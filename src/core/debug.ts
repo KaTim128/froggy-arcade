@@ -40,6 +40,8 @@ export function initDebug(g: Phaser.Game): void {
   panel = document.getElementById('debug-panel');
   if (!panel) return;
 
+  applyLaunchParams(g);
+
   window.addEventListener('keydown', (e) => {
     if (e.key === '`' || e.code === 'Backquote') {
       e.preventDefault();
@@ -47,6 +49,36 @@ export function initDebug(g: Phaser.Game): void {
     }
   });
   render();
+}
+
+/**
+ * Dev-only deep links, the debug panel's URL equivalent (PRD DB-1):
+ *   ?scene=BasementSequence   jump straight to a scene
+ *   ?game=chompman            jump straight into a cabinet
+ *   ?tokens=200&route=ejected&key=1   set state first
+ * Used by the automated harness so each piece can be verified on its own.
+ */
+function applyLaunchParams(g: Phaser.Game): void {
+  const q = new URLSearchParams(location.search);
+  if (![...q.keys()].length) return;
+
+  const tokens = q.get('tokens');
+  if (tokens !== null) ledger.debugSet(Number(tokens));
+  const route = q.get('route');
+  if (route) store.patch({ route: route as Route });
+  if (q.get('key') === '1') store.patch({ hasKey: true });
+  if (q.get('intro') === '1') store.patch({ seenIntro: true });
+  if (q.get('charity') === '1') store.patch({ charityUsed: true });
+
+  const game = q.get('game');
+  const scene = q.get('scene');
+  if (!game && !scene) return;
+
+  window.setTimeout(() => {
+    for (const s of g.scene.getScenes(true)) s.scene.stop();
+    if (game) g.scene.start('Minigame', { id: game });
+    else if (scene && g.scene.getScene(scene)) g.scene.start(scene);
+  }, 350);
 }
 
 function toggle(): void {

@@ -1,17 +1,31 @@
 /**
  * Minigame registry.  PRD §9.
  *
- * Phase 2 registers a placeholder that exercises the full contract (cost on
- * launch, reward on win, Esc forfeits) so the economy is testable end to end
- * before a single game exists.  Phase 3 swaps them out one at a time.
+ * Every game behind one interface, so the hub cannot know or care what happens
+ * inside a cabinet.  `makeStub` stays as the fallback: an unregistered id gets
+ * a visibly-placeholder cabinet rather than a crash.
  */
 
 import type { GameId } from '../core/state';
 import type { MinigameModule } from './types';
 import { makeStub } from './stub';
 
+import { ticTacToe } from './tictactoe';
+import { snakesAndLadders } from './snakes';
+import { airHockey } from './airhockey';
+import { hoops } from './hoops';
+import { whackAFrog } from './whack';
+import { chompMan } from './chompman';
+import { grudge } from './grudge';
+
 const REGISTRY: Partial<Record<GameId, MinigameModule>> = {
-  // Phase 3 fills this in.
+  tictactoe: ticTacToe,
+  snakes: snakesAndLadders,
+  airhockey: airHockey,
+  hoops,
+  whack: whackAFrog,
+  chompman: chompMan,
+  grudge,
 };
 
 export function getMinigame(id: GameId): MinigameModule {
