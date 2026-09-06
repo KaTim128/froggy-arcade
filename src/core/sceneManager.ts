@@ -27,6 +27,7 @@ import { EjectionCutscene } from '../scenes2d/EjectionCutscene';
 import { ExteriorNight } from '../scenes2d/ExteriorNight';
 import { BackAlley } from '../scenes2d/BackAlley';
 import { ArcadeDark } from '../scenes2d/ArcadeDark';
+import { BasementSequence } from '../scenes2d/BasementSequence';
 import { EndCard } from '../scenes2d/EndCard';
 
 let game: Phaser.Game | null = null;
@@ -68,6 +69,7 @@ export function bootGame(): void {
       ExteriorNight,
       BackAlley,
       ArcadeDark,
+      BasementSequence,
       EndCard,
     ],
   });

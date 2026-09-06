@@ -32,6 +32,12 @@ export interface FroggyDrawOpts {
   bounce?: number;
   /** Predator only: 0..1 mouth openness. */
   maw?: number;
+  /**
+   * What `y` means.  'feet' is the ground line, like every other actor.
+   * 'face' anchors between the eyes — for the horror sections, where what has
+   * to be in frame is the part of him you recognise.
+   */
+  anchor?: 'feet' | 'face';
   alpha?: number;
 }
 
@@ -76,9 +82,8 @@ export function drawFroggy(ctx: CanvasRenderingContext2D, o: FroggyDrawOpts): vo
   ctx.globalAlpha = o.alpha ?? 1;
   ctx.translate(o.x, o.y);
   ctx.scale(s, s);
-  // `y` is the GROUND LINE (bottom of the feet), which is how every other
-  // actor in the game is anchored.  Design space puts the feet at +50.
-  ctx.translate(0, -50);
+  // Design space: feet at +50, the point between the eyes at -40.
+  ctx.translate(0, o.anchor === 'face' ? 40 : -50);
 
   if (variant === 'predator') {
     drawPredator(ctx, o.maw ?? 1);
@@ -248,17 +253,20 @@ function drawPredator(ctx: CanvasRenderingContext2D, maw: number): void {
   ctx.stroke();
   ctx.restore();
 
-  // ---- the maw: opens PAST the width of the head, hinged too far back
-  const openW = 40 + 26 * maw; // half-width 66 vs a 40 half-width head
-  const openH = 8 + 34 * maw;
+  // ---- the maw: opens PAST the width of the head, hinged too far back.
+  // It sits on the jaw, not over the face — the eyes have to stay readable or
+  // he stops being Froggy and becomes a generic monster.
+  const mawY = 18;
+  const openW = 40 + 30 * maw; // half-width 70 against a 40 half-width head
+  const openH = 6 + 24 * maw;
   ctx.save();
   ctx.beginPath();
-  ctx.ellipse(0, 6, openW, openH, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, mawY, openW, openH, 0, 0, Math.PI * 2);
   ctx.fillStyle = PREDATOR.mouth;
   ctx.fill();
 
   ctx.beginPath();
-  ctx.ellipse(0, 10 + openH * 0.15, openW * 0.66, openH * 0.55, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, mawY + openH * 0.18, openW * 0.66, openH * 0.55, 0, 0, Math.PI * 2);
   ctx.fillStyle = PREDATOR.mouthDeep;
   ctx.fill();
 
@@ -268,11 +276,11 @@ function drawPredator(ctx: CanvasRenderingContext2D, maw: number): void {
   for (let i = 0; i < teeth; i++) {
     const t = -1 + (2 * i) / (teeth - 1);
     const tx = t * openW * 0.86;
-    const ty = -Math.sqrt(Math.max(0, 1 - t * t)) * openH * 0.86 + 6;
+    const ty = -Math.sqrt(Math.max(0, 1 - t * t)) * openH * 0.86 + mawY;
     ctx.beginPath();
     ctx.moveTo(tx - 4, ty);
     ctx.lineTo(tx + 4, ty);
-    ctx.lineTo(tx, ty + 11);
+    ctx.lineTo(tx, ty + Math.min(11, openH * 0.4));
     ctx.closePath();
     ctx.fill();
   }
@@ -280,15 +288,15 @@ function drawPredator(ctx: CanvasRenderingContext2D, maw: number): void {
   // the same pink tongue, now wet and far too long
   if (maw > 0.35) {
     ctx.beginPath();
-    ctx.moveTo(-13, 12);
-    ctx.quadraticCurveTo(-6, 30 + 26 * maw, 3, 40 + 30 * maw);
-    ctx.quadraticCurveTo(12, 28 + 24 * maw, 14, 12);
+    ctx.moveTo(-13, mawY + 4);
+    ctx.quadraticCurveTo(-6, mawY + 24 * maw, 3, mawY + 16 + 26 * maw);
+    ctx.quadraticCurveTo(12, mawY + 22 * maw, 14, mawY + 4);
     ctx.closePath();
     ctx.fillStyle = PREDATOR.tongue;
     ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(-5, 16);
-    ctx.quadraticCurveTo(0, 30, 2, 36 + 22 * maw);
+    ctx.moveTo(-5, mawY + 6);
+    ctx.quadraticCurveTo(0, mawY + 14, 2, mawY + 14 + 18 * maw);
     ctx.lineWidth = 2.5;
     ctx.strokeStyle = PREDATOR.tongueWet;
     ctx.stroke();
