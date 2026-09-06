@@ -19,14 +19,13 @@ type Tab = 'audio' | 'controls';
 export class SettingsModal extends Phaser.Scene {
   private tab: Tab = 'audio';
   private body!: Phaser.GameObjects.Container;
-  private from = 'StartScreen';
 
   constructor() {
     super('SettingsModal');
   }
 
   init(data: { from?: string }): void {
-    this.from = data?.from ?? 'StartScreen';
+    void data;
     this.tab = 'audio';
   }
 

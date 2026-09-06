@@ -6,7 +6,7 @@
  */
 
 import Phaser from 'phaser';
-import { PALETTE } from '../render/palette';
+
 import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { KEYS } from '../core/input';
