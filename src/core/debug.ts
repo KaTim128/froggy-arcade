@@ -1,0 +1,140 @@
+/**
+ * Dev debug panel.  PRD §6.9 / DB-1 / QFD A6.
+ *
+ * Toggle with the backtick key.  Stripped from production by the __DEV__ define
+ * in vite.config.ts.  You will use this constantly.
+ */
+
+import type Phaser from 'phaser';
+import { store, type Route } from './state';
+import { ledger } from './ledger';
+import { audio } from './audio';
+
+declare const __DEV__: boolean;
+
+const JUMPABLE = [
+  'Boot',
+  'StartScreen',
+  'IntroCutscene',
+  'ArcadeHub',
+  'FroggyCharity',
+  'SecondBust',
+  'EjectionCutscene',
+  'ExteriorNight',
+  'BackAlley',
+  'ArcadeDark',
+  'BasementSequence',
+  'Chase3D',
+  'OutroCutscene3D',
+  'EndCard',
+];
+
+let game: Phaser.Game | null = null;
+let panel: HTMLElement | null = null;
+let open = false;
+let refreshTimer: number | null = null;
+
+export function initDebug(g: Phaser.Game): void {
+  if (!__DEV__) return;
+  game = g;
+  panel = document.getElementById('debug-panel');
+  if (!panel) return;
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === '`' || e.code === 'Backquote') {
+      e.preventDefault();
+      toggle();
+    }
+  });
+  render();
+}
+
+function toggle(): void {
+  if (!panel) return;
+  open = !open;
+  panel.style.display = open ? 'block' : 'none';
+  if (open) {
+    render();
+    refreshTimer = window.setInterval(render, 500);
+  } else if (refreshTimer !== null) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+}
+
+function jump(scene: string): void {
+  if (!game) return;
+  for (const s of game.scene.getScenes(true)) s.scene.stop();
+  if (game.scene.getScene(scene)) game.scene.start(scene);
+  else console.warn(`[debug] scene "${scene}" does not exist yet`);
+}
+
+function render(): void {
+  if (!panel || !open) return;
+  const s = store.get();
+
+  panel.innerHTML = `
+    <h3>Froggy Arcade — debug</h3>
+    <div class="row"><span class="dim">tokens</span>
+      <input id="dbg-tokens" type="number" value="${s.tokens}" />
+      <button data-act="set-tokens">set</button></div>
+    <div class="row">
+      <button data-tok="0">0</button>
+      <button data-tok="1">1</button>
+      <button data-tok="5">5</button>
+      <button data-tok="20">20</button>
+      <button data-tok="200">200</button>
+      <button data-tok="750">750</button>
+    </div>
+    <div class="row"><span class="dim">route</span>
+      <select id="dbg-route">
+        ${(['normal', 'ejected', 'basement', 'chase', 'ended'] as Route[])
+          .map((r) => `<option value="${r}" ${r === s.route ? 'selected' : ''}>${r}</option>`)
+          .join('')}
+      </select></div>
+    <div class="row">
+      <button data-flag="charityUsed">charityUsed: ${s.charityUsed}</button>
+    </div>
+    <div class="row">
+      <button data-flag="hasKey">hasKey: ${s.hasKey}</button>
+      <button data-flag="seenIntro">seenIntro: ${s.seenIntro}</button>
+    </div>
+    <div class="row dim">prizes: ${s.prizesOwned.length ? s.prizesOwned.join(', ') : '—'}</div>
+    <h3>audio</h3>
+    <div class="row dim">sustained sources: <b style="color:${audio.sourceCount() === 0 ? '#3fe39b' : '#ffb038'}">${audio.sourceCount()}</b></div>
+    <div class="row dim">master ${s.settings.master} · music ${s.settings.music} · sfx ${s.settings.sfx}</div>
+    <h3>jump to scene</h3>
+    <div>${JUMPABLE.map((k) => `<button data-scene="${k}">${k}</button>`).join('')}</div>
+    <h3>run</h3>
+    <div class="row">
+      <button data-act="reset">reset run</button>
+      <button data-act="dump">dump state</button>
+    </div>
+    <div class="row dim">backtick closes this panel</div>
+  `;
+
+  panel.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
+    b.onclick = () => {
+      const { scene, flag, tok, act } = b.dataset;
+      if (scene) jump(scene);
+      else if (flag) store.patch({ [flag]: !(s as unknown as Record<string, boolean>)[flag] } as never);
+      else if (tok) ledger.debugSet(Number(tok));
+      else if (act === 'set-tokens') {
+        const el = document.getElementById('dbg-tokens') as HTMLInputElement | null;
+        if (el) ledger.debugSet(Number(el.value));
+      } else if (act === 'reset') {
+        store.resetRun();
+        jump('Boot');
+      } else if (act === 'dump') console.log(JSON.parse(JSON.stringify(store.get())));
+      render();
+    };
+  });
+
+  const routeSel = document.getElementById('dbg-route') as HTMLSelectElement | null;
+  if (routeSel) {
+    routeSel.onchange = () => {
+      store.patch({ route: routeSel.value as Route });
+      render();
+    };
+  }
+}

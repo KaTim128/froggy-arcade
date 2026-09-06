@@ -1,0 +1,68 @@
+/**
+ * Start screen.  PRD §7.2 / brief §5.
+ *
+ * Warm, cozy, buzzing.  This screen exists to be remembered later, when the
+ * same building is dark.
+ */
+
+import Phaser from 'phaser';
+import { PALETTE } from '../render/palette';
+import { audio } from '../core/audio';
+import { store } from '../core/state';
+import { button, centerText, fadeIn, fadeToScene } from '../core/ui';
+import { GAME_W } from '../render/pixelScaler';
+import { paintExterior, startMoth, startSignFlicker } from '../art/exterior';
+import { froggyLayer } from '../render/froggyLayer';
+
+export class StartScreen extends Phaser.Scene {
+  constructor() {
+    super('StartScreen');
+  }
+
+  create(): void {
+    froggyLayer.clear();
+    fadeIn(this);
+    audio.setScene({ music: 'theme_arcade', ambience: ['street_dusk', 'neon_buzz'] });
+
+    const refs = paintExterior(this, { night: false });
+    startSignFlicker(this, refs);
+    startMoth(this, refs);
+
+    // Title plate
+    this.add.rectangle(GAME_W / 2, 26, 190, 30, PALETTE.black).setAlpha(0.55);
+    centerText(this, GAME_W / 2, 20, 'FROGGY ARCADE', PALETTE.gold, 16).setLetterSpacing?.(1);
+    centerText(this, GAME_W / 2, 34, 'you found ten dollars', PALETTE.cream, 8).setAlpha(0.75);
+
+    const s = store.get();
+    button(this, GAME_W / 2, 118, 'START', () => this.onStart(), { width: 74 });
+    button(this, GAME_W / 2, 138, 'SETTINGS', () => this.scene.launch('SettingsModal', { from: 'StartScreen' }), {
+      width: 74,
+    });
+
+    if (s.route !== 'normal' || s.tokens > 0 || s.seenIntro) {
+      centerText(this, GAME_W / 2, 160, 'continue', PALETTE.ash, 8).setAlpha(0.8);
+    }
+  }
+
+  private onStart(): void {
+    const s = store.get();
+    // Resume where the run left off (PRD EC-3).
+    if (s.route === 'ejected') {
+      fadeToScene(this, 'ExteriorNight');
+      return;
+    }
+    if (s.route === 'basement') {
+      fadeToScene(this, 'BasementSequence');
+      return;
+    }
+    if (s.route === 'chase') {
+      fadeToScene(this, 'Chase3D');
+      return;
+    }
+    if (s.route === 'ended') {
+      fadeToScene(this, 'EndCard');
+      return;
+    }
+    fadeToScene(this, s.seenIntro ? 'ArcadeHub' : 'IntroCutscene');
+  }
+}
