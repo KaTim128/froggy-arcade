@@ -33,13 +33,13 @@ export const TIER_ECONOMY: Record<Tier, { cost: number; reward: number }> = {
  * narrowing the scope the customer actually described.
  */
 export const CABINETS: CabinetDef[] = [
-  { id: 'tictactoe', title: 'TIC-TAC-TOE', tier: 'easy', cost: 1, reward: 3, x: 38, y: 78, color: 0xff4fa3 },
-  { id: 'snakes', title: 'SNAKES+LADDERS', tier: 'easy', cost: 1, reward: 3, x: 38, y: 116, color: 0x46c4bd },
-  { id: 'airhockey', title: 'AIR HOCKEY', tier: 'easy', cost: 1, reward: 3, x: 38, y: 154, color: 0xffd45e },
-  { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 3, reward: 6, x: 282, y: 78, color: 0xff7a3d },
-  { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 3, reward: 6, x: 282, y: 116, color: 0x6fbb6a },
-  { id: 'chompman', title: 'CHOMP-MAN', tier: 'hard', cost: 5, reward: 10, x: 282, y: 154, color: 0x7b4bd8 },
-  { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 5, reward: 10, x: 130, y: 66, color: 0xc31f2e },
+  { id: 'tictactoe', title: 'TIC-TAC-TOE', tier: 'easy', cost: 1, reward: 3, x: 34, y: 86, color: 0xff4fa3 },
+  { id: 'snakes', title: 'SNAKES+LADDERS', tier: 'easy', cost: 1, reward: 3, x: 34, y: 124, color: 0x46c4bd },
+  { id: 'airhockey', title: 'AIR HOCKEY', tier: 'easy', cost: 1, reward: 3, x: 34, y: 162, color: 0xffd45e },
+  { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 3, reward: 6, x: 286, y: 86, color: 0xff7a3d },
+  { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 3, reward: 6, x: 286, y: 124, color: 0x6fbb6a },
+  { id: 'chompman', title: 'CHOMP-MAN', tier: 'hard', cost: 5, reward: 10, x: 286, y: 162, color: 0x7b4bd8 },
+  { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 5, reward: 10, x: 72, y: 78, color: 0xc31f2e },
 ];
 
 export function cabinetById(id: GameId): CabinetDef {
@@ -73,9 +73,9 @@ export function prizeById(id: string): PrizeDef | undefined {
 }
 
 /** PRD §7.5: the ticket counter, the prize case, and the bell nobody answers. */
-export const COUNTER = { x: 176, y: 46, w: 126, h: 20 };
-export const BELL = { x: 188, y: 58 };
-export const PRIZE_CASE = { x: 206, y: 46, w: 96, h: 18 };
+export const COUNTER = { x: 112, y: 44, w: 128, h: 18 };
+export const BELL = { x: 122, y: 56 };
+export const PRIZE_CASE = { x: 126, y: 44, w: 100, h: 18 };
 /** PRD AD-5: only reachable at night, when the arcade is closed. */
-export const COUNTER_VAULT = { x: 239, y: 68 };
-export const STAFF_DOOR = { x: 288, y: 52 };
+export const COUNTER_VAULT = { x: 200, y: 66 };
+export const STAFF_DOOR = { x: 234, y: 40 };

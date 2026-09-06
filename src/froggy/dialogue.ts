@@ -11,7 +11,7 @@ import { PALETTE, css } from '../render/palette';
 import { audio } from '../core/audio';
 import { froggyLayer } from '../render/froggyLayer';
 import { drawFroggy, type FroggyPose } from './froggy';
-import { GAME_W, GAME_H } from '../render/pixelScaler';
+import { GAME_W } from '../render/pixelScaler';
 
 export const DEFAULT_CPS = 28;
 
@@ -38,7 +38,8 @@ export interface DialogueLine {
 const BOX_Y = 128;
 const BOX_H = 46;
 const PORTRAIT_CX = 30;
-const PORTRAIT_BASE = GAME_H - 8;
+const PORTRAIT_BASE = BOX_Y + BOX_H - 3;
+const PORTRAIT_H = 40;
 
 export class DialogueBox {
   private scene: Phaser.Scene;
@@ -210,7 +211,7 @@ export class DialogueBox {
       drawFroggy(ctx, {
         x: PORTRAIT_CX,
         y: PORTRAIT_BASE,
-        height: 52,
+        height: PORTRAIT_H,
         // V1 is V0's art with the animation stopped.  Nothing else.
         variant: line.freeze ? 'uncanny' : 'cozy',
         pose,

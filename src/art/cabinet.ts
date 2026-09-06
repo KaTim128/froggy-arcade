@@ -24,21 +24,25 @@ export class Cabinet {
     const c = (col: number) => (night ? nightify(col) : col);
     const { x, y } = def;
 
+    const d = y / 1000; // one depth for the whole cabinet; order decides the rest
+
     // body
-    scene.add.rectangle(x, y, CAB_W, CAB_H, c(PALETTE.slate)).setOrigin(0.5, 1).setDepth(y / 1000);
-    scene.add.rectangle(x, y, CAB_W, 3, c(PALETTE.ink)).setOrigin(0.5, 1);
+    scene.add.rectangle(x, y, CAB_W, CAB_H, c(PALETTE.slate)).setOrigin(0.5, 1).setDepth(d);
+    scene.add.rectangle(x, y, CAB_W, 3, c(PALETTE.ink)).setOrigin(0.5, 1).setDepth(d);
     // screen
     this.screen = scene.add
-      .rectangle(x, y - CAB_H + 20, CAB_W - 8, 13, night ? PALETTE.black : c(def.color))
-      .setOrigin(0.5, 1);
-    this.screen.setAlpha(night ? 1 : 0.8);
+      .rectangle(x, y - CAB_H + 21, CAB_W - 8, 14, night ? PALETTE.black : c(def.color))
+      .setOrigin(0.5, 1)
+      .setDepth(d);
+    this.screen.setAlpha(night ? 1 : 0.85);
     // marquee
     this.marquee = scene.add
       .rectangle(x, y - CAB_H + 6, CAB_W - 2, 6, night ? nightify(def.color) : def.color)
-      .setOrigin(0.5, 1);
+      .setOrigin(0.5, 1)
+      .setDepth(d);
     if (night) this.marquee.setAlpha(0.25);
     // control deck
-    scene.add.rectangle(x, y - 10, CAB_W, 5, c(PALETTE.steel)).setOrigin(0.5, 1);
+    scene.add.rectangle(x, y - 9, CAB_W, 6, c(PALETTE.steel)).setOrigin(0.5, 1).setDepth(d);
 
     if (!night) {
       scene.tweens.add({

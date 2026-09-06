@@ -132,20 +132,22 @@ export class ArcadeHub extends Phaser.Scene {
     this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, 3, PALETTE.brownLight).setOrigin(0, 0);
 
     this.add
-      .rectangle(PRIZE_CASE.x, PRIZE_CASE.y - 26, PRIZE_CASE.w, 26, PALETTE.ink)
+      .rectangle(PRIZE_CASE.x, PRIZE_CASE.y - 30, PRIZE_CASE.w, 30, PALETTE.ink)
       .setOrigin(0, 0)
       .setStrokeStyle(1, PALETTE.fog);
     PRIZES.forEach((p, i) => {
-      this.add.rectangle(PRIZE_CASE.x + 8 + i * 18, PRIZE_CASE.y - 20, 12, 12, p.color).setOrigin(0, 0);
+      this.add.rectangle(PRIZE_CASE.x + 7 + i * 18, PRIZE_CASE.y - 22, 13, 14, p.color).setOrigin(0, 0);
     });
     // glass sheen
-    this.add.rectangle(PRIZE_CASE.x + 4, PRIZE_CASE.y - 24, 3, 22, PALETTE.white).setOrigin(0, 0).setAlpha(0.14);
+    this.add.rectangle(PRIZE_CASE.x + 4, PRIZE_CASE.y - 27, 3, 25, PALETTE.white).setOrigin(0, 0).setAlpha(0.14);
 
     // RING FOR SERVICE.  Nobody is coming.
     this.add.rectangle(BELL.x, BELL.y, 7, 4, PALETTE.gold).setOrigin(0.5, 1);
     this.add.rectangle(BELL.x, BELL.y - 4, 2, 2, PALETTE.cream).setOrigin(0.5, 1);
-    text(this, BELL.x - 22, BELL.y + 2, 'RING FOR', PALETTE.ash, 8).setAlpha(0.75);
-    text(this, BELL.x - 22, BELL.y + 9, 'SERVICE', PALETTE.ash, 8).setAlpha(0.75);
+    // The sign is legible.  That matters: the player has to read it, try it,
+    // and get nothing.  (VOC-18)
+    text(this, BELL.x + 10, BELL.y - 12, 'RING FOR', PALETTE.cream, 8);
+    text(this, BELL.x + 10, BELL.y - 4, 'SERVICE', PALETTE.cream, 8);
   }
 
   private bindKeys(names: readonly string[]): Phaser.Input.Keyboard.Key[] {

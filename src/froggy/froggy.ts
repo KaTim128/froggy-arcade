@@ -76,6 +76,9 @@ export function drawFroggy(ctx: CanvasRenderingContext2D, o: FroggyDrawOpts): vo
   ctx.globalAlpha = o.alpha ?? 1;
   ctx.translate(o.x, o.y);
   ctx.scale(s, s);
+  // `y` is the GROUND LINE (bottom of the feet), which is how every other
+  // actor in the game is anchored.  Design space puts the feet at +50.
+  ctx.translate(0, -50);
 
   if (variant === 'predator') {
     drawPredator(ctx, o.maw ?? 1);

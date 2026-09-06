@@ -69,7 +69,7 @@ export function paintHubRoom(scene: Phaser.Scene, opts: RoomOpts): void {
 /** The change machine, decorative in Act I and dead at night. */
 export function paintChangeMachine(scene: Phaser.Scene, night: boolean): void {
   const c = (col: number) => (night ? nightify(col) : col);
-  scene.add.rectangle(20, 120, 20, 34, c(PALETTE.steel)).setOrigin(0, 0);
-  scene.add.rectangle(23, 126, 14, 10, night ? PALETTE.black : PALETTE.gold).setOrigin(0, 0);
-  scene.add.rectangle(24, 142, 12, 3, c(PALETTE.ink)).setOrigin(0, 0);
+  scene.add.rectangle(262, 10, 20, 32, c(PALETTE.steel)).setOrigin(0, 0);
+  scene.add.rectangle(265, 15, 14, 10, night ? PALETTE.black : PALETTE.gold).setOrigin(0, 0);
+  scene.add.rectangle(266, 32, 12, 3, c(PALETTE.ink)).setOrigin(0, 0);
 }
