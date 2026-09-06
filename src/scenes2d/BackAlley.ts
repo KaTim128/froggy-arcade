@@ -33,6 +33,10 @@ export class BackAlley extends Phaser.Scene {
 
   create(): void {
     froggyLayer.clear();
+    // Scene instances are reused; reset everything mutable.
+    this.locked = false;
+    this.spot = null;
+
     fadeIn(this);
     audio.setScene({ ambience: ['wind_low', 'crickets'] });
 

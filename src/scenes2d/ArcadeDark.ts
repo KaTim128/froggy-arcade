@@ -44,6 +44,11 @@ export class ArcadeDark extends Phaser.Scene {
 
   create(): void {
     froggyLayer.clear();
+    // Scene instances are reused; reset everything mutable.
+    this.locked = false;
+    this.spot = null;
+    this.behindCounter = false;
+
     fadeIn(this);
 
     // No music.  No ambience.  Nothing.

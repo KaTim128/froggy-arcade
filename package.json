@@ -8,7 +8,13 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:smoke": "node tools/smoke.mjs",
+    "test:games": "node tools/games.mjs",
+    "test:story": "node tools/story.mjs",
+    "test:basement": "node tools/basement.mjs",
+    "test:chase": "node tools/chase.mjs",
+    "test:all": "node tools/smoke.mjs && node tools/games.mjs && node tools/story.mjs && node tools/basement.mjs && node tools/chase.mjs"
   },
   "dependencies": {
     "howler": "^2.2.4",

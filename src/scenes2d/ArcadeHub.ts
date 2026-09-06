@@ -53,6 +53,13 @@ export class ArcadeHub extends Phaser.Scene {
 
   create(): void {
     froggyLayer.clear();
+    // Phaser reuses scene instances across start/stop, so every mutable field
+    // has to be reset here.  Left alone, `locked` stayed true after the first
+    // minigame and froze the player in the hub for the rest of the run.
+    this.locked = false;
+    this.target = null;
+    this.cabinets = [];
+
     fadeIn(this);
     audio.setScene({ music: 'hub_lofi', ambience: ['cabinet_bleeps', 'crowd_hum'] });
 

@@ -761,6 +761,14 @@ interface Minigame {
 | MG-6 | All six pass an automated contract test: launch → complete → return, and launch → quit → return `[QFD: AC-2]` |
 | MG-7 | All art, names, audio and layouts are **original**. No licensed assets, no trademarked names, no reproduced maze geometry `[QFD: M4, B7, §13.1 IP sign-off]` |
 
+### 9.0.1 A note on "six"
+
+The brief says **six** minigames throughout and then enumerates **seven**
+(3 easy, 2 medium, 2 hard). All seven are built — dropping one would narrow the
+scope the customer actually described, and no single game is obviously the
+spare. The hub therefore has seven cabinets. If the count matters more than the
+list, say which one goes.
+
 ### 9.1 Tuning targets `[QFD: B4 — rank #10]`
 
 Measured over 200 automated runs per game (scripted competent player).

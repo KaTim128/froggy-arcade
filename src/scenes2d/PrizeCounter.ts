@@ -22,6 +22,7 @@ export class PrizeCounter extends Phaser.Scene {
   }
 
   create(): void {
+    this.rows = [];
     this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0.85).setOrigin(0, 0).setInteractive();
     this.add.rectangle(GAME_W / 2, GAME_H / 2, 276, 156, PALETTE.ink).setStrokeStyle(1, PALETTE.gold);
 

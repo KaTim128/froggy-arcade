@@ -180,11 +180,36 @@ try {
   const after = await readState();
   console.log(`   tokens after launch: ${after.tokens}`);
 
-  await page.keyboard.press('Space'); // win
-  await sleep(1200);
+  // The cabinet now holds a real game, so the reward path is driven through
+  // the debug hook (PRD §6.9 force-win) rather than by beating Tic-Tac-Toe.
+  const hooked = await page.evaluate(() => {
+    if (!window.__minigame) return false;
+    window.__minigame.win();
+    return true;
+  });
+  await sleep(1400);
   await shot('11-minigame-win');
   const won = await readState();
+  console.log(`   debug force-win available: ${hooked}`);
   console.log(`   tokens after win: ${won.tokens}`);
+
+  // And the forfeit path: cost debited, nothing credited back.  The hub puts
+  // you back at the door, so walk to a cabinet again first.
+  await sleep(4200); // result card (2s) + both fades
+  await page.keyboard.down('KeyA');
+  await sleep(2600);
+  await page.keyboard.up('KeyA');
+  await page.keyboard.down('KeyS');
+  await sleep(900);
+  await page.keyboard.up('KeyS');
+  await page.keyboard.press('KeyE');
+  await sleep(2200);
+  const paid = await readState();
+  await shot('12-second-launch');
+  await page.keyboard.press('Escape');
+  await sleep(3600);
+  const forfeited = await readState();
+  console.log(`   forfeit: ${won.tokens} -> ${paid.tokens} -> ${forfeited.tokens}`);
 
   console.log('\nState checks:');
   const checks = [
@@ -194,6 +219,7 @@ try {
     ['seenIntro latched', won.seenIntro === true],
     ['route still normal', won.route === 'normal'],
     ['overlay cleared when Froggy leaves', overlayAfter === 0],
+    ['Esc forfeits the entry cost', paid.tokens === won.tokens - 1 && forfeited.tokens === paid.tokens],
   ];
   let failed = 0;
   for (const [name, ok] of checks) {

@@ -28,6 +28,8 @@ export class EjectionCutscene extends Phaser.Scene {
 
   create(): void {
     froggyLayer.clear();
+    this.done = false;
+
     this.cameras.main.fadeIn(200, 0, 0, 0);
     audio.setScene(SILENCE);
 

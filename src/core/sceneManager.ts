@@ -29,6 +29,7 @@ import { BackAlley } from '../scenes2d/BackAlley';
 import { ArcadeDark } from '../scenes2d/ArcadeDark';
 import { BasementSequence } from '../scenes2d/BasementSequence';
 import { Chase3D } from '../scenes2d/Chase3D';
+import { OutroCutscene3D } from '../scenes2d/OutroCutscene3D';
 import { EndCard } from '../scenes2d/EndCard';
 
 let game: Phaser.Game | null = null;
@@ -72,6 +73,7 @@ export function bootGame(): void {
       ArcadeDark,
       BasementSequence,
       Chase3D,
+      OutroCutscene3D,
       EndCard,
     ],
   });

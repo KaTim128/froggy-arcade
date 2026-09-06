@@ -42,6 +42,11 @@ export class ExteriorNight extends Phaser.Scene {
 
   create(): void {
     froggyLayer.clear();
+    // Scene instances are reused; reset everything mutable.
+    this.locked = false;
+    this.spot = null;
+    this.rattles = 0;
+
     fadeIn(this);
     // No music.  Crickets, wind, and a car every twenty seconds or so.
     audio.setScene({ ambience: ['crickets', 'wind_low', 'car_passby'] });

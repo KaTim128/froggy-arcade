@@ -64,6 +64,18 @@ export class MinigameScene extends Phaser.Scene {
 
     // MG-4: Esc forfeits the entry cost.  No confirmation, no refund.
     this.input.keyboard?.on('keydown-ESC', () => this.settle(false, true));
+
+    if (import.meta.env?.DEV) {
+      // PRD §6.9: force win / force loss in the active minigame.
+      (window as unknown as Record<string, unknown>).__minigame = {
+        id: this.gameId,
+        win: () => this.settle(true),
+        lose: () => this.settle(false),
+      };
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        delete (window as unknown as Record<string, unknown>).__minigame;
+      });
+    }
   }
 
   update(time: number, delta: number): void {

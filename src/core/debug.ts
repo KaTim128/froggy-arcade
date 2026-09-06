@@ -151,6 +151,12 @@ function render(): void {
     <div class="row dim">master ${s.settings.master} · music ${s.settings.music} · sfx ${s.settings.sfx}</div>
     <h3>jump to scene</h3>
     <div>${JUMPABLE.map((k) => `<button data-scene="${k}">${k}</button>`).join('')}</div>
+    <h3>active minigame</h3>
+    <div class="row">
+      <button data-act="mg-win">force win</button>
+      <button data-act="mg-lose">force lose</button>
+      <span class="dim">${(window as unknown as Record<string, { id?: string }>).__minigame?.id ?? 'none'}</span>
+    </div>
     <h3>run</h3>
     <div class="row">
       <button data-act="reset">reset run</button>
@@ -171,6 +177,10 @@ function render(): void {
       } else if (act === 'reset') {
         store.resetRun();
         jump('Boot');
+      } else if (act === 'mg-win' || act === 'mg-lose') {
+        const mg = (window as unknown as Record<string, { win?: () => void; lose?: () => void }>).__minigame;
+        if (act === 'mg-win') mg?.win?.();
+        else mg?.lose?.();
       } else if (act === 'dump') console.log(JSON.parse(JSON.stringify(store.get())));
       render();
     };

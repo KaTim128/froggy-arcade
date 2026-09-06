@@ -54,6 +54,12 @@ export class BasementSequence extends Phaser.Scene {
 
   create(): void {
     froggyLayer.clear();
+    // Scene instances are reused; reset everything mutable.
+    this.index = 0;
+    this.layer = null;
+    this.hotspot = null;
+    this.busy = true;
+
     // No music.  No ambience.  Footsteps, a door, a drip.  Nothing else.
     audio.setScene(SILENCE);
 
