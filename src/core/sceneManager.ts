@@ -17,6 +17,9 @@ import { Boot } from '../scenes2d/Boot';
 import { StartScreen } from '../scenes2d/StartScreen';
 import { SettingsModal } from '../scenes2d/SettingsModal';
 import { ArcadeHub } from '../scenes2d/ArcadeHub';
+import { IntroCutscene } from '../scenes2d/IntroCutscene';
+import { PrizeCounter } from '../scenes2d/PrizeCounter';
+import { MinigameScene } from '../scenes2d/MinigameScene';
 
 let game: Phaser.Game | null = null;
 
@@ -43,7 +46,7 @@ export function bootGame(): void {
       autoCenter: Phaser.Scale.NO_CENTER,
       zoom: 1,
     },
-    scene: [Boot, StartScreen, SettingsModal, ArcadeHub],
+    scene: [Boot, StartScreen, SettingsModal, IntroCutscene, ArcadeHub, PrizeCounter, MinigameScene],
   });
 
   froggyLayer.mount(root);
