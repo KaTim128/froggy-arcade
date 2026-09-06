@@ -7,6 +7,8 @@
 
 import type Phaser from 'phaser';
 import { store, type Route } from './state';
+import { canEnter, SCENES } from './routes';
+import { evaluateBroke } from './broke';
 import { ledger } from './ledger';
 import { audio } from './audio';
 
@@ -39,6 +41,18 @@ export function initDebug(g: Phaser.Game): void {
   game = g;
   panel = document.getElementById('debug-panel');
   if (!panel) return;
+
+  // Dev bridge: lets the automated harness assert the real predicates rather
+  // than a reimplementation of them.  Stripped from production with the panel.
+  (window as unknown as Record<string, unknown>).__froggy = {
+    state: () => JSON.parse(JSON.stringify(store.get())),
+    audioSources: () => audio.sourceCount(),
+    broke: () => evaluateBroke(),
+    scenes: () => SCENES,
+    canEnter: (scene: string, route: string, tokens = 0) =>
+      canEnter(scene as never, { ...store.get(), route: route as Route, tokens }, { cost: 0 }),
+    activeScenes: () => g.scene.getScenes(true).map((s) => s.scene.key),
+  };
 
   applyLaunchParams(g);
 

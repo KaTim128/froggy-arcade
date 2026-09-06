@@ -62,6 +62,12 @@ class AudioManager {
     this.unlocked = true;
     this.applyVolumes();
     void this.ctx.resume();
+    // A scene that declared its bed before the context existed would otherwise
+    // stay silent for its whole lifetime.  Re-apply what the current scene asked
+    // for.  (Silence declarations re-apply as silence, which is free.)
+    const pending = this.current;
+    this.current = SILENCE;
+    this.setScene(pending);
   }
 
   isUnlocked(): boolean {

@@ -183,9 +183,13 @@ export class ArcadeHub extends Phaser.Scene {
 
     if (t.kind === 'door') {
       if (store.get().prizesOwned.length > 0) {
-        // PRD PC-4: with a prize in hand there is somewhere to be.
+        // PRD PC-4: with a prize in hand there is somewhere to be.  Leaving
+        // through the front door goes out to the kid, not to an ending — the
+        // sale happens outside.
         this.locked = true;
-        fadeToScene(this, 'GoodEnding');
+        store.patch({ route: 'ejected' });
+        store.flush();
+        fadeToScene(this, 'ExteriorNight');
       } else {
         this.say('...nah. Not yet.');
       }

@@ -33,6 +33,11 @@ export interface DialogueLine {
   highlight?: { x: number; y: number; w: number; h: number };
   /** Fired once when the line begins revealing. */
   onStart?: () => void;
+  /**
+   * Advance without waiting for input.  The second bust is not a conversation;
+   * the player does not get to hurry it along.  (PRD §7.8)
+   */
+  auto?: boolean;
 }
 
 const BOX_Y = 128;
@@ -197,6 +202,14 @@ export class DialogueBox {
         break;
 
       case 'waiting':
+        if (line.auto) {
+          this.prompt.setVisible(false);
+          this.state = 'idle';
+          this.index++;
+          if (this.index >= this.lines.length) this.finish();
+          else this.beginLine();
+          return;
+        }
         this.prompt.setAlpha(0.4 + 0.6 * Math.abs(Math.sin(this.scene.time.now / 300)));
         break;
     }
@@ -221,6 +234,8 @@ export class DialogueBox {
   }
 
   private advance(): void {
+    const cur = this.current();
+    if (cur?.auto) return; // not skippable
     if (this.state === 'typing') {
       const line = this.current();
       if (!line) return;

@@ -62,6 +62,8 @@ export function tutorialScript(t: TutorialTargets): DialogueLine[] {
 export const charityScript: DialogueLine[] = [
   {
     text: "Aw, tapped out already? Don't sweat it. Five tokens, on the house. Because I like your face.",
+    holdAfter: 600,
+    auto: true,
   },
 ];
 
@@ -75,11 +77,14 @@ export const secondBustScript: DialogueLine[] = [
     pose: 'blank',
     freeze: true,
     holdAfter: 3000,
+    auto: true,
   },
   {
     text: 'You can go now.',
     pose: 'blank',
     freeze: true,
     holdBefore: 400,
+    holdAfter: 1400,
+    auto: true,
   },
 ];
