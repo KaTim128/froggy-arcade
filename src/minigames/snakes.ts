@@ -34,7 +34,7 @@ function squareToXY(n: number): { x: number; y: number } {
 let playerPos = 0;
 let aiPos = 0;
 let pieces: { p: Phaser.GameObjects.Arc; a: Phaser.GameObjects.Arc } | null = null;
-let status: Phaser.GameObjects.Text | null = null;
+let status: Phaser.GameObjects.BitmapText | null = null;
 let rollBtn: Phaser.GameObjects.Container | null = null;
 let busy = false;
 

@@ -9,7 +9,7 @@
  */
 
 import Phaser from 'phaser';
-import { PALETTE, css } from '../render/palette';
+import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { centerText } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
@@ -59,7 +59,7 @@ function minimax(b: Cell[], turn: Cell): { score: number; move: number } {
 
 let board: Cell[] = [];
 let cells: Phaser.GameObjects.Rectangle[] = [];
-let marks: Phaser.GameObjects.Text[] = [];
+let marks: Phaser.GameObjects.BitmapText[] = [];
 let busy = false;
 
 export const ticTacToe: MinigameModule = {
@@ -92,10 +92,7 @@ export const ticTacToe: MinigameModule = {
       cells.push(r);
 
       marks.push(
-        scene.add
-          .text(cx, cy, '', { fontFamily: 'monospace', fontSize: '20px', color: css(PALETTE.cream) })
-          .setOrigin(0.5, 0.5)
-          .setResolution(1),
+        centerText(scene, cx, cy, '', PALETTE.cream, 16),
       );
     }
   },
@@ -109,7 +106,7 @@ export const ticTacToe: MinigameModule = {
 function render(): void {
   for (let i = 0; i < 9; i++) {
     marks[i].setText(board[i]);
-    marks[i].setColor(css(board[i] === 'X' ? PALETTE.gold : PALETTE.neon));
+    marks[i].setTint(board[i] === 'X' ? PALETTE.gold : PALETTE.neon);
   }
 }
 

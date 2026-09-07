@@ -23,7 +23,7 @@ const DOOR_X = 236;
 export class BackAlley extends Phaser.Scene {
   private player!: Player;
   private keys!: Record<string, Phaser.Input.Keyboard.Key[]>;
-  private prompt!: Phaser.GameObjects.Text;
+  private prompt!: Phaser.GameObjects.BitmapText;
   private spot: 'door' | 'out' | null = null;
   private locked = false;
 

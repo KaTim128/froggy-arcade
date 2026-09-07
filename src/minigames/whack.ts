@@ -47,7 +47,7 @@ let holes: Hole[] = [];
 let hits = 0;
 let timeLeft = ROUND_MS;
 let spawnTimer = 0;
-let hud: Phaser.GameObjects.Text | null = null;
+let hud: Phaser.GameObjects.BitmapText | null = null;
 let over = false;
 let apiRef: MinigameApi | null = null;
 

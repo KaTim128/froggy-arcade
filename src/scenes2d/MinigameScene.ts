@@ -8,7 +8,7 @@
  */
 
 import Phaser from 'phaser';
-import { PALETTE, css } from '../render/palette';
+import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
 import { store, type GameId } from '../core/state';
@@ -118,9 +118,6 @@ export class MinigameScene extends Phaser.Scene {
 }
 
 /** Shared helper: a draw a "draw = loss" style sub-caption. */
-export function subCaption(scene: Phaser.Scene, str: string): Phaser.GameObjects.Text {
-  return scene.add
-    .text(GAME_W / 2, 24, str, { fontFamily: 'monospace', fontSize: '8px', color: css(PALETTE.ash) })
-    .setOrigin(0.5, 0)
-    .setResolution(1);
+export function subCaption(scene: Phaser.Scene, str: string): Phaser.GameObjects.BitmapText {
+  return centerText(scene, GAME_W / 2, 24, str, PALETTE.ash).setOrigin(0.5, 0);
 }

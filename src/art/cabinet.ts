@@ -4,8 +4,9 @@
  */
 
 import Phaser from 'phaser';
-import { PALETTE, css, nightify } from '../render/palette';
+import { PALETTE, nightify } from '../render/palette';
 import type { CabinetDef } from '../game/content';
+import { centerText } from '../core/ui';
 
 export const CAB_W = 26;
 export const CAB_H = 36;
@@ -15,7 +16,7 @@ export class Cabinet {
   private marquee: Phaser.GameObjects.Rectangle;
   private badge: Phaser.GameObjects.Container;
   private badgeBox: Phaser.GameObjects.Rectangle;
-  private badgeText: Phaser.GameObjects.Text;
+  private badgeText: Phaser.GameObjects.BitmapText;
   private screen: Phaser.GameObjects.Rectangle;
   private affordable = true;
 
@@ -63,10 +64,7 @@ export class Cabinet {
 
     // floating cost badge
     this.badgeBox = scene.add.rectangle(0, 0, 12, 11, PALETTE.black, 0.75).setStrokeStyle(1, PALETTE.gold);
-    this.badgeText = scene.add
-      .text(0, 0, String(def.cost), { fontFamily: 'monospace', fontSize: '8px', color: css(PALETTE.gold) })
-      .setOrigin(0.5, 0.5)
-      .setResolution(1);
+    this.badgeText = centerText(scene, 0, 0, String(def.cost), PALETTE.gold);
     this.badge = scene.add.container(x, y - CAB_H - 8, [this.badgeBox, this.badgeText]).setDepth(500);
     this.badge.setVisible(!night);
 
@@ -80,7 +78,7 @@ export class Cabinet {
     if (v === this.affordable) return;
     this.affordable = v;
     this.badgeBox.setStrokeStyle(1, v ? PALETTE.gold : PALETTE.steel);
-    this.badgeText.setColor(css(v ? PALETTE.gold : PALETTE.ash));
+    this.badgeText.setTint(v ? PALETTE.gold : PALETTE.ash);
   }
 
   distanceTo(x: number, y: number): number {

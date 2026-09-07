@@ -40,12 +40,12 @@ export class ArcadeHub extends Phaser.Scene {
   private bounds!: Phaser.Geom.Rectangle;
   private keys!: Record<string, Phaser.Input.Keyboard.Key[]>;
   private cabinets: Cabinet[] = [];
-  private prompt!: Phaser.GameObjects.Text;
+  private prompt!: Phaser.GameObjects.BitmapText;
   private promptPlate!: Phaser.GameObjects.Rectangle;
   private target: Target = null;
   private locked = false;
   private dialogue!: DialogueBox;
-  private mutter!: Phaser.GameObjects.Text;
+  private mutter!: Phaser.GameObjects.BitmapText;
 
   constructor() {
     super('ArcadeHub');
@@ -313,7 +313,7 @@ export class ArcadeHub extends Phaser.Scene {
       msg = store.get().prizesOwned.length > 0 ? '[E] LEAVE' : '[E] DOOR';
     }
 
-    this.prompt.setText(msg).setColor(color === PALETTE.gold ? '#ffd45e' : '#5c6b7d');
+    this.prompt.setText(msg).setTint(color === PALETTE.gold ? 0xffd45e : 0x5c6b7d);
     const x = Phaser.Math.Clamp(this.player.x, 60, GAME_W - 60);
     const y = this.player.y - 34;
     this.prompt.setPosition(x, y).setVisible(true);

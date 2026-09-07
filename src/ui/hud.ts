@@ -7,16 +7,21 @@
  */
 
 import Phaser from 'phaser';
-import { PALETTE, css } from '../render/palette';
+import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
+import { text } from '../core/ui';
 
 export const LOW_TOKEN_THRESHOLD = 3;
 
+/** Left edge of the label, clear of the coin. */
+const LABEL_X = 19;
+
 export class TokenHud {
   private scene: Phaser.Scene;
+  private plate: Phaser.GameObjects.Rectangle;
   private coin: Phaser.GameObjects.Arc;
-  private label: Phaser.GameObjects.Text;
+  private label: Phaser.GameObjects.BitmapText;
   private container: Phaser.GameObjects.Container;
   private unsub: () => void;
   private pulse?: Phaser.Tweens.Tween;
@@ -24,13 +29,11 @@ export class TokenHud {
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
 
-    const plate = scene.add.rectangle(0, 0, 54, 14, PALETTE.black, 0.55).setOrigin(0, 0);
+    this.plate = scene.add.rectangle(0, 0, 54, 14, PALETTE.black, 0.55).setOrigin(0, 0);
     this.coin = scene.add.circle(10, 7, 4, PALETTE.gold);
-    this.label = scene.add
-      .text(19, 3, '', { fontFamily: 'monospace', fontSize: '8px', color: css(PALETTE.cream) })
-      .setResolution(1);
+    this.label = text(scene, LABEL_X, 3, '', PALETTE.cream);
 
-    this.container = scene.add.container(4, 4, [plate, this.coin, this.label]);
+    this.container = scene.add.container(4, 4, [this.plate, this.coin, this.label]);
     this.container.setDepth(950).setScrollFactor(0);
 
     this.unsub = ledger.onChange((next, prev) => this.onChange(next, prev));
@@ -55,9 +58,12 @@ export class TokenHud {
 
   private refresh(v: number): void {
     this.label.setText(`${v}`.padStart(3, ' ') + ' TOK');
+    // The plate tracks the label rather than assuming a width: a four-digit
+    // balance is reachable, and the old fixed 54px clipped the K off ' TOK'.
+    this.plate.setSize(LABEL_X + this.label.width + 5, 14);
 
     const low = v <= LOW_TOKEN_THRESHOLD;
-    this.label.setColor(css(low ? PALETTE.blood : PALETTE.cream));
+    this.label.setTint(low ? PALETTE.blood : PALETTE.cream);
     this.coin.setFillStyle(low ? PALETTE.ember : PALETTE.gold);
 
     if (low && !this.pulse) {

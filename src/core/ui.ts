@@ -1,26 +1,34 @@
 /**
  * Shared pixel-UI helpers.  Placeholder-grade by design (PRD §11.5): flat
- * rectangles and bitmap-ish text until the Phase 7 art pass.
+ * rectangles until the art pass.  The text is not placeholder — it is the
+ * 1-bit font in render/pixelFont.ts, because a browser-rasterised font cannot
+ * be crisp inside a 320x180 buffer.
  */
 
 import Phaser from 'phaser';
-import { PALETTE, css } from '../render/palette';
+import { PALETTE } from '../render/palette';
 import { audio } from './audio';
+import { ensurePixelFont, FONT_KEY, FONT_H, FONT_ADVANCE } from '../render/pixelFont';
 
+/**
+ * `size` is a target pixel height, kept for the call sites that ask for big
+ * text.  It snaps to a whole multiple of the font's 8px cell: a fractional
+ * scale would resample the glyphs and undo the whole point of them.
+ */
 export function text(
   scene: Phaser.Scene,
   x: number,
   y: number,
   str: string,
   color: number = PALETTE.cream,
-  size = 8,
-): Phaser.GameObjects.Text {
-  const t = scene.add.text(x, y, str, {
-    fontFamily: 'monospace',
-    fontSize: `${size}px`,
-    color: css(color),
-  });
-  t.setResolution(1);
+  size = FONT_H,
+): Phaser.GameObjects.BitmapText {
+  ensurePixelFont(scene);
+  const scale = Math.max(1, Math.round(size / FONT_H));
+  // RetroFont measures itself by cell WIDTH, so the size that renders a glyph
+  // 1:1 is the cell advance — passing FONT_H here silently scales it by 1.6.
+  const t = scene.add.bitmapText(x, y, FONT_KEY, str, FONT_ADVANCE * scale);
+  t.setTint(color);
   return t;
 }
 
@@ -30,8 +38,8 @@ export function centerText(
   y: number,
   str: string,
   color: number = PALETTE.cream,
-  size = 8,
-): Phaser.GameObjects.Text {
+  size = FONT_H,
+): Phaser.GameObjects.BitmapText {
   return text(scene, x, y, str, color, size).setOrigin(0.5, 0.5);
 }
 
@@ -66,7 +74,7 @@ export function button(
   if (opts.disabled) {
     box.setFillStyle(PALETTE.slate);
     box.setStrokeStyle(1, PALETTE.steel);
-    lbl.setColor(css(PALETTE.ash));
+    lbl.setTint(PALETTE.ash);
     return c;
   }
 

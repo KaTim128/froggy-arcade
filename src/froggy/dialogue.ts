@@ -7,11 +7,12 @@
  */
 
 import Phaser from 'phaser';
-import { PALETTE, css } from '../render/palette';
+import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { froggyLayer } from '../render/froggyLayer';
 import { drawFroggy, type FroggyPose } from './froggy';
 import { GAME_W } from '../render/pixelScaler';
+import { text } from '../core/ui';
 
 export const DEFAULT_CPS = 28;
 
@@ -49,8 +50,8 @@ const PORTRAIT_H = 40;
 export class DialogueBox {
   private scene: Phaser.Scene;
   private container: Phaser.GameObjects.Container;
-  private label: Phaser.GameObjects.Text;
-  private prompt: Phaser.GameObjects.Text;
+  private label: Phaser.GameObjects.BitmapText;
+  private prompt: Phaser.GameObjects.BitmapText;
   private highlight: Phaser.GameObjects.Rectangle;
 
   private lines: DialogueLine[] = [];
@@ -70,24 +71,8 @@ export class DialogueBox {
     panel.setStrokeStyle(1, PALETTE.neon);
     const portraitWell = scene.add.rectangle(6, BOX_Y + 3, 48, BOX_H - 6, PALETTE.plum).setOrigin(0, 0);
 
-    this.label = scene.add
-      .text(60, BOX_Y + 8, '', {
-        fontFamily: 'monospace',
-        fontSize: '8px',
-        color: css(PALETTE.cream),
-        wordWrap: { width: GAME_W - 70 },
-        lineSpacing: 2,
-      })
-      .setResolution(1);
-
-    this.prompt = scene.add
-      .text(GAME_W - 14, BOX_Y + BOX_H - 11, '>', {
-        fontFamily: 'monospace',
-        fontSize: '8px',
-        color: css(PALETTE.gold),
-      })
-      .setResolution(1)
-      .setVisible(false);
+    this.label = text(scene, 60, BOX_Y + 8, '', PALETTE.cream).setMaxWidth(GAME_W - 70);
+    this.prompt = text(scene, GAME_W - 14, BOX_Y + BOX_H - 11, '>', PALETTE.gold).setVisible(false);
 
     this.highlight = scene.add.rectangle(0, 0, 10, 10).setStrokeStyle(1, PALETTE.gold).setVisible(false);
 

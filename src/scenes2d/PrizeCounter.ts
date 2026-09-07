@@ -6,7 +6,7 @@
  */
 
 import Phaser from 'phaser';
-import { PALETTE, css } from '../render/palette';
+import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { ledger } from '../core/ledger';
@@ -48,8 +48,8 @@ export class PrizeCounter extends Phaser.Scene {
       const refresh = () => {
         const isOwned = store.get().prizesOwned.includes(p.id);
         const can = ledger.canAfford(p.cost);
-        name.setColor(css(isOwned ? PALETTE.tealLight : can ? PALETTE.cream : PALETTE.ash));
-        cost.setColor(css(can || isOwned ? PALETTE.gold : PALETTE.steel));
+        name.setTint(isOwned ? PALETTE.tealLight : can ? PALETTE.cream : PALETTE.ash);
+        cost.setTint(can || isOwned ? PALETTE.gold : PALETTE.steel);
         btn.setAlpha(isOwned || can ? 1 : 0.55);
       };
       refresh();

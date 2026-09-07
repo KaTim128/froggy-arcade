@@ -39,7 +39,7 @@ let meterFill: Phaser.GameObjects.Rectangle | null = null;
 let hoopRim: Phaser.GameObjects.Rectangle | null = null;
 let backboard: Phaser.GameObjects.Rectangle | null = null;
 let net: Phaser.GameObjects.Rectangle | null = null;
-let hud: Phaser.GameObjects.Text | null = null;
+let hud: Phaser.GameObjects.BitmapText | null = null;
 let apiRef: MinigameApi | null = null;
 let scoredThisFlight = false;
 

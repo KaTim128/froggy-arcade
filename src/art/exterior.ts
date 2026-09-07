@@ -9,6 +9,7 @@
 import Phaser from 'phaser';
 import { PALETTE, nightify } from '../render/palette';
 import { GAME_W } from '../render/pixelScaler';
+import { centerText } from '../core/ui';
 
 export interface ExteriorOpts {
   night: boolean;
@@ -90,14 +91,7 @@ export function paintExterior(scene: Phaser.Scene, opts: ExteriorOpts): Exterior
   signFrog.fillCircle(-48, -8, 3);
   signFrog.fillCircle(-40, -8, 3);
 
-  const signText = scene.add
-    .text(6, 0, 'FROGGY ARCADE', {
-      fontFamily: 'monospace',
-      fontSize: '8px',
-      color: opts.night ? '#3a3f4d' : '#ff4fa3',
-    })
-    .setOrigin(0.5, 0.5)
-    .setResolution(1);
+  const signText = centerText(scene, 6, 0, 'FROGGY ARCADE', opts.night ? 0x3a3f4d : 0xff4fa3);
 
   const sign = scene.add.container(doorX, fy - 2, [signBox, signFrog, signText]);
 

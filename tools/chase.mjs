@@ -86,9 +86,14 @@ console.log('\nAC-8  the chase');
   check('standing still lets him close', closed,
     `${samples[0].dist.toFixed(1)}m -> ${samples[samples.length - 1].dist.toFixed(1)}m`);
 
-  // measure his actual speed between samples
-  const dt = 0.25;
-  const speeds = samples.slice(1).map((s, i) => Math.hypot(s.fx - samples[i].fx, s.fz - samples[i].fz) / dt);
+  // Measure against the scene's OWN clock, not the sleep between polls.  Under
+  // load the render loop advances far less than wall time — 100ms of game time
+  // across a 353ms sleep — so dividing by either the nominal 250ms or the real
+  // elapsed wall time makes this read wrong in opposite directions.  His speed
+  // is a property of the simulation, so the simulation's clock is what measures it.
+  const speeds = samples
+    .slice(1)
+    .map((s, i) => Math.hypot(s.fx - samples[i].fx, s.fz - samples[i].fz) / ((s.elapsed - samples[i].elapsed) / 1000));
   const avg = speeds.reduce((a, b) => a + b, 0) / speeds.length;
   check('measured speed matches 2.0 m/s', Math.abs(avg - 2.0) < 0.35, `${avg.toFixed(2)} m/s`);
 

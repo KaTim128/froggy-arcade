@@ -7,9 +7,10 @@
  */
 
 import Phaser from 'phaser';
-import { PALETTE, css } from '../render/palette';
+import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
+import { FONT_ADVANCE } from '../render/pixelFont';
 import { BINDINGS } from '../core/input';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
@@ -88,9 +89,7 @@ export class SettingsModal extends Phaser.Scene {
     const track = this.add.rectangle(x0, y, w, 3, PALETTE.slate).setOrigin(0, 0.5);
     const fill = this.add.rectangle(x0, y, 0, 3, PALETTE.neon).setOrigin(0, 0.5);
     const knob = this.add.rectangle(x0, y, 4, 9, PALETTE.gold);
-    const val = this.add
-      .text(x0 + w + 8, y - 4, '0', { fontFamily: 'monospace', fontSize: '8px', color: css(PALETTE.cream) })
-      .setResolution(1);
+    const val = text(this, x0 + w + 8, y - 4, '0', PALETTE.cream);
 
     const refresh = () => {
       const v = store.get().settings[key];
@@ -122,17 +121,16 @@ export class SettingsModal extends Phaser.Scene {
 
   /** PRD §7.3: pixel keycap diagram, generated from BINDINGS. */
   private renderControls(): void {
-    let y = 60;
+    // The longest action runs to x=212 in the 6px-advance font, and the last of
+    // the ten rows has to clear the BACK button at y=145.
+    let y = 54;
     for (const b of BINDINGS) {
       this.body.add(text(this, 44, y, b.action, PALETTE.cream, 8));
-      let kx = 196;
+      let kx = 216;
       for (const k of b.keys) {
-        const w = Math.max(9, k.length * 5 + 5);
+        const w = Math.max(9, k.length * FONT_ADVANCE + 4);
         const cap = this.add.rectangle(kx, y - 2, w, 11, PALETTE.slate).setOrigin(0, 0).setStrokeStyle(1, PALETTE.ash);
-        const lbl = this.add
-          .text(kx + w / 2, y + 3.5, k, { fontFamily: 'monospace', fontSize: '8px', color: css(PALETTE.gold) })
-          .setOrigin(0.5, 0.5)
-          .setResolution(1);
+        const lbl = centerText(this, kx + w / 2, y + 3.5, k, PALETTE.gold);
         this.body.add([cap, lbl]);
         kx += w + 2;
       }

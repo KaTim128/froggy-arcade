@@ -87,7 +87,7 @@ let scatterTimer = SCATTER_EVERY_MS;
 let scatterMs = 0;
 let over = false;
 let dying = false;
-let hud: Phaser.GameObjects.Text | null = null;
+let hud: Phaser.GameObjects.BitmapText | null = null;
 let apiRef: MinigameApi | null = null;
 let sceneRef: Phaser.Scene | null = null;
 

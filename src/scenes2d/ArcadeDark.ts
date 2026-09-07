@@ -30,9 +30,9 @@ type Spot = 'door' | 'case' | 'counter' | 'staff' | null;
 export class ArcadeDark extends Phaser.Scene {
   private player!: Player;
   private keys!: Record<string, Phaser.Input.Keyboard.Key[]>;
-  private prompt!: Phaser.GameObjects.Text;
+  private prompt!: Phaser.GameObjects.BitmapText;
   private promptPlate!: Phaser.GameObjects.Rectangle;
-  private mutter!: Phaser.GameObjects.Text;
+  private mutter!: Phaser.GameObjects.BitmapText;
   private spot: Spot = null;
   private behindCounter = false;
   private locked = false;

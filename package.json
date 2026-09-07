@@ -15,7 +15,8 @@
     "test:basement": "node tools/basement.mjs",
     "test:chase": "node tools/chase.mjs",
     "test:outro": "node tools/outro.mjs",
-    "test:all": "node tools/smoke.mjs && node tools/games.mjs && node tools/story.mjs && node tools/basement.mjs && node tools/chase.mjs && node tools/outro.mjs"
+    "test:text": "node tools/text.mjs",
+    "test:all": "node tools/smoke.mjs && node tools/games.mjs && node tools/story.mjs && node tools/basement.mjs && node tools/chase.mjs && node tools/outro.mjs && node tools/text.mjs"
   },
   "dependencies": {
     "howler": "^2.2.4",

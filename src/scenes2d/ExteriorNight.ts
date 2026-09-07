@@ -11,12 +11,12 @@
  */
 
 import Phaser from 'phaser';
-import { PALETTE, css } from '../render/palette';
+import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { prizeById } from '../game/content';
 import { KEYS } from '../core/input';
-import { fadeIn, fadeToScene, text } from '../core/ui';
+import { centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { paintExterior } from '../art/exterior';
 import { Player } from '../art/player';
 import { froggyLayer } from '../render/froggyLayer';
@@ -28,9 +28,9 @@ type Spot = 'door' | 'kid' | 'leave' | 'alley' | null;
 export class ExteriorNight extends Phaser.Scene {
   private player!: Player;
   private keys!: Record<string, Phaser.Input.Keyboard.Key[]>;
-  private prompt!: Phaser.GameObjects.Text;
+  private prompt!: Phaser.GameObjects.BitmapText;
   private promptPlate!: Phaser.GameObjects.Rectangle;
-  private mutter!: Phaser.GameObjects.Text;
+  private mutter!: Phaser.GameObjects.BitmapText;
   private spot: Spot = null;
   private doorX = GAME_W / 2;
   private locked = false;
@@ -56,10 +56,7 @@ export class ExteriorNight extends Phaser.Scene {
 
     // CLOSED, hanging in the door
     this.add.rectangle(this.doorX, 118, 26, 10, PALETTE.bone).setOrigin(0.5, 0);
-    this.add
-      .text(this.doorX, 120, 'CLOSED', { fontFamily: 'monospace', fontSize: '8px', color: css(PALETTE.blood) })
-      .setOrigin(0.5, 0)
-      .setResolution(1);
+    centerText(this, this.doorX, 120, 'CLOSED', PALETTE.blood).setOrigin(0.5, 0);
 
     // the alley, right edge, barely lit
     this.add.rectangle(GAME_W - 14, 96, 14, 84, PALETTE.black).setOrigin(0, 0);
