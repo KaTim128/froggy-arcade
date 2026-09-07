@@ -130,7 +130,12 @@ export class OutroCutscene3D extends Phaser.Scene {
     tex.minFilter = THREE.LinearFilter;
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, fog: true }));
     sprite.scale.set(6.2, 6.2, 1);
-    sprite.position.set(2, 3.1, -3.6);
+    // A sprite billboards to face the camera, so this 6.2-wide quad also spans
+    // ~1.9 units of z.  The camera sits off to the left, which swung the quad's
+    // left edge back into the facade box (front face z = -4) and let the depth
+    // test slice his left eye and arm off.  He has to be recognisably Froggy
+    // here or the ending does not land, so he stands clear of the wall.
+    sprite.position.set(2, 3.1, -2.6);
     sprite.material.opacity = 0;
     st.scene.add(sprite);
     this.froggySprite = sprite;
@@ -146,7 +151,10 @@ export class OutroCutscene3D extends Phaser.Scene {
     c.height = 384;
     const ctx = c.getContext('2d')!;
     // Mouth closed.  He is not attacking.  He is watching.
-    drawFroggy(ctx, { x: 192, y: 356, height: 320, variant: 'predator', maw: 0.05 });
+    // At height 320 the predator draws 371px tall, so the feet line sits at 370
+    // to keep the tops of the eye bumps inside the canvas rather than shaved
+    // flat by its top edge.
+    drawFroggy(ctx, { x: 192, y: 370, height: 320, variant: 'predator', maw: 0.05 });
     return c;
   }
 
