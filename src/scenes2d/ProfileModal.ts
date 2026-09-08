@@ -37,6 +37,10 @@ export class ProfileModal extends Phaser.Scene {
   }
 
   create(): void {
+    // Scene draw order follows the registration list, and this modal sits near
+    // the front of it — so anything launching it from a later scene would render
+    // on top of it.  A modal has to be on top wherever it is opened from.
+    this.scene.bringToTop();
     this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0.82).setOrigin(0, 0).setInteractive();
     this.add.rectangle(GAME_W / 2, GAME_H / 2, 250, 150, PALETTE.ink).setStrokeStyle(1, PALETTE.neon);
     centerText(this, GAME_W / 2, 26, 'PROFILES', PALETTE.gold, 8);

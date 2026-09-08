@@ -73,13 +73,16 @@ interface Ghost {
   sprite: Phaser.GameObjects.Container;
   body: Phaser.GameObjects.Rectangle;
   patrolIdx: number;
+  /** Tile this entity last made a turn decision in.  See `arrived`. */
+  lastTile: number;
 }
 
 let grid: string[][] = [];
 let pelletObjs: Array<Phaser.GameObjects.Arc | null> = [];
 let pelletsLeft = 0;
-let player = { col: 10, row: 13, px: 0, py: 0, dir: { x: 0, y: 0 }, want: { x: 0, y: 0 } };
+let player = { col: 10, row: 13, px: 0, py: 0, dir: { x: 0, y: 0 }, want: { x: 0, y: 0 }, lastTile: -1 };
 let playerSprite: Phaser.GameObjects.Arc | null = null;
+let chompPhase = 0;
 let ghosts: Ghost[] = [];
 let lives = LIVES;
 let frightMs = 0;
@@ -129,7 +132,9 @@ export const chompMan: MinigameModule = {
           pelletObjs[idx] = scene.add.circle(tileX(c), tileY(r), 1, PALETTE.cream);
           pelletsLeft++;
         } else if (ch === 'o') {
-          pelletObjs[idx] = scene.add.circle(tileX(c), tileY(r), 3, PALETTE.gold);
+          // Cream, not gold: gold is the player, and at 8px a gold dot and a
+          // gold player circle were the same object to the eye.
+          pelletObjs[idx] = scene.add.circle(tileX(c), tileY(r), 3, PALETTE.cream);
           pelletsLeft++;
         } else if (ch === 'P') {
           player.col = c;
@@ -142,7 +147,10 @@ export const chompMan: MinigameModule = {
     player.py = tileY(player.row);
     player.dir = { x: 0, y: 0 };
     player.want = { x: 0, y: 0 };
-    playerSprite = scene.add.circle(player.px, player.py, 3.4, PALETTE.gold).setDepth(20);
+    player.lastTile = -1;
+    // A wedge, not a disc — the mouth is what makes him read as a character
+    // among a maze of dots instead of one more pellet.
+    playerSprite = scene.add.arc(player.px, player.py, 4, 32, 328, false, PALETTE.gold).setDepth(20);
 
     const spawns: Array<[GhostKind, number, number, number, number, number]> = [
       // kind, startCol, startRow, cornerCol, cornerRow, colour
@@ -167,6 +175,7 @@ export const chompMan: MinigameModule = {
         sprite,
         body,
         patrolIdx: 0,
+        lastTile: -1,
       });
     }
 
@@ -217,10 +226,31 @@ function atCentre(px: number, py: number, col: number, row: number): boolean {
   return Math.abs(px - tileX(col)) < 1.2 && Math.abs(py - tileY(row)) < 1.2;
 }
 
+/**
+ * True on the frame an entity settles into a tile it has not decided in yet.
+ *
+ * The decision USED to run on every frame `atCentre` was true, and it re-snaps
+ * position to the tile centre.  At 60fps a step is 0.64-0.70px, well inside the
+ * 1.2px centre band, so the snap undid the step and re-ran forever: nothing in
+ * the maze ever moved, player or ghost.  It only came unstuck below ~33fps,
+ * where one step finally cleared the band — which is why it looked fine in a
+ * throttled tab and dead in a real one.
+ *
+ * Deciding once per entered tile also gives Pac-Man's turn buffering for free:
+ * a direction pressed mid-tile applies at the next centre.
+ */
+function arrived(px: number, py: number, col: number, row: number, dir: Dir, lastTile: number): boolean {
+  if (!atCentre(px, py, col, row)) return false;
+  const stopped = dir.x === 0 && dir.y === 0;
+  return stopped || lastTile !== row * COLS + col;
+}
+
 function movePlayer(dt: number): void {
   if (!playerSprite) return;
+  chompPhase += dt * 9;
 
-  if (atCentre(player.px, player.py, player.col, player.row)) {
+  if (arrived(player.px, player.py, player.col, player.row, player.dir, player.lastTile)) {
+    player.lastTile = player.row * COLS + player.col;
     // snap, then consider turning
     player.px = tileX(player.col);
     player.py = tileY(player.row);
@@ -240,8 +270,24 @@ function movePlayer(dt: number): void {
   player.col = Math.round((player.px - OX - TILE / 2) / TILE);
   player.row = Math.round((player.py - OY - TILE / 2) / TILE);
   playerSprite.setPosition(player.px, player.py);
+  animateMouth();
 
   eatPellet();
+}
+
+/** Chomp on the move, mouth shut when idle, always facing the way he is going. */
+function animateMouth(): void {
+  if (!playerSprite) return;
+  const moving = player.dir.x !== 0 || player.dir.y !== 0;
+  if (!moving) {
+    playerSprite.setStartAngle(8);
+    playerSprite.setEndAngle(352);
+    return;
+  }
+  playerSprite.setAngle(Math.atan2(player.dir.y, player.dir.x) * (180 / Math.PI));
+  const gape = 6 + Math.abs(Math.sin(chompPhase)) * 34;
+  playerSprite.setStartAngle(gape);
+  playerSprite.setEndAngle(360 - gape);
 }
 
 function eatPellet(): void {
@@ -267,7 +313,8 @@ function eatPellet(): void {
 function moveGhost(g: Ghost, dt: number): void {
   const speed = frightMs > 0 ? FRIGHT_SPEED : GHOST_SPEED;
 
-  if (atCentre(g.px, g.py, g.col, g.row)) {
+  if (arrived(g.px, g.py, g.col, g.row, g.dir, g.lastTile)) {
+    g.lastTile = g.row * COLS + g.col;
     g.px = tileX(g.col);
     g.py = tileY(g.row);
     g.dir = chooseDir(g);
@@ -380,6 +427,7 @@ function checkCollisions(): void {
       g.row = g.home.row;
       g.px = tileX(g.col);
       g.py = tileY(g.row);
+      g.lastTile = -1;
       g.sprite.setPosition(g.px, g.py);
       continue;
     }
@@ -406,12 +454,14 @@ function loseLife(): void {
     player.py = tileY(player.row);
     player.dir = { x: 0, y: 0 };
     player.want = { x: 0, y: 0 };
+    player.lastTile = -1;
     playerSprite?.setPosition(player.px, player.py);
     for (const g of ghosts) {
       g.col = g.home.col;
       g.row = g.home.row;
       g.px = tileX(g.col);
       g.py = tileY(g.row);
+      g.lastTile = -1;
       g.sprite.setPosition(g.px, g.py);
     }
     frightMs = 0;

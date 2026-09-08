@@ -31,6 +31,10 @@ export class SettingsModal extends Phaser.Scene {
   }
 
   create(): void {
+    // Scene draw order follows the registration list, where this modal sits
+    // BEFORE the hub — so launched from there it rendered underneath, and the
+    // settings looked like they simply never opened.
+    this.scene.bringToTop();
     // Block clicks reaching the scene underneath.
     this.add
       .rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0.82)

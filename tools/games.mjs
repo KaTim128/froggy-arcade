@@ -80,6 +80,45 @@ for (const g of GAMES) {
 
 console.log(failures === 0 ? '\nAll 7 games launch, play and quit cleanly.' : `\n${failures} game(s) failed.`);
 
+// "Launches and quits cleanly" passed for months on a Chomp-Man where nothing
+// moved at all: the grid step was smaller than the centre-snap band at 60fps,
+// so player and ghosts were pinned to their spawn tiles.  Movement is the game,
+// so assert it moves.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=chompman`, { waitUntil: 'networkidle2' });
+  await sleep(3000);
+  await page.mouse.click(640, 60); // focus the canvas, in the title bar
+
+  const snap = () =>
+    page.evaluate(() => {
+      const s = window.__froggy.game().scene.getScene('Minigame');
+      let player = null;
+      const ghosts = [];
+      s.children.list.forEach((o) => {
+        if (o.type === 'Arc' && o.radius > 3) player = [Math.round(o.x), Math.round(o.y)];
+        if (o.type === 'Container' && o.y > 20) ghosts.push([Math.round(o.x), Math.round(o.y)]);
+      });
+      return { player, ghosts };
+    });
+
+  const a = await snap();
+  await page.keyboard.down('ArrowUp');
+  await sleep(900);
+  await page.keyboard.up('ArrowUp');
+  const b = await snap();
+
+  const moved = (p, q) => p[0] !== q[0] || p[1] !== q[1];
+  const playerMoved = moved(a.player, b.player);
+  const ghostsMoved = a.ghosts.some((g, i) => moved(g, b.ghosts[i]));
+
+  console.log(`${playerMoved ? 'PASS' : 'FAIL'}  chomp-man's player moves  — ${a.player} -> ${b.player}`);
+  console.log(`${ghostsMoved ? 'PASS' : 'FAIL'}  chomp-man's ghosts move   — ${a.ghosts[0]} -> ${b.ghosts[0]}`);
+  if (!playerMoved || !ghostsMoved) failures++;
+  await page.close();
+}
+
 // The deep links above bypass the hub entirely, which is how a cabinet could
 // stop being clickable without a single test noticing.  A cabinet advertises
 // itself as clickable, so clicking one has to start the game.
