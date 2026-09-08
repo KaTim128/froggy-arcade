@@ -38,13 +38,20 @@ export function tutorialScript(t: TutorialTargets): DialogueLine[] {
       highlight: t.prizeCounter,
     },
     {
-      // PRD §8.4 line 6 / QFD VOC-16.  THE only foreshadowing in Act I.
+      // PRD §8.4 line 6 / QFD VOC-16.  THE only foreshadowing in Act I, and it
+      // is entirely non-verbal.
       //
       // Same art as every other line.  He simply stops moving, for half a second
       // before and half a second after, and the typewriter slows down.  No music
       // cue, no colour shift, no camera move.  The stillness is the whole effect.
       // Do not embellish this.  Do not shorten the holds.
-      text: 'One rule, friend. Don’t lose all your tokens.',
+      //
+      // The line itself must stay harmless.  It used to read "One rule, friend.
+      // Don't lose all your tokens." — which tells the player that running out
+      // is dangerous, and a warned player is not a frightened one.  Going broke
+      // has to arrive as a surprise, so he says something warm and empty and
+      // the stillness does the work instead.
+      text: 'Anyway. You’re going to do just fine here.',
       pose: 'blank',
       freeze: true,
       holdBefore: 500,

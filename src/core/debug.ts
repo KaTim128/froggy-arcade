@@ -47,6 +47,7 @@ export function initDebug(g: Phaser.Game): void {
   (window as unknown as Record<string, unknown>).__froggy = {
     state: () => JSON.parse(JSON.stringify(store.get())),
     audioSources: () => audio.sourceCount(),
+    audioLevel: () => audio.probeLevel(),
     broke: () => evaluateBroke(),
     scenes: () => SCENES,
     canEnter: (scene: string, route: string, tokens = 0) =>

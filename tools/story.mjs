@@ -149,6 +149,27 @@ console.log('\nAC-4  second bust ejects, front door locked for good');
   await page.close();
 }
 
+// ------------------------------------------------------- the arcade has a bed
+//
+// The silence later only lands if there was something to lose.  "There is
+// music" used to be assertable only as "a source object exists", which stayed
+// true the whole time the bed was an arpeggio nobody could hear — so measure
+// the signal going to the speakers instead.
+console.log('\nAU-1  the arcade is not silent');
+{
+  const page = await newPage('?intro=1&tokens=20&scene=ArcadeHub');
+  await sleep(1200);
+  await page.mouse.click(640, 60); // unlock the context
+  await sleep(2500);
+  let peak = 0;
+  for (let i = 0; i < 26; i++) {
+    peak = Math.max(peak, await page.evaluate(() => window.__froggy.audioLevel()));
+    await sleep(120);
+  }
+  check('the arcade plays an audible music bed', peak > 0.004, `peak ${peak.toFixed(4)} rms`);
+  await page.close();
+}
+
 // ------------------------------------------------------- AC-10 total silence
 console.log('\nAC-10 the silence contract');
 {

@@ -340,8 +340,10 @@ function stepBarrels(dt: number): void {
       // at the first ladder they touched — meant a barrel only ever covered a
       // third of a floor, and the girders were mostly empty.
       const atEnd = b.dir > 0 ? b.x > RIGHT - 4 : b.x < LEFT + 4;
-      const l = ladders.find((ld) => ld.from === b.floor - 1 && Math.abs(ld.x - b.x) < 3);
-      if ((atEnd || (l && Math.random() < 0.12)) && b.floor > 0) {
+      // Only ever at the end of a girder.  Dropping down a ladder part-way
+      // across meant a barrel covered a fraction of the floor and most of every
+      // girder sat empty; now each one rolls the whole span before it falls.
+      if (atEnd && b.floor > 0) {
         b.floor--;
         b.falling = true;
       }

@@ -45,6 +45,7 @@ class AudioManager {
   private assets = new Map<string, { howl: Howl; bus: BusName }>();
   private current: SceneAudio = SILENCE;
   private unlocked = false;
+  private analyser: AnalyserNode | null = null;
 
   /** Called from the Boot click gate (PRD EC-9). */
   unlock(): void {
@@ -123,6 +124,27 @@ class AudioManager {
   /** DV-3 / AC-10: the number of sustained sources currently instantiated. */
   sourceCount(): number {
     return this.sustained.length;
+  }
+
+  /**
+   * RMS of everything currently going to the speakers, 0..1.
+   *
+   * "There is music" was previously only assertable as "a source object
+   * exists", which stayed true the whole time the bed was an arpeggio nobody
+   * could hear.  This measures the signal instead.
+   */
+  probeLevel(): number {
+    if (!this.ctx || !this.masterGain) return 0;
+    if (!this.analyser) {
+      this.analyser = this.ctx.createAnalyser();
+      this.analyser.fftSize = 1024;
+      this.masterGain.connect(this.analyser);
+    }
+    const buf = new Float32Array(this.analyser.fftSize);
+    this.analyser.getFloatTimeDomainData(buf);
+    let sum = 0;
+    for (const v of buf) sum += v * v;
+    return Math.sqrt(sum / buf.length);
   }
 
   currentScene(): SceneAudio {
@@ -214,40 +236,112 @@ class AudioManager {
     };
   }
 
+  /**
+   * The arcade's music bed.  Synthesized, because there are no audio assets yet
+   * (PRD §11.5) — `registerAsset` is still the seam where real files land.
+   *
+   * This used to be a bare six-note arpeggio, written to prove the music bus
+   * worked rather than to be listened to, and the arcade played as though it
+   * had no soundtrack at all.  It is now an actual loop: a four-chord bed on
+   * soft detuned triangles, a bass note under each change, and a quiet
+   * kick/hat pulse.  Warm, slow, and repetitive on purpose — it is a room you
+   * are meant to stay in.
+   */
   private placeholderMusic(out: GainNode, bright: boolean): () => void {
     const ctx = this.ctx!;
-    // A slow four-bar loop.  Deliberately unremarkable: it is here to prove the
-    // music bus works, not to be the soundtrack.
-    const root = bright ? 261.63 : 196.0;
-    const steps = bright ? [0, 4, 7, 11, 7, 4] : [0, 3, 7, 10, 7, 3];
-    let i = 0;
-    let stopped = false;
-    const bpmMs = 480;
 
-    const tick = () => {
-      if (stopped) return;
-      const semi = steps[i % steps.length];
-      i++;
-      const freq = root * Math.pow(2, semi / 12);
+    // Dusk outside is a shade brighter than the floor inside.
+    const BEAT_MS = bright ? 460 : 520;
+    const chords = bright
+      ? [
+          [261.63, 329.63, 392.0, 493.88], // Cmaj7
+          [220.0, 261.63, 329.63, 392.0], // Am7
+          [174.61, 220.0, 261.63, 329.63], // Fmaj7
+          [196.0, 246.94, 293.66, 349.23], // G7
+        ]
+      : [
+          [146.83, 174.61, 220.0, 261.63], // Dm7
+          [130.81, 155.56, 196.0, 233.08], // Cm7-ish
+          [174.61, 207.65, 261.63, 311.13], // Fm7
+          [196.0, 233.08, 293.66, 349.23], // Gm7
+        ];
+    const bassOf = (chord: number[]) => chord[0] / 2;
+
+    let beat = 0;
+    let stopped = false;
+
+    // Master shaping for the whole bed: gentle low-pass so nothing is sharp.
+    const tone = ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = bright ? 2400 : 1500;
+    tone.Q.value = 0.4;
+    tone.connect(out);
+
+    const pluck = (freq: number, at: number, dur: number, vol: number, detune = 0) => {
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
       osc.type = 'triangle';
       osc.frequency.value = freq;
-      const t = ctx.currentTime;
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(0.055, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + bpmMs / 1000);
+      osc.detune.value = detune;
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.linearRampToValueAtTime(vol, at + 0.08); // soft attack, no click
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
       osc.connect(g);
+      g.connect(tone);
+      osc.start(at);
+      osc.stop(at + dur + 0.05);
+    };
+
+    const thump = (at: number, hat: boolean) => {
+      const len = Math.floor(ctx.sampleRate * (hat ? 0.05 : 0.16));
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** (hat ? 1.4 : 3);
+      const src = ctx.createBufferSource();
+      const f = ctx.createBiquadFilter();
+      const g = ctx.createGain();
+      f.type = hat ? 'highpass' : 'lowpass';
+      f.frequency.value = hat ? 6000 : 190;
+      g.gain.value = hat ? 0.016 : 0.062;
+      src.buffer = buf;
+      src.connect(f);
+      f.connect(g);
       g.connect(out);
-      osc.start(t);
-      osc.stop(t + bpmMs / 1000 + 0.05);
+      src.start(at);
+    };
+
+    const tick = () => {
+      if (stopped) return;
+      const t = ctx.currentTime + 0.02;
+      const bar = Math.floor(beat / 4) % chords.length;
+      const chord = chords[bar];
+      const inBar = beat % 4;
+
+      if (inBar === 0) {
+        // the chord itself, voices spread slightly in time so it breathes
+        chord.forEach((f, i) => {
+          pluck(f, t + i * 0.045, (BEAT_MS * 3.4) / 1000, 0.042, i % 2 ? 6 : -6);
+        });
+        pluck(bassOf(chord), t, (BEAT_MS * 2.2) / 1000, 0.08);
+      }
+      if (inBar === 2) pluck(bassOf(chord) * 1.5, t, (BEAT_MS * 1.2) / 1000, 0.05);
+
+      thump(t, inBar % 2 === 1);
+      if (inBar === 0 || inBar === 2) thump(t, false);
+
+      beat++;
     };
 
     tick();
-    const timer = window.setInterval(tick, bpmMs);
+    const timer = window.setInterval(tick, BEAT_MS);
     return () => {
       stopped = true;
       clearInterval(timer);
+      try {
+        tone.disconnect();
+      } catch {
+        /* already gone */
+      }
     };
   }
 
