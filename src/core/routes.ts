@@ -21,6 +21,7 @@ export const SCENES = [
   'BackAlley',
   'ArcadeDark',
   'BasementSequence',
+  'HideAndSeek',
   'Chase3D',
   'OutroCutscene3D',
   'EndCard',
@@ -65,6 +66,9 @@ export function canEnter(scene: SceneId, s: Readonly<GameState>, ctx: GuardConte
 
     case 'BasementSequence':
       return s.route === 'basement';
+
+    case 'HideAndSeek':
+      return s.route === 'hide';
 
     case 'Chase3D':
       return s.route === 'chase';

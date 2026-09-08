@@ -41,16 +41,18 @@ export class SettingsModal extends Phaser.Scene {
       .setOrigin(0, 0)
       .setInteractive();
 
-    this.add.rectangle(GAME_W / 2, GAME_H / 2, 250, 150, PALETTE.ink).setStrokeStyle(1, PALETTE.neon);
-    centerText(this, GAME_W / 2, 26, 'SETTINGS', PALETTE.gold, 8);
+    // 280x162 rather than 250x150: the controls list grew past what the old
+    // panel could hold without running its last row under the BACK button.
+    this.add.rectangle(GAME_W / 2, GAME_H / 2, 280, 162, PALETTE.ink).setStrokeStyle(1, PALETTE.neon);
+    centerText(this, GAME_W / 2, 18, 'SETTINGS', PALETTE.gold, 8);
 
-    button(this, 108, 44, 'AUDIO', () => this.setTab('audio'), { width: 60, height: 13 });
-    button(this, 176, 44, 'CONTROLS', () => this.setTab('controls'), { width: 68, height: 13 });
+    button(this, 108, 34, 'AUDIO', () => this.setTab('audio'), { width: 60, height: 13 });
+    button(this, 176, 34, 'CONTROLS', () => this.setTab('controls'), { width: 68, height: 13 });
 
     this.body = this.add.container(0, 0);
     this.renderBody();
 
-    button(this, GAME_W / 2, 152, 'BACK', () => this.close(), { width: 60, height: 13 });
+    button(this, GAME_W / 2, 158, 'BACK', () => this.close(), { width: 60, height: 13 });
     this.input.keyboard?.on('keydown-ESC', () => this.close());
   }
 
@@ -77,17 +79,17 @@ export class SettingsModal extends Phaser.Scene {
       ['SFX', 'sfx'],
     ];
     rows.forEach(([label, key], i) => {
-      const y = 68 + i * 22;
-      this.body.add(text(this, 60, y - 4, label, PALETTE.cream));
+      const y = 62 + i * 22;
+      this.body.add(text(this, 44, y - 4, label, PALETTE.cream));
       this.slider(y, key);
     });
     this.body.add(
-      text(this, 60, 136, 'settings persist across a reload', PALETTE.ash, 8).setAlpha(0.7),
+      text(this, 44, 136, 'settings persist across a reload', PALETTE.ash, 8).setAlpha(0.7),
     );
   }
 
   private slider(y: number, key: 'master' | 'music' | 'sfx'): void {
-    const x0 = 120;
+    const x0 = 116;
     const w = 100;
 
     const track = this.add.rectangle(x0, y, w, 3, PALETTE.slate).setOrigin(0, 0.5);
@@ -125,12 +127,13 @@ export class SettingsModal extends Phaser.Scene {
 
   /** PRD §7.3: pixel keycap diagram, generated from BINDINGS. */
   private renderControls(): void {
-    // The longest action runs to x=212 in the 6px-advance font, and the last of
-    // the ten rows has to clear the BACK button at y=145.
-    let y = 54;
+    // Eleven rows at 9px from y=46 end at 136, clearing BACK at 151.  The
+    // longest action reaches x=200 in the 6px-advance font, so the keycaps start
+    // at 204 and the widest row (W A S D) still ends inside the panel.
+    let y = 46;
     for (const b of BINDINGS) {
-      this.body.add(text(this, 44, y, b.action, PALETTE.cream, 8));
-      let kx = 216;
+      this.body.add(text(this, 32, y, b.action, PALETTE.cream, 8));
+      let kx = 204;
       for (const k of b.keys) {
         const w = Math.max(9, k.length * FONT_ADVANCE + 4);
         const cap = this.add.rectangle(kx, y - 2, w, 11, PALETTE.slate).setOrigin(0, 0).setStrokeStyle(1, PALETTE.ash);

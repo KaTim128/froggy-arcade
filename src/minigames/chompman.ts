@@ -182,11 +182,14 @@ export const chompMan: MinigameModule = {
     hud = centerText(scene, GAME_W / 2, 24, '', PALETTE.cream);
     refreshHud();
 
+    // Both schemes, live at once — WASD is added to the arrows, not instead of
+    // them, so neither set can stop working without the other noticing.
     const kb = scene.input.keyboard;
-    kb?.on('keydown-RIGHT', () => (player.want = { x: 1, y: 0 }));
-    kb?.on('keydown-LEFT', () => (player.want = { x: -1, y: 0 }));
-    kb?.on('keydown-DOWN', () => (player.want = { x: 0, y: 1 }));
-    kb?.on('keydown-UP', () => (player.want = { x: 0, y: -1 }));
+    const steer = (x: number, y: number) => () => (player.want = { x, y });
+    for (const key of ['RIGHT', 'D']) kb?.on(`keydown-${key}`, steer(1, 0));
+    for (const key of ['LEFT', 'A']) kb?.on(`keydown-${key}`, steer(-1, 0));
+    for (const key of ['DOWN', 'S']) kb?.on(`keydown-${key}`, steer(0, 1));
+    for (const key of ['UP', 'W']) kb?.on(`keydown-${key}`, steer(0, -1));
   },
 
   update(_t: number, delta: number) {

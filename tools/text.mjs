@@ -155,7 +155,7 @@ try {
     ctx.drawImage(img, 0, 0);
     // The heading, in game pixels, scaled to the 1280x720 shot.
     const z = img.width / 320;
-    const d = ctx.getImageData(120 * z, 20 * z, 80 * z, 12 * z).data;
+    const d = ctx.getImageData(120 * z, 12 * z, 80 * z, 12 * z).data;
     const seen = new Map();
     for (let i = 0; i < d.length; i += 4) {
       const key = `${d[i]},${d[i + 1]},${d[i + 2]}`;
@@ -224,7 +224,7 @@ try {
   await sleep(2200);
   await page.mouse.click(640, 360 + (148 - 90) * 4);
   await sleep(600);
-  await page.mouse.click(640 + (176 - 160) * 4, 360 + (44 - 90) * 4); // CONTROLS
+  await page.mouse.click(640 + (176 - 160) * 4, 360 + (34 - 90) * 4); // CONTROLS
   await sleep(700);
 
   const controls = await page.evaluate(async () => {
@@ -252,10 +252,10 @@ try {
   // Action names live left of the keycap column at x=216; nothing may reach it.
   const actions = controls.filter((l) => /[a-z]/.test(l.text));
   const widest = actions.reduce((a, l) => (l.right > a.right ? l : a), { right: 0, text: '' });
-  check('action names stay clear of the keycap column', widest.right <= 216, `"${widest.text}" ends at ${Math.round(widest.right)}`);
+  check('action names stay clear of the keycap column', widest.right <= 204, `"${widest.text}" ends at ${Math.round(widest.right)}`);
 
   const lowest = controls.reduce((a, l) => (l.bottom > a.bottom ? l : a), { bottom: 0, text: '' });
-  check('the last binding clears the BACK button', lowest.bottom <= 145, `"${lowest.text}" bottom ${Math.round(lowest.bottom)}`);
+  check('the last binding clears the BACK button', lowest.bottom <= 151, `"${lowest.text}" bottom ${Math.round(lowest.bottom)}`);
 
   if (errors.length) {
     console.log('\nRuntime errors:');

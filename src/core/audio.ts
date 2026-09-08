@@ -525,6 +525,80 @@ class AudioManager {
         break;
     }
   }
+
+  /**
+   * The jumpscare, and only the jumpscare.
+   *
+   * Routed straight to the destination — past the master gain and past both
+   * buses — so the sliders cannot soften it.  The whole beat is built on the
+   * contrast between a silent room and this, and a player who has turned the
+   * sfx bus down to hear the room would otherwise defuse it.
+   *
+   * A muted master is still honoured.  Someone who has set the game to zero has
+   * said something clear, and blasting them in headphones is not a scare, it is
+   * an injury.  The peak is also capped below full scale for the same reason.
+   */
+  scare(): void {
+    if (!this.unlocked || !this.ctx) return;
+    if (store.get().settings.master === 0) return;
+
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const out = ctx.createGain();
+    out.gain.value = 0.72; // ceiling, not unity
+    out.connect(ctx.destination);
+
+    // sub impact — the punch you feel before you hear it
+    for (const f of [38, 41, 55, 58]) {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(f * 3, t);
+      osc.frequency.exponentialRampToValueAtTime(f, t + 0.5);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.5, t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+      osc.connect(g);
+      g.connect(out);
+      osc.start(t);
+      osc.stop(t + 1.7);
+    }
+
+    // the shriek, detuned against itself so it beats
+    for (const f of [1180, 1213, 1760]) {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(f, t);
+      osc.frequency.linearRampToValueAtTime(f * 0.7, t + 0.9);
+      g.gain.setValueAtTime(0.0001, t + 0.02);
+      g.gain.linearRampToValueAtTime(0.16, t + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
+      osc.connect(g);
+      g.connect(out);
+      osc.start(t);
+      osc.stop(t + 1.1);
+    }
+
+    // wet noise burst over the top
+    const len = Math.floor(ctx.sampleRate * 1.2);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 1.6;
+    const src = ctx.createBufferSource();
+    const bp = ctx.createBiquadFilter();
+    const ng = ctx.createGain();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(3200, t);
+    bp.frequency.exponentialRampToValueAtTime(420, t + 1.0);
+    bp.Q.value = 0.8;
+    ng.gain.value = 0.42;
+    src.buffer = buf;
+    src.connect(bp);
+    bp.connect(ng);
+    ng.connect(out);
+    src.start(t);
+  }
 }
 
 export type SfxName =

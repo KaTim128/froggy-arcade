@@ -18,7 +18,9 @@
  *                 is the source of the fear; a new creature would not be scary.
  */
 
-export type FroggyVariant = 'cozy' | 'uncanny' | 'predator';
+import { drawMonster } from './monster';
+
+export type FroggyVariant = 'cozy' | 'uncanny' | 'predator' | 'monster';
 export type FroggyPose = 'idleA' | 'idleB' | 'talk' | 'blank';
 
 export interface FroggyDrawOpts {
@@ -30,8 +32,18 @@ export interface FroggyDrawOpts {
   pose?: FroggyPose;
   /** 0..1, drives the bouncy idle.  Ignored by uncanny and predator. */
   bounce?: number;
-  /** Predator only: 0..1 mouth openness. */
+  /** Predator and monster: 0..1 mouth openness. */
   maw?: number;
+  /** Monster only: 0 = mascot proportions, 1 = fully turned. */
+  morph?: number;
+  /** Monster only: 0..1 blood coverage and run length. */
+  blood?: number;
+  /** Monster only: pupil size multiplier.  Small is the stare. */
+  pupil?: number;
+  /** Monster only: seconds, for wet shimmer and running blood. */
+  t?: number;
+  /** Monster only: 0..1 frame jitter. */
+  shake?: number;
   /**
    * What `y` means.  'feet' is the ground line, like every other actor.
    * 'face' anchors between the eyes — for the horror sections, where what has
@@ -85,7 +97,16 @@ export function drawFroggy(ctx: CanvasRenderingContext2D, o: FroggyDrawOpts): vo
   // Design space: feet at +50, the point between the eyes at -40.
   ctx.translate(0, o.anchor === 'face' ? 40 : -50);
 
-  if (variant === 'predator') {
+  if (variant === 'monster') {
+    drawMonster(ctx, {
+      morph: o.morph ?? 1,
+      maw: o.maw ?? 0,
+      blood: o.blood ?? 0,
+      pupil: o.pupil ?? 1,
+      t: o.t ?? 0,
+      shake: o.shake ?? 0,
+    });
+  } else if (variant === 'predator') {
     drawPredator(ctx, o.maw ?? 1);
   } else {
     // V0 and V1 share this code path exactly.  The ONLY difference is the pose

@@ -20,7 +20,8 @@ export const BINDINGS: Binding[] = [
   { action: 'Fighter move / jump / crouch', keys: ['A', 'D', 'W', 'S'], context: 'Grudge' },
   { action: 'Fighter punch / kick / block', keys: ['J', 'K', 'L'], context: 'Grudge' },
   { action: 'Fighter special', keys: ['I'], context: 'Grudge' },
-  { action: 'Chomp-Man movement', keys: ['↑', '←', '↓', '→'], context: 'Chomp-Man' },
+  { action: 'Chomp-Man movement', keys: ['W', 'A', 'S', 'D'], context: 'Chomp-Man' },
+  { action: 'Chomp-Man movement (alt)', keys: ['↑', '←', '↓', '→'], context: 'Chomp-Man' },
   { action: 'Advance basement image', keys: ['CLICK'], context: 'Basement' },
   { action: 'Pause / back / quit', keys: ['ESC'], context: 'Everywhere' },
 ];

@@ -139,7 +139,7 @@ try {
   await click(640, 360 + (148 - 90) * 4); // SETTINGS button
   await sleep(600);
   await shot('03-settings-audio');
-  await click(640 + (176 - 160) * 4, 360 + (44 - 90) * 4); // CONTROLS tab
+  await click(640 + (176 - 160) * 4, 360 + (34 - 90) * 4); // CONTROLS tab
   await sleep(400);
   await shot('04-settings-controls');
   await page.keyboard.press('Escape');

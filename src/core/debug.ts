@@ -85,6 +85,8 @@ function applyLaunchParams(g: Phaser.Game): void {
   const route = q.get('route');
   if (route) store.patch({ route: route as Route });
   if (q.get('key') === '1') store.patch({ hasKey: true });
+  const hideRoom = q.get('hideRoom');
+  if (hideRoom !== null) store.patch({ hideRoom: Math.max(0, Number(hideRoom) | 0) });
   if (q.get('intro') === '1') store.patch({ seenIntro: true });
   if (q.get('charity') === '1') store.patch({ charityUsed: true });
 

@@ -5,7 +5,7 @@
  * the settings (PRD ST-5, QFD FMEA #11).
  */
 
-export type Route = 'normal' | 'ejected' | 'basement' | 'chase' | 'ended';
+export type Route = 'normal' | 'ejected' | 'basement' | 'hide' | 'chase' | 'ended';
 
 export type GameId =
   | 'tictactoe'
@@ -31,6 +31,8 @@ export interface GameState {
   route: Route;
   hasKey: boolean;
   seenIntro: boolean;
+  /** Which hide-and-seek room the player is in, 0-based.  Route 'hide' only. */
+  hideRoom: number;
   settings: Settings;
 }
 
@@ -93,6 +95,7 @@ function defaultState(): GameState {
     route: 'normal',
     hasKey: false,
     seenIntro: false,
+    hideRoom: 0,
     settings: { master: 80, music: 70, sfx: 85 },
   };
 }

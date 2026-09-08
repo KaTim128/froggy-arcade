@@ -111,14 +111,9 @@ await page.mouse.click(TURN[0], TURN[1]);
 await sleep(900);
 await page.screenshot({ path: `${SHOTS}/f09-reverse-nothing.png` });
 
-// hammer it: the hold must not be skippable
-for (let i = 0; i < 12; i++) {
-  await page.mouse.click(640, 360);
-  await page.keyboard.press('Space');
-  await sleep(60);
-}
-// Wait for the scare rather than guessing when it lands, and record when the
-// overlay first carries anything: that instant IS the jumpscare.
+// From the turn onward the sequence runs itself.  Hammer input the whole way
+// and time it: he stands there, he opens, and it lands on the way-out frame.
+// Timing this from the click avoids racing the crossfades either side of it.
 const overlayPixels = () =>
   page.evaluate(() => {
     const c = document.getElementById('froggy-layer');
@@ -128,17 +123,29 @@ const overlayPixels = () =>
     for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
     return { n, total: c.width * c.height };
   });
+const frameIndex = () =>
+  page.evaluate(() => window.__froggy.game().scene.getScene('BasementSequence').index);
 
 let overlay = { n: 0, total: 1 };
-let elapsed = 0;
-for (let i = 0; i < 60; i++) {
-  overlay = await overlayPixels();
-  elapsed = Date.now() - t0;
-  if (overlay.n > 0) break;
+let peak = { n: 0, total: 1 };
+let sawStare = false;
+let held = 0;
+for (let i = 0; i < 90; i++) {
+  await page.mouse.click(640, 360);
+  await page.keyboard.press('Space');
   await sleep(100);
+  const f = await frameIndex();
+  if (f === 8) sawStare = true;
+  overlay = await overlayPixels();
+  if (overlay.n > peak.n) peak = overlay;
+  if (f === 10) {
+    held = Date.now() - t0;
+    break;
+  }
 }
+overlay = peak;
 await page.screenshot({ path: `${SHOTS}/f10-jumpscare.png` });
-check('4s hold survives input hammering', elapsed >= 4000, `${elapsed}ms before the scare`);
+check('the beat cannot be hammered through', sawStare && held >= 3000 && held <= 7000, `${held}ms, stare seen: ${sawStare}`);
 check(
   'jumpscare fills the frame on the unfiltered overlay',
   overlay.n > overlay.total * 0.15,
@@ -146,9 +153,13 @@ check(
 );
 check('still zero audio sources at the scare', (await sources()) === 0);
 
-await sleep(2600);
-const end = await state();
-check('route advanced to chase', end.route === 'chase', `route=${end.route}`);
+// The beat ends on the way-out frame; the route only commits when the player
+// actually opens the door, so wait for the frame rather than the route.
+await sleep(3200);
+const frame = await page.evaluate(
+  () => window.__froggy.game().scene.getScene('BasementSequence').index,
+);
+check('the scare resolves to the way out', frame === 10, `frame ${frame}`);
 
 console.log('\nRuntime errors: ' + (errors.length ? errors.slice(0, 4).join(' | ') : 'none'));
 const failed = results.filter((r) => !r).length;
