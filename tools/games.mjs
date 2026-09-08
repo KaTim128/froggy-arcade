@@ -79,5 +79,34 @@ for (const g of GAMES) {
 }
 
 console.log(failures === 0 ? '\nAll 7 games launch, play and quit cleanly.' : `\n${failures} game(s) failed.`);
+
+// The deep links above bypass the hub entirely, which is how a cabinet could
+// stop being clickable without a single test noticing.  A cabinet advertises
+// itself as clickable, so clicking one has to start the game.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=20&scene=ArcadeHub`, { waitUntil: 'networkidle2' });
+  await sleep(2500);
+  await page.mouse.click(640, 700);
+  await sleep(600);
+
+  const before = await page.evaluate(() => window.__froggy.state().tokens);
+  // TIC-TAC-TOE sits at game (34, 86), far from the spawn point.
+  await page.mouse.click(640 + (34 - 160) * 4, 360 + (86 - 90) * 4);
+  await sleep(1800);
+  const after = await page.evaluate(() => ({
+    scenes: window.__froggy.activeScenes(),
+    tokens: window.__froggy.state().tokens,
+  }));
+
+  const launched = after.scenes.includes('Minigame') && after.tokens === before - 1;
+  console.log(
+    `${launched ? 'PASS' : 'FAIL'}  clicking a cabinet starts it  — ${after.scenes.join(',')}, ${before} -> ${after.tokens} tokens`,
+  );
+  if (!launched) failures++;
+  await page.close();
+}
+
 await browser.close();
 process.exit(failures ? 1 : 0);

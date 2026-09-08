@@ -67,7 +67,36 @@ page.on('console', (m) => {
 });
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
 
+/**
+ * A fresh browser has no profile, so the picker opens over the start screen and
+ * swallows the clicks below.  This suite is about glyphs, not the save flow —
+ * give it a profile and get out of the way.
+ */
+const seedProfile = () =>
+  page.evaluate(() => {
+    const id = 'textsuite';
+    localStorage.setItem(
+      'froggy.slots',
+      JSON.stringify({ active: id, slots: [{ id, name: 'TEST', createdAt: Date.now() }] }),
+    );
+    localStorage.setItem(
+      `froggy.run.${id}`,
+      JSON.stringify({
+        schemaVersion: 1,
+        tokens: 20,
+        charityUsed: false,
+        prizesOwned: [],
+        gamesPlayed: { tictactoe: 0, snakes: 0, airhockey: 0, hoops: 0, whack: 0, chompman: 0, grudge: 0 },
+        route: 'normal',
+        hasKey: false,
+        seenIntro: true,
+      }),
+    );
+  });
+
 try {
+  await page.goto(`${URL}/?intro=1&scene=StartScreen`, { waitUntil: 'networkidle2', timeout: 30000 });
+  await seedProfile();
   await page.goto(`${URL}/?intro=1&scene=StartScreen`, { waitUntil: 'networkidle2', timeout: 30000 });
   await sleep(2200);
 
@@ -111,7 +140,7 @@ try {
   // "SETTINGS" is gold on the flat ink panel, so every pixel of it must be one
   // of exactly those two colours.  Any blend is antialiasing.
   console.log('\nAR-2  the text is 1-bit, not antialiased');
-  await page.mouse.click(640, 360 + (138 - 90) * 4); // SETTINGS
+  await page.mouse.click(640, 360 + (148 - 90) * 4); // SETTINGS
   await sleep(900);
 
   const b64 = await page.screenshot({ encoding: 'base64' });
@@ -193,7 +222,7 @@ try {
   // The Settings keycap diagram is the densest layout in the game.
   await page.goto(`${URL}/?intro=1&scene=StartScreen`, { waitUntil: 'networkidle2' });
   await sleep(2200);
-  await page.mouse.click(640, 360 + (138 - 90) * 4);
+  await page.mouse.click(640, 360 + (148 - 90) * 4);
   await sleep(600);
   await page.mouse.click(640 + (176 - 160) * 4, 360 + (44 - 90) * 4); // CONTROLS
   await sleep(700);

@@ -53,6 +53,9 @@ export function initDebug(g: Phaser.Game): void {
       canEnter(scene as never, { ...store.get(), route: route as Route, tokens }, { cost: 0 }),
     activeScenes: () => g.scene.getScenes(true).map((s) => s.scene.key),
     game: () => g,
+    // Same setter `?tokens=` uses, for tests that need to change a balance
+    // mid-session rather than at load.
+    setTokens: (n: number) => ledger.debugSet(n),
   };
 
   applyLaunchParams(g);

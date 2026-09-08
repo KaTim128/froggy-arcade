@@ -65,6 +65,7 @@ npm run test:basement  # ten frames, no skip, 4s hold, the jumpscare
 npm run test:chase     # speed ratio, lethality, escapability
 npm run test:outro     # camera locked, Froggy whole in the doorway, end card
 npm run test:text      # glyph coverage, 1-bit rendering, no overflow
+npm run test:profiles  # save slots stay separate, the old save is adopted
 npm run test:all
 ```
 

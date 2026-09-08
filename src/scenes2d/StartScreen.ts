@@ -9,12 +9,14 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { button, centerText, fadeIn, fadeToScene } from '../core/ui';
+import { button, centerText, fadeIn, fadeToScene, FADE_MS } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import { paintExterior, startMoth, startSignFlicker } from '../art/exterior';
 import { froggyLayer } from '../render/froggyLayer';
 
 export class StartScreen extends Phaser.Scene {
+  private who!: Phaser.GameObjects.BitmapText;
+
   constructor() {
     super('StartScreen');
   }
@@ -33,18 +35,40 @@ export class StartScreen extends Phaser.Scene {
     centerText(this, GAME_W / 2, 20, 'FROGGY ARCADE', PALETTE.gold, 16).setLetterSpacing?.(1);
     centerText(this, GAME_W / 2, 34, 'you found ten dollars', PALETTE.cream, 8).setAlpha(0.75);
 
-    const s = store.get();
-    button(this, GAME_W / 2, 118, 'START', () => this.onStart(), { width: 74 });
-    button(this, GAME_W / 2, 138, 'SETTINGS', () => this.scene.launch('SettingsModal', { from: 'StartScreen' }), {
+    button(this, GAME_W / 2, 112, 'START', () => this.onStart(), { width: 74 });
+    button(this, GAME_W / 2, 130, 'PROFILES', () => this.openProfiles(), { width: 74 });
+    button(this, GAME_W / 2, 148, 'SETTINGS', () => this.scene.launch('SettingsModal', { from: 'StartScreen' }), {
       width: 74,
     });
 
-    if (s.route !== 'normal' || s.tokens > 0 || s.seenIntro) {
-      centerText(this, GAME_W / 2, 160, 'continue', PALETTE.ash, 8).setAlpha(0.8);
+    this.who = centerText(this, GAME_W / 2, 166, '', PALETTE.ash, 8).setAlpha(0.85);
+    this.refreshWho();
+    this.events.on('profiles-closed', () => this.refreshWho());
+
+    // Nothing to play until there is somewhere to save it.
+    if (!store.activeSlotId()) this.time.delayedCall(FADE_MS, () => this.openProfiles());
+  }
+
+  private openProfiles(): void {
+    this.scene.launch('ProfileModal', { from: 'StartScreen' });
+  }
+
+  private refreshWho(): void {
+    const name = store.activeSlotName();
+    if (!name) {
+      this.who.setText('no profile - choose one').setTint(PALETTE.gold);
+      return;
     }
+    const s = store.get();
+    const resuming = s.route !== 'normal' || s.tokens > 0 || s.seenIntro;
+    this.who.setText(`${resuming ? 'continue as' : 'playing as'} ${name}`).setTint(PALETTE.ash);
   }
 
   private onStart(): void {
+    if (!store.activeSlotId()) {
+      this.openProfiles();
+      return;
+    }
     const s = store.get();
     // Resume where the run left off (PRD EC-3).
     if (s.route === 'ejected') {

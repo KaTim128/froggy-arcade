@@ -68,10 +68,16 @@ const shot = async (name) => {
 };
 
 /** Read game state out of the running page. */
+/**
+ * The persisted run for the active profile.  Reading storage rather than the
+ * live store keeps this an assertion about what actually got saved.
+ */
 const readState = () =>
   page.evaluate(() => {
     try {
-      return JSON.parse(localStorage.getItem('froggy.run') || '{}');
+      const index = JSON.parse(localStorage.getItem('froggy.slots') || 'null');
+      if (!index || !index.active) return {};
+      return JSON.parse(localStorage.getItem(`froggy.run.${index.active}`) || '{}');
     } catch {
       return {};
     }
@@ -112,11 +118,25 @@ try {
   await click(640, 360); // unlock audio + advance
   await sleep(1200);
 
+  // With no profile the picker opens on its own — there is nowhere to save a
+  // run until one exists, so this is the real first-run path.
+  console.log('2. profile picker -> create one');
+  await shot('02a-profile-picker');
+  await click(640 + (237 - 160) * 4, 360 + (66 - 90) * 4); // NEW on the first row
+  await sleep(500);
+  for (const ch of 'SMOKE') {
+    await page.keyboard.press(`Key${ch}`);
+    await sleep(90);
+  }
+  await shot('02b-profile-naming');
+  await page.keyboard.press('Enter');
+  await sleep(900);
+
   console.log('2. start screen');
   await shot('02-start-screen');
 
   console.log('3. settings modal (audio + controls)');
-  await click(640, 360 + (138 - 90) * 4); // SETTINGS button
+  await click(640, 360 + (148 - 90) * 4); // SETTINGS button
   await sleep(600);
   await shot('03-settings-audio');
   await click(640 + (176 - 160) * 4, 360 + (44 - 90) * 4); // CONTROLS tab
@@ -126,7 +146,7 @@ try {
   await sleep(500);
 
   console.log('4. START -> intro cutscene');
-  await click(640, 360 + (118 - 90) * 4);
+  await click(640, 360 + (112 - 90) * 4); // START
   await sleep(2600);
   await shot('05-intro-walk');
   await page.keyboard.press('Escape'); // skip

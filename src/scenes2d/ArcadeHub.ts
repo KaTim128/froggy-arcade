@@ -18,7 +18,7 @@ import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
 import { paintChangeMachine, paintHubRoom, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
-import { Cabinet } from '../art/cabinet';
+import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
 import { BELL, CABINETS, COUNTER, PRIZE_CASE, PRIZES } from '../game/content';
 import { DialogueBox } from '../froggy/dialogue';
@@ -69,6 +69,23 @@ export class ArcadeHub extends Phaser.Scene {
 
     this.cabinets = CABINETS.map((def) => new Cabinet(this, def));
 
+    // A cabinet advertises itself as clickable — cost badge, affordable
+    // highlight — so it has to BE clickable.  Walking up and pressing [E] still
+    // works; this is the mouse path, and without it clicking a cabinet from
+    // across the room did nothing at all, with no feedback.
+    for (const cab of this.cabinets) {
+      // Cabinets in a column sit 38px apart, so the hit area stays at the
+      // cabinet's own size — any more and neighbours overlap and you launch the
+      // one you were not pointing at.
+      this.add
+        .zone(cab.def.x, cab.def.y - CAB_H / 2, CAB_W + 4, CAB_H + 2)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          if (this.busy()) return;
+          this.launchGame(cab);
+        });
+    }
+
     this.bounds = new Phaser.Geom.Rectangle(
       ROOM.left + 8,
       ROOM.top + 6,
@@ -93,11 +110,16 @@ export class ArcadeHub extends Phaser.Scene {
       right: this.bindKeys(KEYS.right),
     };
     this.input.keyboard?.on('keydown-E', () => this.interact());
-    this.input.on('pointerdown', () => {
-      if (!this.dialogue.isActive()) this.interact();
+    // `over` is what the pointer is actually on.  When that is a cabinet zone,
+    // the zone's own handler runs and this must not also fire the proximity
+    // target — otherwise clicking a cabinet from the spawn point would open the
+    // door standing behind you.
+    this.input.on('pointerdown', (_p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
+      if (over.length > 0 || this.busy()) return;
+      this.interact();
     });
     this.input.keyboard?.on('keydown-ESC', () => {
-      if (!this.locked) this.scene.launch('SettingsModal', { from: 'ArcadeHub' });
+      if (!this.busy()) this.scene.launch('SettingsModal', { from: 'ArcadeHub' });
     });
 
     this.dialogue = new DialogueBox(this);
@@ -169,8 +191,21 @@ export class ArcadeHub extends Phaser.Scene {
 
   // --------------------------------------------------------------- interaction
 
+  /**
+   * The hub keeps running underneath the modals it launches, so its input has
+   * to stand down while one is open.
+   */
+  private busy(): boolean {
+    return (
+      this.locked ||
+      this.dialogue.isActive() ||
+      this.scene.isActive('SettingsModal') ||
+      this.scene.isActive('PrizeCounter')
+    );
+  }
+
   private interact(): void {
-    if (this.locked || this.dialogue.isActive() || !this.target) return;
+    if (this.busy() || !this.target) return;
     const t = this.target;
 
     if (t.kind === 'bell') {

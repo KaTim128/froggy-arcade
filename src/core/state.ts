@@ -34,10 +34,40 @@ export interface GameState {
   settings: Settings;
 }
 
-const RUN_KEY = 'froggy.run';
+/**
+ * Runs live one-per-profile under `froggy.run.<id>`; `froggy.run` is where the
+ * single unnamed run used to live and is migrated on first load.  Settings are
+ * device-wide and deliberately outside all of it.
+ */
+const RUN_PREFIX = 'froggy.run.';
+const LEGACY_RUN_KEY = 'froggy.run';
+const SLOTS_KEY = 'froggy.slots';
 const PREFS_KEY = 'froggy.prefs';
 const SCHEMA_VERSION = 1;
 const FLUSH_DEBOUNCE_MS = 250; // PRD ST-2
+
+export const MAX_SLOTS = 3;
+export const MAX_NAME_LEN = 12;
+
+export interface SlotMeta {
+  id: string;
+  name: string;
+  createdAt: number;
+}
+
+/** What the profile picker shows for a slot without making it active. */
+export interface SlotSummary {
+  tokens: number;
+  route: Route;
+  seenIntro: boolean;
+  prizes: number;
+  played: number;
+}
+
+interface SlotIndex {
+  active: string | null;
+  slots: SlotMeta[];
+}
 
 /**
  * Only the token ledger may write `tokens`.  PRD TK-5 / QFD FMEA #3.
@@ -76,6 +106,7 @@ class Store {
   private state: GameState = defaultState();
   private listeners = new Set<Listener>();
   private flushTimer: number | null = null;
+  private index: SlotIndex = { active: null, slots: [] };
 
   constructor() {
     this.hydrate();
@@ -99,30 +130,139 @@ class Store {
       // Keep the default settings and carry on.
     }
 
-    try {
-      const rawRun = localStorage.getItem(RUN_KEY);
-      if (rawRun) {
-        const run = JSON.parse(rawRun) as Partial<GameState>;
-        if (run.schemaVersion === SCHEMA_VERSION) {
-          Object.assign(fresh, run, { settings: fresh.settings });
-          fresh.gamesPlayed = { ...defaultState().gamesPlayed, ...(run.gamesPlayed ?? {}) };
-          fresh.tokens = Math.max(0, Math.floor(run.tokens ?? 0));
-          fresh.prizesOwned = Array.isArray(run.prizesOwned) ? run.prizesOwned : [];
-        } else {
-          console.warn('[state] schema mismatch — discarding run, keeping prefs');
-          localStorage.removeItem(RUN_KEY);
-        }
-      }
-    } catch {
-      console.warn('[state] corrupt run state — starting fresh');
-      try {
-        localStorage.removeItem(RUN_KEY);
-      } catch {
-        /* private mode, nothing to do */
-      }
-    }
-
     this.state = fresh;
+    this.index = readIndex();
+    this.migrateLegacyRun();
+
+    if (this.index.active) {
+      const run = readRun(this.index.active);
+      if (run) this.applyRun(run);
+      else this.index.active = null; // slot listed but its data is gone
+    }
+  }
+
+  /**
+   * The pre-profile save.  Adopt it as the player's first profile rather than
+   * stranding a run someone was in the middle of.
+   */
+  private migrateLegacyRun(): void {
+    if (this.index.slots.length > 0) return;
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(LEGACY_RUN_KEY);
+    } catch {
+      return;
+    }
+    if (!raw) return;
+
+    const meta: SlotMeta = { id: newSlotId(), name: 'PLAYER 1', createdAt: Date.now() };
+    this.index = { active: meta.id, slots: [meta] };
+    try {
+      localStorage.setItem(RUN_PREFIX + meta.id, raw);
+      localStorage.removeItem(LEGACY_RUN_KEY);
+    } catch {
+      /* ignore */
+    }
+    writeIndex(this.index);
+  }
+
+  private applyRun(run: Partial<GameState>): void {
+    const settings = this.state.settings;
+    const fresh = defaultState();
+    Object.assign(fresh, run, { settings });
+    fresh.gamesPlayed = { ...defaultState().gamesPlayed, ...(run.gamesPlayed ?? {}) };
+    fresh.tokens = Math.max(0, Math.floor(run.tokens ?? 0));
+    fresh.prizesOwned = Array.isArray(run.prizesOwned) ? run.prizesOwned : [];
+    this.state = fresh;
+  }
+
+  // ------------------------------------------------------------------ profiles
+
+  listSlots(): readonly SlotMeta[] {
+    return this.index.slots;
+  }
+
+  activeSlotId(): string | null {
+    return this.index.active;
+  }
+
+  activeSlotName(): string | null {
+    return this.index.slots.find((s) => s.id === this.index.active)?.name ?? null;
+  }
+
+  /** Progress for the picker, read straight from storage — never made active. */
+  slotSummary(id: string): SlotSummary {
+    const run = readRun(id);
+    const played = run?.gamesPlayed ? Object.values(run.gamesPlayed).reduce((a, b) => a + b, 0) : 0;
+    return {
+      tokens: Math.max(0, Math.floor(run?.tokens ?? 0)),
+      route: run?.route ?? 'normal',
+      seenIntro: run?.seenIntro ?? false,
+      prizes: Array.isArray(run?.prizesOwned) ? run.prizesOwned.length : 0,
+      played,
+    };
+  }
+
+  /** Returns the new slot id, or null when there is no room left. */
+  createSlot(name: string): string | null {
+    if (this.index.slots.length >= MAX_SLOTS) return null;
+    if (this.index.active) this.flush();
+
+    const meta: SlotMeta = { id: newSlotId(), name: cleanName(name), createdAt: Date.now() };
+    this.index.slots.push(meta);
+    this.index.active = meta.id;
+    writeIndex(this.index);
+
+    const settings = this.state.settings;
+    this.state = defaultState();
+    this.state.settings = settings;
+    this.flush();
+    this.emit();
+    return meta.id;
+  }
+
+  selectSlot(id: string): boolean {
+    if (!this.index.slots.some((s) => s.id === id)) return false;
+    if (this.index.active === id) return true;
+
+    if (this.index.active) this.flush();
+    this.index.active = id;
+    writeIndex(this.index);
+
+    const run = readRun(id);
+    if (run) this.applyRun(run);
+    else {
+      const settings = this.state.settings;
+      this.state = defaultState();
+      this.state.settings = settings;
+      this.flush();
+    }
+    this.emit();
+    return true;
+  }
+
+  deleteSlot(id: string): void {
+    this.index.slots = this.index.slots.filter((s) => s.id !== id);
+    try {
+      localStorage.removeItem(RUN_PREFIX + id);
+    } catch {
+      /* ignore */
+    }
+    if (this.index.active === id) {
+      this.index.active = null;
+      const settings = this.state.settings;
+      this.state = defaultState();
+      this.state.settings = settings;
+      this.emit();
+    }
+    writeIndex(this.index);
+  }
+
+  renameSlot(id: string, name: string): void {
+    const meta = this.index.slots.find((s) => s.id === id);
+    if (!meta) return;
+    meta.name = cleanName(name);
+    writeIndex(this.index);
   }
 
   get(): Readonly<GameState> {
@@ -163,8 +303,12 @@ class Store {
     return () => this.listeners.delete(fn);
   }
 
-  private touch(): void {
+  private emit(): void {
     for (const fn of this.listeners) fn(this.state);
+  }
+
+  private touch(): void {
+    this.emit();
     if (this.flushTimer !== null) return;
     this.flushTimer = window.setTimeout(() => {
       this.flushTimer = null;
@@ -180,25 +324,24 @@ class Store {
     }
     try {
       const { settings, ...run } = this.state;
-      localStorage.setItem(RUN_KEY, JSON.stringify(run));
+      // Settings are device-wide, so they are written even with no profile
+      // selected; the run has nowhere to go until one is.
       localStorage.setItem(PREFS_KEY, JSON.stringify(settings));
+      if (this.index.active) {
+        localStorage.setItem(RUN_PREFIX + this.index.active, JSON.stringify(run));
+      }
     } catch {
       // Private browsing / storage disabled.  The game still plays, it just forgets.
     }
   }
 
-  /** PRD §7.17 / AC-9: wipe the run, keep the prefs. */
+  /** PRD §7.17 / AC-9: wipe the run, keep the prefs — and keep the profile. */
   resetRun(): void {
     const settings = { ...this.state.settings };
     this.state = defaultState();
     this.state.settings = settings;
-    try {
-      localStorage.removeItem(RUN_KEY);
-    } catch {
-      /* ignore */
-    }
     this.flush();
-    for (const fn of this.listeners) fn(this.state);
+    this.emit();
   }
 
   /** Debug panel only (PRD §6.9). */
@@ -210,6 +353,68 @@ class Store {
 
 function clamp100(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+/** The font is uppercase-friendly and the plate is narrow, so both are enforced. */
+export function cleanName(raw: string): string {
+  const s = raw
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_NAME_LEN);
+  return s || 'PLAYER';
+}
+
+function newSlotId(): string {
+  return `s${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`;
+}
+
+function readIndex(): SlotIndex {
+  try {
+    const raw = localStorage.getItem(SLOTS_KEY);
+    if (!raw) return { active: null, slots: [] };
+    const parsed = JSON.parse(raw) as Partial<SlotIndex>;
+    const slots = Array.isArray(parsed.slots)
+      ? parsed.slots
+          .filter((s): s is SlotMeta => !!s && typeof s.id === 'string' && typeof s.name === 'string')
+          .slice(0, MAX_SLOTS)
+      : [];
+    const active = slots.some((s) => s.id === parsed.active) ? (parsed.active as string) : null;
+    return { active, slots };
+  } catch {
+    return { active: null, slots: [] };
+  }
+}
+
+function writeIndex(index: SlotIndex): void {
+  try {
+    localStorage.setItem(SLOTS_KEY, JSON.stringify(index));
+  } catch {
+    /* ignore */
+  }
+}
+
+function readRun(id: string): Partial<GameState> | null {
+  try {
+    const raw = localStorage.getItem(RUN_PREFIX + id);
+    if (!raw) return null;
+    const run = JSON.parse(raw) as Partial<GameState>;
+    if (run.schemaVersion !== SCHEMA_VERSION) {
+      console.warn('[state] schema mismatch — discarding run, keeping prefs');
+      localStorage.removeItem(RUN_PREFIX + id);
+      return null;
+    }
+    return run;
+  } catch {
+    console.warn('[state] corrupt run state — starting fresh');
+    try {
+      localStorage.removeItem(RUN_PREFIX + id);
+    } catch {
+      /* private mode, nothing to do */
+    }
+    return null;
+  }
 }
 
 export const store = new Store();
