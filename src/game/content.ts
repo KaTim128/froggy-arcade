@@ -40,6 +40,8 @@ export const CABINETS: CabinetDef[] = [
   { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 3, reward: 6, x: 286, y: 124, color: 0x6fbb6a },
   { id: 'chompman', title: 'CHOMP-MAN', tier: 'hard', cost: 7, reward: 7, x: 286, y: 162, color: 0x7b4bd8 },
   { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 5, reward: 10, x: 72, y: 78, color: 0xc31f2e },
+  { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 5, reward: 10, x: 248, y: 78, color: 0xd9822b },
+  { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 160, y: 118, color: 0x1d6f8f },
 ];
 
 export function cabinetById(id: GameId): CabinetDef {

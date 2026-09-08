@@ -14,7 +14,9 @@ export type GameId =
   | 'hoops'
   | 'whack'
   | 'chompman'
-  | 'grudge';
+  | 'grudge'
+  | 'donkeykong'
+  | 'battleship';
 
 export interface Settings {
   master: number; // 0..100
@@ -91,6 +93,8 @@ function defaultState(): GameState {
       whack: 0,
       chompman: 0,
       grudge: 0,
+      donkeykong: 0,
+      battleship: 0,
     },
     route: 'normal',
     hasKey: false,
