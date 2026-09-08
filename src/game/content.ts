@@ -19,6 +19,12 @@ export interface CabinetDef {
   y: number;
   /** Marquee tint. */
   color: number;
+  /**
+   * Which room the cabinet stands in.  The hub has a doorway on its left wall
+   * into the annex, which exists so the floor can grow without the hub turning
+   * into a wall of cabinets.  Defaults to the hub.
+   */
+  room?: 'hub' | 'annex';
 }
 
 export const TIER_ECONOMY: Record<Tier, { cost: number; reward: number }> = {
@@ -39,10 +45,18 @@ export const CABINETS: CabinetDef[] = [
   { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 3, reward: 6, x: 286, y: 86, color: 0xff7a3d },
   { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 3, reward: 6, x: 286, y: 124, color: 0x6fbb6a },
   { id: 'chompman', title: 'CHOMP-MAN', tier: 'hard', cost: 7, reward: 7, x: 286, y: 162, color: 0x7b4bd8 },
-  { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 5, reward: 10, x: 72, y: 78, color: 0xc31f2e },
-  { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 5, reward: 10, x: 248, y: 78, color: 0xd9822b },
-  { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 160, y: 118, color: 0x1d6f8f },
+  { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 5, reward: 10, x: 60, y: 96, color: 0xc31f2e, room: 'annex' },
+  { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 5, reward: 10, x: 128, y: 96, color: 0xd9822b, room: 'annex' },
+  { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 196, y: 96, color: 0x1d6f8f, room: 'annex' },
 ];
+
+/** Cabinets standing in a given room.  Anything unmarked lives in the hub. */
+export function cabinetsIn(room: 'hub' | 'annex'): CabinetDef[] {
+  return CABINETS.filter((c) => (c.room ?? 'hub') === room);
+}
+
+/** The doorway between the two rooms, on the hub's left wall. */
+export const ANNEX_DOOR = { x: 20, y: 118, w: 14, h: 40 };
 
 export function cabinetById(id: GameId): CabinetDef {
   const c = CABINETS.find((x) => x.id === id);

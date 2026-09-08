@@ -27,7 +27,9 @@ const WALK = 2.3;
 const RUN = 4.0;
 /** Exactly half your run.  He never gets faster than this. (CH / H6) */
 const FROGGY_CHASE = RUN * 0.5;
-const FROGGY_SEARCH = 1.15;
+// Faster than it looks it should be: the rooms are 36m across now, and at
+// 1.15 m/s he took half a minute to cross one and felt absent rather than near.
+const FROGGY_SEARCH = 1.7;
 const EYE = 1.55;
 const PLAYER_R = 0.42;
 
@@ -93,6 +95,8 @@ export class HideRoom3D extends Phaser.Scene {
   private onMouse: ((e: MouseEvent) => void) | null = null;
   private frames = 0;
   private grace = 0;
+  private stuckT = 0;
+  private slideDir: 1 | -1 = 1;
 
   constructor() {
     super('HideRoom3D');
@@ -114,6 +118,7 @@ export class HideRoom3D extends Phaser.Scene {
     this.fTimer = 0;
     this.memory = 0;
     this.shake = 0;
+    this.stuckT = 0;
     this.prompt = '';
     this.subtitle = '';
 
@@ -145,11 +150,13 @@ export class HideRoom3D extends Phaser.Scene {
     const st = this.stage!;
     const d = this.def;
     st.scene.background = new THREE.Color(0x05060a);
-    st.scene.fog = new THREE.FogExp2(0x05060a, 0.055);
-    st.scene.add(new THREE.AmbientLight(0x3b3a3e, 0.85));
+    st.scene.fog = new THREE.FogExp2(0x05060a, 0.032);
+    st.scene.add(new THREE.AmbientLight(0x45444a, 1.05));
 
     for (const l of d.lights) {
-      const bulb = new THREE.PointLight(l.color, l.intensity, 16, 1.4);
+      // Reach has to scale with the room.  At 16m in a 36m lounge the bulbs lit
+      // a puddle each and the rest was the torch and nothing.
+      const bulb = new THREE.PointLight(l.color, l.intensity, 26, 1.3);
       bulb.position.set(l.x, d.wallH - 0.5, l.z);
       st.scene.add(bulb);
       const shade = new THREE.Mesh(
@@ -532,9 +539,41 @@ export class HideRoom3D extends Phaser.Scene {
     const nz = this.froggy.y + (az / dist) * speed * dt;
     const freeX = !this.solid(nx, this.froggy.y, 0.5);
     const freeZ = !this.solid(this.froggy.x, nz, 0.5);
-    if (freeX) this.froggy.x = nx;
-    if (freeZ) this.froggy.y = nz;
-    if (!freeX && !freeZ && this.fMode !== 'chase') this.pickWaypoint();
+
+    if (freeX && freeZ) {
+      this.froggy.x = nx;
+      this.froggy.y = nz;
+      this.stuckT = 0;
+    } else if (freeX || freeZ) {
+      // Slide along whichever axis is open, at FULL speed.  Keeping only that
+      // axis's share of the heading meant a waypoint straight through a sofa
+      // moved him about a centimetre a second and he looked frozen.
+      //
+      // When the open axis is also the one he has no reason to move along —
+      // the waypoint is dead ahead through the obstacle — he has to pick a side
+      // to go around, and flip that choice if it is not getting him anywhere.
+      this.stuckT += dt;
+      if (this.stuckT > 1.4) {
+        this.slideDir = this.slideDir === 1 ? -1 : 1;
+        this.stuckT = 0;
+      }
+      if (freeX) {
+        const dir = Math.abs(ax) > 0.4 ? Math.sign(ax) : this.slideDir;
+        this.froggy.x += dir * speed * dt;
+      } else {
+        const dir = Math.abs(az) > 0.4 ? Math.sign(az) : this.slideDir;
+        this.froggy.y += dir * speed * dt;
+      }
+    } else {
+      // Blocked both ways: a pocket.  Re-routing alone can pick another blocked
+      // heading forever, so if he genuinely cannot move, put him back on floor.
+      this.stuckT += dt;
+      if (this.fMode !== 'chase') this.pickWaypoint();
+      if (this.stuckT > 1.2) {
+        this.stuckT = 0;
+        this.freeFroggy(true);
+      }
+    }
     this.clampToRoom(this.froggy);
 
     if (this.fMode !== 'chase' && this.pos.distanceTo(this.froggy) < CATCH_DIST) this.caught();
@@ -545,19 +584,21 @@ export class HideRoom3D extends Phaser.Scene {
   private arrive(): void {
     const chest = this.chestNear(this.froggy, 1.8);
     const roll = Math.random();
-    if (chest && roll < 0.55) {
+    if (chest && roll < 0.45) {
       this.targetChest = chest;
       this.fMode = 'openChest';
-      this.fTimer = 1.8;
+      this.fTimer = 1.6;
       audio.sfx('door_creak');
       return;
     }
-    if (roll < 0.8) {
+    if (roll < 0.65) {
       // Stops dead and listens.  If you are running, this is when he hears it.
       this.fMode = 'listen';
-      this.fTimer = 1.2 + Math.random() * 1.4;
+      this.fTimer = 0.9 + Math.random() * 0.9;
       return;
     }
+    // Otherwise he keeps walking.  Pausing on four arrivals out of five made
+    // him a statue: most of any given minute was him standing somewhere.
     this.fMode = 'search';
     this.pickWaypoint();
   }
@@ -584,8 +625,8 @@ export class HideRoom3D extends Phaser.Scene {
    * it for the whole room — he could not move on either axis, so he simply
    * stood in the furniture for as long as you cared to look at him.
    */
-  private freeFroggy(): void {
-    if (!this.solid(this.froggy.x, this.froggy.y, 0.5)) return;
+  private freeFroggy(force = false): void {
+    if (!force && !this.solid(this.froggy.x, this.froggy.y, 0.5)) return;
     for (let r = 0.5; r < 8; r += 0.5) {
       for (let a = 0; a < Math.PI * 2; a += Math.PI / 6) {
         const x = this.froggy.x + Math.cos(a) * r;

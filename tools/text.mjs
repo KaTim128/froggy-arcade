@@ -178,6 +178,7 @@ try {
   const scenes = [
     ['StartScreen', '?intro=1&scene=StartScreen'],
     ['ArcadeHub', '?intro=1&tokens=20&scene=ArcadeHub'],
+    ['ArcadeAnnex', '?intro=1&tokens=20&scene=ArcadeAnnex'],
     ['PrizeCounter', '?intro=1&tokens=800&scene=PrizeCounter'],
     ['FroggyCharity', '?intro=1&tokens=0&scene=FroggyCharity'],
     ['ArcadeDark', '?route=ejected&scene=ArcadeDark'],

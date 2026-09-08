@@ -20,7 +20,7 @@ import { paintChangeMachine, paintHubRoom, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
-import { BELL, CABINETS, COUNTER, PRIZE_CASE, PRIZES } from '../game/content';
+import { ANNEX_DOOR, BELL, COUNTER, PRIZE_CASE, PRIZES, cabinetsIn } from '../game/content';
 import { DialogueBox } from '../froggy/dialogue';
 import { tutorialScript } from '../froggy/script';
 import { froggyLayer } from '../render/froggyLayer';
@@ -33,6 +33,7 @@ type Target =
   | { kind: 'counter' }
   | { kind: 'bell' }
   | { kind: 'door' }
+  | { kind: 'annex' }
   | null;
 
 export class ArcadeHub extends Phaser.Scene {
@@ -67,7 +68,7 @@ export class ArcadeHub extends Phaser.Scene {
     paintChangeMachine(this, false);
     this.paintCounter();
 
-    this.cabinets = CABINETS.map((def) => new Cabinet(this, def));
+    this.cabinets = cabinetsIn('hub').map((def) => new Cabinet(this, def));
 
     // A cabinet advertises itself as clickable — cost badge, affordable
     // highlight — so it has to BE clickable.  Walking up and pressing [E] still
@@ -108,6 +109,8 @@ export class ArcadeHub extends Phaser.Scene {
         audio.sfx('bell_ding');
         this.say('nobody comes.');
       });
+
+    this.paintAnnexDoor();
 
     this.bounds = new Phaser.Geom.Rectangle(
       ROOM.left + 8,
@@ -158,8 +161,11 @@ export class ArcadeHub extends Phaser.Scene {
 
   private runTutorial(): void {
     this.locked = true;
-    const cheap = CABINETS[0];
-    const hard = CABINETS[6];
+    // Both have to be cabinets that are actually IN this room — the expensive
+    // ones moved to the annex, and the tutorial was pointing at a wall.
+    const inHere = cabinetsIn('hub');
+    const cheap = inHere.reduce((a, b) => (b.cost < a.cost ? b : a));
+    const hard = inHere.reduce((a, b) => (b.cost > a.cost ? b : a));
     this.dialogue.play(
       tutorialScript({
         tokenHud: { x: 30, y: 11, w: 56, h: 16 },
@@ -227,6 +233,26 @@ export class ArcadeHub extends Phaser.Scene {
     );
   }
 
+  /** The opening in the left wall, through to the back room. */
+  private paintAnnexDoor(): void {
+    this.add.rectangle(ROOM.left - 6, ANNEX_DOOR.y, 12, 46, PALETTE.black).setOrigin(0, 0.5);
+    this.add.rectangle(ROOM.left, ANNEX_DOOR.y, 4, 46, PALETTE.ink).setOrigin(0, 0.5);
+    text(this, ROOM.left + 12, ANNEX_DOOR.y - 34, 'BACK ROOM', PALETTE.ash).setAlpha(0.7);
+
+    this.add
+      .zone(ANNEX_DOOR.x, ANNEX_DOOR.y, 26, 50)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        if (!this.busy()) this.toAnnex();
+      });
+  }
+
+  private toAnnex(): void {
+    this.locked = true;
+    audio.sfx('footstep_concrete');
+    fadeToScene(this, 'ArcadeAnnex');
+  }
+
   private openCounter(): void {
     if (this.busy()) return;
     this.scene.launch('PrizeCounter');
@@ -239,6 +265,11 @@ export class ArcadeHub extends Phaser.Scene {
   private interact(): void {
     if (this.busy() || !this.target) return;
     const t = this.target;
+
+    if (t.kind === 'annex') {
+      this.toAnnex();
+      return;
+    }
 
     if (t.kind === 'bell') {
       // PRD EC-7: fifty rings, fifty nothings.  No counter, no easter egg.
@@ -347,6 +378,7 @@ export class ArcadeHub extends Phaser.Scene {
     }
     if (best) return { kind: 'cabinet', cab: best };
 
+    if (px < ANNEX_DOOR.x + 20 && Math.abs(py - ANNEX_DOOR.y) < 28) return { kind: 'annex' };
     if (Phaser.Math.Distance.Between(px, py, BELL.x, BELL.y) < INTERACT_RANGE) return { kind: 'bell' };
     if (py < COUNTER.y + 34 && px > COUNTER.x && px < COUNTER.x + COUNTER.w) return { kind: 'counter' };
     if (py > ROOM.bottom - 22 && Math.abs(px - GAME_W / 2) < 26) return { kind: 'door' };
@@ -370,6 +402,8 @@ export class ArcadeHub extends Phaser.Scene {
       color = can ? PALETTE.gold : PALETTE.ash;
     } else if (t.kind === 'counter') {
       msg = '[E] PRIZE COUNTER';
+    } else if (t.kind === 'annex') {
+      msg = '[E] BACK ROOM';
     } else if (t.kind === 'bell') {
       msg = '[E] RING';
     } else {

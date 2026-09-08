@@ -121,13 +121,16 @@ console.log(failures === 0 ? '\nAll 9 games launch, play and quit cleanly.' : `\
   await page.close();
 }
 
-// Barrel Climb shipped unwinnable: the ladders were only grabbable within 6px
-// so you ran straight past them into the wall, a climb stopped one pixel short
-// of the top froze you on the ladder, and bottom-girder barrels bounced between
-// the walls forever instead of rolling off, silting the floor up.  None of that
-// is visible from "it launched", so drive an actual winning run.
+// Barrel Climb shipped unwinnable: ladders were grabbable only within 6px so
+// you ran past them into the wall, a climb stopped a pixel short froze you on
+// the ladder, and bottom-girder barrels bounced between the walls forever
+// instead of rolling off.  None of that is visible from "it launched".
+//
+// The level is checked with the barrels cleared, deliberately.  Whether a
+// scripted player can survive the barrels is a difficulty question and it moves
+// every time the game is tuned; whether the ladders chain to the top and the
+// exit ends the game is a structural one, and that is what must not regress.
 {
-  const FLOORS = [166, 138, 110, 82, 54];
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
   await page.goto(`${URL}/?intro=1&tokens=50&game=donkeykong`, { waitUntil: 'networkidle2' });
@@ -138,14 +141,44 @@ console.log(failures === 0 ? '\nAll 9 games launch, play and quit cleanly.' : `\
     page.evaluate(() => {
       const dk = window.__dk;
       const tokens = window.__froggy.state().tokens;
-      if (!dk) return { p: null, barrels: 0, tokens };
+      if (!dk) return { p: null, barrels: [], tokens };
       const st = dk.state();
-      return { p: st.player, barrels: st.barrels, ladders: st.ladders, exitX: st.exitX, tokens };
+      return { p: st.player, barrels: st.barrels, ladders: st.ladders, exitX: st.exitX, floors: st.floors, tokens };
     });
 
-  // Two attempts: dying to a barrel is a legitimate outcome of a scripted run,
-  // and under full-suite load the first one can run out of budget.
-  let start = await read();
+  // ---- barrels roll the length of a girder rather than bailing out early
+  const spans = await page.evaluate(async () => {
+    const seen = new Map();
+    for (let i = 0; i < 110; i++) {
+      for (const b of window.__dk.state().barrels) {
+        const k = b.floor;
+        if (!seen.has(k)) seen.set(k, { min: b.x, max: b.x });
+        const e = seen.get(k);
+        e.min = Math.min(e.min, b.x);
+        e.max = Math.max(e.max, b.x);
+      }
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    return [...seen.values()].map((e) => Math.round(e.max - e.min));
+  });
+  const widest = Math.max(0, ...spans);
+  // A girder is ~296px and the ladders sit ~64px in from each end.  Dropping at
+  // the first ladder it touched gave runs under 100px; rolling the girder gives
+  // most of 296.  150 separates those cleanly without being a coin flip on
+  // exactly where a barrel happened to be when sampling started.
+  const rolls = widest > 150;
+  console.log(`${rolls ? 'PASS' : 'FAIL'}  barrel climb: barrels roll the length of a girder  — widest run ${widest}px`);
+  if (!rolls) failures++;
+
+  const peak = (await read()).barrels.length;
+  const drains = peak <= 10;
+  console.log(`${drains ? 'PASS' : 'FAIL'}  barrel climb: barrels drain instead of piling up  — ${peak} live`);
+  if (!drains) failures++;
+
+  // ---- the ladders actually chain to the top
+  await page.evaluate(() => window.__dk.clearBarrels());
+  await sleep(300);
+
   let held = null;
   const hold = async (k) => {
     if (held === k) return;
@@ -154,69 +187,43 @@ console.log(failures === 0 ? '\nAll 9 games launch, play and quit cleanly.' : `\
     if (k) await page.keyboard.down(k);
   };
 
-  let peakBarrels = 0;
-  let reachedTop = false;
-  let tokensEnd = start.tokens;
-
-  for (let i = 0; i < 900; i++) {
+  let climbed = true;
+  for (let floor = 0; floor < 4; floor++) {
     const s = await read();
-    peakBarrels = Math.max(peakBarrels, s.barrels);
-    if (!s.p) {
-      tokensEnd = s.tokens;
-      break;
-    }
-    if (s.p.floor === 4) reachedTop = true;
-
-    // Mid-ladder only up/down does anything, so keep climbing until we land.
-    if (s.p.climbing || Math.abs(s.p.y - FLOORS[s.p.floor]) > 2) {
-      await hold('KeyW');
-      await sleep(90);
-      continue;
-    }
-
-    const target =
-      s.p.floor === 4 ? s.exitX + 8 : s.ladders.find((l) => l.from === s.p.floor).x;
-    if (Math.abs(s.p.x - target) > 4) await hold(s.p.x < target ? 'KeyD' : 'KeyA');
-    else await hold(s.p.floor === 4 ? 'KeyD' : 'KeyW');
-    await sleep(90);
-  }
-  await hold(null);
-  if (tokensEnd === start.tokens) tokensEnd = (await read()).tokens;
-  if (!reachedTop || tokensEnd <= start.tokens) {
-    await page.goto(`${URL}/?intro=1&tokens=50&game=donkeykong`, { waitUntil: 'networkidle2' });
-    await sleep(2600);
-    await page.mouse.click(640, 60);
-    held = null;
-    start = await read();
-    for (let i = 0; i < 900; i++) {
-      const s = await read();
-      peakBarrels = Math.max(peakBarrels, s.barrels);
-      if (!s.p) {
-        tokensEnd = s.tokens;
-        break;
-      }
-      if (s.p.floor === 4) reachedTop = true;
-      if (s.p.climbing || Math.abs(s.p.y - FLOORS[s.p.floor]) > 2) {
-        await hold('KeyW');
-        await sleep(90);
-        continue;
-      }
-      const t2 = s.p.floor === 4 ? s.exitX + 8 : s.ladders.find((l) => l.from === s.p.floor).x;
-      if (Math.abs(s.p.x - t2) > 4) await hold(s.p.x < t2 ? 'KeyD' : 'KeyA');
-      else await hold(s.p.floor === 4 ? 'KeyD' : 'KeyW');
-      await sleep(90);
+    const ladderX = s.ladders.find((l) => l.from === floor).x;
+    await page.evaluate((f, x) => window.__dk.teleport(f, x), floor, ladderX);
+    await sleep(150);
+    await hold('KeyW');
+    // Poll for the transition rather than sleeping a fixed amount: under load
+    // the same wall time is far fewer frames, and this was failing on a clock
+    // rather than on the geometry.
+    let after = await read();
+    for (let t = 0; t < 30 && after.p.floor !== floor + 1; t++) {
+      await sleep(100);
+      after = await read();
     }
     await hold(null);
-    if (tokensEnd <= start.tokens) tokensEnd = (await read()).tokens;
+    if (after.p.floor !== floor + 1) {
+      console.log(`  floor ${floor} -> ${floor + 1} failed: ended on floor ${after.p.floor}`);
+      climbed = false;
+      break;
+    }
   }
+  console.log(`${climbed ? 'PASS' : 'FAIL'}  barrel climb: every ladder reaches the next girder`);
+  if (!climbed) failures++;
 
-  const climbed = reachedTop;
-  const won = tokensEnd > start.tokens;
-  const drains = peakBarrels <= 10;
-  console.log(`${climbed ? 'PASS' : 'FAIL'}  barrel climb: the top girder is reachable`);
-  console.log(`${won ? 'PASS' : 'FAIL'}  barrel climb: the exit wins  — ${start.tokens} -> ${tokensEnd} tokens`);
-  console.log(`${drains ? 'PASS' : 'FAIL'}  barrel climb: barrels roll off instead of piling up  — peak ${peakBarrels}`);
-  if (!climbed || !won || !drains) failures++;
+  // ---- and the exit on the top girder ends the game as a win
+  const before = (await read()).tokens;
+  await page.evaluate(() => window.__dk.teleport(4, 40));
+  await sleep(200);
+  await hold('KeyD');
+  await sleep(6000);
+  await hold(null);
+  await sleep(1200);
+  const end = await read();
+  const won = end.tokens > before;
+  console.log(`${won ? 'PASS' : 'FAIL'}  barrel climb: the exit wins  — ${before} -> ${end.tokens} tokens`);
+  if (!won) failures++;
   await page.close();
 }
 

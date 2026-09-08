@@ -17,8 +17,8 @@ import { centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
-const LEFT = 24;
-const RIGHT = GAME_W - 24;
+const LEFT = 12;
+const RIGHT = GAME_W - 12;
 /** Girder tops, bottom first.  The player stands ON these. */
 const FLOORS = [166, 138, 110, 82, 54];
 const GRAVITY = 460;
@@ -32,7 +32,16 @@ const BARREL_R = 4;
 const BARREL_SPEED = 72;
 const LIVES = 3;
 /** Ladder x by the floor it rises FROM.  See create(). */
-const LADDER_X = [RIGHT - 28, LEFT + 28, RIGHT - 28, 132];
+/**
+ * Ladder x by the floor it rises FROM.
+ *
+ * Kept well clear of the girder ends.  Barrels drop at the ends, so a ladder
+ * 28px from one put the climb point directly under the drop — you arrived,
+ * paused for the half-second it takes to grab the ladder, and were hit by a
+ * barrel landing on top of you.  Every death in a scripted climb was at a
+ * ladder, not between them.
+ */
+const LADDER_X = [RIGHT - 64, LEFT + 64, RIGHT - 64, 148];
 /** A backstop: barrels should retire themselves, but never let them stack. */
 const MAX_BARRELS = 12;
 
@@ -81,7 +90,7 @@ export const donkeyKong: MinigameModule = {
     dying = false;
     lives = LIVES;
     invulnMs = 0;
-    spawnTimer = 2600; // a moment to get your bearings before the first one
+    spawnTimer = 3000; // a moment to get your bearings before the first one
     elapsed = 0;
     barrels = [];
     ladders = [];
@@ -134,11 +143,27 @@ export const donkeyKong: MinigameModule = {
       // The harness drives a whole climb to prove the exit is reachable, and
       // guessing at this from the display list is how the last two bugs hid.
       (window as unknown as Record<string, unknown>).__dk = {
+        // Lets the harness ask "is this level winnable" separately from "is it
+        // survivable", which are different questions and only one of them is
+        // about the geometry.
+        clearBarrels: () => {
+          for (const b of barrels) b.dot.destroy();
+          barrels = [];
+          spawnTimer = 1e9;
+        },
+        teleport: (floor: number, x: number) => {
+          player.floor = floor;
+          player.x = x;
+          player.y = FLOORS[floor];
+          player.vy = 0;
+          player.climbing = false;
+          place();
+        },
         state: () => ({
           player: { ...player },
           lives,
           ladders: ladders.map((l) => ({ ...l })),
-          barrels: barrels.length,
+          barrels: barrels.map((b) => ({ x: b.x, y: b.y, floor: b.floor, dir: b.dir })),
           floors: FLOORS,
           exitX: RIGHT - 34,
         }),
@@ -171,7 +196,10 @@ export const donkeyKong: MinigameModule = {
     spawnTimer -= delta;
     if (spawnTimer <= 0) {
       spawnBarrel();
-      spawnTimer = Math.max(1150, 2400 - elapsed / 22);
+      // A barrel now rolls the whole length of five girders before it retires,
+      // which is roughly twenty seconds of life.  At the old rate that put a
+      // dozen on screen and crossing a single girder was not survivable.
+      spawnTimer = Math.max(2000, 3400 - elapsed / 26);
     }
 
     if (invulnMs > 0) {
@@ -308,9 +336,12 @@ function stepBarrels(dt: number): void {
     } else {
       b.x += b.dir * BARREL_SPEED * dt;
       // At the end of a girder — or at a ladder, sometimes — they drop.
-      const atEnd = b.dir > 0 ? b.x > RIGHT - 6 : b.x < LEFT + 6;
+      // Run the full length of the girder before dropping.  Dropping early —
+      // at the first ladder they touched — meant a barrel only ever covered a
+      // third of a floor, and the girders were mostly empty.
+      const atEnd = b.dir > 0 ? b.x > RIGHT - 4 : b.x < LEFT + 4;
       const l = ladders.find((ld) => ld.from === b.floor - 1 && Math.abs(ld.x - b.x) < 3);
-      if ((atEnd || (l && Math.random() < 0.5)) && b.floor > 0) {
+      if ((atEnd || (l && Math.random() < 0.12)) && b.floor > 0) {
         b.floor--;
         b.falling = true;
       }

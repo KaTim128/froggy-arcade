@@ -142,12 +142,18 @@ try {
     check('he is not standing inside the furniture', !s.dbg.froggyBlocked);
     await page.screenshot({ path: `${SHOTS}/room1.png` });
 
-    // He has to actually patrol.
-    const before = { x: s.fx, z: s.fz };
-    await sleep(2500);
-    s = await hide();
-    check('he searches the room on his own', Math.hypot(s.fx - before.x, s.fz - before.z) > 0.5,
-      `moved ${Math.hypot(s.fx - before.x, s.fz - before.z).toFixed(1)}m`);
+    // He has to actually patrol.  Sampled over a long window on purpose: he
+    // legitimately stands still to listen for up to two and a half seconds, so
+    // a short sample can catch him mid-pause and prove nothing.
+    let travelled = 0;
+    let prev = { x: s.fx, z: s.fz };
+    for (let i = 0; i < 10; i++) {
+      await sleep(800);
+      s = await hide();
+      travelled += Math.hypot(s.fx - prev.x, s.fz - prev.z);
+      prev = { x: s.fx, z: s.fz };
+    }
+    check('he searches the room on his own', travelled > 3, `covered ${travelled.toFixed(1)}m in 8s`);
 
     // Hiding, and what hiding costs.
     await page.evaluate(() => {

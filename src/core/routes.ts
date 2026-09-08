@@ -13,6 +13,7 @@ export const SCENES = [
   'SettingsModal',
   'IntroCutscene',
   'ArcadeHub',
+  'ArcadeAnnex',
   'PrizeCounter',
   'FroggyCharity',
   'SecondBust',
@@ -46,6 +47,7 @@ export function canEnter(scene: SceneId, s: Readonly<GameState>, ctx: GuardConte
       return s.route === 'normal' && !s.seenIntro;
 
     case 'ArcadeHub':
+    case 'ArcadeAnnex':
     case 'PrizeCounter':
     case 'FroggyCharity':
     case 'SecondBust':
