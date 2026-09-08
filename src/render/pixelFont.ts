@@ -162,6 +162,49 @@ export function hasGlyph(ch: string): boolean {
   return ch in GLYPHS;
 }
 
+/**
+ * Draw a line of the game's font straight onto a 2D context.
+ *
+ * The 3D scenes put their canvas above Phaser's, so a Phaser BitmapText in one
+ * of them is simply behind the world and invisible.  Their UI has to be painted
+ * on the overlay instead, and it should still be the game's typeface rather
+ * than whatever the browser has lying around.
+ *
+ * `x`/`y` is the top-left of the text box unless `center` is set.
+ */
+export function drawPixelText(
+  ctx: CanvasRenderingContext2D,
+  str: string,
+  x: number,
+  y: number,
+  opts: { scale?: number; color?: string; center?: boolean; alpha?: number } = {},
+): void {
+  const scale = opts.scale ?? 2;
+  const chars = [...str];
+  const width = chars.length * FONT_ADVANCE * scale;
+  const ox = opts.center ? x - width / 2 : x;
+
+  ctx.save();
+  ctx.globalAlpha = opts.alpha ?? 1;
+  ctx.fillStyle = opts.color ?? '#ffffff';
+  chars.forEach((ch, i) => {
+    const rows = (GLYPHS[ch] ?? NOTDEF).split('/');
+    const gx = ox + i * FONT_ADVANCE * scale;
+    for (let ry = 0; ry < FONT_H; ry++) {
+      const row = rows[ry] ?? '.....';
+      for (let rx = 0; rx < GLYPH_W; rx++) {
+        if (row[rx] === '#') ctx.fillRect(gx + rx * scale, y + ry * scale, scale, scale);
+      }
+    }
+  });
+  ctx.restore();
+}
+
+/** Width in pixels of a string drawn by `drawPixelText` at `scale`. */
+export function pixelTextWidth(str: string, scale = 2): number {
+  return [...str].length * FONT_ADVANCE * scale;
+}
+
 const CHARS_PER_ROW = 16;
 
 function buildAtlas(): HTMLCanvasElement {

@@ -72,22 +72,6 @@ const overlayPixels = (page) =>
     return n;
   });
 
-const hs = (page) =>
-  page.evaluate(() => {
-    const s = window.__froggy.game().scene.getScene('HideAndSeek');
-    return {
-      room: s.roomIndex,
-      theme: s.theme.name,
-      props: s.props.length,
-      froggy: { x: s.froggy.x, y: s.froggy.y, dir: s.froggy.dir },
-      player: { x: s.player.x, y: s.player.y },
-      mode: s.mode,
-      hidden: s.hidden,
-      timeLeft: s.timeLeft,
-      over: s.over,
-    };
-  });
-
 try {
   // ------------------------------------------------------------- the turn
   console.log('\nhorror  you turn around and he is already there');
@@ -134,144 +118,98 @@ try {
       scenes: window.__froggy.activeScenes(),
       state: window.__froggy.state(),
     }));
-    check('the door leads on to the rooms', after.scenes.includes('HideAndSeek'), after.scenes.join(','));
+    check('the door leads on to the rooms', after.scenes.includes('HideRoom3D'), after.scenes.join(','));
     check('the route commits to hide', after.state.route === 'hide' && after.state.hideRoom === 0,
       `route=${after.state.route} room=${after.state.hideRoom}`);
     await page.close();
   }
 
-  // ------------------------------------------------------- three settings
-  console.log('\nhorror  three rooms, three settings');
+  // --------------------------------------------------------------- the room
+  console.log('\nhorror  the room he locks you in');
   {
-    const seen = [];
-    for (const room of [0, 1, 2]) {
-      const page = await newPage(`?intro=1&charity=1&key=1&route=hide&hideRoom=${room}&scene=HideAndSeek`);
-      const s = await hs(page);
-      seen.push(s.theme);
-      await page.screenshot({ path: `${SHOTS}/room-${room}.png` });
-      check(`room ${room + 1} has cover to hide behind`, s.props >= 6, `${s.theme}, ${s.props} props`);
-      await page.close();
-    }
-    check('each room is its own setting', new Set(seen).size === 3, seen.join(' / '));
-  }
+    const page = await newPage('?intro=1&charity=1&key=1&route=hide&hideRoom=0&scene=HideRoom3D');
+    const hide = () => page.evaluate(() => window.__hide ?? null);
 
-  // --------------------------------------------------- searching and seeing
-  console.log('\nhorror  he searches, and then he sees you');
-  {
-    const page = await newPage('?intro=1&charity=1&key=1&route=hide&hideRoom=0&scene=HideAndSeek');
+    const intro = await hide();
+    check('the room runs its lock-in first', intro && intro.mode === 'intro', intro?.mode);
 
-    const a = await hs(page);
-    await sleep(1500);
-    const b = await hs(page);
-    check('he sweeps the room unprompted',
-      Math.hypot(b.froggy.x - a.froggy.x, b.froggy.y - a.froggy.y) > 4,
-      `moved ${Math.hypot(b.froggy.x - a.froggy.x, b.froggy.y - a.froggy.y).toFixed(1)}px`);
-    check('he starts out searching, not chasing', b.mode !== 'chase', b.mode);
+    // Sit through the intro rather than skipping it: it is the beat.
+    await sleep(11000);
+    let s = await hide();
+    check('it hands over to play', s.mode === 'play', s.mode);
+    check('there is cover to hide in', s.chests.length >= 5, `${s.chests.length} chests`);
+    check('the key is somewhere in the room', Number.isFinite(s.keyX) && !s.hasKey);
+    check('he is not standing inside the furniture', !s.dbg.froggyBlocked);
+    await page.screenshot({ path: `${SHOTS}/room1.png` });
 
-    // Put the player directly in front of him and let him look.
+    // He has to actually patrol.
+    const before = { x: s.fx, z: s.fz };
+    await sleep(2500);
+    s = await hide();
+    check('he searches the room on his own', Math.hypot(s.fx - before.x, s.fz - before.z) > 0.5,
+      `moved ${Math.hypot(s.fx - before.x, s.fz - before.z).toFixed(1)}m`);
+
+    // Hiding, and what hiding costs.
     await page.evaluate(() => {
-      const s = window.__froggy.game().scene.getScene('HideAndSeek');
-      s.player.x = s.froggy.x + Math.cos(s.froggy.dir) * 26;
-      s.player.y = s.froggy.y + Math.sin(s.froggy.dir) * 26;
-      s.props.length = 0; // nothing between you and him
-      s.hidden = false;
+      const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+      sc.pos.set(sc.chests[0].x, sc.chests[0].z);
+      sc.froggy.set(sc.chests[0].x, sc.chests[0].z + 5);
     });
-    await sleep(700);
-    const spotted = await hs(page);
-    check('standing in his eyeline is seen', spotted.mode === 'chase', spotted.mode);
-    await page.screenshot({ path: `${SHOTS}/04-chase.png` });
+    await sleep(300);
+    await page.keyboard.press('KeyE');
+    await sleep(600);
+    s = await hide();
+    check('E hides you in a chest', s.hiding === true);
+    await page.screenshot({ path: `${SHOTS}/room1-peephole.png` });
 
-    await page.close();
-  }
-
-  // A clean page for the speed comparison: in the block above he closes on the
-  // player and catches them, which ends the room and resets his position — that
-  // reset is a 113px jump, and it is not a walking speed.
-  {
-    const page = await newPage('?intro=1&charity=1&key=1&route=hide&hideRoom=0&scene=HideAndSeek');
-    const park = () =>
-      page.evaluate(() => {
-        const s = window.__froggy.game().scene.getScene('HideAndSeek');
-        s.props.length = 0;
-        s.over = false;
-        s.hidden = true; // he must never actually reach them mid-sample
-        s.player.x = 300;
-        s.player.y = 40;
-        s.froggy.x = 20;
-        s.froggy.y = 165;
-      });
-    const measure = async (mode) => {
-      await park();
-      await page.evaluate((m) => {
-        const s = window.__froggy.game().scene.getScene('HideAndSeek');
-        s.mode = m;
-        s.memory = m === 'chase' ? 60_000 : 0;
-        s.lastSeen = { x: 300, y: 40 };
-        s.waypoint = { x: 300, y: 40 };
-      }, mode);
-      const a = await hs(page);
-      await sleep(700);
-      const b = await hs(page);
-      return Math.hypot(b.froggy.x - a.froggy.x, b.froggy.y - a.froggy.y) / 0.7;
-    };
-    const chaseSpeed = await measure('chase');
-    const searchSpeed = await measure('search');
-    check('the chase is faster than the sweep', chaseSpeed > searchSpeed * 1.4,
-      `${chaseSpeed.toFixed(0)} vs ${searchSpeed.toFixed(0)} px/s`);
-    await page.close();
-  }
-
-  // ------------------------------------------------------------- hiding
-  console.log('\nhorror  hiding is the counterplay');
-  {
-    const page = await newPage('?intro=1&charity=1&key=1&route=hide&hideRoom=0&scene=HideAndSeek');
-    // Stand right in his eyeline with nothing in the way, first out, then hidden.
-    const seenWhileOut = await page.evaluate(() => {
-      const s = window.__froggy.game().scene.getScene('HideAndSeek');
-      s.props.length = 0;
-      s.hidden = false;
-      s.player.x = s.froggy.x + Math.cos(s.froggy.dir) * 22;
-      s.player.y = s.froggy.y + Math.sin(s.froggy.dir) * 22;
-      return s.sees();
-    });
-    await page.evaluate(() => {
-      const s = window.__froggy.game().scene.getScene('HideAndSeek');
-      s.mode = 'search';
-      s.memory = 0;
-      s.hidden = true;
-      s.player.x = s.froggy.x + Math.cos(s.froggy.dir) * 22;
-      s.player.y = s.froggy.y + Math.sin(s.froggy.dir) * 22;
+    // Clear whatever he was doing first: repositioning the player above can
+    // legitimately have put him in a chase, and his memory of it outlasts the
+    // check.  Then stand him right in front of the chest and stare.
+    const hiddenSeen = await page.evaluate(() => {
+      const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+      sc.fMode = 'search';
+      sc.memory = 0;
+      sc.froggy.set(sc.pos.x, sc.pos.y + 2);
+      sc.froggyYaw = Math.atan2(sc.pos.x - sc.froggy.x, sc.pos.y - sc.froggy.y);
+      return { hidden: sc.hiding !== null };
     });
     await sleep(900);
-    const modeWhileHidden = (await hs(page)).mode;
-    const hiddenBlocks = { seenWhileOut, seenWhileHidden: modeWhileHidden === 'chase' };
-    check('out in the open, he can see you', hiddenBlocks.seenWhileOut === true);
-    check('hidden, he never acquires you', hiddenBlocks.seenWhileHidden === false, `mode ${modeWhileHidden}`);
+    s = await hide();
+    check('hidden, he does not acquire you', hiddenSeen.hidden && s.froggyMode !== 'chase',
+      `mode ${s.froggyMode}`);
+
+    // The exit: key, then door.
+    await page.evaluate(() => {
+      const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+      sc.hiding = null;
+      sc.pos.set(sc.keyAt.x, sc.keyAt.y);
+    });
+    await sleep(300);
+    await page.keyboard.press('KeyE');
+    await sleep(500);
+    check('the key can be picked up', (await hide()).hasKey === true);
+
+    await page.evaluate(() => {
+      const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+      sc.pos.set(sc.def.door.x, sc.def.halfD - 1);
+    });
+    await sleep(300);
+    await page.keyboard.press('KeyE');
+    await sleep(2600);
+    const room = await page.evaluate(() => window.__froggy.state().hideRoom);
+    check('the door opens on to the next room', room === 1, `room ${room}`);
     await page.close();
   }
 
-  // ------------------------------------------------- surviving the minute
-  console.log('\nhorror  survive the minute and the door opens');
+  // ------------------------------------------------------ he is always slower
+  console.log('\nhorror  he is exactly half your running speed');
   {
-    const page = await newPage('?intro=1&charity=1&key=1&route=hide&hideRoom=2&scene=HideAndSeek');
-    const start = await hs(page);
-    check('the room is a full minute', start.timeLeft > 55_000, `${Math.round(start.timeLeft / 1000)}s`);
-
-    // Run the clock down rather than waiting a real minute.
-    await page.evaluate(() => {
-      const s = window.__froggy.game().scene.getScene('HideAndSeek');
-      s.timeLeft = 400;
-      s.player.x = 30;
-      s.player.y = 170;
-    });
-    await sleep(3200);
-    const done = await page.evaluate(() => ({
-      scenes: window.__froggy.activeScenes(),
-      state: window.__froggy.state(),
-    }));
-    check('the last room hands off to the chase',
-      done.state.route === 'chase' || done.scenes.includes('Chase3D'),
-      `route=${done.state.route} scenes=${done.scenes.join(',')}`);
+    const page = await newPage('?intro=1&charity=1&key=1&route=hide&hideRoom=0&scene=HideRoom3D');
+    await sleep(11000);
+    const s = await page.evaluate(() => window.__hide);
+    check('the chase speed is half the run, by construction',
+      Math.abs(s.froggyChase - s.playerRun / 2) < 1e-6,
+      `${s.froggyChase} vs ${s.playerRun}`);
     await page.close();
   }
 
@@ -282,7 +220,7 @@ try {
     console.log('\nRuntime errors: none');
   }
 
-  const total = 16;
+  const total = 19;
   console.log(`\n${total - failed}/${total} checks passed.`);
   await browser.close();
   process.exit(failed > 0 || errors.length > 0 ? 1 : 0);

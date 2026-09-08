@@ -200,7 +200,7 @@ export class BasementSequence extends Phaser.Scene {
       audio.sfx('door_creak');
       store.patch({ route: 'hide', hideRoom: 0 });
       store.flush();
-      this.time.delayedCall(900, () => fadeToScene(this, 'HideAndSeek'));
+      this.time.delayedCall(900, () => fadeToScene(this, 'HideRoom3D'));
       return;
     }
     if (kind === 'door') {
