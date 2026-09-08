@@ -26,8 +26,15 @@ const JUMP_V = -168;
 const RUN = 56;
 const CLIMB = 42;
 const BARREL_R = 4;
-const BARREL_SPEED = 46;
+// Fast enough that a barrel's whole trip down is a few seconds.  At 46px/s a
+// barrel took half a minute to cross five girders, so they outlived their own
+// spawn rate and the bottom floor silted up faster than it could drain.
+const BARREL_SPEED = 72;
 const LIVES = 3;
+/** Ladder x by the floor it rises FROM.  See create(). */
+const LADDER_X = [RIGHT - 28, LEFT + 28, RIGHT - 28, 132];
+/** A backstop: barrels should retire themselves, but never let them stack. */
+const MAX_BARRELS = 12;
 
 interface Ladder {
   x: number;
@@ -81,11 +88,11 @@ export const donkeyKong: MinigameModule = {
 
     scene.add.rectangle(0, 18, GAME_W, 162, 0x120a18).setOrigin(0, 0);
 
-    // Ladders alternate ends so every floor has to be crossed.
-    for (let f = 0; f < FLOORS.length - 1; f++) {
-      const x = f % 2 === 0 ? RIGHT - 28 : LEFT + 28;
-      ladders.push({ x, from: f });
-    }
+    // Mostly alternating, so every floor has to be crossed — but the ladder up
+    // to the top girder is deliberately mid-floor.  Alternation put it at
+    // LEFT+28, eight pixels from where barrels are thrown, so climbing to the
+    // exit meant surfacing directly under the thrower with nowhere to go.
+    LADDER_X.forEach((x, from) => ladders.push({ x, from }));
 
     // girders
     FLOORS.forEach((y, i) => {
@@ -123,6 +130,24 @@ export const donkeyKong: MinigameModule = {
     hud = centerText(scene, GAME_W / 2, 26, '', PALETTE.cream);
     refreshHud();
 
+    if (import.meta.env?.DEV) {
+      // The harness drives a whole climb to prove the exit is reachable, and
+      // guessing at this from the display list is how the last two bugs hid.
+      (window as unknown as Record<string, unknown>).__dk = {
+        state: () => ({
+          player: { ...player },
+          lives,
+          ladders: ladders.map((l) => ({ ...l })),
+          barrels: barrels.length,
+          floors: FLOORS,
+          exitX: RIGHT - 34,
+        }),
+      };
+      scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        delete (window as unknown as Record<string, unknown>).__dk;
+      });
+    }
+
     const kb = scene.input.keyboard;
     const bind = (names: string[]) => (kb ? names.map((n) => kb.addKey(n)) : []);
     keys = {
@@ -146,7 +171,7 @@ export const donkeyKong: MinigameModule = {
     spawnTimer -= delta;
     if (spawnTimer <= 0) {
       spawnBarrel();
-      spawnTimer = Math.max(900, 2100 - elapsed / 22);
+      spawnTimer = Math.max(1150, 2400 - elapsed / 22);
     }
 
     if (invulnMs > 0) {
@@ -176,12 +201,18 @@ export const donkeyKong: MinigameModule = {
 
 const held = (g: string): boolean => keys[g]?.some((k) => k.isDown) ?? false;
 
+/**
+ * How close you have to be to grab a ladder.  At +/-6 you ran straight past it
+ * at 56px/s and ended up parked against the wall with no way up.
+ */
+const LADDER_GRAB = 10;
+
 function ladderAt(x: number, floor: number): Ladder | null {
-  return ladders.find((l) => l.from === floor && Math.abs(l.x - x) < 6) ?? null;
+  return ladders.find((l) => l.from === floor && Math.abs(l.x - x) < LADDER_GRAB) ?? null;
 }
 
 function ladderDownAt(x: number, floor: number): Ladder | null {
-  return ladders.find((l) => l.from === floor - 1 && Math.abs(l.x - x) < 6) ?? null;
+  return ladders.find((l) => l.from === floor - 1 && Math.abs(l.x - x) < LADDER_GRAB) ?? null;
 }
 
 function movePlayer(dt: number): void {
@@ -194,7 +225,10 @@ function movePlayer(dt: number): void {
 
     const top = FLOORS[player.floor + 1];
     const bottom = FLOORS[player.floor];
-    if (player.y <= top) {
+    // Finish the climb from within a few pixels of the top.  Stopping one pixel
+    // short left you stuck on the ladder looking like you were on the girder,
+    // with left and right doing nothing.
+    if (player.y <= top + 3) {
       player.y = top;
       player.floor++;
       player.climbing = false;
@@ -254,7 +288,7 @@ function place(): void {
 }
 
 function spawnBarrel(): void {
-  if (!sceneRef) return;
+  if (!sceneRef || barrels.length >= MAX_BARRELS) return;
   const topFloor = FLOORS.length - 1;
   const dot = sceneRef.add.circle(LEFT + 20, FLOORS[topFloor] - BARREL_R, BARREL_R, 0xd9822b).setDepth(15);
   barrels.push({ x: LEFT + 20, y: FLOORS[topFloor] - BARREL_R, floor: topFloor, dir: 1, falling: false, dot });
@@ -276,12 +310,13 @@ function stepBarrels(dt: number): void {
       // At the end of a girder — or at a ladder, sometimes — they drop.
       const atEnd = b.dir > 0 ? b.x > RIGHT - 6 : b.x < LEFT + 6;
       const l = ladders.find((ld) => ld.from === b.floor - 1 && Math.abs(ld.x - b.x) < 3);
-      if ((atEnd || (l && Math.random() < 0.25)) && b.floor > 0) {
+      if ((atEnd || (l && Math.random() < 0.5)) && b.floor > 0) {
         b.floor--;
         b.falling = true;
-      } else if (atEnd) {
-        b.dir *= -1;
       }
+      // On the bottom girder there is nowhere left to drop to, so they roll
+      // straight off the end.  Reversing here instead left them bouncing
+      // between the walls forever, and the floor silted up with barrels.
     }
     b.dot.setPosition(b.x, b.y);
     // spin, so they read as rolling
@@ -290,7 +325,7 @@ function stepBarrels(dt: number): void {
 
   // retire anything that has reached the bottom and run off the end
   barrels = barrels.filter((b) => {
-    const done = b.floor === 0 && (b.x < LEFT + 2 || b.x > RIGHT - 2);
+    const done = b.floor === 0 && !b.falling && (b.x < LEFT - 10 || b.x > RIGHT + 10);
     if (done) b.dot.destroy();
     return !done;
   });

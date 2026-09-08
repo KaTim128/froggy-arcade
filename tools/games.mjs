@@ -121,6 +121,105 @@ console.log(failures === 0 ? '\nAll 9 games launch, play and quit cleanly.' : `\
   await page.close();
 }
 
+// Barrel Climb shipped unwinnable: the ladders were only grabbable within 6px
+// so you ran straight past them into the wall, a climb stopped one pixel short
+// of the top froze you on the ladder, and bottom-girder barrels bounced between
+// the walls forever instead of rolling off, silting the floor up.  None of that
+// is visible from "it launched", so drive an actual winning run.
+{
+  const FLOORS = [166, 138, 110, 82, 54];
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=donkeykong`, { waitUntil: 'networkidle2' });
+  await sleep(2600);
+  await page.mouse.click(640, 60);
+
+  const read = () =>
+    page.evaluate(() => {
+      const dk = window.__dk;
+      const tokens = window.__froggy.state().tokens;
+      if (!dk) return { p: null, barrels: 0, tokens };
+      const st = dk.state();
+      return { p: st.player, barrels: st.barrels, ladders: st.ladders, exitX: st.exitX, tokens };
+    });
+
+  // Two attempts: dying to a barrel is a legitimate outcome of a scripted run,
+  // and under full-suite load the first one can run out of budget.
+  let start = await read();
+  let held = null;
+  const hold = async (k) => {
+    if (held === k) return;
+    if (held) await page.keyboard.up(held);
+    held = k;
+    if (k) await page.keyboard.down(k);
+  };
+
+  let peakBarrels = 0;
+  let reachedTop = false;
+  let tokensEnd = start.tokens;
+
+  for (let i = 0; i < 900; i++) {
+    const s = await read();
+    peakBarrels = Math.max(peakBarrels, s.barrels);
+    if (!s.p) {
+      tokensEnd = s.tokens;
+      break;
+    }
+    if (s.p.floor === 4) reachedTop = true;
+
+    // Mid-ladder only up/down does anything, so keep climbing until we land.
+    if (s.p.climbing || Math.abs(s.p.y - FLOORS[s.p.floor]) > 2) {
+      await hold('KeyW');
+      await sleep(90);
+      continue;
+    }
+
+    const target =
+      s.p.floor === 4 ? s.exitX + 8 : s.ladders.find((l) => l.from === s.p.floor).x;
+    if (Math.abs(s.p.x - target) > 4) await hold(s.p.x < target ? 'KeyD' : 'KeyA');
+    else await hold(s.p.floor === 4 ? 'KeyD' : 'KeyW');
+    await sleep(90);
+  }
+  await hold(null);
+  if (tokensEnd === start.tokens) tokensEnd = (await read()).tokens;
+  if (!reachedTop || tokensEnd <= start.tokens) {
+    await page.goto(`${URL}/?intro=1&tokens=50&game=donkeykong`, { waitUntil: 'networkidle2' });
+    await sleep(2600);
+    await page.mouse.click(640, 60);
+    held = null;
+    start = await read();
+    for (let i = 0; i < 900; i++) {
+      const s = await read();
+      peakBarrels = Math.max(peakBarrels, s.barrels);
+      if (!s.p) {
+        tokensEnd = s.tokens;
+        break;
+      }
+      if (s.p.floor === 4) reachedTop = true;
+      if (s.p.climbing || Math.abs(s.p.y - FLOORS[s.p.floor]) > 2) {
+        await hold('KeyW');
+        await sleep(90);
+        continue;
+      }
+      const t2 = s.p.floor === 4 ? s.exitX + 8 : s.ladders.find((l) => l.from === s.p.floor).x;
+      if (Math.abs(s.p.x - t2) > 4) await hold(s.p.x < t2 ? 'KeyD' : 'KeyA');
+      else await hold(s.p.floor === 4 ? 'KeyD' : 'KeyW');
+      await sleep(90);
+    }
+    await hold(null);
+    if (tokensEnd <= start.tokens) tokensEnd = (await read()).tokens;
+  }
+
+  const climbed = reachedTop;
+  const won = tokensEnd > start.tokens;
+  const drains = peakBarrels <= 10;
+  console.log(`${climbed ? 'PASS' : 'FAIL'}  barrel climb: the top girder is reachable`);
+  console.log(`${won ? 'PASS' : 'FAIL'}  barrel climb: the exit wins  — ${start.tokens} -> ${tokensEnd} tokens`);
+  console.log(`${drains ? 'PASS' : 'FAIL'}  barrel climb: barrels roll off instead of piling up  — peak ${peakBarrels}`);
+  if (!climbed || !won || !drains) failures++;
+  await page.close();
+}
+
 // The deep links above bypass the hub entirely, which is how a cabinet could
 // stop being clickable without a single test noticing.  A cabinet advertises
 // itself as clickable, so clicking one has to start the game.
