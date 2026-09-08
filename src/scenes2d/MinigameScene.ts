@@ -12,7 +12,7 @@ import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
 import { store, type GameId } from '../core/state';
-import { centerText, fadeIn, fadeToScene, text } from '../core/ui';
+import { button, centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { TokenHud } from '../ui/hud';
 import { cabinetById } from '../game/content';
@@ -47,11 +47,18 @@ export class MinigameScene extends Phaser.Scene {
     this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black).setOrigin(0, 0);
     this.add.rectangle(0, 0, GAME_W, 16, PALETTE.ink).setOrigin(0, 0);
     text(this, 4, 4, def.title, PALETTE.gold);
-    text(this, GAME_W - 74, 4, '[ESC] QUIT', PALETTE.ash);
+
+    // A real button, not just the ESC hint — quitting should not require
+    // knowing a key.  It forfeits exactly like ESC does: no refund (MG-4).
+    button(this, GAME_W - 26, 8, 'QUIT', () => this.settle(false, true), {
+      width: 40,
+      height: 12,
+      fill: PALETTE.plum,
+    });
 
     this.hud = new TokenHud(this);
     this.hud.setVisible(false); // the title bar already carries the balance line
-    text(this, GAME_W - 150, 4, `WIN: +${def.reward}`, PALETTE.tealLight);
+    text(this, GAME_W - 128, 4, `WIN: +${def.reward}`, PALETTE.tealLight);
 
     const api: MinigameApi = {
       win: () => this.settle(true),

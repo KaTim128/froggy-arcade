@@ -86,6 +86,29 @@ export class ArcadeHub extends Phaser.Scene {
         });
     }
 
+    // The prize case is the whole reason to earn tokens, and it was viewable
+    // only by walking into the counter — so the prizes may as well not have
+    // existed.  Clicking the case (or the counter under it) opens the list.
+    this.add
+      .zone(PRIZE_CASE.x + PRIZE_CASE.w / 2, PRIZE_CASE.y - 15, PRIZE_CASE.w, 30)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.openCounter());
+    this.add
+      .zone(COUNTER.x + COUNTER.w / 2, COUNTER.y + COUNTER.h / 2, COUNTER.w, COUNTER.h)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.openCounter());
+
+    // The bell still summons nobody (VOC-18) — but it has to at least answer a
+    // click, or it reads as broken rather than as ignored.
+    this.add
+      .zone(BELL.x + 8, BELL.y - 8, 40, 22)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        if (this.busy()) return;
+        audio.sfx('bell_ding');
+        this.say('nobody comes.');
+      });
+
     this.bounds = new Phaser.Geom.Rectangle(
       ROOM.left + 8,
       ROOM.top + 6,
@@ -204,6 +227,15 @@ export class ArcadeHub extends Phaser.Scene {
     );
   }
 
+  private openCounter(): void {
+    if (this.busy()) return;
+    this.scene.launch('PrizeCounter');
+    this.locked = true;
+    this.events.once('prize-closed', () => {
+      this.locked = false;
+    });
+  }
+
   private interact(): void {
     if (this.busy() || !this.target) return;
     const t = this.target;
@@ -215,11 +247,7 @@ export class ArcadeHub extends Phaser.Scene {
     }
 
     if (t.kind === 'counter') {
-      this.scene.launch('PrizeCounter');
-      this.locked = true;
-      this.events.once('prize-closed', () => {
-        this.locked = false;
-      });
+      this.openCounter();
       return;
     }
 

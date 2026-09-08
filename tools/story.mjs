@@ -96,13 +96,10 @@ console.log('\nAC-3  charity fires exactly once per run');
   check('starts with charityUsed false', before.charityUsed === false);
 
   // Spend the last token on the cheapest cabinet: walk left, then down.
-  await page.keyboard.down('KeyA');
-  await sleep(2600);
-  await page.keyboard.up('KeyA');
-  await page.keyboard.down('KeyS');
-  await sleep(900);
-  await page.keyboard.up('KeyS');
-  await page.keyboard.press('KeyE');
+  // Click a one-token cabinet outright.  Walking blind used to land on
+  // whichever cabinet happened to sit bottom-left, so retuning that cabinet's
+  // cost silently stopped the run from ever going broke.
+  await page.mouse.click(640 + (34 - 160) * 4, 360 + (86 - 90) * 4); // TIC-TAC-TOE, 1 token
   await sleep(1500);
   await page.keyboard.press('Escape'); // forfeit -> 0 tokens
   await sleep(12000); // result card, hub, charity dialogue
@@ -131,13 +128,10 @@ console.log('\nAC-4  second bust ejects, front door locked for good');
   const outcome = await page.evaluate(() => window.__froggy.broke());
   check('broke evaluator idle while solvent', outcome === null);
 
-  await page.keyboard.down('KeyA');
-  await sleep(2600);
-  await page.keyboard.up('KeyA');
-  await page.keyboard.down('KeyS');
-  await sleep(900);
-  await page.keyboard.up('KeyS');
-  await page.keyboard.press('KeyE');
+  // Click a one-token cabinet outright.  Walking blind used to land on
+  // whichever cabinet happened to sit bottom-left, so retuning that cabinet's
+  // cost silently stopped the run from ever going broke.
+  await page.mouse.click(640 + (34 - 160) * 4, 360 + (86 - 90) * 4); // TIC-TAC-TOE, 1 token
   await sleep(1500);
   await page.keyboard.press('Escape');
   await sleep(6000);

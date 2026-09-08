@@ -79,6 +79,7 @@ let keys: Record<string, Phaser.Input.Keyboard.Key> = {};
 let aiTimer = 0;
 let aiBeat = 0;
 let aiWhiffOpening = 0;
+let aiSway = 0;
 
 export const grudge: MinigameModule = {
   id: 'grudge',
@@ -110,8 +111,10 @@ export const grudge: MinigameModule = {
 
     text(scene, 8, 36, 'YOU', PALETTE.cream);
     text(scene, GAME_W - 40, 36, 'FROGGY', PALETTE.cream);
-    roundText = centerText(scene, GAME_W / 2, 30, '', PALETTE.gold);
-    timerText = centerText(scene, GAME_W / 2, 42, '', PALETTE.cream);
+    // The clock is short enough to sit in the 45px gap between the HP bars; the
+    // round line is not, and used to be drawn straight through both of them.
+    timerText = centerText(scene, GAME_W / 2, 30, '', PALETTE.cream);
+    roundText = centerText(scene, GAME_W / 2, 46, '', PALETTE.gold);
     announce = centerText(scene, GAME_W / 2, 90, '', PALETTE.gold, 16);
 
     const kb = scene.input.keyboard;
@@ -204,6 +207,7 @@ function startRound(): void {
   aiBeat = 0;
   aiTimer = 600;
   aiWhiffOpening = 0;
+  aiSway = 0;
   roundOver = true;
 
   roundText?.setText(`ROUND ${wins1 + wins2 + 1}   ${wins1}-${wins2}`);
@@ -276,7 +280,20 @@ function runAi(delta: number, dt: number): void {
   }
 
   if (aiTimer > 0) {
-    if (aiBeat === 0 && dist > 30) ai.x += Math.sign(p1.x - ai.x) * WALK_SPEED * 0.8 * dt;
+    // This used to read `aiBeat === 0`, but aiBeat only ever counts up — it is
+    // 3, 6, 9 on later cycles, so the check was false forever and Froggy stood
+    // rooted to the spot after his first approach.  He now keeps his spacing:
+    // steps in when he is out of kick range, backs off when you are too close.
+    // The ideal distance breathes, so he circles the edge of his own kick range
+    // instead of parking on it — that in-and-out is the rhythm you play against.
+    aiSway += dt;
+    const ideal = MOVES.kick.range - 4 + Math.sin(aiSway * 1.7) * 11;
+    const toward = Math.sign(p1.x - ai.x) || 1;
+    const drift = dist > ideal + 3 ? 1 : dist < ideal - 3 ? -1 : 0;
+    if (drift !== 0) {
+      ai.x += toward * drift * WALK_SPEED * 0.8 * dt;
+      ai.x = Phaser.Math.Clamp(ai.x, 20, GAME_W - 20);
+    }
     return;
   }
 
@@ -373,19 +390,42 @@ function render(f: Fighter): void {
   f.body.setSize(14, 26 - crouchOffset);
   f.head.setPosition(f.x, f.y - (26 - crouchOffset));
 
-  if (f.move && f.phase === 'active') {
+  // Every phase is drawn, not just the active frame.  A fight you cannot read
+  // is a fight you can only mash at: the wind-up is the cue to block or step
+  // back, and the recovery droop is the cue to punish.
+  if (f.move && f.phase) {
     const def = MOVES[f.move];
-    f.limb
-      .setVisible(true)
-      .setPosition(f.x + f.facing * (def.range * 0.6), f.y - 18 + crouchOffset)
-      .setSize(def.range * 0.7, f.move === 'kick' ? 5 : 4);
-    f.limb.setFillStyle(f.move === 'special' ? PALETTE.ember : PALETTE.cream);
+    const colour = f.move === 'special' ? PALETTE.ember : f.move === 'kick' ? PALETTE.gold : PALETTE.cream;
+    f.limb.setVisible(true).setFillStyle(colour);
+
+    if (f.phase === 'startup') {
+      // cocked back, behind the fighter — the tell
+      f.limb
+        .setPosition(f.x - f.facing * 6, f.y - 20 + crouchOffset)
+        .setSize(6, 6)
+        .setAlpha(0.75);
+    } else if (f.phase === 'active') {
+      f.limb
+        .setPosition(f.x + f.facing * (def.range * 0.6), f.y - 18 + crouchOffset)
+        .setSize(def.range * 0.7, f.move === 'kick' ? 5 : 4)
+        .setAlpha(1);
+    } else {
+      // dropped and fading — the punish window, visible
+      f.limb
+        .setPosition(f.x + f.facing * (def.range * 0.3), f.y - 11 + crouchOffset)
+        .setSize(def.range * 0.4, 3)
+        .setAlpha(0.4);
+    }
   } else {
     f.limb.setVisible(false);
   }
 
   f.body.setStrokeStyle(f.blocking ? 1 : 0, PALETTE.white);
-  f.head.setFillStyle(f.blocking ? PALETTE.bone : f === p1 ? PALETTE.gold : PALETTE.neon);
+  // A white head is the loudest tell on a 320px screen: someone is winding up.
+  const winding = f.phase === 'startup';
+  f.head.setFillStyle(
+    f.blocking ? PALETTE.bone : winding ? PALETTE.white : f === p1 ? PALETTE.gold : PALETTE.neon,
+  );
 }
 
 export const _css = css;

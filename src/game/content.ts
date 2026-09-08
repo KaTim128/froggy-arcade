@@ -35,7 +35,7 @@ export const TIER_ECONOMY: Record<Tier, { cost: number; reward: number }> = {
 export const CABINETS: CabinetDef[] = [
   { id: 'tictactoe', title: 'TIC-TAC-TOE', tier: 'easy', cost: 1, reward: 3, x: 34, y: 86, color: 0xff4fa3 },
   { id: 'snakes', title: 'SNAKES+LADDERS', tier: 'easy', cost: 1, reward: 3, x: 34, y: 124, color: 0x46c4bd },
-  { id: 'airhockey', title: 'AIR HOCKEY', tier: 'easy', cost: 1, reward: 3, x: 34, y: 162, color: 0xffd45e },
+  { id: 'airhockey', title: 'AIR HOCKEY', tier: 'hard', cost: 5, reward: 10, x: 34, y: 162, color: 0xffd45e },
   { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 3, reward: 6, x: 286, y: 86, color: 0xff7a3d },
   { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 3, reward: 6, x: 286, y: 124, color: 0x6fbb6a },
   { id: 'chompman', title: 'CHOMP-MAN', tier: 'hard', cost: 5, reward: 10, x: 286, y: 162, color: 0x7b4bd8 },

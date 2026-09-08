@@ -80,7 +80,10 @@ export const hoops: MinigameModule = {
 
     const kb = scene.input.keyboard;
     kb?.on('keydown-SPACE', () => {
-      if (inFlight || over) return;
+      // A held key auto-repeats keydown.  Without the `charging` guard every
+      // repeat reset power to zero, so holding SPACE pinned the meter at empty
+      // and the shot always went out at minimum power.
+      if (inFlight || over || charging) return;
       charging = true;
       power = 0;
       chargeDir = 1;

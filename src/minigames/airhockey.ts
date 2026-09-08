@@ -18,8 +18,10 @@ const GOAL_W = 64;
 const PUCK_R = 4;
 const PAD_R = 9;
 const MAX_SPEED = 520;
-const AI_REACTION_MS = 140;
-const AI_AIM_ERROR = 18;
+// Hard tier: it reads the puck sooner and misjudges it less.  At 140ms/18px it
+// was a warm-up opponent; the cabinet costs five tokens now.
+const AI_REACTION_MS = 70;
+const AI_AIM_ERROR = 7;
 const TARGET_SCORE = 5;
 const TIME_CAP_MS = 180_000;
 

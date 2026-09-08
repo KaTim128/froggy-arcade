@@ -198,6 +198,15 @@ try {
   await sleep(1200);
   await shot('10-minigame-placeholder');
   const after = await readState();
+  // Read the economy off the cabinet the walk actually reached, rather than
+  // hardcoding it — cabinets get retuned, and the test should follow.
+  const def = await page.evaluate(async () => {
+    if (!window.__minigame) return null;
+    const { cabinetById } = await import('/src/game/content.ts');
+    const d = cabinetById(window.__minigame.id);
+    return { id: d.id, cost: d.cost, reward: d.reward };
+  });
+  console.log(`   launched ${def?.id} (cost ${def?.cost}, reward ${def?.reward})`);
   console.log(`   tokens after launch: ${after.tokens}`);
 
   // The cabinet now holds a real game, so the reward path is driven through
@@ -225,6 +234,12 @@ try {
   await page.keyboard.press('KeyE');
   await sleep(2200);
   const paid = await readState();
+  const def2 = await page.evaluate(async () => {
+    if (!window.__minigame) return null;
+    const { cabinetById } = await import('/src/game/content.ts');
+    const d = cabinetById(window.__minigame.id);
+    return { id: d.id, cost: d.cost };
+  });
   await shot('12-second-launch');
   await page.keyboard.press('Escape');
   await sleep(3600);
@@ -234,12 +249,12 @@ try {
   console.log('\nState checks:');
   const checks = [
     ['seed credited 20 tokens', before.tokens === 20],
-    ['cost debited on launch', after.tokens === before.tokens - 1],
-    ['reward credited on win', won.tokens === after.tokens + 3],
+    ['cost debited on launch', !!def && after.tokens === before.tokens - def.cost],
+    ['reward credited on win', !!def && won.tokens === after.tokens + def.reward],
     ['seenIntro latched', won.seenIntro === true],
     ['route still normal', won.route === 'normal'],
     ['overlay cleared when Froggy leaves', overlayAfter === 0],
-    ['Esc forfeits the entry cost', paid.tokens === won.tokens - 1 && forfeited.tokens === paid.tokens],
+    ['Esc forfeits the entry cost', !!def2 && paid.tokens === won.tokens - def2.cost && forfeited.tokens === paid.tokens],
   ];
   let failed = 0;
   for (const [name, ok] of checks) {
