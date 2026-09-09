@@ -58,6 +58,13 @@ interface Barrel {
   dir: number;
   falling: boolean;
   dot: Phaser.GameObjects.Arc;
+  /**
+   * The ladder this barrel has already flipped a coin for, so the 50/50 is
+   * decided once per crossing.  Rolling every frame inside the window compounds
+   * — five frames at even odds is a 97% chance — and every barrel took the
+   * ladder.
+   */
+  rolledAt: number | null;
 }
 
 let ladders: Ladder[] = [];
@@ -73,6 +80,8 @@ let dying = false;
 /** Grace after a respawn.  Without it a barrel sitting on the spawn point
  *  takes all three lives in about two seconds. */
 let invulnMs = 0;
+/** Where barrels have gone down, so the 50/50 is measurable rather than assumed. */
+let drops = { ladder: 0, end: 0 };
 let hud: Phaser.GameObjects.BitmapText | null = null;
 let keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
 let apiRef: MinigameApi | null = null;
@@ -90,6 +99,7 @@ export const donkeyKong: MinigameModule = {
     dying = false;
     lives = LIVES;
     invulnMs = 0;
+    drops = { ladder: 0, end: 0 };
     spawnTimer = 3000; // a moment to get your bearings before the first one
     elapsed = 0;
     barrels = [];
@@ -164,6 +174,7 @@ export const donkeyKong: MinigameModule = {
           lives,
           ladders: ladders.map((l) => ({ ...l })),
           barrels: barrels.map((b) => ({ x: b.x, y: b.y, floor: b.floor, dir: b.dir })),
+          drops: { ...drops },
           floors: FLOORS,
           exitX: RIGHT - 34,
         }),
@@ -319,7 +330,15 @@ function spawnBarrel(): void {
   if (!sceneRef || barrels.length >= MAX_BARRELS) return;
   const topFloor = FLOORS.length - 1;
   const dot = sceneRef.add.circle(LEFT + 20, FLOORS[topFloor] - BARREL_R, BARREL_R, 0xd9822b).setDepth(15);
-  barrels.push({ x: LEFT + 20, y: FLOORS[topFloor] - BARREL_R, floor: topFloor, dir: 1, falling: false, dot });
+  barrels.push({
+    x: LEFT + 20,
+    y: FLOORS[topFloor] - BARREL_R,
+    floor: topFloor,
+    dir: 1,
+    falling: false,
+    dot,
+    rolledAt: null,
+  });
   audio.sfx('door_rattle');
 }
 
@@ -331,7 +350,11 @@ function stepBarrels(dt: number): void {
       if (b.y >= target) {
         b.y = target;
         b.falling = false;
-        b.dir = b.floor % 2 === 0 ? 1 : -1;
+        // Roll away from the nearest wall.  Alternating by floor meant a barrel
+        // that had just taken a ladder landed on the far side of the next one
+        // and rolled away from it, so only a third of them ever got a second
+        // coin toss.  Heading for the long side guarantees it crosses.
+        b.dir = b.x < (LEFT + RIGHT) / 2 ? 1 : -1;
       }
     } else {
       b.x += b.dir * BARREL_SPEED * dt;
@@ -340,12 +363,24 @@ function stepBarrels(dt: number): void {
       // at the first ladder they touched — meant a barrel only ever covered a
       // third of a floor, and the girders were mostly empty.
       const atEnd = b.dir > 0 ? b.x > RIGHT - 4 : b.x < LEFT + 4;
-      // Only ever at the end of a girder.  Dropping down a ladder part-way
-      // across meant a barrel covered a fraction of the floor and most of every
-      // girder sat empty; now each one rolls the whole span before it falls.
-      if (atEnd && b.floor > 0) {
+      // Each floor has exactly one ladder leading down from it, and a barrel
+      // reaching that ladder tosses a coin: half take it, half roll on to the
+      // end of the girder.  One flip per crossing, not one per frame.
+      const down = ladders.find((ld) => ld.from === b.floor - 1 && Math.abs(ld.x - b.x) < 4);
+      let takesLadder = false;
+      if (down && b.rolledAt !== down.x) {
+        b.rolledAt = down.x; // this ladder is now decided, either way
+        takesLadder = Math.random() < 0.5;
+      } else if (!down && !atEnd) {
+        b.rolledAt = null; // clear of it, so the next ladder gets its own coin
+      }
+
+      if ((atEnd || takesLadder) && b.floor > 0) {
+        if (takesLadder) drops.ladder++;
+        else drops.end++;
         b.floor--;
         b.falling = true;
+        b.rolledAt = null;
       }
       // On the bottom girder there is nowhere left to drop to, so they roll
       // straight off the end.  Reversing here instead left them bouncing
