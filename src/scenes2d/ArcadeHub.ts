@@ -237,7 +237,9 @@ export class ArcadeHub extends Phaser.Scene {
   private paintAnnexDoor(): void {
     this.add.rectangle(ROOM.left - 6, ANNEX_DOOR.y, 12, 46, PALETTE.black).setOrigin(0, 0.5);
     this.add.rectangle(ROOM.left, ANNEX_DOOR.y, 4, 46, PALETTE.ink).setOrigin(0, 0.5);
-    text(this, ROOM.left + 12, ANNEX_DOOR.y - 34, 'BACK ROOM', PALETTE.ash).setAlpha(0.7);
+    // Beside the opening, in the band between the two left-wall cabinets.  Above
+    // it the label was drawn behind the top one and read as smeared text.
+    text(this, ROOM.left + 12, ANNEX_DOOR.y - 16, 'BACK ROOM', PALETTE.ash).setAlpha(0.75);
 
     this.add
       .zone(ANNEX_DOOR.x, ANNEX_DOOR.y, 26, 50)

@@ -38,9 +38,16 @@ export const TIER_ECONOMY: Record<Tier, { cost: number; reward: number }> = {
  * (3 easy, 2 medium, 2 hard).  All seven are built — dropping one would be
  * narrowing the scope the customer actually described.
  */
+/**
+ * Cabinet positions are hand-placed, not laid out.  The left wall carries two
+ * with the doorway to the back room between them, the top-left pair sit
+ * shoulder to shoulder, and the right wall carries three evenly.  Anything
+ * added here has to keep clear of the counter (x 112-240) and the doorway
+ * (y 118).
+ */
 export const CABINETS: CabinetDef[] = [
   { id: 'tictactoe', title: 'TIC-TAC-TOE', tier: 'easy', cost: 1, reward: 3, x: 34, y: 86, color: 0xff4fa3 },
-  { id: 'snakes', title: 'SNAKES+LADDERS', tier: 'easy', cost: 1, reward: 3, x: 34, y: 124, color: 0x46c4bd },
+  { id: 'snakes', title: 'SNAKES+LADDERS', tier: 'easy', cost: 1, reward: 3, x: 68, y: 86, color: 0x46c4bd },
   { id: 'airhockey', title: 'AIR HOCKEY', tier: 'hard', cost: 5, reward: 10, x: 34, y: 162, color: 0xffd45e },
   { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 3, reward: 6, x: 286, y: 86, color: 0xff7a3d },
   { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 3, reward: 6, x: 286, y: 124, color: 0x6fbb6a },

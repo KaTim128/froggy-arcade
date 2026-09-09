@@ -576,8 +576,11 @@ export class HideRoom3D extends Phaser.Scene {
     }
     this.clampToRoom(this.froggy);
 
-    if (this.fMode !== 'chase' && this.pos.distanceTo(this.froggy) < CATCH_DIST) this.caught();
-    if (this.fMode === 'chase' && this.pos.distanceTo(this.froggy) < CATCH_DIST) this.caught();
+    // Walking into you catches you — unless you are in a chest, in which case
+    // the only thing that finds you is him opening it.  This check ignored
+    // `hiding`, so he could stroll past your box and catch you through the lid,
+    // which defeats the whole mechanic.
+    if (!this.hiding && this.pos.distanceTo(this.froggy) < CATCH_DIST) this.caught();
   }
 
   /** What he does on reaching a waypoint: check it, listen, or move on. */
