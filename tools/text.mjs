@@ -107,6 +107,14 @@ try {
     const input = await import('/src/core/input.ts');
     const script = await import('/src/froggy/script.ts');
     const content = await import('/src/game/content.ts');
+    // The games put their own strings on screen too — blackjack dealt card
+    // suits for a while that the font had no glyphs for, and nothing noticed
+    // because coverage only ever walked the script and the bindings.
+    const games = await Promise.all([
+      import('/src/minigames/blackjack.ts'),
+      import('/src/minigames/slots.ts'),
+      import('/src/minigames/roulette.ts'),
+    ]);
 
     // Every string these modules can put in front of the player.
     const strings = [];
@@ -119,6 +127,7 @@ try {
     walk(input.BINDINGS);
     walk(script);
     walk(content);
+    for (const g of games) walk(g);
 
     const missing = new Set();
     for (const s of strings) {
@@ -179,6 +188,7 @@ try {
     ['StartScreen', '?intro=1&scene=StartScreen'],
     ['ArcadeHub', '?intro=1&tokens=20&scene=ArcadeHub'],
     ['ArcadeAnnex', '?intro=1&tokens=20&scene=ArcadeAnnex'],
+    ['ArcadeCasino', '?intro=1&tokens=20&scene=ArcadeCasino'],
     ['PrizeCounter', '?intro=1&tokens=800&scene=PrizeCounter'],
     ['FroggyCharity', '?intro=1&tokens=0&scene=FroggyCharity'],
     ['ArcadeDark', '?route=ejected&scene=ArcadeDark'],

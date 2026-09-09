@@ -19,6 +19,9 @@ import { chompMan } from './chompman';
 import { grudge } from './grudge';
 import { donkeyKong } from './donkeykong';
 import { battleship } from './battleship';
+import { blackjack } from './blackjack';
+import { slots } from './slots';
+import { roulette } from './roulette';
 
 const REGISTRY: Partial<Record<GameId, MinigameModule>> = {
   tictactoe: ticTacToe,
@@ -30,6 +33,9 @@ const REGISTRY: Partial<Record<GameId, MinigameModule>> = {
   grudge,
   donkeykong: donkeyKong,
   battleship,
+  blackjack,
+  slots,
+  roulette,
 };
 
 export function getMinigame(id: GameId): MinigameModule {

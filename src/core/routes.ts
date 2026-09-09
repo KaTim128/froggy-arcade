@@ -14,6 +14,7 @@ export const SCENES = [
   'IntroCutscene',
   'ArcadeHub',
   'ArcadeAnnex',
+  'ArcadeCasino',
   'PrizeCounter',
   'FroggyCharity',
   'SecondBust',
@@ -48,6 +49,7 @@ export function canEnter(scene: SceneId, s: Readonly<GameState>, ctx: GuardConte
 
     case 'ArcadeHub':
     case 'ArcadeAnnex':
+    case 'ArcadeCasino':
     case 'PrizeCounter':
     case 'FroggyCharity':
     case 'SecondBust':

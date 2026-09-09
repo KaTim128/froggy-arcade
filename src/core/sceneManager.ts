@@ -20,6 +20,7 @@ import { SettingsModal } from '../scenes2d/SettingsModal';
 import { ProfileModal } from '../scenes2d/ProfileModal';
 import { ArcadeHub } from '../scenes2d/ArcadeHub';
 import { ArcadeAnnex } from '../scenes2d/ArcadeAnnex';
+import { ArcadeCasino } from '../scenes2d/ArcadeCasino';
 import { IntroCutscene } from '../scenes2d/IntroCutscene';
 import { PrizeCounter } from '../scenes2d/PrizeCounter';
 import { MinigameScene } from '../scenes2d/MinigameScene';
@@ -68,6 +69,7 @@ export function bootGame(): void {
       IntroCutscene,
       ArcadeHub,
       ArcadeAnnex,
+      ArcadeCasino,
       PrizeCounter,
       MinigameScene,
       FroggyCharity,

@@ -16,7 +16,10 @@ export type GameId =
   | 'chompman'
   | 'grudge'
   | 'donkeykong'
-  | 'battleship';
+  | 'battleship'
+  | 'blackjack'
+  | 'slots'
+  | 'roulette';
 
 export interface Settings {
   master: number; // 0..100
@@ -95,6 +98,9 @@ function defaultState(): GameState {
       grudge: 0,
       donkeykong: 0,
       battleship: 0,
+      blackjack: 0,
+      slots: 0,
+      roulette: 0,
     },
     route: 'normal',
     hasKey: false,

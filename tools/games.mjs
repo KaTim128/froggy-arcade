@@ -33,6 +33,9 @@ const GAMES = [
   { id: 'chompman', drive: async (p) => { for (const k of ['ArrowUp', 'ArrowLeft', 'ArrowUp', 'ArrowRight']) { await p.keyboard.press(k); await sleep(900); } } },
   { id: 'grudge', drive: async (p) => { await sleep(1600); for (let i = 0; i < 6; i++) { await p.keyboard.press('KeyD'); await p.keyboard.press('KeyJ'); await sleep(400); } } },
   { id: 'donkeykong', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(2500); await p.keyboard.up('KeyD'); await p.keyboard.press('Space'); await sleep(600); await p.keyboard.down('KeyW'); await sleep(900); await p.keyboard.up('KeyW'); } },
+  { id: 'slots', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.press('Space'); await sleep(2700); } } },
+  { id: 'blackjack', drive: async (p) => { await sleep(700); await p.keyboard.press('KeyH'); await sleep(900); await p.keyboard.press('Space'); await sleep(3000); } },
+  { id: 'roulette', drive: async (p) => { for (let i = 0; i < 5; i++) { await p.keyboard.press('Space'); await sleep(1300); } } },
   { id: 'battleship', drive: async (p) => { const g = (x, y) => [640 + (x - 160) * 4, 360 + (y - 90) * 4]; for (const [c, r] of [[0, 0], [2, 2], [4, 4], [6, 1]]) { await p.mouse.click(...g(186 + c * 12 + 6, 44 + r * 12 + 6)); await sleep(900); } } },
 ];
 
@@ -80,7 +83,7 @@ for (const g of GAMES) {
   await page.close();
 }
 
-console.log(failures === 0 ? '\nAll 9 games launch, play and quit cleanly.' : `\n${failures} game(s) failed.`);
+console.log(failures === 0 ? '\nAll 12 games launch, play and quit cleanly.' : `\n${failures} game(s) failed.`);
 
 // "Launches and quits cleanly" passed for months on a Chomp-Man where nothing
 // moved at all: the grid step was smaller than the centre-snap band at 60fps,

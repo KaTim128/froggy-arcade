@@ -24,7 +24,7 @@ export interface CabinetDef {
    * into the annex, which exists so the floor can grow without the hub turning
    * into a wall of cabinets.  Defaults to the hub.
    */
-  room?: 'hub' | 'annex';
+  room?: 'hub' | 'annex' | 'casino';
 }
 
 export const TIER_ECONOMY: Record<Tier, { cost: number; reward: number }> = {
@@ -55,15 +55,20 @@ export const CABINETS: CabinetDef[] = [
   { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 5, reward: 10, x: 60, y: 96, color: 0xc31f2e, room: 'annex' },
   { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 5, reward: 10, x: 128, y: 96, color: 0xd9822b, room: 'annex' },
   { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 196, y: 96, color: 0x1d6f8f, room: 'annex' },
+  { id: 'slots', title: 'FROGGY SLOTS', tier: 'medium', cost: 3, reward: 6, x: 96, y: 96, color: 0xff4fa3, room: 'casino' },
+  { id: 'blackjack', title: 'BLACKJACK', tier: 'medium', cost: 3, reward: 6, x: 160, y: 96, color: 0x2f8d4f, room: 'casino' },
+  { id: 'roulette', title: 'CHAMBER', tier: 'hard', cost: 5, reward: 10, x: 224, y: 96, color: 0x8a2b34, room: 'casino' },
 ];
 
 /** Cabinets standing in a given room.  Anything unmarked lives in the hub. */
-export function cabinetsIn(room: 'hub' | 'annex'): CabinetDef[] {
+export function cabinetsIn(room: 'hub' | 'annex' | 'casino'): CabinetDef[] {
   return CABINETS.filter((c) => (c.room ?? 'hub') === room);
 }
 
 /** The doorway between the two rooms, on the hub's left wall. */
 export const ANNEX_DOOR = { x: 20, y: 118, w: 14, h: 40 };
+/** And on through the annex's left wall, into the machines that take money. */
+export const CASINO_DOOR = { x: 20, y: 118, w: 14, h: 40 };
 
 export function cabinetById(id: GameId): CabinetDef {
   const c = CABINETS.find((x) => x.id === id);

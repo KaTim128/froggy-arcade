@@ -1,13 +1,11 @@
 /**
- * The back room.  PRD §7.5, second floor space.
+ * The machines that take money.  Through the opening on the annex's left wall.
  *
- * The hub had run out of wall — nine cabinets left the middle of the floor
- * occupied and nowhere to put a tenth.  This is the room through the opening on
- * the hub's left wall: same arcade, more floor, and space for games that have
- * not been built yet.
+ * Slots, blackjack, and the chamber cabinet.  Same token economy as every other
+ * cabinet in the building — nothing here costs anything but tokens, and the
+ * chamber machine is a cylinder diagram on a cabinet face, not a person.
  *
- * Deliberately thinner than the hub: no bell, no prize counter, no tutorial.
- * Everything that only happens once happens in there, not in here.
+ * Darker and quieter than the arcade floor.  Nobody has ever won in here.
  */
 
 import Phaser from 'phaser';
@@ -22,7 +20,7 @@ import { paintHubRoom, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
-import { CASINO_DOOR, cabinetsIn } from '../game/content';
+import { cabinetsIn } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 
@@ -30,9 +28,9 @@ const INTERACT_RANGE = 24;
 /** The way back, on this room's right wall. */
 const BACK_DOOR = { x: GAME_W - 20, y: 118 };
 
-type Target = { kind: 'cabinet'; cab: Cabinet } | { kind: 'back' } | { kind: 'casino' } | null;
+type Target = { kind: 'cabinet'; cab: Cabinet } | { kind: 'back' } | null;
 
-export class ArcadeAnnex extends Phaser.Scene {
+export class ArcadeCasino extends Phaser.Scene {
   private player!: Player;
   private bounds!: Phaser.Geom.Rectangle;
   private keys!: Record<string, Phaser.Input.Keyboard.Key[]>;
@@ -44,7 +42,7 @@ export class ArcadeAnnex extends Phaser.Scene {
   private locked = false;
 
   constructor() {
-    super('ArcadeAnnex');
+    super('ArcadeCasino');
   }
 
   create(): void {
@@ -55,13 +53,12 @@ export class ArcadeAnnex extends Phaser.Scene {
     this.cabinets = [];
 
     fadeIn(this);
-    audio.setScene({ music: 'hub_lofi', ambience: ['cabinet_bleeps'] });
+    audio.setScene({ music: 'hub_lofi', ambience: ['neon_buzz'] });
 
     paintHubRoom(this, { night: false });
     this.paintDoorway();
-    this.paintCasinoDoor();
 
-    this.cabinets = cabinetsIn('annex').map((def) => new Cabinet(this, def));
+    this.cabinets = cabinetsIn('casino').map((def) => new Cabinet(this, def));
     for (const cab of this.cabinets) {
       this.add
         .zone(cab.def.x, cab.def.y - CAB_H / 2, CAB_W + 4, CAB_H + 2)
@@ -102,7 +99,7 @@ export class ArcadeAnnex extends Phaser.Scene {
       this.interact();
     });
     this.input.keyboard?.on('keydown-ESC', () => {
-      if (!this.busy()) this.scene.launch('SettingsModal', { from: 'ArcadeAnnex' });
+      if (!this.busy()) this.scene.launch('SettingsModal', { from: 'ArcadeCasino' });
     });
 
     store.flush();
@@ -112,34 +109,14 @@ export class ArcadeAnnex extends Phaser.Scene {
     // The opening back to the hub, cut into the right wall.
     this.add.rectangle(ROOM.right - 2, BACK_DOOR.y, 12, 46, PALETTE.black).setOrigin(0, 0.5);
     this.add.rectangle(ROOM.right - 4, BACK_DOOR.y, 4, 46, PALETTE.ink).setOrigin(0, 0.5);
-    text(this, ROOM.right - 44, BACK_DOOR.y - 34, 'ARCADE', PALETTE.ash).setAlpha(0.7);
+    text(this, ROOM.right - 52, BACK_DOOR.y - 34, 'BACK ROOM', PALETTE.ash).setAlpha(0.7);
 
     this.add
       .zone(BACK_DOOR.x, BACK_DOOR.y, 26, 50)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
-        if (!this.busy()) this.toHub();
+        if (!this.busy()) this.toAnnex();
       });
-  }
-
-  /** On through the left wall, to the machines that take money. */
-  private paintCasinoDoor(): void {
-    this.add.rectangle(ROOM.left - 6, CASINO_DOOR.y, 12, 46, PALETTE.black).setOrigin(0, 0.5);
-    this.add.rectangle(ROOM.left, CASINO_DOOR.y, 4, 46, PALETTE.ink).setOrigin(0, 0.5);
-    text(this, ROOM.left + 12, CASINO_DOOR.y - 16, 'THE MACHINES', PALETTE.ash).setAlpha(0.75);
-
-    this.add
-      .zone(CASINO_DOOR.x, CASINO_DOOR.y, 26, 50)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        if (!this.busy()) this.toCasino();
-      });
-  }
-
-  private toCasino(): void {
-    this.locked = true;
-    audio.sfx('footstep_concrete');
-    fadeToScene(this, 'ArcadeCasino');
   }
 
   private bindKeys(names: readonly string[]): Phaser.Input.Keyboard.Key[] {
@@ -159,20 +136,16 @@ export class ArcadeAnnex extends Phaser.Scene {
   private interact(): void {
     if (this.busy() || !this.target) return;
     if (this.target.kind === 'back') {
-      this.toHub();
-      return;
-    }
-    if (this.target.kind === 'casino') {
-      this.toCasino();
+      this.toAnnex();
       return;
     }
     this.launchGame(this.target.cab);
   }
 
-  private toHub(): void {
+  private toAnnex(): void {
     this.locked = true;
     audio.sfx('footstep_concrete');
-    fadeToScene(this, 'ArcadeHub');
+    fadeToScene(this, 'ArcadeAnnex');
   }
 
   private launchGame(cab: Cabinet): void {
@@ -232,7 +205,6 @@ export class ArcadeAnnex extends Phaser.Scene {
     if (best) return { kind: 'cabinet', cab: best };
 
     if (px > BACK_DOOR.x - 22 && Math.abs(py - BACK_DOOR.y) < 28) return { kind: 'back' };
-    if (px < CASINO_DOOR.x + 20 && Math.abs(py - CASINO_DOOR.y) < 28) return { kind: 'casino' };
     return null;
   }
 
@@ -250,10 +222,8 @@ export class ArcadeAnnex extends Phaser.Scene {
       const { cost } = t.cab.def;
       msg = `[E] PLAY - ${cost} TOKEN${cost === 1 ? '' : 'S'}`;
       colour = ledger.balance() >= cost ? PALETTE.gold : PALETTE.ash;
-    } else if (t.kind === 'casino') {
-      msg = '[E] THE MACHINES';
     } else {
-      msg = '[E] ARCADE';
+      msg = '[E] BACK ROOM';
     }
 
     this.prompt.setText(msg).setTint(colour === PALETTE.gold ? 0xffd45e : 0x5c6b7d);
