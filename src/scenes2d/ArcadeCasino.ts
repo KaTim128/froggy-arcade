@@ -11,7 +11,7 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
-import { store } from '../core/state';
+import { store, type GameId } from '../core/state';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
 import { KEYS } from '../core/input';
@@ -20,7 +20,7 @@ import { paintHubRoom, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
-import { cabinetsIn } from '../game/content';
+import { CABINETS, cabinetsIn } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 
@@ -40,9 +40,14 @@ export class ArcadeCasino extends Phaser.Scene {
   private mutter!: Phaser.GameObjects.BitmapText;
   private target: Target = null;
   private locked = false;
+  private returnTo: GameId | null = null;
 
   constructor() {
     super('ArcadeCasino');
+  }
+
+  init(data: { atCabinet?: GameId } = {}): void {
+    this.returnTo = data.atCabinet ?? null;
   }
 
   create(): void {
@@ -76,7 +81,8 @@ export class ArcadeCasino extends Phaser.Scene {
       ROOM.bottom - ROOM.top - 6,
     );
     // You come in through the right-hand doorway, so you arrive next to it.
-    this.player = new Player(this, BACK_DOOR.x - 16, BACK_DOOR.y);
+    const spawn = this.spawnPoint({ x: BACK_DOOR.x - 16, y: BACK_DOOR.y });
+    this.player = new Player(this, spawn.x, spawn.y);
 
     new TokenHud(this);
 
@@ -117,6 +123,22 @@ export class ArcadeCasino extends Phaser.Scene {
       .on('pointerdown', () => {
         if (!this.busy()) this.toAnnex();
       });
+  }
+
+
+  /**
+   * Where to stand when a cabinet hands you back.  Just below its base, which
+   * is inside interact range — so the prompt is already up and you can play it
+   * again without walking anywhere.
+   */
+  private spawnPoint(fallback: { x: number; y: number }): { x: number; y: number } {
+    if (!this.returnTo) return fallback;
+    const def = CABINETS.find((c) => c.id === this.returnTo);
+    if (!def) return fallback;
+    return {
+      x: Phaser.Math.Clamp(def.x, ROOM.left + 12, ROOM.right - 12),
+      y: Phaser.Math.Clamp(def.y + 12, ROOM.top + 12, ROOM.bottom - 8),
+    };
   }
 
   private bindKeys(names: readonly string[]): Phaser.Input.Keyboard.Key[] {
@@ -162,7 +184,7 @@ export class ArcadeCasino extends Phaser.Scene {
     store.bumpGamePlayed(cab.def.id);
     store.flush();
     this.locked = true;
-    fadeToScene(this, 'Minigame', { id: cab.def.id });
+    fadeToScene(this, 'Minigame', { id: cab.def.id, from: 'ArcadeCasino' });
   }
 
   private say(msg: string): void {

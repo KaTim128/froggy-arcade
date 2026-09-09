@@ -230,6 +230,47 @@ console.log(failures === 0 ? '\nAll 12 games launch, play and quit cleanly.' : `
   await page.close();
 }
 
+// Finishing a game used to send everyone to the hub's door, so playing a
+// cabinet two rooms away spat you out two rooms away from it.  You should come
+// back to the room you were in, standing at the machine you played.
+{
+  const g = (x, y) => [640 + (x - 160) * 4, 360 + (y - 90) * 4];
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+
+  const cases = [
+    ['ArcadeHub', 286, 162],   // CHOMP-MAN, right column
+    ['ArcadeAnnex', 128, 96],  // BARREL CLIMB
+    ['ArcadeCasino', 224, 96], // CHAMBER
+  ];
+
+  for (const [room, cx, cy] of cases) {
+    await page.goto(`${URL}/?intro=1&tokens=40&scene=${room}`, { waitUntil: 'networkidle2' });
+    await sleep(2600);
+    await page.mouse.click(...g(cx, cy));
+    await sleep(2200);
+    await page.keyboard.press('Escape'); // forfeit
+    await sleep(6000);
+
+    const back = await page.evaluate((k) => {
+      const s = window.__froggy.game().scene.getScene(k);
+      return {
+        scenes: window.__froggy.activeScenes(),
+        at: s && s.player ? { x: Math.round(s.player.x), y: Math.round(s.player.y) } : null,
+      };
+    }, room);
+
+    const inRoom = back.scenes.includes(room);
+    const atCabinet = !!back.at && Math.abs(back.at.x - cx) < 6 && Math.abs(back.at.y - cy) < 20;
+    const ok = inRoom && atCabinet;
+    console.log(
+      `${ok ? 'PASS' : 'FAIL'}  ${room} hands you back at the cabinet  — ${back.scenes.join(',')} @ ${back.at ? `${back.at.x},${back.at.y}` : 'none'}`,
+    );
+    if (!ok) failures++;
+  }
+  await page.close();
+}
+
 // The deep links above bypass the hub entirely, which is how a cabinet could
 // stop being clickable without a single test noticing.  A cabinet advertises
 // itself as clickable, so clicking one has to start the game.

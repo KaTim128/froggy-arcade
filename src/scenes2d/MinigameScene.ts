@@ -27,14 +27,18 @@ export class MinigameScene extends Phaser.Scene {
   private gameId!: GameId;
   private mod: MinigameModule | null = null;
   private settled = false;
+  private from = 'ArcadeHub';
   private hud!: TokenHud;
 
   constructor() {
     super('Minigame');
   }
 
-  init(data: { id: GameId }): void {
+  init(data: { id: GameId; from?: string }): void {
     this.gameId = data.id;
+    // Which room's floor to put the player back on.  Sending everyone to the
+    // hub meant playing a cabinet in the back room spat you out two rooms away.
+    this.from = data.from ?? 'ArcadeHub';
     this.settled = false;
     this.mod = null;
   }
@@ -120,7 +124,8 @@ export class MinigameScene extends Phaser.Scene {
 
     audio.sfx(won ? 'chime' : 'buzzer');
 
-    this.time.delayedCall(RESULT_MS, () => fadeToScene(this, 'ArcadeHub'));
+    // Back to the room you came from, standing at the cabinet you played.
+    this.time.delayedCall(RESULT_MS, () => fadeToScene(this, this.from, { atCabinet: this.gameId }));
   }
 }
 

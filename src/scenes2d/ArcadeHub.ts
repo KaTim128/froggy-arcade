@@ -10,7 +10,7 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
-import { store } from '../core/state';
+import { store, type GameId } from '../core/state';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
 import { evaluateBroke } from '../core/broke';
@@ -20,7 +20,7 @@ import { paintChangeMachine, paintHubRoom, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
-import { ANNEX_DOOR, BELL, COUNTER, PRIZE_CASE, PRIZES, cabinetsIn } from '../game/content';
+import { ANNEX_DOOR, BELL, CABINETS, COUNTER, PRIZE_CASE, PRIZES, cabinetsIn } from '../game/content';
 import { DialogueBox } from '../froggy/dialogue';
 import { tutorialScript } from '../froggy/script';
 import { froggyLayer } from '../render/froggyLayer';
@@ -47,9 +47,14 @@ export class ArcadeHub extends Phaser.Scene {
   private locked = false;
   private dialogue!: DialogueBox;
   private mutter!: Phaser.GameObjects.BitmapText;
+  private returnTo: GameId | null = null;
 
   constructor() {
     super('ArcadeHub');
+  }
+
+  init(data: { atCabinet?: GameId } = {}): void {
+    this.returnTo = data.atCabinet ?? null;
   }
 
   create(): void {
@@ -118,7 +123,8 @@ export class ArcadeHub extends Phaser.Scene {
       ROOM.right - ROOM.left - 16,
       ROOM.bottom - ROOM.top - 6,
     );
-    this.player = new Player(this, GAME_W / 2, ROOM.bottom - 12);
+    const spawn = this.spawnPoint({ x: GAME_W / 2, y: ROOM.bottom - 12 });
+    this.player = new Player(this, spawn.x, spawn.y);
 
     new TokenHud(this);
 
@@ -206,6 +212,22 @@ export class ArcadeHub extends Phaser.Scene {
     // and get nothing.  (VOC-18)
     text(this, BELL.x + 10, BELL.y - 12, 'RING FOR', PALETTE.cream, 8);
     text(this, BELL.x + 10, BELL.y - 4, 'SERVICE', PALETTE.cream, 8);
+  }
+
+
+  /**
+   * Where to stand when a cabinet hands you back.  Just below its base, which
+   * is inside interact range — so the prompt is already up and you can play it
+   * again without walking anywhere.
+   */
+  private spawnPoint(fallback: { x: number; y: number }): { x: number; y: number } {
+    if (!this.returnTo) return fallback;
+    const def = CABINETS.find((c) => c.id === this.returnTo);
+    if (!def) return fallback;
+    return {
+      x: Phaser.Math.Clamp(def.x, ROOM.left + 12, ROOM.right - 12),
+      y: Phaser.Math.Clamp(def.y + 12, ROOM.top + 12, ROOM.bottom - 8),
+    };
   }
 
   private bindKeys(names: readonly string[]): Phaser.Input.Keyboard.Key[] {
@@ -320,7 +342,7 @@ export class ArcadeHub extends Phaser.Scene {
     store.bumpGamePlayed(cab.def.id);
     store.flush();
     this.locked = true;
-    fadeToScene(this, 'Minigame', { id: cab.def.id });
+    fadeToScene(this, 'Minigame', { id: cab.def.id, from: 'ArcadeHub' });
   }
 
   private say(msg: string): void {
