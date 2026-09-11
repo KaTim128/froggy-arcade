@@ -41,11 +41,20 @@ export interface DialogueLine {
   auto?: boolean;
 }
 
-const BOX_Y = 128;
-const BOX_H = 46;
+/**
+ * The box is taller than it was and the text is twice the size, at the
+ * customer's request: the five-by-eight font at 1x read as texture more than
+ * as words.  Three lines of twenty characters fit; anything longer is paged.
+ */
+const BOX_Y = 116;
+const BOX_H = 64;
+const TEXT_SIZE = 16;
+const TEXT_W = GAME_W - 70;
+/** Characters a page holds before it is split.  Three lines of ~20. */
+const PAGE_CHARS = 58;
 const PORTRAIT_CX = 30;
 const PORTRAIT_BASE = BOX_Y + BOX_H - 3;
-const PORTRAIT_H = 40;
+const PORTRAIT_H = 52;
 
 export class DialogueBox {
   private scene: Phaser.Scene;
@@ -71,8 +80,8 @@ export class DialogueBox {
     panel.setStrokeStyle(1, PALETTE.neon);
     const portraitWell = scene.add.rectangle(6, BOX_Y + 3, 48, BOX_H - 6, PALETTE.plum).setOrigin(0, 0);
 
-    this.label = text(scene, 60, BOX_Y + 8, '', PALETTE.cream).setMaxWidth(GAME_W - 70);
-    this.prompt = text(scene, GAME_W - 14, BOX_Y + BOX_H - 11, '>', PALETTE.gold).setVisible(false);
+    this.label = text(scene, 60, BOX_Y + 6, '', PALETTE.cream, TEXT_SIZE).setMaxWidth(TEXT_W);
+    this.prompt = text(scene, GAME_W - 18, BOX_Y + BOX_H - 18, '>', PALETTE.gold, TEXT_SIZE).setVisible(false);
 
     this.highlight = scene.add.rectangle(0, 0, 10, 10).setStrokeStyle(1, PALETTE.gold).setVisible(false);
 
@@ -85,7 +94,7 @@ export class DialogueBox {
   }
 
   play(lines: DialogueLine[], onDone?: () => void): void {
-    this.lines = lines;
+    this.lines = paginate(lines);
     this.index = 0;
     this.onDone = onDone ?? null;
     this.container.setVisible(true);
@@ -260,6 +269,55 @@ export class DialogueBox {
 }
 
 /** `**bold**` in the script marks emphasis; the placeholder font has none. */
+/**
+ * Split any line too long for the box into pages, at sentence or clause
+ * boundaries.  The first page keeps the hold before; the last keeps the hold
+ * after and the auto-advance; the pose and the highlight carry across all
+ * of them, because it is still the same moment.
+ */
+function paginate(lines: DialogueLine[]): DialogueLine[] {
+  const out: DialogueLine[] = [];
+  for (const line of lines) {
+    const pages = splitText(line.text);
+    pages.forEach((text, i) => {
+      const first = i === 0;
+      const last = i === pages.length - 1;
+      out.push({
+        ...line,
+        text,
+        holdBefore: first ? line.holdBefore : undefined,
+        // An auto line stays auto on every page, with a reading pause on the
+        // ones that are not its last.
+        holdAfter: last ? line.holdAfter : line.auto ? 1400 : undefined,
+        auto: line.auto,
+        onStart: first ? line.onStart : undefined,
+      });
+    });
+  }
+  return out;
+}
+
+function splitText(text: string): string[] {
+  const pages: string[] = [];
+  let rest = text.trim();
+  while (rest.length > PAGE_CHARS) {
+    // The latest boundary that still fits: end of a sentence first, then a
+    // clause, then any space at all.
+    const head = rest.slice(0, PAGE_CHARS + 1);
+    const lastOf = (re: RegExp): number => {
+      let at = -1;
+      for (const m of head.matchAll(re)) at = m.index + m[0].length - 1; // the space after the mark
+      return at;
+    };
+    const at = [lastOf(/[.!?]\s/g), lastOf(/,\s/g), lastOf(/\s/g)].find((i) => i > 12);
+    if (at === undefined) break;
+    pages.push(rest.slice(0, at).trim());
+    rest = rest.slice(at).trim();
+  }
+  pages.push(rest);
+  return pages;
+}
+
 function stripMarkup(s: string): string {
   return s.replace(/\*\*/g, '');
 }

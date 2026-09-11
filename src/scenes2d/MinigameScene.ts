@@ -155,16 +155,17 @@ export class MinigameScene extends Phaser.Scene {
 
     const net = this.paid - this.stake;
     const up = net > 0;
-    const panel = this.add.rectangle(GAME_W / 2, GAME_H / 2, 160, 44, PALETTE.ink).setDepth(990);
+    const panel = this.add.rectangle(GAME_W / 2, GAME_H / 2, 250, 60, PALETTE.ink).setDepth(990);
     panel.setStrokeStyle(1, up ? PALETTE.gold : PALETTE.steel);
     centerText(
       this,
       GAME_W / 2,
-      GAME_H / 2 - 7,
+      GAME_H / 2 - 10,
       net === 0 ? 'YOU BREAK EVEN' : up ? `YOU LEAVE UP ${net}` : `YOU LEAVE DOWN ${-net}`,
       up ? PALETTE.gold : PALETTE.fog,
+      16,
     ).setDepth(991);
-    centerText(this, GAME_W / 2, GAME_H / 2 + 7, `${ledger.balance()} tokens`, PALETTE.ash).setDepth(991);
+    centerText(this, GAME_W / 2, GAME_H / 2 + 12, `${ledger.balance()} tokens`, PALETTE.ash).setDepth(991);
 
     audio.sfx(up ? 'chime' : 'buzzer');
     this.time.delayedCall(RESULT_MS, () => fadeToScene(this, this.from, { atCabinet: this.gameId }));
@@ -183,19 +184,20 @@ export class MinigameScene extends Phaser.Scene {
     if (won) ledger.credit(paid, 'game.reward');
     store.flush();
 
-    const panel = this.add.rectangle(GAME_W / 2, GAME_H / 2, 160, 44, PALETTE.ink).setDepth(990);
+    const panel = this.add.rectangle(GAME_W / 2, GAME_H / 2, 250, 60, PALETTE.ink).setDepth(990);
     panel.setStrokeStyle(1, won ? PALETTE.gold : PALETTE.steel);
     centerText(
       this,
       GAME_W / 2,
-      GAME_H / 2 - 7,
+      GAME_H / 2 - 10,
       won ? `YOU WIN  +${paid}` : quit ? `FORFEIT  -${this.stake}` : `YOU LOSE  -${this.stake}`,
       won ? PALETTE.gold : PALETTE.fog,
+      16,
     ).setDepth(991);
     centerText(
       this,
       GAME_W / 2,
-      GAME_H / 2 + 7,
+      GAME_H / 2 + 12,
       won ? `${ledger.balance()} tokens` : `${ledger.balance()} tokens left`,
       PALETTE.ash,
     ).setDepth(991);

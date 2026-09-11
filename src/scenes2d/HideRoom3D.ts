@@ -211,6 +211,15 @@ type Mode = 'briefing' | 'hiding' | 'seeking' | 'caught' | 'survived';
  */
 type FroggyMode = 'search' | 'listen' | 'openSpot' | 'investigate' | 'chase' | 'suspicious';
 
+/**
+ * As big as a line can be drawn and still fit the frame: 2x for short
+ * prompts, less for a long subtitle.  The overlay is device resolution, so
+ * a fractional scale stays sharp.
+ */
+function fitScale(s: string): number {
+  return Math.max(1, Math.min(2, (GAME_W - 24) / (s.length * 6)));
+}
+
 interface Spot3D {
   x: number;
   z: number;
@@ -1692,16 +1701,16 @@ export class HideRoom3D extends Phaser.Scene {
         const left = Math.max(0, Math.ceil(this.clock));
         const mm = Math.floor(left / 60);
         const ss = `${left % 60}`.padStart(2, '0');
-        drawPixelText(ctx, `${mm}:${ss}`, GAME_W - 30, 6, {
-          scale: 1,
+        drawPixelText(ctx, `${mm}:${ss}`, GAME_W - 44, 6, {
+          scale: 1.5,
           color: left <= 30 ? '#ffd45e' : '#7a8494',
           alpha: 0.85,
         });
       }
 
       if (this.subtitle) {
-        drawPixelText(ctx, this.subtitle, GAME_W / 2, GAME_H - 26, {
-          scale: 1,
+        drawPixelText(ctx, this.subtitle, GAME_W / 2, GAME_H - 30, {
+          scale: fitScale(this.subtitle),
           color: '#e8e2cd',
           center: true,
         });
@@ -1709,7 +1718,7 @@ export class HideRoom3D extends Phaser.Scene {
 
       if (this.prompt && !this.hiding) {
         drawPixelText(ctx, this.prompt, GAME_W / 2, GAME_H * 0.62, {
-          scale: 1,
+          scale: fitScale(this.prompt),
           color: '#ffd45e',
           center: true,
           alpha: 0.9,

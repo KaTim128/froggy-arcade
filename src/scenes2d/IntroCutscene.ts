@@ -30,23 +30,28 @@ import { froggyLayer } from '../render/froggyLayer';
 
 export const STARTING_TOKENS = 20;
 
-/** The cards.  One thought per card, and the next one is a click away. */
+/**
+ * The cards.  One thought per card, and the next one is a click away.  The
+ * text is at 2x, so a line is twenty-six characters at most and the thoughts
+ * are broken to fit.
+ */
 const CARDS: string[][] = [
   ['The job went first.'],
-  ['Then the flat.', 'Then everything that was in it.'],
-  ['That was seven months ago.', 'You have been on the street since.'],
-  ['This afternoon you are sat outside an arcade,', 'because it is warm and nobody moves you on.'],
+  ['Then the flat.', 'Then everything', 'that was in it.'],
+  ['That was seven months ago.', 'You have been on', 'the street since.'],
+  ['This afternoon you are', 'sat outside an arcade,', 'because it is warm and', 'nobody moves you on.'],
 ];
 
-/** What he says, once he is stood over you. */
-const OFFER: string[] = [
-  '"That counter in there sells a stuffed rabbit',
-  'for two hundred tokens. I want it."',
-  '"I am not paying their prices. You will."',
-  '"Win me what is on those shelves and I pay you',
-  'cash. Half of what it cost. In your hand."',
-  'He puts a bag of tokens on the kerb.',
+/** What he says, once he is stood over you.  Two lines a beat. */
+const OFFER: string[][] = [
+  ['"That counter in there', 'sells a stuffed rabbit'],
+  ['for two hundred tokens.', 'I want it."'],
+  ['"I am not paying their', 'prices. You will."'],
+  ['"Win me what is on those', 'shelves and I pay you'],
+  ['cash. Half of what it', 'cost. In your hand."'],
+  ['He puts a bag of', 'tokens on the kerb.'],
 ];
+const CAPTION_SIZE = 16;
 
 /**
  * The arrow does not appear the instant a line does.  A line fades in over
@@ -84,7 +89,7 @@ export class IntroCutscene extends Phaser.Scene {
     audio.setScene({ music: 'theme_arcade' });
 
     this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black).setOrigin(0, 0);
-    this.caption = centerText(this, GAME_W / 2, GAME_H / 2, '', PALETTE.cream).setDepth(900);
+    this.caption = centerText(this, GAME_W / 2, GAME_H / 2, '', PALETTE.cream, CAPTION_SIZE).setDepth(900).setCenterAlign();
     this.buildChrome();
 
     // Esc skips the whole thing — the float is still handed over (PRD §7.4).
@@ -174,7 +179,7 @@ export class IntroCutscene extends Phaser.Scene {
       this.player = new Player(this, MAN_X + 34, KERB_Y, true);
       this.player.sprite.setScale(1, 0.72); // sitting: the same body, folded up
 
-      this.caption = centerText(this, GAME_W / 2, GAME_H - 20, '', PALETTE.cream).setDepth(900);
+      this.caption = centerText(this, GAME_W / 2, GAME_H - 34, '', PALETTE.cream, CAPTION_SIZE).setDepth(900).setCenterAlign();
       this.buildChrome();
 
       this.time.delayedCall(1400, () => this.manArrives());
@@ -205,7 +210,7 @@ export class IntroCutscene extends Phaser.Scene {
       this.dropTokens();
       return;
     }
-    this.caption.setText(line).setAlpha(0);
+    this.caption.setText(line.join('\n')).setAlpha(0);
     this.tweens.add({ targets: this.caption, alpha: 1, duration: 400 });
     this.armArrow(() => {
       this.line++;
@@ -227,7 +232,7 @@ export class IntroCutscene extends Phaser.Scene {
         ease: 'Bounce.easeOut',
       });
     }
-    this.caption.setText('twenty tokens. a start.').setAlpha(0);
+    this.caption.setText('twenty tokens.\na start.').setAlpha(0);
     this.tweens.add({ targets: this.caption, alpha: 1, duration: 500 });
     this.armArrow(() => this.finish());
   }
