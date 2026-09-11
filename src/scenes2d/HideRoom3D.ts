@@ -120,6 +120,19 @@ const CLIMB_SPEED = 1.5;
  * never be reached and he shouldered the furniture instead of ever opening it.
  */
 const ARRIVE_DIST = 1.5;
+/**
+ * How long a trip gets to make headway before he gives it up, and how little
+ * ground in that time counts as none.
+ *
+ * A waypoint on the far side of a partition he cannot climb used to leave him
+ * shouldering the wall for the rest of the round: the outer walls were not
+ * solid to his steering, only to the clamp that ran after it, so every frame
+ * looked like a clean step that the clamp then quietly undid.  Now the walls
+ * block like furniture does, and a trip that is not getting anywhere is
+ * abandoned for a different spot rather than pushed at.
+ */
+const HEADWAY_S = 1.5;
+const HEADWAY_DIST = 1.0;
 
 /** He hears a run from here, even without seeing it. */
 const HEAR_RUN = 9;
@@ -253,6 +266,9 @@ export class HideRoom3D extends Phaser.Scene {
   private grace = 0;
   private stuckT = 0;
   private slideDir: 1 | -1 = 1;
+  /** Walking time on the current trip, and how far from its waypoint he was when last measured. */
+  private headwayT = 0;
+  private headwayDist = 0;
 
   constructor() {
     super('HideRoom3D');
@@ -824,6 +840,7 @@ export class HideRoom3D extends Phaser.Scene {
       if (this.memory <= 0) {
         this.fMode = 'suspicious';
         this.waypoint.copy(this.lastSeen);
+        this.startTrip();
       }
     }
 
@@ -875,7 +892,10 @@ export class HideRoom3D extends Phaser.Scene {
           const r = 2.5 + Math.random() * 3;
           const look = new THREE.Vector2(this.froggy.x + Math.cos(a) * r, this.froggy.y + Math.sin(a) * r);
           this.clampToRoom(look);
-          if (!this.solid(look.x, look.y, 0.5)) this.waypoint.copy(look);
+          if (!this.solid(look.x, look.y, 0.5)) {
+            this.waypoint.copy(look);
+            this.startTrip();
+          }
           this.arrive();
           return;
         }
@@ -889,8 +909,11 @@ export class HideRoom3D extends Phaser.Scene {
     this.froggyYaw = Math.atan2(ax, az);
     const nx = this.froggy.x + (ax / dist) * speed * dt;
     const nz = this.froggy.y + (az / dist) * speed * dt;
-    const freeX = !this.solid(nx, this.froggy.y, 0.5);
-    const freeZ = !this.solid(this.froggy.x, nz, 0.5);
+    // The outer walls are solid here too, not just in the clamp below.  If
+    // they were not, a step into a wall counted as a clean step and none of
+    // the stuck handling ever saw it.
+    const freeX = this.inRoom(nx, this.froggy.y) && !this.solid(nx, this.froggy.y, 0.5);
+    const freeZ = this.inRoom(this.froggy.x, nz) && !this.solid(this.froggy.x, nz, 0.5);
 
     const inTheWay =
       this.blockerAt(nx, nz, 0.5) ??
@@ -925,17 +948,57 @@ export class HideRoom3D extends Phaser.Scene {
         this.froggy.y += dir * speed * dt;
       }
     } else {
-      // Blocked both ways: a pocket.  Re-routing alone can pick another blocked
-      // heading forever, so if he genuinely cannot move, put him back on floor.
+      // Blocked both ways: a pocket.  Give it a moment in case it is a corner
+      // he is about to slide out of, then put him on open floor and send him
+      // somewhere else.  This used to re-pick a waypoint every frame, which
+      // was a different blocked heading every frame and read as a twitch.
       this.stuckT += dt;
-      if (this.fMode !== 'chase') this.pickWaypoint();
-      if (this.stuckT > 1.2) {
+      if (this.stuckT > 0.6) {
         this.stuckT = 0;
         this.freeFroggy(true);
+        if (this.fMode !== 'chase') this.giveUpTrip();
       }
     }
     this.clampToRoom(this.froggy);
     this.footsteps(dt, speed);
+
+    // Headway.  Sliding and climbing are both fine as long as they get him
+    // somewhere; a trip that has not, for a while, is one he cannot make, and
+    // he goes and checks somewhere else instead.  A chase is exempt — that is
+    // him losing you behind a wall, and memory running out already ends it.
+    this.headwayT += dt;
+    if (this.headwayT >= HEADWAY_S) {
+      const now = this.froggy.distanceTo(this.waypoint);
+      const gained = this.headwayDist - now;
+      this.headwayT = 0;
+      this.headwayDist = now;
+      if (gained < HEADWAY_DIST && this.fMode !== 'chase') this.giveUpTrip();
+    }
+  }
+
+  /**
+   * Abandon the current waypoint for a hiding spot other than the one he was
+   * heading to.  Random, not nearest: nearest is usually the one behind the
+   * same wall.
+   */
+  private giveUpTrip(): void {
+    const was = this.waypoint.clone();
+    const others = this.spots.filter((s) => Math.hypot(s.x - was.x, s.z - was.y) > 1);
+    if (others.length > 0) {
+      const s = Phaser.Utils.Array.GetRandom(others);
+      this.waypoint.set(s.x, s.z);
+      this.startTrip();
+    } else {
+      this.pickWaypoint();
+    }
+    if (this.fMode === 'investigate' || this.fMode === 'suspicious') this.fMode = 'search';
+    this.stuckT = 0;
+    // And if what stopped him was being inside something, put him on the floor.
+    this.freeFroggy();
+  }
+
+  private inRoom(x: number, z: number): boolean {
+    return Math.abs(x) < this.def.halfW - 0.6 && Math.abs(z) < this.def.halfD - 0.6;
   }
 
   /**
@@ -1066,6 +1129,7 @@ export class HideRoom3D extends Phaser.Scene {
    * being a circuit you can time.
    */
   private pickWaypoint(): void {
+    let picked = false;
     if (this.spots.length > 0 && Math.random() < 0.8) {
       let best: Spot3D | null = null;
       for (let i = 0; i < 3; i++) {
@@ -1074,13 +1138,22 @@ export class HideRoom3D extends Phaser.Scene {
       }
       if (best) {
         this.waypoint.set(best.x, best.z);
-        return;
+        picked = true;
       }
     }
-    this.waypoint.set(
-      Phaser.Math.FloatBetween(-this.def.halfW + 1.5, this.def.halfW - 1.5),
-      Phaser.Math.FloatBetween(-this.def.halfD + 1.5, this.def.halfD - 1.5),
-    );
+    if (!picked) {
+      this.waypoint.set(
+        Phaser.Math.FloatBetween(-this.def.halfW + 1.5, this.def.halfW - 1.5),
+        Phaser.Math.FloatBetween(-this.def.halfD + 1.5, this.def.halfD - 1.5),
+      );
+    }
+    this.startTrip();
+  }
+
+  /** A fresh trip gets a full headway window, measured from where it starts. */
+  private startTrip(): void {
+    this.headwayT = 0;
+    this.headwayDist = this.froggy.distanceTo(this.waypoint);
   }
 
   /**
@@ -1115,6 +1188,7 @@ export class HideRoom3D extends Phaser.Scene {
     this.fMode = 'investigate';
     this.investigateT = INVESTIGATE_S;
     this.waypoint.copy(guess);
+    this.startTrip();
     this.targetSpot = null;
   }
 

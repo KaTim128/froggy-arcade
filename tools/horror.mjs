@@ -198,6 +198,36 @@ try {
     }
     check('he searches the room on his own', travelled > 3, `covered ${travelled.toFixed(1)}m in 8s`);
 
+    // The corner behind a partition.  Room 0's first partition runs into the
+    // back wall; a waypoint two metres away on the far side of it is one he
+    // cannot reach, and he used to shoulder the outer wall there for the rest
+    // of the round.  He has to give the trip up and go somewhere else.
+    const corner = { x: -8, z: -12.8 };
+    await page.evaluate((c) => {
+      const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+      sc.grace = 99;
+      sc.climb = null;
+      sc.fMode = 'search';
+      sc.froggy.set(c.x, c.z);
+      sc.waypoint.set(-4.5, c.z);
+      sc.startTrip();
+    }, corner);
+    // Sampled, because once he has given up he may already be stood at the next
+    // spot opening it: what matters is that he left, not where he is right now.
+    let farthest = 0;
+    for (let i = 0; i < 14; i++) {
+      await sleep(500);
+      s = await hide();
+      farthest = Math.max(farthest, Math.hypot(s.fx - corner.x, s.fz - corner.z));
+    }
+    const gaveUp = await page.evaluate((c) => {
+      const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+      return Math.hypot(sc.waypoint.x + 4.5, sc.waypoint.y - c.z) > 0.01;
+    }, corner);
+    check('walled off from a waypoint, he goes somewhere else',
+      gaveUp && farthest > 2.5 && !s.dbg.froggyBlocked,
+      `${gaveUp ? 'new waypoint' : 'same waypoint'}, got ${farthest.toFixed(1)}m from the corner`);
+
     // The controls, driven for real through the keyboard rather than by poking
     // the scene: getting between two boxes before he arrives is the whole game,
     // so which way each key sends you is a requirement, not a preference.
