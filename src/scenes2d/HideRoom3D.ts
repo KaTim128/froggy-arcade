@@ -114,6 +114,9 @@ const BRIEFING: Array<[string, number]> = [
   ["LET'S PLAY ANOTHER GAME!", 2800],
   ['IF YOU SURVIVE WITH ME FOR 3 MINUTES,', 3000],
   ['I WILL SET YOU FREE.', 2800],
+  // Two beats, because it will not fit the frame as one line.
+  ['AND YOU BETTER NOT HIDE IN ONE PLACE,', 2800],
+  ["'CAUSE I CAN SENSE YOUR SOUL.", 2800],
   ['IF NOT....', 2600],
 ];
 /** How long his answer to "if not" is allowed to hang there. */
