@@ -203,6 +203,8 @@ class AudioManager {
 
     if (id === 'hub_lofi' || id === 'theme_arcade') {
       stops.push(this.placeholderMusic(gain, id === 'theme_arcade'));
+    } else if (id === 'casino_chiptune') {
+      stops.push(this.placeholderChiptune(gain));
     } else if (id === 'neon_buzz') {
       stops.push(this.placeholderDrone(gain, 120, 0.012, 'sawtooth'));
     } else if (id === 'crowd_hum') {
@@ -334,6 +336,119 @@ class AudioManager {
 
     tick();
     const timer = window.setInterval(tick, BEAT_MS);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      try {
+        tone.disconnect();
+      } catch {
+        /* already gone */
+      }
+    };
+  }
+
+  /**
+   * The back room's music.  Where `hub_lofi` is a bed you sit in, this is a
+   * cabinet attract loop: square-wave lead over a running arpeggio, an
+   * eighth-note bass, and a kick/snare/hat pulse at about 158 BPM.  Four bright
+   * chords (C, Am, F, G) so it reads as an arcade and not as the lounge the
+   * rest of the building is.
+   *
+   * Same seam as the other placeholders: `registerAsset('casino_chiptune', …)`
+   * replaces it with a real file without touching the scene.
+   */
+  private placeholderChiptune(out: GainNode): () => void {
+    const ctx = this.ctx!;
+    const STEP_MS = 190; // one eighth note
+    const hz = (semisFromA4: number) => 440 * 2 ** (semisFromA4 / 12);
+
+    // One chord per bar, eight steps per bar.  Roots, and the arpeggio's
+    // three tones an octave above them.
+    const roots = [-21, -24, -28, -26]; // C3 A2 F2 G2
+    const arps = [
+      [-9, -5, -2], // C E G
+      [-12, -9, -5], // A C E
+      [-16, -12, -9], // F A C
+      [-14, -10, -7], // G B D
+    ];
+    // The lead, 32 steps.  null is a rest.
+    const lead: Array<number | null> = [
+      7, 10, 15, 10, 7, null, 10, null, // over C
+      12, null, 7, 3, 7, 12, null, null, // over Am
+      8, 12, 15, 12, 8, null, 12, 15, // over F
+      14, null, 10, 5, 10, 14, 17, null, // over G
+    ];
+
+    let step = 0;
+    let stopped = false;
+
+    // Squares are harsh at full bandwidth; a low-pass takes the edge off
+    // without losing the character.
+    const tone = ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = 3600;
+    tone.Q.value = 0.5;
+    tone.connect(out);
+
+    const blip = (freq: number, at: number, dur: number, vol: number) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.linearRampToValueAtTime(vol, at + 0.006); // near-instant: it is a chip
+      g.gain.setValueAtTime(vol, at + dur * 0.6);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      osc.connect(g);
+      g.connect(tone);
+      osc.start(at);
+      osc.stop(at + dur + 0.03);
+    };
+
+    const drum = (at: number, kind: 'kick' | 'snare' | 'hat') => {
+      const secs = kind === 'kick' ? 0.12 : kind === 'snare' ? 0.1 : 0.03;
+      const len = Math.floor(ctx.sampleRate * secs);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      const curve = kind === 'kick' ? 3 : kind === 'snare' ? 1.8 : 1.2;
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** curve;
+      const src = ctx.createBufferSource();
+      const f = ctx.createBiquadFilter();
+      const g = ctx.createGain();
+      f.type = kind === 'kick' ? 'lowpass' : kind === 'snare' ? 'bandpass' : 'highpass';
+      f.frequency.value = kind === 'kick' ? 160 : kind === 'snare' ? 1800 : 7000;
+      g.gain.value = kind === 'kick' ? 0.07 : kind === 'snare' ? 0.035 : 0.014;
+      src.buffer = buf;
+      src.connect(f);
+      f.connect(g);
+      g.connect(out);
+      src.start(at);
+    };
+
+    const tick = () => {
+      if (stopped) return;
+      const t = ctx.currentTime + 0.02;
+      const bar = Math.floor(step / 8) % 4;
+      const inBar = step % 8;
+      const dur = STEP_MS / 1000;
+
+      // bass: root on the beat, octave up on the off-beat
+      blip(hz(roots[bar] + (inBar % 2 ? 12 : 0)), t, dur * 0.8, 0.05);
+      // arpeggio, cycling through the chord every step
+      blip(hz(arps[bar][inBar % 3]), t, dur * 0.7, 0.02);
+      // lead
+      const n = lead[step % lead.length];
+      if (n !== null) blip(hz(n), t, dur * 1.6, 0.04);
+
+      drum(t, 'hat');
+      if (inBar === 0 || inBar === 4) drum(t, 'kick');
+      if (inBar === 2 || inBar === 6) drum(t, 'snare');
+
+      step++;
+    };
+
+    tick();
+    const timer = window.setInterval(tick, STEP_MS);
     return () => {
       stopped = true;
       clearInterval(timer);

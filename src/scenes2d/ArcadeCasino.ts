@@ -72,7 +72,8 @@ export class ArcadeCasino extends Phaser.Scene {
     this.clock = 0;
 
     fadeIn(this);
-    audio.setScene({ music: 'hub_lofi', ambience: ['neon_buzz'] });
+    // Its own music, and no ambience: the neon buzz read as static in here.
+    audio.setScene({ music: 'casino_chiptune' });
 
     // No front door in here: the only way out of the building is the hub.
     paintHubRoom(this, { night: false, frontDoor: false });
