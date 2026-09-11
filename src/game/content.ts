@@ -65,28 +65,30 @@ export const CABINETS: CabinetDef[] = [
   // ---- the front room: everything that costs one to three tokens
   { id: 'tictactoe', title: 'TIC-TAC-TOE', tier: 'easy', cost: 1, reward: 3, x: 34, y: 86, color: 0xff4fa3 },
   { id: 'snakes', title: 'SNAKES+LADDERS', tier: 'easy', cost: 1, reward: 3, x: 68, y: 86, color: 0x46c4bd },
+  // The bottom row: two either side of the front door, in line with the two
+  // above.  Nothing sits under the change machine on the right wall, because a
+  // cabinet's click zone up there swallows every attempt to use it.
   { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 3, reward: 6, x: 34, y: 162, color: 0xff7a3d },
   { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 3, reward: 6, x: 68, y: 162, color: 0x6fbb6a },
-  // Low on the right wall on purpose: the change machine is above it, and a
-  // cabinet's click zone up there swallows every attempt to use the machine.
-  { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 286, y: 152, color: 0x1d6f8f },
-  // Either side of the front door, along the bottom wall.  Bowling pays 3 on a
-  // 3 — you are playing Froggy, not the house — and snooker is a medium at 6.
-  { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 3, reward: 3, x: 110, y: 162, color: 0xb9884f },
-  { id: 'snooker', title: 'SNOOKER', tier: 'medium', cost: 3, reward: 6, x: 210, y: 162, color: 0x2a8a4a },
+  // Bowling pays 3 on a 3 — you are playing Froggy, not the house.
+  { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 3, reward: 3, x: 252, y: 162, color: 0xb9884f },
+  { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 286, y: 162, color: 0x1d6f8f },
 
   // ---- the back room: five to seven a go
   { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 5, reward: 10, x: 48, y: 96, color: 0xc31f2e, room: 'annex' },
   { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 5, reward: 5, x: 112, y: 96, color: 0xd9822b, room: 'annex' },
   { id: 'airhockey', title: 'AIR HOCKEY', tier: 'hard', cost: 5, reward: 10, x: 176, y: 96, color: 0xffd45e, room: 'annex' },
   { id: 'chompman', title: 'CHOMP-MAN', tier: 'hard', cost: 7, reward: 7, x: 240, y: 96, color: 0x7b4bd8, room: 'annex' },
-  // Along the bottom wall, like the hub's second row.  Neither has a fixed
-  // reward: a run is worth what it scored, and the module names the payout.
-  { id: 'frogcross', title: 'FROG CROSS', tier: 'medium', cost: 3, reward: 5, x: 112, y: 162, color: 0x6fbb6a, room: 'annex' },
-  { id: 'carchase', title: 'CAR CHASE', tier: 'hard', cost: 5, reward: 7, x: 208, y: 162, color: 0x46a0e0, room: 'annex' },
+  // Along the bottom wall, under the middle two of the row above.  Neither
+  // has a fixed reward: a run is worth what it scored, and the module names
+  // the payout.
+  { id: 'frogcross', title: 'FROG CROSS', tier: 'hard', cost: 7, reward: 10, x: 112, y: 162, color: 0x6fbb6a, room: 'annex' },
+  { id: 'carchase', title: 'CAR CHASE', tier: 'hard', cost: 5, reward: 7, x: 176, y: 162, color: 0x46a0e0, room: 'annex' },
 
   // ---- and the room at the back, where none of it is a game
-  { id: 'slots', title: 'FROGGY SLOTS', tier: 'medium', cost: 3, reward: 6, x: 96, y: 96, color: 0xff4fa3, room: 'casino' },
+  // Two tokens is the price of the first spin; the rest are raised through
+  // the shell, and the wins are paid the same way.  See slots.ts.
+  { id: 'slots', title: 'FROGGY SLOTS', tier: 'medium', cost: 2, reward: 6, x: 96, y: 96, color: 0xff4fa3, room: 'casino' },
   // The table takes a minimum, not a price: `cost` is the ante Froggy will not
   // deal under, and `reward` is what that ante pays back at 2x.  Anything above
   // it is raised at the table through the shell (MinigameApi.raise).

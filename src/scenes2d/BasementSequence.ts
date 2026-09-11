@@ -442,10 +442,13 @@ export class BasementSequence extends Phaser.Scene {
     // wet floor catching what little light there is
     c.add(this.add.rectangle(0, 148, GAME_W, 32, 0x120d12, 0.55).setOrigin(0, 0));
 
-    const doorW = 52;
-    const doorH = 84;
+    // Sized to the wall it is in: the sill sits on the floor line (the back
+    // wall's base, y 118) and the top stays under the ceiling.  It used to be
+    // taller than the wall and hung a foot out over the floor.
+    const doorW = 44;
+    const doorH = 66;
     const dx = GAME_W / 2;
-    const dy = 100;
+    const dy = 118 - doorH / 2;
     c.add(this.add.rectangle(dx, dy, doorW + 8, doorH + 8, 0x1b1218));
     c.add(this.add.rectangle(dx, dy, doorW, doorH, 0x2b1d16));
     // panels, and the light down the hinge side
@@ -457,7 +460,7 @@ export class BasementSequence extends Phaser.Scene {
     c.add(this.add.circle(dx + 17, dy + 5, 1, 0xffd45e, 0.6));
 
     // light bleeding under it
-    const bleed = this.add.rectangle(dx, dy + doorH / 2 + 2, doorW - 6, 3, 0xd8b45a, 0.5);
+    const bleed = this.add.rectangle(dx, dy + doorH / 2 + 1, doorW - 6, 2, 0xd8b45a, 0.5);
     c.add(bleed);
     this.tweens.add({ targets: bleed, alpha: 0.15, duration: 1400, yoyo: true, repeat: -1 });
 

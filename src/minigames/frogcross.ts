@@ -1,10 +1,10 @@
 /**
- * FROG CROSS THE ROAD.  Medium — 3 tokens in, five and up out.
+ * FROG CROSS THE ROAD.  Hard — 7 tokens in, ten and up out.
  *
  * Eight lanes of traffic between the kerb and the far bank.  Every crossing
  * is ten points and makes the road a little worse: faster cars, more of them,
- * longer ones.  Three lives.  Two hundred points is the bar — reach it and the
- * run pays five tokens, and every further two hundred adds one.
+ * longer ones.  Three lives.  Ten crossings — a hundred points — is the bar:
+ * reach it and the run pays ten tokens, and every further ten crossings adds one.
  *
  * Nothing about it is timed.  The clock here is your patience: the road only
  * gets harder, so the question is how far past the bar you push before the
@@ -25,8 +25,8 @@ import type { MinigameApi, MinigameModule } from './types';
 const ID = 'frogcross' as const;
 
 /** The bar, the base payout, and what each further bar is worth. */
-export const TARGET_POINTS = 200;
-export const BASE_REWARD = 5;
+export const TARGET_POINTS = 100;
+export const BASE_REWARD = 10;
 export const POINTS_PER_CROSS = 10;
 
 const LANES = 8;
@@ -38,6 +38,8 @@ const BANK_TOP = 32;
 const COL_W = 16;
 const LIVES = 3;
 const HOP_MS = 90;
+/** The instruction holds this long, and the frog holds with it. */
+const INTRO_MS = 3000;
 const CAR_H = 9;
 
 interface Car {
@@ -68,6 +70,9 @@ let hopping = false;
 let dead = false;
 let over = false;
 let invulnMs = 0;
+let introMs = 0;
+let intro: Phaser.GameObjects.BitmapText | null = null;
+let introPlate: Phaser.GameObjects.Rectangle | null = null;
 let hud: { pts: Phaser.GameObjects.BitmapText; lives: Phaser.GameObjects.BitmapText; best: Phaser.GameObjects.BitmapText; bank: Phaser.GameObjects.BitmapText } | null = null;
 let apiRef: MinigameApi | null = null;
 let sceneRef: Phaser.Scene | null = null;
@@ -85,8 +90,8 @@ const laneY = (lane: number): number => ROAD_BOTTOM - lane * LANE_H + LANE_H / 2
 export const frogCross: MinigameModule = {
   id: ID,
   title: 'FROG CROSS THE ROAD',
-  rules: 'cross for 10 - reach 200',
-  payoutNote: 'WIN: 5+',
+  rules: 'cross 10 times to win',
+  payoutNote: 'WIN: 10+',
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;
@@ -101,6 +106,7 @@ export const frogCross: MinigameModule = {
     dead = false;
     over = false;
     invulnMs = 0;
+    introMs = INTRO_MS;
 
     // far bank, road, kerb
     scene.add.rectangle(0, 18, GAME_W, 162, 0x10141c).setOrigin(0, 0);
@@ -133,6 +139,11 @@ export const frogCross: MinigameModule = {
       bank: centerText(scene, GAME_W / 2, 168, '', PALETTE.gold).setVisible(false),
     };
     refreshHud();
+
+    // What to do, said once.  It fades after three seconds, and the frog
+    // does not move until it has gone.
+    introPlate = scene.add.rectangle(GAME_W / 2, 100, 262, 26, PALETTE.black, 0.7).setDepth(39);
+    intro = centerText(scene, GAME_W / 2, 100, 'HOP ACROSS THE ROAD WITH WASD', PALETTE.gold, 16).setDepth(40);
 
     const kb = scene.input.keyboard;
     const on = (names: string[], fn: () => void) => names.forEach((n) => kb?.on(`keydown-${n}`, fn));
@@ -167,6 +178,20 @@ export const frogCross: MinigameModule = {
     if (over || !sprite) return;
     const dt = delta / 1000;
 
+    if (introMs > 0) {
+      introMs -= delta;
+      // the last 600ms fade it out
+      const a = Math.min(1, Math.max(0, introMs / 600));
+      intro?.setAlpha(a);
+      introPlate?.setAlpha(a * 0.7);
+      if (introMs <= 0) {
+        intro?.destroy();
+        introPlate?.destroy();
+        intro = null;
+        introPlate = null;
+      }
+    }
+
     stepTraffic(dt, delta);
 
     if (invulnMs > 0) {
@@ -187,6 +212,8 @@ export const frogCross: MinigameModule = {
     cars = [];
     sprite = null;
     eyes = null;
+    intro = null;
+    introPlate = null;
     hud = null;
     apiRef = null;
     sceneRef = null;
@@ -244,7 +271,7 @@ function stepTraffic(dt: number, delta: number): void {
 }
 
 function hop(dc: number, dr: number): void {
-  if (over || dead || hopping || !sprite || !sceneRef) return;
+  if (over || dead || hopping || introMs > 0 || !sprite || !sceneRef) return;
   const col = Phaser.Math.Clamp(frog.col + dc, 0, 18);
   const row = Phaser.Math.Clamp(frog.row + dr, 0, LANES + 1);
   if (col === frog.col && row === frog.row) return;

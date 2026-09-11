@@ -34,7 +34,8 @@ import { ROOMS, type Box, type RoomDef, type SpotKind } from '../three/hideRooms
 import { buildGrid, findPath, lineOpen, spotExtent, type NavGrid } from '../three/navGrid';
 import { dressRoom, surfaceTexture } from '../three/hideDecor';
 
-const WALK = 2.6;
+/** A walk is slow and silent; a run is fast and heard.  That is the trade. */
+const WALK = 2.0;
 const RUN = 4.0;
 /** Radians per second on the arrow keys, and per pixel of mouse drag. */
 const TURN_RATE = 2.2;
@@ -162,11 +163,11 @@ const HEADWAY_S = 1.5;
 const HEADWAY_DIST = 1.0;
 
 /**
- * What he hears.  A run carries across most of a room; a walk only when he
- * is close; a crouch, never.  Hearing gives him somewhere to look, not you.
+ * What he hears.  A run carries across most of a room.  A walk and a crouch
+ * he does not hear at all — walking is the quiet choice, and slow for it.
+ * Hearing gives him somewhere to look, not you.
  */
 const HEAR_RUN = 18;
-const HEAR_WALK = 5;
 /**
  * The floor.
  *
@@ -974,19 +975,16 @@ export class HideRoom3D extends Phaser.Scene {
     this.stepT += dt * speed;
     if (this.stepT > 1.9) {
       this.stepT = 0;
-      // Three gaits, three sounds, three ranges.  A run is a slap he hears
-      // across the room; a walk is a soft step he hears only close by; a
-      // crouch is nothing at all, and never sets a board off either.
+      // Three gaits.  A run is a slap he hears across the room, and it is
+      // the only gait that sets a board off.  A walk is a soft step YOU hear
+      // and he does not; a crouch is nothing at all.
       if (this.crouching) return;
-      const near = this.froggy.distanceTo(this.pos);
       if (running) {
         this.play('step_run', 0.55);
-        if (near < HEAR_RUN) this.alert();
+        if (this.froggy.distanceTo(this.pos) < HEAR_RUN) this.alert();
         else if (Math.random() < CREAK_CHANCE) this.creak();
       } else {
         this.play('step_walk', 0.32);
-        if (near < HEAR_WALK) this.alert();
-        else if (Math.random() < CREAK_CHANCE) this.creak();
       }
     }
   }

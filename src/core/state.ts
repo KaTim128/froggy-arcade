@@ -22,8 +22,7 @@ export type GameId =
   | 'roulette'
   | 'frogcross'
   | 'carchase'
-  | 'bowling'
-  | 'snooker';
+  | 'bowling';
 
 export interface Settings {
   master: number; // 0..100
@@ -138,7 +137,6 @@ function defaultState(): GameState {
       frogcross: 0,
       carchase: 0,
       bowling: 0,
-      snooker: 0,
     },
     highScores: {},
     route: 'normal',

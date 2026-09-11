@@ -6,11 +6,14 @@
  * you knock down is a point.  Beat his total and the cabinet pays.  Tie or
  * lose and it does not.
  *
- * A and D swing the aim, the line shows where the ball is going, SPACE holds
- * for power and lets go to throw.  The pins are bodies: the ball shoves them,
- * they shove each other, and a pin that has been moved is a pin that is down.
- * Froggy throws with the same physics and a wobbly arm, so a round can go
- * either way.
+ * A and D walk the ball along the foul line, the arrows swing the aim, the
+ * line shows where the ball is going, SPACE holds for power and lets go to
+ * throw.  The ball HOOKS: it bends left, harder the faster it goes, so a
+ * straight full-power throw down the middle ends in the gutter and the shot
+ * is a matter of where you stand and how much you lead it.  The pins are
+ * bodies: the ball shoves them, they shove each other, and a pin that has
+ * been moved is a pin that is down — but it takes a proper shove.  Froggy
+ * throws with the same physics, knows about the hook, and has a steady arm.
  *
  * Your best total is kept per profile.  Only tokens leave through the shell.
  */
@@ -35,9 +38,18 @@ const PIN_APEX_Y = 66;
 const PIN_GAP = 9;
 const BALL_R = 5;
 const PIN_R = 3;
-const BALL_MASS = 3;
+const BALL_MASS = 1.7;
 const AIM_MAX = 0.42; // radians either side of straight up
 const AIM_RATE = 1.4;
+/** How fast A and D carry the ball along the line, px/s. */
+const WALK = 60;
+/**
+ * The hook: sideways pull, px/s^2, scaled by how fast the ball is going.  At
+ * full power over the length of the lane it is most of a lane's width.
+ */
+const HOOK = 0.55;
+/** A pin has to be shoved this far off its spot to count as down. */
+const KNOCK = 4.5;
 const CHARGE_MS = 1100;
 const THROW_MIN = 130;
 const THROW_MAX = 330;
@@ -74,7 +86,7 @@ let standingBefore = 10;
 let settleMs = 0;
 let over = false;
 let best = 0;
-let keys: { left: Phaser.Input.Keyboard.Key[]; right: Phaser.Input.Keyboard.Key[] } = { left: [], right: [] };
+let keys: Record<'left' | 'right' | 'aimL' | 'aimR', Phaser.Input.Keyboard.Key[]> = { left: [], right: [], aimL: [], aimR: [] };
 let hud: {
   round: Phaser.GameObjects.BitmapText;
   you: Phaser.GameObjects.BitmapText;
@@ -131,14 +143,15 @@ export const bowling: MinigameModule = {
     scene.add.rectangle(GAME_W - 25, 96, 8, 54, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
     text(scene, GAME_W - 40, 154, 'HOLD', PALETTE.ash);
     text(scene, GAME_W - 40, 162, 'SPACE', PALETTE.ash);
-    text(scene, 8, 154, 'A/D AIM', PALETTE.ash);
+    text(scene, 8, 146, 'A/D MOVE', PALETTE.ash);
+    text(scene, 8, 154, '←→ AIM', PALETTE.ash);
     refreshHud();
 
     const kb = scene.input.keyboard;
     const bind = (names: string[]) => (kb ? names.map((n) => kb.addKey(n)) : []);
-    keys = { left: bind(['A', 'LEFT']), right: bind(['D', 'RIGHT']) };
+    keys = { left: bind(['A']), right: bind(['D']), aimL: bind(['LEFT']), aimR: bind(['RIGHT']) };
     kb?.on('keydown-SPACE', () => {
-      if (over || turn !== 'player' || ball.rolling || charging) return;
+      if (over || turn !== 'player' || ball.rolling || settleMs > 0 || charging) return;
       charging = true;
       power = 0;
       chargeDir = 1;
@@ -154,6 +167,11 @@ export const bowling: MinigameModule = {
         state: () => ({ round, ballNo, turn, scores: { ...scores }, standing: pins.filter((p) => !p.down).length, rolling: ball.rolling, best }),
         // A dead-straight full-power throw, for proving the pins fall.
         strike: () => throwBall(0, 1),
+        // Any throw at all, from anywhere on the line.
+        throw: (angle: number, pow: number, x?: number) => {
+          if (x !== undefined) ball.x = x;
+          throwBall(angle, pow);
+        },
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__bowl;
@@ -166,8 +184,11 @@ export const bowling: MinigameModule = {
     const dt = Math.min(delta, 40) / 1000;
 
     if (!ball.rolling && turn === 'player') {
-      const swing = (keys.right.some((k) => k.isDown) ? 1 : 0) - (keys.left.some((k) => k.isDown) ? 1 : 0);
+      const swing = (keys.aimR.some((k) => k.isDown) ? 1 : 0) - (keys.aimL.some((k) => k.isDown) ? 1 : 0);
       aim = Phaser.Math.Clamp(aim + swing * AIM_RATE * dt, -AIM_MAX, AIM_MAX);
+      const walk = (keys.right.some((k) => k.isDown) ? 1 : 0) - (keys.left.some((k) => k.isDown) ? 1 : 0);
+      ball.x = Phaser.Math.Clamp(ball.x + walk * WALK * dt, LANE_L + BALL_R + 1, LANE_L + LANE_W - BALL_R - 1);
+      ballBody.setPosition(ball.x, ball.y);
       if (charging) {
         power += (chargeDir * delta) / CHARGE_MS;
         if (power >= 1) {
@@ -230,7 +251,9 @@ function resetBall(): void {
 }
 
 function throwBall(angle: number, pow: number): void {
-  if (ball.rolling || over) return;
+  // Not while the last roll is still being counted: a throw then restarted
+  // the roll with the ball hidden and the frame never ended.
+  if (ball.rolling || settleMs > 0 || over) return;
   const speed = THROW_MIN + pow * (THROW_MAX - THROW_MIN);
   ball.vx = Math.sin(angle) * speed;
   ball.vy = -Math.cos(angle) * speed;
@@ -243,6 +266,8 @@ function throwBall(angle: number, pow: number): void {
 function stepPhysics(dt: number): void {
   ball.x += ball.vx * dt;
   ball.y += ball.vy * dt;
+  // the hook: a leftward bend that grows with speed
+  ball.vx -= HOOK * Math.abs(ball.vy) * dt;
   // lane friction
   const f = Math.max(0, 1 - 0.18 * dt);
   ball.vx *= f;
@@ -268,7 +293,7 @@ function stepPins(dt: number): void {
     if (p.gone) continue;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-    const f = Math.max(0, 1 - 2.2 * dt);
+    const f = Math.max(0, 1 - 3.6 * dt);
     p.vx *= f;
     p.vy *= f;
     for (const q of pins) {
@@ -277,8 +302,8 @@ function stepPins(dt: number): void {
     }
     // A shove is a fall: moved off its spot, or moving fast, and it is down.
     if (!p.down) {
-      const moved = Math.hypot(p.x - p.home.x, p.y - p.home.y) > 2.5;
-      if (moved || Math.hypot(p.vx, p.vy) > 40) {
+      const moved = Math.hypot(p.x - p.home.x, p.y - p.home.y) > KNOCK;
+      if (moved || Math.hypot(p.vx, p.vy) > 90) {
         p.down = true;
         p.body.setFillStyle(PALETTE.ash).setScale(1.3, 0.55).setDepth(12);
         audio.sfx('ui_hover', 0.6);
@@ -394,15 +419,21 @@ function endRoll(): void {
 }
 
 /**
- * Froggy's arm.  He aims for the head pin with a wobble a few degrees wide,
- * and never quite full power: good enough to beat a bad round, not a good one.
+ * Froggy's arm.  He stands to the right of centre and leads the hook, with a
+ * small wobble and most of his power.  He gets sevens and eights; beating him
+ * takes a strike or two.
  */
 function cpuThrow(): void {
   if (!scene0 || over) return;
   scene0.time.delayedCall(900, () => {
     if (over || turn !== 'cpu') return;
-    const wobble = (Math.random() - 0.5) * 0.24;
-    throwBall(wobble, 0.55 + Math.random() * 0.35);
+    const pow = 0.62 + Math.random() * 0.34;
+    // From here a near-straight throw hooks into the pocket.  He knows, but
+    // his stance drifts and his arm is not steady: sevens and eights, with
+    // the odd strike and the odd gutter.
+    ball.x = LANE_L + LANE_W / 2 + 10 + (Math.random() - 0.5) * 14;
+    const wobble = (Math.random() - 0.5) * 0.3;
+    throwBall(0.02 + wobble, pow);
   });
 }
 

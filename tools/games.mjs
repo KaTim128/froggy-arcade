@@ -41,7 +41,6 @@ const GAMES = [
   { id: 'frogcross', drive: async (p) => { for (let i = 0; i < 4; i++) { await p.keyboard.press('KeyW'); await sleep(350); } await p.keyboard.press('KeyA'); await sleep(600); } },
   { id: 'carchase', drive: async (p) => { await p.keyboard.down('KeyA'); await sleep(500); await p.keyboard.up('KeyA'); await p.keyboard.press('Space'); await sleep(1200); await p.keyboard.down('KeyD'); await sleep(500); await p.keyboard.up('KeyD'); } },
   { id: 'bowling', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(200); await p.keyboard.up('KeyD'); await p.keyboard.down('Space'); await sleep(600); await p.keyboard.up('Space'); await sleep(2600); } },
-  { id: 'snooker', drive: async (p) => { await p.mouse.move(900, 400); await sleep(200); await p.keyboard.down('Space'); await sleep(500); await p.keyboard.up('Space'); await sleep(2500); } },
 ];
 
 const browser = await puppeteer.launch({
@@ -241,7 +240,7 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
 // pays the base, and every further bar adds one.  Banking on ENTER is the
 // path a player who has made the bar actually takes.
 for (const g of [
-  { id: 'frogcross', hook: '__frog', set: 'setPoints', score: 430, expect: 6, label: '430 pts' },
+  { id: 'frogcross', hook: '__frog', set: 'setPoints', score: 230, expect: 11, label: '230 pts' },
   { id: 'carchase', hook: '__chase', set: 'setCash', score: 600, expect: 9, label: '600 cash' },
 ]) {
   const page = await browser.newPage();
@@ -273,7 +272,7 @@ for (const g of [
   // (cheap games out front, the five-to-seven ones in the back room, the
   // gambling in the casino), so these coordinates follow the layout.
   const cases = [
-    ['ArcadeHub', 286, 152],   // BATTLESHIP, right wall
+    ['ArcadeHub', 286, 162],   // BATTLESHIP, bottom right
     ['ArcadeAnnex', 112, 96],  // BARREL CLIMB
     ['ArcadeCasino', 224, 96], // CHAMBER
   ];

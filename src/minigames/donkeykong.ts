@@ -52,12 +52,12 @@ const LADDER_X = [RIGHT - 64, LEFT + 64, RIGHT - 64, LEFT + 64, 148];
  * The bouncer.  A hop is a full arc from girder to peak and back; at 14px it
  * clears a standing player (whose hit box sits within 8px of the girder) but
  * not a jumping one, which is what makes the two barrel types need opposite
- * answers.  They come only once the round is under way.
+ * answers.
  */
 const BOUNCE_H = 14;
 const BOUNCE_HZ = 1.6;
 const BOUNCER_SPEED = 84;
-const BOUNCER_AFTER_MS = 9000;
+/** Two in five barrels bounce, from the first one.  Customer's odds. */
 const BOUNCER_CHANCE = 0.4;
 /** A backstop: barrels should retire themselves, but never let them stack. */
 const MAX_BARRELS = 12;
@@ -351,7 +351,7 @@ function place(): void {
 function spawnBarrel(): void {
   if (!sceneRef || barrels.length >= MAX_BARRELS) return;
   const topFloor = FLOORS.length - 1;
-  const bouncer = elapsed > BOUNCER_AFTER_MS && Math.random() < BOUNCER_CHANCE;
+  const bouncer = Math.random() < BOUNCER_CHANCE;
   const dot = sceneRef.add
     .circle(LEFT + 20, FLOORS[topFloor] - BARREL_R, BARREL_R, bouncer ? PALETTE.neon : 0xd9822b)
     .setDepth(15);

@@ -115,7 +115,7 @@ export const carChase: MinigameModule = {
     police = [];
     cash = [];
     dashes = [];
-    trafficTimer = 1800;
+    trafficTimer = 2600;
     policeTimer = 6000;
     cashTimer = 900;
     collected = 0;
@@ -124,20 +124,21 @@ export const carChase: MinigameModule = {
     nitroCharge = 1;
     over = false;
 
-    // verge, road, lane lines.  Everything on the road sits below depth 0:
-    // things spawn above the top edge and scroll in, and the shell's title
-    // bar and the HUD (both at 0) have to stay on top of them.
-    scene.add.rectangle(0, TOP, GAME_W, BOTTOM - TOP, 0x17301c).setOrigin(0, 0).setDepth(-4);
-    scene.add.rectangle(ROAD_L, TOP, ROAD_W, BOTTOM - TOP, 0x2a2d33).setOrigin(0, 0).setDepth(-4);
-    scene.add.rectangle(ROAD_L - 3, TOP, 3, BOTTOM - TOP, PALETTE.bone).setOrigin(0, 0).setDepth(-4);
-    scene.add.rectangle(ROAD_L + ROAD_W, TOP, 3, BOTTOM - TOP, PALETTE.bone).setOrigin(0, 0).setDepth(-4);
+    // verge, road, lane lines.  Things spawn above the top edge and scroll
+    // in, and the shell's title bar has to stay on top of them — so nothing is
+    // drawn until it is below the bar (see `onScreen`).  Negative depths were
+    // tried for this and put the whole road under the shell's black backdrop.
+    scene.add.rectangle(0, TOP, GAME_W, BOTTOM - TOP, 0x17301c).setOrigin(0, 0).setDepth(1);
+    scene.add.rectangle(ROAD_L, TOP, ROAD_W, BOTTOM - TOP, 0x2a2d33).setOrigin(0, 0).setDepth(1);
+    scene.add.rectangle(ROAD_L - 3, TOP, 3, BOTTOM - TOP, PALETTE.bone).setOrigin(0, 0).setDepth(1);
+    scene.add.rectangle(ROAD_L + ROAD_W, TOP, 3, BOTTOM - TOP, PALETTE.bone).setOrigin(0, 0).setDepth(1);
     for (let i = 1; i < 4; i++) {
       for (let y = TOP; y < BOTTOM + 16; y += 16) {
-        dashes.push(scene.add.rectangle(ROAD_L + LANE_W * i, y, 1, 8, 0x6a6e76).setOrigin(0.5, 0).setDepth(-3));
+        dashes.push(scene.add.rectangle(ROAD_L + LANE_W * i, y, 1, 8, 0x6a6e76).setOrigin(0.5, 0).setDepth(2));
       }
     }
 
-    player = carSprite(scene, px, py, PALETTE.mossLight, false).setDepth(-1);
+    player = carSprite(scene, px, py, PALETTE.mossLight, false).setDepth(6).setVisible(true);
 
     hud = {
       cash: text(scene, 6, 21, '', PALETTE.cream),
@@ -147,8 +148,14 @@ export const carChase: MinigameModule = {
       nitro: scene.add.rectangle(7, 150, 6, 0, PALETTE.tealLight).setOrigin(0, 1),
       nitroLabel: text(scene, 4, 154, 'NITRO', PALETTE.ash),
     };
-    scene.add.rectangle(6, 96, 8, 54, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel).setDepth(-2);
-    text(scene, 4, 162, 'SPACE', PALETTE.ash);
+    scene.add.rectangle(6, 96, 8, 54, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel).setDepth(8);
+    hud.nitro.setDepth(9);
+    hud.nitroLabel.setDepth(9);
+    hud.cash.setDepth(9);
+    hud.best.setDepth(9);
+    hud.time.setDepth(9);
+    hud.bank.setDepth(9);
+    text(scene, 4, 162, 'SPACE', PALETTE.ash).setDepth(9);
     refreshHud();
 
     const kb = scene.input.keyboard;
@@ -216,6 +223,7 @@ export const carChase: MinigameModule = {
     for (const d of dashes) {
       d.y += ground * dt;
       if (d.y > BOTTOM) d.y -= BOTTOM - TOP + 16;
+      d.setVisible(d.y >= TOP);
     }
 
     // ---- traffic: slower than you, so it comes down the screen at you
@@ -226,7 +234,7 @@ export const carChase: MinigameModule = {
     }
     for (const c of traffic) {
       c.y += (ground - c.own) * dt;
-      c.body.setPosition(c.x, c.y);
+      c.body.setPosition(c.x, c.y).setVisible(onScreen(c.y));
     }
     traffic = traffic.filter((c) => keep(c, c.y < BOTTOM + CAR_H && c.y > TOP - CAR_H * 3));
 
@@ -240,7 +248,7 @@ export const carChase: MinigameModule = {
       p.own = speed + POLICE_GAIN + elapsed / 2500;
       p.y += (ground - p.own) * dt;
       p.x += Phaser.Math.Clamp(px - p.x, -1, 1) * POLICE_STEER * dt;
-      p.body.setPosition(p.x, p.y);
+      p.body.setPosition(p.x, p.y).setVisible(onScreen(p.y));
       // lights
       const on = Math.floor(elapsed / 120) % 2 === 0;
       (p.body.getAt(2) as Phaser.GameObjects.Rectangle).setFillStyle(on ? PALETTE.blood : PALETTE.moon);
@@ -256,7 +264,7 @@ export const carChase: MinigameModule = {
     }
     for (const c of cash) {
       c.y += ground * dt;
-      c.body.setPosition(c.x, c.y);
+      c.body.setPosition(c.x, c.y).setVisible(c.y > TOP + 4);
     }
     cash = cash.filter((c) => {
       if (Math.abs(c.x - px) < CAR_W / 2 + 4 && Math.abs(c.y - py) < CAR_H / 2 + 4) {
@@ -310,6 +318,9 @@ export const carChase: MinigameModule = {
 
 const held = (g: string): boolean => keys[g]?.some((k) => k.isDown) ?? false;
 
+/** Fully below the title bar.  Things above it are there, just not drawn yet. */
+const onScreen = (y: number): boolean => y - CAR_H / 2 >= TOP;
+
 /** One at first, two after half a minute, three after a minute. */
 function policeCap(): number {
   return 1 + Math.min(2, Math.floor(elapsed / 30000));
@@ -328,12 +339,15 @@ function carSprite(scene: Phaser.Scene, x: number, y: number, colour: number, co
   const body = scene.add.rectangle(0, 0, CAR_W, CAR_H, colour);
   const glass = scene.add.rectangle(0, -4, CAR_W - 4, 5, PALETTE.ink);
   const roof = scene.add.rectangle(0, 2, cop ? 6 : CAR_W - 4, cop ? 3 : 4, cop ? PALETTE.blood : PALETTE.black).setAlpha(cop ? 1 : 0.35);
-  return scene.add.container(x, y, [body, glass, roof]).setDepth(-2);
+  return scene.add.container(x, y, [body, glass, roof]).setDepth(4).setVisible(false);
 }
 
 function spawnTraffic(): void {
   if (!scene0) return;
-  const lane = LANES[Phaser.Math.Between(0, 3)];
+  let lane = LANES[Phaser.Math.Between(0, 3)];
+  // The first ten seconds never drop one straight down your lane: you get to
+  // see how the road works before it is aimed at you.
+  if (elapsed < 10000 && Math.abs(lane - px) < LANE_W / 2) lane = LANES[(LANES.indexOf(lane) + 1) % 4];
   // Not into the back of one already there.
   if (traffic.some((c) => Math.abs(c.x - lane) < 2 && c.y < TOP + CAR_H * 2)) return;
   const own = 35 + Math.random() * 40;
@@ -352,7 +366,7 @@ function spawnPolice(): void {
 function spawnCash(): void {
   if (!scene0) return;
   const lane = LANES[Phaser.Math.Between(0, 3)];
-  const body = scene0.add.rectangle(lane, TOP - 6, 9, 7, PALETTE.mossLight).setStrokeStyle(1, PALETTE.cream).setDepth(-2);
+  const body = scene0.add.rectangle(lane, TOP - 6, 9, 7, PALETTE.mossLight).setStrokeStyle(1, PALETTE.cream).setDepth(3).setVisible(false);
   cash.push({ x: lane, y: TOP - 6, body });
 }
 
@@ -360,7 +374,7 @@ function crash(why: string): void {
   if (over || !scene0) return;
   audio.sfx('whack');
   scene0.cameras.main.shake(300, 0.02);
-  centerText(scene0, GAME_W / 2, 80, why, PALETTE.blood).setDepth(50);
+  centerText(scene0, GAME_W / 2, 80, why, PALETTE.blood, 16).setDepth(50);
   finish();
 }
 
