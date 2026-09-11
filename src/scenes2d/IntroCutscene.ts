@@ -10,6 +10,10 @@
  * the street, then the offer, then you are stood on the pavement with a job.
  * The `seed` credit here is still the one and only time tokens appear from
  * nowhere — apart from Froggy's five, and he wants something for those.
+ *
+ * Nothing here runs on a clock.  Every card and every line of the offer sits
+ * there until the arrow in the corner is clicked, so it is read at the
+ * player's pace rather than at a guess of it.  Esc still skips the lot.
  */
 
 import Phaser from 'phaser';
@@ -17,7 +21,7 @@ import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { ledger } from '../core/ledger';
-import { centerText, fadeIn, fadeToScene, text } from '../core/ui';
+import { button, centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { paintExterior, startSignFlicker, KERB_Y, MAN_X } from '../art/exterior';
 import { MysteryMan } from '../art/mysteryMan';
@@ -26,29 +30,30 @@ import { froggyLayer } from '../render/froggyLayer';
 
 export const STARTING_TOKENS = 20;
 
-/** The cards, and how long each sits there.  Reading speed, not game speed. */
-const CARDS: Array<{ lines: string[]; ms: number }> = [
-  { lines: ['The job went first.'], ms: 2800 },
-  { lines: ['Then the flat.', 'Then everything that was in it.'], ms: 3400 },
-  {
-    lines: ['That was seven months ago.', 'You have been on the street since.'],
-    ms: 3600,
-  },
-  {
-    lines: ['This afternoon you are sat outside an arcade,', 'because it is warm and nobody moves you on.'],
-    ms: 3800,
-  },
+/** The cards.  One thought per card, and the next one is a click away. */
+const CARDS: string[][] = [
+  ['The job went first.'],
+  ['Then the flat.', 'Then everything that was in it.'],
+  ['That was seven months ago.', 'You have been on the street since.'],
+  ['This afternoon you are sat outside an arcade,', 'because it is warm and nobody moves you on.'],
 ];
 
 /** What he says, once he is stood over you. */
-const OFFER: Array<{ line: string; ms: number }> = [
-  { line: '"That counter in there sells a stuffed rabbit', ms: 2600 },
-  { line: 'for two hundred tokens. I want it."', ms: 2600 },
-  { line: '"I am not paying their prices. You will."', ms: 2800 },
-  { line: '"Win me what is on those shelves and I pay you', ms: 2600 },
-  { line: 'cash. Half of what it cost. In your hand."', ms: 3000 },
-  { line: 'He puts a bag of tokens on the kerb.', ms: 2600 },
+const OFFER: string[] = [
+  '"That counter in there sells a stuffed rabbit',
+  'for two hundred tokens. I want it."',
+  '"I am not paying their prices. You will."',
+  '"Win me what is on those shelves and I pay you',
+  'cash. Half of what it cost. In your hand."',
+  'He puts a bag of tokens on the kerb.',
 ];
+
+/**
+ * The arrow does not appear the instant a line does.  A line fades in over
+ * this long, and a click landing during the fade would skip a beat the player
+ * never saw.
+ */
+const ARROW_DELAY_MS = 700;
 
 type Phase = 'cards' | 'street' | 'offer' | 'done';
 
@@ -58,6 +63,9 @@ export class IntroCutscene extends Phaser.Scene {
   private line = 0;
   private caption!: Phaser.GameObjects.BitmapText;
   private skip!: Phaser.GameObjects.BitmapText;
+  private arrow: Phaser.GameObjects.Container | null = null;
+  /** What the arrow does right now.  Null means it is not showing. */
+  private onArrow: (() => void) | null = null;
   private player: Player | null = null;
 
   constructor() {
@@ -70,34 +78,69 @@ export class IntroCutscene extends Phaser.Scene {
     this.card = 0;
     this.line = 0;
     this.player = null;
+    this.onArrow = null;
 
     fadeIn(this);
     audio.setScene({ music: 'theme_arcade' });
 
     this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black).setOrigin(0, 0);
     this.caption = centerText(this, GAME_W / 2, GAME_H / 2, '', PALETTE.cream).setDepth(900);
-    this.skip = text(this, GAME_W - 62, GAME_H - 12, '[ESC] SKIP', PALETTE.ash)
-      .setAlpha(0.5)
-      .setDepth(900);
+    this.buildChrome();
 
     // Esc skips the whole thing — the float is still handed over (PRD §7.4).
+    // E, Enter and Space do what the arrow does, for anyone on the keyboard.
     this.input.keyboard?.on('keydown-ESC', () => this.finish());
-    this.input.on('pointerdown', () => this.nudge());
+    for (const k of ['E', 'ENTER', 'SPACE']) this.input.keyboard?.on(`keydown-${k}`, () => this.advance());
 
     this.showCard();
+  }
+
+  update(): void {
+    // The arrow breathes while it is waiting on you, the same as the prompt
+    // in Froggy's dialogue box.
+    if (this.arrow?.visible) this.arrow.setAlpha(0.5 + 0.5 * Math.abs(Math.sin(this.time.now / 300)));
+  }
+
+  /**
+   * The skip hint and the arrow.  Built twice, because the street rebuilds the
+   * scene from nothing.
+   */
+  private buildChrome(): void {
+    this.skip = text(this, 6, GAME_H - 12, '[ESC] SKIP', PALETTE.ash).setAlpha(0.5).setDepth(900);
+    this.arrow = button(this, GAME_W - 14, GAME_H - 10, '>', () => this.advance(), { width: 16, height: 13 });
+    this.arrow.setDepth(900).setVisible(false);
+  }
+
+  /** Show the arrow after a beat, and say what a click on it does. */
+  private armArrow(next: () => void, afterMs = ARROW_DELAY_MS): void {
+    this.onArrow = null;
+    this.arrow?.setVisible(false);
+    this.time.delayedCall(afterMs, () => {
+      if (this.phase === 'done') return;
+      this.onArrow = next;
+      this.arrow?.setVisible(true);
+    });
+  }
+
+  private advance(): void {
+    const next = this.onArrow;
+    if (!next) return;
+    this.onArrow = null;
+    this.arrow?.setVisible(false);
+    next();
   }
 
   // ------------------------------------------------------------------ cards
 
   private showCard(): void {
-    const card = CARDS[this.card];
-    if (!card) {
+    const lines = CARDS[this.card];
+    if (!lines) {
       this.toStreet();
       return;
     }
-    this.caption.setText(card.lines.join('\n')).setAlpha(0);
+    this.caption.setText(lines.join('\n')).setAlpha(0);
     this.tweens.add({ targets: this.caption, alpha: 1, duration: 700 });
-    this.time.delayedCall(card.ms, () => {
+    this.armArrow(() => {
       if (this.phase !== 'cards') return;
       this.tweens.add({
         targets: this.caption,
@@ -111,19 +154,16 @@ export class IntroCutscene extends Phaser.Scene {
     });
   }
 
-  /** A click hurries the current card along, but never skips the beat. */
-  private nudge(): void {
-    if (this.phase === 'cards') this.time.delayedCall(0, () => {});
-  }
-
   // ----------------------------------------------------------------- street
 
   private toStreet(): void {
     if (this.phase !== 'cards') return;
     this.phase = 'street';
+    this.onArrow = null;
     this.cameras.main.fadeOut(700, 0, 0, 0);
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
       this.children.removeAll();
+      this.arrow = null;
       this.cameras.main.fadeIn(900, 0, 0, 0);
       audio.setScene({ music: 'theme_arcade', ambience: ['street_dusk'] });
 
@@ -135,10 +175,7 @@ export class IntroCutscene extends Phaser.Scene {
       this.player.sprite.setScale(1, 0.72); // sitting: the same body, folded up
 
       this.caption = centerText(this, GAME_W / 2, GAME_H - 20, '', PALETTE.cream).setDepth(900);
-      this.skip = text(this, GAME_W - 62, GAME_H - 12, '[ESC] SKIP', PALETTE.ash)
-        .setAlpha(0.5)
-        .setDepth(900);
-      this.input.keyboard?.on('keydown-ESC', () => this.finish());
+      this.buildChrome();
 
       this.time.delayedCall(1400, () => this.manArrives());
     });
@@ -163,17 +200,17 @@ export class IntroCutscene extends Phaser.Scene {
 
   private nextLine(): void {
     if (this.phase !== 'offer') return;
-    const beat = OFFER[this.line];
-    if (!beat) {
+    const line = OFFER[this.line];
+    if (!line) {
       this.dropTokens();
       return;
     }
-    this.caption.setText(beat.line).setAlpha(0);
+    this.caption.setText(line).setAlpha(0);
     this.tweens.add({ targets: this.caption, alpha: 1, duration: 400 });
-    this.time.delayedCall(beat.ms, () => {
+    this.armArrow(() => {
       this.line++;
       this.nextLine();
-    });
+    }, 400);
   }
 
   /** The float.  Twenty tokens, on the kerb, take it or do not. */
@@ -192,13 +229,15 @@ export class IntroCutscene extends Phaser.Scene {
     }
     this.caption.setText('twenty tokens. a start.').setAlpha(0);
     this.tweens.add({ targets: this.caption, alpha: 1, duration: 500 });
-    this.time.delayedCall(2600, () => this.finish());
+    this.armArrow(() => this.finish());
   }
 
   private finish(): void {
     if (this.phase === 'done') return;
     this.phase = 'done';
+    this.onArrow = null;
     this.skip?.setVisible(false);
+    this.arrow?.setVisible(false);
     if (ledger.balance() === 0 && !store.get().seenIntro) {
       ledger.credit(STARTING_TOKENS, 'seed');
     }
