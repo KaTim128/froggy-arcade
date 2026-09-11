@@ -62,7 +62,8 @@ export class ArcadeAnnex extends Phaser.Scene {
     fadeIn(this);
     audio.setScene({ music: 'hub_lofi', ambience: ['cabinet_bleeps'] });
 
-    paintHubRoom(this, { night: false });
+    // No front door in here: the only way out of the building is the hub.
+    paintHubRoom(this, { night: false, frontDoor: false });
     this.paintDoorway();
     this.paintCasinoDoor();
 
@@ -270,7 +271,10 @@ export class ArcadeAnnex extends Phaser.Scene {
     let colour: number = PALETTE.gold;
     if (t.kind === 'cabinet') {
       const { cost } = t.cab.def;
-      msg = `[E] PLAY - ${cost} TOKEN${cost === 1 ? '' : 'S'}`;
+      // Name the game on the prompt.  A row of cabinets that all say PLAY is a
+      // row of identical boxes: the marquee is too small to read at this size,
+      // so the thing you are about to spend tokens on says so here.
+      msg = `[E] ${t.cab.def.title} - ${cost} TOKEN${cost === 1 ? '' : 'S'}`;
       colour = ledger.balance() >= cost ? PALETTE.gold : PALETTE.ash;
     } else if (t.kind === 'casino') {
       msg = '[E] THE MACHINES';

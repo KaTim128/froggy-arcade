@@ -19,6 +19,16 @@ export const ROOM = {
 
 export interface RoomOpts {
   night: boolean;
+  /**
+   * Whether to paint the way out at the bottom of the room.
+   *
+   * There is exactly ONE front door in this building and it is in the hub.
+   * The back room and the casino borrow this painter for their walls and
+   * carpet, and used to get a copy of the front door along with them — two
+   * more doors, in rooms that are two and three deep inside, that did nothing
+   * and told the player the wrong thing about where the exit was.
+   */
+  frontDoor?: boolean;
 }
 
 export function paintHubRoom(scene: Phaser.Scene, opts: RoomOpts): void {
@@ -54,9 +64,13 @@ export function paintHubRoom(scene: Phaser.Scene, opts: RoomOpts): void {
   const strip = scene.add.rectangle(14, 8, GAME_W - 28, 2, opts.night ? nightify(PALETTE.neon) : PALETTE.neon).setOrigin(0, 0);
   strip.setAlpha(opts.night ? 0.35 : 1);
 
-  // ---- front door (bottom centre)
-  scene.add.rectangle(GAME_W / 2, GAME_H - 6, 40, 8, c(PALETTE.brown)).setOrigin(0.5, 0);
-  scene.add.rectangle(GAME_W / 2, GAME_H - 4, 30, 4, opts.night ? PALETTE.nightMid : PALETTE.cream).setOrigin(0.5, 0);
+  // ---- front door (bottom centre).  The hub only: see RoomOpts.frontDoor.
+  if (opts.frontDoor !== false) {
+    scene.add.rectangle(GAME_W / 2, GAME_H - 6, 40, 8, c(PALETTE.brown)).setOrigin(0.5, 0);
+    scene.add
+      .rectangle(GAME_W / 2, GAME_H - 4, 30, 4, opts.night ? PALETTE.nightMid : PALETTE.cream)
+      .setOrigin(0.5, 0);
+  }
 
   if (opts.night) {
     // Moonlight through the front windows — the only light in the room.

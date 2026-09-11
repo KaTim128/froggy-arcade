@@ -52,8 +52,11 @@ const sources = () => page.evaluate(() => window.__froggy.audioSources());
 const state = () => page.evaluate(() => window.__froggy.state());
 
 // Hotspot screen coords (logical * 4).
-const DOWN = [640, 624];
-const RIGHT = [1160, 400];
+// Both the stairs and the corridors are walked FORWARD now, and the arrow that
+// says so sits near the vanishing point rather than out at the right edge.
+const FORWARD = [640, 472];
+const DOWN = FORWARD;
+const RIGHT = FORWARD;
 const DOOR = [640, 376];
 const KEY = [640, 376];
 const TURN = [640, 616];

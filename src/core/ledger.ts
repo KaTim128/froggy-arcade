@@ -5,13 +5,14 @@
  * being exact, so every mutation is named and observable.
  */
 
-import { store, LEDGER_KEY } from './state';
+import { store, LEDGER_KEY, ADMIN_TOKENS } from './state';
 
 export type LedgerReason =
   | 'seed' // the $10 -> 20 tokens at the intro
   | 'game.cost' // minigame launch
   | 'game.reward' // minigame win
   | 'charity' // Froggy's five
+  | 'change' // the machine on the back wall, at half rate
   | 'prize'; // redemption
 
 export type LedgerListener = (next: number, prev: number, reason: LedgerReason) => void;
@@ -22,15 +23,36 @@ class TokenLedger {
   private brokeListeners = new Set<BrokeListener>();
 
   balance(): number {
+    // The unlimited run is pinned: reading the balance is also what keeps
+    // it pinned, so a save edited by hand or loaded from an older run snaps
+    // straight back to the ceiling.
+    if (store.isAdmin()) {
+      if (store.get().tokens !== ADMIN_TOKENS) store.setTokens(LEDGER_KEY, ADMIN_TOKENS);
+      return ADMIN_TOKENS;
+    }
     return store.get().tokens;
   }
 
   canAfford(n: number): boolean {
-    return this.balance() >= n;
+    return store.isAdmin() || this.balance() >= n;
   }
 
-  /** PRD TK-1: returns false and changes nothing if unaffordable. */
+  /**
+   * PRD TK-1: returns false and changes nothing if unaffordable.
+   *
+   * Everything in the building goes through here, which is why the unlimited
+   * run is implemented here and nowhere else: the cabinets, the table, the
+   * prize counter and the broke check all keep asking the same question and
+   * all get the same answer, and no scene needs to know the cheat exists.
+   */
   debit(n: number, reason: LedgerReason): boolean {
+    if (store.isAdmin()) {
+      // Affordable, and nothing leaves the pile.  The balance never changes,
+      // so nothing listening for a change fires — including going broke, which
+      // is the whole reason a normal run ends up in the basement.
+      this.balance();
+      return n >= 0;
+    }
     const prev = this.balance();
     if (n < 0 || prev < n) return false;
     const next = prev - n;
@@ -41,6 +63,10 @@ class TokenLedger {
 
   credit(n: number, reason: LedgerReason): void {
     if (n <= 0) return;
+    if (store.isAdmin()) {
+      this.balance();
+      return;
+    }
     const prev = this.balance();
     const next = prev + n;
     store.setTokens(LEDGER_KEY, next);

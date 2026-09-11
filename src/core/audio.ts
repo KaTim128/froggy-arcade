@@ -489,16 +489,25 @@ class AudioManager {
    * One-shot sfx.  These are transient and do NOT count as instantiated sources,
    * which is what lets footsteps exist inside the silence contract (PRD AD-1).
    */
-  sfx(name: SfxName): void {
+  sfx(name: SfxName, gain = 1): void {
     if (!this.unlocked || !this.ctx) return;
     const asset = this.assets.get(name);
     if (asset) {
       asset.howl.play();
       return;
     }
-    const out = this.busGain.sfx;
-    if (!out) return;
+    const bus = this.busGain.sfx;
+    if (!bus) return;
     const ctx = this.ctx;
+    // A per-call trim, for sounds whose loudness IS the information: how far
+    // away he is in the hide rooms is a distance the player reads by ear.
+    let out: AudioNode = bus;
+    if (gain !== 1) {
+      const trim = ctx.createGain();
+      trim.gain.value = Math.max(0, Math.min(1, gain));
+      trim.connect(bus);
+      out = trim;
+    }
     const t = ctx.currentTime;
 
     const beep = (freq: number, dur: number, vol: number, type: OscillatorType = 'square', delay = 0) => {
@@ -586,6 +595,29 @@ class AudioManager {
         break;
       case 'door_creak':
         for (let i = 0; i < 14; i++) beep(180 + i * 22 + Math.random() * 40, 0.14, 0.028, 'sawtooth', i * 0.1);
+        break;
+      // A lid or a door coming open on a hiding place.  Unmistakable on
+      // purpose: it is the one sound that tells you where he is and that he is
+      // looking INSIDE things, and a player who misses it dies in a box.
+      case 'spot_open':
+        noise(0.05, 0.2, 2600);
+        for (let i = 0; i < 9; i++) beep(150 + i * 34, 0.13, 0.05, 'sawtooth', 0.04 + i * 0.055);
+        noise(0.22, 0.13, 700, 0.56);
+        break;
+      // A floorboard going under YOUR foot.  Long, wooden, and unmistakably
+      // not him — the player has to know instantly that they made it, because
+      // the whole point is the second of dread afterwards.
+      case 'floor_creak':
+        for (let i = 0; i < 10; i++) {
+          beep(90 + i * 9 + Math.random() * 14, 0.16, 0.035, 'sawtooth', i * 0.045);
+        }
+        noise(0.12, 0.05, 900, 0.42);
+        break;
+      // His step: heavier and wetter than yours, so two sets of footsteps in a
+      // dark room are never confusable.
+      case 'froggy_step':
+        noise(0.1, 0.16, 420);
+        beep(70, 0.09, 0.07, 'sine', 0.01);
         break;
       case 'drip':
         beep(1800, 0.05, 0.06, 'sine');
@@ -718,6 +750,9 @@ export type SfxName =
   | 'stinger'
   | 'death_stinger'
   | 'hop_wet'
+  | 'spot_open'
+  | 'floor_creak'
+  | 'froggy_step'
   | 'ticket_machine';
 
 export const audio = new AudioManager();

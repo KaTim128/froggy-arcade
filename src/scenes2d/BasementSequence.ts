@@ -2,8 +2,8 @@
  * The basement.  PRD §7.14 / QFD C7 (rank #3).
  *
  * This is NOT a movement scene.  Ten static images, advanced by clicking an
- * arrow hotspot, 600ms crossfades, footstep on every click.  No HUD, no music,
- * no ambience — one-shot footsteps and door creaks only.
+ * arrow hotspot, 600ms crossfades, and a few footsteps for every move.  No HUD,
+ * no music, no ambience — one-shot footsteps and door creaks only.
  *
  * The pacing IS the horror (VOC-25).  Let the crossfade be slow.  Let the
  * player sit in each frame.
@@ -28,16 +28,23 @@ import {
   paintKeyRoom,
   paintPlainDoor,
   paintReverse,
+  paintRoomShell,
   paintStairs,
 } from '../art/basementFrames';
 
 const CROSSFADE_MS = 600;
-/** He stands there this long before he moves.  Unskippable. */
-const STARE_MS = 1900;
-/** And the turn itself, from first twitch to the door appearing. */
+/** He stands there this long before he comes at you.  Unskippable. */
+const STARE_MS = 3000;
+/** And the lunge itself, from first twitch to the door appearing. */
 const TRANSFORM_MS = 2200;
-
-type HotspotKind = 'arrowDown' | 'arrowRight' | 'door' | 'key' | 'turnAround' | 'exitDoor' | 'none';
+/**
+ * `arrowOn` is a direction, not a place: it says which way the player is about
+ * to go and the glyph is drawn pointing that way.  The corridors used to be
+ * marked with a '>' pinned to the right-hand edge of the screen while the
+ * corridor itself ran straight away from the camera, so the one piece of UI in
+ * the sequence was telling the player to walk sideways into a wall.
+ */
+type HotspotKind = 'arrowDown' | 'arrowForward' | 'door' | 'key' | 'turnAround' | 'exitDoor' | 'none';
 
 interface FrameDef {
   paint: (scene: BasementSequence, c: Phaser.GameObjects.Container) => void;
@@ -70,17 +77,20 @@ export class BasementSequence extends Phaser.Scene {
     this.cameras.main.fadeIn(900, 0, 0, 0);
 
     this.frames = [
-      { paint: (_s, c) => paintStairs(this, c), hotspot: 'arrowDown' },
-      { paint: (_s, c) => paintCorridor(this, c, 1), hotspot: 'arrowRight' },
+      // Forward, not down: you walk INTO the frame to go down these.  The
+      // arrow marks the direction you travel, and every other frame in the
+      // sequence uses the same one.
+      { paint: (_s, c) => paintStairs(this, c), hotspot: 'arrowForward' },
+      { paint: (_s, c) => paintCorridor(this, c, 1), hotspot: 'arrowForward' },
       // Frame 3 is frame 2, subtly longer.  Same tiles, stretched.
-      { paint: (_s, c) => paintCorridor(this, c, 1.35), hotspot: 'arrowRight' },
+      { paint: (_s, c) => paintCorridor(this, c, 1.35), hotspot: 'arrowForward' },
       { paint: (_s, c) => paintChairRoom(this, c), hotspot: 'door' },
       {
         paint: (_s, c) => {
           paintCorridor(this, c, 1.5);
           paintFarFigure(this, c); // do not light it, do not animate it
         },
-        hotspot: 'arrowRight',
+        hotspot: 'arrowForward',
       },
       {
         // The figure is gone.  This is never acknowledged.
@@ -142,47 +152,80 @@ export class BasementSequence extends Phaser.Scene {
     this.spawnHotspot(def.hotspot);
   }
 
+  /**
+   * A triangle, pointing the way you are about to walk.
+   *
+   * Drawn rather than typed: the font's '>' and 'v' are letters shaped like
+   * arrows, and at this size a real triangle is both clearer and able to point
+   * at the vanishing point, which is the direction that matters most here.
+   */
+  private arrowGlyph(x: number, y: number, dir: 'down' | 'forward'): Phaser.GameObjects.Graphics {
+    const g = this.add.graphics();
+    g.fillStyle(PALETTE.fog, 0.75);
+    if (dir === 'down') {
+      // Down the stairs: the way the flight in front of you goes.
+      g.fillTriangle(x - 7, y - 5, x + 7, y - 5, x, y + 6);
+      g.fillRect(x - 2, y - 12, 4, 7);
+    } else {
+      // Away from the camera, down the corridor.
+      g.fillTriangle(x - 7, y + 5, x + 7, y + 5, x, y - 6);
+      g.fillRect(x - 2, y + 5, 4, 7);
+    }
+    return g;
+  }
+
   /** Only this advances the sequence.  Nothing else does. */
   private spawnHotspot(kind: HotspotKind): void {
     if (kind === 'none') return;
 
     let x = GAME_W / 2;
     let y = GAME_H - 24;
-    let label = 'v';
+    let label = '';
     let w = 22;
     let h = 18;
+    let arrow: 'down' | 'forward' | null = 'down';
 
-    if (kind === 'arrowRight') {
-      x = GAME_W - 30;
-      y = GAME_H / 2 + 10;
-      label = '>';
+    if (kind === 'arrowForward') {
+      // Centred, near the vanishing point: the corridor runs that way.
+      x = GAME_W / 2;
+      y = 118;
+      w = 40;
+      h = 30;
+      arrow = 'forward';
     } else if (kind === 'door') {
+      // The door itself is the target; it needs no arrow to explain it.
       x = GAME_W / 2;
       y = 94;
       w = 44;
       h = 76;
-      label = '';
+      arrow = null;
     } else if (kind === 'key') {
       x = GAME_W / 2;
       y = 94;
       w = 20;
       h = 26;
-      label = '';
+      arrow = null;
     } else if (kind === 'exitDoor') {
       x = GAME_W / 2;
       y = 100;
       w = 52;
       h = 84;
-      label = '';
+      arrow = null;
     } else if (kind === 'turnAround') {
+      // Not a direction: an instruction to turn on the spot.
       x = GAME_W / 2;
       y = GAME_H - 26;
       w = 30;
+      arrow = null;
       label = '<>';
     }
 
     const zone = this.add.rectangle(x, y, w, h, PALETTE.cream, 0.0).setInteractive({ useHandCursor: true });
-    const glyph = label ? text(this, x, y, label, PALETTE.fog, 8).setOrigin(0.5, 0.5) : null;
+    const glyph: Phaser.GameObjects.GameObject | null = arrow
+      ? this.arrowGlyph(x, y, arrow)
+      : label
+        ? text(this, x, y, label, PALETTE.fog, 8).setOrigin(0.5, 0.5)
+        : null;
     if (glyph) {
       this.tweens.add({ targets: glyph, alpha: 0.35, duration: 900, yoyo: true, repeat: -1 });
     }
@@ -205,6 +248,7 @@ export class BasementSequence extends Phaser.Scene {
     }
     if (kind === 'door') {
       audio.sfx('door_creak');
+      this.time.delayedCall(450, () => this.walk(3));
       this.time.delayedCall(1500, () => this.show(this.index + 1));
       return;
     }
@@ -213,15 +257,32 @@ export class BasementSequence extends Phaser.Scene {
       store.patch({ hasKey: true });
       store.flush();
       audio.sfx('lock_click');
+      this.time.delayedCall(260, () => this.walk(2));
       this.time.delayedCall(500, () => this.show(this.index + 1));
       return;
     }
 
-    audio.sfx('footstep_concrete');
+    this.walk();
     if (Math.random() < 0.25) {
       this.time.delayedCall(900 + Math.random() * 900, () => audio.sfx('drip'));
     }
     this.show(this.index + 1);
+  }
+
+  /**
+   * The sound of covering the ground between two frames.
+   *
+   * Each step of the sequence is a walk down a corridor, and it used to be
+   * exactly one footstep: you crossed ten metres of concrete in silence and
+   * arrived with a single click.  Four of them, unevenly spaced and fading,
+   * is what makes the basement feel walked through rather than clicked through.
+   */
+  private walk(steps = 4): void {
+    for (let i = 0; i < steps; i++) {
+      const at = i * (330 + Math.random() * 90);
+      if (i === 0) audio.sfx('footstep_concrete');
+      else this.time.delayedCall(at, () => audio.sfx('footstep_concrete'));
+    }
   }
 
   // ------------------------------------------------- frames that need scene state
@@ -280,14 +341,23 @@ export class BasementSequence extends Phaser.Scene {
    * is the mascot's own art with the animation stopped and the pupils shrunk to
    * pinpricks (PRD FR-7), which is the last moment he is still recognisable.
    */
+  /**
+   * You turn round, and he is stood down the other end of the room.
+   *
+   * Distance is the whole staging.  He is the mascot, unchanged and unlit,
+   * small in the middle of the frame with the corridor you came in by behind
+   * him — near enough to recognise, far enough that nothing is happening yet.
+   * Three seconds of that, and then he closes it.
+   */
   paintStare(c: Phaser.GameObjects.Container): void {
     paintReverse(this, c);
 
     froggyLayer.paint((ctx) => {
       drawFroggy(ctx, {
         x: GAME_W / 2,
-        y: 150,
-        height: 132,
+        // Feet on the floor at the far end, not on the camera.
+        y: 124,
+        height: 76,
         variant: 'uncanny',
         pose: 'blank', // the pinprick pupils
       });
@@ -298,11 +368,13 @@ export class BasementSequence extends Phaser.Scene {
   }
 
   /**
-   * And then he opens.
+   * And then he crosses it.
    *
    * The morph runs in under half a second — sudden, not a dissolve — and the
    * scare fires on the first frame of it, routed past the volume buses
-   * (audio.scare) so a quiet room stays the setup for something loud.
+   * (audio.scare) so a quiet room stays the setup for something loud.  He
+   * finishes the beat filling the frame, because he has just covered eight
+   * metres of concrete in the time it took you to notice he had moved.
    */
   paintTransform(c: Phaser.GameObjects.Container): void {
     this.tweens.killAll();
@@ -320,8 +392,7 @@ export class BasementSequence extends Phaser.Scene {
       const age = this.time.now - t0;
       const e = Math.min(1, age / 520);
       const morph = e * e; // slow to start, then all at once
-      // He keeps coming after the shape has finished changing.  The face is
-      // readable at first and filling the screen by the end of the beat.
+      // He keeps coming after the shape has finished changing.
       const lunge = Math.min(1, age / TRANSFORM_MS) ** 1.6;
       froggyLayer.paint((ctx) => {
         drawFroggy(ctx, {
@@ -329,7 +400,7 @@ export class BasementSequence extends Phaser.Scene {
           // Framed so the maw stays on screen.  Anchored on the face and scaled
           // any larger, he becomes two eyes and you lose the mouth entirely.
           y: 58,
-          height: 132 + morph * 60 + lunge * 230,
+          height: 96 + morph * 70 + lunge * 250,
           variant: morph < 0.06 ? 'uncanny' : 'monster',
           pose: 'blank',
           anchor: 'face',
@@ -363,15 +434,13 @@ export class BasementSequence extends Phaser.Scene {
     });
   }
 
-  /**
-   * There is no way back the way you came — the corridor behind you is gone.
-   * One door, straight ahead, and it is the only thing in the room.
-   */
   paintWayOut(c: Phaser.GameObjects.Container): void {
-    c.add(this.add.rectangle(0, 0, GAME_W, GAME_H, 0x080609).setOrigin(0, 0));
+    // The same room the rest of the sequence is set in, so the last frame is
+    // not a door floating in front of a black rectangle.
+    paintRoomShell(this, c, { x: 84, y: 46, w: 152, h: 72 }, 8800);
 
     // wet floor catching what little light there is
-    c.add(this.add.rectangle(0, 140, GAME_W, 40, 0x120d12).setOrigin(0, 0));
+    c.add(this.add.rectangle(0, 148, GAME_W, 32, 0x120d12, 0.55).setOrigin(0, 0));
 
     const doorW = 52;
     const doorH = 84;
@@ -379,10 +448,13 @@ export class BasementSequence extends Phaser.Scene {
     const dy = 100;
     c.add(this.add.rectangle(dx, dy, doorW + 8, doorH + 8, 0x1b1218));
     c.add(this.add.rectangle(dx, dy, doorW, doorH, 0x2b1d16));
+    // panels, and the light down the hinge side
     for (let i = 0; i < 4; i++) {
       c.add(this.add.rectangle(dx, dy - doorH / 2 + 12 + i * 20, doorW - 10, 2, 0x1a110d));
     }
+    c.add(this.add.rectangle(dx - doorW / 2 + 1, dy, 1, doorH - 6, 0x4a382a, 0.5));
     c.add(this.add.circle(dx + 17, dy + 6, 2, 0xc9a62e));
+    c.add(this.add.circle(dx + 17, dy + 5, 1, 0xffd45e, 0.6));
 
     // light bleeding under it
     const bleed = this.add.rectangle(dx, dy + doorH / 2 + 2, doorW - 6, 3, 0xd8b45a, 0.5);

@@ -57,6 +57,15 @@ export function initDebug(g: Phaser.Game): void {
     // Same setter `?tokens=` uses, for tests that need to change a balance
     // mid-session rather than at load.
     setTokens: (n: number) => ledger.debugSet(n),
+    // Cash is the other currency and has its own door, so the debug surface
+    // needs one too — otherwise the only way to test the change machine is to
+    // play the whole prize loop by hand.
+    setCash: (n: number) => {
+      const have = store.get().cash;
+      if (n > have) store.earnCash(n - have);
+      else if (n < have) store.spendCash(have - n);
+      store.flush();
+    },
   };
 
   applyLaunchParams(g);

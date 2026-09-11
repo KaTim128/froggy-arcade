@@ -79,6 +79,26 @@ export function nightify(color: number, amount = 0.7): number {
   return (cl(nr) << 16) | (cl(ng) << 8) | cl(nb);
 }
 
+/**
+ * The opposite of nightify: the same tiles at noon.
+ *
+ * Mixes toward white and lifts the whole thing a little, so the facade that
+ * reads as a warm dusk building reads as a plain, bright, ordinary one — the
+ * daytime street is meant to feel safe and unremarkable, and a dark building
+ * under a blue sky just looks like a storm is coming.
+ */
+export function daylight(color: number, amount = 0.28): number {
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+  const cl = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  return (
+    (cl(r + (255 - r) * amount + 12) << 16) |
+    (cl(g + (255 - g) * amount + 12) << 8) |
+    cl(b + (255 - b) * amount + 8)
+  );
+}
+
 /** Multiply a colour toward black — used for the 30% dim on the second bust. */
 export function dim(color: number, factor: number): number {
   const r = Math.round(((color >> 16) & 0xff) * factor);

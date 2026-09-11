@@ -37,29 +37,12 @@ export function tutorialScript(t: TutorialTargets): DialogueLine[] {
       text: "Cash 'em in at the counter for prizes. The good stuff starts at two hundred.",
       highlight: t.prizeCounter,
     },
+    // PRD §8.4 line 6 / QFD VOC-16 used to sit here: "Anyway. You're going to
+    // do just fine here.", delivered frozen and blank-eyed.  It was the only
+    // foreshadowing in Act I, and it is gone at the customer's request — cut,
+    // not rewritten.  The tutorial now ends warm and says nothing about what
+    // happens later.  Do not put a replacement line in this gap.
     {
-      // PRD §8.4 line 6 / QFD VOC-16.  THE only foreshadowing in Act I, and it
-      // is entirely non-verbal.
-      //
-      // Same art as every other line.  He simply stops moving, for half a second
-      // before and half a second after, and the typewriter slows down.  No music
-      // cue, no colour shift, no camera move.  The stillness is the whole effect.
-      // Do not embellish this.  Do not shorten the holds.
-      //
-      // The line itself must stay harmless.  It used to read "One rule, friend.
-      // Don't lose all your tokens." — which tells the player that running out
-      // is dangerous, and a warned player is not a frightened one.  Going broke
-      // has to arrive as a surprise, so he says something warm and empty and
-      // the stillness does the work instead.
-      text: 'Anyway. You’re going to do just fine here.',
-      pose: 'blank',
-      freeze: true,
-      holdBefore: 500,
-      holdAfter: 500,
-      cps: 18,
-    },
-    {
-      // And snap straight back to bouncy, in a single frame.
       text: '...Have fun!',
     },
   ];

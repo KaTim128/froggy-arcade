@@ -69,7 +69,13 @@ export function button(
   const lbl = centerText(scene, 0, 0, label, opts.textColor ?? PALETTE.cream);
   const c = scene.add.container(x, y, [box, lbl]);
   c.setSize(w, h);
-  c.setInteractive(new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h), Phaser.Geom.Rectangle.Contains);
+  // Phaser normalises the local point by the display origin BEFORE testing it
+  // (pointWithinHitArea adds displayOriginX/Y), and a sized container's origin
+  // is its centre.  So the hit area is measured from the top-left corner, not
+  // from the middle: the old -w/2,-h/2 rectangle put every button's hot zone up
+  // and to the left of the button you can see, which is why clicking CREATE on
+  // the profile screen — or the middle of any button — did nothing.
+  c.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
 
   if (opts.disabled) {
     box.setFillStyle(PALETTE.slate);

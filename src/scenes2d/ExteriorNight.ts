@@ -5,16 +5,21 @@
  * sign dead, windows black, CLOSED in the door, rain stopped.  Crickets and the
  * occasional car.  No music.
  *
- * Four things to try.  One of them is LEAVE, and taking it is not punished,
- * mocked, or scored (T6).  Nothing on this screen pushes the player toward the
- * alley — they go because they are broke and they want the prize.
+ * Two things to try, and only one of them goes anywhere: the front door, which
+ * is locked and stays locked, and the alley down the side.
+ *
+ * There used to be a third — LEAVE, off the left of the screen, which ended the
+ * run quietly — and a kid under the streetlight who would buy a prize off you.
+ * Both are gone.  The man in the hat buys the prizes now, in daylight, and a
+ * man who has been sleeping on this street for seven months has nowhere to
+ * leave TO: no home, no car, no bus fare.  The back door is the only way this
+ * night goes anywhere.
  */
 
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { prizeById } from '../game/content';
 import { KEYS } from '../core/input';
 import { centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { paintExterior } from '../art/exterior';
@@ -23,7 +28,7 @@ import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W } from '../render/pixelScaler';
 
 const WALK_Y = 166;
-type Spot = 'door' | 'kid' | 'leave' | 'alley' | null;
+type Spot = 'door' | 'alley' | null;
 
 export class ExteriorNight extends Phaser.Scene {
   private player!: Player;
@@ -62,12 +67,6 @@ export class ExteriorNight extends Phaser.Scene {
     this.add.rectangle(GAME_W - 14, 96, 14, 84, PALETTE.black).setOrigin(0, 0);
     text(this, GAME_W - 13, 150, '>', PALETTE.ash, 8);
 
-    // the LEAVE arrow, left edge.  Plain.  No emphasis, no warning.
-    text(this, 4, 150, '<', PALETTE.ash, 8);
-    text(this, 3, 160, 'LEAVE', PALETTE.ash, 8);
-
-    this.paintKid();
-
     this.player = new Player(this, this.doorX - 50, WALK_Y, true);
     this.player.setSurface('concrete');
 
@@ -84,14 +83,6 @@ export class ExteriorNight extends Phaser.Scene {
     this.input.keyboard?.on('keydown-ESC', () => this.scene.launch('SettingsModal', {}));
 
     store.flush();
-  }
-
-  private paintKid(): void {
-    const kx = 292;
-    // under the streetlight, holding a fistful of crumpled bills
-    this.add.rectangle(kx, 158, 8, 14, PALETTE.nightLight).setOrigin(0.5, 1);
-    this.add.rectangle(kx, 144, 7, 7, PALETTE.moon).setOrigin(0.5, 1);
-    this.add.rectangle(kx + 5, 150, 4, 3, PALETTE.mossLight).setOrigin(0.5, 1);
   }
 
   private bind(names: readonly string[]): Phaser.Input.Keyboard.Key[] {
@@ -115,38 +106,11 @@ export class ExteriorNight extends Phaser.Scene {
         else this.say('locked.');
         break;
       }
-      case 'kid':
-        this.sellToKid();
-        break;
-      case 'leave':
-        this.locked = true;
-        fadeToScene(this, 'EndCard', { title: 'You went home.', quiet: true });
-        break;
       case 'alley':
         this.locked = true;
         fadeToScene(this, 'BackAlley');
         break;
     }
-  }
-
-  /** PRD §7.11 — the good ending, if there is anything to sell. */
-  private sellToKid(): void {
-    const owned = store.get().prizesOwned;
-    if (owned.length === 0) {
-      this.say('"You didn\'t win anything?  ...I\'ll wait."');
-      return;
-    }
-    const prize = prizeById(owned[owned.length - 1]);
-    this.locked = true;
-    this.say(`"...is that a real one?  ...Okay.  Okay, yeah."`);
-    audio.sfx('coin_drop');
-    this.time.delayedCall(2200, () =>
-      fadeToScene(this, 'EndCard', {
-        title: 'You ate that night.',
-        sub: prize ? `you sold the ${prize.name.toLowerCase()}` : undefined,
-        quiet: true,
-      }),
-    );
   }
 
   private say(msg: string): void {
@@ -163,15 +127,7 @@ export class ExteriorNight extends Phaser.Scene {
 
     const px = this.player.x;
     this.spot =
-      px > GAME_W - 26
-        ? 'alley'
-        : px < 16
-          ? 'leave'
-          : Math.abs(px - 292) < 18
-            ? 'kid'
-            : Math.abs(px - this.doorX) < 22
-              ? 'door'
-              : null;
+      px > GAME_W - 26 ? 'alley' : Math.abs(px - this.doorX) < 22 ? 'door' : null;
 
     if (!this.spot) {
       this.prompt.setVisible(false);
@@ -179,14 +135,7 @@ export class ExteriorNight extends Phaser.Scene {
       return;
     }
 
-    const label =
-      this.spot === 'alley'
-        ? '[E] ALLEY'
-        : this.spot === 'leave'
-          ? '[E] LEAVE'
-          : this.spot === 'kid'
-            ? '[E] TALK'
-            : '[E] DOOR';
+    const label = this.spot === 'alley' ? '[E] ALLEY' : '[E] DOOR';
     const x = Phaser.Math.Clamp(px, 40, GAME_W - 40);
     this.prompt.setText(label).setPosition(x, WALK_Y - 34).setVisible(true);
     this.promptPlate

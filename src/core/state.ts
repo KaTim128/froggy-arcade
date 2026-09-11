@@ -30,8 +30,17 @@ export interface Settings {
 export interface GameState {
   schemaVersion: 1;
   tokens: number;
+  /**
+   * Money.  A different thing entirely from tokens: tokens are the arcade's
+   * scrip and buy games and prizes, cash is what the man outside pays for the
+   * prizes afterwards.  Nothing converts cash back into tokens — that is the
+   * whole shape of the job, and the reason the ledger does not touch this.
+   */
+  cash: number;
   charityUsed: boolean;
   prizesOwned: string[];
+  /** Prizes already handed over to the man.  Owned and sold are different. */
+  prizesSold: string[];
   gamesPlayed: Record<GameId, number>;
   route: Route;
   hasKey: boolean;
@@ -82,12 +91,28 @@ interface SlotIndex {
  */
 export const LEDGER_KEY: unique symbol = Symbol('ledger');
 
+/**
+ * Name a run this and it never runs out of tokens.
+ *
+ * Stored as the profile name like any other and compared after cleanName, so
+ * capitalisation does not matter — every name in this game is uppercased on
+ * the way in.  Spacing does: "ADMIN 128" is a different name and an ordinary
+ * run, which is deliberate, a cheat with fuzzy edges is one people trip over
+ * by accident.  The ledger is what honours it (see TokenLedger.debit); this is
+ * only the password.
+ */
+export const ADMIN_NAME = 'ADMIN128';
+/** What the HUD shows for such a run.  It never moves. */
+export const ADMIN_TOKENS = 9999;
+
 function defaultState(): GameState {
   return {
     schemaVersion: SCHEMA_VERSION,
     tokens: 0,
+    cash: 0,
     charityUsed: false,
     prizesOwned: [],
+    prizesSold: [],
     gamesPlayed: {
       tictactoe: 0,
       snakes: 0,
@@ -186,7 +211,11 @@ class Store {
     fresh.gamesPlayed = { ...defaultState().gamesPlayed, ...(run.gamesPlayed ?? {}) };
     fresh.tokens = Math.max(0, Math.floor(run.tokens ?? 0));
     fresh.prizesOwned = Array.isArray(run.prizesOwned) ? run.prizesOwned : [];
+    fresh.prizesSold = Array.isArray(run.prizesSold) ? run.prizesSold : [];
+    fresh.cash = Math.max(0, Math.floor(run.cash ?? 0));
     this.state = fresh;
+    // A saved unlimited run comes back unlimited, whatever the file says.
+    if (this.isAdmin()) this.state.tokens = ADMIN_TOKENS;
   }
 
   // ------------------------------------------------------------------ profiles
@@ -201,6 +230,11 @@ class Store {
 
   activeSlotName(): string | null {
     return this.index.slots.find((s) => s.id === this.index.active)?.name ?? null;
+  }
+
+  /** True when the run in play is the one that never pays for anything. */
+  isAdmin(): boolean {
+    return this.activeSlotName() === ADMIN_NAME;
   }
 
   /** Progress for the picker, read straight from storage — never made active. */
@@ -229,6 +263,10 @@ class Store {
     const settings = this.state.settings;
     this.state = defaultState();
     this.state.settings = settings;
+    // The unlimited run starts full rather than waiting for the first read of
+    // the balance to top it up.  Written here rather than through the ledger
+    // because this is the store loading its own state, not a transaction.
+    if (this.isAdmin()) this.state.tokens = ADMIN_TOKENS;
     this.flush();
     this.emit();
     return meta.id;
@@ -286,6 +324,31 @@ class Store {
   patch(partial: Partial<Patchable>): void {
     Object.assign(this.state, partial);
     this.touch();
+  }
+
+  /**
+   * Cash in, from selling a prize.  Its own path on purpose: the ledger is the
+   * only thing allowed to move tokens (PRD TK-5), and cash must never end up
+   * in that pipe — no scene should be able to spend it on a game by accident.
+   */
+  earnCash(n: number): void {
+    if (!Number.isFinite(n) || n <= 0) return;
+    this.state.cash += Math.floor(n);
+    this.touch();
+  }
+
+  /**
+   * Cash out, into the change machine.  Returns false and moves nothing if the
+   * player cannot cover it.  What comes back the other way is tokens, and that
+   * half of the trade goes through the ledger like every other token in the
+   * game — the two currencies never touch each other in one place.
+   */
+  spendCash(n: number): boolean {
+    const amount = Math.floor(n);
+    if (!Number.isFinite(amount) || amount <= 0 || this.state.cash < amount) return false;
+    this.state.cash -= amount;
+    this.touch();
+    return true;
   }
 
   /** Ledger-only.  PRD TK-5. */

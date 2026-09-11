@@ -1,0 +1,58 @@
+# Build the game and publish it to GitHub Pages.
+#
+# Every push to master rebuilds and redeploys, so the playable page is always
+# whatever is on the branch.  Nothing here needs a secret: Pages deployments
+# use the workflow's own token.
+#
+# One-time setup on GitHub: Settings -> Pages -> Build and deployment ->
+# Source: "GitHub Actions".  Without that the workflow runs and the deploy step
+# fails with "Pages is not enabled".
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  # ...and a button on the Actions tab, for redeploying without a code change.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time.  A queued run is allowed to finish rather than being
+# cancelled, so a push during a deploy does not leave the site half-written.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # The same command used locally: typecheck first, then bundle.  A type
+      # error should stop the deploy rather than ship a broken build.
+      - run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

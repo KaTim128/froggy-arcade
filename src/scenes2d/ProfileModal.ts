@@ -22,6 +22,8 @@ export class ProfileModal extends Phaser.Scene {
   private body!: Phaser.GameObjects.Container;
   private naming = false;
   private draft = '';
+  /** The name being typed, kept so the caret can blink without a rebuild. */
+  private draftText: Phaser.GameObjects.BitmapText | null = null;
   /** Which delete button is one click from actually deleting. */
   private confirmingDelete: string | null = null;
 
@@ -55,6 +57,7 @@ export class ProfileModal extends Phaser.Scene {
 
   private render(): void {
     this.body.removeAll(true);
+    this.draftText = null;
     if (this.naming) this.renderNaming();
     else this.renderList();
   }
@@ -114,9 +117,9 @@ export class ProfileModal extends Phaser.Scene {
     this.body.add(centerText(this, GAME_W / 2, 60, 'NAME YOUR RUN', PALETTE.cream));
 
     this.body.add(this.add.rectangle(GAME_W / 2, 88, 160, 18, PALETTE.black, 0.6).setStrokeStyle(1, PALETTE.gold));
-    // A block caret rather than a thin bar — at this size a 1px line reads as dirt.
-    const shown = this.draft + (Math.floor(this.time.now / 400) % 2 === 0 ? '_' : ' ');
-    this.body.add(centerText(this, GAME_W / 2, 88, shown || '_', PALETTE.gold));
+    this.draftText = centerText(this, GAME_W / 2, 88, '', PALETTE.gold);
+    this.body.add(this.draftText);
+    this.syncDraft();
 
     this.body.add(
       centerText(this, GAME_W / 2, 112, `LETTERS AND NUMBERS, UP TO ${MAX_NAME_LEN}`, PALETTE.ash).setAlpha(0.8),
@@ -129,6 +132,21 @@ export class ProfileModal extends Phaser.Scene {
     this.body.add(
       button(this, 200, 152, 'CREATE', () => this.commitName(), { width: 60, height: 13 }),
     );
+  }
+
+  /**
+   * Repaint just the name and its caret.
+   *
+   * This used to be a full `render()` every frame, which destroyed and rebuilt
+   * CANCEL and CREATE sixty times a second along with it.  Phaser only inserts
+   * a newly interactive object into its input list on the next frame's
+   * pre-update, so buttons churned that fast are a coin toss to click even
+   * once their hit area is right.  Only the caret needs the frame.
+   */
+  private syncDraft(): void {
+    if (!this.draftText) return;
+    // A block caret rather than a thin bar — at this size a 1px line reads as dirt.
+    this.draftText.setText(this.draft + (Math.floor(this.time.now / 400) % 2 === 0 ? '_' : ' '));
   }
 
   // -------------------------------------------------------------------- actions
@@ -194,13 +212,13 @@ export class ProfileModal extends Phaser.Scene {
     }
     if (e.key === 'Backspace') {
       this.draft = this.draft.slice(0, -1);
-      this.render();
+      this.syncDraft();
       return;
     }
     if (e.key.length === 1 && /[A-Za-z0-9 ]/.test(e.key) && this.draft.length < MAX_NAME_LEN) {
       this.draft += e.key.toUpperCase();
       audio.sfx('dialogue_blip');
-      this.render();
+      this.syncDraft();
     }
   }
 
@@ -212,7 +230,7 @@ export class ProfileModal extends Phaser.Scene {
 
   update(): void {
     // Only the caret needs the frame, and only while typing.
-    if (this.naming) this.render();
+    if (this.naming) this.syncDraft();
   }
 }
 

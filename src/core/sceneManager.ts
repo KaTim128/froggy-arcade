@@ -23,6 +23,10 @@ import { ArcadeAnnex } from '../scenes2d/ArcadeAnnex';
 import { ArcadeCasino } from '../scenes2d/ArcadeCasino';
 import { IntroCutscene } from '../scenes2d/IntroCutscene';
 import { PrizeCounter } from '../scenes2d/PrizeCounter';
+import { PrizeExchange } from '../scenes2d/PrizeExchange';
+import { ChangeMachine } from '../scenes2d/ChangeMachine';
+import { ExteriorDay } from '../scenes2d/ExteriorDay';
+import { TheEnd } from '../scenes2d/TheEnd';
 import { MinigameScene } from '../scenes2d/MinigameScene';
 import { FroggyCharity } from '../scenes2d/FroggyCharity';
 import { SecondBust } from '../scenes2d/SecondBust';
@@ -71,6 +75,9 @@ export function bootGame(): void {
       ArcadeAnnex,
       ArcadeCasino,
       PrizeCounter,
+      PrizeExchange,
+      ChangeMachine,
+      ExteriorDay,
       MinigameScene,
       FroggyCharity,
       SecondBust,
@@ -82,6 +89,7 @@ export function bootGame(): void {
       HideRoom3D,
       Chase3D,
       OutroCutscene3D,
+      TheEnd,
       EndCard,
     ],
   });

@@ -56,7 +56,9 @@ export class ArcadeDark extends Phaser.Scene {
 
     paintHubRoom(this, { night: true });
     paintChangeMachine(this, true);
-    for (const def of CABINETS) new Cabinet(this, def, true);
+    // Cabinets only: the blackjack table is furniture with a dealer behind it,
+    // and there is no dealer here at night.
+    for (const def of CABINETS) if (def.fixture !== 'table') new Cabinet(this, def, true);
 
     // counter and case, dead
     this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, COUNTER.h, PALETTE.ink).setOrigin(0, 0);

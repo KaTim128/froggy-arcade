@@ -16,6 +16,9 @@ export const SCENES = [
   'ArcadeAnnex',
   'ArcadeCasino',
   'PrizeCounter',
+  'PrizeExchange',
+  'ChangeMachine',
+  'ExteriorDay',
   'FroggyCharity',
   'SecondBust',
   'EjectionCutscene',
@@ -26,6 +29,7 @@ export const SCENES = [
   'HideRoom3D',
   'Chase3D',
   'OutroCutscene3D',
+  'TheEnd',
   'EndCard',
   'Minigame',
 ] as const;
@@ -53,6 +57,12 @@ export function canEnter(scene: SceneId, s: Readonly<GameState>, ctx: GuardConte
     case 'PrizeCounter':
     case 'FroggyCharity':
     case 'SecondBust':
+    // The street outside and the man on it belong to the daytime half of the
+    // game: once the arcade has thrown you out, there is no going back to
+    // either of them.
+    case 'ExteriorDay':
+    case 'PrizeExchange':
+    case 'ChangeMachine':
       return s.route === 'normal';
 
     case 'Minigame':
@@ -80,6 +90,11 @@ export function canEnter(scene: SceneId, s: Readonly<GameState>, ctx: GuardConte
     case 'OutroCutscene3D':
     case 'EndCard':
       return s.route === 'ended';
+
+    // The job finished.  Reachable from the ordinary route, because that is the
+    // only route on which the prizes can all have been sold.
+    case 'TheEnd':
+      return true;
   }
 }
 

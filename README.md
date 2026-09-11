@@ -1,14 +1,38 @@
 # Froggy Arcade
 
-A cozy 2D pixel-art arcade. You have ten dollars.
+**▶ [Play it in your browser](https://katim128.github.io/froggy-arcade/)**
+
+A cozy 2D pixel-art arcade. You are sleeping rough outside it, and a man in a
+black hat wants the prizes off the shelves.
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
 ```
 
-Desktop browser, 320×180 internal resolution, integer-scaled and letterboxed.
-No backend — everything lives in `localStorage`.
+Desktop browser, keyboard and mouse. 320×180 internal resolution,
+integer-scaled and letterboxed. No backend — your save lives in `localStorage`
+in your own browser, so nothing you do here leaves your machine.
+
+## Playing
+
+| | |
+|---|---|
+| **W A S D** / arrows | walk |
+| **E** | use whatever you are stood at |
+| **Esc** | settings, and quit out of a game |
+| **hold left mouse** | look around, in the first-person rooms |
+
+Win prizes inside, sell them to the man outside for half their token price in
+cash, feed the cash back through the change machine at half again, and see how
+long the arcade lets you keep doing that.
+
+## Deploying
+
+Pushing to `master` rebuilds and republishes the page — see
+[.github/workflows/deploy.yml](.github/workflows/deploy.yml). The repository
+needs **Settings → Pages → Source: GitHub Actions** set once, and the build's
+`base` in [vite.config.ts](vite.config.ts) has to match the repository name.
 
 ---
 

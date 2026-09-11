@@ -65,7 +65,9 @@ const index = () => page.evaluate(() => JSON.parse(localStorage.getItem('froggy.
 const keys = () => page.evaluate(() => Object.keys(localStorage).sort());
 const type = async (s) => {
   for (const ch of s) {
-    await page.keyboard.press(/[0-9]/.test(ch) ? `Digit${ch}` : `Key${ch}`);
+    // Chrome wants the physical key name: KeyA, never Keya.
+    const key = ch === ' ' ? 'Space' : /[0-9]/.test(ch) ? `Digit${ch}` : `Key${ch.toUpperCase()}`;
+    await page.keyboard.press(key);
     await sleep(80);
   }
 };
@@ -151,6 +153,68 @@ try {
   check('the surviving profile keeps its run',
     (await page.evaluate(() => window.__froggy.state().tokens)) === 42);
 
+  // ------------------------------------------------------- the unlimited run
+  console.log('\nprofiles  a run named admin128 never runs out');
+
+  /** Play the dearest cabinet on the floor, through the room's own launch. */
+  const playTheDearestCabinet = () =>
+    page.evaluate(async () => {
+      const hub = window.__froggy.game().scene.getScene('ArcadeHub');
+      const d = hub.dialogue;
+      for (let i = 0; i < 40 && d && d.state !== 'idle'; i++) {
+        d.advance();
+        await new Promise((r) => setTimeout(r, 40));
+      }
+      const cab = hub.cabinets.reduce((a, b) => (b.def.cost > a.def.cost ? b : a));
+      const before = window.__froggy.state().tokens;
+      hub.launchGame(cab); // canEnter + ledger.debit, exactly as a click does
+      await new Promise((r) => setTimeout(r, 1500));
+      return {
+        cost: cab.def.cost,
+        before,
+        after: window.__froggy.state().tokens,
+        launched: window.__froggy.activeScenes().includes('Minigame'),
+      };
+    });
+
+  // Typed in lower case, on a real keyboard: names are uppercased on the way
+  // in, so this is the same name.  Spacing is not — see the near-miss below.
+  await bootFresh();
+  await newProfile(0, 'admin128');
+  const admin = await index();
+  const adminTokens = await page.evaluate(() => window.__froggy.state().tokens);
+  check('the name is matched whatever the capitalisation', admin?.slots?.[0]?.name === 'ADMIN128',
+    admin?.slots?.[0]?.name);
+  check('it starts full without waiting for the intro', adminTokens === 9999, `${adminTokens} tokens`);
+
+  await page.goto(`${URL}?scene=ArcadeHub`, { waitUntil: 'networkidle2' });
+  await sleep(2400);
+  const adminPlay = await playTheDearestCabinet();
+  check('the priciest cabinet in the building opens for it', adminPlay.launched,
+    `${adminPlay.cost} tokens a go`);
+  check('and playing it costs nothing', adminPlay.before === 9999 && adminPlay.after === 9999,
+    `${adminPlay.before} -> ${adminPlay.after}`);
+
+  // The edge of the door.  A name that merely looks like it is an ordinary run,
+  // so nobody unlocks this by typing something close.
+  await bootFresh();
+  await newProfile(0, 'admin 128');
+  const near = await index();
+  const nearTokens = await page.evaluate(() => window.__froggy.state().tokens);
+  check('a name that only looks like it does nothing',
+    near?.slots?.[0]?.name === 'ADMIN 128' && nearTokens === 0,
+    `${near?.slots?.[0]?.name} with ${nearTokens}`);
+
+  // And an ordinary run still pays for everything, down the same path.
+  await bootFresh();
+  await newProfile(0, 'PLAYER TWO');
+  await page.goto(`${URL}?scene=ArcadeHub&tokens=40`, { waitUntil: 'networkidle2' });
+  await sleep(2400);
+  const normalPlay = await playTheDearestCabinet();
+  check('an ordinary run still pays its way',
+    normalPlay.launched && normalPlay.after === normalPlay.before - normalPlay.cost,
+    `${normalPlay.before} -> ${normalPlay.after} for ${normalPlay.cost}`);
+
   // --------------------------------------------------- the pre-profile save
   console.log('\nprofiles  the old single save is adopted, not orphaned');
   await page.goto(URL, { waitUntil: 'networkidle2' });
@@ -179,7 +243,7 @@ try {
     console.log('\nRuntime errors: none');
   }
 
-  const total = 13;
+  const total = 19;
   console.log(`\n${total - failed}/${total} checks passed.`);
   await browser.close();
   process.exit(failed > 0 || errors.length > 0 ? 1 : 0);

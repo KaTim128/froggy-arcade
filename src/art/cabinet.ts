@@ -13,6 +13,8 @@ export const CAB_H = 36;
 
 export class Cabinet {
   readonly def: CabinetDef;
+  /** Pointer/interact hit box, so a room can treat any fixture the same way. */
+  readonly bounds: Phaser.Geom.Rectangle;
   private marquee: Phaser.GameObjects.Rectangle;
   private badge: Phaser.GameObjects.Container;
   private badgeBox: Phaser.GameObjects.Rectangle;
@@ -24,6 +26,8 @@ export class Cabinet {
     this.def = def;
     const c = (col: number) => (night ? nightify(col) : col);
     const { x, y } = def;
+
+    this.bounds = new Phaser.Geom.Rectangle(x - (CAB_W + 4) / 2, y - CAB_H - 1, CAB_W + 4, CAB_H + 2);
 
     const d = y / 1000; // one depth for the whole cabinet; order decides the rest
 

@@ -33,8 +33,12 @@ type Target =
   | { kind: 'counter' }
   | { kind: 'bell' }
   | { kind: 'door' }
+  | { kind: 'change' }
   | { kind: 'annex' }
   | null;
+
+/** Where the player has to stand to use the change machine on the back wall. */
+const CHANGE_SPOT = { x: 272, y: 62 };
 
 export class ArcadeHub extends Phaser.Scene {
   private player!: Player;
@@ -123,7 +127,10 @@ export class ArcadeHub extends Phaser.Scene {
       ROOM.right - ROOM.left - 16,
       ROOM.bottom - ROOM.top - 6,
     );
-    const spawn = this.spawnPoint({ x: GAME_W / 2, y: ROOM.bottom - 12 });
+    // A few steps in from the doors, not stood on them.  The door now actually
+    // goes somewhere, and spawning inside its interact zone meant one stray
+    // click on the carpet walked you straight back out again.
+    const spawn = this.spawnPoint({ x: GAME_W / 2, y: ROOM.bottom - 34 });
     this.player = new Player(this, spawn.x, spawn.y);
 
     new TokenHud(this);
@@ -251,7 +258,8 @@ export class ArcadeHub extends Phaser.Scene {
       this.locked ||
       this.dialogue.isActive() ||
       this.scene.isActive('SettingsModal') ||
-      this.scene.isActive('PrizeCounter')
+      this.scene.isActive('PrizeCounter') ||
+      this.scene.isActive('ChangeMachine')
     );
   }
 
@@ -286,6 +294,16 @@ export class ArcadeHub extends Phaser.Scene {
     });
   }
 
+  /** The machine on the back wall.  Cash in, half of it back out in tokens. */
+  private openChangeMachine(): void {
+    if (this.busy()) return;
+    this.scene.launch('ChangeMachine', { from: 'ArcadeHub' });
+    this.locked = true;
+    this.events.once('change-closed', () => {
+      this.locked = false;
+    });
+  }
+
   private interact(): void {
     if (this.busy() || !this.target) return;
     const t = this.target;
@@ -306,18 +324,20 @@ export class ArcadeHub extends Phaser.Scene {
       return;
     }
 
+    if (t.kind === 'change') {
+      this.openChangeMachine();
+      return;
+    }
+
     if (t.kind === 'door') {
-      if (store.get().prizesOwned.length > 0) {
-        // PRD PC-4: with a prize in hand there is somewhere to be.  Leaving
-        // through the front door goes out to the kid, not to an ending — the
-        // sale happens outside.
-        this.locked = true;
-        store.patch({ route: 'ejected' });
-        store.flush();
-        fadeToScene(this, 'ExteriorNight');
-      } else {
-        this.say('...nah. Not yet.');
-      }
+      // The door is a door.  It goes outside, where the man is, and it comes
+      // back in again — the daytime loop is walking through it with your arms
+      // full and walking back through it with money.  It used to commit
+      // `route: 'ejected'` and send you to the closed arcade at night, which
+      // meant leaving with a prize ended the game whether you meant it to or
+      // not.
+      this.locked = true;
+      fadeToScene(this, 'ExteriorDay');
       return;
     }
 
@@ -403,6 +423,9 @@ export class ArcadeHub extends Phaser.Scene {
     if (best) return { kind: 'cabinet', cab: best };
 
     if (px < ANNEX_DOOR.x + 20 && Math.abs(py - ANNEX_DOOR.y) < 28) return { kind: 'annex' };
+    if (Phaser.Math.Distance.Between(px, py, CHANGE_SPOT.x, CHANGE_SPOT.y) < INTERACT_RANGE) {
+      return { kind: 'change' };
+    }
     if (Phaser.Math.Distance.Between(px, py, BELL.x, BELL.y) < INTERACT_RANGE) return { kind: 'bell' };
     if (py < COUNTER.y + 34 && px > COUNTER.x && px < COUNTER.x + COUNTER.w) return { kind: 'counter' };
     if (py > ROOM.bottom - 22 && Math.abs(px - GAME_W / 2) < 26) return { kind: 'door' };
@@ -422,7 +445,10 @@ export class ArcadeHub extends Phaser.Scene {
     if (t.kind === 'cabinet') {
       const { cost } = t.cab.def;
       const can = ledger.balance() >= cost;
-      msg = `[E] PLAY - ${cost} TOKEN${cost === 1 ? '' : 'S'}`;
+      // Name the game on the prompt.  A row of cabinets that all say PLAY is a
+      // row of identical boxes: the marquee is too small to read at this size,
+      // so the thing you are about to spend tokens on says so here.
+      msg = `[E] ${t.cab.def.title} - ${cost} TOKEN${cost === 1 ? '' : 'S'}`;
       color = can ? PALETTE.gold : PALETTE.ash;
     } else if (t.kind === 'counter') {
       msg = '[E] PRIZE COUNTER';
@@ -430,8 +456,13 @@ export class ArcadeHub extends Phaser.Scene {
       msg = '[E] BACK ROOM';
     } else if (t.kind === 'bell') {
       msg = '[E] RING';
+    } else if (t.kind === 'change') {
+      // The prompt carries the wallet: cash only exists out on the street, so
+      // this is the one place inside the building that mentions it.
+      const cash = store.get().cash;
+      msg = cash > 0 ? `[E] CHANGE - $${cash}` : '[E] CHANGE MACHINE';
     } else {
-      msg = store.get().prizesOwned.length > 0 ? '[E] LEAVE' : '[E] DOOR';
+      msg = '[E] OUTSIDE';
     }
 
     this.prompt.setText(msg).setTint(color === PALETTE.gold ? 0xffd45e : 0x5c6b7d);

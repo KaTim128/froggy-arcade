@@ -79,6 +79,15 @@ export class StartScreen extends Phaser.Scene {
       fadeToScene(this, 'BasementSequence');
       return;
     }
+    if (s.route === 'hide') {
+      // A run locked in the rooms comes back to the rooms.  This case was
+      // missing, so a player who closed the tab mid hide-and-seek — broke, in
+      // the dark, with the door locked behind them — was handed back a warm
+      // arcade and no explanation.  Every other route was covered; this one
+      // fell through to the hub.
+      fadeToScene(this, 'HideRoom3D');
+      return;
+    }
     if (s.route === 'chase') {
       fadeToScene(this, 'Chase3D');
       return;

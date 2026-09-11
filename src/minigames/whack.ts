@@ -30,7 +30,18 @@ const UP_MS_END = 650;
 const SPAWN_MS_START = 750;
 const SPAWN_MS_END = 450;
 const MAX_UP = 3;
-const FROGGY_CHANCE = 1 / 20;
+/**
+ * How often he turns up in a hole himself.
+ *
+ * Once per round at the very most, in one round out of four, and never in the
+ * first nine seconds.  It was a one-in-twenty roll on every spawn, which over
+ * a forty second round meant three or four visits — at that rate he is a game
+ * mechanic you learn to ignore rather than something you are not sure you saw.
+ * The whole effect depends on it almost never happening.
+ */
+const FROGGY_ROUND_CHANCE = 1 / 4;
+const FROGGY_SPAWN_CHANCE = 1 / 18;
+const FROGGY_EARLIEST_MS = 9000;
 const FROGGY_STARE_MS = 1200;
 
 interface Hole {
@@ -49,6 +60,10 @@ let timeLeft = ROUND_MS;
 let spawnTimer = 0;
 let hud: Phaser.GameObjects.BitmapText | null = null;
 let over = false;
+/** Whether this round gets a visit at all, rolled once when it starts. */
+let froggyDue = false;
+/** And whether it has already happened.  He does not come twice. */
+let froggySeen = false;
 let apiRef: MinigameApi | null = null;
 
 export const whackAFrog: MinigameModule = {
@@ -62,6 +77,8 @@ export const whackAFrog: MinigameModule = {
     timeLeft = ROUND_MS;
     spawnTimer = 0;
     over = false;
+    froggyDue = Math.random() < FROGGY_ROUND_CHANCE;
+    froggySeen = false;
     holes = [];
 
     scene.add.rectangle(0, 18, GAME_W, 162, PALETTE.moss).setOrigin(0, 0);
@@ -128,7 +145,10 @@ export const whackAFrog: MinigameModule = {
       const free = holes.filter((h) => !h.occupant);
       if (free.length) {
         const h = free[Math.floor(Math.random() * free.length)];
-        if (Math.random() < FROGGY_CHANCE) {
+        const couldVisit =
+          froggyDue && !froggySeen && ROUND_MS - timeLeft > FROGGY_EARLIEST_MS;
+        if (couldVisit && Math.random() < FROGGY_SPAWN_CHANCE) {
+          froggySeen = true;
           h.occupant = 'froggy';
           h.timer = FROGGY_STARE_MS;
           h.sprite.setVisible(false); // he is not a sprite

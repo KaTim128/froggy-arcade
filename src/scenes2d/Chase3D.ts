@@ -19,7 +19,8 @@ import * as THREE from 'three';
 import { audio, SILENCE } from '../core/audio';
 import { store } from '../core/state';
 import { froggyLayer } from '../render/froggyLayer';
-import { drawFroggy } from '../froggy/froggy';
+import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
+import { FroggyMonster } from '../three/froggyMonster';
 import { ThreeStage } from '../render/threeStage';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import {
@@ -52,7 +53,11 @@ export class Chase3D extends Phaser.Scene {
   private yaw = 0;
   private pos = new THREE.Vector2();
   private froggy = new THREE.Vector2();
-  private froggySprite: THREE.Sprite | null = null;
+  private monster: FroggyMonster | null = null;
+  /** Where he was last frame, so the walk cycle knows how fast he is going. */
+  private froggyWas = new THREE.Vector2();
+  /** How many meshes he is made of.  See buildAlley.  */
+  private froggyMeshes = 0;
   private bobT = 0;
   private stepT = 0;
   private hopT = 0;
@@ -211,28 +216,17 @@ export class Chase3D extends Phaser.Scene {
     stairs.position.set(worldX(exitCell.col), 0.3, worldZ(exitCell.row));
     st.scene.add(stairs);
 
-    // Froggy: the SAME vector art, rasterised for the 3D consumer (PRD FR-3).
-    const tex = new THREE.CanvasTexture(this.renderFroggyTexture());
-    tex.minFilter = THREE.LinearFilter;
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, fog: true, transparent: true }));
-    sprite.scale.set(2.6, 2.6, 1);
-    st.scene.add(sprite);
-    this.froggySprite = sprite;
-  }
-
-  /** One source of truth for his art; this is just a different consumer. */
-  private renderFroggyTexture(): HTMLCanvasElement {
-    const c = document.createElement('canvas');
-    c.width = 256;
-    c.height = 256;
-    const ctx = c.getContext('2d')!;
-    ctx.save();
-    ctx.translate(128, 0);
-    ctx.scale(1.6, 1.6);
-    ctx.translate(-60, 6);
-    drawFroggy(ctx, { x: 60, y: 140, height: 140, variant: 'predator', maw: 0.85 });
-    ctx.restore();
-    return c;
+    // Froggy: the SAME model the hide rooms use.  He was a billboard of a
+    // different drawing of him here, so walking out of the basement swapped the
+    // creature for a different one — same name, different animal.
+    this.monster = new FroggyMonster();
+    st.scene.add(this.monster.root);
+    this.froggyWas.copy(this.froggy);
+    // Same fingerprint the hide rooms publish: the harness compares them.
+    this.froggyMeshes = 0;
+    this.monster.root.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) this.froggyMeshes++;
+    });
   }
 
   // -------------------------------------------------------------------- loop
@@ -260,6 +254,7 @@ export class Chase3D extends Phaser.Scene {
         playerSpeed: PLAYER_SPEED,
         froggySpeed: FROGGY_SPEED,
         optimalRoute: this.routeLen,
+        froggyMeshes: this.froggyMeshes,
       };
     }
 
@@ -345,8 +340,20 @@ export class Chase3D extends Phaser.Scene {
       this.froggy.y += (dz / d) * s;
     }
 
-    if (this.froggySprite) {
-      this.froggySprite.position.set(this.froggy.x, 1.3, this.froggy.y);
+    if (this.monster) {
+      // He is coming for you down a corridor he knows: mouth open the whole way.
+      const moved = this.froggy.distanceTo(this.froggyWas);
+      this.froggyWas.copy(this.froggy);
+      // Built facing +Z, so the angle that points +Z down the alley at you is
+      // the angle he wears.  No half turn: that walked him backwards.
+      this.monster.setPose(this.froggy.x, 0, this.froggy.y, Math.atan2(dx, dz));
+      this.monster.update(dt, {
+        speed: dt > 0 ? moved / dt : 0,
+        maw: 1,
+        climb: 0,
+        scan: 0,
+        lunge: 1,
+      });
     }
   }
 
@@ -400,33 +407,11 @@ export class Chase3D extends Phaser.Scene {
     if (this.over) return;
     this.over = true;
     this.markOver('caught');
-    audio.sfx('death_stinger');
 
-    // He fills the frame, on the same overlay as the basement scare.
-    let maw = 0.5;
-    const paint = () =>
-      froggyLayer.paint((ctx) => {
-        drawFroggy(ctx, {
-          x: GAME_W / 2,
-          y: 60,
-          height: 320,
-          variant: 'predator',
-          anchor: 'face',
-          maw,
-        });
-      });
-    paint();
-    this.cameras.main.shake(400, 0.03);
-    this.time.addEvent({
-      delay: 55,
-      repeat: 9,
-      callback: () => {
-        maw = Math.min(1, maw + 0.06);
-        paint();
-      },
-    });
+    // The same scare the basement uses, because it is the same creature.
+    playJumpscare(this);
 
-    this.time.delayedCall(1400, () => {
+    this.time.delayedCall(SCARE_MS + 400, () => {
       froggyLayer.clear();
       this.teardown();
       // PRD CH-5 / open question #5: a death is a full reset to Boot.
@@ -459,7 +444,7 @@ export class Chase3D extends Phaser.Scene {
   private teardown(): void {
     this.stage?.dispose();
     this.stage = null;
-    this.froggySprite = null;
+    this.monster = null;
     if (document.pointerLockElement) document.exitPointerLock?.();
   }
 }

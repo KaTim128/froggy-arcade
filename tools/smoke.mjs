@@ -95,14 +95,6 @@ const overlayPixels = () =>
     return n;
   });
 
-/** True if the overlay changed between two samples ~150ms apart. */
-const overlayMoved = async () => {
-  const a = await overlayPixels();
-  await sleep(160);
-  const b = await overlayPixels();
-  return a !== b;
-};
-
 const click = async (x, y) => {
   await page.mouse.click(x, y);
   await sleep(120);
@@ -150,7 +142,14 @@ try {
   await sleep(2600);
   await shot('05-intro-walk');
   await page.keyboard.press('Escape'); // skip
-  await sleep(1600);
+  await sleep(2200);
+
+  // The intro now puts you out on the street with the man, not inside: the
+  // arcade is somewhere you choose to walk into.  You land at the doors.
+  console.log('4b. street -> in through the doors');
+  await shot('05b-street-daytime');
+  await page.keyboard.press('KeyE');
+  await sleep(2200);
 
   console.log('5. arcade hub + tutorial');
   await shot('06-hub-tutorial-line1');
@@ -158,29 +157,33 @@ try {
   // Click through the tutorial until the game itself says it is done.
   // Blind click counts screenshot the wrong frame.
   let clicks = 0;
-  let sawFreeze = false;
+  let midShot = false;
   while (clicks < 60) {
     const st = await readState();
     if (st.seenIntro) break;
-    // Line 6 is the frozen one: grab it the moment the overlay stops moving.
-    if (!sawFreeze && clicks > 8) {
-      const moved = await overlayMoved();
-      if (!moved) {
-        await shot('07-hub-tutorial-line6-freeze');
-        sawFreeze = true;
-      }
+    // A frame from the middle of the tutorial.  This used to hunt for the
+    // frozen foreshadowing line by watching for the overlay to stop moving;
+    // that line has been cut, so there is nothing to wait for.
+    if (!midShot && clicks > 8) {
+      await shot('07-hub-tutorial-mid');
+      midShot = true;
     }
     await click(640, 200);
     await sleep(320);
     clicks++;
   }
-  if (!sawFreeze) await shot('07-hub-tutorial-line6-freeze');
+  if (!midShot) await shot('07-hub-tutorial-mid');
   console.log(`   tutorial done after ${clicks} clicks`);
   await sleep(900);
   await shot('08-hub-free-roam');
 
   const overlayAfter = await overlayPixels();
-  console.log(`   overlay opaque pixels after tutorial: ${overlayAfter}`);
+  // Report who is on screen with it: a non-zero overlay here has been a race,
+  // and knowing which scene is painting is the whole diagnosis.
+  console.log(
+    `   overlay opaque pixels after tutorial: ${overlayAfter}` +
+      (overlayAfter ? ` (scenes: ${(await page.evaluate(() => window.__froggy.activeScenes())).join(',')})` : ''),
+  );
 
   console.log('6. walk to a cabinet');
   await page.keyboard.down('KeyA');

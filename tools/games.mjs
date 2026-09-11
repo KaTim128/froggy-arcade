@@ -34,7 +34,8 @@ const GAMES = [
   { id: 'grudge', drive: async (p) => { await sleep(1600); for (let i = 0; i < 6; i++) { await p.keyboard.press('KeyD'); await p.keyboard.press('KeyJ'); await sleep(400); } } },
   { id: 'donkeykong', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(2500); await p.keyboard.up('KeyD'); await p.keyboard.press('Space'); await sleep(600); await p.keyboard.down('KeyW'); await sleep(900); await p.keyboard.up('KeyW'); } },
   { id: 'slots', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.press('Space'); await sleep(2700); } } },
-  { id: 'blackjack', drive: async (p) => { await sleep(700); await p.keyboard.press('KeyH'); await sleep(900); await p.keyboard.press('Space'); await sleep(3000); } },
+  // Bet up from the table minimum first — blackjack deals nothing until you do.
+  { id: 'blackjack', drive: async (p) => { await sleep(500); await p.keyboard.press('ArrowUp'); await p.keyboard.press('ArrowRight'); await sleep(400); await p.keyboard.press('Space'); await sleep(900); await p.keyboard.press('KeyH'); await sleep(900); await p.keyboard.press('Space'); await sleep(3000); } },
   { id: 'roulette', drive: async (p) => { for (let i = 0; i < 5; i++) { await p.keyboard.press('Space'); await sleep(1300); } } },
   { id: 'battleship', drive: async (p) => { const g = (x, y) => [640 + (x - 160) * 4, 360 + (y - 90) * 4]; for (const [c, r] of [[0, 0], [2, 2], [4, 4], [6, 1]]) { await p.mouse.click(...g(186 + c * 12 + 6, 44 + r * 12 + 6)); await sleep(900); } } },
 ];
@@ -238,9 +239,12 @@ console.log(failures === 0 ? '\nAll 12 games launch, play and quit cleanly.' : `
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
 
+  // One cabinet per room, at its current spot: the floor was re-sorted by price
+  // (cheap games out front, the five-to-seven ones in the back room, the
+  // gambling in the casino), so these coordinates follow the layout.
   const cases = [
-    ['ArcadeHub', 286, 162],   // CHOMP-MAN, right column
-    ['ArcadeAnnex', 128, 96],  // BARREL CLIMB
+    ['ArcadeHub', 286, 152],   // BATTLESHIP, right wall
+    ['ArcadeAnnex', 112, 96],  // BARREL CLIMB
     ['ArcadeCasino', 224, 96], // CHAMBER
   ];
 

@@ -20,6 +20,12 @@ export interface CabinetDef {
   /** Marquee tint. */
   color: number;
   /**
+   * What the thing actually is on the floor.  Everything in this arcade is a
+   * cabinet except Froggy's blackjack table, which is furniture with a dealer
+   * behind it — the bet is not a fixed coin slot, so it cannot be a machine.
+   */
+  fixture?: 'cabinet' | 'table';
+  /**
    * Which room the cabinet stands in.  The hub has a doorway on its left wall
    * into the annex, which exists so the floor can grow without the hub turning
    * into a wall of cabinets.  Defaults to the hub.
@@ -39,24 +45,55 @@ export const TIER_ECONOMY: Record<Tier, { cost: number; reward: number }> = {
  * narrowing the scope the customer actually described.
  */
 /**
- * Cabinet positions are hand-placed, not laid out.  The left wall carries two
- * with the doorway to the back room between them, the top-left pair sit
- * shoulder to shoulder, and the right wall carries three evenly.  Anything
- * added here has to keep clear of the counter (x 112-240) and the doorway
- * (y 118).
+ * Three rooms, and the price of admission goes up as you go in.
+ *
+ *   hub     one to three tokens.  The games a person plays.
+ *   annex   five to seven.  The ones that take your afternoon.
+ *   casino  the ones that are not games at all: chamber, slots, cards.
+ *
+ * Sorting them this way means the room you are standing in tells you what you
+ * are risking, and a player who has walked to the back room has already made a
+ * decision about that.
+ *
+ * Positions are hand-placed, not laid out.  Anything added here has to keep
+ * clear of the counter (x 112-240), the doorway on the left wall (y 118), the
+ * front door (bottom centre) and — in the hub — the change machine on the back
+ * wall, which the player stands at around x 272, y 62 and which must not have a
+ * cabinet's click zone over it.
  */
 export const CABINETS: CabinetDef[] = [
+  // ---- the front room: everything that costs one to three tokens
   { id: 'tictactoe', title: 'TIC-TAC-TOE', tier: 'easy', cost: 1, reward: 3, x: 34, y: 86, color: 0xff4fa3 },
   { id: 'snakes', title: 'SNAKES+LADDERS', tier: 'easy', cost: 1, reward: 3, x: 68, y: 86, color: 0x46c4bd },
-  { id: 'airhockey', title: 'AIR HOCKEY', tier: 'hard', cost: 5, reward: 10, x: 34, y: 162, color: 0xffd45e },
-  { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 3, reward: 6, x: 286, y: 86, color: 0xff7a3d },
-  { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 3, reward: 6, x: 286, y: 124, color: 0x6fbb6a },
-  { id: 'chompman', title: 'CHOMP-MAN', tier: 'hard', cost: 7, reward: 7, x: 286, y: 162, color: 0x7b4bd8 },
-  { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 5, reward: 10, x: 60, y: 96, color: 0xc31f2e, room: 'annex' },
-  { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 5, reward: 10, x: 128, y: 96, color: 0xd9822b, room: 'annex' },
-  { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 196, y: 96, color: 0x1d6f8f, room: 'annex' },
+  { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 3, reward: 6, x: 34, y: 162, color: 0xff7a3d },
+  { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 3, reward: 6, x: 68, y: 162, color: 0x6fbb6a },
+  // Low on the right wall on purpose: the change machine is above it, and a
+  // cabinet's click zone up there swallows every attempt to use the machine.
+  { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 286, y: 152, color: 0x1d6f8f },
+
+  // ---- the back room: five to seven a go
+  { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 5, reward: 10, x: 48, y: 96, color: 0xc31f2e, room: 'annex' },
+  { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 5, reward: 10, x: 112, y: 96, color: 0xd9822b, room: 'annex' },
+  { id: 'airhockey', title: 'AIR HOCKEY', tier: 'hard', cost: 5, reward: 10, x: 176, y: 96, color: 0xffd45e, room: 'annex' },
+  { id: 'chompman', title: 'CHOMP-MAN', tier: 'hard', cost: 7, reward: 7, x: 240, y: 96, color: 0x7b4bd8, room: 'annex' },
+
+  // ---- and the room at the back, where none of it is a game
   { id: 'slots', title: 'FROGGY SLOTS', tier: 'medium', cost: 3, reward: 6, x: 96, y: 96, color: 0xff4fa3, room: 'casino' },
-  { id: 'blackjack', title: 'BLACKJACK', tier: 'medium', cost: 3, reward: 6, x: 160, y: 96, color: 0x2f8d4f, room: 'casino' },
+  // The table takes a minimum, not a price: `cost` is the ante Froggy will not
+  // deal under, and `reward` is what that ante pays back at 2x.  Anything above
+  // it is raised at the table through the shell (MinigameApi.raise).
+  {
+    id: 'blackjack',
+    title: 'BLACKJACK',
+    tier: 'easy',
+    cost: 1,
+    reward: 2,
+    x: 160,
+    y: 118,
+    color: 0x2f8d4f,
+    room: 'casino',
+    fixture: 'table',
+  },
   { id: 'roulette', title: 'CHAMBER', tier: 'hard', cost: 5, reward: 10, x: 224, y: 96, color: 0x8a2b34, room: 'casino' },
 ];
 
@@ -98,6 +135,34 @@ export const PRIZES: PrizeDef[] = [
 
 export function prizeById(id: string): PrizeDef | undefined {
   return PRIZES.find((p) => p.id === id);
+}
+
+/**
+ * What the man outside pays for a prize: half what the counter charged for it,
+ * in cash.  He says it like it is a favour.
+ *
+ * Half is the point of the whole arrangement — he gets a two hundred token
+ * bunny for a hundred in notes, and the player, who cannot eat tokens, takes
+ * it.  PRIZES is the only place the token price lives, so this follows it.
+ */
+export function cashFor(prize: PrizeDef): number {
+  return Math.floor(prize.cost / 2);
+}
+
+/**
+ * What the change machine gives you: one token for every two in cash.
+ *
+ * The same rate the man pays for prizes, pointed the other way, and between
+ * the two of them the arcade takes three quarters of everything that passes
+ * through it.  Nobody in this building is on your side.
+ */
+export function tokensForCash(cash: number): number {
+  return Math.max(0, Math.floor(cash / 2));
+}
+
+/** Every prize sold means the job is done. */
+export function allPrizesSold(sold: readonly string[]): boolean {
+  return PRIZES.every((p) => sold.includes(p.id));
 }
 
 /** PRD §7.5: the ticket counter, the prize case, and the bell nobody answers. */

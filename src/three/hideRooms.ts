@@ -5,9 +5,11 @@
  * sight, which is the whole game: a room of open floor has nowhere to break
  * his line of sight, and a room packed solid has nowhere to run.
  *
- * Chests are the hiding places.  There have to be more of them than he can
- * check quickly, and they have to be spread — a cluster lets him clear three
- * in the time it takes you to reach a fourth.
+ * Hiding spots are chests, cupboards and lockers.  There have to be more of
+ * them than he can check quickly, and they have to be spread — a cluster lets
+ * him clear three in the time it takes you to reach a fourth.  The kinds are
+ * not decoration: a locker across the room is a different decision from the
+ * chest at your feet, and he opens all of them.
  */
 
 export interface Box {
@@ -21,11 +23,15 @@ export interface Box {
   low?: boolean;
 }
 
-export interface Chest {
+/** What kind of thing you climb into.  Only the shape and the sound differ. */
+export type SpotKind = 'chest' | 'cupboard' | 'locker';
+
+export interface HideSpot {
   x: number;
   z: number;
-  /** Facing, radians — the lid hinges away from this. */
+  /** Facing, radians — the lid or door opens away from this. */
   rot: number;
+  kind: SpotKind;
 }
 
 export interface RoomDef {
@@ -40,10 +46,8 @@ export interface RoomDef {
   /** Warm bulbs, positioned in room space. */
   lights: Array<{ x: number; z: number; color: number; intensity: number }>;
   furniture: Box[];
-  chests: Chest[];
-  /** Where the key can be, one picked at random on entry. */
-  keySpots: Array<{ x: number; z: number }>;
-  /** The locked door out, on the -Z wall. */
+  spots: HideSpot[];
+  /** The door he locks behind you.  It does not open again this round. */
   door: { x: number };
   /** Where you come in, and where he does the locking. */
   spawn: { x: number; z: number };
@@ -104,25 +108,17 @@ export const LIVING_ROOM: RoomDef = {
     // the television, still off
     { x: -1.0, z: -13.2, w: 3.0, d: 0.6, h: 1.6, color: 0x14161a },
   ],
-  chests: [
-    { x: -16.0, z: -11.0, rot: 0 },
-    { x: -9.5, z: -1.0, rot: Math.PI / 2 },
-    { x: -2.0, z: -7.5, rot: 0 },
-    { x: 4.5, z: -10.5, rot: 0 },
-    { x: 14.5, z: -5.0, rot: Math.PI },
-    { x: 10.0, z: 1.0, rot: Math.PI / 2 },
-    { x: -15.0, z: 5.0, rot: 0 },
-    { x: -5.5, z: 6.0, rot: Math.PI / 2 },
-    { x: 6.5, z: 9.5, rot: 0 },
-    { x: 16.0, z: 12.0, rot: Math.PI },
-  ],
-  keySpots: [
-    { x: -11.0, z: -2.0 },
-    { x: 12.0, z: -1.0 },
-    { x: -3.0, z: 0.5 },
-    { x: 14.0, z: 9.0 },
-    { x: -15.5, z: 11.5 },
-    { x: 6.0, z: -12.5 },
+  spots: [
+    { x: -16.0, z: -11.0, rot: 0, kind: 'cupboard' },
+    { x: -9.5, z: -1.0, rot: Math.PI / 2, kind: 'chest' },
+    { x: -2.0, z: -7.5, rot: 0, kind: 'chest' },
+    { x: 4.5, z: -10.5, rot: 0, kind: 'cupboard' },
+    { x: 14.5, z: -5.0, rot: Math.PI, kind: 'cupboard' },
+    { x: 10.0, z: 1.0, rot: Math.PI / 2, kind: 'chest' },
+    { x: -15.0, z: 5.0, rot: 0, kind: 'cupboard' },
+    { x: -5.5, z: 6.0, rot: Math.PI / 2, kind: 'chest' },
+    { x: 6.5, z: 9.5, rot: 0, kind: 'chest' },
+    { x: 16.0, z: 12.0, rot: Math.PI, kind: 'cupboard' },
   ],
   door: { x: 0 },
   // You come in through the door, so you start beside it, facing the room.
@@ -167,26 +163,18 @@ export const WAREHOUSE: RoomDef = {
     { x: 18.0, z: 11.0, w: 2.4, d: 4.0, h: 2.8, color: 0x3a3f46 },
     { x: 21.0, z: 0.0, w: 2.0, d: 5.0, h: 3.0, color: 0x3a3f46 },
   ],
-  chests: [
-    { x: -21.0, z: -14.0, rot: 0 },
-    { x: -14.5, z: -3.0, rot: Math.PI / 2 },
-    { x: -7.5, z: -14.0, rot: 0 },
-    { x: -0.5, z: -8.0, rot: Math.PI / 2 },
-    { x: 6.5, z: -14.0, rot: 0 },
-    { x: 13.5, z: -4.0, rot: Math.PI / 2 },
-    { x: 21.0, z: -12.0, rot: Math.PI },
-    { x: -17.0, z: 6.0, rot: 0 },
-    { x: -2.0, z: 5.5, rot: 0 },
-    { x: 12.0, z: 15.0, rot: 0 },
-    { x: -10.0, z: 15.5, rot: 0 },
-  ],
-  keySpots: [
-    { x: -20.0, z: 10.0 },
-    { x: -6.0, z: 9.0 },
-    { x: 1.0, z: 13.5 },
-    { x: 8.0, z: 8.5 },
-    { x: 18.0, z: 11.0 },
-    { x: -14.0, z: 13.0 },
+  spots: [
+    { x: -21.0, z: -14.0, rot: 0, kind: 'locker' },
+    { x: -14.5, z: -3.0, rot: Math.PI / 2, kind: 'locker' },
+    { x: -7.5, z: -14.0, rot: 0, kind: 'locker' },
+    { x: -0.5, z: -8.0, rot: Math.PI / 2, kind: 'chest' },
+    { x: 6.5, z: -14.0, rot: 0, kind: 'locker' },
+    { x: 13.5, z: -4.0, rot: Math.PI / 2, kind: 'locker' },
+    { x: 21.0, z: -12.0, rot: Math.PI, kind: 'locker' },
+    { x: -17.0, z: 6.0, rot: 0, kind: 'chest' },
+    { x: -2.0, z: 5.5, rot: 0, kind: 'chest' },
+    { x: 12.0, z: 15.0, rot: 0, kind: 'locker' },
+    { x: -10.0, z: 15.5, rot: 0, kind: 'cupboard' },
   ],
   door: { x: 0 },
   spawn: { x: 0, z: 16.2 },

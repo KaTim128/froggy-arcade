@@ -1,9 +1,13 @@
 /**
  * The machines that take money.  Through the opening on the annex's left wall.
  *
- * Slots, blackjack, and the chamber cabinet.  Same token economy as every other
- * cabinet in the building — nothing here costs anything but tokens, and the
- * chamber machine is a cylinder diagram on a cabinet face, not a person.
+ * Slots, Froggy's blackjack table, and the chamber cabinet.  Same token economy
+ * as every other cabinet in the building — nothing here costs anything but
+ * tokens, and the chamber machine is a cylinder diagram on a cabinet face, not
+ * a person.
+ *
+ * Blackjack is the exception to the wall of machines: a felt table with Froggy
+ * dealing behind it.  He is drawn on the overlay, never as a sprite (FR-1).
  *
  * Darker and quieter than the arcade floor.  Nobody has ever won in here.
  */
@@ -18,23 +22,31 @@ import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
 import { paintHubRoom, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
-import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
+import { Cabinet } from '../art/cabinet';
+import { BlackjackTable } from '../art/blackjackTable';
 import { TokenHud } from '../ui/hud';
 import { CABINETS, cabinetsIn } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
+import { drawFroggy } from '../froggy/froggy';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 
 const INTERACT_RANGE = 24;
 /** The way back, on this room's right wall. */
 const BACK_DOOR = { x: GAME_W - 20, y: 118 };
 
-type Target = { kind: 'cabinet'; cab: Cabinet } | { kind: 'back' } | null;
+/** Anything you can walk up to and play.  The table is not a cabinet. */
+type Fixture = Cabinet | BlackjackTable;
+
+type Target = { kind: 'cabinet'; cab: Fixture } | { kind: 'back' } | null;
 
 export class ArcadeCasino extends Phaser.Scene {
   private player!: Player;
   private bounds!: Phaser.Geom.Rectangle;
   private keys!: Record<string, Phaser.Input.Keyboard.Key[]>;
-  private cabinets: Cabinet[] = [];
+  private cabinets: Fixture[] = [];
+  private table: BlackjackTable | null = null;
+  /** Seconds, for the dealer's idle.  He breathes; the room does not. */
+  private clock = 0;
   private prompt!: Phaser.GameObjects.BitmapText;
   private promptPlate!: Phaser.GameObjects.Rectangle;
   private mutter!: Phaser.GameObjects.BitmapText;
@@ -56,17 +68,26 @@ export class ArcadeCasino extends Phaser.Scene {
     this.locked = false;
     this.target = null;
     this.cabinets = [];
+    this.table = null;
+    this.clock = 0;
 
     fadeIn(this);
     audio.setScene({ music: 'hub_lofi', ambience: ['neon_buzz'] });
 
-    paintHubRoom(this, { night: false });
+    // No front door in here: the only way out of the building is the hub.
+    paintHubRoom(this, { night: false, frontDoor: false });
     this.paintDoorway();
 
-    this.cabinets = cabinetsIn('casino').map((def) => new Cabinet(this, def));
+    this.cabinets = cabinetsIn('casino').map((def) => {
+      if (def.fixture !== 'table') return new Cabinet(this, def);
+      const t = new BlackjackTable(this, def);
+      this.table = t;
+      return t;
+    });
     for (const cab of this.cabinets) {
+      const b = cab.bounds;
       this.add
-        .zone(cab.def.x, cab.def.y - CAB_H / 2, CAB_W + 4, CAB_H + 2)
+        .zone(b.centerX, b.centerY, b.width, b.height)
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => {
           if (this.busy()) return;
@@ -108,7 +129,44 @@ export class ArcadeCasino extends Phaser.Scene {
       if (!this.busy()) this.scene.launch('SettingsModal', { from: 'ArcadeCasino' });
     });
 
+    // The overlay is one canvas shared by every scene, so this room hands it
+    // back the moment it stops owning it.
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => froggyLayer.clear());
+
     store.flush();
+  }
+
+  /**
+   * The dealer, sat at his own table.
+   *
+   * He is drawn LOW and clipped off at the felt, so the table edge crosses his
+   * belly and everything below it is behind the table: from the floor he reads
+   * as someone sitting at the far side dealing, rather than a mascot standing
+   * behind a piece of furniture.  That is the whole point of him being there —
+   * a player who walks past has to be able to tell at a glance that the frog
+   * runs this game.
+   */
+  private paintDealer(): void {
+    const spot = this.table?.dealerSpot();
+    if (!spot) return;
+    froggyLayer.paint((ctx) => {
+      // Clip to everything above the felt: no legs, no feet, no floating.
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, GAME_W, spot.y);
+      ctx.clip();
+      drawFroggy(ctx, {
+        x: spot.x,
+        // Below the cut line, so the bottom third of him is behind the table.
+        y: spot.y + 13,
+        height: 40,
+        variant: 'cozy',
+        pose: this.target?.kind === 'cabinet' && this.target.cab === this.table ? 'talk' : 'idleA',
+        // Seated, so he sways rather than bounces: half the travel of a stand.
+        bounce: (this.clock * 0.4) % 1,
+      });
+      ctx.restore();
+    });
   }
 
   private paintDoorway(): void {
@@ -167,14 +225,19 @@ export class ArcadeCasino extends Phaser.Scene {
   private toAnnex(): void {
     this.locked = true;
     audio.sfx('footstep_concrete');
+    froggyLayer.clear();
     fadeToScene(this, 'ArcadeAnnex');
   }
 
-  private launchGame(cab: Cabinet): void {
+  private launchGame(cab: Fixture): void {
     const { cost } = cab.def;
     if (!canEnter('Minigame', store.get(), { cost })) {
       audio.sfx('buzzer');
-      this.say(`NOT ENOUGH TOKENS — NEED ${cost}`);
+      this.say(
+        cab.def.fixture === 'table'
+          ? `TABLE MINIMUM IS ${cost} — COME BACK WITH IT`
+          : `NOT ENOUGH TOKENS — NEED ${cost}`,
+      );
       return;
     }
     if (!ledger.debit(cost, 'game.cost')) {
@@ -184,6 +247,7 @@ export class ArcadeCasino extends Phaser.Scene {
     store.bumpGamePlayed(cab.def.id);
     store.flush();
     this.locked = true;
+    froggyLayer.clear();
     fadeToScene(this, 'Minigame', { id: cab.def.id, from: 'ArcadeCasino' });
   }
 
@@ -200,6 +264,9 @@ export class ArcadeCasino extends Phaser.Scene {
       return;
     }
 
+    this.clock += delta / 1000;
+    this.paintDealer();
+
     const dx = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     const dy = (this.held('down') ? 1 : 0) - (this.held('up') ? 1 : 0);
     this.player.move(dx, dy, delta, this.bounds);
@@ -215,7 +282,7 @@ export class ArcadeCasino extends Phaser.Scene {
     const px = this.player.x;
     const py = this.player.y;
 
-    let best: Cabinet | null = null;
+    let best: Fixture | null = null;
     let bestD = INTERACT_RANGE;
     for (const c of this.cabinets) {
       const d = c.distanceTo(px, py);
@@ -242,7 +309,11 @@ export class ArcadeCasino extends Phaser.Scene {
     let colour: number = PALETTE.gold;
     if (t.kind === 'cabinet') {
       const { cost } = t.cab.def;
-      msg = `[E] PLAY - ${cost} TOKEN${cost === 1 ? '' : 'S'}`;
+      // The table takes a bet, not a price, so it says so.
+      msg =
+        t.cab.def.fixture === 'table'
+          ? `[E] ${t.cab.def.title} - ${cost} TOKEN MIN`
+          : `[E] ${t.cab.def.title} - ${cost} TOKEN${cost === 1 ? '' : 'S'}`;
       colour = ledger.balance() >= cost ? PALETTE.gold : PALETTE.ash;
     } else {
       msg = '[E] BACK ROOM';
@@ -250,7 +321,10 @@ export class ArcadeCasino extends Phaser.Scene {
 
     this.prompt.setText(msg).setTint(colour === PALETTE.gold ? 0xffd45e : 0x5c6b7d);
     const x = Phaser.Math.Clamp(this.player.x, 70, GAME_W - 70);
-    const y = this.player.y - 34;
+    // Above the player's head, except at the table: Froggy stands there, on an
+    // overlay nothing in the world can draw over, and he ate half the line.
+    const atTable = t.kind === 'cabinet' && t.cab.def.fixture === 'table';
+    const y = atTable ? Math.min(this.player.y + 20, GAME_H - 36) : this.player.y - 34;
     this.prompt.setPosition(x, y).setVisible(true);
     this.promptPlate
       .setPosition(x, y)
