@@ -71,9 +71,9 @@ export const CABINETS: CabinetDef[] = [
   // cabinet's click zone up there swallows every attempt to use the machine.
   { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 286, y: 152, color: 0x1d6f8f },
 
-  // ---- the back room: five to seven a go
+  // ---- the back room: three to seven a go
   { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 5, reward: 10, x: 48, y: 96, color: 0xc31f2e, room: 'annex' },
-  { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 5, reward: 10, x: 112, y: 96, color: 0xd9822b, room: 'annex' },
+  { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 3, reward: 6, x: 112, y: 96, color: 0xd9822b, room: 'annex' },
   { id: 'airhockey', title: 'AIR HOCKEY', tier: 'hard', cost: 5, reward: 10, x: 176, y: 96, color: 0xffd45e, room: 'annex' },
   { id: 'chompman', title: 'CHOMP-MAN', tier: 'hard', cost: 7, reward: 7, x: 240, y: 96, color: 0x7b4bd8, room: 'annex' },
 

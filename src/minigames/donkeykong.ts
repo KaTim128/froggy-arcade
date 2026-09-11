@@ -1,5 +1,5 @@
 /**
- * BARREL CLIMB.  Hard — 5 tokens in, 10 out.
+ * BARREL CLIMB.  Hard — 3 tokens in, 6 out.
  *
  * An original take on the girder-and-barrel climb (PRD MG-7): original level,
  * original art, original name, no borrowed characters.  Five girders, ladders
