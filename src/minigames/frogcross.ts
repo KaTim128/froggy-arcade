@@ -48,7 +48,7 @@ interface Car {
   w: number;
   dir: 1 | -1;
   speed: number;
-  body: Phaser.GameObjects.Rectangle;
+  body: Phaser.GameObjects.Container;
 }
 
 interface Lane {
@@ -120,6 +120,13 @@ export const frogCross: MinigameModule = {
     }
     scene.add.rectangle(0, ROAD_BOTTOM, GAME_W, 2, PALETTE.fog).setOrigin(0, 0);
     scene.add.rectangle(0, ROAD_BOTTOM + 2, GAME_W, 178 - ROAD_BOTTOM, PALETTE.slate).setOrigin(0, 0);
+    // kerb stones along the pavement, and tufts and a shrub or two on the far bank
+    for (let x = 0; x < GAME_W; x += 12) scene.add.rectangle(x, ROAD_BOTTOM + 2, 11, 4, 0x2f3a48).setOrigin(0, 0);
+    for (let i = 0; i < 26; i++) {
+      const tx = 4 + ((i * 47) % (GAME_W - 8));
+      scene.add.rectangle(tx, BANK_TOP + 3 + (i % 3) * 3, 1, 3, PALETTE.mossLight).setOrigin(0.5, 1).setAlpha(0.8);
+    }
+    for (const sx of [30, 120, 210, 290]) scene.add.ellipse(sx, BANK_TOP + 6, 14, 8, 0x2e5e38);
 
     for (let k = 1; k <= LANES; k++) {
       lanes.push({
@@ -253,9 +260,14 @@ function stepTraffic(dt: number, delta: number): void {
       lane.timer = 200;
       return;
     }
-    const body = sceneRef!.add
-      .rectangle(x, laneY(k), w, CAR_H, truck ? PALETTE.steel : [PALETTE.ember, PALETTE.neon, PALETTE.tealLight, PALETTE.amber][k % 4])
-      .setDepth(10);
+    const colour = truck ? PALETTE.steel : [PALETTE.ember, PALETTE.neon, PALETTE.tealLight, PALETTE.amber][k % 4];
+    const chassis = sceneRef!.add.rectangle(0, 0, w, CAR_H, colour);
+    const roof = sceneRef!.add.rectangle(truck ? -w / 4 : 0, -1, truck ? w / 3 : w * 0.5, CAR_H - 4, colour === PALETTE.steel ? 0x2a3440 : 0x1a1f2a).setAlpha(0.85);
+    const lampF = sceneRef!.add.rectangle((w / 2 - 1) * lane.dir, -2, 2, 2, 0xfff6c0);
+    const lampR = sceneRef!.add.rectangle((-w / 2 + 1) * lane.dir, -2, 2, 2, 0xff3a3a);
+    const wheelA = sceneRef!.add.rectangle(-w / 3, CAR_H / 2, 4, 2, 0x111318);
+    const wheelB = sceneRef!.add.rectangle(w / 3, CAR_H / 2, 4, 2, 0x111318);
+    const body = sceneRef!.add.container(x, laneY(k), [chassis, roof, lampF, lampR, wheelA, wheelB]).setDepth(10);
     cars.push({ x, lane: k, w, dir: lane.dir, speed, body });
     lane.timer = (1500 + Math.random() * 1600) * gapMul();
   });

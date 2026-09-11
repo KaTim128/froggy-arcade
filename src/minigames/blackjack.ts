@@ -193,6 +193,8 @@ export const blackjack: MinigameModule = {
 /** The table itself: wood, felt, and the arc Froggy deals across. */
 function paintFelt(scene: Phaser.Scene): void {
   scene.add.rectangle(0, 18, GAME_W, 162, PALETTE.brown).setOrigin(0, 0);
+  for (let x = 0; x < GAME_W; x += 18) scene.add.rectangle(x, 18, 1, 162, 0x5a3e26).setOrigin(0, 0).setAlpha(0.6);
+  scene.add.ellipse(GAME_W / 2, 34, 308, 46, 0x8a6a3a);
   scene.add.ellipse(GAME_W / 2, 34, 300, 40, 0x12401f);
   scene.add.rectangle(0, 34, GAME_W, 146, 0x12401f).setOrigin(0, 0);
   // felt seam, so it reads as a table rather than a green rectangle

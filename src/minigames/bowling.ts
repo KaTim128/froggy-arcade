@@ -25,6 +25,8 @@ import { store } from '../core/state';
 import { centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
+import { backdrop, panel } from './decor';
+
 
 const ID = 'bowling' as const;
 export const ROUNDS = 3;
@@ -118,7 +120,8 @@ export const bowling: MinigameModule = {
     over = false;
     best = store.highScore(ID);
 
-    scene.add.rectangle(0, 18, GAME_W, 162, 0x14100c).setOrigin(0, 0);
+    backdrop(scene, 0x1c1410, 0x120c08, { speckleColor: 0xffd9a0 });
+    panel(scene, 6, 34, 96, 32, 0x2a1d14, 0x8a6a3a, 4);
     // gutters, lane, foul line, pin deck
     scene.add.rectangle(LANE_L - 8, LANE_TOP, LANE_W + 16, FOUL_Y - LANE_TOP + 6, PALETTE.ink).setOrigin(0, 0);
     scene.add.rectangle(LANE_L, LANE_TOP, LANE_W, FOUL_Y - LANE_TOP + 6, 0xb9884f).setOrigin(0, 0);
@@ -126,6 +129,12 @@ export const bowling: MinigameModule = {
       scene.add.rectangle(x, LANE_TOP, 1, FOUL_Y - LANE_TOP + 6, 0xa4773f).setOrigin(0, 0).setAlpha(0.6);
     }
     scene.add.rectangle(LANE_L, FOUL_Y, LANE_W, 1, PALETTE.blood).setOrigin(0, 0);
+    // the aiming arrows a real lane has, a third of the way down
+    for (let i = -3; i <= 3; i++) {
+      const ax = LANE_L + LANE_W / 2 + i * 10;
+      const ay = 118 + Math.abs(i) * 5;
+      scene.add.triangle(ax, ay, 0, 5, 3, 0, 6, 5, 0x6b4a2a).setOrigin(0.5, 0.5);
+    }
     scene.add.rectangle(LANE_L, LANE_TOP, LANE_W, 46, 0x8d6535).setOrigin(0, 0).setAlpha(0.5);
 
     ballBody = scene.add.circle(0, 0, BALL_R, PALETTE.plum).setStrokeStyle(1, PALETTE.violet).setDepth(20);

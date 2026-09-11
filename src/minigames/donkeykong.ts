@@ -127,7 +127,15 @@ export const donkeyKong: MinigameModule = {
     barrels = [];
     ladders = [];
 
+    // a brick wall behind the girders, dark, with the mortar just showing
     scene.add.rectangle(0, 18, GAME_W, 162, 0x120a18).setOrigin(0, 0);
+    for (let row = 0; row < 24; row++) {
+      const y = 20 + row * 7;
+      const off = row % 2 ? 7 : 0;
+      for (let x = -7 + off; x < GAME_W; x += 14) {
+        scene.add.rectangle(x, y, 13, 6, 0x1c1022).setOrigin(0, 0);
+      }
+    }
 
     // Mostly alternating, so every floor has to be crossed — but the ladder up
     // to the top girder is deliberately mid-floor.  Alternation put it at
@@ -355,6 +363,7 @@ function spawnBarrel(): void {
   const bouncer = Math.random() < BOUNCER_CHANCE;
   const dot = sceneRef.add
     .circle(LEFT + 20, FLOORS[topFloor] - BARREL_R, BARREL_R, bouncer ? PALETTE.neon : 0xd9822b)
+    .setStrokeStyle(1, bouncer ? 0x8a2050 : 0x7a4a18)
     .setDepth(15);
   barrels.push({
     x: LEFT + 20,

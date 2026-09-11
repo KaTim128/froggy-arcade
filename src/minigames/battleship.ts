@@ -62,6 +62,12 @@ export const battleship: MinigameModule = {
     scene.add.rectangle(0, 18, GAME_W, 162, 0x0b1a24).setOrigin(0, 0);
     // a horizon, so the board reads as water rather than graph paper
     scene.add.rectangle(0, 30, GAME_W, 1, 0x18394a).setOrigin(0, 0);
+    // and waves on it: short pale dashes, staggered row on row
+    for (let i = 0; i < 120; i++) {
+      const wx = ((i * 53) % (GAME_W - 8)) + 4;
+      const wy = 36 + ((i * 29) % 140);
+      scene.add.rectangle(wx, wy, 4 + (i % 3), 1, 0x9fd4ff).setOrigin(0, 0).setAlpha(0.12);
+    }
 
     text(scene, MINE_X, 34, 'YOUR FLEET', PALETTE.tealLight);
     text(scene, THEIRS_X, 34, 'THEIRS', PALETTE.blood);
@@ -94,9 +100,12 @@ function makeSide(scene: Phaser.Scene, ox: number, isMine: boolean): Side {
       const x = ox + c * CELL;
       const y = GRID_Y + r * CELL;
       const rect = scene.add
-        .rectangle(x, y, CELL - 1, CELL - 1, 0x123243)
+        .rectangle(x, y, CELL - 1, CELL - 1, 0x14384e)
         .setOrigin(0, 0)
-        .setStrokeStyle(1, 0x1d4a61);
+        .setStrokeStyle(1, 0x2a6a86);
+      // coordinates down the side and along the top of each board
+      if (c === 0) text(scene, ox - 8, y + 2, String.fromCharCode(65 + r), 0x4a8aa6, 8);
+      if (r === N - 1) text(scene, x + 3, GRID_Y + N * CELL + 1, String(c + 1), 0x4a8aa6, 8);
       side.rects.push(rect);
 
       if (!isMine) {

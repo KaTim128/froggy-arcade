@@ -15,6 +15,8 @@ import { audio } from '../core/audio';
 import { centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
+import { silhouettes } from './decor';
+
 
 const FLOOR_Y = 156;
 const WALK_SPEED = 52;
@@ -94,9 +96,18 @@ export const grudge: MinigameModule = {
     wins2 = 0;
     over = false;
 
+    // A hall: dark walls, a spotlight on the boards, and a crowd in the dark
+    // at the back with the ropes in front of them.
     scene.add.rectangle(0, 18, GAME_W, 162, PALETTE.plum).setOrigin(0, 0);
+    scene.add.rectangle(0, 18, GAME_W, 162, 0x1a1030).setOrigin(0, 0).setAlpha(0.6);
+    scene.add.ellipse(GAME_W / 2, FLOOR_Y + 4, 260, 60, 0xfff0c9).setAlpha(0.06);
+    scene.add.ellipse(GAME_W / 2, FLOOR_Y + 4, 160, 30, 0xfff0c9).setAlpha(0.06);
+    silhouettes(scene, 108, 26, 0x0e0818, 0.9);
+    for (const y of [116, 124, 132]) scene.add.rectangle(0, y, GAME_W, 1, PALETTE.blood).setOrigin(0, 0).setAlpha(0.7);
+    for (const x of [24, GAME_W - 24]) scene.add.rectangle(x, 112, 3, 26, PALETTE.bone).setOrigin(0.5, 0);
     scene.add.rectangle(0, FLOOR_Y, GAME_W, 24, PALETTE.brown).setOrigin(0, 0);
     scene.add.rectangle(0, FLOOR_Y, GAME_W, 2, PALETTE.brownLight).setOrigin(0, 0);
+    for (let x = 0; x < GAME_W; x += 20) scene.add.rectangle(x, FLOOR_Y + 2, 1, 22, 0x5a3e26).setOrigin(0, 0);
     // crowd silhouettes
     for (let i = 0; i < 14; i++) {
       scene.add.circle(12 + i * 22, 150, 6, PALETTE.ink).setAlpha(0.7);

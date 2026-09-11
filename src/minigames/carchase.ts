@@ -81,7 +81,7 @@ let cash: Array<{ x: number; y: number; body: Phaser.GameObjects.Rectangle }> = 
 let jars: Array<{ x: number; y: number; body: Phaser.GameObjects.Container }> = [];
 let jarTimer = 0;
 let warnT = 0;
-let dashes: Phaser.GameObjects.Rectangle[] = [];
+let dashes: Array<Phaser.GameObjects.Rectangle | Phaser.GameObjects.Arc> = [];
 let trafficTimer = 0;
 let policeTimer = 0;
 let cashTimer = 0;
@@ -148,6 +148,13 @@ export const carChase: MinigameModule = {
       for (let y = TOP; y < BOTTOM + 16; y += 16) {
         dashes.push(scene.add.rectangle(ROAD_L + LANE_W * i, y, 1, 8, 0x6a6e76).setOrigin(0.5, 0).setDepth(2));
       }
+    }
+    // trees and bushes on the verges, scrolling with the road
+    for (let i = 0; i < 14; i++) {
+      const side = i % 2 ? ROAD_L - 14 - ((i * 37) % 60) : ROAD_L + ROAD_W + 14 + ((i * 41) % 60);
+      const y = TOP + ((i * 53) % (BOTTOM - TOP + 16));
+      const r = 4 + (i % 3) * 2;
+      dashes.push(scene.add.circle(side, y, r, i % 3 === 0 ? 0x2e5e38 : 0x24482c).setDepth(2));
     }
 
     player = carSprite(scene, px, py, PALETTE.mossLight, false).setDepth(6).setVisible(true);

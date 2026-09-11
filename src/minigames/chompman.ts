@@ -120,7 +120,7 @@ export const chompMan: MinigameModule = {
     pelletsLeft = 0;
     ghosts = [];
 
-    scene.add.rectangle(0, 18, GAME_W, 162, PALETTE.black).setOrigin(0, 0);
+    scene.add.rectangle(0, 18, GAME_W, 162, 0x0a0618).setOrigin(0, 0);
 
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
@@ -128,7 +128,9 @@ export const chompMan: MinigameModule = {
         const idx = r * COLS + c;
         pelletObjs[idx] = null;
         if (ch === '#') {
+          // a neon wall: a lit edge round a dark core
           scene.add.rectangle(tileX(c), tileY(r), TILE - 1, TILE - 1, PALETTE.violet).setAlpha(0.9);
+          scene.add.rectangle(tileX(c), tileY(r), TILE - 5, TILE - 5, 0x2a1a4a);
         } else if (ch === '.') {
           pelletObjs[idx] = scene.add.circle(tileX(c), tileY(r), 1, PALETTE.cream);
           pelletsLeft++;
@@ -161,9 +163,16 @@ export const chompMan: MinigameModule = {
       ['patrol', 19, 13, 19, 13, PALETTE.neon],
     ];
     for (const [kind, sc, sr, cc, cr, color] of spawns) {
+      // a ghost: a rounded head, a frilled hem, two eyes that look at you
       const body = scene.add.rectangle(0, 0, 7, 7, color);
-      const eye = scene.add.rectangle(0, -1, 4, 2, PALETTE.white);
-      const sprite = scene.add.container(tileX(sc), tileY(sr), [body, eye]).setDepth(19);
+      const dome = scene.add.circle(0, -2, 3.5, color);
+      const hemL = scene.add.rectangle(-2.5, 3.5, 2, 1, color);
+      const hemR = scene.add.rectangle(2.5, 3.5, 2, 1, color);
+      const eyeL = scene.add.rectangle(-1.7, -1.5, 2, 2, PALETTE.white);
+      const eyeR = scene.add.rectangle(1.7, -1.5, 2, 2, PALETTE.white);
+      const pupL = scene.add.rectangle(-1.4, -1.5, 1, 1, 0x1a1a3a);
+      const pupR = scene.add.rectangle(2, -1.5, 1, 1, 0x1a1a3a);
+      const sprite = scene.add.container(tileX(sc), tileY(sr), [dome, body, hemL, hemR, eyeL, eyeR, pupL, pupR]).setDepth(19);
       ghosts.push({
         kind,
         col: sc,

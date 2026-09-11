@@ -14,6 +14,8 @@ import { audio } from '../core/audio';
 import { centerText } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
+import { backdrop, panel } from './decor';
+
 
 type Cell = 'X' | 'O' | '';
 const LINES = [
@@ -59,7 +61,7 @@ function minimax(b: Cell[], turn: Cell): { score: number; move: number } {
 
 let board: Cell[] = [];
 let cells: Phaser.GameObjects.Rectangle[] = [];
-let marks: Phaser.GameObjects.BitmapText[] = [];
+let marks: Phaser.GameObjects.Graphics[] = [];
 let busy = false;
 
 export const ticTacToe: MinigameModule = {
@@ -74,27 +76,28 @@ export const ticTacToe: MinigameModule = {
     marks = [];
     busy = false;
 
-    centerText(scene, GAME_W / 2, 26, 'YOU ARE X   -   A DRAW IS A LOSS', PALETTE.ember);
+    // A wooden table, and the board a cream card on it.
+    backdrop(scene, 0x3b2a1c, 0x2a1d14, { speckleColor: 0xffd9a0 });
+    centerText(scene, GAME_W / 2, 26, 'YOU ARE X   -   A DRAW IS A LOSS', PALETTE.gold);
 
-    const size = 30;
+    const size = 34;
     const ox = GAME_W / 2 - size * 1.5;
-    const oy = 42;
+    const oy = 40;
+    panel(scene, ox - 8, oy - 8, size * 3 + 16, size * 3 + 16, 0x5c4326, 0x8a6a3a, 5);
 
     for (let i = 0; i < 9; i++) {
       const cx = ox + (i % 3) * size + size / 2;
       const cy = oy + Math.floor(i / 3) * size + size / 2;
-      const r = scene.add.rectangle(cx, cy, size - 2, size - 2, PALETTE.ink).setStrokeStyle(1, PALETTE.steel);
+      const r = scene.add.rectangle(cx, cy, size - 3, size - 3, 0xfff0c9).setStrokeStyle(1, 0x8a6a3a);
       r.setInteractive({ useHandCursor: true });
       r.on('pointerover', () => {
-        if (!busy && board[i] === '') r.setFillStyle(PALETTE.slate);
+        if (!busy && board[i] === '') r.setFillStyle(0xffe08a);
       });
-      r.on('pointerout', () => r.setFillStyle(PALETTE.ink));
+      r.on('pointerout', () => r.setFillStyle(0xfff0c9));
       r.on('pointerdown', () => play(scene, api, i));
       cells.push(r);
 
-      marks.push(
-        centerText(scene, cx, cy, '', PALETTE.cream, 16),
-      );
+      marks.push(scene.add.graphics().setDepth(5));
     }
   },
 
@@ -106,8 +109,23 @@ export const ticTacToe: MinigameModule = {
 
 function render(): void {
   for (let i = 0; i < 9; i++) {
-    marks[i].setText(board[i]);
-    marks[i].setTint(board[i] === 'X' ? PALETTE.gold : PALETTE.neon);
+    // Drawn marks, not typed ones: a thick X in ember, a ring in teal.
+    const g = marks[i];
+    const { x, y } = cells[i];
+    if (board[i] !== '') cells[i].setFillStyle(0xfff0c9); // no hover tint on a taken square
+    g.clear();
+    if (board[i] === 'X') {
+      g.lineStyle(3, PALETTE.ember, 1);
+      g.beginPath();
+      g.moveTo(x - 8, y - 8);
+      g.lineTo(x + 8, y + 8);
+      g.moveTo(x + 8, y - 8);
+      g.lineTo(x - 8, y + 8);
+      g.strokePath();
+    } else if (board[i] === 'O') {
+      g.lineStyle(3, PALETTE.teal, 1);
+      g.strokeCircle(x, y, 8);
+    }
   }
 }
 

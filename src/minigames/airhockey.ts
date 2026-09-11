@@ -12,6 +12,8 @@ import { audio } from '../core/audio';
 import { centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
+import { backdrop } from './decor';
+
 
 const TABLE = { x: 70, y: 22, w: 180, h: 152 };
 const GOAL_W = 64;
@@ -58,22 +60,31 @@ export const airHockey: MinigameModule = {
     over = false;
     history = [];
 
+    backdrop(scene, 0x101a2a, 0x0a1220, { speckleColor: 0x9fd4ff });
+    // the table: a wooden rail, then the playing surface with its markings
+    scene.add.rectangle(TABLE.x - 6, TABLE.y - 6, TABLE.w + 12, TABLE.h + 12, 0x5c4326).setOrigin(0, 0);
+    scene.add.rectangle(TABLE.x - 6, TABLE.y - 6, TABLE.w + 12, 3, 0x8a6a3a).setOrigin(0, 0);
     scene.add.rectangle(TABLE.x, TABLE.y, TABLE.w, TABLE.h, PALETTE.tealDark).setOrigin(0, 0);
+    scene.add.rectangle(TABLE.x, TABLE.y, TABLE.w, TABLE.h / 2, 0x1a6a6a).setOrigin(0, 0).setAlpha(0.5);
     scene.add
       .rectangle(TABLE.x, TABLE.y, TABLE.w, TABLE.h)
       .setOrigin(0, 0)
       .setStrokeStyle(2, PALETTE.cream);
     scene.add.rectangle(TABLE.x, TABLE.y + TABLE.h / 2, TABLE.w, 1, PALETTE.cream).setOrigin(0, 0).setAlpha(0.6);
     scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + TABLE.h / 2, 18).setStrokeStyle(1, PALETTE.cream).setAlpha(0.6);
+    scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + TABLE.h / 2, 2, PALETTE.cream).setAlpha(0.6);
+    // the creases in front of each goal
+    scene.add.arc(TABLE.x + TABLE.w / 2, TABLE.y, 22, 0, 180, false, 0x000000, 0).setStrokeStyle(1, PALETTE.neon).setAlpha(0.4);
+    scene.add.arc(TABLE.x + TABLE.w / 2, TABLE.y + TABLE.h, 22, 180, 360, false, 0x000000, 0).setStrokeStyle(1, PALETTE.gold).setAlpha(0.4);
 
     // goals
     const gx = TABLE.x + (TABLE.w - GOAL_W) / 2;
     scene.add.rectangle(gx, TABLE.y - 1, GOAL_W, 3, PALETTE.neon).setOrigin(0, 0);
     scene.add.rectangle(gx, TABLE.y + TABLE.h - 2, GOAL_W, 3, PALETTE.gold).setOrigin(0, 0);
 
-    aiPad = scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + 26, PAD_R, PALETTE.neon);
-    pad = scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + TABLE.h - 26, PAD_R, PALETTE.gold);
-    puck = scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + TABLE.h / 2, PUCK_R, PALETTE.cream);
+    aiPad = scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + 26, PAD_R, PALETTE.neon).setStrokeStyle(2, 0xffffff, 0.55);
+    pad = scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + TABLE.h - 26, PAD_R, PALETTE.gold).setStrokeStyle(2, 0xffffff, 0.55);
+    puck = scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + TABLE.h / 2, PUCK_R, 0x1a1a22).setStrokeStyle(1, PALETTE.cream);
     padPrev = { x: pad.x, y: pad.y };
 
     scoreText = centerText(scene, GAME_W / 2, 178, '', PALETTE.cream);

@@ -60,6 +60,8 @@ export const roulette: MinigameModule = {
     scene.add.rectangle(0, 18, GAME_W, 2, 0x40202a).setOrigin(0, 0);
 
     // The machine's face: a cylinder, six chambers, and a lever.
+    scene.add.ellipse(CYL_X, CYL_Y + 10, CYL_R * 3.2, CYL_R * 2.4, 0x3a2028).setAlpha(0.5);
+    scene.add.circle(CYL_X, CYL_Y, CYL_R + 8, 0x6b4a52);
     scene.add.circle(CYL_X, CYL_Y, CYL_R + 6, 0x2b1a1e);
     cylinder = scene.add.circle(CYL_X, CYL_Y, CYL_R, 0x3d2a2e).setStrokeStyle(1, 0x6b4a52);
     for (let i = 0; i < CHAMBERS; i++) {

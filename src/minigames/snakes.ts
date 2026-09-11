@@ -11,6 +11,8 @@ import { audio } from '../core/audio';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
+import { backdrop } from './decor';
+
 
 const SQUARES = 30;
 const LADDERS: Record<number, number> = { 3: 16, 7: 19, 12: 24, 20: 27 };
@@ -49,24 +51,52 @@ export const snakesAndLadders: MinigameModule = {
     aiPos = 0;
     busy = false;
 
-    centerText(scene, GAME_W / 2, 24, 'FIRST TO SQUARE 30', PALETTE.ember);
+    // A green baize table with a printed board on it.
+    backdrop(scene, 0x2f6b3a, 0x1f4a28, { speckleColor: 0xbfe6a0 });
+    centerText(scene, GAME_W / 2, 24, 'FIRST TO SQUARE 30', PALETTE.gold);
 
-    // board
+    // board: cream and tan squares, a ladder drawn up the ladder squares and
+    // a snake drawn down the snake ones
     for (let n = 1; n <= SQUARES; n++) {
       const { x, y } = squareToXY(n);
       const isLadder = LADDERS[n] !== undefined;
       const isSnake = SNAKES[n] !== undefined;
-      const fill = isLadder ? PALETTE.moss : isSnake ? PALETTE.rust : n % 2 ? PALETTE.ink : PALETTE.slate;
-      scene.add.rectangle(x, y, CELL - 2, 20, fill).setStrokeStyle(1, PALETTE.steel);
-      text(scene, x - 13, y - 9, String(n), PALETTE.ash, 8);
-      if (isLadder) text(scene, x + 2, y - 1, `^${LADDERS[n]}`, PALETTE.mossLight, 8);
-      if (isSnake) text(scene, x + 2, y - 1, `v${SNAKES[n]}`, PALETTE.ember, 8);
+      const fill = isLadder ? 0xbfe3a0 : isSnake ? 0xf0b090 : n % 2 ? 0xf3e3b8 : 0xd9c48e;
+      scene.add.rectangle(x, y, CELL - 2, 20, fill).setStrokeStyle(1, 0x7a5a3a);
+      text(scene, x - 13, y - 9, String(n), 0x5a4632, 8);
+      const g = scene.add.graphics();
+      if (isLadder) {
+        g.lineStyle(1, 0x5c4326, 1);
+        for (const rx of [x + 4, x + 10]) {
+          g.beginPath();
+          g.moveTo(rx, y - 7);
+          g.lineTo(rx, y + 8);
+          g.strokePath();
+        }
+        for (let ry = y - 5; ry < y + 8; ry += 4) {
+          g.beginPath();
+          g.moveTo(x + 4, ry);
+          g.lineTo(x + 10, ry);
+          g.strokePath();
+        }
+        text(scene, x - 12, y + 1, `${LADDERS[n]}`, 0x2e5e38, 8);
+      }
+      if (isSnake) {
+        g.lineStyle(2, 0xc31f2e, 1);
+        g.beginPath();
+        g.moveTo(x + 2, y - 7);
+        for (let k = 1; k <= 5; k++) g.lineTo(x + 2 + (k % 2 ? 6 : 0), y - 7 + k * 3);
+        g.strokePath();
+        g.fillStyle(0xc31f2e, 1);
+        g.fillCircle(x + 2, y - 7, 2);
+        text(scene, x - 12, y + 1, `${SNAKES[n]}`, 0x8a2b1a, 8);
+      }
     }
 
     const start = squareToXY(1);
     pieces = {
-      p: scene.add.circle(start.x - 6, start.y + 4, 4, PALETTE.gold).setDepth(10),
-      a: scene.add.circle(start.x + 6, start.y + 4, 4, PALETTE.neon).setDepth(10),
+      p: scene.add.circle(start.x - 6, start.y + 4, 4, PALETTE.gold).setStrokeStyle(1.5, 0x8a6a10).setDepth(10),
+      a: scene.add.circle(start.x + 6, start.y + 4, 4, PALETTE.neon).setStrokeStyle(1.5, 0x8a2050).setDepth(10),
     };
 
     status = centerText(scene, GAME_W / 2, 152, 'your roll', PALETTE.cream);

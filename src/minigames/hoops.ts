@@ -16,6 +16,8 @@ import { audio } from '../core/audio';
 import { centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
+import { backdrop, silhouettes } from './decor';
+
 
 const CHARGE_MS = 1200;
 const GRAVITY = 420;
@@ -77,14 +79,21 @@ export const hoops: MinigameModule = {
     hoopDir = 1;
     over = false;
 
+    // A gym: a dark wall, a crowd along the back, a boarded court floor.
+    backdrop(scene, 0x232a36, 0x1a1f28, { band: 0.2, speckleColor: 0xffd9a0 });
+    scene.add.rectangle(0, 34, GAME_W, 20, 0x2e3644).setOrigin(0, 0);
+    silhouettes(scene, 48, 26, 0x141a24, 0.9);
+    scene.add.rectangle(0, 54, GAME_W, 2, 0x3a4456).setOrigin(0, 0);
     scene.add.rectangle(0, 160, GAME_W, 20, PALETTE.brown).setOrigin(0, 0);
     scene.add.rectangle(0, 160, GAME_W, 2, PALETTE.brownLight).setOrigin(0, 0);
+    for (let x = 0; x < GAME_W; x += 24) scene.add.rectangle(x, 162, 1, 18, 0x5a3e26).setOrigin(0, 0);
+    scene.add.rectangle(GAME_W / 2, 161, 1, 19, PALETTE.cream).setOrigin(0.5, 0).setAlpha(0.5);
 
     backboard = scene.add.rectangle(hoopX, HOOP_Y - 18, 4, 24, PALETTE.bone).setOrigin(0.5, 0);
     hoopRim = scene.add.rectangle(hoopX, HOOP_Y, HOOP_W, 2, PALETTE.ember).setOrigin(0.5, 0);
     net = scene.add.rectangle(hoopX, HOOP_Y + 2, HOOP_W - 4, 8, PALETTE.cream).setOrigin(0.5, 0).setAlpha(0.3);
 
-    ball = scene.add.circle(LAUNCH.x, LAUNCH.y, 4, PALETTE.ember);
+    ball = scene.add.circle(LAUNCH.x, LAUNCH.y, 4, PALETTE.ember).setStrokeStyle(1, 0x8a3a10);
 
     scene.add.rectangle(14, 96, 8, 54, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
     meterFill = scene.add.rectangle(15, 149, 6, 0, PALETTE.gold).setOrigin(0, 1);
