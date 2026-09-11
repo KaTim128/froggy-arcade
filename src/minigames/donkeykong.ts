@@ -1,13 +1,18 @@
 /**
- * BARREL CLIMB.  Hard — 3 tokens in, 6 out.
+ * BARREL CLIMB.  Hard — 5 tokens in, 5 out.
  *
  * An original take on the girder-and-barrel climb (PRD MG-7): original level,
- * original art, original name, no borrowed characters.  Five girders, ladders
+ * original art, original name, no borrowed characters.  Six girders, ladders
  * offset so you always have to cross a floor, and barrels that roll the length
  * of a girder and drop to the next.
  *
  * The barrels are the clock.  They spawn faster the higher you get, so the run
  * that stalls halfway is the run that loses.
+ *
+ * Two kinds of barrel.  The plain one rolls, and you jump it.  The BOUNCER
+ * hops along the girder, higher than you can jump, and the answer to it is the
+ * opposite: walk under it while it is up, and jump it only when it is down.
+ * Reading which is which, at speed, is what the top three girders are about.
  */
 
 import Phaser from 'phaser';
@@ -19,10 +24,11 @@ import type { MinigameApi, MinigameModule } from './types';
 
 const LEFT = 12;
 const RIGHT = GAME_W - 12;
-/** Girder tops, bottom first.  The player stands ON these. */
-const FLOORS = [166, 138, 110, 82, 54];
+/** Girder tops, bottom first.  The player stands ON these.  Six of them. */
+const FLOORS = [166, 142, 118, 94, 70, 46];
 const GRAVITY = 460;
-const JUMP_V = -168;
+/** Peaks about 21px up: over a barrel, under the girder above. */
+const JUMP_V = -140;
 const RUN = 56;
 const CLIMB = 42;
 const BARREL_R = 4;
@@ -41,7 +47,18 @@ const LIVES = 3;
  * barrel landing on top of you.  Every death in a scripted climb was at a
  * ladder, not between them.
  */
-const LADDER_X = [RIGHT - 64, LEFT + 64, RIGHT - 64, 148];
+const LADDER_X = [RIGHT - 64, LEFT + 64, RIGHT - 64, LEFT + 64, 148];
+/**
+ * The bouncer.  A hop is a full arc from girder to peak and back; at 14px it
+ * clears a standing player (whose hit box sits within 8px of the girder) but
+ * not a jumping one, which is what makes the two barrel types need opposite
+ * answers.  They come only once the round is under way.
+ */
+const BOUNCE_H = 14;
+const BOUNCE_HZ = 1.6;
+const BOUNCER_SPEED = 84;
+const BOUNCER_AFTER_MS = 9000;
+const BOUNCER_CHANCE = 0.4;
 /** A backstop: barrels should retire themselves, but never let them stack. */
 const MAX_BARRELS = 12;
 
@@ -57,6 +74,10 @@ interface Barrel {
   floor: number;
   dir: number;
   falling: boolean;
+  /** A bouncer hops; a plain barrel rolls.  See BOUNCE_H. */
+  bouncer: boolean;
+  /** Where the bouncer is in its hop, radians. */
+  phase: number;
   dot: Phaser.GameObjects.Arc;
   /**
    * The ladder this barrel has already flipped a coin for, so the 50/50 is
@@ -135,12 +156,13 @@ export const donkeyKong: MinigameModule = {
     }
 
     // the thing at the top that keeps rolling them
-    scene.add.rectangle(LEFT + 6, FLOORS[4] - 20, 22, 20, 0x5a3a22).setOrigin(0, 0);
-    scene.add.rectangle(LEFT + 10, FLOORS[4] - 16, 5, 5, PALETTE.blood).setOrigin(0, 0);
-    scene.add.rectangle(LEFT + 19, FLOORS[4] - 16, 5, 5, PALETTE.blood).setOrigin(0, 0);
+    const top = FLOORS[FLOORS.length - 1];
+    scene.add.rectangle(LEFT + 6, top - 20, 22, 20, 0x5a3a22).setOrigin(0, 0);
+    scene.add.rectangle(LEFT + 10, top - 16, 5, 5, PALETTE.blood).setOrigin(0, 0);
+    scene.add.rectangle(LEFT + 19, top - 16, 5, 5, PALETTE.blood).setOrigin(0, 0);
     // and the way out, at the very top
-    scene.add.rectangle(RIGHT - 30, FLOORS[4] - 14, 16, 14, PALETTE.gold).setOrigin(0, 0);
-    text(scene, RIGHT - 34, FLOORS[4] - 24, 'OUT', PALETTE.gold);
+    scene.add.rectangle(RIGHT - 30, top - 14, 16, 14, PALETTE.gold).setOrigin(0, 0);
+    text(scene, RIGHT - 34, top - 24, 'OUT', PALETTE.gold);
 
     player = { x: LEFT + 14, y: FLOORS[0], vy: 0, floor: 0, onLadder: false, climbing: false };
     sprite = scene.add.rectangle(player.x, player.y, 7, 11, 0x46a0e0).setOrigin(0.5, 1).setDepth(20);
@@ -173,7 +195,7 @@ export const donkeyKong: MinigameModule = {
           player: { ...player },
           lives,
           ladders: ladders.map((l) => ({ ...l })),
-          barrels: barrels.map((b) => ({ x: b.x, y: b.y, floor: b.floor, dir: b.dir })),
+          barrels: barrels.map((b) => ({ x: b.x, y: b.y, floor: b.floor, dir: b.dir, bouncer: b.bouncer })),
           drops: { ...drops },
           floors: FLOORS,
           exitX: RIGHT - 34,
@@ -329,17 +351,22 @@ function place(): void {
 function spawnBarrel(): void {
   if (!sceneRef || barrels.length >= MAX_BARRELS) return;
   const topFloor = FLOORS.length - 1;
-  const dot = sceneRef.add.circle(LEFT + 20, FLOORS[topFloor] - BARREL_R, BARREL_R, 0xd9822b).setDepth(15);
+  const bouncer = elapsed > BOUNCER_AFTER_MS && Math.random() < BOUNCER_CHANCE;
+  const dot = sceneRef.add
+    .circle(LEFT + 20, FLOORS[topFloor] - BARREL_R, BARREL_R, bouncer ? PALETTE.neon : 0xd9822b)
+    .setDepth(15);
   barrels.push({
     x: LEFT + 20,
     y: FLOORS[topFloor] - BARREL_R,
     floor: topFloor,
     dir: 1,
     falling: false,
+    bouncer,
+    phase: 0,
     dot,
     rolledAt: null,
   });
-  audio.sfx('door_rattle');
+  audio.sfx(bouncer ? 'hop_wet' : 'door_rattle');
 }
 
 function stepBarrels(dt: number): void {
@@ -357,7 +384,13 @@ function stepBarrels(dt: number): void {
         b.dir = b.x < (LEFT + RIGHT) / 2 ? 1 : -1;
       }
     } else {
-      b.x += b.dir * BARREL_SPEED * dt;
+      b.x += b.dir * (b.bouncer ? BOUNCER_SPEED : BARREL_SPEED) * dt;
+      if (b.bouncer) {
+        // Hop: a half-sine per bounce, so it spends its time up in the air
+        // and comes down hard rather than floating.
+        b.phase += dt * BOUNCE_HZ * Math.PI;
+        b.y = FLOORS[b.floor] - BARREL_R - Math.abs(Math.sin(b.phase)) * BOUNCE_H;
+      }
       // At the end of a girder — or at a ladder, sometimes — they drop.
       // Run the full length of the girder before dropping.  Dropping early —
       // at the first ladder they touched — meant a barrel only ever covered a
@@ -366,7 +399,9 @@ function stepBarrels(dt: number): void {
       // Each floor has exactly one ladder leading down from it, and a barrel
       // reaching that ladder tosses a coin: half take it, half roll on to the
       // end of the girder.  One flip per crossing, not one per frame.
-      const down = ladders.find((ld) => ld.from === b.floor - 1 && Math.abs(ld.x - b.x) < 4);
+      // A bouncer is in the air more than it is on the girder, so it never
+      // takes a ladder: it goes off the end, every time.
+      const down = b.bouncer ? undefined : ladders.find((ld) => ld.from === b.floor - 1 && Math.abs(ld.x - b.x) < 4);
       let takesLadder = false;
       if (down && b.rolledAt !== down.x) {
         b.rolledAt = down.x; // this ladder is now decided, either way
@@ -387,8 +422,13 @@ function stepBarrels(dt: number): void {
       // between the walls forever, and the floor silted up with barrels.
     }
     b.dot.setPosition(b.x, b.y);
-    // spin, so they read as rolling
-    b.dot.setScale(1, 0.8 + Math.abs(Math.sin(b.x / 6)) * 0.35);
+    // spin, so they read as rolling; a bouncer squashes on landing instead
+    if (b.bouncer) {
+      const air = Math.abs(Math.sin(b.phase));
+      b.dot.setScale(1.15 - air * 0.15, 0.8 + air * 0.3);
+    } else {
+      b.dot.setScale(1, 0.8 + Math.abs(Math.sin(b.x / 6)) * 0.35);
+    }
   }
 
   // retire anything that has reached the bottom and run off the end

@@ -11,9 +11,11 @@
  * and the shell reports how the whole sitting went.  Every token in and out
  * still moves through the shell, so the ledger stays the only path.
  *
- * Single deck, dealer stands on 17, blackjack pays as a win, a push goes to the
- * house.  Aces are the only fiddly part: they count eleven until that would
- * bust you, then one, and a hand can hold several of them.
+ * Single deck, dealer stands on 17, blackjack pays as a win, and a push is a
+ * push: the same total on both sides hands your stake straight back, so a
+ * tied hand costs nothing and pays nothing.  Aces are the only fiddly part:
+ * they count eleven until that would bust you, then one, and a hand can hold
+ * several of them.
  *
  * Froggy deals.  He is drawn on the unfiltered overlay like everywhere else —
  * he is never a sprite (PRD FR-1).
@@ -313,7 +315,7 @@ function stand(): void {
     const d = score(dealer);
     if (d > 21) finish(true, 'DEALER BUSTS');
     else if (p > d) finish(true, `${p} BEATS ${d}`);
-    else if (p === d) finish(false, `PUSH ON ${p} - HOUSE WINS`);
+    else if (p === d) finish(false, `PUSH ON ${p} - BET RETURNED`, true);
     else finish(false, `${d} BEATS ${p}`);
   };
   sceneRef.time.delayedCall(600, step);
@@ -382,18 +384,21 @@ function drawStake(c: Phaser.GameObjects.Container): void {
   betText?.setText(phase === 'bet' ? `${bet}` : '').setVisible(phase === 'bet');
 }
 
-function finish(won: boolean, why: string): void {
+function finish(won: boolean, why: string, push = false): void {
   if (phase === 'over') return;
   phase = 'over';
   outcome = why;
   status?.setText(why);
   hitBtn?.setVisible(false);
   standBtn?.setVisible(false);
-  audio.sfx(won ? 'chime' : 'buzzer');
+  audio.sfx(won ? 'chime' : push ? 'ui_blip' : 'buzzer');
 
   // The hand settles here and now, so the winnings are in your pocket before
-  // you decide whether to put them back on the felt.
+  // you decide whether to put them back on the felt.  A push gives the stake
+  // back at 1x — the bet was debited on the deal, so this is what "nothing
+  // changes hands" costs to say through the ledger.
   if (won) apiRef?.payout(bet * 2);
+  else if (push) apiRef?.payout(bet);
   render();
 
   sceneRef?.time.delayedCall(1100, () => offerAnother());

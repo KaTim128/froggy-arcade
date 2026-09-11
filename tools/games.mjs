@@ -38,6 +38,10 @@ const GAMES = [
   { id: 'blackjack', drive: async (p) => { await sleep(500); await p.keyboard.press('ArrowUp'); await p.keyboard.press('ArrowRight'); await sleep(400); await p.keyboard.press('Space'); await sleep(900); await p.keyboard.press('KeyH'); await sleep(900); await p.keyboard.press('Space'); await sleep(3000); } },
   { id: 'roulette', drive: async (p) => { for (let i = 0; i < 5; i++) { await p.keyboard.press('Space'); await sleep(1300); } } },
   { id: 'battleship', drive: async (p) => { const g = (x, y) => [640 + (x - 160) * 4, 360 + (y - 90) * 4]; for (const [c, r] of [[0, 0], [2, 2], [4, 4], [6, 1]]) { await p.mouse.click(...g(186 + c * 12 + 6, 44 + r * 12 + 6)); await sleep(900); } } },
+  { id: 'frogcross', drive: async (p) => { for (let i = 0; i < 4; i++) { await p.keyboard.press('KeyW'); await sleep(350); } await p.keyboard.press('KeyA'); await sleep(600); } },
+  { id: 'carchase', drive: async (p) => { await p.keyboard.down('KeyA'); await sleep(500); await p.keyboard.up('KeyA'); await p.keyboard.press('Space'); await sleep(1200); await p.keyboard.down('KeyD'); await sleep(500); await p.keyboard.up('KeyD'); } },
+  { id: 'bowling', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(200); await p.keyboard.up('KeyD'); await p.keyboard.down('Space'); await sleep(600); await p.keyboard.up('Space'); await sleep(2600); } },
+  { id: 'snooker', drive: async (p) => { await p.mouse.move(900, 400); await sleep(200); await p.keyboard.down('Space'); await sleep(500); await p.keyboard.up('Space'); await sleep(2500); } },
 ];
 
 const browser = await puppeteer.launch({
@@ -84,7 +88,7 @@ for (const g of GAMES) {
   await page.close();
 }
 
-console.log(failures === 0 ? '\nAll 12 games launch, play and quit cleanly.' : `\n${failures} game(s) failed.`);
+console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit cleanly.` : `\n${failures} game(s) failed.`);
 
 // "Launches and quits cleanly" passed for months on a Chomp-Man where nothing
 // moved at all: the grid step was smaller than the centre-snap band at 60fps,
@@ -192,7 +196,8 @@ console.log(failures === 0 ? '\nAll 12 games launch, play and quit cleanly.' : `
   };
 
   let climbed = true;
-  for (let floor = 0; floor < 4; floor++) {
+  const floorCount = (await read()).floors.length;
+  for (let floor = 0; floor < floorCount - 1; floor++) {
     const s = await read();
     const ladderX = s.ladders.find((l) => l.from === floor).x;
     await page.evaluate((f, x) => window.__dk.teleport(f, x), floor, ladderX);
@@ -213,12 +218,12 @@ console.log(failures === 0 ? '\nAll 12 games launch, play and quit cleanly.' : `
       break;
     }
   }
-  console.log(`${climbed ? 'PASS' : 'FAIL'}  barrel climb: every ladder reaches the next girder`);
+  console.log(`${climbed ? 'PASS' : 'FAIL'}  barrel climb: every ladder reaches the next girder  — ${floorCount} girders`);
   if (!climbed) failures++;
 
   // ---- and the exit on the top girder ends the game as a win
   const before = (await read()).tokens;
-  await page.evaluate(() => window.__dk.teleport(4, 40));
+  await page.evaluate((f) => window.__dk.teleport(f, 40), floorCount - 1);
   await sleep(200);
   await hold('KeyD');
   await sleep(6000);
@@ -228,6 +233,31 @@ console.log(failures === 0 ? '\nAll 12 games launch, play and quit cleanly.' : `
   const won = end.tokens > before;
   console.log(`${won ? 'PASS' : 'FAIL'}  barrel climb: the exit wins  — ${before} -> ${end.tokens} tokens`);
   if (!won) failures++;
+  await page.close();
+}
+
+// The two score-for-tokens cabinets.  Their payout is a formula, not a
+// cabinet constant, so the shell has to be handed the right number: the bar
+// pays the base, and every further bar adds one.  Banking on ENTER is the
+// path a player who has made the bar actually takes.
+for (const g of [
+  { id: 'frogcross', hook: '__frog', set: 'setPoints', score: 430, expect: 6, label: '430 pts' },
+  { id: 'carchase', hook: '__chase', set: 'setCash', score: 600, expect: 9, label: '600 cash' },
+]) {
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=${g.id}`, { waitUntil: 'networkidle2' });
+  await sleep(2200);
+  await page.mouse.click(640, 60);
+  const before = await page.evaluate(() => window.__froggy.state().tokens);
+  await page.evaluate((h, s, n) => window[h][s](n), g.hook, g.set, g.score);
+  await page.keyboard.press('Enter');
+  await sleep(1800);
+  const after = await page.evaluate(() => window.__froggy.state());
+  const paid = after.tokens - before;
+  const ok = paid === g.expect && after.highScores[g.id] === g.score;
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${g.id}: ${g.label} banks +${g.expect} and sets the high score  — paid ${paid}, best ${after.highScores[g.id]}`);
+  if (!ok) failures++;
   await page.close();
 }
 

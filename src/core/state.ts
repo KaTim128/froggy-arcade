@@ -19,7 +19,11 @@ export type GameId =
   | 'battleship'
   | 'blackjack'
   | 'slots'
-  | 'roulette';
+  | 'roulette'
+  | 'frogcross'
+  | 'carchase'
+  | 'bowling'
+  | 'snooker';
 
 export interface Settings {
   master: number; // 0..100
@@ -42,6 +46,11 @@ export interface GameState {
   /** Prizes already handed over to the man.  Owned and sold are different. */
   prizesSold: string[];
   gamesPlayed: Record<GameId, number>;
+  /**
+   * Best score per game, for the cabinets that keep one.  Part of the run, so
+   * it belongs to the profile and goes with the reset.
+   */
+  highScores: Partial<Record<GameId, number>>;
   route: Route;
   hasKey: boolean;
   seenIntro: boolean;
@@ -126,7 +135,12 @@ function defaultState(): GameState {
       blackjack: 0,
       slots: 0,
       roulette: 0,
+      frogcross: 0,
+      carchase: 0,
+      bowling: 0,
+      snooker: 0,
     },
+    highScores: {},
     route: 'normal',
     hasKey: false,
     seenIntro: false,
@@ -209,6 +223,7 @@ class Store {
     const fresh = defaultState();
     Object.assign(fresh, run, { settings });
     fresh.gamesPlayed = { ...defaultState().gamesPlayed, ...(run.gamesPlayed ?? {}) };
+    fresh.highScores = run.highScores && typeof run.highScores === 'object' ? { ...run.highScores } : {};
     fresh.tokens = Math.max(0, Math.floor(run.tokens ?? 0));
     fresh.prizesOwned = Array.isArray(run.prizesOwned) ? run.prizesOwned : [];
     fresh.prizesSold = Array.isArray(run.prizesSold) ? run.prizesSold : [];
@@ -372,6 +387,19 @@ class Store {
   bumpGamePlayed(id: GameId): void {
     this.state.gamesPlayed[id] = (this.state.gamesPlayed[id] ?? 0) + 1;
     this.touch();
+  }
+
+  highScore(id: GameId): number {
+    return this.state.highScores[id] ?? 0;
+  }
+
+  /** Record a score if it beats the best.  Returns true when it did. */
+  setHighScore(id: GameId, score: number): boolean {
+    const n = Math.max(0, Math.floor(score));
+    if (n <= this.highScore(id)) return false;
+    this.state.highScores[id] = n;
+    this.touch();
+    return true;
   }
 
   subscribe(fn: Listener): () => void {

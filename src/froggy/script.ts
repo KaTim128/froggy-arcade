@@ -60,19 +60,20 @@ export const charityScript: DialogueLine[] = [
 /**
  * PRD §7.8 — the hinge of the whole game.
  * The three-second hold is a hard requirement, not a suggestion.
+ *
+ * He looks exactly as he always has here — big friendly pupils, the idle
+ * bounce — at the customer's request.  The pinprick-pupil stare was cut from
+ * this box: the words and the wait do the turn on their own, and the face
+ * that says them stays the one you were fond of.
  */
 export const secondBustScript: DialogueLine[] = [
   {
     text: "Oops. Looks like you're all out of froggy-tokens.",
-    pose: 'blank',
-    freeze: true,
     holdAfter: 3000,
     auto: true,
   },
   {
     text: 'You can go now.',
-    pose: 'blank',
-    freeze: true,
     holdBefore: 400,
     holdAfter: 1400,
     auto: true,

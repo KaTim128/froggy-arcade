@@ -1,9 +1,13 @@
 /**
  * Basketball Hoops.  PRD §9.5 — Medium, 3 tokens in, 6 out.
  *
- * Hold SPACE to charge, release to shoot.  The meter bounces back down at the
- * top so there is no infinite hold.  The hoop slides, and speeds up 15% per
- * made shot.  Five makes in sixty seconds.
+ * Hold SPACE to charge, release to shoot; W and S tilt the shot while you do.
+ * The meter bounces back down at the top so there is no infinite hold.  The
+ * hoop slides, and speeds up 15% per made shot.  Five makes in sixty seconds.
+ *
+ * An arrow at the ball shows where it is going: its direction is the aim and
+ * its length is the charge, so what leaves your hand is what you were looking
+ * at, not a guess from a meter on the other side of the screen.
  */
 
 import Phaser from 'phaser';
@@ -16,13 +20,21 @@ import type { MinigameApi, MinigameModule } from './types';
 const CHARGE_MS = 1200;
 const GRAVITY = 420;
 const LAUNCH = { x: 46, y: 150 };
-const LAUNCH_ANGLE = -Math.PI / 3.1; // fixed: power is the only variable
+/** Where the shot starts out, and how far W/S can tilt it either way. */
+const LAUNCH_ANGLE = -Math.PI / 3.1;
+const AIM_MIN = -Math.PI * 0.46; // nearly straight up
+const AIM_MAX = -Math.PI * 0.14; // a flat line drive
+const AIM_RATE = 1.3; // radians per second held
+/** The arrow: this long at zero charge, and this much longer at full. */
+const ARROW_MIN = 12;
+const ARROW_GROW = 30;
 const TARGET_MAKES = 5;
 const ROUND_MS = 60_000;
 const HOOP_Y = 74;
 const HOOP_W = 22;
 
 let power = 0;
+let aim = LAUNCH_ANGLE;
 let charging = false;
 let chargeDir = 1;
 let ball: Phaser.GameObjects.Arc | null = null;
@@ -36,6 +48,8 @@ let timeLeft = ROUND_MS;
 let over = false;
 
 let meterFill: Phaser.GameObjects.Rectangle | null = null;
+let arrow: Phaser.GameObjects.Graphics | null = null;
+let aimKeys: { up: Phaser.Input.Keyboard.Key[]; down: Phaser.Input.Keyboard.Key[] } = { up: [], down: [] };
 let hoopRim: Phaser.GameObjects.Rectangle | null = null;
 let backboard: Phaser.GameObjects.Rectangle | null = null;
 let net: Phaser.GameObjects.Rectangle | null = null;
@@ -51,6 +65,7 @@ export const hoops: MinigameModule = {
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;
     power = 0;
+    aim = LAUNCH_ANGLE;
     charging = false;
     chargeDir = 1;
     inFlight = false;
@@ -74,11 +89,16 @@ export const hoops: MinigameModule = {
     meterFill = scene.add.rectangle(15, 149, 6, 0, PALETTE.gold).setOrigin(0, 1);
     text(scene, 8, 154, 'HOLD', PALETTE.ash);
     text(scene, 8, 162, 'SPACE', PALETTE.ash);
+    text(scene, 44, 162, 'W/S AIM', PALETTE.ash);
+
+    arrow = scene.add.graphics().setDepth(30);
 
     hud = centerText(scene, GAME_W / 2, 26, '', PALETTE.cream);
     refreshHud();
 
     const kb = scene.input.keyboard;
+    const bind = (names: string[]) => (kb ? names.map((n) => kb.addKey(n)) : []);
+    aimKeys = { up: bind(['W', 'UP']), down: bind(['S', 'DOWN']) };
     kb?.on('keydown-SPACE', () => {
       // A held key auto-repeats keydown.  Without the `charging` guard every
       // repeat reset power to zero, so holding SPACE pinned the meter at empty
@@ -119,6 +139,14 @@ export const hoops: MinigameModule = {
     hoopRim.x = hoopX;
     backboard.x = hoopX + HOOP_W / 2 + 2;
     net.x = hoopX;
+
+    // ---- aim.  W tilts the shot up, S flattens it.  Works at any time you
+    // are not mid-flight, so you can line up before you start charging.
+    if (!inFlight) {
+      const tilt = (aimKeys.up.some((k) => k.isDown) ? -1 : 0) + (aimKeys.down.some((k) => k.isDown) ? 1 : 0);
+      aim = Phaser.Math.Clamp(aim + tilt * AIM_RATE * dt, AIM_MIN, AIM_MAX);
+    }
+    drawArrow();
 
     // ---- charge meter, bouncing at the top
     if (charging) {
@@ -179,15 +207,49 @@ export const hoops: MinigameModule = {
   destroy() {
     ball = null;
     hoopRim = null;
+    arrow = null;
     apiRef = null;
   },
 };
 
+/**
+ * The launch arrow.  Dim while idle, so you can see where you are pointing;
+ * bright and growing while SPACE is held, so the length you release at is the
+ * shot you get.  Gone while the ball is in the air.
+ */
+function drawArrow(): void {
+  if (!arrow) return;
+  arrow.clear();
+  if (inFlight || over) return;
+  const len = ARROW_MIN + (charging ? power : 0) * ARROW_GROW;
+  const dx = Math.cos(aim);
+  const dy = Math.sin(aim);
+  const x0 = LAUNCH.x + dx * 6;
+  const y0 = LAUNCH.y + dy * 6;
+  const x1 = x0 + dx * len;
+  const y1 = y0 + dy * len;
+  const colour = charging ? PALETTE.gold : PALETTE.ash;
+  arrow.lineStyle(charging ? 2 : 1, colour, charging ? 1 : 0.7);
+  arrow.beginPath();
+  arrow.moveTo(x0, y0);
+  arrow.lineTo(x1, y1);
+  arrow.strokePath();
+  // the head: two short strokes back from the tip
+  const h = 5;
+  const a = Math.PI * 0.8;
+  arrow.beginPath();
+  arrow.moveTo(x1, y1);
+  arrow.lineTo(x1 + Math.cos(aim + a) * h, y1 + Math.sin(aim + a) * h);
+  arrow.moveTo(x1, y1);
+  arrow.lineTo(x1 + Math.cos(aim - a) * h, y1 + Math.sin(aim - a) * h);
+  arrow.strokePath();
+}
+
 function shoot(): void {
   if (!ball) return;
   const speed = 150 + power * 300;
-  ballVel = { x: Math.cos(LAUNCH_ANGLE) * speed * -1, y: Math.sin(LAUNCH_ANGLE) * speed };
-  ballVel.x = Math.abs(ballVel.x);
+  // Exactly the direction the arrow was drawn in.
+  ballVel = { x: Math.cos(aim) * speed, y: Math.sin(aim) * speed };
   inFlight = true;
   scoredThisFlight = false;
   audio.sfx('whack');
@@ -209,6 +271,7 @@ function refreshHud(): void {
 function finish(): void {
   if (over) return;
   over = true;
+  arrow?.clear();
   const won = makes >= TARGET_MAKES;
   ball?.scene.time.delayedCall(500, () => (won ? apiRef?.win() : apiRef?.lose()));
 }

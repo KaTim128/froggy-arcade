@@ -114,6 +114,10 @@ try {
       import('/src/minigames/blackjack.ts'),
       import('/src/minigames/slots.ts'),
       import('/src/minigames/roulette.ts'),
+      import('/src/minigames/frogcross.ts'),
+      import('/src/minigames/carchase.ts'),
+      import('/src/minigames/bowling.ts'),
+      import('/src/minigames/snooker.ts'),
     ]);
 
     // Every string these modules can put in front of the player.
