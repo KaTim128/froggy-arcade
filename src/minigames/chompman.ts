@@ -103,6 +103,7 @@ const tileY = (row: number) => OY + row * TILE + TILE / 2;
 export const chompMan: MinigameModule = {
   id: 'chompman',
   title: 'CHOMP-MAN',
+  music: 'game_chompman',
   rules: 'clear the maze',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

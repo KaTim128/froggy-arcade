@@ -84,6 +84,7 @@ let aiSway = 0;
 export const grudge: MinigameModule = {
   id: 'grudge',
   title: 'GRUDGE',
+  music: 'game_grudge',
   rules: 'best of 3',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

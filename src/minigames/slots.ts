@@ -67,6 +67,7 @@ let apiRef: MinigameApi | null = null;
 export const slots: MinigameModule = {
   id: 'slots',
   title: 'FROGGY SLOTS',
+  music: 'game_slots',
   rules: 'two tokens a spin',
   payoutNote: 'PAYS 6 / 15',
 

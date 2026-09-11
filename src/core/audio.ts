@@ -16,6 +16,7 @@
 
 import { Howl } from 'howler';
 import { store } from './state';
+import { TRACKS, runTrack } from './tracks';
 
 export const CROSSFADE_MS = 800; // PRD AU-1
 
@@ -201,7 +202,10 @@ class AudioManager {
 
     const stops: Array<() => void> = [];
 
-    if (id === 'hub_lofi' || id === 'theme_arcade') {
+    if (TRACKS[id]) {
+      // The rooms' and the cabinets' own tunes.  See tracks.ts.
+      stops.push(runTrack(this.ctx, gain, TRACKS[id]));
+    } else if (id === 'hub_lofi' || id === 'theme_arcade') {
       stops.push(this.placeholderMusic(gain, id === 'theme_arcade'));
     } else if (id === 'casino_chiptune') {
       stops.push(this.placeholderChiptune(gain));
@@ -823,6 +827,14 @@ class AudioManager {
       // You made it out of a zone.  A soft rising pair of notes and their
       // echoes, dying away down a long corridor.  Deliberately not a scare:
       // the room provides those, and this is the one kind thing it says.
+      // A low swell that rises out of nothing and goes back into it.  It is
+      // not him.  It is the sound of a room you are not sure is empty.
+      case 'eerie_swell':
+        beep(52, 2.4, 0.06, 'sine');
+        beep(52.7, 2.4, 0.04, 'sine', 0.05);
+        beep(78, 1.8, 0.02, 'triangle', 0.4);
+        noise(1.6, 0.012, 240, 0.3);
+        break;
       case 'zone_clear':
         beep(392, 0.28, 0.05, 'sine');
         beep(587, 0.42, 0.045, 'sine', 0.24);
@@ -882,8 +894,64 @@ class AudioManager {
     const ctx = this.ctx;
     const t = ctx.currentTime;
     const out = ctx.createGain();
-    out.gain.value = 0.72; // ceiling, not unity
+    out.gain.value = 0.85; // ceiling, not unity
     out.connect(ctx.destination);
+
+    // The scream: three detuned saws through a hard clip, sweeping down from
+    // a shriek to a roar over most of a second.  The clipping is what makes
+    // it a voice and not a synth.
+    const clip = ctx.createWaveShaper();
+    const curve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) {
+      const x = (i / 127.5) - 1;
+      curve[i] = Math.tanh(x * 4.5);
+    }
+    clip.curve = curve;
+    const clipGain = ctx.createGain();
+    clipGain.gain.setValueAtTime(0.0001, t);
+    clipGain.gain.linearRampToValueAtTime(0.45, t + 0.03);
+    clipGain.gain.setValueAtTime(0.45, t + 0.5);
+    clipGain.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+    clip.connect(clipGain);
+    clipGain.connect(out);
+    for (const [f0, f1, d] of [
+      [920, 260, 0],
+      [935, 270, 0.01],
+      [1380, 390, 0.02],
+      [610, 180, 0.03],
+    ]) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(f0, t + d);
+      osc.frequency.exponentialRampToValueAtTime(f1, t + d + 0.9);
+      // a wobble in the throat
+      const lfo = ctx.createOscillator();
+      const lfoG = ctx.createGain();
+      lfo.frequency.value = 11 + d * 100;
+      lfoG.gain.value = 22;
+      lfo.connect(lfoG);
+      lfoG.connect(osc.frequency);
+      osc.connect(clip);
+      lfo.start(t);
+      osc.start(t + d);
+      osc.stop(t + 1.6);
+      lfo.stop(t + 1.6);
+    }
+    // a second hit a third of a second in, when you thought it was over
+    for (const f of [44, 47]) {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(f * 4, t + 0.34);
+      osc.frequency.exponentialRampToValueAtTime(f, t + 0.7);
+      g.gain.setValueAtTime(0.0001, t + 0.34);
+      g.gain.linearRampToValueAtTime(0.4, t + 0.35);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
+      osc.connect(g);
+      g.connect(out);
+      osc.start(t + 0.34);
+      osc.stop(t + 1.5);
+    }
 
     // sub impact — the punch you feel before you hear it
     for (const f of [38, 41, 55, 58]) {
@@ -967,6 +1035,7 @@ export type SfxName =
   | 'step_walk'
   | 'step_run'
   | 'zone_clear'
+  | 'eerie_swell'
   | 'ticket_machine';
 
 export const audio = new AudioManager();

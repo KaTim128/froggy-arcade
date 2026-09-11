@@ -107,6 +107,7 @@ function maxBet(): number {
 export const blackjack: MinigameModule = {
   id: 'blackjack',
   title: 'BLACKJACK',
+  music: 'game_blackjack',
   rules: 'bet what you like, beat the dealer to 21',
   payoutNote: 'PAYS 2X BET',
 

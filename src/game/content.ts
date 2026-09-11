@@ -76,7 +76,7 @@ export const CABINETS: CabinetDef[] = [
 
   // ---- the back room: five to seven a go
   { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 5, reward: 10, x: 48, y: 96, color: 0xc31f2e, room: 'annex' },
-  { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 5, reward: 5, x: 112, y: 96, color: 0xd9822b, room: 'annex' },
+  { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 7, reward: 7, x: 112, y: 96, color: 0xd9822b, room: 'annex' },
   { id: 'airhockey', title: 'AIR HOCKEY', tier: 'hard', cost: 5, reward: 10, x: 176, y: 96, color: 0xffd45e, room: 'annex' },
   { id: 'chompman', title: 'CHOMP-MAN', tier: 'hard', cost: 7, reward: 7, x: 240, y: 96, color: 0x7b4bd8, room: 'annex' },
   // Along the bottom wall, under the middle two of the row above.  Neither

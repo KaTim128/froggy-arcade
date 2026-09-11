@@ -3,7 +3,7 @@
  *
  * Nine holes, 25 hits in 40 seconds, ramping speed.
  *
- * THE CAMEO (PRD §9.6 / VOC-21): roughly 1 in 20 frogs is Froggy himself —
+ * THE CAMEO (PRD §9.6 / VOC-21): one frog in forty is Froggy himself —
  * smooth, non-pixel, out of place among the pixel frogs.  Whacking him:
  *   - does not count as a hit
  *   - costs nothing
@@ -31,17 +31,10 @@ const SPAWN_MS_START = 750;
 const SPAWN_MS_END = 450;
 const MAX_UP = 3;
 /**
- * How often he turns up in a hole himself.
- *
- * Once per round at the very most, in one round out of four, and never in the
- * first nine seconds.  It was a one-in-twenty roll on every spawn, which over
- * a forty second round meant three or four visits — at that rate he is a game
- * mechanic you learn to ignore rather than something you are not sure you saw.
- * The whole effect depends on it almost never happening.
+ * How often he turns up in a hole himself: a straight one-in-forty roll on
+ * every frog that comes up, and nothing else gating it.  The customer's odds.
  */
-const FROGGY_ROUND_CHANCE = 1 / 4;
-const FROGGY_SPAWN_CHANCE = 1 / 18;
-const FROGGY_EARLIEST_MS = 9000;
+const FROGGY_SPAWN_CHANCE = 1 / 40;
 const FROGGY_STARE_MS = 1200;
 
 interface Hole {
@@ -60,15 +53,13 @@ let timeLeft = ROUND_MS;
 let spawnTimer = 0;
 let hud: Phaser.GameObjects.BitmapText | null = null;
 let over = false;
-/** Whether this round gets a visit at all, rolled once when it starts. */
-let froggyDue = false;
-/** And whether it has already happened.  He does not come twice. */
-let froggySeen = false;
 let apiRef: MinigameApi | null = null;
+let sceneRef: Phaser.Scene | null = null;
 
 export const whackAFrog: MinigameModule = {
   id: 'whack',
   title: 'WHACK-A-FROG',
+  music: 'game_whack',
   rules: '25 hits in 40 seconds',
 
   create(scene: Phaser.Scene, api: MinigameApi) {
@@ -77,11 +68,23 @@ export const whackAFrog: MinigameModule = {
     timeLeft = ROUND_MS;
     spawnTimer = 0;
     over = false;
-    froggyDue = Math.random() < FROGGY_ROUND_CHANCE;
-    froggySeen = false;
+    sceneRef = scene;
     holes = [];
 
+    // The lawn: grass with lighter blades, a darker border, and a little
+    // clover — a garden, not a green rectangle.
     scene.add.rectangle(0, 18, GAME_W, 162, PALETTE.moss).setOrigin(0, 0);
+    scene.add.rectangle(0, 18, GAME_W, 162, 0x2e5e38).setOrigin(0, 0).setAlpha(0.35);
+    scene.add.rectangle(8, 36, GAME_W - 16, 138, 0x4a8a52).setOrigin(0, 0).setStrokeStyle(2, 0x2e5e38);
+    for (let i = 0; i < 90; i++) {
+      const gx = 12 + ((i * 131 + ((i * i) % 23) * 7) % (GAME_W - 24));
+      const gy = 40 + ((i * 89 + ((i * 3) % 11) * 5) % 130);
+      scene.add.rectangle(gx, gy, 1, 3 + (i % 3), 0x6fbb6a).setOrigin(0.5, 1).setAlpha(0.7);
+    }
+    for (let i = 0; i < 8; i++) {
+      scene.add.circle(20 + ((i * 71) % (GAME_W - 40)), 44 + ((i * 47) % 124), 2, 0xbfe6a0).setAlpha(0.5);
+    }
+    scene.add.rectangle(GAME_W / 2, 27, 120, 12, PALETTE.ink, 0.6);
     hud = centerText(scene, GAME_W / 2, 26, '', PALETTE.cream);
 
     for (let r = 0; r < 3; r++) {
@@ -89,19 +92,29 @@ export const whackAFrog: MinigameModule = {
         const x = 100 + c * 60;
         const y = 62 + r * 42;
 
-        scene.add.ellipse(x, y + 10, 40, 14, PALETTE.ink);
+        // the hole: a ring of dug earth around a dark mouth
+        scene.add.ellipse(x, y + 12, 46, 18, PALETTE.brown);
+        scene.add.ellipse(x, y + 11, 42, 15, 0x4a3320);
+        scene.add.ellipse(x, y + 10, 38, 12, PALETTE.ink);
 
-        // the pixel frog: a plain sprite, like everything else in this world
-        const body = scene.add.rectangle(0, 0, 22, 20, PALETTE.mossLight).setOrigin(0.5, 1);
-        const eyeL = scene.add.circle(-6, -20, 3, PALETTE.cream);
-        const eyeR = scene.add.circle(6, -20, 3, PALETTE.cream);
-        const pupL = scene.add.circle(-6, -20, 1.5, PALETTE.black);
-        const pupR = scene.add.circle(6, -20, 1.5, PALETTE.black);
-        const sprite = scene.add.container(x, y + 10, [body, eyeL, eyeR, pupL, pupR]);
+        // the frog: a round body, a pale belly, big eyes and a smile
+        const body = scene.add.ellipse(0, -9, 26, 20, PALETTE.mossLight);
+        const belly = scene.add.ellipse(0, -6, 16, 10, 0xcfe8a0);
+        const footL = scene.add.ellipse(-9, -1, 8, 4, PALETTE.moss);
+        const footR = scene.add.ellipse(9, -1, 8, 4, PALETTE.moss);
+        const eyeL = scene.add.circle(-6, -19, 4, PALETTE.cream);
+        const eyeR = scene.add.circle(6, -19, 4, PALETTE.cream);
+        const pupL = scene.add.circle(-5, -19, 2, PALETTE.black);
+        const pupR = scene.add.circle(7, -19, 2, PALETTE.black);
+        const glintL = scene.add.circle(-6, -20, 0.8, PALETTE.white);
+        const glintR = scene.add.circle(6, -20, 0.8, PALETTE.white);
+        const mouth = scene.add.rectangle(0, -12, 10, 1, PALETTE.moss);
+        const sprite = scene.add.container(x, y + 10, [footL, footR, body, belly, eyeL, eyeR, pupL, pupR, glintL, glintR, mouth]);
         sprite.setVisible(false);
 
         // mask: the frog rises out of the hole
-        scene.add.ellipse(x, y + 14, 40, 12, PALETTE.moss).setDepth(5);
+        scene.add.ellipse(x, y + 14, 44, 12, 0x4a8a52).setDepth(5);
+        scene.add.ellipse(x, y + 15, 46, 8, PALETTE.brown).setDepth(5).setAlpha(0.6);
 
         const hole: Hole = { x, y, occupant: null, timer: 0, sprite, hit: false };
         holes.push(hole);
@@ -133,7 +146,7 @@ export const whackAFrog: MinigameModule = {
       if (h.timer <= 0) {
         h.occupant = null;
         h.hit = false;
-        h.sprite.setVisible(false);
+        h.sprite.setVisible(false).setScale(1, 1);
       }
     }
 
@@ -145,10 +158,7 @@ export const whackAFrog: MinigameModule = {
       const free = holes.filter((h) => !h.occupant);
       if (free.length) {
         const h = free[Math.floor(Math.random() * free.length)];
-        const couldVisit =
-          froggyDue && !froggySeen && ROUND_MS - timeLeft > FROGGY_EARLIEST_MS;
-        if (couldVisit && Math.random() < FROGGY_SPAWN_CHANCE) {
-          froggySeen = true;
+        if (Math.random() < FROGGY_SPAWN_CHANCE) {
           h.occupant = 'froggy';
           h.timer = FROGGY_STARE_MS;
           h.sprite.setVisible(false); // he is not a sprite
@@ -156,7 +166,9 @@ export const whackAFrog: MinigameModule = {
           h.occupant = 'frog';
           h.timer = upMs;
           h.hit = false;
-          h.sprite.setVisible(true);
+          h.sprite.setVisible(true).setScale(1, 0.2);
+          // up out of the hole, with a little overshoot
+          sceneRef?.tweens.add({ targets: h.sprite, scaleY: 1, duration: 120, ease: 'Back.easeOut' });
         }
       }
     }
@@ -184,6 +196,7 @@ export const whackAFrog: MinigameModule = {
     froggyLayer.clear();
     holes = [];
     apiRef = null;
+    sceneRef = null;
   },
 };
 
@@ -203,8 +216,13 @@ function onClick(x: number, y: number): void {
     h.hit = true;
     hits++;
     audio.sfx('whack');
-    h.timer = Math.min(h.timer, 90);
-    h.sprite.setVisible(false);
+    h.timer = Math.min(h.timer, 140);
+    // Squashed flat, and a +1 that floats off.
+    h.sprite.setScale(1.3, 0.35);
+    if (sceneRef) {
+      const pop = centerText(sceneRef, h.x, h.y - 18, '+1', PALETTE.gold).setDepth(20);
+      sceneRef.tweens.add({ targets: pop, y: h.y - 34, alpha: 0, duration: 420, onComplete: () => pop.destroy() });
+    }
     if (hits >= TARGET_HITS) finish();
     return;
   }

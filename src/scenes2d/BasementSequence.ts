@@ -147,6 +147,12 @@ export class BasementSequence extends Phaser.Scene {
       return;
     }
     if (i === 9) return; // the transformation drives itself
+    if (def.hotspot === 'turnAround') {
+      // Five seconds to turn round yourself.  Then the game does it for you.
+      this.time.delayedCall(5000, () => {
+        if (this.index === i && !this.busy) this.advance('turnAround');
+      });
+    }
 
     this.busy = false;
     this.spawnHotspot(def.hotspot);
@@ -355,9 +361,11 @@ export class BasementSequence extends Phaser.Scene {
     froggyLayer.paint((ctx) => {
       drawFroggy(ctx, {
         x: GAME_W / 2,
-        // Feet on the floor at the far end, not on the camera.
-        y: 124,
-        height: 76,
+        // Feet on the far wall's floor line (paintReverse's back wall ends at
+        // y 116), and small: he is at the other end of the room, which is what
+        // makes the next half-second — the whole distance in one go — land.
+        y: 116,
+        height: 34,
         variant: 'uncanny',
         pose: 'blank', // the pinprick pupils
       });

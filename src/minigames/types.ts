@@ -53,6 +53,11 @@ export interface MinigameModule {
   rules: string;
   /** Replaces the shell's "WIN: +n" line when the payout is not fixed. */
   payoutNote?: string;
+  /**
+   * The cabinet's own music, by id (see core/tracks.ts).  The shell fades the
+   * room's bed into it on launch and the room fades it back out on return.
+   */
+  music?: string;
   create(scene: Phaser.Scene, api: MinigameApi): void;
   update?(time: number, delta: number): void;
   destroy?(): void;

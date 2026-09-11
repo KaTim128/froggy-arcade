@@ -115,9 +115,21 @@ const BRIEFING: Array<[string, number]> = [
   ['IF YOU SURVIVE WITH ME FOR 3 MINUTES,', 3000],
   ['I WILL SET YOU FREE.', 2800],
   // Two beats, because it will not fit the frame as one line.
-  ['AND YOU BETTER NOT HIDE IN ONE PLACE,', 2800],
-  ["'CAUSE I CAN SENSE YOUR SOUL.", 2800],
+  ['AND YOU BETTER NOT BE HIDING IN ONE SPOT', 2800],
+  ['THE ENTIRE TIME DURING OUR LITTLE GAME.', 2800],
   ['IF NOT....', 2600],
+];
+/**
+ * What he says at the later doors.  Short: you know the rules.  Zone two he
+ * is angry about the key; zone three he is barely speaking at all.
+ */
+const ZONE_LINES: Array<Array<[string, number]>> = [
+  [],
+  [
+    ["YOU THINK I'D LET YOU OFF THAT EASY", 2800],
+    ['AFTER YOU TRIED TO STEAL MY KEY?', 3000],
+  ],
+  [['WHERE ARE YOU....', 3200]],
 ];
 /** How long his answer to "if not" is allowed to hang there. */
 const BRIEFING_TAIL_MS = 2400;
@@ -401,8 +413,7 @@ export class HideRoom3D extends Phaser.Scene {
     // He explains the game once, at the first door.  The second and third
     // rooms open straight onto the count: you know the rules by then, and a
     // speech you have heard is a wait, not a threat.
-    if (this.roomIndex === 0) this.beginBriefing();
-    else this.beginCountOnly();
+    this.beginBriefing(this.roomIndex === 0 ? BRIEFING : ZONE_LINES[Math.min(this.roomIndex, ZONE_LINES.length - 1)]);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
   }
 
@@ -835,7 +846,13 @@ export class HideRoom3D extends Phaser.Scene {
    * then he is gone when the count starts, which is worse than him walking
    * away.  The player is frozen for the whole thing on purpose.
    */
-  private beginBriefing(): void {
+  private beginBriefing(lines: Array<[string, number]>): void {
+    if (lines.length === 0) {
+      this.beginCountOnly();
+      return;
+    }
+    // Later zones: the echo for the one you got through, then his line.
+    if (this.roomIndex > 0) audio.sfx('zone_clear');
     this.monster?.setVisible(true);
     // Well down the room, facing you: near enough to read, far enough that he
     // is not the whole screen.
@@ -846,21 +863,26 @@ export class HideRoom3D extends Phaser.Scene {
     this.fTimer = 999;
 
     const say = (i: number): void => {
-      const beat = BRIEFING[i];
+      const beat = lines[i];
       if (!beat) return;
       this.subtitle = beat[0];
       this.play('ui_hover', 0.35);
       this.time.delayedCall(beat[1], () => {
         if (this.mode !== 'briefing') return;
-        if (i + 1 < BRIEFING.length) {
+        if (i + 1 < lines.length) {
           say(i + 1);
           return;
         }
-        // ...and then the noise, instead of the rest of the sentence.
+        // ...and then the noise, instead of the rest of the sentence.  The
+        // first door gets the scream; the later ones a creak and the dark.
         this.subtitle = '';
-        audio.scare();
-        this.cameras.main.shake(900, 0.03);
-        this.time.delayedCall(BRIEFING_TAIL_MS, () => {
+        if (this.roomIndex === 0) {
+          audio.scare();
+          this.cameras.main.shake(900, 0.03);
+        } else {
+          audio.sfx('door_creak');
+        }
+        this.time.delayedCall(this.roomIndex === 0 ? BRIEFING_TAIL_MS : 900, () => {
           if (this.mode !== 'briefing') return;
           this.mode = 'hiding';
           this.clock = HIDE_S;
@@ -877,15 +899,13 @@ export class HideRoom3D extends Phaser.Scene {
     say(0);
   }
 
-  /** Rooms two and three: no speech, straight to the count. */
+  /** A zone with nothing to say: straight to the count. */
   private beginCountOnly(): void {
     this.monster?.setVisible(false);
     this.mode = 'hiding';
     this.clock = HIDE_S;
     this.fMode = 'search';
     this.fTimer = 0;
-    // The echo: you got through the last one.  Once, on the way in, and not
-    // a scare — the room does that itself in ten seconds.
     audio.sfx('zone_clear');
     this.say(`ZONE ${this.roomIndex + 1}`, 1600);
     this.freeFroggy();
@@ -933,12 +953,31 @@ export class HideRoom3D extends Phaser.Scene {
     }
   }
 
-  /** A drip, now and then, quiet enough that his footsteps still cut through. */
+  /**
+   * What the room does on its own: a drip, a board settling somewhere, a low
+   * swell that is nothing, two steps that are not his — and, most of the
+   * time, nothing at all.  The gaps are the instrument.  Everything here is
+   * quiet enough that his real footsteps still cut through it.
+   */
   private roomTone(dt: number): void {
     this.dripIn -= dt;
     if (this.dripIn > 0) return;
-    this.dripIn = 9 + Math.random() * 11;
-    this.play('drip', 0.18);
+    this.dripIn = 5 + Math.random() * 13;
+    const roll = Math.random();
+    if (roll < 0.3) {
+      this.play('drip', 0.18);
+    } else if (roll < 0.55) {
+      this.play('floor_creak', 0.22);
+    } else if (roll < 0.75) {
+      this.play('eerie_swell', 0.5);
+    } else if (roll < 0.9) {
+      // Two faint steps from nowhere in particular.  Not him.  Probably.
+      this.play('froggy_step', 0.06);
+      this.time.delayedCall(520 + Math.random() * 300, () => {
+        if (this.mode === 'seeking' || this.mode === 'hiding') this.play('froggy_step', 0.05);
+      });
+    }
+    // ...and the rest of the time, the silence stays.
   }
 
   private movePlayer(dt: number): void {
@@ -1616,17 +1655,20 @@ export class HideRoom3D extends Phaser.Scene {
       const { beat, k } = this.climbBeat();
       const top = this.climb.top;
       if (beat === 'mount') {
-        // Reaching up and hauling: the pose comes on, the body starts to rise.
+        // Reaching up: the pose comes on, feet still on the floor.
         climbing = k;
-        y = top * 0.3 * k * k;
+        y = 0;
       } else if (beat === 'cross') {
-        // Up, along, and down: a flattened arc that tops out above the obstacle.
+        // Up the near face, over the top, down the far face — and on the floor
+        // at BOTH ends, so he never stands on air past the far edge.  A
+        // version of this arc ended half the obstacle's height up and he
+        // hung there; that is the floating that was reported.
         climbing = 1;
-        y = Math.sin(k * Math.PI) * 0.35 + top * Math.min(1, 0.3 + k * 2.2, (1 - k) * 2.2 + 0.55);
+        y = top * Math.max(0, Math.min(1, k * 3, (1 - k) * 3));
       } else {
-        // Landing: down the last of it and the pose lets go.
+        // Landed: crouched from the drop, straightening as the pose lets go.
         climbing = 1 - k;
-        y = top * 0.35 * (1 - k) * (1 - k);
+        y = 0;
       }
     }
 

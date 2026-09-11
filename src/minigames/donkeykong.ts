@@ -1,5 +1,5 @@
 /**
- * BARREL CLIMB.  Hard — 5 tokens in, 5 out.
+ * BARREL CLIMB.  Hard — 7 tokens in, 7 out.
  *
  * An original take on the girder-and-barrel climb (PRD MG-7): original level,
  * original art, original name, no borrowed characters.  Six girders, ladders
@@ -111,6 +111,7 @@ let sceneRef: Phaser.Scene | null = null;
 export const donkeyKong: MinigameModule = {
   id: 'donkeykong',
   title: 'BARREL CLIMB',
+  music: 'game_donkeykong',
   rules: 'get to the top',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

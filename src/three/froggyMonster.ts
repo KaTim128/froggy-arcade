@@ -75,6 +75,9 @@ export class FroggyMonster {
   private jaw = new THREE.Group();
   private arms: THREE.Group[] = [];
   private legs: THREE.Group[] = [];
+  /** The joints halfway down each limb, so a step bends and a reach folds. */
+  private knees: THREE.Group[] = [];
+  private elbows: THREE.Group[] = [];
   private walkT = 0;
   private breathT = 0;
   private mawNow = 0;
@@ -91,36 +94,43 @@ export class FroggyMonster {
     const skinDark = mat(SKIN_DARK);
     const skinLit = mat(SKIN_LIT);
 
-    // ---- legs.  Bent the wrong way and too long, hinged at the hip.
+    // ---- legs.  Long — longer than a person's for his height — hinged at
+    // the hip, with a knee halfway down that bends on every stride.
     for (const side of [-1, 1]) {
       const leg = new THREE.Group();
-      leg.position.set(side * 0.28, 1.18, 0);
+      leg.position.set(side * 0.28, 1.42, 0);
 
-      const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.46, 4, 8), skin);
-      thigh.position.set(0, -0.26, -0.06);
+      const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.62, 4, 8), skin);
+      thigh.position.set(0, -0.34, -0.04);
       leg.add(thigh);
 
-      const shin = new THREE.Mesh(new THREE.CapsuleGeometry(0.11, 0.44, 4, 8), skinDark);
-      shin.position.set(0, -0.72, 0.04);
-      leg.add(shin);
+      const knee = new THREE.Group();
+      knee.position.set(0, -0.66, 0);
+      leg.add(knee);
 
-      // A frog's foot: splayed flat, far too big for the leg.
+      const shin = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.6, 4, 8), skinDark);
+      shin.position.set(0, -0.36, 0.04);
+      knee.add(shin);
+
+      // A frog's foot: splayed flat, far too big for the leg.  Its sole is
+      // at the floor when the leg hangs straight.
       const foot = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.08, 0.54), skinDark);
-      foot.position.set(0, -0.98, 0.16);
-      leg.add(foot);
+      foot.position.set(0, -0.72, 0.16);
+      knee.add(foot);
       for (let t = -1; t <= 1; t++) {
         const toe = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.16, 3, 6), skinDark);
         toe.rotation.x = Math.PI / 2;
-        toe.position.set(t * 0.1, -0.98, 0.46);
-        leg.add(toe);
+        toe.position.set(t * 0.1, -0.72, 0.46);
+        knee.add(toe);
       }
 
       this.hips.add(leg);
       this.legs.push(leg);
+      this.knees.push(knee);
     }
 
     // ---- torso.  The mass is forward of the hips: he is folded over himself.
-    this.torso.position.set(0, 1.2, 0);
+    this.torso.position.set(0, 1.44, 0);
     const chest = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 10), skin);
     chest.scale.set(1.02, 0.86, 0.94);
     chest.position.z = -0.06;
@@ -151,33 +161,39 @@ export class FroggyMonster {
       this.torso.add(shoulder);
     }
 
-    // ---- arms.  The hands hang below the knees.  They are the reach.
+    // ---- arms.  Long enough that the hands hang past the knees, with an
+    // elbow that folds on the swing and on a climb.  They are the reach.
     for (const side of [-1, 1]) {
       const arm = new THREE.Group();
       arm.position.set(side * 0.46, 0.12, 0);
 
-      const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.115, 0.5, 4, 8), skin);
-      upper.position.y = -0.3;
+      const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.11, 0.66, 4, 8), skin);
+      upper.position.y = -0.38;
       arm.add(upper);
 
-      const fore = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.52, 4, 8), skinDark);
-      fore.position.y = -0.82;
-      arm.add(fore);
+      const elbow = new THREE.Group();
+      elbow.position.y = -0.74;
+      arm.add(elbow);
+
+      const fore = new THREE.Mesh(new THREE.CapsuleGeometry(0.082, 0.68, 4, 8), skinDark);
+      fore.position.y = -0.38;
+      elbow.add(fore);
 
       // Three fingers.  Four would look like a hand.
       for (let f = -1; f <= 1; f++) {
         const finger = new THREE.Mesh(new THREE.CapsuleGeometry(0.032, 0.26, 3, 6), skinDark);
-        finger.position.set(f * 0.085, -1.2, 0.04);
+        finger.position.set(f * 0.085, -0.86, 0.04);
         finger.rotation.x = 0.3;
-        arm.add(finger);
+        elbow.add(finger);
       }
       const stain = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), mat(BLOOD));
       stain.scale.set(1, 1.4, 0.7);
-      stain.position.set(0, -1.06, 0.04);
-      arm.add(stain);
+      stain.position.set(0, -0.7, 0.04);
+      elbow.add(stain);
 
       this.torso.add(arm);
       this.arms.push(arm);
+      this.elbows.push(elbow);
     }
 
     // ---- head.  Slung low and thrown forward, and much too big.
@@ -345,10 +361,19 @@ export class FroggyMonster {
 
     this.legs[0].rotation.x = gait * swing;
     this.legs[1].rotation.x = -(gait * swing) * 0.72 + drag * 0.12;
+    // The knee bends as the leg comes through — the foot lifts and clears the
+    // floor rather than sweeping along it — and straightens to take the weight.
+    // A climb tucks both up under him.
+    const stepLift = Math.min(1, speed * 0.5);
+    this.knees[0].rotation.x = Math.max(0, -Math.cos(phase)) * 0.95 * stepLift + this.climbNow * 1.1;
+    this.knees[1].rotation.x = Math.max(0, Math.cos(phase + 0.5)) * 0.85 * stepLift + this.climbNow * 1.1;
     // Arms counter-swing, hang lower the faster he goes, and reach up a wall
-    // when he is going over one.
+    // when he is going over one.  The elbow carries a bend that opens on the
+    // forward swing, so the hands come up in front of him and not the floor.
     this.arms[0].rotation.x = -gait * swing * 0.8 - this.climbNow * 2.3 - this.lungeNow * 0.25;
     this.arms[1].rotation.x = gait * swing * 0.8 - this.climbNow * 2.3 - this.lungeNow * 0.25;
+    this.elbows[0].rotation.x = -(0.25 + Math.max(0, -gait) * 0.55 * stepLift) - this.climbNow * 0.6 - this.lungeNow * 0.5;
+    this.elbows[1].rotation.x = -(0.25 + Math.max(0, gait) * 0.55 * stepLift) - this.climbNow * 0.6 - this.lungeNow * 0.5;
     for (const arm of this.arms) arm.rotation.z = this.climbNow * 0.35 + this.lungeNow * 0.12;
 
     // The body rides on the stride and breathes underneath it.  The breath does

@@ -60,7 +60,7 @@ export class ArcadeAnnex extends Phaser.Scene {
     this.cabinets = [];
 
     fadeIn(this);
-    audio.setScene({ music: 'hub_lofi', ambience: ['cabinet_bleeps'] });
+    audio.setScene({ music: 'room_annex', ambience: ['cabinet_bleeps'] });
 
     // No front door in here: the only way out of the building is the hub.
     paintHubRoom(this, { night: false, frontDoor: false });

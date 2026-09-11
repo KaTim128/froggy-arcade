@@ -48,6 +48,7 @@ const inside = (c: number, r: number) => c >= 0 && r >= 0 && c < N && r < N;
 export const battleship: MinigameModule = {
   id: 'battleship',
   title: 'BATTLESHIP',
+  music: 'game_battleship',
   rules: 'sink all four',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

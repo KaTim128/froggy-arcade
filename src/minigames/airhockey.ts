@@ -47,6 +47,7 @@ let apiRef: MinigameApi | null = null;
 export const airHockey: MinigameModule = {
   id: 'airhockey',
   title: 'AIR HOCKEY',
+  music: 'game_airhockey',
   rules: 'first to 5',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

@@ -65,6 +65,7 @@ let busy = false;
 export const ticTacToe: MinigameModule = {
   id: 'tictactoe',
   title: 'TIC-TAC-TOE',
+  music: 'game_tictactoe',
   rules: 'a draw is a loss',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

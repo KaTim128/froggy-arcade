@@ -99,6 +99,7 @@ let hud: {
 export const bowling: MinigameModule = {
   id: ID,
   title: 'BOWLING',
+  music: 'game_bowling',
   rules: '3 rounds against froggy - beat his total',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

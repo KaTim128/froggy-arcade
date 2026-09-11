@@ -8,6 +8,8 @@ import { PALETTE, nightify } from '../render/palette';
 import { audio } from '../core/audio';
 
 export const PLAYER_SPEED = 62; // logical px/s
+/** Holding SHIFT: a fifth faster.  A jog across the floor, not a sprint. */
+export const SPRINT_MUL = 1.2;
 const STEP_INTERVAL_MS = 340;
 
 export class Player {
@@ -17,8 +19,10 @@ export class Player {
   private bobT = 0;
   private torso: Phaser.GameObjects.Rectangle;
   private surface: 'carpet' | 'concrete' = 'carpet';
+  private shift: Phaser.Input.Keyboard.Key | null = null;
 
   constructor(scene: Phaser.Scene, x: number, y: number, night = false) {
+    this.shift = scene.input.keyboard?.addKey('SHIFT') ?? null;
     const c = (col: number) => (night ? nightify(col) : col);
     this.body = scene.add.rectangle(0, 0, 10, 8, c(PALETTE.rust)).setOrigin(0.5, 1);
     this.torso = scene.add.rectangle(0, -8, 12, 12, c(PALETTE.brownLight)).setOrigin(0.5, 1);
@@ -50,7 +54,8 @@ export class Player {
       this.torso.y = -8;
       return false;
     }
-    const step = (PLAYER_SPEED * delta) / 1000;
+    const sprinting = this.shift?.isDown ?? false;
+    const step = (PLAYER_SPEED * (sprinting ? SPRINT_MUL : 1) * delta) / 1000;
     const nx = this.sprite.x + (dx / len) * step;
     const ny = this.sprite.y + (dy / len) * step;
     this.sprite.x = Phaser.Math.Clamp(nx, bounds.x, bounds.right);
@@ -61,7 +66,7 @@ export class Player {
     this.bobT += delta;
     this.torso.y = -8 - (Math.sin(this.bobT / 90) > 0 ? 1 : 0);
 
-    this.stepTimer += delta;
+    this.stepTimer += delta * (sprinting ? SPRINT_MUL : 1);
     if (this.stepTimer >= STEP_INTERVAL_MS) {
       this.stepTimer = 0;
       audio.sfx(this.surface === 'carpet' ? 'footstep_carpet' : 'footstep_concrete');

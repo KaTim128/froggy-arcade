@@ -41,6 +41,7 @@ let busy = false;
 export const snakesAndLadders: MinigameModule = {
   id: 'snakes',
   title: 'SNAKES + LADDERS',
+  music: 'game_snakes',
   rules: 'first to 30',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

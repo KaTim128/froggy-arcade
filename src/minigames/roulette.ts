@@ -44,6 +44,7 @@ let cashBtn: Phaser.GameObjects.Container | null = null;
 export const roulette: MinigameModule = {
   id: 'roulette',
   title: 'CHAMBER',
+  music: 'game_roulette',
   rules: 'four clean pulls',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

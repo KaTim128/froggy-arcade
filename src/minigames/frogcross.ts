@@ -90,6 +90,7 @@ const laneY = (lane: number): number => ROAD_BOTTOM - lane * LANE_H + LANE_H / 2
 export const frogCross: MinigameModule = {
   id: ID,
   title: 'FROG CROSS THE ROAD',
+  music: 'game_frogcross',
   rules: 'cross 10 times to win',
   payoutNote: 'WIN: 10+',
 

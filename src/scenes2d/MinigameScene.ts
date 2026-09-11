@@ -63,6 +63,10 @@ export class MinigameScene extends Phaser.Scene {
     // what is already riding on this play.
     this.stake = def.cost;
 
+    // Every cabinet has its own tune.  The room's bed crossfades into it here
+    // and back out when the room is rebuilt on the way back (AU-1).
+    audio.setScene({ music: this.mod.music ?? 'room_hub' });
+
     this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black).setOrigin(0, 0);
     this.add.rectangle(0, 0, GAME_W, 16, PALETTE.ink).setOrigin(0, 0);
     text(this, 4, 4, def.title, PALETTE.gold);

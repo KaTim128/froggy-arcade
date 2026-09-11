@@ -6,9 +6,10 @@
  * you and have to be shaken.  Cash sits on the road in bundles of twenty.
  *
  * NITRO is the one tool.  It is a burst — a second and a half at nearly twice
- * the speed — and then it is gone for six seconds, so it is spent on getting
- * out of a corner, not on going fast.  The police close the gap again the
- * moment it ends.
+ * the speed — and it is FUEL: blue jars on the road, one burst each, up to
+ * two in the tank.  You start with one.  Spend it getting out of a corner,
+ * not going fast; the police close the gap again the moment it ends, and a
+ * warning flashes when one is on your bumper.
  *
  * Two hundred cash is the bar: seven tokens, and one more for every further
  * two hundred.  The run ends on a crash, on being caught, or on ENTER — pull
@@ -51,7 +52,10 @@ const CREEP = 50;
 /** Nitro: how much faster, for how long, and how long until it is back. */
 const NITRO_MUL = 1.8;
 const NITRO_MS = 1500;
-const NITRO_RECHARGE_MS = 6000;
+/** Bursts the tank holds. */
+const NITRO_TANK = 2;
+/** A police car this close behind you is a warning. */
+const WARN_DIST = 70;
 /** How much faster the police are than you, and how hard they steer at you. */
 const POLICE_GAIN = 26;
 const POLICE_STEER = 55;
@@ -74,6 +78,9 @@ let elapsed = 0;
 let traffic: Mover[] = [];
 let police: Mover[] = [];
 let cash: Array<{ x: number; y: number; body: Phaser.GameObjects.Rectangle }> = [];
+let jars: Array<{ x: number; y: number; body: Phaser.GameObjects.Container }> = [];
+let jarTimer = 0;
+let warnT = 0;
 let dashes: Phaser.GameObjects.Rectangle[] = [];
 let trafficTimer = 0;
 let policeTimer = 0;
@@ -91,6 +98,7 @@ let hud: {
   bank: Phaser.GameObjects.BitmapText;
   nitro: Phaser.GameObjects.Rectangle;
   nitroLabel: Phaser.GameObjects.BitmapText;
+  warn: Phaser.GameObjects.BitmapText;
 } | null = null;
 
 export function chasePayout(c: number): number {
@@ -101,6 +109,7 @@ export function chasePayout(c: number): number {
 export const carChase: MinigameModule = {
   id: ID,
   title: 'FROGGY CAR CHASE',
+  music: 'game_carchase',
   rules: 'dodge, grab cash, lose the law',
   payoutNote: 'WIN: 7+',
 
@@ -118,6 +127,9 @@ export const carChase: MinigameModule = {
     trafficTimer = 2600;
     policeTimer = 6000;
     cashTimer = 900;
+    jars = [];
+    jarTimer = 5000;
+    warnT = 0;
     collected = 0;
     best = store.highScore(ID);
     nitroMs = 0;
@@ -147,10 +159,12 @@ export const carChase: MinigameModule = {
       bank: centerText(scene, GAME_W / 2, 170, '', PALETTE.gold).setVisible(false),
       nitro: scene.add.rectangle(7, 150, 6, 0, PALETTE.tealLight).setOrigin(0, 1),
       nitroLabel: text(scene, 4, 154, 'NITRO', PALETTE.ash),
+      warn: centerText(scene, GAME_W / 2, 150, 'POLICE CLOSE', PALETTE.blood, 16).setVisible(false),
     };
     scene.add.rectangle(6, 96, 8, 54, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel).setDepth(8);
     hud.nitro.setDepth(9);
     hud.nitroLabel.setDepth(9);
+    hud.warn.setDepth(9);
     hud.cash.setDepth(9);
     hud.best.setDepth(9);
     hud.time.setDepth(9);
@@ -169,7 +183,7 @@ export const carChase: MinigameModule = {
     kb?.on('keydown-SPACE', () => {
       if (over || nitroMs > 0 || nitroCharge < 1) return;
       nitroMs = NITRO_MS;
-      nitroCharge = 0;
+      nitroCharge -= 1;
       audio.sfx('vault', 0.6);
     });
     kb?.on('keydown-ENTER', () => {
@@ -184,6 +198,7 @@ export const carChase: MinigameModule = {
           speed,
           nitro: nitroMs > 0,
           nitroCharge,
+          jars: jars.length,
           traffic: traffic.length,
           police: police.length,
           player: { x: px, y: py },
@@ -204,12 +219,8 @@ export const carChase: MinigameModule = {
     const dt = delta / 1000;
     elapsed += delta;
 
-    // ---- nitro
-    if (nitroMs > 0) {
-      nitroMs -= delta;
-    } else if (nitroCharge < 1) {
-      nitroCharge = Math.min(1, nitroCharge + delta / NITRO_RECHARGE_MS);
-    }
+    // ---- nitro.  No recharge: what is in the tank came off the road.
+    if (nitroMs > 0) nitroMs -= delta;
     const boost = nitroMs > 0 ? NITRO_MUL : 1;
 
     // ---- the road, and you on it
@@ -266,6 +277,31 @@ export const carChase: MinigameModule = {
       c.y += ground * dt;
       c.body.setPosition(c.x, c.y).setVisible(c.y > TOP + 4);
     }
+    // ---- nitro jars, rarer than the cash and worth stopping for
+    jarTimer -= delta;
+    if (jarTimer <= 0) {
+      spawnJar();
+      jarTimer = 6000 + Math.random() * 5000;
+    }
+    for (const j of jars) {
+      j.y += ground * dt;
+      j.body.setPosition(j.x, j.y).setVisible(j.y > TOP + 6);
+    }
+    jars = jars.filter((j) => {
+      if (Math.abs(j.x - px) < CAR_W / 2 + 4 && Math.abs(j.y - py) < CAR_H / 2 + 5) {
+        nitroCharge = Math.min(NITRO_TANK, nitroCharge + 1);
+        audio.sfx('chime', 0.5);
+        refreshHud();
+        j.body.destroy();
+        return false;
+      }
+      if (j.y > BOTTOM + 10) {
+        j.body.destroy();
+        return false;
+      }
+      return true;
+    });
+
     cash = cash.filter((c) => {
       if (Math.abs(c.x - px) < CAR_W / 2 + 4 && Math.abs(c.y - py) < CAR_H / 2 + 4) {
         collected += CASH_PER_PICKUP;
@@ -299,15 +335,27 @@ export const carChase: MinigameModule = {
       }
     }
 
-    hud?.nitro.setSize(6, (nitroMs > 0 ? nitroMs / NITRO_MS : nitroCharge) * 52);
-    hud?.nitro.setFillStyle(nitroMs > 0 ? PALETTE.gold : nitroCharge >= 1 ? PALETTE.tealLight : PALETTE.steel);
+    hud?.nitro.setSize(6, (nitroMs > 0 ? nitroMs / NITRO_MS : nitroCharge / NITRO_TANK) * 52);
+    hud?.nitro.setFillStyle(nitroMs > 0 ? PALETTE.gold : nitroCharge >= 1 ? 0x46a0e0 : PALETTE.steel);
     hud?.time.setText(`${Math.floor(elapsed / 1000)}s`);
+
+    // ---- the warning: a police car right behind you, flashing and beeping
+    const close = police.some((p) => p.y > py && p.y - py < WARN_DIST && Math.abs(p.x - px) < LANE_W * 1.5);
+    if (close) {
+      warnT += delta;
+      hud?.warn.setVisible(Math.floor(warnT / 160) % 2 === 0);
+      if (warnT % 700 < delta) audio.sfx('buzzer', 0.25);
+    } else {
+      warnT = 0;
+      hud?.warn.setVisible(false);
+    }
   },
 
   destroy() {
     traffic = [];
     police = [];
     cash = [];
+    jars = [];
     dashes = [];
     player = null;
     hud = null;
@@ -363,6 +411,17 @@ function spawnPolice(): void {
   audio.sfx('buzzer', 0.35);
 }
 
+/** A blue jar of nitro, worth one burst. */
+function spawnJar(): void {
+  if (!scene0) return;
+  const lane = LANES[Phaser.Math.Between(0, 3)];
+  const jar = scene0.add.rectangle(0, 1, 8, 9, 0x46a0e0).setStrokeStyle(1, PALETTE.bone);
+  const cap = scene0.add.rectangle(0, -4, 5, 3, PALETTE.bone);
+  const shine = scene0.add.rectangle(-2, 0, 1, 5, 0xbfe6ff);
+  const body = scene0.add.container(lane, TOP - 6, [jar, cap, shine]).setDepth(3).setVisible(false);
+  jars.push({ x: lane, y: TOP - 6, body });
+}
+
 function spawnCash(): void {
   if (!scene0) return;
   const lane = LANES[Phaser.Math.Between(0, 3)];
@@ -384,6 +443,7 @@ function refreshHud(): void {
   hud.best.setText(`BEST ${best}`);
   const banked = chasePayout(collected);
   hud.bank.setText(`[ENTER] PULL OVER FOR ${banked} TOKENS`).setVisible(banked > 0);
+  hud.nitroLabel.setText(`NITRO x${Math.floor(nitroCharge)}`);
 }
 
 function finish(): void {

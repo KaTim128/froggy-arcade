@@ -60,6 +60,7 @@ let scoredThisFlight = false;
 export const hoops: MinigameModule = {
   id: 'hoops',
   title: 'HOOPS',
+  music: 'game_hoops',
   rules: '5 shots in 60 seconds',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

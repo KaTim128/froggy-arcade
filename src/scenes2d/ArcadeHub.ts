@@ -71,7 +71,7 @@ export class ArcadeHub extends Phaser.Scene {
     this.cabinets = [];
 
     fadeIn(this);
-    audio.setScene({ music: 'hub_lofi', ambience: ['cabinet_bleeps', 'crowd_hum'] });
+    audio.setScene({ music: 'room_hub', ambience: ['cabinet_bleeps', 'crowd_hum'] });
 
     paintHubRoom(this, { night: false });
     paintChangeMachine(this, false);

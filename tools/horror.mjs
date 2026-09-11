@@ -418,7 +418,7 @@ try {
       opens.map((x) => x[1]).join(','));
     check('nothing else is making noise in there',
       heard.every(([n]) =>
-        ['froggy_step', 'spot_open', 'floor_creak', 'drip', 'hop_wet', 'step_walk', 'step_run', 'zone_clear', 'door_creak', 'ui_hover'].includes(n),
+        ['froggy_step', 'spot_open', 'floor_creak', 'drip', 'hop_wet', 'step_walk', 'step_run', 'zone_clear', 'eerie_swell', 'door_creak', 'ui_hover'].includes(n),
       ),
       [...new Set(heard.map(([n]) => n))].join(','));
 
