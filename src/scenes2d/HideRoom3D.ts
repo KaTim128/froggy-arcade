@@ -31,6 +31,8 @@ import { drawPixelText } from '../render/pixelFont';
 import { ThreeStage } from '../render/threeStage';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { ROOMS, type Box, type RoomDef, type SpotKind } from '../three/hideRooms';
+import { buildGrid, findPath, lineOpen, spotExtent, type NavGrid } from '../three/navGrid';
+import { dressRoom, surfaceTexture } from '../three/hideDecor';
 
 const WALK = 2.6;
 const RUN = 4.0;
@@ -47,7 +49,7 @@ const LOOK_SENS = 0.004;
  * get inside something before he arrives.  Hiding is the only counterplay,
  * which is the game this is supposed to be.
  */
-const FROGGY_CHASE = RUN * 1.1;
+const FROGGY_CHASE = RUN * 2.0;
 /**
  * And what he does the rest of the time: 0.8x your top speed.
  *
@@ -55,7 +57,7 @@ const FROGGY_CHASE = RUN * 1.1;
  * slower than you can run, so the room is never big enough to relax in — the
  * distance between you and him closes whether or not he knows where you are.
  */
-const FROGGY_SEARCH = RUN * 0.8;
+const FROGGY_SEARCH = RUN * 1.1;
 /**
  * And what he slows to once he has not laid eyes on you for a while.
  *
@@ -64,16 +66,41 @@ const FROGGY_SEARCH = RUN * 0.8;
  * watch from inside a locker and the thing that gives a player who has just
  * broken his line of sight the seconds they need to get somewhere.
  */
-const FROGGY_PROWL = RUN * 0.5;
+const FROGGY_PROWL = RUN * 0.9;
 const LOST_YOU_S = 5;
+/**
+ * How much faster he is in each room than in the first.  Slightly in the
+ * second, noticeably in the third; the player never gets faster, so this is
+ * where the difficulty climbs.
+ */
+const ROOM_PACE = [1, 1.08, 1.18];
+/**
+ * How long he takes to open a hiding place, by zone.  The lid comes up a
+ * little over halfway through, so in the last room you have well under a
+ * second between hearing him at the box and being found in it.
+ */
+const OPEN_S = [1.7, 1.3, 1.0];
+/** Crouched: slow, silent, and low enough to lose him behind a sofa. */
+const CROUCH = WALK * 0.55;
 const EYE = 1.55;
+const EYE_CROUCH = 0.8;
 const PLAYER_R = 0.42;
+/**
+ * How big he is in here.  At 1x he was a man-sized thing across a large room;
+ * he is now half again, which is what "something in the room with you" needs.
+ * His reach scales with him.
+ */
+const FROGGY_SCALE = 1.35;
+/** How quickly he can turn, radians per second.  Below this he slides. */
+const FROGGY_TURN = 5.5;
+/** How quickly he gets up to speed and back down, per second. */
+const FROGGY_ACCEL = 9;
 
 const VIEW_RANGE = 13;
 const VIEW_HALF = Math.PI / 3.6;
 /** How long he keeps coming after losing sight of you. */
 const MEMORY_S = 4.0;
-const CATCH_DIST = 1.15;
+const CATCH_DIST = 1.15 * FROGGY_SCALE;
 
 const SPOT_REACH = 1.6;
 const DOOR_REACH = 2.2;
@@ -84,7 +111,7 @@ const DOOR_REACH = 2.2;
  */
 const BRIEFING: Array<[string, number]> = [
   ["LET'S PLAY ANOTHER GAME!", 2800],
-  ['IF YOU SURVIVE WITH ME FOR 4 MINUTES,', 3000],
+  ['IF YOU SURVIVE WITH ME FOR 3 MINUTES,', 3000],
   ['I WILL SET YOU FREE.', 2800],
   ['IF NOT....', 2600],
 ];
@@ -94,12 +121,12 @@ const BRIEFING_TAIL_MS = 2400;
 /**
  * The count he gives you, and the time he then has to find you.
  *
- * He states both out loud before the round starts — "survive with me for 4
+ * He states both out loud before the round starts — "survive with me for 3
  * minutes" — so these two numbers are a promise the game has made and cannot
  * quietly retune.  See BasementSequence.paintOffer.
  */
 const HIDE_S = 10;
-const SEEK_S = 240;
+const SEEK_S = 180;
 /** How far his footsteps and the lids carry.  Silence is doing the work. */
 const EARSHOT = 22;
 const OPEN_EARSHOT = 30;
@@ -134,8 +161,12 @@ const ARRIVE_DIST = 1.5;
 const HEADWAY_S = 1.5;
 const HEADWAY_DIST = 1.0;
 
-/** He hears a run from here, even without seeing it. */
-const HEAR_RUN = 9;
+/**
+ * What he hears.  A run carries across most of a room; a walk only when he
+ * is close; a crouch, never.  Hearing gives him somewhere to look, not you.
+ */
+const HEAR_RUN = 18;
+const HEAR_WALK = 5;
 /**
  * The floor.
  *
@@ -159,7 +190,7 @@ const INVESTIGATE_S = 7;
  *
  * It happens HERE rather than in the basement because it belongs to the round:
  * you open the door, he is waiting on the other side of it, and he tells you
- * what the next four minutes are.  You cannot move during it — there is
+ * what the next three minutes are.  You cannot move during it — there is
  * nothing to do yet and letting the player wander while he talks turns a
  * threat into a cutscene they walked out of.
  */
@@ -184,6 +215,11 @@ interface Spot3D {
   x: number;
   z: number;
   kind: SpotKind;
+  /** Half extents of its footprint, world axes. */
+  hw: number;
+  hd: number;
+  /** Opened on the current sweep already.  See pickWaypoint. */
+  checkedOn: number;
   /** The hinge: a chest lid tips back, a door swings sideways. */
   hinge: THREE.Object3D;
   /** 0 shut, 1 fully open. */
@@ -201,7 +237,7 @@ export class HideRoom3D extends Phaser.Scene {
   private yaw = 0;
   private pos = new THREE.Vector2();
   private mode: Mode = 'hiding';
-  /** Counts down through the hiding phase, then through his four minutes. */
+  /** Counts down through the hiding phase, then through his three minutes. */
   private clock = 0;
   /** Which line of the briefing he is on, before any of it starts. */
   private briefLine = 0;
@@ -217,14 +253,34 @@ export class HideRoom3D extends Phaser.Scene {
   private monster: FroggyMonster | null = null;
   /** How many meshes he is made of.  See buildRoom. */
   private froggyMeshes = 0;
-  /** Set while he is going over something: nothing blocks him until it ends. */
+  /**
+   * Set while he is going over something: nothing blocks him until it ends.
+   * Three beats — mount (he reaches up and stops), cross (he goes over), land
+   * (he drops and gathers himself) — so it reads as a climb, not a hop.
+   */
   private climb: {
     from: THREE.Vector2;
     to: THREE.Vector2;
     top: number;
     t: number;
     dur: number;
+    mount: number;
+    land: number;
   } | null = null;
+  /** His map of the room, and the route he is on.  See navGrid. */
+  private grid: NavGrid | null = null;
+  private path: Array<[number, number]> = [];
+  private pathFor = new THREE.Vector2(NaN, NaN);
+  private pathAge = 0;
+  private repathFails = 0;
+  /** Eased: he accelerates and turns rather than snapping. */
+  private fSpeed = 0;
+  private wantYaw = 0;
+  /** Held CTRL (or C).  Low, slow, quiet. */
+  private crouching = false;
+  private eyeNow = EYE;
+  /** Which pass over the hiding places he is on.  Every spot gets opened once per pass. */
+  private sweep = 0;
   /** Distance he has walked since his last step sound. */
   private fStep = 0;
   /** Where he stood last frame, so the walk animates off real movement. */
@@ -265,7 +321,6 @@ export class HideRoom3D extends Phaser.Scene {
   private frames = 0;
   private grace = 0;
   private stuckT = 0;
-  private slideDir: 1 | -1 = 1;
   /** Walking time on the current trip, and how far from its waypoint he was when last measured. */
   private headwayT = 0;
   private headwayDist = 0;
@@ -301,6 +356,15 @@ export class HideRoom3D extends Phaser.Scene {
     this.stuckT = 0;
     this.prompt = '';
     this.subtitle = '';
+    this.path = [];
+    this.pathFor.set(NaN, NaN);
+    this.pathAge = 0;
+    this.repathFails = 0;
+    this.fSpeed = 0;
+    this.crouching = false;
+    this.eyeNow = EYE;
+    this.sweep = 0;
+    this.grace = 0;
 
     froggyLayer.clear();
     this.cameras.main.setBackgroundColor(0x000000);
@@ -317,10 +381,15 @@ export class HideRoom3D extends Phaser.Scene {
     const root = document.getElementById('game-root');
     if (root) this.stage.mount(root, this.game.canvas);
     this.buildRoom();
+    this.grid = buildGrid(this.def, CLIMB_MAX_H);
     this.stage.start((dt) => this.tick(dt));
 
     this.bindInput();
-    this.beginBriefing();
+    // He explains the game once, at the first door.  The second and third
+    // rooms open straight onto the count: you know the rules by then, and a
+    // speech you have heard is a wait, not a threat.
+    if (this.roomIndex === 0) this.beginBriefing();
+    else this.beginCountOnly();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
   }
 
@@ -355,9 +424,23 @@ export class HideRoom3D extends Phaser.Scene {
     st.camera.add(torch.target);
     st.scene.add(st.camera);
 
-    const floorMat = new THREE.MeshLambertMaterial({ color: d.floor });
-    const wallMat = new THREE.MeshLambertMaterial({ color: d.wall });
-    const ceilMat = new THREE.MeshLambertMaterial({ color: d.ceiling });
+    // Painted surfaces: see hideDecor.  Each is drawn from the room's base
+    // colour so the palette the designer picked is still the palette.
+    const seed = this.roomIndex + 1;
+    const floorMat = new THREE.MeshLambertMaterial({
+      map: surfaceTexture(d.theme, 'floor', d.floor, seed, d.halfW * 2, d.halfD * 2),
+    });
+    const wallMatX = new THREE.MeshLambertMaterial({
+      map: surfaceTexture(d.theme, 'wall', d.wall, seed, d.halfW * 2, d.wallH),
+    });
+    const wallMatZ = new THREE.MeshLambertMaterial({
+      map: surfaceTexture(d.theme, 'wall', d.wall, seed, d.halfD * 2, d.wallH),
+    });
+    const ceilMat = new THREE.MeshLambertMaterial({
+      map: surfaceTexture(d.theme, 'ceiling', d.ceiling, seed, d.halfW * 2, d.halfD * 2),
+    });
+    // Furniture is tinted flat colour under a shared wear texture.
+    const grunge = surfaceTexture(d.theme, 'grunge', 0xffffff, seed, 3, 3);
 
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(d.halfW * 2, d.halfD * 2), floorMat);
     floor.rotation.x = -Math.PI / 2;
@@ -369,7 +452,7 @@ export class HideRoom3D extends Phaser.Scene {
     st.scene.add(ceil);
 
     const wall = (x: number, z: number, w: number, dp: number) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, d.wallH, dp), wallMat);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, d.wallH, dp), w > dp ? wallMatX : wallMatZ);
       m.position.set(x, d.wallH / 2, z);
       st.scene.add(m);
     };
@@ -391,9 +474,14 @@ export class HideRoom3D extends Phaser.Scene {
     st.scene.add(handle);
 
     for (const f of d.furniture) {
+      // Full-height partitions are walls and look like the walls; the rest is
+      // furniture, worn.
+      const isWall = f.h >= d.wallH - 0.05;
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(f.w, f.h, f.d),
-        new THREE.MeshLambertMaterial({ color: f.color }),
+        isWall
+          ? new THREE.MeshLambertMaterial({ map: surfaceTexture(d.theme, 'wall', f.color, seed + 3, Math.max(f.w, f.d), f.h) })
+          : new THREE.MeshLambertMaterial({ color: f.color, map: grunge }),
       );
       mesh.position.set(f.x, f.h / 2, f.z);
       st.scene.add(mesh);
@@ -402,11 +490,14 @@ export class HideRoom3D extends Phaser.Scene {
 
     for (const c of d.spots) this.spots.push(this.buildSpot(c.x, c.z, c.rot, c.kind));
 
+    // The dirt, the litter, the damp.  Placed off anything solid.
+    dressRoom(st.scene, d, seed, (x, z) => this.solid(x, z, 0.3));
+
     // Froggy himself: a real model, the same one the alley uses, so the thing
     // opening the lockers and the thing in the alley are one creature.  Hidden
     // for the count — the first fifteen seconds are yours, and nothing should
     // loom through them.
-    this.monster = new FroggyMonster();
+    this.monster = new FroggyMonster(FROGGY_SCALE);
     this.monster.setVisible(false);
     st.scene.add(this.monster.root);
     // A fingerprint of the model, published for the harness: the alley reports
@@ -431,7 +522,44 @@ export class HideRoom3D extends Phaser.Scene {
 
     const hinge = new THREE.Group();
 
-    if (kind === 'chest') {
+    if (kind === 'bed') {
+      // A bed frame on legs with a gap under it you can get into.  The
+      // blanket is the hinge: he checks a bed by throwing it back.
+      const frame = new THREE.Mesh(
+        new THREE.BoxGeometry(2.3, 0.16, 1.1),
+        new THREE.MeshLambertMaterial({ color: 0x6b6f6b }),
+      );
+      frame.position.y = 0.5;
+      group.add(frame);
+      for (const [lx, lz] of [[-1.05, -0.45], [1.05, -0.45], [-1.05, 0.45], [1.05, 0.45]]) {
+        const leg = new THREE.Mesh(
+          new THREE.BoxGeometry(0.08, 0.5, 0.08),
+          new THREE.MeshLambertMaterial({ color: 0x4a4d4a }),
+        );
+        leg.position.set(lx, 0.25, lz);
+        group.add(leg);
+      }
+      const mattress = new THREE.Mesh(
+        new THREE.BoxGeometry(2.2, 0.22, 1.0),
+        new THREE.MeshLambertMaterial({ color: 0x8a8272 }),
+      );
+      mattress.position.y = 0.69;
+      group.add(mattress);
+      const head = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.9, 1.1),
+        new THREE.MeshLambertMaterial({ color: 0x4a4d4a }),
+      );
+      head.position.set(-1.12, 0.6, 0);
+      group.add(head);
+      // the blanket, hinged along the far edge
+      hinge.position.set(0, 0.82, -0.5);
+      const blanket = new THREE.Mesh(
+        new THREE.BoxGeometry(2.0, 0.08, 1.0),
+        new THREE.MeshLambertMaterial({ color: 0x3f4a5a }),
+      );
+      blanket.position.z = 0.5;
+      hinge.add(blanket);
+    } else if (kind === 'chest') {
       const body = new THREE.Mesh(
         new THREE.BoxGeometry(1.1, 0.7, 0.8),
         new THREE.MeshLambertMaterial({ color: 0x4a3520 }),
@@ -487,7 +615,8 @@ export class HideRoom3D extends Phaser.Scene {
 
     group.add(hinge);
     st.scene.add(group);
-    return { x, z, kind, hinge, open: 0, opening: false, sinceChecked: 0 };
+    const ext = spotExtent({ x, z, rot, kind });
+    return { x, z, kind, hw: ext.hw, hd: ext.hd, checkedOn: -1, hinge, open: 0, opening: false, sinceChecked: 0 };
   }
 
   // ------------------------------------------------------------------- input
@@ -514,6 +643,9 @@ export class HideRoom3D extends Phaser.Scene {
       turnL: bind(['LEFT', 'Q']),
       turnR: bind(['RIGHT']),
       run: bind(['SHIFT']),
+      // CTRL as asked, and C beside it: the browser owns CTRL+W, and a player
+      // crouch-walking forward should not lose the tab for it.
+      crouch: bind(['CTRL', 'C']),
     };
     kb?.on('keydown-E', () => this.interact());
 
@@ -568,8 +700,18 @@ export class HideRoom3D extends Phaser.Scene {
 
     const spot = this.nearestSpot(SPOT_REACH);
     if (spot && !spot.opening) {
+      // If he is watching you climb in, the box is not a secret: he comes
+      // straight to it.  If he is not, it is — a sound is not a sighting.
+      const watched = this.mode === 'seeking' && this.grace <= 0 && (this.fMode === 'chase' || this.sees());
       this.hiding = spot;
       audio.sfx('hop_wet');
+      if (watched) {
+        this.fMode = 'suspicious';
+        this.memory = 0;
+        this.waypoint.set(spot.x, spot.z);
+        this.startTrip();
+        this.targetSpot = null;
+      }
     }
   }
 
@@ -663,7 +805,7 @@ export class HideRoom3D extends Phaser.Scene {
       const want = c.opening ? 1 : 0;
       c.open += (want - c.open) * Math.min(1, dt * 6);
       // A lid tips back; a door swings out on its side hinge.
-      if (c.kind === 'chest') c.hinge.rotation.x = -c.open * 1.5;
+      if (c.kind === 'chest' || c.kind === 'bed') c.hinge.rotation.x = -c.open * 1.5;
       else c.hinge.rotation.y = c.open * 1.9;
     }
 
@@ -722,6 +864,21 @@ export class HideRoom3D extends Phaser.Scene {
     say(0);
   }
 
+  /** Rooms two and three: no speech, straight to the count. */
+  private beginCountOnly(): void {
+    this.monster?.setVisible(false);
+    this.mode = 'hiding';
+    this.clock = HIDE_S;
+    this.fMode = 'search';
+    this.fTimer = 0;
+    // The echo: you got through the last one.  Once, on the way in, and not
+    // a scare — the room does that itself in ten seconds.
+    audio.sfx('zone_clear');
+    this.say(`ZONE ${this.roomIndex + 1}`, 1600);
+    this.freeFroggy();
+    this.pickWaypoint();
+  }
+
   /**
    * The count.  Ten seconds of an empty room and a number.
    *
@@ -742,7 +899,8 @@ export class HideRoom3D extends Phaser.Scene {
     // whose whole game is crossing it quickly cannot afford a player who does
     // not know they can strafe.
     if (this.clock > 7.5) this.subtitle = 'HIDE';
-    else if (this.clock > 3.5) this.subtitle = 'WASD TO MOVE - HOLD LEFT CLICK TO LOOK';
+    else if (this.clock > 5.2) this.subtitle = 'WASD MOVE - SHIFT RUN - CTRL CROUCH';
+    else if (this.clock > 3.0) this.subtitle = 'HOLD LEFT CLICK TO LOOK';
     else if (this.clock > 1.2) this.subtitle = 'FIND SOMEWHERE TO HIDE';
     else this.subtitle = '';
 
@@ -786,8 +944,9 @@ export class HideRoom3D extends Phaser.Scene {
     const strafe = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     if (fwd === 0 && strafe === 0) return;
 
-    const running = this.held('run');
-    const speed = running ? RUN : WALK;
+    this.crouching = this.held('crouch');
+    const running = this.held('run') && !this.crouching;
+    const speed = this.crouching ? CROUCH : running ? RUN : WALK;
 
     // Camera looks down -Z, so forward is (-sin, -cos) and right is (cos, -sin).
     const sin = Math.sin(this.yaw);
@@ -802,14 +961,24 @@ export class HideRoom3D extends Phaser.Scene {
     if (!this.solid(this.pos.x, nz)) this.pos.y = nz;
     this.clampToRoom(this.pos);
 
-    this.bob += dt * (running ? 9 : 5.5);
+    this.bob += dt * (running ? 9 : this.crouching ? 3.5 : 5.5);
     this.stepT += dt * speed;
     if (this.stepT > 1.9) {
       this.stepT = 0;
-      audio.sfx('footstep_concrete');
-      // Running is loud.  He does not need to see you to know where you are.
-      if (running && this.froggy.distanceTo(this.pos) < HEAR_RUN) this.alert();
-      else if (Math.random() < CREAK_CHANCE) this.creak();
+      // Three gaits, three sounds, three ranges.  A run is a slap he hears
+      // across the room; a walk is a soft step he hears only close by; a
+      // crouch is nothing at all, and never sets a board off either.
+      if (this.crouching) return;
+      const near = this.froggy.distanceTo(this.pos);
+      if (running) {
+        this.play('step_run', 0.55);
+        if (near < HEAR_RUN) this.alert();
+        else if (Math.random() < CREAK_CHANCE) this.creak();
+      } else {
+        this.play('step_walk', 0.32);
+        if (near < HEAR_WALK) this.alert();
+        else if (Math.random() < CREAK_CHANCE) this.creak();
+      }
     }
   }
 
@@ -831,7 +1000,12 @@ export class HideRoom3D extends Phaser.Scene {
     }
 
     if (seen) {
-      if (this.fMode !== 'chase') audio.sfx('buzzer');
+      if (this.fMode !== 'chase') {
+        audio.sfx('buzzer');
+        // The chase has its own music, and only the chase: the room is
+        // silent until he has you in view, and silent again once he loses you.
+        audio.setScene({ music: 'chase_pulse' });
+      }
       this.fMode = 'chase';
       this.memory = MEMORY_S;
       this.lastSeen.copy(this.pos);
@@ -839,6 +1013,7 @@ export class HideRoom3D extends Phaser.Scene {
       this.memory -= dt;
       if (this.memory <= 0) {
         this.fMode = 'suspicious';
+        audio.setScene(SILENCE);
         this.waypoint.copy(this.lastSeen);
         this.startTrip();
       }
@@ -850,20 +1025,25 @@ export class HideRoom3D extends Phaser.Scene {
       this.fTimer -= dt;
       if (this.fMode === 'openSpot' && this.targetSpot) {
         const spot = this.targetSpot;
-        // The lid comes up at the halfway mark, and it is heard when it does —
-        // from anywhere in the room.  This is the sound the round is played by.
-        spot.opening = this.fTimer < 0.9;
-        if (before >= 0.9 && this.fTimer < 0.9) {
+        // The lid comes up a little past the halfway mark, and it is heard
+        // when it does — from anywhere in the room.  This is the sound the
+        // round is played by.
+        const lidAt = this.openSeconds() * 0.53;
+        spot.opening = this.fTimer < lidAt;
+        if (before >= lidAt && this.fTimer < lidAt) {
           this.play('spot_open', this.earshot(spot.x, spot.z, OPEN_EARSHOT, 0.3));
           spot.sinceChecked = 0;
         }
-        if (this.fTimer < 0.9 && this.hiding === spot) {
+        if (this.fTimer < lidAt && this.hiding === spot) {
           this.caught();
           return;
         }
       }
       if (this.fTimer <= 0) {
-        if (this.targetSpot) this.targetSpot.opening = false;
+        if (this.targetSpot) {
+          this.targetSpot.opening = false;
+          this.targetSpot.checkedOn = this.sweep;
+        }
         this.targetSpot = null;
         this.fMode = 'search';
         this.pickWaypoint();
@@ -878,12 +1058,13 @@ export class HideRoom3D extends Phaser.Scene {
     }
 
     const target = this.fMode === 'chase' ? this.pos : this.waypoint;
-    const speed = this.froggySpeed();
-    const ax = target.x - this.froggy.x;
-    const az = target.y - this.froggy.y;
-    const dist = Math.hypot(ax, az);
+    const dist = target.distanceTo(this.froggy);
+    // Arriving at a hiding place means standing beside it, and a bed is a
+    // good deal wider than a chest.
+    const spotTarget = this.fMode === 'chase' ? null : this.spotNear(this.waypoint, 0.2);
+    const arriveAt = spotTarget ? Math.max(spotTarget.hw, spotTarget.hd) + 1.5 : ARRIVE_DIST;
 
-    if (dist < ARRIVE_DIST) {
+    if (dist < arriveAt) {
       if (this.fMode === 'investigate') {
         // Nothing here.  Look around the spot rather than walking off it: the
         // sound was approximate, so the search has to be too.
@@ -906,74 +1087,113 @@ export class HideRoom3D extends Phaser.Scene {
       return;
     }
 
-    this.froggyYaw = Math.atan2(ax, az);
-    const nx = this.froggy.x + (ax / dist) * speed * dt;
-    const nz = this.froggy.y + (az / dist) * speed * dt;
+    // ---- the route.  Replanned when the target has moved, when it is old,
+    // or when it is gone.  A chase replans often because you move.
+    this.pathAge += dt;
+    const stale = this.pathAge > (this.fMode === 'chase' ? 0.6 : 2.0);
+    const moved = Number.isNaN(this.pathFor.x) || this.pathFor.distanceTo(target) > 1.2;
+    if (this.path.length === 0 || moved || stale) this.replan(target);
+
+    // Next point: the furthest node ahead he can walk to in a straight line
+    // without crossing furniture, so the route is a walk and not a stagger
+    // from cell to cell.  Climbable cells are left to the path itself, so a
+    // climb happens where the route chose it.
+    let nx = target.x;
+    let nz = target.y;
+    if (this.path.length > 0 && this.grid) {
+      while (this.path.length > 1 && Math.hypot(this.path[0][0] - this.froggy.x, this.path[0][1] - this.froggy.y) < 0.45) {
+        this.path.shift();
+      }
+      let k = 0;
+      for (let i = Math.min(this.path.length - 1, 14); i > 0; i--) {
+        if (lineOpen(this.grid, this.froggy.x, this.froggy.y, this.path[i][0], this.path[i][1], false)) {
+          k = i;
+          break;
+        }
+      }
+      [nx, nz] = this.path[k];
+    }
+
+    // ---- steering.  He turns at a bounded rate and moves the way he is
+    // FACING, so a change of direction is an arc rather than a slide; he
+    // slows into sharp turns and accelerates out of them.
+    const wantSpeed = this.froggySpeed();
+    this.fSpeed += (wantSpeed - this.fSpeed) * Math.min(1, dt * FROGGY_ACCEL);
+    this.wantYaw = Math.atan2(nx - this.froggy.x, nz - this.froggy.y);
+    const dyaw = Phaser.Math.Angle.Wrap(this.wantYaw - this.froggyYaw);
+    this.froggyYaw = Phaser.Math.Angle.Wrap(this.froggyYaw + Phaser.Math.Clamp(dyaw, -FROGGY_TURN * dt, FROGGY_TURN * dt));
+    const align = Math.max(0, Math.cos(dyaw));
+    const step = this.fSpeed * dt * (0.3 + 0.7 * align);
+    const ax = Math.sin(this.froggyYaw);
+    const az = Math.cos(this.froggyYaw);
+    const speed = this.fSpeed;
+    const tx = this.froggy.x + ax * step;
+    const tz = this.froggy.y + az * step;
+
     // The outer walls are solid here too, not just in the clamp below.  If
     // they were not, a step into a wall counted as a clean step and none of
     // the stuck handling ever saw it.
-    const freeX = this.inRoom(nx, this.froggy.y) && !this.solid(nx, this.froggy.y, 0.5);
-    const freeZ = this.inRoom(this.froggy.x, nz) && !this.solid(this.froggy.x, nz, 0.5);
+    const freeX = this.inRoom(tx, this.froggy.y) && !this.solid(tx, this.froggy.y, 0.5);
+    const freeZ = this.inRoom(this.froggy.x, tz) && !this.solid(this.froggy.x, tz, 0.5);
 
     const inTheWay =
-      this.blockerAt(nx, nz, 0.5) ??
-      this.blockerAt(nx, this.froggy.y, 0.5) ??
-      this.blockerAt(this.froggy.x, nz, 0.5);
+      this.blockerAt(tx, tz, 0.5) ??
+      this.blockerAt(tx, this.froggy.y, 0.5) ??
+      this.blockerAt(this.froggy.x, tz, 0.5);
 
     if (freeX && freeZ) {
-      this.froggy.x = nx;
-      this.froggy.y = nz;
+      this.froggy.x = tx;
+      this.froggy.y = tz;
       this.stuckT = 0;
     } else if (inTheWay && this.startClimb(inTheWay, ax, az)) {
       // Straight over it.
       this.stuckT = 0;
     } else if (freeX || freeZ) {
-      // Slide along whichever axis is open, at FULL speed.  Keeping only that
-      // axis's share of the heading meant a waypoint straight through a sofa
-      // moved him about a centimetre a second and he looked frozen.
-      //
-      // When the open axis is also the one he has no reason to move along —
-      // the waypoint is dead ahead through the obstacle — he has to pick a side
-      // to go around, and flip that choice if it is not getting him anywhere.
+      // Sliding along whatever he clipped, at full speed.  The route should
+      // not bring him here often; when it does, this is one frame of it.
       this.stuckT += dt;
-      if (this.stuckT > 1.4) {
-        this.slideDir = this.slideDir === 1 ? -1 : 1;
+      if (freeX) this.froggy.x += Math.sign(ax || 1) * speed * dt * 0.8;
+      else this.froggy.y += Math.sign(az || 1) * speed * dt * 0.8;
+      if (this.stuckT > 0.5) {
         this.stuckT = 0;
-      }
-      if (freeX) {
-        const dir = Math.abs(ax) > 0.4 ? Math.sign(ax) : this.slideDir;
-        this.froggy.x += dir * speed * dt;
-      } else {
-        const dir = Math.abs(az) > 0.4 ? Math.sign(az) : this.slideDir;
-        this.froggy.y += dir * speed * dt;
+        this.replan(target);
       }
     } else {
-      // Blocked both ways: a pocket.  Give it a moment in case it is a corner
-      // he is about to slide out of, then put him on open floor and send him
-      // somewhere else.  This used to re-pick a waypoint every frame, which
-      // was a different blocked heading every frame and read as a twitch.
+      // Blocked both ways: a pocket.  A moment in case it is a corner he is
+      // about to turn out of, then onto open floor and a fresh route.
       this.stuckT += dt;
-      if (this.stuckT > 0.6) {
+      if (this.stuckT > 0.5) {
         this.stuckT = 0;
         this.freeFroggy(true);
-        if (this.fMode !== 'chase') this.giveUpTrip();
+        this.replan(target);
       }
     }
     this.clampToRoom(this.froggy);
     this.footsteps(dt, speed);
 
-    // Headway.  Sliding and climbing are both fine as long as they get him
-    // somewhere; a trip that has not, for a while, is one he cannot make, and
-    // he goes and checks somewhere else instead.  A chase is exempt — that is
-    // him losing you behind a wall, and memory running out already ends it.
+    // Headway.  A trip that is not getting anywhere is replanned once, and if
+    // the second route is no better it is abandoned for a different spot.  A
+    // chase is exempt: memory running out already ends that.
     this.headwayT += dt;
     if (this.headwayT >= HEADWAY_S) {
       const now = this.froggy.distanceTo(this.waypoint);
       const gained = this.headwayDist - now;
       this.headwayT = 0;
       this.headwayDist = now;
-      if (gained < HEADWAY_DIST && this.fMode !== 'chase') this.giveUpTrip();
+      if (gained < HEADWAY_DIST && this.fMode !== 'chase') {
+        if (this.repathFails++ < 1) this.replan(target);
+        else this.giveUpTrip();
+      }
     }
+  }
+
+  /** A fresh route to wherever he is going.  No route at all means give it up. */
+  private replan(target: THREE.Vector2): void {
+    if (!this.grid) return;
+    this.path = findPath(this.grid, this.froggy.x, this.froggy.y, target.x, target.y);
+    this.pathFor.copy(target);
+    this.pathAge = 0;
+    if (this.path.length === 0 && this.fMode !== 'chase') this.giveUpTrip();
   }
 
   /**
@@ -993,6 +1213,8 @@ export class HideRoom3D extends Phaser.Scene {
     }
     if (this.fMode === 'investigate' || this.fMode === 'suspicious') this.fMode = 'search';
     this.stuckT = 0;
+    this.path = [];
+    this.pathFor.set(NaN, NaN);
     // And if what stopped him was being inside something, put him on the floor.
     this.freeFroggy();
   }
@@ -1056,23 +1278,28 @@ export class HideRoom3D extends Phaser.Scene {
    * five seconds have gone by without a sight of you — prowling.
    */
   private froggySpeed(): number {
-    if (this.fMode === 'chase') return FROGGY_CHASE;
+    const pace = ROOM_PACE[Math.min(this.roomIndex, ROOM_PACE.length - 1)];
+    if (this.fMode === 'chase') return FROGGY_CHASE * pace;
     // Something made a noise, so he is not dawdling — but he is not chasing
     // either, because he has not seen anything to chase.
-    if (this.fMode === 'investigate') return FROGGY_SEARCH;
-    return this.unseenT > LOST_YOU_S ? FROGGY_PROWL : FROGGY_SEARCH;
+    if (this.fMode === 'investigate') return FROGGY_SEARCH * pace;
+    return (this.unseenT > LOST_YOU_S ? FROGGY_PROWL : FROGGY_SEARCH) * pace;
+  }
+
+  private openSeconds(): number {
+    return OPEN_S[Math.min(this.roomIndex, OPEN_S.length - 1)];
   }
 
   /** What he does on reaching a waypoint: check it, listen, or move on. */
   private arrive(): void {
-    const spot = this.spotNear(this.froggy, 1.8);
+    const spot = this.spotNear(this.froggy, 3.0);
     const roll = Math.random();
-    // A spot he has not touched in a while gets opened almost every time.  That
-    // is the pressure on the player: any one hiding place has a shelf life.
-    if (spot && (spot.sinceChecked > STALE_S || roll < 0.5)) {
+    // He opens what he walked to.  Every spot gets checked once a sweep, and
+    // a spot he has not touched in a while gets opened whatever the sweep says.
+    if (spot && (spot.checkedOn < this.sweep || spot.sinceChecked > STALE_S || roll < 0.5)) {
       this.targetSpot = spot;
       this.fMode = 'openSpot';
-      this.fTimer = 1.7;
+      this.fTimer = this.openSeconds();
       this.froggyYaw = Math.atan2(spot.x - this.froggy.x, spot.z - this.froggy.y);
       return;
     }
@@ -1129,19 +1356,27 @@ export class HideRoom3D extends Phaser.Scene {
    * being a circuit you can time.
    */
   private pickWaypoint(): void {
-    let picked = false;
-    if (this.spots.length > 0 && Math.random() < 0.8) {
-      let best: Spot3D | null = null;
-      for (let i = 0; i < 3; i++) {
-        const c = Phaser.Utils.Array.GetRandom(this.spots);
-        if (!best || c.sinceChecked > best.sinceChecked) best = c;
+    if (this.spots.length > 0) {
+      // Every hiding place gets opened once per sweep; when the last one is
+      // done the sweep starts again, which is the recheck.  Mostly he takes
+      // the nearest one still to do, so a sweep is a walk around the room and
+      // not a tour of its far corners — and one trip in five is a spot he has
+      // already done, so having been checked is not the same as being safe.
+      let pool = this.spots.filter((c) => c.checkedOn < this.sweep);
+      if (pool.length === 0) {
+        this.sweep++;
+        pool = this.spots.slice();
       }
-      if (best) {
-        this.waypoint.set(best.x, best.z);
-        picked = true;
+      let pick: Spot3D;
+      if (Math.random() < 0.2) {
+        pick = Phaser.Utils.Array.GetRandom(this.spots);
+      } else {
+        const here = this.froggy;
+        pool.sort((a, b) => Math.hypot(a.x - here.x, a.z - here.y) - Math.hypot(b.x - here.x, b.z - here.y));
+        pick = pool[Math.floor(Math.random() * Math.min(2, pool.length))];
       }
-    }
-    if (!picked) {
+      this.waypoint.set(pick.x, pick.z);
+    } else {
       this.waypoint.set(
         Phaser.Math.FloatBetween(-this.def.halfW + 1.5, this.def.halfW - 1.5),
         Phaser.Math.FloatBetween(-this.def.halfD + 1.5, this.def.halfD - 1.5),
@@ -1154,6 +1389,9 @@ export class HideRoom3D extends Phaser.Scene {
   private startTrip(): void {
     this.headwayT = 0;
     this.headwayDist = this.froggy.distanceTo(this.waypoint);
+    this.repathFails = 0;
+    this.path = [];
+    this.pathFor.set(NaN, NaN);
   }
 
   /**
@@ -1211,7 +1449,7 @@ export class HideRoom3D extends Phaser.Scene {
     const steps = Math.ceil(dist / 0.5);
     for (let i = 1; i < steps; i++) {
       const f = i / steps;
-      if (this.solid(this.froggy.x + dx * f, this.froggy.y + dz * f, 0)) return false;
+      if (this.opaque(this.froggy.x + dx * f, this.froggy.y + dz * f, this.crouching)) return false;
     }
     return true;
   }
@@ -1255,9 +1493,26 @@ export class HideRoom3D extends Phaser.Scene {
     // Landing inside something else is worse than not climbing at all.
     if (this.solid(to.x, to.y, 0.5)) return false;
 
-    this.climb = { from, to, top: box.h, t: 0, dur: Math.max(0.7, (box.h + from.distanceTo(to)) / CLIMB_SPEED) };
+    this.climb = {
+      from,
+      to,
+      top: box.h,
+      t: 0,
+      dur: Math.max(0.6, (box.h + from.distanceTo(to)) / CLIMB_SPEED),
+      mount: 0.32,
+      land: 0.24,
+    };
+    this.wantYaw = Math.atan2(to.x - from.x, to.y - from.y);
     this.play('hop_wet', this.earshot(from.x, from.y, EARSHOT, 0));
     return true;
+  }
+
+  /** 0..1 how far into the climb, by beat: -1 mounting, 0..1 crossing, 2 landing. */
+  private climbBeat(): { beat: 'mount' | 'cross' | 'land'; k: number } {
+    const c = this.climb!;
+    if (c.t < c.mount) return { beat: 'mount', k: c.t / c.mount };
+    if (c.t < c.mount + c.dur) return { beat: 'cross', k: (c.t - c.mount) / c.dur };
+    return { beat: 'land', k: Math.min(1, (c.t - c.mount - c.dur) / c.land) };
   }
 
   /** Runs a climb to its end.  Returns true while he is still on top of it. */
@@ -1265,11 +1520,17 @@ export class HideRoom3D extends Phaser.Scene {
     const c = this.climb;
     if (!c) return false;
     c.t += dt;
-    const k = Math.min(1, c.t / c.dur);
-    this.froggy.lerpVectors(c.from, c.to, k);
-    if (k >= 1) {
+    // He faces the thing he is climbing, and turns to it before he moves.
+    const dyaw = Phaser.Math.Angle.Wrap(this.wantYaw - this.froggyYaw);
+    this.froggyYaw = Phaser.Math.Angle.Wrap(this.froggyYaw + Phaser.Math.Clamp(dyaw, -FROGGY_TURN * dt, FROGGY_TURN * dt));
+    const { beat, k } = this.climbBeat();
+    if (beat === 'mount') this.froggy.copy(c.from);
+    else if (beat === 'cross') this.froggy.lerpVectors(c.from, c.to, k);
+    else this.froggy.copy(c.to);
+    if (c.t >= c.mount + c.dur + c.land) {
       this.climb = null;
       this.fStep = 0;
+      this.fSpeed *= 0.5;
       this.play('froggy_step', this.earshot(this.froggy.x, this.froggy.y, EARSHOT, 0));
     }
     return true;
@@ -1281,7 +1542,23 @@ export class HideRoom3D extends Phaser.Scene {
       if (Math.abs(x - b.x) < b.w / 2 + pad && Math.abs(z - b.z) < b.d / 2 + pad) return true;
     }
     for (const c of this.spots) {
-      if (Math.abs(x - c.x) < 0.55 + pad && Math.abs(z - c.z) < 0.4 + pad) return true;
+      if (Math.abs(x - c.x) < c.hw + pad && Math.abs(z - c.z) < c.hd + pad) return true;
+    }
+    return false;
+  }
+
+  /**
+   * What blocks SIGHT, which is not quite what blocks bodies: waist-height
+   * furniture stops you walking but you can see over it — unless you are
+   * crouched behind it, which is what crouching is for.
+   */
+  private opaque(x: number, z: number, lowCounts: boolean): boolean {
+    for (const b of this.blockers) {
+      if (b.low && !lowCounts) continue;
+      if (Math.abs(x - b.x) < b.w / 2 && Math.abs(z - b.z) < b.d / 2) return true;
+    }
+    for (const c of this.spots) {
+      if (Math.abs(x - c.x) < c.hw && Math.abs(z - c.z) < c.hd) return true;
     }
     return false;
   }
@@ -1300,7 +1577,9 @@ export class HideRoom3D extends Phaser.Scene {
     if (this.shake > 0) this.shake = Math.max(0, this.shake - dt * 1.6);
     const jitter = this.shake * 0.06;
 
-    const y = this.hiding ? 0.85 : EYE + Math.sin(this.bob) * 0.035;
+    const eyeWant = this.hiding ? (this.hiding.kind === 'bed' ? 0.32 : 0.85) : this.crouching ? EYE_CROUCH : EYE;
+    this.eyeNow += (eyeWant - this.eyeNow) * Math.min(1, dt * 9);
+    const y = this.eyeNow + (this.hiding ? 0 : Math.sin(this.bob) * 0.035);
     cam.position.set(
       this.pos.x + (Math.random() - 0.5) * jitter,
       y + (Math.random() - 0.5) * jitter,
@@ -1324,10 +1603,21 @@ export class HideRoom3D extends Phaser.Scene {
     let y = 0;
     let climbing = 0;
     if (this.climb) {
-      const k = this.climb.t / this.climb.dur;
-      // Up, along, and down: a flattened arc that tops out above the obstacle.
-      y = Math.sin(Math.min(1, k) * Math.PI) * 0.35 + this.climb.top * Math.min(1, k * 2.2, (1 - k) * 2.2 + 0.55);
-      climbing = 1;
+      const { beat, k } = this.climbBeat();
+      const top = this.climb.top;
+      if (beat === 'mount') {
+        // Reaching up and hauling: the pose comes on, the body starts to rise.
+        climbing = k;
+        y = top * 0.3 * k * k;
+      } else if (beat === 'cross') {
+        // Up, along, and down: a flattened arc that tops out above the obstacle.
+        climbing = 1;
+        y = Math.sin(k * Math.PI) * 0.35 + top * Math.min(1, 0.3 + k * 2.2, (1 - k) * 2.2 + 0.55);
+      } else {
+        // Landing: down the last of it and the pose lets go.
+        climbing = 1 - k;
+        y = top * 0.35 * (1 - k) * (1 - k);
+      }
     }
 
     // The model is built facing +Z and `froggyYaw` is already the angle that
@@ -1481,6 +1771,12 @@ export class HideRoom3D extends Phaser.Scene {
       froggyProwl: FROGGY_PROWL,
       lostYouSeconds: LOST_YOU_S,
       froggyMeshes: this.froggyMeshes,
+      froggyScale: FROGGY_SCALE,
+      roomPace: ROOM_PACE[Math.min(this.roomIndex, ROOM_PACE.length - 1)],
+      crouching: this.crouching,
+      pathLength: this.path.length,
+      sweep: this.sweep,
+      checkedThisSweep: this.spots.filter((c) => c.checkedOn >= this.sweep).length,
       secondsLeft: this.clock,
       hideSeconds: HIDE_S,
       seekSeconds: SEEK_S,
@@ -1507,6 +1803,7 @@ export class HideRoom3D extends Phaser.Scene {
   /** Found.  There is no beat between the two — the scare IS the catch. */
   private caught(): void {
     if (this.mode !== 'seeking') return;
+    audio.setScene(SILENCE);
     this.mode = 'caught';
     this.caughtT = 0;
     this.hiding = null;
@@ -1529,6 +1826,7 @@ export class HideRoom3D extends Phaser.Scene {
     this.hiding = null;
     this.subtitle = '';
     this.monster?.setVisible(false);
+    audio.setScene(SILENCE);
     audio.sfx('door_creak');
 
     const next = this.roomIndex + 1;

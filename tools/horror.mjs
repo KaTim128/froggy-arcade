@@ -173,8 +173,15 @@ try {
     await sleep(11000);
     let s = await hide();
     check('the count hands over to the search', s.mode === 'seeking', s.mode);
-    // Four minutes, because that is the number he says out loud in the basement.
-    check('he then has four minutes', s.seekSeconds === 240 && s.secondsLeft > 230,
+    // The test player stands in the open at the door for the next while.  He
+    // is faster and sharper than he was, and catching a mannequin ends the
+    // scene under the rest of these checks, so he is kept blind until a check
+    // wants him otherwise.
+    await page.evaluate(() => {
+      window.__froggy.game().scene.getScene('HideRoom3D').grace = 999;
+    });
+    // Three minutes, because that is the number he says out loud at the door.
+    check('he then has three minutes', s.seekSeconds === 180 && s.secondsLeft > 170,
       `${s.seekSeconds}s, ${s.secondsLeft?.toFixed(0)} left`);
     check('there is cover to hide in', s.spots.length >= 5, `${s.spots.length} spots`);
     check('the spots are not all the same thing',
@@ -224,9 +231,11 @@ try {
       const sc = window.__froggy.game().scene.getScene('HideRoom3D');
       return Math.hypot(sc.waypoint.x + 4.5, sc.waypoint.y - c.z) > 0.01;
     }, corner);
-    check('walled off from a waypoint, he goes somewhere else',
-      gaveUp && farthest > 2.5 && !s.dbg.froggyBlocked,
-      `${gaveUp ? 'new waypoint' : 'same waypoint'}, got ${farthest.toFixed(1)}m from the corner`);
+    // Either answer is right: a route round the partition, or a different spot.
+    // What is wrong is staying put.
+    check('walled off from a waypoint, he routes round or goes somewhere else',
+      farthest > 2.5 && !s.dbg.froggyBlocked,
+      `${gaveUp ? 'new waypoint' : 'same waypoint, routed'}, got ${farthest.toFixed(1)}m from the corner`);
 
     // The controls, driven for real through the keyboard rather than by poking
     // the scene: getting between two boxes before he arrives is the whole game,
@@ -409,7 +418,7 @@ try {
       opens.map((x) => x[1]).join(','));
     check('nothing else is making noise in there',
       heard.every(([n]) =>
-        ['froggy_step', 'spot_open', 'floor_creak', 'drip', 'hop_wet', 'footstep_concrete', 'door_creak', 'ui_hover'].includes(n),
+        ['froggy_step', 'spot_open', 'floor_creak', 'drip', 'hop_wet', 'step_walk', 'step_run', 'zone_clear', 'door_creak', 'ui_hover'].includes(n),
       ),
       [...new Set(heard.map(([n]) => n))].join(','));
 
@@ -475,8 +484,10 @@ try {
       `${gears.hunting} -> ${gears.prowling} after ${gears.lostAfter}s`);
     check('hunting he is faster than you can run', gears.chasing > gears.playerRun,
       `${gears.chasing} vs your ${gears.playerRun}`);
-    check('and even searching he is not far off it',
-      Math.abs(gears.search - gears.playerRun * 0.8) < 1e-6, `${gears.search} vs ${gears.playerRun}`);
+    check('and even searching he is a shade faster than you',
+      Math.abs(gears.search - gears.playerRun * 1.1) < 1e-6 && gears.hunting > gears.playerRun, `${gears.search} vs ${gears.playerRun}`);
+    check('and hunting he is twice your speed', Math.abs(gears.chasing - gears.playerRun * 2) < 1e-6,
+      `${gears.chasing} vs ${gears.playerRun}`);
 
     // The face goes first.  He spent a whole release walking backwards because
     // the model was handed a half turn it did not need.

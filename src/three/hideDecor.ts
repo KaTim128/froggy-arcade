@@ -1,0 +1,390 @@
+/**
+ * What the rooms are made of.
+ *
+ * Every surface used to be one flat colour, which reads as a diagram: a box
+ * with boxes in it.  These are painted textures — drawn on a canvas at load,
+ * from a seed, so the same room always looks the same — with the grime that
+ * makes a place read as abandoned: damp climbing the walls, stains on the
+ * floor, cracks, scuffs, peeling paper, tile joints gone black.
+ *
+ * Three themes, one per room, so the rooms are three places and not one
+ * place three times.  None of it changes the geometry; the grid he walks and
+ * the boxes you hide in are exactly what they were.
+ */
+
+import * as THREE from 'three';
+import type { RoomDef, RoomTheme } from './hideRooms';
+
+type Surface = 'floor' | 'wall' | 'ceiling' | 'grunge';
+
+/** A small deterministic generator, so a room dresses the same every visit. */
+function rng(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a += 0x6d2b79f5;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const hex = (c: number, mul = 1): string => {
+  const r = Math.min(255, Math.round(((c >> 16) & 255) * mul));
+  const g = Math.min(255, Math.round(((c >> 8) & 255) * mul));
+  const b = Math.min(255, Math.round((c & 255) * mul));
+  return `rgb(${r},${g},${b})`;
+};
+
+const SIZE = 256;
+
+function canvas(): [HTMLCanvasElement, CanvasRenderingContext2D] {
+  const c = document.createElement('canvas');
+  c.width = SIZE;
+  c.height = SIZE;
+  return [c, c.getContext('2d')!];
+}
+
+/** Fine speckle over the whole tile.  Every surface gets some. */
+function speckle(ctx: CanvasRenderingContext2D, r: () => number, amount: number, strength: number): void {
+  const img = ctx.getImageData(0, 0, SIZE, SIZE);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (r() > amount) continue;
+    const k = 1 + (r() - 0.5) * strength;
+    d[i] = Math.min(255, d[i] * k);
+    d[i + 1] = Math.min(255, d[i + 1] * k);
+    d[i + 2] = Math.min(255, d[i + 2] * k);
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+/** Soft dark blotches: damp, oil, old spills. */
+function stains(ctx: CanvasRenderingContext2D, r: () => number, n: number, colour: string, maxR: number, alpha: number): void {
+  for (let i = 0; i < n; i++) {
+    const x = r() * SIZE;
+    const y = r() * SIZE;
+    const rad = maxR * (0.4 + r() * 0.6);
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+    g.addColorStop(0, colour.replace(')', `,${alpha})`).replace('rgb', 'rgba'));
+    g.addColorStop(1, colour.replace(')', ',0)').replace('rgb', 'rgba'));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(x, y, rad * (0.7 + r() * 0.6), rad, r() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/** Hairline cracks: a few jagged polylines. */
+function cracks(ctx: CanvasRenderingContext2D, r: () => number, n: number, colour: string): void {
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = 1;
+  for (let i = 0; i < n; i++) {
+    let x = r() * SIZE;
+    let y = r() * SIZE;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    const segs = 6 + Math.floor(r() * 10);
+    const dir = r() * Math.PI * 2;
+    for (let s = 0; s < segs; s++) {
+      x += Math.cos(dir + (r() - 0.5) * 1.6) * (4 + r() * 10);
+      y += Math.sin(dir + (r() - 0.5) * 1.6) * (4 + r() * 10);
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+}
+
+/** Scuffs and scratches: short straight strokes, slightly lighter. */
+function scratches(ctx: CanvasRenderingContext2D, r: () => number, n: number, colour: string): void {
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = 1;
+  for (let i = 0; i < n; i++) {
+    const x = r() * SIZE;
+    const y = r() * SIZE;
+    const a = r() * Math.PI;
+    const len = 6 + r() * 26;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+    ctx.stroke();
+  }
+}
+
+function grid(ctx: CanvasRenderingContext2D, step: number, colour: string, width = 1): void {
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = width;
+  for (let x = 0; x <= SIZE; x += step) {
+    ctx.beginPath();
+    ctx.moveTo(x + 0.5, 0);
+    ctx.lineTo(x + 0.5, SIZE);
+    ctx.stroke();
+  }
+  for (let y = 0; y <= SIZE; y += step) {
+    ctx.beginPath();
+    ctx.moveTo(0, y + 0.5);
+    ctx.lineTo(SIZE, y + 0.5);
+    ctx.stroke();
+  }
+}
+
+function paint(theme: RoomTheme, surface: Surface, base: number, seed: number): HTMLCanvasElement {
+  const [c, ctx] = canvas();
+  const r = rng(seed);
+  ctx.fillStyle = hex(base);
+  ctx.fillRect(0, 0, SIZE, SIZE);
+
+  if (surface === 'grunge') {
+    // A neutral multiplier for furniture: mostly white, worn at the edges.
+    ctx.fillStyle = '#e6e6e6';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    speckle(ctx, r, 0.5, 0.25);
+    stains(ctx, r, 14, 'rgb(90,90,90)', 40, 0.35);
+    scratches(ctx, r, 30, 'rgba(255,255,255,0.35)');
+    return c;
+  }
+
+  if (theme === 'lounge') {
+    if (surface === 'floor') {
+      // Carpet: a fine weave, worn paths, and things spilled long ago.
+      speckle(ctx, r, 0.9, 0.22);
+      stains(ctx, r, 6, hex(base, 1.35), 60, 0.35); // worn lighter
+      stains(ctx, r, 9, 'rgb(20,12,10)', 34, 0.6);
+      stains(ctx, r, 3, 'rgb(70,18,20)', 22, 0.5);
+    } else if (surface === 'wall') {
+      // Wallpaper: faint stripes, damp rising from the skirting, paper lifting.
+      ctx.fillStyle = hex(base, 1.08);
+      for (let x = 0; x < SIZE; x += 24) ctx.fillRect(x, 0, 8, SIZE);
+      speckle(ctx, r, 0.6, 0.16);
+      const damp = ctx.createLinearGradient(0, SIZE, 0, SIZE * 0.45);
+      damp.addColorStop(0, 'rgba(12,10,8,0.7)');
+      damp.addColorStop(1, 'rgba(12,10,8,0)');
+      ctx.fillStyle = damp;
+      ctx.fillRect(0, 0, SIZE, SIZE);
+      stains(ctx, r, 5, 'rgb(30,22,14)', 44, 0.5);
+      cracks(ctx, r, 5, 'rgba(0,0,0,0.5)');
+      ctx.fillStyle = hex(base, 1.5);
+      for (let i = 0; i < 4; i++) {
+        const x = r() * SIZE;
+        const y = r() * SIZE * 0.6;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + 10 + r() * 20, y + 4);
+        ctx.lineTo(x + 6 + r() * 12, y + 16 + r() * 20);
+        ctx.closePath();
+        ctx.fill();
+      }
+    } else {
+      speckle(ctx, r, 0.7, 0.18);
+      stains(ctx, r, 6, 'rgb(60,44,24)', 60, 0.55); // water stains
+      cracks(ctx, r, 4, 'rgba(0,0,0,0.45)');
+    }
+  } else if (theme === 'stores') {
+    if (surface === 'floor') {
+      // Concrete slabs: joints, oil, tyre scuffs, a crack or two.
+      speckle(ctx, r, 0.95, 0.3);
+      grid(ctx, 128, 'rgba(0,0,0,0.55)', 2);
+      stains(ctx, r, 7, 'rgb(8,8,10)', 40, 0.7);
+      stains(ctx, r, 4, 'rgb(70,50,20)', 30, 0.4); // rust
+      scratches(ctx, r, 40, 'rgba(0,0,0,0.35)');
+      cracks(ctx, r, 6, 'rgba(0,0,0,0.6)');
+    } else if (surface === 'wall') {
+      // Blockwork: courses of block, grime low down, a leak line.
+      speckle(ctx, r, 0.9, 0.22);
+      for (let y = 0; y < SIZE; y += 32) {
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, y + 0.5);
+        ctx.lineTo(SIZE, y + 0.5);
+        ctx.stroke();
+        const off = (y / 32) % 2 === 0 ? 0 : 32;
+        for (let x = off; x < SIZE; x += 64) {
+          ctx.beginPath();
+          ctx.moveTo(x + 0.5, y);
+          ctx.lineTo(x + 0.5, y + 32);
+          ctx.stroke();
+        }
+      }
+      const damp = ctx.createLinearGradient(0, SIZE, 0, SIZE * 0.55);
+      damp.addColorStop(0, 'rgba(0,0,0,0.65)');
+      damp.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = damp;
+      ctx.fillRect(0, 0, SIZE, SIZE);
+      stains(ctx, r, 4, 'rgb(60,40,16)', 30, 0.5);
+      for (let i = 0; i < 3; i++) {
+        const x = r() * SIZE;
+        ctx.fillStyle = 'rgba(40,30,12,0.45)';
+        ctx.fillRect(x, 0, 2 + r() * 3, SIZE * (0.4 + r() * 0.6));
+      }
+    } else {
+      speckle(ctx, r, 0.8, 0.3);
+      stains(ctx, r, 5, 'rgb(0,0,0)', 70, 0.5);
+    }
+  } else {
+    if (surface === 'floor') {
+      // Lino tiles gone the colour of the years, joints black, drag marks.
+      speckle(ctx, r, 0.6, 0.14);
+      ctx.fillStyle = hex(base, 0.9);
+      for (let y = 0; y < SIZE; y += 32) {
+        for (let x = 0; x < SIZE; x += 32) if ((x / 32 + y / 32) % 2 === 0) ctx.fillRect(x, y, 32, 32);
+      }
+      grid(ctx, 32, 'rgba(0,0,0,0.45)');
+      stains(ctx, r, 6, 'rgb(40,30,18)', 50, 0.5);
+      stains(ctx, r, 3, 'rgb(90,18,16)', 18, 0.6);
+      scratches(ctx, r, 24, 'rgba(0,0,0,0.3)');
+    } else if (surface === 'wall') {
+      // Half-tiled: white tiles to waist height, painted above, all of it grubby.
+      ctx.fillStyle = hex(base, 1.5);
+      ctx.fillRect(0, SIZE * 0.5, SIZE, SIZE * 0.5);
+      for (let y = SIZE * 0.5; y < SIZE; y += 16) {
+        for (let x = 0; x < SIZE; x += 32) {
+          ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+          ctx.strokeRect(x + 0.5, y + 0.5, 32, 16);
+        }
+      }
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(0, SIZE * 0.5 - 3, SIZE, 3);
+      speckle(ctx, r, 0.7, 0.18);
+      stains(ctx, r, 6, 'rgb(40,36,20)', 40, 0.5);
+      stains(ctx, r, 2, 'rgb(80,16,14)', 26, 0.45);
+      cracks(ctx, r, 6, 'rgba(0,0,0,0.5)');
+      scratches(ctx, r, 18, 'rgba(0,0,0,0.3)');
+    } else {
+      // Suspended ceiling panels, some of them stained through.
+      grid(ctx, 64, 'rgba(0,0,0,0.6)', 2);
+      speckle(ctx, r, 0.5, 0.14);
+      stains(ctx, r, 5, 'rgb(70,60,30)', 40, 0.6);
+    }
+  }
+  return c;
+}
+
+const cache = new Map<string, THREE.CanvasTexture>();
+
+/** A tiling texture for a surface, repeated so the tile is about 4m across. */
+export function surfaceTexture(theme: RoomTheme, surface: Surface, base: number, seed: number, spanW: number, spanH: number): THREE.CanvasTexture {
+  const key = `${theme}:${surface}:${base}:${seed}`;
+  let tex = cache.get(key);
+  if (!tex) {
+    tex = new THREE.CanvasTexture(paint(theme, surface, base, seed));
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    cache.set(key, tex);
+  }
+  const t = tex.clone();
+  t.needsUpdate = true;
+  const tile = surface === 'wall' ? 3.2 : 4;
+  t.repeat.set(Math.max(1, spanW / tile), Math.max(1, spanH / tile));
+  return t;
+}
+
+/**
+ * Litter and decals: things on the floor that are not furniture and do not
+ * block anything.  Placed off the walkable geometry using the room's own
+ * solid test, so nothing sits inside a sofa or a box.
+ */
+export function dressRoom(scene: THREE.Scene, def: RoomDef, seed: number, solid: (x: number, z: number) => boolean): void {
+  const r = rng(seed * 7919 + 13);
+  const theme = def.theme;
+
+  // floor decals: dark patches, a few of them large
+  const decalMat = (col: number, alpha: number) => {
+    const [c, ctx] = canvas();
+    const g = ctx.createRadialGradient(SIZE / 2, SIZE / 2, 0, SIZE / 2, SIZE / 2, SIZE / 2);
+    g.addColorStop(0, hex(col).replace('rgb', 'rgba').replace(')', `,${alpha})`));
+    g.addColorStop(1, hex(col).replace('rgb', 'rgba').replace(')', ',0)'));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
+  };
+  const dark = decalMat(0x06050a, 0.75);
+  const rust = decalMat(theme === 'lounge' ? 0x3a1410 : 0x4a2a10, 0.6);
+  const count = Math.round((def.halfW * def.halfD) / 40);
+  for (let i = 0; i < count; i++) {
+    const x = (r() * 2 - 1) * (def.halfW - 2);
+    const z = (r() * 2 - 1) * (def.halfD - 2);
+    const s = 1.5 + r() * 3.5;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(s, s * (0.6 + r() * 0.8)), r() < 0.7 ? dark : rust);
+    m.rotation.x = -Math.PI / 2;
+    m.rotation.z = r() * Math.PI;
+    m.position.set(x, 0.012, z);
+    scene.add(m);
+  }
+
+  // debris: bits of board, bottles, bricks, paper — small, low, off the paths
+  const debrisCols = theme === 'lounge' ? [0x3b2a1c, 0x58432b, 0x2a2420] : theme === 'stores' ? [0x3a3f46, 0x4a3a26, 0x24262a] : [0x8a8f8a, 0x5c5a52, 0x3a3d3a];
+  const bits = Math.round((def.halfW * def.halfD) / 14);
+  for (let i = 0; i < bits; i++) {
+    const x = (r() * 2 - 1) * (def.halfW - 1.5);
+    const z = (r() * 2 - 1) * (def.halfD - 1.5);
+    if (solid(x, z)) continue;
+    const w = 0.15 + r() * 0.5;
+    const d = 0.1 + r() * 0.4;
+    const h = 0.05 + r() * 0.16;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color: debrisCols[Math.floor(r() * debrisCols.length)] }));
+    m.position.set(x, h / 2, z);
+    m.rotation.y = r() * Math.PI;
+    scene.add(m);
+  }
+
+  // wall grime: dark panels low on the walls, and a few tall streaks
+  const streak = new THREE.MeshBasicMaterial({ color: 0x050406, transparent: true, opacity: 0.5, depthWrite: false });
+  const walls: Array<[number, number, number, number]> = [
+    [0, -def.halfD + 0.03, def.halfW * 2, 0],
+    [0, def.halfD - 0.03, def.halfW * 2, Math.PI],
+    [-def.halfW + 0.03, 0, def.halfD * 2, Math.PI / 2],
+    [def.halfW - 0.03, 0, def.halfD * 2, -Math.PI / 2],
+  ];
+  for (const [wx, wz, len, rot] of walls) {
+    const n = Math.round(len / 6);
+    for (let i = 0; i < n; i++) {
+      const along = (r() - 0.5) * (len - 2);
+      const w = 0.6 + r() * 2.4;
+      const h = 0.6 + r() * (def.wallH - 0.8);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), streak);
+      m.position.set(wx + (rot === 0 || rot === Math.PI ? along : 0), h / 2 + 0.01, wz + (rot === 0 || rot === Math.PI ? 0 : along));
+      m.rotation.y = rot;
+      scene.add(m);
+    }
+  }
+
+  // theme props
+  if (theme === 'ward') {
+    // drip stands and a wheelchair's worth of tubing: thin verticals
+    for (let i = 0; i < 6; i++) {
+      const x = (r() * 2 - 1) * (def.halfW - 3);
+      const z = (r() * 2 - 1) * (def.halfD - 3);
+      if (solid(x, z)) continue;
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.8, 6), new THREE.MeshLambertMaterial({ color: 0x9aa0a0 }));
+      pole.position.set(x, 0.9, z);
+      scene.add(pole);
+    }
+  } else if (theme === 'stores') {
+    // pipes along the ceiling
+    for (let i = 0; i < 4; i++) {
+      const z = -def.halfD + 3 + r() * (def.halfD * 2 - 6);
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, def.halfW * 2, 8), new THREE.MeshLambertMaterial({ color: 0x2f3338 }));
+      pipe.rotation.z = Math.PI / 2;
+      pipe.position.set(0, def.wallH - 0.35 - r() * 0.3, z);
+      scene.add(pipe);
+    }
+  } else {
+    // a rug, and pictures on the walls
+    const rug = new THREE.Mesh(new THREE.PlaneGeometry(5, 3.2), new THREE.MeshLambertMaterial({ color: 0x4a2a2e }));
+    rug.rotation.x = -Math.PI / 2;
+    rug.position.set(0, 0.008, 2);
+    scene.add(rug);
+    for (let i = 0; i < 4; i++) {
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 0.05), new THREE.MeshLambertMaterial({ color: 0x1a1410 }));
+      frame.position.set((r() * 2 - 1) * (def.halfW - 3), 1.7, -def.halfD + 0.3);
+      frame.rotation.z = (r() - 0.5) * 0.3;
+      scene.add(frame);
+    }
+  }
+}

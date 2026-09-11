@@ -205,6 +205,8 @@ class AudioManager {
       stops.push(this.placeholderMusic(gain, id === 'theme_arcade'));
     } else if (id === 'casino_chiptune') {
       stops.push(this.placeholderChiptune(gain));
+    } else if (id === 'chase_pulse') {
+      stops.push(this.placeholderChase(gain));
     } else if (id === 'neon_buzz') {
       stops.push(this.placeholderDrone(gain, 120, 0.012, 'sawtooth'));
     } else if (id === 'crowd_hum') {
@@ -449,6 +451,77 @@ class AudioManager {
 
     tick();
     const timer = window.setInterval(tick, STEP_MS);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      try {
+        tone.disconnect();
+      } catch {
+        /* already gone */
+      }
+    };
+  }
+
+  /**
+   * The chase.  Not a tune: a pulse.  A kick on every beat at about 150 BPM
+   * over a low sawtooth that alternates a semitone — the oldest trick there
+   * is for "something is wrong" — and, above it, a thin string tremolo that
+   * climbs a little every bar and never resolves.  It stops the instant he
+   * loses you, which is the point of it.
+   */
+  private placeholderChase(out: GainNode): () => void {
+    const ctx = this.ctx!;
+    const BEAT_MS = 400;
+    let beat = 0;
+    let stopped = false;
+
+    const tone = ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = 2600;
+    tone.connect(out);
+
+    const hit = (freq: number, at: number, dur: number, vol: number, type: OscillatorType) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.linearRampToValueAtTime(vol, at + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      osc.connect(g);
+      g.connect(tone);
+      osc.start(at);
+      osc.stop(at + dur + 0.05);
+    };
+    const kick = (at: number) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(140, at);
+      osc.frequency.exponentialRampToValueAtTime(38, at + 0.12);
+      g.gain.setValueAtTime(0.16, at);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.22);
+      osc.connect(g);
+      g.connect(out);
+      osc.start(at);
+      osc.stop(at + 0.25);
+    };
+
+    const tick = () => {
+      if (stopped) return;
+      const t = ctx.currentTime + 0.02;
+      const bar = Math.floor(beat / 4);
+      kick(t);
+      // the low growl, a semitone apart on alternate beats
+      hit(beat % 2 ? 43.65 : 41.2, t, 0.38, 0.05, 'sawtooth');
+      // the string, off the beat, creeping up over eight bars then falling back
+      const climb = (bar % 8) * 0.35;
+      hit(880 * Math.pow(2, climb / 12), t + 0.2, 0.18, 0.012, 'triangle');
+      hit(932 * Math.pow(2, climb / 12), t + 0.3, 0.14, 0.01, 'triangle');
+      beat++;
+    };
+    tick();
+    const timer = window.setInterval(tick, BEAT_MS);
     return () => {
       stopped = true;
       clearInterval(timer);
@@ -734,6 +807,29 @@ class AudioManager {
         noise(0.1, 0.16, 420);
         beep(70, 0.09, 0.07, 'sine', 0.01);
         break;
+      // Your steps, in the rooms.  A walk is a soft sole coming down: a low
+      // thump with almost no hiss.  A run is the same foot hitting harder — a
+      // sharper thump with a scuff on top.  The old concrete step was a burst
+      // of bright noise that read as static, and it was the same at any speed.
+      case 'step_walk':
+        beep(58, 0.06, 0.09, 'sine');
+        noise(0.05, 0.03, 320, 0.005);
+        break;
+      case 'step_run':
+        beep(64, 0.07, 0.13, 'sine');
+        noise(0.04, 0.05, 260, 0.004);
+        noise(0.03, 0.045, 1600, 0.02);
+        break;
+      // You made it out of a zone.  A soft rising pair of notes and their
+      // echoes, dying away down a long corridor.  Deliberately not a scare:
+      // the room provides those, and this is the one kind thing it says.
+      case 'zone_clear':
+        beep(392, 0.28, 0.05, 'sine');
+        beep(587, 0.42, 0.045, 'sine', 0.24);
+        beep(392, 0.24, 0.022, 'sine', 0.62);
+        beep(587, 0.36, 0.02, 'sine', 0.86);
+        beep(587, 0.5, 0.009, 'sine', 1.4);
+        break;
       case 'drip':
         beep(1800, 0.05, 0.06, 'sine');
         beep(900, 0.12, 0.05, 'sine', 0.03);
@@ -868,6 +964,9 @@ export type SfxName =
   | 'spot_open'
   | 'floor_creak'
   | 'froggy_step'
+  | 'step_walk'
+  | 'step_run'
+  | 'zone_clear'
   | 'ticket_machine';
 
 export const audio = new AudioManager();

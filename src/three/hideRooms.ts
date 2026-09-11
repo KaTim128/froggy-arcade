@@ -23,8 +23,15 @@ export interface Box {
   low?: boolean;
 }
 
-/** What kind of thing you climb into.  Only the shape and the sound differ. */
-export type SpotKind = 'chest' | 'cupboard' | 'locker';
+/**
+ * What kind of thing you hide in.  Only the shape and the sound differ — and
+ * the bed, which you go UNDER rather than into, and which he checks by
+ * lifting the blanket.
+ */
+export type SpotKind = 'chest' | 'cupboard' | 'locker' | 'bed';
+
+/** Which set of textures and props dresses the room.  See hideDecor. */
+export type RoomTheme = 'lounge' | 'stores' | 'ward';
 
 export interface HideSpot {
   x: number;
@@ -36,6 +43,7 @@ export interface HideSpot {
 
 export interface RoomDef {
   name: string;
+  theme: RoomTheme;
   /** Half-extents of the floor: the room spans -halfW..halfW by -halfD..halfD. */
   halfW: number;
   halfD: number;
@@ -61,8 +69,9 @@ export interface RoomDef {
  * a chest.  Partitions give you the third option — break the sightline and
  * simply not be where he is looking.
  */
-export const LIVING_ROOM: RoomDef = {
+const LOUNGE_BASE: RoomDef = {
   name: 'THE LOUNGE',
+  theme: 'lounge',
   halfW: 18,
   halfD: 14,
   wallH: 3.4,
@@ -119,6 +128,9 @@ export const LIVING_ROOM: RoomDef = {
     { x: -5.5, z: 6.0, rot: Math.PI / 2, kind: 'chest' },
     { x: 6.5, z: 9.5, rot: 0, kind: 'chest' },
     { x: 16.0, z: 12.0, rot: Math.PI, kind: 'cupboard' },
+    // a couple of beds that were never meant to be in a lounge
+    { x: -16.0, z: -6.5, rot: Math.PI / 2, kind: 'bed' },
+    { x: 15.5, z: 2.0, rot: Math.PI / 2, kind: 'bed' },
   ],
   door: { x: 0 },
   // You come in through the door, so you start beside it, facing the room.
@@ -127,8 +139,9 @@ export const LIVING_ROOM: RoomDef = {
 };
 
 /** Underground, and bigger again.  Racking makes the sightlines. */
-export const WAREHOUSE: RoomDef = {
+const STORES_BASE: RoomDef = {
   name: 'SUB-LEVEL STORES',
+  theme: 'stores',
   halfW: 24,
   halfD: 18,
   wallH: 4.6,
@@ -175,10 +188,104 @@ export const WAREHOUSE: RoomDef = {
     { x: -2.0, z: 5.5, rot: 0, kind: 'chest' },
     { x: 12.0, z: 15.0, rot: 0, kind: 'locker' },
     { x: -10.0, z: 15.5, rot: 0, kind: 'cupboard' },
+    // camp beds, in the open half, where somebody once slept down here
+    { x: 14.0, z: 8.0, rot: 0, kind: 'bed' },
+    { x: -9.5, z: 12.5, rot: Math.PI / 2, kind: 'bed' },
   ],
   door: { x: 0 },
   spawn: { x: 0, z: 16.2 },
   froggyStart: { x: -20.0, z: -15.0 },
 };
 
-export const ROOMS: RoomDef[] = [LIVING_ROOM, WAREHOUSE];
+/**
+ * The last room.  A ward: rows of beds with curtain rails between them, a
+ * nurses' station, and lockers along the walls.  Beds are most of the cover,
+ * which is the point of it — under one, you can see his feet go past.
+ */
+const WARD_BASE: RoomDef = {
+  name: 'THE WARD',
+  theme: 'ward',
+  halfW: 26,
+  halfD: 19,
+  wallH: 3.8,
+  floor: 0x3a3d3a,
+  wall: 0x505a52,
+  ceiling: 0x1a1d1a,
+  lights: [
+    { x: -16, z: -11, color: 0xc8ffd8, intensity: 14 },
+    { x: 0, z: -11, color: 0xd8ffe8, intensity: 12 },
+    { x: 16, z: -11, color: 0xc8ffd8, intensity: 14 },
+    { x: -16, z: 7, color: 0xd8ffe8, intensity: 12 },
+    { x: 16, z: 7, color: 0xc8ffd8, intensity: 12 },
+    { x: 0, z: 12, color: 0xffb45e, intensity: 9 },
+  ],
+  furniture: [
+    // curtain rails: full-height partitions between the bays
+    { x: -13.0, z: -12.0, w: 0.4, d: 12.0, h: 3.8, color: 0x6a7368 },
+    { x: -4.0, z: -12.0, w: 0.4, d: 12.0, h: 3.8, color: 0x6a7368 },
+    { x: 5.0, z: -12.0, w: 0.4, d: 12.0, h: 3.8, color: 0x6a7368 },
+    { x: 14.0, z: -12.0, w: 0.4, d: 12.0, h: 3.8, color: 0x6a7368 },
+    // the corridor wall down the middle, with gaps at both ends
+    { x: -8.0, z: -2.5, w: 22.0, d: 0.6, h: 3.8, color: 0x555e55 },
+    { x: 15.0, z: -2.5, w: 14.0, d: 0.6, h: 3.8, color: 0x555e55 },
+    // the nurses' station, and the wall behind it
+    { x: 0.0, z: 6.0, w: 7.0, d: 2.2, h: 1.1, color: 0x7a7266 },
+    { x: 0.0, z: 8.6, w: 9.0, d: 0.5, h: 3.8, color: 0x555e55 },
+    // trolleys and cabinets you can go over
+    { x: -18.0, z: 3.0, w: 1.6, d: 1.0, h: 1.0, color: 0x8a8f8a, low: true },
+    { x: -9.0, z: 12.0, w: 2.2, d: 1.2, h: 1.6, color: 0x6e6a62 },
+    { x: 9.0, z: 13.0, w: 2.2, d: 1.2, h: 1.6, color: 0x6e6a62 },
+    { x: 20.0, z: 4.0, w: 1.6, d: 1.0, h: 1.0, color: 0x8a8f8a, low: true },
+    { x: -22.0, z: 12.0, w: 2.6, d: 2.6, h: 2.6, color: 0x4a4d4a },
+    { x: 22.0, z: 13.0, w: 2.6, d: 2.6, h: 2.6, color: 0x4a4d4a },
+    { x: -20.0, z: -4.5, w: 3.0, d: 1.4, h: 0.9, color: 0x5c5a52, low: true },
+    { x: 21.0, z: -5.0, w: 3.0, d: 1.4, h: 0.9, color: 0x5c5a52, low: true },
+  ],
+  spots: [
+    // a bed in every bay
+    { x: -22.0, z: -14.0, rot: 0, kind: 'bed' },
+    { x: -17.5, z: -8.0, rot: 0, kind: 'bed' },
+    { x: -8.5, z: -14.0, rot: 0, kind: 'bed' },
+    { x: -8.5, z: -7.0, rot: 0, kind: 'bed' },
+    { x: 0.5, z: -14.0, rot: 0, kind: 'bed' },
+    { x: 9.5, z: -14.0, rot: 0, kind: 'bed' },
+    { x: 9.5, z: -7.0, rot: 0, kind: 'bed' },
+    { x: 18.5, z: -14.0, rot: 0, kind: 'bed' },
+    { x: 22.0, z: -8.0, rot: 0, kind: 'bed' },
+    // and lockers and a cupboard in the open half
+    { x: -24.5, z: 0.0, rot: Math.PI / 2, kind: 'locker' },
+    { x: 24.5, z: 0.0, rot: -Math.PI / 2, kind: 'locker' },
+    { x: -14.0, z: 16.5, rot: 0, kind: 'cupboard' },
+    { x: 15.0, z: 16.5, rot: 0, kind: 'locker' },
+    { x: 5.0, z: 3.0, rot: Math.PI / 2, kind: 'chest' },
+  ],
+  door: { x: 0 },
+  spawn: { x: 0, z: 17.2 },
+  froggyStart: { x: -23.0, z: -16.0 },
+};
+
+/**
+ * Stretch a room.  Positions and footprints scale; heights do not.  The
+ * rooms were built at a size that turned out cramped once he was faster and
+ * bigger, and scaling the layout keeps every sightline the designer chose
+ * while giving both of you more floor to use.
+ */
+function scaleRoom(def: RoomDef, k: number): RoomDef {
+  return {
+    ...def,
+    halfW: Math.round(def.halfW * k),
+    halfD: Math.round(def.halfD * k),
+    lights: def.lights.map((l) => ({ ...l, x: l.x * k, z: l.z * k })),
+    furniture: def.furniture.map((f) => ({ ...f, x: f.x * k, z: f.z * k, w: f.w * k, d: f.d * k })),
+    spots: def.spots.map((s) => ({ ...s, x: s.x * k, z: s.z * k })),
+    door: { x: def.door.x * k },
+    spawn: { x: def.spawn.x * k, z: def.spawn.z * k },
+    froggyStart: { x: def.froggyStart.x * k, z: def.froggyStart.z * k },
+  };
+}
+
+export const LIVING_ROOM: RoomDef = scaleRoom(LOUNGE_BASE, 1.3);
+export const WAREHOUSE: RoomDef = scaleRoom(STORES_BASE, 1.2);
+export const WARD: RoomDef = scaleRoom(WARD_BASE, 1.1);
+
+export const ROOMS: RoomDef[] = [LIVING_ROOM, WAREHOUSE, WARD];
