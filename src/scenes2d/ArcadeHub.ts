@@ -181,7 +181,7 @@ export class ArcadeHub extends Phaser.Scene {
     const hard = inHere.reduce((a, b) => (b.cost > a.cost ? b : a));
     this.dialogue.play(
       tutorialScript({
-        tokenHud: { x: 54, y: 15, w: 104, h: 26 },
+        tokenHud: { x: 30, y: 11, w: 56, h: 16 },
         cheapCabinet: { x: cheap.x, y: cheap.y - 18, w: 30, h: 40 },
         hardCabinet: { x: hard.x, y: hard.y - 18, w: 30, h: 40 },
         prizeCounter: { x: PRIZE_CASE.x + PRIZE_CASE.w / 2, y: PRIZE_CASE.y + 9, w: PRIZE_CASE.w, h: 22 },

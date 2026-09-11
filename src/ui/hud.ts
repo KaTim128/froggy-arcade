@@ -14,9 +14,8 @@ import { text } from '../core/ui';
 
 export const LOW_TOKEN_THRESHOLD = 3;
 
-/** Left edge of the label, clear of the coin.  Text at 2x: it is the number the whole game is about. */
-const LABEL_X = 24;
-const LABEL_SIZE = 16;
+/** Left edge of the label, clear of the coin. */
+const LABEL_X = 19;
 
 export class TokenHud {
   private scene: Phaser.Scene;
@@ -30,9 +29,9 @@ export class TokenHud {
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
 
-    this.plate = scene.add.rectangle(0, 0, 100, 22, PALETTE.black, 0.55).setOrigin(0, 0);
-    this.coin = scene.add.circle(12, 11, 6, PALETTE.gold);
-    this.label = text(scene, LABEL_X, 3, '', PALETTE.cream, LABEL_SIZE);
+    this.plate = scene.add.rectangle(0, 0, 54, 14, PALETTE.black, 0.55).setOrigin(0, 0);
+    this.coin = scene.add.circle(10, 7, 4, PALETTE.gold);
+    this.label = text(scene, LABEL_X, 3, '', PALETTE.cream);
 
     this.container = scene.add.container(4, 4, [this.plate, this.coin, this.label]);
     this.container.setDepth(950).setScrollFactor(0);
