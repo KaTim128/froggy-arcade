@@ -39,7 +39,7 @@ const CARDS: string[][] = [
   ['The job went first.'],
   ['Then the flat.', 'Then everything', 'that was in it.'],
   ['That was seven months ago.', 'You have been on', 'the street since.'],
-  ['This afternoon you are', 'sat outside an arcade,', 'because it is warm and', 'nobody moves you on.'],
+  ['This afternoon you sit', 'near an arcade.', 'It is warm, and nobody', 'bothers you.'],
 ];
 
 /** What he says, once he is stood over you.  Small, under the street: a caption, not a card. */
