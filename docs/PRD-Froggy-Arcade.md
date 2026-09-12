@@ -867,7 +867,7 @@ An original 1v1 side-view fighter. Original characters and art. `[QFD: VOC-22]`
 
 ### 9.9 Frog vs Lizard — Hard, 5 → 5
 
-A turn-based throwing match over a garden fence. You are the frog on the left;
+A one-round, turn-based throwing match over a garden fence. You are the frog on the left;
 the lizard is on the right and plays by exactly the same rules. Five in, five
 out: you are playing the lizard, not the house.
 
@@ -883,7 +883,7 @@ out: you are playing the lizard, not the house.
 | **Dynamite** | 28 | exactly double | 1 |
 | **Poison** | 8 | **5 chip damage at the top of the opponent's next three turns**, applied once per turn, then it stops | 1 |
 
-- **Rounds:** 80 HP a side, **two rounds**. Health, poison and the special stock reset between them; the round score and the damage tally do not. Take both rounds and the cabinet pays; a one-all split goes to whoever dealt the most damage over the match; a dead heat pays nothing — the same rule the bowling lane uses.
+- **Rounds:** 80 HP a side, **one round**. It ends when somebody's bar is empty: empty his and the cabinet pays, empty yours and it does not. There is no second go, which is what makes holding a special worth doing and throwing one at nothing a real loss. (`ROUNDS` is a constant and the scoring still handles a longer match — a split going on total damage dealt, a dead heat paying nothing, as the bowling lane does — so the number can be retuned without rewriting the end of the game.)
 - **The lizard's AI** searches its own throws against the wind actually blowing, keeps the arc that would land, then throws it with a small two-uniform wobble on both angle and power — so it aims like an opponent and misses like one. Its item choice is the same reasoning a player uses off the same stock: heal when hurt, dynamite to finish, poison early while there is time for it to work, rock otherwise.
 - **HUD:** both health bars, the round and round score, the poison counter on each side, the wind bar, the item bar with the key for each item and how many are left, and the control line.
 

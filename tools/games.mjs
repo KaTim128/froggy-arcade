@@ -544,11 +544,17 @@ for (const g of [
   console.log(`${rockOk ? 'PASS' : 'FAIL'}  frog vs lizard: the rock lands its ordinary damage  — ${rockDmg}`);
   if (!rockOk) failures++;
 
-  // Wait out the lizard's reply, then take the frog's turn again.
+  // Wait out the lizard's reply, then take the frog's turn again.  The match
+  // is a single round now, so a frog that runs out of health ends the game and
+  // takes the rest of these checks with it: top it back up on the way through.
+  // What is under test is the items, not whether the lizard can aim.
   const waitForFrog = async () => {
     for (let i = 0; i < 60; i++) {
       const s = await st();
-      if (s.turn === 'frog' && s.phase === 'aim') return s;
+      if (s.turn === 'frog' && s.phase === 'aim') {
+        await page.evaluate(() => window.__fvl.setHp('frog', 80));
+        return st();
+      }
       await sleep(400);
     }
     return st();

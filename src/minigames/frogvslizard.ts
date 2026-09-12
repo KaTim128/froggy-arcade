@@ -25,10 +25,15 @@
  * to it.  It pushes whatever is in the air, and it pushes harder the stronger
  * it is, so the same throw that landed last turn does not land this turn.
  *
- * TWO ROUNDS.  A round ends when somebody's health is gone.  Take both and the
- * cabinet pays; split them and it goes to whoever did the most damage over the
- * match; a dead heat pays nothing.  Health, poison and the special stock all
- * reset between rounds — what carries is the round score.
+ * ONE ROUND, and it ends when somebody's health is gone.  Empty his bar and
+ * the cabinet pays; empty yours and it does not.  There is no second go at it
+ * and no coming back from a bad first exchange, so one dynamite thrown early
+ * at nothing is a real loss — which is the whole reason the specials are worth
+ * holding.
+ *
+ * (ROUNDS drives it.  The scoring below still handles a match of several — a
+ * split going to whoever did the most damage, a dead heat paying nothing —
+ * because the number is a constant and not an assumption baked into the code.)
  */
 
 import Phaser from 'phaser';
@@ -41,7 +46,7 @@ import type { MinigameApi, MinigameModule } from './types';
 import { backdrop } from './decor';
 
 const ID = 'frogvslizard' as const;
-export const ROUNDS = 2;
+export const ROUNDS = 1;
 const MAX_HP = 80;
 
 const GROUND_Y = 146;
@@ -159,12 +164,12 @@ export const frogVsLizard: MinigameModule = {
   id: ID,
   title: 'FROG VS LIZARD',
   music: 'game_frogvslizard',
-  rules: 'two rounds over the fence - mind the wind',
+  rules: 'one round over the fence - mind the wind',
   tutorial: {
     objective: [
       'THROW OVER THE FENCE AND HIT HIM.',
       'THE WIND BENDS EVERY THROW - AIM OFF IT.',
-      'TWO ROUNDS. EMPTY HIS HEALTH BAR.',
+      'ONE ROUND. EMPTY HIS HEALTH BAR.',
     ],
     controls: [
       ['W / S', 'AIM HIGHER OR LOWER'],
@@ -468,7 +473,9 @@ function buildHud(scene: Phaser.Scene): void {
 }
 
 function refreshHud(): void {
-  roundText?.setText(`ROUND ${round}/${ROUNDS}   ${roundsWon.frog}-${roundsWon.lizard}`);
+  roundText?.setText(
+    ROUNDS > 1 ? `ROUND ${round}/${ROUNDS}   ${roundsWon.frog}-${roundsWon.lizard}` : 'ONE ROUND - LAST ONE STANDING',
+  );
   for (const who of ['frog', 'lizard'] as Who[]) {
     const s = sides[who];
     const frac = Math.max(0, s.hp) / MAX_HP;
@@ -894,7 +901,16 @@ function endRound(): void {
   const winner: Who = frogDown ? 'lizard' : 'frog';
   roundsWon[winner]++;
   refreshHud();
-  banner(winner === 'frog' ? `ROUND ${round} IS YOURS` : `ROUND ${round} TO THE LIZARD`, winner === 'frog' ? PALETTE.gold : PALETTE.neon);
+  banner(
+    ROUNDS > 1
+      ? winner === 'frog'
+        ? `ROUND ${round} IS YOURS`
+        : `ROUND ${round} TO THE LIZARD`
+      : winner === 'frog'
+        ? 'HE IS DOWN'
+        : 'YOU ARE DOWN',
+    winner === 'frog' ? PALETTE.gold : PALETTE.neon,
+  );
   audio.sfx(winner === 'frog' ? 'chime' : 'buzzer');
 
   scene0.time.delayedCall(1700, () => {
@@ -932,11 +948,12 @@ function finish(): void {
 
   if (store.setHighScore(ID, sides.frog.dealt)) best = sides.frog.dealt;
   refreshHud();
+  const score = ROUNDS > 1 ? ` ${roundsWon.frog}-${roundsWon.lizard}` : '';
   const line = drawn
     ? 'DEAD HEAT - NO PRIZE'
     : won
-      ? `YOU WIN ${roundsWon.frog}-${roundsWon.lizard}`
-      : `THE LIZARD WINS ${roundsWon.lizard}-${roundsWon.frog}`;
+      ? `YOU WIN${score}`
+      : `THE LIZARD WINS${ROUNDS > 1 ? ` ${roundsWon.lizard}-${roundsWon.frog}` : ''}`;
   centerText(scene0, GAME_W / 2, 96, line, won ? PALETTE.gold : PALETTE.fog, 16).setDepth(80);
   centerText(scene0, GAME_W / 2, 112, `DAMAGE ${sides.frog.dealt} - ${sides.lizard.dealt}   BEST ${best}`, PALETTE.ash).setDepth(80);
   scene0.time.delayedCall(1700, () => (won ? apiRef?.win() : apiRef?.lose()));
