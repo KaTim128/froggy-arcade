@@ -20,8 +20,10 @@ in your own browser, so nothing you do here leaves your machine.
 |---|---|
 | **W A S D** / arrows | walk |
 | **E** | use whatever you are stood at |
+| **E**, **space** or **enter** | get Froggy to the point |
 | **Esc** | settings, and quit out of a game |
 | **hold left mouse** | look around, in the first-person rooms |
+| **shift** / **C** | run, and toggle a crouch — in the rooms he locks you in |
 
 Every cabinet takes its tokens first and then shows you a how-to-play card:
 what it wants, and which keys *that* cabinet reads. Nothing starts until you

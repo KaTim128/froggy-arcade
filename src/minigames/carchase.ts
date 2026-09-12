@@ -6,14 +6,19 @@
  * you and have to be shaken.  Cash sits on the road in bundles of twenty.
  *
  * NITRO is the one tool.  It is a burst — a second and a half at nearly twice
- * the speed — and it is FUEL: blue jars on the road, one burst each, up to
- * two in the tank.  You start with one.  Spend it getting out of a corner,
- * not going fast; the police close the gap again the moment it ends, and a
+ * the speed — and it REFILLS ON ITS OWN, slowly: a burst back every fourteen
+ * seconds, and it does not tick while you are burning one.  Blue jars on the
+ * road fill it the rest of the way, up to two in the tank.  So there is always
+ * a way out of a corner eventually, and the question is whether you can wait
+ * for it — the police close the gap again the moment a burst ends, and a
  * warning flashes when one is on your bumper.
  *
  * Two hundred cash is the bar: seven tokens, and one more for every further
- * two hundred.  The run ends on a crash, on being caught, or on ENTER — pull
- * over and take what you have.  It only gets harder from there.
+ * two hundred.  IT IS ALSO WHEN THEY START TAKING YOU SERIOUSLY.  Every two
+ * hundred in the bag is a notch of HEAT: another car on the road behind you,
+ * a faster one, thicker traffic and a quicker road, up to three notches.  The
+ * run ends on a crash, on being caught, or on ENTER — pull over and take what
+ * you have.  Carrying on is a bet against a chase that is getting worse.
  *
  * The cash here is a score.  It is not the cash the man outside pays, it is
  * never added to it, and the only thing that leaves this cabinet is the token
@@ -49,16 +54,33 @@ const SPEED_RAMP = 1.6;
 const SPEED_MAX = 250;
 const STEER = 120;
 const CREEP = 50;
-/** Nitro: how much faster, for how long, and how long until it is back. */
+/** Nitro: how much faster, and for how long. */
 const NITRO_MUL = 1.8;
 const NITRO_MS = 1500;
 /** Bursts the tank holds. */
 const NITRO_TANK = 2;
+/**
+ * How long the tank takes to put a burst back by itself.  Long enough that a
+ * burst is still a decision and not a button, short enough that being caught
+ * empty is a bad minute rather than the end of the run.  It does not tick
+ * while a burst is burning: the clock is for refilling, not for extending.
+ */
+const NITRO_REGEN_MS = 14_000;
 /** A police car this close behind you is a warning. */
 const WARN_DIST = 70;
 /** How much faster the police are than you, and how hard they steer at you. */
 const POLICE_GAIN = 26;
 const POLICE_STEER = 55;
+/**
+ * The heat.  Every TARGET_CASH in the bag is a notch, up to HEAT_MAX: one more
+ * car behind you, that much more speed on all of them, thicker traffic and a
+ * quicker road.  Tying it to the cash rather than the clock is the point — the
+ * run gets harder because of what you are carrying, so the decision to stay
+ * out for another two hundred is a decision to be chased harder for it.
+ */
+const HEAT_MAX = 3;
+const HEAT_POLICE_GAIN = 11;
+const HEAT_ROAD = 18;
 
 interface Mover {
   x: number;
@@ -89,6 +111,8 @@ let collected = 0;
 let best = 0;
 let nitroMs = 0;
 let nitroCharge = 1;
+/** The last heat notch the player was told about, so it is announced once. */
+let heatShown = 0;
 let over = false;
 let keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
 let hud: {
@@ -106,6 +130,15 @@ export function chasePayout(c: number): number {
   return BASE_REWARD + Math.floor((c - TARGET_CASH) / TARGET_CASH);
 }
 
+/**
+ * How hard they are chasing, from what is in the bag.  A pure function of the
+ * cash, so nothing can drift out of step with it — the pickup only decides
+ * when to SAY so.
+ */
+export function chaseHeat(c: number): number {
+  return Math.min(HEAT_MAX, Math.floor(c / TARGET_CASH));
+}
+
 export const carChase: MinigameModule = {
   id: ID,
   title: 'FROGGY CAR CHASE',
@@ -114,7 +147,8 @@ export const carChase: MinigameModule = {
   tutorial: {
     objective: [
       'GRAB CASH AND LOSE THE LAW.',
-      'CASH BANKS AS TOKENS.',
+      'NITRO REFILLS ITSELF - SLOWLY.',
+      'PAST 200 THEY CHASE YOU HARDER.',
     ],
     controls: [
       ['A / D', 'STEER'],
@@ -146,6 +180,7 @@ export const carChase: MinigameModule = {
     best = store.highScore(ID);
     nitroMs = 0;
     nitroCharge = 1;
+    heatShown = 0;
     over = false;
 
     // verge, road, lane lines.  Things spawn above the top edge and scroll
@@ -181,6 +216,9 @@ export const carChase: MinigameModule = {
       warn: centerText(scene, GAME_W / 2, 150, 'POLICE CLOSE', PALETTE.blood, 16).setVisible(false),
     };
     scene.add.rectangle(6, 96, 8, 54, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel).setDepth(8);
+    // The line one burst is worth.  The tank fills itself, so the player needs
+    // to see where the bar has to reach before SPACE will do anything.
+    scene.add.rectangle(6, 124, 8, 1, PALETTE.steel).setOrigin(0, 0).setDepth(10).setAlpha(0.8);
     hud.nitro.setDepth(9);
     hud.nitroLabel.setDepth(9);
     hud.warn.setDepth(9);
@@ -217,6 +255,9 @@ export const carChase: MinigameModule = {
           speed,
           nitro: nitroMs > 0,
           nitroCharge,
+          heat: chaseHeat(collected),
+          policeCap: policeCap(),
+          policeSpeed: speed + POLICE_GAIN + chaseHeat(collected) * HEAT_POLICE_GAIN + elapsed / 2500,
           jars: jars.length,
           traffic: traffic.length,
           police: police.length,
@@ -224,6 +265,13 @@ export const carChase: MinigameModule = {
         }),
         setCash: (n: number) => {
           collected = n;
+          heatShown = chaseHeat(n);
+          refreshHud();
+        },
+        /** Empty the tank, for watching it fill itself back up. */
+        setNitro: (n: number) => {
+          nitroCharge = Math.max(0, Math.min(NITRO_TANK, n));
+          nitroMs = 0;
           refreshHud();
         },
       };
@@ -238,12 +286,26 @@ export const carChase: MinigameModule = {
     const dt = delta / 1000;
     elapsed += delta;
 
-    // ---- nitro.  No recharge: what is in the tank came off the road.
-    if (nitroMs > 0) nitroMs -= delta;
+    // ---- nitro.  It comes back on its own between bursts, so being empty is
+    // a wait rather than a sentence; jars are what get you there faster and
+    // what fill the second slot.  The clock is stopped while a burst runs.
+    if (nitroMs > 0) {
+      nitroMs -= delta;
+    } else if (nitroCharge < NITRO_TANK) {
+      const before = Math.floor(nitroCharge);
+      nitroCharge = Math.min(NITRO_TANK, nitroCharge + delta / NITRO_REGEN_MS);
+      // Only when a whole burst lands: the bar creeps every frame, the label
+      // and the chime are for the moment it becomes usable.
+      if (Math.floor(nitroCharge) > before) {
+        audio.sfx('ui_blip', 0.5);
+        refreshHud();
+      }
+    }
     const boost = nitroMs > 0 ? NITRO_MUL : 1;
+    const heat = chaseHeat(collected);
 
-    // ---- the road, and you on it
-    speed = Math.min(SPEED_MAX, SPEED_START + (elapsed / 1000) * SPEED_RAMP);
+    // ---- the road, and you on it.  It runs quicker the more you are carrying.
+    speed = Math.min(SPEED_MAX + heat * HEAT_ROAD, SPEED_START + (elapsed / 1000) * SPEED_RAMP + heat * HEAT_ROAD);
     const ground = speed * boost;
     const dx = (held('right') ? 1 : 0) - (held('left') ? 1 : 0);
     const dy = (held('down') ? 1 : 0) - (held('up') ? 1 : 0);
@@ -260,7 +322,7 @@ export const carChase: MinigameModule = {
     trafficTimer -= delta;
     if (trafficTimer <= 0) {
       spawnTraffic();
-      trafficTimer = Math.max(420, 1100 - elapsed / 90);
+      trafficTimer = Math.max(360, 1100 - elapsed / 90 - heat * 130);
     }
     for (const c of traffic) {
       c.y += (ground - c.own) * dt;
@@ -272,10 +334,10 @@ export const carChase: MinigameModule = {
     policeTimer -= delta;
     if (policeTimer <= 0 && police.length < policeCap()) {
       spawnPolice();
-      policeTimer = 3000;
+      policeTimer = Math.max(1500, 3000 - heat * 500);
     }
     for (const p of police) {
-      p.own = speed + POLICE_GAIN + elapsed / 2500;
+      p.own = speed + POLICE_GAIN + heat * HEAT_POLICE_GAIN + elapsed / 2500;
       p.y += (ground - p.own) * dt;
       p.x += Phaser.Math.Clamp(px - p.x, -1, 1) * POLICE_STEER * dt;
       p.body.setPosition(p.x, p.y).setVisible(onScreen(p.y));
@@ -329,6 +391,13 @@ export const carChase: MinigameModule = {
           best = collected;
           store.setHighScore(ID, best);
         }
+        // Crossing two hundred, and every two hundred after it, is said out
+        // loud: a chase that quietly got harder reads as the game cheating.
+        const notch = chaseHeat(collected);
+        if (notch > heatShown) {
+          heatShown = notch;
+          heatUp(notch);
+        }
         refreshHud();
         c.body.destroy();
         return false;
@@ -356,7 +425,8 @@ export const carChase: MinigameModule = {
 
     hud?.nitro.setSize(6, (nitroMs > 0 ? nitroMs / NITRO_MS : nitroCharge / NITRO_TANK) * 52);
     hud?.nitro.setFillStyle(nitroMs > 0 ? PALETTE.gold : nitroCharge >= 1 ? 0x46a0e0 : PALETTE.steel);
-    hud?.time.setText(`${Math.floor(elapsed / 1000)}s`);
+    hud?.time.setText(heat > 0 ? `${Math.floor(elapsed / 1000)}s   HEAT ${heat}` : `${Math.floor(elapsed / 1000)}s`);
+    hud?.time.setTint(heat > 0 ? PALETTE.blood : PALETTE.fog);
 
     // ---- the warning: a police car right behind you, flashing and beeping
     const close = police.some((p) => p.y > py && p.y - py < WARN_DIST && Math.abs(p.x - px) < LANE_W * 1.5);
@@ -388,9 +458,22 @@ const held = (g: string): boolean => keys[g]?.some((k) => k.isDown) ?? false;
 /** Fully below the title bar.  Things above it are there, just not drawn yet. */
 const onScreen = (y: number): boolean => y - CAR_H / 2 >= TOP;
 
-/** One at first, two after half a minute, three after a minute. */
+/**
+ * One at first, two after half a minute, three after a minute — and one more
+ * for every notch of heat.  What is in the bag decides as much as the clock.
+ */
 function policeCap(): number {
-  return 1 + Math.min(2, Math.floor(elapsed / 30000));
+  return 1 + Math.min(2, Math.floor(elapsed / 30000)) + chaseHeat(collected);
+}
+
+/** They have called it in.  Said once per notch, and never quietly. */
+function heatUp(notch: number): void {
+  if (!scene0) return;
+  audio.sfx('buzzer', 0.5);
+  scene0.cameras.main.shake(180, 0.006);
+  const line = notch >= HEAT_MAX ? 'ROADBLOCK - EVERY CAR THEY HAVE' : 'THEY CALL FOR BACKUP';
+  const t = centerText(scene0, GAME_W / 2, 96, line, PALETTE.blood).setDepth(50);
+  scene0.tweens.add({ targets: t, y: 86, alpha: 0, duration: 1600, onComplete: () => t.destroy() });
 }
 
 function keep(m: Mover, ok: boolean): boolean {

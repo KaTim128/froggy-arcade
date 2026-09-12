@@ -107,7 +107,9 @@ const LOUNGE_BASE: RoomDef = {
     { x: 11.0, z: -8.5, w: 4.0, d: 1.5, h: 0.9, color: 0x5e2a34, low: true },
     { x: 2.0, z: 6.5, w: 4.6, d: 1.5, h: 0.9, color: 0x4a3a52, low: true },
     { x: -12.5, z: 8.0, w: 3.0, d: 1.4, h: 0.9, color: 0x4a3a52, low: true },
-    { x: -11.0, z: -2.0, w: 2.6, d: 1.4, h: 0.6, color: 0x4a3524, low: true },
+    // pulled off the chest beside it: a coffee table half a body-width from a
+    // hiding place is a hiding place you have to sidle into
+    { x: -12.2, z: -2.6, w: 2.6, d: 1.4, h: 0.6, color: 0x4a3524, low: true },
     { x: 12.0, z: -1.0, w: 2.0, d: 2.0, h: 0.6, color: 0x4a3524, low: true },
     { x: -3.0, z: 0.5, w: 2.4, d: 1.3, h: 0.6, color: 0x4a3524, low: true },
     { x: 14.0, z: 9.0, w: 2.2, d: 2.2, h: 1.2, color: 0x3f3128 },
@@ -166,6 +168,22 @@ const STORES_BASE: RoomDef = {
     // a cross wall, so the aisles are not five straight sightlines
     { x: -7.0, z: 3.0, w: 24.0, d: 0.8, h: 4.0, color: 0x26292e },
     { x: 14.0, z: 3.0, w: 12.0, d: 0.8, h: 4.0, color: 0x26292e },
+
+    // ---- concrete pillars, floor to ceiling.  A rack run is one long wall you
+    // either commit to or do not; a pillar is a thing you can put between you
+    // and him and then move around while he decides which side to come down.
+    // Two stand in the aisles at the far end, the rest hold up the open half.
+    // two down the aisles, so a run to the far end has one thing in it
+    { x: -14.5, z: -12.0, w: 1.6, d: 1.6, h: 4.6, color: 0x3b4046 },
+    { x: -0.5, z: -12.0, w: 1.6, d: 1.6, h: 4.6, color: 0x3b4046 },
+    // and six holding up the open half, each clear of the hiding places so
+    // that none of them is a pillar you cannot get round to
+    { x: -21.5, z: 5.0, w: 1.6, d: 1.6, h: 4.6, color: 0x3b4046 },
+    { x: -12.5, z: 6.5, w: 1.6, d: 1.6, h: 4.6, color: 0x3b4046 },
+    { x: -3.0, z: 11.0, w: 1.6, d: 1.6, h: 4.6, color: 0x3b4046 },
+    { x: 4.5, z: 6.0, w: 1.6, d: 1.6, h: 4.6, color: 0x3b4046 },
+    { x: 10.5, z: 11.5, w: 1.6, d: 1.6, h: 4.6, color: 0x3b4046 },
+    { x: 19.5, z: 6.5, w: 1.6, d: 1.6, h: 4.6, color: 0x3b4046 },
 
     // pallet stacks in the open half
     { x: -20.0, z: 10.0, w: 3.2, d: 3.2, h: 2.2, color: 0x4a3a26 },
@@ -265,18 +283,21 @@ const WARD_BASE: RoomDef = {
 };
 
 /**
- * Stretch a room.  Positions and footprints scale; heights do not.  The
- * rooms were built at a size that turned out cramped once he was faster and
- * bigger, and scaling the layout keeps every sightline the designer chose
- * while giving both of you more floor to use.
+ * Stretch a room.  Positions scale by `k` and heights never do.
+ *
+ * Footprints scale separately (`bulk`, defaulting to `k`), and the gap between
+ * the two is the useful part: spreading the layout further than the furniture
+ * grows opens the floor BETWEEN things without moving a single sightline the
+ * layout was designed around.  That is how the first zone gets room to move
+ * between hiding places while staying the same room.
  */
-function scaleRoom(def: RoomDef, k: number): RoomDef {
+function scaleRoom(def: RoomDef, k: number, bulk = k): RoomDef {
   return {
     ...def,
     halfW: Math.round(def.halfW * k),
     halfD: Math.round(def.halfD * k),
     lights: def.lights.map((l) => ({ ...l, x: l.x * k, z: l.z * k })),
-    furniture: def.furniture.map((f) => ({ ...f, x: f.x * k, z: f.z * k, w: f.w * k, d: f.d * k })),
+    furniture: def.furniture.map((f) => ({ ...f, x: f.x * k, z: f.z * k, w: f.w * bulk, d: f.d * bulk })),
     spots: def.spots.map((s) => ({ ...s, x: s.x * k, z: s.z * k })),
     door: { x: def.door.x * k },
     spawn: { x: def.spawn.x * k, z: def.spawn.z * k },
@@ -284,8 +305,23 @@ function scaleRoom(def: RoomDef, k: number): RoomDef {
   };
 }
 
-export const LIVING_ROOM: RoomDef = scaleRoom(LOUNGE_BASE, 1.3);
-export const WAREHOUSE: RoomDef = scaleRoom(STORES_BASE, 1.2);
+/**
+ * The lounge is the room you learn the game in, and it was the tightest of the
+ * three: sofas and tables at every turn, and a run to the next chest that came
+ * down to threading a gap.  It is spread out (1.5) further than its furniture
+ * has grown (1.3), so the walls, the partitions and the spots are where they
+ * always were relative to each other and there is simply more floor in between.
+ */
+export const LIVING_ROOM: RoomDef = scaleRoom(LOUNGE_BASE, 1.5, 1.3);
+/**
+ * The stores was the largest room in the building and it played like it: long
+ * racking runs, a lot of ground between one locker and the next, and a hunt
+ * that came down to picking a box and staying in it.  It is pulled back to its
+ * drawn size (1.0), and its racking and pallets are slimmed (0.85) so the
+ * aisles stay wide — smaller room, same number of ways through it, and a real
+ * chance to leave one spot for another while he is working the other end.
+ */
+export const WAREHOUSE: RoomDef = scaleRoom(STORES_BASE, 1.0, 0.85);
 export const WARD: RoomDef = scaleRoom(WARD_BASE, 1.1);
 
 export const ROOMS: RoomDef[] = [LIVING_ROOM, WAREHOUSE, WARD];

@@ -3,7 +3,8 @@
  *
  * He gives you fifteen seconds.  He is not in the room for them and he does
  * not say anything: the count runs, you walk, you pick somewhere.  Then he
- * comes in and has three minutes to find you.  Last the three minutes and the
+ * comes in and has his clock to find you — two minutes in the first zone, two
+ * and a half in the second, three in the third.  Last it out and the
  * round is yours.
  *
  * He SEARCHES.  He does not walk at you — he tours the hiding places, stops to
@@ -112,7 +113,9 @@ const DOOR_REACH = 2.2;
  */
 const BRIEFING: Array<[string, number]> = [
   ["LET'S PLAY ANOTHER GAME!", 2800],
-  ['IF YOU SURVIVE WITH ME FOR 3 MINUTES,', 3000],
+  // The number here is the FIRST zone's clock, filled in below from SEEK_S so
+  // the promise he makes at the door cannot drift from the one the game keeps.
+  ['IF YOU SURVIVE WITH ME FOR {N} MINUTES,', 3000],
   ['I WILL SET YOU FREE.', 2800],
   // Two beats, because it will not fit the frame as one line.
   ['AND YOU BETTER NOT BE HIDING IN ONE SPOT', 2800],
@@ -128,21 +131,44 @@ const ZONE_LINES: Array<Array<[string, number]>> = [
   [
     ["YOU THINK I'D LET YOU OFF THAT EASY", 2800],
     ['AFTER YOU TRIED TO STEAL MY KEY?', 3000],
+    // He is lengthening it, and he says so.  A zone that quietly got longer
+    // would read as the clock being broken rather than as him moving the line.
+    ['AND THIS TIME IT IS {N} MINUTES.', 2800],
   ],
-  [['WHERE ARE YOU....', 3200]],
+  [
+    ['WHERE ARE YOU....', 3200],
+    ['{N} MINUTES.', 2400],
+  ],
 ];
 /** How long his answer to "if not" is allowed to hang there. */
 const BRIEFING_TAIL_MS = 2400;
 
 /**
- * The count he gives you, and the time he then has to find you.
- *
- * He states both out loud before the round starts — "survive with me for 3
- * minutes" — so these two numbers are a promise the game has made and cannot
- * quietly retune.  See BasementSequence.paintOffer.
+ * The count he gives you before he comes in.  He says it out loud, so it is a
+ * promise the game has made.  See BasementSequence.paintOffer.
  */
 const HIDE_S = 10;
-const SEEK_S = 180;
+/**
+ * How long he hunts, by zone: two minutes, then two and a half, then three.
+ *
+ * The zones already get harder through his pace and how fast he opens a box;
+ * the clock is the other half of it, and it is the half the player can feel
+ * ticking.  Zone one being the short one is what makes it the one you learn
+ * the rules in.  He states the number out loud at every door (BRIEFING and
+ * ZONE_LINES take it from here), so it cannot be retuned quietly.
+ */
+const SEEK_S = [120, 150, 180];
+
+/** His clock for a zone, and the same number in whole minutes for his mouth. */
+const seekFor = (zone: number): number => SEEK_S[Math.min(zone, SEEK_S.length - 1)];
+const minutesWord = (secs: number): string => {
+  const halves = Math.round(secs / 30);
+  const whole = Math.floor(halves / 2);
+  return halves % 2 ? `${whole} AND A HALF` : `${whole}`;
+};
+/** Fill {N} in his lines with the zone's own clock. */
+const spoken = (lines: Array<[string, number]>, zone: number): Array<[string, number]> =>
+  lines.map(([t, ms]) => [t.replace('{N}', minutesWord(seekFor(zone))), ms] as [string, number]);
 /** How far his footsteps and the lids carry.  Silence is doing the work. */
 const EARSHOT = 22;
 const OPEN_EARSHOT = 30;
@@ -206,7 +232,7 @@ const INVESTIGATE_S = 7;
  *
  * It happens HERE rather than in the basement because it belongs to the round:
  * you open the door, he is waiting on the other side of it, and he tells you
- * what the next three minutes are.  You cannot move during it — there is
+ * what the next few minutes are.  You cannot move during it — there is
  * nothing to do yet and letting the player wander while he talks turns a
  * threat into a cutscene they walked out of.
  */
@@ -262,7 +288,7 @@ export class HideRoom3D extends Phaser.Scene {
   private yaw = 0;
   private pos = new THREE.Vector2();
   private mode: Mode = 'hiding';
-  /** Counts down through the hiding phase, then through his three minutes. */
+  /** Counts down through the hiding phase, then through his hunt. */
   private clock = 0;
   /** Which line of the briefing he is on, before any of it starts. */
   private briefLine = 0;
@@ -301,7 +327,7 @@ export class HideRoom3D extends Phaser.Scene {
   /** Eased: he accelerates and turns rather than snapping. */
   private fSpeed = 0;
   private wantYaw = 0;
-  /** Held CTRL (or C).  Low, slow, quiet. */
+  /** Toggled with C.  Low, slow, quiet, and it stays on until you say so. */
   private crouching = false;
   private eyeNow = EYE;
   /** Which pass over the hiding places he is on.  Every spot gets opened once per pass. */
@@ -413,7 +439,8 @@ export class HideRoom3D extends Phaser.Scene {
     // He explains the game once, at the first door.  The second and third
     // rooms open straight onto the count: you know the rules by then, and a
     // speech you have heard is a wait, not a threat.
-    this.beginBriefing(this.roomIndex === 0 ? BRIEFING : ZONE_LINES[Math.min(this.roomIndex, ZONE_LINES.length - 1)]);
+    const lines = this.roomIndex === 0 ? BRIEFING : ZONE_LINES[Math.min(this.roomIndex, ZONE_LINES.length - 1)];
+    this.beginBriefing(spoken(lines, this.roomIndex));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
   }
 
@@ -667,11 +694,14 @@ export class HideRoom3D extends Phaser.Scene {
       turnL: bind(['LEFT', 'Q']),
       turnR: bind(['RIGHT']),
       run: bind(['SHIFT']),
-      // CTRL as asked, and C beside it: the browser owns CTRL+W, and a player
-      // crouch-walking forward should not lose the tab for it.
-      crouch: bind(['CTRL', 'C']),
     };
     kb?.on('keydown-E', () => this.interact());
+    // Crouch is a TOGGLE on C, not a key you hold.  You crouch to cross a room
+    // slowly and quietly, which can be most of a minute, and holding a key for
+    // a minute with the other hand on WASD and the mouse is a hand cramp, not
+    // a decision.  CTRL is gone with the holding: the browser owns CTRL+W, and
+    // crouch-walking forward should never close the tab.
+    kb?.on('keydown-C', () => this.toggleCrouch());
 
     // Window-level, not Phaser-level: the Three canvas is layered over the
     // Phaser one, so the scene's own pointer events never see the room.
@@ -703,6 +733,20 @@ export class HideRoom3D extends Phaser.Scene {
 
   private held(g: string): boolean {
     return this.keys[g]?.some((k) => k.isDown) ?? false;
+  }
+
+  /**
+   * Down, or up.  It sticks either way — the eye height tweens to it, the
+   * footsteps go silent at it, and it survives being let go of, because the
+   * thing it is for is the long quiet walk across a room he is standing in.
+   *
+   * No effect from inside a box: you are already as low as you get in there,
+   * and toggling it would only change what you see when you climb out.
+   */
+  private toggleCrouch(): void {
+    if (this.mode !== 'hiding' && this.mode !== 'seeking') return;
+    if (this.hiding) return;
+    this.crouching = !this.crouching;
   }
 
   private interact(): void {
@@ -932,14 +976,14 @@ export class HideRoom3D extends Phaser.Scene {
     // whose whole game is crossing it quickly cannot afford a player who does
     // not know they can strafe.
     if (this.clock > 7.5) this.subtitle = 'HIDE';
-    else if (this.clock > 5.2) this.subtitle = 'WASD MOVE - SHIFT RUN - CTRL CROUCH';
+    else if (this.clock > 5.2) this.subtitle = 'WASD MOVE - SHIFT RUN - C CROUCH';
     else if (this.clock > 3.0) this.subtitle = 'HOLD LEFT CLICK TO LOOK';
     else if (this.clock > 1.2) this.subtitle = 'FIND SOMEWHERE TO HIDE';
     else this.subtitle = '';
 
     if (this.clock <= 0) {
       this.mode = 'seeking';
-      this.clock = SEEK_S;
+      this.clock = seekFor(this.roomIndex);
       this.subtitle = 'READY OR NOT';
       this.time.delayedCall(2400, () => {
         if (this.subtitle === 'READY OR NOT') this.subtitle = '';
@@ -996,7 +1040,9 @@ export class HideRoom3D extends Phaser.Scene {
     const strafe = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     if (fwd === 0 && strafe === 0) return;
 
-    this.crouching = this.held('crouch');
+    // SHIFT stands you up rather than being ignored: a player holding run is
+    // telling you they want to move, and the toggle should not argue with it.
+    if (this.crouching && this.held('run')) this.crouching = false;
     const running = this.held('run') && !this.crouching;
     const speed = this.crouching ? CROUCH : running ? RUN : WALK;
 
@@ -1723,7 +1769,7 @@ export class HideRoom3D extends Phaser.Scene {
         });
       }
 
-      // The count, and then his three minutes.  Both are the same clock, and it
+      // The count, and then his hunt.  Both are the same clock, and it
       // is the only thing on screen that is not the room.
       if (this.mode === 'briefing') {
         // No number yet.  The count has not started, and it says so.
@@ -1831,7 +1877,7 @@ export class HideRoom3D extends Phaser.Scene {
       checkedThisSweep: this.spots.filter((c) => c.checkedOn >= this.sweep).length,
       secondsLeft: this.clock,
       hideSeconds: HIDE_S,
-      seekSeconds: SEEK_S,
+      seekSeconds: seekFor(this.roomIndex),
       briefingLine: this.briefLine,
       spots: this.spots.map((c) => ({ x: c.x, z: c.z, kind: c.kind, open: c.open })),
       heard: this.heard.slice(),
@@ -1868,7 +1914,7 @@ export class HideRoom3D extends Phaser.Scene {
   }
 
   /**
-   * Three minutes, and he did not find you.  He gives up and the door he locked
+   * His clock ran out and he did not find you.  He gives up and the door he locked
    * is open again — the round was the whole point, not the door.
    */
   private survive(): void {

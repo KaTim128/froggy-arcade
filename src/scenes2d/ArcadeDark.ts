@@ -21,7 +21,7 @@ import { fadeIn, fadeToScene, text } from '../core/ui';
 import { paintChangeMachine, paintHubRoom, ROOM } from '../art/hubRoom';
 import { Cabinet } from '../art/cabinet';
 import { Player } from '../art/player';
-import { CABINETS, COUNTER, COUNTER_VAULT, PRIZE_CASE, STAFF_DOOR } from '../game/content';
+import { CABINETS, COUNTER, COUNTER_DEPTH, COUNTER_VAULT, PRIZE_CASE, STAFF_DOOR } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 
@@ -60,20 +60,23 @@ export class ArcadeDark extends Phaser.Scene {
     // and there is no dealer here at night.
     for (const def of CABINETS) if (def.fixture !== 'table') new Cabinet(this, def, true);
 
-    // counter and case, dead
-    this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, COUNTER.h, PALETTE.ink).setOrigin(0, 0);
-    this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, 2, PALETTE.slate).setOrigin(0, 0);
+    // the STAFF door, on the wall behind the counter's right-hand end
+    this.staffDoor = this.add
+      .rectangle(STAFF_DOOR.x, 14, 22, 30, PALETTE.nightMid)
+      .setOrigin(0, 0)
+      .setStrokeStyle(1, PALETTE.slate);
+    text(this, STAFF_DOOR.x + 1, 26, 'STAFF', PALETTE.ash, 8).setAlpha(0.8);
+
+    // The case is against the wall at the back of the counter, so it goes in
+    // before anyone can be standing in front of it.
     this.add
       .rectangle(PRIZE_CASE.x, PRIZE_CASE.y - 30, PRIZE_CASE.w, 30, PALETTE.black)
       .setOrigin(0, 0)
       .setStrokeStyle(1, PALETTE.slate);
 
-    // the STAFF door, behind the counter
-    this.staffDoor = this.add
-      .rectangle(STAFF_DOOR.x, 14, 22, 32, PALETTE.nightMid)
-      .setOrigin(0, 0)
-      .setStrokeStyle(1, PALETTE.slate);
-    text(this, STAFF_DOOR.x + 1, 26, 'STAFF', PALETTE.ash, 8).setAlpha(0.8);
+    // counter, dead — and in FRONT of whoever is behind it (COUNTER_DEPTH).
+    this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, COUNTER.h, PALETTE.ink).setOrigin(0, 0).setDepth(COUNTER_DEPTH);
+    this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, 2, PALETTE.slate).setOrigin(0, 0).setDepth(COUNTER_DEPTH);
 
     this.player = new Player(this, GAME_W / 2, ROOM.bottom - 14, true);
     this.player.setSurface('concrete');
@@ -126,9 +129,12 @@ export class ArcadeDark extends Phaser.Scene {
 
       case 'counter':
         // AD-5: the interaction the arcade never offered while it was open.
+        // Over, and DOWN behind it: the counter's front face is drawn in front
+        // of the player from here, so what shows is a head and shoulders above
+        // the lip rather than a whole person standing on the back wall.
         audio.sfx('vault');
         this.behindCounter = true;
-        this.player.setPosition(COUNTER.x + COUNTER.w / 2, COUNTER.y - 6);
+        this.player.setPosition(COUNTER.x + COUNTER.w / 2, COUNTER.y + 13);
         this.say('');
         break;
 
@@ -160,8 +166,11 @@ export class ArcadeDark extends Phaser.Scene {
     const dx = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     const dy = (this.held('down') ? 1 : 0) - (this.held('up') ? 1 : 0);
 
+    // Behind the counter is a narrow service strip inside the counter's own
+    // band — deep enough to walk its length, shallow enough that the front
+    // face never stops hiding your legs.
     const bounds = this.behindCounter
-      ? new Phaser.Geom.Rectangle(COUNTER.x, 20, COUNTER.w, COUNTER.y - 24)
+      ? new Phaser.Geom.Rectangle(COUNTER.x + 8, COUNTER.y + 10, COUNTER.w - 16, 6)
       : new Phaser.Geom.Rectangle(ROOM.left + 8, ROOM.top + 6, ROOM.right - ROOM.left - 16, ROOM.bottom - ROOM.top - 6);
     this.player.move(dx, dy, delta, bounds);
 
@@ -169,7 +178,8 @@ export class ArcadeDark extends Phaser.Scene {
     const py = this.player.y;
 
     if (this.behindCounter) {
-      this.spot = Math.abs(px - (STAFF_DOOR.x + 11)) < 20 && py < 56 ? 'staff' : null;
+      // Only the x matters back here: the strip is one body deep.
+      this.spot = Math.abs(px - (STAFF_DOOR.x + 11)) < 18 ? 'staff' : null;
     } else if (py > ROOM.bottom - 24 && Math.abs(px - GAME_W / 2) < 26) {
       this.spot = 'door';
     } else if (py < COUNTER.y + 30 && px > PRIZE_CASE.x && px < PRIZE_CASE.x + PRIZE_CASE.w) {

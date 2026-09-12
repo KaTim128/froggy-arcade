@@ -56,7 +56,7 @@ export const TIER_ECONOMY: Record<Tier, { cost: number; reward: number }> = {
  * decision about that.
  *
  * Positions are hand-placed, not laid out.  Anything added here has to keep
- * clear of the counter (x 112-240), the doorway on the left wall (y 118), the
+ * clear of the counter (x 112-258), the doorway on the left wall (y 118), the
  * front door (bottom centre) and — in the hub — the change machine on the back
  * wall, which the player stands at around x 272, y 62 and which must not have a
  * cabinet's click zone over it.
@@ -179,9 +179,23 @@ export function allPrizesSold(sold: readonly string[]): boolean {
 }
 
 /** PRD §7.5: the ticket counter, the prize case, and the bell nobody answers. */
-export const COUNTER = { x: 112, y: 44, w: 128, h: 18 };
+export const COUNTER = { x: 112, y: 44, w: 146, h: 18 };
+/**
+ * Depth for the counter's front face, on the same y-sorted scale the player
+ * runs on (`art/player.ts`: 50 + y/1000).  Anything whose feet are ABOVE the
+ * counter's front edge is drawn under it and anything below is drawn over it,
+ * which is the whole of how a flat room says "behind the counter" — without it
+ * a player standing back there is a whole sprite hanging in the air.
+ */
+export const COUNTER_DEPTH = 50 + (44 + 18) / 1000;
 export const BELL = { x: 122, y: 56 };
 export const PRIZE_CASE = { x: 126, y: 44, w: 100, h: 18 };
 /** PRD AD-5: only reachable at night, when the arcade is closed. */
 export const COUNTER_VAULT = { x: 200, y: 66 };
-export const STAFF_DOOR = { x: 234, y: 40 };
+/**
+ * The way into the back of the building, at the counter's right-hand end.  It
+ * is INSIDE the counter's span on purpose: the only way to reach it is over
+ * the counter, so a door standing out in the open beside it was telling the
+ * player they could just walk up.
+ */
+export const STAFF_DOOR = { x: 232, y: 40 };

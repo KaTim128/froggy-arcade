@@ -91,11 +91,19 @@ export class DialogueBox {
     this.container.setVisible(true);
     this.beginLine();
 
+    // E is the world's "use" key and reads naturally inside a conversation,
+    // but SPACE is what a hand already on the keyboard reaches for to skip a
+    // line, and ENTER is the other one people try.  All three, plus a click:
+    // nobody should be hunting for the key that gets Froggy to the point.
     const advance = () => this.advance();
+    const keys = ['E', 'SPACE', 'ENTER'];
     this.scene.input.on('pointerdown', advance);
-    this.scene.input.keyboard?.on('keydown-E', advance);
+    for (const k of keys) this.scene.input.keyboard?.on(`keydown-${k}`, advance);
     this.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scene.input.off('pointerdown', advance);
+      // The keyboard listeners outlived the scene before this: a rebuilt room
+      // bound a second set and every key press advanced two lines at a time.
+      for (const k of keys) this.scene.input.keyboard?.off(`keydown-${k}`, advance);
     });
   }
 

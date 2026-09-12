@@ -184,8 +184,9 @@ try {
     await page.evaluate(() => {
       window.__froggy.game().scene.getScene('HideRoom3D').grace = 999;
     });
-    // Three minutes, because that is the number he says out loud at the door.
-    check('he then has three minutes', s.seekSeconds === 180 && s.secondsLeft > 170,
+    // Two minutes in the first zone, because that is the number he says out
+    // loud at its door.  Later zones are longer; this one is where you learn.
+    check('he then has the zone-one clock, two minutes', s.seekSeconds === 120 && s.secondsLeft > 110,
       `${s.seekSeconds}s, ${s.secondsLeft?.toFixed(0)} left`);
     check('there is cover to hide in', s.spots.length >= 5, `${s.spots.length} spots`);
     check('the spots are not all the same thing',
@@ -244,15 +245,21 @@ try {
     // The controls, driven for real through the keyboard rather than by poking
     // the scene: getting between two boxes before he arrives is the whole game,
     // so which way each key sends you is a requirement, not a preference.
+    // A patch of lounge with floor on all four sides of it.  The room gets
+    // re-laid out from time to time, so the spot is asserted open rather than
+    // assumed: a park that lands inside a sofa reads as "the keys do nothing".
+    const PARK = { x: -2, z: 12 };
     const park = () =>
-      page.evaluate(() => {
+      page.evaluate((p) => {
         const sc = window.__froggy.game().scene.getScene('HideRoom3D');
         sc.hiding = null;
         sc.yaw = 0;
         sc.grace = 99;
-        sc.pos.set(0, 11);
+        sc.pos.set(p.x, p.z);
         sc.froggy.set(sc.def.halfW - 2, -sc.def.halfD + 2);
-      });
+        return !sc.solid(p.x, p.z);
+      }, PARK);
+    check('there is open floor to test the walking on', await park(), `${PARK.x},${PARK.z}`);
     const walk = async (key) => {
       await park();
       await sleep(120);
@@ -295,9 +302,13 @@ try {
       look.idle === 0 && look.released === look.held,
       `idle ${look.idle}, after release ${look.released.toFixed(2)}`);
 
-    // Furniture is cover, not a wall.  He goes over it — which is what stops a
-    // sofa between the two of you from being permanent safety.
-    const climbed = await page.evaluate(async () => {
+    // Furniture is cover, not a wall.  Two separate guarantees, and they are
+    // checked separately on purpose: (1) a sofa between the two of you is not
+    // permanent safety — he gets to the far side of it one way or another, and
+    // (2) when he does go over one he is genuinely up on top of it.  Which of
+    // the two routes his pathfinder picks on any given sofa is a property of
+    // how open the room is, and rooms get re-laid out; the guarantees do not.
+    const reached = await page.evaluate(async () => {
       const sc = window.__froggy.game().scene.getScene('HideRoom3D');
       const sofa = sc.def.furniture.find((f) => f.low && f.w > 3);
       sc.hiding = null;
@@ -306,18 +317,38 @@ try {
       sc.froggy.set(sofa.x, sofa.z + 2.2);
       sc.fMode = 'search';
       sc.waypoint.set(sofa.x, sofa.z - 2.2);
-      let wentOver = false;
+      for (let i = 0; i < 120; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+        if (sc.froggy.y < sofa.z - 0.5) break;
+      }
+      return { crossed: sc.froggy.y < sofa.z, top: sofa.h };
+    });
+    check('a sofa between you is not permanent cover — he gets past it',
+      reached.crossed, `${reached.top}m of sofa, crossed ${reached.crossed}`);
+
+    const climbed = await page.evaluate(async () => {
+      const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+      const sofa = sc.def.furniture.find((f) => f.low && f.w > 3);
+      sc.hiding = null;
+      sc.grace = 999;
+      sc.climb = null;
+      sc.froggy.set(sofa.x, sofa.z + 1.0);
+      // Straight over it, the way the route asks for one when there is no way
+      // round: the mechanic itself, not the decision to use it.
+      const started = sc.startClimb(sofa, 0, -1);
       let highest = 0;
-      for (let i = 0; i < 100; i++) {
+      let wentOver = false;
+      for (let i = 0; i < 80; i++) {
         await new Promise((r) => setTimeout(r, 50));
         if (window.__hide.climbing) wentOver = true;
         highest = Math.max(highest, sc.monster.root.position.y);
-        if (sc.froggy.y < sofa.z - 0.5) break;
+        if (!sc.climb && wentOver) break;
       }
-      return { wentOver, highest, crossed: sc.froggy.y < sofa.z, top: sofa.h };
+      return { started, wentOver, highest, crossed: sc.froggy.y < sofa.z, top: sofa.h };
     });
     check('he climbs over the furniture rather than stopping at it',
-      climbed.wentOver && climbed.crossed, `over ${climbed.top}m, crossed ${climbed.crossed}`);
+      climbed.started && climbed.wentOver && climbed.crossed,
+      `started ${climbed.started}, over ${climbed.top}m, crossed ${climbed.crossed}`);
     check('he is actually up on top of it while he does',
       climbed.highest > climbed.top * 0.8, `${climbed.highest.toFixed(2)}m up`);
 
@@ -426,7 +457,7 @@ try {
       ),
       [...new Set(heard.map(([n]) => n))].join(','));
 
-    // Lasting his three minutes is the win.  The clock is the thing being
+    // Lasting his clock out is the win.  The clock is the thing being
     // tested, so it gets wound forward rather than waited out.
     await page.evaluate(() => {
       const sc = window.__froggy.game().scene.getScene('HideRoom3D');
@@ -440,6 +471,49 @@ try {
     const room = await page.evaluate(() => window.__froggy.state().hideRoom);
     check('surviving moves you on to the next room', room === 1, `room ${room}`);
     await page.close();
+  }
+
+  // ------------------------------------------------- the rooms, on the page
+  // Furniture is added by hand, and a prop dropped on top of a hiding place
+  // is invisible from anywhere except inside the game with a torch.  The
+  // layout is checked as data instead: every spot reachable, nobody spawning
+  // inside a box, and the three rooms in the sizes they are meant to be.
+  console.log('\nhorror  the three rooms are laid out, not just built');
+  {
+    const page = await newPage('?intro=1');
+    await sleep(1200);
+    const rooms = await page.evaluate(async () => {
+      const { ROOMS } = await import('/src/three/hideRooms.ts');
+      const R = 0.42;
+      const inBox = (x, z, b, pad) => Math.abs(x - b.x) < b.w / 2 + pad && Math.abs(z - b.z) < b.d / 2 + pad;
+      return ROOMS.map((r) => ({
+        name: r.name,
+        w: r.halfW * 2,
+        d: r.halfD * 2,
+        spots: r.spots.length,
+        blocked: r.spots.filter((sp) => r.furniture.some((f) => inBox(sp.x, sp.z, f, R + 0.6))).length,
+        outside: r.spots.filter((sp) => Math.abs(sp.x) > r.halfW - 0.5 || Math.abs(sp.z) > r.halfD - 0.5).length,
+        spawnBlocked: r.furniture.some((f) => inBox(r.spawn.x, r.spawn.z, f, R)),
+        froggyBlocked: r.furniture.some((f) => inBox(r.froggyStart.x, r.froggyStart.z, f, R * 2)),
+        pillars: r.furniture.filter((f) => f.h >= r.wallH && f.w <= 2 && f.d <= 2).length,
+      }));
+    });
+    await page.close();
+
+    check('nothing is parked on top of a hiding place',
+      rooms.every((r) => r.blocked === 0), rooms.map((r) => `${r.name}:${r.blocked}`).join(' '));
+    check('no hiding place is inside a wall',
+      rooms.every((r) => r.outside === 0), rooms.map((r) => `${r.name}:${r.outside}`).join(' '));
+    check('neither of you starts inside the furniture',
+      rooms.every((r) => !r.spawnBlocked && !r.froggyBlocked),
+      rooms.map((r) => `${r.name}:${r.spawnBlocked ? 'you' : ''}${r.froggyBlocked ? 'him' : ''}`).join(' '));
+    // The stores is the middle room and must not be the biggest: it is the one
+    // that played like an empty car park before it was pulled in.
+    const [lounge, stores, ward] = rooms;
+    check('the stores is not the largest room any more',
+      stores.w * stores.d < lounge.w * lounge.d && stores.w * stores.d < ward.w * ward.d,
+      rooms.map((r) => `${r.name} ${r.w}x${r.d}`).join(', '));
+    check('the stores has pillars to break it up', stores.pillars >= 6, `${stores.pillars} pillars`);
   }
 
   // -------------------------------------------- the same creature, both scenes
@@ -541,7 +615,7 @@ try {
     console.log('\nRuntime errors: none');
   }
 
-  const total = 42;
+  const total = 49;
   console.log(`\n${total - failed}/${total} checks passed.`);
   await browser.close();
   process.exit(failed > 0 || errors.length > 0 ? 1 : 0);

@@ -12,6 +12,15 @@ export const PLAYER_SPEED = 62; // logical px/s
 export const SPRINT_MUL = 1.2;
 const STEP_INTERVAL_MS = 340;
 
+/**
+ * Where the player sorts against the room's fixtures: 50, plus a thousandth
+ * per pixel down the screen.  Fixtures that can be stood behind pick a depth
+ * off the same scale (see `COUNTER_DEPTH` in game/content.ts).
+ */
+export function depthFor(y: number): number {
+  return 50 + y / 1000;
+}
+
 export class Player {
   readonly sprite: Phaser.GameObjects.Container;
   private body: Phaser.GameObjects.Rectangle;
@@ -29,7 +38,10 @@ export class Player {
     const head = scene.add.rectangle(0, -20, 8, 8, c(PALETTE.cream)).setOrigin(0.5, 1);
     const hood = scene.add.rectangle(0, -22, 10, 5, c(PALETTE.brown)).setOrigin(0.5, 1);
     this.sprite = scene.add.container(x, y, [this.body, this.torso, head, hood]);
-    this.sprite.setDepth(50);
+    // Sorted by where the feet are, from the first frame: a flat 50 here meant
+    // a player who had not moved yet sorted against the room as if they were
+    // standing at its top edge.
+    this.sprite.setDepth(depthFor(y));
   }
 
   setSurface(s: 'carpet' | 'concrete'): void {
@@ -45,6 +57,9 @@ export class Player {
 
   setPosition(x: number, y: number): void {
     this.sprite.setPosition(x, y);
+    // Being put somewhere is being somewhere: the depth has to follow, or a
+    // player placed behind a fixture keeps the sorting of wherever they were.
+    this.sprite.setDepth(depthFor(y));
   }
 
   /** Returns true if the player actually moved this frame. */
@@ -60,7 +75,7 @@ export class Player {
     const ny = this.sprite.y + (dy / len) * step;
     this.sprite.x = Phaser.Math.Clamp(nx, bounds.x, bounds.right);
     this.sprite.y = Phaser.Math.Clamp(ny, bounds.y, bounds.bottom);
-    this.sprite.setDepth(50 + this.sprite.y / 1000);
+    this.sprite.setDepth(depthFor(this.sprite.y));
 
     // A one-pixel bob, and a footstep.  The footsteps matter later.
     this.bobT += delta;

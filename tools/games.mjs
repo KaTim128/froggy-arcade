@@ -460,6 +460,61 @@ for (const g of [
   await page.close();
 }
 
+// The chase has two rules that are invisible from a screenshot: the tank
+// refills itself between bursts, and what is in the bag — not the clock —
+// decides how hard they come after you.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=carchase`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await sleep(600);
+
+  const st = () => page.evaluate(() => window.__chase.state());
+
+  // ---- the tank puts a burst back by itself, and takes its time about it.
+  // A jar picked up mid-measurement adds a WHOLE burst, so the regeneration is
+  // read off the fractional part: five seconds of it is a bit over a third of
+  // one, jar or no jar.
+  await page.evaluate(() => window.__chase.setNitro(0));
+  const dry = await st();
+  await sleep(5000);
+  const filling = await st();
+  const grew = filling.nitroCharge > dry.nitroCharge;
+  const part = filling.nitroCharge % 1;
+  // Fourteen seconds a burst: five of them must be a fraction of one, or the
+  // burst has stopped being a decision.
+  const slowly = part > 0.2 && part < 0.5;
+  console.log(
+    `${grew && slowly ? 'PASS' : 'FAIL'}  car chase: nitro comes back on its own, slowly  — ${dry.nitroCharge.toFixed(2)} -> ${filling.nitroCharge.toFixed(2)} in 5s`,
+  );
+  if (!grew || !slowly) failures++;
+
+  // ---- and two hundred in the bag turns the heat up.  Read a few frames
+  // after each change: the road speed the police measure themselves against
+  // is recomputed in update(), not at the moment the cash lands.
+  await page.evaluate(() => window.__chase.setCash(0));
+  await sleep(250);
+  const cool = await st();
+  await page.evaluate(() => window.__chase.setCash(200));
+  await sleep(250);
+  const hot = await st();
+  await page.evaluate(() => window.__chase.setCash(1400));
+  await sleep(250);
+  const boiling = await st();
+
+  const steps = cool.heat === 0 && hot.heat === 1 && boiling.heat === 3;
+  const harder = hot.policeCap === cool.policeCap + 1 && hot.policeSpeed - cool.policeSpeed > 20;
+  console.log(`${steps ? 'PASS' : 'FAIL'}  car chase: every 200 is a notch of heat, and it caps  — ${cool.heat}/${hot.heat}/${boiling.heat}`);
+  console.log(
+    `${harder ? 'PASS' : 'FAIL'}  car chase: the notch is more cars and faster ones  — cap ${cool.policeCap}->${hot.policeCap}, speed +${(hot.policeSpeed - cool.policeSpeed).toFixed(0)}`,
+  );
+  if (!steps) failures++;
+  if (!harder) failures++;
+  await page.close();
+}
+
 // Frog vs Lizard: the items are the game, so each one has to do its own thing
 // and only its own thing.  Every throw here is the solved arc, so what is
 // under test is the item and not the aim.

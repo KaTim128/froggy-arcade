@@ -20,7 +20,7 @@ import { paintChangeMachine, paintHubRoom, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
-import { ANNEX_DOOR, BELL, CABINETS, COUNTER, PRIZE_CASE, PRIZES, cabinetsIn } from '../game/content';
+import { ANNEX_DOOR, BELL, CABINETS, COUNTER, COUNTER_DEPTH, PRIZE_CASE, PRIZES, cabinetsIn } from '../game/content';
 import { DialogueBox } from '../froggy/dialogue';
 import { tutorialScript } from '../froggy/script';
 import { froggyLayer } from '../render/froggyLayer';
@@ -198,9 +198,11 @@ export class ArcadeHub extends Phaser.Scene {
   // ------------------------------------------------------------------ the room
 
   private paintCounter(): void {
-    // Ticket counter along the back wall, prizes visible behind glass.
-    this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, COUNTER.h, PALETTE.brown).setOrigin(0, 0);
-    this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, 3, PALETTE.brownLight).setOrigin(0, 0);
+    // Ticket counter along the back wall, prizes visible behind glass.  The
+    // front face sorts by its own front edge, so anyone up against it is cut
+    // off at the waist by it instead of standing on top of it.
+    this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, COUNTER.h, PALETTE.brown).setOrigin(0, 0).setDepth(COUNTER_DEPTH);
+    this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, 3, PALETTE.brownLight).setOrigin(0, 0).setDepth(COUNTER_DEPTH);
 
     this.add
       .rectangle(PRIZE_CASE.x, PRIZE_CASE.y - 30, PRIZE_CASE.w, 30, PALETTE.ink)
