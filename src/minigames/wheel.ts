@@ -16,9 +16,11 @@
  * The board on the right says all of that out loud, the way the chamber says
  * one live round in six.  This building takes your money in the open.
  *
- * Twenty in the slot buys the first spin (the shell already debited it); every
- * spin after that is raised through the shell, every prize is paid the moment
- * the wheel stops, and LEAVE settles up.  Nothing leaves except through the
+ * WALKING UP TO IT IS FREE.  The wheel takes nothing to stand at and nothing
+ * to read: the board, the odds and the price of a go are all there before a
+ * token moves, and the twenty is only taken when the player actually spins.
+ * Every spin is raised through the shell, every prize is paid the moment the
+ * wheel stops, and LEAVE settles up.  Nothing leaves except through the
  * ledger (MG-3).
  *
  * THE PRICE, AND WHY IT IS TWENTY.  The faces average 17.7 tokens a spin.  At
@@ -131,11 +133,11 @@ export const wheelOfFortune: MinigameModule = {
   id: ID,
   title: 'WHEEL OF FORTUNE',
   music: 'game_wheel',
-  rules: 'ten a spin - the wheel says what it pays',
+  rules: 'free to look, twenty a spin - the wheel says what it pays',
   payoutNote: 'PAYS 1 - 100',
   tutorial: {
     objective: [
-      'TWENTY TOKENS A SPIN.',
+      'FREE TO LOOK - TWENTY TOKENS A SPIN.',
       'EVERY FACE IS AS WIDE AS ITS CHANCE.',
       'LEAVE WHENEVER YOU LIKE - IT IS ALL YOURS.',
     ],
@@ -196,7 +198,7 @@ export const wheelOfFortune: MinigameModule = {
 
     balanceText = text(scene, 180, 98, '', PALETTE.cream);
     tallyText = text(scene, 180, 108, '', PALETTE.ash);
-    statusText = text(scene, 180, 122, 'SPIN THE WHEEL', PALETTE.gold);
+    statusText = text(scene, 180, 122, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
 
     spinBtn = button(scene, 214, 150, `SPIN - ${SPIN_COST}`, () => spin(), { width: 66, height: 14 });
     leaveBtn = button(scene, 284, 150, 'LEAVE', () => leave(), { width: 52, height: 14, fill: PALETTE.slate });
@@ -276,8 +278,9 @@ function draw(): void {
 
 function spin(): void {
   if (over || spinning || !sceneRef || !apiRef) return;
-  // The first spin was paid at the door; every one after it is raised here.
-  if (spins > 0 && !apiRef.raise(SPIN_COST)) {
+  // Nothing was paid at the door, so every spin — the first one included — is
+  // raised here.  Look for free, pay to play.
+  if (!apiRef.raise(SPIN_COST)) {
     audio.sfx('buzzer');
     statusText?.setText(`YOU NEED ${SPIN_COST}`).setTint(PALETTE.blood);
     return;

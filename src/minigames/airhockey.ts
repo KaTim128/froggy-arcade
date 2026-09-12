@@ -1,7 +1,7 @@
 /**
  * Air Hockey.  PRD §9.4 — Easy, 1 token in, 3 out.
  *
- * Mouse paddle in the player's half, first to 5, 180s cap, a tie is a loss.
+ * Mouse paddle in the player's half, first to 5, 180s cap, a tie refunds.
  * The AI tracks the puck's predicted intercept with a deliberate 140ms reaction
  * delay and an aim error, so it is beatable by feints (VOC-20).
  */
@@ -242,12 +242,13 @@ function updateScore(): void {
   scoreText?.setText(`FROGGY ${scoreA}   -   ${scoreP} YOU`);
 }
 
-/** PRD §9.4: on timeout the higher score wins, and a tie is a loss. */
+/** PRD §9.4: on timeout the higher score wins.  Level on the clock is a tie. */
 function finish(): void {
   if (over) return;
   over = true;
   const won = scoreP > scoreA;
-  puck?.scene.time.delayedCall(400, () => (won ? apiRef?.win() : apiRef?.lose()));
+  const tied = scoreP === scoreA;
+  puck?.scene.time.delayedCall(400, () => (won ? apiRef?.win() : tied ? apiRef?.draw() : apiRef?.lose()));
 }
 
 export const _debug = { TABLE, GAME_H };

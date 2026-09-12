@@ -11,6 +11,7 @@ export type LedgerReason =
   | 'seed' // the $10 -> 20 tokens at the intro
   | 'game.cost' // minigame launch
   | 'game.reward' // minigame win
+  | 'game.refund' // a tie: the entry cost handed straight back
   | 'charity' // Froggy's five
   | 'change' // the machine on the back wall, at half rate
   | 'prize'; // redemption

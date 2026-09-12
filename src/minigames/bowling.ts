@@ -3,8 +3,8 @@
  *
  * A lane seen from above, ten pins at the far end, and Froggy on the next
  * lane over bowling against you.  Three rounds; two balls a round; every pin
- * you knock down is a point.  Beat his total and the cabinet pays.  Tie or
- * lose and it does not.
+ * you knock down is a point.  Beat his total and the cabinet pays.  Tie and
+ * you get your tokens back; lose and you do not.
  *
  * A and D walk the ball along the foul line, the arrows swing the aim, the
  * line shows where the ball is going, SPACE holds for power and lets go to
@@ -126,7 +126,7 @@ export const bowling: MinigameModule = {
   tutorial: {
     objective: [
       'THREE ROUNDS AGAINST FROGGY.',
-      'BEAT HIS TOTAL - A TIE PAYS NOTHING.',
+      'BEAT HIS TOTAL - A TIE REFUNDS.',
       'SOME BALLS CURVE. YOU FIND OUT ROLLING.',
     ],
     controls: [
@@ -519,7 +519,12 @@ function finish(): void {
   if (store.setHighScore(ID, scores.player)) best = scores.player;
   refreshHud();
   const won = scores.player > scores.cpu;
-  const line = won ? `YOU WIN ${scores.player} - ${scores.cpu}` : scores.player === scores.cpu ? `TIED ${scores.player} - ${scores.cpu}  -  NO PRIZE` : `FROGGY WINS ${scores.cpu} - ${scores.player}`;
-  centerText(scene0, GAME_W / 2, 100, line, won ? PALETTE.gold : PALETTE.fog).setDepth(50);
-  scene0.time.delayedCall(1600, () => (won ? apiRef?.win() : apiRef?.lose()));
+  const tied = scores.player === scores.cpu;
+  const line = won
+    ? `YOU WIN ${scores.player} - ${scores.cpu}`
+    : tied
+      ? `TIED ${scores.player} - ${scores.cpu}  -  TOKENS BACK`
+      : `FROGGY WINS ${scores.cpu} - ${scores.player}`;
+  centerText(scene0, GAME_W / 2, 100, line, won ? PALETTE.gold : tied ? PALETTE.tealLight : PALETTE.fog).setDepth(50);
+  scene0.time.delayedCall(1600, () => (won ? apiRef?.win() : tied ? apiRef?.draw() : apiRef?.lose()));
 }

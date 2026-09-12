@@ -200,12 +200,15 @@ export class ArcadeAnnex extends Phaser.Scene {
 
   private launchGame(cab: Cabinet): void {
     const { cost } = cab.def;
-    if (!canEnter('Minigame', store.get(), { cost })) {
+    // A fixture that charges inside the game (the table, the wheel) is free to
+    // walk up to and free to read the rules of; the rest pay at the door.
+    const free = cab.def.freeToEnter === true;
+    if (!free && !canEnter('Minigame', store.get(), { cost })) {
       audio.sfx('buzzer');
       this.say(`NOT ENOUGH TOKENS — NEED ${cost}`);
       return;
     }
-    if (!ledger.debit(cost, 'game.cost')) {
+    if (!free && !ledger.debit(cost, 'game.cost')) {
       audio.sfx('buzzer');
       return;
     }

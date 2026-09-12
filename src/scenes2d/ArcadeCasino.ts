@@ -240,7 +240,11 @@ export class ArcadeCasino extends Phaser.Scene {
 
   private launchGame(cab: Fixture): void {
     const { cost } = cab.def;
-    if (!canEnter('Minigame', store.get(), { cost })) {
+    // The table and the wheel cost nothing to walk up to: their rules are
+    // free to read and the first token moves when the player deals or spins.
+    // Everything else takes its coin at the door.
+    const free = cab.def.freeToEnter === true;
+    if (!free && !canEnter('Minigame', store.get(), { cost })) {
       audio.sfx('buzzer');
       this.say(
         cab.def.fixture === 'table'
@@ -249,7 +253,7 @@ export class ArcadeCasino extends Phaser.Scene {
       );
       return;
     }
-    if (!ledger.debit(cost, 'game.cost')) {
+    if (!free && !ledger.debit(cost, 'game.cost')) {
       audio.sfx('buzzer');
       return;
     }
@@ -282,7 +286,9 @@ export class ArcadeCasino extends Phaser.Scene {
     this.player.move(dx, dy, delta, this.bounds);
 
     const bal = ledger.balance();
-    for (const c of this.cabinets) c.setAffordable(bal >= c.def.cost);
+    // A free fixture never reads as unaffordable — you can always walk up to
+    // the table or the wheel, whatever is in your pocket.
+    for (const c of this.cabinets) c.setAffordable(c.def.freeToEnter === true || bal >= c.def.cost);
 
     this.target = this.findTarget();
     this.renderPrompt();
@@ -319,12 +325,19 @@ export class ArcadeCasino extends Phaser.Scene {
     let colour: number = PALETTE.gold;
     if (t.kind === 'cabinet') {
       const { cost } = t.cab.def;
-      // The table takes a bet, not a price, so it says so.
-      msg =
-        t.cab.def.fixture === 'table'
-          ? `[E] ${t.cab.def.title} - ${cost} TOKEN MIN`
-          : `[E] ${t.cab.def.title} - ${cost} TOKEN${cost === 1 ? '' : 'S'}`;
-      colour = ledger.balance() >= cost ? PALETTE.gold : PALETTE.ash;
+      // The table and the wheel take a bet, not a price — walking up to them
+      // costs nothing, so the prompt says what a go costs rather than what the
+      // door costs, and it never greys out: you can always read the rules.
+      if (t.cab.def.freeToEnter) {
+        msg =
+          t.cab.def.fixture === 'table'
+            ? `[E] ${t.cab.def.title} - FREE TO SIT, ${cost} MIN BET`
+            : `[E] ${t.cab.def.title} - FREE TO LOOK, ${cost} A SPIN`;
+        colour = PALETTE.gold;
+      } else {
+        msg = `[E] ${t.cab.def.title} - ${cost} TOKEN${cost === 1 ? '' : 'S'}`;
+        colour = ledger.balance() >= cost ? PALETTE.gold : PALETTE.ash;
+      }
     } else {
       msg = '[E] BACK ROOM';
     }

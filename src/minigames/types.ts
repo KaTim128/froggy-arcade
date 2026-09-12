@@ -21,6 +21,15 @@ export interface MinigameApi {
   win(payout?: number): void;
   /** End the game as a loss.  Nothing is credited. */
   lose(): void;
+  /**
+   * End the game as a TIE: the entry cost goes back, exactly once, and nothing
+   * is paid on top of it.  Neither side won, so neither side pays.
+   *
+   * The game says a tie happened; the shell decides what a tie is worth, the
+   * same way it decides what a win is worth.  A game that credited its own
+   * refund would be the one place the economy lived outside the ledger.
+   */
+  draw(): void;
   /** Tokens riding on this play: the entry cost, plus anything raised. */
   staked(): number;
   /**

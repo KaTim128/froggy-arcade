@@ -18,10 +18,27 @@
  *
  * Two hundred cash is the bar: ten tokens, and one more for every further
  * two hundred.  IT IS ALSO WHEN THEY START TAKING YOU SERIOUSLY.  Every two
- * hundred in the bag is a notch of HEAT: another car on the road behind you,
- * a faster one, thicker traffic and a quicker road, up to three notches.  The
- * run ends on a crash, on being caught, or on ENTER — pull over and take what
- * you have.  Carrying on is a bet against a chase that is getting worse.
+ * hundred in the bag puts another car on the road behind you, and the first
+ * three notches also make them faster, the traffic thicker and the road
+ * quicker.  At six hundred they stop driving at you and start LAYING THINGS
+ * IN THE ROAD.  The run ends on a crash, on being caught, or on ENTER — pull
+ * over and take what you have.  Carrying on is a bet against a chase that is
+ * getting worse.
+ *
+ * THEY CAN BE JUKED, AND THEY CAN BE CRASHED.  A chaser steers at the lane it
+ * last SAW you in, and it only looks every few tenths of a second, so a late
+ * swerve leaves it committed to where you were — that lag is the whole of how
+ * you shake one without nitro, and it shortens as the heat climbs.  It also
+ * means you can aim them: a chaser locked onto your old lane drives into the
+ * back of the traffic in it, spins out, and is no use to anyone for a few
+ * seconds.  The spike strips cut both ways too — a police car that drives
+ * over one goes out the same way your car would have.
+ *
+ * So the road is a weapon, not just an obstacle, and the nitro jars are laid
+ * out to make you use it: never twice in the same lane, never behind a car
+ * that is already there, and always a lane or two off your line, so topping
+ * up the tank is a decision about traffic rather than a thing you drive
+ * through.
  *
  * The cash here is a score.  It is not the cash the man outside pays, it is
  * never added to it, and the only thing that leaves this cabinet is the token
@@ -80,6 +97,34 @@ const NITRO_REGEN_MS = 11_000;
 /** A police car this close behind you is a warning. */
 const WARN_DIST = 70;
 /**
+ * How often a chaser looks up to see which lane you are in.  Between looks it
+ * drives at where you WERE, which is what makes a late swerve work: change
+ * lanes as one closes and it commits to the old line and goes past.  Sharper
+ * eyes with every notch of heat, down to a floor — they get harder to juke,
+ * never impossible.
+ */
+const POLICE_REACT_MS = 460;
+const POLICE_REACT_FLOOR = 200;
+/**
+ * How long a police car is out of the chase after it hits something.  It
+ * spins, drops its siren, slows to a crawl and falls back down the road; if
+ * it is still on screen when it comes round, it starts chasing again.
+ */
+const POLICE_STUN_MS = 2800;
+/** Crawling speed of a spun-out car, so the wreck is watchable. */
+const POLICE_STUN_SPEED = 26;
+/** The most cars they will ever have on you at once. */
+const POLICE_MAX = 6;
+/**
+ * Cash at which the road itself turns against you: spike strips, laid across
+ * most of the lanes with a gap to thread.  It is the one hazard that is not a
+ * car, it arrives long after the run has paid for itself, and it is the reason
+ * a big bag is worth banking.
+ */
+export const TRAP_CASH = 600;
+/** Lanes a strip covers: two at first, three once the bag is twice over. */
+const TRAP_GAP_MS = 9000;
+/**
  * How much faster the police are than you, and how hard they steer at you.
  *
  * Twenty is still a gap that closes — you cannot simply out-drive them — but
@@ -107,6 +152,27 @@ interface Mover {
   body: Phaser.GameObjects.Container;
 }
 
+/** A chaser.  It carries what it thinks it knows and how hurt it is. */
+interface Police extends Mover {
+  /** The x it is steering at: your lane as of its last look, not your lane. */
+  aim: number;
+  /** ms until it looks again. */
+  react: number;
+  /** ms left of being spun out.  Zero means it is chasing. */
+  stun: number;
+}
+
+/**
+ * A spike strip.  `lanes[i]` is true where the strip covers lane i, so the
+ * false ones are the gap you have to be in.  It scrolls down with the road
+ * like everything else, which is what makes it dodgeable rather than a tax.
+ */
+interface Trap {
+  y: number;
+  lanes: boolean[];
+  body: Phaser.GameObjects.Container;
+}
+
 let scene0: Phaser.Scene | null = null;
 let apiRef: MinigameApi | null = null;
 let player: Phaser.GameObjects.Container | null = null;
@@ -115,7 +181,11 @@ let py = 140;
 let speed = SPEED_START;
 let elapsed = 0;
 let traffic: Mover[] = [];
-let police: Mover[] = [];
+let police: Police[] = [];
+let traps: Trap[] = [];
+let trapTimer = 0;
+/** The lane the last nitro jar went in, so the next one does not repeat it. */
+let lastJarLane = -1;
 let cash: Array<{ x: number; y: number; body: Phaser.GameObjects.Rectangle }> = [];
 let jars: Array<{ x: number; y: number; body: Phaser.GameObjects.Container }> = [];
 let jarTimer = 0;
@@ -131,6 +201,8 @@ let nitroCharge = 1;
 /** The last heat notch the player was told about, so it is announced once. */
 let heatShown = 0;
 let over = false;
+/** What ended the run, for the HUD's sake and for the harness's. */
+let reason = '';
 let keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
 let hud: {
   cash: Phaser.GameObjects.BitmapText;
@@ -165,7 +237,8 @@ export const carChase: MinigameModule = {
     objective: [
       'GRAB CASH AND LOSE THE LAW.',
       'NITRO REFILLS ITSELF - SLOWLY.',
-      'PAST 200 THEY CHASE YOU HARDER.',
+      'SWERVE LATE - THEY DRIVE AT YOUR OLD LANE.',
+      'PAST 200 MORE CARS. PAST 600, SPIKES.',
     ],
     controls: [
       ['A / D', 'STEER'],
@@ -191,7 +264,10 @@ export const carChase: MinigameModule = {
     policeTimer = 8000;
     cashTimer = 900;
     jars = [];
-    jarTimer = 5000;
+    jarTimer = 3000;
+    lastJarLane = -1;
+    traps = [];
+    trapTimer = TRAP_GAP_MS;
     warnT = 0;
     collected = 0;
     best = store.highScore(ID);
@@ -199,6 +275,7 @@ export const carChase: MinigameModule = {
     nitroCharge = 1;
     heatShown = 0;
     over = false;
+    reason = '';
 
     // verge, road, lane lines.  Things spawn above the top edge and scroll
     // in, and the shell's title bar has to stay on top of them — so nothing is
@@ -276,10 +353,65 @@ export const carChase: MinigameModule = {
           policeCap: policeCap(),
           policeSpeed: speed + POLICE_GAIN + chaseHeat(collected) * HEAT_POLICE_GAIN + elapsed / 3500,
           jars: jars.length,
+          jarLanes: jars.map((j) => laneOf(j.x)),
           traffic: traffic.length,
           police: police.length,
+          chasing: police.filter((p) => p.stun <= 0).length,
+          stunned: police.filter((p) => p.stun > 0).length,
+          traps: traps.length,
+          trapLanes: traps.map((t) => t.lanes.slice()),
+          cars: police.map((p) => ({
+            x: Math.round(p.x),
+            y: Math.round(p.y),
+            lane: laneOf(p.x),
+            aim: laneOf(p.aim),
+            stun: Math.round(p.stun),
+          })),
+          over,
+          reason,
           player: { x: px, y: py },
         }),
+        /** Put a chaser in a known lane, at a known distance behind you. */
+        spawnPolice: (lane: number, y?: number) => {
+          spawnPolice();
+          const p = police[police.length - 1];
+          if (!p) return;
+          p.x = LANES[Phaser.Math.Clamp(lane | 0, 0, 3)];
+          p.aim = p.x;
+          p.y = y ?? py + 40;
+          p.react = POLICE_REACT_MS;
+        },
+        /** Drop a traffic car in a lane, at a y of your choosing. */
+        spawnTrafficAt: (lane: number, y: number) => {
+          if (!scene0) return;
+          const x = LANES[Phaser.Math.Clamp(lane | 0, 0, 3)];
+          traffic.push({ x, y, own: 40, body: carSprite(scene0, x, y, PALETTE.ember, false) });
+        },
+        spawnTrap: () => spawnTrap(),
+        /** Put the strip clock on a hair trigger, without touching the guard. */
+        armTrap: () => {
+          trapTimer = 300;
+        },
+        dropJar: () => spawnJar(),
+        /** Sweep the road, so a test can aim at one hazard and only one. */
+        clearRoad: () => {
+          for (const c of traffic) c.body.destroy();
+          for (const pc of police) pc.body.destroy();
+          for (const t of traps) t.body.destroy();
+          traffic = [];
+          police = [];
+          traps = [];
+          policeTimer = 60_000;
+          trafficTimer = 60_000;
+          trapTimer = 60_000;
+        },
+        /** Park the car somewhere exact, for aiming a test at a hazard. */
+        setPlayer: (x: number, y: number) => {
+          px = Phaser.Math.Clamp(x, ROAD_L + CAR_W / 2, ROAD_L + ROAD_W - CAR_W / 2);
+          py = Phaser.Math.Clamp(y, 70, 160);
+          player?.setPosition(px, py);
+        },
+        laneX: (lane: number) => LANES[Phaser.Math.Clamp(lane | 0, 0, 3)],
         setCash: (n: number) => {
           collected = n;
           heatShown = chaseHeat(n);
@@ -354,14 +486,53 @@ export const carChase: MinigameModule = {
       policeTimer = Math.max(1500, 3000 - heat * 500);
     }
     for (const p of police) {
+      const light = p.body.getAt(2) as Phaser.GameObjects.Rectangle;
+      if (p.stun > 0) {
+        // Spun out: siren dead, no steering, crawling, and falling back down
+        // the road.  It is still a lump of metal in a lane, so it can still be
+        // hit — it just is not chasing anybody.
+        p.stun -= delta;
+        p.own = POLICE_STUN_SPEED;
+        p.y += (ground - p.own) * dt;
+        p.body.setPosition(p.x, p.y).setVisible(onScreen(p.y));
+        p.body.setAngle(p.body.angle + delta * 0.3);
+        light.setFillStyle(PALETTE.steel);
+        if (p.stun <= 0) {
+          // Back on its wheels, and it has to earn the distance again.
+          p.body.setAngle(0);
+          p.aim = px;
+          p.react = reactMs(heat);
+        }
+        continue;
+      }
+      // It only looks every so often.  Between looks it drives at the lane it
+      // last saw you in, which is the whole of how a juke works.
+      p.react -= delta;
+      if (p.react <= 0) {
+        p.aim = px;
+        p.react = reactMs(heat);
+      }
       p.own = speed + POLICE_GAIN + heat * HEAT_POLICE_GAIN + elapsed / 3500;
       p.y += (ground - p.own) * dt;
-      p.x += Phaser.Math.Clamp(px - p.x, -1, 1) * POLICE_STEER * dt;
+      if (Math.abs(p.aim - p.x) > 1) p.x += Math.sign(p.aim - p.x) * POLICE_STEER * dt;
       p.body.setPosition(p.x, p.y).setVisible(onScreen(p.y));
       // lights
       const on = Math.floor(elapsed / 120) % 2 === 0;
-      (p.body.getAt(2) as Phaser.GameObjects.Rectangle).setFillStyle(on ? PALETTE.blood : PALETTE.moon);
+      light.setFillStyle(on ? PALETTE.blood : PALETTE.moon);
     }
+
+    // ---- and what happens when a chaser drives into the traffic it was not
+    // looking at.  This is the reason to lead them: a car locked onto the lane
+    // you just left goes into the back of whatever is in it.
+    for (const p of police) {
+      if (p.stun > 0) continue;
+      const into = traffic.find((c) => Math.abs(p.x - c.x) < CAR_W - 3 && Math.abs(p.y - c.y) < CAR_H - 4);
+      if (into) {
+        spinOut(p);
+        wreck(into);
+      }
+    }
+    traffic = traffic.filter((c) => c.body.active);
     // Under nitro they fall off the bottom; shaken, they come back later.
     police = police.filter((p) => keep(p, p.y < BOTTOM + CAR_H * 2 && p.y > TOP - CAR_H * 2));
 
@@ -379,7 +550,10 @@ export const carChase: MinigameModule = {
     jarTimer -= delta;
     if (jarTimer <= 0) {
       spawnJar();
-      jarTimer = 6000 + Math.random() * 5000;
+      // More of them than there used to be, and spread rather than clustered:
+      // see `jarLane`.  A tank you can actually keep topped up is what makes
+      // leading the police into the traffic a plan instead of a prayer.
+      jarTimer = 3600 + Math.random() * 2400;
     }
     for (const j of jars) {
       j.y += ground * dt;
@@ -399,6 +573,38 @@ export const carChase: MinigameModule = {
       }
       return true;
     });
+
+    // ---- spike strips, once the bag is big enough to be worth stopping
+    if (collected >= TRAP_CASH) {
+      trapTimer -= delta;
+      if (trapTimer <= 0) {
+        spawnTrap();
+        // They come quicker the longer you stay out with a full bag.
+        trapTimer = Math.max(4200, TRAP_GAP_MS - (collected - TRAP_CASH) * 4) + Math.random() * 1200;
+      }
+    }
+    for (const t of traps) {
+      t.y += ground * dt;
+      t.body.setPosition(0, t.y).setVisible(t.y > TOP + 2);
+    }
+    traps = traps.filter((t) => {
+      if (t.y > BOTTOM + 6) {
+        t.body.destroy();
+        return false;
+      }
+      return true;
+    });
+    // A strip does not care whose tyres they are.  A chaser that drives over
+    // one goes out exactly the way you would have.
+    for (const t of traps) {
+      for (const p of police) {
+        if (p.stun <= 0 && Math.abs(t.y - p.y) < CAR_H / 2 + 2 && spiked(t, p.x)) spinOut(p);
+      }
+      if (Math.abs(t.y - py) < CAR_H / 2 + 2 && spiked(t, px)) {
+        crash('SPIKED');
+        return;
+      }
+    }
 
     cash = cash.filter((c) => {
       if (Math.abs(c.x - px) < CAR_W / 2 + 4 && Math.abs(c.y - py) < CAR_H / 2 + 4) {
@@ -435,7 +641,8 @@ export const carChase: MinigameModule = {
     }
     for (const p of police) {
       if (hits(p)) {
-        crash('BUSTED');
+        // A spun-out car is wreckage in a lane, not an arrest.
+        crash(p.stun > 0 ? 'CRASHED' : 'BUSTED');
         return;
       }
     }
@@ -446,7 +653,9 @@ export const carChase: MinigameModule = {
     hud?.time.setTint(heat > 0 ? PALETTE.blood : PALETTE.fog);
 
     // ---- the warning: a police car right behind you, flashing and beeping
-    const close = police.some((p) => p.y > py && p.y - py < WARN_DIST && Math.abs(p.x - px) < LANE_W * 1.5);
+    const close = police.some(
+      (p) => p.stun <= 0 && p.y > py && p.y - py < WARN_DIST && Math.abs(p.x - px) < LANE_W * 1.5,
+    );
     if (close) {
       warnT += delta;
       hud?.warn.setVisible(Math.floor(warnT / 160) % 2 === 0);
@@ -460,6 +669,7 @@ export const carChase: MinigameModule = {
   destroy() {
     traffic = [];
     police = [];
+    traps = [];
     cash = [];
     jars = [];
     dashes = [];
@@ -475,13 +685,59 @@ const held = (g: string): boolean => keys[g]?.some((k) => k.isDown) ?? false;
 /** Fully below the title bar.  Things above it are there, just not drawn yet. */
 const onScreen = (y: number): boolean => y - CAR_H / 2 >= TOP;
 
+/** Which lane an x is in.  Lane 0 is the left-hand one. */
+function laneOf(x: number): number {
+  return Phaser.Math.Clamp(Math.floor((x - ROAD_L) / LANE_W), 0, 3);
+}
+
 /**
- * One at first, two after three quarters of a minute, three after a minute and
- * a half — and one more for every notch of heat.  What is in the bag decides
- * as much as the clock, and it decides it sooner.
+ * How many are on you at once: ONE until the first two hundred, TWO from two
+ * hundred, and one more for every further two hundred in the bag, up to six.
+ * It is a pure function of the cash — the clock no longer has a say — so the
+ * chase is exactly as heavy as what you are carrying, and the player can read
+ * their own bag and know what is behind them.
  */
+export function policeFor(cash: number): number {
+  return Math.min(POLICE_MAX, 1 + Math.floor(cash / TARGET_CASH));
+}
+
 function policeCap(): number {
-  return 1 + Math.min(2, Math.floor(elapsed / 45000)) + chaseHeat(collected);
+  return policeFor(collected);
+}
+
+/** How long a chaser goes between looks.  Sharper with every notch of heat. */
+function reactMs(heat: number): number {
+  return Math.max(POLICE_REACT_FLOOR, POLICE_REACT_MS - heat * 80);
+}
+
+/**
+ * Spin one out.  It keeps its place on the road — a wreck does not teleport —
+ * but it stops steering, stops gaining and stops being a chaser for a while.
+ */
+function spinOut(p: Police): void {
+  if (p.stun > 0) return;
+  p.stun = POLICE_STUN_MS;
+  p.own = POLICE_STUN_SPEED;
+  audio.sfx('whack', 0.5);
+  scene0?.cameras.main.shake(140, 0.006);
+}
+
+/** The traffic car that took the hit.  It is gone; the road is that much clearer. */
+function wreck(c: Mover): void {
+  if (!scene0) return;
+  const puff = scene0.add.circle(c.x, c.y, 7, PALETTE.bone, 0.8).setDepth(7);
+  scene0.tweens.add({ targets: puff, radius: 14, alpha: 0, duration: 420, onComplete: () => puff.destroy() });
+  c.body.destroy();
+}
+
+/** Does a strip cover this x?  Measured against the car's body, not its centre. */
+function spiked(t: Trap, x: number): boolean {
+  const half = (CAR_W - 4) / 2;
+  return t.lanes.some((on, i) => {
+    if (!on) return false;
+    const left = ROAD_L + i * LANE_W;
+    return x + half > left && x - half < left + LANE_W;
+  });
 }
 
 /** They have called it in.  Said once per notch, and never quietly. */
@@ -533,14 +789,89 @@ function spawnPolice(): void {
   if (!scene0) return;
   const lane = LANES[Phaser.Math.Between(0, 3)];
   const body = carSprite(scene0, lane, BOTTOM + CAR_H, PALETTE.moon, true);
-  police.push({ x: lane, y: BOTTOM + CAR_H, own: speed + POLICE_GAIN, body });
+  // It comes on aimed at the lane it can see you in, and looks again on its
+  // own clock from there.
+  police.push({
+    x: lane,
+    y: BOTTOM + CAR_H,
+    own: speed + POLICE_GAIN,
+    body,
+    aim: px,
+    react: POLICE_REACT_MS,
+    stun: 0,
+  });
   audio.sfx('buzzer', 0.35);
+}
+
+/**
+ * A spike strip across the road, with a gap.  Two lanes at first and three
+ * once the bag is twice the trap threshold; the gap is never where the player
+ * already is, because a strip you are standing in is not a hazard, it is a
+ * verdict.
+ */
+function spawnTrap(): void {
+  if (!scene0) return;
+  const width = collected >= TRAP_CASH * 2 ? 3 : 2;
+  const here = laneOf(px);
+  // Pick the gap first: a lane you can actually get to from where you are.
+  const gapChoices = [0, 1, 2, 3].filter((i) => Math.abs(i - here) <= 2);
+  const gap = gapChoices[Phaser.Math.Between(0, gapChoices.length - 1)];
+  const lanes = [0, 1, 2, 3].map((i) => i !== gap);
+  // With only three spikes on a four-lane road, open a second lane as well —
+  // whichever is furthest from the gap, so the strip still reads as a wall.
+  if (width === 2) {
+    const spare = [0, 1, 2, 3]
+      .filter((i) => i !== gap)
+      .sort((a, b) => Math.abs(b - gap) - Math.abs(a - gap))[0];
+    lanes[spare] = false;
+  }
+
+  const parts: Phaser.GameObjects.GameObject[] = [];
+  lanes.forEach((on, i) => {
+    if (!on) return;
+    const left = ROAD_L + i * LANE_W;
+    parts.push(scene0!.add.rectangle(left + 1, -3, LANE_W - 2, 6, 0x2b2118).setOrigin(0, 0));
+    for (let t = 0; t < 5; t++) {
+      parts.push(scene0!.add.triangle(left + 3 + t * 6, -3, 0, 5, 2.5, 0, 5, 5, PALETTE.bone));
+    }
+  });
+  const body = scene0.add.container(0, TOP - 6, parts).setDepth(3).setVisible(false);
+  traps.push({ y: TOP - 6, lanes, body });
+
+  audio.sfx('lock_click', 0.5);
+  const warn = centerText(scene0, GAME_W / 2, 62, 'SPIKES', PALETTE.blood).setDepth(50);
+  scene0.tweens.add({ targets: warn, alpha: 0, duration: 900, onComplete: () => warn.destroy() });
+}
+
+/**
+ * Where the next jar goes.  Never the lane the last one was in, never behind
+ * a car that is already at the top of the road, and — given a choice — a lane
+ * or two off the player's line, so a top-up is a decision about traffic and
+ * not something you collect by holding a direction.
+ */
+function jarLane(): number {
+  const clear = [0, 1, 2, 3].filter(
+    (i) =>
+      i !== lastJarLane &&
+      !traffic.some((c) => laneOf(c.x) === i && c.y < TOP + CAR_H * 3) &&
+      !jars.some((j) => laneOf(j.x) === i && j.y < TOP + 48),
+  );
+  const pool = clear.length ? clear : [0, 1, 2, 3].filter((i) => i !== lastJarLane);
+  const here = laneOf(px);
+  // Furthest from the player's lane, but two is as far as it is worth putting
+  // one: a jar on the far verge of a busy road is decoration, not a pickup.
+  const reach = (i: number): number => Math.min(2, Math.abs(i - here));
+  const best = Math.max(...pool.map(reach));
+  const picks = pool.filter((i) => reach(i) === best);
+  return picks[Phaser.Math.Between(0, picks.length - 1)];
 }
 
 /** A blue jar of nitro, worth one burst. */
 function spawnJar(): void {
   if (!scene0) return;
-  const lane = LANES[Phaser.Math.Between(0, 3)];
+  const idx = jarLane();
+  lastJarLane = idx;
+  const lane = LANES[idx];
   const jar = scene0.add.rectangle(0, 1, 8, 9, 0x46a0e0).setStrokeStyle(1, PALETTE.bone);
   const cap = scene0.add.rectangle(0, -4, 5, 3, PALETTE.bone);
   const shine = scene0.add.rectangle(-2, 0, 1, 5, 0xbfe6ff);
@@ -557,6 +888,7 @@ function spawnCash(): void {
 
 function crash(why: string): void {
   if (over || !scene0) return;
+  reason = why;
   audio.sfx('whack');
   scene0.cameras.main.shake(300, 0.02);
   centerText(scene0, GAME_W / 2, 80, why, PALETTE.blood, 16).setDepth(50);

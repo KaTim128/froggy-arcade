@@ -354,13 +354,16 @@ export class ArcadeHub extends Phaser.Scene {
 
     // The guard and the ledger are the only two things standing between the
     // player and a broken economy.  Both are checked, in that order.
-    if (!canEnter('Minigame', store.get(), { cost })) {
+    // A fixture that charges inside the game (the table, the wheel) is free to
+    // walk up to and free to read the rules of; the rest pay at the door.
+    const free = cab.def.freeToEnter === true;
+    if (!free && !canEnter('Minigame', store.get(), { cost })) {
       audio.sfx('buzzer');
       this.say(`NOT ENOUGH TOKENS — NEED ${cost}`);
       return;
     }
     // MG-2 / TK-2: cost is debited on launch, before the scene starts.
-    if (!ledger.debit(cost, 'game.cost')) {
+    if (!free && !ledger.debit(cost, 'game.cost')) {
       audio.sfx('buzzer');
       return;
     }

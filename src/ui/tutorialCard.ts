@@ -1,11 +1,14 @@
 /**
  * The how-to-play card.  PRD MG-8.
  *
- * Every cabinet shows one, and it shows it AFTER the room has taken the
- * tokens and BEFORE the game is built: paying is the commitment, and the
- * tutorial is what you get for it.  The shell does not construct the game
- * module until this card is dismissed, so nothing behind it can be played by
- * accident and no key pressed here reaches the game.
+ * Every cabinet shows one, and it shows it BEFORE the game is built: the shell
+ * does not construct the game module until this card is dismissed, so nothing
+ * behind it can be played by accident and no key pressed here reaches the
+ * game.  At a coin-op cabinet the token is already gone by the time the card
+ * is up — paying is the commitment and the tutorial is what you get for it.
+ * At the table and the wheel nothing has been taken yet: those charge for the
+ * go rather than the door, so their rules can be read for free and walked
+ * away from.
  *
  * It carries two things and only two: what winning is, and which keys this
  * cabinet reads.  A game's controls are its own — the card is built from the
@@ -66,7 +69,7 @@ export function showTutorial(
   keep(centerText(scene, GAME_W / 2, CARD.y + 5, `HOW TO PLAY - ${title}`, PALETTE.gold).setDepth(903));
 
   let y = CARD.y + 17;
-  for (const line of tut.objective.slice(0, 3)) {
+  for (const line of tut.objective.slice(0, 4)) {
     keep(centerText(scene, GAME_W / 2, y + 3, line, PALETTE.cream).setDepth(903));
     y += ROW_H;
   }

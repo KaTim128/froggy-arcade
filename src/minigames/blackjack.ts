@@ -1,9 +1,11 @@
 /**
  * BLACKJACK.  Froggy's table, not a cabinet.
  *
- * You sit down for one token — the table minimum, which the room already took
- * on the way in — and then bet as much of your pocket on the hand as you like
- * before he deals.  A win pays the whole stake back at 2x.
+ * Sitting down is free.  The table charges for the HAND, not for the chair:
+ * you can walk up, read what he deals and how it pays, and walk away again
+ * without a token moving.  When you do want a hand you put the bet up — the
+ * table minimum is one, the ceiling is your pocket — and it is debited when he
+ * deals.  A win pays the whole stake back at 2x.
  *
  * It is a table, so it deals as long as you want it to: every hand settles on
  * the spot and, while you can still cover the minimum, you can push another
@@ -11,7 +13,7 @@
  * and the shell reports how the whole sitting went.  Every token in and out
  * still moves through the shell, so the ledger stays the only path.
  *
- * Single deck, dealer stands on 17, blackjack pays as a win, and a push is a
+ * Single deck, the dealer draws to 17, blackjack pays as a win, and a push is a
  * push: the same total on both sides hands your stake straight back, so a
  * tied hand costs nothing and pays nothing.  Aces are the only fiddly part:
  * they count eleven until that would bust you, then one, and a hand can hold
@@ -112,7 +114,8 @@ export const blackjack: MinigameModule = {
   tutorial: {
     objective: [
       'BEAT THE DEALER TO 21.',
-      'BET WHAT YOU LIKE, HAND BY HAND.',
+      'SITTING DOWN IS FREE - YOU PAY THE BET.',
+      'MINIMUM 1, AND A WIN PAYS 2X.',
     ],
     controls: [
       ['LEFT/RIGHT', 'BET 1 DOWN OR UP'],
@@ -135,10 +138,11 @@ export const blackjack: MinigameModule = {
     outcome = '';
     player = [];
     dealer = [];
-    // The minimum is already on the felt — the room debited it to let you sit
-    // down — so the first hand's ante is paid and the bet starts there.
-    ante = Math.max(MINIMUM, api.staked());
-    bet = ante;
+    // Nothing is on the felt yet.  Sitting down was free, so `staked` is zero
+    // and the whole bet is debited when he deals; if some other room ever does
+    // charge at the door, that token is already down and counts as the ante.
+    ante = api.staked();
+    bet = Math.max(MINIMUM, ante);
 
     shuffle();
 
@@ -168,6 +172,32 @@ export const blackjack: MinigameModule = {
     scene.input.keyboard?.on('keydown-DOWN', () => lower(5));
 
     render();
+
+    if (import.meta.env?.DEV) {
+      // What he is holding and what he just said, side by side: the status line
+      // used to claim a seventeen every hand, and the only way to keep it
+      // honest is to be able to read both at once.
+      (window as unknown as Record<string, unknown>).__blackjack = {
+        state: () => ({
+          phase,
+          standing,
+          bet,
+          ante,
+          hands,
+          player: score(player),
+          dealer: score(dealer),
+          status: status?.text ?? '',
+        }),
+        deal: () => deal(),
+        hit: () => hit(),
+        stand: () => stand(),
+        again: () => nextHand(),
+        leave: () => leave(),
+      };
+      scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        delete (window as unknown as Record<string, unknown>).__blackjack;
+      });
+    }
   },
 
   update(_time: number, delta: number) {
@@ -232,7 +262,7 @@ function buildBetUi(scene: Phaser.Scene): void {
   c.add(button(scene, 200, 116, '+1', () => raise(1), { width: 26, height: 13 }));
   c.add(button(scene, 228, 116, '+5', () => raise(5), { width: 26, height: 13 }));
   c.add(button(scene, 268, 116, 'ALL IN', () => raise(maxBet()), { width: 44, height: 13 }));
-  c.add(centerText(scene, GAME_W / 2, 130, 'MINIMUM 1 - THE REST IS UP TO YOU', PALETTE.ash));
+  c.add(centerText(scene, GAME_W / 2, 130, 'THE SEAT IS FREE - MINIMUM BET 1', PALETTE.ash));
   c.add(
     button(scene, GAME_W / 2, 164, 'DEAL', () => deal(), {
       width: 64,
@@ -258,8 +288,9 @@ function raise(n: number): void {
 
 function lower(n: number): void {
   if (phase !== 'bet' || !apiRef) return;
-  // This hand's ante is already staked; nothing below it can come back off.
-  const next = Math.max(ante, bet - n);
+  // The table minimum is the floor, and anything already staked on this hand
+  // (a door charge, if a room ever takes one) cannot come back off under it.
+  const next = Math.max(Math.max(ante, MINIMUM), bet - n);
   if (next === bet) {
     audio.sfx('buzzer');
     return;
@@ -273,11 +304,14 @@ function lower(n: number): void {
 function deal(): void {
   if (phase !== 'bet' || !sceneRef || !apiRef) return;
 
-  // Everything above the ante goes down now, through the shell.
+  // The bet goes down now, through the shell — all of it, since sitting down
+  // took nothing.  This is the first and only moment a hand costs anything.
   const extra = bet - ante;
   if (extra > 0 && !apiRef.raise(extra)) {
     audio.sfx('buzzer');
-    bet = ante;
+    // Back to the smallest bet he will take, never to zero: a zero bet cannot
+    // be raised, so the DEAL button would stop meaning anything.
+    bet = Math.max(MINIMUM, ante);
     say('YOU CANNOT COVER THAT');
     render();
     return;
@@ -314,25 +348,44 @@ function hit(): void {
 function stand(): void {
   if (phase !== 'play' || standing || !sceneRef) return;
   standing = true;
-  say('DEALER STANDS ON 17');
+  // The hole card turns over here, so the first thing he can honestly say is
+  // what he is actually holding.  "DEALER STANDS ON 17" is a RULE, not a
+  // score, and saying it every hand told the player his total was 17 when it
+  // was very often nothing of the kind — so nothing below states a number the
+  // cards on the felt do not show.
+  say(`YOU STAND ON ${score(player)} - DEALER SHOWS ${score(dealer)}`);
   render();
 
-  // Dealer draws to 17, one card at a time so you can watch it happen.
+  // Dealer draws to 17, one card at a time so you can watch it happen, and
+  // says his real total after each one.
   const step = () => {
     if (phase === 'over') return;
     if (score(dealer) < 17) {
       dealer.push(deck.pop()!);
       audio.sfx('ui_hover');
       render();
+      const d = score(dealer);
+      // Whatever he drew to, including past 21 — the line must never be left
+      // showing the total he had one card ago.
+      say(d > 21 ? `DEALER BUSTS ON ${d}` : `DEALER DRAWS - ${d}`);
       sceneRef?.time.delayedCall(600, step);
       return;
     }
     const p = score(player);
     const d = score(dealer);
-    if (d > 21) finish(true, 'DEALER BUSTS');
-    else if (p > d) finish(true, `${p} BEATS ${d}`);
-    else if (p === d) finish(false, `PUSH ON ${p} - BET RETURNED`, true);
-    else finish(false, `${d} BEATS ${p}`);
+    if (d > 21) {
+      finish(true, 'DEALER BUSTS');
+      return;
+    }
+    // He stopped, and this is the total he stopped on — 17 through 21, and
+    // the line says which.
+    say(`DEALER STANDS ON ${d}`);
+    sceneRef?.time.delayedCall(700, () => {
+      if (phase === 'over') return;
+      if (p > d) finish(true, `${p} BEATS ${d}`);
+      else if (p === d) finish(false, `PUSH ON ${p} - BET RETURNED`, true);
+      else finish(false, `${d} BEATS ${p}`);
+    });
   };
   sceneRef.time.delayedCall(600, step);
 }
@@ -436,17 +489,21 @@ function offerAnother(): void {
   render();
 }
 
-/** Ante up and deal again.  The ante is a fresh debit, like sitting down was. */
+/**
+ * Another hand.  Nothing is debited here — the bet is taken on the deal, the
+ * same as the first hand was — so all this has to do is check the player can
+ * still cover the minimum and hand him the betting controls back.
+ */
 function nextHand(): void {
   if (phase !== 'over' || !apiRef || !sceneRef) return;
-  if (!apiRef.raise(MINIMUM)) {
+  if (apiRef.balance() < MINIMUM) {
     audio.sfx('buzzer');
     say(`${outcome} - THAT WAS THE LAST OF IT`);
     againBtn?.setVisible(false);
     return;
   }
 
-  ante = MINIMUM;
+  ante = 0;
   bet = MINIMUM;
   outcome = '';
   standing = false;

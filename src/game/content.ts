@@ -27,6 +27,16 @@ export interface CabinetDef {
    */
   fixture?: 'cabinet' | 'table' | 'wheel';
   /**
+   * Free to walk up to.  A cabinet takes its coin at the door — you pay, you
+   * play, and the how-to-play card comes after the token is gone.  The table
+   * and the wheel do not work like that: the bet IS the game, so they take
+   * nothing to sit down at, the rules are readable for free, and the first
+   * token only moves when the player deals or spins.  `cost` still means
+   * something at these two — it is the smallest bet the fixture will take —
+   * it is simply charged inside the game rather than at the door.
+   */
+  freeToEnter?: boolean;
+  /**
    * Which room the cabinet stands in.  The hub has a doorway on its left wall
    * into the annex, which exists so the floor can grow without the hub turning
    * into a wall of cabinets.  Defaults to the hub.
@@ -116,6 +126,7 @@ export const CABINETS: CabinetDef[] = [
     color: 0x2f8d4f,
     room: 'casino',
     fixture: 'table',
+    freeToEnter: true,
   },
   { id: 'roulette', title: 'CHAMBER', tier: 'hard', cost: 5, reward: 10, x: 224, y: 96, color: 0x8a2b34, room: 'casino' },
   // Not a machine either: a wheel on a post, in the corner of the casino.
@@ -134,6 +145,7 @@ export const CABINETS: CabinetDef[] = [
     color: 0xffd45e,
     room: 'casino',
     fixture: 'wheel',
+    freeToEnter: true,
   },
 ];
 

@@ -1,15 +1,22 @@
 /**
- * CHAMBER.  Hard — 5 tokens in, 10 out.
+ * CHAMBER.  Hard — 5 tokens in, and up to 15 back out.
  *
  * The arcade's russian-roulette cabinet, and it is a cabinet: a cylinder
  * diagram, a lever, and six chambers with one live round in them.  There is no
  * gun and nobody points anything at themselves — what is at stake is the five
  * tokens you put in, and the whole game is on the machine's face.
  *
- * Four clean pulls wins.  The cylinder spins between pulls, so every pull is an
- * independent one-in-six and the odds of the full run are (5/6)^4 — a shade
- * under half.  You may cash out after two, which loses the entry fee but ends
- * it: the interesting decision is whether the last two pulls are worth ten.
+ * FIVE PULLS, three tokens a clean one, and the pot is not yours until you
+ * walk.  Leave whenever you like and you keep what is on the machine; take the
+ * live one and the whole pot goes with it.  The cylinder spins between pulls,
+ * so every pull is an independent one in six and nothing about the run so far
+ * changes the next one.
+ *
+ * The arithmetic, since the machine states it and the player should be able to
+ * check it: surviving all five is (5/6)^5 = 40%, which pays 15 against the 5 it
+ * cost — about a token of expected value a play.  Stopping early is worse than
+ * going on at every single step, which is the joke: the machine is honest, and
+ * the honest play is to keep pulling.
  */
 
 import Phaser from 'phaser';
@@ -20,15 +27,19 @@ import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
 const CHAMBERS = 6;
-const PULLS_TO_WIN = 4;
-/** Cashing out is allowed only once you have something to lose. */
-const CASH_OUT_AFTER = 2;
+/** The most it will let you pull.  There is no sixth. */
+const MAX_PULLS = 5;
+/** What a clean pull adds to the pot, and what the pot tops out at. */
+const PAY_PER_PULL = 3;
+export const MAX_POT = MAX_PULLS * PAY_PER_PULL;
 
 const CYL_X = GAME_W / 2;
 const CYL_Y = 86;
 const CYL_R = 34;
 
 let survived = 0;
+/** Tokens on the machine.  Nothing is credited until the player walks. */
+let pot = 0;
 let over = false;
 let busy = false;
 let spin = 0;
@@ -40,20 +51,24 @@ let status: Phaser.GameObjects.BitmapText | null = null;
 let tally: Phaser.GameObjects.BitmapText | null = null;
 let pullBtn: Phaser.GameObjects.Container | null = null;
 let cashBtn: Phaser.GameObjects.Container | null = null;
+/** DEV only: forces the next pull's outcome so both endings are testable. */
+let rigged: 'clean' | 'live' | null = null;
 
 export const roulette: MinigameModule = {
   id: 'roulette',
   title: 'CHAMBER',
   music: 'game_roulette',
-  rules: 'four clean pulls',
+  rules: 'three a pull, five pulls, one live round',
+  payoutNote: 'PAYS 3 A PULL',
   tutorial: {
     objective: [
-      'FOUR CLEAN PULLS AND IT PAYS.',
+      'EVERY CLEAN PULL PAYS 3. FIVE PULLS MAX.',
       'ONE ROUND IN SIX IS LIVE.',
+      'WALK AND KEEP IT - OR LOSE THE LOT.',
     ],
     controls: [
       ['SPACE', 'PULL'],
-      ['MOUSE', 'PULL OR CASH OUT'],
+      ['MOUSE', 'PULL OR WALK AWAY'],
     ],
   },
 
@@ -61,6 +76,7 @@ export const roulette: MinigameModule = {
     sceneRef = scene;
     apiRef = api;
     survived = 0;
+    pot = 0;
     over = false;
     busy = false;
     spin = 0;
@@ -88,16 +104,36 @@ export const roulette: MinigameModule = {
     // the hammer, so the top chamber reads as the one that fires
     scene.add.triangle(CYL_X, CYL_Y - CYL_R - 12, 0, 0, 8, 0, 4, 8, 0x8a6a72);
 
+    // The deal, on the face of the machine, before a token moves.
     text(scene, 10, 30, `1 LIVE ROUND IN ${CHAMBERS}`, PALETTE.ash);
-    tally = centerText(scene, GAME_W / 2, 132, '', PALETTE.gold);
-    status = centerText(scene, GAME_W / 2, 146, 'THE CYLINDER SPINS EVERY PULL', PALETTE.ash);
+    text(scene, 10, 40, `${PAY_PER_PULL} A CLEAN PULL`, PALETTE.gold);
+    text(scene, GAME_W - 10, 30, `${MAX_PULLS} PULLS MAX`, PALETTE.ash).setOrigin(1, 0);
+    text(scene, GAME_W - 10, 40, `UP TO ${MAX_POT}`, PALETTE.gold).setOrigin(1, 0);
+    centerText(scene, GAME_W / 2, 124, 'THE LIVE ONE TAKES THE LOT', PALETTE.blood);
 
-    pullBtn = button(scene, GAME_W / 2 - 42, 166, 'PULL', () => pull(), { width: 60, height: 13 });
-    cashBtn = button(scene, GAME_W / 2 + 42, 166, 'CASH OUT', () => cashOut(), { width: 68, height: 13 });
-    cashBtn.setVisible(false);
+    tally = centerText(scene, GAME_W / 2, 138, '', PALETTE.gold);
+    status = centerText(scene, GAME_W / 2, 150, 'THE CYLINDER SPINS EVERY PULL', PALETTE.ash);
+
+    pullBtn = button(scene, GAME_W / 2 - 46, 168, 'PULL', () => pull(), { width: 60, height: 12 });
+    cashBtn = button(scene, GAME_W / 2 + 46, 168, 'WALK AWAY', () => cashOut(), { width: 72, height: 12 });
     scene.input.keyboard?.on('keydown-SPACE', () => pull());
 
     refresh();
+
+    if (import.meta.env?.DEV) {
+      (window as unknown as Record<string, unknown>).__chamber = {
+        state: () => ({ survived, pot, over, busy, maxPulls: MAX_PULLS, payPerPull: PAY_PER_PULL }),
+        /** Pull without the cylinder deciding, for testing both endings. */
+        rig: (outcome: 'clean' | 'live') => {
+          rigged = outcome;
+        },
+        pull: () => pull(),
+        walk: () => cashOut(),
+      };
+      scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        delete (window as unknown as Record<string, unknown>).__chamber;
+      });
+    }
   },
 
   update(_t: number, delta: number) {
@@ -123,12 +159,17 @@ export const roulette: MinigameModule = {
 };
 
 function refresh(): void {
-  tally?.setText(`${survived} / ${PULLS_TO_WIN} CLEAN`);
-  cashBtn?.setVisible(survived >= CASH_OUT_AFTER && !over);
+  tally?.setText(`${survived} / ${MAX_PULLS} CLEAN   -   ${pot} ON THE MACHINE`);
+  // You may walk at any point, including before you have pulled at all.
+  cashBtn?.setVisible(!over);
+  pullBtn?.setVisible(!over && survived < MAX_PULLS);
 }
 
 function pull(): void {
   if (over || busy || !sceneRef) return;
+  // Five and no more.  The button goes with the fifth, and this is the latch
+  // behind it so nothing else can ask for a sixth.
+  if (survived >= MAX_PULLS) return;
   busy = true;
   status?.setText('...');
   audio.sfx('lock_click');
@@ -136,9 +177,12 @@ function pull(): void {
   sceneRef.time.delayedCall(900, () => {
     busy = false;
     // Independent every time: the cylinder is spun between pulls.
-    const live = Math.floor(Math.random() * CHAMBERS) === 0;
+    const live = rigged ? rigged === 'live' : Math.floor(Math.random() * CHAMBERS) === 0;
+    rigged = null;
     if (live) {
-      status?.setText('THE LIVE ONE');
+      status?.setText(pot > 0 ? `THE LIVE ONE. THE ${pot} GOES WITH IT.` : 'THE LIVE ONE');
+      pot = 0;
+      refresh();
       chamberDots[0]?.setFillStyle(PALETTE.blood);
       sceneRef?.cameras.main.shake(320, 0.02);
       finish(false);
@@ -146,24 +190,33 @@ function pull(): void {
     }
 
     survived++;
+    pot += PAY_PER_PULL;
     audio.sfx('ui_blip');
     refresh();
-    if (survived >= PULLS_TO_WIN) {
-      status?.setText('FOUR CLEAN. THE MACHINE PAYS.');
+    if (survived >= MAX_PULLS) {
+      status?.setText(`FIVE CLEAN. THE MACHINE PAYS ${pot}.`);
       finish(true);
       return;
     }
-    status?.setText('CLICK. AGAIN?');
+    status?.setText(`CLICK.  ${pot} ON THE MACHINE.  AGAIN?`);
   });
 }
 
-/** Ends the run without the reward.  The entry fee is already gone. */
+/**
+ * Walking away with the pot.  The entry fee is spent either way — what is
+ * being decided here is whether the tokens on the machine come with you.
+ */
 function cashOut(): void {
   if (over || busy) return;
-  status?.setText('YOU WALK AWAY');
-  finish(false);
+  status?.setText(pot > 0 ? `YOU WALK WITH ${pot}` : 'YOU WALK AWAY');
+  finish(pot > 0);
 }
 
+/**
+ * `won` here means "there is a pot to pay".  The shell credits exactly what is
+ * on the machine — nothing was credited pull by pull, which is what makes the
+ * live round able to take it all back.
+ */
 function finish(won: boolean): void {
   if (over) return;
   over = true;
@@ -171,5 +224,6 @@ function finish(won: boolean): void {
   pullBtn?.setVisible(false);
   cashBtn?.setVisible(false);
   audio.sfx(won ? 'chime' : 'buzzer');
-  sceneRef?.time.delayedCall(1500, () => (won ? apiRef?.win() : apiRef?.lose()));
+  const paid = pot;
+  sceneRef?.time.delayedCall(1500, () => (won && paid > 0 ? apiRef?.win(paid) : apiRef?.lose()));
 }

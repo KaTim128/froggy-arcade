@@ -70,8 +70,10 @@ export class MinigameScene extends Phaser.Scene {
     const def = cabinetById(this.gameId);
     this.mod = getMinigame(this.gameId);
     // The room debited the entry cost before it launched us (MG-2), so that is
-    // what is already riding on this play.
-    this.stake = def.cost;
+    // what is already riding on this play.  A free fixture (the table, the
+    // wheel) was walked up to for nothing: nothing is riding on it yet, and
+    // every token it takes arrives later through `raise`.
+    this.stake = def.freeToEnter ? 0 : def.cost;
 
     // Every cabinet has its own tune.  The room's bed crossfades into it here
     // and back out when the room is rebuilt on the way back (AU-1).
@@ -96,6 +98,7 @@ export class MinigameScene extends Phaser.Scene {
     const api: MinigameApi = {
       win: (payout?: number) => this.settle(true, false, payout),
       lose: () => this.settle(false),
+      draw: () => this.settleDraw(),
       staked: () => this.stake,
       raise: (n: number) => this.raise(n),
       payout: (n: number) => this.payout(n),
@@ -108,9 +111,11 @@ export class MinigameScene extends Phaser.Scene {
     // before the tutorial so it works while the card is up too.
     this.input.keyboard?.on('keydown-ESC', () => this.forfeit());
 
-    // MG-8: the tokens are already gone, so what the player gets first is the
-    // card telling them what this cabinet wants and which keys it reads.  The
-    // module is constructed on the other side of it.
+    // MG-8: the card telling them what this cabinet wants and which keys it
+    // reads comes first, before anything is playable.  At a paid cabinet the
+    // tokens are already gone by now; at the table and the wheel they are not,
+    // which is the point — the rules are free to read.  The module is
+    // constructed on the other side of the card either way.
     const mod = this.mod;
     this.card = showTutorial(this, def.title, mod.tutorial, () => {
       this.card = null;
@@ -147,7 +152,10 @@ export class MinigameScene extends Phaser.Scene {
    * player who won forty and quits on a one-token hand did not "FORFEIT -1".
    */
   private forfeit(): void {
-    if (this.paid > 0) this.cashOut();
+    // Nothing was ever staked — a free fixture the player only looked at — so
+    // there is nothing to forfeit.  Walking out of the wheel without spinning
+    // is not a loss, and the card must not say it took a token that it did not.
+    if (this.paid > 0 || this.stake === 0) this.cashOut();
     else this.settle(false, true);
   }
 
@@ -198,6 +206,35 @@ export class MinigameScene extends Phaser.Scene {
     centerText(this, GAME_W / 2, GAME_H / 2 + 12, `${ledger.balance()} tokens`, PALETTE.ash).setDepth(991);
 
     audio.sfx(up ? 'chime' : 'buzzer');
+    this.time.delayedCall(RESULT_MS, () => fadeToScene(this, this.from, { atCabinet: this.gameId }));
+  }
+
+  /**
+   * A tie.  The entry cost goes back and nothing else changes hands.
+   *
+   * It is deliberately NOT a win: no reward, no high score, no "+n".  A player
+   * who drew with the machine has bought nothing and sold nothing, and the
+   * card says so.  The refund is the stake this play actually carries, so a
+   * table that raised gets back what it put in, and it happens once because
+   * `settled` latches before the credit.
+   */
+  private settleDraw(): void {
+    if (this.settled) return;
+    this.settled = true;
+    this.card?.destroy();
+    this.card = null;
+    if (this.started) this.mod?.destroy?.();
+
+    const back = this.stake;
+    if (back > 0) ledger.credit(back, 'game.refund');
+    store.flush();
+
+    const panel = this.add.rectangle(GAME_W / 2, GAME_H / 2, 250, 60, PALETTE.ink).setDepth(990);
+    panel.setStrokeStyle(1, PALETTE.tealLight);
+    centerText(this, GAME_W / 2, GAME_H / 2 - 10, `A TIE  -  ${back} BACK`, PALETTE.tealLight, 16).setDepth(991);
+    centerText(this, GAME_W / 2, GAME_H / 2 + 12, `${ledger.balance()} tokens`, PALETTE.ash).setDepth(991);
+
+    audio.sfx('coin_drop');
     this.time.delayedCall(RESULT_MS, () => fadeToScene(this, this.from, { atCabinet: this.gameId }));
   }
 

@@ -518,7 +518,216 @@ for (const g of [
   );
   if (!steps) failures++;
   if (!harder) failures++;
+
+  // ---- one car until the first two hundred, then one more every two hundred.
+  const caps = await page.evaluate(() =>
+    [0, 199, 200, 400, 600, 1000, 4000].map((c) => {
+      window.__chase.setCash(c);
+      return window.__chase.state().policeCap;
+    }),
+  );
+  const counted = JSON.stringify(caps) === JSON.stringify([1, 1, 2, 3, 4, 6, 6]);
+  console.log(`${counted ? 'PASS' : 'FAIL'}  car chase: two cars at 200, one more every 200  — ${caps.join(',')}`);
+  if (!counted) failures++;
+
+  // ---- the juke.  A chaser steers at the lane it last SAW you in, so a late
+  // swerve has to leave it behind in the old one.  Sit still long enough for
+  // it to lock on, jump two lanes, and read it a tenth of a second later.
+  await page.evaluate(() => {
+    window.__chase.setCash(0);
+    window.__chase.clearRoad();
+    window.__chase.setPlayer(window.__chase.laneX(0), 140);
+    window.__chase.spawnPolice(0, 170);
+  });
+  await sleep(600);
+  const locked = await st();
+  await page.evaluate(() => window.__chase.setPlayer(window.__chase.laneX(3), 140));
+  await sleep(120);
+  const juked = await st();
+  const lagged = locked.cars[0]?.lane === 0 && juked.cars[0]?.lane <= 1;
+  console.log(
+    `${lagged ? 'PASS' : 'FAIL'}  car chase: a late swerve leaves them in your old lane  — ` +
+      `locked lane ${locked.cars[0]?.lane}, after the jump lane ${juked.cars[0]?.lane}`,
+  );
+  if (!lagged) failures++;
+
+  // ---- and the traffic in that old lane is a weapon.  Put a car in front of
+  // a chaser and it drives into the back of it and spins out of the chase.
+  // The player sits two lanes clear of it: the wreck drops back down the road
+  // it was in, and a test that parks in front of one is testing the wrong
+  // thing.
+  await page.evaluate(() => {
+    window.__chase.clearRoad();
+    window.__chase.setPlayer(window.__chase.laneX(3), 168);
+    window.__chase.spawnPolice(0, 120);
+    window.__chase.spawnTrafficAt(0, 86);
+  });
+  await sleep(700);
+  const smashed = await st();
+  const spun = smashed.stunned === 1 && smashed.traffic === 0;
+  console.log(
+    `${spun ? 'PASS' : 'FAIL'}  car chase: a chaser that hits traffic is out of the chase  — ` +
+      `${smashed.stunned} spun out, ${smashed.traffic} traffic left`,
+  );
+  if (!spun) failures++;
+
+  // A spun-out car stops steering and drops back: it holds the lane it crashed
+  // in and slides away down the road, or it is off the bottom already.
+  await sleep(700);
+  const after = await st();
+  const was = smashed.cars[0];
+  const now = after.cars[0];
+  const dropped = !now || (now.lane === was?.lane && now.y > (was?.y ?? 0));
+  console.log(
+    `${dropped ? 'PASS' : 'FAIL'}  car chase: a wreck does not steer, it drops back  — ` +
+      `${was ? `lane ${was.lane} y ${was.y}` : 'none'} -> ${now ? `lane ${now.lane} y ${now.y}` : 'off the road'}`,
+  );
+  if (!dropped) failures++;
+
+  // ---- nitro jars are spread, not clustered: never twice in the same lane.
+  await page.evaluate(() => {
+    window.__chase.clearRoad();
+    window.__chase.setCash(0);
+    window.__chase.setPlayer(window.__chase.laneX(1), 150);
+  });
+  const lanes = await page.evaluate(() => {
+    const seen = [];
+    for (let i = 0; i < 8; i++) {
+      window.__chase.dropJar();
+      const all = window.__chase.state().jarLanes;
+      seen.push(all[all.length - 1]);
+    }
+    return seen;
+  });
+  const spread = lanes.every((l, i) => i === 0 || l !== lanes[i - 1]);
+  console.log(`${spread ? 'PASS' : 'FAIL'}  car chase: jars never land twice in the same lane  — ${lanes.join(',')}`);
+  if (!spread) failures++;
+
+  // ---- spike strips: nothing before six hundred, and a gap to thread after.
+  await page.evaluate(() => {
+    window.__chase.clearRoad();
+    window.__chase.setCash(500);
+    window.__chase.armTrap();
+  });
+  await sleep(900);
+  const early = await st();
+  await page.evaluate(() => {
+    window.__chase.setCash(700);
+    window.__chase.armTrap();
+  });
+  await sleep(900);
+  const laid = await st();
+  const gap = laid.trapLanes[0]?.some((on) => !on);
+  const timed = early.traps === 0 && laid.traps >= 1 && gap;
+  console.log(
+    `${timed ? 'PASS' : 'FAIL'}  car chase: spikes start at 600, and always leave a gap  — ` +
+      `${early.traps} at 500, ${laid.traps} at 700, lanes ${(laid.trapLanes[0] ?? []).map((o) => (o ? 'X' : '.')).join('')}`,
+  );
+  if (!timed) failures++;
+
+  // ---- and driving into one ends the run.  Sweep the road, lay a fresh strip
+  // at the top of it, then park in a lane the spikes cover and let it arrive:
+  // nothing else on the road can reach the car, so the strip is what got it.
+  await page.evaluate(() => {
+    window.__chase.clearRoad();
+    window.__chase.armTrap();
+  });
+  await sleep(500);
+  await page.evaluate(() => {
+    const t = window.__chase.state().trapLanes[0];
+    window.__chase.setPlayer(window.__chase.laneX(t.findIndex((on) => on)), 155);
+  });
+  await sleep(1600);
+  const spikedRun = await st();
+  const bit = spikedRun.over && spikedRun.reason === 'SPIKED';
+  console.log(`${bit ? 'PASS' : 'FAIL'}  car chase: the spikes end the run  — over ${spikedRun.over}, ${spikedRun.reason || 'still driving'}`);
+  if (!bit) failures++;
   await page.close();
+}
+
+// The dealer's line has to be true.  It used to read "DEALER STANDS ON 17"
+// every single hand — a rule of the house printed as if it were his score —
+// so play out a stack of hands and check that every number he says out loud is
+// the number the felt shows.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=60&game=blackjack`, { waitUntil: 'networkidle2' });
+  await sleep(2400);
+  await startGame(page);
+
+  const lies = [];
+  let stood = 0;
+  for (let hand = 0; hand < 12; hand++) {
+    const phase = await page.evaluate(() => window.__blackjack?.state().phase);
+    if (phase === 'bet') await page.evaluate(() => window.__blackjack.deal());
+    else if (phase === 'over') await page.evaluate(() => window.__blackjack.again());
+    else continue;
+    await sleep(400);
+    await page.evaluate(() => window.__blackjack.stand());
+    // Each drawn card takes 600ms and he says his total after every one.
+    for (let t = 0; t < 14; t++) {
+      await sleep(300);
+      const st = await page.evaluate(() => window.__blackjack?.state() ?? null);
+      if (!st) break;
+      const said = /^DEALER (?:STANDS ON |DRAWS - |BUSTS ON )(\d+)$/.exec(st.status);
+      if (said) {
+        if (st.status.startsWith('DEALER STANDS ON')) stood++;
+        if (Number(said[1]) !== st.dealer) lies.push(`${st.status} on ${st.dealer}`);
+      }
+      if (st.phase === 'over') break;
+    }
+  }
+
+  const honest = lies.length === 0 && stood > 0;
+  console.log(
+    `${honest ? 'PASS' : 'FAIL'}  blackjack: the dealer says the score he actually has  — ` +
+      `${stood} stands read, ${lies.length ? lies.slice(0, 3).join('; ') : 'no mismatches'}`,
+  );
+  if (!honest) failures++;
+  await page.close();
+}
+
+// The table and the wheel charge for the GO, not for the door.  Walking up to
+// either has to cost nothing — including reading the how-to-play card, which is
+// the whole point of them being free — and the paid cabinets have to keep
+// charging.  Three tokens in the pocket, which is under the wheel's price of a
+// spin, so this also proves the door is not gated on being able to afford one.
+{
+  const free = [
+    { id: 'wheel', label: 'the wheel', x: 58, y: 140 },
+    { id: 'blackjack', label: "froggy's table", x: 160, y: 118 },
+  ];
+  for (const f of free) {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 720 });
+    await page.goto(`${URL}/?intro=1&tokens=3&scene=ArcadeCasino`, { waitUntil: 'networkidle2' });
+    await sleep(2500);
+    const before = await page.evaluate(() => window.__froggy.state().tokens);
+    await page.mouse.click(640 + (f.x - 160) * 4, 360 + (f.y - 90) * 4);
+    await sleep(1800);
+
+    const inside = await page.evaluate(() => ({
+      scenes: window.__froggy.activeScenes(),
+      tokens: window.__froggy.state().tokens,
+    }));
+    const reading = await cardUp(page);
+    const ok = inside.scenes.includes('Minigame') && reading && inside.tokens === before;
+    console.log(
+      `${ok ? 'PASS' : 'FAIL'}  ${f.label}: free to walk up to and read  — ` +
+        `${inside.scenes.join(',')}, card ${reading ? 'up' : 'missing'}, ${before} -> ${inside.tokens} tokens`,
+    );
+    if (!ok) failures++;
+
+    // And walking back out again is not a forfeit, because nothing was staked.
+    await page.keyboard.press('Escape');
+    await sleep(3200);
+    const out = await page.evaluate(() => window.__froggy.state().tokens);
+    const kept = out === before;
+    console.log(`${kept ? 'PASS' : 'FAIL'}  ${f.label}: leaving without playing costs nothing  — ${before} -> ${out}`);
+    if (!kept) failures++;
+    await page.close();
+  }
 }
 
 // The wheel's odds ARE its geometry: every face is cut to the width of its own
@@ -550,6 +759,9 @@ for (const g of [
   if (!ok) failures++;
 
   // And a spin pays what it landed on, through the ledger and nowhere else.
+  // The twenty comes off here too — walking up to the wheel is free, so the
+  // net move for one spin is the face minus the price of the go.
+  const SPIN = 20;
   const before = await page.evaluate(() => window.__froggy.state().tokens);
   await page.keyboard.press('Space');
   await sleep(4600);
@@ -558,8 +770,9 @@ for (const g of [
     at: window.__wheel.state().at,
     won: window.__wheel.state().won,
   }));
-  const paid = after.tokens - before === after.at && after.won === after.at;
-  console.log(`${paid ? 'PASS' : 'FAIL'}  wheel: it pays the face it stopped on  — landed ${after.at}, banked ${after.tokens - before}`);
+  const net = after.tokens - before;
+  const paid = net === after.at - SPIN && after.won === after.at;
+  console.log(`${paid ? 'PASS' : 'FAIL'}  wheel: it pays the face it stopped on  — landed ${after.at}, net ${net}`);
   if (!paid) failures++;
   await page.close();
 }

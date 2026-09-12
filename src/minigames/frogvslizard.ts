@@ -940,7 +940,7 @@ function finish(): void {
   aimG?.clear();
 
   // A split match goes to whoever did the most damage across the two rounds.
-  // A dead heat pays nothing — the same rule the bowling lane uses.
+  // A dead heat is a tie: the tokens come back, the same as the bowling lane.
   const won =
     roundsWon.frog > roundsWon.lizard ||
     (roundsWon.frog === roundsWon.lizard && sides.frog.dealt > sides.lizard.dealt);
@@ -950,11 +950,11 @@ function finish(): void {
   refreshHud();
   const score = ROUNDS > 1 ? ` ${roundsWon.frog}-${roundsWon.lizard}` : '';
   const line = drawn
-    ? 'DEAD HEAT - NO PRIZE'
+    ? 'DEAD HEAT - TOKENS BACK'
     : won
       ? `YOU WIN${score}`
       : `THE LIZARD WINS${ROUNDS > 1 ? ` ${roundsWon.lizard}-${roundsWon.frog}` : ''}`;
   centerText(scene0, GAME_W / 2, 96, line, won ? PALETTE.gold : PALETTE.fog, 16).setDepth(80);
   centerText(scene0, GAME_W / 2, 112, `DAMAGE ${sides.frog.dealt} - ${sides.lizard.dealt}   BEST ${best}`, PALETTE.ash).setDepth(80);
-  scene0.time.delayedCall(1700, () => (won ? apiRef?.win() : apiRef?.lose()));
+  scene0.time.delayedCall(1700, () => (won ? apiRef?.win() : drawn ? apiRef?.draw() : apiRef?.lose()));
 }

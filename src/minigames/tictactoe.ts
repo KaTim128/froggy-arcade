@@ -4,8 +4,9 @@
  * AI: a uniformly random legal move 30% of the time, full minimax otherwise.
  * Decent but reliably beatable (VOC-20).
  *
- * A DRAW IS A LOSS.  This is the most important rule in the game and it is
- * stated on the board, before the player commits, and again on the result.
+ * A DRAW GETS YOUR TOKEN BACK.  Nobody won, so nobody pays: the entry cost
+ * comes straight back and nothing is paid on top of it.  It is stated on the
+ * board before the player commits, and again on the result.
  */
 
 import Phaser from 'phaser';
@@ -68,11 +69,11 @@ export const ticTacToe: MinigameModule = {
   id: 'tictactoe',
   title: 'TIC-TAC-TOE',
   music: 'game_tictactoe',
-  rules: 'a draw is a loss',
+  rules: 'a draw gets your token back',
   tutorial: {
     objective: [
       'THREE IN A ROW BEATS FROGGY.',
-      'A DRAW COUNTS AS A LOSS.',
+      'A DRAW GETS YOUR TOKEN BACK.',
     ],
     controls: [
       ['MOUSE', 'CLICK A SQUARE TO PLACE X'],
@@ -87,7 +88,7 @@ export const ticTacToe: MinigameModule = {
 
     // A wooden table, and the board a cream card on it.
     backdrop(scene, 0x3b2a1c, 0x2a1d14, { speckleColor: 0xffd9a0 });
-    centerText(scene, GAME_W / 2, 26, 'YOU ARE X   -   A DRAW IS A LOSS', PALETTE.gold);
+    centerText(scene, GAME_W / 2, 26, 'YOU ARE X   -   A DRAW REFUNDS', PALETTE.gold);
 
     const size = 34;
     const ox = GAME_W / 2 - size * 1.5;
@@ -183,8 +184,8 @@ function settle(scene: Phaser.Scene, api: MinigameApi): boolean {
   }
   if (full(board)) {
     busy = true;
-    centerText(scene, GAME_W / 2, 150, 'DRAW - NO PAYOUT', PALETTE.blood);
-    scene.time.delayedCall(900, () => api.lose());
+    centerText(scene, GAME_W / 2, 150, 'DRAW - TOKEN BACK', PALETTE.tealLight);
+    scene.time.delayedCall(900, () => api.draw());
     return true;
   }
   return false;
