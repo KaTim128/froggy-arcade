@@ -902,6 +902,12 @@ class AudioManager {
         beep(233, 0.34, 0.035, 'sawtooth', 0.05);
         beep(220, 0.34, 0.03, 'sawtooth', 0.09);
         break;
+      // The peg going past on the casino wheel.  One per face, so the sound of
+      // it slowing down is the sound of the odds narrowing.
+      case 'wheel_tick':
+        beep(1500, 0.02, 0.05, 'square');
+        noise(0.02, 0.04, 5000);
+        break;
       // The fence taking one instead of the other fellow.
       case 'fence_thunk':
         beep(180, 0.11, 0.09, 'triangle');
@@ -1077,6 +1083,7 @@ export type SfxName =
   | 'boom'
   | 'heal_up'
   | 'poison_hiss'
-  | 'fence_thunk';
+  | 'fence_thunk'
+  | 'wheel_tick';
 
 export const audio = new AudioManager();

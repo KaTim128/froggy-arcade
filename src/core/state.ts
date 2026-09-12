@@ -23,7 +23,9 @@ export type GameId =
   | 'frogcross'
   | 'carchase'
   | 'bowling'
-  | 'frogvslizard';
+  | 'frogvslizard'
+  | 'wheel'
+  | 'danceoff';
 
 export interface Settings {
   master: number; // 0..100
@@ -139,6 +141,8 @@ function defaultState(): GameState {
       carchase: 0,
       bowling: 0,
       frogvslizard: 0,
+      wheel: 0,
+      danceoff: 0,
     },
     highScores: {},
     route: 'normal',

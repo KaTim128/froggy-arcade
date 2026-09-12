@@ -52,6 +52,7 @@ against an id and the placeholder for that id is never constructed again.
 | sfx (ambience) | `street_dusk`, `neon_buzz`, `cabinet_bleeps`, `crowd_hum`, `crickets`, `wind_low`, `car_passby` |
 | sfx (one-shots) | `ui_blip`, `ui_hover`, `dialogue_blip`, `coin_spin`, `coin_drop`, `buzzer`, `chime`, `bell_ding`, `footstep_carpet`, `footstep_concrete`, `door_open`, `door_shut`, `lock_click`, `door_rattle`, `door_creak`, `drip`, `bulb_flicker`, `vault`, `whack`, `stinger`, `death_stinger`, `hop_wet`, `ticket_machine` |
 | sfx (the throwing match) | `throw_whoosh`, `item_thud`, `boom`, `heal_up`, `poison_hiss`, `fence_thunk` |
+| sfx (the casino wheel) | `wheel_tick` |
 
 Two placeholders stand in for sounds that need real recordings: the chase's
 heavy breathing currently borrows `footstep_carpet`, and `hop_wet` is filtered

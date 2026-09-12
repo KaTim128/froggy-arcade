@@ -25,7 +25,7 @@ export interface CabinetDef {
    * cabinet except Froggy's blackjack table, which is furniture with a dealer
    * behind it — the bet is not a fixed coin slot, so it cannot be a machine.
    */
-  fixture?: 'cabinet' | 'table';
+  fixture?: 'cabinet' | 'table' | 'wheel';
   /**
    * Which room the cabinet stands in.  The hub has a doorway on its left wall
    * into the annex, which exists so the floor can grow without the hub turning
@@ -90,6 +90,9 @@ export const CABINETS: CabinetDef[] = [
   // Along the bottom wall, under the middle two of the row above.  Neither
   // has a fixed reward: a run is worth what it scored, and the module names
   // the payout.
+  // Ten in, twenty out: the one cabinet in the building you lose by being out
+  // of time rather than out of lives, and the only one played to a beat.
+  { id: 'danceoff', title: 'DANCE OFF', tier: 'hard', cost: 10, reward: 20, x: 48, y: 162, color: 0xff4fa3, room: 'annex' },
   { id: 'frogcross', title: 'FROG CROSS', tier: 'hard', cost: 7, reward: 15, x: 112, y: 162, color: 0x6fbb6a, room: 'annex' },
   { id: 'carchase', title: 'CAR CHASE', tier: 'hard', cost: 5, reward: 10, x: 176, y: 162, color: 0x46a0e0, room: 'annex' },
   // Ten on a five, like every other five-token cabinet on the floor.
@@ -115,6 +118,22 @@ export const CABINETS: CabinetDef[] = [
     fixture: 'table',
   },
   { id: 'roulette', title: 'CHAMBER', tier: 'hard', cost: 5, reward: 10, x: 224, y: 96, color: 0x8a2b34, room: 'casino' },
+  // Not a machine either: a wheel on a post, in the corner of the casino.  Ten
+  // a spin, and what it pays is whatever the pointer is over when it stops —
+  // `reward` is only what the room's badge would say, since the wheel settles
+  // every spin itself through the shell (MinigameApi.payout).
+  {
+    id: 'wheel',
+    title: 'WHEEL OF FORTUNE',
+    tier: 'hard',
+    cost: 10,
+    reward: 15,
+    x: 58,
+    y: 140,
+    color: 0xffd45e,
+    room: 'casino',
+    fixture: 'wheel',
+  },
 ];
 
 /** Cabinets standing in a given room.  Anything unmarked lives in the hub. */

@@ -232,6 +232,35 @@ export const TRACKS: Record<string, TrackPreset> = {
     cutoff: 3000,
     vol: { lead: 0.026, bass: 0.045, arp: 0.012, drums: 1.1 },
   }),
+  // Dance Off: four on the floor and a hook you can hit arrows to.  The chart
+  // is written at this tempo, so the arrows land where the kick does.
+  game_danceoff: preset({
+    bpm: 128,
+    chords: [min(C.a4 - 12), maj(C.f4 - 12), maj(C.c4), maj(C.g4 - 12)],
+    bass: [0, 0, 2, 0, 0, 0, 2, 1],
+    lead: [C.a5, _, C.e5, C.a5, _, C.c6, _, C.b5, C.a5, _, C.g5, _, C.e5, _, C.g5, _, C.f5, _, C.a5, _, C.c6, _, C.a5, C.g5, C.e5, _, C.d5, _, C.e5, _, _, _],
+    leadWave: 'square',
+    bassWave: 'sawtooth',
+    arpWave: 'square',
+    drums: 'four',
+    cutoff: 3600,
+    vol: { lead: 0.03, bass: 0.05, arp: 0.014, drums: 1.15 },
+    ring: 0.9,
+  }),
+  // The wheel: a fairground vamp, all bounce and no menace, because the thing
+  // taking your money is painted in primary colours.
+  game_wheel: preset({
+    bpm: 136,
+    chords: [maj(C.c4), maj(C.g4 - 12), maj(C.c4), maj(C.f4 - 12)],
+    bass: [0, _, 1, _, 0, _, 2, 1],
+    lead: [C.c5, C.e5, C.g5, C.e5, C.c6, _, C.g5, _, C.a5, C.f5, C.c5, C.f5, C.a5, _, C.g5, _],
+    leadWave: 'square',
+    bassWave: 'triangle',
+    arpWave: 'square',
+    drums: 'four',
+    cutoff: 3800,
+    ring: 1.1,
+  }),
   // Frog vs Lizard: a fast minor march with a taunt in the lead — two
   // neighbours over a fence, and neither of them backing down.
   game_frogvslizard: preset({

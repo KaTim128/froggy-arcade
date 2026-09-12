@@ -791,6 +791,7 @@ Measured over 200 automated runs per game (scripted competent player).
 | Barrel Climb | Hard | 7 | 20 | 30–45% | 120 s |
 | Grudge (Fighter) | Hard | 5 | 10 | 30–45% | 90 s |
 | Frog vs Lizard | Hard | 5 | 10 | 40–55% | 120 s |
+| Dance Off | Hard | 10 | 20 | 40–55% | 45 s |
 
 Air Hockey moved to the back room and the hard tier when the floor was sorted
 by price; the two seven-token climbs and the two versus cabinets are explained
@@ -900,6 +901,45 @@ other five-token cabinet on the floor.
 - **The lizard's AI** searches its own throws against the wind actually blowing, keeps the arc that would land, then throws it with a small two-uniform wobble on both angle and power — so it aims like an opponent and misses like one. Its item choice is the same reasoning a player uses off the same stock: heal when hurt, dynamite to finish, poison early while there is time for it to work, rock otherwise.
 - **HUD:** both health bars, the round and round score, the poison counter on each side, the wind bar, the item bar with the key for each item and how many are left, and the control line.
 
+### 9.10 Wheel of Fortune — casino, 10 a spin
+
+Not a cabinet: a painted wheel on a post in the corner of the casino, with a
+pointer over the top of it. Ten tokens a spin, the first one paid at the door
+and every one after it raised through the shell; LEAVE settles up. Prizes are
+paid the moment the wheel stops.
+
+**The odds are the geometry.** Each face is cut to the width of its own chance
+and a spin picks a uniformly random stopping angle — nothing weights the draw
+afterwards. A player who counts the faces gets the truth, and the board beside
+the wheel prints the same numbers.
+
+| Face | Share of the rim |
+|---|---|
+| 1, 2, 3, 5, 7, 10, 15 | **65%** — a seventh of it each (9.29%) |
+| 20, 30 | **15%** — 7.5% each |
+| 50 | **10%** |
+| 100 | **5%** |
+| the blank | **5%** |
+
+**Known imbalance.** At those odds a spin returns **17.7 tokens for a 10-token
+stake** — a 77% edge to the player, and the only unbounded token source in the
+game. It is implemented exactly as specified and flagged here rather than
+quietly retuned; the one-number fix, if the loop wants closing, is the price of
+a spin (20 makes it an 11% house edge) rather than the face list.
+
+### 9.11 Dance Off — Hard, 10 → 20, in the back room
+
+A step battle against a rival on the next mat. Arrows climb two lanes of four
+to the receptors at the top; press the matching key as yours reaches the line.
+`A` left, `S` down, `W` up, `D` right — the same hand position as walking.
+
+- **45 seconds**, one chart, and the higher score takes it. A draw pays nothing.
+- **The chart** is generated from a fixed seed: a note on every beat at 128bpm and an off-beat 22% of the time, the same moments for both sides with independent lanes. The same song every time you pay for it, because a chart that is noise cannot be learned and learning it is the genre.
+- **Scoring:** 100 a hit, plus 10 per consecutive hit up to +100. A press into an empty lane breaks the combo, so mashing loses.
+- **The rival** gets the same arrows and lands **70%** of them, and never builds a combo. The margin is yours to take with accuracy.
+- Timing: ±145 ms to hit, ±55 ms for a PERFECT, and past 190 ms the arrow is gone.
+- Original characters, original chart, original name (MG-7).
+
 ---
 
 ## 10. Economy Design & Simulation
@@ -924,6 +964,8 @@ Every tier is a **2× on a win**, so expected value is negative unless the playe
 |---|---:|---:|---|
 | Barrel Climb | 7 | 20 | The two longest games in the building, and the only ones you can lose on the last screen after four minutes of not losing. A 7-in / 7-out cabinet asked for the afternoon and handed back the entry fee. |
 | Chomp-Man | 7 | 20 | as above |
+| Dance Off | 10 | 20 | Forty-five seconds against a rival who lands seven in ten: a short game with a real opponent, priced as one go rather than as a tier. |
+| Wheel of Fortune | 10 | — | Pays what the pointer stops on, 0 to 100. See §9.10, including what it does to the economy. |
 
 The two score-for-tokens cabinets are a formula rather than a constant: a bar, a base payout, and one more token for every further bar. **Frog Cross** is 7 in, 50 points (five crossings) for 15, and +1 every 50 after. **Car Chase** is 5 in, 200 cash for 10, and +1 every 200 after. See the module headers.
 

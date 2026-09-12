@@ -71,7 +71,7 @@ src/
   render/     320x180 integer scaler, palette + night transform, Froggy's overlay
   art/        painters shared between the warm and the dark version of each room
   froggy/     his vector art, his three variants, and everything he says
-  minigames/  sixteen games behind one interface
+  minigames/  eighteen games behind one interface
   scenes2d/   Phaser scenes
   three/      chase level grid + pathfinding
 ```

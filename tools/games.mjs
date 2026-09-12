@@ -46,6 +46,9 @@ const GAMES = [
   { id: 'carchase', drive: async (p) => { await p.keyboard.down('KeyA'); await sleep(500); await p.keyboard.up('KeyA'); await p.keyboard.press('Space'); await sleep(1200); await p.keyboard.down('KeyD'); await sleep(500); await p.keyboard.up('KeyD'); } },
   // Aim, charge, throw one over the fence, then try a special item.
   { id: 'frogvslizard', drive: async (p) => { await p.keyboard.press('KeyW'); await p.keyboard.down('Space'); await sleep(620); await p.keyboard.up('Space'); await sleep(3200); await p.keyboard.press('Digit3'); await sleep(300); } },
+  // One spin of the wheel, and a scripted dancer who actually plays the chart.
+  { id: 'wheel', drive: async (p) => { await p.keyboard.press('Space'); await sleep(4400); } },
+  { id: 'danceoff', drive: async (p) => { for (let i = 0; i < 14; i++) { await p.keyboard.press(['KeyA', 'KeyS', 'KeyW', 'KeyD'][i % 4]); await sleep(190); } } },
   { id: 'bowling', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(200); await p.keyboard.up('KeyD'); await p.keyboard.down('Space'); await sleep(600); await p.keyboard.up('Space'); await sleep(2600); } },
 ];
 
@@ -515,6 +518,93 @@ for (const g of [
   );
   if (!steps) failures++;
   if (!harder) failures++;
+  await page.close();
+}
+
+// The wheel's odds ARE its geometry: every face is cut to the width of its own
+// chance and a spin picks a stopping angle.  Sample the same function the
+// pointer resolves through, so a face quietly resized shows up here.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=200&game=wheel`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await sleep(600);
+
+  const N = 200000;
+  const seen = await page.evaluate((n) => window.__wheel.sample(n), N);
+  const band = (...vals) => vals.reduce((a, v) => a + (seen[v] ?? 0), 0) / N;
+  const small = band(1, 2, 3, 5, 7, 10, 15);
+  const mid = band(20, 30);
+  const fifty = band(50);
+  const hundred = band(100);
+  const nothing = band(0);
+  const near = (got, want) => Math.abs(got - want) < 0.01;
+  const ok = near(small, 0.65) && near(mid, 0.15) && near(fifty, 0.1) && near(hundred, 0.05) && near(nothing, 0.05);
+  console.log(
+    `${ok ? 'PASS' : 'FAIL'}  wheel: the faces pay at the odds on the board  — ` +
+      `1-15 ${(small * 100).toFixed(1)}%, 20/30 ${(mid * 100).toFixed(1)}%, 50 ${(fifty * 100).toFixed(1)}%, ` +
+      `100 ${(hundred * 100).toFixed(1)}%, none ${(nothing * 100).toFixed(1)}%`,
+  );
+  if (!ok) failures++;
+
+  // And a spin pays what it landed on, through the ledger and nowhere else.
+  const before = await page.evaluate(() => window.__froggy.state().tokens);
+  await page.keyboard.press('Space');
+  await sleep(4600);
+  const after = await page.evaluate(() => ({
+    tokens: window.__froggy.state().tokens,
+    at: window.__wheel.state().at,
+    won: window.__wheel.state().won,
+  }));
+  const paid = after.tokens - before === after.at && after.won === after.at;
+  console.log(`${paid ? 'PASS' : 'FAIL'}  wheel: it pays the face it stopped on  — landed ${after.at}, banked ${after.tokens - before}`);
+  if (!paid) failures++;
+  await page.close();
+}
+
+// Dance Off is a rhythm game, so the thing to prove is that rhythm is what it
+// reads: a chart played on the beat beats the rival and pays, and the same
+// number of presses thrown at random does not.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=60&game=danceoff`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await sleep(600);
+
+  const KEY = ['KeyA', 'KeyS', 'KeyW', 'KeyD'];
+  const t0 = Date.now();
+  while (Date.now() - t0 < 9000) {
+    const nx = await page.evaluate(() => window.__dance.next(1)[0] ?? null);
+    if (!nx) break;
+    if (nx.in > 60) {
+      await sleep(Math.min(nx.in - 40, 300));
+      continue;
+    }
+    await page.keyboard.press(KEY[nx.lane]);
+  }
+  const played = await page.evaluate(() => window.__dance.state());
+  const lands = played.hits > 12 && played.misses <= played.hits / 4;
+  const leads = played.score.you > played.score.rival;
+  console.log(`${lands ? 'PASS' : 'FAIL'}  dance off: arrows played on the beat land  — ${played.hits} hit, ${played.misses} missed`);
+  console.log(`${leads ? 'PASS' : 'FAIL'}  dance off: and playing it beats the rival  — ${played.score.you} - ${played.score.rival}`);
+  if (!lands) failures++;
+  if (!leads) failures++;
+
+  // Winning pays the cabinet's reward, through the shell.
+  const before = await page.evaluate(() => window.__froggy.state().tokens);
+  await page.evaluate(() => {
+    window.__dance.ace();
+    window.__dance.finish();
+  });
+  await sleep(4200);
+  const after = await page.evaluate(() => window.__froggy.state().tokens);
+  const pays = after - before === 20;
+  console.log(`${pays ? 'PASS' : 'FAIL'}  dance off: taking it pays the twenty  — ${before} -> ${after}`);
+  if (!pays) failures++;
   await page.close();
 }
 

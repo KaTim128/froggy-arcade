@@ -24,6 +24,7 @@ import { paintHubRoom, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet } from '../art/cabinet';
 import { BlackjackTable } from '../art/blackjackTable';
+import { PrizeWheel } from '../art/prizeWheel';
 import { TokenHud } from '../ui/hud';
 import { CABINETS, cabinetsIn } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
@@ -35,7 +36,7 @@ const INTERACT_RANGE = 24;
 const BACK_DOOR = { x: GAME_W - 20, y: 118 };
 
 /** Anything you can walk up to and play.  The table is not a cabinet. */
-type Fixture = Cabinet | BlackjackTable;
+type Fixture = Cabinet | BlackjackTable | PrizeWheel;
 
 type Target = { kind: 'cabinet'; cab: Fixture } | { kind: 'back' } | null;
 
@@ -80,6 +81,7 @@ export class ArcadeCasino extends Phaser.Scene {
     this.paintDoorway();
 
     this.cabinets = cabinetsIn('casino').map((def) => {
+      if (def.fixture === 'wheel') return new PrizeWheel(this, def);
       if (def.fixture !== 'table') return new Cabinet(this, def);
       const t = new BlackjackTable(this, def);
       this.table = t;
