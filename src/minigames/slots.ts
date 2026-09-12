@@ -2,10 +2,14 @@
  * FROGGY SLOTS.  Two tokens a spin, and it keeps taking them.
  *
  * Five reels.  Three Froggys in a row pays six; all five pays fifteen.  The
- * paytable is on the machine, the odds are not: three in a row lands three
- * spins in ten, five in a row one in ten, and the rest is a near miss.  The
- * outcome is decided when the button is pressed and the reels are then made
- * to show it — which is exactly how a real one works.
+ * paytable is on the machine, the odds are not: three in a row lands a quarter
+ * of the time, five in a row one spin in twenty, and the other seven in ten
+ * are a near miss.  The outcome is decided when the button is pressed and the
+ * reels are then made to show it — which is exactly how a real one works.
+ *
+ * Unlike the wheel next to it, this machine does NOT print its odds.  That is
+ * the difference between the two of them: the wheel is honest furniture and
+ * the slot is a slot.
  *
  * It is a session, like the blackjack table: the first spin is the entry
  * cost the room took, every spin after that is raised through the shell, and
@@ -23,9 +27,14 @@ import type { MinigameApi, MinigameModule } from './types';
 export const SPIN_COST = 2;
 export const PAY_THREE = 6;
 export const PAY_FIVE = 15;
-/** The odds.  On the machine they are a secret; in the code they are a fact. */
-const P_FIVE = 0.1;
-const P_THREE = 0.3;
+/**
+ * The odds.  On the machine they are a secret; in the code they are a fact,
+ * and they are the fact the harness checks.  Every spin is drawn against
+ * these and nothing else — no pity timer, no streak memory, no adjusting for
+ * how the session has gone.
+ */
+const P_FIVE = 0.05;
+const P_THREE = 0.25;
 
 const REELS = 5;
 const REEL_X = [52, 106, 160, 214, 268];
@@ -121,6 +130,21 @@ export const slots: MinigameModule = {
     if (import.meta.env?.DEV) {
       (window as unknown as Record<string, unknown>).__slots = {
         state: () => ({ busy, firstSpin, reels: reels.map((r) => r.stopAt) }),
+        /**
+         * Sample the draw itself.  The reels take two and a half seconds to
+         * stop, so the odds cannot be checked by spinning — and what is under
+         * test is the decision, which is what `draw` is.
+         */
+        sample: (n: number) => {
+          let five = 0;
+          let three = 0;
+          for (let i = 0; i < n; i++) {
+            const line = draw();
+            if (line.every((x) => x === FROG)) five++;
+            else if (line.some((_, k) => k + 2 < REELS && line[k] === FROG && line[k + 1] === FROG && line[k + 2] === FROG)) three++;
+          }
+          return { five, three, none: n - five - three };
+        },
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__slots;

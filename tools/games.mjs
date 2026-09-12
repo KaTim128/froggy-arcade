@@ -564,6 +564,32 @@ for (const g of [
   await page.close();
 }
 
+// The slot machine hides its odds from the player, which is exactly why they
+// need asserting here: nothing on screen would show them drifting.  Sample the
+// draw itself — the reels take two and a half seconds to stop, and what is
+// under test is the decision, not the animation.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=200&game=slots`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await sleep(600);
+
+  const N = 200000;
+  const seen = await page.evaluate((n) => window.__slots.sample(n), N);
+  const five = seen.five / N;
+  const three = seen.three / N;
+  const near = (got, want) => Math.abs(got - want) < 0.008;
+  const ok = near(five, 0.05) && near(three, 0.25);
+  console.log(
+    `${ok ? 'PASS' : 'FAIL'}  slots: five in a row one spin in twenty, three in a row one in four  — ` +
+      `five ${(five * 100).toFixed(2)}%, three ${(three * 100).toFixed(2)}%, nothing ${((seen.none / N) * 100).toFixed(2)}%`,
+  );
+  if (!ok) failures++;
+  await page.close();
+}
+
 // Dance Off is a rhythm game, so the thing to prove is that rhythm is what it
 // reads: a chart played on the beat beats the rival and pays, and the same
 // number of presses thrown at random does not.
