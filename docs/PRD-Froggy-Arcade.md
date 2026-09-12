@@ -255,7 +255,7 @@ type GameState = {
 };
 
 type GameId =
-  | 'tictactoe' | 'snakes' | 'airhockey'
+  | 'tictactoe' | 'fallingblocks' | 'airhockey'
   | 'hoops' | 'whack'
   | 'chompman' | 'grudge';
 ```
@@ -471,7 +471,7 @@ The main loop. A single room, 3/4 view, walked with WASD.
         │                                          │
         │            · player spawn ·              │
         │                                          │
-        │  ▣ SNAKES (1)              ▣ WHACK (3)   │
+        │  ▣ FALLING BLOCKS (3)      ▣ WHACK (3)   │
         │                                          │
         │  ▣ AIR HOCKEY (1)      ▣ CHOMP-MAN (5)   │
         │                                          │
@@ -482,8 +482,9 @@ The main loop. A single room, 3/4 view, walked with WASD.
 
 | Element | Spec |
 |---|---|
-| **Cabinets** | Six, wall-mounted, each with a glowing animated marquee and a floating cost badge (1 / 3 / 5) |
-| **Approach** | Entering a cabinet's trigger zone shows `[E] PLAY — n TOKENS`. Unaffordable → badge greys, `E` plays a buzzer, no scene change `[QFD: B8]` |
+| **Cabinets** | Each is a box with side art in its own colour, a bezelled screen carrying a **motif** unique to that game (a grid, a maze, a ladder, reels…), a marquee with the machine's own letters on it, a control deck with a stick and three buttons, a coin slot, a speaker grille, a plinth, and a floating cost badge |
+| **Dressing** | Hanging PLAY/WIN signs on chains, posters taped to the panelled back wall, wall vents and a sagging cable run, a strip light down the ceiling, a bin, a plant, carpet seams, scuffs and a painted ring on the floor — hung wherever the counter and the change machine are not |
+| **Approach** | Entering a cabinet's trigger zone shows `[E] TITLE — n TOKENS`. Unaffordable → the badge greys, but the machine still opens: what a cabinet costs is on its how-to-play card, which is free to read, and PLAY is what charges (MG-2/MG-8). The two casino bet fixtures are the exception (MG-11) |
 | **Prize counter** | Interactable; opens `PrizeCounter` (§7.6) |
 | **The bell** | A small handbell with a sign: `RING FOR SERVICE`. Interacting plays a clean *ding* and **nothing else happens. Ever.** No counter, no variation, no eventual response. `[QFD: VOC-18, §13.1 bell check]` |
 | **The counter** | Permanently unattended. There is no cashier sprite in the game. Climbing over it is **not** offered here — only in `ArcadeDark` |
@@ -494,7 +495,25 @@ The main loop. A single room, 3/4 view, walked with WASD.
 
 ### 7.6 PrizeCounter `[QFD: B5, E5]`
 
-A shelf of **nine** prizes behind glass, each with a name, a pixel illustration, a token price and a locked/unlocked state.
+**A shelf, not a spreadsheet.** Three shelves of three behind the glass, with
+the thing itself standing on each one — a duck is a duck, a guitar is a guitar
+— its price on the shelf edge above it and its name on the board below. The
+whole slot is the button; there is no REDEEM column.
+
+**Redeemed prizes leave the shelf.** The moment one is bought its slot empties:
+bare board, no price, a gap where the thing was, and the same gap appears in
+the case out on the hub's back wall. A counter that keeps showing what you
+already own is lying about what it has.
+
+**And the shelf refills.** When the last prize on it goes, the back room sends
+out a fresh lot — different toys, different colours, the same price curve — so
+a player who clears the counter has something to keep playing for instead of a
+wall of OWNED. The wave is a number on the save (`prizeWave`) and the stock is
+generated from it (`prizesForWave`), with each prize's id carrying the wave and
+slot it came from, so anything in the bag can be rebuilt from its id and the
+man outside will buy it. **The ending still counts the opening nine**
+(`allPrizesSold`): the restock keeps the loop alive, it does not move the
+finish line.
 
 The cheap end stays cheap — a keyring at forty against a starting bankroll of twenty, so the counter is somewhere a player can actually reach — and then it climbs hard. Everything above the duck is a decision to keep playing rather than something you happen to be able to afford, and the whole shelf is **2,930 tokens**, which nobody clears by accident. Halving the list in an earlier pass made the shelf reachable but made clearing it a formality; this curve keeps the doorway and puts the far end back out of sight. The man outside still pays half of the counter's price (`cashFor`), so the sell-and-rechange loop keeps its shape at every rung.
 
@@ -503,16 +522,17 @@ The cheap end stays cheap — a keyring at forty against a starting bankroll of 
 | Frog Keyring | 40 | The cheapest thing in the room, and reachable in one good run |
 | Sticker Pack | 70 | |
 | Rubber Duck | 120 | |
-| Stuffed Bunny | 180 | The kid's target |
+| Bunny | 180 | The kid's target |
 | Lava Lamp | 260 | |
 | Skateboard | 360 | |
-| Gaming Headset | 480 | |
-| Electric Guitar | 620 | |
+| Headset | 480 | |
+| Guitar | 620 | |
 | PS5 | 800 | Still the one at the end of the shelf; it exists to be looked at |
 
 | # | Requirement |
 |---|---|
-| PC-1 | A prize is redeemable only when `balance ≥ cost`; otherwise the tile is greyed with the shortfall shown |
+| PC-1 | A prize is redeemable only when `balance ≥ cost`; otherwise its price and name go grey |
+| PC-4 | A redeemed prize is removed from the shelf and from the hub's prize case; clearing the shelf restocks it with a fresh generated wave at the same prices |
 | PC-2 | Redemption: `debit(cost,'prize')`, push the id to `prizesOwned`, play a slow ticket-machine animation |
 | PC-3 | Owning a prize does **not** end the game. The player keeps playing until they leave or go broke |
 | PC-4 | With a prize owned, the front door now reads `[E] LEAVE` and exits to the **good ending** path (§7.11) |
@@ -761,15 +781,16 @@ interface Minigame {
 | # | Requirement |
 |---|---|
 | MG-1 | The hub knows nothing of a game's internals — only this interface `[QFD: VOC-19]` |
-| MG-2 | `cost` is debited on launch by the hub, **before** `launch()` is called — except at a **free-to-enter fixture** (MG-10), which takes nothing at the door |
+| MG-2 | **Nothing is charged for walking up to a machine.** The room opens the shell with the game unbuilt behind its how-to-play card; the cabinet's `cost` is debited by the shell at the moment the player presses **PLAY**, once, in one place. LEAVE, `ESC` at the card, or a balance that cannot cover the price all end the visit with the player's tokens untouched. A fixture that charges inside the game (MG-10) is not debited even then. |
 | MG-3 | `onComplete({won:true})` credits `reward`; `{won:false}` credits nothing |
 | MG-4 | Every game has `[ESC] QUIT`, which **forfeits the entry cost** and calls `onComplete({won:false})` |
 | MG-5 | Every game shows a result card (`YOU WIN +6` / `YOU LOSE`) for 2 s before returning to the hub |
 | MG-6 | All six pass an automated contract test: launch → complete → return, and launch → quit → return `[QFD: AC-2]` |
 | MG-7 | All art, names, audio and layouts are **original**. No licensed assets, no trademarked names, no reproduced maze geometry `[QFD: M4, B7, §13.1 IP sign-off]` |
-| MG-8 | Every game shows a **how-to-play card** before it is built: the objective, and **this cabinet's own controls and no other cabinet's**. At a coin-op cabinet it appears *after* the cost is debited — paying is the commitment and the tutorial is what the player gets for it. The game module is not constructed until the card is dismissed, so nothing under it is playable and no key pressed at it reaches the game. `ESC` at the card forfeits exactly as it does in play (MG-4), except where nothing was staked (MG-10). The contract is enforced by the type: `MinigameModule.tutorial` is not optional. |
+| MG-8 | Every game shows a **how-to-play card** before it is built, and it is free to read: the objective, **this cabinet's own controls and no other cabinet's**, what a go costs, and two buttons — **PLAY** (the only thing in the game that takes tokens, latched so five clicks pay for one play) and **LEAVE** (back to the room, nothing charged). A player who cannot afford the cabinet still sees the card, with PLAY dark and the shortfall spelled out. The controls sit on their own panel, darker than the card, so they read at a glance over whatever the cabinet is painting underneath. The module is not constructed until PLAY, so nothing under the card is playable and no key pressed at it reaches the game. The contract is enforced by the type: `MinigameModule.tutorial` is not optional. |
 | MG-9 | **A tie is not a loss.** A game that can end level calls `api.draw()`, and the shell hands the stake back **once**, through the ledger, as `game.refund`. No reward, no high score, no "+n" — the player has bought nothing and sold nothing. Applies wherever a tie is reachable: tic-tac-toe, bowling, air hockey, frog vs lizard, and a dance-off match that ends level on rounds. Blackjack's push is the same rule inside a hand and pays the stake back at 1× on the spot. |
-| MG-10 | **A fixture that charges for the go does not charge at the door.** Froggy's blackjack table and the wheel take a bet, not a price: walking up to them and reading the how-to-play card costs nothing, the cabinet's `cost` is the smallest bet they will take rather than an entry fee, and the first token moves when the player deals or spins (`api.raise`). Walking out without playing is not a forfeit and the result card says so. Marked in the cabinet table as `freeToEnter`. |
+| MG-10 | **A fixture that charges for the go does not charge at PLAY either.** Froggy's blackjack table and the wheel take a bet, not a price: their `cost` is the smallest bet they will take, and the first token moves when the player deals or spins (`api.raise`). Marked in the cabinet table as `freeToEnter`. |
+| MG-11 | **The two bet fixtures are barred to a player who cannot cover a go.** Blackjack and the wheel are the only places in the building where the money changes hands inside the game, so a broke player would be sat at a machine they cannot make a move on. The casino refuses them at the fixture, out loud, with the number they are short (`NO MONEY, NO CARDS — THE MINIMUM IS 1`). Every other cabinet lets anyone walk up and read (MG-8). Tokens and cash stay separate currencies throughout: nothing here spends cash. |
 
 ### 9.0.1 A note on "six"
 
@@ -786,17 +807,17 @@ Measured over 200 automated runs per game (scripted competent player).
 | Game | Tier | Cost | Reward | Target win rate | Typical length |
 |---|---|---:|---:|---|---|
 | Tic-Tac-Toe | Easy | 1 | 2 | 45–60% | 25 s |
-| Snakes & Ladders | Easy | 1 | 2 | 48–52% | 45 s |
+| Falling Blocks | Medium | 3 | 6 | 40–55% | 45 s |
 | Air Hockey | Hard | 5 | 10 | 45–60% | 70 s |
 | Basketball Hoops | Medium | 3 | 6 | 40–55% | 60 s |
 | Whack-a-Frog | Medium | 3 | 6 | 40–55% | 40 s |
 | Bowling | Medium | 3 | 6 | 40–55% | 150 s |
 | Battleship | Medium | 3 | 6 | 40–55% | 90 s |
-| Chomp-Man | Hard | 7 | 20 | 30–45% | 100 s |
-| Barrel Climb | Hard | 7 | 20 | 30–45% | 120 s |
+| Chomp-Man | Hard | 7 | 15 | 30–45% | 100 s |
+| Barrel Climb | Hard | 7 | 15 | 30–45% | 120 s |
 | Grudge (Fighter) | Hard | 5 | 10 | 30–45% | 90 s |
 | Frog vs Lizard | Hard | 5 | 10 | 40–55% | 120 s |
-| Dance Off | Hard | 10 | 20 | 40–55% | 45 s |
+| Dance Off | Hard | 7 | 15 | 40–55% | 90–135 s |
 
 Air Hockey moved to the back room and the hard tier when the floor was sorted
 by price; the two seven-token climbs and the two versus cabinets are explained
@@ -810,12 +831,18 @@ not in this table.
 - **A draw refunds the token** (MG-9). It is neither a win nor a loss: the entry cost goes back exactly once and nothing is paid on top of it. The board says so before a move is made (`YOU ARE X — A DRAW REFUNDS`), the result card says `DRAW — TOKEN BACK`, and the shell's card reads `A TIE — 1 BACK`. This replaces the original "a draw is a loss", which charged a token for a game nobody won.
 - Win: three in a row for the player. Lose: AI three in a row.
 
-### 9.3 Snakes & Ladders — Easy, 1 → 2
+### 9.3 Falling Blocks — Medium, 3 → 6
 
-- 30 squares, player vs one AI token, click to roll a d6.
-- **Board:** ladders `3→16`, `7→19`, `12→24`, `20→27`; snakes `25→9`, `22→11`, `18→6`.
-- Landing exactly on or past 30 wins. Player rolls first; turns alternate.
-- Pure luck, ~50%. The piece **hops square to square** with a 120 ms per-square animation — the hop is most of the game's charm.
+A shaft with a ledge at the top of it and **45 seconds** to be standing on that
+ledge. Blocks fall down the shaft the whole time and they are the only way up:
+jump onto one in the air, it carries you down while you line up the next, and
+you leave it before it costs you more height than it gave.
+
+- Eight columns, 20×14 blocks, a block dropped every 430 ms into a column near the player so there is always one in reach.
+- **A block that reaches the bottom stays there** — it lands on the floor or on whatever is already in its column and becomes terrain. A fall is therefore recoverable, and the ground builds itself into a staircase while the player works above it.
+- The goal is 360 px up. Standing still and being lifted by the stack is worth about 280 px in 45 seconds: enough that a fall is not the end, not enough to win on.
+- **The clock is the only way to lose.** A block landing on the frog shoves him out from under it; nothing here kills.
+- Left/right and jump (`A`/`D`/arrows, `SPACE`/`W`/`UP`). Custom tune (`game_fallingblocks`) and sfx for the jump, the landing, a block coming to rest and the summit.
 
 ### 9.4 Air Hockey — Hard, 5 → 10
 
@@ -849,7 +876,7 @@ not in this table.
   - The game never comments. There is no achievement, no dialogue, no follow-up.
   - He occupies a hole for the full 1.2 s, so he mildly hurts the player's score. That is the only mechanical consequence.
 
-### 9.7 Chomp-Man — Hard, 5 → 10
+### 9.7 Chomp-Man — Hard, 7 → 15
 
 An original homage. Original maze, original frog-themed ghosts, original sounds and name. **No Namco assets, geometry or names.** `[QFD: VOC-22, B7]`
 
@@ -875,18 +902,28 @@ An original homage. Original maze, original frog-themed ghosts, original sounds 
 
 An original 1v1 side-view fighter. Original characters and art. `[QFD: VOC-22]`
 
-- **Best of 3 rounds**, 99 s per round, 100 HP each, health bars top of screen.
-- Moves: `A`/`D` walk, `W` jump, `S` crouch, `J` punch, `K` kick, `L` block, `I` special.
-
-| Move | Damage | Startup | Recovery | Notes |
-|---|---:|---:|---:|---|
-| Punch | 6 | 12 f | 10 f | Fast poke |
-| Kick | 10 | 20 f | 18 f | Longer reach, punishable on whiff |
-| Block | — | 2 f | 4 f | Reduces incoming damage to 20%; no chip on punches |
-| Special "Ribbit Rush" | 25 | 28 f | 30 f | **8 s cooldown**, visible meter |
-
-- Simple hitbox-vs-hurtbox collision, per-frame.
-- **AI:** a readable three-beat pattern — *approach → kick → punch-punch* — with a deliberate **0.6 s opening after a whiffed kick**. It blocks ~50% of incoming punches and ~30% of kicks, and uses its special only below 40% HP. A player who learns the pattern wins; a masher loses. `[QFD: M2]`
+- **A frog against a lizard, both on two legs.** The frog is round and
+  low-slung; the lizard is taller, has a snout, a crest and a tail. They are
+  built out of posable parts — legs, torso, head, arm, shin, aura — so what
+  they are doing is drawn rather than implied.
+- **Three attacks, and each looks like itself.** `J` is a HIGH strike: a
+  straight arm at head height. `K` is a LOW sweep: a crouch and a leg along the
+  floor. `I` is the SPECIAL: a wound-up lunge with a ring of light off it.
+  Every attack is drawn through all three phases — the wind-up (cocked back,
+  white head), the active frame, the droop — and the fighter throwing it names
+  it in a word over their head, so a player can read what is coming.
+- **Getting hit looks like it.** The target snaps backwards, whites out,
+  loses whatever they were throwing, and cannot act for 170–340 ms depending on
+  the blow. A burst of shards and an expanding ring go off where it landed, and
+  the camera shakes — harder for the special.
+- **The special has a visible cooldown.** A bar under each health bar, 8 s,
+  with `SPECIAL READY` in gold when it is back and a chime the moment it
+  returns. Pressing it early is refused with a buzz and `NOT READY` rather than
+  silently ignored.
+- Blocking cuts damage to 20%, and a low sweep goes under a standing block.
+- The AI runs a readable three-beat pattern — approach, low, high-high — with a
+  deliberate 0.6 s opening after a whiffed sweep. A player who learns the
+  pattern wins; a masher loses.
 
 ### 9.9 Frog vs Lizard — Hard, 5 → 10
 
@@ -910,41 +947,51 @@ other five-token cabinet on the floor.
 - **The lizard's AI** searches its own throws against the wind actually blowing, keeps the arc that would land, then throws it with a small two-uniform wobble on both angle and power — so it aims like an opponent and misses like one. Its item choice is the same reasoning a player uses off the same stock: heal when hurt, dynamite to finish, poison early while there is time for it to work, rock otherwise.
 - **HUD:** both health bars, the round and round score, the poison counter on each side, the wind bar, the item bar with the key for each item and how many are left, and the control line.
 
-### 9.10 Wheel of Fortune — casino, 20 a spin
+### 9.10 Wheel of Fortune — casino, 45 a spin
 
 Not a cabinet: a painted wheel on a post in the corner of the casino, with a
-pointer over the top of it. **Free to walk up to** (MG-10): the board, the odds
-and the price of a go are all readable before a token moves. Twenty tokens a
-spin, every one of them raised through the shell as it is taken; LEAVE settles
-up. Prizes are paid the moment the wheel stops.
+pointer over the top of it. **Free to walk up to and read** (MG-8) but barred
+to a player who cannot cover a spin (MG-11). Every spin is raised through the
+shell as it is taken; LEAVE settles up. Prizes are paid the moment the wheel
+stops, and **a spin pays exactly one face** — there is no second prize and
+nothing that can stack two payouts onto one go.
 
 **The odds are the geometry.** Each face is cut to the width of its own chance
 and a spin picks a uniformly random stopping angle — nothing weights the draw
-afterwards. A player who counts the faces gets the truth, and the board beside
-the wheel prints the same numbers.
+afterwards. A player who counts the faces gets the truth.
 
 | Face | Share of the rim |
 |---|---|
-| 1, 2, 3, 5, 7, 10, 15 | **65%** — a seventh of it each (9.29%) |
-| 20, 30 | **15%** — 7.5% each |
-| 50 | **10%** |
-| 100 | **5%** |
-| the blank | **5%** |
+| 500 | **1%** — one 3.6° splinter |
+| 200 | **5%** |
+| 70 | **10%** — two faces |
+| 60 | **10%** — two faces |
+| 50 | **10%** — two faces |
+| 40 | **15%** — three faces |
+| 1, 2, 3, 5, 7, 10, 15 | **39%** — a seventh of it each |
+| the blank | **10%** — two faces |
 
-**The price, and why it is twenty.** The faces average **17.7 tokens a spin**.
-At ten a spin that was a 77% edge to the *player* and an unbounded token
-supply: the prize shelf became a formality and every other cabinet became
-pointless. At twenty the house keeps about 11%, which is what a wheel in a room
-like this is for. The faces are untouched — the odds on the board are the odds
-that were asked for, and the price of a go is the one number that moved.
+**The percentages are no longer printed.** The board beside the wheel names
+what it can pay and says that the big money is on the thin slices; the honesty
+lives in the rim, where anyone who wants the odds can count them, rather than
+in a table that turns a fairground wheel into a prospectus. The exact shares
+are asserted in `tools/games.mjs` by sampling the geometry, precisely because
+nothing on screen would show them drifting.
 
-### 9.11 Dance Off — Hard, 10 → 20, in the back room
+**The price, and why it is forty-five.** These faces average **41.4 tokens a
+spin**. The wheel was 20 a go against a rim averaging 17.7; at 20 against this
+one it would hand the player twenty-one tokens a spin, for ever, and the prize
+shelf and every other cabinet would stop meaning anything inside a minute. At
+45 the house keeps about **8%**. The faces are exactly the ones that were
+asked for; the price of a go is the one number that had to move.
+
+### 9.11 Dance Off — Hard, 7 → 15, in the back room
 
 A step battle against a rival on the next mat. Arrows climb two lanes of four
 to the receptors at the top; press the matching key as yours reaches the line.
 `A` left, `S` down, `W` up, `D` right — the same hand position as walking.
 
-- **A match, best of three.** Each round is **45 seconds** and the higher score takes the round; the first to two rounds takes the match and the twenty. Three rounds with the rounds level is a draw, and a draw refunds the ten (MG-9).
+- **A match, best of three.** Each round is **45 seconds** and the higher score takes the round; the first to two rounds takes the match and the fifteen. Three rounds with the rounds level is a draw, and a draw refunds the seven (MG-9).
 - **Every round is a different song and a different chart.** The tune steps up a tempo each round — 128 → 140 → 152 bpm, each with its own preset (`game_danceoff`, `game_danceoff_2`, `game_danceoff_3`) — and the chart is cut fresh to that tempo, with the off-beat rate climbing 20% → 32% → 44%. The seed is taken off the clock, so no two rounds and no two matches are the same sequence. (The original fixed seed made rounds two and three a replay of round one, which is the opposite of a rival who gets harder.)
 - **Scoring:** 100 a hit, plus 10 per consecutive hit up to +100. A press into an empty lane costs 100 and breaks the combo, so mashing loses.
 - **The rival steps up every round you take off him.** He gets the same arrows at the same moments; what changes is how many he lands and whether he strings them: **62%** and no combo to start, **76%** with a 6-hit combo cap once you are one round up, **88%** with a 10-hit cap once you are two. Lose a round and he does not improve for it — he steps up when you do.
@@ -960,6 +1007,7 @@ printed on the machine's face before a token moves.
 
 - **Five tokens to sit down. Three a clean pull. Five pulls, and no sixth.**
 - **The pot is not yours until you walk.** It sits on the machine, pull by pull; `WALK AWAY` is available from the first moment and pays exactly what is on it. The live round zeroes it and the run ends with nothing.
+- **The warning is in plain words and clear of the machine**: `IF YOU GET SHOT, YOU LOSE ALL YOUR TOKENS`, in its own panel below the cylinder. It replaced "THE LIVE ONE TAKES THE LOT", which was a card-room turn of phrase for the one rule a player has to understand — and which sat across the bottom of the cylinder while it said it. Nothing is printed over the cylinder, the hammer or the lever.
 - The cylinder is spun between pulls, so every pull is an independent **1 in 6** and nothing about the run so far changes the next one. The machine says so.
 - **The arithmetic, because the machine states it:** surviving all five is (5/6)⁵ = 40%, paying 15 against the 5 it cost — about a token of expected value a play. Stopping early is worse than going on at every single step, which is the joke: the machine is honest, and the honest play is to keep pulling.
 
@@ -970,7 +1018,8 @@ threaded; the police behind are faster and have to be shaken. Cash sits on the
 road in bundles of twenty and the run ends on a crash, on being caught, or on
 `ENTER` — pull over and take what you have.
 
-- **Nitro refills itself**, a burst every 11 s, up to two in the tank; blue jars fill it the rest of the way.
+- **Nitro refills itself**, a burst every 11 s, up to two in the tank; blue jars fill it the rest of the way. A burst runs for 2.2 s and, while it does, the police **cannot** gain: the road moves at the player's speed, so every chaser slides backwards down the screen and the player comes out of it with room to pick a lane.
+- They close at 15 px/s over the road speed rather than 20, and gain with the clock more slowly. The chase still shuts on a mistake; it no longer turns every mistake into an arrest.
 - **They can be juked.** A chaser steers at the lane it last *saw* you in and only looks every 460 ms (down to 200 ms as the heat climbs), so a late swerve leaves it committed to your old line. That lag is how you shake one without nitro.
 - **They can be crashed.** A chaser locked onto the lane you just left drives into the back of the traffic in it, spins out, drops its siren and falls back down the road for ~2.8 s. The road is a weapon, not only an obstacle.
 - **The chase is as heavy as the bag:** one car until 200 cash, then **one more for every further 200**, up to six. The first three of those notches also speed the police up, thicken the traffic and quicken the road.
@@ -987,24 +1036,47 @@ road in bundles of twenty and the run ends on a crash, on being caught, or on
 
 ### 10.2 Payout table `[QFD: E2, §15 decision #1]`
 
+**One rule, and the reward is the TOTAL handed back on a win** — the stake is
+already gone, so 3 in and 6 out is three tokens of profit, and nothing
+re-deducts the entry cost when it pays:
+
+| Cost | Win | Profit |
+|---:|---:|---:|
+| 1 | 2 | +1 |
+| 3 | 6 | +3 |
+| 5 | 10 | +5 |
+| 7 | 15 | +8 |
+
 | Tier | Games | Cost | Win | Loss |
 |---|---|---:|---:|---:|
-| Easy | Tic-Tac-Toe, Snakes & Ladders | 1 | 2 | 0 |
-| Medium | Basketball Hoops, Whack-a-Frog | 3 | 6 | 0 |
-| Hard | Chomp-Man, Grudge | 5 | 10 | 0 |
+| Easy | Tic-Tac-Toe | 1 | 2 | 0 |
+| Medium | Falling Blocks, Basketball Hoops, Whack-a-Frog, Bowling, Battleship | 3 | 6 | 0 |
+| Hard | Air Hockey, Grudge, Frog vs Lizard | 5 | 10 | 0 |
+| Hard (long) | Chomp-Man, Barrel Climb, Dance Off | 7 | 15 | 0 |
 
-Every tier is a **2× on a win**, so expected value is negative unless the player wins more than half the time. That pressure is the point. The brief's original "5 in / 3 out" medium tier was a guaranteed loss even on a win, and was corrected to 3/6 in the QFD. `[QFD: §15 decision #1]` The easy tier used to pay 1 → 3, which was the one corner of the floor paying triple and the only reliably positive-EV play in the building; it is 1 → 2 now, so the rule holds everywhere.
+Everything up to the five-token row is a **2× on a win**, so expected value is
+negative unless the player wins more than half the time. That pressure is the
+point. The brief's original "5 in / 3 out" medium tier was a guaranteed loss
+even on a win, and was corrected to 3/6 in the QFD. `[QFD: §15 decision #1]`
+The easy tier used to pay 1 → 3, which was the one corner of the floor paying
+triple; it is 1 → 2 now. The seven-token row pays a little over 2× because
+those three are the longest games in the building — a 7-in cabinet you can
+lose on the last screen after four minutes has to be worth the walk — and
+fifteen is the top of the standard table rather than a cabinet-by-cabinet
+exception. `STANDARD_REWARD` in `game/content.ts` is the table, and
+`tools/games.mjs` asserts every normal cabinet against it.
 
-**Cabinets that sit outside the tier table.** The floor grew past the original seven, and the price of a go now follows one rule — **1 → 2, 3 → 6, 5 → 10** — with two exceptions, both of them the longest games in the building:
+**The fixtures that run their own economy** say so on the machine, and are the
+only things exempt:
 
-| Cabinet | Cost | Win | Why |
-|---|---:|---:|---|
-| Barrel Climb | 7 | 20 | The two longest games in the building, and the only ones you can lose on the last screen after four minutes of not losing. A 7-in / 7-out cabinet asked for the afternoon and handed back the entry fee. |
-| Chomp-Man | 7 | 20 | as above |
-| Dance Off | 10 | 20 | Forty-five seconds against a rival who lands seven in ten: a short game with a real opponent, priced as one go rather than as a tier. |
-| Wheel of Fortune | 20 | — | Pays what the pointer stops on, 0 to 100, averaging 17.7. See §9.10. |
-
-The two score-for-tokens cabinets are a formula rather than a constant: a bar, a base payout, and one more token for every further bar. **Frog Cross** is 7 in, 50 points (five crossings) for 15, and +1 every 50 after. **Car Chase** is 5 in, 200 cash for 10, and +1 every 200 after. See the module headers.
+| Fixture | Cost | Pays | Why |
+|---|---:|---|---|
+| Froggy Slots | 2 a spin | its own paytable | §9.x, and it does not print its odds |
+| Wheel of Fortune | 45 a spin | 0 to 500, averaging 41.4 | §9.10 |
+| Chamber | 5 in | 3 a clean pull, up to 15 | §9.12 |
+| Blackjack | 1 minimum | 2× the bet, hand by hand | §9.x |
+| Frog Cross | 7 | 50 points (five crossings) for 15, +1 every 50 after | a formula, not a constant |
+| Car Chase | 5 | 200 cash for 10, +1 every 200 after | as above |
 
 ### 10.3 Expected-value model
 
@@ -1013,11 +1085,12 @@ Net EV per play = `(p_win × reward) − cost`, where the break-even win rate is
 | Game | p_win (target midpoint) | Cost | EV | Net per play |
 |---|---:|---:|---:|---:|
 | Tic-Tac-Toe | 0.525 | 1 | 1.05 | **+0.05** |
-| Snakes & Ladders | 0.50 | 1 | 1.00 | **0.00** |
+| Falling Blocks | 0.475 | 3 | 2.85 | **−0.15** |
 | Basketball Hoops | 0.475 | 3 | 2.85 | **−0.15** |
 | Whack-a-Frog | 0.475 | 3 | 2.85 | **−0.15** |
-| Chomp-Man | 0.375 | 5 | 3.75 | **−1.25** |
 | Grudge | 0.375 | 5 | 3.75 | **−1.25** |
+| Chomp-Man | 0.375 | 7 | 5.63 | **−1.37** |
+| Dance Off | 0.475 | 7 | 7.13 | **+0.13** |
 
 **Read:** the Easy tier is a coin flip that pays for itself and no more, and the Hard tier bleeds badly. This is deliberate and load-bearing:
 
@@ -1046,12 +1119,13 @@ A representative Rusher run from 20 tokens:
 | 5 | Chomp-Man | 5 | Lose | 10 |
 | 6 | Grudge | 5 | Lose | 5 |
 | 7 | Hoops | 3 | Lose | 2 |
-| 8 | Snakes | 1 | Lose | 1 |
-| 9 | Snakes | 1 | Lose | **0** |
-| — | **CHARITY +5** | — | — | 5 |
+| 8 | Tic-Tac-Toe | 1 | Lose | 1 |
+| 9 | Tic-Tac-Toe | 1 | Lose | **0** |
+| — | **CHARITY +10** | — | — | 10 |
 | 10 | Hoops | 3 | Lose | 2 |
 | 11 | Air Hockey | 1 | Lose | 1 |
-| 12 | Tic-Tac-Toe | 1 | Draw = lose | **0** |
+| 12 | Tic-Tac-Toe | 1 | Draw = token back | 1 |
+| 13 | Tic-Tac-Toe | 1 | Lose | **0** |
 | — | **SECOND BUST → EJECTED** | | | |
 
 Elapsed: ~7 minutes. This is the intended shape of a first run.
@@ -1177,7 +1251,7 @@ src/
     Chase3D.ts OutroCutscene3D.ts
   minigames/
     index.ts              // registry, shared Minigame interface (§9.0)
-    tictactoe/ snakes/ airhockey/ hoops/ whack/ chompman/ grudge/
+    tictactoe/ fallingblocks/ airhockey/ hoops/ whack/ chompman/ grudge/
   froggy/
     froggy.ts             // variant state machine V0/V1/V2 (§8.2)
     script.ts             // all dialogue (§8.4)

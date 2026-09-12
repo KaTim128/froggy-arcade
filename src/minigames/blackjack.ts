@@ -13,6 +13,15 @@
  * and the shell reports how the whole sitting went.  Every token in and out
  * still moves through the shell, so the ledger stays the only path.
  *
+ * ONE DECK, ONE SHOE, FOR BOTH OF YOU.  There is a single 52-card array, it is
+ * Fisher-Yates shuffled when the sitting opens, and every card either of you
+ * receives is taken off the top of it — there is no second source of randomness
+ * anywhere in this file, and no card can come out twice inside a shoe because
+ * a dealt card is removed from the array rather than copied out of it.  He
+ * reshuffles when the shoe gets thin (under 15 cards), which is the only time
+ * a card can appear again.  What the hand is worth is read off the cards that
+ * actually came out; nothing here decides the result first and deals to match.
+ *
  * Single deck, the dealer draws to 17, blackjack pays as a win, and a push is a
  * push: the same total on both sides hands your stake straight back, so a
  * tied hand costs nothing and pays nothing.  Aces are the only fiddly part:
@@ -48,6 +57,9 @@ interface Card {
 type Phase = 'bet' | 'play' | 'over';
 
 let deck: Card[] = [];
+/** Which shoe this is, and everything that has come out of it.  DEV only. */
+let shoeId = 0;
+let drawn: Card[] = [];
 let player: Card[] = [];
 let dealer: Card[] = [];
 let phase: Phase = 'bet';
@@ -187,6 +199,14 @@ export const blackjack: MinigameModule = {
           player: score(player),
           dealer: score(dealer),
           status: status?.text ?? '',
+          // The shoe, so a test can prove both hands come out of one deck.
+          shoe: shoeId,
+          left: deck.length,
+          drawn: drawn.map((c) => `${c.rank}${c.suit}`),
+          cards: {
+            player: player.map((c) => `${c.rank}${c.suit}`),
+            dealer: dealer.map((c) => `${c.rank}${c.suit}`),
+          },
         }),
         deal: () => deal(),
         hit: () => hit(),
@@ -326,8 +346,8 @@ function deal(): void {
   standBtn?.setVisible(true);
   audio.sfx('coin_drop');
 
-  player = [deck.pop()!, deck.pop()!];
-  dealer = [deck.pop()!, deck.pop()!];
+  player = [take(), take()];
+  dealer = [take(), take()];
   say('HIT OR STAND');
   render();
 
@@ -339,7 +359,7 @@ function deal(): void {
 
 function hit(): void {
   if (phase !== 'play' || standing || !sceneRef) return;
-  player.push(deck.pop()!);
+  player.push(take());
   audio.sfx('ui_blip');
   render();
   if (score(player) > 21) finish(false, 'BUST');
@@ -361,7 +381,7 @@ function stand(): void {
   const step = () => {
     if (phase === 'over') return;
     if (score(dealer) < 17) {
-      dealer.push(deck.pop()!);
+      dealer.push(take());
       audio.sfx('ui_hover');
       render();
       const d = score(dealer);
@@ -535,8 +555,23 @@ function onConfirm(): void {
   else leave();
 }
 
+/**
+ * The top card of the shoe, removed from it.  Both hands draw through here and
+ * nowhere else, which is what makes "the same deck" a fact about the code
+ * rather than a claim in a comment.
+ */
+function take(): Card {
+  if (deck.length === 0) shuffle();
+  const card = deck.pop()!;
+  drawn.push(card);
+  return card;
+}
+
+/** A fresh 52, genuinely shuffled (Fisher-Yates), in a random order. */
 function shuffle(): void {
   deck = [];
   for (const s of SUITS) for (const r of RANKS) deck.push({ rank: r, suit: s });
   Phaser.Utils.Array.Shuffle(deck);
+  shoeId++;
+  drawn = [];
 }

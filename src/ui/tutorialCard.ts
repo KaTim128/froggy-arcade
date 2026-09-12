@@ -1,63 +1,87 @@
 /**
  * The how-to-play card.  PRD MG-8.
  *
- * Every cabinet shows one, and it shows it BEFORE the game is built: the shell
- * does not construct the game module until this card is dismissed, so nothing
- * behind it can be played by accident and no key pressed here reaches the
- * game.  At a coin-op cabinet the token is already gone by the time the card
- * is up — paying is the commitment and the tutorial is what you get for it.
- * At the table and the wheel nothing has been taken yet: those charge for the
- * go rather than the door, so their rules can be read for free and walked
- * away from.
+ * NOTHING IS CHARGED UNTIL THE PLAYER PRESSES PLAY.  Walking up to a cabinet
+ * and reading what it wants is free at every machine in the building: the card
+ * carries the objective, this cabinet's own controls, and what a go costs, and
+ * then offers two buttons.  LEAVE goes back to the room with the player's
+ * tokens untouched.  PLAY is the only thing that takes them, and it takes them
+ * exactly once — the button latches on the first press, so a player hammering
+ * it is charged for one play and not for five.
  *
- * It carries two things and only two: what winning is, and which keys this
- * cabinet reads.  A game's controls are its own — the card is built from the
- * module's own `tutorial`, so no cabinet can advertise another one's keys.
+ * It follows that a player can be at the card without being able to afford the
+ * game.  That is not an error to hide: PLAY goes dark, the card says what the
+ * machine wants and what is in the pocket, and LEAVE still works.
+ *
+ * The controls sit on a panel of their own, darker than the card, because they
+ * are the part of this that gets read at a glance and they used to be grey on
+ * grey over whatever the cabinet was painting underneath.
+ *
+ * The shell does not construct the game module until PLAY is pressed, so
+ * nothing behind the card can be played by accident and no key pressed here
+ * reaches the game.  A game's controls are its own — the card is built from
+ * the module's own `tutorial`, so no cabinet can advertise another one's keys.
  */
 
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
-import { centerText, text } from '../core/ui';
+import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { FONT_ADVANCE } from '../render/pixelFont';
 import type { Tutorial } from '../minigames/types';
 
-const CARD = { x: 10, y: 22, w: GAME_W - 20, h: GAME_H - 30 };
+const CARD = { x: 8, y: 20, w: GAME_W - 16, h: GAME_H - 26 };
 /** Where the "what it does" column starts, measured from the card's left. */
-const DOES_X = 88;
+const DOES_X = 84;
 const ROW_H = 10;
+/** The controls panel: darker than the card, so the keys read at a glance. */
+const PANEL_INK = 0x07060c;
+const PANEL_EDGE = 0x2f2850;
 
 export interface TutorialCard {
   /** Tear the card down.  Safe to call twice. */
   destroy(): void;
 }
 
-/**
- * Put the card up.  `onStart` runs once, on SPACE, ENTER or a click — the
- * shell builds the game there.  ESC still belongs to the shell and still
- * forfeits: the tokens are spent the moment the room takes them, so quitting
- * out of the tutorial is quitting out of the play (MG-4).
- */
-export function showTutorial(
-  scene: Phaser.Scene,
-  title: string,
-  tut: Tutorial,
-  onStart: () => void,
-): TutorialCard {
+export interface TutorialCardOpts {
+  title: string;
+  tutorial: Tutorial;
+  /** What a go costs, in tokens. */
+  cost: number;
+  /** Tokens in the pocket, for the affordability line. */
+  balance: number;
+  /**
+   * True where the cabinet charges INSIDE the game rather than at the door —
+   * the table and the wheel.  PLAY costs nothing at those; the bet does.
+   */
+  chargesInside?: boolean;
+  /** One line under the price, e.g. "WIN: 6 TOKENS". */
+  payNote?: string;
+  /** Pressed PLAY, and could afford it.  Runs at most once. */
+  onPlay: () => void;
+  /** Pressed LEAVE, or Esc.  Nothing has been charged. */
+  onLeave: () => void;
+}
+
+export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): TutorialCard {
   const parts: Phaser.GameObjects.GameObject[] = [];
   const keep = <T extends Phaser.GameObjects.GameObject>(o: T): T => {
     parts.push(o);
     return o;
   };
 
+  const free = opts.chargesInside === true;
+  // A fixture that charges inside is always startable; everything else needs
+  // the coin up front.
+  const affordable = free || opts.balance >= opts.cost;
+
   // The card sits over a dimmed screen rather than a black one: the cabinet's
-  // own colours stay visible underneath, so you can see what you paid for.
+  // own colours stay visible underneath, so you can see what you are buying.
   // Interactive, and the input plugin is top-only, so the dimmer also swallows
-  // clicks: the QUIT button underneath cannot be hit through the card.
-  const dim = keep(
-    scene.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0.82).setOrigin(0, 0).setDepth(900),
-  ).setInteractive({ useHandCursor: true });
+  // clicks: the QUIT button underneath cannot be hit through the card, and a
+  // stray click no longer starts a game the player was still reading about.
+  keep(scene.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0.86).setOrigin(0, 0).setDepth(900)).setInteractive();
   keep(
     scene.add
       .rectangle(CARD.x, CARD.y, CARD.w, CARD.h, PALETTE.ink)
@@ -66,63 +90,117 @@ export function showTutorial(
       .setDepth(901),
   );
   keep(scene.add.rectangle(CARD.x, CARD.y, CARD.w, 11, PALETTE.plum).setOrigin(0, 0).setDepth(902));
-  keep(centerText(scene, GAME_W / 2, CARD.y + 5, `HOW TO PLAY - ${title}`, PALETTE.gold).setDepth(903));
+  keep(centerText(scene, GAME_W / 2, CARD.y + 5, `HOW TO PLAY - ${opts.title}`, PALETTE.gold).setDepth(903));
 
-  let y = CARD.y + 17;
-  for (const line of tut.objective.slice(0, 4)) {
+  let y = CARD.y + 14;
+  for (const line of opts.tutorial.objective.slice(0, 4)) {
     keep(centerText(scene, GAME_W / 2, y + 3, line, PALETTE.cream).setDepth(903));
     y += ROW_H;
   }
 
-  y += 3;
-  keep(scene.add.rectangle(CARD.x + 8, y, CARD.w - 16, 1, PALETTE.steel).setOrigin(0, 0).setDepth(903));
-  y += 4;
-  keep(text(scene, CARD.x + 8, y, 'CONTROLS', PALETTE.tealLight).setDepth(903));
-  y += ROW_H;
-
+  // ---- the controls, on a panel of their own
+  y += 2;
+  const rows = opts.tutorial.controls.slice(0, 6);
+  const panelH = rows.length * ROW_H + 14;
+  keep(
+    scene.add
+      .rectangle(CARD.x + 6, y, CARD.w - 12, panelH, PANEL_INK)
+      .setOrigin(0, 0)
+      .setStrokeStyle(1, PANEL_EDGE)
+      .setDepth(903),
+  );
+  keep(text(scene, CARD.x + 10, y + 3, 'CONTROLS', PALETTE.tealLight).setDepth(904));
+  let ry = y + 13;
   // Two columns, and the key column is measured rather than guessed: a long
   // key name ("HOLD SPACE") must not run into what it does.
-  for (const [keys, does] of tut.controls.slice(0, 6)) {
-    const kx = CARD.x + 10;
-    keep(text(scene, kx, y, keys, PALETTE.gold).setDepth(903));
+  for (const [keys, does] of rows) {
+    keep(text(scene, CARD.x + 10, ry, keys, PALETTE.gold).setDepth(904));
     const overrun = Math.max(0, keys.length * FONT_ADVANCE - (DOES_X - 14));
-    keep(text(scene, CARD.x + DOES_X + overrun, y, does, PALETTE.fog).setDepth(903));
-    y += ROW_H;
+    keep(text(scene, CARD.x + DOES_X + overrun, ry, does, PALETTE.cream).setDepth(904));
+    ry += ROW_H;
+  }
+  y += panelH + 3;
+
+  // ---- the price, and whether it can be met
+  const priceLine = free
+    ? `FREE TO SIT  -  ${opts.cost} TOKEN${opts.cost === 1 ? '' : 'S'} A GO`
+    : `${opts.cost} TOKEN${opts.cost === 1 ? '' : 'S'} TO PLAY`;
+  keep(centerText(scene, GAME_W / 2, y + 3, priceLine, affordable ? PALETTE.gold : PALETTE.blood).setDepth(903));
+  y += ROW_H;
+  if (opts.payNote) {
+    keep(centerText(scene, GAME_W / 2, y + 1, opts.payNote, PALETTE.tealLight).setDepth(903));
+    y += 9;
+  }
+  if (!affordable) {
+    keep(
+      centerText(
+        scene,
+        GAME_W / 2,
+        y + 1,
+        `YOU HAVE ${opts.balance} - YOU NEED ${opts.cost - opts.balance} MORE`,
+        PALETTE.ash,
+      ).setDepth(903),
+    );
   }
 
-  const prompt = keep(
-    centerText(scene, GAME_W / 2, CARD.y + CARD.h - 9, 'SPACE OR CLICK TO START', PALETTE.cream).setDepth(903),
+  // ---- the two buttons.  One of them takes tokens; the other never does.
+  let taken = false;
+  const play = (): void => {
+    if (!affordable) {
+      audio.sfx('buzzer', 0.5);
+      return;
+    }
+    // The latch: a player who clicks PLAY four times pays once.
+    if (taken || done) return;
+    taken = true;
+    card.destroy();
+    audio.sfx('coin_drop');
+    opts.onPlay();
+  };
+  const leave = (): void => {
+    if (taken || done) return;
+    taken = true;
+    card.destroy();
+    audio.sfx('ui_blip');
+    opts.onLeave();
+  };
+
+  const by = CARD.y + CARD.h - 11;
+  keep(
+    button(scene, GAME_W / 2 - 52, by, affordable ? 'PLAY' : 'CANT PLAY', play, {
+      width: 88,
+      height: 15,
+      fill: affordable ? PALETTE.tealDark : PALETTE.slate,
+      disabled: !affordable,
+    }).setDepth(905),
   );
-  scene.tweens.add({ targets: prompt, alpha: 0.35, duration: 620, yoyo: true, repeat: -1 });
+  keep(
+    button(scene, GAME_W / 2 + 52, by, 'LEAVE', leave, {
+      width: 88,
+      height: 15,
+      fill: PALETTE.plum,
+    }).setDepth(905),
+  );
 
   let done = false;
   const card: TutorialCard = {
     destroy() {
       if (done) return;
       done = true;
-      scene.tweens.killTweensOf(prompt);
-      kb?.off('keyup-SPACE', begin);
-      kb?.off('keyup-ENTER', begin);
-      dim.off('pointerup', begin);
+      kb?.off('keyup-SPACE', play);
+      kb?.off('keyup-ENTER', play);
       for (const o of parts) o.destroy();
       parts.length = 0;
     },
   };
 
-  const begin = (): void => {
-    if (done) return;
-    card.destroy();
-    audio.sfx('ui_blip');
-    onStart();
-  };
-
   // On the way UP, not the way down.  A held key auto-repeats its keydown, and
   // a game built on the first repeat would read the rest of them and the final
-  // keyup as play — dismissing on release hands the game a clean keyboard.
+  // keyup as play — starting on release hands the game a clean keyboard.
+  // Esc belongs to the shell, which treats it as LEAVE while the card is up.
   const kb = scene.input.keyboard;
-  kb?.on('keyup-SPACE', begin);
-  kb?.on('keyup-ENTER', begin);
-  dim.on('pointerup', begin);
+  kb?.on('keyup-SPACE', play);
+  kb?.on('keyup-ENTER', play);
 
   return card;
 }

@@ -34,8 +34,13 @@ const PAY_PER_PULL = 3;
 export const MAX_POT = MAX_PULLS * PAY_PER_PULL;
 
 const CYL_X = GAME_W / 2;
-const CYL_Y = 86;
-const CYL_R = 34;
+/**
+ * The cylinder sits high enough that the warning under it has a row of its
+ * own.  Nothing is allowed to be printed over the machine: the player has to
+ * be able to see the chambers, the hammer and the lever at all times.
+ */
+const CYL_Y = 80;
+const CYL_R = 32;
 
 let survived = 0;
 /** Tokens on the machine.  Nothing is credited until the player walks. */
@@ -86,7 +91,7 @@ export const roulette: MinigameModule = {
     scene.add.rectangle(0, 18, GAME_W, 2, 0x40202a).setOrigin(0, 0);
 
     // The machine's face: a cylinder, six chambers, and a lever.
-    scene.add.ellipse(CYL_X, CYL_Y + 10, CYL_R * 3.2, CYL_R * 2.4, 0x3a2028).setAlpha(0.5);
+    scene.add.ellipse(CYL_X, CYL_Y + 12, CYL_R * 3.2, CYL_R * 2.4, 0x3a2028).setAlpha(0.5);
     scene.add.circle(CYL_X, CYL_Y, CYL_R + 8, 0x6b4a52);
     scene.add.circle(CYL_X, CYL_Y, CYL_R + 6, 0x2b1a1e);
     cylinder = scene.add.circle(CYL_X, CYL_Y, CYL_R, 0x3d2a2e).setStrokeStyle(1, 0x6b4a52);
@@ -109,10 +114,15 @@ export const roulette: MinigameModule = {
     text(scene, 10, 40, `${PAY_PER_PULL} A CLEAN PULL`, PALETTE.gold);
     text(scene, GAME_W - 10, 30, `${MAX_PULLS} PULLS MAX`, PALETTE.ash).setOrigin(1, 0);
     text(scene, GAME_W - 10, 40, `UP TO ${MAX_POT}`, PALETTE.gold).setOrigin(1, 0);
-    centerText(scene, GAME_W / 2, 124, 'THE LIVE ONE TAKES THE LOT', PALETTE.blood);
+    // The warning, in plain words and clear of the machine.  "THE LIVE ONE
+    // TAKES THE LOT" was a card-room turn of phrase for the one rule a player
+    // has to understand before they touch the lever, and it sat across the
+    // bottom of the cylinder while it said it.
+    scene.add.rectangle(18, 122, GAME_W - 36, 13, 0x2a0f14).setOrigin(0, 0).setStrokeStyle(1, 0x5a2028);
+    centerText(scene, GAME_W / 2, 128, 'IF YOU GET SHOT, YOU LOSE ALL YOUR TOKENS', PALETTE.blood);
 
-    tally = centerText(scene, GAME_W / 2, 138, '', PALETTE.gold);
-    status = centerText(scene, GAME_W / 2, 150, 'THE CYLINDER SPINS EVERY PULL', PALETTE.ash);
+    tally = centerText(scene, GAME_W / 2, 142, '', PALETTE.gold);
+    status = centerText(scene, GAME_W / 2, 153, 'THE CYLINDER SPINS EVERY PULL', PALETTE.ash);
 
     pullBtn = button(scene, GAME_W / 2 - 46, 168, 'PULL', () => pull(), { width: 60, height: 12 });
     cashBtn = button(scene, GAME_W / 2 + 46, 168, 'WALK AWAY', () => cashOut(), { width: 72, height: 12 });

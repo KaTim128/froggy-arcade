@@ -161,8 +161,15 @@ try {
   console.log('\nprofiles  a run named admin128 never runs out');
 
   /** Play the dearest cabinet on the floor, through the room's own launch. */
-  const playTheDearestCabinet = () =>
-    page.evaluate(async () => {
+  /**
+   * Walk up to the priciest machine on the floor and actually start it.
+   *
+   * Two steps now, because the money moves in two places: the room opens the
+   * how-to-play card for nothing, and PLAY on that card is what charges.  A
+   * test that stopped at the first step would find every run free.
+   */
+  const playTheDearestCabinet = async () => {
+    const opened = await page.evaluate(async () => {
       const hub = window.__froggy.game().scene.getScene('ArcadeHub');
       const d = hub.dialogue;
       for (let i = 0; i < 40 && d && d.state !== 'idle'; i++) {
@@ -171,15 +178,18 @@ try {
       }
       const cab = hub.cabinets.reduce((a, b) => (b.def.cost > a.def.cost ? b : a));
       const before = window.__froggy.state().tokens;
-      hub.launchGame(cab); // canEnter + ledger.debit, exactly as a click does
+      hub.launchGame(cab); // canEnter, exactly as a click does
       await new Promise((r) => setTimeout(r, 1500));
-      return {
-        cost: cab.def.cost,
-        before,
-        after: window.__froggy.state().tokens,
-        launched: window.__froggy.activeScenes().includes('Minigame'),
-      };
+      return { cost: cab.def.cost, before };
     });
+    await page.keyboard.press('Space'); // PLAY: the one thing that charges
+    await sleep(900);
+    return {
+      ...opened,
+      after: await page.evaluate(() => window.__froggy.state().tokens),
+      launched: await page.evaluate(() => window.__froggy.activeScenes().includes('Minigame')),
+    };
+  };
 
   // Typed in lower case, on a real keyboard: names are uppercased on the way
   // in, so this is the same name.  Spacing is not — see the near-miss below.
@@ -227,7 +237,7 @@ try {
     // Exactly what the game wrote before profiles existed.
     localStorage.setItem('froggy.run', JSON.stringify({
       schemaVersion: 1, tokens: 17, charityUsed: false, prizesOwned: [],
-      gamesPlayed: { tictactoe: 2, snakes: 0, airhockey: 0, hoops: 0, whack: 0, chompman: 0, grudge: 0 },
+      gamesPlayed: { tictactoe: 2, airhockey: 0, hoops: 0, whack: 0, chompman: 0, grudge: 0 },
       route: 'normal', hasKey: false, seenIntro: true,
     }));
   });

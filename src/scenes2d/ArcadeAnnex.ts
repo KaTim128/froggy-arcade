@@ -18,13 +18,13 @@ import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
 import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
-import { paintHubRoom, ROOM } from '../art/hubRoom';
+import { paintArcadeDressing, paintHubRoom, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
 import { CASINO_DOOR, CABINETS, cabinetsIn } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
-import { GAME_W, GAME_H } from '../render/pixelScaler';
+import { GAME_W } from '../render/pixelScaler';
 
 const INTERACT_RANGE = 24;
 /** The way back, on this room's right wall. */
@@ -39,7 +39,6 @@ export class ArcadeAnnex extends Phaser.Scene {
   private cabinets: Cabinet[] = [];
   private prompt!: Phaser.GameObjects.BitmapText;
   private promptPlate!: Phaser.GameObjects.Rectangle;
-  private mutter!: Phaser.GameObjects.BitmapText;
   private target: Target = null;
   private locked = false;
   private returnTo: GameId | null = null;
@@ -64,6 +63,7 @@ export class ArcadeAnnex extends Phaser.Scene {
 
     // No front door in here: the only way out of the building is the hub.
     paintHubRoom(this, { night: false, frontDoor: false });
+    paintArcadeDressing(this, { night: false });
     this.paintDoorway();
     this.paintCasinoDoor();
 
@@ -92,11 +92,6 @@ export class ArcadeAnnex extends Phaser.Scene {
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
-    this.mutter = text(this, GAME_W / 2, GAME_H - 26, '', PALETTE.fog)
-      .setOrigin(0.5, 0.5)
-      .setDepth(802)
-      .setVisible(false);
-
     this.keys = {
       up: this.bindKeys(KEYS.up),
       down: this.bindKeys(KEYS.down),
@@ -199,29 +194,16 @@ export class ArcadeAnnex extends Phaser.Scene {
   }
 
   private launchGame(cab: Cabinet): void {
-    const { cost } = cab.def;
-    // A fixture that charges inside the game (the table, the wheel) is free to
-    // walk up to and free to read the rules of; the rest pay at the door.
-    const free = cab.def.freeToEnter === true;
-    if (!free && !canEnter('Minigame', store.get(), { cost })) {
-      audio.sfx('buzzer');
-      this.say(`NOT ENOUGH TOKENS — NEED ${cost}`);
-      return;
-    }
-    if (!free && !ledger.debit(cost, 'game.cost')) {
+    // Nothing is charged for walking up to a machine (MG-2).  The shell opens
+    // on the how-to-play card with the game unbuilt behind it, and the tokens
+    // move when the player presses PLAY — so a player who cannot afford this
+    // cabinet may still read what it wants and walk away.
+    if (!canEnter('Minigame', store.get(), {})) {
       audio.sfx('buzzer');
       return;
     }
-    store.bumpGamePlayed(cab.def.id);
-    store.flush();
     this.locked = true;
     fadeToScene(this, 'Minigame', { id: cab.def.id, from: 'ArcadeAnnex' });
-  }
-
-  private say(msg: string): void {
-    this.mutter.setText(msg).setVisible(true).setAlpha(1);
-    this.tweens.killTweensOf(this.mutter);
-    this.tweens.add({ targets: this.mutter, alpha: 0, delay: 1200, duration: 500 });
   }
 
   update(_time: number, delta: number): void {

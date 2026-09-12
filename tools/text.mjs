@@ -90,7 +90,7 @@ const seedProfile = () =>
         tokens: 20,
         charityUsed: false,
         prizesOwned: [],
-        gamesPlayed: { tictactoe: 0, snakes: 0, airhockey: 0, hoops: 0, whack: 0, chompman: 0, grudge: 0 },
+        gamesPlayed: { tictactoe: 0, airhockey: 0, hoops: 0, whack: 0, chompman: 0, grudge: 0 },
         route: 'normal',
         hasKey: false,
         seenIntro: true,

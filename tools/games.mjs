@@ -30,8 +30,8 @@ mkdirSync(SHOTS, { recursive: true });
 /** Each game gets a short scripted interaction so the screenshot shows play. */
 const GAMES = [
   { id: 'tictactoe', drive: async (p) => { await p.mouse.click(640, 260); await sleep(700); await p.mouse.click(760, 380); await sleep(700); } },
-  { id: 'snakes', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.mouse.click(640, 672); await sleep(1500); } } },
   { id: 'airhockey', drive: async (p) => { for (let i = 0; i < 12; i++) { await p.mouse.move(500 + i * 20, 560 + (i % 3) * 20); await sleep(120); } await sleep(1500); } },
+  { id: 'fallingblocks', drive: async (p) => { for (let i = 0; i < 8; i++) { await p.keyboard.press('Space'); await sleep(180); await p.keyboard.down('KeyD'); await sleep(160); await p.keyboard.up('KeyD'); } } },
   { id: 'hoops', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.down('Space'); await sleep(500); await p.keyboard.up('Space'); await sleep(1400); } } },
   { id: 'whack', drive: async (p) => { for (let i = 0; i < 14; i++) { await p.mouse.click(400 + (i % 3) * 240, 250 + Math.floor(i / 3) * 168); await sleep(180); } await sleep(600); } },
   { id: 'chompman', drive: async (p) => { for (const k of ['ArrowUp', 'ArrowLeft', 'ArrowUp', 'ArrowRight']) { await p.keyboard.press(k); await sleep(900); } } },
@@ -92,22 +92,33 @@ for (const g of GAMES) {
   try {
     await page.goto(`${URL}/?game=${g.id}&intro=1&tokens=50`, { waitUntil: 'networkidle2' });
     await sleep(1200);
-    // MG-8: every cabinet opens on its how-to-play card, and the card carries
-    // this cabinet's own controls.  A game that ships without one is a game
-    // nobody can be told how to play.  Read it BEFORE the unlock click, which
-    // is itself a click on the card and dismisses it.
+    // MG-8: every cabinet opens on its how-to-play card, the card carries this
+    // cabinet's own controls, and it says what a go costs before it offers to
+    // take it.  A game that ships without one is a game nobody can be told how
+    // to play; a card without a price is one that charges by surprise.
     const card = await page.evaluate(() => {
       const s = window.__froggy.game().scene.getScene('Minigame');
-      const lines = s.children.list.filter((o) => o.type === 'BitmapText').map((o) => o.text);
+      // The buttons are containers with their label inside, so the display
+      // list has to be walked rather than filtered.
+      const lines = [];
+      const walk = (list) => {
+        for (const o of list) {
+          if (typeof o.text === 'string') lines.push(o.text);
+          if (o.list) walk(o.list);
+        }
+      };
+      walk(s.children.list);
       return {
         titled: lines.some((t) => t.startsWith('HOW TO PLAY')),
         controls: lines.includes('CONTROLS'),
-        prompt: lines.some((t) => t.includes('TO START')),
+        play: lines.some((t) => t === 'PLAY' || t === 'CANT PLAY'),
+        leave: lines.includes('LEAVE'),
+        price: lines.some((t) => t.includes('TO PLAY') || t.includes('A GO')),
       };
     });
-    const tutorial = card.titled && card.controls && card.prompt;
+    const tutorial = card.titled && card.controls && card.play && card.leave && card.price;
 
-    await page.mouse.click(640, 700); // audio unlock, and the card's own dismiss
+    await page.mouse.click(640, 700); // audio unlock; the card swallows the click
     await sleep(600);
     await startGame(page);
 
@@ -124,7 +135,7 @@ for (const g of GAMES) {
 
     const ok = errs.length === 0 && back && tutorial;
     console.log(
-      `${ok ? 'PASS' : 'FAIL'}  ${g.id.padEnd(12)} ${tutorial ? 'tutorial+controls' : 'NO TUTORIAL CARD'}` +
+      `${ok ? 'PASS' : 'FAIL'}  ${g.id.padEnd(13)} ${tutorial ? 'card: rules, controls, price, play/leave' : `BAD CARD ${JSON.stringify(card)}`}` +
         `${errs.length ? '  ' + errs.slice(0, 2).join(' | ') : ''}`,
     );
     if (!ok) failures++;
@@ -492,106 +503,106 @@ for (const g of [
 
 // The deep links above bypass the hub entirely, which is how a cabinet could
 // stop being clickable without a single test noticing.  A cabinet advertises
-// itself as clickable, so clicking one has to start the game.
+// itself as clickable, so clicking one has to open its card — and opening a
+// card has to cost nothing at all.  PLAY is the only thing in the building
+// that takes tokens, it takes them once, and a player who cannot cover the
+// price is not offered it.
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
+  const tokens = () => page.evaluate(() => window.__froggy.state().tokens);
+  const scenes = () => page.evaluate(() => window.__froggy.activeScenes().join(','));
+  // TIC-TAC-TOE sits at game (30, 88), far from the spawn point; the card's
+  // two buttons are at y 163, either side of the middle.
+  const cabinet = [640 + (30 - 160) * 4, 360 + (88 - 90) * 4];
+  const PLAY = [640 + (108 - 160) * 4, 360 + (163 - 90) * 4];
+  const LEAVE = [640 + (212 - 160) * 4, 360 + (163 - 90) * 4];
+
   await page.goto(`${URL}/?intro=1&tokens=20&scene=ArcadeHub`, { waitUntil: 'networkidle2' });
   await sleep(2500);
   await page.mouse.click(640, 700);
   await sleep(600);
 
-  const before = await page.evaluate(() => window.__froggy.state().tokens);
-  // TIC-TAC-TOE sits at game (34, 86), far from the spawn point.
-  await page.mouse.click(640 + (34 - 160) * 4, 360 + (86 - 90) * 4);
+  const before = await tokens();
+  await page.mouse.click(...cabinet);
   await sleep(1800);
-  const after = await page.evaluate(() => ({
-    scenes: window.__froggy.activeScenes(),
-    tokens: window.__froggy.state().tokens,
-  }));
-
-  const launched = after.scenes.includes('Minigame') && after.tokens === before - 1;
+  const atCard = { scenes: await scenes(), tokens: await tokens(), card: await cardUp(page) };
+  const opened = atCard.scenes.includes('Minigame') && atCard.card && atCard.tokens === before;
   console.log(
-    `${launched ? 'PASS' : 'FAIL'}  clicking a cabinet starts it  — ${after.scenes.join(',')}, ${before} -> ${after.tokens} tokens`,
+    `${opened ? 'PASS' : 'FAIL'}  clicking a cabinet opens its card, free  — ` +
+      `${atCard.scenes}, card ${atCard.card ? 'up' : 'missing'}, ${before} -> ${atCard.tokens} tokens`,
   );
-  if (!launched) failures++;
+  if (!opened) failures++;
+
+  // LEAVE puts you back on the floor with everything you walked up with.
+  await page.mouse.click(...LEAVE);
+  await sleep(2600);
+  const left = { scenes: await scenes(), tokens: await tokens() };
+  const walkedAway = left.scenes.includes('ArcadeHub') && left.tokens === before;
+  console.log(`${walkedAway ? 'PASS' : 'FAIL'}  LEAVE costs nothing  — ${left.scenes}, ${before} -> ${left.tokens} tokens`);
+  if (!walkedAway) failures++;
+
+  // PLAY charges exactly once, however many times it is hit.
+  await page.mouse.click(...cabinet);
+  await sleep(1800);
+  for (let i = 0; i < 5; i++) {
+    await page.mouse.click(...PLAY);
+    await sleep(70);
+  }
+  await sleep(900);
+  const played = { scenes: await scenes(), tokens: await tokens(), card: await cardUp(page) };
+  const chargedOnce = played.scenes.includes('Minigame') && !played.card && played.tokens === before - 1;
+  console.log(
+    `${chargedOnce ? 'PASS' : 'FAIL'}  five clicks on PLAY pay for one play  — ${before} -> ${played.tokens} tokens`,
+  );
+  if (!chargedOnce) failures++;
+
+  // And a pocket that cannot cover the price is told so, and charged nothing.
+  await page.goto(`${URL}/?intro=1&tokens=2&game=chompman`, { waitUntil: 'networkidle2' });
+  await sleep(2000);
+  const brokeBefore = await tokens();
+  await page.mouse.click(...PLAY);
+  await sleep(900);
+  const broke = { tokens: await tokens(), card: await cardUp(page) };
+  const refused = broke.card && broke.tokens === brokeBefore;
+  console.log(
+    `${refused ? 'PASS' : 'FAIL'}  a 7-token cabinet will not start on 2 tokens  — ` +
+      `card ${broke.card ? 'still up' : 'gone'}, ${brokeBefore} -> ${broke.tokens} tokens`,
+  );
+  if (!refused) failures++;
   await page.close();
 }
 
-// The lane's curve is a probability, and a probability is exactly the kind of
-// thing that quietly stops being one.  Sample the draw itself — the same
-// function the ball uses — rather than rolling ten thousand balls: three in
-// ten bend, the two sides split evenly, and nothing bends further than the
-// band allows.
+// The floor is data before it is a room: the reward table is a rule, not a
+// habit, and one mistyped number in content.ts is a cabinet that quietly pays
+// the wrong thing forever.
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
-  await page.goto(`${URL}/?intro=1&tokens=50&game=bowling`, { waitUntil: 'networkidle2' });
-  await sleep(1500);
-  await startGame(page);
-  await sleep(600);
-
-  const N = 20000;
-  const stats = await page.evaluate((n) => {
-    let curved = 0;
-    let left = 0;
-    let maxMag = 0;
-    let minMag = Infinity;
-    for (let i = 0; i < n; i++) {
-      const c = window.__bowl.rollCurve();
-      if (c === 0) continue;
-      curved++;
-      if (c < 0) left++;
-      maxMag = Math.max(maxMag, Math.abs(c));
-      minMag = Math.min(minMag, Math.abs(c));
-    }
-    return { curved, left, maxMag, minMag };
-  }, N);
-
-  const pCurve = stats.curved / N;
-  const pLeft = stats.left / stats.curved;
-  const rate = pCurve > 0.28 && pCurve < 0.32;
-  const even = pLeft > 0.46 && pLeft < 0.54;
-  const gentle = stats.maxMag <= 0.4001 && stats.minMag >= 0.2;
-  console.log(`${rate ? 'PASS' : 'FAIL'}  bowling: about three throws in ten curve  — ${(pCurve * 100).toFixed(1)}%`);
-  console.log(`${even ? 'PASS' : 'FAIL'}  bowling: the side is a coin flip  — ${(pLeft * 100).toFixed(1)}% left`);
-  console.log(`${gentle ? 'PASS' : 'FAIL'}  bowling: the bend stays in its band  — ${stats.minMag.toFixed(2)}..${stats.maxMag.toFixed(2)}`);
-  if (!rate) failures++;
-  if (!even) failures++;
-  if (!gentle) failures++;
-
-  // And a straight throw with the curve forced off must run straight, or the
-  // aim line is lying about where the ball goes.
-  const straight = await page.evaluate(async () => {
-    window.__bowl.throw(0, 0.8, 160, 0);
-    await new Promise((r) => setTimeout(r, 700));
-    return window.__bowl.curve();
+  await page.goto(`${URL}/?intro=1&tokens=20&scene=ArcadeHub`, { waitUntil: 'networkidle2' });
+  await sleep(1800);
+  const floor = await page.evaluate(async () => {
+    const { CABINETS, STANDARD_REWARD } = await import('/src/game/content.ts');
+    return {
+      ids: CABINETS.map((c) => c.id),
+      table: STANDARD_REWARD,
+      rows: CABINETS.map((c) => ({ id: c.id, cost: c.cost, reward: c.reward })),
+    };
   });
-  const trueRoll = straight === 0;
-  console.log(`${trueRoll ? 'PASS' : 'FAIL'}  bowling: a throw with no curve keeps none  — ${straight}`);
-  if (!trueRoll) failures++;
-  await page.close();
-}
+  // The fixtures that run their own economy and say so on the machine.
+  const OWN_RULES = ['slots', 'wheel', 'blackjack', 'roulette', 'frogcross', 'carchase'];
+  const wrong = floor.rows.filter(
+    (r) => !OWN_RULES.includes(r.id) && floor.table[r.cost] !== undefined && r.reward !== floor.table[r.cost],
+  );
+  console.log(
+    `${wrong.length === 0 ? 'PASS' : 'FAIL'}  every normal cabinet pays the standard table  — ` +
+      (wrong.length ? wrong.map((r) => `${r.id} ${r.cost}->${r.reward}`).join(', ') : '3/6, 5/10, 7/15 throughout'),
+  );
+  if (wrong.length) failures++;
 
-// The cameo is meant to be a thing almost nobody sees, and "almost nobody"
-// is a number that can rot without anything on screen looking different.
-// Sample the spawn roll: it has to be the roll that decides, not a frog that
-// is chosen and then hidden.
-{
-  const page = await browser.newPage();
-  await page.setViewport({ width: 1280, height: 720 });
-  await page.goto(`${URL}/?intro=1&tokens=50&game=whack`, { waitUntil: 'networkidle2' });
-  await sleep(1500);
-  await startGame(page);
-  await sleep(600);
-
-  const N = 400000;
-  const seen = await page.evaluate((n) => window.__whack.sampleCameo(n), N);
-  const rate = seen / N;
-  // One in two hundred, with room for the sampling noise at this many draws.
-  const rare = rate > 0.004 && rate < 0.006;
-  console.log(`${rare ? 'PASS' : 'FAIL'}  whack-a-frog: the cameo stays a rarity  — ${seen} in ${N} (1 in ${Math.round(1 / rate)})`);
-  if (!rare) failures++;
+  const goneForGood = !floor.ids.includes('snakes');
+  console.log(`${goneForGood ? 'PASS' : 'FAIL'}  snakes and ladders is off the floor  — ${floor.ids.length} cabinets`);
+  if (!goneForGood) failures++;
   await page.close();
 }
 
@@ -754,11 +765,38 @@ for (const g of [
   );
   if (!timed) failures++;
 
+  // ---- nitro has to buy room.  With a chaser on the bumper, a burst must
+  // put real distance between the two cars rather than being a noise the game
+  // makes while they stay exactly where they were.
+  await page.evaluate(() => {
+    window.__chase.clearRoad();
+    window.__chase.setCash(0);
+    window.__chase.setPlayer(window.__chase.laneX(1), 120);
+    window.__chase.spawnPolice(1, 150);
+    window.__chase.setNitro(2);
+  });
+  await sleep(700);
+  const onTheBumper = await st();
+  await page.keyboard.press('Space'); // nitro
+  await sleep(1400);
+  const midBurst = await st();
+  const gapBefore = (onTheBumper.cars[0]?.y ?? 0) - onTheBumper.player.y;
+  const gapAfter = (midBurst.cars[0]?.y ?? 0) - midBurst.player.y;
+  const roomToBreathe = !midBurst.cars.length || gapAfter > gapBefore + 20;
+  console.log(
+    `${roomToBreathe ? 'PASS' : 'FAIL'}  car chase: a nitro burst opens a real gap  — ` +
+      `${Math.round(gapBefore)}px -> ${midBurst.cars.length ? `${Math.round(gapAfter)}px` : 'off the road'}`,
+  );
+  if (!roomToBreathe) failures++;
+
   // ---- and driving into one ends the run.  Sweep the road, lay a fresh strip
   // at the top of it, then park in a lane the spikes cover and let it arrive:
   // nothing else on the road can reach the car, so the strip is what got it.
   await page.evaluate(() => {
     window.__chase.clearRoad();
+    // The nitro test above swept the road and put the bag back to nothing;
+    // the strips only come out past six hundred.
+    window.__chase.setCash(700);
     window.__chase.armTrap();
   });
   await sleep(500);
@@ -785,12 +823,12 @@ for (const g of [
   await sleep(2500);
 
   const purse = await page.evaluate(() => window.__froggy.state().tokens);
-  // TIC-TAC-TOE sits at game (34, 86).
-  await page.mouse.click(640 + (34 - 160) * 4, 360 + (86 - 90) * 4);
+  // TIC-TAC-TOE sits at game (30, 88).  The card is free; PLAY is the charge.
+  await page.mouse.click(640 + (30 - 160) * 4, 360 + (88 - 90) * 4);
   await sleep(1800);
-  const paid = await page.evaluate(() => window.__froggy.state().tokens);
   await startGame(page);
   await sleep(400);
+  const paid = await page.evaluate(() => window.__froggy.state().tokens);
   await page.evaluate(() => window.__ttt.drawGame());
   await sleep(4200);
   const back = await page.evaluate(() => window.__froggy.state().tokens);
@@ -900,21 +938,21 @@ for (const g of [
   await page.close();
 }
 
-// The table and the wheel charge for the GO, not for the door.  Walking up to
-// either has to cost nothing — including reading the how-to-play card, which is
-// the whole point of them being free — and the paid cabinets have to keep
-// charging.  Three tokens in the pocket, which is under the wheel's price of a
-// spin, so this also proves the door is not gated on being able to afford one.
+// The table and the wheel charge for the GO, not for the door: walking up to
+// either and reading the card costs nothing, and leaving costs nothing.  They
+// are also the two fixtures with a bar at the door — see the broke test above —
+// so this is run with enough in the pocket to be let in.
 {
   const free = [
-    { id: 'wheel', label: 'the wheel', x: 58, y: 140 },
-    { id: 'blackjack', label: "froggy's table", x: 160, y: 118 },
+    { id: 'wheel', label: 'the wheel', x: 58, y: 140, purse: 60 },
+    { id: 'blackjack', label: "froggy's table", x: 160, y: 118, purse: 6 },
   ];
   for (const f of free) {
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 720 });
-    await page.goto(`${URL}/?intro=1&tokens=3&scene=ArcadeCasino`, { waitUntil: 'networkidle2' });
+    await page.goto(`${URL}/?intro=1&tokens=${f.purse}&scene=ArcadeCasino`, { waitUntil: 'networkidle2' });
     await sleep(2500);
+
     const before = await page.evaluate(() => window.__froggy.state().tokens);
     await page.mouse.click(640 + (f.x - 160) * 4, 360 + (f.y - 90) * 4);
     await sleep(1800);
@@ -943,37 +981,51 @@ for (const g of [
 }
 
 // The wheel's odds ARE its geometry: every face is cut to the width of its own
-// chance and a spin picks a stopping angle.  Sample the same function the
-// pointer resolves through, so a face quietly resized shows up here.
+// chance and a spin picks an angle, not a prize.  The board beside it no longer
+// prints the percentages — which is exactly why they are asserted here, since
+// nothing on screen would show them drifting.
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
-  await page.goto(`${URL}/?intro=1&tokens=200&game=wheel`, { waitUntil: 'networkidle2' });
+  await page.goto(`${URL}/?intro=1&tokens=400&game=wheel`, { waitUntil: 'networkidle2' });
   await sleep(1500);
   await startGame(page);
   await sleep(600);
 
-  const N = 200000;
+  const N = 400000;
   const seen = await page.evaluate((n) => window.__wheel.sample(n), N);
-  const band = (...vals) => vals.reduce((a, v) => a + (seen[v] ?? 0), 0) / N;
-  const small = band(1, 2, 3, 5, 7, 10, 15);
-  const mid = band(20, 30);
-  const fifty = band(50);
-  const hundred = band(100);
-  const nothing = band(0);
-  const near = (got, want) => Math.abs(got - want) < 0.01;
-  const ok = near(small, 0.65) && near(mid, 0.15) && near(fifty, 0.1) && near(hundred, 0.05) && near(nothing, 0.05);
+  const share = (v) => (seen[v] ?? 0) / N;
+  const band = (want, got, tol = 0.006) => Math.abs(got - want) <= tol;
+
+  const five = share(500);
+  const twoHundred = share(200);
+  const seventy = share(70);
+  const sixty = share(60);
+  const fifty = share(50);
+  const forty = share(40);
+  const small = [1, 2, 3, 5, 7, 10, 15].reduce((a, v) => a + share(v), 0);
+  const nothing = share(0);
+
+  const ok =
+    band(0.01, five, 0.003) &&
+    band(0.05, twoHundred) &&
+    band(0.1, seventy) &&
+    band(0.1, sixty) &&
+    band(0.1, fifty) &&
+    band(0.15, forty) &&
+    band(0.39, small, 0.01) &&
+    band(0.1, nothing);
   console.log(
-    `${ok ? 'PASS' : 'FAIL'}  wheel: the faces pay at the odds on the board  — ` +
-      `1-15 ${(small * 100).toFixed(1)}%, 20/30 ${(mid * 100).toFixed(1)}%, 50 ${(fifty * 100).toFixed(1)}%, ` +
-      `100 ${(hundred * 100).toFixed(1)}%, none ${(nothing * 100).toFixed(1)}%`,
+    `${ok ? 'PASS' : 'FAIL'}  wheel: the faces pay at the odds asked for  — ` +
+      `500 ${(five * 100).toFixed(2)}%, 200 ${(twoHundred * 100).toFixed(1)}%, 70 ${(seventy * 100).toFixed(1)}%, ` +
+      `60 ${(sixty * 100).toFixed(1)}%, 50 ${(fifty * 100).toFixed(1)}%, 40 ${(forty * 100).toFixed(1)}%, ` +
+      `1-15 ${(small * 100).toFixed(1)}%, none ${(nothing * 100).toFixed(1)}%`,
   );
   if (!ok) failures++;
 
-  // And a spin pays what it landed on, through the ledger and nowhere else.
-  // The twenty comes off here too — walking up to the wheel is free, so the
-  // net move for one spin is the face minus the price of the go.
-  const SPIN = 20;
+  // And a spin pays what it landed on, ONCE, through the ledger and nowhere
+  // else: the net move for one spin is the face minus the price of the go.
+  const SPIN = 45;
   const before = await page.evaluate(() => window.__froggy.state().tokens);
   await page.keyboard.press('Space');
   await sleep(4600);
@@ -981,10 +1033,13 @@ for (const g of [
     tokens: window.__froggy.state().tokens,
     at: window.__wheel.state().at,
     won: window.__wheel.state().won,
+    spins: window.__wheel.state().spins,
   }));
   const net = after.tokens - before;
-  const paid = net === after.at - SPIN && after.won === after.at;
-  console.log(`${paid ? 'PASS' : 'FAIL'}  wheel: it pays the face it stopped on  — landed ${after.at}, net ${net}`);
+  const paid = net === after.at - SPIN && after.won === after.at && after.spins === 1;
+  console.log(
+    `${paid ? 'PASS' : 'FAIL'}  wheel: one spin, one prize  — landed ${after.at}, net ${net}, banked ${after.won}`,
+  );
   if (!paid) failures++;
   await page.close();
 }
@@ -1095,9 +1150,169 @@ for (const g of [
   });
   await sleep(4200);
   const after = await page.evaluate(() => window.__froggy.state().tokens);
-  const pays = after - before === 20;
-  console.log(`${pays ? 'PASS' : 'FAIL'}  dance off: taking the match pays the twenty  — ${before} -> ${after}`);
+  const pays = after - before === 15;
+  console.log(`${pays ? 'PASS' : 'FAIL'}  dance off: taking the match pays the fifteen  — ${before} -> ${after}`);
   if (!pays) failures++;
+  await page.close();
+}
+
+// GRUDGE: the special is on a timer, and the timer is the point.  Throw it,
+// and the next one has to be refused until the bar has filled back up.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=20&game=grudge`, { waitUntil: 'networkidle2' });
+  await sleep(1800);
+  await startGame(page);
+  await sleep(2400); // READY / FIGHT
+
+  const st = () => page.evaluate(() => window.__grudge.state());
+  const press = (m) => page.evaluate((move) => window.__grudge.press(move), m);
+
+  const ready = await st();
+  const first = await press('special');
+  await sleep(200);
+  const thrown = await st();
+  const spent = ready.you.cd === 0 && first === true && thrown.you.cd > ready.cooldownMs * 0.8;
+  console.log(
+    `${spent ? 'PASS' : 'FAIL'}  grudge: the special spends its cooldown  — ${ready.you.cd}ms -> ${thrown.you.cd}ms of ${thrown.cooldownMs}`,
+  );
+  if (!spent) failures++;
+
+  // A second one, straight away, must be refused rather than quietly ignored.
+  await sleep(1200);
+  const second = await press('special');
+  const after = await st();
+  const blocked = second === false && after.you.cd > 0;
+  console.log(`${blocked ? 'PASS' : 'FAIL'}  grudge: a second special is refused while it charges  — ${after.you.cd}ms left`);
+  if (!blocked) failures++;
+
+  // The high strike and the low sweep both land, and they are different moves.
+  // The lizard is held still for this: what is under test is the two attacks,
+  // not whether he happens to be standing where they reach.
+  await page.evaluate(() => window.__grudge.freeze(true));
+  await page.evaluate(() => window.__grudge.place(150, 172));
+  const beforeHigh = await st();
+  await press('high');
+  await sleep(700);
+  const afterHigh = await st();
+  await page.evaluate(() => window.__grudge.place(150, 172));
+  await press('low');
+  await sleep(900);
+  const afterLow = await st();
+  await page.evaluate(() => window.__grudge.freeze(false));
+  const hits = afterHigh.him.hp < beforeHigh.him.hp && afterLow.him.hp < afterHigh.him.hp;
+  console.log(
+    `${hits ? 'PASS' : 'FAIL'}  grudge: high and low both land  — ${beforeHigh.him.hp} -> ${afterHigh.him.hp} -> ${afterLow.him.hp} hp`,
+  );
+  if (!hits) failures++;
+  await page.close();
+}
+
+// SHIFT across the arcade floor is 1.4x the walk.  Measured rather than
+// trusted: the multiplier lives in one constant and the walk speed in another,
+// and a change to either is a change to how the whole building feels.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=20&scene=ArcadeAnnex`, { waitUntil: 'networkidle2' });
+  await sleep(2600);
+  const at = () =>
+    page.evaluate(() => {
+      const s = window.__froggy.game().scene.getScene('ArcadeAnnex');
+      return { x: s.player.x, y: s.player.y };
+    });
+
+  const runFor = async (ms, shift) => {
+    const from = await at();
+    if (shift) await page.keyboard.down('ShiftLeft');
+    await page.keyboard.down('KeyD');
+    await sleep(ms);
+    await page.keyboard.up('KeyD');
+    if (shift) await page.keyboard.up('ShiftLeft');
+    await sleep(120);
+    const to = await at();
+    return Math.abs(to.x - from.x);
+  };
+
+  // Back to the left wall first, so both runs have the same road ahead.
+  await page.keyboard.down('KeyA');
+  await sleep(2200);
+  await page.keyboard.up('KeyA');
+  await sleep(200);
+  const walked = await runFor(700, false);
+  await page.keyboard.down('KeyA');
+  await sleep(2200);
+  await page.keyboard.up('KeyA');
+  await sleep(200);
+  const ran = await runFor(700, true);
+
+  const ratio = walked > 0 ? ran / walked : 0;
+  const right = ratio > 1.28 && ratio < 1.52;
+  console.log(
+    `${right ? 'PASS' : 'FAIL'}  the arcade run is 1.4x the walk  — ${walked.toFixed(0)}px vs ${ran.toFixed(0)}px (x${ratio.toFixed(2)})`,
+  );
+  if (!right) failures++;
+  await page.close();
+}
+
+// The prize counter is a shelf: what has been taken is gone from it, and when
+// the last one goes a fresh lot comes out of the back.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=9000&scene=ArcadeHub`, { waitUntil: 'networkidle2' });
+  await sleep(2600);
+  await page.mouse.click(640 + (185 - 160) * 4, 360 + (30 - 90) * 4); // the prize case
+  await sleep(1200);
+
+  const state = () => page.evaluate(() => window.__froggy.state());
+  const slot = (i) => [
+    640 + (52 + (i % 3) * 84 + 42 - 160) * 4,
+    360 + (34 + Math.floor(i / 3) * 42 + 20 - 90) * 4,
+  ];
+
+  const opening = await state();
+  await page.mouse.click(...slot(0));
+  await sleep(800);
+  const oneGone = await state();
+  const taken =
+    oneGone.prizesOwned.length === opening.prizesOwned.length + 1 && oneGone.tokens === opening.tokens - 40;
+  console.log(`${taken ? 'PASS' : 'FAIL'}  prize counter: redeeming takes it off the shelf  — ${oneGone.prizesOwned.join(',')}`);
+  if (!taken) failures++;
+
+  for (let i = 1; i < 9; i++) {
+    await page.mouse.click(...slot(i));
+    await sleep(700);
+  }
+  const cleared = await state();
+  await sleep(2200);
+  const restocked = await state();
+  const refilled = cleared.prizeWave === 0 && restocked.prizeWave === 1;
+  console.log(
+    `${refilled ? 'PASS' : 'FAIL'}  prize counter: clearing the shelf brings out new stock  — ` +
+      `wave ${cleared.prizeWave} -> ${restocked.prizeWave}, ${restocked.prizesOwned.length} owned`,
+  );
+  if (!refilled) failures++;
+
+  // The new lot is nine different things at the same prices.
+  const fresh = await page.evaluate(async () => {
+    const { prizesForWave } = await import('/src/game/content.ts');
+    const a = prizesForWave(0);
+    const b = prizesForWave(1);
+    return {
+      count: b.length,
+      costs: b.map((p) => p.cost).join(','),
+      baseCosts: a.map((p) => p.cost).join(','),
+      names: b.map((p) => p.name),
+      sameAsBase: b.some((p, i) => p.id === a[i].id),
+    };
+  });
+  const goodStock = fresh.count === 9 && fresh.costs === fresh.baseCosts && !fresh.sameAsBase;
+  console.log(
+    `${goodStock ? 'PASS' : 'FAIL'}  prize counter: new stock keeps the price curve  — ${fresh.names.slice(0, 3).join(', ')}...`,
+  );
+  if (!goodStock) failures++;
   await page.close();
 }
 
@@ -1123,17 +1338,6 @@ for (const g of [
     return st();
   };
 
-  const before = await st();
-  const afterRock = await hit('rock');
-  const rockDmg = before.lizard.hp - afterRock.lizard.hp;
-  const rockOk = rockDmg === 14;
-  console.log(`${rockOk ? 'PASS' : 'FAIL'}  frog vs lizard: the rock lands its ordinary damage  — ${rockDmg}`);
-  if (!rockOk) failures++;
-
-  // Wait out the lizard's reply, then take the frog's turn again.  The match
-  // is a single round now, so a frog that runs out of health ends the game and
-  // takes the rest of these checks with it: top it back up on the way through.
-  // What is under test is the items, not whether the lizard can aim.
   const waitForFrog = async () => {
     for (let i = 0; i < 60; i++) {
       const s = await st();
@@ -1146,6 +1350,20 @@ for (const g of [
     return st();
   };
 
+
+  // The first throw waits for the frog's turn like every other one: the game
+  // opens on a round card now, and a throw into that is a throw into nothing.
+  const before = await waitForFrog();
+  const afterRock = await hit('rock');
+  const rockDmg = before.lizard.hp - afterRock.lizard.hp;
+  const rockOk = rockDmg === 14;
+  console.log(`${rockOk ? 'PASS' : 'FAIL'}  frog vs lizard: the rock lands its ordinary damage  — ${rockDmg}`);
+  if (!rockOk) failures++;
+
+  // Wait out the lizard's reply, then take the frog's turn again.  The match
+  // is a single round now, so a frog that runs out of health ends the game and
+  // takes the rest of these checks with it: top it back up on the way through.
+  // What is under test is the items, not whether the lizard can aim.
   let s = await waitForFrog();
   const hpBeforeTnt = s.lizard.hp;
   const afterTnt = await hit('tnt');

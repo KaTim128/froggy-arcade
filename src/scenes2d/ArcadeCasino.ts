@@ -240,25 +240,26 @@ export class ArcadeCasino extends Phaser.Scene {
 
   private launchGame(cab: Fixture): void {
     const { cost } = cab.def;
-    // The table and the wheel cost nothing to walk up to: their rules are
-    // free to read and the first token moves when the player deals or spins.
-    // Everything else takes its coin at the door.
-    const free = cab.def.freeToEnter === true;
-    if (!free && !canEnter('Minigame', store.get(), { cost })) {
+    // Two different bars, and which one applies is decided by where the money
+    // changes hands.  A coin-op cabinet takes nothing at the door: the
+    // how-to-play card is free to read and PLAY is what charges, so anyone may
+    // walk up to one.  The table and the wheel charge INSIDE, which means a
+    // player with nothing in their pocket would sit down to a game they cannot
+    // make a move in — so those two are refused here, out loud, with the
+    // number they are short.
+    if (cab.def.freeToEnter && ledger.balance() < cost) {
       audio.sfx('buzzer');
       this.say(
         cab.def.fixture === 'table'
-          ? `TABLE MINIMUM IS ${cost} — COME BACK WITH IT`
-          : `NOT ENOUGH TOKENS — NEED ${cost}`,
+          ? `NO MONEY, NO CARDS — THE MINIMUM IS ${cost}`
+          : `NO MONEY, NO SPIN — IT IS ${cost} A GO`,
       );
       return;
     }
-    if (!free && !ledger.debit(cost, 'game.cost')) {
+    if (!canEnter('Minigame', store.get(), {})) {
       audio.sfx('buzzer');
       return;
     }
-    store.bumpGamePlayed(cab.def.id);
-    store.flush();
     this.locked = true;
     froggyLayer.clear();
     fadeToScene(this, 'Minigame', { id: cab.def.id, from: 'ArcadeCasino' });
@@ -286,9 +287,10 @@ export class ArcadeCasino extends Phaser.Scene {
     this.player.move(dx, dy, delta, this.bounds);
 
     const bal = ledger.balance();
-    // A free fixture never reads as unaffordable — you can always walk up to
-    // the table or the wheel, whatever is in your pocket.
-    for (const c of this.cabinets) c.setAffordable(c.def.freeToEnter === true || bal >= c.def.cost);
+    // The table and the wheel go dark when the pocket cannot cover a go: they
+    // are the two fixtures that refuse you at the door, so they have to look
+    // like it before you walk over.
+    for (const c of this.cabinets) c.setAffordable(bal >= c.def.cost);
 
     this.target = this.findTarget();
     this.renderPrompt();
@@ -329,15 +331,16 @@ export class ArcadeCasino extends Phaser.Scene {
       // costs nothing, so the prompt says what a go costs rather than what the
       // door costs, and it never greys out: you can always read the rules.
       if (t.cab.def.freeToEnter) {
+        // These two take a bet rather than a price, and they are the two you
+        // cannot walk into empty-handed — so the prompt names the bet.
         msg =
           t.cab.def.fixture === 'table'
-            ? `[E] ${t.cab.def.title} - FREE TO SIT, ${cost} MIN BET`
-            : `[E] ${t.cab.def.title} - FREE TO LOOK, ${cost} A SPIN`;
-        colour = PALETTE.gold;
+            ? `[E] ${t.cab.def.title} - ${cost} MIN BET`
+            : `[E] ${t.cab.def.title} - ${cost} A SPIN`;
       } else {
         msg = `[E] ${t.cab.def.title} - ${cost} TOKEN${cost === 1 ? '' : 'S'}`;
-        colour = ledger.balance() >= cost ? PALETTE.gold : PALETTE.ash;
       }
+      colour = ledger.balance() >= cost ? PALETTE.gold : PALETTE.ash;
     } else {
       msg = '[E] BACK ROOM';
     }

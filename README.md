@@ -23,18 +23,25 @@ in your own browser, so nothing you do here leaves your machine.
 | **E**, **space** or **enter** | get Froggy to the point |
 | **Esc** | settings, and quit out of a game |
 | **hold left mouse** | look around, in the first-person rooms |
-| **shift** / **C** | run, and toggle a crouch — in the rooms he locks you in |
+| **shift** | run — 1.4x the walk, across the arcade floor |
+| **C** | toggle a crouch, in the rooms he locks you in |
 
-Every cabinet takes its tokens first and then shows you a how-to-play card:
-what it wants, and which keys *that* cabinet reads. Nothing starts until you
-dismiss it, so the controls are never something you have to work out while the
-clock runs. Two things in the casino take a bet rather than a price — Froggy's
-blackjack table and the wheel — and those are free to walk up to and free to
-read: the first token moves when you deal or spin, and walking away without
-playing costs nothing.
+**Nothing is charged for walking up to a machine.** Every cabinet opens on a
+how-to-play card — what it wants, which keys *that* cabinet reads, and what a
+go costs — with two buttons under it. LEAVE goes back to the floor with your
+tokens untouched. PLAY is the only thing in the building that takes them, and
+it takes them once. If you cannot afford the machine you still get to read it;
+PLAY just goes dark and tells you what you are short.
+
+The two things in the casino that take a bet rather than a price — Froggy's
+blackjack table and the wheel — charge inside the game instead, and they are
+the only two that will not let you in empty-handed.
 
 A game that ends level is not a loss. A draw hands your entry cost straight
 back, once, and pays nothing on top of it.
+
+Win a prize and it comes off the shelf. Clear the shelf and the back room
+sends out a fresh lot, so there is always something to be playing for.
 
 Win prizes inside, sell them to the man outside for half their token price in
 cash, feed the cash back through the change machine at half again, and see how

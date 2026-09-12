@@ -1,35 +1,42 @@
 /**
- * WHEEL OF FORTUNE.  Twenty tokens a spin, in the corner of the casino.
+ * WHEEL OF FORTUNE.  Forty-five tokens a spin, in the corner of the casino.
  *
  * THE ODDS ARE THE GEOMETRY.  Every face on the wheel is cut to the width of
- * its own chance — the hundred is an eighteen-degree sliver and the small
+ * its own chance — the five hundred is a three-degree splinter and the small
  * money is most of the rim — and a spin picks a stopping angle, not a prize.
  * Nothing weights the draw afterwards, so what you watch the pointer do is
- * what actually happened, and a player who counts the faces gets the truth.
+ * what actually happened, and a spin pays the one face it stopped on: there is
+ * no second prize, no bonus, nothing that can stack two payouts onto one go.
  *
- *   1  2  3  5  7  10  15     65%   (a seventh of it each)
- *   20  30                    15%
- *   50                        10%
- *   100                        5%
- *   the blank                  5%
+ *   500                        1%
+ *   200                        5%
+ *   70                        10%   (two faces)
+ *   60                        10%   (two faces)
+ *   50                        10%   (two faces)
+ *   40                        15%   (three faces)
+ *   1 2 3 5 7 10 15           39%   (a seventh of it each)
+ *   the blank                 10%   (two faces)
  *
- * The board on the right says all of that out loud, the way the chamber says
- * one live round in six.  This building takes your money in the open.
+ * THE NUMBERS ARE NOT PRINTED ANY MORE.  The board beside it names what the
+ * wheel can pay and says which ones are the thin slices, and that is all: the
+ * honesty is in the geometry, where a player who wants the odds can count the
+ * rim, rather than in a table that turns a fairground wheel into a prospectus.
  *
- * WALKING UP TO IT IS FREE.  The wheel takes nothing to stand at and nothing
- * to read: the board, the odds and the price of a go are all there before a
- * token moves, and the twenty is only taken when the player actually spins.
- * Every spin is raised through the shell, every prize is paid the moment the
- * wheel stops, and LEAVE settles up.  Nothing leaves except through the
- * ledger (MG-3).
+ * WALKING UP TO IT IS FREE, but it will not let you stand at it broke: a spin
+ * is the only thing this fixture does, so a player who cannot cover one is
+ * turned away at the rope rather than sat in front of a machine they cannot
+ * use.  Every spin is raised through the shell as it is taken, every prize is
+ * paid the moment the wheel stops, and LEAVE settles up.  Nothing leaves
+ * except through the ledger (MG-3).
  *
- * THE PRICE, AND WHY IT IS TWENTY.  The faces average 17.7 tokens a spin.  At
- * ten a spin that is a seventy-seven per cent edge to the PLAYER and an
- * unbounded token supply — the prize shelf becomes a formality and every other
- * cabinet becomes pointless.  At twenty the house keeps about eleven per cent,
- * which is what a wheel in a room like this is for.  The faces are untouched:
- * the odds on the board are the odds the customer asked for, and the price of
- * a go is the one number that had to move.
+ * THE PRICE, AND WHY IT IS FORTY-FIVE.  These faces average 41.4 tokens a
+ * spin.  The wheel was twenty a go when it averaged 17.7, which was already
+ * the most generous thing in the building; at twenty against this rim it would
+ * hand the player twenty-one tokens a spin for nothing, forever, and the prize
+ * shelf — and every other cabinet — would stop meaning anything by the end of
+ * the first minute.  Forty-five keeps the house at about eight per cent, which
+ * is what a wheel in a room like this is for.  The faces are exactly the ones
+ * that were asked for; the price of a go is the one number that had to move.
  */
 
 import Phaser from 'phaser';
@@ -40,7 +47,7 @@ import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
 const ID = 'wheel' as const;
-export const SPIN_COST = 20;
+export const SPIN_COST = 45;
 
 /**
  * The faces, in the order they sit round the rim, with the share of the wheel
@@ -52,18 +59,26 @@ export const SPIN_COST = 20;
  * the rim instead of sitting in one quarter you can aim at.
  */
 export const FACES: Array<{ pays: number; share: number }> = [
-  { pays: 1, share: 65 / 7 },
-  { pays: 20, share: 7.5 },
-  { pays: 3, share: 65 / 7 },
-  { pays: 50, share: 10 },
-  { pays: 5, share: 65 / 7 },
-  { pays: 2, share: 65 / 7 },
-  { pays: 100, share: 5 },
-  { pays: 7, share: 65 / 7 },
-  { pays: 30, share: 7.5 },
-  { pays: 10, share: 65 / 7 },
+  { pays: 1, share: 39 / 7 },
+  { pays: 40, share: 5 },
+  { pays: 2, share: 39 / 7 },
+  { pays: 50, share: 5 },
+  { pays: 500, share: 1 },
+  { pays: 3, share: 39 / 7 },
+  { pays: 60, share: 5 },
+  { pays: 5, share: 39 / 7 },
+  { pays: 40, share: 5 },
   { pays: 0, share: 5 },
-  { pays: 15, share: 65 / 7 },
+  { pays: 7, share: 39 / 7 },
+  { pays: 70, share: 5 },
+  { pays: 200, share: 5 },
+  { pays: 10, share: 39 / 7 },
+  { pays: 50, share: 5 },
+  { pays: 60, share: 5 },
+  { pays: 15, share: 39 / 7 },
+  { pays: 40, share: 5 },
+  { pays: 0, share: 5 },
+  { pays: 70, share: 5 },
 ];
 
 const CX = 96;
@@ -112,7 +127,16 @@ function build(): void {
       to: a + span,
       // The money faces get their own colours; the small change alternates so
       // the rim reads as a wheel and not a pie chart.
-      colour: f.pays === 0 ? PALETTE.ink : f.pays >= 50 ? PALETTE.gold : f.pays >= 20 ? PALETTE.neonDim : palette[i % palette.length],
+      // The top two prizes get a colour nothing else on the rim uses, so the
+      // splinter you are hoping for is findable while the wheel is turning.
+      colour:
+        f.pays === 0
+          ? PALETTE.ink
+          : f.pays >= 200
+            ? PALETTE.blood
+            : f.pays >= 40
+              ? PALETTE.gold
+              : palette[i % palette.length],
     });
     a += span;
   });
@@ -133,12 +157,13 @@ export const wheelOfFortune: MinigameModule = {
   id: ID,
   title: 'WHEEL OF FORTUNE',
   music: 'game_wheel',
-  rules: 'free to look, twenty a spin - the wheel says what it pays',
-  payoutNote: 'PAYS 1 - 100',
+  rules: 'forty-five a spin - the wheel says what it pays',
+  payoutNote: 'PAYS 1 - 500',
   tutorial: {
     objective: [
-      'FREE TO LOOK - TWENTY TOKENS A SPIN.',
+      'ONE SPIN, ONE PRIZE, WHATEVER IT STOPS ON.',
       'EVERY FACE IS AS WIDE AS ITS CHANCE.',
+      'THE BIG MONEY IS ON THE THIN SLICES.',
       'LEAVE WHENEVER YOU LIKE - IT IS ALL YOURS.',
     ],
     controls: [
@@ -181,24 +206,26 @@ export const wheelOfFortune: MinigameModule = {
     // the pointer, over the top
     scene.add.triangle(CX, CY - R - 6, 0, 0, 8, 0, 4, 9, PALETTE.cream).setOrigin(0.5, 0).setDepth(8);
 
-    // the board: what it pays and how often, said out loud
+    // The board names the faces and nothing else.  The old one printed the
+    // exact chance of each band, which is a prospectus rather than a wheel —
+    // what a player needs to know is what it can pay and that the big money is
+    // on the thin slices, and the rim in front of them says the rest.
     text(scene, 178, 24, 'WHAT IT PAYS', PALETTE.gold);
-    const odds: Array<[string, string]> = [
-      ['1 TO 15', '65%'],
-      ['20 OR 30', '15%'],
-      ['50', '10%'],
-      ['100', '5%'],
-      ['NOTHING', '5%'],
+    const board: Array<[string, number]> = [
+      ['500', PALETTE.gold],
+      ['200', PALETTE.gold],
+      ['40 50 60 70', PALETTE.cream],
+      ['1 TO 15', PALETTE.cream],
+      ['OR NOTHING AT ALL', PALETTE.ash],
     ];
-    odds.forEach(([what, how], i) => {
-      const y = 38 + i * 10;
-      text(scene, 180, y, what, PALETTE.cream);
-      text(scene, GAME_W - 8, y, how, PALETTE.tealLight).setOrigin(1, 0);
+    board.forEach(([what, tint], i) => {
+      text(scene, 180, 38 + i * 10, what, tint);
     });
+    text(scene, 180, 88, 'THIN SLICES PAY BIG', PALETTE.ash);
 
-    balanceText = text(scene, 180, 98, '', PALETTE.cream);
-    tallyText = text(scene, 180, 108, '', PALETTE.ash);
-    statusText = text(scene, 180, 122, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
+    balanceText = text(scene, 180, 100, '', PALETTE.cream);
+    tallyText = text(scene, 180, 110, '', PALETTE.ash);
+    statusText = text(scene, 180, 124, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
 
     spinBtn = button(scene, 214, 150, `SPIN - ${SPIN_COST}`, () => spin(), { width: 66, height: 14 });
     leaveBtn = button(scene, 284, 150, 'LEAVE', () => leave(), { width: 52, height: 14, fill: PALETTE.slate });
@@ -314,8 +341,14 @@ function spin(): void {
   });
 }
 
+/**
+ * The wheel has stopped.  ONE face, ONE payout, and the latch is what
+ * guarantees it: the tween's completion is the only caller, but a spin that
+ * somehow settled twice would pay twice, and that is the one bug a wheel must
+ * not have.
+ */
 function settleSpin(): void {
-  if (!apiRef || !sceneRef) return;
+  if (!apiRef || !sceneRef || !spinning) return;
   spinning = false;
   const landed = faceAt(rotation);
   if (landed.pays > 0) {

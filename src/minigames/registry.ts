@@ -11,7 +11,6 @@ import type { MinigameModule } from './types';
 import { makeStub } from './stub';
 
 import { ticTacToe } from './tictactoe';
-import { snakesAndLadders } from './snakes';
 import { airHockey } from './airhockey';
 import { hoops } from './hoops';
 import { whackAFrog } from './whack';
@@ -28,10 +27,10 @@ import { bowling } from './bowling';
 import { frogVsLizard } from './frogvslizard';
 import { wheelOfFortune } from './wheel';
 import { danceOff } from './danceoff';
+import { fallingBlocks } from './fallingblocks';
 
 const REGISTRY: Partial<Record<GameId, MinigameModule>> = {
   tictactoe: ticTacToe,
-  snakes: snakesAndLadders,
   airhockey: airHockey,
   hoops,
   whack: whackAFrog,
@@ -48,6 +47,7 @@ const REGISTRY: Partial<Record<GameId, MinigameModule>> = {
   frogvslizard: frogVsLizard,
   wheel: wheelOfFortune,
   danceoff: danceOff,
+  fallingblocks: fallingBlocks,
 };
 
 export function getMinigame(id: GameId): MinigameModule {

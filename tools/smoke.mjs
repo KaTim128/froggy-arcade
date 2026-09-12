@@ -202,7 +202,11 @@ try {
   const before = await readState();
   console.log(`   tokens before: ${before.tokens}`);
   await page.keyboard.press('KeyE');
-  await sleep(1200);
+  await sleep(1400);
+  // The card is up and nothing has been charged for it; PLAY is the coin slot.
+  const atCard = await readState();
+  await page.keyboard.press('Space');
+  await sleep(900);
   await shot('10-minigame-placeholder');
   const after = await readState();
   // Read the economy off the cabinet the walk actually reached, rather than
@@ -239,7 +243,9 @@ try {
   await sleep(900);
   await page.keyboard.up('KeyS');
   await page.keyboard.press('KeyE');
-  await sleep(2200);
+  await sleep(1600);
+  await page.keyboard.press('Space'); // PLAY
+  await sleep(900);
   const paid = await readState();
   const def2 = await page.evaluate(async () => {
     if (!window.__minigame) return null;
@@ -256,7 +262,8 @@ try {
   console.log('\nState checks:');
   const checks = [
     ['seed credited 20 tokens', before.tokens === 20],
-    ['cost debited on launch', !!def && after.tokens === before.tokens - def.cost],
+    ['reading the card costs nothing', atCard.tokens === before.tokens],
+    ['cost debited on PLAY', !!def && after.tokens === before.tokens - def.cost],
     ['reward credited on win', !!def && won.tokens === after.tokens + def.reward],
     ['seenIntro latched', won.seenIntro === true],
     ['route still normal', won.route === 'normal'],

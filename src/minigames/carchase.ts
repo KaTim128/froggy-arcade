@@ -5,13 +5,16 @@
  * slower than you and has to be threaded; the police behind are faster than
  * you and have to be shaken.  Cash sits on the road in bundles of twenty.
  *
- * NITRO is the one tool.  It is a burst — a second and a half at nearly twice
- * the speed — and it REFILLS ON ITS OWN, slowly: a burst back every fourteen
- * seconds, and it does not tick while you are burning one.  Blue jars on the
- * road fill it the rest of the way, up to two in the tank.  So there is always
- * a way out of a corner eventually, and the question is whether you can wait
- * for it — the police close the gap again the moment a burst ends, and a
- * warning flashes when one is on your bumper.
+ * NITRO is the one tool.  It is a burst — a bit over two seconds at nearly
+ * twice the speed — and while it is burning, the police CANNOT gain: the road
+ * runs at your speed, not theirs, so every one of them slides backwards down
+ * the screen and you come out of it with room to pick a lane.  It REFILLS ON
+ * ITS OWN, slowly: a burst back every eleven seconds, and it does not tick
+ * while you are burning one.  Blue jars on the road fill it the rest of the
+ * way, up to two in the tank.  So there is always a way out of a corner
+ * eventually, and the question is whether you can wait for it — the police
+ * start closing again the moment a burst ends, and a warning flashes when one
+ * is on your bumper.
  *
  * Getting TO two hundred is the gentle half: the road climbs slowly, traffic
  * is thin, and a second car does not turn up for three quarters of a minute.
@@ -84,7 +87,12 @@ const STEER = 120;
 const CREEP = 50;
 /** Nitro: how much faster, and for how long. */
 const NITRO_MUL = 1.8;
-const NITRO_MS = 1700;
+/**
+ * Long enough to be worth something.  A burst has to open a gap the player can
+ * DO something with — pick a lane, cross the traffic, line up a jar — and at
+ * 1.7 seconds they were back on the bumper before the road had changed.
+ */
+const NITRO_MS = 2200;
 /** Bursts the tank holds. */
 const NITRO_TANK = 2;
 /**
@@ -131,8 +139,19 @@ const TRAP_GAP_MS = 9000;
  * it leaves a burst of nitro enough room to actually lose one, which is what
  * the burst is for.  They also gain on you more slowly with the clock.
  */
-const POLICE_GAIN = 20;
+/**
+ * Fifteen, down from twenty.  They still close — you cannot out-drive them on
+ * the throttle alone, which is the whole point of the nitro and of the traffic
+ * — but the gap shuts at a speed a player can read and answer, instead of one
+ * that turns every mistake into an arrest.
+ */
+const POLICE_GAIN = 15;
 const POLICE_STEER = 48;
+/**
+ * How much they gain with the clock, as a divisor of elapsed ms.  Bigger is
+ * gentler; this went from 3500 to 4500 with the same reasoning as above.
+ */
+const POLICE_CLOCK = 4500;
 /**
  * The heat.  Every TARGET_CASH in the bag is a notch, up to HEAT_MAX: one more
  * car behind you, that much more speed on all of them, thicker traffic and a
@@ -141,7 +160,7 @@ const POLICE_STEER = 48;
  * out for another two hundred is a decision to be chased harder for it.
  */
 const HEAT_MAX = 3;
-const HEAT_POLICE_GAIN = 11;
+const HEAT_POLICE_GAIN = 10;
 const HEAT_ROAD = 18;
 
 interface Mover {
@@ -351,7 +370,7 @@ export const carChase: MinigameModule = {
           nitroCharge,
           heat: chaseHeat(collected),
           policeCap: policeCap(),
-          policeSpeed: speed + POLICE_GAIN + chaseHeat(collected) * HEAT_POLICE_GAIN + elapsed / 3500,
+          policeSpeed: speed + POLICE_GAIN + chaseHeat(collected) * HEAT_POLICE_GAIN + elapsed / POLICE_CLOCK,
           jars: jars.length,
           jarLanes: jars.map((j) => laneOf(j.x)),
           traffic: traffic.length,
@@ -512,7 +531,7 @@ export const carChase: MinigameModule = {
         p.aim = px;
         p.react = reactMs(heat);
       }
-      p.own = speed + POLICE_GAIN + heat * HEAT_POLICE_GAIN + elapsed / 3500;
+      p.own = speed + POLICE_GAIN + heat * HEAT_POLICE_GAIN + elapsed / POLICE_CLOCK;
       p.y += (ground - p.own) * dt;
       if (Math.abs(p.aim - p.x) > 1) p.x += Math.sign(p.aim - p.x) * POLICE_STEER * dt;
       p.body.setPosition(p.x, p.y).setVisible(onScreen(p.y));

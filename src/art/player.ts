@@ -8,8 +8,15 @@ import { PALETTE, nightify } from '../render/palette';
 import { audio } from '../core/audio';
 
 export const PLAYER_SPEED = 62; // logical px/s
-/** Holding SHIFT: a fifth faster.  A jog across the floor, not a sprint. */
-export const SPRINT_MUL = 1.2;
+/**
+ * Holding SHIFT: 1.4x the walk, and nothing else about the walk changes.
+ *
+ * A fifth faster was not enough to be worth holding a key down for across a
+ * room this size; two and a half times it would have the player skating past
+ * every cabinet they were aiming at.  1.4 crosses the floor noticeably quicker
+ * and still stops where you meant to stop.
+ */
+export const SPRINT_MUL = 1.4;
 const STEP_INTERVAL_MS = 340;
 
 /**

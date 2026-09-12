@@ -2,8 +2,15 @@
  * Minigame shell.  PRD §9.0.
  *
  * One scene hosts every game.  It owns the frame, the HUD, the quit key, the
- * result card and the ledger credit, so no individual game can get the economy
- * wrong.  MG-6: launch -> complete -> return and launch -> quit -> return are
+ * result card and BOTH ends of the ledger, so no individual game can get the
+ * economy wrong.
+ *
+ * MG-2 now reads: nothing is charged for walking up to a machine.  The shell
+ * opens on the how-to-play card with the game unbuilt behind it, and the
+ * cabinet's cost is debited at the moment the player presses PLAY — once, in
+ * one place, guarded so a hammered button is one play.  LEAVE, Esc at the
+ * card, or a balance that cannot cover the price all end the visit with the
+ * player's tokens exactly where they were.  MG-6: launch -> complete -> return and launch -> quit -> return are
  * contract-tested here, once, for all of them.
  *
  * A game may let the player raise the stake mid-play, and a table game may pay
@@ -35,7 +42,7 @@ export class MinigameScene extends Phaser.Scene {
   private settled = false;
   private from = 'ArcadeHub';
   private hud!: TokenHud;
-  /** Tokens on this play: the entry cost the room debited, plus any raise. */
+  /** Tokens on this play: what PLAY debited, plus anything raised in-game. */
   private stake = 0;
   /** Tokens paid out mid-game, hand by hand.  Only a table uses this. */
   private paid = 0;
@@ -69,11 +76,9 @@ export class MinigameScene extends Phaser.Scene {
     fadeIn(this);
     const def = cabinetById(this.gameId);
     this.mod = getMinigame(this.gameId);
-    // The room debited the entry cost before it launched us (MG-2), so that is
-    // what is already riding on this play.  A free fixture (the table, the
-    // wheel) was walked up to for nothing: nothing is riding on it yet, and
-    // every token it takes arrives later through `raise`.
-    this.stake = def.freeToEnter ? 0 : def.cost;
+    // Nothing is riding on this yet.  The stake arrives when PLAY is pressed
+    // (or, at the table and the wheel, when the player actually bets).
+    this.stake = 0;
 
     // Every cabinet has its own tune.  The room's bed crossfades into it here
     // and back out when the room is rebuilt on the way back (AU-1).
@@ -107,21 +112,45 @@ export class MinigameScene extends Phaser.Scene {
       area: AREA,
     };
 
-    // MG-4: Esc forfeits the entry cost.  No confirmation, no refund.  Bound
-    // before the tutorial so it works while the card is up too.
-    this.input.keyboard?.on('keydown-ESC', () => this.forfeit());
+    // MG-4: Esc forfeits, but only once there is something to forfeit.  While
+    // the card is up it is the LEAVE button, because nothing has been paid.
+    this.input.keyboard?.on('keydown-ESC', () => (this.card ? this.leave() : this.forfeit()));
 
-    // MG-8: the card telling them what this cabinet wants and which keys it
-    // reads comes first, before anything is playable.  At a paid cabinet the
-    // tokens are already gone by now; at the table and the wheel they are not,
-    // which is the point — the rules are free to read.  The module is
-    // constructed on the other side of the card either way.
+    // MG-8: the card comes first — what the cabinet wants, which keys it
+    // reads, and what a go costs — with the game unbuilt behind it.  PLAY is
+    // where the tokens move and where the module is constructed.
     const mod = this.mod;
-    this.card = showTutorial(this, def.title, mod.tutorial, () => {
-      this.card = null;
-      if (this.settled) return;
-      mod.create(this, api);
-      this.started = true;
+    this.card = showTutorial(this, {
+      title: def.title,
+      tutorial: mod.tutorial,
+      cost: def.cost,
+      balance: ledger.balance(),
+      chargesInside: def.freeToEnter === true,
+      payNote: mod.payoutNote ?? `WIN: ${def.reward} TOKENS`,
+      onPlay: () => {
+        this.card = null;
+        if (this.settled) return;
+        // MG-2: the one place in the game that charges for a play.
+        if (!def.freeToEnter) {
+          if (!ledger.debit(def.cost, 'game.cost')) {
+            // Belt and braces: the card already refuses to offer PLAY when the
+            // balance cannot cover it, so this only fires if the balance moved
+            // under us.  Either way nothing is built and nothing is taken.
+            audio.sfx('buzzer');
+            this.leave();
+            return;
+          }
+          this.stake = def.cost;
+        }
+        store.bumpGamePlayed(this.gameId);
+        store.flush();
+        mod.create(this, api);
+        this.started = true;
+      },
+      onLeave: () => {
+        this.card = null;
+        this.leave();
+      },
     });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.card?.destroy();
@@ -151,6 +180,19 @@ export class MinigameScene extends Phaser.Scene {
    * felt, but the card has to report the session rather than the hand — a
    * player who won forty and quits on a one-token hand did not "FORFEIT -1".
    */
+  /**
+   * Walking away from the card.  Nothing was charged, so this is not a result:
+   * no card, no ledger movement, straight back to the room and back to the
+   * machine the player was standing at.
+   */
+  private leave(): void {
+    if (this.settled) return;
+    this.settled = true;
+    this.card?.destroy();
+    this.card = null;
+    fadeToScene(this, this.from, { atCabinet: this.gameId });
+  }
+
   private forfeit(): void {
     // Nothing was ever staked — a free fixture the player only looked at — so
     // there is nothing to forfeit.  Walking out of the wheel without spinning

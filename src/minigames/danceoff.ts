@@ -1,5 +1,5 @@
 /**
- * DANCE OFF.  Hard — 10 tokens in, 20 out.
+ * DANCE OFF.  Hard — 7 tokens in, 15 out.
  *
  * A step battle against a rival on the next mat over.  Arrows climb two lanes
  * of four towards the receptors at the top; when yours reaches the line, press
@@ -9,7 +9,7 @@
  *
  * IT IS A MATCH, BEST OF THREE.  Each round is forty-five seconds, the higher
  * score takes the round, and the first to two rounds takes the match and the
- * twenty tokens.  Three rounds that both go one apiece and the match is a
+ * fifteen tokens.  Three rounds that both go one apiece and the match is a
  * draw, which — like every other tie in the building — hands the entry fee
  * back rather than keeping it.
  *

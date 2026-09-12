@@ -212,7 +212,7 @@ function draw(): number[] {
 
 function spin(): void {
   if (over || busy || !sceneRef || !apiRef) return;
-  // The first spin is the entry cost the room already took (api.staked());
+  // The first spin is the entry cost PLAY took on the way in (api.staked());
   // every one after it is two more tokens, or nothing.
   if (!firstSpin) {
     if (apiRef.balance() < SPIN_COST || !apiRef.raise(SPIN_COST)) {

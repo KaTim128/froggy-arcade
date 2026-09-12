@@ -99,13 +99,17 @@ console.log('\nAC-3  charity fires exactly once per run');
   const before = await st(page);
   check('starts with charityUsed false', before.charityUsed === false);
 
-  // Spend the last token on the cheapest cabinet: walk left, then down.
-  // Click a one-token cabinet outright.  Walking blind used to land on
-  // whichever cabinet happened to sit bottom-left, so retuning that cabinet's
-  // cost silently stopped the run from ever going broke.
-  await page.mouse.click(640 + (34 - 160) * 4, 360 + (86 - 90) * 4); // TIC-TAC-TOE, 1 token
-  await sleep(1500);
-  await page.keyboard.press('Escape'); // forfeit -> 0 tokens
+  // Spend the last token on the cheapest cabinet.  Three steps, because that
+  // is what spending a token now takes: click the machine, press PLAY on its
+  // card (the only thing in the building that charges), then walk out on the
+  // play you paid for.  Clicking a one-token cabinet outright — rather than
+  // walking blind and hoping — is deliberate: retuning whichever cabinet
+  // happened to sit bottom-left used to silently stop the run going broke.
+  await page.mouse.click(640 + (30 - 160) * 4, 360 + (88 - 90) * 4); // TIC-TAC-TOE, 1 token
+  await sleep(1600);
+  await page.keyboard.press('Space'); // PLAY -> 0 tokens
+  await sleep(900);
+  await page.keyboard.press('Escape'); // forfeit the play
   await sleep(12000); // result card, hub, charity dialogue
 
   await page.screenshot({ path: `${SHOTS}/01-charity.png` });
@@ -132,11 +136,14 @@ console.log('\nAC-4  second bust ejects, front door locked for good');
   const outcome = await page.evaluate(() => window.__froggy.broke());
   check('broke evaluator idle while solvent', outcome === null);
 
-  // Click a one-token cabinet outright.  Walking blind used to land on
-  // whichever cabinet happened to sit bottom-left, so retuning that cabinet's
-  // cost silently stopped the run from ever going broke.
-  await page.mouse.click(640 + (34 - 160) * 4, 360 + (86 - 90) * 4); // TIC-TAC-TOE, 1 token
-  await sleep(1500);
+  // Click a one-token cabinet outright, press PLAY to actually spend the
+  // token, and walk out on the play.  Walking blind used to land on whichever
+  // cabinet happened to sit bottom-left, so retuning that cabinet's cost
+  // silently stopped the run from ever going broke.
+  await page.mouse.click(640 + (30 - 160) * 4, 360 + (88 - 90) * 4); // TIC-TAC-TOE, 1 token
+  await sleep(1600);
+  await page.keyboard.press('Space'); // PLAY
+  await sleep(900);
   await page.keyboard.press('Escape');
   await sleep(6000);
 

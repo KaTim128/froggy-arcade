@@ -16,7 +16,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { PRIZES, cashFor, type PrizeDef } from '../game/content';
+import { PRIZES, cashFor, prizeById, type PrizeDef } from '../game/content';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 
@@ -52,7 +52,14 @@ export class PrizeExchange extends Phaser.Scene {
   private render(): void {
     this.body.removeAll(true);
     const s = store.get();
-    const carried = PRIZES.filter((p) => s.prizesOwned.includes(p.id));
+    // Everything in the bag, in the order it was won, resolved through the
+    // catalogue — a prize from a restocked shelf is rebuilt from its id, so
+    // the man will buy those too.  Unsold first, because those are the ones
+    // there is anything to do about.
+    const carried = s.prizesOwned
+      .map((id) => prizeById(id))
+      .filter((p): p is PrizeDef => !!p)
+      .sort((a, b) => Number(s.prizesSold.includes(a.id)) - Number(s.prizesSold.includes(b.id)));
 
     // Column headings, so the two numbers are never mistaken for each other.
     // They sit above the first row rather than on it: the list is seven long
@@ -94,7 +101,7 @@ export class PrizeExchange extends Phaser.Scene {
 
     // The line under the table: what the pick in front of you is worth, spelled
     // out, before it is gone.
-    const pick = PRIZES.find((p) => p.id === this.picked);
+    const pick = this.picked ? prizeById(this.picked) : undefined;
     this.body.add(
       centerText(
         this,

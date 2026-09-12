@@ -19,9 +19,10 @@ and consumed by both engines from that one source — a Phaser overlay canvas in
 | Arcade exterior, night | 320×180 | same painter + `nightify()` | `src/art/exterior.ts` |
 | Hub room, carpet, walls | 320×180 | generated rects, seeded scatter | `src/art/hubRoom.ts` |
 | Hub room, dark | 320×180 | same painter, `night: true` | `src/art/hubRoom.ts` |
-| Cabinet ×7 | 32×48 | rects + tweened marquee | `src/art/cabinet.ts` |
+| Cabinet ×18 | 26×36 | rects: side art, bezel, motif, marquee letters, stick and buttons | `src/art/cabinet.ts` |
 | Player character | 32×32 | 4 rects | `src/art/player.ts` |
-| Prize icons ×5 | 24×24 | flat colour swatches | `src/scenes2d/PrizeCounter.ts` |
+| Prize models ×14 shapes | 24×24 | rectangles per shape (duck, bear, lamp, guitar, console…) | `src/scenes2d/PrizeCounter.ts` |
+| Cabinet screen motifs ×17 | 18×14 | rectangles per motif, one per game | `src/art/cabinet.ts` |
 | Kid NPC | 32×32 | 3 rects | `src/scenes2d/ExteriorNight.ts` |
 | Basement frames 1–10 | 320×180 | generated perspective geometry | `src/art/basementFrames.ts` |
 | Chase corridor textures | 512×512 | flat Lambert colours | `src/scenes2d/Chase3D.ts` |
@@ -48,7 +49,7 @@ against an id and the placeholder for that id is never constructed again.
 
 | Bus | Ids |
 |---|---|
-| music | one preset per room and per cabinet in [`src/core/tracks.ts`](../src/core/tracks.ts) — `theme_arcade`, `hub_lofi`, `room_hub`, `room_annex`, `room_casino`, and a `game_*` tune for every cabinet. **Dance Off carries three**: `game_danceoff`, `game_danceoff_2` and `game_danceoff_3`, one per round of the match, each a tempo up on the last — the chart is cut to the round's bpm, so replacing one of these with a recording means matching its tempo. |
+| music | one preset per room and per cabinet in [`src/core/tracks.ts`](../src/core/tracks.ts) — `theme_arcade`, `hub_lofi`, `room_hub`, `room_annex`, `room_casino`, and a `game_*` tune for every cabinet. **Dance Off carries three**: `game_danceoff`, `game_danceoff_2` and `game_danceoff_3`, one per round of the match, each a tempo up on the last — the chart is cut to the round's bpm, so replacing one of these with a recording means matching its tempo. Falling Blocks has `game_fallingblocks`. |
 | sfx (ambience) | `street_dusk`, `neon_buzz`, `cabinet_bleeps`, `crowd_hum`, `crickets`, `wind_low`, `car_passby` |
 | sfx (one-shots) | `ui_blip`, `ui_hover`, `dialogue_blip`, `coin_spin`, `coin_drop`, `buzzer`, `chime`, `bell_ding`, `footstep_carpet`, `footstep_concrete`, `door_open`, `door_shut`, `lock_click`, `door_rattle`, `door_creak`, `drip`, `bulb_flicker`, `vault`, `whack`, `stinger`, `death_stinger`, `hop_wet`, `ticket_machine` |
 | sfx (the throwing match) | `throw_whoosh`, `item_thud`, `boom`, `heal_up`, `poison_hiss`, `fence_thunk` |

@@ -9,7 +9,6 @@ export type Route = 'normal' | 'ejected' | 'basement' | 'hide' | 'chase' | 'ende
 
 export type GameId =
   | 'tictactoe'
-  | 'snakes'
   | 'airhockey'
   | 'hoops'
   | 'whack'
@@ -25,7 +24,8 @@ export type GameId =
   | 'bowling'
   | 'frogvslizard'
   | 'wheel'
-  | 'danceoff';
+  | 'danceoff'
+  | 'fallingblocks';
 
 export interface Settings {
   master: number; // 0..100
@@ -47,6 +47,12 @@ export interface GameState {
   prizesOwned: string[];
   /** Prizes already handed over to the man.  Owned and sold are different. */
   prizesSold: string[];
+  /**
+   * Which shelf the prize counter is showing.  0 is the opening nine; every
+   * time the shelf is cleared it goes up by one and a fresh lot is generated
+   * (see `prizesForWave`), so the counter never becomes a wall of OWNED.
+   */
+  prizeWave: number;
   gamesPlayed: Record<GameId, number>;
   /**
    * Best score per game, for the cabinets that keep one.  Part of the run, so
@@ -124,9 +130,9 @@ function defaultState(): GameState {
     charityUsed: false,
     prizesOwned: [],
     prizesSold: [],
+    prizeWave: 0,
     gamesPlayed: {
       tictactoe: 0,
-      snakes: 0,
       airhockey: 0,
       hoops: 0,
       whack: 0,
@@ -143,6 +149,7 @@ function defaultState(): GameState {
       frogvslizard: 0,
       wheel: 0,
       danceoff: 0,
+      fallingblocks: 0,
     },
     highScores: {},
     route: 'normal',
@@ -232,6 +239,9 @@ class Store {
     fresh.prizesOwned = Array.isArray(run.prizesOwned) ? run.prizesOwned : [];
     fresh.prizesSold = Array.isArray(run.prizesSold) ? run.prizesSold : [];
     fresh.cash = Math.max(0, Math.floor(run.cash ?? 0));
+    // A save from before the shelf restocked has no wave on it; it is on the
+    // first one by definition.
+    fresh.prizeWave = Math.max(0, Math.floor(run.prizeWave ?? 0));
     this.state = fresh;
     // A saved unlimited run comes back unlimited, whatever the file says.
     if (this.isAdmin()) this.state.tokens = ADMIN_TOKENS;

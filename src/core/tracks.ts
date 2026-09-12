@@ -93,14 +93,6 @@ export const TRACKS: Record<string, TrackPreset> = {
     drums: 'sparse',
     ring: 2,
   }),
-  // Snakes and ladders: a jaunty march up the board.
-  game_snakes: preset({
-    bpm: 120,
-    chords: [maj(C.g4 - 12), maj(C.c4), maj(C.d4), maj(C.g4 - 12)],
-    bass: [0, _, 1, _, 0, _, 1, _],
-    lead: [C.g5, _, C.g5, C.a5, C.b5, _, C.g5, _, C.a5, _, C.b5, _, C.a5, C.g5, _, _, C.d5, _, C.e5, C.f5, C.g5, _, C.d5, _, C.g5, C.f5, C.e5, C.d5, C.g5, _, _, _],
-    drums: 'half',
-  }),
   // Air hockey: organ chords at rink speed.
   game_airhockey: preset({
     bpm: 160,
@@ -279,6 +271,21 @@ export const TRACKS: Record<string, TrackPreset> = {
     cutoff: 4400,
     vol: { lead: 0.03, bass: 0.055, arp: 0.018, drums: 1.25 },
     ring: 0.7,
+  }),
+  // Falling Blocks: a climbing tune in a hurry.  Rising figures over a walking
+  // bass, because the whole game is upward and the clock is the enemy.
+  game_fallingblocks: preset({
+    bpm: 146,
+    chords: [min(C.a4 - 12), maj(C.c4), maj(C.f4 - 12), maj(C.g4 - 12)],
+    bass: [0, _, 1, _, 2, _, 1, _],
+    lead: [C.a4, C.c5, C.e5, C.a5, C.e5, _, C.c5, _, C.c5, C.e5, C.g5, C.c6, C.g5, _, C.e5, _, C.f5, C.a5, C.c6, C.f5 + 12, C.c6, _, C.a5, _, C.g5, C.b5, C.d5 + 12, C.g5 + 12, _, C.d5 + 12, C.b5, _],
+    leadWave: 'square',
+    bassWave: 'triangle',
+    arpWave: 'square',
+    drums: 'four',
+    cutoff: 3900,
+    vol: { lead: 0.03, bass: 0.05, arp: 0.015, drums: 1.1 },
+    ring: 0.8,
   }),
   // The wheel: a fairground vamp, all bounce and no menace, because the thing
   // taking your money is painted in primary colours.

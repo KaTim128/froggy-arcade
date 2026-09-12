@@ -16,11 +16,11 @@ import { canEnter } from '../core/routes';
 import { evaluateBroke } from '../core/broke';
 import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
-import { paintChangeMachine, paintHubRoom, ROOM } from '../art/hubRoom';
+import { paintArcadeDressing, paintChangeMachine, paintHubRoom, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
-import { ANNEX_DOOR, BELL, CABINETS, COUNTER, COUNTER_DEPTH, PRIZE_CASE, PRIZES, cabinetsIn } from '../game/content';
+import { ANNEX_DOOR, BELL, CABINETS, COUNTER, COUNTER_DEPTH, PRIZE_CASE, cabinetsIn, prizesForWave } from '../game/content';
 import { DialogueBox } from '../froggy/dialogue';
 import { tutorialScript } from '../froggy/script';
 import { froggyLayer } from '../render/froggyLayer';
@@ -74,6 +74,17 @@ export class ArcadeHub extends Phaser.Scene {
     audio.setScene({ music: 'room_hub', ambience: ['cabinet_bleeps', 'crowd_hum'] });
 
     paintHubRoom(this, { night: false });
+    // The counter owns the middle of the back wall, so the signs and posters
+    // are hung either side of it.
+    paintArcadeDressing(this, {
+      night: false,
+      // The counter and the change machine own their stretches of the back
+      // wall; the dressing goes wherever they are not.
+      avoid: [
+        { from: COUNTER.x - 6, to: COUNTER.x + COUNTER.w + 6 },
+        { from: 256, to: GAME_W },
+      ],
+    });
     paintChangeMachine(this, false);
     this.paintCounter();
 
@@ -208,11 +219,21 @@ export class ArcadeHub extends Phaser.Scene {
       .rectangle(PRIZE_CASE.x, PRIZE_CASE.y - 30, PRIZE_CASE.w, 30, PALETTE.ink)
       .setOrigin(0, 0)
       .setStrokeStyle(1, PALETTE.fog);
-    // Seven things in the same hundred pixels of glass: the pitch follows the
-    // list rather than being drawn for five.
-    const pitch = Math.floor((PRIZE_CASE.w - 12) / PRIZES.length);
-    PRIZES.forEach((p, i) => {
-      this.add.rectangle(PRIZE_CASE.x + 6 + i * pitch, PRIZE_CASE.y - 22, pitch - 2, 14, p.color).setOrigin(0, 0);
+    // What is actually still on the shelf, in the same hundred pixels of
+    // glass: the pitch follows the list, and a prize that has been redeemed
+    // leaves a gap in the case exactly as it leaves a gap on the counter.
+    const s = store.get();
+    const stock = prizesForWave(s.prizeWave);
+    const pitch = Math.floor((PRIZE_CASE.w - 12) / stock.length);
+    stock.forEach((p, i) => {
+      const x = PRIZE_CASE.x + 6 + i * pitch;
+      if (s.prizesOwned.includes(p.id)) {
+        // an empty peg where it stood
+        this.add.rectangle(x + (pitch - 2) / 2, PRIZE_CASE.y - 10, 1, 4, PALETTE.steel).setOrigin(0.5, 1).setAlpha(0.5);
+        return;
+      }
+      this.add.rectangle(x, PRIZE_CASE.y - 22, pitch - 2, 14, p.color).setOrigin(0, 0);
+      this.add.rectangle(x, PRIZE_CASE.y - 22, pitch - 2, 3, PALETTE.white).setOrigin(0, 0).setAlpha(0.18);
     });
     // glass sheen
     this.add.rectangle(PRIZE_CASE.x + 4, PRIZE_CASE.y - 27, 3, 25, PALETTE.white).setOrigin(0, 0).setAlpha(0.14);
@@ -350,25 +371,14 @@ export class ArcadeHub extends Phaser.Scene {
   }
 
   private launchGame(cab: Cabinet): void {
-    const { cost } = cab.def;
-
-    // The guard and the ledger are the only two things standing between the
-    // player and a broken economy.  Both are checked, in that order.
-    // A fixture that charges inside the game (the table, the wheel) is free to
-    // walk up to and free to read the rules of; the rest pay at the door.
-    const free = cab.def.freeToEnter === true;
-    if (!free && !canEnter('Minigame', store.get(), { cost })) {
-      audio.sfx('buzzer');
-      this.say(`NOT ENOUGH TOKENS — NEED ${cost}`);
-      return;
-    }
-    // MG-2 / TK-2: cost is debited on launch, before the scene starts.
-    if (!free && !ledger.debit(cost, 'game.cost')) {
+    // Nothing is charged for walking up to a machine (MG-2).  The shell opens
+    // on the how-to-play card with the game unbuilt behind it, and the tokens
+    // move when the player presses PLAY — so a player who cannot afford this
+    // cabinet may still read what it wants and walk away.
+    if (!canEnter('Minigame', store.get(), {})) {
       audio.sfx('buzzer');
       return;
     }
-    store.bumpGamePlayed(cab.def.id);
-    store.flush();
     this.locked = true;
     fadeToScene(this, 'Minigame', { id: cab.def.id, from: 'ArcadeHub' });
   }
