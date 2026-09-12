@@ -31,10 +31,17 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { FONT_ADVANCE } from '../render/pixelFont';
 import type { Tutorial } from '../minigames/types';
 
-const CARD = { x: 8, y: 20, w: GAME_W - 16, h: GAME_H - 26 };
+const CARD = { x: 8, y: 18, w: GAME_W - 16, h: 158 };
 /** Where the "what it does" column starts, measured from the card's left. */
 const DOES_X = 84;
-const ROW_H = 10;
+/**
+ * Nine, not ten.  The busiest card in the building is four lines of objective
+ * over six rows of controls (Grudge), and at ten the price line ended up
+ * underneath the PLAY button.  Everything fits at nine with a couple of pixels
+ * to spare, and the price block is placed from the buttons upwards rather than
+ * flowed after the panel, so it cannot be pushed off the card again.
+ */
+const ROW_H = 9;
 /** The controls panel: darker than the card, so the keys read at a glance. */
 const PANEL_INK = 0x07060c;
 const PANEL_EDGE = 0x2f2850;
@@ -92,7 +99,7 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
   keep(scene.add.rectangle(CARD.x, CARD.y, CARD.w, 11, PALETTE.plum).setOrigin(0, 0).setDepth(902));
   keep(centerText(scene, GAME_W / 2, CARD.y + 5, `HOW TO PLAY - ${opts.title}`, PALETTE.gold).setDepth(903));
 
-  let y = CARD.y + 14;
+  let y = CARD.y + 13;
   for (const line of opts.tutorial.objective.slice(0, 4)) {
     keep(centerText(scene, GAME_W / 2, y + 3, line, PALETTE.cream).setDepth(903));
     y += ROW_H;
@@ -101,7 +108,7 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
   // ---- the controls, on a panel of their own
   y += 2;
   const rows = opts.tutorial.controls.slice(0, 6);
-  const panelH = rows.length * ROW_H + 14;
+  const panelH = rows.length * ROW_H + 12;
   keep(
     scene.add
       .rectangle(CARD.x + 6, y, CARD.w - 12, panelH, PANEL_INK)
@@ -109,8 +116,8 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
       .setStrokeStyle(1, PANEL_EDGE)
       .setDepth(903),
   );
-  keep(text(scene, CARD.x + 10, y + 3, 'CONTROLS', PALETTE.tealLight).setDepth(904));
-  let ry = y + 13;
+  keep(text(scene, CARD.x + 10, y + 2, 'CONTROLS', PALETTE.tealLight).setDepth(904));
+  let ry = y + 12;
   // Two columns, and the key column is measured rather than guessed: a long
   // key name ("HOLD SPACE") must not run into what it does.
   for (const [keys, does] of rows) {
@@ -119,27 +126,22 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
     keep(text(scene, CARD.x + DOES_X + overrun, ry, does, PALETTE.cream).setDepth(904));
     ry += ROW_H;
   }
-  y += panelH + 3;
-
-  // ---- the price, and whether it can be met
+  // ---- the price, and whether it can be met.  Measured up from the buttons.
+  const buttonY = CARD.y + CARD.h - 11;
   const priceLine = free
     ? `FREE TO SIT  -  ${opts.cost} TOKEN${opts.cost === 1 ? '' : 'S'} A GO`
     : `${opts.cost} TOKEN${opts.cost === 1 ? '' : 'S'} TO PLAY`;
-  keep(centerText(scene, GAME_W / 2, y + 3, priceLine, affordable ? PALETTE.gold : PALETTE.blood).setDepth(903));
-  y += ROW_H;
-  if (opts.payNote) {
-    keep(centerText(scene, GAME_W / 2, y + 1, opts.payNote, PALETTE.tealLight).setDepth(903));
-    y += 9;
-  }
-  if (!affordable) {
+  keep(
+    centerText(scene, GAME_W / 2, buttonY - 26, priceLine, affordable ? PALETTE.gold : PALETTE.blood).setDepth(903),
+  );
+  // The second line is the shortfall when there is one, and what a win pays
+  // when there is not: only ever one of them, and always in the same place.
+  const second = affordable
+    ? opts.payNote
+    : `YOU HAVE ${opts.balance} - YOU NEED ${opts.cost - opts.balance} MORE`;
+  if (second) {
     keep(
-      centerText(
-        scene,
-        GAME_W / 2,
-        y + 1,
-        `YOU HAVE ${opts.balance} - YOU NEED ${opts.cost - opts.balance} MORE`,
-        PALETTE.ash,
-      ).setDepth(903),
+      centerText(scene, GAME_W / 2, buttonY - 17, second, affordable ? PALETTE.tealLight : PALETTE.ash).setDepth(903),
     );
   }
 
@@ -165,7 +167,7 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
     opts.onLeave();
   };
 
-  const by = CARD.y + CARD.h - 11;
+  const by = buttonY;
   keep(
     button(scene, GAME_W / 2 - 52, by, affordable ? 'PLAY' : 'CANT PLAY', play, {
       width: 88,
