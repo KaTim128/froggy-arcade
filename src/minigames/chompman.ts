@@ -8,6 +8,20 @@
  * Four ghosts with distinct behaviours, three lives, four power pellets, and a
  * scatter phase every 20 seconds that is the player's breathing room — it is
  * what keeps this at a 30-45% win rate instead of 10%.
+ *
+ * THE MAZE IS A LATTICE, not four quadrants.  Every corridor meets another one
+ * within a few tiles, so there is always a way round: a player who is being
+ * followed can turn, loop and come back out behind the ghost that was on them,
+ * which is the whole skill of the game and was impossible on a board of long
+ * straight runs.  It is checked, not assumed — `tools/games.mjs` floods the
+ * maze from the player's start and fails if a single pellet is unreachable.
+ *
+ * THE GHOSTS LIVE IN A BOX in the middle of it, with one door in the top of
+ * it.  They come out one at a time rather than all at once, the door is a wall
+ * to the player so the box is never a bolt-hole, and a ghost that gets eaten
+ * goes back in it for TEN SECONDS before it can come out again — a power
+ * pellet buys real time off the board, and clearing the last corner of the
+ * maze is a thing you can plan rather than a thing you survive.
  */
 
 import Phaser from 'phaser';
@@ -17,33 +31,74 @@ import { centerText } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
-// Original maze.  '#' wall, '.' pellet, 'o' power pellet, 'P' player start.
+/**
+ * Original maze.  '#' wall, '-' the ghost box's door, ' ' the inside of the
+ * box, '.' pellet, 'o' power pellet, 'P' player start.
+ *
+ * It is laid out as a lattice of corridors with wall islands between them, so
+ * every junction has at least three ways out of it and almost nothing is a
+ * dead end.  The door is a wall as far as the player is concerned: the inside
+ * of the box is sealed, carries no pellets, and cannot be hidden in.
+ */
 const MAZE = [
   '#####################',
-  '#........#.#........#',
-  '#o##.###.#.#.###.##o#',
+  '#o.................o#',
+  '#.##.##.##.##.##.##.#',
+  '#.##.##.##.##.##.##.#',
   '#...................#',
-  '#.##.#.#######.#.##.#',
-  '#....#....#....#....#',
-  '####.####.#.####.####',
-  '#.......#...#.......#',
-  '####.####.#.####.####',
-  '#....#....#....#....#',
-  '#.##.#.#######.#.##.#',
+  '#.##.##.......##.##.#',
+  '#.##.#####-#####.##.#',
+  '#....###     ###....#',
+  '#.##.###########.##.#',
+  '#.##.##.......##.##.#',
   '#...................#',
-  '#o##.###.#.#.###.##o#',
-  '#........#P#........#',
+  '#.##.##.##P##.##.##.#',
+  '#.##.##.##.##.##.##.#',
+  '#o.................o#',
   '#####################',
 ];
+
+/** The box: where it is, where its door is, and where the four of them sit. */
+const HOUSE = { left: 7, right: 13, top: 6, bottom: 8, doorCol: 10 };
+const SEATS: Array<{ col: number; row: number }> = [
+  { col: 8, row: 7 },
+  { col: 9, row: 7 },
+  { col: 11, row: 7 },
+  { col: 12, row: 7 },
+];
+/** Staggered releases, so the board does not open with four of them on you. */
+const RELEASE_MS = [0, 1800, 3600, 5400];
+/** How long an eaten ghost sits in the box before it can come out again. */
+export const GHOST_RESPAWN_MS = 10_000;
+/** How fast one shuffles about inside the box and out through the door. */
+const HOUSE_SPEED = 30;
+/** Where the player starts, read off the maze so the two cannot drift apart. */
+const START = (() => {
+  for (let r = 0; r < MAZE.length; r++) {
+    const c = MAZE[r].indexOf('P');
+    if (c >= 0) return { col: c, row: r };
+  }
+  return { col: 10, row: 11 };
+})();
 
 const COLS = MAZE[0].length;
 const ROWS = MAZE.length;
 const TILE = 8;
 const OX = Math.round((GAME_W - COLS * TILE) / 2);
-const OY = 32;
+/**
+ * The maze is 120px tall in a 162px play area, so it is hung to leave a
+ * readable gap under the HUD line and a matching one at the bottom.
+ */
+const OY = 40;
 
 const PLAYER_SPEED = 44; // 5.5 tiles/s
-const GHOST_SPEED = 40; // 5.0 tiles/s
+/**
+ * 4.6 tiles/s, down from 5.0.  The hunters path properly now rather than
+ * guessing at the straight line (see `pathTo`), which is a large step up in
+ * how dangerous they are; the speed came off to pay for it, so the player
+ * keeps enough of an edge to actually shake one on a loop.
+ */
+const GHOST_SPEED = 37;
 const FRIGHT_SPEED = 24; // 3.0 tiles/s
 const FRIGHT_MS = 6000;
 const FRIGHT_WARN_MS = 1500;
@@ -61,8 +116,20 @@ const DIRS: Dir[] = [
 
 type GhostKind = 'direct' | 'ambush' | 'random' | 'patrol';
 
+/**
+ * Where a ghost is in its life.  `house` is waiting to be let out (or on its
+ * way to the door), `out` is on the board and dangerous, `eaten` is sitting in
+ * the box serving its ten seconds.
+ */
+type GhostState = 'house' | 'out' | 'eaten';
+
 interface Ghost {
   kind: GhostKind;
+  state: GhostState;
+  /** ms left before it may leave the box.  Counts down in `house` and `eaten`. */
+  wait: number;
+  /** Its own place in the box, so four of them do not sit in one tile. */
+  seat: { col: number; row: number };
   col: number;
   row: number;
   px: number;
@@ -94,8 +161,13 @@ let hud: Phaser.GameObjects.BitmapText | null = null;
 let apiRef: MinigameApi | null = null;
 let sceneRef: Phaser.Scene | null = null;
 
+/**
+ * A wall to anything walking the maze.  The box's door counts: ghosts leave
+ * through it on a scripted path of their own, and nothing — the player least
+ * of all — walks through it under normal pathing.
+ */
 const isWall = (col: number, row: number): boolean =>
-  col < 0 || row < 0 || col >= COLS || row >= ROWS || grid[row][col] === '#';
+  col < 0 || row < 0 || col >= COLS || row >= ROWS || grid[row][col] === '#' || grid[row][col] === '-';
 
 const tileX = (col: number) => OX + col * TILE + TILE / 2;
 const tileY = (row: number) => OY + row * TILE + TILE / 2;
@@ -108,7 +180,8 @@ export const chompMan: MinigameModule = {
   tutorial: {
     objective: [
       'CLEAR EVERY PELLET IN THE MAZE.',
-      'THE GHOSTS END YOUR RUN.',
+      'THE GHOSTS END YOUR RUN - LOOP THEM.',
+      'A POWER PELLET PUTS ONE AWAY FOR 10S.',
     ],
     controls: [
       ['W A S D', 'STEER'],
@@ -141,6 +214,10 @@ export const chompMan: MinigameModule = {
           // a neon wall: a lit edge round a dark core
           scene.add.rectangle(tileX(c), tileY(r), TILE - 1, TILE - 1, PALETTE.violet).setAlpha(0.9);
           scene.add.rectangle(tileX(c), tileY(r), TILE - 5, TILE - 5, 0x2a1a4a);
+        } else if (ch === '-') {
+          // The gate.  Drawn as a bar rather than a block so it reads as the
+          // one gap in the box — which is exactly what it is, for them.
+          scene.add.rectangle(tileX(c), tileY(r), TILE - 1, 2, PALETTE.tealLight).setAlpha(0.9);
         } else if (ch === '.') {
           pelletObjs[idx] = scene.add.circle(tileX(c), tileY(r), 1, PALETTE.cream);
           pelletsLeft++;
@@ -156,6 +233,18 @@ export const chompMan: MinigameModule = {
       }
     }
 
+    // The floor of the box, so it reads as a room rather than a hole in the
+    // maze, and the player can see who is still in it.
+    scene.add
+      .rectangle(
+        tileX(HOUSE.left) + TILE / 2,
+        tileY(HOUSE.top) + TILE / 2,
+        (HOUSE.right - HOUSE.left) * TILE - TILE,
+        (HOUSE.bottom - HOUSE.top) * TILE - TILE,
+        0x1a1030,
+      )
+      .setOrigin(0, 0);
+
     player.px = tileX(player.col);
     player.py = tileY(player.row);
     player.dir = { x: 0, y: 0 };
@@ -165,14 +254,20 @@ export const chompMan: MinigameModule = {
     // among a maze of dots instead of one more pellet.
     playerSprite = scene.add.arc(player.px, player.py, 4, 32, 328, false, PALETTE.gold).setDepth(20);
 
-    const spawns: Array<[GhostKind, number, number, number, number, number]> = [
-      // kind, startCol, startRow, cornerCol, cornerRow, colour
-      ['direct', 1, 1, 1, 1, PALETTE.blood],
-      ['ambush', 19, 1, 19, 1, PALETTE.ember],
-      ['random', 1, 13, 1, 13, PALETTE.tealLight],
-      ['patrol', 19, 13, 19, 13, PALETTE.neon],
+    // All four start in the box and are let out one at a time.  `corner` is
+    // where each one runs to when the scatter phase says so, and they are the
+    // four corners of the maze, which is what makes scatter readable.
+    const spawns: Array<[GhostKind, number, number, number]> = [
+      // kind, cornerCol, cornerRow, colour
+      ['direct', 1, 1, PALETTE.blood],
+      ['ambush', 19, 1, PALETTE.ember],
+      ['random', 1, 13, PALETTE.tealLight],
+      ['patrol', 19, 13, PALETTE.neon],
     ];
-    for (const [kind, sc, sr, cc, cr, color] of spawns) {
+    spawns.forEach(([kind, cc, cr, color], i) => {
+      const seat = SEATS[i];
+      const sc = seat.col;
+      const sr = seat.row;
       // a ghost: a rounded head, a frilled hem, two eyes that look at you
       const body = scene.add.rectangle(0, 0, 7, 7, color);
       const dome = scene.add.circle(0, -2, 3.5, color);
@@ -185,11 +280,14 @@ export const chompMan: MinigameModule = {
       const sprite = scene.add.container(tileX(sc), tileY(sr), [dome, body, hemL, hemR, eyeL, eyeR, pupL, pupR]).setDepth(19);
       ghosts.push({
         kind,
+        state: 'house',
+        wait: RELEASE_MS[i] ?? 0,
+        seat,
         col: sc,
         row: sr,
         px: tileX(sc),
         py: tileY(sr),
-        dir: { ...DIRS[0] },
+        dir: { x: 0, y: -1 },
         home: { col: sc, row: sr },
         corner: { col: cc, row: cr },
         sprite,
@@ -197,9 +295,9 @@ export const chompMan: MinigameModule = {
         patrolIdx: 0,
         lastTile: -1,
       });
-    }
+    });
 
-    hud = centerText(scene, GAME_W / 2, 24, '', PALETTE.cream);
+    hud = centerText(scene, GAME_W / 2, 28, '', PALETTE.cream);
     refreshHud();
 
     // Both schemes, live at once — WASD is added to the arrows, not instead of
@@ -210,6 +308,40 @@ export const chompMan: MinigameModule = {
     for (const key of ['LEFT', 'A']) kb?.on(`keydown-${key}`, steer(-1, 0));
     for (const key of ['DOWN', 'S']) kb?.on(`keydown-${key}`, steer(0, 1));
     for (const key of ['UP', 'W']) kb?.on(`keydown-${key}`, steer(0, -1));
+
+    if (import.meta.env?.DEV) {
+      (window as unknown as Record<string, unknown>).__chomp = {
+        state: () => ({
+          lives,
+          pelletsLeft,
+          frightMs: Math.round(frightMs),
+          over,
+          player: { col: player.col, row: player.row },
+          ghosts: ghosts.map((g) => ({
+            kind: g.kind,
+            state: g.state,
+            wait: Math.round(g.wait),
+            col: g.col,
+            row: g.row,
+          })),
+        }),
+        /** The maze as data, so the harness can flood it and count the routes. */
+        maze: () => MAZE.slice(),
+        house: () => ({ ...HOUSE, seats: SEATS.map((s2) => ({ ...s2 })), respawnMs: GHOST_RESPAWN_MS }),
+        /** Eat one, without having to find a power pellet first. */
+        eat: (i = 0) => {
+          const g = ghosts[i];
+          if (g) sendHome(g, GHOST_RESPAWN_MS);
+        },
+        /** Let them all out now, for tests that want them on the board. */
+        release: () => {
+          for (const g of ghosts) if (g.state === 'house') g.wait = 0;
+        },
+      };
+      scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        delete (window as unknown as Record<string, unknown>).__chomp;
+      });
+    }
   },
 
   update(_t: number, delta: number) {
@@ -334,6 +466,34 @@ function eatPellet(): void {
 // ------------------------------------------------------------------- ghosts
 
 function moveGhost(g: Ghost, dt: number): void {
+  // ---- serving time, or waiting to be let out.  Neither is on the board.
+  if (g.state === 'eaten' || g.state === 'house') {
+    g.wait -= dt * 1000;
+    if (g.state === 'eaten') {
+      // Eyes only, sat in its own seat, until the ten seconds are up.
+      g.sprite.setAlpha(0.4);
+      g.px = tileX(g.seat.col);
+      g.py = tileY(g.seat.row) + Math.sin(g.wait / 260) * 1.2;
+      g.col = g.seat.col;
+      g.row = g.seat.row;
+      g.sprite.setPosition(g.px, g.py);
+      if (g.wait <= 0) {
+        g.state = 'house';
+        g.wait = 0;
+        g.sprite.setAlpha(1);
+      }
+      return;
+    }
+    if (g.wait > 0) {
+      // Shuffling on the spot: it is in there, and you can see it is coming.
+      g.py = tileY(g.seat.row) + Math.sin(g.wait / 200) * 1.6;
+      g.sprite.setPosition(g.px, g.py);
+      return;
+    }
+    leaveHouse(g, dt);
+    return;
+  }
+
   const speed = frightMs > 0 ? FRIGHT_SPEED : GHOST_SPEED;
 
   if (arrived(g.px, g.py, g.col, g.row, g.dir, g.lastTile)) {
@@ -350,12 +510,52 @@ function moveGhost(g: Ghost, dt: number): void {
   g.sprite.setPosition(g.px, g.py);
 
   // frightened look, flashing for the last 1.5s
-  if (frightMs > 0) {
+  if (frightMs > 0 && g.state === 'out') {
     const flashing = frightMs < FRIGHT_WARN_MS && Math.floor(frightMs / 150) % 2 === 0;
     g.body.setFillStyle(flashing ? PALETTE.white : PALETTE.nightLight);
   } else {
     g.body.setFillStyle(ghostColor(g.kind));
   }
+}
+
+/**
+ * Out through the gate.  The box is sealed, so this is a scripted path rather
+ * than pathfinding: slide to the door's column, climb through it, and the tile
+ * above the gate is where the ghost joins the maze and starts thinking again.
+ */
+function leaveHouse(g: Ghost, dt: number): void {
+  const doorX = tileX(HOUSE.doorCol);
+  const outY = tileY(HOUSE.top - 1);
+  const step = HOUSE_SPEED * dt;
+  if (Math.abs(g.px - doorX) > 0.6) {
+    g.px += Math.sign(doorX - g.px) * Math.min(step, Math.abs(doorX - g.px));
+  } else {
+    g.px = doorX;
+    g.py = Math.max(outY, g.py - step);
+    if (g.py <= outY + 0.6) {
+      g.py = outY;
+      g.state = 'out';
+      g.dir = { x: 0, y: -1 };
+      g.lastTile = -1;
+    }
+  }
+  g.col = Math.round((g.px - OX - TILE / 2) / TILE);
+  g.row = Math.round((g.py - OY - TILE / 2) / TILE);
+  g.sprite.setPosition(g.px, g.py);
+}
+
+/** Back in the box for ten seconds, and no use to anybody until they are up. */
+function sendHome(g: Ghost, ms: number): void {
+  g.state = 'eaten';
+  g.wait = ms;
+  g.col = g.seat.col;
+  g.row = g.seat.row;
+  g.px = tileX(g.col);
+  g.py = tileY(g.row);
+  g.dir = { x: 0, y: -1 };
+  g.lastTile = -1;
+  g.sprite.setAlpha(0.4).setPosition(g.px, g.py);
+  g.body.setFillStyle(PALETTE.nightLight);
 }
 
 function ghostColor(kind: GhostKind): number {
@@ -371,6 +571,82 @@ function ghostColor(kind: GhostKind): number {
   }
 }
 
+/**
+ * Shortest-path distance from one tile to every other, walls excluded.  -1
+ * where there is no route at all.
+ *
+ * A greedy step — "of the ways out of this tile, take the one that ends up
+ * nearest in a straight line" — is the classic rule, and on a maze of long
+ * corridors it works.  On THIS maze it does not: a lattice is full of ways
+ * round, and a hunter that only compares straight-line distance circles the
+ * same block forever while the player stands still in the next one.  So the
+ * hunters path properly.  The board is 315 tiles and a ghost only decides when
+ * it enters a new one, so a flood per decision costs nothing.
+ */
+function distanceField(tc: number, tr: number): Int16Array {
+  const dist = new Int16Array(COLS * ROWS).fill(-1);
+  if (isWall(tc, tr)) return dist;
+  const queue = [tr * COLS + tc];
+  dist[queue[0]] = 0;
+  for (let head = 0; head < queue.length; head++) {
+    const idx = queue[head];
+    const c = idx % COLS;
+    const r = (idx - c) / COLS;
+    for (const d of DIRS) {
+      const nc = c + d.x;
+      const nr = r + d.y;
+      if (isWall(nc, nr)) continue;
+      const n = nr * COLS + nc;
+      if (dist[n] >= 0) continue;
+      dist[n] = dist[idx] + 1;
+      queue.push(n);
+    }
+  }
+  return dist;
+}
+
+/**
+ * The open tile closest to a target that may be inside a wall — the ambusher
+ * aims four tiles in front of the player, which is regularly a wall.
+ */
+function snapToOpen(tc: number, tr: number): { col: number; row: number } {
+  if (!isWall(tc, tr)) return { col: tc, row: tr };
+  let best = { col: player.col, row: player.row };
+  let bestD = Infinity;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (isWall(c, r)) continue;
+      const d = Math.hypot(c - tc, r - tr);
+      if (d < bestD) {
+        bestD = d;
+        best = { col: c, row: r };
+      }
+    }
+  }
+  return best;
+}
+
+/** The way out of this tile that actually gets there soonest. */
+function pathTo(opts: Dir[], g: Ghost, tc: number, tr: number): Dir {
+  const goal = snapToOpen(tc, tr);
+  const field = distanceField(goal.col, goal.row);
+  let best = opts[0];
+  let bestD = Infinity;
+  for (const d of opts) {
+    const c = g.col + d.x;
+    const r = g.row + d.y;
+    const v = field[r * COLS + c];
+    // Unreachable steps sort last, by straight line, so there is always an
+    // answer even if the flood somehow found nothing.
+    const dist = v < 0 ? 10_000 + Math.hypot(c - goal.col, r - goal.row) : v;
+    if (dist < bestD) {
+      bestD = dist;
+      best = d;
+    }
+  }
+  return best;
+}
+
 /** PRD §9.7: four distinct behaviours, plus scatter and flight. */
 function chooseDir(g: Ghost): Dir {
   const options = DIRS.filter((d) => !isWall(g.col + d.x, g.row + d.y));
@@ -382,18 +658,22 @@ function chooseDir(g: Ghost): Dir {
   const legal = forward.length ? forward : options;
 
   if (frightMs > 0) {
-    // run away
+    // Running away is deliberately DAFT — straight-line, one step at a time —
+    // because a frightened ghost that pathed its way out of trouble would make
+    // the power pellets worthless.
     return furthestFrom(legal, g, player.col, player.row);
   }
   if (scatterMs > 0) {
-    return nearestTo(legal, g, g.corner.col, g.corner.row);
+    return pathTo(legal, g, g.corner.col, g.corner.row);
   }
 
   switch (g.kind) {
     case 'direct':
-      return nearestTo(legal, g, player.col, player.row);
+      // The hunter.  It knows the way, and standing still is not a plan.
+      return pathTo(legal, g, player.col, player.row);
     case 'ambush':
-      return nearestTo(legal, g, player.col + player.dir.x * 4, player.row + player.dir.y * 4);
+      // Cuts you off: it paths to where you are GOING, four tiles ahead.
+      return pathTo(legal, g, player.col + player.dir.x * 4, player.row + player.dir.y * 4);
     case 'random':
       return legal[Math.floor(Math.random() * legal.length)];
     case 'patrol': {
@@ -442,16 +722,13 @@ function furthestFrom(opts: Dir[], g: Ghost, tc: number, tr: number): Dir {
 
 function checkCollisions(): void {
   for (const g of ghosts) {
+    // Only the ones actually on the board can touch you, or be touched.
+    if (g.state !== 'out') continue;
     if (Math.hypot(g.px - player.px, g.py - player.py) > 6) continue;
 
     if (frightMs > 0) {
       audio.sfx('coin_spin');
-      g.col = g.home.col;
-      g.row = g.home.row;
-      g.px = tileX(g.col);
-      g.py = tileY(g.row);
-      g.lastTile = -1;
-      g.sprite.setPosition(g.px, g.py);
+      sendHome(g, GHOST_RESPAWN_MS);
       continue;
     }
     loseLife();
@@ -471,22 +748,27 @@ function loseLife(): void {
     return;
   }
   sceneRef?.time.delayedCall(900, () => {
-    player.col = 10;
-    player.row = 13;
+    player.col = START.col;
+    player.row = START.row;
     player.px = tileX(player.col);
     player.py = tileY(player.row);
     player.dir = { x: 0, y: 0 };
     player.want = { x: 0, y: 0 };
     player.lastTile = -1;
     playerSprite?.setPosition(player.px, player.py);
-    for (const g of ghosts) {
-      g.col = g.home.col;
-      g.row = g.home.row;
+    // Everyone back in the box, and let out one at a time again — losing a
+    // life should hand back the opening breath, not four ghosts on the door.
+    ghosts.forEach((g, i) => {
+      g.state = 'house';
+      g.wait = RELEASE_MS[i] ?? 0;
+      g.col = g.seat.col;
+      g.row = g.seat.row;
       g.px = tileX(g.col);
       g.py = tileY(g.row);
+      g.dir = { x: 0, y: -1 };
       g.lastTile = -1;
-      g.sprite.setPosition(g.px, g.py);
-    }
+      g.sprite.setAlpha(1).setPosition(g.px, g.py);
+    });
     frightMs = 0;
     dying = false;
   });

@@ -285,6 +285,7 @@ type LedgerReason =
   | 'seed'          // the $10 -> 20 tokens at intro
   | 'game.cost'     // minigame launch
   | 'game.reward'   // minigame win
+  | 'game.refund'   // a tie: the entry cost handed straight back (MG-9)
   | 'charity'       // Froggy's five
   | 'prize';        // redemption
 ```
@@ -292,8 +293,8 @@ type LedgerReason =
 | # | Requirement |
 |---|---|
 | TK-1 | Balance can never go below 0. `debit` returns `false` and changes nothing if unaffordable. |
-| TK-2 | Cost is debited **on launch**, before the minigame scene starts. Reward is credited **on win**, in the completion callback. `[QFD: M3]` |
-| TK-3 | `Esc` quit forfeits the entry cost — no refund path exists in the API at all. |
+| TK-2 | Cost is debited **on launch**, before the minigame scene starts, except at a free-to-enter fixture (MG-10) where it is raised inside the game instead. Reward is credited **on win**, in the completion callback. `[QFD: M3]` |
+| TK-3 | `Esc` quit forfeits the entry cost. The only refund in the API is `api.draw()` (MG-9), which is not a quit path: it hands the stake back once, for a game that ended level, and is unreachable from the quit button. Where nothing was staked — a free fixture walked away from — there is nothing to forfeit and nothing to refund. |
 | TK-4 | Every `onChange` drives the HUD animation within 100 ms. `[QFD: B8]` |
 | TK-5 | A lint rule forbids `state.tokens =` outside `TokenLedger`. `[QFD: FMEA #3]` |
 | TK-6 | The ledger emits `broke` when the balance transitions to exactly 0. |
@@ -760,13 +761,15 @@ interface Minigame {
 | # | Requirement |
 |---|---|
 | MG-1 | The hub knows nothing of a game's internals — only this interface `[QFD: VOC-19]` |
-| MG-2 | `cost` is debited on launch by the hub, **before** `launch()` is called |
+| MG-2 | `cost` is debited on launch by the hub, **before** `launch()` is called — except at a **free-to-enter fixture** (MG-10), which takes nothing at the door |
 | MG-3 | `onComplete({won:true})` credits `reward`; `{won:false}` credits nothing |
 | MG-4 | Every game has `[ESC] QUIT`, which **forfeits the entry cost** and calls `onComplete({won:false})` |
 | MG-5 | Every game shows a result card (`YOU WIN +6` / `YOU LOSE`) for 2 s before returning to the hub |
 | MG-6 | All six pass an automated contract test: launch → complete → return, and launch → quit → return `[QFD: AC-2]` |
 | MG-7 | All art, names, audio and layouts are **original**. No licensed assets, no trademarked names, no reproduced maze geometry `[QFD: M4, B7, §13.1 IP sign-off]` |
-| MG-8 | Every game shows a **how-to-play card** before it is built: the objective, and **this cabinet's own controls and no other cabinet's**. It appears *after* the cost is debited — paying is the commitment and the tutorial is what the player gets for it — and the game module is not constructed until it is dismissed, so nothing under the card is playable and no key pressed at it reaches the game. `ESC` at the card forfeits exactly as it does in play (MG-4). The contract is enforced by the type: `MinigameModule.tutorial` is not optional. |
+| MG-8 | Every game shows a **how-to-play card** before it is built: the objective, and **this cabinet's own controls and no other cabinet's**. At a coin-op cabinet it appears *after* the cost is debited — paying is the commitment and the tutorial is what the player gets for it. The game module is not constructed until the card is dismissed, so nothing under it is playable and no key pressed at it reaches the game. `ESC` at the card forfeits exactly as it does in play (MG-4), except where nothing was staked (MG-10). The contract is enforced by the type: `MinigameModule.tutorial` is not optional. |
+| MG-9 | **A tie is not a loss.** A game that can end level calls `api.draw()`, and the shell hands the stake back **once**, through the ledger, as `game.refund`. No reward, no high score, no "+n" — the player has bought nothing and sold nothing. Applies wherever a tie is reachable: tic-tac-toe, bowling, air hockey, frog vs lizard, and a dance-off match that ends level on rounds. Blackjack's push is the same rule inside a hand and pays the stake back at 1× on the spot. |
+| MG-10 | **A fixture that charges for the go does not charge at the door.** Froggy's blackjack table and the wheel take a bet, not a price: walking up to them and reading the how-to-play card costs nothing, the cabinet's `cost` is the smallest bet they will take rather than an entry fee, and the first token moves when the player deals or spins (`api.raise`). Walking out without playing is not a forfeit and the result card says so. Marked in the cabinet table as `freeToEnter`. |
 
 ### 9.0.1 A note on "six"
 
@@ -804,8 +807,8 @@ not in this table.
 
 - 3×3 grid, player is `X` and moves first, click to place.
 - **AI:** 30% of turns a uniformly random legal move; otherwise full minimax. This makes it decently strong but reliably beatable. `[QFD: VOC-20]`
-- **A draw is a loss.** This is the single most important rule in the game and must be stated on the result card: `DRAW — NO PAYOUT`.
-- Win: three in a row for the player. Lose: AI three in a row, or a full board.
+- **A draw refunds the token** (MG-9). It is neither a win nor a loss: the entry cost goes back exactly once and nothing is paid on top of it. The board says so before a move is made (`YOU ARE X — A DRAW REFUNDS`), the result card says `DRAW — TOKEN BACK`, and the shell's card reads `A TIE — 1 BACK`. This replaces the original "a draw is a loss", which charged a token for a game nobody won.
+- Win: three in a row for the player. Lose: AI three in a row.
 
 ### 9.3 Snakes & Ladders — Easy, 1 → 2
 
@@ -850,9 +853,13 @@ not in this table.
 
 An original homage. Original maze, original frog-themed ghosts, original sounds and name. **No Namco assets, geometry or names.** `[QFD: VOC-22, B7]`
 
-- Single maze, 3 lives, ~180 pellets, 4 power pellets.
+- Single maze, 3 lives, 141 pellets, 4 power pellets.
 - **Win:** clear the maze. **Lose:** all three lives.
-- Speeds: player 5.5 tiles/s, ghosts 5.0, frightened 3.0. Frightened lasts 6 s with a 1.5 s flashing warning.
+- Speeds: player 5.5 tiles/s, ghosts 4.6, frightened 3.0. Frightened lasts 6 s with a 1.5 s flashing warning.
+- **The maze is a lattice, not four quadrants.** 21×15, corridors every three tiles both ways, **29 independent ways round, 46 junctions and no dead ends** (the board it replaced had 16, 30 and 6). Every corridor meets another within a few tiles, so a player being followed can turn, loop and come out behind the ghost that was on them — which is the skill of the game and was impossible on long straight runs. Asserted in `tools/games.mjs`, which floods the maze from the player's start and fails if one pellet is unreachable.
+- **The ghosts live in a box** in the middle of it with a single door in the top. They are let out one at a time (0 / 1.8 / 3.6 / 5.4 s), the door is a wall to the player so the box is never a bolt-hole, and losing a life puts all four back in it on the same staggered clock.
+- **An eaten ghost is off the board for 10 seconds**, sitting in the box dimmed, before it comes out again. A power pellet buys real time rather than a lap of the maze, and clearing the last corner becomes a thing you can plan.
+- **The hunters path properly.** `direct` and `ambush` take the shortest route (breadth-first over the maze) to the player and to four tiles ahead of them; a greedy straight-line step circles a block forever on a lattice. `random` and the frightened flight stay deliberately dumb — a frightened ghost that pathed its way out of trouble would make the power pellets worthless. The ghost speed came down from 5.0 to 4.6 tiles/s to pay for the better pathing.
 - **Four ghosts, distinct behaviours** `[QFD: §8 of the brief]`:
 
 | Ghost | Behaviour |
@@ -906,9 +913,10 @@ other five-token cabinet on the floor.
 ### 9.10 Wheel of Fortune — casino, 20 a spin
 
 Not a cabinet: a painted wheel on a post in the corner of the casino, with a
-pointer over the top of it. Twenty tokens a spin, the first one paid at the door
-and every one after it raised through the shell; LEAVE settles up. Prizes are
-paid the moment the wheel stops.
+pointer over the top of it. **Free to walk up to** (MG-10): the board, the odds
+and the price of a go are all readable before a token moves. Twenty tokens a
+spin, every one of them raised through the shell as it is taken; LEAVE settles
+up. Prizes are paid the moment the wheel stops.
 
 **The odds are the geometry.** Each face is cut to the width of its own chance
 and a spin picks a uniformly random stopping angle — nothing weights the draw
@@ -936,12 +944,38 @@ A step battle against a rival on the next mat. Arrows climb two lanes of four
 to the receptors at the top; press the matching key as yours reaches the line.
 `A` left, `S` down, `W` up, `D` right — the same hand position as walking.
 
-- **45 seconds**, one chart, and the higher score takes it. A draw pays nothing.
-- **The chart** is generated from a fixed seed: a note on every beat at 128bpm and an off-beat 22% of the time, the same moments for both sides with independent lanes. The same song every time you pay for it, because a chart that is noise cannot be learned and learning it is the genre.
-- **Scoring:** 100 a hit, plus 10 per consecutive hit up to +100. A press into an empty lane breaks the combo, so mashing loses.
-- **The rival** gets the same arrows and lands **70%** of them, and never builds a combo. The margin is yours to take with accuracy.
+- **A match, best of three.** Each round is **45 seconds** and the higher score takes the round; the first to two rounds takes the match and the twenty. Three rounds with the rounds level is a draw, and a draw refunds the ten (MG-9).
+- **Every round is a different song and a different chart.** The tune steps up a tempo each round — 128 → 140 → 152 bpm, each with its own preset (`game_danceoff`, `game_danceoff_2`, `game_danceoff_3`) — and the chart is cut fresh to that tempo, with the off-beat rate climbing 20% → 32% → 44%. The seed is taken off the clock, so no two rounds and no two matches are the same sequence. (The original fixed seed made rounds two and three a replay of round one, which is the opposite of a rival who gets harder.)
+- **Scoring:** 100 a hit, plus 10 per consecutive hit up to +100. A press into an empty lane costs 100 and breaks the combo, so mashing loses.
+- **The rival steps up every round you take off him.** He gets the same arrows at the same moments; what changes is how many he lands and whether he strings them: **62%** and no combo to start, **76%** with a 6-hit combo cap once you are one round up, **88%** with a 10-hit cap once you are two. Lose a round and he does not improve for it — he steps up when you do.
 - Timing: ±145 ms to hit, ±55 ms for a PERFECT, and past 190 ms the arrow is gone.
 - Original characters, original chart, original name (MG-7).
+
+### 9.12 Chamber — casino, 5 in, up to 15 out
+
+The arcade's russian-roulette cabinet, and it **is** a cabinet: a cylinder
+diagram, a lever and six chambers with one live round in them. Nothing is
+pointed at anybody — what is at stake is the five tokens, and the whole deal is
+printed on the machine's face before a token moves.
+
+- **Five tokens to sit down. Three a clean pull. Five pulls, and no sixth.**
+- **The pot is not yours until you walk.** It sits on the machine, pull by pull; `WALK AWAY` is available from the first moment and pays exactly what is on it. The live round zeroes it and the run ends with nothing.
+- The cylinder is spun between pulls, so every pull is an independent **1 in 6** and nothing about the run so far changes the next one. The machine says so.
+- **The arithmetic, because the machine states it:** surviving all five is (5/6)⁵ = 40%, paying 15 against the 5 it cost — about a token of expected value a play. Stopping early is worse than going on at every single step, which is the joke: the machine is honest, and the honest play is to keep pulling.
+
+### 9.13 Froggy Car Chase — Hard, 5 in, 10 and up
+
+A four-lane road from above. Traffic ahead is slower than you and has to be
+threaded; the police behind are faster and have to be shaken. Cash sits on the
+road in bundles of twenty and the run ends on a crash, on being caught, or on
+`ENTER` — pull over and take what you have.
+
+- **Nitro refills itself**, a burst every 11 s, up to two in the tank; blue jars fill it the rest of the way.
+- **They can be juked.** A chaser steers at the lane it last *saw* you in and only looks every 460 ms (down to 200 ms as the heat climbs), so a late swerve leaves it committed to your old line. That lag is how you shake one without nitro.
+- **They can be crashed.** A chaser locked onto the lane you just left drives into the back of the traffic in it, spins out, drops its siren and falls back down the road for ~2.8 s. The road is a weapon, not only an obstacle.
+- **The chase is as heavy as the bag:** one car until 200 cash, then **one more for every further 200**, up to six. The first three of those notches also speed the police up, thicken the traffic and quicken the road.
+- **From 600 cash they lay spike strips** across the road with a gap to thread, coming quicker the longer you stay out. A strip takes a police car out exactly the way it would take you.
+- Nitro jars are spread rather than clustered: never twice in the same lane, never behind a car already at the top of the road, and always a lane or two off your line.
 
 ---
 

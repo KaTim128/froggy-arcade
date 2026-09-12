@@ -109,6 +109,28 @@ export const ticTacToe: MinigameModule = {
 
       marks.push(scene.add.graphics().setDepth(5));
     }
+
+    if (import.meta.env?.DEV) {
+      (window as unknown as Record<string, unknown>).__ttt = {
+        board: () => board.join(''),
+        /**
+         * Put a finished, genuinely drawn position on the board and let the
+         * normal settle run.  Playing to a draw against a minimax opponent by
+         * clicking squares is not something a harness can do reliably, and the
+         * refund is the thing under test, not the clicking.
+         */
+        drawGame: () => {
+          const drawn: Cell[] = ['X', 'X', 'O', 'O', 'O', 'X', 'X', 'O', 'X'];
+          for (let i = 0; i < 9; i++) board[i] = drawn[i];
+          busy = false;
+          render();
+          settle(scene, api);
+        },
+      };
+      scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        delete (window as unknown as Record<string, unknown>).__ttt;
+      });
+    }
   },
 
   destroy() {

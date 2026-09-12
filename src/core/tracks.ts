@@ -247,6 +247,39 @@ export const TRACKS: Record<string, TrackPreset> = {
     vol: { lead: 0.03, bass: 0.05, arp: 0.014, drums: 1.15 },
     ring: 0.9,
   }),
+  // Dance Off, round two: same room, quicker feet.  Up a fourth and up twelve
+  // bpm, the bass on every eighth, and the lead stops resting — the chart is
+  // cut to this tempo, so the round is audibly busier before a single arrow
+  // has climbed the mat.
+  game_danceoff_2: preset({
+    bpm: 140,
+    chords: [min(C.d4), maj(C.b4 - 13), maj(C.f4 - 12), maj(C.c4)],
+    bass: [0, 0, 2, 0, 1, 0, 2, 0],
+    lead: [C.d5, _, C.a5, C.d5 + 12, C.a5, _, C.f5, C.a5, C.g5, _, C.d5, C.g5, C.a5, _, C.c6, _, C.a5, C.g5, C.f5, _, C.d5, _, C.f5, C.a5, C.c6, _, C.a5, _, C.g5, _, C.f5, _],
+    leadWave: 'square',
+    bassWave: 'sawtooth',
+    arpWave: 'square',
+    drums: 'four',
+    cutoff: 4000,
+    vol: { lead: 0.032, bass: 0.052, arp: 0.016, drums: 1.2 },
+    ring: 0.8,
+  }),
+  // And the final round: the fastest tune in the building, in a minor key,
+  // with the lead running sixteenths.  By here he is landing nearly nine in
+  // ten and the music is telling you so.
+  game_danceoff_3: preset({
+    bpm: 152,
+    chords: [min(C.e4 - 12), maj(C.c4), maj(C.g4 - 12), maj(C.d4)],
+    bass: [0, 0, 0, 2, 0, 0, 2, 1],
+    lead: [C.e5, C.g5, C.b5, C.e5 + 12, C.b5, C.g5, C.b5, _, C.c6, _, C.b5, C.g5, C.e5, _, C.g5, _, C.d5 + 12, C.b5, C.g5, C.d5, C.g5, _, C.b5, _, C.a5, C.b5, C.c6, C.b5, C.a5, _, C.g5, _],
+    leadWave: 'sawtooth',
+    bassWave: 'sawtooth',
+    arpWave: 'square',
+    drums: 'four',
+    cutoff: 4400,
+    vol: { lead: 0.03, bass: 0.055, arp: 0.018, drums: 1.25 },
+    ring: 0.7,
+  }),
   // The wheel: a fairground vamp, all bounce and no menace, because the thing
   // taking your money is painted in primary colours.
   game_wheel: preset({

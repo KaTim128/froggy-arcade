@@ -175,6 +175,135 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   console.log(`${playerMoved ? 'PASS' : 'FAIL'}  chomp-man's player moves  — ${a.player} -> ${b.player}`);
   console.log(`${ghostsMoved ? 'PASS' : 'FAIL'}  chomp-man's ghosts move   — ${a.ghosts[0]} -> ${b.ghosts[0]}`);
   if (!playerMoved || !ghostsMoved) failures++;
+
+  // ---- the maze is the game, so it is checked as data rather than admired in
+  // a screenshot: every pellet has to be reachable from where the player
+  // starts (one walled-off pellet makes the cabinet unwinnable and nothing on
+  // screen would say so), and it has to be a lattice rather than a set of
+  // corridors — a player who cannot turn off and come back round cannot
+  // outmanoeuvre anything.
+  const maze = await page.evaluate(() => window.__chomp.maze());
+  const w = maze[0].length;
+  const h = maze.length;
+  const at = (c, r) => (c < 0 || r < 0 || c >= w || r >= h ? '#' : maze[r][c]);
+  const open = (c, r) => at(c, r) !== '#' && at(c, r) !== '-';
+  let start = null;
+  const pellets = [];
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      if (at(c, r) === 'P') start = [c, r];
+      if (at(c, r) === '.' || at(c, r) === 'o') pellets.push(`${c},${r}`);
+    }
+  }
+  const seen = new Set();
+  const stack = [start];
+  while (stack.length) {
+    const [c, r] = stack.pop();
+    const k = `${c},${r}`;
+    if (seen.has(k) || !open(c, r)) continue;
+    seen.add(k);
+    stack.push([c + 1, r], [c - 1, r], [c, r + 1], [c, r - 1]);
+  }
+  const stranded = pellets.filter((p) => !seen.has(p));
+  console.log(
+    `${stranded.length === 0 ? 'PASS' : 'FAIL'}  chomp-man: every pellet is reachable  — ${pellets.length} pellets, ${stranded.length} walled off`,
+  );
+  if (stranded.length) failures++;
+
+  // A junction is a tile with three or more ways out of it, a dead end has
+  // one, and the number that actually decides whether you can shake a ghost is
+  // the number of independent LOOPS — edges minus tiles plus one, which is the
+  // count of ways round.  The board this replaced had 16 of them, 30 junctions
+  // and 6 dead ends; a corridor maze would have almost none.
+  let junctions = 0;
+  let deadEnds = 0;
+  let edges = 0;
+  for (const k of seen) {
+    const [c, r] = k.split(',').map(Number);
+    const ways = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dc, dr]) => open(c + dc, r + dr)).length;
+    if (ways >= 3) junctions++;
+    if (ways === 1) deadEnds++;
+    if (seen.has(`${c + 1},${r}`)) edges++;
+    if (seen.has(`${c},${r + 1}`)) edges++;
+  }
+  const loops = edges - seen.size + 1;
+  const loopy = loops >= 24 && junctions >= 40 && deadEnds === 0;
+  console.log(
+    `${loopy ? 'PASS' : 'FAIL'}  chomp-man: the maze is a lattice, not a corridor  — ` +
+      `${loops} ways round, ${junctions} junctions, ${deadEnds} dead ends`,
+  );
+  if (!loopy) failures++;
+
+  // ---- the box.  They start in it, they are let out one at a time, and the
+  // door is a wall as far as the maze is concerned.
+  await page.goto(`${URL}/?intro=1&tokens=50&game=chompman`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await sleep(250);
+  const opening = await page.evaluate(() => window.__chomp.state());
+  const house = await page.evaluate(() => window.__chomp.house());
+  const penned = opening.ghosts.every((g) => g.state === 'house');
+  const staggered = opening.ghosts.filter((g) => g.wait > 0).length >= 3;
+  const door = maze[house.top][house.doorCol] === '-';
+  const boxed = penned && staggered && door;
+  console.log(
+    `${boxed ? 'PASS' : 'FAIL'}  chomp-man: they start in a box with one door  — ` +
+      `${opening.ghosts.map((g) => g.state).join(',')}, waits ${opening.ghosts.map((g) => Math.round(g.wait / 100) / 10).join('/')}s`,
+  );
+  if (!boxed) failures++;
+
+  // ---- eaten is ten seconds off the board, not a lap of the maze.  Clear the
+  // whole board — which is what a power pellet can do — so the ten seconds can
+  // be watched without a hunter arriving mid-measurement, and so the thing the
+  // rule is FOR is what gets asserted: a cleared board stays cleared, and the
+  // player is still alive at the end of it.  Early, before the hunter has
+  // crossed the board: a life lost mid-measurement puts everyone back in the
+  // box on its own clock and there is nothing left to measure.
+  await sleep(1200);
+  await page.evaluate(() => [0, 1, 2, 3].forEach((i) => window.__chomp.eat(i)));
+  await sleep(300);
+  const justEaten = await page.evaluate(() => window.__chomp.state());
+  await sleep(4000);
+  const stillGone = await page.evaluate(() => window.__chomp.state());
+  await sleep(6500);
+  const back = await page.evaluate(() => window.__chomp.state());
+  const served =
+    justEaten.ghosts.every((g) => g.state === 'eaten' && g.wait > 9000) &&
+    stillGone.ghosts.every((g) => g.state === 'eaten') &&
+    back.ghosts[0].state !== 'eaten' &&
+    back.lives === 3;
+  console.log(
+    `${served ? 'PASS' : 'FAIL'}  chomp-man: an eaten ghost is gone for ten seconds  — ` +
+      `${Math.round(justEaten.ghosts[0].wait / 100) / 10}s -> at 4s ${stillGone.ghosts.map((g) => g.state[0]).join('')} -> at 11s ${back.ghosts.map((g) => g.state[0]).join('')}`,
+  );
+  if (!served) failures++;
+
+  // ---- and when they are out they still come for you.  A fresh board, so the
+  // twenty-second scatter phase is nowhere near: let all four out, stand
+  // perfectly still, and the hunter has to arrive.  A ghost that wanders is a
+  // ghost the player never has to think about.
+  await page.goto(`${URL}/?intro=1&tokens=50&game=chompman`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await page.evaluate(() => window.__chomp.release());
+  const gap = (s2) => {
+    const g = s2.ghosts.find((x) => x.kind === 'direct');
+    return Math.abs(g.col - s2.player.col) + Math.abs(g.row - s2.player.row);
+  };
+  let closest = 99;
+  let caught = false;
+  for (let t = 0; t < 24; t++) {
+    await sleep(300);
+    const now = await page.evaluate(() => window.__chomp.state());
+    closest = Math.min(closest, gap(now));
+    if (now.lives < 3 || now.over) {
+      caught = true;
+      break;
+    }
+  }
+  const hunting = caught || closest <= 1;
+  console.log(`${hunting ? 'PASS' : 'FAIL'}  chomp-man: the hunter still comes for you  — ${caught ? 'it caught a sitting player' : `closest ${closest} tiles`}`);
+  if (!hunting) failures++;
   await page.close();
 }
 
@@ -645,6 +774,89 @@ for (const g of [
   await page.close();
 }
 
+// A TIE IS NOT A LOSS.  Every game that can end level hands the entry cost
+// straight back, once, through the shell — so this one is measured from the
+// hub, where the token is actually taken, rather than from a deep link where
+// nothing was ever debited.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=20&scene=ArcadeHub`, { waitUntil: 'networkidle2' });
+  await sleep(2500);
+
+  const purse = await page.evaluate(() => window.__froggy.state().tokens);
+  // TIC-TAC-TOE sits at game (34, 86).
+  await page.mouse.click(640 + (34 - 160) * 4, 360 + (86 - 90) * 4);
+  await sleep(1800);
+  const paid = await page.evaluate(() => window.__froggy.state().tokens);
+  await startGame(page);
+  await sleep(400);
+  await page.evaluate(() => window.__ttt.drawGame());
+  await sleep(4200);
+  const back = await page.evaluate(() => window.__froggy.state().tokens);
+
+  const refunded = paid === purse - 1 && back === purse;
+  console.log(
+    `${refunded ? 'PASS' : 'FAIL'}  a drawn game hands the token back  — ` +
+      `${purse} -> ${paid} on the way in -> ${back} on the way out`,
+  );
+  if (!refunded) failures++;
+  await page.close();
+}
+
+// CHAMBER pays by the pull and holds the pot on the machine: five tokens in,
+// three a clean pull, five pulls at most, and the live round takes whatever is
+// sitting there.  Both endings are rigged here because one in six is not a
+// thing a test can wait for.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+
+  const run = async (pulls, ending) => {
+    await page.goto(`${URL}/?intro=1&tokens=40&game=roulette`, { waitUntil: 'networkidle2' });
+    await sleep(1500);
+    await startGame(page);
+    await sleep(400);
+    const before = await page.evaluate(() => window.__froggy.state().tokens);
+    for (let i = 0; i < pulls; i++) {
+      await page.evaluate(() => {
+        window.__chamber.rig('clean');
+        window.__chamber.pull();
+      });
+      await sleep(1100);
+    }
+    if (ending === 'live') {
+      await page.evaluate(() => {
+        window.__chamber.rig('live');
+        window.__chamber.pull();
+      });
+      await sleep(1200);
+    } else if (ending === 'walk') {
+      await page.evaluate(() => window.__chamber.walk());
+    }
+    const state = await page.evaluate(() => window.__chamber.state());
+    await sleep(4200);
+    const after = await page.evaluate(() => window.__froggy.state().tokens);
+    return { state, banked: after - before };
+  };
+
+  const walked = await run(2, 'walk');
+  const ok1 = walked.state.survived === 2 && walked.banked === 6;
+  console.log(`${ok1 ? 'PASS' : 'FAIL'}  chamber: two clean pulls and you walk with six  — ${walked.state.survived} clean, banked ${walked.banked}`);
+  if (!ok1) failures++;
+
+  const shot = await run(3, 'live');
+  const ok2 = shot.state.pot === 0 && shot.banked === 0;
+  console.log(`${ok2 ? 'PASS' : 'FAIL'}  chamber: the live round takes the lot  — nine on the machine, banked ${shot.banked}`);
+  if (!ok2) failures++;
+
+  const full = await run(5, 'none');
+  const ok3 = full.state.survived === 5 && full.banked === 15;
+  console.log(`${ok3 ? 'PASS' : 'FAIL'}  chamber: five clean is the most it pays  — ${full.state.survived} pulls, banked ${full.banked}`);
+  if (!ok3) failures++;
+  await page.close();
+}
+
 // The dealer's line has to be true.  It used to read "DEALER STANDS ON 17"
 // every single hand — a rule of the house printed as if it were his score —
 // so play out a stack of hands and check that every number he says out loud is
@@ -846,7 +1058,36 @@ for (const g of [
   );
   if (!punished) failures++;
 
-  // Winning pays the cabinet's reward, through the shell.
+  // ---- it is a match now, best of three, and every round is a new song cut
+  // fresh: different tune, different tempo, different arrows.  Take the first
+  // round and he has to come back harder for the second.
+  const r1 = await page.evaluate(() => window.__dance.state());
+  await page.evaluate(() => {
+    window.__dance.ace();
+    window.__dance.finish();
+  });
+  await sleep(300);
+  const card = await page.evaluate(() => window.__dance.state());
+  await page.evaluate(() => window.__dance.skipCard());
+  await sleep(700);
+  const r2 = await page.evaluate(() => window.__dance.state());
+
+  const fresh = r2.chart !== r1.chart && r2.music !== r1.music && r2.bpm > r1.bpm && r2.notes > r1.notes;
+  console.log(
+    `${fresh ? 'PASS' : 'FAIL'}  dance off: a new song and a new chart every round  — ` +
+      `${r1.music} ${r1.bpm}bpm ${r1.notes} arrows -> ${r2.music} ${r2.bpm}bpm ${r2.notes} arrows`,
+  );
+  if (!fresh) failures++;
+
+  const stepped = card.wins.you === 1 && r2.rival.accuracy > r1.rival.accuracy && r2.rival.combo > r1.rival.combo;
+  console.log(
+    `${stepped ? 'PASS' : 'FAIL'}  dance off: beat him and he comes back better  — ` +
+      `lands ${Math.round(r1.rival.accuracy * 100)}% -> ${Math.round(r2.rival.accuracy * 100)}%, combo cap ${r1.rival.combo} -> ${r2.rival.combo}`,
+  );
+  if (!stepped) failures++;
+
+  // Two rounds takes the match, and the match pays the cabinet's reward
+  // through the shell.
   const before = await page.evaluate(() => window.__froggy.state().tokens);
   await page.evaluate(() => {
     window.__dance.ace();
@@ -855,7 +1096,7 @@ for (const g of [
   await sleep(4200);
   const after = await page.evaluate(() => window.__froggy.state().tokens);
   const pays = after - before === 20;
-  console.log(`${pays ? 'PASS' : 'FAIL'}  dance off: taking it pays the twenty  — ${before} -> ${after}`);
+  console.log(`${pays ? 'PASS' : 'FAIL'}  dance off: taking the match pays the twenty  — ${before} -> ${after}`);
   if (!pays) failures++;
   await page.close();
 }

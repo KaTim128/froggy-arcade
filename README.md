@@ -28,7 +28,13 @@ in your own browser, so nothing you do here leaves your machine.
 Every cabinet takes its tokens first and then shows you a how-to-play card:
 what it wants, and which keys *that* cabinet reads. Nothing starts until you
 dismiss it, so the controls are never something you have to work out while the
-clock runs.
+clock runs. Two things in the casino take a bet rather than a price — Froggy's
+blackjack table and the wheel — and those are free to walk up to and free to
+read: the first token moves when you deal or spin, and walking away without
+playing costs nothing.
+
+A game that ends level is not a loss. A draw hands your entry cost straight
+back, once, and pays nothing on top of it.
 
 Win prizes inside, sell them to the man outside for half their token price in
 cash, feed the cash back through the change machine at half again, and see how

@@ -7,18 +7,31 @@
  * W up, D right — which is the same hand position as walking, so nobody has to
  * learn a new grip to play a game that is over in forty-five seconds.
  *
- * Forty-five seconds, one chart, and the higher score takes it.  The rival
- * gets the SAME arrows at the SAME moments and lands about seven in ten of
- * them, so beating him is a matter of accuracy rather than luck — and the
- * combo bonus is where the margin comes from: he never builds one.
+ * IT IS A MATCH, BEST OF THREE.  Each round is forty-five seconds, the higher
+ * score takes the round, and the first to two rounds takes the match and the
+ * twenty tokens.  Three rounds that both go one apiece and the match is a
+ * draw, which — like every other tie in the building — hands the entry fee
+ * back rather than keeping it.
+ *
+ * EVERY ROUND IS A DIFFERENT SONG AND A DIFFERENT CHART.  The tune steps up a
+ * tempo each round and the chart is cut fresh to that tempo, busier every
+ * time; the arrows are drawn at random from a seed taken off the clock, so no
+ * two rounds — and no two matches — are the same sequence.  The chart used to
+ * be one fixed seed on the argument that a rhythm game should be learnable;
+ * against a rival who is supposed to get harder every round, that made the
+ * second and third rounds the first one again, so the seed moves now.
+ *
+ * AND HE GETS BETTER EVERY TIME YOU BEAT HIM.  He gets the SAME arrows at the
+ * SAME moments as you; what changes is how many of them he lands, and whether
+ * he strings them together.  Take the first round off him and he starts
+ * landing three in four; take the second and he is landing nearly nine in ten
+ * and building combos of his own, which is the thing you were beating him
+ * with.  Lose a round and he does not get any better for it: he steps up when
+ * you step up.
  *
  * A hit is 100 and a run of them pays 10 more each up to +100; a WRONG KEY —
  * one with nothing of yours due in that lane — takes 100 straight back off,
  * which is what stops the game being four keys held down.
- *
- * The chart is generated from a fixed seed, so the song is the same song every
- * time you pay for it.  A rhythm game whose chart is noise cannot be learned,
- * and learning it is the whole of the genre.
  *
  * Original characters, original chart, original name (PRD MG-7).
  */
@@ -33,13 +46,36 @@ import type { MinigameApi, MinigameModule } from './types';
 const ID = 'danceoff' as const;
 
 export const ROUND_MS = 45_000;
-const BPM = 128;
-const BEAT = 60_000 / BPM;
 /** The chart starts after a bar of nothing and stops before the buzzer. */
 const CHART_FROM = 2200;
 const CHART_TO = ROUND_MS - 2000;
-/** How likely an off-beat note is, on top of the note on every beat. */
-const OFFBEAT_CHANCE = 0.22;
+
+/**
+ * The three rounds: which tune, how fast it runs, and how much of the chart
+ * falls between the beats.  Each one is quicker and busier than the last, and
+ * the chart is cut to the round's own tempo so the arrows always land where
+ * the kick does.
+ */
+export const ROUNDS = [
+  { music: 'game_danceoff', bpm: 128, offbeat: 0.2, label: 'ROUND 1' },
+  { music: 'game_danceoff_2', bpm: 140, offbeat: 0.32, label: 'ROUND 2' },
+  { music: 'game_danceoff_3', bpm: 152, offbeat: 0.44, label: 'FINAL ROUND' },
+];
+/** Rounds needed to take the match. */
+const ROUNDS_TO_WIN = 2;
+/** How long the round card sits between rounds. */
+const CARD_MS = 2800;
+
+/**
+ * How good he is, by the number of rounds you have already taken off him.  He
+ * starts a bit worse than he used to be and finishes a lot better, and from
+ * the second tier he strings hits together the way you do.
+ */
+const RIVAL_TIERS = [
+  { accuracy: 0.62, combo: 0 },
+  { accuracy: 0.76, combo: 6 },
+  { accuracy: 0.88, combo: 10 },
+];
 
 /** Where the arrows are caught, and how fast they climb to it. */
 const RECEPTOR_Y = 46;
@@ -74,8 +110,6 @@ const HIT_POINTS = 100;
 const WRONG_POINTS = 100;
 const COMBO_STEP = 10;
 const COMBO_CAP = 10;
-/** How often the rival lands one.  He is good, not perfect, and never combos. */
-const RIVAL_ACCURACY = 0.7;
 
 interface Note {
   /** When it should be hit, ms into the round. */
@@ -94,6 +128,17 @@ let apiRef: MinigameApi | null = null;
 let notes: Note[] = [];
 let clock = 0;
 let over = false;
+/** Which round is on, 0-based, and how the match stands. */
+let round = 0;
+let wins = { you: 0, rival: 0 };
+/** ms left of the card between rounds.  Nothing is playable while it is up. */
+let cardMs = 0;
+/** The card's own objects, torn down when the next round starts. */
+let cardBits: Phaser.GameObjects.GameObject[] = [];
+/** The round title, so a round that ends early can take it down with it. */
+let banners: Phaser.GameObjects.GameObject[] = [];
+/** His run of hits this round, for the tiers that let him keep one. */
+let rivalCombo = 0;
 let score = { you: 0, rival: 0 };
 let combo = 0;
 let bestCombo = 0;
@@ -123,19 +168,23 @@ function rng(seed: number): () => number {
 }
 
 /**
- * The chart.  A note on every beat and an off-beat now and then, the same
- * moments for both sides so the two mats read as one song, with the lanes
- * drawn independently so you are not simply mirroring him.
+ * The chart for one round.  A note on every beat of that round's tempo and an
+ * off-beat now and then, the same moments for both sides so the two mats read
+ * as one song, with the lanes drawn independently so you are not simply
+ * mirroring him.
+ *
+ * The seed is the round's, so a fresh one is cut every round and every match.
  */
-function buildChart(): Note[] {
-  const rand = rng(0x5757);
+function buildChart(seed: number, bpm: number, offbeat: number): Note[] {
+  const rand = rng(seed);
+  const beat = 60_000 / bpm;
   const out: Note[] = [];
-  for (let t = CHART_FROM; t < CHART_TO; t += BEAT) {
+  for (let t = CHART_FROM; t < CHART_TO; t += beat) {
     for (const mine of [false, true]) {
       out.push({ at: t, lane: Math.floor(rand() * LANES), mine, done: false, hit: false, body: null, glyph: null });
     }
-    if (rand() < OFFBEAT_CHANCE) {
-      const off = t + BEAT / 2;
+    if (rand() < offbeat) {
+      const off = t + beat / 2;
       if (off < CHART_TO) {
         for (const mine of [false, true]) {
           out.push({ at: off, lane: Math.floor(rand() * LANES), mine, done: false, hit: false, body: null, glyph: null });
@@ -144,6 +193,11 @@ function buildChart(): Note[] {
     }
   }
   return out;
+}
+
+/** The tier he is dancing at: one step up for every round you have taken. */
+function rivalTier(): { accuracy: number; combo: number } {
+  return RIVAL_TIERS[Math.min(RIVAL_TIERS.length - 1, wins.you)];
 }
 
 function laneX(mine: boolean, lane: number): number {
@@ -159,7 +213,8 @@ export const danceOff: MinigameModule = {
     objective: [
       'HIT THE ARROWS AS THEY REACH THE LINE.',
       'A WRONG KEY COSTS YOU 100 - NO MASHING.',
-      '45 SECONDS. THE HIGHER SCORE TAKES IT.',
+      'BEST OF THREE. 45 SECONDS A ROUND.',
+      'NEW SONG EACH ROUND - AND HE GETS BETTER.',
     ],
     controls: [
       ['A / S', 'LEFT AND DOWN'],
@@ -172,6 +227,12 @@ export const danceOff: MinigameModule = {
     apiRef = api;
     clock = 0;
     over = false;
+    round = 0;
+    wins = { you: 0, rival: 0 };
+    cardMs = 0;
+    cardBits = [];
+    banners = [];
+    rivalCombo = 0;
     score = { you: 0, rival: 0 };
     combo = 0;
     bestCombo = 0;
@@ -179,7 +240,7 @@ export const danceOff: MinigameModule = {
     misses = 0;
     wrongs = 0;
     receptors = [];
-    notes = buildChart();
+    notes = [];
 
     // the hall: a dark room, a lit floor, a speaker stack either side
     scene.add.rectangle(0, 18, GAME_W, 162, 0x1d1030).setOrigin(0, 0);
@@ -230,7 +291,7 @@ export const danceOff: MinigameModule = {
     const kb = scene.input.keyboard;
     keys = kb ? ['A', 'S', 'W', 'D'].map((k) => kb.addKey(k)) : [];
     onKey = (ev: KeyboardEvent) => {
-      if (over || ev.repeat) return;
+      if (over || cardMs > 0 || ev.repeat) return;
       const lane = LANE_CODES.indexOf(ev.code);
       if (lane >= 0) press(lane);
     };
@@ -240,9 +301,33 @@ export const danceOff: MinigameModule = {
       onKey = null;
     });
 
+    startRound(0);
+
     if (import.meta.env?.DEV) {
       (window as unknown as Record<string, unknown>).__dance = {
-        state: () => ({ clock, score: { ...score }, combo, bestCombo, hits, misses, wrongs, notes: notes.length, over }),
+        state: () => ({
+          clock,
+          score: { ...score },
+          combo,
+          bestCombo,
+          hits,
+          misses,
+          wrongs,
+          notes: notes.length,
+          over,
+          round,
+          wins: { ...wins },
+          cardUp: cardMs > 0,
+          bpm: ROUNDS[Math.min(round, ROUNDS.length - 1)].bpm,
+          music: ROUNDS[Math.min(round, ROUNDS.length - 1)].music,
+          rival: rivalTier(),
+          /** The round's arrows, in order, so two rounds can be compared. */
+          chart: notes
+            .filter((n) => n.mine)
+            .sort((a, b) => a.at - b.at)
+            .map((n) => `${Math.round(n.at)}:${n.lane}`)
+            .join(','),
+        }),
         /**
          * The next few arrows of yours that are still live.  A rhythm game is
          * only testable if the harness can play it properly, and playing it
@@ -277,7 +362,12 @@ export const danceOff: MinigameModule = {
           combo = 0;
           refreshHud();
         },
-        finish: () => finish(),
+        /** End the round on the spot, wherever the clock is. */
+        finish: () => endRound(),
+        /** And skip the card between rounds, so a test need not wait it out. */
+        skipCard: () => {
+          if (cardMs > 0) cardMs = 1;
+        },
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__dance;
@@ -287,9 +377,21 @@ export const danceOff: MinigameModule = {
 
   update(_t: number, delta: number) {
     if (over) return;
+
+    // Between rounds: the card is up, nothing is on the mats, and no key
+    // pressed at it reaches the next round's chart.
+    if (cardMs > 0) {
+      cardMs -= delta;
+      if (cardMs <= 0) {
+        cardMs = 0;
+        startRound(round);
+      }
+      return;
+    }
+
     clock += delta;
     if (clock >= ROUND_MS) {
-      finish();
+      endRound();
       return;
     }
 
@@ -318,10 +420,14 @@ export const danceOff: MinigameModule = {
       // the rival plays his own side, on the beat, most of the time
       if (!n.mine && dt <= 0) {
         n.done = true;
-        if (Math.random() < RIVAL_ACCURACY) {
+        const tier = rivalTier();
+        if (Math.random() < tier.accuracy) {
           n.hit = true;
-          score.rival += HIT_POINTS;
+          score.rival += HIT_POINTS + Math.min(rivalCombo, tier.combo) * COMBO_STEP;
+          rivalCombo++;
           bob(dancers.rival, n.lane);
+        } else {
+          rivalCombo = 0;
         }
         clear(n);
         refreshHud();
@@ -343,6 +449,8 @@ export const danceOff: MinigameModule = {
     if (onKey) window.removeEventListener('keydown', onKey);
     onKey = null;
     notes = [];
+    cardBits = [];
+    banners = [];
     receptors = [];
     dancers = { you: null, rival: null };
     hud = null;
@@ -354,7 +462,7 @@ export const danceOff: MinigameModule = {
 
 /** A key went down in a lane: take the nearest arrow of yours that is due. */
 function press(lane: number): void {
-  if (over) return;
+  if (over || cardMs > 0) return;
   let best: Note | null = null;
   let bestGap = Infinity;
   for (const n of notes) {
@@ -414,29 +522,114 @@ function judge(word: string, colour: number): void {
 
 function refreshHud(): void {
   if (!hud) return;
-  hud.rival.setText(`RIVAL ${score.rival}`);
-  hud.you.setText(`YOU ${score.you}`);
-  hud.time.setText(`${Math.max(0, Math.ceil((ROUND_MS - clock) / 1000))}s`);
+  hud.rival.setText(`RIVAL ${score.rival}  (${wins.rival})`);
+  hud.you.setText(`(${wins.you})  YOU ${score.you}`);
+  const left = Math.max(0, Math.ceil((ROUND_MS - clock) / 1000));
+  hud.time.setText(`R${Math.min(round + 1, ROUNDS.length)}   ${left}s`);
   hud.combo.setText(combo >= 3 ? `${combo} IN A ROW` : '');
 }
 
-function finish(): void {
-  if (over || !sceneRef) return;
-  over = true;
+/**
+ * Put a round on: its own tune, its own tempo, its own chart.  The scores on
+ * the board are per ROUND — the match is counted in rounds won, which is what
+ * the brackets in the HUD are — so they reset here too.
+ */
+function startRound(i: number): void {
+  if (!sceneRef) return;
+  round = i;
+  const cfg = ROUNDS[Math.min(i, ROUNDS.length - 1)];
+  for (const o of cardBits) o.destroy();
+  cardBits = [];
+  for (const n of notes) clear(n);
+  // A seed off the clock and the round number: a different sequence every
+  // round, and a different one again next time the cabinet is paid for.
+  notes = buildChart((Date.now() ^ (i * 0x9e3779b1)) >>> 0, cfg.bpm, cfg.offbeat);
+  clock = 0;
+  combo = 0;
+  rivalCombo = 0;
+  score = { you: 0, rival: 0 };
+  audio.setScene({ music: cfg.music });
+  refreshHud();
+
+  const banner = centerText(sceneRef, GAME_W / 2, 88, cfg.label, PALETTE.gold, 16).setDepth(50);
+  const sub = centerText(
+    sceneRef,
+    GAME_W / 2,
+    106,
+    i === 0 ? 'BEST OF THREE' : `HE IS DANCING HARDER  -  ${cfg.bpm} BPM`,
+    PALETTE.cream,
+  ).setDepth(50);
+  // Kept, not forgotten: a round that ends early — the buzzer, or a test —
+  // must not leave the round's own title fading under the result card.
+  banners = [banner, sub];
+  sceneRef.tweens.add({
+    targets: banners,
+    alpha: 0,
+    delay: 900,
+    duration: 700,
+    onComplete: () => clearBanner(),
+  });
+}
+
+/** Take the round's title off the screen, whenever the round is done with it. */
+function clearBanner(): void {
+  for (const o of banners) o.destroy();
+  banners = [];
+}
+
+/** The buzzer.  Whoever is ahead takes the round; the match may end here. */
+function endRound(): void {
+  if (over || cardMs > 0 || !sceneRef) return;
+  clearBanner();
   for (const n of notes) clear(n);
   hud?.combo.setText('');
-  const won = score.you > score.rival;
-  const line = won ? 'YOU TOOK IT' : score.you === score.rival ? 'A DRAW - NO PRIZE' : 'HE TOOK IT';
-  centerText(sceneRef, GAME_W / 2, 92, line, won ? PALETTE.gold : PALETTE.fog, 16).setDepth(50);
-  centerText(sceneRef, GAME_W / 2, 110, `${score.you} - ${score.rival}`, PALETTE.cream).setDepth(50);
+
+  const youTook = score.you > score.rival;
+  const drawn = score.you === score.rival;
+  if (youTook) wins.you++;
+  else if (!drawn) wins.rival++;
+  refreshHud();
+
+  if (wins.you >= ROUNDS_TO_WIN || wins.rival >= ROUNDS_TO_WIN || round >= ROUNDS.length - 1) {
+    endMatch(drawn && wins.you === wins.rival);
+    return;
+  }
+
+  // Another round to dance.  The card says how it stands and what is coming.
+  const line = youTook ? 'ROUND TO YOU' : drawn ? 'ROUND DRAWN' : 'ROUND TO HIM';
+  cardBits = [
+    sceneRef.add.rectangle(GAME_W / 2, 100, 220, 62, PALETTE.ink).setDepth(49).setStrokeStyle(1, PALETTE.gold),
+    centerText(sceneRef, GAME_W / 2, 84, line, youTook ? PALETTE.gold : PALETTE.fog, 16).setDepth(50),
+    centerText(sceneRef, GAME_W / 2, 102, `${score.you} - ${score.rival}`, PALETTE.cream).setDepth(50),
+    centerText(sceneRef, GAME_W / 2, 114, `ROUNDS  YOU ${wins.you}  -  HIM ${wins.rival}`, PALETTE.ash).setDepth(50),
+  ];
+  audio.sfx(youTook ? 'chime' : 'buzzer', 0.6);
+  round++;
+  cardMs = CARD_MS;
+}
+
+/** The match.  Rounds won decides it, and a level match is a level match. */
+function endMatch(levelOnThree = false): void {
+  if (over || !sceneRef) return;
+  over = true;
+  clearBanner();
+  for (const n of notes) clear(n);
+  const won = wins.you > wins.rival;
+  const tied = wins.you === wins.rival;
+  const line = won ? 'YOU TOOK THE MATCH' : tied ? 'A DRAW - TOKENS BACK' : 'HE TOOK THE MATCH';
+  centerText(sceneRef, GAME_W / 2, 88, line, won ? PALETTE.gold : PALETTE.fog, 16).setDepth(50);
+  centerText(sceneRef, GAME_W / 2, 106, `ROUNDS  ${wins.you} - ${wins.rival}`, PALETTE.cream).setDepth(50);
   centerText(
     sceneRef,
     GAME_W / 2,
-    122,
+    118,
     `${hits} HIT  ${misses} MISSED  ${wrongs} WRONG  BEST ${bestCombo}`,
     PALETTE.ash,
   ).setDepth(50);
-  sceneRef.time.delayedCall(1800, () => (won ? apiRef?.win() : apiRef?.lose()));
+  if (levelOnThree) {
+    centerText(sceneRef, GAME_W / 2, 130, 'THREE ROUNDS AND NOTHING IN IT', PALETTE.ash).setDepth(50);
+  }
+  sceneRef.time.delayedCall(1800, () => (won ? apiRef?.win() : tied ? apiRef?.draw() : apiRef?.lose()));
 }
 
 /** You: the frog, on the mat, in a cap. */
