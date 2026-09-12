@@ -69,6 +69,16 @@ export const slots: MinigameModule = {
   title: 'FROGGY SLOTS',
   music: 'game_slots',
   rules: 'two tokens a spin',
+  tutorial: {
+    objective: [
+      'TWO TOKENS A SPIN.',
+      'THREE FROGGYS IN A ROW PAYS.',
+    ],
+    controls: [
+      ['SPACE', 'SPIN'],
+      ['MOUSE', 'SPIN OR LEAVE'],
+    ],
+  },
   payoutNote: 'PAYS 6 / 15',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

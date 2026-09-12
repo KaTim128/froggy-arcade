@@ -69,6 +69,15 @@ export const ticTacToe: MinigameModule = {
   title: 'TIC-TAC-TOE',
   music: 'game_tictactoe',
   rules: 'a draw is a loss',
+  tutorial: {
+    objective: [
+      'THREE IN A ROW BEATS FROGGY.',
+      'A DRAW COUNTS AS A LOSS.',
+    ],
+    controls: [
+      ['MOUSE', 'CLICK A SQUARE TO PLACE X'],
+    ],
+  },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     board = Array<Cell>(9).fill('');

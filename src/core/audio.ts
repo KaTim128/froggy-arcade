@@ -872,6 +872,41 @@ class AudioManager {
       case 'ticket_machine':
         for (let i = 0; i < 8; i++) beep(760, 0.04, 0.05, 'square', i * 0.11);
         break;
+      // ---- the throwing match (minigames/frogvslizard.ts)
+      // An arm coming over: air moving, and the item leaving the hand.
+      case 'throw_whoosh':
+        noise(0.16, 0.07, 2600);
+        beep(420, 0.09, 0.035, 'sine', 0.02);
+        break;
+      // Something solid landing on something soft.  The ordinary hit.
+      case 'item_thud':
+        noise(0.09, 0.17, 800);
+        beep(140, 0.1, 0.09, 'square');
+        break;
+      // Dynamite.  Low, long and clearly a different order of event.
+      case 'boom':
+        noise(0.55, 0.3, 520);
+        beep(58, 0.42, 0.17, 'sawtooth');
+        beep(92, 0.26, 0.1, 'square', 0.03);
+        beep(41, 0.6, 0.09, 'sine', 0.05);
+        break;
+      // Health going the other way: a bright rising third.
+      case 'heal_up':
+        beep(659, 0.12, 0.07, 'sine');
+        beep(880, 0.14, 0.07, 'sine', 0.09);
+        beep(1174, 0.24, 0.06, 'sine', 0.18);
+        break;
+      // Poison taking hold, and the tick it makes on every turn after.
+      case 'poison_hiss':
+        for (let i = 0; i < 5; i++) noise(0.12, 0.045, 3400 - i * 400, i * 0.07);
+        beep(233, 0.34, 0.035, 'sawtooth', 0.05);
+        beep(220, 0.34, 0.03, 'sawtooth', 0.09);
+        break;
+      // The fence taking one instead of the other fellow.
+      case 'fence_thunk':
+        beep(180, 0.11, 0.09, 'triangle');
+        noise(0.07, 0.08, 620, 0.01);
+        break;
     }
   }
 
@@ -1036,6 +1071,12 @@ export type SfxName =
   | 'step_run'
   | 'zone_clear'
   | 'eerie_swell'
-  | 'ticket_machine';
+  | 'ticket_machine'
+  | 'throw_whoosh'
+  | 'item_thud'
+  | 'boom'
+  | 'heal_up'
+  | 'poison_hiss'
+  | 'fence_thunk';
 
 export const audio = new AudioManager();

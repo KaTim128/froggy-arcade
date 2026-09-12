@@ -45,6 +45,15 @@ export const snakesAndLadders: MinigameModule = {
   title: 'SNAKES + LADDERS',
   music: 'game_snakes',
   rules: 'first to 30',
+  tutorial: {
+    objective: [
+      'RACE FROGGY TO SQUARE 30.',
+      'LADDERS CLIMB. SNAKES DROP.',
+    ],
+    controls: [
+      ['MOUSE', 'CLICK ROLL TO THROW'],
+    ],
+  },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     playerPos = 0;

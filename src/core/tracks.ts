@@ -232,6 +232,21 @@ export const TRACKS: Record<string, TrackPreset> = {
     cutoff: 3000,
     vol: { lead: 0.026, bass: 0.045, arp: 0.012, drums: 1.1 },
   }),
+  // Frog vs Lizard: a fast minor march with a taunt in the lead — two
+  // neighbours over a fence, and neither of them backing down.
+  game_frogvslizard: preset({
+    bpm: 152,
+    chords: [min(C.e4 - 12), maj(C.c4), maj(C.g4 - 12), maj(C.d4)],
+    bass: [0, 0, 1, 0, 2, _, 0, 1],
+    lead: [C.e5, _, C.e5, C.g5, C.b5, _, C.a5, C.g5, C.e5, _, C.c5, _, C.d5, C.e5, _, _, C.g5, _, C.g5, C.b5, C.d5 + 12, _, C.b5, C.a5, C.g5, _, C.e5, _, C.d5, _, _, _],
+    leadWave: 'square',
+    bassWave: 'sawtooth',
+    arpWave: 'square',
+    drums: 'four',
+    cutoff: 3200,
+    vol: { lead: 0.032, bass: 0.048, arp: 0.014, drums: 1.1 },
+    ring: 1,
+  }),
   // Bowling: brassy squares, a sports-hall fanfare.
   game_bowling: preset({
     bpm: 128,

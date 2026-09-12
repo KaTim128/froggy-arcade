@@ -111,6 +111,18 @@ export const carChase: MinigameModule = {
   title: 'FROGGY CAR CHASE',
   music: 'game_carchase',
   rules: 'dodge, grab cash, lose the law',
+  tutorial: {
+    objective: [
+      'GRAB CASH AND LOSE THE LAW.',
+      'CASH BANKS AS TOKENS.',
+    ],
+    controls: [
+      ['A / D', 'STEER'],
+      ['W / S', 'SPEED UP OR EASE OFF'],
+      ['SPACE', 'NITRO'],
+      ['ENTER', 'BANK THE CASH'],
+    ],
+  },
   payoutNote: 'WIN: 7+',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

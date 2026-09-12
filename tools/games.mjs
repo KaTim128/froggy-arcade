@@ -16,9 +16,13 @@ const SHOTS = 'tools/shots/games';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const CHROME = [
+  // CI and container images keep Chrome somewhere else entirely; CHROME_PATH
+  // wins, and the pinned path is what this repo's dev container ships.
+  process.env.CHROME_PATH ?? '',
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
   '/usr/bin/google-chrome',
+  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
 ].find((p) => existsSync(p));
 
 mkdirSync(SHOTS, { recursive: true });
@@ -40,8 +44,30 @@ const GAMES = [
   { id: 'battleship', drive: async (p) => { const g = (x, y) => [640 + (x - 160) * 4, 360 + (y - 90) * 4]; for (const [c, r] of [[0, 0], [2, 2], [4, 4], [6, 1]]) { await p.mouse.click(...g(186 + c * 12 + 6, 44 + r * 12 + 6)); await sleep(900); } } },
   { id: 'frogcross', drive: async (p) => { for (let i = 0; i < 4; i++) { await p.keyboard.press('KeyW'); await sleep(350); } await p.keyboard.press('KeyA'); await sleep(600); } },
   { id: 'carchase', drive: async (p) => { await p.keyboard.down('KeyA'); await sleep(500); await p.keyboard.up('KeyA'); await p.keyboard.press('Space'); await sleep(1200); await p.keyboard.down('KeyD'); await sleep(500); await p.keyboard.up('KeyD'); } },
+  // Aim, charge, throw one over the fence, then try a special item.
+  { id: 'frogvslizard', drive: async (p) => { await p.keyboard.press('KeyW'); await p.keyboard.down('Space'); await sleep(620); await p.keyboard.up('Space'); await sleep(3200); await p.keyboard.press('Digit3'); await sleep(300); } },
   { id: 'bowling', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(200); await p.keyboard.up('KeyD'); await p.keyboard.down('Space'); await sleep(600); await p.keyboard.up('Space'); await sleep(2600); } },
 ];
+
+/** Is the how-to-play card still up? */
+const cardUp = (page) =>
+  page.evaluate(() => {
+    const s = window.__froggy.game().scene.getScene('Minigame');
+    return !!s && s.children.list.some((o) => typeof o.text === 'string' && o.text.startsWith('HOW TO PLAY'));
+  });
+
+/**
+ * Clear the tutorial card.  MG-8 put one in front of every game, so every
+ * harness that wants to touch a game has to get past it first.  It is
+ * dismissed by a click as readily as by SPACE, so check before pressing
+ * anything: a stray press into an already-running game is not free.
+ */
+const startGame = async (page) => {
+  if (await cardUp(page)) {
+    await page.keyboard.press('Space');
+    await sleep(500);
+  }
+};
 
 const browser = await puppeteer.launch({
   executablePath: CHROME,
@@ -63,8 +89,24 @@ for (const g of GAMES) {
   try {
     await page.goto(`${URL}/?game=${g.id}&intro=1&tokens=50`, { waitUntil: 'networkidle2' });
     await sleep(1200);
-    await page.mouse.click(640, 700); // audio unlock, harmlessly low on screen
+    // MG-8: every cabinet opens on its how-to-play card, and the card carries
+    // this cabinet's own controls.  A game that ships without one is a game
+    // nobody can be told how to play.  Read it BEFORE the unlock click, which
+    // is itself a click on the card and dismisses it.
+    const card = await page.evaluate(() => {
+      const s = window.__froggy.game().scene.getScene('Minigame');
+      const lines = s.children.list.filter((o) => o.type === 'BitmapText').map((o) => o.text);
+      return {
+        titled: lines.some((t) => t.startsWith('HOW TO PLAY')),
+        controls: lines.includes('CONTROLS'),
+        prompt: lines.some((t) => t.includes('TO START')),
+      };
+    });
+    const tutorial = card.titled && card.controls && card.prompt;
+
+    await page.mouse.click(640, 700); // audio unlock, and the card's own dismiss
     await sleep(600);
+    await startGame(page);
 
     await g.drive(page);
     await page.screenshot({ path: `${SHOTS}/${g.id}.png` });
@@ -77,8 +119,11 @@ for (const g of GAMES) {
       return !!c;
     });
 
-    const ok = errs.length === 0 && back;
-    console.log(`${ok ? 'PASS' : 'FAIL'}  ${g.id.padEnd(10)} ${errs.length ? errs.slice(0, 2).join(' | ') : ''}`);
+    const ok = errs.length === 0 && back && tutorial;
+    console.log(
+      `${ok ? 'PASS' : 'FAIL'}  ${g.id.padEnd(12)} ${tutorial ? 'tutorial+controls' : 'NO TUTORIAL CARD'}` +
+        `${errs.length ? '  ' + errs.slice(0, 2).join(' | ') : ''}`,
+    );
     if (!ok) failures++;
   } catch (e) {
     console.log(`FAIL  ${g.id.padEnd(10)} ${e.message}`);
@@ -97,7 +142,9 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
   await page.goto(`${URL}/?intro=1&tokens=50&game=chompman`, { waitUntil: 'networkidle2' });
-  await sleep(3000);
+  await sleep(1500);
+  await startGame(page);
+  await sleep(1500);
   await page.mouse.click(640, 60); // focus the canvas, in the title bar
 
   const snap = () =>
@@ -141,7 +188,9 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
   await page.goto(`${URL}/?intro=1&tokens=50&game=donkeykong`, { waitUntil: 'networkidle2' });
-  await sleep(2600);
+  await sleep(1400);
+  await startGame(page);
+  await sleep(1200);
   await page.mouse.click(640, 60);
 
   const read = () =>
@@ -246,7 +295,9 @@ for (const g of [
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
   await page.goto(`${URL}/?intro=1&tokens=50&game=${g.id}`, { waitUntil: 'networkidle2' });
-  await sleep(2200);
+  await sleep(1400);
+  await startGame(page);
+  await sleep(900);
   await page.mouse.click(640, 60);
   const before = await page.evaluate(() => window.__froggy.state().tokens);
   await page.evaluate((h, s, n) => window[h][s](n), g.hook, g.set, g.score);
@@ -329,6 +380,200 @@ for (const g of [
     `${launched ? 'PASS' : 'FAIL'}  clicking a cabinet starts it  — ${after.scenes.join(',')}, ${before} -> ${after.tokens} tokens`,
   );
   if (!launched) failures++;
+  await page.close();
+}
+
+// The lane's curve is a probability, and a probability is exactly the kind of
+// thing that quietly stops being one.  Sample the draw itself — the same
+// function the ball uses — rather than rolling ten thousand balls: three in
+// ten bend, the two sides split evenly, and nothing bends further than the
+// band allows.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=bowling`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await sleep(600);
+
+  const N = 20000;
+  const stats = await page.evaluate((n) => {
+    let curved = 0;
+    let left = 0;
+    let maxMag = 0;
+    let minMag = Infinity;
+    for (let i = 0; i < n; i++) {
+      const c = window.__bowl.rollCurve();
+      if (c === 0) continue;
+      curved++;
+      if (c < 0) left++;
+      maxMag = Math.max(maxMag, Math.abs(c));
+      minMag = Math.min(minMag, Math.abs(c));
+    }
+    return { curved, left, maxMag, minMag };
+  }, N);
+
+  const pCurve = stats.curved / N;
+  const pLeft = stats.left / stats.curved;
+  const rate = pCurve > 0.28 && pCurve < 0.32;
+  const even = pLeft > 0.46 && pLeft < 0.54;
+  const gentle = stats.maxMag <= 0.4001 && stats.minMag >= 0.2;
+  console.log(`${rate ? 'PASS' : 'FAIL'}  bowling: about three throws in ten curve  — ${(pCurve * 100).toFixed(1)}%`);
+  console.log(`${even ? 'PASS' : 'FAIL'}  bowling: the side is a coin flip  — ${(pLeft * 100).toFixed(1)}% left`);
+  console.log(`${gentle ? 'PASS' : 'FAIL'}  bowling: the bend stays in its band  — ${stats.minMag.toFixed(2)}..${stats.maxMag.toFixed(2)}`);
+  if (!rate) failures++;
+  if (!even) failures++;
+  if (!gentle) failures++;
+
+  // And a straight throw with the curve forced off must run straight, or the
+  // aim line is lying about where the ball goes.
+  const straight = await page.evaluate(async () => {
+    window.__bowl.throw(0, 0.8, 160, 0);
+    await new Promise((r) => setTimeout(r, 700));
+    return window.__bowl.curve();
+  });
+  const trueRoll = straight === 0;
+  console.log(`${trueRoll ? 'PASS' : 'FAIL'}  bowling: a throw with no curve keeps none  — ${straight}`);
+  if (!trueRoll) failures++;
+  await page.close();
+}
+
+// The cameo is meant to be a thing almost nobody sees, and "almost nobody"
+// is a number that can rot without anything on screen looking different.
+// Sample the spawn roll: it has to be the roll that decides, not a frog that
+// is chosen and then hidden.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=whack`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await sleep(600);
+
+  const N = 400000;
+  const seen = await page.evaluate((n) => window.__whack.sampleCameo(n), N);
+  const rate = seen / N;
+  // One in two hundred, with room for the sampling noise at this many draws.
+  const rare = rate > 0.004 && rate < 0.006;
+  console.log(`${rare ? 'PASS' : 'FAIL'}  whack-a-frog: the cameo stays a rarity  — ${seen} in ${N} (1 in ${Math.round(1 / rate)})`);
+  if (!rare) failures++;
+  await page.close();
+}
+
+// Frog vs Lizard: the items are the game, so each one has to do its own thing
+// and only its own thing.  Every throw here is the solved arc, so what is
+// under test is the item and not the aim.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(e.message));
+  await page.goto(`${URL}/?intro=1&tokens=50&game=frogvslizard`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await sleep(700);
+
+  const st = () => page.evaluate(() => window.__fvl.state());
+  /** Throw the solved arc on the frog's turn and wait for it to resolve. */
+  const hit = async (item) => {
+    await page.evaluate(() => window.__fvl.setWind(0));
+    await page.evaluate((i) => window.__fvl.autoThrow(i), item);
+    await sleep(2200);
+    return st();
+  };
+
+  const before = await st();
+  const afterRock = await hit('rock');
+  const rockDmg = before.lizard.hp - afterRock.lizard.hp;
+  const rockOk = rockDmg === 14;
+  console.log(`${rockOk ? 'PASS' : 'FAIL'}  frog vs lizard: the rock lands its ordinary damage  — ${rockDmg}`);
+  if (!rockOk) failures++;
+
+  // Wait out the lizard's reply, then take the frog's turn again.
+  const waitForFrog = async () => {
+    for (let i = 0; i < 60; i++) {
+      const s = await st();
+      if (s.turn === 'frog' && s.phase === 'aim') return s;
+      await sleep(400);
+    }
+    return st();
+  };
+
+  let s = await waitForFrog();
+  const hpBeforeTnt = s.lizard.hp;
+  const afterTnt = await hit('tnt');
+  const tntDmg = hpBeforeTnt - afterTnt.lizard.hp;
+  const tntOk = tntDmg === 28 && afterTnt.frog.stock.tnt === 0;
+  console.log(`${tntOk ? 'PASS' : 'FAIL'}  frog vs lizard: dynamite doubles it and is spent  — ${tntDmg}, ${afterTnt.frog.stock.tnt} left`);
+  if (!tntOk) failures++;
+
+  s = await waitForFrog();
+  await page.evaluate(() => window.__fvl.setHp('frog', 30));
+  const afterHeal = await hit('heal');
+  const healed = afterHeal.frog.hp - 30;
+  const healOk = healed === 16 && afterHeal.lizard.hp < s.lizard.hp;
+  console.log(`${healOk ? 'PASS' : 'FAIL'}  frog vs lizard: heal mends the thrower and still stings  — +${healed}`);
+  if (!healOk) failures++;
+
+  // Poison is the one item whose whole behaviour happens on later turns, so it
+  // is tested over turns: both sides are pinned at full health so the round
+  // cannot end under the test, and the frog wastes every throw so that the
+  // only thing moving the lizard's health is the poison.
+  s = await waitForFrog();
+  await page.evaluate(() => {
+    window.__fvl.setHp('frog', 80);
+    window.__fvl.setHp('lizard', 80);
+    window.__fvl.setWind(0);
+  });
+  await page.evaluate(() => window.__fvl.autoThrow('poison'));
+
+  let applied = 0;
+  for (let i = 0; i < 40; i++) {
+    const now = await st();
+    applied = Math.max(applied, now.lizard.poison);
+    if (applied) break;
+    await sleep(150);
+  }
+  const poisoned = applied === 3;
+  console.log(`${poisoned ? 'PASS' : 'FAIL'}  frog vs lizard: poison applies three turns  — ${applied}`);
+  if (!poisoned) failures++;
+
+  // 8 on contact, then the chip damage.  Four turns of it are allowed to
+  // happen; only three of them may cost the lizard anything.
+  const afterContact = 80 - 8;
+  for (let i = 0; i < 4; i++) {
+    await waitForFrog();
+    await page.evaluate(() => window.__fvl.setHp('frog', 80));
+    await page.evaluate(() => window.__fvl.throw(0.2, 0.15, 'rock')); // into the grass
+    await sleep(600);
+  }
+  await waitForFrog();
+  const settled = await st();
+  const chip = afterContact - settled.lizard.hp;
+  const ranOut = chip === 15 && settled.lizard.poison === 0;
+  console.log(
+    `${ranOut ? 'PASS' : 'FAIL'}  frog vs lizard: and stops after the third  — ${chip} chip over 3 turns, ${settled.lizard.poison} left`,
+  );
+  if (!ranOut) failures++;
+
+  // The wind has to actually move the item, or the bar is decoration.
+  const drift = await page.evaluate(() => {
+    const still = window.__fvl.state();
+    void still;
+    window.__fvl.setWind(0);
+    const calm = window.__fvl.solve();
+    window.__fvl.setWind(1);
+    const gale = window.__fvl.solve();
+    return { calm, gale };
+  });
+  const windMatters = Math.abs(drift.calm.angle - drift.gale.angle) > 0.01 || Math.abs(drift.calm.power - drift.gale.power) > 0.01;
+  console.log(`${windMatters ? 'PASS' : 'FAIL'}  frog vs lizard: the wind changes the throw that lands`);
+  if (!windMatters) failures++;
+
+  if (errs.length) {
+    console.log(`FAIL  frog vs lizard: ${errs.slice(0, 2).join(' | ')}`);
+    failures++;
+  }
   await page.close();
 }
 

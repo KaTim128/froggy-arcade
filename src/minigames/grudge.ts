@@ -88,6 +88,18 @@ export const grudge: MinigameModule = {
   title: 'GRUDGE',
   music: 'game_grudge',
   rules: 'best of 3',
+  tutorial: {
+    objective: [
+      'BEST OF THREE ROUNDS.',
+    ],
+    controls: [
+      ['A / D', 'WALK'],
+      ['W / S', 'JUMP AND CROUCH'],
+      ['J / K', 'PUNCH AND KICK'],
+      ['L', 'BLOCK'],
+      ['I', 'SPECIAL'],
+    ],
+  },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;

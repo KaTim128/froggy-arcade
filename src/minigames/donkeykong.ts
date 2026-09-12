@@ -113,6 +113,17 @@ export const donkeyKong: MinigameModule = {
   title: 'BARREL CLIMB',
   music: 'game_donkeykong',
   rules: 'get to the top',
+  tutorial: {
+    objective: [
+      'CLIMB TO THE EXIT AT THE TOP.',
+      'THE BARRELS TAKE A LIFE.',
+    ],
+    controls: [
+      ['A / D', 'RUN'],
+      ['W / S', 'CLIMB LADDERS'],
+      ['SPACE', 'JUMP'],
+    ],
+  },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;

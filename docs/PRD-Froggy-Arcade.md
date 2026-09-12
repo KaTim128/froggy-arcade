@@ -760,6 +760,7 @@ interface Minigame {
 | MG-5 | Every game shows a result card (`YOU WIN +6` / `YOU LOSE`) for 2 s before returning to the hub |
 | MG-6 | All six pass an automated contract test: launch → complete → return, and launch → quit → return `[QFD: AC-2]` |
 | MG-7 | All art, names, audio and layouts are **original**. No licensed assets, no trademarked names, no reproduced maze geometry `[QFD: M4, B7, §13.1 IP sign-off]` |
+| MG-8 | Every game shows a **how-to-play card** before it is built: the objective, and **this cabinet's own controls and no other cabinet's**. It appears *after* the cost is debited — paying is the commitment and the tutorial is what the player gets for it — and the game module is not constructed until it is dismissed, so nothing under the card is playable and no key pressed at it reaches the game. `ESC` at the card forfeits exactly as it does in play (MG-4). The contract is enforced by the type: `MinigameModule.tutorial` is not optional. |
 
 ### 9.0.1 A note on "six"
 
@@ -806,18 +807,22 @@ Measured over 200 automated runs per game (scripted competent player).
 
 ### 9.5 Basketball Hoops — Medium, 3 → 6
 
-- **Hold `Spacebar`** to charge a power meter (0→100 over 1.2 s, then it bounces back down — no infinite hold); release to shoot.
-- Projectile arc with gravity; the release angle is fixed, so power is the only variable.
+- **Hold `Spacebar`** to charge a power meter (0→100 over 1.2 s, then it bounces back down — no infinite hold); release to shoot. `W`/`S` tilt the shot, and an arrow at the ball shows the direction and the charge.
+- Projectile arc with gravity.
 - The hoop **slides left–right**, starting at 60 px/s and speeding up **15% per made shot**.
-- **Win: 5 made shots in 60 seconds.** A miss costs only time.
+- **Win: 5 points in 60 seconds.** A miss costs only time.
 - Rim and backboard have real collision — bank shots must be possible.
+- **Three variations sit on top of the plain shot**, and each one is readable from the screen without being explained:
+  - **The rim tightens.** Every score narrows the mouth by 1.6 px, down to a floor of 14 px, on top of the 15% speed-up. The last point of a run is the hardest one.
+  - **On fire.** Two makes in a row light the ball — it burns, it trails, and while it is lit **every make is worth two**. One miss puts it out, which is what makes the second shot of a streak worth more than the first.
+  - **The bonus ring.** A small gold ring drifts across above the hoop every ~13 s and stays for 7 s, blinking out at the end. Threading it is **worth two and lights the ball**, and it is a harder shot than the hoop beneath it.
 
 ### 9.6 Whack-a-Frog — Medium, 3 → 6
 
 - Nine holes in a 3×3 grid; frogs pop up, click to whack.
 - **Win: 25 hits in 40 seconds.**
 - Frog up-time ramps 1.10 s → 0.65 s across the round; spawn interval ramps 0.75 s → 0.45 s. Up to 3 frogs up at once late in the round.
-- **The cameo** `[QFD: M5, VOC-21]`: **1 in 20** frogs that pop up is **Froggy V1** — smooth, non-pixel, out of place. Clicking him:
+- **The cameo** `[QFD: M5, VOC-21]`: **1 in 200** occupants that pop up is **Froggy V1** — the customer raised the rarity from the original 1 in 20 so that most players never meet him at all, and the roll gates the **spawn decision itself** rather than hiding him after the fact. The odds are never shown, said or hinted at in game — smooth, non-pixel, out of place. Clicking him:
   - does **not** count as a hit,
   - does **not** cost anything,
   - plays **no sound at all**,
@@ -859,6 +864,28 @@ An original 1v1 side-view fighter. Original characters and art. `[QFD: VOC-22]`
 
 - Simple hitbox-vs-hurtbox collision, per-frame.
 - **AI:** a readable three-beat pattern — *approach → kick → punch-punch* — with a deliberate **0.6 s opening after a whiffed kick**. It blocks ~50% of incoming punches and ~30% of kicks, and uses its special only below 40% HP. A player who learns the pattern wins; a masher loses. `[QFD: M2]`
+
+### 9.9 Frog vs Lizard — Hard, 5 → 5
+
+A turn-based throwing match over a garden fence. You are the frog on the left;
+the lizard is on the right and plays by exactly the same rules. Five in, five
+out: you are playing the lizard, not the house.
+
+- **Throwing** is the Hoops mechanic with a target instead of a hoop: `W`/`S` aim, **hold `Spacebar`** for power, release to throw. An arrow shows the direction and charge, and a dotted arc shows the flight **in still air only** — the wind is deliberately *not* baked into the preview, because reading the preview against the wind bar is the game.
+- **Wind** is rolled fresh **every turn** and shown as a two-sided bar in the middle of the screen. It accelerates anything in the air sideways at up to 88 px/s², so a stronger wind bends the flight further and the throw that landed last turn does not land this one. The draw is squared (keeping its sign), so gentle days are common and a gale is occasional.
+- **The fence** is real: an item that hits it is stopped and does nothing.
+- **Items** — one ordinary, three special, **and the lizard has the same four and the same stock**:
+
+| Item | Damage | Effect | Stock per round |
+|---|---:|---|---:|
+| **Rock** | 14 | the baseline | unlimited |
+| **Heal** | 4 | heals **the thrower** 16 on contact, and still hurts the opponent | 1 |
+| **Dynamite** | 28 | exactly double | 1 |
+| **Poison** | 8 | **5 chip damage at the top of the opponent's next three turns**, applied once per turn, then it stops | 1 |
+
+- **Rounds:** 80 HP a side, **two rounds**. Health, poison and the special stock reset between them; the round score and the damage tally do not. Take both rounds and the cabinet pays; a one-all split goes to whoever dealt the most damage over the match; a dead heat pays nothing — the same rule the bowling lane uses.
+- **The lizard's AI** searches its own throws against the wind actually blowing, keeps the arc that would land, then throws it with a small two-uniform wobble on both angle and power — so it aims like an opponent and misses like one. Its item choice is the same reasoning a player uses off the same stock: heal when hurt, dynamite to finish, poison early while there is time for it to work, rock otherwise.
+- **HUD:** both health bars, the round and round score, the poison counter on each side, the wind bar, the item bar with the key for each item and how many are left, and the control line.
 
 ---
 

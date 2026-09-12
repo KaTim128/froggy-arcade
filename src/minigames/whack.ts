@@ -3,8 +3,10 @@
  *
  * Nine holes, 25 hits in 40 seconds, ramping speed.
  *
- * THE CAMEO (PRD §9.6 / VOC-21): one frog in forty is Froggy himself —
- * smooth, non-pixel, out of place among the pixel frogs.  Whacking him:
+ * THE CAMEO (PRD §9.6 / VOC-21): once in a very long while the thing that
+ * comes up out of a hole is Froggy himself — smooth, non-pixel, wrong-sized
+ * and wrong-shaped among the pixel frogs, and the only occupant that is not
+ * drawn into the game's own buffer at all.  Whacking him:
  *   - does not count as a hit
  *   - costs nothing
  *   - plays NO SOUND AT ALL
@@ -31,10 +33,16 @@ const SPAWN_MS_START = 750;
 const SPAWN_MS_END = 450;
 const MAX_UP = 3;
 /**
- * How often he turns up in a hole himself: a straight one-in-forty roll on
- * every frog that comes up, and nothing else gating it.  The customer's odds.
+ * How often he turns up in a hole himself.
+ *
+ * A straight roll on every occupant that comes up, and nothing else gating it:
+ * the rarity IS the spawn decision, so a player who dumps the scene graph or
+ * watches the overlay finds nothing hidden — most rounds he simply was never
+ * chosen.  At this rate a forty-second round is very unlikely to contain him
+ * and most players will never see him at all, which is the point.  The number
+ * is never shown, said, or hinted at anywhere in the game.
  */
-const FROGGY_SPAWN_CHANCE = 1 / 40;
+const FROGGY_SPAWN_CHANCE = 1 / 200;
 const FROGGY_STARE_MS = 1200;
 
 interface Hole {
@@ -61,6 +69,15 @@ export const whackAFrog: MinigameModule = {
   title: 'WHACK-A-FROG',
   music: 'game_whack',
   rules: '25 hits in 40 seconds',
+  tutorial: {
+    objective: [
+      '25 HITS IN 40 SECONDS.',
+      'THEY GET QUICKER AS YOU GO.',
+    ],
+    controls: [
+      ['MOUSE', 'CLICK A FROG TO WHACK IT'],
+    ],
+  },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;
@@ -123,6 +140,30 @@ export const whackAFrog: MinigameModule = {
 
     scene.input.on('pointerdown', (p: Phaser.Input.Pointer) => onClick(p.worldX, p.worldY));
     refreshHud();
+
+    if (import.meta.env?.DEV) {
+      (window as unknown as Record<string, unknown>).__whack = {
+        state: () => ({
+          hits,
+          up: holes.filter((h) => h.occupant).length,
+          guest: holes.some((h) => h.occupant === 'froggy'),
+        }),
+        /**
+         * The spawn roll itself, sampled.  His rarity has to BE the decision
+         * that puts him in a hole — a test that watched the screen could not
+         * tell that apart from spawning him and hiding him, so the harness
+         * samples the roll instead.  It reports counts, never the odds.
+         */
+        sampleCameo: (n: number) => {
+          let seen = 0;
+          for (let i = 0; i < n; i++) if (Math.random() < FROGGY_SPAWN_CHANCE) seen++;
+          return seen;
+        },
+      };
+      scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        delete (window as unknown as Record<string, unknown>).__whack;
+      });
+    }
   },
 
   update(_t: number, delta: number) {

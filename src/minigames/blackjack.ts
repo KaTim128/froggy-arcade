@@ -109,6 +109,19 @@ export const blackjack: MinigameModule = {
   title: 'BLACKJACK',
   music: 'game_blackjack',
   rules: 'bet what you like, beat the dealer to 21',
+  tutorial: {
+    objective: [
+      'BEAT THE DEALER TO 21.',
+      'BET WHAT YOU LIKE, HAND BY HAND.',
+    ],
+    controls: [
+      ['LEFT/RIGHT', 'BET 1 DOWN OR UP'],
+      ['UP / DOWN', 'BET 5 UP OR DOWN'],
+      ['SPACE', 'DEAL, THEN STAND'],
+      ['H', 'HIT'],
+      ['C', 'CASH OUT'],
+    ],
+  },
   payoutNote: 'PAYS 2X BET',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

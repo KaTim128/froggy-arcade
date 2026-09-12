@@ -105,6 +105,16 @@ export const chompMan: MinigameModule = {
   title: 'CHOMP-MAN',
   music: 'game_chompman',
   rules: 'clear the maze',
+  tutorial: {
+    objective: [
+      'CLEAR EVERY PELLET IN THE MAZE.',
+      'THE GHOSTS END YOUR RUN.',
+    ],
+    controls: [
+      ['W A S D', 'STEER'],
+      ['ARROWS', 'STEER'],
+    ],
+  },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;

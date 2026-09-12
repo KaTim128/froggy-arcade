@@ -20,6 +20,14 @@ export function makeStub(id: GameId): MinigameModule {
     id,
     title: def.title,
     rules: 'placeholder',
+    tutorial: {
+      objective: ['THIS CABINET IS NOT BUILT YET.', 'IT TAKES YOUR TOKENS ANYWAY.'],
+      controls: [
+        ['SPACE', 'WIN'],
+        ['X', 'LOSE'],
+        ['ESC', 'QUIT - FORFEITS THE COST'],
+      ],
+    },
     create(scene: Phaser.Scene, api: MinigameApi) {
       scene.add
         .rectangle(GAME_W / 2, GAME_H / 2, 220, 90, PALETTE.slate)

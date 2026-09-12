@@ -23,6 +23,11 @@ in your own browser, so nothing you do here leaves your machine.
 | **Esc** | settings, and quit out of a game |
 | **hold left mouse** | look around, in the first-person rooms |
 
+Every cabinet takes its tokens first and then shows you a how-to-play card:
+what it wants, and which keys *that* cabinet reads. Nothing starts until you
+dismiss it, so the controls are never something you have to work out while the
+clock runs.
+
 Win prizes inside, sell them to the man outside for half their token price in
 cash, feed the cash back through the change machine at half again, and see how
 long the arcade lets you keep doing that.
@@ -64,7 +69,7 @@ src/
   render/     320x180 integer scaler, palette + night transform, Froggy's overlay
   art/        painters shared between the warm and the dark version of each room
   froggy/     his vector art, his three variants, and everything he says
-  minigames/  seven games behind one interface
+  minigames/  sixteen games behind one interface
   scenes2d/   Phaser scenes
   three/      chase level grid + pathfinding
 ```
@@ -80,10 +85,12 @@ Everything is verified by driving the real game in real Chrome
 (`puppeteer-core`, using the installed browser — no download). A typecheck
 cannot tell you that a scene threw on `create()`.
 
+`CHROME_PATH` picks the browser if it is not in one of the usual places.
+
 ```bash
 npm run dev            # in one terminal
 npm run test:smoke     # boot -> settings -> intro -> hub -> cabinet -> win
-npm run test:games     # all seven games launch, play and forfeit cleanly
+npm run test:games     # every cabinet: tutorial, play, forfeit, and the odds
 npm run test:story     # charity fires once, the bust ejects, silence holds
 npm run test:basement  # ten frames, no skip, 4s hold, the jumpscare
 npm run test:chase     # speed ratio, lethality, escapability

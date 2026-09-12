@@ -46,11 +46,33 @@ export interface MinigameApi {
   readonly area: { x: number; y: number; w: number; h: number };
 }
 
+/**
+ * The card the shell puts up after the tokens are taken and before the game
+ * exists.  MG-8: no cabinet in this arcade starts without telling you what it
+ * wants and which keys it reads.
+ *
+ * `controls` is this cabinet's keys and nothing else — a player who has just
+ * paid for HOOPS is not told about the bowling aim keys.  The shell lays the
+ * pairs out as a two-column table, so `keys` is the literal key or keys and
+ * `does` is what they do, both short enough to fit 320 pixels.
+ */
+export interface Tutorial {
+  /** What winning is, in one to three short lines. */
+  objective: string[];
+  /** [keys, what they do] — every control the cabinet reads, in play order. */
+  controls: Array<[string, string]>;
+}
+
 export interface MinigameModule {
   id: GameId;
   title: string;
   /** One line shown under the title while the game boots. */
   rules: string;
+  /**
+   * How to play, shown before the game is built.  Not optional: the type is
+   * what stops a cabinet shipping without its controls on screen.
+   */
+  tutorial: Tutorial;
   /** Replaces the shell's "WIN: +n" line when the payout is not fixed. */
   payoutNote?: string;
   /**

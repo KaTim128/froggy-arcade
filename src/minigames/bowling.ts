@@ -8,12 +8,15 @@
  *
  * A and D walk the ball along the foul line, the arrows swing the aim, the
  * line shows where the ball is going, SPACE holds for power and lets go to
- * throw.  The ball HOOKS: it bends left, harder the faster it goes, so a
- * straight full-power throw down the middle ends in the gutter and the shot
- * is a matter of where you stand and how much you lead it.  The pins are
- * bodies: the ball shoves them, they shove each other, and a pin that has
- * been moved is a pin that is down — but it takes a proper shove.  Froggy
- * throws with the same physics, knows about the hook, and has a steady arm.
+ * throw.  Most balls run true.  ROUGHLY THREE IN TEN CURVE, and when one does
+ * the lane picks the side — left or right, near enough evenly — and how hard,
+ * out of a band that bends the ball by a few boards rather than across the
+ * lane.  Nothing says which kind of ball is in your hand before you let go of
+ * it: the throw is honest and the roll is where you find out, which is why a
+ * spare is a spare and not arithmetic.  The pins are bodies: the ball shoves
+ * them, they shove each other, and a pin that has been moved is a pin that is
+ * down — but it takes a proper shove.  Froggy throws the same ball on the same
+ * lane, and it surprises him exactly as often.
  *
  * Your best total is kept per profile.  Only tokens leave through the shell.
  */
@@ -46,10 +49,22 @@ const AIM_RATE = 1.4;
 /** How fast A and D carry the ball along the line, px/s. */
 const WALK = 60;
 /**
- * The hook: sideways pull, px/s^2, scaled by how fast the ball is going.  At
- * full power over the length of the lane it is most of a lane's width.
+ * The curve.  Three throws in ten bend; the rest go where they were aimed.
+ *
+ * It is rolled per throw, after the ball has left the hand, so nothing the
+ * player can read before releasing tells them which one they have — and the
+ * two sides are drawn evenly, so a ball that went left last frame says
+ * nothing about this one.
  */
-const HOOK = 0.55;
+const CURVE_CHANCE = 0.3;
+/**
+ * How hard a curving ball bends: sideways pull, px/s^2 per px/s of speed.  The
+ * band is deliberately modest — a curve should pull a pocket shot off the
+ * headpin or a gutter-bound ball back onto the deck, not sweep the lane.  The
+ * old ball hooked at 0.55 on EVERY throw, which is where the exaggeration was.
+ */
+const CURVE_MIN = 0.2;
+const CURVE_MAX = 0.4;
 /** A pin has to be shoved this far off its spot to count as down. */
 const KNOCK = 4.5;
 const CHARGE_MS = 1100;
@@ -78,6 +93,11 @@ let ballBody: Phaser.GameObjects.Arc | null = null;
 let aimLine: Phaser.GameObjects.Graphics | null = null;
 let aim = 0;
 let power = 0;
+/**
+ * The curve on the ball currently rolling: signed sideways pull, 0 for a
+ * throw that runs true.  Set at release and nowhere else.
+ */
+let curve = 0;
 let charging = false;
 let chargeDir = 1;
 let round = 1;
@@ -103,6 +123,18 @@ export const bowling: MinigameModule = {
   title: 'BOWLING',
   music: 'game_bowling',
   rules: '3 rounds against froggy - beat his total',
+  tutorial: {
+    objective: [
+      'THREE ROUNDS AGAINST FROGGY.',
+      'BEAT HIS TOTAL - A TIE PAYS NOTHING.',
+      'SOME BALLS CURVE. YOU FIND OUT ROLLING.',
+    ],
+    controls: [
+      ['A / D', 'WALK THE FOUL LINE'],
+      ['LEFT/RIGHT', 'SWING THE AIM'],
+      ['HOLD SPACE', 'POWER, LET GO TO THROW'],
+    ],
+  },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     scene0 = scene;
@@ -110,6 +142,7 @@ export const bowling: MinigameModule = {
     pins = [];
     aim = 0;
     power = 0;
+    curve = 0;
     charging = false;
     chargeDir = 1;
     round = 1;
@@ -175,13 +208,19 @@ export const bowling: MinigameModule = {
     if (import.meta.env?.DEV) {
       (window as unknown as Record<string, unknown>).__bowl = {
         state: () => ({ round, ballNo, turn, scores: { ...scores }, standing: pins.filter((p) => !p.down).length, rolling: ball.rolling, best }),
-        // A dead-straight full-power throw, for proving the pins fall.
-        strike: () => throwBall(0, 1),
-        // Any throw at all, from anywhere on the line.
-        throw: (angle: number, pow: number, x?: number) => {
+        // A dead-straight full-power throw, for proving the pins fall.  The
+        // curve is forced off so the pin physics is tested on its own.
+        strike: () => throwBall(0, 1, 0),
+        // Any throw at all, from anywhere on the line.  Pass `hook` to pin the
+        // curve instead of rolling for one.
+        throw: (angle: number, pow: number, x?: number, hook?: number) => {
           if (x !== undefined) ball.x = x;
-          throwBall(angle, pow);
+          throwBall(angle, pow, hook);
         },
+        // The curve draw on its own, so the odds can be sampled without
+        // rolling ten thousand balls down the lane.
+        rollCurve: () => rollCurve(),
+        curve: () => curve,
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__bowl;
@@ -260,10 +299,26 @@ function resetBall(): void {
   ballBody?.setPosition(ball.x, ball.y).setVisible(true);
 }
 
-function throwBall(angle: number, pow: number): void {
+/**
+ * Does this ball curve, and how much?  Zero most of the time; otherwise a
+ * signed pull, the side chosen by a coin and the strength drawn from the band.
+ *
+ * The roll happens here rather than at pick-up so that nothing the player can
+ * see — the meter, the aim line, the ball itself — has had the answer in it
+ * while they were still deciding.
+ */
+function rollCurve(): number {
+  if (Math.random() >= CURVE_CHANCE) return 0;
+  const side = Math.random() < 0.5 ? -1 : 1;
+  return side * (CURVE_MIN + Math.random() * (CURVE_MAX - CURVE_MIN));
+}
+
+/** `hook` forces the curve (the harness uses it); otherwise the lane rolls. */
+function throwBall(angle: number, pow: number, hook?: number): void {
   // Not while the last roll is still being counted: a throw then restarted
   // the roll with the ball hidden and the frame never ended.
   if (ball.rolling || settleMs > 0 || over) return;
+  curve = hook ?? rollCurve();
   const speed = THROW_MIN + pow * (THROW_MAX - THROW_MIN);
   ball.vx = Math.sin(angle) * speed;
   ball.vy = -Math.cos(angle) * speed;
@@ -276,8 +331,8 @@ function throwBall(angle: number, pow: number): void {
 function stepPhysics(dt: number): void {
   ball.x += ball.vx * dt;
   ball.y += ball.vy * dt;
-  // the hook: a leftward bend that grows with speed
-  ball.vx -= HOOK * Math.abs(ball.vy) * dt;
+  // the curve, if this ball has one: a bend that grows with speed
+  if (curve !== 0) ball.vx += curve * Math.abs(ball.vy) * dt;
   // lane friction
   const f = Math.max(0, 1 - 0.18 * dt);
   ball.vx *= f;
@@ -429,21 +484,22 @@ function endRoll(): void {
 }
 
 /**
- * Froggy's arm.  He stands to the right of centre and leads the hook, with a
- * small wobble and most of his power.  He gets sevens and eights; beating him
- * takes a strike or two.
+ * Froggy's arm.  He plays the ball the way it is now worth playing: straight
+ * at the pocket from just off centre, with a small wobble and most of his
+ * power, and no allowance for a curve he cannot know he has either.  Three of
+ * his throws in ten bend too, and it costs him about what it costs you.  He
+ * still gets sevens and eights; beating him still takes a strike or two.
  */
 function cpuThrow(): void {
   if (!scene0 || over) return;
   scene0.time.delayedCall(900, () => {
     if (over || turn !== 'cpu') return;
     const pow = 0.62 + Math.random() * 0.34;
-    // From here a near-straight throw hooks into the pocket.  He knows, but
-    // his stance drifts and his arm is not steady: sevens and eights, with
-    // the odd strike and the odd gutter.
-    ball.x = LANE_L + LANE_W / 2 + 10 + (Math.random() - 0.5) * 14;
-    const wobble = (Math.random() - 0.5) * 0.3;
-    throwBall(0.02 + wobble, pow);
+    // Just right of the centre board, aiming a shade left into the pocket —
+    // his stance drifts and his arm is not steady.
+    ball.x = LANE_L + LANE_W / 2 + 4 + (Math.random() - 0.5) * 12;
+    const wobble = (Math.random() - 0.5) * 0.24;
+    throwBall(-0.03 + wobble, pow);
   });
 }
 

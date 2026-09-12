@@ -17,9 +17,13 @@ const SHOTS = 'tools/shots/basement';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const CHROME = [
+  // CI and container images keep Chrome somewhere else entirely; CHROME_PATH
+  // wins, and the pinned path is what this repo's dev container ships.
+  process.env.CHROME_PATH ?? '',
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
   '/usr/bin/google-chrome',
+  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
 ].find((p) => existsSync(p));
 
 mkdirSync(SHOTS, { recursive: true });

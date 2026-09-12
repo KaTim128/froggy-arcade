@@ -51,6 +51,14 @@ export const airHockey: MinigameModule = {
   title: 'AIR HOCKEY',
   music: 'game_airhockey',
   rules: 'first to 5',
+  tutorial: {
+    objective: [
+      'FIRST TO FIVE GOALS TAKES IT.',
+    ],
+    controls: [
+      ['MOUSE', 'MOVES YOUR MALLET'],
+    ],
+  },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;

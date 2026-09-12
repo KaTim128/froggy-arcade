@@ -46,6 +46,16 @@ export const roulette: MinigameModule = {
   title: 'CHAMBER',
   music: 'game_roulette',
   rules: 'four clean pulls',
+  tutorial: {
+    objective: [
+      'FOUR CLEAN PULLS AND IT PAYS.',
+      'ONE ROUND IN SIX IS LIVE.',
+    ],
+    controls: [
+      ['SPACE', 'PULL'],
+      ['MOUSE', 'PULL OR CASH OUT'],
+    ],
+  },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     sceneRef = scene;

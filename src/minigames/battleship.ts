@@ -50,6 +50,15 @@ export const battleship: MinigameModule = {
   title: 'BATTLESHIP',
   music: 'game_battleship',
   rules: 'sink all four',
+  tutorial: {
+    objective: [
+      'SINK ALL FOUR OF HIS SHIPS',
+      'BEFORE HE SINKS ALL FOUR OF YOURS.',
+    ],
+    controls: [
+      ['MOUSE', 'CLICK THEIR GRID TO FIRE'],
+    ],
+  },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;

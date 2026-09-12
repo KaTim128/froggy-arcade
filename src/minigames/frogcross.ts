@@ -92,6 +92,17 @@ export const frogCross: MinigameModule = {
   title: 'FROG CROSS THE ROAD',
   music: 'game_frogcross',
   rules: 'cross 10 times to win',
+  tutorial: {
+    objective: [
+      'CROSS THE ROAD TEN TIMES.',
+      'POINTS BANK AS TOKENS.',
+    ],
+    controls: [
+      ['W A S D', 'HOP'],
+      ['ARROWS', 'HOP'],
+      ['ENTER', 'BANK WHAT YOU HAVE'],
+    ],
+  },
   payoutNote: 'WIN: 10+',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

@@ -37,7 +37,7 @@ produces intermediate values on screen, so the automated palette-count check
 
 ## Audio
 
-All ~23 sfx and both music loops are WebAudio-synthesized in
+All the sfx and every music loop are WebAudio-synthesized in
 [`src/core/audio.ts`](../src/core/audio.ts). They are real enough to test the
 three buses, the 800 ms crossfade and — most importantly — the silence
 contract, which is asserted as *zero instantiated sources* rather than a
@@ -51,6 +51,7 @@ against an id and the placeholder for that id is never constructed again.
 | music | `theme_arcade`, `hub_lofi` |
 | sfx (ambience) | `street_dusk`, `neon_buzz`, `cabinet_bleeps`, `crowd_hum`, `crickets`, `wind_low`, `car_passby` |
 | sfx (one-shots) | `ui_blip`, `ui_hover`, `dialogue_blip`, `coin_spin`, `coin_drop`, `buzzer`, `chime`, `bell_ding`, `footstep_carpet`, `footstep_concrete`, `door_open`, `door_shut`, `lock_click`, `door_rattle`, `door_creak`, `drip`, `bulb_flicker`, `vault`, `whack`, `stinger`, `death_stinger`, `hop_wet`, `ticket_machine` |
+| sfx (the throwing match) | `throw_whoosh`, `item_thud`, `boom`, `heal_up`, `poison_hiss`, `fence_thunk` |
 
 Two placeholders stand in for sounds that need real recordings: the chase's
 heavy breathing currently borrows `footstep_carpet`, and `hop_wet` is filtered

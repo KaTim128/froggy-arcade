@@ -84,6 +84,9 @@ export const CABINETS: CabinetDef[] = [
   // the payout.
   { id: 'frogcross', title: 'FROG CROSS', tier: 'hard', cost: 7, reward: 10, x: 112, y: 162, color: 0x6fbb6a, room: 'annex' },
   { id: 'carchase', title: 'CAR CHASE', tier: 'hard', cost: 5, reward: 7, x: 176, y: 162, color: 0x46a0e0, room: 'annex' },
+  // Five on a five, like the bowling lane: you are playing the lizard, not the
+  // house, and the cabinet only takes its cut when he beats you.
+  { id: 'frogvslizard', title: 'FROG VS LIZARD', tier: 'hard', cost: 5, reward: 5, x: 240, y: 162, color: 0xa8c23f, room: 'annex' },
 
   // ---- and the room at the back, where none of it is a game
   // Two tokens is the price of the first spin; the rest are raised through

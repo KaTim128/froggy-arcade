@@ -23,6 +23,7 @@ import { TokenHud } from '../ui/hud';
 import { cabinetById } from '../game/content';
 import { getMinigame } from '../minigames/registry';
 import type { MinigameApi, MinigameModule } from '../minigames/types';
+import { showTutorial, type TutorialCard } from '../ui/tutorialCard';
 import { froggyLayer } from '../render/froggyLayer';
 
 const AREA = { x: 0, y: 18, w: GAME_W, h: GAME_H - 18 };
@@ -38,6 +39,13 @@ export class MinigameScene extends Phaser.Scene {
   private stake = 0;
   /** Tokens paid out mid-game, hand by hand.  Only a table uses this. */
   private paid = 0;
+  /**
+   * MG-8: the game is not built until the how-to-play card is dismissed, so
+   * nothing under the card can be played and no key pressed at it is read by
+   * the game.  `started` is what `update` waits on.
+   */
+  private started = false;
+  private card: TutorialCard | null = null;
 
   constructor() {
     super('Minigame');
@@ -52,6 +60,8 @@ export class MinigameScene extends Phaser.Scene {
     this.mod = null;
     this.stake = 0;
     this.paid = 0;
+    this.started = false;
+    this.card = null;
   }
 
   create(): void {
@@ -94,10 +104,24 @@ export class MinigameScene extends Phaser.Scene {
       area: AREA,
     };
 
-    this.mod.create(this, api);
-
-    // MG-4: Esc forfeits the entry cost.  No confirmation, no refund.
+    // MG-4: Esc forfeits the entry cost.  No confirmation, no refund.  Bound
+    // before the tutorial so it works while the card is up too.
     this.input.keyboard?.on('keydown-ESC', () => this.forfeit());
+
+    // MG-8: the tokens are already gone, so what the player gets first is the
+    // card telling them what this cabinet wants and which keys it reads.  The
+    // module is constructed on the other side of it.
+    const mod = this.mod;
+    this.card = showTutorial(this, def.title, mod.tutorial, () => {
+      this.card = null;
+      if (this.settled) return;
+      mod.create(this, api);
+      this.started = true;
+    });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.card?.destroy();
+      this.card = null;
+    });
 
     if (import.meta.env?.DEV) {
       // PRD §6.9: force win / force loss in the active minigame.
@@ -113,7 +137,7 @@ export class MinigameScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
-    if (this.settled) return;
+    if (this.settled || !this.started) return;
     this.mod?.update?.(time, delta);
   }
 
@@ -154,7 +178,9 @@ export class MinigameScene extends Phaser.Scene {
   private cashOut(): void {
     if (this.settled) return;
     this.settled = true;
-    this.mod?.destroy?.();
+    this.card?.destroy();
+    this.card = null;
+    if (this.started) this.mod?.destroy?.();
     store.flush();
 
     const net = this.paid - this.stake;
@@ -178,8 +204,13 @@ export class MinigameScene extends Phaser.Scene {
   private settle(won: boolean, quit = false, payout?: number): void {
     if (this.settled) return;
     this.settled = true;
+    this.card?.destroy();
+    this.card = null;
 
-    this.mod?.destroy?.();
+    // Quitting at the card never built the game, so there is nothing to tear
+    // down — calling destroy on a module that never ran leaves the next play
+    // reading another game's leftovers.
+    if (this.started) this.mod?.destroy?.();
     const def = cabinetById(this.gameId);
 
     // MG-3: the reward is credited here and nowhere else.  A betting game names
