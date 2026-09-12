@@ -20,7 +20,7 @@ import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
 import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
-import { paintHubRoom, ROOM } from '../art/hubRoom';
+import { paintCasinoDressing, paintHubRoom, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet } from '../art/cabinet';
 import { BlackjackTable } from '../art/blackjackTable';
@@ -77,7 +77,8 @@ export class ArcadeCasino extends Phaser.Scene {
     audio.setScene({ music: 'casino_chiptune' });
 
     // No front door in here: the only way out of the building is the hub.
-    paintHubRoom(this, { night: false, frontDoor: false });
+    paintHubRoom(this, { night: false, frontDoor: false, theme: 'casino' });
+    paintCasinoDressing(this);
     this.paintDoorway();
 
     this.cabinets = cabinetsIn('casino').map((def) => {

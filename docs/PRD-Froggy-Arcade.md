@@ -493,19 +493,21 @@ The main loop. A single room, 3/4 view, walked with WASD.
 
 ### 7.6 PrizeCounter `[QFD: B5, E5]`
 
-A shelf of **seven** prizes behind glass, each with a name, a pixel illustration, a token price and a locked/unlocked state.
+A shelf of **nine** prizes behind glass, each with a name, a pixel illustration, a token price and a locked/unlocked state.
 
-Every price is **half** what it was, and two cheaper things sit below where the old list started. The gap the design wanted is still there — forty tokens against a starting bankroll of twenty — but at two hundred for the bunny most players never reached the shelf at all, and a prize nobody ever holds may as well not be modelled. Halving the list halves what the man outside pays for it too (`cashFor` is cost ÷ 2), so the sell-and-rechange loop keeps its shape exactly.
+The cheap end stays cheap — a keyring at forty against a starting bankroll of twenty, so the counter is somewhere a player can actually reach — and then it climbs hard. Everything above the duck is a decision to keep playing rather than something you happen to be able to afford, and the whole shelf is **2,930 tokens**, which nobody clears by accident. Halving the list in an earlier pass made the shelf reachable but made clearing it a formality; this curve keeps the doorway and puts the far end back out of sight. The man outside still pays half of the counter's price (`cashFor`), so the sell-and-rechange loop keeps its shape at every rung.
 
 | Prize | Cost | Notes |
 |---|---|---|
 | Frog Keyring | 40 | The cheapest thing in the room, and reachable in one good run |
-| Sticker Pack | 60 | |
-| Stuffed Bunny | 100 | The kid's target |
-| Lava Lamp | 125 | |
-| Skateboard | 175 | |
-| Gaming Headset | 250 | |
-| PS5 | 375 | Still the one at the end of the shelf; it exists to be looked at |
+| Sticker Pack | 70 | |
+| Rubber Duck | 120 | |
+| Stuffed Bunny | 180 | The kid's target |
+| Lava Lamp | 260 | |
+| Skateboard | 360 | |
+| Gaming Headset | 480 | |
+| Electric Guitar | 620 | |
+| PS5 | 800 | Still the one at the end of the shelf; it exists to be looked at |
 
 | # | Requirement |
 |---|---|
@@ -901,10 +903,10 @@ other five-token cabinet on the floor.
 - **The lizard's AI** searches its own throws against the wind actually blowing, keeps the arc that would land, then throws it with a small two-uniform wobble on both angle and power — so it aims like an opponent and misses like one. Its item choice is the same reasoning a player uses off the same stock: heal when hurt, dynamite to finish, poison early while there is time for it to work, rock otherwise.
 - **HUD:** both health bars, the round and round score, the poison counter on each side, the wind bar, the item bar with the key for each item and how many are left, and the control line.
 
-### 9.10 Wheel of Fortune — casino, 10 a spin
+### 9.10 Wheel of Fortune — casino, 20 a spin
 
 Not a cabinet: a painted wheel on a post in the corner of the casino, with a
-pointer over the top of it. Ten tokens a spin, the first one paid at the door
+pointer over the top of it. Twenty tokens a spin, the first one paid at the door
 and every one after it raised through the shell; LEAVE settles up. Prizes are
 paid the moment the wheel stops.
 
@@ -921,11 +923,12 @@ the wheel prints the same numbers.
 | 100 | **5%** |
 | the blank | **5%** |
 
-**Known imbalance.** At those odds a spin returns **17.7 tokens for a 10-token
-stake** — a 77% edge to the player, and the only unbounded token source in the
-game. It is implemented exactly as specified and flagged here rather than
-quietly retuned; the one-number fix, if the loop wants closing, is the price of
-a spin (20 makes it an 11% house edge) rather than the face list.
+**The price, and why it is twenty.** The faces average **17.7 tokens a spin**.
+At ten a spin that was a 77% edge to the *player* and an unbounded token
+supply: the prize shelf became a formality and every other cabinet became
+pointless. At twenty the house keeps about 11%, which is what a wheel in a room
+like this is for. The faces are untouched — the odds on the board are the odds
+that were asked for, and the price of a go is the one number that moved.
 
 ### 9.11 Dance Off — Hard, 10 → 20, in the back room
 
@@ -965,7 +968,7 @@ Every tier is a **2× on a win**, so expected value is negative unless the playe
 | Barrel Climb | 7 | 20 | The two longest games in the building, and the only ones you can lose on the last screen after four minutes of not losing. A 7-in / 7-out cabinet asked for the afternoon and handed back the entry fee. |
 | Chomp-Man | 7 | 20 | as above |
 | Dance Off | 10 | 20 | Forty-five seconds against a rival who lands seven in ten: a short game with a real opponent, priced as one go rather than as a tier. |
-| Wheel of Fortune | 10 | — | Pays what the pointer stops on, 0 to 100. See §9.10, including what it does to the economy. |
+| Wheel of Fortune | 20 | — | Pays what the pointer stops on, 0 to 100, averaging 17.7. See §9.10. |
 
 The two score-for-tokens cabinets are a formula rather than a constant: a bar, a base payout, and one more token for every further bar. **Frog Cross** is 7 in, 50 points (five crossings) for 15, and +1 every 50 after. **Car Chase** is 5 in, 200 cash for 10, and +1 every 200 after. See the module headers.
 

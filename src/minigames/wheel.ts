@@ -1,5 +1,5 @@
 /**
- * WHEEL OF FORTUNE.  Ten tokens a spin, in the corner of the casino.
+ * WHEEL OF FORTUNE.  Twenty tokens a spin, in the corner of the casino.
  *
  * THE ODDS ARE THE GEOMETRY.  Every face on the wheel is cut to the width of
  * its own chance — the hundred is an eighteen-degree sliver and the small
@@ -16,10 +16,18 @@
  * The board on the right says all of that out loud, the way the chamber says
  * one live round in six.  This building takes your money in the open.
  *
- * Ten in the slot buys the first spin (the shell already debited it); every
+ * Twenty in the slot buys the first spin (the shell already debited it); every
  * spin after that is raised through the shell, every prize is paid the moment
  * the wheel stops, and LEAVE settles up.  Nothing leaves except through the
  * ledger (MG-3).
+ *
+ * THE PRICE, AND WHY IT IS TWENTY.  The faces average 17.7 tokens a spin.  At
+ * ten a spin that is a seventy-seven per cent edge to the PLAYER and an
+ * unbounded token supply — the prize shelf becomes a formality and every other
+ * cabinet becomes pointless.  At twenty the house keeps about eleven per cent,
+ * which is what a wheel in a room like this is for.  The faces are untouched:
+ * the odds on the board are the odds the customer asked for, and the price of
+ * a go is the one number that had to move.
  */
 
 import Phaser from 'phaser';
@@ -30,7 +38,7 @@ import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
 const ID = 'wheel' as const;
-export const SPIN_COST = 10;
+export const SPIN_COST = 20;
 
 /**
  * The faces, in the order they sit round the rim, with the share of the wheel
@@ -127,7 +135,7 @@ export const wheelOfFortune: MinigameModule = {
   payoutNote: 'PAYS 1 - 100',
   tutorial: {
     objective: [
-      'TEN TOKENS A SPIN.',
+      'TWENTY TOKENS A SPIN.',
       'EVERY FACE IS AS WIDE AS ITS CHANCE.',
       'LEAVE WHENEVER YOU LIKE - IT IS ALL YOURS.',
     ],

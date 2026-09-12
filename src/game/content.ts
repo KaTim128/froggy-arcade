@@ -118,15 +118,16 @@ export const CABINETS: CabinetDef[] = [
     fixture: 'table',
   },
   { id: 'roulette', title: 'CHAMBER', tier: 'hard', cost: 5, reward: 10, x: 224, y: 96, color: 0x8a2b34, room: 'casino' },
-  // Not a machine either: a wheel on a post, in the corner of the casino.  Ten
-  // a spin, and what it pays is whatever the pointer is over when it stops —
+  // Not a machine either: a wheel on a post, in the corner of the casino.
+  // Twenty a spin, and what it pays is whatever the pointer is over when it
+  // stops —
   // `reward` is only what the room's badge would say, since the wheel settles
   // every spin itself through the shell (MinigameApi.payout).
   {
     id: 'wheel',
     title: 'WHEEL OF FORTUNE',
     tier: 'hard',
-    cost: 10,
+    cost: 20,
     reward: 15,
     x: 58,
     y: 140,
@@ -160,25 +161,27 @@ export interface PrizeDef {
 }
 
 /**
- * PRD §7.6.  Every price here is HALF what it was, and there are two more
- * things on the shelf below where the old list started.
+ * PRD §7.6.  Nine things on the shelf, and a curve that means them.
  *
- * The gap was the point and it still is — the cheapest thing is forty tokens
- * against a starting bankroll of twenty, so the counter is still somewhere you
- * walk up to and walk away from — but at two hundred for the bunny most
- * players never reached the shelf at all, and a prize nobody ever holds is a
- * prize that may as well not be modelled.  A keyring at forty is reachable in
- * one good run, and the PS5 still exists to be looked at.
- * (QFD §15 decision #2.)
+ * The cheap end stays cheap — a keyring at forty against a starting bankroll
+ * of twenty, so the counter is somewhere you can actually reach — and then it
+ * climbs hard.  Everything above the duck is a decision to keep playing rather
+ * than a thing you happen to be able to afford, and the whole shelf is two
+ * thousand nine hundred and thirty tokens, which nobody clears by accident.
+ *
+ * The man outside still pays half of the counter's price (`cashFor`), so the
+ * sell-and-rechange loop keeps its shape at every rung.
  */
 export const PRIZES: PrizeDef[] = [
   { id: 'keyring', name: 'FROG KEYRING', cost: 40, color: 0x6fbb6a },
-  { id: 'stickers', name: 'STICKER PACK', cost: 60, color: 0xffd45e },
-  { id: 'bunny', name: 'STUFFED BUNNY', cost: 100, color: 0xfff0c9 },
-  { id: 'lavalamp', name: 'LAVA LAMP', cost: 125, color: 0xff7a3d },
-  { id: 'skateboard', name: 'SKATEBOARD', cost: 175, color: 0x7b4bd8 },
-  { id: 'headset', name: 'GAMING HEADSET', cost: 250, color: 0x46c4bd },
-  { id: 'ps5', name: 'PS5', cost: 375, color: 0xd6dce4 },
+  { id: 'stickers', name: 'STICKER PACK', cost: 70, color: 0xffd45e },
+  { id: 'duck', name: 'RUBBER DUCK', cost: 120, color: 0xffb038 },
+  { id: 'bunny', name: 'STUFFED BUNNY', cost: 180, color: 0xfff0c9 },
+  { id: 'lavalamp', name: 'LAVA LAMP', cost: 260, color: 0xff7a3d },
+  { id: 'skateboard', name: 'SKATEBOARD', cost: 360, color: 0x7b4bd8 },
+  { id: 'headset', name: 'GAMING HEADSET', cost: 480, color: 0x46c4bd },
+  { id: 'guitar', name: 'ELECTRIC GUITAR', cost: 620, color: 0xc31f2e },
+  { id: 'ps5', name: 'PS5', cost: 800, color: 0xd6dce4 },
 ];
 
 export function prizeById(id: string): PrizeDef | undefined {

@@ -24,27 +24,27 @@ export class PrizeCounter extends Phaser.Scene {
   create(): void {
     this.rows = [];
     this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0.85).setOrigin(0, 0).setInteractive();
-    this.add.rectangle(GAME_W / 2, GAME_H / 2, 276, 156, PALETTE.ink).setStrokeStyle(1, PALETTE.gold);
+    this.add.rectangle(GAME_W / 2, GAME_H / 2 - 2, 276, 164, PALETTE.ink).setStrokeStyle(1, PALETTE.gold);
 
-    centerText(this, GAME_W / 2, 22, 'PRIZE COUNTER', PALETTE.gold);
-    centerText(this, GAME_W / 2, 33, 'no attendant', PALETTE.ash).setAlpha(0.6);
+    centerText(this, GAME_W / 2, 17, 'PRIZE COUNTER', PALETTE.gold);
+    centerText(this, GAME_W / 2, 27, 'no attendant', PALETTE.ash).setAlpha(0.6);
 
-    // Seven rows on a 180px screen: the pitch is what the shelf can hold, and
-    // the last REDEEM has to clear the BACK button at 158.
+    // Nine rows on a 180px screen: the pitch is what the shelf can hold, and
+    // the last REDEEM has to clear the BACK button.
     PRIZES.forEach((p, i) => {
-      const y = 44 + i * 15;
-      this.add.rectangle(34, y, 13, 13, p.color).setOrigin(0, 0);
-      const name = text(this, 54, y + 3, p.name, PALETTE.cream);
-      const cost = text(this, 186, y + 3, `${p.cost}`, PALETTE.gold);
+      const y = 37 + i * 13;
+      this.add.rectangle(34, y, 11, 11, p.color).setOrigin(0, 0);
+      const name = text(this, 52, y + 2, p.name, PALETTE.cream);
+      const cost = text(this, 186, y + 2, `${p.cost}`, PALETTE.gold);
 
       const owned = store.get().prizesOwned.includes(p.id);
       const btn = button(
         this,
         250,
-        y + 7,
+        y + 5,
         owned ? 'OWNED' : 'REDEEM',
         () => this.redeem(p.id, p.cost),
-        { width: 52, height: 13, disabled: owned || !ledger.canAfford(p.cost) },
+        { width: 52, height: 12, disabled: owned || !ledger.canAfford(p.cost) },
       );
 
       const refresh = () => {
@@ -58,7 +58,7 @@ export class PrizeCounter extends Phaser.Scene {
       this.rows.push(refresh);
     });
 
-    button(this, GAME_W / 2, 158, 'BACK', () => this.close(), { width: 60, height: 13 });
+    button(this, GAME_W / 2, 166, 'BACK', () => this.close(), { width: 60, height: 12 });
     this.input.keyboard?.on('keydown-ESC', () => this.close());
   }
 

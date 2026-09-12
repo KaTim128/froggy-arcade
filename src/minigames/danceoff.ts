@@ -12,6 +12,10 @@
  * them, so beating him is a matter of accuracy rather than luck — and the
  * combo bonus is where the margin comes from: he never builds one.
  *
+ * A hit is 100 and a run of them pays 10 more each up to +100; a WRONG KEY —
+ * one with nothing of yours due in that lane — takes 100 straight back off,
+ * which is what stops the game being four keys held down.
+ *
  * The chart is generated from a fixed seed, so the song is the same song every
  * time you pay for it.  A rhythm game whose chart is noise cannot be learned,
  * and learning it is the whole of the genre.
@@ -49,6 +53,8 @@ const MISS_MS = 190;
 const LANES = 4;
 const LANE_W = 19;
 const ARROWS = ['←', '↓', '↑', '→'];
+/** The physical keys, by lane.  `code` so the mapping survives a layout. */
+const LANE_CODES = ['KeyA', 'KeyS', 'KeyW', 'KeyD'];
 const LANE_COLOUR = [PALETTE.neon, PALETTE.tealLight, PALETTE.mossLight, PALETTE.ember];
 /** Left edge of each side's four lanes. */
 const RIVAL_X = 22;
@@ -56,6 +62,16 @@ const YOU_X = GAME_W - 22 - LANES * LANE_W;
 
 /** What a hit is worth, and what a run of them adds on top. */
 const HIT_POINTS = 100;
+/**
+ * And what a wrong key costs: exactly what a right one pays.
+ *
+ * Anything less and the best strategy is to hold all four down and let the
+ * window sort it out.  A press only counts as wrong when there is nothing of
+ * yours due in that lane — the window is 145ms either side, so this is a wrong
+ * key or a press at nothing, not a slightly early one.  The score floors at
+ * zero: a negative scoreboard reads as a bug rather than as a telling-off.
+ */
+const WRONG_POINTS = 100;
 const COMBO_STEP = 10;
 const COMBO_CAP = 10;
 /** How often the rival lands one.  He is good, not perfect, and never combos. */
@@ -83,6 +99,8 @@ let combo = 0;
 let bestCombo = 0;
 let hits = 0;
 let misses = 0;
+/** Presses at nothing.  They cost points, so they are counted like the rest. */
+let wrongs = 0;
 let receptors: Phaser.GameObjects.Rectangle[] = [];
 let dancers: { you: Phaser.GameObjects.Container | null; rival: Phaser.GameObjects.Container | null } = { you: null, rival: null };
 let hud: {
@@ -93,7 +111,7 @@ let hud: {
   judge: Phaser.GameObjects.BitmapText;
 } | null = null;
 let keys: Phaser.Input.Keyboard.Key[] = [];
-let heldLast = [false, false, false, false];
+let onKey: ((e: KeyboardEvent) => void) | null = null;
 
 /** A little deterministic generator, so the chart is a chart and not noise. */
 function rng(seed: number): () => number {
@@ -139,9 +157,9 @@ export const danceOff: MinigameModule = {
   rules: '45 seconds - out-dance him',
   tutorial: {
     objective: [
-      'ARROWS CLIMB. HIT THEM ON THE LINE.',
-      'A LEFT, S DOWN, W UP, D RIGHT.',
-      '45 SECONDS - THE HIGHER SCORE TAKES IT.',
+      'HIT THE ARROWS AS THEY REACH THE LINE.',
+      'A WRONG KEY COSTS YOU 100 - NO MASHING.',
+      '45 SECONDS. THE HIGHER SCORE TAKES IT.',
     ],
     controls: [
       ['A / S', 'LEFT AND DOWN'],
@@ -159,8 +177,8 @@ export const danceOff: MinigameModule = {
     bestCombo = 0;
     hits = 0;
     misses = 0;
+    wrongs = 0;
     receptors = [];
-    heldLast = [false, false, false, false];
     notes = buildChart();
 
     // the hall: a dark room, a lit floor, a speaker stack either side
@@ -201,12 +219,30 @@ export const danceOff: MinigameModule = {
     };
     refreshHud();
 
+    // Input comes off the DOM, once per key press, and nothing else.
+    //
+    // Polling `isDown` per frame drops a tap that begins and ends inside one
+    // frame and reads every other one up to 16ms late — 11% of the hit window
+    // spent on nothing.  Phaser's own keydown events are worse for this: its
+    // queue re-emits, and ten presses measured as forty-six, which in a game
+    // that docks you for a wrong key is ten mistakes charged as forty-six.
+    // The DOM counts presses exactly; `repeat` filters the held-key stream.
     const kb = scene.input.keyboard;
     keys = kb ? ['A', 'S', 'W', 'D'].map((k) => kb.addKey(k)) : [];
+    onKey = (ev: KeyboardEvent) => {
+      if (over || ev.repeat) return;
+      const lane = LANE_CODES.indexOf(ev.code);
+      if (lane >= 0) press(lane);
+    };
+    window.addEventListener('keydown', onKey);
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (onKey) window.removeEventListener('keydown', onKey);
+      onKey = null;
+    });
 
     if (import.meta.env?.DEV) {
       (window as unknown as Record<string, unknown>).__dance = {
-        state: () => ({ clock, score: { ...score }, combo, bestCombo, hits, misses, notes: notes.length, over }),
+        state: () => ({ clock, score: { ...score }, combo, bestCombo, hits, misses, wrongs, notes: notes.length, over }),
         /**
          * The next few arrows of yours that are still live.  A rhythm game is
          * only testable if the harness can play it properly, and playing it
@@ -257,12 +293,10 @@ export const danceOff: MinigameModule = {
       return;
     }
 
-    // ---- the keys.  Edge-triggered: holding a key does not eat a lane.
+    // ---- the receptors light while a key is held.  Presses arrive as events;
+    // this is only the lamp.
     for (let l = 0; l < LANES; l++) {
-      const down = keys[l]?.isDown ?? false;
-      if (down && !heldLast[l]) press(l);
-      heldLast[l] = down;
-      receptors[l]?.setFillStyle(down ? LANE_COLOUR[l] : PALETTE.ink);
+      receptors[l]?.setFillStyle(keys[l]?.isDown ? LANE_COLOUR[l] : PALETTE.ink);
     }
 
     // ---- the arrows
@@ -306,6 +340,8 @@ export const danceOff: MinigameModule = {
   },
 
   destroy() {
+    if (onKey) window.removeEventListener('keydown', onKey);
+    onKey = null;
     notes = [];
     receptors = [];
     dancers = { you: null, rival: null };
@@ -331,10 +367,12 @@ function press(lane: number): void {
   }
   if (!best || bestGap > WINDOW_MS) {
     // A press into an empty lane is not free: it is how mashing loses.
+    wrongs++;
+    score.you = Math.max(0, score.you - WRONG_POINTS);
     combo = 0;
-    judge('OFF BEAT', PALETTE.steel);
+    judge(`WRONG -${WRONG_POINTS}`, PALETTE.blood);
     refreshHud();
-    audio.sfx('ui_hover', 0.4);
+    audio.sfx('buzzer', 0.35);
     return;
   }
   best.done = true;
@@ -391,7 +429,13 @@ function finish(): void {
   const line = won ? 'YOU TOOK IT' : score.you === score.rival ? 'A DRAW - NO PRIZE' : 'HE TOOK IT';
   centerText(sceneRef, GAME_W / 2, 92, line, won ? PALETTE.gold : PALETTE.fog, 16).setDepth(50);
   centerText(sceneRef, GAME_W / 2, 110, `${score.you} - ${score.rival}`, PALETTE.cream).setDepth(50);
-  centerText(sceneRef, GAME_W / 2, 122, `${hits} HIT  ${misses} MISSED  BEST RUN ${bestCombo}`, PALETTE.ash).setDepth(50);
+  centerText(
+    sceneRef,
+    GAME_W / 2,
+    122,
+    `${hits} HIT  ${misses} MISSED  ${wrongs} WRONG  BEST ${bestCombo}`,
+    PALETTE.ash,
+  ).setDepth(50);
   sceneRef.time.delayedCall(1800, () => (won ? apiRef?.win() : apiRef?.lose()));
 }
 

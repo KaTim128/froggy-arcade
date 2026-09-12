@@ -594,6 +594,19 @@ for (const g of [
   if (!lands) failures++;
   if (!leads) failures++;
 
+  // A wrong key costs exactly what a right one pays, so a burst of presses at
+  // nothing can only ever take a score down.  Ten in one lane: at most one of
+  // them can be a real arrow, and the other nine are the rule under test.
+  const beforeMash = await page.evaluate(() => window.__dance.state());
+  for (let i = 0; i < 10; i++) await page.keyboard.press('KeyA');
+  const afterMash = await page.evaluate(() => window.__dance.state());
+  const punished = afterMash.wrongs >= beforeMash.wrongs + 8 && afterMash.score.you <= beforeMash.score.you;
+  console.log(
+    `${punished ? 'PASS' : 'FAIL'}  dance off: a wrong key costs a point, so mashing cannot pay  — ` +
+      `${beforeMash.score.you} -> ${afterMash.score.you} over ${afterMash.wrongs - beforeMash.wrongs} wrong`,
+  );
+  if (!punished) failures++;
+
   // Winning pays the cabinet's reward, through the shell.
   const before = await page.evaluate(() => window.__froggy.state().tokens);
   await page.evaluate(() => {
