@@ -29,9 +29,11 @@ export class PrizeCounter extends Phaser.Scene {
     centerText(this, GAME_W / 2, 22, 'PRIZE COUNTER', PALETTE.gold);
     centerText(this, GAME_W / 2, 33, 'no attendant', PALETTE.ash).setAlpha(0.6);
 
+    // Seven rows on a 180px screen: the pitch is what the shelf can hold, and
+    // the last REDEEM has to clear the BACK button at 158.
     PRIZES.forEach((p, i) => {
-      const y = 50 + i * 20;
-      this.add.rectangle(34, y, 14, 14, p.color).setOrigin(0, 0);
+      const y = 44 + i * 15;
+      this.add.rectangle(34, y, 13, 13, p.color).setOrigin(0, 0);
       const name = text(this, 54, y + 3, p.name, PALETTE.cream);
       const cost = text(this, 186, y + 3, `${p.cost}`, PALETTE.gold);
 

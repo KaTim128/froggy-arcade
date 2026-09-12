@@ -1,5 +1,5 @@
 /**
- * BOWLING.  Medium — 3 tokens in, 3 out.
+ * BOWLING.  Medium — 3 tokens in, 6 out.
  *
  * A lane seen from above, ten pins at the far end, and Froggy on the next
  * lane over bowling against you.  Three rounds; two balls a round; every pin

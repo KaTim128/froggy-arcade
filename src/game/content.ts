@@ -2,7 +2,8 @@
  * Cabinets and prizes.  PRD §7.5 layout, §7.6 prize list, §10.2 payout table.
  *
  * Every tier is a 2x on a win (PRD §10.2 / QFD §15 decision #1): the brief's
- * original "5 in / 3 out" medium tier was a guaranteed loss even when you won.
+ * original "5 in / 3 out" medium tier was a guaranteed loss even when you won,
+ * and the easy tier's 1-in / 3-out was the one place the arcade paid triple.
  */
 
 import type { GameId } from '../core/state';
@@ -34,7 +35,7 @@ export interface CabinetDef {
 }
 
 export const TIER_ECONOMY: Record<Tier, { cost: number; reward: number }> = {
-  easy: { cost: 1, reward: 3 },
+  easy: { cost: 1, reward: 2 },
   medium: { cost: 3, reward: 6 },
   hard: { cost: 5, reward: 10 },
 };
@@ -63,30 +64,36 @@ export const TIER_ECONOMY: Record<Tier, { cost: number; reward: number }> = {
  */
 export const CABINETS: CabinetDef[] = [
   // ---- the front room: everything that costs one to three tokens
-  { id: 'tictactoe', title: 'TIC-TAC-TOE', tier: 'easy', cost: 1, reward: 3, x: 34, y: 86, color: 0xff4fa3 },
-  { id: 'snakes', title: 'SNAKES+LADDERS', tier: 'easy', cost: 1, reward: 3, x: 68, y: 86, color: 0x46c4bd },
+  // A token in, two out: you win one.  Three out was a 3x on the cheapest
+  // games in the building and the only positive-EV corner of the floor.
+  { id: 'tictactoe', title: 'TIC-TAC-TOE', tier: 'easy', cost: 1, reward: 2, x: 34, y: 86, color: 0xff4fa3 },
+  { id: 'snakes', title: 'SNAKES+LADDERS', tier: 'easy', cost: 1, reward: 2, x: 68, y: 86, color: 0x46c4bd },
   // The bottom row: two either side of the front door, in line with the two
   // above.  Nothing sits under the change machine on the right wall, because a
   // cabinet's click zone up there swallows every attempt to use it.
   { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 3, reward: 6, x: 34, y: 162, color: 0xff7a3d },
   { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 3, reward: 6, x: 68, y: 162, color: 0x6fbb6a },
-  // Bowling pays 3 on a 3 — you are playing Froggy, not the house.
-  { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 3, reward: 3, x: 252, y: 162, color: 0xb9884f },
+  // Three in, six out like the rest of the three-token row: beating Froggy is
+  // worth the same as clearing any other medium cabinet.
+  { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 3, reward: 6, x: 252, y: 162, color: 0xb9884f },
   { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 286, y: 162, color: 0x1d6f8f },
 
   // ---- the back room: five to seven a go
   { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 5, reward: 10, x: 48, y: 96, color: 0xc31f2e, room: 'annex' },
-  { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 7, reward: 7, x: 112, y: 96, color: 0xd9822b, room: 'annex' },
+  // The two seven-token climbs pay 20.  They are the longest games in the
+  // building and the only ones you can lose on the last screen after four
+  // minutes of not losing, so the pot has to be worth the walk — a 7-in, 7-out
+  // cabinet was asking for the afternoon and handing back the entry fee.
+  { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 7, reward: 20, x: 112, y: 96, color: 0xd9822b, room: 'annex' },
   { id: 'airhockey', title: 'AIR HOCKEY', tier: 'hard', cost: 5, reward: 10, x: 176, y: 96, color: 0xffd45e, room: 'annex' },
-  { id: 'chompman', title: 'CHOMP-MAN', tier: 'hard', cost: 7, reward: 7, x: 240, y: 96, color: 0x7b4bd8, room: 'annex' },
+  { id: 'chompman', title: 'CHOMP-MAN', tier: 'hard', cost: 7, reward: 20, x: 240, y: 96, color: 0x7b4bd8, room: 'annex' },
   // Along the bottom wall, under the middle two of the row above.  Neither
   // has a fixed reward: a run is worth what it scored, and the module names
   // the payout.
-  { id: 'frogcross', title: 'FROG CROSS', tier: 'hard', cost: 7, reward: 10, x: 112, y: 162, color: 0x6fbb6a, room: 'annex' },
-  { id: 'carchase', title: 'CAR CHASE', tier: 'hard', cost: 5, reward: 7, x: 176, y: 162, color: 0x46a0e0, room: 'annex' },
-  // Five on a five, like the bowling lane: you are playing the lizard, not the
-  // house, and the cabinet only takes its cut when he beats you.
-  { id: 'frogvslizard', title: 'FROG VS LIZARD', tier: 'hard', cost: 5, reward: 5, x: 240, y: 162, color: 0xa8c23f, room: 'annex' },
+  { id: 'frogcross', title: 'FROG CROSS', tier: 'hard', cost: 7, reward: 15, x: 112, y: 162, color: 0x6fbb6a, room: 'annex' },
+  { id: 'carchase', title: 'CAR CHASE', tier: 'hard', cost: 5, reward: 10, x: 176, y: 162, color: 0x46a0e0, room: 'annex' },
+  // Ten on a five, like every other five-token cabinet on the floor.
+  { id: 'frogvslizard', title: 'FROG VS LIZARD', tier: 'hard', cost: 5, reward: 10, x: 240, y: 162, color: 0xa8c23f, room: 'annex' },
 
   // ---- and the room at the back, where none of it is a game
   // Two tokens is the price of the first spin; the rest are raised through
@@ -134,16 +141,25 @@ export interface PrizeDef {
 }
 
 /**
- * PRD §7.6.  The cheapest thing in the room is 200 tokens against a starting
- * bankroll of 20.  That gap is the point — most players never redeem, and the
- * PS5 exists to be looked at.  (QFD §15 decision #2.)
+ * PRD §7.6.  Every price here is HALF what it was, and there are two more
+ * things on the shelf below where the old list started.
+ *
+ * The gap was the point and it still is — the cheapest thing is forty tokens
+ * against a starting bankroll of twenty, so the counter is still somewhere you
+ * walk up to and walk away from — but at two hundred for the bunny most
+ * players never reached the shelf at all, and a prize nobody ever holds is a
+ * prize that may as well not be modelled.  A keyring at forty is reachable in
+ * one good run, and the PS5 still exists to be looked at.
+ * (QFD §15 decision #2.)
  */
 export const PRIZES: PrizeDef[] = [
-  { id: 'bunny', name: 'STUFFED BUNNY', cost: 200, color: 0xfff0c9 },
-  { id: 'lavalamp', name: 'LAVA LAMP', cost: 250, color: 0xff7a3d },
-  { id: 'skateboard', name: 'SKATEBOARD', cost: 350, color: 0x7b4bd8 },
-  { id: 'headset', name: 'GAMING HEADSET', cost: 500, color: 0x46c4bd },
-  { id: 'ps5', name: 'PS5', cost: 750, color: 0xd6dce4 },
+  { id: 'keyring', name: 'FROG KEYRING', cost: 40, color: 0x6fbb6a },
+  { id: 'stickers', name: 'STICKER PACK', cost: 60, color: 0xffd45e },
+  { id: 'bunny', name: 'STUFFED BUNNY', cost: 100, color: 0xfff0c9 },
+  { id: 'lavalamp', name: 'LAVA LAMP', cost: 125, color: 0xff7a3d },
+  { id: 'skateboard', name: 'SKATEBOARD', cost: 175, color: 0x7b4bd8 },
+  { id: 'headset', name: 'GAMING HEADSET', cost: 250, color: 0x46c4bd },
+  { id: 'ps5', name: 'PS5', cost: 375, color: 0xd6dce4 },
 ];
 
 export function prizeById(id: string): PrizeDef | undefined {

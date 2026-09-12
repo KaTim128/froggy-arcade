@@ -289,8 +289,11 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
 // pays the base, and every further bar adds one.  Banking on ENTER is the
 // path a player who has made the bar actually takes.
 for (const g of [
-  { id: 'frogcross', hook: '__frog', set: 'setPoints', score: 230, expect: 11, label: '230 pts' },
-  { id: 'carchase', hook: '__chase', set: 'setCash', score: 600, expect: 9, label: '600 cash' },
+  // The bar is 50 points (five crossings) and every further bar adds one:
+  // 230 banks the base fifteen plus three.
+  { id: 'frogcross', hook: '__frog', set: 'setPoints', score: 230, expect: 18, label: '230 pts' },
+  // 200 cash is ten, and 600 is two bars past it.
+  { id: 'carchase', hook: '__chase', set: 'setCash', score: 600, expect: 12, label: '600 cash' },
 ]) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });

@@ -1,10 +1,12 @@
 /**
- * FROG CROSS THE ROAD.  Hard — 7 tokens in, ten and up out.
+ * FROG CROSS THE ROAD.  Hard — 7 tokens in, fifteen and up out.
  *
  * Eight lanes of traffic between the kerb and the far bank.  Every crossing
  * is ten points and makes the road a little worse: faster cars, more of them,
- * longer ones.  Three lives.  Ten crossings — a hundred points — is the bar:
- * reach it and the run pays ten tokens, and every further ten crossings adds one.
+ * longer ones.  Three lives.  FIVE crossings — fifty points — is the bar:
+ * reach it and the run pays fifteen tokens for the seven it cost, and every
+ * further five crossings adds one.  Ten was a long way to walk on three lives with the road thickening
+ * under you, and most runs died two crossings short of being worth anything.
  *
  * Nothing about it is timed.  The clock here is your patience: the road only
  * gets harder, so the question is how far past the bar you push before the
@@ -25,8 +27,8 @@ import type { MinigameApi, MinigameModule } from './types';
 const ID = 'frogcross' as const;
 
 /** The bar, the base payout, and what each further bar is worth. */
-export const TARGET_POINTS = 100;
-export const BASE_REWARD = 10;
+export const TARGET_POINTS = 50;
+export const BASE_REWARD = 15;
 export const POINTS_PER_CROSS = 10;
 
 const LANES = 8;
@@ -91,10 +93,10 @@ export const frogCross: MinigameModule = {
   id: ID,
   title: 'FROG CROSS THE ROAD',
   music: 'game_frogcross',
-  rules: 'cross 10 times to win',
+  rules: 'cross 5 times to win',
   tutorial: {
     objective: [
-      'CROSS THE ROAD TEN TIMES.',
+      'CROSS THE ROAD FIVE TIMES.',
       'POINTS BANK AS TOKENS.',
     ],
     controls: [
@@ -103,7 +105,7 @@ export const frogCross: MinigameModule = {
       ['ENTER', 'BANK WHAT YOU HAVE'],
     ],
   },
-  payoutNote: 'WIN: 10+',
+  payoutNote: 'WIN: 15+',
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;

@@ -23,11 +23,20 @@ export function evaluateBroke(): BrokeOutcome {
   return s.charityUsed ? 'eject' : 'charity';
 }
 
-/** PRD §7.7 — the five tokens.  Sets the latch first, so it cannot double-fire. */
+/**
+ * PRD §7.7 — the handout.  Sets the latch first, so it cannot double-fire.
+ *
+ * Ten, not five.  Five bought one go on a medium cabinet and one loss put the
+ * player straight back on zero and out of the building, which made the whole
+ * beat a formality rather than a second chance.  Ten is a few goes: enough
+ * that what happens next is something the player did.
+ */
+export const CHARITY_TOKENS = 10;
+
 export function grantCharity(): void {
   if (store.get().charityUsed) return;
   store.patch({ charityUsed: true });
-  ledger.credit(5, 'charity');
+  ledger.credit(CHARITY_TOKENS, 'charity');
   store.flush();
 }
 

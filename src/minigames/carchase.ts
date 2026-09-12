@@ -1,5 +1,5 @@
 /**
- * FROGGY CAR CHASE.  Hard — 5 tokens in, seven and up out.
+ * FROGGY CAR CHASE.  Hard — 5 tokens in, ten and up out.
  *
  * A four-lane road seen from above, scrolling under you.  Traffic ahead is
  * slower than you and has to be threaded; the police behind are faster than
@@ -13,7 +13,10 @@
  * for it — the police close the gap again the moment a burst ends, and a
  * warning flashes when one is on your bumper.
  *
- * Two hundred cash is the bar: seven tokens, and one more for every further
+ * Getting TO two hundred is the gentle half: the road climbs slowly, traffic
+ * is thin, and a second car does not turn up for three quarters of a minute.
+ *
+ * Two hundred cash is the bar: ten tokens, and one more for every further
  * two hundred.  IT IS ALSO WHEN THEY START TAKING YOU SERIOUSLY.  Every two
  * hundred in the bag is a notch of HEAT: another car on the road behind you,
  * a faster one, thicker traffic and a quicker road, up to three notches.  The
@@ -36,7 +39,7 @@ import type { MinigameApi, MinigameModule } from './types';
 const ID = 'carchase' as const;
 
 export const TARGET_CASH = 200;
-export const BASE_REWARD = 7;
+export const BASE_REWARD = 10;
 export const CASH_PER_PICKUP = 20;
 
 const ROAD_L = 96;
@@ -48,15 +51,23 @@ const BOTTOM = 180;
 const CAR_W = 12;
 const CAR_H = 20;
 
-/** Road speed in px/s: where it starts, how fast it climbs, where it stops. */
-const SPEED_START = 110;
-const SPEED_RAMP = 1.6;
-const SPEED_MAX = 250;
+/**
+ * Road speed in px/s: where it starts, how fast it climbs, where it stops.
+ *
+ * The climb is deliberately slower than it was (1.6/s to a 250 ceiling): the
+ * road used to be at its worst before most players had two hundred in the bag,
+ * so the run ended before it had paid for itself.  Reaching the bar is now the
+ * gentle half of the game and the HEAT below is the hard half — which is the
+ * right way round, because the heat only arrives once you have been paid.
+ */
+const SPEED_START = 104;
+const SPEED_RAMP = 1.1;
+const SPEED_MAX = 226;
 const STEER = 120;
 const CREEP = 50;
 /** Nitro: how much faster, and for how long. */
 const NITRO_MUL = 1.8;
-const NITRO_MS = 1500;
+const NITRO_MS = 1700;
 /** Bursts the tank holds. */
 const NITRO_TANK = 2;
 /**
@@ -65,12 +76,18 @@ const NITRO_TANK = 2;
  * empty is a bad minute rather than the end of the run.  It does not tick
  * while a burst is burning: the clock is for refilling, not for extending.
  */
-const NITRO_REGEN_MS = 14_000;
+const NITRO_REGEN_MS = 11_000;
 /** A police car this close behind you is a warning. */
 const WARN_DIST = 70;
-/** How much faster the police are than you, and how hard they steer at you. */
-const POLICE_GAIN = 26;
-const POLICE_STEER = 55;
+/**
+ * How much faster the police are than you, and how hard they steer at you.
+ *
+ * Twenty is still a gap that closes — you cannot simply out-drive them — but
+ * it leaves a burst of nitro enough room to actually lose one, which is what
+ * the burst is for.  They also gain on you more slowly with the clock.
+ */
+const POLICE_GAIN = 20;
+const POLICE_STEER = 48;
 /**
  * The heat.  Every TARGET_CASH in the bag is a notch, up to HEAT_MAX: one more
  * car behind you, that much more speed on all of them, thicker traffic and a
@@ -157,7 +174,7 @@ export const carChase: MinigameModule = {
       ['ENTER', 'BANK THE CASH'],
     ],
   },
-  payoutNote: 'WIN: 7+',
+  payoutNote: 'WIN: 10+',
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     scene0 = scene;
@@ -171,7 +188,7 @@ export const carChase: MinigameModule = {
     cash = [];
     dashes = [];
     trafficTimer = 2600;
-    policeTimer = 6000;
+    policeTimer = 8000;
     cashTimer = 900;
     jars = [];
     jarTimer = 5000;
@@ -257,7 +274,7 @@ export const carChase: MinigameModule = {
           nitroCharge,
           heat: chaseHeat(collected),
           policeCap: policeCap(),
-          policeSpeed: speed + POLICE_GAIN + chaseHeat(collected) * HEAT_POLICE_GAIN + elapsed / 2500,
+          policeSpeed: speed + POLICE_GAIN + chaseHeat(collected) * HEAT_POLICE_GAIN + elapsed / 3500,
           jars: jars.length,
           traffic: traffic.length,
           police: police.length,
@@ -322,7 +339,7 @@ export const carChase: MinigameModule = {
     trafficTimer -= delta;
     if (trafficTimer <= 0) {
       spawnTraffic();
-      trafficTimer = Math.max(360, 1100 - elapsed / 90 - heat * 130);
+      trafficTimer = Math.max(460, 1250 - elapsed / 120 - heat * 130);
     }
     for (const c of traffic) {
       c.y += (ground - c.own) * dt;
@@ -337,7 +354,7 @@ export const carChase: MinigameModule = {
       policeTimer = Math.max(1500, 3000 - heat * 500);
     }
     for (const p of police) {
-      p.own = speed + POLICE_GAIN + heat * HEAT_POLICE_GAIN + elapsed / 2500;
+      p.own = speed + POLICE_GAIN + heat * HEAT_POLICE_GAIN + elapsed / 3500;
       p.y += (ground - p.own) * dt;
       p.x += Phaser.Math.Clamp(px - p.x, -1, 1) * POLICE_STEER * dt;
       p.body.setPosition(p.x, p.y).setVisible(onScreen(p.y));
@@ -459,11 +476,12 @@ const held = (g: string): boolean => keys[g]?.some((k) => k.isDown) ?? false;
 const onScreen = (y: number): boolean => y - CAR_H / 2 >= TOP;
 
 /**
- * One at first, two after half a minute, three after a minute — and one more
- * for every notch of heat.  What is in the bag decides as much as the clock.
+ * One at first, two after three quarters of a minute, three after a minute and
+ * a half — and one more for every notch of heat.  What is in the bag decides
+ * as much as the clock, and it decides it sooner.
  */
 function policeCap(): number {
-  return 1 + Math.min(2, Math.floor(elapsed / 30000)) + chaseHeat(collected);
+  return 1 + Math.min(2, Math.floor(elapsed / 45000)) + chaseHeat(collected);
 }
 
 /** They have called it in.  Said once per notch, and never quietly. */
@@ -481,8 +499,14 @@ function keep(m: Mover, ok: boolean): boolean {
   return ok;
 }
 
+/**
+ * Contact.  Deliberately smaller than the paint: a car is 12x20 and this is
+ * 8x14 between centres, so a gap you can see is a gap you get through.  The
+ * old box clipped on misses that looked clean, which reads as the game
+ * cheating rather than as your mistake.
+ */
 function hits(m: Mover): boolean {
-  return Math.abs(m.x - px) < CAR_W - 2 && Math.abs(m.y - py) < CAR_H - 3;
+  return Math.abs(m.x - px) < CAR_W - 4 && Math.abs(m.y - py) < CAR_H - 6;
 }
 
 function carSprite(scene: Phaser.Scene, x: number, y: number, colour: number, cop: boolean): Phaser.GameObjects.Container {

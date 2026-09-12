@@ -208,8 +208,11 @@ export class ArcadeHub extends Phaser.Scene {
       .rectangle(PRIZE_CASE.x, PRIZE_CASE.y - 30, PRIZE_CASE.w, 30, PALETTE.ink)
       .setOrigin(0, 0)
       .setStrokeStyle(1, PALETTE.fog);
+    // Seven things in the same hundred pixels of glass: the pitch follows the
+    // list rather than being drawn for five.
+    const pitch = Math.floor((PRIZE_CASE.w - 12) / PRIZES.length);
     PRIZES.forEach((p, i) => {
-      this.add.rectangle(PRIZE_CASE.x + 7 + i * 18, PRIZE_CASE.y - 22, 13, 14, p.color).setOrigin(0, 0);
+      this.add.rectangle(PRIZE_CASE.x + 6 + i * pitch, PRIZE_CASE.y - 22, pitch - 2, 14, p.color).setOrigin(0, 0);
     });
     // glass sheen
     this.add.rectangle(PRIZE_CASE.x + 4, PRIZE_CASE.y - 27, 3, 25, PALETTE.white).setOrigin(0, 0).setAlpha(0.14);

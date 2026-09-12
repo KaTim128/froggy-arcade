@@ -108,8 +108,11 @@ export const slots: MinigameModule = {
       show(reels[i], FROG);
     });
 
-    balance = text(scene, 30, 118, '', PALETTE.cream);
-    status = centerText(scene, GAME_W / 2, 124, 'SPIN TO PLAY', PALETTE.cream);
+    // Two lines, not one.  The balance is left-aligned and the result is
+    // centred, so on a long result ("FIVE FROGGYS  -  15 TOKENS") the two ran
+    // into each other and printed on top of one another.
+    balance = text(scene, 30, 114, '', PALETTE.cream);
+    status = centerText(scene, GAME_W / 2, 128, 'SPIN TO PLAY', PALETTE.cream);
     spinBtn = button(scene, GAME_W / 2 - 40, 156, `SPIN - ${SPIN_COST}`, () => spin(), { width: 70, height: 14 });
     leaveBtn = button(scene, GAME_W / 2 + 40, 156, 'LEAVE', () => leave(), { width: 56, height: 14, fill: PALETTE.slate });
     scene.input.keyboard?.on('keydown-SPACE', () => spin());

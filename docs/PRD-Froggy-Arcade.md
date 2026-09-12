@@ -39,7 +39,7 @@
 
 **Froggy Arcade** is a single-player browser game, roughly **25–40 minutes** for a full run, that presents itself as a cozy 2D pixel-art arcade sim and is actually a horror game.
 
-The player has **$10**, converted to **20 froggy-tokens**. They spend those tokens on six arcade minigames, hoping to accumulate the 200 tokens needed for the cheapest prize — which they intend to sell to a kid outside for real cash. There is no way to earn more money. When the tokens run out, the arcade's cheerful mascot gives them five more. When those run out too, he stops smiling and has them removed.
+The player has **$10**, converted to **20 froggy-tokens**. They spend those tokens on six arcade minigames, hoping to accumulate the tokens needed for the cheapest prize — which they intend to sell to a kid outside for real cash. There is no way to earn more money. When the tokens run out, the arcade's cheerful mascot gives them ten more. When those run out too, he stops smiling and has them removed.
 
 The horror unlocks only if the player, now outside and broke at night, chooses to break back in through the alley door.
 
@@ -93,7 +93,7 @@ The horror unlocks only if the player, now outside and broke at night, chooses t
 
 | Persona | Behaviour | Design implication |
 |---|---|---|
-| **The Grinder** (~20%) | Plays every minigame carefully, tries to reach 200 tokens | The prize path must be *real* and the kid must actually pay out (§7.11) |
+| **The Grinder** (~20%) | Plays every minigame carefully, tries to reach the shelf | The prize path must be *real* and the kid must actually pay out (§7.11) |
 | **The Rusher** (~45%) | Mashes the expensive cabinets, goes broke in three minutes | The hub must not require exploration to find cabinets; the tutorial must be short |
 | **The Reader** (~25%) | Reads every line, rings the bell, clicks everything | The bell, the unattended counter and the blank stare pay off for this player and nobody else |
 | **The Coward** (~10%) | Takes the `LEAVE` exit | Their ending must be quiet and unmocked — no "are you sure?", no shaming |
@@ -136,15 +136,15 @@ The intended minute-by-minute experience of a median blind player. Times are tar
 
 **1:30 — First game.** Almost always an Easy cabinet (1 token). Win or lose, the HUD coin-spins. They play again.
 
-**2:00–6:00 — The grind.** With 20 tokens and a 2× payout on every tier, most players trend downward. The Rusher tries a Hard cabinet early and loses a quarter of their bankroll in ninety seconds. The Grinder farms Tic-Tac-Toe at 1-in/3-out. The prize case shows a Stuffed Bunny at 200 tokens, which by now looks impossible.
+**2:00–6:00 — The grind.** With 20 tokens and a 2× payout on every tier, most players trend downward. The Rusher tries a Hard cabinet early and loses a quarter of their bankroll in ninety seconds. The Grinder farms Tic-Tac-Toe at 1-in/2-out. The prize case shows a keyring at forty tokens and a Stuffed Bunny at a hundred, which by now looks like a long afternoon.
 
 **~5:00 — Somewhere in here:** the player rings the handbell at the unattended prize counter. Nothing happens. They ring it again. Nothing happens. Ever. `[QFD: VOC-18]`
 
 **~5:30 — Possibly:** a Whack-a-Frog session throws up one smooth, non-pixel Froggy among the pixel frogs. Whacking him does nothing — he stares for 1.2 seconds and goes back down, and the hit doesn't count. The player assumes it's a bug. `[QFD: M5]`
 
-**6:00 — First bust.** Tokens hit 0. Froggy appears: *"Aw, tapped out already? Don't sweat it. Five tokens, on the house. Because I like your face."* `+5 tokens`, cheerful chime. The player feels lucky. `[QFD: E3]`
+**6:00 — First bust.** Tokens hit 0. Froggy appears: *"Aw, tapped out already? Don't sweat it. Ten tokens, on the house. Because I like your face."* `+10 tokens`, cheerful chime. The player feels lucky. `[QFD: E3]` (Five was the original figure and it bought a single medium go: one loss and the player was back on zero and out of the building, which made the second chance a formality. Ten is a few goes, so what happens next is something they did.)
 
-**7:00 — Second bust.** Five tokens buys one Easy game and two-thirds of a Medium. It goes fast.
+**7:00 — Second bust.** Ten tokens buys a handful of Easy games or three Mediums. It still goes.
 
 The music **cuts** — not fades. The cabinet bleeps stop. The lights drop 30%.
 
@@ -493,15 +493,19 @@ The main loop. A single room, 3/4 view, walked with WASD.
 
 ### 7.6 PrizeCounter `[QFD: B5, E5]`
 
-A grid of five prizes behind glass, each with a name, a pixel illustration, a token price and a locked/unlocked state.
+A shelf of **seven** prizes behind glass, each with a name, a pixel illustration, a token price and a locked/unlocked state.
+
+Every price is **half** what it was, and two cheaper things sit below where the old list started. The gap the design wanted is still there — forty tokens against a starting bankroll of twenty — but at two hundred for the bunny most players never reached the shelf at all, and a prize nobody ever holds may as well not be modelled. Halving the list halves what the man outside pays for it too (`cashFor` is cost ÷ 2), so the sell-and-rechange loop keeps its shape exactly.
 
 | Prize | Cost | Notes |
 |---|---|---|
-| Stuffed Bunny | 200 | The cheapest thing in the room; the kid's target |
-| Lava Lamp | 250 | |
-| Skateboard | 350 | |
-| Gaming Headset | 500 | |
-| PS5 | 750 | Effectively unreachable; it exists to be looked at |
+| Frog Keyring | 40 | The cheapest thing in the room, and reachable in one good run |
+| Sticker Pack | 60 | |
+| Stuffed Bunny | 100 | The kid's target |
+| Lava Lamp | 125 | |
+| Skateboard | 175 | |
+| Gaming Headset | 250 | |
+| PS5 | 375 | Still the one at the end of the shelf; it exists to be looked at |
 
 | # | Requirement |
 |---|---|
@@ -514,7 +518,7 @@ A grid of five prizes behind glass, each with a name, a pixel illustration, a to
 
 Fires once, on the first zero balance. Froggy hops into frame; the dialogue box slides up.
 
-> "Aw, tapped out already? Don't sweat it. **Five tokens, on the house.** Because I like your face."
+> "Aw, tapped out already? Don't sweat it. **Ten tokens, on the house.** Because I like your face."
 
 `credit(5,'charity')` · `charityUsed = true` · cheerful chime · coin-spin to `5`. Returns to `ArcadeHub`. Total duration ~6 s.
 
@@ -724,7 +728,7 @@ Bottom third of the screen. Froggy's portrait on the left, text on the right, ty
 
 **Charity** (first zero balance):
 
-> "Aw, tapped out already? Don't sweat it. **Five tokens, on the house.** Because I like your face."
+> "Aw, tapped out already? Don't sweat it. **Ten tokens, on the house.** Because I like your face."
 
 **Second bust** (second zero balance) — timing in §7.8:
 
@@ -776,29 +780,38 @@ Measured over 200 automated runs per game (scripted competent player).
 
 | Game | Tier | Cost | Reward | Target win rate | Typical length |
 |---|---|---:|---:|---|---|
-| Tic-Tac-Toe | Easy | 1 | 3 | 45–60% | 25 s |
-| Snakes & Ladders | Easy | 1 | 3 | 48–52% | 45 s |
-| Air Hockey | Easy | 1 | 3 | 45–60% | 70 s |
+| Tic-Tac-Toe | Easy | 1 | 2 | 45–60% | 25 s |
+| Snakes & Ladders | Easy | 1 | 2 | 48–52% | 45 s |
+| Air Hockey | Hard | 5 | 10 | 45–60% | 70 s |
 | Basketball Hoops | Medium | 3 | 6 | 40–55% | 60 s |
 | Whack-a-Frog | Medium | 3 | 6 | 40–55% | 40 s |
-| Chomp-Man | Hard | 5 | 10 | 30–45% | 100 s |
+| Bowling | Medium | 3 | 6 | 40–55% | 150 s |
+| Battleship | Medium | 3 | 6 | 40–55% | 90 s |
+| Chomp-Man | Hard | 7 | 20 | 30–45% | 100 s |
+| Barrel Climb | Hard | 7 | 20 | 30–45% | 120 s |
 | Grudge (Fighter) | Hard | 5 | 10 | 30–45% | 90 s |
+| Frog vs Lizard | Hard | 5 | 10 | 40–55% | 120 s |
 
-### 9.2 Tic-Tac-Toe — Easy, 1 → 3
+Air Hockey moved to the back room and the hard tier when the floor was sorted
+by price; the two seven-token climbs and the two versus cabinets are explained
+under §10.2. Frog Cross and Car Chase pay a formula, not a constant, and are
+not in this table.
+
+### 9.2 Tic-Tac-Toe — Easy, 1 → 2
 
 - 3×3 grid, player is `X` and moves first, click to place.
 - **AI:** 30% of turns a uniformly random legal move; otherwise full minimax. This makes it decently strong but reliably beatable. `[QFD: VOC-20]`
 - **A draw is a loss.** This is the single most important rule in the game and must be stated on the result card: `DRAW — NO PAYOUT`.
 - Win: three in a row for the player. Lose: AI three in a row, or a full board.
 
-### 9.3 Snakes & Ladders — Easy, 1 → 3
+### 9.3 Snakes & Ladders — Easy, 1 → 2
 
 - 30 squares, player vs one AI token, click to roll a d6.
 - **Board:** ladders `3→16`, `7→19`, `12→24`, `20→27`; snakes `25→9`, `22→11`, `18→6`.
 - Landing exactly on or past 30 wins. Player rolls first; turns alternate.
 - Pure luck, ~50%. The piece **hops square to square** with a 120 ms per-square animation — the hop is most of the game's charm.
 
-### 9.4 Air Hockey — Easy, 1 → 3
+### 9.4 Air Hockey — Hard, 5 → 10
 
 - Mouse-controlled paddle, constrained to the player's half. First to **5**.
 - Puck: max speed 520 px/s, elastic wall bounces, restitution 0.98 on paddles, speed inherited from paddle motion.
@@ -865,11 +878,11 @@ An original 1v1 side-view fighter. Original characters and art. `[QFD: VOC-22]`
 - Simple hitbox-vs-hurtbox collision, per-frame.
 - **AI:** a readable three-beat pattern — *approach → kick → punch-punch* — with a deliberate **0.6 s opening after a whiffed kick**. It blocks ~50% of incoming punches and ~30% of kicks, and uses its special only below 40% HP. A player who learns the pattern wins; a masher loses. `[QFD: M2]`
 
-### 9.9 Frog vs Lizard — Hard, 5 → 5
+### 9.9 Frog vs Lizard — Hard, 5 → 10
 
 A one-round, turn-based throwing match over a garden fence. You are the frog on the left;
-the lizard is on the right and plays by exactly the same rules. Five in, five
-out: you are playing the lizard, not the house.
+the lizard is on the right and plays by exactly the same rules. Five in, ten out, like every
+other five-token cabinet on the floor.
 
 - **Throwing** is the Hoops mechanic with a target instead of a hoop: `W`/`S` aim, **hold `Spacebar`** for power, release to throw. An arrow shows the direction and charge, and a dotted arc shows the flight **in still air only** — the wind is deliberately *not* baked into the preview, because reading the preview against the wind bar is the game.
 - **Wind** is rolled fresh **every turn** and shown as a two-sided bar in the middle of the screen. It accelerates anything in the air sideways at up to 88 px/s², so a stronger wind bends the flight further and the throw that landed last turn does not land this one. The draw is squared (keeping its sign), so gentle days are common and a gale is occasional.
@@ -899,11 +912,20 @@ out: you are playing the lizard, not the house.
 
 | Tier | Games | Cost | Win | Loss |
 |---|---|---:|---:|---:|
-| Easy | Tic-Tac-Toe, Snakes & Ladders, Air Hockey | 1 | 3 | 0 |
+| Easy | Tic-Tac-Toe, Snakes & Ladders | 1 | 2 | 0 |
 | Medium | Basketball Hoops, Whack-a-Frog | 3 | 6 | 0 |
 | Hard | Chomp-Man, Grudge | 5 | 10 | 0 |
 
-Every tier is a **2× on a win**, so expected value is negative unless the player wins more than half the time. That pressure is the point. The brief's original "5 in / 3 out" medium tier was a guaranteed loss even on a win, and was corrected to 3/6 in the QFD. `[QFD: §15 decision #1]`
+Every tier is a **2× on a win**, so expected value is negative unless the player wins more than half the time. That pressure is the point. The brief's original "5 in / 3 out" medium tier was a guaranteed loss even on a win, and was corrected to 3/6 in the QFD. `[QFD: §15 decision #1]` The easy tier used to pay 1 → 3, which was the one corner of the floor paying triple and the only reliably positive-EV play in the building; it is 1 → 2 now, so the rule holds everywhere.
+
+**Cabinets that sit outside the tier table.** The floor grew past the original seven, and the price of a go now follows one rule — **1 → 2, 3 → 6, 5 → 10** — with two exceptions, both of them the longest games in the building:
+
+| Cabinet | Cost | Win | Why |
+|---|---:|---:|---|
+| Barrel Climb | 7 | 20 | The two longest games in the building, and the only ones you can lose on the last screen after four minutes of not losing. A 7-in / 7-out cabinet asked for the afternoon and handed back the entry fee. |
+| Chomp-Man | 7 | 20 | as above |
+
+The two score-for-tokens cabinets are a formula rather than a constant: a bar, a base payout, and one more token for every further bar. **Frog Cross** is 7 in, 50 points (five crossings) for 15, and +1 every 50 after. **Car Chase** is 5 in, 200 cash for 10, and +1 every 200 after. See the module headers.
 
 ### 10.3 Expected-value model
 
@@ -911,18 +933,17 @@ Net EV per play = `(p_win × reward) − cost`, where the break-even win rate is
 
 | Game | p_win (target midpoint) | Cost | EV | Net per play |
 |---|---:|---:|---:|---:|
-| Tic-Tac-Toe | 0.525 | 1 | 1.58 | **+0.58** |
-| Snakes & Ladders | 0.50 | 1 | 1.50 | **+0.50** |
-| Air Hockey | 0.525 | 1 | 1.58 | **+0.58** |
+| Tic-Tac-Toe | 0.525 | 1 | 1.05 | **+0.05** |
+| Snakes & Ladders | 0.50 | 1 | 1.00 | **0.00** |
 | Basketball Hoops | 0.475 | 3 | 2.85 | **−0.15** |
 | Whack-a-Frog | 0.475 | 3 | 2.85 | **−0.15** |
 | Chomp-Man | 0.375 | 5 | 3.75 | **−1.25** |
 | Grudge | 0.375 | 5 | 3.75 | **−1.25** |
 
-**Read:** the Easy tier is marginally *positive* EV for a competent player, and the Hard tier bleeds badly. This is deliberate and load-bearing:
+**Read:** the Easy tier is a coin flip that pays for itself and no more, and the Hard tier bleeds badly. This is deliberate and load-bearing:
 
 - **The Rusher** goes for the big payouts and busts in 3–5 minutes.
-- **The Grinder** who farms Tic-Tac-Toe at +0.58/play needs ~310 winning plays to reach 200 tokens — around 2 hours. Technically possible; nobody will do it.
+- **The Grinder** who farms Tic-Tac-Toe at +0.05/play would need thousands of winning plays to reach 200 tokens. Technically possible; nobody will do it. (At the old 1 → 3 it was +0.58 a play and ~310 plays — a grind, but a real one, and the only route through the arcade that did not depend on the game being kind.)
 - Both outcomes are correct. Most players go broke, which is the thesis. `[QFD: VOC-11, E5]`
 
 **EC-1:** ship the tiered prize list as specified and accept that most players never redeem.
@@ -1156,7 +1177,7 @@ The customer's ten criteria, each mapped to the PRD sections that implement it. 
 | 2 | All six minigames winnable and losable; tokens deducted and awarded correctly | §9 | Contract test + 200-run win-rate sample per game |
 | 3 | Going broke once triggers charity exactly once per run | §6.3, §7.7 | Scripted: broke → charity → broke → assert no second charity |
 | 4 | Going broke twice ejects; the front door is permanently locked afterwards | §7.8, §7.9, §7.10 | Post-ejection, assert the front door returns `locked` in all states |
-| 5 | 200+ tokens redeems a prize and the kid buys it — a complete non-horror ending | §7.6, §7.11 | Debug-set 200, redeem, leave, sell; assert the good ending |
+| 5 | Enough tokens redeems a prize and the kid buys it — a complete non-horror ending | §7.6, §7.11 | Debug-set the balance, redeem, leave, sell; assert the good ending |
 | 6 | The back door route is only reachable via `route === 'ejected'` | §6.4, §7.12 | Enumerate all routes; assert blocked for `normal`/`basement`/`chase`/`ended` |
 | 7 | The full basement plays with correct hotspots and no forward skip except arrows | §7.14 | Input fuzz all ten frames (mash, double-click, rapid click) |
 | 8 | The 3D chase is escapable by a competent player and lethal to a lost one | §7.15 | 20 playtests against the S3 band |

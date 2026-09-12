@@ -1,5 +1,5 @@
 /**
- * FROG VS LIZARD.  Hard — 5 tokens in, 5 out.
+ * FROG VS LIZARD.  Hard — 5 tokens in, 10 out.
  *
  * Two neighbours, one fence, and a shed's worth of things to throw over it.
  * You are the frog on the left; the lizard is on the right and he is playing

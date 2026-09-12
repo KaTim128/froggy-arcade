@@ -110,7 +110,7 @@ console.log('\nAC-3  charity fires exactly once per run');
 
   await page.screenshot({ path: `${SHOTS}/01-charity.png` });
   const afterCharity = await st(page);
-  check('charity granted 5 tokens', afterCharity.tokens === 5, `tokens=${afterCharity.tokens}`);
+  check('charity granted 10 tokens', afterCharity.tokens === 10, `tokens=${afterCharity.tokens}`);
   check('charityUsed latched', afterCharity.charityUsed === true);
   check('still on the normal route', afterCharity.route === 'normal');
 

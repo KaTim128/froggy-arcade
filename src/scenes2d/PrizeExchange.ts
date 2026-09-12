@@ -55,9 +55,11 @@ export class PrizeExchange extends Phaser.Scene {
     const carried = PRIZES.filter((p) => s.prizesOwned.includes(p.id));
 
     // Column headings, so the two numbers are never mistaken for each other.
-    this.body.add(text(this, 30, 42, 'PRIZE', PALETTE.ash));
-    this.body.add(text(this, 150, 42, 'COST', PALETTE.ash));
-    this.body.add(text(this, 196, 42, 'HE PAYS', PALETTE.ash));
+    // They sit above the first row rather than on it: the list is seven long
+    // now and it starts higher up the panel than it used to.
+    this.body.add(text(this, 30, 37, 'PRIZE', PALETTE.ash));
+    this.body.add(text(this, 150, 37, 'COST', PALETTE.ash));
+    this.body.add(text(this, 196, 37, 'HE PAYS', PALETTE.ash));
 
     if (carried.length === 0) {
       this.body.add(
@@ -65,12 +67,14 @@ export class PrizeExchange extends Phaser.Scene {
       );
     }
 
-    carried.slice(0, 5).forEach((p, i) => {
-      const y = 54 + i * 17;
+    // Everything you are carrying, not the first five of it: the shelf is
+    // seven things long now and a truncated list hides prizes you own.
+    carried.slice(0, PRIZES.length).forEach((p, i) => {
+      const y = 48 + i * 13;
       const sold = s.prizesSold.includes(p.id);
       const cash = cashFor(p);
 
-      this.body.add(this.add.rectangle(30, y, 12, 12, p.color).setOrigin(0, 0).setAlpha(sold ? 0.35 : 1));
+      this.body.add(this.add.rectangle(30, y, 11, 11, p.color).setOrigin(0, 0).setAlpha(sold ? 0.35 : 1));
       this.body.add(text(this, 46, y + 2, p.name, sold ? PALETTE.steel : PALETTE.cream));
       this.body.add(text(this, 150, y + 2, `${p.cost}`, sold ? PALETTE.steel : PALETTE.gold));
       this.body.add(text(this, 200, y + 2, `$${cash}`, sold ? PALETTE.steel : PALETTE.mossLight));
@@ -80,9 +84,9 @@ export class PrizeExchange extends Phaser.Scene {
         return;
       }
       this.body.add(
-        button(this, 266, y + 8, this.picked === p.id ? 'SURE?' : 'SELL', () => this.pick(p), {
+        button(this, 266, y + 6, this.picked === p.id ? 'SURE?' : 'SELL', () => this.pick(p), {
           width: 40,
-          height: 13,
+          height: 12,
           fill: this.picked === p.id ? PALETTE.moss : PALETTE.plum,
         }),
       );

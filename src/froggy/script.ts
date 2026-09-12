@@ -51,7 +51,7 @@ export function tutorialScript(t: TutorialTargets): DialogueLine[] {
 /** PRD §7.7 — fires once, on the first zero balance. */
 export const charityScript: DialogueLine[] = [
   {
-    text: "Aw, tapped out already? Don't sweat it. Five tokens, on the house. Because I like your face.",
+    text: "Aw, tapped out already? Don't sweat it. Ten tokens, on the house. Because I like your face.",
     holdAfter: 600,
     auto: true,
   },
