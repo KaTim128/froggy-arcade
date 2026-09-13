@@ -1254,6 +1254,93 @@ for (const g of [
     `${hits ? 'PASS' : 'FAIL'}  grudge: high and low both land  — ${beforeHigh.him.hp} -> ${afterHigh.him.hp} -> ${afterLow.him.hp} hp`,
   );
   if (!hits) failures++;
+
+  // THE SWEEP IS THE MOVE YOU JUMP.  Hung 14px off the floor — inside an
+  // ordinary hop, which peaks at 29 — the sweep must pass underneath, while
+  // the same hop is nowhere near enough to get over a high strike.  Both are
+  // measured from the same height, or the test is measuring the height.
+  await page.evaluate(() => window.__grudge.freeze(true));
+  await page.evaluate(() => window.__grudge.place(150, 172));
+  await page.evaluate(() => window.__grudge.hoist(14));
+  const beforeAir = await st();
+  await press('low');
+  await sleep(900);
+  const afterAirLow = await st();
+  await press('high');
+  await sleep(700);
+  const afterAirHigh = await st();
+  await page.evaluate(() => window.__grudge.hoist(null));
+  await page.evaluate(() => window.__grudge.freeze(false));
+  const dodged = afterAirLow.him.hp === beforeAir.him.hp && afterAirHigh.him.hp < afterAirLow.him.hp;
+  console.log(
+    `${dodged ? 'PASS' : 'FAIL'}  grudge: a jump clears the sweep, not the high strike  — 14px up: low ${beforeAir.him.hp}->${afterAirLow.him.hp}, high ${afterAirLow.him.hp}->${afterAirHigh.him.hp} hp`,
+  );
+  if (!dodged) failures++;
+  await page.close();
+}
+
+// FALLING BLOCKS is a Tetris well, and the three things that make it one are
+// worth asserting: the pieces are four cells and come in all seven shapes, the
+// ghost outline is where the piece actually lands, and being caught under one
+// on the pile ends the round rather than shoving you politely aside.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=40&game=fallingblocks`, { waitUntil: 'networkidle2' });
+  await sleep(1800);
+  await startGame(page);
+  await sleep(1200);
+  const st = () => page.evaluate(() => window.__blocks.state());
+
+  // Every shape is a tetromino, and all seven of them are in the bag.
+  const shapes = await page.evaluate(() => window.__blocks.shapes());
+  const sizes = await page.evaluate(() => {
+    const out = {};
+    for (const n of window.__blocks.shapes()) {
+      window.__blocks.drop(0, n);
+      const s = window.__blocks.state();
+      out[n] = s.cells[s.cells.length - 1];
+    }
+    return out;
+  });
+  const tetro = shapes.length === 7 && Object.values(sizes).every((n) => n === 4);
+  console.log(
+    `${tetro ? 'PASS' : 'FAIL'}  falling blocks: seven shapes, four cells each  — ${shapes.join('')} ${JSON.stringify(sizes)}`,
+  );
+  if (!tetro) failures++;
+
+  // The ghost is not decoration: a piece comes to rest at the height its own
+  // outline was drawn at, so what the player reads is what lands on them.
+  const ghostOk = await page.evaluate(async () => {
+    const B = window.__blocks;
+    B.hold(0);
+    const before = B.state().ghosts.map((g) => `${g.cols.join('')}@${g.rest}`);
+    if (!before.length) return { ok: false, why: 'nothing in the air' };
+    // A ghost's resting height only ever moves UP, as the pile under it grows.
+    for (let i = 0; i < 40; i++) {
+      const now = B.state();
+      if (now.over) break;
+      for (const g of now.ghosts) if (g.y < g.rest - 1) return { ok: false, why: 'a piece fell through its own ghost' };
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return { ok: true, why: `${before.length} ghosts tracked` };
+  });
+  console.log(`${ghostOk.ok ? 'PASS' : 'FAIL'}  falling blocks: a piece stops at its own ghost  — ${ghostOk.why}`);
+  if (!ghostOk.ok) failures++;
+
+  // And the crush.  Stood on the shaft floor with a piece brought down on his
+  // head, the frog is flat and the round is over — not shoved out from under.
+  await page.evaluate(() => {
+    window.__blocks.hold(0);
+    window.__blocks.setPlayer(160, 0);
+  });
+  await sleep(200);
+  await page.evaluate(() => window.__blocks.dropOnHead());
+  await sleep(700);
+  const squashed = await st();
+  const crushed = squashed.over === true;
+  console.log(`${crushed ? 'PASS' : 'FAIL'}  falling blocks: caught on the pile is CRUSHED  — over=${squashed.over}`);
+  if (!crushed) failures++;
   await page.close();
 }
 
@@ -1378,11 +1465,27 @@ for (const g of [
   await sleep(700);
 
   const st = () => page.evaluate(() => window.__fvl.state());
-  /** Throw the solved arc on the frog's turn and wait for it to resolve. */
+  /**
+   * Throw the solved arc on the frog's turn and wait for it to RESOLVE, rather
+   * than for a fixed couple of seconds.  Flight is simulated per frame, so on a
+   * loaded machine the arc takes longer in wall-clock than it does on an idle
+   * one, and a fixed sleep read the damage before the rock had landed — which
+   * looked like "the rock does nothing" rather than like a slow test.
+   */
   const hit = async (item) => {
     await page.evaluate(() => window.__fvl.setWind(0));
     await page.evaluate((i) => window.__fvl.autoThrow(i), item);
-    await sleep(2200);
+    // off the ground...
+    for (let i = 0; i < 40; i++) {
+      if ((await st()).phase !== 'aim') break;
+      await sleep(50);
+    }
+    // ...and back down, whoever's turn it is now.
+    for (let i = 0; i < 160; i++) {
+      const s = await st();
+      if (s.phase === 'aim' || s.phase === 'roundEnd' || s.phase === 'over') break;
+      await sleep(50);
+    }
     return st();
   };
 

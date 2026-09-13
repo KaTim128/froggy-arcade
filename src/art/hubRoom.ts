@@ -9,7 +9,7 @@
 import Phaser from 'phaser';
 import { PALETTE, nightify } from '../render/palette';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
-import { centerText } from '../core/ui';
+import { centerText, text } from '../core/ui';
 import { depthFor } from './player';
 
 export const ROOM = {
@@ -287,6 +287,93 @@ export function paintArcadeDressing(
     halo.fillStyle(PALETTE.cream, 0.025);
     halo.fillTriangle(GAME_W / 2 - 60, 6, GAME_W / 2 + 60, 6, GAME_W / 2, 120);
   }
+}
+
+/**
+ * An opening in a side wall: the way from one room into the next.
+ *
+ * It used to be two black rectangles and a word on the carpet, which read as a
+ * hole rather than as a door — and a hole is not somewhere a player thinks
+ * they can walk.  What makes it read is the frame and the light: a lintel and
+ * a threshold in the wall's own metal, a strip of the NEXT room's colour down
+ * the back of the recess, and that colour spilling out across this room's
+ * floor in a wedge, the way light actually leaves a doorway.  The sign goes on
+ * a plate over the opening rather than being written on the floor beside it.
+ *
+ * Everything here sorts below the player (depth < 50), so walking into the
+ * doorway puts the player in it rather than behind it.
+ */
+export function paintOpening(
+  scene: Phaser.Scene,
+  opts: {
+    side: 'left' | 'right';
+    /** Middle of the opening, in room coordinates. */
+    y: number;
+    /** How tall the opening is.  46 is a double door. */
+    h?: number;
+    label: string;
+    /** The colour of the room on the other side of it. */
+    glow: number;
+    night?: boolean;
+  },
+): void {
+  const c = (col: number) => (opts.night ? nightify(col) : col);
+  const h = opts.h ?? 46;
+  const left = opts.side === 'left';
+  const dir = left ? 1 : -1;
+  // The mouth of the opening, at the inside face of the wall.
+  const mouth = left ? ROOM.left : ROOM.right;
+  const top = opts.y - h / 2;
+  const glow = opts.night ? nightify(opts.glow) : opts.glow;
+
+  // ---- the light on this room's floor, first, so everything stands in it
+  const spill = scene.add.graphics().setDepth(0.4);
+  spill.fillStyle(glow, opts.night ? 0.05 : 0.13);
+  spill.fillTriangle(mouth, top + 2, mouth, top + h - 2, mouth + dir * 46, opts.y);
+  spill.fillStyle(glow, opts.night ? 0.04 : 0.09);
+  spill.fillTriangle(mouth, top + 6, mouth, top + h - 6, mouth + dir * 26, opts.y);
+
+  // ---- the recess itself: black, with the next room's light at the back of it
+  const recessX = left ? mouth - 12 : mouth - 4;
+  scene.add.rectangle(recessX, top, 16, h, PALETTE.black).setOrigin(0, 0).setDepth(0.5);
+  const backX = left ? recessX : recessX + 13;
+  scene.add.rectangle(backX, top + 3, 3, h - 6, glow).setOrigin(0, 0).setDepth(0.51).setAlpha(opts.night ? 0.25 : 0.7);
+  scene.add
+    .rectangle(left ? recessX + 3 : recessX + 9, top + 5, 4, h - 10, glow)
+    .setOrigin(0, 0)
+    .setDepth(0.51)
+    .setAlpha(opts.night ? 0.08 : 0.22);
+
+  // ---- the frame: a lintel, a threshold, and a post on the room side
+  const frameX = left ? mouth - 14 : mouth - 2;
+  scene.add.rectangle(frameX, top - 3, 18, 3, c(PALETTE.steel)).setOrigin(0, 0).setDepth(0.6);
+  scene.add.rectangle(frameX, top + h, 18, 3, c(PALETTE.slate)).setOrigin(0, 0).setDepth(0.6);
+  const postX = left ? mouth + 2 : mouth - 4;
+  scene.add.rectangle(postX, top - 3, 2, h + 6, c(PALETTE.steel)).setOrigin(0, 0).setDepth(0.6);
+  // a tube of the next room's colour down the post, so the opening is lit
+  scene.add
+    .rectangle(left ? postX + 2 : postX - 1, top, 1, h, glow)
+    .setOrigin(0, 0)
+    .setDepth(0.61)
+    .setAlpha(opts.night ? 0.2 : 0.85);
+
+  // ---- the sign, on a plate beside the mouth.
+  //
+  // Beside, and level with the middle of the opening, because that is the one
+  // band of wall this room keeps clear: every room has a cabinet above the
+  // doorway and another below it, and a plate hung over the lintel lands on
+  // the top one's control deck.
+  const plateW = Math.max(34, opts.label.length * 6 + 10);
+  const plateX = left ? mouth + 4 : mouth - 4 - plateW;
+  const plateY = opts.y - 20;
+  scene.add
+    .rectangle(plateX, plateY, plateW, 11, c(PALETTE.ink))
+    .setOrigin(0, 0)
+    .setStrokeStyle(1, c(PALETTE.steel))
+    .setDepth(0.62);
+  text(scene, plateX + 5, plateY + 3, opts.label, opts.night ? PALETTE.ash : PALETTE.gold)
+    .setDepth(0.63)
+    .setAlpha(opts.night ? 0.5 : 1);
 }
 
 /** The change machine, decorative in Act I and dead at night. */

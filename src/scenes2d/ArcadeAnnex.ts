@@ -18,7 +18,7 @@ import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
 import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
-import { paintArcadeDressing, paintHubRoom, ROOM } from '../art/hubRoom';
+import { paintArcadeDressing, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
@@ -65,14 +65,14 @@ export class ArcadeAnnex extends Phaser.Scene {
     paintHubRoom(this, { night: false, frontDoor: false });
     paintArcadeDressing(this, {
       night: false,
-      // The back room fills its middle with machines and the strip past the
-      // last cabinet is the way in from the hub — so the bin goes up against
-      // the back wall and the plant into the far corner, where the doorway to
-      // the casino is not.
-      props: [
-        { x: 268, y: 62, kind: 'bin' },
-        { x: 17, y: 108, kind: 'plant' },
-      ],
+      // The back room fills its middle with machines, the strip past the last
+      // cabinet is the way in from the hub, and the LEFT WALL IS THE WAY ON TO
+      // THE CASINO — so the whole left-hand side stays bare.  A plant stood
+      // there in two different corners and read as blocking the opening in
+      // both; a doorway you have to be told is a doorway is worth more than a
+      // pot plant.  The bin goes up against the back wall on the right, well
+      // away from either way out, and that is the lot.
+      props: [{ x: 268, y: 62, kind: 'bin' }],
       // Clear of the poster at 187-205 and the WIN sign at 245-279.
       vents: [24, 210],
     });
@@ -124,9 +124,7 @@ export class ArcadeAnnex extends Phaser.Scene {
 
   private paintDoorway(): void {
     // The opening back to the hub, cut into the right wall.
-    this.add.rectangle(ROOM.right - 2, BACK_DOOR.y, 12, 46, PALETTE.black).setOrigin(0, 0.5);
-    this.add.rectangle(ROOM.right - 4, BACK_DOOR.y, 4, 46, PALETTE.ink).setOrigin(0, 0.5);
-    text(this, ROOM.right - 44, BACK_DOOR.y - 34, 'ARCADE', PALETTE.ash).setAlpha(0.7);
+    paintOpening(this, { side: 'right', y: BACK_DOOR.y, label: 'ARCADE', glow: PALETTE.neon });
 
     this.add
       .zone(BACK_DOOR.x, BACK_DOOR.y, 26, 50)
@@ -138,9 +136,10 @@ export class ArcadeAnnex extends Phaser.Scene {
 
   /** On through the left wall, to the machines that take money. */
   private paintCasinoDoor(): void {
-    this.add.rectangle(ROOM.left - 6, CASINO_DOOR.y, 12, 46, PALETTE.black).setOrigin(0, 0.5);
-    this.add.rectangle(ROOM.left, CASINO_DOOR.y, 4, 46, PALETTE.ink).setOrigin(0, 0.5);
-    text(this, ROOM.left + 12, CASINO_DOOR.y - 16, 'THE MACHINES', PALETTE.ash).setAlpha(0.75);
+    // Gold, because that is the colour of the room on the other side of it —
+    // the light coming out of an opening is the first thing that says where it
+    // goes.
+    paintOpening(this, { side: 'left', y: CASINO_DOOR.y, label: 'THE MACHINES', glow: PALETTE.gold });
 
     this.add
       .zone(CASINO_DOOR.x, CASINO_DOOR.y, 26, 50)

@@ -16,7 +16,7 @@ import { canEnter } from '../core/routes';
 import { evaluateBroke } from '../core/broke';
 import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
-import { paintArcadeDressing, paintChangeMachine, paintHubRoom, ROOM } from '../art/hubRoom';
+import { paintArcadeDressing, paintChangeMachine, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
@@ -91,7 +91,9 @@ export class ArcadeHub extends Phaser.Scene {
       // the player has to be able to get to.
       props: [
         { x: 95, y: 66, kind: 'bin' },
-        { x: 261, y: 158, kind: 'plant' },
+        // Dead centre of the 257-277 gap between the last two cabinets: at 261
+        // it crowded the bowling machine's control deck.
+        { x: 267, y: 158, kind: 'plant' },
       ],
       // The prize case owns 126-226 of the back wall and the change machine
       // 262-282; the vents go in what is left of it.
@@ -303,11 +305,8 @@ export class ArcadeHub extends Phaser.Scene {
 
   /** The opening in the left wall, through to the back room. */
   private paintAnnexDoor(): void {
-    this.add.rectangle(ROOM.left - 6, ANNEX_DOOR.y, 12, 46, PALETTE.black).setOrigin(0, 0.5);
-    this.add.rectangle(ROOM.left, ANNEX_DOOR.y, 4, 46, PALETTE.ink).setOrigin(0, 0.5);
-    // Beside the opening, in the band between the two left-wall cabinets.  Above
-    // it the label was drawn behind the top one and read as smeared text.
-    text(this, ROOM.left + 12, ANNEX_DOOR.y - 16, 'BACK ROOM', PALETTE.ash).setAlpha(0.75);
+    // Teal, the colour of the room it goes to, spilling out onto this carpet.
+    paintOpening(this, { side: 'left', y: ANNEX_DOOR.y, label: 'BACK ROOM', glow: PALETTE.tealLight });
 
     this.add
       .zone(ANNEX_DOOR.x, ANNEX_DOOR.y, 26, 50)

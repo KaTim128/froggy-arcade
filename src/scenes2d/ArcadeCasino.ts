@@ -20,7 +20,7 @@ import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
 import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
-import { paintCasinoDressing, paintHubRoom, ROOM } from '../art/hubRoom';
+import { paintCasinoDressing, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet } from '../art/cabinet';
 import { BlackjackTable } from '../art/blackjackTable';
@@ -179,10 +179,8 @@ export class ArcadeCasino extends Phaser.Scene {
   }
 
   private paintDoorway(): void {
-    // The opening back to the hub, cut into the right wall.
-    this.add.rectangle(ROOM.right - 2, BACK_DOOR.y, 12, 46, PALETTE.black).setOrigin(0, 0.5);
-    this.add.rectangle(ROOM.right - 4, BACK_DOOR.y, 4, 46, PALETTE.ink).setOrigin(0, 0.5);
-    text(this, ROOM.right - 52, BACK_DOOR.y - 34, 'BACK ROOM', PALETTE.ash).setAlpha(0.7);
+    // The opening back to the back room, cut into the right wall.
+    paintOpening(this, { side: 'right', y: BACK_DOOR.y, label: 'BACK ROOM', glow: PALETTE.tealLight });
 
     this.add
       .zone(BACK_DOOR.x, BACK_DOOR.y, 26, 50)

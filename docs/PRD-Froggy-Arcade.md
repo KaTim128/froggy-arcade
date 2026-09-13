@@ -471,7 +471,7 @@ The main loop. A single room, 3/4 view, walked with WASD.
         │                                          │
         │            · player spawn ·              │
         │                                          │
-        │  ▣ FALLING BLOCKS (3)      ▣ WHACK (3)   │
+        │  ▣ FALLING BLOCKS (7)      ▣ WHACK (3)   │
         │                                          │
         │  ▣ AIR HOCKEY (1)      ▣ CHOMP-MAN (5)   │
         │                                          │
@@ -807,7 +807,7 @@ Measured over 200 automated runs per game (scripted competent player).
 | Game | Tier | Cost | Reward | Target win rate | Typical length |
 |---|---|---:|---:|---|---|
 | Tic-Tac-Toe | Easy | 1 | 2 | 45–60% | 25 s |
-| Falling Blocks | Medium | 3 | 6 | 40–55% | 45 s |
+| Falling Blocks | Hard (long) | 7 | 15 | 40–55% | 60 s |
 | Air Hockey | Hard | 5 | 10 | 45–60% | 70 s |
 | Basketball Hoops | Medium | 3 | 6 | 40–55% | 60 s |
 | Whack-a-Frog | Medium | 3 | 6 | 40–55% | 40 s |
@@ -831,18 +831,20 @@ not in this table.
 - **A draw refunds the token** (MG-9). It is neither a win nor a loss: the entry cost goes back exactly once and nothing is paid on top of it. The board says so before a move is made (`YOU ARE X — A DRAW REFUNDS`), the result card says `DRAW — TOKEN BACK`, and the shell's card reads `A TIE — 1 BACK`. This replaces the original "a draw is a loss", which charged a token for a game nobody won.
 - Win: three in a row for the player. Lose: AI three in a row.
 
-### 9.3 Falling Blocks — Medium, 3 → 6
+### 9.3 Falling Blocks — Hard (long), 7 → 15
 
-A shaft with a ledge at the top of it and **45 seconds** to be standing on that
-ledge. Blocks fall down the shaft the whole time and they are the only way up:
-jump onto one in the air, it carries you down while you line up the next, and
-you leave it before it costs you more height than it gave.
+**A Tetris well with a frog loose in it.** Four-cell pieces — the seven shapes,
+in random turns — drift down a ten-column shaft and pile up where they land.
+Nobody steers the pieces. The frog is the only thing the player steers, and the
+ledge at the top of the shaft is the only thing they are trying to reach.
+**60 seconds.**
 
-- Eight columns, 20×14 blocks, a block dropped every 430 ms into a column near the player so there is always one in reach.
-- **A block that reaches the bottom stays there** — it lands on the floor or on whatever is already in its column and becomes terrain. A fall is therefore recoverable, and the ground builds itself into a staircase while the player works above it.
-- The goal is 360 px up. Standing still and being lifted by the stack is worth about 280 px in 45 seconds: enough that a fall is not the end, not enough to win on.
-- **The clock is the only way to lose.** A block landing on the frog shoves him out from under it; nothing here kills.
-- Left/right and jump (`A`/`D`/arrows, `SPACE`/`W`/`UP`). Custom tune (`game_fallingblocks`) and sfx for the jump, the landing, a block coming to rest and the summit.
+- Ten columns on a 16×12 cell. A piece every **1150 ms**, falling at **30 px/s**, which is about five seconds to cross the shaft and four or five in the air at once.
+- **The pile is the staircase.** A piece that comes to rest becomes terrain, exactly where it stopped — gaps and all, the way a well full of tetrominoes looks. The walkable surface of a column is the top of its highest cell, so a cave under a bridged S is a cave you can see and never fall into. The frog climbs by staying on top of the pile and by jumping onto pieces still in the air, which carry him down while he lines up the next hop.
+- **A piece will crush him, and that is the round.** Caught between a piece and the pile there is nowhere to put him: `CRUSHED`, and the run is over. Caught in open air it only shoves him down until he can get out from under. He is never moved anywhere he did not walk, jump or get pushed to — no snapping, no teleporting out of trouble.
+- **Nothing lands without warning.** Every piece in the air draws a hollow **ghost** of itself where it will come to rest, recomputed each frame against the pile as it currently stands, and the frog flashes with a `MOVE!` banner the moment a ghost is sitting on him. Pieces are aimed within three columns of the frog three times in four (the fourth goes anywhere), so standing in a corner is not a plan — but the warning is always there and always seconds long.
+- The ledge is **300 px** up, twenty-five rows. Fifty pieces land in the minute and they land uneven, so a frog who survives on top of the pile arrives with time in hand and a frog who spends the minute running along the bottom does not. Surviving is the game; the height is the clock they are measured against.
+- Left/right and jump (`A`/`D`/arrows, `SPACE`/`W`/`UP`). Custom tune (`game_fallingblocks`) and sfx for the jump, a piece coming to rest and the summit.
 
 ### 9.4 Air Hockey — Hard, 5 → 10
 
@@ -907,8 +909,9 @@ An original 1v1 side-view fighter. Original characters and art. `[QFD: VOC-22]`
   built out of posable parts — legs, torso, head, arm, shin, aura — so what
   they are doing is drawn rather than implied.
 - **Three attacks, and each looks like itself.** `J` is a HIGH strike: a
-  straight arm at head height. `K` is a LOW sweep: a crouch and a leg along the
-  floor. `I` is the SPECIAL: a wound-up lunge with a ring of light off it.
+  straight arm at head height. `K` is a LOW sweep: a dip and a leg out at knee
+  height — under a standing guard, but off the floor, not flat along it. `I` is
+  the SPECIAL: a wound-up lunge with a ring of light off it.
   Every attack is drawn through all three phases — the wind-up (cocked back,
   white head), the active frame, the droop — and the fighter throwing it names
   it in a word over their head, so a player can read what is coming.
@@ -921,6 +924,11 @@ An original 1v1 side-view fighter. Original characters and art. `[QFD: VOC-22]`
   returns. Pressing it early is refused with a buzz and `NOT READY` rather than
   silently ignored.
 - Blocking cuts damage to 20%, and a low sweep goes under a standing block.
+- **Jumping clears a blow, and clears the sweep easily.** A jump peaks 29 px up
+  and lasts 0.61 s. The sweep needs only 12 px of daylight to pass underneath —
+  about 0.47 s of the arc — so an ordinary hop beats it; the high strike and the
+  special need 20 px, a much narrower window. Low is answered by jumping, high
+  by blocking.
 - The AI runs a readable three-beat pattern — approach, low, high-high — with a
   deliberate 0.6 s opening after a whiffed sweep. A player who learns the
   pattern wins; a masher loses.
@@ -1053,9 +1061,9 @@ re-deducts the entry cost when it pays:
 | Tier | Games | Cost | Win | Loss |
 |---|---|---:|---:|---:|
 | Easy | Tic-Tac-Toe | 1 | 2 | 0 |
-| Medium | Falling Blocks, Basketball Hoops, Whack-a-Frog, Bowling, Battleship | 3 | 6 | 0 |
+| Medium | Basketball Hoops, Whack-a-Frog, Bowling, Battleship | 3 | 6 | 0 |
 | Hard | Air Hockey, Grudge, Frog vs Lizard | 5 | 10 | 0 |
-| Hard (long) | Chomp-Man, Barrel Climb, Dance Off | 7 | 15 | 0 |
+| Hard (long) | Chomp-Man, Barrel Climb, Dance Off, Falling Blocks | 7 | 15 | 0 |
 
 Everything up to the five-token row is a **2× on a win**, so expected value is
 negative unless the player wins more than half the time. That pressure is the
@@ -1088,7 +1096,7 @@ Net EV per play = `(p_win × reward) − cost`, where the break-even win rate is
 | Game | p_win (target midpoint) | Cost | EV | Net per play |
 |---|---:|---:|---:|---:|
 | Tic-Tac-Toe | 0.525 | 1 | 1.05 | **+0.05** |
-| Falling Blocks | 0.475 | 3 | 2.85 | **−0.15** |
+| Falling Blocks | 0.475 | 7 | 7.13 | **+0.13** |
 | Basketball Hoops | 0.475 | 3 | 2.85 | **−0.15** |
 | Whack-a-Frog | 0.475 | 3 | 2.85 | **−0.15** |
 | Grudge | 0.375 | 5 | 3.75 | **−1.25** |

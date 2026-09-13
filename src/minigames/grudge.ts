@@ -7,11 +7,19 @@
  * rectangles is not a fight you can read.
  *
  * THE THREE ATTACKS LOOK LIKE THREE ATTACKS.  A HIGH strike is a straight arm
- * at head height with the shoulder turned into it; a LOW strike is a crouched
- * sweep along the floor; the SPECIAL is a wound-up lunge with a ring of light
+ * at head height with the shoulder turned into it; a LOW strike is a knee-high
+ * sweep — low enough to go under a standing guard, but off the floor rather
+ * than flat along it, so it reads as a leg coming at you and not as the
+ * fighter lying down; the SPECIAL is a wound-up lunge with a ring of light
  * coming off it.  Each one is drawn through all three of its phases — the
  * wind-up, the active frame, the droop — and the fighter throwing it says so
  * in a word over their head, so what is coming at you is never a guess.
+ *
+ * AND THE SWEEP IS WHAT A JUMP IS FOR.  Every attack can be cleared by being
+ * in the air, but the sweep is the one with room to spare: it wants only a
+ * dozen pixels of daylight (`JUMP_CLEARANCE`), so an ordinary hop beats it,
+ * while the higher strikes need most of the arc.  Low is answered by jumping,
+ * high by blocking, and the special by not being there.
  *
  * Getting hit looks like getting hit: the fighter snaps backwards, whites out
  * for a moment, cannot act while they are reeling, and a burst goes off where
@@ -68,6 +76,14 @@ const SPECIAL_COOLDOWN = 8000;
 const BLOCK_MULT = 0.2;
 /** How long a clean hit takes you out of the fight for, by move. */
 const HITSTUN: Record<'high' | 'low' | 'special', number> = { high: 170, low: 230, special: 340 };
+/**
+ * How far off the floor you have to be for a blow to pass underneath, in
+ * pixels.  A jump peaks 29px up (JUMP_V against GRAVITY) and lasts 0.61s, so
+ * twelve is a wide door — roughly 0.47s of the arc clears the sweep — and
+ * twenty is a narrow one.  That is the point: the sweep is the move you beat
+ * by jumping, and the high strike is the move you beat by blocking.
+ */
+const JUMP_CLEARANCE: Record<'high' | 'low' | 'special', number> = { high: 20, low: 12, special: 20 };
 
 /** Everything a fighter is drawn out of, so the poses can move real limbs. */
 interface Art {
@@ -144,6 +160,8 @@ let aiSway = 0;
 let sceneClock = 0;
 /** DEV only: hold the lizard still, so a test can aim at something. */
 let aiFrozen = false;
+/** Dev only: hold the lizard this many pixels off the floor, for jump tests. */
+let aiHover: number | null = null;
 /** Debounce on the "not ready" buzz, so a held key does not machine-gun it. */
 let notReadyT = 0;
 
@@ -259,6 +277,18 @@ export const grudge: MinigameModule = {
           if (p1) p1.x = mine;
           if (p2) p2.x = theirs;
         },
+        /**
+         * Hang the lizard a fixed height off the floor, as if caught mid-jump,
+         * so a sweep can be tested against an airborne target without having to
+         * land a move inside the 0.6s an actual jump lasts.  null drops him.
+         */
+        hoist: (h: number | null) => {
+          aiHover = h;
+          if (p2 && h !== null) {
+            p2.y = FLOOR_Y - h;
+            p2.vy = 0;
+          }
+        },
         /** Hold the lizard still, so what is under test is the move. */
         freeze: (on: boolean) => {
           aiFrozen = on;
@@ -311,6 +341,7 @@ export const grudge: MinigameModule = {
   destroy() {
     sceneClock = 0;
     aiFrozen = false;
+    aiHover = null;
     notReadyT = 0;
     cd1 = null;
     cd2 = null;
@@ -556,7 +587,10 @@ function tickFighter(f: Fighter, delta: number, dt: number): void {
   }
 
   // gravity
-  if (f.y < FLOOR_Y || f.vy !== 0) {
+  if (f === p2 && aiHover !== null) {
+    f.y = FLOOR_Y - aiHover;
+    f.vy = 0;
+  } else if (f.y < FLOOR_Y || f.vy !== 0) {
     f.vy += GRAVITY * dt;
     f.y += f.vy * dt;
     if (f.y >= FLOOR_Y) {
@@ -598,7 +632,7 @@ function tryHit(f: Fighter): void {
   const facingRight = target.x > f.x;
   if (dist > def.range) return;
   if ((facingRight && f.facing !== 1) || (!facingRight && f.facing !== -1)) return;
-  if (target.y < FLOOR_Y - 20) return; // jumped over it
+  if (target.y < FLOOR_Y - JUMP_CLEARANCE[f.move]) return; // jumped over it
 
   // A low sweep goes under a block; a high strike does not go through one.
   const blocked = target.blocking && !(f.move === 'low' && !target.crouch);
@@ -616,10 +650,10 @@ function tryHit(f: Fighter): void {
     target.recoil = away * 3;
   }
 
-  // where it landed, in world pixels: head height for a high strike, ankle
+  // where it landed, in world pixels: head height for a high strike, knee
   // height for a sweep, chest for the special
   const hx = f.x + f.facing * (def.range * 0.6);
-  const hy = f.y - (f.move === 'low' ? 6 : f.move === 'special' ? 20 : 28);
+  const hy = f.y - (f.move === 'low' ? 12 : f.move === 'special' ? 20 : 28);
   impact(hx, hy, f.move, blocked);
 }
 
@@ -630,7 +664,10 @@ function tryHit(f: Fighter): void {
  */
 function render(f: Fighter, dt: number): void {
   const a = f.art;
-  const crouch = (f.crouch && f.y >= FLOOR_Y) || f.move === 'low' ? 5 : 0;
+  // Holding down is a full squat.  Throwing the sweep is only a dip into it:
+  // at a full crouch the fighter ended up sitting on the floor with a leg
+  // stuck out flat, which is not a kick, it is a fall.
+  const crouch = f.crouch && f.y >= FLOOR_Y ? 5 : f.move === 'low' ? 2 : 0;
   const reel = f.stun > 0 ? f.recoil * Math.min(4, f.stun / 60) : 0;
 
   a.root.setPosition(f.x + reel, f.y);
@@ -676,16 +713,18 @@ function render(f: Fighter, dt: number): void {
         a.fist.setPosition(4 + def.range * 0.3, -20).setSize(5, 5);
       }
     } else if (f.move === 'low') {
-      // A sweep along the floor: the whole leg comes out at ankle height.
+      // A sweep at knee height: the leg comes out level with the kneecap,
+      // well clear of the floorboards, with the knee cocked first.  The
+      // fighter leans back over the standing leg to throw it.
       a.shin.setVisible(true).setFillStyle(a.skinLight);
-      a.arm.setPosition(2, -20).setSize(4, 4);
-      a.fist.setPosition(4, -20).setSize(4, 4);
+      a.arm.setPosition(-1, -22).setSize(4, 4);
+      a.fist.setPosition(1, -22).setSize(4, 4);
       if (f.phase === 'startup') {
-        a.shin.setPosition(-2, -6).setSize(7, 5);
+        a.shin.setPosition(-2, -13).setSize(7, 5);
       } else if (f.phase === 'active') {
-        a.shin.setPosition(4, -4).setSize(def.range * 0.8, 5);
+        a.shin.setPosition(4, -12).setSize(def.range * 0.8, 5);
       } else {
-        a.shin.setPosition(3, -4).setSize(def.range * 0.35, 4);
+        a.shin.setPosition(3, -12).setSize(def.range * 0.35, 4);
       }
     } else {
       // The special: wound up with a ring of light, then thrown with both arms.
