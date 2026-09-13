@@ -1417,8 +1417,10 @@ for (const g of [
   const quiet = await st();
   const cleared = !quiet.gone && busy.chasing > 0 && quiet.chasing === 0 && quiet.respite > 8000;
   console.log(
-    `${cleared ? 'PASS' : 'FAIL'}  car chase: nitro clears the road for ten seconds  — ` +
-      quiet.gone ? 'the run ended first' : `${busy.chasing} chasing -> ${quiet.chasing}, ${Math.round(quiet.respite / 100) / 10}s left`,
+      `${cleared ? 'PASS' : 'FAIL'}  car chase: nitro clears the road for ten seconds  — ` +
+        (quiet.gone
+          ? 'the run ended first'
+          : `${busy.chasing} chasing -> ${quiet.chasing}, ${Math.round(quiet.respite / 100) / 10}s left`),
   );
   if (!cleared) failures++;
 
@@ -1427,8 +1429,10 @@ for (const g of [
   const during = await st();
   const held = !during.gone && during.respite > 0 && during.chasing === 0;
   console.log(
-    `${held ? 'PASS' : 'FAIL'}  car chase: and nothing is sent out while it lasts  — ` +
-      during.gone ? 'the run ended first' : `${during.chasing} chasing at ${Math.round(during.respite / 100) / 10}s left`,
+      `${held ? 'PASS' : 'FAIL'}  car chase: and nothing is sent out while it lasts  — ` +
+        (during.gone
+          ? 'the run ended first'
+          : `${during.chasing} chasing at ${Math.round(during.respite / 100) / 10}s left`),
   );
   if (!held) failures++;
 
@@ -1437,8 +1441,8 @@ for (const g of [
   const back = await st();
   const gentle = !back.gone && back.respite === 0 && back.police <= 2;
   console.log(
-    `${gentle ? 'PASS' : 'FAIL'}  car chase: they come back one at a time  — ` +
-      back.gone ? 'the run ended first' : `${back.police} on the road, cap ${back.policeCap}`,
+      `${gentle ? 'PASS' : 'FAIL'}  car chase: they come back one at a time  — ` +
+        (back.gone ? 'the run ended first' : `${back.police} on the road, cap ${back.policeCap}`),
   );
   if (!gentle) failures++;
   await page.close();
