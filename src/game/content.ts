@@ -121,11 +121,11 @@ export const CABINETS: CabinetDef[] = [
   // A token in, two out: you win one.  Three out was a 3x on the cheapest
   // games in the building and the only positive-EV corner of the floor.
   { id: 'tictactoe', title: 'TIC-TAC-TOE', tier: 'easy', cost: 1, reward: 2, x: 52, y: 88, color: 0xff4fa3, symbol: 'X', motif: 'grid' },
-  // Five in, ten out, in the slot Snakes & Ladders used to stand in: the pieces
-  // fall by themselves and the crush is instant, so it is priced with the hard
-  // cabinets rather than with the three-token row it started in — but it is a
-  // minute, not the four the seven-token row asks for.
-  { id: 'fallingblocks', title: 'FALLING BLOCKS', tier: 'hard', cost: 5, reward: 10, x: 98, y: 88, color: 0x46c4bd, symbol: 'BL', motif: 'blocks' },
+  // Five in, ten out, in the slot Snakes & Ladders used to stand in.  The id is
+  // still `fallingblocks` and it is deliberate: it is the key a saved run's
+  // high score and play count are filed under, and renaming it would quietly
+  // orphan every save in existence to gain nothing but a tidier string.
+  { id: 'fallingblocks', title: 'THE FLOOD', tier: 'hard', cost: 5, reward: 10, x: 98, y: 88, color: 0x2f7fb5, symbol: 'FD', motif: 'blocks' },
   // The bottom row: two either side of the front door, in line with the two
   // above.  Nothing sits under the change machine on the right wall, because a
   // cabinet's click zone up there swallows every attempt to use it.

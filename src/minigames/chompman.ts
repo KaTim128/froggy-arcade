@@ -188,6 +188,7 @@ export const chompMan: MinigameModule = {
       ['ARROWS', 'STEER'],
     ],
   },
+  touch: { stick: 'wasd', arrows: true },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;

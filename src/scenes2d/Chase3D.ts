@@ -51,6 +51,11 @@ const FROGGY_HEAD_START = 8; // metres behind
 export class Chase3D extends Phaser.Scene {
   private stage: ThreeStage | null = null;
   private yaw = 0;
+  /** A held left button turns the view; the on-screen look pad sends one. */
+  private dragging = false;
+  private onLookDown: ((e: MouseEvent) => void) | null = null;
+  private onLookMove: ((e: MouseEvent) => void) | null = null;
+  private onLookUp: (() => void) | null = null;
   private pos = new THREE.Vector2();
   private froggy = new THREE.Vector2();
   private monster: FroggyMonster | null = null;
@@ -132,12 +137,30 @@ export class Chase3D extends Phaser.Scene {
         turnR: [kb.addKey('E')],
       };
     }
-    // Mouse look, without demanding pointer lock.
+    // Look, three ways, because the corridor has to be turnable however the
+    // player is holding the thing: pointer lock if the browser gives it, a
+    // held drag if not — which is also what the on-screen look pad sends — and
+    // A/D steering as the floor (see `movePlayer`).  The Three canvas is over
+    // the Phaser one, so the drag is listened for at the window.
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (p.event instanceof MouseEvent && document.pointerLockElement) {
         this.yaw -= p.event.movementX * 0.0022;
       }
     });
+    this.onLookDown = (e: MouseEvent) => {
+      if (e.button === 0) this.dragging = true;
+    };
+    this.onLookMove = (e: MouseEvent) => {
+      if (!this.dragging || document.pointerLockElement) return;
+      this.yaw -= (e.movementX || 0) * 0.0035;
+    };
+    this.onLookUp = () => {
+      this.dragging = false;
+    };
+    window.addEventListener('mousedown', this.onLookDown);
+    window.addEventListener('mousemove', this.onLookMove);
+    window.addEventListener('mouseup', this.onLookUp);
+    window.addEventListener('blur', this.onLookUp);
     this.game.canvas.addEventListener('click', () => {
       void this.game.canvas.requestPointerLock?.();
     });
@@ -445,6 +468,15 @@ export class Chase3D extends Phaser.Scene {
     this.stage?.dispose();
     this.stage = null;
     this.monster = null;
+    if (this.onLookDown) window.removeEventListener('mousedown', this.onLookDown);
+    if (this.onLookMove) window.removeEventListener('mousemove', this.onLookMove);
+    if (this.onLookUp) {
+      window.removeEventListener('mouseup', this.onLookUp);
+      window.removeEventListener('blur', this.onLookUp);
+    }
+    this.onLookDown = this.onLookMove = null;
+    this.onLookUp = null;
+    this.dragging = false;
     if (document.pointerLockElement) document.exitPointerLock?.();
   }
 }

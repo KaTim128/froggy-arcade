@@ -124,6 +124,7 @@ export const donkeyKong: MinigameModule = {
       ['SPACE', 'JUMP'],
     ],
   },
+  touch: { stick: 'wasd', arrows: true, buttons: [{ label: 'JUMP', key: 'SPACE', primary: true }] },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;

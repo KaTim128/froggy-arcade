@@ -113,6 +113,7 @@ npm run test:outro     # camera locked, Froggy whole in the doorway, end card
 npm run test:text      # glyph coverage, 1-bit rendering, no overflow
 npm run test:profiles  # save slots stay separate, the old save is adopted
 npm run test:horror    # the turn, the transformation, the three rooms
+npm run test:mobile    # the phone build, driven with real touch events
 npm run test:all
 ```
 
@@ -123,6 +124,7 @@ how the harness reaches any part of the game directly:
 ?scene=ArcadeDark&route=ejected      jump to a scene with the state it needs
 ?game=chompman&tokens=50             jump straight into a cabinet
 ?intro=1&charity=1&key=1             set the latches
+?touch=1                             force the phone controls on (0 forces off)
 ```
 
 Press `` ` `` in a dev build for the debug panel: set tokens, set the route,

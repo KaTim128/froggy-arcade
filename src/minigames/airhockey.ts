@@ -59,6 +59,8 @@ export const airHockey: MinigameModule = {
       ['MOUSE', 'MOVES YOUR MALLET'],
     ],
   },
+  // The paddle follows the finger, the way it follows the mouse.
+  touch: {},
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;

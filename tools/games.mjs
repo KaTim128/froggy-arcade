@@ -451,8 +451,9 @@ for (const g of [
   // The bar is 50 points (five crossings) and every further bar adds one:
   // 230 banks the base fifteen plus three.
   { id: 'frogcross', hook: '__frog', set: 'setPoints', score: 230, expect: 18, label: '230 pts' },
-  // 200 cash is ten, and 600 is two bars past it.
-  { id: 'carchase', hook: '__chase', set: 'setCash', score: 600, expect: 12, label: '600 cash' },
+  // 300 cash is fifteen, and every hundred past it is five more: 600 is three
+  // hundreds past the bar, so thirty.
+  { id: 'carchase', hook: '__chase', set: 'setCash', score: 600, expect: 30, label: '600 cash' },
 ]) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
@@ -1296,68 +1297,150 @@ for (const g of [
   await page.close();
 }
 
-// FALLING BLOCKS is a Tetris well, and the three things that make it one are
-// worth asserting: the pieces are four cells and come in all seven shapes, the
-// ghost outline is where the piece actually lands, and being caught under one
-// on the pile ends the round rather than shoving you politely aside.
+// THE FLOOD.  Three things carry this game and all three are asserted: the
+// tower is CLIMBABLE BY CONSTRUCTION, every kind of ledge shows up in a run,
+// and the water is lethal on contact rather than merely present.
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
   await page.goto(`${URL}/?intro=1&tokens=40&game=fallingblocks`, { waitUntil: 'networkidle2' });
   await sleep(1800);
   await startGame(page);
-  await sleep(1200);
-  const st = () => page.evaluate(() => window.__blocks.state());
+  await sleep(1400);
+  const st = () => page.evaluate(() => window.__flood.state());
 
-  // Every shape is a tetromino, and all seven of them are in the bag.
-  const shapes = await page.evaluate(() => window.__blocks.shapes());
-  const sizes = await page.evaluate(() => {
-    const out = {};
-    for (const n of window.__blocks.shapes()) {
-      window.__blocks.drop(0, n);
-      const s = window.__blocks.state();
-      out[n] = s.cells[s.cells.length - 1];
+  // Nothing in the tower may be further than a jump.  Rise is measured against
+  // the apex of a standing jump and the sideways gap against how far a run
+  // carries you in the air — both read out of the game's own constants, so
+  // retuning the frog retunes the test with it.
+  const reach = await page.evaluate(() => window.__flood.reach());
+  const towers = [];
+  for (let i = 0; i < 4; i++) {
+    const ladder = await page.evaluate(() => window.__flood.ladder());
+    towers.push(ladder);
+    if (i < 3) {
+      await page.goto(`${URL}/?intro=1&tokens=40&game=fallingblocks`, { waitUntil: 'networkidle2' });
+      await sleep(1500);
+      await startGame(page);
+      await sleep(1200);
     }
-    return out;
-  });
-  const tetro = shapes.length === 7 && Object.values(sizes).every((n) => n === 4);
+  }
+  const bad = [];
+  for (const t of towers) {
+    for (const l of t) {
+      if (l.rise > reach.apex - 4) bad.push(`${l.kind} rises ${l.rise} of ${reach.apex}`);
+      if (l.gap > reach.run) bad.push(`${l.kind} gaps ${l.gap} of ${reach.run}`);
+    }
+  }
+  const climbable = bad.length === 0 && towers.every((t) => t.length > 18);
   console.log(
-    `${tetro ? 'PASS' : 'FAIL'}  falling blocks: seven shapes, four cells each  — ${shapes.join('')} ${JSON.stringify(sizes)}`,
+    `${climbable ? 'PASS' : 'FAIL'}  the flood: every ledge is inside a jump  — ` +
+      `${towers.length} towers, ${towers[0].length} ledges, apex ${reach.apex} run ${reach.run}` +
+      (bad.length ? `; ${bad.slice(0, 3).join(', ')}` : ''),
   );
-  if (!tetro) failures++;
+  if (!climbable) failures++;
 
-  // The ghost is not decoration: a piece comes to rest at the height its own
-  // outline was drawn at, so what the player reads is what lands on them.
-  const ghostOk = await page.evaluate(async () => {
-    const B = window.__blocks;
-    B.hold(0);
-    const before = B.state().ghosts.map((g) => `${g.cols.join('')}@${g.rest}`);
-    if (!before.length) return { ok: false, why: 'nothing in the air' };
-    // A ghost's resting height only ever moves UP, as the pile under it grows.
-    for (let i = 0; i < 40; i++) {
-      const now = B.state();
-      if (now.over) break;
-      for (const g of now.ghosts) if (g.y < g.rest - 1) return { ok: false, why: 'a piece fell through its own ghost' };
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    return { ok: true, why: `${before.length} ghosts tracked` };
-  });
-  console.log(`${ghostOk.ok ? 'PASS' : 'FAIL'}  falling blocks: a piece stops at its own ghost  — ${ghostOk.why}`);
-  if (!ghostOk.ok) failures++;
+  // And all six kinds are really in the bag, across a handful of towers.
+  const kinds = new Set(towers.flat().map((l) => l.kind));
+  const allSix = ['static', 'slide', 'rise', 'spin', 'retract', 'crumble'].every((k) => kinds.has(k));
+  console.log(`${allSix ? 'PASS' : 'FAIL'}  the flood: all six kinds of ledge get built  — ${[...kinds].join(',')}`);
+  if (!allSix) failures++;
 
-  // And the crush.  Stood on the shaft floor with a piece brought down on his
-  // head, the frog is flat and the round is over — not shoved out from under.
+  // The water is the only way to lose, and it only has to touch him once.
   await page.evaluate(() => {
-    window.__blocks.hold(0);
-    window.__blocks.setPlayer(160, 0);
+    window.__flood.setPlayer(160, 200);
+    window.__flood.setWater(198);
   });
-  await sleep(200);
-  await page.evaluate(() => window.__blocks.dropOnHead());
-  await sleep(700);
-  const squashed = await st();
-  const crushed = squashed.over === true;
-  console.log(`${crushed ? 'PASS' : 'FAIL'}  falling blocks: caught on the pile is CRUSHED  — over=${squashed.over}`);
-  if (!crushed) failures++;
+  await sleep(600);
+  const drowned = await st();
+  console.log(`${drowned.over ? 'PASS' : 'FAIL'}  the flood: the water touching you ends it  — over=${drowned.over}`);
+  if (!drowned.over) failures++;
+  await page.close();
+}
+
+// And the hatch pays.  Put the frog at the top with the water miles below and
+// the round has to bank the cabinet's reward, not merely stop.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=40&game=fallingblocks`, { waitUntil: 'networkidle2' });
+  await sleep(1800);
+  const before = await page.evaluate(() => window.__froggy.state().tokens);
+  await startGame(page);
+  await sleep(1200);
+  await page.evaluate(() => {
+    window.__flood.setWater(-400);
+    window.__flood.setPlayer(160, window.__flood.state().goal - 1);
+  });
+  await sleep(2600);
+  const after = await page.evaluate(() => window.__froggy.state().tokens);
+  const paid = after === before - 5 + 10;
+  console.log(`${paid ? 'PASS' : 'FAIL'}  the flood: reaching the hatch banks the ten  — ${before} -> ${after}`);
+  if (!paid) failures++;
+  await page.close();
+}
+
+// THE RESPITE.  Nitro and a crash both buy ten seconds with nobody on you,
+// and the road may not send two cars out the moment it is over.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=40&game=carchase`, { waitUntil: 'networkidle2' });
+  await sleep(1600);
+  await startGame(page);
+  await sleep(1000);
+  // The run can end under us — this one is deliberately long — so every read
+  // says so rather than throwing halfway through the check.
+  const st = async () => (await page.evaluate(() => window.__chase?.state() ?? null)) ?? { gone: true };
+
+  // Enough cash to be worth three cars but UNDER the six hundred the spikes
+  // start at, because a spiked run ends and takes the rest of this with it.
+  // Then WAIT for some to actually be on the road: the first is eight seconds
+  // out, and a chaser that finds the traffic on its own buys a respite of its
+  // own, so a fixed sleep lands on an empty road as often as not.
+  await page.evaluate(() => {
+    // Twenty-five seconds of unsteered driving would end in a traffic car long
+    // before the respite did.  What is under test is the police, so the road
+    // is made harmless for the length of the check and nothing else changes.
+    window.__chase.shield(true);
+    window.__chase.setCash(400);
+  });
+  let busy = await st();
+  for (let i = 0; i < 40 && busy.chasing === 0; i++) {
+    await sleep(700);
+    busy = await st();
+  }
+
+  await page.evaluate(() => window.__chase.setNitro(2));
+  await page.keyboard.press('Space');
+  await sleep(600);
+  const quiet = await st();
+  const cleared = !quiet.gone && busy.chasing > 0 && quiet.chasing === 0 && quiet.respite > 8000;
+  console.log(
+    `${cleared ? 'PASS' : 'FAIL'}  car chase: nitro clears the road for ten seconds  — ` +
+      quiet.gone ? 'the run ended first' : `${busy.chasing} chasing -> ${quiet.chasing}, ${Math.round(quiet.respite / 100) / 10}s left`,
+  );
+  if (!cleared) failures++;
+
+  // Nothing new arrives while the quiet lasts.
+  await sleep(5000);
+  const during = await st();
+  const held = !during.gone && during.respite > 0 && during.chasing === 0;
+  console.log(
+    `${held ? 'PASS' : 'FAIL'}  car chase: and nothing is sent out while it lasts  — ` +
+      during.gone ? 'the run ended first' : `${during.chasing} chasing at ${Math.round(during.respite / 100) / 10}s left`,
+  );
+  if (!held) failures++;
+
+  // And when it ends they come back ONE at a time, not four at once.
+  await sleep(7000);
+  const back = await st();
+  const gentle = !back.gone && back.respite === 0 && back.police <= 2;
+  console.log(
+    `${gentle ? 'PASS' : 'FAIL'}  car chase: they come back one at a time  — ` +
+      back.gone ? 'the run ended first' : `${back.police} on the road, cap ${back.policeCap}`,
+  );
+  if (!gentle) failures++;
   await page.close();
 }
 

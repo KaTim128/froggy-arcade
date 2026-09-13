@@ -78,6 +78,8 @@ export const whackAFrog: MinigameModule = {
       ['MOUSE', 'CLICK A FROG TO WHACK IT'],
     ],
   },
+  // Played entirely by tapping the frogs.
+  touch: {},
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;

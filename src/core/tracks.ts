@@ -272,9 +272,9 @@ export const TRACKS: Record<string, TrackPreset> = {
     vol: { lead: 0.03, bass: 0.055, arp: 0.018, drums: 1.25 },
     ring: 0.7,
   }),
-  // Falling Blocks: a climbing tune in a hurry.  Rising figures over a walking
-  // bass, because the whole game is upward and the clock is the enemy.
-  game_fallingblocks: preset({
+  // The Flood: a climbing tune in a hurry.  Rising figures over a walking
+  // bass, because the whole game is upward and the water is the clock.
+  game_flood: preset({
     bpm: 146,
     chords: [min(C.a4 - 12), maj(C.c4), maj(C.f4 - 12), maj(C.g4 - 12)],
     bass: [0, _, 1, _, 2, _, 1, _],

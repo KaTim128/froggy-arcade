@@ -881,6 +881,24 @@ class AudioManager {
         beep(1760, 0.3, 0.09, 'triangle', 0.08); // A6, held
         beep(2637, 0.22, 0.045, 'sine', 0.1);
         break;
+      // ---- the flooded shaft (minigames/flood.ts)
+      // Something going INTO water: the slap of the surface, then the fizz of
+      // the air coming back up through it.
+      case 'splash':
+        noise(0.06, 0.22, 1500);
+        noise(0.34, 0.09, 620);
+        beep(240, 0.18, 0.05, 'sine', 0.03);
+        break;
+      // The water finding another foot of the shaft: low, wide and patient.
+      case 'water_rise':
+        noise(0.9, 0.05, 340);
+        beep(70, 0.8, 0.05, 'sine', 0.05);
+        break;
+      // A ledge giving way under a foot.
+      case 'crumble':
+        noise(0.24, 0.11, 1100);
+        beep(180, 0.2, 0.04, 'square', 0.04);
+        break;
       // ---- the throwing match (minigames/frogvslizard.ts)
       // An arm coming over: air moving, and the item leaving the hand.
       case 'throw_whoosh':
@@ -1094,6 +1112,9 @@ export type SfxName =
   | 'heal_up'
   | 'poison_hiss'
   | 'fence_thunk'
-  | 'wheel_tick';
+  | 'wheel_tick'
+  | 'splash'
+  | 'water_rise'
+  | 'crumble';
 
 export const audio = new AudioManager();

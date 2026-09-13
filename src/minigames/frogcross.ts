@@ -109,6 +109,7 @@ export const frogCross: MinigameModule = {
     // when the choice is in front of them.  On the card, before a single
     // crossing, it was a key with nothing behind it.
   },
+  touch: { stick: 'wasd', arrows: true, buttons: [{ label: 'BANK', key: 'ENTER' }] },
   payoutNote: 'WIN: 15+',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

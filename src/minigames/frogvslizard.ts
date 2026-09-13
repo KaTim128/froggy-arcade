@@ -178,6 +178,19 @@ export const frogVsLizard: MinigameModule = {
       ['HOLD SPACE', 'POWER, LET GO TO THROW'],
     ],
   },
+  // Up and down aim, left and right cycle the items — and the four items are
+  // also a button each, because picking one directly beats cycling to it.
+  touch: {
+    stick: 'wasd',
+    arrows: true,
+    buttons: [
+      { label: 'THROW', key: 'SPACE', primary: true },
+      { label: '1', key: 'ONE' },
+      { label: '2', key: 'TWO' },
+      { label: '3', key: 'THREE' },
+      { label: '4', key: 'FOUR' },
+    ],
+  },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     scene0 = scene;

@@ -28,6 +28,12 @@ export interface ExteriorRefs {
   moth: Phaser.GameObjects.Arc | null;
   doorX: number;
   doorY: number;
+  /**
+   * The doorway as a box, so a scene can hang a hit area on the thing the
+   * player is looking at rather than on a rectangle it guessed.  Whoever draws
+   * the door owns where the door is.
+   */
+  doorRect: { x: number; y: number; w: number; h: number };
 }
 
 /** Where the man stands, and where the player sits at the start. */
@@ -182,7 +188,15 @@ export function paintExterior(scene: Phaser.Scene, opts: ExteriorOpts): Exterior
     moth = scene.add.circle(doorX, fy - 2, 1, PALETTE.cream);
   }
 
-  return { sign, signGlow, windows, moth, doorX, doorY };
+  return {
+    sign,
+    signGlow,
+    windows,
+    moth,
+    doorX,
+    doorY,
+    doorRect: { x: doorX - 15, y: fy + fh - 30, w: 30, h: 30 },
+  };
 }
 
 function paintCar(scene: Phaser.Scene, x: number, y: number, body: number, c: (n: number) => number): void {

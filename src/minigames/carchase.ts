@@ -58,8 +58,23 @@ import type { MinigameApi, MinigameModule } from './types';
 
 const ID = 'carchase' as const;
 
+/**
+ * The HEAT notch: every two hundred in the bag is another car on your tail.
+ * This is the difficulty curve, and it is not the same number as the pay bar.
+ */
 export const TARGET_CASH = 200;
-export const BASE_REWARD = 10;
+/**
+ * The PAY bar, and what clearing it is worth.
+ *
+ * Three hundred to bank anything, fifteen tokens for it, and five more for
+ * every hundred after that.  It is deliberately past the first heat notch:
+ * one police car turns up at two hundred, so nobody banks a run without
+ * having been chased by somebody.
+ */
+export const BAR_CASH = 300;
+export const BASE_REWARD = 15;
+export const STEP_CASH = 100;
+export const STEP_REWARD = 5;
 export const CASH_PER_PICKUP = 20;
 
 const ROAD_L = 96;
@@ -85,6 +100,27 @@ const SPEED_RAMP = 1.1;
 const SPEED_MAX = 226;
 const STEER = 120;
 const CREEP = 50;
+/**
+ * THE RESPITE.  Ten seconds with nobody behind you.
+ *
+ * It is granted by the two things that are supposed to feel like winning: a
+ * NITRO burst, and leading a chaser into the back of a traffic car.  Every
+ * police car on the road drops out of the chase and no replacement is sent
+ * for ten seconds, so the reward for playing well is TIME — time to breathe,
+ * reposition, sweep up the cash you have been driving past, and pick a lane
+ * for what comes next.
+ *
+ * It replaces the old reward, which was a couple of seconds of distance that
+ * the speed difference took straight back.  Both triggers share one timer, so
+ * a nitro burst during a crash respite extends the quiet rather than stacking
+ * a second one on top of it, and nothing can send two cars out at once when it
+ * ends: the spawner is on its usual one-at-a-time clock and starts from a full
+ * interval, so the first car back is a car, not a wall.
+ */
+const RESPITE_MS = 10_000;
+/** And it comes back in gently: the first spawn after a respite is unhurried. */
+const RESPITE_TAIL_MS = 1800;
+
 /** Nitro: how much faster, and for how long. */
 const NITRO_MUL = 1.8;
 /**
@@ -212,6 +248,10 @@ let warnT = 0;
 let dashes: Array<Phaser.GameObjects.Rectangle | Phaser.GameObjects.Arc> = [];
 let trafficTimer = 0;
 let policeTimer = 0;
+/** Milliseconds left with the road behind you empty.  See RESPITE_MS. */
+let respiteMs = 0;
+/** Dev only: nothing on the road can end the run, for testing the police. */
+let shielded = false;
 let cashTimer = 0;
 let collected = 0;
 let best = 0;
@@ -231,11 +271,12 @@ let hud: {
   nitro: Phaser.GameObjects.Rectangle;
   nitroLabel: Phaser.GameObjects.BitmapText;
   warn: Phaser.GameObjects.BitmapText;
+  clear: Phaser.GameObjects.BitmapText;
 } | null = null;
 
 export function chasePayout(c: number): number {
-  if (c < TARGET_CASH) return 0;
-  return BASE_REWARD + Math.floor((c - TARGET_CASH) / TARGET_CASH);
+  if (c < BAR_CASH) return 0;
+  return BASE_REWARD + STEP_REWARD * Math.floor((c - BAR_CASH) / STEP_CASH);
 }
 
 /**
@@ -257,7 +298,8 @@ export const carChase: MinigameModule = {
       'GRAB CASH AND LOSE THE LAW.',
       'NITRO REFILLS ITSELF - SLOWLY.',
       'SWERVE LATE - THEY DRIVE AT YOUR OLD LANE.',
-      'PAST 200 MORE CARS. PAST 600, SPIKES.',
+      'NITRO OR A CRASH CLEARS THEM FOR 10s.',
+      'PULL OVER AT 300 FOR 15, +5 EVERY 100.',
     ],
     controls: [
       ['A / D', 'STEER'],
@@ -268,7 +310,14 @@ export const carChase: MinigameModule = {
     // nothing until there is cash to pull over with, and the moment there is,
     // the HUD says `[ENTER] PULL OVER FOR n TOKENS` on the road itself.
   },
-  payoutNote: 'WIN: 10+',
+  touch: {
+    stick: 'wasd',
+    buttons: [
+      { label: 'NITRO', key: 'SPACE', primary: true },
+      { label: 'PULL\nOVER', key: 'ENTER' },
+    ],
+  },
+  payoutNote: 'WIN: 15+',
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     scene0 = scene;
@@ -283,6 +332,8 @@ export const carChase: MinigameModule = {
     dashes = [];
     trafficTimer = 2600;
     policeTimer = 8000;
+    respiteMs = 0;
+    shielded = false;
     cashTimer = 900;
     jars = [];
     jarTimer = 3000;
@@ -329,6 +380,9 @@ export const carChase: MinigameModule = {
       nitro: scene.add.rectangle(7, 150, 6, 0, PALETTE.tealLight).setOrigin(0, 1),
       nitroLabel: text(scene, 4, 154, 'NITRO', PALETTE.ash),
       warn: centerText(scene, GAME_W / 2, 150, 'POLICE CLOSE', PALETTE.blood, 16).setVisible(false),
+      // The quiet is the reward, so the quiet is on the HUD and counting down:
+      // ten seconds you cannot see is ten seconds you cannot spend.
+      clear: centerText(scene, GAME_W / 2, 30, '', PALETTE.tealLight, 16).setVisible(false),
     };
     scene.add.rectangle(6, 96, 8, 54, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel).setDepth(8);
     // The line one burst is worth.  The tank fills itself, so the player needs
@@ -337,6 +391,7 @@ export const carChase: MinigameModule = {
     hud.nitro.setDepth(9);
     hud.nitroLabel.setDepth(9);
     hud.warn.setDepth(9);
+    hud.clear.setDepth(9);
     hud.cash.setDepth(9);
     hud.best.setDepth(9);
     hud.time.setDepth(9);
@@ -356,10 +411,12 @@ export const carChase: MinigameModule = {
       if (over || nitroMs > 0 || nitroCharge < 1) return;
       nitroMs = NITRO_MS;
       nitroCharge -= 1;
+      // The burst is the distance; the respite is the prize.
+      startRespite();
       audio.sfx('vault', 0.6);
     });
     kb?.on('keydown-ENTER', () => {
-      if (!over && collected >= TARGET_CASH) finish();
+      if (!over && collected >= BAR_CASH) finish();
     });
 
     if (import.meta.env?.DEV) {
@@ -376,6 +433,7 @@ export const carChase: MinigameModule = {
           jars: jars.length,
           jarLanes: jars.map((j) => laneOf(j.x)),
           traffic: traffic.length,
+          respite: Math.max(0, Math.round(respiteMs)),
           police: police.length,
           chasing: police.filter((p) => p.stun <= 0).length,
           stunned: police.filter((p) => p.stun > 0).length,
@@ -439,6 +497,13 @@ export const carChase: MinigameModule = {
           refreshHud();
         },
         /** Empty the tank, for watching it fill itself back up. */
+        /**
+         * Make the car unhittable, so a test of the CHASE is not cut short by
+         * a traffic car the harness was never steering around.
+         */
+        shield: (on: boolean) => {
+          shielded = on;
+        },
         setNitro: (n: number) => {
           nitroCharge = Math.max(0, Math.min(NITRO_TANK, n));
           nitroMs = 0;
@@ -501,10 +566,17 @@ export const carChase: MinigameModule = {
     traffic = traffic.filter((c) => keep(c, c.y < BOTTOM + CAR_H && c.y > TOP - CAR_H * 3));
 
     // ---- police: faster than you, so they come UP the screen, and steer at you
-    policeTimer -= delta;
-    if (policeTimer <= 0 && police.length < policeCap()) {
-      spawnPolice();
-      policeTimer = Math.max(1500, 3000 - heat * 500);
+    if (respiteMs > 0) {
+      respiteMs -= delta;
+      // The clock does not start until the quiet is over, and it starts from a
+      // FULL interval — so the road cannot produce two cars the moment it does.
+      policeTimer = Math.max(policeTimer, RESPITE_TAIL_MS);
+    } else {
+      policeTimer -= delta;
+      if (policeTimer <= 0 && police.length < policeCap()) {
+        spawnPolice();
+        policeTimer = Math.max(1500, 3000 - heat * 500);
+      }
     }
     for (const p of police) {
       const light = p.body.getAt(2) as Phaser.GameObjects.Rectangle;
@@ -551,6 +623,10 @@ export const carChase: MinigameModule = {
       if (into) {
         spinOut(p);
         wreck(into);
+        // Putting one into the traffic clears the road the same way a nitro
+        // burst does.  Leading them is meant to be worth more than outrunning
+        // them, and this is what makes it worth more.
+        startRespite();
       }
     }
     traffic = traffic.filter((c) => c.body.active);
@@ -673,6 +749,14 @@ export const carChase: MinigameModule = {
     hud?.time.setText(heat > 0 ? `${Math.floor(elapsed / 1000)}s   HEAT ${heat}` : `${Math.floor(elapsed / 1000)}s`);
     hud?.time.setTint(heat > 0 ? PALETTE.blood : PALETTE.fog);
 
+    // ---- the quiet, counted down where the player can spend it
+    if (respiteMs > 0) {
+      hud?.clear.setText(`ROAD CLEAR  ${Math.ceil(respiteMs / 1000)}`).setVisible(true);
+      hud?.clear.setTint(respiteMs < 2600 ? PALETTE.amber : PALETTE.tealLight);
+    } else {
+      hud?.clear.setVisible(false);
+    }
+
     // ---- the warning: a police car right behind you, flashing and beeping
     const close = police.some(
       (p) => p.stun <= 0 && p.y > py && p.y - py < WARN_DIST && Math.abs(p.x - px) < LANE_W * 1.5,
@@ -741,6 +825,28 @@ function spinOut(p: Police): void {
   p.own = POLICE_STUN_SPEED;
   audio.sfx('whack', 0.5);
   scene0?.cameras.main.shake(140, 0.006);
+}
+
+/**
+ * Clear the road and keep it clear for ten seconds.
+ *
+ * Every car on you drops out at once, whatever it was doing: it spins, falls
+ * back down the road under its own dead weight and is off the bottom of the
+ * screen within a second or two, which is the same exit a nitro burst always
+ * gave them.  They are left in the list to drive away rather than deleted, so
+ * the exit is something the player watches happen instead of a row of cars
+ * blinking out.
+ *
+ * Extending is not stacking: a second trigger inside the quiet sets the clock
+ * back to ten, it does not add ten to what is left.
+ */
+function startRespite(): void {
+  respiteMs = RESPITE_MS;
+  for (const p of police) {
+    if (p.stun <= 0) spinOut(p);
+    // Long enough that it is off the road before it could ever right itself.
+    p.stun = Math.max(p.stun, RESPITE_MS);
+  }
 }
 
 /** The traffic car that took the hit.  It is gone; the road is that much clearer. */
@@ -908,6 +1014,7 @@ function spawnCash(): void {
 }
 
 function crash(why: string): void {
+  if (shielded) return;
   if (over || !scene0) return;
   reason = why;
   audio.sfx('whack');

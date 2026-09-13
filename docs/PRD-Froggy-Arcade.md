@@ -255,6 +255,9 @@ type GameState = {
 };
 
 type GameId =
+  // `fallingblocks` is The Flood.  The id is the key a saved run's high score
+  // and play count are filed under; renaming it would orphan every save in
+  // existence to gain a tidier string.
   | 'tictactoe' | 'fallingblocks' | 'airhockey'
   | 'hoops' | 'whack'
   | 'chompman' | 'grudge';
@@ -412,6 +415,58 @@ Toggle `` ` ``. Dev builds only; stripped from production by a Vite define.
 
 ---
 
+### 6.10 Playing it on a phone `[MOB-1..MOB-6]`
+
+**MOB-1 — one detection, asked once.** `core/device.ts` answers "is there a
+thumb on this" from a **coarse pointer with no fine pointer and a touch
+screen** — not the user agent, which is a string a browser chooses. A
+touchscreen laptop reports both pointers and keeps the desktop build.
+`?touch=1` and `?touch=0` force it either way, which is how it is tested.
+
+**MOB-2 — the controls send keys, because the game reads keys.** `ui/
+touchControls.ts` mounts a DOM overlay with a thumbstick, a look pad and up to
+five labelled buttons, and every one of them dispatches a **real
+`KeyboardEvent` at the window** with the `keyCode` Phaser matches on. No scene
+and no cabinet knows the overlay exists; nothing downstream branches on the
+platform, so nothing downstream can behave differently on a phone. Both
+schemes are live at once — a Bluetooth keyboard on a tablet works, and a mouse
+on the desktop is untouched.
+
+**MOB-3 — what is on screen is what the thing in front of you reads.** A
+layout is `{stick, arrows, look, buttons, noQuit}`. Scenes get theirs from one
+table (`game/touchLayouts.ts`), keyed by scene, following the **topmost running
+scene** so a prize shelf opened over the hub owns the controls while it is up.
+A cabinet declares its own in its module, next to the tutorial that names the
+same keys — `MinigameModule.touch` is **required**, so a cabinet cannot ship
+without somebody deciding how it is played by thumb. Anything played by
+tapping the picture (Tic-Tac-Toe, Battleship, Whack, the prize shelf, the
+change machine) declares an **empty** layout: on a touch screen a tap is
+already a click, and a button drawn over it would only cover what is tapped.
+
+**MOB-4 — the controls are not on the game.** A 16:9 buffer inside a 19.5:9
+phone leaves a band of dead black; in **portrait** that band is where the
+controls go, so nothing can cover a timer, a score, a dialogue box or a
+button, and the picture is centred in what is left above it. **Landscape** has
+no band, so the controls sit in the two bottom corners at reduced opacity, in
+the strip of carpet every room keeps clear. The stick sets the scale and the
+band is sized to hold it, never the other way round.
+
+**MOB-5 — the integer rule is broken, on purpose, only here.** The largest
+integer scale that fits a 320-wide buffer on a 390-wide phone is **one**. Touch
+devices therefore get a continuous fit of what the controls left, and
+`image-rendering: pixelated` keeps the blocks square; at the 2x and 3x device
+pixel ratios phones ship with, the unevenness lands inside one physical pixel.
+Desktop keeps `Math.floor` and is unchanged (§AR-1).
+
+**MOB-6 — the whole game, thumbs only.** Walking, doors, cabinets, all
+eighteen games, the charity, the bust, the alley, the dark arcade, the
+basement, the hide room and the chase. The two 3D rooms get a **look pad** over
+the picture that sends a held mouse drag, which is what both rooms already turn
+on. `tools/mobile.mjs` drives real CDP touch events against an emulated phone
+and asserts, among other things, that **every key any cabinet's tutorial names
+is reachable by thumb** — a cabinet that grows a key without growing a button
+fails the suite.
+
 ## 7. Scene Specifications
 
 Each scene lists purpose, entry, layout, interactions, audio and exits. Audio entries are the literal `SceneAudio` declaration.
@@ -471,7 +526,7 @@ The main loop. A single room, 3/4 view, walked with WASD.
         │                                          │
         │            · player spawn ·              │
         │                                          │
-        │  ▣ FALLING BLOCKS (5)      ▣ WHACK (3)   │
+        │  ▣ THE FLOOD (5)           ▣ WHACK (3)   │
         │                                          │
         │  ▣ AIR HOCKEY (1)      ▣ CHOMP-MAN (5)   │
         │                                          │
@@ -492,6 +547,20 @@ The main loop. A single room, 3/4 view, walked with WASD.
 | **Lighting** | Warm amber key, magenta neon rim, teal carpet with a chaotic 90s pattern |
 | **Audio** | `music: 'hub_lofi'`, `ambience: ['cabinet_bleeps','crowd_hum']` |
 | **On entry** | Run the broke check (BR-1) → tutorial if `!seenIntro` |
+
+### 7.5a ExteriorDay — the door is a thing you can press
+
+The two things worth touching on the street — **the doorway and the man** — are
+hit areas as well as walk-up spots. Pointing at one sends the player over on
+their own legs and fires the interaction when they arrive; pointing at one you
+are already standing at just does it. Touching a movement key cancels the
+errand, so a click and a hand on the keys never fight over the same legs.
+
+The door **lights up under a cursor** — a gold outline and a warm wash — so it
+reads as something that can be pressed before anybody tries. The man does not:
+he is a person standing in the open, and a glowing rectangle around him would
+read as something being wrong with him. The `[E] GO IN` prompt still appears
+when you arrive on foot; neither way of getting there replaces the other.
 
 ### 7.6 PrizeCounter `[QFD: B5, E5]`
 
@@ -807,7 +876,7 @@ Measured over 200 automated runs per game (scripted competent player).
 | Game | Tier | Cost | Reward | Target win rate | Typical length |
 |---|---|---:|---:|---|---|
 | Tic-Tac-Toe | Easy | 1 | 2 | 45–60% | 25 s |
-| Falling Blocks | Hard | 5 | 10 | 45–60% | 40 s |
+| The Flood | Hard | 5 | 10 | 45–60% | 60 s |
 | Air Hockey | Hard | 5 | 10 | 45–60% | 70 s |
 | Basketball Hoops | Medium | 3 | 6 | 40–55% | 60 s |
 | Whack-a-Frog | Medium | 3 | 6 | 40–55% | 40 s |
@@ -831,20 +900,20 @@ not in this table.
 - **A draw refunds the token** (MG-9). It is neither a win nor a loss: the entry cost goes back exactly once and nothing is paid on top of it. The board says so before a move is made (`YOU ARE X — A DRAW REFUNDS`), the result card says `DRAW — TOKEN BACK`, and the shell's card reads `A TIE — 1 BACK`. This replaces the original "a draw is a loss", which charged a token for a game nobody won.
 - Win: three in a row for the player. Lose: AI three in a row.
 
-### 9.3 Falling Blocks — Hard, 5 → 10
+### 9.3 The Flood — Hard, 5 → 10
 
-**A Tetris well with a frog loose in it.** Four-cell pieces — the seven shapes,
-in random turns — drift down a ten-column shaft and pile up where they land.
-Nobody steers the pieces. The frog is the only thing the player steers, and the
-ledge at the top of the shaft is the only thing they are trying to reach.
-**60 seconds.**
+**A parkour shaft with the water coming up it.** One way out — the hatch at the
+top — and one way to lose: the water reaching your feet. Nothing else in the
+shaft can kill you and nothing else needs to. The flood is the clock, the
+difficulty and the reason you cannot stand anywhere and think about it, all at
+once.
 
-- **Twelve columns** on a 16×12 cell — the shaft is the room to move in, and at ten the four or five pieces in the air covered most of the floor between them. A piece every **1250 ms**, falling at **30 px/s**, which is about five seconds to cross the shaft and four in the air at once.
-- **The pile is the staircase.** A piece that comes to rest becomes terrain, exactly where it stopped — gaps and all, the way a well full of tetrominoes looks. The walkable surface of a column is the top of its highest cell, so a cave under a bridged S is a cave you can see and never fall into. The frog climbs by staying on top of the pile and by jumping onto pieces still in the air, which carry him down while he lines up the next hop.
-- **A piece will crush him, and that is the round.** Caught between a piece and the pile there is nowhere to put him: `CRUSHED`, and the run is over. Caught in open air it only shoves him down until he can get out from under. He is never moved anywhere he did not walk, jump or get pushed to — no snapping, no teleporting out of trouble.
-- **Nothing lands without warning.** Every piece in the air draws a hollow **ghost** of itself where it will come to rest, recomputed each frame against the pile as it currently stands, and the frog flashes with a `MOVE!` banner the moment a ghost is sitting on him. Pieces are aimed within three columns of the frog three times in four (the fourth goes anywhere), so standing in a corner is not a plan — but the warning is always there and always seconds long.
-- The ledge is **240 px** up, twenty rows, and a hop peaks at **47 px** — very nearly four rows, so the frog climbs under his own steam instead of waiting for a piece to be jumped off. The pile is the lift and the jump is the climb. Surviving is the game; the height is the clock they are measured against. A scripted player who dodges the imminent ghosts reaches the ledge around the 35-second mark in roughly four runs in five.
-- Left/right and jump (`A`/`D`/arrows, `SPACE`/`W`/`UP`). Custom tune (`game_fallingblocks`) and sfx for the jump, a piece coming to rest and the summit.
+- **Six kinds of ledge**, each asking a different question. `STATIC` — a ledge, where the run breathes. `SLIDE` — tracks left and right; jump where it is *going* to be. `RISE` — tracks up and down; take it at the bottom of its stroke. `SPIN` — a bar turning on its middle: edge-on there is nothing to land on, flat it is a wide ledge, and the whole skill is the wait. `RETRACT` — slides out of a wall and back into it; cross while it is out. `CRUMBLE` — holds for half a second under a foot, flashing red, then drops and comes back 2.6 s later.
+- **A ledge is always drawn as the object it is**, never as the surface it currently offers. A bar seen edge-on and an arm half inside its wall carry no weight and are drawn hollow, but they are drawn: a ledge that vanished when it stopped being standable would be asking the player to learn a rhythm they cannot see.
+- **Randomised, and climbable by construction.** Every run is a different tower and the generator is not allowed to build one that cannot be climbed: each ledge sits inside the arc a jump actually covers — no more than `APEX − 9` above the last and no further sideways than a run carries in the air — computed from the frog's own constants rather than guessed. A **moving** ledge is placed against its *worst* position, so reachable means reachable at the moment it is furthest away. Two movers never follow one another. A retracting arm is *grown* until its tip is inside the jump, and if no length would reach, a plain ledge is built instead. `tools/games.mjs` re-checks four fresh towers against the same numbers every run.
+- **The water** starts 70 px below the kerb, rises at 8.5 px/s and accelerates by 0.115 px/s² — eight seconds before it reaches the floor you start on, about sixty-five before it reaches the hatch. It rumbles every 90 px it climbs, throws bubbles off its surface, and the round ends the moment it touches the frog: a splash, a shake and `DROWNED`.
+- **You can see it coming.** The camera rides *above* the frog, so the next two or three ledges are on screen while the decision is being made; a gauge down the right edge shows the water, the frog and the hatch as one picture; and a line across the top counts the seconds until the water is where you are — amber under nine, red under four.
+- The hatch is **720 px** up, about 27 ledges. Left/right and jump (`A`/`D`/arrows, `SPACE`/`W`/`UP`), a `JUMP` button on a phone. Custom tune (`game_flood`) and its own `splash`, `water_rise` and `crumble` sfx.
 
 ### 9.4 Air Hockey — Hard, 5 → 10
 
@@ -1022,14 +1091,22 @@ printed on the machine's face before a token moves.
 - The cylinder is spun between pulls, so every pull is an independent **1 in 6** and nothing about the run so far changes the next one. The machine says so.
 - **The arithmetic, because the machine states it:** surviving all five is (5/6)⁵ = 40%, paying 15 against the 5 it cost — about a token of expected value a play. Stopping early is worse than going on at every single step, which is the joke: the machine is honest, and the honest play is to keep pulling.
 
-### 9.13 Froggy Car Chase — Hard, 5 in, 10 and up
+### 9.13 Froggy Car Chase — Hard, 5 in, 15 and up
 
 A four-lane road from above. Traffic ahead is slower than you and has to be
 threaded; the police behind are faster and have to be shaken. Cash sits on the
 road in bundles of twenty and the run ends on a crash, on being caught, or on
 `ENTER` — pull over and take what you have.
 
-- **Nitro refills itself**, a burst every 11 s, up to two in the tank; blue jars fill it the rest of the way. A burst runs for 2.2 s and, while it does, the police **cannot** gain: the road moves at the player's speed, so every chaser slides backwards down the screen and the player comes out of it with room to pick a lane.
+**The bar is 300 cash and it pays 15 tokens, plus 5 for every further 100.**
+That bar sits deliberately past the first heat notch, which is at 200: one
+police car turns up before you can bank anything, so nobody banks a run
+without having been chased. The notches themselves are unchanged and still
+keyed to 200 — the pay bar and the difficulty curve are two different numbers
+and the code keeps them as two different constants.
+
+- **Nitro refills itself**, a burst every 11 s, up to two in the tank; blue jars fill it the rest of the way. A burst runs for 2.2 s and, while it does, the police **cannot** gain: the road moves at the player's speed, so every chaser slides backwards down the screen and the player comes out of it with room to pick a lane. The car itself is never pinned by the burst — `W`/`S` still move it up and down the road throughout and afterwards.
+- **THE RESPITE: ten seconds with nobody behind you.** Granted by the two things that are supposed to feel like winning — a nitro burst, and leading a chaser into the back of a traffic car. Every police car on the road drops out at once (it spins, falls back under its own dead weight and is off the bottom within a second or two) and **no replacement is sent for ten seconds**, so the reward for playing well is TIME: to breathe, reposition, sweep up the cash you have been driving past and pick a lane for what comes next. It is counted down on the HUD as `ROAD CLEAR n`, because ten seconds you cannot see is ten seconds you cannot spend. Both triggers share one timer — a second trigger inside the quiet resets it to ten rather than stacking another ten on top — and when it ends the spawner restarts from a **full** interval on its usual one-at-a-time clock, so the first car back is a car and not a wall.
 - They close at 15 px/s over the road speed rather than 20, and gain with the clock more slowly. The chase still shuts on a mistake; it no longer turns every mistake into an arrest.
 - **They can be juked.** A chaser steers at the lane it last *saw* you in and only looks every 460 ms (down to 200 ms as the heat climbs), so a late swerve leaves it committed to your old line. That lag is how you shake one without nitro.
 - **They can be crashed.** A chaser locked onto the lane you just left drives into the back of the traffic in it, spins out, drops its siren and falls back down the road for ~2.8 s. The road is a weapon, not only an obstacle.
@@ -1062,7 +1139,7 @@ re-deducts the entry cost when it pays:
 |---|---|---:|---:|---:|
 | Easy | Tic-Tac-Toe | 1 | 2 | 0 |
 | Medium | Basketball Hoops, Whack-a-Frog, Bowling, Battleship | 3 | 6 | 0 |
-| Hard | Air Hockey, Grudge, Frog vs Lizard, Falling Blocks | 5 | 10 | 0 |
+| Hard | Air Hockey, Grudge, Frog vs Lizard, The Flood | 5 | 10 | 0 |
 | Hard (long) | Chomp-Man, Barrel Climb, Dance Off | 7 | 15 | 0 |
 
 Everything up to the five-token row is a **2× on a win**, so expected value is
@@ -1087,7 +1164,7 @@ only things exempt:
 | Chamber | 5 in | 3 a clean pull, up to 15 | §9.12 |
 | Blackjack | 1 minimum | 2× the bet, hand by hand | §9.x |
 | Frog Cross | 7 | 50 points (five crossings) for 15, +1 every 50 after | a formula, not a constant |
-| Car Chase | 5 | 200 cash for 10, +1 every 200 after | as above |
+| Car Chase | 5 | 300 cash for 15, +5 every 100 after | as above |
 
 ### 10.3 Expected-value model
 
@@ -1096,7 +1173,7 @@ Net EV per play = `(p_win × reward) − cost`, where the break-even win rate is
 | Game | p_win (target midpoint) | Cost | EV | Net per play |
 |---|---:|---:|---:|---:|
 | Tic-Tac-Toe | 0.525 | 1 | 1.05 | **+0.05** |
-| Falling Blocks | 0.525 | 5 | 5.25 | **+0.25** |
+| The Flood | 0.525 | 5 | 5.25 | **+0.25** |
 | Basketball Hoops | 0.475 | 3 | 2.85 | **−0.15** |
 | Whack-a-Frog | 0.475 | 3 | 2.85 | **−0.15** |
 | Grudge | 0.375 | 5 | 3.75 | **−1.25** |
@@ -1247,6 +1324,7 @@ src/
     broke.ts              // broke detector + latches (§6.3)
     routes.ts             // canEnter() guards (§6.4)
     sceneManager.ts       // Phaser/Three lifecycle (§6.5)
+    device.ts             // is there a thumb on this (§6.10, MOB-1)
     audio.ts              // 3-bus Howler manager (§6.6)
     input.ts              // single input map (§6.7)
     debug.ts              // dev panel (§6.9)
@@ -1262,7 +1340,7 @@ src/
     Chase3D.ts OutroCutscene3D.ts
   minigames/
     index.ts              // registry, shared Minigame interface (§9.0)
-    tictactoe/ fallingblocks/ airhockey/ hoops/ whack/ chompman/ grudge/
+    tictactoe/ flood/ airhockey/ hoops/ whack/ chompman/ grudge/
   froggy/
     froggy.ts             // variant state machine V0/V1/V2 (§8.2)
     script.ts             // all dialogue (§8.4)

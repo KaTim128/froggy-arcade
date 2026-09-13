@@ -76,6 +76,7 @@ export const roulette: MinigameModule = {
       ['MOUSE', 'PULL OR WALK AWAY'],
     ],
   },
+  touch: { buttons: [{ label: 'PULL', key: 'SPACE', primary: true }] },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     sceneRef = scene;

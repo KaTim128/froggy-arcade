@@ -137,6 +137,17 @@ export const blackjack: MinigameModule = {
       ['C', 'CASH OUT'],
     ],
   },
+  // The stick is the bet — left and right by one, up and down by five — and
+  // SPACE is the one button that both deals the hand and stands on it.
+  touch: {
+    stick: 'wasd',
+    arrows: true,
+    buttons: [
+      { label: 'DEAL\nSTAND', key: 'SPACE', primary: true },
+      { label: 'HIT', key: 'H' },
+      { label: 'CASH\nOUT', key: 'C' },
+    ],
+  },
   payoutNote: 'PAYS 2X BET',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

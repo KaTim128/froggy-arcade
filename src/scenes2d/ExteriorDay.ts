@@ -9,6 +9,14 @@
  * Nothing bad happens on this street.  That is deliberate — the whole horror
  * act is the arcade at night, and it only lands because the daytime loop was
  * safe and ordinary and you were happy to keep walking back inside.
+ *
+ * YOU CAN JUST CLICK THE DOOR.  Both things worth touching out here — the
+ * doorway and the man — are hit areas as well as walk-up spots: point at one
+ * and the player walks there and does the thing, which is how a phone plays
+ * this scene and how anybody who would rather not hold a key plays it too.
+ * The door lights up under a cursor so it reads as a door you can press, and
+ * the `[E]` prompt still appears when you arrive on foot, because neither way
+ * of getting there replaces the other.
  */
 
 import Phaser from 'phaser';
@@ -37,6 +45,9 @@ export class ExteriorDay extends Phaser.Scene {
   private spot: Spot = null;
   private locked = false;
   private doorX = GAME_W / 2;
+  /** Where a click told the player to go, and what to do on arrival. */
+  private errand: Spot = null;
+  private doorGlow!: Phaser.GameObjects.Rectangle;
 
   constructor() {
     super('ExteriorDay');
@@ -53,6 +64,8 @@ export class ExteriorDay extends Phaser.Scene {
     const refs = paintExterior(this, { night: false, day: true });
     startSignFlicker(this, refs);
     this.doorX = refs.doorX;
+    this.errand = null;
+    this.makeSpotsClickable(refs.doorRect);
 
     // He stands where he stands.  Nothing in this scene ever moves him, so he
     // does not need keeping hold of.
@@ -85,6 +98,63 @@ export class ExteriorDay extends Phaser.Scene {
     });
 
     this.checkFinished();
+  }
+
+  /**
+   * The door and the man, as things you can point at.
+   *
+   * A click is an ERRAND, not a teleport: the player walks over on their own
+   * legs and the interaction fires when they get there, so clicking and
+   * walking end in exactly the same place and the scene never has two ways of
+   * being somewhere.  Clicking what you are already standing at just does it.
+   *
+   * Only the door lights up.  It is the way out of the scene and the thing a
+   * new player is looking for; the man is a person standing in the open, and a
+   * glowing rectangle around him would read as something being wrong with him.
+   */
+  private makeSpotsClickable(door: { x: number; y: number; w: number; h: number }): void {
+    this.doorGlow = this.add
+      .rectangle(door.x - 2, door.y - 2, door.w + 4, door.h + 4)
+      .setOrigin(0, 0)
+      .setStrokeStyle(1, PALETTE.gold)
+      .setDepth(60)
+      .setAlpha(0)
+      .setFillStyle(PALETTE.gold, 0.12);
+
+    const zone = this.add
+      .zone(door.x, door.y, door.w, door.h)
+      .setOrigin(0, 0)
+      .setDepth(61)
+      .setInteractive({ useHandCursor: true });
+    zone.on('pointerover', () => {
+      if (!this.locked && !this.busy()) this.tweens.add({ targets: this.doorGlow, alpha: 1, duration: 110 });
+    });
+    zone.on('pointerout', () => this.tweens.add({ targets: this.doorGlow, alpha: 0, duration: 160 }));
+    zone.on('pointerdown', () => this.send('door'));
+
+    // The man gets the same reach, sized to him rather than to the doorway.
+    this.add
+      .zone(MAN_X - 14, WALK_Y - 34, 28, 40)
+      .setOrigin(0, 0)
+      .setDepth(61)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.send('man'));
+  }
+
+  /** Go and do that.  Arriving is `update`'s job; this only sets the errand. */
+  private send(where: Spot): void {
+    if (this.locked || this.busy()) return;
+    audio.sfx('ui_blip', 0.4);
+    if (this.spot === where) {
+      this.errand = null;
+      this.interact();
+      return;
+    }
+    this.errand = where;
+  }
+
+  private targetX(where: Spot): number {
+    return where === 'man' ? MAN_X + 16 : this.doorX;
   }
 
   private bind(names: readonly string[]): Phaser.Input.Keyboard.Key[] {
@@ -146,7 +216,21 @@ export class ExteriorDay extends Phaser.Scene {
       return;
     }
 
-    const dx = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
+    let dx = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
+    // A hand on the keys always wins: touching a movement key drops whatever
+    // the last click asked for, so the two never fight over the same legs.
+    if (dx !== 0) this.errand = null;
+    if (this.errand) {
+      const gap = this.targetX(this.errand) - this.player.x;
+      if (Math.abs(gap) <= 2) {
+        const done = this.errand;
+        this.errand = null;
+        this.spot = done;
+        this.interact();
+        return;
+      }
+      dx = gap > 0 ? 1 : -1;
+    }
     this.player.move(dx, 0, delta, new Phaser.Geom.Rectangle(20, WALK_Y, GAME_W - 40, 0));
 
     const px = this.player.x;

@@ -186,6 +186,15 @@ export const grudge: MinigameModule = {
       ['I', 'SPECIAL'],
     ],
   },
+  touch: {
+    stick: 'wasd',
+    buttons: [
+      { label: 'HIGH', key: 'J', primary: true },
+      { label: 'LOW', key: 'K' },
+      { label: 'SPCL', key: 'I' },
+      { label: 'BLOCK', key: 'L' },
+    ],
+  },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;

@@ -59,6 +59,8 @@ export const battleship: MinigameModule = {
       ['MOUSE', 'CLICK THEIR GRID TO FIRE'],
     ],
   },
+  // Played entirely by tapping the grid.
+  touch: {},
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;

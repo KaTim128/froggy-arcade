@@ -113,6 +113,8 @@ export const hoops: MinigameModule = {
       ['W / S', 'TILT THE SHOT'],
     ],
   },
+  // Hold the button to charge, exactly as the key is held.
+  touch: { stick: 'ud', buttons: [{ label: 'SHOOT', key: 'SPACE', primary: true }] },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;

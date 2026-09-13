@@ -32,6 +32,7 @@ import { getMinigame } from '../minigames/registry';
 import type { MinigameApi, MinigameModule } from '../minigames/types';
 import { showTutorial, type TutorialCard } from '../ui/tutorialCard';
 import { froggyLayer } from '../render/froggyLayer';
+import { setCabinetTouch } from '../game/touchLayouts';
 
 const AREA = { x: 0, y: 18, w: GAME_W, h: GAME_H - 18 };
 const RESULT_MS = 2000;
@@ -146,6 +147,10 @@ export class MinigameScene extends Phaser.Scene {
         store.flush();
         mod.create(this, api);
         this.started = true;
+        // On a phone, the cabinet's own keys become the cabinet's own buttons
+        // for as long as it is being played.  The card did not need them: it
+        // is two buttons you tap.
+        setCabinetTouch(mod.touch);
       },
       onLeave: () => {
         this.card = null;
@@ -155,6 +160,7 @@ export class MinigameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.card?.destroy();
       this.card = null;
+      setCabinetTouch(null);
     });
 
     if (import.meta.env?.DEV) {

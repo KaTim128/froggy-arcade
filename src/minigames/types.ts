@@ -12,6 +12,7 @@
 
 import type Phaser from 'phaser';
 import type { GameId } from '../core/state';
+import type { TouchLayout } from '../ui/touchControls';
 
 export interface MinigameApi {
   /**
@@ -82,6 +83,19 @@ export interface MinigameModule {
    * what stops a cabinet shipping without its controls on screen.
    */
   tutorial: Tutorial;
+  /**
+   * The same controls again, as thumbs.  On a touch device the shell puts this
+   * on screen for the life of the game: a stick where the cabinet steers, and
+   * a labelled button for every key it reads.
+   *
+   * It sits next to `tutorial` on purpose.  The card names the keys and this
+   * names the buttons, and a cabinet that grows a key without growing a button
+   * is a cabinet that cannot be finished on a phone — having both in the same
+   * object is what makes that impossible to miss.  A game played entirely by
+   * clicking (Tic-Tac-Toe, Battleship) declares an empty layout rather than
+   * leaving this out, so "nothing to show" is a decision and not an oversight.
+   */
+  touch: TouchLayout;
   /** Replaces the shell's "WIN: +n" line when the payout is not fixed. */
   payoutNote?: string;
   /**

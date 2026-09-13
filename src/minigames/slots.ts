@@ -88,6 +88,7 @@ export const slots: MinigameModule = {
       ['MOUSE', 'SPIN OR LEAVE'],
     ],
   },
+  touch: { buttons: [{ label: 'SPIN', key: 'SPACE', primary: true }] },
   payoutNote: 'PAYS 6 / 15',
 
   create(scene: Phaser.Scene, api: MinigameApi) {

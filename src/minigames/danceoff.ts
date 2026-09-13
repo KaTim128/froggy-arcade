@@ -221,6 +221,15 @@ export const danceOff: MinigameModule = {
       ['W / D', 'UP AND RIGHT'],
     ],
   },
+  // The four arrows ARE the game, so they are four buttons and not a stick.
+  touch: {
+    buttons: [
+      { label: '\u25c0', key: 'A' },
+      { label: '\u25bc', key: 'S' },
+      { label: '\u25b2', key: 'W' },
+      { label: '\u25b6', key: 'D' },
+    ],
+  },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     sceneRef = scene;

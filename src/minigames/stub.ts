@@ -28,6 +28,7 @@ export function makeStub(id: GameId): MinigameModule {
         ['ESC', 'QUIT - FORFEITS THE COST'],
       ],
     },
+    touch: { buttons: [{ label: 'WIN', key: 'SPACE', primary: true }, { label: 'LOSE', key: 'X' }] },
     create(scene: Phaser.Scene, api: MinigameApi) {
       scene.add
         .rectangle(GAME_W / 2, GAME_H / 2, 220, 90, PALETTE.slate)

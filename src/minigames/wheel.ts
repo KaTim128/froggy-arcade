@@ -172,6 +172,7 @@ export const wheelOfFortune: MinigameModule = {
       ['MOUSE', 'SPIN OR LEAVE'],
     ],
   },
+  touch: { buttons: [{ label: 'SPIN', key: 'SPACE', primary: true }] },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;

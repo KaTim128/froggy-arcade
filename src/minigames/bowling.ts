@@ -135,6 +135,16 @@ export const bowling: MinigameModule = {
       ['HOLD SPACE', 'POWER, LET GO TO THROW'],
     ],
   },
+  // Two separate axes: the stick walks the foul line, the arrows swing the
+  // aim.  Aliasing them onto one stick would walk and aim with one thumb.
+  touch: {
+    stick: 'lr',
+    buttons: [
+      { label: 'ROLL', key: 'SPACE', primary: true },
+      { label: '\u25c0', key: 'LEFT' },
+      { label: '\u25b6', key: 'RIGHT' },
+    ],
+  },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     scene0 = scene;

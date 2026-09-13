@@ -79,6 +79,8 @@ export const ticTacToe: MinigameModule = {
       ['MOUSE', 'CLICK A SQUARE TO PLACE X'],
     ],
   },
+  // Played entirely by tapping the board.
+  touch: {},
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     board = Array<Cell>(9).fill('');

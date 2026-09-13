@@ -10,6 +10,8 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { GAME_W, GAME_H, attachScaler } from '../render/pixelScaler';
 import { froggyLayer } from '../render/froggyLayer';
+import { touchControls } from '../ui/touchControls';
+import { installTouchDirector } from '../game/touchLayouts';
 import { initDebug } from './debug';
 import { store } from './state';
 import { audio } from './audio';
@@ -95,7 +97,12 @@ export function bootGame(): void {
   });
 
   froggyLayer.mount(root);
+  // Before the scaler: it asks the controls how much of the screen they want
+  // before it decides how big the picture can be.  On anything without a touch
+  // screen both of these do nothing at all.
+  touchControls.mount();
   attachScaler(game);
+  installTouchDirector(game);
   initDebug(game);
 
   // Boot's CLICK TO BEGIN gate is the intended unlock (PRD EC-9), but any first
