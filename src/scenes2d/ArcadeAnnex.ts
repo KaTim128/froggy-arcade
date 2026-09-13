@@ -124,7 +124,7 @@ export class ArcadeAnnex extends Phaser.Scene {
 
   private paintDoorway(): void {
     // The opening back to the hub, cut into the right wall.
-    paintOpening(this, { side: 'right', y: BACK_DOOR.y, label: 'ARCADE', glow: PALETTE.neon });
+    paintOpening(this, { side: 'right', y: BACK_DOOR.y, glow: PALETTE.neon });
 
     this.add
       .zone(BACK_DOOR.x, BACK_DOOR.y, 26, 50)
@@ -139,7 +139,7 @@ export class ArcadeAnnex extends Phaser.Scene {
     // Gold, because that is the colour of the room on the other side of it —
     // the light coming out of an opening is the first thing that says where it
     // goes.
-    paintOpening(this, { side: 'left', y: CASINO_DOOR.y, label: 'THE MACHINES', glow: PALETTE.gold });
+    paintOpening(this, { side: 'left', y: CASINO_DOOR.y, glow: PALETTE.gold });
 
     this.add
       .zone(CASINO_DOOR.x, CASINO_DOOR.y, 26, 50)

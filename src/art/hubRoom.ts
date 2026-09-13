@@ -9,7 +9,7 @@
 import Phaser from 'phaser';
 import { PALETTE, nightify } from '../render/palette';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
-import { centerText, text } from '../core/ui';
+import { centerText } from '../core/ui';
 import { depthFor } from './player';
 
 export const ROOM = {
@@ -297,8 +297,11 @@ export function paintArcadeDressing(
  * they can walk.  What makes it read is the frame and the light: a lintel and
  * a threshold in the wall's own metal, a strip of the NEXT room's colour down
  * the back of the recess, and that colour spilling out across this room's
- * floor in a wedge, the way light actually leaves a doorway.  The sign goes on
- * a plate over the opening rather than being written on the floor beside it.
+ * floor in a wedge, the way light actually leaves a doorway.  There is NO SIGN
+ * on it.  A lit recess with the next room's colour coming out of it says door
+ * on its own; the plate that used to hang beside it said the same thing again
+ * in words, across the wall at eye level, and the walk-up prompt already names
+ * the room the moment the player is close enough for the name to matter.
  *
  * Everything here sorts below the player (depth < 50), so walking into the
  * doorway puts the player in it rather than behind it.
@@ -311,7 +314,6 @@ export function paintOpening(
     y: number;
     /** How tall the opening is.  46 is a double door. */
     h?: number;
-    label: string;
     /** The colour of the room on the other side of it. */
     glow: number;
     night?: boolean;
@@ -357,23 +359,6 @@ export function paintOpening(
     .setDepth(0.61)
     .setAlpha(opts.night ? 0.2 : 0.85);
 
-  // ---- the sign, on a plate beside the mouth.
-  //
-  // Beside, and level with the middle of the opening, because that is the one
-  // band of wall this room keeps clear: every room has a cabinet above the
-  // doorway and another below it, and a plate hung over the lintel lands on
-  // the top one's control deck.
-  const plateW = Math.max(34, opts.label.length * 6 + 10);
-  const plateX = left ? mouth + 4 : mouth - 4 - plateW;
-  const plateY = opts.y - 20;
-  scene.add
-    .rectangle(plateX, plateY, plateW, 11, c(PALETTE.ink))
-    .setOrigin(0, 0)
-    .setStrokeStyle(1, c(PALETTE.steel))
-    .setDepth(0.62);
-  text(scene, plateX + 5, plateY + 3, opts.label, opts.night ? PALETTE.ash : PALETTE.gold)
-    .setDepth(0.63)
-    .setAlpha(opts.night ? 0.5 : 1);
 }
 
 /** The change machine, decorative in Act I and dead at night. */

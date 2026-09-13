@@ -180,7 +180,7 @@ export class ArcadeCasino extends Phaser.Scene {
 
   private paintDoorway(): void {
     // The opening back to the back room, cut into the right wall.
-    paintOpening(this, { side: 'right', y: BACK_DOOR.y, label: 'BACK ROOM', glow: PALETTE.tealLight });
+    paintOpening(this, { side: 'right', y: BACK_DOOR.y, glow: PALETTE.tealLight });
 
     this.add
       .zone(BACK_DOOR.x, BACK_DOOR.y, 26, 50)

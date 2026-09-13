@@ -91,9 +91,11 @@ export class ArcadeHub extends Phaser.Scene {
       // the player has to be able to get to.
       props: [
         { x: 95, y: 66, kind: 'bin' },
-        // Dead centre of the 257-277 gap between the last two cabinets: at 261
-        // it crowded the bowling machine's control deck.
-        { x: 267, y: 158, kind: 'plant' },
+        // Bottom-left of the floor, a dozen pixels clear of the last cabinet
+        // in the row.  Wedged into the gap between two machines it overlapped
+        // one or the other at every x that fitted, because the gap is twenty
+        // pixels wide and the plant is seventeen.
+        { x: 104, y: 170, kind: 'plant' },
       ],
       // The prize case owns 126-226 of the back wall and the change machine
       // 262-282; the vents go in what is left of it.
@@ -306,7 +308,7 @@ export class ArcadeHub extends Phaser.Scene {
   /** The opening in the left wall, through to the back room. */
   private paintAnnexDoor(): void {
     // Teal, the colour of the room it goes to, spilling out onto this carpet.
-    paintOpening(this, { side: 'left', y: ANNEX_DOOR.y, label: 'BACK ROOM', glow: PALETTE.tealLight });
+    paintOpening(this, { side: 'left', y: ANNEX_DOOR.y, glow: PALETTE.tealLight });
 
     this.add
       .zone(ANNEX_DOOR.x, ANNEX_DOOR.y, 26, 50)
