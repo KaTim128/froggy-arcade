@@ -72,6 +72,22 @@ const startGame = async (page) => {
   }
 };
 
+/**
+ * Screen coordinates of a named cabinet, ASKED OF THE ROOM rather than copied
+ * out of `content.ts`.  Re-spacing the floor to get a machine out of a doorway
+ * used to break two checks apiece, in tests that had nothing to do with where
+ * the machines stand.
+ */
+const cabinetAt = async (page, sceneKey, id) =>
+  page.evaluate(
+    ([key, want]) => {
+      const room = window.__froggy.game().scene.getScene(key);
+      const cab = room?.cabinets?.find((c) => c.def.id === want);
+      return cab ? [640 + (cab.def.x - 160) * 4, 360 + (cab.def.y - 90) * 4] : null;
+    },
+    [sceneKey, id],
+  );
+
 const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: 'new',
@@ -512,16 +528,17 @@ for (const g of [
   await page.setViewport({ width: 1280, height: 720 });
   const tokens = () => page.evaluate(() => window.__froggy.state().tokens);
   const scenes = () => page.evaluate(() => window.__froggy.activeScenes().join(','));
-  // TIC-TAC-TOE sits at game (30, 88), far from the spawn point; the card's
-  // two buttons are at y 163, either side of the middle.
-  const cabinet = [640 + (30 - 160) * 4, 360 + (88 - 90) * 4];
-  const PLAY = [640 + (108 - 160) * 4, 360 + (163 - 90) * 4];
-  const LEAVE = [640 + (212 - 160) * 4, 360 + (163 - 90) * 4];
+  // TIC-TAC-TOE, wherever it is standing today: far from the spawn point, and
+  // the card's two buttons are at y 163, either side of the middle.
+  const PLAY_Y = 163;
+  const PLAY = [640 + (108 - 160) * 4, 360 + (PLAY_Y - 90) * 4];
+  const LEAVE = [640 + (212 - 160) * 4, 360 + (PLAY_Y - 90) * 4];
 
   await page.goto(`${URL}/?intro=1&tokens=20&scene=ArcadeHub`, { waitUntil: 'networkidle2' });
   await sleep(2500);
   await page.mouse.click(640, 700);
   await sleep(600);
+  const cabinet = await cabinetAt(page, 'ArcadeHub', 'tictactoe');
 
   const before = await tokens();
   await page.mouse.click(...cabinet);
@@ -871,8 +888,8 @@ for (const g of [
   await sleep(2500);
 
   const purse = await page.evaluate(() => window.__froggy.state().tokens);
-  // TIC-TAC-TOE sits at game (30, 88).  The card is free; PLAY is the charge.
-  await page.mouse.click(640 + (30 - 160) * 4, 360 + (88 - 90) * 4);
+  // The card is free; PLAY is the charge.
+  await page.mouse.click(...(await cabinetAt(page, 'ArcadeHub', 'tictactoe')));
   await sleep(1800);
   await startGame(page);
   await sleep(400);

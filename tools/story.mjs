@@ -105,7 +105,7 @@ console.log('\nAC-3  charity fires exactly once per run');
   // play you paid for.  Clicking a one-token cabinet outright — rather than
   // walking blind and hoping — is deliberate: retuning whichever cabinet
   // happened to sit bottom-left used to silently stop the run going broke.
-  await page.mouse.click(640 + (30 - 160) * 4, 360 + (88 - 90) * 4); // TIC-TAC-TOE, 1 token
+  await page.mouse.click(640 + (52 - 160) * 4, 360 + (88 - 90) * 4); // TIC-TAC-TOE, 1 token
   await sleep(1600);
   await page.keyboard.press('Space'); // PLAY -> 0 tokens
   await sleep(900);
@@ -140,7 +140,7 @@ console.log('\nAC-4  second bust ejects, front door locked for good');
   // token, and walk out on the play.  Walking blind used to land on whichever
   // cabinet happened to sit bottom-left, so retuning that cabinet's cost
   // silently stopped the run from ever going broke.
-  await page.mouse.click(640 + (30 - 160) * 4, 360 + (88 - 90) * 4); // TIC-TAC-TOE, 1 token
+  await page.mouse.click(640 + (52 - 160) * 4, 360 + (88 - 90) * 4); // TIC-TAC-TOE, 1 token
   await sleep(1600);
   await page.keyboard.press('Space'); // PLAY
   await sleep(900);

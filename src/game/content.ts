@@ -120,16 +120,24 @@ export const CABINETS: CabinetDef[] = [
   // ---- the front room: everything that costs one to three tokens
   // A token in, two out: you win one.  Three out was a 3x on the cheapest
   // games in the building and the only positive-EV corner of the floor.
-  { id: 'tictactoe', title: 'TIC-TAC-TOE', tier: 'easy', cost: 1, reward: 2, x: 30, y: 88, color: 0xff4fa3, symbol: 'X', motif: 'grid' },
-  // Seven in, fifteen out, in the slot Snakes & Ladders used to stand in: the
-  // pieces fall by themselves and the crush is instant, so it is priced with
-  // the hard cabinets rather than with the three-token row it started in.
-  { id: 'fallingblocks', title: 'FALLING BLOCKS', tier: 'hard', cost: 7, reward: 15, x: 76, y: 88, color: 0x46c4bd, symbol: 'BL', motif: 'blocks' },
+  { id: 'tictactoe', title: 'TIC-TAC-TOE', tier: 'easy', cost: 1, reward: 2, x: 52, y: 88, color: 0xff4fa3, symbol: 'X', motif: 'grid' },
+  // Five in, ten out, in the slot Snakes & Ladders used to stand in: the pieces
+  // fall by themselves and the crush is instant, so it is priced with the hard
+  // cabinets rather than with the three-token row it started in — but it is a
+  // minute, not the four the seven-token row asks for.
+  { id: 'fallingblocks', title: 'FALLING BLOCKS', tier: 'hard', cost: 5, reward: 10, x: 98, y: 88, color: 0x46c4bd, symbol: 'BL', motif: 'blocks' },
   // The bottom row: two either side of the front door, in line with the two
   // above.  Nothing sits under the change machine on the right wall, because a
   // cabinet's click zone up there swallows every attempt to use it.
-  { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 3, reward: 6, x: 30, y: 164, color: 0xff7a3d, symbol: 'H', motif: 'ball' },
-  { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 3, reward: 6, x: 76, y: 164, color: 0x6fbb6a, symbol: 'W', motif: 'mallet' },
+  //
+  // THE LEFT COLUMN STANDS AT 52, NOT 30.  The way through to the back room is
+  // an opening in the left wall between y 95 and 141, and a cabinet at 30 is
+  // 26 pixels wide from 17 — it stood in the doorway, took the light coming
+  // out of it, and put its own click zone over the door's.  Both rows moved
+  // together so the grid stays a grid; the back room's left column has always
+  // been at 48 for the same reason.
+  { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 3, reward: 6, x: 52, y: 164, color: 0xff7a3d, symbol: 'H', motif: 'ball' },
+  { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 3, reward: 6, x: 98, y: 164, color: 0x6fbb6a, symbol: 'W', motif: 'mallet' },
   // Three in, six out like the rest of the three-token row: beating Froggy is
   // worth the same as clearing any other medium cabinet.
   { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 3, reward: 6, x: 244, y: 164, color: 0xb9884f, symbol: 'BW', motif: 'pins' },

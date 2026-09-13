@@ -90,12 +90,15 @@ export class ArcadeHub extends Phaser.Scene {
       // used to stand in the approach to the change machine, which is somewhere
       // the player has to be able to get to.
       props: [
-        { x: 95, y: 66, kind: 'bin' },
-        // Bottom-left of the floor, a dozen pixels clear of the last cabinet
-        // in the row.  Wedged into the gap between two machines it overlapped
-        // one or the other at every x that fitted, because the gap is twenty
+        // Under the left-hand vent, in the strip of back wall the doorway does
+        // not reach and no cabinet stands on.  At 95 it ended up behind a
+        // machine and at 117 half inside the counter.
+        { x: 22, y: 66, kind: 'bin' },
+        // Bottom of the floor, clear of the last cabinet in the row by a dozen
+        // pixels.  Wedged into the gap between two machines it overlapped one
+        // or the other at every x that fitted, because the gap is twenty
         // pixels wide and the plant is seventeen.
-        { x: 104, y: 170, kind: 'plant' },
+        { x: 126, y: 170, kind: 'plant' },
       ],
       // The prize case owns 126-226 of the back wall and the change machine
       // 262-282; the vents go in what is left of it.

@@ -1,5 +1,5 @@
 /**
- * FALLING BLOCKS.  Hard — 7 tokens in, 15 out.
+ * FALLING BLOCKS.  Hard — 5 tokens in, 10 out.
  *
  * A TETRIS WELL WITH A FROG LOOSE IN IT.  Four-cell pieces — the seven shapes,
  * in random turns — drift down a ten-column shaft and pile up where they land.
@@ -39,8 +39,16 @@ const ID = 'fallingblocks' as const;
 /** A minute in the well.  The countdown is on screen the whole time. */
 export const ROUND_MS = 60_000;
 
-/** The shaft: ten columns, centred, on a 16x12 cell. */
-const COLS = 10;
+/**
+ * The shaft: TWELVE columns, centred, on a 16x12 cell.
+ *
+ * Twelve rather than ten because the shaft is the room to move in.  With ten,
+ * four or five pieces in the air covered most of the floor between them and a
+ * frog with nowhere to stand is not being asked to play well, he is being
+ * asked to be lucky.  Two more columns is thirty-two pixels of somewhere else
+ * to be, every second of the round.
+ */
+const COLS = 12;
 const BW = 16;
 const BH = 12;
 const SHAFT_W = COLS * BW;
@@ -53,22 +61,28 @@ const TOP_SY = 34;
 const VIEW_H = FLOOR_SY - TOP_SY;
 
 /**
- * How high the ledge is, in world pixels above the floor — twenty-five rows.
+ * How high the ledge is, in world pixels above the floor — twenty rows.
  *
- * Tuned against the pile rather than against a perfect run: fifty pieces come
- * down in the minute, four cells each, and they land uneven, so the surface of
- * the pile ends the round somewhere north of thirty rows.  Twenty-five is the
- * ledge.  A frog who survives the minute on top of the pile therefore arrives
- * with time in hand; a frog who spends it running along the bottom does not.
- * Surviving is the game — the height is the clock you are measured against.
+ * Tuned against the pile rather than against a perfect run.  The pile is the
+ * lift and the jump is the climb: a frog can take four rows off the top of a
+ * hop, so twenty rows is a handful of good jumps above wherever the pile has
+ * got to.  A frog who survives the minute on top of the pile arrives with time
+ * in hand, and one who spends it running along the bottom does not.  Surviving
+ * is the game — the height is the clock you are measured against.
  */
-export const GOAL_H = 300;
+export const GOAL_H = 240;
 
 /** The frog. */
 const PW = 10;
 const PH = 12;
 const RUN = 80;
-const JUMP_V = 192;
+/**
+ * A hop peaks at 47 pixels, which is very nearly four rows of the pile.  It
+ * used to be three and a quarter, which meant most steps up the pile had to
+ * wait for a piece to come and be jumped off — the climb is the point, so the
+ * frog gets to make it under his own steam.
+ */
+const JUMP_V = 210;
 const GRAVITY = 470;
 
 /**
@@ -76,12 +90,13 @@ const GRAVITY = 470;
  *
  * These two are the fairness dial, not the difficulty dial.  A piece crosses
  * the shaft in about five seconds, which is how long the warning lasts, and
- * one goes every one-and-a-bit seconds, which puts four or five in the air at
- * once.  Faster or more often and the frog gets boxed in by pieces he had no
- * way to be somewhere else for, which is not hard, it is arbitrary.
+ * one goes every one-and-a-quarter seconds, which puts four in the air at once
+ * across twelve columns.  Faster or more often and the frog gets boxed in by
+ * pieces he had no way to be somewhere else for, which is not hard, it is
+ * arbitrary.
  */
 const FALL_V = 30;
-const DROP_MS = 1150;
+const DROP_MS = 1250;
 
 /**
  * The seven shapes, each as the cells it fills: [column offset, row offset],
@@ -267,7 +282,7 @@ export const fallingBlocks: MinigameModule = {
   title: 'FALLING BLOCKS',
   music: 'game_fallingblocks',
   rules: 'climb the pile, do not get crushed',
-  payoutNote: 'WIN: 15 TOKENS',
+  payoutNote: 'WIN: 10 TOKENS',
   tutorial: {
     objective: [
       'TETRIS PIECES FALL AND PILE UP.',
@@ -574,7 +589,7 @@ function jump(): void {
 function aimColumn(): number {
   if (Phaser.Math.Between(0, 3) === 0) return Phaser.Math.Between(0, COLS - 1);
   const here = Phaser.Math.Clamp(Math.floor((px - SHAFT_L) / BW), 0, COLS - 1);
-  return Phaser.Math.Clamp(here + Phaser.Math.Between(-3, 3), 0, COLS - 1);
+  return Phaser.Math.Clamp(here + Phaser.Math.Between(-4, 4), 0, COLS - 1);
 }
 
 /** Let one go: a random shape in a random turn, clamped inside the shaft. */

@@ -471,7 +471,7 @@ The main loop. A single room, 3/4 view, walked with WASD.
         │                                          │
         │            · player spawn ·              │
         │                                          │
-        │  ▣ FALLING BLOCKS (7)      ▣ WHACK (3)   │
+        │  ▣ FALLING BLOCKS (5)      ▣ WHACK (3)   │
         │                                          │
         │  ▣ AIR HOCKEY (1)      ▣ CHOMP-MAN (5)   │
         │                                          │
@@ -807,7 +807,7 @@ Measured over 200 automated runs per game (scripted competent player).
 | Game | Tier | Cost | Reward | Target win rate | Typical length |
 |---|---|---:|---:|---|---|
 | Tic-Tac-Toe | Easy | 1 | 2 | 45–60% | 25 s |
-| Falling Blocks | Hard (long) | 7 | 15 | 40–55% | 60 s |
+| Falling Blocks | Hard | 5 | 10 | 45–60% | 40 s |
 | Air Hockey | Hard | 5 | 10 | 45–60% | 70 s |
 | Basketball Hoops | Medium | 3 | 6 | 40–55% | 60 s |
 | Whack-a-Frog | Medium | 3 | 6 | 40–55% | 40 s |
@@ -831,7 +831,7 @@ not in this table.
 - **A draw refunds the token** (MG-9). It is neither a win nor a loss: the entry cost goes back exactly once and nothing is paid on top of it. The board says so before a move is made (`YOU ARE X — A DRAW REFUNDS`), the result card says `DRAW — TOKEN BACK`, and the shell's card reads `A TIE — 1 BACK`. This replaces the original "a draw is a loss", which charged a token for a game nobody won.
 - Win: three in a row for the player. Lose: AI three in a row.
 
-### 9.3 Falling Blocks — Hard (long), 7 → 15
+### 9.3 Falling Blocks — Hard, 5 → 10
 
 **A Tetris well with a frog loose in it.** Four-cell pieces — the seven shapes,
 in random turns — drift down a ten-column shaft and pile up where they land.
@@ -839,11 +839,11 @@ Nobody steers the pieces. The frog is the only thing the player steers, and the
 ledge at the top of the shaft is the only thing they are trying to reach.
 **60 seconds.**
 
-- Ten columns on a 16×12 cell. A piece every **1150 ms**, falling at **30 px/s**, which is about five seconds to cross the shaft and four or five in the air at once.
+- **Twelve columns** on a 16×12 cell — the shaft is the room to move in, and at ten the four or five pieces in the air covered most of the floor between them. A piece every **1250 ms**, falling at **30 px/s**, which is about five seconds to cross the shaft and four in the air at once.
 - **The pile is the staircase.** A piece that comes to rest becomes terrain, exactly where it stopped — gaps and all, the way a well full of tetrominoes looks. The walkable surface of a column is the top of its highest cell, so a cave under a bridged S is a cave you can see and never fall into. The frog climbs by staying on top of the pile and by jumping onto pieces still in the air, which carry him down while he lines up the next hop.
 - **A piece will crush him, and that is the round.** Caught between a piece and the pile there is nowhere to put him: `CRUSHED`, and the run is over. Caught in open air it only shoves him down until he can get out from under. He is never moved anywhere he did not walk, jump or get pushed to — no snapping, no teleporting out of trouble.
 - **Nothing lands without warning.** Every piece in the air draws a hollow **ghost** of itself where it will come to rest, recomputed each frame against the pile as it currently stands, and the frog flashes with a `MOVE!` banner the moment a ghost is sitting on him. Pieces are aimed within three columns of the frog three times in four (the fourth goes anywhere), so standing in a corner is not a plan — but the warning is always there and always seconds long.
-- The ledge is **300 px** up, twenty-five rows. Fifty pieces land in the minute and they land uneven, so a frog who survives on top of the pile arrives with time in hand and a frog who spends the minute running along the bottom does not. Surviving is the game; the height is the clock they are measured against.
+- The ledge is **240 px** up, twenty rows, and a hop peaks at **47 px** — very nearly four rows, so the frog climbs under his own steam instead of waiting for a piece to be jumped off. The pile is the lift and the jump is the climb. Surviving is the game; the height is the clock they are measured against. A scripted player who dodges the imminent ghosts reaches the ledge around the 35-second mark in roughly four runs in five.
 - Left/right and jump (`A`/`D`/arrows, `SPACE`/`W`/`UP`). Custom tune (`game_fallingblocks`) and sfx for the jump, a piece coming to rest and the summit.
 
 ### 9.4 Air Hockey — Hard, 5 → 10
@@ -1062,8 +1062,8 @@ re-deducts the entry cost when it pays:
 |---|---|---:|---:|---:|
 | Easy | Tic-Tac-Toe | 1 | 2 | 0 |
 | Medium | Basketball Hoops, Whack-a-Frog, Bowling, Battleship | 3 | 6 | 0 |
-| Hard | Air Hockey, Grudge, Frog vs Lizard | 5 | 10 | 0 |
-| Hard (long) | Chomp-Man, Barrel Climb, Dance Off, Falling Blocks | 7 | 15 | 0 |
+| Hard | Air Hockey, Grudge, Frog vs Lizard, Falling Blocks | 5 | 10 | 0 |
+| Hard (long) | Chomp-Man, Barrel Climb, Dance Off | 7 | 15 | 0 |
 
 Everything up to the five-token row is a **2× on a win**, so expected value is
 negative unless the player wins more than half the time. That pressure is the
@@ -1096,7 +1096,7 @@ Net EV per play = `(p_win × reward) − cost`, where the break-even win rate is
 | Game | p_win (target midpoint) | Cost | EV | Net per play |
 |---|---:|---:|---:|---:|
 | Tic-Tac-Toe | 0.525 | 1 | 1.05 | **+0.05** |
-| Falling Blocks | 0.475 | 7 | 7.13 | **+0.13** |
+| Falling Blocks | 0.525 | 5 | 5.25 | **+0.25** |
 | Basketball Hoops | 0.475 | 3 | 2.85 | **−0.15** |
 | Whack-a-Frog | 0.475 | 3 | 2.85 | **−0.15** |
 | Grudge | 0.375 | 5 | 3.75 | **−1.25** |

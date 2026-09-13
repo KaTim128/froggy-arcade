@@ -117,6 +117,46 @@ const click = async (x, y) => {
   await sleep(120);
 };
 
+/**
+ * Walk the player onto the nearest cabinet in the hub and stop there.
+ *
+ * Driven off where the machines actually are rather than off a stopwatch: a
+ * fixed "hold A for 2.6 seconds" walked into whichever cabinet happened to be
+ * bottom-left, so moving the left-hand column out of the back-room doorway
+ * marched the player straight past it into the wall, and four checks failed
+ * for a reason that had nothing to do with what they test.
+ */
+const walkToACabinet = async () => {
+  const where = () =>
+    page.evaluate(() => {
+      const s = window.__froggy.game().scene.getScene('ArcadeHub');
+      return { x: s.player.x, y: s.player.y };
+    });
+  const me0 = await where();
+  const target = await page.evaluate((me) => {
+    const s = window.__froggy.game().scene.getScene('ArcadeHub');
+    const cab = s.cabinets
+      .map((c) => c.def)
+      .reduce((a, b) => (Math.hypot(b.x - me.x, b.y - me.y) < Math.hypot(a.x - me.x, a.y - me.y) ? b : a));
+    return { x: cab.x, y: cab.y + 8, id: cab.id };
+  }, me0);
+  for (const [axis, less, more] of [
+    ['y', 'KeyW', 'KeyS'],
+    ['x', 'KeyA', 'KeyD'],
+  ]) {
+    for (let i = 0; i < 40; i++) {
+      const me = await where();
+      const d = target[axis] - me[axis];
+      if (Math.abs(d) < 5) break;
+      await page.keyboard.down(d < 0 ? less : more);
+      await sleep(90);
+      await page.keyboard.up(d < 0 ? less : more);
+    }
+  }
+  await sleep(300);
+  console.log(`   walked to ${target.id}`);
+};
+
 try {
   console.log(`Loading ${URL}`);
   await page.goto(URL, { waitUntil: 'networkidle2', timeout: 30000 });
@@ -203,13 +243,7 @@ try {
   );
 
   console.log('6. walk to a cabinet');
-  await page.keyboard.down('KeyA');
-  await sleep(2600);
-  await page.keyboard.up('KeyA');
-  await page.keyboard.down('KeyS');
-  await sleep(900);
-  await page.keyboard.up('KeyS');
-  await sleep(300);
+  await walkToACabinet();
   await shot('09-hub-cabinet-prompt');
 
   const before = await readState();
@@ -249,12 +283,7 @@ try {
   // And the forfeit path: cost debited, nothing credited back.  The hub puts
   // you back at the door, so walk to a cabinet again first.
   await sleep(4200); // result card (2s) + both fades
-  await page.keyboard.down('KeyA');
-  await sleep(2600);
-  await page.keyboard.up('KeyA');
-  await page.keyboard.down('KeyS');
-  await sleep(900);
-  await page.keyboard.up('KeyS');
+  await walkToACabinet();
   await page.keyboard.press('KeyE');
   await sleep(1600);
   await page.keyboard.press('Space'); // PLAY

@@ -102,8 +102,12 @@ export const frogCross: MinigameModule = {
     controls: [
       ['W A S D', 'HOP'],
       ['ARROWS', 'HOP'],
-      ['ENTER', 'BANK WHAT YOU HAVE'],
     ],
+    // ENTER banks what you have, and it is NOT listed here.  It does nothing
+    // until there is something to bank, and the moment there is, the HUD says
+    // `[ENTER] BANK n TOKENS` in the game itself — which is where a player is
+    // when the choice is in front of them.  On the card, before a single
+    // crossing, it was a key with nothing behind it.
   },
   payoutNote: 'WIN: 15+',
 

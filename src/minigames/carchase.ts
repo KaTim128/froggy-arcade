@@ -263,8 +263,10 @@ export const carChase: MinigameModule = {
       ['A / D', 'STEER'],
       ['W / S', 'SPEED UP OR EASE OFF'],
       ['SPACE', 'NITRO'],
-      ['ENTER', 'BANK THE CASH'],
     ],
+    // ENTER pulls over with the cash, and it is NOT listed here.  It does
+    // nothing until there is cash to pull over with, and the moment there is,
+    // the HUD says `[ENTER] PULL OVER FOR n TOKENS` on the road itself.
   },
   payoutNote: 'WIN: 10+',
 
