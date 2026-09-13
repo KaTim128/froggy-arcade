@@ -63,7 +63,15 @@ export class ArcadeAnnex extends Phaser.Scene {
 
     // No front door in here: the only way out of the building is the hub.
     paintHubRoom(this, { night: false, frontDoor: false });
-    paintArcadeDressing(this, { night: false });
+    paintArcadeDressing(this, {
+      night: false,
+      // The back room fills its middle with machines; the floor it has spare is
+      // the strip past the last cabinet on the right.
+      props: [
+        { x: 268, y: 66, kind: 'bin' },
+        { x: 288, y: 84, kind: 'plant' },
+      ],
+    });
     this.paintDoorway();
     this.paintCasinoDoor();
 

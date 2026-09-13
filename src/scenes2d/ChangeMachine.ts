@@ -59,11 +59,16 @@ export class ChangeMachine extends Phaser.Scene {
     this.amount = Phaser.Math.Clamp(this.amount, 0, cash);
     const tokens = tokensForCash(this.amount);
 
-    this.body.add(text(this, 34, 58, `YOU HAVE $${cash}`, PALETTE.mossLight));
-    this.body.add(text(this, 34, 70, `TOKENS NOW ${ledger.balance()}`, PALETTE.gold));
+    this.body.add(text(this, 46, 58, `YOU HAVE $${cash}`, PALETTE.mossLight));
+    this.body.add(text(this, 46, 70, `TOKENS NOW ${ledger.balance()}`, PALETTE.gold));
 
-    // The trade, spelled out, in the machine's own words.
-    this.body.add(centerText(this, GAME_W / 2, 92, `$${this.amount}   ->   ${tokens} TOKENS`, PALETTE.cream, 16));
+    // The trade, spelled out, in the machine's own words — and inside its own
+    // panel.  "$260   ->   130 TOKENS" at sixteen pixels a character is 264px
+    // wide against a 250px box, so it ran off both ends of the machine: the
+    // numbers keep the big font and the words that label them go underneath in
+    // the small one, which fits at any amount the wallet can hold.
+    this.body.add(centerText(this, GAME_W / 2, 88, `$${this.amount}  ->  ${tokens}`, PALETTE.cream, 16));
+    this.body.add(centerText(this, GAME_W / 2, 102, 'CASH IN    ->    TOKENS OUT', PALETTE.ash).setAlpha(0.85));
 
     this.body.add(button(this, 60, 116, '-10', () => this.bump(-10), { width: 30, height: 13 }));
     this.body.add(button(this, 94, 116, '-1', () => this.bump(-1), { width: 26, height: 13 }));

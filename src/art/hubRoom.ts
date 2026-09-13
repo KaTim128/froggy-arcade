@@ -10,6 +10,7 @@ import Phaser from 'phaser';
 import { PALETTE, nightify } from '../render/palette';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { centerText } from '../core/ui';
+import { depthFor } from './player';
 
 export const ROOM = {
   left: 14,
@@ -185,7 +186,22 @@ export function paintHubRoom(scene: Phaser.Scene, opts: RoomOpts): void {
  */
 export function paintArcadeDressing(
   scene: Phaser.Scene,
-  opts: { night: boolean; avoid?: Array<{ from: number; to: number }> },
+  opts: {
+    night: boolean;
+    /** Stretches of the back wall the room's own fixtures own. */
+    avoid?: Array<{ from: number; to: number }>;
+    /**
+     * Where the floor props stand, given by the room.
+     *
+     * They are NOT placed here any more.  A bin hard against the left wall
+     * looked fine until the cabinets were re-spaced and one of them moved
+     * under it — a grey box sitting over the front of Tic-Tac-Toe's screen,
+     * drawn on the player's own depth scale so it covered the machine.  Only
+     * the room knows where its machines are, so only the room may say where
+     * there is floor to put something on.
+     */
+    props?: Array<{ x: number; y: number; kind: 'bin' | 'plant' }>,
+  },
 ): void {
   const c = (col: number) => (opts.night ? nightify(col) : col);
   const lit = !opts.night;
@@ -224,18 +240,23 @@ export function paintArcadeDressing(
     }
   }
 
-  // ---- a bin and a plant, in the corners where nobody walks
-  scene.add.rectangle(20, 62, 10, 12, c(PALETTE.steel)).setOrigin(0, 1).setDepth(50 + 62 / 1000);
-  scene.add.rectangle(20, 51, 10, 2, c(PALETTE.slate)).setOrigin(0, 1).setDepth(50 + 62 / 1000);
-  scene.add.rectangle(GAME_W - 30, 64, 10, 8, c(PALETTE.brown)).setOrigin(0, 1).setDepth(50 + 64 / 1000);
-  for (const [dx, dy, w, h] of [
-    [-1, -7, 4, 9],
-    [3, -9, 4, 11],
-    [7, -6, 4, 8],
-  ] as const) {
-    scene.add
-      .ellipse(GAME_W - 30 + 5 + dx, 56 + dy, w, h, c(PALETTE.moss))
-      .setDepth(50 + 64 / 1000);
+  // ---- the floor props, where the room said there is room for them
+  for (const prop of opts.props ?? []) {
+    const d = depthFor(prop.y);
+    if (prop.kind === 'bin') {
+      scene.add.rectangle(prop.x, prop.y, 10, 12, c(PALETTE.steel)).setOrigin(0, 1).setDepth(d);
+      scene.add.rectangle(prop.x, prop.y - 11, 10, 2, c(PALETTE.slate)).setOrigin(0, 1).setDepth(d);
+      scene.add.rectangle(prop.x + 2, prop.y - 8, 6, 1, c(PALETTE.ink)).setOrigin(0, 1).setDepth(d);
+    } else {
+      scene.add.rectangle(prop.x, prop.y, 10, 8, c(PALETTE.brown)).setOrigin(0, 1).setDepth(d);
+      for (const [dx, dy, w, h] of [
+        [-1, -7, 4, 9],
+        [3, -9, 4, 11],
+        [7, -6, 4, 8],
+      ] as const) {
+        scene.add.ellipse(prop.x + 5 + dx, prop.y - 8 + dy, w, h, c(PALETTE.moss)).setDepth(d);
+      }
+    }
   }
 
   // ---- a strip light down the middle of the ceiling, and the glow under it

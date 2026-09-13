@@ -573,6 +573,67 @@ for (const g of [
   await page.close();
 }
 
+// The counter is staff-side, and Froggy is the staff.  A player who walks
+// straight up the middle of the hub used to end up BEHIND it, in the strip
+// between the counter and the prize case, standing in the same tile as him.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=20&scene=ArcadeHub`, { waitUntil: 'networkidle2' });
+  await sleep(2600);
+
+  const at = () =>
+    page.evaluate(() => {
+      const s = window.__froggy.game().scene.getScene('ArcadeHub');
+      return { x: Math.round(s.player.x), y: Math.round(s.player.y) };
+    });
+  const counter = await page.evaluate(async () => {
+    const { COUNTER } = await import('/src/game/content.ts');
+    return COUNTER;
+  });
+
+  // Straight up the middle, then in from the side along the back wall: the two
+  // ways into the strip.
+  await page.keyboard.down('KeyW');
+  await sleep(3000);
+  await page.keyboard.up('KeyW');
+  const straightUp = await at();
+  await page.keyboard.down('KeyA');
+  await sleep(1800);
+  await page.keyboard.up('KeyA');
+  await page.keyboard.down('KeyW');
+  await sleep(1500);
+  await page.keyboard.up('KeyW');
+  await page.keyboard.down('KeyD');
+  await sleep(2500);
+  await page.keyboard.up('KeyD');
+  const fromTheSide = await at();
+
+  const front = counter.y + counter.h;
+  const behind = (p) => p.x > counter.x - 3 && p.x < counter.x + counter.w + 3 && p.y < front;
+  const kept = !behind(straightUp) && !behind(fromTheSide);
+  console.log(
+    `${kept ? 'PASS' : 'FAIL'}  the player cannot get behind the counter  — ` +
+      `up: ${straightUp.x},${straightUp.y}; along the wall: ${fromTheSide.x},${fromTheSide.y} (front edge ${front})`,
+  );
+  if (!kept) failures++;
+
+  // And he is standing there: the overlay carries him in the top third, where
+  // the dialogue portrait never draws.
+  const onDuty = await page.evaluate(() => {
+    const c = document.getElementById('froggy-layer');
+    if (!c) return -1;
+    const d = c.getContext('2d').getImageData(0, 0, c.width, Math.floor(c.height * 0.45)).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+    return n;
+  });
+  const manning = onDuty > 400;
+  console.log(`${manning ? 'PASS' : 'FAIL'}  froggy is behind the counter  — ${onDuty} pixels of him`);
+  if (!manning) failures++;
+  await page.close();
+}
+
 // The floor is data before it is a room: the reward table is a rule, not a
 // habit, and one mistyped number in content.ts is a cabinet that quietly pays
 // the wrong thing forever.

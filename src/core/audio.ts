@@ -872,6 +872,15 @@ class AudioManager {
       case 'ticket_machine':
         for (let i = 0; i < 8; i++) beep(760, 0.04, 0.05, 'square', i * 0.11);
         break;
+      // The till.  A cash register: the drawer's clack, then the two-note
+      // chime every shop in the world has, with the second note over the top
+      // of the first so it rings rather than trills.
+      case 'cha_ching':
+        noise(0.05, 0.1, 3200);
+        beep(1318, 0.16, 0.1, 'triangle', 0.02); // E6
+        beep(1760, 0.3, 0.09, 'triangle', 0.08); // A6, held
+        beep(2637, 0.22, 0.045, 'sine', 0.1);
+        break;
       // ---- the throwing match (minigames/frogvslizard.ts)
       // An arm coming over: air moving, and the item leaving the hand.
       case 'throw_whoosh':
@@ -1078,6 +1087,7 @@ export type SfxName =
   | 'zone_clear'
   | 'eerie_swell'
   | 'ticket_machine'
+  | 'cha_ching'
   | 'throw_whoosh'
   | 'item_thud'
   | 'boom'

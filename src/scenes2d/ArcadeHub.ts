@@ -24,6 +24,7 @@ import { ANNEX_DOOR, BELL, CABINETS, COUNTER, COUNTER_DEPTH, PRIZE_CASE, cabinet
 import { DialogueBox } from '../froggy/dialogue';
 import { tutorialScript } from '../froggy/script';
 import { froggyLayer } from '../render/froggyLayer';
+import { drawFroggy } from '../froggy/froggy';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 
 const INTERACT_RANGE = 24;
@@ -48,6 +49,8 @@ export class ArcadeHub extends Phaser.Scene {
   private prompt!: Phaser.GameObjects.BitmapText;
   private promptPlate!: Phaser.GameObjects.Rectangle;
   private target: Target = null;
+  /** Seconds the room has been up, for Froggy's idle sway behind the counter. */
+  private clock = 0;
   private locked = false;
   private dialogue!: DialogueBox;
   private mutter!: Phaser.GameObjects.BitmapText;
@@ -67,6 +70,7 @@ export class ArcadeHub extends Phaser.Scene {
     // has to be reset here.  Left alone, `locked` stayed true after the first
     // minigame and froze the player in the hub for the rest of the run.
     this.locked = false;
+    this.clock = 0;
     this.target = null;
     this.cabinets = [];
 
@@ -83,6 +87,13 @@ export class ArcadeHub extends Phaser.Scene {
       avoid: [
         { from: COUNTER.x - 6, to: COUNTER.x + COUNTER.w + 6 },
         { from: 256, to: GAME_W },
+      ],
+      // Between the left-hand cabinets and the counter, and in the right-hand
+      // corner under the change machine: the only two patches of hub floor
+      // with nothing standing on them.
+      props: [
+        { x: 95, y: 66, kind: 'bin' },
+        { x: 284, y: 68, kind: 'plant' },
       ],
     });
     paintChangeMachine(this, false);
@@ -127,7 +138,10 @@ export class ArcadeHub extends Phaser.Scene {
       .on('pointerdown', () => {
         if (this.busy()) return;
         audio.sfx('bell_ding');
-        this.say('nobody comes.');
+        // He is standing right there and he does not look up.  The gag is the
+        // same gag — the bell summons nobody — it just has somebody to ignore
+        // it now (VOC-18).
+        this.say('he does not look up.');
       });
 
     this.paintAnnexDoor();
@@ -417,12 +431,65 @@ export class ArcadeHub extends Phaser.Scene {
     const dx = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     const dy = (this.held('down') ? 1 : 0) - (this.held('up') ? 1 : 0);
     this.player.move(dx, dy, delta, this.bounds);
+    this.keepOutOfCounter();
+
+    this.paintCounterFroggy();
 
     const bal = ledger.balance();
     for (const c of this.cabinets) c.setAffordable(bal >= c.def.cost);
 
     this.target = this.findTarget();
     this.renderPrompt();
+  }
+
+  /**
+   * The counter is staff-side.  The room's walkable box is a rectangle and the
+   * counter stands inside the top of it, so a player who walked up the middle
+   * of the room ended up BEHIND it, in the two-foot strip between the counter
+   * and the prize case, with Froggy standing in the same tile.
+   *
+   * Pushing them back out on the frame they enter it is enough: the counter is
+   * against the back wall, so there is only one way in and one way out of the
+   * strip, and the interact range still reaches across the counter from the
+   * customer's side.
+   */
+  private keepOutOfCounter(): void {
+    const front = COUNTER.y + COUNTER.h + 2;
+    if (this.player.y >= front) return;
+    if (this.player.x < COUNTER.x - 3 || this.player.x > COUNTER.x + COUNTER.w + 3) return;
+    this.player.setPosition(this.player.x, front);
+  }
+
+  /**
+   * Froggy, behind the counter, from the waist up.
+   *
+   * He is on the unfiltered overlay like everywhere else (PRD FR-1), clipped
+   * to the counter's front edge so the wood cuts him off rather than him
+   * standing on it.  The dialogue owns the same layer, so this stands down
+   * whenever he is talking to the player from the portrait — otherwise the two
+   * of him fight over one canvas and neither is drawn properly.
+   */
+  private paintCounterFroggy(): void {
+    if (this.dialogue.isActive()) return;
+    const top = COUNTER.y;
+    const x = COUNTER.x + COUNTER.w - 30;
+    this.clock += this.game.loop.delta / 1000;
+    const looking = this.target?.kind === 'counter' || this.target?.kind === 'bell';
+    froggyLayer.paint((ctx) => {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, GAME_W, top + 9);
+      ctx.clip();
+      drawFroggy(ctx, {
+        x,
+        y: top + 22,
+        height: 34,
+        variant: 'cozy',
+        pose: looking ? 'talk' : 'idleA',
+        bounce: (this.clock * 0.4) % 1,
+      });
+      ctx.restore();
+    });
   }
 
   private findTarget(): Target {

@@ -96,8 +96,9 @@ export class PrizeCounter extends Phaser.Scene {
     this.add.rectangle(x + 3, y + SLOT_H - 6, SLOT_W - 6, 2, 0x000000).setOrigin(0, 0).setAlpha(0.35);
 
     if (owned) {
-      // An empty space on the shelf, and it reads as one.
-      centerText(this, x + SLOT_W / 2, y + 18, 'TAKEN', PALETTE.steel).setAlpha(0.6);
+      // Gone means gone: the board, and nothing standing on it.  Labelling the
+      // gap TAKEN was still showing you the thing you had already bought, one
+      // word instead of one toy.
       return;
     }
 
@@ -128,7 +129,7 @@ export class PrizeCounter extends Phaser.Scene {
     }
     store.patch({ prizesOwned: [...store.get().prizesOwned, p.id] });
     store.flush();
-    audio.sfx('ticket_machine');
+    audio.sfx('cha_ching');
     this.redrawing = true;
     this.scene.restart();
   }

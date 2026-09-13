@@ -88,16 +88,30 @@ const readState = () =>
   });
 
 /** Count non-transparent pixels on Froggy's overlay canvas. */
-const overlayPixels = () =>
-  page.evaluate(() => {
-    const c = document.getElementById('froggy-layer');
-    if (!c) return -1;
-    const ctx = c.getContext('2d');
-    const d = ctx.getImageData(0, 0, c.width, c.height).data;
-    let n = 0;
-    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
-    return n;
-  });
+/**
+ * Opaque pixels on Froggy's overlay, optionally only in one band of it.
+ *
+ * The whole canvas is no longer the right question: he stands behind the prize
+ * counter in the hub now, so the overlay is legitimately never empty in there.
+ * What still has to be empty when a conversation ends is the PORTRAIT — the
+ * bottom third, where the dialogue box draws him — and that is what the check
+ * below measures.
+ */
+const overlayPixels = (fromFrac = 0, toFrac = 1) =>
+  page.evaluate(
+    ([a, b]) => {
+      const c = document.getElementById('froggy-layer');
+      if (!c) return -1;
+      const ctx = c.getContext('2d');
+      const y0 = Math.floor(c.height * a);
+      const h = Math.max(1, Math.floor(c.height * b) - y0);
+      const d = ctx.getImageData(0, y0, c.width, h).data;
+      let n = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+      return n;
+    },
+    [fromFrac, toFrac],
+  );
 
 const click = async (x, y) => {
   await page.mouse.click(x, y);
@@ -181,7 +195,9 @@ try {
   await sleep(900);
   await shot('08-hub-free-roam');
 
-  const overlayAfter = await overlayPixels();
+  // The portrait lives in the bottom third of the screen; the counter Froggy
+  // is up against the back wall in the top third.
+  const overlayAfter = await overlayPixels(0.62, 1);
   // Report who is on screen with it: a non-zero overlay here has been a race,
   // and knowing which scene is painting is the whole diagnosis.
   console.log(
@@ -267,7 +283,7 @@ try {
     ['reward credited on win', !!def && won.tokens === after.tokens + def.reward],
     ['seenIntro latched', won.seenIntro === true],
     ['route still normal', won.route === 'normal'],
-    ['overlay cleared when Froggy leaves', overlayAfter === 0],
+    ['the dialogue portrait is gone when Froggy leaves', overlayAfter === 0],
     ['Esc forfeits the entry cost', !!def2 && paid.tokens === won.tokens - def2.cost && forfeited.tokens === paid.tokens],
   ];
   let failed = 0;
