@@ -65,12 +65,16 @@ export class ArcadeAnnex extends Phaser.Scene {
     paintHubRoom(this, { night: false, frontDoor: false });
     paintArcadeDressing(this, {
       night: false,
-      // The back room fills its middle with machines; the floor it has spare is
-      // the strip past the last cabinet on the right.
+      // The back room fills its middle with machines and the strip past the
+      // last cabinet is the way in from the hub — so the bin goes up against
+      // the back wall and the plant into the far corner, where the doorway to
+      // the casino is not.
       props: [
-        { x: 268, y: 66, kind: 'bin' },
-        { x: 288, y: 84, kind: 'plant' },
+        { x: 268, y: 62, kind: 'bin' },
+        { x: 17, y: 108, kind: 'plant' },
       ],
+      // Clear of the poster at 187-205 and the WIN sign at 245-279.
+      vents: [24, 210],
     });
     this.paintDoorway();
     this.paintCasinoDoor();

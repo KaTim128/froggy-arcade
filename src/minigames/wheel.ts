@@ -1,5 +1,5 @@
 /**
- * WHEEL OF FORTUNE.  Forty-five tokens a spin, in the corner of the casino.
+ * WHEEL OF FORTUNE.  Thirty tokens a spin, in the corner of the casino.
  *
  * THE ODDS ARE THE GEOMETRY.  Every face on the wheel is cut to the width of
  * its own chance — the five hundred is a three-degree splinter and the small
@@ -29,14 +29,15 @@
  * paid the moment the wheel stops, and LEAVE settles up.  Nothing leaves
  * except through the ledger (MG-3).
  *
- * THE PRICE, AND WHY IT IS FORTY-FIVE.  These faces average 41.4 tokens a
- * spin.  The wheel was twenty a go when it averaged 17.7, which was already
- * the most generous thing in the building; at twenty against this rim it would
- * hand the player twenty-one tokens a spin for nothing, forever, and the prize
- * shelf — and every other cabinet — would stop meaning anything by the end of
- * the first minute.  Forty-five keeps the house at about eight per cent, which
- * is what a wheel in a room like this is for.  The faces are exactly the ones
- * that were asked for; the price of a go is the one number that had to move.
+ * THE PRICE IS THIRTY, AND IT IS THE PLAYER'S CALL.  These faces average 41.4
+ * tokens a spin, so at thirty the wheel pays out about 11 tokens more than it
+ * takes, every spin, for ever: it is the one fixture in the building with a
+ * standing positive edge to the customer, and a patient player can farm the
+ * prize shelf off it rather than off the cabinets.  That was said out loud
+ * when the price was set, and thirty is what was asked for — the odds on the
+ * rim are exactly the ones that were specified, and the price is the number
+ * the customer chose to put against them.  If the shelf ever needs to mean
+ * something again, this constant is the lever: at 45 the house keeps 8%.
  */
 
 import Phaser from 'phaser';
@@ -47,7 +48,7 @@ import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
 const ID = 'wheel' as const;
-export const SPIN_COST = 45;
+export const SPIN_COST = 30;
 
 /**
  * The faces, in the order they sit round the rim, with the share of the wheel

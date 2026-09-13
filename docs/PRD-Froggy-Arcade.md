@@ -483,11 +483,11 @@ The main loop. A single room, 3/4 view, walked with WASD.
 | Element | Spec |
 |---|---|
 | **Cabinets** | Each is a box with side art in its own colour, a bezelled screen carrying a **motif** unique to that game (a grid, a maze, a ladder, reels…), a marquee with the machine's own letters on it, a control deck with a stick and three buttons, a coin slot, a speaker grille, a plinth, and a floating cost badge |
-| **Dressing** | Hanging PLAY/WIN signs on chains, posters taped to the panelled back wall, wall vents and a sagging cable run, a strip light down the ceiling, a bin, a plant, carpet seams, scuffs and a painted ring on the floor — hung wherever the counter and the change machine are not |
+| **Dressing** | A hanging WIN sign on chains — nothing on the left, where the token HUD lives — posters taped to the panelled back wall, wall vents and a sagging cable run, a strip light down the ceiling, a bin, a plant, carpet seams, scuffs and a painted ring on the floor — hung wherever the counter and the change machine are not |
 | **Approach** | Entering a cabinet's trigger zone shows `[E] TITLE — n TOKENS`. Unaffordable → the badge greys, but the machine still opens: what a cabinet costs is on its how-to-play card, which is free to read, and PLAY is what charges (MG-2/MG-8). The two casino bet fixtures are the exception (MG-11) |
 | **Prize counter** | Interactable; opens `PrizeCounter` (§7.6) |
-| **The bell** | A small handbell with a sign: `RING FOR SERVICE`. Interacting plays a clean *ding* and **nothing else happens. Ever.** No variation, no eventual response — the line is now *"he does not look up"*, because there is somebody there to ignore it. `[QFD: VOC-18, §13.1 bell check]` |
-| **The counter** | **Froggy stands behind it**, drawn on the unfiltered overlay (FR-1) and clipped to the counter's front edge so the wood cuts him off at the waist. He stands down while the dialogue box has him, since they share one canvas. The counter itself is **staff-side**: the player is pushed back out on the frame they enter the strip between it and the prize case, from either end, and the interact range still reaches across it from the customer's side. Climbing over it is **not** offered here — only in `ArcadeDark` |
+| **The bell** | A small handbell with a sign: `RING FOR SERVICE`. Interacting plays a clean *ding* and **nothing else happens. Ever.** No counter, no variation, no eventual response: *"nobody comes."* `[QFD: VOC-18, §13.1 bell check]` |
+| **The counter** | Permanently unattended. There is no cashier sprite in the game. It is **staff-side** all the same: the player is pushed back out on the frame they enter the strip between it and the prize case, from either end, and the interact range still reaches across it from the customer's side. Climbing over it is **not** offered here — only in `ArcadeDark` |
 | **Front door** | Interacting: *"…nah. Not yet."* The player cannot voluntarily leave during Act I |
 | **Lighting** | Warm amber key, magenta neon rim, teal carpet with a chaotic 90s pattern |
 | **Audio** | `music: 'hub_lofi'`, `ambience: ['cabinet_bleeps','crowd_hum']` |
@@ -947,7 +947,7 @@ other five-token cabinet on the floor.
 - **The lizard's AI** searches its own throws against the wind actually blowing, keeps the arc that would land, then throws it with a small two-uniform wobble on both angle and power — so it aims like an opponent and misses like one. Its item choice is the same reasoning a player uses off the same stock: heal when hurt, dynamite to finish, poison early while there is time for it to work, rock otherwise.
 - **HUD:** both health bars, the round and round score, the poison counter on each side, the wind bar, the item bar with the key for each item and how many are left, and the control line.
 
-### 9.10 Wheel of Fortune — casino, 45 a spin
+### 9.10 Wheel of Fortune — casino, 30 a spin
 
 Not a cabinet: a painted wheel on a post in the corner of the casino, with a
 pointer over the top of it. **Free to walk up to and read** (MG-8) but barred
@@ -978,12 +978,15 @@ in a table that turns a fairground wheel into a prospectus. The exact shares
 are asserted in `tools/games.mjs` by sampling the geometry, precisely because
 nothing on screen would show them drifting.
 
-**The price, and why it is forty-five.** These faces average **41.4 tokens a
-spin**. The wheel was 20 a go against a rim averaging 17.7; at 20 against this
-one it would hand the player twenty-one tokens a spin, for ever, and the prize
-shelf and every other cabinet would stop meaning anything inside a minute. At
-45 the house keeps about **8%**. The faces are exactly the ones that were
-asked for; the price of a go is the one number that had to move.
+**The price is thirty, and it is the customer's call.** These faces average
+**41.4 tokens a spin**, so at 30 the wheel hands back about **11 tokens more
+than it takes, every spin, for ever**: it is the one fixture in the building
+with a standing positive edge to the player, and a patient player can farm the
+prize shelf off it rather than off the cabinets. That was said out loud when
+the price was set and 30 is what was asked for — the odds on the rim are
+exactly the ones specified, and the price is the number chosen to go against
+them. `SPIN_COST` in `minigames/wheel.ts` is the lever if the shelf ever needs
+to mean something again: at 45 the house keeps about 8%.
 
 ### 9.11 Dance Off — Hard, 7 → 15, in the back room
 
@@ -1072,7 +1075,7 @@ only things exempt:
 | Fixture | Cost | Pays | Why |
 |---|---:|---|---|
 | Froggy Slots | 2 a spin | its own paytable | §9.x, and it does not print its odds |
-| Wheel of Fortune | 45 a spin | 0 to 500, averaging 41.4 | §9.10 |
+| Wheel of Fortune | 30 a spin | 0 to 500, averaging 41.4 — positive to the player by design | §9.10 |
 | Chamber | 5 in | 3 a clean pull, up to 15 | §9.12 |
 | Blackjack | 1 minimum | 2× the bet, hand by hand | §9.x |
 | Frog Cross | 7 | 50 points (five crossings) for 15, +1 every 50 after | a formula, not a constant |

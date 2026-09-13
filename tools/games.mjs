@@ -573,9 +573,9 @@ for (const g of [
   await page.close();
 }
 
-// The counter is staff-side, and Froggy is the staff.  A player who walks
-// straight up the middle of the hub used to end up BEHIND it, in the strip
-// between the counter and the prize case, standing in the same tile as him.
+// The counter has a wrong side and the player belongs on the other one.  A
+// player who walked straight up the middle of the hub used to end up BEHIND
+// it, in the strip between the counter and the prize case.
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
@@ -618,19 +618,6 @@ for (const g of [
   );
   if (!kept) failures++;
 
-  // And he is standing there: the overlay carries him in the top third, where
-  // the dialogue portrait never draws.
-  const onDuty = await page.evaluate(() => {
-    const c = document.getElementById('froggy-layer');
-    if (!c) return -1;
-    const d = c.getContext('2d').getImageData(0, 0, c.width, Math.floor(c.height * 0.45)).data;
-    let n = 0;
-    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
-    return n;
-  });
-  const manning = onDuty > 400;
-  console.log(`${manning ? 'PASS' : 'FAIL'}  froggy is behind the counter  — ${onDuty} pixels of him`);
-  if (!manning) failures++;
   await page.close();
 }
 
@@ -1086,7 +1073,7 @@ for (const g of [
 
   // And a spin pays what it landed on, ONCE, through the ledger and nowhere
   // else: the net move for one spin is the face minus the price of the go.
-  const SPIN = 45;
+  const SPIN = 30;
   const before = await page.evaluate(() => window.__froggy.state().tokens);
   await page.keyboard.press('Space');
   await sleep(4600);

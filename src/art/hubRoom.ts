@@ -125,13 +125,8 @@ export function paintHubRoom(scene: Phaser.Scene, opts: RoomOpts): void {
       cable.lineTo(x + 34, 12);
       cable.strokePath();
     }
-    // vents
-    for (const vx of [24, GAME_W - 46]) {
-      scene.add.rectangle(vx, 20, 22, 12, 0x241638).setOrigin(0, 0).setStrokeStyle(1, 0x140c22);
-      for (let i = 0; i < 4; i++) {
-        scene.add.rectangle(vx + 2, 22 + i * 3, 18, 1, 0x150d24).setOrigin(0, 0);
-      }
-    }
+    // The vents are hung by the room (see `paintArcadeDressing`), because where
+    // they can go depends on what that room has bolted to its back wall.
   }
   if (casino) {
     for (let x = 18; x < GAME_W - 14; x += 26) {
@@ -200,7 +195,9 @@ export function paintArcadeDressing(
      * the room knows where its machines are, so only the room may say where
      * there is floor to put something on.
      */
-    props?: Array<{ x: number; y: number; kind: 'bin' | 'plant' }>,
+    props?: Array<{ x: number; y: number; kind: 'bin' | 'plant' }>;
+    /** Left edges of the wall vents.  Defaults to one in each top corner. */
+    vents?: number[],
   },
 ): void {
   const c = (col: number) => (opts.night ? nightify(col) : col);
@@ -208,11 +205,12 @@ export function paintArcadeDressing(
   const avoid = opts.avoid ?? [];
   const clear = (from: number, to: number): boolean => avoid.every((a) => to < a.from || from > a.to);
 
-  // ---- hanging signs over the machines, on their own little chains
-  const signs: Array<[number, string, number]> = [
-    [58, 'PLAY', PALETTE.neon],
-    [262, 'WIN', PALETTE.gold],
-  ];
+  // ---- hanging signs over the machines, on their own little chains.
+  //
+  // There is no sign on the left-hand side any more: the token HUD owns that
+  // corner of every room, and a lit box hanging a few pixels under it read as
+  // part of the HUD rather than as part of the room.
+  const signs: Array<[number, string, number]> = [[262, 'WIN', PALETTE.gold]];
   for (const [x, word, colour] of signs) {
     if (!clear(x - 20, x + 20)) continue;
     // Hung below the token HUD, which owns the top-left corner of every room.
@@ -224,6 +222,16 @@ export function paintArcadeDressing(
       .setStrokeStyle(1, lit ? colour : nightify(colour))
       .setDepth(0.02);
     centerText(scene, x, 30, word, lit ? colour : nightify(colour)).setDepth(0.021).setAlpha(lit ? 1 : 0.4);
+  }
+
+  // ---- vents, where the room says the wall is bare.  The right-hand one used
+  // to be at a fixed x that the hub's change machine also stands at, so it
+  // looked welded to the side of it.
+  for (const vx of opts.vents ?? [24, GAME_W - 46]) {
+    scene.add.rectangle(vx, 20, 22, 12, c(0x241638)).setOrigin(0, 0).setStrokeStyle(1, c(0x140c22));
+    for (let i = 0; i < 4; i++) {
+      scene.add.rectangle(vx + 2, 22 + i * 3, 18, 1, c(0x150d24)).setOrigin(0, 0);
+    }
   }
 
   // ---- posters, taped flat to the wall between the panels
@@ -248,13 +256,26 @@ export function paintArcadeDressing(
       scene.add.rectangle(prop.x, prop.y - 11, 10, 2, c(PALETTE.slate)).setOrigin(0, 1).setDepth(d);
       scene.add.rectangle(prop.x + 2, prop.y - 8, 6, 1, c(PALETTE.ink)).setOrigin(0, 1).setDepth(d);
     } else {
-      scene.add.rectangle(prop.x, prop.y, 10, 8, c(PALETTE.brown)).setOrigin(0, 1).setDepth(d);
-      for (const [dx, dy, w, h] of [
-        [-1, -7, 4, 9],
-        [3, -9, 4, 11],
-        [7, -6, 4, 8],
+      // A pot with a rim, soil in it, and a plant with leaves that overlap —
+      // three ellipses in one green read as a bush somebody dropped.
+      const cx = prop.x + 6;
+      scene.add.rectangle(prop.x + 1, prop.y, 10, 7, c(PALETTE.rust)).setOrigin(0, 1).setDepth(d);
+      scene.add.rectangle(prop.x, prop.y - 6, 12, 3, c(PALETTE.ember)).setOrigin(0, 1).setDepth(d);
+      scene.add.rectangle(prop.x + 1, prop.y - 7, 10, 1, c(0x2a1a12)).setOrigin(0, 1).setDepth(d);
+      // the stems
+      scene.add.rectangle(cx - 1, prop.y - 8, 1, 5, c(PALETTE.moss)).setOrigin(0, 1).setDepth(d);
+      // the leaves, back layer dark and front layer light, so it has depth
+      for (const [dx, dy, w, h, dark] of [
+        [-5, -9, 7, 5, true],
+        [5, -10, 7, 5, true],
+        [0, -14, 6, 6, true],
+        [-3, -11, 6, 4, false],
+        [3, -12, 6, 4, false],
+        [0, -16, 5, 5, false],
       ] as const) {
-        scene.add.ellipse(prop.x + 5 + dx, prop.y - 8 + dy, w, h, c(PALETTE.moss)).setDepth(d);
+        scene.add
+          .ellipse(cx + dx, prop.y + dy, w, h, c(dark ? PALETTE.moss : PALETTE.mossLight))
+          .setDepth(d);
       }
     }
   }
