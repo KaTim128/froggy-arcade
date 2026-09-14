@@ -14,8 +14,8 @@
  *   💰 500                    0.5%
  *   🎁 200                      5%
  *   🎁 80 90 100               12%   (three faces)
- *   🪙 40 50 60 70             20%   (four faces)
- *   🪙 1 2 3 5 7 10 15      52.39%   (a seventh of it each)
+ *   🪙 40 50 60 70             10%   (four faces)
+ *   🪙 1 2 3 5 7 10 15      62.39%   (a seventh of it each)
  *   the blank                 10%   (two faces)
  *
  * THE NUMBERS ARE NOT PRINTED ON THE WHEEL ITSELF.  The board beside it now
@@ -31,11 +31,10 @@
  * except through the ledger (MG-3).
  *
  * THE PRICE IS TWENTY, AND IT IS THE PLAYER'S CALL.  These faces average
- * about 39.02 tokens a spin, so at twenty the wheel pays out roughly 19
- * tokens more than it takes, every spin, forever — nearly double the
- * standing edge it carried before the jackpot tier went in.  It is still
- * the one fixture in the building with a positive edge to the customer,
- * and a patient player can farm the prize shelf off it rather than off the
+ * about 34.13 tokens a spin, so at twenty the wheel pays out roughly 14
+ * tokens more than it takes, every spin, forever.  It is still the one
+ * fixture in the building with a positive edge to the customer, and a
+ * patient player can farm the prize shelf off it rather than off the
  * cabinets.  If the shelf ever needs to mean something again, this
  * constant is the lever.
  */
@@ -60,26 +59,26 @@ export const SPIN_COST = 20;
  * the rim instead of sitting in one quarter you can aim at.
  */
 export const FACES: Array<{ pays: number; share: number }> = [
-  { pays: 1, share: 52.39 / 7 },
-  { pays: 40, share: 5 },
+  { pays: 1, share: 62.39 / 7 },
+  { pays: 40, share: 2.5 },
   { pays: 80, share: 4 },
-  { pays: 2, share: 52.39 / 7 },
-  { pays: 50, share: 5 },
+  { pays: 2, share: 62.39 / 7 },
+  { pays: 50, share: 2.5 },
   { pays: 90, share: 4 },
-  { pays: 3, share: 52.39 / 7 },
-  { pays: 60, share: 5 },
+  { pays: 3, share: 62.39 / 7 },
+  { pays: 60, share: 2.5 },
   { pays: 100, share: 4 },
   { pays: 5000, share: 0.01 },
-  { pays: 5, share: 52.39 / 7 },
-  { pays: 70, share: 5 },
+  { pays: 5, share: 62.39 / 7 },
+  { pays: 70, share: 2.5 },
   { pays: 0, share: 5 },
-  { pays: 7, share: 52.39 / 7 },
+  { pays: 7, share: 62.39 / 7 },
   { pays: 200, share: 5 },
   { pays: 1000, share: 0.10 },
-  { pays: 10, share: 52.39 / 7 },
+  { pays: 10, share: 62.39 / 7 },
   { pays: 500, share: 0.50 },
   { pays: 0, share: 5 },
-  { pays: 15, share: 52.39 / 7 },
+  { pays: 15, share: 62.39 / 7 },
 ];
 
 const CX = 96;
