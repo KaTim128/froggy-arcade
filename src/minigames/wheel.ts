@@ -47,7 +47,7 @@ import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
 const ID = 'wheel' as const;
-export const SPIN_COST = 20;
+export const SPIN_COST = 45;
 
 /**
  * The faces, in the order they sit round the rim, with the share of the wheel
