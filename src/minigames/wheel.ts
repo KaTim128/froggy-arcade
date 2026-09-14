@@ -61,26 +61,26 @@ export const SPIN_COST = 20;
  * the rim instead of sitting in one quarter you can aim at.
  */
 export const FACES: Array<{ pays: number; share: number }> = [
-  { pays: 1, share: 43.5 / 7 },
-  { pays: 40, share: 20 / 3 },
-  { pays: 2, share: 43.5 / 7 },
+  { pays: 1, share: 52.39 / 7 },
+  { pays: 40, share: 5 },
+  { pays: 80, share: 4 },
+  { pays: 2, share: 52.39 / 7 },
   { pays: 50, share: 5 },
-  { pays: 500, share: 0.5 },
-  { pays: 3, share: 43.5 / 7 },
+  { pays: 90, share: 4 },
+  { pays: 3, share: 52.39 / 7 },
   { pays: 60, share: 5 },
-  { pays: 5, share: 43.5 / 7 },
-  { pays: 40, share: 20 / 3 },
+  { pays: 100, share: 4 },
+  { pays: 5000, share: 0.01 },
+  { pays: 5, share: 52.39 / 7 },
+  { pays: 70, share: 5 },
   { pays: 0, share: 5 },
-  { pays: 7, share: 43.5 / 7 },
-  { pays: 70, share: 2.5 },
-  { pays: 200, share: 1 },
-  { pays: 10, share: 43.5 / 7 },
-  { pays: 50, share: 5 },
-  { pays: 60, share: 5 },
-  { pays: 15, share: 43.5 / 7 },
-  { pays: 40, share: 20 / 3 },
+  { pays: 7, share: 52.39 / 7 },
+  { pays: 200, share: 5 },
+  { pays: 1000, share: 0.10 },
+  { pays: 10, share: 52.39 / 7 },
+  { pays: 500, share: 0.50 },
   { pays: 0, share: 5 },
-  { pays: 70, share: 2.5 },
+  { pays: 15, share: 52.39 / 7 },
 ];
 
 const CX = 96;
@@ -219,20 +219,22 @@ export const wheelOfFortune: MinigameModule = {
     // straight off FACES — so it can never fall out of sync with the rim the
     // way a hand-typed table could.
     text(scene, 178, 24, 'WHAT IT PAYS', PALETTE.gold);
-    const board: Array<[string, number]> = [
-      [`500 - ${pctOf([500])}`, PALETTE.gold],
-      [`200 - ${pctOf([200])}`, PALETTE.gold],
-      [`40 50 60 70 - ${pctOf([40, 50, 60, 70])}`, PALETTE.cream],
-      [`1 TO 15 - ${pctOf([1, 2, 3, 5, 7, 10, 15])}`, PALETTE.cream],
-      [`NOTHING - ${pctOf([0])}`, PALETTE.ash],
-    ];
-    board.forEach(([what, tint], i) => {
-      text(scene, 180, 38 + i * 10, what, tint);
-    });
-    text(scene, 180, 88, `${SPIN_COST} TOKENS PER SPIN`, PALETTE.gold);
+const board: Array<[string, number]> = [
+  [`🏆 5000 - ${pctOf([5000])}`, PALETTE.gold],
+  [`💰 1000 - ${pctOf([1000])}`, PALETTE.gold],
+  [`💰 500 - ${pctOf([500])}`, PALETTE.gold],
+  [`🎁 200 - ${pctOf([200])}`, PALETTE.cream],
+  [`🎁 80-100 - ${pctOf([80, 90, 100])}`, PALETTE.cream],
+  [`🪙 40-70 - ${pctOf([40, 50, 60, 70])}`, PALETTE.cream],
+  [`🪙 1-15 - ${pctOf([1, 2, 3, 5, 7, 10, 15])}`, PALETTE.cream],
+  [`NOTHING - ${pctOf([0])}`, PALETTE.ash],
+];
+board.forEach(([what, tint], i) => {
+  text(scene, 180, 34 + i * 8, what, tint);
+});
 
-    balanceText = text(scene, 180, 100, '', PALETTE.cream);
-    statusText = text(scene, 180, 124, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
+balanceText = text(scene, 180, 102, '', PALETTE.cream);
+statusText = text(scene, 180, 116, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
 
     spinBtn = button(scene, 214, 150, `SPIN - ${SPIN_COST}`, () => spin(), { width: 66, height: 14 });
     leaveBtn = button(scene, 284, 150, 'LEAVE', () => leave(), { width: 52, height: 14, fill: PALETTE.slate });
