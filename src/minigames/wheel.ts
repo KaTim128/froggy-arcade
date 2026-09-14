@@ -48,7 +48,7 @@ import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
 const ID = 'wheel' as const;
-export const SPIN_COST = 30;
+export const SPIN_COST = 20;
 
 /**
  * The faces, in the order they sit round the rim, with the share of the wheel
@@ -60,26 +60,26 @@ export const SPIN_COST = 30;
  * the rim instead of sitting in one quarter you can aim at.
  */
 export const FACES: Array<{ pays: number; share: number }> = [
-  { pays: 1, share: 39 / 7 },
-  { pays: 40, share: 5 },
-  { pays: 2, share: 39 / 7 },
+  { pays: 1, share: 43.5 / 7 },   // was 39 / 7
+  { pays: 40, share: 20 / 3 },    // was 5  (40 is now 20% over 3 faces)
+  { pays: 2, share: 43.5 / 7 },
+  { pays: 50, share: 5 },         // unchanged - 50 stayed at 10% / 2 faces
+  { pays: 500, share: 0.5 },      // was 1
+  { pays: 3, share: 43.5 / 7 },
+  { pays: 60, share: 5 },         // unchanged - 60 stayed at 10% / 2 faces
+  { pays: 5, share: 43.5 / 7 },
+  { pays: 40, share: 20 / 3 },
+  { pays: 0, share: 5 },          // unchanged - blank stayed at 10% / 2 faces
+  { pays: 7, share: 43.5 / 7 },
+  { pays: 70, share: 2.5 },       // was 5  (70 is now 5% over 2 faces)
+  { pays: 200, share: 1 },        // was 5
+  { pays: 10, share: 43.5 / 7 },
   { pays: 50, share: 5 },
-  { pays: 500, share: 1 },
-  { pays: 3, share: 39 / 7 },
   { pays: 60, share: 5 },
-  { pays: 5, share: 39 / 7 },
-  { pays: 40, share: 5 },
+  { pays: 15, share: 43.5 / 7 },
+  { pays: 40, share: 20 / 3 },
   { pays: 0, share: 5 },
-  { pays: 7, share: 39 / 7 },
-  { pays: 70, share: 5 },
-  { pays: 200, share: 5 },
-  { pays: 10, share: 39 / 7 },
-  { pays: 50, share: 5 },
-  { pays: 60, share: 5 },
-  { pays: 15, share: 39 / 7 },
-  { pays: 40, share: 5 },
-  { pays: 0, share: 5 },
-  { pays: 70, share: 5 },
+  { pays: 70, share: 2.5 },
 ];
 
 const CX = 96;
@@ -213,17 +213,17 @@ export const wheelOfFortune: MinigameModule = {
     // what a player needs to know is what it can pay and that the big money is
     // on the thin slices, and the rim in front of them says the rest.
     text(scene, 178, 24, 'WHAT IT PAYS', PALETTE.gold);
-    const board: Array<[string, number]> = [
-      ['500', PALETTE.gold],
-      ['200', PALETTE.gold],
-      ['40 50 60 70', PALETTE.cream],
-      ['1 TO 15', PALETTE.cream],
-      ['OR NOTHING AT ALL', PALETTE.ash],
-    ];
-    board.forEach(([what, tint], i) => {
-      text(scene, 180, 38 + i * 10, what, tint);
-    });
-    text(scene, 180, 88, 'THIN SLICES PAY BIG', PALETTE.ash);
+const board: Array<[string, number]> = [
+  [`500 - ${pctOf([500])}`, PALETTE.gold],
+  [`200 - ${pctOf([200])}`, PALETTE.gold],
+  [`40 50 60 70 - ${pctOf([40, 50, 60, 70])}`, PALETTE.cream],
+  [`1 TO 15 - ${pctOf([1, 2, 3, 5, 7, 10, 15])}`, PALETTE.cream],
+  [`NOTHING - ${pctOf([0])}`, PALETTE.ash],
+];
+board.forEach(([what, tint], i) => {
+  text(scene, 180, 38 + i * 10, what, tint);
+});
+text(scene, 180, 88, `${SPIN_COST} TOKENS PER SPIN`, PALETTE.gold);
 
     balanceText = text(scene, 180, 100, '', PALETTE.cream);
     tallyText = text(scene, 180, 110, '', PALETTE.ash);
