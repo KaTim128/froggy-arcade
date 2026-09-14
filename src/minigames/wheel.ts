@@ -2,20 +2,21 @@
  * WHEEL OF FORTUNE.  Twenty tokens a spin, in the corner of the casino.
  *
  * THE ODDS ARE THE GEOMETRY.  Every face on the wheel is cut to the width of
- * its own chance — the five hundred is a tiny sliver and the small money is
- * most of the rim — and a spin picks a stopping angle, not a prize.  Nothing
- * weights the draw afterwards, so what you watch the pointer do is what
- * actually happened, and a spin pays the one face it stopped on: there is no
- * second prize, no bonus, nothing that can stack two payouts onto one go.
+ * its own chance — the five thousand is a hairline sliver and the small
+ * money is most of the rim — and a spin picks a stopping angle, not a
+ * prize.  Nothing weights the draw afterwards, so what you watch the
+ * pointer do is what actually happened, and a spin pays the one face it
+ * stopped on: there is no second prize, no bonus, nothing that can stack
+ * two payouts onto one go.
  *
- *   500                       0.5%
- *   200                         1%
- *   70                          5%   (two faces)
- *   60                         10%   (two faces)
- *   50                         10%   (two faces)
- *   40                         20%   (three faces)
- *   1 2 3 5 7 10 15          43.5%   (a seventh of it each)
- *   the blank                  10%   (two faces)
+ *   🏆 5000                  0.01%
+ *   💰 1000                   0.1%
+ *   💰 500                    0.5%
+ *   🎁 200                      5%
+ *   🎁 80 90 100               12%   (three faces)
+ *   🪙 40 50 60 70             20%   (four faces)
+ *   🪙 1 2 3 5 7 10 15      52.39%   (a seventh of it each)
+ *   the blank                 10%   (two faces)
  *
  * THE NUMBERS ARE NOT PRINTED ON THE WHEEL ITSELF.  The board beside it now
  * names what the wheel can pay AND the live percentage for each band, read
@@ -30,15 +31,13 @@
  * except through the ledger (MG-3).
  *
  * THE PRICE IS TWENTY, AND IT IS THE PLAYER'S CALL.  These faces average
- * about 29.67 tokens a spin, so at twenty the wheel pays out roughly 9.67
- * tokens more than it takes, every spin, for ever: it is still the one
- * fixture in the building with a standing positive edge to the customer,
+ * about 39.02 tokens a spin, so at twenty the wheel pays out roughly 19
+ * tokens more than it takes, every spin, forever — nearly double the
+ * standing edge it carried before the jackpot tier went in.  It is still
+ * the one fixture in the building with a positive edge to the customer,
  * and a patient player can farm the prize shelf off it rather than off the
- * cabinets.  That was said out loud when the price was set, and twenty is
- * what was asked for — the odds on the rim are exactly the ones that were
- * specified, and the price is the number the customer chose to put against
- * them.  If the shelf ever needs to mean something again, this constant is
- * the lever.
+ * cabinets.  If the shelf ever needs to mean something again, this
+ * constant is the lever.
  */
 
 import Phaser from 'phaser';
