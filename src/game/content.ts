@@ -186,7 +186,7 @@ export const CABINETS: CabinetDef[] = [
   },
   { id: 'roulette', title: 'CHAMBER', tier: 'hard', cost: 5, reward: 10, x: 224, y: 96, color: 0x8a2b34, room: 'casino', symbol: '6', motif: 'chamber' },
   // Not a machine either: a wheel on a post, in the corner of the casino.
-  // Thirty a spin, and what it pays is whatever the pointer is over when it
+  // Twenty a spin, and what it pays is whatever the pointer is over when it
   // stops — `reward` is only what the room's badge would say, since the wheel
   // settles every spin itself through the shell (MinigameApi.payout).
   {
