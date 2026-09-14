@@ -165,7 +165,7 @@ export const wheelOfFortune: MinigameModule = {
   title: 'WHEEL OF FORTUNE',
   music: 'game_wheel',
   rules: 'twenty a spin - the wheel says what it pays',
-  payoutNote: 'PAYS 1 - 500',
+  payoutNote: 'PAYS 1 - 5000',
   tutorial: {
     objective: [
       'ONE SPIN, ONE PRIZE, WHATEVER IT STOPS ON.',
