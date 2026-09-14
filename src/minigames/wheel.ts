@@ -1,26 +1,26 @@
 /**
- * WHEEL OF FORTUNE.  Thirty tokens a spin, in the corner of the casino.
+ * WHEEL OF FORTUNE.  Twenty tokens a spin, in the corner of the casino.
  *
  * THE ODDS ARE THE GEOMETRY.  Every face on the wheel is cut to the width of
- * its own chance — the five hundred is a three-degree splinter and the small
- * money is most of the rim — and a spin picks a stopping angle, not a prize.
- * Nothing weights the draw afterwards, so what you watch the pointer do is
- * what actually happened, and a spin pays the one face it stopped on: there is
- * no second prize, no bonus, nothing that can stack two payouts onto one go.
+ * its own chance — the five hundred is a tiny sliver and the small money is
+ * most of the rim — and a spin picks a stopping angle, not a prize.  Nothing
+ * weights the draw afterwards, so what you watch the pointer do is what
+ * actually happened, and a spin pays the one face it stopped on: there is no
+ * second prize, no bonus, nothing that can stack two payouts onto one go.
  *
- *   500                        1%
- *   200                        5%
- *   70                        10%   (two faces)
- *   60                        10%   (two faces)
- *   50                        10%   (two faces)
- *   40                        15%   (three faces)
- *   1 2 3 5 7 10 15           39%   (a seventh of it each)
- *   the blank                 10%   (two faces)
+ *   500                       0.5%
+ *   200                         1%
+ *   70                          5%   (two faces)
+ *   60                         10%   (two faces)
+ *   50                         10%   (two faces)
+ *   40                         20%   (three faces)
+ *   1 2 3 5 7 10 15          43.5%   (a seventh of it each)
+ *   the blank                  10%   (two faces)
  *
- * THE NUMBERS ARE NOT PRINTED ANY MORE.  The board beside it names what the
- * wheel can pay and says which ones are the thin slices, and that is all: the
- * honesty is in the geometry, where a player who wants the odds can count the
- * rim, rather than in a table that turns a fairground wheel into a prospectus.
+ * THE NUMBERS ARE NOT PRINTED ON THE WHEEL ITSELF.  The board beside it now
+ * names what the wheel can pay AND the live percentage for each band, read
+ * straight off the same FACES table that cuts the rim — so the board can
+ * never drift out of sync with the geometry the way a hand-typed table could.
  *
  * WALKING UP TO IT IS FREE, but it will not let you stand at it broke: a spin
  * is the only thing this fixture does, so a player who cannot cover one is
@@ -29,15 +29,16 @@
  * paid the moment the wheel stops, and LEAVE settles up.  Nothing leaves
  * except through the ledger (MG-3).
  *
- * THE PRICE IS THIRTY, AND IT IS THE PLAYER'S CALL.  These faces average 41.4
- * tokens a spin, so at thirty the wheel pays out about 11 tokens more than it
- * takes, every spin, for ever: it is the one fixture in the building with a
- * standing positive edge to the customer, and a patient player can farm the
- * prize shelf off it rather than off the cabinets.  That was said out loud
- * when the price was set, and thirty is what was asked for — the odds on the
- * rim are exactly the ones that were specified, and the price is the number
- * the customer chose to put against them.  If the shelf ever needs to mean
- * something again, this constant is the lever: at 45 the house keeps 8%.
+ * THE PRICE IS TWENTY, AND IT IS THE PLAYER'S CALL.  These faces average
+ * about 29.67 tokens a spin, so at twenty the wheel pays out roughly 9.67
+ * tokens more than it takes, every spin, for ever: it is still the one
+ * fixture in the building with a standing positive edge to the customer,
+ * and a patient player can farm the prize shelf off it rather than off the
+ * cabinets.  That was said out loud when the price was set, and twenty is
+ * what was asked for — the odds on the rim are exactly the ones that were
+ * specified, and the price is the number the customer chose to put against
+ * them.  If the shelf ever needs to mean something again, this constant is
+ * the lever.
  */
 
 import Phaser from 'phaser';
@@ -60,19 +61,19 @@ export const SPIN_COST = 20;
  * the rim instead of sitting in one quarter you can aim at.
  */
 export const FACES: Array<{ pays: number; share: number }> = [
-  { pays: 1, share: 43.5 / 7 },   // was 39 / 7
-  { pays: 40, share: 20 / 3 },    // was 5  (40 is now 20% over 3 faces)
+  { pays: 1, share: 43.5 / 7 },
+  { pays: 40, share: 20 / 3 },
   { pays: 2, share: 43.5 / 7 },
-  { pays: 50, share: 5 },         // unchanged - 50 stayed at 10% / 2 faces
-  { pays: 500, share: 0.5 },      // was 1
+  { pays: 50, share: 5 },
+  { pays: 500, share: 0.5 },
   { pays: 3, share: 43.5 / 7 },
-  { pays: 60, share: 5 },         // unchanged - 60 stayed at 10% / 2 faces
+  { pays: 60, share: 5 },
   { pays: 5, share: 43.5 / 7 },
   { pays: 40, share: 20 / 3 },
-  { pays: 0, share: 5 },          // unchanged - blank stayed at 10% / 2 faces
+  { pays: 0, share: 5 },
   { pays: 7, share: 43.5 / 7 },
-  { pays: 70, share: 2.5 },       // was 5  (70 is now 5% over 2 faces)
-  { pays: 200, share: 1 },        // was 5
+  { pays: 70, share: 2.5 },
+  { pays: 200, share: 1 },
   { pays: 10, share: 43.5 / 7 },
   { pays: 50, share: 5 },
   { pays: 60, share: 5 },
@@ -109,7 +110,6 @@ let spins = 0;
 let won = 0;
 let statusText: Phaser.GameObjects.BitmapText | null = null;
 let balanceText: Phaser.GameObjects.BitmapText | null = null;
-let tallyText: Phaser.GameObjects.BitmapText | null = null;
 let spinBtn: Phaser.GameObjects.Container | null = null;
 let leaveBtn: Phaser.GameObjects.Container | null = null;
 /** Which face the pointer was over last frame, for the ratchet tick. */
@@ -143,6 +143,13 @@ function build(): void {
   });
 }
 
+/** Total share of the rim across a set of payout values, formatted as a percent. */
+function pctOf(pays: number[]): string {
+  const total = FACES.filter((f) => pays.includes(f.pays)).reduce((sum, f) => sum + f.share, 0);
+  const rounded = Math.round(total * 10) / 10;
+  return `${rounded % 1 === 0 ? rounded : rounded.toFixed(1)}%`;
+}
+
 /** Which face is under the pointer at this rotation. */
 export function faceAt(rot: number): Slice {
   const twoPi = Math.PI * 2;
@@ -158,7 +165,7 @@ export const wheelOfFortune: MinigameModule = {
   id: ID,
   title: 'WHEEL OF FORTUNE',
   music: 'game_wheel',
-  rules: 'forty-five a spin - the wheel says what it pays',
+  rules: 'twenty a spin - the wheel says what it pays',
   payoutNote: 'PAYS 1 - 500',
   tutorial: {
     objective: [
@@ -208,25 +215,23 @@ export const wheelOfFortune: MinigameModule = {
     // the pointer, over the top
     scene.add.triangle(CX, CY - R - 6, 0, 0, 8, 0, 4, 9, PALETTE.cream).setOrigin(0.5, 0).setDepth(8);
 
-    // The board names the faces and nothing else.  The old one printed the
-    // exact chance of each band, which is a prospectus rather than a wheel —
-    // what a player needs to know is what it can pay and that the big money is
-    // on the thin slices, and the rim in front of them says the rest.
+    // The board names the faces and, next to each, the live percentage read
+    // straight off FACES — so it can never fall out of sync with the rim the
+    // way a hand-typed table could.
     text(scene, 178, 24, 'WHAT IT PAYS', PALETTE.gold);
-const board: Array<[string, number]> = [
-  [`500 - ${pctOf([500])}`, PALETTE.gold],
-  [`200 - ${pctOf([200])}`, PALETTE.gold],
-  [`40 50 60 70 - ${pctOf([40, 50, 60, 70])}`, PALETTE.cream],
-  [`1 TO 15 - ${pctOf([1, 2, 3, 5, 7, 10, 15])}`, PALETTE.cream],
-  [`NOTHING - ${pctOf([0])}`, PALETTE.ash],
-];
-board.forEach(([what, tint], i) => {
-  text(scene, 180, 38 + i * 10, what, tint);
-});
-text(scene, 180, 88, `${SPIN_COST} TOKENS PER SPIN`, PALETTE.gold);
+    const board: Array<[string, number]> = [
+      [`500 - ${pctOf([500])}`, PALETTE.gold],
+      [`200 - ${pctOf([200])}`, PALETTE.gold],
+      [`40 50 60 70 - ${pctOf([40, 50, 60, 70])}`, PALETTE.cream],
+      [`1 TO 15 - ${pctOf([1, 2, 3, 5, 7, 10, 15])}`, PALETTE.cream],
+      [`NOTHING - ${pctOf([0])}`, PALETTE.ash],
+    ];
+    board.forEach(([what, tint], i) => {
+      text(scene, 180, 38 + i * 10, what, tint);
+    });
+    text(scene, 180, 88, `${SPIN_COST} TOKENS PER SPIN`, PALETTE.gold);
 
     balanceText = text(scene, 180, 100, '', PALETTE.cream);
-    tallyText = text(scene, 180, 110, '', PALETTE.ash);
     statusText = text(scene, 180, 124, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
 
     spinBtn = button(scene, 214, 150, `SPIN - ${SPIN_COST}`, () => spin(), { width: 66, height: 14 });
@@ -266,7 +271,6 @@ text(scene, 180, 88, `${SPIN_COST} TOKENS PER SPIN`, PALETTE.gold);
     labels = [];
     statusText = null;
     balanceText = null;
-    tallyText = null;
     spinBtn = null;
     leaveBtn = null;
     apiRef = null;
@@ -380,7 +384,6 @@ function setButtons(on: boolean): void {
 
 function refresh(): void {
   balanceText?.setText(`TOKENS ${apiRef?.balance() ?? 0}`);
-  tallyText?.setText(`${spins} SPIN${spins === 1 ? '' : 'S'}  -  WON ${won}`);
 }
 
 function leave(): void {
