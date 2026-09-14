@@ -144,7 +144,7 @@ export const CABINETS: CabinetDef[] = [
   { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 290, y: 164, color: 0x1d6f8f, symbol: 'BS', motif: 'ship' },
 
   // ---- the back room: five to seven a go
-  { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 5, reward: 10, x: 48, y: 96, color: 0xc31f2e, room: 'annex', symbol: 'VS', motif: 'fist' },
+  { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 7, reward: 15, x: 48, y: 96, color: 0xc31f2e, room: 'annex', symbol: 'VS', motif: 'fist' },
   // Every seven-token cabinet pays fifteen: eight tokens of profit for the
   // longest games in the building, which is the top of the standard table.
   { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 7, reward: 15, x: 112, y: 96, color: 0xd9822b, room: 'annex', symbol: 'BC', motif: 'ladder' },
