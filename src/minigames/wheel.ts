@@ -144,6 +144,7 @@ function build(): void {
 /** Total share of the rim across a set of payout values, formatted as a percent. */
 function pctOf(pays: number[]): string {
   const total = FACES.filter((f) => pays.includes(f.pays)).reduce((sum, f) => sum + f.share, 0);
+  if (total > 0 && total < 0.1) return `${total.toFixed(2)}%`;
   const rounded = Math.round(total * 10) / 10;
   return `${rounded % 1 === 0 ? rounded : rounded.toFixed(1)}%`;
 }
