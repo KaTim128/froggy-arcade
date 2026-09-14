@@ -149,14 +149,14 @@ export const CABINETS: CabinetDef[] = [
   // longest games in the building, which is the top of the standard table.
   { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 7, reward: 15, x: 112, y: 96, color: 0xd9822b, room: 'annex', symbol: 'BC', motif: 'ladder' },
   { id: 'airhockey', title: 'AIR HOCKEY', tier: 'hard', cost: 5, reward: 10, x: 176, y: 96, color: 0xffd45e, room: 'annex', symbol: 'AH', motif: 'ball' },
-  { id: 'chompman', title: 'CHOMP-MAN', tier: 'hard', cost: 7, reward: 15, x: 240, y: 96, color: 0x7b4bd8, room: 'annex', symbol: 'CM', motif: 'maze' },
+  { id: 'chompman', title: 'CHOMP-MAN', tier: 'hard', cost: 10, reward: 20, x: 240, y: 96, color: 0x7b4bd8, room: 'annex', symbol: 'CM', motif: 'maze' },
   // Along the bottom wall, under the middle two of the row above.  Neither
   // has a fixed reward: a run is worth what it scored, and the module names
   // the payout.
   // Seven in, fifteen out like the other long games: the one cabinet you lose
   // by being out of time rather than out of lives, and the only one played to
   // a beat.
-  { id: 'danceoff', title: 'DANCE OFF', tier: 'hard', cost: 7, reward: 15, x: 48, y: 162, color: 0xff4fa3, room: 'annex', symbol: 'DO', motif: 'steps' },
+  { id: 'danceoff', title: 'DANCE OFF', tier: 'hard', cost: 10, reward: 20, x: 48, y: 162, color: 0xff4fa3, room: 'annex', symbol: 'DO', motif: 'steps' },
   { id: 'frogcross', title: 'FROG CROSS', tier: 'hard', cost: 7, reward: 15, x: 112, y: 162, color: 0x6fbb6a, room: 'annex', symbol: 'FC', motif: 'road' },
   { id: 'carchase', title: 'CAR CHASE', tier: 'hard', cost: 5, reward: 10, x: 176, y: 162, color: 0x46a0e0, room: 'annex', symbol: 'CC', motif: 'car' },
   // Ten on a five, like every other five-token cabinet on the floor.
