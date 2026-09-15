@@ -125,15 +125,6 @@ export const TRACKS: Record<string, TrackPreset> = {
     arpWave: undefined,
     drums: 'four',
   }),
-  // Chomp-Man: chromatic and hurried, something behind you.
-  game_chompman: preset({
-    bpm: 145,
-    chords: [min(C.c4), min(C.c4), maj(C.a4 - 12 - 1), maj(C.g4 - 12)],
-    bass: [0, 2, 0, 2, 0, 2, 0, 2],
-    lead: [C.c5, C.c5 + 1, C.d5, C.d5 + 1, C.e5, _, C.d5 + 1, C.d5, C.c5 + 1, C.c5, _, C.g5, _, C.f5 + 1, C.g5, _],
-    bassWave: 'square',
-    cutoff: 3000,
-  }),
   // Grudge: power chords and a snare that hits.
   game_grudge: preset({
     bpm: 150,
@@ -271,6 +262,64 @@ export const TRACKS: Record<string, TrackPreset> = {
     cutoff: 4400,
     vol: { lead: 0.03, bass: 0.055, arp: 0.018, drums: 1.25 },
     ring: 0.7,
+  }),
+  // Find the Frog: a slow, curious burble.  Nothing is chasing you in here;
+  // the pressure is entirely the clock and your own eyes.
+  game_findthefrog: preset({
+    bpm: 96,
+    chords: [maj(C.c4), min(C.a4 - 12), maj(C.f4 - 12), maj(C.g4 - 12)],
+    bass: [0, _, _, _, 1, _, _, _],
+    lead: [C.e5, _, C.g5, _, C.c6, _, C.g5, _, C.a5, _, C.e5, _, C.c5, _, _, _],
+    leadWave: 'triangle',
+    bassWave: 'sine',
+    arpWave: 'triangle',
+    drums: 'sparse',
+    cutoff: 2600,
+    vol: { lead: 0.028, bass: 0.05, arp: 0.018, drums: 0.7 },
+    ring: 1.1,
+  }),
+  // Pinball: a bright, bouncing vamp with a fast shuffle under it — the noise
+  // a machine with a bell in it makes when it is pleased with you.
+  game_pinball: preset({
+    bpm: 152,
+    chords: [maj(C.c4), maj(C.f4 - 12), maj(C.g4 - 12), maj(C.c4)],
+    bass: [0, 0, _, 1, _, 2, _, 1],
+    lead: [C.c5, C.e5, C.g5, C.e5, C.c6, _, C.g5, _, C.f5, C.a5, C.c6, C.a5, C.f5, _, C.c5, _],
+    leadWave: 'square',
+    bassWave: 'triangle',
+    arpWave: 'square',
+    drums: 'four',
+    cutoff: 4200,
+    vol: { lead: 0.028, bass: 0.05, arp: 0.018, drums: 1.1 },
+    ring: 0.6,
+  }),
+  // The race: a fairground gallop.  All forward motion, no menace.
+  game_frograce: preset({
+    bpm: 164,
+    chords: [maj(C.g4 - 12), maj(C.c4), maj(C.d4), maj(C.g4 - 12)],
+    bass: [0, _, 0, _, 1, _, 1, _],
+    lead: [C.g5, C.b5, C.d5 + 12, C.b5, C.g5, _, C.d5 + 12, _, C.c5, C.e5, C.g5, C.e5, C.c5, _, C.g5, _],
+    leadWave: 'square',
+    bassWave: 'triangle',
+    drums: 'four',
+    cutoff: 3800,
+    vol: { lead: 0.026, bass: 0.048, arp: 0.014, drums: 1.05 },
+    ring: 0.5,
+  }),
+  // The table: slow, smoky, in no hurry at all.  The only room in the building
+  // where the music is trying to make you stay.
+  game_poker: preset({
+    bpm: 84,
+    chords: [min(C.a4 - 12), min(C.d4), maj(C.g4 - 12), maj(C.c4)],
+    bass: [0, _, _, 1, _, _, 2, _],
+    lead: [C.a4, _, C.c5, _, C.e5, _, _, _, C.d5, _, C.f5, _, C.a5, _, _, _],
+    leadWave: 'triangle',
+    bassWave: 'sine',
+    arpWave: 'triangle',
+    drums: 'none',
+    cutoff: 2100,
+    vol: { lead: 0.03, bass: 0.055, arp: 0.02, drums: 0 },
+    ring: 1.4,
   }),
   // The Flood: a climbing tune in a hurry.  Rising figures over a walking
   // bass, because the whole game is upward and the water is the clock.

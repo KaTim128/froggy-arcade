@@ -45,13 +45,6 @@ function drawMotif(scene: Phaser.Scene, cx: number, cy: number, def: CabinetDef,
       put(2, -3, 8, 4, bright);
       put(-2, 2, 2, 8);
       break;
-    case 'maze':
-      put(0, -4, 12, 1);
-      put(-5, 0, 1, 8);
-      put(5, 0, 1, 8);
-      put(0, 4, 12, 1);
-      dot(0, 0, 1.5, bright);
-      break;
     case 'ladder':
       put(-2, 0, 1, 12);
       put(3, 0, 1, 12);

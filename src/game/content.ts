@@ -16,7 +16,6 @@ export type Motif =
   | 'blocks'
   | 'ball'
   | 'mallet'
-  | 'maze'
   | 'ladder'
   | 'fist'
   | 'car'
@@ -121,11 +120,10 @@ export const CABINETS: CabinetDef[] = [
   // A token in, two out: you win one.  Three out was a 3x on the cheapest
   // games in the building and the only positive-EV corner of the floor.
   { id: 'tictactoe', title: 'TIC-TAC-TOE', tier: 'easy', cost: 1, reward: 2, x: 52, y: 88, color: 0xff4fa3, symbol: 'X', motif: 'grid' },
-  // Five in, ten out, in the slot Snakes & Ladders used to stand in.  The id is
-  // still `fallingblocks` and it is deliberate: it is the key a saved run's
-  // high score and play count are filed under, and renaming it would quietly
-  // orphan every save in existence to gain nothing but a tidier string.
-  { id: 'fallingblocks', title: 'THE FLOOD', tier: 'hard', cost: 5, reward: 10, x: 98, y: 88, color: 0x2f7fb5, symbol: 'FD', motif: 'blocks' },
+  // Seven in, fifteen out, in the slot The Flood briefly stood in and Snakes &
+  // Ladders stood in before that.  A table game in a room of screens: the only
+  // cabinet out here with moving parts behind the glass.
+  { id: 'pinball', title: 'FROGGY PINBALL', tier: 'hard', cost: 7, reward: 15, x: 98, y: 88, color: 0xff4fa3, symbol: 'PB', motif: 'pins' },
   // The bottom row: two either side of the front door, in line with the two
   // above.  Nothing sits under the change machine on the right wall, because a
   // cabinet's click zone up there swallows every attempt to use it.
@@ -138,8 +136,10 @@ export const CABINETS: CabinetDef[] = [
   // been at 48 for the same reason.
   { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 3, reward: 6, x: 52, y: 164, color: 0xff7a3d, symbol: 'H', motif: 'ball' },
   { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 3, reward: 6, x: 98, y: 164, color: 0x6fbb6a, symbol: 'W', motif: 'mallet' },
-  // Three in, six out like the rest of the three-token row: beating Froggy is
-  // worth the same as clearing any other medium cabinet.
+  // Three in, six out, on the right-hand side of the front room opposite the
+  // two cheap machines.  Nothing stood on this row before: the prize case owns
+  // 126-226 of the back wall, which leaves exactly this corner.
+  { id: 'findthefrog', title: 'FIND THE FROG', tier: 'medium', cost: 3, reward: 6, x: 244, y: 88, color: 0x2e8b57, symbol: 'FF', motif: 'grid' },
   { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 3, reward: 6, x: 244, y: 164, color: 0xb9884f, symbol: 'BW', motif: 'pins' },
   { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 290, y: 164, color: 0x1d6f8f, symbol: 'BS', motif: 'ship' },
 
@@ -149,7 +149,13 @@ export const CABINETS: CabinetDef[] = [
   // longest games in the building, which is the top of the standard table.
   { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 7, reward: 15, x: 112, y: 96, color: 0xd9822b, room: 'annex', symbol: 'BC', motif: 'ladder' },
   { id: 'airhockey', title: 'AIR HOCKEY', tier: 'hard', cost: 5, reward: 10, x: 176, y: 96, color: 0xffd45e, room: 'annex', symbol: 'AH', motif: 'ball' },
-  { id: 'chompman', title: 'CHOMP-MAN', tier: 'hard', cost: 7, reward: 15, x: 240, y: 96, color: 0x7b4bd8, room: 'annex', symbol: 'CM', motif: 'maze' },
+  // THE FLOOD lives back here now, in the slot Chomp-Man stood in.  It belongs
+  // with the long games rather than in the front room with the one-token
+  // board: it is a minute of climbing and it takes seven to start.  The id is
+  // still `fallingblocks` and that is deliberate — it is the key a saved run's
+  // high score and play count are filed under, and renaming it would orphan
+  // every save in existence to gain nothing but a tidier string.
+  { id: 'fallingblocks', title: 'THE FLOOD', tier: 'hard', cost: 7, reward: 15, x: 240, y: 96, color: 0x2f7fb5, room: 'annex', symbol: 'FD', motif: 'blocks' },
   // Along the bottom wall, under the middle two of the row above.  Neither
   // has a fixed reward: a run is worth what it scored, and the module names
   // the payout.
@@ -204,6 +210,11 @@ export const CABINETS: CabinetDef[] = [
     symbol: '*',
     motif: 'wheel',
   },
+  // The bottom row of the casino: two machines under the two above them, with
+  // the table left clear between them.  Both are seven-token games that end in
+  // a single decision rather than a run, which is what the room is for.
+  { id: 'frograce', title: 'FROG RACE', tier: 'hard', cost: 7, reward: 15, x: 96, y: 162, color: 0x6fbb6a, room: 'casino', symbol: 'RC', motif: 'road' },
+  { id: 'poker', title: 'TEXAS POKER', tier: 'hard', cost: 7, reward: 15, x: 224, y: 162, color: 0x2f8d4f, room: 'casino', symbol: 'TX', motif: 'cards' },
 ];
 
 /** Cabinets standing in a given room.  Anything unmarked lives in the hub. */

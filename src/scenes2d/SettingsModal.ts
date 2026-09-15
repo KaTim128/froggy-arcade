@@ -14,8 +14,11 @@ import { FONT_ADVANCE } from '../render/pixelFont';
 import { BINDINGS } from '../core/input';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
+import { isTouch } from '../core/device';
+import { touchControls } from '../ui/touchControls';
+import type { MoveStyle } from '../core/state';
 
-type Tab = 'audio' | 'controls';
+type Tab = 'audio' | 'controls' | 'move';
 
 export class SettingsModal extends Phaser.Scene {
   private tab: Tab = 'audio';
@@ -46,8 +49,16 @@ export class SettingsModal extends Phaser.Scene {
     this.add.rectangle(GAME_W / 2, GAME_H / 2, 280, 162, PALETTE.ink).setStrokeStyle(1, PALETTE.neon);
     centerText(this, GAME_W / 2, 18, 'SETTINGS', PALETTE.gold, 8);
 
-    button(this, 108, 34, 'AUDIO', () => this.setTab('audio'), { width: 60, height: 13 });
-    button(this, 176, 34, 'CONTROLS', () => this.setTab('controls'), { width: 68, height: 13 });
+    // The third tab is only there for a thumb: on a desktop there is no
+    // on-screen stick to choose between, so the choice would be a dead option.
+    if (isTouch()) {
+      button(this, 76, 34, 'AUDIO', () => this.setTab('audio'), { width: 54, height: 13 });
+      button(this, 140, 34, 'CONTROLS', () => this.setTab('controls'), { width: 66, height: 13 });
+      button(this, 214, 34, 'MOVEMENT', () => this.setTab('move'), { width: 70, height: 13 });
+    } else {
+      button(this, 108, 34, 'AUDIO', () => this.setTab('audio'), { width: 60, height: 13 });
+      button(this, 176, 34, 'CONTROLS', () => this.setTab('controls'), { width: 68, height: 13 });
+    }
 
     this.body = this.add.container(0, 0);
     this.renderBody();
@@ -69,7 +80,50 @@ export class SettingsModal extends Phaser.Scene {
   private renderBody(): void {
     this.body.removeAll(true);
     if (this.tab === 'audio') this.renderAudio();
+    else if (this.tab === 'move') this.renderMove();
     else this.renderControls();
+  }
+
+  /**
+   * Stick or pad.
+   *
+   * Both drive Froggy with the same four keys, so nothing downstream of this
+   * knows which one is on screen — the choice is only about what the thumb is
+   * resting on.  It takes effect the moment it is tapped, not on the next
+   * room, and it is kept with the volumes rather than in the run, because the
+   * hand holding the phone does not change when the profile does.
+   */
+  private renderMove(): void {
+    this.body.add(centerText(this, GAME_W / 2, 50, 'HOW FROGGY MOVES', PALETTE.cream));
+
+    const rows: Array<[MoveStyle, string, string]> = [
+      ['stick', 'JOYSTICK', 'a thumbstick you push in any direction'],
+      ['pad', 'ARROW KEYS', 'four arrow buttons, one per direction'],
+    ];
+    rows.forEach(([style, label, blurb], i) => {
+      const y = 72 + i * 32;
+      const on = store.get().settings.moveStyle === style;
+      const box = this.add
+        .rectangle(GAME_W / 2, y, 200, 15, on ? PALETTE.tealDark : PALETTE.slate)
+        .setStrokeStyle(1, on ? PALETTE.neon : PALETTE.steel)
+        .setInteractive({ useHandCursor: true });
+      box.on('pointerdown', () => this.setMoveStyle(style));
+      this.body.add(box);
+      this.body.add(centerText(this, GAME_W / 2, y - 3, `${on ? '> ' : '  '}${label}`, on ? PALETTE.gold : PALETTE.cream));
+      this.body.add(centerText(this, GAME_W / 2, y + 13, blurb, PALETTE.ash, 8).setAlpha(0.75));
+    });
+
+    this.body.add(
+      centerText(this, GAME_W / 2, 138, 'change it whenever you like', PALETTE.ash, 8).setAlpha(0.7),
+    );
+  }
+
+  private setMoveStyle(style: MoveStyle): void {
+    if (store.get().settings.moveStyle === style) return;
+    store.setSettings({ moveStyle: style });
+    touchControls.setMoveStyle(style);
+    audio.sfx('ui_blip');
+    this.renderBody();
   }
 
   private renderAudio(): void {

@@ -455,7 +455,7 @@ Only non-zero correlations are listed.
 | B1 | Token ledger | 0 token mutations outside the ledger API; balance never < 0 | `grep`-based lint + property test |
 | B2 | Latches | Charity fires exactly 1× per run; 2nd bust always ejects | Scripted playthrough test |
 | B3 | Minigame contract | 6/6 games pass launch/complete/forfeit contract | Automated contract test per game |
-| B4 | Win rates | TTT 45–60%, S&L 48–52%, Hockey 45–60%, Hoops 40–55%, Whack 40–55%, Chomp 30–45%, Fighter 30–45% | 200 scripted/AI-vs-AI runs per game |
+| B4 | Win rates | TTT 45–60%, Hockey 45–60%, Hoops 40–55%, Whack 40–55%, Pinball 30–45%, Poker 30–45%, Fighter 30–45% | 200 scripted/AI-vs-AI runs per game |
 | B5 | Prizes | 5 prizes; min 200 tokens; redemption blocked below cost | Unit test |
 | B6 | Input map | 0 duplicated bindings; manual rendered from the map | Manual renders from map object; visual check |
 | B7 | IP provenance | 0 third-party or licensed assets; 0 trademarked names | Asset audit checklist signed per phase |

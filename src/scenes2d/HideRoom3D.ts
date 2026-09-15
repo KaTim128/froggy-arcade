@@ -88,11 +88,22 @@ const EYE = 1.55;
 const EYE_CROUCH = 0.8;
 const PLAYER_R = 0.42;
 /**
- * How big he is in here.  At 1x he was a man-sized thing across a large room;
- * he is now half again, which is what "something in the room with you" needs.
- * His reach scales with him.
+ * How big he is in here.
+ *
+ * At 1x he was a man-sized thing across a large room, and at 1.35 he was
+ * merely tall.  At 1.75 he stands 3.6m — more than twice your eye height, with
+ * his head near the ceiling in two of the three rooms — and the silhouette
+ * stops being a person and starts being the reason you are under the bed.
+ *
+ * NONE OF THIS CHANGES HOW HE GETS AROUND.  The body that furniture and walls
+ * are tested against is a 0.5m circle at his feet (see `solid` and
+ * `blockerAt`), and it is deliberately NOT scaled: what grew is a head slung
+ * out in front of him and arms hanging past his knees, and those pass over the
+ * sofa rather than into it.  Growing the circle with the model would have
+ * shrunk every gap the pathfinder thinks it can use, which is exactly how a
+ * thing this size ends up wedged in a doorway.
  */
-const FROGGY_SCALE = 1.35;
+const FROGGY_SCALE = 1.75;
 /** How quickly he can turn, radians per second.  Below this he slides. */
 const FROGGY_TURN = 5.5;
 /** How quickly he gets up to speed and back down, per second. */
@@ -102,7 +113,15 @@ const VIEW_RANGE = 13;
 const VIEW_HALF = Math.PI / 3.6;
 /** How long he keeps coming after losing sight of you. */
 const MEMORY_S = 4.0;
-const CATCH_DIST = 1.15 * FROGGY_SCALE;
+/**
+ * How close he has to be to have you.
+ *
+ * It follows his reach, but at half the rate he grows: the grab that ends the
+ * round is measured hip to hip, and letting it track the whole model would
+ * have made all three rooms harder simply because he got taller.  At 1.75 this
+ * is 1.58m, a finger's width off what it was at 1.35.
+ */
+const CATCH_DIST = 1.15 * (1 + (FROGGY_SCALE - 1) * 0.5);
 
 const SPOT_REACH = 1.6;
 const DOOR_REACH = 2.2;

@@ -401,6 +401,137 @@ const labels = (page) =>
   await page.close();
 }
 
+// ------------------------------ 9. stick or arrow pad, switched in the settings
+{
+  const page = await phone('?intro=1&tokens=20&scene=ArcadeHub');
+  const shape = () =>
+    page.evaluate(() => {
+      const stick = document.querySelector('#touch-controls .tc-stick');
+      const dpad = document.querySelector('#touch-controls .tc-dpad');
+      const vis = (el) => !!el && getComputedStyle(el).display !== 'none';
+      return {
+        stick: vis(stick),
+        pad: vis(dpad),
+        arrows: [...document.querySelectorAll('#touch-controls .tc-dkey')]
+          .filter((e) => getComputedStyle(e).display !== 'none').length,
+        stored: JSON.parse(localStorage.getItem('froggy.prefs') || '{}').moveStyle,
+      };
+    });
+
+  const before = await shape();
+  check(
+    'the joystick is what a phone gets by default',
+    before.stick && !before.pad,
+    `stick ${before.stick}, pad ${before.pad}`,
+  );
+
+  // Through the settings screen, the way a player would: ESC, MOVEMENT, ARROWS.
+  await pressButton(page, 'ESC');
+  await sleep(900);
+  const tapGame = async (x, y) => {
+    const at = await page.evaluate(
+      ([gxv, gyv]) => {
+        const c = document.querySelector('#game-root canvas').getBoundingClientRect();
+        const z = window.__froggy.game().scale.zoom;
+        return { x: c.left + gxv * z, y: c.top + gyv * z };
+      },
+      [x, y],
+    );
+    await touch(page, at.x, at.y);
+    await sleep(500);
+  };
+  const inSettings = await page.evaluate(() => window.__froggy.activeScenes().includes('SettingsModal'));
+  await tapGame(214, 34); // MOVEMENT tab
+  await tapGame(160, 104); // ARROW KEYS
+  const after = await shape();
+  await page.screenshot({ path: `${SHOTS}/07-arrow-pad.png` });
+  check(
+    'and the settings swap it for an arrow pad, there and then',
+    inSettings && after.pad && !after.stick && after.arrows === 4 && after.stored === 'pad',
+    `settings ${inSettings}, pad ${after.pad}, ${after.arrows} arrows, stored ${after.stored}`,
+  );
+
+  // Back out, and the pad has to actually walk him.
+  await tapGame(160, 158); // BACK
+  await sleep(700);
+  const at = () =>
+    page.evaluate(() => {
+      const s = window.__froggy.game().scene.getScene('ArcadeHub');
+      return { x: Math.round(s.player.x), y: Math.round(s.player.y) };
+    });
+  const p0 = await at();
+  const hit = await page.evaluate(() => {
+    const el = document.querySelector('#touch-controls .tc-dkey.left');
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await touch(page, hit.x, hit.y, 900);
+  await sleep(250);
+  const p1 = await at();
+  const stuck = await page.evaluate(() => window.__touch.held());
+  check(
+    'the arrow pad walks, and lets go when the thumb does',
+    p1.x < p0.x - 12 && stuck.length === 0,
+    `${p0.x},${p0.y} -> ${p1.x},${p1.y}, held [${stuck}]`,
+  );
+
+  // And the choice outlives the reload, since it is kept with the volumes.
+  await page.reload({ waitUntil: 'networkidle2' });
+  await sleep(2400);
+  const kept = await shape();
+  check('the choice survives a reload', kept.pad && !kept.stick, `pad ${kept.pad}, stick ${kept.stick}`);
+  await page.close();
+}
+
+// ------------------------------------------ 10. a phone can skip the opening
+{
+  const page = await phone('?scene=IntroCutscene');
+  const seen = await page.evaluate(() => {
+    const s = window.__froggy.game().scene.getScene('IntroCutscene');
+    const buttons = [...document.querySelectorAll('#touch-controls .tc-btn')].map((e) =>
+      e.textContent.trim(),
+    );
+    return { hint: !!s?.skip, buttons };
+  });
+  await page.screenshot({ path: `${SHOTS}/08-intro-skip.png` });
+  check(
+    'the phone gets a SKIP button and not an Esc it cannot press',
+    seen.hint === false && seen.buttons.includes('SKIP') && seen.buttons.includes('NEXT'),
+    `hint ${seen.hint}, buttons [${seen.buttons}]`,
+  );
+
+  await pressButton(page, 'SKIP');
+  await sleep(3000);
+  const out = await page.evaluate(() => ({
+    scenes: window.__froggy.activeScenes(),
+    buttons: [...document.querySelectorAll('#touch-controls .tc-btn')].map((e) => e.textContent.trim()),
+  }));
+  check(
+    'tapping it leaves the opening at once, and takes itself with it',
+    out.scenes.includes('ExteriorDay') && !out.buttons.includes('SKIP'),
+    `${out.scenes.join(',')} with [${out.buttons}]`,
+  );
+  await page.close();
+}
+
+// -------------------------------- 11. and the desktop opening is left alone
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?scene=IntroCutscene`, { waitUntil: 'networkidle2' });
+  await sleep(2400);
+  const desk = await page.evaluate(() => {
+    const s = window.__froggy.game().scene.getScene('IntroCutscene');
+    return { hint: s?.skip?.text ?? null, controls: !!document.getElementById('touch-controls') };
+  });
+  check(
+    'the desktop opening still says which key skips it',
+    desk.hint === '[ESC] SKIP' && desk.controls === false,
+    `hint ${JSON.stringify(desk.hint)}, controls ${desk.controls}`,
+  );
+  await page.close();
+}
+
 console.log(failures ? `\n${failures} FAILED` : '\nAll mobile checks passed.');
 await browser.close();
 process.exit(failures ? 1 : 0);

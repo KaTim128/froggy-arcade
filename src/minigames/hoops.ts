@@ -5,9 +5,19 @@
  * The meter bounces back down at the top so there is no infinite hold.  Five
  * points in sixty seconds, and a miss only costs you time.
  *
- * An arrow at the ball shows where it is going: its direction is the aim and
- * its length is the charge, so what leaves your hand is what you were looking
- * at, not a guess from a meter on the other side of the screen.
+ * AND YOU CAN SEE THE SHOT BEFORE YOU TAKE IT.  A dotted arc runs from the
+ * ball along the exact parabola the shot would fly — same launch speed, same
+ * gravity, same arithmetic the flight itself uses — with a marker where it
+ * would cross the rim's height on the way down.  The arc is GREEN when that
+ * crossing lands inside the hoop and AMBER when it does not, so "will this go
+ * in" stops being a thing you learn by throwing away shots.
+ *
+ * THE PREDICTION CHASES THE MOVING RIM.  The hoop slides, so the arc works out
+ * how long the ball would be in the air and asks where the rim will BE then,
+ * not where it is now — and it draws a faint ghost of the rim in that place,
+ * under the mark, so the LEAD is the thing on the screen rather than a sum the
+ * player is meant to be doing.  Leading a moving target is still their job;
+ * the arithmetic of it is not.
  *
  * THE COURT DOES NOT SIT STILL.  Three things stack on top of the plain shot,
  * and all three are readable from the screen without being told:
@@ -45,6 +55,16 @@ const AIM_RATE = 1.3; // radians per second held
 /** The arrow: this long at zero charge, and this much longer at full. */
 const ARROW_MIN = 12;
 const ARROW_GROW = 30;
+/**
+ * The preview arc.
+ *
+ * `PREVIEW_POWER` is the shot the arc is drawn at while nobody is holding the
+ * button — a reference throw, so the aim line means something before the meter
+ * has moved.  The moment SPACE goes down the arc switches to the live charge.
+ */
+const PREVIEW_POWER = 0.55;
+const ARC_DOTS = 18;
+const ARC_STEP = 0.055;
 /** Points, not shots: a make on fire is worth two of them. */
 const TARGET_MAKES = 5;
 const ROUND_MS = 60_000;
@@ -107,6 +127,7 @@ export const hoops: MinigameModule = {
       'SCORE 5 IN 60 SECONDS.',
       'EVERY MAKE RUNS THE RIM FASTER + TIGHTER.',
       'TWO IN A ROW LIGHTS THE BALL: MAKES PAY 2.',
+      'THE DOTTED ARC IS GREEN WHEN IT GOES IN.',
     ],
     controls: [
       ['HOLD SPACE', 'CHARGE, LET GO TO SHOOT'],
@@ -184,6 +205,68 @@ export const hoops: MinigameModule = {
       charging = false;
       shoot();
     });
+
+    if (import.meta.env?.DEV) {
+      (window as unknown as Record<string, unknown>).__hoops = {
+        state: () => ({
+          makes,
+          over,
+          inFlight,
+          charging,
+          power: Number(power.toFixed(3)),
+          aim: Number(aim.toFixed(3)),
+          hoopX: Math.round(hoopX),
+          hoopW: Math.round(hoopW),
+          ball: ball ? { x: Math.round(ball.x), y: Math.round(ball.y) } : null,
+          target: TARGET_MAKES,
+        }),
+        /**
+         * What the arc is telling the player right now: where the shot would
+         * come down through the rim's height, where the rim will be when it
+         * does, and therefore which colour the dots are.
+         */
+        predict: (p = power) => {
+          const hit = crossing(p);
+          if (!hit) return { good: false, reason: 'never reaches the rim' };
+          const rim = hoopAt(hit.t);
+          return {
+            good: Math.abs(hit.x - rim) < hoopW / 2 - 2,
+            x: Math.round(hit.x),
+            t: Number(hit.t.toFixed(3)),
+            rim: Math.round(rim),
+            hoopNow: Math.round(hoopX),
+          };
+        },
+        /** Aim and charge exactly as the keys would, then let go. */
+        aimAt: (a: number) => {
+          aim = Phaser.Math.Clamp(a, AIM_MIN, AIM_MAX);
+        },
+        shootAt: (p: number) => {
+          if (inFlight || over) return false;
+          power = Phaser.Math.Clamp(p, 0, 1);
+          charging = false;
+          shoot();
+          return true;
+        },
+        /** Search the aim/power space for a shot the arc says is good. */
+        findGood: () => {
+          for (let a = AIM_MIN; a <= AIM_MAX; a += 0.01) {
+            for (let p = 0.1; p <= 1; p += 0.02) {
+              const was = aim;
+              aim = a;
+              const hit = crossing(p);
+              const ok = hit !== null && Math.abs(hit.x - hoopAt(hit.t)) < hoopW / 2 - 2;
+              aim = was;
+              if (ok) return { aim: Number(a.toFixed(3)), power: Number(p.toFixed(3)) };
+            }
+          }
+          return null;
+        },
+      };
+      scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        delete (window as unknown as Record<string, unknown>).__hoops;
+      });
+    }
   },
 
   update(_t: number, delta: number) {
@@ -309,14 +392,17 @@ export const hoops: MinigameModule = {
 };
 
 /**
- * The launch arrow.  Dim while idle, so you can see where you are pointing;
- * bright and growing while SPACE is held, so the length you release at is the
- * shot you get.  Gone while the ball is in the air.
+ * The launch arrow AND the arc it would fly.
+ *
+ * Dim while idle, so you can see where you are pointing; bright and growing
+ * while SPACE is held, so the length you release at is the shot you get.  Gone
+ * while the ball is in the air.
  */
 function drawArrow(): void {
   if (!arrow) return;
   arrow.clear();
   if (inFlight || over) return;
+  drawArc();
   const len = ARROW_MIN + (charging ? power : 0) * ARROW_GROW;
   const dx = Math.cos(aim);
   const dy = Math.sin(aim);
@@ -409,14 +495,130 @@ function drawFlames(): void {
   }
 }
 
+/** The launch speed for a given charge.  One definition, used by both the
+ * shot and the arc that predicts it — so the preview cannot drift from the
+ * thing it is previewing. */
+function launchSpeed(p: number): number {
+  return 150 + p * 300;
+}
+
+/**
+ * Where the shot would cross the rim's height ON THE WAY DOWN, and when.
+ *
+ * Straight out of the same parabola the flight integrates: solve
+ * `y0 + vy t + gt^2/2 = HOOP_Y` and take the later root, which is the
+ * descending crossing — the only one a ball can actually drop through a hoop
+ * on.  Null when the shot never gets that high, which is itself the answer.
+ */
+function crossing(p: number): { x: number; t: number } | null {
+  const speed = launchSpeed(p);
+  const vy = Math.sin(aim) * speed;
+  const vx = Math.cos(aim) * speed;
+  const a = GRAVITY / 2;
+  const c = LAUNCH.y - HOOP_Y;
+  const disc = vy * vy - 4 * a * c;
+  if (disc < 0) return null;
+  const t = (-vy + Math.sqrt(disc)) / (2 * a);
+  if (t <= 0) return null;
+  return { x: LAUNCH.x + vx * t, t };
+}
+
+/**
+ * Where the rim will be in `t` seconds.
+ *
+ * Walked forward rather than solved, because the rim turns round at the walls
+ * and a closed form for a bouncing interval is more code than the loop is.
+ */
+function hoopAt(t: number): number {
+  let x = hoopX;
+  let dir = hoopDir;
+  let left = t;
+  const dt = 1 / 60;
+  while (left > 0) {
+    const step = Math.min(dt, left);
+    x += dir * hoopSpeed * step;
+    if (x > GAME_W - 30) {
+      x = GAME_W - 30;
+      dir = -1;
+    } else if (x < 130) {
+      x = 130;
+      dir = 1;
+    }
+    left -= step;
+  }
+  return x;
+}
+
+/** Would the shot at this charge drop through the rim?  The scoring test, asked early. */
+export function wouldScore(p: number): boolean {
+  const hit = crossing(p);
+  if (!hit) return false;
+  return Math.abs(hit.x - hoopAt(hit.t)) < hoopW / 2 - 2;
+}
+
 function shoot(): void {
   if (!ball) return;
-  const speed = 150 + power * 300;
+  const speed = launchSpeed(power);
   // Exactly the direction the arrow was drawn in.
   ballVel = { x: Math.cos(aim) * speed, y: Math.sin(aim) * speed };
   inFlight = true;
   scoredThisFlight = false;
   audio.sfx('whack');
+}
+
+/**
+ * The dotted flight path, and the mark where it would fall through the rim.
+ *
+ * Dots rather than a line, because a solid parabola over a busy court reads as
+ * a piece of scenery; a dotted one reads as a prediction.  They thin out as
+ * they go, so the near end — the part the player is steering — is the loudest
+ * part of it.
+ */
+function drawArc(): void {
+  if (!arrow) return;
+  const p = charging ? power : PREVIEW_POWER;
+  const speed = launchSpeed(p);
+  const vx = Math.cos(aim) * speed;
+  const vy = Math.sin(aim) * speed;
+  const hit = crossing(p);
+  const good = hit !== null && Math.abs(hit.x - hoopAt(hit.t)) < hoopW / 2 - 2;
+  const colour = good ? PALETTE.mossLight : PALETTE.amber;
+  const alpha = charging ? 1 : 0.5;
+
+  arrow.fillStyle(colour, alpha);
+  for (let i = 1; i <= ARC_DOTS; i++) {
+    const t = i * ARC_STEP;
+    const x = LAUNCH.x + vx * t;
+    const y = LAUNCH.y + vy * t + (GRAVITY * t * t) / 2;
+    if (x > GAME_W + 4 || y > 176) break;
+    if (y < 20) continue;
+    arrow.fillCircle(x, y, i < ARC_DOTS / 2 ? 1.4 : 1);
+  }
+
+  if (!hit) return;
+
+  // WHERE THE RIM WILL BE, faint, under where the ball will come down.  The
+  // hoop slides, so the mark on its own only answers half the question — "it
+  // lands there" means nothing without "and the rim is there by then".  Drawn
+  // as a hollow bar in the rim's own width, it makes the lead the thing you
+  // are steering rather than a number you are meant to have in your head.
+  const rim = hoopAt(hit.t);
+  arrow.lineStyle(1, PALETTE.fog, alpha * 0.55);
+  arrow.strokeRect(rim - hoopW / 2, HOOP_Y - 3, hoopW, 6);
+
+  // The mark: where it would come down through the rim's height, and whether
+  // that is inside the rim.  A ring when it is, a cross when it is not.
+  arrow.lineStyle(1, colour, alpha);
+  if (good) {
+    arrow.strokeCircle(hit.x, HOOP_Y, 4);
+  } else {
+    arrow.beginPath();
+    arrow.moveTo(hit.x - 3, HOOP_Y - 3);
+    arrow.lineTo(hit.x + 3, HOOP_Y + 3);
+    arrow.moveTo(hit.x + 3, HOOP_Y - 3);
+    arrow.lineTo(hit.x - 3, HOOP_Y + 3);
+    arrow.strokePath();
+  }
 }
 
 function reset(): void {

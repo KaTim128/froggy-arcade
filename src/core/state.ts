@@ -12,7 +12,6 @@ export type GameId =
   | 'airhockey'
   | 'hoops'
   | 'whack'
-  | 'chompman'
   | 'grudge'
   | 'donkeykong'
   | 'battleship'
@@ -25,12 +24,26 @@ export type GameId =
   | 'frogvslizard'
   | 'wheel'
   | 'danceoff'
-  | 'fallingblocks';
+  | 'fallingblocks'
+  | 'pinball'
+  | 'frograce'
+  | 'poker'
+  | 'findthefrog';
+
+/**
+ * How the thumb drives Froggy on a touch screen.  A stick is quicker once you
+ * have the feel of it; a pad is what a player who grew up on a phone keyboard
+ * expects, and it is the only one of the two you can use without looking.  The
+ * setting is device-wide because the hand holding the phone does not change
+ * between profiles.  It has no effect at all on a desktop.
+ */
+export type MoveStyle = 'stick' | 'pad';
 
 export interface Settings {
   master: number; // 0..100
   music: number; // 0..100
   sfx: number; // 0..100
+  moveStyle: MoveStyle;
 }
 
 export interface GameState {
@@ -111,9 +124,10 @@ export const LEDGER_KEY: unique symbol = Symbol('ledger');
 /**
  * Name a run this and it never runs out of tokens.
  *
- * Stored as the profile name like any other and compared after cleanName, so
- * capitalisation does not matter — every name in this game is uppercased on
- * the way in.  Spacing does: "ADMIN 128" is a different name and an ordinary
+ * Stored as the profile name like any other and compared CASE-INSENSITIVELY,
+ * so "admin128" works as well as "ADMIN128" — names keep their case now, and
+ * a cheat that depended on the shift key would be a cheat nobody could type.
+ * Spacing still matters: "ADMIN 128" is a different name and an ordinary
  * run, which is deliberate, a cheat with fuzzy edges is one people trip over
  * by accident.  The ledger is what honours it (see TokenLedger.debit); this is
  * only the password.
@@ -136,7 +150,6 @@ function defaultState(): GameState {
       airhockey: 0,
       hoops: 0,
       whack: 0,
-      chompman: 0,
       grudge: 0,
       donkeykong: 0,
       battleship: 0,
@@ -150,13 +163,17 @@ function defaultState(): GameState {
       wheel: 0,
       danceoff: 0,
       fallingblocks: 0,
+      pinball: 0,
+      frograce: 0,
+      poker: 0,
+      findthefrog: 0,
     },
     highScores: {},
     route: 'normal',
     hasKey: false,
     seenIntro: false,
     hideRoom: 0,
-    settings: { master: 80, music: 70, sfx: 85 },
+    settings: { master: 80, music: 70, sfx: 85, moveStyle: 'stick' },
   };
 }
 
@@ -187,6 +204,7 @@ class Store {
           master: clamp100(prefs.master ?? fresh.settings.master),
           music: clamp100(prefs.music ?? fresh.settings.music),
           sfx: clamp100(prefs.sfx ?? fresh.settings.sfx),
+          moveStyle: prefs.moveStyle === 'pad' ? 'pad' : 'stick',
         };
       }
     } catch {
@@ -263,7 +281,7 @@ class Store {
 
   /** True when the run in play is the one that never pays for anything. */
   isAdmin(): boolean {
-    return this.activeSlotName() === ADMIN_NAME;
+    return (this.activeSlotName() ?? "").toUpperCase() === ADMIN_NAME;
   }
 
   /** Progress for the picker, read straight from storage — never made active. */
@@ -394,6 +412,7 @@ class Store {
       master: clamp100(partial.master ?? this.state.settings.master),
       music: clamp100(partial.music ?? this.state.settings.music),
       sfx: clamp100(partial.sfx ?? this.state.settings.sfx),
+      moveStyle: partial.moveStyle ?? this.state.settings.moveStyle,
     };
     this.touch();
   }
@@ -473,11 +492,18 @@ function clamp100(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
-/** The font is uppercase-friendly and the plate is narrow, so both are enforced. */
+/**
+ * Letters, digits and single spaces, up to the plate's width.
+ *
+ * CASE IS KEPT.  It used to be forced to capitals because the rest of the
+ * building shouts, but the pixel font has a full lowercase set and a player
+ * who types their own name in their own case should get it back — the plate is
+ * narrow, not shouty.  Everything else is still enforced: no punctuation, no
+ * runs of spaces, nothing longer than the plate, and never an empty name.
+ */
 export function cleanName(raw: string): string {
   const s = raw
-    .toUpperCase()
-    .replace(/[^A-Z0-9 ]/g, '')
+    .replace(/[^A-Za-z0-9 ]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, MAX_NAME_LEN);

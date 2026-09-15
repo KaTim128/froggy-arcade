@@ -74,7 +74,11 @@ const LOUNGE_BASE: RoomDef = {
   theme: 'lounge',
   halfW: 18,
   halfD: 14,
-  wallH: 3.4,
+  // 4.0 rather than a domestic 3.4: the thing hunting you in here stands 3.6m,
+  // and at the old height his head went through the ceiling standing still.
+  // A tall old lounge reads fine and leaves him just enough room to be under
+  // it rather than in it.
+  wallH: 4.0,
   floor: 0x2a2119,
   wall: 0x35291f,
   ceiling: 0x140f0b,

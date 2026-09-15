@@ -1,5 +1,5 @@
 /**
- * THE FLOOD.  Hard — 5 tokens in, 10 out.
+ * THE FLOOD.  Hard (long) — 7 tokens in, 15 out.
  *
  * A parkour shaft with the water coming up it.  There is one way out and it is
  * the hatch at the top; there is one way to lose and it is the water reaching
@@ -83,7 +83,7 @@ const WATER_START = -70;
 const WATER_V0 = 8.5;
 const WATER_ACC = 0.115;
 
-type Kind = 'static' | 'slide' | 'rise' | 'spin' | 'retract' | 'crumble';
+type Kind = 'static' | 'slide' | 'rise' | 'spin' | 'retract' | 'crumble' | 'orbit';
 
 interface Plat {
   kind: Kind;
@@ -98,8 +98,10 @@ interface Plat {
   amp: number;
   rate: number;
   phase: number;
-  /** Spin only, in radians. */
+  /** Spin and orbit only, in radians. */
   angle: number;
+  /** Orbit only: how far out from its anchor it swings. */
+  radius: number;
   /** Retract only: which wall it comes out of. */
   side: -1 | 1;
   /** Crumble only. */
@@ -162,6 +164,12 @@ function surfaceOf(p: Plat): { left: number; right: number; y: number } | null {
     const half = (p.w / 2) * flat;
     return { left: p.x - half, right: p.x + half, y: p.y };
   }
+  if (p.kind === 'orbit') {
+    // A ledge going round a post.  It is always solid — the difficulty is
+    // WHERE it is, not whether it is there — so the only question is the same
+    // one every ledge answers: how wide is it and where is it right now.
+    return { left: p.x - p.w / 2, right: p.x + p.w / 2, y: p.y };
+  }
   if (p.kind === 'retract') {
     const out = extension(p);
     if (out < 0.28) return null;
@@ -184,7 +192,7 @@ export const flood: MinigameModule = {
   title: 'THE FLOOD',
   music: 'game_flood',
   rules: 'climb out before the water gets you',
-  payoutNote: 'WIN: 10 TOKENS',
+  payoutNote: 'WIN: 15 TOKENS',
   tutorial: {
     objective: [
       'THE SHAFT IS FLOODING. CLIMB OUT OF IT.',
@@ -269,6 +277,9 @@ export const flood: MinigameModule = {
           riding: rider ? rider.kind : null,
           kinds: plats.map((p) => p.kind),
           standable: plats.filter((p) => surfaceOf(p) !== null).length,
+          /** How many layouts the route checker threw away before this one. */
+          tries: layoutTries,
+          fallback: layoutFallback,
           over,
         }),
         /** Put the frog where a test needs him, in world coordinates. */
@@ -283,19 +294,25 @@ export const flood: MinigameModule = {
         },
         jump: () => jump(),
         /**
-         * Every step of the tower, with the gap to the one below it — what the
-         * generator promised, for a test to hold it to.
+         * Every ledge in the built tower, anchor and travel both.
+         *
+         * `rise` and `gap` are to the ledge BEFORE it in the list, which is
+         * useful to read and is NOT the climb: ledges are scattered inside the
+         * jump rather than threaded one under the next, so the route is a path
+         * through the graph and not the list in order.  A harness that wants
+         * to know whether the tower goes anywhere walks it with `leap`/`span`
+         * from `reach()`, the way `routeExists` does.
          */
         ladder: () =>
           plats.map((p, i) => {
             const prev = plats[i - 1];
-            // The gap a jump has to cover, measured edge to edge and at the
-            // WORST moment: both ledges pushed as far apart as they travel.
+            // How far either side of its anchor a ledge's surface ever gets.
+            const span = (q: Plat) => q.w / 2 + q.amp + (q.kind === 'orbit' ? q.radius : 0);
             const near = (a: Plat, b: Plat) => {
-              const ar = a.ax + a.w / 2 + a.amp;
-              const al = a.ax - a.w / 2 - a.amp;
-              const br = b.ax + b.w / 2 + b.amp;
-              const bl = b.ax - b.w / 2 - b.amp;
+              const ar = a.ax + span(a);
+              const al = a.ax - span(a);
+              const br = b.ax + span(b);
+              const bl = b.ax - span(b);
               return bl > ar ? bl - ar : al > br ? al - br : 0;
             };
             return {
@@ -304,11 +321,35 @@ export const flood: MinigameModule = {
               y: Math.round(p.ay),
               w: p.w,
               amp: Math.round(p.amp),
+              radius: Math.round(p.radius),
+              // How far the surface can be from the anchor, up or down.
+              slop: Math.round(p.kind === 'rise' ? p.amp : p.kind === 'orbit' ? p.radius * 0.5 : 0),
               rise: prev ? Math.round(p.ay - prev.ay) : 0,
               gap: prev ? Math.round(near(prev, p)) : 0,
             };
           }),
-        reach: () => ({ apex: Math.round(APEX), run: Math.round(REACH) }),
+        reach: () => ({ apex: Math.round(APEX), run: Math.round(REACH), leap: Math.round(LEAP), span: Math.round(SPAN) }),
+        /**
+         * Generate and check N layouts WITHOUT building any of them, so the
+         * harness can prove the validator rejects what it should and that a
+         * valid tower is what actually gets built.
+         */
+        audit: (n: number) => {
+          let valid = 0;
+          const kinds = new Set<string>();
+          for (let i = 0; i < n; i++) {
+            const specs = generate();
+            if (routeExists(specs)) valid++;
+            for (const sp of specs) kinds.add(sp.kind);
+          }
+          return { of: n, valid, kinds: [...kinds] };
+        },
+        /** And that the checker says NO to something genuinely unclimbable. */
+        auditBroken: () =>
+          routeExists([
+            { kind: 'static', x: 160, y: 0, w: 60, amp: 0, radius: 0, side: 1 },
+            { kind: 'static', x: 160, y: 400, w: 20, amp: 0, radius: 0, side: 1 },
+          ]),
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__flood;
@@ -446,101 +487,309 @@ export const flood: MinigameModule = {
  * follow one another: a jump from a thing that is moving onto a thing that is
  * moving is not difficulty, it is a coin toss.
  */
-function buildTower(scene: Phaser.Scene): void {
-  const maxRise = APEX - 9; // 34: comfortably inside the arc
+/** A ledge before it has any art: what the generator makes and the checker reads. */
+interface Spec {
+  kind: Kind;
+  x: number;
+  y: number;
+  w: number;
+  amp: number;
+  radius: number;
+  side: -1 | 1;
+}
+
+/**
+ * What a jump is allowed to be asked to cover.
+ *
+ * `LEAP` is a shade under the real apex, so the frog is never required to
+ * graze a ledge at the exact top of his arc, and `SPAN` is the sideways half
+ * of the same thing.  Every reachability question in this file is asked
+ * against these two numbers and nothing else.
+ */
+const LEAP = APEX - 5;
+const SPAN = REACH;
+
+/** How far a ledge's surface can be from its anchor, at the worst moment. */
+function reachSpan(sp: Spec): number {
+  return sp.w / 2 + sp.amp + (sp.kind === 'orbit' ? sp.radius : 0);
+}
+
+/** The horizontal gap between two ledges AT THEIR WORST — furthest apart. */
+function worstGap(a: Spec, b: Spec): number {
+  const aL = a.x - reachSpan(a);
+  const aR = a.x + reachSpan(a);
+  const bL = b.x - reachSpan(b);
+  const bR = b.x + reachSpan(b);
+  return bL > aR ? bL - aR : aL > bR ? aL - bR : 0;
+}
+
+/** How far a ledge's surface can be from its anchor vertically, worst case. */
+function slop(sp: Spec): number {
+  return (sp.kind === 'rise' ? sp.amp : 0) + (sp.kind === 'orbit' ? sp.radius * 0.5 : 0);
+}
+
+/** The vertical gap, worst case: take-off at its lowest, landing at its highest. */
+function worstRise(a: Spec, b: Spec): number {
+  return b.y + slop(b) - (a.y - slop(a));
+}
+
+/**
+ * IS THERE A WAY UP THIS TOWER?
+ *
+ * Not "is each ledge reachable from the one below it" — that was the old rule,
+ * and it only ever allowed a single-file staircase.  This asks the real
+ * question of the whole shaft as a graph: from the kerb, which ledges can be
+ * jumped to; from those, which; and does the hatch's landing ever come up.
+ * A generator that makes a mess is allowed to, as long as SOME line through
+ * the mess goes all the way — and that is what lets the towers get hard.
+ *
+ * Every edge is measured at the WORST moment of both ledges, so a route that
+ * exists here exists whatever phase everything happens to be in.
+ */
+export function routeExists(specs: Spec[]): boolean {
+  const n = specs.length;
+  if (n < 2) return false;
+  const seen = new Array(n).fill(false);
+  const queue = [0];
+  seen[0] = true;
+  while (queue.length) {
+    const i = queue.shift() as number;
+    if (i === n - 1) return true;
+    for (let j = 0; j < n; j++) {
+      if (seen[j]) continue;
+      const rise = worstRise(specs[i], specs[j]);
+      // Up, and not further up than a jump goes.  Dropping to something lower
+      // is always allowed; it is just not how anybody gets out.
+      if (rise > LEAP || rise < -140) continue;
+      if (worstGap(specs[i], specs[j]) > SPAN) continue;
+      seen[j] = true;
+      queue.push(j);
+    }
+  }
+  return false;
+}
+
+/**
+ * Lay out a tower, at random, as hard as the height it has reached.
+ *
+ * Deliberately looser than the old chain: ledges are scattered inside the jump
+ * rather than threaded one under the next, they get smaller and more awkward
+ * the higher it goes, and above the halfway mark two moving ledges may follow
+ * one another — the single biggest difficulty lever on the table, and the
+ * reason the top third of the shaft is a different game from the bottom.
+ *
+ * Nothing here promises the result is climbable.  `routeExists` decides that,
+ * and `buildTower` throws away anything that fails.
+ */
+function generate(): Spec[] {
   const roof = GOAL_H - 14;
-  let prevKind: Kind = 'static';
+  const specs: Spec[] = [
+    // The kerb: the whole width of the shaft, so the run starts on something
+    // solid and the first jump is a jump and not a fall.
+    { kind: 'static', x: GAME_W / 2, y: 0, w: SHAFT_W, amp: 0, radius: 0, side: 1 },
+  ];
   let x = GAME_W / 2;
   let y = 0;
+  let prevKind: Kind = 'static';
 
-  // The kerb: the whole width of the shaft, at the waterline, so the run
-  // starts on something solid and the first jump is a jump and not a fall.
-  push(scene, 'static', GAME_W / 2, 0, SHAFT_W, 0, 1);
-
-  for (let i = 0; y + maxRise < roof && i < 80; i++) {
+  // Keep stacking while the hatch's landing is still out of reach of the last
+  // ledge placed — measured with that ledge's own travel, because a take-off
+  // that bobs downward spends part of the jump before the frog leaves it.  Get
+  // this wrong and the FINAL hop is the one that cannot be made, which
+  // `routeExists` then has to reject the whole tower over.
+  for (let i = 0; y + LEAP - slop(specs[specs.length - 1]) < roof && i < 90; i++) {
     const t = Phaser.Math.Clamp(y / roof, 0, 1);
-    const rise = Phaser.Math.Between(Math.round(maxRise * 0.62), Math.round(maxRise));
+    const prev = specs[specs.length - 1];
+
+    // WHAT it is comes first, because what it is decides how much of the jump
+    // it has already spent before the frog leaves the ground.
+    const moving = prevKind === 'slide' || prevKind === 'rise' || prevKind === 'spin' || prevKind === 'orbit';
+    let kind = pickKind(t, moving);
+    // Higher is narrower: a 46-pixel ledge at the bottom is a landing, a
+    // 17-pixel one at the top is a target.
+    const wide = Math.round(Phaser.Math.Linear(46, 30, t));
+    const narrow = Math.round(Phaser.Math.Linear(26, 17, t));
+    let w =
+      kind === 'spin'
+        ? Phaser.Math.Between(36, 52)
+        : Phaser.Math.Between(kind === 'crumble' ? narrow - 3 : narrow, wide);
+    let amp =
+      kind === 'slide'
+        ? Phaser.Math.Between(16, 26 + Math.round(t * 18))
+        : kind === 'rise'
+          ? Phaser.Math.Between(10, 16 + Math.round(t * 12))
+          : 0;
+    let radius = kind === 'orbit' ? Phaser.Math.Between(16, 22 + Math.round(t * 12)) : 0;
+
+    // THE RISE IS WHAT IS LEFT OF THE JUMP.  A ledge that bobs and a take-off
+    // that bobs each eat into the height a jump can still cover, so the gap is
+    // budgeted from what remains rather than picked and hoped about — which is
+    // exactly the bug the route checker caught when it was picked first.
+    const here: Spec = { kind, x, y, w, amp, radius, side: 1 };
+    let budget = LEAP - slop(prev) - slop(here);
+    if (budget < 10) {
+      // Two bobbing ledges in a row with no height left between them: this one
+      // stands still instead, which is the only honest way to keep the climb.
+      kind = 'static';
+      amp = 0;
+      radius = 0;
+      w = Phaser.Math.Between(narrow, wide);
+      here.kind = kind;
+      here.amp = 0;
+      here.radius = 0;
+      here.w = w;
+      budget = LEAP - slop(prev);
+    }
+    const rise = Phaser.Math.Between(Math.round(budget * 0.62), Math.round(budget));
     y += rise;
+    here.y = y;
 
-    const moving = prevKind === 'slide' || prevKind === 'rise' || prevKind === 'spin';
-    const kind = pickKind(t, moving);
-    const w = kind === 'spin' ? Phaser.Math.Between(40, 56) : Phaser.Math.Between(kind === 'crumble' ? 22 : 26, 46);
-    // How far this ledge can wander from its anchor, and therefore how much of
-    // the jump's reach it has already spent before the frog even leaves.
-    const amp = kind === 'slide' ? Phaser.Math.Between(14, 34) : kind === 'rise' ? Phaser.Math.Between(10, 20) : 0;
-    const spend = kind === 'slide' ? amp : 0;
-    const room = Math.max(14, REACH - spend - w * 0.2);
+    // AND THE SIDEWAYS ROOM IS WHAT THE TWO LEDGES BETWEEN THEM REACH.  The
+    // gap a jump has to cover is measured edge to edge, so two wide ledges may
+    // stand much further apart by their middles than two narrow ones.
+    const room = Math.max(12, SPAN + reachSpan(prev) + reachSpan(here) - 6);
 
-    let nx: number;
     if (kind === 'retract') {
-      // An arm out of a wall.  Only its TIP is reachable, and the tip is set
-      // by how long the arm is — so the arm is grown until the tip is inside
-      // the jump, rather than the ledge being placed and hoped about.  If even
-      // a full-length arm cannot be reached from here, it does not get built.
-      const prev = plats[plats.length - 1];
-      const prevL = prev.ax - prev.w / 2 - prev.amp;
-      const prevR = prev.ax + prev.w / 2 + prev.amp;
+      const span = reachSpan(prev);
       const side: -1 | 1 = x < GAME_W / 2 ? -1 : 1;
-      const need = side < 0 ? prevL - REACH - SHAFT_L : SHAFT_R - prevR - REACH;
+      const need = side < 0 ? prev.x - span - SPAN - SHAFT_L : SHAFT_R - (prev.x + span) - SPAN;
       const maxArm = SHAFT_W * 0.62;
       if (need > maxArm) {
-        // Out of reach from this wall at any length: a plain ledge instead.
-        const lo = Math.max(SHAFT_L + w / 2, x - REACH);
-        const hi = Math.min(SHAFT_R - w / 2, x + REACH);
-        nx = lo >= hi ? Phaser.Math.Clamp(x, SHAFT_L + w / 2, SHAFT_R - w / 2) : Phaser.Math.Between(lo, hi);
-        push(scene, 'static', nx, y, w, 0, 1);
+        const nx = Phaser.Math.Clamp(
+          Phaser.Math.Between(Math.round(x - room), Math.round(x + room)),
+          SHAFT_L + w / 2,
+          SHAFT_R - w / 2,
+        );
+        specs.push({ kind: 'static', x: nx, y, w, amp: 0, radius: 0, side: 1 });
         x = nx;
         prevKind = 'static';
         continue;
       }
       const arm = Phaser.Math.Clamp(Math.max(w, Math.ceil(need) + 6), 26, maxArm);
-      nx = side < 0 ? SHAFT_L + arm / 2 : SHAFT_R - arm / 2;
-      push(scene, kind, nx, y, arm, 0, side);
-    } else {
-      const lo = Math.max(SHAFT_L + w / 2 + amp, x - room);
-      const hi = Math.min(SHAFT_R - w / 2 - amp, x + room);
-      nx = lo >= hi ? Phaser.Math.Clamp(x, SHAFT_L + w / 2 + amp, SHAFT_R - w / 2 - amp) : Phaser.Math.Between(lo, hi);
-      push(scene, kind, nx, y, w, amp, 1);
+      const nx = side < 0 ? SHAFT_L + arm / 2 : SHAFT_R - arm / 2;
+      specs.push({ kind, x: nx, y, w: arm, amp: 0, radius: 0, side });
+      x = nx;
+      prevKind = kind;
+      continue;
     }
+
+    const half = w / 2 + amp + radius;
+    const loX = Math.max(SHAFT_L + half, x - room);
+    const hiX = Math.min(SHAFT_R - half, x + room);
+    const nx =
+      loX >= hiX ? Phaser.Math.Clamp(x, SHAFT_L + half, SHAFT_R - half) : Phaser.Math.Between(loX, hiX);
+    specs.push({ kind, x: nx, y, w, amp, radius, side: 1 });
     x = nx;
     prevKind = kind;
   }
 
-  // The hatch, one legal jump above the last ledge, with a landing under it
-  // you cannot miss: static, wide, and directly over where you took off from.
-  const top = plats[plats.length - 1];
-  push(scene, 'static', Phaser.Math.Clamp(top.ax, SHAFT_L + 28, SHAFT_R - 28), roof, 54, 0, 1);
-  hatchGlow = scene.add.rectangle(top.ax, 0, 30, 26, PALETTE.gold).setDepth(19).setAlpha(0.18);
-  hatch = scene.add.rectangle(top.ax, 0, 22, 20, 0x2b1c10).setDepth(20).setStrokeStyle(2, PALETTE.gold);
+  // The hatch's landing, one legal jump above the last ledge: static, wide and
+  // over where you took off from, because the last thing this game should take
+  // from you is the run you just made.
+  const top = specs[specs.length - 1];
+  specs.push({
+    kind: 'static',
+    x: Phaser.Math.Clamp(top.x, SHAFT_L + 28, SHAFT_R - 28),
+    y: roof,
+    w: 54,
+    amp: 0,
+    radius: 0,
+    side: 1,
+  });
+  return specs;
+}
+
+/** Tries before the generator is told to stop being clever.  See below. */
+const LAYOUT_TRIES = 40;
+/** What the last build actually cost, for the harness and the dev bridge. */
+let layoutTries = 0;
+let layoutFallback = false;
+
+/**
+ * Build a tower that can actually be climbed.
+ *
+ * Generate, CHECK, and throw it away if the check fails — up to forty times.
+ * If forty in a row somehow failed, the last resort is a deliberately tame
+ * layout: a plain staircase of static ledges built to a rule that cannot fail.
+ * Shipping an unwinnable shaft to somebody who has just paid seven tokens is
+ * not an option.  Shipping a dull one, once in a blue moon, is.
+ */
+function buildTower(scene: Phaser.Scene): void {
+  layoutFallback = false;
+  for (let attempt = 1; attempt <= LAYOUT_TRIES; attempt++) {
+    const specs = generate();
+    if (routeExists(specs)) {
+      layoutTries = attempt;
+      paint(scene, specs);
+      return;
+    }
+  }
+  layoutTries = LAYOUT_TRIES;
+  layoutFallback = true;
+  paint(scene, staircase());
+}
+
+/** The last resort: a plain, wide, boring staircase.  It always goes up. */
+function staircase(): Spec[] {
+  const roof = GOAL_H - 14;
+  const specs: Spec[] = [{ kind: 'static', x: GAME_W / 2, y: 0, w: SHAFT_W, amp: 0, radius: 0, side: 1 }];
+  let y = 0;
+  let x = GAME_W / 2;
+  let dir: 1 | -1 = 1;
+  while (y + LEAP < roof) {
+    y += Math.round(LEAP * 0.7);
+    const nx = Phaser.Math.Clamp(x + dir * 40, SHAFT_L + 24, SHAFT_R - 24);
+    if (nx === x) dir = (dir === 1 ? -1 : 1) as 1 | -1;
+    x = Phaser.Math.Clamp(x + dir * 40, SHAFT_L + 24, SHAFT_R - 24);
+    specs.push({ kind: 'static', x, y, w: 44, amp: 0, radius: 0, side: 1 });
+  }
+  specs.push({ kind: 'static', x, y: roof, w: 54, amp: 0, radius: 0, side: 1 });
+  return specs;
+}
+
+function paint(scene: Phaser.Scene, specs: Spec[]): void {
+  for (const sp of specs) push(scene, sp.kind, sp.x, sp.y, sp.w, sp.amp, sp.side, sp.radius);
+  const top = specs[specs.length - 1];
+  hatchGlow = scene.add.rectangle(top.x, 0, 30, 26, PALETTE.gold).setDepth(19).setAlpha(0.18);
+  hatch = scene.add.rectangle(top.x, 0, 22, 20, 0x2b1c10).setDepth(20).setStrokeStyle(2, PALETTE.gold);
   scene.tweens.add({ targets: hatchGlow, alpha: 0.4, duration: 700, yoyo: true, repeat: -1 });
 }
 
-/** The bag of ledge kinds, getting nastier the higher the tower goes. */
+/**
+ * The bag, getting nastier the higher the tower goes.
+ *
+ * The bottom third teaches — mostly plain ledges with one thing moving — and
+ * the top third tests: small, crumbling, turning, orbiting, and above the
+ * halfway mark two moving ledges may follow one another, which is the jump
+ * this game is really about.
+ */
 function pickKind(t: number, afterMover: boolean): Kind {
   const bag: Kind[] = ['static', 'static'];
-  if (t > 0.1) bag.push('slide');
-  if (t > 0.2) bag.push('crumble');
-  if (t > 0.3) bag.push('retract', 'rise');
-  if (t > 0.45) bag.push('spin', 'slide');
-  if (t > 0.65) bag.push('spin', 'crumble', 'retract');
+  if (t > 0.08) bag.push('slide');
+  if (t > 0.16) bag.push('crumble');
+  if (t > 0.24) bag.push('retract', 'rise');
+  if (t > 0.34) bag.push('spin', 'slide', 'orbit');
+  if (t > 0.52) bag.push('spin', 'crumble', 'orbit', 'retract');
+  if (t > 0.7) bag.push('crumble', 'orbit', 'slide', 'spin');
   const pick = bag[Phaser.Math.Between(0, bag.length - 1)];
-  // Never two movers in a row: a moving take-off onto a moving landing is a
-  // coin toss, not a jump.
-  if (afterMover && (pick === 'slide' || pick === 'rise' || pick === 'spin')) return 'static';
+  const mover = pick === 'slide' || pick === 'rise' || pick === 'spin' || pick === 'orbit';
+  // Below the halfway mark a moving take-off onto a moving landing is a coin
+  // toss.  Above it, it is the game.
+  if (afterMover && mover && t < 0.5) return 'static';
   return pick;
 }
 
-function push(scene: Phaser.Scene, kind: Kind, x: number, y: number, w: number, amp: number, side: -1 | 1): void {
-  const colour =
-    kind === 'crumble'
-      ? PALETTE.rust
-      : kind === 'spin'
-        ? PALETTE.violet
-        : kind === 'retract'
-          ? PALETTE.steel
-          : kind === 'static'
-            ? PALETTE.brown
-            : PALETTE.tealDark;
+function push(
+  scene: Phaser.Scene,
+  kind: Kind,
+  x: number,
+  y: number,
+  w: number,
+  amp: number,
+  side: -1 | 1,
+  radius = 0,
+): void {
+  const colour = KIND_COLOUR[kind];
   const art = scene.add.rectangle(x, 0, w, 6, colour).setDepth(12);
   const lip = scene.add.rectangle(x, 0, w, 2, PALETTE.bone).setDepth(13).setAlpha(0.55);
   plats.push({
@@ -553,7 +802,8 @@ function push(scene: Phaser.Scene, kind: Kind, x: number, y: number, w: number, 
     amp,
     rate: Phaser.Math.FloatBetween(0.7, 1.5),
     phase: Phaser.Math.FloatBetween(0, Math.PI * 2),
-    angle: Phaser.Math.FloatBetween(0, Math.PI),
+    angle: Phaser.Math.FloatBetween(0, Math.PI * 2),
+    radius,
     side,
     state: 'solid',
     timer: 0,
@@ -573,6 +823,11 @@ function tickPlat(p: Plat, dt: number): void {
       break;
     case 'spin':
       p.angle += p.rate * 1.1 * dt;
+      break;
+    case 'orbit':
+      p.angle += p.rate * 0.8 * dt;
+      p.x = p.ax + Math.cos(p.angle) * p.radius;
+      p.y = p.ay + Math.sin(p.angle) * p.radius * 0.5;
       break;
     case 'retract': {
       const len = p.w * extension(p);
@@ -710,19 +965,25 @@ function draw(): void {
   }
 }
 
+/**
+ * One colour per kind, in one place.
+ *
+ * A player learns this table in the first ten seconds and then reads the whole
+ * shaft with it: brown holds, teal moves, purple turns, pink goes round, grey
+ * comes out of the wall, rust is about to go.
+ */
+const KIND_COLOUR: Record<Kind, number> = {
+  static: PALETTE.brown,
+  slide: PALETTE.tealDark,
+  rise: PALETTE.tealDark,
+  spin: PALETTE.violet,
+  orbit: PALETTE.neon,
+  retract: PALETTE.steel,
+  crumble: PALETTE.rust,
+};
+
 function platColour(p: Plat): number {
-  switch (p.kind) {
-    case 'crumble':
-      return PALETTE.rust;
-    case 'spin':
-      return PALETTE.violet;
-    case 'retract':
-      return PALETTE.steel;
-    case 'static':
-      return PALETTE.brown;
-    default:
-      return PALETTE.tealDark;
-  }
+  return KIND_COLOUR[p.kind];
 }
 
 function refreshHud(): void {

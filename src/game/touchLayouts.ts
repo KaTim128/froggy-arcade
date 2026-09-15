@@ -49,7 +49,17 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   StartScreen: BARE,
   ProfileModal: BARE,
   SettingsModal: TAP,
-  IntroCutscene: { noQuit: true, buttons: [{ label: 'NEXT', key: 'SPACE', primary: true }] },
+  // SKIP sends the same Esc the desktop hint names, and it lives in the band
+  // under the picture, so it cannot land on the dialogue it is offering to
+  // skip.  It goes the moment the intro hands over to the street, because the
+  // layout goes with the scene.
+  IntroCutscene: {
+    noQuit: true,
+    buttons: [
+      { label: 'NEXT', key: 'SPACE', primary: true },
+      { label: 'SKIP', key: 'ESC' },
+    ],
+  },
 
   ArcadeHub: ROOM,
   ArcadeAnnex: ROOM,

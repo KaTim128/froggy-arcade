@@ -34,7 +34,10 @@ const GAMES = [
   { id: 'fallingblocks', drive: async (p) => { for (let i = 0; i < 8; i++) { await p.keyboard.press('Space'); await sleep(180); await p.keyboard.down('KeyD'); await sleep(160); await p.keyboard.up('KeyD'); } } },
   { id: 'hoops', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.down('Space'); await sleep(500); await p.keyboard.up('Space'); await sleep(1400); } } },
   { id: 'whack', drive: async (p) => { for (let i = 0; i < 14; i++) { await p.mouse.click(400 + (i % 3) * 240, 250 + Math.floor(i / 3) * 168); await sleep(180); } await sleep(600); } },
-  { id: 'chompman', drive: async (p) => { for (const k of ['ArrowUp', 'ArrowLeft', 'ArrowUp', 'ArrowRight']) { await p.keyboard.press(k); await sleep(900); } } },
+  { id: 'pinball', drive: async (p) => { await p.keyboard.down('Space'); await sleep(400); await p.keyboard.up('Space'); for (let i = 0; i < 6; i++) { await p.keyboard.press('KeyA'); await sleep(200); await p.keyboard.press('KeyD'); await sleep(200); } } },
+  { id: 'frograce', drive: async (p) => { await p.keyboard.press('Digit3'); await sleep(300); await p.keyboard.press('Space'); await sleep(2400); } },
+  { id: 'poker', drive: async (p) => { for (let i = 0; i < 4; i++) { await p.keyboard.press('KeyC'); await sleep(900); } } },
+  { id: 'findthefrog', drive: async (p) => { await p.evaluate(() => window.__find?.tapFrog()); await sleep(600); await p.evaluate(() => window.__find?.tapFrog()); await sleep(600); } },
   { id: 'grudge', drive: async (p) => { await sleep(1600); for (let i = 0; i < 6; i++) { await p.keyboard.press('KeyD'); await p.keyboard.press('KeyJ'); await sleep(400); } } },
   { id: 'donkeykong', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(2500); await p.keyboard.up('KeyD'); await p.keyboard.press('Space'); await sleep(600); await p.keyboard.down('KeyW'); await sleep(900); await p.keyboard.up('KeyW'); } },
   { id: 'slots', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.press('Space'); await sleep(2700); } } },
@@ -70,6 +73,33 @@ const startGame = async (page) => {
     await page.keyboard.press('Space');
     await sleep(500);
   }
+};
+
+/**
+ * Wait for a cabinet's dev bridge to appear.
+ *
+ * `startGame` presses PLAY; the game's `create()` runs on the next frame and
+ * hangs the bridge off `window` at the end of it.  On a loaded machine that
+ * can take several frames, and a fixed sleep afterwards is a race the harness
+ * loses as a crash rather than as a failed check — which tells you nothing
+ * about the game.  Returns false if it never turned up, so a caller can say so.
+ */
+const bridge = async (page, name, tries = 24) => {
+  for (let i = 0; i < tries; i++) {
+    if (await page.evaluate((n) => !!window[n], name)) return true;
+    await sleep(250);
+  }
+  return false;
+};
+
+/** Wait for a scene to be running (or to have gone), rather than guessing. */
+const sceneUp = async (page, key, want = true, tries = 32) => {
+  for (let i = 0; i < tries; i++) {
+    const on = await page.evaluate((k) => window.__froggy.activeScenes().includes(k), key);
+    if (on === want) return true;
+    await sleep(250);
+  }
+  return false;
 };
 
 /**
@@ -164,173 +194,184 @@ for (const g of GAMES) {
 
 console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit cleanly.` : `\n${failures} game(s) failed.`);
 
-// "Launches and quits cleanly" passed for months on a Chomp-Man where nothing
-// moved at all: the grid step was smaller than the centre-snap band at 60fps,
-// so player and ghosts were pinned to their spawn tiles.  Movement is the game,
-// so assert it moves.
+// HOOPS now shows the shot before it is taken, and the whole point of that is
+// that the arc TELLS THE TRUTH.  Not "an arc is drawn" — that a shot the arc
+// calls good actually goes in, and that the prediction leads the moving rim
+// rather than aiming at where it currently is.
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
-  await page.goto(`${URL}/?intro=1&tokens=50&game=chompman`, { waitUntil: 'networkidle2' });
-  await sleep(1500);
+  await page.goto(`${URL}/?intro=1&tokens=50&game=hoops`, { waitUntil: 'networkidle2' });
+  await sleep(1700);
   await startGame(page);
-  await sleep(1500);
-  await page.mouse.click(640, 60); // focus the canvas, in the title bar
+  await bridge(page, '__hoops');
 
-  const snap = () =>
-    page.evaluate(() => {
-      const s = window.__froggy.game().scene.getScene('Minigame');
-      let player = null;
-      const ghosts = [];
-      s.children.list.forEach((o) => {
-        if (o.type === 'Arc' && o.radius > 3) player = [Math.round(o.x), Math.round(o.y)];
-        if (o.type === 'Container' && o.y > 20) ghosts.push([Math.round(o.x), Math.round(o.y)]);
-      });
-      return { player, ghosts };
-    });
+  // The rim moves, so the prediction has to say where it WILL be.
+  const lead = await page.evaluate(() => window.__hoops.predict(0.8));
+  const leads = lead.rim !== undefined && lead.t > 0;
+  console.log(
+    `${leads ? 'PASS' : 'FAIL'}  hoops: the arc leads the moving rim  — ` +
+      `lands x${lead.x} at ${lead.t}s, rim ${lead.hoopNow} -> ${lead.rim}`,
+  );
+  if (!leads) failures++;
 
-  const a = await snap();
-  await page.keyboard.down('ArrowUp');
-  await sleep(900);
-  await page.keyboard.up('ArrowUp');
-  const b = await snap();
-
-  const moved = (p, q) => p[0] !== q[0] || p[1] !== q[1];
-  const playerMoved = moved(a.player, b.player);
-  const ghostsMoved = a.ghosts.some((g, i) => moved(g, b.ghosts[i]));
-
-  console.log(`${playerMoved ? 'PASS' : 'FAIL'}  chomp-man's player moves  — ${a.player} -> ${b.player}`);
-  console.log(`${ghostsMoved ? 'PASS' : 'FAIL'}  chomp-man's ghosts move   — ${a.ghosts[0]} -> ${b.ghosts[0]}`);
-  if (!playerMoved || !ghostsMoved) failures++;
-
-  // ---- the maze is the game, so it is checked as data rather than admired in
-  // a screenshot: every pellet has to be reachable from where the player
-  // starts (one walled-off pellet makes the cabinet unwinnable and nothing on
-  // screen would say so), and it has to be a lattice rather than a set of
-  // corridors — a player who cannot turn off and come back round cannot
-  // outmanoeuvre anything.
-  const maze = await page.evaluate(() => window.__chomp.maze());
-  const w = maze[0].length;
-  const h = maze.length;
-  const at = (c, r) => (c < 0 || r < 0 || c >= w || r >= h ? '#' : maze[r][c]);
-  const open = (c, r) => at(c, r) !== '#' && at(c, r) !== '-';
-  let start = null;
-  const pellets = [];
-  for (let r = 0; r < h; r++) {
-    for (let c = 0; c < w; c++) {
-      if (at(c, r) === 'P') start = [c, r];
-      if (at(c, r) === '.' || at(c, r) === 'o') pellets.push(`${c},${r}`);
+  // And a shot it calls good is a shot that scores.  Three of them, because
+  // one could be luck and the claim is that the arithmetic is right.
+  let honest = 0;
+  let tried = 0;
+  const live = () => page.evaluate(() => window.__hoops?.state() ?? null);
+  for (let i = 0; i < 3; i++) {
+    // The round is sixty seconds and three of these plus the checks above can
+    // run it out.  A finished round is not a failed shot: start a fresh one
+    // and take the attempt there, so all three are real attempts.
+    let now = await live();
+    if (!now || now.over) {
+      await page.goto(`${URL}/?intro=1&tokens=50&game=hoops`, { waitUntil: 'networkidle2' });
+      await sleep(1600);
+      await startGame(page);
+      await sleep(900);
+      now = await live();
+      if (!now) break;
     }
+    const good = await page.evaluate(() => window.__hoops?.findGood() ?? null);
+    if (!good) break;
+    tried += 1;
+    const before = now.makes;
+    await page.evaluate((g) => {
+      window.__hoops.aimAt(g.aim);
+      return window.__hoops.shootAt(g.power);
+    }, good);
+    await sleep(2400);
+    const after = await live();
+    if (after && after.makes > before) honest += 1;
   }
-  const seen = new Set();
-  const stack = [start];
-  while (stack.length) {
-    const [c, r] = stack.pop();
-    const k = `${c},${r}`;
-    if (seen.has(k) || !open(c, r)) continue;
-    seen.add(k);
-    stack.push([c + 1, r], [c - 1, r], [c, r + 1], [c, r - 1]);
-  }
-  const stranded = pellets.filter((p) => !seen.has(p));
   console.log(
-    `${stranded.length === 0 ? 'PASS' : 'FAIL'}  chomp-man: every pellet is reachable  — ${pellets.length} pellets, ${stranded.length} walled off`,
+    `${honest >= 2 ? 'PASS' : 'FAIL'}  hoops: a shot the arc calls good goes in  — ${honest}/${tried} scored`,
   );
-  if (stranded.length) failures++;
+  if (honest < 2) failures++;
+  await page.close();
+}
 
-  // A junction is a tile with three or more ways out of it, a dead end has
-  // one, and the number that actually decides whether you can shake a ghost is
-  // the number of independent LOOPS — edges minus tiles plus one, which is the
-  // count of ways round.  The board this replaced had 16 of them, 30 junctions
-  // and 6 dead ends; a corridor maze would have almost none.
-  let junctions = 0;
-  let deadEnds = 0;
-  let edges = 0;
-  for (const k of seen) {
-    const [c, r] = k.split(',').map(Number);
-    const ways = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dc, dr]) => open(c + dc, r + dr)).length;
-    if (ways >= 3) junctions++;
-    if (ways === 1) deadEnds++;
-    if (seen.has(`${c + 1},${r}`)) edges++;
-    if (seen.has(`${c},${r + 1}`)) edges++;
-  }
-  const loops = edges - seen.size + 1;
-  const loopy = loops >= 24 && junctions >= 40 && deadEnds === 0;
-  console.log(
-    `${loopy ? 'PASS' : 'FAIL'}  chomp-man: the maze is a lattice, not a corridor  — ` +
-      `${loops} ways round, ${junctions} junctions, ${deadEnds} dead ends`,
-  );
-  if (!loopy) failures++;
-
-  // ---- the box.  They start in it, they are let out one at a time, and the
-  // door is a wall as far as the maze is concerned.
-  await page.goto(`${URL}/?intro=1&tokens=50&game=chompman`, { waitUntil: 'networkidle2' });
-  await sleep(1500);
+// FIND THE FROG is one puzzle repeated five times, so the two things that must
+// hold are that there is exactly ONE frog in the tank and that a wrong tap is
+// a cost rather than a loss.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=findthefrog`, { waitUntil: 'networkidle2' });
+  await sleep(1700);
   await startGame(page);
+  await bridge(page, '__find');
+  const st = () => page.evaluate(() => window.__find.state());
+
+  // One frog, and a crowd of things that are not it.
+  const a = await st();
+  const alone = a.frogs === 1 && a.critters > 10;
+  console.log(`${alone ? 'PASS' : 'FAIL'}  find the frog: one frog in a crowd  — ${a.frogs} of ${a.critters}`);
+  if (!alone) failures++;
+
+  // Tapping it counts, and restocks the tank with MORE things than before.
+  await page.evaluate(() => window.__find.tapFrog());
+  await sleep(500);
+  const b = await st();
+  const counted = b.finds === 1 && b.critters > a.critters && b.frogs === 1;
+  console.log(
+    `${counted ? 'PASS' : 'FAIL'}  find the frog: finding it counts and the tank fills up  — ` +
+      `${a.finds}->${b.finds} finds, ${a.critters}->${b.critters} in the tank`,
+  );
+  if (!counted) failures++;
+
+  // And tapping the wrong thing costs seconds, not the round.
+  const before = (await st()).left;
+  await page.evaluate(() => {
+    const d = window.__find.state().decoy;
+    if (d) window.__find.tap(d.x, d.y);
+  });
   await sleep(250);
-  const opening = await page.evaluate(() => window.__chomp.state());
-  const house = await page.evaluate(() => window.__chomp.house());
-  const penned = opening.ghosts.every((g) => g.state === 'house');
-  const staggered = opening.ghosts.filter((g) => g.wait > 0).length >= 3;
-  const door = maze[house.top][house.doorCol] === '-';
-  const boxed = penned && staggered && door;
+  const after = await st();
+  const survived = !after.over && after.lives === 3 && after.left < before;
   console.log(
-    `${boxed ? 'PASS' : 'FAIL'}  chomp-man: they start in a box with one door  — ` +
-      `${opening.ghosts.map((g) => g.state).join(',')}, waits ${opening.ghosts.map((g) => Math.round(g.wait / 100) / 10).join('/')}s`,
+    `${survived ? 'PASS' : 'FAIL'}  find the frog: a wrong tap costs time, not the run  — ` +
+      `${before}s -> ${after.left}s, ${after.lives} lives, over=${after.over}`,
   );
-  if (!boxed) failures++;
+  if (!survived) failures++;
+  await page.close();
+}
 
-  // ---- eaten is ten seconds off the board, not a lap of the maze.  Clear the
-  // whole board — which is what a power pellet can do — so the ten seconds can
-  // be watched without a hunter arriving mid-measurement, and so the thing the
-  // rule is FOR is what gets asserted: a cleared board stays cleared, and the
-  // player is still alive at the end of it.  Early, before the hunter has
-  // crossed the board: a life lost mid-measurement puts everyone back in the
-  // box on its own clock and there is nothing left to measure.
-  await sleep(1200);
-  await page.evaluate(() => [0, 1, 2, 3].forEach((i) => window.__chomp.eat(i)));
-  await sleep(300);
-  const justEaten = await page.evaluate(() => window.__chomp.state());
-  await sleep(4000);
-  const stillGone = await page.evaluate(() => window.__chomp.state());
-  await sleep(6500);
-  const back = await page.evaluate(() => window.__chomp.state());
-  const served =
-    justEaten.ghosts.every((g) => g.state === 'eaten' && g.wait > 9000) &&
-    stillGone.ghosts.every((g) => g.state === 'eaten') &&
-    back.ghosts[0].state !== 'eaten' &&
-    back.lives === 3;
-  console.log(
-    `${served ? 'PASS' : 'FAIL'}  chomp-man: an eaten ghost is gone for ten seconds  — ` +
-      `${Math.round(justEaten.ghosts[0].wait / 100) / 10}s -> at 4s ${stillGone.ghosts.map((g) => g.state[0]).join('')} -> at 11s ${back.ghosts.map((g) => g.state[0]).join('')}`,
-  );
-  if (!served) failures++;
-
-  // ---- and when they are out they still come for you.  A fresh board, so the
-  // twenty-second scatter phase is nowhere near: let all four out, stand
-  // perfectly still, and the hunter has to arrive.  A ghost that wanders is a
-  // ghost the player never has to think about.
-  await page.goto(`${URL}/?intro=1&tokens=50&game=chompman`, { waitUntil: 'networkidle2' });
-  await sleep(1500);
+// TEXAS POKER lives or dies on its hand evaluator, so it is checked against
+// hands whose order is not a matter of opinion.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=poker`, { waitUntil: 'networkidle2' });
+  await sleep(1700);
   await startGame(page);
-  await page.evaluate(() => window.__chomp.release());
-  const gap = (s2) => {
-    const g = s2.ghosts.find((x) => x.kind === 'direct');
-    return Math.abs(g.col - s2.player.col) + Math.abs(g.row - s2.player.row);
-  };
-  let closest = 99;
-  let caught = false;
-  for (let t = 0; t < 24; t++) {
-    await sleep(300);
-    const now = await page.evaluate(() => window.__chomp.state());
-    closest = Math.min(closest, gap(now));
-    if (now.lives < 3 || now.over) {
-      caught = true;
-      break;
-    }
-  }
-  const hunting = caught || closest <= 1;
-  console.log(`${hunting ? 'PASS' : 'FAIL'}  chomp-man: the hunter still comes for you  — ${caught ? 'it caught a sitting player' : `closest ${closest} tiles`}`);
-  if (!hunting) failures++;
+  await bridge(page, '__poker');
+
+  const ranked = await page.evaluate(() => {
+    const r = (cards) => window.__poker.rank(cards);
+    return {
+      // Strictly increasing, or the evaluator has its categories out of order.
+      ladder: [
+        r(['2C', '7D', '9H', 'JS', 'KC']), // high card
+        r(['2C', '2D', '9H', 'JS', 'KC']), // a pair
+        r(['2C', '2D', '9H', '9S', 'KC']), // two pair
+        r(['2C', '2D', '2H', '9S', 'KC']), // trips
+        r(['3C', '4D', '5H', '6S', '7C']), // straight
+        r(['2C', '5C', '9C', 'JC', 'KC']), // flush
+        r(['2C', '2D', '2H', '9S', '9C']), // full house
+        r(['2C', '2D', '2H', '2S', '9C']), // quads
+        r(['3C', '4C', '5C', '6C', '7C']), // straight flush
+      ],
+      // The wheel is a straight and the ace plays low in it.
+      wheel: r(['AC', '2D', '3H', '4S', '5C']) > r(['AC', 'KD', 'QH', 'JS', '9C']),
+      // Seven cards: the best five are found, not the first five.
+      seven: r(['AC', 'AD', 'KH', 'KS', '2C', '2D', '2H']) > r(['AC', 'AD', 'KH', 'KS', 'QC', '9D', '3H']),
+      // And a better kicker wins with the same pair.
+      kicker: r(['AC', 'AD', 'KH', '9S', '3C']) > r(['AC', 'AD', 'QH', '9S', '3C']),
+    };
+  });
+  const ordered = ranked.ladder.every((v, i) => i === 0 || v > ranked.ladder[i - 1]);
+  const ok = ordered && ranked.wheel && ranked.seven && ranked.kicker;
+  console.log(
+    `${ok ? 'PASS' : 'FAIL'}  poker: the evaluator ranks hands correctly  — ` +
+      `ladder ${ordered ? 'ordered' : 'OUT OF ORDER'}, wheel ${ranked.wheel}, 7-card ${ranked.seven}, kicker ${ranked.kicker}`,
+  );
+  if (!ok) failures++;
+
+  // Five opponents, five different styles, and the table actually deals.
+  const table = await page.evaluate(() => window.__poker.state());
+  const dealt = table.hole.length === 2 && table.seats.length === 6;
+  const styles = new Set(table.seats.map((x) => x.style).filter(Boolean));
+  console.log(
+    `${dealt && styles.size === 5 ? 'PASS' : 'FAIL'}  poker: six seats, two cards, five styles  — ` +
+      `${table.seats.length} seats, hole ${table.hole.join(' ')}, styles ${[...styles].join('/')}`,
+  );
+  if (!dealt || styles.size !== 5) failures++;
+  await page.close();
+}
+
+// FROG RACE is a betting game, so the thing that matters is that the form is
+// REAL: the favourite has to win far more often than a seventh of the time,
+// and far less often than always.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=frograce`, { waitUntil: 'networkidle2' });
+  await sleep(1700);
+  await startGame(page);
+  await bridge(page, '__race');
+
+  const s = await page.evaluate(() => window.__race.sample(600));
+  const fav = s.favourite;
+  // Every colour wins sometimes: no frog on this machine is a dud or a lock.
+  const spread = s.wins.filter((n) => n > 0).length;
+  const fair = fav > 0.28 && fav < 0.62 && spread === 7;
+  console.log(
+    `${fair ? 'PASS' : 'FAIL'}  frog race: the favourite wins often, not always  — ` +
+      `${(fav * 100).toFixed(0)}% of 600, ${spread}/7 colours won at least one`,
+  );
+  if (!fair) failures++;
   await page.close();
 }
 
@@ -349,7 +390,7 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   await page.goto(`${URL}/?intro=1&tokens=50&game=donkeykong`, { waitUntil: 'networkidle2' });
   await sleep(1400);
   await startGame(page);
-  await sleep(1200);
+  await bridge(page, '__dk');
   await page.mouse.click(640, 60);
 
   const read = () =>
@@ -460,7 +501,7 @@ for (const g of [
   await page.goto(`${URL}/?intro=1&tokens=50&game=${g.id}`, { waitUntil: 'networkidle2' });
   await sleep(1400);
   await startGame(page);
-  await sleep(900);
+  await bridge(page, g.hook);
   await page.mouse.click(640, 60);
   const before = await page.evaluate(() => window.__froggy.state().tokens);
   await page.evaluate((h, s, n) => window[h][s](n), g.hook, g.set, g.score);
@@ -493,11 +534,16 @@ for (const g of [
 
   for (const [room, cx, cy] of cases) {
     await page.goto(`${URL}/?intro=1&tokens=40&scene=${room}`, { waitUntil: 'networkidle2' });
-    await sleep(2600);
+    await sceneUp(page, room);
+    await sleep(1200); // the walk-in fade, before the floor takes a click
     await page.mouse.click(...g(cx, cy));
-    await sleep(2200);
+    // Waited for rather than slept through: under load the walk over and the
+    // card going up take longer than any fixed guess, and a check that fires
+    // early reads the player's SPAWN and calls the room broken.
+    await sceneUp(page, 'Minigame');
     await page.keyboard.press('Escape'); // forfeit
-    await sleep(6000);
+    await sceneUp(page, 'Minigame', false);
+    await sleep(2500); // the fade back, and the walk to the machine
 
     const back = await page.evaluate((k) => {
       const s = window.__froggy.game().scene.getScene(k);
@@ -576,7 +622,7 @@ for (const g of [
   if (!chargedOnce) failures++;
 
   // And a pocket that cannot cover the price is told so, and charged nothing.
-  await page.goto(`${URL}/?intro=1&tokens=2&game=chompman`, { waitUntil: 'networkidle2' });
+  await page.goto(`${URL}/?intro=1&tokens=2&game=poker`, { waitUntil: 'networkidle2' });
   await sleep(2000);
   const brokeBefore = await tokens();
   await page.mouse.click(...PLAY);
@@ -666,8 +712,15 @@ for (const g of [
   );
   if (wrong.length) failures++;
 
-  const goneForGood = !floor.ids.includes('snakes');
-  console.log(`${goneForGood ? 'PASS' : 'FAIL'}  snakes and ladders is off the floor  — ${floor.ids.length} cabinets`);
+  // Two machines have been taken off the floor for good.  A cabinet that comes
+  // back by accident — a stray entry, a bad merge — is a game with no module
+  // behind it, so it is asserted gone rather than assumed.
+  const revived = ['snakes', 'chompman'].filter((id) => floor.ids.includes(id));
+  const goneForGood = revived.length === 0;
+  console.log(
+    `${goneForGood ? 'PASS' : 'FAIL'}  the retired cabinets stay off the floor  — ` +
+      `${floor.ids.length} cabinets${revived.length ? `, back: ${revived.join(',')}` : ''}`,
+  );
   if (!goneForGood) failures++;
   await page.close();
 }
@@ -681,7 +734,7 @@ for (const g of [
   await page.goto(`${URL}/?intro=1&tokens=50&game=carchase`, { waitUntil: 'networkidle2' });
   await sleep(1500);
   await startGame(page);
-  await sleep(600);
+  await bridge(page, '__chase');
 
   const st = () => page.evaluate(() => window.__chase.state());
 
@@ -895,6 +948,7 @@ for (const g of [
   await startGame(page);
   await sleep(400);
   const paid = await page.evaluate(() => window.__froggy.state().tokens);
+  await bridge(page, '__ttt');
   await page.evaluate(() => window.__ttt.drawGame());
   await sleep(4200);
   const back = await page.evaluate(() => window.__froggy.state().tokens);
@@ -920,7 +974,7 @@ for (const g of [
     await page.goto(`${URL}/?intro=1&tokens=40&game=roulette`, { waitUntil: 'networkidle2' });
     await sleep(1500);
     await startGame(page);
-    await sleep(400);
+    await bridge(page, '__chamber');
     const before = await page.evaluate(() => window.__froggy.state().tokens);
     for (let i = 0; i < pulls; i++) {
       await page.evaluate(() => {
@@ -971,6 +1025,7 @@ for (const g of [
   await page.goto(`${URL}/?intro=1&tokens=60&game=blackjack`, { waitUntil: 'networkidle2' });
   await sleep(2400);
   await startGame(page);
+  await bridge(page, '__blackjack');
 
   const lies = [];
   let stood = 0;
@@ -1056,7 +1111,7 @@ for (const g of [
   await page.goto(`${URL}/?intro=1&tokens=400&game=wheel`, { waitUntil: 'networkidle2' });
   await sleep(1500);
   await startGame(page);
-  await sleep(600);
+  await bridge(page, '__wheel');
 
   const N = 400000;
   const seen = await page.evaluate((n) => window.__wheel.sample(n), N);
@@ -1120,7 +1175,7 @@ for (const g of [
   await page.goto(`${URL}/?intro=1&tokens=200&game=slots`, { waitUntil: 'networkidle2' });
   await sleep(1500);
   await startGame(page);
-  await sleep(600);
+  await bridge(page, '__slots');
 
   const N = 200000;
   const seen = await page.evaluate((n) => window.__slots.sample(n), N);
@@ -1145,7 +1200,7 @@ for (const g of [
   await page.goto(`${URL}/?intro=1&tokens=60&game=danceoff`, { waitUntil: 'networkidle2' });
   await sleep(1500);
   await startGame(page);
-  await sleep(600);
+  await bridge(page, '__dance');
 
   const KEY = ['KeyA', 'KeyS', 'KeyW', 'KeyD'];
   const t0 = Date.now();
@@ -1230,6 +1285,7 @@ for (const g of [
   await page.goto(`${URL}/?intro=1&tokens=20&game=grudge`, { waitUntil: 'networkidle2' });
   await sleep(1800);
   await startGame(page);
+  await bridge(page, '__grudge');
   await sleep(2400); // READY / FIGHT
 
   const st = () => page.evaluate(() => window.__grudge.state());
@@ -1306,7 +1362,7 @@ for (const g of [
   await page.goto(`${URL}/?intro=1&tokens=40&game=fallingblocks`, { waitUntil: 'networkidle2' });
   await sleep(1800);
   await startGame(page);
-  await sleep(1400);
+  await bridge(page, '__flood');
   const st = () => page.evaluate(() => window.__flood.state());
 
   // Nothing in the tower may be further than a jump.  Rise is measured against
@@ -1322,20 +1378,52 @@ for (const g of [
       await page.goto(`${URL}/?intro=1&tokens=40&game=fallingblocks`, { waitUntil: 'networkidle2' });
       await sleep(1500);
       await startGame(page);
-      await sleep(1200);
+      await bridge(page, '__flood');
     }
   }
+  // The ledges are SCATTERED inside the jump, not threaded one under the next,
+  // so "is each one reachable from the one before it in the list" is the wrong
+  // question — the climb is a path through the graph.  This walks that graph
+  // here, from the kerb, using the frog's own leap and span: an independent
+  // reading of the same property the game's validator checks, so a generator
+  // that starts building unclimbable towers is caught by something other than
+  // the code that built them.
+  const reachable = (ledges) => {
+    const span = (l) => l.w / 2 + l.amp + (l.kind === 'orbit' ? l.radius : 0);
+    const seen = ledges.map(() => false);
+    const queue = [0];
+    seen[0] = true;
+    while (queue.length) {
+      const i = queue.shift();
+      if (i === ledges.length - 1) return true;
+      for (let j = 0; j < ledges.length; j++) {
+        if (seen[j]) continue;
+        const a = ledges[i];
+        const b = ledges[j];
+        // Worst case both ways: take off at its lowest, land at its highest,
+        // with the two ledges as far apart sideways as they ever travel.
+        const rise = b.y + b.slop - (a.y - a.slop);
+        if (rise > reach.leap || rise < -140) continue;
+        const aR = a.x + span(a);
+        const aL = a.x - span(a);
+        const bR = b.x + span(b);
+        const bL = b.x - span(b);
+        const gap = bL > aR ? bL - aR : aL > bR ? aL - bR : 0;
+        if (gap > reach.span) continue;
+        seen[j] = true;
+        queue.push(j);
+      }
+    }
+    return false;
+  };
   const bad = [];
-  for (const t of towers) {
-    for (const l of t) {
-      if (l.rise > reach.apex - 4) bad.push(`${l.kind} rises ${l.rise} of ${reach.apex}`);
-      if (l.gap > reach.run) bad.push(`${l.kind} gaps ${l.gap} of ${reach.run}`);
-    }
-  }
+  towers.forEach((t, i) => {
+    if (!reachable(t)) bad.push(`tower ${i + 1} has no way up`);
+  });
   const climbable = bad.length === 0 && towers.every((t) => t.length > 18);
   console.log(
-    `${climbable ? 'PASS' : 'FAIL'}  the flood: every ledge is inside a jump  — ` +
-      `${towers.length} towers, ${towers[0].length} ledges, apex ${reach.apex} run ${reach.run}` +
+    `${climbable ? 'PASS' : 'FAIL'}  the flood: every tower has a way to the top  — ` +
+      `${towers.length} towers, ${towers[0].length} ledges, leap ${reach.leap} span ${reach.span}` +
       (bad.length ? `; ${bad.slice(0, 3).join(', ')}` : ''),
   );
   if (!climbable) failures++;
@@ -1367,15 +1455,25 @@ for (const g of [
   await sleep(1800);
   const before = await page.evaluate(() => window.__froggy.state().tokens);
   await startGame(page);
-  await sleep(1200);
+  await bridge(page, '__flood');
   await page.evaluate(() => {
     window.__flood.setWater(-400);
     window.__flood.setPlayer(160, window.__flood.state().goal - 1);
   });
   await sleep(2600);
   const after = await page.evaluate(() => window.__froggy.state().tokens);
-  const paid = after === before - 5 + 10;
-  console.log(`${paid ? 'PASS' : 'FAIL'}  the flood: reaching the hatch banks the ten  — ${before} -> ${after}`);
+  // Read off the cabinet rather than typed here, so repricing the machine
+  // cannot leave this check asserting last month's numbers.
+  const price = await page.evaluate(async () => {
+    const { CABINETS } = await import('/src/game/content.ts');
+    const c = CABINETS.find((x) => x.id === 'fallingblocks');
+    return { cost: c.cost, reward: c.reward };
+  });
+  const paid = after === before - price.cost + price.reward;
+  console.log(
+    `${paid ? 'PASS' : 'FAIL'}  the flood: reaching the hatch banks the reward  — ` +
+      `${before} -> ${after}, ${price.cost} in for ${price.reward}`,
+  );
   if (!paid) failures++;
   await page.close();
 }
@@ -1388,7 +1486,7 @@ for (const g of [
   await page.goto(`${URL}/?intro=1&tokens=40&game=carchase`, { waitUntil: 'networkidle2' });
   await sleep(1600);
   await startGame(page);
-  await sleep(1000);
+  await bridge(page, '__chase');
   // The run can end under us — this one is deliberately long — so every read
   // says so rather than throwing halfway through the check.
   const st = async () => (await page.evaluate(() => window.__chase?.state() ?? null)) ?? { gone: true };
@@ -1566,7 +1664,7 @@ for (const g of [
   await page.goto(`${URL}/?intro=1&tokens=50&game=frogvslizard`, { waitUntil: 'networkidle2' });
   await sleep(1500);
   await startGame(page);
-  await sleep(700);
+  await bridge(page, '__fvl');
 
   const st = () => page.evaluate(() => window.__fvl.state());
   /**

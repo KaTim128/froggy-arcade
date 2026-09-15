@@ -516,6 +516,72 @@ try {
     check('the stores has pillars to break it up', stores.pillars >= 6, `${stores.pillars} pillars`);
   }
 
+  // ------------------------------------------- he is huge, and still gets about
+  // Making him bigger is only worth anything if he can still cross the room.
+  // The model grew; the circle the walls and the furniture are tested against
+  // did not, on purpose — so this asserts both halves of that: he really is
+  // that size, and all three rooms still let him walk, climb and arrive.
+  console.log('\nhorror  he fills the room, and the room still lets him through');
+  for (const room of [0, 1, 2]) {
+    const page = await newPage(
+      `?intro=1&charity=1&key=1&route=hide&hideRoom=${room}&scene=HideRoom3D`,
+    );
+    const hide = () => page.evaluate(() => window.__hide ?? null);
+    await sleep(2500);
+
+    if (room === 0) {
+      // How big he actually is, built at the scale the room builds him at —
+      // not a number typed into this file, which could drift from the game.
+      const size = await page.evaluate(async (scale) => {
+        const THREE = await import('/node_modules/three/build/three.module.js');
+        const { FroggyMonster } = await import('/src/three/froggyMonster.ts');
+        const { ROOMS } = await import('/src/three/hideRooms.ts');
+        const m = new FroggyMonster(scale);
+        m.update(1 / 60, { speed: 0, maw: 0, climb: 0 });
+        const b = new THREE.Box3().setFromObject(m.root);
+        return { standing: b.max.y, ceilings: ROOMS.map((r) => r.wallH) };
+      }, (await hide()).froggyScale);
+      // Twice a 1.55m eye height is the bar: under that he reads as a tall man.
+      check('he is more than twice your height', size.standing > 3.1,
+        `${size.standing.toFixed(2)}m standing`);
+      check('and he still stands under every ceiling',
+        size.ceilings.every((h) => h > size.standing),
+        `${size.standing.toFixed(2)}m under ${size.ceilings.join('/')}`);
+    }
+
+    // Wait the briefing and the count out rather than forcing the mode: the
+    // hand-over is what puts him on the floor in the first place.
+    let waited = 0;
+    while (waited < 45000 && (await hide())?.mode !== 'seeking') {
+      await sleep(500);
+      waited += 500;
+    }
+    // Blind, so catching the parked test player cannot cut the sample short.
+    await page.evaluate(() => {
+      window.__froggy.game().scene.getScene('HideRoom3D').grace = 9999;
+    });
+
+    let travelled = 0;
+    let wedged = 0;
+    let prev = null;
+    for (let i = 0; i < 20; i++) {
+      await sleep(1000);
+      const h = await hide();
+      if (!h) continue;
+      if (prev) travelled += Math.hypot(h.fx - prev.x, h.fz - prev.z);
+      prev = { x: h.fx, z: h.fz };
+      // Inside the furniture is only ever legitimate while he is on top of it.
+      if (h.dbg.froggyBlocked && !h.climbing) wedged++;
+    }
+    await page.screenshot({ path: `${SHOTS}/big-room${room}.png` });
+    await page.close();
+
+    check(`room ${room}: he gets right across it at this size`, travelled > 12,
+      `covered ${travelled.toFixed(1)}m in 20s`);
+    check(`room ${room}: and never wedges in the furniture or the walls`, wedged === 0,
+      `${wedged} of 20 samples stuck`);
+  }
+
   // -------------------------------------------- the same creature, both scenes
   console.log('\nhorror  the thing in the alley is the thing in the basement');
   {
@@ -615,7 +681,7 @@ try {
     console.log('\nRuntime errors: none');
   }
 
-  const total = 49;
+  const total = 57;
   console.log(`\n${total - failed}/${total} checks passed.`);
   await browser.close();
   process.exit(failed > 0 || errors.length > 0 ? 1 : 0);

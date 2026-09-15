@@ -10,9 +10,11 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-Desktop browser, keyboard and mouse. 320×180 internal resolution,
-integer-scaled and letterboxed. No backend — your save lives in `localStorage`
-in your own browser, so nothing you do here leaves your machine.
+Desktop browser or phone. 320×180 internal resolution, integer-scaled and
+letterboxed on a desktop; on a touch screen the picture is scaled to fit the
+width and the controls go in the band underneath it. No backend — your save
+lives in `localStorage` in your own browser, so nothing you do here leaves your
+machine.
 
 ## Playing
 
@@ -25,6 +27,14 @@ in your own browser, so nothing you do here leaves your machine.
 | **hold left mouse** | look around, in the first-person rooms |
 | **shift** | run — 1.4x the walk, across the arcade floor |
 | **C** | toggle a crouch, in the rooms he locks you in |
+
+On a phone you get a thumbstick, a look pad over the picture, and whatever
+buttons the thing in front of you actually reads — a cabinet brings its own
+out, labelled with the same keys its how-to-play card names. **Esc → MOVEMENT**
+swaps the thumbstick for a four-way arrow pad if that suits your thumb better;
+the choice is kept with the volumes, so it outlives the run. Everything in the
+building is reachable this way, including the doors, the horror rooms and all
+twenty-one cabinets.
 
 **Nothing is charged for walking up to a machine.** Every cabinet opens on a
 how-to-play card — what it wants, which keys *that* cabinet reads, and what a
@@ -84,7 +94,7 @@ src/
   render/     320x180 integer scaler, palette + night transform, Froggy's overlay
   art/        painters shared between the warm and the dark version of each room
   froggy/     his vector art, his three variants, and everything he says
-  minigames/  eighteen games behind one interface
+  minigames/  twenty-one games behind one interface
   scenes2d/   Phaser scenes
   three/      chase level grid + pathfinding
 ```
@@ -112,7 +122,7 @@ npm run test:chase     # speed ratio, lethality, escapability
 npm run test:outro     # camera locked, Froggy whole in the doorway, end card
 npm run test:text      # glyph coverage, 1-bit rendering, no overflow
 npm run test:profiles  # save slots stay separate, the old save is adopted
-npm run test:horror    # the turn, the transformation, the three rooms
+npm run test:horror    # the turn, the transformation, the three rooms, his size
 npm run test:mobile    # the phone build, driven with real touch events
 npm run test:all
 ```
@@ -122,7 +132,7 @@ how the harness reaches any part of the game directly:
 
 ```
 ?scene=ArcadeDark&route=ejected      jump to a scene with the state it needs
-?game=chompman&tokens=50             jump straight into a cabinet
+?game=pinball&tokens=50              jump straight into a cabinet
 ?intro=1&charity=1&key=1             set the latches
 ?touch=1                             force the phone controls on (0 forces off)
 ```

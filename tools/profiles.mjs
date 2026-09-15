@@ -69,9 +69,14 @@ const index = () => page.evaluate(() => JSON.parse(localStorage.getItem('froggy.
 const keys = () => page.evaluate(() => Object.keys(localStorage).sort());
 const type = async (s) => {
   for (const ch of s) {
-    // Chrome wants the physical key name: KeyA, never Keya.
+    // Chrome wants the physical key name: KeyA, never Keya.  Case is carried by
+    // Shift, exactly as a person types it — names are stored in the case they
+    // were typed in now, so pressing KeyA alone really does mean a lower-case a.
     const key = ch === ' ' ? 'Space' : /[0-9]/.test(ch) ? `Digit${ch}` : `Key${ch.toUpperCase()}`;
+    const upper = /[A-Z]/.test(ch);
+    if (upper) await page.keyboard.down('Shift');
     await page.keyboard.press(key);
+    if (upper) await page.keyboard.up('Shift');
     await sleep(80);
   }
 };
@@ -191,14 +196,16 @@ try {
     };
   };
 
-  // Typed in lower case, on a real keyboard: names are uppercased on the way
-  // in, so this is the same name.  Spacing is not — see the near-miss below.
+  // Typed in lower case, on a real keyboard.  The name is stored exactly as it
+  // was typed now that the board has both cases, and the door is matched
+  // without regard to case, so this is still the same name.  Spacing is not —
+  // see the near-miss below.
   await bootFresh();
   await newProfile(0, 'admin128');
   const admin = await index();
   const adminTokens = await page.evaluate(() => window.__froggy.state().tokens);
-  check('the name is matched whatever the capitalisation', admin?.slots?.[0]?.name === 'ADMIN128',
-    admin?.slots?.[0]?.name);
+  check('the name is kept in the case it was typed, and still matched',
+    admin?.slots?.[0]?.name === 'admin128', admin?.slots?.[0]?.name);
   check('it starts full without waiting for the intro', adminTokens === 9999, `${adminTokens} tokens`);
 
   await page.goto(`${URL}?scene=ArcadeHub`, { waitUntil: 'networkidle2' });
@@ -216,7 +223,7 @@ try {
   const near = await index();
   const nearTokens = await page.evaluate(() => window.__froggy.state().tokens);
   check('a name that only looks like it does nothing',
-    near?.slots?.[0]?.name === 'ADMIN 128' && nearTokens === 0,
+    near?.slots?.[0]?.name === 'admin 128' && nearTokens === 0,
     `${near?.slots?.[0]?.name} with ${nearTokens}`);
 
   // And an ordinary run still pays for everything, down the same path.
@@ -237,7 +244,7 @@ try {
     // Exactly what the game wrote before profiles existed.
     localStorage.setItem('froggy.run', JSON.stringify({
       schemaVersion: 1, tokens: 17, charityUsed: false, prizesOwned: [],
-      gamesPlayed: { tictactoe: 2, airhockey: 0, hoops: 0, whack: 0, chompman: 0, grudge: 0 },
+      gamesPlayed: { tictactoe: 2, airhockey: 0, hoops: 0, whack: 0, grudge: 0 },
       route: 'normal', hasKey: false, seenIntro: true,
     }));
   });

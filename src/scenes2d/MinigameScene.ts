@@ -99,7 +99,12 @@ export class MinigameScene extends Phaser.Scene {
 
     this.hud = new TokenHud(this);
     this.hud.setVisible(false); // the title bar already carries the balance line
-    text(this, GAME_W - 128, 4, this.mod.payoutNote ?? `WIN: +${def.reward}`, PALETTE.tealLight);
+    // Right-aligned to just short of the QUIT button rather than pinned to a
+    // fixed left edge: the note is the cabinet's own wording and some of them
+    // are twice as long as others, so a fixed start meant "WIN: 15 TOKENS"
+    // reached under QUIT while "WIN: +2" sat in the middle of nowhere.
+    text(this, GAME_W - 50, 4, this.mod.payoutNote ?? `WIN: +${def.reward}`, PALETTE.tealLight)
+      .setOrigin(1, 0);
 
     const api: MinigameApi = {
       win: (payout?: number) => this.settle(true, false, payout),

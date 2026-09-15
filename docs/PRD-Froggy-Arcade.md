@@ -70,7 +70,7 @@ The horror unlocks only if the player, now outside and broke at night, chooses t
 - **No multiplayer, no accounts, no backend, no leaderboards.**
 - **No procedural generation.** Every scene is authored.
 - **No difficulty settings.** The economy *is* the difficulty. Payout scaling exists behind a debug flag only (§10.4).
-- **No mobile or touch support** in v1. Desktop keyboard + mouse.
+- ~~No mobile or touch support in v1.~~ Superseded: the whole game is playable with two thumbs (§6.10). Desktop keyboard + mouse is unchanged and both schemes are live at once.
 - **No branching dialogue.** Froggy talks; the player listens.
 - **No inventory system** beyond `prizesOwned: string[]`.
 - **We are not trying to out-jumpscare *FNAF*.** One planned scare, plus one death scare. That is the entire budget. `[QFD: §10 benchmarking]`
@@ -260,7 +260,7 @@ type GameId =
   // existence to gain a tidier string.
   | 'tictactoe' | 'fallingblocks' | 'airhockey'
   | 'hoops' | 'whack'
-  | 'chompman' | 'grudge';
+  | 'pinball' | 'findthefrog' | 'frograce' | 'poker' | 'grudge';
 ```
 
 | # | Requirement |
@@ -381,7 +381,11 @@ One exported object is the single source of truth; the in-game manual is **rende
 | Fighter move / jump / crouch | `A` `D` / `W` / `S` | Grudge |
 | Fighter punch / kick / block | `J` / `K` / `L` | Grudge |
 | Fighter special | `I` | Grudge |
-| Chomp-Man movement | Arrow keys | Chomp-Man |
+| Pinball flippers | `A` / `D` (or arrows) | Froggy Pinball |
+| Pinball plunger | Hold `Spacebar` | Froggy Pinball |
+| Pick a frog to back | `1`–`7`, or click the lane | Frog Race |
+| Fold / call / raise | `F` / `C` / `R` | Texas Poker |
+| Find the frog | `Left click` on it | Find The Frog |
 | Advance basement frame | `Left click` on hotspot | Basement |
 | Pause / back / quit game | `Esc` | Everywhere |
 | Debug panel | `` ` `` | Dev builds only |
@@ -415,7 +419,7 @@ Toggle `` ` ``. Dev builds only; stripped from production by a Vite define.
 
 ---
 
-### 6.10 Playing it on a phone `[MOB-1..MOB-6]`
+### 6.10 Playing it on a phone `[MOB-1..MOB-8]`
 
 **MOB-1 — one detection, asked once.** `core/device.ts` answers "is there a
 thumb on this" from a **coarse pointer with no fine pointer and a touch
@@ -459,13 +463,63 @@ pixel ratios phones ship with, the unevenness lands inside one physical pixel.
 Desktop keeps `Math.floor` and is unchanged (§AR-1).
 
 **MOB-6 — the whole game, thumbs only.** Walking, doors, cabinets, all
-eighteen games, the charity, the bust, the alley, the dark arcade, the
+twenty-one games, the charity, the bust, the alley, the dark arcade, the
 basement, the hide room and the chase. The two 3D rooms get a **look pad** over
 the picture that sends a held mouse drag, which is what both rooms already turn
 on. `tools/mobile.mjs` drives real CDP touch events against an emulated phone
 and asserts, among other things, that **every key any cabinet's tutorial names
 is reachable by thumb** — a cabinet that grows a key without growing a button
 fails the suite.
+
+**MOB-7 — a stick or a pad, the player's call.** `Esc → MOVEMENT` (a tab that
+only exists on a touch build, because on a desktop it would be a dead option)
+offers **JOYSTICK** or **ARROW KEYS**. The pad stands in exactly the stick's
+footprint, so the band does not resize when it is swapped, and it shows only
+the directions the game in front of it reads — a one-axis cabinet gets two
+keys, not four it would ignore. **Both send the same keys**, so nothing
+downstream knows which is on screen. The joystick is the default, the swap is
+live rather than on the next room, and the choice is kept in `froggy.prefs`
+beside the volumes — it belongs to the hand holding the phone, not to the run,
+so it survives a reload and a change of profile.
+
+**MOB-8 — a phone can skip the opening.** The intro carries `[ESC] SKIP` on a
+desktop; on a touch build that line is **not drawn at all**, because there is
+no Esc key to press and the hint would be an instruction the player cannot
+follow. What it gets instead is a **SKIP button in the control band**, sending
+the same Esc — under the picture rather than over the dialogue it is offering
+to skip, and gone the moment the intro hands over to the street, because the
+layout goes with the scene.
+
+### 6.11 Naming a run `[NAM-1..NAM-4]`
+
+**NAM-1 — the name is typed on screen, not only on a keyboard.** The profile
+picker's NEW RUN view carries a **full board**: ten digits, twenty-six letters
+on the QWERTY rows, SPACE, BACK, CLEAR, OK and CANCEL. It is the same board on
+a desktop and on a phone — a mouse and a thumb both tap keys — and a physical
+keyboard still types into the same field for anyone who has one.
+
+**NAM-2 — both cases, and the key says which you will get.** `abc`/`ABC` is a
+**latch**, not a hold: a key you have to keep a finger on is a key you cannot
+use with the other thumb. Every letter key repaints itself in the case it is
+currently going to type, so what is on the key is what you get. A name typed
+on a physical keyboard keeps the case it was typed in — the latch is for
+thumbs, and a real keyboard already has a shift.
+
+**NAM-3 — a key typed once is typed once.** Phaser queues the native keyboard
+events and every running scene's plugin drains that queue on its own update, so
+a generic `keydown` handler can be handed **the same `KeyboardEvent` object two
+or three times** — same `timeStamp`, `repeat` false. Every other scene binds
+`keydown-<KEY>` and only cares that a key went down, so none of them ever
+noticed; the name box typed `KAI` as `KKKAAAIII`. It keeps a weak set of the
+events it has already acted on and ignores the replays.
+
+**NAM-4 — nothing important is underneath it.** The board sits below the name
+field on a 300x168 panel: the title at y=24, the field at y=40, four key rows
+from y=58, and the two rows that finish or undo beneath them, all inside the
+320x180 buffer. `cleanName` still strips anything that is not a letter, a
+digit or a space and caps the result at twelve characters, and the unlimited
+run is matched **without regard to case**, so a name is stored the way it was
+typed rather than shouted back.
 
 ## 7. Scene Specifications
 
@@ -494,12 +548,15 @@ Each scene lists purpose, entry, layout, interactions, audio and exits. Audio en
 
 ### 7.3 SettingsModal `[QFD: P3, AC-1]`
 
-Two tabs, openable from `StartScreen` and from `Esc` in the hub.
+Two tabs on a desktop, three on a phone, openable from `StartScreen` and from
+`Esc` in the hub.
 
 - **AUDIO** — three sliders: Master / Music / SFX, 0–100, live-applied, persisted to `froggy.prefs`.
 - **CONTROLS** — the §6.7 table rendered as a **pixel-art keycap diagram**, generated from the input map so it can never go stale.
+- **MOVEMENT** — touch builds only (§6.10, MOB-7): JOYSTICK or ARROW KEYS, applied the moment it is tapped and kept in `froggy.prefs` with the volumes. It is not drawn on a desktop, where there is no on-screen stick for it to choose between.
 
-**SET-1:** all three values survive a page reload. `[QFD: AC-1]`
+**SET-1:** all three volumes survive a page reload. `[QFD: AC-1]`
+**SET-2:** so does the movement style, and it is device-wide rather than per-profile.
 
 ### 7.4 IntroCutscene
 
@@ -509,7 +566,7 @@ Two tabs, openable from `StartScreen` and from `Esc` in the hub.
 | **Beats** | 1. Side-on street, the player character walks in from the left, stops under the sign, looks up. 2. Pushes the door; a bell jingles; interior warmth washes over the frame. 3. At the change machine: a `$10` bill goes in, **20 tokens** clatter out, the HUD counter fills to `20` with a coin-spin. |
 | **Ledger** | `credit(20, 'seed')` — the only `seed` call that ever exists `[QFD: E1]` |
 | **Audio** | Crossfade `theme_arcade` → `music: 'hub_lofi'`, `ambience: ['cabinet_bleeps','crowd_hum']` |
-| **Skippable** | `Esc` skips to the end of the cutscene (still credits the tokens) |
+| **Skippable** | `Esc` skips to the end of the cutscene (still credits the tokens). A desktop draws `[ESC] SKIP` bottom-left; a phone draws **nothing there** and gets a SKIP button in the control band instead, which sends the same Esc (§6.10, MOB-8) |
 | **Exit** | `ArcadeHub`, which immediately runs the tutorial if `!seenIntro` |
 
 ### 7.5 ArcadeHub `[QFD: §7]`
@@ -522,15 +579,14 @@ The main loop. A single room, 3/4 view, walked with WASD.
         ┌──────────────────────────────────────────┐
         │  [PRIZE CASE - glass]   [COUNTER + BELL] │   back wall
         │                                          │
-        │  ▣ TIC-TAC-TOE (1)          ▣ HOOPS (3)  │
-        │                                          │
+        │  ▣ TIC-TAC-TOE (1)   ▣ FIND THE FROG (3) │
+        │  ▣ PINBALL (7)                           │
         │            · player spawn ·              │
         │                                          │
-        │  ▣ THE FLOOD (5)           ▣ WHACK (3)   │
+        │  ▣ HOOPS (3)             ▣ BOWLING (3)   │
+        │  ▣ WHACK (3)          ▣ BATTLESHIP (3)   │
         │                                          │
-        │  ▣ AIR HOCKEY (1)      ▣ CHOMP-MAN (5)   │
-        │                                          │
-        │  [change machine]        ▣ GRUDGE (5)    │
+        │  [change machine]                        │
         │  ══════════ FRONT DOOR ══════════        │
         └──────────────────────────────────────────┘
 ```
@@ -882,7 +938,10 @@ Measured over 200 automated runs per game (scripted competent player).
 | Whack-a-Frog | Medium | 3 | 6 | 40–55% | 40 s |
 | Bowling | Medium | 3 | 6 | 40–55% | 150 s |
 | Battleship | Medium | 3 | 6 | 40–55% | 90 s |
-| Chomp-Man | Hard | 7 | 15 | 30–45% | 100 s |
+| Froggy Pinball | Hard | 7 | 15 | 30–45% | 120 s |
+| Find The Frog | Medium | 3 | 6 | 40–55% | 60 s |
+| Frog Race | Hard | 7 | 15 | 14% blind, ~36% on the form | 30 s |
+| Texas Poker | Hard | 7 | 15 | 30–45% | 180 s |
 | Barrel Climb | Hard | 7 | 15 | 30–45% | 120 s |
 | Grudge (Fighter) | Hard | 5 | 10 | 30–45% | 90 s |
 | Frog vs Lizard | Hard | 5 | 10 | 40–55% | 120 s |
@@ -900,7 +959,7 @@ not in this table.
 - **A draw refunds the token** (MG-9). It is neither a win nor a loss: the entry cost goes back exactly once and nothing is paid on top of it. The board says so before a move is made (`YOU ARE X — A DRAW REFUNDS`), the result card says `DRAW — TOKEN BACK`, and the shell's card reads `A TIE — 1 BACK`. This replaces the original "a draw is a loss", which charged a token for a game nobody won.
 - Win: three in a row for the player. Lose: AI three in a row.
 
-### 9.3 The Flood — Hard, 5 → 10
+### 9.3 The Flood — Hard, 7 → 15, in the back room
 
 **A parkour shaft with the water coming up it.** One way out — the hatch at the
 top — and one way to lose: the water reaching your feet. Nothing else in the
@@ -908,12 +967,15 @@ shaft can kill you and nothing else needs to. The flood is the clock, the
 difficulty and the reason you cannot stand anywhere and think about it, all at
 once.
 
-- **Six kinds of ledge**, each asking a different question. `STATIC` — a ledge, where the run breathes. `SLIDE` — tracks left and right; jump where it is *going* to be. `RISE` — tracks up and down; take it at the bottom of its stroke. `SPIN` — a bar turning on its middle: edge-on there is nothing to land on, flat it is a wide ledge, and the whole skill is the wait. `RETRACT` — slides out of a wall and back into it; cross while it is out. `CRUMBLE` — holds for half a second under a foot, flashing red, then drops and comes back 2.6 s later.
+- **Seven kinds of ledge**, each asking a different question. `STATIC` — a ledge, where the run breathes. `SLIDE` — tracks left and right; jump where it is *going* to be. `RISE` — tracks up and down; take it at the bottom of its stroke. `SPIN` — a bar turning on its middle: edge-on there is nothing to land on, flat it is a wide ledge, and the whole skill is the wait. `RETRACT` — slides out of a wall and back into it; cross while it is out. `CRUMBLE` — holds for half a second under a foot, flashing red, then drops and comes back 2.6 s later. `ORBIT` is the seventh and is described below.
 - **A ledge is always drawn as the object it is**, never as the surface it currently offers. A bar seen edge-on and an arm half inside its wall carry no weight and are drawn hollow, but they are drawn: a ledge that vanished when it stopped being standable would be asking the player to learn a rhythm they cannot see.
-- **Randomised, and climbable by construction.** Every run is a different tower and the generator is not allowed to build one that cannot be climbed: each ledge sits inside the arc a jump actually covers — no more than `APEX − 9` above the last and no further sideways than a run carries in the air — computed from the frog's own constants rather than guessed. A **moving** ledge is placed against its *worst* position, so reachable means reachable at the moment it is furthest away. Two movers never follow one another. A retracting arm is *grown* until its tip is inside the jump, and if no length would reach, a plain ledge is built instead. `tools/games.mjs` re-checks four fresh towers against the same numbers every run.
+- **A seventh kind: `ORBIT`.** A ledge on the end of an arm, going round a fixed point at a radius of 16–22 px. It is the only one that moves in both axes at once, so it cannot be read off a single rhythm, and it is what the top third of the shaft is made of.
+- **Harder than anything else in the building, and winnable every time.** The old rule threaded each ledge under the last, which could only ever produce a staircase. Ledges are now SCATTERED inside the jump and two movers may follow one another above the halfway mark — which is the single biggest difficulty lever on the table — and whether the result goes anywhere is decided afterwards, by `routeExists()`: **a breadth-first walk of the whole shaft as a graph**, from the kerb, asking whether the hatch's landing ever comes up. Every edge is measured at the WORST moment of both ledges, so a route that exists exists at any phase.
+- **A tower that fails is thrown away and rolled again**, up to 40 times, and a plain staircase is built if all 40 fail — so a run is never unwinnable, and never merely easy either. The validator earned its place immediately: it correctly rejected every one of the first 40 layouts and exposed a real generator bug (two movers in a row could not satisfy the worst-case rise), which is why the generator now picks the KIND first and budgets the rise out of what the jump has left after both ledges' travel. `tools/games.mjs` audits 150 layouts a run and, separately, walks four freshly built towers with its own copy of the graph search.
 - **The water** starts 70 px below the kerb, rises at 8.5 px/s and accelerates by 0.115 px/s² — eight seconds before it reaches the floor you start on, about sixty-five before it reaches the hatch. It rumbles every 90 px it climbs, throws bubbles off its surface, and the round ends the moment it touches the frog: a splash, a shake and `DROWNED`.
 - **You can see it coming.** The camera rides *above* the frog, so the next two or three ledges are on screen while the decision is being made; a gauge down the right edge shows the water, the frog and the hatch as one picture; and a line across the top counts the seconds until the water is where you are — amber under nine, red under four.
 - The hatch is **720 px** up, about 27 ledges. Left/right and jump (`A`/`D`/arrows, `SPACE`/`W`/`UP`), a `JUMP` button on a phone. Custom tune (`game_flood`) and its own `splash`, `water_rise` and `crumble` sfx.
+- **Seven in, fifteen out**, charged on PLAY and paid once on the hatch, like every other long game. It sits in the back room, in the slot Chomp-Man used to hold on the first-room floor.
 
 ### 9.4 Air Hockey — Hard, 5 → 10
 
@@ -924,8 +986,9 @@ once.
 
 ### 9.5 Basketball Hoops — Medium, 3 → 6
 
-- **Hold `Spacebar`** to charge a power meter (0→100 over 1.2 s, then it bounces back down — no infinite hold); release to shoot. `W`/`S` tilt the shot, and an arrow at the ball shows the direction and the charge.
-- Projectile arc with gravity.
+- **Hold `Spacebar`** to charge a power meter (0→100 over 1.2 s, then it bounces back down — no infinite hold); release to shoot. `W`/`S` tilt the shot.
+- **The shot is shown before it is taken, and it does not lie.** A dotted arc leads from the ball along the actual parabola the current aim and charge would fly — eighteen dots at 55 ms apart — and it is **GREEN with a ring on the rim when that shot goes in, AMBER with a cross when it does not**. The verdict is not a guess at the drawing: `crossing()` solves the descending root of the parabola at the hoop's height, `hoopAt()` walks the moving rim forward to where it will be at that moment, and `wouldScore()` compares the two. The arc redraws every frame while `Spacebar` is held, so charge and tilt are both read off the picture.
+- **It is still a game of aim.** The arc says what THIS shot does; it does not aim for you, it does not slow the rim down, and the rim keeps tightening and speeding up with every make. What went is knowing whether you were close.
 - The hoop **slides left–right**, starting at 60 px/s and speeding up **15% per made shot**.
 - **Win: 5 points in 60 seconds.** A miss costs only time.
 - Rim and backboard have real collision — bank shots must be possible.
@@ -947,27 +1010,69 @@ once.
   - The game never comments. There is no achievement, no dialogue, no follow-up.
   - He occupies a hole for the full 1.2 s, so he mildly hurts the player's score. That is the only mechanical consequence.
 
-### 9.7 Chomp-Man — Hard, 7 → 15
+### 9.7 Froggy Pinball — Hard, 7 → 15
 
-An original homage. Original maze, original frog-themed ghosts, original sounds and name. **No Namco assets, geometry or names.** `[QFD: VOC-22, B7]`
+Replaced Chomp-Man on the first-room floor. The maze was an homage to somebody
+else's game; the table is Froggy's own, and it is the machine a player walks
+past first.
 
-- Single maze, 3 lives, 141 pellets, 4 power pellets.
-- **Win:** clear the maze. **Lose:** all three lives.
-- Speeds: player 5.5 tiles/s, ghosts 4.6, frightened 3.0. Frightened lasts 6 s with a 1.5 s flashing warning.
-- **The maze is a lattice, not four quadrants.** 21×15, corridors every three tiles both ways, **29 independent ways round, 46 junctions and no dead ends** (the board it replaced had 16, 30 and 6). Every corridor meets another within a few tiles, so a player being followed can turn, loop and come out behind the ghost that was on them — which is the skill of the game and was impossible on long straight runs. Asserted in `tools/games.mjs`, which floods the maze from the player's start and fails if one pellet is unreachable.
-- **The ghosts live in a box** in the middle of it with a single door in the top. They are let out one at a time (0 / 1.8 / 3.6 / 5.4 s), the door is a wall to the player so the box is never a bolt-hole, and losing a life puts all four back in it on the same staggered clock.
-- **An eaten ghost is off the board for 10 seconds**, sitting in the box dimmed, before it comes out again. A power pellet buys real time rather than a lap of the maze, and clearing the last corner becomes a thing you can plan.
-- **The hunters path properly.** `direct` and `ambush` take the shortest route (breadth-first over the maze) to the player and to four tiles ahead of them; a greedy straight-line step circles a block forever on a lattice. `random` and the frightened flight stay deliberately dumb — a frightened ghost that pathed its way out of trouble would make the power pellets worthless. The ghost speed came down from 5.0 to 4.6 tiles/s to pay for the better pathing.
-- **Four ghosts, distinct behaviours** `[QFD: §8 of the brief]`:
+- **Hand-rolled physics, not an engine.** A ball of radius 3.2 under 190 px/s²
+  of gravity, capped at 260 px/s, integrated at five substeps a frame so it
+  cannot tunnel through a flipper at speed. Every collision is a circle against
+  a segment with restitution, and a rising flipper adds its own push on top —
+  which is what makes a flick different from a rest.
+- **The flippers hinge OUTSIDE the drain** (x = 96 and 212, drain 128..180), so
+  they close across the gap rather than sweeping away from it like wipers.
+  `A`/`LEFT` and `D`/`RIGHT` work them; holding `SPACE` pulls the plunger and
+  letting go fires it.
+- **Win:** 2000 points before three balls are gone. Bumpers kick at 118, the
+  ramps and the drop targets are worth more the deeper into the table they are,
+  and the lane lights say what is live.
+- **Lose:** the third ball drains.
 
-| Ghost | Behaviour |
-|---|---|
-| **Direct** | Targets the player's current tile |
-| **Ambush** | Targets 4 tiles ahead of the player's facing |
-| **Random** | Picks a random legal direction at each junction |
-| **Patrol** | Loops a fixed corner circuit, ignoring the player until they enter its quadrant |
+### 9.7a Find The Frog — Medium, 3 → 6
 
-- A 4 s scatter phase every 20 s sends all ghosts to their corners — this is the player's breathing room and is what keeps the game at a 30–45% win rate rather than 10%.
+- Thirty-odd green animals drifting over the screen — turtles, lizards, newts,
+  beetles, leaves, grubs, geckos — in the same greens as the frog. Exactly one
+  of them is the frog.
+- **His tell is his eyes**: two of them, standing up off the top of his head.
+  Nothing else in the crowd has that, and nothing about it needs explaining.
+- **Win:** find him five times. **Lose:** three wrong clicks, or the 20-second
+  clock on any one of the five.
+- The crowd and the drift both grow each round (14 → 42 animals, 11 → 24 px/s),
+  so the fifth is a different game from the first.
+
+### 9.7b Frog Race — Hard, 7 → 15, casino
+
+- **Seven lanes, seven colours, one of them yours.** `1`–`7` or a click on the
+  lane backs a frog; the field then runs.
+- The seven runners are dealt a shuffled set of fixed forms
+  (`1, 0.82, 0.64, 0.5, 0.36, 0.2, 0`) each race, so the favourite MOVES: there
+  is a best frog every time and it is never the same colour twice running.
+- **The variance has to LAST, or the card is the result.** Per-tick wobble
+  averages out over a race: the first build of this had white noise only and
+  the favourite won **93 races in 100**, which makes a form figure on the wall
+  an instruction rather than a read. So there are three noise terms — per-tick
+  `WOBBLE` for the jostle, a slow pulled-back random walk (`DRIFT`) that gives
+  a frog good and bad patches you can watch, and a per-race `LUCK` drawn once
+  and held to the line, the same size as the whole form spread. With a surge
+  on top, the favourite comes home **about a third of the time**: two and a
+  half times a blind pick, and still losing two races in three.
+- **Win:** your frog comes home first.
+
+### 9.7c Texas Poker — Hard, 7 → 15, casino
+
+- **Six seats, five of them AI.** Hold'em as it is played: blinds, hole cards,
+  flop, turn, river, fold/call/raise on each street.
+- **Hands are ranked, not guessed.** `evaluate()` folds any five of seven cards
+  into one comparable number from a straight flush down to a high card, the
+  wheel included, so a split pot is a split pot and not a coin toss.
+- **Five styles, and they play like themselves**: `rock` folds anything
+  marginal, `caller` never raises, `shark` reads the board, `bluffer` fires at
+  weakness, `wild` cannot be read at all. Each carries its own `callAt`,
+  `raiseAt` and bluff frequency, so the table has personalities rather than
+  noise.
+- Start with 100 chips. **Win:** reach 300. **Lose:** go out.
 
 ### 9.8 Grudge (Fighter) — Hard, 5 → 10
 
@@ -1140,7 +1245,7 @@ re-deducts the entry cost when it pays:
 | Easy | Tic-Tac-Toe | 1 | 2 | 0 |
 | Medium | Basketball Hoops, Whack-a-Frog, Bowling, Battleship | 3 | 6 | 0 |
 | Hard | Air Hockey, Grudge, Frog vs Lizard, The Flood | 5 | 10 | 0 |
-| Hard (long) | Chomp-Man, Barrel Climb, Dance Off | 7 | 15 | 0 |
+| Hard (long) | Pinball, Poker, Frog Race, Barrel Climb, Dance Off | 7 | 15 | 0 |
 
 Everything up to the five-token row is a **2× on a win**, so expected value is
 negative unless the player wins more than half the time. That pressure is the
@@ -1173,11 +1278,14 @@ Net EV per play = `(p_win × reward) − cost`, where the break-even win rate is
 | Game | p_win (target midpoint) | Cost | EV | Net per play |
 |---|---:|---:|---:|---:|
 | Tic-Tac-Toe | 0.525 | 1 | 1.05 | **+0.05** |
-| The Flood | 0.525 | 5 | 5.25 | **+0.25** |
+| The Flood | 0.375 | 7 | 5.63 | **−1.37** |
 | Basketball Hoops | 0.475 | 3 | 2.85 | **−0.15** |
 | Whack-a-Frog | 0.475 | 3 | 2.85 | **−0.15** |
 | Grudge | 0.375 | 5 | 3.75 | **−1.25** |
-| Chomp-Man | 0.375 | 7 | 5.63 | **−1.37** |
+| Froggy Pinball | 0.375 | 7 | 5.63 | **−1.37** |
+| Texas Poker | 0.375 | 7 | 5.63 | **−1.37** |
+| Find The Frog | 0.475 | 3 | 2.85 | **−0.15** |
+| Frog Race (on the form) | 0.364 | 7 | 5.46 | **−1.54** |
 | Dance Off | 0.475 | 7 | 7.13 | **+0.13** |
 
 **Read:** the Easy tier is a coin flip that pays for itself and no more, and the Hard tier bleeds badly. This is deliberate and load-bearing:
@@ -1201,10 +1309,10 @@ A representative Rusher run from 20 tokens:
 |---|---|---:|---|---:|
 | — | seed | — | — | 20 |
 | 1 | Tic-Tac-Toe | 1 | Win +3 | 22 |
-| 2 | Chomp-Man | 5 | Lose | 17 |
-| 3 | Grudge | 5 | Lose | 12 |
-| 4 | Hoops | 3 | Win +6 | 15 |
-| 5 | Chomp-Man | 5 | Lose | 10 |
+| 2 | Froggy Pinball | 7 | Lose | 15 |
+| 3 | Grudge | 5 | Lose | 10 |
+| 4 | Hoops | 3 | Win +6 | 13 |
+| 5 | Find The Frog | 3 | Lose | 10 |
 | 6 | Grudge | 5 | Lose | 5 |
 | 7 | Hoops | 3 | Lose | 2 |
 | 8 | Tic-Tac-Toe | 1 | Lose | 1 |
@@ -1340,7 +1448,8 @@ src/
     Chase3D.ts OutroCutscene3D.ts
   minigames/
     index.ts              // registry, shared Minigame interface (§9.0)
-    tictactoe/ flood/ airhockey/ hoops/ whack/ chompman/ grudge/
+    tictactoe/ flood/ airhockey/ hoops/ whack/ grudge/
+    pinball/ findthefrog/ frograce/ poker/ ...  // twenty-one in all
   froggy/
     froggy.ts             // variant state machine V0/V1/V2 (§8.2)
     script.ts             // all dialogue (§8.4)
@@ -1416,7 +1525,7 @@ The customer's ten criteria, each mapped to the PRD sections that implement it. 
 | AC | Criterion | Implemented by | Test |
 |---|---|---|---|
 | 1 | Start, read the manual, adjust volume; settings persist across reload | §7.3, §6.6, §6.7 | Set three distinct slider values, reload, assert restored |
-| 2 | All six minigames winnable and losable; tokens deducted and awarded correctly | §9 | Contract test + 200-run win-rate sample per game |
+| 2 | All minigames winnable and losable; tokens deducted and awarded correctly | §9 | Contract test + 200-run win-rate sample per game |
 | 3 | Going broke once triggers charity exactly once per run | §6.3, §7.7 | Scripted: broke → charity → broke → assert no second charity |
 | 4 | Going broke twice ejects; the front door is permanently locked afterwards | §7.8, §7.9, §7.10 | Post-ejection, assert the front door returns `locked` in all states |
 | 5 | Enough tokens redeems a prize and the kid buys it — a complete non-horror ending | §7.6, §7.11 | Debug-set the balance, redeem, leave, sell; assert the good ending |
@@ -1435,6 +1544,8 @@ The customer's ten criteria, each mapped to the PRD sections that implement it. 
 | **IP provenance sign-off** | Per phase: zero third-party assets, zero trademarked names, original maze and fighter designs |
 | **Walk-away check** | The `LEAVE` exit works, ends quietly, and is never punished or mocked |
 | **Bell check** | The handbell still does nothing. It will be tempting to make it do something. Do not |
+| **Thumb-reach audit** | Every key any cabinet's tutorial card names is reachable by thumb; a cabinet that grows a key without growing a button fails `tools/mobile.mjs` |
+| **Climbability audit** | 150 generated Flood towers a run, plus four freshly built ones walked as a graph — every one must have a way to the hatch |
 
 ---
 
@@ -1442,7 +1553,7 @@ The customer's ten criteria, each mapped to the PRD sections that implement it. 
 
 Explicitly not in v1, listed so they are not re-litigated mid-build:
 
-- Mobile, touch and gamepad input
+- ~~Mobile and touch input~~ — **shipped**, see §6.10. Gamepad is still out.
 - Localisation (English only)
 - Achievements, statistics screens, run history
 - A second basement route or alternate chase layout

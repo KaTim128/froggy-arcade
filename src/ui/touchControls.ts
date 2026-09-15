@@ -16,6 +16,14 @@
  * module, next to the tutorial card that names the same keys.  A player never
  * sees a button that does nothing here.
  *
+ * A STICK OR A PAD, WHICHEVER THE THUMB WANTS.  `Esc -> MOVEMENT` swaps the
+ * thumbstick for a four-way arrow pad and back, live.  The pad stands in
+ * exactly the stick's footprint so the band does not resize under the player's
+ * hand, it shows only the directions the game in front of it reads, and both
+ * send the same keys — so nothing downstream, here or anywhere else, knows or
+ * can know which one is on the screen.  The choice lives in `froggy.prefs`
+ * beside the volumes: it belongs to the hand holding the phone, not the run.
+ *
  * IN PORTRAIT THE CONTROLS ARE NOT ON THE GAME.  A 16:9 screen inside a tall
  * phone leaves a band of dead black under it, and that band is where the
  * controls go — nothing overlaps the picture, so nothing can cover a timer, a
@@ -27,6 +35,7 @@
  */
 
 import { isTouch } from '../core/device';
+import { store, type MoveStyle } from '../core/state';
 
 /** Every key the building actually binds, with the code Phaser matches on. */
 const KEYS = {
@@ -44,17 +53,22 @@ const KEYS = {
   SHIFT: { key: 'Shift', code: 'ShiftLeft', keyCode: 16 },
   C: { key: 'c', code: 'KeyC', keyCode: 67 },
   E: { key: 'e', code: 'KeyE', keyCode: 69 },
+  F: { key: 'f', code: 'KeyF', keyCode: 70 },
   H: { key: 'h', code: 'KeyH', keyCode: 72 },
   I: { key: 'i', code: 'KeyI', keyCode: 73 },
   J: { key: 'j', code: 'KeyJ', keyCode: 74 },
   K: { key: 'k', code: 'KeyK', keyCode: 75 },
   L: { key: 'l', code: 'KeyL', keyCode: 76 },
   Q: { key: 'q', code: 'KeyQ', keyCode: 81 },
+  R: { key: 'r', code: 'KeyR', keyCode: 82 },
   X: { key: 'x', code: 'KeyX', keyCode: 88 },
   ONE: { key: '1', code: 'Digit1', keyCode: 49 },
   TWO: { key: '2', code: 'Digit2', keyCode: 50 },
   THREE: { key: '3', code: 'Digit3', keyCode: 51 },
   FOUR: { key: '4', code: 'Digit4', keyCode: 52 },
+  FIVE: { key: '5', code: 'Digit5', keyCode: 53 },
+  SIX: { key: '6', code: 'Digit6', keyCode: 54 },
+  SEVEN: { key: '7', code: 'Digit7', keyCode: 55 },
 } as const;
 
 export type KeyName = keyof typeof KEYS;
@@ -130,6 +144,35 @@ const STYLE = `
 }
 #touch-controls .tc-stick.on .tc-nub { background: rgba(255, 212, 94, 0.75); }
 
+/* The arrow pad, for the thumb that would rather have four separate targets
+   than one it has to aim.  It stands in exactly the stick's footprint so the
+   band does not change size when the player switches. */
+#touch-controls .tc-dpad {
+  position: relative; pointer-events: none;
+  width: var(--tc-stick, 132px); height: var(--tc-stick, 132px);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 3px;
+}
+#touch-controls .tc-dkey {
+  pointer-events: auto; touch-action: none;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  background: rgba(20, 26, 36, 0.72);
+  border: 2px solid rgba(70, 196, 189, 0.5);
+  color: #46c4bd; font-size: calc(var(--tc-stick, 132px) * 0.2); line-height: 1;
+  padding: 0;
+}
+#touch-controls .tc-dkey.down { background: rgba(255, 212, 94, 0.85); color: #141a24; }
+/* A display of grid or flex both beat the [hidden] default, so the two rules
+   that carry one have to say so themselves. */
+#touch-controls .tc-dpad[hidden], #touch-controls .tc-dkey[hidden] { display: none; }
+#touch-controls .tc-dkey.up { grid-area: 1 / 2; }
+#touch-controls .tc-dkey.left { grid-area: 2 / 1; }
+#touch-controls .tc-dkey.right { grid-area: 2 / 3; }
+#touch-controls .tc-dkey.dn { grid-area: 3 / 2; }
+
 #touch-controls .tc-pads {
   display: grid; gap: var(--tc-gap, 10px);
   grid-template-columns: repeat(2, auto);
@@ -189,6 +232,7 @@ type Held = Set<KeyName>;
 class TouchControls {
   private root: HTMLDivElement | null = null;
   private stick: HTMLDivElement | null = null;
+  private dpad: HTMLDivElement | null = null;
   private nub: HTMLDivElement | null = null;
   private pads: HTMLDivElement | null = null;
   private quit: HTMLButtonElement | null = null;
@@ -200,6 +244,7 @@ class TouchControls {
   private lookX = 0;
   private lookY = 0;
   private band = 0;
+  private moveStyle: MoveStyle = 'stick';
 
   /** No-op on anything without a thumb on it. */
   mount(): void {
@@ -214,7 +259,14 @@ class TouchControls {
     root.id = 'touch-controls';
     root.innerHTML =
       '<div class="tc-look" hidden></div>' +
-      '<div class="tc-zone tc-left"><div class="tc-stick"><div class="tc-nub"></div></div></div>' +
+      '<div class="tc-zone tc-left">' +
+      '<div class="tc-stick"><div class="tc-nub"></div></div>' +
+      '<div class="tc-dpad" hidden>' +
+      '<button class="tc-dkey up" type="button">&#9650;</button>' +
+      '<button class="tc-dkey left" type="button">&#9664;</button>' +
+      '<button class="tc-dkey right" type="button">&#9654;</button>' +
+      '<button class="tc-dkey dn" type="button">&#9660;</button>' +
+      '</div></div>' +
       '<div class="tc-zone tc-right"><div class="tc-pads"></div></div>' +
       '<button class="tc-corner" type="button">ESC</button>';
     document.body.appendChild(root);
@@ -222,11 +274,13 @@ class TouchControls {
     this.root = root;
     this.lookPad = root.querySelector('.tc-look');
     this.stick = root.querySelector('.tc-stick');
+    this.dpad = root.querySelector('.tc-dpad');
     this.nub = root.querySelector('.tc-nub');
     this.pads = root.querySelector('.tc-pads');
     this.quit = root.querySelector('.tc-corner');
 
     this.wireStick();
+    this.wireDpad();
     this.wireLook();
     this.wireHold(this.quit as HTMLElement, ['ESC']);
 
@@ -239,6 +293,7 @@ class TouchControls {
       if (document.hidden) this.releaseAll();
     });
 
+    this.moveStyle = store.get().settings.moveStyle;
     this.apply({});
     this.relayout();
 
@@ -249,6 +304,13 @@ class TouchControls {
         labels: () => [...root.querySelectorAll('.tc-btn')].map((b) => b.textContent ?? ''),
         band: () => this.band,
         reserve: () => this.reserveHeight(),
+        moveStyle: () => this.moveStyle,
+        setMoveStyle: (m: MoveStyle) => this.setMoveStyle(m),
+        arrows: () =>
+          [...root.querySelectorAll('.tc-dkey')]
+            .filter((b) => !(b as HTMLButtonElement).hidden)
+            .map((b) => (b.className.match(/up|left|right|dn/) ?? [''])[0]),
+        stickShown: () => !(this.stick as HTMLElement).hidden,
       };
     }
   }
@@ -265,6 +327,7 @@ class TouchControls {
 
     const zoneL = this.root.querySelector('.tc-left') as HTMLElement;
     zoneL.style.visibility = layout.stick ? 'visible' : 'hidden';
+    this.syncMoveStyle();
 
     const buttons = (layout.buttons ?? []).slice(0, 5);
     const pads = this.pads as HTMLDivElement;
@@ -283,6 +346,37 @@ class TouchControls {
     (this.quit as HTMLElement).hidden = layout.noQuit === true;
     (this.lookPad as HTMLElement).hidden = layout.look !== true;
     this.relayout();
+  }
+
+  /**
+   * Swap the stick for the arrow pad, or back, without leaving a key down.
+   *
+   * Live: the settings screen calls this the moment the player taps, and the
+   * room underneath carries on reading the same four keys either way.
+   */
+  setMoveStyle(style: MoveStyle): void {
+    if (style === this.moveStyle) return;
+    this.releaseAll();
+    this.moveStyle = style;
+    this.syncMoveStyle();
+  }
+
+  /**
+   * Show whichever of the two the player chose, with only the directions the
+   * game in front of them actually reads — a one-axis game gets two keys, not
+   * four it would ignore.
+   */
+  private syncMoveStyle(): void {
+    if (!this.stick || !this.dpad) return;
+    const pad = this.moveStyle === 'pad';
+    this.stick.hidden = pad;
+    this.dpad.hidden = !pad;
+
+    const axis = this.layout.stick ?? 'wasd';
+    for (const el of Array.from(this.dpad.querySelectorAll('.tc-dkey')) as HTMLButtonElement[]) {
+      const vertical = el.classList.contains('up') || el.classList.contains('dn');
+      el.hidden = vertical ? axis === 'lr' : axis === 'ud';
+    }
   }
 
   /** Everything up.  Safe at any moment, and the only way keys are released. */
@@ -396,6 +490,28 @@ class TouchControls {
     window.addEventListener('touchmove', move, { passive: false });
     window.addEventListener('touchend', end, { passive: false });
     window.addEventListener('touchcancel', end, { passive: false });
+  }
+
+  /**
+   * The arrow pad.  One key each, held while the thumb is on it — the same
+   * hold-to-move the stick does, without the aiming.  A diagonal is two
+   * thumbs, or two fingers, exactly as it is on a real arrow pad.
+   */
+  private wireDpad(): void {
+    if (!this.dpad) return;
+    const map: Array<[string, KeyName, KeyName]> = [
+      ['up', 'W', 'UP'],
+      ['dn', 'S', 'DOWN'],
+      ['left', 'A', 'LEFT'],
+      ['right', 'D', 'RIGHT'],
+    ];
+    for (const [cls, wasd, arrow] of map) {
+      const el = this.dpad.querySelector(`.tc-dkey.${cls}`) as HTMLElement | null;
+      // Both names go down together.  Sending the arrow to a game that only
+      // reads WASD costs nothing, and it saves the pad having to know which
+      // of the eighteen cabinets is in front of it.
+      if (el) this.wireHold(el, [wasd, arrow]);
+    }
   }
 
   /**

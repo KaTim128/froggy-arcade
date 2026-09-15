@@ -90,7 +90,7 @@ const seedProfile = () =>
         tokens: 20,
         charityUsed: false,
         prizesOwned: [],
-        gamesPlayed: { tictactoe: 0, airhockey: 0, hoops: 0, whack: 0, chompman: 0, grudge: 0 },
+        gamesPlayed: { tictactoe: 0, airhockey: 0, hoops: 0, whack: 0, grudge: 0 },
         route: 'normal',
         hasKey: false,
         seenIntro: true,
@@ -123,13 +123,23 @@ try {
       import('/src/minigames/bowling.ts'),
     ]);
 
-    // Every string these modules can put in front of the player.
+    // Every string these modules can put in front of the player IN THE PIXEL
+    // FONT.  A `touch` layout is skipped: its labels are written into the DOM
+    // overlay in the system monospace, never through `pixelFont`, so a thumb
+    // button is free to wear a glyph the 5x8 font has never heard of — and the
+    // flippers and the bowling lane are much clearer with a real arrow on them
+    // than with the word LEFT.
     const strings = [];
     const walk = (v, depth = 0) => {
       if (depth > 6 || v == null) return;
       if (typeof v === 'string') strings.push(v);
       else if (Array.isArray(v)) v.forEach((x) => walk(x, depth + 1));
-      else if (typeof v === 'object') Object.values(v).forEach((x) => walk(x, depth + 1));
+      else if (typeof v === 'object') {
+        for (const [k, x] of Object.entries(v)) {
+          if (k === 'touch') continue;
+          walk(x, depth + 1);
+        }
+      }
     };
     walk(input.BINDINGS);
     walk(script);

@@ -27,6 +27,7 @@ import { paintExterior, startSignFlicker, KERB_Y, MAN_X } from '../art/exterior'
 import { MysteryMan } from '../art/mysteryMan';
 import { Player } from '../art/player';
 import { froggyLayer } from '../render/froggyLayer';
+import { isTouch } from '../core/device';
 
 export const STARTING_TOKENS = 20;
 
@@ -68,7 +69,8 @@ export class IntroCutscene extends Phaser.Scene {
   private card = 0;
   private line = 0;
   private caption!: Phaser.GameObjects.BitmapText;
-  private skip!: Phaser.GameObjects.BitmapText;
+  /** The keyboard hint.  Null on a phone, which has a SKIP button instead. */
+  private skip: Phaser.GameObjects.BitmapText | null = null;
   private arrow: Phaser.GameObjects.Container | null = null;
   /** What the arrow does right now.  Null means it is not showing. */
   private onArrow: (() => void) | null = null;
@@ -110,9 +112,16 @@ export class IntroCutscene extends Phaser.Scene {
   /**
    * The skip hint and the arrow.  Built twice, because the street rebuilds the
    * scene from nothing.
+   *
+   * A phone gets no hint: there is no Esc key to press, so the line would be
+   * an instruction the player cannot follow.  The SKIP it gets instead is a
+   * real button in the control band (see `game/touchLayouts.ts`), which sends
+   * the same Esc and sits below the picture rather than over the dialogue.
    */
   private buildChrome(): void {
-    this.skip = text(this, 6, GAME_H - 12, '[ESC] SKIP', PALETTE.ash).setAlpha(0.5).setDepth(900);
+    this.skip = isTouch()
+      ? null
+      : text(this, 6, GAME_H - 12, '[ESC] SKIP', PALETTE.ash).setAlpha(0.5).setDepth(900);
     this.arrow = button(this, GAME_W - 14, GAME_H - 10, '>', () => this.advance(), { width: 16, height: 13 });
     this.arrow.setDepth(900).setVisible(false);
   }
