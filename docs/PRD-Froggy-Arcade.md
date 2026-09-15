@@ -1129,7 +1129,7 @@ other five-token cabinet on the floor.
 - **The lizard's AI** searches its own throws against the wind actually blowing, keeps the arc that would land, then throws it with a small two-uniform wobble on both angle and power — so it aims like an opponent and misses like one. Its item choice is the same reasoning a player uses off the same stock: heal when hurt, dynamite to finish, poison early while there is time for it to work, rock otherwise.
 - **HUD:** both health bars, the round and round score, the poison counter on each side, the wind bar, the item bar with the key for each item and how many are left, and the control line.
 
-### 9.10 Wheel of Fortune — casino, 30 a spin
+### 9.10 Wheel of Fortune — casino, 40 a spin
 
 Not a cabinet: a painted wheel on a post in the corner of the casino, with a
 pointer over the top of it. **Free to walk up to and read** (MG-8) but barred
@@ -1144,31 +1144,36 @@ afterwards. A player who counts the faces gets the truth.
 
 | Face | Share of the rim |
 |---|---|
-| 500 | **1%** — one 3.6° splinter |
+| 5000 | **0.01%** — a hairline |
+| 1000 | **0.1%** |
+| 500 | **0.5%** |
 | 200 | **5%** |
-| 70 | **10%** — two faces |
-| 60 | **10%** — two faces |
-| 50 | **10%** — two faces |
-| 40 | **15%** — three faces |
-| 1, 2, 3, 5, 7, 10, 15 | **39%** — a seventh of it each |
+| 80, 90, 100 | **12%** — three faces at 4% each |
+| 40, 50, 60, 70 | **10%** — four faces at 2.5% each |
+| 1, 2, 3, 5, 7, 10, 15 | **62.39%** — a seventh of it each |
 | the blank | **10%** — two faces |
 
 **The percentages are no longer printed.** The board beside the wheel names
 what it can pay and says that the big money is on the thin slices; the honesty
 lives in the rim, where anyone who wants the odds can count them, rather than
-in a table that turns a fairground wheel into a prospectus. The exact shares
-are asserted in `tools/games.mjs` by sampling the geometry, precisely because
-nothing on screen would show them drifting.
+in a table that turns a fairground wheel into a prospectus.
 
-**The price is thirty, and it is the customer's call.** These faces average
-**41.4 tokens a spin**, so at 30 the wheel hands back about **11 tokens more
-than it takes, every spin, for ever**: it is the one fixture in the building
-with a standing positive edge to the player, and a patient player can farm the
-prize shelf off it rather than off the cabinets. That was said out loud when
-the price was set and 30 is what was asked for — the odds on the rim are
-exactly the ones specified, and the price is the number chosen to go against
-them. `SPIN_COST` in `minigames/wheel.ts` is the lever if the shelf ever needs
-to mean something again: at 45 the house keeps about 8%.
+**The shares are asserted against the wheel itself**, not against a copy of
+them typed into the harness: `tools/games.mjs` imports `FACES`, works out what
+each face should come up at from the arc it was cut, and samples 400,000 spins
+against that with a tolerance that scales with the face — a 0.01% hairline
+cannot be measured to the same absolute precision as a 62% band. It also
+checks the shares total a whole wheel. A retune is then a retune rather than a
+failure, and a face that stops matching its own arc is still caught.
+
+**The price is the lever, and it has been pulled.** These faces average
+**34.13 tokens a spin**. At 20 the wheel handed back about fourteen more than
+it took, every spin, for ever — the one fixture in the building with a
+standing positive edge to the player, and a patient player could farm the
+prize shelf off it rather than off the cabinets. **At 40 it keeps about six a
+spin instead**, so the shelf has to be earned on the floor again. `SPIN_COST`
+in `minigames/wheel.ts` is the whole of that decision: the faces were not
+touched to make it.
 
 ### 9.11 Dance Off — Hard, 10 → 20, in the back room
 
@@ -1266,7 +1271,7 @@ only things exempt:
 | Fixture | Cost | Pays | Why |
 |---|---:|---|---|
 | Froggy Slots | 2 a spin | its own paytable | §9.x, and it does not print its odds |
-| Wheel of Fortune | 30 a spin | 0 to 500, averaging 41.4 — positive to the player by design | §9.10 |
+| Wheel of Fortune | 40 a spin | 0 to 5000, averaging 34.13 — the house keeps about six | §9.10 |
 | Chamber | 5 in | 3 a clean pull, up to 15 | §9.12 |
 | Blackjack | 1 minimum | 2× the bet, hand by hand | §9.x |
 | Frog Cross | 7 | 50 points (five crossings) for 15, +1 every 50 after | a formula, not a constant |

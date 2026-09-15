@@ -1,5 +1,5 @@
 /**
- * WHEEL OF FORTUNE.  Twenty tokens a spin, in the corner of the casino.
+ * WHEEL OF FORTUNE.  Forty tokens a spin, in the corner of the casino.
  *
  * THE ODDS ARE THE GEOMETRY.  Every face on the wheel is cut to the width of
  * its own chance — the five thousand is a hairline sliver and the small
@@ -30,13 +30,13 @@
  * paid the moment the wheel stops, and LEAVE settles up.  Nothing leaves
  * except through the ledger (MG-3).
  *
- * THE PRICE IS TWENTY, AND IT IS THE PLAYER'S CALL.  These faces average
- * about 34.13 tokens a spin, so at twenty the wheel pays out roughly 14
- * tokens more than it takes, every spin, forever.  It is still the one
- * fixture in the building with a positive edge to the customer, and a
- * patient player can farm the prize shelf off it rather than off the
- * cabinets.  If the shelf ever needs to mean something again, this
- * constant is the lever.
+ * THE PRICE IS THE LEVER, AND IT HAS BEEN PULLED.  These faces average about
+ * 34.13 tokens a spin.  At twenty the wheel handed back fourteen more than it
+ * took, every spin, forever — the one fixture in the building with a positive
+ * edge to the customer, and a patient player could farm the prize shelf off it
+ * rather than off the cabinets.  At forty it keeps about six a spin instead,
+ * so the shelf has to be earned on the floor again.  `SPIN_COST` is the whole
+ * of that decision; the faces themselves were not touched to make it.
  */
 
 import Phaser from 'phaser';

@@ -1116,37 +1116,51 @@ for (const g of [
   const N = 400000;
   const seen = await page.evaluate((n) => window.__wheel.sample(n), N);
   const share = (v) => (seen[v] ?? 0) / N;
-  const band = (want, got, tol = 0.006) => Math.abs(got - want) <= tol;
 
-  const five = share(500);
-  const twoHundred = share(200);
-  const seventy = share(70);
-  const sixty = share(60);
-  const fifty = share(50);
-  const forty = share(40);
-  const small = [1, 2, 3, 5, 7, 10, 15].reduce((a, v) => a + share(v), 0);
-  const nothing = share(0);
+  // WHAT EACH FACE SHOULD COME UP AT IS READ OFF THE WHEEL ITSELF.  The odds
+  // are the geometry — every face is cut to the width of its own chance — so
+  // the only honest question is whether four hundred thousand spins land in
+  // the arcs the table actually cut.  Typing the percentages here instead
+  // meant that retuning the wheel, which is a thing somebody is allowed to do,
+  // failed as though the wheel were broken.
+  const want = await page.evaluate(async () => {
+    const { FACES } = await import('/src/minigames/wheel.ts');
+    const by = {};
+    for (const f of FACES) by[f.pays] = (by[f.pays] ?? 0) + f.share / 100;
+    return by;
+  });
 
-  const ok =
-    band(0.01, five, 0.003) &&
-    band(0.05, twoHundred) &&
-    band(0.1, seventy) &&
-    band(0.1, sixty) &&
-    band(0.1, fifty) &&
-    band(0.15, forty) &&
-    band(0.39, small, 0.01) &&
-    band(0.1, nothing);
+  // Tolerance scales with the face: a 0.01% sliver cannot be measured to the
+  // same absolute precision as a 62% band, and a flat one would either wave
+  // the slivers through or fail the wide bands on ordinary sampling noise.
+  const off = [];
+  for (const [pays, p] of Object.entries(want)) {
+    const got = share(Number(pays));
+    const tol = Math.max(0.0008, 4 * Math.sqrt((p * (1 - p)) / N));
+    if (Math.abs(got - p) > tol) off.push(`${pays} wants ${(p * 100).toFixed(2)}% got ${(got * 100).toFixed(2)}%`);
+  }
+  // And the table has to describe a whole wheel, not 97% of one.
+  const total = Object.values(want).reduce((a, b) => a + b, 0);
+  const whole = Math.abs(total - 1) < 1e-6;
+  const ok = off.length === 0 && whole;
+  const summary = Object.entries(want)
+    .sort((a, b) => Number(b[0]) - Number(a[0]))
+    .map(([v]) => `${v}:${(share(Number(v)) * 100).toFixed(2)}%`)
+    .join(' ');
   console.log(
-    `${ok ? 'PASS' : 'FAIL'}  wheel: the faces pay at the odds asked for  — ` +
-      `500 ${(five * 100).toFixed(2)}%, 200 ${(twoHundred * 100).toFixed(1)}%, 70 ${(seventy * 100).toFixed(1)}%, ` +
-      `60 ${(sixty * 100).toFixed(1)}%, 50 ${(fifty * 100).toFixed(1)}%, 40 ${(forty * 100).toFixed(1)}%, ` +
-      `1-15 ${(small * 100).toFixed(1)}%, none ${(nothing * 100).toFixed(1)}%`,
+    `${ok ? 'PASS' : 'FAIL'}  wheel: every face comes up at the width it was cut  — ` +
+      (whole ? summary : `shares total ${(total * 100).toFixed(2)}%`) +
+      (off.length ? `; ${off.slice(0, 3).join(', ')}` : ''),
   );
   if (!ok) failures++;
 
   // And a spin pays what it landed on, ONCE, through the ledger and nowhere
   // else: the net move for one spin is the face minus the price of the go.
-  const SPIN = 30;
+  // Off the wheel, not typed here: the price of a go is the machine's to set.
+  const SPIN = await page.evaluate(async () => {
+    const { SPIN_COST } = await import('/src/minigames/wheel.ts');
+    return SPIN_COST;
+  });
   const before = await page.evaluate(() => window.__froggy.state().tokens);
   await page.keyboard.press('Space');
   await sleep(4600);
@@ -1271,8 +1285,17 @@ for (const g of [
   });
   await sleep(4200);
   const after = await page.evaluate(() => window.__froggy.state().tokens);
-  const pays = after - before === 15;
-  console.log(`${pays ? 'PASS' : 'FAIL'}  dance off: taking the match pays the fifteen  — ${before} -> ${after}`);
+  // The cabinet's own reward, read off the floor: this machine has been
+  // repriced before and a number typed here only asserts what it used to cost.
+  const reward = await page.evaluate(async () => {
+    const { CABINETS } = await import('/src/game/content.ts');
+    return CABINETS.find((c) => c.id === 'danceoff').reward;
+  });
+  const pays = after - before === reward;
+  console.log(
+    `${pays ? 'PASS' : 'FAIL'}  dance off: taking the match pays the cabinet's reward  — ` +
+      `${before} -> ${after}, wants +${reward}`,
+  );
   if (!pays) failures++;
   await page.close();
 }
