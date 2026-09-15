@@ -163,9 +163,9 @@ export const CABINETS: CabinetDef[] = [
   // Along the bottom wall, under the middle two of the row above.  Neither
   // has a fixed reward: a run is worth what it scored, and the module names
   // the payout.
-  // Seven in, fifteen out like the other long games: the one cabinet you lose
-  // by being out of time rather than out of lives, and the only one played to
-  // a beat.
+  // Ten in, twenty out: the dearest cabinet in the building.  It is the one you
+  // lose by being out of time rather than out of lives, and the only one played
+  // to a beat.
   { id: 'danceoff', title: 'DANCE OFF', tier: 'hard', cost: 10, reward: 20, x: 48, y: 162, color: 0xff4fa3, room: 'annex', symbol: 'DO', motif: 'steps' },
   { id: 'frogcross', title: 'FROG CROSS', tier: 'hard', cost: 7, reward: 15, x: 112, y: 162, color: 0x6fbb6a, room: 'annex', symbol: 'FC', motif: 'road' },
   { id: 'carchase', title: 'CAR CHASE', tier: 'hard', cost: 5, reward: 10, x: 176, y: 162, color: 0x46a0e0, room: 'annex', symbol: 'CC', motif: 'car' },
@@ -196,7 +196,7 @@ export const CABINETS: CabinetDef[] = [
   },
   { id: 'roulette', title: 'CHAMBER', tier: 'hard', cost: 5, reward: 10, x: 224, y: 96, color: 0x8a2b34, room: 'casino', symbol: '6', motif: 'chamber' },
   // Not a machine either: a wheel on a post, in the corner of the casino.
-  // Twenty a spin, and what it pays is whatever the pointer is over when it
+  // Forty a spin, and what it pays is whatever the pointer is over when it
   // stops — `reward` is only what the room's badge would say, since the wheel
   // settles every spin itself through the shell (MinigameApi.payout).
   {
