@@ -231,16 +231,33 @@ try {
   }
   if (!midShot) await shot('07-hub-tutorial-mid');
   console.log(`   tutorial done after ${clicks} clicks`);
-  await sleep(900);
+
+  // Froggy WALKS off when the tutorial ends; he does not blink out.  Poll for
+  // the thing being asserted rather than sleeping a fixed beat and hoping, but
+  // keep a ceiling so a portrait genuinely left behind still fails.
+  let overlayAfter = await overlayPixels();
+  for (let i = 0; i < 12 && overlayAfter > 0; i++) {
+    await sleep(250);
+    overlayAfter = await overlayPixels();
+  }
   await shot('08-hub-free-roam');
 
-  const overlayAfter = await overlayPixels();
-  // Report who is on screen with it: a non-zero overlay here has been a race,
-  // and knowing which scene is painting is the whole diagnosis.
-  console.log(
-    `   overlay opaque pixels after tutorial: ${overlayAfter}` +
-      (overlayAfter ? ` (scenes: ${(await page.evaluate(() => window.__froggy.activeScenes())).join(',')})` : ''),
-  );
+  // Say what is on screen with it.  A non-zero overlay here has always been a
+  // race, and which scene is up and what the dialogue is doing IS the
+  // diagnosis — without it the failure is just a number.
+  if (overlayAfter) {
+    const who = await page.evaluate(() => {
+      const hub = window.__froggy.game().scene.getScene('ArcadeHub');
+      const d = hub?.dialogue;
+      return {
+        scenes: window.__froggy.activeScenes(),
+        dialogue: d ? `${d.state} ${d.index}/${d.lines.length}` : null,
+      };
+    });
+    console.log(`   overlay opaque pixels after tutorial: ${overlayAfter}  ${JSON.stringify(who)}`);
+  } else {
+    console.log('   overlay opaque pixels after tutorial: 0');
+  }
 
   console.log('6. walk to a cabinet');
   await walkToACabinet();

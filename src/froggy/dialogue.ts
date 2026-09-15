@@ -61,6 +61,8 @@ export class DialogueBox {
   private state: 'idle' | 'holdBefore' | 'typing' | 'holdAfter' | 'waiting' = 'idle';
   private holdTimer = 0;
   private bounce = 0;
+  /** Whether the portrait is currently on the overlay.  See `tick`. */
+  private painted = false;
   private onDone: (() => void) | null = null;
   private updateRef: (t: number, d: number) => void;
 
@@ -149,6 +151,18 @@ export class DialogueBox {
   private tick(delta: number): void {
     const line = this.current();
     if (this.state === 'idle' || !line) {
+      // ONE CLEAR ON THE FIRST IDLE FRAME.  `finish()` clears the overlay, but
+      // the frame it happens on is not always the last one to paint: the tap
+      // that ends the box and the scene's update run on different clocks, so
+      // now and then the portrait is drawn AFTER the clear that was meant to
+      // take it away — and with the box idle, nothing comes along to remove
+      // it.  Froggy then sits in the corner of the room until the next scene
+      // change.  Rare, entirely visible when it happens, and this settles it
+      // for a single clearRect once per conversation.
+      if (this.painted) {
+        this.painted = false;
+        froggyLayer.clear();
+      }
       return;
     }
 
@@ -211,6 +225,7 @@ export class DialogueBox {
   }
 
   private paintPortrait(line: DialogueLine): void {
+    this.painted = true;
     const talking = this.state === 'typing';
     const pose: FroggyPose = line.pose ?? (talking ? 'talk' : 'idleA');
     froggyLayer.paint((ctx) => {
@@ -255,6 +270,8 @@ export class DialogueBox {
     this.state = 'idle';
     this.container.setVisible(false);
     this.highlight.setVisible(false);
+    // Cleared here AND again on the next idle frame (see `tick`): this one is
+    // what the player sees, that one is what catches a paint that raced it.
     froggyLayer.clear();
     const cb = this.onDone;
     this.onDone = null;
