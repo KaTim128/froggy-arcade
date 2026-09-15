@@ -943,9 +943,9 @@ Measured over 200 automated runs per game (scripted competent player).
 | Frog Race | Hard | 7 | 15 | 14% blind, ~36% on the form | 30 s |
 | Texas Poker | Hard | 7 | 15 | 30–45% | 180 s |
 | Barrel Climb | Hard | 7 | 15 | 30–45% | 120 s |
-| Grudge (Fighter) | Hard | 5 | 10 | 30–45% | 90 s |
+| Grudge (Fighter) | Hard | 7 | 15 | 30–45% | 90 s |
 | Frog vs Lizard | Hard | 5 | 10 | 40–55% | 120 s |
-| Dance Off | Hard | 7 | 15 | 40–55% | 90–135 s |
+| Dance Off | Hard (long) | 10 | 20 | 40–55% | 90–135 s |
 
 Air Hockey moved to the back room and the hard tier when the floor was sorted
 by price; the two seven-token climbs and the two versus cabinets are explained
@@ -1074,7 +1074,7 @@ past first.
   noise.
 - Start with 100 chips. **Win:** reach 300. **Lose:** go out.
 
-### 9.8 Grudge (Fighter) — Hard, 5 → 10
+### 9.8 Grudge (Fighter) — Hard, 7 → 15
 
 An original 1v1 side-view fighter. Original characters and art. `[QFD: VOC-22]`
 
@@ -1170,7 +1170,7 @@ exactly the ones specified, and the price is the number chosen to go against
 them. `SPIN_COST` in `minigames/wheel.ts` is the lever if the shelf ever needs
 to mean something again: at 45 the house keeps about 8%.
 
-### 9.11 Dance Off — Hard, 7 → 15, in the back room
+### 9.11 Dance Off — Hard, 10 → 20, in the back room
 
 A step battle against a rival on the next mat. Arrows climb two lanes of four
 to the receptors at the top; press the matching key as yours reaches the line.
@@ -1245,7 +1245,8 @@ re-deducts the entry cost when it pays:
 | Easy | Tic-Tac-Toe | 1 | 2 | 0 |
 | Medium | Basketball Hoops, Whack-a-Frog, Bowling, Battleship | 3 | 6 | 0 |
 | Hard | Air Hockey, Grudge, Frog vs Lizard, The Flood | 5 | 10 | 0 |
-| Hard (long) | Pinball, Poker, Frog Race, Barrel Climb, Dance Off | 7 | 15 | 0 |
+| Hard (long) | Pinball, Poker, Frog Race, Barrel Climb, Grudge, The Flood, Frog Cross | 7 | 15 | 0 |
+| Hard (longest) | Dance Off | 10 | 20 | 0 |
 
 Everything up to the five-token row is a **2× on a win**, so expected value is
 negative unless the player wins more than half the time. That pressure is the
@@ -1281,12 +1282,12 @@ Net EV per play = `(p_win × reward) − cost`, where the break-even win rate is
 | The Flood | 0.375 | 7 | 5.63 | **−1.37** |
 | Basketball Hoops | 0.475 | 3 | 2.85 | **−0.15** |
 | Whack-a-Frog | 0.475 | 3 | 2.85 | **−0.15** |
-| Grudge | 0.375 | 5 | 3.75 | **−1.25** |
+| Grudge | 0.375 | 7 | 5.63 | **−1.37** |
 | Froggy Pinball | 0.375 | 7 | 5.63 | **−1.37** |
 | Texas Poker | 0.375 | 7 | 5.63 | **−1.37** |
 | Find The Frog | 0.475 | 3 | 2.85 | **−0.15** |
 | Frog Race (on the form) | 0.364 | 7 | 5.46 | **−1.54** |
-| Dance Off | 0.475 | 7 | 7.13 | **+0.13** |
+| Dance Off | 0.475 | 10 | 9.50 | **−0.50** |
 
 **Read:** the Easy tier is a coin flip that pays for itself and no more, and the Hard tier bleeds badly. This is deliberate and load-bearing:
 

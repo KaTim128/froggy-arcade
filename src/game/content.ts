@@ -74,7 +74,8 @@ export interface CabinetDef {
 /**
  * The standard table, and the only one a normal cabinet may use.
  *
- *   1 in -> 2 out     3 in -> 6 out     5 in -> 10 out     7 in -> 15 out
+ *   1 in -> 2 out    3 in -> 6 out    5 in -> 10 out    7 in -> 15 out
+ *   10 in -> 20 out, for the longest cabinet in the building
  *
  * The reward is the TOTAL handed back on a win, not a bonus on top of the
  * stake — the stake is already gone, so 3 in and 6 out is three tokens of
@@ -91,7 +92,10 @@ export const TIER_ECONOMY: Record<Tier, { cost: number; reward: number }> = {
 };
 
 /** What a normal cabinet at this price must pay on a win. */
-export const STANDARD_REWARD: Record<number, number> = { 1: 2, 3: 6, 5: 10, 7: 15 };
+// 10 -> 20 is the top of it: the two longest cabinets in the building were
+// repriced above seven, and the rule the table encodes is "a win is worth
+// about twice the stake", not "these four prices and no others".
+export const STANDARD_REWARD: Record<number, number> = { 1: 2, 3: 6, 5: 10, 7: 15, 10: 20 };
 
 /**
  * NOTE on the count: the brief says "six minigames" but enumerates seven
@@ -144,7 +148,7 @@ export const CABINETS: CabinetDef[] = [
   { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 290, y: 164, color: 0x1d6f8f, symbol: 'BS', motif: 'ship' },
 
   // ---- the back room: five to seven a go
-  { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 5, reward: 10, x: 48, y: 96, color: 0xc31f2e, room: 'annex', symbol: 'VS', motif: 'fist' },
+  { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 7, reward: 15, x: 48, y: 96, color: 0xc31f2e, room: 'annex', symbol: 'VS', motif: 'fist' },
   // Every seven-token cabinet pays fifteen: eight tokens of profit for the
   // longest games in the building, which is the top of the standard table.
   { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 7, reward: 15, x: 112, y: 96, color: 0xd9822b, room: 'annex', symbol: 'BC', motif: 'ladder' },
@@ -162,7 +166,7 @@ export const CABINETS: CabinetDef[] = [
   // Seven in, fifteen out like the other long games: the one cabinet you lose
   // by being out of time rather than out of lives, and the only one played to
   // a beat.
-  { id: 'danceoff', title: 'DANCE OFF', tier: 'hard', cost: 7, reward: 15, x: 48, y: 162, color: 0xff4fa3, room: 'annex', symbol: 'DO', motif: 'steps' },
+  { id: 'danceoff', title: 'DANCE OFF', tier: 'hard', cost: 10, reward: 20, x: 48, y: 162, color: 0xff4fa3, room: 'annex', symbol: 'DO', motif: 'steps' },
   { id: 'frogcross', title: 'FROG CROSS', tier: 'hard', cost: 7, reward: 15, x: 112, y: 162, color: 0x6fbb6a, room: 'annex', symbol: 'FC', motif: 'road' },
   { id: 'carchase', title: 'CAR CHASE', tier: 'hard', cost: 5, reward: 10, x: 176, y: 162, color: 0x46a0e0, room: 'annex', symbol: 'CC', motif: 'car' },
   // Ten on a five, like every other five-token cabinet on the floor.
@@ -192,14 +196,14 @@ export const CABINETS: CabinetDef[] = [
   },
   { id: 'roulette', title: 'CHAMBER', tier: 'hard', cost: 5, reward: 10, x: 224, y: 96, color: 0x8a2b34, room: 'casino', symbol: '6', motif: 'chamber' },
   // Not a machine either: a wheel on a post, in the corner of the casino.
-  // Thirty a spin, and what it pays is whatever the pointer is over when it
+  // Twenty a spin, and what it pays is whatever the pointer is over when it
   // stops — `reward` is only what the room's badge would say, since the wheel
   // settles every spin itself through the shell (MinigameApi.payout).
   {
     id: 'wheel',
     title: 'WHEEL OF FORTUNE',
     tier: 'hard',
-    cost: 30,
+    cost: 40,
     reward: 40,
     x: 58,
     y: 140,
