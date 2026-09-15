@@ -65,6 +65,19 @@ const ARROW_GROW = 30;
 const PREVIEW_POWER = 0.55;
 const ARC_DOTS = 18;
 const ARC_STEP = 0.055;
+/**
+ * How much room inside the mouth a shot needs before the arc will call it IN.
+ *
+ * GREEN IS A PROMISE, SO IT IS DELIBERATELY CAUTIOUS.  The rim is moving, so
+ * the prediction walks it forward to where it will be when the ball arrives —
+ * a second and a half away — and a walk at a fixed step against a flight
+ * integrated at whatever the frame rate gives drifts by a pixel or two over
+ * that distance.  A shot that clears the mouth by less than the drift is one
+ * the arc cannot honestly promise, so it does not: it goes amber, and if it
+ * drops anyway the player gets a pleasant surprise instead of a broken word.
+ * The asymmetry is the whole point — green never lies, amber sometimes does.
+ */
+const SURE_MARGIN = 3;
 /** Points, not shots: a make on fire is worth two of them. */
 const TARGET_MAKES = 5;
 const ROUND_MS = 60_000;
@@ -230,7 +243,7 @@ export const hoops: MinigameModule = {
           if (!hit) return { good: false, reason: 'never reaches the rim' };
           const rim = hoopAt(hit.t);
           return {
-            good: Math.abs(hit.x - rim) < hoopW / 2 - 2,
+            good: sureThing(hit.x, rim),
             x: Math.round(hit.x),
             t: Number(hit.t.toFixed(3)),
             rim: Math.round(rim),
@@ -255,7 +268,7 @@ export const hoops: MinigameModule = {
               const was = aim;
               aim = a;
               const hit = crossing(p);
-              const ok = hit !== null && Math.abs(hit.x - hoopAt(hit.t)) < hoopW / 2 - 2;
+              const ok = hit !== null && sureThing(hit.x, hoopAt(hit.t));
               aim = was;
               if (ok) return { aim: Number(a.toFixed(3)), power: Number(p.toFixed(3)) };
             }
@@ -325,6 +338,7 @@ export const hoops: MinigameModule = {
     // ---- flight
     if (inFlight) {
       const prevY = ball.y;
+      const prevX = ball.x;
       ballVel.y += GRAVITY * dt;
       ball.x += ballVel.x * dt;
       ball.y += ballVel.y * dt;
@@ -345,13 +359,22 @@ export const hoops: MinigameModule = {
         }
       }
 
-      // through the rim, downward, within the hoop's mouth
+      // Through the rim, downward, within the hoop's mouth — asked AT THE
+      // CROSSING, not at the end of the step that crossed it.  The ball covers
+      // five or six pixels a frame and the mouth is twenty wide, so testing
+      // `ball.x` once it is already past the rim's height judged the shot on
+      // where it had got to rather than on where it went through: a ball that
+      // dropped cleanly through one edge was a miss because a frame later it
+      // was outside.  The path within a step is a straight line, so this is
+      // where that line crosses HOOP_Y.
+      const k = ball.y === prevY ? 1 : (HOOP_Y - prevY) / (ball.y - prevY);
+      const crossX = prevX + (ball.x - prevX) * k;
       if (
         !scoredThisFlight &&
         ballVel.y > 0 &&
         prevY <= HOOP_Y &&
         ball.y >= HOOP_Y &&
-        Math.abs(ball.x - hoopX) < hoopW / 2 - 2
+        Math.abs(crossX - hoopX) < hoopW / 2 - 2
       ) {
         scoredThisFlight = true;
         hoopSpeed *= 1.15; // PRD §9.5
@@ -553,7 +576,17 @@ function hoopAt(t: number): number {
 export function wouldScore(p: number): boolean {
   const hit = crossing(p);
   if (!hit) return false;
-  return Math.abs(hit.x - hoopAt(hit.t)) < hoopW / 2 - 2;
+  return sureThing(hit.x, hoopAt(hit.t));
+}
+
+/**
+ * Would this crossing drop through, with room to spare?
+ *
+ * `hoopW / 2 - 2` is the rim's real mouth, the same test the flight itself
+ * uses; `SURE_MARGIN` is what the arc holds back before it will say so.
+ */
+function sureThing(x: number, rim: number): boolean {
+  return Math.abs(x - rim) < hoopW / 2 - 2 - SURE_MARGIN;
 }
 
 function shoot(): void {
@@ -581,7 +614,7 @@ function drawArc(): void {
   const vx = Math.cos(aim) * speed;
   const vy = Math.sin(aim) * speed;
   const hit = crossing(p);
-  const good = hit !== null && Math.abs(hit.x - hoopAt(hit.t)) < hoopW / 2 - 2;
+  const good = hit !== null && sureThing(hit.x, hoopAt(hit.t));
   const colour = good ? PALETTE.mossLight : PALETTE.amber;
   const alpha = charging ? 1 : 0.5;
 
