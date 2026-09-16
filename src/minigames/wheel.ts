@@ -1,5 +1,5 @@
 /**
- * WHEEL OF FORTUNE.  Forty tokens a spin, in the corner of the casino.
+ * WHEEL OF FORTUNE.  Twenty Five tokens a spin, in the corner of the casino.
  *
  * THE ODDS ARE THE GEOMETRY.  Every face on the wheel is cut to the width of
  * its own chance — the five thousand is a hairline sliver and the small
