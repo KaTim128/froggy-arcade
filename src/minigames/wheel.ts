@@ -47,7 +47,7 @@ import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
 const ID = 'wheel' as const;
-export const SPIN_COST = 40;
+export const SPIN_COST = 25;
 
 /**
  * The faces, in the order they sit round the rim, with the share of the wheel
@@ -164,8 +164,8 @@ export const wheelOfFortune: MinigameModule = {
   id: ID,
   title: 'WHEEL OF FORTUNE',
   music: 'game_wheel',
-  rules: 'forty a spin - the wheel says what it pays',
-  payoutNote: 'PAYS 1 - 5000',
+  rules: '25 a spin - the wheel says what it pays',
+  payoutNote: 'PAYS 0 - 5000',
   tutorial: {
     objective: [
       'ONE SPIN, ONE PRIZE, WHATEVER IT STOPS ON.',
