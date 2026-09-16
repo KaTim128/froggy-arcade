@@ -419,8 +419,6 @@ export const COUNTER = { x: 112, y: 44, w: 146, h: 18 };
 export const COUNTER_DEPTH = 50 + (44 + 18) / 1000;
 export const BELL = { x: 122, y: 56 };
 export const PRIZE_CASE = { x: 126, y: 44, w: 100, h: 18 };
-/** PRD AD-5: only reachable at night, when the arcade is closed. */
-export const COUNTER_VAULT = { x: 200, y: 66 };
 /**
  * The way into the back of the building, at the counter's right-hand end.  It
  * is INSIDE the counter's span on purpose: the only way to reach it is over
@@ -428,3 +426,14 @@ export const COUNTER_VAULT = { x: 200, y: 66 };
  * player they could just walk up.
  */
 export const STAFF_DOOR = { x: 232, y: 40 };
+/**
+ * The stretch of counter you can actually get over, and it is the right-hand
+ * end — under the staff door, which is the only reason to be back there.
+ *
+ * It has to sit clear of the prize case (126..226).  When both were offered
+ * over the same floor the case always won, because it is tested first, and
+ * CLIMB OVER survived only in the fourteen pixels past the case's right edge:
+ * a player walking the counter looking for the way over found the wrong prompt
+ * almost everywhere and the right one almost nowhere.
+ */
+export const COUNTER_CLIMB = { from: 228, to: COUNTER.x + COUNTER.w - 2 };

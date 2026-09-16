@@ -21,7 +21,14 @@ import { fadeIn, fadeToScene, text } from '../core/ui';
 import { paintChangeMachine, paintHubRoom, ROOM } from '../art/hubRoom';
 import { Cabinet } from '../art/cabinet';
 import { Player } from '../art/player';
-import { CABINETS, COUNTER, COUNTER_DEPTH, COUNTER_VAULT, PRIZE_CASE, STAFF_DOOR } from '../game/content';
+import {
+  CABINETS,
+  COUNTER,
+  COUNTER_CLIMB,
+  COUNTER_DEPTH,
+  PRIZE_CASE,
+  STAFF_DOOR,
+} from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 
@@ -129,13 +136,7 @@ export class ArcadeDark extends Phaser.Scene {
 
       case 'counter':
         // AD-5: the interaction the arcade never offered while it was open.
-        // Over, and DOWN behind it: the counter's front face is drawn in front
-        // of the player from here, so what shows is a head and shoulders above
-        // the lip rather than a whole person standing on the back wall.
-        audio.sfx('vault');
-        this.behindCounter = true;
-        this.player.setPosition(COUNTER.x + COUNTER.w / 2, COUNTER.y + 13);
-        this.say('');
+        this.climbOver();
         break;
 
       case 'staff': {
@@ -160,18 +161,84 @@ export class ArcadeDark extends Phaser.Scene {
     this.tweens.add({ targets: this.mutter, alpha: 0, delay: 1800, duration: 600 });
   }
 
+  /**
+   * Over the counter, from where you are standing.
+   *
+   * It used to be a single frame: the flag went true and the player appeared
+   * at the MIDDLE of the counter however far along it they had been standing,
+   * which reads as being put somewhere rather than going there.  Now they go
+   * up and over at their own x — clamped to the counter's span, since that is
+   * the only part there is anything to climb — and the input is held for the
+   * half second it takes, so the climb is something that happens rather than
+   * something that has happened.
+   *
+   * ONE WAY.  Nothing sets `behindCounter` back, no prompt offers the climb
+   * from the far side, and the strip back there is the counter's own width, so
+   * this is the last time this interaction is available.
+   */
+  private climbOver(): void {
+    if (this.behindCounter || this.locked) return;
+    this.locked = true;
+    audio.sfx('vault');
+    this.prompt.setVisible(false);
+    this.promptPlate.setVisible(false);
+    this.say('');
+
+    const fromX = this.player.x;
+    const fromY = this.player.y;
+    const toX = Phaser.Math.Clamp(fromX, COUNTER.x + 12, COUNTER.x + COUNTER.w - 12);
+    const toY = COUNTER.y + 13;
+    // Up onto the lip, across, and down the other side: one tween with a hop
+    // in it, rather than two the player would see as a stutter.
+    const t = { k: 0 };
+    this.tweens.add({
+      targets: t,
+      k: 1,
+      duration: 520,
+      ease: 'Sine.easeInOut',
+      onUpdate: () => {
+        const hop = Math.sin(t.k * Math.PI) * 9;
+        this.player.setPosition(
+          Phaser.Math.Linear(fromX, toX, t.k),
+          Phaser.Math.Linear(fromY, toY, t.k) - hop,
+        );
+      },
+      onComplete: () => {
+        this.player.setPosition(toX, toY);
+        // The flag goes true at the END of it.  Flipping it first would swap
+        // the bounds to the service strip mid-climb and drag him through it.
+        this.behindCounter = true;
+        this.locked = false;
+      },
+    });
+  }
+
   update(_t: number, delta: number): void {
     if (this.locked) return;
 
     const dx = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     const dy = (this.held('down') ? 1 : 0) - (this.held('up') ? 1 : 0);
 
-    // Behind the counter is a narrow service strip inside the counter's own
-    // band — deep enough to walk its length, shallow enough that the front
-    // face never stops hiding your legs.
+    // THE COUNTER IS A WALL UNTIL YOU CLIMB IT.  The floor used to run all the
+    // way to the back of the room, so a player could simply walk up past the
+    // counter — through the table, as far as the picture was concerned — and
+    // round either end of it, and CLIMB OVER was a thing you could decline and
+    // still end up behind.  The front face is the back of the room now, across
+    // the WHOLE width and not just the counter's span: leaving the corners open
+    // would only move the way round from through it to beside it.
+    //
+    // Behind it is a narrow service strip inside the counter's own band — deep
+    // enough to walk its length, shallow enough that the front face never stops
+    // hiding your legs, and no wider than the counter, so there is no walking
+    // back round the end once you are over.
     const bounds = this.behindCounter
       ? new Phaser.Geom.Rectangle(COUNTER.x + 8, COUNTER.y + 10, COUNTER.w - 16, 6)
-      : new Phaser.Geom.Rectangle(ROOM.left + 8, ROOM.top + 6, ROOM.right - ROOM.left - 16, ROOM.bottom - ROOM.top - 6);
+      : new Phaser.Geom.Rectangle(
+          ROOM.left + 8,
+          COUNTER.y + COUNTER.h + 2,
+          ROOM.right - ROOM.left - 16,
+          ROOM.bottom - (COUNTER.y + COUNTER.h + 2),
+        );
     this.player.move(dx, dy, delta, bounds);
 
     const px = this.player.x;
@@ -184,7 +251,7 @@ export class ArcadeDark extends Phaser.Scene {
       this.spot = 'door';
     } else if (py < COUNTER.y + 30 && px > PRIZE_CASE.x && px < PRIZE_CASE.x + PRIZE_CASE.w) {
       this.spot = 'case';
-    } else if (py < COUNTER.y + 32 && Math.abs(px - COUNTER_VAULT.x) < 40) {
+    } else if (py < COUNTER.y + 32 && px >= COUNTER_CLIMB.from && px <= COUNTER_CLIMB.to) {
       this.spot = 'counter';
     } else {
       this.spot = null;
