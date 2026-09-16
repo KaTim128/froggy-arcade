@@ -104,6 +104,15 @@ const PLAYER_R = 0.42;
  * thing this size ends up wedged in a doorway.
  */
 const FROGGY_SCALE = 1.75;
+/**
+ * And bigger again in the arcade, because the arcade has the height for it.
+ *
+ * The ward's ceiling is 3.8 and he stands 3.61 under it; this room was built
+ * at 4.2 so the last time you see him he can be the biggest he has ever been
+ * and still be under a ceiling rather than through it.  1.9 puts his head at
+ * 3.92 — a hand's width of air, in a room whose machines come up to his knee.
+ */
+const FINAL_SCALE = 1.9;
 /** How quickly he can turn, radians per second.  Below this he slides. */
 const FROGGY_TURN = 5.5;
 /** How quickly he gets up to speed and back down, per second. */
@@ -121,7 +130,8 @@ const MEMORY_S = 4.0;
  * have made all three rooms harder simply because he got taller.  At 1.75 this
  * is 1.58m, a finger's width off what it was at 1.35.
  */
-const CATCH_DIST = 1.15 * (1 + (FROGGY_SCALE - 1) * 0.5);
+const catchFor = (scale: number): number => 1.15 * (1 + (scale - 1) * 0.5);
+const CATCH_DIST = catchFor(FROGGY_SCALE);
 
 const SPOT_REACH = 1.6;
 const DOOR_REACH = 2.2;
@@ -158,7 +168,34 @@ const ZONE_LINES: Array<Array<[string, number]>> = [
     ['WHERE ARE YOU....', 3200],
     ['{N} MINUTES.', 2400],
   ],
+  // THE ARCADE.  One line, and he does not say what the rules are, because in
+  // this room there are none of his to say: no count, no clock, nothing he is
+  // promising.  He is simply in here looking for you, and the objective on
+  // screen is the game's to state, not his.
+  [["WHERE IS THAT USELESS BEING...", 3400]],
 ];
+
+/**
+ * The last room is the arcade, and it does not work like the other three.
+ *
+ * No clock: you are not surviving a number, you are getting out.  The way out
+ * is the front door at the far end, which takes five seconds of holding a key
+ * you were given for something else.  He hunts the whole time, slower than he
+ * did downstairs because the room is the puzzle now and you need long enough
+ * in it to solve one.
+ */
+const FINAL_ROOM = 3;
+/**
+ * How much of his search pace he keeps in the arcade.
+ *
+ * Downstairs he was a shade faster than a running player, which is what made
+ * those rooms about not being seen at all.  Here you have to cross his floor,
+ * climb his counter and stand still at a door for five seconds — so he searches
+ * at two-thirds, which leaves room to move, watch him, and go.  Sighting you
+ * still puts him at full chase speed: the mercy is in the looking, not the
+ * catching.
+ */
+const FINAL_SEARCH_PACE = 0.66;
 /** How long his answer to "if not" is allowed to hang there. */
 const BRIEFING_TAIL_MS = 2400;
 
@@ -567,7 +604,7 @@ export class HideRoom3D extends Phaser.Scene {
     // opening the lockers and the thing in the alley are one creature.  Hidden
     // for the count — the first fifteen seconds are yours, and nothing should
     // loom through them.
-    this.monster = new FroggyMonster(FROGGY_SCALE);
+    this.monster = new FroggyMonster(this.isFinal ? FINAL_SCALE : FROGGY_SCALE);
     this.monster.setVisible(false);
     st.scene.add(this.monster.root);
     // A fingerprint of the model, published for the harness: the alley reports
@@ -875,12 +912,13 @@ export class HideRoom3D extends Phaser.Scene {
       this.runCount(dt);
       this.movePlayer(dt);
     } else if (this.mode === 'seeking') {
-      this.clock -= dt;
+      // The arcade has no clock.  You leave by the door or not at all.
+      if (!this.isFinal) this.clock -= dt;
       this.movePlayer(dt);
       this.moveFroggy(dt);
       this.checkCaught();
       this.roomTone(dt);
-      if (this.clock <= 0) this.survive();
+      if (!this.isFinal && this.clock <= 0) this.survive();
     } else if (this.mode === 'caught') {
       this.caughtT += dt;
     } else if (this.mode === 'survived') {
@@ -919,7 +957,14 @@ export class HideRoom3D extends Phaser.Scene {
     this.monster?.setVisible(true);
     // Well down the room, facing you: near enough to read, far enough that he
     // is not the whole screen.
-    this.froggy.set(this.def.spawn.x, this.def.spawn.z - 9);
+    // NINE METRES INTO THE ROOM, whichever end of it you came in at.  The
+    // first three rooms put you at the +z wall, so "towards the middle" was
+    // always -z and the nine could simply be subtracted; the arcade lets you in
+    // at the BACK, behind the counter, and subtracting there stood him outside
+    // the room and on top of you — close enough that the round opened with him
+    // already having you.
+    const inward = this.def.spawn.z > 0 ? -1 : 1;
+    this.froggy.set(this.def.spawn.x, this.def.spawn.z + inward * 9);
     this.froggyWas.copy(this.froggy);
     this.froggyYaw = Math.atan2(this.pos.x - this.froggy.x, this.pos.y - this.froggy.y);
     this.fMode = 'listen';
@@ -947,10 +992,13 @@ export class HideRoom3D extends Phaser.Scene {
         }
         this.time.delayedCall(this.roomIndex === 0 ? BRIEFING_TAIL_MS : 900, () => {
           if (this.mode !== 'briefing') return;
-          this.mode = 'hiding';
-          this.clock = HIDE_S;
+          // NO COUNT IN THE ARCADE.  The ten seconds exist because he shuts
+          // the door and gives them to you; up here he is already in the room
+          // and has promised nothing, so the round simply starts.
+          this.mode = this.isFinal ? 'seeking' : 'hiding';
+          this.clock = this.isFinal ? 0 : HIDE_S;
           this.subtitle = '';
-          this.monster?.setVisible(false);
+          this.monster?.setVisible(this.isFinal);
           this.fMode = 'search';
           this.fTimer = 0;
           this.freeFroggy();
@@ -1350,7 +1398,10 @@ export class HideRoom3D extends Phaser.Scene {
    */
   private checkCaught(): void {
     if (this.mode !== 'seeking' || this.hiding) return;
-    if (this.pos.distanceTo(this.froggy) < CATCH_DIST) this.caught();
+    // His reach follows his size, so the arcade's larger model has the arcade's
+    // larger grab rather than the one the smaller rooms were tuned for.
+    const reach = this.isFinal ? catchFor(FINAL_SCALE) : CATCH_DIST;
+    if (this.pos.distanceTo(this.froggy) < reach) this.caught();
   }
 
   /**
@@ -1393,11 +1444,23 @@ export class HideRoom3D extends Phaser.Scene {
    */
   private froggySpeed(): number {
     const pace = ROOM_PACE[Math.min(this.roomIndex, ROOM_PACE.length - 1)];
+    // ONCE HE HAS SEEN YOU HE IS THE SAME EVERYWHERE.  The arcade slows his
+    // SEARCH, not his chase: the room is the puzzle up here and you need time
+    // in it, but being spotted has to cost exactly what it always cost.
     if (this.fMode === 'chase') return FROGGY_CHASE * pace;
+    const hunt = this.isFinal ? pace * FINAL_SEARCH_PACE : pace;
     // Something made a noise, so he is not dawdling — but he is not chasing
     // either, because he has not seen anything to chase.
-    if (this.fMode === 'investigate') return FROGGY_SEARCH * pace;
-    return (this.unseenT > LOST_YOU_S ? FROGGY_PROWL : FROGGY_SEARCH) * pace;
+    if (this.fMode === 'investigate') return FROGGY_SEARCH * hunt;
+    return (this.unseenT > LOST_YOU_S ? FROGGY_PROWL : FROGGY_SEARCH) * hunt;
+  }
+
+  /**
+   * The arcade: the last room, and the only one with a door instead of a
+   * clock.  Everything that behaves differently up here asks this.
+   */
+  private get isFinal(): boolean {
+    return this.roomIndex === FINAL_ROOM;
   }
 
   private openSeconds(): number {
@@ -1805,6 +1868,12 @@ export class HideRoom3D extends Phaser.Scene {
           center: true,
           alpha: 0.9,
         });
+      } else if (this.mode === 'seeking' && this.isFinal) {
+        // WHAT TO DO, NOT HOW LONG IS LEFT.  A clock in the corner of this
+        // room would be answering a question nobody asked: there is no time
+        // limit here, only a door, and the player has to be told which.
+        drawPixelText(ctx, 'OBJECTIVE', 6, 6, { scale: 1, color: '#7a8494', alpha: 0.8 });
+        drawPixelText(ctx, 'REACH THE DOOR', 6, 16, { scale: 1.5, color: '#ffd45e', alpha: 0.9 });
       } else if (this.mode === 'seeking') {
         const left = Math.max(0, Math.ceil(this.clock));
         const mm = Math.floor(left / 60);
@@ -1888,7 +1957,7 @@ export class HideRoom3D extends Phaser.Scene {
       froggyProwl: FROGGY_PROWL,
       lostYouSeconds: LOST_YOU_S,
       froggyMeshes: this.froggyMeshes,
-      froggyScale: FROGGY_SCALE,
+      froggyScale: this.isFinal ? FINAL_SCALE : FROGGY_SCALE,
       roomPace: ROOM_PACE[Math.min(this.roomIndex, ROOM_PACE.length - 1)],
       crouching: this.crouching,
       pathLength: this.path.length,
