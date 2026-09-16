@@ -25,7 +25,6 @@ export type GameId =
   | 'wheel'
   | 'danceoff'
   | 'fallingblocks'
-  | 'pinball'
   | 'frograce'
   | 'frograce';
 
@@ -173,7 +172,6 @@ function defaultState(): GameState {
       wheel: 0,
       danceoff: 0,
       fallingblocks: 0,
-      pinball: 0,
       frograce: 0,
     },
     highScores: {},

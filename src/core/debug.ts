@@ -82,7 +82,7 @@ export function initDebug(g: Phaser.Game): void {
 /**
  * Dev-only deep links, the debug panel's URL equivalent (PRD DB-1):
  *   ?scene=BasementSequence   jump straight to a scene
- *   ?game=pinball             jump straight into a cabinet
+ *   ?game=hoops               jump straight into a cabinet
  *   ?tokens=200&route=ejected&key=1   set state first
  * Used by the automated harness so each piece can be verified on its own.
  */

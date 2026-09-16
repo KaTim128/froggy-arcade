@@ -35,6 +35,7 @@ import { ROOMS, type Box, type RoomDef, type SpotKind } from '../three/hideRooms
 import { buildGrid, findPath, lineOpen, spotExtent, type NavGrid } from '../three/navGrid';
 import { dressRoom, surfaceTexture } from '../three/hideDecor';
 import { buildCabinet, buildPrizeCase } from '../three/arcadeProps';
+import { buildSecretRoom, SECRET_ORIGIN, type SecretRoom } from '../three/secretRoom';
 
 /** A walk is slow and silent; a run is fast and heard.  That is the trade. */
 const WALK = 2.0;
@@ -186,6 +187,8 @@ const ZONE_LINES: Array<Array<[string, number]>> = [
  * in it to solve one.
  */
 const FINAL_ROOM = 3;
+/** No offset.  Named so the camera reads as one expression either way. */
+const ZERO = new THREE.Vector3(0, 0, 0);
 /**
  * How much of his search pace he keeps in the arcade.
  *
@@ -213,6 +216,21 @@ const FINAL_SEARCH_PACE = 0.66;
  * else in the building.
  */
 const FROGGY_IN_ARCADE = false;
+/**
+ * Rooms where he speaks but is NOT in the shot.
+ *
+ * Room two's line is "WHERE ARE YOU...." -- which is a thing said by something
+ * that cannot see you, and he was standing nine metres in front of the player
+ * saying it, filling the middle of the screen, with the room he was asking
+ * about hidden behind him.  The line lands harder from nowhere: the player is
+ * alone in a room they cannot yet read, and a voice in it wants to know where
+ * they are.
+ *
+ * He is still placed, still pathing and still hunting the moment the count
+ * ends -- he simply starts the round from his own corner instead of from the
+ * player's face.
+ */
+const UNSEEN_BRIEFING = new Set([2]);
 /**
  * How long the key has to stay turning in the staff door.
  *
@@ -395,6 +413,16 @@ export class HideRoom3D extends Phaser.Scene {
   private roomIndex = 0;
 
   private yaw = 0;
+  /**
+   * Up and down.
+   *
+   * The view was yaw only, which was survivable in four rooms where everything
+   * worth seeing is at eye height -- and impossible the moment there is a sheet
+   * of glass under your feet with something standing under it.  Dragging the
+   * mouse up and down pitches, clamped short of straight up and straight down
+   * so the horizon never rolls over.
+   */
+  private pitch = 0;
   private pos = new THREE.Vector2();
   private mode: Mode = 'hiding';
   /** Counts down through the hiding phase, then through his hunt. */
@@ -481,12 +509,36 @@ export class HideRoom3D extends Phaser.Scene {
   private vault: { from: THREE.Vector2; to: THREE.Vector2; t: number } | null = null;
   /** Whether the counter has been crossed at all, for the harness. */
   private vaulted = false;
+  /**
+   * The room behind the wall, and whether the player is in it.
+   *
+   * `inSecret` is the single safety switch: while it is true nothing in the
+   * hunt can reach the player.  He is not paused for it -- he goes on searching
+   * the room you left, which is most of the point -- he simply cannot see,
+   * hear, path to or catch somebody who is not in his building any more.
+   */
+  private secret: SecretRoom | null = null;
+  private inSecret = false;
+  /** Floor height under the player.  Only the secret room has more than one. */
+  private floorY = 0;
+  /** The button has been pressed and the fade is running.  Once only. */
+  private leaving = false;
+  /**
+   * The hide room's own lamps, including the torch.
+   *
+   * ONLY ONE ROOM IS LIT AT A TIME.  Both spaces live in the same scene, and
+   * three evaluates every visible light against every fragment -- so leaving
+   * both sets burning halved the frame rate, and at under twenty frames a
+   * second `threeStage`'s dt clamp makes the game's own clock run slow.
+   */
+  private roomLights: THREE.Light[] = [];
   private subtitle = '';
   private keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
   /** True while the left mouse button is down: dragging the view around. */
   private looking = false;
   /** Last cursor position, for working out the drag by hand. */
   private lookX = 0;
+  private lookY = 0;
   private onMove: ((e: MouseEvent) => void) | null = null;
   private onDown: ((e: MouseEvent) => void) | null = null;
   private onUp: (() => void) | null = null;
@@ -532,6 +584,11 @@ export class HideRoom3D extends Phaser.Scene {
     this.tumbler = 0;
     this.vault = null;
     this.vaulted = false;
+    this.secret = null;
+    this.inSecret = false;
+    this.floorY = 0;
+    this.leaving = false;
+    this.roomLights = [];
     this.path = [];
     this.pathFor.set(NaN, NaN);
     this.pathAge = 0;
@@ -553,6 +610,7 @@ export class HideRoom3D extends Phaser.Scene {
     // the half turn — otherwise the first frame of the last room in the game
     // is a wall two metres away.
     this.yaw = this.def.spawnYaw ?? 0;
+    this.pitch = 0;
     // He is outside for the count.  He walks in when it runs out.
     this.froggy.set(this.def.froggyStart.x, this.def.froggyStart.z);
     this.froggyWas.copy(this.froggy);
@@ -580,12 +638,15 @@ export class HideRoom3D extends Phaser.Scene {
     const d = this.def;
     st.scene.background = new THREE.Color(0x05060a);
     st.scene.fog = new THREE.FogExp2(0x05060a, 0.032);
-    st.scene.add(new THREE.AmbientLight(0x45444a, 1.05));
+    const amb = new THREE.AmbientLight(0x45444a, 1.05);
+    st.scene.add(amb);
+    this.roomLights.push(amb);
 
     for (const l of d.lights) {
       // Reach has to scale with the room.  At 16m in a 36m lounge the bulbs lit
       // a puddle each and the rest was the torch and nothing.
       const bulb = new THREE.PointLight(l.color, l.intensity, 26, 1.3);
+      this.roomLights.push(bulb);
       bulb.position.set(l.x, d.wallH - 0.5, l.z);
       st.scene.add(bulb);
       const shade = new THREE.Mesh(
@@ -598,6 +659,7 @@ export class HideRoom3D extends Phaser.Scene {
 
     // a torch of your own, so the far corners are not free information
     const torch = new THREE.SpotLight(0xfff0c9, 110, 18, THREE.MathUtils.degToRad(30), 0.55, 1.1);
+    this.roomLights.push(torch);
     torch.position.set(0, 0, 0.2);
     torch.target.position.set(0, 0, -1);
     st.camera.add(torch);
@@ -717,6 +779,14 @@ export class HideRoom3D extends Phaser.Scene {
 
     // The dirt, the litter, the damp.  Placed off anything solid.
     dressRoom(st.scene, d, seed, (x, z) => this.solid(x, z, 0.3));
+
+    // The room behind the wall, built six hundred metres away so that nothing
+    // in the hunt -- no waypoint, no earshot test, no path probe -- can reach
+    // it by arithmetic.  It costs a few dozen meshes the player will probably
+    // never see, and the alternative is building it on entry, which would put
+    // a stall exactly where the surprise is.
+    if (d.secretDoor) this.secret = buildSecretRoom(st.scene);
+    this.secret?.setActive(false);
 
     // Froggy himself: a real model, the same one the alley uses, so the thing
     // opening the lockers and the thing in the alley are one creature.  Hidden
@@ -891,6 +961,7 @@ export class HideRoom3D extends Phaser.Scene {
       if (e.button !== 0) return;
       this.looking = true;
       this.lookX = e.clientX;
+      this.lookY = e.clientY;
       // Otherwise the drag selects the page furniture behind the canvas.
       e.preventDefault();
     };
@@ -899,8 +970,13 @@ export class HideRoom3D extends Phaser.Scene {
       // Prefer the browser's own delta, fall back to tracking the cursor: some
       // browsers leave movementX at 0 outside pointer lock.
       const dx = e.movementX || e.clientX - this.lookX;
+      const dy = e.movementY || e.clientY - this.lookY;
       this.lookX = e.clientX;
+      this.lookY = e.clientY;
       this.yaw -= dx * LOOK_SENS;
+      // Clamped well short of vertical: past about sixty degrees the room
+      // stops having a floor and the player loses which way they are facing.
+      this.pitch = Phaser.Math.Clamp(this.pitch - dy * LOOK_SENS, -1.15, 1.0);
     };
     this.onUp = () => {
       this.looking = false;
@@ -933,6 +1009,13 @@ export class HideRoom3D extends Phaser.Scene {
 
   private interact(): void {
     if (this.mode !== 'hiding' && this.mode !== 'seeking') return;
+
+    // Inside the wall there is exactly one thing to press, and nothing else in
+    // here answers to E: no spots, no doors, no case.
+    if (this.inSecret) {
+      if (this.atButton()) this.leaveBySecret();
+      return;
+    }
 
     if (this.hiding) {
       this.stepOut(this.hiding);
@@ -1165,6 +1248,63 @@ export class HideRoom3D extends Phaser.Scene {
     if (this.unlockT >= UNLOCK_S) this.survive();
   }
 
+  /**
+   * Through the wall.
+   *
+   * Everything that could still touch the player is cut here, in one place, so
+   * there is no second path by which a chase already in flight lands after the
+   * fact: the hiding spot is let go of, the vault is cancelled, the count is
+   * put out of reach, and `inSecret` goes true -- after which `sees`, `alert`,
+   * `creak` and `checkCaught` all refuse on sight.
+   *
+   * HE IS NOT STOPPED.  He keeps searching the room, because the room is still
+   * there and he is still in it; he has simply lost the only thing he was
+   * looking for, and the pathfinder has no idea the wall was ever anything
+   * else.
+   */
+  private enterSecret(): void {
+    const sec = this.secret;
+    if (!sec || this.inSecret) return;
+    this.inSecret = true;
+    this.hiding = null;
+    this.vault = null;
+    this.crouching = false;
+    this.subtitle = '';
+    this.prompt = '';
+    this.unlockT = 0;
+    // A chase in progress ends at the wall.  He loses you there and works the
+    // room from the last place he had you, which is exactly right.
+    if (this.fMode === 'chase') {
+      this.fMode = 'search';
+      this.memory = 0;
+      this.pickWaypoint();
+    }
+
+    this.pos.set(sec.spawn.x, sec.spawn.z);
+    this.yaw = sec.spawn.yaw;
+    this.floorY = sec.floorAt(sec.spawn.x, sec.spawn.z);
+    this.eyeNow = EYE;
+
+    // The air changes.  Warm and thin instead of cold and thick, and it is the
+    // first thing the player notices before they have read a single object.
+    const st = this.stage;
+    if (st) st.scene.fog = new THREE.FogExp2(0x3a2418, 0.012);
+    // The lights change hands.  His room goes dark behind you -- it is six
+    // hundred metres away and nothing in here can see into it -- and the
+    // lounge comes up.
+    for (const l of this.roomLights) l.visible = false;
+    sec.setActive(true);
+    audio.setScene(SILENCE);
+    audio.sfx('door_shut', 0.5);
+  }
+
+  /** Standing at the pedestal in the lounge. */
+  private atButton(): boolean {
+    if (!this.inSecret || !this.secret) return false;
+    const b = this.secret.button;
+    return Math.hypot(this.pos.x - b.x, this.pos.y - b.z) < 2.2 && this.floorY < 1.0;
+  }
+
   private say(text: string, ms: number): void {
     this.subtitle = text;
     this.time.delayedCall(ms, () => {
@@ -1219,6 +1359,21 @@ export class HideRoom3D extends Phaser.Scene {
       this.endT += dt;
     }
 
+    // WHICH FLOOR THE PLAYER IS ON.  Every frame, not only the ones they are
+    // pressing a key on: `movePlayer` returns early when nothing is held, so
+    // running this in there left the height stale after any teleport and left
+    // the button unreachable from the pedestal it is standing on.  Eased, so
+    // the steps read as steps instead of the camera jumping up each one.
+    if (this.inSecret && this.secret) {
+      const want = this.secret.floorAt(this.pos.x, this.pos.y);
+      this.floorY += (want - this.floorY) * Math.min(1, dt * 12);
+    }
+
+    // The television, the button's lamp and the thing under the glass.  It
+    // runs whether or not anyone is in there: walking in on a room that starts
+    // moving when you arrive is walking onto a set.
+    this.secret?.tick(dt);
+
     for (const c of this.spots) {
       if (this.mode === 'seeking') c.sinceChecked += dt;
       const want = c.opening ? 1 : 0;
@@ -1248,7 +1403,8 @@ export class HideRoom3D extends Phaser.Scene {
     }
     // Later zones: the echo for the one you got through, then his line.
     if (this.roomIndex > 0) audio.sfx('zone_clear');
-    this.monster?.setVisible(true);
+    const unseen = UNSEEN_BRIEFING.has(this.roomIndex) || !this.hunted;
+    this.monster?.setVisible(!unseen);
     // Well down the room, facing you: near enough to read, far enough that he
     // is not the whole screen.
     // NINE METRES INTO THE ROOM, whichever end of it you came in at.  The
@@ -1258,7 +1414,13 @@ export class HideRoom3D extends Phaser.Scene {
     // the room and on top of you — close enough that the round opened with him
     // already having you.
     const inward = this.def.spawn.z > 0 ? -1 : 1;
-    this.froggy.set(this.def.spawn.x, this.def.spawn.z + inward * 9);
+    if (unseen) {
+      // Out of the shot entirely: his own starting corner, which is where the
+      // count would have put him anyway.
+      this.froggy.set(this.def.froggyStart.x, this.def.froggyStart.z);
+    } else {
+      this.froggy.set(this.def.spawn.x, this.def.spawn.z + inward * 9);
+    }
     this.froggyWas.copy(this.froggy);
     this.froggyYaw = Math.atan2(this.pos.x - this.froggy.x, this.pos.y - this.froggy.y);
     this.fMode = 'listen';
@@ -1425,6 +1587,16 @@ export class HideRoom3D extends Phaser.Scene {
     if (!this.solid(nx, this.pos.y)) this.pos.x = nx;
     if (!this.solid(this.pos.x, nz)) this.pos.y = nz;
     this.clampToRoom(this.pos);
+
+    if (this.inSecret) {
+      this.bob += dt * (running ? 9 : this.crouching ? 3.5 : 5.5);
+      return;
+    }
+    // Past the face of the wall inside the secret door's span: you are in.
+    if (this.def.secretDoor && this.pos.x > this.def.halfW - 0.2) {
+      this.enterSecret();
+      return;
+    }
 
     this.bob += dt * (running ? 9 : this.crouching ? 3.5 : 5.5);
     this.stepT += dt * speed;
@@ -1702,6 +1874,12 @@ export class HideRoom3D extends Phaser.Scene {
     // are unable to steer out of it is a trap, not a decision.  It lasts under
     // two thirds of a second and it is loud, so he is already coming.
     if (this.mode !== 'seeking' || this.hiding || this.vault) return;
+    // AND HERE, BELT AND BRACES.  Nothing catches you through a wall he does
+    // not know is a door, and six hundred metres of world space between the
+    // two of you would already have made the distance test pass -- but this
+    // must be true because it is stated, not because the arithmetic happens
+    // to agree.
+    if (this.inSecret) return;
     // His reach follows his size, so the arcade's larger model has the arcade's
     // larger grab rather than the one the smaller rooms were tuned for.
     const reach = this.isFinal ? catchFor(FINAL_SCALE) : CATCH_DIST;
@@ -1891,7 +2069,7 @@ export class HideRoom3D extends Phaser.Scene {
    */
   private creak(): void {
     this.play('floor_creak', 0.9);
-    if (this.mode !== 'seeking') return;
+    if (this.mode !== 'seeking' || this.inSecret) return;
     if (this.froggy.distanceTo(this.pos) > CREAK_HEARD_FROM) return;
     this.investigate(this.pos.x, this.pos.y);
   }
@@ -1917,7 +2095,7 @@ export class HideRoom3D extends Phaser.Scene {
   }
 
   private alert(): void {
-    if (this.fMode === 'chase') return;
+    if (this.inSecret || this.fMode === 'chase') return;
     // Running is louder than a board, so he gets a better fix on it — but it
     // is still only a place to walk to.
     this.lastSeen.copy(this.pos);
@@ -1925,6 +2103,10 @@ export class HideRoom3D extends Phaser.Scene {
   }
 
   private sees(): boolean {
+    // THE SAFETY, AT THE ROOT.  Sight, hearing and the catch test all come
+    // back through here or through `inSecret` directly, so there is one answer
+    // rather than four places that each have to remember.
+    if (this.inSecret) return false;
     const dx = this.pos.x - this.froggy.x;
     const dz = this.pos.y - this.froggy.y;
     const dist = Math.hypot(dx, dz);
@@ -2024,6 +2206,14 @@ export class HideRoom3D extends Phaser.Scene {
 
   /** Furniture is solid to bodies and to sight.  `pad` widens it for him. */
   private solid(x: number, z: number, pad = PLAYER_R): boolean {
+    // Two spaces, one test.  Inside the wall the room's own furniture is six
+    // hundred metres away and irrelevant; only the lounge's is.
+    if (this.inSecret && this.secret) {
+      for (const b of this.secret.blockers) {
+        if (Math.abs(x - b.x) < b.w / 2 + pad && Math.abs(z - b.z) < b.d / 2 + pad) return true;
+      }
+      return false;
+    }
     for (const b of this.blockers) {
       if (Math.abs(x - b.x) < b.w / 2 + pad && Math.abs(z - b.z) < b.d / 2 + pad) return true;
     }
@@ -2050,8 +2240,20 @@ export class HideRoom3D extends Phaser.Scene {
   }
 
   private clampToRoom(v: THREE.Vector2): void {
-    v.x = Phaser.Math.Clamp(v.x, -this.def.halfW + 0.6, this.def.halfW - 0.6);
-    v.y = Phaser.Math.Clamp(v.y, -this.def.halfD + 0.6, this.def.halfD - 0.6);
+    if (this.inSecret && this.secret) {
+      this.secret.clamp(v);
+      return;
+    }
+    const d = this.def;
+    // THE ONE HOLE IN THE WALL.  Every other millimetre of every wall clamps
+    // exactly as it always did; inside the secret door's span the +X clamp is
+    // pushed out far enough to step THROUGH, and movePlayer picks that up on
+    // the next frame.  Doing it here rather than by deleting a collider is what
+    // keeps it to this span: there is no geometry to get wrong, and nothing
+    // else in the game -- him included -- ever calls this.
+    const through = d.secretDoor && Math.abs(v.y - d.secretDoor.z) < d.secretDoor.w / 2;
+    v.x = Phaser.Math.Clamp(v.x, -d.halfW + 0.6, through ? d.halfW + 1.4 : d.halfW - 0.6);
+    v.y = Phaser.Math.Clamp(v.y, -d.halfD + 0.6, d.halfD - 0.6);
   }
 
   // ------------------------------------------------------------------ render
@@ -2073,12 +2275,18 @@ export class HideRoom3D extends Phaser.Scene {
       this.eyeNow += (eyeWant - this.eyeNow) * Math.min(1, dt * 9);
     }
     const y = this.eyeNow + (this.hiding ? 0 : Math.sin(this.bob) * 0.035);
+    // The secret complex is built at SECRET_ORIGIN, and `pos` stays local to
+    // whichever space the player is in, so the offset is applied once, here.
+    const o = this.inSecret ? SECRET_ORIGIN : ZERO;
     cam.position.set(
-      this.pos.x + (Math.random() - 0.5) * jitter,
-      y + (Math.random() - 0.5) * jitter,
-      this.pos.y,
+      o.x + this.pos.x + (Math.random() - 0.5) * jitter,
+      o.y + this.floorY + y + (Math.random() - 0.5) * jitter,
+      o.z + this.pos.y,
     );
-    cam.rotation.set(0, this.yaw, 0);
+    // YXZ: yaw about the world's up, then pitch about the camera's own right.
+    // The default XYZ order tips the horizon over as soon as both are non-zero.
+    cam.rotation.order = 'YXZ';
+    cam.rotation.set(this.pitch, this.yaw, 0);
 
     // Being hidden means being close to him and unable to move — the room
     // shakes when he is right outside, which is the only warning you get.
@@ -2336,6 +2544,11 @@ export class HideRoom3D extends Phaser.Scene {
       atDoor: this.atDoor(),
       atCase: this.atCase(),
       atCounter: this.atCounter(),
+      inSecret: this.inSecret,
+      hasSecret: !!this.def.secretDoor,
+      secretDoorZ: this.def.secretDoor?.z ?? null,
+      atButton: this.atButton(),
+      floorY: this.floorY,
       vaulting: !!this.vault,
       vaulted: this.vaulted,
       unlockT: this.unlockT,
@@ -2369,6 +2582,34 @@ export class HideRoom3D extends Phaser.Scene {
 
     this.time.delayedCall(SCARE_MS + 700, () => {
       froggyLayer.clear();
+      this.scene.restart();
+    });
+  }
+
+  /**
+   * The button, and on to the next room.
+   *
+   * It is the same advance the clock running out gives you, taken early and
+   * from somewhere he cannot follow.  No card: HE NEVER FOUND YOU is a verdict
+   * on a round that was played, and this was not one.
+   */
+  private leaveBySecret(): void {
+    if (this.leaving) return;
+    this.leaving = true;
+    this.prompt = '';
+    this.subtitle = '';
+    audio.sfx('chime', 0.8);
+    this.time.delayedCall(700, () => {
+      const next = this.roomIndex + 1;
+      froggyLayer.clear();
+      if (next >= ROOMS.length) {
+        store.patch({ route: 'chase', hideRoom: 0 });
+        store.flush();
+        this.scene.start('Chase3D');
+        return;
+      }
+      store.patch({ hideRoom: next });
+      store.flush();
       this.scene.restart();
     });
   }
@@ -2437,6 +2678,8 @@ export class HideRoom3D extends Phaser.Scene {
     this.onUp = null;
     this.looking = false;
     if (document.pointerLockElement) document.exitPointerLock();
+    this.secret?.dispose();
+    this.secret = null;
     this.stage?.dispose();
     this.stage = null;
     froggyLayer.clear();
@@ -2447,6 +2690,14 @@ export class HideRoom3D extends Phaser.Scene {
     // The prompt is cheap to recompute and needs to track the player.
     if ((this.mode !== 'hiding' && this.mode !== 'seeking') || this.hiding) {
       this.prompt = '';
+      return;
+    }
+
+    if (this.inSecret) {
+      // NOTHING PROMPTS THE WALL, on either side of it.  The button is the one
+      // thing in the sequence that is allowed to shout, and only once you are
+      // standing in a room nobody was told about.
+      this.prompt = this.atButton() ? '[E] GO ON' : '';
       return;
     }
     const spot = this.nearestSpot(SPOT_REACH);

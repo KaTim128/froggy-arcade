@@ -27,7 +27,6 @@ import { frogVsLizard } from './frogvslizard';
 import { wheelOfFortune } from './wheel';
 import { danceOff } from './danceoff';
 import { flood } from './flood';
-import { pinball } from './pinball';
 import { frogRace } from './frograce';
 
 const REGISTRY: Partial<Record<GameId, MinigameModule>> = {
@@ -48,7 +47,6 @@ const REGISTRY: Partial<Record<GameId, MinigameModule>> = {
   wheel: wheelOfFortune,
   danceoff: danceOff,
   fallingblocks: flood,
-  pinball,
   frograce: frogRace,
 };
 

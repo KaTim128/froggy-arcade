@@ -80,6 +80,18 @@ export interface RoomDef {
    * way you came from is half of knowing which way out is.
    */
   staffDoor?: { x: number };
+  /**
+   * THE SECTION OF THE RIGHT-HAND WALL YOU CAN WALK THROUGH.
+   *
+   * `z` is its centre on the +X wall (screen-right at spawn, since yaw 0 looks
+   * down -Z), `w` how wide it is.  It is not drawn, not lit, not prompted and
+   * not in the nav grid: from either side it is wall, and the only thing that
+   * knows otherwise is the player's own movement test.
+   *
+   * Deliberately narrow.  A three-metre hole would be found by anyone who ran
+   * a wall; a metre and a half has to be aimed at.
+   */
+  secretDoor?: { z: number; w: number };
   /** Where he goes once he has finished with the door.  Kept off the furniture. */
   froggyStart: { x: number; z: number };
   /**
@@ -353,7 +365,7 @@ function scaleRoom(def: RoomDef, k: number, bulk = k): RoomDef {
  * has grown (1.3), so the walls, the partitions and the spots are where they
  * always were relative to each other and there is simply more floor in between.
  */
-export const LIVING_ROOM: RoomDef = scaleRoom(LOUNGE_BASE, 1.5, 1.3);
+export const LIVING_ROOM: RoomDef = { ...scaleRoom(LOUNGE_BASE, 1.5, 1.3), secretDoor: { z: 9.0, w: 1.6 } };
 /**
  * The stores was the largest room in the building and it played like it: long
  * racking runs, a lot of ground between one locker and the next, and a hunt
@@ -362,8 +374,14 @@ export const LIVING_ROOM: RoomDef = scaleRoom(LOUNGE_BASE, 1.5, 1.3);
  * aisles stay wide — smaller room, same number of ways through it, and a real
  * chance to leave one spot for another while he is working the other end.
  */
-export const WAREHOUSE: RoomDef = scaleRoom(STORES_BASE, 1.0, 0.85);
-export const WARD: RoomDef = scaleRoom(WARD_BASE, 1.1);
+export const WAREHOUSE: RoomDef = { ...scaleRoom(STORES_BASE, 1.0, 0.85), secretDoor: { z: 10.0, w: 1.6 } };
+/**
+ * THE SECRET DOORS.  Set after scaling, in final room coordinates, and each
+ * one sited on the clearest stretch of its room's +X wall -- clear of every
+ * piece of furniture and every hiding place, so walking into it is walking
+ * into bare wall and nothing about the dressing hints at it.
+ */
+export const WARD: RoomDef = { ...scaleRoom(WARD_BASE, 1.1), secretDoor: { z: -10.8, w: 1.6 } };
 
 /**
  * THE ARCADE, IN THREE DIMENSIONS.  The last room of the sequence, and the

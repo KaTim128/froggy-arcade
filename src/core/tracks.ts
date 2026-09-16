@@ -265,19 +265,6 @@ export const TRACKS: Record<string, TrackPreset> = {
   }),
   // Pinball: a bright, bouncing vamp with a fast shuffle under it — the noise
   // a machine with a bell in it makes when it is pleased with you.
-  game_pinball: preset({
-    bpm: 152,
-    chords: [maj(C.c4), maj(C.f4 - 12), maj(C.g4 - 12), maj(C.c4)],
-    bass: [0, 0, _, 1, _, 2, _, 1],
-    lead: [C.c5, C.e5, C.g5, C.e5, C.c6, _, C.g5, _, C.f5, C.a5, C.c6, C.a5, C.f5, _, C.c5, _],
-    leadWave: 'square',
-    bassWave: 'triangle',
-    arpWave: 'square',
-    drums: 'four',
-    cutoff: 4200,
-    vol: { lead: 0.028, bass: 0.05, arp: 0.018, drums: 1.1 },
-    ring: 0.6,
-  }),
   // The race: a fairground gallop.  All forward motion, no menace.
   game_frograce: preset({
     bpm: 164,

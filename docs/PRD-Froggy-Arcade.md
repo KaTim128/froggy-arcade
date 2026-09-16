@@ -260,7 +260,7 @@ type GameId =
   // existence to gain a tidier string.
   | 'tictactoe' | 'fallingblocks' | 'airhockey'
   | 'hoops' | 'whack'
-  | 'pinball' | 'frograce' | 'grudge';
+  | 'frograce' | 'grudge';
 ```
 
 | # | Requirement |
@@ -1425,7 +1425,7 @@ src/
   minigames/
     index.ts              // registry, shared Minigame interface (§9.0)
     tictactoe/ flood/ airhockey/ hoops/ whack/ grudge/
-    pinball/ frograce/ ...  // nineteen in all
+    frograce/ hoops/ ...     // eighteen in all
   froggy/
     froggy.ts             // variant state machine V0/V1/V2 (§8.2)
     script.ts             // all dialogue (§8.4)

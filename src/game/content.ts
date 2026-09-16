@@ -124,10 +124,6 @@ export const CABINETS: CabinetDef[] = [
   // A token in, two out: you win one.  Three out was a 3x on the cheapest
   // games in the building and the only positive-EV corner of the floor.
   { id: 'tictactoe', title: 'TIC-TAC-TOE', tier: 'easy', cost: 1, reward: 2, x: 52, y: 88, color: 0xff4fa3, symbol: 'X', motif: 'grid' },
-  // Seven in, fifteen out, in the slot The Flood briefly stood in and Snakes &
-  // Ladders stood in before that.  A table game in a room of screens: the only
-  // cabinet out here with moving parts behind the glass.
-  { id: 'pinball', title: 'FROGGY PINBALL', tier: 'hard', cost: 7, reward: 15, x: 98, y: 88, color: 0xff4fa3, symbol: 'PB', motif: 'pins' },
   // The bottom row: two either side of the front door, in line with the two
   // above.  Nothing sits under the change machine on the right wall, because a
   // cabinet's click zone up there swallows every attempt to use it.

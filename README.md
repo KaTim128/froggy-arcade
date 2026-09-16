@@ -132,7 +132,7 @@ how the harness reaches any part of the game directly:
 
 ```
 ?scene=ArcadeDark&route=ejected      jump to a scene with the state it needs
-?game=pinball&tokens=50              jump straight into a cabinet
+?game=hoops&tokens=50                jump straight into a cabinet
 ?intro=1&charity=1&key=1             set the latches
 ?touch=1                             force the phone controls on (0 forces off)
 ```
