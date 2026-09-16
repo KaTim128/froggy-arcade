@@ -19,6 +19,14 @@ export type BrokeOutcome = 'charity' | 'eject' | null;
 export function evaluateBroke(): BrokeOutcome {
   const s = store.get();
   if (s.route !== 'normal') return null;
+  // NOBODY COMES WHEN YOU RUN OUT ANY MORE.
+  //
+  // Both outcomes of this check are Froggy: the handout is him, and the
+  // ejection is him closing the building with you in it.  After the night he
+  // is not in the building, so an empty pocket is just an empty pocket -- the
+  // player keeps the run of the arcade and the street outside, and nothing
+  // walks over to tell them the day is finished.
+  if (s.froggyGone) return null;
   if (ledger.balance() > 0) return null;
   return s.charityUsed ? 'eject' : 'charity';
 }

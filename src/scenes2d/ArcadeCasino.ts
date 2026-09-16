@@ -310,7 +310,7 @@ export class ArcadeCasino extends Phaser.Scene {
     this.saidIt = true;
     audio.sfx('dialogue_blip', 0.5);
     this.say("FROGGY HASN'T BEEN AROUND LATELY...");
-    this.time.delayedCall(1700, () => this.say("I'M NOT SURE WHERE HE WENT."));
+    this.time.delayedCall(1700, () => this.say("I'M NOT SURE WHERE THAT LITTLE GUY WENT."));
   }
 
   private say(msg: string): void {

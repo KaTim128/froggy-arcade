@@ -681,7 +681,7 @@ class AudioManager {
    * One-shot sfx.  These are transient and do NOT count as instantiated sources,
    * which is what lets footsteps exist inside the silence contract (PRD AD-1).
    */
-  sfx(name: SfxName, gain = 1): void {
+  sfx(name: SfxName, gain = 1, place?: SfxPlace): void {
     if (!this.unlocked || !this.ctx) return;
     const asset = this.assets.get(name);
     if (asset) {
@@ -699,6 +699,30 @@ class AudioManager {
       trim.gain.value = Math.max(0, Math.min(1, gain));
       trim.connect(bus);
       out = trim;
+    }
+    // WHERE IT IS COMING FROM.
+    //
+    // `pan` is stereo and honest.  `behind` is not -- stereo cannot put a
+    // sound behind a head -- but the ear reads a dulled version of a sound it
+    // expects to be bright as one coming from behind, because that is what the
+    // shape of an ear actually does to it.  A lowpass and a little pan is the
+    // whole trick, and at the far end of a dark room it works on everybody.
+    if (place && (place.behind || place.pan)) {
+      if (place.behind) {
+        const filt = ctx.createBiquadFilter();
+        filt.type = 'lowpass';
+        // 2400 down to about 700 as `behind` goes 0 -> 1.
+        filt.frequency.value = 2400 - Math.max(0, Math.min(1, place.behind)) * 1700;
+        filt.Q.value = 0.4;
+        filt.connect(out);
+        out = filt;
+      }
+      if (place.pan !== undefined && ctx.createStereoPanner) {
+        const pan = ctx.createStereoPanner();
+        pan.pan.value = Math.max(-1, Math.min(1, place.pan));
+        pan.connect(out);
+        out = pan;
+      }
     }
     const t = ctx.currentTime;
 
@@ -1072,6 +1096,17 @@ class AudioManager {
     ng.connect(out);
     src.start(t);
   }
+}
+
+/**
+ * Where a one-shot is standing, for the handful of sounds whose direction is
+ * the information rather than a decoration on it.
+ */
+export interface SfxPlace {
+  /** -1 hard left, 0 centred, 1 hard right. */
+  pan?: number;
+  /** 0..1 how far behind the listener.  Dulls it; see `sfx`. */
+  behind?: number;
 }
 
 export type SfxName =

@@ -9,6 +9,7 @@ import { store, LEDGER_KEY, ADMIN_TOKENS } from './state';
 
 export type LedgerReason =
   | 'seed' // the $10 -> 20 tokens at the intro
+  | 'survived' // whatever is left in the pocket after the night
   | 'game.cost' // minigame launch
   | 'game.reward' // minigame win
   | 'game.refund' // a tie: the entry cost handed straight back
@@ -83,6 +84,27 @@ class TokenLedger {
   onBroke(cb: BrokeListener): () => void {
     this.brokeListeners.add(cb);
     return () => this.brokeListeners.delete(cb);
+  }
+
+  /**
+   * The purse, set outright, after surviving the night.
+   *
+   * Not a credit and not a debit: the player comes back out of the arcade with
+   * what they come back out with, and what that is has nothing to do with what
+   * they went in holding.  It is its own reason so that nothing downstream
+   * mistakes it for a win.
+   *
+   * It does NOT fire the broke listeners, even at zero: the whole point of the
+   * state it leaves behind is that running out no longer summons anybody.
+   */
+  setAfterNight(value: number): void {
+    if (store.isAdmin()) {
+      this.balance();
+      return;
+    }
+    const prev = this.balance();
+    store.setTokens(LEDGER_KEY, Math.max(0, Math.floor(value)));
+    for (const fn of this.changeListeners) fn(this.balance(), prev, 'survived');
   }
 
   /** Debug panel only. */
