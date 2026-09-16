@@ -700,8 +700,30 @@ export class HideRoom3D extends Phaser.Scene {
     };
     wall(0, -d.halfD - 0.25, d.halfW * 2 + 1, 0.5);
     wall(0, d.halfD + 0.25, d.halfW * 2 + 1, 0.5);
-    wall(-d.halfW - 0.25, 0, 0.5, d.halfD * 2 + 1);
-    wall(d.halfW + 0.25, 0, 0.5, d.halfD * 2 + 1);
+    // The side walls go up in one piece each, EXCEPT where a decorative
+    // opening is cut into one: there it goes up in two, with a gap left
+    // between them.  A dark panel laid flat on an unbroken wall reads as a
+    // stain, not as a way through; the eye needs the wall to actually stop.
+    const openSide = d.wallOpening;
+    for (const sx of [-1, 1] as const) {
+      const wx = sx * (d.halfW + 0.25);
+      const side = sx < 0 ? 'left' : 'right';
+      if (!openSide || openSide.side !== side) {
+        wall(wx, 0, 0.5, d.halfD * 2 + 1);
+        continue;
+      }
+      const lo = -d.halfD - 0.5;
+      const hi = d.halfD + 0.5;
+      const gapA = openSide.z - openSide.w / 2;
+      const gapB = openSide.z + openSide.w / 2;
+      wall(wx, (lo + gapA) / 2, 0.5, gapA - lo);
+      wall(wx, (gapB + hi) / 2, 0.5, hi - gapB);
+      // and a lintel across the top of the gap, so the hole has a height
+      wall(wx, openSide.z, 0.5, openSide.w);
+      const lintelFix = st.scene.children[st.scene.children.length - 1] as THREE.Mesh;
+      lintelFix.scale.y = (d.wallH - openSide.h) / d.wallH;
+      lintelFix.position.y = openSide.h + (d.wallH - openSide.h) / 2;
+    }
 
     // the door out, set into the far wall
     const doorMat = new THREE.MeshLambertMaterial({ color: 0x53331f });
@@ -779,6 +801,69 @@ export class HideRoom3D extends Phaser.Scene {
 
     // The dirt, the litter, the damp.  Placed off anything solid.
     dressRoom(st.scene, d, seed, (x, z) => this.solid(x, z, 0.3));
+
+    // THE WAY THROUGH TO THE BACK ROOM, WHICH ISN'T ONE.
+    //
+    // A recess cut into the side wall with a lit frame round it, so from the
+    // floor it reads as an opening you could walk into.  It is bricked up a
+    // foot behind the frame, and the room's own clamp stops you a good half
+    // metre short of the wall plane in the first place -- so there are two
+    // independent reasons the player never gets through it, and neither of
+    // them is a hole in the collision that could be found somewhere else.
+    if (d.wallOpening) {
+      const w = d.wallOpening;
+      const sx = w.side === 'left' ? -1 : 1;
+      const wallX = sx * d.halfW;
+      // A short passage behind the gap, going away from the room and ending in
+      // a wall.  It has depth, so from an angle you see the inside of it and
+      // it reads as somewhere rather than as a painted rectangle -- and there
+      // is nothing in it, because there is nothing to find.
+      const passage = new THREE.Mesh(
+        new THREE.BoxGeometry(3.0, w.h, w.w),
+        new THREE.MeshLambertMaterial({ color: 0x141a26 }),
+      );
+      passage.position.set(wallX + sx * 1.5, w.h / 2, w.z);
+      st.scene.add(passage);
+      const back = new THREE.Mesh(
+        new THREE.BoxGeometry(0.3, w.h, w.w + 0.6),
+        new THREE.MeshLambertMaterial({ color: 0x0b0e15 }),
+      );
+      back.position.set(wallX + sx * 3.1, w.h / 2, w.z);
+      st.scene.add(back);
+      // The frame, standing proud of the wall on the ROOM side, lit: the one
+      // thing down that wall with any colour in it, and what makes the eye
+      // read the gap as a doorway rather than as a missing panel.
+      for (const off of [-1, 1]) {
+        const jamb = new THREE.Mesh(
+          new THREE.BoxGeometry(0.3, w.h + 0.2, 0.26),
+          new THREE.MeshBasicMaterial({ color: 0x2f8f9f }),
+        );
+        jamb.position.set(wallX + sx * -0.2, (w.h + 0.2) / 2, w.z + off * (w.w / 2 + 0.13));
+        st.scene.add(jamb);
+      }
+      const head = new THREE.Mesh(
+        new THREE.BoxGeometry(0.3, 0.24, w.w + 0.52),
+        new THREE.MeshBasicMaterial({ color: 0x2f8f9f }),
+      );
+      head.position.set(wallX + sx * -0.2, w.h + 0.1, w.z);
+      st.scene.add(head);
+      const spill = new THREE.PointLight(0x46c4bd, 6, 8, 1.6);
+      spill.position.set(wallX + sx * -0.9, w.h * 0.6, w.z);
+      st.scene.add(spill);
+      this.roomLights.push(spill);
+      // AND IT IS SHUT.  A collider filling the gap, so the one place the wall
+      // has a hole in it is the one place the player is stopped by something
+      // other than the wall.  The room's own clamp already holds them half a
+      // metre short; this is the reason that stays true if the clamp changes.
+      this.blockers.push({
+        x: wallX + sx * 0.45,
+        z: w.z,
+        w: 1.0,
+        d: w.w + 0.4,
+        h: w.h,
+        color: 0x0a0d14,
+      });
+    }
 
     // The room behind the wall, built six hundred metres away so that nothing
     // in the hunt -- no waypoint, no earshot test, no path probe -- can reach
