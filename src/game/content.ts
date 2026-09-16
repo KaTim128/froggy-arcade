@@ -171,7 +171,7 @@ export const CABINETS: CabinetDef[] = [
   // ---- and the room at the back, where none of it is a game
   // Two tokens is the price of the first spin; the rest are raised through
   // the shell, and the wins are paid the same way.  See slots.ts.
-  { id: 'slots', title: 'FROGGY SLOTS', tier: 'medium', cost: 2, reward: 6, x: 96, y: 96, color: 0xff4fa3, room: 'casino', symbol: '777', motif: 'reels' },
+  { id: 'slots', title: 'FROGGY SLOTS', tier: 'medium', cost: 3, reward: 6, x: 96, y: 96, color: 0xff4fa3, room: 'casino', symbol: '777', motif: 'reels' },
   // The table takes a minimum, not a price: `cost` is the ante Froggy will not
   // deal under, and `reward` is what that ante pays back at 2x.  Anything above
   // it is raised at the table through the shell (MinigameApi.raise).
@@ -199,8 +199,8 @@ export const CABINETS: CabinetDef[] = [
     id: 'wheel',
     title: 'WHEEL OF FORTUNE',
     tier: 'hard',
-    cost: 40,
-    reward: 40,
+    cost: 25,
+    reward: 50,
     x: 58,
     y: 140,
     color: 0xffd45e,

@@ -1,5 +1,5 @@
 /**
- * WHEEL OF FORTUNE.  Forty tokens a spin, in the corner of the casino.
+ * WHEEL OF FORTUNE.  Twenty Five tokens a spin, in the corner of the casino.
  *
  * THE ODDS ARE THE GEOMETRY.  Every face on the wheel is cut to the width of
  * its own chance — the five thousand is a hairline sliver and the small
@@ -47,7 +47,7 @@ import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
 const ID = 'wheel' as const;
-export const SPIN_COST = 40;
+export const SPIN_COST = 25;
 
 /**
  * The faces, in the order they sit round the rim, with the share of the wheel
@@ -164,8 +164,8 @@ export const wheelOfFortune: MinigameModule = {
   id: ID,
   title: 'WHEEL OF FORTUNE',
   music: 'game_wheel',
-  rules: 'forty a spin - the wheel says what it pays',
-  payoutNote: 'PAYS 1 - 5000',
+  rules: '25 a spin - the wheel says what it pays',
+  payoutNote: 'PAYS 0 - 5000',
   tutorial: {
     objective: [
       'ONE SPIN, ONE PRIZE, WHATEVER IT STOPS ON.',
