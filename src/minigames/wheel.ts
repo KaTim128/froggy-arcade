@@ -13,8 +13,8 @@
  *   💰 1000                   0.1%
  *   💰 500                    0.5%
  *   🎁 200                      5%
- *   🎁 80 90 100               12%   (three faces)
- *   🪙 40 50 60 70             10%   (four faces)
+ *   🎁 80 90 100               10%   (three faces)
+ *   🪙 40 50 60 70             12%   (four faces)
  *   🪙 1 2 3 5 7 10 15      62.39%   (a seventh of it each)
  *   the blank                 10%   (two faces)
  *
