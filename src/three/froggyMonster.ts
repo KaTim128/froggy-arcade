@@ -31,6 +31,7 @@
  */
 
 import * as THREE from 'three';
+import { froggySkin, roughen } from './froggySkin';
 
 /**
  * Straight out of the 2D monster art, pulled several stops darker: this model
@@ -58,6 +59,13 @@ export interface FroggyPose {
   /** 0..1 up the side of something.  Pitches him forward and lifts the arms. */
   climb: number;
   /**
+   * How far through the climb he is, 0..1, so the haul can be an ANIMATION
+   * rather than a pose that fades in and out.  `climb` says "he is climbing";
+   * this says "he is two thirds of the way up", which is what an arm reaching
+   * over the top needs to know.
+   */
+  climbT?: number;
+  /**
    * Radians the head is turned off his direction of travel.  Hunting, the
    * caller swings this slowly: he walks one way and looks another, which is
    * the single most unpleasant thing a body can do.
@@ -77,6 +85,13 @@ export class FroggyMonster {
   private legs: THREE.Group[] = [];
   /** The joints halfway down each limb, so a step bends and a reach folds. */
   private knees: THREE.Group[] = [];
+  /**
+   * And a joint at the bottom of each leg, so the foot stays PARALLEL TO THE
+   * FLOOR through the stride.  The feet used to be bolted to the shin, so they
+   * swung like paddles and pointed at the ceiling at the top of every step —
+   * which is most of what read as the walk being wrong.
+   */
+  private ankles: THREE.Group[] = [];
   private elbows: THREE.Group[] = [];
   private walkT = 0;
   private breathT = 0;
@@ -89,10 +104,33 @@ export class FroggyMonster {
   private twitchT = 0;
 
   constructor(scale = 1) {
+    const tex = froggySkin();
+    /**
+     * Flat things stay flat: teeth, eyes, blood, the inside of the throat.
+     * Anything that is HIM gets the hide, the bump map and a specular — the
+     * torch then finds a wet highlight that breaks up across the warts, which
+     * is most of the difference between a creature and a painted primitive.
+     */
     const mat = (color: number) => new THREE.MeshLambertMaterial({ color });
-    const skin = mat(SKIN_MID);
-    const skinDark = mat(SKIN_DARK);
-    const skinLit = mat(SKIN_LIT);
+    const hide = (color: number, bumpScale: number) =>
+      new THREE.MeshPhongMaterial({
+        color,
+        map: tex.skin,
+        bumpMap: tex.skinBump,
+        bumpScale,
+        // A TIGHT highlight, not a broad one.  A low shininess with a light
+        // specular put a white stripe down the whole of each limb -- chrome,
+        // not skin.  Small and sharp reads as damp; large and soft reads as
+        // plastic, and this renderer is physical enough to blow out either.
+        specular: 0x0c100c,
+        shininess: 60,
+      });
+    const skin = hide(SKIN_MID, 0.05);
+    const skinDark = hide(SKIN_DARK, 0.045);
+    const skinLit = hide(SKIN_LIT, 0.055);
+    /** A primitive that has stopped being one.  See froggySkin.roughen. */
+    const lumpy = (g: THREE.BufferGeometry, amp: number, freq: number, seed: number) =>
+      roughen(g, amp, freq, seed);
 
     // ---- legs.  Long — longer than a person's for his height — hinged at
     // the hip, with a knee halfway down that bends on every stride.
@@ -100,7 +138,7 @@ export class FroggyMonster {
       const leg = new THREE.Group();
       leg.position.set(side * 0.28, 1.42, 0);
 
-      const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.62, 4, 8), skin);
+      const thigh = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.15, 0.62, 7, 14), 0.034, 5.5, 3), skin);
       thigh.position.set(0, -0.34, -0.04);
       leg.add(thigh);
 
@@ -108,36 +146,60 @@ export class FroggyMonster {
       knee.position.set(0, -0.66, 0);
       leg.add(knee);
 
-      const shin = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.6, 4, 8), skinDark);
+      const shin = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.1, 0.6, 7, 14), 0.026, 6.5, 7), skinDark);
+      // A ball at the knee, so the thigh and the shin are one leg rather than
+      // two pills end to end.  Same at the hip, the shoulder and the elbow:
+      // every place two primitives met used to have a visible join in it.
+      const kneeBall = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.125, 10, 8), 0.016, 8, 13), skin);
+      knee.add(kneeBall);
       shin.position.set(0, -0.36, 0.04);
       knee.add(shin);
+
+      // The ankle.  Everything below it is levelled against the leg above, so
+      // the sole stays flat to the floor however far through the stride he is.
+      const ankle = new THREE.Group();
+      ankle.position.set(0, -0.68, 0);
+      knee.add(ankle);
+      const heel = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.1, 10, 8), 0.012, 9, 59), skinDark);
+      ankle.add(heel);
 
       // A frog's foot: splayed flat, far too big for the leg.  Its sole is
       // at the floor when the leg hangs straight.
       const foot = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.08, 0.54), skinDark);
-      foot.position.set(0, -0.72, 0.16);
-      knee.add(foot);
+      foot.position.set(0, -0.04, 0.16);
+      ankle.add(foot);
       for (let t = -1; t <= 1; t++) {
         const toe = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.16, 3, 6), skinDark);
         toe.rotation.x = Math.PI / 2;
-        toe.position.set(t * 0.1, -0.72, 0.46);
-        knee.add(toe);
+        toe.position.set(t * 0.1, -0.04, 0.46);
+        ankle.add(toe);
       }
 
       this.hips.add(leg);
       this.legs.push(leg);
       this.knees.push(knee);
+      this.ankles.push(ankle);
     }
 
     // ---- torso.  The mass is forward of the hips: he is folded over himself.
     this.torso.position.set(0, 1.44, 0);
-    const chest = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 10), skin);
+    const chest = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.5, 20, 16), 0.034, 3.4, 1), skin);
     chest.scale.set(1.02, 0.86, 0.94);
     chest.position.z = -0.06;
     this.torso.add(chest);
 
     // The belly he still has, gone the colour of something kept in a jar.
-    const belly = new THREE.Mesh(new THREE.SphereGeometry(0.36, 12, 10), mat(BELLY));
+    const belly = new THREE.Mesh(
+      lumpy(new THREE.SphereGeometry(0.36, 18, 14), 0.02, 4.2, 5),
+      new THREE.MeshPhongMaterial({
+        color: BELLY,
+        map: tex.belly,
+        bumpMap: tex.bellyBump,
+        bumpScale: 0.035,
+        specular: 0x121208,
+        shininess: 50,
+      }),
+    );
     belly.scale.set(1, 0.9, 0.66);
     belly.position.set(0, -0.1, 0.28);
     this.torso.add(belly);
@@ -149,14 +211,14 @@ export class FroggyMonster {
       [0.02, 0.3, -0.34, 0.11],
       [-0.1, -0.12, -0.32, 0.12],
     ] as const) {
-      const blotch = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), skinLit);
+      const blotch = new THREE.Mesh(lumpy(new THREE.SphereGeometry(r, 10, 8), 0.02, 9, 47), skinLit);
       blotch.scale.set(1, 0.7, 0.5);
       blotch.position.set(x, y, z);
       this.torso.add(blotch);
     }
 
     for (const side of [-1, 1]) {
-      const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.21, 10, 8), skinLit);
+      const shoulder = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.23, 12, 10), 0.022, 6, 17), skinLit);
       shoulder.position.set(side * 0.44, 0.16, -0.04);
       this.torso.add(shoulder);
     }
@@ -167,7 +229,7 @@ export class FroggyMonster {
       const arm = new THREE.Group();
       arm.position.set(side * 0.46, 0.12, 0);
 
-      const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.11, 0.66, 4, 8), skin);
+      const upper = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.11, 0.66, 7, 14), 0.028, 6, 23), skin);
       upper.position.y = -0.38;
       arm.add(upper);
 
@@ -175,7 +237,9 @@ export class FroggyMonster {
       elbow.position.y = -0.74;
       arm.add(elbow);
 
-      const fore = new THREE.Mesh(new THREE.CapsuleGeometry(0.082, 0.68, 4, 8), skinDark);
+      const fore = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.082, 0.68, 7, 14), 0.022, 7, 29), skinDark);
+      const elbowBall = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.095, 10, 8), 0.012, 9, 31), skin);
+      elbow.add(elbowBall);
       fore.position.y = -0.38;
       elbow.add(fore);
 
@@ -203,13 +267,20 @@ export class FroggyMonster {
     // face that is permanently a little bit open is the difference between a
     // frog and something that eats.
     this.neck.position.set(0, 0.24, 0.2);
-    const skull = new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 12), skin);
+    // The throat column between the chest and the head.  Without it the skull
+    // hangs off the torso with a gap of nothing behind it, and from the side
+    // that gap is the single most obvious "two spheres" tell on the model.
+    const gullet = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.2, 0.26, 6, 14), 0.028, 7, 53), skinDark);
+    gullet.rotation.x = 0.8;
+    gullet.position.set(0, 0.02, -0.14);
+    this.neck.add(gullet);
+    const skull = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.5, 22, 18), 0.03, 3.8, 37), skin);
     skull.scale.set(1.06, 0.62, 1.0);
     skull.position.y = 0.13;
     this.neck.add(skull);
 
     // A brow, low and heavy over the eyes.  Nothing cute has one.
-    const brow = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 8), skinDark);
+    const brow = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.5, 16, 12), 0.02, 5, 41), skinDark);
     brow.scale.set(1.06, 0.3, 0.86);
     brow.position.set(0, 0.3, 0.08);
     this.neck.add(brow);
@@ -274,7 +345,7 @@ export class FroggyMonster {
     // The jaw hinges at the BACK of the head, which is what makes it open
     // further than a head that size should allow.
     this.jaw.position.set(0, -0.14, -0.3);
-    const jawMesh = new THREE.Mesh(new THREE.SphereGeometry(0.48, 12, 10), skin);
+    const jawMesh = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.48, 18, 14), 0.024, 4.4, 43), skin);
     jawMesh.scale.set(1.0, 0.34, 0.98);
     jawMesh.position.z = 0.34;
     this.jaw.add(jawMesh);
@@ -350,39 +421,87 @@ export class FroggyMonster {
       twitch = this.twitchT > 0.24 ? 0.3 : this.twitchT * 0.9;
     }
 
-    // ---- the gait.  Uneven on purpose: one leg is given slightly more of the
-    // cycle than the other, so he limps rather than marches, and the whole
-    // cycle is slower per metre than a person's would be.
-    this.walkT += dt * (0.7 + speed * 1.25);
+    // ---- THE GAIT.
+    //
+    // It used to be a sine wave at `0.7 + speed * 1.25` cycles a second, which
+    // at a full run is ten strides a second and reads as scrabbling; the two
+    // legs were also run at different frequencies to make a limp, so they
+    // drifted in and out of phase and every few seconds he did something no
+    // animal does.  Both are gone.
+    //
+    // CADENCE COMES FROM STRIDE LENGTH.  He covers `stride` metres per full
+    // cycle, and the stride lengthens as he speeds up the way a real animal's
+    // does, so a prowl is slow long steps and a run is quick longer ones, and
+    // neither is the other one sped up.  The legs are exactly anti-phase; the
+    // limp is an AMPLITUDE difference, which keeps him uneven without ever
+    // putting both feet on the same side of the cycle.
+    const stride = 1.4 + speed * 0.28;
+    const cadence = speed > 0.05 ? speed / stride : 0;
+    this.walkT += dt * (cadence + 0.1); // the 0.1 keeps him breathing at a stop
     const phase = this.walkT * Math.PI * 2;
     const gait = Math.sin(phase);
-    const drag = Math.sin(phase + 0.5) * 0.35; // the trailing half of the limp
-    const swing = Math.min(0.75, 0.16 + speed * 0.2 + this.lungeNow * 0.12);
+    // How much of the walk is switched on at all.  Standing, the legs are
+    // straight and only the breath moves; there is no half-stride held.
+    const moving = Math.min(1, speed / 1.1);
+    const swing = (0.17 + Math.min(0.4, speed * 0.05) + this.lungeNow * 0.1) * moving;
 
     this.legs[0].rotation.x = gait * swing;
-    this.legs[1].rotation.x = -(gait * swing) * 0.72 + drag * 0.12;
-    // The knee bends as the leg comes through — the foot lifts and clears the
-    // floor rather than sweeping along it — and straightens to take the weight.
-    // A climb tucks both up under him.
-    const stepLift = Math.min(1, speed * 0.5);
-    this.knees[0].rotation.x = Math.max(0, -Math.cos(phase)) * 0.95 * stepLift + this.climbNow * 1.1;
-    this.knees[1].rotation.x = Math.max(0, Math.cos(phase + 0.5)) * 0.85 * stepLift + this.climbNow * 1.1;
+    this.legs[1].rotation.x = -gait * swing * 0.88;
+
+    // The knee bends THROUGH THE SWING and straightens to take the weight: it
+    // is folded while the foot is travelling forward and locked while the foot
+    // is on the floor taking him.  A climb tucks both up under him.
+    const bend = (0.5 + Math.min(0.45, speed * 0.07)) * moving;
+    const k0 = Math.max(0, Math.cos(phase)) * bend;
+    const k1 = Math.max(0, -Math.cos(phase)) * bend * 0.9;
+    this.knees[0].rotation.x = k0 + this.climbNow * 1.1;
+    this.knees[1].rotation.x = k1 + this.climbNow * 1.1;
+
+    // And the foot stays flat.  Levelled against everything above it, damped a
+    // little so it is a foot and not a gyroscope, and let go of on a climb —
+    // there is no floor to be level with halfway up a cupboard.
+    const level = (leg: number, knee: number) =>
+      THREE.MathUtils.clamp(-(leg + knee) * 0.85, -0.55, 0.55) * (1 - this.climbNow);
+    this.ankles[0].rotation.x = level(this.legs[0].rotation.x, k0);
+    this.ankles[1].rotation.x = level(this.legs[1].rotation.x, k1);
+
+    // ---- THE CLIMB.  `climbT` runs 0..1 over the whole crossing, and the
+    // arms haul hand over hand across it instead of both reaching up and
+    // staying there.  One arm is over the top and pulling while the other is
+    // coming up to meet it, twice, which is what going over something looks
+    // like when it is being done rather than played back.
+    const ct = pose.climbT ?? 0;
+    const haul = Math.sin(ct * Math.PI * 4) * this.climbNow;
+    const crest = Math.sin(ct * Math.PI) * this.climbNow; // highest at the top
+
     // Arms counter-swing, hang lower the faster he goes, and reach up a wall
     // when he is going over one.  The elbow carries a bend that opens on the
     // forward swing, so the hands come up in front of him and not the floor.
-    this.arms[0].rotation.x = -gait * swing * 0.8 - this.climbNow * 2.3 - this.lungeNow * 0.25;
-    this.arms[1].rotation.x = gait * swing * 0.8 - this.climbNow * 2.3 - this.lungeNow * 0.25;
-    this.elbows[0].rotation.x = -(0.25 + Math.max(0, -gait) * 0.55 * stepLift) - this.climbNow * 0.6 - this.lungeNow * 0.5;
-    this.elbows[1].rotation.x = -(0.25 + Math.max(0, gait) * 0.55 * stepLift) - this.climbNow * 0.6 - this.lungeNow * 0.5;
+    this.arms[0].rotation.x =
+      -gait * swing * 0.8 - this.climbNow * 2.2 - haul * 0.55 - this.lungeNow * 0.25;
+    this.arms[1].rotation.x =
+      gait * swing * 0.8 - this.climbNow * 2.2 + haul * 0.55 - this.lungeNow * 0.25;
+    this.elbows[0].rotation.x =
+      -(0.25 + Math.max(0, -gait) * 0.5 * moving) - this.climbNow * 0.5 + haul * 0.45 - this.lungeNow * 0.5;
+    this.elbows[1].rotation.x =
+      -(0.25 + Math.max(0, gait) * 0.5 * moving) - this.climbNow * 0.5 - haul * 0.45 - this.lungeNow * 0.5;
     for (const arm of this.arms) arm.rotation.z = this.climbNow * 0.35 + this.lungeNow * 0.12;
+    // Knees tuck hardest at the crest, when he is folded over the top of it.
+    this.knees[0].rotation.x += crest * 0.5;
+    this.knees[1].rotation.x += crest * 0.5;
 
     // The body rides on the stride and breathes underneath it.  The breath does
     // not stop when the walking does — standing still, it is all there is.
-    const bob = Math.abs(gait) * Math.min(0.11, 0.02 + speed * 0.022);
+    //
+    // He DIPS at footfall rather than rising at it: `1 - |cos|` is lowest at
+    // the two moments a foot lands, which is where the weight goes.  The old
+    // one peaked mid-swing, so he bobbed up every time he should have been
+    // taking the impact.
+    const dip = (1 - Math.abs(Math.cos(phase))) * Math.min(0.09, 0.02 + speed * 0.018) * moving;
     const breath = Math.sin(this.breathT * 1.5) * 0.014;
-    this.hips.position.y = bob + breath;
+    this.hips.position.y = dip + breath + crest * 0.12;
     // A slight roll off the same limp, so his weight goes side to side.
-    this.hips.rotation.z = gait * 0.03;
+    this.hips.rotation.z = gait * 0.035 * moving;
 
     // Folded forward, further the faster he moves, and further again once he is
     // coming for you.  A climb folds him over whatever he is on top of.

@@ -22,11 +22,12 @@ import { paintChangeMachine, paintHubRoom, ROOM } from '../art/hubRoom';
 import { Cabinet } from '../art/cabinet';
 import { Player } from '../art/player';
 import {
-  CABINETS,
+  cabinetsIn,
   COUNTER,
   COUNTER_CLIMB,
   COUNTER_DEPTH,
   PRIZE_CASE,
+  prizesForWave,
   STAFF_DOOR,
 } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
@@ -63,9 +64,12 @@ export class ArcadeDark extends Phaser.Scene {
 
     paintHubRoom(this, { night: true });
     paintChangeMachine(this, true);
-    // Cabinets only: the blackjack table is furniture with a dealer behind it,
-    // and there is no dealer here at night.
-    for (const def of CABINETS) if (def.fixture !== 'table') new Cabinet(this, def, true);
+    // THE HUB'S OWN CABINETS, AND ONLY THOSE.  This drew every machine in the
+    // building -- the back room's and the casino's on top of the front room's
+    // -- which put ten cabinets in a room that has six and made the dark
+    // arcade a different floor plan from the lit one.  It is the same room at
+    // night or it is nothing: same six machines, same places.
+    for (const def of cabinetsIn('hub')) new Cabinet(this, def, true);
 
     // the STAFF door, on the wall behind the counter's right-hand end
     this.staffDoor = this.add
@@ -75,11 +79,28 @@ export class ArcadeDark extends Phaser.Scene {
     text(this, STAFF_DOOR.x + 1, 26, 'STAFF', PALETTE.ash, 8).setAlpha(0.8);
 
     // The case is against the wall at the back of the counter, so it goes in
-    // before anyone can be standing in front of it.
+    // before anyone can be standing in front of it.  The prizes are still in
+    // it: unlit, so they are shapes behind glass rather than a row of colours,
+    // but in the same places and the same widths they are by day.  An empty
+    // black rectangle here was the one thing that stopped this reading as the
+    // room the player spent the afternoon in.
     this.add
       .rectangle(PRIZE_CASE.x, PRIZE_CASE.y - 30, PRIZE_CASE.w, 30, PALETTE.black)
       .setOrigin(0, 0)
       .setStrokeStyle(1, PALETTE.slate);
+    const stock = prizesForWave(store.get().prizeWave);
+    const pitch = Math.floor((PRIZE_CASE.w - 12) / stock.length);
+    for (let i = 0; i < stock.length; i++) {
+      const p = stock[i];
+      if (store.get().prizesOwned.includes(p.id)) continue;
+      // A tenth of the daytime brightness: the shape is there, the colour is
+      // barely a hint of one, and the torchless dark keeps every bit of its
+      // hold on the room.
+      this.add
+        .rectangle(PRIZE_CASE.x + 6 + i * pitch, PRIZE_CASE.y - 22, pitch - 2, 14, p.color)
+        .setOrigin(0, 0)
+        .setAlpha(0.22);
+    }
 
     // counter, dead — and in FRONT of whoever is behind it (COUNTER_DEPTH).
     this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, COUNTER.h, PALETTE.ink).setOrigin(0, 0).setDepth(COUNTER_DEPTH);

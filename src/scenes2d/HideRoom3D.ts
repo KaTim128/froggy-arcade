@@ -34,6 +34,7 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { ROOMS, type Box, type RoomDef, type SpotKind } from '../three/hideRooms';
 import { buildGrid, findPath, lineOpen, spotExtent, type NavGrid } from '../three/navGrid';
 import { dressRoom, surfaceTexture } from '../three/hideDecor';
+import { buildCabinet, buildPrizeCase } from '../three/arcadeProps';
 
 /** A walk is slow and silent; a run is fast and heard.  That is the trade. */
 const WALK = 2.0;
@@ -197,6 +198,22 @@ const FINAL_ROOM = 3;
  */
 const FINAL_SEARCH_PACE = 0.66;
 /**
+ * WHETHER HE IS IN THE ARCADE AT ALL.  He is not, for now.
+ *
+ * The room is the last thing the sequence teaches and the most it asks: read a
+ * layout you have only ever seen from above, find the counter, work out that
+ * it is climbed rather than walked round, and then stand still at a door for
+ * five seconds.  A three-and-a-half metre thing hunting you through all of
+ * that is a room nobody gets to look at.
+ *
+ * So the escape is played empty first.  Everything he needs is still here and
+ * still tested — the search, the sight lines, the counter he can climb and you
+ * can hide behind — and this flag is the only thing between that and him being
+ * back in it.  His line still opens the room; he just says it from somewhere
+ * else in the building.
+ */
+const FROGGY_IN_ARCADE = false;
+/**
  * How long the key has to stay turning in the staff door.
  *
  * A TAP MUST NOT DO ANYTHING.  The whole shape of the ending is standing
@@ -214,7 +231,7 @@ const TUMBLERS = [0.14, 0.33, 0.55, 0.74, 0.92];
 /** The radius of the ring the hold draws round the prompt. */
 const RING_R = 30;
 /** How close to the prize case counts as standing at it: half-width, half-depth. */
-const CASE_REACH = { hw: 3.4, hd: 2.4 };
+const CASE_REACH = { hw: 3.6, hd: 3.0 };
 /** How far back from the counter the climb is still on offer. */
 const COUNTER_REACH = 2.2;
 /** How long going over it takes.  Long enough to be a commitment, not a step. */
@@ -262,8 +279,19 @@ const STALE_S = 24;
  * middle of has no hiding in it.
  */
 const CLIMB_MAX_H = 2.9;
-/** How fast he goes over something, in metres of obstacle per second. */
-const CLIMB_SPEED = 1.5;
+/**
+ * How fast he goes over something, in metres of obstacle per second.
+ *
+ * It was 1.5, which put a full second and a half between him reaching a sofa
+ * and him being on your side of it — long enough that climbing was a thing you
+ * watched rather than a thing that happened to you, and long enough that the
+ * furniture was still most of a hiding place after he had decided to cross it.
+ * At 3.2 he is over a chest in under half a second.
+ */
+const CLIMB_SPEED = 3.2;
+/** Reaching up before he goes, and gathering himself after.  Beats, not waits. */
+const CLIMB_MOUNT_S = 0.17;
+const CLIMB_LAND_S = 0.15;
 /**
  * How close counts as arriving.  It has to be OUTSIDE the thing he came to
  * check: a spot is solid to him from 1.05m, so the old 0.6m arrival could
@@ -451,7 +479,7 @@ export class HideRoom3D extends Phaser.Scene {
    * and the camera rides up over the top and down the other side.
    */
   private vault: { from: THREE.Vector2; to: THREE.Vector2; t: number } | null = null;
-  /** ONE WAY.  Set at the end of the climb and never cleared. */
+  /** Whether the counter has been crossed at all, for the harness. */
   private vaulted = false;
   private subtitle = '';
   private keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
@@ -520,7 +548,11 @@ export class HideRoom3D extends Phaser.Scene {
     audio.setScene(SILENCE);
 
     this.pos.set(this.def.spawn.x, this.def.spawn.z);
-    this.yaw = 0; // yaw 0 looks down -Z: into the room, door behind you
+    // yaw 0 looks down -Z: into the room, with the door you came through
+    // behind you.  The arcade is entered through its BACK wall, so it asks for
+    // the half turn — otherwise the first frame of the last room in the game
+    // is a wall two metres away.
+    this.yaw = this.def.spawnYaw ?? 0;
     // He is outside for the count.  He walks in when it runs out.
     this.froggy.set(this.def.froggyStart.x, this.def.froggyStart.z);
     this.froggyWas.copy(this.froggy);
@@ -621,7 +653,52 @@ export class HideRoom3D extends Phaser.Scene {
     handle.position.set(d.door.x + 0.55, 1.15, d.halfD - 0.18);
     st.scene.add(handle);
 
+    // The door you came IN through, in the wall behind the spawn.  It is not
+    // interactive and it never opens again; it is there so that turning round
+    // answers "where am I" without a line of dialogue, and so the front door
+    // at the other end reads as the other one.
+    if (d.staffDoor) {
+      const back = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.4, 0.2), doorMat.clone());
+      back.position.set(d.staffDoor.x, 1.2, -d.halfD + 0.05);
+      st.scene.add(back);
+      // A plate over it, lit rather than shaded: at this light level a sign
+      // painted on the door is a slightly different brown.
+      const plate = new THREE.Mesh(
+        new THREE.BoxGeometry(0.9, 0.3, 0.06),
+        new THREE.MeshBasicMaterial({ color: 0x9aa4b4 }),
+      );
+      plate.position.set(d.staffDoor.x, 2.05, -d.halfD + 0.18);
+      st.scene.add(plate);
+      const backHandle = new THREE.Mesh(
+        new THREE.SphereGeometry(0.09, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xc9a62e }),
+      );
+      backHandle.position.set(d.staffDoor.x - 0.55, 1.15, -d.halfD + 0.18);
+      st.scene.add(backHandle);
+    }
+
     for (const f of d.furniture) {
+      // A few things in the arcade are built rather than blocked out.  The
+      // collision box is the same either way: the prop is fitted into the box
+      // it replaces, so nothing about where you can walk or what he can see
+      // over depends on how nicely a thing is modelled.
+      if (f.prop) {
+        const turned = Math.abs(Math.cos(f.face ?? 0)) < 0.5;
+        // Facing along x means its width runs down z, so the two extents swap
+        // before they go to a builder that always works front-to-back in +Z.
+        const bw = turned ? f.d : f.w;
+        const bd = turned ? f.w : f.d;
+        const g =
+          f.prop === 'cabinet'
+            ? buildCabinet(bw, f.h, bd, f.color, grunge)
+            : buildPrizeCase(bw, f.h, bd, grunge);
+        g.position.set(f.x, 0, f.z);
+        g.rotation.y = f.face ?? 0;
+        st.scene.add(g);
+        this.blockers.push(f);
+        continue;
+      }
+
       // Full-height partitions are walls and look like the walls; the rest is
       // furniture, worn.
       const isWall = f.h >= d.wallH - 0.05;
@@ -645,6 +722,9 @@ export class HideRoom3D extends Phaser.Scene {
     // opening the lockers and the thing in the alley are one creature.  Hidden
     // for the count — the first fifteen seconds are yours, and nothing should
     // loom through them.
+    // ...unless this is the arcade, where he is not in the room at all: no
+    // model, nothing to position, nothing to animate.  See FROGGY_IN_ARCADE.
+    if (!this.hunted) return;
     this.monster = new FroggyMonster(this.isFinal ? FINAL_SCALE : FROGGY_SCALE);
     this.monster.setVisible(false);
     st.scene.add(this.monster.root);
@@ -943,26 +1023,35 @@ export class HideRoom3D extends Phaser.Scene {
   private atCase(): boolean {
     const c = this.def.prizeCase;
     if (!c) return false;
-    // A rectangle, not a radius: the case is five metres of frontage and a
+    // A rectangle, not a radius: the case is seven metres of frontage and a
     // circle round its middle either misses both ends or reaches behind it.
-    return Math.abs(this.pos.x - c.x) < CASE_REACH.hw && Math.abs(this.pos.y - c.z) < CASE_REACH.hd;
+    // And only from IN FRONT of it (+Z): the case is set into the wall the
+    // counter is in, so a symmetric band would offer the prompt through that
+    // wall to somebody standing on the staff side with their back to it.
+    const dz = this.pos.y - c.z;
+    return Math.abs(this.pos.x - c.x) < CASE_REACH.hw && dz > 0 && dz < CASE_REACH.hd;
   }
 
   /**
-   * Standing on the staff side of the counter, close enough to get over it.
+   * At the counter, close enough to get over it — ANY part of it, FROM EITHER
+   * SIDE.
    *
-   * ONE WAY, and the geometry says so twice.  The staff side is a test on your
-   * z, so the moment you are over you fail it; and `vaulted` is never cleared,
-   * so even a room that put you back there could not offer it again.  There is
-   * nothing to walk round either: the counter runs wall to wall, which is why
-   * the climb is the escape route rather than a shortcut on it.
+   * It was the staff side only and once only.  That made the climb a door
+   * rather than a counter, and it cost the room the other half of what a
+   * counter is for: you cannot duck behind a thing you are not allowed back
+   * behind.  The counter is eight metres of waist-high cover in the middle of
+   * a room with something hunting in it, and crouching behind it breaks his
+   * line of sight like any other low furniture — so being able to get back
+   * over is the mechanic, not a leak in it.
+   *
+   * There is still nothing to walk round: the partition either side of the
+   * counter is full height, so this is the only hole in that wall.
    */
   private atCounter(): boolean {
     const c = this.def.counter;
-    if (!c || this.vaulted || this.vault) return false;
-    if (this.pos.x < c.from || this.pos.x > c.to) return false;
-    const behind = this.pos.y - c.z;
-    return behind < 0 && behind > -COUNTER_REACH;
+    if (!c || this.vault) return false;
+    if (this.pos.x < c.from - 0.4 || this.pos.x > c.to + 0.4) return false;
+    return Math.abs(this.pos.y - c.z) < COUNTER_REACH;
   }
 
   /**
@@ -977,12 +1066,14 @@ export class HideRoom3D extends Phaser.Scene {
   private startVault(): void {
     const c = this.def.counter;
     if (!c || !this.atCounter()) return;
-    const to = new THREE.Vector2(this.pos.x, c.z + VAULT_CLEAR);
+    // Over to the OTHER side, whichever side that is.
+    const side = this.pos.y < c.z ? 1 : -1;
+    const to = new THREE.Vector2(this.pos.x, c.z + side * VAULT_CLEAR);
     // Straight over is usually clear, but a cabinet the other side is not our
     // problem to shove through: slide along the counter until there is floor.
     let landed = false;
-    for (const off of [0, 1.2, -1.2, 2.4, -2.4, 3.6, -3.6]) {
-      const x = Phaser.Math.Clamp(this.pos.x + off, -this.def.halfW + 0.8, this.def.halfW - 0.8);
+    for (const off of [0, 0.8, -0.8, 1.6, -1.6, 2.4, -2.4]) {
+      const x = Phaser.Math.Clamp(this.pos.x + off, c.from + 0.3, c.to - 0.3);
       if (!this.solid(x, to.y)) {
         to.x = x;
         landed = true;
@@ -1116,8 +1207,10 @@ export class HideRoom3D extends Phaser.Scene {
       if (!this.isFinal) this.clock -= dt;
       this.movePlayer(dt);
       this.runUnlock(dt);
-      this.moveFroggy(dt);
-      this.checkCaught();
+      if (this.hunted) {
+        this.moveFroggy(dt);
+        this.checkCaught();
+      }
       this.roomTone(dt);
       if (!this.isFinal && this.clock <= 0) this.survive();
     } else if (this.mode === 'caught') {
@@ -1199,7 +1292,7 @@ export class HideRoom3D extends Phaser.Scene {
           this.mode = this.isFinal ? 'seeking' : 'hiding';
           this.clock = this.isFinal ? 0 : HIDE_S;
           this.subtitle = '';
-          this.monster?.setVisible(this.isFinal);
+          this.monster?.setVisible(this.hunted && this.isFinal);
           this.fMode = 'search';
           this.fTimer = 0;
           this.freeFroggy();
@@ -1674,6 +1767,11 @@ export class HideRoom3D extends Phaser.Scene {
     return this.roomIndex === FINAL_ROOM;
   }
 
+  /** Whether there is anything hunting you in this room at all. */
+  private get hunted(): boolean {
+    return !this.isFinal || FROGGY_IN_ARCADE;
+  }
+
   private openSeconds(): number {
     return OPEN_S[Math.min(this.roomIndex, OPEN_S.length - 1)];
   }
@@ -1886,9 +1984,9 @@ export class HideRoom3D extends Phaser.Scene {
       to,
       top: box.h,
       t: 0,
-      dur: Math.max(0.6, (box.h + from.distanceTo(to)) / CLIMB_SPEED),
-      mount: 0.32,
-      land: 0.24,
+      dur: Math.max(0.32, (box.h + from.distanceTo(to)) / CLIMB_SPEED),
+      mount: CLIMB_MOUNT_S,
+      land: CLIMB_LAND_S,
     };
     this.wantYaw = Math.atan2(to.x - from.x, to.y - from.y);
     this.play('hop_wet', this.earshot(from.x, from.y, EARSHOT, 0));
@@ -1997,8 +2095,12 @@ export class HideRoom3D extends Phaser.Scene {
     // Height off the floor: on the ground, or partway over something.
     let y = 0;
     let climbing = 0;
+    // 0..1 across the whole crossing, for the hand-over-hand haul.  The model
+    // needs to know how far up he is, not merely that he is up.
+    let climbT = 0;
     if (this.climb) {
       const { beat, k } = this.climbBeat();
+      climbT = beat === 'mount' ? 0 : beat === 'cross' ? k : 1;
       const top = this.climb.top;
       if (beat === 'mount') {
         // Reaching up: the pose comes on, feet still on the floor.
@@ -2035,6 +2137,7 @@ export class HideRoom3D extends Phaser.Scene {
       // The mouth is shut while he is looking for you and open once he is not.
       maw: this.fMode === 'chase' ? 1 : this.fMode === 'openSpot' ? 0.45 : 0.12,
       climb: climbing,
+      climbT,
       // Hunting, his head swings slowly across the room.  Once he has you it
       // stops dead on you and stays there, which is much worse than the swing.
       // Investigating, he sweeps his head faster and wider: looking FOR
