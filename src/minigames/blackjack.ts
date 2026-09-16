@@ -39,6 +39,8 @@ import { button, centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import { froggyLayer } from '../render/froggyLayer';
 import { drawFroggy } from '../froggy/froggy';
+import { drawSuitedMan } from '../froggy/suit';
+import { store } from '../core/state';
 import type { MinigameApi, MinigameModule } from './types';
 
 const SUITS = ['♠', '♥', '♦', '♣'];
@@ -235,15 +237,30 @@ export const blackjack: MinigameModule = {
     if (!sceneRef) return;
     clock += delta / 1000;
     talking = Math.max(0, talking - delta / 1000);
+    // The same swap the casino floor makes: after the night, the hand is being
+    // dealt by the man in the suit.  Sitting down at this table is the longest
+    // anyone looks at him, so he has to hold up close -- and hold up doing
+    // nothing, which is most of what he does.
+    const gone = store.get().froggyGone;
     froggyLayer.paint((ctx) => {
-      drawFroggy(ctx, {
-        x: DEALER.x,
-        y: DEALER.y,
-        height: DEALER.height,
-        variant: 'cozy',
-        pose: talking > 0 ? 'talk' : 'idleA',
-        bounce: (clock * 0.5) % 1,
-      });
+      if (gone) {
+        drawSuitedMan(ctx, {
+          x: DEALER.x,
+          y: DEALER.y,
+          height: DEALER.height,
+          pose: talking > 0 ? 'talk' : 'idle',
+          bounce: (clock * 0.28) % 1,
+        });
+      } else {
+        drawFroggy(ctx, {
+          x: DEALER.x,
+          y: DEALER.y,
+          height: DEALER.height,
+          variant: 'cozy',
+          pose: talking > 0 ? 'talk' : 'idleA',
+          bounce: (clock * 0.5) % 1,
+        });
+      }
     });
   },
 
@@ -276,7 +293,10 @@ function paintFelt(scene: Phaser.Scene): void {
   // the dealer's arc, and the betting spot the chips sit on
   scene.add.ellipse(GAME_W / 2, 74, 220, 46, 0x000000, 0).setStrokeStyle(1, 0x1d5c2d);
   scene.add.ellipse(46, 130, 34, 16, 0x000000, 0).setStrokeStyle(1, 0x1d5c2d);
-  text(scene, 12, 38, 'FROGGY DEALS', PALETTE.ash).setAlpha(0.7);
+  // Whose game this is.  It is not his any more, and the corner of the felt
+  // should not still be saying it was -- but the replacement does not get a
+  // name either, because nobody has given one.
+  text(scene, 12, 38, store.get().froggyGone ? 'THE HOUSE DEALS' : 'FROGGY DEALS', PALETTE.ash).setAlpha(0.7);
   text(scene, 12, 92, 'YOU', PALETTE.cream);
 }
 

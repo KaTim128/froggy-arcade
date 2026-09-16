@@ -29,6 +29,7 @@ import { TokenHud } from '../ui/hud';
 import { CABINETS, cabinetsIn } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
 import { drawFroggy } from '../froggy/froggy';
+import { drawSuitedMan } from '../froggy/suit';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 
 const INTERACT_RANGE = 24;
@@ -46,6 +47,15 @@ export class ArcadeCasino extends Phaser.Scene {
   private keys!: Record<string, Phaser.Input.Keyboard.Key[]>;
   private cabinets: Fixture[] = [];
   private table: BlackjackTable | null = null;
+  /**
+   * Whether the man in the suit has said his piece yet this visit.
+   *
+   * Once, on the first approach, and then he is quiet.  It is the only answer
+   * anyone in the building gives about where Froggy went, and a line that
+   * repeats every time you walk past stops being an answer and becomes a
+   * barker's call.
+   */
+  private saidIt = false;
   /** Seconds, for the dealer's idle.  He breathes; the room does not. */
   private clock = 0;
   private prompt!: Phaser.GameObjects.BitmapText;
@@ -71,6 +81,7 @@ export class ArcadeCasino extends Phaser.Scene {
     this.cabinets = [];
     this.table = null;
     this.clock = 0;
+    this.saidIt = false;
 
     fadeIn(this);
     // Its own music, and no ambience: the neon buzz read as static in here.
@@ -113,7 +124,10 @@ export class ArcadeCasino extends Phaser.Scene {
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
-    this.mutter = text(this, GAME_W / 2, GAME_H - 26, '', PALETTE.fog)
+    // Below the interact prompt, not level with it: the prompt at the table
+    // drops UNDER the player (Froggy used to eat the line above his head), and
+    // at 26 up the two of them sat on top of each other.
+    this.mutter = text(this, GAME_W / 2, GAME_H - 14, '', PALETTE.fog)
       .setOrigin(0.5, 0.5)
       .setDepth(802)
       .setVisible(false);
@@ -158,22 +172,41 @@ export class ArcadeCasino extends Phaser.Scene {
   private paintDealer(): void {
     const spot = this.table?.dealerSpot();
     if (!spot) return;
+    const atTable = this.target?.kind === 'cabinet' && this.target.cab === this.table;
+    // AFTER THE NIGHT, SOMEBODY ELSE IS DEALING.  Same seat, same clip, same
+    // height: everything about the shot is identical so that the ONE thing
+    // that changed is the thing the player sees.  He is not explained and he
+    // does not explain himself.
+    const gone = store.get().froggyGone;
     froggyLayer.paint((ctx) => {
       // Clip to everything above the felt: no legs, no feet, no floating.
       ctx.save();
       ctx.beginPath();
       ctx.rect(0, 0, GAME_W, spot.y);
       ctx.clip();
-      drawFroggy(ctx, {
-        x: spot.x,
-        // Below the cut line, so the bottom third of him is behind the table.
-        y: spot.y + 13,
-        height: 40,
-        variant: 'cozy',
-        pose: this.target?.kind === 'cabinet' && this.target.cab === this.table ? 'talk' : 'idleA',
-        // Seated, so he sways rather than bounces: half the travel of a stand.
-        bounce: (this.clock * 0.4) % 1,
-      });
+      if (gone) {
+        drawSuitedMan(ctx, {
+          x: spot.x,
+          y: spot.y + 13,
+          height: 40,
+          pose: atTable ? 'talk' : 'idle',
+          // A third of the frog's sway.  He breathes and that is all, and a
+          // player who watched Froggy bob at this table for an afternoon reads
+          // the stillness before they read the suit.
+          bounce: (this.clock * 0.22) % 1,
+        });
+      } else {
+        drawFroggy(ctx, {
+          x: spot.x,
+          // Below the cut line, so the bottom third of him is behind the table.
+          y: spot.y + 13,
+          height: 40,
+          variant: 'cozy',
+          pose: atTable ? 'talk' : 'idleA',
+          // Seated, so he sways rather than bounces: half the travel of a stand.
+          bounce: (this.clock * 0.4) % 1,
+        });
+      }
       ctx.restore();
     });
   }
@@ -263,6 +296,23 @@ export class ArcadeCasino extends Phaser.Scene {
     fadeToScene(this, 'Minigame', { id: cab.def.id, from: 'ArcadeCasino' });
   }
 
+  /**
+   * "FROGGY HASN'T BEEN AROUND LATELY..."
+   *
+   * Fired on the first approach to the table after the night, and then never
+   * again this visit.  He does not know, he is not worried, and he is not
+   * going to be asked a second question — which leaves the player holding the
+   * only account of it that exists, which is their own.
+   */
+  private watchForTheQuestion(): void {
+    if (!store.get().froggyGone || this.saidIt || !this.table) return;
+    if (this.target?.kind !== 'cabinet' || this.target.cab !== this.table) return;
+    this.saidIt = true;
+    audio.sfx('dialogue_blip', 0.5);
+    this.say("FROGGY HASN'T BEEN AROUND LATELY...");
+    this.time.delayedCall(1700, () => this.say("I'M NOT SURE WHERE HE WENT."));
+  }
+
   private say(msg: string): void {
     this.mutter.setText(msg).setVisible(true).setAlpha(1);
     this.tweens.killTweensOf(this.mutter);
@@ -279,6 +329,7 @@ export class ArcadeCasino extends Phaser.Scene {
 
     this.clock += delta / 1000;
     this.paintDealer();
+    this.watchForTheQuestion();
 
     const dx = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     const dy = (this.held('down') ? 1 : 0) - (this.held('up') ? 1 : 0);
