@@ -21,6 +21,7 @@ import { store } from '../core/state';
 import { froggyLayer } from '../render/froggyLayer';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
 import { FroggyMonster } from '../three/froggyMonster';
+import { alleySurfaces, dressAlley } from '../three/alleyDecor';
 import { ThreeStage } from '../render/threeStage';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import {
@@ -39,7 +40,15 @@ import {
 
 const PLAYER_SPEED = 4.0; // W
 const FROGGY_SPEED = PLAYER_SPEED * 0.5; // exactly half.  Never scaled. (CH / H6)
-const CATCH_RADIUS = 1.1;
+/**
+ * How big he is down here, and how far his reach goes because of it.
+ *
+ * The reach follows the size for the same reason it does in the hide rooms: a
+ * creature twice as wide whose grab did not grow would be one you could run
+ * past through his chest.
+ */
+const FROGGY_SCALE = 1.35;
+const CATCH_RADIUS = 1.1 * (1 + (FROGGY_SCALE - 1) * 0.5);
 const FOG_DENSITY = 0.085; // full occlusion past ~12m
 const HEADBOB_HZ = 1.6;
 const HEADBOB_AMP = 0.04;
@@ -196,9 +205,13 @@ export class Chase3D extends Phaser.Scene {
     st.camera.add(fill);
     st.scene.add(st.camera);
 
-    const wallMat = new THREE.MeshLambertMaterial({ color: 0x46525f });
-    const floorMat = new THREE.MeshLambertMaterial({ color: 0x333c46 });
-    const ceilMat = new THREE.MeshLambertMaterial({ color: 0x1d242c });
+    // Brick, wet concrete and a stained ceiling, instead of three flat colours.
+    // With a torch on them, three flat colours is not a place -- it is a maze
+    // demo where every junction is the same junction.
+    const surf = alleySurfaces();
+    const wallMat = new THREE.MeshLambertMaterial({ color: 0x8a949e, map: surf.wall });
+    const floorMat = new THREE.MeshLambertMaterial({ color: 0x9aa4ae, map: surf.floor });
+    const ceilMat = new THREE.MeshLambertMaterial({ color: 0x8a949e, map: surf.ceiling });
     const wallGeo = new THREE.BoxGeometry(CELL, WALL_H, CELL);
 
     const floorSize = Math.max(COLS, ROWS) * CELL;
@@ -238,10 +251,30 @@ export class Chase3D extends Phaser.Scene {
     stairs.position.set(worldX(exitCell.col), 0.3, worldZ(exitCell.row));
     st.scene.add(stairs);
 
+    // And then everything that has been left down here: pipe runs, doors that
+    // have been shut a long time, cables across the corridors, bins, crates,
+    // planks, bags and litter.  None of it is a collider -- see alleyDecor.
+    dressAlley({
+      scene: st.scene,
+      cols: COLS,
+      rows: ROWS,
+      cell: CELL,
+      wallH: WALL_H,
+      isWall: (c, r) => c < 0 || r < 0 || c >= COLS || r >= ROWS || isWall(c, r),
+      worldX,
+      worldZ,
+    });
+
     // Froggy: the SAME model the hide rooms use.  He was a billboard of a
     // different drawing of him here, so walking out of the basement swapped the
     // creature for a different one — same name, different animal.
-    this.monster = new FroggyMonster();
+    //
+    // AND HE IS THE SIZE HE IS UPSTAIRS, as near as the ceiling allows.  At
+    // scale 1 he was 2.4m in a 3.2m corridor and read as a man in a suit; the
+    // hide rooms run him at 1.75, which folds to 3.6m and would put his head
+    // through this ceiling.  1.42 folds to about 2.9m: he fills the corridor,
+    // he clears the pipes, and he is unmistakably the thing from the rooms.
+    this.monster = new FroggyMonster(FROGGY_SCALE);
     st.scene.add(this.monster.root);
     this.froggyWas.copy(this.froggy);
     // Same fingerprint the hide rooms publish: the harness compares them.
