@@ -31,7 +31,7 @@ export interface Box {
 export type SpotKind = 'chest' | 'cupboard' | 'locker' | 'bed';
 
 /** Which set of textures and props dresses the room.  See hideDecor. */
-export type RoomTheme = 'lounge' | 'stores' | 'ward';
+export type RoomTheme = 'lounge' | 'stores' | 'ward' | 'arcade';
 
 export interface HideSpot {
   x: number;
@@ -328,4 +328,104 @@ export const LIVING_ROOM: RoomDef = scaleRoom(LOUNGE_BASE, 1.5, 1.3);
 export const WAREHOUSE: RoomDef = scaleRoom(STORES_BASE, 1.0, 0.85);
 export const WARD: RoomDef = scaleRoom(WARD_BASE, 1.1);
 
-export const ROOMS: RoomDef[] = [LIVING_ROOM, WAREHOUSE, WARD];
+/**
+ * THE ARCADE, IN THREE DIMENSIONS.  The last room of the sequence, and the
+ * only one the player has already walked around — from above, in two
+ * dimensions, with the lights on.  Recognising it is the point: the counter is
+ * where the counter has always been, the prize case is behind it, and the
+ * machines stand in the two rows they stand in upstairs.
+ *
+ * THE SHAPE OF IT IS THE ESCAPE.  You come in through the staff door BEHIND
+ * the counter, which is a wall to you and a step to him.  The only way onto
+ * the floor is over it, and the counter runs the full width so there is no end
+ * to walk around.  Once you are over, you are on the floor with him, and the
+ * way out is the front door at the far end — as far from the counter as this
+ * room goes.
+ *
+ * COVER, NOT CONTAINERS.  Nineteen cabinets, a change machine, a bin, a plant
+ * and a photo booth: this is a room you hide BEHIND rather than inside, so
+ * most of the furniture is chest-high or taller and the sightlines down the
+ * lanes are long.  The handful of real hiding places are the staff side's —
+ * the stock cupboard and the lockers — because they are what an arcade would
+ * actually have out of sight of the customers.
+ */
+const ARCADE_BASE: RoomDef = {
+  name: 'THE ARCADE',
+  theme: 'arcade',
+  halfW: 20,
+  halfD: 17,
+  // Tall enough for the thing hunting you to stand up in, and no taller: an
+  // arcade with a warehouse ceiling stops being an arcade.
+  wallH: 4.2,
+  floor: 0x1b3440,
+  wall: 0x3b2a52,
+  ceiling: 0x120c1c,
+  lights: [
+    // The cabinets light the room, so the bulbs sit over the two rows rather
+    // than in the middle of the ceiling, and the counter keeps one warm one.
+    { x: -12, z: -6, color: 0xff4fa3, intensity: 11 },
+    { x: 12, z: -6, color: 0x46c4bd, intensity: 11 },
+    { x: -12, z: 7, color: 0xffd45e, intensity: 10 },
+    { x: 12, z: 7, color: 0x7b4bd8, intensity: 10 },
+    { x: 0, z: -14, color: 0xffb45e, intensity: 9 },
+    { x: 0, z: 15, color: 0xc8d8ff, intensity: 7 },
+  ],
+  furniture: [
+    // THE COUNTER.  Wall to wall at z = -12, waist high, `low` so he can go
+    // over it and you cannot.  Two pieces with no gap: one span would be a
+    // single box the width of the room, and the pathfinder reads a box that
+    // wide as a wall it should never try, which stops him following you over.
+    { x: -10.0, z: -12.0, w: 20.0, d: 1.4, h: 1.15, color: 0x6b4a2f, low: true },
+    { x: 10.0, z: -12.0, w: 20.0, d: 1.4, h: 1.15, color: 0x6b4a2f, low: true },
+    // the back wall of the staff side, and the prize case standing against it
+    { x: 0.0, z: -16.2, w: 14.0, d: 0.6, h: 4.2, color: 0x2e2140 },
+    { x: -6.5, z: -15.0, w: 5.0, d: 1.2, h: 2.4, color: 0x203048 },
+    // the back row of cabinets, shoulder to shoulder with gaps to slip through
+    { x: -15.0, z: -7.5, w: 2.0, d: 1.3, h: 2.1, color: 0xff4fa3 },
+    { x: -11.5, z: -7.5, w: 2.0, d: 1.3, h: 2.1, color: 0xff7a3d },
+    { x: -8.0, z: -7.5, w: 2.0, d: 1.3, h: 2.1, color: 0x6fbb6a },
+    { x: 8.0, z: -7.5, w: 2.0, d: 1.3, h: 2.1, color: 0xb9884f },
+    { x: 11.5, z: -7.5, w: 2.0, d: 1.3, h: 2.1, color: 0x1d6f8f },
+    { x: 15.0, z: -7.5, w: 2.0, d: 1.3, h: 2.1, color: 0x7b4bd8 },
+    // the middle row, offset so the lanes do not line up end to end
+    { x: -16.5, z: 0.5, w: 2.0, d: 1.3, h: 2.1, color: 0xffd45e },
+    { x: -13.0, z: 0.5, w: 2.0, d: 1.3, h: 2.1, color: 0x46c4bd },
+    { x: -9.5, z: 0.5, w: 2.0, d: 1.3, h: 2.1, color: 0xc31f2e },
+    { x: -6.0, z: 0.5, w: 2.0, d: 1.3, h: 2.1, color: 0x2f7fb5 },
+    { x: 6.0, z: 0.5, w: 2.0, d: 1.3, h: 2.1, color: 0xd9822b },
+    { x: 9.5, z: 0.5, w: 2.0, d: 1.3, h: 2.1, color: 0x6fbb6a },
+    { x: 13.0, z: 0.5, w: 2.0, d: 1.3, h: 2.1, color: 0xa86ad8 },
+    { x: 16.5, z: 0.5, w: 2.0, d: 1.3, h: 2.1, color: 0xff4fa3 },
+    // the front row, nearest the door, thinner so the last run is not blind
+    { x: -14.0, z: 8.5, w: 2.0, d: 1.3, h: 2.1, color: 0x46a0e0 },
+    { x: -10.5, z: 8.5, w: 2.0, d: 1.3, h: 2.1, color: 0xff6fb0 },
+    { x: 10.5, z: 8.5, w: 2.0, d: 1.3, h: 2.1, color: 0x8a2b34 },
+    { x: 14.0, z: 8.5, w: 2.0, d: 1.3, h: 2.1, color: 0xffd45e },
+    // the photo booth in the corner, and the change machine on the wall
+    { x: -17.5, z: 13.0, w: 3.0, d: 2.6, h: 2.6, color: 0x2a2440 },
+    { x: 18.5, z: -2.0, w: 1.4, d: 2.2, h: 2.2, color: 0x4a4258 },
+    // a bin and a planter, low enough to crouch behind and see over
+    { x: 17.0, z: 12.0, w: 1.0, d: 1.0, h: 1.0, color: 0x30384a, low: true },
+    { x: -3.0, z: 13.5, w: 1.2, d: 1.2, h: 0.9, color: 0x3a5a3a, low: true },
+  ],
+  spots: [
+    // The staff side's, which is where an arcade keeps things out of sight.
+    { x: 6.5, z: -15.0, rot: 0, kind: 'cupboard' },
+    { x: 12.0, z: -14.6, rot: 0, kind: 'locker' },
+    { x: -13.0, z: -14.6, rot: 0, kind: 'locker' },
+    // and four on the floor, in the corners the cabinets do not reach
+    { x: -18.0, z: -12.0, rot: Math.PI / 2, kind: 'chest' },
+    { x: 18.0, z: 6.0, rot: -Math.PI / 2, kind: 'locker' },
+    { x: -18.0, z: 4.0, rot: Math.PI / 2, kind: 'chest' },
+    { x: 3.0, z: 14.0, rot: 0, kind: 'cupboard' },
+  ],
+  // The front door, at the opposite end of the room from the counter.
+  door: { x: 0 },
+  // You come in through the staff door, behind the counter.
+  spawn: { x: -2.0, z: -14.5 },
+  froggyStart: { x: 16.0, z: 14.0 },
+};
+
+export const ARCADE: RoomDef = ARCADE_BASE;
+
+export const ROOMS: RoomDef[] = [LIVING_ROOM, WAREHOUSE, WARD, ARCADE];

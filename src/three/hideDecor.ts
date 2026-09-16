@@ -221,6 +221,69 @@ function paint(theme: RoomTheme, surface: Surface, base: number, seed: number): 
       speckle(ctx, r, 0.8, 0.3);
       stains(ctx, r, 5, 'rgb(0,0,0)', 70, 0.5);
     }
+  } else if (theme === 'arcade') {
+    if (surface === 'floor') {
+      // THE CARPET.  Every arcade floor ever laid: a dark ground with a
+      // confetti of little bright flecks on it, worn pale down the lanes
+      // people actually walk and sticky-dark where the machines stand.  It is
+      // the one surface in this building a player has already seen in two
+      // dimensions, so it is the one that has to be recognisable.
+      speckle(ctx, r, 0.5, 0.12);
+      for (let i = 0; i < 520; i++) {
+        const c = [0xff4fa3, 0x46c4bd, 0xffd45e, 0x7b4bd8, 0x6fbb6a][Math.floor(r() * 5)];
+        ctx.fillStyle = hex(c, 0.5 + r() * 0.3);
+        const w = 2 + r() * 4;
+        ctx.fillRect(r() * SIZE, r() * SIZE, w, 2 + r() * 3);
+      }
+      // walked-pale lanes, then the dark under the cabinets
+      for (let i = 0; i < 3; i++) {
+        const x = SIZE * (0.2 + r() * 0.6);
+        const g = ctx.createLinearGradient(x - 40, 0, x + 40, 0);
+        g.addColorStop(0, 'rgba(255,255,255,0)');
+        g.addColorStop(0.5, 'rgba(255,255,255,0.05)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, SIZE, SIZE);
+      }
+      stains(ctx, r, 9, 'rgb(6,8,12)', 34, 0.55);
+      stains(ctx, r, 4, 'rgb(40,26,10)', 26, 0.35);
+      scratches(ctx, r, 26, 'rgba(0,0,0,0.3)');
+    } else if (surface === 'wall') {
+      // Panelled to waist height, painted above it, and both gone shabby:
+      // scuffed where shoulders and coin-cups have been, damp along the floor.
+      speckle(ctx, r, 0.8, 0.18);
+      ctx.fillStyle = 'rgba(0,0,0,0.30)';
+      ctx.fillRect(0, SIZE * 0.62, SIZE, SIZE * 0.38);
+      for (let x = 0; x < SIZE; x += 40) {
+        ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x + 0.5, SIZE * 0.62);
+        ctx.lineTo(x + 0.5, SIZE);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+        ctx.fillRect(x + 2, SIZE * 0.62, 3, SIZE * 0.38);
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(0, SIZE * 0.62);
+      ctx.lineTo(SIZE, SIZE * 0.62);
+      ctx.stroke();
+      const damp = ctx.createLinearGradient(0, SIZE, 0, SIZE * 0.7);
+      damp.addColorStop(0, 'rgba(0,0,0,0.6)');
+      damp.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = damp;
+      ctx.fillRect(0, 0, SIZE, SIZE);
+      stains(ctx, r, 5, 'rgb(20,14,26)', 30, 0.45);
+      scratches(ctx, r, 22, 'rgba(0,0,0,0.3)');
+      cracks(ctx, r, 3, 'rgba(0,0,0,0.5)');
+    } else {
+      // Ceiling tiles with the strip lights long dead.
+      speckle(ctx, r, 0.7, 0.2);
+      grid(ctx, 64, 'rgba(0,0,0,0.5)', 2);
+      stains(ctx, r, 6, 'rgb(0,0,0)', 60, 0.5);
+    }
   } else {
     if (surface === 'floor') {
       // Lino tiles gone the colour of the years, joints black, drag marks.
