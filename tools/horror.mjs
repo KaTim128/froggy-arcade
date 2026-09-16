@@ -367,12 +367,22 @@ try {
 
     // Clear whatever he was doing first: repositioning the player above can
     // legitimately have put him in a chase, and his memory of it outlasts the
-    // check.  Then stand him right in front of the chest and stare.
+    // check.  Then stand him in front of the chest and stare.
+    //
+    // THREE AND A HALF METRES, NOT TWO.  At two he is inside ARRIVE_DIST of
+    // the spot, so `arrive` can roll to OPEN it -- and opening the box the
+    // player is inside is a legitimate catch, which restarts the scene and
+    // fails the next eight checks for reasons that have nothing to do with
+    // them.  That made this a coin flip on `Math.random`.  Out here he can see
+    // the spot from well inside his thirteen-metre sight range and cannot
+    // reach it, which is the thing this check is actually about.
     const hiddenSeen = await page.evaluate(() => {
       const sc = window.__froggy.game().scene.getScene('HideRoom3D');
       sc.fMode = 'search';
       sc.memory = 0;
-      sc.froggy.set(sc.pos.x, sc.pos.y + 2);
+      sc.froggy.set(sc.pos.x, sc.pos.y + 3.5);
+      sc.waypoint.set(sc.froggy.x, sc.froggy.y);
+      sc.targetSpot = null;
       sc.froggyYaw = Math.atan2(sc.pos.x - sc.froggy.x, sc.pos.y - sc.froggy.y);
       return { hidden: sc.hiding !== null };
     });
