@@ -36,8 +36,6 @@ const GAMES = [
   { id: 'whack', drive: async (p) => { for (let i = 0; i < 14; i++) { await p.mouse.click(400 + (i % 3) * 240, 250 + Math.floor(i / 3) * 168); await sleep(180); } await sleep(600); } },
   { id: 'pinball', drive: async (p) => { await p.keyboard.down('Space'); await sleep(400); await p.keyboard.up('Space'); for (let i = 0; i < 6; i++) { await p.keyboard.press('KeyA'); await sleep(200); await p.keyboard.press('KeyD'); await sleep(200); } } },
   { id: 'frograce', drive: async (p) => { await p.keyboard.press('Digit3'); await sleep(300); await p.keyboard.press('Space'); await sleep(2400); } },
-  { id: 'poker', drive: async (p) => { for (let i = 0; i < 4; i++) { await p.keyboard.press('KeyC'); await sleep(900); } } },
-  { id: 'findthefrog', drive: async (p) => { await p.evaluate(() => window.__find?.tapFrog()); await sleep(600); await p.evaluate(() => window.__find?.tapFrog()); await sleep(600); } },
   { id: 'grudge', drive: async (p) => { await sleep(1600); for (let i = 0; i < 6; i++) { await p.keyboard.press('KeyD'); await p.keyboard.press('KeyJ'); await sleep(400); } } },
   { id: 'donkeykong', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(2500); await p.keyboard.up('KeyD'); await p.keyboard.press('Space'); await sleep(600); await p.keyboard.down('KeyW'); await sleep(900); await p.keyboard.up('KeyW'); } },
   { id: 'slots', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.press('Space'); await sleep(2700); } } },
@@ -249,105 +247,6 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
     `${honest >= 2 ? 'PASS' : 'FAIL'}  hoops: a shot the arc calls good goes in  — ${honest}/${tried} scored`,
   );
   if (honest < 2) failures++;
-  await page.close();
-}
-
-// FIND THE FROG is one puzzle repeated five times, so the two things that must
-// hold are that there is exactly ONE frog in the tank and that a wrong tap is
-// a cost rather than a loss.
-{
-  const page = await browser.newPage();
-  await page.setViewport({ width: 1280, height: 720 });
-  await page.goto(`${URL}/?intro=1&tokens=50&game=findthefrog`, { waitUntil: 'networkidle2' });
-  await sleep(1700);
-  await startGame(page);
-  await bridge(page, '__find');
-  const st = () => page.evaluate(() => window.__find.state());
-
-  // One frog, and a crowd of things that are not it.
-  const a = await st();
-  const alone = a.frogs === 1 && a.critters > 10;
-  console.log(`${alone ? 'PASS' : 'FAIL'}  find the frog: one frog in a crowd  — ${a.frogs} of ${a.critters}`);
-  if (!alone) failures++;
-
-  // Tapping it counts, and restocks the tank with MORE things than before.
-  await page.evaluate(() => window.__find.tapFrog());
-  await sleep(500);
-  const b = await st();
-  const counted = b.finds === 1 && b.critters > a.critters && b.frogs === 1;
-  console.log(
-    `${counted ? 'PASS' : 'FAIL'}  find the frog: finding it counts and the tank fills up  — ` +
-      `${a.finds}->${b.finds} finds, ${a.critters}->${b.critters} in the tank`,
-  );
-  if (!counted) failures++;
-
-  // And tapping the wrong thing costs seconds, not the round.
-  const before = (await st()).left;
-  await page.evaluate(() => {
-    const d = window.__find.state().decoy;
-    if (d) window.__find.tap(d.x, d.y);
-  });
-  await sleep(250);
-  const after = await st();
-  const survived = !after.over && after.lives === 3 && after.left < before;
-  console.log(
-    `${survived ? 'PASS' : 'FAIL'}  find the frog: a wrong tap costs time, not the run  — ` +
-      `${before}s -> ${after.left}s, ${after.lives} lives, over=${after.over}`,
-  );
-  if (!survived) failures++;
-  await page.close();
-}
-
-// TEXAS POKER lives or dies on its hand evaluator, so it is checked against
-// hands whose order is not a matter of opinion.
-{
-  const page = await browser.newPage();
-  await page.setViewport({ width: 1280, height: 720 });
-  await page.goto(`${URL}/?intro=1&tokens=50&game=poker`, { waitUntil: 'networkidle2' });
-  await sleep(1700);
-  await startGame(page);
-  await bridge(page, '__poker');
-
-  const ranked = await page.evaluate(() => {
-    const r = (cards) => window.__poker.rank(cards);
-    return {
-      // Strictly increasing, or the evaluator has its categories out of order.
-      ladder: [
-        r(['2C', '7D', '9H', 'JS', 'KC']), // high card
-        r(['2C', '2D', '9H', 'JS', 'KC']), // a pair
-        r(['2C', '2D', '9H', '9S', 'KC']), // two pair
-        r(['2C', '2D', '2H', '9S', 'KC']), // trips
-        r(['3C', '4D', '5H', '6S', '7C']), // straight
-        r(['2C', '5C', '9C', 'JC', 'KC']), // flush
-        r(['2C', '2D', '2H', '9S', '9C']), // full house
-        r(['2C', '2D', '2H', '2S', '9C']), // quads
-        r(['3C', '4C', '5C', '6C', '7C']), // straight flush
-      ],
-      // The wheel is a straight and the ace plays low in it.
-      wheel: r(['AC', '2D', '3H', '4S', '5C']) > r(['AC', 'KD', 'QH', 'JS', '9C']),
-      // Seven cards: the best five are found, not the first five.
-      seven: r(['AC', 'AD', 'KH', 'KS', '2C', '2D', '2H']) > r(['AC', 'AD', 'KH', 'KS', 'QC', '9D', '3H']),
-      // And a better kicker wins with the same pair.
-      kicker: r(['AC', 'AD', 'KH', '9S', '3C']) > r(['AC', 'AD', 'QH', '9S', '3C']),
-    };
-  });
-  const ordered = ranked.ladder.every((v, i) => i === 0 || v > ranked.ladder[i - 1]);
-  const ok = ordered && ranked.wheel && ranked.seven && ranked.kicker;
-  console.log(
-    `${ok ? 'PASS' : 'FAIL'}  poker: the evaluator ranks hands correctly  — ` +
-      `ladder ${ordered ? 'ordered' : 'OUT OF ORDER'}, wheel ${ranked.wheel}, 7-card ${ranked.seven}, kicker ${ranked.kicker}`,
-  );
-  if (!ok) failures++;
-
-  // Five opponents, five different styles, and the table actually deals.
-  const table = await page.evaluate(() => window.__poker.state());
-  const dealt = table.hole.length === 2 && table.seats.length === 6;
-  const styles = new Set(table.seats.map((x) => x.style).filter(Boolean));
-  console.log(
-    `${dealt && styles.size === 5 ? 'PASS' : 'FAIL'}  poker: six seats, two cards, five styles  — ` +
-      `${table.seats.length} seats, hole ${table.hole.join(' ')}, styles ${[...styles].join('/')}`,
-  );
-  if (!dealt || styles.size !== 5) failures++;
   await page.close();
 }
 
@@ -622,7 +521,7 @@ for (const g of [
   if (!chargedOnce) failures++;
 
   // And a pocket that cannot cover the price is told so, and charged nothing.
-  await page.goto(`${URL}/?intro=1&tokens=2&game=poker`, { waitUntil: 'networkidle2' });
+  await page.goto(`${URL}/?intro=1&tokens=2&game=frograce`, { waitUntil: 'networkidle2' });
   await sleep(2000);
   const brokeBefore = await tokens();
   await page.mouse.click(...PLAY);

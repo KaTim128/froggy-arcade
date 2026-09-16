@@ -27,8 +27,7 @@ export type GameId =
   | 'fallingblocks'
   | 'pinball'
   | 'frograce'
-  | 'poker'
-  | 'findthefrog';
+  | 'frograce';
 
 /**
  * How the thumb drives Froggy on a touch screen.  A stick is quicker once you
@@ -165,8 +164,6 @@ function defaultState(): GameState {
       fallingblocks: 0,
       pinball: 0,
       frograce: 0,
-      poker: 0,
-      findthefrog: 0,
     },
     highScores: {},
     route: 'normal',

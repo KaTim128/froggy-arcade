@@ -34,7 +34,7 @@ out, labelled with the same keys its how-to-play card names. **Esc → MOVEMENT*
 swaps the thumbstick for a four-way arrow pad if that suits your thumb better;
 the choice is kept with the volumes, so it outlives the run. Everything in the
 building is reachable this way, including the doors, the horror rooms and all
-twenty-one cabinets.
+nineteen cabinets.
 
 **Nothing is charged for walking up to a machine.** Every cabinet opens on a
 how-to-play card — what it wants, which keys *that* cabinet reads, and what a
@@ -94,7 +94,7 @@ src/
   render/     320x180 integer scaler, palette + night transform, Froggy's overlay
   art/        painters shared between the warm and the dark version of each room
   froggy/     his vector art, his three variants, and everything he says
-  minigames/  twenty-one games behind one interface
+  minigames/  nineteen games behind one interface
   scenes2d/   Phaser scenes
   three/      chase level grid + pathfinding
 ```

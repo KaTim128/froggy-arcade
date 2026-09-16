@@ -260,7 +260,7 @@ type GameId =
   // existence to gain a tidier string.
   | 'tictactoe' | 'fallingblocks' | 'airhockey'
   | 'hoops' | 'whack'
-  | 'pinball' | 'findthefrog' | 'frograce' | 'poker' | 'grudge';
+  | 'pinball' | 'frograce' | 'grudge';
 ```
 
 | # | Requirement |
@@ -384,8 +384,6 @@ One exported object is the single source of truth; the in-game manual is **rende
 | Pinball flippers | `A` / `D` (or arrows) | Froggy Pinball |
 | Pinball plunger | Hold `Spacebar` | Froggy Pinball |
 | Pick a frog to back | `1`–`7`, or click the lane | Frog Race |
-| Fold / call / raise | `F` / `C` / `R` | Texas Poker |
-| Find the frog | `Left click` on it | Find The Frog |
 | Advance basement frame | `Left click` on hotspot | Basement |
 | Pause / back / quit game | `Esc` | Everywhere |
 | Debug panel | `` ` `` | Dev builds only |
@@ -463,7 +461,7 @@ pixel ratios phones ship with, the unevenness lands inside one physical pixel.
 Desktop keeps `Math.floor` and is unchanged (§AR-1).
 
 **MOB-6 — the whole game, thumbs only.** Walking, doors, cabinets, all
-twenty-one games, the charity, the bust, the alley, the dark arcade, the
+nineteen games, the charity, the bust, the alley, the dark arcade, the
 basement, the hide room and the chase. The two 3D rooms get a **look pad** over
 the picture that sends a held mouse drag, which is what both rooms already turn
 on. `tools/mobile.mjs` drives real CDP touch events against an emulated phone
@@ -579,7 +577,7 @@ The main loop. A single room, 3/4 view, walked with WASD.
         ┌──────────────────────────────────────────┐
         │  [PRIZE CASE - glass]   [COUNTER + BELL] │   back wall
         │                                          │
-        │  ▣ TIC-TAC-TOE (1)   ▣ FIND THE FROG (3) │
+        │  ▣ TIC-TAC-TOE (1)                       │
         │  ▣ PINBALL (7)                           │
         │            · player spawn ·              │
         │                                          │
@@ -939,9 +937,7 @@ Measured over 200 automated runs per game (scripted competent player).
 | Bowling | Medium | 3 | 6 | 40–55% | 150 s |
 | Battleship | Medium | 3 | 6 | 40–55% | 90 s |
 | Froggy Pinball | Hard | 7 | 15 | 30–45% | 120 s |
-| Find The Frog | Medium | 3 | 6 | 40–55% | 60 s |
 | Frog Race | Hard | 7 | 15 | 14% blind, ~36% on the form | 30 s |
-| Texas Poker | Hard | 7 | 15 | 30–45% | 180 s |
 | Barrel Climb | Hard | 7 | 15 | 30–45% | 120 s |
 | Grudge (Fighter) | Hard | 7 | 15 | 30–45% | 90 s |
 | Frog vs Lizard | Hard | 5 | 10 | 40–55% | 120 s |
@@ -1032,18 +1028,6 @@ past first.
   and the lane lights say what is live.
 - **Lose:** the third ball drains.
 
-### 9.7a Find The Frog — Medium, 3 → 6
-
-- Thirty-odd green animals drifting over the screen — turtles, lizards, newts,
-  beetles, leaves, grubs, geckos — in the same greens as the frog. Exactly one
-  of them is the frog.
-- **His tell is his eyes**: two of them, standing up off the top of his head.
-  Nothing else in the crowd has that, and nothing about it needs explaining.
-- **Win:** find him five times. **Lose:** three wrong clicks, or the 20-second
-  clock on any one of the five.
-- The crowd and the drift both grow each round (14 → 42 animals, 11 → 24 px/s),
-  so the fifth is a different game from the first.
-
 ### 9.7b Frog Race — Hard, 7 → 15, casino
 
 - **Seven lanes, seven colours, one of them yours.** `1`–`7` or a click on the
@@ -1061,20 +1045,6 @@ past first.
   on top, the favourite comes home **about a third of the time**: two and a
   half times a blind pick, and still losing two races in three.
 - **Win:** your frog comes home first.
-
-### 9.7c Texas Poker — Hard, 7 → 15, casino
-
-- **Six seats, five of them AI.** Hold'em as it is played: blinds, hole cards,
-  flop, turn, river, fold/call/raise on each street.
-- **Hands are ranked, not guessed.** `evaluate()` folds any five of seven cards
-  into one comparable number from a straight flush down to a high card, the
-  wheel included, so a split pot is a split pot and not a coin toss.
-- **Five styles, and they play like themselves**: `rock` folds anything
-  marginal, `caller` never raises, `shark` reads the board, `bluffer` fires at
-  weakness, `wild` cannot be read at all. Each carries its own `callAt`,
-  `raiseAt` and bluff frequency, so the table has personalities rather than
-  noise.
-- Start with 100 chips. **Win:** reach 300. **Lose:** go out.
 
 ### 9.8 Grudge (Fighter) — Hard, 7 → 15
 
@@ -1252,7 +1222,7 @@ re-deducts the entry cost when it pays:
 | Easy | Tic-Tac-Toe | 1 | 2 | 0 |
 | Medium | Basketball Hoops, Whack-a-Frog, Bowling, Battleship | 3 | 6 | 0 |
 | Hard | Air Hockey, Grudge, Frog vs Lizard, The Flood | 5 | 10 | 0 |
-| Hard (long) | Pinball, Poker, Frog Race, Barrel Climb, Grudge, The Flood, Frog Cross | 7 | 15 | 0 |
+| Hard (long) | Pinball, Frog Race, Barrel Climb, Grudge, The Flood, Frog Cross | 7 | 15 | 0 |
 | Hard (longest) | Dance Off | 10 | 20 | 0 |
 
 Everything up to the five-token row is a **2× on a win**, so expected value is
@@ -1291,8 +1261,6 @@ Net EV per play = `(p_win × reward) − cost`, where the break-even win rate is
 | Whack-a-Frog | 0.475 | 3 | 2.85 | **−0.15** |
 | Grudge | 0.375 | 7 | 5.63 | **−1.37** |
 | Froggy Pinball | 0.375 | 7 | 5.63 | **−1.37** |
-| Texas Poker | 0.375 | 7 | 5.63 | **−1.37** |
-| Find The Frog | 0.475 | 3 | 2.85 | **−0.15** |
 | Frog Race (on the form) | 0.364 | 7 | 5.46 | **−1.54** |
 | Dance Off | 0.475 | 10 | 9.50 | **−0.50** |
 
@@ -1320,7 +1288,7 @@ A representative Rusher run from 20 tokens:
 | 2 | Froggy Pinball | 7 | Lose | 15 |
 | 3 | Grudge | 5 | Lose | 10 |
 | 4 | Hoops | 3 | Win +6 | 13 |
-| 5 | Find The Frog | 3 | Lose | 10 |
+| 5 | Hoops | 3 | Lose | 10 |
 | 6 | Grudge | 5 | Lose | 5 |
 | 7 | Hoops | 3 | Lose | 2 |
 | 8 | Tic-Tac-Toe | 1 | Lose | 1 |
@@ -1457,7 +1425,7 @@ src/
   minigames/
     index.ts              // registry, shared Minigame interface (§9.0)
     tictactoe/ flood/ airhockey/ hoops/ whack/ grudge/
-    pinball/ findthefrog/ frograce/ poker/ ...  // twenty-one in all
+    pinball/ frograce/ ...  // nineteen in all
   froggy/
     froggy.ts             // variant state machine V0/V1/V2 (§8.2)
     script.ts             // all dialogue (§8.4)

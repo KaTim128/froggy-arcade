@@ -140,10 +140,6 @@ export const CABINETS: CabinetDef[] = [
   // been at 48 for the same reason.
   { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 3, reward: 6, x: 52, y: 164, color: 0xff7a3d, symbol: 'H', motif: 'ball' },
   { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 3, reward: 6, x: 98, y: 164, color: 0x6fbb6a, symbol: 'W', motif: 'mallet' },
-  // Three in, six out, on the right-hand side of the front room opposite the
-  // two cheap machines.  Nothing stood on this row before: the prize case owns
-  // 126-226 of the back wall, which leaves exactly this corner.
-  { id: 'findthefrog', title: 'FIND THE FROG', tier: 'medium', cost: 3, reward: 6, x: 244, y: 88, color: 0x2e8b57, symbol: 'FF', motif: 'grid' },
   { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 3, reward: 6, x: 244, y: 164, color: 0xb9884f, symbol: 'BW', motif: 'pins' },
   { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 290, y: 164, color: 0x1d6f8f, symbol: 'BS', motif: 'ship' },
 
@@ -214,11 +210,10 @@ export const CABINETS: CabinetDef[] = [
     symbol: '*',
     motif: 'wheel',
   },
-  // The bottom row of the casino: two machines under the two above them, with
-  // the table left clear between them.  Both are seven-token games that end in
-  // a single decision rather than a run, which is what the room is for.
+  // The bottom row of the casino: one machine under the slots, with the table
+  // left clear beside it.  A seven-token game that ends in a single decision
+  // rather than a run, which is what the room is for.
   { id: 'frograce', title: 'FROG RACE', tier: 'hard', cost: 7, reward: 15, x: 96, y: 162, color: 0x6fbb6a, room: 'casino', symbol: 'RC', motif: 'road' },
-  { id: 'poker', title: 'TEXAS POKER', tier: 'hard', cost: 7, reward: 15, x: 224, y: 162, color: 0x2f8d4f, room: 'casino', symbol: 'TX', motif: 'cards' },
 ];
 
 /** Cabinets standing in a given room.  Anything unmarked lives in the hub. */

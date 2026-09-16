@@ -263,21 +263,6 @@ export const TRACKS: Record<string, TrackPreset> = {
     vol: { lead: 0.03, bass: 0.055, arp: 0.018, drums: 1.25 },
     ring: 0.7,
   }),
-  // Find the Frog: a slow, curious burble.  Nothing is chasing you in here;
-  // the pressure is entirely the clock and your own eyes.
-  game_findthefrog: preset({
-    bpm: 96,
-    chords: [maj(C.c4), min(C.a4 - 12), maj(C.f4 - 12), maj(C.g4 - 12)],
-    bass: [0, _, _, _, 1, _, _, _],
-    lead: [C.e5, _, C.g5, _, C.c6, _, C.g5, _, C.a5, _, C.e5, _, C.c5, _, _, _],
-    leadWave: 'triangle',
-    bassWave: 'sine',
-    arpWave: 'triangle',
-    drums: 'sparse',
-    cutoff: 2600,
-    vol: { lead: 0.028, bass: 0.05, arp: 0.018, drums: 0.7 },
-    ring: 1.1,
-  }),
   // Pinball: a bright, bouncing vamp with a fast shuffle under it — the noise
   // a machine with a bell in it makes when it is pleased with you.
   game_pinball: preset({
@@ -305,21 +290,6 @@ export const TRACKS: Record<string, TrackPreset> = {
     cutoff: 3800,
     vol: { lead: 0.026, bass: 0.048, arp: 0.014, drums: 1.05 },
     ring: 0.5,
-  }),
-  // The table: slow, smoky, in no hurry at all.  The only room in the building
-  // where the music is trying to make you stay.
-  game_poker: preset({
-    bpm: 84,
-    chords: [min(C.a4 - 12), min(C.d4), maj(C.g4 - 12), maj(C.c4)],
-    bass: [0, _, _, 1, _, _, 2, _],
-    lead: [C.a4, _, C.c5, _, C.e5, _, _, _, C.d5, _, C.f5, _, C.a5, _, _, _],
-    leadWave: 'triangle',
-    bassWave: 'sine',
-    arpWave: 'triangle',
-    drums: 'none',
-    cutoff: 2100,
-    vol: { lead: 0.03, bass: 0.055, arp: 0.02, drums: 0 },
-    ring: 1.4,
   }),
   // The Flood: a climbing tune in a hurry.  Rising figures over a walking
   // bass, because the whole game is upward and the water is the clock.

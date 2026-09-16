@@ -3,46 +3,44 @@
  *
  * Seven frogs, seven lanes, one of them is yours.  Pick before the gun.
  *
- * IT IS A READING GAME, NOT A LOTTERY.  One in seven picked blind is a 14%
- * game, and a 14% game that costs seven tokens is a machine nobody plays
- * twice.  So the card is on the wall before the race: every frog carries a
- * FORM figure, and the form is real — it is the mean of the speed that frog
- * will actually be drawn from, so the favourite comes home about a third of
- * the time and a rank outsider hardly ever does.  Backing the favourite is
- * therefore worth two and a half times a blind pick, which is what makes this
- * a reading game, and still loses two races in three, which is what keeps a
- * seven-token cabinet from being a cash machine.
+ * NOTHING ON THE CARD TELLS YOU WHICH.  The rim of this machine used to carry
+ * a FORM rating beside every lane, and it was real — but a rating you can read
+ * is a rating you can follow, and a race you win by following the top line is
+ * a menu, not a race.  The plates now carry the lane number and nothing else.
+ * Which frog to back is a guess, and it is meant to be one.
  *
- * AND THE FORM IS REDRAWN EVERY RACE.  It is not "the green one is fast": the
- * ratings are shuffled before each card goes up, so the favourite is a
- * different colour every time and nothing on this machine can be learned once
- * and then played on autopilot.
+ * THE FORM IS STILL THERE, AND IT IS STILL SHUFFLED EVERY RACE.  It is what
+ * gives a field a favourite and a tail-ender rather than seven identical
+ * sprites, so the running of the race has shape — somebody leads, somebody
+ * comes through late.  It is dealt onto the colours at random before every
+ * card, so it is never "the green one is fast", and it is never shown.  From
+ * the seat, every lane is one in seven.
  *
  * THE RACES ARE CLOSE ON PURPOSE, AND THE NOISE HAS TO LAST.  Per-tick wobble
  * on its own does nothing over a race — a hundred fair coins average out, and
- * a field separated only by white noise is decided by whoever has the best
- * form before the gun goes.  That is what the first version of this did: the
- * favourite won 93 races in 100, which makes a card on the wall an instruction
- * rather than a read.  So the variance is in three parts, and only the first
- * of them is per-tick:
+ * a field separated only by white noise is decided by whoever had the best
+ * form before the gun.  That is what the first version of this did: the best
+ * frog won 93 races in 100.  So the variance is in three parts, and only the
+ * first of them is per-tick:
  *
  *   WOBBLE — per tick, and cosmetic: it is what makes the pack jostle.
  *   DRIFT  — a slow random walk, pulled back towards nothing, so a frog has
  *            good and bad PATCHES a few seconds long that you can watch.
  *   LUCK   — drawn ONCE per frog per race and held for the whole of it: the
  *            day it is having.  It is the same size as the whole form spread,
- *            which is exactly what stops the card from being the result.
+ *            which is what stops the best card simply winning.
  *
  * Every frog also gets a SURGE somewhere in the middle, which is what stops a
- * leader simply holding a lead from the gun.  The favourite comes home about a
- * third of the time — clearly the way to bet, nothing like a certainty.
+ * leader holding a lead from the gun.  The best frog in the field comes home
+ * about a third of the time — which nobody can see, and which is why the race
+ * is worth watching rather than worth reading.
  */
 
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { centerText, text } from '../core/ui';
+import { centerText } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
@@ -61,11 +59,10 @@ const RUNNERS: Array<{ name: string; colour: number }> = [
 
 const LANE_T = 44;
 const LANE_H = 15;
-// Ten pixels further in than the first version: the racecard plate to the left
-// of it carries a number and up to four stars, which is forty-two pixels of
-// text, and the old start line ran straight through the last of them.
-const START_X = 52;
+const START_X = 42;
 const FINISH_X = GAME_W - 30;
+/** One square of the chequered tape, in pixels. */
+const TAPE_SQ = 5;
 const DIST = FINISH_X - START_X;
 
 /**
@@ -152,8 +149,8 @@ export const frogRace: MinigameModule = {
   tutorial: {
     objective: [
       'SEVEN FROGS RACE. BACK ONE OF THEM.',
-      'READ THE FORM - IT IS REAL, AND IT MOVES.',
-      'THE FAVOURITE WINS ABOUT HALF THE TIME.',
+      'NOTHING SAYS WHICH. IT IS A GUESS.',
+      'THEY RUN CLOSE AND THE LEAD CHANGES.',
       'YOUR FROG FIRST PAST THE POST PAYS 15.',
     ],
     controls: [
@@ -342,21 +339,21 @@ function draft(scene: Phaser.Scene): void {
   racers.forEach((r) => {
     const y = LANE_T + r.i * LANE_H;
     const plate = scene.add
-      .rectangle(4, y - 6, 42, 13, PALETTE.ink)
+      .rectangle(4, y - 6, 34, 13, PALETTE.ink)
       .setOrigin(0, 0)
       .setDepth(20)
       .setStrokeStyle(1, PALETTE.steel)
       .setInteractive({ useHandCursor: true });
     plate.on('pointerdown', () => choose(r.i));
     // The whole lane is the hit area, not just the plate: a row you have to
-    // aim at a 42-pixel box to back is a menu wearing a racecard's clothes.
+    // aim at a 34-pixel box to back is a menu wearing a racecard's clothes.
     scene.add
       .zone(0, y - 7, GAME_W, LANE_H)
       .setOrigin(0, 0)
       .setDepth(19)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => choose(r.i));
-    const label = text(scene, 6, y - 3, '', PALETTE.cream).setDepth(21);
+    const label = centerText(scene, 21, y, '', PALETTE.cream).setDepth(21);
     rows[r.i] = { plate, label };
   });
 }
@@ -369,9 +366,22 @@ function paintTrack(scene: Phaser.Scene): void {
   }
   // the rail, the post and the chequered line
   scene.add.rectangle(START_X - 3, LANE_T - 8, 1, RUNNERS.length * LANE_H, PALETTE.bone).setOrigin(0, 0).setAlpha(0.5);
-  for (let i = 0; i < RUNNERS.length * 2; i++) {
+  // THE CHEQUER RUNS THE WHOLE FIELD.  It used to be a fixed count of squares
+  // — two per runner, five pixels each — which is seventy pixels of a
+  // hundred-and-five pixel field, so the bottom two lanes ran at a finish line
+  // that was not there.  Counted off the lanes instead, it cannot come up
+  // short again however many frogs are in the race.
+  const tapeTop = LANE_T - 8;
+  const tapeH = RUNNERS.length * LANE_H;
+  for (let i = 0; i * TAPE_SQ < tapeH; i++) {
     scene.add
-      .rectangle(FINISH_X, LANE_T - 8 + i * 5, 4, 5, i % 2 ? PALETTE.white : PALETTE.ink)
+      .rectangle(
+        FINISH_X,
+        tapeTop + i * TAPE_SQ,
+        4,
+        Math.min(TAPE_SQ, tapeH - i * TAPE_SQ),
+        i % 2 ? PALETTE.white : PALETTE.ink,
+      )
       .setOrigin(0, 0)
       .setDepth(2);
   }
@@ -437,14 +447,11 @@ function settle(): void {
 }
 
 function refresh(): void {
-  const rank = [...racers].sort((a, b) => b.form - a.form);
   for (const r of racers) {
     const row = rows[r.i];
     if (!row) continue;
-    const place = rank.indexOf(r) + 1;
     const mine = r.i === pick;
-    const stars = '*'.repeat(Math.max(1, 4 - Math.floor((place - 1) / 2)));
-    row.label.setText(phase === 'betting' ? `${r.i + 1} ${stars}` : `${r.i + 1}`);
+    row.label.setText(`${r.i + 1}`);
     row.label.setTint(mine ? PALETTE.gold : PALETTE.fog);
     row.plate.setStrokeStyle(1, mine ? PALETTE.gold : PALETTE.steel);
     row.plate.setFillStyle(mine ? 0x2a2410 : PALETTE.ink);
