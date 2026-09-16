@@ -137,11 +137,10 @@ export class Chase3D extends Phaser.Scene {
         turnR: [kb.addKey('E')],
       };
     }
-    // Look, three ways, because the corridor has to be turnable however the
-    // player is holding the thing: pointer lock if the browser gives it, a
-    // held drag if not — which is also what the on-screen look pad sends — and
-    // A/D steering as the floor (see `movePlayer`).  The Three canvas is over
-    // the Phaser one, so the drag is listened for at the window.
+    // Look, two ways, and neither of them is a movement key: pointer lock if
+    // the browser gives it, and a held left-drag if not — which is also what
+    // the on-screen look pad sends.  The Three canvas is over the Phaser one,
+    // so the drag is listened for at the window.
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (p.event instanceof MouseEvent && document.pointerLockElement) {
         this.yaw -= p.event.movementX * 0.0022;
@@ -302,22 +301,38 @@ export class Chase3D extends Phaser.Scene {
     };
   }
 
+  /**
+   * W AND S WALK, A AND D STEP SIDEWAYS, AND ONLY THE MOUSE TURNS YOU.
+   *
+   * A and D used to steer when the browser had not given up pointer lock —
+   * the corridor had to be turnable somehow on a trackpad, and that was the
+   * somehow.  It made the two keys mean different things depending on a
+   * browser permission the player never sees, and in a corridor where you are
+   * being followed, a key that swings the whole view when you meant to sidle
+   * round a corner is the difference between getting past him and walking
+   * into him.  The view is the mouse's, held or locked; the keys are the
+   * feet's.  Q and E are still there for anyone who wants to turn on the
+   * keyboard, and they are the only keys that do.
+   */
   private movePlayer(dt: number): void {
     const { fwd, strafe, turn } = this.moveInput();
     this.yaw -= turn * 2.4 * dt;
+    if (fwd === 0 && strafe === 0) return;
 
-    // Without pointer lock, strafing steers: A/D turn you when you are not
-    // also holding forward, so the game is playable on a trackpad.
-    if (!document.pointerLockElement && strafe !== 0 && fwd === 0) {
-      this.yaw -= strafe * 2.0 * dt;
-      return;
+    // Three's camera looks down -Z, so forward is (-sin yaw, -cos yaw) and
+    // right is that turned a quarter: (-cos yaw, sin yaw).
+    const sin = Math.sin(this.yaw);
+    const cos = Math.cos(this.yaw);
+    let dx = -sin * fwd - cos * strafe;
+    let dz = -cos * fwd + sin * strafe;
+    // Diagonals must not be faster than straight lines.
+    const len = Math.hypot(dx, dz);
+    if (len > 1) {
+      dx /= len;
+      dz /= len;
     }
-    if (!document.pointerLockElement && strafe !== 0) this.yaw -= strafe * 1.4 * dt;
-
-    if (fwd === 0) return;
-    // Three's camera looks down -Z, so forward is (-sin yaw, -cos yaw).
-    const dx = -Math.sin(this.yaw) * fwd * PLAYER_SPEED * dt;
-    const dz = -Math.cos(this.yaw) * fwd * PLAYER_SPEED * dt;
+    dx *= PLAYER_SPEED * dt;
+    dz *= PLAYER_SPEED * dt;
 
     // slide along walls instead of sticking to them
     if (!this.blocked(this.pos.x + dx, this.pos.y)) this.pos.x += dx;

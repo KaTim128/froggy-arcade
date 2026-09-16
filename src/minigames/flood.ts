@@ -280,6 +280,23 @@ export const flood: MinigameModule = {
           /** How many layouts the route checker threw away before this one. */
           tries: layoutTries,
           fallback: layoutFallback,
+          /**
+           * What the game's OWN validator makes of the tower now standing.
+           * A harness that walks the built ledges itself and disagrees with
+           * this has found a difference between what was checked and what was
+           * built, which is worth far more than either verdict alone.
+           */
+          climbable: routeExists(
+            plats.map((p) => ({
+              kind: p.kind,
+              x: p.ax,
+              y: p.ay,
+              w: p.w,
+              amp: p.amp,
+              radius: p.radius,
+              side: p.side,
+            })),
+          ),
           over,
         }),
         /** Put the frog where a test needs him, in world coordinates. */
@@ -317,18 +334,30 @@ export const flood: MinigameModule = {
             };
             return {
               kind: p.kind,
-              x: Math.round(p.ax),
-              y: Math.round(p.ay),
+              // The geometry is exact for the same reason `reach` is: half a
+              // pixel of rounding here is half a pixel of a limit the
+              // generator deliberately budgets right up to.
+              x: p.ax,
+              y: p.ay,
               w: p.w,
-              amp: Math.round(p.amp),
-              radius: Math.round(p.radius),
+              amp: p.amp,
+              radius: p.radius,
               // How far the surface can be from the anchor, up or down.
-              slop: Math.round(p.kind === 'rise' ? p.amp : p.kind === 'orbit' ? p.radius * 0.5 : 0),
+              slop: p.kind === 'rise' ? p.amp : p.kind === 'orbit' ? p.radius * 0.5 : 0,
+              // These two are the readable summary, so they are rounded.
               rise: prev ? Math.round(p.ay - prev.ay) : 0,
               gap: prev ? Math.round(near(prev, p)) : 0,
             };
           }),
-        reach: () => ({ apex: Math.round(APEX), run: Math.round(REACH), leap: Math.round(LEAP), span: Math.round(SPAN) }),
+        /**
+         * EXACT, NOT ROUNDED.  `LEAP` and `SPAN` come out of the frog's jump
+         * physics and are not whole numbers, and the generator budgets rises
+         * right up to the limit — so an edge sitting exactly on it is normal.
+         * Rounding these before a harness compares against them moves the
+         * limit by up to half a pixel, which is enough to reject a tower the
+         * game correctly built.  Round for display, never for arithmetic.
+         */
+        reach: () => ({ apex: APEX, run: REACH, leap: LEAP, span: SPAN }),
         /**
          * Generate and check N layouts WITHOUT building any of them, so the
          * harness can prove the validator rejects what it should and that a
@@ -724,9 +753,19 @@ function buildTower(scene: Phaser.Scene): void {
       return;
     }
   }
+  // ALL FORTY FAILED.  The staircase is the last resort, and it is checked
+  // like any other layout rather than trusted: "it always goes up" is a claim
+  // about code that can be edited, and the promise this game makes — that
+  // every shaft it builds can be climbed — is not one to leave resting on a
+  // comment.  If even this fails, something is wrong with the reach constants
+  // rather than with any one tower, and a dev build says so out loud.
+  const last = staircase();
   layoutTries = LAYOUT_TRIES;
   layoutFallback = true;
-  paint(scene, staircase());
+  if (import.meta.env?.DEV && !routeExists(last)) {
+    console.error('[flood] the fallback staircase does not pass its own route check');
+  }
+  paint(scene, last);
 }
 
 /** The last resort: a plain, wide, boring staircase.  It always goes up. */

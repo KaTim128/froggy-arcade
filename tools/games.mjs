@@ -1293,9 +1293,14 @@ for (const g of [
   // retuning the frog retunes the test with it.
   const reach = await page.evaluate(() => window.__flood.reach());
   const towers = [];
+  const saidByTheGame = [];
   for (let i = 0; i < 4; i++) {
     const ladder = await page.evaluate(() => window.__flood.ladder());
     towers.push(ladder);
+    // What the game's own validator makes of the tower it just built, captured
+    // NOW: the page is reloaded for the next one, so asking afterwards would
+    // only ever describe the last of them.
+    saidByTheGame.push(await page.evaluate(() => window.__flood.state().climbable));
     if (i < 3) {
       await page.goto(`${URL}/?intro=1&tokens=40&game=fallingblocks`, { waitUntil: 'networkidle2' });
       await sleep(1500);
@@ -1338,14 +1343,19 @@ for (const g of [
     }
     return false;
   };
+  // On a failure, say whether the GAME thought the tower it built was
+  // climbable too.  Agreement means the generator really did emit a bad tower;
+  // a disagreement means what was validated is not what was built, which is a
+  // different bug entirely and impossible to tell apart from one verdict.
   const bad = [];
   towers.forEach((t, i) => {
-    if (!reachable(t)) bad.push(`tower ${i + 1} has no way up`);
+    if (!reachable(t)) bad.push(`tower ${i + 1} has no way up (the game said ${saidByTheGame[i]})`);
   });
   const climbable = bad.length === 0 && towers.every((t) => t.length > 18);
   console.log(
     `${climbable ? 'PASS' : 'FAIL'}  the flood: every tower has a way to the top  — ` +
-      `${towers.length} towers, ${towers[0].length} ledges, leap ${reach.leap} span ${reach.span}` +
+      `${towers.length} towers, ${towers[0].length} ledges, ` +
+      `leap ${reach.leap.toFixed(1)} span ${reach.span.toFixed(1)}` +
       (bad.length ? `; ${bad.slice(0, 3).join(', ')}` : ''),
   );
   if (!climbable) failures++;
