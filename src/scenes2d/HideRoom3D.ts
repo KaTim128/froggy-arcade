@@ -1747,13 +1747,21 @@ export class HideRoom3D extends Phaser.Scene {
         // The lid comes up a little past the halfway mark, and it is heard
         // when it does — from anywhere in the room.  This is the sound the
         // round is played by.
-        const lidAt = this.openSeconds() * 0.53;
+        const total = this.openSeconds(spot);
+        // A lid comes up just past halfway.  A BLANKET comes up once he is
+        // already down on the floor -- he does not lift it on the way past.
+        const lidAt = total * (spot.kind === 'bed' ? 0.58 : 0.53);
         spot.opening = this.fTimer < lidAt;
         if (before >= lidAt && this.fTimer < lidAt) {
           this.play('spot_open', this.earshot(spot.x, spot.z, OPEN_EARSHOT, 0.3));
           spot.sinceChecked = 0;
         }
-        if (this.fTimer < lidAt && this.hiding === spot) {
+        // AND HE HAS TO LOOK BEFORE HE FINDS YOU.  Under a bed the catch waits
+        // until he is properly down and the blanket is up -- a fifth of the
+        // beat after the lift -- so what happens to a player hiding there is a
+        // thing they watch coming rather than a thing that has happened.
+        const findAt = spot.kind === 'bed' ? total * 0.38 : lidAt;
+        if (this.fTimer < findAt && this.hiding === spot) {
           this.caught();
           return;
         }
@@ -2035,8 +2043,35 @@ export class HideRoom3D extends Phaser.Scene {
     return !this.isFinal || FROGGY_IN_ARCADE;
   }
 
-  private openSeconds(): number {
-    return OPEN_S[Math.min(this.roomIndex, OPEN_S.length - 1)];
+  /**
+   * How long he spends on a hiding place.
+   *
+   * A BED TAKES LONGER, because a bed is the only one he has to get down on
+   * the floor for.  Lifting a lid is a reach; looking underneath something is
+   * a squat, a look, a hold, and a stand -- and at 1.7 seconds that whole
+   * sequence is a twitch.  Twice and a bit gives each beat room to land.
+   */
+  private openSeconds(spot?: Spot3D | null): number {
+    const base = OPEN_S[Math.min(this.roomIndex, OPEN_S.length - 1)];
+    return spot?.kind === 'bed' ? base * 2.3 : base;
+  }
+
+  /**
+   * 0..1 through a check of a bed, for the crouch.
+   *
+   * Eased in over the first quarter, held flat while he is actually looking,
+   * and out over the last fifth -- so he goes down deliberately, stays down
+   * long enough for the player under there to have to watch him, and stands up
+   * as the beat ends rather than snapping upright.
+   */
+  private bedCrouch(): number {
+    const spot = this.targetSpot;
+    if (this.fMode !== 'openSpot' || !spot || spot.kind !== 'bed') return 0;
+    const total = this.openSeconds(spot);
+    const k = 1 - Phaser.Math.Clamp(this.fTimer / total, 0, 1);
+    if (k < 0.26) return Phaser.Math.Easing.Sine.InOut(k / 0.26);
+    if (k > 0.82) return Phaser.Math.Easing.Sine.InOut((1 - k) / 0.18);
+    return 1;
   }
 
   /** What he does on reaching a waypoint: check it, listen, or move on. */
@@ -2048,7 +2083,7 @@ export class HideRoom3D extends Phaser.Scene {
     if (spot && (spot.checkedOn < this.sweep || spot.sinceChecked > STALE_S || roll < 0.5)) {
       this.targetSpot = spot;
       this.fMode = 'openSpot';
-      this.fTimer = this.openSeconds();
+      this.fTimer = this.openSeconds(spot);
       this.froggyYaw = Math.atan2(spot.x - this.froggy.x, spot.z - this.froggy.y);
       return;
     }
@@ -2431,6 +2466,9 @@ export class HideRoom3D extends Phaser.Scene {
       maw: this.fMode === 'chase' ? 1 : this.fMode === 'openSpot' ? 0.45 : 0.12,
       climb: climbing,
       climbT,
+      // Down on his haunches at a bed, craning about under it.
+      crouch: this.bedCrouch(),
+      peer: 1,
       // Hunting, his head swings slowly across the room.  Once he has you it
       // stops dead on you and stays there, which is much worse than the swing.
       // Investigating, he sweeps his head faster and wider: looking FOR

@@ -73,6 +73,22 @@ export interface FroggyPose {
   scan?: number;
   /** 0..1 after you.  Folds him lower, lengthens the stride, opens the reach. */
   lunge?: number;
+  /**
+   * 0..1 down on his haunches, looking UNDER something.
+   *
+   * He used to check a bed by standing in front of it while the blanket lifted
+   * itself, which is a thing happening near him rather than a thing he is
+   * doing.  This drops the whole body to the height of the gap, folds him over
+   * his knees, and pitches the head DOWN and forward so the face is in the
+   * dark under the frame -- which is the one pose in his whole range where he
+   * is not looking at the room, and is much worse for it.
+   */
+  crouch?: number;
+  /**
+   * 0..1 craning about while he is down there.  Small, slow, and side to side:
+   * looking FOR something rather than at it.
+   */
+  peer?: number;
 }
 
 export class FroggyMonster {
@@ -99,6 +115,7 @@ export class FroggyMonster {
   private climbNow = 0;
   private scanNow = 0;
   private lungeNow = 0;
+  private crouchNow = 0;
   /** Seconds until the next twitch, and how far through one he is. */
   private twitchIn = 2.5;
   private twitchT = 0;
@@ -406,6 +423,10 @@ export class FroggyMonster {
     this.climbNow += (pose.climb - this.climbNow) * Math.min(1, dt * 5);
     this.scanNow += ((pose.scan ?? 0) - this.scanNow) * Math.min(1, dt * 2.5);
     this.lungeNow += ((pose.lunge ?? 0) - this.lungeNow) * Math.min(1, dt * 4);
+    // Slower than the rest: going down on his haunches is a deliberate act and
+    // it has to read as one.  Three and a half gives about a second either
+    // way, which is long enough to watch and short enough to be alarming.
+    this.crouchNow += ((pose.crouch ?? 0) - this.crouchNow) * Math.min(1, dt * 3.5);
 
     // ---- the twitch.  Every few seconds the head snaps a few degrees and
     // holds, then drifts back.  It is over before you are sure it happened,
@@ -454,16 +475,28 @@ export class FroggyMonster {
     const bend = (0.5 + Math.min(0.45, speed * 0.07)) * moving;
     const k0 = Math.max(0, Math.cos(phase)) * bend;
     const k1 = Math.max(0, -Math.cos(phase)) * bend * 0.9;
-    this.knees[0].rotation.x = k0 + this.climbNow * 1.1;
-    this.knees[1].rotation.x = k1 + this.climbNow * 1.1;
+    // ---- DOWN ON HIS HAUNCHES.  A squat, built the way a squat is: the thigh
+    // comes forward, the knee folds hard under it, and the hips drop by what
+    // that costs in leg length.  Applied on top of the stride rather than
+    // instead of it, so he can still be settling as he arrives.
+    const cr = this.crouchNow;
+    this.legs[0].rotation.x += cr * 0.62;
+    this.legs[1].rotation.x += cr * 0.62;
+
+    this.knees[0].rotation.x = k0 + this.climbNow * 1.1 + cr * 1.35;
+    this.knees[1].rotation.x = k1 + this.climbNow * 1.1 + cr * 1.35;
 
     // And the foot stays flat.  Levelled against everything above it, damped a
     // little so it is a foot and not a gyroscope, and let go of on a climb —
     // there is no floor to be level with halfway up a cupboard.
+    // Crouched, the sole is still on the floor -- more so, not less -- so the
+    // levelling gets the crouch terms too, and the clamp is opened up because
+    // a squat asks more of an ankle than a stride does.
     const level = (leg: number, knee: number) =>
-      THREE.MathUtils.clamp(-(leg + knee) * 0.85, -0.55, 0.55) * (1 - this.climbNow);
-    this.ankles[0].rotation.x = level(this.legs[0].rotation.x, k0);
-    this.ankles[1].rotation.x = level(this.legs[1].rotation.x, k1);
+      THREE.MathUtils.clamp(-(leg + knee) * 0.85, -0.55 - cr * 0.7, 0.55 + cr * 0.7) *
+      (1 - this.climbNow);
+    this.ankles[0].rotation.x = level(this.legs[0].rotation.x, k0 + cr * 1.35);
+    this.ankles[1].rotation.x = level(this.legs[1].rotation.x, k1 + cr * 1.35);
 
     // ---- THE CLIMB.  `climbT` runs 0..1 over the whole crossing, and the
     // arms haul hand over hand across it instead of both reaching up and
@@ -499,23 +532,48 @@ export class FroggyMonster {
     // taking the impact.
     const dip = (1 - Math.abs(Math.cos(phase))) * Math.min(0.09, 0.02 + speed * 0.018) * moving;
     const breath = Math.sin(this.breathT * 1.5) * 0.014;
-    this.hips.position.y = dip + breath + crest * 0.12;
+    // And the hips come down by what the fold costs.  0.86 on a 1.42 hip puts
+    // his eyeline at about half a metre -- the height of the gap under a bed,
+    // which is the whole point of the pose.
+    this.hips.position.y = dip + breath + crest * 0.12 - cr * 0.86;
     // A slight roll off the same limp, so his weight goes side to side.
     this.hips.rotation.z = gait * 0.035 * moving;
 
     // Folded forward, further the faster he moves, and further again once he is
     // coming for you.  A climb folds him over whatever he is on top of.
     this.torso.rotation.x =
-      0.34 + Math.min(0.28, speed * 0.06) + this.climbNow * 0.45 + this.lungeNow * 0.22;
+      0.34 + Math.min(0.28, speed * 0.06) + this.climbNow * 0.45 + this.lungeNow * 0.22 +
+      cr * 0.5;
     this.torso.rotation.z = gait * 0.05;
 
     // The head hangs the other way, so the face stays level however far over he
     // is folded — that is the part that has to keep looking at you.  It also
     // leads the turn: the head goes first and the body follows it round.
+    //
+    // ...EXCEPT WHEN HE IS LOOKING UNDER SOMETHING, which is the one time the
+    // face is not pointed at the room.  The crouch cancels the levelling and a
+    // little more, so the head goes below horizontal and INTO the gap.  Only a
+    // little more: the torso is already folded half a radian further by the
+    // squat, and at 0.95 the two stacked up to eighty-six degrees, which is a
+    // creature staring at its own feet rather than under a bed.
+    const peer = (pose.peer ?? 0) * cr;
     this.neck.rotation.x =
-      -0.3 - Math.min(0.2, speed * 0.05) - this.climbNow * 0.2 - this.lungeNow * 0.1;
-    this.neck.rotation.y = this.scanNow + twitch;
-    this.neck.rotation.z = -gait * 0.06 + twitch * 0.4;
+      -0.3 - Math.min(0.2, speed * 0.05) - this.climbNow * 0.2 - this.lungeNow * 0.1 +
+      cr * 0.55;
+    // Craning: slow, small, side to side, and offset from the body's own sway
+    // so the two never line up into something that looks mechanical.
+    this.neck.rotation.y = this.scanNow + twitch + Math.sin(this.breathT * 1.9) * 0.3 * peer;
+    this.neck.rotation.z =
+      -gait * 0.06 + twitch * 0.4 + Math.sin(this.breathT * 1.3 + 1.1) * 0.16 * peer;
+
+    // The arms come FORWARD and down to take his weight on the floor.  The
+    // sign matters and it is not the legs': on an arm hanging from a shoulder,
+    // negative rotation.x is the way the climb reach goes, which is forward --
+    // positive swung both of them out behind him like oars.
+    if (cr > 0.001) {
+      for (const arm of this.arms) arm.rotation.x -= cr * 0.55;
+      for (const el of this.elbows) el.rotation.x -= cr * 0.3;
+    }
 
     // The jaw.  Shut, it still hangs on the teeth; it never quite stops moving.
     this.jaw.rotation.x = 0.18 + this.mawNow * 0.9 + Math.sin(this.breathT * 2.7) * 0.025;
