@@ -76,6 +76,17 @@ export interface GameState {
   seenIntro: boolean;
   /** Which hide-and-seek room the player is in, 0-based.  Route 'hide' only. */
   hideRoom: number;
+  /**
+   * The night is over and it was survived.  Set once, when the player gets the
+   * staff door of the dark arcade open with Froggy still in the room, and never
+   * cleared except by resetting the run.
+   *
+   * It outlives the horror sequence on purpose: the arcade the player comes
+   * back to is not the one they were thrown out of.  Froggy is not at the
+   * blackjack table any more, and the man in the suit dealing in his place is
+   * the only answer anyone will give about it.
+   */
+  froggyGone: boolean;
   settings: Settings;
 }
 
@@ -170,6 +181,7 @@ function defaultState(): GameState {
     hasKey: false,
     seenIntro: false,
     hideRoom: 0,
+    froggyGone: false,
     settings: { master: 80, music: 70, sfx: 85, moveStyle: 'stick' },
   };
 }

@@ -61,6 +61,22 @@ export interface RoomDef {
   spawn: { x: number; z: number };
   /** Where he goes once he has finished with the door.  Kept off the furniture. */
   froggyStart: { x: number; z: number };
+  /**
+   * The prize case, where a room has one.  It is not scenery: the player has a
+   * key by now, and the first thing anyone does with a key in a room with a
+   * locked glass case is try it.  The room needs to know where the case is so
+   * the case can say no.
+   */
+  prizeCase?: { x: number; z: number };
+  /**
+   * The counter, where a room has one, and the fact that you can get over it.
+   *
+   * It is declared rather than inferred from the furniture because it is the
+   * escape route, not a prop: the room has to be able to say which waist-high
+   * box is the one the player is allowed to climb, which side of it they have
+   * to be standing on to climb it, and how high the top is.
+   */
+  counter?: { z: number; top: number; from: number; to: number };
 }
 
 /**
@@ -410,11 +426,11 @@ const ARCADE_BASE: RoomDef = {
   ],
   spots: [
     // The staff side's, which is where an arcade keeps things out of sight.
-    { x: 6.5, z: -15.0, rot: 0, kind: 'cupboard' },
+    { x: 6.5, z: -14.2, rot: 0, kind: 'cupboard' },
     { x: 12.0, z: -14.6, rot: 0, kind: 'locker' },
     { x: -13.0, z: -14.6, rot: 0, kind: 'locker' },
     // and four on the floor, in the corners the cabinets do not reach
-    { x: -18.0, z: -12.0, rot: Math.PI / 2, kind: 'chest' },
+    { x: -18.0, z: -9.5, rot: Math.PI / 2, kind: 'chest' },
     { x: 18.0, z: 6.0, rot: -Math.PI / 2, kind: 'locker' },
     { x: -18.0, z: 4.0, rot: Math.PI / 2, kind: 'chest' },
     { x: 3.0, z: 14.0, rot: 0, kind: 'cupboard' },
@@ -424,6 +440,13 @@ const ARCADE_BASE: RoomDef = {
   // You come in through the staff door, behind the counter.
   spawn: { x: -2.0, z: -14.5 },
   froggyStart: { x: 16.0, z: 14.0 },
+  // The case against the staff-side wall — the same one that wanted a key in
+  // the lit arcade, and the reason the player still thinks they have one.
+  prizeCase: { x: -6.5, z: -15.0 },
+  // Wall to wall, so the climb is the only way out of the staff side and
+  // there is no end of it to walk round.  You come in behind it; everything
+  // else in the room is on the other side.
+  counter: { z: -12.0, top: 1.15, from: -20.0, to: 20.0 },
 };
 
 export const ARCADE: RoomDef = ARCADE_BASE;

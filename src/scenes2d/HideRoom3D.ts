@@ -196,6 +196,31 @@ const FINAL_ROOM = 3;
  * catching.
  */
 const FINAL_SEARCH_PACE = 0.66;
+/**
+ * How long the key has to stay turning in the staff door.
+ *
+ * A TAP MUST NOT DO ANYTHING.  The whole shape of the ending is standing
+ * perfectly still, in the open, at the far end of the room from the counter,
+ * for long enough that you have to have decided where he is first.  Five
+ * seconds is about two of his sweeps across the front row, so there is a right
+ * moment to start and a wrong one, and it can be got wrong.
+ */
+const UNLOCK_S = 5;
+/**
+ * Where in the turn each tumbler drops.  Unevenly spaced on purpose: an even
+ * tick is a progress bar with a sound on it, and this wants to be a lock.
+ */
+const TUMBLERS = [0.14, 0.33, 0.55, 0.74, 0.92];
+/** The radius of the ring the hold draws round the prompt. */
+const RING_R = 30;
+/** How close to the prize case counts as standing at it: half-width, half-depth. */
+const CASE_REACH = { hw: 3.4, hd: 2.4 };
+/** How far back from the counter the climb is still on offer. */
+const COUNTER_REACH = 2.2;
+/** How long going over it takes.  Long enough to be a commitment, not a step. */
+const VAULT_S = 0.62;
+/** How far past the counter you land, so you never come down on top of it. */
+const VAULT_CLEAR = 1.7;
 /** How long his answer to "if not" is allowed to hang there. */
 const BRIEFING_TAIL_MS = 2400;
 
@@ -416,6 +441,18 @@ export class HideRoom3D extends Phaser.Scene {
   private stepT = 0;
   private shake = 0;
   private prompt = '';
+  /** Seconds of uninterrupted hold on the staff door, 0..UNLOCK_S. */
+  private unlockT = 0;
+  /** How many of TUMBLERS have already been heard this turn. */
+  private tumbler = 0;
+  /**
+   * Going over the counter: where from, where to, and how far through it we
+   * are.  Non-null means the player is committed — no steering, no stopping,
+   * and the camera rides up over the top and down the other side.
+   */
+  private vault: { from: THREE.Vector2; to: THREE.Vector2; t: number } | null = null;
+  /** ONE WAY.  Set at the end of the climb and never cleared. */
+  private vaulted = false;
   private subtitle = '';
   private keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
   /** True while the left mouse button is down: dragging the view around. */
@@ -463,6 +500,10 @@ export class HideRoom3D extends Phaser.Scene {
     this.stuckT = 0;
     this.prompt = '';
     this.subtitle = '';
+    this.unlockT = 0;
+    this.tumbler = 0;
+    this.vault = null;
+    this.vaulted = false;
     this.path = [];
     this.pathFor.set(NaN, NaN);
     this.pathAge = 0;
@@ -750,6 +791,11 @@ export class HideRoom3D extends Phaser.Scene {
       turnL: bind(['LEFT', 'Q']),
       turnR: bind(['RIGHT']),
       run: bind(['SHIFT']),
+      // E is both a press and a hold: a press gets you into a box, and a hold
+      // turns the key in the staff door.  It needs a Key object either way,
+      // because `keydown-E` repeats and cannot tell five seconds from fifty
+      // keyboard auto-repeats.
+      use: bind(['E']),
     };
     kb?.on('keydown-E', () => this.interact());
     // Crouch is a TOGGLE on C, not a key you hold.  You crouch to cross a room
@@ -815,13 +861,9 @@ export class HideRoom3D extends Phaser.Scene {
       return;
     }
 
-    // The door is not the game any more.  It says so, once, and that is all.
-    const d = this.def;
-    if (Math.hypot(this.pos.x - d.door.x, this.pos.y - d.halfD) < DOOR_REACH) {
-      this.say('LOCKED. THERE IS NOWHERE TO GO BUT UNDER SOMETHING.', 2400);
-      return;
-    }
-
+    // Same order the prompt uses.  A press that does something other than what
+    // the line above the player's hands says it will do is worse than a press
+    // that does nothing.
     const spot = this.nearestSpot(SPOT_REACH);
     if (spot && !spot.opening) {
       // If he is watching you climb in, the box is not a secret: he comes
@@ -836,7 +878,24 @@ export class HideRoom3D extends Phaser.Scene {
         this.startTrip();
         this.targetSpot = null;
       }
+      return;
     }
+
+    if (this.atDoor()) {
+      // In the arcade the door IS the game, and it does not answer to a press.
+      // runUnlock has the hold; all a tap gets is the reminder that it wants
+      // one.  Everywhere else the door is scenery and says so, once.
+      if (this.isFinal) this.say('HOLD IT. THE KEY HAS TO TURN.', 1800);
+      else this.say('LOCKED. THERE IS NOWHERE TO GO BUT UNDER SOMETHING.', 2400);
+      return;
+    }
+
+    if (this.atCounter()) {
+      this.startVault();
+      return;
+    }
+
+    if (this.atCase()) this.tryCase();
   }
 
   /**
@@ -872,6 +931,147 @@ export class HideRoom3D extends Phaser.Scene {
     }
     // Boxed in on every side: stay put rather than step into the furniture.
     this.pos.set(spot.x, spot.z);
+  }
+
+  /** Standing at the one door in the room that goes anywhere. */
+  private atDoor(): boolean {
+    const d = this.def;
+    return Math.hypot(this.pos.x - d.door.x, this.pos.y - d.halfD) < DOOR_REACH;
+  }
+
+  /** In front of the prize case, where a room has one. */
+  private atCase(): boolean {
+    const c = this.def.prizeCase;
+    if (!c) return false;
+    // A rectangle, not a radius: the case is five metres of frontage and a
+    // circle round its middle either misses both ends or reaches behind it.
+    return Math.abs(this.pos.x - c.x) < CASE_REACH.hw && Math.abs(this.pos.y - c.z) < CASE_REACH.hd;
+  }
+
+  /**
+   * Standing on the staff side of the counter, close enough to get over it.
+   *
+   * ONE WAY, and the geometry says so twice.  The staff side is a test on your
+   * z, so the moment you are over you fail it; and `vaulted` is never cleared,
+   * so even a room that put you back there could not offer it again.  There is
+   * nothing to walk round either: the counter runs wall to wall, which is why
+   * the climb is the escape route rather than a shortcut on it.
+   */
+  private atCounter(): boolean {
+    const c = this.def.counter;
+    if (!c || this.vaulted || this.vault) return false;
+    if (this.pos.x < c.from || this.pos.x > c.to) return false;
+    const behind = this.pos.y - c.z;
+    return behind < 0 && behind > -COUNTER_REACH;
+  }
+
+  /**
+   * Over the top, and it is a climb rather than a teleport.
+   *
+   * The player is committed for the whole of it — no steering, no stopping,
+   * and he cannot be caught mid-air, because being frozen in the open by the
+   * one move the room requires would be a trap rather than a decision.  It is
+   * loud, though: a body going over a counter is the least quiet thing you can
+   * do in this room, and he hears it from wherever he is.
+   */
+  private startVault(): void {
+    const c = this.def.counter;
+    if (!c || !this.atCounter()) return;
+    const to = new THREE.Vector2(this.pos.x, c.z + VAULT_CLEAR);
+    // Straight over is usually clear, but a cabinet the other side is not our
+    // problem to shove through: slide along the counter until there is floor.
+    let landed = false;
+    for (const off of [0, 1.2, -1.2, 2.4, -2.4, 3.6, -3.6]) {
+      const x = Phaser.Math.Clamp(this.pos.x + off, -this.def.halfW + 0.8, this.def.halfW - 0.8);
+      if (!this.solid(x, to.y)) {
+        to.x = x;
+        landed = true;
+        break;
+      }
+    }
+    if (!landed) return;
+
+    this.vault = { from: this.pos.clone(), to, t: 0 };
+    this.play('hop_wet', 0.5);
+    this.alert();
+  }
+
+  /** The arc: up the near face, across the top, down the far side. */
+  private stepVault(dt: number): void {
+    const v = this.vault;
+    if (!v) return;
+    v.t = Math.min(1, v.t + dt / VAULT_S);
+    // Ease in and out, so the weight is at the top rather than at the ends.
+    const k = v.t < 0.5 ? 2 * v.t * v.t : 1 - 2 * (1 - v.t) * (1 - v.t);
+    this.pos.set(
+      Phaser.Math.Linear(v.from.x, v.to.x, k),
+      Phaser.Math.Linear(v.from.y, v.to.y, k),
+    );
+    if (v.t >= 1) {
+      this.vault = null;
+      this.vaulted = true;
+      this.play('footstep_concrete', 0.45);
+    }
+  }
+
+  /**
+   * The key, in the prize case.
+   *
+   * IT DOES NOT FIT, AND IT IS NOT SPENT.  The player has been carrying this
+   * key since the basement believing it was for the bunny in the case, and the
+   * case is the first thing in this room they will walk to.  It has to be able
+   * to say no — and the no has to land as an answer rather than a locked door,
+   * because it is the moment the whole night stops being an accident.
+   *
+   * Nothing is consumed and nothing is flagged.  The key still opens the staff
+   * door, which is what it was cut for, which is the part he never said.
+   */
+  private tryCase(): void {
+    if (!store.get().hasKey) {
+      audio.sfx('door_rattle', 0.5);
+      this.say('IT NEEDS A KEY.', 2000);
+      return;
+    }
+    // Quiet.  A stinger here would make it a scare; it is a realisation, and
+    // the room is silent enough that a swell under it is plenty.
+    audio.sfx('lock_click', 0.4);
+    this.time.delayedCall(260, () => audio.sfx('eerie_swell', 0.35));
+    this.say("THIS KEY ISN'T FOR THE PRIZE CASE...", 2600);
+    this.time.delayedCall(2600, () => this.say('FROGGY MUST HAVE KNOWN ALL ALONG...', 3000));
+  }
+
+  /**
+   * Turning the key in the staff door: five unbroken seconds of holding E.
+   *
+   * Held, not pressed, and re-tested every frame against both the key AND the
+   * spot, so there is no version of this that a tap, an auto-repeat or a run
+   * past the door can satisfy.  Letting go drops it to nothing — not back a
+   * bit, to nothing — because a lock you can chip away at over four visits is
+   * not a thing you have to stand still in the open for.
+   */
+  private runUnlock(dt: number): void {
+    if (!this.isFinal || this.mode !== 'seeking') return;
+
+    if (this.hiding || !this.atDoor() || !this.held('use')) {
+      if (this.unlockT > 0) {
+        // The tumblers falling back: the one sound in the room that is the
+        // player's own fault.
+        audio.sfx('lock_click', 0.3);
+        this.unlockT = 0;
+        this.tumbler = 0;
+      }
+      return;
+    }
+
+    this.unlockT = Math.min(UNLOCK_S, this.unlockT + dt);
+    const k = this.unlockT / UNLOCK_S;
+    while (this.tumbler < TUMBLERS.length && k >= TUMBLERS[this.tumbler]) {
+      this.tumbler++;
+      // Each one a shade brighter than the last, so the turn sounds like it is
+      // getting somewhere without a bar having to say so.
+      audio.sfx('lock_click', 0.45 + this.tumbler * 0.1);
+    }
+    if (this.unlockT >= UNLOCK_S) this.survive();
   }
 
   private say(text: string, ms: number): void {
@@ -915,6 +1115,7 @@ export class HideRoom3D extends Phaser.Scene {
       // The arcade has no clock.  You leave by the door or not at all.
       if (!this.isFinal) this.clock -= dt;
       this.movePlayer(dt);
+      this.runUnlock(dt);
       this.moveFroggy(dt);
       this.checkCaught();
       this.roomTone(dt);
@@ -1100,6 +1301,12 @@ export class HideRoom3D extends Phaser.Scene {
 
     if (this.hiding) {
       this.pos.set(this.hiding.x, this.hiding.z);
+      return;
+    }
+
+    // Committed.  The arc owns where he is until he is down the other side.
+    if (this.vault) {
+      this.stepVault(dt);
       return;
     }
 
@@ -1397,7 +1604,11 @@ export class HideRoom3D extends Phaser.Scene {
    * thing that finds you is him opening it.
    */
   private checkCaught(): void {
-    if (this.mode !== 'seeking' || this.hiding) return;
+    // Mid-vault he cannot be taken.  The counter is the one move the room
+    // REQUIRES, and a move you have to make that can end the round while you
+    // are unable to steer out of it is a trap, not a decision.  It lasts under
+    // two thirds of a second and it is loud, so he is already coming.
+    if (this.mode !== 'seeking' || this.hiding || this.vault) return;
     // His reach follows his size, so the arcade's larger model has the arcade's
     // larger grab rather than the one the smaller rooms were tuned for.
     const reach = this.isFinal ? catchFor(FINAL_SCALE) : CATCH_DIST;
@@ -1755,7 +1966,14 @@ export class HideRoom3D extends Phaser.Scene {
     const jitter = this.shake * 0.06;
 
     const eyeWant = this.hiding ? (this.hiding.kind === 'bed' ? 0.32 : 0.85) : this.crouching ? EYE_CROUCH : EYE;
-    this.eyeNow += (eyeWant - this.eyeNow) * Math.min(1, dt * 9);
+    if (this.vault) {
+      // Up and over.  Set rather than eased: the lerp below takes most of a
+      // second to arrive and the whole climb is shorter than that, so easing
+      // it would have him watching the counter go past at chest height.
+      this.eyeNow = EYE + Math.sin(this.vault.t * Math.PI) * 0.85;
+    } else {
+      this.eyeNow += (eyeWant - this.eyeNow) * Math.min(1, dt * 9);
+    }
     const y = this.eyeNow + (this.hiding ? 0 : Math.sin(this.bob) * 0.035);
     cam.position.set(
       this.pos.x + (Math.random() - 0.5) * jitter,
@@ -1844,7 +2062,9 @@ export class HideRoom3D extends Phaser.Scene {
       if (this.mode === 'survived') {
         ctx.fillStyle = `rgba(4,8,10,${Math.min(0.8, this.endT * 1.4)})`;
         ctx.fillRect(0, 0, GAME_W, GAME_H);
-        drawPixelText(ctx, 'HE NEVER FOUND YOU', GAME_W / 2, GAME_H * 0.42, {
+        // Downstairs it is a report on the round.  Out of the arcade it is a
+        // verdict on the night, and it gets the bigger of the two.
+        drawPixelText(ctx, this.isFinal ? 'YOU SURVIVED' : 'HE NEVER FOUND YOU', GAME_W / 2, GAME_H * 0.42, {
           scale: 2,
           color: '#e8e2cd',
           center: true,
@@ -1893,15 +2113,19 @@ export class HideRoom3D extends Phaser.Scene {
         });
       }
 
-      if (this.prompt && !this.hiding) {
+      if (this.prompt && !this.hiding && (this.mode === 'hiding' || this.mode === 'seeking')) {
+        // Held down to scale 1 while the ring is up: fitScale would give HOLD
+        // [E] the full double height, which is 96px of text through a 60px
+        // circle.
         drawPixelText(ctx, this.prompt, GAME_W / 2, GAME_H * 0.62, {
-          scale: fitScale(this.prompt),
+          scale: this.unlockT > 0 ? 1 : fitScale(this.prompt),
           color: '#ffd45e',
           center: true,
           alpha: 0.9,
         });
       }
 
+      if (this.unlockT > 0) this.paintUnlockRing(ctx);
     });
   }
 
@@ -1932,6 +2156,39 @@ export class HideRoom3D extends Phaser.Scene {
       center: true,
       alpha: 0.8,
     });
+  }
+
+  /**
+   * The five seconds, drawn as a ring round the prompt.
+   *
+   * A ring rather than a bar because it has to read at a glance from the
+   * corner of an eye that is watching the room: a bar is a thing you look at,
+   * and looking at it is how he reaches you.  It fills clockwise from the top
+   * in the same yellow as the objective, so the two ends of the room are
+   * telling the player the same thing in the same colour.
+   *
+   * It only exists while the key is turning.  Let go and it is gone, which is
+   * the honest picture of what letting go did.
+   */
+  private paintUnlockRing(ctx: CanvasRenderingContext2D): void {
+    const cx = GAME_W / 2;
+    const cy = GAME_H * 0.62;
+    const k = Math.min(1, this.unlockT / UNLOCK_S);
+
+    ctx.save();
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'butt';
+    // the empty track, so the arc has something to be a fraction of
+    ctx.strokeStyle = 'rgba(232,226,205,0.22)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, RING_R, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#ffd45e';
+    ctx.beginPath();
+    ctx.arc(cx, cy, RING_R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k);
+    ctx.stroke();
+    ctx.restore();
   }
 
   private publishTelemetry(): void {
@@ -1973,6 +2230,18 @@ export class HideRoom3D extends Phaser.Scene {
       froggyChase: FROGGY_CHASE,
       doorX: this.def.door.x,
       doorZ: this.def.halfD,
+      atDoor: this.atDoor(),
+      atCase: this.atCase(),
+      atCounter: this.atCounter(),
+      vaulting: !!this.vault,
+      vaulted: this.vaulted,
+      unlockT: this.unlockT,
+      unlockSeconds: UNLOCK_S,
+      tumblers: this.tumbler,
+      prompt: this.prompt,
+      subtitle: this.subtitle,
+      hasKey: store.get().hasKey,
+      isFinal: this.isFinal,
       dbg: {
         fwd: this.held('fwd'),
         strafe: (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0),
@@ -2002,8 +2271,12 @@ export class HideRoom3D extends Phaser.Scene {
   }
 
   /**
-   * His clock ran out and he did not find you.  He gives up and the door he locked
-   * is open again — the round was the whole point, not the door.
+   * Out.
+   *
+   * Downstairs this is his clock running out: he did not find you, he gives up,
+   * and the door he locked is open again — the round was the point, not the
+   * door.  In the arcade it is the lock finally turning, which is a different
+   * thing entirely, and it ends the night rather than the room.
    */
   private survive(): void {
     if (this.mode !== 'seeking') return;
@@ -2011,12 +2284,32 @@ export class HideRoom3D extends Phaser.Scene {
     this.endT = 0;
     this.hiding = null;
     this.subtitle = '';
+    this.prompt = '';
+    this.unlockT = 0;
+    this.tumbler = 0;
     this.monster?.setVisible(false);
     audio.setScene(SILENCE);
-    audio.sfx('door_creak');
+    // The last of the five: the bolt coming back, and then the door.
+    if (this.isFinal) {
+      audio.sfx('lock_click', 1);
+      this.time.delayedCall(280, () => audio.sfx('door_open'));
+    } else {
+      audio.sfx('door_creak');
+    }
 
     const next = this.roomIndex + 1;
-    this.time.delayedCall(3000, () => {
+    this.time.delayedCall(this.isFinal ? 4200 : 3000, () => {
+      if (this.isFinal) {
+        // THE NIGHT IS OVER, and the game goes back to being a game.  The run
+        // returns to the ordinary route so the arcade is open again — but it
+        // is not the same arcade, because `froggyGone` stays set and the
+        // blackjack table has somebody else behind it now.
+        store.patch({ route: 'normal', hideRoom: 0, froggyGone: true });
+        store.flush();
+        froggyLayer.clear();
+        this.scene.start('StartScreen');
+        return;
+      }
       if (next >= ROOMS.length) {
         store.patch({ route: 'chase', hideRoom: 0 });
         store.flush();
@@ -2053,12 +2346,18 @@ export class HideRoom3D extends Phaser.Scene {
       this.prompt = '';
       return;
     }
-    const d = this.def;
     const spot = this.nearestSpot(SPOT_REACH);
     if (spot) {
       this.prompt = spot.kind === 'chest' ? '[E] GET IN' : '[E] GET INSIDE';
-    } else if (Math.hypot(this.pos.x - d.door.x, this.pos.y - d.halfD) < DOOR_REACH) {
-      this.prompt = '[E] LOCKED';
+    } else if (this.atCounter()) {
+      this.prompt = '[E] CLIMB OVER';
+    } else if (this.atDoor()) {
+      // Short on purpose while it is turning: the ring is drawn round this
+      // text, and a full sentence in a 60px circle is a sentence with a circle
+      // through it.
+      this.prompt = this.isFinal ? (this.unlockT > 0 ? 'HOLD [E]' : '[E] UNLOCK') : '[E] LOCKED';
+    } else if (this.atCase()) {
+      this.prompt = '[E] PRIZE CASE';
     } else {
       this.prompt = '';
     }
