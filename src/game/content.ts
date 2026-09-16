@@ -27,7 +27,8 @@ export type Motif =
   | 'wheel'
   | 'chamber'
   | 'steps'
-  | 'throw';
+  | 'throw'
+  | 'race';
 
 export interface CabinetDef {
   id: GameId;
@@ -209,7 +210,10 @@ export const CABINETS: CabinetDef[] = [
   // The bottom row of the casino: one machine under the slots, with the table
   // left clear beside it.  A seven-token game that ends in a single decision
   // rather than a run, which is what the room is for.
-  { id: 'frograce', title: 'FROG RACE', tier: 'hard', cost: 7, reward: 15, x: 96, y: 162, color: 0x6fbb6a, room: 'casino', symbol: 'RC', motif: 'road' },
+  // Ten a ticket, twenty back, and you may buy as many tickets as you can
+  // afford -- the only cabinet in the building where the stake is the player's
+  // to set before a single thing happens.  See minigames/frograce.
+  { id: 'frograce', title: 'FROG RACE', tier: 'hard', cost: 10, reward: 20, x: 96, y: 162, color: 0x6fbb6a, room: 'casino', symbol: 'RC', motif: 'race' },
 ];
 
 /** Cabinets standing in a given room.  Anything unmarked lives in the hub. */

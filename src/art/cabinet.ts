@@ -59,6 +59,26 @@ function drawMotif(scene: Phaser.Scene, cx: number, cy: number, def: CabinetDef,
       put(0, 1, 7, 9, bright);
       put(0, -2, 5, 3);
       break;
+    // FROG RACE.  Three lanes with a frog in each, mid-hop and staggered, and
+    // the chequer at the end of them.  The old marquee was the FROG CROSS road
+    // -- two kerbs and a dashed centre line -- which told a player walking up
+    // to a betting machine that it was a crossing game.
+    case 'race':
+      // the lane rails
+      for (const y of [-5, 0, 5]) put(0, y, 14, 1);
+      // three frogs, each at a different point in its hop, each further along
+      for (const [dx, dy, lit] of [
+        [-4, -5, true],
+        [0, 0, false],
+        [-1, 5, false],
+      ] as const) {
+        dot(dx, dy - 2, 3, lit ? bright : undefined);
+        put(dx - 2, dy - 1, 1, 2, lit ? bright : undefined);
+        put(dx + 2, dy - 1, 1, 2, lit ? bright : undefined);
+      }
+      // the chequered post they are running at
+      for (let i = -6; i <= 6; i += 2) put(6, i, 2, 2, i % 4 === 0 ? bright : undefined);
+      break;
     case 'road':
       put(-4, 0, 1, 12);
       put(4, 0, 1, 12);

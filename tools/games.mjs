@@ -34,7 +34,9 @@ const GAMES = [
   { id: 'fallingblocks', drive: async (p) => { for (let i = 0; i < 8; i++) { await p.keyboard.press('Space'); await sleep(180); await p.keyboard.down('KeyD'); await sleep(160); await p.keyboard.up('KeyD'); } } },
   { id: 'hoops', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.down('Space'); await sleep(500); await p.keyboard.up('Space'); await sleep(1400); } } },
   { id: 'whack', drive: async (p) => { for (let i = 0; i < 14; i++) { await p.mouse.click(400 + (i % 3) * 240, 250 + Math.floor(i / 3) * 168); await sleep(180); } await sleep(600); } },
-  { id: 'frograce', drive: async (p) => { await p.keyboard.press('Digit3'); await sleep(300); await p.keyboard.press('Space'); await sleep(2400); } },
+  // Back one, buy a second ticket, and then sit through the whole race: it is
+  // twelve seconds by design and the result card comes after it.
+  { id: 'frograce', drive: async (p) => { await p.keyboard.press('Digit3'); await sleep(250); await p.keyboard.press('ArrowUp'); await sleep(250); await p.keyboard.press('Space'); await sleep(16500); } },
   { id: 'grudge', drive: async (p) => { await sleep(1600); for (let i = 0; i < 6; i++) { await p.keyboard.press('KeyD'); await p.keyboard.press('KeyJ'); await sleep(400); } } },
   { id: 'donkeykong', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(2500); await p.keyboard.up('KeyD'); await p.keyboard.press('Space'); await sleep(600); await p.keyboard.down('KeyW'); await sleep(900); await p.keyboard.up('KeyW'); } },
   { id: 'slots', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.press('Space'); await sleep(2700); } } },
@@ -528,7 +530,7 @@ for (const g of [
   const broke = { tokens: await tokens(), card: await cardUp(page) };
   const refused = broke.card && broke.tokens === brokeBefore;
   console.log(
-    `${refused ? 'PASS' : 'FAIL'}  a 7-token cabinet will not start on 2 tokens  — ` +
+    `${refused ? 'PASS' : 'FAIL'}  a 10-token cabinet will not start on 2 tokens  — ` +
       `card ${broke.card ? 'still up' : 'gone'}, ${brokeBefore} -> ${broke.tokens} tokens`,
   );
   if (!refused) failures++;
