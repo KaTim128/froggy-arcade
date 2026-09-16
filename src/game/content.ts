@@ -200,7 +200,7 @@ export const CABINETS: CabinetDef[] = [
     title: 'WHEEL OF FORTUNE',
     tier: 'hard',
     cost: 25,
-    reward: 25,
+    reward: 50,
     x: 58,
     y: 140,
     color: 0xffd45e,
