@@ -149,6 +149,25 @@ const held = (g: string): boolean => keys[g]?.some((k) => k.isDown) ?? false;
 const sy = (wy: number): number => FLOOR_SY - (wy - camY);
 
 /**
+ * The tower as it was actually built, in the generator's own terms.
+ *
+ * A harness that walks the BUILT ledges and disagrees with the check that was
+ * run before they were built has found a difference between what was promised
+ * and what was painted, which is worth more than either verdict alone.
+ */
+function built(): Spec[] {
+  return plats.map((p) => ({
+    kind: p.kind,
+    x: p.ax,
+    y: p.ay,
+    w: p.w,
+    amp: p.amp,
+    radius: p.radius,
+    side: p.side,
+  }));
+}
+
+/**
  * The standable top of a ledge right now, or null if there is nothing to stand
  * on this instant — a spin bar seen edge-on, a retracted arm, a ledge that has
  * already crumbled.
@@ -286,17 +305,14 @@ export const flood: MinigameModule = {
            * this has found a difference between what was checked and what was
            * built, which is worth far more than either verdict alone.
            */
-          climbable: routeExists(
-            plats.map((p) => ({
-              kind: p.kind,
-              x: p.ax,
-              y: p.ay,
-              w: p.w,
-              amp: p.amp,
-              radius: p.radius,
-              side: p.side,
-            })),
-          ),
+          climbable: routeExists(built()),
+          /**
+           * And the stronger claim: EVERY ledge in the shaft is one jump from
+           * the one below it, so the climb a player can see is the climb they
+           * can make.  `climbable` only says some line goes up.
+           */
+          chained: chainIsLegal(built()),
+          worstStep: worstStep(built()),
           over,
         }),
         /** Put the frog where a test needs him, in world coordinates. */
@@ -563,6 +579,46 @@ function worstRise(a: Spec, b: Spec): number {
 }
 
 /**
+ * CAN YOU GET FROM THIS LEDGE TO THAT ONE, AT THE WORST MOMENT OF BOTH?
+ *
+ * The one question the generator has to answer before a ledge is allowed to
+ * exist.  Both halves are measured against the arc a jump actually covers —
+ * `LEAP` up and `SPAN` across — and both ledges are taken at the position that
+ * makes the jump hardest, so a step that is legal here is legal whatever phase
+ * everything happens to be in when the player arrives at it.
+ */
+export function stepIsLegal(a: Spec, b: Spec): boolean {
+  const rise = worstRise(a, b);
+  return rise <= LEAP && worstGap(a, b) <= SPAN;
+}
+
+/**
+ * EVERY LEDGE REACHABLE FROM THE ONE BELOW IT — not merely "some line through
+ * the tower goes all the way up".
+ *
+ * `routeExists` asks the weaker question, and a tower can pass it while a ledge
+ * in the middle of the shaft is stranded: the route goes around that ledge, but
+ * a player looking up at it and taking the obvious jump dies for it.  The climb
+ * a player can see has to be a climb they can make, so the chain is checked
+ * too, and a tower that breaks it is thrown away like any other.
+ */
+export function chainIsLegal(specs: Spec[]): boolean {
+  for (let i = 1; i < specs.length; i++) if (!stepIsLegal(specs[i - 1], specs[i])) return false;
+  return true;
+}
+
+/** The worst consecutive step in a tower, as fractions of what a jump covers. */
+export function worstStep(specs: Spec[]): { rise: number; gap: number } {
+  let rise = 0;
+  let gap = 0;
+  for (let i = 1; i < specs.length; i++) {
+    rise = Math.max(rise, worstRise(specs[i - 1], specs[i]) / LEAP);
+    gap = Math.max(gap, worstGap(specs[i - 1], specs[i]) / SPAN);
+  }
+  return { rise, gap };
+}
+
+/**
  * IS THERE A WAY UP THIS TOWER?
  *
  * Not "is each ledge reachable from the one below it" — that was the old rule,
@@ -696,7 +752,21 @@ function generate(): Spec[] {
       }
       const arm = Phaser.Math.Clamp(Math.max(w, Math.ceil(need) + 6), 26, maxArm);
       const nx = side < 0 ? SHAFT_L + arm / 2 : SHAFT_R - arm / 2;
-      specs.push({ kind, x: nx, y, w: arm, amp: 0, radius: 0, side });
+      const spec: Spec = { kind, x: nx, y, w: arm, amp: 0, radius: 0, side };
+      // An arm long enough to reach is the whole point of the branch above, so
+      // if the clamp shortened it past reaching, this is not a retract ledge.
+      if (!stepIsLegal(prev, spec)) {
+        const sx = Phaser.Math.Clamp(
+          Phaser.Math.Between(Math.round(x - room), Math.round(x + room)),
+          SHAFT_L + w / 2,
+          SHAFT_R - w / 2,
+        );
+        specs.push({ kind: 'static', x: sx, y, w, amp: 0, radius: 0, side: 1 });
+        x = sx;
+        prevKind = 'static';
+        continue;
+      }
+      specs.push(spec);
       x = nx;
       prevKind = kind;
       continue;
@@ -705,8 +775,32 @@ function generate(): Spec[] {
     const half = w / 2 + amp + radius;
     const loX = Math.max(SHAFT_L + half, x - room);
     const hiX = Math.min(SHAFT_R - half, x + room);
-    const nx =
-      loX >= hiX ? Phaser.Math.Clamp(x, SHAFT_L + half, SHAFT_R - half) : Phaser.Math.Between(loX, hiX);
+
+    // THE LEDGE IS CHECKED BEFORE IT IS PLACED, AND RE-ROLLED UNTIL IT PASSES.
+    //
+    // `room` is the arithmetic that SHOULD make every draw legal, and it very
+    // nearly does — but it is arithmetic about a shaft with walls in it, and
+    // the clamps at the edges can hand back an x further from the take-off than
+    // the jump covers.  Trusting the arithmetic is how an unjumpable step gets
+    // built; asking the same question the player's legs will ask is how it does
+    // not.  Twenty-four draws, then a placement that cannot fail: straight over
+    // the ledge below, which is always within reach because the rise was
+    // budgeted from the jump in the first place.
+    here.w = w;
+    here.amp = amp;
+    here.radius = radius;
+    here.kind = kind;
+    let nx = Phaser.Math.Clamp(x, SHAFT_L + half, SHAFT_R - half);
+    for (let draw = 0; draw < 24; draw++) {
+      const cand = loX >= hiX ? nx : Phaser.Math.Between(loX, hiX);
+      here.x = cand;
+      if (stepIsLegal(prev, here)) {
+        nx = cand;
+        break;
+      }
+      if (loX >= hiX) break;
+    }
+    here.x = nx;
     specs.push({ kind, x: nx, y, w, amp, radius, side: 1 });
     x = nx;
     prevKind = kind;
@@ -728,6 +822,26 @@ function generate(): Spec[] {
   return specs;
 }
 
+/**
+ * The staircase's own rule, applied to a tower that broke the chain somewhere:
+ * pull the offending ledge back over the one below it and widen it.
+ *
+ * It is the repair of last resort and it runs before the tower is thrown away,
+ * because throwing away a tower costs a whole regeneration and the only thing
+ * usually wrong with one is a single ledge that the wall clamped too far.
+ */
+function mend(specs: Spec[]): Spec[] {
+  for (let i = 1; i < specs.length; i++) {
+    if (stepIsLegal(specs[i - 1], specs[i])) continue;
+    const prev = specs[i - 1];
+    const fixed: Spec = { ...specs[i], kind: 'static', amp: 0, radius: 0, w: Math.max(specs[i].w, 32) };
+    fixed.x = Phaser.Math.Clamp(prev.x, SHAFT_L + fixed.w / 2, SHAFT_R - fixed.w / 2);
+    fixed.y = Math.min(fixed.y, prev.y - slop(prev) + LEAP);
+    specs[i] = fixed;
+  }
+  return specs;
+}
+
 /** Tries before the generator is told to stop being clever.  See below. */
 const LAYOUT_TRIES = 40;
 /** What the last build actually cost, for the harness and the dev bridge. */
@@ -746,8 +860,11 @@ let layoutFallback = false;
 function buildTower(scene: Phaser.Scene): void {
   layoutFallback = false;
   for (let attempt = 1; attempt <= LAYOUT_TRIES; attempt++) {
-    const specs = generate();
-    if (routeExists(specs)) {
+    // Mend first, throw away second.  A tower is usually one clamped ledge away
+    // from legal and regenerating the whole shaft over it is wasteful; what is
+    // NOT negotiable is that the thing finally painted passes both checks.
+    const specs = mend(generate());
+    if (routeExists(specs) && chainIsLegal(specs)) {
       layoutTries = attempt;
       paint(scene, specs);
       return;
@@ -762,7 +879,7 @@ function buildTower(scene: Phaser.Scene): void {
   const last = staircase();
   layoutTries = LAYOUT_TRIES;
   layoutFallback = true;
-  if (import.meta.env?.DEV && !routeExists(last)) {
+  if (import.meta.env?.DEV && !(routeExists(last) && chainIsLegal(last))) {
     console.error('[flood] the fallback staircase does not pass its own route check');
   }
   paint(scene, last);

@@ -331,6 +331,7 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   console.log(`${drains ? 'PASS' : 'FAIL'}  barrel climb: barrels drain instead of piling up  — ${peak} live`);
   if (!drains) failures++;
 
+
   // ---- the ladders actually chain to the top
   await page.evaluate(() => window.__dk.clearBarrels());
   await sleep(300);
@@ -381,6 +382,86 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   const won = end.tokens > before;
   console.log(`${won ? 'PASS' : 'FAIL'}  barrel climb: the exit wins  — ${before} -> ${end.tokens} tokens`);
   if (!won) failures++;
+  await page.close();
+}
+
+// NO COMBINATION OF BARRELS ASKS FOR A JUMP AND A DUCK AT ONCE.
+//
+// An orange roller has to be jumped; a pink bouncer at the top of its hop has
+// to be walked under, and jumping into one is a death.  Put the two of them
+// within a jump of each other and there is no input that answers both — the
+// player is hit having done the right thing.  Same for two pink ones out of
+// step, one overhead and one on the girder in front of you.
+//
+// Its own page, and sampled in chunks: the barrels are what is under test, the
+// player is not driving, and a frog standing still runs out of lives in well
+// under a minute.  Every frame is looked at, because a bad pair lasts a
+// fraction of a second and a poll on a timer walks straight past it.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  const tally = { frames: 0, samples: 0, span: 0, worst: null, closest: 1e9, up: 0 };
+  for (let run = 0; run < 3; run++) {
+    await page.goto(`${URL}/?intro=1&tokens=50&game=donkeykong`, { waitUntil: 'networkidle2' });
+    await sleep(1400);
+    await startGame(page);
+    if (!(await bridge(page, '__dk'))) break;
+    const r = await page.evaluate(async () => {
+      const out = { span: window.__dk.state().jumpSpan, samples: 0, frames: 0, up: 0, closest: 1e9, worst: null };
+      const until = performance.now() + 18000;
+      while (performance.now() < until && window.__dk) {
+        const bs = window.__dk.state().barrels.filter((b) => !b.falling);
+        out.samples++;
+        if (bs.some((b) => b.up)) out.up++;
+        let badHere = false;
+        for (let i = 0; i < bs.length; i++) {
+          for (let j = i + 1; j < bs.length; j++) {
+            const a = bs[i];
+            const b = bs[j];
+            if (a.floor !== b.floor || a.up === b.up) continue;
+            const gap = Math.abs(a.x - b.x);
+            if (gap >= out.span) continue;
+            badHere = true;
+            if (gap < out.closest) {
+              out.closest = gap;
+              out.worst =
+                `floor ${a.floor}: ${a.bouncer ? 'pink' : 'orange'} at ${Math.round(a.x)} (lift ` +
+                `${a.lift.toFixed(1)}) and ${b.bouncer ? 'pink' : 'orange'} at ${Math.round(b.x)} ` +
+                `(lift ${b.lift.toFixed(1)}), ${Math.round(gap)}px apart`;
+            }
+          }
+        }
+        if (badHere) out.frames++;
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      return out;
+    });
+    tally.samples += r.samples;
+    tally.frames += r.frames;
+    tally.up += r.up;
+    tally.span = r.span;
+    if (r.closest < tally.closest) {
+      tally.closest = r.closest;
+      tally.worst = r.worst;
+    }
+  }
+  const passable = tally.samples > 1000 && tally.frames === 0;
+  console.log(
+    `${passable ? 'PASS' : 'FAIL'}  barrel climb: no pair of barrels blocks a girder  — ` +
+      (tally.frames === 0
+        ? `${tally.samples} frames, nothing within ${tally.span}px asking for a jump and a duck at once`
+        : `${tally.frames} frames of it; worst ${tally.worst}`),
+  );
+  if (!passable) failures++;
+
+  // And the bouncer is still a bouncer: the rule that settles it near a roller
+  // must not be quietly grounding it for the whole game.
+  const lively = tally.up / Math.max(1, tally.samples) > 0.1;
+  console.log(
+    `${lively ? 'PASS' : 'FAIL'}  barrel climb: and the bouncers still bounce  — ` +
+      `one was over your head on ${((tally.up / Math.max(1, tally.samples)) * 100).toFixed(0)}% of frames`,
+  );
+  if (!lively) failures++;
   await page.close();
 }
 
@@ -1361,6 +1442,39 @@ for (const g of [
   );
   if (!climbable) failures++;
 
+  // AND THE STRONGER PROMISE: EVERY LEDGE IS ONE JUMP FROM THE ONE BELOW IT.
+  //
+  // "A way to the top exists" is not the same claim, and the difference is
+  // something a player feels: a tower can have a route that goes around a
+  // stranded ledge, and the player looking up at that ledge takes the obvious
+  // jump and drowns for it.  Measured here off the same `ladder()` data and the
+  // same constants, independently of the generator's own verdict.
+  const stranded = [];
+  towers.forEach((t, i) => {
+    const span = (l) => l.w / 2 + l.amp + (l.kind === 'orbit' ? l.radius : 0);
+    for (let k = 1; k < t.length; k++) {
+      const a = t[k - 1];
+      const b = t[k];
+      const rise = b.y + b.slop - (a.y - a.slop);
+      const gap = Math.max(0, Math.abs(b.x - a.x) - span(a) - span(b));
+      if (rise > reach.leap || gap > reach.span) {
+        stranded.push(
+          `tower ${i + 1} ledge ${k} needs ${rise.toFixed(0)}up/${gap.toFixed(0)}across ` +
+            `(the jump is ${reach.leap.toFixed(0)}/${reach.span.toFixed(0)})`,
+        );
+        break;
+      }
+    }
+  });
+  const chained = stranded.length === 0;
+  console.log(
+    `${chained ? 'PASS' : 'FAIL'}  the flood: and every ledge is reachable from the one below it  — ` +
+      (chained
+        ? `${towers.reduce((n, t) => n + t.length - 1, 0)} steps, none beyond the jump`
+        : stranded.slice(0, 3).join('; ')),
+  );
+  if (!chained) failures++;
+
   // And all six kinds are really in the bag, across a handful of towers.
   const kinds = new Set(towers.flat().map((l) => l.kind));
   const allSix = ['static', 'slide', 'rise', 'spin', 'retract', 'crumble'].every((k) => kinds.has(k));
@@ -1477,6 +1591,78 @@ for (const g of [
   );
   if (!gentle) failures++;
   await page.close();
+}
+
+// THE TRAFFIC INDICATES BEFORE IT MOVES, AND PARKING IS NOT A PLAN.
+//
+// Two halves of the same change.  A car is twelve wide in a thirty-two wide
+// lane, so standing ON a lane line — the middle of the road most obviously —
+// used to be a corridor nothing could ever drive through: no steering, no
+// timing, no risk.  The cars change lanes now, which closes that; the price of
+// closing it is that a car must never move sideways without having indicated
+// first, or the fix is just a different unfairness.
+{
+  const park = async (x) => {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 720 });
+    await page.goto(`${URL}/?intro=1&tokens=40&game=carchase`, { waitUntil: 'networkidle2' });
+    await sleep(1600);
+    await startGame(page);
+    await bridge(page, '__chase');
+    // Nothing on the road may end the run, and the car is pinned every frame so
+    // the scene's own clamp cannot walk it off the line under us.
+    await page.evaluate((x) => {
+      window.__chase.shield(true);
+      const pin = () => {
+        window.__chase.setPlayer(x, 140);
+        requestAnimationFrame(pin);
+      };
+      pin();
+      // Sampled every frame: a lane change lasts under a second and a poll at
+      // a fixed interval would walk straight past the take-off.
+      window.__parked = { hits: 0, silent: 0, changes: 0, last: new Map() };
+      const watch = () => {
+        const w = window.__parked;
+        const me = window.__chase.state().player;
+        for (const c of window.__chase.trafficState()) {
+          if (Math.abs(c.x - me.x) < 8 && Math.abs(c.y - me.y) < 14) w.hits++;
+          const was = w.last.get(c.id);
+          if (was !== undefined && Math.abs(c.x - was) > 0.05) {
+            w.changes++;
+            if (c.signal === 0) w.silent++;
+          }
+          w.last.set(c.id, c.x);
+        }
+        requestAnimationFrame(watch);
+      };
+      watch();
+    }, x);
+    await sleep(38000);
+    const out = await page.evaluate(() => {
+      const w = window.__parked;
+      return { hits: w.hits, silent: w.silent, changes: w.changes };
+    });
+    await page.close();
+    return out;
+  };
+
+  // 160 is the middle of the road, 128 the line between lanes 0 and 1.
+  for (const [where, x] of [['the middle of the road', 160], ['a lane line', 128]]) {
+    const r = await park(x);
+    const caught = r.hits > 0;
+    console.log(
+      `${caught ? 'PASS' : 'FAIL'}  car chase: parking on ${where} is not a safe spot  — ` +
+        `traffic was on top of it for ${r.hits} frames`,
+    );
+    if (!caught) failures++;
+
+    const fair = r.changes > 0 && r.silent === 0;
+    console.log(
+      `${fair ? 'PASS' : 'FAIL'}  car chase: and nothing moved sideways without indicating  — ` +
+        `${r.changes} frames of lane change, ${r.silent} of them unannounced`,
+    );
+    if (!fair) failures++;
+  }
 }
 
 // SHIFT across the arcade floor is 1.4x the walk.  Measured rather than

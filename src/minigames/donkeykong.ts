@@ -9,10 +9,18 @@
  * The barrels are the clock.  They spawn faster the higher you get, so the run
  * that stalls halfway is the run that loses.
  *
- * Two kinds of barrel.  The plain one rolls, and you jump it.  The BOUNCER
- * hops along the girder, higher than you can jump, and the answer to it is the
- * opposite: walk under it while it is up, and jump it only when it is down.
- * Reading which is which, at speed, is what the top three girders are about.
+ * Two kinds of barrel.  The plain orange one rolls, and you jump it.  The pink
+ * BOUNCER hops along the girder, higher than you can jump, and the answer to it
+ * is the opposite: walk under it while it is up, and jump it only when it is
+ * down.  Reading which is which, at speed, is what the top three girders are
+ * about.
+ *
+ * AND THAT IS WHY THEY KEEP OUT OF EACH OTHER'S WAY.  Two answers that are
+ * opposites are a wall as soon as both are asked at once, and no input answers
+ * "jump this and duck that" in the same tenth of a second.  Three rules — see
+ * `JUMP_SPAN` — space the barrels out, put a bouncer back on the girder while
+ * it is near a roller, and keep clusters of bouncers hopping in step.  The
+ * barrels stay as hard to read; they stop being impossible to pass.
  */
 
 import Phaser from 'phaser';
@@ -62,6 +70,69 @@ const BOUNCER_CHANCE = 0.4;
 /** A backstop: barrels should retire themselves, but never let them stack. */
 const MAX_BARRELS = 12;
 
+/**
+ * NO TWO BARRELS MAY ASK FOR OPPOSITE THINGS AT THE SAME PLACE.
+ *
+ * The two kinds have deliberately opposite answers — you JUMP an orange roller
+ * and you WALK UNDER a pink bouncer while it is up — and that is the whole idea
+ * of the top girders.  It is also, unhandled, a way to build a wall: an orange
+ * one and a pink one arriving together demand a jump and a duck at the same
+ * instant, and there is no input that does both.  Two pink ones out of step
+ * with each other do the same thing, one up over your head while the other sits
+ * on the girder in front of you.
+ *
+ * Three rules keep the barrels hard and keep them passable, and none of them
+ * moves a barrel to somewhere it was not:
+ *
+ *   SPACING   a barrel never closes on the one in front of it; it eases off
+ *             and queues instead.  Mixed pairs keep a wider gap than matched
+ *             ones, because a mixed pair is a harder question.
+ *   SETTLING  a bouncer near a roller finishes its hop and STAYS DOWN until it
+ *             is clear again.  Both are then ground-level and a single jump
+ *             clears the pair.
+ *   LOCKSTEP  bouncers near each other hop together, so a cluster of them is
+ *             always all up (walk under) or all down (jump once).
+ *
+ * `JUMP_SPAN` is what any of this is measured against: how far the player
+ * travels in one jump, which is how close two hazards may be before they are
+ * really one hazard.
+ */
+const JUMP_SPAN = Math.round(RUN * ((2 * -JUMP_V) / GRAVITY));
+/** Matched pair: one jump's worth of room between them. */
+const SAFE_GAP = JUMP_SPAN + 6;
+/** Mixed pair, both going the same way: a whole extra jump of room. */
+const MIXED_GAP = JUMP_SPAN * 2;
+/**
+ * And a mixed pair CLOSING on each other, which no amount of queuing fixes:
+ * the bouncer settles from this far out, which is a shade over one full hop of
+ * closing at the speed the two of them shut the gap.
+ */
+const SETTLE_CLOSING = 130;
+/**
+ * How fast a settling bouncer comes down: a slam, not a glide.
+ *
+ * It matters because the way DOWN crosses the same band that the way up does.
+ * A bouncer that eases back to the girder spends a tenth of a second at exactly
+ * the height that is over a standing player and into a jumping one — which is
+ * the wall this is all here to prevent, arriving on the descent instead of the
+ * ascent.  At this rate the drop is four frames, and the rules below start it
+ * while the roller that caused it is still in the air.
+ */
+const SETTLE_DROP = 220;
+
+/**
+ * The hit box, and the one number that falls out of it.
+ *
+ * The player is measured from a point `PLAYER_MID` above his feet, `HIT_DY`
+ * either side of it.  A barrel `WALK_UNDER` pixels clear of the girder is
+ * therefore over a standing player's head — which is the whole bargain the
+ * bouncer offers, and the number every rule above is really about.
+ */
+const HIT_DX = 6;
+const HIT_DY = 8;
+const PLAYER_MID = 5;
+const WALK_UNDER = HIT_DY + PLAYER_MID - BARREL_R;
+
 interface Ladder {
   x: number;
   /** Index of the floor it rises FROM. */
@@ -86,6 +157,12 @@ interface Barrel {
    * ladder.
    */
   rolledAt: number | null;
+  /** Recomputed every frame — see the spacing rules above. */
+  settled: boolean;
+  brake: number;
+  /** A bouncer's height above the girder.  Held separately from `phase` so a
+   * settling one can be brought down faster than its own arc would. */
+  lift: number;
 }
 
 let ladders: Ladder[] = [];
@@ -216,7 +293,21 @@ export const donkeyKong: MinigameModule = {
           player: { ...player },
           lives,
           ladders: ladders.map((l) => ({ ...l })),
-          barrels: barrels.map((b) => ({ x: b.x, y: b.y, floor: b.floor, dir: b.dir, bouncer: b.bouncer })),
+          barrels: barrels.map((b) => ({
+            x: b.x,
+            y: b.y,
+            floor: b.floor,
+            dir: b.dir,
+            bouncer: b.bouncer,
+            falling: b.falling,
+            settled: b.settled,
+            /** How far off the girder it is. */
+            lift: b.bouncer ? b.lift : 0,
+            /** Off the girder far enough that a standing player walks under it. */
+            up: b.bouncer && b.lift > WALK_UNDER,
+          })),
+          jumpSpan: JUMP_SPAN,
+          walkUnder: WALK_UNDER,
           drops: { ...drops },
           floors: FLOORS,
           exitX: RIGHT - 34,
@@ -387,11 +478,68 @@ function spawnBarrel(): void {
     phase: 0,
     dot,
     rolledAt: null,
+    settled: false,
+    brake: 1,
+    lift: 0,
   });
   audio.sfx(bouncer ? 'hop_wet' : 'door_rattle');
 }
 
+/** How fast a barrel would go on an empty girder. */
+function barrelSpeed(b: Barrel): number {
+  return b.bouncer ? BOUNCER_SPEED : BARREL_SPEED;
+}
+
+/**
+ * The three rules, applied before anything moves.  See the block comment on
+ * `JUMP_SPAN`: this is what stops a pink one and an orange one turning into a
+ * wall no input can answer.
+ */
+function spaceBarrels(): void {
+  for (const b of barrels) {
+    b.settled = false;
+    b.brake = 1;
+  }
+  for (let i = 0; i < barrels.length; i++) {
+    const b = barrels[i];
+    if (b.falling) continue;
+    for (let j = 0; j < barrels.length; j++) {
+      if (i === j) continue;
+      const o = barrels[j];
+      // A barrel already carries the floor it is DROPPING ONTO, so one still in
+      // the air counts for settling: the bouncer starts coming down while the
+      // roller is falling towards it, instead of the frame it lands.  It does
+      // not count for spacing, because it is not rolling yet.
+      if (o.floor !== b.floor) continue;
+      const gap = Math.abs(o.x - b.x);
+      const mixed = b.bouncer !== o.bouncer;
+
+      // SPACING.  Only the one behind gives way, and only to the one it is
+      // actually driving into: `o` has to be ahead of `b` along b's own line.
+      if (!o.falling && Math.sign(o.x - b.x) === b.dir) {
+        const need = mixed ? MIXED_GAP : SAFE_GAP;
+        if (gap < need) b.brake = Math.min(b.brake, Phaser.Math.Clamp(gap / need, 0.2, 1));
+      }
+
+      if (!b.bouncer) continue;
+      if (mixed) {
+        // SETTLING.  Wider when the two of them are closing, because queuing
+        // cannot help a pair coming at each other.
+        const vb = b.dir * barrelSpeed(b);
+        const vo = o.dir * barrelSpeed(o);
+        const closing = (o.x - b.x) * (vo - vb) < 0;
+        if (gap < (closing ? SETTLE_CLOSING : MIXED_GAP)) b.settled = true;
+      } else if (!o.falling && gap < MIXED_GAP && j < i) {
+        // LOCKSTEP.  The older barrel — the one already on the girder — sets
+        // the rhythm, so a cluster is always all up or all down together.
+        b.phase = o.phase;
+      }
+    }
+  }
+}
+
 function stepBarrels(dt: number): void {
+  spaceBarrels();
   for (const b of barrels) {
     if (b.falling) {
       b.y += 150 * dt;
@@ -406,12 +554,23 @@ function stepBarrels(dt: number): void {
         b.dir = b.x < (LEFT + RIGHT) / 2 ? 1 : -1;
       }
     } else {
-      b.x += b.dir * (b.bouncer ? BOUNCER_SPEED : BARREL_SPEED) * dt;
+      b.x += b.dir * barrelSpeed(b) * b.brake * dt;
       if (b.bouncer) {
         // Hop: a half-sine per bounce, so it spends its time up in the air
-        // and comes down hard rather than floating.
-        b.phase += dt * BOUNCE_HZ * Math.PI;
-        b.y = FLOORS[b.floor] - BARREL_R - Math.abs(Math.sin(b.phase)) * BOUNCE_H;
+        // and comes down hard rather than floating.  A SETTLED one finishes
+        // the hop it is in and then holds on the girder — it does not drop out
+        // of the air, it lands.
+        if (b.settled) {
+          // Parked on the girder, and the phase parked with it, so that when it
+          // is clear again the next hop starts from the ground rather than
+          // resuming halfway up an arc it never finished.
+          b.lift = Math.max(0, b.lift - SETTLE_DROP * dt);
+          b.phase = Math.ceil(b.phase / Math.PI) * Math.PI;
+        } else {
+          b.phase += dt * BOUNCE_HZ * Math.PI;
+          b.lift = Math.abs(Math.sin(b.phase)) * BOUNCE_H;
+        }
+        b.y = FLOORS[b.floor] - BARREL_R - b.lift;
       }
       // At the end of a girder — or at a ladder, sometimes — they drop.
       // Run the full length of the girder before dropping.  Dropping early —
@@ -446,7 +605,9 @@ function stepBarrels(dt: number): void {
     b.dot.setPosition(b.x, b.y);
     // spin, so they read as rolling; a bouncer squashes on landing instead
     if (b.bouncer) {
-      const air = Math.abs(Math.sin(b.phase));
+      // Read off the real height, so a settled one is visibly flat on the
+      // girder rather than drawn mid-hop while sitting on the floor.
+      const air = b.lift / BOUNCE_H;
       b.dot.setScale(1.15 - air * 0.15, 0.8 + air * 0.3);
     } else {
       b.dot.setScale(1, 0.8 + Math.abs(Math.sin(b.x / 6)) * 0.35);
@@ -463,7 +624,7 @@ function stepBarrels(dt: number): void {
 
 function checkHits(): void {
   for (const b of barrels) {
-    if (Math.abs(b.x - player.x) < 6 && Math.abs(b.y - (player.y - 5)) < 8) {
+    if (Math.abs(b.x - player.x) < HIT_DX && Math.abs(b.y - (player.y - PLAYER_MID)) < HIT_DY) {
       loseLife();
       return;
     }

@@ -37,6 +37,15 @@
  * seconds.  The spike strips cut both ways too — a police car that drives
  * over one goes out the same way your car would have.
  *
+ * THE TRAFFIC CHANGES LANES, AND IT INDICATES FIRST.  Cars are not rails: they
+ * follow the car in front, back off when they close on it, pull out to pass,
+ * and — one at a time — move onto the line the player is sitting on.  That last
+ * one is what stops the road being solvable by parking: a car is twelve wide in
+ * a thirty-two wide lane, so standing on a lane line used to be a corridor
+ * nothing could occupy.  Every change is announced by the indicator a full
+ * `LANE_WARN_MS` before the car moves an inch, which is about four times as
+ * long as it takes to steer clear of one.
+ *
  * So the road is a weapon, not just an obstacle, and the nitro jars are laid
  * out to make you use it: never twice in the same lane, never behind a car
  * that is already there, and always a lane or two off your line, so topping
@@ -199,12 +208,79 @@ const HEAT_MAX = 3;
 const HEAT_POLICE_GAIN = 10;
 const HEAT_ROAD = 18;
 
+/**
+ * TRAFFIC DRIVES.  IT DOES NOT SLIDE DOWN A RAIL.
+ *
+ * Every car used to be pinned to the centre of the lane it spawned in for its
+ * whole life on screen, and that made the road solvable by standing still:
+ * a car is twelve wide in a thirty-two wide lane, so a player parked ON a lane
+ * line — the middle of the road most obviously — sat in a corridor nothing
+ * could ever occupy.  No steering, no timing, no risk.  The fix is not a wider
+ * hit box, which would only punish honest driving; it is that the cars now
+ * CHANGE LANES, so there is no x on the road that traffic will not eventually
+ * drive through.
+ *
+ * And a car that swerves without warning is just a different unfairness, so
+ * every change is announced: the indicator comes on, it blinks for
+ * `LANE_WARN_MS` with the car still in its lane, and only then does it start
+ * to move — easing across over `LANE_CHANGE_MS` rather than snapping.  That is
+ * about a second of notice before the car is anywhere near your line, against
+ * a quarter of a second to cross a lane at `STEER`.  Plenty, IF you are
+ * watching the road.
+ */
+const LANE_WARN_MS = 620;
+const LANE_CHANGE_MS = 760;
+/** Indicator blink period. */
+const BLINK_MS = 180;
+/** How often a car reconsiders which lane it wants to be in. */
+const THINK_MS = 900;
+/** How hard a car may accelerate or brake, px/s². */
+const CAR_ACCEL = 34;
+/** It starts easing off inside this gap to the car in front. */
+const FOLLOW_GAP = CAR_H + 12;
+/**
+ * At most one car may be moving onto the player's line at a time, and at most
+ * two may be changing lanes at all.  The point is that standing still stops
+ * working, not that the road becomes a blender.
+ */
+const HUNTERS = 1;
+const CHANGERS = 2;
+let nextCarId = 1;
+
 interface Mover {
   x: number;
   y: number;
   /** Ground speed of its own, px/s, along the road. */
   own: number;
   body: Phaser.GameObjects.Container;
+}
+
+/**
+ * A traffic car, with somewhere it wants to be and a speed it wants to do.
+ *
+ * `lane` is where it is going, `from` where the current change started, and
+ * `move` how far through that change it is — -1 when it is simply driving.
+ */
+interface Car extends Mover {
+  /** Stable across frames, so a harness can watch one car rather than a list. */
+  id: number;
+  lane: number;
+  from: number;
+  /** -1 indicating left, +1 right, 0 not indicating. */
+  signal: -1 | 0 | 1;
+  /** ms of indicating left before it may start to move. */
+  warn: number;
+  /** 0..1 through a lane change, or -1 when it is not making one. */
+  move: number;
+  /** ms until it next thinks about its lane. */
+  think: number;
+  /** The speed it would do on an empty road, and the speed it is trying to
+   * do right now.  `own` is what it is actually doing and eases toward `want`. */
+  cruise: number;
+  want: number;
+  /** True while this change is aimed at the player's line. */
+  hunting: boolean;
+  lamps: Phaser.GameObjects.Rectangle[];
 }
 
 /** A chaser.  It carries what it thinks it knows and how hurt it is. */
@@ -235,7 +311,7 @@ let px = LANES[1];
 let py = 140;
 let speed = SPEED_START;
 let elapsed = 0;
-let traffic: Mover[] = [];
+let traffic: Car[] = [];
 let police: Police[] = [];
 let traps: Trap[] = [];
 let trapTimer = 0;
@@ -297,6 +373,7 @@ export const carChase: MinigameModule = {
     objective: [
       'GRAB CASH AND LOSE THE LAW.',
       'NITRO REFILLS ITSELF - SLOWLY.',
+      'TRAFFIC INDICATES BEFORE IT PULLS OVER.',
       'SWERVE LATE - THEY DRIVE AT YOUR OLD LANE.',
       'NITRO OR A CRASH CLEARS THEM FOR 10s.',
       'PULL OVER AT 300 FOR 15, +5 EVERY 100.',
@@ -463,9 +540,39 @@ export const carChase: MinigameModule = {
         /** Drop a traffic car in a lane, at a y of your choosing. */
         spawnTrafficAt: (lane: number, y: number) => {
           if (!scene0) return;
-          const x = LANES[Phaser.Math.Clamp(lane | 0, 0, 3)];
-          traffic.push({ x, y, own: 40, body: carSprite(scene0, x, y, PALETTE.ember, false) });
+          const idx = Phaser.Math.Clamp(lane | 0, 0, 3);
+          const x = LANES[idx];
+          const body = carSprite(scene0, x, y, PALETTE.ember, false);
+          traffic.push({
+            id: nextCarId++,
+            x,
+            y,
+            own: 40,
+            cruise: 40,
+            want: 40,
+            body,
+            lane: idx,
+            from: x,
+            signal: 0,
+            warn: 0,
+            move: -1,
+            think: THINK_MS,
+            hunting: false,
+            lamps: body.getData('lamps') as Phaser.GameObjects.Rectangle[],
+          });
         },
+        /** What the traffic is doing, so a harness can watch it indicate. */
+        trafficState: () =>
+          traffic.map((c) => ({
+            id: c.id,
+            x: c.x,
+            y: Math.round(c.y),
+            lane: c.lane,
+            signal: c.signal,
+            changing: c.move >= 0,
+            hunting: c.hunting,
+            own: Math.round(c.own),
+          })),
         spawnTrap: () => spawnTrap(),
         /** Put the strip clock on a hair trigger, without touching the guard. */
         armTrap: () => {
@@ -547,6 +654,8 @@ export const carChase: MinigameModule = {
     px = Phaser.Math.Clamp(px + dx * STEER * dt, ROAD_L + CAR_W / 2, ROAD_L + ROAD_W - CAR_W / 2);
     py = Phaser.Math.Clamp(py + dy * CREEP * dt, 70, 160);
     player.setPosition(px, py);
+    // leaning where you are steering, eased so it is a car and not a cursor
+    player.setAngle(Phaser.Math.Linear(player.angle, dx * 7, Math.min(1, dt * 9)));
     for (const d of dashes) {
       d.y += ground * dt;
       if (d.y > BOTTOM) d.y -= BOTTOM - TOP + 16;
@@ -560,7 +669,50 @@ export const carChase: MinigameModule = {
       trafficTimer = Math.max(460, 1250 - elapsed / 120 - heat * 130);
     }
     for (const c of traffic) {
+      // ---- the speed it wants.  Its own cruise, unless there is somebody
+      // slower in front of it, in which case it backs off to their pace rather
+      // than driving through them.
+      const leader = carAhead(c);
+      const gap = leader ? c.y - leader.y : Infinity;
+      c.want = leader && gap < FOLLOW_GAP * 2 ? Math.min(c.cruise, leader.own - 3) : c.cruise;
+      // and it gets there at a finite rate, so nothing on this road changes
+      // speed instantly
+      const step = CAR_ACCEL * dt;
+      c.own = Math.max(16, c.own + Phaser.Math.Clamp(c.want - c.own, -step, step));
       c.y += (ground - c.own) * dt;
+
+      // ---- indicating, then moving.  Nothing moves sideways until the lamp
+      // has been on for the full warning.
+      c.think -= delta;
+      if (c.think <= 0) {
+        c.think = THINK_MS * (0.6 + Math.random() * 0.8);
+        thinkCar(c);
+      }
+      if (c.warn > 0) {
+        c.warn -= delta;
+        if (c.warn <= 0) c.move = 0;
+      } else if (c.move >= 0) {
+        c.move += delta / LANE_CHANGE_MS;
+        if (c.move >= 1) {
+          c.x = LANES[c.lane];
+          c.move = -1;
+          c.signal = 0;
+          c.hunting = false;
+        } else {
+          // Eased both ends: a car leans out of its lane and settles into the
+          // next one, it does not translate between them.
+          const k = c.move * c.move * (3 - 2 * c.move);
+          c.x = c.from + (LANES[c.lane] - c.from) * k;
+        }
+      }
+      // the lamps themselves
+      const blink = c.signal !== 0 && Math.floor(elapsed / BLINK_MS) % 2 === 0;
+      c.lamps[0]?.setVisible(blink && c.signal < 0);
+      c.lamps[1]?.setVisible(blink && c.signal > 0);
+
+      // and it leans out of the lane and settles back, rather than sliding
+      // across perfectly square to the road
+      c.body.setAngle(c.move >= 0 ? c.signal * 7 * Math.sin(Math.PI * c.move) : 0);
       c.body.setPosition(c.x, c.y).setVisible(onScreen(c.y));
     }
     traffic = traffic.filter((c) => keep(c, c.y < BOTTOM + CAR_H && c.y > TOP - CAR_H * 3));
@@ -607,7 +759,13 @@ export const carChase: MinigameModule = {
       }
       p.own = speed + POLICE_GAIN + heat * HEAT_POLICE_GAIN + elapsed / POLICE_CLOCK;
       p.y += (ground - p.own) * dt;
-      if (Math.abs(p.aim - p.x) > 1) p.x += Math.sign(p.aim - p.x) * POLICE_STEER * dt;
+      // Full lock until the last few pixels and then it settles, instead of
+      // driving flat out at the line and stopping dead on it.  Past twelve
+      // pixels this is exactly the old constant rate, so a late swerve still
+      // leaves a chaser committed to the lane it last saw you in.
+      const lock = Phaser.Math.Clamp((p.aim - p.x) * 4, -POLICE_STEER, POLICE_STEER);
+      if (Math.abs(p.aim - p.x) > 0.5) p.x += lock * dt;
+      p.body.setAngle((lock / POLICE_STEER) * 6);
       p.body.setPosition(p.x, p.y).setVisible(onScreen(p.y));
       // lights
       const on = Math.floor(elapsed / 120) % 2 === 0;
@@ -896,20 +1054,123 @@ function carSprite(scene: Phaser.Scene, x: number, y: number, colour: number, co
   const body = scene.add.rectangle(0, 0, CAR_W, CAR_H, colour);
   const glass = scene.add.rectangle(0, -4, CAR_W - 4, 5, PALETTE.ink);
   const roof = scene.add.rectangle(0, 2, cop ? 6 : CAR_W - 4, cop ? 3 : 4, cop ? PALETTE.blood : PALETTE.black).setAlpha(cop ? 1 : 0.35);
-  return scene.add.container(x, y, [body, glass, roof]).setDepth(4).setVisible(false);
+  const parts: Phaser.GameObjects.GameObject[] = [body, glass, roof];
+  // Indicators, at the back corners where the player — who is behind every one
+  // of these cars — can actually see them.  Police do not signal.
+  const lamps: Phaser.GameObjects.Rectangle[] = [];
+  if (!cop) {
+    for (const side of [-1, 1]) {
+      const lamp = scene.add.rectangle(side * (CAR_W / 2 - 1), CAR_H / 2 - 3, 2, 4, PALETTE.amber).setVisible(false);
+      lamps.push(lamp);
+      parts.push(lamp);
+    }
+  }
+  const c = scene.add.container(x, y, parts).setDepth(4).setVisible(false);
+  c.setData('lamps', lamps);
+  return c;
+}
+
+/**
+ * Is a lane clear around this point on the road?  Used both for spawning and
+ * for deciding a lane change is survivable for the car making it.
+ */
+function laneClear(lane: number, y: number, span: number, except?: Car): boolean {
+  return !traffic.some((c) => c !== except && (c.lane === lane || laneOf(c.x) === lane) && Math.abs(c.y - y) < span);
+}
+
+/** The same question for the player: somewhere left to go once a car moves. */
+function playerHasAnOut(blocked: number): boolean {
+  const here = laneOf(px);
+  return [0, 1, 2, 3].some(
+    (i) => i !== blocked && Math.abs(i - here) <= 1 && laneClear(i, py, CAR_H + 8),
+  );
+}
+
+/**
+ * One car's mind, ticked once a think.  It decides one thing: which lane it
+ * wants.  Everything else — indicating, moving, easing — falls out of that.
+ *
+ * It will move onto the player's line, and that is the point: it is what makes
+ * standing still stop working.  But only one car at a time may do it, it only
+ * does it from in front of the player where the change is visible, and it will
+ * not do it if the player would have nowhere to go afterwards.
+ */
+function thinkCar(c: Car): void {
+  if (c.move >= 0 || c.warn > 0) return;
+  const changing = traffic.filter((o) => o.move >= 0 || o.warn > 0).length;
+  if (changing >= CHANGERS) return;
+
+  const options = [c.lane - 1, c.lane + 1].filter(
+    (i) => i >= 0 && i <= 3 && laneClear(i, c.y, CAR_H * 2.2, c),
+  );
+  if (!options.length) return;
+
+  let want = -1;
+  // ---- hunting: sweep across the line the player is sitting on.
+  const hunters = traffic.filter((o) => o.hunting && (o.move >= 0 || o.warn > 0)).length;
+  const ahead = c.y < py - CAR_H && py - c.y < 150;
+  const off = px - c.x;
+  if (hunters < HUNTERS && ahead && elapsed > 6000 && Math.abs(off) > 3) {
+    const toward = c.lane + Math.sign(off);
+    if (options.includes(toward) && playerHasAnOut(toward)) want = toward;
+  }
+  // ---- or simply getting past somebody slower, which is what real traffic
+  // spends its time doing and what keeps the road alive when nobody is parked.
+  if (want < 0) {
+    const leader = carAhead(c);
+    const stuck = leader && c.y - leader.y < FOLLOW_GAP * 1.6 && leader.cruise < c.cruise - 3;
+    if ((stuck || Math.random() < 0.18) && options.length) {
+      want = options[Phaser.Math.Between(0, options.length - 1)];
+    }
+  }
+  if (want < 0 || want === c.lane) return;
+
+  c.signal = want < c.lane ? -1 : 1;
+  c.hunting = Math.abs(px - LANES[want]) < LANE_W;
+  c.warn = LANE_WARN_MS;
+  c.from = c.x;
+  c.lane = want;
+}
+
+/** The car this one is following: same lane, further up the road, nearest. */
+function carAhead(c: Car): Car | null {
+  let best: Car | null = null;
+  for (const o of traffic) {
+    if (o === c || o.lane !== c.lane || o.y >= c.y) continue;
+    if (!best || o.y > best.y) best = o;
+  }
+  return best;
 }
 
 function spawnTraffic(): void {
   if (!scene0) return;
-  let lane = LANES[Phaser.Math.Between(0, 3)];
+  let idx = Phaser.Math.Between(0, 3);
   // The first ten seconds never drop one straight down your lane: you get to
   // see how the road works before it is aimed at you.
-  if (elapsed < 10000 && Math.abs(lane - px) < LANE_W / 2) lane = LANES[(LANES.indexOf(lane) + 1) % 4];
+  if (elapsed < 10000 && Math.abs(LANES[idx] - px) < LANE_W / 2) idx = (idx + 1) % 4;
   // Not into the back of one already there.
-  if (traffic.some((c) => Math.abs(c.x - lane) < 2 && c.y < TOP + CAR_H * 2)) return;
+  if (!laneClear(idx, TOP - CAR_H, CAR_H * 2)) return;
+  const lane = LANES[idx];
   const own = 35 + Math.random() * 40;
   const colours = [PALETTE.ember, PALETTE.neon, PALETTE.amber, PALETTE.violet, PALETTE.bone];
-  traffic.push({ x: lane, y: TOP - CAR_H, own, body: carSprite(scene0, lane, TOP - CAR_H, colours[Phaser.Math.Between(0, colours.length - 1)], false) });
+  const body = carSprite(scene0, lane, TOP - CAR_H, colours[Phaser.Math.Between(0, colours.length - 1)], false);
+  traffic.push({
+    id: nextCarId++,
+    x: lane,
+    y: TOP - CAR_H,
+    own,
+    cruise: own,
+    want: own,
+    body,
+    lane: idx,
+    from: lane,
+    signal: 0,
+    warn: 0,
+    move: -1,
+    think: THINK_MS * (0.5 + Math.random()),
+    hunting: false,
+    lamps: body.getData('lamps') as Phaser.GameObjects.Rectangle[],
+  });
 }
 
 function spawnPolice(): void {

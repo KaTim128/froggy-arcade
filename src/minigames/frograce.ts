@@ -126,6 +126,89 @@ const RACE_S = 12;
 /** One hop: how long it takes, and how high it goes in pixels. */
 const HOP_S = 0.34;
 const HOP_H = 5;
+/**
+ * THE HOP IS THE MOTION, NOT A BOB ON TOP OF IT.
+ *
+ * A frog used to travel at a constant rate with a sine wave laid over its
+ * height, which is a hovercraft with a nodding animation: the feet never had a
+ * moment on the ground and nothing ever pushed off. Now the cycle has a ground
+ * phase and an air phase, and the frog only really travels in the air.
+ *
+ * `hop` runs 0..1 and wraps. TAKEOFF..LAND is the airborne slice of it; the
+ * rest is the frog gathering itself, which is where the compress lives.
+ *
+ * `GROUND_RATE` is what a gathering frog still creeps forward at, as a
+ * multiple of its own pace, and `AIR_RATE` is solved from it so the pair
+ * INTEGRATE TO EXACTLY 1 OVER A CYCLE. That is the whole trick: a frog covers
+ * precisely the ground per second that `pace` says it does, so the race is the
+ * same race and the odds on the rim are still the odds. Only the look changed.
+ */
+const TAKEOFF = 0.2;
+const LAND = 0.88;
+const GROUND_RATE = 0.12;
+const AIR_RATE = (1 - GROUND_RATE * (1 - (LAND - TAKEOFF))) / (LAND - TAKEOFF);
+
+/** Where in its cycle a frog is travelling, as a multiple of its average pace. */
+function hopRate(u: number): number {
+  return u >= TAKEOFF && u < LAND ? AIR_RATE : GROUND_RATE;
+}
+
+/** Height off the lane. Ballistic while airborne, flat on the ground. */
+function hopLift(u: number): number {
+  if (u < TAKEOFF || u >= LAND) return 0;
+  const a = (u - TAKEOFF) / (LAND - TAKEOFF);
+  return HOP_H * 4 * a * (1 - a);
+}
+
+/**
+ * The gate's MEAN value across one tick of the cycle, integrated exactly
+ * rather than sampled at an end point.
+ *
+ * Sampling would make the distance covered depend on where the frame boundaries
+ * happened to fall — a frog whose tick began one pixel before take-off would be
+ * charged a whole tick of standing still — and the sampler runs at a fixed
+ * 1/60 while the race runs at whatever the browser gives it.  Two different
+ * frame rates have to produce the same race or the odds on the rim are a lie.
+ */
+function hopTravel(u0: number, du: number): number {
+  if (du <= 0) return hopRate(u0 % 1);
+  let acc = 0;
+  let u = u0;
+  let left = du;
+  while (left > 1e-9) {
+    const p = u % 1;
+    const next = p < TAKEOFF ? TAKEOFF : p < LAND ? LAND : 1;
+    const span = Math.min(left, next - p);
+    acc += hopRate(p) * span;
+    u += span;
+    left -= span;
+  }
+  return acc / du;
+}
+
+/**
+ * How a hopping frog is squashed, stretched and tilted at this point in its
+ * cycle.  Drawing only — nothing here moves a frog up the track.
+ *
+ * It compresses on touchdown, absorbs, coils, then leaves the ground stretched
+ * out, tucks at the top of the arc and comes down stretched again.  The tilt
+ * follows the arc: nose up off the ground, level at the top, nose down coming
+ * in.
+ */
+const FOOT = 4; // where a frog's feet are, in its own drawing
+function hopPose(u: number): { sx: number; sy: number; rot: number } {
+  if (u >= TAKEOFF && u < LAND) {
+    const a = (u - TAKEOFF) / (LAND - TAKEOFF);
+    const v = 1 - 2 * a; // +1 leaving the ground, 0 at the top, -1 coming down
+    const rise = Math.abs(v);
+    return { sx: 1 - 0.13 * rise, sy: 1 + 0.2 * rise, rot: -0.3 * v };
+  }
+  const groundSpan = 1 - LAND + TAKEOFF;
+  const gp = (u >= LAND ? u - LAND : u + 1 - LAND) / groundSpan;
+  // 0.66 flat on impact, up to 0.88 as it absorbs, back to 0.74 as it coils
+  const sy = gp < 0.45 ? 0.66 + (0.22 * gp) / 0.45 : 0.88 - (0.14 * (gp - 0.45)) / 0.55;
+  return { sx: 1 + (1 - sy) * 0.85, sy, rot: -0.12 * gp };
+}
 /** A pothole costs this long of scrabbling, and a slip this long of sprawling. */
 const HOLE_S = 0.85;
 const SLIP_S = 0.65;
@@ -357,6 +440,8 @@ export const frogRace: MinigameModule = {
           // is over is a bridge that cannot be used to check how it ended.
           favourite: racers.length ? racers.reduce((a, b) => (b.form > a.form ? b : a)).i : -1,
         }),
+        /** Height off the lane for every frog, so a harness can see the hop. */
+        lifts: () => racers.map((r) => r.lift),
         choose: (i: number) => choose(i),
         setTickets: (n: number) => setTickets(n),
         tickets: () => tickets,
@@ -450,15 +535,24 @@ export const frogRace: MinigameModule = {
       // Down in a hole: sunk, and shuffling.  On its face: flat and sprawled.
       if (r.going === 'hole') {
         body.setScale(1, 0.45);
+        body.setRotation(0);
         body.y = laneY + 3 + Math.sin(clock / 60) * 0.6;
       } else if (r.going === 'slip') {
         body.setScale(1.25, 0.5);
         body.setRotation(0.5);
         body.y = laneY + 2;
+      } else if (r.going === 'taken') {
+        // Hanging off a bird, and not enjoying it.
+        body.setScale(0.95, 1.1);
+        body.setRotation(Math.sin(clock / 90) * 0.35);
       } else {
-        body.setScale(1, 1);
-        // Leaning into the hop, and tucked at the top of it.
-        body.setRotation(-Math.sin(r.hop * Math.PI * 2) * 0.22);
+        // Compressed on the lane, stretched off it, tucked at the top.  The
+        // feet are pinned as it squashes — a frog that shrinks about its middle
+        // sinks into the track instead of flattening onto it.
+        const p = hopPose(r.hop);
+        body.setScale(p.sx, p.sy);
+        body.setRotation(p.rot);
+        body.y = laneY - r.lift + FOOT * (1 - p.sy);
       }
     }
 
@@ -519,16 +613,22 @@ function step(r: Run, dt: number): void {
   const t = r.x / DIST;
   const surging = t > r.surgeAt && t < r.surgeAt + r.surgeFor;
   const speed = Math.max(4, pace(r, t, surging, dt));
-  r.x = Math.min(DIST, r.x + speed * dt);
 
-  // The hop.  It is a real cycle rather than a bob: the frog is off the ground
-  // for most of it and touches down at the end, and touching down is the only
-  // moment anything can go wrong.
+  // The hop.  It is a real cycle rather than a bob: the frog gathers itself on
+  // the lane, pushes off, sails, and touches down — and touching down is the
+  // only moment anything can go wrong.
   const was = r.hop;
-  r.hop += dt / HOP_S;
+  const du = dt / HOP_S;
+  r.hop += du;
   const landed = r.hop >= 1;
   if (landed) r.hop -= Math.floor(r.hop);
-  r.lift = Math.sin(r.hop * Math.PI) * HOP_H;
+  r.lift = hopLift(r.hop);
+
+  // The ground it covers is the hop, gated.  `hopTravel` integrates the gate
+  // across the tick rather than sampling it, so the distance is the same
+  // whatever the frame rate and a tick that straddles the take-off is not
+  // rounded into a free step or a lost one.
+  r.x = Math.min(DIST, r.x + speed * dt * hopTravel(was, du));
 
   if (!landed && was <= 1) {
     // A POTHOLE IS TESTED ON THE WAY IN, not on landing: a frog reaching one

@@ -12,17 +12,58 @@ export const CAB_W = 26;
 export const CAB_H = 36;
 
 /**
+ * The screen a motif is drawn on, as offsets from the motif's own centre.
+ * Anything outside this is drawn over the bezel or over the room behind it,
+ * which reads as a glitch rather than as art.
+ */
+const SCREEN_HW = (CAB_W - 8) / 2; // 9
+const SCREEN_HH = 7;
+
+/**
  * The picture on a machine's screen.  A handful of rectangles each, drawn in
  * the cabinet's own colours — enough that a player crossing the room knows
  * which machine is which without reading a single marquee.
+ *
+ * EVERY PART OF A MOTIF HAS TO FIT THE SCREEN.  The frog race's lead frog used
+ * to be a radius-3 circle centred three pixels above the glass, so a pale disc
+ * sat on the bezel of every FROG RACE cabinet in the arcade.  `put` and `dot`
+ * now measure themselves in DEV, so the next one is caught the first time it is
+ * drawn rather than in a screenshot.
  */
 function drawMotif(scene: Phaser.Scene, cx: number, cy: number, def: CabinetDef, depth: number): void {
   const ink: number = PALETTE.ink;
   const bright: number = PALETTE.cream;
-  const put = (dx: number, dy: number, w: number, h: number, col: number = ink, alpha = 1) =>
-    scene.add.rectangle(cx + dx, cy + dy, w, h, col).setOrigin(0.5, 0.5).setDepth(depth).setAlpha(alpha);
-  const dot = (dx: number, dy: number, r: number, col: number = ink) =>
-    scene.add.circle(cx + dx, cy + dy, r, col).setDepth(depth);
+  const fits = (dx: number, dy: number, hw: number, hh: number) => {
+    if (!import.meta.env?.DEV) return;
+    if (Math.abs(dx) + hw > SCREEN_HW + 0.01 || Math.abs(dy) + hh > SCREEN_HH + 0.01) {
+      console.warn(
+        `[cabinet] the '${def.motif}' motif runs off the screen at (${dx}, ${dy}) ` +
+          `±(${hw}, ${hh}); the glass is ±(${SCREEN_HW}, ${SCREEN_HH})`,
+      );
+    }
+  };
+  const put = (dx: number, dy: number, w: number, h: number, col: number = ink, alpha = 1) => {
+    fits(dx, dy, w / 2, h / 2);
+    return scene.add.rectangle(cx + dx, cy + dy, w, h, col).setOrigin(0.5, 0.5).setDepth(depth).setAlpha(alpha);
+  };
+  const dot = (dx: number, dy: number, r: number, col: number = ink) => {
+    fits(dx, dy, r, r);
+    return scene.add.circle(cx + dx, cy + dy, r, col).setDepth(depth);
+  };
+  /**
+   * A rectangle at an angle, measured by the box it actually covers.
+   *
+   * Everything else here is axis-aligned, which is fine for a road or a reel
+   * and useless for a limb: the one cue that says RUNNING at this size is a leg
+   * kicked out on a diagonal.
+   */
+  const bar = (dx: number, dy: number, w: number, h: number, deg: number, col: number = ink) => {
+    const a = Phaser.Math.DegToRad(deg);
+    const hw = (Math.abs(Math.cos(a)) * w + Math.abs(Math.sin(a)) * h) / 2;
+    const hh = (Math.abs(Math.sin(a)) * w + Math.abs(Math.cos(a)) * h) / 2;
+    fits(dx, dy, hw, hh);
+    return scene.add.rectangle(cx + dx, cy + dy, w, h, col).setOrigin(0.5, 0.5).setAngle(deg).setDepth(depth);
+  };
 
   switch (def.motif) {
     case 'grid':
@@ -59,26 +100,33 @@ function drawMotif(scene: Phaser.Scene, cx: number, cy: number, def: CabinetDef,
       put(0, 1, 7, 9, bright);
       put(0, -2, 5, 3);
       break;
-    // FROG RACE.  Three lanes with a frog in each, mid-hop and staggered, and
-    // the chequer at the end of them.  The old marquee was the FROG CROSS road
-    // -- two kerbs and a dashed centre line -- which told a player walking up
-    // to a betting machine that it was a crossing game.
-    case 'race':
-      // the lane rails
-      for (const y of [-5, 0, 5]) put(0, y, 14, 1);
-      // three frogs, each at a different point in its hop, each further along
-      for (const [dx, dy, lit] of [
-        [-4, -5, true],
-        [0, 0, false],
-        [-1, 5, false],
-      ] as const) {
-        dot(dx, dy - 2, 3, lit ? bright : undefined);
-        put(dx - 2, dy - 1, 1, 2, lit ? bright : undefined);
-        put(dx + 2, dy - 1, 1, 2, lit ? bright : undefined);
-      }
-      // the chequered post they are running at
-      for (let i = -6; i <= 6; i += 2) put(6, i, 2, 2, i % 4 === 0 ? bright : undefined);
+    // FROG RACE.  ONE FROG, RUNNING, AND THE LINE IT IS RUNNING AT.
+    //
+    // The glass is eighteen pixels by fourteen.  Three frogs in three lanes is
+    // what the game IS, and at this size it came out as a row of specks — so
+    // this draws the thing a player is being sold instead: a frog at full
+    // stretch, leg out behind it, speed lines off its back, chequer ahead.
+    // One big silhouette reads across a room; three small ones do not.
+    case 'race': {
+      // the track it is running on
+      put(-1, 4.6, 14, 1, ink);
+      // speed lines off its back
+      put(-6.4, -2.6, 3, 0.8, ink);
+      put(-6.6, -0.6, 3.4, 0.8, ink);
+      // the back leg kicked out behind, the foot on the end of it, and the
+      // front leg reaching — both on a diagonal, which is the whole read
+      bar(-4, 2, 4.5, 1.6, -27, bright);
+      put(-6.6, 3.4, 2, 1, bright);
+      bar(3.5, 2, 3.2, 1.2, 18, bright);
+      // body, then the head set up and forward of it so the two circles make a
+      // diagonal rather than a loaf
+      dot(-0.5, 0.5, 3, bright);
+      dot(3, -1.8, 2, bright);
+      dot(3.6, -2.5, 0.85, ink);
+      // and the line it is running at
+      for (let i = -5; i <= 5; i += 2) put(7.5, i, 2, 2, i % 4 === 1 ? bright : ink);
       break;
+    }
     case 'road':
       put(-4, 0, 1, 12);
       put(4, 0, 1, 12);
