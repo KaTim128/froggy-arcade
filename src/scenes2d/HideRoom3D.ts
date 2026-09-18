@@ -259,6 +259,10 @@ const DROP = {
  * it back.
  */
 const KEY_LIES = { ahead: 0.72, aside: -0.34 };
+/** How long it is in the air, once it leaves his hand. */
+const KEY_FALL_S = 0.62;
+/** And how high up it leaves from: the padlock, on the face of the doors. */
+const KEY_LOCK_Y = 0.98;
 /** How close, and how far down, counts as looking at it. */
 const KEY_REACH = 1.7;
 const KEY_LOOK = -0.3;
@@ -653,6 +657,15 @@ export class HideRoom3D extends Phaser.Scene {
   private keyTaken = false;
   private keyAt = new THREE.Vector2();
   private keyProp: THREE.Object3D | null = null;
+  /**
+   * THE FALL ITSELF.
+   *
+   * Where it left his hand at the lock, where it is going to land, and how far
+   * through the drop it is.  It exists so the key is SEEN to come off the
+   * door: it used to be placed on the carpet the instant the beat ended, which
+   * from the player's side is a key that was never in his hand at all.
+   */
+  private keyFall: { from: THREE.Vector3; to: THREE.Vector3; t: number; spin: number } | null = null;
   /** Seconds into the drop, and then into what follows it. */
   private dropT = 0;
   private chaseT = 0;
@@ -752,6 +765,7 @@ export class HideRoom3D extends Phaser.Scene {
     this.keyOnFloor = false;
     this.keyTaken = false;
     this.keyProp = null;
+    this.keyFall = null;
     this.dropT = 0;
     this.chaseT = 0;
     this.charging = false;
@@ -1740,13 +1754,83 @@ export class HideRoom3D extends Phaser.Scene {
 
     if (at(DROP.toLock)) audio.sfx('key_turn', 0.6);
     if (at(DROP.slip)) {
-      // IT GOES.  A jolt, and the sound of something small and metal landing
-      // on carpet in a room where nothing else is making a noise.
-      audio.sfx('item_thud', 0.8);
-      this.shake = Math.max(this.shake, 1);
-      this.time.delayedCall(90, () => audio.sfx('lock_click', 0.35));
+      // IT GOES.  Off the lock, out of his fingers, and down -- and it is on
+      // screen for every frame of it.
+      this.releaseKey();
+      audio.sfx('lock_click', 0.4);
     }
-    if (this.dropT >= KEY_DROP_S) this.dropTheKey();
+    // ---- THE DROP, FRAME BY FRAME.  A parabola off the lock face down to the
+    // carpet, tumbling as it goes, because a key that falls straight is a key
+    // being lowered.
+    if (this.keyFall) {
+      const f = this.keyFall;
+      f.t = Math.min(1, f.t + dt / KEY_FALL_S);
+      const e = f.t;
+      const prop = this.keyProp;
+      if (prop) {
+        // Across and down on their own curves: the sideways travel is even,
+        // the vertical is squared, which is what gravity looks like.
+        prop.position.set(
+          Phaser.Math.Linear(f.from.x, f.to.x, e),
+          Math.max(f.to.y, Phaser.Math.Linear(f.from.y, f.to.y, e * e)),
+          Phaser.Math.Linear(f.from.z, f.to.z, e),
+        );
+        // Tumbling end over end, slowing as it lands so it does not stop dead
+        // in mid-spin.
+        const settle = 1 - e * e;
+        prop.rotation.set(f.spin * 5.2 * e * settle, f.spin * 2.1 * e, f.spin * 3.4 * e * settle);
+      }
+      if (f.t >= 1) this.landKey();
+    }
+    if (this.dropT >= KEY_DROP_S && !this.keyOnFloor) this.landKey();
+  }
+
+  /**
+   * OUT OF HIS HAND, AT THE LOCK.
+   *
+   * The key is built and put where it actually was -- up at the padlock, on
+   * the face of the doors -- and given somewhere to land.  Nothing about it is
+   * on the floor yet.
+   */
+  private releaseKey(): void {
+    if (this.keyFall || this.keyOnFloor) return;
+    const d = this.def;
+    const face = this.doorFacing();
+    const fx = -Math.sin(face);
+    const fz = -Math.cos(face);
+    // Where it lands: in front of the player and off to one side.
+    this.keyAt.set(
+      this.pos.x + fx * KEY_LIES.ahead - fz * KEY_LIES.aside,
+      this.pos.y + fz * KEY_LIES.ahead + fx * KEY_LIES.aside,
+    );
+    // Where it leaves: the lock, which is the padlock on the mullion.
+    const doorZ = d.halfD - (d.glassDoor ? 0.38 : 0.05);
+    const from = new THREE.Vector3(d.door.x, KEY_LOCK_Y, doorZ - 0.3);
+    const to = new THREE.Vector3(this.keyAt.x, 0.02, this.keyAt.y);
+    const st = this.stage;
+    if (st) {
+      const key = buildDroppedKey();
+      key.position.copy(from);
+      st.scene.add(key);
+      this.keyProp = key;
+    }
+    this.keyFall = { from, to, t: 0, spin: Math.random() < 0.5 ? -1 : 1 };
+  }
+
+  /** It hits the carpet, and stays there. */
+  private landKey(): void {
+    if (this.keyOnFloor) return;
+    this.keyOnFloor = true;
+    this.keyFall = null;
+    const face = this.doorFacing();
+    if (this.keyProp) {
+      this.keyProp.position.set(this.keyAt.x, 0.02, this.keyAt.y);
+      // Lying flat, at whatever angle it came to rest at.
+      this.keyProp.rotation.set(0, face + 0.6, 0);
+    }
+    audio.sfx('item_thud', 0.8);
+    this.shake = Math.max(this.shake, 1);
+    this.say('', 0);
   }
 
   /**
@@ -1756,28 +1840,6 @@ export class HideRoom3D extends Phaser.Scene {
    * a point on the floor, it is lit by the torch like everything else down
    * there, and it does not move again until somebody picks it up.
    */
-  private dropTheKey(): void {
-    if (this.keyOnFloor) return;
-    this.keyOnFloor = true;
-    // In front of the player and off to one side, on the line they are facing.
-    const face = this.doorFacing();
-    const fx = -Math.sin(face);
-    const fz = -Math.cos(face);
-    this.keyAt.set(
-      this.pos.x + fx * KEY_LIES.ahead - fz * KEY_LIES.aside,
-      this.pos.y + fz * KEY_LIES.ahead + fx * KEY_LIES.aside,
-    );
-    const st = this.stage;
-    if (st) {
-      const key = buildDroppedKey();
-      key.position.set(this.keyAt.x, 0.02, this.keyAt.y);
-      key.rotation.y = face + 0.6;
-      st.scene.add(key);
-      this.keyProp = key;
-    }
-    this.say('', 0);
-  }
-
   /** Standing over the key he dropped, and looking down at it. */
   private atKey(): boolean {
     if (!this.keyOnFloor || this.keyTaken) return false;

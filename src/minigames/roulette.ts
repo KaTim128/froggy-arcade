@@ -9,12 +9,18 @@
  * THE LOOP IS SPIN, STOP, PULL, AND EVERY STEP OF IT IS YOURS.
  *
  *   1. The cylinder is turning when the round opens.
- *   2. KEEP SPINNING gives it another shove.  STOP SPINNING lets it coast
- *      down onto a chamber.
+ *   2. STOP SPINNING lets it coast down onto a chamber.
  *   3. Stopped, and only stopped, the trigger works.  Nothing fires on its
  *      own: the machine waits for PULL TRIGGER to be pressed.
  *   4. A clean pull puts five more on the machine and the barrel starts
  *      turning again by itself, which is step 2 over again.
+ *
+ * THERE IS NO KEEP SPINNING.  It was a third button that gave the cylinder
+ * another shove, and the header below already says why that could never
+ * matter: the draw is made at the trigger, so a longer spin changes nothing
+ * about the odds and the machine says so out loud.  A button whose whole
+ * effect is on the picture is a button that teaches the player to distrust the
+ * other two.  The cylinder still turns, and stopping it is still theirs.
  *   5. CASH OUT, once there is anything to cash out, ends the round and the
  *      pot is yours.  The live round ends it and the pot goes with it.
  *
@@ -66,7 +72,13 @@ const STEP = (Math.PI * 2) / CHAMBERS;
 
 /** How fast the cylinder turns, in radians per millisecond. */
 const SPIN_BASE = 0.012;
-/** And what KEEP SPINNING gives it: a shove that decays back to the idle. */
+/**
+ * The shove a fresh spin opens with, and how quickly it bleeds back down to
+ * the idle turn.
+ *
+ * It is what the barrel does on its own after a clean pull -- it comes round
+ * hard and settles -- rather than anything the player presses for.
+ */
 const SPIN_KICK = 0.03;
 /** How quickly a kick bleeds off, per millisecond. */
 const SPIN_DECAY = 0.0006;
@@ -91,7 +103,7 @@ const CYL_R = 32;
 /**
  * Where the round is, and the whole of the re-entrancy guard.
  *
- *   spinning  the cylinder is turning; keep spinning, stop, or cash out
+ *   spinning  the cylinder is turning; stop it, or cash out
  *   stopping  it is coasting onto a chamber; nothing but cash out
  *   stopped   sitting on a chamber; pull the trigger, or cash out
  *   firing    the hammer is falling; nothing at all
@@ -118,7 +130,6 @@ let apiRef: MinigameApi | null = null;
 let chamberDots: Phaser.GameObjects.Arc[] = [];
 let status: Phaser.GameObjects.BitmapText | null = null;
 let tally: Phaser.GameObjects.BitmapText | null = null;
-let spinBtn: Phaser.GameObjects.Container | null = null;
 let stopBtn: Phaser.GameObjects.Container | null = null;
 let pullBtn: Phaser.GameObjects.Container | null = null;
 let cashBtn: Phaser.GameObjects.Container | null = null;
@@ -193,9 +204,8 @@ export const roulette: MinigameModule = {
     tally = centerText(scene, GAME_W / 2, 142, '', PALETTE.gold);
     status = centerText(scene, GAME_W / 2, 153, '', PALETTE.ash);
 
-    // Three slots, and a button is shown only when its action is available —
+    // Two slots, and a button is shown only when its action is available —
     // so what the machine will let you do next is readable without reading.
-    spinBtn = button(scene, 56, 168, 'KEEP SPINNING', () => keepSpinning(), { width: 92, height: 12 });
     stopBtn = button(scene, 160, 168, 'STOP SPINNING', () => stopSpin(), { width: 92, height: 12 });
     pullBtn = button(scene, 160, 168, 'PULL TRIGGER', () => pull(), { width: 92, height: 12 });
     cashBtn = button(scene, 264, 168, 'CASH OUT', () => cashOut(), { width: 84, height: 12 });
@@ -227,7 +237,6 @@ export const roulette: MinigameModule = {
         rig: (outcome: 'clean' | 'live') => {
           rigged = outcome;
         },
-        spinMore: () => keepSpinning(),
         stop: () => stopSpin(),
         pull: () => pull(),
         walk: () => cashOut(),
@@ -252,8 +261,8 @@ export const roulette: MinigameModule = {
   update(_t: number, delta: number) {
     if (over) return;
     if (phase === 'spinning') {
-      // A kick bleeds off back to the idle turn, so KEEP SPINNING is something
-      // the player can see happen rather than a button that does nothing.
+      // The shove a pull hands back bleeds off to the idle turn, so the
+      // barrel visibly comes round and settles instead of running flat.
       spinVel = Math.max(SPIN_BASE, spinVel - SPIN_DECAY * delta);
       spin += spinVel * delta;
       placeDots();
@@ -277,7 +286,6 @@ export const roulette: MinigameModule = {
     chamberDots = [];
     status = null;
     tally = null;
-    spinBtn = null;
     stopBtn = null;
     pullBtn = null;
     cashBtn = null;
@@ -310,14 +318,6 @@ function underHammer(): number {
     }
   });
   return best;
-}
-
-/** Another shove.  It changes the picture and nothing else — see the header. */
-function keepSpinning(): void {
-  if (phase !== 'spinning') return;
-  spinVel = SPIN_KICK;
-  audio.sfx('ui_hover', 0.4);
-  status?.setText('SPINNING. STOP IT WHEN YOU LIKE.');
 }
 
 /** Let it coast down onto a chamber.  The trigger works once it has. */
@@ -392,7 +392,6 @@ function cashOut(): void {
 function refresh(): void {
   tally?.setText(pot > 0 ? `${survived} CLEAN   -   ${pot} UNCASHED` : `${survived} CLEAN   -   NOTHING ON THE MACHINE`);
   // A button is on screen exactly when pressing it would do something.
-  spinBtn?.setVisible(phase === 'spinning');
   stopBtn?.setVisible(phase === 'spinning');
   pullBtn?.setVisible(phase === 'stopped');
   // Cash out only once there is something to cash out, and never once the
@@ -417,7 +416,6 @@ function finish(won: boolean): void {
   if (over) return;
   over = true;
   phase = 'over';
-  spinBtn?.setVisible(false);
   stopBtn?.setVisible(false);
   pullBtn?.setVisible(false);
   cashBtn?.setVisible(false);

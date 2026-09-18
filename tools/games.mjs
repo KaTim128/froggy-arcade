@@ -1010,10 +1010,11 @@ for (const g of [
   );
   if (!facing) failures++;
 
-  // ---- KEEP SPINNING keeps it spinning, and the trigger stays dead through
-  // it: pulling a turning cylinder must do nothing at all.
+  // ---- THE TRIGGER STAYS DEAD WHILE IT TURNS: pulling a spinning cylinder
+  // must do nothing at all.  There is no KEEP SPINNING button any more -- the
+  // barrel turns on its own and the only thing the player can do to it is stop
+  // it -- so this leans on the cylinder still being in its opening spin.
   await page.evaluate(() => {
-    window.__chamber.spinMore();
     window.__chamber.pull();
   });
   await sleep(500);
