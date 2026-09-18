@@ -42,9 +42,10 @@ const GAMES = [
   { id: 'slots', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.press('Space'); await sleep(2700); } } },
   // Bet up from the table minimum first — blackjack deals nothing until you do.
   { id: 'blackjack', drive: async (p) => { await sleep(500); await p.keyboard.press('ArrowUp'); await p.keyboard.press('ArrowRight'); await sleep(400); await p.keyboard.press('Space'); await sleep(900); await p.keyboard.press('KeyH'); await sleep(900); await p.keyboard.press('Space'); await sleep(3000); } },
-  // Rigged clean, or one pull in five ends the round and the screenshot is of
-  // the room the player was sent back to rather than of the machine.
-  { id: 'roulette', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.evaluate(() => window.__chamber?.rig('clean')); await p.keyboard.press('Space'); await sleep(1800); } } },
+  // SPACE stops a turning cylinder and pulls a stopped one, so a cycle is two
+  // presses.  Rigged clean, or one pull in five ends the round and the
+  // screenshot is of the room the player was sent back to, not of the machine.
+  { id: 'roulette', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.evaluate(() => window.__chamber?.rig('clean')); await p.keyboard.press('Space'); await sleep(700); await p.keyboard.press('Space'); await sleep(1400); } } },
   { id: 'battleship', drive: async (p) => { const g = (x, y) => [640 + (x - 160) * 4, 360 + (y - 90) * 4]; for (const [c, r] of [[0, 0], [2, 2], [4, 4], [6, 1]]) { await p.mouse.click(...g(186 + c * 12 + 6, 44 + r * 12 + 6)); await sleep(900); } } },
   { id: 'frogcross', drive: async (p) => { for (let i = 0; i < 4; i++) { await p.keyboard.press('KeyW'); await sleep(350); } await p.keyboard.press('KeyA'); await sleep(600); } },
   { id: 'carchase', drive: async (p) => { await p.keyboard.down('KeyA'); await sleep(500); await p.keyboard.up('KeyA'); await p.keyboard.press('Space'); await sleep(1200); await p.keyboard.down('KeyD'); await sleep(500); await p.keyboard.up('KeyD'); } },
@@ -955,13 +956,126 @@ for (const g of [
   await page.close();
 }
 
-// CHAMBER pays by the pull and holds the pot on the machine: twenty tokens in,
-// five a clean pull, no cap on the pulls, and the live round takes whatever is
-// sitting there.  Both endings are rigged here because one in five is not a
-// thing a test can wait for.
+// CHAMBER: SPIN, STOP, PULL, and the twenty is gone the moment you walk up.
+//
+// The loop is the thing here.  The trigger only works on a stopped cylinder,
+// nothing fires on its own when it stops, a clean pull sets the barrel turning
+// again by itself, and the pot on the machine is not the player's until they
+// cash out.  Both endings are rigged, because one in five is not a thing a
+// test can wait for.
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
+
+  // One pull, the long way round: stop the cylinder, wait for it to settle,
+  // then press the trigger.  Exactly what a player does.
+  const cycle = async (outcome) => {
+    await page.evaluate((o) => {
+      window.__chamber.rig(o);
+      window.__chamber.stop();
+    }, outcome);
+    for (let i = 0; i < 40; i++) {
+      if (await page.evaluate(() => window.__chamber.state().canPull)) break;
+      await sleep(60);
+    }
+    await page.evaluate(() => window.__chamber.pull());
+    await sleep(1000);
+  };
+
+  // ---- the machine on the way in: five chambers on the face, turning, and
+  // the trigger dead until the player stops it.
+  await page.goto(`${URL}/?intro=1&tokens=40&game=roulette`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  const purse = await page.evaluate(() => window.__froggy.state().tokens);
+  await startGame(page);
+  await bridge(page, '__chamber');
+  await sleep(400);
+  const opened = await page.evaluate(() => window.__chamber.state());
+  const paidIn = await page.evaluate(() => window.__froggy.state().tokens);
+  const price = await page.evaluate(async () => {
+    const { CABINETS } = await import('/src/game/content.ts');
+    return CABINETS.find((c) => c.id === 'roulette').cost;
+  });
+  const charged = price === 20 && paidIn === purse - 20;
+  console.log(
+    `${charged ? 'PASS' : 'FAIL'}  chamber: twenty to walk up  — ${purse} -> ${paidIn}, cabinet asks ${price}`,
+  );
+  if (!charged) failures++;
+
+  const facing =
+    opened.chambers === 5 && opened.dots === 5 && opened.spinning && !opened.canPull && opened.pot === 0;
+  console.log(
+    `${facing ? 'PASS' : 'FAIL'}  chamber: five chambers on the face, turning, trigger dead  — ` +
+      `${opened.dots} of ${opened.chambers}, ${opened.phase}`,
+  );
+  if (!facing) failures++;
+
+  // ---- KEEP SPINNING keeps it spinning, and the trigger stays dead through
+  // it: pulling a turning cylinder must do nothing at all.
+  await page.evaluate(() => {
+    window.__chamber.spinMore();
+    window.__chamber.pull();
+  });
+  await sleep(500);
+  const stillTurning = await page.evaluate(() => window.__chamber.state());
+  const refused = stillTurning.spinning && !stillTurning.canPull && stillTurning.survived === 0 && stillTurning.pot === 0;
+  console.log(
+    `${refused ? 'PASS' : 'FAIL'}  chamber: a spinning cylinder cannot be fired  — ` +
+      `${stillTurning.phase}, ${stillTurning.survived} pulls, ${stillTurning.pot} on the machine`,
+  );
+  if (!refused) failures++;
+
+  // ---- STOP SPINNING settles it onto a chamber, and THEN the trigger works.
+  // It must not fire on its own when it stops: nothing is paid until a pull.
+  await page.evaluate(() => window.__chamber.stop());
+  for (let i = 0; i < 40; i++) {
+    if (await page.evaluate(() => window.__chamber.state().canPull)) break;
+    await sleep(60);
+  }
+  const halted = await page.evaluate(() => window.__chamber.state());
+  await sleep(700);
+  const waited = await page.evaluate(() => window.__chamber.state());
+  const patient = halted.canPull && !halted.spinning && waited.survived === 0 && waited.pot === 0 && waited.canPull;
+  console.log(
+    `${patient ? 'PASS' : 'FAIL'}  chamber: it stops and waits - the trigger is the player's  — ` +
+      `${halted.phase}, ${waited.survived} pulls after sitting on it`,
+  );
+  if (!patient) failures++;
+
+  // ---- and a clean pull pays five and sets the barrel turning again.
+  await page.evaluate(() => {
+    window.__chamber.rig('clean');
+    window.__chamber.pull();
+  });
+  await sleep(1100);
+  const after1 = await page.evaluate(() => window.__chamber.state());
+  const cycled = after1.survived === 1 && after1.pot === 5 && after1.spinning && !after1.canPull;
+  console.log(
+    `${cycled ? 'PASS' : 'FAIL'}  chamber: a clean pull pays five and the barrel spins again  — ` +
+      `${after1.pot} on the machine, ${after1.phase}`,
+  );
+  if (!cycled) failures++;
+  await page.close();
+}
+
+// And the same machine's books.  Nothing is credited pull by pull, cashing out
+// pays the pot once, and the live round takes everything sitting on it.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+
+  const cycle = async (outcome) => {
+    await page.evaluate((o) => {
+      window.__chamber.rig(o);
+      window.__chamber.stop();
+    }, outcome);
+    for (let i = 0; i < 40; i++) {
+      if (await page.evaluate(() => window.__chamber.state().canPull)) break;
+      await sleep(60);
+    }
+    await page.evaluate(() => window.__chamber.pull());
+    await sleep(1000);
+  };
 
   const run = async (pulls, ending) => {
     await page.goto(`${URL}/?intro=1&tokens=40&game=roulette`, { waitUntil: 'networkidle2' });
@@ -969,21 +1083,10 @@ for (const g of [
     await startGame(page);
     await bridge(page, '__chamber');
     const before = await page.evaluate(() => window.__froggy.state().tokens);
-    for (let i = 0; i < pulls; i++) {
-      await page.evaluate(() => {
-        window.__chamber.rig('clean');
-        window.__chamber.pull();
-      });
-      // The hammer falls after 900ms and the cylinder respins for another 700
-      // before the buttons come back, so a pull is 1.6 seconds end to end.
-      await sleep(1900);
-    }
+    for (let i = 0; i < pulls; i++) await cycle('clean');
     if (ending === 'live') {
-      await page.evaluate(() => {
-        window.__chamber.rig('live');
-        window.__chamber.pull();
-      });
-      await sleep(1200);
+      await cycle('live');
+      await sleep(400);
     } else if (ending === 'walk') {
       // Twice, on purpose.  `finish` latches on `over`, so a player who mashes
       // CASH OUT is paid the pot once and not once per press.
@@ -995,23 +1098,34 @@ for (const g of [
     const state = await page.evaluate(() => window.__chamber.state());
     await sleep(4200);
     const after = await page.evaluate(() => window.__froggy.state().tokens);
-    return { state, banked: after - before };
+    // And after the round has ended, cashing out again must move nothing.
+    const late = await page.evaluate(() => {
+      const was = window.__froggy.state().tokens;
+      window.__chamber?.walk();
+      return window.__froggy.state().tokens - was;
+    });
+    return { state, banked: after - before, late };
   };
 
-  const walked = await run(2, 'walk');
-  const ok1 = walked.state.survived === 2 && walked.banked === 10;
-  console.log(`${ok1 ? 'PASS' : 'FAIL'}  chamber: two clean pulls, cash out once, ten tokens  — ${walked.state.survived} clean, banked ${walked.banked}`);
+  const one = await run(1, 'walk');
+  const ok0 = one.state.survived === 1 && one.banked === 5 && one.late === 0;
+  console.log(`${ok0 ? 'PASS' : 'FAIL'}  chamber: one clean pull, cash out, five tokens  — ${one.state.survived} clean, banked ${one.banked}`);
+  if (!ok0) failures++;
+
+  const walked = await run(3, 'walk');
+  const ok1 = walked.state.survived === 3 && walked.banked === 15 && walked.late === 0;
+  console.log(`${ok1 ? 'PASS' : 'FAIL'}  chamber: three clean pulls, cash out once, fifteen  — ${walked.state.survived} clean, banked ${walked.banked}`);
   if (!ok1) failures++;
 
   const shot = await run(3, 'live');
-  const ok2 = shot.state.pot === 0 && shot.banked === 0;
+  const ok2 = shot.state.pot === 0 && shot.banked === 0 && shot.late === 0;
   console.log(`${ok2 ? 'PASS' : 'FAIL'}  chamber: the live round takes the lot  — fifteen on the machine, banked ${shot.banked}`);
   if (!ok2) failures++;
 
-  // There is no cap any more: the lever comes back after every clean pull, so
-  // a seventh is a thing you can do and it is worth five like all the others.
+  // There is no cap: the barrel comes back after every clean pull, so a
+  // seventh is a thing you can do and it is worth five like all the others.
   const long = await run(7, 'walk');
-  const ok3 = long.state.survived === 7 && long.banked === 35;
+  const ok3 = long.state.survived === 7 && long.banked === 35 && long.late === 0;
   console.log(`${ok3 ? 'PASS' : 'FAIL'}  chamber: pulls keep coming, five a time  — ${long.state.survived} pulls, banked ${long.banked}`);
   if (!ok3) failures++;
   await page.close();
