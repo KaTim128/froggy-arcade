@@ -84,6 +84,7 @@ export function initDebug(g: Phaser.Game): void {
  *   ?scene=BasementSequence   jump straight to a scene
  *   ?game=hoops               jump straight into a cabinet
  *   ?tokens=200&route=ejected&key=1   set state first
+ *   ?gone=1                   the night is over: the man in the suit is dealing
  * Used by the automated harness so each piece can be verified on its own.
  */
 function applyLaunchParams(g: Phaser.Game): void {
@@ -99,6 +100,11 @@ function applyLaunchParams(g: Phaser.Game): void {
   if (hideRoom !== null) store.patch({ hideRoom: Math.max(0, Number(hideRoom) | 0) });
   if (q.get('intro') === '1') store.patch({ seenIntro: true });
   if (q.get('charity') === '1') store.patch({ charityUsed: true });
+  // AFTER THE NIGHT.  The one latch with no way in from a URL, which meant the
+  // half of the building it changes -- the casino table with somebody else
+  // behind it, and the blackjack hand he deals -- could not be reached by the
+  // harness or looked at without playing the whole game to get there.
+  if (q.get('gone') === '1') store.patch({ froggyGone: true });
 
   const game = q.get('game');
   const scene = q.get('scene');

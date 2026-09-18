@@ -38,6 +38,21 @@ export interface SuitDrawOpts {
   /** What `y` means: the ground line, or the point between the eyes. */
   anchor?: 'feet' | 'face';
   alpha?: number;
+  /**
+   * THE ROOM'S LIGHT, LAID OVER HIM.
+   *
+   * He is drawn in flat fills, which is the house style and is why Froggy
+   * works -- but Froggy is a cartoon frog and reads as one lit from nowhere,
+   * whereas a man at a table in a room with lamps over it reads as a sticker
+   * the moment nothing in the room touches him.  This puts the lamp back: warm
+   * across the head and shoulders, nothing through the middle, and the table's
+   * own shadow rising up him from the felt line.
+   *
+   * It composites `source-atop`, so it only ever darkens or warms pixels he
+   * has already put down and never paints a rectangle on the room.  Pass
+   * `false` where he is wanted flat.
+   */
+  light?: false | { warm?: number; shade?: number };
 }
 
 /** Charcoal, shirt, and a tie the colour of the felt he deals on. */
@@ -73,6 +88,35 @@ export function drawSuitedMan(ctx: CanvasRenderingContext2D, o: SuitDrawOpts): v
   // two can be swapped at a call site without moving the drawing.
   ctx.translate(0, o.anchor === 'face' ? 44 : -50);
   drawMan(ctx, pose, o.bounce ?? 0);
+  if (o.light !== false) lightHim(ctx, o.light?.warm ?? 0.24, o.light?.shade ?? 0.42);
+  ctx.restore();
+}
+
+/**
+ * The lamp above the table and the shadow under it, composited onto him.
+ *
+ * Two stops of warm at the top and two of near-black at the bottom, with the
+ * middle left alone so the shirt keeps its white.  `source-atop` is what makes
+ * it safe: every pixel it touches is one he drew a moment ago.
+ */
+function lightHim(ctx: CanvasRenderingContext2D, warm: number, shade: number): void {
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-atop';
+  const g = ctx.createLinearGradient(0, -62, 0, 52);
+  g.addColorStop(0, `rgba(255, 216, 158, ${warm})`);
+  g.addColorStop(0.22, `rgba(255, 206, 140, ${warm * 0.45})`);
+  g.addColorStop(0.5, 'rgba(0, 0, 0, 0)');
+  g.addColorStop(0.78, `rgba(14, 8, 18, ${shade * 0.35})`);
+  g.addColorStop(1, `rgba(10, 6, 14, ${shade})`);
+  ctx.fillStyle = g;
+  ctx.fillRect(-60, -62, 120, 114);
+  // and a cold rim down his left, from the wall lamp the casino keeps on that
+  // side, so he has an edge instead of ending
+  const rim = ctx.createLinearGradient(-30, 0, -14, 0);
+  rim.addColorStop(0, 'rgba(150, 176, 220, 0.20)');
+  rim.addColorStop(1, 'rgba(150, 176, 220, 0)');
+  ctx.fillStyle = rim;
+  ctx.fillRect(-60, -62, 120, 114);
   ctx.restore();
 }
 

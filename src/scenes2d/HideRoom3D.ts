@@ -987,9 +987,11 @@ export class HideRoom3D extends Phaser.Scene {
       // a wall.  It has depth, so from an angle you see the inside of it and
       // it reads as somewhere rather than as a painted rectangle -- and there
       // is nothing in it, because there is nothing to find.
+      // Near black, and unlit by anything in the room: what the eye should get
+      // through the frame is depth it cannot measure, not a grey panel it can.
       const passage = new THREE.Mesh(
         new THREE.BoxGeometry(3.0, w.h, w.w),
-        new THREE.MeshLambertMaterial({ color: 0x141a26 }),
+        new THREE.MeshLambertMaterial({ color: 0x090c14 }),
       );
       passage.position.set(wallX + sx * 1.5, w.h / 2, w.z);
       st.scene.add(passage);
@@ -1016,8 +1018,16 @@ export class HideRoom3D extends Phaser.Scene {
       );
       head.position.set(wallX + sx * -0.2, w.h + 0.1, w.z);
       st.scene.add(head);
-      const spill = new THREE.PointLight(0x46c4bd, 6, 8, 1.6);
-      spill.position.set(wallX + sx * -0.9, w.h * 0.6, w.z);
+      // ---- THE LIGHT ON IT, AND HOW LITTLE OF IT THERE IS.
+      //
+      // A six-candela lamp a metre off the frame washed the whole corner teal
+      // and turned the one unlit thing in the room into the best lit.  It is
+      // down to a third of that and pulled back INTO the recess, so what
+      // reaches the floor is a rim on the jambs and nothing else: the doorway
+      // is legible as a doorway and the two metres in front of it are as dark
+      // as the room gets, which is the point of having it there at all.
+      const spill = new THREE.PointLight(0x46c4bd, 2, 5.5, 2.2);
+      spill.position.set(wallX + sx * 0.35, w.h * 0.62, w.z);
       st.scene.add(spill);
       this.roomLights.push(spill);
       // AND IT IS SHUT.  A collider filling the gap, so the one place the wall

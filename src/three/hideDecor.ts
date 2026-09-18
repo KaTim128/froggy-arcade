@@ -413,12 +413,25 @@ export function dressRoom(scene: THREE.Scene, def: RoomDef, seed: number, solid:
     [-def.halfW + 0.03, 0, def.halfD * 2, Math.PI / 2],
     [def.halfW - 0.03, 0, def.halfD * 2, -Math.PI / 2],
   ];
+  // WHICH WALL HAS A HOLE IN IT, AND WHERE.  Grime is painted along each wall
+  // without knowing what is in it, and the arcade's left wall has a doorway:
+  // two of these landed across the opening and hung there as black slabs in
+  // it, because they are unlit basic material and the recess behind them is
+  // not.  The way through is the one thing on that wall the player is meant
+  // to be able to read, so nothing is painted over it.
+  const open = def.wallOpening;
+  const openSide = open ? (open.side === 'left' ? -1 : 1) * (def.halfW - 0.03) : null;
   for (const [wx, wz, len, rot] of walls) {
     const n = Math.round(len / 6);
+    const sideWall = rot === Math.PI / 2 || rot === -Math.PI / 2;
+    const cutsTheDoor = open !== undefined && openSide !== null && sideWall && Math.abs(wx - openSide) < 0.1;
     for (let i = 0; i < n; i++) {
       const along = (r() - 0.5) * (len - 2);
       const w = 0.6 + r() * 2.4;
       const h = 0.6 + r() * (def.wallH - 0.8);
+      // Clear of the opening by its own half-width plus this streak's, so a
+      // wide one beside the door does not lap over its edge either.
+      if (cutsTheDoor && open && Math.abs(along - open.z) < (open.w + w) / 2 + 0.3) continue;
       const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), streak);
       m.position.set(wx + (rot === 0 || rot === Math.PI ? along : 0), h / 2 + 0.01, wz + (rot === 0 || rot === Math.PI ? 0 : along));
       m.rotation.y = rot;
