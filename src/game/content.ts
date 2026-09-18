@@ -135,7 +135,9 @@ export const CABINETS: CabinetDef[] = [
   // out of it, and put its own click zone over the door's.  Both rows moved
   // together so the grid stays a grid; the back room's left column has always
   // been at 48 for the same reason.
-  { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 3, reward: 6, x: 52, y: 164, color: 0xff7a3d, symbol: 'H', motif: 'ball' },
+  // Five in, ten out: the standard table's five-token rung, moved up off the
+  // three-token one.
+  { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 5, reward: 10, x: 52, y: 164, color: 0xff7a3d, symbol: 'H', motif: 'ball' },
   { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 3, reward: 6, x: 98, y: 164, color: 0x6fbb6a, symbol: 'W', motif: 'mallet' },
   { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 3, reward: 6, x: 244, y: 164, color: 0xb9884f, symbol: 'BW', motif: 'pins' },
   { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 290, y: 164, color: 0x1d6f8f, symbol: 'BS', motif: 'ship' },
@@ -168,7 +170,7 @@ export const CABINETS: CabinetDef[] = [
   // ---- and the room at the back, where none of it is a game
   // Two tokens is the price of the first spin; the rest are raised through
   // the shell, and the wins are paid the same way.  See slots.ts.
-  { id: 'slots', title: 'FROGGY SLOTS', tier: 'medium', cost: 3, reward: 6, x: 96, y: 96, color: 0xff4fa3, room: 'casino', symbol: '777', motif: 'reels' },
+  { id: 'slots', title: 'FROGGY SLOTS', tier: 'medium', cost: 3, reward: 10, x: 96, y: 96, color: 0xff4fa3, room: 'casino', symbol: '777', motif: 'reels' },
   // The table takes a minimum, not a price: `cost` is the ante Froggy will not
   // deal under, and `reward` is what that ante pays back at 2x.  Anything above
   // it is raised at the table through the shell (MinigameApi.raise).
@@ -187,7 +189,10 @@ export const CABINETS: CabinetDef[] = [
     symbol: '21',
     motif: 'cards',
   },
-  { id: 'roulette', title: 'CHAMBER', tier: 'hard', cost: 5, reward: 10, x: 224, y: 96, color: 0x8a2b34, room: 'casino', symbol: '6', motif: 'chamber' },
+  // Twenty in, and what comes back out is whatever is on the machine when the
+  // player cashes out — the cabinet settles its own payout through the shell,
+  // so `reward` here is only the five a clean pull is worth.  See roulette.ts.
+  { id: 'roulette', title: 'CHAMBER', tier: 'hard', cost: 20, reward: 5, x: 224, y: 96, color: 0x8a2b34, room: 'casino', symbol: '5', motif: 'chamber' },
   // Not a machine either: a wheel on a post, in the corner of the casino.
   // Forty a spin, and what it pays is whatever the pointer is over when it
   // stops — `reward` is only what the room's badge would say, since the wheel

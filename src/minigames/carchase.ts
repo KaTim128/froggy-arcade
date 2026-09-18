@@ -37,14 +37,17 @@
  * seconds.  The spike strips cut both ways too — a police car that drives
  * over one goes out the same way your car would have.
  *
- * THE TRAFFIC CHANGES LANES, AND IT INDICATES FIRST.  Cars are not rails: they
- * follow the car in front, back off when they close on it, pull out to pass,
- * and — one at a time — move onto the line the player is sitting on.  That last
- * one is what stops the road being solvable by parking: a car is twelve wide in
- * a thirty-two wide lane, so standing on a lane line used to be a corridor
- * nothing could occupy.  Every change is announced by the indicator a full
- * `LANE_WARN_MS` before the car moves an inch, which is about four times as
- * long as it takes to steer clear of one.
+ * THE TRAFFIC CHANGES LANES, AND IT INDICATES THREE TIMES FIRST.  Cars are not
+ * rails: they follow the car in front, back off when they close on it, pull out
+ * to pass, and — one at a time — move onto the line the player is sitting on.
+ * That last one is what stops the road being solvable by parking: a car is
+ * twelve wide in a lane four and a half times that, so standing on a lane line
+ * used to be a corridor nothing could occupy.  Every change is announced, and
+ * the announcement is COUNTED rather than timed: the indicator comes on, it
+ * blinks exactly `SIGNAL_BLINKS` times with the car still dead in its lane, and
+ * only on the far side of the third blink does it start to move — and then it
+ * eases across over `LANE_CHANGE_MS`, better than a second and a half, at about
+ * a quarter of the speed the player can steer.
  *
  * So the road is a weapon, not just an obstacle, and the nitro jars are laid
  * out to make you use it: never twice in the same lane, never behind a car
@@ -86,8 +89,19 @@ export const STEP_CASH = 100;
 export const STEP_REWARD = 5;
 export const CASH_PER_PICKUP = 20;
 
-const ROAD_L = 96;
-const ROAD_W = 128;
+/**
+ * THE CAMERA IS PULLED BACK.
+ *
+ * The road used to be a 128px ribbon down the middle of a 320px screen, with
+ * two fat verges either side that were never anything but scenery.  The view
+ * is the same 320 pixels, so the only way to show MORE road is to give the
+ * road more of them: the verges are trimmed to what reads as a verge and the
+ * carriageway is nearly twice as wide.  Same four lanes, same 12x20 cars, so
+ * every lane is now a room rather than a slot — which is most of what makes
+ * the traffic readable at the new, slower lane-change speeds below.
+ */
+const ROAD_L = 52;
+const ROAD_W = 216;
 const LANE_W = ROAD_W / 4;
 const LANES = [0, 1, 2, 3].map((i) => ROAD_L + LANE_W * i + LANE_W / 2);
 const TOP = 18;
@@ -98,15 +112,21 @@ const CAR_H = 20;
 /**
  * Road speed in px/s: where it starts, how fast it climbs, where it stops.
  *
- * The climb is deliberately slower than it was (1.6/s to a 250 ceiling): the
- * road used to be at its worst before most players had two hundred in the bag,
- * so the run ended before it had paid for itself.  Reaching the bar is now the
- * gentle half of the game and the HEAT below is the hard half — which is the
- * right way round, because the heat only arrives once you have been paid.
+ * The climb is deliberately slower than it was: the road used to be at its
+ * worst before most players had two hundred in the bag, so the run ended
+ * before it had paid for itself.  Reaching the bar is the gentle half of the
+ * game and the HEAT below is the hard half — which is the right way round,
+ * because the heat only arrives once you have been paid.
+ *
+ * Eased AGAIN here — everything on this road now moves about fifteen per cent
+ * slower than it did.  The road speed is what every other car on screen is
+ * measured against, so dropping it is the single biggest thing that slows the
+ * traffic down as the player sees it: a car closing at forty pixels a second
+ * can be read and steered around, one closing at seventy has to be guessed.
  */
-const SPEED_START = 104;
-const SPEED_RAMP = 1.1;
-const SPEED_MAX = 226;
+const SPEED_START = 88;
+const SPEED_RAMP = 0.85;
+const SPEED_MAX = 190;
 const STEER = 120;
 const CREEP = 50;
 /**
@@ -190,13 +210,18 @@ const TRAP_GAP_MS = 9000;
  * — but the gap shuts at a speed a player can read and answer, instead of one
  * that turns every mistake into an arrest.
  */
-const POLICE_GAIN = 15;
+/**
+ * Eleven, down from fifteen.  The gap still shuts — they are still faster than
+ * you and nitro is still the way out — but it shuts slowly enough to be a
+ * problem you solve rather than one you notice happening.
+ */
+const POLICE_GAIN = 11;
 const POLICE_STEER = 48;
 /**
  * How much they gain with the clock, as a divisor of elapsed ms.  Bigger is
  * gentler; this went from 3500 to 4500 with the same reasoning as above.
  */
-const POLICE_CLOCK = 4500;
+const POLICE_CLOCK = 6000;
 /**
  * The heat.  Every TARGET_CASH in the bag is a notch, up to HEAT_MAX: one more
  * car behind you, that much more speed on all of them, thicker traffic and a
@@ -205,8 +230,8 @@ const POLICE_CLOCK = 4500;
  * out for another two hundred is a decision to be chased harder for it.
  */
 const HEAT_MAX = 3;
-const HEAT_POLICE_GAIN = 10;
-const HEAT_ROAD = 18;
+const HEAT_POLICE_GAIN = 8;
+const HEAT_ROAD = 16;
 
 /**
  * TRAFFIC DRIVES.  IT DOES NOT SLIDE DOWN A RAIL.
@@ -228,14 +253,42 @@ const HEAT_ROAD = 18;
  * a quarter of a second to cross a lane at `STEER`.  Plenty, IF you are
  * watching the road.
  */
-const LANE_WARN_MS = 620;
-const LANE_CHANGE_MS = 760;
-/** Indicator blink period. */
-const BLINK_MS = 180;
+/**
+ * THE INDICATOR IS COUNTED, NOT TIMED.
+ *
+ * `LANE_WARN_MS` is not a number somebody picked that happens to look like
+ * blinking; it is exactly three blinks long, and the car is released by the
+ * third one finishing rather than by a clock running out.  So "it blinks three
+ * times and then it moves" is literally what the code does, and changing the
+ * blink rhythm cannot quietly change how much warning the player gets.
+ *
+ * The lamp keeps blinking on the same rhythm all the way through the change,
+ * the way a real indicator does — the three that matter are the three BEFORE
+ * the car has moved an inch, which is what `blinks` counts.
+ */
+const SIGNAL_BLINKS = 3;
+const BLINK_ON_MS = 260;
+const BLINK_OFF_MS = 200;
+const BLINK_CYCLE_MS = BLINK_ON_MS + BLINK_OFF_MS;
+const LANE_WARN_MS = SIGNAL_BLINKS * BLINK_CYCLE_MS;
+/**
+ * And the change itself is slow.  A lane is 54px wide now, so easing across
+ * one over 1.6 seconds is about 34px/s — less than a third of the 120px/s the
+ * player steers at, and better than three seconds of notice end to end once
+ * the three blinks in front of it are counted.  Nothing on this road snaps.
+ */
+const LANE_CHANGE_MS = 1600;
 /** How often a car reconsiders which lane it wants to be in. */
 const THINK_MS = 900;
 /** How hard a car may accelerate or brake, px/s². */
 const CAR_ACCEL = 34;
+/**
+ * And how hard it may while it is crossing a line: barely at all.  A car that
+ * picks up speed halfway through a lane change arrives somewhere the player
+ * did not predict from watching it start, which undoes the point of the three
+ * blinks.  It holds its pace and moves over.
+ */
+const LANE_CHANGE_ACCEL = 8;
 /** It starts easing off inside this gap to the car in front. */
 const FOLLOW_GAP = CAR_H + 12;
 /**
@@ -245,6 +298,16 @@ const FOLLOW_GAP = CAR_H + 12;
  */
 const HUNTERS = 1;
 const CHANGERS = 2;
+/**
+ * How fast traffic actually drives, px/s.  Raised from 35-75 along with the
+ * drop in road speed above, and the two together are the "slow the other cars
+ * down" change: what the player experiences is not a car's ground speed but
+ * the speed it comes DOWN THE SCREEN at, which is the road minus this.  That
+ * closing speed used to run 29-69px/s and now runs 22-48, so the slowest thing
+ * on the road drifts toward you instead of arriving.
+ */
+const TRAFFIC_MIN = 40;
+const TRAFFIC_SPAN = 26;
 let nextCarId = 1;
 
 interface Mover {
@@ -268,6 +331,10 @@ interface Car extends Mover {
   from: number;
   /** -1 indicating left, +1 right, 0 not indicating. */
   signal: -1 | 0 | 1;
+  /** ms since the indicator came on: drives both the blink and the count. */
+  signalMs: number;
+  /** Blinks completed since it came on.  It may not move until SIGNAL_BLINKS. */
+  blinks: number;
   /** ms of indicating left before it may start to move. */
   warn: number;
   /** 0..1 through a lane change, or -1 when it is not making one. */
@@ -373,7 +440,7 @@ export const carChase: MinigameModule = {
     objective: [
       'GRAB CASH AND LOSE THE LAW.',
       'NITRO REFILLS ITSELF - SLOWLY.',
-      'TRAFFIC INDICATES BEFORE IT PULLS OVER.',
+      'TRAFFIC BLINKS 3 TIMES, THEN MOVES OVER.',
       'SWERVE LATE - THEY DRIVE AT YOUR OLD LANE.',
       'NITRO OR A CRASH CLEARS THEM FOR 10s.',
       'PULL OVER AT 300 FOR 15, +5 EVERY 100.',
@@ -441,7 +508,9 @@ export const carChase: MinigameModule = {
     }
     // trees and bushes on the verges, scrolling with the road
     for (let i = 0; i < 14; i++) {
-      const side = i % 2 ? ROAD_L - 14 - ((i * 37) % 60) : ROAD_L + ROAD_W + 14 + ((i * 41) % 60);
+      // The verges are narrower now the camera is back, so the scenery is
+      // packed into what is left of them rather than off the side of the view.
+      const side = i % 2 ? ROAD_L - 8 - ((i * 37) % 36) : ROAD_L + ROAD_W + 8 + ((i * 41) % 36);
       const y = TOP + ((i * 53) % (BOTTOM - TOP + 16));
       const r = 4 + (i % 3) * 2;
       dashes.push(scene.add.circle(side, y, r, i % 3 === 0 ? 0x2e5e38 : 0x24482c).setDepth(2));
@@ -554,6 +623,8 @@ export const carChase: MinigameModule = {
             lane: idx,
             from: x,
             signal: 0,
+            signalMs: 0,
+            blinks: 0,
             warn: 0,
             move: -1,
             think: THINK_MS,
@@ -569,6 +640,8 @@ export const carChase: MinigameModule = {
             y: Math.round(c.y),
             lane: c.lane,
             signal: c.signal,
+            blinks: c.blinks,
+            warn: Math.max(0, Math.round(c.warn)),
             changing: c.move >= 0,
             hunting: c.hunting,
             own: Math.round(c.own),
@@ -676,8 +749,10 @@ export const carChase: MinigameModule = {
       const gap = leader ? c.y - leader.y : Infinity;
       c.want = leader && gap < FOLLOW_GAP * 2 ? Math.min(c.cruise, leader.own - 3) : c.cruise;
       // and it gets there at a finite rate, so nothing on this road changes
-      // speed instantly
-      const step = CAR_ACCEL * dt;
+      // speed instantly — and at a much finer one while it is crossing a line,
+      // so a car that has announced a change does not also surprise you with
+      // the speed it makes it at.
+      const step = (c.move >= 0 ? LANE_CHANGE_ACCEL : CAR_ACCEL) * dt;
       c.own = Math.max(16, c.own + Phaser.Math.Clamp(c.want - c.own, -step, step));
       c.y += (ground - c.own) * dt;
 
@@ -688,15 +763,24 @@ export const carChase: MinigameModule = {
         c.think = THINK_MS * (0.6 + Math.random() * 0.8);
         thinkCar(c);
       }
+      if (c.signal !== 0) c.signalMs += delta;
       if (c.warn > 0) {
+        // Counting the blinks off, not just running a clock down: the car is
+        // released by the THIRD blink finishing, and `blinks` is what says so.
         c.warn -= delta;
-        if (c.warn <= 0) c.move = 0;
+        c.blinks = Math.min(SIGNAL_BLINKS, Math.floor(c.signalMs / BLINK_CYCLE_MS));
+        if (c.warn <= 0) {
+          c.blinks = SIGNAL_BLINKS;
+          c.move = 0;
+        }
       } else if (c.move >= 0) {
         c.move += delta / LANE_CHANGE_MS;
         if (c.move >= 1) {
           c.x = LANES[c.lane];
           c.move = -1;
           c.signal = 0;
+          c.signalMs = 0;
+          c.blinks = 0;
           c.hunting = false;
         } else {
           // Eased both ends: a car leans out of its lane and settles into the
@@ -705,8 +789,10 @@ export const carChase: MinigameModule = {
           c.x = c.from + (LANES[c.lane] - c.from) * k;
         }
       }
-      // the lamps themselves
-      const blink = c.signal !== 0 && Math.floor(elapsed / BLINK_MS) % 2 === 0;
+      // The lamps themselves, on this car's own clock — a blink counted off a
+      // shared `elapsed` would be a different fraction of a blink for every
+      // car, and "exactly three" would mean nothing.
+      const blink = c.signal !== 0 && c.signalMs % BLINK_CYCLE_MS < BLINK_ON_MS;
       c.lamps[0]?.setVisible(blink && c.signal < 0);
       c.lamps[1]?.setVisible(blink && c.signal > 0);
 
@@ -1126,6 +1212,8 @@ function thinkCar(c: Car): void {
   if (want < 0 || want === c.lane) return;
 
   c.signal = want < c.lane ? -1 : 1;
+  c.signalMs = 0;
+  c.blinks = 0;
   c.hunting = Math.abs(px - LANES[want]) < LANE_W;
   c.warn = LANE_WARN_MS;
   c.from = c.x;
@@ -1151,7 +1239,7 @@ function spawnTraffic(): void {
   // Not into the back of one already there.
   if (!laneClear(idx, TOP - CAR_H, CAR_H * 2)) return;
   const lane = LANES[idx];
-  const own = 35 + Math.random() * 40;
+  const own = TRAFFIC_MIN + Math.random() * TRAFFIC_SPAN;
   const colours = [PALETTE.ember, PALETTE.neon, PALETTE.amber, PALETTE.violet, PALETTE.bone];
   const body = carSprite(scene0, lane, TOP - CAR_H, colours[Phaser.Math.Between(0, colours.length - 1)], false);
   traffic.push({
@@ -1165,6 +1253,8 @@ function spawnTraffic(): void {
     lane: idx,
     from: lane,
     signal: 0,
+    signalMs: 0,
+    blinks: 0,
     warn: 0,
     move: -1,
     think: THINK_MS * (0.5 + Math.random()),
@@ -1219,8 +1309,14 @@ function spawnTrap(): void {
     if (!on) return;
     const left = ROAD_L + i * LANE_W;
     parts.push(scene0!.add.rectangle(left + 1, -3, LANE_W - 2, 6, 0x2b2118).setOrigin(0, 0));
-    for (let t = 0; t < 5; t++) {
-      parts.push(scene0!.add.triangle(left + 3 + t * 6, -3, 0, 5, 2.5, 0, 5, 5, PALETTE.bone));
+    // Enough spikes to span the lane whatever the lane is worth: a strip with
+    // a visible hole in it reads as a gap, and the gap is supposed to be the
+    // lane that has no strip on it at all.
+    const spikes = Math.max(5, Math.round((LANE_W - 6) / 6));
+    for (let t = 0; t < spikes; t++) {
+      parts.push(
+        scene0!.add.triangle(left + 3 + (t * (LANE_W - 6)) / spikes, -3, 0, 5, 2.5, 0, 5, 5, PALETTE.bone),
+      );
     }
   });
   const body = scene0.add.container(0, TOP - 6, parts).setDepth(3).setVisible(false);

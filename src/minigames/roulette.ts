@@ -1,22 +1,27 @@
 /**
- * CHAMBER.  Hard — 5 tokens in, and up to 15 back out.
+ * CHAMBER.  Hard — 20 tokens in, and whatever you have the nerve to hold.
  *
  * The arcade's russian-roulette cabinet, and it is a cabinet: a cylinder
- * diagram, a lever, and six chambers with one live round in them.  There is no
- * gun and nobody points anything at themselves — what is at stake is the five
- * tokens you put in, and the whole game is on the machine's face.
+ * diagram, a lever, and five chambers with one live round in them.  There is
+ * no gun and nobody points anything at themselves — what is at stake is the
+ * twenty tokens you put in, and the whole game is on the machine's face.
  *
- * FIVE PULLS, three tokens a clean one, and the pot is not yours until you
- * walk.  Leave whenever you like and you keep what is on the machine; take the
- * live one and the whole pot goes with it.  The cylinder spins between pulls,
- * so every pull is an independent one in six and nothing about the run so far
- * changes the next one.
+ * TWENTY IN, FIVE A CLEAN PULL, AND NO LIMIT ON THE PULLS.  The pot is not
+ * yours until you CASH OUT.  Every clean pull adds five to the machine and
+ * hands you the same two buttons back: take what is sitting there, or risk it
+ * for another five.  Take the live one and the whole pot goes with it.
+ *
+ * THE CYLINDER RESPINS AFTER EVERY SINGLE PULL, clean or not, and the respin
+ * is a thing you watch happen before the buttons come back.  So every pull is
+ * an independent ONE IN FIVE — drawn from `Math.random()` at the moment the
+ * hammer falls, not acted out by an animation that knows the answer — and
+ * nothing about the run so far changes the next one.
  *
  * The arithmetic, since the machine states it and the player should be able to
- * check it: surviving all five is (5/6)^5 = 40%, which pays 15 against the 5 it
- * cost — about a token of expected value a play.  Stopping early is worse than
- * going on at every single step, which is the joke: the machine is honest, and
- * the honest play is to keep pulling.
+ * check it: continuing from a pot of p is worth 0.8 * (p + 5), so it beats
+ * cashing out for p right up to a pot of twenty and never after.  Played that
+ * way a round returns about eight of the twenty it cost.  The machine is
+ * honest about its odds and it is still a machine in a casino.
  */
 
 import Phaser from 'phaser';
@@ -26,12 +31,20 @@ import { button, centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
-const CHAMBERS = 6;
-/** The most it will let you pull.  There is no sixth. */
-const MAX_PULLS = 5;
-/** What a clean pull adds to the pot, and what the pot tops out at. */
-const PAY_PER_PULL = 3;
-export const MAX_POT = MAX_PULLS * PAY_PER_PULL;
+/**
+ * One live round in five, so a pull is a flat 1-in-5 of ending the round.  It
+ * is the only number the odds come from: the draw below is
+ * `Math.floor(Math.random() * CHAMBERS) === 0` and there is nothing else.
+ */
+const CHAMBERS = 5;
+/** What a clean pull adds to the pot. */
+const PAY_PER_PULL = 5;
+/**
+ * How long the cylinder spins between the hammer falling and the buttons
+ * coming back.  It is after EVERY pull — the respin is part of the loop, not
+ * something that happens to be true of the first one.
+ */
+const RESPIN_MS = 700;
 
 const CYL_X = GAME_W / 2;
 /**
@@ -43,7 +56,13 @@ const CYL_Y = 80;
 const CYL_R = 32;
 
 let survived = 0;
-/** Tokens on the machine.  Nothing is credited until the player walks. */
+/**
+ * Tokens on the machine.  NOTHING is credited until the player cashes out —
+ * `finish` is the only thing in this file that can move a token, it is latched
+ * behind `over`, and it pays the pot exactly once.  That is what makes the
+ * live round able to take it all back, and what makes cashing out twice or
+ * collecting a pull and a cash-out for the same five impossible.
+ */
 let pot = 0;
 let over = false;
 let busy = false;
@@ -63,17 +82,17 @@ export const roulette: MinigameModule = {
   id: 'roulette',
   title: 'CHAMBER',
   music: 'game_roulette',
-  rules: 'three a pull, five pulls, one live round',
-  payoutNote: 'PAYS 3 A PULL',
+  rules: '20 in, five a pull, one live round in five',
+  payoutNote: `PAYS ${PAY_PER_PULL} A PULL`,
   tutorial: {
     objective: [
-      'EVERY CLEAN PULL PAYS 3. FIVE PULLS MAX.',
-      'ONE ROUND IN SIX IS LIVE.',
-      'WALK AND KEEP IT - OR LOSE THE LOT.',
+      `EVERY CLEAN PULL PAYS ${PAY_PER_PULL}.`,
+      `ONE ROUND IN ${CHAMBERS} IS LIVE, EVERY PULL.`,
+      'CASH OUT AND KEEP IT - OR LOSE THE LOT.',
     ],
     controls: [
-      ['SPACE', 'PULL'],
-      ['MOUSE', 'PULL OR WALK AWAY'],
+      ['SPACE', 'PULL THE TRIGGER'],
+      ['MOUSE', 'PULL OR CASH OUT'],
     ],
   },
   touch: { buttons: [{ label: 'PULL', key: 'SPACE', primary: true }] },
@@ -91,7 +110,7 @@ export const roulette: MinigameModule = {
     scene.add.rectangle(0, 18, GAME_W, 162, 0x1a1012).setOrigin(0, 0);
     scene.add.rectangle(0, 18, GAME_W, 2, 0x40202a).setOrigin(0, 0);
 
-    // The machine's face: a cylinder, six chambers, and a lever.
+    // The machine's face: a cylinder, five chambers, and a lever.
     scene.add.ellipse(CYL_X, CYL_Y + 12, CYL_R * 3.2, CYL_R * 2.4, 0x3a2028).setAlpha(0.5);
     scene.add.circle(CYL_X, CYL_Y, CYL_R + 8, 0x6b4a52);
     scene.add.circle(CYL_X, CYL_Y, CYL_R + 6, 0x2b1a1e);
@@ -113,8 +132,8 @@ export const roulette: MinigameModule = {
     // The deal, on the face of the machine, before a token moves.
     text(scene, 10, 30, `1 LIVE ROUND IN ${CHAMBERS}`, PALETTE.ash);
     text(scene, 10, 40, `${PAY_PER_PULL} A CLEAN PULL`, PALETTE.gold);
-    text(scene, GAME_W - 10, 30, `${MAX_PULLS} PULLS MAX`, PALETTE.ash).setOrigin(1, 0);
-    text(scene, GAME_W - 10, 40, `UP TO ${MAX_POT}`, PALETTE.gold).setOrigin(1, 0);
+    text(scene, GAME_W - 10, 30, 'PULL AS OFTEN AS YOU DARE', PALETTE.ash).setOrigin(1, 0);
+    text(scene, GAME_W - 10, 40, 'CASH OUT ANY TIME', PALETTE.gold).setOrigin(1, 0);
     // The warning, in plain words and clear of the machine.  "THE LIVE ONE
     // TAKES THE LOT" was a card-room turn of phrase for the one rule a player
     // has to understand before they touch the lever, and it sat across the
@@ -123,20 +142,31 @@ export const roulette: MinigameModule = {
     centerText(scene, GAME_W / 2, 128, 'IF YOU GET SHOT, YOU LOSE ALL YOUR TOKENS', PALETTE.blood);
 
     tally = centerText(scene, GAME_W / 2, 142, '', PALETTE.gold);
-    status = centerText(scene, GAME_W / 2, 153, 'THE CYLINDER SPINS EVERY PULL', PALETTE.ash);
+    status = centerText(scene, GAME_W / 2, 153, 'THE CYLINDER RESPINS AFTER EVERY PULL', PALETTE.ash);
 
-    pullBtn = button(scene, GAME_W / 2 - 46, 168, 'PULL', () => pull(), { width: 60, height: 12 });
-    cashBtn = button(scene, GAME_W / 2 + 46, 168, 'WALK AWAY', () => cashOut(), { width: 72, height: 12 });
+    pullBtn = button(scene, GAME_W / 2 - 48, 168, 'PULL', () => pull(), { width: 68, height: 12 });
+    cashBtn = button(scene, GAME_W / 2 + 48, 168, 'CASH OUT', () => cashOut(), { width: 68, height: 12 });
     scene.input.keyboard?.on('keydown-SPACE', () => pull());
 
     refresh();
 
     if (import.meta.env?.DEV) {
       (window as unknown as Record<string, unknown>).__chamber = {
-        state: () => ({ survived, pot, over, busy, maxPulls: MAX_PULLS, payPerPull: PAY_PER_PULL }),
+        state: () => ({ survived, pot, over, busy, chambers: CHAMBERS, payPerPull: PAY_PER_PULL }),
         /** Pull without the cylinder deciding, for testing both endings. */
         rig: (outcome: 'clean' | 'live') => {
           rigged = outcome;
+        },
+        /**
+         * Sample the DRAW itself.  A pull takes a second and a half of spinning
+         * before it says anything, so the odds cannot be checked by pulling —
+         * and what is under test is the decision, which is this line.  It is
+         * the same expression `pull` uses and there is no second one.
+         */
+        sample: (n: number) => {
+          let live = 0;
+          for (let i = 0; i < n; i++) if (Math.floor(Math.random() * CHAMBERS) === 0) live++;
+          return live;
         },
         pull: () => pull(),
         walk: () => cashOut(),
@@ -170,28 +200,43 @@ export const roulette: MinigameModule = {
 };
 
 function refresh(): void {
-  tally?.setText(`${survived} / ${MAX_PULLS} CLEAN   -   ${pot} ON THE MACHINE`);
-  // You may walk at any point, including before you have pulled at all.
+  tally?.setText(`${survived} CLEAN   -   ${pot} ON THE MACHINE`);
+  // Both buttons, after every clean pull, for as long as the player wants
+  // them: cash out with what is on the machine, or put it back on the lever.
   cashBtn?.setVisible(!over);
-  pullBtn?.setVisible(!over && survived < MAX_PULLS);
+  pullBtn?.setVisible(!over);
+  // The lever says what pressing it actually costs you now.  Before the first
+  // pull there is nothing on the machine to lose, so it is just a pull.
+  const lbl = pullBtn?.getAt(1) as Phaser.GameObjects.BitmapText | undefined;
+  lbl?.setText(pot > 0 ? 'CONTINUE' : 'PULL');
 }
 
+/**
+ * One trigger pull.
+ *
+ * `busy` is the whole of the re-entrancy guard: it goes up the moment the
+ * lever moves and does not come down until the cylinder has respun, so the
+ * lever, the space bar and the cash-out button are all dead for the length of
+ * a pull.  Nothing here credits anything — a clean pull only raises `pot`, and
+ * the pot is paid once, by `finish`, when the player cashes out.
+ */
 function pull(): void {
   if (over || busy || !sceneRef) return;
-  // Five and no more.  The button goes with the fifth, and this is the latch
-  // behind it so nothing else can ask for a sixth.
-  if (survived >= MAX_PULLS) return;
   busy = true;
+  refresh();
   status?.setText('...');
   audio.sfx('lock_click');
 
   sceneRef.time.delayedCall(900, () => {
-    busy = false;
-    // Independent every time: the cylinder is spun between pulls.
+    // ONE IN FIVE, drawn here and nowhere else.  The spinning above is the
+    // machine being watchable; this line is the machine being fair.
     const live = rigged ? rigged === 'live' : Math.floor(Math.random() * CHAMBERS) === 0;
     rigged = null;
     if (live) {
+      busy = false;
       status?.setText(pot > 0 ? `THE LIVE ONE. THE ${pot} GOES WITH IT.` : 'THE LIVE ONE');
+      // Everything on the machine goes with it, and it goes BEFORE `finish`
+      // reads the pot — so there is nothing left for the shell to be handed.
       pot = 0;
       refresh();
       chamberDots[0]?.setFillStyle(PALETTE.blood);
@@ -204,22 +249,30 @@ function pull(): void {
     pot += PAY_PER_PULL;
     audio.sfx('ui_blip');
     refresh();
-    if (survived >= MAX_PULLS) {
-      status?.setText(`FIVE CLEAN. THE MACHINE PAYS ${pot}.`);
-      finish(true);
-      return;
-    }
-    status?.setText(`CLICK.  ${pot} ON THE MACHINE.  AGAIN?`);
+    // AND THEN IT RESPINS.  Every pull, clean or not — this is the clean half,
+    // and the live half ended the round instead.  The buttons stay dead until
+    // the cylinder has come round, so "cash out or continue" is a choice made
+    // against a chamber nobody knows anything about.
+    status?.setText(`CLICK.  +${PAY_PER_PULL}.  RESPINNING...`);
+    sceneRef?.time.delayedCall(RESPIN_MS, () => {
+      if (over) return;
+      busy = false;
+      refresh();
+      status?.setText(`${pot} ON THE MACHINE.  CASH OUT OR CONTINUE?`);
+    });
   });
 }
 
 /**
- * Walking away with the pot.  The entry fee is spent either way — what is
- * being decided here is whether the tokens on the machine come with you.
+ * Cashing out with the pot.  The twenty is spent either way — what is being
+ * decided here is whether the tokens on the machine come with you.
+ *
+ * It cannot be taken twice: `finish` latches `over`, and `over` is the first
+ * thing this checks.
  */
 function cashOut(): void {
   if (over || busy) return;
-  status?.setText(pot > 0 ? `YOU WALK WITH ${pot}` : 'YOU WALK AWAY');
+  status?.setText(pot > 0 ? `YOU CASH OUT WITH ${pot}` : 'YOU WALK AWAY WITH NOTHING');
   finish(pot > 0);
 }
 
@@ -227,6 +280,9 @@ function cashOut(): void {
  * `won` here means "there is a pot to pay".  The shell credits exactly what is
  * on the machine — nothing was credited pull by pull, which is what makes the
  * live round able to take it all back.
+ *
+ * `paid` is read once, here, and closed over, so nothing that happens in the
+ * second and a half before the shell is called can change what it is handed.
  */
 function finish(won: boolean): void {
   if (over) return;
