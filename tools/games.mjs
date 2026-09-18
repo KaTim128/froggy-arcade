@@ -42,7 +42,9 @@ const GAMES = [
   { id: 'slots', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.press('Space'); await sleep(2700); } } },
   // Bet up from the table minimum first — blackjack deals nothing until you do.
   { id: 'blackjack', drive: async (p) => { await sleep(500); await p.keyboard.press('ArrowUp'); await p.keyboard.press('ArrowRight'); await sleep(400); await p.keyboard.press('Space'); await sleep(900); await p.keyboard.press('KeyH'); await sleep(900); await p.keyboard.press('Space'); await sleep(3000); } },
-  { id: 'roulette', drive: async (p) => { for (let i = 0; i < 5; i++) { await p.keyboard.press('Space'); await sleep(1300); } } },
+  // Rigged clean, or one pull in five ends the round and the screenshot is of
+  // the room the player was sent back to rather than of the machine.
+  { id: 'roulette', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.evaluate(() => window.__chamber?.rig('clean')); await p.keyboard.press('Space'); await sleep(1800); } } },
   { id: 'battleship', drive: async (p) => { const g = (x, y) => [640 + (x - 160) * 4, 360 + (y - 90) * 4]; for (const [c, r] of [[0, 0], [2, 2], [4, 4], [6, 1]]) { await p.mouse.click(...g(186 + c * 12 + 6, 44 + r * 12 + 6)); await sleep(900); } } },
   { id: 'frogcross', drive: async (p) => { for (let i = 0; i < 4; i++) { await p.keyboard.press('KeyW'); await sleep(350); } await p.keyboard.press('KeyA'); await sleep(600); } },
   { id: 'carchase', drive: async (p) => { await p.keyboard.down('KeyA'); await sleep(500); await p.keyboard.up('KeyA'); await p.keyboard.press('Space'); await sleep(1200); await p.keyboard.down('KeyD'); await sleep(500); await p.keyboard.up('KeyD'); } },
@@ -51,7 +53,7 @@ const GAMES = [
   // One spin of the wheel, and a scripted dancer who actually plays the chart.
   { id: 'wheel', drive: async (p) => { await p.keyboard.press('Space'); await sleep(4400); } },
   { id: 'danceoff', drive: async (p) => { for (let i = 0; i < 14; i++) { await p.keyboard.press(['KeyA', 'KeyS', 'KeyW', 'KeyD'][i % 4]); await sleep(190); } } },
-  { id: 'bowling', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(200); await p.keyboard.up('KeyD'); await p.keyboard.down('Space'); await sleep(600); await p.keyboard.up('Space'); await sleep(2600); } },
+  { id: 'bowling', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(200); await p.keyboard.up('KeyD'); await p.keyboard.down('KeyE'); await sleep(400); await p.keyboard.up('KeyE'); await p.keyboard.down('Space'); await sleep(600); await p.keyboard.up('Space'); await sleep(2600); } },
 ];
 
 /** Is the how-to-play card still up? */
@@ -716,6 +718,14 @@ for (const g of [
   await sleep(1500);
   await startGame(page);
   await bridge(page, '__chase');
+  // NOTHING ON THE ROAD MAY END THE RUN while the rules that are not about
+  // crashing are under test.  Every check below this line — the tank, the
+  // heat, the juke, the jars, the strips being laid — parks the car and reads
+  // the state some seconds later, and a traffic car that arrived in the
+  // meantime took the scene down with it, deleted `window.__chase` and threw
+  // the rest of the block at the wall.  The shield comes off for the one test
+  // that is about crashing, at the bottom.
+  await page.evaluate(() => window.__chase.shield(true));
 
   const st = () => page.evaluate(() => window.__chase.state());
 
@@ -894,6 +904,8 @@ for (const g of [
   // nothing else on the road can reach the car, so the strip is what got it.
   await page.evaluate(() => {
     window.__chase.clearRoad();
+    // Off it comes: this is the one check that wants the run to end.
+    window.__chase.shield(false);
     // The nitro test above swept the road and put the bag back to nothing;
     // the strips only come out past six hundred.
     window.__chase.setCash(700);
@@ -943,9 +955,9 @@ for (const g of [
   await page.close();
 }
 
-// CHAMBER pays by the pull and holds the pot on the machine: five tokens in,
-// three a clean pull, five pulls at most, and the live round takes whatever is
-// sitting there.  Both endings are rigged here because one in six is not a
+// CHAMBER pays by the pull and holds the pot on the machine: twenty tokens in,
+// five a clean pull, no cap on the pulls, and the live round takes whatever is
+// sitting there.  Both endings are rigged here because one in five is not a
 // thing a test can wait for.
 {
   const page = await browser.newPage();
@@ -962,7 +974,9 @@ for (const g of [
         window.__chamber.rig('clean');
         window.__chamber.pull();
       });
-      await sleep(1100);
+      // The hammer falls after 900ms and the cylinder respins for another 700
+      // before the buttons come back, so a pull is 1.6 seconds end to end.
+      await sleep(1900);
     }
     if (ending === 'live') {
       await page.evaluate(() => {
@@ -971,7 +985,12 @@ for (const g of [
       });
       await sleep(1200);
     } else if (ending === 'walk') {
-      await page.evaluate(() => window.__chamber.walk());
+      // Twice, on purpose.  `finish` latches on `over`, so a player who mashes
+      // CASH OUT is paid the pot once and not once per press.
+      await page.evaluate(() => {
+        window.__chamber.walk();
+        window.__chamber.walk();
+      });
     }
     const state = await page.evaluate(() => window.__chamber.state());
     await sleep(4200);
@@ -980,18 +999,20 @@ for (const g of [
   };
 
   const walked = await run(2, 'walk');
-  const ok1 = walked.state.survived === 2 && walked.banked === 6;
-  console.log(`${ok1 ? 'PASS' : 'FAIL'}  chamber: two clean pulls and you walk with six  — ${walked.state.survived} clean, banked ${walked.banked}`);
+  const ok1 = walked.state.survived === 2 && walked.banked === 10;
+  console.log(`${ok1 ? 'PASS' : 'FAIL'}  chamber: two clean pulls, cash out once, ten tokens  — ${walked.state.survived} clean, banked ${walked.banked}`);
   if (!ok1) failures++;
 
   const shot = await run(3, 'live');
   const ok2 = shot.state.pot === 0 && shot.banked === 0;
-  console.log(`${ok2 ? 'PASS' : 'FAIL'}  chamber: the live round takes the lot  — nine on the machine, banked ${shot.banked}`);
+  console.log(`${ok2 ? 'PASS' : 'FAIL'}  chamber: the live round takes the lot  — fifteen on the machine, banked ${shot.banked}`);
   if (!ok2) failures++;
 
-  const full = await run(5, 'none');
-  const ok3 = full.state.survived === 5 && full.banked === 15;
-  console.log(`${ok3 ? 'PASS' : 'FAIL'}  chamber: five clean is the most it pays  — ${full.state.survived} pulls, banked ${full.banked}`);
+  // There is no cap any more: the lever comes back after every clean pull, so
+  // a seventh is a thing you can do and it is worth five like all the others.
+  const long = await run(7, 'walk');
+  const ok3 = long.state.survived === 7 && long.banked === 35;
+  console.log(`${ok3 ? 'PASS' : 'FAIL'}  chamber: pulls keep coming, five a time  — ${long.state.survived} pulls, banked ${long.banked}`);
   if (!ok3) failures++;
   await page.close();
 }
@@ -1174,13 +1195,245 @@ for (const g of [
 
   const N = 200000;
   const seen = await page.evaluate((n) => window.__slots.sample(n), N);
+  // Read the odds off the machine rather than restating them here: the point
+  // of the test is that the DRAW matches the constants, not that two copies of
+  // the same number agree.
+  const want = await page.evaluate(async () => {
+    const m = await import('/src/minigames/slots.ts');
+    return { five: m.P_FIVE, three: m.P_THREE };
+  });
   const five = seen.five / N;
   const three = seen.three / N;
-  const near = (got, want) => Math.abs(got - want) < 0.008;
-  const ok = near(five, 0.05) && near(three, 0.25);
+  const near = (got, target) => Math.abs(got - target) < 0.008;
+  const ok = near(five, want.five) && near(three, want.three);
   console.log(
-    `${ok ? 'PASS' : 'FAIL'}  slots: five in a row one spin in twenty, three in a row one in four  — ` +
+    `${ok ? 'PASS' : 'FAIL'}  slots: five in a row ${(want.five * 100).toFixed(0)}% of spins, three in a row ${(want.three * 100).toFixed(0)}%  — ` +
       `five ${(five * 100).toFixed(2)}%, three ${(three * 100).toFixed(2)}%, nothing ${((seen.none / N) * 100).toFixed(2)}%`,
+  );
+  if (!ok) failures++;
+  await page.close();
+}
+
+// THE TRAFFIC ANNOUNCES ITSELF, AND THE ANNOUNCEMENT IS COUNTED.  A car may
+// not move a pixel sideways until its indicator has blinked three whole times,
+// and the whole point of the rule is that it is three and not "about three" —
+// so catch a car in the act, count the blinks off its own clock, and check it
+// was still dead in its lane for every one of them.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=carchase`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await bridge(page, '__chase');
+  // Nothing may end the run while we watch the road, and the car must not be
+  // able to drive into the one we are watching either.
+  await page.evaluate(() => window.__chase.shield(true));
+
+  // ONE PASS, BOTH FACTS.  Watch the road for twenty-four seconds and file an
+  // episode per SIGNAL — not per car, because a car changes lanes several
+  // times in that window and one entry per car compares its second change
+  // against where its first one started.  Each episode records how many blinks
+  // had been counted when it was released, whether it moved before that, and
+  // how long the crossing itself took.
+  const seen = await page.evaluate(async () => {
+    const live = new Map();
+    const done = [];
+    const stop = Date.now() + 24000;
+    while (Date.now() < stop) {
+      const t = Date.now();
+      const cars = window.__chase.trafficState();
+      const here = new Set(cars.map((c) => c.id));
+      for (const c of cars) {
+        let e = live.get(c.id);
+        if (c.signal !== 0 && !c.changing) {
+          // Indicating, wheels straight.  A fresh episode, or the same one.
+          if (!e || e.atBlinks >= 0) {
+            e = { blinks: 0, movedEarly: false, atBlinks: -1, t0: 0, ms: 0, x0: c.x };
+            live.set(c.id, e);
+          }
+          e.blinks = Math.max(e.blinks, c.blinks);
+          if (Math.abs(c.x - e.x0) > 0.51) e.movedEarly = true;
+        } else if (c.changing && e) {
+          // The third blink finishing IS the release, so the first frame that
+          // reports `changing` is the frame the count reaches three.
+          if (e.atBlinks < 0) {
+            e.atBlinks = c.blinks;
+            e.t0 = t;
+          }
+          e.ms = t - e.t0;
+        } else if (e && e.atBlinks >= 0) {
+          // Back in a lane with the lamp off: that episode is finished.
+          done.push(e);
+          live.delete(c.id);
+        }
+      }
+      // A car that scrolled off mid-change is dropped rather than filed.
+      for (const id of [...live.keys()]) if (!here.has(id)) live.delete(id);
+      await new Promise((r) => setTimeout(r, 30));
+    }
+    return done;
+  });
+
+  const counted = seen.length > 0 && seen.every((e) => e.atBlinks === 3 && !e.movedEarly);
+  console.log(
+    `${counted ? 'PASS' : 'FAIL'}  car chase: a car blinks three times before it moves, and not before  — ` +
+      `${seen.length} lane changes, blinks at release ${seen.map((e) => e.atBlinks).join(',') || 'none seen'}` +
+      `${seen.some((e) => e.movedEarly) ? ', SOME MOVED EARLY' : ''}`,
+  );
+  if (!counted) failures++;
+
+  // And the change itself is slow enough to answer: a lane is 54px wide and
+  // crossing one is supposed to take better than a second and a half.  The
+  // middle of what was seen, so one clipped sample cannot decide it.
+  const times = seen.map((e) => e.ms).sort((a, b) => a - b);
+  const middle = times.length ? times[Math.floor(times.length / 2)] : 0;
+  const unhurried = middle >= 1200;
+  console.log(
+    `${unhurried ? 'PASS' : 'FAIL'}  car chase: the lane change is slow enough to read  — ` +
+      `${middle}ms across the middle one of ${times.length}`,
+  );
+  if (!unhurried) failures++;
+  await page.close();
+}
+
+// THE GUTTER IS A ONE-WAY DOOR.  The old lane clamped the ball's x and zeroed
+// its sideways speed every frame, and then the curve put the speed straight
+// back — so a hooking ball climbed out of the channel and back onto the boards.
+// Throw one into the left gutter with a hard RIGHT hook on it, which is the
+// exact shot that used to come back, and check it does not.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=bowling`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await bridge(page, '__bowl');
+
+  const watched = await page.evaluate(async () => {
+    // Hard left off the left-hand boards, with a full right-hand hook dialled
+    // in: everything about this ball wants to come back onto the lane.
+    window.__bowl.throw(-0.4, 1, 130, 0.55);
+    let escaped = false;
+    let entered = false;
+    const xs = [];
+    for (let i = 0; i < 160; i++) {
+      const st = window.__bowl.state();
+      if (!st.rolling && entered) break;
+      if (st.gutter !== 0) entered = true;
+      if (entered) {
+        xs.push(Math.round(st.ball.x));
+        // 118 is the left edge of the boards; anything at or past it is the
+        // ball back in play, which is the bug.
+        if (st.ball.x > 117) escaped = true;
+      }
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    return { entered, escaped, xs: [...new Set(xs)], state: window.__bowl.state() };
+  });
+  await sleep(1600);
+  const after = await page.evaluate(() => window.__bowl.state());
+  const dead = watched.entered && !watched.escaped && after.scores.player === 0 && after.standing === 10;
+  console.log(
+    `${dead ? 'PASS' : 'FAIL'}  bowling: a gutter ball stays in the gutter and scores nothing  — ` +
+      `channel x ${watched.xs.join('/') || 'never entered'}, ${after.standing} pins standing, ${after.scores.player} scored`,
+  );
+  if (!dead) failures++;
+  await page.close();
+}
+
+// THE TWO SHOTS HAVE TO BE DIFFERENT SHOTS.  The same line thrown straight and
+// thrown hooked must arrive in different places, and the hook must go the way
+// it was dialled — otherwise "straight or curved" is a label on one shot.
+//
+// A fresh machine per throw, because a second ball is a different frame: the
+// pins have been swept, the round may have turned over to Froggy, and the lane
+// under the ball is not the lane the first one rolled down.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+
+  // Where the ball is by the time it reaches the head pin.  Nothing is racked
+  // below y=66, so the whole roll up to there is the ball and the lane alone.
+  // 175 is off the right-hand end of round one's first patch, so the shot
+  // starts on dry boards and the hook has something to bite on.
+  const land = async (bend) => {
+    await page.goto(`${URL}/?intro=1&tokens=50&game=bowling`, { waitUntil: 'networkidle2' });
+    await sleep(1400);
+    await startGame(page);
+    await bridge(page, '__bowl');
+    return page.evaluate(async (b) => {
+      window.__bowl.throw(0, 0.8, 175, b);
+      let last = 175;
+      for (let i = 0; i < 400; i++) {
+        const st = window.__bowl.state();
+        if (st.ball.y > 74) last = st.ball.x;
+        if (!st.rolling) break;
+        await new Promise((r) => setTimeout(r, 8));
+      }
+      return last;
+    }, bend);
+  };
+
+  const straight = await land(0);
+  const right = await land(0.8);
+  const left = await land(-0.8);
+  const bends = right > straight + 3 && left < straight - 3;
+  console.log(
+    `${bends ? 'PASS' : 'FAIL'}  bowling: the hook dial is what bends the ball  — ` +
+      `left ${left.toFixed(1)}, straight ${straight.toFixed(1)}, right ${right.toFixed(1)} at the head pin`,
+  );
+  if (!bends) failures++;
+
+  // And the oil is real: a ball thrown dead straight down the middle of a
+  // patch does not arrive where it was pointed, and it misses to the side the
+  // chevrons on that patch point.
+  await page.goto(`${URL}/?intro=1&tokens=50&game=bowling`, { waitUntil: 'networkidle2' });
+  await sleep(1400);
+  await startGame(page);
+  await bridge(page, '__bowl');
+  const oiled = await page.evaluate(async () => {
+    const patch = window.__bowl.state().oil[0];
+    if (!patch) return null;
+    const x0 = patch.x + patch.w / 2;
+    window.__bowl.throw(0, 0.8, x0, 0);
+    let last = x0;
+    for (let i = 0; i < 400; i++) {
+      const st = window.__bowl.state();
+      if (st.ball.y > 74) last = st.ball.x;
+      if (!st.rolling) break;
+      await new Promise((r) => setTimeout(r, 8));
+    }
+    return { x0, last, push: patch.push };
+  });
+  const shoved = oiled && Math.abs(oiled.last - oiled.x0) > 3 && Math.sign(oiled.last - oiled.x0) === oiled.push;
+  console.log(
+    `${shoved ? 'PASS' : 'FAIL'}  bowling: the oil shoves a straight ball the way its chevrons point  — ` +
+      (oiled
+        ? `${oiled.x0.toFixed(1)} -> ${oiled.last.toFixed(1)}, patch pushes ${oiled.push > 0 ? 'right' : 'left'}`
+        : 'no oil on the lane'),
+  );
+  if (!shoved) failures++;
+  await page.close();
+}
+
+// ONE IN FIVE, AND IT HAS TO BE THE DRAW THAT SAYS SO.  The cylinder spinning
+// on screen is decoration; what decides is one `Math.random()` per pull, so
+// sample the decision itself rather than sitting through ten thousand pulls.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=40&game=roulette`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await bridge(page, '__chamber');
+
+  const N = 200000;
+  const live = await page.evaluate((n) => window.__chamber.sample(n), N);
+  const rate = live / N;
+  const ok = Math.abs(rate - 0.2) < 0.005;
+  console.log(
+    `${ok ? 'PASS' : 'FAIL'}  chamber: a pull is a flat one in five  — ${(rate * 100).toFixed(2)}% live over ${N} draws`,
   );
   if (!ok) failures++;
   await page.close();
@@ -1582,9 +1835,25 @@ for (const g of [
   if (!held) failures++;
 
   // And when it ends they come back ONE at a time, not four at once.
-  await sleep(7000);
-  const back = await st();
-  const gentle = !back.gone && back.respite === 0 && back.police <= 2;
+  //
+  // Watched for rather than timed.  A chaser that finds the back of a traffic
+  // car on its own buys ANOTHER ten seconds of quiet, which is the game
+  // working exactly as it is supposed to — and with the road as busy as it is
+  // now, a fixed sleep lands inside a second respite often enough to fail a
+  // rule that was never broken.  So wait for a moment when the quiet is
+  // genuinely over and somebody is genuinely back, and count them then.
+  let back = await st();
+  let resumed = null;
+  for (let i = 0; i < 60 && !back.gone; i++) {
+    if (back.respite === 0 && back.police >= 1) {
+      resumed = back;
+      break;
+    }
+    await sleep(500);
+    back = await st();
+  }
+  back = resumed ?? back;
+  const gentle = !!resumed && resumed.police <= 2;
   console.log(
       `${gentle ? 'PASS' : 'FAIL'}  car chase: they come back one at a time  — ` +
         (back.gone ? 'the run ended first' : `${back.police} on the road, cap ${back.policeCap}`),
@@ -1595,8 +1864,8 @@ for (const g of [
 
 // THE TRAFFIC INDICATES BEFORE IT MOVES, AND PARKING IS NOT A PLAN.
 //
-// Two halves of the same change.  A car is twelve wide in a thirty-two wide
-// lane, so standing ON a lane line — the middle of the road most obviously —
+// Two halves of the same change.  A car is twelve wide in a lane several times
+// that, so standing ON a lane line — the middle of the road most obviously —
 // used to be a corridor nothing could ever drive through: no steering, no
 // timing, no risk.  The cars change lanes now, which closes that; the price of
 // closing it is that a car must never move sideways without having indicated
@@ -1637,7 +1906,12 @@ for (const g of [
       };
       watch();
     }, x);
-    await sleep(38000);
+    // Long enough to be sure.  A car has to be crossing the line the player is
+    // parked on AND be level with them at the same moment, and with the warning
+    // and the crossing between them a lane change is now better than three
+    // seconds end to end — so a window that catches a handful of changes is not
+    // the same thing as a window that catches a handful of SWEEPS.
+    await sleep(58000);
     const out = await page.evaluate(() => {
       const w = window.__parked;
       return { hits: w.hits, silent: w.silent, changes: w.changes };
@@ -1646,8 +1920,22 @@ for (const g of [
     return out;
   };
 
-  // 160 is the middle of the road, 128 the line between lanes 0 and 1.
-  for (const [where, x] of [['the middle of the road', 160], ['a lane line', 128]]) {
+  // ASKED OF THE ROAD, not typed here.  The lines are halfway between two lane
+  // centres, and the road has been re-cut before — a hard-coded 128 quietly
+  // stopped being a lane line and became the middle of a lane, which is a
+  // check that passes for the wrong reason.
+  const lines = await (async () => {
+    const page = await browser.newPage();
+    await page.goto(`${URL}/?intro=1&tokens=40&game=carchase`, { waitUntil: 'networkidle2' });
+    await sleep(1600);
+    await startGame(page);
+    await bridge(page, '__chase');
+    const xs = await page.evaluate(() => [0, 1, 2, 3].map((i) => window.__chase.laneX(i)));
+    await page.close();
+    return { middle: (xs[1] + xs[2]) / 2, line: (xs[0] + xs[1]) / 2 };
+  })();
+
+  for (const [where, x] of [['the middle of the road', lines.middle], ['a lane line', lines.line]]) {
     const r = await park(x);
     const caught = r.hits > 0;
     console.log(

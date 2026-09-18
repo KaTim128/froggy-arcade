@@ -1,11 +1,13 @@
 /**
- * FROGGY SLOTS.  Two tokens a spin, and it keeps taking them.
+ * FROGGY SLOTS.  Three tokens a spin, and it keeps taking them.
  *
- * Five reels.  Three Froggys in a row pays six; all five pays fifteen.  The
- * paytable is on the machine, the odds are not: three in a row lands a quarter
- * of the time, five in a row one spin in twenty, and the other seven in ten
- * are a near miss.  The outcome is decided when the button is pressed and the
- * reels are then made to show it — which is exactly how a real one works.
+ * Five reels.  Three Froggys in a row pays ten; all five pays thirty.  The
+ * paytable is on the machine, the odds are not: three in a row lands one spin
+ * in five, five in a row three in a hundred, and the rest are a near miss.
+ * The outcome is decided when the button is pressed and the reels are then
+ * made to show it — which is exactly how a real one works.  The odds live in
+ * the DRAW, not in the animation: `draw()` below rolls once against `P_FIVE`
+ * and `P_THREE` and the reels are dressed to whatever it said.
  *
  * Unlike the wheel next to it, this machine does NOT print its odds.  That is
  * the difference between the two of them: the wheel is honest furniture and
@@ -24,17 +26,17 @@ import { button, centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
-export const SPIN_COST = 2;
-export const PAY_THREE = 6;
-export const PAY_FIVE = 15;
+export const SPIN_COST = 3;
+export const PAY_THREE = 10;
+export const PAY_FIVE = 30;
 /**
  * The odds.  On the machine they are a secret; in the code they are a fact,
  * and they are the fact the harness checks.  Every spin is drawn against
  * these and nothing else — no pity timer, no streak memory, no adjusting for
  * how the session has gone.
  */
-const P_FIVE = 0.05;
-const P_THREE = 0.25;
+export const P_FIVE = 0.03;
+export const P_THREE = 0.2;
 
 const REELS = 5;
 const REEL_X = [52, 106, 160, 214, 268];
@@ -77,11 +79,12 @@ export const slots: MinigameModule = {
   id: 'slots',
   title: 'FROGGY SLOTS',
   music: 'game_slots',
-  rules: 'two tokens a spin',
+  rules: `${SPIN_COST} tokens a spin`,
   tutorial: {
     objective: [
-      'TWO TOKENS A SPIN.',
-      'THREE FROGGYS IN A ROW PAYS.',
+      `${SPIN_COST} TOKENS A SPIN.`,
+      `THREE FROGGYS IN A ROW PAYS ${PAY_THREE}.`,
+      `ALL FIVE PAYS ${PAY_FIVE}.`,
     ],
     controls: [
       ['SPACE', 'SPIN'],
@@ -89,7 +92,7 @@ export const slots: MinigameModule = {
     ],
   },
   touch: { buttons: [{ label: 'SPIN', key: 'SPACE', primary: true }] },
-  payoutNote: 'PAYS 6 / 15',
+  payoutNote: `PAYS ${PAY_THREE} / ${PAY_FIVE}`,
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     sceneRef = scene;
@@ -105,7 +108,7 @@ export const slots: MinigameModule = {
     scene.add.rectangle(20, 40, 280, 96, 0x53215c).setOrigin(0, 0).setStrokeStyle(1, 0xff4fa3);
     scene.add.rectangle(26, 58, 268, 54, 0x1a0a1e).setOrigin(0, 0);
     // the paytable, on the machine where a player reads it before paying
-    text(scene, 30, 45, '3 FROGGYS IN A ROW = 6 TOKENS', PALETTE.gold);
+    text(scene, 30, 45, `3 FROGGYS IN A ROW = ${PAY_THREE} TOKENS`, PALETTE.gold);
     text(scene, GAME_W - 30, 45, `5 = ${PAY_FIVE}`, PALETTE.gold).setOrigin(1, 0);
 
     REEL_X.forEach((x, i) => {
@@ -214,7 +217,7 @@ function draw(): number[] {
 function spin(): void {
   if (over || busy || !sceneRef || !apiRef) return;
   // The first spin is the entry cost PLAY took on the way in (api.staked());
-  // every one after it is two more tokens, or nothing.
+  // every one after it is another SPIN_COST tokens, or nothing.
   if (!firstSpin) {
     if (apiRef.balance() < SPIN_COST || !apiRef.raise(SPIN_COST)) {
       status?.setText(`NEED ${SPIN_COST} TOKENS`);
