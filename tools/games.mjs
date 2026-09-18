@@ -1864,8 +1864,8 @@ for (const g of [
 
 // THE TRAFFIC INDICATES BEFORE IT MOVES, AND PARKING IS NOT A PLAN.
 //
-// Two halves of the same change.  A car is twelve wide in a thirty-two wide
-// lane, so standing ON a lane line — the middle of the road most obviously —
+// Two halves of the same change.  A car is twelve wide in a lane several times
+// that, so standing ON a lane line — the middle of the road most obviously —
 // used to be a corridor nothing could ever drive through: no steering, no
 // timing, no risk.  The cars change lanes now, which closes that; the price of
 // closing it is that a car must never move sideways without having indicated
@@ -1906,7 +1906,12 @@ for (const g of [
       };
       watch();
     }, x);
-    await sleep(38000);
+    // Long enough to be sure.  A car has to be crossing the line the player is
+    // parked on AND be level with them at the same moment, and with the warning
+    // and the crossing between them a lane change is now better than three
+    // seconds end to end — so a window that catches a handful of changes is not
+    // the same thing as a window that catches a handful of SWEEPS.
+    await sleep(58000);
     const out = await page.evaluate(() => {
       const w = window.__parked;
       return { hits: w.hits, silent: w.silent, changes: w.changes };
@@ -1915,8 +1920,22 @@ for (const g of [
     return out;
   };
 
-  // 160 is the middle of the road, 128 the line between lanes 0 and 1.
-  for (const [where, x] of [['the middle of the road', 160], ['a lane line', 128]]) {
+  // ASKED OF THE ROAD, not typed here.  The lines are halfway between two lane
+  // centres, and the road has been re-cut before — a hard-coded 128 quietly
+  // stopped being a lane line and became the middle of a lane, which is a
+  // check that passes for the wrong reason.
+  const lines = await (async () => {
+    const page = await browser.newPage();
+    await page.goto(`${URL}/?intro=1&tokens=40&game=carchase`, { waitUntil: 'networkidle2' });
+    await sleep(1600);
+    await startGame(page);
+    await bridge(page, '__chase');
+    const xs = await page.evaluate(() => [0, 1, 2, 3].map((i) => window.__chase.laneX(i)));
+    await page.close();
+    return { middle: (xs[1] + xs[2]) / 2, line: (xs[0] + xs[1]) / 2 };
+  })();
+
+  for (const [where, x] of [['the middle of the road', lines.middle], ['a lane line', lines.line]]) {
     const r = await park(x);
     const caught = r.hits > 0;
     console.log(
