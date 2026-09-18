@@ -132,7 +132,7 @@ export const roulette: MinigameModule = {
     // The deal, on the face of the machine, before a token moves.
     text(scene, 10, 30, `1 LIVE ROUND IN ${CHAMBERS}`, PALETTE.ash);
     text(scene, 10, 40, `${PAY_PER_PULL} A CLEAN PULL`, PALETTE.gold);
-    text(scene, GAME_W - 10, 30, 'PULL AS OFTEN AS YOU DARE', PALETTE.ash).setOrigin(1, 0);
+    text(scene, GAME_W - 10, 30, 'AS OFTEN AS YOU DARE', PALETTE.ash).setOrigin(1, 0);
     text(scene, GAME_W - 10, 40, 'CASH OUT ANY TIME', PALETTE.gold).setOrigin(1, 0);
     // The warning, in plain words and clear of the machine.  "THE LIVE ONE
     // TAKES THE LOT" was a card-room turn of phrase for the one rule a player

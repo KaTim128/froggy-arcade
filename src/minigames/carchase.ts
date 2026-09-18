@@ -200,26 +200,16 @@ const TRAP_GAP_MS = 9000;
 /**
  * How much faster the police are than you, and how hard they steer at you.
  *
- * Twenty is still a gap that closes — you cannot simply out-drive them — but
- * it leaves a burst of nitro enough room to actually lose one, which is what
- * the burst is for.  They also gain on you more slowly with the clock.
- */
-/**
- * Fifteen, down from twenty.  They still close — you cannot out-drive them on
- * the throttle alone, which is the whole point of the nitro and of the traffic
- * — but the gap shuts at a speed a player can read and answer, instead of one
- * that turns every mistake into an arrest.
- */
-/**
- * Eleven, down from fifteen.  The gap still shuts — they are still faster than
- * you and nitro is still the way out — but it shuts slowly enough to be a
- * problem you solve rather than one you notice happening.
+ * Eleven, down from twenty by way of fifteen.  It is still a gap that closes —
+ * you cannot out-drive them on the throttle alone, which is the whole point of
+ * the nitro and of the traffic — but it shuts at a speed a player can read and
+ * answer, instead of one that turns every mistake into an arrest.
  */
 const POLICE_GAIN = 11;
 const POLICE_STEER = 48;
 /**
  * How much they gain with the clock, as a divisor of elapsed ms.  Bigger is
- * gentler; this went from 3500 to 4500 with the same reasoning as above.
+ * gentler; this went 3500 to 4500 to 6000 with the same reasoning as above.
  */
 const POLICE_CLOCK = 6000;
 /**
@@ -246,11 +236,12 @@ const HEAT_ROAD = 16;
  * drive through.
  *
  * And a car that swerves without warning is just a different unfairness, so
- * every change is announced: the indicator comes on, it blinks for
- * `LANE_WARN_MS` with the car still in its lane, and only then does it start
- * to move — easing across over `LANE_CHANGE_MS` rather than snapping.  That is
- * about a second of notice before the car is anywhere near your line, against
- * a quarter of a second to cross a lane at `STEER`.  Plenty, IF you are
+ * every change is announced and the announcement is counted: the indicator
+ * comes on, it blinks three whole times with the car still in its lane, and
+ * only then does it start to move — easing across over `LANE_CHANGE_MS` rather
+ * than snapping.  That is about one and a half seconds of notice before the
+ * car is anywhere near your line and another one and a half while it crosses,
+ * against under half a second to cross a lane at `STEER`.  Plenty, IF you are
  * watching the road.
  */
 /**
