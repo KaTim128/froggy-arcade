@@ -283,6 +283,8 @@ export function buildGlassDoors(w: number, h: number): THREE.Group {
   );
   shackle.position.set(0, 0.87, -0.21);
   shackle.rotation.z = 0.18;
+  // Named so the room can find it and swing it open when the key turns.
+  shackle.name = 'padlockShackle';
   g.add(shackle);
 
   return g;
@@ -326,16 +328,92 @@ export function buildDroppedKey(): THREE.Group {
   add(brass(0xe8c96e), 0.075, 0.03, 0.035, 0.03, 0.016, 0.1);
   add(brass(0xe8c96e), 0.055, 0.03, 0.03, 0.02, 0.016, 0.155);
 
-  // ---- and the glint.  A flat, brighter plane just above the carpet under
-  // it: at this size the key itself is a few pixels, and what actually catches
-  // the eye across a dark floor is the light it is sitting in.
-  const glint = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.62, 0.52),
-    new THREE.MeshBasicMaterial({ color: 0xffe7a8, transparent: true, opacity: 0.16, depthWrite: false }),
-  );
-  glint.rotation.x = -Math.PI / 2;
-  glint.position.y = 0.004;
-  g.add(glint);
+  // NO GLINT UNDER IT.  There was a pale plane on the carpet beneath the key,
+  // meant to catch the eye across a dark floor -- and what it actually read as
+  // was a selection box drawn round an object, which is a thing this game does
+  // not otherwise do to anything.  The key is self-lit brass; that is enough.
+  return g;
+}
+
+/**
+ * THE PLAYER'S OWN HAND, for the two moments the ending needs one.
+ *
+ * Everything in the hide rooms happens to a camera: the player is a point of
+ * view with a torch, and nothing of them is ever on screen.  That is right for
+ * the hunt -- a body in the corner of the frame is a character, and this is
+ * meant to be you -- and wrong for the two beats at the end where the whole
+ * point is a physical act.  Watching a key rise off the carpet by itself, or a
+ * lock open with nothing touching it, reads as the game doing it for you.
+ *
+ * So there is a hand, and it exists for about six seconds: it comes into frame
+ * to pick the key up off the floor, and it holds the key in the lock while it
+ * turns.  It is parented to the camera, so it is drawn in view space and the
+ * room's own lighting never has to reach it.
+ *
+ * Built palm-down, fingers forward along -Z, wrist at the origin.
+ */
+export function buildHand(): THREE.Group {
+  const g = new THREE.Group();
+  // SELF-SHADED, NOT LIT.  The torch is a 110-candela spot mounted on the
+  // camera, and the hand is half a metre from it: under a Lambert material it
+  // came out as a white slab with no shape in it at all.  These are fixed
+  // tones -- a lit top, a mid, and a shadowed underside -- so the hand carries
+  // its own form and no lamp in the room can flatten it.
+  const skin = new THREE.MeshBasicMaterial({ color: 0xb4947a });
+  const skinLit = new THREE.MeshBasicMaterial({ color: 0xd2b291 });
+  const skinDark = new THREE.MeshBasicMaterial({ color: 0x7d6350 });
+
+  const add = (mat: THREE.Material, sx: number, sy: number, sz: number, px: number, py: number, pz: number) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(px, py, pz);
+    g.add(m);
+    return m;
+  };
+
+  // THE WRIST, AND NO MORE THAN THAT.  There was a forearm and a dark sleeve
+  // cuff behind the hand, and because they sit NEARER the camera than the hand
+  // does they loomed over it -- a black slab across the middle of the frame
+  // with a small hand poking out of the side.  What is wanted is the hand and
+  // just enough wrist to say it is attached to somebody; the arm leaves the
+  // shot immediately, which is what an arm does at this range.
+  add(skin, 0.062, 0.058, 0.1, 0, -0.004, 0.06);
+  add(skinDark, 0.05, 0.006, 0.09, 0, -0.03, 0.06);
+  // the back of the hand, with a lit plane on top and a dark one under, so it
+  // has a top and a bottom from any angle
+  add(skin, 0.09, 0.042, 0.11, 0, 0, -0.06);
+  add(skinLit, 0.08, 0.008, 0.1, 0, 0.022, -0.06);
+  add(skinDark, 0.08, 0.008, 0.1, 0, -0.022, -0.06);
+  // knuckles, which is what tells you it is a hand and not a glove
+  for (let i = 0; i < 4; i++) {
+    add(skinLit, 0.016, 0.012, 0.016, -0.031 + i * 0.021, 0.02, -0.105);
+  }
+
+  // FOUR FINGERS, on their own group so they can close on something.  They
+  // curl about the knuckle line rather than bending in the middle: at this
+  // size a curl is the only part of a grip anybody reads.
+  const fingers = new THREE.Group();
+  fingers.position.set(0, -0.01, -0.11);
+  fingers.name = 'fingers';
+  for (let i = 0; i < 4; i++) {
+    const len = 0.078 - Math.abs(i - 1.5) * 0.012;
+    const f = new THREE.Mesh(new THREE.BoxGeometry(0.019, 0.021, len), i % 2 ? skin : skinLit);
+    f.position.set(-0.031 + i * 0.021, 0, -len / 2 - 0.004);
+    fingers.add(f);
+    // a dark line down each gap, so four fingers are four fingers
+    const gap = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.023, len), skinDark);
+    gap.position.set(-0.041 + i * 0.021, 0, -len / 2 - 0.004);
+    fingers.add(gap);
+  }
+  g.add(fingers);
+
+  // and the thumb, which closes from the side
+  const thumb = new THREE.Group();
+  thumb.position.set(0.045, -0.005, -0.05);
+  thumb.name = 'thumb';
+  const t = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.022, 0.024), skin);
+  t.position.set(-0.025, 0, -0.02);
+  thumb.add(t);
+  g.add(thumb);
 
   return g;
 }

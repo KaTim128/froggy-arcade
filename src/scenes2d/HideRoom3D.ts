@@ -35,7 +35,7 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { ROOMS, type Box, type CounterRun, type RoomDef, type SpotKind } from '../three/hideRooms';
 import { buildGrid, findPath, lineOpen, spotExtent, type NavGrid } from '../three/navGrid';
 import { dressRoom, surfaceTexture } from '../three/hideDecor';
-import { buildCabinet, buildDroppedKey, buildGlassDoors, buildPrizeCase } from '../three/arcadeProps';
+import { buildCabinet, buildDroppedKey, buildGlassDoors, buildHand, buildPrizeCase } from '../three/arcadeProps';
 import { buildSecretRoom, SECRET_ORIGIN, type SecretRoom } from '../three/secretRoom';
 
 /** A walk is slow and silent; a run is fast and heard.  That is the trade. */
@@ -270,7 +270,37 @@ const KEY_LOOK = -0.3;
  * ONCE IT IS BACK IN HIS HAND.  The lock takes this long, and it is the last
  * thing that happens in the building.
  */
-const CHASE_S = 9.0;
+const CHASE_S = 13.0;
+/**
+ * THE GRAB.  How long the hand takes to come into frame, close on the key and
+ * lift it off the carpet.
+ *
+ * It sits between the player pressing E and the rest of the ending starting,
+ * and nothing else moves during it: the key does not leave the floor until a
+ * hand has visibly closed on it, because a key that rises off the carpet by
+ * itself is the game picking it up rather than the player.
+ */
+const GRAB_S = 1.3;
+/** Where in the grab the fingers shut on it. */
+const GRAB_CLOSE = 0.55;
+/**
+ * WHERE THE HAND SITS, in view space, for each of the three things it does.
+ *
+ * These are on the line of sight to what they are reaching for rather than at
+ * its distance: a hand 0.55m from the eye at the same ANGLE as the padlock
+ * 1.5m away covers it exactly, and is close enough to read as the player's own
+ * rather than as somebody standing in the room.
+ */
+const HAND_OFF = { x: 0.26, y: -0.46, z: -0.6 };
+const HAND_KEY = { x: 0.15, y: -0.17, z: -0.58 };
+const HAND_LOCK = { x: 0.035, y: -0.028, z: -0.6 };
+/**
+ * And which way it is turned.  A hand square to the camera is a plate; a
+ * three-quarter view down the back of it, tilted in from the right, is a hand.
+ */
+const HAND_YAW = -0.55;
+/** How much of the chase the key spends going into the lock and turning. */
+const INSERT_UNTIL = 0.3;
 /**
  * WHERE THE WALK BECOMES A RUN.
  *
@@ -669,6 +699,18 @@ export class HideRoom3D extends Phaser.Scene {
   /** Seconds into the drop, and then into what follows it. */
   private dropT = 0;
   private chaseT = 0;
+  /**
+   * THE HAND, and how far through picking the key up it is.
+   *
+   * `grabT` counts the grab; while it is running the sequence is paused on
+   * purpose — the footsteps have not started, nothing is approaching, and the
+   * only thing happening is a hand closing on a key.
+   */
+  private handProp: THREE.Object3D | null = null;
+  private grabbing = false;
+  private grabT = 0;
+  /** The padlock's shackle, so it can come open when the key turns. */
+  private shackle: THREE.Object3D | null = null;
   /** True once the walk behind you has become a run.  Once only. */
   private charging = false;
   /** Whether the counter has been crossed at all, for the harness. */
@@ -766,6 +808,10 @@ export class HideRoom3D extends Phaser.Scene {
     this.keyTaken = false;
     this.keyProp = null;
     this.keyFall = null;
+    this.handProp = null;
+    this.shackle = null;
+    this.grabbing = false;
+    this.grabT = 0;
     this.dropT = 0;
     this.chaseT = 0;
     this.charging = false;
@@ -939,6 +985,7 @@ export class HideRoom3D extends Phaser.Scene {
       const doors = buildGlassDoors(gd.w, gd.h);
       doors.position.set(d.door.x, 0, doorZ);
       st.scene.add(doors);
+      this.shackle = doors.getObjectByName('padlockShackle') ?? null;
       // AND THEY ARE SOLID.  The room's own clamp stops the player 0.6m short
       // of the wall plane, which is INSIDE a door that stands off it — so the
       // doors get a collider of their own and the player is held half a metre
@@ -1726,6 +1773,13 @@ export class HideRoom3D extends Phaser.Scene {
       this.runDrop(dt);
       return;
     }
+    // PICKING IT UP.  The hand is on its way to the key and nothing else is
+    // happening: no clock, no footsteps, nothing approaching.
+    if (this.grabbing) {
+      this.trembleSeed += dt * 2.2;
+      this.runGrab(dt);
+      return;
+    }
     // WAITING.  The key is on the carpet, nothing is coming, and no clock is
     // running.  This is the one part of the ending the player is in charge of,
     // and it lasts exactly as long as it takes them to look down.
@@ -1842,7 +1896,10 @@ export class HideRoom3D extends Phaser.Scene {
    */
   /** Standing over the key he dropped, and looking down at it. */
   private atKey(): boolean {
-    if (!this.keyOnFloor || this.keyTaken) return false;
+    // Not once the hand is already on its way to it: the offer has been taken,
+    // and a prompt still reading [E] PICK IT UP over a hand picking it up is
+    // the game asking for something it is in the middle of doing.
+    if (!this.keyOnFloor || this.keyTaken || this.grabbing) return false;
     if (Math.hypot(this.pos.x - this.keyAt.x, this.pos.y - this.keyAt.y) > KEY_REACH) return false;
     // AND LOOKING AT IT.  It is at their feet, so the distance is never the
     // test that fails -- what the beat is actually asking for is that the
@@ -1860,20 +1917,120 @@ export class HideRoom3D extends Phaser.Scene {
    * something they are not allowed to look at.
    */
   private takeKey(): void {
-    if (!this.atKey()) return;
-    this.keyTaken = true;
-    this.chaseT = 0;
-    this.charging = false;
-    this.stepIn = STEP_SLOW;
+    if (!this.atKey() || this.grabbing) return;
+    // THE HAND COMES IN FIRST.  Nothing else starts until it has closed on the
+    // key: `keyTaken` is what begins the footsteps and the lock, and it is not
+    // set here.  See runGrab.
+    this.grabbing = true;
+    this.grabT = 0;
     this.prompt = '';
-    if (this.keyProp) {
-      this.stage?.scene.remove(this.keyProp);
-      this.keyProp = null;
+    const st = this.stage;
+    if (st && !this.handProp) {
+      const hand = buildHand();
+      hand.position.set(HAND_OFF.x, HAND_OFF.y, HAND_OFF.z);
+      hand.rotation.set(-0.55, HAND_YAW, 0.2);
+      st.camera.add(hand);
+      this.handProp = hand;
     }
-    audio.sfx('key_turn', 0.5);
-    // Square up on the doors and stay there.  holdOnDoor pins it from here.
-    this.yaw = this.doorFacing();
-    this.pitch = 0;
+    audio.sfx('footstep_carpet', 0.5);
+  }
+
+  /**
+   * REACHING DOWN AND PICKING IT UP.
+   *
+   * The hand comes up into frame from below, out along the line of sight to
+   * the key on the carpet, and closes on it; the key leaves the floor only on
+   * that close, and it leaves by being handed to the hand rather than by being
+   * deleted.  The player is crouched over it for the whole thing, which is the
+   * pose `escapePose` is already holding.
+   */
+  private runGrab(dt: number): void {
+    this.grabT = Math.min(GRAB_S, this.grabT + dt);
+    const k = this.grabT / GRAB_S;
+    // ---- THE POSE TAKES THE VIEW BACK.  `escapePose`'s pitch is a bias on top
+    // of the player's own, and the player has just been looking as far down as
+    // the sequence allows to find the key -- so the two stack into a camera
+    // pointed at their own shoes, with the key and the hand off the top of the
+    // frame.  Easing their contribution out hands the framing to the pose,
+    // which is aimed at the key.
+    this.pitch = Phaser.Math.Linear(this.pitch, 0, Math.min(1, dt * 5));
+    const hand = this.handProp;
+    const st = this.stage;
+    if (!hand || !st) return;
+
+    // ---- out to the key, then back up with it
+    const reach = Phaser.Math.Easing.Sine.Out(Phaser.Math.Clamp(k / GRAB_CLOSE, 0, 1));
+    const lift = Phaser.Math.Easing.Sine.InOut(Phaser.Math.Clamp((k - GRAB_CLOSE) / (1 - GRAB_CLOSE), 0, 1));
+    hand.position.set(
+      Phaser.Math.Linear(HAND_OFF.x, HAND_KEY.x, reach),
+      Phaser.Math.Linear(HAND_OFF.y, HAND_KEY.y, reach) + lift * 0.1,
+      Phaser.Math.Linear(HAND_OFF.z, HAND_KEY.z, reach),
+    );
+    hand.rotation.set(-0.55 + reach * 0.45, HAND_YAW, 0.2 - reach * 0.12);
+
+    // ---- the fingers.  Open on the way down, shut on the key.
+    const curl = Phaser.Math.Clamp((k - GRAB_CLOSE * 0.8) / 0.25, 0, 1);
+    const fingers = hand.getObjectByName('fingers');
+    const thumb = hand.getObjectByName('thumb');
+    if (fingers) fingers.rotation.x = curl * 1.15;
+    if (thumb) thumb.rotation.y = -curl * 0.8;
+
+    // ---- AND THE KEY CHANGES HANDS, on the close, from the floor to the fist.
+    if (k >= GRAB_CLOSE && this.keyProp && this.keyProp.parent !== hand) {
+      st.scene.remove(this.keyProp);
+      hand.add(this.keyProp);
+      this.keyProp.position.set(0, -0.02, -0.16);
+      this.keyProp.rotation.set(0, 0, 0.2);
+      audio.sfx('lock_click', 0.35);
+    }
+
+    if (this.grabT >= GRAB_S) {
+      this.grabbing = false;
+      this.keyTaken = true;
+      this.chaseT = 0;
+      this.charging = false;
+      this.stepIn = STEP_SLOW;
+      // Square up on the doors and stay there.  holdOnDoor pins it from here.
+      this.yaw = this.doorFacing();
+      this.pitch = 0;
+    }
+  }
+
+  /**
+   * PUTTING IT IN THE LOCK, AND TURNING IT.
+   *
+   * The hand carries the key up the line of sight until it is over the
+   * padlock, pushes it in, and then turns -- and the shackle comes open on the
+   * last of it.  Every click the player hears has the hand moving on it, so
+   * the sound is a consequence of the picture rather than a substitute for it.
+   */
+  private runInsert(k: number): void {
+    const hand = this.handProp;
+    if (!hand) return;
+    // ---- up to the lock over the first third of the insert, then it stays.
+    const up = Phaser.Math.Easing.Sine.InOut(Phaser.Math.Clamp(k / (INSERT_UNTIL * 0.45), 0, 1));
+    hand.position.set(
+      Phaser.Math.Linear(HAND_KEY.x, HAND_LOCK.x, up),
+      Phaser.Math.Linear(HAND_KEY.y + 0.1, HAND_LOCK.y, up),
+      Phaser.Math.Linear(HAND_KEY.z, HAND_LOCK.z, up),
+    );
+    hand.rotation.set(-0.1 + (1 - up) * 0.25, HAND_YAW + up * 0.2, 0.08);
+
+    // ---- pushing it home, and then working it round.  The turn is not one
+    // sweep: it goes, stops against a ward, and goes again -- which is the
+    // same shape the tumblers are already making in the audio.
+    const worked = Phaser.Math.Clamp((k - INSERT_UNTIL * 0.45) / (INSERT_UNTIL * 0.55), 0, 1);
+    const key = this.keyProp;
+    if (key) {
+      key.position.set(0, -0.02, -0.16 - worked * 0.05);
+      const turn = worked * Math.PI * 0.55;
+      const catchOn = Math.sin(worked * Math.PI * 3) * 0.12 * (1 - worked);
+      key.rotation.set(0, 0, 0.2 + turn + catchOn);
+    }
+    hand.rotation.z = 0.08 + worked * 0.5;
+
+    // ---- and the lock gives.  It opens once, on the far side of the turn.
+    if (this.shackle && worked > 0.92) this.shackle.rotation.z = 0.18 - 1.15;
   }
 
   /**
@@ -1895,6 +2052,9 @@ export class HideRoom3D extends Phaser.Scene {
     this.trembleSeed += dt * (2.4 + k * 6.5);
     const at = (mark: number): boolean => before < mark && k >= mark;
 
+    // ---- THE KEY GOING IN, AND TURNING.  The hand is doing it on screen for
+    // the whole of the first third; see runInsert.
+    if (k < INSERT_UNTIL) this.runInsert(k);
     // ---- the lock, being fought with properly this time
     if (at(0.06)) audio.sfx('key_turn', 0.75);
     if (k > 0.1) {
@@ -1973,16 +2133,20 @@ export class HideRoom3D extends Phaser.Scene {
 
     // ---- it is on the carpet and nobody has picked it up.  He is stood
     // looking down at it, and the player decides how long that goes on for.
-    if (!this.keyTaken) return { eye: EYE, pitch: -0.5 };
+    if (!this.keyTaken && !this.grabbing) return { eye: EYE, pitch: -0.5 };
+    // ---- GOING DOWN FOR IT.  He drops into a crouch over the key as the hand
+    // reaches, and the pose holds there until the grab is done.
+    if (this.grabbing) {
+      const t = Phaser.Math.Easing.Sine.InOut(Phaser.Math.Clamp(this.grabT / (GRAB_S * 0.5), 0, 1));
+      return { eye: Phaser.Math.Linear(EYE, CROUCH_EYE, t), pitch: Phaser.Math.Linear(-0.5, -0.6, t) };
+    }
 
     // ---- down after it, up with it, and back to the lock
+    // ---- UP, WITH IT.  He straightens out of the crouch while the hand
+    // carries the key to the lock, so the two movements are one movement.
     const k = this.chaseT / CHASE_S;
-    if (k < 0.16) {
-      const t = ease(k / 0.16);
-      return { eye: Phaser.Math.Linear(EYE, CROUCH_EYE, t), pitch: -0.78 };
-    }
-    if (k < 0.3) {
-      const t = ease((k - 0.16) / 0.14);
+    if (k < INSERT_UNTIL * 0.6) {
+      const t = ease(k / (INSERT_UNTIL * 0.6));
       return { eye: Phaser.Math.Linear(CROUCH_EYE, EYE, t), pitch: -0.78 + t * 0.44 };
     }
     return { eye: EYE + 0.04, pitch: WORK };
@@ -3380,6 +3544,11 @@ export class HideRoom3D extends Phaser.Scene {
       doorFacing: this.doorFacing(),
       keyOnFloor: this.keyOnFloor,
       keyTaken: this.keyTaken,
+      grabbing: this.grabbing,
+      grabT: this.grabT,
+      grabSeconds: GRAB_S,
+      handUp: !!this.handProp,
+      keyInHand: !!this.keyProp && this.keyProp.parent === this.handProp,
       keyX: this.keyAt.x,
       keyZ: this.keyAt.y,
       atKey: this.atKey(),
@@ -3475,6 +3644,7 @@ export class HideRoom3D extends Phaser.Scene {
     this.tumbler = 0;
     this.escaping = false;
     this.escapeMark = null;
+    this.grabbing = false;
     this.monster?.setVisible(false);
     audio.setScene(SILENCE);
     // The last of the five: the bolt coming back, and then the door.

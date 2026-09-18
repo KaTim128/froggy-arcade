@@ -741,11 +741,28 @@ try {
     check('looking down at it offers the pick-up', lookingDown.atKey && lookingDown.prompt === '[E] PICK IT UP',
       lookingDown.prompt || 'no prompt');
     await page.screenshot({ path: `${SHOTS}/arcade-key-down.png` });
+    // ---- E STARTS A GRAB, NOT A TELEPORT.  A hand comes into frame, closes on
+    // the key and lifts it, and only then does anything else begin -- so this
+    // watches the hand arrive and the key change owner before it asserts on
+    // what follows.
     await page.keyboard.press('e');
-    await sleep(500);
+    await sleep(400);
+    const reaching = await hide();
+    check('E sends a hand down for it rather than deleting it',
+      reaching.grabbing && reaching.handUp && !reaching.keyTaken,
+      `grabT ${reaching.grabT.toFixed(2)}, hand ${reaching.handUp ? 'in frame' : 'absent'}`);
+    check('and nothing else has started while it reaches',
+      reaching.chaseT === 0, `chaseT ${reaching.chaseT.toFixed(2)}`);
+
+    let grabbed = 0;
+    while (grabbed < 4000 && !(await hide()).keyTaken) {
+      await sleep(150);
+      grabbed += 150;
+    }
     const taken = await hide();
-    check('E picks it up and starts what comes after', taken.keyTaken && taken.chaseT > 0,
-      `chaseT ${taken.chaseT.toFixed(2)}`);
+    check('the key ends up in the hand', taken.keyInHand, taken.keyInHand ? 'held' : 'not held');
+    check('and picking it up starts what comes after', taken.keyTaken && taken.chaseT >= 0,
+      `after ${(grabbed / 1000).toFixed(1)}s, chaseT ${taken.chaseT.toFixed(2)}`);
 
     // ---- AND FROM HERE THE VIEW IS NOT THE PLAYER'S AT ALL.  Not clamped to
     // a few degrees: pinned, so there is no looking for what is coming.
