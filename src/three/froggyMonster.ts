@@ -148,6 +148,30 @@ export class FroggyMonster {
     /** A primitive that has stopped being one.  See froggySkin.roughen. */
     const lumpy = (g: THREE.BufferGeometry, amp: number, freq: number, seed: number) =>
       roughen(g, amp, freq, seed);
+    /**
+     * TAPER, which is the difference between a limb and a pill.
+     *
+     * A capsule is the same thickness the whole way down, and at this size
+     * that is what makes a leg read as a tube rather than as a thing with
+     * muscle at the top and bone at the bottom.  This squeezes a geometry
+     * about its own y: `top` at the highest point, `bottom` at the lowest,
+     * everything in between interpolated.
+     */
+    const taper = (g: THREE.BufferGeometry, top: number, bottom: number): THREE.BufferGeometry => {
+      g.computeBoundingBox();
+      const bb = g.boundingBox!;
+      const span = Math.max(1e-5, bb.max.y - bb.min.y);
+      const pos = g.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < pos.count; i++) {
+        const t = (pos.getY(i) - bb.min.y) / span;
+        const k = bottom + (top - bottom) * t;
+        pos.setX(i, pos.getX(i) * k);
+        pos.setZ(i, pos.getZ(i) * k);
+      }
+      pos.needsUpdate = true;
+      g.computeVertexNormals();
+      return g;
+    };
 
     // ---- legs.  Long — longer than a person's for his height — hinged at
     // the hip, with a knee halfway down that bends on every stride.
@@ -155,7 +179,12 @@ export class FroggyMonster {
       const leg = new THREE.Group();
       leg.position.set(side * 0.28, 1.42, 0);
 
-      const thigh = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.15, 0.62, 7, 14), 0.034, 5.5, 3), skin);
+      // Heavy at the hip and drawn in above the knee: the weight is up where
+      // it drives from, which is what a leg that can cover ground looks like.
+      const thigh = new THREE.Mesh(
+        lumpy(taper(new THREE.CapsuleGeometry(0.15, 0.62, 9, 16), 1.16, 0.78), 0.034, 5.5, 3),
+        skin,
+      );
       thigh.position.set(0, -0.34, -0.04);
       leg.add(thigh);
 
@@ -163,7 +192,12 @@ export class FroggyMonster {
       knee.position.set(0, -0.66, 0);
       leg.add(knee);
 
-      const shin = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.1, 0.6, 7, 14), 0.026, 6.5, 7), skinDark);
+      // And the shin the other way about: thick under the knee, drawn down to
+      // almost nothing at the ankle, so the joint is the narrowest part of him.
+      const shin = new THREE.Mesh(
+        lumpy(taper(new THREE.CapsuleGeometry(0.1, 0.6, 9, 16), 1.22, 0.62), 0.026, 6.5, 7),
+        skinDark,
+      );
       // A ball at the knee, so the thigh and the shin are one leg rather than
       // two pills end to end.  Same at the hip, the shoulder and the elbow:
       // every place two primitives met used to have a visible join in it.
@@ -180,17 +214,61 @@ export class FroggyMonster {
       const heel = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.1, 10, 8), 0.012, 9, 59), skinDark);
       ankle.add(heel);
 
-      // A frog's foot: splayed flat, far too big for the leg.  Its sole is
-      // at the floor when the leg hangs straight.
-      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.08, 0.54), skinDark);
-      foot.position.set(0, -0.04, 0.16);
-      ankle.add(foot);
-      for (let t = -1; t <= 1; t++) {
-        const toe = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.16, 3, 6), skinDark);
+      // ---- THE FOOT.  A frog's: splayed flat, far too big for the leg, and
+      // webbed.
+      //
+      // It was a box with three pills on the front, which at his scale is the
+      // one part of him the player gets a close look at -- he walks past the
+      // gap under a bed, and what goes past is the feet.  A slab is a slab
+      // from any distance.
+      //
+      // The sole is a squashed, roughened sphere rather than a cuboid, so it
+      // has a heel that narrows and a pad that spreads; four toes fan out of
+      // it at their own angles, each one tapered to a point; and a low sheet
+      // of webbing spans them, which is what makes the whole thing read as a
+      // foot rather than as fingers.  Everything hangs off `ankle`, so the
+      // stride levels it against the floor exactly as it did before.
+      const sole = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.2, 14, 10), 0.02, 7, 23), skinDark);
+      sole.scale.set(0.92, 0.3, 1.5);
+      sole.position.set(0, -0.05, 0.16);
+      ankle.add(sole);
+      // the pad under the ball of it, where the weight goes
+      const pad = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.12, 10, 8), 0.014, 9, 41), skinDark);
+      pad.scale.set(1.5, 0.34, 1.0);
+      pad.position.set(0, -0.075, 0.28);
+      ankle.add(pad);
+
+      // Four toes, fanned.  The outer two are longer and swing wider, which is
+      // what stops the fan reading as a comb.
+      const TOES: Array<[number, number, number]> = [
+        // splay (radians), length, thickness
+        [-0.42, 0.30, 0.036],
+        [-0.15, 0.36, 0.040],
+        [0.15, 0.35, 0.039],
+        [0.44, 0.27, 0.033],
+      ];
+      for (const [splay, len, r] of TOES) {
+        const toe = new THREE.Mesh(
+          lumpy(taper(new THREE.CapsuleGeometry(r, len, 5, 9), 0.45, 1.25), 0.012, 11, 61 + splay * 20),
+          skinDark,
+        );
+        // Built up the y axis, laid down the z and turned out from the ankle.
         toe.rotation.x = Math.PI / 2;
-        toe.position.set(t * 0.1, -0.04, 0.46);
+        toe.position.set(Math.sin(splay) * 0.2, -0.062, 0.3 + Math.cos(splay) * len * 0.5);
+        toe.rotation.z = -splay;
         ankle.add(toe);
+        // a knuckle where it leaves the foot, so the toes are jointed on
+        const knuckle = new THREE.Mesh(lumpy(new THREE.SphereGeometry(r * 1.25, 8, 6), 0.008, 12, 71), skinDark);
+        knuckle.position.set(Math.sin(splay) * 0.11, -0.062, 0.29);
+        ankle.add(knuckle);
       }
+
+      // ---- the webbing.  Low, wide and thin, sitting between the toes and
+      // stopping short of their tips.
+      const web = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.2, 12, 8), 0.012, 9, 87), skinDark);
+      web.scale.set(1.25, 0.09, 1.0);
+      web.position.set(0, -0.066, 0.38);
+      ankle.add(web);
 
       this.hips.add(leg);
       this.legs.push(leg);

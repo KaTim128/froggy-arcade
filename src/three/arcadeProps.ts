@@ -287,3 +287,55 @@ export function buildGlassDoors(w: number, h: number): THREE.Group {
 
   return g;
 }
+
+/**
+ * THE KEY, ON THE CARPET.
+ *
+ * It has to be findable in a dark room by somebody who has just watched it
+ * fall and is not allowed to walk about looking for it — so it is built the
+ * one way a small object can be legible at knee height in the dark: in
+ * self-lit brass, with a bow wide enough to read as a key at a glance and a
+ * bit on the end of it that says which way round it is lying.
+ *
+ * Laid flat, along +Z, with the bow at the back and the tip forward.
+ */
+export function buildDroppedKey(): THREE.Group {
+  const g = new THREE.Group();
+  const brass = (c: number) => new THREE.MeshBasicMaterial({ color: c });
+
+  const add = (mat: THREE.Material, sx: number, sy: number, sz: number, px: number, py: number, pz: number) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(px, py, pz);
+    g.add(m);
+    return m;
+  };
+
+  // the shaft
+  add(brass(0xd9b45a), 0.035, 0.035, 0.26, 0, 0.018, 0);
+  // the bow: a ring at the back, built as four sides so it has a hole in it
+  const bow = 0.115;
+  for (const [dx, dz, w, d] of [
+    [0, -bow, bow * 2, 0.03],
+    [0, -bow * 2 + 0.03, bow * 2, 0.03],
+    [-bow + 0.015, -bow * 1.5 + 0.015, 0.03, bow],
+    [bow - 0.015, -bow * 1.5 + 0.015, 0.03, bow],
+  ] as const) {
+    add(brass(0xc9a445), w, 0.03, d, dx, 0.016, dz - 0.05);
+  }
+  // the bit, two teeth on the end
+  add(brass(0xe8c96e), 0.075, 0.03, 0.035, 0.03, 0.016, 0.1);
+  add(brass(0xe8c96e), 0.055, 0.03, 0.03, 0.02, 0.016, 0.155);
+
+  // ---- and the glint.  A flat, brighter plane just above the carpet under
+  // it: at this size the key itself is a few pixels, and what actually catches
+  // the eye across a dark floor is the light it is sitting in.
+  const glint = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.62, 0.52),
+    new THREE.MeshBasicMaterial({ color: 0xffe7a8, transparent: true, opacity: 0.16, depthWrite: false }),
+  );
+  glint.rotation.x = -Math.PI / 2;
+  glint.position.y = 0.004;
+  g.add(glint);
+
+  return g;
+}
