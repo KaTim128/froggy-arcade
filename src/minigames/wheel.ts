@@ -30,13 +30,14 @@
  * paid the moment the wheel stops, and LEAVE settles up.  Nothing leaves
  * except through the ledger (MG-3).
  *
- * THE PRICE IS THE LEVER, AND IT HAS BEEN PULLED.  These faces average about
- * 34.13 tokens a spin.  At twenty the wheel handed back fourteen more than it
- * took, every spin, forever — the one fixture in the building with a positive
- * edge to the customer, and a patient player could farm the prize shelf off it
- * rather than off the cabinets.  At forty it keeps about six a spin instead,
- * so the shelf has to be earned on the floor again.  `SPIN_COST` is the whole
- * of that decision; the faces themselves were not touched to make it.
+ * THE PRICE IS THE LEVER.  These faces average about 33.43 tokens a spin, and
+ * `SPIN_COST` is twenty-five — so the wheel still hands back about eight more
+ * than it takes, every spin, forever.  It remains the one fixture in the
+ * building with a positive edge to the customer, and a patient player can farm
+ * the prize shelf off it rather than off the cabinets.  If the shelf has to
+ * mean something again, the price is the whole of that decision: at thirty-four
+ * the wheel is level and at forty the house keeps about six.  The faces are cut
+ * to the odds and are not the place to do it.
  */
 
 import Phaser from 'phaser';
@@ -57,20 +58,26 @@ export const SPIN_COST = 25;
  *
  * They are interleaved rather than sorted, so the big money is spread around
  * the rim instead of sitting in one quarter you can aim at.
+ *
+ * THE BIGGER BAND IS THE NARROWER ONE.  80-100 takes ten percent of the rim
+ * across three faces and 40-70 takes twelve across four, so the band that pays
+ * more is the band that comes up less.  It was the other way round -- four
+ * percent a face against two and a half -- which made the better prize the
+ * likelier one and read as a mistake on the board beside it, because it was.
  */
 export const FACES: Array<{ pays: number; share: number }> = [
   { pays: 1, share: 62.39 / 7 },
-  { pays: 40, share: 2.5 },
-  { pays: 80, share: 4 },
+  { pays: 40, share: 3 },
+  { pays: 80, share: 10 / 3 },
   { pays: 2, share: 62.39 / 7 },
-  { pays: 50, share: 2.5 },
-  { pays: 90, share: 4 },
+  { pays: 50, share: 3 },
+  { pays: 90, share: 10 / 3 },
   { pays: 3, share: 62.39 / 7 },
-  { pays: 60, share: 2.5 },
-  { pays: 100, share: 4 },
+  { pays: 60, share: 3 },
+  { pays: 100, share: 10 / 3 },
   { pays: 5000, share: 0.01 },
   { pays: 5, share: 62.39 / 7 },
-  { pays: 70, share: 2.5 },
+  { pays: 70, share: 3 },
   { pays: 0, share: 5 },
   { pays: 7, share: 62.39 / 7 },
   { pays: 200, share: 5 },

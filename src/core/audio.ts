@@ -806,6 +806,27 @@ class AudioManager {
         beep(2400, 0.03, 0.09, 'square');
         beep(1600, 0.04, 0.07, 'square', 0.04);
         break;
+      // A KEY GOING INTO A LOCK AND TURNING.
+      //
+      // `lock_click` is one tumbler dropping -- a tick, and the right sound
+      // for a bolt that has already decided to move.  It is the wrong sound
+      // for the ten seconds at the arcade's front doors, which is somebody
+      // fighting a barrel with a key that was cut for a different door: the
+      // scrape of brass going in, the grind of it being turned against the
+      // wards, and a tumbler or two giving under it.  Three layers, because
+      // that is what the ear is listening for.
+      case 'key_turn':
+        // the key finding the slot: short, bright, metallic
+        noise(0.07, 0.09, 5200);
+        noise(0.05, 0.05, 3000, 0.05);
+        // the barrel turning under it: a low grind that rises as it goes
+        for (let i = 0; i < 7; i++) {
+          beep(240 + i * 46 + Math.random() * 30, 0.07, 0.035, 'sawtooth', 0.11 + i * 0.03);
+        }
+        // and the wards knocking on the way round
+        beep(1900, 0.03, 0.07, 'square', 0.2);
+        beep(1350, 0.04, 0.055, 'square', 0.27);
+        break;
       case 'door_rattle':
         for (let i = 0; i < 4; i++) noise(0.06, 0.11, 3000, i * 0.11);
         break;
@@ -1123,6 +1144,7 @@ export type SfxName =
   | 'door_open'
   | 'door_shut'
   | 'lock_click'
+  | 'key_turn'
   | 'door_rattle'
   | 'door_creak'
   | 'drip'

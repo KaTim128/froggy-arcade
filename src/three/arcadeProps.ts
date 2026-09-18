@@ -190,3 +190,100 @@ export function buildPrizeCase(
 
   return g;
 }
+
+/**
+ * THE FRONT DOORS.  Two glass leaves in an aluminium frame, chained shut.
+ *
+ * This is the objective, so it has to read as one from the far end of a dark
+ * room: a painted slab in the back wall is a door the player walks past, and
+ * the whole last act is walking TOWARDS something.  Glass does that on its
+ * own — it is the only surface in the building with the street behind it, and
+ * a pair of them with a mullion down the middle is the shape every arcade,
+ * every chip shop and every shut-up unit on that street has at the front.
+ *
+ * AND THE LOCK IS VISIBLE.  A chain threaded through both push bars with a
+ * padlock hanging off it, in self-lit brass so it stays the brightest thing on
+ * the door however dark the room gets.  The player has to be able to see,
+ * before pressing anything, that the way out is held shut by a specific
+ * object — otherwise the ten seconds that follow are a loading bar rather than
+ * a lock being fought with.
+ *
+ * Built into the +Z wall, facing back into the room: the room side is -Z,
+ * which is where the push bars and the chain hang.
+ */
+export function buildGlassDoors(w: number, h: number): THREE.Group {
+  const g = new THREE.Group();
+  const lam = (c: number) => new THREE.MeshLambertMaterial({ color: c });
+  const lit = (c: number) => new THREE.MeshBasicMaterial({ color: c });
+
+  const add = (mat: THREE.Material, sx: number, sy: number, sz: number, px: number, py: number, pz: number) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(px, py, pz);
+    g.add(m);
+    return m;
+  };
+
+  const frame = lam(0x6f7682);
+  const post = 0.16;
+  const leaf = (w - post * 3) / 2;
+
+  // ---- the surround: two jambs, a head, and the mullion between the leaves.
+  for (const side of [-1, 1]) add(frame, post, h, 0.24, side * (w / 2 - post / 2), h / 2, 0);
+  add(frame, w, post, 0.24, 0, h - post / 2, 0);
+  add(frame, post, h, 0.24, 0, h / 2, 0);
+  // a transom over the top of it, so the doors sit under something
+  add(lam(0x2a2233), w + 0.6, 0.5, 0.3, 0, h + 0.25, 0);
+
+  // ---- the two leaves.  Each is a pane in a thin rail, and the pane is the
+  // only transparent thing in the room: what is behind it is the street, and
+  // the street is the reason this door is worth crossing a floor for.
+  for (const side of [-1, 1]) {
+    const cx = side * (post / 2 + leaf / 2);
+    const glass = new THREE.Mesh(
+      new THREE.BoxGeometry(leaf - 0.1, h - 0.5, 0.05),
+      new THREE.MeshBasicMaterial({ color: 0x14202e, transparent: true, opacity: 0.55 }),
+    );
+    glass.position.set(cx, h / 2, -0.02);
+    g.add(glass);
+    // rails top and bottom, and the kick plate every public door has
+    add(lam(0x5e6673), leaf, 0.14, 0.12, cx, h - 0.28, -0.04);
+    add(lam(0x5e6673), leaf, 0.12, 0.12, cx, h * 0.52, -0.04);
+    add(lam(0x4e555f), leaf, 0.42, 0.14, cx, 0.21, -0.05);
+    // the push bar, on the room side, at the height a hand goes to
+    add(lit(0xb9b3a0), leaf * 0.72, 0.08, 0.08, cx, 1.02, -0.15);
+    for (const b of [-1, 1]) {
+      add(lam(0x8a8f97), 0.07, 0.07, 0.18, cx + b * leaf * 0.3, 1.02, -0.1);
+    }
+    // a strip of faded lettering across the glass: OPEN, on a door that is not
+    add(lit(0xd9b45a), leaf * 0.5, 0.1, 0.02, cx, h * 0.72, -0.06);
+  }
+
+  // ---- THE LOCK.  A chain through both handles and a padlock on it.
+  // Links nearly touching, alternating flat and on edge the way a chain does,
+  // on a shallow sag between the two push bars.  Spaced out, it read as a row
+  // of tiles stuck to the glass rather than as something holding a door shut.
+  const chain = 15;
+  const span = leaf * 0.86;
+  for (let i = 0; i < chain; i++) {
+    const t = i / (chain - 1);
+    const flat = i % 2 === 0;
+    const link = new THREE.Mesh(
+      new THREE.BoxGeometry(flat ? 0.1 : 0.04, 0.09, flat ? 0.04 : 0.1),
+      lit(flat ? 0xc9b877 : 0x9a8f6a),
+    );
+    // slack: it hangs between the two bars rather than running straight
+    link.position.set((t - 0.5) * span, 1.02 - Math.sin(t * Math.PI) * 0.14, -0.19);
+    g.add(link);
+  }
+  const body = add(lit(0xc9a62e), 0.2, 0.26, 0.12, 0, 0.74, -0.21);
+  body.rotation.z = 0.18;
+  const shackle = new THREE.Mesh(
+    new THREE.TorusGeometry(0.09, 0.028, 6, 10, Math.PI),
+    lit(0xd8d2bc),
+  );
+  shackle.position.set(0, 0.87, -0.21);
+  shackle.rotation.z = 0.18;
+  g.add(shackle);
+
+  return g;
+}

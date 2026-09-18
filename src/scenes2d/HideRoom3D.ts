@@ -32,10 +32,10 @@ import { FroggyMonster } from '../three/froggyMonster';
 import { drawPixelText } from '../render/pixelFont';
 import { ThreeStage } from '../render/threeStage';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
-import { ROOMS, type Box, type RoomDef, type SpotKind } from '../three/hideRooms';
+import { ROOMS, type Box, type CounterRun, type RoomDef, type SpotKind } from '../three/hideRooms';
 import { buildGrid, findPath, lineOpen, spotExtent, type NavGrid } from '../three/navGrid';
 import { dressRoom, surfaceTexture } from '../three/hideDecor';
-import { buildCabinet, buildPrizeCase } from '../three/arcadeProps';
+import { buildCabinet, buildGlassDoors, buildPrizeCase } from '../three/arcadeProps';
 import { buildSecretRoom, SECRET_ORIGIN, type SecretRoom } from '../three/secretRoom';
 
 /** A walk is slow and silent; a run is fast and heard.  That is the trade. */
@@ -171,10 +171,11 @@ const ZONE_LINES: Array<Array<[string, number]>> = [
     ['WHERE ARE YOU....', 3200],
     ['{N} MINUTES.', 2400],
   ],
-  // THE ARCADE.  One line, and he does not say what the rules are, because in
-  // this room there are none of his to say: no count, no clock, nothing he is
-  // promising.  He is simply in here looking for you, and the objective on
-  // screen is the game's to state, not his.
+  // THE ARCADE.  One line, said over the top of a player who already has the
+  // controls back (see beginArcade), and he does not say what the rules are,
+  // because in this room there are none of his to say: no count, no clock,
+  // nothing he is promising.  He is somewhere in the building looking for you,
+  // and the objective on screen is the game's to state, not his.
   [["WHERE IS THAT USELESS BEING...", 3400]],
 ];
 
@@ -182,10 +183,10 @@ const ZONE_LINES: Array<Array<[string, number]>> = [
  * The last room is the arcade, and it does not work like the other three.
  *
  * No clock: you are not surviving a number, you are getting out.  The way out
- * is the front door at the far end, which takes five seconds of holding a key
- * you were given for something else.  He hunts the whole time, slower than he
- * did downstairs because the room is the puzzle now and you need long enough
- * in it to solve one.
+ * is the front door at the far end -- a pair of chained glass ones -- and it
+ * takes ten seconds of turning a key you were given for something else.  He
+ * hunts the whole time, slower than he did downstairs because the room is the
+ * puzzle now and you need long enough in it to solve one.
  */
 const FINAL_ROOM = 3;
 /** No offset.  Named so the camera reads as one expression either way. */
@@ -195,7 +196,7 @@ const ZERO = new THREE.Vector3(0, 0, 0);
  *
  * Downstairs he was a shade faster than a running player, which is what made
  * those rooms about not being seen at all.  Here you have to cross his floor,
- * climb his counter and stand still at a door for five seconds — so he searches
+ * climb his counter and stand still at a door for ten seconds — so he searches
  * at two-thirds, which leaves room to move, watch him, and go.  Sighting you
  * still puts him at full chase speed: the mercy is in the looking, not the
  * catching.
@@ -205,10 +206,11 @@ const FINAL_SEARCH_PACE = 0.66;
  * WHETHER HE IS IN THE ARCADE AT ALL.  He is not, for now.
  *
  * The room is the last thing the sequence teaches and the most it asks: read a
- * layout you have only ever seen from above, find the counter, work out that
- * it is climbed rather than walked round, and then stand still at a door for
- * five seconds.  A three-and-a-half metre thing hunting you through all of
- * that is a room nobody gets to look at.
+ * layout you have only ever seen from above, find that the counter wraps right
+ * round the staff corner you came out into, work out that it is climbed rather
+ * than walked round, and then stand still at the front doors for ten seconds.
+ * A three-and-a-half metre thing hunting you through all of that is a room
+ * nobody gets to look at.
  *
  * So the escape is played empty first.  Everything he needs is still here and
  * still tested — the search, the sight lines, the counter he can climb and you
@@ -233,17 +235,18 @@ const FROGGY_IN_ARCADE = false;
  */
 const UNSEEN_BRIEFING = new Set([2]);
 /**
- * How long the key has to stay turning in the staff door.
+ * How long the key takes to turn in the front doors.
  *
  * A TAP MUST NOT DO ANYTHING.  The whole shape of the ending is standing
  * perfectly still, in the open, at the far end of the room from the counter,
- * for long enough that you have to have decided where he is first.  Five
- * seconds is about two of his sweeps across the front row, so there is a right
- * moment to start and a wrong one, and it can be got wrong.
+ * facing a pair of glass doors you cannot look away from, for long enough that
+ * you have to have decided where he is first.  Ten seconds is long enough for
+ * the key to be dropped, found and worked a second time, and short enough that
+ * the sequence never stops being one held breath.
  */
-const UNLOCK_S = 15;
+const UNLOCK_S = 10;
 /**
- * THE SHAPE OF THE FIFTEEN SECONDS, as fractions of it.
+ * THE SHAPE OF THE TEN SECONDS, as fractions of it.
  *
  * It was a five-second hold with a ring round it, which is a progress bar you
  * can fail by letting go of -- a test of a thumb, in the one place in the game
@@ -278,8 +281,48 @@ const CROUCH_EYE = 0.52;
 /** His footsteps behind you: seconds between them at the start and at the end. */
 const STEP_SLOW = 1.15;
 const STEP_FAST = 0.3;
-/** How close to the prize case counts as standing at it: half-width, half-depth. */
-const CASE_REACH = { hw: 3.6, hd: 3.0 };
+/**
+ * HOW FAR THE HEAD IS ALLOWED TO GO WHILE THE KEY IS IN THE DOOR.
+ *
+ * Twenty-four degrees either side of the doors, and not a degree more.  It is
+ * enough to glance along the glass, down at your own hands and back -- so the
+ * shot is a person at a lock rather than a camera bolted to one -- and it is
+ * nowhere near enough to see anything that is not in front of you.  What is
+ * behind the player during these ten seconds is the entire point of them, and
+ * the game never lets them check.
+ */
+const ESCAPE_YAW = 0.42;
+/**
+ * And how far up and down, for the same reason -- and tighter than it looks,
+ * because this is a bias ON TOP of the pose the sequence is already holding.
+ * The pose spends most of the ten seconds looking down at the lock, and a
+ * player leaning on it from there should end up at their own hands, not with
+ * the horizon over the top of their head.
+ */
+const ESCAPE_PITCH = { min: -0.45, max: 0.32 };
+/**
+ * WHERE THEY STAND TO DO IT, measured back from the face of the doors.
+ *
+ * A player who walked into the doors is 0.6m off the glass, and at that range
+ * a 72-degree camera sees one pane and a white mullion: the pair of doors the
+ * whole last act has been about stops being in the shot at the exact moment it
+ * matters.  At a metre and a half both leaves, the chain and the padlock are
+ * all in frame, and it is also simply what somebody does before working a lock
+ * -- square up to it and give their hands room.
+ */
+const ESCAPE_STAND = 1.5;
+/** How long that half-step back takes.  A beat, not a walk. */
+const ESCAPE_SETTLE = 0.45;
+/**
+ * How close to the prize case counts as standing at it: half-width, half-depth.
+ *
+ * It is the case's own frontage plus a stride, and no more.  The prompt is the
+ * game promising that E will do something, and a band three metres deep had it
+ * lit from halfway across the floor -- so a player crossing the room to the
+ * doors was told, the whole way, that they were standing at a case they were
+ * nowhere near.
+ */
+const CASE_REACH = { hw: 3.4, hd: 2.4 };
 /** How far back from the counter the climb is still on offer. */
 const COUNTER_REACH = 2.2;
 /** How long going over it takes.  Long enough to be a commitment, not a step. */
@@ -550,6 +593,12 @@ export class HideRoom3D extends Phaser.Scene {
    * and the camera rides up over the top and down the other side.
    */
   private vault: { from: THREE.Vector2; to: THREE.Vector2; t: number } | null = null;
+  /**
+   * The half-step back at the start of the escape: where they were, and the
+   * mark in front of the doors they settle onto.  Null once they are on it.
+   */
+  private escapeFrom = new THREE.Vector2();
+  private escapeMark: THREE.Vector2 | null = null;
   /** Whether the counter has been crossed at all, for the harness. */
   private vaulted = false;
   /**
@@ -640,6 +689,7 @@ export class HideRoom3D extends Phaser.Scene {
     this.trembleSeed = 0;
     this.vault = null;
     this.vaulted = false;
+    this.escapeMark = null;
     this.secret = null;
     this.inSecret = false;
     this.floorY = 0;
@@ -683,8 +733,18 @@ export class HideRoom3D extends Phaser.Scene {
     // He explains the game once, at the first door.  The second and third
     // rooms open straight onto the count: you know the rules by then, and a
     // speech you have heard is a wait, not a threat.
-    const lines = this.roomIndex === 0 ? BRIEFING : ZONE_LINES[Math.min(this.roomIndex, ZONE_LINES.length - 1)];
-    this.beginBriefing(spoken(lines, this.roomIndex));
+    //
+    // THE ARCADE DOES NOT GET A BRIEFING AT ALL.  See beginArcade: the player
+    // has just come up out of the third room and lands behind the counter with
+    // the controls already live, because a scene that takes them away again
+    // the instant it hands the arcade over reads as another cutscene rather
+    // than as being back on the floor.
+    if (this.isFinal) {
+      this.beginArcade();
+    } else {
+      const lines = this.roomIndex === 0 ? BRIEFING : ZONE_LINES[Math.min(this.roomIndex, ZONE_LINES.length - 1)];
+      this.beginBriefing(spoken(lines, this.roomIndex));
+    }
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
   }
 
@@ -783,17 +843,60 @@ export class HideRoom3D extends Phaser.Scene {
       lintelFix.position.y = openSide.h + (d.wallH - openSide.h) / 2;
     }
 
-    // the door out, set into the far wall
+    // ---- THE WAY OUT, set into the far wall.
+    //
+    // Downstairs it is a painted slab he locks behind you and it is scenery.
+    // In the arcade it is the main entrance, in glass, chained shut — and it
+    // is the objective, so it is built rather than blocked out.  See
+    // buildGlassDoors.
     const doorMat = new THREE.MeshLambertMaterial({ color: 0x53331f });
-    const door = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.4, 0.2), doorMat);
-    door.position.set(d.door.x, 1.2, d.halfD - 0.05);
-    st.scene.add(door);
-    const handle = new THREE.Mesh(
-      new THREE.SphereGeometry(0.09, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0xc9a62e }),
-    );
-    handle.position.set(d.door.x + 0.55, 1.15, d.halfD - 0.18);
-    st.scene.add(handle);
+    if (d.glassDoor) {
+      const gd = d.glassDoor;
+      // Stood off the wall far enough to have a night behind it.  A pane with
+      // the room's own purple wall a centimetre behind it is a purple panel;
+      // what makes glass read as glass is that the thing through it is a
+      // different colour from everything else in the picture.
+      const doorZ = d.halfD - 0.38;
+      const doors = buildGlassDoors(gd.w, gd.h);
+      doors.position.set(d.door.x, 0, doorZ);
+      st.scene.add(doors);
+      // AND THEY ARE SOLID.  The room's own clamp stops the player 0.6m short
+      // of the wall plane, which is INSIDE a door that stands off it — so the
+      // doors get a collider of their own and the player is held half a metre
+      // in front of the glass, which is where somebody working a lock stands.
+      this.blockers.push({
+        x: d.door.x,
+        z: doorZ,
+        w: gd.w,
+        d: 0.5,
+        h: gd.h,
+        color: 0x0a0d14,
+      });
+      // THE STREET.  Unlit black-blue, so no lamp in here can wash it out and
+      // it stays the one cold hole in a room made of purple and carpet.
+      const street = new THREE.Mesh(
+        new THREE.BoxGeometry(gd.w + 0.2, gd.h + 0.2, 0.08),
+        new THREE.MeshBasicMaterial({ color: 0x080d16 }),
+      );
+      street.position.set(d.door.x, gd.h / 2, d.halfD - 0.14);
+      st.scene.add(street);
+      // and one lamp out there, BEHIND the doors, so what it does is rim the
+      // frame and glow through the glass rather than flatten the front of it
+      const outside = new THREE.PointLight(0x9fd4ff, 4, 5, 1.8);
+      outside.position.set(d.door.x, gd.h * 0.55, d.halfD - 0.2);
+      st.scene.add(outside);
+      this.roomLights.push(outside);
+    } else {
+      const door = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.4, 0.2), doorMat);
+      door.position.set(d.door.x, 1.2, d.halfD - 0.05);
+      st.scene.add(door);
+      const handle = new THREE.Mesh(
+        new THREE.SphereGeometry(0.09, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xc9a62e }),
+      );
+      handle.position.set(d.door.x + 0.55, 1.15, d.halfD - 0.18);
+      st.scene.add(handle);
+    }
 
     // The door you came IN through, in the wall behind the spawn.  It is not
     // interactive and it never opens again; it is there so that turning round
@@ -1084,9 +1187,9 @@ export class HideRoom3D extends Phaser.Scene {
       turnL: bind(['LEFT', 'Q']),
       turnR: bind(['RIGHT']),
       run: bind(['SHIFT']),
-      // E is both a press and a hold: a press gets you into a box, and a hold
-      // turns the key in the staff door.  It needs a Key object either way,
-      // because `keydown-E` repeats and cannot tell five seconds from fifty
+      // E is both a press and a hold: a press gets you into a box, and a press
+      // at the front doors turns a key in them.  It needs a Key object anyway,
+      // because `keydown-E` repeats and cannot tell a held key from fifty
       // keyboard auto-repeats.
       use: bind(['E']),
     };
@@ -1120,16 +1223,10 @@ export class HideRoom3D extends Phaser.Scene {
       // Clamped well short of vertical: past about sixty degrees the room
       // stops having a floor and the player loses which way they are facing.
       this.pitch = Phaser.Math.Clamp(this.pitch - dy * LOOK_SENS, -1.15, 1.0);
-      // AND HELD NEAR THE DOOR while the key is in it.  Half a radian either
-      // way is enough to glance down at your hands or off to the side and not
-      // nearly enough to turn round and look at what is coming, which is the
-      // whole of why it is frightening.
-      if (this.escaping) {
-        const face = Math.atan2(this.def.door.x - this.pos.x, this.def.halfD - this.pos.y) + Math.PI;
-        const off = Phaser.Math.Angle.Wrap(this.yaw - face);
-        this.yaw = face + Phaser.Math.Clamp(off, -0.5, 0.5);
-        this.pitch = Phaser.Math.Clamp(this.pitch, -1.0, 0.35);
-      }
+      // AND HELD ON THE DOORS while the key is in them.  See holdOnDoor: the
+      // clamp is applied here so the drag itself cannot overshoot, and again
+      // every frame so no other way of turning gets round it.
+      this.holdOnDoor();
     };
     this.onUp = () => {
       this.looking = false;
@@ -1156,7 +1253,9 @@ export class HideRoom3D extends Phaser.Scene {
    */
   private toggleCrouch(): void {
     if (this.mode !== 'hiding' && this.mode !== 'seeking') return;
-    if (this.hiding) return;
+    // Not while the key is in the door: the sequence owns the eye height for
+    // the whole ten seconds, and a crouch toggled under it fights the pose.
+    if (this.hiding || this.escaping) return;
     this.crouching = !this.crouching;
   }
 
@@ -1202,10 +1301,9 @@ export class HideRoom3D extends Phaser.Scene {
     }
 
     if (this.atDoor()) {
-      // ONE PRESS.  In the arcade the door is the game, and pressing E on it
-      // starts the fifteen seconds and hands control of the next fifteen
-      // seconds to the sequence.  Everywhere else the door is scenery and says
-      // so, once.
+      // ONE PRESS.  In the arcade the doors are the game, and pressing E at
+      // them hands the next ten seconds to the sequence.  Everywhere else the
+      // door is scenery and says so, once.
       if (this.isFinal) this.startEscape();
       else this.say('LOCKED. THERE IS NOWHERE TO GO BUT UNDER SOMETHING.', 2400);
       return;
@@ -1254,9 +1352,23 @@ export class HideRoom3D extends Phaser.Scene {
     this.pos.set(spot.x, spot.z);
   }
 
-  /** Standing at the one door in the room that goes anywhere. */
+  /**
+   * Standing at the one door in the room that goes anywhere.
+   *
+   * A radius round the middle of a single-leaf door; a rectangle across the
+   * front of a double one, because a circle round the middle of three and a
+   * half metres of glass either misses both leaves or reaches out past the
+   * frame into the wall on either side.
+   */
   private atDoor(): boolean {
     const d = this.def;
+    const g = d.glassDoor;
+    if (g) {
+      return (
+        Math.abs(this.pos.x - d.door.x) < g.w / 2 + 0.5 &&
+        Math.abs(this.pos.y - d.halfD) < DOOR_REACH
+      );
+    }
     return Math.hypot(this.pos.x - d.door.x, this.pos.y - d.halfD) < DOOR_REACH;
   }
 
@@ -1264,11 +1376,17 @@ export class HideRoom3D extends Phaser.Scene {
   private atCase(): boolean {
     const c = this.def.prizeCase;
     if (!c) return false;
-    // A rectangle, not a radius: the case is seven metres of frontage and a
+    // A rectangle, not a radius: the case is six metres of frontage and a
     // circle round its middle either misses both ends or reaches behind it.
-    // And only from IN FRONT of it (+Z): the case is set into the wall the
-    // counter is in, so a symmetric band would offer the prompt through that
-    // wall to somebody standing on the staff side with their back to it.
+    // And only from IN FRONT of it (+Z): it stands against the back wall, so a
+    // symmetric band would offer the prompt through that wall to somebody
+    // standing outside the room with their back to it.
+    //
+    // It is out on the floor side of the counter, which is the point: the
+    // player comes up in the staff corner with the counter wrapped round them,
+    // and the one thing in this room that answers a key is on the other side
+    // of it.  Nothing about the counter is in the way once they are over --
+    // there is two and a half metres of clear floor between the two.
     const dz = this.pos.y - c.z;
     return Math.abs(this.pos.x - c.x) < CASE_REACH.hw && dz > 0 && dz < CASE_REACH.hd;
   }
@@ -1285,14 +1403,39 @@ export class HideRoom3D extends Phaser.Scene {
    * line of sight like any other low furniture — so being able to get back
    * over is the mechanic, not a leak in it.
    *
-   * There is still nothing to walk round: the partition either side of the
-   * counter is full height, so this is the only hole in that wall.
+   * IN THE ARCADE THERE IS NOTHING TO WALK ROUND.  The counter wraps the staff
+   * corner and both its ends die into a wall, so the climb is the only way out
+   * of the corner the player comes up in -- and, afterwards, the only way back
+   * into it.
    */
   private atCounter(): boolean {
-    const c = this.def.counter;
-    if (!c || this.vault) return false;
-    if (this.pos.x < c.from - 0.4 || this.pos.x > c.to + 0.4) return false;
-    return Math.abs(this.pos.y - c.z) < COUNTER_REACH;
+    return this.counterRun() !== null;
+  }
+
+  /**
+   * Which run of the counter the player is stood at, if any.
+   *
+   * The counter turns a corner, so there is more than one of them and the
+   * nearest wins: at the inside of the corner both runs are within reach, and
+   * climbing the one you are further from would send the player over a stretch
+   * of counter they are not stood at.
+   */
+  private counterRun(): CounterRun | null {
+    const runs = this.def.counter;
+    if (!runs || this.vault) return null;
+    let best: CounterRun | null = null;
+    let bestD = COUNTER_REACH;
+    for (const r of runs) {
+      const along = r.axis === 'x' ? this.pos.x : this.pos.y;
+      const across = r.axis === 'x' ? this.pos.y : this.pos.x;
+      if (along < r.from - 0.4 || along > r.to + 0.4) continue;
+      const gap = Math.abs(across - r.at);
+      if (gap < bestD) {
+        bestD = gap;
+        best = r;
+      }
+    }
+    return best;
   }
 
   /**
@@ -1305,18 +1448,23 @@ export class HideRoom3D extends Phaser.Scene {
    * do in this room, and he hears it from wherever he is.
    */
   private startVault(): void {
-    const c = this.def.counter;
-    if (!c || !this.atCounter()) return;
+    const c = this.counterRun();
+    if (!c) return;
+    const along = c.axis === 'x' ? this.pos.x : this.pos.y;
+    const across = c.axis === 'x' ? this.pos.y : this.pos.x;
     // Over to the OTHER side, whichever side that is.
-    const side = this.pos.y < c.z ? 1 : -1;
-    const to = new THREE.Vector2(this.pos.x, c.z + side * VAULT_CLEAR);
+    const side = across < c.at ? 1 : -1;
+    const landAcross = c.at + side * VAULT_CLEAR;
+    const to = new THREE.Vector2();
     // Straight over is usually clear, but a cabinet the other side is not our
     // problem to shove through: slide along the counter until there is floor.
     let landed = false;
     for (const off of [0, 0.8, -0.8, 1.6, -1.6, 2.4, -2.4]) {
-      const x = Phaser.Math.Clamp(this.pos.x + off, c.from + 0.3, c.to - 0.3);
-      if (!this.solid(x, to.y)) {
-        to.x = x;
+      const a = Phaser.Math.Clamp(along + off, c.from + 0.3, c.to - 0.3);
+      const x = c.axis === 'x' ? a : landAcross;
+      const z = c.axis === 'x' ? landAcross : a;
+      if (!this.solid(x, z)) {
+        to.set(x, z);
         landed = true;
         break;
       }
@@ -1373,7 +1521,7 @@ export class HideRoom3D extends Phaser.Scene {
   }
 
   /**
-   * THE ESCAPE.  Fifteen seconds, one press, and no way to stop it.
+   * THE ESCAPE.  Ten seconds, one press, and no way to stop it.
    *
    * It was a five-second hold with a ring round it -- a progress bar you could
    * fail by letting go of, which put a test of a thumb in the one place in
@@ -1383,9 +1531,11 @@ export class HideRoom3D extends Phaser.Scene {
    * floor, has to be found by feel, and goes back in -- while something the
    * player cannot turn round and look at crosses the room behind them.
    *
-   * The camera is NOT locked.  They can still look about, within half a radian
-   * of the door, because a player who has been frozen solid is watching a
-   * cutscene and a player who can still move their head is in the room.
+   * The feet are locked and the head is not.  They can still look about,
+   * within ESCAPE_YAW of the doors, because a player who has been frozen solid
+   * is watching a cutscene and a player who can still move their head is in
+   * the room -- and they can never look far enough round to see what is coming,
+   * because not being allowed to is the whole of why it is frightening.
    */
   private startEscape(): void {
     if (this.escaping || this.mode !== 'seeking') return;
@@ -1396,12 +1546,39 @@ export class HideRoom3D extends Phaser.Scene {
     this.crouching = false;
     this.prompt = '';
     this.subtitle = '';
-    // Face the door and stay roughly on it.  The clamp in the look handler
-    // takes it from here.
-    this.yaw = Math.atan2(this.def.door.x - this.pos.x, this.def.halfD - this.pos.y) + Math.PI;
+    // Square up to the doors, and take the half-step back off them that puts
+    // both leaves and the chain in the shot.  See ESCAPE_STAND: it only ever
+    // moves them AWAY from the door, so starting the sequence from across the
+    // room does not drag anybody forward into it.
+    this.escapeFrom.copy(this.pos);
+    const face = this.def.halfD - (this.def.glassDoor ? 0.38 : 0.05);
+    this.escapeMark = new THREE.Vector2(this.pos.x, Math.min(this.pos.y, face - ESCAPE_STAND));
+    this.yaw = this.doorFacing();
     this.pitch = 0;
-    audio.sfx('lock_click', 0.5);
+    audio.sfx('key_turn', 0.55);
     if (this.torch) this.torch.intensity = 26;
+  }
+
+  /** The yaw that looks straight at the way out from wherever the player is. */
+  private doorFacing(): number {
+    return Math.atan2(this.def.door.x - this.pos.x, this.def.halfD - this.pos.y) + Math.PI;
+  }
+
+  /**
+   * HOLD THE HEAD ON THE DOORS.
+   *
+   * One clamp, applied from everywhere that can change where the player is
+   * looking -- the mouse drag, the arrow keys, and every frame of the sequence
+   * on top of both -- so there is no route to a view over their own shoulder.
+   * A small amount of play either side keeps the shot alive; past that the
+   * angle simply does not exist for ten seconds.
+   */
+  private holdOnDoor(): void {
+    if (!this.escaping) return;
+    const face = this.doorFacing();
+    const off = Phaser.Math.Angle.Wrap(this.yaw - face);
+    this.yaw = face + Phaser.Math.Clamp(off, -ESCAPE_YAW, ESCAPE_YAW);
+    this.pitch = Phaser.Math.Clamp(this.pitch, ESCAPE_PITCH.min, ESCAPE_PITCH.max);
   }
 
   /** 0..1 through the whole sequence. */
@@ -1410,16 +1587,30 @@ export class HideRoom3D extends Phaser.Scene {
   }
 
   /**
-   * Runs the fifteen seconds: the hands, the lock, and him.
+   * Runs the ten seconds: the hands, the lock, and him.
    *
    * Every beat here is something the player HEARS rather than something they
    * are told, because the one thing they cannot do is turn round and check.
    */
   private runEscape(dt: number): void {
     if (!this.escaping || this.mode !== 'seeking') return;
+    // Belt and braces on the view: whatever else moved it this frame, it comes
+    // back inside the arc before anything is drawn.
+    this.holdOnDoor();
     const before = this.escapeK;
     this.unlockT = Math.min(UNLOCK_S, this.unlockT + dt);
     const k = this.escapeK;
+
+    // The half-step back, eased out over the first beat.
+    if (this.escapeMark) {
+      const t = Phaser.Math.Clamp(this.unlockT / ESCAPE_SETTLE, 0, 1);
+      const e = Phaser.Math.Easing.Sine.Out(t);
+      this.pos.set(
+        Phaser.Math.Linear(this.escapeFrom.x, this.escapeMark.x, e),
+        Phaser.Math.Linear(this.escapeFrom.y, this.escapeMark.y, e),
+      );
+      if (t >= 1) this.escapeMark = null;
+    }
     this.trembleSeed += dt * (2.4 + k * 5.5);
 
     // ---- HIS FOOTSTEPS, BEHIND YOU.  Quiet and far apart to begin with, and
@@ -1438,7 +1629,7 @@ export class HideRoom3D extends Phaser.Scene {
 
     // ---- THE HANDS.
     const at = (mark: number): boolean => before < mark && k >= mark;
-    if (at(BEAT.tryA)) audio.sfx('lock_click', 0.5);
+    if (at(BEAT.tryA)) audio.sfx('key_turn', 0.6);
     if (at(BEAT.drop)) {
       // IT SLIPS.  The one beat in the sequence that is a mistake rather than
       // a delay, and the only one that gets a jolt of its own.
@@ -1446,7 +1637,10 @@ export class HideRoom3D extends Phaser.Scene {
       this.shake = Math.max(this.shake, 0.9);
     }
     if (at(BEAT.down)) audio.sfx('footstep_concrete', 0.4);
-    if (at(BEAT.up)) audio.sfx('lock_click', 0.45);
+    // Back on his feet with it, and the key goes into the lock properly this
+    // time: the scrape of it going in, and then the barrel turning under it
+    // for the rest of the sequence.
+    if (at(BEAT.up)) audio.sfx('key_turn', 0.7);
     if (k > BEAT.up) {
       while (this.tumbler < TUMBLERS.length && k >= TUMBLERS[this.tumbler]) {
         this.tumbler++;
@@ -1454,8 +1648,9 @@ export class HideRoom3D extends Phaser.Scene {
       }
     }
     if (at(BEAT.turn)) {
-      audio.sfx('lock_click', 1);
-      this.time.delayedCall(220, () => audio.sfx('door_open'));
+      audio.sfx('key_turn', 1);
+      this.time.delayedCall(140, () => audio.sfx('lock_click', 1));
+      this.time.delayedCall(360, () => audio.sfx('door_open'));
     }
     if (this.unlockT >= UNLOCK_S) this.survive();
   }
@@ -1470,23 +1665,27 @@ export class HideRoom3D extends Phaser.Scene {
   private escapePose(): { eye: number; pitch: number } {
     const k = this.escapeK;
     const ease = Phaser.Math.Easing.Sine.InOut;
-    if (k < BEAT.tryA) return { eye: EYE + 0.04, pitch: -0.1 };
+    // WORKING THE LOCK.  The head is down on the hands and the chain, not
+    // level with the glass: at this range a level view is a sheet of pane, and
+    // what the player should be looking at is the thing holding the door shut.
+    const WORK = -0.34;
+    if (k < BEAT.tryA) return { eye: EYE + 0.04, pitch: WORK };
     if (k < BEAT.stare) {
       // Watching it go.  The head snaps down after it, fast.
       const t = (k - BEAT.tryA) / (BEAT.stare - BEAT.tryA);
-      return { eye: EYE, pitch: -0.1 - ease(Math.min(1, t * 1.6)) * 0.65 };
+      return { eye: EYE, pitch: WORK - ease(Math.min(1, t * 1.6)) * 0.5 };
     }
     if (k < BEAT.down) {
       // Going down after it.
       const t = ease((k - BEAT.stare) / (BEAT.down - BEAT.stare));
-      return { eye: Phaser.Math.Linear(EYE, CROUCH_EYE, t), pitch: -0.75 };
+      return { eye: Phaser.Math.Linear(EYE, CROUCH_EYE, t), pitch: -0.78 };
     }
     if (k < BEAT.up) {
       // Standing, with it.
       const t = ease((k - BEAT.down) / (BEAT.up - BEAT.down));
-      return { eye: Phaser.Math.Linear(CROUCH_EYE, EYE, t), pitch: -0.75 + t * 0.65 };
+      return { eye: Phaser.Math.Linear(CROUCH_EYE, EYE, t), pitch: -0.78 + t * 0.44 };
     }
-    return { eye: EYE + 0.04, pitch: -0.1 };
+    return { eye: EYE + 0.04, pitch: WORK };
   }
 
   /**
@@ -1716,6 +1915,33 @@ export class HideRoom3D extends Phaser.Scene {
     say(0);
   }
 
+  /**
+   * THE ARCADE, AND THE CONTROLS ARE ALREADY YOURS.
+   *
+   * Every other room opens on a speech the player cannot move through, which
+   * is right at a door he is standing on the other side of.  This one is not a
+   * door he opened: the third room ended, and the next thing is the staff
+   * corner of the arcade with the counter round it.  So there is no freeze, no
+   * count and no clock — WASD, the mouse and E all work on the first frame, and
+   * the one line he has left is said over the top of a player already walking.
+   *
+   * What the room wants is stated as an objective on the overlay rather than
+   * by him, because in here he is not promising anything.
+   */
+  private beginArcade(): void {
+    this.mode = 'seeking';
+    this.clock = 0;
+    this.fMode = 'search';
+    this.fTimer = 0;
+    this.grace = 1.5;
+    this.monster?.setVisible(this.hunted);
+    audio.sfx('door_shut', 0.5);
+    const [text, ms] = ZONE_LINES[FINAL_ROOM][0];
+    this.say(text, ms);
+    this.freeFroggy();
+    this.pickWaypoint();
+  }
+
   /** A zone with nothing to say: straight to the count. */
   private beginCountOnly(): void {
     this.monster?.setVisible(false);
@@ -1803,6 +2029,9 @@ export class HideRoom3D extends Phaser.Scene {
     // is worth having.
     const turn = (this.held('turnR') ? 1 : 0) - (this.held('turnL') ? 1 : 0);
     if (turn !== 0) this.yaw -= turn * TURN_RATE * dt;
+    // The arrow keys are a second way of turning, and the door holds the head
+    // whichever one is being used.
+    if (this.escaping) this.holdOnDoor();
 
     if (this.hiding) {
       this.pos.set(this.hiding.x, this.hiding.z);
@@ -1815,9 +2044,10 @@ export class HideRoom3D extends Phaser.Scene {
       return;
     }
 
-    // And once the key is in the door, the feet stay where they are.  The head
-    // does not -- see the look handler's clamp -- because a player frozen
-    // solid is watching a cutscene.
+    // And once the key is in the door, the feet stay where they are: no WASD,
+    // no strafe, no run, no crouch.  The head does not freeze with them -- see
+    // holdOnDoor -- because a player frozen solid is watching a cutscene and a
+    // player who can still move their head is in the room.
     if (this.escaping) return;
 
     const fwd = (this.held('fwd') ? 1 : 0) - (this.held('back') ? 1 : 0);
@@ -2845,8 +3075,12 @@ export class HideRoom3D extends Phaser.Scene {
       floorY: this.floorY,
       vaulting: !!this.vault,
       vaulted: this.vaulted,
+      yaw: this.yaw,
+      pitch: this.pitch,
+      doorFacing: this.doorFacing(),
       unlockT: this.unlockT,
       unlockSeconds: UNLOCK_S,
+      escapeYaw: ESCAPE_YAW,
       escaping: this.escaping,
       escapeK: this.escapeK,
       tremble: this.tremble,
@@ -2930,6 +3164,7 @@ export class HideRoom3D extends Phaser.Scene {
     this.unlockT = 0;
     this.tumbler = 0;
     this.escaping = false;
+    this.escapeMark = null;
     this.monster?.setVisible(false);
     audio.setScene(SILENCE);
     // The last of the five: the bolt coming back, and then the door.
@@ -2994,7 +3229,7 @@ export class HideRoom3D extends Phaser.Scene {
     // The prompt is cheap to recompute and needs to track the player.
     // It also comes DOWN for the escape: there is nothing left to press, and
     // a line reading HOLD [E] over a sequence that no longer wants anything
-    // held is the game contradicting itself for fifteen seconds.
+    // held is the game contradicting itself for ten seconds.
     if ((this.mode !== 'hiding' && this.mode !== 'seeking') || this.hiding || this.escaping) {
       this.prompt = '';
       return;

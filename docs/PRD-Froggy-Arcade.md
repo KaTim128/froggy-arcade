@@ -1138,14 +1138,18 @@ cannot be measured to the same absolute precision as a 62% band. It also
 checks the shares total a whole wheel. A retune is then a retune rather than a
 failure, and a face that stops matching its own arc is still caught.
 
-**The price is the lever, and it has been pulled.** These faces average
-**34.13 tokens a spin**. At 20 the wheel handed back about fourteen more than
-it took, every spin, for ever — the one fixture in the building with a
-standing positive edge to the player, and a patient player could farm the
-prize shelf off it rather than off the cabinets. **At 40 it keeps about six a
-spin instead**, so the shelf has to be earned on the floor again. `SPIN_COST`
-in `minigames/wheel.ts` is the whole of that decision: the faces were not
-touched to make it.
+The 80-100 band takes **10%** of the rim across three faces and the 40-70 band
+**12%** across four: the band that pays more is the band that comes up less.
+The two were inverted in the table for a while — 4% a face against 2.5% — which
+made the better prize the likelier one.
+
+**The price is the lever.** These faces average **33.43 tokens a spin** and
+`SPIN_COST` is **25**, so the wheel hands back about eight more than it takes,
+every spin, for ever — the one fixture in the building with a standing positive
+edge to the player, and a patient player can farm the prize shelf off it rather
+than off the cabinets. At **34** it is level and at **40** the house keeps about
+six. `SPIN_COST` in `minigames/wheel.ts` is the whole of that decision: the
+faces are cut to the odds and are not the place to do it.
 
 ### 9.11 Dance Off — Hard, 10 → 20, in the back room
 
@@ -1243,7 +1247,7 @@ only things exempt:
 | Fixture | Cost | Pays | Why |
 |---|---:|---|---|
 | Froggy Slots | 2 a spin | its own paytable | §9.x, and it does not print its odds |
-| Wheel of Fortune | 40 a spin | 0 to 5000, averaging 34.13 — the house keeps about six | §9.10 |
+| Wheel of Fortune | 25 a spin | 0 to 5000, averaging 33.43 — the player keeps about eight | §9.10 |
 | Chamber | 5 in | 3 a clean pull, up to 15 | §9.12 |
 | Blackjack | 1 minimum | 2× the bet, hand by hand | §9.x |
 | Frog Cross | 7 | 50 points (five crossings) for 15, +1 every 50 after | a formula, not a constant |
