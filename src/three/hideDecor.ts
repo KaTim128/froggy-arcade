@@ -381,7 +381,16 @@ export function dressRoom(scene: THREE.Scene, def: RoomDef, seed: number, solid:
   }
 
   // debris: bits of board, bottles, bricks, paper — small, low, off the paths
-  const debrisCols = theme === 'lounge' ? [0x3b2a1c, 0x58432b, 0x2a2420] : theme === 'stores' ? [0x3a3f46, 0x4a3a26, 0x24262a] : [0x8a8f8a, 0x5c5a52, 0x3a3d3a];
+  const debrisCols =
+    theme === 'lounge'
+      ? [0x3b2a1c, 0x58432b, 0x2a2420]
+      : theme === 'stores'
+        ? [0x3a3f46, 0x4a3a26, 0x24262a]
+        : theme === 'arcade'
+          ? // What is on an arcade floor at four in the morning: trodden
+            // tickets, a paper cup, and the card off a machine nobody plays.
+            [0xd8cdb0, 0xb9a98a, 0x2a2430]
+          : [0x8a8f8a, 0x5c5a52, 0x3a3d3a];
   const bits = Math.round((def.halfW * def.halfD) / 14);
   for (let i = 0; i < bits; i++) {
     const x = (r() * 2 - 1) * (def.halfW - 1.5);
@@ -436,6 +445,24 @@ export function dressRoom(scene: THREE.Scene, def: RoomDef, seed: number, solid:
       pipe.rotation.z = Math.PI / 2;
       pipe.position.set(0, def.wallH - 0.35 - r() * 0.3, z);
       scene.add(pipe);
+    }
+  } else if (theme === 'arcade') {
+    // TICKETS.  Nothing tall and nothing against the back wall: the back wall
+    // is the prize case and the staff door, and a picture frame hung on it
+    // ends up inside the glass.  What the room gets instead is the litter an
+    // arcade floor has on it -- run-out tickets, flat, where they fell.
+    for (let i = 0; i < 14; i++) {
+      const x = (r() * 2 - 1) * (def.halfW - 2);
+      const z = (r() * 2 - 1) * (def.halfD - 2);
+      if (solid(x, z)) continue;
+      const t = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.16 + r() * 0.5, 0.1 + r() * 0.12),
+        new THREE.MeshLambertMaterial({ color: r() < 0.5 ? 0xd8cdb0 : 0xe0b85e }),
+      );
+      t.rotation.x = -Math.PI / 2;
+      t.rotation.z = r() * Math.PI;
+      t.position.set(x, 0.016, z);
+      scene.add(t);
     }
   } else {
     // a rug, and pictures on the walls

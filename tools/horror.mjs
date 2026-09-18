@@ -39,7 +39,14 @@ if (!CHROME) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const errors = [];
 let failed = 0;
+// Counted rather than written down.  The total was a literal, and it had
+// already drifted four behind the checks actually being run -- a summary line
+// that is maintained by hand is a summary line that quietly lies.  A run that
+// dies early never reaches this: the catch at the bottom prints the throw and
+// exits 1 without a summary at all.
+let ran = 0;
 const check = (name, ok, note = '') => {
+  ran++;
   console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  — ${note}` : ''}`);
   if (!ok) failed++;
 };
@@ -526,6 +533,160 @@ try {
     check('the stores has pillars to break it up', stores.pillars >= 6, `${stores.pillars} pillars`);
   }
 
+
+  // -------------------------------------------- the arcade, and the way out of it
+  // The last of the four is the one the player ARRIVES in rather than is let
+  // into: the third room ends and the next thing is the staff corner of the
+  // arcade, with the counter wrapped round them and the front doors at the far
+  // end.  It has no clock, nothing to hide in, and one thing to do.
+  console.log('\nhorror  the arcade: up behind the counter, out through the glass');
+  {
+    const page = await newPage('?intro=1&charity=1&key=1&route=hide&hideRoom=3&scene=HideRoom3D');
+    await sleep(3200);
+    const hide = () => page.evaluate(() => window.__hide ?? null);
+    const scene = (fn, ...a) => page.evaluate(fn, ...a);
+    const press = async (key, ms) => {
+      await page.keyboard.down(key);
+      await sleep(ms);
+      await page.keyboard.up(key);
+    };
+
+    const start = await hide();
+    check('the arcade hands the controls straight back', start.mode === 'seeking', start.mode);
+    check('and there is nothing in it to hide in', start.spots.length === 0, `${start.spots.length} spots`);
+    await page.screenshot({ path: `${SHOTS}/arcade-spawn.png` });
+
+    // ---- the shape of the room, read off the definition rather than the
+    // picture: a counter that turns a corner, the player and the staff door
+    // inside the corner, and the prize case out on the floor side of it.
+    const shape = await page.evaluate(async () => {
+      const { ROOMS, ARCADE } = await import('/src/three/hideRooms.ts');
+      const front = ARCADE.counter.find((r) => r.axis === 'x');
+      const side = ARCADE.counter.find((r) => r.axis === 'z');
+      const inCorner = (x, z) => z < front.at && x < side.at;
+      const cab = ARCADE.furniture.filter((f) => f.prop === 'cabinet');
+      const box = ARCADE.furniture.find((f) => f.prop === 'case');
+      return {
+        runs: ARCADE.counter.length,
+        spawnInCorner: inCorner(ARCADE.spawn.x, ARCADE.spawn.z),
+        staffDoorInCorner: inCorner(ARCADE.staffDoor.x, -ARCADE.halfD),
+        caseOnTheFloorSide: !inCorner(ARCADE.prizeCase.x, ARCADE.prizeCase.z),
+        // clear floor between the open side of the counter and the near end
+        // of the case: enough to walk up to it and stand there
+        caseGap: ARCADE.prizeCase.x - box.w / 2 - (side.at + 0.6),
+        area: ARCADE.halfW * ARCADE.halfD * 4,
+        others: ROOMS.filter((r) => r !== ARCADE).map((r) => r.halfW * r.halfD * 4),
+        cabinets: cab.length,
+        // 0 faces +Z, down the room at the doors: the OPPOSITE of the row of
+        // lit fronts that used to face back up at the counter
+        facingTheDoors: cab.filter((f) => Math.abs(f.face) < 0.01).length,
+        againstTheWall: cab.filter((f) => Math.abs(f.x + ARCADE.halfW) < 1.2).length,
+        glass: ARCADE.glassDoor ? ARCADE.glassDoor.w : 0,
+      };
+    });
+    check('the counter turns a corner round the staff side', shape.runs === 2, `${shape.runs} runs`);
+    check('you come up inside it, with the staff door in the wall behind you',
+      shape.spawnInCorner && shape.staffDoorInCorner,
+      `${shape.spawnInCorner ? 'you' : 'NOT you'}, ${shape.staffDoorInCorner ? 'door' : 'NOT door'}`);
+    check('and the prize case is out on the other side of it, with room to stand',
+      shape.caseOnTheFloorSide && shape.caseGap > 1.5, `${shape.caseGap.toFixed(1)}m of floor`);
+    check('the arcade is the smallest of the four rooms',
+      shape.others.every((a) => shape.area < a),
+      `${shape.area} vs ${shape.others.join('/')}`);
+    check('the machines face down the room, away from the counter',
+      shape.facingTheDoors === shape.cabinets - shape.againstTheWall && shape.facingTheDoors > 0,
+      `${shape.facingTheDoors} of ${shape.cabinets}`);
+    check('and two of them are flat against the wall beside it',
+      shape.againstTheWall === 2, `${shape.againstTheWall} on the wall`);
+    check('the way out is a pair of glass doors', shape.glass >= 3, `${shape.glass}m wide`);
+
+    // ---- the counter is a wall to you, and the climb is the way out of the
+    // corner.  Driven, not asserted off the numbers: this is the one move the
+    // room requires and it has to actually work on a keyboard.
+    await press('w', 2600);
+    const stopped = await hide();
+    check('walking forward out of the staff corner stops you at the counter',
+      stopped.atCounter && stopped.pz < 0, `at ${stopped.pz.toFixed(1)}, prompt ${stopped.prompt}`);
+    check('the prompt offers the climb', stopped.prompt === '[E] CLIMB OVER', stopped.prompt);
+    await page.keyboard.press('e');
+    await sleep(1400);
+    const over = await hide();
+    check('E puts you over it and onto the floor', over.vaulted && over.pz > stopped.pz,
+      `${stopped.pz.toFixed(1)} -> ${over.pz.toFixed(1)}`);
+
+    // ---- the case: reachable on foot from the floor side, and quiet until
+    // you are actually at it.
+    await scene(() => {
+      const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+      sc.pos.set(sc.def.prizeCase.x, sc.def.prizeCase.z + 3.4);
+      sc.yaw = 0;
+    });
+    await sleep(120);
+    const approach = await hide();
+    await press('w', 2200);
+    const atCase = await hide();
+    check('the case says nothing until you are standing at it',
+      !approach.atCase && atCase.atCase, `${approach.prompt || 'nothing'} -> ${atCase.prompt}`);
+    check('and walking to it from the floor gets you there',
+      atCase.prompt === '[E] PRIZE CASE', `stopped at z ${atCase.pz.toFixed(1)}`);
+
+    // ---- the doors.  Ten seconds, the feet nailed down, and no way to look
+    // at what is walking up behind.
+    await scene(() => {
+      const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+      sc.pos.set(sc.def.door.x, 4);
+      sc.yaw = Math.PI;
+    });
+    await press('w', 4200);
+    const atDoor = await hide();
+    check('walking down the room brings you up at the doors',
+      atDoor.atDoor && atDoor.prompt === '[E] UNLOCK', `z ${atDoor.pz.toFixed(1)}, ${atDoor.prompt}`);
+    await page.keyboard.press('e');
+    await sleep(700);
+    const going = await hide();
+    check('E starts the unlocking rather than opening anything',
+      going.escaping && going.unlockSeconds === 10, `${going.unlockSeconds}s, k ${going.escapeK.toFixed(2)}`);
+
+    // Shove the view as hard round as a panicking player would, from both the
+    // mouse's clamp and the arrow keys, and take the worst of it.
+    let worstYaw = 0;
+    let moved = 0;
+    const heldAt = { x: going.px, z: going.pz };
+    for (let i = 0; i < 8; i++) {
+      await scene(() => {
+        const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+        sc.yaw += 2.7;
+      });
+      await press('ArrowLeft', 260);
+      await sleep(120);
+      const s = await hide();
+      const off = Math.abs(Math.atan2(Math.sin(s.yaw - s.doorFacing), Math.cos(s.yaw - s.doorFacing)));
+      worstYaw = Math.max(worstYaw, off);
+      moved = Math.max(moved, Math.hypot(s.px - heldAt.x, s.pz - heldAt.z));
+      if (i === 3) await page.screenshot({ path: `${SHOTS}/arcade-unlocking.png` });
+    }
+    check('the head will not turn round, however hard it is pushed',
+      worstYaw <= going.escapeYaw + 0.02, `${worstYaw.toFixed(2)} rad off the doors, cap ${going.escapeYaw}`);
+    check('and it is nowhere near far enough to see behind you',
+      worstYaw < Math.PI / 4, `${((worstYaw * 180) / Math.PI).toFixed(0)} degrees`);
+    check('the feet do not move for the whole of it', moved < 0.01, `${moved.toFixed(3)}m`);
+
+    // and the hands shake harder the longer it goes on
+    const late = await hide();
+    check('the shake builds as it runs out', late.tremble > going.tremble,
+      `${going.tremble.toFixed(2)} -> ${late.tremble.toFixed(2)}`);
+
+    let waited = 0;
+    while (waited < 9000 && (await hide())?.mode === 'seeking') {
+      await sleep(400);
+      waited += 400;
+    }
+    const done = await hide();
+    check('ten seconds of it and the lock turns', done.mode === 'survived', done.mode);
+    await page.screenshot({ path: `${SHOTS}/arcade-out.png` });
+    await page.close();
+  }
+
   // ------------------------------------------- he is huge, and still gets about
   // Making him bigger is only worth anything if he can still cross the room.
   // The model grew; the circle the walls and the furniture are tested against
@@ -691,8 +852,7 @@ try {
     console.log('\nRuntime errors: none');
   }
 
-  const total = 57;
-  console.log(`\n${total - failed}/${total} checks passed.`);
+  console.log(`\n${ran - failed}/${ran} checks passed.`);
   await browser.close();
   process.exit(failed > 0 || errors.length > 0 ? 1 : 0);
 } catch (e) {
