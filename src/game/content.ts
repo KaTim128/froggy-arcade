@@ -192,7 +192,7 @@ export const CABINETS: CabinetDef[] = [
   // Twenty in, and what comes back out is whatever is on the machine when the
   // player cashes out — the cabinet settles its own payout through the shell,
   // so `reward` here is only the five a clean pull is worth.  See roulette.ts.
-  { id: 'roulette', title: 'CHAMBER', tier: 'hard', cost: 20, reward: 5, x: 224, y: 96, color: 0x8a2b34, room: 'casino', symbol: '5', motif: 'chamber' },
+  { id: 'roulette', title: 'CHAMBER', tier: 'hard', cost: 15, reward: 5, x: 224, y: 96, color: 0x8a2b34, room: 'casino', symbol: '5', motif: 'chamber' },
   // Not a machine either: a wheel on a post, in the corner of the casino.
   // Forty a spin, and what it pays is whatever the pointer is over when it
   // stops — `reward` is only what the room's badge would say, since the wheel
