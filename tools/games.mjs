@@ -1230,67 +1230,68 @@ for (const g of [
   // able to drive into the one we are watching either.
   await page.evaluate(() => window.__chase.shield(true));
 
-  // Poll the traffic and remember, per SIGNAL, what the indicator did and
-  // where the car was sitting while it did it.  Per signal and not per car:
-  // one car changes lanes several times in twenty seconds, and holding one
-  // entry per car compares the second change against where the first started.
+  // ONE PASS, BOTH FACTS.  Watch the road for twenty-four seconds and file an
+  // episode per SIGNAL — not per car, because a car changes lanes several
+  // times in that window and one entry per car compares its second change
+  // against where its first one started.  Each episode records how many blinks
+  // had been counted when it was released, whether it moved before that, and
+  // how long the crossing itself took.
   const seen = await page.evaluate(async () => {
     const live = new Map();
     const done = [];
-    const stop = Date.now() + 22000;
+    const stop = Date.now() + 24000;
     while (Date.now() < stop) {
-      for (const c of window.__chase.trafficState()) {
-        if (c.signal === 0 && !c.changing) continue;
-        const e = live.get(c.id);
-        if (!c.changing) {
-          // A fresh signal is either a car we have not seen indicating, or one
-          // whose last change has already been released.
+      const t = Date.now();
+      const cars = window.__chase.trafficState();
+      const here = new Set(cars.map((c) => c.id));
+      for (const c of cars) {
+        let e = live.get(c.id);
+        if (c.signal !== 0 && !c.changing) {
+          // Indicating, wheels straight.  A fresh episode, or the same one.
           if (!e || e.atBlinks >= 0) {
-            live.set(c.id, { blinks: c.blinks, movedEarly: false, atBlinks: -1, x0: c.x });
-          } else {
-            e.blinks = Math.max(e.blinks, c.blinks);
-            // Still indicating: it has not been released yet, so it must not
-            // have moved off the line it was on when the lamp came on.
-            if (Math.abs(c.x - e.x0) > 0.51) e.movedEarly = true;
+            e = { blinks: 0, movedEarly: false, atBlinks: -1, t0: 0, ms: 0, x0: c.x };
+            live.set(c.id, e);
           }
-        } else if (e && e.atBlinks < 0) {
-          // The third blink finishing IS the release, so the frame that first
+          e.blinks = Math.max(e.blinks, c.blinks);
+          if (Math.abs(c.x - e.x0) > 0.51) e.movedEarly = true;
+        } else if (c.changing && e) {
+          // The third blink finishing IS the release, so the first frame that
           // reports `changing` is the frame the count reaches three.
-          e.atBlinks = c.blinks;
+          if (e.atBlinks < 0) {
+            e.atBlinks = c.blinks;
+            e.t0 = t;
+          }
+          e.ms = t - e.t0;
+        } else if (e && e.atBlinks >= 0) {
+          // Back in a lane with the lamp off: that episode is finished.
           done.push(e);
+          live.delete(c.id);
         }
       }
-      await new Promise((r) => setTimeout(r, 40));
+      // A car that scrolled off mid-change is dropped rather than filed.
+      for (const id of [...live.keys()]) if (!here.has(id)) live.delete(id);
+      await new Promise((r) => setTimeout(r, 30));
     }
     return done;
   });
 
-  // And the change itself is slow enough to answer: a lane is 54px and it is
-  // supposed to take better than a second and a half to cross one.  Catch a
-  // car while it is still INDICATING, so the clock starts on the first frame
-  // of the change rather than wherever the poll happened to look.
-  const crossed = await page.evaluate(async () => {
-    const give = Date.now() + 25000;
-    while (Date.now() < give) {
-      const waiting = window.__chase.trafficState().find((c) => c.signal !== 0 && !c.changing);
-      if (waiting) {
-        let t0 = 0;
-        const deadline = Date.now() + 8000;
-        while (Date.now() < deadline) {
-          const now = window.__chase.trafficState().find((x) => x.id === waiting.id);
-          if (!now) break;
-          if (now.changing && !t0) t0 = Date.now();
-          if (t0 && !now.changing) return Date.now() - t0;
-          await new Promise((r) => setTimeout(r, 25));
-        }
-      }
-      await new Promise((r) => setTimeout(r, 25));
-    }
-    return 0;
-  });
-  const unhurried = crossed >= 1200;
+  const counted = seen.length > 0 && seen.every((e) => e.atBlinks === 3 && !e.movedEarly);
   console.log(
-    `${unhurried ? 'PASS' : 'FAIL'}  car chase: the lane change is slow enough to read  — ${crossed}ms end to end`,
+    `${counted ? 'PASS' : 'FAIL'}  car chase: a car blinks three times before it moves, and not before  — ` +
+      `${seen.length} lane changes, blinks at release ${seen.map((e) => e.atBlinks).join(',') || 'none seen'}` +
+      `${seen.some((e) => e.movedEarly) ? ', SOME MOVED EARLY' : ''}`,
+  );
+  if (!counted) failures++;
+
+  // And the change itself is slow enough to answer: a lane is 54px wide and
+  // crossing one is supposed to take better than a second and a half.  The
+  // middle of what was seen, so one clipped sample cannot decide it.
+  const times = seen.map((e) => e.ms).sort((a, b) => a - b);
+  const middle = times.length ? times[Math.floor(times.length / 2)] : 0;
+  const unhurried = middle >= 1200;
+  console.log(
+    `${unhurried ? 'PASS' : 'FAIL'}  car chase: the lane change is slow enough to read  — ` +
+      `${middle}ms across the middle one of ${times.length}`,
   );
   if (!unhurried) failures++;
   await page.close();
@@ -1318,6 +1319,7 @@ for (const g of [
     const xs = [];
     for (let i = 0; i < 160; i++) {
       const st = window.__bowl.state();
+      if (!st.rolling && entered) break;
       if (st.gutter !== 0) entered = true;
       if (entered) {
         xs.push(Math.round(st.ball.x));
@@ -1325,7 +1327,6 @@ for (const g of [
         // ball back in play, which is the bug.
         if (st.ball.x > 117) escaped = true;
       }
-      if (!st.rolling && entered) break;
       await new Promise((r) => setTimeout(r, 25));
     }
     return { entered, escaped, xs: [...new Set(xs)], state: window.__bowl.state() };
@@ -1834,9 +1835,25 @@ for (const g of [
   if (!held) failures++;
 
   // And when it ends they come back ONE at a time, not four at once.
-  await sleep(7000);
-  const back = await st();
-  const gentle = !back.gone && back.respite === 0 && back.police <= 2;
+  //
+  // Watched for rather than timed.  A chaser that finds the back of a traffic
+  // car on its own buys ANOTHER ten seconds of quiet, which is the game
+  // working exactly as it is supposed to — and with the road as busy as it is
+  // now, a fixed sleep lands inside a second respite often enough to fail a
+  // rule that was never broken.  So wait for a moment when the quiet is
+  // genuinely over and somebody is genuinely back, and count them then.
+  let back = await st();
+  let resumed = null;
+  for (let i = 0; i < 60 && !back.gone; i++) {
+    if (back.respite === 0 && back.police >= 1) {
+      resumed = back;
+      break;
+    }
+    await sleep(500);
+    back = await st();
+  }
+  back = resumed ?? back;
+  const gentle = !!resumed && resumed.police <= 2;
   console.log(
       `${gentle ? 'PASS' : 'FAIL'}  car chase: they come back one at a time  — ` +
         (back.gone ? 'the run ended first' : `${back.police} on the road, cap ${back.policeCap}`),

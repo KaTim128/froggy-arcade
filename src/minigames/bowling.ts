@@ -395,7 +395,12 @@ export const bowling: MinigameModule = {
     if (over || !ballBody) return;
     const dt = Math.min(delta, 40) / 1000;
 
-    if (!ball.rolling && turn === 'player') {
+    // Not while the last roll is still being counted.  The walk below clamps
+    // the ball back onto the boards, and a ball that has just died in the
+    // gutter is still at the gutter's x — so this branch was quietly lifting a
+    // dead ball out of the channel and putting it back on the lane while the
+    // pins settled.  SPACE was already refused during a settle; so is this.
+    if (!ball.rolling && settleMs <= 0 && turn === 'player') {
       const swing = (keys.aimR.some((k) => k.isDown) ? 1 : 0) - (keys.aimL.some((k) => k.isDown) ? 1 : 0);
       aim = Phaser.Math.Clamp(aim + swing * AIM_RATE * dt, -AIM_MAX, AIM_MAX);
       // Q and E swing the hook dial through zero; there is no separate key for
