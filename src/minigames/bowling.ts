@@ -99,8 +99,32 @@ const OIL_HOOK_BITE = 0.25;
 /** Lane friction, and the much lower figure on oil. */
 const FRICTION_DRY = 0.18;
 const FRICTION_OIL = 0.05;
-/** A pin has to be shoved this far off its spot to count as down. */
-const KNOCK = 4.5;
+/**
+ * THE PINS DO NOT GO OVER EASILY.
+ *
+ * `KNOCK` is how far a pin has to be shoved off its spot before it counts as
+ * down, and `TOPPLE` is the speed that puts one over without moving it that
+ * far.  A brush used to be a fall: any ball that arrived anywhere near the
+ * rack took most of it, and a strike was the ordinary outcome of a decent
+ * line rather than a good one.  `PIN_MASS` is the rest of it — a heavier pin
+ * takes more of the ball's speed to start moving and passes less of it on, so
+ * the chain across the back rows has to be set up rather than hoped for.
+ */
+const KNOCK = 5.5;
+const TOPPLE = 112;
+const PIN_MASS = 1.15;
+/** How fast a shoved pin gives up, per second.  Higher is a shorter chain. */
+const PIN_DRAG = 3.9;
+/**
+ * WHAT CLEARING THE RACK IS WORTH, on top of the ten pins themselves.
+ *
+ * A strike pays more than a spare because it is the harder of the two and
+ * because it costs a ball: eight and two is ten, and the same ten off the
+ * first ball is fifteen.  Both sides are paid it, so Froggy's total moves the
+ * same way and beating him still means out-bowling him.
+ */
+const STRIKE_BONUS = 5;
+const SPARE_BONUS = 3;
 const CHARGE_MS = 1100;
 const THROW_MIN = 130;
 const THROW_MAX = 330;
@@ -122,10 +146,18 @@ const DECK_Y = PIN_APEX_Y + PIN_R * 2;
  * than as screen pixels: `l` and `r` are fractions of the lane's width, `top`
  * and `bottom` are y on the lane, and `push` is which way the patch shoves.
  *
- * There is one pattern per round and the rounds always come in this order, so
- * the third round is the same lane for everyone who ever reaches it.  That is
- * the whole design: the oil is a puzzle, and a puzzle that is re-rolled every
- * throw is not a puzzle.
+ * THE LANE IS RE-OILED BEFORE EVERY BALL, not once a round.  It used to be one
+ * fixed pattern per round out of a table, so round three was the same lane for
+ * everyone who ever reached it and a line that worked on your first ball
+ * worked on your second.  Now the crew comes out between shots: the pattern
+ * you spent a ball learning is gone, and the one in front of you is the only
+ * one that matters.
+ *
+ * IT IS STILL READ, NOT GUESSED.  The patches are drawn on the boards with the
+ * chevrons pointing the way they shove, and the aiming line is simulated
+ * through whatever is down there now — so a fresh pattern is a fresh problem
+ * you can see from the foul line, not a dice roll after the ball leaves your
+ * hand.
  */
 interface OilSpec {
   l: number;
@@ -135,27 +167,40 @@ interface OilSpec {
   push: -1 | 1;
 }
 
-const OIL_PATTERNS: OilSpec[][] = [
-  // Round one: one long patch down the left half pushing right, one short one
-  // up on the right pushing back.  A straight ball down the left comes back to
-  // the pocket; a right-hand hook thrown wide is held off and then bites.
-  [
-    { l: 0.0, r: 0.5, top: 98, bottom: 142, push: 1 },
-    { l: 0.58, r: 1.0, top: 70, bottom: 98, push: -1 },
-  ],
-  // Round two: the mirror of it, so the lane you learned reads backwards.
-  [
-    { l: 0.5, r: 1.0, top: 98, bottom: 142, push: -1 },
-    { l: 0.0, r: 0.42, top: 70, bottom: 98, push: 1 },
-  ],
-  // Round three: both edges pushing outward, into the channels, with dry
-  // boards down the middle.  The gutters do the work here and the only safe
-  // line is the one you have to thread.
-  [
-    { l: 0.0, r: 0.3, top: 78, bottom: 146, push: -1 },
-    { l: 0.7, r: 1.0, top: 78, bottom: 146, push: 1 },
-  ],
-];
+/** The band of lane the crew ever oils: short of the deck, past the approach. */
+const OIL_Y = { top: 66, bottom: 148 };
+/** How many patches go down, and how wide across the lane each one can be. */
+const OIL_PATCHES = [2, 3];
+const OIL_SPAN = { min: 0.28, max: 0.52 };
+/** How deep a patch is, in lane pixels. */
+const OIL_DEPTH = { min: 24, max: 40 };
+
+/**
+ * Lay a fresh pattern.
+ *
+ * The patches are stacked DOWN THE LANE in their own bands rather than dropped
+ * anywhere, for two reasons: `oilAt` takes the first patch under a point and
+ * so relies on them never overlapping, and a ball that crosses them one after
+ * another is a lane you can read top to bottom instead of a smear.
+ */
+function rollOil(): OilSpec[] {
+  const n = OIL_PATCHES[Math.floor(Math.random() * OIL_PATCHES.length)];
+  const band = (OIL_Y.bottom - OIL_Y.top) / n;
+  const spec: OilSpec[] = [];
+  let last = 0;
+  for (let i = 0; i < n; i++) {
+    const depth = Math.min(band - 4, OIL_DEPTH.min + Math.random() * (OIL_DEPTH.max - OIL_DEPTH.min));
+    const top = OIL_Y.top + i * band + Math.random() * (band - depth);
+    const span = OIL_SPAN.min + Math.random() * (OIL_SPAN.max - OIL_SPAN.min);
+    const l = Math.random() * (1 - span);
+    // Never two shoves the same way in a row: a lane that pushes one way from
+    // end to end is one correction, and one correction is not a pattern.
+    const push: -1 | 1 = last === 0 ? (Math.random() < 0.5 ? -1 : 1) : ((-last) as -1 | 1);
+    last = push;
+    spec.push({ l, r: l + span, top, bottom: top + depth, push });
+  }
+  return spec;
+}
 
 /** A patch as it sits on the lane, in screen pixels. */
 interface Oil {
@@ -245,6 +290,8 @@ export const bowling: MinigameModule = {
       'THREE ROUNDS AGAINST FROGGY.',
       'BEAT HIS TOTAL - A TIE REFUNDS.',
       'THE DARK PATCHES ARE OIL - IT SHOVES.',
+      'THE LANE IS RE-OILED BEFORE EVERY BALL.',
+      'STRIKE +5 ON BALL ONE, SPARE +3 ON TWO.',
       'STRAIGHT OR HOOKED. THE LINE SHOWS BOTH.',
     ],
     controls: [
@@ -363,6 +410,13 @@ export const bowling: MinigameModule = {
           scores: { ...scores },
           standing: pins.filter((p) => !p.down).length,
           rolling: ball.rolling,
+          /**
+           * The pins are still being counted.  `rolling` goes false the moment
+           * the ball stops, and the score does not move until the deck has
+           * settled -- so a harness that waits on `rolling` alone reads the
+           * scoreboard from before the roll it just threw.
+           */
+          settling: settleMs > 0,
           best,
           hook,
           curve,
@@ -384,6 +438,16 @@ export const bowling: MinigameModule = {
           hook = Phaser.Math.Clamp(h, -HOOK_MAX, HOOK_MAX);
           refreshHud();
         },
+        /**
+         * Lay a KNOWN pattern, or an empty one for dry boards.
+         *
+         * The lane is re-oiled at random before every ball, which is the game
+         * -- and which means two throws measured against each other are not
+         * two throws down the same lane unless something pins the pattern.
+         * That is what this is for: it is the only way to ask what the hook
+         * alone does, or what one patch alone does.
+         */
+        setOil: (spec: OilSpec[]) => layOil(spec),
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__bowl;
@@ -477,17 +541,20 @@ function resetBall(): void {
 }
 
 /**
- * Lay this round's oil, and draw it.
+ * Lay a fresh pattern on the lane, and draw it.
  *
  * The patch itself is a dark sheen over the boards — oil on wood, seen from
  * above — and the chevrons on it point the way it shoves, so the lane can be
  * read from the foul line without having thrown a ball down it first.
+ *
+ * Called before EVERY ball, the player's and Froggy's alike.  It tears down
+ * the last pattern's art as it goes, so this is also the only thing that has
+ * to be right about repeated calls.
  */
-function layOil(): void {
+function layOil(spec: OilSpec[] = rollOil()): void {
   if (!scene0) return;
   for (const o of oil) for (const part of o.parts) part.destroy();
   oil = [];
-  const spec = OIL_PATTERNS[(round - 1) % OIL_PATTERNS.length];
   for (const s of spec) {
     const x = LANE_L + s.l * LANE_W;
     const w = (s.r - s.l) * LANE_W;
@@ -583,7 +650,7 @@ function stepPhysics(dt: number): void {
   // it.  That is where the chain reactions come from.
   for (const p of pins) {
     if (p.gone) continue;
-    collide(ball, BALL_MASS, BALL_R, p, 1, PIN_R);
+    collide(ball, BALL_MASS, BALL_R, p, PIN_MASS, PIN_R);
   }
   stepPins(dt);
 }
@@ -610,17 +677,17 @@ function stepPins(dt: number): void {
     if (p.gone) continue;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-    const f = Math.max(0, 1 - 3.6 * dt);
+    const f = Math.max(0, 1 - PIN_DRAG * dt);
     p.vx *= f;
     p.vy *= f;
     for (const q of pins) {
       if (q === p || q.gone) continue;
-      collide(p, 1, PIN_R, q, 1, PIN_R);
+      collide(p, PIN_MASS, PIN_R, q, PIN_MASS, PIN_R);
     }
     // A shove is a fall: moved off its spot, or moving fast, and it is down.
     if (!p.down) {
       const moved = Math.hypot(p.x - p.home.x, p.y - p.home.y) > KNOCK;
-      if (moved || Math.hypot(p.vx, p.vy) > 90) {
+      if (moved || Math.hypot(p.vx, p.vy) > TOPPLE) {
         p.down = true;
         p.body.setFillStyle(PALETTE.ash).setScale(1.3, 0.55).setDepth(12);
         audio.sfx('ui_hover', 0.6);
@@ -747,15 +814,32 @@ function drawAim(): void {
   aimLine.fillCircle(tip.x, tip.y, 1.5);
 }
 
-/** The roll is over: count, then decide whose ball is next. */
+/**
+ * The roll is over: count, then decide whose ball is next.
+ *
+ * TEN IS WORTH MORE THAN TEN.  A rack cleared with the FIRST ball is a strike
+ * and pays STRIKE_BONUS on top of the ten; cleared with the second, after the
+ * sweep, it is a spare and pays SPARE_BONUS.  The two of them are what makes
+ * the first ball of a frame worth taking a line on rather than nursing: eight
+ * and two is ten, and a strike is fifteen.  Froggy is paid the same way.
+ */
 function endRoll(): void {
   const standing = pins.filter((p) => !p.down).length;
   const knocked = standingBefore - standing;
   scores[turn] += knocked;
   if (knocked > 0) audio.sfx(knocked >= 5 ? 'chime' : 'ui_blip');
+
+  // The whole rack, and which ball did it.
+  const cleared = standing === 0;
+  const strike = cleared && ballNo === 1;
+  const spare = cleared && ballNo > 1;
+  if (strike || spare) {
+    scores[turn] += strike ? STRIKE_BONUS : SPARE_BONUS;
+    callIt(strike ? `STRIKE!  +${STRIKE_BONUS}` : `SPARE  +${SPARE_BONUS}`, strike);
+  }
   refreshHud();
 
-  const frameDone = standing === 0 || ballNo >= BALLS_PER_ROUND;
+  const frameDone = cleared || ballNo >= BALLS_PER_ROUND;
   if (!frameDone) {
     // The sweep: fallen pins are cleared off the deck before the second ball,
     // so what is left standing is all that is in the way.
@@ -766,6 +850,9 @@ function endRoll(): void {
       }
     }
     ballNo++;
+    // A fresh pattern before the spare attempt too: the line that left those
+    // pins standing is not the line that will pick them up.
+    layOil();
     resetBall();
     if (turn === 'cpu') cpuThrow();
     return;
@@ -775,6 +862,7 @@ function endRoll(): void {
   if (turn === 'player') {
     turn = 'cpu';
     ballNo = 1;
+    layOil();
     rack();
     resetBall();
     refreshHud();
@@ -788,8 +876,6 @@ function endRoll(): void {
   round++;
   turn = 'player';
   ballNo = 1;
-  // A new round is a fresh pattern: the lane you have learned is not the lane
-  // you get next, which is what keeps three rounds worth playing.
   layOil();
   rack();
   resetBall();
@@ -835,6 +921,21 @@ function cpuThrow(): void {
     );
     throwBall(bestLine.angle + (Math.random() - 0.5) * 0.16, pow, bestLine.bend);
   });
+}
+
+/**
+ * The word for what just happened, over the deck.
+ *
+ * Same place and the same fade as GUTTER, because it is the same kind of
+ * thing: the one line of feedback the deck gives you about the ball you have
+ * just thrown.  It has to say the number too — a bonus the scoreboard absorbs
+ * silently is a bonus nobody knows they are playing for.
+ */
+function callIt(line: string, big: boolean): void {
+  if (!scene0) return;
+  audio.sfx('chime', big ? 0.9 : 0.7);
+  const t = centerText(scene0, LANE_L + LANE_W / 2, 84, line, big ? PALETTE.gold : PALETTE.tealLight).setDepth(50);
+  scene0.tweens.add({ targets: t, y: 74, alpha: 0, duration: 1600, onComplete: () => t.destroy() });
 }
 
 function refreshHud(): void {

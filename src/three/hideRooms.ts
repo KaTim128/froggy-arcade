@@ -27,7 +27,7 @@ export interface Box {
    * what you can walk through and what he can see over do not depend on how
    * nicely a thing happens to be modelled.
    */
-  prop?: 'cabinet' | 'case';
+  prop?: 'cabinet' | 'case' | 'counter' | 'change';
   /** Which way a prop with a front is facing, in radians.  0 faces +Z. */
   face?: number;
 }
@@ -502,9 +502,14 @@ const ARCADE_BASE: RoomDef = {
     // the flat room gets for free from having a back wall six pixels behind
     // the desk: they close the ends, so the corner is somewhere you are rather
     // than a strip you stand in, and there is no walking round into it.
-    { x: 1.88, z: -5.4, w: 11.0, d: 1.2, h: 1.15, color: 0x6b4a2f, low: true },
-    { x: -3.61, z: -7.7, w: 1.2, d: 5.8, h: 1.15, color: 0x6b4a2f, low: true },
-    { x: 7.38, z: -7.7, w: 1.2, d: 5.8, h: 1.15, color: 0x6b4a2f, low: true },
+    // `face` is the PUBLIC side of each run: the front looks down the room, and
+    // the two returns look outwards, away from the staff corner between them.
+    // It is what decides which way the top overhangs and which side carries
+    // the panelling, so a return built facing the wrong way would put its
+    // shadow inside the corner nobody can see into.
+    { x: 1.88, z: -5.4, w: 11.0, d: 1.2, h: 1.15, color: 0x6b4a2f, low: true, prop: 'counter', face: 0 },
+    { x: -3.61, z: -7.7, w: 1.2, d: 5.8, h: 1.15, color: 0x6b4a2f, low: true, prop: 'counter', face: -Math.PI / 2 },
+    { x: 7.38, z: -7.7, w: 1.2, d: 5.8, h: 1.15, color: 0x6b4a2f, low: true, prop: 'counter', face: Math.PI / 2 },
 
     // ---- THE BACK WALL: the prize case, and the staff door beside it.
     // PRIZE_CASE x 126..226, which lands it inside the wrap with the staff
@@ -513,7 +518,7 @@ const ARCADE_BASE: RoomDef = {
     // stand on in front of it rather than a slot to be wedged into.
     { x: 1.2, z: -9.5, w: 7.4, d: 0.9, h: 2.8, color: 0x203048, prop: 'case', face: 0 },
     // the change machine, past the right-hand end of the desk, where x 272 is
-    { x: 9.6, z: -9.3, w: 1.8, d: 1.2, h: 2.3, color: 0x4a4258 },
+    { x: 9.6, z: -9.3, w: 1.8, d: 1.2, h: 2.3, color: 0x4a4258, prop: 'change', face: 0 },
 
     // ---- FIVE MACHINES, WHERE THE LIT ROOM STANDS THEM.
     //

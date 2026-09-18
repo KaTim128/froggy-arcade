@@ -35,8 +35,8 @@ const GAMES = [
   { id: 'hoops', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.down('Space'); await sleep(500); await p.keyboard.up('Space'); await sleep(1400); } } },
   { id: 'whack', drive: async (p) => { for (let i = 0; i < 14; i++) { await p.mouse.click(400 + (i % 3) * 240, 250 + Math.floor(i / 3) * 168); await sleep(180); } await sleep(600); } },
   // Back one, buy a second ticket, and then sit through the whole race: it is
-  // twelve seconds by design and the result card comes after it.
-  { id: 'frograce', drive: async (p) => { await p.keyboard.press('Digit3'); await sleep(250); await p.keyboard.press('ArrowUp'); await sleep(250); await p.keyboard.press('Space'); await sleep(16500); } },
+  // twenty seconds by design and the result card comes after it.
+  { id: 'frograce', drive: async (p) => { await p.keyboard.press('Digit3'); await sleep(250); await p.keyboard.press('ArrowUp'); await sleep(250); await p.keyboard.press('Space'); await sleep(24500); } },
   { id: 'grudge', drive: async (p) => { await sleep(1600); for (let i = 0; i < 6; i++) { await p.keyboard.press('KeyD'); await p.keyboard.press('KeyJ'); await sleep(400); } } },
   { id: 'donkeykong', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(2500); await p.keyboard.up('KeyD'); await p.keyboard.press('Space'); await sleep(600); await p.keyboard.down('KeyW'); await sleep(900); await p.keyboard.up('KeyW'); } },
   { id: 'slots', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.press('Space'); await sleep(2700); } } },
@@ -721,7 +721,7 @@ for (const g of [
   await bridge(page, '__chase');
   // NOTHING ON THE ROAD MAY END THE RUN while the rules that are not about
   // crashing are under test.  Every check below this line — the tank, the
-  // heat, the juke, the jars, the strips being laid — parks the car and reads
+  // heat, the juke, the pickups, the strips being laid — parks the car and reads
   // the state some seconds later, and a traffic car that arrived in the
   // meantime took the scene down with it, deleted `window.__chase` and threw
   // the rest of the block at the wall.  The shield comes off for the one test
@@ -730,23 +730,57 @@ for (const g of [
 
   const st = () => page.evaluate(() => window.__chase.state());
 
-  // ---- the tank puts a burst back by itself, and takes its time about it.
-  // A jar picked up mid-measurement adds a WHOLE burst, so the regeneration is
-  // read off the fractional part: five seconds of it is a bit over a third of
-  // one, jar or no jar.
-  await page.evaluate(() => window.__chase.setNitro(0));
-  const dry = await st();
-  await sleep(5000);
-  const filling = await st();
-  const grew = filling.nitroCharge > dry.nitroCharge;
-  const part = filling.nitroCharge % 1;
-  // Fourteen seconds a burst: five of them must be a fraction of one, or the
-  // burst has stopped being a decision.
-  const slowly = part > 0.2 && part < 0.5;
+  // ---- WHAT THE THREE THINGS ON THE ROAD ACTUALLY DO.  Each is put down in
+  // the player's own lane, driven over, and the one number it is supposed to
+  // move is read: a banana adds a skin, a bank adds fifty, and a pothole takes
+  // the speed without ending the run.
+  const takePickup = async (kind) => {
+    // The spawner deliberately puts one as far from the player's lane as it
+    // can (see `jarLane`) and jitters it across that lane, so the car has to
+    // be moved ONTO its real x -- aiming at the lane centre misses by more
+    // than the car is wide, which is the whole point of the jitter.
+    const before = await page.evaluate((k) => {
+      window.__chase.clearRoad();
+      window.__chase.setPlayer(window.__chase.laneX(1), 150);
+      window.__chase.dropPickup(k);
+      const s = window.__chase.state();
+      window.__chase.setPlayer(s.pickupXs[0], 150);
+      return window.__chase.state();
+    }, kind);
+    // And then it comes down the road onto the car on its own.
+    for (let i = 0; i < 60; i++) {
+      const now = await st();
+      if (now.pickups === 0 || now.gone) return { before, after: now };
+      await sleep(100);
+    }
+    return { before, after: await st() };
+  };
+
+  await page.evaluate(() => window.__chase.setBananas(0));
+  const gotBanana = await takePickup('banana');
+  const bananaOk = gotBanana.after.bananas > gotBanana.before.bananas;
   console.log(
-    `${grew && slowly ? 'PASS' : 'FAIL'}  car chase: nitro comes back on its own, slowly  — ${dry.nitroCharge.toFixed(2)} -> ${filling.nitroCharge.toFixed(2)} in 5s`,
+    `${bananaOk ? 'PASS' : 'FAIL'}  car chase: a banana is picked up and carried  — ` +
+      `${gotBanana.before.bananas} -> ${gotBanana.after.bananas}`,
   );
-  if (!grew || !slowly) failures++;
+  if (!bananaOk) failures++;
+
+  await page.evaluate(() => window.__chase.setCash(0));
+  const gotBank = await takePickup('bank');
+  const bankOk = gotBank.after.cash - gotBank.before.cash === 50;
+  console.log(
+    `${bankOk ? 'PASS' : 'FAIL'}  car chase: a froggy bank pays fifty  — ` +
+      `${gotBank.before.cash} -> ${gotBank.after.cash}`,
+  );
+  if (!bankOk) failures++;
+
+  const hitHole = await takePickup('pothole');
+  const holeOk = hitHole.after.jolted && !hitHole.after.gone;
+  console.log(
+    `${holeOk ? 'PASS' : 'FAIL'}  car chase: a pothole costs you the gap, not the run  — ` +
+      `${hitHole.after.jolted ? 'jolted' : 'no jolt'}, ${hitHole.after.gone ? 'RUN ENDED' : 'still driving'}`,
+  );
+  if (!holeOk) failures++;
 
   // ---- and two hundred in the bag turns the heat up.  Read a few frames
   // after each change: the road speed the police measure themselves against
@@ -835,7 +869,7 @@ for (const g of [
   );
   if (!dropped) failures++;
 
-  // ---- nitro jars are spread, not clustered: never twice in the same lane.
+  // ---- the pickups are spread, not clustered: never twice in the same lane.
   await page.evaluate(() => {
     window.__chase.clearRoad();
     window.__chase.setCash(0);
@@ -844,14 +878,14 @@ for (const g of [
   const lanes = await page.evaluate(() => {
     const seen = [];
     for (let i = 0; i < 8; i++) {
-      window.__chase.dropJar();
-      const all = window.__chase.state().jarLanes;
+      window.__chase.dropPickup('banana');
+      const all = window.__chase.state().pickupLanes;
       seen.push(all[all.length - 1]);
     }
     return seen;
   });
   const spread = lanes.every((l, i) => i === 0 || l !== lanes[i - 1]);
-  console.log(`${spread ? 'PASS' : 'FAIL'}  car chase: jars never land twice in the same lane  — ${lanes.join(',')}`);
+  console.log(`${spread ? 'PASS' : 'FAIL'}  car chase: pickups never land twice in the same lane  — ${lanes.join(',')}`);
   if (!spread) failures++;
 
   // ---- spike strips: nothing before six hundred, and a gap to thread after.
@@ -876,29 +910,28 @@ for (const g of [
   );
   if (!timed) failures++;
 
-  // ---- nitro has to buy room.  With a chaser on the bumper, a burst must
-  // put real distance between the two cars rather than being a noise the game
-  // makes while they stay exactly where they were.
+  // ---- A DROPPED BANANA HAS TO TAKE A CHASER OFF THE ROAD.  It is the only
+  // escape the game has left, so a skin put down in front of a car on the
+  // bumper must spin it and buy the quiet — not merely be a noise while the
+  // two of them stay exactly where they were.
   await page.evaluate(() => {
     window.__chase.clearRoad();
     window.__chase.setCash(0);
     window.__chase.setPlayer(window.__chase.laneX(1), 120);
     window.__chase.spawnPolice(1, 150);
-    window.__chase.setNitro(2);
+    window.__chase.setBananas(2);
   });
   await sleep(700);
   const onTheBumper = await st();
-  await page.keyboard.press('Space'); // nitro
-  await sleep(1400);
-  const midBurst = await st();
-  const gapBefore = (onTheBumper.cars[0]?.y ?? 0) - onTheBumper.player.y;
-  const gapAfter = (midBurst.cars[0]?.y ?? 0) - midBurst.player.y;
-  const roomToBreathe = !midBurst.cars.length || gapAfter > gapBefore + 20;
+  await page.keyboard.press('Space'); // put one down behind
+  await sleep(1600);
+  const afterDrop = await st();
+  const skinWorked = onTheBumper.chasing > 0 && afterDrop.chasing === 0 && afterDrop.respite > 8000;
   console.log(
-    `${roomToBreathe ? 'PASS' : 'FAIL'}  car chase: a nitro burst opens a real gap  — ` +
-      `${Math.round(gapBefore)}px -> ${midBurst.cars.length ? `${Math.round(gapAfter)}px` : 'off the road'}`,
+    `${skinWorked ? 'PASS' : 'FAIL'}  car chase: a dropped banana spins the car on your bumper  — ` +
+      `${onTheBumper.chasing} chasing -> ${afterDrop.chasing}, ${Math.round(afterDrop.respite / 100) / 10}s clear`,
   );
-  if (!roomToBreathe) failures++;
+  if (!skinWorked) failures++;
 
   // ---- and driving into one ends the run.  Sweep the road, lay a fresh strip
   // at the top of it, then park in a lane the spikes cover and let it arrive:
@@ -907,7 +940,7 @@ for (const g of [
     window.__chase.clearRoad();
     // Off it comes: this is the one check that wants the run to end.
     window.__chase.shield(false);
-    // The nitro test above swept the road and put the bag back to nothing;
+    // The banana test above swept the road and put the bag back to nothing;
     // the strips only come out past six hundred.
     window.__chase.setCash(700);
     window.__chase.armTrap();
@@ -956,7 +989,7 @@ for (const g of [
   await page.close();
 }
 
-// CHAMBER: SPIN, STOP, PULL, and the twenty is gone the moment you walk up.
+// CHAMBER: SPIN, STOP, PULL, and the price is gone the moment you walk up.
 //
 // The loop is the thing here.  The trigger only works on a stopped cylinder,
 // nothing fires on its own when it stops, a clean pull sets the barrel turning
@@ -996,9 +1029,15 @@ for (const g of [
     const { CABINETS } = await import('/src/game/content.ts');
     return CABINETS.find((c) => c.id === 'roulette').cost;
   });
-  const charged = price === 20 && paidIn === purse - 20;
+  // WHAT THE CABINET ASKS, NOT WHAT THIS FILE REMEMBERS IT ASKING.  The price
+  // was written in here as a literal 20 beside the very number it was reading
+  // off the cabinet, so the day the Chamber's price moved to 15 the check
+  // failed on the retuning rather than on anything being wrong.  The thing
+  // worth asserting is that the door takes the cabinet's own price, once.
+  const charged = price > 0 && paidIn === purse - price;
   console.log(
-    `${charged ? 'PASS' : 'FAIL'}  chamber: twenty to walk up  — ${purse} -> ${paidIn}, cabinet asks ${price}`,
+    `${charged ? 'PASS' : 'FAIL'}  chamber: the door takes the cabinet's own price  — ` +
+      `${purse} -> ${paidIn}, cabinet asks ${price}`,
   );
   if (!charged) failures++;
 
@@ -1470,14 +1509,18 @@ for (const g of [
 
   // Where the ball is by the time it reaches the head pin.  Nothing is racked
   // below y=66, so the whole roll up to there is the ball and the lane alone.
-  // 175 is off the right-hand end of round one's first patch, so the shot
-  // starts on dry boards and the hook has something to bite on.
+  //
+  // THE LANE IS WIPED FIRST.  The pattern is rolled fresh before every ball
+  // now, so three throws off three fresh machines are three different lanes
+  // and the difference between them would be the oil, not the dial.  Dry
+  // boards is the only surface on which this question has an answer.
   const land = async (bend) => {
     await page.goto(`${URL}/?intro=1&tokens=50&game=bowling`, { waitUntil: 'networkidle2' });
     await sleep(1400);
     await startGame(page);
     await bridge(page, '__bowl');
     return page.evaluate(async (b) => {
+      window.__bowl.setOil([]);
       window.__bowl.throw(0, 0.8, 175, b);
       let last = 175;
       for (let i = 0; i < 400; i++) {
@@ -1508,6 +1551,10 @@ for (const g of [
   await startGame(page);
   await bridge(page, '__bowl');
   const oiled = await page.evaluate(async () => {
+    // One patch, laid where it can be rolled straight down: the random pattern
+    // could put its first patch anywhere, including hard against a channel,
+    // and this asks what a patch does rather than where one happened to land.
+    window.__bowl.setOil([{ l: 0.3, r: 0.7, top: 100, bottom: 140, push: 1 }]);
     const patch = window.__bowl.state().oil[0];
     if (!patch) return null;
     const x0 = patch.x + patch.w / 2;
@@ -1529,6 +1576,139 @@ for (const g of [
         : 'no oil on the lane'),
   );
   if (!shoved) failures++;
+  await page.close();
+}
+
+// THE CREW COMES OUT BETWEEN SHOTS.  The lane used to be oiled once a round,
+// so the line that worked on your first ball worked on your second.  Take one
+// ball, leave pins standing, and check the pattern under the spare attempt is
+// not the pattern the first ball rolled down.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=bowling`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await bridge(page, '__bowl');
+
+  const relaid = await page.evaluate(async () => {
+    const sig = () =>
+      window.__bowl
+        .state()
+        .oil.map((o) => [o.x, o.y, o.w, o.h, o.push].map((n) => Math.round(n)).join(':'))
+        .join('|');
+    const first = sig();
+    // A soft ball into the left-hand boards: it reaches the deck, so the frame
+    // moves on, and it cannot take the whole rack, so there is a second ball.
+    window.__bowl.throw(-0.2, 0.55, 130, 0);
+    for (let i = 0; i < 400; i++) {
+      const st = window.__bowl.state();
+      if (!st.rolling && (st.ballNo === 2 || st.turn === 'cpu')) break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    const st = window.__bowl.state();
+    return { first, second: sig(), ballNo: st.ballNo, turn: st.turn };
+  });
+  // Only meaningful if the frame really did move to a second ball.
+  const fresh = relaid.ballNo === 2 && relaid.turn === 'player' && relaid.second !== relaid.first;
+  console.log(
+    `${fresh ? 'PASS' : 'FAIL'}  bowling: the lane is re-oiled before the spare attempt  — ` +
+      `ball ${relaid.ballNo} (${relaid.turn}), [${relaid.first}] -> [${relaid.second}]`,
+  );
+  if (!fresh) failures++;
+  await page.close();
+}
+
+// TEN IS WORTH MORE THAN TEN.  All ten off the first ball is a strike and pays
+// five on top; all ten off the second is a spare and pays three.  The score is
+// what proves it: a bonus that quietly stopped being added reads as a cleared
+// rack worth exactly ten.
+//
+// The lane is wiped for both, because the pattern is random now and a shove
+// into the channel would be measuring the oil rather than the scoring.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+
+  // Everything the frame did, off a fresh machine: the balls thrown, what the
+  // board said after each, and whether the rack went down.
+  const frame = async (shots) => {
+    await page.goto(`${URL}/?intro=1&tokens=50&game=bowling`, { waitUntil: 'networkidle2' });
+    await sleep(1400);
+    await startGame(page);
+    await bridge(page, '__bowl');
+    return page.evaluate(async (shots) => {
+      // Thrown, stopped, AND counted: the score does not move until the deck
+      // has settled, so `rolling` alone reads the board from before the roll.
+      const settle = async () => {
+        for (let i = 0; i < 20; i++) {
+          if (window.__bowl.state().rolling) break;
+          await new Promise((r) => setTimeout(r, 25));
+        }
+        for (let i = 0; i < 400; i++) {
+          const st = window.__bowl.state();
+          if (!st.rolling && !st.settling) return st;
+          await new Promise((r) => setTimeout(r, 25));
+        }
+        return window.__bowl.state();
+      };
+      const out = [];
+      for (const [x, pow] of shots) {
+        // Re-wiped before every ball: the game re-oils between them.
+        window.__bowl.setOil([]);
+        window.__bowl.throw(0, pow, x, 0);
+        const st = await settle();
+        // WHETHER THE RACK WENT DOWN IS NOT `standing`.  By the time the deck
+        // has settled the frame is over and the pins are already re-racked for
+        // whoever is up next, so `standing` reads 10 after a strike.  What the
+        // frame did is in the turn: it moves on when the rack is cleared or
+        // the second ball is spent, and stays put with the ball number up when
+        // there are pins left to pick up.
+        out.push({ score: st.scores.player, ballNo: st.ballNo, turn: st.turn });
+        if (st.turn !== 'player') break;
+      }
+      return out;
+    }, shots);
+  };
+
+  // 159 is the pocket at full power and takes the rack off the first ball: one
+  // ball, the frame over, and ten pins on the board as fifteen.
+  const struck = await frame([[159, 1]]);
+  const strikeOk = struck.length === 1 && struck[0].turn === 'cpu' && struck[0].score === 15;
+  console.log(
+    `${strikeOk ? 'PASS' : 'FAIL'}  bowling: the whole rack off the first ball pays 10 and 5  — ` +
+      `${struck.map((r) => `${r.score} (ball ${r.ballNo}, ${r.turn})`).join(' then ')}`,
+  );
+  if (!strikeOk) failures++;
+
+  // A soft ball wide of the pocket leaves pins -- the frame stays put and the
+  // ball number goes up -- and the pocket then picks them up for thirteen.
+  const spared = await frame([
+    [168, 0.7],
+    [162, 1],
+  ]);
+  const spareOk =
+    spared.length === 2 &&
+    spared[0].turn === 'player' &&
+    spared[0].ballNo === 2 &&
+    spared[1].turn === 'cpu' &&
+    spared[1].score === 13;
+  console.log(
+    `${spareOk ? 'PASS' : 'FAIL'}  bowling: the whole rack off the second ball pays 10 and 3  — ` +
+      `${spared.map((r) => `${r.score} (ball ${r.ballNo}, ${r.turn})`).join(' then ')}`,
+  );
+  if (!spareOk) failures++;
+
+  // AND THE PINS ARE NOT PUSHOVERS.  A soft ball clipping the edge of the rack
+  // used to take most of it; it has to leave the rack mostly standing now.
+  const brushed = await frame([[143, 0.3]]);
+  const glance = brushed[0].score;
+  const stubborn = glance <= 5;
+  console.log(
+    `${stubborn ? 'PASS' : 'FAIL'}  bowling: a glancing ball does not take the rack  — ` +
+      `${glance} pins off a soft edge ball`,
+  );
+  if (!stubborn) failures++;
   await page.close();
 }
 
@@ -1893,7 +2073,7 @@ for (const g of [
   await page.close();
 }
 
-// THE RESPITE.  Nitro and a crash both buy ten seconds with nobody on you,
+// THE RESPITE.  A banana and a crash both buy ten seconds with nobody on you,
 // and the road may not send two cars out the moment it is over.
 {
   const page = await browser.newPage();
@@ -1924,13 +2104,23 @@ for (const g of [
     busy = await st();
   }
 
-  await page.evaluate(() => window.__chase.setNitro(2));
+  // A SKIN ONLY CLEARS THE ROAD IF SOMEBODY DRIVES OVER IT, which is the
+  // whole of what replaced the nitro: the old burst emptied the road by
+  // itself, this has to catch a car.  So one is put directly behind the
+  // player before the drop, the way a player would use it.
+  await page.evaluate(() => {
+    const s = window.__chase.state();
+    window.__chase.setPlayer(s.player.x, 110);
+    window.__chase.spawnPolice(window.__chase.laneOf(s.player.x), 150);
+    window.__chase.setBananas(2);
+  });
+  await sleep(400);
   await page.keyboard.press('Space');
-  await sleep(600);
+  await sleep(1800);
   const quiet = await st();
   const cleared = !quiet.gone && busy.chasing > 0 && quiet.chasing === 0 && quiet.respite > 8000;
   console.log(
-      `${cleared ? 'PASS' : 'FAIL'}  car chase: nitro clears the road for ten seconds  — ` +
+      `${cleared ? 'PASS' : 'FAIL'}  car chase: a banana clears the road for ten seconds  — ` +
         (quiet.gone
           ? 'the run ended first'
           : `${busy.chasing} chasing -> ${quiet.chasing}, ${Math.round(quiet.respite / 100) / 10}s left`),
