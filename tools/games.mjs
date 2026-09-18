@@ -35,8 +35,8 @@ const GAMES = [
   { id: 'hoops', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.down('Space'); await sleep(500); await p.keyboard.up('Space'); await sleep(1400); } } },
   { id: 'whack', drive: async (p) => { for (let i = 0; i < 14; i++) { await p.mouse.click(400 + (i % 3) * 240, 250 + Math.floor(i / 3) * 168); await sleep(180); } await sleep(600); } },
   // Back one, buy a second ticket, and then sit through the whole race: it is
-  // twelve seconds by design and the result card comes after it.
-  { id: 'frograce', drive: async (p) => { await p.keyboard.press('Digit3'); await sleep(250); await p.keyboard.press('ArrowUp'); await sleep(250); await p.keyboard.press('Space'); await sleep(16500); } },
+  // twenty seconds by design and the result card comes after it.
+  { id: 'frograce', drive: async (p) => { await p.keyboard.press('Digit3'); await sleep(250); await p.keyboard.press('ArrowUp'); await sleep(250); await p.keyboard.press('Space'); await sleep(24500); } },
   { id: 'grudge', drive: async (p) => { await sleep(1600); for (let i = 0; i < 6; i++) { await p.keyboard.press('KeyD'); await p.keyboard.press('KeyJ'); await sleep(400); } } },
   { id: 'donkeykong', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(2500); await p.keyboard.up('KeyD'); await p.keyboard.press('Space'); await sleep(600); await p.keyboard.down('KeyW'); await sleep(900); await p.keyboard.up('KeyW'); } },
   { id: 'slots', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.press('Space'); await sleep(2700); } } },
@@ -1503,14 +1503,18 @@ for (const g of [
 
   // Where the ball is by the time it reaches the head pin.  Nothing is racked
   // below y=66, so the whole roll up to there is the ball and the lane alone.
-  // 175 is off the right-hand end of round one's first patch, so the shot
-  // starts on dry boards and the hook has something to bite on.
+  //
+  // THE LANE IS WIPED FIRST.  The pattern is rolled fresh before every ball
+  // now, so three throws off three fresh machines are three different lanes
+  // and the difference between them would be the oil, not the dial.  Dry
+  // boards is the only surface on which this question has an answer.
   const land = async (bend) => {
     await page.goto(`${URL}/?intro=1&tokens=50&game=bowling`, { waitUntil: 'networkidle2' });
     await sleep(1400);
     await startGame(page);
     await bridge(page, '__bowl');
     return page.evaluate(async (b) => {
+      window.__bowl.setOil([]);
       window.__bowl.throw(0, 0.8, 175, b);
       let last = 175;
       for (let i = 0; i < 400; i++) {
@@ -1541,6 +1545,10 @@ for (const g of [
   await startGame(page);
   await bridge(page, '__bowl');
   const oiled = await page.evaluate(async () => {
+    // One patch, laid where it can be rolled straight down: the random pattern
+    // could put its first patch anywhere, including hard against a channel,
+    // and this asks what a patch does rather than where one happened to land.
+    window.__bowl.setOil([{ l: 0.3, r: 0.7, top: 100, bottom: 140, push: 1 }]);
     const patch = window.__bowl.state().oil[0];
     if (!patch) return null;
     const x0 = patch.x + patch.w / 2;
@@ -1562,6 +1570,129 @@ for (const g of [
         : 'no oil on the lane'),
   );
   if (!shoved) failures++;
+  await page.close();
+}
+
+// THE CREW COMES OUT BETWEEN SHOTS.  The lane used to be oiled once a round,
+// so the line that worked on your first ball worked on your second.  Take one
+// ball, leave pins standing, and check the pattern under the spare attempt is
+// not the pattern the first ball rolled down.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=bowling`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await bridge(page, '__bowl');
+
+  const relaid = await page.evaluate(async () => {
+    const sig = () =>
+      window.__bowl
+        .state()
+        .oil.map((o) => [o.x, o.y, o.w, o.h, o.push].map((n) => Math.round(n)).join(':'))
+        .join('|');
+    const first = sig();
+    // A soft ball into the left-hand boards: it reaches the deck, so the frame
+    // moves on, and it cannot take the whole rack, so there is a second ball.
+    window.__bowl.throw(-0.2, 0.55, 130, 0);
+    for (let i = 0; i < 400; i++) {
+      const st = window.__bowl.state();
+      if (!st.rolling && (st.ballNo === 2 || st.turn === 'cpu')) break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    const st = window.__bowl.state();
+    return { first, second: sig(), ballNo: st.ballNo, turn: st.turn };
+  });
+  // Only meaningful if the frame really did move to a second ball.
+  const fresh = relaid.ballNo === 2 && relaid.turn === 'player' && relaid.second !== relaid.first;
+  console.log(
+    `${fresh ? 'PASS' : 'FAIL'}  bowling: the lane is re-oiled before the spare attempt  — ` +
+      `ball ${relaid.ballNo} (${relaid.turn}), [${relaid.first}] -> [${relaid.second}]`,
+  );
+  if (!fresh) failures++;
+  await page.close();
+}
+
+// TEN IS WORTH MORE THAN TEN.  All ten off the first ball is a strike and pays
+// five on top; all ten off the second is a spare and pays three.  The score is
+// what proves it: a bonus that quietly stopped being added reads as a cleared
+// rack worth exactly ten.
+//
+// The lane is wiped for both, because the pattern is random now and a shove
+// into the channel would be measuring the oil rather than the scoring.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+
+  // Everything the frame did, off a fresh machine: the balls thrown, what the
+  // board said after each, and whether the rack went down.
+  const frame = async (shots) => {
+    await page.goto(`${URL}/?intro=1&tokens=50&game=bowling`, { waitUntil: 'networkidle2' });
+    await sleep(1400);
+    await startGame(page);
+    await bridge(page, '__bowl');
+    return page.evaluate(async (shots) => {
+      // Thrown, stopped, AND counted: the score does not move until the deck
+      // has settled, so `rolling` alone reads the board from before the roll.
+      const settle = async () => {
+        for (let i = 0; i < 20; i++) {
+          if (window.__bowl.state().rolling) break;
+          await new Promise((r) => setTimeout(r, 25));
+        }
+        for (let i = 0; i < 400; i++) {
+          const st = window.__bowl.state();
+          if (!st.rolling && !st.settling) return st;
+          await new Promise((r) => setTimeout(r, 25));
+        }
+        return window.__bowl.state();
+      };
+      const out = [];
+      for (const [x, pow] of shots) {
+        // Re-wiped before every ball: the game re-oils between them.
+        window.__bowl.setOil([]);
+        const before = window.__bowl.state().standing;
+        window.__bowl.throw(0, pow, x, 0);
+        const st = await settle();
+        out.push({ score: st.scores.player, cleared: before > 0 && st.standing === 0 });
+        // The rack is re-racked once the frame turns over; stop there.
+        if (out[out.length - 1].cleared) break;
+      }
+      return out;
+    }, shots);
+  };
+
+  // 159 is the pocket at full power and takes the rack off the first ball.
+  const struck = await frame([[159, 1]]);
+  const strikeOk = struck.length === 1 && struck[0].cleared && struck[0].score === 15;
+  console.log(
+    `${strikeOk ? 'PASS' : 'FAIL'}  bowling: the whole rack off the first ball pays 10 and 5  — ` +
+      `${struck.map((r) => `${r.score}${r.cleared ? ' cleared' : ''}`).join(' then ')}`,
+  );
+  if (!strikeOk) failures++;
+
+  // A soft ball wide of the pocket leaves pins; the pocket then picks them up.
+  const spared = await frame([
+    [168, 0.7],
+    [162, 1],
+  ]);
+  const spareOk =
+    spared.length === 2 && !spared[0].cleared && spared[1].cleared && spared[1].score === 13;
+  console.log(
+    `${spareOk ? 'PASS' : 'FAIL'}  bowling: the whole rack off the second ball pays 10 and 3  — ` +
+      `${spared.map((r) => `${r.score}${r.cleared ? ' cleared' : ''}`).join(' then ')}`,
+  );
+  if (!spareOk) failures++;
+
+  // AND THE PINS ARE NOT PUSHOVERS.  A soft ball clipping the edge of the rack
+  // used to take most of it; it has to leave the rack mostly standing now.
+  const brushed = await frame([[143, 0.3]]);
+  const glance = brushed[0].score;
+  const stubborn = glance <= 5;
+  console.log(
+    `${stubborn ? 'PASS' : 'FAIL'}  bowling: a glancing ball does not take the rack  — ` +
+      `${glance} pins off a soft edge ball`,
+  );
+  if (!stubborn) failures++;
   await page.close();
 }
 

@@ -99,15 +99,23 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
   keep(scene.add.rectangle(CARD.x, CARD.y, CARD.w, 11, PALETTE.plum).setOrigin(0, 0).setDepth(902));
   keep(centerText(scene, GAME_W / 2, CARD.y + 5, `HOW TO PLAY - ${opts.title}`, PALETTE.gold).setDepth(903));
 
+  const rows = opts.tutorial.controls.slice(0, 6);
+  // ---- the objective, out of a TEN ROW BUDGET shared with the controls.
+  //
+  // Ten is what fits between the title and the price block, and the busiest
+  // card in the building spends it four-and-six (Grudge).  A cabinet with
+  // fewer keys may spend the slack on saying more about the game -- bowling
+  // has four rows of controls and six lines of rules, including what the two
+  // bonuses pay -- and nothing may go over the ten, which is the line the
+  // price used to end up under.
   let y = CARD.y + 13;
-  for (const line of opts.tutorial.objective.slice(0, 4)) {
+  for (const line of opts.tutorial.objective.slice(0, Math.max(1, 10 - rows.length))) {
     keep(centerText(scene, GAME_W / 2, y + 3, line, PALETTE.cream).setDepth(903));
     y += ROW_H;
   }
 
   // ---- the controls, on a panel of their own
   y += 2;
-  const rows = opts.tutorial.controls.slice(0, 6);
   const panelH = rows.length * ROW_H + 12;
   keep(
     scene.add
