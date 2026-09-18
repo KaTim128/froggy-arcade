@@ -35,7 +35,7 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { ROOMS, type Box, type CounterRun, type RoomDef, type SpotKind } from '../three/hideRooms';
 import { buildGrid, findPath, lineOpen, spotExtent, type NavGrid } from '../three/navGrid';
 import { dressRoom, surfaceTexture } from '../three/hideDecor';
-import { buildCabinet, buildGlassDoors, buildPrizeCase } from '../three/arcadeProps';
+import { buildCabinet, buildDroppedKey, buildGlassDoors, buildPrizeCase } from '../three/arcadeProps';
 import { buildSecretRoom, SECRET_ORIGIN, type SecretRoom } from '../three/secretRoom';
 
 /** A walk is slow and silent; a run is fast and heard.  That is the trade. */
@@ -235,6 +235,48 @@ const FROGGY_IN_ARCADE = false;
  */
 const UNSEEN_BRIEFING = new Set([2]);
 /**
+ * THE DROP.  How long the key spends going at the lock before it slips.
+ *
+ * Short on purpose.  The first thing the sequence does is promise the player
+ * they are getting out -- the key goes at the lock, it sounds right -- and the
+ * promise has to be made and broken inside a couple of seconds, before anybody
+ * has settled into watching a progress bar.
+ */
+const KEY_DROP_S = 2.6;
+/** Beats inside the drop, as fractions of it. */
+const DROP = {
+  /** The key goes up to the lock, and it is going in. */
+  toLock: 0.3,
+  /** It does not.  It turns over in his fingers and goes. */
+  slip: 0.44,
+  /** Watching it land, and then looking at where it landed. */
+  land: 0.6,
+};
+/**
+ * WHERE IT ENDS UP.  Metres in front of the player and off to one side, on the
+ * carpet.  Close enough that it is obviously theirs and obviously reachable,
+ * far enough that they have to look down and find it rather than being handed
+ * it back.
+ */
+const KEY_LIES = { ahead: 0.72, aside: -0.34 };
+/** How close, and how far down, counts as looking at it. */
+const KEY_REACH = 1.7;
+const KEY_LOOK = -0.3;
+/**
+ * ONCE IT IS BACK IN HIS HAND.  The lock takes this long, and it is the last
+ * thing that happens in the building.
+ */
+const CHASE_S = 9.0;
+/**
+ * WHERE THE WALK BECOMES A RUN.
+ *
+ * Everything before this is something crossing a dark room behind you at its
+ * own pace, getting closer.  Everything after it is that thing having decided.
+ * The cut is deliberately not a ramp: a sprint that fades in is a volume
+ * slider, and what this wants is the moment the footsteps change character.
+ */
+const CHARGE_AT = 0.6;
+/**
  * How long the key takes to turn in the front doors.
  *
  * A TAP MUST NOT DO ANYTHING.  The whole shape of the ending is standing
@@ -244,32 +286,7 @@ const UNSEEN_BRIEFING = new Set([2]);
  * the key to be dropped, found and worked a second time, and short enough that
  * the sequence never stops being one held breath.
  */
-const UNLOCK_S = 10;
-/**
- * THE SHAPE OF THE TEN SECONDS, as fractions of it.
- *
- * It was a five-second hold with a ring round it, which is a progress bar you
- * can fail by letting go of -- a test of a thumb, in the one place in the game
- * where the thing being tested should be nerve.  Now one press starts it and
- * it does not stop, and what fills the time is the player's own hands making
- * a mess of it while something crosses the room behind them.
- */
-const BEAT = {
-  /** Working the key at the lock, first go. */
-  tryA: 0.14,
-  /** It slips. */
-  drop: 0.16,
-  /** Looking at it on the floor. */
-  stare: 0.22,
-  /** Down after it, groping about. */
-  down: 0.36,
-  /** Up again, with it. */
-  up: 0.42,
-  /** Working the lock, second go, for most of the remaining time. */
-  tryB: 0.88,
-  /** The key turns and the bolt goes back. */
-  turn: 0.95,
-};
+const UNLOCK_S = KEY_DROP_S + CHASE_S;
 /**
  * Where in the second attempt each tumbler drops.  Unevenly spaced on purpose:
  * an even tick is a progress bar with a sound on it, and this wants to be a
@@ -278,9 +295,18 @@ const BEAT = {
 const TUMBLERS = [0.52, 0.63, 0.71, 0.79, 0.86];
 /** Eye height at the bottom of the bend, and while standing. */
 const CROUCH_EYE = 0.52;
-/** His footsteps behind you: seconds between them at the start and at the end. */
+/**
+ * His footsteps behind you: seconds between them at the start of the walk and
+ * at the end of it, and then the sprint, which is a different animal.
+ *
+ * The walk closes from over a second apart to about three a second, which is
+ * something big covering ground.  The sprint is five a second and lands twice
+ * as hard, and the gap between the last walking step and the first running one
+ * is the whole point of the sequence.
+ */
 const STEP_SLOW = 1.15;
-const STEP_FAST = 0.3;
+const STEP_FAST = 0.34;
+const SPRINT_STEP = 0.19;
 /**
  * HOW FAR THE HEAD IS ALLOWED TO GO WHILE THE KEY IS IN THE DOOR.
  *
@@ -300,6 +326,14 @@ const ESCAPE_YAW = 0.42;
  * the horizon over the top of their head.
  */
 const ESCAPE_PITCH = { min: -0.45, max: 0.32 };
+/**
+ * And how far down while the key is on the carpet.
+ *
+ * Further than the rest of the sequence allows, because the rest of the
+ * sequence never asks the player to find something at their own feet.  It is
+ * still a bias on top of the pose, and the pose is already looking downward.
+ */
+const KEY_PITCH_MIN = -0.9;
 /**
  * WHERE THEY STAND TO DO IT, measured back from the face of the doors.
  *
@@ -607,6 +641,23 @@ export class HideRoom3D extends Phaser.Scene {
    */
   private escapeFrom = new THREE.Vector2();
   private escapeMark: THREE.Vector2 | null = null;
+  /**
+   * THE KEY, ONCE HE HAS DROPPED IT.
+   *
+   * `keyOnFloor` means it is lying there and the sequence is WAITING: no clock
+   * is running, nothing is approaching, and the only thing that moves the
+   * ending on is the player finding it and pressing E.  `keyTaken` starts
+   * everything that comes after.
+   */
+  private keyOnFloor = false;
+  private keyTaken = false;
+  private keyAt = new THREE.Vector2();
+  private keyProp: THREE.Object3D | null = null;
+  /** Seconds into the drop, and then into what follows it. */
+  private dropT = 0;
+  private chaseT = 0;
+  /** True once the walk behind you has become a run.  Once only. */
+  private charging = false;
   /** Whether the counter has been crossed at all, for the harness. */
   private vaulted = false;
   /**
@@ -698,6 +749,12 @@ export class HideRoom3D extends Phaser.Scene {
     this.vault = null;
     this.vaulted = false;
     this.escapeMark = null;
+    this.keyOnFloor = false;
+    this.keyTaken = false;
+    this.keyProp = null;
+    this.dropT = 0;
+    this.chaseT = 0;
+    this.charging = false;
     this.secret = null;
     this.inSecret = false;
     this.floorY = 0;
@@ -1280,9 +1337,13 @@ export class HideRoom3D extends Phaser.Scene {
   private interact(): void {
     if (this.mode !== 'hiding' && this.mode !== 'seeking') return;
 
-    // Once the key is in the door, E does nothing.  The sequence cannot be
-    // restarted, hurried, or pressed through.
-    if (this.escaping) return;
+    // Once the key is in the door, the only thing E is still good for is the
+    // one moment the sequence hands back: the key on the carpet.  Nothing else
+    // in it can be restarted, hurried or pressed through.
+    if (this.escaping) {
+      if (this.atKey()) this.takeKey();
+      return;
+    }
 
     // Inside the wall there is exactly one thing to press, and nothing else in
     // here answers to E: no spots, no doors, no case.
@@ -1594,14 +1655,34 @@ export class HideRoom3D extends Phaser.Scene {
   private holdOnDoor(): void {
     if (!this.escaping) return;
     const face = this.doorFacing();
+    // ---- ONCE THE KEY IS BACK IN HIS HAND, THE VIEW IS NOT THE PLAYER'S.
+    //
+    // Nothing they do moves it: not the mouse, not the arrow keys, not
+    // anything. It is nailed to the glass for the rest of the sequence,
+    // because the whole of what is being built is a player listening to
+    // something come up behind them that they are not allowed to look at, and
+    // a few degrees of play is a few degrees of looking for it.
+    if (this.keyTaken) {
+      this.yaw = face;
+      this.pitch = 0;
+      return;
+    }
     const off = Phaser.Math.Angle.Wrap(this.yaw - face);
     this.yaw = face + Phaser.Math.Clamp(off, -ESCAPE_YAW, ESCAPE_YAW);
-    this.pitch = Phaser.Math.Clamp(this.pitch, ESCAPE_PITCH.min, ESCAPE_PITCH.max);
+    // Down far enough to find something on the carpet at your own feet: the
+    // sequence asks the player to look at the floor, so it has to let them.
+    this.pitch = Phaser.Math.Clamp(this.pitch, KEY_PITCH_MIN, ESCAPE_PITCH.max);
   }
 
-  /** 0..1 through the whole sequence. */
+  /**
+   * 0..1 through the whole sequence, for the tremble and the harness.
+   *
+   * The wait on the floor does not advance it: nothing is happening during it
+   * and the hands should not be shaking harder for the player having taken
+   * longer to look down.
+   */
   private get escapeK(): number {
-    return Phaser.Math.Clamp(this.unlockT / UNLOCK_S, 0, 1);
+    return Phaser.Math.Clamp((this.dropT + this.chaseT) / UNLOCK_S, 0, 1);
   }
 
   /**
@@ -1615,13 +1696,10 @@ export class HideRoom3D extends Phaser.Scene {
     // Belt and braces on the view: whatever else moved it this frame, it comes
     // back inside the arc before anything is drawn.
     this.holdOnDoor();
-    const before = this.escapeK;
-    this.unlockT = Math.min(UNLOCK_S, this.unlockT + dt);
-    const k = this.escapeK;
 
     // The half-step back, eased out over the first beat.
     if (this.escapeMark) {
-      const t = Phaser.Math.Clamp(this.unlockT / ESCAPE_SETTLE, 0, 1);
+      const t = Phaser.Math.Clamp(this.dropT / ESCAPE_SETTLE, 0, 1);
       const e = Phaser.Math.Easing.Sine.Out(t);
       this.pos.set(
         Phaser.Math.Linear(this.escapeFrom.x, this.escapeMark.x, e),
@@ -1629,48 +1707,180 @@ export class HideRoom3D extends Phaser.Scene {
       );
       if (t >= 1) this.escapeMark = null;
     }
-    this.trembleSeed += dt * (2.4 + k * 5.5);
 
-    // ---- HIS FOOTSTEPS, BEHIND YOU.  Quiet and far apart to begin with, and
-    // by the end almost on top of each other.  They are dulled and panned,
-    // which is as close as stereo gets to "behind" -- and it is close enough,
-    // because that is what an ear does to a sound coming from back there.
-    this.stepIn -= dt;
-    if (this.stepIn <= 0) {
-      this.stepIn = Phaser.Math.Linear(STEP_SLOW, STEP_FAST, Math.pow(k, 0.8));
-      this.stepSide = -this.stepSide;
-      audio.sfx('froggy_step', 0.07 + Math.pow(k, 1.5) * 0.93, {
-        behind: 1 - k * 0.35,
-        pan: this.stepSide * (0.5 - k * 0.3),
-      });
+    if (!this.keyOnFloor) {
+      this.runDrop(dt);
+      return;
     }
+    // WAITING.  The key is on the carpet, nothing is coming, and no clock is
+    // running.  This is the one part of the ending the player is in charge of,
+    // and it lasts exactly as long as it takes them to look down.
+    if (!this.keyTaken) {
+      this.trembleSeed += dt * 2.0;
+      return;
+    }
+    this.runCharge(dt);
+  }
 
-    // ---- THE HANDS.
+  /**
+   * THE FIRST TRY, AND THE SLIP.
+   *
+   * It looks like the door is being unlocked.  The key comes up, it finds the
+   * lock, it sounds exactly like a key going into a lock -- and then it turns
+   * over in his fingers and goes on the floor.  Nothing about the first two
+   * seconds tells the player it is not working, which is the whole of why the
+   * moment it hits the carpet lands.
+   */
+  private runDrop(dt: number): void {
+    const before = this.dropT / KEY_DROP_S;
+    this.dropT = Math.min(KEY_DROP_S, this.dropT + dt);
+    const k = this.dropT / KEY_DROP_S;
+    this.trembleSeed += dt * 2.6;
     const at = (mark: number): boolean => before < mark && k >= mark;
-    if (at(BEAT.tryA)) audio.sfx('key_turn', 0.6);
-    if (at(BEAT.drop)) {
-      // IT SLIPS.  The one beat in the sequence that is a mistake rather than
-      // a delay, and the only one that gets a jolt of its own.
-      audio.sfx('item_thud', 0.75);
-      this.shake = Math.max(this.shake, 0.9);
+
+    if (at(DROP.toLock)) audio.sfx('key_turn', 0.6);
+    if (at(DROP.slip)) {
+      // IT GOES.  A jolt, and the sound of something small and metal landing
+      // on carpet in a room where nothing else is making a noise.
+      audio.sfx('item_thud', 0.8);
+      this.shake = Math.max(this.shake, 1);
+      this.time.delayedCall(90, () => audio.sfx('lock_click', 0.35));
     }
-    if (at(BEAT.down)) audio.sfx('footstep_concrete', 0.4);
-    // Back on his feet with it, and the key goes into the lock properly this
-    // time: the scrape of it going in, and then the barrel turning under it
-    // for the rest of the sequence.
-    if (at(BEAT.up)) audio.sfx('key_turn', 0.7);
-    if (k > BEAT.up) {
+    if (this.dropT >= KEY_DROP_S) this.dropTheKey();
+  }
+
+  /**
+   * Put it on the carpet, as an object.
+   *
+   * It is a real thing in the room from here on: it is built into the scene at
+   * a point on the floor, it is lit by the torch like everything else down
+   * there, and it does not move again until somebody picks it up.
+   */
+  private dropTheKey(): void {
+    if (this.keyOnFloor) return;
+    this.keyOnFloor = true;
+    // In front of the player and off to one side, on the line they are facing.
+    const face = this.doorFacing();
+    const fx = -Math.sin(face);
+    const fz = -Math.cos(face);
+    this.keyAt.set(
+      this.pos.x + fx * KEY_LIES.ahead - fz * KEY_LIES.aside,
+      this.pos.y + fz * KEY_LIES.ahead + fx * KEY_LIES.aside,
+    );
+    const st = this.stage;
+    if (st) {
+      const key = buildDroppedKey();
+      key.position.set(this.keyAt.x, 0.02, this.keyAt.y);
+      key.rotation.y = face + 0.6;
+      st.scene.add(key);
+      this.keyProp = key;
+    }
+    this.say('', 0);
+  }
+
+  /** Standing over the key he dropped, and looking down at it. */
+  private atKey(): boolean {
+    if (!this.keyOnFloor || this.keyTaken) return false;
+    if (Math.hypot(this.pos.x - this.keyAt.x, this.pos.y - this.keyAt.y) > KEY_REACH) return false;
+    // AND LOOKING AT IT.  It is at their feet, so the distance is never the
+    // test that fails -- what the beat is actually asking for is that the
+    // player takes their eyes off the door and looks at the floor, which is
+    // the last thing anybody wants to do with something crossing the room.
+    return this.pitch < KEY_LOOK;
+  }
+
+  /**
+   * Picking it up, and everything that starts the moment he does.
+   *
+   * The camera stops being the player's here.  Up to now they have had a few
+   * degrees either way; from here it is pinned on the glass and nothing they
+   * do moves it, because the entire sequence is being made to listen to
+   * something they are not allowed to look at.
+   */
+  private takeKey(): void {
+    if (!this.atKey()) return;
+    this.keyTaken = true;
+    this.chaseT = 0;
+    this.charging = false;
+    this.stepIn = STEP_SLOW;
+    this.prompt = '';
+    if (this.keyProp) {
+      this.stage?.scene.remove(this.keyProp);
+      this.keyProp = null;
+    }
+    audio.sfx('key_turn', 0.5);
+    // Square up on the doors and stay there.  holdOnDoor pins it from here.
+    this.yaw = this.doorFacing();
+    this.pitch = 0;
+  }
+
+  /**
+   * HIM, BEHIND YOU, AND THEN HIM RUNNING.
+   *
+   * Two gaits and a hard cut between them.  The walk starts far off and over a
+   * second apart and closes to about three a second, getting louder and less
+   * dulled as it comes -- which is what an ear reads as something approaching
+   * from behind.  Then, without a ramp, it becomes a sprint: five a second,
+   * twice the weight, and no further away than the last step was.
+   *
+   * He is never drawn.  There is nothing to see and the player cannot turn
+   * round anyway; the whole thing is built out of what they can hear.
+   */
+  private runCharge(dt: number): void {
+    const before = this.chaseT / CHASE_S;
+    this.chaseT = Math.min(CHASE_S, this.chaseT + dt);
+    const k = this.chaseT / CHASE_S;
+    this.trembleSeed += dt * (2.4 + k * 6.5);
+    const at = (mark: number): boolean => before < mark && k >= mark;
+
+    // ---- the lock, being fought with properly this time
+    if (at(0.06)) audio.sfx('key_turn', 0.75);
+    if (k > 0.1) {
       while (this.tumbler < TUMBLERS.length && k >= TUMBLERS[this.tumbler]) {
         this.tumbler++;
         audio.sfx('lock_click', 0.45 + this.tumbler * 0.1);
       }
     }
-    if (at(BEAT.turn)) {
+
+    // ---- and him
+    if (at(CHARGE_AT)) {
+      // THE MOMENT HE DECIDES.  One beat of nothing, which is worse than a
+      // noise, and then he is running.
+      this.charging = true;
+      this.stepIn = 0.26;
+      this.shake = Math.max(this.shake, 0.7);
+      audio.sfx('eerie_swell', 0.5);
+    }
+
+    this.stepIn -= dt;
+    if (this.stepIn <= 0) {
+      this.stepSide = -this.stepSide;
+      if (this.charging) {
+        // Heavier, faster, and close: barely dulled, barely panned, because
+        // by now he is not across the room any more.
+        const c = Phaser.Math.Clamp((k - CHARGE_AT) / (1 - CHARGE_AT), 0, 1);
+        this.stepIn = SPRINT_STEP * (1 - c * 0.25);
+        audio.sfx('froggy_step', 1, { behind: 0.35 - c * 0.2, pan: this.stepSide * 0.12 });
+        // A second, lower thump under each one, so a sprinting step is a
+        // different sound from a walking one rather than the same sound
+        // played sooner.
+        this.time.delayedCall(38, () => audio.sfx('item_thud', 0.4 + c * 0.35));
+      } else {
+        const w = Phaser.Math.Clamp(k / CHARGE_AT, 0, 1);
+        this.stepIn = Phaser.Math.Linear(STEP_SLOW, STEP_FAST, Math.pow(w, 0.8));
+        audio.sfx('froggy_step', 0.08 + Math.pow(w, 1.4) * 0.72, {
+          behind: 1 - w * 0.4,
+          pan: this.stepSide * (0.55 - w * 0.3),
+        });
+      }
+    }
+
+    if (at(0.95)) {
       audio.sfx('key_turn', 1);
       this.time.delayedCall(140, () => audio.sfx('lock_click', 1));
       this.time.delayedCall(360, () => audio.sfx('door_open'));
     }
-    if (this.unlockT >= UNLOCK_S) this.survive();
+    if (this.chaseT >= CHASE_S) this.survive();
   }
 
   /**
@@ -1681,26 +1891,36 @@ export class HideRoom3D extends Phaser.Scene {
    * fall, goes down after it on the floor, and comes back up.
    */
   private escapePose(): { eye: number; pitch: number } {
-    const k = this.escapeK;
     const ease = Phaser.Math.Easing.Sine.InOut;
     // WORKING THE LOCK.  The head is down on the hands and the chain, not
     // level with the glass: at this range a level view is a sheet of pane, and
     // what the player should be looking at is the thing holding the door shut.
     const WORK = -0.34;
-    if (k < BEAT.tryA) return { eye: EYE + 0.04, pitch: WORK };
-    if (k < BEAT.stare) {
-      // Watching it go.  The head snaps down after it, fast.
-      const t = (k - BEAT.tryA) / (BEAT.stare - BEAT.tryA);
-      return { eye: EYE, pitch: WORK - ease(Math.min(1, t * 1.6)) * 0.5 };
+
+    // ---- the first try, and watching it go
+    if (!this.keyOnFloor) {
+      const k = this.dropT / KEY_DROP_S;
+      if (k < DROP.toLock) return { eye: EYE + 0.04, pitch: WORK };
+      if (k < DROP.land) {
+        // The head goes after it, fast, and finds the floor.
+        const t = ease(Phaser.Math.Clamp((k - DROP.toLock) / (DROP.land - DROP.toLock), 0, 1));
+        return { eye: EYE, pitch: WORK - t * 0.44 };
+      }
+      return { eye: EYE, pitch: -0.78 };
     }
-    if (k < BEAT.down) {
-      // Going down after it.
-      const t = ease((k - BEAT.stare) / (BEAT.down - BEAT.stare));
+
+    // ---- it is on the carpet and nobody has picked it up.  He is stood
+    // looking down at it, and the player decides how long that goes on for.
+    if (!this.keyTaken) return { eye: EYE, pitch: -0.5 };
+
+    // ---- down after it, up with it, and back to the lock
+    const k = this.chaseT / CHASE_S;
+    if (k < 0.16) {
+      const t = ease(k / 0.16);
       return { eye: Phaser.Math.Linear(EYE, CROUCH_EYE, t), pitch: -0.78 };
     }
-    if (k < BEAT.up) {
-      // Standing, with it.
-      const t = ease((k - BEAT.down) / (BEAT.up - BEAT.down));
+    if (k < 0.3) {
+      const t = ease((k - 0.16) / 0.14);
       return { eye: Phaser.Math.Linear(CROUCH_EYE, EYE, t), pitch: -0.78 + t * 0.44 };
     }
     return { eye: EYE + 0.04, pitch: WORK };
@@ -3096,6 +3316,16 @@ export class HideRoom3D extends Phaser.Scene {
       yaw: this.yaw,
       pitch: this.pitch,
       doorFacing: this.doorFacing(),
+      keyOnFloor: this.keyOnFloor,
+      keyTaken: this.keyTaken,
+      keyX: this.keyAt.x,
+      keyZ: this.keyAt.y,
+      atKey: this.atKey(),
+      charging: this.charging,
+      chaseT: this.chaseT,
+      chaseSeconds: CHASE_S,
+      chargeAt: CHARGE_AT,
+      dropSeconds: KEY_DROP_S,
       unlockT: this.unlockT,
       unlockSeconds: UNLOCK_S,
       escapeYaw: ESCAPE_YAW,
@@ -3249,7 +3479,9 @@ export class HideRoom3D extends Phaser.Scene {
     // a line reading HOLD [E] over a sequence that no longer wants anything
     // held is the game contradicting itself for ten seconds.
     if ((this.mode !== 'hiding' && this.mode !== 'seeking') || this.hiding || this.escaping) {
-      this.prompt = '';
+      // ONE EXCEPTION, and it is the only thing the sequence asks for: the key
+      // he dropped, once the player has looked down far enough to see it.
+      this.prompt = this.atKey() ? '[E] PICK IT UP' : '';
       return;
     }
 

@@ -707,41 +707,85 @@ try {
     await sleep(700);
     const going = await hide();
     check('E starts the unlocking rather than opening anything',
-      going.escaping && going.unlockSeconds === 10, `${going.unlockSeconds}s, k ${going.escapeK.toFixed(2)}`);
+      going.escaping && !going.keyOnFloor, `k ${going.escapeK.toFixed(2)}`);
 
+    // ---- THE KEY GOES ON THE FLOOR, and the ending stops dead until the
+    // player picks it up.  This is the half of the sequence the game hands
+    // back, so it has to be genuinely waiting rather than waiting a bit.
+    let dropped = 0;
+    while (dropped < 5000 && !(await hide()).keyOnFloor) {
+      await sleep(200);
+      dropped += 200;
+    }
+    const onFloor = await hide();
+    check('the key slips and lands on the floor', onFloor.keyOnFloor && !onFloor.keyTaken,
+      `after ${(dropped / 1000).toFixed(1)}s`);
+    check('it lands at the player\'s feet, not out of reach',
+      Math.hypot(onFloor.keyX - onFloor.px, onFloor.keyZ - onFloor.pz) < 1.2,
+      `${Math.hypot(onFloor.keyX - onFloor.px, onFloor.keyZ - onFloor.pz).toFixed(2)}m away`);
+    // Nothing advances on its own from here.
+    await sleep(3000);
+    const stillThere = await hide();
+    check('and nothing moves on until it is picked up',
+      stillThere.keyOnFloor && !stillThere.keyTaken && stillThere.mode === 'seeking' && stillThere.chaseT === 0,
+      `chaseT ${stillThere.chaseT}`);
+    check('it does not prompt while the player is looking at the door',
+      !stillThere.atKey && stillThere.prompt === '', stillThere.prompt || 'no prompt');
+    // Look down at it.
+    await scene(() => {
+      const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+      sc.pitch = -0.75;
+    });
+    await sleep(300);
+    const lookingDown = await hide();
+    check('looking down at it offers the pick-up', lookingDown.atKey && lookingDown.prompt === '[E] PICK IT UP',
+      lookingDown.prompt || 'no prompt');
+    await page.screenshot({ path: `${SHOTS}/arcade-key-down.png` });
+    await page.keyboard.press('e');
+    await sleep(500);
+    const taken = await hide();
+    check('E picks it up and starts what comes after', taken.keyTaken && taken.chaseT > 0,
+      `chaseT ${taken.chaseT.toFixed(2)}`);
+
+    // ---- AND FROM HERE THE VIEW IS NOT THE PLAYER'S AT ALL.  Not clamped to
+    // a few degrees: pinned, so there is no looking for what is coming.
     let worstYaw = 0;
     let moved = 0;
-    const heldAt = { x: going.px, z: going.pz };
+    const heldAt = { x: taken.px, z: taken.pz };
     for (let i = 0; i < 8; i++) {
       await scene(() => {
         const sc = window.__froggy.game().scene.getScene('HideRoom3D');
         sc.yaw += 2.7;
+        sc.pitch -= 1.4;
       });
-      await press('ArrowLeft', 260);
-      await sleep(120);
+      await press('ArrowLeft', 240);
+      await sleep(140);
       const s = await hide();
       const off = Math.abs(Math.atan2(Math.sin(s.yaw - s.doorFacing), Math.cos(s.yaw - s.doorFacing)));
       worstYaw = Math.max(worstYaw, off);
       moved = Math.max(moved, Math.hypot(s.px - heldAt.x, s.pz - heldAt.z));
       if (i === 3) await page.screenshot({ path: `${SHOTS}/arcade-unlocking.png` });
     }
-    check('the head will not turn round, however hard it is pushed',
-      worstYaw <= going.escapeYaw + 0.02, `${worstYaw.toFixed(2)} rad off the doors, cap ${going.escapeYaw}`);
-    check('and it is nowhere near far enough to see behind you',
-      worstYaw < Math.PI / 4, `${((worstYaw * 180) / Math.PI).toFixed(0)} degrees`);
+    check('once the key is back in his hand the camera is dead on the doors',
+      worstYaw < 0.001, `${worstYaw.toFixed(4)} rad off them`);
     check('the feet do not move for the whole of it', moved < 0.01, `${moved.toFixed(3)}m`);
 
     const late = await hide();
-    check('the shake builds as it runs out', late.tremble > going.tremble,
-      `${going.tremble.toFixed(2)} -> ${late.tremble.toFixed(2)}`);
+    check('the shake builds as it runs out', late.tremble > taken.tremble,
+      `${taken.tremble.toFixed(2)} -> ${late.tremble.toFixed(2)}`);
+    // He never appears: this room has no monster in it at all.
+    check('and he is never shown', late.froggyMeshes === 0, `${late.froggyMeshes} meshes`);
 
     let waited = 0;
-    while (waited < 9000 && (await hide())?.mode === 'seeking') {
-      await sleep(400);
-      waited += 400;
+    let sawCharge = false;
+    while (waited < 14000 && (await hide())?.mode === 'seeking') {
+      await sleep(300);
+      waited += 300;
+      if ((await hide())?.charging) sawCharge = true;
     }
     const done = await hide();
-    check('ten seconds of it and the lock turns', done.mode === 'survived', done.mode);
+    check('the walk behind you turns into a sprint', sawCharge, sawCharge ? 'it charges' : 'never charged');
+    check('and then the lock turns', done.mode === 'survived', done.mode);
     await page.screenshot({ path: `${SHOTS}/arcade-out.png` });
     await page.close();
   }
