@@ -5,16 +5,30 @@
  * slower than you and has to be threaded; the police behind are faster than
  * you and have to be shaken.  Cash sits on the road in bundles of twenty.
  *
- * NITRO is the one tool.  It is a burst — a bit over two seconds at nearly
- * twice the speed — and while it is burning, the police CANNOT gain: the road
- * runs at your speed, not theirs, so every one of them slides backwards down
- * the screen and you come out of it with room to pick a lane.  It REFILLS ON
- * ITS OWN, slowly: a burst back every eleven seconds, and it does not tick
- * while you are burning one.  Blue jars on the road fill it the rest of the
- * way, up to two in the tank.  So there is always a way out of a corner
- * eventually, and the question is whether you can wait for it — the police
- * start closing again the moment a burst ends, and a warning flashes when one
- * is on your bumper.
+ * THERE ARE THREE THINGS ON THE ROAD, and two of them are worth having.
+ *
+ *   BANANAS are the tool.  You pick one up by driving over it and you carry up
+ *   to three; SPACE puts one down a car's length behind you, and the first
+ *   police car to reach it goes round — spun out, siren off, sliding back down
+ *   the road — and the road behind you clears for ten seconds with it.  It is
+ *   the only way out of a corner that you have to have EARNED: the skin was
+ *   somewhere on the road and you had to go and get it.
+ *
+ *   FROGGY BANKS pay fifty on the spot, which is two and a half bundles of
+ *   cash for one steer.  They are the rarest thing out here, so a bank is
+ *   something you cross two lanes for with the police on you, which is exactly
+ *   the decision the game wants to be asking.
+ *
+ *   POTHOLES are the one you have to miss.  They do not end the run: the car
+ *   drops in, comes out under a second later with most of its speed and half
+ *   its steering gone, and whatever was behind you closes the entire gap while
+ *   it happens.  A hazard that kills is a hazard you memorise; one that costs
+ *   you the gap is one you drive around.
+ *
+ * NITRO USED TO BE THE ONE TOOL, and it was a button that made the problem go
+ * away: press it, the road emptied, and the only question was whether the bar
+ * had refilled.  What replaced it buys the same respite and makes you go and
+ * find it first.
  *
  * Getting TO two hundred is the gentle half: the road climbs slowly, traffic
  * is thin, and a second car does not turn up for three quarters of a minute.
@@ -31,7 +45,7 @@
  * THEY CAN BE JUKED, AND THEY CAN BE CRASHED.  A chaser steers at the lane it
  * last SAW you in, and it only looks every few tenths of a second, so a late
  * swerve leaves it committed to where you were — that lag is the whole of how
- * you shake one without nitro, and it shortens as the heat climbs.  It also
+ * you shake one without a banana, and it shortens as the heat climbs.  It also
  * means you can aim them: a chaser locked onto your old lane drives into the
  * back of the traffic in it, spins out, and is no use to anyone for a few
  * seconds.  The spike strips cut both ways too — a police car that drives
@@ -49,11 +63,11 @@
  * eases across over `LANE_CHANGE_MS`, better than a second and a half, at about
  * a quarter of the speed the player can steer.
  *
- * So the road is a weapon, not just an obstacle, and the nitro jars are laid
- * out to make you use it: never twice in the same lane, never behind a car
- * that is already there, and always a lane or two off your line, so topping
- * up the tank is a decision about traffic rather than a thing you drive
- * through.
+ * So the road is a weapon, not just an obstacle, and the pickups are laid out
+ * to make you use it: never twice in the same lane, never behind a car that is
+ * already there, always a lane or two off your line, and jittered ACROSS the
+ * lane rather than parked in the middle of it — so going for one is a steer
+ * you have to aim rather than a thing you drive through.
  *
  * The cash here is a score.  It is not the cash the man outside pays, it is
  * never added to it, and the only thing that leaves this cabinet is the token
@@ -127,7 +141,17 @@ const CAR_H = 20;
 const SPEED_START = 88;
 const SPEED_RAMP = 0.85;
 const SPEED_MAX = 190;
-const STEER = 120;
+/**
+ * How hard it steers.
+ *
+ * 120 was a car that took most of a second to cross one lane, which on a road
+ * four lanes wide meant a player pinned against a verge could not get back out
+ * into it before the next thing arrived.  At 170 a lane is a flick and the
+ * whole width is reachable, which is what the pickups need: they land anywhere
+ * on the road and they are only worth putting there if going for one is a
+ * decision rather than a commitment.
+ */
+const STEER = 170;
 const CREEP = 50;
 /**
  * THE RESPITE.  Ten seconds with nobody behind you.
@@ -141,7 +165,7 @@ const CREEP = 50;
  *
  * It replaces the old reward, which was a couple of seconds of distance that
  * the speed difference took straight back.  Both triggers share one timer, so
- * a nitro burst during a crash respite extends the quiet rather than stacking
+ * a banana dropped during a crash respite extends the quiet rather than stacking
  * a second one on top of it, and nothing can send two cars out at once when it
  * ends: the spawner is on its usual one-at-a-time clock and starts from a full
  * interval, so the first car back is a car, not a wall.
@@ -150,23 +174,33 @@ const RESPITE_MS = 10_000;
 /** And it comes back in gently: the first spawn after a respite is unhurried. */
 const RESPITE_TAIL_MS = 1800;
 
-/** Nitro: how much faster, and for how long. */
-const NITRO_MUL = 1.8;
 /**
- * Long enough to be worth something.  A burst has to open a gap the player can
- * DO something with — pick a lane, cross the traffic, line up a jar — and at
- * 1.7 seconds they were back on the bumper before the road had changed.
+ * BANANAS, WHICH REPLACED THE NITRO.
+ *
+ * Nitro was a button that made the problem go away: press it, the road
+ * emptied, and the only decision was whether the bar was full.  A banana is
+ * the same escape bought a different way -- you have to find one on the road,
+ * which means going where it is instead of where you want to be, and then
+ * choose the moment to put it down behind you.  What it buys is the same
+ * respite, and it buys it by taking a chaser off the road rather than by
+ * outrunning one.
  */
-const NITRO_MS = 2200;
-/** Bursts the tank holds. */
-const NITRO_TANK = 2;
+const BANANA_MAX = 3;
+/** How long a dropped skin stays on the road before the sweeper gets it. */
+const BANANA_LIFE_MS = 9000;
+/** What a Froggy Bank is worth when you drive over it. */
+const BANK_CASH = 50;
 /**
- * How long the tank takes to put a burst back by itself.  Long enough that a
- * burst is still a decision and not a button, short enough that being caught
- * empty is a bad minute rather than the end of the run.  It does not tick
- * while a burst is burning: the clock is for refilling, not for extending.
+ * POTHOLES.  The one thing out here that does not end the run and is still
+ * worth swerving for: the car drops into it, loses most of its speed and half
+ * its steering for a moment, and whatever is behind you closes the whole gap
+ * while it happens.  A hazard that kills is a hazard you memorise; one that
+ * costs you the gap is one you drive around.
  */
-const NITRO_REGEN_MS = 11_000;
+const POTHOLE_JOLT_MS = 900;
+/** What is left of the throttle and the steering while you are in one. */
+const POTHOLE_SPEED = 0.45;
+const POTHOLE_STEER = 0.4;
 /** A police car this close behind you is a warning. */
 const WARN_DIST = 70;
 /**
@@ -202,7 +236,7 @@ const TRAP_GAP_MS = 9000;
  *
  * Eleven, down from twenty by way of fifteen.  It is still a gap that closes —
  * you cannot out-drive them on the throttle alone, which is the whole point of
- * the nitro and of the traffic — but it shuts at a speed a player can read and
+ * the bananas and of the traffic — but it shuts at a speed a player can read and
  * answer, instead of one that turns every mistake into an arrest.
  */
 const POLICE_GAIN = 11;
@@ -373,11 +407,28 @@ let traffic: Car[] = [];
 let police: Police[] = [];
 let traps: Trap[] = [];
 let trapTimer = 0;
-/** The lane the last nitro jar went in, so the next one does not repeat it. */
+/** The lane the last pickup went in, so the next one does not repeat it. */
 let lastJarLane = -1;
 let cash: Array<{ x: number; y: number; body: Phaser.GameObjects.Rectangle }> = [];
-let jars: Array<{ x: number; y: number; body: Phaser.GameObjects.Container }> = [];
+/**
+ * WHAT IS LYING ON THE ROAD.
+ *
+ * Three kinds, one list, because they all do the same thing every frame -- come
+ * down the screen at road speed and get tested against the car -- and differ
+ * only in what happens when they are reached.
+ *
+ *   banana   picked up, and kept until you choose to put it down
+ *   bank     picked up, and worth fifty on the spot
+ *   pothole  not picked up at all: it is the one you have to miss
+ */
+type PickupKind = 'banana' | 'bank' | 'pothole';
+let pickups: Array<{ x: number; y: number; kind: PickupKind; body: Phaser.GameObjects.Container }> = [];
 let jarTimer = 0;
+/** Skins the player is carrying, and skins already down on the road. */
+let bananas = 0;
+let drops: Array<{ x: number; y: number; life: number; body: Phaser.GameObjects.Container }> = [];
+/** Milliseconds left of being in a pothole.  See POTHOLE_JOLT_MS. */
+let joltMs = 0;
 let warnT = 0;
 let dashes: Array<Phaser.GameObjects.Rectangle | Phaser.GameObjects.Arc> = [];
 let trafficTimer = 0;
@@ -389,8 +440,6 @@ let shielded = false;
 let cashTimer = 0;
 let collected = 0;
 let best = 0;
-let nitroMs = 0;
-let nitroCharge = 1;
 /** The last heat notch the player was told about, so it is announced once. */
 let heatShown = 0;
 let over = false;
@@ -402,8 +451,7 @@ let hud: {
   best: Phaser.GameObjects.BitmapText;
   time: Phaser.GameObjects.BitmapText;
   bank: Phaser.GameObjects.BitmapText;
-  nitro: Phaser.GameObjects.Rectangle;
-  nitroLabel: Phaser.GameObjects.BitmapText;
+  bananaLabel: Phaser.GameObjects.BitmapText;
   warn: Phaser.GameObjects.BitmapText;
   clear: Phaser.GameObjects.BitmapText;
 } | null = null;
@@ -430,16 +478,16 @@ export const carChase: MinigameModule = {
   tutorial: {
     objective: [
       'GRAB CASH AND LOSE THE LAW.',
-      'NITRO REFILLS ITSELF - SLOWLY.',
+      'BANANAS SPIN THE POLICE. BANKS PAY 50.',
       'TRAFFIC BLINKS 3 TIMES, THEN MOVES OVER.',
       'SWERVE LATE - THEY DRIVE AT YOUR OLD LANE.',
-      'NITRO OR A CRASH CLEARS THEM FOR 10s.',
+      'A BANANA OR A CRASH CLEARS THEM FOR 10s.',
       'PULL OVER AT 300 FOR 15, +5 EVERY 100.',
     ],
     controls: [
       ['A / D', 'STEER'],
       ['W / S', 'SPEED UP OR EASE OFF'],
-      ['SPACE', 'NITRO'],
+      ['SPACE', 'DROP A BANANA'],
     ],
     // ENTER pulls over with the cash, and it is NOT listed here.  It does
     // nothing until there is cash to pull over with, and the moment there is,
@@ -448,7 +496,7 @@ export const carChase: MinigameModule = {
   touch: {
     stick: 'wasd',
     buttons: [
-      { label: 'NITRO', key: 'SPACE', primary: true },
+      { label: 'DROP\nBANANA', key: 'SPACE', primary: true },
       { label: 'PULL\nOVER', key: 'ENTER' },
     ],
   },
@@ -470,7 +518,8 @@ export const carChase: MinigameModule = {
     respiteMs = 0;
     shielded = false;
     cashTimer = 900;
-    jars = [];
+    pickups = [];
+    drops = [];
     jarTimer = 3000;
     lastJarLane = -1;
     traps = [];
@@ -478,8 +527,10 @@ export const carChase: MinigameModule = {
     warnT = 0;
     collected = 0;
     best = store.highScore(ID);
-    nitroMs = 0;
-    nitroCharge = 1;
+    bananas = 1;
+    drops = [];
+    pickups = [];
+    joltMs = 0;
     heatShown = 0;
     over = false;
     reason = '';
@@ -514,26 +565,21 @@ export const carChase: MinigameModule = {
       best: text(scene, GAME_W - 6, 21, '', PALETTE.gold).setOrigin(1, 0),
       time: centerText(scene, GAME_W / 2, 25, '', PALETTE.fog),
       bank: centerText(scene, GAME_W / 2, 170, '', PALETTE.gold).setVisible(false),
-      nitro: scene.add.rectangle(7, 150, 6, 0, PALETTE.tealLight).setOrigin(0, 1),
-      nitroLabel: text(scene, 4, 154, 'NITRO', PALETTE.ash),
+      bananaLabel: text(scene, 4, 150, '', PALETTE.gold),
       warn: centerText(scene, GAME_W / 2, 150, 'POLICE CLOSE', PALETTE.blood, 16).setVisible(false),
       // The quiet is the reward, so the quiet is on the HUD and counting down:
       // ten seconds you cannot see is ten seconds you cannot spend.
       clear: centerText(scene, GAME_W / 2, 30, '', PALETTE.tealLight, 16).setVisible(false),
     };
-    scene.add.rectangle(6, 96, 8, 54, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel).setDepth(8);
-    // The line one burst is worth.  The tank fills itself, so the player needs
-    // to see where the bar has to reach before SPACE will do anything.
-    scene.add.rectangle(6, 124, 8, 1, PALETTE.steel).setOrigin(0, 0).setDepth(10).setAlpha(0.8);
-    hud.nitro.setDepth(9);
-    hud.nitroLabel.setDepth(9);
+    hud.bananaLabel.setDepth(9);
     hud.warn.setDepth(9);
     hud.clear.setDepth(9);
     hud.cash.setDepth(9);
     hud.best.setDepth(9);
     hud.time.setDepth(9);
     hud.bank.setDepth(9);
-    text(scene, 4, 162, 'SPACE', PALETTE.ash).setDepth(9);
+    text(scene, 4, 160, 'SPACE', PALETTE.ash).setDepth(9);
+    text(scene, 4, 168, 'DROPS', PALETTE.ash).setDepth(9);
     refreshHud();
 
     const kb = scene.input.keyboard;
@@ -544,14 +590,7 @@ export const carChase: MinigameModule = {
       up: bind(['W', 'UP']),
       down: bind(['S', 'DOWN']),
     };
-    kb?.on('keydown-SPACE', () => {
-      if (over || nitroMs > 0 || nitroCharge < 1) return;
-      nitroMs = NITRO_MS;
-      nitroCharge -= 1;
-      // The burst is the distance; the respite is the prize.
-      startRespite();
-      audio.sfx('vault', 0.6);
-    });
+    kb?.on('keydown-SPACE', () => dropBanana());
     kb?.on('keydown-ENTER', () => {
       if (!over && collected >= BAR_CASH) finish();
     });
@@ -562,13 +601,19 @@ export const carChase: MinigameModule = {
           cash: collected,
           best,
           speed,
-          nitro: nitroMs > 0,
-          nitroCharge,
+          bananas,
+          drops: drops.length,
+          jolted: joltMs > 0,
           heat: chaseHeat(collected),
           policeCap: policeCap(),
           policeSpeed: speed + POLICE_GAIN + chaseHeat(collected) * HEAT_POLICE_GAIN + elapsed / POLICE_CLOCK,
-          jars: jars.length,
-          jarLanes: jars.map((j) => laneOf(j.x)),
+          pickups: pickups.length,
+          pickupKinds: pickups.map((j) => j.kind),
+          pickupLanes: pickups.map((j) => laneOf(j.x)),
+          // The real x, not the lane's: they are jittered across the lane, so
+          // a harness that aims at the lane centre misses by more than the
+          // car is wide.
+          pickupXs: pickups.map((j) => j.x),
           traffic: traffic.length,
           respite: Math.max(0, Math.round(respiteMs)),
           police: police.length,
@@ -642,18 +687,31 @@ export const carChase: MinigameModule = {
         armTrap: () => {
           trapTimer = 300;
         },
-        dropJar: () => spawnJar(),
+        dropPickup: (kind: PickupKind) => spawnPickup(kind),
         /** Sweep the road, so a test can aim at one hazard and only one. */
         clearRoad: () => {
           for (const c of traffic) c.body.destroy();
           for (const pc of police) pc.body.destroy();
           for (const t of traps) t.body.destroy();
+          // EVERYTHING, not just the cars.  A test that aims at one pickup and
+          // reads the first one in the list gets a stale one otherwise -- and
+          // a bundle of cash landing in the same frame makes a fifty look like
+          // a seventy.
+          for (const j of pickups) j.body.destroy();
+          for (const d of drops) d.body.destroy();
+          for (const c of cash) c.body.destroy();
           traffic = [];
           police = [];
           traps = [];
+          pickups = [];
+          drops = [];
+          cash = [];
+          joltMs = 0;
           policeTimer = 60_000;
           trafficTimer = 60_000;
           trapTimer = 60_000;
+          cashTimer = 60_000;
+          jarTimer = 60_000;
         },
         /** Park the car somewhere exact, for aiming a test at a hazard. */
         setPlayer: (x: number, y: number) => {
@@ -662,6 +720,7 @@ export const carChase: MinigameModule = {
           player?.setPosition(px, py);
         },
         laneX: (lane: number) => LANES[Phaser.Math.Clamp(lane | 0, 0, 3)],
+        laneOf: (x: number) => laneOf(x),
         setCash: (n: number) => {
           collected = n;
           heatShown = chaseHeat(n);
@@ -675,11 +734,11 @@ export const carChase: MinigameModule = {
         shield: (on: boolean) => {
           shielded = on;
         },
-        setNitro: (n: number) => {
-          nitroCharge = Math.max(0, Math.min(NITRO_TANK, n));
-          nitroMs = 0;
+        setBananas: (n: number) => {
+          bananas = Math.max(0, Math.min(BANANA_MAX, n | 0));
           refreshHud();
         },
+        drop: () => dropBanana(),
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__chase;
@@ -692,30 +751,22 @@ export const carChase: MinigameModule = {
     const dt = delta / 1000;
     elapsed += delta;
 
-    // ---- nitro.  It comes back on its own between bursts, so being empty is
-    // a wait rather than a sentence; jars are what get you there faster and
-    // what fill the second slot.  The clock is stopped while a burst runs.
-    if (nitroMs > 0) {
-      nitroMs -= delta;
-    } else if (nitroCharge < NITRO_TANK) {
-      const before = Math.floor(nitroCharge);
-      nitroCharge = Math.min(NITRO_TANK, nitroCharge + delta / NITRO_REGEN_MS);
-      // Only when a whole burst lands: the bar creeps every frame, the label
-      // and the chime are for the moment it becomes usable.
-      if (Math.floor(nitroCharge) > before) {
-        audio.sfx('ui_blip', 0.5);
-        refreshHud();
-      }
-    }
-    const boost = nitroMs > 0 ? NITRO_MUL : 1;
+    // ---- the pothole you are still climbing out of.  Nothing here ends the
+    // run; what it costs is the gap, and the gap is what the police are for.
+    if (joltMs > 0) joltMs -= delta;
+    const jolted = joltMs > 0;
     const heat = chaseHeat(collected);
 
     // ---- the road, and you on it.  It runs quicker the more you are carrying.
     speed = Math.min(SPEED_MAX + heat * HEAT_ROAD, SPEED_START + (elapsed / 1000) * SPEED_RAMP + heat * HEAT_ROAD);
-    const ground = speed * boost;
+    const ground = speed * (jolted ? POTHOLE_SPEED : 1);
     const dx = (held('right') ? 1 : 0) - (held('left') ? 1 : 0);
     const dy = (held('down') ? 1 : 0) - (held('up') ? 1 : 0);
-    px = Phaser.Math.Clamp(px + dx * STEER * dt, ROAD_L + CAR_W / 2, ROAD_L + ROAD_W - CAR_W / 2);
+    px = Phaser.Math.Clamp(
+      px + dx * STEER * (jolted ? POTHOLE_STEER : 1) * dt,
+      ROAD_L + CAR_W / 2,
+      ROAD_L + ROAD_W - CAR_W / 2,
+    );
     py = Phaser.Math.Clamp(py + dy * CREEP * dt, 70, 160);
     player.setPosition(px, py);
     // leaning where you are steering, eased so it is a car and not a cursor
@@ -858,14 +909,14 @@ export const carChase: MinigameModule = {
       if (into) {
         spinOut(p);
         wreck(into);
-        // Putting one into the traffic clears the road the same way a nitro
-        // burst does.  Leading them is meant to be worth more than outrunning
+        // Putting one into the traffic clears the road the same way a banana
+        // does.  Leading them is meant to be worth more than outrunning
         // them, and this is what makes it worth more.
         startRespite();
       }
     }
     traffic = traffic.filter((c) => c.body.active);
-    // Under nitro they fall off the bottom; shaken, they come back later.
+    // Shaken, they fall off the bottom and come back later.
     police = police.filter((p) => keep(p, p.y < BOTTOM + CAR_H * 2 && p.y > TOP - CAR_H * 2));
 
     // ---- cash on the road
@@ -878,29 +929,71 @@ export const carChase: MinigameModule = {
       c.y += ground * dt;
       c.body.setPosition(c.x, c.y).setVisible(c.y > TOP + 4);
     }
-    // ---- nitro jars, rarer than the cash and worth stopping for
+    // ---- WHAT IS LYING ON THE ROAD.  One clock for all three, and which one
+    // it puts down is a weighted roll: mostly bananas, because they are the
+    // tool; a pothole often enough that the road is never a clear run; and a
+    // bank rarely, so fifty on the floor is something you go out of your way
+    // for rather than something that arrives.
     jarTimer -= delta;
     if (jarTimer <= 0) {
-      spawnJar();
-      // More of them than there used to be, and spread rather than clustered:
-      // see `jarLane`.  A tank you can actually keep topped up is what makes
-      // leading the police into the traffic a plan instead of a prayer.
-      jarTimer = 3600 + Math.random() * 2400;
+      const r = Math.random();
+      spawnPickup(r < 0.42 ? 'banana' : r < 0.82 ? 'pothole' : 'bank');
+      jarTimer = 1500 + Math.random() * 1600;
     }
-    for (const j of jars) {
+    for (const j of pickups) {
       j.y += ground * dt;
       j.body.setPosition(j.x, j.y).setVisible(j.y > TOP + 6);
     }
-    jars = jars.filter((j) => {
-      if (Math.abs(j.x - px) < CAR_W / 2 + 4 && Math.abs(j.y - py) < CAR_H / 2 + 5) {
-        nitroCharge = Math.min(NITRO_TANK, nitroCharge + 1);
-        audio.sfx('chime', 0.5);
+    pickups = pickups.filter((j) => {
+      const touched = Math.abs(j.x - px) < CAR_W / 2 + 4 && Math.abs(j.y - py) < CAR_H / 2 + 5;
+      if (touched) {
+        if (j.kind === 'bank') {
+          collected += BANK_CASH;
+          best = Math.max(best, collected);
+          audio.sfx('cha_ching', 0.6);
+          announceHeat();
+        } else if (j.kind === 'banana') {
+          bananas = Math.min(BANANA_MAX, bananas + 1);
+          audio.sfx('chime', 0.5);
+        } else {
+          // THE POTHOLE.  You are in it, and out of it in under a second --
+          // with most of your speed gone and whatever was behind you a lot
+          // closer than it was.
+          joltMs = POTHOLE_JOLT_MS;
+          audio.sfx('item_thud', 0.8);
+          scene0?.cameras.main.shake(260, 0.012);
+        }
         refreshHud();
         j.body.destroy();
         return false;
       }
       if (j.y > BOTTOM + 10) {
         j.body.destroy();
+        return false;
+      }
+      return true;
+    });
+
+    // ---- SKINS ALREADY DOWN.  You put one where you were and it stays there,
+    // scrolling away with the road.  A chaser that drives over one goes round
+    // exactly the way it would off a spike strip, and the road behind you
+    // clears with it.
+    drops = drops.filter((d) => {
+      d.y += ground * dt;
+      d.life -= delta;
+      d.body.setPosition(d.x, d.y).setVisible(d.y > TOP + 4);
+      const hit = police.find(
+        (pc) => pc.stun <= 0 && Math.abs(pc.x - d.x) < CAR_W / 2 + 3 && Math.abs(pc.y - d.y) < CAR_H / 2 + 3,
+      );
+      if (hit) {
+        spinOut(hit);
+        startRespite();
+        audio.sfx('splash', 0.5);
+        d.body.destroy();
+        return false;
+      }
+      if (d.life <= 0 || d.y > BOTTOM + 10) {
+        d.body.destroy();
         return false;
       }
       return true;
@@ -948,11 +1041,7 @@ export const carChase: MinigameModule = {
         }
         // Crossing two hundred, and every two hundred after it, is said out
         // loud: a chase that quietly got harder reads as the game cheating.
-        const notch = chaseHeat(collected);
-        if (notch > heatShown) {
-          heatShown = notch;
-          heatUp(notch);
-        }
+        announceHeat();
         refreshHud();
         c.body.destroy();
         return false;
@@ -979,8 +1068,6 @@ export const carChase: MinigameModule = {
       }
     }
 
-    hud?.nitro.setSize(6, (nitroMs > 0 ? nitroMs / NITRO_MS : nitroCharge / NITRO_TANK) * 52);
-    hud?.nitro.setFillStyle(nitroMs > 0 ? PALETTE.gold : nitroCharge >= 1 ? 0x46a0e0 : PALETTE.steel);
     hud?.time.setText(heat > 0 ? `${Math.floor(elapsed / 1000)}s   HEAT ${heat}` : `${Math.floor(elapsed / 1000)}s`);
     hud?.time.setTint(heat > 0 ? PALETTE.blood : PALETTE.fog);
 
@@ -1011,7 +1098,8 @@ export const carChase: MinigameModule = {
     police = [];
     traps = [];
     cash = [];
-    jars = [];
+    pickups = [];
+    drops = [];
     dashes = [];
     player = null;
     hud = null;
@@ -1067,7 +1155,7 @@ function spinOut(p: Police): void {
  *
  * Every car on you drops out at once, whatever it was doing: it spins, falls
  * back down the road under its own dead weight and is off the bottom of the
- * screen within a second or two, which is the same exit a nitro burst always
+ * screen within a second or two, which is the same exit a banana always
  * gave them.  They are left in the list to drive away rather than deleted, so
  * the exit is something the player watches happen instead of a row of cars
  * blinking out.
@@ -1329,7 +1417,7 @@ function jarLane(): number {
     (i) =>
       i !== lastJarLane &&
       !traffic.some((c) => laneOf(c.x) === i && c.y < TOP + CAR_H * 3) &&
-      !jars.some((j) => laneOf(j.x) === i && j.y < TOP + 48),
+      !pickups.some((j) => laneOf(j.x) === i && j.y < TOP + 48),
   );
   const pool = clear.length ? clear : [0, 1, 2, 3].filter((i) => i !== lastJarLane);
   const here = laneOf(px);
@@ -1341,17 +1429,83 @@ function jarLane(): number {
   return picks[Phaser.Math.Between(0, picks.length - 1)];
 }
 
-/** A blue jar of nitro, worth one burst. */
-function spawnJar(): void {
+/**
+ * Crossing a heat notch is said out loud once.  A chase that quietly got
+ * harder reads as the game cheating, and there are two ways to cross one now.
+ */
+function announceHeat(): void {
+  const notch = chaseHeat(collected);
+  if (notch > heatShown) {
+    heatShown = notch;
+    heatUp(notch);
+  }
+}
+
+/**
+ * One thing on the road, in a lane and OFF the lane's middle.
+ *
+ * The jars used to land dead centre of a lane, which made them a thing you
+ * lined up once and then drove through.  These are jittered across most of the
+ * lane's width, so reaching one is a steer rather than a lane choice and two
+ * in a row are never in the same place.
+ */
+function spawnPickup(kind: PickupKind): void {
   if (!scene0) return;
   const idx = jarLane();
   lastJarLane = idx;
-  const lane = LANES[idx];
-  const jar = scene0.add.rectangle(0, 1, 8, 9, 0x46a0e0).setStrokeStyle(1, PALETTE.bone);
-  const cap = scene0.add.rectangle(0, -4, 5, 3, PALETTE.bone);
-  const shine = scene0.add.rectangle(-2, 0, 1, 5, 0xbfe6ff);
-  const body = scene0.add.container(lane, TOP - 6, [jar, cap, shine]).setDepth(3).setVisible(false);
-  jars.push({ x: lane, y: TOP - 6, body });
+  const x = LANES[idx] + (Math.random() - 0.5) * (LANE_W - CAR_W - 4);
+  const parts: Phaser.GameObjects.GameObject[] = [];
+
+  if (kind === 'banana') {
+    // A skin: a fat crescent, drawn as three blocks stepping round, with a
+    // brown tip so it is not just a yellow smear at this size.
+    parts.push(scene0.add.rectangle(-3, -2, 4, 3, 0xf2d04b));
+    parts.push(scene0.add.rectangle(0, 0, 5, 3, 0xffe46b));
+    parts.push(scene0.add.rectangle(3, 2, 4, 3, 0xf2d04b));
+    parts.push(scene0.add.rectangle(-5, -3, 2, 2, 0x6b4a2f));
+  } else if (kind === 'bank') {
+    // A FROGGY BANK: a green money box with a slot in the top and his eyes on
+    // it, so the fifty reads as his before the player has been told.
+    parts.push(scene0.add.rectangle(0, 1, 11, 9, PALETTE.moss).setStrokeStyle(1, 0x1e3f24));
+    parts.push(scene0.add.rectangle(0, -4, 7, 2, 0x14261a));
+    parts.push(scene0.add.rectangle(-3, 0, 2, 2, PALETTE.cream));
+    parts.push(scene0.add.rectangle(3, 0, 2, 2, PALETTE.cream));
+    parts.push(scene0.add.rectangle(0, 4, 9, 2, PALETTE.gold));
+  } else {
+    // A POTHOLE: a ragged black hole with a lip of broken tarmac, which is the
+    // only thing out here drawn DARKER than the road so it cannot be mistaken
+    // for something worth driving at.
+    parts.push(scene0.add.ellipse(0, 0, 15, 10, 0x2a2b30));
+    parts.push(scene0.add.ellipse(0, 0, 12, 7, 0x0a0b0e));
+    parts.push(scene0.add.rectangle(-4, -3, 3, 2, 0x3c3e44));
+    parts.push(scene0.add.rectangle(5, 2, 3, 2, 0x3c3e44));
+  }
+
+  const body = scene0.add.container(x, TOP - 6, parts).setDepth(kind === 'pothole' ? 2 : 3).setVisible(false);
+  pickups.push({ x, y: TOP - 6, kind, body });
+}
+
+/**
+ * PUT ONE DOWN, BEHIND YOU.
+ *
+ * It goes a car's length back, which is the only place it is any use: a skin
+ * under your own wheels does nothing, and one dropped in front would be a
+ * thing you drove into.  Nothing stops you dropping the lot at once -- the
+ * limit is how many you found.
+ */
+function dropBanana(): void {
+  if (over || bananas <= 0 || !scene0) return;
+  bananas -= 1;
+  const parts = [
+    scene0.add.rectangle(-3, -2, 4, 3, 0xd8b93f),
+    scene0.add.rectangle(0, 0, 5, 3, 0xf2d04b),
+    scene0.add.rectangle(3, 2, 4, 3, 0xd8b93f),
+  ];
+  const y = py + CAR_H / 2 + 4;
+  const body = scene0.add.container(px, y, parts).setDepth(2);
+  drops.push({ x: px, y, life: BANANA_LIFE_MS, body });
+  audio.sfx('throw_whoosh', 0.45);
+  refreshHud();
 }
 
 function spawnCash(): void {
@@ -1377,7 +1531,8 @@ function refreshHud(): void {
   hud.best.setText(`BEST ${best}`);
   const banked = chasePayout(collected);
   hud.bank.setText(`[ENTER] PULL OVER FOR ${banked} TOKENS`).setVisible(banked > 0);
-  hud.nitroLabel.setText(`NITRO x${Math.floor(nitroCharge)}`);
+  hud.bananaLabel.setText(`BANANA x${bananas}`);
+  hud.bananaLabel.setTint(bananas > 0 ? PALETTE.gold : PALETTE.steel);
 }
 
 function finish(): void {

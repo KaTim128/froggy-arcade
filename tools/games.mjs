@@ -721,7 +721,7 @@ for (const g of [
   await bridge(page, '__chase');
   // NOTHING ON THE ROAD MAY END THE RUN while the rules that are not about
   // crashing are under test.  Every check below this line — the tank, the
-  // heat, the juke, the jars, the strips being laid — parks the car and reads
+  // heat, the juke, the pickups, the strips being laid — parks the car and reads
   // the state some seconds later, and a traffic car that arrived in the
   // meantime took the scene down with it, deleted `window.__chase` and threw
   // the rest of the block at the wall.  The shield comes off for the one test
@@ -730,23 +730,57 @@ for (const g of [
 
   const st = () => page.evaluate(() => window.__chase.state());
 
-  // ---- the tank puts a burst back by itself, and takes its time about it.
-  // A jar picked up mid-measurement adds a WHOLE burst, so the regeneration is
-  // read off the fractional part: five seconds of it is a bit over a third of
-  // one, jar or no jar.
-  await page.evaluate(() => window.__chase.setNitro(0));
-  const dry = await st();
-  await sleep(5000);
-  const filling = await st();
-  const grew = filling.nitroCharge > dry.nitroCharge;
-  const part = filling.nitroCharge % 1;
-  // Fourteen seconds a burst: five of them must be a fraction of one, or the
-  // burst has stopped being a decision.
-  const slowly = part > 0.2 && part < 0.5;
+  // ---- WHAT THE THREE THINGS ON THE ROAD ACTUALLY DO.  Each is put down in
+  // the player's own lane, driven over, and the one number it is supposed to
+  // move is read: a banana adds a skin, a bank adds fifty, and a pothole takes
+  // the speed without ending the run.
+  const takePickup = async (kind) => {
+    // The spawner deliberately puts one as far from the player's lane as it
+    // can (see `jarLane`) and jitters it across that lane, so the car has to
+    // be moved ONTO its real x -- aiming at the lane centre misses by more
+    // than the car is wide, which is the whole point of the jitter.
+    const before = await page.evaluate((k) => {
+      window.__chase.clearRoad();
+      window.__chase.setPlayer(window.__chase.laneX(1), 150);
+      window.__chase.dropPickup(k);
+      const s = window.__chase.state();
+      window.__chase.setPlayer(s.pickupXs[0], 150);
+      return window.__chase.state();
+    }, kind);
+    // And then it comes down the road onto the car on its own.
+    for (let i = 0; i < 60; i++) {
+      const now = await st();
+      if (now.pickups === 0 || now.gone) return { before, after: now };
+      await sleep(100);
+    }
+    return { before, after: await st() };
+  };
+
+  await page.evaluate(() => window.__chase.setBananas(0));
+  const gotBanana = await takePickup('banana');
+  const bananaOk = gotBanana.after.bananas > gotBanana.before.bananas;
   console.log(
-    `${grew && slowly ? 'PASS' : 'FAIL'}  car chase: nitro comes back on its own, slowly  — ${dry.nitroCharge.toFixed(2)} -> ${filling.nitroCharge.toFixed(2)} in 5s`,
+    `${bananaOk ? 'PASS' : 'FAIL'}  car chase: a banana is picked up and carried  — ` +
+      `${gotBanana.before.bananas} -> ${gotBanana.after.bananas}`,
   );
-  if (!grew || !slowly) failures++;
+  if (!bananaOk) failures++;
+
+  await page.evaluate(() => window.__chase.setCash(0));
+  const gotBank = await takePickup('bank');
+  const bankOk = gotBank.after.cash - gotBank.before.cash === 50;
+  console.log(
+    `${bankOk ? 'PASS' : 'FAIL'}  car chase: a froggy bank pays fifty  — ` +
+      `${gotBank.before.cash} -> ${gotBank.after.cash}`,
+  );
+  if (!bankOk) failures++;
+
+  const hitHole = await takePickup('pothole');
+  const holeOk = hitHole.after.jolted && !hitHole.after.gone;
+  console.log(
+    `${holeOk ? 'PASS' : 'FAIL'}  car chase: a pothole costs you the gap, not the run  — ` +
+      `${hitHole.after.jolted ? 'jolted' : 'no jolt'}, ${hitHole.after.gone ? 'RUN ENDED' : 'still driving'}`,
+  );
+  if (!holeOk) failures++;
 
   // ---- and two hundred in the bag turns the heat up.  Read a few frames
   // after each change: the road speed the police measure themselves against
@@ -835,7 +869,7 @@ for (const g of [
   );
   if (!dropped) failures++;
 
-  // ---- nitro jars are spread, not clustered: never twice in the same lane.
+  // ---- the pickups are spread, not clustered: never twice in the same lane.
   await page.evaluate(() => {
     window.__chase.clearRoad();
     window.__chase.setCash(0);
@@ -844,14 +878,14 @@ for (const g of [
   const lanes = await page.evaluate(() => {
     const seen = [];
     for (let i = 0; i < 8; i++) {
-      window.__chase.dropJar();
-      const all = window.__chase.state().jarLanes;
+      window.__chase.dropPickup('banana');
+      const all = window.__chase.state().pickupLanes;
       seen.push(all[all.length - 1]);
     }
     return seen;
   });
   const spread = lanes.every((l, i) => i === 0 || l !== lanes[i - 1]);
-  console.log(`${spread ? 'PASS' : 'FAIL'}  car chase: jars never land twice in the same lane  — ${lanes.join(',')}`);
+  console.log(`${spread ? 'PASS' : 'FAIL'}  car chase: pickups never land twice in the same lane  — ${lanes.join(',')}`);
   if (!spread) failures++;
 
   // ---- spike strips: nothing before six hundred, and a gap to thread after.
@@ -876,29 +910,28 @@ for (const g of [
   );
   if (!timed) failures++;
 
-  // ---- nitro has to buy room.  With a chaser on the bumper, a burst must
-  // put real distance between the two cars rather than being a noise the game
-  // makes while they stay exactly where they were.
+  // ---- A DROPPED BANANA HAS TO TAKE A CHASER OFF THE ROAD.  It is the only
+  // escape the game has left, so a skin put down in front of a car on the
+  // bumper must spin it and buy the quiet — not merely be a noise while the
+  // two of them stay exactly where they were.
   await page.evaluate(() => {
     window.__chase.clearRoad();
     window.__chase.setCash(0);
     window.__chase.setPlayer(window.__chase.laneX(1), 120);
     window.__chase.spawnPolice(1, 150);
-    window.__chase.setNitro(2);
+    window.__chase.setBananas(2);
   });
   await sleep(700);
   const onTheBumper = await st();
-  await page.keyboard.press('Space'); // nitro
-  await sleep(1400);
-  const midBurst = await st();
-  const gapBefore = (onTheBumper.cars[0]?.y ?? 0) - onTheBumper.player.y;
-  const gapAfter = (midBurst.cars[0]?.y ?? 0) - midBurst.player.y;
-  const roomToBreathe = !midBurst.cars.length || gapAfter > gapBefore + 20;
+  await page.keyboard.press('Space'); // put one down behind
+  await sleep(1600);
+  const afterDrop = await st();
+  const skinWorked = onTheBumper.chasing > 0 && afterDrop.chasing === 0 && afterDrop.respite > 8000;
   console.log(
-    `${roomToBreathe ? 'PASS' : 'FAIL'}  car chase: a nitro burst opens a real gap  — ` +
-      `${Math.round(gapBefore)}px -> ${midBurst.cars.length ? `${Math.round(gapAfter)}px` : 'off the road'}`,
+    `${skinWorked ? 'PASS' : 'FAIL'}  car chase: a dropped banana spins the car on your bumper  — ` +
+      `${onTheBumper.chasing} chasing -> ${afterDrop.chasing}, ${Math.round(afterDrop.respite / 100) / 10}s clear`,
   );
-  if (!roomToBreathe) failures++;
+  if (!skinWorked) failures++;
 
   // ---- and driving into one ends the run.  Sweep the road, lay a fresh strip
   // at the top of it, then park in a lane the spikes cover and let it arrive:
@@ -907,7 +940,7 @@ for (const g of [
     window.__chase.clearRoad();
     // Off it comes: this is the one check that wants the run to end.
     window.__chase.shield(false);
-    // The nitro test above swept the road and put the bag back to nothing;
+    // The banana test above swept the road and put the bag back to nothing;
     // the strips only come out past six hundred.
     window.__chase.setCash(700);
     window.__chase.armTrap();
@@ -1893,7 +1926,7 @@ for (const g of [
   await page.close();
 }
 
-// THE RESPITE.  Nitro and a crash both buy ten seconds with nobody on you,
+// THE RESPITE.  A banana and a crash both buy ten seconds with nobody on you,
 // and the road may not send two cars out the moment it is over.
 {
   const page = await browser.newPage();
@@ -1924,13 +1957,23 @@ for (const g of [
     busy = await st();
   }
 
-  await page.evaluate(() => window.__chase.setNitro(2));
+  // A SKIN ONLY CLEARS THE ROAD IF SOMEBODY DRIVES OVER IT, which is the
+  // whole of what replaced the nitro: the old burst emptied the road by
+  // itself, this has to catch a car.  So one is put directly behind the
+  // player before the drop, the way a player would use it.
+  await page.evaluate(() => {
+    const s = window.__chase.state();
+    window.__chase.setPlayer(s.player.x, 110);
+    window.__chase.spawnPolice(window.__chase.laneOf(s.player.x), 150);
+    window.__chase.setBananas(2);
+  });
+  await sleep(400);
   await page.keyboard.press('Space');
-  await sleep(600);
+  await sleep(1800);
   const quiet = await st();
   const cleared = !quiet.gone && busy.chasing > 0 && quiet.chasing === 0 && quiet.respite > 8000;
   console.log(
-      `${cleared ? 'PASS' : 'FAIL'}  car chase: nitro clears the road for ten seconds  — ` +
+      `${cleared ? 'PASS' : 'FAIL'}  car chase: a banana clears the road for ten seconds  — ` +
         (quiet.gone
           ? 'the run ended first'
           : `${busy.chasing} chasing -> ${quiet.chasing}, ${Math.round(quiet.respite / 100) / 10}s left`),
