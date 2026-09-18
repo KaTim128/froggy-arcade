@@ -323,8 +323,16 @@ const ESCAPE_SETTLE = 0.45;
  * nowhere near.
  */
 const CASE_REACH = { hw: 3.4, hd: 2.4 };
-/** How far back from the counter the climb is still on offer. */
-const COUNTER_REACH = 2.2;
+/**
+ * How far back from the counter the climb is still on offer.
+ *
+ * It was 2.2, which is most of the way from the desk to the prize case behind
+ * it: the two bands overlapped, the climb is tested first, and a player stood
+ * at the case to try their key was told to CLIMB OVER instead.  At 1.8 there
+ * is still three quarters of a metre of approach either side of a desk you are
+ * stopped a metre from, and the case keeps its own frontage to itself.
+ */
+const COUNTER_REACH = 1.8;
 /** How long going over it takes.  Long enough to be a commitment, not a step. */
 const VAULT_S = 0.62;
 /** How far past the counter you land, so you never come down on top of it. */

@@ -424,39 +424,55 @@ export const WARD: RoomDef = { ...scaleRoom(WARD_BASE, 1.1), secretDoor: { z: -1
 /**
  * THE ARCADE, IN THREE DIMENSIONS.  The last room of the sequence, and the
  * only one the player has already walked around — from above, in two
- * dimensions, with the lights on.  Recognising it is the point: the counter is
- * where the counter has always been, the prize case is along the back wall
- * beside it, and the machines stand against the walls they stand against
- * upstairs.
+ * dimensions, with the lights on.
  *
- * YOU COME OUT OF THE BACK OFFICE, AND THE COUNTER IS ROUND YOU.  The staff
- * door is in the back wall INSIDE the wrap of the counter, so the first thing
- * the room says is where you have just come from: you are the wrong side of a
- * ticket desk, in a corner an arcade keeps its staff in, and the floor is over
- * the top of it.  The counter turns a corner to do that — one run across the
- * front of the staff corner, one down its open side — and both runs are
- * climbable from either side, so getting out is a decision and getting back in
- * is still available as cover.
+ * IT IS NOT DRAWN FROM THE PICTURE OF THE LIT ROOM.  IT IS DRAWN FROM ITS
+ * COORDINATES.  Every position below is `game/content.ts` put through one
+ * linear map, so this room and the hub the player spent the first half of the
+ * night in are the same floor plan rather than two people's idea of it:
  *
- * COVER, NOT CONTAINERS.  There is NOTHING in this room to get inside.  Six
- * cabinets, a change machine, a bin and a plant: it is a room you break a
- * sightline in and keep moving through, and the hiding mechanic the three
- * rooms downstairs taught is deliberately taken away for the one room where
- * the objective is a door rather than a clock.
+ *   COUNTER        x 112..258   the desk, right of centre with the floor open
+ *                               to its left
+ *   PRIZE_CASE     x 126..226   along the back wall, behind the desk
+ *   STAFF_DOOR     x 232        INSIDE the counter's span, at its right-hand
+ *                               end, which is the whole reason the only way to
+ *                               it is over the top
+ *   CABINETS       (52,88)      one against the left wall
+ *                  (52,164) (98,164) (244,164) (290,164)
+ *                               four along the front wall, two either side of
+ *                               the doors
+ *   change machine x 272        past the right-hand end of the desk
  *
- * AND IT IS SMALL.  It was 26 by 30, which is a warehouse with cabinets in it;
- * at 22 by 20 the counter, the prize case, the machines and the front doors
- * are all in one glance from the staff corner, which is what an arcade floor
- * actually feels like.
+ * `x3d = (x2d - 160) * 22/292` maps the hub's 292 walkable pixels onto this
+ * room's twenty-two metres.  The DEPTH axis is not mapped with it: a flat
+ * three-quarter room foreshortens everything running away from the camera, so
+ * the counter's eighteen pixels are a desk AND its height at once and the
+ * service strip behind it is six pixels — one body, because that is all a flat
+ * room needs it to be.  Laid out at that scale in three dimensions it is a
+ * corridor nobody can turn round in.  The depth here is the lit room's ORDER,
+ * at metric clearances: wall, case, staff floor, counter, open floor,
+ * machines, doors.
+ *
+ * YOU COME OUT OF THE BACK OFFICE, AND THE COUNTER IS ROUND YOU.  The desk
+ * wraps: one run across the front of the staff corner and one down each end
+ * into the back wall, so the corner is closed on all four sides and the staff
+ * door in the wall behind is inside it.  The floor is over the top, from any
+ * run, in either direction.
+ *
+ * COVER, NOT CONTAINERS.  There is NOTHING in this room to get inside.  Five
+ * cabinets, a change machine and the desk: it is a room you break a sightline
+ * in and keep moving through, and the hiding mechanic the three rooms
+ * downstairs taught is deliberately taken away for the one room whose
+ * objective is a door rather than a clock.  Nothing is in here that is not in
+ * the lit room's own layout.
  */
 const ARCADE_BASE: RoomDef = {
   name: 'THE ARCADE',
-  theme: 'arcade',
-  // 22 by 20.  Compact enough to read in one look from behind the counter and
-  // still wide enough that the walk from the staff corner to the front doors
-  // goes past the prize case, down the middle of the machines, and out.
+  // 22 by 20.  The width is the hub's own, to scale; the depth is the hub's
+  // order given room to stand in.
   halfW: 11,
   halfD: 10,
+  theme: 'arcade',
   // Tall enough for the thing hunting you to stand up in, and no taller: an
   // arcade with a warehouse ceiling stops being an arcade.
   wallH: 4.2,
@@ -464,73 +480,59 @@ const ARCADE_BASE: RoomDef = {
   wall: 0x3b2a52,
   ceiling: 0x120c1c,
   lights: [
-    // One warm lamp over the staff corner, because that is the first thing the
-    // room has to be able to say, and one over the prize case beside it.
-    { x: -7.4, z: -7.8, color: 0xffb45e, intensity: 13 },
-    { x: 2.6, z: -7.6, color: 0xffd45e, intensity: 10 },
-    // the machines light themselves; these only pick out the walls they are on
-    { x: -9.0, z: -1.4, color: 0xff4fa3, intensity: 10 },
-    { x: -5.2, z: 3.4, color: 0xffd45e, intensity: 10 },
-    { x: 5.2, z: 3.4, color: 0x7b4bd8, intensity: 10 },
+    // the desk and the case behind it, which is what the room has to say first
+    { x: 1.2, z: -7.8, color: 0xffb45e, intensity: 13 },
+    { x: 5.6, z: -6.4, color: 0xffd45e, intensity: 9 },
+    // the machine on the left wall, lighting the wall it stands against
+    { x: -8.6, z: -1.3, color: 0xff4fa3, intensity: 10 },
+    // the front row, either side of the doors
+    { x: -6.4, z: 7.4, color: 0xffd45e, intensity: 10 },
+    { x: 8.0, z: 7.4, color: 0x7b4bd8, intensity: 10 },
     // and the doors, which are the objective and are lit like one
-    { x: 0, z: 8.4, color: 0xc8d8ff, intensity: 10 },
+    { x: 0, z: 8.8, color: 0xc8d8ff, intensity: 10 },
     // One cold fill over the open middle -- not to light the room, but so the
     // floor between the counter and the doors has a shape to it rather than
     // being a black gap the player walks across on faith.
-    { x: 0, z: 0.5, color: 0x6a7fa8, intensity: 7 },
+    { x: 0, z: 1.0, color: 0x6a7fa8, intensity: 7 },
   ],
   furniture: [
-    // ---- THE COUNTER, IN TWO RUNS, WRAPPING THE STAFF CORNER.
+    // ---- THE COUNTER, IN THREE RUNS, WRAPPING THE STAFF CORNER.
     //
-    // The front run goes from the left wall across to x = -3.6; the side run
-    // comes back off its end down to the back wall.  Between them, the back
-    // wall and the left wall, the staff corner is closed on all four sides —
-    // which is the point of it, and why the staff door inside it reads as the
-    // way you came in rather than as another way out.
-    { x: -7.5, z: -5.4, w: 7.8, d: 1.2, h: 1.15, color: 0x6b4a2f, low: true },
-    { x: -3.6, z: -7.85, w: 1.2, d: 5.5, h: 1.15, color: 0x6b4a2f, low: true },
+    // The front run is COUNTER x 112..258 to scale.  The two returns are what
+    // the flat room gets for free from having a back wall six pixels behind
+    // the desk: they close the ends, so the corner is somewhere you are rather
+    // than a strip you stand in, and there is no walking round into it.
+    { x: 1.88, z: -5.4, w: 11.0, d: 1.2, h: 1.15, color: 0x6b4a2f, low: true },
+    { x: -3.61, z: -7.7, w: 1.2, d: 5.8, h: 1.15, color: 0x6b4a2f, low: true },
+    { x: 7.38, z: -7.7, w: 1.2, d: 5.8, h: 1.15, color: 0x6b4a2f, low: true },
 
-    // ---- THE BACK WALL: the prize case, and the change machine past it.
-    // The case is OUT ON THE FLOOR SIDE of the counter, two and a half metres
-    // clear of it, so reaching the thing the player has been carrying a key
-    // for means getting over the counter first — and there is room to stand in
-    // front of it when they do.
-    { x: 2.6, z: -9.5, w: 6.4, d: 0.9, h: 2.8, color: 0x203048, prop: 'case', face: 0 },
-    // the change machine, in the back right corner, where the lit room keeps it
-    { x: 9.6, z: -9.2, w: 1.8, d: 1.2, h: 2.3, color: 0x4a4258 },
+    // ---- THE BACK WALL: the prize case, and the staff door beside it.
+    // PRIZE_CASE x 126..226, which lands it inside the wrap with the staff
+    // door at its right -- exactly the arrangement the lit room draws.  It
+    // stands two and a half metres clear of the desk, so there is floor to
+    // stand on in front of it rather than a slot to be wedged into.
+    { x: 1.2, z: -9.5, w: 7.4, d: 0.9, h: 2.8, color: 0x203048, prop: 'case', face: 0 },
+    // the change machine, past the right-hand end of the desk, where x 272 is
+    { x: 9.6, z: -9.3, w: 1.8, d: 1.2, h: 2.3, color: 0x4a4258 },
 
-    // ---- SIX MACHINES.
+    // ---- FIVE MACHINES, WHERE THE LIT ROOM STANDS THEM.
     //
-    // ALL OF THEM TURNED THE OTHER WAY ROUND.  They used to face back up the
-    // room at the counter you come in behind, which meant the walk to the
-    // doors was made past six lit fronts and the room gave up its whole length
-    // at once.  Turned, the floor reads as backs and side art on the way out
-    // and only lights up if you look behind you.
-    //
-    // The first two are flat against the left wall beside the counter, turned
-    // a further quarter to sit in it rather than stand off it: a machine
-    // parked at an angle to a wall is the one piece of furniture that makes a
-    // room look unfinished, and these two are the pair the player squeezes
-    // past on the way round the counter, so they have to be tight to it.
-    { x: -10.3, z: -2.6, w: 1.3, d: 2.0, h: 2.1, color: 0xff4fa3, prop: 'cabinet', face: Math.PI / 2 },
-    { x: -10.3, z: -0.3, w: 1.3, d: 2.0, h: 2.1, color: 0xff7a3d, prop: 'cabinet', face: Math.PI / 2 },
-    // and four out on the floor in two pairs, with the walk to the doors
-    // straight down the gap between them
-    { x: -6.4, z: 3.4, w: 2.0, d: 1.3, h: 2.1, color: 0xffd45e, prop: 'cabinet', face: 0 },
-    { x: -4.0, z: 3.4, w: 2.0, d: 1.3, h: 2.1, color: 0x6fbb6a, prop: 'cabinet', face: 0 },
-    { x: 4.0, z: 3.4, w: 2.0, d: 1.3, h: 2.1, color: 0xb9884f, prop: 'cabinet', face: 0 },
-    { x: 6.4, z: 3.4, w: 2.0, d: 1.3, h: 2.1, color: 0x1d6f8f, prop: 'cabinet', face: 0 },
-
-    // the bin and the plant by the way out, the last things you pass
-    { x: 9.8, z: 7.4, w: 1.0, d: 1.0, h: 1.0, color: 0x30384a, low: true },
-    { x: -3.4, z: 8.0, w: 1.2, d: 1.2, h: 0.9, color: 0x3a5a3a, low: true },
+    // One against the left wall at (52, 88), turned to face into the room the
+    // way a machine against a wall has to be.
+    { x: -10.3, z: -1.3, w: 1.3, d: 2.0, h: 2.1, color: 0xff4fa3, prop: 'cabinet', face: Math.PI / 2 },
+    // And four along the front wall at y 164, two either side of the doors,
+    // ALL FACING BACK UP THE ROOM at the counter.  That is the way the lit
+    // room has them and it is the way a player standing at the doors sees
+    // them: you come over the desk into a row of lit fronts, and the backs are
+    // what the wall gets.
+    { x: -8.13, z: 8.7, w: 2.0, d: 1.3, h: 2.1, color: 0xff7a3d, prop: 'cabinet', face: Math.PI },
+    { x: -4.67, z: 8.7, w: 2.0, d: 1.3, h: 2.1, color: 0x6fbb6a, prop: 'cabinet', face: Math.PI },
+    { x: 6.33, z: 8.7, w: 2.0, d: 1.3, h: 2.1, color: 0xb9884f, prop: 'cabinet', face: Math.PI },
+    { x: 9.79, z: 8.7, w: 2.0, d: 1.3, h: 2.1, color: 0x1d6f8f, prop: 'cabinet', face: Math.PI },
   ],
-  // ---- NOTHING TO HIDE IN.
-  //
-  // The lockers and the stock cupboard are gone, and nothing has replaced
-  // them.  Every other room in the sequence is played from inside a box; this
-  // one is played on your feet, and leaving a single cupboard in it would have
-  // the player sitting in the dark waiting for a clock that does not exist.
+  // ---- NOTHING TO HIDE IN, and nothing that is not in the lit room either.
+  // The bin and the plant that used to be by the doors are gone with the
+  // lockers: the hub has no bin and no plant, and this room is the hub.
   spots: [],
   // The front doors, straight down the room from the staff corner.
   door: { x: 0 },
@@ -540,27 +542,46 @@ const ARCADE_BASE: RoomDef = {
   glassDoor: { w: 3.6, h: 2.7 },
   // ---- WHERE YOU COME IN, AND WHICH WAY YOU ARE FACING.
   //
-  // Behind the counter, in the staff corner, a stride out from the staff door
-  // in the back wall — far enough forward that nothing is in arm's reach and
-  // there is floor on every side, and turned to face down the room, so the
-  // first frame is the counter, the case beyond it, the machines either side
-  // of an open middle and the glass doors at the end of it.
-  spawn: { x: -7.3, z: -8.5 },
+  // Behind the desk, in the staff corner, a stride out and to the left of the
+  // staff door in the back wall.  NOT DIRECTLY UNDER IT: the door is at the
+  // desk's right-hand end, which puts anybody standing in it inside reach of
+  // the return, and the first frame of the last room in the game should be the
+  // room rather than a prompt offering to climb something.  Out here it is
+  // clear of the return, clear of the case along the wall to the left and
+  // clear of the desk in front, so nothing is being offered until the player
+  // walks at it.  Turned to face down the room, so the first frame is the
+  // desk, the machines either side of an open middle, and the glass doors at
+  // the end of it.
+  spawn: { x: 5.0, z: -7.8 },
   spawnYaw: Math.PI,
-  staffDoor: { x: -7.3 },
-  froggyStart: { x: 0.0, z: 7.6 },
-  prizeCase: { x: 2.6, z: -9.5 },
-  // Both runs, from either side: waist-high cover round a corner of the room,
-  // which is what a counter is actually for.
+  staffDoor: { x: 6.1 },
+  froggyStart: { x: 0.0, z: 4.6 },
+  prizeCase: { x: 1.2, z: -9.5 },
+  // All three runs, from either side.  The lit room only lets you over the
+  // right-hand end, under the staff door; in here the desk is also the one
+  // piece of waist-high cover on the floor, and cover you are not allowed back
+  // behind is not cover.
   counter: [
-    { axis: 'x', at: -5.4, from: -11.4, to: -3.6, top: 1.15 },
-    { axis: 'z', at: -3.6, from: -10.6, to: -5.1, top: 1.15 },
+    { axis: 'x', at: -5.4, from: -3.61, to: 7.38, top: 1.15 },
+    { axis: 'z', at: -3.61, from: -10.0, to: -4.8, top: 1.15 },
+    { axis: 'z', at: 7.38, from: -10.0, to: -4.8, top: 1.15 },
   ],
   // The way through to the back room, in the left-hand wall where the lit
-  // arcade has it.  Scenery: see RoomDef.wallOpening.
-  wallOpening: { side: 'left', z: 5.6, w: 3.0, h: 2.8 },
+  // arcade has its doorway (y 95..141).  Scenery: see RoomDef.wallOpening.
+  wallOpening: { side: 'left', z: 2.5, w: 3.4, h: 2.8 },
 };
 
 export const ARCADE: RoomDef = ARCADE_BASE;
 
 export const ROOMS: RoomDef[] = [LIVING_ROOM, WAREHOUSE, WARD, ARCADE];
+
+/**
+ * Which of them the arcade is.
+ *
+ * The three hide and seek rooms are 0, 1 and 2 and the arcade is whatever comes
+ * after them.  Anything that wants to put the player in the arcade -- the jump
+ * TEST_NAME takes, the harness, the transition out of the third room -- asks
+ * here rather than writing 3 down, so adding a room in the middle of the
+ * sequence cannot quietly send them somewhere else.
+ */
+export const ARCADE_ROOM = ROOMS.indexOf(ARCADE);
