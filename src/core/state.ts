@@ -144,6 +144,22 @@ export const LEDGER_KEY: unique symbol = Symbol('ledger');
 export const ADMIN_NAME = 'ADMIN128';
 /** What the HUD shows for such a run.  It never moves. */
 export const ADMIN_TOKENS = 9999;
+/**
+ * Name a run this and it opens in the arcade, in three dimensions.
+ *
+ * The 3D arcade is the last room of the night and everything in front of it is
+ * about forty minutes of play: the intro, the floor, going broke, the bust, the
+ * alley, the basement and three rooms of hide and seek.  Nobody can look at a
+ * counter they moved by two metres if the only way back to it is all of that
+ * again, so this is the door into it.
+ *
+ * It is the same kind of password as ADMIN_NAME and follows the same rules:
+ * stored as an ordinary profile name, compared CASE-INSENSITIVELY so "test128"
+ * and "TEST128" both work, and matched WHOLE — "TEST 128" and "TEST1280" are
+ * ordinary runs, because a cheat with fuzzy edges is one people trip over by
+ * accident.  ProfileModal is what honours it; this is only the password.
+ */
+export const TEST_NAME = 'TEST128';
 
 function defaultState(): GameState {
   return {

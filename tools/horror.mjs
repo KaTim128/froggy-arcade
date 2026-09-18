@@ -537,7 +537,7 @@ try {
   // -------------------------------------------- the arcade, and the way out of it
   // The last of the four is the one the player ARRIVES in rather than is let
   // into: the third room ends and the next thing is the staff corner of the
-  // arcade, with the counter wrapped round them and the front doors at the far
+  // arcade, with the desk wrapped round them and the front doors at the far
   // end.  It has no clock, nothing to hide in, and one thing to do.
   console.log('\nhorror  the arcade: up behind the counter, out through the glass');
   {
@@ -554,81 +554,143 @@ try {
     const start = await hide();
     check('the arcade hands the controls straight back', start.mode === 'seeking', start.mode);
     check('and there is nothing in it to hide in', start.spots.length === 0, `${start.spots.length} spots`);
+    // The first frame of the last room should be the room.  Spawning inside
+    // the reach of the desk put a CLIMB OVER over it before the player had
+    // touched anything.
+    check('nothing is being offered on the first frame',
+      start.prompt === '' && !start.atCounter && !start.atCase && !start.atDoor,
+      start.prompt || 'no prompt');
     await page.screenshot({ path: `${SHOTS}/arcade-spawn.png` });
 
-    // ---- the shape of the room, read off the definition rather than the
-    // picture: a counter that turns a corner, the player and the staff door
-    // inside the corner, and the prize case out on the floor side of it.
-    const shape = await page.evaluate(async () => {
-      const { ROOMS, ARCADE } = await import('/src/three/hideRooms.ts');
+    // ---- IT IS THE LIT ROOM'S OWN FLOOR PLAN, not an impression of it.  Every
+    // x below is `game/content.ts` through one linear map, so this asserts the
+    // two rooms against each other rather than against numbers typed in here:
+    // retuning the hub moves the 3D arcade with it or this fails.
+    const plan = await page.evaluate(async () => {
+      const { ARCADE } = await import('/src/three/hideRooms.ts');
+      const { COUNTER, PRIZE_CASE, STAFF_DOOR, cabinetsIn } = await import('/src/game/content.ts');
+      const K = 22 / 292;
+      const to3d = (x) => (x - 160) * K;
       const front = ARCADE.counter.find((r) => r.axis === 'x');
-      const side = ARCADE.counter.find((r) => r.axis === 'z');
-      const inCorner = (x, z) => z < front.at && x < side.at;
+      const returns = ARCADE.counter.filter((r) => r.axis === 'z').sort((a, b) => a.at - b.at);
       const cab = ARCADE.furniture.filter((f) => f.prop === 'cabinet');
       const box = ARCADE.furniture.find((f) => f.prop === 'case');
+      const hub = cabinetsIn('hub');
+      // inside the wrap: behind the front run and between the two returns
+      const inside = (x, z) => z < front.at && x > returns[0].at && x < returns[1].at;
       return {
+        counterFrom: front.from, wantCounterFrom: to3d(COUNTER.x),
+        counterTo: front.to, wantCounterTo: to3d(COUNTER.x + COUNTER.w),
+        caseX: ARCADE.prizeCase.x, wantCaseX: to3d(PRIZE_CASE.x + PRIZE_CASE.w / 2),
+        caseW: box.w, wantCaseW: PRIZE_CASE.w * K,
+        staffX: ARCADE.staffDoor.x, wantStaffX: to3d(STAFF_DOOR.x + 11),
+        staffInsideCounterSpan: ARCADE.staffDoor.x > front.from && ARCADE.staffDoor.x < front.to,
         runs: ARCADE.counter.length,
-        spawnInCorner: inCorner(ARCADE.spawn.x, ARCADE.spawn.z),
-        staffDoorInCorner: inCorner(ARCADE.staffDoor.x, -ARCADE.halfD),
-        caseOnTheFloorSide: !inCorner(ARCADE.prizeCase.x, ARCADE.prizeCase.z),
-        // clear floor between the open side of the counter and the near end
-        // of the case: enough to walk up to it and stand there
-        caseGap: ARCADE.prizeCase.x - box.w / 2 - (side.at + 0.6),
-        area: ARCADE.halfW * ARCADE.halfD * 4,
-        others: ROOMS.filter((r) => r !== ARCADE).map((r) => r.halfW * r.halfD * 4),
+        spawnInside: inside(ARCADE.spawn.x, ARCADE.spawn.z),
+        caseInside: inside(ARCADE.prizeCase.x, ARCADE.prizeCase.z),
+        // how much floor there is in front of the case to stand on and press E
+        caseStandingRoom: front.at - 0.6 - 0.42 - (ARCADE.prizeCase.z + 0.45 + 0.42),
         cabinets: cab.length,
-        // 0 faces +Z, down the room at the doors: the OPPOSITE of the row of
-        // lit fronts that used to face back up at the counter
-        facingTheDoors: cab.filter((f) => Math.abs(f.face) < 0.01).length,
-        againstTheWall: cab.filter((f) => Math.abs(f.x + ARCADE.halfW) < 1.2).length,
-        glass: ARCADE.glassDoor ? ARCADE.glassDoor.w : 0,
+        hubCabinets: hub.length,
+        // the four along the front wall, against their own 2D x
+        frontRow: cab.filter((f) => f.z > 0).map((f) => f.x).sort((a, b) => a - b),
+        wantFrontRow: hub.filter((c) => c.y > 140).map((c) => to3d(c.x)).sort((a, b) => a - b),
+        facingTheCounter: cab.filter((f) => f.z > 0 && Math.abs(Math.abs(f.face) - Math.PI) < 0.01).length,
+        onTheLeftWall: cab.filter((f) => f.x < -ARCADE.halfW + 1.2).length,
+        extras: ARCADE.furniture.filter((f) => !f.prop && f.h < 1.1).length,
       };
     });
-    check('the counter turns a corner round the staff side', shape.runs === 2, `${shape.runs} runs`);
-    check('you come up inside it, with the staff door in the wall behind you',
-      shape.spawnInCorner && shape.staffDoorInCorner,
-      `${shape.spawnInCorner ? 'you' : 'NOT you'}, ${shape.staffDoorInCorner ? 'door' : 'NOT door'}`);
-    check('and the prize case is out on the other side of it, with room to stand',
-      shape.caseOnTheFloorSide && shape.caseGap > 1.5, `${shape.caseGap.toFixed(1)}m of floor`);
-    check('the arcade is the smallest of the four rooms',
-      shape.others.every((a) => shape.area < a),
-      `${shape.area} vs ${shape.others.join('/')}`);
-    check('the machines face down the room, away from the counter',
-      shape.facingTheDoors === shape.cabinets - shape.againstTheWall && shape.facingTheDoors > 0,
-      `${shape.facingTheDoors} of ${shape.cabinets}`);
-    check('and two of them are flat against the wall beside it',
-      shape.againstTheWall === 2, `${shape.againstTheWall} on the wall`);
-    check('the way out is a pair of glass doors', shape.glass >= 3, `${shape.glass}m wide`);
+    const near = (a, b, tol = 0.35) => Math.abs(a - b) <= tol;
+    check('the counter sits where the lit room puts it',
+      near(plan.counterFrom, plan.wantCounterFrom) && near(plan.counterTo, plan.wantCounterTo),
+      `${plan.counterFrom.toFixed(2)}..${plan.counterTo.toFixed(2)} want ` +
+        `${plan.wantCounterFrom.toFixed(2)}..${plan.wantCounterTo.toFixed(2)}`);
+    check('the prize case is the lit room\'s case, to scale',
+      near(plan.caseX, plan.wantCaseX) && near(plan.caseW, plan.wantCaseW, 0.5),
+      `x ${plan.caseX.toFixed(2)} want ${plan.wantCaseX.toFixed(2)}, ` +
+        `w ${plan.caseW.toFixed(2)} want ${plan.wantCaseW.toFixed(2)}`);
+    check('the staff door is where the lit room puts it, inside the counter span',
+      near(plan.staffX, plan.wantStaffX) && plan.staffInsideCounterSpan,
+      `x ${plan.staffX.toFixed(2)} want ${plan.wantStaffX.toFixed(2)}`);
+    check('the four machines along the front are the lit room\'s four',
+      plan.frontRow.length === 4 &&
+        plan.frontRow.every((x, i) => near(x, plan.wantFrontRow[i])),
+      plan.frontRow.map((x, i) => `${x.toFixed(1)}/${plan.wantFrontRow[i]?.toFixed(1)}`).join(' '));
+    check('and they face back up the room at the counter, as it draws them',
+      plan.facingTheCounter === 4, `${plan.facingTheCounter} of 4`);
+    check('with the fifth against the left wall', plan.onTheLeftWall === 1,
+      `${plan.onTheLeftWall} on the wall, ${plan.cabinets} machines for the hub\'s ${plan.hubCabinets}`);
+    check('the counter wraps the staff corner on three sides', plan.runs === 3, `${plan.runs} runs`);
+    check('you and the case are both inside the wrap',
+      plan.spawnInside && plan.caseInside,
+      `${plan.spawnInside ? 'you' : 'NOT you'}, ${plan.caseInside ? 'case' : 'NOT case'}`);
+    check('with floor to stand on in front of the case', plan.caseStandingRoom > 1.5,
+      `${plan.caseStandingRoom.toFixed(1)}m`);
+    check('and nothing in the room the lit one does not have',
+      plan.extras === 0, `${plan.extras} props that are not in the hub`);
 
-    // ---- the counter is a wall to you, and the climb is the way out of the
-    // corner.  Driven, not asserted off the numbers: this is the one move the
-    // room requires and it has to actually work on a keyboard.
-    await press('w', 2600);
-    const stopped = await hide();
-    check('walking forward out of the staff corner stops you at the counter',
-      stopped.atCounter && stopped.pz < 0, `at ${stopped.pz.toFixed(1)}, prompt ${stopped.prompt}`);
-    check('the prompt offers the climb', stopped.prompt === '[E] CLIMB OVER', stopped.prompt);
-    await page.keyboard.press('e');
-    await sleep(1400);
-    const over = await hide();
-    check('E puts you over it and onto the floor', over.vaulted && over.pz > stopped.pz,
-      `${stopped.pz.toFixed(1)} -> ${over.pz.toFixed(1)}`);
+    // ---- the staff corner is somewhere you can be, not a slot you are wedged
+    // in.  Walked, not measured off the numbers.
+    const box = {};
+    for (const [name, key] of [['forward', 'w'], ['back', 's'], ['left', 'a'], ['right', 'd']]) {
+      await scene(() => {
+        const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+        sc.pos.set(sc.def.spawn.x, sc.def.spawn.z);
+        sc.yaw = sc.def.spawnYaw ?? 0;
+      });
+      await sleep(120);
+      await press(key, 3000);
+      box[name] = await hide();
+    }
+    const acrossTheCorner = Math.abs(box.left.px - box.right.px);
+    const downTheCorner = Math.abs(box.forward.pz - box.back.pz);
+    check('there is room to move behind the counter',
+      acrossTheCorner > 4 && downTheCorner > 1.5,
+      `${acrossTheCorner.toFixed(1)}m across, ${downTheCorner.toFixed(1)}m deep`);
+    check('walking forward out of it stops you at the counter',
+      box.forward.atCounter && box.forward.prompt === '[E] CLIMB OVER',
+      `at ${box.forward.pz.toFixed(2)}, ${box.forward.prompt}`);
 
-    // ---- the case: reachable on foot from the floor side, and quiet until
-    // you are actually at it.
+    // ---- the case, on foot, from inside the wrap.
+    //
+    // The start is measured off the COUNTER rather than off the case: the
+    // staff corner is only a couple of metres deep, and a fixed distance in
+    // front of the case lands inside the desk, where the walk under test
+    // cannot happen because the player is already stuck.
     await scene(() => {
       const sc = window.__froggy.game().scene.getScene('HideRoom3D');
-      sc.pos.set(sc.def.prizeCase.x, sc.def.prizeCase.z + 3.4);
+      const front = sc.def.counter.find((r) => r.axis === 'x');
+      sc.pos.set(sc.def.prizeCase.x, front.at - 1.5);
       sc.yaw = 0;
     });
     await sleep(120);
     const approach = await hide();
-    await press('w', 2200);
+    await press('w', 2500);
     const atCase = await hide();
     check('the case says nothing until you are standing at it',
       !approach.atCase && atCase.atCase, `${approach.prompt || 'nothing'} -> ${atCase.prompt}`);
-    check('and walking to it from the floor gets you there',
-      atCase.prompt === '[E] PRIZE CASE', `stopped at z ${atCase.pz.toFixed(1)}`);
+    check('and E is offered when you get there', atCase.prompt === '[E] PRIZE CASE',
+      `stopped at z ${atCase.pz.toFixed(2)}`);
+
+    // ---- over the counter and back.  It is the only way onto the floor, and
+    // cover you are not allowed back behind is not cover.
+    await scene(() => {
+      const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+      const front = sc.def.counter.find((r) => r.axis === 'x');
+      sc.pos.set(1.2, front.at - 1.1);
+      sc.yaw = Math.PI;
+    });
+    await sleep(150);
+    const beforeVault = await hide();
+    await page.keyboard.press('e');
+    await sleep(1400);
+    const over = await hide();
+    check('E puts you over the counter and onto the floor',
+      over.vaulted && over.pz > beforeVault.pz, `${beforeVault.pz.toFixed(2)} -> ${over.pz.toFixed(2)}`);
+    await page.keyboard.press('e');
+    await sleep(1400);
+    const back = await hide();
+    check('and you can get back behind it', back.pz < over.pz, `${over.pz.toFixed(2)} -> ${back.pz.toFixed(2)}`);
 
     // ---- the doors.  Ten seconds, the feet nailed down, and no way to look
     // at what is walking up behind.
@@ -647,8 +709,6 @@ try {
     check('E starts the unlocking rather than opening anything',
       going.escaping && going.unlockSeconds === 10, `${going.unlockSeconds}s, k ${going.escapeK.toFixed(2)}`);
 
-    // Shove the view as hard round as a panicking player would, from both the
-    // mouse's clamp and the arrow keys, and take the worst of it.
     let worstYaw = 0;
     let moved = 0;
     const heldAt = { x: going.px, z: going.pz };
@@ -671,7 +731,6 @@ try {
       worstYaw < Math.PI / 4, `${((worstYaw * 180) / Math.PI).toFixed(0)} degrees`);
     check('the feet do not move for the whole of it', moved < 0.01, `${moved.toFixed(3)}m`);
 
-    // and the hands shake harder the longer it goes on
     const late = await hide();
     check('the shake builds as it runs out', late.tremble > going.tremble,
       `${going.tremble.toFixed(2)} -> ${late.tremble.toFixed(2)}`);
@@ -684,6 +743,106 @@ try {
     const done = await hide();
     check('ten seconds of it and the lock turns', done.mode === 'survived', done.mode);
     await page.screenshot({ path: `${SHOTS}/arcade-out.png` });
+    await page.close();
+  }
+
+  // ------------------------------------- the third room hands over to the arcade
+  // The transition itself, played rather than deep-linked: the third room is
+  // survived and the next thing the player sees has to be the staff corner.
+  console.log('\nhorror  surviving the third room puts you behind the counter');
+  {
+    const page = await newPage('?intro=1&charity=1&key=1&route=hide&hideRoom=2&scene=HideRoom3D');
+    const hide = () => page.evaluate(() => window.__hide ?? null);
+    let waited = 0;
+    while (waited < 60000 && (await hide())?.mode !== 'seeking') {
+      await sleep(500);
+      waited += 500;
+    }
+    check('the third room is the ward, not the arcade', (await hide())?.room === 2, `room ${(await hide())?.room}`);
+    // Run his clock out, which is how a hide room is survived.
+    await page.evaluate(() => {
+      const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+      sc.grace = 9999;
+      sc.clock = 0.05;
+    });
+    await sleep(1400);
+    check('running it out survives the round', (await hide())?.mode === 'survived', (await hide())?.mode);
+    await sleep(6000);
+    const now = await hide();
+    const st = await page.evaluate(() => window.__froggy.state());
+    const where = await page.evaluate(async () => {
+      const { ARCADE } = await import('/src/three/hideRooms.ts');
+      const front = ARCADE.counter.find((r) => r.axis === 'x');
+      const returns = ARCADE.counter.filter((r) => r.axis === 'z').sort((a, b) => a.at - b.at);
+      const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+      return {
+        behindTheCounter: sc.pos.y < front.at,
+        insideTheWrap: sc.pos.x > returns[0].at && sc.pos.x < returns[1].at,
+        metresFromTheDoors: ARCADE.halfD - sc.pos.y,
+      };
+    });
+    check('it hands over to the arcade', now?.room === 3 && st.hideRoom === 3, `room ${now?.room}`);
+    check('and puts you BEHIND the counter, inside the wrap',
+      where.behindTheCounter && where.insideTheWrap,
+      `${now.px.toFixed(2)}, ${now.pz.toFixed(2)}`);
+    check('nowhere near the glass doors', where.metresFromTheDoors > 12,
+      `${where.metresFromTheDoors.toFixed(1)}m from them`);
+    check('with the controls already yours', now?.mode === 'seeking', now?.mode);
+    await page.screenshot({ path: `${SHOTS}/arcade-handover.png` });
+    await page.close();
+  }
+
+  // ------------------------------------------------- the way in, for testing it
+  // Forty minutes of play stand in front of this room, so it has a password.
+  console.log('\nhorror  a run named TEST128 opens in the arcade');
+  {
+    const page = await newPage('');
+    await sleep(2500);
+    await page.evaluate(() => localStorage.clear());
+    await page.reload({ waitUntil: 'networkidle2' });
+    await sleep(2800);
+    const name = async (typed) => {
+      await page.evaluate(() => {
+        if (!window.__froggy.activeScenes().includes('ProfileModal')) {
+          window.__froggy.game().scene.start('ProfileModal', { from: 'StartScreen' });
+        }
+      });
+      await sleep(900);
+      await page.evaluate(() => window.__froggy.game().scene.getScene('ProfileModal').beginNaming());
+      await sleep(300);
+      for (const ch of typed) {
+        await page.keyboard.press(/[0-9]/.test(ch) ? `Digit${ch}` : `Key${ch.toUpperCase()}`);
+        await sleep(50);
+      }
+      await page.keyboard.press('Enter');
+      await sleep(2500);
+      return {
+        scenes: await page.evaluate(() => window.__froggy.activeScenes()),
+        state: await page.evaluate(() => window.__froggy.state()),
+        hide: await page.evaluate(() => window.__hide ?? null),
+      };
+    };
+
+    const test = await name('test128');
+    check('TEST128 goes straight into the arcade',
+      test.scenes.includes('HideRoom3D') && test.hide?.room === 3,
+      `${test.scenes.join(',')}, room ${test.hide?.room}`);
+    check('with everything the room reads already set',
+      test.state.route === 'hide' && test.state.hasKey && test.state.seenIntro,
+      `route ${test.state.route}, key ${test.state.hasKey}, intro ${test.state.seenIntro}`);
+    check('and it lands behind the counter like the handover does',
+      test.hide && test.hide.pz < 0 && test.hide.prompt === '',
+      test.hide ? `${test.hide.px.toFixed(2)}, ${test.hide.pz.toFixed(2)}` : 'not in the room');
+    await page.screenshot({ path: `${SHOTS}/arcade-test128.png` });
+
+    // And the name is the whole of it: an ordinary run is still an ordinary run.
+    await page.evaluate(() => localStorage.clear());
+    await page.reload({ waitUntil: 'networkidle2' });
+    await sleep(2800);
+    const normal = await name('kai');
+    check('any other name still starts a normal run',
+      !normal.scenes.includes('HideRoom3D') && normal.state.route === 'normal' && !normal.state.hasKey,
+      `${normal.scenes.join(',')}, route ${normal.state.route}`);
     await page.close();
   }
 

@@ -20,9 +20,10 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
-import { store, MAX_SLOTS, MAX_NAME_LEN, type SlotMeta } from '../core/state';
+import { store, cleanName, MAX_SLOTS, MAX_NAME_LEN, TEST_NAME, type SlotMeta } from '../core/state';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
+import { ARCADE_ROOM } from '../three/hideRooms';
 
 const ROW_Y = [56, 86, 116];
 
@@ -302,15 +303,56 @@ export class ProfileModal extends Phaser.Scene {
   }
 
   private commitName(): void {
+    // Kept before the draft is cleared: the shortcut below is decided on the
+    // name that was actually typed, and cleaned the same way the stored one is
+    // so that stray spaces cannot make the two disagree.
+    const typed = cleanName(this.draft);
     const id = store.createSlot(this.draft);
     this.naming = false;
     this.draft = '';
-    if (id) {
-      audio.sfx('coin_spin');
-      this.close();
-    } else {
+    if (!id) {
       this.render();
+      return;
     }
+    audio.sfx('coin_spin');
+    if (typed.toUpperCase() === TEST_NAME) {
+      this.jumpToArcade();
+      return;
+    }
+    this.close();
+  }
+
+  /**
+   * TEST128, AND STRAIGHT UP INTO THE ARCADE.  See TEST_NAME.
+   *
+   * The run is real — it was created a moment ago like any other and it saves
+   * like any other — it simply starts at the end of the night instead of the
+   * beginning.  Everything the last room reads is set here in one go, because
+   * the room is the end of a chain of latches and arriving with half of them
+   * unset is a room that looks right and behaves like somewhere else: the
+   * route has to be `hide` or nothing else in the building agrees the night is
+   * happening, `hideRoom` has to be the arcade, and the key has to be in the
+   * pocket or the prize case has nothing to say and the front doors cannot be
+   * worked.  `seenIntro` and `charityUsed` are spent rather than skipped, so
+   * neither fires later over the top of something.
+   *
+   * Every active scene is stopped before the jump rather than this one closing
+   * onto the start screen: closing would hand control back to the menu, and the
+   * whole point is not to go through the menu.
+   */
+  private jumpToArcade(): void {
+    store.patch({
+      seenIntro: true,
+      charityUsed: true,
+      hasKey: true,
+      route: 'hide',
+      hideRoom: ARCADE_ROOM,
+    });
+    store.flush();
+    const mgr = this.scene.manager;
+    // Snapshotted: stopping a scene mutates the list this is walking.
+    for (const key of mgr.getScenes(true).map((sc) => sc.scene.key)) mgr.stop(key);
+    mgr.start('HideRoom3D');
   }
 
   private play(id: string): void {
