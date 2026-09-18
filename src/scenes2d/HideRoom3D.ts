@@ -35,7 +35,16 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { ROOMS, type Box, type CounterRun, type RoomDef, type SpotKind } from '../three/hideRooms';
 import { buildGrid, findPath, lineOpen, spotExtent, type NavGrid } from '../three/navGrid';
 import { dressRoom, surfaceTexture } from '../three/hideDecor';
-import { buildCabinet, buildDroppedKey, buildGlassDoors, buildHand, buildPrizeCase } from '../three/arcadeProps';
+import {
+  buildCabinet,
+  buildChangeMachine,
+  buildCounter,
+  buildDroppedKey,
+  buildGlassDoors,
+  buildHand,
+  buildPrizeCase,
+  buildStaffDoor,
+} from '../three/arcadeProps';
 import { buildSecretRoom, SECRET_ORIGIN, type SecretRoom } from '../three/secretRoom';
 
 /** A walk is slow and silent; a run is fast and heard.  That is the trade. */
@@ -1028,24 +1037,13 @@ export class HideRoom3D extends Phaser.Scene {
     // interactive and it never opens again; it is there so that turning round
     // answers "where am I" without a line of dialogue, and so the front door
     // at the other end reads as the other one.
+    // The door the player walks out of, and the only part of the back wall they
+    // are ever stood next to.  A brown box with a ball on it read as a cupboard
+    // from a metre away, which is the one distance it is always seen from.
     if (d.staffDoor) {
-      const back = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.4, 0.2), doorMat.clone());
-      back.position.set(d.staffDoor.x, 1.2, -d.halfD + 0.05);
+      const back = buildStaffDoor(1.6, 2.4, grunge);
+      back.position.set(d.staffDoor.x, 0, -d.halfD + 0.05);
       st.scene.add(back);
-      // A plate over it, lit rather than shaded: at this light level a sign
-      // painted on the door is a slightly different brown.
-      const plate = new THREE.Mesh(
-        new THREE.BoxGeometry(0.9, 0.3, 0.06),
-        new THREE.MeshBasicMaterial({ color: 0x9aa4b4 }),
-      );
-      plate.position.set(d.staffDoor.x, 2.05, -d.halfD + 0.18);
-      st.scene.add(plate);
-      const backHandle = new THREE.Mesh(
-        new THREE.SphereGeometry(0.09, 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0xc9a62e }),
-      );
-      backHandle.position.set(d.staffDoor.x - 0.55, 1.15, -d.halfD + 0.18);
-      st.scene.add(backHandle);
     }
 
     for (const f of d.furniture) {
@@ -1062,7 +1060,11 @@ export class HideRoom3D extends Phaser.Scene {
         const g =
           f.prop === 'cabinet'
             ? buildCabinet(bw, f.h, bd, f.color, grunge)
-            : buildPrizeCase(bw, f.h, bd, grunge);
+            : f.prop === 'counter'
+              ? buildCounter(bw, f.h, bd, f.color, grunge)
+              : f.prop === 'change'
+                ? buildChangeMachine(bw, f.h, bd, grunge)
+                : buildPrizeCase(bw, f.h, bd, grunge);
         g.position.set(f.x, 0, f.z);
         g.rotation.y = f.face ?? 0;
         st.scene.add(g);

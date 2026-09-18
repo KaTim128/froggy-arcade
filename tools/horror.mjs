@@ -629,6 +629,85 @@ try {
     check('and nothing in the room the lit one does not have',
       plan.extras === 0, `${plan.extras} props that are not in the hub`);
 
+    // ---- EVERYTHING WITH A JOB IS BUILT, AND EVERYTHING BUILT STAYS IN ITS
+    // BOX.
+    //
+    // Two separate questions, asked of the real three.js scene rather than of
+    // the room definition.  First: is it modelled at all?  A prize counter and
+    // a change machine painted as single cuboids are a wall and a locker, and
+    // the room's whole job is to be recognised as the arcade.  Second, and the
+    // one that can actually break the game: the collision box is the box in
+    // `furniture`, so a lip, an architrave or an overhanging counter top that
+    // grows outside it is geometry the player walks through -- or worse, a
+    // shape poking out of a wall.  A little overhang is the point of a counter
+    // top, so the allowance is generous and the check is that nothing has run
+    // away with itself.
+    const built = await page.evaluate(() => {
+      const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+      const root = sc.stage.scene;
+      root.updateMatrixWorld(true);
+      const d = sc.def;
+
+      // A PROP IS ITS OWN GROUP, and only its own group.  Picking parts up by
+      // where they are in the room instead swept in the wall grime behind the
+      // prize case and the litter round the counter's feet, and then reported
+      // a streak of dirt on the back wall as the case overhanging its box by
+      // a third of a metre.  Every prop is added to the scene as one group at
+      // the furniture's own x/z, so that is what identifies it.
+      const groupAt = (f) =>
+        root.children.find(
+          (o) => o.type === 'Group' && Math.abs(o.position.x - f.x) < 0.01 && Math.abs(o.position.z - f.z) < 0.01,
+        );
+
+      const report = (f) => {
+        const g = groupAt(f);
+        if (!g) return { meshes: 0, lit: 0, over: 0, worst: 0 };
+        const r = { meshes: 0, lit: 0, over: 0, worst: 0 };
+        g.traverse((o) => {
+          if (!o.isMesh || !o.geometry) return;
+          o.geometry.computeBoundingBox();
+          if (!o.geometry.boundingBox) return;
+          const bb = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld);
+          r.meshes++;
+          if (o.material && o.material.type === 'MeshBasicMaterial') r.lit++;
+          const outX = Math.max(bb.max.x - (f.x + f.w / 2), f.x - f.w / 2 - bb.min.x);
+          const outZ = Math.max(bb.max.z - (f.z + f.d / 2), f.z - f.d / 2 - bb.min.z);
+          const worst = Math.max(outX, outZ, bb.max.y - f.h);
+          r.worst = Math.max(r.worst, worst);
+          if (worst > 0.3) r.over++;
+        });
+        return r;
+      };
+
+      const runFor = (run) =>
+        d.furniture.find((f) =>
+          run.axis === 'x' ? Math.abs(f.z - run.at) < 0.1 && f.w > 5 : Math.abs(f.x - run.at) < 0.1 && f.d > 5,
+        );
+      return {
+        change: report(d.furniture.find((f) => f.prop === 'change')),
+        cabinet: report(d.furniture.find((f) => f.prop === 'cabinet')),
+        prizeCase: report(d.furniture.find((f) => f.prop === 'case')),
+        counter: d.counter.map((r) => {
+          const f = runFor(r);
+          return f ? report(f) : null;
+        }),
+      };
+    });
+    const runs = built.counter.filter(Boolean);
+    check('the change machine is a machine, not a locker',
+      built.change.meshes >= 8 && built.change.lit >= 2,
+      `${built.change.meshes} parts, ${built.change.lit} of them lit`);
+    check('the counter is a counter, not three slabs',
+      runs.length === 3 && runs.every((r) => r.meshes >= 4),
+      runs.map((r) => `${r.meshes}`).join('/') + ' parts');
+    check('the cabinets and the case are built too',
+      built.cabinet.meshes >= 10 && built.prizeCase.meshes >= 10,
+      `${built.cabinet.meshes} and ${built.prizeCase.meshes} parts`);
+    const boxed = [built.change, built.cabinet, built.prizeCase, ...runs];
+    check('and none of it grows outside the box it is allowed',
+      boxed.every((r) => r.over === 0),
+      `worst overhang ${Math.max(...boxed.map((r) => r.worst)).toFixed(2)}m of the 0.30 allowed`);
+
     // ---- the staff corner is somewhere you can be, not a slot you are wedged
     // in.  Walked, not measured off the numbers.
     const box = {};

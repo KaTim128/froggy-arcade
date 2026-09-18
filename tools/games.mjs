@@ -989,7 +989,7 @@ for (const g of [
   await page.close();
 }
 
-// CHAMBER: SPIN, STOP, PULL, and the twenty is gone the moment you walk up.
+// CHAMBER: SPIN, STOP, PULL, and the price is gone the moment you walk up.
 //
 // The loop is the thing here.  The trigger only works on a stopped cylinder,
 // nothing fires on its own when it stops, a clean pull sets the barrel turning
@@ -1029,9 +1029,15 @@ for (const g of [
     const { CABINETS } = await import('/src/game/content.ts');
     return CABINETS.find((c) => c.id === 'roulette').cost;
   });
-  const charged = price === 20 && paidIn === purse - 20;
+  // WHAT THE CABINET ASKS, NOT WHAT THIS FILE REMEMBERS IT ASKING.  The price
+  // was written in here as a literal 20 beside the very number it was reading
+  // off the cabinet, so the day the Chamber's price moved to 15 the check
+  // failed on the retuning rather than on anything being wrong.  The thing
+  // worth asserting is that the door takes the cabinet's own price, once.
+  const charged = price > 0 && paidIn === purse - price;
   console.log(
-    `${charged ? 'PASS' : 'FAIL'}  chamber: twenty to walk up  — ${purse} -> ${paidIn}, cabinet asks ${price}`,
+    `${charged ? 'PASS' : 'FAIL'}  chamber: the door takes the cabinet's own price  — ` +
+      `${purse} -> ${paidIn}, cabinet asks ${price}`,
   );
   if (!charged) failures++;
 
@@ -1650,36 +1656,46 @@ for (const g of [
       for (const [x, pow] of shots) {
         // Re-wiped before every ball: the game re-oils between them.
         window.__bowl.setOil([]);
-        const before = window.__bowl.state().standing;
         window.__bowl.throw(0, pow, x, 0);
         const st = await settle();
-        out.push({ score: st.scores.player, cleared: before > 0 && st.standing === 0 });
-        // The rack is re-racked once the frame turns over; stop there.
-        if (out[out.length - 1].cleared) break;
+        // WHETHER THE RACK WENT DOWN IS NOT `standing`.  By the time the deck
+        // has settled the frame is over and the pins are already re-racked for
+        // whoever is up next, so `standing` reads 10 after a strike.  What the
+        // frame did is in the turn: it moves on when the rack is cleared or
+        // the second ball is spent, and stays put with the ball number up when
+        // there are pins left to pick up.
+        out.push({ score: st.scores.player, ballNo: st.ballNo, turn: st.turn });
+        if (st.turn !== 'player') break;
       }
       return out;
     }, shots);
   };
 
-  // 159 is the pocket at full power and takes the rack off the first ball.
+  // 159 is the pocket at full power and takes the rack off the first ball: one
+  // ball, the frame over, and ten pins on the board as fifteen.
   const struck = await frame([[159, 1]]);
-  const strikeOk = struck.length === 1 && struck[0].cleared && struck[0].score === 15;
+  const strikeOk = struck.length === 1 && struck[0].turn === 'cpu' && struck[0].score === 15;
   console.log(
     `${strikeOk ? 'PASS' : 'FAIL'}  bowling: the whole rack off the first ball pays 10 and 5  — ` +
-      `${struck.map((r) => `${r.score}${r.cleared ? ' cleared' : ''}`).join(' then ')}`,
+      `${struck.map((r) => `${r.score} (ball ${r.ballNo}, ${r.turn})`).join(' then ')}`,
   );
   if (!strikeOk) failures++;
 
-  // A soft ball wide of the pocket leaves pins; the pocket then picks them up.
+  // A soft ball wide of the pocket leaves pins -- the frame stays put and the
+  // ball number goes up -- and the pocket then picks them up for thirteen.
   const spared = await frame([
     [168, 0.7],
     [162, 1],
   ]);
   const spareOk =
-    spared.length === 2 && !spared[0].cleared && spared[1].cleared && spared[1].score === 13;
+    spared.length === 2 &&
+    spared[0].turn === 'player' &&
+    spared[0].ballNo === 2 &&
+    spared[1].turn === 'cpu' &&
+    spared[1].score === 13;
   console.log(
     `${spareOk ? 'PASS' : 'FAIL'}  bowling: the whole rack off the second ball pays 10 and 3  — ` +
-      `${spared.map((r) => `${r.score}${r.cleared ? ' cleared' : ''}`).join(' then ')}`,
+      `${spared.map((r) => `${r.score} (ball ${r.ballNo}, ${r.turn})`).join(' then ')}`,
   );
   if (!spareOk) failures++;
 
