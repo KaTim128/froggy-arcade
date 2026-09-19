@@ -735,18 +735,26 @@ for (const g of [
   // that is about crashing, at the bottom.
   await page.evaluate(() => window.__chase.shield(true));
 
-  const st = () => page.evaluate(() => window.__chase.state());
+  // A RUN THAT ENDED HAS TO READ AS A FAILED CHECK, NOT AS A CRASHED SUITE.
+  // The scene deletes the bridge on its way out, so `window.__chase.state()`
+  // throws the moment anything on the road gets the car -- and every check
+  // below that is asserting "this does not end the run" was reading `.gone`
+  // off a state object that never had one.  It has one now, and it means what
+  // the block's name for it says: the game is gone.
+  const st = async () => (await page.evaluate(() => window.__chase?.state() ?? null)) ?? { gone: true };
 
-  // ---- WHAT THE THREE THINGS ON THE ROAD ACTUALLY DO.  Each is put down in
+  // ---- WHAT IS LYING ON THE ROAD, AND WHAT IT COSTS.  Each is put down in
   // the player's own lane, driven over, and the one number it is supposed to
-  // move is read: a banana adds a skin, a bank adds fifty, and a pothole takes
-  // the speed without ending the run.
+  // move is read: a pothole takes the speed for a beat, and a slick takes the
+  // car itself for three seconds.  NEITHER ENDS THE RUN, which is the half of
+  // this that matters -- they are things you pay for, not things you die to.
   const takePickup = async (kind) => {
     // The spawner deliberately puts one as far from the player's lane as it
     // can (see `jarLane`) and jitters it across that lane, so the car has to
     // be moved ONTO its real x -- aiming at the lane centre misses by more
     // than the car is wide, which is the whole point of the jitter.
     const before = await page.evaluate((k) => {
+      if (!window.__chase) return { gone: true };
       window.__chase.clearRoad();
       window.__chase.setPlayer(window.__chase.laneX(1), 150);
       window.__chase.dropPickup(k);
@@ -763,23 +771,27 @@ for (const g of [
     return { before, after: await st() };
   };
 
-  await page.evaluate(() => window.__chase.setBananas(0));
-  const gotBanana = await takePickup('banana');
-  const bananaOk = gotBanana.after.bananas > gotBanana.before.bananas;
+  // THERE IS NOTHING LEFT OUT THERE WORTH HAVING.  The road used to hand out
+  // bananas and Froggy banks; the banks are gone and the tool is bought now,
+  // so the only kinds a spawner will produce are the two that hurt.  A pickup
+  // that came back would be a reward this game is no longer supposed to have.
+  const onTheRoad = await page.evaluate(() => {
+    window.__chase.clearRoad();
+    const kinds = new Set();
+    for (let i = 0; i < 40; i++) {
+      window.__chase.dropPickup('pothole');
+      window.__chase.dropPickup('oil');
+      window.__chase.state().pickupKinds.forEach((k) => kinds.add(k));
+    }
+    window.__chase.clearRoad();
+    return [...kinds].sort();
+  });
+  const noRewards = JSON.stringify(onTheRoad) === JSON.stringify(['oil', 'pothole']);
   console.log(
-    `${bananaOk ? 'PASS' : 'FAIL'}  car chase: a banana is picked up and carried  — ` +
-      `${gotBanana.before.bananas} -> ${gotBanana.after.bananas}`,
+    `${noRewards ? 'PASS' : 'FAIL'}  car chase: nothing on the road is worth having  — ` +
+      `${onTheRoad.join(',') || 'nothing'}`,
   );
-  if (!bananaOk) failures++;
-
-  await page.evaluate(() => window.__chase.setCash(0));
-  const gotBank = await takePickup('bank');
-  const bankOk = gotBank.after.cash - gotBank.before.cash === 50;
-  console.log(
-    `${bankOk ? 'PASS' : 'FAIL'}  car chase: a froggy bank pays fifty  — ` +
-      `${gotBank.before.cash} -> ${gotBank.after.cash}`,
-  );
-  if (!bankOk) failures++;
+  if (!noRewards) failures++;
 
   const hitHole = await takePickup('pothole');
   const holeOk = hitHole.after.jolted && !hitHole.after.gone;
@@ -788,6 +800,36 @@ for (const g of [
       `${hitHole.after.jolted ? 'jolted' : 'no jolt'}, ${hitHole.after.gone ? 'RUN ENDED' : 'still driving'}`,
   );
   if (!holeOk) failures++;
+
+  // ---- AND THE SLICK TAKES THE CAR, FOR THREE SECONDS, WITHOUT KILLING YOU.
+  // Three things at once: it starts, it lasts about three seconds and not four,
+  // and the run is still going at the end of it.  The last one is the fairness:
+  // a hazard that removes the controls AND ends the run is not a hazard.
+  const hitOil = await takePickup('oil');
+  const spunUp = hitOil.after.spinning && !hitOil.after.gone;
+  console.log(
+    `${spunUp ? 'PASS' : 'FAIL'}  car chase: oil takes the car off you, and does not end the run  — ` +
+      `${hitOil.after.spinning ? `${hitOil.after.spin}ms of spin` : 'no spin'}, ` +
+      `${hitOil.after.gone ? 'RUN ENDED' : 'still driving'}`,
+  );
+  if (!spunUp) failures++;
+
+  // and it hands the car back.  Watched rather than assumed: a spin that never
+  // ends is the same bug as one that never starts, and worse to play.
+  const backInControl = await page.evaluate(async () => {
+    const t0 = Date.now();
+    for (let i = 0; i < 90; i++) {
+      if (!window.__chase.state().spinning) return Date.now() - t0;
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    return -1;
+  });
+  const handedBack = backInControl >= 0 && backInControl < 3400;
+  console.log(
+    `${handedBack ? 'PASS' : 'FAIL'}  car chase: and it gives the car back after three seconds  — ` +
+      (backInControl < 0 ? 'still spinning after 5s' : `back in ${(backInControl / 1000).toFixed(1)}s`),
+  );
+  if (!handedBack) failures++;
 
   // ---- and two hundred in the bag turns the heat up.  Read a few frames
   // after each change: the road speed the police measure themselves against
@@ -813,13 +855,15 @@ for (const g of [
 
   // ---- one car until the first two hundred, then one more every two hundred.
   const caps = await page.evaluate(() =>
-    [0, 199, 200, 400, 600, 1000, 4000].map((c) => {
+    [0, 199, 200, 400, 600, 1000, 1400, 4000].map((c) => {
       window.__chase.setCash(c);
       return window.__chase.state().policeCap;
     }),
   );
-  const counted = JSON.stringify(caps) === JSON.stringify([1, 1, 2, 3, 4, 6, 6]);
-  console.log(`${counted ? 'PASS' : 'FAIL'}  car chase: two cars at 200, one more every 200  — ${caps.join(',')}`);
+  // ...and it keeps climbing to EIGHT rather than stopping at six, so the last
+  // third of a long run is not the same road as the middle of it.
+  const counted = JSON.stringify(caps) === JSON.stringify([1, 1, 2, 3, 4, 6, 8, 8]);
+  console.log(`${counted ? 'PASS' : 'FAIL'}  car chase: two cars at 200, one more every 200, up to eight  — ${caps.join(',')}`);
   if (!counted) failures++;
 
   // ---- the juke.  A chaser steers at the lane it last SAW you in, so a late
@@ -885,7 +929,7 @@ for (const g of [
   const lanes = await page.evaluate(() => {
     const seen = [];
     for (let i = 0; i < 8; i++) {
-      window.__chase.dropPickup('banana');
+      window.__chase.dropPickup('pothole');
       const all = window.__chase.state().pickupLanes;
       seen.push(all[all.length - 1]);
     }
@@ -917,28 +961,218 @@ for (const g of [
   );
   if (!timed) failures++;
 
-  // ---- A DROPPED BANANA HAS TO TAKE A CHASER OFF THE ROAD.  It is the only
-  // escape the game has left, so a skin put down in front of a car on the
-  // bumper must spin it and buy the quiet — not merely be a noise while the
-  // two of them stay exactly where they were.
+  // ---- A DROPPED BOMB HAS TO TAKE A CHASER OFF THE ROAD.  It is the only
+  // escape the game has left, so one put down in front of a car on the bumper
+  // must spin it and buy the quiet — not merely be a noise while the two of
+  // them stay exactly where they were.
   await page.evaluate(() => {
     window.__chase.clearRoad();
-    window.__chase.setCash(0);
+    // Enough in the bag to afford one, which is now part of what it takes.
+    window.__chase.setCash(120);
     window.__chase.setPlayer(window.__chase.laneX(1), 120);
     window.__chase.spawnPolice(1, 150);
-    window.__chase.setBananas(2);
   });
   await sleep(700);
   const onTheBumper = await st();
-  await page.keyboard.press('Space'); // put one down behind
+  await page.keyboard.press('Space'); // buy one and put it down behind
   await sleep(1600);
   const afterDrop = await st();
-  const skinWorked = onTheBumper.chasing > 0 && afterDrop.chasing === 0 && afterDrop.respite > 8000;
+  const bombWorked = onTheBumper.chasing > 0 && afterDrop.chasing === 0 && afterDrop.respite > 8000;
   console.log(
-    `${skinWorked ? 'PASS' : 'FAIL'}  car chase: a dropped banana spins the car on your bumper  — ` +
+    `${bombWorked ? 'PASS' : 'FAIL'}  car chase: a dropped bomb spins the car on your bumper  — ` +
       `${onTheBumper.chasing} chasing -> ${afterDrop.chasing}, ${Math.round(afterDrop.respite / 100) / 10}s clear`,
   );
-  if (!skinWorked) failures++;
+  if (!bombWorked) failures++;
+
+  // ---- AND IT IS PAID FOR OUT OF THE SCORE, EVERY TIME.  That is the whole
+  // of what makes it a decision rather than an inventory check: thirty off the
+  // bag is a token and a half off the payout.  Both halves are asserted — the
+  // charge when it can be met, and the refusal when it cannot, because a
+  // button that quietly does nothing reads as a broken game.
+  const priced = await page.evaluate(() => {
+    window.__chase.clearRoad();
+    const cost = window.__chase.state().bombCost;
+    window.__chase.setCash(cost - 1);
+    window.__chase.drop();
+    const broke = window.__chase.state();
+    window.__chase.setCash(100);
+    window.__chase.drop();
+    const paid = window.__chase.state();
+    return { cost, brokeCash: broke.cash, brokeDrops: broke.drops, paidCash: paid.cash, paidDrops: paid.drops };
+  });
+  const charged =
+    priced.cost === 30 &&
+    priced.brokeDrops === 0 &&
+    priced.brokeCash === priced.cost - 1 &&
+    priced.paidDrops === 1 &&
+    priced.paidCash === 100 - priced.cost;
+  console.log(
+    `${charged ? 'PASS' : 'FAIL'}  car chase: a bomb costs ${priced.cost} cash, and short of it buys nothing  — ` +
+      `${priced.cost - 1} -> ${priced.brokeCash} (${priced.brokeDrops} down), 100 -> ${priced.paidCash} (${priced.paidDrops} down)`,
+  );
+  if (!charged) failures++;
+
+  // ---- CONCRETE NEVER CLOSES THE ROAD.
+  //
+  // This is the one that can quietly ruin the game.  A barrier takes lanes
+  // away, and lanes taken away is exactly how an unwinnable frame happens: the
+  // player is in lane 1, the concrete lands in 0, 1 and 2, and the token is
+  // gone through no fault of theirs.  So it is asked of the CHOOSER, two
+  // hundred times from every lane on the road -- never the lane the player is
+  // in, never more than two of the four, and always an open lane next door to
+  // where they already are, because a gap three lanes away is not a gap at the
+  // speed the road arrives.
+  const boxedIn = await page.evaluate(async () => {
+    window.__chase.setCash(400);
+    let laid = 0;
+    for (let i = 0; i < 200; i++) {
+      const lane = i % 4;
+      window.__chase.clearRoad();
+      window.__chase.setPlayer(window.__chase.laneX(lane), 140);
+      window.__chase.layBarrier();
+      await new Promise((r) => setTimeout(r, 16));
+      const blocked = window.__chase.state().barrierLanes;
+      if (!blocked.length) continue;
+      laid++;
+      const open = [0, 1, 2, 3].filter((l) => !blocked.includes(l));
+      if (blocked.includes(lane) || blocked.length > 2 || !open.some((l) => Math.abs(l - lane) <= 1)) {
+        return { laid, trapped: { lane, blocked } };
+      }
+    }
+    return { laid, trapped: null };
+  });
+  const roomToGo = boxedIn.laid > 50 && !boxedIn.trapped;
+  console.log(
+    `${roomToGo ? 'PASS' : 'FAIL'}  car chase: concrete never closes the road on you  — ` +
+      (boxedIn.trapped
+        ? `in lane ${boxedIn.trapped.lane}, blocked ${boxedIn.trapped.blocked.join('/')}`
+        : `${boxedIn.laid} laid, a way past every one`),
+  );
+  if (!roomToGo) failures++;
+
+  // ---- and it is a wall to them as well.  A chaser locked onto the lane you
+  // just left drives into the concrete in it, the same way it drives into the
+  // traffic in it.  That is what keeps a barrier a weapon and not just a tax.
+  const intoTheWall = await page.evaluate(async () => {
+    window.__chase.clearRoad();
+    window.__chase.setCash(400);
+    window.__chase.setPlayer(window.__chase.laneX(0), 150);
+    window.__chase.spawnPolice(3, 120);
+    window.__chase.spawnBarrierAt(3, 60);
+    const before = window.__chase.state().chasing;
+    for (let i = 0; i < 60; i++) {
+      const now = window.__chase.state();
+      if (now.stunned > 0) return { before, stunned: now.stunned, hit: true };
+      await new Promise((r) => setTimeout(r, 80));
+    }
+    return { before, stunned: window.__chase.state().stunned, hit: false };
+  });
+  console.log(
+    `${intoTheWall.hit ? 'PASS' : 'FAIL'}  car chase: and a chaser drives into it the same way you would  — ` +
+      `${intoTheWall.before} chasing, ${intoTheWall.stunned} spun out`,
+  );
+  if (!intoTheWall.hit) failures++;
+
+  // ---- SOMEBODY IN THE ROAD WALKS, WANDERS, AND ENDS YOU.
+  //
+  // Three separate things and all three matter.  They have to MOVE, or they
+  // are bollards.  They have to change their mind, or they are traffic with a
+  // different sprite -- the unpredictability is the entire reason they are a
+  // different problem from a car.  And they have to be lethal, or there is no
+  // reason to steer around one.
+  const crowd = await page.evaluate(async () => {
+    window.__chase.clearRoad();
+    window.__chase.setCash(600);
+    window.__chase.setPlayer(window.__chase.laneX(0), 165);
+    // Spawned by the GAME's own spawner, not placed: what is under test is
+    // what they do on their own, and a placed one carries a frozen mind.
+    for (let i = 0; i < 6; i++) window.__chase.spawnPedAt(150 + i * 9, 24, i % 2 ? 22 : -22, 0);
+    const track = [];
+    for (let t = 0; t < 16; t++) {
+      track.push(window.__chase.state().pedXs.slice());
+      await new Promise((r) => setTimeout(r, 80));
+    }
+    const spans = track[0].map((_, i) => {
+      const seen = track.map((row) => row[i]).filter((v) => v !== undefined);
+      return seen.length > 1 ? Math.max(...seen) - Math.min(...seen) : 0;
+    });
+    return { walked: spans.filter((d) => d > 4).length, of: track[0].length };
+  });
+  const walking = crowd.walked === crowd.of && crowd.of > 0;
+  console.log(
+    `${walking ? 'PASS' : 'FAIL'}  car chase: the people in the road are walking  — ` +
+      `${crowd.walked} of ${crowd.of} moved off their mark`,
+  );
+  if (!walking) failures++;
+
+  // They think again on their own clock, so watch a crowd long enough for
+  // several of those clocks to come round and count the ones that turned.
+  const mindChanged = await page.evaluate(async () => {
+    window.__chase.clearRoad();
+    window.__chase.setCash(600);
+    window.__chase.setPlayer(window.__chase.laneX(0), 170);
+    let turns = 0;
+    const last = new Map();
+    for (let round = 0; round < 6; round++) {
+      for (let i = 0; i < 4; i++) window.__chase.spawnPed();
+      for (let t = 0; t < 22; t++) {
+        window.__chase.state().pedXs.forEach((x, i) => {
+          const was = last.get(i);
+          if (was && was.x !== x) {
+            const d = Math.sign(x - was.x);
+            if (was.d !== 0 && d !== 0 && d !== was.d) turns++;
+            last.set(i, { x, d });
+          } else if (!was) last.set(i, { x, d: 0 });
+        });
+        await new Promise((r) => setTimeout(r, 70));
+      }
+      last.clear();
+    }
+    return turns;
+  });
+  console.log(
+    `${mindChanged > 0 ? 'PASS' : 'FAIL'}  car chase: and they change their mind about where they are going  — ` +
+      `${mindChanged} turns`,
+  );
+  if (mindChanged === 0) failures++;
+
+  // ---- THE ROAD DOES NOT ARRIVE FINISHED.  Nothing that is meant to turn up
+  // later may be out there at the start, and each one has to be out there by
+  // its own number.  A player who dies in the first thirty seconds should have
+  // died to traffic, because traffic is all that was on the road.
+  const staged = await page.evaluate(() =>
+    [0, 100, 150, 349, 350, 499, 500, 900].map((c) => {
+      window.__chase.setPeak(0);
+      window.__chase.setCash(c);
+      return window.__chase.state().stage;
+    }),
+  );
+  const curve = JSON.stringify(staged) === JSON.stringify([0, 0, 1, 1, 2, 2, 3, 3]);
+  console.log(
+    `${curve ? 'PASS' : 'FAIL'}  car chase: oil at 150, concrete at 350, people at 500  — stages ${staged.join(',')}`,
+  );
+  if (!curve) failures++;
+
+  // ---- AND SPENDING CANNOT WIND THE ROAD BACK.  A bomb takes thirty out of
+  // the bag; if the hazards read the bag, buying one would quietly return the
+  // road to an earlier stage and the player could shop their way down to an
+  // emptier one.  They read the high-water mark instead.
+  const bought = await page.evaluate(() => {
+    window.__chase.clearRoad();
+    window.__chase.setPeak(0);
+    window.__chase.setCash(360);
+    const before = window.__chase.state();
+    window.__chase.drop();
+    window.__chase.drop();
+    const after = window.__chase.state();
+    return { beforeStage: before.stage, afterStage: after.stage, cash: after.cash, peak: after.peak };
+  });
+  const heldStage = bought.beforeStage === 2 && bought.afterStage === 2 && bought.cash === 300;
+  console.log(
+    `${heldStage ? 'PASS' : 'FAIL'}  car chase: and buying bombs does not make the road easier  — ` +
+      `stage ${bought.beforeStage} -> ${bought.afterStage} at ${bought.cash} cash, peak ${bought.peak}`,
+  );
+  if (!heldStage) failures++;
 
   // ---- and driving into one ends the run.  Sweep the road, lay a fresh strip
   // at the top of it, then park in a lane the spikes cover and let it arrive:
@@ -947,7 +1181,7 @@ for (const g of [
     window.__chase.clearRoad();
     // Off it comes: this is the one check that wants the run to end.
     window.__chase.shield(false);
-    // The banana test above swept the road and put the bag back to nothing;
+    // The bomb test above swept the road and left the bag where it was;
     // the strips only come out past six hundred.
     window.__chase.setCash(700);
     window.__chase.armTrap();
@@ -1719,6 +1953,108 @@ for (const g of [
   await page.close();
 }
 
+// AND DRIVING INTO SOMEBODY ENDS THE RUN.
+//
+// ITS OWN MACHINE, because it is a check that KILLS THE PLAYER.  The scene
+// deletes `window.__chase` on its way out and `over` stays true for whatever
+// is left of that scene's life, so a lethal check sitting in the middle of the
+// block above takes every check after it down with it -- silently, as a crash
+// rather than a failure.  The spike-strip test is at the bottom of that block
+// for exactly this reason; this one gets a page instead, so neither has to be
+// the last thing anybody adds.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=carchase`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await bridge(page, '__chase');
+  const ranOver = await page.evaluate(async () => {
+    window.__chase.clearRoad();
+    window.__chase.setCash(600);
+    window.__chase.setPlayer(window.__chase.laneX(2), 120);
+    const me = window.__chase.state().player;
+    // Directly in front of the car and not walking anywhere: what is under
+    // test is the collision, not whether one happens to wander into you.
+    window.__chase.spawnPedAt(me.x, me.y - 26, 0, 0);
+    for (let i = 0; i < 70; i++) {
+      const s = window.__chase?.state();
+      if (!s) return 'the scene went';
+      if (s.over) return s.reason;
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    return '';
+  });
+  const lethal = ranOver === 'YOU HIT SOMEBODY';
+  console.log(
+    `${lethal ? 'PASS' : 'FAIL'}  car chase: driving into somebody ends the run  — ` +
+      `${ranOver || 'drove straight through'}`,
+  );
+  if (!lethal) failures++;
+  await page.close();
+}
+
+// AND CONCRETE AND SPIKES NEVER MAKE ONE WALL BETWEEN THEM.
+//
+// Each of them leaves a way past on its own.  Both are laid at the top of the
+// road and both scroll down at the same speed, so one laid while the other is
+// still coming stays the same distance behind it the whole way down — and the
+// lanes the strip left open are exactly the lanes the concrete is free to
+// take.  Between them that is four lanes shut and a token gone.
+//
+// So they have a pact: neither is laid while the other is still up the road.
+// That is what is asserted, because it is the mechanism — asking instead
+// whether a closed road ever appeared would pass for the wrong reason, by
+// never producing the pair at all.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=carchase`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await bridge(page, '__chase');
+  const pact = await page.evaluate(async () => {
+    window.__chase.shield(true);
+    // ---- concrete holds off while a strip is coming down.
+    window.__chase.clearRoad();
+    window.__chase.setCash(800);
+    window.__chase.setPlayer(window.__chase.laneX(1), 150);
+    window.__chase.armTrap();
+    await new Promise((r) => setTimeout(r, 500));
+    const strip = window.__chase.state().traps;
+    for (let i = 0; i < 20; i++) window.__chase.layBarrier();
+    const heldOff = window.__chase.state().barriers;
+
+    // ---- and on a clear road it lays one, so the guard above is a guard and
+    // not simply a barrier spawner that never works.
+    window.__chase.clearRoad();
+    window.__chase.setCash(800);
+    window.__chase.setPlayer(window.__chase.laneX(1), 150);
+    window.__chase.layBarrier();
+    const onAClearRoad = window.__chase.state().barriers;
+
+    // ---- and a strip holds off while concrete is coming down.
+    window.__chase.clearRoad();
+    window.__chase.setCash(800);
+    window.__chase.setPlayer(window.__chase.laneX(1), 150);
+    window.__chase.layBarrier();
+    const concrete = window.__chase.state().barriers;
+    window.__chase.armTrap();
+    await new Promise((r) => setTimeout(r, 500));
+    const stripHeldOff = window.__chase.state().traps;
+    return { strip, heldOff, onAClearRoad, concrete, stripHeldOff };
+  });
+  const kept =
+    pact.strip >= 1 && pact.heldOff === 0 && pact.onAClearRoad >= 1 && pact.concrete >= 1 && pact.stripHeldOff === 0;
+  console.log(
+    `${kept ? 'PASS' : 'FAIL'}  car chase: concrete and spikes are never on the road together  — ` +
+      `${pact.heldOff} concrete under ${pact.strip} strip, ${pact.stripHeldOff} strips under ${pact.concrete} concrete, ` +
+      `${pact.onAClearRoad} on a clear road`,
+  );
+  if (!kept) failures++;
+  await page.close();
+}
+
 // ONE IN FIVE, AND IT HAS TO BE THE DRAW THAT SAYS SO.  The cylinder spinning
 // on screen is decoration; what decides is one `Math.random()` per pull, so
 // sample the decision itself rather than sitting through ten thousand pulls.
@@ -2111,15 +2447,15 @@ for (const g of [
     busy = await st();
   }
 
-  // A SKIN ONLY CLEARS THE ROAD IF SOMEBODY DRIVES OVER IT, which is the
+  // A BOMB ONLY CLEARS THE ROAD IF SOMEBODY DRIVES OVER IT, which is the
   // whole of what replaced the nitro: the old burst emptied the road by
   // itself, this has to catch a car.  So one is put directly behind the
-  // player before the drop, the way a player would use it.
+  // player before the drop, the way a player would use it.  The bag is
+  // already at four hundred above, which is what pays for it.
   await page.evaluate(() => {
     const s = window.__chase.state();
     window.__chase.setPlayer(s.player.x, 110);
     window.__chase.spawnPolice(window.__chase.laneOf(s.player.x), 150);
-    window.__chase.setBananas(2);
   });
   await sleep(400);
   await page.keyboard.press('Space');
@@ -2127,7 +2463,7 @@ for (const g of [
   const quiet = await st();
   const cleared = !quiet.gone && busy.chasing > 0 && quiet.chasing === 0 && quiet.respite > 8000;
   console.log(
-      `${cleared ? 'PASS' : 'FAIL'}  car chase: a banana clears the road for ten seconds  — ` +
+      `${cleared ? 'PASS' : 'FAIL'}  car chase: a bomb clears the road for ten seconds  — ` +
         (quiet.gone
           ? 'the run ended first'
           : `${busy.chasing} chasing -> ${quiet.chasing}, ${Math.round(quiet.respite / 100) / 10}s left`),

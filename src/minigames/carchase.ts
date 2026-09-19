@@ -1,55 +1,81 @@
 /**
- * FROGGY CAR CHASE.  Hard — 5 tokens in, ten and up out.
+ * FROGGY CAR CHASE.  Hard — 7 tokens in, fifteen and up out.
  *
  * A four-lane road seen from above, scrolling under you.  Traffic ahead is
  * slower than you and has to be threaded; the police behind are faster than
- * you and have to be shaken.  Cash sits on the road in bundles of twenty.
+ * you and have to be shaken.  Cash sits on the road in bundles of twenty, and
+ * it is the only thing out here worth driving AT.
  *
- * THERE ARE THREE THINGS ON THE ROAD, and two of them are worth having.
+ * EVERYTHING ELSE ON THE ROAD IS TRYING TO END YOUR RUN.  There used to be
+ * bananas to collect and Froggy banks worth fifty, and between them the road
+ * was a place you went shopping.  What is on it now:
  *
- *   BANANAS are the tool.  You pick one up by driving over it and you carry up
- *   to three; SPACE puts one down a car's length behind you, and the first
- *   police car to reach it goes round — spun out, siren off, sliding back down
- *   the road — and the road behind you clears for ten seconds with it.  It is
- *   the only way out of a corner that you have to have EARNED: the skin was
- *   somewhere on the road and you had to go and get it.
+ *   POTHOLES cost you the gap.  The car drops in, comes out under a second
+ *   later with most of its speed and half its steering gone, and whatever was
+ *   behind you closes the whole distance while it happens.  A hazard that
+ *   kills is a hazard you memorise; one that costs you the gap is one you
+ *   drive around.
  *
- *   FROGGY BANKS pay fifty on the spot, which is two and a half bundles of
- *   cash for one steer.  They are the rarest thing out here, so a bank is
- *   something you cross two lanes for with the police on you, which is exactly
- *   the decision the game wants to be asking.
+ *   OIL SPILLS cost you the car.  Three seconds of it going round on its own,
+ *   drifting where it likes, with a fifth of the steering left — which is not
+ *   enough to drive with and is just enough to save yourself with.  It is the
+ *   widest thing out here and the only one with a sheen on it, because a
+ *   hazard nobody swerves for is decoration.
  *
- *   POTHOLES are the one you have to miss.  They do not end the run: the car
- *   drops in, comes out under a second later with most of its speed and half
- *   its steering gone, and whatever was behind you closes the entire gap while
- *   it happens.  A hazard that kills is a hazard you memorise; one that costs
- *   you the gap is one you drive around.
+ *   BARRIERS cost you the lane.  Concrete parked across one or two of the
+ *   four, hazard-striped and lamped, and the way past is the lanes it is not
+ *   in.  It never closes the road and it never closes the lane you are in as
+ *   it is laid — a wall with no door is not difficulty, it is theft.
  *
- * NITRO USED TO BE THE ONE TOOL, and it was a button that made the problem go
- * away: press it, the road emptied, and the only question was whether the bar
- * had refilled.  What replaced it buys the same respite and makes you go and
- * find it first.
+ *   PEOPLE cost you everything, and they cannot see you coming.  They walk out
+ *   into the road, tap along it, change their mind and turn round.  They are
+ *   unpredictable in DIRECTION and never in arrival: one enters at the top
+ *   edge and walks at a fraction of the closing speed, so the whole height of
+ *   the road is the warning.
+ *
+ *   SPIKE STRIPS close most of the lanes at once with a gap to thread, and
+ *   they arrive last of all.
+ *
+ * THE ROAD DOES NOT ARRIVE FINISHED.  Potholes are out there from the gun; oil
+ * at a hundred and fifty, concrete at three hundred and fifty, people at five
+ * hundred, strips at six hundred — and every one of those steps also tightens
+ * the clocks on everything already out there.  A player who dies in the first
+ * thirty seconds died to traffic, because traffic is all there was.  See
+ * `stage()`.
+ *
+ * THE FROGGY BOMB IS THE ONLY TOOL, AND IT IS BOUGHT, NOT FOUND.  SPACE puts
+ * one down a car's length behind you and takes THIRTY OF THE CASH YOU ARE
+ * PLAYING FOR to do it.  The first police car to reach it goes round — spun
+ * out, siren off, sliding back down the road — and the road behind you clears
+ * for ten seconds with it.  There is no carry limit, because the bag is the
+ * carry limit: with four hundred on you it is four escapes, and with
+ * twenty-nine it is a button that says so and does nothing.
+ *
+ * Spending really does cool the chase, too — the police read the bag itself,
+ * so thirty off it can take a car off your tail as well as buying the bomb.
+ * What it cannot do is roll the ROAD back: the hazards are staged off the most
+ * cash the run has ever held, so nobody shops their way down to an easier
+ * road.  See `peak`.
  *
  * Getting TO two hundred is the gentle half: the road climbs slowly, traffic
  * is thin, and a second car does not turn up for three quarters of a minute.
  *
- * Two hundred cash is the bar: ten tokens, and one more for every further
- * two hundred.  IT IS ALSO WHEN THEY START TAKING YOU SERIOUSLY.  Every two
- * hundred in the bag puts another car on the road behind you, and the first
- * three notches also make them faster, the traffic thicker and the road
- * quicker.  At six hundred they stop driving at you and start LAYING THINGS
- * IN THE ROAD.  The run ends on a crash, on being caught, or on ENTER — pull
- * over and take what you have.  Carrying on is a bet against a chase that is
- * getting worse.
+ * Three hundred cash is the pay bar: fifteen tokens, and five more for every
+ * further hundred.  TWO HUNDRED IS WHEN THEY START TAKING YOU SERIOUSLY.
+ * Every two hundred in the bag puts another car on the road behind you, all
+ * the way to eight, and the first three notches also make them faster, the
+ * traffic thicker and the road quicker.  The run ends on a crash, on being
+ * caught, or on ENTER — pull over and take what you have.  Carrying on is a
+ * bet against a chase that is getting worse.
  *
  * THEY CAN BE JUKED, AND THEY CAN BE CRASHED.  A chaser steers at the lane it
  * last SAW you in, and it only looks every few tenths of a second, so a late
  * swerve leaves it committed to where you were — that lag is the whole of how
- * you shake one without a banana, and it shortens as the heat climbs.  It also
+ * you shake one without a bomb, and it shortens as the heat climbs.  It also
  * means you can aim them: a chaser locked onto your old lane drives into the
- * back of the traffic in it, spins out, and is no use to anyone for a few
- * seconds.  The spike strips cut both ways too — a police car that drives
- * over one goes out the same way your car would have.
+ * back of the traffic in it, or into the concrete in it, and spins out.  The
+ * spike strips cut both ways too — a police car that drives over one goes out
+ * the same way your car would have.
  *
  * THE TRAFFIC CHANGES LANES, AND IT INDICATES THREE TIMES FIRST.  Cars are not
  * rails: they follow the car in front, back off when they close on it, pull out
@@ -63,11 +89,10 @@
  * eases across over `LANE_CHANGE_MS`, better than a second and a half, at about
  * a quarter of the speed the player can steer.
  *
- * So the road is a weapon, not just an obstacle, and the pickups are laid out
- * to make you use it: never twice in the same lane, never behind a car that is
- * already there, always a lane or two off your line, and jittered ACROSS the
- * lane rather than parked in the middle of it — so going for one is a steer
- * you have to aim rather than a thing you drive through.
+ * So the road is a weapon, not just an obstacle, and nothing on it is placed
+ * where you already are: never twice in the same lane, never behind a car that
+ * is already there, always a lane or two off your line, and jittered ACROSS
+ * the lane rather than parked in the middle of it.
  *
  * The cash here is a score.  It is not the cash the man outside pays, it is
  * never added to it, and the only thing that leaves this cabinet is the token
@@ -165,7 +190,7 @@ const CREEP = 50;
  *
  * It replaces the old reward, which was a couple of seconds of distance that
  * the speed difference took straight back.  Both triggers share one timer, so
- * a banana dropped during a crash respite extends the quiet rather than stacking
+ * a bomb dropped during a crash respite extends the quiet rather than stacking
  * a second one on top of it, and nothing can send two cars out at once when it
  * ends: the spawner is on its usual one-at-a-time clock and starts from a full
  * interval, so the first car back is a car, not a wall.
@@ -175,21 +200,118 @@ const RESPITE_MS = 10_000;
 const RESPITE_TAIL_MS = 1800;
 
 /**
- * BANANAS, WHICH REPLACED THE NITRO.
+ * THE FROGGY BOMB, WHICH REPLACED THE NITRO AND THEN THE BANANA.
  *
  * Nitro was a button that made the problem go away: press it, the road
- * emptied, and the only decision was whether the bar was full.  A banana is
- * the same escape bought a different way -- you have to find one on the road,
- * which means going where it is instead of where you want to be, and then
- * choose the moment to put it down behind you.  What it buys is the same
- * respite, and it buys it by taking a chaser off the road rather than by
- * outrunning one.
+ * emptied, and the only decision was whether the bar was full.  Bananas fixed
+ * that by making you go and find one -- but once you had, the escape was free,
+ * and a free escape is a button with extra steps.
+ *
+ * A bomb is bought, out of the cash you are playing for, every single time.
+ * That is the whole design: thirty off the bag is a token and a half off the
+ * payout, so using it is a decision with a price rather than an inventory
+ * check.  What it buys is unchanged -- a chaser off the road and ten seconds
+ * of quiet behind you.
  */
-const BANANA_MAX = 3;
-/** How long a dropped skin stays on the road before the sweeper gets it. */
-const BANANA_LIFE_MS = 9000;
-/** What a Froggy Bank is worth when you drive over it. */
-const BANK_CASH = 50;
+const BOMB_COST = 30;
+/** How long a dropped bomb stays on the road before the sweeper gets it. */
+const BOMB_LIFE_MS = 9000;
+
+/**
+ * OIL SPILLS.  Three seconds of not driving the car.
+ *
+ * The pothole costs you the gap.  This costs you the WHEEL: drive over a slick
+ * and the car lets go, spins, and drifts wherever it was already going for a
+ * full three seconds.  Everything else out here is a thing you steer around;
+ * this is the one that takes the steering away, which is why it is the hazard
+ * that makes a busy road frightening rather than merely busy.
+ *
+ * NOT A FREEZE, THOUGH.  A hazard that removes every input for three seconds
+ * with four police cars on your bumper is not difficulty, it is a cutscene of
+ * your own death — so a fifth of the steering survives the spin.  It is not
+ * enough to drive with and it is enough to save yourself with, which is the
+ * difference between a hazard and a verdict.
+ */
+const OIL_SPIN_MS = 3000;
+/** What is left of the steering while the car is going round. */
+const OIL_STEER = 0.2;
+/**
+ * How hard the spin throws the car sideways, px/s at its worst, and how many
+ * times it swings there and back over the three seconds.
+ *
+ * A LOOSE CAR TRAVELS.  At 34 over two and a half swings the drift reversed
+ * before it had gone anywhere and the whole thing read as a wobble: the car
+ * ended up a quarter of a lane from where it started and the player barely had
+ * to answer it.  Half the swings and half again the force, and it crosses most
+ * of a lane one way before it comes back -- which the twenty per cent of
+ * steering left can lean against and cannot beat.
+ */
+const OIL_DRIFT = 52;
+const OIL_SWINGS = 1.25;
+/** Degrees a second the body turns while it is loose. */
+const OIL_SPIN_RATE = 520;
+
+/**
+ * ROAD BARRIERS.  The lanes themselves close.
+ *
+ * Traffic can be threaded and hazards can be steered round, but both of them
+ * leave the whole width of the road available in principle.  A barrier takes
+ * lanes off the table: concrete in one or two of them, parked there, and the
+ * only way past is the lanes it is not in.  It is what stops the road being a
+ * flat plane you can be anywhere on.
+ *
+ * IT NEVER CLOSES THE ROAD.  At most two of four lanes, never the one the
+ * player is in at the moment it is laid, and never so far from them that the
+ * gap cannot be reached at `STEER` before it arrives.  A wall with no door is
+ * not a difficulty, it is a coin-op stealing your token.
+ */
+const BARRIER_MAX_LANES = 2;
+const BARRIER_H = 14;
+/** How often one is laid, and the floor that gap falls to at full difficulty. */
+const BARRIER_GAP_MS = 5200;
+const BARRIER_GAP_MIN = 2400;
+
+/**
+ * BLIND PEDESTRIANS.  They cannot see you and they are crossing anyway.
+ *
+ * A moving hazard that does not care where you are is a different problem from
+ * traffic, which does: traffic holds a lane and announces itself, and these
+ * wander.  One walks out, taps along, changes its mind, and turns round — the
+ * unpredictability is the point, and it is why they get the whole height of
+ * the road to be seen coming across.
+ *
+ * THEY ARE SLOW, AND THEY START AT THE TOP.  A pedestrian enters at the top
+ * edge and walks at a fraction of the closing speed, so there is never less
+ * than a second and a half of watching one before it is anywhere near the car.
+ * That is the fairness: they are unpredictable in DIRECTION, never in arrival.
+ */
+const PED_W = 5;
+const PED_H = 7;
+/** How fast one walks across the road, and down it, px/s. */
+const PED_CROSS = 22;
+const PED_ALONG = 14;
+/** How long one holds a heading before it thinks again, ms. */
+const PED_TURN_MS = 900;
+const PED_GAP_MS = 6000;
+const PED_GAP_MIN = 2600;
+
+/**
+ * WHEN EACH OF THEM STARTS TURNING UP, in cash banked.
+ *
+ * The road does not arrive finished.  Potholes are there from the gun; the oil
+ * comes in once the run is worth something; the concrete once it is worth a
+ * lot; the pedestrians and the spike strips last of all.  A player who dies in
+ * the first thirty seconds should have died to traffic, because traffic is all
+ * that was out there.
+ *
+ * Measured against the MOST cash the run has ever held rather than what is in
+ * the bag right now -- see `peak`.  Otherwise buying a bomb would roll the road
+ * back to an earlier stage, and a hazard that can be un-summoned by spending
+ * is a hazard the player learns to shop their way out of.
+ */
+const OIL_CASH = 150;
+const BARRIER_CASH = 350;
+const PED_CASH = 500;
 /**
  * POTHOLES.  The one thing out here that does not end the run and is still
  * worth swerving for: the car drops into it, loses most of its speed and half
@@ -220,8 +342,17 @@ const POLICE_REACT_FLOOR = 200;
 const POLICE_STUN_MS = 2800;
 /** Crawling speed of a spun-out car, so the wreck is watchable. */
 const POLICE_STUN_SPEED = 26;
-/** The most cars they will ever have on you at once. */
-const POLICE_MAX = 6;
+/**
+ * The most cars they will ever have on you at once.
+ *
+ * Six, and now eight.  The cap was reached at a thousand in the bag and the
+ * chase stopped growing there, so the last third of a long run was the same
+ * road as the middle of it: what was left to go wrong was only ever the
+ * hazards.  At eight the pursuit keeps getting heavier for as long as the
+ * player keeps deciding to stay out, which is the decision the whole game is
+ * built around asking.
+ */
+const POLICE_MAX = 8;
 /**
  * Cash at which the road itself turns against you: spike strips, laid across
  * most of the lanes with a gap to thread.  It is the one hazard that is not a
@@ -236,7 +367,7 @@ const TRAP_GAP_MS = 9000;
  *
  * Eleven, down from twenty by way of fifteen.  It is still a gap that closes —
  * you cannot out-drive them on the throttle alone, which is the whole point of
- * the bananas and of the traffic — but it shuts at a speed a player can read and
+ * the bombs and of the traffic — but it shuts at a speed a player can read and
  * answer, instead of one that turns every mistake into an arrest.
  */
 const POLICE_GAIN = 11;
@@ -396,6 +527,33 @@ interface Trap {
   body: Phaser.GameObjects.Container;
 }
 
+/**
+ * A slab of concrete parked in one lane.  It scrolls down with the road and it
+ * does not move within it -- what makes it a hazard is that the lane it is in
+ * is gone, not that it is coming for you.
+ */
+interface Barrier {
+  x: number;
+  y: number;
+  lane: number;
+  body: Phaser.GameObjects.Container;
+}
+
+/**
+ * Somebody in the road.  `vx`/`vy` are where they are walking, `turn` is how
+ * long until they think better of it, and `cane` is the white stick, which is
+ * the only reason a five pixel shape at this size reads as a person.
+ */
+interface Ped {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  turn: number;
+  body: Phaser.GameObjects.Container;
+  cane: Phaser.GameObjects.Rectangle;
+}
+
 let scene0: Phaser.Scene | null = null;
 let apiRef: MinigameApi | null = null;
 let player: Phaser.GameObjects.Container | null = null;
@@ -413,22 +571,41 @@ let cash: Array<{ x: number; y: number; body: Phaser.GameObjects.Rectangle }> = 
 /**
  * WHAT IS LYING ON THE ROAD.
  *
- * Three kinds, one list, because they all do the same thing every frame -- come
- * down the screen at road speed and get tested against the car -- and differ
- * only in what happens when they are reached.
+ * Two kinds, one list, because they do the same thing every frame -- come down
+ * the screen at road speed and get tested against the car -- and differ only
+ * in what they cost when they are reached.  NEITHER IS WORTH HAVING: the road
+ * used to hand out bananas and Froggy banks and there is nothing on it now
+ * that is not trying to end your run, which is most of why this road is harder
+ * than the one it replaced.  The cash bundles are still out there, and they
+ * are the only thing left to drive AT.
  *
- *   banana   picked up, and kept until you choose to put it down
- *   bank     picked up, and worth fifty on the spot
- *   pothole  not picked up at all: it is the one you have to miss
+ *   pothole  costs you the gap: most of the speed, half the steering, a beat
+ *   oil      costs you the car: three seconds of it going round on its own
  */
-type PickupKind = 'banana' | 'bank' | 'pothole';
+type PickupKind = 'pothole' | 'oil';
 let pickups: Array<{ x: number; y: number; kind: PickupKind; body: Phaser.GameObjects.Container }> = [];
 let jarTimer = 0;
-/** Skins the player is carrying, and skins already down on the road. */
-let bananas = 0;
+/** Bombs already down on the road.  There is no carrying any more: see BOMB_COST. */
 let drops: Array<{ x: number; y: number; life: number; body: Phaser.GameObjects.Container }> = [];
 /** Milliseconds left of being in a pothole.  See POTHOLE_JOLT_MS. */
 let joltMs = 0;
+/** Milliseconds left of the car being loose, and which way it is going round. */
+let spinMs = 0;
+let spinDir = 1;
+let barriers: Barrier[] = [];
+let barrierTimer = 0;
+let peds: Ped[] = [];
+let pedTimer = 0;
+/**
+ * The most cash this run has ever held.
+ *
+ * The hazards are staged off THIS, not off what is in the bag: buying a bomb
+ * takes thirty out of the bag, and a road that quietly went back to being
+ * gentle every time you bought one would be a road you could shop your way
+ * down.  The police still read the bag itself, so spending really does cool
+ * the chase -- that is what the thirty buys besides the bomb.
+ */
+let peak = 0;
 let warnT = 0;
 let dashes: Array<Phaser.GameObjects.Rectangle | Phaser.GameObjects.Arc> = [];
 let trafficTimer = 0;
@@ -451,7 +628,7 @@ let hud: {
   best: Phaser.GameObjects.BitmapText;
   time: Phaser.GameObjects.BitmapText;
   bank: Phaser.GameObjects.BitmapText;
-  bananaLabel: Phaser.GameObjects.BitmapText;
+  bombLabel: Phaser.GameObjects.BitmapText;
   warn: Phaser.GameObjects.BitmapText;
   clear: Phaser.GameObjects.BitmapText;
 } | null = null;
@@ -474,20 +651,21 @@ export const carChase: MinigameModule = {
   id: ID,
   title: 'FROGGY CAR CHASE',
   music: 'game_carchase',
-  rules: 'dodge, grab cash, lose the law',
+  rules: 'dodge, grab cash, bomb the law',
   tutorial: {
     objective: [
       'GRAB CASH AND LOSE THE LAW.',
-      'BANANAS SPIN THE POLICE. BANKS PAY 50.',
-      'TRAFFIC BLINKS 3 TIMES, THEN MOVES OVER.',
+      'SPACE BUYS A FROGGY BOMB - 30 CASH.',
+      'IT SPINS THE LAW AND CLEARS THEM 10s.',
+      'OIL SPINS *YOU*. CONCRETE ENDS YOU.',
+      'THE PEOPLE OUT THERE CANNOT SEE YOU.',
       'SWERVE LATE - THEY DRIVE AT YOUR OLD LANE.',
-      'A BANANA OR A CRASH CLEARS THEM FOR 10s.',
       'PULL OVER AT 300 FOR 15, +5 EVERY 100.',
     ],
     controls: [
       ['A / D', 'STEER'],
       ['W / S', 'SPEED UP OR EASE OFF'],
-      ['SPACE', 'DROP A BANANA'],
+      ['SPACE', 'BUY A BOMB - 30 CASH'],
     ],
     // ENTER pulls over with the cash, and it is NOT listed here.  It does
     // nothing until there is cash to pull over with, and the moment there is,
@@ -496,7 +674,7 @@ export const carChase: MinigameModule = {
   touch: {
     stick: 'wasd',
     buttons: [
-      { label: 'DROP\nBANANA', key: 'SPACE', primary: true },
+      { label: 'BOMB\n30', key: 'SPACE', primary: true },
       { label: 'PULL\nOVER', key: 'ENTER' },
     ],
   },
@@ -526,11 +704,17 @@ export const carChase: MinigameModule = {
     trapTimer = TRAP_GAP_MS;
     warnT = 0;
     collected = 0;
+    peak = 0;
     best = store.highScore(ID);
-    bananas = 1;
     drops = [];
     pickups = [];
+    barriers = [];
+    barrierTimer = BARRIER_GAP_MS;
+    peds = [];
+    pedTimer = PED_GAP_MS;
     joltMs = 0;
+    spinMs = 0;
+    spinDir = 1;
     heatShown = 0;
     over = false;
     reason = '';
@@ -565,13 +749,13 @@ export const carChase: MinigameModule = {
       best: text(scene, GAME_W - 6, 21, '', PALETTE.gold).setOrigin(1, 0),
       time: centerText(scene, GAME_W / 2, 25, '', PALETTE.fog),
       bank: centerText(scene, GAME_W / 2, 170, '', PALETTE.gold).setVisible(false),
-      bananaLabel: text(scene, 4, 150, '', PALETTE.gold),
+      bombLabel: text(scene, 4, 150, '', PALETTE.gold),
       warn: centerText(scene, GAME_W / 2, 150, 'POLICE CLOSE', PALETTE.blood, 16).setVisible(false),
       // The quiet is the reward, so the quiet is on the HUD and counting down:
       // ten seconds you cannot see is ten seconds you cannot spend.
       clear: centerText(scene, GAME_W / 2, 30, '', PALETTE.tealLight, 16).setVisible(false),
     };
-    hud.bananaLabel.setDepth(9);
+    hud.bombLabel.setDepth(9);
     hud.warn.setDepth(9);
     hud.clear.setDepth(9);
     hud.cash.setDepth(9);
@@ -579,7 +763,7 @@ export const carChase: MinigameModule = {
     hud.time.setDepth(9);
     hud.bank.setDepth(9);
     text(scene, 4, 160, 'SPACE', PALETTE.ash).setDepth(9);
-    text(scene, 4, 168, 'DROPS', PALETTE.ash).setDepth(9);
+    text(scene, 4, 168, 'BUYS', PALETTE.ash).setDepth(9);
     refreshHud();
 
     const kb = scene.input.keyboard;
@@ -590,7 +774,7 @@ export const carChase: MinigameModule = {
       up: bind(['W', 'UP']),
       down: bind(['S', 'DOWN']),
     };
-    kb?.on('keydown-SPACE', () => dropBanana());
+    kb?.on('keydown-SPACE', () => dropBomb());
     kb?.on('keydown-ENTER', () => {
       if (!over && collected >= BAR_CASH) finish();
     });
@@ -599,11 +783,19 @@ export const carChase: MinigameModule = {
       (window as unknown as Record<string, unknown>).__chase = {
         state: () => ({
           cash: collected,
+          peak,
           best,
           speed,
-          bananas,
+          bombCost: BOMB_COST,
           drops: drops.length,
           jolted: joltMs > 0,
+          spinning: spinMs > 0,
+          spin: Math.max(0, Math.round(spinMs)),
+          stage: stage(),
+          barriers: barriers.length,
+          barrierLanes: barriers.map((b) => b.lane),
+          peds: peds.length,
+          pedXs: peds.map((p) => Math.round(p.x)),
           heat: chaseHeat(collected),
           policeCap: policeCap(),
           policeSpeed: speed + POLICE_GAIN + chaseHeat(collected) * HEAT_POLICE_GAIN + elapsed / POLICE_CLOCK,
@@ -700,18 +892,25 @@ export const carChase: MinigameModule = {
           for (const j of pickups) j.body.destroy();
           for (const d of drops) d.body.destroy();
           for (const c of cash) c.body.destroy();
+          for (const b of barriers) b.body.destroy();
+          for (const ped of peds) ped.body.destroy();
           traffic = [];
           police = [];
           traps = [];
           pickups = [];
           drops = [];
           cash = [];
+          barriers = [];
+          peds = [];
           joltMs = 0;
+          spinMs = 0;
           policeTimer = 60_000;
           trafficTimer = 60_000;
           trapTimer = 60_000;
           cashTimer = 60_000;
           jarTimer = 60_000;
+          barrierTimer = 60_000;
+          pedTimer = 60_000;
         },
         /** Park the car somewhere exact, for aiming a test at a hazard. */
         setPlayer: (x: number, y: number) => {
@@ -723,8 +922,13 @@ export const carChase: MinigameModule = {
         laneOf: (x: number) => laneOf(x),
         setCash: (n: number) => {
           collected = n;
+          peak = Math.max(peak, n);
           heatShown = chaseHeat(n);
           refreshHud();
+        },
+        /** Wind the road's own difficulty back, without touching the bag. */
+        setPeak: (n: number) => {
+          peak = n;
         },
         /** Empty the tank, for watching it fill itself back up. */
         /**
@@ -734,11 +938,36 @@ export const carChase: MinigameModule = {
         shield: (on: boolean) => {
           shielded = on;
         },
-        setBananas: (n: number) => {
-          bananas = Math.max(0, Math.min(BANANA_MAX, n | 0));
-          refreshHud();
+        /** Lay a barrier in a known lane, at a y of your choosing. */
+        spawnBarrierAt: (lane: number, y: number) => {
+          spawnBarrier([Phaser.Math.Clamp(lane | 0, 0, 3)], y);
         },
-        drop: () => dropBanana(),
+        /**
+         * Lay one the way the GAME lays them -- lanes chosen by `layBarrier`,
+         * not by the caller.  This is the one a fairness test has to drive:
+         * the question is whether the road ever closes on the player, and
+         * that is decided by the chooser, not by the spawner.
+         */
+        layBarrier: () => layBarrier(),
+        /**
+         * One pedestrian, spawned the way the GAME spawns them -- their own
+         * heading, their own clock, their own mind.  `spawnPedAt` below freezes
+         * that clock so a test can aim at one, which makes it exactly the wrong
+         * thing to ask "do they change their mind?" with.
+         */
+        spawnPed: () => spawnPed(),
+        /** Put somebody in the road at an exact spot, walking a known way. */
+        spawnPedAt: (x: number, y: number, vx: number, vy: number) => {
+          spawnPed();
+          const ped = peds[peds.length - 1];
+          if (!ped) return;
+          ped.x = x;
+          ped.y = y;
+          ped.vx = vx;
+          ped.vy = vy;
+          ped.turn = 4000;
+        },
+        drop: () => dropBomb(),
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__chase;
@@ -755,22 +984,38 @@ export const carChase: MinigameModule = {
     // run; what it costs is the gap, and the gap is what the police are for.
     if (joltMs > 0) joltMs -= delta;
     const jolted = joltMs > 0;
+    // ---- and the slick you are still going round on.  Three seconds, and the
+    // car is barely yours for any of it.
+    if (spinMs > 0) spinMs -= delta;
+    const spinning = spinMs > 0;
     const heat = chaseHeat(collected);
+    peak = Math.max(peak, collected);
 
     // ---- the road, and you on it.  It runs quicker the more you are carrying.
     speed = Math.min(SPEED_MAX + heat * HEAT_ROAD, SPEED_START + (elapsed / 1000) * SPEED_RAMP + heat * HEAT_ROAD);
     const ground = speed * (jolted ? POTHOLE_SPEED : 1);
     const dx = (held('right') ? 1 : 0) - (held('left') ? 1 : 0);
     const dy = (held('down') ? 1 : 0) - (held('up') ? 1 : 0);
+    // What is left of the steering.  A pothole takes half of it for under a
+    // second; a slick takes four fifths of it for three.
+    const grip = spinning ? OIL_STEER : jolted ? POTHOLE_STEER : 1;
+    // ---- AND THE SLICK DRIVES THE CAR FOR YOU while it lasts: a sideways
+    // drift that swings one way and back rather than a constant shove, so the
+    // car wanders across the road the way one that has let go actually does.
+    const loose = spinning
+      ? Math.sin((1 - spinMs / OIL_SPIN_MS) * Math.PI * 2 * OIL_SWINGS) * OIL_DRIFT * spinDir
+      : 0;
     px = Phaser.Math.Clamp(
-      px + dx * STEER * (jolted ? POTHOLE_STEER : 1) * dt,
+      px + (dx * STEER * grip + loose) * dt,
       ROAD_L + CAR_W / 2,
       ROAD_L + ROAD_W - CAR_W / 2,
     );
-    py = Phaser.Math.Clamp(py + dy * CREEP * dt, 70, 160);
+    py = Phaser.Math.Clamp(py + dy * CREEP * (spinning ? OIL_STEER : 1) * dt, 70, 160);
     player.setPosition(px, py);
-    // leaning where you are steering, eased so it is a car and not a cursor
-    player.setAngle(Phaser.Math.Linear(player.angle, dx * 7, Math.min(1, dt * 9)));
+    // leaning where you are steering, eased so it is a car and not a cursor --
+    // or going round and round, which is what a car on oil does.
+    if (spinning) player.setAngle(player.angle + spinDir * OIL_SPIN_RATE * dt);
+    else player.setAngle(Phaser.Math.Linear(player.angle, dx * 7, Math.min(1, dt * 9)));
     for (const d of dashes) {
       d.y += ground * dt;
       if (d.y > BOTTOM) d.y -= BOTTOM - TOP + 16;
@@ -909,7 +1154,7 @@ export const carChase: MinigameModule = {
       if (into) {
         spinOut(p);
         wreck(into);
-        // Putting one into the traffic clears the road the same way a banana
+        // Putting one into the traffic clears the road the same way a bomb
         // does.  Leading them is meant to be worth more than outrunning
         // them, and this is what makes it worth more.
         startRespite();
@@ -929,16 +1174,19 @@ export const carChase: MinigameModule = {
       c.y += ground * dt;
       c.body.setPosition(c.x, c.y).setVisible(c.y > TOP + 4);
     }
-    // ---- WHAT IS LYING ON THE ROAD.  One clock for all three, and which one
-    // it puts down is a weighted roll: mostly bananas, because they are the
-    // tool; a pothole often enough that the road is never a clear run; and a
-    // bank rarely, so fifty on the floor is something you go out of your way
-    // for rather than something that arrives.
+    // ---- WHAT IS LYING ON THE ROAD.  One clock for both, and neither of them
+    // is worth having: a pothole often enough that the road is never a clear
+    // run, and — once the run is worth something — oil, which is the one that
+    // takes the car off you.
     jarTimer -= delta;
     if (jarTimer <= 0) {
-      const r = Math.random();
-      spawnPickup(r < 0.42 ? 'banana' : r < 0.82 ? 'pothole' : 'bank');
-      jarTimer = 1500 + Math.random() * 1600;
+      // Potholes from the gun; oil once the run is worth something, and then
+      // an increasing share of what goes down is oil rather than holes.
+      const oiled = peak >= OIL_CASH;
+      spawnPickup(oiled && Math.random() < 0.42 ? 'oil' : 'pothole');
+      // And they come thicker as the road gets worse: a gap that starts at a
+      // second and a half and closes toward half of that.
+      jarTimer = Math.max(700, 1500 - stage() * 260) + Math.random() * Math.max(600, 1600 - stage() * 300);
     }
     for (const j of pickups) {
       j.y += ground * dt;
@@ -947,14 +1195,14 @@ export const carChase: MinigameModule = {
     pickups = pickups.filter((j) => {
       const touched = Math.abs(j.x - px) < CAR_W / 2 + 4 && Math.abs(j.y - py) < CAR_H / 2 + 5;
       if (touched) {
-        if (j.kind === 'bank') {
-          collected += BANK_CASH;
-          best = Math.max(best, collected);
-          audio.sfx('cha_ching', 0.6);
-          announceHeat();
-        } else if (j.kind === 'banana') {
-          bananas = Math.min(BANANA_MAX, bananas + 1);
-          audio.sfx('chime', 0.5);
+        if (j.kind === 'oil') {
+          // THE SLICK.  The car lets go.  Three seconds of it going round on
+          // its own with a fifth of the steering left, and everything that was
+          // behind you arriving while it happens.
+          spinMs = OIL_SPIN_MS;
+          spinDir = Math.random() < 0.5 ? -1 : 1;
+          audio.sfx('splash', 0.7);
+          scene0?.cameras.main.shake(420, 0.014);
         } else {
           // THE POTHOLE.  You are in it, and out of it in under a second --
           // with most of your speed gone and whatever was behind you a lot
@@ -998,6 +1246,94 @@ export const carChase: MinigameModule = {
       }
       return true;
     });
+
+    // ---- CONCRETE, once the run has been worth something for a while.  It is
+    // laid on its own clock and the clock tightens with the stage.
+    if (stage() >= 2) {
+      barrierTimer -= delta;
+      if (barrierTimer <= 0) {
+        layBarrier();
+        barrierTimer = Math.max(BARRIER_GAP_MIN, BARRIER_GAP_MS - (peak - BARRIER_CASH) * 3) + Math.random() * 1400;
+      }
+    }
+    for (const b of barriers) {
+      b.y += ground * dt;
+      b.body.setPosition(b.x, b.y).setVisible(b.y > TOP + 2);
+    }
+    barriers = barriers.filter((b) => {
+      if (b.y > BOTTOM + BARRIER_H) {
+        b.body.destroy();
+        return false;
+      }
+      return true;
+    });
+    // Concrete does not care whose car it is.  A chaser locked onto a lane you
+    // just left drives into it exactly the way you would have.
+    for (const b of barriers) {
+      for (const p of police) {
+        if (p.stun <= 0 && Math.abs(b.x - p.x) < (LANE_W - 8 + CAR_W) / 2 - 3 && Math.abs(b.y - p.y) < (BARRIER_H + CAR_H) / 2 - 4) {
+          spinOut(p);
+        }
+      }
+      if (Math.abs(b.x - px) < (LANE_W - 8 + CAR_W) / 2 - 3 && Math.abs(b.y - py) < (BARRIER_H + CAR_H) / 2 - 4) {
+        crash('CONCRETE');
+        return;
+      }
+    }
+
+    // ---- PEOPLE IN THE ROAD, last of the four and the only one that moves of
+    // its own accord.  They walk, they change their mind, and they do not look.
+    if (stage() >= 3) {
+      pedTimer -= delta;
+      if (pedTimer <= 0) {
+        spawnPed();
+        pedTimer = Math.max(PED_GAP_MIN, PED_GAP_MS - (peak - PED_CASH) * 3) + Math.random() * 2000;
+      }
+    }
+    for (const ped of peds) {
+      ped.turn -= delta;
+      if (ped.turn <= 0) {
+        ped.turn = PED_TURN_MS * (0.6 + Math.random() * 1.1);
+        // Thinks again: carry on, turn round, or set off down the road
+        // instead.  Never stops dead -- somebody stood still is a bollard.
+        const r = Math.random();
+        if (r < 0.3) {
+          ped.vx = -ped.vx || (Math.random() < 0.5 ? -PED_CROSS : PED_CROSS);
+        } else if (r < 0.5) {
+          ped.vx = ped.vx === 0 ? (Math.random() < 0.5 ? -PED_CROSS : PED_CROSS) : 0;
+          ped.vy = ped.vx === 0 ? PED_ALONG : 0;
+        }
+      }
+      ped.x += ped.vx * dt;
+      // They drift down the screen with the road as well as walking on it:
+      // standing still on a road moving under you is still moving.
+      ped.y += (ground * 0.82 + ped.vy) * dt;
+      // Turned round by the verge rather than walking off it.
+      if (ped.x < ROAD_L + 2) {
+        ped.x = ROAD_L + 2;
+        ped.vx = Math.abs(ped.vx) || PED_CROSS;
+      }
+      if (ped.x > ROAD_L + ROAD_W - 2) {
+        ped.x = ROAD_L + ROAD_W - 2;
+        ped.vx = -Math.abs(ped.vx) || -PED_CROSS;
+      }
+      ped.body.setPosition(ped.x, ped.y).setVisible(ped.y > TOP + 2);
+      // the cane sweeping side to side in front of them
+      ped.cane.setAngle(Math.sin(elapsed / 170) * 38);
+    }
+    peds = peds.filter((ped) => {
+      if (ped.y > BOTTOM + PED_H) {
+        ped.body.destroy();
+        return false;
+      }
+      return true;
+    });
+    for (const ped of peds) {
+      if (Math.abs(ped.x - px) < (PED_W + CAR_W) / 2 - 2 && Math.abs(ped.y - py) < (PED_H + CAR_H) / 2 - 2) {
+        crash('YOU HIT SOMEBODY');
+        return;
+      }
+    }
 
     // ---- spike strips, once the bag is big enough to be worth stopping
     if (collected >= TRAP_CASH) {
@@ -1100,6 +1436,8 @@ export const carChase: MinigameModule = {
     cash = [];
     pickups = [];
     drops = [];
+    barriers = [];
+    peds = [];
     dashes = [];
     player = null;
     hud = null;
@@ -1120,10 +1458,17 @@ function laneOf(x: number): number {
 
 /**
  * How many are on you at once: ONE until the first two hundred, TWO from two
- * hundred, and one more for every further two hundred in the bag, up to six.
- * It is a pure function of the cash — the clock no longer has a say — so the
- * chase is exactly as heavy as what you are carrying, and the player can read
- * their own bag and know what is behind them.
+ * hundred, and one more for every further two hundred in the bag, up to EIGHT.
+ * It is a pure function of the cash — the clock has no say — so the chase is
+ * exactly as heavy as what you are carrying, and the player can read their own
+ * bag and know what is behind them.
+ *
+ * Which also means spending it lightens the chase.  A bomb costs thirty, and
+ * thirty across a notch takes a car off your tail as well as spinning one out:
+ * that is deliberate, it is the only thing in the game that can make the
+ * pursuit smaller, and it costs exactly what it looks like it costs.  The
+ * ROAD is not on this clock — see `stage()` — so nobody spends their way back
+ * to an emptier one.
  */
 export function policeFor(cash: number): number {
   return Math.min(POLICE_MAX, 1 + Math.floor(cash / TARGET_CASH));
@@ -1131,6 +1476,28 @@ export function policeFor(cash: number): number {
 
 function policeCap(): number {
   return policeFor(collected);
+}
+
+/**
+ * HOW FAR INTO THE RUN THE ROAD IS, 0 to 3.
+ *
+ * One number that every new hazard reads, so "it gets worse gradually" is a
+ * single curve rather than four unrelated ones that happen to point the same
+ * way.  Each step is a thing that was not out there before:
+ *
+ *   0  traffic, cash, potholes
+ *   1  oil, at a hundred and fifty
+ *   2  concrete, at three hundred and fifty
+ *   3  people in the road, at five hundred
+ *
+ * and each step also tightens the clocks on everything already out there.  It
+ * reads `peak` rather than `collected`: see the note on `peak`.
+ */
+function stage(): number {
+  if (peak >= PED_CASH) return 3;
+  if (peak >= BARRIER_CASH) return 2;
+  if (peak >= OIL_CASH) return 1;
+  return 0;
 }
 
 /** How long a chaser goes between looks.  Sharper with every notch of heat. */
@@ -1155,7 +1522,7 @@ function spinOut(p: Police): void {
  *
  * Every car on you drops out at once, whatever it was doing: it spins, falls
  * back down the road under its own dead weight and is off the bottom of the
- * screen within a second or two, which is the same exit a banana always
+ * screen within a second or two, which is the same exit a bomb always
  * gave them.  They are left in the list to drive away rather than deleted, so
  * the exit is something the player watches happen instead of a row of cars
  * blinking out.
@@ -1368,6 +1735,9 @@ function spawnPolice(): void {
  */
 function spawnTrap(): void {
   if (!scene0) return;
+  // The other half of the pact in `layBarrier`: a strip laid onto concrete
+  // that is already coming down closes the road just as completely.
+  if (barriers.some((b) => b.y < BOTTOM * 0.6)) return;
   const width = collected >= TRAP_CASH * 2 ? 3 : 2;
   const here = laneOf(px);
   // Pick the gap first: a lane you can actually get to from where you are.
@@ -1407,10 +1777,12 @@ function spawnTrap(): void {
 }
 
 /**
- * Where the next jar goes.  Never the lane the last one was in, never behind
+ * Where the next hazard goes.  Never the lane the last one was in, never behind
  * a car that is already at the top of the road, and — given a choice — a lane
- * or two off the player's line, so a top-up is a decision about traffic and
- * not something you collect by holding a direction.
+ * or two off the player's line.  It was written to stop pickups being
+ * collectable by holding a direction; with nothing out there worth collecting
+ * any more it does the opposite job just as well, which is that a hazard never
+ * lands on the line you are already committed to.
  */
 function jarLane(): number {
   const clear = [0, 1, 2, 3].filter(
@@ -1444,10 +1816,10 @@ function announceHeat(): void {
 /**
  * One thing on the road, in a lane and OFF the lane's middle.
  *
- * The jars used to land dead centre of a lane, which made them a thing you
- * lined up once and then drove through.  These are jittered across most of the
- * lane's width, so reaching one is a steer rather than a lane choice and two
- * in a row are never in the same place.
+ * They used to land dead centre of a lane, which made a hazard a thing you
+ * lined up against once and then held a line around.  Jittered across most of
+ * the lane's width, missing one is a steer you have to aim and two in a row
+ * are never in the same place.
  */
 function spawnPickup(kind: PickupKind): void {
   if (!scene0) return;
@@ -1456,21 +1828,18 @@ function spawnPickup(kind: PickupKind): void {
   const x = LANES[idx] + (Math.random() - 0.5) * (LANE_W - CAR_W - 4);
   const parts: Phaser.GameObjects.GameObject[] = [];
 
-  if (kind === 'banana') {
-    // A skin: a fat crescent, drawn as three blocks stepping round, with a
-    // brown tip so it is not just a yellow smear at this size.
-    parts.push(scene0.add.rectangle(-3, -2, 4, 3, 0xf2d04b));
-    parts.push(scene0.add.rectangle(0, 0, 5, 3, 0xffe46b));
-    parts.push(scene0.add.rectangle(3, 2, 4, 3, 0xf2d04b));
-    parts.push(scene0.add.rectangle(-5, -3, 2, 2, 0x6b4a2f));
-  } else if (kind === 'bank') {
-    // A FROGGY BANK: a green money box with a slot in the top and his eyes on
-    // it, so the fifty reads as his before the player has been told.
-    parts.push(scene0.add.rectangle(0, 1, 11, 9, PALETTE.moss).setStrokeStyle(1, 0x1e3f24));
-    parts.push(scene0.add.rectangle(0, -4, 7, 2, 0x14261a));
-    parts.push(scene0.add.rectangle(-3, 0, 2, 2, PALETTE.cream));
-    parts.push(scene0.add.rectangle(3, 0, 2, 2, PALETTE.cream));
-    parts.push(scene0.add.rectangle(0, 4, 9, 2, PALETTE.gold));
+  if (kind === 'oil') {
+    // A SLICK.  Wider than a pothole and the only thing on this road with a
+    // sheen on it: black in the middle with a rainbow edge, because a hazard
+    // that reads as "shadow" is a hazard nobody swerves for.  It is the widest
+    // thing you have to miss, which is the point -- it is also the worst.
+    parts.push(scene0.add.ellipse(0, 0, 26, 13, 0x0c0d11));
+    parts.push(scene0.add.ellipse(-4, -1, 12, 7, 0x1a1c24));
+    parts.push(scene0.add.ellipse(6, 2, 9, 5, 0x1a1c24));
+    // the sheen, in three arcs of colour round the leading edge
+    parts.push(scene0.add.ellipse(-6, -3, 7, 3, 0x2f4d6b).setAlpha(0.8));
+    parts.push(scene0.add.ellipse(2, -4, 6, 2, 0x5c3a6b).setAlpha(0.7));
+    parts.push(scene0.add.ellipse(8, -2, 5, 2, 0x2a5c4a).setAlpha(0.7));
   } else {
     // A POTHOLE: a ragged black hole with a lip of broken tarmac, which is the
     // only thing out here drawn DARKER than the road so it cannot be mistaken
@@ -1486,26 +1855,151 @@ function spawnPickup(kind: PickupKind): void {
 }
 
 /**
- * PUT ONE DOWN, BEHIND YOU.
+ * BUY ONE, AND PUT IT DOWN BEHIND YOU.
  *
- * It goes a car's length back, which is the only place it is any use: a skin
+ * THE TOOL IS BOUGHT NOW, NOT FOUND.  A banana was a thing lying in a lane:
+ * you drove where it was, you carried up to three, and from then on the escape
+ * was free and the only question was whether you had one left.  A Froggy bomb
+ * costs THIRTY OF THE CASH YOU ARE PLAYING FOR, every time, which makes every
+ * use of it a real decision -- thirty off the bag is a token and a half off
+ * the payout and a notch of heat you have to earn back.
+ *
+ * The cost is also the only brake on it: there is no carry limit any more
+ * because the bag is the carry limit.  With four hundred on you it is four
+ * escapes; with twenty-nine it is a button that does nothing, and the HUD says
+ * which of those you are in before you press it.
+ *
+ * It goes a car's length back, which is the only place it is any use: one
  * under your own wheels does nothing, and one dropped in front would be a
- * thing you drove into.  Nothing stops you dropping the lot at once -- the
- * limit is how many you found.
+ * thing you drove into.
  */
-function dropBanana(): void {
-  if (over || bananas <= 0 || !scene0) return;
-  bananas -= 1;
+function dropBomb(): void {
+  if (over || !scene0) return;
+  if (collected < BOMB_COST) {
+    // Told, not ignored.  A button that silently does nothing reads as broken.
+    audio.sfx('ui_blip', 0.35);
+    const t = centerText(scene0, GAME_W / 2, 118, `BOMBS COST ${BOMB_COST}`, PALETTE.blood).setDepth(50);
+    scene0.tweens.add({ targets: t, alpha: 0, duration: 800, onComplete: () => t.destroy() });
+    return;
+  }
+  collected -= BOMB_COST;
   const parts = [
-    scene0.add.rectangle(-3, -2, 4, 3, 0xd8b93f),
-    scene0.add.rectangle(0, 0, 5, 3, 0xf2d04b),
-    scene0.add.rectangle(3, 2, 4, 3, 0xd8b93f),
+    // A dark round body with a lit fuse and his eyes on it, so what is sitting
+    // in the road is a bomb and is his.
+    scene0.add.circle(0, 1, 5, 0x1b2028),
+    scene0.add.circle(0, 1, 3, PALETTE.moss),
+    scene0.add.rectangle(-1, -1, 2, 2, PALETTE.cream),
+    scene0.add.rectangle(2, -1, 2, 2, PALETTE.cream),
+    scene0.add.rectangle(1, -5, 1, 3, PALETTE.brown),
+    scene0.add.circle(2, -7, 1.5, PALETTE.amber),
   ];
   const y = py + CAR_H / 2 + 4;
   const body = scene0.add.container(px, y, parts).setDepth(2);
-  drops.push({ x: px, y, life: BANANA_LIFE_MS, body });
+  drops.push({ x: px, y, life: BOMB_LIFE_MS, body });
   audio.sfx('throw_whoosh', 0.45);
   refreshHud();
+}
+
+/**
+ * CONCRETE IN A LANE, AND A WAY ROUND IT.
+ *
+ * `lanes` is which lanes it fills.  The caller picks them; the fairness is in
+ * `layBarrier` below, which is the only thing that ever chooses them itself.
+ */
+function spawnBarrier(lanes: number[], y = TOP - BARRIER_H): void {
+  if (!scene0) return;
+  for (const lane of lanes) {
+    const x = LANES[lane];
+    const w = LANE_W - 8;
+    const parts: Phaser.GameObjects.GameObject[] = [
+      // A jersey barrier seen from above: grey slab, a darker shadow down one
+      // side so it has height, and the diagonal hazard stripes that are the
+      // only reason it reads at a glance as "do not drive here".
+      scene0.add.rectangle(0, 0, w, BARRIER_H, 0x8c8f96),
+      scene0.add.rectangle(0, BARRIER_H / 2 - 2, w, 3, 0x5a5d64),
+      scene0.add.rectangle(0, -BARRIER_H / 2 + 1, w, 2, 0xb6b9c0),
+    ];
+    for (let i = -2; i <= 2; i++) {
+      parts.push(scene0.add.rectangle(i * 8, 0, 3, BARRIER_H - 4, PALETTE.blood).setAlpha(0.85));
+    }
+    // and a lamp on top of it, lit, so it is visible before the paint is
+    parts.push(scene0.add.circle(w / 2 - 3, -BARRIER_H / 2 + 2, 2, PALETTE.amber));
+    const body = scene0.add.container(x, y, parts).setDepth(4).setVisible(false);
+    barriers.push({ x, y, lane, body });
+  }
+}
+
+/**
+ * Choose where the concrete goes, and leave a door in it.
+ *
+ * THE RULES ARE THE WHOLE POINT.  At most two of the four lanes, never the
+ * lane the player is in as it is laid, and the gap the player is nearest has
+ * to be inside a lane of where they already are -- so the way round is always
+ * a steer they have time to make rather than a sprint across the road.  It
+ * also will not lay one on top of a spike strip that is already coming, which
+ * between them could close every lane on the board.
+ */
+function layBarrier(): void {
+  // ---- NOT ON TOP OF A STRIP.  Both of these close lanes, both are laid at
+  // the top of the road, and both scroll down at the same speed -- so one laid
+  // while the other is still coming stays the same few pixels behind it for
+  // the whole way down, and the two of them together are one wall with no door
+  // in it.  The strip has the stronger claim (it is the older hazard and it
+  // picks its own gap), so the concrete waits.
+  if (traps.some((t) => t.y < BOTTOM * 0.6)) return;
+  const here = laneOf(px);
+  const free = [0, 1, 2, 3].filter((i) => i !== here);
+  if (!free.length) return;
+  // How many lanes it fills: one to start with, two once the road is bad.
+  const want = stage() >= 2 && Math.random() < 0.45 ? BARRIER_MAX_LANES : 1;
+  const lanes: number[] = [];
+  for (const cand of free.sort(() => Math.random() - 0.5)) {
+    if (lanes.length >= want) break;
+    // Leaving this one out still has to leave the player somewhere to be that
+    // is next door to where they are.
+    const after = [...lanes, cand];
+    const open = [0, 1, 2, 3].filter((i) => !after.includes(i));
+    if (!open.some((i) => Math.abs(i - here) <= 1)) continue;
+    lanes.push(cand);
+  }
+  if (!lanes.length) return;
+  spawnBarrier(lanes);
+  audio.sfx('fence_thunk', 0.4);
+}
+
+/**
+ * SOMEBODY IN THE ROAD.
+ *
+ * They come in at the top like everything else and they walk -- across the
+ * lanes, or down the road, and they change their mind about which on their own
+ * clock.  They do not look, they do not hurry and they do not get out of the
+ * way, which is exactly what makes them harder to plan around than a car.
+ */
+function spawnPed(): void {
+  if (!scene0) return;
+  // Crossing, or walking along it.  Crossers start at a verge so the whole
+  // width of the road is the warning; walkers start in a lane.
+  const crossing = Math.random() < 0.65;
+  const fromLeft = Math.random() < 0.5;
+  const x = crossing ? (fromLeft ? ROAD_L + 3 : ROAD_L + ROAD_W - 3) : LANES[Phaser.Math.Between(0, 3)];
+  const parts: Phaser.GameObjects.GameObject[] = [
+    scene0.add.rectangle(0, 0, PED_W, PED_H, PALETTE.brownLight),
+    scene0.add.rectangle(0, -PED_H / 2 - 1, 3, 3, PALETTE.cream),
+    // dark glasses, which with the cane is the whole of the read at this size
+    scene0.add.rectangle(0, -PED_H / 2 - 1, 3, 1, PALETTE.black),
+  ];
+  const cane = scene0.add.rectangle(3, 2, 1, 7, PALETTE.white);
+  parts.push(cane);
+  const body = scene0.add.container(x, TOP - PED_H, parts).setDepth(5).setVisible(false);
+  peds.push({
+    x,
+    y: TOP - PED_H,
+    vx: crossing ? (fromLeft ? PED_CROSS : -PED_CROSS) : 0,
+    vy: crossing ? 0 : PED_ALONG,
+    turn: PED_TURN_MS,
+    body,
+    cane,
+  });
 }
 
 function spawnCash(): void {
@@ -1531,8 +2025,10 @@ function refreshHud(): void {
   hud.best.setText(`BEST ${best}`);
   const banked = chasePayout(collected);
   hud.bank.setText(`[ENTER] PULL OVER FOR ${banked} TOKENS`).setVisible(banked > 0);
-  hud.bananaLabel.setText(`BANANA x${bananas}`);
-  hud.bananaLabel.setTint(bananas > 0 ? PALETTE.gold : PALETTE.steel);
+  // What the tool costs and whether the bag covers it.  A price you cannot
+  // read is a button you press and nothing happens.
+  hud.bombLabel.setText(`BOMB ${BOMB_COST}`);
+  hud.bombLabel.setTint(collected >= BOMB_COST ? PALETTE.gold : PALETTE.steel);
 }
 
 function finish(): void {
