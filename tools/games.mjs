@@ -475,14 +475,18 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   await page.close();
 }
 
-// The two score-for-tokens cabinets.  Their payout is a formula, not a
-// cabinet constant, so the shell has to be handed the right number: the bar
-// pays the base, and every further bar adds one.  Banking on ENTER is the
-// path a player who has made the bar actually takes.
+// The cabinets that hand the shell a number rather than taking the cabinet's
+// flat reward.  Banking on ENTER is the path a player who has made the bar
+// actually takes.
 for (const g of [
-  // The bar is 50 points (five crossings) and every further bar adds one:
-  // 230 banks the base fifteen plus three.
-  { id: 'frogcross', hook: '__frog', set: 'setPoints', score: 230, expect: 18, label: '230 pts' },
+  // FROG CROSS IS FLAT NOW: fifty points is the bar and the bar pays twenty,
+  // whether you stop there or cross another eighteen times.  230 points is
+  // well past it and still pays exactly twenty -- which is the half of this
+  // that would go unnoticed if the check only ever measured a run that
+  // stopped on the bar itself.
+  { id: 'frogcross', hook: '__frog', set: 'setPoints', score: 230, expect: 20, label: '230 pts' },
+  // ...and on the bar itself, for the other end of the same rule.
+  { id: 'frogcross', hook: '__frog', set: 'setPoints', score: 50, expect: 20, label: '50 pts, on the bar' },
   // 300 cash is fifteen, and every hundred past it is five more: 600 is three
   // hundreds past the bar, so thirty.
   { id: 'carchase', hook: '__chase', set: 'setCash', score: 600, expect: 30, label: '600 cash' },
@@ -693,7 +697,14 @@ for (const g of [
     };
   });
   // The fixtures that run their own economy and say so on the machine.
-  const OWN_RULES = ['slots', 'wheel', 'blackjack', 'roulette', 'frogcross', 'carchase'];
+  //
+  // FROG CROSS CAME OFF THIS LIST and DANCE OFF WENT ON IT.  The crossing used
+  // to pay fifteen plus one for every further five crossings, which was a
+  // formula; it is a flat twenty on a ten-token cabinet now, which is exactly
+  // the standard table, so the table should be checking it.  The dance is the
+  // other way round: it pays 20, 35 or 55 depending how far up the ladder you
+  // got, and no row of the table says that.
+  const OWN_RULES = ['slots', 'wheel', 'blackjack', 'roulette', 'danceoff', 'carchase'];
   const wrong = floor.rows.filter(
     (r) => !OWN_RULES.includes(r.id) && floor.table[r.cost] !== undefined && r.reward !== floor.table[r.cost],
   );
@@ -2120,9 +2131,9 @@ for (const g of [
   );
   if (!punished) failures++;
 
-  // ---- it is a match now, best of three, and every round is a new song cut
-  // fresh: different tune, different tempo, different arrows.  Take the first
-  // round and he has to come back harder for the second.
+  // ---- it is a ladder now, and every round is a new song cut fresh:
+  // different tune, different tempo, different arrows.  Take the first round
+  // and he has to come back harder for the second.
   const r1 = await page.evaluate(() => window.__dance.state());
   await page.evaluate(() => {
     window.__dance.ace();
@@ -2148,28 +2159,107 @@ for (const g of [
   );
   if (!stepped) failures++;
 
-  // Two rounds takes the match, and the match pays the cabinet's reward
-  // through the shell.
+  // ---- AND THE LADDER PAYS AS IT CLIMBS.  Round two is banked but not paid,
+  // because there is a third round above it: the whole shape of the game is
+  // that you carry the money into the next round rather than collecting it.
+  await page.evaluate(() => {
+    window.__dance.setScores(9000, 0);
+    window.__dance.finish();
+    window.__dance.skipCard();
+  });
+  await sleep(700);
+  const two = await page.evaluate(() => window.__dance.state());
+  const climbing = two.wins.you === 2 && two.banked === 35 && two.round === 2 && !two.over;
+  console.log(
+    `${climbing ? 'PASS' : 'FAIL'}  dance off: two rounds banks 35 and dances the third  — ` +
+      `${two.wins.you} rounds, ${two.banked} banked, on round ${two.round + 1}${two.over ? ', OVER' : ''}`,
+  );
+  if (!climbing) failures++;
+
+  // ---- and the third one pays the lot, through the shell.
   const before = await page.evaluate(() => window.__froggy.state().tokens);
   await page.evaluate(() => {
-    window.__dance.ace();
+    window.__dance.setScores(9000, 0);
     window.__dance.finish();
   });
   await sleep(4200);
   const after = await page.evaluate(() => window.__froggy.state().tokens);
-  // The cabinet's own reward, read off the floor: this machine has been
-  // repriced before and a number typed here only asserts what it used to cost.
-  const reward = await page.evaluate(async () => {
-    const { CABINETS } = await import('/src/game/content.ts');
-    return CABINETS.find((c) => c.id === 'danceoff').reward;
-  });
-  const pays = after - before === reward;
+  const paidAll = after - before === 55;
   console.log(
-    `${pays ? 'PASS' : 'FAIL'}  dance off: taking the match pays the cabinet's reward  — ` +
-      `${before} -> ${after}, wants +${reward}`,
+    `${paidAll ? 'PASS' : 'FAIL'}  dance off: all three rounds pays 55  — ${before} -> ${after}, wants +55`,
   );
-  if (!pays) failures++;
+  if (!paidAll) failures++;
   await page.close();
+}
+
+// THE LADDER'S OTHER THREE ENDINGS.
+//
+// Winning all three is the easy one to get right.  What the table is actually
+// promising is what happens when the climb STOPS: a dropped round pays what
+// was already banked and does not dance the round above it, a dropped first
+// round pays nothing, and a drawn first round is a tie like every other tie in
+// the building and hands the entry fee back.
+//
+// A PAGE EACH, because every one of these ends the run and a finished run
+// takes the bridge down with it.
+{
+  const ladder = async (rounds) => {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 720 });
+    await page.goto(`${URL}/?intro=1&tokens=60&game=danceoff`, { waitUntil: 'networkidle2' });
+    await sleep(1500);
+    await startGame(page);
+    await bridge(page, '__dance');
+    const before = await page.evaluate(() => window.__froggy.state().tokens);
+    // `rounds` is the scoreline to put up for each round in turn: 'win',
+    // 'lose' or 'draw'.  The run stops itself the moment one is not a win.
+    for (const r of rounds) {
+      const ended = await page.evaluate(async (outcome) => {
+        if (!window.__dance) return true;
+        const you = 9000;
+        const rival = outcome === 'win' ? 0 : outcome === 'draw' ? you : you + 1000;
+        window.__dance.setScores(you, rival);
+        window.__dance.finish();
+        await new Promise((res) => setTimeout(res, 200));
+        const st = window.__dance?.state();
+        if (!st || st.over) return true;
+        window.__dance.skipCard();
+        return false;
+      }, r);
+      await sleep(700);
+      if (ended) break;
+    }
+    await sleep(4200);
+    const after = await page.evaluate(() => window.__froggy.state().tokens);
+    await page.close();
+    return after - before;
+  };
+
+  const droppedSecond = await ladder(['win', 'lose']);
+  console.log(
+    `${droppedSecond === 20 ? 'PASS' : 'FAIL'}  dance off: win one, drop the second, walk with 20  — +${droppedSecond}`,
+  );
+  if (droppedSecond !== 20) failures++;
+
+  const droppedThird = await ladder(['win', 'win', 'lose']);
+  console.log(
+    `${droppedThird === 35 ? 'PASS' : 'FAIL'}  dance off: win two, drop the third, walk with 35  — +${droppedThird}`,
+  );
+  if (droppedThird !== 35) failures++;
+
+  const droppedFirst = await ladder(['lose']);
+  console.log(
+    `${droppedFirst === 0 ? 'PASS' : 'FAIL'}  dance off: drop the first and there is nothing to walk with  — +${droppedFirst}`,
+  );
+  if (droppedFirst !== 0) failures++;
+
+  // The house rule: a tie is not a loss, and with nothing banked it is a
+  // refund.  Ten out, ten back.
+  const drawnFirst = await ladder(['draw']);
+  console.log(
+    `${drawnFirst === 10 ? 'PASS' : 'FAIL'}  dance off: a drawn first round hands the entry fee back  — +${drawnFirst}`,
+  );
+  if (drawnFirst !== 10) failures++;
 }
 
 // GRUDGE: the special is on a timer, and the timer is the point.  Throw it,
