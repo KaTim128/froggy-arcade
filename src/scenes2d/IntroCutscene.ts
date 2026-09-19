@@ -38,8 +38,8 @@ export const STARTING_TOKENS = 20;
  */
 const CARDS: string[][] = [
   ['You lost your job.', 'Then your home.'],
-  ['You thought it would only be temporary,'], ['but one month became seven.'],
-  ['You have been living on the streets ever since,'], ['sleeping wherever you can and surviving day by day.'],
+  ['You thought it would only be temporary,', 'but one month became seven.'],
+  ['You have been living on the streets ever since,', 'sleeping wherever you can and surviving day by day.'],
   ['This afternoon you sit', 'near an arcade.', 'It is warm, and nobody', 'bothered you... until...'],
 ];
 
