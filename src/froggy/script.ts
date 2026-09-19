@@ -25,7 +25,7 @@ export function tutorialScript(t: TutorialTargets): DialogueLine[] {
       highlight: t.tokenHud,
     },
     {
-      text: 'Cheap games take one token. The tough ones take five — but they pay out big.',
+      text: 'Cheap games take one to three tokens. The tougher ones take five or more!',
       highlight: t.hardCabinet,
     },
     {
@@ -34,7 +34,7 @@ export function tutorialScript(t: TutorialTargets): DialogueLine[] {
       highlight: t.cheapCabinet,
     },
     {
-      text: "Cash 'em in at the counter for prizes. The good stuff starts at two hundred.",
+      text: "Cash 'em in at the counter for prizes. That's where you get all the good froggy stuff.",
       highlight: t.prizeCounter,
     },
     // PRD §8.4 line 6 / QFD VOC-16 used to sit here: "Anyway. You're going to
