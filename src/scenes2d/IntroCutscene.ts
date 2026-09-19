@@ -38,8 +38,8 @@ export const STARTING_TOKENS = 20;
  */
 const CARDS: string[][] = [
   ['You lost your job.', 'Then your home.'],
-  ['You thought it would', 'only be temporary,', 'but one month became', 'seven.'],
-  ['You have been living', 'on the streets ever', 'since, sleeping wherever', 'you can and surviving', 'day by day.'],
+  ['This afternoon you sit', 'near an arcade.', 'It is warm, and nobody', 'bothered you... until...'],
+  ['This afternoon you sit', 'near an arcade.', 'It is warm, and nobody', 'bothered you... until...'],
   ['This afternoon you sit', 'near an arcade.', 'It is warm, and nobody', 'bothered you... until...'],
 ];
 
@@ -47,7 +47,7 @@ const OFFER: string[] = [
   '"That arcade is full of prizes."',
   '"Win them for me, and I will pay you in cash."',
   '"Half of whatever the prize is worth."',
-  'He hands you 20 tokens.',
+  'Here\'s 20 tokens.',
 ];
 /** The cards are big.  Only the cards. */
 const CARD_SIZE = 16;
