@@ -37,20 +37,17 @@ export const STARTING_TOKENS = 20;
  * are broken to fit.
  */
 const CARDS: string[][] = [
-  ['The job went first.'],
-  ['Then the flat.', 'Then everything', 'that was in it.'],
-  ['That was seven months ago.', 'You have been on', 'the street since.'],
+  ['You lost your job.', 'Then you lost your home.'],
+  ['You thought it would only be temporary,', 'but one month became seven.'],
+  ['You have been living on the streets ever since,', 'sleeping wherever you can and surviving day by day.'],
   ['This afternoon you sit', 'near an arcade.', 'It is warm, and nobody', 'bothered you... until...'],
 ];
 
-/** What he says, once he is stood over you.  Small, under the street: a caption, not a card. */
 const OFFER: string[] = [
-  '"That counter in there sells a stuffed rabbit',
-  'for two hundred tokens. I want it."',
-  '"I am not paying their prices. You will."',
-  '"Win me what is on those shelves and I pay you',
-  'cash. Half of what it cost. In your hand."',
-  'He puts a bag of tokens on the kerb.',
+  '"That arcade is full of prizes."',
+  '"Win them for me, and I will pay you in cash."',
+  '"Half of whatever the prize is worth."',
+  'He hands you 20 tokens.',
 ];
 /** The cards are big.  Only the cards. */
 const CARD_SIZE = 16;
