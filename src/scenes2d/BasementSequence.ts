@@ -45,10 +45,12 @@ const CROSSFADE_MS = 600;
  * are creeping down is the quietest thing in it; at full level four of them
  * was the loudest thing in the game.
  */
-const STEP_GAP = 300;
-const STEP_JITTER = 90;
-const STEP_TAIL = 260;
+const STEP_GAP = 250;
+const STEP_JITTER = 80;
+const STEP_TAIL = 200;
 const STEP_GAIN = 0.45;
+/** Steps in an ordinary walk between two frames.  Three is a walk; four was a wait. */
+const WALK_STEPS = 3;
 /** He stands there this long before he comes at you.  Unskippable. */
 const STARE_MS = 3000;
 /** And the lunge itself, from first twitch to the door appearing. */
@@ -72,6 +74,9 @@ export class BasementSequence extends Phaser.Scene {
   private layer: Phaser.GameObjects.Container | null = null;
   private hotspot: Phaser.GameObjects.Container | null = null;
   private busy = true;
+  /** The frame a walk in progress is heading for, and every timer it is riding on. */
+  private walkTo: number | null = null;
+  private pending: Phaser.Time.TimerEvent[] = [];
   private frames: FrameDef[] = [];
 
   constructor() {
@@ -257,6 +262,15 @@ export class BasementSequence extends Phaser.Scene {
   }
 
   private advance(kind: HotspotKind): void {
+    // ---- A SECOND CLICK CUTS THE WALK SHORT.
+    //
+    // The walk is what stops the footsteps landing on top of the next frame,
+    // but it must not be the only way to reach that frame: a player who has
+    // already decided and clicks again should arrive NOW, not be told to wait
+    // out an animation by a door that appears to have stopped working.  The
+    // pending steps are cancelled rather than left to ring over the new frame,
+    // so nothing overlaps either way.
+    if (this.skipWalk()) return;
     if (this.busy) return;
     this.busy = true;
 
@@ -279,7 +293,7 @@ export class BasementSequence extends Phaser.Scene {
     // real length rather than a guess that has to be kept in step with it.
     if (kind === 'door') {
       audio.sfx('door_creak');
-      this.time.delayedCall(450, () => this.walkThenShow(3));
+      this.queue(450, 2);
       return;
     }
     if (kind === 'key') {
@@ -287,20 +301,47 @@ export class BasementSequence extends Phaser.Scene {
       store.patch({ hasKey: true });
       store.flush();
       audio.sfx('lock_click');
-      this.time.delayedCall(260, () => this.walkThenShow(2));
+      this.queue(260, 2);
       return;
     }
 
     if (Math.random() < 0.25) {
       this.time.delayedCall(900 + Math.random() * 900, () => audio.sfx('drip'));
     }
-    this.walkThenShow();
+    this.queue(0, WALK_STEPS);
   }
 
-  /** Walk the corridor, and step into the next frame as the last foot lands. */
-  private walkThenShow(steps = 4): void {
-    const walked = this.walk(steps);
-    this.time.delayedCall(walked, () => this.show(this.index + 1));
+  /**
+   * Walk the corridor, and step into the next frame as the last foot lands.
+   *
+   * EVERY TIMER IT SETS IS KEPT, and the frame it is walking towards is kept
+   * with them, so the whole transition can be cut short in one place -- see
+   * `skipWalk`.  A chain of anonymous delayed calls could only be waited out.
+   */
+  private queue(delay: number, steps: number): void {
+    this.walkTo = this.index + 1;
+    const go = (): void => {
+      const walked = this.walk(steps);
+      this.pending.push(this.time.delayedCall(walked, () => this.land()));
+    };
+    if (delay <= 0) go();
+    else this.pending.push(this.time.delayedCall(delay, go));
+  }
+
+  /** Arrive: drop whatever is still queued and show the frame we set out for. */
+  private land(): void {
+    const to = this.walkTo;
+    this.walkTo = null;
+    for (const e of this.pending) e.remove(false);
+    this.pending = [];
+    if (to !== null) this.show(to);
+  }
+
+  /** True if there was a walk to cut short, and it has been cut short. */
+  private skipWalk(): boolean {
+    if (this.walkTo === null) return false;
+    this.land();
+    return true;
   }
 
   /**
@@ -318,13 +359,13 @@ export class BasementSequence extends Phaser.Scene {
    * started a fresh four on top of the tail of the old four.  Callers wait for
    * this number before moving on, which is what stops both.
    */
-  private walk(steps = 4): number {
+  private walk(steps = WALK_STEPS): number {
     let at = 0;
     for (let i = 0; i < steps; i++) {
       if (i === 0) audio.sfx('footstep_concrete', STEP_GAIN);
       else {
         const when = at;
-        this.time.delayedCall(when, () => audio.sfx('footstep_concrete', STEP_GAIN));
+        this.pending.push(this.time.delayedCall(when, () => audio.sfx('footstep_concrete', STEP_GAIN)));
       }
       at += STEP_GAP + Math.random() * STEP_JITTER;
     }

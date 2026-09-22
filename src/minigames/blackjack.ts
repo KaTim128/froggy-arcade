@@ -121,22 +121,28 @@ let leaveBtn: Phaser.GameObjects.Container | null = null;
 /**
  * WHAT AN ACE IS WORTH AT THIS TABLE.
  *
- * Not the usual "eleven until that busts".  Froggy's rule is about how many
- * cards you are holding:
+ * Not the usual "eleven until that busts".  Froggy's rule is that the ace is
+ * YOURS TO PRICE, and what the table will let you price it at depends on how
+ * many cards you are holding:
  *
- *   TWO CARDS   it is yours to decide, one or eleven, and you can change your
- *               mind for as long as you are still on two.  That is the whole
- *               of the decision the two-card hand offers.
- *   THREE OR MORE   it hardens to ONE, immediately, whatever you had chosen.
- *               Taking a card takes the choice away with it, which is what
- *               makes hitting on a soft hand a real commitment here.
+ *   TWO CARDS   one, ten or eleven, and you can change your mind for as long
+ *               as you are still on two.  That is the whole of the decision
+ *               the two-card hand offers.
+ *   THREE OR MORE   eleven is off the table.  The ace is one or ten, and it
+ *               stays yours to choose -- taking a card narrows the choice
+ *               rather than ending it.
  *
- * `pick` is the player's current answer while they are still on two cards; it
- * is ignored from the third card on, and the dealer never has one -- he is
- * scored the ordinary way at two cards (eleven unless it busts him) and by
- * the same hardening rule from three.
+ * AND TWO ACES ARE TWENTY-ONE.  Dealt a pair of them, one is priced at ten and
+ * the other at eleven and the hand is 21 on the spot: no choice to make, no
+ * button, nothing to change.  It is the only hand at this table that scores
+ * itself.
+ *
+ * `pick` is the player's current answer.  The dealer never has one -- he is
+ * scored the way he always was, eleven at two cards unless it busts him and
+ * one from the third, which is his own business and not the player's rule.
  */
 function score(hand: Card[], pick?: AceAs): number {
+  if (bothAces(hand)) return 21;
   const aces = hand.filter((c) => c.rank === 'A').length;
   let total = 0;
   for (const c of hand) {
@@ -145,19 +151,37 @@ function score(hand: Card[], pick?: AceAs): number {
     else total += Number(c.rank);
   }
   if (!aces) return total;
-  // From the third card an ace is one and there is nothing to add.
+  // The player's own answer, applied to ONE ace -- any others stay at one,
+  // which is the only reading under which a hand of aces is not a lottery.
+  if (pick !== undefined && aceChoices(hand).includes(pick)) return total + (pick - 1);
+  // Nobody's choice: the dealer's own reading, unchanged.
   if (hand.length >= 3) return total;
-  // On two: the player's own answer, or -- for the dealer -- the best one.
-  if (pick !== undefined) return pick === 11 ? total + 10 : total;
   return total + 10 <= 21 ? total + 10 : total;
 }
 
-/** The player's answer to their own ace, while they are still on two cards. */
-type AceAs = 1 | 11;
+/** What the player may price their ace at.  Empty when there is nothing to decide. */
+type AceAs = 1 | 10 | 11;
+const ACE_ON_TWO: AceAs[] = [1, 10, 11];
+const ACE_ON_MORE: AceAs[] = [1, 10];
 
-/** Does this hand still offer the choice?  Two cards, and one of them an ace. */
+/** Dealt two aces: the hand is 21 and there is no choice in it. */
+function bothAces(hand: Card[]): boolean {
+  return hand.length === 2 && hand.every((c) => c.rank === 'A');
+}
+
+/**
+ * The prices this hand may put on its ace, in the order the button offers
+ * them.  One list, read by the button, by the arithmetic and by the harness,
+ * so they cannot disagree about what is legal.
+ */
+function aceChoices(hand: Card[]): AceAs[] {
+  if (bothAces(hand) || !hand.some((c) => c.rank === 'A')) return [];
+  return hand.length === 2 ? ACE_ON_TWO : ACE_ON_MORE;
+}
+
+/** Does this hand still offer the choice? */
 function aceIsOpen(hand: Card[]): boolean {
-  return hand.length === 2 && hand.some((c) => c.rank === 'A');
+  return aceChoices(hand).length > 0;
 }
 
 /** The player's hand as it stands, with their ace answer applied. */
@@ -211,9 +235,13 @@ export const blackjack: MinigameModule = {
   rules: 'bet what you like, beat the dealer to 21',
   tutorial: {
     objective: [
+      // FIVE LINES, AND FIVE IS THE CARD'S CEILING WITH FIVE CONTROLS ON IT:
+      // the ace rule is two lines because it is two rules, and the fifteen has
+      // to survive both of them -- a rule the card drops is a rule the player
+      // finds out about by losing to it.
       'BEAT THE DEALER TO 21. FIVE CARDS MAX.',
-      'TWO CARDS: AN ACE IS 1 OR 11, YOUR CALL.',
-      'A THIRD CARD MAKES EVERY ACE A 1.',
+      'AN ACE IS 1, 10 OR 11 ON TWO CARDS,',
+      'AND 1 OR 10 FROM THE THIRD. TWO ACES = 21.',
       'FIVE CARDS OR A 21 DOUBLES THE STAKE.',
       'STUCK ON 15 FROM TWO? LEAVE IT FOR FREE.',
     ],
@@ -267,8 +295,8 @@ export const blackjack: MinigameModule = {
     standBtn = button(scene, GAME_W / 2 + 40, 164, 'STAND', () => stand(), { width: 56, height: 13 });
     // ---- the two that are only sometimes yours.  They sit on their own row
     // above HIT and STAND, and each appears only while the hand it belongs to
-    // is on the felt: the ace one while you are on two cards with an ace, the
-    // fifteen one while you are on two cards worth exactly fifteen.
+    // is on the felt: the ace one while there is an ace to price, the fifteen
+    // one while you are on two cards worth exactly fifteen.
     aceBtn = button(scene, GAME_W / 2 - 40, 148, 'ACE 11', () => flipAce(), {
       width: 56,
       height: 13,
@@ -315,6 +343,9 @@ export const blackjack: MinigameModule = {
           dealer: score(dealer),
           aceAs,
           aceOpen: aceIsOpen(player),
+          /** What the table will let this hand price its ace at, in button order. */
+          aceChoices: aceChoices(player),
+          bothAces: bothAces(player),
           canSurrender: canSurrender(),
           maxCards: MAX_CARDS,
           stakeMul,
@@ -525,6 +556,7 @@ function hit(): void {
     return;
   }
   player.push(take());
+  settleAce();
   audio.sfx('ui_blip');
   render();
   const p = mine();
@@ -553,11 +585,32 @@ function hit(): void {
  * never disagree about whether the choice is still open.
  */
 function flipAce(): void {
-  if (phase !== 'play' || standing || !aceIsOpen(player)) return;
-  aceAs = aceAs === 11 ? 1 : 11;
+  if (phase !== 'play' || standing) return;
+  const choices = aceChoices(player);
+  if (!choices.length) return;
+  aceAs = choices[(choices.indexOf(aceAs) + 1) % choices.length];
   audio.sfx('ui_hover', 0.5);
   say(`ACE PLAYS AS ${aceAs} - YOU HAVE ${mine()}`);
   render();
+}
+
+/**
+ * KEEP THE ANSWER LEGAL, AND KEEP IT KIND.
+ *
+ * Eleven is only on offer at two cards, so a player who priced their ace at
+ * eleven and then hit is holding an answer the table no longer sells.  The
+ * table picks for them, and it picks THE BEST PRICE THAT DOES NOT BUST THEM:
+ * A+6 priced at eleven, hit for a 9, is a 26 if the ace comes down to ten and
+ * a 16 if it comes down to one, and the bust is checked on the same frame --
+ * so choosing the nearest number instead of the best one would take the hand
+ * off a player who still had a legal way to keep it.  Only if every price
+ * busts does it take the lowest.  Called from the one place a hand grows.
+ */
+function settleAce(): void {
+  const choices = aceChoices(player);
+  if (!choices.length || choices.includes(aceAs)) return;
+  const alive = choices.filter((v) => score(player, v) <= 21);
+  aceAs = alive.length ? alive[alive.length - 1] : choices[0];
 }
 
 /**

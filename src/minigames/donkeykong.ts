@@ -67,6 +67,23 @@ const BOUNCE_HZ = 1.6;
 const BOUNCER_SPEED = 84;
 /** Two in five barrels bounce, from the first one.  Customer's odds. */
 const BOUNCER_CHANCE = 0.4;
+/**
+ * THE DEATH BARREL.  Black, with a skull on it, and it does not take a life --
+ * it takes the game.
+ *
+ * It rolls: it is thrown, it crosses girders, it takes ladders and it is
+ * knocked off by the one behind it exactly like every other barrel, because a
+ * hazard that moves differently is a second system to keep fair and this one
+ * only needs to be a different ANSWER.  You jump it, the same as a yellow one;
+ * the difference is entirely in what it costs to get it wrong.
+ *
+ * It is held back for the first few seconds so that the climb opens on
+ * something survivable -- the barrels come immediately now, and a black one in
+ * the first throw is a run that ended before the player's hands were on the
+ * keys.
+ */
+const DEATH_CHANCE = 0.12;
+const DEATH_AFTER_MS = 8000;
 /** A backstop: barrels should retire themselves, but never let them stack. */
 const MAX_BARRELS = 12;
 
@@ -172,6 +189,8 @@ interface Barrel {
   falling: boolean;
   /** A bouncer hops; a plain barrel rolls.  See BOUNCE_H. */
   bouncer: boolean;
+  /** The black one.  Rolls like any other and ends the run on contact. */
+  deadly: boolean;
   /** Where the bouncer is in its hop, radians. */
   phase: number;
   dot: Phaser.GameObjects.Container;
@@ -235,10 +254,11 @@ export const donkeyKong: MinigameModule = {
   tutorial: {
     objective: [
       'CLIMB TO THE EXIT AT THE TOP.',
-      'FROGGY KONG THROWS BARRELS DOWN AT YOU.',
-      'EACH ONE TAKES A LIFE. YOU HAVE THREE.',
+      'FROGGY KONG IS THROWING FROM THE OFF.',
+      'A BARREL TAKES A LIFE. YOU HAVE THREE.',
       'YELLOW ROLLS AT YOU - JUMP IT.',
       'ORANGE HOPS - WALK UNDER IT WHILE IT IS UP.',
+      'BLACK WITH A SKULL ENDS THE RUN ON TOUCH.',
       'ONE THAT CATCHES ANOTHER KNOCKS IT OFF.',
     ],
     controls: [
@@ -257,20 +277,15 @@ export const donkeyKong: MinigameModule = {
     lives = LIVES;
     invulnMs = 0;
     drops = { ladder: 0, end: 0 };
-    spawnTimer = 3000; // a moment to get your bearings before the first one
+    // NO HEAD START.  He is already throwing when the cabinet comes up: the
+    // first barrel is on its way before the player has taken a step, and the
+    // climb is a climb from the first second rather than from the fourth.
+    spawnTimer = 0;
     elapsed = 0;
     barrels = [];
     ladders = [];
 
-    // a brick wall behind the girders, dark, with the mortar just showing
-    scene.add.rectangle(0, 18, GAME_W, 162, 0x120a18).setOrigin(0, 0);
-    for (let row = 0; row < 24; row++) {
-      const y = 20 + row * 7;
-      const off = row % 2 ? 7 : 0;
-      for (let x = -7 + off; x < GAME_W; x += 14) {
-        scene.add.rectangle(x, y, 13, 6, 0x1c1022).setOrigin(0, 0);
-      }
-    }
+    paintJungle(scene);
 
     // Mostly alternating, so every floor has to be crossed — but the ladder up
     // to the top girder is deliberately mid-floor.  Alternation put it at
@@ -332,6 +347,34 @@ export const donkeyKong: MinigameModule = {
         grace: (ms: number) => {
           invulnMs = ms;
         },
+        /**
+         * Throw one now, and optionally say which kind, so the throw and the
+         * black one can both be watched rather than waited for.
+         */
+        throwNow: (kind?: BarrelKind) => spawnBarrel(kind),
+        /**
+         * The kind decision itself, sampled.  How often a black one comes off
+         * the pile is a property of that decision, not of whether one happened
+         * to turn up inside a test's patience.
+         */
+        sampleKinds: (n: number, late = true) => {
+          const tally = { roll: 0, hop: 0, death: 0 };
+          for (let i = 0; i < n; i++) tally[rollKind(late)]++;
+          return tally;
+        },
+        deathAfterMs: DEATH_AFTER_MS,
+        /**
+         * What he is doing with his arms this frame.  `swing` is 1 at the
+         * release and 0 once he has them back, which is the only thing a
+         * harness needs in order to know the throw is a throw.
+         */
+        kong: () => ({
+          swing: (throwT / THROW_S) ** 2,
+          armL: (kong?.getData('armL') as Phaser.GameObjects.Container | undefined)?.rotation ?? 0,
+          armR: (kong?.getData('armR') as Phaser.GameObjects.Container | undefined)?.rotation ?? 0,
+          lean: kong?.rotation ?? 0,
+          holding: ((kong?.getData('held') as Phaser.GameObjects.Container | undefined)?.visible ?? false),
+        }),
         teleport: (floor: number, x: number) => {
           player.floor = floor;
           player.x = x;
@@ -351,6 +394,7 @@ export const donkeyKong: MinigameModule = {
             floor: b.floor,
             dir: b.dir,
             bouncer: b.bouncer,
+            deadly: b.deadly,
             falling: b.falling,
             settled: b.settled,
             speed: b.speed,
@@ -516,11 +560,30 @@ function place(): void {
   hat?.setPosition(player.x, player.y - 11);
 }
 
-function spawnBarrel(): void {
+/** The three kinds, and which one the next barrel is. */
+export type BarrelKind = 'roll' | 'hop' | 'death';
+
+/**
+ * WHAT COMES OFF THE PILE NEXT.
+ *
+ * One kind per barrel and one decision in one place: the black one is rolled
+ * for first and is never a bouncer as well, because two answers on one barrel
+ * is a barrel nobody can read.  `late` is whether the climb is past the few
+ * seconds that the black one is held back for -- passed in rather than read
+ * off the clock, so the decision can be sampled without playing the game.
+ */
+function rollKind(late: boolean): BarrelKind {
+  if (late && Math.random() < DEATH_CHANCE) return 'death';
+  return Math.random() < BOUNCER_CHANCE ? 'hop' : 'roll';
+}
+
+function spawnBarrel(kind?: BarrelKind): void {
   if (!sceneRef || barrels.length >= MAX_BARRELS) return;
   const topFloor = FLOORS.length - 1;
-  const bouncer = Math.random() < BOUNCER_CHANCE;
-  const dot = makeBarrel(sceneRef, bouncer);
+  const which = kind ?? rollKind(elapsed > DEATH_AFTER_MS);
+  const deadly = which === 'death';
+  const bouncer = which === 'hop';
+  const dot = makeBarrel(sceneRef, bouncer, deadly);
   dot.setPosition(LEFT + 20, FLOORS[topFloor] - BARREL_R);
   barrels.push({
     id: ++barrelNo,
@@ -530,6 +593,7 @@ function spawnBarrel(): void {
     dir: 1,
     falling: false,
     bouncer,
+    deadly,
     phase: 0,
     dot,
     rolledAt: null,
@@ -537,7 +601,7 @@ function spawnBarrel(): void {
     speed: (bouncer ? BOUNCER_SPEED : BARREL_SPEED) * (1 + (Math.random() - 0.5) * 2 * SPEED_SPREAD),
     lift: 0,
   });
-  audio.sfx(bouncer ? 'hop_wet' : 'door_rattle');
+  audio.sfx(deadly ? 'stinger' : bouncer ? 'hop_wet' : 'door_rattle', deadly ? 0.35 : undefined);
   throwT = THROW_S;
 }
 
@@ -554,11 +618,11 @@ function spawnBarrel(): void {
  * different shapes as well as different colours: colour alone is a coin toss
  * for anyone who cannot separate the two, and these two want OPPOSITE inputs.
  */
-function makeBarrel(scene: Phaser.Scene, bouncer: boolean): Phaser.GameObjects.Container {
-  const skin = bouncer ? 0xf08a2c : 0xf0c33c;
-  const lit = bouncer ? 0xffc06a : 0xffe89a;
-  const dark = bouncer ? 0x9c4a10 : 0xa8801a;
-  const hoop = bouncer ? 0x6d3208 : 0x6e5410;
+function makeBarrel(scene: Phaser.Scene, bouncer: boolean, deadly = false): Phaser.GameObjects.Container {
+  const skin = deadly ? 0x1b1b20 : bouncer ? 0xf08a2c : 0xf0c33c;
+  const lit = deadly ? 0x3a3a44 : bouncer ? 0xffc06a : 0xffe89a;
+  const dark = deadly ? 0x000000 : bouncer ? 0x9c4a10 : 0xa8801a;
+  const hoop = deadly ? 0x4a4a55 : bouncer ? 0x6d3208 : 0x6e5410;
   // THE RIM DOES NOT TURN, THE STAVES DO.  Everything that spins lives in its
   // own container inside this one: spinning the whole barrel turned its
   // silhouette into a four-pointed thing every eighth of a turn, because the
@@ -581,6 +645,21 @@ function makeBarrel(scene: Phaser.Scene, bouncer: boolean): Phaser.GameObjects.C
   const spin = scene.add.container(0, 0, spun);
   const c = scene.add.container(0, 0, [...rim, spin]).setDepth(15);
   c.setData('spin', spin);
+  if (deadly) {
+    // THE SKULL, and it does not turn with the barrel.  A spinning skull at
+    // eight pixels is a smear; painted on the end and held upright it is the
+    // one thing on the girder the eye goes to, which is the entire job.
+    const bone = PALETTE.bone;
+    const skull = [
+      scene.add.circle(0, -0.6, BARREL_R - 1.2, bone),
+      scene.add.rectangle(0, 1.4, 3.4, 2.2, bone),
+      scene.add.rectangle(-1.1, -1, 1.3, 1.6, 0x000000),
+      scene.add.rectangle(1.1, -1, 1.3, 1.6, 0x000000),
+      scene.add.rectangle(0, 0.8, 0.8, 1, 0x000000),
+      scene.add.rectangle(0, 2.1, 2.6, 0.6, 0x000000),
+    ];
+    for (const part of skull) c.add(part);
+  }
   return c;
 }
 
@@ -597,6 +676,118 @@ function makeBarrel(scene: Phaser.Scene, bouncer: boolean): Phaser.GameObjects.C
  * Everything hangs off ONE container at his feet, so the whole of him can be
  * leaned into a throw without a single part having to be moved by hand.
  */
+/**
+ * THE JUNGLE BEHIND THE GIRDERS.
+ *
+ * It was a brick wall, which is where this kind of game is usually set and is
+ * nowhere at all: eleven hundred identical rectangles and not one of them
+ * telling the player where they are.  What is behind the climb now is depth --
+ * four layers of it, each further back than the last and each drawn darker and
+ * flatter than the one in front, which is the only way a flat image reads as
+ * having a distance in it:
+ *
+ *   1  the canopy dark, top to bottom, with the light falling off downwards
+ *   2  far trees: tall, narrow, nearly the colour of the dark behind them
+ *   3  near trunks with bark on them, and the vines that hang off the girders
+ *   4  leaves, in three greens, thickest at the top and at the edges
+ *
+ * All of it is drawn ONCE, at create, into the scene behind everything else.
+ * Nothing here moves, nothing here is read by the game, and nothing here is on
+ * the girders: the climb is exactly the climb it was.
+ */
+function paintJungle(scene: Phaser.Scene): void {
+  // A seeded shuffle, so the jungle is the same jungle every time the cabinet
+  // is switched on.  A background that is different on every play is a
+  // background the player cannot learn the room from.
+  let seed = 20240917;
+  const rnd = (): number => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  const between = (a: number, b: number): number => a + rnd() * (b - a);
+
+  // ---- 1. the canopy dark.  Bands rather than one flat fill, so the light
+  // falls off towards the floor the way it does under a canopy.
+  scene.add.rectangle(0, 18, GAME_W, 162, 0x08150e).setOrigin(0, 0);
+  for (let i = 0; i < 9; i++) {
+    const y = 18 + i * 18;
+    scene.add
+      .rectangle(0, y, GAME_W, 18, 0x0d2117)
+      .setOrigin(0, 0)
+      .setAlpha(0.75 - i * 0.07);
+  }
+  // shafts of light coming down through it, at the same angle
+  for (const x of [60, 150, 250]) {
+    scene.add
+      .rectangle(x, 18, 26, 170, 0x9ad07a)
+      .setOrigin(0.5, 0)
+      .setAlpha(0.05)
+      .setRotation(0.12);
+  }
+
+  // ---- 2. far trees, flat and nearly the colour of the dark.
+  for (let i = 0; i < 9; i++) {
+    const x = between(6, GAME_W - 6);
+    const w = between(5, 11);
+    scene.add.rectangle(x, 18, w, 162, 0x10291b).setOrigin(0.5, 0);
+    scene.add.ellipse(x, between(24, 60), w * between(2.4, 3.6), between(14, 22), 0x14331f);
+  }
+
+  // ---- 3. the near trunks, with bark, and the vines.
+  for (const [x, w] of [
+    [18, 15],
+    [GAME_W - 20, 17],
+    [128, 11],
+  ] as const) {
+    scene.add.rectangle(x, 18, w, 162, 0x33261a).setOrigin(0.5, 0);
+    scene.add.rectangle(x - w / 2 + 2, 18, 3, 162, 0x4a3726).setOrigin(0, 0);
+    scene.add.rectangle(x + w / 2 - 2, 18, 2, 162, 0x1e1610).setOrigin(0, 0);
+    for (let y = 22; y < 178; y += 9) {
+      scene.add.rectangle(x + between(-3, 2), y, between(2, 5), 1, 0x241a12).setOrigin(0, 0);
+    }
+  }
+  // Vines off the underside of each girder, hanging into the floor below.
+  for (const y of FLOORS) {
+    for (let i = 0; i < 5; i++) {
+      const x = between(LEFT + 8, RIGHT - 8);
+      const len = between(6, 20);
+      scene.add.rectangle(x, y + 6, 1, len, 0x2f6b34).setOrigin(0, 0);
+      scene.add.ellipse(x + between(-2, 2), y + 6 + len, between(3, 6), between(2, 4), 0x3f8a3f).setAlpha(0.9);
+    }
+  }
+
+  // ---- 4. the leaves.  Thickest along the top and down both edges, so the
+  // middle of the screen -- where the climb is -- stays readable.
+  const leaf = (x: number, y: number, w: number, h: number, c: number, rot: number): void => {
+    scene.add.ellipse(x, y, w, h, c).setRotation(rot).setAlpha(0.95);
+  };
+  // The two things at the top of the screen that the player has to be able to
+  // read -- him, and the way out -- are kept clear of it.
+  const clear = (x: number, y: number): boolean =>
+    y < FLOORS[FLOORS.length - 1] && (Math.abs(x - (LEFT + 20)) < 30 || Math.abs(x - (RIGHT - 22)) < 26);
+  for (let i = 0; i < 46; i++) {
+    const edge = rnd() < 0.62;
+    const x = edge ? (rnd() < 0.5 ? between(0, 46) : between(GAME_W - 46, GAME_W)) : between(46, GAME_W - 46);
+    const y = edge ? between(20, 176) : between(20, 54);
+    if (clear(x, y)) continue;
+    const w = between(12, 26);
+    const h = between(5, 9);
+    const greens = [0x2c6b33, 0x39843c, 0x1f4f2a, 0x47a049];
+    leaf(x, y, w, h, greens[Math.floor(rnd() * greens.length)], between(-0.9, 0.9));
+    // the rib down the middle of it
+    scene.add
+      .rectangle(x, y, w * 0.8, 0.8, 0x18351c)
+      .setRotation(between(-0.9, 0.9))
+      .setAlpha(0.5);
+  }
+  // and a few big ones hanging over the very top, in front of the rest
+  for (let i = 0; i < 7; i++) {
+    const x = between(0, GAME_W);
+    if (clear(x, 22)) continue;
+    leaf(x, between(18, 26), between(26, 40), between(10, 16), 0x24592c, between(-0.4, 0.4));
+  }
+}
+
 function makeKong(scene: Phaser.Scene, x: number, groundY: number): Phaser.GameObjects.Container {
   const SKIN = 0x4e9c4a;
   const LIT = 0x76c86a;
@@ -620,15 +811,28 @@ function makeKong(scene: Phaser.Scene, x: number, groundY: number): Phaser.GameO
     part(scene.add.ellipse(0, -11, 13, 11, BELLY)),
     part(scene.add.ellipse(0, -9, 10, 6, 0xeef3cc).setAlpha(0.6)),
   ];
-  // arms, out in front and low, because they are for picking barrels up
-  const arms: Phaser.GameObjects.GameObject[] = [
-    scene.add.ellipse(-13, -13, 7, 14, SKIN),
-    scene.add.ellipse(13, -13, 7, 14, SKIN),
-    scene.add.ellipse(-13, -16, 6, 7, LIT).setAlpha(0.45),
-    scene.add.ellipse(13, -16, 6, 7, LIT).setAlpha(0.45),
-    scene.add.ellipse(-14, -7, 8, 5, DARK),
-    scene.add.ellipse(14, -7, 8, 5, DARK),
-  ];
+  // ---- THE ARMS, WHICH ARE WHAT THROWS.
+  //
+  // Each one is its own container hung at the shoulder with the limb drawn
+  // BELOW the origin, so rotating the container swings the arm about the
+  // shoulder the way an arm swings.  Built as six loose ellipses they could
+  // only ever be stretched, which is a limb inflating rather than a throw.
+  const SHOULDER_Y = -19;
+  const arm = (side: number): Phaser.GameObjects.Container =>
+    scene.add.container(side * 13, SHOULDER_Y, [
+      scene.add.ellipse(0, 6, 7, 14, SKIN),
+      scene.add.ellipse(0, 3, 6, 7, LIT).setAlpha(0.45),
+      scene.add.ellipse(side * 1, 12, 8, 5, DARK),
+    ]);
+  const armL = arm(-1);
+  const armR = arm(1);
+  // and the next one, held between throws, so the barrels visibly come from
+  // his hands rather than from the air beside him
+  const held = scene.add.container(0, -6, [
+    scene.add.circle(0, 0, 5, 0xf0c33c),
+    scene.add.circle(0, 0, 5, 0x000000, 0).setStrokeStyle(1.4, 0xa8801a),
+    scene.add.rectangle(0, 0, 10, 1.2, 0x6e5410),
+  ]);
   // the head: wide, low on the shoulders, with the eyes ON TOP of it
   const head: Phaser.GameObjects.GameObject[] = [
     scene.add.ellipse(0, -26, 22, 13, SKIN),
@@ -646,30 +850,49 @@ function makeKong(scene: Phaser.Scene, x: number, groundY: number): Phaser.GameO
     scene.add.circle(-7, -35.4, 0.9, PALETTE.white).setAlpha(0.8),
     scene.add.circle(5, -35.4, 0.9, PALETTE.white).setAlpha(0.8),
   ];
-  const c = scene.add.container(x, groundY, [...bits, ...arms, ...head]).setDepth(14);
+  const c = scene.add.container(x, groundY, [...bits, armL, armR, held, ...head]).setDepth(14);
   c.setScale(KONG_SCALE);
-  c.setData('arms', arms);
+  c.setData('armL', armL);
+  c.setData('armR', armR);
+  c.setData('held', held);
   return c;
 }
 
 /**
- * The throw, which is the only thing he ever does.
+ * THE THROW.
  *
- * He rocks forward over the barrel as it leaves him and settles back, and he
- * breathes the rest of the time -- a thing at the top of the screen that never
- * moves is scenery, and the barrels are supposed to be coming from HIM.
+ * `throwT` is set the instant a barrel is thrown and runs down, so what is
+ * drawn is the release and the recovery: the arms are out and down over the
+ * girder at t=0, they come back up to a hold, and the next barrel appears in
+ * his hands as they arrive.  The barrel leaving and the arms going with it are
+ * the same frame, which is the whole of what makes the barrels his.
+ *
+ * Between throws he breathes.  A thing at the top of the screen that never
+ * moves is scenery, and the one at the top of THIS screen is the reason the
+ * game is happening.
  */
 function stepKong(dt: number): void {
   if (!kong) return;
   if (throwT > 0) throwT = Math.max(0, throwT - dt);
+  // 1 at the release, 0 once he has it back -- squared, so the swing snaps out
+  // and drifts home rather than sliding both ways at the same speed.
   const k = throwT / THROW_S;
-  // out and back inside the one beat
-  const swing = Math.sin((1 - k) * Math.PI);
-  kong.setRotation(-0.22 * swing);
-  kong.setScale(KONG_SCALE * (1 + 0.06 * swing), KONG_SCALE * (1 - 0.05 * swing + Math.sin(elapsed / 620) * 0.012));
-  for (const a of kong.getData('arms') as Phaser.GameObjects.Ellipse[]) {
-    a.setScale(1, 1 + 0.25 * swing);
-  }
+  const swing = k * k;
+  const breath = Math.sin(elapsed / 620) * 0.012;
+
+  // Over the girder as it goes, and back on his haunches after.
+  kong.setRotation(0.3 * swing);
+  kong.setScale(KONG_SCALE * (1 + 0.07 * swing), KONG_SCALE * (1 - 0.06 * swing + breath));
+  // Both arms swing through about a hundred degrees, the far one trailing.
+  const armL = kong.getData('armL') as Phaser.GameObjects.Container;
+  const armR = kong.getData('armR') as Phaser.GameObjects.Container;
+  armL.setRotation(-1.9 * swing);
+  armR.setRotation(-1.55 * swing);
+  // The next one is in his hands the moment the last one has gone.
+  const held = kong.getData('held') as Phaser.GameObjects.Container;
+  held.setVisible(throwT <= 0);
+  held.setPosition(0, -6 + breath * 40);
+  held.setRotation(elapsed / 900);
 }
 
 /**
@@ -755,6 +978,16 @@ function stepBarrels(dt: number): void {
       if (b.y >= target) {
         b.y = target;
         b.falling = false;
+        // ---- AND IT LANDS ON THE GIRDER, not halfway up a hop.
+        //
+        // A bouncer carried the phase it had when it went over the edge, so
+        // the frame it touched down it was already drawn nine pixels up -- a
+        // barrel to be walked under, arriving out of the air beside a roller
+        // that has to be jumped, with the settling rule then given four frames
+        // to fix a pair that should never have been made.  It lands flat and
+        // takes off from there.
+        b.phase = 0;
+        b.lift = 0;
         // Roll away from the nearest wall.  Alternating by floor meant a barrel
         // that had just taken a ladder landed on the far side of the next one
         // and rolled away from it, so only a third of them ever got a second
@@ -835,6 +1068,17 @@ function stepBarrels(dt: number): void {
 function checkHits(): void {
   for (const b of barrels) {
     if (Math.abs(b.x - player.x) < HIT_DX && Math.abs(b.y - (player.y - PLAYER_MID)) < HIT_DY) {
+      // The black one does not take a life off you.  It takes the climb.
+      if (b.deadly) {
+        if (dying || over) return;
+        dying = true;
+        lives = 0;
+        audio.sfx('death_stinger', 0.8);
+        refreshHud();
+        sceneRef?.cameras.main.shake(320, 0.02);
+        finish(false);
+        return;
+      }
       loseLife();
       return;
     }

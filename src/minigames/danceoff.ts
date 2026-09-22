@@ -12,7 +12,12 @@
  *
  *   round 1   20 tokens   for the ten it cost, so ten in profit
  *   round 2   +15         35 on the night
- *   round 3   +20         55, and nobody beats him three times by accident
+ *   round 3   +15         50, and nobody beats him three times by accident
+ *
+ * EVERY RUNG PAST THE FIRST IS THE SAME FIFTEEN.  It was twenty on the last
+ * one; the house rule is that a ten token cabinet pays twenty for the win and
+ * fifteen more for each go the player takes past it, and there is no reason
+ * for this cabinet to be the exception that has to be remembered separately.
  *
  * LOSE ONE AND YOU STOP, WITH WHAT YOU HAVE.  It is not best of three: there
  * is no coming back from a dropped round, and there is no point playing on
@@ -85,7 +90,7 @@ export const ROUNDS = [
  * Zero for no rounds is the entry fee gone, which is what losing the first
  * round costs.
  */
-export const PRIZE = [0, 20, 35, 55];
+export const PRIZE = [0, 20, 35, 50];
 /** How long the round card sits between rounds. */
 const CARD_MS = 2800;
 
@@ -231,13 +236,13 @@ export const danceOff: MinigameModule = {
   id: ID,
   title: 'DANCE OFF',
   music: 'game_danceoff',
-  rules: 'beat him three times, 20/35/55',
+  rules: 'beat him three times, 20/35/50',
   tutorial: {
     objective: [
       'HIT THE ARROWS AS THEY REACH THE LINE.',
       'A WRONG KEY COSTS YOU 100 - NO MASHING.',
       'THREE ROUNDS. 45 SECONDS EACH.',
-      'WIN ONE: 20.  TWO: 35.  ALL THREE: 55.',
+      'WIN ONE: 20.  TWO: 35.  ALL THREE: 50.',
       'DROP A ROUND AND YOU STOP, AND KEEP IT.',
       'NEW SONG EACH ROUND - AND HE GETS BETTER.',
     ],
@@ -246,7 +251,7 @@ export const danceOff: MinigameModule = {
       ['W / D', 'UP AND RIGHT'],
     ],
   },
-  payoutNote: 'WIN: 20/35/55',
+  payoutNote: 'WIN: 20/35/50',
   // The four arrows ARE the game, so they are four buttons and not a stick.
   touch: {
     buttons: [

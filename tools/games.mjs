@@ -272,14 +272,22 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   await startGame(page);
   await bridge(page, '__race');
 
-  const s = await page.evaluate(() => window.__race.sample(600));
+  // TWELVE HUNDRED, NOT SIX, AND A WIDER FLOOR.
+  //
+  // The favourite took 37% of a race with no comeback in it and takes about
+  // 32% of one with; six hundred fields is a standard deviation of nearly two
+  // points, so a floor at 28 was inside two of them and the check started
+  // failing on its own sample rather than on the game.  Twice the fields and a
+  // floor at 25 still tells a real favourite (32%) from a field of seven
+  // deciding it between them (14%), which is the thing being asked.
+  const s = await page.evaluate(() => window.__race.sample(1200));
   const fav = s.favourite;
   // Every colour wins sometimes: no frog on this machine is a dud or a lock.
   const spread = s.wins.filter((n) => n > 0).length;
-  const fair = fav > 0.28 && fav < 0.62 && spread === 7;
+  const fair = fav > 0.25 && fav < 0.62 && spread === 7;
   console.log(
     `${fair ? 'PASS' : 'FAIL'}  frog race: the favourite wins often, not always  — ` +
-      `${(fav * 100).toFixed(0)}% of 600, ${spread}/7 colours won at least one`,
+      `${(fav * 100).toFixed(0)}% of 1200, ${spread}/7 colours won at least one`,
   );
   if (!fair) failures++;
 
@@ -600,6 +608,140 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   await page.close();
 }
 
+// THE BLACK BARREL, AND THE FIRST THROW.
+//
+// Two separate promises about the climb: it is under way the moment the
+// cabinet comes up -- there is no three second grace any more -- and the black
+// one with the skull on it does not take a life off you, it takes the run.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=donkeykong`, { waitUntil: 'networkidle2' });
+  await sleep(1400);
+  await startGame(page);
+  if (await bridge(page, '__dk')) {
+    const first = await page.evaluate(() => window.__dk.state().barrels.length);
+    const thrown = first > 0;
+    console.log(
+      `${thrown ? 'PASS' : 'FAIL'}  barrel climb: he is already throwing when you arrive  — ` +
+        `${first} on the girders at the first read`,
+    );
+    if (!thrown) failures++;
+
+    // Stand the player somewhere nothing can reach.
+    await page.evaluate(() => {
+      window.__dk.teleport(0, 20);
+      window.__dk.grace(600000);
+    });
+
+    // HOW OFTEN A BLACK ONE COMES is a property of the decision behind the
+    // throw, so the decision is sampled.  Waiting for one to turn up inside a
+    // test's patience is a coin toss: at these odds a thirty second watch
+    // misses it about a third of the time, which is a check that reports the
+    // game as broken once in every three runs.
+    const kinds = await page.evaluate(() => ({
+      late: window.__dk.sampleKinds(20000, true),
+      early: window.__dk.sampleKinds(5000, false),
+      after: window.__dk.deathAfterMs,
+    }));
+    const rate = kinds.late.death / 20000;
+    const mix = rate > 0.09 && rate < 0.16 && kinds.early.death === 0 && kinds.late.hop > 0 && kinds.late.roll > 0;
+    console.log(
+      `${mix ? 'PASS' : 'FAIL'}  barrel climb: a black one in about eight, and none at the start  — ` +
+        `${(rate * 100).toFixed(1)}% of 20000 past the first ${kinds.after / 1000}s, none of 5000 before it`,
+    );
+    if (!mix) failures++;
+
+    // And one on the girders, thrown on demand so the next check is aimed at
+    // the barrel rather than at whatever happened to be rolling.
+    const deadly = await page.evaluate(async () => {
+      window.__dk.throwNow('death');
+      await new Promise((r) => requestAnimationFrame(r));
+      return window.__dk.state().barrels.find((b) => b.deadly) ?? null;
+    });
+    const arrives = !!deadly;
+    console.log(
+      `${arrives ? 'PASS' : 'FAIL'}  barrel climb: and it is a barrel like the others  — ` +
+        (deadly ? `floor ${deadly.floor} at ${deadly.x.toFixed(0)}, rolling at ${deadly.speed.toFixed(0)}` : 'none thrown'),
+    );
+    if (!arrives) failures++;
+
+    // Walk into it.  Three lives or not, that is the end of the climb.
+    const end = await page.evaluate(async () => {
+      window.__dk.grace(0);
+      const before = window.__dk.state().lives;
+      window.__dk.throwNow('death');
+      for (let i = 0; i < 1200; i++) {
+        const st = window.__dk?.state();
+        if (!st) return { before, gone: true };
+        const d = st.barrels.find((b) => b.deadly && !b.falling);
+        if (d) window.__dk.teleport(d.floor, d.x);
+        if (st.lives <= 0) return { before, after: st.lives };
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      return { before, after: window.__dk?.state().lives, timeout: true };
+    });
+    const fatal = end.after === 0 && end.before === 3;
+    console.log(
+      `${fatal ? 'PASS' : 'FAIL'}  barrel climb: touching it ends the run there and then  — ` +
+        `${end.before} lives before it, ${end.after} after`,
+    );
+    if (!fatal) failures++;
+  }
+  await page.close();
+}
+
+// AND THE BARRELS COME FROM HIM.
+//
+// He stands at the top holding the next one, and when it goes his arms go with
+// it -- rather than the barrel appearing beside a frog that never moved.  Read
+// off the pose rather than the screen: the throw is four tenths of a second
+// and a screenshot is most of that.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=donkeykong`, { waitUntil: 'networkidle2' });
+  await sleep(1400);
+  await startGame(page);
+  if (await bridge(page, '__dk')) {
+    await page.evaluate(() => {
+      window.__dk.teleport(0, 20);
+      window.__dk.grace(600000);
+    });
+    // Wait out whatever throw was already in flight when the cabinet came up.
+    for (let i = 0; i < 40 && (await page.evaluate(() => window.__dk.kong().swing)) > 0.01; i++) await sleep(100);
+    const rest = await page.evaluate(() => window.__dk.kong());
+    // The pose is applied by the game's own update, so the throw has to be
+    // read on a LATER frame than the one that started it: read on the same
+    // frame it is all still zero, which is a test of the ordering of two lines
+    // rather than of the animation.
+    const mid = await page.evaluate(async () => {
+      window.__dk.throwNow();
+      await new Promise((r) => requestAnimationFrame(r));
+      await new Promise((r) => requestAnimationFrame(r));
+      return window.__dk.kong();
+    });
+    await sleep(700);
+    const back = await page.evaluate(() => window.__dk.kong());
+
+    const throws =
+      rest.holding &&
+      rest.armL === 0 &&
+      mid.swing > 0.2 &&
+      mid.armL < -0.3 &&
+      mid.lean > 0.05 &&
+      !mid.holding &&
+      back.holding &&
+      Math.abs(back.armL) < 0.02;
+    console.log(
+      `${throws ? 'PASS' : 'FAIL'}  barrel climb: froggy kong throws them, arms and all  — ` +
+        `holding, then arms at ${mid.armL.toFixed(2)}/${mid.armR.toFixed(2)} leaning ${mid.lean.toFixed(2)}, then holding the next`,
+    );
+    if (!throws) failures++;
+  }
+  await page.close();
+}
+
 // The cabinets that hand the shell a number rather than taking the cabinet's
 // flat reward.  Banking on ENTER is the path a player who has made the bar
 // actually takes.
@@ -827,7 +969,7 @@ for (const g of [
   // to pay fifteen plus one for every further five crossings, which was a
   // formula; it is a flat twenty on a ten-token cabinet now, which is exactly
   // the standard table, so the table should be checking it.  The dance is the
-  // other way round: it pays 20, 35 or 55 depending how far up the ladder you
+  // other way round: it pays 20, 35 or 50 depending how far up the ladder you
   // got, and no row of the table says that.  Whack-a-frog joined it for the
   // same reason -- ten or fifteen off a three token cabinet, by score.
   const OWN_RULES = ['slots', 'wheel', 'blackjack', 'roulette', 'danceoff', 'carchase', 'whack'];
@@ -1593,6 +1735,110 @@ for (const g of [
   await page.close();
 }
 
+// ---- FROGGY'S ACE, WHICH IS THREE RULES AND NOT ONE.
+//
+// On two cards it is worth one, ten or eleven and the player says which; a
+// pair of them is twenty-one on the spot with nothing to decide; and from the
+// third card eleven is off the table while one and ten are still a choice.
+// All three are arithmetic, so they are asked of the arithmetic -- the hand is
+// set directly rather than played into, because playing into a specific hand
+// is a test of the shoe.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=60&game=blackjack`, { waitUntil: 'networkidle2' });
+  await sleep(2400);
+  await startGame(page);
+  if (await bridge(page, '__blackjack')) {
+    await page.evaluate(() => window.__blackjack.deal());
+    await sleep(500);
+    const r = await page.evaluate(() => {
+      const bj = window.__blackjack;
+      const at = (cards) => {
+        bj.setHands(cards, ['9♣', '7♦']);
+        return bj.state();
+      };
+      const out = {};
+      let st = at(['A♠', '6♥']);
+      out.twoChoices = st.aceChoices;
+      out.twoTotals = [];
+      for (let i = 0; i < 3; i++) {
+        const now = bj.state();
+        out.twoTotals.push(`${now.aceAs}=${now.player}`);
+        bj.flipAce();
+      }
+      st = at(['A♠', 'A♥']);
+      out.pair = { total: st.player, choices: st.aceChoices };
+      st = at(['A♠', '6♥', '2♣']);
+      out.threeChoices = st.aceChoices;
+      // and the forced change when a third card lands on an eleven
+      bj.setHands(['A♠', '6♥'], ['9♣', '7♦']);
+      while (bj.state().aceAs !== 11) bj.flipAce();
+      bj.hit();
+      const after = bj.state();
+      out.grown = { as: after.aceAs, total: after.player, over: after.player > 21 };
+      return out;
+    });
+
+    const onTwo = r.twoChoices.join(',') === '1,10,11';
+    console.log(
+      `${onTwo ? 'PASS' : 'FAIL'}  blackjack: on two cards the ace is 1, 10 or 11  — ` +
+        `${r.twoChoices.join('/')}, and A+6 reads ${r.twoTotals.join(' ')}`,
+    );
+    if (!onTwo) failures++;
+
+    const pair = r.pair.total === 21 && r.pair.choices.length === 0;
+    console.log(
+      `${pair ? 'PASS' : 'FAIL'}  blackjack: two aces are 21 with nothing to decide  — ` +
+        `${r.pair.total}, ${r.pair.choices.length} choices offered`,
+    );
+    if (!pair) failures++;
+
+    const onThree = r.threeChoices.join(',') === '1,10';
+    console.log(
+      `${onThree ? 'PASS' : 'FAIL'}  blackjack: from the third card the eleven is gone  — ` +
+        `${r.threeChoices.join('/')}`,
+    );
+    if (!onThree) failures++;
+
+    // An eleven that is no longer on offer must come down to a price that
+    // KEEPS THE HAND, not to whichever number happens to be nearest.
+    const kind = r.grown.as !== 11 && !r.grown.over;
+    console.log(
+      `${kind ? 'PASS' : 'FAIL'}  blackjack: and hitting on an eleven does not bust you by arithmetic  — ` +
+        `it came down to ${r.grown.as} for ${r.grown.total}`,
+    );
+    if (!kind) failures++;
+  }
+  await page.close();
+}
+
+// HIS CAMEO IS ONE IN TWO THOUSAND, and that number is the spawn decision
+// itself rather than a curtain drawn over a frog that was always there.  The
+// roll is sampled instead of the screen: a test that watched the holes could
+// not tell a rare guest from a common one that is usually invisible.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=40&game=whack`, { waitUntil: 'networkidle2' });
+  await sleep(1600);
+  await startGame(page);
+  if (await bridge(page, '__whack')) {
+    const n = 400000;
+    const seen = await page.evaluate((k) => window.__whack.sampleCameo(k), n);
+    // Mean 200 on 400k rolls, standard deviation about 14: this band is seven
+    // of those either way, so it catches a changed constant and not a run of
+    // luck.
+    const right = seen > 100 && seen < 320;
+    console.log(
+      `${right ? 'PASS' : 'FAIL'}  whack a frog: the cameo is one in two thousand  — ` +
+        `${seen} in ${n} rolls, which is one in ${Math.round(n / Math.max(1, seen))}`,
+    );
+    if (!right) failures++;
+  }
+  await page.close();
+}
+
 // The table and the wheel charge for the GO, not for the door: walking up to
 // either and reading the card costs nothing, and leaving costs nothing.  They
 // are also the two fixtures with a bar at the door — see the broke test above —
@@ -1760,7 +2006,21 @@ for (const g of [
   await bridge(page, '__chase');
   // Nothing may end the run while we watch the road, and the car must not be
   // able to drive into the one we are watching either.
-  await page.evaluate(() => window.__chase.shield(true));
+  //
+  // THE ROAD IS ALSO KEPT BUSY.  Traffic builds with the cash taken and this
+  // car takes none, so a stock road is two or three cars and a twenty-four
+  // second watch can genuinely contain no lane change at all -- at which point
+  // the check reports "nobody indicated" about a road where nobody moved.  Six
+  // cars, behaving exactly as they always do, is the road a player who is
+  // actually earning would be watching.
+  await page.evaluate(() => {
+    window.__chase.shield(true);
+    setInterval(() => {
+      if (window.__chase.trafficState().length < 6) {
+        window.__chase.spawnTrafficAt(Math.floor(Math.random() * 4), 10);
+      }
+    }, 1200);
+  });
 
   // ONE PASS, BOTH FACTS.  Watch the road for twenty-four seconds and file an
   // episode per SIGNAL — not per car, because a car changes lanes several
@@ -2310,9 +2570,9 @@ for (const g of [
   });
   await sleep(4200);
   const after = await page.evaluate(() => window.__froggy.state().tokens);
-  const paidAll = after - before === 55;
+  const paidAll = after - before === 50;
   console.log(
-    `${paidAll ? 'PASS' : 'FAIL'}  dance off: all three rounds pays 55  — ${before} -> ${after}, wants +55`,
+    `${paidAll ? 'PASS' : 'FAIL'}  dance off: all three rounds pays 50  — ${before} -> ${after}, wants +50`,
   );
   if (!paidAll) failures++;
   await page.close();

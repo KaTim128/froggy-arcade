@@ -66,16 +66,20 @@ const SPAWN_MS_START = 450;
 const SPAWN_MS_END = 260;
 const MAX_UP = 4;
 /**
- * How often he turns up in a hole himself.
+ * How often he turns up in a hole himself: ONE IN TWO THOUSAND APPEARANCES.
  *
  * A straight roll on every occupant that comes up, and nothing else gating it:
  * the rarity IS the spawn decision, so a player who dumps the scene graph or
  * watches the overlay finds nothing hidden — most rounds he simply was never
- * chosen.  At this rate a forty-second round is very unlikely to contain him
- * and most players will never see him at all, which is the point.  The number
- * is never shown, said, or hinted at anywhere in the game.
+ * chosen.  One roll per spawn and one spawn per hole, so he cannot arrive
+ * twice from a single decision.
+ *
+ * A thirty second round puts about eighty-five frogs up, so he is in roughly
+ * one round in twenty-four and most players will never see him at all, which
+ * is the point.  The number is never shown, said, or hinted at anywhere in the
+ * game.
  */
-const FROGGY_SPAWN_CHANCE = 1 / 200;
+const FROGGY_SPAWN_CHANCE = 1 / 2000;
 const FROGGY_STARE_MS = 1200;
 
 interface Hole {
