@@ -53,14 +53,18 @@ export class MinigameScene extends Phaser.Scene {
    * the game.  `started` is what `update` waits on.
    */
   private started = false;
+  /** Opened straight into the game, with no how-to-play card.  See `create`. */
+  private straight = false;
   private card: TutorialCard | null = null;
 
   constructor() {
     super('Minigame');
   }
 
-  init(data: { id: GameId; from?: string }): void {
+  init(data: { id: GameId; from?: string; straight?: boolean }): void {
     this.gameId = data.id;
+    // Walked up and pressed play in one motion: see `straight` below.
+    this.straight = data.straight === true;
     // Which room's floor to put the player back on.  Sending everyone to the
     // hub meant playing a cabinet in the back room spat you out two rooms away.
     this.from = data.from ?? 'ArcadeHub';
@@ -126,6 +130,59 @@ export class MinigameScene extends Phaser.Scene {
     // reads, and what a go costs — with the game unbuilt behind it.  PLAY is
     // where the tokens move and where the module is constructed.
     const mod = this.mod;
+
+    // ---- STRAIGHT IN, WITH NO CARD.
+    //
+    // Clicking the cabinet itself asks what it is, so it gets the card.
+    // Everything else that starts a game from the floor -- the E key, or a
+    // click anywhere else while stood at a machine -- is somebody who already
+    // knows and wants to play, so it goes straight to the game.  The charge is
+    // identical either way: the same debit, the same ledger reason, once.
+    //
+    // It is the same `onPlay` the card's own button runs, called directly, so
+    // there is exactly one route into a built game and no second copy of the
+    // charging rule to drift out of step with this one.
+    const start = (): void => {
+      this.card = null;
+      if (this.settled) return;
+      // MG-2: the one place in the game that charges for a play.
+      if (!def.freeToEnter) {
+        if (!ledger.debit(def.cost, 'game.cost')) {
+          // Belt and braces: the card already refuses to offer PLAY when the
+          // balance cannot cover it, so this only fires if the balance moved
+          // under us.  Either way nothing is built and nothing is taken.
+          audio.sfx('buzzer');
+          this.leave();
+          return;
+        }
+        this.stake = def.cost;
+      }
+      store.bumpGamePlayed(this.gameId);
+      store.flush();
+      mod.create(this, api);
+      this.started = true;
+      // On a phone, the cabinet's own keys become the cabinet's own buttons
+      // for as long as it is being played.  The card did not need them: it
+      // is two buttons you tap.
+      setCabinetTouch(mod.touch);
+    };
+
+    if (this.straight) {
+      // The affordability check the card would have made.  Without it a player
+      // who cannot cover the cabinet gets dropped into a built game that then
+      // refuses to charge them, which is the accidental loop this whole change
+      // is meant to close.
+      if (!def.freeToEnter && ledger.balance() < def.cost) {
+        audio.sfx('buzzer');
+        this.leave();
+        return;
+      }
+      start();
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setCabinetTouch(null));
+      this.devBridge();
+      return;
+    }
+
     this.card = showTutorial(this, {
       title: def.title,
       tutorial: mod.tutorial,
@@ -133,30 +190,7 @@ export class MinigameScene extends Phaser.Scene {
       balance: ledger.balance(),
       chargesInside: def.freeToEnter === true,
       payNote: mod.payoutNote ?? `WIN: ${def.reward} TOKENS`,
-      onPlay: () => {
-        this.card = null;
-        if (this.settled) return;
-        // MG-2: the one place in the game that charges for a play.
-        if (!def.freeToEnter) {
-          if (!ledger.debit(def.cost, 'game.cost')) {
-            // Belt and braces: the card already refuses to offer PLAY when the
-            // balance cannot cover it, so this only fires if the balance moved
-            // under us.  Either way nothing is built and nothing is taken.
-            audio.sfx('buzzer');
-            this.leave();
-            return;
-          }
-          this.stake = def.cost;
-        }
-        store.bumpGamePlayed(this.gameId);
-        store.flush();
-        mod.create(this, api);
-        this.started = true;
-        // On a phone, the cabinet's own keys become the cabinet's own buttons
-        // for as long as it is being played.  The card did not need them: it
-        // is two buttons you tap.
-        setCabinetTouch(mod.touch);
-      },
+      onPlay: start,
       onLeave: () => {
         this.card = null;
         this.leave();
@@ -168,17 +202,22 @@ export class MinigameScene extends Phaser.Scene {
       setCabinetTouch(null);
     });
 
-    if (import.meta.env?.DEV) {
-      // PRD §6.9: force win / force loss in the active minigame.
-      (window as unknown as Record<string, unknown>).__minigame = {
-        id: this.gameId,
-        win: () => this.settle(true),
-        lose: () => this.settle(false),
-      };
-      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-        delete (window as unknown as Record<string, unknown>).__minigame;
-      });
-    }
+    this.devBridge();
+  }
+
+  /** PRD §6.9: force win / force loss in the active minigame. */
+  private devBridge(): void {
+    if (!import.meta.env?.DEV) return;
+    (window as unknown as Record<string, unknown>).__minigame = {
+      id: this.gameId,
+      win: () => this.settle(true),
+      lose: () => this.settle(false),
+      /** Whether this one opened straight into play or on the card. */
+      straight: this.straight,
+    };
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      delete (window as unknown as Record<string, unknown>).__minigame;
+    });
   }
 
   update(time: number, delta: number): void {

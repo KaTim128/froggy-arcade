@@ -72,7 +72,7 @@ export class BackAlley extends Phaser.Scene {
     this.add.rectangle(DOOR_X + 21, 100, 1, 50, PALETTE.moon).setOrigin(0, 0).setAlpha(0.25);
 
     this.player = new Player(this, 70, WALK_Y, true);
-    this.player.setSurface('concrete');
+    this.player.setSurface('gravel');
 
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setOrigin(0.5, 0.5).setDepth(801).setVisible(false);
 

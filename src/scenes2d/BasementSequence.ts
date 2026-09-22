@@ -33,6 +33,22 @@ import {
 } from '../art/basementFrames';
 
 const CROSSFADE_MS = 600;
+/**
+ * THE WALK BETWEEN FRAMES.
+ *
+ * `STEP_GAP` is the pace, `STEP_JITTER` stops four steps sounding like a
+ * metronome, and `STEP_TAIL` is the quiet after the last one lands -- without
+ * it the crossfade starts on top of the final step's decay, which is the
+ * overlap this whole arrangement exists to avoid.
+ *
+ * `STEP_GAIN` is under half of what these were.  A footstep in a corridor you
+ * are creeping down is the quietest thing in it; at full level four of them
+ * was the loudest thing in the game.
+ */
+const STEP_GAP = 300;
+const STEP_JITTER = 90;
+const STEP_TAIL = 260;
+const STEP_GAIN = 0.45;
 /** He stands there this long before he comes at you.  Unskippable. */
 const STARE_MS = 3000;
 /** And the lunge itself, from first twitch to the door appearing. */
@@ -252,10 +268,18 @@ export class BasementSequence extends Phaser.Scene {
       this.time.delayedCall(900, () => fadeToScene(this, 'HideRoom3D'));
       return;
     }
+    // ---- NOTHING ADVANCES UNTIL THE WALKING HAS STOPPED.
+    //
+    // Every branch below walks first and shows second, and the gap between
+    // them is the walk's own length rather than a number that happened to
+    // look long enough.  `busy` is already true for all of it, so the arrow
+    // cannot be clicked into a second walk over the top of this one.
+    // Each of these lets its own sound land first, THEN walks, and only shows
+    // the next frame once the walk is spent -- so the wait is always the walk's
+    // real length rather than a guess that has to be kept in step with it.
     if (kind === 'door') {
       audio.sfx('door_creak');
-      this.time.delayedCall(450, () => this.walk(3));
-      this.time.delayedCall(1500, () => this.show(this.index + 1));
+      this.time.delayedCall(450, () => this.walkThenShow(3));
       return;
     }
     if (kind === 'key') {
@@ -263,32 +287,49 @@ export class BasementSequence extends Phaser.Scene {
       store.patch({ hasKey: true });
       store.flush();
       audio.sfx('lock_click');
-      this.time.delayedCall(260, () => this.walk(2));
-      this.time.delayedCall(500, () => this.show(this.index + 1));
+      this.time.delayedCall(260, () => this.walkThenShow(2));
       return;
     }
 
-    this.walk();
     if (Math.random() < 0.25) {
       this.time.delayedCall(900 + Math.random() * 900, () => audio.sfx('drip'));
     }
-    this.show(this.index + 1);
+    this.walkThenShow();
+  }
+
+  /** Walk the corridor, and step into the next frame as the last foot lands. */
+  private walkThenShow(steps = 4): void {
+    const walked = this.walk(steps);
+    this.time.delayedCall(walked, () => this.show(this.index + 1));
   }
 
   /**
-   * The sound of covering the ground between two frames.
+   * The sound of covering the ground between two frames, and HOW LONG IT TAKES.
    *
    * Each step of the sequence is a walk down a corridor, and it used to be
    * exactly one footstep: you crossed ten metres of concrete in silence and
-   * arrived with a single click.  Four of them, unevenly spaced and fading,
-   * is what makes the basement feel walked through rather than clicked through.
+   * arrived with a single click.  Four of them, unevenly spaced, is what makes
+   * the basement feel walked through rather than clicked through.
+   *
+   * IT RETURNS ITS OWN LENGTH, and that is the point.  The walk ran for better
+   * than a second while `show` was called on the same frame, so the crossfade
+   * had already put the next corridor on screen with the last two steps of the
+   * previous one still landing on it -- and a second click inside that window
+   * started a fresh four on top of the tail of the old four.  Callers wait for
+   * this number before moving on, which is what stops both.
    */
-  private walk(steps = 4): void {
+  private walk(steps = 4): number {
+    let at = 0;
     for (let i = 0; i < steps; i++) {
-      const at = i * (330 + Math.random() * 90);
-      if (i === 0) audio.sfx('footstep_concrete');
-      else this.time.delayedCall(at, () => audio.sfx('footstep_concrete'));
+      if (i === 0) audio.sfx('footstep_concrete', STEP_GAIN);
+      else {
+        const when = at;
+        this.time.delayedCall(when, () => audio.sfx('footstep_concrete', STEP_GAIN));
+      }
+      at += STEP_GAP + Math.random() * STEP_JITTER;
     }
+    // The last step is struck at `at - gap`; give it room to ring out.
+    return Math.max(0, at - STEP_GAP) + STEP_TAIL;
   }
 
   // ------------------------------------------------- frames that need scene state
@@ -372,7 +413,7 @@ export class BasementSequence extends Phaser.Scene {
     });
 
     // One dry click of a footstep behind you, then nothing at all.
-    this.time.delayedCall(260, () => audio.sfx('footstep_concrete'));
+    this.time.delayedCall(260, () => audio.sfx('footstep_concrete', STEP_GAIN));
   }
 
   /**

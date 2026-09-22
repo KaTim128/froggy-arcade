@@ -73,6 +73,9 @@ export class ExteriorDay extends Phaser.Scene {
     // You come out of the doors standing at them, so going back in is one key
     // press away — the loop is meant to be walked dozens of times.
     this.player = new Player(this, this.doorX + 16, WALK_Y, true);
+    // The forecourt is loose ground, not the arcade's carpet.  This scene
+    // never said so, which left the walk outside sounding like the walk in.
+    this.player.setSurface('gravel');
 
     // What you are carrying, and what you have made.  Cash is not tokens and
     // the HUD says so by keeping them apart and only showing cash out here.

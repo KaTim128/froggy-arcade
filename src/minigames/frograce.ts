@@ -347,6 +347,44 @@ const TONGUE_S = 0.6;
 /** How far the lick goes, in pixels.  A frog is about ten across. */
 const TONGUE_REACH = 26;
 
+/**
+ * ---- THE JETPACK.  The comeback, and the one thing on this track the card
+ * does not hint at and the tutorial does not mention.
+ *
+ * In the last stretch of the race -- the final two seconds of it, whether
+ * those are the last two before the cap or the last two before the leader
+ * crosses -- whoever is dead last may light a jetpack and come up the track at
+ * it.  It is rolled before the gun like everything else, so most races do not
+ * have one.
+ *
+ * IT DOES NOT MOVE THE CLOCK.  The burn is sized from the ground the frog has
+ * left and the time the race has left, so a lit jetpack always puts its frog
+ * on the line INSIDE the existing race -- and never after it.  What it does
+ * not guarantee is the win: it is aimed at the leader's projected arrival, and
+ * the leader is a frog with wobble and drift and a pothole in front of it, so
+ * the projection is a guess and the finish is a race.
+ */
+const JET_CHANCE = 0.3;
+/** How much of the end of the race counts as the last stretch, in seconds. */
+const JET_WINDOW_S = 2;
+/**
+ * Where it aims, as a fraction of the time the race has left when it lights.
+ *
+ * IT STRADDLES THE LEADER.  Sized entirely under 1 the burn beat the leader's
+ * projection every time and the comeback won 95% of the races it appeared in,
+ * which is not a comeback, it is an announcement -- and it took five points
+ * off the favourite in the sampler.  Straddling means some burns are aimed
+ * past the leader and get there second, and a frog that flew and lost is the
+ * point of the thing.  Either way the burn is sized inside the clock, so it is
+ * never a jetpack that runs out in the middle of the track.
+ */
+const JET_AIM = { min: 0.82, max: 1.16 };
+/** The burn will not be lit for a frog that would need to be fired up the track faster than this. */
+const JET_MAX_SPEED = 120;
+/** How high off the lane it flies, and how long it takes to get up there. */
+const JET_LIFT = 7;
+const JET_RISE_S = 0.25;
+
 /** Ten a ticket; twenty back.  Kept here so the game and the cabinet agree. */
 const TICKET = 10;
 const TICKET_PAYS = 20;
@@ -419,6 +457,9 @@ interface Run {
   lean: number;
   /** How far through a lick at the fly it is, 0..1, and which way. */
   tongue: number;
+  /** Seconds of jetpack left, and the pace it was sized to fly at. */
+  jet: number;
+  jetSpeed: number;
 }
 
 interface Racer extends Run {
@@ -455,6 +496,15 @@ interface Bird {
   y: number;
 }
 
+/**
+ * The race's one jetpack.  `armed` is a race that has one going spare;
+ * `who` is the colour wearing it once it has been lit, and -1 before that.
+ */
+interface Jet {
+  armed: boolean;
+  who: number;
+}
+
 type Phase = 'betting' | 'countdown' | 'racing' | 'result';
 
 let sceneRef: Phaser.Scene | null = null;
@@ -471,6 +521,7 @@ let bird: Bird = makeBird();
 let birdArt: Phaser.GameObjects.Container | null = null;
 let fly: Fly = makeFly();
 let flyArt: Phaser.GameObjects.Container | null = null;
+let jet: Jet = makeJet();
 /** How many tickets are on this race.  Ten tokens each, twenty back each. */
 let tickets = 1;
 let ticketLabel: Phaser.GameObjects.BitmapText | null = null;
@@ -493,7 +544,10 @@ export const frogRace: MinigameModule = {
       'SEVEN FROGS RACE. BACK ONE OF THEM.',
       'NOTHING SAYS WHICH. IT IS A GUESS.',
       'POTHOLES, NAPS, SHOVES, BALLOONS AND A BIRD.',
-      'TWENTY SECONDS. 10 A TICKET, 20 BACK.',
+      'FIRST TO THE TAPE WINS IT. AT TWENTY',
+      'SECONDS, WHOEVER IS FURTHEST UP TAKES IT.',
+      'YOUR FROG LOSES, THE TICKET IS GONE.',
+      '10 A TICKET, 20 BACK ON EACH.',
     ],
     controls: [
       ['1-7 / CLICK', 'BACK THAT FROG'],
@@ -596,6 +650,24 @@ export const frogRace: MinigameModule = {
         }),
         /** Height off the lane for every frog, so a harness can see the hop. */
         lifts: () => racers.map((r) => r.lift),
+        /** The comeback as it stands in this race: armed, lit, and who is flying. */
+        jet: () => ({
+          armed: jet.armed,
+          who: jet.who,
+          flying: racers.filter((r) => r.jet > 0).map((r) => RUNNERS[r.i].name),
+        }),
+        jetWindow: JET_WINDOW_S,
+        /**
+         * Light it now, through the real path: the window is handed to the
+         * same code the race runs, so what a harness sees is the mechanic and
+         * not a second copy of it.
+         */
+        lightJet: () => {
+          jet.armed = true;
+          jet.who = -1;
+          stepJet(jet, racers, RACE_S - JET_WINDOW_S, 0);
+          return jet.who;
+        },
         choose: (i: number) => choose(i),
         setTickets: (n: number) => setTickets(n),
         tickets: () => tickets,
@@ -612,6 +684,7 @@ export const frogRace: MinigameModule = {
             const runs = toRuns(makeField());
             const b = makeBird();
             const f = makeFly();
+            const jt = makeJet();
             const dt = 1 / 60;
             let t = 0;
             let done = 0;
@@ -621,6 +694,7 @@ export const frogRace: MinigameModule = {
               for (const r of runs) step(r, dt, runs, t);
               stepBird(b, runs, t, dt);
               stepFly(f, runs, t, dt);
+              stepJet(jt, runs, t, dt);
               // The bird PUTS THEM BACK, so `taken` is a state that comes and
               // goes: reading it at the line would say the bird never came.
               if (runs.some((r) => r.going === 'taken')) grabbed = true;
@@ -634,6 +708,70 @@ export const frogRace: MinigameModule = {
             if (grabbed) taken++;
           }
           return { meanSeconds: total / n, birdTook: taken / n, hitTheCap: capped / n };
+        },
+        /**
+         * THE COMEBACK, MEASURED.  How often a jetpack is lit, whether the
+         * burn fits inside the twenty seconds, whether its frog really was
+         * last when it went up, and how often it takes the race.
+         */
+        comeback: (n: number) => {
+          let lit = 0;
+          let inTheClock = 0;
+          let fromLast = 0;
+          let reached = 0;
+          let won = 0;
+          let fired = 0;
+          let late = 0;
+          for (let k = 0; k < n; k++) {
+            const runs = toRuns(makeField());
+            const b = makeBird();
+            const f = makeFly();
+            const jt = makeJet();
+            const dt = 1 / 60;
+            let t = 0;
+            let hero: Run | null = null;
+            let at = 0;
+            let burn = 0;
+            let behind = 0;
+            let endAt = RACE_S;
+            while (t < RACE_S) {
+              t += dt;
+              for (const r of runs) step(r, dt, runs, t);
+              stepBird(b, runs, t, dt);
+              stepFly(f, runs, t, dt);
+              const before = jt.who;
+              stepJet(jt, runs, t, dt);
+              if (jt.who >= 0 && before < 0) {
+                hero = runs.find((r) => r.i === jt.who) ?? null;
+                at = t;
+                burn = hero ? hero.jet : 0;
+                behind = hero ? runs.filter((r) => r.going !== 'taken' && r.x > hero!.x).length : 0;
+              }
+              if (runs.some((r) => r.going !== 'taken' && r.x >= DIST)) {
+                endAt = t;
+                break;
+              }
+            }
+            if (!hero) continue;
+            lit++;
+            fired += at;
+            if (at + burn <= RACE_S) inTheClock++;
+            // Last of everybody still in the race when the burn went up.
+            if (behind === runs.filter((r) => r.going !== 'taken').length - 1) fromLast++;
+            if (hero.x >= DIST) reached++;
+            if (settleField(runs) === hero.i) won++;
+            if (endAt - at <= JET_WINDOW_S + 1e-6) late++;
+          }
+          return {
+            races: n,
+            lit: lit / n,
+            inTheClock: lit ? inTheClock / lit : 0,
+            fromLast: lit ? fromLast / lit : 0,
+            reachedTheLine: lit ? reached / lit : 0,
+            won: lit ? won / lit : 0,
+            insideTheWindow: lit ? late / lit : 0,
+            meanFiredAt: lit ? fired / lit : 0,
+          };
         },
         /** Run a race to the line without drawing it, for sampling the odds. */
         sample: (n: number) => {
@@ -674,6 +812,9 @@ export const frogRace: MinigameModule = {
       for (const r of racers) step(r, dt, racers, raceT);
       stepBird(bird, racers, raceT, dt);
       stepFly(fly, racers, raceT, dt);
+      const wasLit = jet.who;
+      stepJet(jet, racers, raceT, dt);
+      if (jet.who >= 0 && wasLit < 0) audio.sfx('throw_whoosh', 0.75);
       if (bird.phase === 1 && bird.t <= dt) audio.sfx('throw_whoosh', 0.5);
 
       const home = racers.filter((r) => r.going !== 'taken' && r.x >= DIST);
@@ -727,6 +868,11 @@ export const frogRace: MinigameModule = {
         body.setScale(0.92, 1.12);
         body.setRotation(-0.18);
         body.y = laneY - 1;
+      } else if (r.jet > 0) {
+        // ---- ON THE JETPACK.  Flat out, nose up, and shaking with it.
+        body.setScale(1.18, 0.88);
+        body.setRotation(-0.22 + Math.sin(clock / 30) * 0.05);
+        body.y = laneY - r.lift;
       } else if (r.balloon > 0) {
         // ---- UNDER A BALLOON.  Hanging, and swinging a little.
         body.setScale(0.95, 1.05);
@@ -752,6 +898,17 @@ export const frogRace: MinigameModule = {
       }
       const balloon = body.getData('balloon') as Phaser.GameObjects.Container | undefined;
       if (balloon) balloon.setVisible(r.balloon > 0);
+      const pack = body.getData('jet') as Phaser.GameObjects.Container | undefined;
+      if (pack) {
+        pack.setVisible(r.jet > 0);
+        if (r.jet > 0) {
+          // The flame guttering, so the burn reads as a burn rather than a
+          // triangle glued to a frog.
+          const lick = 0.7 + Math.abs(Math.sin(clock / 40)) * 0.8;
+          (body.getData('flame') as Phaser.GameObjects.Triangle).setScale(lick, 1);
+          (body.getData('ember') as Phaser.GameObjects.Triangle).setScale(lick * 1.2, 1);
+        }
+      }
       const tongue = body.getData('tongue') as Phaser.GameObjects.Rectangle | undefined;
       if (tongue) {
         tongue.setVisible(r.going === 'tongue');
@@ -820,6 +977,22 @@ export const frogRace: MinigameModule = {
 function step(r: Run, dt: number, field?: Run[], raceT = 0): void {
   if (r.lean > 0) r.lean -= dt;
   if (r.going === 'taken') return;
+
+  // ---- ON THE JETPACK.  Nothing on the track reaches a frog that is off it:
+  // no hop, no pothole, no landing to slip on.  It flies the pace it was sized
+  // to fly and it comes down when the burn is out.
+  if (r.jet > 0) {
+    r.jet -= dt;
+    r.hop = (r.hop + dt * 3) % 1;
+    r.lift = Math.min(JET_LIFT, r.lift + (JET_LIFT / JET_RISE_S) * dt);
+    r.x = Math.min(DIST, r.x + r.jetSpeed * dt);
+    if (r.jet <= 0 || r.x >= DIST) {
+      r.jet = 0;
+      r.lift = 0;
+      r.hop = 0;
+    }
+    return;
+  }
 
   if (r.going !== 'run') {
     // In a hole, on its face, asleep, or busy with a fly.  The clock runs;
@@ -935,6 +1108,57 @@ function step(r: Run, dt: number, field?: Run[], raceT = 0): void {
     r.stuck = SLIP_S;
     r.lift = 0;
   }
+}
+
+/** A jetpack, or not.  Rolled before the gun, the same as the bird and the fly. */
+function makeJet(): Jet {
+  return { armed: Math.random() < JET_CHANCE, who: -1 };
+}
+
+/**
+ * THE COMEBACK, and the arithmetic that keeps it inside the clock.
+ *
+ * Every tick it asks how long the race has left -- the smaller of the cap and
+ * the leader's own run to the line at the pace its form says it runs -- and
+ * does nothing until that is inside the last stretch.  Then it takes whoever
+ * is genuinely last, sizes a burn that lands them on the line before the race
+ * ends, and lights it.  One per race: it is spent whether it fires or not, so
+ * a frog too far back to be got there honestly is a race without a comeback
+ * rather than a jetpack that gets cheaper every tick.
+ */
+function stepJet(j: Jet, runs: Run[], raceT: number, dt: number): void {
+  void dt;
+  if (!j.armed) return;
+  const live = runs.filter((r) => r.going !== 'taken' && r.x < DIST);
+  if (live.length < 2) return;
+
+  const leader = live.reduce((a, b) => (b.x > a.x ? b : a));
+  const leaderPace = Math.max(4, BASE + leader.form * SPREAD + leader.luck);
+  const endsIn = Math.min((DIST - leader.x) / leaderPace, RACE_S - raceT);
+  if (endsIn > JET_WINDOW_S) return;
+
+  // Spent from here, whichever way it goes.
+  j.armed = false;
+
+  const last = live.reduce((a, b) => (b.x < a.x ? b : a));
+  if (last === leader) return;
+
+  const aim = JET_AIM.min + Math.random() * (JET_AIM.max - JET_AIM.min);
+  // Aimed past the leader or not, it has to be on the line before the cap.
+  const burn = Phaser.Math.Clamp(endsIn * aim, 0.3, Math.max(0.3, RACE_S - raceT - 0.05));
+  const need = (DIST - last.x) / burn;
+  if (need > JET_MAX_SPEED) return;
+
+  j.who = last.i;
+  // The burn takes it out of whatever it was in -- a hole, a nap, its own face.
+  last.going = 'run';
+  last.stuck = 0;
+  last.balloon = 0;
+  last.balloonAt = -1;
+  last.tongue = 0;
+  last.jet = burn;
+  last.jetSpeed = need;
+  last.lift = 0;
 }
 
 /** A bird, or not.  One per race, timed before the gun like everything else. */
@@ -1128,6 +1352,8 @@ function toRuns(
     holes: f.holes,
     holeAt: 0,
     lift: 0,
+    jet: 0,
+    jetSpeed: 0,
   }));
 }
 
@@ -1163,6 +1389,7 @@ function simulate(
   const runs = toRuns(field);
   const bird = makeBird();
   const fly = makeFly();
+  const jet = makeJet();
   const dt = 1 / 60;
   let t = 0;
   while (t < RACE_S) {
@@ -1170,6 +1397,7 @@ function simulate(
     for (const r of runs) step(r, dt, runs, t);
     stepBird(bird, runs, t, dt);
     stepFly(fly, runs, t, dt);
+    stepJet(jet, runs, t, dt);
     const home = runs.filter((r) => r.going !== 'taken' && r.x >= DIST);
     if (home.length) return settleField(runs);
   }
@@ -1184,6 +1412,7 @@ function draft(scene: Phaser.Scene): void {
   birdArt = makeBird4(scene);
   fly = makeFly();
   flyArt = makeFlyArt(scene);
+  jet = makeJet();
 
   // The potholes, dug where the model says they are.  Drawn UNDER the frogs
   // and over the lane, so a frog in one is visibly down in it.
@@ -1309,6 +1538,20 @@ function makeFrog(scene: Phaser.Scene, colour: number): Phaser.GameObjects.Conta
   const balloon = scene.add.container(0, 0, [string, skin, shine, knot]).setVisible(false);
   c.add(balloon);
   c.setData('balloon', balloon);
+
+  // The jetpack: a tank on its back and the flame off the bottom of it, both
+  // hidden until the last stretch of a race that has one in it.
+  const tank = scene.add.rectangle(-6, -2, 4, 7, PALETTE.ash);
+  const cap = scene.add.rectangle(-6, -5, 5, 1, PALETTE.bone);
+  // The thrust goes BACKWARDS, which is the only reason the frog is going
+  // forwards: a flame under a frog reads as a frog on fire.
+  const flame = scene.add.triangle(-11, 1, 0, 0, 0, 5, -7, 2.5, PALETTE.gold);
+  const ember = scene.add.triangle(-9, 1, 0, 0, 0, 3, -4, 1.5, PALETTE.cream);
+  const pack = scene.add.container(0, 0, [tank, cap, flame, ember]).setVisible(false);
+  c.add(pack);
+  c.setData('jet', pack);
+  c.setData('flame', flame);
+  c.setData('ember', ember);
 
   // And the tongue, which is one pink rectangle that grows out of its mouth.
   const tongue = scene.add.rectangle(4, -2, 1, 1.5, 0xff6f91).setOrigin(0.5, 0.5).setVisible(false);

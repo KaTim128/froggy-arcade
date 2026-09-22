@@ -106,7 +106,7 @@ export class ArcadeCasino extends Phaser.Scene {
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => {
           if (this.busy()) return;
-          this.launchGame(cab);
+          this.launchGame(cab, 'card');
         });
     }
 
@@ -259,17 +259,34 @@ export class ArcadeCasino extends Phaser.Scene {
       this.toAnnex();
       return;
     }
-    this.launchGame(this.target.cab);
+    this.launchGame(this.target.cab, 'play');
   }
 
   private toAnnex(): void {
     this.locked = true;
-    audio.sfx('footstep_concrete');
+    audio.sfx('footstep_carpet');
     froggyLayer.clear();
     fadeToScene(this, 'ArcadeAnnex');
   }
 
-  private launchGame(cab: Fixture): void {
+  /**
+   * Into a cabinet, one of two ways.
+   *
+   * `how` is WHICH KIND OF ASK THIS WAS, and it is the whole of the rule:
+   *
+   *   'card'   the player clicked the machine itself.  That is a question --
+   *            what is this, what does it cost -- so it gets the how-to-play
+   *            card and nothing is charged until they press PLAY.
+   *   'play'   the player pressed E, or clicked somewhere else on the floor
+   *            while stood at a machine.  That is not a question, it is an
+   *            instruction, so it goes straight into the game and the token
+   *            moves on the way in.
+   *
+   * It used to be one route for both, which meant a click anywhere on the
+   * floor near a cabinet opened the card for it -- the player had asked to
+   * play and been handed a leaflet.
+   */
+  private launchGame(cab: Fixture, how: 'card' | 'play'): void {
     const { cost } = cab.def;
     // Two different bars, and which one applies is decided by where the money
     // changes hands.  A coin-op cabinet takes nothing at the door: the
@@ -293,7 +310,7 @@ export class ArcadeCasino extends Phaser.Scene {
     }
     this.locked = true;
     froggyLayer.clear();
-    fadeToScene(this, 'Minigame', { id: cab.def.id, from: 'ArcadeCasino' });
+    fadeToScene(this, 'Minigame', { id: cab.def.id, from: 'ArcadeCasino', straight: how === 'play' });
   }
 
   /**

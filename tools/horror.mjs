@@ -490,6 +490,108 @@ try {
     await page.close();
   }
 
+  // -------------------------------------------- the gallery behind the wall
+  //
+  // There is a stretch of the right-hand wall in each of the three rooms that
+  // you can walk through, and behind it is a warm lounge with a staircase up
+  // to a pane of glass.  UNDER THE GLASS IS THE ROOM YOU JUST LEFT, with the
+  // hunt still running in it.
+  //
+  // Three things have to hold or the gallery is a lie: the enclosure has to be
+  // THIS round's room, the thing in it has to be the room's own Froggy rather
+  // than a second one with its own ideas, and nothing down there can reach the
+  // player.  All three are checked in every room, because the enclosure is
+  // built from whichever definition the round happens to be running.
+  console.log('\nhorror  the gallery behind the wall');
+  for (const room of [0, 1, 2]) {
+    const page = await newPage(`?intro=1&charity=1&key=1&route=hide&hideRoom=${room}&scene=HideRoom3D`);
+    const hide = () => page.evaluate(() => window.__hide ?? null);
+    let waited = 0;
+    while (waited < 60000 && (await hide())?.mode !== 'seeking') {
+      await sleep(500);
+      waited += 500;
+    }
+    const before = await hide();
+    check(`room ${room + 1}: there is a way through the wall`, before.hasSecret && before.secretDoorZ !== null,
+      `secret door at z=${before.secretDoorZ}`);
+
+    await page.evaluate(() => window.__hide.toSecret());
+    await sleep(600);
+    const inside = await hide();
+    check(`room ${room + 1}: and the enclosure under the glass is this room`,
+      inside.inSecret && inside.pen && inside.pen.room === before.roomName,
+      `${inside.pen?.room} vs ${before.roomName}, ${inside.pen?.props} props at 1:${(1 / (inside.pen?.scale || 1)).toFixed(1)}`);
+
+    // Him, for three seconds: the twin has to stay on top of the real one and
+    // the real one has to keep working the room.  A twin that tracked a
+    // standing still Froggy would pass the first half of this and fail the
+    // second.
+    let apart = 0;
+    let went = 0;
+    let at = { x: inside.fx, z: inside.fz };
+    for (let i = 0; i < 12; i++) {
+      await sleep(250);
+      const t = await hide();
+      apart = Math.max(apart, Math.hypot(t.fx - t.pen.x, t.fz - t.pen.z));
+      went += Math.hypot(t.fx - at.x, t.fz - at.z);
+      at = { x: t.fx, z: t.fz };
+    }
+    check(`room ${room + 1}: the thing in it is the one hunting you, not a second one`, apart < 0.6,
+      `never more than ${apart.toFixed(2)}m apart`);
+    check(`room ${room + 1}: and he is still searching while you watch`, went > 1.5,
+      `${went.toFixed(1)}m covered in three seconds`);
+
+    const safe = await hide();
+    check(`room ${room + 1}: he cannot touch you through it`,
+      safe.mode === 'seeking' && !safe.hiding && safe.froggyMode !== 'chase',
+      `round is ${safe.mode}, he is ${safe.froggyMode}`);
+    check(`room ${room + 1}: and running in here is worth double`,
+      safe.runNow === before.runNow * safe.secretRun && safe.secretRun === 2,
+      `${before.runNow} -> ${safe.runNow}`);
+    await page.close();
+  }
+
+  // ----------------------------------------- and the pace is handed back
+  // The double is read off the room the player is standing in every frame
+  // rather than latched on the way in, so it has to be gone the moment they
+  // are out.  Driven the long way round -- in through the wall, across the
+  // lounge to the pedestal, out through the button -- because that is the only
+  // way a player ever leaves.
+  {
+    const page = await newPage('?intro=1&charity=1&key=1&route=hide&hideRoom=0&scene=HideRoom3D');
+    const hide = () => page.evaluate(() => window.__hide ?? null);
+    let waited = 0;
+    while (waited < 60000 && (await hide())?.mode !== 'seeking') {
+      await sleep(500);
+      waited += 500;
+    }
+    await page.evaluate(() => window.__hide.toSecret());
+    await sleep(700);
+    await page.mouse.click(640, 360);
+    await sleep(200);
+    const go = async (key, ms) => {
+      await page.keyboard.down(key);
+      await sleep(ms);
+      await page.keyboard.up(key);
+    };
+    await page.keyboard.down('ShiftLeft');
+    await go('KeyA', 950);
+    await sleep(150);
+    await go('KeyW', 700);
+    await page.keyboard.up('ShiftLeft');
+    await sleep(300);
+    const atIt = await hide();
+    check('the way on is a button you walk to', atIt.atButton && atIt.prompt.includes('E'),
+      `at ${atIt.px.toFixed(1)},${atIt.pz.toFixed(1)} — "${atIt.prompt}"`);
+    await page.keyboard.press('KeyE');
+    await sleep(2600);
+    const out = await hide();
+    check('and taking it puts you in the next room at the old pace',
+      out && out.room === 1 && !out.inSecret && out.runNow === 4,
+      `room ${out?.room}, running at ${out?.runNow}`);
+    await page.close();
+  }
+
   // ------------------------------------------------- the rooms, on the page
   // Furniture is added by hand, and a prop dropped on top of a hiding place
   // is invisible from anywhere except inside the game with a torch.  The

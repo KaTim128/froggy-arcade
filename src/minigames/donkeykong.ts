@@ -71,6 +71,31 @@ const BOUNCER_CHANCE = 0.4;
 const MAX_BARRELS = 12;
 
 /**
+ * How much two barrels of the same kind differ.  A girder of barrels all
+ * travelling at exactly one speed is a conveyor belt; a tenth either way is
+ * enough that they pull apart and bunch up on their own.
+ */
+const SPEED_SPREAD = 0.12;
+/**
+ * BUMPING.  Close enough to be one object, and something has to give.
+ *
+ * The barrels used to QUEUE: the one behind eased off to hold a gap, down to a
+ * fifth of its pace.  What that produced is the thing this game was reported
+ * for -- three barrels nose to tail, crawling down the girder at walking pace,
+ * occupying the crossing for four or five seconds with no way past and no way
+ * to make them go away.  Slowing a hazard down makes it last longer, which is
+ * the opposite of what a queue is for.
+ *
+ * Now nobody brakes.  Every barrel runs at its own pace for its whole life,
+ * and when a faster one catches a slower one THE BACK ONE GOES OVER THE EDGE:
+ * it drops to the girder below at the point of the bump, the same way a barrel
+ * that took a ladder does.  The pile-up cannot form, the path clears itself in
+ * a frame, and what the player sees is two barrels colliding and one of them
+ * falling off -- which is what barrels do.
+ */
+const BUMP_GAP = BARREL_R * 2;
+
+/**
  * NO TWO BARRELS MAY ASK FOR OPPOSITE THINGS AT THE SAME PLACE.
  *
  * The two kinds have deliberately opposite answers — you JUMP an orange roller
@@ -84,9 +109,9 @@ const MAX_BARRELS = 12;
  * Three rules keep the barrels hard and keep them passable, and none of them
  * moves a barrel to somewhere it was not:
  *
- *   SPACING   a barrel never closes on the one in front of it; it eases off
- *             and queues instead.  Mixed pairs keep a wider gap than matched
- *             ones, because a mixed pair is a harder question.
+ *   BUMPING   a barrel that catches the one in front knocks it off the
+ *             girder -- see BUMP_GAP.  Nothing slows down; the pile is
+ *             removed instead of being queued.
  *   SETTLING  a bouncer near a roller finishes its hop and STAYS DOWN until it
  *             is clear again.  Both are then ground-level and a single jump
  *             clears the pair.
@@ -98,8 +123,6 @@ const MAX_BARRELS = 12;
  * really one hazard.
  */
 const JUMP_SPAN = Math.round(RUN * ((2 * -JUMP_V) / GRAVITY));
-/** Matched pair: one jump's worth of room between them. */
-const SAFE_GAP = JUMP_SPAN + 6;
 /** Mixed pair, both going the same way: a whole extra jump of room. */
 const MIXED_GAP = JUMP_SPAN * 2;
 /**
@@ -140,6 +163,8 @@ interface Ladder {
 }
 
 interface Barrel {
+  /** Only so a harness can follow one barrel across frames. */
+  id: number;
   x: number;
   y: number;
   floor: number;
@@ -149,7 +174,13 @@ interface Barrel {
   bouncer: boolean;
   /** Where the bouncer is in its hop, radians. */
   phase: number;
-  dot: Phaser.GameObjects.Arc;
+  dot: Phaser.GameObjects.Container;
+  /**
+   * ITS OWN PACE, AND NOTHING ELSE'S.  Drawn once when it is thrown and never
+   * touched again: the barrels used to slow each other down (see BUMPING), so
+   * a girder with three on it crawled and the crawl was the thing in the way.
+   */
+  speed: number;
   /**
    * The ladder this barrel has already flipped a coin for, so the 50/50 is
    * decided once per crossing.  Rolling every frame inside the window compounds
@@ -157,9 +188,8 @@ interface Barrel {
    * ladder.
    */
   rolledAt: number | null;
-  /** Recomputed every frame — see the spacing rules above. */
+  /** Recomputed every frame — see the rules above. */
   settled: boolean;
-  brake: number;
   /** A bouncer's height above the girder.  Held separately from `phase` so a
    * settling one can be brought down faster than its own arc would. */
   lift: number;
@@ -167,6 +197,7 @@ interface Barrel {
 
 let ladders: Ladder[] = [];
 let barrels: Barrel[] = [];
+let barrelNo = 0;
 let player = { x: 0, y: 0, vy: 0, floor: 0, onLadder: false, climbing: false };
 let sprite: Phaser.GameObjects.Rectangle | null = null;
 let hat: Phaser.GameObjects.Rectangle | null = null;
@@ -180,6 +211,17 @@ let dying = false;
 let invulnMs = 0;
 /** Where barrels have gone down, so the 50/50 is measurable rather than assumed. */
 let drops = { ladder: 0, end: 0 };
+/**
+ * FROGGY KONG, and how far through a throw he is.  See makeKong.
+ *
+ * He is drawn at his own comfortable size and then brought down to fit: the
+ * top girder is at 46 and the cabinet's own header eats everything above 18,
+ * so he has 28 pixels to stand in and he is built in forty.
+ */
+const KONG_SCALE = 0.62;
+let kong: Phaser.GameObjects.Container | null = null;
+let throwT = 0;
+const THROW_S = 0.42;
 let hud: Phaser.GameObjects.BitmapText | null = null;
 let keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
 let apiRef: MinigameApi | null = null;
@@ -193,7 +235,11 @@ export const donkeyKong: MinigameModule = {
   tutorial: {
     objective: [
       'CLIMB TO THE EXIT AT THE TOP.',
-      'THE BARRELS TAKE A LIFE.',
+      'FROGGY KONG THROWS BARRELS DOWN AT YOU.',
+      'EACH ONE TAKES A LIFE. YOU HAVE THREE.',
+      'YELLOW ROLLS AT YOU - JUMP IT.',
+      'ORANGE HOPS - WALK UNDER IT WHILE IT IS UP.',
+      'ONE THAT CATCHES ANOTHER KNOCKS IT OFF.',
     ],
     controls: [
       ['A / D', 'RUN'],
@@ -255,9 +301,7 @@ export const donkeyKong: MinigameModule = {
 
     // the thing at the top that keeps rolling them
     const top = FLOORS[FLOORS.length - 1];
-    scene.add.rectangle(LEFT + 6, top - 20, 22, 20, 0x5a3a22).setOrigin(0, 0);
-    scene.add.rectangle(LEFT + 10, top - 16, 5, 5, PALETTE.blood).setOrigin(0, 0);
-    scene.add.rectangle(LEFT + 19, top - 16, 5, 5, PALETTE.blood).setOrigin(0, 0);
+    kong = makeKong(scene, LEFT + 20, top);
     // and the way out, at the very top
     scene.add.rectangle(RIGHT - 30, top - 14, 16, 14, PALETTE.gold).setOrigin(0, 0);
     text(scene, RIGHT - 34, top - 24, 'OUT', PALETTE.gold);
@@ -281,6 +325,13 @@ export const donkeyKong: MinigameModule = {
           barrels = [];
           spawnTimer = 1e9;
         },
+        /**
+         * Stand the player down for a while, so the barrels can be watched for
+         * a minute without the climb ending underneath the measurement.
+         */
+        grace: (ms: number) => {
+          invulnMs = ms;
+        },
         teleport: (floor: number, x: number) => {
           player.floor = floor;
           player.x = x;
@@ -294,6 +345,7 @@ export const donkeyKong: MinigameModule = {
           lives,
           ladders: ladders.map((l) => ({ ...l })),
           barrels: barrels.map((b) => ({
+            id: b.id,
             x: b.x,
             y: b.y,
             floor: b.floor,
@@ -301,6 +353,7 @@ export const donkeyKong: MinigameModule = {
             bouncer: b.bouncer,
             falling: b.falling,
             settled: b.settled,
+            speed: b.speed,
             /** How far off the girder it is. */
             lift: b.bouncer ? b.lift : 0,
             /** Off the girder far enough that a standing player walks under it. */
@@ -336,6 +389,7 @@ export const donkeyKong: MinigameModule = {
 
     if (!dying) movePlayer(dt);
     stepBarrels(dt);
+    stepKong(dt);
 
     // They come faster the longer you take, so stalling is not a strategy.
     spawnTimer -= delta;
@@ -364,6 +418,8 @@ export const donkeyKong: MinigameModule = {
 
   destroy() {
     barrels = [];
+    kong = null;
+    throwT = 0;
     sprite = null;
     hat = null;
     hud = null;
@@ -464,11 +520,10 @@ function spawnBarrel(): void {
   if (!sceneRef || barrels.length >= MAX_BARRELS) return;
   const topFloor = FLOORS.length - 1;
   const bouncer = Math.random() < BOUNCER_CHANCE;
-  const dot = sceneRef.add
-    .circle(LEFT + 20, FLOORS[topFloor] - BARREL_R, BARREL_R, bouncer ? PALETTE.neon : 0xd9822b)
-    .setStrokeStyle(1, bouncer ? 0x8a2050 : 0x7a4a18)
-    .setDepth(15);
+  const dot = makeBarrel(sceneRef, bouncer);
+  dot.setPosition(LEFT + 20, FLOORS[topFloor] - BARREL_R);
   barrels.push({
+    id: ++barrelNo,
     x: LEFT + 20,
     y: FLOORS[topFloor] - BARREL_R,
     floor: topFloor,
@@ -479,15 +534,158 @@ function spawnBarrel(): void {
     dot,
     rolledAt: null,
     settled: false,
-    brake: 1,
+    speed: (bouncer ? BOUNCER_SPEED : BARREL_SPEED) * (1 + (Math.random() - 0.5) * 2 * SPEED_SPREAD),
     lift: 0,
   });
   audio.sfx(bouncer ? 'hop_wet' : 'door_rattle');
+  throwT = THROW_S;
 }
 
-/** How fast a barrel would go on an empty girder. */
-function barrelSpeed(b: Barrel): number {
-  return b.bouncer ? BOUNCER_SPEED : BARREL_SPEED;
+/**
+ * A BARREL THAT LOOKS LIKE A BARREL.
+ *
+ * It was a circle with a ring round it, which at eight pixels is a coin.  A
+ * barrel is a cylinder coming at you end-on: circular ends, and sides that
+ * bulge out between them.  Three tones do the bulge -- a lit top-left, the
+ * body, and the shadow under the far curve -- and the two hoops read as hoops
+ * because they are drawn on the curve rather than across it.
+ *
+ * Yellow for the ones you jump, orange for the ones that hop, and they are
+ * different shapes as well as different colours: colour alone is a coin toss
+ * for anyone who cannot separate the two, and these two want OPPOSITE inputs.
+ */
+function makeBarrel(scene: Phaser.Scene, bouncer: boolean): Phaser.GameObjects.Container {
+  const skin = bouncer ? 0xf08a2c : 0xf0c33c;
+  const lit = bouncer ? 0xffc06a : 0xffe89a;
+  const dark = bouncer ? 0x9c4a10 : 0xa8801a;
+  const hoop = bouncer ? 0x6d3208 : 0x6e5410;
+  // THE RIM DOES NOT TURN, THE STAVES DO.  Everything that spins lives in its
+  // own container inside this one: spinning the whole barrel turned its
+  // silhouette into a four-pointed thing every eighth of a turn, because the
+  // hoops stuck out past the curve.  Now the outline stays a barrel end and
+  // what goes round is what would actually go round.
+  const rim = [
+    scene.add.circle(0, 0, BARREL_R + 0.5, dark),
+    scene.add.circle(0, 0, BARREL_R, skin),
+  ];
+  const spun = [
+    // the shadow down the far side of the curve
+    scene.add.ellipse(1.4, 0.8, BARREL_R * 1.4, BARREL_R * 1.7, dark).setAlpha(0.5),
+    // the hoops, one either side of the end
+    scene.add.rectangle(-2.4, 0, 1, BARREL_R * 1.7, hoop),
+    scene.add.rectangle(2.4, 0, 1, BARREL_R * 1.7, hoop),
+    // and the end itself, which is what you are actually looking at
+    scene.add.circle(-0.4, -0.4, BARREL_R - 1.4, lit),
+    scene.add.circle(-0.4, -0.4, BARREL_R - 2.6, skin),
+  ];
+  const spin = scene.add.container(0, 0, spun);
+  const c = scene.add.container(0, 0, [...rim, spin]).setDepth(15);
+  c.setData('spin', spin);
+  return c;
+}
+
+/**
+ * FROGGY KONG.
+ *
+ * He was a brown rectangle with two red squares on it, which is a box with
+ * eyes: nothing about it said frog, said animal, or said which way it was
+ * facing.  He is built here the way the arcade's own props are -- rounded
+ * shapes, three tones a piece, and the shading all coming from one side -- so
+ * that a flat sprite reads as something with a front and a back and a bulk to
+ * it.
+ *
+ * Everything hangs off ONE container at his feet, so the whole of him can be
+ * leaned into a throw without a single part having to be moved by hand.
+ */
+function makeKong(scene: Phaser.Scene, x: number, groundY: number): Phaser.GameObjects.Container {
+  const SKIN = 0x4e9c4a;
+  const LIT = 0x76c86a;
+  const DARK = 0x2c6330;
+  const BELLY = 0xd8e3a8;
+
+  const part = (o: Phaser.GameObjects.GameObject) => o;
+  const bits: Phaser.GameObjects.GameObject[] = [
+    // haunches, folded under him: the widest thing about him, at the bottom
+    part(scene.add.ellipse(-9, -5, 12, 11, DARK)),
+    part(scene.add.ellipse(9, -5, 12, 11, DARK)),
+    part(scene.add.ellipse(-9, -6, 9, 8, SKIN)),
+    part(scene.add.ellipse(9, -6, 9, 8, SKIN)),
+    // feet, splayed forward
+    part(scene.add.ellipse(-11, -1, 9, 4, DARK)),
+    part(scene.add.ellipse(11, -1, 9, 4, DARK)),
+    // the body: a big barrel chest with the light coming from the left
+    part(scene.add.ellipse(0, -14, 24, 20, SKIN)),
+    part(scene.add.ellipse(5, -13, 16, 17, DARK).setAlpha(0.45)),
+    part(scene.add.ellipse(-6, -18, 10, 11, LIT).setAlpha(0.5)),
+    part(scene.add.ellipse(0, -11, 13, 11, BELLY)),
+    part(scene.add.ellipse(0, -9, 10, 6, 0xeef3cc).setAlpha(0.6)),
+  ];
+  // arms, out in front and low, because they are for picking barrels up
+  const arms: Phaser.GameObjects.GameObject[] = [
+    scene.add.ellipse(-13, -13, 7, 14, SKIN),
+    scene.add.ellipse(13, -13, 7, 14, SKIN),
+    scene.add.ellipse(-13, -16, 6, 7, LIT).setAlpha(0.45),
+    scene.add.ellipse(13, -16, 6, 7, LIT).setAlpha(0.45),
+    scene.add.ellipse(-14, -7, 8, 5, DARK),
+    scene.add.ellipse(14, -7, 8, 5, DARK),
+  ];
+  // the head: wide, low on the shoulders, with the eyes ON TOP of it
+  const head: Phaser.GameObjects.GameObject[] = [
+    scene.add.ellipse(0, -26, 22, 13, SKIN),
+    scene.add.ellipse(4, -25, 15, 10, DARK).setAlpha(0.4),
+    scene.add.ellipse(-5, -29, 9, 6, LIT).setAlpha(0.5),
+    // the mouth, a hard line across the whole width of it
+    scene.add.rectangle(0, -22, 19, 1.5, 0x1b3a1f),
+    // eye mounds, then the eyes, then the pupils
+    scene.add.circle(-6, -33, 5, SKIN),
+    scene.add.circle(6, -33, 5, SKIN),
+    scene.add.circle(-6, -34, 3.6, PALETTE.cream),
+    scene.add.circle(6, -34, 3.6, PALETTE.cream),
+    scene.add.circle(-6, -34, 1.8, 0x101418),
+    scene.add.circle(6, -34, 1.8, 0x101418),
+    scene.add.circle(-7, -35.4, 0.9, PALETTE.white).setAlpha(0.8),
+    scene.add.circle(5, -35.4, 0.9, PALETTE.white).setAlpha(0.8),
+  ];
+  const c = scene.add.container(x, groundY, [...bits, ...arms, ...head]).setDepth(14);
+  c.setScale(KONG_SCALE);
+  c.setData('arms', arms);
+  return c;
+}
+
+/**
+ * The throw, which is the only thing he ever does.
+ *
+ * He rocks forward over the barrel as it leaves him and settles back, and he
+ * breathes the rest of the time -- a thing at the top of the screen that never
+ * moves is scenery, and the barrels are supposed to be coming from HIM.
+ */
+function stepKong(dt: number): void {
+  if (!kong) return;
+  if (throwT > 0) throwT = Math.max(0, throwT - dt);
+  const k = throwT / THROW_S;
+  // out and back inside the one beat
+  const swing = Math.sin((1 - k) * Math.PI);
+  kong.setRotation(-0.22 * swing);
+  kong.setScale(KONG_SCALE * (1 + 0.06 * swing), KONG_SCALE * (1 - 0.05 * swing + Math.sin(elapsed / 620) * 0.012));
+  for (const a of kong.getData('arms') as Phaser.GameObjects.Ellipse[]) {
+    a.setScale(1, 1 + 0.25 * swing);
+  }
+}
+
+/**
+ * Knocked off the girder by the one behind it, at the point of the bump.
+ *
+ * The same fall a barrel takes off the end or down a ladder, so there is one
+ * way a barrel changes floor and one place it is handled.  On the bottom
+ * girder there is nothing below to fall to, so it simply rolls on and retires
+ * off the end as it always would.
+ */
+function knockOff(b: Barrel): void {
+  if (b.floor === 0 || b.falling) return;
+  b.floor--;
+  b.falling = true;
+  b.rolledAt = null;
+  audio.sfx('item_thud', 0.35);
 }
 
 /**
@@ -496,10 +694,7 @@ function barrelSpeed(b: Barrel): number {
  * wall no input can answer.
  */
 function spaceBarrels(): void {
-  for (const b of barrels) {
-    b.settled = false;
-    b.brake = 1;
-  }
+  for (const b of barrels) b.settled = false;
   for (let i = 0; i < barrels.length; i++) {
     const b = barrels[i];
     if (b.falling) continue;
@@ -514,19 +709,32 @@ function spaceBarrels(): void {
       const gap = Math.abs(o.x - b.x);
       const mixed = b.bouncer !== o.bouncer;
 
-      // SPACING.  Only the one behind gives way, and only to the one it is
-      // actually driving into: `o` has to be ahead of `b` along b's own line.
-      if (!o.falling && Math.sign(o.x - b.x) === b.dir) {
-        const need = mixed ? MIXED_GAP : SAFE_GAP;
-        if (gap < need) b.brake = Math.min(b.brake, Phaser.Math.Clamp(gap / need, 0.2, 1));
+      // BUMPING.  Close enough to be one object, and the one that drove into
+      // the other goes over the edge.  Nothing here slows anything down -- see
+      // BUMP_GAP.
+      //
+      // Which one that is has two answers.  Running the same way it is the one
+      // BEHIND, which is the one that caught up.  Head on it is neither and
+      // both, so it is the one that was thrown last: the older barrel has been
+      // on that girder longer and has more claim to it.  Without the head-on
+      // case two barrels closing from opposite ends simply passed through each
+      // other, which is the stack the queue used to make, arriving by a
+      // different door.
+      if (!o.falling && gap < BUMP_GAP) {
+        const sameWay = o.dir === b.dir;
+        const drove = sameWay ? (o.x - b.x) * b.dir > 0 || (o.x === b.x && b.id > o.id) : b.id > o.id;
+        if (drove) {
+          knockOff(b);
+          break;
+        }
       }
 
       if (!b.bouncer) continue;
       if (mixed) {
         // SETTLING.  Wider when the two of them are closing, because queuing
         // cannot help a pair coming at each other.
-        const vb = b.dir * barrelSpeed(b);
-        const vo = o.dir * barrelSpeed(o);
+        const vb = b.dir * b.speed;
+        const vo = o.dir * o.speed;
         const closing = (o.x - b.x) * (vo - vb) < 0;
         if (gap < (closing ? SETTLE_CLOSING : MIXED_GAP)) b.settled = true;
       } else if (!o.falling && gap < MIXED_GAP && j < i) {
@@ -554,7 +762,7 @@ function stepBarrels(dt: number): void {
         b.dir = b.x < (LEFT + RIGHT) / 2 ? 1 : -1;
       }
     } else {
-      b.x += b.dir * barrelSpeed(b) * b.brake * dt;
+      b.x += b.dir * b.speed * dt;
       if (b.bouncer) {
         // Hop: a half-sine per bounce, so it spends its time up in the air
         // and comes down hard rather than floating.  A SETTLED one finishes
@@ -603,14 +811,16 @@ function stepBarrels(dt: number): void {
       // between the walls forever, and the floor silted up with barrels.
     }
     b.dot.setPosition(b.x, b.y);
-    // spin, so they read as rolling; a bouncer squashes on landing instead
+    // It ROLLS: the hoops and the end go round with the ground it covers, so
+    // the direction it is travelling is readable from the barrel itself.
+    (b.dot.getData('spin') as Phaser.GameObjects.Container).setRotation(b.x / BARREL_R);
     if (b.bouncer) {
       // Read off the real height, so a settled one is visibly flat on the
       // girder rather than drawn mid-hop while sitting on the floor.
       const air = b.lift / BOUNCE_H;
-      b.dot.setScale(1.15 - air * 0.15, 0.8 + air * 0.3);
+      b.dot.setScale(1.1 - air * 0.1, 0.9 + air * 0.2);
     } else {
-      b.dot.setScale(1, 0.8 + Math.abs(Math.sin(b.x / 6)) * 0.35);
+      b.dot.setScale(1, 1);
     }
   }
 

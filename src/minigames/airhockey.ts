@@ -17,6 +17,12 @@ import { backdrop } from './decor';
 
 const TABLE = { x: 70, y: 22, w: 180, h: 152 };
 const GOAL_W = 64;
+/**
+ * The cooldown between rounds: three seconds with the puck sat on the spot.
+ * Also used for the first face-off, so the opening of a game and the restart
+ * after a goal are the same beat rather than two different ones.
+ */
+const ROUND_GAP_MS = 3000;
 const PUCK_R = 4;
 const PAD_R = 9;
 const MAX_SPEED = 520;
@@ -41,6 +47,8 @@ let history: Array<{ t: number; x: number; y: number }> = [];
 let scoreP = 0;
 let scoreA = 0;
 let scoreText: Phaser.GameObjects.BitmapText | null = null;
+/** The face-off count, big, on the centre spot. */
+let countText: Phaser.GameObjects.BitmapText | null = null;
 let elapsed = 0;
 let frozen = 0;
 let over = false;
@@ -50,10 +58,13 @@ export const airHockey: MinigameModule = {
   id: 'airhockey',
   title: 'AIR HOCKEY',
   music: 'game_airhockey',
-  rules: 'first to 5',
+  rules: 'first to 5 - 7 in, 15 out',
   tutorial: {
     objective: [
       'FIRST TO FIVE GOALS TAKES IT.',
+      'SEVEN TOKENS IN, FIFTEEN BACK ON A WIN.',
+      'THREE SECONDS ON THE SPOT AFTER A GOAL.',
+      'USE THEM - GET BACK INTO YOUR OWN HALF.',
     ],
     controls: [
       ['MOUSE', 'MOVES YOUR MALLET'],
@@ -98,10 +109,15 @@ export const airHockey: MinigameModule = {
     padPrev = { x: pad.x, y: pad.y };
 
     scoreText = centerText(scene, GAME_W / 2, 178, '', PALETTE.cream);
+    // On the centre spot, over the puck it is holding still.
+    countText = centerText(scene, GAME_W / 2, TABLE.y + TABLE.h / 2 - 14, '', PALETTE.gold, 16)
+      .setDepth(40)
+      .setVisible(false);
     text(scene, 8, 30, 'MOUSE', PALETTE.ash);
     text(scene, 8, 40, 'TO MOVE', PALETTE.ash);
     updateScore();
 
+    // The opening face-off is the same three seconds as every restart.
     serve(1);
   },
 
@@ -112,8 +128,12 @@ export const airHockey: MinigameModule = {
 
     if (frozen > 0) {
       frozen -= delta;
+      // Counted down where it can be seen: three seconds of a puck that will
+      // not move is a broken game unless the game says what it is waiting for.
+      countText?.setText(frozen > 0 ? `${Math.ceil(frozen / 1000)}` : '').setVisible(frozen > 0);
       return;
     }
+    countText?.setVisible(false);
 
     // ---- player paddle follows the mouse, clamped to the lower half
     const p = scene.input.activePointer;
@@ -187,6 +207,8 @@ export const airHockey: MinigameModule = {
     puck = null;
     pad = null;
     aiPad = null;
+    scoreText = null;
+    countText = null;
     apiRef = null;
   },
 };
@@ -232,11 +254,20 @@ function goal(playerScored: boolean): void {
   serve(playerScored ? -1 : 1);
 }
 
+/**
+ * Centre the puck and hold it there for the cooldown.
+ *
+ * THREE SECONDS BETWEEN ROUNDS, not half of one.  The old half second put the
+ * puck back in play before either mallet had been moved off wherever the last
+ * goal left it, so the restart was a scramble rather than a fresh face-off.
+ * Three is long enough to get back to your own half and watch the count, and
+ * the count is on screen because three silent seconds reads as a hang.
+ */
 function serve(dir: number): void {
   if (!puck) return;
   puck.setPosition(TABLE.x + TABLE.w / 2, TABLE.y + TABLE.h / 2);
   vel = { x: Phaser.Math.Between(-90, 90), y: 170 * dir };
-  frozen = 500;
+  frozen = ROUND_GAP_MS;
   history = [];
 }
 

@@ -68,7 +68,7 @@ export class ExteriorNight extends Phaser.Scene {
     text(this, GAME_W - 13, 150, '>', PALETTE.ash, 8);
 
     this.player = new Player(this, this.doorX - 50, WALK_Y, true);
-    this.player.setSurface('concrete');
+    this.player.setSurface('gravel');
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.75).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setOrigin(0.5, 0.5).setDepth(801).setVisible(false);

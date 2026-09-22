@@ -282,6 +282,43 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
       `${(fav * 100).toFixed(0)}% of 600, ${spread}/7 colours won at least one`,
   );
   if (!fair) failures++;
+
+  // ---- THE COMEBACK.  A jetpack that fired every race would be a tax on the
+  // favourite, and one sized past the clock would be a frog stranded in the
+  // middle of the track when the tape goes.  Both are measured on the model
+  // the race actually runs.
+  const jet = await page.evaluate(() => window.__race.comeback(300));
+  const sometimes = jet.lit > 0.1 && jet.lit < 0.55;
+  console.log(
+    `${sometimes ? 'PASS' : 'FAIL'}  frog race: the jetpack comes out sometimes, not every race  — ` +
+      `${(jet.lit * 100).toFixed(0)}% of 300`,
+  );
+  if (!sometimes) failures++;
+
+  const honest = jet.inTheClock > 0.999 && jet.fromLast > 0.85;
+  console.log(
+    `${honest ? 'PASS' : 'FAIL'}  frog race: it is lit for the last frog and lands inside the clock  — ` +
+      `${(jet.fromLast * 100).toFixed(0)}% from last, ${(jet.inTheClock * 100).toFixed(0)}% inside`,
+  );
+  if (!honest) failures++;
+
+  // It has to be able to win and able to lose: a comeback that always came
+  // back would make the race a formality with a countdown on it.
+  const race = jet.won > 0.3 && jet.won < 0.85;
+  console.log(
+    `${race ? 'PASS' : 'FAIL'}  frog race: and it is a finish rather than a formality  — ` +
+      `the jetpack takes ${(jet.won * 100).toFixed(0)}% of the races it appears in`,
+  );
+  if (!race) failures++;
+
+  // And the clock is where it was: twenty seconds, most races home before it.
+  const t = await page.evaluate(() => window.__race.timing(200));
+  const clock = t.meanSeconds < 20 && t.hitTheCap < 0.2 && jet.meanFiredAt > t.meanSeconds - 3.2;
+  console.log(
+    `${clock ? 'PASS' : 'FAIL'}  frog race: the jetpack does not stretch the twenty seconds  — ` +
+      `mean ${t.meanSeconds.toFixed(1)}s, lit at ${jet.meanFiredAt.toFixed(1)}s, ${(t.hitTheCap * 100).toFixed(0)}% run to the cap`,
+  );
+  if (!clock) failures++;
   await page.close();
 }
 
@@ -397,11 +434,17 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
 
 // NO COMBINATION OF BARRELS ASKS FOR A JUMP AND A DUCK AT ONCE.
 //
-// An orange roller has to be jumped; a pink bouncer at the top of its hop has
+// A yellow roller has to be jumped; an orange bouncer at the top of its hop has
 // to be walked under, and jumping into one is a death.  Put the two of them
 // within a jump of each other and there is no input that answers both — the
-// player is hit having done the right thing.  Same for two pink ones out of
+// player is hit having done the right thing.  Same for two orange ones out of
 // step, one overhead and one on the girder in front of you.
+//
+// The same pass measures the two things the barrels were reported for: that
+// none of them is being slowed down by another one, and that they never pile
+// into a group too wide to jump.  Both are properties of a whole run rather
+// than of a frame, so they are gathered here rather than given their own
+// eighteen seconds.
 //
 // Its own page, and sampled in chunks: the barrels are what is under test, the
 // player is not driving, and a frog standing still runs out of lives in well
@@ -410,18 +453,76 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
-  const tally = { frames: 0, samples: 0, span: 0, worst: null, closest: 1e9, up: 0 };
+  const tally = { frames: 0, samples: 0, span: 0, worst: null, closest: 1e9, up: 0, slowest: 1, pile: 0 };
   for (let run = 0; run < 3; run++) {
     await page.goto(`${URL}/?intro=1&tokens=50&game=donkeykong`, { waitUntil: 'networkidle2' });
     await sleep(1400);
     await startGame(page);
     if (!(await bridge(page, '__dk'))) break;
     const r = await page.evaluate(async () => {
-      const out = { span: window.__dk.state().jumpSpan, samples: 0, frames: 0, up: 0, closest: 1e9, worst: null };
+      const out = {
+        span: window.__dk.state().jumpSpan,
+        samples: 0,
+        frames: 0,
+        up: 0,
+        closest: 1e9,
+        worst: null,
+        // The slowest any one barrel ever ran over a girder crossing, as a
+        // fraction of the pace it was thrown at, and the widest run of them
+        // that were touching at once.
+        slowest: 1,
+        pile: 0,
+      };
+      const seen = new Map();
+      let last = performance.now();
       const until = performance.now() + 18000;
       while (performance.now() < until && window.__dk) {
-        const bs = window.__dk.state().barrels.filter((b) => !b.falling);
+        const now = performance.now();
+        const dt = (now - last) / 1000;
+        last = now;
+        const all = window.__dk.state().barrels;
+        const bs = all.filter((b) => !b.falling);
         out.samples++;
+
+        // ---- NOBODY IS BRAKING.  Distance over a whole crossing against the
+        // pace the barrel was thrown at: measured frame to frame it is the
+        // browser's own jitter that gets reported, not the game's.
+        for (const bl of all) {
+          const was = seen.get(bl.id);
+          if (was && !bl.falling && !was.falling && was.floor === bl.floor) {
+            was.dist += Math.abs(bl.x - was.x);
+            was.time += dt;
+          } else if (was && was.time > 0.8) {
+            out.slowest = Math.min(out.slowest, was.dist / was.time / bl.speed);
+            was.dist = 0;
+            was.time = 0;
+          }
+          seen.set(bl.id, {
+            x: bl.x,
+            floor: bl.floor,
+            falling: bl.falling,
+            dist: was?.dist ?? 0,
+            time: was?.time ?? 0,
+          });
+        }
+
+        // ---- AND NOTHING IS PILING UP.  The widest run of barrels each
+        // within a barrel of the next: one jump has to clear the lot.
+        const byFloor = new Map();
+        for (const bl of bs) {
+          if (!byFloor.has(bl.floor)) byFloor.set(bl.floor, []);
+          byFloor.get(bl.floor).push(bl);
+        }
+        for (const list of byFloor.values()) {
+          list.sort((a, b) => a.x - b.x);
+          let from = 0;
+          for (let j = 1; j <= list.length; j++) {
+            if (j === list.length || list[j].x - list[j - 1].x > 10) {
+              out.pile = Math.max(out.pile, list[j - 1].x - list[from].x);
+              from = j;
+            }
+          }
+        }
         if (bs.some((b) => b.up)) out.up++;
         let badHere = false;
         for (let i = 0; i < bs.length; i++) {
@@ -450,6 +551,8 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
     tally.frames += r.frames;
     tally.up += r.up;
     tally.span = r.span;
+    tally.slowest = Math.min(tally.slowest, r.slowest);
+    tally.pile = Math.max(tally.pile, r.pile);
     if (r.closest < tally.closest) {
       tally.closest = r.closest;
       tally.worst = r.worst;
@@ -472,6 +575,28 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
       `one was over your head on ${((tally.up / Math.max(1, tally.samples)) * 100).toFixed(0)}% of frames`,
   );
   if (!lively) failures++;
+
+  // ---- THE PILE-UP, WHICH IS WHAT THE QUEUE USED TO MAKE.
+  //
+  // Barrels used to give way to the one in front, down to a fifth of their
+  // pace, so three of them nose to tail crawled down a girder and sat in the
+  // crossing for seconds at a time.  Nothing gives way now -- a barrel that
+  // catches another knocks it off the girder -- so both halves of that are
+  // testable: every barrel runs at the pace it was thrown at, and no group of
+  // them is ever wider than a jump.
+  const ownPace = tally.slowest > 0.97;
+  console.log(
+    `${ownPace ? 'PASS' : 'FAIL'}  barrel climb: no barrel is slowed down by another  — ` +
+      `the slowest crossing ran at ${(tally.slowest * 100).toFixed(0)}% of its own pace`,
+  );
+  if (!ownPace) failures++;
+
+  const clears = tally.pile < tally.span;
+  console.log(
+    `${clears ? 'PASS' : 'FAIL'}  barrel climb: and a group of them still fits inside one jump  — ` +
+      `widest ${tally.pile.toFixed(0)}px against a ${tally.span}px jump`,
+  );
+  if (!clears) failures++;
   await page.close();
 }
 
@@ -703,8 +828,9 @@ for (const g of [
   // formula; it is a flat twenty on a ten-token cabinet now, which is exactly
   // the standard table, so the table should be checking it.  The dance is the
   // other way round: it pays 20, 35 or 55 depending how far up the ladder you
-  // got, and no row of the table says that.
-  const OWN_RULES = ['slots', 'wheel', 'blackjack', 'roulette', 'danceoff', 'carchase'];
+  // got, and no row of the table says that.  Whack-a-frog joined it for the
+  // same reason -- ten or fifteen off a three token cabinet, by score.
+  const OWN_RULES = ['slots', 'wheel', 'blackjack', 'roulette', 'danceoff', 'carchase', 'whack'];
   const wrong = floor.rows.filter(
     (r) => !OWN_RULES.includes(r.id) && floor.table[r.cost] !== undefined && r.reward !== floor.table[r.cost],
   );
@@ -2620,6 +2746,20 @@ for (const g of [
     // the scene's own clamp cannot walk it off the line under us.
     await page.evaluate((x) => {
       window.__chase.shield(true);
+      // ---- AND THE ROAD IS KEPT BUSY, ON PURPOSE.
+      //
+      // Traffic builds with the cash taken, and a parked player takes none: an
+      // untouched run puts two or three cars on a four lane road, and whether
+      // one of them happens to cross the exact line the player is sitting on
+      // is then a coin toss the check reports as a verdict on the game.  It
+      // has flipped tails.  The road is topped up to six instead -- the cars'
+      // own behaviour untouched, only more of them -- which is the same road a
+      // player who is actually earning would be looking at.
+      setInterval(() => {
+        if (window.__chase.trafficState().length < 6) {
+          window.__chase.spawnTrafficAt(Math.floor(Math.random() * 4), 10);
+        }
+      }, 1200);
       const pin = () => {
         window.__chase.setPlayer(x, 140);
         requestAnimationFrame(pin);
@@ -2627,12 +2767,19 @@ for (const g of [
       pin();
       // Sampled every frame: a lane change lasts under a second and a poll at
       // a fixed interval would walk straight past the take-off.
-      window.__parked = { hits: 0, silent: 0, changes: 0, last: new Map() };
+      window.__parked = { hits: 0, swept: 0, silent: 0, changes: 0, last: new Map() };
       const watch = () => {
         const w = window.__parked;
         const me = window.__chase.state().player;
         for (const c of window.__chase.trafficState()) {
           if (Math.abs(c.x - me.x) < 8 && Math.abs(c.y - me.y) < 14) w.hits++;
+          // ON THE LINE AT ALL, whatever the distance up the road: a car whose
+          // body is over the line has driven down the corridor, and a parked
+          // car is in the way of it whether or not the two happened to be
+          // level on the frame it was sampled.  This is the thing being
+          // tested; the frames where they are also level are the same fact
+          // with the timing added, and the timing is not what is on trial.
+          if (Math.abs(c.x - me.x) < 8) w.swept++;
           const was = w.last.get(c.id);
           if (was !== undefined && Math.abs(c.x - was) > 0.05) {
             w.changes++;
@@ -2652,7 +2799,7 @@ for (const g of [
     await sleep(58000);
     const out = await page.evaluate(() => {
       const w = window.__parked;
-      return { hits: w.hits, silent: w.silent, changes: w.changes };
+      return { hits: w.hits, swept: w.swept, silent: w.silent, changes: w.changes };
     });
     await page.close();
     return out;
@@ -2675,10 +2822,10 @@ for (const g of [
 
   for (const [where, x] of [['the middle of the road', lines.middle], ['a lane line', lines.line]]) {
     const r = await park(x);
-    const caught = r.hits > 0;
+    const caught = r.swept > 0;
     console.log(
       `${caught ? 'PASS' : 'FAIL'}  car chase: parking on ${where} is not a safe spot  — ` +
-        `traffic was on top of it for ${r.hits} frames`,
+        `traffic drove down it for ${r.swept} frames, and was level with the car for ${r.hits} of them`,
     );
     if (!caught) failures++;
 

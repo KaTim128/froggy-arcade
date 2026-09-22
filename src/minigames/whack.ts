@@ -1,7 +1,26 @@
 /**
- * Whack-a-Frog.  PRD §9.6 — Medium, 3 tokens in, 6 out.
+ * Whack-a-Frog.  PRD §9.6 — Medium, 3 tokens in, up to 15 out.
  *
- * Nine holes, 25 hits in 40 seconds, ramping speed.
+ * Nine holes, THIRTY SECONDS, and as many as you can get.
+ *
+ * IT IS NOT A TARGET ANY MORE.  It used to be twenty-five hits in forty
+ * seconds: reach the number and the round ended early, miss it and the round
+ * was already lost some time before the clock said so.  Both halves of that
+ * were bad -- a player who was good at it stopped playing, and a player who
+ * was not spent the last fifteen seconds whacking for nothing.  Now the clock
+ * is the whole game and the score is how far up the ladder you got:
+ *
+ *   50 or more   15 tokens
+ *   45 to 49     10 tokens
+ *   under 45     nothing
+ *
+ * WHICH MEANT THE FROGS HAD TO COME FASTER.  Fifty in thirty seconds is one
+ * and two thirds a second, and at the old rate a thirty second round only ever
+ * contained about fifty frogs in total -- so the top tier needed a perfect
+ * round and the lower one very nearly.  The spawn clock is most of twice as
+ * quick now and a fourth hole can be occupied at once, which puts around
+ * eighty-five up in a round: fifty of those is a good round rather than a
+ * flawless one.
  *
  * THE CAMEO (PRD §9.6 / VOC-21): once in a very long while the thing that
  * comes up out of a hole is Froggy himself — smooth, non-pixel, wrong-sized
@@ -25,13 +44,27 @@ import { froggyLayer } from '../render/froggyLayer';
 import { drawFroggy } from '../froggy/froggy';
 import type { MinigameApi, MinigameModule } from './types';
 
-const TARGET_HITS = 25;
-const ROUND_MS = 40_000;
-const UP_MS_START = 1100;
-const UP_MS_END = 650;
-const SPAWN_MS_START = 750;
-const SPAWN_MS_END = 450;
-const MAX_UP = 3;
+/**
+ * The clock, and what a round is worth.
+ *
+ * `PAYS` is read top down and the first row you clear is the one you get, so
+ * the tiers can never disagree with each other about a score on the boundary.
+ */
+const ROUND_MS = 30_000;
+const PAYS: Array<{ at: number; tokens: number }> = [
+  { at: 50, tokens: 15 },
+  { at: 45, tokens: 10 },
+];
+/**
+ * How long one is up, and how often another comes.  See the note at the top:
+ * these carry the new reward ladder, and a round has to be able to PUT eighty
+ * or so frogs up for fifty of them to be a score rather than a perfect game.
+ */
+const UP_MS_START = 900;
+const UP_MS_END = 520;
+const SPAWN_MS_START = 450;
+const SPAWN_MS_END = 260;
+const MAX_UP = 4;
 /**
  * How often he turns up in a hole himself.
  *
@@ -68,16 +101,20 @@ export const whackAFrog: MinigameModule = {
   id: 'whack',
   title: 'WHACK-A-FROG',
   music: 'game_whack',
-  rules: '25 hits in 40 seconds',
+  rules: '30 seconds - whack all you can',
   tutorial: {
     objective: [
-      '25 HITS IN 40 SECONDS.',
+      'THIRTY SECONDS. WHACK ALL YOU CAN.',
+      'THERE IS NO TARGET - THE CLOCK ENDS IT.',
+      '50 WHACKS OR MORE PAYS 15 TOKENS.',
+      '45 TO 49 PAYS 10. UNDER 45 PAYS NOTHING.',
       'THEY GET QUICKER AS YOU GO.',
     ],
     controls: [
       ['MOUSE', 'CLICK A FROG TO WHACK IT'],
     ],
   },
+  payoutNote: 'WIN: 10 / 15',
   // Played entirely by tapping the frogs.
   touch: {},
 
@@ -266,19 +303,45 @@ function onClick(x: number, y: number): void {
       const pop = centerText(sceneRef, h.x, h.y - 18, '+1', PALETTE.gold).setDepth(20);
       sceneRef.tweens.add({ targets: pop, y: h.y - 34, alpha: 0, duration: 420, onComplete: () => pop.destroy() });
     }
-    if (hits >= TARGET_HITS) finish();
     return;
   }
 }
 
-function refreshHud(): void {
-  hud?.setText(`HITS ${hits}/${TARGET_HITS}    ${Math.ceil(timeLeft / 1000)}s`);
+/** What a round of this many whacks is worth.  Zero under the bottom rung. */
+export function whackPayout(n: number): number {
+  return PAYS.find((row) => n >= row.at)?.tokens ?? 0;
 }
 
+function refreshHud(): void {
+  // The count and the clock, and -- once the score is worth something -- what
+  // it is worth, because the difference between 44 and 45 is ten tokens and
+  // the player deserves to know they are one away from it.
+  const paid = whackPayout(hits);
+  const next = PAYS.filter((row) => hits < row.at).pop();
+  const tail = paid > 0 ? `  ${paid} TOKENS` : next ? `  ${next.at - hits} TO PAY` : '';
+  hud?.setText(`WHACKS ${hits}    ${Math.ceil(Math.max(0, timeLeft) / 1000)}s${tail}`);
+  hud?.setTint(paid > 0 ? PALETTE.gold : PALETTE.cream);
+}
+
+/**
+ * The buzzer.  Whatever is on the board is what it pays, ONCE.
+ *
+ * `over` is set before anything else happens and every entry point checks it,
+ * so a round cannot be settled twice -- not by the clock and a last whack
+ * landing in the same frame, and not by the delayed call being scheduled
+ * twice.
+ */
 function finish(): void {
   if (over) return;
   over = true;
   froggyLayer.clear();
-  const won = hits >= TARGET_HITS;
-  holes[0]?.sprite.scene.time.delayedCall(400, () => (won ? apiRef?.win() : apiRef?.lose()));
+  const paid = whackPayout(hits);
+  const scene = holes[0]?.sprite.scene;
+  if (scene) {
+    // The final count and what it earned, on screen, before the shell's own
+    // card comes up over it.
+    const line = paid > 0 ? `${hits} WHACKS  -  ${paid} TOKENS` : `${hits} WHACKS  -  45 WAS THE BAR`;
+    centerText(scene, GAME_W / 2, 90, line, paid > 0 ? PALETTE.gold : PALETTE.fog, 16).setDepth(60);
+    scene.time.delayedCall(900, () => (paid > 0 ? apiRef?.win(paid) : apiRef?.lose()));
+  }
 }

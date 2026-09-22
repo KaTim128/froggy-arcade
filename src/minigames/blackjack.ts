@@ -22,11 +22,28 @@
  * a card can appear again.  What the hand is worth is read off the cards that
  * actually came out; nothing here decides the result first and deals to match.
  *
- * Single deck, the dealer draws to 17, blackjack pays as a win, and a push is a
- * push: the same total on both sides hands your stake straight back, so a
- * tied hand costs nothing and pays nothing.  Aces are the only fiddly part:
- * they count eleven until that would bust you, then one, and a hand can hold
- * several of them.
+ * Single deck, the dealer draws to 17, and a push is a push: the same total on
+ * both sides hands your stake straight back, so a tied hand costs nothing and
+ * pays nothing.
+ *
+ * FROGGY'S OWN RULES ARE THE REST OF IT, and every one of them cuts both ways:
+ *
+ *   FIVE CARDS IS THE CEILING.  There is no sixth, so a soft hand cannot be
+ *   ground upward one card at a time for ever.
+ *
+ *   AN ACE IS YOURS TO CALL, ON TWO CARDS.  One or eleven, and you may change
+ *   your mind for as long as you are still on two.  From the THIRD card it is
+ *   a one and it stays a one -- so taking a card takes the choice with it.
+ *
+ *   FIVE CARDS DOUBLES THE STAKE, whichever way it lands: survive to five and
+ *   win, and it pays double; bust on the fifth, and it costs double.  It is
+ *   the only hand in the building that can cost more than what was put up.
+ *
+ *   SO DOES A TWENTY-ONE, and his counts too -- his twenty-one takes double
+ *   off you and yours takes double off him.  The two do not stack.
+ *
+ *   FIFTEEN ON TWO CARDS IS THE ONE YOU MAY WALK AWAY FROM.  Too high to hit,
+ *   too low to stand: leave it and the stake comes back untouched.
  *
  * Froggy deals.  He is drawn on the unfiltered overlay like everywhere else —
  * he is never a sprite (PRD FR-1).
@@ -66,6 +83,16 @@ let player: Card[] = [];
 let dealer: Card[] = [];
 let phase: Phase = 'bet';
 let standing = false;
+/**
+ * The player's answer to their own ace while they are still on two cards.
+ *
+ * Eleven to start with, because that is the answer that makes a two card hand
+ * interesting; it is theirs to change until they take a third card, at which
+ * point `score` stops reading it (see the note there).
+ */
+let aceAs: AceAs = 11;
+/** Set the frame a hand is settled by a five card finish or a 21, for the doubling. */
+let stakeMul = 1;
 /** Tokens the player has asked to put up.  Staked for real when he deals. */
 let bet = 1;
 /** Of that, what is already debited for THIS hand and cannot come back off. */
@@ -86,32 +113,89 @@ let status: Phaser.GameObjects.BitmapText | null = null;
 let betText: Phaser.GameObjects.BitmapText | null = null;
 let hitBtn: Phaser.GameObjects.Container | null = null;
 let standBtn: Phaser.GameObjects.Container | null = null;
+let aceBtn: Phaser.GameObjects.Container | null = null;
+let quitHandBtn: Phaser.GameObjects.Container | null = null;
 let againBtn: Phaser.GameObjects.Container | null = null;
 let leaveBtn: Phaser.GameObjects.Container | null = null;
 
-/** Aces are eleven until that busts, then one.  Works for any number of them. */
-function score(hand: Card[]): number {
+/**
+ * WHAT AN ACE IS WORTH AT THIS TABLE.
+ *
+ * Not the usual "eleven until that busts".  Froggy's rule is about how many
+ * cards you are holding:
+ *
+ *   TWO CARDS   it is yours to decide, one or eleven, and you can change your
+ *               mind for as long as you are still on two.  That is the whole
+ *               of the decision the two-card hand offers.
+ *   THREE OR MORE   it hardens to ONE, immediately, whatever you had chosen.
+ *               Taking a card takes the choice away with it, which is what
+ *               makes hitting on a soft hand a real commitment here.
+ *
+ * `pick` is the player's current answer while they are still on two cards; it
+ * is ignored from the third card on, and the dealer never has one -- he is
+ * scored the ordinary way at two cards (eleven unless it busts him) and by
+ * the same hardening rule from three.
+ */
+function score(hand: Card[], pick?: AceAs): number {
+  const aces = hand.filter((c) => c.rank === 'A').length;
   let total = 0;
-  let aces = 0;
   for (const c of hand) {
-    if (c.rank === 'A') {
-      aces++;
-      total += 11;
-    } else if (['J', 'Q', 'K'].includes(c.rank)) {
-      total += 10;
-    } else {
-      total += Number(c.rank);
-    }
+    if (c.rank === 'A') total += 1;
+    else if (['J', 'Q', 'K'].includes(c.rank)) total += 10;
+    else total += Number(c.rank);
   }
-  while (total > 21 && aces > 0) {
-    total -= 10;
-    aces--;
-  }
-  return total;
+  if (!aces) return total;
+  // From the third card an ace is one and there is nothing to add.
+  if (hand.length >= 3) return total;
+  // On two: the player's own answer, or -- for the dealer -- the best one.
+  if (pick !== undefined) return pick === 11 ? total + 10 : total;
+  return total + 10 <= 21 ? total + 10 : total;
+}
+
+/** The player's answer to their own ace, while they are still on two cards. */
+type AceAs = 1 | 11;
+
+/** Does this hand still offer the choice?  Two cards, and one of them an ace. */
+function aceIsOpen(hand: Card[]): boolean {
+  return hand.length === 2 && hand.some((c) => c.rank === 'A');
+}
+
+/** The player's hand as it stands, with their ace answer applied. */
+function mine(): number {
+  return score(player, aceIsOpen(player) ? aceAs : undefined);
 }
 
 /** The table minimum.  Froggy will not deal under it. */
 const MINIMUM = 1;
+
+/**
+ * FROGGY'S HOUSE RULES, all four of them, and all four cut both ways.
+ *
+ * MAX_CARDS: five, and there is no sixth.  A hand that reaches five is
+ * settled on what it has -- you cannot grind a soft total up one card at a
+ * time for ever.
+ *
+ * FIVE_CARD_MUL: and getting there is a wager of its own.  Bust on the fifth
+ * and it costs DOUBLE the stake; survive it and win and it pays double.  That
+ * is the only place in the building where a loss can cost more than what was
+ * put up, and it is the only place a hand can pay four times it.
+ *
+ * TWENTYONE_MUL: a hand won on exactly twenty-one doubles the stake as well,
+ * whoever is holding it -- his twenty-one takes double off you, yours takes
+ * double off him.
+ *
+ * SURRENDER_ON: fifteen on two cards is the worst place to be at this table,
+ * so it is the one hand you are allowed to walk away from with your stake
+ * intact.  Two cards only: take a third and you have chosen.
+ *
+ * They do not stack.  A five card twenty-one is doubled once, not four times
+ * -- the larger of the two applies, so a rule that was written to be a risk
+ * cannot quietly become a quadruple.
+ */
+const MAX_CARDS = 5;
+const FIVE_CARD_MUL = 2;
+const TWENTYONE_MUL = 2;
+const SURRENDER_ON = 15;
 
 /** The most this hand could ride: what is already down, plus what is left. */
 function maxBet(): number {
@@ -127,9 +211,11 @@ export const blackjack: MinigameModule = {
   rules: 'bet what you like, beat the dealer to 21',
   tutorial: {
     objective: [
-      'BEAT THE DEALER TO 21.',
-      'SITTING DOWN IS FREE - YOU PAY THE BET.',
-      'MINIMUM 1, AND A WIN PAYS 2X.',
+      'BEAT THE DEALER TO 21. FIVE CARDS MAX.',
+      'TWO CARDS: AN ACE IS 1 OR 11, YOUR CALL.',
+      'A THIRD CARD MAKES EVERY ACE A 1.',
+      'FIVE CARDS OR A 21 DOUBLES THE STAKE.',
+      'STUCK ON 15 FROM TWO? LEAVE IT FOR FREE.',
     ],
     controls: [
       ['LEFT/RIGHT', 'BET 1 DOWN OR UP'],
@@ -150,13 +236,15 @@ export const blackjack: MinigameModule = {
       { label: 'CASH\nOUT', key: 'C' },
     ],
   },
-  payoutNote: 'PAYS 2X BET',
+  payoutNote: 'PAYS 2X - OR 4X',
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     sceneRef = scene;
     apiRef = api;
     phase = 'bet';
     standing = false;
+    aceAs = 11;
+    stakeMul = 1;
     clock = 0;
     talking = 1.2;
     hands = 0;
@@ -177,13 +265,27 @@ export const blackjack: MinigameModule = {
     betText = centerText(scene, GAME_W / 2, 116, '', PALETTE.gold, 16);
     hitBtn = button(scene, GAME_W / 2 - 40, 164, 'HIT', () => hit(), { width: 56, height: 13 });
     standBtn = button(scene, GAME_W / 2 + 40, 164, 'STAND', () => stand(), { width: 56, height: 13 });
+    // ---- the two that are only sometimes yours.  They sit on their own row
+    // above HIT and STAND, and each appears only while the hand it belongs to
+    // is on the felt: the ace one while you are on two cards with an ace, the
+    // fifteen one while you are on two cards worth exactly fifteen.
+    aceBtn = button(scene, GAME_W / 2 - 40, 148, 'ACE 11', () => flipAce(), {
+      width: 56,
+      height: 13,
+      fill: PALETTE.tealDark,
+    });
+    quitHandBtn = button(scene, GAME_W / 2 + 40, 148, 'LEAVE IT', () => surrender(), {
+      width: 56,
+      height: 13,
+      fill: PALETTE.tealDark,
+    });
     againBtn = button(scene, GAME_W / 2 - 46, 164, 'ANOTHER HAND', () => nextHand(), {
       width: 76,
       height: 13,
       fill: PALETTE.tealDark,
     });
     leaveBtn = button(scene, GAME_W / 2 + 46, 164, 'CASH OUT', () => leave(), { width: 76, height: 13 });
-    for (const b of [hitBtn, standBtn, againBtn, leaveBtn]) b.setVisible(false);
+    for (const b of [hitBtn, standBtn, againBtn, leaveBtn, aceBtn, quitHandBtn]) b.setVisible(false);
 
     buildBetUi(scene);
 
@@ -209,8 +311,15 @@ export const blackjack: MinigameModule = {
           bet,
           ante,
           hands,
-          player: score(player),
+          player: mine(),
           dealer: score(dealer),
+          aceAs,
+          aceOpen: aceIsOpen(player),
+          canSurrender: canSurrender(),
+          maxCards: MAX_CARDS,
+          stakeMul,
+          // What the hand would be multiplied by if it landed as it stands.
+          mulNow: phase === 'play' ? mulFor(mine(), player.length) : 1,
           status: status?.text ?? '',
           // The shoe, so a test can prove both hands come out of one deck.
           shoe: shoeId,
@@ -224,6 +333,20 @@ export const blackjack: MinigameModule = {
         deal: () => deal(),
         hit: () => hit(),
         stand: () => stand(),
+        flipAce: () => flipAce(),
+        surrender: () => surrender(),
+        /**
+         * Deal a KNOWN hand.  The rules being added here are all about the
+         * shape of a hand -- five cards, an ace on two, exactly fifteen -- and
+         * waiting for a shuffled shoe to produce one is not a test, it is a
+         * lottery.  Everything else still comes off the real deck.
+         */
+        setHands: (mineCards: string[], his: string[]) => {
+          const parse = (t: string): Card => ({ rank: t.slice(0, -1), suit: t.slice(-1) });
+          player = mineCards.map(parse);
+          dealer = his.map(parse);
+          render();
+        },
         again: () => nextHand(),
         leave: () => leave(),
       };
@@ -274,6 +397,8 @@ export const blackjack: MinigameModule = {
     betText = null;
     hitBtn = null;
     standBtn = null;
+    aceBtn = null;
+    quitHandBtn = null;
     againBtn = null;
     leaveBtn = null;
     sceneRef = null;
@@ -382,18 +507,78 @@ function deal(): void {
   say('HIT OR STAND');
   render();
 
-  // A natural twenty-one is decided before you touch anything.
-  if (score(player) === 21) sceneRef.time.delayedCall(700, () => stand());
+  // A natural twenty-one is decided before you touch anything -- unless the
+  // ace is what made it, in which case it is the player's call and theirs to
+  // change, so the table waits.
+  if (mine() === 21 && !aceIsOpen(player)) sceneRef.time.delayedCall(700, () => stand());
 }
 
 // ---------------------------------------------------------------------- play
 
 function hit(): void {
   if (phase !== 'play' || standing || !sceneRef) return;
+  // FIVE IS THE CEILING.  The button is hidden at five, but the key is not,
+  // so the rule lives here rather than in whether a thing is on screen.
+  if (player.length >= MAX_CARDS) {
+    audio.sfx('buzzer', 0.4);
+    say(`FIVE IS ALL YOU GET - STAND ON ${mine()}`);
+    return;
+  }
   player.push(take());
   audio.sfx('ui_blip');
   render();
-  if (score(player) > 21) finish(false, 'BUST');
+  const p = mine();
+  if (p > 21) {
+    // On the fifth card this costs double.  See FIVE_CARD_MUL.
+    if (player.length >= MAX_CARDS) {
+      stakeMul = FIVE_CARD_MUL;
+      finish(false, `BUST ON FIVE - DOUBLE`);
+    } else {
+      finish(false, 'BUST');
+    }
+    return;
+  }
+  // Survived to five: there is nothing left to decide, so he plays his hand.
+  if (player.length >= MAX_CARDS) {
+    say(`FIVE CARDS ON ${p} - HE HAS TO BEAT IT`);
+    sceneRef.time.delayedCall(700, () => stand());
+  }
+}
+
+/**
+ * Flip the ace, while it is still yours to flip.
+ *
+ * Only ever legal on two cards: `aceIsOpen` is the same test `score` uses to
+ * decide whether to read `aceAs` at all, so the button and the arithmetic can
+ * never disagree about whether the choice is still open.
+ */
+function flipAce(): void {
+  if (phase !== 'play' || standing || !aceIsOpen(player)) return;
+  aceAs = aceAs === 11 ? 1 : 11;
+  audio.sfx('ui_hover', 0.5);
+  say(`ACE PLAYS AS ${aceAs} - YOU HAVE ${mine()}`);
+  render();
+}
+
+/**
+ * WALK AWAY FROM A TWO CARD FIFTEEN.
+ *
+ * Fifteen on two is the worst hand at the table -- too high to hit without
+ * expecting to bust, too low to stand on -- so it is the one hand Froggy lets
+ * you out of, and it costs nothing.  The stake comes back exactly the way a
+ * push returns it, which is also why this is a `push` finish rather than a
+ * loss with a refund bolted on: the ledger has one path for "nothing changed
+ * hands" and this takes it.
+ */
+function surrender(): void {
+  if (phase !== 'play' || standing || !canSurrender()) return;
+  audio.sfx('ui_blip', 0.6);
+  finish(false, `YOU LEAVE IT ON ${SURRENDER_ON} - STAKE BACK`, true);
+}
+
+/** Two cards, and exactly the number he lets you off. */
+function canSurrender(): boolean {
+  return phase === 'play' && !standing && player.length === 2 && mine() === SURRENDER_ON;
 }
 
 function stand(): void {
@@ -404,7 +589,7 @@ function stand(): void {
   // score, and saying it every hand told the player his total was 17 when it
   // was very often nothing of the kind — so nothing below states a number the
   // cards on the felt do not show.
-  say(`YOU STAND ON ${score(player)} - DEALER SHOWS ${score(dealer)}`);
+  say(`YOU STAND ON ${mine()} - DEALER SHOWS ${score(dealer)}`);
   render();
 
   // Dealer draws to 17, one card at a time so you can watch it happen, and
@@ -422,10 +607,10 @@ function stand(): void {
       sceneRef?.time.delayedCall(600, step);
       return;
     }
-    const p = score(player);
+    const p = mine();
     const d = score(dealer);
     if (d > 21) {
-      finish(true, 'DEALER BUSTS');
+      settleWon(p, `DEALER BUSTS`);
       return;
     }
     // He stopped, and this is the total he stopped on — 17 through 21, and
@@ -433,12 +618,38 @@ function stand(): void {
     say(`DEALER STANDS ON ${d}`);
     sceneRef?.time.delayedCall(700, () => {
       if (phase === 'over') return;
-      if (p > d) finish(true, `${p} BEATS ${d}`);
+      if (p > d) settleWon(p, `${p} BEATS ${d}`);
       else if (p === d) finish(false, `PUSH ON ${p} - BET RETURNED`, true);
-      else finish(false, `${d} BEATS ${p}`);
+      else settleLost(d, `${d} BEATS ${p}`);
     });
   };
   sceneRef.time.delayedCall(600, step);
+}
+
+/**
+ * WHAT THE STAKE IS MULTIPLIED BY, and it is decided in exactly two places.
+ *
+ * A hand pays or costs double for one of two reasons -- it went to five cards,
+ * or it was won on exactly twenty-one -- and `stakeMul` carries whichever
+ * applies into `finish`, which is the only thing that moves tokens.  They do
+ * NOT stack: a five card twenty-one is the larger of the two, once.
+ */
+function mulFor(total: number, cards: number): number {
+  const five = cards >= MAX_CARDS ? FIVE_CARD_MUL : 1;
+  const blackjack = total === 21 ? TWENTYONE_MUL : 1;
+  return Math.max(five, blackjack);
+}
+
+/** The player took it.  Five cards or a twenty-one pays double. */
+function settleWon(p: number, why: string): void {
+  stakeMul = mulFor(p, player.length);
+  finish(true, stakeMul > 1 ? `${why} - PAYS DOUBLE` : why);
+}
+
+/** He took it.  His twenty-one, or your five cards, costs you double. */
+function settleLost(d: number, why: string): void {
+  stakeMul = mulFor(d, player.length);
+  finish(false, stakeMul > 1 ? `${why} - COSTS DOUBLE` : why);
 }
 
 /** Froggy says it, and his mouth moves while he does. */
@@ -475,8 +686,25 @@ function render(): void {
     drawHand(dealer, DEALER_ROW, !standing && phase !== 'over');
     drawHand(player, PLAYER_ROW, false);
     c.add(text(sceneRef, 12, 48, standing || phase === 'over' ? `${score(dealer)}` : '?', PALETTE.ash));
-    c.add(text(sceneRef, 34, 92, `${score(player)}`, PALETTE.gold));
+    c.add(text(sceneRef, 34, 92, `${mine()}`, PALETTE.gold));
+    // How many of the five are spent.  The cap only matters if you can see it
+    // coming, and a player on four cards is making a different decision from
+    // one on two.
+    if (phase === 'play' && !standing) {
+      const left = MAX_CARDS - player.length;
+      c.add(
+        text(sceneRef, GAME_W - 74, 92, `${player.length}/${MAX_CARDS} CARDS`, left <= 1 ? PALETTE.blood : PALETTE.ash),
+      );
+      if (left === 1) c.add(text(sceneRef, GAME_W - 74, 102, 'FIFTH DOUBLES', PALETTE.blood));
+    }
   }
+
+  // ---- the two conditional buttons, decided from the hand and nothing else.
+  const open = phase === 'play' && !standing;
+  aceBtn?.setVisible(open && aceIsOpen(player));
+  const aceLabel = aceBtn?.getAt(1) as Phaser.GameObjects.BitmapText | undefined;
+  aceLabel?.setText(`ACE ${aceAs}`);
+  quitHandBtn?.setVisible(open && canSurrender());
 
   drawStake(c);
 }
@@ -499,7 +727,12 @@ function drawStake(c: Phaser.GameObjects.Container): void {
   c.add(text(s, 12, 150, `BET ${bet}`, PALETTE.gold));
   c.add(text(s, 12, 160, `POCKET ${pocket}`, pocket > 0 ? PALETTE.fog : PALETTE.ash));
   if (phase === 'over') c.add(text(s, GAME_W - 74, 150, `HAND ${hands}`, PALETTE.ash));
-  else c.add(text(s, GAME_W - 74, 150, `PAYS ${bet * 2}`, PALETTE.tealLight));
+  else {
+    // What it pays if it lands as it stands: the doubling is worth knowing
+    // BEFORE the decision that triggers it, not after.
+    const mul = phase === 'play' ? mulFor(mine(), player.length) : 1;
+    c.add(text(s, GAME_W - 74, 150, `PAYS ${bet * 2 * mul}`, mul > 1 ? PALETTE.gold : PALETTE.tealLight));
+  }
   // The stake, big, only while it is still yours to change.
   betText?.setText(phase === 'bet' ? `${bet}` : '').setVisible(phase === 'bet');
 }
@@ -511,14 +744,31 @@ function finish(won: boolean, why: string, push = false): void {
   status?.setText(why);
   hitBtn?.setVisible(false);
   standBtn?.setVisible(false);
+  aceBtn?.setVisible(false);
+  quitHandBtn?.setVisible(false);
   audio.sfx(won ? 'chime' : push ? 'ui_blip' : 'buzzer');
 
   // The hand settles here and now, so the winnings are in your pocket before
   // you decide whether to put them back on the felt.  A push gives the stake
   // back at 1x — the bet was debited on the deal, so this is what "nothing
   // changes hands" costs to say through the ledger.
-  if (won) apiRef?.payout(bet * 2);
-  else if (push) apiRef?.payout(bet);
+  //
+  // AND `stakeMul` IS APPLIED HERE AND NOWHERE ELSE.  A doubled WIN is simply
+  // paid twice as much.  A doubled LOSS has to take a second stake off the
+  // player, because only one was ever debited -- so the extra is raised now,
+  // and if the pocket cannot cover it Froggy takes what is there rather than
+  // pushing the balance below nothing.
+  if (won) {
+    apiRef?.payout(bet * 2 * stakeMul);
+  } else if (push) {
+    apiRef?.payout(bet);
+  } else if (stakeMul > 1) {
+    const owed = bet * (stakeMul - 1);
+    const has = apiRef?.balance() ?? 0;
+    const taken = Math.min(owed, has);
+    if (taken > 0) apiRef?.raise(taken);
+    if (taken < owed) status?.setText(`${why} - HE TAKES WHAT YOU HAVE`);
+  }
   render();
 
   sceneRef?.time.delayedCall(1100, () => offerAnother());
@@ -558,6 +808,10 @@ function nextHand(): void {
   bet = MINIMUM;
   outcome = '';
   standing = false;
+  // A fresh hand is a fresh ace and a fresh stake: nothing about the last one
+  // may follow the player into this one.
+  aceAs = 11;
+  stakeMul = 1;
   phase = 'bet';
   player = [];
   dealer = [];

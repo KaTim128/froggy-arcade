@@ -147,7 +147,7 @@ export const CABINETS: CabinetDef[] = [
   // Every seven-token cabinet pays fifteen: eight tokens of profit for the
   // longest games in the building, which is the top of the standard table.
   { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 7, reward: 15, x: 112, y: 96, color: 0xd9822b, room: 'annex', symbol: 'BC', motif: 'ladder' },
-  { id: 'airhockey', title: 'AIR HOCKEY', tier: 'hard', cost: 5, reward: 10, x: 176, y: 96, color: 0xffd45e, room: 'annex', symbol: 'AH', motif: 'ball' },
+  { id: 'airhockey', title: 'AIR HOCKEY', tier: 'hard', cost: 7, reward: 15, x: 176, y: 96, color: 0xffd45e, room: 'annex', symbol: 'AH', motif: 'ball' },
   // THE FLOOD lives back here now, in the slot Chomp-Man stood in.  It belongs
   // with the long games rather than in the front room with the one-token
   // board: it is a minute of climbing and it takes seven to start.  The id is

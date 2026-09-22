@@ -789,12 +789,47 @@ class AudioManager {
         beep(2093, 0.5, 0.09, 'sine');
         beep(3136, 0.35, 0.04, 'sine');
         break;
+      // ---- FOOTSTEPS, ONE PER FLOOR, AND ALL OF THEM QUIET.
+      //
+      // These were one loud noise burst each and the only difference between
+      // them was the filter, so the arcade and the street sounded like the
+      // same person stamping in two different rooms.  What the ear actually
+      // sorts a footstep by is not brightness, it is the SHAPE: how much body
+      // the landing has, how long the tail rings, and whether anything
+      // rattles after it.  So each one is a body plus a surface now, and the
+      // level came down a long way -- a footstep is the quietest thing in a
+      // room you are walking through, not the loudest.
+      //
+      // CARPET: almost all body and no tail.  A low thud with the top taken
+      // off it, which is what a shoe on pile does -- it lands, the pile
+      // swallows it, there is nothing after.
       case 'footstep_carpet':
-        noise(0.09, 0.055, 700);
+        noise(0.055, 0.020, 260);
+        noise(0.10, 0.013, 420, 0.004);
         break;
+      // CONCRETE: a hard little tap with a short bright tail.  Same idea and
+      // the opposite balance -- not much body, and the room gives it back for
+      // a moment.  It was at 0.12, which was louder than most of the music.
       case 'footstep_concrete':
-        noise(0.12, 0.12, 2200);
+        noise(0.03, 0.026, 900);
+        noise(0.085, 0.020, 2400, 0.005);
         break;
+      // GRAVEL, FOR OUTSIDE: the body of a concrete step with loose stone on
+      // top of it.  The landing is duller than a paving slab because the
+      // gravel gives, and then two or three grains shift under the weight --
+      // which is the whole of what makes it read as rough ground rather than
+      // as a floor.  Softer than the concrete: outdoors has no walls to hand
+      // the sound back to you.
+      case 'footstep_gravel': {
+        noise(0.045, 0.022, 520);
+        noise(0.07, 0.014, 1700, 0.006);
+        // the grit, scattered so no two steps crunch the same way
+        const grains = 2 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < grains; i++) {
+          noise(0.018, 0.006 + Math.random() * 0.005, 3200 + Math.random() * 1800, 0.02 + Math.random() * 0.06);
+        }
+        break;
+      }
       case 'door_open':
         noise(0.35, 0.09, 900);
         break;
@@ -1141,6 +1176,7 @@ export type SfxName =
   | 'bell_ding'
   | 'footstep_carpet'
   | 'footstep_concrete'
+  | 'footstep_gravel'
   | 'door_open'
   | 'door_shut'
   | 'lock_click'
