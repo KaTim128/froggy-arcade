@@ -50,6 +50,12 @@ import { buildSecretRoom, SECRET_ORIGIN, type SecretRoom } from '../three/secret
 /** A walk is slow and silent; a run is fast and heard.  That is the trade. */
 const WALK = 2.0;
 const RUN = 4.0;
+/**
+ * What running is worth behind the wall.  The gallery is a long room with a
+ * staircase in it and nothing in it can hurt you; the hide rooms' pace is
+ * there to make crossing a room a decision, and there is no decision in here.
+ */
+const SECRET_RUN = 2.0;
 /** Radians per second on the arrow keys, and per pixel of mouse drag. */
 const TURN_RATE = 2.2;
 const LOOK_SENS = 0.004;
@@ -1169,7 +1175,7 @@ export class HideRoom3D extends Phaser.Scene {
     // it by arithmetic.  It costs a few dozen meshes the player will probably
     // never see, and the alternative is building it on entry, which would put
     // a stall exactly where the surprise is.
-    if (d.secretDoor) this.secret = buildSecretRoom(st.scene);
+    if (d.secretDoor) this.secret = buildSecretRoom(st.scene, d);
     this.secret?.setActive(false);
 
     // Froggy himself: a real model, the same one the alley uses, so the thing
@@ -2524,7 +2530,12 @@ export class HideRoom3D extends Phaser.Scene {
     // telling you they want to move, and the toggle should not argue with it.
     if (this.crouching && this.held('run')) this.crouching = false;
     const running = this.held('run') && !this.crouching;
-    const speed = this.crouching ? CROUCH : running ? RUN : WALK;
+    // ---- TWICE THE PACE, AND ONLY IN HERE.  Nothing behind the wall is
+    // listening for a footstep, so the careful pace the hide rooms are built
+    // around is just distance in the gallery.  It is read off `inSecret` every
+    // frame rather than latched on the way in, so stepping back out through
+    // the wall is back to the room's pace on the same frame.
+    const speed = (this.crouching ? CROUCH : running ? RUN : WALK) * (running && this.inSecret ? SECRET_RUN : 1);
 
     // Camera looks down -Z, so forward is (-sin, -cos) and right is (cos, -sin).
     const sin = Math.sin(this.yaw);
@@ -3361,7 +3372,7 @@ export class HideRoom3D extends Phaser.Scene {
     const moved = this.froggy.distanceTo(this.froggyWas) / Math.max(dt, 0.0001);
     this.froggyWas.copy(this.froggy);
 
-    m.update(dt, {
+    const pose = {
       speed: Math.min(6, moved),
       // The mouth is shut while he is looking for you and open once he is not.
       maw: this.fMode === 'chase' ? 1 : this.fMode === 'openSpot' ? 0.45 : 0.12,
@@ -3380,7 +3391,12 @@ export class HideRoom3D extends Phaser.Scene {
           : Math.sin(this.clock * (this.fMode === 'investigate' ? 1.5 : 0.55)) *
             (this.fMode === 'investigate' ? 0.75 : 0.5),
       lunge: this.fMode === 'chase' ? 1 : 0,
-    });
+    };
+    m.update(dt, pose);
+    // ---- AND THE SAME POSE, DOWN THE HOLE.  The enclosure under the secret
+    // room's glass is this room, so the thing in it is this model: one hunt,
+    // drawn twice, rather than two hunts that have to be kept in step.
+    this.secret?.watch({ x: this.froggy.x, y, z: this.froggy.y, yaw: this.froggyYaw, pose });
   }
 
   /**
@@ -3496,6 +3512,7 @@ export class HideRoom3D extends Phaser.Scene {
     if (!import.meta.env?.DEV) return;
     (window as unknown as Record<string, unknown>).__hide = {
       room: this.roomIndex,
+      roomName: this.def.name,
       mode: this.mode,
       froggyMode: this.fMode,
       px: this.pos.x,
@@ -3535,6 +3552,12 @@ export class HideRoom3D extends Phaser.Scene {
       atCase: this.atCase(),
       atCounter: this.atCounter(),
       inSecret: this.inSecret,
+      secretRun: SECRET_RUN,
+      /** What running is worth where the player is standing, right now. */
+      runNow: RUN * (this.inSecret ? SECRET_RUN : 1),
+      /** The enclosure under the glass, and the twin of him in it. */
+      pen: this.secret?.watching() ?? null,
+      toSecret: () => this.enterSecret(),
       hasSecret: !!this.def.secretDoor,
       secretDoorZ: this.def.secretDoor?.z ?? null,
       atButton: this.atButton(),

@@ -1,16 +1,22 @@
 /**
- * FROG CROSS THE ROAD.  Hard — 7 tokens in, fifteen and up out.
+ * FROG CROSS THE ROAD.  Hard — 10 tokens in, 20 out.
  *
  * Eight lanes of traffic between the kerb and the far bank.  Every crossing
  * is ten points and makes the road a little worse: faster cars, more of them,
  * longer ones.  Three lives.  FIVE crossings — fifty points — is the bar:
- * reach it and the run pays fifteen tokens for the seven it cost, and every
- * further five crossings adds one.  Ten was a long way to walk on three lives with the road thickening
- * under you, and most runs died two crossings short of being worth anything.
+ * reach it and the run pays twenty tokens for the ten it cost.
+ *
+ * THE PAYOUT IS FLAT, AND IT USED TO CLIMB.  Fifteen at the bar and one more
+ * for every further five crossings, which meant the interesting decision --
+ * how far past the bar do you push before the last life goes -- was worth a
+ * single token a go.  A tenth of the stake is not a decision, it is a rounding
+ * error with a prompt on it.  The bar is the whole game now: get there and it
+ * pays double, and everything past it is the high score and nothing else.
  *
  * Nothing about it is timed.  The clock here is your patience: the road only
- * gets harder, so the question is how far past the bar you push before the
- * last life goes, or whether you take ENTER and bank what you have.
+ * gets harder, so the question is whether you reach the bar at all before the
+ * last life goes -- and once you have, whether you take ENTER and walk with it
+ * or stay out for a number on the board.
  *
  * The score is the game's own; nothing but tokens ever leaves through the
  * shell (MG-3).  The best score is kept per profile (store.highScores).
@@ -26,9 +32,15 @@ import type { MinigameApi, MinigameModule } from './types';
 
 const ID = 'frogcross' as const;
 
-/** The bar, the base payout, and what each further bar is worth. */
+/**
+ * The bar and what clearing it pays.
+ *
+ * ONE NUMBER, NOT A FORMULA.  There is no per-bar bonus any more: fifty points
+ * is the win and the win is twenty tokens, whether you stop there or cross
+ * another twenty times.  See the note at the top of the file.
+ */
 export const TARGET_POINTS = 50;
-export const BASE_REWARD = 15;
+export const BASE_REWARD = 20;
 export const POINTS_PER_CROSS = 10;
 
 const LANES = 8;
@@ -81,8 +93,7 @@ let sceneRef: Phaser.Scene | null = null;
 
 /** Tokens a run is worth, or zero if it never reached the bar. */
 export function frogPayout(pts: number): number {
-  if (pts < TARGET_POINTS) return 0;
-  return BASE_REWARD + Math.floor((pts - TARGET_POINTS) / TARGET_POINTS);
+  return pts < TARGET_POINTS ? 0 : BASE_REWARD;
 }
 
 const rowY = (row: number): number => (row > LANES ? BANK_TOP + 6 : ROAD_BOTTOM + 7 - row * LANE_H);
@@ -93,11 +104,12 @@ export const frogCross: MinigameModule = {
   id: ID,
   title: 'FROG CROSS THE ROAD',
   music: 'game_frogcross',
-  rules: 'cross 5 times to win',
+  rules: 'cross 5 times for 20 tokens',
   tutorial: {
     objective: [
       'CROSS THE ROAD FIVE TIMES.',
-      'POINTS BANK AS TOKENS.',
+      'THAT IS FIFTY POINTS, AND IT PAYS 20.',
+      'THREE LIVES. THE ROAD GETS WORSE.',
     ],
     controls: [
       ['W A S D', 'HOP'],
@@ -110,7 +122,7 @@ export const frogCross: MinigameModule = {
     // crossing, it was a key with nothing behind it.
   },
   touch: { stick: 'wasd', arrows: true, buttons: [{ label: 'BANK', key: 'ENTER' }] },
-  payoutNote: 'WIN: 15+',
+  payoutNote: 'WIN: 20',
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;

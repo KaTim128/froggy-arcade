@@ -28,13 +28,29 @@ export function depthFor(y: number): number {
   return 50 + y / 1000;
 }
 
+/**
+ * What is underfoot, and what that sounds like.
+ *
+ * The arcade is carpeted -- every room of it -- and outside is loose ground,
+ * which is a different sound and not merely a brighter one.  `concrete` is
+ * kept for the places that really are a bare slab: the basement, the flooded
+ * lower level.
+ */
+export type Surface = 'carpet' | 'concrete' | 'gravel';
+
+const FLOOR_SFX: Record<Surface, 'footstep_carpet' | 'footstep_concrete' | 'footstep_gravel'> = {
+  carpet: 'footstep_carpet',
+  concrete: 'footstep_concrete',
+  gravel: 'footstep_gravel',
+};
+
 export class Player {
   readonly sprite: Phaser.GameObjects.Container;
   private body: Phaser.GameObjects.Rectangle;
   private stepTimer = 0;
   private bobT = 0;
   private torso: Phaser.GameObjects.Rectangle;
-  private surface: 'carpet' | 'concrete' = 'carpet';
+  private surface: Surface = 'carpet';
   private shift: Phaser.Input.Keyboard.Key | null = null;
 
   constructor(scene: Phaser.Scene, x: number, y: number, night = false) {
@@ -51,7 +67,7 @@ export class Player {
     this.sprite.setDepth(depthFor(y));
   }
 
-  setSurface(s: 'carpet' | 'concrete'): void {
+  setSurface(s: Surface): void {
     this.surface = s;
   }
 
@@ -91,7 +107,7 @@ export class Player {
     this.stepTimer += delta * (sprinting ? SPRINT_MUL : 1);
     if (this.stepTimer >= STEP_INTERVAL_MS) {
       this.stepTimer = 0;
-      audio.sfx(this.surface === 'carpet' ? 'footstep_carpet' : 'footstep_concrete');
+      audio.sfx(FLOOR_SFX[this.surface]);
     }
     return true;
   }

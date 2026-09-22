@@ -22,18 +22,41 @@
  * here at all.
  *
  * UPSTAIRS IS WHY IT IS STILL A HORROR ROOM.  A staircase out of the lounge
- * leads onto a mezzanine whose floor is glass, and under the glass is a
- * chamber with him in it, pacing, looking for something.  He cannot see up
- * through it.  You are three metres above the thing that has been hunting you
- * all night, in a warm room, eating its food, watching it work.
+ * leads onto a mezzanine whose floor is glass, and under the glass is THE ROOM
+ * YOU WERE JUST IN -- the whole of it, rebuilt from the same definition the
+ * hunt is running in, at a third of size so it fits under the pane.  Room one,
+ * two or three, whichever round this is.  It is an observation gallery over an
+ * enclosure, and the animal in the enclosure is the thing that was chasing
+ * you: still in there, still working the boxes, still looking for a player who
+ * is now standing over it with a mug of its tea.
+ *
+ * HE IS NOT A SECOND FROGGY.  The twin down there decides nothing -- every
+ * frame it is handed the pose the room's own model is wearing (see `watch`),
+ * so what you are watching is the real search, in real time, for you.  He
+ * cannot see up through the glass, cannot hear through it, cannot reach it and
+ * has no path to it: the only thing that crosses the pane is your line of
+ * sight.
  *
  * Geometry is local to this module and lives at SECRET_ORIGIN, a long way from
  * any hide room, so nothing in the hunt can reach it by accident.
  */
 
 import * as THREE from 'three';
-import type { Box } from './hideRooms';
-import { FroggyMonster } from './froggyMonster';
+import type { Box, RoomDef } from './hideRooms';
+import { FroggyMonster, type FroggyPose } from './froggyMonster';
+
+/**
+ * What the room says he is doing this frame, handed straight to the twin in
+ * the enclosure.  Position and facing are in ROOM coordinates: the enclosure
+ * group carries the scale, so nothing here has to know what it is.
+ */
+export interface Watched {
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  pose: FroggyPose;
+}
 
 /**
  * Where the complex is built, in world space.  Far enough from every room that
@@ -41,7 +64,15 @@ import { FroggyMonster } from './froggyMonster';
  */
 export const SECRET_ORIGIN = new THREE.Vector3(0, 0, -600);
 
-/** The mezzanine's height: a full storey up, and the ceiling of the chamber. */
+/**
+ * How big he is, which is the hide rooms' own number.  He is built INSIDE the
+ * enclosure group, so the room's scale is applied to him too and he stands the
+ * same height against that furniture down there as he does against the real
+ * thing upstairs.
+ */
+const FROGGY_SCALE = 1.75;
+
+/** The mezzanine's height: a full storey up, and the ceiling of the enclosure. */
 const MEZZ_Y = 4.6;
 /** The lounge runs from the back wall to the divider; the chamber from it. */
 const DIVIDE_Z = -2.5;
@@ -67,6 +98,14 @@ export interface SecretRoom {
   clamp(v: THREE.Vector2): void;
   /** Drives the television and the thing under the glass. */
   tick(dt: number): void;
+  /**
+   * MIRROR THE HUNT.  Called every frame with the pose the room's own model is
+   * wearing, so the thing in the enclosure is the thing still looking for you
+   * rather than a second one with its own ideas.
+   */
+  watch(w: Watched): void;
+  /** What is in the enclosure and where it is, for a harness that cannot look down. */
+  watching(): { x: number; z: number; yaw: number; scale: number; props: number; room: string };
   /**
    * Whether the complex is being rendered and lit at all.
    *
@@ -100,7 +139,11 @@ function floorAt(x: number, z: number): number {
   return 0;
 }
 
-export function buildSecretRoom(scene: THREE.Scene): SecretRoom {
+/**
+ * @param watched The room the player just stepped out of -- the one that is
+ *   rebuilt under the glass.  Room one, two or three, whichever this is.
+ */
+export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoom {
   const root = new THREE.Group();
   root.position.copy(SECRET_ORIGIN);
   scene.add(root);
@@ -342,40 +385,77 @@ export function buildSecretRoom(scene: THREE.Scene): SecretRoom {
   // and the divider between the lounge and the drop, everywhere except the run
   box(lam(0xc2895c), 14.0, 5.2, 0.5, -2.0, 0, DIVIDE_Z, true, 0xc2895c);
 
-  // ------------------------------------------------- THE CHAMBER, AND THE GLASS
-  // Below the mezzanine: a dim room with him in it.  The glass is its ceiling
-  // and the mezzanine's floor, it is solid to walk on, and it is transparent
-  // from above and mirrored from below -- which is the point, and which costs
-  // nothing to fake, because he has no reflection to check.
-  const chamberMinZ = DIVIDE_Z;
-  const chamberFloor = new THREE.Mesh(
-    new THREE.PlaneGeometry(MAX_X - MIN_X, MAX_Z - chamberMinZ),
-    lam(0x2a2f36),
+  // ------------------------------------------- THE ENCLOSURE, AND THE GLASS
+  //
+  // Below the mezzanine is THE ROOM YOU JUST LEFT, laid out from the same
+  // RoomDef the hunt is running in: the same floor, the same walls, the same
+  // furniture in the same places and the same boxes you were hiding in ten
+  // seconds ago.  It is built to a third of size so the whole of it fits under
+  // the pane, which is exactly what an enclosure is -- a whole habitat, seen
+  // at once, from above, by somebody who is not in it.
+  //
+  // THE THING IN IT IS NOT A SECOND FROGGY.  Nothing down there decides
+  // anything: `watch` is handed the pose the room's own model is wearing this
+  // frame and the twin copies it.  What the player is looking down at is the
+  // real hunt, still going, in the real room, for them.
+  const pitMinZ = DIVIDE_Z;
+  const pitCZ = (pitMinZ + MAX_Z) / 2;
+  const pitW = MAX_X - MIN_X - 1.4;
+  const pitD = MAX_Z - pitMinZ - 1.4;
+  /** One metre of that room, in here.  The smaller axis wins so nothing is cropped. */
+  const k = Math.min(pitW / (watched.halfW * 2), pitD / (watched.halfD * 2));
+
+  const pen = new THREE.Group();
+  pen.position.set(0, 0.02, pitCZ);
+  pen.scale.setScalar(k);
+  root.add(pen);
+  /** A box in ROOM coordinates, dropped into the enclosure at enclosure scale. */
+  const penBox = (color: number, w: number, h: number, d: number, x: number, z: number, y = 0): void => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), lam(color));
+    m.position.set(x, y + h / 2, z);
+    pen.add(m);
+  };
+
+  const penFloor = new THREE.Mesh(
+    new THREE.PlaneGeometry(watched.halfW * 2, watched.halfD * 2),
+    lam(watched.floor),
   );
-  chamberFloor.rotation.x = -Math.PI / 2;
-  chamberFloor.position.set(0, 0.02, (chamberMinZ + MAX_Z) / 2);
-  root.add(chamberFloor);
-  for (const [x, z] of [
-    [-5, 2],
-    [5, 9],
-  ] as const) {
-    const l = new THREE.PointLight(0x7d93a8, 11, 16, 1.4);
-    l.position.set(x, 3.2, z);
-    root.add(l);
-    lights.push(l);
+  penFloor.rotation.x = -Math.PI / 2;
+  pen.add(penFloor);
+  // The shell.  Low enough to see over from up here -- the point of the pane
+  // is that the room has no lid on it any more and he has not noticed.
+  const penH = watched.wallH;
+  penBox(watched.wall, watched.halfW * 2 + 0.6, penH, 0.6, 0, -watched.halfD - 0.3);
+  penBox(watched.wall, watched.halfW * 2 + 0.6, penH, 0.6, 0, watched.halfD + 0.3);
+  penBox(watched.wall, 0.6, penH, watched.halfD * 2 + 0.6, -watched.halfW - 0.3, 0);
+  penBox(watched.wall, 0.6, penH, watched.halfD * 2 + 0.6, watched.halfW + 0.3, 0);
+  // Everything that is in that room, where it is in that room.
+  for (const f of watched.furniture) penBox(f.color, f.w, f.h, f.d, f.x, f.z);
+  // and the boxes he opens, marked out from the furniture so it is obvious
+  // which ones he is working and which ones he has not got to yet.
+  for (const spot of watched.spots) {
+    penBox(0x6b7789, 1.5, spot.kind === 'bed' ? 0.7 : 1.4, 1.5, spot.x, spot.z);
+    penBox(0x93a3b8, 1.6, 0.12, 1.6, spot.x, spot.z, spot.kind === 'bed' ? 0.7 : 1.4);
   }
-  // a few shapes down there, so it is a place rather than an empty tray
-  for (const [x, z, w, d, h] of [
-    [-7.2, 4.0, 1.6, 1.6, 1.4],
-    [6.6, 1.2, 2.2, 1.0, 1.9],
-    [0.5, 11.0, 3.0, 1.2, 1.6],
-    [-3.0, 8.0, 1.0, 1.0, 0.8],
-  ] as const) {
-    box(lam(0x3a424e), w, h, d, x, 0, z);
+  // the door he locked behind you, shut, in the wall it is in
+  penBox(0x2b2119, 2.2, 3.0, 0.5, watched.door.x, watched.halfD - 0.1);
+
+  // ITS OWN LIGHT, taken off the room's own bulbs so the enclosure is lit the
+  // colour the room is lit -- two of them, not nine, because ten more lamps in
+  // here is what put the hide rooms under twenty frames a second.
+  for (const l of watched.lights.slice(0, 3)) {
+    // Hung off the underside of the pane rather than at the room's own ceiling
+    // height, and carrying a long way: at the bulbs' own reach the enclosure
+    // was a dark tray with something moving in it, and the whole point of the
+    // gallery is that you can SEE him work.
+    const pl = new THREE.PointLight(l.color, 34, 26, 1.1);
+    pl.position.set(l.x * k, 3.6, pitCZ + l.z * k);
+    root.add(pl);
+    lights.push(pl);
   }
 
   const glass = new THREE.Mesh(
-    new THREE.PlaneGeometry(MAX_X - MIN_X, MAX_Z - chamberMinZ),
+    new THREE.PlaneGeometry(MAX_X - MIN_X, MAX_Z - pitMinZ),
     new THREE.MeshBasicMaterial({
       color: 0xbfe4ff,
       transparent: true,
@@ -385,45 +465,42 @@ export function buildSecretRoom(scene: THREE.Scene): SecretRoom {
     }),
   );
   glass.rotation.x = -Math.PI / 2;
-  glass.position.set(0, MEZZ_Y, (chamberMinZ + MAX_Z) / 2);
+  glass.position.set(0, MEZZ_Y, pitCZ);
   root.add(glass);
   // a frame round it, so it reads as a pane and not as a missing floor
   for (const [x, z, w, d] of [
-    [0, chamberMinZ + 0.15, MAX_X - MIN_X, 0.3],
+    [0, pitMinZ + 0.15, MAX_X - MIN_X, 0.3],
     [0, MAX_Z - 0.15, MAX_X - MIN_X, 0.3],
-    [MIN_X + 0.15, (chamberMinZ + MAX_Z) / 2, 0.3, MAX_Z - chamberMinZ],
-    [MAX_X - 0.15, (chamberMinZ + MAX_Z) / 2, 0.3, MAX_Z - chamberMinZ],
+    [MIN_X + 0.15, pitCZ, 0.3, MAX_Z - pitMinZ],
+    [MAX_X - 0.15, pitCZ, 0.3, MAX_Z - pitMinZ],
   ] as const) {
     box(lam(0x4a5260), w, 0.12, d, x, MEZZ_Y - 0.12, z);
   }
   // and a railing, so standing on a sheet of glass over that is survivable
   for (const [x, z, w, d] of [
     [0, MAX_Z - 0.3, MAX_X - MIN_X, 0.2],
-    [MIN_X + 0.3, (chamberMinZ + MAX_Z) / 2, 0.2, MAX_Z - chamberMinZ],
-    [MAX_X - 0.3, (chamberMinZ + MAX_Z) / 2, 0.2, MAX_Z - chamberMinZ],
+    [MIN_X + 0.3, pitCZ, 0.2, MAX_Z - pitMinZ],
+    [MAX_X - 0.3, pitCZ, 0.2, MAX_Z - pitMinZ],
   ] as const) {
     box(lam(0x5a6270), w, 1.05, d, x, MEZZ_Y, z, true, 0x5a6270);
   }
 
-  // HIM, under the glass.  Off to one side of where the stairs put you, so the
-  // first thing you see when you step onto the pane is not the top of his head
-  // -- you have to walk out over him to find him, which is worse.
-  const monster = new FroggyMonster(1.75);
-  root.add(monster.root);
+  // HIM, in the enclosure, at the enclosure's scale because he is in the group
+  // with the room he is searching.  Posed by `watch` and by nothing else.
+  const monster = new FroggyMonster(FROGGY_SCALE);
+  pen.add(monster.root);
   // Dark and unlit until somebody walks through the wall.  See setActive.
   root.visible = false;
   for (const l of lights) l.visible = false;
-  /** A slow beat down there: two long legs of a patrol, and a pause at each end. */
-  const PATROL: Array<[number, number]> = [
-    [-5.5, 2.4],
-    [5.0, 9.6],
-  ];
-  let leg = 0;
-  let at = new THREE.Vector2(PATROL[0][0], PATROL[0][1]);
-  let goal = new THREE.Vector2(PATROL[1][0], PATROL[1][1]);
-  let pause = 1.2;
-  let yaw = 0;
   let clock = 0;
+  /** The last thing the room said he was doing.  Standing still, until it does. */
+  let seen: Watched = {
+    x: watched.froggyStart.x,
+    y: 0,
+    z: watched.froggyStart.z,
+    yaw: 0,
+    pose: { speed: 0, maw: 0.12, climb: 0, scan: 0 },
+  };
 
   const tick = (dt: number): void => {
     clock += dt;
@@ -434,36 +511,11 @@ export function buildSecretRoom(scene: THREE.Scene): SecretRoom {
     tvGlow.intensity = 7 + k * 5;
     knobLight.intensity = 6 + Math.sin(clock * 2.4) * 1.6;
 
-    // Him.  1.1 m/s -- a walk, not a hunt, because he has nothing to hunt.
-    let speed = 0;
-    if (pause > 0) {
-      pause -= dt;
-    } else {
-      const dx = goal.x - at.x;
-      const dz = goal.y - at.y;
-      const dist = Math.hypot(dx, dz);
-      if (dist < 0.4) {
-        leg = 1 - leg;
-        goal.set(PATROL[leg][0], PATROL[leg][1]);
-        pause = 2.2 + Math.random() * 2.5;
-      } else {
-        speed = 1.1;
-        at.x += (dx / dist) * speed * dt;
-        at.y += (dz / dist) * speed * dt;
-        yaw = Math.atan2(dx, dz);
-      }
-    }
-    monster.setPose(at.x, 0, at.y, yaw);
-    monster.update(dt, {
-      speed,
-      // Shut.  He is not chasing anything; he is looking, and that is the
-      // whole of what makes watching him from up here unpleasant.
-      maw: 0.12,
-      climb: 0,
-      // The head sweeps the room the way it does upstairs, and it never once
-      // comes up -- he does not know there is an up.
-      scan: Math.sin(clock * 0.5) * 0.7,
-    });
+    // Him, doing downstairs exactly what he is doing in the room: the pose is
+    // the room's, not ours.  He never once looks up -- there is nothing in the
+    // hunt that knows there is an up.
+    monster.setPose(seen.x, seen.y, seen.z, seen.yaw);
+    monster.update(dt, seen.pose);
   };
 
   return {
@@ -477,6 +529,18 @@ export function buildSecretRoom(scene: THREE.Scene): SecretRoom {
       v.y = Math.min(MAX_Z - 0.6, Math.max(MIN_Z + 0.6, v.y));
     },
     tick,
+    watch: (w: Watched) => {
+      seen = w;
+    },
+    watching: () => ({
+      x: monster.root.position.x,
+      z: monster.root.position.z,
+      yaw: monster.root.rotation.y,
+      scale: k,
+      // Everything rebuilt from the room definition, the shell included.
+      props: pen.children.length - 2,
+      room: watched.name,
+    }),
     setActive: (on: boolean) => {
       root.visible = on;
       for (const l of lights) l.visible = on;

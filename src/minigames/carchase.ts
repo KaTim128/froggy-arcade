@@ -117,13 +117,17 @@ export const TARGET_CASH = 200;
 /**
  * The PAY bar, and what clearing it is worth.
  *
- * Three hundred to bank anything, fifteen tokens for it, and five more for
+ * Three hundred to bank anything, TWENTY TOKENS for it, and five more for
  * every hundred after that.  It is deliberately past the first heat notch:
  * one police car turns up at two hundred, so nobody banks a run without
  * having been chased by somebody.
+ *
+ * Twenty because the cabinet takes ten: every ten token machine on this floor
+ * pays twenty for the win, and a road that paid fifteen for clearing its own
+ * bar was the one that asked for more and gave back less.
  */
 export const BAR_CASH = 300;
-export const BASE_REWARD = 15;
+export const BASE_REWARD = 20;
 export const STEP_CASH = 100;
 export const STEP_REWARD = 5;
 export const CASH_PER_PICKUP = 20;
@@ -218,21 +222,27 @@ const BOMB_COST = 30;
 const BOMB_LIFE_MS = 9000;
 
 /**
- * OIL SPILLS.  Three seconds of not driving the car.
+ * OIL SPILLS.  A second and a half of not driving the car.
  *
  * The pothole costs you the gap.  This costs you the WHEEL: drive over a slick
  * and the car lets go, spins, and drifts wherever it was already going for a
- * full three seconds.  Everything else out here is a thing you steer around;
+ * second and a half.  Everything else out here is a thing you steer around;
  * this is the one that takes the steering away, which is why it is the hazard
  * that makes a busy road frightening rather than merely busy.
  *
- * NOT A FREEZE, THOUGH.  A hazard that removes every input for three seconds
- * with four police cars on your bumper is not difficulty, it is a cutscene of
- * your own death — so a fifth of the steering survives the spin.  It is not
- * enough to drive with and it is enough to save yourself with, which is the
- * difference between a hazard and a verdict.
+ * NOT A FREEZE, THOUGH.  A hazard that removes every input with four police
+ * cars on your bumper is not difficulty, it is a cutscene of your own death —
+ * so a fifth of the steering survives the spin.  It is not enough to drive
+ * with and it is enough to save yourself with, which is the difference between
+ * a hazard and a verdict.
+ *
+ * THREE SECONDS WAS TOO LONG.  At that length the spin outlasted the stretch
+ * of road you could see coming, so there was nothing to do with the steering
+ * that survived it: you went round, and whatever you were going to hit was
+ * already decided.  At a second and a half the fifth of a wheel you keep is
+ * worth using, which is the whole point of leaving it.
  */
-const OIL_SPIN_MS = 3000;
+const OIL_SPIN_MS = 1500;
 /** What is left of the steering while the car is going round. */
 const OIL_STEER = 0.2;
 /**
@@ -320,6 +330,30 @@ const PED_CASH = 500;
  * costs you the gap is one you drive around.
  */
 const POTHOLE_JOLT_MS = 900;
+/**
+ * THE CAR ONLY TAKES THREE OF THEM.
+ *
+ * A pothole used to cost the gap and nothing else, so a player who could
+ * afford the seconds could simply drive through every one on the road -- the
+ * hazard had no memory and there was no reason to treat the third differently
+ * from the first.  Now the car does the remembering:
+ *
+ *   one    the jolt, as before: most of the speed and half the steering, a beat
+ *   two    the same jolt, and it starts smoking, so the damage is on screen
+ *   three  the axle goes, the car rolls to a stop, and the run is over
+ *
+ * The count is per run and resets with everything else at the gun.  A pothole
+ * is destroyed by the contact that registers it, so one hole is one hit
+ * however many frames the boxes overlap for.
+ */
+const POTHOLE_MAX = 3;
+/** Hits before the engine starts showing it. */
+const SMOKE_FROM = 2;
+/** How long the car takes to roll to a stop once the axle has gone. */
+const BREAKDOWN_MS = 1200;
+/** How often a damaged engine coughs out a puff, ms. */
+const SMOKE_EVERY = 130;
+const SMOKE_LIFE = 900;
 /** What is left of the throttle and the steering while you are in one. */
 const POTHOLE_SPEED = 0.45;
 const POTHOLE_STEER = 0.4;
@@ -592,6 +626,12 @@ let joltMs = 0;
 /** Milliseconds left of the car being loose, and which way it is going round. */
 let spinMs = 0;
 let spinDir = 1;
+/** Potholes hit this run, out of POTHOLE_MAX.  Reset at the gun. */
+let potholeHits = 0;
+/** Milliseconds of rolling to a stop with a broken axle.  0 when driving. */
+let brokenMs = 0;
+let smokeTimer = 0;
+let smoke: Array<{ x: number; y: number; life: number; body: Phaser.GameObjects.Arc }> = [];
 let barriers: Barrier[] = [];
 let barrierTimer = 0;
 let peds: Ped[] = [];
@@ -629,6 +669,7 @@ let hud: {
   time: Phaser.GameObjects.BitmapText;
   bank: Phaser.GameObjects.BitmapText;
   bombLabel: Phaser.GameObjects.BitmapText;
+  damage: Phaser.GameObjects.BitmapText;
   warn: Phaser.GameObjects.BitmapText;
   clear: Phaser.GameObjects.BitmapText;
 } | null = null;
@@ -657,10 +698,10 @@ export const carChase: MinigameModule = {
       'GRAB CASH AND LOSE THE LAW.',
       'SPACE BUYS A FROGGY BOMB - 30 CASH.',
       'IT SPINS THE LAW AND CLEARS THEM 10s.',
-      'OIL SPINS *YOU*. CONCRETE ENDS YOU.',
-      'THE PEOPLE OUT THERE CANNOT SEE YOU.',
-      'SWERVE LATE - THEY DRIVE AT YOUR OLD LANE.',
-      'PULL OVER AT 300 FOR 15, +5 EVERY 100.',
+      'OIL SPINS YOU 1.5s. CONCRETE ENDS YOU.',
+      'POTHOLE 1 SLOWS YOU. 2 STARTS SMOKE.',
+      'POTHOLE 3 BREAKS THE CAR - RUN OVER.',
+      'PULL OVER AT 300 FOR 20, +5 EVERY 100.',
     ],
     controls: [
       ['A / D', 'STEER'],
@@ -678,7 +719,7 @@ export const carChase: MinigameModule = {
       { label: 'PULL\nOVER', key: 'ENTER' },
     ],
   },
-  payoutNote: 'WIN: 15+',
+  payoutNote: 'WIN: 20+',
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     scene0 = scene;
@@ -715,6 +756,10 @@ export const carChase: MinigameModule = {
     joltMs = 0;
     spinMs = 0;
     spinDir = 1;
+    potholeHits = 0;
+    brokenMs = 0;
+    smokeTimer = 0;
+    smoke = [];
     heatShown = 0;
     over = false;
     reason = '';
@@ -750,12 +795,14 @@ export const carChase: MinigameModule = {
       time: centerText(scene, GAME_W / 2, 25, '', PALETTE.fog),
       bank: centerText(scene, GAME_W / 2, 170, '', PALETTE.gold).setVisible(false),
       bombLabel: text(scene, 4, 150, '', PALETTE.gold),
+      damage: text(scene, 4, 140, '', PALETTE.amber),
       warn: centerText(scene, GAME_W / 2, 150, 'POLICE CLOSE', PALETTE.blood, 16).setVisible(false),
       // The quiet is the reward, so the quiet is on the HUD and counting down:
       // ten seconds you cannot see is ten seconds you cannot spend.
       clear: centerText(scene, GAME_W / 2, 30, '', PALETTE.tealLight, 16).setVisible(false),
     };
     hud.bombLabel.setDepth(9);
+    hud.damage.setDepth(9);
     hud.warn.setDepth(9);
     hud.clear.setDepth(9);
     hud.cash.setDepth(9);
@@ -791,6 +838,12 @@ export const carChase: MinigameModule = {
           jolted: joltMs > 0,
           spinning: spinMs > 0,
           spin: Math.max(0, Math.round(spinMs)),
+          spinFor: OIL_SPIN_MS,
+          potholeHits,
+          potholeMax: POTHOLE_MAX,
+          smoking: potholeHits >= SMOKE_FROM,
+          smoke: smoke.length,
+          broken: brokenMs > 0,
           stage: stage(),
           barriers: barriers.length,
           barrierLanes: barriers.map((b) => b.lane),
@@ -894,6 +947,7 @@ export const carChase: MinigameModule = {
           for (const c of cash) c.body.destroy();
           for (const b of barriers) b.body.destroy();
           for (const ped of peds) ped.body.destroy();
+          for (const puff of smoke) puff.body.destroy();
           traffic = [];
           police = [];
           traps = [];
@@ -902,8 +956,15 @@ export const carChase: MinigameModule = {
           cash = [];
           barriers = [];
           peds = [];
+          smoke = [];
           joltMs = 0;
           spinMs = 0;
+          // NOT the pothole count, and not the broken axle.  Those are the
+          // CAR's state and this sweeps the ROAD -- wiping them here made
+          // "clear the hazards so I can aim at one" quietly mean "and repair
+          // the car", so damage could never be accumulated a hole at a time.
+          // The run's own reset is in `create`, which is the only place a
+          // fresh car comes from.
           policeTimer = 60_000;
           trafficTimer = 60_000;
           trapTimer = 60_000;
@@ -911,6 +972,14 @@ export const carChase: MinigameModule = {
           jarTimer = 60_000;
           barrierTimer = 60_000;
           pedTimer = 60_000;
+        },
+        /** Put the car back together, for a test that wants a fresh one. */
+        repair: () => {
+          potholeHits = 0;
+          brokenMs = 0;
+          for (const puff of smoke) puff.body.destroy();
+          smoke = [];
+          refreshHud();
         },
         /** Park the car somewhere exact, for aiming a test at a hazard. */
         setPlayer: (x: number, y: number) => {
@@ -988,17 +1057,31 @@ export const carChase: MinigameModule = {
     // car is barely yours for any of it.
     if (spinMs > 0) spinMs -= delta;
     const spinning = spinMs > 0;
+    // ---- and the axle you broke on the third hole.  Nothing the player does
+    // reaches the car from here: it coasts down and the run ends with it.
+    if (brokenMs > 0) {
+      brokenMs -= delta;
+      if (brokenMs <= 0) {
+        crash('BROKEN DOWN');
+        return;
+      }
+    }
+    const broken = brokenMs > 0;
+    // What is left of the engine: full, or winding down to nothing over the
+    // roll-out, so the car is seen to stop rather than being switched off.
+    const engine = broken ? Math.max(0, brokenMs / BREAKDOWN_MS) : 1;
     const heat = chaseHeat(collected);
     peak = Math.max(peak, collected);
 
     // ---- the road, and you on it.  It runs quicker the more you are carrying.
     speed = Math.min(SPEED_MAX + heat * HEAT_ROAD, SPEED_START + (elapsed / 1000) * SPEED_RAMP + heat * HEAT_ROAD);
-    const ground = speed * (jolted ? POTHOLE_SPEED : 1);
+    const ground = speed * (jolted ? POTHOLE_SPEED : 1) * engine;
     const dx = (held('right') ? 1 : 0) - (held('left') ? 1 : 0);
     const dy = (held('down') ? 1 : 0) - (held('up') ? 1 : 0);
     // What is left of the steering.  A pothole takes half of it for under a
     // second; a slick takes four fifths of it for three.
-    const grip = spinning ? OIL_STEER : jolted ? POTHOLE_STEER : 1;
+    // A broken car does not steer at all; a spinning one barely does.
+    const grip = broken ? 0 : spinning ? OIL_STEER : jolted ? POTHOLE_STEER : 1;
     // ---- AND THE SLICK DRIVES THE CAR FOR YOU while it lasts: a sideways
     // drift that swings one way and back rather than a constant shove, so the
     // car wanders across the road the way one that has let go actually does.
@@ -1016,6 +1099,8 @@ export const carChase: MinigameModule = {
     // or going round and round, which is what a car on oil does.
     if (spinning) player.setAngle(player.angle + spinDir * OIL_SPIN_RATE * dt);
     else player.setAngle(Phaser.Math.Linear(player.angle, dx * 7, Math.min(1, dt * 9)));
+    // The damage, on screen, behind the car.
+    stepSmoke(dt, delta, ground);
     for (const d of dashes) {
       d.y += ground * dt;
       if (d.y > BOTTOM) d.y -= BOTTOM - TOP + 16;
@@ -1196,9 +1281,14 @@ export const carChase: MinigameModule = {
       const touched = Math.abs(j.x - px) < CAR_W / 2 + 4 && Math.abs(j.y - py) < CAR_H / 2 + 5;
       if (touched) {
         if (j.kind === 'oil') {
-          // THE SLICK.  The car lets go.  Three seconds of it going round on
-          // its own with a fifth of the steering left, and everything that was
-          // behind you arriving while it happens.
+          // THE SLICK.  The car lets go: a second and a half of it going round
+          // on its own with a fifth of the steering left, and everything that
+          // was behind you arriving while it happens.
+          //
+          // A SECOND SLICK STARTS A WHOLE FRESH SPIN rather than topping up
+          // what is left of the first.  The clock is set, not added to, and
+          // the direction is re-rolled with it -- two slicks in a row is two
+          // spins, and the one you are in now is always a full one.
           spinMs = OIL_SPIN_MS;
           spinDir = Math.random() < 0.5 ? -1 : 1;
           audio.sfx('splash', 0.7);
@@ -1206,10 +1296,18 @@ export const carChase: MinigameModule = {
         } else {
           // THE POTHOLE.  You are in it, and out of it in under a second --
           // with most of your speed gone and whatever was behind you a lot
-          // closer than it was.
+          // closer than it was.  And the car remembers it: see POTHOLE_MAX.
           joltMs = POTHOLE_JOLT_MS;
+          potholeHits++;
           audio.sfx('item_thud', 0.8);
-          scene0?.cameras.main.shake(260, 0.012);
+          if (potholeHits >= POTHOLE_MAX) {
+            breakDown();
+          } else {
+            scene0?.cameras.main.shake(260, 0.012);
+            // The one that starts the smoke is worth saying out loud -- the
+            // smoke itself is behind the car, where the driver cannot see it.
+            if (potholeHits === SMOKE_FROM) warn('SOMETHING IS SMOKING');
+          }
         }
         refreshHud();
         j.body.destroy();
@@ -1438,6 +1536,7 @@ export const carChase: MinigameModule = {
     drops = [];
     barriers = [];
     peds = [];
+    smoke = [];
     dashes = [];
     player = null;
     hud = null;
@@ -2002,6 +2101,69 @@ function spawnPed(): void {
   });
 }
 
+/**
+ * THE AXLE GOES.
+ *
+ * Not a crash: a breakdown.  The car keeps its place on the road and coasts
+ * down over `BREAKDOWN_MS` with the steering gone, so the player watches the
+ * run end rather than being told it has -- and whatever was chasing arrives
+ * while it happens, which is the right last image for this game.
+ *
+ * `crash` is what actually ends it, from the update loop, once the roll-out is
+ * spent.  Calling it here would cut the roll-out off at the first frame.
+ */
+function breakDown(): void {
+  if (brokenMs > 0 || over) return;
+  brokenMs = BREAKDOWN_MS;
+  audio.sfx('crumble', 0.8);
+  scene0?.cameras.main.shake(620, 0.02);
+  warn('THE AXLE IS GONE');
+}
+
+/** A line over the road, for the things the driver cannot see for themselves. */
+function warn(line: string): void {
+  if (!scene0) return;
+  const t = centerText(scene0, GAME_W / 2, 74, line, PALETTE.blood).setDepth(50);
+  scene0.tweens.add({ targets: t, y: 66, alpha: 0, duration: 1500, onComplete: () => t.destroy() });
+}
+
+/**
+ * THE SMOKE, once the engine has taken two.
+ *
+ * Puffs off the back of the car, drifting down the road with everything else
+ * and fading as they go.  It is the only part of the damage the player can
+ * see, so it keeps going for as long as the car is hurt rather than being a
+ * one-off puff at the moment of the hit.
+ */
+function stepSmoke(dt: number, delta: number, ground: number): void {
+  if (!scene0) return;
+  if (potholeHits >= SMOKE_FROM && !over) {
+    smokeTimer -= delta;
+    if (smokeTimer <= 0) {
+      smokeTimer = SMOKE_EVERY;
+      const x = px + (Math.random() - 0.5) * (CAR_W - 4);
+      const y = py + CAR_H / 2 - 1;
+      // Darker the worse it is: a car on its last hole is burning something.
+      const shade = potholeHits >= POTHOLE_MAX - 1 ? 0x4a4a52 : 0x7d8088;
+      const body = scene0.add.circle(x, y, 2, shade, 0.7).setDepth(5);
+      smoke.push({ x, y, life: SMOKE_LIFE, body });
+    }
+  }
+  smoke = smoke.filter((puff) => {
+    puff.life -= delta;
+    // Down the road with everything else, and wandering as it lifts.
+    puff.y += ground * dt * 0.9;
+    puff.x += Math.sin(puff.life / 90) * 8 * dt;
+    const k = Math.max(0, puff.life / SMOKE_LIFE);
+    puff.body.setPosition(puff.x, puff.y).setRadius(2 + (1 - k) * 4).setAlpha(k * 0.6);
+    if (puff.life <= 0 || puff.y > BOTTOM + 8) {
+      puff.body.destroy();
+      return false;
+    }
+    return true;
+  });
+}
+
 function spawnCash(): void {
   if (!scene0) return;
   const lane = LANES[Phaser.Math.Between(0, 3)];
@@ -2029,6 +2191,13 @@ function refreshHud(): void {
   // read is a button you press and nothing happens.
   hud.bombLabel.setText(`BOMB ${BOMB_COST}`);
   hud.bombLabel.setTint(collected >= BOMB_COST ? PALETTE.gold : PALETTE.steel);
+  // ---- AND HOW MUCH CAR IS LEFT.  The smoke says something is wrong; this
+  // says how wrong, which is what a player deciding whether to risk the next
+  // hole actually needs.  Hidden while the car is clean, so an undamaged run
+  // is not carrying a meter that only ever reads full.
+  const left = POTHOLE_MAX - potholeHits;
+  hud.damage.setText(potholeHits > 0 ? `CAR ${'#'.repeat(left)}${'.'.repeat(potholeHits)}` : '').setVisible(potholeHits > 0);
+  hud.damage.setTint(left <= 1 ? PALETTE.blood : PALETTE.amber);
 }
 
 function finish(): void {

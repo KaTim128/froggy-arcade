@@ -42,6 +42,20 @@ const DOES_X = 84;
  * flowed after the panel, so it cannot be pushed off the card again.
  */
 const ROW_H = 9;
+/**
+ * The objective's own line height, a pixel tighter than a control row.
+ *
+ * A control row carries two columns that have to stay legible side by side; an
+ * objective line is one centred sentence, and eight reads perfectly well.  The
+ * pixel a line is what buys the car chase its seventh line of rules.
+ */
+const OBJ_ROW = 8;
+/** The CONTROLS header inside the panel, above the first row. */
+const PANEL_HEAD = 11;
+/** Clear air between the bottom of the panel and the top of the price. */
+const PANEL_GAP = 3;
+/** How far the price sits above the buttons. */
+const PRICE_UP = 27;
 /** The controls panel: darker than the card, so the keys read at a glance. */
 const PANEL_INK = 0x07060c;
 const PANEL_EDGE = 0x2f2850;
@@ -100,23 +114,36 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
   keep(centerText(scene, GAME_W / 2, CARD.y + 5, `HOW TO PLAY - ${opts.title}`, PALETTE.gold).setDepth(903));
 
   const rows = opts.tutorial.controls.slice(0, 6);
-  // ---- the objective, out of a TEN ROW BUDGET shared with the controls.
+
+  // ---- HOW MANY LINES FIT, WORKED OUT RATHER THAN GUESSED.
   //
-  // Ten is what fits between the title and the price block, and the busiest
-  // card in the building spends it four-and-six (Grudge).  A cabinet with
-  // fewer keys may spend the slack on saying more about the game -- bowling
-  // has four rows of controls and six lines of rules, including what the two
-  // bonuses pay -- and nothing may go over the ten, which is the line the
-  // price used to end up under.
-  let y = CARD.y + 13;
-  for (const line of opts.tutorial.objective.slice(0, Math.max(1, 10 - rows.length))) {
+  // This was a flat budget of ten rows shared between the objective and the
+  // controls, and it was one row too many: the price line is placed a fixed
+  // distance up from the buttons, so a full card pushed the controls panel
+  // down until its bottom edge ran through "n TOKENS TO PLAY".  The busiest
+  // card in the building (Grudge, four and six) was overlapping by a pixel
+  // the whole time, and the car chase -- which has more to say than any of
+  // them -- was overlapping visibly.
+  //
+  // So the cap comes off the geometry now.  Everything below is measured from
+  // where the price block actually starts, backwards: whatever is left after
+  // the controls panel and a clear gap is what the objective may have.  Move
+  // the price, the buttons or the card and the number follows on its own.
+  const buttonY = CARD.y + CARD.h - 11;
+  const priceTop = buttonY - PRICE_UP - Math.ceil(ROW_H / 2);
+  const panelH = rows.length * ROW_H + PANEL_HEAD;
+  const objTop = CARD.y + 13;
+  const room = priceTop - PANEL_GAP - panelH - 2 - objTop;
+  const maxLines = Math.max(1, Math.floor(room / OBJ_ROW));
+
+  let y = objTop;
+  for (const line of opts.tutorial.objective.slice(0, maxLines)) {
     keep(centerText(scene, GAME_W / 2, y + 3, line, PALETTE.cream).setDepth(903));
-    y += ROW_H;
+    y += OBJ_ROW;
   }
 
   // ---- the controls, on a panel of their own
   y += 2;
-  const panelH = rows.length * ROW_H + 12;
   keep(
     scene.add
       .rectangle(CARD.x + 6, y, CARD.w - 12, panelH, PANEL_INK)
@@ -125,7 +152,7 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
       .setDepth(903),
   );
   keep(text(scene, CARD.x + 10, y + 2, 'CONTROLS', PALETTE.tealLight).setDepth(904));
-  let ry = y + 12;
+  let ry = y + PANEL_HEAD;
   // Two columns, and the key column is measured rather than guessed: a long
   // key name ("HOLD SPACE") must not run into what it does.
   for (const [keys, does] of rows) {
@@ -135,12 +162,11 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
     ry += ROW_H;
   }
   // ---- the price, and whether it can be met.  Measured up from the buttons.
-  const buttonY = CARD.y + CARD.h - 11;
   const priceLine = free
     ? `FREE TO SIT  -  ${opts.cost} TOKEN${opts.cost === 1 ? '' : 'S'} A GO`
     : `${opts.cost} TOKEN${opts.cost === 1 ? '' : 'S'} TO PLAY`;
   keep(
-    centerText(scene, GAME_W / 2, buttonY - 26, priceLine, affordable ? PALETTE.gold : PALETTE.blood).setDepth(903),
+    centerText(scene, GAME_W / 2, buttonY - PRICE_UP, priceLine, affordable ? PALETTE.gold : PALETTE.blood).setDepth(903),
   );
   // The second line is the shortfall when there is one, and what a win pays
   // when there is not: only ever one of them, and always in the same place.
@@ -149,7 +175,7 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
     : `YOU HAVE ${opts.balance} - YOU NEED ${opts.cost - opts.balance} MORE`;
   if (second) {
     keep(
-      centerText(scene, GAME_W / 2, buttonY - 17, second, affordable ? PALETTE.tealLight : PALETTE.ash).setDepth(903),
+      centerText(scene, GAME_W / 2, buttonY - PRICE_UP + ROW_H, second, affordable ? PALETTE.tealLight : PALETTE.ash).setDepth(903),
     );
   }
 

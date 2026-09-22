@@ -7,11 +7,29 @@
  * W up, D right — which is the same hand position as walking, so nobody has to
  * learn a new grip to play a game that is over in forty-five seconds.
  *
- * IT IS A MATCH, BEST OF THREE.  Each round is forty-five seconds, the higher
- * score takes the round, and the first to two rounds takes the match and the
- * fifteen tokens.  Three rounds that both go one apiece and the match is a
- * draw, which — like every other tie in the building — hands the entry fee
- * back rather than keeping it.
+ * IT IS A LADDER, AND EVERY RUNG PAYS.  Three rounds of forty-five seconds,
+ * the higher score takes the round, and you only climb by winning:
+ *
+ *   round 1   20 tokens   for the ten it cost, so ten in profit
+ *   round 2   +15         35 on the night
+ *   round 3   +15         50, and nobody beats him three times by accident
+ *
+ * EVERY RUNG PAST THE FIRST IS THE SAME FIFTEEN.  It was twenty on the last
+ * one; the house rule is that a ten token cabinet pays twenty for the win and
+ * fifteen more for each go the player takes past it, and there is no reason
+ * for this cabinet to be the exception that has to be remembered separately.
+ *
+ * LOSE ONE AND YOU STOP, WITH WHAT YOU HAVE.  It is not best of three: there
+ * is no coming back from a dropped round, and there is no point playing on
+ * after one, because the money is already banked.  Take the first off him and
+ * walk into the second knowing you cannot leave with less than twenty -- which
+ * is the whole shape of the thing, and the reason the third round is worth
+ * standing up for.
+ *
+ * A DRAWN ROUND STOPS THE LADDER TOO, because a draw is not a win and the
+ * ladder only goes up on wins.  Drawn on the very first round, with nothing
+ * banked, it is a tie like any other in the building and the entry fee comes
+ * straight back rather than being kept.
  *
  * EVERY ROUND IS A DIFFERENT SONG AND A DIFFERENT CHART.  The tune steps up a
  * tempo each round and the chart is cut fresh to that tempo, busier every
@@ -61,8 +79,18 @@ export const ROUNDS = [
   { music: 'game_danceoff_2', bpm: 140, offbeat: 0.32, label: 'ROUND 2' },
   { music: 'game_danceoff_3', bpm: 152, offbeat: 0.44, label: 'FINAL ROUND' },
 ];
-/** Rounds needed to take the match. */
-const ROUNDS_TO_WIN = 2;
+/**
+ * WHAT EACH ROUND IS WORTH, cumulatively, in tokens.
+ *
+ * `PRIZE[n]` is what you leave with having won n rounds -- so the entries are
+ * totals and not increments, because the total is the thing the player is
+ * deciding about when the card comes up between rounds.  Nothing else in the
+ * file may compute a payout: this array is the payout.
+ *
+ * Zero for no rounds is the entry fee gone, which is what losing the first
+ * round costs.
+ */
+export const PRIZE = [0, 20, 35, 50];
 /** How long the round card sits between rounds. */
 const CARD_MS = 2800;
 
@@ -208,12 +236,14 @@ export const danceOff: MinigameModule = {
   id: ID,
   title: 'DANCE OFF',
   music: 'game_danceoff',
-  rules: '45 seconds - out-dance him',
+  rules: 'beat him three times, 20/35/50',
   tutorial: {
     objective: [
       'HIT THE ARROWS AS THEY REACH THE LINE.',
       'A WRONG KEY COSTS YOU 100 - NO MASHING.',
-      'BEST OF THREE. 45 SECONDS A ROUND.',
+      'THREE ROUNDS. 45 SECONDS EACH.',
+      'WIN ONE: 20.  TWO: 35.  ALL THREE: 50.',
+      'DROP A ROUND AND YOU STOP, AND KEEP IT.',
       'NEW SONG EACH ROUND - AND HE GETS BETTER.',
     ],
     controls: [
@@ -221,6 +251,7 @@ export const danceOff: MinigameModule = {
       ['W / D', 'UP AND RIGHT'],
     ],
   },
+  payoutNote: 'WIN: 20/35/50',
   // The four arrows ARE the game, so they are four buttons and not a stick.
   touch: {
     buttons: [
@@ -326,6 +357,9 @@ export const danceOff: MinigameModule = {
           over,
           round,
           wins: { ...wins },
+          /** What the rungs climbed so far are worth, in tokens. */
+          banked: PRIZE[Math.min(wins.you, PRIZE.length - 1)],
+          prize: [...PRIZE],
           cardUp: cardMs > 0,
           bpm: ROUNDS[Math.min(round, ROUNDS.length - 1)].bpm,
           music: ROUNDS[Math.min(round, ROUNDS.length - 1)].music,
@@ -369,6 +403,21 @@ export const danceOff: MinigameModule = {
             misses++;
           }
           combo = 0;
+          refreshHud();
+        },
+        /**
+         * Put a scoreline on the board.
+         *
+         * `ace` and `flop` play the arrows that are ON SCREEN, which is the
+         * right way to test the dancing and the wrong way to test the money:
+         * the rival scores on his own clock, so whether a round is won is not
+         * decided until the buzzer.  The ladder's payout table needs rounds
+         * whose outcome is known before they end, and this is how a test says
+         * which one it wants.
+         */
+        setScores: (you: number, rival: number) => {
+          score.you = you;
+          score.rival = rival;
           refreshHud();
         },
         /** End the round on the spot, wherever the clock is. */
@@ -565,7 +614,10 @@ function startRound(i: number): void {
     sceneRef,
     GAME_W / 2,
     106,
-    i === 0 ? 'BEST OF THREE' : `HE IS DANCING HARDER  -  ${cfg.bpm} BPM`,
+    // The first banner has to say what the round is FOR, because the ladder is
+    // the whole game and a player who missed the card would otherwise think
+    // they were three rounds from being paid rather than one.
+    i === 0 ? `WIN THIS FOR ${PRIZE[1]} TOKENS` : `HE IS DANCING HARDER  -  ${cfg.bpm} BPM`,
     PALETTE.cream,
   ).setDepth(50);
   // Kept, not forgotten: a round that ends early — the buzzer, or a test —
@@ -586,7 +638,15 @@ function clearBanner(): void {
   banners = [];
 }
 
-/** The buzzer.  Whoever is ahead takes the round; the match may end here. */
+/**
+ * The buzzer.  Whoever is ahead takes the round, and the round decides whether
+ * there is another one.
+ *
+ * THE LADDER ONLY GOES UP ON A WIN.  Anything that is not a win -- his round
+ * or a drawn one -- ends the match here, with whatever the rungs already
+ * climbed are worth.  There is no coming back from a dropped round, which is
+ * the point: it makes the round you are dancing the only one that matters.
+ */
 function endRound(): void {
   if (over || cardMs > 0 || !sceneRef) return;
   clearBanner();
@@ -599,35 +659,65 @@ function endRound(): void {
   else if (!drawn) wins.rival++;
   refreshHud();
 
-  if (wins.you >= ROUNDS_TO_WIN || wins.rival >= ROUNDS_TO_WIN || round >= ROUNDS.length - 1) {
-    endMatch(drawn && wins.you === wins.rival);
+  // Dropped it, or drew it: the climb is over and the bag is what it is.
+  if (!youTook) {
+    endMatch(drawn);
+    return;
+  }
+  // Won the last one: there is nothing above it.
+  if (round >= ROUNDS.length - 1) {
+    endMatch(false);
     return;
   }
 
-  // Another round to dance.  The card says how it stands and what is coming.
-  const line = youTook ? 'ROUND TO YOU' : drawn ? 'ROUND DRAWN' : 'ROUND TO HIM';
+  // Another rung.  The card says what is already banked and what the next one
+  // is worth, because that is the decision the player is actually holding.
+  const banked = PRIZE[wins.you] ?? 0;
+  const next = (PRIZE[wins.you + 1] ?? banked) - banked;
   cardBits = [
-    sceneRef.add.rectangle(GAME_W / 2, 100, 220, 62, PALETTE.ink).setDepth(49).setStrokeStyle(1, PALETTE.gold),
-    centerText(sceneRef, GAME_W / 2, 84, line, youTook ? PALETTE.gold : PALETTE.fog, 16).setDepth(50),
-    centerText(sceneRef, GAME_W / 2, 102, `${score.you} - ${score.rival}`, PALETTE.cream).setDepth(50),
-    centerText(sceneRef, GAME_W / 2, 114, `ROUNDS  YOU ${wins.you}  -  HIM ${wins.rival}`, PALETTE.ash).setDepth(50),
+    sceneRef.add.rectangle(GAME_W / 2, 100, 228, 74, PALETTE.ink).setDepth(49).setStrokeStyle(1, PALETTE.gold),
+    centerText(sceneRef, GAME_W / 2, 76, 'ROUND TO YOU', PALETTE.gold, 16).setDepth(50),
+    centerText(sceneRef, GAME_W / 2, 94, `${score.you} - ${score.rival}`, PALETTE.cream).setDepth(50),
+    centerText(sceneRef, GAME_W / 2, 106, `${banked} TOKENS BANKED`, PALETTE.tealLight).setDepth(50),
+    centerText(sceneRef, GAME_W / 2, 118, `WIN THE NEXT FOR +${next}`, PALETTE.ash).setDepth(50),
   ];
-  audio.sfx(youTook ? 'chime' : 'buzzer', 0.6);
+  audio.sfx('chime', 0.6);
   round++;
   cardMs = CARD_MS;
 }
 
-/** The match.  Rounds won decides it, and a level match is a level match. */
-function endMatch(levelOnThree = false): void {
+/**
+ * The end of it.  What you leave with is how many rungs you climbed.
+ *
+ * ONE EXCEPTION, AND IT IS THE HOUSE RULE: a draw with nothing banked is a
+ * tie, and a tie in this building hands the entry fee back rather than keeping
+ * it.  A draw with something banked is not a refund -- you are walking away
+ * with more than you came in with, which is a win by any reading.
+ */
+function endMatch(drawn: boolean): void {
   if (over || !sceneRef) return;
   over = true;
   clearBanner();
   for (const n of notes) clear(n);
-  const won = wins.you > wins.rival;
-  const tied = wins.you === wins.rival;
-  const line = won ? 'YOU TOOK THE MATCH' : tied ? 'A DRAW - TOKENS BACK' : 'HE TOOK THE MATCH';
-  centerText(sceneRef, GAME_W / 2, 88, line, won ? PALETTE.gold : PALETTE.fog, 16).setDepth(50);
-  centerText(sceneRef, GAME_W / 2, 106, `ROUNDS  ${wins.you} - ${wins.rival}`, PALETTE.cream).setDepth(50);
+  const banked = PRIZE[Math.min(wins.you, PRIZE.length - 1)];
+  const clean = wins.you >= ROUNDS.length;
+  const refund = drawn && banked === 0;
+
+  const line = clean
+    ? 'ALL THREE - HE IS FINISHED'
+    : banked > 0
+      ? `YOU WALK WITH ${banked}`
+      : refund
+        ? 'A DRAW - TOKENS BACK'
+        : 'HE TOOK IT';
+  centerText(sceneRef, GAME_W / 2, 88, line, banked > 0 ? PALETTE.gold : PALETTE.fog, 16).setDepth(50);
+  centerText(
+    sceneRef,
+    GAME_W / 2,
+    106,
+    `${wins.you} OF ${ROUNDS.length} ROUNDS  -  ${score.you} - ${score.rival}`,
+    PALETTE.cream,
+  ).setDepth(50);
   centerText(
     sceneRef,
     GAME_W / 2,
@@ -635,10 +725,12 @@ function endMatch(levelOnThree = false): void {
     `${hits} HIT  ${misses} MISSED  ${wrongs} WRONG  BEST ${bestCombo}`,
     PALETTE.ash,
   ).setDepth(50);
-  if (levelOnThree) {
-    centerText(sceneRef, GAME_W / 2, 130, 'THREE ROUNDS AND NOTHING IN IT', PALETTE.ash).setDepth(50);
+  if (drawn && banked > 0) {
+    centerText(sceneRef, GAME_W / 2, 130, 'DRAWN ROUND - THE CLIMB STOPS THERE', PALETTE.ash).setDepth(50);
   }
-  sceneRef.time.delayedCall(1800, () => (won ? apiRef?.win() : tied ? apiRef?.draw() : apiRef?.lose()));
+  sceneRef.time.delayedCall(1800, () =>
+    banked > 0 ? apiRef?.win(banked) : refund ? apiRef?.draw() : apiRef?.lose(),
+  );
 }
 
 /** You: the frog, on the mat, in a cap. */

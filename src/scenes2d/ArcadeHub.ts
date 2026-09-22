@@ -122,7 +122,7 @@ export class ArcadeHub extends Phaser.Scene {
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => {
           if (this.busy()) return;
-          this.launchGame(cab);
+          this.launchGame(cab, 'card');
         });
     }
 
@@ -323,7 +323,7 @@ export class ArcadeHub extends Phaser.Scene {
 
   private toAnnex(): void {
     this.locked = true;
-    audio.sfx('footstep_concrete');
+    audio.sfx('footstep_carpet');
     fadeToScene(this, 'ArcadeAnnex');
   }
 
@@ -383,10 +383,27 @@ export class ArcadeHub extends Phaser.Scene {
       return;
     }
 
-    this.launchGame(t.cab);
+    this.launchGame(t.cab, 'play');
   }
 
-  private launchGame(cab: Cabinet): void {
+  /**
+   * Into a cabinet, one of two ways.
+   *
+   * `how` is WHICH KIND OF ASK THIS WAS, and it is the whole of the rule:
+   *
+   *   'card'   the player clicked the machine itself.  That is a question --
+   *            what is this, what does it cost -- so it gets the how-to-play
+   *            card and nothing is charged until they press PLAY.
+   *   'play'   the player pressed E, or clicked somewhere else on the floor
+   *            while stood at a machine.  That is not a question, it is an
+   *            instruction, so it goes straight into the game and the token
+   *            moves on the way in.
+   *
+   * It used to be one route for both, which meant a click anywhere on the
+   * floor near a cabinet opened the card for it -- the player had asked to
+   * play and been handed a leaflet.
+   */
+  private launchGame(cab: Cabinet, how: 'card' | 'play'): void {
     // Nothing is charged for walking up to a machine (MG-2).  The shell opens
     // on the how-to-play card with the game unbuilt behind it, and the tokens
     // move when the player presses PLAY — so a player who cannot afford this
@@ -396,7 +413,7 @@ export class ArcadeHub extends Phaser.Scene {
       return;
     }
     this.locked = true;
-    fadeToScene(this, 'Minigame', { id: cab.def.id, from: 'ArcadeHub' });
+    fadeToScene(this, 'Minigame', { id: cab.def.id, from: 'ArcadeHub', straight: how === 'play' });
   }
 
   private say(msg: string): void {

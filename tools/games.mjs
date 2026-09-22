@@ -272,16 +272,61 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   await startGame(page);
   await bridge(page, '__race');
 
-  const s = await page.evaluate(() => window.__race.sample(600));
+  // TWELVE HUNDRED, NOT SIX, AND A WIDER FLOOR.
+  //
+  // The favourite took 37% of a race with no comeback in it and takes about
+  // 32% of one with; six hundred fields is a standard deviation of nearly two
+  // points, so a floor at 28 was inside two of them and the check started
+  // failing on its own sample rather than on the game.  Twice the fields and a
+  // floor at 25 still tells a real favourite (32%) from a field of seven
+  // deciding it between them (14%), which is the thing being asked.
+  const s = await page.evaluate(() => window.__race.sample(1200));
   const fav = s.favourite;
   // Every colour wins sometimes: no frog on this machine is a dud or a lock.
   const spread = s.wins.filter((n) => n > 0).length;
-  const fair = fav > 0.28 && fav < 0.62 && spread === 7;
+  const fair = fav > 0.25 && fav < 0.62 && spread === 7;
   console.log(
     `${fair ? 'PASS' : 'FAIL'}  frog race: the favourite wins often, not always  — ` +
-      `${(fav * 100).toFixed(0)}% of 600, ${spread}/7 colours won at least one`,
+      `${(fav * 100).toFixed(0)}% of 1200, ${spread}/7 colours won at least one`,
   );
   if (!fair) failures++;
+
+  // ---- THE COMEBACK.  A jetpack that fired every race would be a tax on the
+  // favourite, and one sized past the clock would be a frog stranded in the
+  // middle of the track when the tape goes.  Both are measured on the model
+  // the race actually runs.
+  const jet = await page.evaluate(() => window.__race.comeback(300));
+  const sometimes = jet.lit > 0.1 && jet.lit < 0.55;
+  console.log(
+    `${sometimes ? 'PASS' : 'FAIL'}  frog race: the jetpack comes out sometimes, not every race  — ` +
+      `${(jet.lit * 100).toFixed(0)}% of 300`,
+  );
+  if (!sometimes) failures++;
+
+  const honest = jet.inTheClock > 0.999 && jet.fromLast > 0.85;
+  console.log(
+    `${honest ? 'PASS' : 'FAIL'}  frog race: it is lit for the last frog and lands inside the clock  — ` +
+      `${(jet.fromLast * 100).toFixed(0)}% from last, ${(jet.inTheClock * 100).toFixed(0)}% inside`,
+  );
+  if (!honest) failures++;
+
+  // It has to be able to win and able to lose: a comeback that always came
+  // back would make the race a formality with a countdown on it.
+  const race = jet.won > 0.3 && jet.won < 0.85;
+  console.log(
+    `${race ? 'PASS' : 'FAIL'}  frog race: and it is a finish rather than a formality  — ` +
+      `the jetpack takes ${(jet.won * 100).toFixed(0)}% of the races it appears in`,
+  );
+  if (!race) failures++;
+
+  // And the clock is where it was: twenty seconds, most races home before it.
+  const t = await page.evaluate(() => window.__race.timing(200));
+  const clock = t.meanSeconds < 20 && t.hitTheCap < 0.2 && jet.meanFiredAt > t.meanSeconds - 3.2;
+  console.log(
+    `${clock ? 'PASS' : 'FAIL'}  frog race: the jetpack does not stretch the twenty seconds  — ` +
+      `mean ${t.meanSeconds.toFixed(1)}s, lit at ${jet.meanFiredAt.toFixed(1)}s, ${(t.hitTheCap * 100).toFixed(0)}% run to the cap`,
+  );
+  if (!clock) failures++;
   await page.close();
 }
 
@@ -397,11 +442,17 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
 
 // NO COMBINATION OF BARRELS ASKS FOR A JUMP AND A DUCK AT ONCE.
 //
-// An orange roller has to be jumped; a pink bouncer at the top of its hop has
+// A yellow roller has to be jumped; an orange bouncer at the top of its hop has
 // to be walked under, and jumping into one is a death.  Put the two of them
 // within a jump of each other and there is no input that answers both — the
-// player is hit having done the right thing.  Same for two pink ones out of
+// player is hit having done the right thing.  Same for two orange ones out of
 // step, one overhead and one on the girder in front of you.
+//
+// The same pass measures the two things the barrels were reported for: that
+// none of them is being slowed down by another one, and that they never pile
+// into a group too wide to jump.  Both are properties of a whole run rather
+// than of a frame, so they are gathered here rather than given their own
+// eighteen seconds.
 //
 // Its own page, and sampled in chunks: the barrels are what is under test, the
 // player is not driving, and a frog standing still runs out of lives in well
@@ -410,18 +461,76 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
-  const tally = { frames: 0, samples: 0, span: 0, worst: null, closest: 1e9, up: 0 };
+  const tally = { frames: 0, samples: 0, span: 0, worst: null, closest: 1e9, up: 0, slowest: 1, pile: 0 };
   for (let run = 0; run < 3; run++) {
     await page.goto(`${URL}/?intro=1&tokens=50&game=donkeykong`, { waitUntil: 'networkidle2' });
     await sleep(1400);
     await startGame(page);
     if (!(await bridge(page, '__dk'))) break;
     const r = await page.evaluate(async () => {
-      const out = { span: window.__dk.state().jumpSpan, samples: 0, frames: 0, up: 0, closest: 1e9, worst: null };
+      const out = {
+        span: window.__dk.state().jumpSpan,
+        samples: 0,
+        frames: 0,
+        up: 0,
+        closest: 1e9,
+        worst: null,
+        // The slowest any one barrel ever ran over a girder crossing, as a
+        // fraction of the pace it was thrown at, and the widest run of them
+        // that were touching at once.
+        slowest: 1,
+        pile: 0,
+      };
+      const seen = new Map();
+      let last = performance.now();
       const until = performance.now() + 18000;
       while (performance.now() < until && window.__dk) {
-        const bs = window.__dk.state().barrels.filter((b) => !b.falling);
+        const now = performance.now();
+        const dt = (now - last) / 1000;
+        last = now;
+        const all = window.__dk.state().barrels;
+        const bs = all.filter((b) => !b.falling);
         out.samples++;
+
+        // ---- NOBODY IS BRAKING.  Distance over a whole crossing against the
+        // pace the barrel was thrown at: measured frame to frame it is the
+        // browser's own jitter that gets reported, not the game's.
+        for (const bl of all) {
+          const was = seen.get(bl.id);
+          if (was && !bl.falling && !was.falling && was.floor === bl.floor) {
+            was.dist += Math.abs(bl.x - was.x);
+            was.time += dt;
+          } else if (was && was.time > 0.8) {
+            out.slowest = Math.min(out.slowest, was.dist / was.time / bl.speed);
+            was.dist = 0;
+            was.time = 0;
+          }
+          seen.set(bl.id, {
+            x: bl.x,
+            floor: bl.floor,
+            falling: bl.falling,
+            dist: was?.dist ?? 0,
+            time: was?.time ?? 0,
+          });
+        }
+
+        // ---- AND NOTHING IS PILING UP.  The widest run of barrels each
+        // within a barrel of the next: one jump has to clear the lot.
+        const byFloor = new Map();
+        for (const bl of bs) {
+          if (!byFloor.has(bl.floor)) byFloor.set(bl.floor, []);
+          byFloor.get(bl.floor).push(bl);
+        }
+        for (const list of byFloor.values()) {
+          list.sort((a, b) => a.x - b.x);
+          let from = 0;
+          for (let j = 1; j <= list.length; j++) {
+            if (j === list.length || list[j].x - list[j - 1].x > 10) {
+              out.pile = Math.max(out.pile, list[j - 1].x - list[from].x);
+              from = j;
+            }
+          }
+        }
         if (bs.some((b) => b.up)) out.up++;
         let badHere = false;
         for (let i = 0; i < bs.length; i++) {
@@ -450,6 +559,8 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
     tally.frames += r.frames;
     tally.up += r.up;
     tally.span = r.span;
+    tally.slowest = Math.min(tally.slowest, r.slowest);
+    tally.pile = Math.max(tally.pile, r.pile);
     if (r.closest < tally.closest) {
       tally.closest = r.closest;
       tally.worst = r.worst;
@@ -472,20 +583,181 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
       `one was over your head on ${((tally.up / Math.max(1, tally.samples)) * 100).toFixed(0)}% of frames`,
   );
   if (!lively) failures++;
+
+  // ---- THE PILE-UP, WHICH IS WHAT THE QUEUE USED TO MAKE.
+  //
+  // Barrels used to give way to the one in front, down to a fifth of their
+  // pace, so three of them nose to tail crawled down a girder and sat in the
+  // crossing for seconds at a time.  Nothing gives way now -- a barrel that
+  // catches another knocks it off the girder -- so both halves of that are
+  // testable: every barrel runs at the pace it was thrown at, and no group of
+  // them is ever wider than a jump.
+  const ownPace = tally.slowest > 0.97;
+  console.log(
+    `${ownPace ? 'PASS' : 'FAIL'}  barrel climb: no barrel is slowed down by another  — ` +
+      `the slowest crossing ran at ${(tally.slowest * 100).toFixed(0)}% of its own pace`,
+  );
+  if (!ownPace) failures++;
+
+  const clears = tally.pile < tally.span;
+  console.log(
+    `${clears ? 'PASS' : 'FAIL'}  barrel climb: and a group of them still fits inside one jump  — ` +
+      `widest ${tally.pile.toFixed(0)}px against a ${tally.span}px jump`,
+  );
+  if (!clears) failures++;
   await page.close();
 }
 
-// The two score-for-tokens cabinets.  Their payout is a formula, not a
-// cabinet constant, so the shell has to be handed the right number: the bar
-// pays the base, and every further bar adds one.  Banking on ENTER is the
-// path a player who has made the bar actually takes.
+// THE BLACK BARREL, AND THE FIRST THROW.
+//
+// Two separate promises about the climb: it is under way the moment the
+// cabinet comes up -- there is no three second grace any more -- and the black
+// one with the skull on it does not take a life off you, it takes the run.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=donkeykong`, { waitUntil: 'networkidle2' });
+  await sleep(1400);
+  await startGame(page);
+  if (await bridge(page, '__dk')) {
+    const first = await page.evaluate(() => window.__dk.state().barrels.length);
+    const thrown = first > 0;
+    console.log(
+      `${thrown ? 'PASS' : 'FAIL'}  barrel climb: he is already throwing when you arrive  — ` +
+        `${first} on the girders at the first read`,
+    );
+    if (!thrown) failures++;
+
+    // Stand the player somewhere nothing can reach.
+    await page.evaluate(() => {
+      window.__dk.teleport(0, 20);
+      window.__dk.grace(600000);
+    });
+
+    // HOW OFTEN A BLACK ONE COMES is a property of the decision behind the
+    // throw, so the decision is sampled.  Waiting for one to turn up inside a
+    // test's patience is a coin toss: at these odds a thirty second watch
+    // misses it about a third of the time, which is a check that reports the
+    // game as broken once in every three runs.
+    const kinds = await page.evaluate(() => ({
+      late: window.__dk.sampleKinds(20000, true),
+      early: window.__dk.sampleKinds(5000, false),
+      after: window.__dk.deathAfterMs,
+    }));
+    const rate = kinds.late.death / 20000;
+    const mix = rate > 0.09 && rate < 0.16 && kinds.early.death === 0 && kinds.late.hop > 0 && kinds.late.roll > 0;
+    console.log(
+      `${mix ? 'PASS' : 'FAIL'}  barrel climb: a black one in about eight, and none at the start  — ` +
+        `${(rate * 100).toFixed(1)}% of 20000 past the first ${kinds.after / 1000}s, none of 5000 before it`,
+    );
+    if (!mix) failures++;
+
+    // And one on the girders, thrown on demand so the next check is aimed at
+    // the barrel rather than at whatever happened to be rolling.
+    const deadly = await page.evaluate(async () => {
+      window.__dk.throwNow('death');
+      await new Promise((r) => requestAnimationFrame(r));
+      return window.__dk.state().barrels.find((b) => b.deadly) ?? null;
+    });
+    const arrives = !!deadly;
+    console.log(
+      `${arrives ? 'PASS' : 'FAIL'}  barrel climb: and it is a barrel like the others  — ` +
+        (deadly ? `floor ${deadly.floor} at ${deadly.x.toFixed(0)}, rolling at ${deadly.speed.toFixed(0)}` : 'none thrown'),
+    );
+    if (!arrives) failures++;
+
+    // Walk into it.  Three lives or not, that is the end of the climb.
+    const end = await page.evaluate(async () => {
+      window.__dk.grace(0);
+      const before = window.__dk.state().lives;
+      window.__dk.throwNow('death');
+      for (let i = 0; i < 1200; i++) {
+        const st = window.__dk?.state();
+        if (!st) return { before, gone: true };
+        const d = st.barrels.find((b) => b.deadly && !b.falling);
+        if (d) window.__dk.teleport(d.floor, d.x);
+        if (st.lives <= 0) return { before, after: st.lives };
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      return { before, after: window.__dk?.state().lives, timeout: true };
+    });
+    const fatal = end.after === 0 && end.before === 3;
+    console.log(
+      `${fatal ? 'PASS' : 'FAIL'}  barrel climb: touching it ends the run there and then  — ` +
+        `${end.before} lives before it, ${end.after} after`,
+    );
+    if (!fatal) failures++;
+  }
+  await page.close();
+}
+
+// AND THE BARRELS COME FROM HIM.
+//
+// He stands at the top holding the next one, and when it goes his arms go with
+// it -- rather than the barrel appearing beside a frog that never moved.  Read
+// off the pose rather than the screen: the throw is four tenths of a second
+// and a screenshot is most of that.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=donkeykong`, { waitUntil: 'networkidle2' });
+  await sleep(1400);
+  await startGame(page);
+  if (await bridge(page, '__dk')) {
+    await page.evaluate(() => {
+      window.__dk.teleport(0, 20);
+      window.__dk.grace(600000);
+    });
+    // Wait out whatever throw was already in flight when the cabinet came up.
+    for (let i = 0; i < 40 && (await page.evaluate(() => window.__dk.kong().swing)) > 0.01; i++) await sleep(100);
+    const rest = await page.evaluate(() => window.__dk.kong());
+    // The pose is applied by the game's own update, so the throw has to be
+    // read on a LATER frame than the one that started it: read on the same
+    // frame it is all still zero, which is a test of the ordering of two lines
+    // rather than of the animation.
+    const mid = await page.evaluate(async () => {
+      window.__dk.throwNow();
+      await new Promise((r) => requestAnimationFrame(r));
+      await new Promise((r) => requestAnimationFrame(r));
+      return window.__dk.kong();
+    });
+    await sleep(700);
+    const back = await page.evaluate(() => window.__dk.kong());
+
+    const throws =
+      rest.holding &&
+      rest.armL === 0 &&
+      mid.swing > 0.2 &&
+      mid.armL < -0.3 &&
+      mid.lean > 0.05 &&
+      !mid.holding &&
+      back.holding &&
+      Math.abs(back.armL) < 0.02;
+    console.log(
+      `${throws ? 'PASS' : 'FAIL'}  barrel climb: froggy kong throws them, arms and all  — ` +
+        `holding, then arms at ${mid.armL.toFixed(2)}/${mid.armR.toFixed(2)} leaning ${mid.lean.toFixed(2)}, then holding the next`,
+    );
+    if (!throws) failures++;
+  }
+  await page.close();
+}
+
+// The cabinets that hand the shell a number rather than taking the cabinet's
+// flat reward.  Banking on ENTER is the path a player who has made the bar
+// actually takes.
 for (const g of [
-  // The bar is 50 points (five crossings) and every further bar adds one:
-  // 230 banks the base fifteen plus three.
-  { id: 'frogcross', hook: '__frog', set: 'setPoints', score: 230, expect: 18, label: '230 pts' },
-  // 300 cash is fifteen, and every hundred past it is five more: 600 is three
-  // hundreds past the bar, so thirty.
-  { id: 'carchase', hook: '__chase', set: 'setCash', score: 600, expect: 30, label: '600 cash' },
+  // FROG CROSS IS FLAT NOW: fifty points is the bar and the bar pays twenty,
+  // whether you stop there or cross another eighteen times.  230 points is
+  // well past it and still pays exactly twenty -- which is the half of this
+  // that would go unnoticed if the check only ever measured a run that
+  // stopped on the bar itself.
+  { id: 'frogcross', hook: '__frog', set: 'setPoints', score: 230, expect: 20, label: '230 pts' },
+  // ...and on the bar itself, for the other end of the same rule.
+  { id: 'frogcross', hook: '__frog', set: 'setPoints', score: 50, expect: 20, label: '50 pts, on the bar' },
+  // 300 cash is twenty -- the cabinet takes ten, and every ten token machine
+  // on this floor pays twenty for the win -- and every hundred past the bar is
+  // five more: 600 is three hundreds past it, so thirty-five.
+  { id: 'carchase', hook: '__chase', set: 'setCash', score: 600, expect: 35, label: '600 cash' },
 ]) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
@@ -693,7 +965,15 @@ for (const g of [
     };
   });
   // The fixtures that run their own economy and say so on the machine.
-  const OWN_RULES = ['slots', 'wheel', 'blackjack', 'roulette', 'frogcross', 'carchase'];
+  //
+  // FROG CROSS CAME OFF THIS LIST and DANCE OFF WENT ON IT.  The crossing used
+  // to pay fifteen plus one for every further five crossings, which was a
+  // formula; it is a flat twenty on a ten-token cabinet now, which is exactly
+  // the standard table, so the table should be checking it.  The dance is the
+  // other way round: it pays 20, 35 or 50 depending how far up the ladder you
+  // got, and no row of the table says that.  Whack-a-frog joined it for the
+  // same reason -- ten or fifteen off a three token cabinet, by score.
+  const OWN_RULES = ['slots', 'wheel', 'blackjack', 'roulette', 'danceoff', 'carchase', 'whack'];
   const wrong = floor.rows.filter(
     (r) => !OWN_RULES.includes(r.id) && floor.table[r.cost] !== undefined && r.reward !== floor.table[r.cost],
   );
@@ -1456,6 +1736,110 @@ for (const g of [
   await page.close();
 }
 
+// ---- FROGGY'S ACE, WHICH IS THREE RULES AND NOT ONE.
+//
+// On two cards it is worth one, ten or eleven and the player says which; a
+// pair of them is twenty-one on the spot with nothing to decide; and from the
+// third card eleven is off the table while one and ten are still a choice.
+// All three are arithmetic, so they are asked of the arithmetic -- the hand is
+// set directly rather than played into, because playing into a specific hand
+// is a test of the shoe.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=60&game=blackjack`, { waitUntil: 'networkidle2' });
+  await sleep(2400);
+  await startGame(page);
+  if (await bridge(page, '__blackjack')) {
+    await page.evaluate(() => window.__blackjack.deal());
+    await sleep(500);
+    const r = await page.evaluate(() => {
+      const bj = window.__blackjack;
+      const at = (cards) => {
+        bj.setHands(cards, ['9♣', '7♦']);
+        return bj.state();
+      };
+      const out = {};
+      let st = at(['A♠', '6♥']);
+      out.twoChoices = st.aceChoices;
+      out.twoTotals = [];
+      for (let i = 0; i < 3; i++) {
+        const now = bj.state();
+        out.twoTotals.push(`${now.aceAs}=${now.player}`);
+        bj.flipAce();
+      }
+      st = at(['A♠', 'A♥']);
+      out.pair = { total: st.player, choices: st.aceChoices };
+      st = at(['A♠', '6♥', '2♣']);
+      out.threeChoices = st.aceChoices;
+      // and the forced change when a third card lands on an eleven
+      bj.setHands(['A♠', '6♥'], ['9♣', '7♦']);
+      while (bj.state().aceAs !== 11) bj.flipAce();
+      bj.hit();
+      const after = bj.state();
+      out.grown = { as: after.aceAs, total: after.player, over: after.player > 21 };
+      return out;
+    });
+
+    const onTwo = r.twoChoices.join(',') === '1,10,11';
+    console.log(
+      `${onTwo ? 'PASS' : 'FAIL'}  blackjack: on two cards the ace is 1, 10 or 11  — ` +
+        `${r.twoChoices.join('/')}, and A+6 reads ${r.twoTotals.join(' ')}`,
+    );
+    if (!onTwo) failures++;
+
+    const pair = r.pair.total === 21 && r.pair.choices.length === 0;
+    console.log(
+      `${pair ? 'PASS' : 'FAIL'}  blackjack: two aces are 21 with nothing to decide  — ` +
+        `${r.pair.total}, ${r.pair.choices.length} choices offered`,
+    );
+    if (!pair) failures++;
+
+    const onThree = r.threeChoices.join(',') === '1,10';
+    console.log(
+      `${onThree ? 'PASS' : 'FAIL'}  blackjack: from the third card the eleven is gone  — ` +
+        `${r.threeChoices.join('/')}`,
+    );
+    if (!onThree) failures++;
+
+    // An eleven that is no longer on offer must come down to a price that
+    // KEEPS THE HAND, not to whichever number happens to be nearest.
+    const kind = r.grown.as !== 11 && !r.grown.over;
+    console.log(
+      `${kind ? 'PASS' : 'FAIL'}  blackjack: and hitting on an eleven does not bust you by arithmetic  — ` +
+        `it came down to ${r.grown.as} for ${r.grown.total}`,
+    );
+    if (!kind) failures++;
+  }
+  await page.close();
+}
+
+// HIS CAMEO IS ONE IN TWO THOUSAND, and that number is the spawn decision
+// itself rather than a curtain drawn over a frog that was always there.  The
+// roll is sampled instead of the screen: a test that watched the holes could
+// not tell a rare guest from a common one that is usually invisible.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=40&game=whack`, { waitUntil: 'networkidle2' });
+  await sleep(1600);
+  await startGame(page);
+  if (await bridge(page, '__whack')) {
+    const n = 400000;
+    const seen = await page.evaluate((k) => window.__whack.sampleCameo(k), n);
+    // Mean 200 on 400k rolls, standard deviation about 14: this band is seven
+    // of those either way, so it catches a changed constant and not a run of
+    // luck.
+    const right = seen > 100 && seen < 320;
+    console.log(
+      `${right ? 'PASS' : 'FAIL'}  whack a frog: the cameo is one in two thousand  — ` +
+        `${seen} in ${n} rolls, which is one in ${Math.round(n / Math.max(1, seen))}`,
+    );
+    if (!right) failures++;
+  }
+  await page.close();
+}
+
 // The table and the wheel charge for the GO, not for the door: walking up to
 // either and reading the card costs nothing, and leaving costs nothing.  They
 // are also the two fixtures with a bar at the door — see the broke test above —
@@ -1623,7 +2007,21 @@ for (const g of [
   await bridge(page, '__chase');
   // Nothing may end the run while we watch the road, and the car must not be
   // able to drive into the one we are watching either.
-  await page.evaluate(() => window.__chase.shield(true));
+  //
+  // THE ROAD IS ALSO KEPT BUSY.  Traffic builds with the cash taken and this
+  // car takes none, so a stock road is two or three cars and a twenty-four
+  // second watch can genuinely contain no lane change at all -- at which point
+  // the check reports "nobody indicated" about a road where nobody moved.  Six
+  // cars, behaving exactly as they always do, is the road a player who is
+  // actually earning would be watching.
+  await page.evaluate(() => {
+    window.__chase.shield(true);
+    setInterval(() => {
+      if (window.__chase.trafficState().length < 6) {
+        window.__chase.spawnTrafficAt(Math.floor(Math.random() * 4), 10);
+      }
+    }, 1200);
+  });
 
   // ONE PASS, BOTH FACTS.  Watch the road for twenty-four seconds and file an
   // episode per SIGNAL — not per car, because a car changes lanes several
@@ -2120,9 +2518,9 @@ for (const g of [
   );
   if (!punished) failures++;
 
-  // ---- it is a match now, best of three, and every round is a new song cut
-  // fresh: different tune, different tempo, different arrows.  Take the first
-  // round and he has to come back harder for the second.
+  // ---- it is a ladder now, and every round is a new song cut fresh:
+  // different tune, different tempo, different arrows.  Take the first round
+  // and he has to come back harder for the second.
   const r1 = await page.evaluate(() => window.__dance.state());
   await page.evaluate(() => {
     window.__dance.ace();
@@ -2148,28 +2546,107 @@ for (const g of [
   );
   if (!stepped) failures++;
 
-  // Two rounds takes the match, and the match pays the cabinet's reward
-  // through the shell.
+  // ---- AND THE LADDER PAYS AS IT CLIMBS.  Round two is banked but not paid,
+  // because there is a third round above it: the whole shape of the game is
+  // that you carry the money into the next round rather than collecting it.
+  await page.evaluate(() => {
+    window.__dance.setScores(9000, 0);
+    window.__dance.finish();
+    window.__dance.skipCard();
+  });
+  await sleep(700);
+  const two = await page.evaluate(() => window.__dance.state());
+  const climbing = two.wins.you === 2 && two.banked === 35 && two.round === 2 && !two.over;
+  console.log(
+    `${climbing ? 'PASS' : 'FAIL'}  dance off: two rounds banks 35 and dances the third  — ` +
+      `${two.wins.you} rounds, ${two.banked} banked, on round ${two.round + 1}${two.over ? ', OVER' : ''}`,
+  );
+  if (!climbing) failures++;
+
+  // ---- and the third one pays the lot, through the shell.
   const before = await page.evaluate(() => window.__froggy.state().tokens);
   await page.evaluate(() => {
-    window.__dance.ace();
+    window.__dance.setScores(9000, 0);
     window.__dance.finish();
   });
   await sleep(4200);
   const after = await page.evaluate(() => window.__froggy.state().tokens);
-  // The cabinet's own reward, read off the floor: this machine has been
-  // repriced before and a number typed here only asserts what it used to cost.
-  const reward = await page.evaluate(async () => {
-    const { CABINETS } = await import('/src/game/content.ts');
-    return CABINETS.find((c) => c.id === 'danceoff').reward;
-  });
-  const pays = after - before === reward;
+  const paidAll = after - before === 50;
   console.log(
-    `${pays ? 'PASS' : 'FAIL'}  dance off: taking the match pays the cabinet's reward  — ` +
-      `${before} -> ${after}, wants +${reward}`,
+    `${paidAll ? 'PASS' : 'FAIL'}  dance off: all three rounds pays 50  — ${before} -> ${after}, wants +50`,
   );
-  if (!pays) failures++;
+  if (!paidAll) failures++;
   await page.close();
+}
+
+// THE LADDER'S OTHER THREE ENDINGS.
+//
+// Winning all three is the easy one to get right.  What the table is actually
+// promising is what happens when the climb STOPS: a dropped round pays what
+// was already banked and does not dance the round above it, a dropped first
+// round pays nothing, and a drawn first round is a tie like every other tie in
+// the building and hands the entry fee back.
+//
+// A PAGE EACH, because every one of these ends the run and a finished run
+// takes the bridge down with it.
+{
+  const ladder = async (rounds) => {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 720 });
+    await page.goto(`${URL}/?intro=1&tokens=60&game=danceoff`, { waitUntil: 'networkidle2' });
+    await sleep(1500);
+    await startGame(page);
+    await bridge(page, '__dance');
+    const before = await page.evaluate(() => window.__froggy.state().tokens);
+    // `rounds` is the scoreline to put up for each round in turn: 'win',
+    // 'lose' or 'draw'.  The run stops itself the moment one is not a win.
+    for (const r of rounds) {
+      const ended = await page.evaluate(async (outcome) => {
+        if (!window.__dance) return true;
+        const you = 9000;
+        const rival = outcome === 'win' ? 0 : outcome === 'draw' ? you : you + 1000;
+        window.__dance.setScores(you, rival);
+        window.__dance.finish();
+        await new Promise((res) => setTimeout(res, 200));
+        const st = window.__dance?.state();
+        if (!st || st.over) return true;
+        window.__dance.skipCard();
+        return false;
+      }, r);
+      await sleep(700);
+      if (ended) break;
+    }
+    await sleep(4200);
+    const after = await page.evaluate(() => window.__froggy.state().tokens);
+    await page.close();
+    return after - before;
+  };
+
+  const droppedSecond = await ladder(['win', 'lose']);
+  console.log(
+    `${droppedSecond === 20 ? 'PASS' : 'FAIL'}  dance off: win one, drop the second, walk with 20  — +${droppedSecond}`,
+  );
+  if (droppedSecond !== 20) failures++;
+
+  const droppedThird = await ladder(['win', 'win', 'lose']);
+  console.log(
+    `${droppedThird === 35 ? 'PASS' : 'FAIL'}  dance off: win two, drop the third, walk with 35  — +${droppedThird}`,
+  );
+  if (droppedThird !== 35) failures++;
+
+  const droppedFirst = await ladder(['lose']);
+  console.log(
+    `${droppedFirst === 0 ? 'PASS' : 'FAIL'}  dance off: drop the first and there is nothing to walk with  — +${droppedFirst}`,
+  );
+  if (droppedFirst !== 0) failures++;
+
+  // The house rule: a tie is not a loss, and with nothing banked it is a
+  // refund.  Ten out, ten back.
+  const drawnFirst = await ladder(['draw']);
+  console.log(
+    `${drawnFirst === 10 ? 'PASS' : 'FAIL'}  dance off: a drawn first round hands the entry fee back  — +${drawnFirst}`,
+  );
+  if (drawnFirst !== 10) failures++;
 }
 
 // GRUDGE: the special is on a timer, and the timer is the point.  Throw it,
@@ -2530,6 +3007,20 @@ for (const g of [
     // the scene's own clamp cannot walk it off the line under us.
     await page.evaluate((x) => {
       window.__chase.shield(true);
+      // ---- AND THE ROAD IS KEPT BUSY, ON PURPOSE.
+      //
+      // Traffic builds with the cash taken, and a parked player takes none: an
+      // untouched run puts two or three cars on a four lane road, and whether
+      // one of them happens to cross the exact line the player is sitting on
+      // is then a coin toss the check reports as a verdict on the game.  It
+      // has flipped tails.  The road is topped up to six instead -- the cars'
+      // own behaviour untouched, only more of them -- which is the same road a
+      // player who is actually earning would be looking at.
+      setInterval(() => {
+        if (window.__chase.trafficState().length < 6) {
+          window.__chase.spawnTrafficAt(Math.floor(Math.random() * 4), 10);
+        }
+      }, 1200);
       const pin = () => {
         window.__chase.setPlayer(x, 140);
         requestAnimationFrame(pin);
@@ -2537,12 +3028,19 @@ for (const g of [
       pin();
       // Sampled every frame: a lane change lasts under a second and a poll at
       // a fixed interval would walk straight past the take-off.
-      window.__parked = { hits: 0, silent: 0, changes: 0, last: new Map() };
+      window.__parked = { hits: 0, swept: 0, silent: 0, changes: 0, last: new Map() };
       const watch = () => {
         const w = window.__parked;
         const me = window.__chase.state().player;
         for (const c of window.__chase.trafficState()) {
           if (Math.abs(c.x - me.x) < 8 && Math.abs(c.y - me.y) < 14) w.hits++;
+          // ON THE LINE AT ALL, whatever the distance up the road: a car whose
+          // body is over the line has driven down the corridor, and a parked
+          // car is in the way of it whether or not the two happened to be
+          // level on the frame it was sampled.  This is the thing being
+          // tested; the frames where they are also level are the same fact
+          // with the timing added, and the timing is not what is on trial.
+          if (Math.abs(c.x - me.x) < 8) w.swept++;
           const was = w.last.get(c.id);
           if (was !== undefined && Math.abs(c.x - was) > 0.05) {
             w.changes++;
@@ -2562,7 +3060,7 @@ for (const g of [
     await sleep(58000);
     const out = await page.evaluate(() => {
       const w = window.__parked;
-      return { hits: w.hits, silent: w.silent, changes: w.changes };
+      return { hits: w.hits, swept: w.swept, silent: w.silent, changes: w.changes };
     });
     await page.close();
     return out;
@@ -2585,10 +3083,10 @@ for (const g of [
 
   for (const [where, x] of [['the middle of the road', lines.middle], ['a lane line', lines.line]]) {
     const r = await park(x);
-    const caught = r.hits > 0;
+    const caught = r.swept > 0;
     console.log(
       `${caught ? 'PASS' : 'FAIL'}  car chase: parking on ${where} is not a safe spot  — ` +
-        `traffic was on top of it for ${r.hits} frames`,
+        `traffic drove down it for ${r.swept} frames, and was level with the car for ${r.hits} of them`,
     );
     if (!caught) failures++;
 

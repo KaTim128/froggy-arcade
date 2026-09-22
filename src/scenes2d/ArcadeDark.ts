@@ -107,7 +107,8 @@ export class ArcadeDark extends Phaser.Scene {
     this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, 2, PALETTE.slate).setOrigin(0, 0).setDepth(COUNTER_DEPTH);
 
     this.player = new Player(this, GAME_W / 2, ROOM.bottom - 14, true);
-    this.player.setSurface('concrete');
+    // Dark or not, it is the same carpeted floor as the lit arcade.
+    this.player.setSurface('carpet');
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.8).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.moon).setOrigin(0.5, 0.5).setDepth(801).setVisible(false);

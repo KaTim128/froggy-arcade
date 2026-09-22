@@ -80,27 +80,70 @@ const stillFrame1 = await page.evaluate(() => document.querySelectorAll('canvas'
 await page.screenshot({ path: `${SHOTS}/f01b-after-fuzz.png` });
 check('mashing keys and empty space does not advance', stillFrame1);
 
-const step = async (coords, name, wait = 1500) => {
+const frameNow = () =>
+  page.evaluate(() => window.__froggy.game().scene.getScene('BasementSequence')?.index ?? -1);
+
+/**
+ * Click a hotspot and WAIT FOR THE FRAME TO CHANGE, rather than for a number
+ * of milliseconds that has to be kept in step with the walk between frames.
+ *
+ * The walk is sound: footsteps, then the next corridor.  It got longer, and
+ * every fixed wait in here quietly became too short -- at which point the next
+ * click landed inside the crossfade, was swallowed by the busy latch as it is
+ * meant to be, and the sequence sat where it was while the harness reported it
+ * as a broken door.  Polling tests the door; sleeping tested the stopwatch.
+ */
+const stepTimes = [];
+let stepSlips = 0;
+let patientMs = 0;
+const step = async (coords, name, double = true) => {
+  const was = await frameNow();
+  const t = Date.now();
   await page.mouse.click(coords[0], coords[1]);
-  // double-click immediately: the second must be swallowed by the busy latch
-  await page.mouse.click(coords[0], coords[1]);
-  await sleep(wait);
+  // double-click immediately: the second must not skip a frame, though it is
+  // allowed to cut the walk short -- see BasementSequence.skipWalk
+  if (double) await page.mouse.click(coords[0], coords[1]);
+  for (let i = 0; i < 60 && (await frameNow()) === was; i++) await sleep(100);
+  const now = await frameNow();
+  if (double) stepTimes.push(Date.now() - t);
+  else patientMs = Date.now() - t;
+  if (now !== was + 1) {
+    stepSlips++;
+    console.log(`  ${name}: frame ${was} -> ${now}`);
+  }
+  // let the crossfade finish, so the next click is not eaten by the latch
+  await sleep(700);
   await page.screenshot({ path: `${SHOTS}/${name}.png` });
 };
 
 await step(DOWN, 'f02-corridor');
-await step(RIGHT, 'f03-corridor-longer');
+// One of them clicked ONCE and left alone, so the walk itself is timed as well
+// as the way out of it.
+await step(RIGHT, 'f03-corridor-longer', false);
 await step(RIGHT, 'f04-chair-room');
-await step(DOOR, 'f05-figure', 2600); // door creak is 1.5s
+await step(DOOR, 'f05-figure');
 await page.screenshot({ path: `${SHOTS}/f05-figure-hold.png` });
 await step(RIGHT, 'f06-plain-door');
-await step(DOOR, 'f07-key-room', 2600);
+await step(DOOR, 'f07-key-room');
+
+// ---- THE DOOR ANSWERS THE CLICK.
+//
+// Every frame between the stairs and the key room is reached by clicking a
+// hotspot and walking, and the walk must never become the only way through:
+// each of those clicks has to land on the next frame, and it has to do it
+// while the player is still looking at the hand they clicked with.
+check('every hotspot lands on the next frame', stepSlips === 0, `${stepTimes.length} frames, ${stepSlips} that did not`);
+const slowest = Math.max(...stepTimes);
+check('and a second click gets there at once', slowest < 400, `slowest ${slowest}ms of ${stepTimes.join('/')}`);
+// Left alone it walks, and the walk is a walk rather than a wait: long enough
+// for the footsteps to land and finish, short enough not to be sat through.
+check('one click walks it, and not for long', patientMs > 350 && patientMs < 2000, `${patientMs}ms`);
 
 const beforeKey = await state();
 check('hasKey false before pickup', beforeKey.hasKey === false);
 
 await page.mouse.click(KEY[0], KEY[1]);
-await sleep(1400);
+for (let i = 0; i < 40 && !(await state()).hasKey; i++) await sleep(100);
 const afterKey = await state();
 check('hasKey set on pickup', afterKey.hasKey === true);
 

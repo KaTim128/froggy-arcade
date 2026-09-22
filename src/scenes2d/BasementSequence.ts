@@ -33,6 +33,24 @@ import {
 } from '../art/basementFrames';
 
 const CROSSFADE_MS = 600;
+/**
+ * THE WALK BETWEEN FRAMES.
+ *
+ * `STEP_GAP` is the pace, `STEP_JITTER` stops four steps sounding like a
+ * metronome, and `STEP_TAIL` is the quiet after the last one lands -- without
+ * it the crossfade starts on top of the final step's decay, which is the
+ * overlap this whole arrangement exists to avoid.
+ *
+ * `STEP_GAIN` is under half of what these were.  A footstep in a corridor you
+ * are creeping down is the quietest thing in it; at full level four of them
+ * was the loudest thing in the game.
+ */
+const STEP_GAP = 250;
+const STEP_JITTER = 80;
+const STEP_TAIL = 200;
+const STEP_GAIN = 0.45;
+/** Steps in an ordinary walk between two frames.  Three is a walk; four was a wait. */
+const WALK_STEPS = 3;
 /** He stands there this long before he comes at you.  Unskippable. */
 const STARE_MS = 3000;
 /** And the lunge itself, from first twitch to the door appearing. */
@@ -56,6 +74,9 @@ export class BasementSequence extends Phaser.Scene {
   private layer: Phaser.GameObjects.Container | null = null;
   private hotspot: Phaser.GameObjects.Container | null = null;
   private busy = true;
+  /** The frame a walk in progress is heading for, and every timer it is riding on. */
+  private walkTo: number | null = null;
+  private pending: Phaser.Time.TimerEvent[] = [];
   private frames: FrameDef[] = [];
 
   constructor() {
@@ -241,6 +262,15 @@ export class BasementSequence extends Phaser.Scene {
   }
 
   private advance(kind: HotspotKind): void {
+    // ---- A SECOND CLICK CUTS THE WALK SHORT.
+    //
+    // The walk is what stops the footsteps landing on top of the next frame,
+    // but it must not be the only way to reach that frame: a player who has
+    // already decided and clicks again should arrive NOW, not be told to wait
+    // out an animation by a door that appears to have stopped working.  The
+    // pending steps are cancelled rather than left to ring over the new frame,
+    // so nothing overlaps either way.
+    if (this.skipWalk()) return;
     if (this.busy) return;
     this.busy = true;
 
@@ -252,10 +282,18 @@ export class BasementSequence extends Phaser.Scene {
       this.time.delayedCall(900, () => fadeToScene(this, 'HideRoom3D'));
       return;
     }
+    // ---- NOTHING ADVANCES UNTIL THE WALKING HAS STOPPED.
+    //
+    // Every branch below walks first and shows second, and the gap between
+    // them is the walk's own length rather than a number that happened to
+    // look long enough.  `busy` is already true for all of it, so the arrow
+    // cannot be clicked into a second walk over the top of this one.
+    // Each of these lets its own sound land first, THEN walks, and only shows
+    // the next frame once the walk is spent -- so the wait is always the walk's
+    // real length rather than a guess that has to be kept in step with it.
     if (kind === 'door') {
       audio.sfx('door_creak');
-      this.time.delayedCall(450, () => this.walk(3));
-      this.time.delayedCall(1500, () => this.show(this.index + 1));
+      this.queue(450, 2);
       return;
     }
     if (kind === 'key') {
@@ -263,32 +301,76 @@ export class BasementSequence extends Phaser.Scene {
       store.patch({ hasKey: true });
       store.flush();
       audio.sfx('lock_click');
-      this.time.delayedCall(260, () => this.walk(2));
-      this.time.delayedCall(500, () => this.show(this.index + 1));
+      this.queue(260, 2);
       return;
     }
 
-    this.walk();
     if (Math.random() < 0.25) {
       this.time.delayedCall(900 + Math.random() * 900, () => audio.sfx('drip'));
     }
-    this.show(this.index + 1);
+    this.queue(0, WALK_STEPS);
   }
 
   /**
-   * The sound of covering the ground between two frames.
+   * Walk the corridor, and step into the next frame as the last foot lands.
+   *
+   * EVERY TIMER IT SETS IS KEPT, and the frame it is walking towards is kept
+   * with them, so the whole transition can be cut short in one place -- see
+   * `skipWalk`.  A chain of anonymous delayed calls could only be waited out.
+   */
+  private queue(delay: number, steps: number): void {
+    this.walkTo = this.index + 1;
+    const go = (): void => {
+      const walked = this.walk(steps);
+      this.pending.push(this.time.delayedCall(walked, () => this.land()));
+    };
+    if (delay <= 0) go();
+    else this.pending.push(this.time.delayedCall(delay, go));
+  }
+
+  /** Arrive: drop whatever is still queued and show the frame we set out for. */
+  private land(): void {
+    const to = this.walkTo;
+    this.walkTo = null;
+    for (const e of this.pending) e.remove(false);
+    this.pending = [];
+    if (to !== null) this.show(to);
+  }
+
+  /** True if there was a walk to cut short, and it has been cut short. */
+  private skipWalk(): boolean {
+    if (this.walkTo === null) return false;
+    this.land();
+    return true;
+  }
+
+  /**
+   * The sound of covering the ground between two frames, and HOW LONG IT TAKES.
    *
    * Each step of the sequence is a walk down a corridor, and it used to be
    * exactly one footstep: you crossed ten metres of concrete in silence and
-   * arrived with a single click.  Four of them, unevenly spaced and fading,
-   * is what makes the basement feel walked through rather than clicked through.
+   * arrived with a single click.  Four of them, unevenly spaced, is what makes
+   * the basement feel walked through rather than clicked through.
+   *
+   * IT RETURNS ITS OWN LENGTH, and that is the point.  The walk ran for better
+   * than a second while `show` was called on the same frame, so the crossfade
+   * had already put the next corridor on screen with the last two steps of the
+   * previous one still landing on it -- and a second click inside that window
+   * started a fresh four on top of the tail of the old four.  Callers wait for
+   * this number before moving on, which is what stops both.
    */
-  private walk(steps = 4): void {
+  private walk(steps = WALK_STEPS): number {
+    let at = 0;
     for (let i = 0; i < steps; i++) {
-      const at = i * (330 + Math.random() * 90);
-      if (i === 0) audio.sfx('footstep_concrete');
-      else this.time.delayedCall(at, () => audio.sfx('footstep_concrete'));
+      if (i === 0) audio.sfx('footstep_concrete', STEP_GAIN);
+      else {
+        const when = at;
+        this.pending.push(this.time.delayedCall(when, () => audio.sfx('footstep_concrete', STEP_GAIN)));
+      }
+      at += STEP_GAP + Math.random() * STEP_JITTER;
     }
+    // The last step is struck at `at - gap`; give it room to ring out.
+    return Math.max(0, at - STEP_GAP) + STEP_TAIL;
   }
 
   // ------------------------------------------------- frames that need scene state
@@ -372,7 +454,7 @@ export class BasementSequence extends Phaser.Scene {
     });
 
     // One dry click of a footstep behind you, then nothing at all.
-    this.time.delayedCall(260, () => audio.sfx('footstep_concrete'));
+    this.time.delayedCall(260, () => audio.sfx('footstep_concrete', STEP_GAIN));
   }
 
   /**
