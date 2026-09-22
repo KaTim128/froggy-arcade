@@ -58,11 +58,11 @@ export const airHockey: MinigameModule = {
   id: 'airhockey',
   title: 'AIR HOCKEY',
   music: 'game_airhockey',
-  rules: 'first to 5 - 7 in, 15 out',
+  rules: 'first to 5 - 10 in, 20 out',
   tutorial: {
     objective: [
       'FIRST TO FIVE GOALS TAKES IT.',
-      'SEVEN TOKENS IN, FIFTEEN BACK ON A WIN.',
+      'TEN TOKENS IN, TWENTY BACK ON A WIN.',
       'THREE SECONDS ON THE SPOT AFTER A GOAL.',
       'USE THEM - GET BACK INTO YOUR OWN HALF.',
     ],

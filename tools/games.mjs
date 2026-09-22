@@ -754,9 +754,10 @@ for (const g of [
   { id: 'frogcross', hook: '__frog', set: 'setPoints', score: 230, expect: 20, label: '230 pts' },
   // ...and on the bar itself, for the other end of the same rule.
   { id: 'frogcross', hook: '__frog', set: 'setPoints', score: 50, expect: 20, label: '50 pts, on the bar' },
-  // 300 cash is fifteen, and every hundred past it is five more: 600 is three
-  // hundreds past the bar, so thirty.
-  { id: 'carchase', hook: '__chase', set: 'setCash', score: 600, expect: 30, label: '600 cash' },
+  // 300 cash is twenty -- the cabinet takes ten, and every ten token machine
+  // on this floor pays twenty for the win -- and every hundred past the bar is
+  // five more: 600 is three hundreds past it, so thirty-five.
+  { id: 'carchase', hook: '__chase', set: 'setCash', score: 600, expect: 35, label: '600 cash' },
 ]) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });

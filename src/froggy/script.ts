@@ -18,14 +18,14 @@ export interface TutorialTargets {
 export function tutorialScript(t: TutorialTargets): DialogueLine[] {
   return [
     {
-      text: 'Well well well! A new face. Welcome to my arcade, friend.',
+      text: 'Well well well! A new face. Welcome to my arcade, friend. 🐸',
     },
     {
       text: "See these? Froggy-tokens. Little gold coins with my handsome face on 'em. They're how you play.",
       highlight: t.tokenHud,
     },
     {
-      text: 'Cheap games take one token. The tough ones take five — but they pay out big.',
+      text: 'Cheap games take one to three tokens. The tougher ones take five or more!',
       highlight: t.hardCabinet,
     },
     {
@@ -34,7 +34,7 @@ export function tutorialScript(t: TutorialTargets): DialogueLine[] {
       highlight: t.cheapCabinet,
     },
     {
-      text: "Cash 'em in at the counter for prizes. The good stuff starts at two hundred.",
+      text: "Cash 'em in at the counter for prizes. That's where you get all the good froggy stuff.",
       highlight: t.prizeCounter,
     },
     // PRD §8.4 line 6 / QFD VOC-16 used to sit here: "Anyway. You're going to
@@ -43,7 +43,7 @@ export function tutorialScript(t: TutorialTargets): DialogueLine[] {
     // not rewritten.  The tutorial now ends warm and says nothing about what
     // happens later.  Do not put a replacement line in this gap.
     {
-      text: '...Have fun!',
+      text: '...Have fun! 🐸',
     },
   ];
 }
@@ -73,7 +73,7 @@ export const secondBustScript: DialogueLine[] = [
     auto: true,
   },
   {
-    text: 'You can go now.',
+    text: 'See you next time! 🐸',
     holdBefore: 400,
     holdAfter: 1400,
     auto: true,

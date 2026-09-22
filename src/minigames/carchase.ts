@@ -117,13 +117,17 @@ export const TARGET_CASH = 200;
 /**
  * The PAY bar, and what clearing it is worth.
  *
- * Three hundred to bank anything, fifteen tokens for it, and five more for
+ * Three hundred to bank anything, TWENTY TOKENS for it, and five more for
  * every hundred after that.  It is deliberately past the first heat notch:
  * one police car turns up at two hundred, so nobody banks a run without
  * having been chased by somebody.
+ *
+ * Twenty because the cabinet takes ten: every ten token machine on this floor
+ * pays twenty for the win, and a road that paid fifteen for clearing its own
+ * bar was the one that asked for more and gave back less.
  */
 export const BAR_CASH = 300;
-export const BASE_REWARD = 15;
+export const BASE_REWARD = 20;
 export const STEP_CASH = 100;
 export const STEP_REWARD = 5;
 export const CASH_PER_PICKUP = 20;
@@ -697,7 +701,7 @@ export const carChase: MinigameModule = {
       'OIL SPINS YOU 1.5s. CONCRETE ENDS YOU.',
       'POTHOLE 1 SLOWS YOU. 2 STARTS SMOKE.',
       'POTHOLE 3 BREAKS THE CAR - RUN OVER.',
-      'PULL OVER AT 300 FOR 15, +5 EVERY 100.',
+      'PULL OVER AT 300 FOR 20, +5 EVERY 100.',
     ],
     controls: [
       ['A / D', 'STEER'],
@@ -715,7 +719,7 @@ export const carChase: MinigameModule = {
       { label: 'PULL\nOVER', key: 'ENTER' },
     ],
   },
-  payoutNote: 'WIN: 15+',
+  payoutNote: 'WIN: 20+',
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     scene0 = scene;

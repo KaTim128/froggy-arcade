@@ -88,8 +88,8 @@ export interface CabinetDef {
  */
 export const TIER_ECONOMY: Record<Tier, { cost: number; reward: number }> = {
   easy: { cost: 1, reward: 2 },
-  medium: { cost: 3, reward: 6 },
-  hard: { cost: 5, reward: 10 },
+  medium: { cost: 5, reward: 10 },
+  hard: { cost: 10, reward: 20 },
 };
 
 /** What a normal cabinet at this price must pay on a win. */
@@ -138,23 +138,23 @@ export const CABINETS: CabinetDef[] = [
   // Five in, ten out: the standard table's five-token rung, moved up off the
   // three-token one.
   { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 5, reward: 10, x: 52, y: 164, color: 0xff7a3d, symbol: 'H', motif: 'ball' },
-  { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 3, reward: 6, x: 98, y: 164, color: 0x6fbb6a, symbol: 'W', motif: 'mallet' },
-  { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 3, reward: 6, x: 244, y: 164, color: 0xb9884f, symbol: 'BW', motif: 'pins' },
+  { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 5, reward: 10, x: 98, y: 164, color: 0x6fbb6a, symbol: 'W', motif: 'mallet' },
+  { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 5, reward: 10, x: 244, y: 164, color: 0xb9884f, symbol: 'BW', motif: 'pins' },
   { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 290, y: 164, color: 0x1d6f8f, symbol: 'BS', motif: 'ship' },
 
   // ---- the back room: five to seven a go
-  { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 7, reward: 15, x: 48, y: 96, color: 0xc31f2e, room: 'annex', symbol: 'VS', motif: 'fist' },
+  { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 10, reward: 20, x: 48, y: 96, color: 0xc31f2e, room: 'annex', symbol: 'VS', motif: 'fist' },
   // Every seven-token cabinet pays fifteen: eight tokens of profit for the
   // longest games in the building, which is the top of the standard table.
-  { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 7, reward: 15, x: 112, y: 96, color: 0xd9822b, room: 'annex', symbol: 'BC', motif: 'ladder' },
-  { id: 'airhockey', title: 'AIR HOCKEY', tier: 'hard', cost: 7, reward: 15, x: 176, y: 96, color: 0xffd45e, room: 'annex', symbol: 'AH', motif: 'ball' },
+  { id: 'donkeykong', title: 'BARREL CLIMB', tier: 'hard', cost: 10, reward: 20, x: 112, y: 96, color: 0xd9822b, room: 'annex', symbol: 'BC', motif: 'ladder' },
+  { id: 'airhockey', title: 'AIR HOCKEY', tier: 'hard', cost: 10, reward: 20, x: 176, y: 96, color: 0xffd45e, room: 'annex', symbol: 'AH', motif: 'ball' },
   // THE FLOOD lives back here now, in the slot Chomp-Man stood in.  It belongs
   // with the long games rather than in the front room with the one-token
   // board: it is a minute of climbing and it takes seven to start.  The id is
   // still `fallingblocks` and that is deliberate — it is the key a saved run's
   // high score and play count are filed under, and renaming it would orphan
   // every save in existence to gain nothing but a tidier string.
-  { id: 'fallingblocks', title: 'THE FLOOD', tier: 'hard', cost: 7, reward: 15, x: 240, y: 96, color: 0x2f7fb5, room: 'annex', symbol: 'FD', motif: 'blocks' },
+  { id: 'fallingblocks', title: 'THE FLOOD', tier: 'hard', cost: 10, reward: 20, x: 240, y: 96, color: 0x2f7fb5, room: 'annex', symbol: 'FD', motif: 'blocks' },
   // Along the bottom wall, under the middle two of the row above.  Neither
   // has a fixed reward: a run is worth what it scored, and the module names
   // the payout.
@@ -163,9 +163,9 @@ export const CABINETS: CabinetDef[] = [
   // to a beat.
   { id: 'danceoff', title: 'DANCE OFF', tier: 'hard', cost: 10, reward: 20, x: 48, y: 162, color: 0xff4fa3, room: 'annex', symbol: 'DO', motif: 'steps' },
   { id: 'frogcross', title: 'FROG CROSS', tier: 'hard', cost: 10, reward: 20, x: 112, y: 162, color: 0x6fbb6a, room: 'annex', symbol: 'FC', motif: 'road' },
-  { id: 'carchase', title: 'CAR CHASE', tier: 'hard', cost: 7, reward: 15, x: 176, y: 162, color: 0x46a0e0, room: 'annex', symbol: 'CC', motif: 'car' },
+  { id: 'carchase', title: 'CAR CHASE', tier: 'hard', cost: 10, reward: 20, x: 176, y: 162, color: 0x46a0e0, room: 'annex', symbol: 'CC', motif: 'car' },
   // Ten on a five, like every other five-token cabinet on the floor.
-  { id: 'frogvslizard', title: 'FROG VS LIZARD', tier: 'hard', cost: 5, reward: 10, x: 240, y: 162, color: 0xa8c23f, room: 'annex', symbol: 'FL', motif: 'throw' },
+  { id: 'frogvslizard', title: 'FROG VS LIZARD', tier: 'hard', cost: 7, reward: 15, x: 240, y: 162, color: 0xa8c23f, room: 'annex', symbol: 'FL', motif: 'throw' },
 
   // ---- and the room at the back, where none of it is a game
   // Two tokens is the price of the first spin; the rest are raised through

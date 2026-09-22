@@ -96,10 +96,10 @@ const ID = 'frograce' as const;
 const RUNNERS: Array<{ name: string; colour: number }> = [
   { name: 'GREEN', colour: 0x5fbf5a },
   { name: 'GOLD', colour: 0xffd45e },
-  { name: 'RED', colour: 0xd8443c },
-  { name: 'BLUE', colour: 0x46a0e0 },
+  // { name: 'RED', colour: 0xd8443c },
+  // { name: 'BLUE', colour: 0x46a0e0 },
   { name: 'PINK', colour: 0xff6fb0 },
-  { name: 'TEAL', colour: 0x46c4bd },
+  // { name: 'TEAL', colour: 0x46c4bd },
   { name: 'VIOLET', colour: 0xa86ad8 },
 ];
 
