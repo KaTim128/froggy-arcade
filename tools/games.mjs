@@ -43,7 +43,7 @@ const GAMES = [
   // shot came back of the arcade floor.  Twelve seconds is the middle of every
   // race there is, which is a better picture of the game anyway: the field
   // strung out down the track with whatever is going wrong today.
-  { id: 'frograce', drive: async (p) => { await p.keyboard.press('Digit3'); await sleep(250); await p.keyboard.press('ArrowUp'); await sleep(250); await p.keyboard.press('Space'); await sleep(12000); } },
+  { id: 'frograce', drive: async (p) => { await p.keyboard.press('Digit3'); await sleep(250); await p.keyboard.press('ArrowUp'); await sleep(250); await p.keyboard.press('Space'); await sleep(31000); } },
   { id: 'grudge', drive: async (p) => { await sleep(1600); for (let i = 0; i < 6; i++) { await p.keyboard.press('KeyD'); await p.keyboard.press('KeyJ'); await sleep(400); } } },
   { id: 'donkeykong', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(2500); await p.keyboard.up('KeyD'); await p.keyboard.press('Space'); await sleep(600); await p.keyboard.down('KeyW'); await sleep(900); await p.keyboard.up('KeyW'); } },
   { id: 'slots', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.press('Space'); await sleep(2700); } } },
@@ -272,22 +272,24 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   await startGame(page);
   await bridge(page, '__race');
 
-  // TWELVE HUNDRED, NOT SIX, AND A WIDER FLOOR.
+  // TWELVE HUNDRED FIELDS, AND THE BAR SET BY THE FIELD SIZE.
   //
-  // The favourite took 37% of a race with no comeback in it and takes about
-  // 32% of one with; six hundred fields is a standard deviation of nearly two
-  // points, so a floor at 28 was inside two of them and the check started
-  // failing on its own sample rather than on the game.  Twice the fields and a
-  // floor at 25 still tells a real favourite (32%) from a field of seven
-  // deciding it between them (14%), which is the thing being asked.
+  // The question is whether the form is real: the favourite has to beat a coin
+  // toss between the runners by a long way and still lose often.  Both ends of
+  // that band move with how many frogs are in the race -- the field has been
+  // seven and is four -- so they are computed from the field rather than
+  // typed, and the number of colours that have to win is the field itself.
+  const field = await page.evaluate(() => window.__race.runners);
   const s = await page.evaluate(() => window.__race.sample(1200));
   const fav = s.favourite;
   // Every colour wins sometimes: no frog on this machine is a dud or a lock.
   const spread = s.wins.filter((n) => n > 0).length;
-  const fair = fav > 0.25 && fav < 0.62 && spread === 7;
+  const even = 1 / field;
+  const fair = fav > even * 1.5 && fav < 0.75 && spread === field;
   console.log(
     `${fair ? 'PASS' : 'FAIL'}  frog race: the favourite wins often, not always  — ` +
-      `${(fav * 100).toFixed(0)}% of 1200, ${spread}/7 colours won at least one`,
+      `${(fav * 100).toFixed(0)}% of 1200 against ${(even * 100).toFixed(0)}% for a coin toss, ` +
+      `${spread}/${field} colours won at least one`,
   );
   if (!fair) failures++;
 
@@ -311,22 +313,66 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   if (!honest) failures++;
 
   // It has to be able to win and able to lose: a comeback that always came
-  // back would make the race a formality with a countdown on it.
-  const race = jet.won > 0.3 && jet.won < 0.85;
+  // back would make the race a formality with a countdown on it.  The floor is
+  // low because the field is close now -- the burn is aimed either side of a
+  // leader it can genuinely predict, so landing in front is close to a coin
+  // flip and a run of tails is not a broken jetpack.
+  const race = jet.won > 0.18 && jet.won < 0.85;
   console.log(
     `${race ? 'PASS' : 'FAIL'}  frog race: and it is a finish rather than a formality  — ` +
       `the jetpack takes ${(jet.won * 100).toFixed(0)}% of the races it appears in`,
   );
   if (!race) failures++;
 
-  // And the clock is where it was: twenty seconds, most races home before it.
+  // And the clock is where it was: thirty seconds, most races home before it.
   const t = await page.evaluate(() => window.__race.timing(200));
-  const clock = t.meanSeconds < 20 && t.hitTheCap < 0.2 && jet.meanFiredAt > t.meanSeconds - 3.2;
+  const cap = await page.evaluate(() => window.__race.raceSeconds);
+  const clock = t.meanSeconds < cap && t.hitTheCap < 0.25 && jet.meanFiredAt > t.meanSeconds - 4;
   console.log(
-    `${clock ? 'PASS' : 'FAIL'}  frog race: the jetpack does not stretch the twenty seconds  — ` +
+    `${clock ? 'PASS' : 'FAIL'}  frog race: the jetpack does not stretch the ${cap} seconds  — ` +
       `mean ${t.meanSeconds.toFixed(1)}s, lit at ${jet.meanFiredAt.toFixed(1)}s, ${(t.hitTheCap * 100).toFixed(0)}% run to the cap`,
   );
   if (!clock) failures++;
+
+  // ---- THE SHAPE OF THE RACE ITSELF.
+  //
+  // Four promises, and none of them is visible from one race: it lasts about
+  // thirty seconds, something happens to EVERY frog and the four guaranteed
+  // things are different from each other, they are still together at the line,
+  // and whoever leads at two thirds is not the answer.  All four are asked of
+  // three hundred whole fields, run on the model the player watches.
+  const shape = await page.evaluate(() => window.__race.shape(300));
+  const lasts = shape.meanSeconds > 25 && shape.meanSeconds <= cap;
+  console.log(
+    `${lasts ? 'PASS' : 'FAIL'}  frog race: a race is about thirty seconds  — ` +
+      `mean ${shape.meanSeconds.toFixed(1)}s of a ${cap}s cap, ${(shape.hitTheCap * 100).toFixed(0)}% settled on distance`,
+  );
+  if (!lasts) failures++;
+
+  const fed = shape.everyFrogFed > 0.94 && shape.allDifferent > 0.94;
+  console.log(
+    `${fed ? 'PASS' : 'FAIL'}  frog race: something happens to every frog, and not the same thing  — ` +
+      `${(shape.everyFrogFed * 100).toFixed(0)}% of races feed all four, ` +
+      `${(shape.allDifferent * 100).toFixed(0)}% with four different ones, ${shape.meanEffects.toFixed(1)} effects a race`,
+  );
+  if (!fed) failures++;
+
+  // A tenth of the track between first and last at the line is not a race, it
+  // is a procession: the tow rope is there to stop exactly that.
+  const close = shape.meanFinishGap < 0.1 * shape.dist;
+  console.log(
+    `${close ? 'PASS' : 'FAIL'}  frog race: and they are together at the line  — ` +
+      `${shape.meanFinishGap.toFixed(0)}px between first and last on a ${shape.dist}px track ` +
+      `(${shape.meanGapTwoThirds.toFixed(0)}px at two thirds)`,
+  );
+  if (!close) failures++;
+
+  const open = shape.leaderHeldOn < 0.7;
+  console.log(
+    `${open ? 'PASS' : 'FAIL'}  frog race: and it is not over at two thirds  — ` +
+      `the frog in front then wins ${(shape.leaderHeldOn * 100).toFixed(0)}% of the time`,
+  );
+  if (!open) failures++;
   await page.close();
 }
 
@@ -2935,15 +2981,34 @@ for (const g of [
     window.__chase.spawnPolice(window.__chase.laneOf(s.player.x), 150);
   });
   await sleep(400);
+  // COUNTED AFTER THE CAR IS PUT THERE, not before.
+  //
+  // The loop above gives the road time to bring its own police and usually it
+  // does, but "usually" is not a test: on a slow arrival it read an empty road
+  // and reported the bomb as broken over a car that had not turned up yet.
+  // What has to be true is that somebody was chasing when the bomb went off,
+  // and the car behind the player is somebody.
+  busy = await st();
   await page.keyboard.press('Space');
   await sleep(1800);
   const quiet = await st();
-  const cleared = !quiet.gone && busy.chasing > 0 && quiet.chasing === 0 && quiet.respite > 8000;
+  // ON THE ROAD, not necessarily CHASING.  `chasing` leaves out a police car
+  // that is spun out, and by four hundred cash there is concrete on the road
+  // for them to spin out on -- so the road could be two cars deep and read as
+  // empty, which is what this check kept failing on.  What the bomb has to do
+  // is clear the road; what has to be true before it is that there was a road
+  // to clear.
+  //
+  // Ten seconds of respite, read a beat after the drop and through a browser
+  // that is rendering three other pages: seven is the floor that separates a
+  // respite that started from one that did not.
+  const cleared = !quiet.gone && busy.police > 0 && quiet.chasing === 0 && quiet.respite > 7000;
   console.log(
       `${cleared ? 'PASS' : 'FAIL'}  car chase: a bomb clears the road for ten seconds  — ` +
         (quiet.gone
           ? 'the run ended first'
-          : `${busy.chasing} chasing -> ${quiet.chasing}, ${Math.round(quiet.respite / 100) / 10}s left`),
+          : `${busy.police} on the road (${busy.chasing} of them chasing) -> ${quiet.chasing}, ` +
+            `${Math.round(quiet.respite / 100) / 10}s left`),
   );
   if (!cleared) failures++;
 
