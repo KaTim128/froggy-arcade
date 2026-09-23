@@ -136,8 +136,17 @@ const FIELD_WORD = COUNT_WORD[FIELD] ?? `${FIELD}`;
  * The lanes take the room the field does not, so four of them fill the same
  * band seven used to.
  */
-const TRACK_TOP = 74;
-const LANE_H = Math.max(14, Math.min(22, Math.floor(84 / FIELD)));
+const TRACK_TOP = 66;
+/**
+ * A LANE HAS TO BE TALLER THAN A FROG.
+ *
+ * The frogs are chubby now -- about eighteen pixels from the top of an eye to
+ * the sole of a foot -- and at twenty-one a lane had them clipping the animal
+ * in the lane above whenever one hopped.  Twenty-three gives every frog its
+ * own air, and the track still ends clear of the rail at the bottom of the
+ * cabinet.
+ */
+const LANE_H = Math.max(14, Math.min(23, Math.floor(92 / FIELD)));
 const LANE_T = TRACK_TOP;
 /** The bottom of the last lane, which is where the verge starts. */
 const TRACK_BOTTOM = TRACK_TOP + LANE_H * FIELD;
@@ -270,11 +279,13 @@ const HOP_S = 0.34;
  * How far off the lane a hop takes a frog.
  *
  * Five was a bob: at fifteen pixels of lane it read as a frog running with a
- * limp.  Nine is most of a body clear of the track at the top of the arc,
- * which is what a frog does -- it is airborne for most of its stride and the
- * running is the exception.
+ * limp.  Nine was most of a body clear of the track -- right for the lean
+ * little frogs that used to run here and too much for these ones, which are
+ * nearly nineteen pixels of chubby animal in a twenty-three pixel lane: at
+ * the top of the arc they were in the lane above.  Six keeps the hop a hop
+ * and keeps every frog in its own lane.
  */
-const HOP_H = 9;
+const HOP_H = 6;
 /**
  * THE HOP IS THE MOTION, NOT A BOB ON TOP OF IT.
  *
@@ -344,7 +355,7 @@ function hopTravel(u0: number, du: number): number {
  * follows the arc: nose up off the ground, level at the top, nose down coming
  * in.
  */
-const FOOT = 4; // where a frog's feet are, in its own drawing
+const FOOT = 6; // where a frog's feet are, in its own drawing
 function hopPose(u: number): { sx: number; sy: number; rot: number } {
   if (u >= TAKEOFF && u < LAND) {
     const a = (u - TAKEOFF) / (LAND - TAKEOFF);
@@ -1198,7 +1209,14 @@ export const frogRace: MinigameModule = {
       // Depth by height settles it the way the eye already reads it: the
       // higher thing is the nearer thing.  A frog in the beak goes over the
       // bird as well -- it is in its claws, not behind it.
-      body.setDepth(r.going === 'taken' ? 39 : 10 + Math.min(8, r.lift / 3));
+      // ---- AND WHO IS IN FRONT OF WHOM.
+      //
+      // The crowd is at the back and lane four is nearest the camera, so a
+      // lower lane draws over a higher one: where two frogs do overlap -- at
+      // the top of a hop, or under a balloon -- it reads as one being in
+      // front of the other rather than as two shapes fighting.  Height still
+      // wins over lane, because a frog in the air is nearer than either.
+      body.setDepth(r.going === 'taken' ? 39 : 10 + r.i * 0.6 + Math.min(8, r.lift / 2.5));
 
       if (r.going === 'hole') {
         // Down in a hole: sunk to the shoulders, and scrabbling.
@@ -2400,8 +2418,8 @@ function wearMood(body: Phaser.GameObjects.Container, m: Mood, blink: number, dt
     // The lid closes over the eye from the top.
     (e.lid as Phaser.GameObjects.Ellipse).setScale(1, Phaser.Math.Clamp(1 - now, 0, 1) * 1.05);
     const iris = e.iris as Phaser.GameObjects.Arc;
-    const wantX = side * 3.6 + (m.irisX ?? 0);
-    const wantY = -5.6 + (m.irisY ?? 0);
+    const wantX = side * 4.2 + (m.irisX ?? 0);
+    const wantY = -7.1 + (m.irisY ?? 0);
     iris.setPosition(iris.x + (wantX - iris.x) * k, iris.y + (wantY - iris.y) * k);
     const big = m.big ?? 1;
     iris.setScale(iris.scaleX + (big - iris.scaleX) * k);
@@ -2414,8 +2432,8 @@ function wearMood(body: Phaser.GameObjects.Container, m: Mood, blink: number, dt
   const tip = 0.45 * smile;
   mouthL.setRotation(mouthL.rotation + (tip - mouthL.rotation) * k);
   mouthR.setRotation(mouthR.rotation + (-tip - mouthR.rotation) * k);
-  mouthL.setPosition(-1.6, -0.6 - smile * 0.5);
-  mouthR.setPosition(1.6, -0.6 - smile * 0.5);
+  mouthL.setPosition(-2, -1.4 - smile * 0.6);
+  mouthR.setPosition(2, -1.4 - smile * 0.6);
   const gasping = (m.open ?? 0) > 0;
   gape.setVisible(gasping);
   if (gasping) gape.setScale(0.7 + (m.open ?? 0) * 0.5);
@@ -2428,7 +2446,7 @@ function wearMood(body: Phaser.GameObjects.Container, m: Mood, blink: number, dt
     if (!brow) return;
     const side = i === 0 ? -1 : 1;
     b.setRotation(side * 0.4 * brow);
-    b.setY(-8.4 + brow * 0.5);
+    b.setY(-10.2 + brow * 0.6);
   });
 }
 
@@ -2447,40 +2465,49 @@ function wearMood(body: Phaser.GameObjects.Container, m: Mood, blink: number, dt
  */
 function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.GameObjects.Container {
   const { skin, lit, dark, cheek } = kit;
-  // ---- THE PROPORTIONS ARE THE CUTENESS.
+  // ================= ONE SHAPE, NOT TWO =================
   //
-  // Big head, big eyes, small round body, short limbs, oversized feet.  The
-  // old frog was a twelve by nine body with two small eyes on top of it --
-  // correct for a frog and charmless.  The head is now most of the animal and
-  // the eyes are most of the head, which is the whole trick.
+  // The frog before this one was a head ellipse THIRTEEN wide sitting on a
+  // body ellipse TEN wide, which is a big head attached to a small body with
+  // a waist where they met.  What is drawn now is one round mass: a wide
+  // chubby body, and a crown that is NARROWER than it and overlaps most of
+  // the way down, so the two read as the top and bottom of a single animal
+  // and there is no neck anywhere.  Both are drawn in the same skin with no
+  // edge between them -- the only rim is round the OUTSIDE of the pair.
+  //
+  // Everything else is small by comparison on purpose: stubby legs, feet that
+  // just peek out underneath, and eyes set into the top of the mass rather
+  // than perched above it.  That is the whole recipe for chubby and cute at
+  // this size.
   const parts = [
-    // ---- the feet, which are deliberately too big for it
-    scene.add.ellipse(-6, 5, 8, 3.2, dark),
-    scene.add.ellipse(6, 5, 8, 3.2, dark),
-    scene.add.ellipse(-6, 4.6, 7, 2.4, skin).setAlpha(0.85),
-    scene.add.ellipse(6, 4.6, 7, 2.4, skin).setAlpha(0.85),
-    // ---- short limbs, tucked in under it
-    scene.add.ellipse(-4.5, 2.5, 4.5, 4, dark),
-    scene.add.ellipse(4.5, 2.5, 4.5, 4, dark),
-    // ---- a small round body, with a rim of its own shadow colour behind it.
+    // ---- THE RIM, which is the outside edge of the whole animal.
     //
-    // THE RIM IS WHAT KEEPS A GREEN FROG OFF GREEN GRASS.  Without it the
-    // green one disappears into its lane whenever it stops moving, and the
-    // whole race depends on being able to tell four colours apart at a
-    // glance.  It is the frog's own dark tone, so it reads as the shaded
-    // underside of a round animal rather than as an outline drawn round it.
-    scene.add.ellipse(0, 1.5, 11.6, 9, dark),
-    scene.add.ellipse(0, 1.5, 10, 7.5, skin),
-    scene.add.ellipse(0, 3, 7, 3.4, 0xfff6e0).setAlpha(0.5),
-    // ---- and a big soft head over it
-    scene.add.ellipse(0, -3, 14.6, 11.5, dark),
-    scene.add.ellipse(0, -3, 13, 10, skin),
-    // the light on top of the head, which is what makes it look rounded
-    scene.add.ellipse(0, -6, 9.5, 4.5, lit).setAlpha(0.8),
-    scene.add.ellipse(-2.5, -7, 4, 2.2, 0xffffff).setAlpha(0.22),
-    // cheeks
-    scene.add.ellipse(-5, -1.2, 3.6, 2.4, cheek).setAlpha(0.55),
-    scene.add.ellipse(5, -1.2, 3.6, 2.4, cheek).setAlpha(0.55),
+    // Drawn as the same two shapes a shade larger and in the frog's own dark
+    // tone: it keeps a green frog off green grass and it reads as the shaded
+    // underside of something round rather than as an outline drawn round it.
+    scene.add.ellipse(0, 6.5, 8.6, 4.2, dark),
+    scene.add.ellipse(0, -0.5, 15.8, 13.2, dark),
+    scene.add.ellipse(0, -4.8, 13.6, 10, dark),
+    // ---- the feet, just showing under the belly
+    scene.add.ellipse(-5.5, 6.2, 8, 3.6, dark),
+    scene.add.ellipse(5.5, 6.2, 8, 3.6, dark),
+    scene.add.ellipse(-5.5, 5.8, 6.8, 2.6, skin).setAlpha(0.9),
+    scene.add.ellipse(5.5, 5.8, 6.8, 2.6, skin).setAlpha(0.9),
+    // ---- THE MASS.  Body first, crown over it, same colour, no seam.
+    scene.add.ellipse(0, -0.5, 14.4, 11.8, skin),
+    scene.add.ellipse(0, -4.8, 12.2, 8.6, skin),
+    // the light across the top of it, which is what makes it look round
+    scene.add.ellipse(0, -7.4, 10, 5, lit).setAlpha(0.8),
+    scene.add.ellipse(-2.8, -8.4, 4.4, 2.4, 0xffffff).setAlpha(0.2),
+    // ---- the belly, low and wide, and a soft pale front
+    scene.add.ellipse(0, 3.2, 10.5, 6, 0xfff6e0).setAlpha(0.45),
+    scene.add.ellipse(0, 4.4, 7.5, 3.2, 0xffffff).setAlpha(0.25),
+    // ---- stubby little legs, tucked against the body
+    scene.add.ellipse(-7, 3.4, 4.6, 5, dark).setAlpha(0.9),
+    scene.add.ellipse(7, 3.4, 4.6, 5, dark).setAlpha(0.9),
+    // ---- and cheeks, low on the face where a chubby thing has them
+    scene.add.ellipse(-5.4, -1.4, 4.2, 2.8, cheek).setAlpha(0.5),
+    scene.add.ellipse(5.4, -1.4, 4.2, 2.8, cheek).setAlpha(0.5),
   ];
   const c = scene.add.container(0, 0, parts).setDepth(10);
 
@@ -2490,32 +2517,36 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
   // over the top for a blink and a squint.  The mouth is a separate piece so
   // it can be a smile, an O of surprise or a flat line of concentration
   // without anything else on the frog having to change.
+  // The eye sits IN the top of the mass rather than on top of it: the mound
+  // is the same skin as the crown and overlaps it, so what shows above the
+  // silhouette is the top third of an eye, the way a frog's eyes sit.
+  const EYE_X = 4.2;
+  const EYE_Y = -7;
   const eye = (side: number) => {
-    const rim = scene.add.circle(side * 3.6, -5.5, 4.1, dark);
-    const mound = scene.add.circle(side * 3.6, -5.5, 3.6, skin);
-    void rim;
-    const white = scene.add.circle(side * 3.6, -5.8, 3.0, 0xffffff);
-    const iris = scene.add.circle(side * 3.6, -5.6, 1.9, PALETTE.black);
-    const glint = scene.add.circle(side * 3.6 - 0.9, -6.6, 0.9, 0xffffff).setAlpha(0.95);
-    const spark = scene.add.circle(side * 3.6 + 0.9, -4.9, 0.45, 0xffffff).setAlpha(0.7);
+    const rim = scene.add.circle(side * EYE_X, EYE_Y, 4.3, dark);
+    const mound = scene.add.circle(side * EYE_X, EYE_Y, 3.8, skin);
+    const white = scene.add.circle(side * EYE_X, EYE_Y - 0.3, 3.2, 0xffffff);
+    const iris = scene.add.circle(side * EYE_X, EYE_Y - 0.1, 2.0, PALETTE.black);
+    const glint = scene.add.circle(side * EYE_X - 1, EYE_Y - 1.2, 1, 0xffffff).setAlpha(0.95);
+    const spark = scene.add.circle(side * EYE_X + 1, EYE_Y + 0.8, 0.5, 0xffffff).setAlpha(0.7);
     // The lid comes down over the eye FROM ITS TOP EDGE: with the origin at
     // the top, scaleY 0 is a lid that is not there and 1 is an eye shut.  A
     // lid that scales about its own middle closes over the centre of the eye
     // and leaves a ring of white showing all round it, which is not a blink,
     // it is a mask.
-    const lid = scene.add.ellipse(side * 3.6, -8.9, 6.8, 6.6, skin).setOrigin(0.5, 0).setScale(1, 0);
+    const lid = scene.add.ellipse(side * EYE_X, EYE_Y - 3.5, 7.2, 7, skin).setOrigin(0.5, 0).setScale(1, 0);
     return { rim, mound, white, iris, glint, spark, lid };
   };
   const eyes = [eye(-1), eye(1)];
   for (const e of eyes) c.add([e.rim, e.mound, e.white, e.iris, e.glint, e.spark, e.lid]);
   // A smile: two short bars that meet in the middle and turn up at the ends.
-  const mouthL = scene.add.rectangle(-1.6, -0.6, 3.6, 1.3, 0x2a1a20).setAlpha(0.9);
-  const mouthR = scene.add.rectangle(1.6, -0.6, 3.6, 1.3, 0x2a1a20).setAlpha(0.9);
-  const gape = scene.add.ellipse(0, 0.2, 4, 3.6, 0x6b2430).setVisible(false);
+  const mouthL = scene.add.rectangle(-2, -1.4, 4.4, 1.4, 0x2a1a20).setAlpha(0.9);
+  const mouthR = scene.add.rectangle(2, -1.4, 4.4, 1.4, 0x2a1a20).setAlpha(0.9);
+  const gape = scene.add.ellipse(0, -0.4, 5, 4.4, 0x6b2430).setVisible(false);
   // Brows sit ON the head, not above it: the head's top edge is about -8, and
   // a brow drawn at -9.6 is a pair of sticks floating over a frog.
   const brows = [-1, 1].map((side) =>
-    scene.add.rectangle(side * 3.6, -8.4, 3.6, 1, dark).setAlpha(0.85).setVisible(false),
+    scene.add.rectangle(side * EYE_X, -10.2, 4, 1.1, dark).setAlpha(0.85).setVisible(false),
   );
   c.add([gape, mouthL, mouthR, ...brows]);
   c.setData('eyes', eyes);
