@@ -780,7 +780,7 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
         }
         rises.push(st0.floors[f] - top);
       }
-      return { rises, cap: st0.maxRise, h: st0.playerH, floors: st0.floors };
+      return { rises, cap: st0.maxRise, h: st0.playerH, beam: st0.beam, floors: st0.floors };
     });
     const highest = Math.max(...jumps.rises);
     const capped = highest <= jumps.cap + 0.01 && highest > jumps.cap - 2;
@@ -791,16 +791,20 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
     if (!capped) failures++;
 
     // The same numbers read the other way round: where the top of his hat got
-    // to, against the girder over his head.
+    // to, against the UNDERSIDE of the girder over his head.  Under it by any
+    // margin at all and he is never drawn into the beam, so the top of a jump
+    // shows the whole player.
     const headroom = Math.min(
       ...jumps.rises.map((r, f) =>
-        f + 1 < jumps.floors.length ? jumps.floors[f] - r - jumps.h - jumps.floors[f + 1] : 99,
+        f + 1 < jumps.floors.length
+          ? jumps.floors[f] - r - jumps.h - (jumps.floors[f + 1] + jumps.beam)
+          : 99,
       ),
     );
     const under = headroom >= 0;
     console.log(
-      `${under ? 'PASS' : 'FAIL'}  barrel climb: and his head never comes out above it  — ` +
-        `closest ${headroom.toFixed(1)}px under the next girder`,
+      `${under ? 'PASS' : 'FAIL'}  barrel climb: and his head stays clear of the beam above it  — ` +
+        `closest ${headroom.toFixed(1)}px under the underside`,
     );
     if (!under) failures++;
 
