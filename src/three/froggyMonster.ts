@@ -14,15 +14,20 @@
  *
  * WHAT MAKES IT READ AS HORROR, in order of how much each one carries:
  *
- *   1. The silhouette.  He is 2.4m and folded forward, head slung below the
- *      shoulders and pushed out in front of him, arms hanging past his knees.
- *      Nothing about that shape is upright or symmetrical.
+ *   1. The silhouette.  He is 2.4m, UPRIGHT ON TWO FEET, and built as one
+ *      round heavy mass with the head sunk into the front of it -- no neck, no
+ *      shoulders, no join.  He used to be folded forward with his head slung
+ *      below his shoulders and his arms past his knees, which is an ape; a
+ *      swollen frog standing up is worse, because standing up is what the
+ *      mascot does.
  *   2. The skin is nearly black.  The player carries a bright torch, and a
  *      mascot-green model under a 110-intensity spotlight is a cartoon; these
  *      values are dark enough that the torch finds a wet edge and not much else.
- *   3. The eyes are wide and pale with pinprick pupils, one lower and larger
- *      than the other.  That single asymmetry is what stops him reading as a
- *      design and starts him reading as an animal.
+ *   3. TWO EYES, and they are a matched pair: big frog eyes bulging off the
+ *      top of the head, bloodshot to the rim, with a pupil the size of a full
+ *      stop in the middle of all that white.  One of them used to be lower and
+ *      larger than the other; it read as a different creature from the one on
+ *      the poster, and the horror here is recognition.
  *   4. The jaw never fully shuts.  Even hunting he is holding it open on a rank
  *      of teeth, and it hinges back past where a jaw goes.
  *
@@ -44,8 +49,8 @@ const BELLY = 0x4c4a2a;
 const GUM = 0x3d1016;
 const THROAT = 0x080204;
 const TOOTH = 0x9a9078;
-const SCLERA = 0x6c6852;
-const VEIN = 0x5a1a1c;
+const SCLERA = 0xc0aca0;
+const VEIN = 0x8d1a1f;
 const BLOOD = 0x4a0507;
 
 /** Head to floor, in metres, standing.  The player's eye is at 1.55. */
@@ -279,8 +284,11 @@ export class FroggyMonster {
     // ---- torso.  The mass is forward of the hips: he is folded over himself.
     this.torso.position.set(0, 1.44, 0);
     const chest = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.5, 20, 16), 0.034, 3.4, 1), skin);
-    chest.scale.set(1.02, 0.86, 0.94);
-    chest.position.z = -0.06;
+    // ROUND AND HEAVY.  He was a chest; he is a mass now -- wider than he is
+    // tall and deep with it, so the head has something to sink into and the
+    // silhouette is one lump rather than a torso with a ball on top.
+    chest.scale.set(1.2, 1.06, 1.14);
+    chest.position.z = -0.02;
     this.torso.add(chest);
 
     // The belly he still has, gone the colour of something kept in a jar.
@@ -314,7 +322,10 @@ export class FroggyMonster {
 
     for (const side of [-1, 1]) {
       const shoulder = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.23, 12, 10), 0.022, 6, 17), skinLit);
-      shoulder.position.set(side * 0.44, 0.16, -0.04);
+      // OUTBOARD OF THE MASS.  The body is wider than it was, and a shoulder
+      // set where the old chest ended is a shoulder inside the new one -- the
+      // arms vanished into him and he read as having none.
+      shoulder.position.set(side * 0.58, 0.14, -0.02);
       this.torso.add(shoulder);
     }
 
@@ -322,7 +333,7 @@ export class FroggyMonster {
     // elbow that folds on the swing and on a climb.  They are the reach.
     for (const side of [-1, 1]) {
       const arm = new THREE.Group();
-      arm.position.set(side * 0.46, 0.12, 0);
+      arm.position.set(side * 0.6, 0.1, 0);
 
       const upper = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.11, 0.66, 7, 14), 0.028, 6, 23), skin);
       upper.position.y = -0.38;
@@ -361,14 +372,12 @@ export class FroggyMonster {
     // it: the gap between them is where the throat and the teeth show, and a
     // face that is permanently a little bit open is the difference between a
     // frog and something that eats.
-    this.neck.position.set(0, 0.24, 0.2);
-    // The throat column between the chest and the head.  Without it the skull
-    // hangs off the torso with a gap of nothing behind it, and from the side
-    // that gap is the single most obvious "two spheres" tell on the model.
-    const gullet = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.2, 0.26, 6, 14), 0.028, 7, 53), skinDark);
-    gullet.rotation.x = 0.8;
-    gullet.position.set(0, 0.02, -0.14);
-    this.neck.add(gullet);
+    // ---- NO NECK.  There was a throat column between the chest and the head
+    // and the head sat on top of it; the head is DOWN IN the body now, front
+    // and low, so the jaw comes straight out of the chest and there is no join
+    // to see from any angle.  A frog has no neck, and the one thing this has
+    // to stay is a frog.
+    this.neck.position.set(0, 0.12, 0.14);
     const skull = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.5, 22, 18), 0.03, 3.8, 37), skin);
     skull.scale.set(1.06, 0.62, 1.0);
     skull.position.y = 0.13;
@@ -380,35 +389,39 @@ export class FroggyMonster {
     brow.position.set(0, 0.3, 0.08);
     this.neck.add(brow);
 
-    // The two eye bumps: the mascot's own landmark, kept exactly, then ruined.
-    // Small in a big head, set deep under the brow, and pointed at you.
+    // ---- TWO EYES.  EXACTLY TWO, AND A MATCHED PAIR.
+    //
+    // One of them used to be lower and larger than the other, on the grounds
+    // that an asymmetry reads as an animal rather than as a design.  It also
+    // reads as a different creature from the one on the poster, and what this
+    // thing has to be is FROGGY: two big frog eyes, bulging off the top of the
+    // head where a frog's are, the same size as each other, bloodshot to the
+    // rim with a pupil the size of a full stop in the middle of all that
+    // white.  A matched pair looks back at you; a wrong one is a texture.
     for (const side of [-1, 1]) {
-      // One eye lower and larger than the other.  This is the whole trick.
-      const wrong = side === -1 ? 1.18 : 1;
-      const drop = side === -1 ? 0.055 : 0;
-      const ex = side * 0.29;
-      const ey = 0.19 - drop;
+      const ex = side * 0.31;
+      const ey = 0.26;
 
-      const socket = new THREE.Mesh(new THREE.SphereGeometry(0.2 * wrong, 12, 10), skinDark);
-      socket.position.set(ex, ey, 0.16);
+      const socket = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 10), skinDark);
+      socket.position.set(ex, ey, 0.13);
       this.neck.add(socket);
 
-      const sclera = new THREE.Mesh(new THREE.SphereGeometry(0.155 * wrong, 12, 10), mat(SCLERA));
-      sclera.position.set(ex, ey, 0.26);
+      const sclera = new THREE.Mesh(new THREE.SphereGeometry(0.205, 14, 12), mat(SCLERA));
+      sclera.position.set(ex, ey, 0.23);
       this.neck.add(sclera);
 
       // Veins, not a ring: a rim reads as a cartoon outline at this size.
-      for (let v = 0; v < 3; v++) {
-        const vein = new THREE.Mesh(new THREE.CapsuleGeometry(0.008, 0.14, 3, 5), mat(VEIN));
-        const a = (v / 3) * Math.PI * 2 + side;
-        vein.position.set(ex + Math.cos(a) * 0.09, ey + Math.sin(a) * 0.09, 0.34);
+      for (let v = 0; v < 6; v++) {
+        const vein = new THREE.Mesh(new THREE.CapsuleGeometry(0.009, 0.18, 3, 5), mat(VEIN));
+        const a = (v / 6) * Math.PI * 2 + side;
+        vein.position.set(ex + Math.cos(a) * 0.1, ey + Math.sin(a) * 0.1, 0.36);
         vein.rotation.z = a;
         this.neck.add(vein);
       }
 
       // The pupil: a pinprick, sunk into the eye rather than sat on it.
-      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 8), mat(0x000000));
-      pupil.position.set(ex, ey, 0.26 + 0.145 * wrong);
+      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), mat(0x000000));
+      pupil.position.set(ex, ey, 0.23 + 0.19);
       this.neck.add(pupil);
     }
 
@@ -617,10 +630,15 @@ export class FroggyMonster {
     // A slight roll off the same limp, so his weight goes side to side.
     this.hips.rotation.z = gait * 0.035 * moving;
 
-    // Folded forward, further the faster he moves, and further again once he is
-    // coming for you.  A climb folds him over whatever he is on top of.
+    // ---- UPRIGHT.  He used to be folded a third of a radian forward at rest
+    // and half again at a run -- head slung below the shoulders, arms past the
+    // knees, an ape.  He stands on his two feet now, with only enough lean in
+    // him to say which way he is going: a swollen frog standing up is worse
+    // than a thing on all fours, because it is the mascot's shape and the
+    // mascot stands up too.  The climb and the crouch still fold him, because
+    // those are what going up a shelf and looking under a bed look like.
     this.torso.rotation.x =
-      0.34 + Math.min(0.28, speed * 0.06) + this.climbNow * 0.45 + this.lungeNow * 0.22 +
+      0.1 + Math.min(0.16, speed * 0.035) + this.climbNow * 0.45 + this.lungeNow * 0.16 +
       cr * 0.5;
     this.torso.rotation.z = gait * 0.05;
 
@@ -636,7 +654,7 @@ export class FroggyMonster {
     // creature staring at its own feet rather than under a bed.
     const peer = (pose.peer ?? 0) * cr;
     this.neck.rotation.x =
-      -0.3 - Math.min(0.2, speed * 0.05) - this.climbNow * 0.2 - this.lungeNow * 0.1 +
+      -0.08 - Math.min(0.1, speed * 0.03) - this.climbNow * 0.2 - this.lungeNow * 0.06 +
       cr * 0.55;
     // Craning: slow, small, side to side, and offset from the body's own sway
     // so the two never line up into something that looks mechanical.

@@ -1119,6 +1119,84 @@ try {
       check('and he still stands under every ceiling',
         size.ceilings.every((h) => h > size.standing),
         `${size.standing.toFixed(2)}m under ${size.ceilings.join('/')}`);
+
+      // ---- TWO EYES.  EXACTLY TWO, ON BOTH OF HIM.
+      //
+      // He used to have eight more scattered over the drawing, and one of the
+      // main pair was larger than the other.  Both are gone, and this is the
+      // check that keeps them gone -- on the MODEL by counting the one pale
+      // material on him, and on the DRAWING by counting the pale regions in a
+      // rendered face, which is what the jumpscare paints.
+      const eyes = await page.evaluate(async () => {
+        const { FroggyMonster } = await import('/src/three/froggyMonster.ts');
+        const mon = new FroggyMonster(1.75);
+        mon.update(1 / 60, { speed: 0, maw: 0, climb: 0 });
+        let sclera = 0;
+        let meshes = 0;
+        mon.root.traverse((o) => {
+          if (!o.isMesh) return;
+          meshes++;
+          if (o.material?.color?.getHexString?.() === 'c0aca0') sclera++;
+        });
+
+        const mod = await import('/src/froggy/froggy.ts');
+        const c = document.createElement('canvas');
+        c.width = 320;
+        c.height = 180;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#0d0205';
+        ctx.fillRect(0, 0, 320, 180);
+        mod.drawFroggy(ctx, {
+          x: 160, y: 56, height: 160, variant: 'monster', anchor: 'face',
+          morph: 1, maw: 0.55, blood: 0, pupil: 0.08, t: 0, shake: 0,
+        });
+        const d = ctx.getImageData(0, 0, 320, 180).data;
+        const pale = (i) => d[i] > 150 && d[i + 1] > 150 && d[i + 2] > 130;
+        const seen = new Uint8Array(320 * 180);
+        const blobs = [];
+        for (let y = 0; y < 180; y++) {
+          for (let x = 0; x < 320; x++) {
+            const idx = y * 320 + x;
+            if (seen[idx] || !pale(idx * 4)) continue;
+            const stack = [idx];
+            seen[idx] = 1;
+            let n = 0;
+            let minX = x, maxX = x, minY = y, maxY = y;
+            while (stack.length) {
+              const cur = stack.pop();
+              const cx = cur % 320;
+              const cy = (cur - cx) / 320;
+              n++;
+              if (cx < minX) minX = cx;
+              if (cx > maxX) maxX = cx;
+              if (cy < minY) minY = cy;
+              if (cy > maxY) maxY = cy;
+              for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+                const nx = cx + dx;
+                const ny = cy + dy;
+                if (nx < 0 || ny < 0 || nx >= 320 || ny >= 180) continue;
+                const nidx = ny * 320 + nx;
+                if (seen[nidx] || !pale(nidx * 4)) continue;
+                seen[nidx] = 1;
+                stack.push(nidx);
+              }
+            }
+            // Big pale regions only: the veins crossing an eye cut slivers off
+            // it, and a sliver of an eye is not another eye.
+            if (n > 800) blobs.push({ w: maxX - minX, h: maxY - minY, y: minY });
+          }
+        }
+        return { sclera, meshes, blobs };
+      });
+      check('the model has exactly two eyes', eyes.sclera === 2, `${eyes.sclera} whites on it`);
+      check('and so does the drawing the jumpscare paints', eyes.blobs.length === 2,
+        `${eyes.blobs.length} whites`);
+      check('and they are a matched pair',
+        eyes.blobs.length === 2 &&
+          Math.abs(eyes.blobs[0].w - eyes.blobs[1].w) <= 6 &&
+          Math.abs(eyes.blobs[0].h - eyes.blobs[1].h) <= 6 &&
+          Math.abs(eyes.blobs[0].y - eyes.blobs[1].y) <= 2,
+        JSON.stringify(eyes.blobs));
     }
 
     // Wait the briefing and the count out rather than forcing the mode: the

@@ -63,7 +63,6 @@ export function drawMonster(ctx: CanvasRenderingContext2D, o: MonsterOpts): void
   // things stuck on the front of him.
   drawGrowths(ctx, headR, headY, m);
   drawHead(ctx, headR, headY, m, o);
-  drawExtraEyes(ctx, headR, headY, m);
   if (o.blood > 0) drawBlood(ctx, headR, headY, o);
 
   ctx.restore();
@@ -71,67 +70,109 @@ export function drawMonster(ctx: CanvasRenderingContext2D, o: MonsterOpts): void
 
 // ------------------------------------------------------------------------ body
 
+/**
+ * THE BODY, AND WHY IT IS A BALL.
+ *
+ * He used to be a tapering sack with two long arms hanging past his knees out
+ * of it and no legs drawn at all -- a hunched thing.  He stands up now, on two
+ * feet, and what he stands on is one heavy round mass with the head sunk into
+ * the top of it: no neck, no shoulders, no join.  That is the whole silhouette
+ * -- a swollen frog, upright -- and it is what makes him read as a frog first
+ * and as a horror second, which is the right way round.
+ *
+ * Two arms, two legs, and nothing else growing out of him.
+ */
 function drawBody(ctx: CanvasRenderingContext2D, m: number): void {
-  const w = 44 - m * 6;
-  const top = -20;
-  const bottom = 50;
+  const w = 46 - m * 2;
+  const top = -24;
+  const bottom = 40;
 
-  const g = ctx.createLinearGradient(-w, top, w, bottom);
+  const g = ctx.createRadialGradient(-w * 0.3, 2, 6, 0, 14, w * 1.5);
   g.addColorStop(0, SKIN_MID);
-  g.addColorStop(0.55, SKIN_DARK);
+  g.addColorStop(0.6, SKIN_DARK);
   g.addColorStop(1, '#0d1510');
 
+  // ---- the mass itself: round, and wider than it is tall.
   ctx.beginPath();
-  ctx.moveTo(-w, bottom);
-  ctx.bezierCurveTo(-w - 8, 4, -w + 4, top, 0, top - 4);
-  ctx.bezierCurveTo(w - 4, top, w + 8, 4, w, bottom);
-  ctx.closePath();
+  ctx.ellipse(0, 8, w, (bottom - top) / 2 + 4, 0, 0, Math.PI * 2);
   ctx.fillStyle = g;
   ctx.fill();
 
-  // The belly is still there.  It is the last thing you recognise.
-  const bg = ctx.createRadialGradient(0, 22, 3, 0, 22, 30);
-  bg.addColorStop(0, `rgba(196,178,74,${0.85 - m * 0.45})`);
-  bg.addColorStop(1, `rgba(90,84,38,${0.5 - m * 0.3})`);
+  // ---- the belly.  Pale, cracked, and the last thing you recognise.
+  const bg = ctx.createRadialGradient(0, 20, 4, 0, 20, 34);
+  bg.addColorStop(0, `rgba(198,186,104,${0.8 - m * 0.3})`);
+  bg.addColorStop(1, `rgba(96,92,44,${0.5 - m * 0.25})`);
   ctx.beginPath();
-  ctx.ellipse(0, 22, 24 - m * 4, 26, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 20, w * 0.62, 28, 0, 0, Math.PI * 2);
   ctx.fillStyle = bg;
   ctx.fill();
+  // and the cracks across it, which is what the belly is FOR on this version
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(0, 20, w * 0.62, 28, 0, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.strokeStyle = `rgba(92,22,24,${0.35 + m * 0.3})`;
+  for (let i = 0; i < 9; i++) {
+    const x0 = (rnd(i + 210) - 0.5) * w;
+    const y0 = 2 + rnd(i + 220) * 36;
+    ctx.lineWidth = 0.6 + rnd(i + 230) * 1.1;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.quadraticCurveTo(x0 + (rnd(i + 240) - 0.5) * 22, y0 + 8, x0 + (rnd(i + 250) - 0.5) * 34, y0 + 16);
+    ctx.stroke();
+  }
+  ctx.restore();
 
-  // ribs pushing through, only once he has turned
-  if (m > 0.35) {
-    ctx.strokeStyle = `rgba(10,14,10,${(m - 0.35) * 0.8})`;
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 4; i++) {
-      const y = 4 + i * 9;
+  mottle(ctx, 0, 12, w * 1.9, 46, 26, m);
+
+  // ---- TWO ARMS.  Short, held at the sides, ending in long fingers.  They
+  // used to reach past the bottom of the drawing, which is an ape.
+  ctx.strokeStyle = SKIN_DARK;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const side of [-1, 1]) {
+    ctx.lineWidth = 8 - m;
+    const sx = side * (w - 8);
+    ctx.beginPath();
+    ctx.moveTo(sx, -6);
+    ctx.quadraticCurveTo(side * (w + 9), 8, side * (w + 5), 30);
+    ctx.stroke();
+    // three long fingers, splayed
+    ctx.lineWidth = 2.6;
+    for (let fgr = -1; fgr <= 1; fgr++) {
       ctx.beginPath();
-      ctx.moveTo(-20, y);
-      ctx.quadraticCurveTo(0, y + 5, 20, y);
+      ctx.moveTo(side * (w + 5), 30);
+      ctx.quadraticCurveTo(
+        side * (w + 6) + fgr * 4,
+        38,
+        side * (w + 4) + fgr * 8,
+        44 - Math.abs(fgr) * 3,
+      );
       ctx.stroke();
     }
   }
 
-  mottle(ctx, 0, 14, 40, 40, 26, m);
-
-  // long arms, hanging wrong
-  ctx.strokeStyle = SKIN_DARK;
-  ctx.lineCap = 'round';
-  ctx.lineWidth = 9 - m * 2;
+  // ---- TWO LEGS, and he is stood on them.  A frog's: folded out at the knee,
+  // dropping to a long flat foot with toes that spread across the floor.
   for (const side of [-1, 1]) {
-    const reach = 26 + m * 20;
+    ctx.strokeStyle = SKIN_DARK;
+    ctx.lineWidth = 11 - m;
     ctx.beginPath();
-    ctx.moveTo(side * (w - 6), -6);
-    ctx.quadraticCurveTo(side * (w + 14), 18, side * (w + 6), 18 + reach);
+    ctx.moveTo(side * 16, 30);
+    ctx.quadraticCurveTo(side * 26, 40, side * 20, 50);
     ctx.stroke();
-  }
-  // fingers
-  ctx.lineWidth = 3;
-  for (const side of [-1, 1]) {
-    const reach = 26 + m * 20;
-    for (let f = -1; f <= 1; f++) {
+    // the foot: flat on the ground, long, with four toes off the front of it
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(side * 20, 50);
+    ctx.lineTo(side * 20, 51);
+    ctx.stroke();
+    ctx.lineWidth = 2.4;
+    for (let toe = 0; toe < 4; toe++) {
+      const spread = (toe / 3 - 0.5) * 2;
       ctx.beginPath();
-      ctx.moveTo(side * (w + 6), 18 + reach);
-      ctx.lineTo(side * (w + 6) + f * 7, 18 + reach + 12 + Math.abs(f) * -3);
+      ctx.moveTo(side * 20, 50);
+      ctx.quadraticCurveTo(side * (20 + spread * 6), 53, side * (20 + spread * 13), 52 + Math.abs(spread) * 2);
       ctx.stroke();
     }
   }
@@ -191,9 +232,19 @@ function drawHead(ctx: CanvasRenderingContext2D, R: number, cy: number, m: numbe
   ctx.fillStyle = sh;
   ctx.fill();
 
-  // The two eye bumps are the mascot's, kept and ruined.  Deliberately unequal.
-  drawEye(ctx, -R * 0.46, cy - R * 0.34, R * 0.36, m, o, 1);
-  drawEye(ctx, R * 0.5, cy - R * 0.27, R * 0.42, m, o, -1);
+  // ---- TWO EYES.  EXACTLY TWO, AND THEY ARE A PAIR.
+  //
+  // There used to be eight more scattered over the head and one of the main
+  // pair was lower and larger than the other.  Both are gone: he is a frog
+  // with a frog's two eyes, and what is wrong with him is that they are twice
+  // the size they should be, bloodshot to the iris and pointed at you.  A
+  // matched pair looks BACK at the player; a scatter of wrong ones is a
+  // texture, and a texture cannot stare.
+  //
+  // Set high and wide, where a frog's are -- bulging off the top of the skull
+  // rather than sunk into the front of it.
+  drawEye(ctx, -R * 0.52, cy - R * 0.46, R * 0.44, m, o, 1);
+  drawEye(ctx, R * 0.52, cy - R * 0.46, R * 0.44, m, o, -1);
 
   drawMaw(ctx, R, cy, m, o);
 
@@ -217,126 +268,21 @@ function drawHead(ctx: CanvasRenderingContext2D, R: number, cy: number, m: numbe
 }
 
 /**
- * THE OTHER EYES.
+ * WHAT HIS SKIN IS LIKE.
  *
- * The mascot has two and this has as many as it likes.  They are scattered
- * rather than arranged — different sizes, no pair the same, none of them
- * symmetrical with any other — because a second neat pair reads as a design
- * decision and a handful of wrong ones reads as something that grew.
- *
- * Every one is the same construction as the main pair at a fraction of the
- * size: far too much white, a red iris ring, and a pupil the size of a full
- * stop.  That last part is what makes all of them feel like they are looking
- * at the player at once.
- */
-function drawExtraEyes(ctx: CanvasRenderingContext2D, R: number, cy: number, m: number): void {
-  if (m < 0.15) return;
-  const a = Math.min(1, (m - 0.15) / 0.35);
-  /** x, y and radius, all as fractions of the head. */
-  const set: Array<[number, number, number]> = [
-    [-0.13, -0.74, 0.155],
-    [0.21, -0.8, 0.12],
-    [-0.63, -0.6, 0.105],
-    [0.64, -0.58, 0.135],
-    [0.03, -0.46, 0.085],
-    [-0.87, -0.14, 0.1],
-    [0.89, -0.08, 0.08],
-    [-0.36, -0.87, 0.075],
-  ];
-  ctx.save();
-  ctx.globalAlpha = a;
-  for (let i = 0; i < set.length; i++) {
-    const [fx, fy, fr] = set[i];
-    const x = fx * R;
-    const y = cy + fy * R;
-    const r = fr * R;
-
-    // socket, so it sits IN the head rather than on it
-    ctx.beginPath();
-    ctx.ellipse(x, y, r * 1.28, r * 1.24, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(6,10,7,0.9)';
-    ctx.fill();
-
-    const g = ctx.createRadialGradient(x - r * 0.25, y - r * 0.25, r * 0.08, x, y, r);
-    g.addColorStop(0, '#d8d0b6');
-    g.addColorStop(0.75, SCLERA);
-    g.addColorStop(1, '#8a866e');
-    ctx.beginPath();
-    ctx.ellipse(x, y, r, r * (0.9 + rnd(i) * 0.16), 0, 0, Math.PI * 2);
-    ctx.fillStyle = g;
-    ctx.fill();
-
-    // the iris is a ring of blood rather than a colour: it reads at four
-    // pixels across, which a coloured disc does not
-    ctx.beginPath();
-    ctx.arc(x, y, r * 0.42, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(150,26,26,0.85)';
-    ctx.lineWidth = Math.max(0.8, r * 0.18);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(x, y, Math.max(0.7, r * 0.17), 0, Math.PI * 2);
-    ctx.fillStyle = '#000000';
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(x - r * 0.3, y - r * 0.32, Math.max(0.5, r * 0.15), 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
-    ctx.fill();
-
-    // A lid over the small ones too, so none of them is a bead -- CLIPPED to
-    // the socket, which the main pair has always done and this did not: an
-    // unclipped lid is a black rectangle stuck on the face, and eight of them
-    // turned the head into a pegboard.
-    ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(x, y, r * 1.3, r * 1.26, 0, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.beginPath();
-    ctx.moveTo(x - r * 1.4, y - r * 0.55);
-    ctx.quadraticCurveTo(x, y - r * (1.05 + rnd(i + 5) * 0.3), x + r * 1.4, y - r * 0.5);
-    ctx.lineTo(x + r * 1.4, y - r * 1.8);
-    ctx.lineTo(x - r * 1.4, y - r * 1.8);
-    ctx.closePath();
-    ctx.fillStyle = SKIN_DARK;
-    ctx.fill();
-    ctx.restore();
-  }
-  ctx.restore();
-}
-
-/**
- * WHAT IS GROWING OUT OF HIM.
- *
- * Tufts of matted hair off the silhouette and nodules over the skin.  The
- * tufts matter more than they look like they should: a clean elliptical head
- * is the single strongest "this is a primitive" tell there is, and forty
- * ragged spikes off its edge take the shape away without changing it.
+ * Warts, and nothing else: raised nodules over the hide with a shadow under
+ * each, so they are bumps rather than spots.  There used to be forty ragged
+ * tufts of matted hair off the silhouette as well; they are gone, because a
+ * frog does not have hair and the brief for this thing is a FROG -- round,
+ * cracked, swollen -- rather than a pile of mutations.  The cracks in
+ * `drawHead` do the job the tufts were doing, which is stopping a large
+ * ellipse from reading as a balloon.
  */
 function drawGrowths(ctx: CanvasRenderingContext2D, R: number, cy: number, m: number): void {
   if (m < 0.1) return;
   const a = Math.min(1, (m - 0.1) / 0.3);
   ctx.save();
   ctx.globalAlpha = a;
-  ctx.strokeStyle = '#0b120c';
-  ctx.lineCap = 'round';
-  for (let i = 0; i < 46; i++) {
-    const ang = (i / 46) * Math.PI * 2 + rnd(i) * 0.12;
-    const rr = rnd(i + 11);
-    const len = 4 + rr * 13;
-    const ex = Math.cos(ang) * R * 0.98;
-    const ey = cy + Math.sin(ang) * R * 0.9;
-    ctx.lineWidth = 0.7 + rr * 1.5;
-    ctx.beginPath();
-    ctx.moveTo(ex, ey);
-    ctx.quadraticCurveTo(
-      ex + Math.cos(ang + 0.4) * len * 0.6,
-      ey + Math.sin(ang + 0.4) * len * 0.6,
-      ex + Math.cos(ang + (rnd(i + 3) - 0.5) * 1.1) * len,
-      ey + Math.sin(ang + (rnd(i + 3) - 0.5) * 1.1) * len,
-    );
-    ctx.stroke();
-  }
   // nodules: raised, with a shadow under each, so they are bumps and not spots
   for (let i = 0; i < 26; i++) {
     const ang = rnd(i + 60) * Math.PI * 2;
@@ -455,8 +401,11 @@ function drawEye(
 
 function drawMaw(ctx: CanvasRenderingContext2D, R: number, cy: number, m: number, o: MonsterOpts): void {
   const open = o.maw * (0.35 + m * 0.65);
-  const halfW = R * (0.72 + m * 0.24);
-  const lipY = cy + R * 0.36;
+  // ---- AND IT IS THE BIGGEST THING ON HIM.  Nearly the width of the head and
+  // set low on it, under two eyes that take the top: a frog's face, at the
+  // proportions of something that swallows what it catches.
+  const halfW = R * (0.8 + m * 0.26);
+  const lipY = cy + R * 0.3;
   const drop = R * (0.16 + open * (0.95 + m * 0.5));
 
   // the split — it goes past where a mouth should stop
@@ -572,41 +521,6 @@ function drawMaw(ctx: CanvasRenderingContext2D, R: number, cy: number, m: number
     }
   }
   ctx.restore();
-
-  // ---- TENDRILS, out of the corners of it.
-  //
-  // They are the one part of him that is not a ruined frog: nothing about a
-  // frog explains them, which is why they go last and why they move.  Drawn
-  // outside the clip so they cross the face and hang past the jaw.
-  if (m > 0.4) {
-    const ta = Math.min(1, (m - 0.4) / 0.35);
-    for (let i = 0; i < 4; i++) {
-      const side = i < 2 ? -1 : 1;
-      const k = i % 2;
-      const bx = side * halfW * (0.9 + k * 0.08);
-      const by = lipY + drop * (0.12 + k * 0.3);
-      const wave = Math.sin(o.t * 1.7 + i * 2.1) * 6;
-      const reach = R * (0.55 + k * 0.28);
-      ctx.strokeStyle = `rgba(158,88,96,${0.85 * ta})`;
-      ctx.lineCap = 'round';
-      ctx.lineWidth = 3.4 - k * 1.1;
-      ctx.beginPath();
-      ctx.moveTo(bx, by);
-      ctx.bezierCurveTo(
-        bx + side * reach * 0.5,
-        by - reach * 0.25 + wave,
-        bx + side * reach * 1.05,
-        by + reach * 0.35 - wave,
-        bx + side * reach * (0.7 + k * 0.2),
-        by + reach * (0.75 + k * 0.2) + wave * 0.5,
-      );
-      ctx.stroke();
-      // and a thinner highlight down it, so it is wet rather than drawn
-      ctx.strokeStyle = `rgba(212,150,156,${0.4 * ta})`;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-  }
 
   // torn corners, sinew where the jaw unhinged
   if (m > 0.3) {

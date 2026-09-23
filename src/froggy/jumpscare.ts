@@ -32,6 +32,13 @@
  *   AND THE NEGATIVE.  One frame, twice, where the whole thing inverts and his
  *   pupils go: a white face with black teeth, gone before it can be read.
  *   Everybody sees it and nobody can say what it was.
+ *
+ * WHAT IS COMING AT YOU is the same creature that walks the rooms: the 2D
+ * monster drawing and the three-dimensional model are built to the same brief
+ * -- one round mass, no neck, TWO eyes bloodshot to the rim with pinprick
+ * pupils, and a mouth most of the width of the head.  The scattered extra eyes
+ * that used to be on the drawing are gone from both, so the thing that catches
+ * you cannot be mistaken for a different animal.
  */
 
 import Phaser from 'phaser';
@@ -40,8 +47,15 @@ import { froggyLayer } from '../render/froggyLayer';
 import { drawFroggy } from './froggy';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 
-/** How long he takes to fill the frame, including the hold at the front. */
-export const SCARE_MS = 1550;
+/**
+ * How long he takes to fill the frame, including the hold at the front.
+ *
+ * As short as it can be and still have a shape to it: a fifth of a second of
+ * him standing there, and then a second of him arriving.  Everything after the
+ * mouth fills the frame is time the player spends looking at a red screen, so
+ * there is none of it.
+ */
+export const SCARE_MS = 1200;
 const FRAME_MS = 40;
 /**
  * The hold.  He is on screen and still for this long before anything moves.
@@ -107,15 +121,16 @@ export function playJumpscare(scene: Phaser.Scene): void {
         x: GAME_W / 2,
         // ---- HOW BIG, AND THIS IS THE WHOLE SHOT.
         //
-        // The head is about 106 of the drawing's 114 units tall, so `height`
-        // 190 puts a face very slightly wider than a 320x180 frame: every eye
-        // and the whole mouth are in shot on the FIRST frame, and there is
+        // The face is about 114 units from the top of the eyes to the bottom
+        // of an open jaw -- it grew when the eyes did and when the mouth went
+        // most of the way across the head -- so `height` 160 at y 56 puts ALL
+        // OF IT in the 320x180 frame on the FIRST frame, eyes and teeth, with
         // nothing else in shot at all.  Starting at 310 -- which is what
         // "close" naively suggests -- put the player inside his cheek before a
         // millisecond had run, and a texture nobody can see is not a texture.
-        // It ends at 620, which is well inside the mouth.
-        y: 62 + rush * 26,
-        height: 190 + rush * 430 + snap,
+        // It ends at 600, which is well inside the mouth.
+        y: 56 + rush * 30,
+        height: 160 + rush * 440 + snap,
         variant: 'monster',
         anchor: 'face',
         morph: 1,
