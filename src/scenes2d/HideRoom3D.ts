@@ -2578,6 +2578,14 @@ export class HideRoom3D extends Phaser.Scene {
     }
   }
 
+  /**
+   * How often the wall-avoidance above had to work, and how often it failed
+   * and he ground along something anyway.  Counted rather than guessed at:
+   * "he bumps into walls" is a number, and this is the number.
+   */
+  private wallGrazes = 0;
+  private wallScrapes = 0;
+
   private moveFroggy(dt: number): void {
     // A few seconds of grace.  Without it he is already looking straight down
     // the room as the intro ends, and the first thing the room does is chase.
@@ -2728,11 +2736,70 @@ export class HideRoom3D extends Phaser.Scene {
     this.froggyYaw = Phaser.Math.Angle.Wrap(this.froggyYaw + Phaser.Math.Clamp(dyaw, -FROGGY_TURN * dt, FROGGY_TURN * dt));
     const align = Math.max(0, Math.cos(dyaw));
     const step = this.fSpeed * dt * (0.3 + 0.7 * align);
-    const ax = Math.sin(this.froggyYaw);
-    const az = Math.cos(this.froggyYaw);
+    let ax = Math.sin(this.froggyYaw);
+    let az = Math.cos(this.froggyYaw);
     const speed = this.fSpeed;
-    const tx = this.froggy.x + ax * step;
-    const tz = this.froggy.y + az * step;
+    let tx = this.froggy.x + ax * step;
+    let tz = this.froggy.y + az * step;
+
+    // ---- AND HE GOES ROUND THE WALL RATHER THAN INTO IT.
+    //
+    // The route is planned on a half-metre grid and he steers along it at a
+    // bounded turn rate, which means the two do not always agree: on a tight
+    // corner, or when a replan moves the line he is following, the step he is
+    // about to take puts him through a wall.  What happened then was the slide
+    // below -- he ground along the wall at eight tenths of his pace with his
+    // shoulder in it until half a second was up and the route was redrawn,
+    // which is what reads as bumping into things.
+    //
+    // Before any of that, he FEELS FOR A WAY PAST: the same step, deflected by
+    // up to a little over a right angle either side, taking the first heading
+    // that is clear and turning into it.  It costs him nothing -- same speed,
+    // same step, same path, same collisions -- and it is only reached on the
+    // frames where he was going to hit something.  A climbable blocker is
+    // tested first, so a thing he is meant to go OVER is still gone over.
+    //
+    // A step is only free if BOTH axes of it are, which is what the slide
+    // below tests: an inside corner passes a straight-line test and fails
+    // both of those, and that corner is where he used to get his shoulder
+    // stuck.
+    const stepFree = (px: number, pz: number): boolean =>
+      this.inRoom(px, pz) &&
+      !this.solid(px, pz, 0.5) &&
+      this.inRoom(px, this.froggy.y) &&
+      !this.solid(px, this.froggy.y, 0.5) &&
+      this.inRoom(this.froggy.x, pz) &&
+      !this.solid(this.froggy.x, pz, 0.5);
+
+    // `__noDeflect` turns this off, in DEV only: it is how the check in
+    // `horror.mjs` measures the old behaviour against the new one in the same
+    // room on the same frame rather than against a number typed into a file.
+    const noDeflect =
+      !!import.meta.env?.DEV && !!(window as unknown as Record<string, unknown>).__noDeflect;
+    if (!noDeflect && !stepFree(tx, tz)) {
+      const climbable = this.blockerAt(tx, tz, 0.5);
+      if (!climbable) {
+        for (const off of [0.32, -0.32, 0.66, -0.66, 1.02, -1.02, 1.4, -1.4]) {
+          const yaw = this.froggyYaw + off;
+          const sx = Math.sin(yaw);
+          const sz = Math.cos(yaw);
+          const px = this.froggy.x + sx * step;
+          const pz = this.froggy.y + sz * step;
+          if (!stepFree(px, pz)) continue;
+          // Turn into it rather than snapping: he leans out of the wall over
+          // the next few frames, which is what an animal does.
+          this.froggyYaw = Phaser.Math.Angle.Wrap(
+            this.froggyYaw + Phaser.Math.Clamp(off, -FROGGY_TURN * dt, FROGGY_TURN * dt),
+          );
+          ax = sx;
+          az = sz;
+          tx = px;
+          tz = pz;
+          this.wallGrazes++;
+          break;
+        }
+      }
+    }
 
     // The outer walls are solid here too, not just in the clamp below.  If
     // they were not, a step into a wall counted as a clean step and none of
@@ -2753,9 +2820,11 @@ export class HideRoom3D extends Phaser.Scene {
       // Straight over it.
       this.stuckT = 0;
     } else if (freeX || freeZ) {
-      // Sliding along whatever he clipped, at full speed.  The route should
-      // not bring him here often; when it does, this is one frame of it.
+      // Sliding along whatever he clipped, at full speed.  With the deflection
+      // above in front of it this is now the rare case rather than the usual
+      // one; when it does happen, this is one frame of it.
       this.stuckT += dt;
+      this.wallScrapes++;
       if (freeX) this.froggy.x += Math.sign(ax || 1) * speed * dt * 0.8;
       else this.froggy.y += Math.sign(az || 1) * speed * dt * 0.8;
       if (this.stuckT > 0.5) {
@@ -2766,6 +2835,7 @@ export class HideRoom3D extends Phaser.Scene {
       // Blocked both ways: a pocket.  A moment in case it is a corner he is
       // about to turn out of, then onto open floor and a fresh route.
       this.stuckT += dt;
+      this.wallScrapes++;
       if (this.stuckT > 0.5) {
         this.stuckT = 0;
         this.freeFroggy(true);
@@ -3562,6 +3632,8 @@ export class HideRoom3D extends Phaser.Scene {
       secretDoorZ: this.def.secretDoor?.z ?? null,
       atButton: this.atButton(),
       floorY: this.floorY,
+      wallGrazes: this.wallGrazes,
+      wallScrapes: this.wallScrapes,
       vaulting: !!this.vault,
       vaulted: this.vaulted,
       yaw: this.yaw,

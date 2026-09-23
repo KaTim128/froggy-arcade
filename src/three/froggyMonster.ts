@@ -14,20 +14,15 @@
  *
  * WHAT MAKES IT READ AS HORROR, in order of how much each one carries:
  *
- *   1. The silhouette.  He is 2.4m, UPRIGHT ON TWO FEET, and built as one
- *      round heavy mass with the head sunk into the front of it -- no neck, no
- *      shoulders, no join.  He used to be folded forward with his head slung
- *      below his shoulders and his arms past his knees, which is an ape; a
- *      swollen frog standing up is worse, because standing up is what the
- *      mascot does.
+ *   1. The silhouette.  He is 2.4m and folded forward, head slung below the
+ *      shoulders and pushed out in front of him, arms hanging past his knees.
+ *      Nothing about that shape is upright or symmetrical.
  *   2. The skin is nearly black.  The player carries a bright torch, and a
  *      mascot-green model under a 110-intensity spotlight is a cartoon; these
  *      values are dark enough that the torch finds a wet edge and not much else.
- *   3. TWO EYES, and they are a matched pair: big frog eyes bulging off the
- *      top of the head, bloodshot to the rim, with a pupil the size of a full
- *      stop in the middle of all that white.  One of them used to be lower and
- *      larger than the other; it read as a different creature from the one on
- *      the poster, and the horror here is recognition.
+ *   3. The eyes are wide and pale with pinprick pupils, one lower and larger
+ *      than the other.  That single asymmetry is what stops him reading as a
+ *      design and starts him reading as an animal.
  *   4. The jaw never fully shuts.  Even hunting he is holding it open on a rank
  *      of teeth, and it hinges back past where a jaw goes.
  *
@@ -49,9 +44,80 @@ const BELLY = 0x4c4a2a;
 const GUM = 0x3d1016;
 const THROAT = 0x080204;
 const TOOTH = 0x9a9078;
-const SCLERA = 0xc0aca0;
-const VEIN = 0x8d1a1f;
-const BLOOD = 0x4a0507;
+const SCLERA = 0x6c6852;
+const VEIN = 0x5a1a1c;
+/**
+ * BLOOD, AND WHY IT IS NOT A RED DOT.
+ *
+ * What he had on his hands and down his chin was one saturated red sphere
+ * each: at the size they are drawn, a small round red mark on a dark model
+ * reads as an indicator light rather than as something he has done.  There
+ * are three tones now, all of them dried rather than fresh, and the marks are
+ * built out of two or three flattened lobes at different angles with a drip
+ * under them -- so every one of them is a different shape and none of them is
+ * a circle.  See `smear`.
+ *
+ * They are also much DARKER than they look here: the torch is a spotlight a
+ * couple of metres away, and a Lambert surface under it comes back several
+ * times its own value.  A blood that looks right in a colour picker is a
+ * bright red mark on a dark model in the game -- which is precisely the thing
+ * that reads as an indicator light.
+ */
+const BLOOD = 0x220406;
+const BLOOD_DRY = 0x18060a;
+const BLOOD_EDGE = 0x0d0203;
+
+/**
+ * ONE MARK OF BLOOD, and there is not a circle in it.
+ *
+ * Two or three flattened lobes at different angles and different tones, a
+ * darker patch under them so the edge is where it dried deepest, and a thin
+ * drip running out of the bottom.  Everything is derived from `r` and `tilt`,
+ * so two calls with different sizes and angles cannot come out as the same
+ * mark -- which is the whole point: a repeated identical red shape is what
+ * reads as a marker.
+ *
+ * Flat-shaded and unlit-looking on purpose, like the teeth and the eyes: the
+ * torch should not put a highlight on it.
+ */
+function smear(target: THREE.Group, x: number, y: number, z: number, r: number, tilt: number): void {
+  const flat = (color: number) => new THREE.MeshLambertMaterial({ color });
+  const g = new THREE.Group();
+  g.position.set(x, y, z);
+  g.rotation.z = tilt;
+
+  // the dried edge, widest and darkest
+  const edge = new THREE.Mesh(new THREE.SphereGeometry(r * 1.25, 8, 6), flat(BLOOD_EDGE));
+  edge.scale.set(1, 1.7, 0.22);
+  edge.position.z = -0.004;
+  g.add(edge);
+
+  // the body of it, in two lobes that do not agree with each other
+  const lobes: Array<[number, number, number, number, number]> = [
+    [0, 0, 1, 2.0, 0],
+    [r * 0.55, -r * 0.7, 0.62, 1.5, 0.5],
+    [-r * 0.42, r * 0.5, 0.48, 1.2, -0.7],
+  ];
+  for (const [lx, ly, k, stretch, spin] of lobes) {
+    const lobe = new THREE.Mesh(new THREE.SphereGeometry(r * k, 8, 6), flat(spin === 0 ? BLOOD : BLOOD_DRY));
+    lobe.scale.set(1, stretch, 0.3);
+    lobe.position.set(lx, ly, 0.004);
+    lobe.rotation.z = spin;
+    g.add(lobe);
+  }
+
+  // and the drip, which is what says which way is down
+  const drip = new THREE.Mesh(new THREE.CapsuleGeometry(r * 0.16, r * 1.5, 3, 6), flat(BLOOD_DRY));
+  drip.scale.set(1, 1, 0.35);
+  drip.position.set(r * 0.2, -r * 2.1, 0.004);
+  g.add(drip);
+  const bead = new THREE.Mesh(new THREE.SphereGeometry(r * 0.26, 6, 5), flat(BLOOD));
+  bead.scale.set(1, 1.2, 0.35);
+  bead.position.set(r * 0.2, -r * 3, 0.004);
+  g.add(bead);
+
+  target.add(g);
+}
 
 /** Head to floor, in metres, standing.  The player's eye is at 1.55. */
 export const FROGGY_HEIGHT = 2.4;
@@ -120,6 +186,14 @@ export class FroggyMonster {
   private climbNow = 0;
   private scanNow = 0;
   private lungeNow = 0;
+  /** The three fingers on each hand, so they can close on the grab. */
+  private hands: THREE.Mesh[][] = [];
+  /**
+   * The reach's own clock.  Separate from the stride: he keeps grabbing at you
+   * whether his feet are moving or not, and a grab tied to the gait would stop
+   * dead the moment he did.
+   */
+  private reachT = 0;
   private crouchNow = 0;
   /** Seconds until the next twitch, and how far through one he is. */
   private twitchIn = 2.5;
@@ -284,11 +358,8 @@ export class FroggyMonster {
     // ---- torso.  The mass is forward of the hips: he is folded over himself.
     this.torso.position.set(0, 1.44, 0);
     const chest = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.5, 20, 16), 0.034, 3.4, 1), skin);
-    // ROUND AND HEAVY.  He was a chest; he is a mass now -- wider than he is
-    // tall and deep with it, so the head has something to sink into and the
-    // silhouette is one lump rather than a torso with a ball on top.
-    chest.scale.set(1.2, 1.06, 1.14);
-    chest.position.z = -0.02;
+    chest.scale.set(1.02, 0.86, 0.94);
+    chest.position.z = -0.06;
     this.torso.add(chest);
 
     // The belly he still has, gone the colour of something kept in a jar.
@@ -322,10 +393,7 @@ export class FroggyMonster {
 
     for (const side of [-1, 1]) {
       const shoulder = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.23, 12, 10), 0.022, 6, 17), skinLit);
-      // OUTBOARD OF THE MASS.  The body is wider than it was, and a shoulder
-      // set where the old chest ended is a shoulder inside the new one -- the
-      // arms vanished into him and he read as having none.
-      shoulder.position.set(side * 0.58, 0.14, -0.02);
+      shoulder.position.set(side * 0.44, 0.16, -0.04);
       this.torso.add(shoulder);
     }
 
@@ -333,7 +401,7 @@ export class FroggyMonster {
     // elbow that folds on the swing and on a climb.  They are the reach.
     for (const side of [-1, 1]) {
       const arm = new THREE.Group();
-      arm.position.set(side * 0.6, 0.1, 0);
+      arm.position.set(side * 0.46, 0.12, 0);
 
       const upper = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.11, 0.66, 7, 14), 0.028, 6, 23), skin);
       upper.position.y = -0.38;
@@ -349,17 +417,19 @@ export class FroggyMonster {
       fore.position.y = -0.38;
       elbow.add(fore);
 
-      // Three fingers.  Four would look like a hand.
+      // Three fingers.  Four would look like a hand.  Kept, because they
+      // CLOSE: see the reach in `update`.
+      const hand: THREE.Mesh[] = [];
       for (let f = -1; f <= 1; f++) {
         const finger = new THREE.Mesh(new THREE.CapsuleGeometry(0.032, 0.26, 3, 6), skinDark);
         finger.position.set(f * 0.085, -0.86, 0.04);
         finger.rotation.x = 0.3;
         elbow.add(finger);
+        hand.push(finger);
       }
-      const stain = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), mat(BLOOD));
-      stain.scale.set(1, 1.4, 0.7);
-      stain.position.set(0, -0.7, 0.04);
-      elbow.add(stain);
+      this.hands.push(hand);
+      // What is on his hands.  Not a spot: a smear, with a drip off it.
+      smear(elbow, 0, -0.72, 0.045, 0.07, side * 0.6);
 
       this.torso.add(arm);
       this.arms.push(arm);
@@ -372,12 +442,14 @@ export class FroggyMonster {
     // it: the gap between them is where the throat and the teeth show, and a
     // face that is permanently a little bit open is the difference between a
     // frog and something that eats.
-    // ---- NO NECK.  There was a throat column between the chest and the head
-    // and the head sat on top of it; the head is DOWN IN the body now, front
-    // and low, so the jaw comes straight out of the chest and there is no join
-    // to see from any angle.  A frog has no neck, and the one thing this has
-    // to stay is a frog.
-    this.neck.position.set(0, 0.12, 0.14);
+    this.neck.position.set(0, 0.24, 0.2);
+    // The throat column between the chest and the head.  Without it the skull
+    // hangs off the torso with a gap of nothing behind it, and from the side
+    // that gap is the single most obvious "two spheres" tell on the model.
+    const gullet = new THREE.Mesh(lumpy(new THREE.CapsuleGeometry(0.2, 0.26, 6, 14), 0.028, 7, 53), skinDark);
+    gullet.rotation.x = 0.8;
+    gullet.position.set(0, 0.02, -0.14);
+    this.neck.add(gullet);
     const skull = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.5, 22, 18), 0.03, 3.8, 37), skin);
     skull.scale.set(1.06, 0.62, 1.0);
     skull.position.y = 0.13;
@@ -389,39 +461,35 @@ export class FroggyMonster {
     brow.position.set(0, 0.3, 0.08);
     this.neck.add(brow);
 
-    // ---- TWO EYES.  EXACTLY TWO, AND A MATCHED PAIR.
-    //
-    // One of them used to be lower and larger than the other, on the grounds
-    // that an asymmetry reads as an animal rather than as a design.  It also
-    // reads as a different creature from the one on the poster, and what this
-    // thing has to be is FROGGY: two big frog eyes, bulging off the top of the
-    // head where a frog's are, the same size as each other, bloodshot to the
-    // rim with a pupil the size of a full stop in the middle of all that
-    // white.  A matched pair looks back at you; a wrong one is a texture.
+    // The two eye bumps: the mascot's own landmark, kept exactly, then ruined.
+    // Small in a big head, set deep under the brow, and pointed at you.
     for (const side of [-1, 1]) {
-      const ex = side * 0.31;
-      const ey = 0.26;
+      // One eye lower and larger than the other.  This is the whole trick.
+      const wrong = side === -1 ? 1.18 : 1;
+      const drop = side === -1 ? 0.055 : 0;
+      const ex = side * 0.29;
+      const ey = 0.19 - drop;
 
-      const socket = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 10), skinDark);
-      socket.position.set(ex, ey, 0.13);
+      const socket = new THREE.Mesh(new THREE.SphereGeometry(0.2 * wrong, 12, 10), skinDark);
+      socket.position.set(ex, ey, 0.16);
       this.neck.add(socket);
 
-      const sclera = new THREE.Mesh(new THREE.SphereGeometry(0.205, 14, 12), mat(SCLERA));
-      sclera.position.set(ex, ey, 0.23);
+      const sclera = new THREE.Mesh(new THREE.SphereGeometry(0.155 * wrong, 12, 10), mat(SCLERA));
+      sclera.position.set(ex, ey, 0.26);
       this.neck.add(sclera);
 
       // Veins, not a ring: a rim reads as a cartoon outline at this size.
-      for (let v = 0; v < 6; v++) {
-        const vein = new THREE.Mesh(new THREE.CapsuleGeometry(0.009, 0.18, 3, 5), mat(VEIN));
-        const a = (v / 6) * Math.PI * 2 + side;
-        vein.position.set(ex + Math.cos(a) * 0.1, ey + Math.sin(a) * 0.1, 0.36);
+      for (let v = 0; v < 3; v++) {
+        const vein = new THREE.Mesh(new THREE.CapsuleGeometry(0.008, 0.14, 3, 5), mat(VEIN));
+        const a = (v / 3) * Math.PI * 2 + side;
+        vein.position.set(ex + Math.cos(a) * 0.09, ey + Math.sin(a) * 0.09, 0.34);
         vein.rotation.z = a;
         this.neck.add(vein);
       }
 
       // The pupil: a pinprick, sunk into the eye rather than sat on it.
-      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), mat(0x000000));
-      pupil.position.set(ex, ey, 0.23 + 0.19);
+      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 8), mat(0x000000));
+      pupil.position.set(ex, ey, 0.26 + 0.145 * wrong);
       this.neck.add(pupil);
     }
 
@@ -470,17 +538,15 @@ export class FroggyMonster {
     }
     this.neck.add(this.jaw);
 
-    // ---- what he has been doing.  Down the chin and onto the chest.
-    for (const [x, y, z, r, target] of [
-      [0.1, -0.3, 0.34, 0.1, this.neck],
-      [-0.16, -0.26, 0.3, 0.08, this.neck],
-      [0.0, 0.02, 0.44, 0.12, this.torso],
-      [0.18, -0.16, 0.34, 0.09, this.torso],
+    // ---- what he has been doing.  Down the chin and onto the chest: four
+    // runs, each one a different size, at its own angle, with its own drip.
+    for (const [x, y, z, r, tilt, target] of [
+      [0.1, -0.3, 0.34, 0.105, 0.22, this.neck],
+      [-0.16, -0.26, 0.3, 0.085, -0.35, this.neck],
+      [0.0, 0.02, 0.44, 0.125, 0.08, this.torso],
+      [0.18, -0.16, 0.34, 0.095, -0.18, this.torso],
     ] as const) {
-      const run = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), mat(BLOOD));
-      run.scale.set(1, 2.1, 0.35);
-      run.position.set(x, y, z);
-      (target as THREE.Group).add(run);
+      smear(target as THREE.Group, x, y, z, r, tilt);
     }
 
     this.torso.add(this.neck);
@@ -598,18 +664,51 @@ export class FroggyMonster {
     const haul = Math.sin(ct * Math.PI * 4) * this.climbNow;
     const crest = Math.sin(ct * Math.PI) * this.climbNow; // highest at the top
 
-    // Arms counter-swing, hang lower the faster he goes, and reach up a wall
-    // when he is going over one.  The elbow carries a bend that opens on the
-    // forward swing, so the hands come up in front of him and not the floor.
+    // ---- THE REACH.  While he is coming for you, BOTH ARMS COME FORWARD.
+    //
+    // A chase used to read as a run: the arms counter-swung with the stride
+    // and leaned a quarter of a radian in, which at a distance is a thing
+    // jogging at you.  Chasing, he holds both arms out in front of himself and
+    // GRABS -- a cycle of pushing out with the hands open and drawing back
+    // with them closed, the two arms a beat out of step so it is not a
+    // machine.  It is the same `lunge` the scenes already set when they hand
+    // him the chase, so nothing about the chase itself changes: not the speed,
+    // not the path, not what happens when he reaches you.
+    //
+    // Nothing is rigid: the stride's counter-swing stays underneath it at a
+    // third of its weight, so the arms still ride the run they are attached
+    // to, and every term below fades out with `lungeNow` when he stops
+    // chasing -- which is the old idle walk, untouched.
+    const reach = this.lungeNow;
+    this.reachT += dt * (2.6 + reach * 1.6);
+    /** 0 drawn back with the hands shut, 1 thrown out with them open. */
+    const grabOf = (phase: number): number => 0.5 + 0.5 * Math.sin(this.reachT + phase);
+    const gL = grabOf(0);
+    const gR = grabOf(0.7);
+    // Forward is NEGATIVE rotation.x on an arm hanging off a shoulder -- see
+    // the climb reach below, which is the same sign.
+    const armReach = (g: number): number => -reach * (1.05 + 0.5 * g);
+    const elbowReach = (g: number): number => -reach * (0.15 + 0.75 * (1 - g));
+    const carry = 1 - reach * 0.66;
+
     this.arms[0].rotation.x =
-      -gait * swing * 0.8 - this.climbNow * 2.2 - haul * 0.55 - this.lungeNow * 0.25;
+      -gait * swing * 0.8 * carry - this.climbNow * 2.2 - haul * 0.55 + armReach(gL);
     this.arms[1].rotation.x =
-      gait * swing * 0.8 - this.climbNow * 2.2 + haul * 0.55 - this.lungeNow * 0.25;
+      gait * swing * 0.8 * carry - this.climbNow * 2.2 + haul * 0.55 + armReach(gR);
     this.elbows[0].rotation.x =
-      -(0.25 + Math.max(0, -gait) * 0.5 * moving) - this.climbNow * 0.5 + haul * 0.45 - this.lungeNow * 0.5;
+      -(0.25 + Math.max(0, -gait) * 0.5 * moving) * carry - this.climbNow * 0.5 + haul * 0.45 + elbowReach(gL);
     this.elbows[1].rotation.x =
-      -(0.25 + Math.max(0, gait) * 0.5 * moving) - this.climbNow * 0.5 - haul * 0.45 - this.lungeNow * 0.5;
-    for (const arm of this.arms) arm.rotation.z = this.climbNow * 0.35 + this.lungeNow * 0.12;
+      -(0.25 + Math.max(0, gait) * 0.5 * moving) * carry - this.climbNow * 0.5 - haul * 0.45 + elbowReach(gR);
+    // Out wide on the push, in on the pull: the gap between his hands opens
+    // and closes around where you are standing.
+    this.arms[0].rotation.z = this.climbNow * 0.35 - reach * (0.1 + 0.26 * gL);
+    this.arms[1].rotation.z = this.climbNow * 0.35 + reach * (0.1 + 0.26 * gR);
+    // And the hands close as they come back, which is what makes it a grab
+    // rather than a wave.
+    for (let h = 0; h < this.hands.length; h++) {
+      const g = h === 0 ? gL : gR;
+      for (const finger of this.hands[h]) finger.rotation.x = 0.3 + reach * (0.2 + 1.15 * (1 - g));
+    }
     // Knees tuck hardest at the crest, when he is folded over the top of it.
     this.knees[0].rotation.x += crest * 0.5;
     this.knees[1].rotation.x += crest * 0.5;
@@ -630,15 +729,10 @@ export class FroggyMonster {
     // A slight roll off the same limp, so his weight goes side to side.
     this.hips.rotation.z = gait * 0.035 * moving;
 
-    // ---- UPRIGHT.  He used to be folded a third of a radian forward at rest
-    // and half again at a run -- head slung below the shoulders, arms past the
-    // knees, an ape.  He stands on his two feet now, with only enough lean in
-    // him to say which way he is going: a swollen frog standing up is worse
-    // than a thing on all fours, because it is the mascot's shape and the
-    // mascot stands up too.  The climb and the crouch still fold him, because
-    // those are what going up a shelf and looking under a bed look like.
+    // Folded forward, further the faster he moves, and further again once he is
+    // coming for you.  A climb folds him over whatever he is on top of.
     this.torso.rotation.x =
-      0.1 + Math.min(0.16, speed * 0.035) + this.climbNow * 0.45 + this.lungeNow * 0.16 +
+      0.34 + Math.min(0.28, speed * 0.06) + this.climbNow * 0.45 + this.lungeNow * 0.22 +
       cr * 0.5;
     this.torso.rotation.z = gait * 0.05;
 
@@ -654,7 +748,7 @@ export class FroggyMonster {
     // creature staring at its own feet rather than under a bed.
     const peer = (pose.peer ?? 0) * cr;
     this.neck.rotation.x =
-      -0.08 - Math.min(0.1, speed * 0.03) - this.climbNow * 0.2 - this.lungeNow * 0.06 +
+      -0.3 - Math.min(0.2, speed * 0.05) - this.climbNow * 0.2 - this.lungeNow * 0.1 +
       cr * 0.55;
     // Craning: slow, small, side to side, and offset from the body's own sway
     // so the two never line up into something that looks mechanical.

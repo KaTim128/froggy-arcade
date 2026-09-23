@@ -75,6 +75,107 @@ function stains(ctx: CanvasRenderingContext2D, r: () => number, n: number, colou
   }
 }
 
+/**
+ * BLOOD, AND WHY IT IS NOT A RED DOT.
+ *
+ * The rooms used to get their blood from `stains` -- the same soft radial
+ * ellipse as the damp and the oil, in a bright red.  Three round red marks on
+ * a floor do not read as something that happened; they read as UI.  A player
+ * looks at a small saturated red circle on the ground and checks whether it is
+ * a button.
+ *
+ * What this draws instead is a SPILL: a body of three or four overlapping
+ * lobes at different sizes, each one dragged out along a direction of travel,
+ * in the browns and burgundies dried blood actually goes -- never the bright
+ * red of a warning.  Round it: a few streaks pulled off the leading edge, a
+ * scatter of specks at the end of them, and a darker rim where it dried
+ * deepest, which is what stops a flat fill from looking painted on.
+ *
+ * It goes into the TEXTURE, so it lies on whatever it is drawn on -- it
+ * follows the floorboards and goes round a corner with the wall -- rather than
+ * floating as a decal.  Every one gets its own size, direction, opacity and
+ * number of lobes from the room's seed, so no two are the same mark twice.
+ */
+function bloodStains(
+  ctx: CanvasRenderingContext2D,
+  r: () => number,
+  n: number,
+  maxR: number,
+  alpha: number,
+): void {
+  for (let i = 0; i < n; i++) {
+    const x = r() * SIZE;
+    const y = r() * SIZE;
+    const rad = maxR * (0.45 + r() * 0.75);
+    // Which way it went: the lobes stretch along it and the streaks run off it.
+    const dir = r() * Math.PI * 2;
+    const a = alpha * (0.55 + r() * 0.5);
+    // Dried, not fresh.  Three tones, all of them dark, picked per stain so a
+    // floor has older and newer marks on it.
+    const tone = r();
+    // Dark on the canvas, because the room is lit: a colour that looks like
+    // dried blood in a picker comes back off a torch-lit floor as a bright red
+    // mark, which is the thing this is here to stop being.
+    const body =
+      tone < 0.38 ? [30, 9, 11] : tone < 0.72 ? [41, 13, 13] : [25, 10, 13];
+    const rgba = (k: number, al: number): string =>
+      `rgba(${Math.round(body[0] * k)},${Math.round(body[1] * k)},${Math.round(body[2] * k)},${al})`;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(dir);
+
+    // ---- the body of it: overlapping lobes, none of them centred on another.
+    const lobes = 3 + Math.floor(r() * 3);
+    for (let l = 0; l < lobes; l++) {
+      const lx = (r() - 0.35) * rad * 1.3;
+      const ly = (r() - 0.5) * rad * 0.8;
+      const lr = rad * (0.32 + r() * 0.6);
+      // The darker rim first, a shade under the lobe and a shade wider, so the
+      // edge is where the colour is deepest.
+      // Flattened ALONG the direction of travel rather than at a random
+      // angle: a random rotation on a flattened lobe averages back out to a
+      // circle, and a circle is the one shape this must not be.
+      const lean = (r() - 0.5) * 0.7;
+      ctx.beginPath();
+      ctx.ellipse(lx, ly, lr * 1.2, lr * (0.42 + r() * 0.4), lean, 0, Math.PI * 2);
+      ctx.fillStyle = rgba(0.55, a * 0.85);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(lx, ly, lr, lr * (0.34 + r() * 0.36), lean, 0, Math.PI * 2);
+      ctx.fillStyle = rgba(1, a);
+      ctx.fill();
+    }
+
+    // ---- streaks off the leading edge, thinning as they go.
+    const streaks = 2 + Math.floor(r() * 4);
+    for (let t = 0; t < streaks; t++) {
+      const sy = (r() - 0.5) * rad * 1.1;
+      const len = rad * (0.5 + r() * 1.6);
+      const w = 0.8 + r() * 2.2;
+      ctx.beginPath();
+      ctx.moveTo(rad * 0.5, sy);
+      ctx.quadraticCurveTo(rad * 0.5 + len * 0.6, sy + (r() - 0.5) * rad * 0.35, rad * 0.5 + len, sy + (r() - 0.5) * rad * 0.5);
+      ctx.strokeStyle = rgba(0.8, a * (0.45 + r() * 0.4));
+      ctx.lineWidth = w;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
+
+    // ---- and the specks at the end of them.
+    const specks = 5 + Math.floor(r() * 10);
+    for (let sp = 0; sp < specks; sp++) {
+      const px = rad * (0.6 + r() * 2.2);
+      const py = (r() - 0.5) * rad * 2;
+      ctx.beginPath();
+      ctx.ellipse(px, py, 0.5 + r() * 1.6, 0.5 + r() * 1.1, r() * Math.PI, 0, Math.PI * 2);
+      ctx.fillStyle = rgba(0.7, a * (0.3 + r() * 0.5));
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
 /** Hairline cracks: a few jagged polylines. */
 function cracks(ctx: CanvasRenderingContext2D, r: () => number, n: number, colour: string): void {
   ctx.strokeStyle = colour;
@@ -150,7 +251,7 @@ function paint(theme: RoomTheme, surface: Surface, base: number, seed: number): 
       speckle(ctx, r, 0.9, 0.22);
       stains(ctx, r, 6, hex(base, 1.35), 60, 0.35); // worn lighter
       stains(ctx, r, 9, 'rgb(20,12,10)', 34, 0.6);
-      stains(ctx, r, 3, 'rgb(70,18,20)', 22, 0.5);
+      bloodStains(ctx, r, 3, 22, 0.75);
     } else if (surface === 'wall') {
       // Wallpaper: faint stripes, damp rising from the skirting, paper lifting.
       ctx.fillStyle = hex(base, 1.08);
@@ -294,7 +395,7 @@ function paint(theme: RoomTheme, surface: Surface, base: number, seed: number): 
       }
       grid(ctx, 32, 'rgba(0,0,0,0.45)');
       stains(ctx, r, 6, 'rgb(40,30,18)', 50, 0.5);
-      stains(ctx, r, 3, 'rgb(90,18,16)', 18, 0.6);
+      bloodStains(ctx, r, 3, 18, 0.8);
       scratches(ctx, r, 24, 'rgba(0,0,0,0.3)');
     } else if (surface === 'wall') {
       // Half-tiled: white tiles to waist height, painted above, all of it grubby.
@@ -310,7 +411,7 @@ function paint(theme: RoomTheme, surface: Surface, base: number, seed: number): 
       ctx.fillRect(0, SIZE * 0.5 - 3, SIZE, 3);
       speckle(ctx, r, 0.7, 0.18);
       stains(ctx, r, 6, 'rgb(40,36,20)', 40, 0.5);
-      stains(ctx, r, 2, 'rgb(80,16,14)', 26, 0.45);
+      bloodStains(ctx, r, 2, 26, 0.7);
       cracks(ctx, r, 6, 'rgba(0,0,0,0.5)');
       scratches(ctx, r, 18, 'rgba(0,0,0,0.3)');
     } else {
