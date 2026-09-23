@@ -68,8 +68,28 @@ const COUNTER_POST = { x: 243, y: COUNTER.y + 17 };
  * he is a mascot leaning on a counter, and at the height he was first drawn at
  * he loomed over the prizes he is pointing at.
  */
-const FROG_POST = { x: 230, y: COUNTER.y + 8, height: 28 };
+const FROG_POST = { x: 230, y: COUNTER.y + 8, height: 34 };
 const STAFF_DEPTH = COUNTER_DEPTH - 0.01;
+/**
+ * ---- AND THE HIGHLIGHTS GO BEHIND EVERYBODY.
+ *
+ * They were at 55, which is over the whole room: a gold outline drawn across
+ * the front of Froggy's face and across the player stood at the machine.  A
+ * highlight is a thing ON the furniture, so it belongs between the furniture
+ * and the people in front of it.
+ *
+ * `GLOW_DEPTH` is under the staff (STAFF_DEPTH) and under the player, whose
+ * depth is 50 plus a thousandth per pixel down the room and so never comes
+ * below 50.058 at the top of the walkable floor -- and over the wall and the
+ * prize case, which are painted at the bottom of the pile.
+ *
+ * The counter's own edge is the exception: it is drawn ON the counter, which
+ * is above both of them, so it goes a thousandth over the counter instead --
+ * still under the player stood at it, and the part of Froggy it crosses is
+ * behind the counter already.
+ */
+const GLOW_DEPTH = 50.04;
+const GLOW_ON_COUNTER = COUNTER_DEPTH + 0.001;
 /** How close you have to be to the post to be talking to them rather than shopping. */
 const POST_RANGE = 22;
 /** What the key is worth to the arcade, in cash, once. */
@@ -336,18 +356,26 @@ export class ArcadeHub extends Phaser.Scene {
           this.add
             .rectangle(PRIZE_CASE.x + PRIZE_CASE.w / 2, PRIZE_CASE.y - 15, PRIZE_CASE.w + 4, 34)
             .setStrokeStyle(1, PALETTE.gold)
-            .setFillStyle(),
-          this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, 2, PALETTE.gold).setOrigin(0, 0),
+            .setFillStyle()
+            .setDepth(GLOW_DEPTH),
+          this.add
+            .rectangle(COUNTER.x, COUNTER.y, COUNTER.w, 2, PALETTE.gold)
+            .setOrigin(0, 0)
+            .setDepth(GLOW_ON_COUNTER),
         ],
       },
       {
         kind: 'change',
-        glow: [this.add.rectangle(272, 26, 24, 36).setStrokeStyle(1, PALETTE.gold).setFillStyle()],
+        glow: [
+          this.add
+            .rectangle(272, 26, 24, 36)
+            .setStrokeStyle(1, PALETTE.gold)
+            .setFillStyle()
+            .setDepth(GLOW_DEPTH),
+        ],
       },
     ];
-    for (const cue of this.cues) {
-      for (const g of cue.glow) g.setDepth(55);
-    }
+
   }
 
   /** The cues, once a frame: whether the player is stood at one, and a pulse. */
@@ -454,11 +482,15 @@ export class ArcadeHub extends Phaser.Scene {
     // than a loop -- he says it once each time you come over, and never twice
     // for one visit.
     if (!this.frog) return;
-    const near = Math.hypot(this.player.x - FROG_POST.x, this.player.y - (COUNTER.y + 24)) < 46;
-    if (near && !this.frogSpoke && !this.busy()) {
+    const d = Math.hypot(this.player.x - FROG_POST.x, this.player.y - (COUNTER.y + 24));
+    if (d < 46 && !this.frogSpoke && !this.busy()) {
       this.frogSpoke = true;
       this.say('"FEEL FREE TO CHECK WHAT PRIZES YOU CAN GET! \u{1F438}"');
-    } else if (!near && Math.hypot(this.player.x - FROG_POST.x, this.player.y - (COUNTER.y + 24)) > 70) {
+    } else if (d > 52) {
+      // He says it EVERY TIME you come over.  The gap between the two numbers
+      // is only there to stop a player stood exactly on the line setting him
+      // off once a frame -- step back off the counter and walk up again and he
+      // greets you again, which is what a mascot on a counter does.
       this.frogSpoke = false;
     }
   }

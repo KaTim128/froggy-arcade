@@ -72,7 +72,12 @@ export class ExteriorDay extends Phaser.Scene {
     new MysteryMan(this, MAN_X, WALK_Y + 4);
     // You come out of the doors standing at them, so going back in is one key
     // press away — the loop is meant to be walked dozens of times.
-    this.player = new Player(this, this.doorX + 16, WALK_Y, true);
+    // DAY COLOURS, on the one scene in the game that is painted in daylight.
+    // It was building him with the NIGHT flag on, which runs every colour he
+    // has through `nightify`: cap, hood, coat and trousers all came out the
+    // same desaturated blue-grey, stood on a sunlit forecourt.  The night
+    // scenes -- the alley, the dark arcade, the street after hours -- keep it.
+    this.player = new Player(this, this.doorX + 16, WALK_Y, false);
     // The forecourt is loose ground, not the arcade's carpet.  This scene
     // never said so, which left the walk outside sounding like the walk in.
     this.player.setSurface('gravel');
