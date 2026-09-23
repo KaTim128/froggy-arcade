@@ -43,7 +43,7 @@ const GAMES = [
   // shot came back of the arcade floor.  Twelve seconds is the middle of every
   // race there is, which is a better picture of the game anyway: the field
   // strung out down the track with whatever is going wrong today.
-  { id: 'frograce', drive: async (p) => { await p.keyboard.press('Digit3'); await sleep(250); await p.keyboard.press('ArrowUp'); await sleep(250); await p.keyboard.press('Space'); await sleep(46000); } },
+  { id: 'frograce', drive: async (p) => { await p.keyboard.press('Digit3'); await sleep(250); await p.keyboard.press('ArrowUp'); await sleep(250); await p.keyboard.press('Space'); await sleep(34000); } },
   { id: 'grudge', drive: async (p) => { await sleep(1600); for (let i = 0; i < 6; i++) { await p.keyboard.press('KeyD'); await p.keyboard.press('KeyJ'); await sleep(400); } } },
   { id: 'donkeykong', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(2500); await p.keyboard.up('KeyD'); await p.keyboard.press('Space'); await sleep(600); await p.keyboard.down('KeyW'); await sleep(900); await p.keyboard.up('KeyW'); } },
   { id: 'slots', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.press('Space'); await sleep(2700); } } },
@@ -531,13 +531,15 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   await page.close();
 }
 
-// NO COMBINATION OF BARRELS ASKS FOR A JUMP AND A DUCK AT ONCE.
+// A BOUNCER BOUNCES FOR ITS WHOLE LIFE, AND NOTHING EVER TURNS INTO ANYTHING.
 //
-// A yellow roller has to be jumped; an orange bouncer at the top of its hop has
-// to be walked under, and jumping into one is a death.  Put the two of them
-// within a jump of each other and there is no input that answers both — the
-// player is hit having done the right thing.  Same for two orange ones out of
-// step, one overhead and one on the girder in front of you.
+// There used to be a rule that put a bouncer back on the girder while it was
+// near a roller, so that a jump and a duck were never asked for at the same
+// instant.  What the player saw was a pink barrel behaving like an orange one
+// -- the game changing a hazard's kind under them -- and it is gone.  The two
+// kinds are independent: this watches every barrel for its whole life and
+// fails if any of them ever changes kind, or if a bouncer ever stops reaching
+// the top of its hop.
 //
 // The same pass measures the two things the barrels were reported for: that
 // none of them is being slowed down by another one, and that they never pile
@@ -552,7 +554,10 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
-  const tally = { frames: 0, samples: 0, span: 0, worst: null, closest: 1e9, up: 0, slowest: 1, pile: 0 };
+  const tally = {
+    frames: 0, samples: 0, span: 0, worst: null, closest: 1e9, up: 0, slowest: 1, pile: 0,
+    flips: 0, lowestPeak: 1e9, longestStill: 0, hoppers: 0,
+  };
   for (let run = 0; run < 3; run++) {
     await page.goto(`${URL}/?intro=1&tokens=50&game=donkeykong`, { waitUntil: 'networkidle2' });
     await sleep(1400);
@@ -571,8 +576,15 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
         // that were touching at once.
         slowest: 1,
         pile: 0,
+        // Kind switches seen, the lowest peak any bouncer managed, and the
+        // longest run of frames one spent sat on the girder.
+        flips: 0,
+        lowestPeak: null,
+        longestStill: 0,
       };
       const seen = new Map();
+      /** Every barrel ever seen, by id, for the life-long checks. */
+      const kinds = new Map();
       let last = performance.now();
       const until = performance.now() + 18000;
       while (performance.now() < until && window.__dk) {
@@ -623,29 +635,38 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
           }
         }
         if (bs.some((b) => b.up)) out.up++;
-        let badHere = false;
-        for (let i = 0; i < bs.length; i++) {
-          for (let j = i + 1; j < bs.length; j++) {
-            const a = bs[i];
-            const b = bs[j];
-            if (a.floor !== b.floor || a.up === b.up) continue;
-            const gap = Math.abs(a.x - b.x);
-            if (gap >= out.span) continue;
-            badHere = true;
-            if (gap < out.closest) {
-              out.closest = gap;
-              out.worst =
-                `floor ${a.floor}: ${a.bouncer ? 'pink' : 'orange'} at ${Math.round(a.x)} (lift ` +
-                `${a.lift.toFixed(1)}) and ${b.bouncer ? 'pink' : 'orange'} at ${Math.round(b.x)} ` +
-                `(lift ${b.lift.toFixed(1)}), ${Math.round(gap)}px apart`;
-            }
-          }
+
+        // ---- NOTHING CHANGES KIND, AND NOTHING IS GROUNDED.  A bouncer is
+        // followed by id: if its `bouncer` flag ever moves it has converted,
+        // and if it spends a run of frames flat on the girder while it is
+        // rolling along one, something has stopped it hopping.
+        for (const bl of all) {
+          const was = kinds.get(bl.id);
+          if (was && was.bouncer !== bl.bouncer) out.flips++;
+          const flat = bl.bouncer && !bl.falling && bl.lift < 0.5;
+          const run = flat ? (was?.run ?? 0) + 1 : 0;
+          kinds.set(bl.id, {
+            bouncer: bl.bouncer,
+            run,
+            still: Math.max(was?.still ?? 0, run),
+            top: Math.max(was?.top ?? 0, bl.lift),
+            frames: (was?.frames ?? 0) + 1,
+          });
         }
-        if (badHere) out.frames++;
         await new Promise((r) => requestAnimationFrame(r));
+      }
+      const hoppers = [...kinds.values()].filter((v) => v.bouncer && v.frames > 60);
+      if (hoppers.length) {
+        out.lowestPeak = Math.min(...hoppers.map((v) => v.top));
+        out.longestStill = Math.max(...hoppers.map((v) => v.still));
+        out.hoppers = hoppers.length;
       }
       return out;
     });
+    tally.hoppers += r.hoppers ?? 0;
+    tally.flips += r.flips;
+    if (r.lowestPeak !== null) tally.lowestPeak = Math.min(tally.lowestPeak, r.lowestPeak);
+    tally.longestStill = Math.max(tally.longestStill, r.longestStill);
     tally.samples += r.samples;
     tally.frames += r.frames;
     tally.up += r.up;
@@ -657,21 +678,27 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
       tally.worst = r.worst;
     }
   }
-  const passable = tally.samples > 1000 && tally.frames === 0;
+  const independent = tally.samples > 1000 && tally.flips === 0;
   console.log(
-    `${passable ? 'PASS' : 'FAIL'}  barrel climb: no pair of barrels blocks a girder  — ` +
-      (tally.frames === 0
-        ? `${tally.samples} frames, nothing within ${tally.span}px asking for a jump and a duck at once`
-        : `${tally.frames} frames of it; worst ${tally.worst}`),
+    `${independent ? 'PASS' : 'FAIL'}  barrel climb: no barrel ever changes kind  — ` +
+      `${tally.flips} switches across ${tally.samples} frames`,
   );
-  if (!passable) failures++;
+  if (!independent) failures++;
 
-  // And the bouncer is still a bouncer: the rule that settles it near a roller
-  // must not be quietly grounding it for the whole game.
+  // And a bouncer keeps bouncing: every one of them reaches the top of its hop
+  // for its whole life, and none of them is ever sat on the girder.
+  const hopping = tally.hoppers > 0 && tally.lowestPeak > 13 && tally.longestStill <= 3;
+  console.log(
+    `${hopping ? 'PASS' : 'FAIL'}  barrel climb: and every bouncer keeps bouncing  — ` +
+      `lowest peak ${tally.lowestPeak.toFixed(1)}px across ${tally.hoppers} of them, ` +
+      `longest spell flat ${tally.longestStill} frames`,
+  );
+  if (!hopping) failures++;
+
   const lively = tally.up / Math.max(1, tally.samples) > 0.1;
   console.log(
-    `${lively ? 'PASS' : 'FAIL'}  barrel climb: and the bouncers still bounce  — ` +
-      `one was over your head on ${((tally.up / Math.max(1, tally.samples)) * 100).toFixed(0)}% of frames`,
+    `${lively ? 'PASS' : 'FAIL'}  barrel climb: one is over your head often enough to matter  — ` +
+      `${((tally.up / Math.max(1, tally.samples)) * 100).toFixed(0)}% of frames`,
   );
   if (!lively) failures++;
 
@@ -699,11 +726,13 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   await page.close();
 }
 
-// THE BLACK BARREL, AND THE FIRST THROW.
+// THE FIRST THROW, AND THE CEILING OVER EVERY GIRDER.
 //
-// Two separate promises about the climb: it is under way the moment the
-// cabinet comes up -- there is no three second grace any more -- and the black
-// one with the skull on it does not take a life off you, it takes the run.
+// Two promises about the climb: it is under way the moment the cabinet comes
+// up -- there is no grace period -- and a jump cannot take the player into or
+// through the girder above him.  The black barrel with the skull on it, which
+// used to take the whole run on contact, has been removed: the pile throws two
+// kinds and only two.
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
@@ -719,65 +748,97 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
     );
     if (!thrown) failures++;
 
-    // Stand the player somewhere nothing can reach.
+    // TWO KINDS AND ONLY TWO, sampled off the decision rather than waited for.
+    const kinds = await page.evaluate(() => window.__dk.sampleKinds(20000));
+    const two = !('death' in kinds) && kinds.roll > 0 && kinds.hop > 0;
+    console.log(
+      `${two ? 'PASS' : 'FAIL'}  barrel climb: the pile throws a roller or a bouncer, nothing else  — ` +
+        `${JSON.stringify(kinds)} of 20000`,
+    );
+    if (!two) failures++;
+
+    // ---- THE CEILING.  Jump on every girder and watch the top of the arc.
+    // The player must never rise past the cap, which is his own height below
+    // the girder above -- so his head stops at its underside and the storey he
+    // is on is the storey he stays on.
     await page.evaluate(() => {
-      window.__dk.teleport(0, 20);
+      window.__dk.clearBarrels();
       window.__dk.grace(600000);
     });
-
-    // HOW OFTEN A BLACK ONE COMES is a property of the decision behind the
-    // throw, so the decision is sampled.  Waiting for one to turn up inside a
-    // test's patience is a coin toss: at these odds a thirty second watch
-    // misses it about a third of the time, which is a check that reports the
-    // game as broken once in every three runs.
-    const kinds = await page.evaluate(() => ({
-      late: window.__dk.sampleKinds(20000, true),
-      early: window.__dk.sampleKinds(5000, false),
-      after: window.__dk.deathAfterMs,
-    }));
-    const rate = kinds.late.death / 20000;
-    const mix = rate > 0.09 && rate < 0.16 && kinds.early.death === 0 && kinds.late.hop > 0 && kinds.late.roll > 0;
-    console.log(
-      `${mix ? 'PASS' : 'FAIL'}  barrel climb: a black one in about eight, and none at the start  — ` +
-        `${(rate * 100).toFixed(1)}% of 20000 past the first ${kinds.after / 1000}s, none of 5000 before it`,
-    );
-    if (!mix) failures++;
-
-    // And one on the girders, thrown on demand so the next check is aimed at
-    // the barrel rather than at whatever happened to be rolling.
-    const deadly = await page.evaluate(async () => {
-      window.__dk.throwNow('death');
-      await new Promise((r) => requestAnimationFrame(r));
-      return window.__dk.state().barrels.find((b) => b.deadly) ?? null;
+    const jumps = await page.evaluate(async () => {
+      const st0 = window.__dk.state();
+      const rises = [];
+      for (let f = 0; f < st0.floors.length; f++) {
+        window.__dk.teleport(f, 120);
+        await new Promise((r) => requestAnimationFrame(r));
+        window.__dk.jump();
+        let top = 1e9;
+        const t0 = performance.now();
+        while (performance.now() - t0 < 900) {
+          top = Math.min(top, window.__dk.state().player.y);
+          await new Promise((r) => requestAnimationFrame(r));
+        }
+        rises.push(st0.floors[f] - top);
+      }
+      return { rises, cap: st0.maxRise, h: st0.playerH, floors: st0.floors };
     });
-    const arrives = !!deadly;
+    const highest = Math.max(...jumps.rises);
+    const capped = highest <= jumps.cap + 0.01 && highest > jumps.cap - 2;
     console.log(
-      `${arrives ? 'PASS' : 'FAIL'}  barrel climb: and it is a barrel like the others  — ` +
-        (deadly ? `floor ${deadly.floor} at ${deadly.x.toFixed(0)}, rolling at ${deadly.speed.toFixed(0)}` : 'none thrown'),
+      `${capped ? 'PASS' : 'FAIL'}  barrel climb: a jump stops dead under the girder above  — ` +
+        `highest ${highest.toFixed(1)}px against a ${jumps.cap}px ceiling`,
     );
-    if (!arrives) failures++;
+    if (!capped) failures++;
 
-    // Walk into it.  Three lives or not, that is the end of the climb.
-    const end = await page.evaluate(async () => {
+    // The same numbers read the other way round: where the top of his hat got
+    // to, against the girder over his head.
+    const headroom = Math.min(
+      ...jumps.rises.map((r, f) =>
+        f + 1 < jumps.floors.length ? jumps.floors[f] - r - jumps.h - jumps.floors[f + 1] : 99,
+      ),
+    );
+    const under = headroom >= 0;
+    console.log(
+      `${under ? 'PASS' : 'FAIL'}  barrel climb: and his head never comes out above it  — ` +
+        `closest ${headroom.toFixed(1)}px under the next girder`,
+    );
+    if (!under) failures++;
+
+    // AND THE JUMP IS STILL A JUMP: a roller has to go under it, or the cap
+    // has fixed one thing by breaking the game.
+    const cleared = await page.evaluate(async () => {
+      window.__dk.teleport(0, 200);
       window.__dk.grace(0);
+      window.__dk.throwNow('roll');
       const before = window.__dk.state().lives;
-      window.__dk.throwNow('death');
-      for (let i = 0; i < 1200; i++) {
-        const st = window.__dk?.state();
-        if (!st) return { before, gone: true };
-        const d = st.barrels.find((b) => b.deadly && !b.falling);
-        if (d) window.__dk.teleport(d.floor, d.x);
-        if (st.lives <= 0) return { before, after: st.lives };
+      const t0 = performance.now();
+      let jumped = false;
+      let low = 99;
+      while (performance.now() - t0 < 20000) {
+        const st = window.__dk.state();
+        if (st.lives < before) return { hit: true, low };
+        for (const bl of st.barrels) {
+          if (bl.floor !== 0 || bl.falling || bl.bouncer) continue;
+          const d = Math.abs(bl.x - st.player.x);
+          if (d < low) low = d;
+          // Jumped at the distance a player would pick it at, and then it has
+          // to pass right under him.
+          if (!jumped && d > 15 && d < 26 && bl.x > st.player.x) {
+            jumped = true;
+            window.__dk.jump();
+          }
+        }
+        if (jumped && low < 4) return { hit: false, low };
         await new Promise((r) => requestAnimationFrame(r));
       }
-      return { before, after: window.__dk?.state().lives, timeout: true };
+      return { hit: null, low };
     });
-    const fatal = end.after === 0 && end.before === 3;
+    const clears = cleared.hit === false;
     console.log(
-      `${fatal ? 'PASS' : 'FAIL'}  barrel climb: touching it ends the run there and then  — ` +
-        `${end.before} lives before it, ${end.after} after`,
+      `${clears ? 'PASS' : 'FAIL'}  barrel climb: a rolling barrel still passes under a jump  — ` +
+        `closest it came was ${cleared.low.toFixed(1)}px`,
     );
-    if (!fatal) failures++;
+    if (!clears) failures++;
   }
   await page.close();
 }

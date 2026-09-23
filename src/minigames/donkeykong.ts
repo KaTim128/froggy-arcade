@@ -17,26 +17,64 @@
  *
  * AND THAT IS WHY THEY KEEP OUT OF EACH OTHER'S WAY.  Two answers that are
  * opposites are a wall as soon as both are asked at once, and no input answers
- * "jump this and duck that" in the same tenth of a second.  Three rules — see
- * `JUMP_SPAN` — space the barrels out, put a bouncer back on the girder while
- * it is near a roller, and keep clusters of bouncers hopping in step.  The
- * barrels stay as hard to read; they stop being impossible to pass.
+ * "jump this and duck that" in the same tenth of a second.  Two rules — see
+ * `JUMP_SPAN` — knock a barrel off the girder when another drives into it, and
+ * keep clusters of bouncers hopping in step.  What is NOT done is grounding a
+ * bouncer near a roller: the two kinds are independent and neither ever
+ * behaves like the other.
  */
 
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
-import { centerText, text } from '../core/ui';
-import { GAME_W } from '../render/pixelScaler';
+import { text } from '../core/ui';
+import { GAME_W, GAME_H } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
 const LEFT = 12;
 const RIGHT = GAME_W - 12;
 /** Girder tops, bottom first.  The player stands ON these.  Six of them. */
 const FLOORS = [166, 142, 118, 94, 70, 46];
-const GRAVITY = 460;
-/** Peaks about 21px up: over a barrel, under the girder above. */
-const JUMP_V = -140;
+/** The player, heel to the top of his hat.  See `sprite` and `hat`. */
+const PLAYER_H = 14;
+/**
+ * The storey height.  The girders are evenly spaced and listed from the BOTTOM
+ * up, so the one above any given girder is the smaller number.
+ */
+const FLOOR_GAP = FLOORS[0] - FLOORS[1];
+/**
+ * THE CEILING OVER EVERY GIRDER, AND THE JUMP THAT FITS UNDER IT.
+ *
+ * A jump used to peak 21px up inside a 24px storey, which sent the whole
+ * player -- head, hat and shoulders -- up through the girder above and out the
+ * other side of it.  A climb whose floors can be jumped through is not a
+ * climb.
+ *
+ * There is a cap over every girder now, one player's height below the next
+ * one, and the jump is tuned to arrive exactly at it rather than to slam into
+ * it: `MAX_RISE` is the whole of the headroom and `movePlayer` holds it as a
+ * hard floor-in-the-sky in case anything else ever pushes him up.  Nothing can
+ * be jumped ONTO or THROUGH; the only way up is a ladder.
+ *
+ * Ten pixels is what that leaves, and it is enough for what a jump is for: a
+ * barrel sat on the girder is clear from seven up (HIT_DY plus PLAYER_MID
+ * against BARREL_R), so a roller, and a bouncer while it is down, still pass
+ * underneath.  A bouncer at the top of its hop is walked under, which is what
+ * it was always for.
+ *
+ * AND THE TIME IS NOT CLAMPED WITH THE HEIGHT.  Halving the arc and keeping
+ * the old gravity would have left a jump lasting a quarter of a second, which
+ * is a four-pixel window to time a barrel in -- the height would have been
+ * fixed by making the game unplayable.  Gravity is derived from the arc
+ * instead: the jump takes the same 0.61s it always took, so it is timed
+ * exactly as it was, and `JUMP_SPAN` -- the distance one jump covers, which
+ * every barrel-spacing rule below is measured in -- comes out at the same 34px
+ * it was tuned against.
+ */
+const MAX_RISE = FLOOR_GAP - PLAYER_H;
+const AIRTIME_S = 0.609;
+const GRAVITY = (8 * MAX_RISE) / (AIRTIME_S * AIRTIME_S);
+const JUMP_V = -Math.sqrt(2 * GRAVITY * MAX_RISE);
 const RUN = 56;
 const CLIMB = 42;
 const BARREL_R = 4;
@@ -45,6 +83,8 @@ const BARREL_R = 4;
 // spawn rate and the bottom floor silted up faster than it could drain.
 const BARREL_SPEED = 72;
 const LIVES = 3;
+/** The girders sit in front of everything that moves between them. */
+const GIRDER_DEPTH = 25;
 /** Ladder x by the floor it rises FROM.  See create(). */
 /**
  * Ladder x by the floor it rises FROM.
@@ -67,23 +107,6 @@ const BOUNCE_HZ = 1.6;
 const BOUNCER_SPEED = 84;
 /** Two in five barrels bounce, from the first one.  Customer's odds. */
 const BOUNCER_CHANCE = 0.4;
-/**
- * THE DEATH BARREL.  Black, with a skull on it, and it does not take a life --
- * it takes the game.
- *
- * It rolls: it is thrown, it crosses girders, it takes ladders and it is
- * knocked off by the one behind it exactly like every other barrel, because a
- * hazard that moves differently is a second system to keep fair and this one
- * only needs to be a different ANSWER.  You jump it, the same as a yellow one;
- * the difference is entirely in what it costs to get it wrong.
- *
- * It is held back for the first few seconds so that the climb opens on
- * something survivable -- the barrels come immediately now, and a black one in
- * the first throw is a run that ended before the player's hands were on the
- * keys.
- */
-const DEATH_CHANCE = 0.12;
-const DEATH_AFTER_MS = 8000;
 /** A backstop: barrels should retire themselves, but never let them stack. */
 const MAX_BARRELS = 12;
 
@@ -113,7 +136,7 @@ const SPEED_SPREAD = 0.12;
 const BUMP_GAP = BARREL_R * 2;
 
 /**
- * NO TWO BARRELS MAY ASK FOR OPPOSITE THINGS AT THE SAME PLACE.
+ * KEEPING THE BARRELS OUT OF EACH OTHER'S WAY -- WITHOUT CHANGING WHAT ONE IS.
  *
  * The two kinds have deliberately opposite answers — you JUMP an orange roller
  * and you WALK UNDER a pink bouncer while it is up — and that is the whole idea
@@ -123,15 +146,12 @@ const BUMP_GAP = BARREL_R * 2;
  * with each other do the same thing, one up over your head while the other sits
  * on the girder in front of you.
  *
- * Three rules keep the barrels hard and keep them passable, and none of them
- * moves a barrel to somewhere it was not:
+ * Two rules keep the barrels hard, and neither one turns a barrel into the other
+ * kind:
  *
  *   BUMPING   a barrel that catches the one in front knocks it off the
  *             girder -- see BUMP_GAP.  Nothing slows down; the pile is
  *             removed instead of being queued.
- *   SETTLING  a bouncer near a roller finishes its hop and STAYS DOWN until it
- *             is clear again.  Both are then ground-level and a single jump
- *             clears the pair.
  *   LOCKSTEP  bouncers near each other hop together, so a cluster of them is
  *             always all up (walk under) or all down (jump once).
  *
@@ -142,24 +162,6 @@ const BUMP_GAP = BARREL_R * 2;
 const JUMP_SPAN = Math.round(RUN * ((2 * -JUMP_V) / GRAVITY));
 /** Mixed pair, both going the same way: a whole extra jump of room. */
 const MIXED_GAP = JUMP_SPAN * 2;
-/**
- * And a mixed pair CLOSING on each other, which no amount of queuing fixes:
- * the bouncer settles from this far out, which is a shade over one full hop of
- * closing at the speed the two of them shut the gap.
- */
-const SETTLE_CLOSING = 130;
-/**
- * How fast a settling bouncer comes down: a slam, not a glide.
- *
- * It matters because the way DOWN crosses the same band that the way up does.
- * A bouncer that eases back to the girder spends a tenth of a second at exactly
- * the height that is over a standing player and into a jumping one — which is
- * the wall this is all here to prevent, arriving on the descent instead of the
- * ascent.  At this rate the drop is four frames, and the rules below start it
- * while the roller that caused it is still in the air.
- */
-const SETTLE_DROP = 220;
-
 /**
  * The hit box, and the one number that falls out of it.
  *
@@ -189,8 +191,6 @@ interface Barrel {
   falling: boolean;
   /** A bouncer hops; a plain barrel rolls.  See BOUNCE_H. */
   bouncer: boolean;
-  /** The black one.  Rolls like any other and ends the run on contact. */
-  deadly: boolean;
   /** Where the bouncer is in its hop, radians. */
   phase: number;
   dot: Phaser.GameObjects.Container;
@@ -207,8 +207,6 @@ interface Barrel {
    * ladder.
    */
   rolledAt: number | null;
-  /** Recomputed every frame — see the rules above. */
-  settled: boolean;
   /** A bouncer's height above the girder.  Held separately from `phase` so a
    * settling one can be brought down faster than its own arc would. */
   lift: number;
@@ -241,7 +239,26 @@ const KONG_SCALE = 0.62;
 let kong: Phaser.GameObjects.Container | null = null;
 let throwT = 0;
 const THROW_S = 0.42;
-let hud: Phaser.GameObjects.BitmapText | null = null;
+/**
+ * THE PANEL, AND WHY IT IS AT THE BOTTOM.
+ *
+ * `LIVES 3` used to sit in the middle of the band above the top girder, which
+ * is the one place on the screen the player STANDS: on the top floor his head
+ * went straight through it, and Froggy Kong and the OUT door are in the same
+ * band either side of it.  A readout that the game walks through is not a
+ * readout.
+ *
+ * Under the bottom girder there is nothing at all -- the player's feet stop on
+ * it, barrels retire off the ends of it -- so the panel goes there, across the
+ * full width, on its own plate: lives as pips that go out as they are spent,
+ * and which girder of the six he is on.  Nothing on the level can reach it.
+ */
+const PANEL_TOP = FLOORS[0] + 6;
+const PANEL_H = GAME_H - PANEL_TOP;
+let hudFloor: Phaser.GameObjects.BitmapText | null = null;
+let hudPips: Phaser.GameObjects.Rectangle[] = [];
+/** So the floor readout is only rewritten when it changes. */
+let hudFloorShown = -1;
 let keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
 let apiRef: MinigameApi | null = null;
 let sceneRef: Phaser.Scene | null = null;
@@ -258,7 +275,6 @@ export const donkeyKong: MinigameModule = {
       'A BARREL TAKES A LIFE. YOU HAVE THREE.',
       'YELLOW ROLLS AT YOU - JUMP IT.',
       'ORANGE HOPS - WALK UNDER IT WHILE IT IS UP.',
-      'BLACK WITH A SKULL ENDS THE RUN ON TOUCH.',
       'ONE THAT CATCHES ANOTHER KNOCKS IT OFF.',
     ],
     controls: [
@@ -294,14 +310,18 @@ export const donkeyKong: MinigameModule = {
     LADDER_X.forEach((x, from) => ladders.push({ x, from }));
 
     // girders
-    FLOORS.forEach((y, i) => {
-      scene.add.rectangle(LEFT, y, RIGHT - LEFT, 4, 0xc0455a).setOrigin(0, 0);
-      scene.add.rectangle(LEFT, y + 4, RIGHT - LEFT, 2, 0x7a2233).setOrigin(0, 0);
+    // IN FRONT OF THE PLAYER, not behind him.  He stands on top of a girder so
+    // nothing is hidden while he is on one -- but the top of a jump now brings
+    // his hat up against the underside of the next girder, and a hat that
+    // slides BEHIND the beam reads as hitting it.  Drawn behind him it read as
+    // his head coming through the floor above.
+    FLOORS.forEach((y) => {
+      scene.add.rectangle(LEFT, y, RIGHT - LEFT, 4, 0xc0455a).setOrigin(0, 0).setDepth(GIRDER_DEPTH);
+      scene.add.rectangle(LEFT, y + 4, RIGHT - LEFT, 2, 0x7a2233).setOrigin(0, 0).setDepth(GIRDER_DEPTH);
       // rivets
       for (let x = LEFT + 6; x < RIGHT - 4; x += 16) {
-        scene.add.rectangle(x, y + 1, 2, 2, 0xf0879a).setOrigin(0, 0);
+        scene.add.rectangle(x, y + 1, 2, 2, 0xf0879a).setOrigin(0, 0).setDepth(GIRDER_DEPTH);
       }
-      void i;
     });
 
     for (const l of ladders) {
@@ -325,7 +345,17 @@ export const donkeyKong: MinigameModule = {
     sprite = scene.add.rectangle(player.x, player.y, 7, 11, 0x46a0e0).setOrigin(0.5, 1).setDepth(20);
     hat = scene.add.rectangle(player.x, player.y - 11, 8, 3, PALETTE.cream).setOrigin(0.5, 1).setDepth(21);
 
-    hud = centerText(scene, GAME_W / 2, 26, '', PALETTE.cream);
+    // ---- THE PANEL.  See PANEL_TOP.
+    scene.add.rectangle(0, PANEL_TOP, GAME_W, PANEL_H, PALETTE.black, 0.72).setOrigin(0, 0).setDepth(30);
+    scene.add.rectangle(0, PANEL_TOP, GAME_W, 1, 0xc0455a).setOrigin(0, 0).setDepth(31);
+    const row = PANEL_TOP + Math.round((PANEL_H - 8) / 2);
+    text(scene, 8, row, 'LIVES', PALETTE.fog).setDepth(31);
+    hudPips = [];
+    for (let i = 0; i < LIVES; i++) {
+      hudPips.push(scene.add.rectangle(42 + i * 7, row + 2, 5, 5, PALETTE.gold).setOrigin(0, 0).setDepth(31));
+    }
+    hudFloor = text(scene, GAME_W - 8, row, '', PALETTE.cream).setOrigin(1, 0).setDepth(31);
+    hudFloorShown = -1;
     refreshHud();
 
     if (import.meta.env?.DEV) {
@@ -357,12 +387,11 @@ export const donkeyKong: MinigameModule = {
          * the pile is a property of that decision, not of whether one happened
          * to turn up inside a test's patience.
          */
-        sampleKinds: (n: number, late = true) => {
-          const tally = { roll: 0, hop: 0, death: 0 };
-          for (let i = 0; i < n; i++) tally[rollKind(late)]++;
+        sampleKinds: (n: number) => {
+          const tally = { roll: 0, hop: 0 };
+          for (let i = 0; i < n; i++) tally[rollKind()]++;
           return tally;
         },
-        deathAfterMs: DEATH_AFTER_MS,
         /**
          * What he is doing with his arms this frame.  `swing` is 1 at the
          * release and 0 once he has them back, which is the only thing a
@@ -375,6 +404,18 @@ export const donkeyKong: MinigameModule = {
           lean: kong?.rotation ?? 0,
           holding: ((kong?.getData('held') as Phaser.GameObjects.Container | undefined)?.visible ?? false),
         }),
+        /**
+         * Jump, now, without a key.  A test of whether a barrel can be cleared
+         * has to press at an exact distance, and a keypress sent from outside
+         * the page arrives a frame or two late -- which is the difference
+         * between clearing one and being hit by it.
+         */
+        jump: () => {
+          if (player.climbing || player.vy !== 0) return false;
+          if (Math.abs(player.y - FLOORS[player.floor]) > 0.5) return false;
+          player.vy = JUMP_V;
+          return true;
+        },
         teleport: (floor: number, x: number) => {
           player.floor = floor;
           player.x = x;
@@ -394,9 +435,7 @@ export const donkeyKong: MinigameModule = {
             floor: b.floor,
             dir: b.dir,
             bouncer: b.bouncer,
-            deadly: b.deadly,
             falling: b.falling,
-            settled: b.settled,
             speed: b.speed,
             /** How far off the girder it is. */
             lift: b.bouncer ? b.lift : 0,
@@ -405,6 +444,10 @@ export const donkeyKong: MinigameModule = {
           })),
           jumpSpan: JUMP_SPAN,
           walkUnder: WALK_UNDER,
+          /** The cap over the girder he is on, and how far he may rise off it. */
+          ceiling: ceilingY(player.floor),
+          maxRise: MAX_RISE,
+          playerH: PLAYER_H,
           drops: { ...drops },
           floors: FLOORS,
           exitX: RIGHT - 34,
@@ -432,6 +475,7 @@ export const donkeyKong: MinigameModule = {
     elapsed += delta;
 
     if (!dying) movePlayer(dt);
+    if (player.floor !== hudFloorShown) refreshHud();
     stepBarrels(dt);
     stepKong(dt);
 
@@ -466,7 +510,8 @@ export const donkeyKong: MinigameModule = {
     throwT = 0;
     sprite = null;
     hat = null;
-    hud = null;
+    hudFloor = null;
+    hudPips = [];
     apiRef = null;
     sceneRef = null;
   },
@@ -547,6 +592,14 @@ function movePlayer(dt: number): void {
       player.y = floorY;
       player.vy = 0;
     }
+    // ---- AND THE CEILING.  The invisible cap over this girder: he stops dead
+    // against it and comes back down, the same as hitting a ceiling anywhere
+    // else.  See MAX_RISE.
+    const capY = ceilingY(player.floor);
+    if (player.y < capY) {
+      player.y = capY;
+      if (player.vy < 0) player.vy = 0;
+    }
   }
 
   place();
@@ -555,35 +608,41 @@ function movePlayer(dt: number): void {
   if (player.floor === FLOORS.length - 1 && player.x > RIGHT - 34) finish(true);
 }
 
+/**
+ * The cap over a girder: the highest his FEET may go, which is a player's
+ * height below the girder above.  Every storey is the same height, so the top
+ * girder -- which has no girder above it -- gets the same ceiling as the rest
+ * rather than an open sky.
+ */
+function ceilingY(floor: number): number {
+  return FLOORS[floor] - MAX_RISE;
+}
+
 function place(): void {
   sprite?.setPosition(player.x, player.y);
   hat?.setPosition(player.x, player.y - 11);
 }
 
-/** The three kinds, and which one the next barrel is. */
-export type BarrelKind = 'roll' | 'hop' | 'death';
+/** The two kinds, and which one the next barrel is. */
+export type BarrelKind = 'roll' | 'hop';
 
 /**
- * WHAT COMES OFF THE PILE NEXT.
+ * WHAT COMES OFF THE PILE NEXT.  One decision, in one place.
  *
- * One kind per barrel and one decision in one place: the black one is rolled
- * for first and is never a bouncer as well, because two answers on one barrel
- * is a barrel nobody can read.  `late` is whether the climb is past the few
- * seconds that the black one is held back for -- passed in rather than read
- * off the clock, so the decision can be sampled without playing the game.
+ * There were three kinds; the black one with the skull that took the whole run
+ * on contact is gone, spawner and all.  A barrel takes a life, and three lives
+ * is the run.
  */
-function rollKind(late: boolean): BarrelKind {
-  if (late && Math.random() < DEATH_CHANCE) return 'death';
+function rollKind(): BarrelKind {
   return Math.random() < BOUNCER_CHANCE ? 'hop' : 'roll';
 }
 
 function spawnBarrel(kind?: BarrelKind): void {
   if (!sceneRef || barrels.length >= MAX_BARRELS) return;
   const topFloor = FLOORS.length - 1;
-  const which = kind ?? rollKind(elapsed > DEATH_AFTER_MS);
-  const deadly = which === 'death';
+  const which = kind ?? rollKind();
   const bouncer = which === 'hop';
-  const dot = makeBarrel(sceneRef, bouncer, deadly);
+  const dot = makeBarrel(sceneRef, bouncer);
   dot.setPosition(LEFT + 20, FLOORS[topFloor] - BARREL_R);
   barrels.push({
     id: ++barrelNo,
@@ -593,15 +652,13 @@ function spawnBarrel(kind?: BarrelKind): void {
     dir: 1,
     falling: false,
     bouncer,
-    deadly,
     phase: 0,
     dot,
     rolledAt: null,
-    settled: false,
     speed: (bouncer ? BOUNCER_SPEED : BARREL_SPEED) * (1 + (Math.random() - 0.5) * 2 * SPEED_SPREAD),
     lift: 0,
   });
-  audio.sfx(deadly ? 'stinger' : bouncer ? 'hop_wet' : 'door_rattle', deadly ? 0.35 : undefined);
+  audio.sfx(bouncer ? 'hop_wet' : 'door_rattle');
   throwT = THROW_S;
 }
 
@@ -618,11 +675,11 @@ function spawnBarrel(kind?: BarrelKind): void {
  * different shapes as well as different colours: colour alone is a coin toss
  * for anyone who cannot separate the two, and these two want OPPOSITE inputs.
  */
-function makeBarrel(scene: Phaser.Scene, bouncer: boolean, deadly = false): Phaser.GameObjects.Container {
-  const skin = deadly ? 0x1b1b20 : bouncer ? 0xf08a2c : 0xf0c33c;
-  const lit = deadly ? 0x3a3a44 : bouncer ? 0xffc06a : 0xffe89a;
-  const dark = deadly ? 0x000000 : bouncer ? 0x9c4a10 : 0xa8801a;
-  const hoop = deadly ? 0x4a4a55 : bouncer ? 0x6d3208 : 0x6e5410;
+function makeBarrel(scene: Phaser.Scene, bouncer: boolean): Phaser.GameObjects.Container {
+  const skin = bouncer ? 0xf08a2c : 0xf0c33c;
+  const lit = bouncer ? 0xffc06a : 0xffe89a;
+  const dark = bouncer ? 0x9c4a10 : 0xa8801a;
+  const hoop = bouncer ? 0x6d3208 : 0x6e5410;
   // THE RIM DOES NOT TURN, THE STAVES DO.  Everything that spins lives in its
   // own container inside this one: spinning the whole barrel turned its
   // silhouette into a four-pointed thing every eighth of a turn, because the
@@ -645,21 +702,6 @@ function makeBarrel(scene: Phaser.Scene, bouncer: boolean, deadly = false): Phas
   const spin = scene.add.container(0, 0, spun);
   const c = scene.add.container(0, 0, [...rim, spin]).setDepth(15);
   c.setData('spin', spin);
-  if (deadly) {
-    // THE SKULL, and it does not turn with the barrel.  A spinning skull at
-    // eight pixels is a smear; painted on the end and held upright it is the
-    // one thing on the girder the eye goes to, which is the entire job.
-    const bone = PALETTE.bone;
-    const skull = [
-      scene.add.circle(0, -0.6, BARREL_R - 1.2, bone),
-      scene.add.rectangle(0, 1.4, 3.4, 2.2, bone),
-      scene.add.rectangle(-1.1, -1, 1.3, 1.6, 0x000000),
-      scene.add.rectangle(1.1, -1, 1.3, 1.6, 0x000000),
-      scene.add.rectangle(0, 0.8, 0.8, 1, 0x000000),
-      scene.add.rectangle(0, 2.1, 2.6, 0.6, 0x000000),
-    ];
-    for (const part of skull) c.add(part);
-  }
   return c;
 }
 
@@ -917,7 +959,6 @@ function knockOff(b: Barrel): void {
  * wall no input can answer.
  */
 function spaceBarrels(): void {
-  for (const b of barrels) b.settled = false;
   for (let i = 0; i < barrels.length; i++) {
     const b = barrels[i];
     if (b.falling) continue;
@@ -952,15 +993,15 @@ function spaceBarrels(): void {
         }
       }
 
-      if (!b.bouncer) continue;
-      if (mixed) {
-        // SETTLING.  Wider when the two of them are closing, because queuing
-        // cannot help a pair coming at each other.
-        const vb = b.dir * b.speed;
-        const vo = o.dir * o.speed;
-        const closing = (o.x - b.x) * (vo - vb) < 0;
-        if (gap < (closing ? SETTLE_CLOSING : MIXED_GAP)) b.settled = true;
-      } else if (!o.falling && gap < MIXED_GAP && j < i) {
+      // A BOUNCER IS A BOUNCER FOR ITS WHOLE LIFE.  There used to be a third
+      // rule here -- a bouncer near a roller finished its hop and held on the
+      // girder until it was clear again -- and what it produced was a pink
+      // barrel behaving like an orange one for seconds at a time, which is the
+      // one thing the two kinds must never do.  The kinds are independent now:
+      // nothing converts, nothing is grounded, and a bouncer hops from the
+      // throw to the moment it runs off the bottom girder.
+      if (!b.bouncer || mixed) continue;
+      if (!o.falling && gap < MIXED_GAP && j < i) {
         // LOCKSTEP.  The older barrel — the one already on the girder — sets
         // the rhythm, so a cluster is always all up or all down together.
         b.phase = o.phase;
@@ -997,20 +1038,10 @@ function stepBarrels(dt: number): void {
     } else {
       b.x += b.dir * b.speed * dt;
       if (b.bouncer) {
-        // Hop: a half-sine per bounce, so it spends its time up in the air
-        // and comes down hard rather than floating.  A SETTLED one finishes
-        // the hop it is in and then holds on the girder — it does not drop out
-        // of the air, it lands.
-        if (b.settled) {
-          // Parked on the girder, and the phase parked with it, so that when it
-          // is clear again the next hop starts from the ground rather than
-          // resuming halfway up an arc it never finished.
-          b.lift = Math.max(0, b.lift - SETTLE_DROP * dt);
-          b.phase = Math.ceil(b.phase / Math.PI) * Math.PI;
-        } else {
-          b.phase += dt * BOUNCE_HZ * Math.PI;
-          b.lift = Math.abs(Math.sin(b.phase)) * BOUNCE_H;
-        }
+        // Hop: a half-sine per bounce, so it spends its time up in the air and
+        // comes down hard rather than floating.  Nothing interrupts it.
+        b.phase += dt * BOUNCE_HZ * Math.PI;
+        b.lift = Math.abs(Math.sin(b.phase)) * BOUNCE_H;
         b.y = FLOORS[b.floor] - BARREL_R - b.lift;
       }
       // At the end of a girder — or at a ladder, sometimes — they drop.
@@ -1048,8 +1079,7 @@ function stepBarrels(dt: number): void {
     // the direction it is travelling is readable from the barrel itself.
     (b.dot.getData('spin') as Phaser.GameObjects.Container).setRotation(b.x / BARREL_R);
     if (b.bouncer) {
-      // Read off the real height, so a settled one is visibly flat on the
-      // girder rather than drawn mid-hop while sitting on the floor.
+      // Squashed on the girder and stretched at the top of the hop.
       const air = b.lift / BOUNCE_H;
       b.dot.setScale(1.1 - air * 0.1, 0.9 + air * 0.2);
     } else {
@@ -1068,17 +1098,6 @@ function stepBarrels(dt: number): void {
 function checkHits(): void {
   for (const b of barrels) {
     if (Math.abs(b.x - player.x) < HIT_DX && Math.abs(b.y - (player.y - PLAYER_MID)) < HIT_DY) {
-      // The black one does not take a life off you.  It takes the climb.
-      if (b.deadly) {
-        if (dying || over) return;
-        dying = true;
-        lives = 0;
-        audio.sfx('death_stinger', 0.8);
-        refreshHud();
-        sceneRef?.cameras.main.shake(320, 0.02);
-        finish(false);
-        return;
-      }
       loseLife();
       return;
     }
@@ -1113,7 +1132,15 @@ function loseLife(): void {
 }
 
 function refreshHud(): void {
-  hud?.setText(`LIVES ${lives}`);
+  hudPips.forEach((pip, i) => {
+    // A spent life is not removed -- the empty socket is what says how many
+    // there were.
+    pip.setFillStyle(i < lives ? PALETTE.gold : PALETTE.slate);
+  });
+  if (player.floor !== hudFloorShown) {
+    hudFloorShown = player.floor;
+    hudFloor?.setText(`GIRDER ${player.floor + 1} / ${FLOORS.length}`);
+  }
 }
 
 function finish(won: boolean): void {
