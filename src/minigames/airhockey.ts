@@ -25,6 +25,12 @@ const GOAL_W = 64;
 const ROUND_GAP_MS = 3000;
 const PUCK_R = 4;
 const PAD_R = 9;
+/**
+ * How close a mallet may get to the puck while the count is running: touching
+ * it, plus a little daylight so it reads as being held off rather than as
+ * being stuck to it.
+ */
+const KEEP_OFF = PAD_R + PUCK_R + 3;
 const MAX_SPEED = 520;
 // Hard tier: it reads the puck sooner and misjudges it less.  At 140ms/18px it
 // was a warm-up opponent; the cabinet costs five tokens now.
@@ -131,16 +137,33 @@ export const airHockey: MinigameModule = {
       // Counted down where it can be seen: three seconds of a puck that will
       // not move is a broken game unless the game says what it is waiting for.
       countText?.setText(frozen > 0 ? `${Math.ceil(frozen / 1000)}` : '').setVisible(frozen > 0);
+
+      // ---- THE PUCK IS STILL.  THE PADDLES ARE NOT.
+      //
+      // The whole update used to return here, which froze the player's mallet
+      // to the felt for three seconds with the mouse moving under it.  You can
+      // take your position while the count runs -- and you cannot take it ON
+      // the spot: both mallets are held outside a ring round the puck, so
+      // nothing can be resting against it when the count ends and nobody gets
+      // a goal out of the wait.  Nothing in here touches the puck's position
+      // or its velocity.
+      followPointer(scene);
+      keepOffPuck(pad);
+      // The machine waits at its own end rather than crowding the spot.
+      const back = (150 * delta) / 1000;
+      aiPad.x += Phaser.Math.Clamp(TABLE.x + TABLE.w / 2 - aiPad.x, -back, back);
+      aiPad.y += Phaser.Math.Clamp(TABLE.y + 26 - aiPad.y, -back, back);
+      keepOffPuck(aiPad);
+      // The mallet is standing still as far as the first bounce is concerned:
+      // whatever the mouse did during the count is not a swing.  The machine's
+      // mallet is always treated as still -- see the collide call below.
+      padPrev = { x: pad.x, y: pad.y };
       return;
     }
     countText?.setVisible(false);
 
     // ---- player paddle follows the mouse, clamped to the lower half
-    const p = scene.input.activePointer;
-    const px = Phaser.Math.Clamp(p.worldX, TABLE.x + PAD_R, TABLE.x + TABLE.w - PAD_R);
-    const py = Phaser.Math.Clamp(p.worldY, TABLE.y + TABLE.h / 2 + PAD_R, TABLE.y + TABLE.h - PAD_R);
-    padPrev = { x: pad.x, y: pad.y };
-    pad.setPosition(px, py);
+    followPointer(scene);
 
     // ---- AI: chase a 140ms-old view of the puck
     history.push({ t: elapsed, x: puck.x, y: puck.y });
@@ -212,6 +235,37 @@ export const airHockey: MinigameModule = {
     apiRef = null;
   },
 };
+
+/** The player's mallet, under the mouse and inside its own half. */
+function followPointer(scene: Phaser.Scene): void {
+  if (!pad) return;
+  const p = scene.input.activePointer;
+  const px = Phaser.Math.Clamp(p.worldX, TABLE.x + PAD_R, TABLE.x + TABLE.w - PAD_R);
+  const py = Phaser.Math.Clamp(p.worldY, TABLE.y + TABLE.h / 2 + PAD_R, TABLE.y + TABLE.h - PAD_R);
+  padPrev = { x: pad.x, y: pad.y };
+  pad.setPosition(px, py);
+}
+
+/**
+ * Hold a mallet outside a ring round the puck, and move the MALLET to do it.
+ *
+ * Used only while the count is running.  A mallet that was allowed to rest
+ * against a stationary puck would be touching it the instant the count ended,
+ * which is a free goal for whoever got there first -- and pushing the puck out
+ * of the way instead would be the puck moving during a count that exists to
+ * keep it still.
+ */
+function keepOffPuck(p: Phaser.GameObjects.Arc): void {
+  if (!puck) return;
+  const dx = p.x - puck.x;
+  const dy = p.y - puck.y;
+  const d = Math.hypot(dx, dy);
+  if (d >= KEEP_OFF) return;
+  // Straight out from the puck; from exactly on top of it, downwards.
+  const nx = d === 0 ? 0 : dx / d;
+  const ny = d === 0 ? 1 : dy / d;
+  p.setPosition(puck.x + nx * KEEP_OFF, puck.y + ny * KEEP_OFF);
+}
 
 function collide(p: Phaser.GameObjects.Arc, padVel: Vec, delta: number): void {
   if (!puck) return;

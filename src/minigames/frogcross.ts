@@ -86,6 +86,8 @@ let over = false;
 let invulnMs = 0;
 let introMs = 0;
 let intro: Phaser.GameObjects.BitmapText | null = null;
+/** The controls, on their own line under the banner.  See `create`. */
+let introHint: Phaser.GameObjects.BitmapText | null = null;
 let introPlate: Phaser.GameObjects.Rectangle | null = null;
 let hud: { pts: Phaser.GameObjects.BitmapText; lives: Phaser.GameObjects.BitmapText; best: Phaser.GameObjects.BitmapText; bank: Phaser.GameObjects.BitmapText } | null = null;
 let apiRef: MinigameApi | null = null;
@@ -180,8 +182,18 @@ export const frogCross: MinigameModule = {
 
     // What to do, said once.  It fades after three seconds, and the frog
     // does not move until it has gone.
-    introPlate = scene.add.rectangle(GAME_W / 2, 100, 262, 26, PALETTE.black, 0.7).setDepth(39);
-    intro = centerText(scene, GAME_W / 2, 100, 'HOP ACROSS THE ROAD WITH WASD', PALETTE.gold, 16).setDepth(40);
+    // ---- IT HAS TO FIT ON THE SCREEN IT IS DRAWN ON.
+    //
+    // The font renders at whole multiples of its own cell, so size 16 is two
+    // pixels of advance per one: twenty-nine characters of "HOP ACROSS THE
+    // ROAD WITH WASD" is three hundred and forty-eight pixels on a three
+    // hundred and twenty pixel screen, and the player saw "OP ACROSS THE ROAD
+    // WITH WAS".  Nineteen characters is two hundred and twenty-eight, which
+    // fits inside the plate with room either side, and the controls go
+    // underneath at the ordinary size where they also fit.
+    introPlate = scene.add.rectangle(GAME_W / 2, 100, 262, 32, PALETTE.black, 0.7).setDepth(39);
+    intro = centerText(scene, GAME_W / 2, 94, 'HOP ACROSS THE ROAD', PALETTE.gold, 16).setDepth(40);
+    introHint = centerText(scene, GAME_W / 2, 110, 'WASD OR THE ARROWS', PALETTE.cream).setDepth(40);
 
     const kb = scene.input.keyboard;
     const on = (names: string[], fn: () => void) => names.forEach((n) => kb?.on(`keydown-${n}`, fn));
@@ -221,11 +233,14 @@ export const frogCross: MinigameModule = {
       // the last 600ms fade it out
       const a = Math.min(1, Math.max(0, introMs / 600));
       intro?.setAlpha(a);
+      introHint?.setAlpha(a);
       introPlate?.setAlpha(a * 0.7);
       if (introMs <= 0) {
         intro?.destroy();
+        introHint?.destroy();
         introPlate?.destroy();
         intro = null;
+        introHint = null;
         introPlate = null;
       }
     }
@@ -251,6 +266,7 @@ export const frogCross: MinigameModule = {
     sprite = null;
     eyes = null;
     intro = null;
+    introHint = null;
     introPlate = null;
     hud = null;
     apiRef = null;
