@@ -103,11 +103,11 @@ const ID = 'frograce' as const;
  * (green and yellow) differ most in brightness, which is the pair a colour
  * blind player has to tell apart.
  */
-const RUNNERS: Array<{ name: string; skin: number; lit: number; dark: number }> = [
-  { name: 'GREEN', skin: 0x46a83f, lit: 0x7ad06a, dark: 0x235c26 },
-  { name: 'RED', skin: 0xd8443c, lit: 0xf5847a, dark: 0x7d1e1c },
-  { name: 'BLUE', skin: 0x3d8fdd, lit: 0x79c2f5, dark: 0x1c4a86 },
-  { name: 'YELLOW', skin: 0xf0c33c, lit: 0xffe89a, dark: 0x9a7412 },
+const RUNNERS: Array<{ name: string; skin: number; lit: number; dark: number; cheek: number }> = [
+  { name: 'GREEN', skin: 0x5fc457, lit: 0x9ae88a, dark: 0x2f7a37, cheek: 0xff9aa8 },
+  { name: 'RED', skin: 0xf2685e, lit: 0xffa79c, dark: 0xa8362f, cheek: 0xffc2b0 },
+  { name: 'BLUE', skin: 0x59a9ef, lit: 0x9fd6ff, dark: 0x2c66ad, cheek: 0xffa3b8 },
+  { name: 'YELLOW', skin: 0xf8d45c, lit: 0xfff3b8, dark: 0xb88f1e, cheek: 0xffab8f },
 ];
 
 /**
@@ -180,22 +180,83 @@ const DIST = FINISH_X - START_X;
  * carrying the wind, and gives up three per cent for it.
  */
 const BASE = 8.4;
-const SPREAD = 1.15;
-const WOBBLE = 2.6;
+const SPREAD = 1.6;
+const WOBBLE = 5.5;
 /** Held for the whole race: uniform over ±LUCK. */
 const LUCK = 0.7;
 /** The slow walk: how hard it is kicked per second, how fast it is pulled back, and its ceiling. */
 const DRIFT_KICK = 5;
 const DRIFT_PULL = 2.2;
-const DRIFT_MAX = 1.5;
+const DRIFT_MAX = 2.2;
 /** Every frog gets one, somewhere in the middle third.  Small: it is a nudge. */
-const SURGE = 1.6;
+const SURGE = 2.6;
 
-/** ---- THE TOW ROPE.  See the block above. */
-const CATCH_GAIN = 3.2;
+/**
+ * ---- THE CONVOY, which is how the field is shaped.
+ *
+ * A spring on the MEAN of the race was the first go at this and it makes a
+ * blob: the force only knows how far a frog is from the middle, so pairs
+ * either sit on top of each other or string right out, and four frogs
+ * converge on one x and cross the line as one shape.  That is not a close
+ * race, it is a tie with four colours in it.
+ *
+ * What the player actually reads is THE GAP TO THE FROG IN FRONT, so that is
+ * what is shaped.  Every frog wants to sit in a band behind the one ahead of
+ * it: closer than `GAP_MIN` it eases off, further than `GAP_MAX` it presses
+ * on.  Four frogs each holding a three-to-six pixel gap is a ladder -- a
+ * first, a second, a third and a fourth, all of them in shot, none of them
+ * on top of another -- and at nine pixels a second that band is between a
+ * third and three quarters of a second of running.
+ *
+ * It does not stop anybody passing.  The ease is a fifth of pace, which a
+ * frog with a boost or a good patch goes straight through; what it stops is
+ * two frogs sharing one x for four seconds because neither can get by.
+ */
+const GAP_MIN = 4;
+const GAP_MAX = 5;
+const SEP_EASE = 0.55;
+const CONVOY_GAIN = 0.09;
+const CONVOY_MAX = 0.5;
+/**
+ * ---- AND THE LAST FEW PIXELS, WHICH ARE THE ONES THE PLAYER LOOKS AT.
+ *
+ * Inside `FINISH_CLEAR` -- about three seconds of running -- the no-overlap
+ * band is widened, so a frog closing on the leader over the run-in is held a
+ * body clear of it instead of arriving alongside.  Ten pixels was not enough:
+ * a frog coming fast arrives two pixels down and the leader crosses while it
+ * is still there, which is the photo finish this race is not allowed to have.
+ * Three seconds is long enough for the ease to actually open a gap, and it is
+ * the stretch the player is watching, so the frogs go over the line in a
+ * readable order with daylight between them.
+ */
+const FINISH_CLEAR = 26;
+const FINISH_GAP_MUL = 1.8;
+
+/** The convoy pulls a little tighter over the last stretch.  A little. */
 const CLOSING_FROM = 0.62;
-const CLOSING_MUL = 2.6;
-const LEADER_DRAG = 0.97;
+const CLOSING_MUL = 1.35;
+/**
+ * Whoever is in front is carrying the wind, and it is worth more than it
+ * looks.  The leader is the one frog with no convoy force on it -- nobody
+ * ahead to hold a gap on -- so without a cost to leading it simply keeps
+ * going and the frog in front at two thirds wins three races in four.  Four
+ * and a half per cent is invisible in any one second and means the lead is
+ * something that has to be held rather than something that is won early.
+ */
+const LEADER_DRAG = 0.955;
+
+/**
+ * ---- AND A ROPE FOR ANYBODY WHO HAS DROPPED RIGHT OFF.
+ *
+ * The convoy cannot help a frog that has just spent four seconds asleep: its
+ * neighbour is thirty pixels up the road and the band it is trying to hold is
+ * six.  This is the backstop, and it is deliberately blunt -- nothing at all
+ * until a frog is `TOW_DEAD` behind the middle of the race, and never worth
+ * more than `RESCUE_MAX` when it is.
+ */
+const TOW_DEAD = 14;
+const RESCUE_GAIN = 0.022;
+const RESCUE_MAX = 0.3;
 
 /**
  * THE RACE IS THIRTY SECONDS.  BASE is set so a clean run is home at about
@@ -404,12 +465,21 @@ const HOLE_BACK = 4;
  */
 const JET_CHANCE = 0.2;
 const JET_WINDOW_S = 2.5;
-// AIMED WIDER THAN IT USED TO BE.  With the field this tight the leader's
-// arrival is far easier to predict than it was, so a burn sized under it beat
-// that leader nine times out of ten -- which turns a comeback into a coin
-// flip on who happened to be last.  Straddling further either side puts it
-// behind about as often as in front.
-const JET_AIM = { min: 0.86, max: 1.12 };
+/**
+ * WHERE THE BURN IS AIMED, and why there is a hole in the middle of it.
+ *
+ * A jetpack does not queue: it is the one thing in the race that ignores the
+ * convoy, so a burn aimed AT the leader's arrival lands level with it and the
+ * race ends in a dead heat nobody can read.  That was a tenth of all finishes
+ * and every one of them was a jetpack.
+ *
+ * So it is aimed at one side or the other and never at the middle: half the
+ * time it goes for a length in front, half the time it comes up a length
+ * short.  The coin flip is intact -- it takes about half the races it
+ * appears in -- and both outcomes are something the player can see.
+ */
+const JET_AIM_EARLY = { min: 0.78, max: 0.9 };
+const JET_AIM_LATE = { min: 1.1, max: 1.3 };
 const JET_MAX_SPEED = 90;
 const JET_LIFT = 7;
 const JET_RISE_S = 0.25;
@@ -433,7 +503,7 @@ const BAND_TO = 0.68;
 const EXTRA_MIN = 1;
 const EXTRA_MAX = 2;
 /** Nothing new starts after this much of the race has gone. */
-const LAST_CALL = 0.82;
+const LAST_CALL = 0.78;
 
 /** One booked effect: when it goes off, who it goes off on, and what it is. */
 interface Booking {
@@ -486,16 +556,35 @@ function tow(r: Run, field: Run[] | undefined): number {
   let sum = 0;
   let n = 0;
   let lead = -1;
+  // The nearest frog in front of this one, which is the one it has to not run
+  // into.  Lanes do not come into it: what the player reads as a gap is the
+  // distance up the TRACK, whatever lane it is in.
+  let ahead = Infinity;
   for (const o of field) {
     if (o.going === 'taken') continue;
     sum += o.x;
     n++;
     if (o.x > lead) lead = o.x;
+    if (o !== r && o.x > r.x) ahead = Math.min(ahead, o.x - r.x);
   }
   if (!n) return 1;
-  const behind = (sum / n - r.x) / DIST;
-  const gain = r.x / DIST >= CLOSING_FROM ? CATCH_GAIN * CLOSING_MUL : CATCH_GAIN;
-  const pull = Phaser.Math.Clamp(1 + gain * behind, 0.72, 1.7);
+  let pull = 1;
+
+  // ---- THE CONVOY.  Hold a gap on the frog in front: ease off inside it,
+  // press on outside it, and do nothing at all in between.  The leader has
+  // nobody in front and is left alone.
+  const keep = r.x > DIST - FINISH_CLEAR ? GAP_MIN * FINISH_GAP_MUL : GAP_MIN;
+  if (ahead < keep) {
+    pull *= SEP_EASE + (1 - SEP_EASE) * (ahead / keep);
+  } else if (ahead > GAP_MAX && ahead < Infinity) {
+    const gain = r.x / DIST >= CLOSING_FROM ? CONVOY_GAIN * CLOSING_MUL : CONVOY_GAIN;
+    pull *= 1 + Math.min(CONVOY_MAX, (ahead - GAP_MAX) * gain);
+  }
+
+  // ---- THE BACKSTOP, for a frog that has dropped right off the race.
+  const off = sum / n - r.x;
+  if (off > TOW_DEAD) pull *= 1 + Math.min(RESCUE_MAX, (off - TOW_DEAD) * RESCUE_GAIN);
+
   // And whoever is actually in front is carrying the wind.
   return r.x >= lead - 0.5 ? pull * LEADER_DRAG : pull;
 }
@@ -803,6 +892,21 @@ export const frogRace: MinigameModule = {
           let lateSum = 0;
           let heldOn = 0;
           let effTotal = 0;
+          // ---- THE SPACING, which is what a player actually reads.
+          //
+          // Measured between NEIGHBOURS in the running order rather than
+          // between first and last: what says "he is second and he is third"
+          // is the gap between those two, and a field can be four pixels end
+          // to end with three invisible gaps in it.  Reported in seconds of
+          // running, because that is the unit the race is designed in.
+          let adjSum = 0;
+          let adjN = 0;
+          let adjTightest = 999;
+          let sameSpot = 0;
+          let marginSum = 0;
+          let marginWorst = 999;
+          let swaps = 0;
+          let tooClose = 0;
           for (let k = 0; k < n; k++) {
             const runs = toRuns(makeField());
             const b = makeBird();
@@ -814,6 +918,8 @@ export const frogRace: MinigameModule = {
             let done = 0;
             let leadLate = -1;
             let spreadLate = 0;
+            let wasLead = -1;
+            let sampled = 0;
             while (t < RACE_S) {
               t += dt;
               stepCard(cd, runs, b, f, t);
@@ -825,11 +931,36 @@ export const frogRace: MinigameModule = {
                 leadLate = runs.reduce((a, o) => (o.x > a.x ? o : a)).i;
                 spreadLate = Math.max(...runs.map((o) => o.x)) - Math.min(...runs.map((o) => o.x));
               }
+              // Every tenth of a second: the gaps between neighbours, and
+              // whether the frog in front has changed.
+              if (t - sampled >= 0.1) {
+                sampled = t;
+                const order = [...runs].sort((a, o) => o.x - a.x);
+                if (order[0].i !== wasLead) {
+                  if (wasLead >= 0) swaps++;
+                  wasLead = order[0].i;
+                }
+                for (let q = 1; q < order.length; q++) {
+                  const gap = order[q - 1].x - order[q].x;
+                  adjSum += gap;
+                  adjN++;
+                  adjTightest = Math.min(adjTightest, gap);
+                  if (gap < 2) sameSpot++;
+                }
+              }
               if (runs.some((r) => r.going !== 'taken' && r.x >= DIST)) {
                 done = t;
                 break;
               }
             }
+            // How far clear the winner was as it crossed.
+            const line = [...runs].sort((a, o) => o.x - a.x);
+            const margin = line.length > 1 ? line[0].x - line[1].x : 0;
+            marginSum += margin;
+            marginWorst = Math.min(marginWorst, margin);
+            // Two pixels is half a frog: under that the player cannot see who
+            // won, which is the one finish this race is not allowed to have.
+            if (margin < 2) tooClose++;
             if (!done) capped++;
             total += done || RACE_S;
             // How close they were at the line, and at two thirds.
@@ -863,6 +994,15 @@ export const frogRace: MinigameModule = {
             meanGapTwoThirds: lateSum / n,
             leaderHeldOn: heldOn / n,
             dist: DIST,
+            // ---- spacing, in seconds of running
+            meanNeighbourGap: adjN ? adjSum / adjN / BASE : 0,
+            tightestGap: adjTightest / BASE,
+            /** How much of the race has two frogs inside two pixels of each other. */
+            onTopOfEachOther: adjN ? sameSpot / adjN : 0,
+            meanWinMargin: marginSum / n / BASE,
+            closestFinish: marginWorst / BASE,
+            leadChanges: swaps / n,
+            tooCloseToCall: tooClose / n,
           };
         },
         /**
@@ -1131,6 +1271,21 @@ export const frogRace: MinigameModule = {
         body.setRotation(p.rot + gust + lean);
         body.y = laneY - r.lift + FOOT * (1 - p.sy);
       }
+
+      // ---- THE FACE.  A blink on its own clock, and a mood read off what
+      // the race is doing to this frog.  Nothing here is decided twice: the
+      // expression is a function of the state the model already keeps.
+      let blinkIn = (body.getData('blinkIn') as number) - delta;
+      let blinking = (body.getData('blink') as number) - delta;
+      if (blinkIn <= 0) {
+        blinking = 110;
+        blinkIn = 1600 + Math.random() * 3200;
+      }
+      body.setData('blinkIn', blinkIn);
+      body.setData('blink', Math.max(0, blinking));
+      // A blink is a lid down and up inside a tenth of a second.
+      const shut = blinking > 0 ? Math.sin((1 - blinking / 110) * Math.PI) : 0;
+      wearMood(body, moodOf(r, clock), shut, dt);
 
       // ---- THE EXTRAS.  Each is a child of the frog, so it moves, scales and
       // turns with it and cannot drift off the body it belongs to.
@@ -1637,7 +1792,8 @@ function stepJet(j: Jet, runs: Run[], raceT: number, dt: number): void {
   const last = live.reduce((a, b) => (b.x < a.x ? b : a));
   if (last === leader) return;
 
-  const aim = JET_AIM.min + Math.random() * (JET_AIM.max - JET_AIM.min);
+  const band = Math.random() < 0.5 ? JET_AIM_EARLY : JET_AIM_LATE;
+  const aim = band.min + Math.random() * (band.max - band.min);
   const burn = Phaser.Math.Clamp(endsIn * aim, 0.3, Math.max(0.3, RACE_S - raceT - 0.05));
   const need = (DIST - last.x) / burn;
   if (need > JET_MAX_SPEED) return;
@@ -2147,6 +2303,136 @@ function makeFlyArt(scene: Phaser.Scene): Phaser.GameObjects.Container {
 }
 
 /**
+ * ---- WHAT A FROG'S FACE IS DOING, and what decides it.
+ *
+ * One function, read off the state the model already keeps: there is no
+ * second set of flags saying "look worried" that could drift out of step with
+ * what is actually happening to the frog.  Every field is optional, so a mood
+ * only has to say what makes it different from an ordinary running frog.
+ *
+ *   eye     how open the eyes are: 1 wide, 0 shut
+ *   iris    where the pupils sit, in pixels -- up, down, left, right
+ *   big     pupil size, which is most of what reads as surprise
+ *   smile   +1 a grin, 0 a flat line, -1 a worried curve
+ *   open    the mouth as an O, for a gasp
+ *   brow    a pair of brows, for determination and for annoyance
+ *   squash  the whole head, for a bounce
+ */
+interface Mood {
+  eye?: number;
+  irisX?: number;
+  irisY?: number;
+  big?: number;
+  smile?: number;
+  open?: number;
+  brow?: number;
+}
+
+/** The mood a frog is in, decided entirely by what the race is doing to it. */
+function moodOf(r: Run, clock: number): Mood {
+  if (r.going === 'taken') {
+    // ---- IN THE BIRD'S FEET: eyes wide, mouth open, brows up.
+    return { eye: 1, big: 1.35, open: 1, smile: -1, irisY: -0.6 };
+  }
+  if (r.jet > 0) {
+    // ---- ON THE JETPACK: delighted, eyes forward, teeth out.
+    return { eye: 1, big: 1.1, smile: 1, irisX: 1.1, brow: -1 };
+  }
+  if (r.going === 'sleep') {
+    // ---- ASLEEP: shut, and a small contented smile.
+    return { eye: r.stuck < WAKE_S ? 1 - r.stuck / WAKE_S : 0, smile: 0.6 };
+  }
+  if (r.going === 'slip') {
+    // ---- OVER IT GOES: shocked, then sheepish as it gets back up.
+    const early = r.stuck > SLIP_S * 0.45;
+    return early ? { eye: 1, big: 1.5, open: 1, smile: -1 } : { eye: 0.55, smile: -0.4, irisY: 0.5 };
+  }
+  if (r.going === 'balloon') {
+    // ---- GOING UP: thrilled, looking at the balloon.
+    return { eye: 1, big: 1.25, smile: 1, irisY: -0.9, open: 0.6 };
+  }
+  if (r.going === 'jump') {
+    // ---- AIRBORNE AND LOVING IT.
+    return { eye: 1, big: 1.15, smile: 1, irisY: -0.4 };
+  }
+  if (r.going === 'eat') {
+    // ---- MID-LICK: eyes on the fly, mouth open.
+    return { eye: 1, smile: 1, open: 1, irisX: 1.2 };
+  }
+  if (r.going === 'hole') {
+    return { eye: 0.8, smile: -0.7, irisY: 0.4, brow: 1 };
+  }
+  if (r.mud > 0) {
+    // ---- MUD: not hurt, just fed up.
+    return { eye: 0.7, smile: -0.5, brow: 1, irisX: -0.4 };
+  }
+  if (r.boost > 0 || r.gold > 0) {
+    // ---- BOOST: chin down, eyes front, absolutely going for it.
+    return { eye: 0.85, smile: 1, brow: -1, irisX: 1.2, big: 1.05 };
+  }
+  if (r.wind > 0) {
+    return { eye: 0.65, smile: -0.3, irisX: r.windDir * 0.8 };
+  }
+  // ---- OTHERWISE: running along, having a look about every few seconds.
+  const look = Math.sin(clock / 900);
+  return { eye: 1, smile: 0.7, irisX: Math.abs(look) > 0.8 ? Math.sign(look) * 0.9 : 0 };
+}
+
+/**
+ * Put a mood on a frog's face.  Drawing only: nothing in here is read back by
+ * anything, and every value eases towards its target so an expression changes
+ * over a few frames rather than snapping between two faces.
+ */
+function wearMood(body: Phaser.GameObjects.Container, m: Mood, blink: number, dt: number): void {
+  const eyes = body.getData('eyes') as Array<Record<string, Phaser.GameObjects.Shape>>;
+  const [mouthL, mouthR] = body.getData('mouth') as Phaser.GameObjects.Rectangle[];
+  const gape = body.getData('gape') as Phaser.GameObjects.Ellipse;
+  const brows = body.getData('brows') as Phaser.GameObjects.Rectangle[];
+  const k = Math.min(1, dt * 12);
+
+  const openWant = Math.min(m.eye ?? 1, 1 - blink);
+  const held = (body.getData('eyeNow') as number) ?? 1;
+  const now = held + (openWant - held) * k;
+  body.setData('eyeNow', now);
+
+  eyes.forEach((e, i) => {
+    const side = i === 0 ? -1 : 1;
+    // The lid closes over the eye from the top.
+    (e.lid as Phaser.GameObjects.Ellipse).setScale(1, Phaser.Math.Clamp(1 - now, 0, 1) * 1.05);
+    const iris = e.iris as Phaser.GameObjects.Arc;
+    const wantX = side * 3.6 + (m.irisX ?? 0);
+    const wantY = -5.6 + (m.irisY ?? 0);
+    iris.setPosition(iris.x + (wantX - iris.x) * k, iris.y + (wantY - iris.y) * k);
+    const big = m.big ?? 1;
+    iris.setScale(iris.scaleX + (big - iris.scaleX) * k);
+    (e.glint as Phaser.GameObjects.Arc).setVisible(now > 0.45);
+    (e.spark as Phaser.GameObjects.Arc).setVisible(now > 0.6);
+  });
+
+  // The mouth: two bars that tip up for a smile and down for a worry.
+  const smile = m.smile ?? 0;
+  const tip = 0.45 * smile;
+  mouthL.setRotation(mouthL.rotation + (tip - mouthL.rotation) * k);
+  mouthR.setRotation(mouthR.rotation + (-tip - mouthR.rotation) * k);
+  mouthL.setPosition(-1.6, -0.6 - smile * 0.5);
+  mouthR.setPosition(1.6, -0.6 - smile * 0.5);
+  const gasping = (m.open ?? 0) > 0;
+  gape.setVisible(gasping);
+  if (gasping) gape.setScale(0.7 + (m.open ?? 0) * 0.5);
+  mouthL.setVisible(!gasping);
+  mouthR.setVisible(!gasping);
+
+  const brow = m.brow ?? 0;
+  brows.forEach((b, i) => {
+    b.setVisible(brow !== 0);
+    if (!brow) return;
+    const side = i === 0 ? -1 : 1;
+    b.setRotation(side * 0.4 * brow);
+    b.setY(-8.4 + brow * 0.5);
+  });
+}
+
+/**
  * ONE FROG, IN THREE TONES.
  *
  * It was a flat ellipse with two dots on it.  A frog at eleven pixels can
@@ -2160,33 +2446,85 @@ function makeFlyArt(scene: Phaser.Scene): Phaser.GameObjects.Container {
  * off the body they belong to.
  */
 function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.GameObjects.Container {
-  const { skin, lit, dark } = kit;
+  const { skin, lit, dark, cheek } = kit;
+  // ---- THE PROPORTIONS ARE THE CUTENESS.
+  //
+  // Big head, big eyes, small round body, short limbs, oversized feet.  The
+  // old frog was a twelve by nine body with two small eyes on top of it --
+  // correct for a frog and charmless.  The head is now most of the animal and
+  // the eyes are most of the head, which is the whole trick.
   const parts = [
-    // haunches first, so the body sits over them
-    scene.add.ellipse(-4, 2, 6, 5, dark),
-    scene.add.ellipse(4, 2, 6, 5, dark),
-    // the feet, splayed
-    scene.add.ellipse(-6, 4, 5, 2, dark),
-    scene.add.ellipse(6, 4, 5, 2, dark),
-    // the body, and the light down its back
-    scene.add.ellipse(0, 0, 12, 9, skin),
-    scene.add.ellipse(0, -2, 9, 4, lit).setAlpha(0.75),
-    // the belly, in shadow
-    scene.add.ellipse(0, 3, 8, 3, dark).setAlpha(0.55),
-    scene.add.ellipse(0, 2.6, 6, 2, 0xf4f7fb).setAlpha(0.22),
-    // eye mounds, eyes, pupils and a glint apiece
-    scene.add.circle(-3, -4.5, 2.8, skin),
-    scene.add.circle(3, -4.5, 2.8, skin),
-    scene.add.circle(-3, -4.8, 2.1, 0xf4f7fb),
-    scene.add.circle(3, -4.8, 2.1, 0xf4f7fb),
-    scene.add.circle(-3, -4.8, 1.1, PALETTE.black),
-    scene.add.circle(3, -4.8, 1.1, PALETTE.black),
-    scene.add.circle(-3.6, -5.4, 0.5, PALETTE.white).setAlpha(0.9),
-    scene.add.circle(2.4, -5.4, 0.5, PALETTE.white).setAlpha(0.9),
-    // the mouth, one dark line
-    scene.add.rectangle(0, -0.5, 7, 1, dark).setAlpha(0.7),
+    // ---- the feet, which are deliberately too big for it
+    scene.add.ellipse(-6, 5, 8, 3.2, dark),
+    scene.add.ellipse(6, 5, 8, 3.2, dark),
+    scene.add.ellipse(-6, 4.6, 7, 2.4, skin).setAlpha(0.85),
+    scene.add.ellipse(6, 4.6, 7, 2.4, skin).setAlpha(0.85),
+    // ---- short limbs, tucked in under it
+    scene.add.ellipse(-4.5, 2.5, 4.5, 4, dark),
+    scene.add.ellipse(4.5, 2.5, 4.5, 4, dark),
+    // ---- a small round body, with a rim of its own shadow colour behind it.
+    //
+    // THE RIM IS WHAT KEEPS A GREEN FROG OFF GREEN GRASS.  Without it the
+    // green one disappears into its lane whenever it stops moving, and the
+    // whole race depends on being able to tell four colours apart at a
+    // glance.  It is the frog's own dark tone, so it reads as the shaded
+    // underside of a round animal rather than as an outline drawn round it.
+    scene.add.ellipse(0, 1.5, 11.6, 9, dark),
+    scene.add.ellipse(0, 1.5, 10, 7.5, skin),
+    scene.add.ellipse(0, 3, 7, 3.4, 0xfff6e0).setAlpha(0.5),
+    // ---- and a big soft head over it
+    scene.add.ellipse(0, -3, 14.6, 11.5, dark),
+    scene.add.ellipse(0, -3, 13, 10, skin),
+    // the light on top of the head, which is what makes it look rounded
+    scene.add.ellipse(0, -6, 9.5, 4.5, lit).setAlpha(0.8),
+    scene.add.ellipse(-2.5, -7, 4, 2.2, 0xffffff).setAlpha(0.22),
+    // cheeks
+    scene.add.ellipse(-5, -1.2, 3.6, 2.4, cheek).setAlpha(0.55),
+    scene.add.ellipse(5, -1.2, 3.6, 2.4, cheek).setAlpha(0.55),
   ];
   const c = scene.add.container(0, 0, parts).setDepth(10);
+
+  // ---- THE FACE, which is its own group so it can be given an expression.
+  //
+  // Eye mound, white, iris, pupil and a glint apiece, plus a lid that drops
+  // over the top for a blink and a squint.  The mouth is a separate piece so
+  // it can be a smile, an O of surprise or a flat line of concentration
+  // without anything else on the frog having to change.
+  const eye = (side: number) => {
+    const rim = scene.add.circle(side * 3.6, -5.5, 4.1, dark);
+    const mound = scene.add.circle(side * 3.6, -5.5, 3.6, skin);
+    void rim;
+    const white = scene.add.circle(side * 3.6, -5.8, 3.0, 0xffffff);
+    const iris = scene.add.circle(side * 3.6, -5.6, 1.9, PALETTE.black);
+    const glint = scene.add.circle(side * 3.6 - 0.9, -6.6, 0.9, 0xffffff).setAlpha(0.95);
+    const spark = scene.add.circle(side * 3.6 + 0.9, -4.9, 0.45, 0xffffff).setAlpha(0.7);
+    // The lid comes down over the eye FROM ITS TOP EDGE: with the origin at
+    // the top, scaleY 0 is a lid that is not there and 1 is an eye shut.  A
+    // lid that scales about its own middle closes over the centre of the eye
+    // and leaves a ring of white showing all round it, which is not a blink,
+    // it is a mask.
+    const lid = scene.add.ellipse(side * 3.6, -8.9, 6.8, 6.6, skin).setOrigin(0.5, 0).setScale(1, 0);
+    return { rim, mound, white, iris, glint, spark, lid };
+  };
+  const eyes = [eye(-1), eye(1)];
+  for (const e of eyes) c.add([e.rim, e.mound, e.white, e.iris, e.glint, e.spark, e.lid]);
+  // A smile: two short bars that meet in the middle and turn up at the ends.
+  const mouthL = scene.add.rectangle(-1.6, -0.6, 3.6, 1.3, 0x2a1a20).setAlpha(0.9);
+  const mouthR = scene.add.rectangle(1.6, -0.6, 3.6, 1.3, 0x2a1a20).setAlpha(0.9);
+  const gape = scene.add.ellipse(0, 0.2, 4, 3.6, 0x6b2430).setVisible(false);
+  // Brows sit ON the head, not above it: the head's top edge is about -8, and
+  // a brow drawn at -9.6 is a pair of sticks floating over a frog.
+  const brows = [-1, 1].map((side) =>
+    scene.add.rectangle(side * 3.6, -8.4, 3.6, 1, dark).setAlpha(0.85).setVisible(false),
+  );
+  c.add([gape, mouthL, mouthR, ...brows]);
+  c.setData('eyes', eyes);
+  c.setData('mouth', [mouthL, mouthR]);
+  c.setData('gape', gape);
+  c.setData('brows', brows);
+  // Everybody blinks, and not in time with each other.
+  c.setData('blinkIn', 1200 + Math.random() * 2600);
+  c.setData('blink', 0);
 
   // ---- a Z coming off a sleeping frog
   const zzz = text(scene, 4, -10, 'Z', PALETTE.bone).setVisible(false);
