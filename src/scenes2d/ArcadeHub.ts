@@ -107,6 +107,8 @@ export class ArcadeHub extends Phaser.Scene {
   /** Whoever is on the counter.  One of these is null at all times. */
   private staff: CounterStaff | null = null;
   private frogOnCounter = false;
+  /** Kept so the room can tell who is on the counter without guessing. */
+  private frog: Phaser.GameObjects.Image | null = null;
   private frogT = 0;
   /** Whether he has already said it since the player last walked away. */
   private frogSpoke = false;
@@ -375,6 +377,7 @@ export class ArcadeHub extends Phaser.Scene {
     if (store.get().froggyGone) {
       this.staff = new CounterStaff(this, COUNTER_POST.x, COUNTER_POST.y, STAFF_DEPTH);
       this.frogOnCounter = false;
+      this.frog = null;
       // Phaser reuses scene instances, so the tween inside him has to be
       // stopped with the room or it keeps running against a destroyed object.
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -384,17 +387,62 @@ export class ArcadeHub extends Phaser.Scene {
       return;
     }
     this.frogOnCounter = true;
+    this.frog = this.drawFrogOnCounter();
   }
 
   /**
-   * Froggy, leaning on the prize counter, painted straight onto the overlay.
+   * ---- HIM, BAKED INTO A TEXTURE AND PUT IN THE ROOM.
    *
-   * CLIPPED TO ABOVE THE COUNTER.  The overlay sits over the whole Phaser
-   * canvas, so an unclipped drawing would put him in FRONT of the counter --
-   * standing on the customer's side of it.  Everything below the counter's top
-   * edge is cut away, which leaves exactly what a person behind a counter
-   * shows: head, shoulders, and his hands on the glass.
+   * He was painted straight onto the overlay, which is a canvas ABOVE the
+   * whole Phaser canvas: whatever was clipped off him, everything left was
+   * drawn in front of every other thing in the room -- including the player,
+   * who is twenty-eight pixels tall and whose head comes up well past the
+   * counter when he stands at it.  A mascot drawn over the customer's face is
+   * a mascot standing in FRONT of the counter, which is the one place he is
+   * not.
+   *
+   * The drawing is rendered ONCE into a texture instead and hung in the scene
+   * like any other piece of furniture, at a depth just under the counter's.
+   * The counter then covers him from the chest down, the player walks in front
+   * of him, and the two of them sort themselves out the way everything else in
+   * this room does.
    */
+  private drawFrogOnCounter(): Phaser.GameObjects.Image {
+    const key = 'hub-counter-froggy';
+    if (this.textures.exists(key)) this.textures.remove(key);
+    const w = 44;
+    const h = FROG_POST.height + 6;
+    const tex = this.textures.createCanvas(key, w, h)!;
+    const ctx = tex.getContext();
+    ctx.clearRect(0, 0, w, h);
+    drawFroggy(ctx, {
+      x: w / 2,
+      y: h - 2,
+      height: FROG_POST.height,
+      variant: 'cozy',
+      pose: 'idleA',
+      bounce: 0.55,
+    });
+    tex.refresh();
+    const img = this.add.image(FROG_POST.x, FROG_POST.y, key).setOrigin(0.5, 1).setDepth(STAFF_DEPTH);
+    // The same slow breath the staff who replace him have, so the counter is
+    // never completely still whoever is on it.
+    this.tweens.add({
+      targets: img,
+      y: FROG_POST.y - 1,
+      duration: 2100,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.InOut',
+    });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (this.textures.exists(key)) this.textures.remove(key);
+      this.frog = null;
+    });
+    return img;
+  }
+
+  /** What he does every frame, which is say hello and nothing else. */
   private stepCounterFroggy(delta: number): void {
     if (!this.frogOnCounter) return;
     this.frogT += delta;
@@ -405,6 +453,7 @@ export class ArcadeHub extends Phaser.Scene {
     // to press.  It re-arms when the player leaves, so it is a greeting rather
     // than a loop -- he says it once each time you come over, and never twice
     // for one visit.
+    if (!this.frog) return;
     const near = Math.hypot(this.player.x - FROG_POST.x, this.player.y - (COUNTER.y + 24)) < 46;
     if (near && !this.frogSpoke && !this.busy()) {
       this.frogSpoke = true;
@@ -412,21 +461,6 @@ export class ArcadeHub extends Phaser.Scene {
     } else if (!near && Math.hypot(this.player.x - FROG_POST.x, this.player.y - (COUNTER.y + 24)) > 70) {
       this.frogSpoke = false;
     }
-    froggyLayer.paint((ctx) => {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, 0, GAME_W, COUNTER.y + 2);
-      ctx.clip();
-      drawFroggy(ctx, {
-        x: FROG_POST.x,
-        y: FROG_POST.y,
-        height: FROG_POST.height,
-        variant: 'cozy',
-        pose: 'idleA',
-        bounce: Math.sin(this.frogT / 620) * 0.5 + 0.5,
-      });
-      ctx.restore();
-    });
   }
 
   /**

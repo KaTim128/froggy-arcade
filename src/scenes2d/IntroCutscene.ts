@@ -183,7 +183,15 @@ export class IntroCutscene extends Phaser.Scene {
       startSignFlicker(this, refs);
 
       // Sat on the kerb, off to one side of the doors, out of everyone's way.
-      this.player = new Player(this, MAN_X + 34, KERB_Y, true);
+      //
+      // DAY COLOURS.  The street this beat is painted with is `day: true` --
+      // teal sky, the sun up, the front of the arcade lit -- and the figure on
+      // the kerb was being built with the NIGHT flag on, which runs every one
+      // of his colours through `nightify`: the cream cap, the brown coat and
+      // the rust trousers all came out the same desaturated blue-grey.  He is
+      // the same man the player walks around the arcade as, so he is the same
+      // colours as him.
+      this.player = new Player(this, MAN_X + 34, KERB_Y, false);
       this.player.sprite.setScale(1, 0.72); // sitting: the same body, folded up
 
       this.caption = centerText(this, GAME_W / 2, GAME_H - 20, '', PALETTE.cream).setDepth(900);
