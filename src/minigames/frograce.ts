@@ -103,8 +103,30 @@ const RUNNERS: Array<{ name: string; colour: number }> = [
   { name: 'VIOLET', colour: 0xa86ad8 },
 ];
 
+/**
+ * HOW MANY FROGS ARE IN THE RACE, AND WHERE THAT NUMBER LIVES.
+ *
+ * `RUNNERS` is the field, and runners have been commented out of it before --
+ * it was seven and it is four.  Everything that used to say "seven" out loud
+ * says this instead: the ratings spread, the card, the row prompt and the keys
+ * the player can press.  A field of four with a card promising seven is a
+ * machine lying to the person betting on it.
+ */
+const FIELD = RUNNERS.length;
+const COUNT_WORD = ['NO', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'];
+/** `FOUR`, `SEVEN`... and the number itself for a field too big to have a word here. */
+const FIELD_WORD = COUNT_WORD[FIELD] ?? `${FIELD}`;
+
 const LANE_T = 44;
-const LANE_H = 15;
+/**
+ * HOW DEEP A LANE IS, which depends on how many there are.
+ *
+ * Fifteen was right for seven of them and leaves a four frog field racing
+ * across the top third of the cabinet with half the screen empty under it.
+ * The lanes take the room the field does not: the track always fills the same
+ * band, whether that is seven thin lanes or four generous ones.
+ */
+const LANE_H = Math.max(15, Math.min(24, Math.floor(96 / FIELD)));
 const START_X = 42;
 const FINISH_X = GAME_W - 30;
 /** One square of the chequered tape, in pixels. */
@@ -537,11 +559,11 @@ export const frogRace: MinigameModule = {
   id: ID,
   title: 'FROG RACE',
   music: 'game_frograce',
-  rules: 'pick one, seven run',
+  rules: `pick one, ${FIELD} run`,
   payoutNote: 'WIN: 20 A TICKET',
   tutorial: {
     objective: [
-      'SEVEN FROGS RACE. BACK ONE OF THEM.',
+      `${FIELD_WORD} FROGS RACE. BACK ONE OF THEM.`,
       'NOTHING SAYS WHICH. IT IS A GUESS.',
       'POTHOLES, NAPS, SHOVES, BALLOONS AND A BIRD.',
       'FIRST TO THE TAPE WINS IT. AT TWENTY',
@@ -550,13 +572,13 @@ export const frogRace: MinigameModule = {
       '10 A TICKET, 20 BACK ON EACH.',
     ],
     controls: [
-      ['1-7 / CLICK', 'BACK THAT FROG'],
+      [`1-${FIELD} / CLICK`, 'BACK THAT FROG'],
       ['UP / DOWN', 'MORE OR FEWER TICKETS'],
       ['SPACE', 'START THE RACE'],
     ],
   },
-  // Seven runners will not fit on five buttons, and they do not need to: the
-  // whole lane is a hit area, so backing one is tapping the frog you want.
+  // The field will not fit on five buttons, and it does not need to: the whole
+  // lane is a hit area, so backing one is tapping the frog you want.
   touch: { buttons: [{ label: 'RACE', key: 'SPACE', primary: true }] },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
@@ -577,7 +599,7 @@ export const frogRace: MinigameModule = {
     draft(scene);
 
     banner = centerText(scene, GAME_W / 2, 24, 'BACK A FROG', PALETTE.gold).setDepth(60);
-    sub = centerText(scene, GAME_W / 2, 164, 'TAP A ROW OR PRESS 1-7', PALETTE.cream).setDepth(60);
+    sub = centerText(scene, GAME_W / 2, 164, `TAP A ROW OR PRESS 1-${FIELD}`, PALETTE.cream).setDepth(60);
     goBtn = {
       box: scene.add
         .rectangle(GAME_W / 2, 150, 78, 14, PALETTE.tealDark)
@@ -613,7 +635,10 @@ export const frogRace: MinigameModule = {
     setTickets(1);
 
     const kb = scene.input.keyboard;
-    keys = kb ? ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN'].map((n) => kb.addKey(n)) : [];
+    // Only the keys there are frogs for: a 5 that does nothing is a key the
+    // player presses twice before deciding the machine is broken.
+    const numberKeys = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN'].slice(0, FIELD);
+    keys = kb ? numberKeys.map((n) => kb.addKey(n)) : [];
     keys.forEach((k, i) => k.on('down', () => choose(i)));
     kb?.on('keydown-SPACE', () => startRace());
     kb?.on('keydown-UP', () => setTickets(tickets + 1));
@@ -657,6 +682,8 @@ export const frogRace: MinigameModule = {
           flying: racers.filter((r) => r.jet > 0).map((r) => RUNNERS[r.i].name),
         }),
         jetWindow: JET_WINDOW_S,
+        /** How many frogs are actually in the race.  See FIELD. */
+        runners: FIELD,
         /**
          * Light it now, through the real path: the window is handed to the
          * same code the race runs, so what a harness sees is the mechanic and
@@ -1307,9 +1334,15 @@ function digHoles(): number[] {
 
 /** A fresh field: seven forms, shuffled onto the seven colours. */
 function makeField(): Array<{ i: number; form: number; luck: number; surgeAt: number; surgeFor: number; holes: number[] }> {
-  // Seven evenly spread ratings, handed out at random — so the favourite is a
-  // different colour every race and the spread is the same every race.
-  const forms = [1, 0.82, 0.64, 0.5, 0.36, 0.2, 0];
+  // ---- THE RATINGS, SPREAD ACROSS WHATEVER SIZE THE FIELD IS.
+  //
+  // They were seven numbers typed out, best to worst.  Commenting a runner out
+  // of RUNNERS then cut the BOTTOM off the card without saying so: four frogs
+  // took the top four ratings, the worst horse in the race was a 0.5, and a
+  // field that was meant to run from a good thing to a no-hoper was four good
+  // things.  Derived, the ends are always 1 and 0 and the rest are evenly
+  // spaced between them, whoever is in the race.
+  const forms = RUNNERS.map((_, k) => (FIELD > 1 ? 1 - k / (FIELD - 1) : 1));
   const order = [...RUNNERS.keys()];
   for (let i = order.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));

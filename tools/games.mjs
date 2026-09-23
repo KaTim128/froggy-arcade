@@ -272,22 +272,24 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   await startGame(page);
   await bridge(page, '__race');
 
-  // TWELVE HUNDRED, NOT SIX, AND A WIDER FLOOR.
+  // TWELVE HUNDRED FIELDS, AND THE BAR SET BY THE FIELD SIZE.
   //
-  // The favourite took 37% of a race with no comeback in it and takes about
-  // 32% of one with; six hundred fields is a standard deviation of nearly two
-  // points, so a floor at 28 was inside two of them and the check started
-  // failing on its own sample rather than on the game.  Twice the fields and a
-  // floor at 25 still tells a real favourite (32%) from a field of seven
-  // deciding it between them (14%), which is the thing being asked.
+  // The question is whether the form is real: the favourite has to beat a coin
+  // toss between the runners by a long way and still lose often.  Both ends of
+  // that band move with how many frogs are in the race -- the field has been
+  // seven and is four -- so they are computed from the field rather than
+  // typed, and the number of colours that have to win is the field itself.
+  const field = await page.evaluate(() => window.__race.runners);
   const s = await page.evaluate(() => window.__race.sample(1200));
   const fav = s.favourite;
   // Every colour wins sometimes: no frog on this machine is a dud or a lock.
   const spread = s.wins.filter((n) => n > 0).length;
-  const fair = fav > 0.25 && fav < 0.62 && spread === 7;
+  const even = 1 / field;
+  const fair = fav > even * 1.5 && fav < 0.75 && spread === field;
   console.log(
     `${fair ? 'PASS' : 'FAIL'}  frog race: the favourite wins often, not always  — ` +
-      `${(fav * 100).toFixed(0)}% of 1200, ${spread}/7 colours won at least one`,
+      `${(fav * 100).toFixed(0)}% of 1200 against ${(even * 100).toFixed(0)}% for a coin toss, ` +
+      `${spread}/${field} colours won at least one`,
   );
   if (!fair) failures++;
 
@@ -2935,10 +2937,21 @@ for (const g of [
     window.__chase.spawnPolice(window.__chase.laneOf(s.player.x), 150);
   });
   await sleep(400);
+  // COUNTED AFTER THE CAR IS PUT THERE, not before.
+  //
+  // The loop above gives the road time to bring its own police and usually it
+  // does, but "usually" is not a test: on a slow arrival it read an empty road
+  // and reported the bomb as broken over a car that had not turned up yet.
+  // What has to be true is that somebody was chasing when the bomb went off,
+  // and the car behind the player is somebody.
+  busy = await st();
   await page.keyboard.press('Space');
   await sleep(1800);
   const quiet = await st();
-  const cleared = !quiet.gone && busy.chasing > 0 && quiet.chasing === 0 && quiet.respite > 8000;
+  // Ten seconds of respite, read a beat after the drop and through a browser
+  // that is rendering three other pages: seven is the floor that separates a
+  // respite that started from one that did not.
+  const cleared = !quiet.gone && busy.chasing > 0 && quiet.chasing === 0 && quiet.respite > 7000;
   console.log(
       `${cleared ? 'PASS' : 'FAIL'}  car chase: a bomb clears the road for ten seconds  — ` +
         (quiet.gone
