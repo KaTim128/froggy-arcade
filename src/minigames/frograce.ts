@@ -386,11 +386,21 @@ const HOLE_TO = 0.8;
 const HOLE_S = 0.7;
 const HOLE_BACK = 4;
 
-/** ---- THE JETPACK, kept from the comeback that was asked for before this one.
+/**
+ * ---- THE JETPACK, AND WHY IT IS NOT THE TOW ROPE.
  *
- * It is the tow rope made visible, and it is the only thing in the race that
- * is not on the card: in the last stretch, sometimes, whoever is last lights
- * one.  With the field this close it is a short burn rather than a rescue.
+ * The two do the same arithmetic and they are not the same thing, so do not
+ * take one out on the grounds that the other exists.
+ *
+ * THE TOW ROPE IS BALANCING, and it is meant to be invisible: it leans on
+ * every frog, every second, by a few per cent, and what the player sees is
+ * four frogs who happen to still be together.  THE JETPACK IS DRAMA, and it
+ * is meant to be seen: one race in five, in the last stretch, the frog at the
+ * back lights one and goes, and the player watching their ticket knows
+ * exactly what is happening.
+ *
+ * It is the only thing in the race that is not on the card, and it is the only
+ * thing the tutorial does not mention.
  */
 const JET_CHANCE = 0.2;
 const JET_WINDOW_S = 2.5;
