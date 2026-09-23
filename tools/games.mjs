@@ -2948,15 +2948,23 @@ for (const g of [
   await page.keyboard.press('Space');
   await sleep(1800);
   const quiet = await st();
+  // ON THE ROAD, not necessarily CHASING.  `chasing` leaves out a police car
+  // that is spun out, and by four hundred cash there is concrete on the road
+  // for them to spin out on -- so the road could be two cars deep and read as
+  // empty, which is what this check kept failing on.  What the bomb has to do
+  // is clear the road; what has to be true before it is that there was a road
+  // to clear.
+  //
   // Ten seconds of respite, read a beat after the drop and through a browser
   // that is rendering three other pages: seven is the floor that separates a
   // respite that started from one that did not.
-  const cleared = !quiet.gone && busy.chasing > 0 && quiet.chasing === 0 && quiet.respite > 7000;
+  const cleared = !quiet.gone && busy.police > 0 && quiet.chasing === 0 && quiet.respite > 7000;
   console.log(
       `${cleared ? 'PASS' : 'FAIL'}  car chase: a bomb clears the road for ten seconds  — ` +
         (quiet.gone
           ? 'the run ended first'
-          : `${busy.chasing} chasing -> ${quiet.chasing}, ${Math.round(quiet.respite / 100) / 10}s left`),
+          : `${busy.police} on the road (${busy.chasing} of them chasing) -> ${quiet.chasing}, ` +
+            `${Math.round(quiet.respite / 100) / 10}s left`),
   );
   if (!cleared) failures++;
 
