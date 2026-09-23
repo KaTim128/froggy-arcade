@@ -1356,6 +1356,25 @@ export const frogRace: MinigameModule = {
         body.setScale(1 - 0.18 * Math.abs(v) + 0.1, 1 + 0.26 * Math.abs(v));
         body.setRotation(-0.55 * v);
         body.y = laneY - r.lift;
+      } else if (phase !== 'racing') {
+        // ---- ON THE START LINE, AND STOOD ON IT.
+        //
+        // Every frog is given a random point in its hop cycle when the field
+        // is dealt, so that they are not all bouncing in step once the gun
+        // goes.  Before the gun nothing advances that cycle -- so each frog
+        // sat FROZEN at whatever frame it was handed: one flat on its belly at
+        // 0.66 of its height, one stretched at 1.2, one somewhere between.
+        // Four frogs at four different squashes, none of them moving, which
+        // reads as four badly drawn frogs rather than as four frogs waiting.
+        //
+        // They stand up and breathe instead until the race starts, on their
+        // own clocks so the line is not a chorus line.  The feet stay pinned
+        // the same way the hop pins them.
+        const breath = Math.sin(clock / 540 + r.i * 1.7) * 0.022;
+        const sy = 1 + breath;
+        body.setScale(1 - breath * 0.6, sy);
+        body.setRotation(0);
+        body.y = laneY - r.lift + FOOT * (1 - sy);
       } else {
         // Compressed on the lane, stretched off it, tucked at the top.  The
         // feet are pinned as it squashes — a frog that shrinks about its

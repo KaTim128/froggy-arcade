@@ -59,6 +59,16 @@ const CHANGE_SPOT = { x: 272, y: 62 };
  * box changes.
  */
 const COUNTER_POST = { x: 243, y: COUNTER.y + 17 };
+/**
+ * And where FROGGY leans on it, which is not the same place.
+ *
+ * He is smaller than the staff who replace him and he stands further along,
+ * just off the end of the prize case: head and eyes over the glass, hands out
+ * of sight behind it.  The member of staff is a person and stands like one;
+ * he is a mascot leaning on a counter, and at the height he was first drawn at
+ * he loomed over the prizes he is pointing at.
+ */
+const FROG_POST = { x: 230, y: COUNTER.y + 8, height: 28 };
 const STAFF_DEPTH = COUNTER_DEPTH - 0.01;
 /** How close you have to be to the post to be talking to them rather than shopping. */
 const POST_RANGE = 22;
@@ -105,6 +115,8 @@ export class ArcadeHub extends Phaser.Scene {
   private staff: CounterStaff | null = null;
   private frogOnCounter = false;
   private frogT = 0;
+  /** Whether he has already said it since the player last walked away. */
+  private frogSpoke = false;
   /** The staff conversation, while it is up. */
   private talk: Phaser.GameObjects.Container | null = null;
   /** The thing outside the glass.  See `startApparition`. */
@@ -323,13 +335,12 @@ export class ArcadeHub extends Phaser.Scene {
       this.add.circle(5.5, 0, 1.4, PALETTE.teal),
       this.add.rectangle(-2, -2, 4, 1, PALETTE.cream).setAlpha(0.8),
     ]);
-    const coin = this.add.container(0, 0, [
-      this.add.ellipse(0, 0, 14, 14, PALETTE.gold).setAlpha(0.14),
-      this.add.circle(0, 0, 4.5, PALETTE.amberDark),
-      this.add.circle(0, 0, 3.6, PALETTE.gold),
-      this.add.rectangle(0, 0, 1, 5, PALETTE.amberDark).setAlpha(0.85),
-      this.add.rectangle(-1.4, -1.6, 2, 1, PALETTE.cream).setAlpha(0.7),
-    ]);
+    // NO COIN ON THE CHANGE MACHINE.  It had one floating beside it as its
+    // idle cue and it read as a pickup -- a thing lying on the carpet to walk
+    // over and collect, in a game that has those.  The machine keeps its
+    // outline, which comes up and pulses in range like everything else on this
+    // wall, and that is the whole of its advertising.
+    const coin = this.add.container(0, 0, []);
 
     this.cues = [
       {
@@ -414,15 +425,29 @@ export class ArcadeHub extends Phaser.Scene {
   private stepCounterFroggy(delta: number): void {
     if (!this.frogOnCounter) return;
     this.frogT += delta;
+
+    // ---- AND HE SAYS SOMETHING AS YOU GO PAST.
+    //
+    // Not an interaction: walking into earshot is enough, and there is nothing
+    // to press.  It re-arms when the player leaves, so it is a greeting rather
+    // than a loop -- he says it once each time you come over, and never twice
+    // for one visit.
+    const near = Math.hypot(this.player.x - FROG_POST.x, this.player.y - (COUNTER.y + 24)) < 46;
+    if (near && !this.frogSpoke && !this.busy()) {
+      this.frogSpoke = true;
+      this.say('"FEEL FREE TO CHECK WHAT PRIZES YOU CAN GET! \u{1F438}"');
+    } else if (!near && Math.hypot(this.player.x - FROG_POST.x, this.player.y - (COUNTER.y + 24)) > 70) {
+      this.frogSpoke = false;
+    }
     froggyLayer.paint((ctx) => {
       ctx.save();
       ctx.beginPath();
       ctx.rect(0, 0, GAME_W, COUNTER.y + 2);
       ctx.clip();
       drawFroggy(ctx, {
-        x: COUNTER_POST.x,
-        y: COUNTER.y + 20,
-        height: 46,
+        x: FROG_POST.x,
+        y: FROG_POST.y,
+        height: FROG_POST.height,
         variant: 'cozy',
         pose: 'idleA',
         bounce: Math.sin(this.frogT / 620) * 0.5 + 0.5,
