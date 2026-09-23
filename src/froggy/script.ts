@@ -18,7 +18,7 @@ export interface TutorialTargets {
 export function tutorialScript(t: TutorialTargets): DialogueLine[] {
   return [
     {
-      text: 'Well well well! A new face. Welcome to my arcade, friend. 🐸',
+      text: 'Well well well! A new face. Welcome to my arcade, friend.',
     },
     {
       text: "See these? Froggy-tokens. Little gold coins with my handsome face on 'em. They're how you play.",
@@ -43,7 +43,7 @@ export function tutorialScript(t: TutorialTargets): DialogueLine[] {
     // not rewritten.  The tutorial now ends warm and says nothing about what
     // happens later.  Do not put a replacement line in this gap.
     {
-      text: '...Have fun! 🐸',
+      text: '...Have fun!',
     },
   ];
 }
@@ -73,7 +73,7 @@ export const secondBustScript: DialogueLine[] = [
     auto: true,
   },
   {
-    text: 'See you next time! 🐸',
+    text: 'See you next time!',
     holdBefore: 400,
     holdAfter: 1400,
     auto: true,
