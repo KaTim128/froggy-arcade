@@ -671,12 +671,13 @@ export class ArcadeHub extends Phaser.Scene {
     if (this.apparition === 'off') return;
     this.appT += delta;
 
-    // ---- THE TIMINGS.  Eight seconds of him, and then a blink.
+    // ---- THE TIMINGS.  Two seconds of him, and then a blink.
     //
-    // Eight is a long time to look at something that is not moving, which is
-    // the point: past about three the player has taken it in, and what is left
-    // is the part where nothing happens and they have to keep looking at it.
-    const STARE = 8000;
+    // Two is long enough to register a face and nowhere near long enough to
+    // study it: he is there, he is looking at you, and he is gone.  A close-up
+    // does not need eight -- it needs the player to not quite believe what
+    // they saw.
+    const STARE = 2000;
     const SHUT = 170;
     const BLACK = 120;
     const OPEN = 240;
@@ -691,7 +692,7 @@ export class ArcadeHub extends Phaser.Scene {
 
     // Two breaths of static across the eight seconds, so the silence has
     // something wrong with it rather than being merely quiet.
-    if (this.appHiss < 2 && t > 2600 + this.appHiss * 3000) {
+    if (this.appHiss < 2 && t > 250 + this.appHiss * 900) {
       this.appHiss++;
       audio.sfx('poison_hiss', 0.22);
     }
@@ -713,16 +714,20 @@ export class ArcadeHub extends Phaser.Scene {
   /**
    * ---- WHAT THE APPARITION LOOKS LIKE.
    *
-   * The arcade, drawn as a picture rather than as the room: the purple wall
-   * and the strip light along the top of it, the grey floor, a cabinet either
-   * side at the spacing the hub's own are at, and the doorway in the middle
-   * with him standing in it looking out at the player.  It is the place the
-   * player is stood in, painted the way a photograph of it would look -- same
-   * wall, same floor, same machines, nobody else in it.
+   * HIS FACE, AND ALMOST NOTHING ELSE.  He used to be a small figure standing
+   * in a doorway at the back of a picture of the arcade, which is a room with
+   * a frog in it: the eye reads the room first and finds him second, by which
+   * time the moment has gone.  The camera is right up against him now -- two
+   * eyes most of the width of the screen, pupils the size of a full stop
+   * pointed straight out of it, and the rest of him running off all four
+   * edges.
    *
-   * He does not move for any of it.  Two eyes, pupils the size of a full stop
-   * pointed straight out of the screen, and a rim of light behind him that is
-   * the only thing in the picture with any warmth in it.
+   * The arcade is still behind him, and still this arcade: the purple wall and
+   * its strip light, the grey floor, a cabinet either side at the spacing the
+   * room's own are at, and the doorway he is stood in.  It is dark and it is
+   * out past the edges of his head, which is exactly as much of it as a face
+   * this close leaves room for -- the player recognises where they are without
+   * ever looking away from him.
    */
   private paintApparition(ctx: CanvasRenderingContext2D, t: number, lid: number, gone: boolean): void {
     const FLOOR = 122;
@@ -765,17 +770,24 @@ export class ArcadeHub extends Phaser.Scene {
     cab(20, '#c08a52', '#6b4a2f');
     cab(GAME_W - 54, '#a8c23f', '#46a83f');
 
-    // ---- him.  Dead centre, dead still, and looking at you.
+    // ---- the room goes down, because it is not what anybody is looking at.
+    ctx.fillStyle = 'rgba(4,2,10,0.45)';
+    ctx.fillRect(0, 0, GAME_W, GAME_H);
+
+    // ---- HIM.  Right up against the glass, filling it.
     if (!gone) {
-      const glow = ctx.createRadialGradient(GAME_W / 2, FLOOR - 22, 4, GAME_W / 2, FLOOR - 22, 52);
-      glow.addColorStop(0, 'rgba(180,220,190,0.22)');
-      glow.addColorStop(1, 'rgba(180,220,190,0)');
+      const glow = ctx.createRadialGradient(GAME_W / 2, 70, 10, GAME_W / 2, 70, 150);
+      glow.addColorStop(0, 'rgba(150,220,180,0.20)');
+      glow.addColorStop(1, 'rgba(150,220,180,0)');
       ctx.fillStyle = glow;
-      ctx.fillRect(GAME_W / 2 - 60, FLOOR - 80, 120, 80);
+      ctx.fillRect(0, 0, GAME_W, GAME_H);
       drawFroggy(ctx, {
         x: GAME_W / 2,
-        y: FLOOR + 2,
-        height: 74,
+        // Anchored between the eyes rather than at the feet: what has to be in
+        // frame is the part of him that is looking at you.
+        y: 62,
+        height: 205,
+        anchor: 'face',
         variant: 'cozy',
         // The fourth pose: the same face, with the pupils down to a full stop.
         pose: 'blank',
