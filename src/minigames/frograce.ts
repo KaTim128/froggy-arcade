@@ -198,7 +198,7 @@ const DIST = FINISH_X - START_X;
  * `LEADER_DRAG` is the same idea from the front: whoever is in front is
  * carrying the wind, and gives up three per cent for it.
  */
-const BASE = 4.45;
+const BASE = 7.8;
 const SPREAD = 1.6;
 const WOBBLE = 5.5;
 /** Held for the whole race: uniform over ±LUCK. */
@@ -234,8 +234,8 @@ const SURGE = 2.6;
 // ---- AND THE BAND IS IN PIXELS, DELIBERATELY.
 //
 // It was briefly rewritten in seconds, on the grounds that the race is
-// designed in seconds -- and at forty-five seconds half a second of gap is two
-// and a half pixels, which on a nineteen pixel frog is touching.  What has to
+// designed in seconds -- and half a second of gap is a few pixels, which on a
+// nineteen pixel frog is touching.  What has to
 // be true is that the player can SEE who is second and who is third, and that
 // is a distance on the screen, not a duration.  Four pixels of clear grass is
 // about a fifth of a frog; at this pace it is also the better part of a
@@ -288,11 +288,16 @@ const RESCUE_GAIN = 0.03;
 const RESCUE_MAX = 0.3;
 
 /**
- * THE RACE IS FORTY-FIVE SECONDS.  BASE is set so a clean run is home at about
- * forty-two, which leaves room for a sleep, a slip and a bird inside the cap.
- * Anyone still running at forty-five is settled on distance.
+ * THE RACE IS THIRTY SECONDS.  BASE is set so a clean run is home at about
+ * twenty-eight, which leaves room for a sleep, a slip and a bird inside the
+ * cap.  Anyone still running at thirty is settled on distance.
+ *
+ * Everything else written in seconds -- the effects, the bands they are dealt
+ * in, the jetpack's window -- is either a fraction of this or a duration in
+ * its own right, so shortening the race makes each of them a bigger share of
+ * it: the same nine things happen, closer together.
  */
-const RACE_S = 45;
+const RACE_S = 30;
 /** One hop: how long it takes, and how high it goes in pixels. */
 const HOP_S = 0.34;
 /**
@@ -775,7 +780,7 @@ export const frogRace: MinigameModule = {
   id: ID,
   title: 'FROG RACE',
   music: 'game_frograce',
-  rules: `pick one, ${FIELD} run, 45 seconds`,
+  rules: `pick one, ${FIELD} run, 30 seconds`,
   payoutNote: 'WIN: 20 A TICKET',
   tutorial: {
     objective: [
@@ -784,7 +789,7 @@ export const frogRace: MinigameModule = {
       'BIRDS, BALLOONS, FLIES, MUD, WIND, A SLIP.',
       'SOMETHING HAPPENS TO EVERY FROG.',
       'THEY RUN CLOSE AND IT IS WON AT THE END.',
-      'FORTY-FIVE SECONDS. FIRST TO THE TAPE WINS.',
+      'THIRTY SECONDS. FIRST TO THE TAPE WINS.',
       '10 A TICKET, 20 BACK ON EACH.',
     ],
     controls: [
