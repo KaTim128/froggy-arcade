@@ -848,7 +848,10 @@ for (const g of [
   // 300 cash is twenty -- the cabinet takes ten, and every ten token machine
   // on this floor pays twenty for the win -- and every hundred past the bar is
   // five more: 600 is three hundreds past it, so thirty-five.
-  { id: 'carchase', hook: '__chase', set: 'setCash', score: 600, expect: 35, label: '600 cash' },
+  // ...and the road pays it out ON BEING CAUGHT, because there is no longer a
+  // way to stop: the bar is a latch, so the run ends the only way it can and
+  // the tokens are still there.
+  { id: 'carchase', hook: '__chase', set: 'setCash', score: 600, expect: 35, label: '600 cash, then busted', end: (p) => p.evaluate(() => window.__chase.bust()) },
 ]) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
@@ -859,7 +862,8 @@ for (const g of [
   await page.mouse.click(640, 60);
   const before = await page.evaluate(() => window.__froggy.state().tokens);
   await page.evaluate((h, s, n) => window[h][s](n), g.hook, g.set, g.score);
-  await page.keyboard.press('Enter');
+  if (g.end) await g.end(page);
+  else await page.keyboard.press('Enter');
   await sleep(1800);
   const after = await page.evaluate(() => window.__froggy.state());
   const paid = after.tokens - before;
