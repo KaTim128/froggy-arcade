@@ -1181,8 +1181,9 @@ printed on the machine's face before a token moves.
 
 A four-lane road from above. Traffic ahead is slower than you and has to be
 threaded; the police behind are faster and have to be shaken. Cash sits on the
-road in bundles of twenty and the run ends on a crash, on being caught, or on
-`ENTER` — pull over and take what you have.
+road in bundles of twenty and the run ends on a crash or on being caught.
+There is no pulling over: clearing the bar EARNS the tokens outright, and
+being caught afterwards does not take them back.
 
 **The bar is 300 cash and it pays 15 tokens, plus 5 for every further 100.**
 That bar sits deliberately past the first heat notch, which is at 200: one

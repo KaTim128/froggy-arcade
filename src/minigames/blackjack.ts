@@ -66,7 +66,15 @@ const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
 /** Where Froggy stands, and the two rows of felt in front of him. */
 const DEALER = { x: GAME_W / 2, y: 58, height: 38 };
 const DEALER_ROW = 62;
-const PLAYER_ROW = 104;
+/**
+ * The player's row moved up four pixels to make room under it.
+ *
+ * Cards are thirty deep, so at 104 they ran to 134 and left twenty-three
+ * pixels for a line of narration AND a row of buttons before HIT and STAND --
+ * which is two pixels less than the two of them need.  The ACE button was
+ * drawn straight over the line telling the player what the ace was doing.
+ */
+const PLAYER_ROW = 100;
 
 interface Card {
   rank: string;
@@ -289,7 +297,12 @@ export const blackjack: MinigameModule = {
 
     paintFelt(scene);
 
-    status = centerText(scene, GAME_W / 2, 142, 'PLACE YOUR BET', PALETTE.cream);
+    // ---- THE NARRATION SITS ABOVE THE BUTTONS AND CLEAR OF THEM.
+    //
+    // Cards end at 130, this line runs 133-141, the sometimes-buttons below it
+    // run 144.5-155.5 and HIT and STAND run from 157.5.  Nothing on this felt
+    // overlaps anything else on it.
+    status = centerText(scene, GAME_W / 2, 137, 'PLACE YOUR BET', PALETTE.cream);
     betText = centerText(scene, GAME_W / 2, 116, '', PALETTE.gold, 16);
     hitBtn = button(scene, GAME_W / 2 - 40, 164, 'HIT', () => hit(), { width: 56, height: 13 });
     standBtn = button(scene, GAME_W / 2 + 40, 164, 'STAND', () => stand(), { width: 56, height: 13 });
@@ -297,14 +310,14 @@ export const blackjack: MinigameModule = {
     // above HIT and STAND, and each appears only while the hand it belongs to
     // is on the felt: the ace one while there is an ace to price, the fifteen
     // one while you are on two cards worth exactly fifteen.
-    aceBtn = button(scene, GAME_W / 2 - 40, 148, 'ACE 11', () => flipAce(), {
+    aceBtn = button(scene, GAME_W / 2 - 40, 150, 'ACE 11', () => flipAce(), {
       width: 56,
-      height: 13,
+      height: 11,
       fill: PALETTE.tealDark,
     });
-    quitHandBtn = button(scene, GAME_W / 2 + 40, 148, 'LEAVE IT', () => surrender(), {
+    quitHandBtn = button(scene, GAME_W / 2 + 40, 150, 'LEAVE IT', () => surrender(), {
       width: 56,
-      height: 13,
+      height: 11,
       fill: PALETTE.tealDark,
     });
     againBtn = button(scene, GAME_W / 2 - 46, 164, 'ANOTHER HAND', () => nextHand(), {

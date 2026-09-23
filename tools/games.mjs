@@ -43,7 +43,7 @@ const GAMES = [
   // shot came back of the arcade floor.  Twelve seconds is the middle of every
   // race there is, which is a better picture of the game anyway: the field
   // strung out down the track with whatever is going wrong today.
-  { id: 'frograce', drive: async (p) => { await p.keyboard.press('Digit3'); await sleep(250); await p.keyboard.press('ArrowUp'); await sleep(250); await p.keyboard.press('Space'); await sleep(31000); } },
+  { id: 'frograce', drive: async (p) => { await p.keyboard.press('Digit3'); await sleep(250); await p.keyboard.press('ArrowUp'); await sleep(250); await p.keyboard.press('Space'); await sleep(46000); } },
   { id: 'grudge', drive: async (p) => { await sleep(1600); for (let i = 0; i < 6; i++) { await p.keyboard.press('KeyD'); await p.keyboard.press('KeyJ'); await sleep(400); } } },
   { id: 'donkeykong', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(2500); await p.keyboard.up('KeyD'); await p.keyboard.press('Space'); await sleep(600); await p.keyboard.down('KeyW'); await sleep(900); await p.keyboard.up('KeyW'); } },
   { id: 'slots', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.keyboard.press('Space'); await sleep(2700); } } },
@@ -398,10 +398,14 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   // has to be able to tell which is which.  Measured between NEIGHBOURS in the
   // running order, in seconds of running, because a field can be a few pixels
   // end to end with three invisible gaps in it.
-  const spaced = shape.meanNeighbourGap > 0.3 && shape.meanNeighbourGap < 0.9;
+  // ASKED IN PIXELS, REPORTED IN BOTH.  Whether you can tell second from third
+  // is a distance on the screen: half a second of gap is six pixels in a
+  // thirty second race and under three in a forty-five second one, and only
+  // one of those is visible on a nineteen pixel frog.
+  const spaced = shape.meanNeighbourPx > 3 && shape.meanNeighbourPx < 12;
   console.log(
     `${spaced ? 'PASS' : 'FAIL'}  frog race: and you can see who is second, third and fourth  — ` +
-      `${shape.meanNeighbourGap.toFixed(2)}s between neighbours, ` +
+      `${shape.meanNeighbourPx.toFixed(1)}px between neighbours (${shape.meanNeighbourGap.toFixed(2)}s), ` +
       `${(shape.onTopOfEachOther * 100).toFixed(0)}% of the race with a pair inside two pixels`,
   );
   if (!spaced) failures++;
@@ -844,7 +848,10 @@ for (const g of [
   // 300 cash is twenty -- the cabinet takes ten, and every ten token machine
   // on this floor pays twenty for the win -- and every hundred past the bar is
   // five more: 600 is three hundreds past it, so thirty-five.
-  { id: 'carchase', hook: '__chase', set: 'setCash', score: 600, expect: 35, label: '600 cash' },
+  // ...and the road pays it out ON BEING CAUGHT, because there is no longer a
+  // way to stop: the bar is a latch, so the run ends the only way it can and
+  // the tokens are still there.
+  { id: 'carchase', hook: '__chase', set: 'setCash', score: 600, expect: 35, label: '600 cash, then busted', end: (p) => p.evaluate(() => window.__chase.bust()) },
 ]) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
@@ -855,7 +862,8 @@ for (const g of [
   await page.mouse.click(640, 60);
   const before = await page.evaluate(() => window.__froggy.state().tokens);
   await page.evaluate((h, s, n) => window[h][s](n), g.hook, g.set, g.score);
-  await page.keyboard.press('Enter');
+  if (g.end) await g.end(page);
+  else await page.keyboard.press('Enter');
   await sleep(1800);
   const after = await page.evaluate(() => window.__froggy.state());
   const paid = after.tokens - before;

@@ -65,8 +65,10 @@
  * Every two hundred in the bag puts another car on the road behind you, all
  * the way to eight, and the first three notches also make them faster, the
  * traffic thicker and the road quicker.  The run ends on a crash, on being
- * caught, or on ENTER — pull over and take what you have.  Carrying on is a
- * bet against a chase that is getting worse.
+ * caught.  There is nothing to bank and nothing to press: three hundred in
+ * the bag EARNS the tokens outright, and being caught afterwards does not
+ * take them back — so carrying on past the bar is a free bet on a chase that
+ * is getting worse.
  *
  * THEY CAN BE JUKED, AND THEY CAN BE CRASHED.  A chaser steers at the lane it
  * last SAW you in, and it only looks every few tenths of a second, so a late
@@ -117,8 +119,9 @@ export const TARGET_CASH = 200;
 /**
  * The PAY bar, and what clearing it is worth.
  *
- * Three hundred to bank anything, TWENTY TOKENS for it, and five more for
- * every hundred after that.  It is deliberately past the first heat notch:
+ * Three hundred to earn anything, TWENTY TOKENS for it, and five more for
+ * every hundred the run ever held after that.  Clearing it is a latch: see
+ * `earned`.  It is deliberately past the first heat notch:
  * one police car turns up at two hundred, so nobody banks a run without
  * having been chased by somebody.
  *
@@ -646,6 +649,20 @@ let pedTimer = 0;
  * the chase -- that is what the thirty buys besides the bomb.
  */
 let peak = 0;
+/**
+ * THE REWARD IS EARNED AT THE BAR, AND THEN IT IS THE PLAYER'S.
+ *
+ * It used to be worked out from what was in the bag when the run ended, which
+ * meant two ways of losing it after clearing three hundred: buy a bomb and
+ * drop back under the bar, or get caught and have the whole run pay nothing.
+ * Both read as the machine taking back something it had already given.
+ *
+ * So the bar is a latch.  The moment the bag touches `BAR_CASH` this turns
+ * true and nothing turns it off again -- not a bomb, not a crash, not the
+ * law -- and the payout is worked out from `peak`, the most the run ever
+ * held.  Caught before the bar is still nothing, which is the bet.
+ */
+let earned = false;
 let warnT = 0;
 let dashes: Array<Phaser.GameObjects.Rectangle | Phaser.GameObjects.Arc> = [];
 let trafficTimer = 0;
@@ -680,6 +697,14 @@ export function chasePayout(c: number): number {
 }
 
 /**
+ * What this run is worth right now: nothing until the bar is cleared, and
+ * from then on what the run's best bag was worth, however it ends.
+ */
+function runReward(): number {
+  return earned ? chasePayout(Math.max(peak, collected)) : 0;
+}
+
+/**
  * How hard they are chasing, from what is in the bag.  A pure function of the
  * cash, so nothing can drift out of step with it — the pickup only decides
  * when to SAY so.
@@ -701,22 +726,21 @@ export const carChase: MinigameModule = {
       'OIL SPINS YOU 1.5s. CONCRETE ENDS YOU.',
       'POTHOLE 1 SLOWS YOU. 2 STARTS SMOKE.',
       'POTHOLE 3 BREAKS THE CAR - RUN OVER.',
-      'PULL OVER AT 300 FOR 20, +5 EVERY 100.',
+      'REACH 300 FOR 20, +5 EVERY 100. KEPT.',
     ],
     controls: [
       ['A / D', 'STEER'],
       ['W / S', 'SPEED UP OR EASE OFF'],
       ['SPACE', 'BUY A BOMB - 30 CASH'],
     ],
-    // ENTER pulls over with the cash, and it is NOT listed here.  It does
-    // nothing until there is cash to pull over with, and the moment there is,
-    // the HUD says `[ENTER] PULL OVER FOR n TOKENS` on the road itself.
+    // There is no bank button and no way to stop: once three hundred is in
+    // the bag the tokens are safe, so the only question left on the road is
+    // how much further it goes.  The HUD says `n TOKENS SAFE` for it.
   },
   touch: {
     stick: 'wasd',
     buttons: [
       { label: 'BOMB\n30', key: 'SPACE', primary: true },
-      { label: 'PULL\nOVER', key: 'ENTER' },
     ],
   },
   payoutNote: 'WIN: 20+',
@@ -745,6 +769,7 @@ export const carChase: MinigameModule = {
     trapTimer = TRAP_GAP_MS;
     warnT = 0;
     collected = 0;
+    earned = false;
     peak = 0;
     best = store.highScore(ID);
     drops = [];
@@ -787,7 +812,7 @@ export const carChase: MinigameModule = {
       dashes.push(scene.add.circle(side, y, r, i % 3 === 0 ? 0x2e5e38 : 0x24482c).setDepth(2));
     }
 
-    player = carSprite(scene, px, py, PALETTE.mossLight, false).setDepth(6).setVisible(true);
+    player = carSprite(scene, px, py, PALETTE.mossLight, false, true).setDepth(6).setVisible(true);
 
     hud = {
       cash: text(scene, 6, 21, '', PALETTE.cream),
@@ -822,9 +847,6 @@ export const carChase: MinigameModule = {
       down: bind(['S', 'DOWN']),
     };
     kb?.on('keydown-SPACE', () => dropBomb());
-    kb?.on('keydown-ENTER', () => {
-      if (!over && collected >= BAR_CASH) finish();
-    });
 
     if (import.meta.env?.DEV) {
       (window as unknown as Record<string, unknown>).__chase = {
@@ -834,6 +856,8 @@ export const carChase: MinigameModule = {
           best,
           speed,
           bombCost: BOMB_COST,
+          earned,
+          reward: runReward(),
           drops: drops.length,
           jolted: joltMs > 0,
           spinning: spinMs > 0,
@@ -992,6 +1016,7 @@ export const carChase: MinigameModule = {
         setCash: (n: number) => {
           collected = n;
           peak = Math.max(peak, n);
+          if (n >= BAR_CASH) earned = true;
           heatShown = chaseHeat(n);
           refreshHud();
         },
@@ -1037,6 +1062,12 @@ export const carChase: MinigameModule = {
           ped.turn = 4000;
         },
         drop: () => dropBomb(),
+        /**
+         * End the run the only way it ends now: caught.  There is no pull-over
+         * key any more, so a test that wants to see what a run PAID has to be
+         * able to have the law take it.
+         */
+        bust: () => crash('BUSTED'),
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__chase;
@@ -1072,6 +1103,7 @@ export const carChase: MinigameModule = {
     const engine = broken ? Math.max(0, brokenMs / BREAKDOWN_MS) : 1;
     const heat = chaseHeat(collected);
     peak = Math.max(peak, collected);
+    if (collected >= BAR_CASH) earned = true;
 
     // ---- the road, and you on it.  It runs quicker the more you are carrying.
     speed = Math.min(SPEED_MAX + heat * HEAT_ROAD, SPEED_START + (elapsed / 1000) * SPEED_RAMP + heat * HEAT_ROAD);
@@ -1189,7 +1221,7 @@ export const carChase: MinigameModule = {
       }
     }
     for (const p of police) {
-      const light = p.body.getAt(2) as Phaser.GameObjects.Rectangle;
+      const siren = (p.body.getData('siren') ?? []) as Phaser.GameObjects.Rectangle[];
       if (p.stun > 0) {
         // Spun out: siren dead, no steering, crawling, and falling back down
         // the road.  It is still a lump of metal in a lane, so it can still be
@@ -1199,7 +1231,7 @@ export const carChase: MinigameModule = {
         p.y += (ground - p.own) * dt;
         p.body.setPosition(p.x, p.y).setVisible(onScreen(p.y));
         p.body.setAngle(p.body.angle + delta * 0.3);
-        light.setFillStyle(PALETTE.steel);
+        for (const lamp of siren) lamp.setFillStyle(PALETTE.steel);
         if (p.stun <= 0) {
           // Back on its wheels, and it has to earn the distance again.
           p.body.setAngle(0);
@@ -1225,9 +1257,11 @@ export const carChase: MinigameModule = {
       if (Math.abs(p.aim - p.x) > 0.5) p.x += lock * dt;
       p.body.setAngle((lock / POLICE_STEER) * 6);
       p.body.setPosition(p.x, p.y).setVisible(onScreen(p.y));
-      // lights
+      // The bar alternates rather than blinking on and off: red one beat,
+      // blue the next, which is what a police car in the mirror looks like.
       const on = Math.floor(elapsed / 120) % 2 === 0;
-      light.setFillStyle(on ? PALETTE.blood : PALETTE.moon);
+      siren[0]?.setFillStyle(on ? PALETTE.blood : tone(PALETTE.blood, 0.35));
+      siren[1]?.setFillStyle(on ? tone(PALETTE.tealLight, 0.35) : PALETTE.tealLight);
     }
 
     // ---- and what happens when a chaser drives into the traffic it was not
@@ -1681,23 +1715,110 @@ function hits(m: Mover): boolean {
   return Math.abs(m.x - px) < CAR_W - 4 && Math.abs(m.y - py) < CAR_H - 6;
 }
 
-function carSprite(scene: Phaser.Scene, x: number, y: number, colour: number, cop: boolean): Phaser.GameObjects.Container {
-  const body = scene.add.rectangle(0, 0, CAR_W, CAR_H, colour);
-  const glass = scene.add.rectangle(0, -4, CAR_W - 4, 5, PALETTE.ink);
-  const roof = scene.add.rectangle(0, 2, cop ? 6 : CAR_W - 4, cop ? 3 : 4, cop ? PALETTE.blood : PALETTE.black).setAlpha(cop ? 1 : 0.35);
-  const parts: Phaser.GameObjects.GameObject[] = [body, glass, roof];
-  // Indicators, at the back corners where the player — who is behind every one
-  // of these cars — can actually see them.  Police do not signal.
+/** Darken a packed colour, for the panels and shadows on a car's own paint. */
+function tone(colour: number, k: number): number {
+  const c = Phaser.Display.Color.IntegerToColor(colour);
+  const m = (v: number) => Phaser.Math.Clamp(Math.round(v * k), 0, 255);
+  return (m(c.red) << 16) | (m(c.green) << 8) | m(c.blue);
+}
+
+/**
+ * A car, twelve by twenty, facing up the road.
+ *
+ * Everything on it is built out of the same handful of rectangles, and the
+ * SHAPE is the bit that matters at this size: a 12x16 hull with a narrower
+ * nose and tail stuck on the ends reads as rounded without a single curve,
+ * which is what the flat 12x20 slab it replaced never did.  Wheels go on
+ * first so the hull covers all but the lug that pokes out of each arch, and
+ * the cabin is the body's own colour taken down a third rather than a new
+ * one — so a car is one object with panels, not three stacked boxes.
+ *
+ * THE THREE KINDS ARE TOLD APART BY SHAPE AND NOT BY COLOUR ALONE:
+ *   the player has a frog sat in it, eyes over the roof line;
+ *   the police have a light bar and black doors;
+ *   the traffic has indicators and nothing else.
+ *
+ * `CAR_W`/`CAR_H` and the contact box in `hits` are untouched: this is paint.
+ */
+function carSprite(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  colour: number,
+  cop: boolean,
+  hero = false,
+): Phaser.GameObjects.Container {
+  const dark = tone(colour, 0.66);
+  const lit = tone(colour, 1.12);
+  const parts: Phaser.GameObjects.GameObject[] = [];
+
+  // ---- WHEELS, under everything: only the lug outside the arch shows.
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      parts.push(scene.add.rectangle(sx * 6, sy * 5, 2, 4, PALETTE.black));
+    }
+  }
+
+  // ---- THE HULL: a 12x16 middle with a narrower nose and a tail on the ends.
+  parts.push(scene.add.rectangle(0, 0, CAR_W, CAR_H - 4, colour));
+  parts.push(scene.add.rectangle(0, -9, 10, 2, colour));
+  parts.push(scene.add.rectangle(0, 9, 10, 2, colour));
+  // A line of shadow down each flank, so it has a side as well as a top.
+  for (const sx of [-1, 1]) parts.push(scene.add.rectangle(sx * 5.5, 0, 1, 14, dark));
+  // Bonnet in front of the glass, roof behind it.
+  parts.push(scene.add.rectangle(0, -6.5, 8, 3, lit));
+  parts.push(scene.add.rectangle(0, 4.5, 8, 5, tone(colour, 0.82)));
+
+  // ---- GLASS.  The screen up front, a smaller one at the back.
+  parts.push(scene.add.rectangle(0, -2, 8, 6, PALETTE.ink));
+  parts.push(scene.add.rectangle(0, 4, 5, 2, PALETTE.ink).setAlpha(0.75));
+
+  // ---- LIGHTS.  Headlights lead, tail lights follow, both inside the panel
+  // they are set into rather than hung off the end of it.
+  for (const sx of [-1, 1]) {
+    parts.push(scene.add.rectangle(sx * 2.5, -9.5, 3, 1, PALETTE.cream));
+    parts.push(scene.add.rectangle(sx * 2.5, 9.5, 3, 1, PALETTE.blood));
+  }
+
   const lamps: Phaser.GameObjects.Rectangle[] = [];
-  if (!cop) {
-    for (const side of [-1, 1]) {
-      const lamp = scene.add.rectangle(side * (CAR_W / 2 - 1), CAR_H / 2 - 3, 2, 4, PALETTE.amber).setVisible(false);
+  const siren: Phaser.GameObjects.Rectangle[] = [];
+
+  if (cop) {
+    // ---- POLICE: black doors down the flanks and a bar across the roof.
+    for (const sx of [-1, 1]) parts.push(scene.add.rectangle(sx * 4.5, 3.5, 2, 7, PALETTE.ink));
+    parts.push(scene.add.rectangle(0, 2, 8, 2.5, PALETTE.black));
+    for (const [sx, hue] of [[-1, PALETTE.blood], [1, PALETTE.tealLight]] as const) {
+      const lamp = scene.add.rectangle(sx * 2, 2, 3, 1.5, hue);
+      siren.push(lamp);
+      parts.push(lamp);
+    }
+  } else if (hero) {
+    // ---- THE FROGGY CAR.  There is a frog driving it and you can see him
+    // through the screen: a pale head filling the cabin and two eyes up at
+    // the top of it.  Nothing else on this road has a face, so the player
+    // never loses their own car in traffic.
+    parts.push(scene.add.ellipse(0, -1, 9, 8, lit));
+    for (const sx of [-1, 1]) {
+      parts.push(scene.add.circle(sx * 2.5, -3, 1.8, PALETTE.cream));
+      parts.push(scene.add.circle(sx * 2.5, -3, 0.9, PALETTE.black));
+    }
+    // A wide frog mouth, closed, somewhere between pleased and concentrating.
+    parts.push(scene.add.rectangle(0, 1, 5, 1, tone(colour, 0.45)));
+  } else {
+    // ---- TRAFFIC: a glint on the screen, and indicators at the back corners
+    // where the player -- who is behind every one of these cars -- can see
+    // them.
+    parts.push(scene.add.rectangle(-2, -4, 3, 1, PALETTE.fog).setAlpha(0.55));
+    for (const sx of [-1, 1]) {
+      const lamp = scene.add.rectangle(sx * (CAR_W / 2 - 1), CAR_H / 2 - 3, 2, 4, PALETTE.amber).setVisible(false);
       lamps.push(lamp);
       parts.push(lamp);
     }
   }
+
   const c = scene.add.container(x, y, parts).setDepth(4).setVisible(false);
   c.setData('lamps', lamps);
+  c.setData('siren', siren);
   return c;
 }
 
@@ -1811,7 +1932,7 @@ function spawnTraffic(): void {
 function spawnPolice(): void {
   if (!scene0) return;
   const lane = LANES[Phaser.Math.Between(0, 3)];
-  const body = carSprite(scene0, lane, BOTTOM + CAR_H, PALETTE.moon, true);
+  const body = carSprite(scene0, lane, BOTTOM + CAR_H, PALETTE.bone, true);
   // It comes on aimed at the lane it can see you in, and looks again on its
   // own clock from there.
   police.push({
@@ -2185,8 +2306,10 @@ function refreshHud(): void {
   if (!hud) return;
   hud.cash.setText(`CASH ${collected}`);
   hud.best.setText(`BEST ${best}`);
-  const banked = chasePayout(collected);
-  hud.bank.setText(`[ENTER] PULL OVER FOR ${banked} TOKENS`).setVisible(banked > 0);
+  const banked = runReward();
+  // Not an offer any more -- there is nothing to press.  It is the receipt:
+  // once it is up, it is up for the rest of the run whatever happens next.
+  hud.bank.setText(`${banked} TOKENS SAFE`).setVisible(banked > 0);
   // What the tool costs and whether the bag covers it.  A price you cannot
   // read is a button you press and nothing happens.
   hud.bombLabel.setText(`BOMB ${BOMB_COST}`);
@@ -2204,6 +2327,6 @@ function finish(): void {
   if (over) return;
   over = true;
   store.setHighScore(ID, collected);
-  const payout = chasePayout(collected);
+  const payout = runReward();
   scene0?.time.delayedCall(700, () => (payout > 0 ? apiRef?.win(payout) : apiRef?.lose()));
 }
