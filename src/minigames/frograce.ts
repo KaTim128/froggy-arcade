@@ -92,15 +92,22 @@ import type { MinigameApi, MinigameModule } from './types';
 
 const ID = 'frograce' as const;
 
-/** The field.  Seven colours, seven names, and they never change. */
-const RUNNERS: Array<{ name: string; colour: number }> = [
-  { name: 'GREEN', colour: 0x5fbf5a },
-  { name: 'GOLD', colour: 0xffd45e },
-  // { name: 'RED', colour: 0xd8443c },
-  // { name: 'BLUE', colour: 0x46a0e0 },
-  { name: 'PINK', colour: 0xff6fb0 },
-  // { name: 'TEAL', colour: 0x46c4bd },
-  { name: 'VIOLET', colour: 0xa86ad8 },
+/**
+ * THE FIELD.  Four frogs, and four colours that cannot be mistaken for each
+ * other at eleven pixels across while they are moving.
+ *
+ * `skin` is the body, `lit` the light down its back and `dark` the shadow
+ * under it -- three tones per frog rather than one flat fill, so a frog reads
+ * as a body with a top and an underside rather than as a coloured blob.  The
+ * four hues are a quarter of the wheel apart and the two that sit closest
+ * (green and yellow) differ most in brightness, which is the pair a colour
+ * blind player has to tell apart.
+ */
+const RUNNERS: Array<{ name: string; skin: number; lit: number; dark: number }> = [
+  { name: 'GREEN', skin: 0x46a83f, lit: 0x7ad06a, dark: 0x235c26 },
+  { name: 'RED', skin: 0xd8443c, lit: 0xf5847a, dark: 0x7d1e1c },
+  { name: 'BLUE', skin: 0x3d8fdd, lit: 0x79c2f5, dark: 0x1c4a86 },
+  { name: 'YELLOW', skin: 0xf0c33c, lit: 0xffe89a, dark: 0x9a7412 },
 ];
 
 /**
@@ -117,16 +124,23 @@ const COUNT_WORD = ['NO', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN',
 /** `FOUR`, `SEVEN`... and the number itself for a field too big to have a word here. */
 const FIELD_WORD = COUNT_WORD[FIELD] ?? `${FIELD}`;
 
-const LANE_T = 44;
 /**
- * HOW DEEP A LANE IS, which depends on how many there are.
+ * WHERE THE TRACK SITS, AND HOW DEEP A LANE IS.
  *
- * Fifteen was right for seven of them and leaves a four frog field racing
- * across the top third of the cabinet with half the screen empty under it.
- * The lanes take the room the field does not: the track always fills the same
- * band, whether that is seven thin lanes or four generous ones.
+ * The track used to start twenty-six pixels under the header and run out of
+ * screen before the betting rail, which put the race in the top third of the
+ * cabinet with the sky doing nothing above it and nothing at all below.  It is
+ * dropped to the middle of the screen now: sky and scenery above it, verge and
+ * crowd below, and the frogs across the line your eye already rests on.
+ *
+ * The lanes take the room the field does not, so four of them fill the same
+ * band seven used to.
  */
-const LANE_H = Math.max(15, Math.min(24, Math.floor(96 / FIELD)));
+const TRACK_TOP = 74;
+const LANE_H = Math.max(14, Math.min(22, Math.floor(84 / FIELD)));
+const LANE_T = TRACK_TOP;
+/** The bottom of the last lane, which is where the verge starts. */
+const TRACK_BOTTOM = TRACK_TOP + LANE_H * FIELD;
 const START_X = 42;
 const FINISH_X = GAME_W - 30;
 /** One square of the chequered tape, in pixels. */
@@ -136,45 +150,59 @@ const DIST = FINISH_X - START_X;
 /**
  * How fast a frog goes, in lengths per second.
  *
- * `BASE` is the pace of the whole field and `SPREAD` is what the form is worth
- * on top of it.  The three noise terms are described at the top of the file;
- * what matters here is that `LUCK` is the same size as the whole form spread,
- * because a race where the fastest card simply wins is not a race, it is an
- * announcement.
- */
-/**
- * BASE IS SET BY THE CLOCK, NOT BY TASTE.  The race is twenty seconds; at 15 a
- * clean field was home in under twelve and the cap never came into it, which
- * made the twenty seconds a number in a comment.  The whole set below is the
- * old twelve-second one scaled by the ratio of the two clocks, so the pace
- * comes off without changing the shape of the race.  Measured over six hundred
- * fields: the winner is home at around seventeen and about one race in fifteen
- * is still running at twenty and settled on distance — which is what a nap, a
- * shove and a pothole in the same race are supposed to cost.
+ * `BASE` is the pace of the whole field.  Everything else on top of it is
+ * small on purpose: THIS IS A CLOSE RACE.
  *
- * SPREAD IS THE ONE THAT DID NOT SCALE.  Straight scaling left the favourite on
- * 32%, close enough to the sampler's floor to trip it on a bad draw; the longer
- * clock gives the chaos more room, so the form has to be worth more to stay
- * readable.  At 5.6 the favourite takes 37% and every colour still wins.
+ * ---- WHY THE FORM IS WORTH SO LITTLE NOW.
+ *
+ * The old field ran on a form spread of 5.6 against a base of 8.9, so the best
+ * card was travelling more than half again as fast as the worst and the race
+ * was usually decided in the first ten seconds.  The spread is 1.15 now: the
+ * favourite is still the favourite over a hundred races, and over any ONE race
+ * it is worth about four seconds of nothing-going-wrong.  What decides a race
+ * is what happens IN it.
+ *
+ * ---- AND WHY NOTHING RUNS AWAY WITH IT.
+ *
+ * `CATCH_GAIN` is the whole of the closeness.  Every frog's pace is scaled by
+ * how far behind the leader it is, as a fraction of the track -- twenty pixels
+ * down is about a tenth of the track, which buys back roughly twelve per cent
+ * of pace until the gap closes.  It is a tow rope, not a teleport: it never
+ * moves anybody, it only leans on the arithmetic that was moving them anyway,
+ * so the motion stays smooth and nothing snaps.
+ *
+ * `CLOSING_FROM` is where that rope is pulled tight.  Inside the last quarter
+ * of the track the gain doubles, which is what turns four frogs strung out
+ * over thirty pixels into four frogs crossing the line inside ten of each
+ * other -- and it is why the winner is not knowable until the last seconds.
+ *
+ * `LEADER_DRAG` is the same idea from the front: whoever is in front is
+ * carrying the wind, and gives up three per cent for it.
  */
-const BASE = 8.9;
-const SPREAD = 5.6;
-const WOBBLE = 7;
+const BASE = 8.4;
+const SPREAD = 1.15;
+const WOBBLE = 2.6;
 /** Held for the whole race: uniform over ±LUCK. */
-const LUCK = 4.5;
+const LUCK = 0.7;
 /** The slow walk: how hard it is kicked per second, how fast it is pulled back, and its ceiling. */
-const DRIFT_KICK = 17;
-const DRIFT_PULL = 1.6;
-const DRIFT_MAX = 5.8;
-/** Every frog gets one, somewhere in the middle third. */
-const SURGE = 10;
+const DRIFT_KICK = 5;
+const DRIFT_PULL = 2.2;
+const DRIFT_MAX = 1.5;
+/** Every frog gets one, somewhere in the middle third.  Small: it is a nudge. */
+const SURGE = 1.6;
+
+/** ---- THE TOW ROPE.  See the block above. */
+const CATCH_GAIN = 3.2;
+const CLOSING_FROM = 0.62;
+const CLOSING_MUL = 2.6;
+const LEADER_DRAG = 0.97;
 
 /**
- * THE RACE IS TWENTY SECONDS.  BASE is set so a clean run is home at about
- * eighteen, which leaves room for a fall, a slip and a nap inside the cap.
- * Anyone still running at twenty is settled on distance.
+ * THE RACE IS THIRTY SECONDS.  BASE is set so a clean run is home at about
+ * twenty-eight, which leaves room for a sleep, a slip and a bird inside the
+ * cap.  Anyone still running at thirty is settled on distance.
  */
-const RACE_S = 20;
+const RACE_S = 30;
 /** One hop: how long it takes, and how high it goes in pixels. */
 const HOP_S = 0.34;
 /**
@@ -269,143 +297,143 @@ function hopPose(u: number): { sx: number; sy: number; rot: number } {
   const sy = gp < 0.45 ? 0.66 + (0.22 * gp) / 0.45 : 0.88 - (0.14 * (gp - 0.45)) / 0.55;
   return { sx: 1 + (1 - sy) * 0.85, sy, rot: -0.12 * gp };
 }
-/** A pothole costs this long of scrabbling, and a slip this long of sprawling. */
-const HOLE_S = 0.85;
-const SLIP_S = 0.65;
-/** The chance of a slip on any one landing.  Small: it is a surprise, not a tax. */
-const SLIP_CHANCE = 0.018;
-/** How much of the track a frog loses backing out of a hole. */
-const HOLE_BACK = 6;
-/** Potholes per lane, and the stretch of the track they are dug in. */
-const HOLES_PER_LANE = 3;
-const HOLE_FROM = 0.18;
-const HOLE_TO = 0.86;
 /**
- * The bird comes for somebody between these two points in the race -- and only
- * in some races.  At every race it stopped being a thing that happens and
- * became a tax on the field: about a third is often enough that the player has
- * seen it and does not know when it is coming.
- */
-const BIRD_CHANCE = 0.35;
-const BIRD_FROM = 0.3;
-const BIRD_TO = 0.68;
-/** How long it takes to come down, take one, and go. */
-/**
- * How far up the track the bird carries it, in pixels.
+ * ================= WHAT HAPPENS TO FROGS =================
  *
- * IT HAS TO BE A LOSS.  At 34 the carry put the frog further up the track than
- * the three and a quarter seconds it spends out of the race would have taken
- * it, so being caught by the bird was the best thing that could happen to a
- * frog.  Twelve is a shove forward that still leaves it about two seconds down
- * on the field, which is what a hazard is.
+ * Nine things, and they are the race.  The form is worth four seconds over
+ * thirty; one of these is worth two, and every frog gets one.
+ *
+ * EVERY EFFECT IS MEASURED IN SECONDS OF RUNNING, not in pixels, because that
+ * is how the player experiences it: "the bird put him two seconds down" is a
+ * thing you can see happen.  `SEC` turns one of those seconds into the ground
+ * a frog covers in it, so retuning the pace does not silently retune every
+ * effect with it.
+ *
+ * AND NONE OF THEM TELEPORTS ANYTHING.  Each one either scales the pace for a
+ * while, adds a push for a while, or takes the frog off the ground and puts it
+ * back down -- and the ones that move a frog do it over their own length with
+ * an ease on both ends.  Nothing in here writes a new `x` in one frame.
  */
-const BIRD_CARRY = 12;
-const BIRD_DIVE_S = 0.55;
-const BIRD_AWAY_S = 1.6;
+const SEC = BASE;
+
+/** ---- THE BIRD.  Down, hooks it, carries it BACKWARDS, drops it, leaves. */
+const BIRD_DIVE_S = 0.75;
+const BIRD_CARRY_S = 1.35;
+const BIRD_RELEASE_S = 0.45;
+const BIRD_AWAY_S = 1.2;
+/** How far back it puts the frog, in seconds of running.  The point of the bird. */
+const BIRD_BACK = 2.0;
+/** How high it lifts it off the lane on the way. */
+const BIRD_LIFT = 26;
 /**
  * WHERE THE BEAK IS, inside the bird's own drawing.
  *
  * The frog it has taken is drawn AT this point rather than at its own place on
  * the track, which is the whole of the fix: the bird flies on while it carries
  * one, and a frog left at its own x is a frog hanging in the air under a bird
- * that has gone without it.  Kept beside the drawing it belongs to, so moving
- * the beak moves what is in it.
+ * that has gone without it.
  */
-const BEAK = { x: 12, y: 2 };
-/**
- * ---- THE THINGS THAT HAPPEN TO FROGS, and how often.
- *
- * None of them fires in every race and none of them fires for every frog.  The
- * card is seven ratings and the race is twenty seconds of those ratings being
- * interfered with, so what the player is actually betting on is a frog's form
- * surviving whatever the track does to it.  Every one of these is rolled per
- * race and per frog, so two races of the same field do not look alike.
- */
+const BEAK = { x: 1, y: 8 };
 
-/** A frog nods off in the last stretch.  Late, so it costs a lead. */
-const SLEEP_CHANCE = 0.3;
-const SLEEP_FROM = 0.6;
-const SLEEP_S = 1.9;
+/** ---- THE BALLOON.  Lifts, tows it forward, lets go, and it comes down. */
+const BALLOON_S = 2.0;
+const BALLOON_DOWN_S = 0.5;
+const BALLOON_GAIN = 2.0;
+const BALLOON_H = 12;
 
-/**
- * Shoving.  A frog leans into the lane beside it and puts its neighbour over.
- *
- * It only reaches a frog it is actually ALONGSIDE -- within half a body up the
- * track -- so what the player sees is two frogs level and one of them going
- * down, rather than a frog being knocked over by somebody it has never been
- * near.  Each frog gets at most one go, which is what stops the back of the
- * field being flattened by the front of it.
- */
-const SHOVE_CHANCE = 0.45;
-const SHOVE_FROM = 0.2;
-const SHOVE_TO = 0.85;
-const SHOVE_REACH = 7;
-const SHOVE_LEAN = 5;
-const SHOVE_LEAN_S = 0.5;
-/** And what it costs the frog that goes over. */
-const DOWN_S = 1.0;
-
-/** A balloon, which is the rarest thing on this track. */
-const BALLOON_CHANCE = 0.16;
-const BALLOON_FROM = 0.25;
-const BALLOON_TO = 0.7;
-const BALLOON_S = 2.6;
-const BALLOON_H = 22;
-/**
- * What floating does to a frog's pace: it drifts on rather than hopping, which
- * is slower than a good frog and faster than a bad one.  A balloon is luck,
- * not a win.
- */
-const BALLOON_PACE = 0.72;
-
-/** The fly, and the frogs that cannot leave it alone. */
-const FLY_CHANCE = 0.45;
-const FLY_FROM = 0.15;
-const FLY_TO = 0.75;
-const FLY_S = 2.4;
-/** The chance ONE frog takes a go at it as the fly passes its lane. */
-const FLY_NOTICE = 0.4;
-const TONGUE_S = 0.6;
-/** How far the lick goes, in pixels.  A frog is about ten across. */
+/** ---- THE FLY.  It crosses the lanes, somebody eats it, and it sleeps it off. */
+const FLY_CROSS_S = 2.6;
+const TONGUE_S = 0.45;
+/** How far the lick goes, in pixels.  A frog is about eleven across. */
 const TONGUE_REACH = 26;
+/** A full stomach is four seconds of not racing. */
+const SLEEP_S = 4.0;
+/** How long it takes to wake up, inside those four seconds. */
+const WAKE_S = 0.8;
 
-/**
- * ---- THE JETPACK.  The comeback, and the one thing on this track the card
- * does not hint at and the tutorial does not mention.
+/** ---- THE GOLDEN FLY.  Same idea, opposite result: eat it and go. */
+const GOLD_GAIN = 1.5;
+const GOLD_SURGE_S = 0.9;
+const GOLD_CROSS_S = 2.2;
+
+/** ---- THE BOOST.  A fifth more pace for two seconds, and you can see it. */
+const BOOST_S = 2.0;
+const BOOST_MUL = 1.2;
+
+/** ---- THE MUD.  A quarter off for two seconds, with the splash to match. */
+const MUD_S = 2.0;
+const MUD_MUL = 0.75;
+
+/** ---- THE WIND.  One second of gust, forward or back, and it is drawn. */
+const WIND_S = 1.0;
+const WIND_PUSH = 0.9;
+
+/** ---- THE SUPER JUMP.  One long arc that lands a second and a half up. */
+const JUMP_S = 1.5;
+const JUMP_GAIN = 1.5;
+const JUMP_H = 22;
+
+/** ---- THE SLIP.  Legs go, slides, gets up.  It costs about a second. */
+const SLIP_S = 1.1;
+const SLIP_SLIDE = 0.35;
+/** The chance of one on any landing, on top of the scheduled ones. */
+const SLIP_CHANCE = 0.004;
+
+/** ---- POTHOLES.  Thinned right out: one a lane, and half of them are cleared. */
+const HOLES_PER_LANE = 1;
+const HOLE_FROM = 0.3;
+const HOLE_TO = 0.8;
+const HOLE_S = 0.7;
+const HOLE_BACK = 4;
+
+/** ---- THE JETPACK, kept from the comeback that was asked for before this one.
  *
- * In the last stretch of the race -- the final two seconds of it, whether
- * those are the last two before the cap or the last two before the leader
- * crosses -- whoever is dead last may light a jetpack and come up the track at
- * it.  It is rolled before the gun like everything else, so most races do not
- * have one.
- *
- * IT DOES NOT MOVE THE CLOCK.  The burn is sized from the ground the frog has
- * left and the time the race has left, so a lit jetpack always puts its frog
- * on the line INSIDE the existing race -- and never after it.  What it does
- * not guarantee is the win: it is aimed at the leader's projected arrival, and
- * the leader is a frog with wobble and drift and a pothole in front of it, so
- * the projection is a guess and the finish is a race.
+ * It is the tow rope made visible, and it is the only thing in the race that
+ * is not on the card: in the last stretch, sometimes, whoever is last lights
+ * one.  With the field this close it is a short burn rather than a rescue.
  */
-const JET_CHANCE = 0.3;
-/** How much of the end of the race counts as the last stretch, in seconds. */
-const JET_WINDOW_S = 2;
-/**
- * Where it aims, as a fraction of the time the race has left when it lights.
- *
- * IT STRADDLES THE LEADER.  Sized entirely under 1 the burn beat the leader's
- * projection every time and the comeback won 95% of the races it appeared in,
- * which is not a comeback, it is an announcement -- and it took five points
- * off the favourite in the sampler.  Straddling means some burns are aimed
- * past the leader and get there second, and a frog that flew and lost is the
- * point of the thing.  Either way the burn is sized inside the clock, so it is
- * never a jetpack that runs out in the middle of the track.
- */
-const JET_AIM = { min: 0.82, max: 1.16 };
-/** The burn will not be lit for a frog that would need to be fired up the track faster than this. */
-const JET_MAX_SPEED = 120;
-/** How high off the lane it flies, and how long it takes to get up there. */
+const JET_CHANCE = 0.2;
+const JET_WINDOW_S = 2.5;
+// AIMED WIDER THAN IT USED TO BE.  With the field this tight the leader's
+// arrival is far easier to predict than it was, so a burn sized under it beat
+// that leader nine times out of ten -- which turns a comeback into a coin
+// flip on who happened to be last.  Straddling further either side puts it
+// behind about as often as in front.
+const JET_AIM = { min: 0.86, max: 1.12 };
+const JET_MAX_SPEED = 90;
 const JET_LIFT = 7;
 const JET_RISE_S = 0.25;
+
+/**
+ * ---- THE CARD OF EFFECTS, AND THE RULE THAT EVERY FROG IS ON IT.
+ *
+ * Four frogs, four DIFFERENT effects, one each, spaced down the race so they
+ * do not all land at once.  The bands overlap a little so the running order of
+ * the effects is not the running order of the lanes.
+ *
+ * `EXTRA` is what is sprinkled on top: a couple more, anywhere, on anybody --
+ * enough that two races do not look alike, not so many that the race is a
+ * fairground ride.  Nothing is booked in the last few seconds: the finish
+ * belongs to the frogs.
+ */
+const EFFECTS = ['bird', 'balloon', 'fly', 'boost', 'mud', 'wind', 'golden', 'jump', 'slip'] as const;
+type EffectKind = (typeof EFFECTS)[number];
+const BAND_FROM = 0.12;
+const BAND_TO = 0.68;
+const EXTRA_MIN = 1;
+const EXTRA_MAX = 2;
+/** Nothing new starts after this much of the race has gone. */
+const LAST_CALL = 0.82;
+
+/** One booked effect: when it goes off, who it goes off on, and what it is. */
+interface Booking {
+  at: number;
+  who: number;
+  kind: EffectKind;
+  done: boolean;
+  /** One of the four the field is guaranteed, rather than a sprinkled extra. */
+  core: boolean;
+}
 
 /** Ten a ticket; twenty back.  Kept here so the game and the cabinet agree. */
 const TICKET = 10;
@@ -418,26 +446,56 @@ const TICKET_PAYS = 20;
  * by the headless sampler — two copies of this arithmetic is two races, and
  * the sampler would then be measuring a game nobody plays.
  */
-function pace(r: { form: number; luck: number; drift: number }, t: number, surging: boolean, dt: number): number {
+function pace(r: Run, field: Run[] | undefined, surging: boolean, dt: number): number {
   r.drift += (Math.random() - 0.5) * 2 * DRIFT_KICK * dt;
   r.drift = Phaser.Math.Clamp(r.drift - r.drift * DRIFT_PULL * dt, -DRIFT_MAX, DRIFT_MAX);
-  void t;
-  return (
-    BASE +
-    r.form * SPREAD +
-    r.luck +
-    r.drift +
-    (Math.random() - 0.5) * 2 * WOBBLE +
-    (surging ? SURGE : 0)
-  );
+  const own =
+    BASE + r.form * SPREAD + r.luck + r.drift + (Math.random() - 0.5) * 2 * WOBBLE + (surging ? SURGE : 0);
+  return own * tow(r, field);
 }
 
 /**
- * What a frog is doing.  `run` is hopping up the track; the other three are
- * the ways that stops, and each of them is something the player can see
- * happen rather than a number going down.
+ * THE TOW ROPE, and the only reason four frogs are still together at the line.
+ *
+ * A spring on the MEAN of the field rather than on the leader: a frog behind
+ * the middle of the race is pulled up, one ahead of it is held back, and the
+ * pair of those closes a gap twice as fast as leaning on either end alone --
+ * for half the visible difference in pace, which is what keeps it subtle.
+ *
+ * It scales pace; it never writes a position.  A frog that has just lost four
+ * seconds asleep spends the next several running at something like half again
+ * its own pace, and what the player sees is a frog running its heart out, not
+ * a frog being handed the ground back.
+ *
+ * Inside the last quarter the spring stiffens, which is what turns a field
+ * strung out over thirty pixels into four frogs inside ten of each other, and
+ * why nobody can call it until the last seconds.
  */
-type Going = 'run' | 'hole' | 'slip' | 'taken' | 'sleep' | 'down' | 'tongue';
+function tow(r: Run, field: Run[] | undefined): number {
+  if (!field || field.length < 2) return 1;
+  let sum = 0;
+  let n = 0;
+  let lead = -1;
+  for (const o of field) {
+    if (o.going === 'taken') continue;
+    sum += o.x;
+    n++;
+    if (o.x > lead) lead = o.x;
+  }
+  if (!n) return 1;
+  const behind = (sum / n - r.x) / DIST;
+  const gain = r.x / DIST >= CLOSING_FROM ? CATCH_GAIN * CLOSING_MUL : CATCH_GAIN;
+  const pull = Phaser.Math.Clamp(1 + gain * behind, 0.72, 1.7);
+  // And whoever is actually in front is carrying the wind.
+  return r.x >= lead - 0.5 ? pull * LEADER_DRAG : pull;
+}
+
+/**
+ * What a frog is doing.  `run` is hopping up the track; everything else is a
+ * way that stops, and each of them is something the player can see happen
+ * rather than a number going down.
+ */
+type Going = 'run' | 'hole' | 'slip' | 'taken' | 'sleep' | 'eat' | 'balloon' | 'jump';
 
 /**
  * Everything that moves a frog, and nothing that draws one.
@@ -467,21 +525,37 @@ interface Run {
   holeAt: number;
   /** Height off the lane, in pixels: the hop arc, or being carried off. */
   lift: number;
-  /** Seconds left of floating under a balloon, and when it goes up. */
+
+  // ---- the timed modifiers.  Each is seconds left, and each scales or adds
+  // to pace rather than moving anything.
+  boost: number;
+  mud: number;
+  wind: number;
+  windDir: number;
+  gold: number;
+
+  // ---- the staged movements.  Each runs from one place to another over its
+  // own length, eased at both ends; see `step`.
+  /** The bird has it: where it was taken from, where it will be put down. */
+  carryFrom: number;
+  carryTo: number;
+  /** One long arc: where it left the ground and where it lands. */
+  jumpFrom: number;
+  jumpTo: number;
+  /** Seconds of float left, and how far through the let-go it is. */
   balloon: number;
-  balloonAt: number;
-  /** When it nods off, if it does at all.  -1 is a frog that stays awake. */
-  sleepAt: number;
-  /** When it tries to put a neighbour over, and whether it still has its go. */
-  shoveAt: number;
-  shoved: boolean;
-  /** Seconds left leaning sideways into the shove.  Drawing only. */
-  lean: number;
-  /** How far through a lick at the fly it is, 0..1, and which way. */
+  balloonDown: number;
+  /** How far through a lick at a fly it is, 0..1. */
   tongue: number;
+  /** A slip's slide, and a lean into a shove.  Drawing only. */
+  slide: number;
+  lean: number;
   /** Seconds of jetpack left, and the pace it was sized to fly at. */
   jet: number;
   jetSpeed: number;
+  /** What is happening to it right now, and everything that has. */
+  fx: EffectKind | null;
+  had: EffectKind[];
 }
 
 interface Racer extends Run {
@@ -494,24 +568,23 @@ interface Racer extends Run {
  * stop racing for half a second to have a go at it with their tongue.
  */
 interface Fly {
-  /** When it comes, as a fraction of RACE_S.  -1 for a race without one. */
-  at: number;
   /** Alive while it is on screen, and where it is in track/lane space. */
   on: boolean;
+  /** The golden one is worth catching; the ordinary one is worth a nap. */
+  gold: boolean;
   t: number;
   x: number;
+  /** A float, not an index: it slides across the lanes towards its frog. */
   lane: number;
-  /** Which frogs have already had their go, so nobody licks twice. */
-  tried: number[];
+  /** The frog the card sent it to. */
+  target: number;
 }
 
-/** The one bird, and where it is in its dive.  One per race, at most. */
+/** The one bird, and where it is in its five beats.  See `stepBird`. */
 interface Bird {
-  /** When it comes, as a fraction of RACE_S. */
-  at: number;
-  /** Who it takes.  Chosen when it arrives, from whoever is still running. */
+  /** Who it takes.  Named by the card before it comes in. */
   target: number;
-  /** 0 waiting, 1 diving, 2 carrying off, 3 gone. */
+  /** 0 idle, 1 approach, 2 carry, 3 release, 4 gone. */
   phase: number;
   t: number;
   x: number;
@@ -544,6 +617,8 @@ let birdArt: Phaser.GameObjects.Container | null = null;
 let fly: Fly = makeFly();
 let flyArt: Phaser.GameObjects.Container | null = null;
 let jet: Jet = makeJet();
+/** What is booked to happen to whom, and when.  See `bookField`. */
+let card: Booking[] = [];
 /** How many tickets are on this race.  Ten tokens each, twenty back each. */
 let tickets = 1;
 let ticketLabel: Phaser.GameObjects.BitmapText | null = null;
@@ -559,16 +634,16 @@ export const frogRace: MinigameModule = {
   id: ID,
   title: 'FROG RACE',
   music: 'game_frograce',
-  rules: `pick one, ${FIELD} run`,
+  rules: `pick one, ${FIELD} run, 30 seconds`,
   payoutNote: 'WIN: 20 A TICKET',
   tutorial: {
     objective: [
       `${FIELD_WORD} FROGS RACE. BACK ONE OF THEM.`,
       'NOTHING SAYS WHICH. IT IS A GUESS.',
-      'POTHOLES, NAPS, SHOVES, BALLOONS AND A BIRD.',
-      'FIRST TO THE TAPE WINS IT. AT TWENTY',
-      'SECONDS, WHOEVER IS FURTHEST UP TAKES IT.',
-      'YOUR FROG LOSES, THE TICKET IS GONE.',
+      'BIRDS, BALLOONS, FLIES, MUD, WIND, A SLIP.',
+      'SOMETHING HAPPENS TO EVERY FROG.',
+      'THEY RUN CLOSE AND IT IS WON AT THE END.',
+      'THIRTY SECONDS. FIRST TO THE TAPE TAKES IT.',
       '10 A TICKET, 20 BACK ON EACH.',
     ],
     controls: [
@@ -666,7 +741,8 @@ export const frogRace: MinigameModule = {
               form: Math.round(r.form * 100),
               x: Math.round(r.x),
               going: r.going,
-              balloon: r.balloon > 0,
+              fx: r.fx,
+              had: [...r.had],
             }))
             .sort((a, b) => b.form - a.form),
           // `destroy` empties the field, and a bridge that throws once the game
@@ -684,6 +760,101 @@ export const frogRace: MinigameModule = {
         jetWindow: JET_WINDOW_S,
         /** How many frogs are actually in the race.  See FIELD. */
         runners: FIELD,
+        /**
+         * Start one effect on one frog, through the same `fire` the card
+         * uses -- so what a harness watches is the mechanic and not a second
+         * copy of it.  Returns false if that frog is busy.
+         */
+        fire: (kind: EffectKind, who = 0) => {
+          const r = racers.find((o) => o.i === who);
+          return r ? fire(kind, r, bird, fly) : false;
+        },
+        kinds: [...EFFECTS],
+        /** The card of effects as it stands, and what each frog is in. */
+        effects: () => ({
+          card: card.map((b) => ({ at: Math.round(b.at * 100) / 100, who: RUNNERS[b.who].name, kind: b.kind, done: b.done })),
+          on: racers.map((r) => ({ name: RUNNERS[r.i].name, fx: r.fx, going: r.going, had: [...r.had] })),
+          spread: racers.length ? Math.max(...racers.map((r) => r.x)) - Math.min(...racers.map((r) => r.x)) : 0,
+          dist: DIST,
+        }),
+        /**
+         * THE RACE, MEASURED, over whole fields: how long it takes, how close
+         * they are, whether every frog got something and whether the leader at
+         * two thirds is the frog that wins.  It runs the same model the player
+         * watches -- the card, the bird, the fly, the jetpack and the tow.
+         */
+        shape: (n: number) => {
+          let total = 0;
+          let capped = 0;
+          let allFed = 0;
+          let distinct = 0;
+          let gapSum = 0;
+          let gapWorst = 0;
+          let lateSum = 0;
+          let heldOn = 0;
+          let effTotal = 0;
+          for (let k = 0; k < n; k++) {
+            const runs = toRuns(makeField());
+            const b = makeBird();
+            const f = makeFly();
+            const cd = bookField();
+            const jt = makeJet();
+            const dt = 1 / 60;
+            let t = 0;
+            let done = 0;
+            let leadLate = -1;
+            let spreadLate = 0;
+            while (t < RACE_S) {
+              t += dt;
+              stepCard(cd, runs, b, f, t);
+              for (const r of runs) step(r, dt, runs);
+              stepBird(b, runs, t, dt);
+              stepFly(f, runs, t, dt);
+              stepJet(jt, runs, t, dt);
+              if (leadLate < 0 && t >= RACE_S * 0.66) {
+                leadLate = runs.reduce((a, o) => (o.x > a.x ? o : a)).i;
+                spreadLate = Math.max(...runs.map((o) => o.x)) - Math.min(...runs.map((o) => o.x));
+              }
+              if (runs.some((r) => r.going !== 'taken' && r.x >= DIST)) {
+                done = t;
+                break;
+              }
+            }
+            if (!done) capped++;
+            total += done || RACE_S;
+            // How close they were at the line, and at two thirds.
+            const gap = Math.max(...runs.map((o) => o.x)) - Math.min(...runs.map((o) => o.x));
+            gapSum += gap;
+            gapWorst = Math.max(gapWorst, gap);
+            lateSum += spreadLate;
+            const won = settleField(runs);
+            if (won === leadLate) heldOn++;
+            // THE PROMISE, MEASURED.  Every frog gets one of the four the
+            // card guarantees, and those four are different from each other --
+            // asked of the bookings themselves, because the extras sprinkled
+            // on top can land first and would otherwise be counted as the
+            // guarantee.
+            const core = cd.filter((x) => x.core && x.done);
+            // Asked of the frogs, not of the paperwork: a booking that was
+            // sent and missed is not an effect the frog had.
+            if (runs.every((r) => r.had.length > 0)) allFed++;
+            if (new Set(core.map((x) => x.kind)).size === FIELD) distinct++;
+            effTotal += runs.reduce((a, r) => a + r.had.length, 0);
+          }
+          return {
+            races: n,
+            meanSeconds: total / n,
+            hitTheCap: capped / n,
+            everyFrogFed: allFed / n,
+            allDifferent: distinct / n,
+            meanEffects: effTotal / n,
+            meanFinishGap: gapSum / n,
+            worstFinishGap: gapWorst,
+            meanGapTwoThirds: lateSum / n,
+            leaderHeldOn: heldOn / n,
+            dist: DIST,
+          };
+        },
         /**
          * Light it now, through the real path: the window is handed to the
          * same code the race runs, so what a harness sees is the mechanic and
@@ -711,6 +882,7 @@ export const frogRace: MinigameModule = {
             const runs = toRuns(makeField());
             const b = makeBird();
             const f = makeFly();
+            const cd = bookField();
             const jt = makeJet();
             const dt = 1 / 60;
             let t = 0;
@@ -718,7 +890,8 @@ export const frogRace: MinigameModule = {
             let grabbed = false;
             while (t < RACE_S) {
               t += dt;
-              for (const r of runs) step(r, dt, runs, t);
+              stepCard(cd, runs, b, f, t);
+              for (const r of runs) step(r, dt, runs);
               stepBird(b, runs, t, dt);
               stepFly(f, runs, t, dt);
               stepJet(jt, runs, t, dt);
@@ -753,6 +926,7 @@ export const frogRace: MinigameModule = {
             const runs = toRuns(makeField());
             const b = makeBird();
             const f = makeFly();
+            const cd = bookField();
             const jt = makeJet();
             const dt = 1 / 60;
             let t = 0;
@@ -763,7 +937,8 @@ export const frogRace: MinigameModule = {
             let endAt = RACE_S;
             while (t < RACE_S) {
               t += dt;
-              for (const r of runs) step(r, dt, runs, t);
+              stepCard(cd, runs, b, f, t);
+              for (const r of runs) step(r, dt, runs);
               stepBird(b, runs, t, dt);
               stepFly(f, runs, t, dt);
               const before = jt.who;
@@ -836,7 +1011,10 @@ export const frogRace: MinigameModule = {
     } else if (phase === 'racing') {
       raceT += dt;
       // One tick of the model, and it is the SAME model the sampler runs.
-      for (const r of racers) step(r, dt, racers, raceT);
+      // The card first: an effect that is due this tick starts before
+      // anything moves, so it is never a frame late.
+      stepCard(card, racers, bird, fly, raceT);
+      for (const r of racers) step(r, dt, racers);
       stepBird(bird, racers, raceT, dt);
       stepFly(fly, racers, raceT, dt);
       const wasLit = jet.who;
@@ -853,84 +1031,123 @@ export const frogRace: MinigameModule = {
     }
 
     // ---- where everything is drawn.
+    //
+    // NOTHING IN HERE DECIDES ANYTHING.  Every branch reads a number the model
+    // already settled and turns it into a pose, so an animation can never put
+    // a frog somewhere the race does not think it is.
     for (const r of racers) {
-      const laneY = LANE_T + r.i * LANE_H + 7;
+      const laneY = LANE_T + r.i * LANE_H + LANE_H / 2 + 1;
       const body = r.body;
       body.setPosition(START_X + r.x, laneY - r.lift);
       body.setVisible(true);
-      // Down in a hole: sunk, and shuffling.  On its face: flat and sprawled.
+      body.setAlpha(1);
+      // ---- ANYTHING OFF THE GROUND IS DRAWN OVER EVERYTHING ON IT.
+      //
+      // A lane is twenty-one pixels and a balloon lifts a frog twelve, so a
+      // frog in the air is over the lane above it whatever the numbers are.
+      // Depth by height settles it the way the eye already reads it: the
+      // higher thing is the nearer thing.  A frog in the beak goes over the
+      // bird as well -- it is in its claws, not behind it.
+      body.setDepth(r.going === 'taken' ? 39 : 10 + Math.min(8, r.lift / 3));
+
       if (r.going === 'hole') {
+        // Down in a hole: sunk to the shoulders, and scrabbling.
         body.setScale(1, 0.45);
         body.setRotation(0);
         body.y = laneY + 3 + Math.sin(clock / 60) * 0.6;
       } else if (r.going === 'slip') {
-        body.setScale(1.25, 0.5);
-        body.setRotation(0.5);
-        body.y = laneY + 2;
+        // ---- THE SLIP.  The legs go, it slides on its side, and it is back
+        // on its feet before it runs again: the pose rotates out of the fall
+        // rather than snapping upright on the frame the timer ends.
+        const k = Phaser.Math.Clamp(r.stuck / SLIP_S, 0, 1);
+        const down = ease(Math.min(1, (1 - k) * 3));
+        const up = ease(Math.max(0, (0.45 - k) / 0.45));
+        const fallen = down - up;
+        body.setScale(1 + 0.3 * fallen, 1 - 0.5 * fallen);
+        body.setRotation(0.75 * fallen);
+        body.y = laneY + 3 * fallen;
       } else if (r.going === 'taken') {
-        // ---- HELD IN THE BEAK, and held THERE.
-        //
-        // The frog used to be drawn at its own x while the bird flew on ahead
-        // of it, so what the player saw was a frog hanging in the air under a
-        // bird that had left without it.  While the bird has it, the frog is
-        // drawn at the beak: the bird's position plus the beak's own offset
-        // inside its drawing, and nothing else decides where it is.
+        // ---- HELD IN THE BEAK, and held THERE.  The frog is drawn at the
+        // beak -- the bird's position plus the beak's own offset inside its
+        // drawing -- so it cannot hang in the air under a bird that has flown
+        // on without it.
         body.setPosition(START_X + bird.x + BEAK.x, laneY + bird.y + BEAK.y);
-        body.setScale(0.95, 1.1);
-        body.setRotation(Math.sin(clock / 90) * 0.35);
-      } else if (r.going === 'sleep') {
-        // ---- ASLEEP.  Sat down, breathing, with a Z coming off it.
-        const breath = Math.sin(clock / 220);
-        body.setScale(1.1 + breath * 0.05, 0.72 - breath * 0.04);
-        body.setRotation(0.1);
-        body.y = laneY + 2;
-      } else if (r.going === 'down') {
-        // ---- PUT OVER.  On its side, and getting up again at the end of it.
-        const up = 1 - Phaser.Math.Clamp(r.stuck / DOWN_S, 0, 1);
-        body.setScale(1.3 - up * 0.3, 0.45 + up * 0.55);
-        body.setRotation(-0.8 + up * 0.8);
-        body.y = laneY + 3 - up * 3;
-      } else if (r.going === 'tongue') {
-        // ---- AFTER THE FLY.  Up on its back legs, leaning at it.
-        body.setScale(0.92, 1.12);
-        body.setRotation(-0.18);
-        body.y = laneY - 1;
+        body.setScale(0.95, 1.12);
+        // It struggles.  Slower and smaller as the carry goes on.
+        body.setRotation(Math.sin(clock / 55) * 0.4 * (r.lift / BIRD_LIFT));
       } else if (r.jet > 0) {
         // ---- ON THE JETPACK.  Flat out, nose up, and shaking with it.
         body.setScale(1.18, 0.88);
         body.setRotation(-0.22 + Math.sin(clock / 30) * 0.05);
         body.y = laneY - r.lift;
-      } else if (r.balloon > 0) {
-        // ---- UNDER A BALLOON.  Hanging, and swinging a little.
-        body.setScale(0.95, 1.05);
-        body.setRotation(Math.sin(clock / 260) * 0.2);
+      } else if (r.going === 'sleep') {
+        // ---- ASLEEP, and waking up out of it.  Sat back on its haunches,
+        // breathing slowly, then a stretch and a shake in the last beat so it
+        // does not simply start running from a sitting position.
+        const waking = r.stuck < WAKE_S;
+        const w = waking ? ease(1 - r.stuck / WAKE_S) : 0;
+        const breath = Math.sin(clock / 260);
+        body.setScale(1.12 + breath * 0.05 - w * 0.12, 0.7 - breath * 0.04 + w * 0.3);
+        body.setRotation(0.12 - w * 0.12 + (waking ? Math.sin(clock / 30) * 0.05 * w : 0));
+        body.y = laneY + 3 * (1 - w);
+      } else if (r.going === 'eat') {
+        // ---- AFTER THE FLY.  Up on its back legs, leaning into the lick.
+        body.setScale(0.9, 1.14);
+        body.setRotation(-0.2);
+        body.y = laneY - 1;
+      } else if (r.going === 'balloon') {
+        // ---- UNDER A BALLOON.  Hanging, swinging, toes pointed.
+        body.setScale(0.94, 1.08);
+        body.setRotation(Math.sin(clock / 240) * 0.22);
+        body.y = laneY - r.lift;
+      } else if (r.going === 'jump') {
+        // ---- THE SUPER JUMP.  One long arc: tucked at the top, stretched at
+        // both ends, and nose-down coming in.
+        const k = 1 - Phaser.Math.Clamp(r.stuck / JUMP_S, 0, 1);
+        const v = 1 - 2 * k;
+        body.setScale(1 - 0.18 * Math.abs(v) + 0.1, 1 + 0.26 * Math.abs(v));
+        body.setRotation(-0.55 * v);
         body.y = laneY - r.lift;
       } else {
         // Compressed on the lane, stretched off it, tucked at the top.  The
-        // feet are pinned as it squashes — a frog that shrinks about its middle
-        // sinks into the track instead of flattening onto it.
+        // feet are pinned as it squashes — a frog that shrinks about its
+        // middle sinks into the track instead of flattening onto it.
         const p = hopPose(r.hop);
-        body.setScale(p.sx, p.sy);
-        // A frog mid-shove leans into the lane it is shoving at.
-        body.setRotation(p.rot + (r.lean > 0 ? 0.35 : 0));
+        // A gust bends it; mud drags it back on its heels; a boost tips it
+        // forward.  All three are read off the same timers the model uses.
+        const gust = r.wind > 0 ? r.windDir * 0.22 * ease(Math.min(1, r.wind / 0.3)) : 0;
+        const lean = r.boost > 0 || r.gold > 0 ? -0.16 : r.mud > 0 ? 0.12 : 0;
+        body.setScale(p.sx * (r.gold > 0 ? 1.08 : 1), p.sy);
+        body.setRotation(p.rot + gust + lean);
         body.y = laneY - r.lift + FOOT * (1 - p.sy);
-        if (r.lean > 0) body.x += Math.sin((r.lean / SHOVE_LEAN_S) * Math.PI) * SHOVE_LEAN * 0.4;
       }
 
-      // ---- THE EXTRAS, which are only ever on one frog at a time.
+      // ---- THE EXTRAS.  Each is a child of the frog, so it moves, scales and
+      // turns with it and cannot drift off the body it belongs to.
       const zzz = body.getData('zzz') as Phaser.GameObjects.BitmapText | undefined;
       if (zzz) {
-        zzz.setVisible(r.going === 'sleep');
-        if (r.going === 'sleep') zzz.setY(-10 - ((clock / 90) % 6));
+        const napping = r.going === 'sleep' && r.stuck > WAKE_S;
+        zzz.setVisible(napping);
+        if (napping) {
+          zzz.setY(-10 - ((clock / 90) % 6));
+          zzz.setAlpha(1 - ((clock / 90) % 6) / 8);
+        }
       }
       const balloon = body.getData('balloon') as Phaser.GameObjects.Container | undefined;
-      if (balloon) balloon.setVisible(r.balloon > 0);
+      if (balloon) {
+        const up = r.going === 'balloon';
+        balloon.setVisible(up);
+        if (up) {
+          // The string stays taut and the skin drifts: it is holding the frog
+          // up, not sitting on top of it.
+          balloon.setRotation(Math.sin(clock / 300) * 0.16);
+          balloon.setScale(1, 1 + Math.sin(clock / 420) * 0.04);
+        }
+      }
       const pack = body.getData('jet') as Phaser.GameObjects.Container | undefined;
       if (pack) {
         pack.setVisible(r.jet > 0);
         if (r.jet > 0) {
-          // The flame guttering, so the burn reads as a burn rather than a
-          // triangle glued to a frog.
           const lick = 0.7 + Math.abs(Math.sin(clock / 40)) * 0.8;
           (body.getData('flame') as Phaser.GameObjects.Triangle).setScale(lick, 1);
           (body.getData('ember') as Phaser.GameObjects.Triangle).setScale(lick * 1.2, 1);
@@ -938,37 +1155,108 @@ export const frogRace: MinigameModule = {
       }
       const tongue = body.getData('tongue') as Phaser.GameObjects.Rectangle | undefined;
       if (tongue) {
-        tongue.setVisible(r.going === 'tongue');
-        if (r.going === 'tongue') {
-          // Two and a half frog-lengths of it.  At sixteen the lick was a pink
-          // pixel on a ten pixel frog and you had to be told it had happened.
+        tongue.setVisible(r.going === 'eat');
+        if (r.going === 'eat') {
           const reach = r.tongue * TONGUE_REACH;
           tongue.setSize(Math.max(1, reach), 2);
-          tongue.setPosition(4 + reach / 2, -2);
+          tongue.setPosition(5 + reach / 2, -2);
         }
+      }
+      // ---- THE BOOST.  Three streaks off its back, drawn only while it runs.
+      const trail = body.getData('trail') as Phaser.GameObjects.Rectangle[] | undefined;
+      if (trail) {
+        const going = (r.boost > 0 || r.gold > 0) && r.going === 'run';
+        trail.forEach((line, k) => {
+          line.setVisible(going);
+          if (!going) return;
+          const wag = ((clock / 26 + k * 2) % 6) / 6;
+          line.setSize(5 + wag * 8, 1);
+          line.setPosition(-8 - wag * 7, -3 + k * 3);
+          line.setAlpha(0.85 - wag * 0.7);
+          line.setFillStyle(r.gold > 0 ? PALETTE.gold : PALETTE.cream);
+        });
+      }
+      // ---- THE MUD.  A patch under it and three clods coming off its feet.
+      const mud = body.getData('mud') as Phaser.GameObjects.Ellipse[] | undefined;
+      if (mud) {
+        const dirty = r.mud > 0;
+        mud.forEach((clod, k) => {
+          clod.setVisible(dirty);
+          if (!dirty) return;
+          const hop = ((clock / 90 + k * 0.4) % 1);
+          clod.setPosition(-4 - k * 4 - hop * 5, 3 - Math.sin(hop * Math.PI) * 5);
+          clod.setScale(1 - hop * 0.5);
+          clod.setAlpha(0.9 - hop * 0.8);
+        });
+      }
+      // ---- THE GUST.  Two streaks of moving air across it, the way it blows.
+      const gustArt = body.getData('gust') as Phaser.GameObjects.Rectangle[] | undefined;
+      if (gustArt) {
+        const blowing = r.wind > 0;
+        gustArt.forEach((line, k) => {
+          line.setVisible(blowing);
+          if (!blowing) return;
+          const run = ((clock / 34 + k * 0.5) % 1);
+          line.setSize(7 + (1 - run) * 9, 1);
+          line.setPosition(r.windDir * (-12 + run * 24), -5 + k * 7);
+          line.setAlpha(Math.sin(run * Math.PI) * 0.8);
+        });
+      }
+      // ---- THE GOLDEN FLY'S SPARKLE, for as long as the sugar lasts.
+      const spark = body.getData('spark') as Phaser.GameObjects.Rectangle[] | undefined;
+      if (spark) {
+        const lit = r.gold > 0;
+        spark.forEach((bit, k) => {
+          bit.setVisible(lit);
+          if (!lit) return;
+          const a = clock / 140 + (k * Math.PI * 2) / 3;
+          bit.setPosition(Math.cos(a) * 9, -4 + Math.sin(a) * 6);
+          bit.setAlpha(0.4 + 0.6 * Math.abs(Math.sin(a * 2)));
+        });
       }
     }
 
-    // ---- the fly, wandering across the lanes
+    // ---- the fly, closing on the frog it was sent to
     if (flyArt) {
       flyArt.setVisible(fly.on);
       if (fly.on) {
-        flyArt.setPosition(START_X + fly.x, LANE_T + fly.lane * LANE_H + 4);
+        flyArt.setPosition(START_X + fly.x, LANE_T + fly.lane * LANE_H + LANE_H / 2 + 1);
         const w = flyArt.getData('wing') as Phaser.GameObjects.Rectangle;
         w.setScale(1, Math.sin(clock / 18) > 0 ? 1 : -1);
+        const gold = flyArt.getData('gold') as Phaser.GameObjects.Ellipse;
+        const plain = flyArt.getData('plain') as Phaser.GameObjects.Ellipse;
+        gold.setVisible(fly.gold);
+        plain.setVisible(!fly.gold);
+        if (fly.gold) gold.setScale(1 + Math.sin(clock / 90) * 0.12);
       }
     }
 
+    // ---- the bird, and the shadow that arrives before it does
     if (birdArt) {
-      const on = bird.phase === 1 || bird.phase === 2;
+      const on = bird.phase >= 1 && bird.phase <= 4;
       birdArt.setVisible(on);
       if (on) {
         const lane = racers.find((r) => r.i === bird.target);
-        birdArt.setPosition(START_X + bird.x, (lane ? LANE_T + lane.i * LANE_H + 7 : 90) + bird.y);
+        const y = lane ? LANE_T + lane.i * LANE_H + LANE_H / 2 + 1 : 100;
+        birdArt.setPosition(START_X + bird.x, y + bird.y);
         const wings = birdArt.getData('wings') as Phaser.GameObjects.Ellipse[];
-        const beat = Math.sin(clock / 45) * 3;
+        // Slow and heavy while it is carrying something, quick when it is not.
+        const beat = Math.sin(clock / (bird.phase === 2 ? 70 : 42)) * 3;
         wings[0].setY(-3 - beat);
         wings[1].setY(3 + beat);
+        birdArt.setRotation(bird.phase === 1 ? 0.25 : bird.phase === 3 ? -0.2 : 0);
+      }
+      const shade = birdArt.getData('shadow') as Phaser.GameObjects.Ellipse;
+      shade.setVisible(on);
+      if (on) {
+        // On the lane, under the bird, and it grows as the bird comes down.
+        const lane = racers.find((r) => r.i === bird.target);
+        const y = lane ? LANE_T + lane.i * LANE_H + LANE_H / 2 + 5 : 104;
+        const high = Phaser.Math.Clamp(-bird.y / (BIRD_LIFT * 2), 0, 1);
+        shade.setPosition(0, y - (birdArt.y ?? 0) + (birdArt.y - birdArt.y));
+        shade.setPosition(0, y - birdArt.y);
+        shade.setScale(1.4 - high * 0.7, 1.4 - high * 0.7);
+        shade.setAlpha(0.45 - high * 0.3);
       }
     }
   },
@@ -991,23 +1279,32 @@ export const frogRace: MinigameModule = {
 
 // ------------------------------------------------------------------ the card
 
+
 /**
  * ONE FROG, ONE TICK.  The only arithmetic that moves anything.
  *
  * The live race and the headless sampler both call this, which is the whole
  * reason it exists: the odds the machine advertises have to be the odds of the
- * race with the potholes and the bird in it, not of a clean one.
+ * race with the bird and the sleeping and the mud in it, not of a clean one.
  *
- * Returns true if this frog landed on this tick, which is when a slip can
- * happen and when a pothole gets tested — a frog in the air is committed.
+ * EVERYTHING THAT MOVES A FROG MOVES IT OVER TIME.  There is no branch in here
+ * that writes a new `x` in one frame: the staged effects -- the carry, the
+ * jump, the balloon -- run from where the frog was to where it is going over
+ * their own length, eased at both ends, and everything else is a pace the frog
+ * runs at for a while.
  */
-function step(r: Run, dt: number, field?: Run[], raceT = 0): void {
-  if (r.lean > 0) r.lean -= dt;
+function step(r: Run, dt: number, field?: Run[]): void {
+  if (r.lean > 0) r.lean = Math.max(0, r.lean - dt);
+  if (r.boost > 0) r.boost = Math.max(0, r.boost - dt);
+  if (r.mud > 0) r.mud = Math.max(0, r.mud - dt);
+  if (r.wind > 0) r.wind = Math.max(0, r.wind - dt);
+  if (r.gold > 0) r.gold = Math.max(0, r.gold - dt);
+  if (r.going === 'run' && !r.boost && !r.mud && !r.wind && !r.gold && r.jet <= 0) r.fx = null;
+
+  // ---- IN THE BIRD'S FEET.  The bird owns where it is; see `stepBird`.
   if (r.going === 'taken') return;
 
-  // ---- ON THE JETPACK.  Nothing on the track reaches a frog that is off it:
-  // no hop, no pothole, no landing to slip on.  It flies the pace it was sized
-  // to fly and it comes down when the burn is out.
+  // ---- ON THE JETPACK.  Nothing on the track reaches a frog that is off it.
   if (r.jet > 0) {
     r.jet -= dt;
     r.hop = (r.hop + dt * 3) % 1;
@@ -1021,79 +1318,96 @@ function step(r: Run, dt: number, field?: Run[], raceT = 0): void {
     return;
   }
 
-  if (r.going !== 'run') {
-    // In a hole, on its face, asleep, or busy with a fly.  The clock runs;
-    // nothing else does.
+  // ---- UNDER THE BALLOON.  It tows, then it lets go and the frog comes down.
+  if (r.going === 'balloon') {
+    if (r.balloon > 0) {
+      r.balloon -= dt;
+      // up over the first half second, held, and the frog is drawn hanging
+      const up = Math.min(1, (BALLOON_S - r.balloon) / 0.5);
+      r.lift = BALLOON_H * ease(Math.min(up, Math.min(1, r.balloon / 0.5) || up));
+      r.lift = BALLOON_H * ease(Math.min(1, Math.min(BALLOON_S - r.balloon, r.balloon + BALLOON_DOWN_S) / 0.5));
+      r.x = Math.min(DIST, r.x + (BASE + (BALLOON_GAIN * SEC) / BALLOON_S) * dt);
+      if (r.balloon <= 0) r.balloonDown = BALLOON_DOWN_S;
+      return;
+    }
+    // let go: it settles back onto the lane rather than dropping out of the sky
+    r.balloonDown -= dt;
+    const k = Phaser.Math.Clamp(r.balloonDown / BALLOON_DOWN_S, 0, 1);
+    r.lift = BALLOON_H * ease(k) * 0.9;
+    r.x = Math.min(DIST, r.x + BASE * dt);
+    if (r.balloonDown <= 0) {
+      r.going = 'run';
+      r.lift = 0;
+      r.hop = 0;
+      r.fx = null;
+    }
+    return;
+  }
+
+  // ---- THE SUPER JUMP.  One arc, from where it took off to where it lands.
+  if (r.going === 'jump') {
     r.stuck -= dt;
-    if (r.going === 'tongue') {
+    const k = Phaser.Math.Clamp(1 - r.stuck / JUMP_S, 0, 1);
+    r.x = Math.min(DIST, r.jumpFrom + (r.jumpTo - r.jumpFrom) * ease(k));
+    r.lift = JUMP_H * 4 * k * (1 - k);
+    if (r.stuck <= 0) {
+      r.going = 'run';
+      r.lift = 0;
+      r.hop = 0;
+      r.fx = null;
+    }
+    return;
+  }
+
+  if (r.going !== 'run') {
+    // In a hole, on its face, asleep, or eating.  The clock runs; the frog
+    // does not -- except a slip, which slides as it goes down.
+    r.stuck -= dt;
+    if (r.going === 'eat') {
       // Out and back inside the one beat, so the tongue is a lick rather than
       // a thing that hangs there.
       r.tongue = 1 - Math.abs(1 - (2 * (TONGUE_S - r.stuck)) / TONGUE_S);
+      if (r.stuck <= 0) {
+        // What was on the end of it decides what happens next.
+        r.tongue = 0;
+        if (r.fx === 'golden') {
+          r.going = 'run';
+          r.gold = GOLD_SURGE_S;
+          r.hop = 0;
+        } else {
+          r.going = 'sleep';
+          r.stuck = SLEEP_S;
+        }
+        return;
+      }
+    }
+    if (r.going === 'slip') {
+      // It keeps sliding for a moment after the legs go, and stops dead.
+      const k = Phaser.Math.Clamp(r.stuck / SLIP_S, 0, 1);
+      r.slide = k;
+      r.x = Math.min(DIST, r.x + BASE * SLIP_SLIDE * k * dt);
     }
     if (r.stuck <= 0) {
       r.going = 'run';
       r.hop = 0;
       r.tongue = 0;
+      r.slide = 0;
+      r.fx = null;
     }
     return;
   }
 
   const t = r.x / DIST;
 
-  // ---- THE BALLOON.  It goes up when its moment comes and it carries the
-  // frog on at its own steady drift; nothing else can happen to a frog that is
-  // off the ground, which is most of why it is worth having.
-  if (r.balloon > 0) {
-    r.balloon -= dt;
-    const k = Phaser.Math.Clamp(Math.min(r.balloon, BALLOON_S - r.balloon) / 0.5, 0, 1);
-    r.lift = BALLOON_H * k;
-    r.x = Math.min(DIST, r.x + BASE * BALLOON_PACE * dt);
-    if (r.balloon <= 0) {
-      r.lift = 0;
-      r.hop = 0;
-    }
-    return;
-  }
-  if (r.balloonAt > 0 && t >= r.balloonAt) {
-    r.balloonAt = -1;
-    r.balloon = BALLOON_S;
-    return;
-  }
-
-  // ---- NODDING OFF.  Late, and only for the frogs that drew it.
-  if (r.sleepAt > 0 && t >= r.sleepAt) {
-    r.sleepAt = -1;
-    r.going = 'sleep';
-    r.stuck = SLEEP_S;
-    r.lift = 0;
-    return;
-  }
-
-  // ---- AND PUTTING A NEIGHBOUR OVER.  One go each, and only at a frog it is
-  // genuinely alongside: the shove reaches half a body up the track, so what
-  // the player sees is two frogs level and one of them going down.
-  if (!r.shoved && field && r.shoveAt > 0 && t >= r.shoveAt) {
-    const mark = field.find(
-      (o) =>
-        o !== r &&
-        Math.abs(o.i - r.i) === 1 &&
-        o.going === 'run' &&
-        o.balloon <= 0 &&
-        Math.abs(o.x - r.x) < SHOVE_REACH,
-    );
-    if (mark) {
-      r.shoved = true;
-      r.lean = SHOVE_LEAN_S;
-      mark.going = 'down';
-      mark.stuck = DOWN_S;
-      mark.lift = 0;
-      mark.hop = 0;
-    }
-  }
-  void raceT;
-
   const surging = t > r.surgeAt && t < r.surgeAt + r.surgeFor;
-  const speed = Math.max(4, pace(r, t, surging, dt));
+  let speed = pace(r, field, surging, dt);
+  if (r.boost > 0) speed *= BOOST_MUL;
+  if (r.mud > 0) speed *= MUD_MUL;
+  // The gust and the golden surge are pushes rather than gears: they are worth
+  // the same ground whoever they land on.
+  if (r.wind > 0) speed += r.windDir * WIND_PUSH * SEC;
+  if (r.gold > 0) speed += (GOLD_GAIN * SEC) / GOLD_SURGE_S;
+  speed = Math.max(2, speed);
 
   // The hop.  It is a real cycle rather than a bob: the frog gathers itself on
   // the lane, pushes off, sails, and touches down — and touching down is the
@@ -1107,21 +1421,18 @@ function step(r: Run, dt: number, field?: Run[], raceT = 0): void {
 
   // The ground it covers is the hop, gated.  `hopTravel` integrates the gate
   // across the tick rather than sampling it, so the distance is the same
-  // whatever the frame rate and a tick that straddles the take-off is not
-  // rounded into a free step or a lost one.
+  // whatever the frame rate.
   r.x = Math.min(DIST, r.x + speed * dt * hopTravel(was, du));
 
   if (!landed && was <= 1) {
     // A POTHOLE IS TESTED ON THE WAY IN, not on landing: a frog reaching one
-    // either clears it in the air or comes down in it, and the coin is flipped
-    // at the lip so the player sees the result rather than the decision.
+    // either clears it in the air or comes down in it.
     while (r.holeAt < r.holes.length && t >= r.holes[r.holeAt]) {
       r.holeAt++;
       if (Math.random() < 0.5) {
         r.going = 'hole';
         r.stuck = HOLE_S;
         r.lift = 0;
-        // and it loses the ground it was over when it went in
         r.x = Math.max(0, r.x - HOLE_BACK);
         return;
       }
@@ -1130,14 +1441,157 @@ function step(r: Run, dt: number, field?: Run[], raceT = 0): void {
   }
 
   // Landed clean.  Unless it does not.
-  if (Math.random() < SLIP_CHANCE) {
-    r.going = 'slip';
-    r.stuck = SLIP_S;
-    r.lift = 0;
+  if (Math.random() < SLIP_CHANCE) slipUp(r);
+}
+
+/** Smooth at both ends.  Every staged effect runs through this. */
+function ease(k: number): number {
+  const u = Phaser.Math.Clamp(k, 0, 1);
+  return u * u * (3 - 2 * u);
+}
+
+/** Down it goes, wherever it was in its stride. */
+function slipUp(r: Run): void {
+  r.going = 'slip';
+  r.stuck = SLIP_S;
+  r.slide = 1;
+  r.lift = 0;
+  r.fx = 'slip';
+  r.had.push('slip');
+}
+
+/**
+ * ================= THE CARD, AND WHAT IT PUTS ON WHOM =================
+ *
+ * `bookField` deals one effect to every frog -- a DIFFERENT one each -- and
+ * spaces them down the race, then sprinkles a few extras.  `fire` is the only
+ * place an effect starts, so there is one answer to "what can happen to a
+ * frog and when", and the harness can read the card rather than watching the
+ * screen and hoping.
+ */
+function bookField(): Booking[] {
+  const kinds = [...EFFECTS];
+  for (let i = kinds.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [kinds[i], kinds[j]] = [kinds[j], kinds[i]];
+  }
+  const band = (BAND_TO - BAND_FROM) / FIELD;
+  const out: Booking[] = RUNNERS.map((_, k) => ({
+    // One per frog, each in its own band of the race, in a random order of
+    // frogs so the lane order is not the order things happen in.
+    at: (BAND_FROM + band * (k + 0.15 + Math.random() * 0.7)) * RACE_S,
+    who: k,
+    kind: kinds[k % kinds.length],
+    done: false,
+    core: true,
+  }));
+  // Whose band is whose, shuffled: otherwise lane one is always first.
+  const who = [...RUNNERS.keys()];
+  for (let i = who.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [who[i], who[j]] = [who[j], who[i]];
+  }
+  out.forEach((b, k) => (b.who = who[k]));
+
+  const extras = EXTRA_MIN + Math.floor(Math.random() * (EXTRA_MAX - EXTRA_MIN + 1));
+  for (let i = 0; i < extras; i++) {
+    out.push({
+      at: (BAND_FROM + Math.random() * (LAST_CALL - BAND_FROM)) * RACE_S,
+      who: Math.floor(Math.random() * FIELD),
+      kind: EFFECTS[Math.floor(Math.random() * EFFECTS.length)],
+      done: false,
+      core: false,
+    });
+  }
+  out.sort((a, b) => a.at - b.at);
+  return out;
+}
+
+/**
+ * Work the card.  A booking whose frog is busy is held rather than dropped --
+ * pushed on half a second and tried again -- so the promise that every frog
+ * gets one is kept even when two land on the same frog at once.
+ */
+function stepCard(card: Booking[], runs: Run[], bird: Bird, fly: Fly, raceT: number): void {
+  for (const b of card) {
+    if (b.done || raceT < b.at) continue;
+    const r = runs.find((o) => o.i === b.who);
+    if (!r || r.x >= DIST) {
+      b.done = true;
+      continue;
+    }
+    if (!fire(b.kind, r, bird, fly)) {
+      b.at += 0.5;
+      continue;
+    }
+    b.done = true;
   }
 }
 
-/** A jetpack, or not.  Rolled before the gun, the same as the bird and the fly. */
+/**
+ * Start one effect on one frog.  Returns false if it cannot be started yet --
+ * the frog is already in the middle of something, or the one bird is busy.
+ */
+function fire(kind: EffectKind, r: Run, bird: Bird, fly: Fly): boolean {
+  if (r.going !== 'run' || r.jet > 0) return false;
+  switch (kind) {
+    case 'bird': {
+      if (bird.phase !== 0) return false;
+      bird.phase = 1;
+      bird.t = 0;
+      bird.target = r.i;
+      bird.x = r.x + 60;
+      bird.y = -BIRD_LIFT * 2;
+      // NOT RECORDED HERE.  The bird is only on its way; what has happened to
+      // this frog is nothing at all until the beak closes on it, and a card
+      // that counted the send-off would count an effect that a frog crossing
+      // the line first never actually had.  See `stepBird`.
+      return true;
+    }
+    case 'fly':
+    case 'golden': {
+      if (fly.on) return false;
+      fly.on = true;
+      fly.gold = kind === 'golden';
+      fly.t = 0;
+      fly.target = r.i;
+      fly.x = r.x + 34;
+      fly.lane = r.i + (Math.random() < 0.5 ? -1.1 : 1.1);
+      // Recorded when it is eaten, not when it is sent.  See `stepFly`.
+      return true;
+    }
+    case 'balloon':
+      r.going = 'balloon';
+      r.balloon = BALLOON_S;
+      r.balloonDown = BALLOON_DOWN_S;
+      r.lift = 0;
+      break;
+    case 'boost':
+      r.boost = BOOST_S;
+      break;
+    case 'mud':
+      r.mud = MUD_S;
+      break;
+    case 'wind':
+      r.wind = WIND_S;
+      r.windDir = Math.random() < 0.5 ? -1 : 1;
+      break;
+    case 'jump':
+      r.going = 'jump';
+      r.stuck = JUMP_S;
+      r.jumpFrom = r.x;
+      r.jumpTo = Math.min(DIST, r.x + (JUMP_S + JUMP_GAIN) * SEC);
+      break;
+    case 'slip':
+      slipUp(r);
+      return true;
+  }
+  r.fx = kind;
+  r.had.push(kind);
+  return true;
+}
+
+/** A jetpack, or not.  Rolled before the gun, the same as everything else. */
 function makeJet(): Jet {
   return { armed: Math.random() < JET_CHANCE, who: -1 };
 }
@@ -1149,9 +1603,7 @@ function makeJet(): Jet {
  * the leader's own run to the line at the pace its form says it runs -- and
  * does nothing until that is inside the last stretch.  Then it takes whoever
  * is genuinely last, sizes a burn that lands them on the line before the race
- * ends, and lights it.  One per race: it is spent whether it fires or not, so
- * a frog too far back to be got there honestly is a race without a comeback
- * rather than a jetpack that gets cheaper every tick.
+ * ends, and lights it.  One per race: it is spent whether it fires or not.
  */
 function stepJet(j: Jet, runs: Run[], raceT: number, dt: number): void {
   void dt;
@@ -1160,7 +1612,12 @@ function stepJet(j: Jet, runs: Run[], raceT: number, dt: number): void {
   if (live.length < 2) return;
 
   const leader = live.reduce((a, b) => (b.x > a.x ? b : a));
-  const leaderPace = Math.max(4, BASE + leader.form * SPREAD + leader.luck);
+  // THE LEADER'S PACE INCLUDES THE ROPE.  Its own form is what it would run
+  // alone; out in front it is also carrying the wind and being held back by
+  // the field behind it, and a projection that leaves that out reads the
+  // leader as arriving sooner than it does -- which lit the burn four or five
+  // seconds out instead of in the last stretch.
+  const leaderPace = Math.max(4, (BASE + leader.form * SPREAD + leader.luck) * tow(leader, live));
   const endsIn = Math.min((DIST - leader.x) / leaderPace, RACE_S - raceT);
   if (endsIn > JET_WINDOW_S) return;
 
@@ -1171,7 +1628,6 @@ function stepJet(j: Jet, runs: Run[], raceT: number, dt: number): void {
   if (last === leader) return;
 
   const aim = JET_AIM.min + Math.random() * (JET_AIM.max - JET_AIM.min);
-  // Aimed past the leader or not, it has to be on the line before the cap.
   const burn = Phaser.Math.Clamp(endsIn * aim, 0.3, Math.max(0.3, RACE_S - raceT - 0.05));
   const need = (DIST - last.x) / burn;
   if (need > JET_MAX_SPEED) return;
@@ -1181,167 +1637,170 @@ function stepJet(j: Jet, runs: Run[], raceT: number, dt: number): void {
   last.going = 'run';
   last.stuck = 0;
   last.balloon = 0;
-  last.balloonAt = -1;
   last.tongue = 0;
   last.jet = burn;
   last.jetSpeed = need;
   last.lift = 0;
 }
 
-/** A bird, or not.  One per race, timed before the gun like everything else. */
+/** The bird, idle until the card calls it. */
 function makeBird(): Bird {
-  // A bird that is not coming is one that has already finished: phase 3.
-  if (Math.random() > BIRD_CHANCE) {
-    return { at: 0, target: -1, phase: 3, t: 0, x: 0, y: 0 };
-  }
-  return {
-    at: BIRD_FROM + Math.random() * (BIRD_TO - BIRD_FROM),
-    target: -1,
-    phase: 0,
-    t: 0,
-    x: 0,
-    y: 0,
-  };
+  return { phase: 0, t: 0, x: 0, y: 0, target: -1 };
 }
 
 /**
- * The bird's own clock, and the one thing in the race that removes a runner.
+ * THE BIRD, IN FIVE BEATS, and the frog never leaves its feet.
  *
- * It picks from whoever is STILL RUNNING when it arrives -- not before -- so
- * it cannot be predicted from the card and cannot take a frog that is already
- * out of it.  `runs` is indexed by colour, the same as everything else.
+ *   1 APPROACH  it comes in from up the track and drops onto the frog, which
+ *               is still running: the shadow arrives before the bird does.
+ *   2 CARRY     it has it.  The frog is drawn at the beak and goes where the
+ *               bird goes, and the bird goes BACKWARDS down the track.
+ *   3 RELEASE   it lets go over the lane and climbs away; the frog falls the
+ *               last few pixels onto its feet rather than being teleported.
+ *   4 AWAY      out of frame, and the bird is done for the race.
+ *
+ * What it costs is two seconds: the ground given up hanging in the air, plus
+ * the few pixels of track the carry takes back.  `BIRD_DRIFT` is solved from
+ * the two so retuning the timings does not silently retune the cost.
  */
+const BIRD_AIR_S = BIRD_CARRY_S + BIRD_RELEASE_S;
+const BIRD_DRIFT = Math.max(0, (BIRD_BACK - BIRD_AIR_S) * SEC);
+
 function stepBird(b: Bird, runs: Run[], raceT: number, dt: number): void {
-  if (b.phase === 3) return;
-  if (b.phase === 0) {
-    if (raceT < b.at * RACE_S) return;
-    const live = runs.filter((r) => r.going !== 'taken' && r.x < DIST);
-    if (!live.length) {
-      b.phase = 3;
-      return;
-    }
-    b.target = live[Math.floor(Math.random() * live.length)].i;
-    b.phase = 1;
-    b.t = 0;
-    return;
-  }
-  const victim = runs.find((r) => r.i === b.target);
-  if (!victim) {
-    b.phase = 3;
-    return;
-  }
+  void raceT;
+  if (b.phase === 0 || b.phase >= 5) return;
   b.t += dt;
+  const r = runs.find((o) => o.i === b.target);
+  if (!r) {
+    b.phase = 5;
+    return;
+  }
+
   if (b.phase === 1) {
-    b.x = victim.x;
-    b.y = -26 + (b.t / BIRD_DIVE_S) * 26;
-    if (b.t >= BIRD_DIVE_S) {
-      victim.going = 'taken';
+    // Down and along, onto a frog that is still running away from it.
+    const k = Phaser.Math.Clamp(b.t / BIRD_DIVE_S, 0, 1);
+    b.x = r.x + 60 * (1 - ease(k)) + BEAK.x * 0;
+    b.y = -BIRD_LIFT * 2 + (BIRD_LIFT * 2 - 2) * ease(k);
+    if (k >= 1) {
       b.phase = 2;
+      b.t = 0;
+      r.going = 'taken';
+      r.lift = 0;
+      r.hop = 0;
+      r.carryFrom = r.x;
+      r.carryTo = Math.max(0, r.x - BIRD_DRIFT);
+      r.fx = 'bird';
+      r.had.push('bird');
+    }
+    return;
+  }
+
+  if (b.phase === 2) {
+    // Lift and carry, backwards.  The frog's own x follows the bird, so what
+    // the player sees and what the race scores are the same number.
+    const k = Phaser.Math.Clamp(b.t / BIRD_CARRY_S, 0, 1);
+    r.x = r.carryFrom + (r.carryTo - r.carryFrom) * ease(k);
+    r.lift = BIRD_LIFT * ease(Math.min(1, k * 2.5));
+    // THE BIRD IS ABOVE THE FROG, not level with it.  The frog is drawn at
+    // `BEAK` inside the bird's own drawing, so the bird has to sit that far
+    // higher for the frog to end up at the height the model says it is --
+    // otherwise the lift is spent moving the bird and the frog hangs at the
+    // lane it was supposed to have been carried off.
+    b.x = r.x;
+    b.y = -r.lift - BEAK.y + 2;
+    if (k >= 1) {
+      b.phase = 3;
       b.t = 0;
     }
     return;
   }
-  // ---- CARRYING IT OFF, and then thinking better of it.
-  //
-  // It used to be the one thing in the race that removed a runner for good: a
-  // taken frog never came back and the bet on it was dead from the moment the
-  // shadow arrived.  Now the bird gets bored of it -- it lifts, carries it up
-  // the track and drops it, and the frog picks itself up and runs.  What the
-  // bird costs is the seconds and the ground, which is a hazard; what it cost
-  // before was the ticket, which is a different game.
-  //
-  // `b.x` is the bird's own position and the frog is drawn at its beak (see
-  // BEAK), so nothing here has to move the frog to keep the two together.
-  const k = b.t / BIRD_AWAY_S;
-  b.y = -Math.sin(k * Math.PI) * 46;
-  b.x = victim.x + k * BIRD_CARRY;
-  victim.lift = -b.y;
-  if (b.t >= BIRD_AWAY_S) {
-    b.phase = 3;
-    // Put down where the bird got to, on its face, and up again in a moment.
-    victim.x = Math.min(DIST - 1, b.x);
-    victim.lift = 0;
-    victim.going = 'down';
-    victim.stuck = DOWN_S;
-    victim.hop = 0;
+
+  if (b.phase === 3) {
+    // Let go: the bird climbs, the frog drops the last stretch onto its feet.
+    const k = Phaser.Math.Clamp(b.t / BIRD_RELEASE_S, 0, 1);
+    r.lift = BIRD_LIFT * (1 - ease(k));
+    // It lets go and climbs: the frog comes down on its own from here, so the
+    // bird leaves the frog's height rather than carrying it down with it.
+    b.x = r.x + 26 * ease(k);
+    b.y = -BIRD_LIFT - BEAK.y - 20 * ease(k);
+    if (k >= 1) {
+      b.phase = 4;
+      b.t = 0;
+      r.going = 'run';
+      r.lift = 0;
+      r.hop = 0;
+      r.fx = null;
+    }
+    return;
+  }
+
+  // ---- AND OUT.  It climbs away up the track under its own power rather
+  // than being switched off over the frog it just dropped.
+  if (b.phase === 4) {
+    const k = Phaser.Math.Clamp(b.t / BIRD_AWAY_S, 0, 1);
+    b.x += 70 * dt;
+    b.y = -BIRD_LIFT - 18 - 40 * ease(k);
+    if (k >= 1) b.phase = 5;
   }
 }
 
-/** A fly, or not.  Timed before the gun like everything else. */
+/** The fly, idle until the card calls it.  `gold` is the one worth catching. */
 function makeFly(): Fly {
-  if (Math.random() > FLY_CHANCE) return { at: -1, on: false, t: 0, x: 0, lane: 0, tried: [] };
-  return {
-    at: FLY_FROM + Math.random() * (FLY_TO - FLY_FROM),
-    on: false,
-    t: 0,
-    x: 0,
-    lane: 0,
-    tried: [],
-  };
+  return { on: false, gold: false, t: 0, x: 0, lane: 0, target: -1 };
 }
 
 /**
- * The fly's own clock.
+ * THE FLY, AND THE FROG THAT CANNOT LEAVE IT ALONE.
  *
- * It comes in at one edge, wanders across the lanes and leaves, and as it
- * crosses each lane the frog in that lane gets ONE chance to be distracted by
- * it.  Most are not.  A frog that goes for it stops to do so, which is the
- * whole cost: the fly does not have to be catchable for the tongue to be a
- * mistake.
+ * It comes in across the lanes towards the frog the card named, and when it is
+ * within a tongue's reach that frog has a go at it.  The ordinary one is a
+ * meal and a four second sleep; the golden one is a mouthful of sugar and a
+ * second and a half of running.  Same animation, opposite outcome, and the
+ * colour is the only warning.
  */
 function stepFly(f: Fly, runs: Run[], raceT: number, dt: number): void {
-  if (f.at < 0) return;
-  if (!f.on) {
-    if (raceT < f.at * RACE_S || f.t > 0) return;
-    f.on = true;
-    f.t = 0;
-    return;
-  }
+  void raceT;
+  if (!f.on) return;
   f.t += dt;
-  const k = f.t / FLY_S;
-  if (k >= 1) {
+  const r = runs.find((o) => o.i === f.target);
+  const span = f.gold ? GOLD_CROSS_S : FLY_CROSS_S;
+  if (!r || f.t > span) {
     f.on = false;
-    f.at = -1;
     return;
   }
-  // Across the lanes and up the track at the same time, with a wander on it so
-  // it is an insect rather than a projectile.
-  f.lane = k * (RUNNERS.length - 1) + Math.sin(f.t * 7) * 0.35;
-  f.x = DIST * (0.3 + k * 0.4) + Math.sin(f.t * 5.5) * 10;
-
-  // Whoever's lane it is over right now, once each.
-  const near = Math.round(f.lane);
-  const victim = runs.find((r) => r.i === near);
-  if (!victim || f.tried.includes(near)) return;
-  if (Math.abs(f.lane - near) > 0.3) return;
-  f.tried.push(near);
-  if (victim.going !== 'run' || Math.random() > FLY_NOTICE) return;
-  victim.going = 'tongue';
-  victim.stuck = TONGUE_S;
-  victim.tongue = 0;
-  victim.lift = 0;
+  // It closes on the frog's lane and on the frog.
+  const k = Phaser.Math.Clamp(f.t / (span * 0.6), 0, 1);
+  f.lane += (r.i - f.lane) * Math.min(1, dt * 2.4);
+  f.x += (r.x + 9 - f.x) * Math.min(1, dt * 2.0);
+  if (k >= 1 || Math.abs(f.x - r.x) > TONGUE_REACH) return;
+  if (r.going !== 'run' || r.jet > 0) return;
+  // Got it.  The lick is its own short state and the meal follows it.
+  r.going = 'eat';
+  r.stuck = TONGUE_S;
+  r.tongue = 0;
+  r.lift = 0;
+  r.fx = f.gold ? 'golden' : 'fly';
+  r.had.push(r.fx);
+  f.on = false;
 }
 
-/** Potholes for one lane: a few, spread, never two on top of each other. */
+/** Potholes for one lane.  One each, well inside the track. */
 function digHoles(): number[] {
   const out: number[] = [];
   for (let i = 0; i < HOLES_PER_LANE; i++) {
     const band = (HOLE_TO - HOLE_FROM) / HOLES_PER_LANE;
-    out.push(HOLE_FROM + band * (i + 0.2 + Math.random() * 0.6));
+    out.push(HOLE_FROM + band * (i + 0.15 + Math.random() * 0.7));
   }
   return out;
 }
 
-/** A fresh field: seven forms, shuffled onto the seven colours. */
+/** A fresh field: one rating each, shuffled onto the colours. */
 function makeField(): Array<{ i: number; form: number; luck: number; surgeAt: number; surgeFor: number; holes: number[] }> {
   // ---- THE RATINGS, SPREAD ACROSS WHATEVER SIZE THE FIELD IS.
   //
-  // They were seven numbers typed out, best to worst.  Commenting a runner out
-  // of RUNNERS then cut the BOTTOM off the card without saying so: four frogs
-  // took the top four ratings, the worst horse in the race was a 0.5, and a
-  // field that was meant to run from a good thing to a no-hoper was four good
-  // things.  Derived, the ends are always 1 and 0 and the rest are evenly
-  // spaced between them, whoever is in the race.
+  // The ends are always 1 and 0 and the rest are evenly spaced between them,
+  // whoever is in the race -- so commenting a runner out of RUNNERS cannot
+  // quietly cut the bottom off the card.
   const forms = RUNNERS.map((_, k) => (FIELD > 1 ? 1 - k / (FIELD - 1) : 1));
   const order = [...RUNNERS.keys()];
   for (let i = order.length - 1; i > 0; i--) {
@@ -1369,13 +1828,6 @@ function toRuns(
     form: f.form,
     luck: f.luck,
     drift: 0,
-    balloon: 0,
-    balloonAt: Math.random() < BALLOON_CHANCE ? BALLOON_FROM + Math.random() * (BALLOON_TO - BALLOON_FROM) : -1,
-    sleepAt: Math.random() < SLEEP_CHANCE ? SLEEP_FROM + Math.random() * (0.95 - SLEEP_FROM) : -1,
-    shoveAt: Math.random() < SHOVE_CHANCE ? SHOVE_FROM + Math.random() * (SHOVE_TO - SHOVE_FROM) : -1,
-    shoved: false,
-    lean: 0,
-    tongue: 0,
     x: 0,
     surgeAt: f.surgeAt,
     surgeFor: f.surgeFor,
@@ -1385,8 +1837,24 @@ function toRuns(
     holes: f.holes,
     holeAt: 0,
     lift: 0,
+    boost: 0,
+    mud: 0,
+    wind: 0,
+    windDir: 1,
+    gold: 0,
+    carryFrom: 0,
+    carryTo: 0,
+    jumpFrom: 0,
+    jumpTo: 0,
+    balloon: 0,
+    balloonDown: 0,
+    tongue: 0,
+    slide: 0,
+    lean: 0,
     jet: 0,
     jetSpeed: 0,
+    fx: null,
+    had: [] as EffectKind[],
   }));
 }
 
@@ -1422,12 +1890,14 @@ function simulate(
   const runs = toRuns(field);
   const bird = makeBird();
   const fly = makeFly();
+  const cd = bookField();
   const jet = makeJet();
   const dt = 1 / 60;
   let t = 0;
   while (t < RACE_S) {
     t += dt;
-    for (const r of runs) step(r, dt, runs, t);
+    stepCard(cd, runs, bird, fly, t);
+    for (const r of runs) step(r, dt, runs);
     stepBird(bird, runs, t, dt);
     stepFly(fly, runs, t, dt);
     stepJet(jet, runs, t, dt);
@@ -1439,30 +1909,34 @@ function simulate(
 
 function draft(scene: Phaser.Scene): void {
   const field = makeField();
-  racers = toRuns(field).map((r) => ({ ...r, body: makeFrog(scene, RUNNERS[r.i].colour) }));
+  racers = toRuns(field).map((r) => ({ ...r, body: makeFrog(scene, RUNNERS[r.i]) }));
   racers.sort((a, b) => a.i - b.i);
   bird = makeBird();
   birdArt = makeBird4(scene);
   fly = makeFly();
   flyArt = makeFlyArt(scene);
   jet = makeJet();
+  card = bookField();
 
   // The potholes, dug where the model says they are.  Drawn UNDER the frogs
-  // and over the lane, so a frog in one is visibly down in it.
+  // and over the lane, so a frog in one is visibly down in it.  There is one a
+  // lane now: they were furniture, and the track is about the frogs.
   for (const r of racers) {
-    const y = LANE_T + r.i * LANE_H + 7;
+    const y = LANE_T + r.i * LANE_H + LANE_H / 2 + 1;
     for (const h of r.holes) {
       const hx = START_X + h * DIST;
-      scene.add.ellipse(hx, y + 2, 11, 5, 0x0a1a10).setDepth(6);
-      scene.add.ellipse(hx, y + 1, 11, 4, 0x061009).setDepth(7);
-      scene.add.ellipse(hx - 1, y + 3, 7, 2, 0x1c3a26).setDepth(8).setAlpha(0.7);
+      scene.add.ellipse(hx, y + 3, 13, 6, 0x0c1f14).setDepth(6);
+      scene.add.ellipse(hx, y + 2, 12, 5, 0x05100a).setDepth(7);
+      scene.add.ellipse(hx - 1, y + 4, 8, 2, 0x25452c).setDepth(8).setAlpha(0.7);
+      // a lip of turf on the near side, so it reads as a hole and not a stain
+      scene.add.ellipse(hx + 1, y + 5, 12, 2, 0x2f6b3a).setDepth(8).setAlpha(0.5);
     }
   }
 
   racers.forEach((r) => {
     const y = LANE_T + r.i * LANE_H;
     const plate = scene.add
-      .rectangle(4, y - 6, 34, 13, PALETTE.ink)
+      .rectangle(4, y + 1, 34, Math.min(15, LANE_H - 2), PALETTE.ink)
       .setOrigin(0, 0)
       .setDepth(20)
       .setStrokeStyle(1, PALETTE.steel)
@@ -1471,113 +1945,256 @@ function draft(scene: Phaser.Scene): void {
     // The whole lane is the hit area, not just the plate: a row you have to
     // aim at a 34-pixel box to back is a menu wearing a racecard's clothes.
     scene.add
-      .zone(0, y - 7, GAME_W, LANE_H)
+      .zone(0, y, GAME_W, LANE_H)
       .setOrigin(0, 0)
       .setDepth(19)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => choose(r.i));
-    const label = centerText(scene, 21, y, '', PALETTE.cream).setDepth(21);
+    const label = centerText(scene, 21, y + Math.min(15, LANE_H - 2) / 2, '', PALETTE.cream).setDepth(21);
     rows[r.i] = { plate, label };
   });
 }
 
+/**
+ * ================= THE PLACE THE RACE HAPPENS =================
+ *
+ * Four bands, back to front, and the whole point of them is DEPTH: the eye
+ * reads a picture as having distance in it when the things behind are
+ * flatter, cooler and less contrasty than the things in front, and when
+ * something overlaps something else.
+ *
+ *   sky      a graded wash, warm at the horizon and cool at the top
+ *   hills    two rows of them, the far row pale and the near row overlapping
+ *   crowd    a rail and a line of heads: the thing that makes it a RACE
+ *   track    four lanes, mown in stripes, with a verge in front of the crowd
+ *
+ * Everything here is drawn once, at create, under the frogs.  Nothing in it
+ * moves and nothing in it is read by the model.
+ */
 function paintTrack(scene: Phaser.Scene): void {
-  scene.add.rectangle(0, 18, GAME_W, 162, 0x123322).setOrigin(0, 0);
-  for (let i = 0; i < RUNNERS.length; i++) {
-    const y = LANE_T + i * LANE_H;
-    scene.add.rectangle(0, y - 7, GAME_W, LANE_H - 1, i % 2 ? 0x18412a : 0x14381f).setOrigin(0, 0);
+  // A seeded shuffle, so the ground is the same ground every time the cabinet
+  // is switched on.  Scenery that is different on every play is scenery the
+  // player cannot learn the room from.
+  let seed = 19770413;
+  const rnd = (): number => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  const between = (a: number, b: number): number => a + rnd() * (b - a);
+
+  // ---- the sky, in bands rather than one fill, warming towards the horizon
+  const SKY = [0x1b3358, 0x24436a, 0x2f557f, 0x3f6a92, 0x5885a4, 0x7aa3b4, 0x9dbdb9];
+  const skyH = TRACK_TOP - 18;
+  SKY.forEach((c, i) => {
+    scene.add
+      .rectangle(0, 18 + (skyH / SKY.length) * i, GAME_W, Math.ceil(skyH / SKY.length) + 1, c)
+      .setOrigin(0, 0);
+  });
+  // a low sun behind the hills, and its haze
+  scene.add.circle(248, TRACK_TOP - 26, 11, 0xffd9a0).setAlpha(0.85);
+  scene.add.circle(248, TRACK_TOP - 26, 17, 0xffd9a0).setAlpha(0.18);
+
+  // ---- the hills.  Far row first, pale and flat; near row over it, darker.
+  for (const [rowY, colour, h, alpha] of [
+    [TRACK_TOP - 20, 0x6f8f92, 13, 0.85],
+    [TRACK_TOP - 13, 0x4a7358, 15, 1],
+  ] as const) {
+    let x = -10;
+    while (x < GAME_W + 10) {
+      const w = between(34, 68);
+      scene.add
+        .ellipse(x + w / 2, rowY, w, h * between(0.8, 1.25), colour)
+        .setAlpha(alpha)
+        .setDepth(0);
+      x += w * 0.72;
+    }
   }
-  // the rail, the post and the chequered line
-  scene.add.rectangle(START_X - 3, LANE_T - 8, 1, RUNNERS.length * LANE_H, PALETTE.bone).setOrigin(0, 0).setAlpha(0.5);
-  // THE CHEQUER RUNS THE WHOLE FIELD.  It used to be a fixed count of squares
-  // — two per runner, five pixels each — which is seventy pixels of a
-  // hundred-and-five pixel field, so the bottom two lanes ran at a finish line
-  // that was not there.  Counted off the lanes instead, it cannot come up
-  // short again however many frogs are in the race.
-  const tapeTop = LANE_T - 8;
-  const tapeH = RUNNERS.length * LANE_H;
+  // a line of trees along the near hills, small and dark
+  for (let i = 0; i < 26; i++) {
+    const x = between(0, GAME_W);
+    const h = between(4, 8);
+    scene.add.ellipse(x, TRACK_TOP - 14 - h / 2, between(4, 7), h, 0x2c5238).setAlpha(0.9);
+  }
+
+  // ---- THE CROWD.  A rail, and heads behind it: two rows, the back row
+  // darker and smaller, because a crowd is the one thing that says this is a
+  // race and not four frogs in a field.
+  const crowdY = TRACK_TOP - 9;
+  scene.add.rectangle(0, crowdY - 1, GAME_W, 7, 0x2a4130).setOrigin(0, 0);
+  for (const [row, size, tone] of [
+    [0, 3, 0.55],
+    [1, 4, 1],
+  ] as const) {
+    for (let x = -2; x < GAME_W + 4; x += between(5, 9)) {
+      const hue = [0xd8443c, 0x3d8fdd, 0xf0c33c, 0xe8e2cd, 0xa86ad8, 0x46a83f][Math.floor(rnd() * 6)];
+      scene.add
+        .circle(x, crowdY + 2 + row * 2, size / 2, hue)
+        .setAlpha(tone)
+        .setDepth(1);
+      scene.add
+        .rectangle(x, crowdY + 3 + row * 2, size, 3, 0x1d2b22)
+        .setAlpha(tone * 0.8)
+        .setDepth(1);
+    }
+  }
+  // the rail in front of them
+  scene.add.rectangle(0, TRACK_TOP - 4, GAME_W, 1, 0xd6dce4).setOrigin(0, 0).setAlpha(0.8).setDepth(2);
+  for (let x = 4; x < GAME_W; x += 24) {
+    scene.add.rectangle(x, TRACK_TOP - 4, 1, 4, 0x9aa6b4).setOrigin(0, 0).setAlpha(0.7).setDepth(2);
+  }
+
+  // ---- THE TRACK.  Mown stripes across each lane, a white line between
+  // lanes, and grain: three tones of green per lane rather than one flat fill.
+  for (let i = 0; i < FIELD; i++) {
+    const y = LANE_T + i * LANE_H;
+    const base = i % 2 ? 0x2a6636 : 0x24592f;
+    scene.add.rectangle(0, y, GAME_W, LANE_H, base).setOrigin(0, 0);
+    // mowing: vertical bands, alternating a shade either side of the base
+    for (let x = 0; x < GAME_W; x += 16) {
+      scene.add
+        .rectangle(x, y, 8, LANE_H, i % 2 ? 0x2e7039 : 0x285f33)
+        .setOrigin(0, 0)
+        .setAlpha(0.55);
+    }
+    // grain, and a shadow along the top edge so the lane has a lip
+    for (let k = 0; k < 26; k++) {
+      scene.add
+        .rectangle(between(0, GAME_W), y + between(1, LANE_H - 2), between(2, 5), 1, 0x18401f)
+        .setAlpha(0.35);
+    }
+    scene.add.rectangle(0, y, GAME_W, 1, 0x152f1c).setOrigin(0, 0).setAlpha(0.6);
+    scene.add.rectangle(0, y + LANE_H - 1, GAME_W, 1, 0x6fbb6a).setOrigin(0, 0).setAlpha(0.12);
+  }
+  // the verge in front of the track, so the bottom lane sits on something
+  scene.add.rectangle(0, TRACK_BOTTOM, GAME_W, 6, 0x1d4326).setOrigin(0, 0);
+  for (let k = 0; k < 40; k++) {
+    scene.add.rectangle(between(0, GAME_W), TRACK_BOTTOM + between(0, 5), between(1, 3), 1, 0x2f6b3a).setAlpha(0.6);
+  }
+
+  // ---- the starting rail, and the chequered line.
+  scene.add.rectangle(START_X - 3, LANE_T, 1, FIELD * LANE_H, PALETTE.bone).setOrigin(0, 0).setAlpha(0.5);
+  // THE CHEQUER RUNS THE WHOLE FIELD, counted off the lanes, so it cannot come
+  // up short however many frogs are in the race.
+  const tapeH = FIELD * LANE_H;
   for (let i = 0; i * TAPE_SQ < tapeH; i++) {
     scene.add
-      .rectangle(
-        FINISH_X,
-        tapeTop + i * TAPE_SQ,
-        4,
-        Math.min(TAPE_SQ, tapeH - i * TAPE_SQ),
-        i % 2 ? PALETTE.white : PALETTE.ink,
-      )
+      .rectangle(FINISH_X, LANE_T + i * TAPE_SQ, 4, Math.min(TAPE_SQ, tapeH - i * TAPE_SQ), i % 2 ? PALETTE.white : PALETTE.ink)
       .setOrigin(0, 0)
       .setDepth(2);
   }
-  scene.add.rectangle(FINISH_X + 4, LANE_T - 12, 2, RUNNERS.length * LANE_H + 6, PALETTE.bone).setOrigin(0, 0);
+  scene.add.rectangle(FINISH_X + 4, LANE_T - 4, 2, tapeH + 8, PALETTE.bone).setOrigin(0, 0).setDepth(2);
+  // a post and a flag over the line, so the finish reads from across the room
+  scene.add.rectangle(FINISH_X + 4, LANE_T - 16, 2, 12, 0xd6dce4).setOrigin(0, 0).setDepth(2);
+  scene.add.triangle(FINISH_X + 10, LANE_T - 13, 0, 0, 9, 3, 0, 6, PALETTE.neon).setDepth(2);
 }
 
 /**
- * The bird.  Four shapes and a wing beat -- it is on screen for under two
- * seconds and it only has to read as "something came down and took one".
+ * THE BIRD, and the shadow it throws.
+ *
+ * The shadow is the half of it that sells the dive: it lands on the lane
+ * before the bird does and grows as the bird comes down, so a player watching
+ * the frogs sees something coming without having to look up.
  */
 function makeBird4(scene: Phaser.Scene): Phaser.GameObjects.Container {
-  const body = scene.add.ellipse(0, 0, 13, 6, 0x4a4a58);
-  const head = scene.add.circle(6, -2, 3, 0x4a4a58);
-  const beak = scene.add.triangle(BEAK.x - 2, BEAK.y - 3, 0, 0, 5, 2, 0, 4, 0xffb45e);
-  const wingL = scene.add.ellipse(-1, -3, 12, 4, 0x6a6a7c);
-  const wingR = scene.add.ellipse(-1, 3, 12, 4, 0x3a3a48);
-  const eye = scene.add.circle(7, -3, 1, PALETTE.black);
-  const c = scene.add.container(0, 0, [wingR, body, head, beak, eye, wingL]).setDepth(40);
+  const tailF = scene.add.triangle(-9, 0, 0, 0, 6, -3, 6, 3, 0x3a3a48);
+  const body = scene.add.ellipse(0, 0, 15, 7, 0x4a4a58);
+  const belly = scene.add.ellipse(0, 2, 11, 3, 0x6a6a7c).setAlpha(0.6);
+  const head = scene.add.circle(6, -2, 3.4, 0x54545f);
+  const beak = scene.add.triangle(BEAK.x - 2, BEAK.y - 4, 0, 0, 6, 2.5, 0, 5, 0xffb45e);
+  const claw = scene.add.rectangle(2, 4, 4, 2, 0xffb45e);
+  const wingL = scene.add.ellipse(-1, -4, 14, 5, 0x76768a);
+  const wingR = scene.add.ellipse(-1, 4, 14, 5, 0x35354a);
+  const eye = scene.add.circle(7.4, -3, 1.1, PALETTE.black);
+  const glint = scene.add.circle(7.8, -3.4, 0.4, PALETTE.white);
+  // The shadow is a child, so it follows the bird across the track, and it is
+  // positioned onto the lane every frame -- see the draw block.
+  const shadow = scene.add.ellipse(0, 0, 14, 4, 0x000000).setAlpha(0.35);
+  const c = scene.add
+    .container(0, 0, [shadow, wingR, tailF, body, belly, head, beak, claw, eye, glint, wingL])
+    .setDepth(40);
   c.setVisible(false);
   c.setData('wings', [wingL, wingR]);
+  c.setData('shadow', shadow);
   return c;
 }
 
 /**
- * The fly.  Two pixels of body and a wing that flickers -- it is three pixels
- * across and the only thing it has to do is be findable while it crosses.
+ * THE FLY.  Two of them in one drawing: the ordinary one is a dark speck and
+ * the golden one glows, because they ask for the same lick and pay opposite
+ * things, and the colour is the only warning the player gets.
  */
 function makeFlyArt(scene: Phaser.Scene): Phaser.GameObjects.Container {
-  const body = scene.add.rectangle(0, 0, 3, 2, 0x1a1a22);
-  const wing = scene.add.rectangle(0, -2, 4, 1.5, 0xc8d8ff).setAlpha(0.75);
-  const c = scene.add.container(0, 0, [wing, body]).setDepth(41);
+  const plain = scene.add.ellipse(0, 0, 3.5, 2.5, 0x1a1a22);
+  const gold = scene.add.ellipse(0, 0, 4.5, 3.5, PALETTE.gold);
+  const halo = scene.add.ellipse(0, 0, 8, 6, PALETTE.gold).setAlpha(0.22);
+  const wing = scene.add.rectangle(0, -2, 5, 1.5, 0xc8d8ff).setAlpha(0.8);
+  const c = scene.add.container(0, 0, [halo, wing, plain, gold]).setDepth(41);
   c.setVisible(false);
   c.setData('wing', wing);
+  c.setData('gold', gold);
+  c.setData('plain', plain);
   return c;
 }
 
-function makeFrog(scene: Phaser.Scene, colour: number): Phaser.GameObjects.Container {
+/**
+ * ONE FROG, IN THREE TONES.
+ *
+ * It was a flat ellipse with two dots on it.  A frog at eleven pixels can
+ * still have a top and an underside: the light comes from above and behind, so
+ * the back is `lit`, the body is `skin`, and everything under the waterline --
+ * the belly shadow, the haunches, the feet -- is `dark`.  That is what makes
+ * four frogs of four colours readable while they are all moving at once.
+ *
+ * The extras that only sometimes apply are built once, hidden, and live on the
+ * frog's own container so they move, scale and turn with it and cannot drift
+ * off the body they belong to.
+ */
+function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.GameObjects.Container {
+  const { skin, lit, dark } = kit;
   const parts = [
-    scene.add.ellipse(0, 0, 11, 8, colour),
-    scene.add.ellipse(1, 1, 6, 4, 0xffffff).setAlpha(0.25),
-    scene.add.circle(-3, -4, 2.5, colour),
-    scene.add.circle(3, -4, 2.5, colour),
-    scene.add.circle(-3, -4, 1.2, PALETTE.black),
-    scene.add.circle(3, -4, 1.2, PALETTE.black),
-    scene.add.ellipse(-5, 3, 4, 2, colour),
-    scene.add.ellipse(5, 3, 4, 2, colour),
+    // haunches first, so the body sits over them
+    scene.add.ellipse(-4, 2, 6, 5, dark),
+    scene.add.ellipse(4, 2, 6, 5, dark),
+    // the feet, splayed
+    scene.add.ellipse(-6, 4, 5, 2, dark),
+    scene.add.ellipse(6, 4, 5, 2, dark),
+    // the body, and the light down its back
+    scene.add.ellipse(0, 0, 12, 9, skin),
+    scene.add.ellipse(0, -2, 9, 4, lit).setAlpha(0.75),
+    // the belly, in shadow
+    scene.add.ellipse(0, 3, 8, 3, dark).setAlpha(0.55),
+    scene.add.ellipse(0, 2.6, 6, 2, 0xf4f7fb).setAlpha(0.22),
+    // eye mounds, eyes, pupils and a glint apiece
+    scene.add.circle(-3, -4.5, 2.8, skin),
+    scene.add.circle(3, -4.5, 2.8, skin),
+    scene.add.circle(-3, -4.8, 2.1, 0xf4f7fb),
+    scene.add.circle(3, -4.8, 2.1, 0xf4f7fb),
+    scene.add.circle(-3, -4.8, 1.1, PALETTE.black),
+    scene.add.circle(3, -4.8, 1.1, PALETTE.black),
+    scene.add.circle(-3.6, -5.4, 0.5, PALETTE.white).setAlpha(0.9),
+    scene.add.circle(2.4, -5.4, 0.5, PALETTE.white).setAlpha(0.9),
+    // the mouth, one dark line
+    scene.add.rectangle(0, -0.5, 7, 1, dark).setAlpha(0.7),
   ];
   const c = scene.add.container(0, 0, parts).setDepth(10);
 
-  // ---- THE THREE THINGS THAT ONLY SOMETIMES APPLY, built once per frog and
-  // hidden until they do.  They live on the frog's own container so they move,
-  // scale and rotate with it without anything having to keep them in step.
-  //
-  // A Z coming off a sleeping frog.
+  // ---- a Z coming off a sleeping frog
   const zzz = text(scene, 4, -10, 'Z', PALETTE.bone).setVisible(false);
   c.add(zzz);
   c.setData('zzz', zzz);
 
-  // The balloon: a string and a skin, straight up.
+  // ---- the balloon: a string, a skin, a knot and a shine, straight up
   const string = scene.add.rectangle(0, -9, 1, 10, PALETTE.bone).setAlpha(0.6);
-  const skin = scene.add.ellipse(0, -18, 9, 11, PALETTE.neon);
-  const shine = scene.add.ellipse(-2, -20, 3, 4, PALETTE.cream).setAlpha(0.6);
+  const skinB = scene.add.ellipse(0, -19, 11, 13, PALETTE.neon);
+  const shine = scene.add.ellipse(-2.5, -22, 3.5, 5, PALETTE.cream).setAlpha(0.65);
   const knot = scene.add.triangle(0, -13, 0, 0, 3, 0, 1.5, 2.5, PALETTE.neonDim);
-  const balloon = scene.add.container(0, 0, [string, skin, shine, knot]).setVisible(false);
+  const balloon = scene.add.container(0, 0, [string, skinB, shine, knot]).setVisible(false);
   c.add(balloon);
   c.setData('balloon', balloon);
 
-  // The jetpack: a tank on its back and the flame off the bottom of it, both
-  // hidden until the last stretch of a race that has one in it.
+  // ---- the jetpack: a tank on its back and the thrust off the bottom of it
   const tank = scene.add.rectangle(-6, -2, 4, 7, PALETTE.ash);
   const cap = scene.add.rectangle(-6, -5, 5, 1, PALETTE.bone);
-  // The thrust goes BACKWARDS, which is the only reason the frog is going
-  // forwards: a flame under a frog reads as a frog on fire.
   const flame = scene.add.triangle(-11, 1, 0, 0, 0, 5, -7, 2.5, PALETTE.gold);
   const ember = scene.add.triangle(-9, 1, 0, 0, 0, 3, -4, 1.5, PALETTE.cream);
   const pack = scene.add.container(0, 0, [tank, cap, flame, ember]).setVisible(false);
@@ -1586,10 +2203,28 @@ function makeFrog(scene: Phaser.Scene, colour: number): Phaser.GameObjects.Conta
   c.setData('flame', flame);
   c.setData('ember', ember);
 
-  // And the tongue, which is one pink rectangle that grows out of its mouth.
-  const tongue = scene.add.rectangle(4, -2, 1, 1.5, 0xff6f91).setOrigin(0.5, 0.5).setVisible(false);
+  // ---- the tongue, which is one pink rectangle that grows out of its mouth
+  const tongue = scene.add.rectangle(5, -2, 1, 2, 0xff6f91).setOrigin(0.5, 0.5).setVisible(false);
   c.add(tongue);
   c.setData('tongue', tongue);
+
+  // ---- the boost trail, the mud it throws, the gust that bends it and the
+  // sparkle off a golden fly.  All hidden until the model says otherwise.
+  const trail = [0, 1, 2].map(() => scene.add.rectangle(0, 0, 6, 1, PALETTE.cream).setVisible(false));
+  trail.forEach((t) => c.add(t));
+  c.setData('trail', trail);
+
+  const mud = [0, 1, 2].map(() => scene.add.ellipse(0, 0, 3, 2.5, 0x5a3a22).setVisible(false));
+  mud.forEach((m) => c.add(m));
+  c.setData('mud', mud);
+
+  const gust = [0, 1].map(() => scene.add.rectangle(0, 0, 8, 1, 0xd8ecff).setAlpha(0.7).setVisible(false));
+  gust.forEach((g) => c.add(g));
+  c.setData('gust', gust);
+
+  const spark = [0, 1, 2].map(() => scene.add.rectangle(0, 0, 1.6, 1.6, PALETTE.gold).setVisible(false));
+  spark.forEach((s) => c.add(s));
+  c.setData('spark', spark);
 
   return c;
 }
