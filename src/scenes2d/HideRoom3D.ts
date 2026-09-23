@@ -2278,6 +2278,7 @@ export class HideRoom3D extends Phaser.Scene {
       this.caughtT += dt;
     } else if (this.mode === 'survived') {
       this.endT += dt;
+      if (this.isFinal && this.endT > 4.2) this.leaveTheNight();
     }
 
     // WHICH FLOOR THE PLAYER IS ON.  Every frame, not only the ones they are
@@ -2583,6 +2584,8 @@ export class HideRoom3D extends Phaser.Scene {
    * and he ground along something anyway.  Counted rather than guessed at:
    * "he bumps into walls" is a number, and this is the number.
    */
+  /** Set once, when the night hands the player back to the forecourt. */
+  private left = false;
   private wallGrazes = 0;
   private wallScrapes = 0;
 
@@ -3466,7 +3469,17 @@ export class HideRoom3D extends Phaser.Scene {
     // ---- AND THE SAME POSE, DOWN THE HOLE.  The enclosure under the secret
     // room's glass is this room, so the thing in it is this model: one hunt,
     // drawn twice, rather than two hunts that have to be kept in step.
-    this.secret?.watch({ x: this.froggy.x, y, z: this.froggy.y, yaw: this.froggyYaw, pose });
+    // AND THE LIDS WITH IT.  `c.open` is the real hinge, eased by the room's
+    // own update; the enclosure reads the same number, so the box he is
+    // working down there is the box he is working up here.
+    this.secret?.watch({
+      x: this.froggy.x,
+      y,
+      z: this.froggy.y,
+      yaw: this.froggyYaw,
+      pose,
+      lids: this.spots.map((c) => c.open),
+    });
   }
 
   /**
@@ -3730,10 +3743,45 @@ export class HideRoom3D extends Phaser.Scene {
    * door.  In the arcade it is the lock finally turning, which is a different
    * thing entirely, and it ends the night rather than the room.
    */
+  /**
+   * ---- THE END OF THE NIGHT, AND WHERE IT PUTS YOU.
+   *
+   * Run off `endT` -- this scene's own clock, advanced by the three.js frame
+   * loop -- rather than off a Phaser timer.  Everything else in here is on
+   * that clock, and in the final room a `delayedCall` was not landing at all,
+   * which left the player stood in a room with the door open and nothing
+   * happening.
+   *
+   * It used to drop them on the START SCREEN, which is where a game goes when
+   * it is over, and this one is not over: it is back to being an arcade.  The
+   * exterior is where the night started and it spawns you at the doors facing
+   * them (see `ExteriorDay.create`), so the first thing you do is walk back in
+   * and find out what changed.  The run is already `normal` with `hideRoom`
+   * back to 0, so nothing about the night can trigger on the way.
+   *
+   * `froggyGone` stays set, which is the whole point of the walk back in: the
+   * blackjack table has somebody else behind it, the prize counter has a
+   * member of staff on it, and running out of tokens no longer summons
+   * anybody (see core/broke).
+   */
+  private leaveTheNight(): void {
+    if (this.left) return;
+    this.left = true;
+    store.patch({ route: 'normal', hideRoom: 0, froggyGone: true });
+    // AND YOU COME OUT WITH ONE TOKEN.  Not a reward and not a handout -- it
+    // is what was in the pocket, and it is exactly enough for one go on the
+    // cheapest machine in the building.
+    ledger.setAfterNight(1);
+    store.flush();
+    froggyLayer.clear();
+    this.scene.start('ExteriorDay');
+  }
+
   private survive(): void {
     if (this.mode !== 'seeking') return;
     this.mode = 'survived';
     this.endT = 0;
+    this.left = false;
     this.hiding = null;
     this.subtitle = '';
     this.prompt = '';
@@ -3753,23 +3801,11 @@ export class HideRoom3D extends Phaser.Scene {
     }
 
     const next = this.roomIndex + 1;
-    this.time.delayedCall(this.isFinal ? 4200 : 3000, () => {
-      if (this.isFinal) {
-        // THE NIGHT IS OVER, and the game goes back to being a game.  The run
-        // returns to the ordinary route so the arcade is open again — but it
-        // is not the same arcade, because `froggyGone` stays set: the blackjack
-        // table has somebody else behind it, and running out of tokens no
-        // longer summons anybody (see core/broke).
-        store.patch({ route: 'normal', hideRoom: 0, froggyGone: true });
-        // AND YOU COME OUT WITH ONE TOKEN.  Not a reward and not a handout --
-        // it is what was in the pocket, and it is exactly enough for one go on
-        // the cheapest machine in the building.
-        ledger.setAfterNight(1);
-        store.flush();
-        froggyLayer.clear();
-        this.scene.start('StartScreen');
-        return;
-      }
+    // THE LAST ONE IS NOT ON THIS TIMER.  See `leaveTheNight`: the end of the
+    // night is counted on the scene's OWN clock, the one the three.js frame
+    // loop drives, because that is the clock the rest of this scene runs on.
+    if (this.isFinal) return;
+    this.time.delayedCall(3000, () => {
       if (next >= ROOMS.length) {
         store.patch({ route: 'chase', hideRoom: 0 });
         store.flush();

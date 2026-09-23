@@ -56,6 +56,17 @@ export interface Watched {
   z: number;
   yaw: number;
   pose: FroggyPose;
+  /**
+   * How far open each hiding place is, 0..1, in the same order as the room's
+   * own `spots`.
+   *
+   * THE ENCLOSURE IS NOT A SECOND HUNT.  It is this hunt, drawn twice: the
+   * position, the facing, the pose and now the LIDS all come off the real
+   * room's state every frame.  When he walks to a wardrobe down there and
+   * opens it, it is because he has walked to that wardrobe up here and opened
+   * it -- there is nothing scripted in the glass and nothing to keep in step.
+   */
+  lids?: number[];
 }
 
 /**
@@ -105,7 +116,16 @@ export interface SecretRoom {
    */
   watch(w: Watched): void;
   /** What is in the enclosure and where it is, for a harness that cannot look down. */
-  watching(): { x: number; z: number; yaw: number; scale: number; props: number; room: string };
+  watching(): {
+    x: number;
+    z: number;
+    yaw: number;
+    scale: number;
+    props: number;
+    room: string;
+    /** How far open each lid in the enclosure is, for a harness that cannot look down. */
+    lids: number[];
+  };
   /**
    * Whether the complex is being rendered and lit at all.
    *
@@ -433,9 +453,15 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
   for (const f of watched.furniture) penBox(f.color, f.w, f.h, f.d, f.x, f.z);
   // and the boxes he opens, marked out from the furniture so it is obvious
   // which ones he is working and which ones he has not got to yet.
+  /** The lids, kept, because they open when the real ones do.  See `Watched`. */
+  const penLids: Array<{ mesh: THREE.Mesh; base: number; open: number }> = [];
   for (const spot of watched.spots) {
-    penBox(0x6b7789, 1.5, spot.kind === 'bed' ? 0.7 : 1.4, 1.5, spot.x, spot.z);
-    penBox(0x93a3b8, 1.6, 0.12, 1.6, spot.x, spot.z, spot.kind === 'bed' ? 0.7 : 1.4);
+    const h = spot.kind === 'bed' ? 0.7 : 1.4;
+    penBox(0x6b7789, 1.5, h, 1.5, spot.x, spot.z);
+    const lid = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.12, 1.6), lam(0x93a3b8));
+    lid.position.set(spot.x, h + 0.06, spot.z);
+    pen.add(lid);
+    penLids.push({ mesh: lid, base: h + 0.06, open: 0 });
   }
   // the door he locked behind you, shut, in the wall it is in
   penBox(0x2b2119, 2.2, 3.0, 0.5, watched.door.x, watched.halfD - 0.1);
@@ -516,6 +542,20 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
     // hunt that knows there is an up.
     monster.setPose(seen.x, seen.y, seen.z, seen.yaw);
     monster.update(dt, seen.pose);
+
+    // ---- AND THE LIDS COME UP WHEN THE REAL ONES DO.
+    //
+    // The box he is working down there is the box he is working up here,
+    // because the number comes out of the room's own `spots` every frame.
+    // Eased rather than snapped, so a lid takes a moment to swing -- which is
+    // what makes it read as him opening it rather than as a light going on.
+    for (let i = 0; i < penLids.length; i++) {
+      const want = Math.min(1, Math.max(0, seen.lids?.[i] ?? 0));
+      const lid = penLids[i];
+      lid.open += (want - lid.open) * Math.min(1, dt * 6);
+      lid.mesh.position.y = lid.base + lid.open * 0.55;
+      lid.mesh.rotation.z = lid.open * 0.5;
+    }
   };
 
   return {
@@ -540,6 +580,7 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
       // Everything rebuilt from the room definition, the shell included.
       props: pen.children.length - 2,
       room: watched.name,
+      lids: penLids.map((l) => +l.open.toFixed(3)),
     }),
     setActive: (on: boolean) => {
       root.visible = on;

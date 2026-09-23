@@ -86,6 +86,22 @@ export interface GameState {
    * the only answer anyone will give about it.
    */
   froggyGone: boolean;
+  /**
+   * ---- THE KEY THAT WAS LOST, AND WHAT BECAME OF IT.
+   *
+   * `hasKey` says the player is carrying it.  These two say what happened
+   * after that, and they are separate on purpose: handing it back and being
+   * paid for it are two events, and a reward that can be claimed twice is a
+   * reward claimed off a single flag.
+   */
+  keyReturned: boolean;
+  keyRewardClaimed: boolean;
+  /**
+   * He stood outside the glass once, after the change machine, and was gone
+   * when the picture came back.  Once a run: a thing that happens every time
+   * you buy tokens is a mechanic, not an apparition.
+   */
+  sawApparition: boolean;
   settings: Settings;
 }
 
@@ -196,6 +212,9 @@ function defaultState(): GameState {
     seenIntro: false,
     hideRoom: 0,
     froggyGone: false,
+    keyReturned: false,
+    keyRewardClaimed: false,
+    sawApparition: false,
     settings: { master: 80, music: 70, sfx: 85, moveStyle: 'stick' },
   };
 }

@@ -50,6 +50,16 @@ export interface FroggyDrawOpts {
    * to be in frame is the part of him you recognise.
    */
   anchor?: 'feet' | 'face';
+  /**
+   * Cozy only: draw the eyes with NOTHING IN THEM.
+   *
+   * The mascot with his pupils taken out is not a different character and it
+   * is not a monster -- it is the same drawing, the same silhouette, the same
+   * colours, looking at you out of two blank rings.  One flag rather than a
+   * fourth variant, because the moment it becomes its own artwork it stops
+   * being him.  Used once, by the thing outside the glass doors.
+   */
+  pupils?: boolean;
   alpha?: number;
 }
 
@@ -111,7 +121,7 @@ export function drawFroggy(ctx: CanvasRenderingContext2D, o: FroggyDrawOpts): vo
   } else {
     // V0 and V1 share this code path exactly.  The ONLY difference is the pose
     // the caller passes and whether it animates.  That is the whole trick.
-    drawCozy(ctx, pose, variant === 'uncanny' ? 0 : (o.bounce ?? 0));
+    drawCozy(ctx, pose, variant === 'uncanny' ? 0 : (o.bounce ?? 0), o.pupils !== false);
   }
 
   ctx.restore();
@@ -119,7 +129,7 @@ export function drawFroggy(ctx: CanvasRenderingContext2D, o: FroggyDrawOpts): vo
 
 // ---------------------------------------------------------------- cozy (V0/V1)
 
-function drawCozy(ctx: CanvasRenderingContext2D, pose: FroggyPose, bounce: number): void {
+function drawCozy(ctx: CanvasRenderingContext2D, pose: FroggyPose, bounce: number, pupils = true): void {
   // The idle squash: he breathes.  Uncanny passes bounce = 0, so he does not.
   const squash = 1 + Math.sin(bounce * Math.PI * 2) * 0.03;
   const lift = Math.sin(bounce * Math.PI * 2) * 2;
@@ -193,11 +203,14 @@ function drawCozy(ctx: CanvasRenderingContext2D, pose: FroggyPose, bounce: numbe
     ctx.fillStyle = COZY.eyeRing;
     ctx.fill();
 
-    // pupil: big and friendly, or the fourth pose's pinprick
-    ctx.beginPath();
-    ctx.arc(ex, ey, blank ? 2 : 10, 0, Math.PI * 2);
-    ctx.fillStyle = COZY.pupil;
-    ctx.fill();
+    // pupil: big and friendly, or the fourth pose's pinprick -- or, outside
+    // the glass at two in the morning, not there at all.
+    if (pupils) {
+      ctx.beginPath();
+      ctx.arc(ex, ey, blank ? 2 : 10, 0, Math.PI * 2);
+      ctx.fillStyle = COZY.pupil;
+      ctx.fill();
+    }
   }
 
   // ---- nostrils
