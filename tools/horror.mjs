@@ -1122,11 +1122,12 @@ try {
 
       // ---- TWO EYES.  EXACTLY TWO, ON BOTH OF HIM.
       //
-      // He used to have eight more scattered over the drawing, and one of the
-      // main pair was larger than the other.  Both are gone, and this is the
-      // check that keeps them gone -- on the MODEL by counting the one pale
-      // material on him, and on the DRAWING by counting the pale regions in a
-      // rendered face, which is what the jumpscare paints.
+      // The DRAWING used to have eight more scattered over the head; they are
+      // gone, and this is the check that keeps them gone -- counting the pale
+      // regions in a rendered face, which is what the jumpscare paints.  The
+      // MODEL is the original one and always had two; it is counted here as
+      // well so that the thing walking the rooms and the thing that catches
+      // you can never disagree about how many eyes Froggy has.
       const eyes = await page.evaluate(async () => {
         const { FroggyMonster } = await import('/src/three/froggyMonster.ts');
         const mon = new FroggyMonster(1.75);
@@ -1136,7 +1137,7 @@ try {
         mon.root.traverse((o) => {
           if (!o.isMesh) return;
           meshes++;
-          if (o.material?.color?.getHexString?.() === 'c0aca0') sclera++;
+          if (o.material?.color?.getHexString?.() === '6c6852') sclera++;
         });
 
         const mod = await import('/src/froggy/froggy.ts');
@@ -1188,6 +1189,52 @@ try {
         }
         return { sclera, meshes, blobs };
       });
+      // ---- AND HE DOES NOT WALK INTO THE WALLS.
+      //
+      // The route is planned on a half-metre grid and he steers along it at a
+      // bounded turn rate, so on a tight corner the step he is about to take
+      // goes through a wall.  What happened then was a slide: he ground along
+      // it at eight tenths of his pace until the route was redrawn.  He feels
+      // for a way past first now.  Measured both ways in the same room, by
+      // driving him nose-first at a wall with the player on the far side of
+      // it -- `__noDeflect` turns the new behaviour off for the second half.
+      const walls = await page.evaluate(async () => {
+        const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+        const run = async (off) => {
+          window.__noDeflect = off;
+          sc.grace = 0;
+          sc.hiding = null;
+          const D = sc.def.halfD;
+          sc.froggy.set(0, D - 1.0);
+          sc.froggyYaw = 0;
+          sc.pos.set(0, D + 6);
+          sc.fMode = 'chase';
+          sc.memory = 9999;
+          sc.lastSeen.set(sc.pos.x, sc.pos.y);
+          sc.targetSpot = null;
+          const g0 = window.__hide.wallGrazes;
+          const s0 = window.__hide.wallScrapes;
+          const t0 = performance.now();
+          while (performance.now() - t0 < 3000) {
+            sc.fMode = 'chase';
+            sc.memory = 9999;
+            await new Promise((r) => requestAnimationFrame(r));
+          }
+          return {
+            grazes: window.__hide.wallGrazes - g0,
+            scrapes: window.__hide.wallScrapes - s0,
+          };
+        };
+        const now = await run(false);
+        const before = await run(true);
+        window.__noDeflect = false;
+        return { now, before };
+      });
+      check('he goes round a wall rather than grinding along it',
+        walls.now.scrapes === 0 && walls.now.grazes > 0,
+        `${walls.now.grazes} deflections and ${walls.now.scrapes} scrapes, ` +
+          `against ${walls.before.scrapes} scrapes with it switched off`);
+
       check('the model has exactly two eyes', eyes.sclera === 2, `${eyes.sclera} whites on it`);
       check('and so does the drawing the jumpscare paints', eyes.blobs.length === 2,
         `${eyes.blobs.length} whites`);
