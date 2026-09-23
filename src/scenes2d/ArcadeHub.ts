@@ -93,21 +93,14 @@ export class ArcadeHub extends Phaser.Scene {
    * something if you walked into the right patch of carpet and pressed a key
    * nothing had told you about.
    *
-   * Each gets the same two-stage cue a cabinet gets.  Idle, there is a small
-   * icon floating in front of it -- a ticket for the counter, a coin for the
-   * machine -- bobbing on its own clock, and a faint outline on the object
-   * itself.  In range, the outline comes up and pulses and the ordinary [E]
-   * prompt appears over the player, the same prompt and the same plate the
-   * cabinets use.
-   *
-   * The icons sit UNDER the player's depth, so the player walks in front of
-   * them and they can never cover him; the outlines sit over the back wall,
-   * above where his head can reach.
+   * Each gets the same two-stage cue a cabinet gets: a faint outline on the
+   * object while nobody is near it, and the same outline up and pulsing with
+   * the ordinary [E] prompt over the player once somebody is.  The outlines
+   * sit over the back wall, above where the player's head can reach, so they
+   * never cover him.
    */
   private cues: Array<{
-    icon: Phaser.GameObjects.Container;
     glow: Phaser.GameObjects.Rectangle[];
-    at: { x: number; y: number };
     kind: 'counter' | 'change';
   }> = [];
   private cueT = 0;
@@ -327,26 +320,15 @@ export class ArcadeHub extends Phaser.Scene {
    * icons and four outlines, and `stepCues` below is all that touches them.
    */
   private paintCues(): void {
-    const ticket = this.add.container(0, 0, [
-      this.add.ellipse(0, 0, 16, 11, PALETTE.gold).setAlpha(0.14),
-      this.add.rectangle(0, 0, 11, 7, PALETTE.gold),
-      this.add.rectangle(0, 0, 11, 1, PALETTE.amberDark).setAlpha(0.7),
-      this.add.circle(-5.5, 0, 1.4, PALETTE.teal),
-      this.add.circle(5.5, 0, 1.4, PALETTE.teal),
-      this.add.rectangle(-2, -2, 4, 1, PALETTE.cream).setAlpha(0.8),
-    ]);
-    // NO COIN ON THE CHANGE MACHINE.  It had one floating beside it as its
-    // idle cue and it read as a pickup -- a thing lying on the carpet to walk
-    // over and collect, in a game that has those.  The machine keeps its
-    // outline, which comes up and pulses in range like everything else on this
-    // wall, and that is the whole of its advertising.
-    const coin = this.add.container(0, 0, []);
-
+    // ---- NO FLOATING ICONS.  There was a ticket on the carpet in front of
+    // the counter and a coin beside the change machine, and both of them read
+    // as PICKUPS: small gold things lying about to be walked over and
+    // collected, in a game that has those.  What is left is the outline on the
+    // object itself, which is the half of the cue that points at the thing it
+    // is advertising rather than at the floor next to it.
     this.cues = [
       {
         kind: 'counter',
-        icon: ticket,
-        at: { x: COUNTER.x + COUNTER.w / 2, y: COUNTER.y + COUNTER.h + 10 },
         glow: [
           // the case, and the front edge of the counter under it
           this.add
@@ -358,32 +340,23 @@ export class ArcadeHub extends Phaser.Scene {
       },
       {
         kind: 'change',
-        icon: coin,
-        // Off to the side of the slot the player stands in, so the coin is
-        // still there to be seen while he is stood at the machine.
-        at: { x: 291, y: 48 },
-        glow: [
-          this.add.rectangle(272, 26, 24, 36).setStrokeStyle(1, PALETTE.gold).setFillStyle(),
-        ],
+        glow: [this.add.rectangle(272, 26, 24, 36).setStrokeStyle(1, PALETTE.gold).setFillStyle()],
       },
     ];
     for (const cue of this.cues) {
-      // UNDER THE PLAYER: he walks in front of the icon, never behind it.
-      cue.icon.setPosition(cue.at.x, cue.at.y).setDepth(45);
       for (const g of cue.glow) g.setDepth(55);
     }
   }
 
-  /** The cues, once a frame: a bob, and whether the player is at one. */
+  /** The cues, once a frame: whether the player is stood at one, and a pulse. */
   private stepCues(delta: number): void {
     this.cueT += delta;
+    const pulse = 0.55 + 0.3 * (0.5 + 0.5 * Math.sin(this.cueT / 260));
     for (const cue of this.cues) {
-      const near = this.target?.kind === cue.kind;
-      const t = this.cueT / (near ? 320 : 620);
-      cue.icon.setPosition(cue.at.x, cue.at.y + Math.sin(t) * (near ? 2.2 : 1.2));
-      cue.icon.setAlpha(near ? 1 : 0.6);
-      cue.icon.setScale(near ? 1.15 : 1);
-      const pulse = 0.55 + 0.3 * (0.5 + 0.5 * Math.sin(this.cueT / 260));
+      // The staff on the counter are talked to from the same patch of floor
+      // the prizes are looked at from, so their target lights the counter too.
+      const near =
+        this.target?.kind === cue.kind || (cue.kind === 'counter' && this.target?.kind === 'staff');
       for (const g of cue.glow) g.setAlpha(near ? pulse : 0.2);
     }
   }
@@ -484,22 +457,38 @@ export class ArcadeHub extends Phaser.Scene {
 
   /** The panel itself.  `withKey` decides whether it has the two buttons on it. */
   private openTalk(line: string, withKey: boolean): void {
-    const h = withKey ? 74 : 56;
-    const y = GAME_H - h - 6;
+    // ---- THE PANEL IS BUILT ROUND THE TEXT, NOT THE OTHER WAY ABOUT.
+    //
+    // It used to be a fixed 74 tall with the buttons pinned to the bottom of
+    // it, which is fine until the line wraps to six rows -- and then the
+    // buttons sit ON TOP OF the last two, covering the half of the sentence
+    // that says what the reward is.  The line is measured first, and
+    // everything else is laid out from what it actually came to: header,
+    // text, and the buttons in a band of their own under it.
+    const PAD = 7;
+    const HEAD = 11;
+    const ROW = 19;
+    const body = text(this, 22, 0, line, PALETTE.cream).setMaxWidth(GAME_W - 46);
+    const textH = Math.max(8, Math.ceil(body.height));
+    const h = PAD + HEAD + textH + PAD + (withKey ? ROW : 10);
+    const y = GAME_H - h - 5;
+    body.setY(y + PAD + HEAD);
+
     const panel = this.add.rectangle(GAME_W / 2, y + h / 2, GAME_W - 24, h, PALETTE.ink, 0.95);
     panel.setStrokeStyle(1, PALETTE.neon);
-    const who = text(this, 22, y + 6, 'ARCADE STAFF', PALETTE.neon);
-    const body = text(this, 22, y + 18, line, PALETTE.cream).setMaxWidth(GAME_W - 46);
+    const who = text(this, 22, y + PAD, 'ARCADE STAFF', PALETTE.neon);
+    // The panel is drawn under the words it is behind.
     const parts: Phaser.GameObjects.GameObject[] = [panel, who, body];
+    panel.setDepth(0);
 
+    const rowY = y + h - (withKey ? ROW / 2 + 3 : 9);
     if (withKey) {
       parts.push(
-        button(this, GAME_W / 2 - 56, y + h - 14, 'GIVE KEY', () => this.giveKey(), { width: 92 }),
-        button(this, GAME_W / 2 + 56, y + h - 14, 'KEEP KEY', () => this.closeTalk(), { width: 92 }),
+        button(this, GAME_W / 2 - 56, rowY, 'GIVE KEY', () => this.giveKey(), { width: 92 }),
+        button(this, GAME_W / 2 + 56, rowY, 'KEEP KEY', () => this.closeTalk(), { width: 92 }),
       );
     } else {
-      const hint = text(this, GAME_W / 2, y + h - 12, '[E] LEAVE IT', PALETTE.ash).setOrigin(0.5, 0.5);
-      parts.push(hint);
+      parts.push(text(this, GAME_W / 2, rowY, '[E] LEAVE IT', PALETTE.ash).setOrigin(0.5, 0.5));
     }
 
     this.talk = this.add.container(0, 0, parts).setDepth(900);
