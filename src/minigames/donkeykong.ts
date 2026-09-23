@@ -35,6 +35,17 @@ const LEFT = 12;
 const RIGHT = GAME_W - 12;
 /** Girder tops, bottom first.  The player stands ON these.  Six of them. */
 const FLOORS = [166, 142, 118, 94, 70, 46];
+/** The girders sit in front of everything that moves between them. */
+const GIRDER_DEPTH = 25;
+/**
+ * How thick a girder is DRAWN: three pixels of beam and one of shadow under
+ * it.  It was six, and six left four pixels of headroom in a twenty-four pixel
+ * storey for a fourteen pixel player -- so the cap that stopped him jumping
+ * through the floor above had to be set where his hat disappeared behind the
+ * beam.  Two pixels off the beam is two pixels of daylight over his head: see
+ * MAX_RISE, which is measured from it.
+ */
+const BEAM_H = 4;
 /** The player, heel to the top of his hat.  See `sprite` and `hat`. */
 const PLAYER_H = 14;
 /**
@@ -56,11 +67,19 @@ const FLOOR_GAP = FLOORS[0] - FLOORS[1];
  * hard floor-in-the-sky in case anything else ever pushes him up.  Nothing can
  * be jumped ONTO or THROUGH; the only way up is a ladder.
  *
- * Ten pixels is what that leaves, and it is enough for what a jump is for: a
- * barrel sat on the girder is clear from seven up (HIT_DY plus PLAYER_MID
- * against BARREL_R), so a roller, and a bouncer while it is down, still pass
- * underneath.  A bouncer at the top of its hop is walked under, which is what
- * it was always for.
+ * AND HIS HEAD STAYS IN THE PICTURE.  The cap is measured to the UNDERSIDE of
+ * the beam rather than to its top, so at the peak of a jump the top of his hat
+ * sits exactly against it with nothing drawn over him -- he is never clipped
+ * by the girder he has just stopped under.  That costs four pixels of the ten
+ * the old cap allowed, which is why the beam is drawn two pixels thinner (see
+ * BEAM_H) and why the hit box below is the size of the player rather than two
+ * pixels taller than him.
+ *
+ * Six pixels is what that leaves, and it is enough for what a jump is for: a
+ * barrel sat on the girder is clear from four up (HIT_DY less PLAYER_MID plus
+ * BARREL_R), so a roller, and a bouncer while it is down, still pass
+ * underneath with two pixels to spare.  A bouncer at the top of its hop is
+ * walked under, which is what it was always for.
  *
  * AND THE TIME IS NOT CLAMPED WITH THE HEIGHT.  Halving the arc and keeping
  * the old gravity would have left a jump lasting a quarter of a second, which
@@ -71,7 +90,7 @@ const FLOOR_GAP = FLOORS[0] - FLOORS[1];
  * every barrel-spacing rule below is measured in -- comes out at the same 34px
  * it was tuned against.
  */
-const MAX_RISE = FLOOR_GAP - PLAYER_H;
+const MAX_RISE = FLOOR_GAP - BEAM_H - PLAYER_H;
 const AIRTIME_S = 0.609;
 const GRAVITY = (8 * MAX_RISE) / (AIRTIME_S * AIRTIME_S);
 const JUMP_V = -Math.sqrt(2 * GRAVITY * MAX_RISE);
@@ -83,8 +102,6 @@ const BARREL_R = 4;
 // spawn rate and the bottom floor silted up faster than it could drain.
 const BARREL_SPEED = 72;
 const LIVES = 3;
-/** The girders sit in front of everything that moves between them. */
-const GIRDER_DEPTH = 25;
 /** Ladder x by the floor it rises FROM.  See create(). */
 /**
  * Ladder x by the floor it rises FROM.
@@ -171,8 +188,17 @@ const MIXED_GAP = JUMP_SPAN * 2;
  * bouncer offers, and the number every rule above is really about.
  */
 const HIT_DX = 6;
-const HIT_DY = 8;
-const PLAYER_MID = 5;
+/**
+ * AND IT IS THE SIZE OF THE PLAYER.  It used to be sixteen pixels tall around
+ * a point five up from his heels, which put three pixels of hit box BELOW HIS
+ * FEET -- inside the girder he was standing on -- and stopped one short of his
+ * hat.  A barrel therefore had to be cleared by seven pixels of jump when the
+ * player is only fourteen tall.  Centred on the middle of him and half his
+ * height, it covers exactly the frog the player can see, which is what makes
+ * the six pixels of jump left under the new ceiling enough to clear a barrel.
+ */
+const HIT_DY = 7;
+const PLAYER_MID = 7;
 const WALK_UNDER = HIT_DY + PLAYER_MID - BARREL_R;
 
 interface Ladder {
@@ -316,8 +342,8 @@ export const donkeyKong: MinigameModule = {
     // slides BEHIND the beam reads as hitting it.  Drawn behind him it read as
     // his head coming through the floor above.
     FLOORS.forEach((y) => {
-      scene.add.rectangle(LEFT, y, RIGHT - LEFT, 4, 0xc0455a).setOrigin(0, 0).setDepth(GIRDER_DEPTH);
-      scene.add.rectangle(LEFT, y + 4, RIGHT - LEFT, 2, 0x7a2233).setOrigin(0, 0).setDepth(GIRDER_DEPTH);
+      scene.add.rectangle(LEFT, y, RIGHT - LEFT, BEAM_H - 1, 0xc0455a).setOrigin(0, 0).setDepth(GIRDER_DEPTH);
+      scene.add.rectangle(LEFT, y + BEAM_H - 1, RIGHT - LEFT, 1, 0x7a2233).setOrigin(0, 0).setDepth(GIRDER_DEPTH);
       // rivets
       for (let x = LEFT + 6; x < RIGHT - 4; x += 16) {
         scene.add.rectangle(x, y + 1, 2, 2, 0xf0879a).setOrigin(0, 0).setDepth(GIRDER_DEPTH);
@@ -448,6 +474,8 @@ export const donkeyKong: MinigameModule = {
           ceiling: ceilingY(player.floor),
           maxRise: MAX_RISE,
           playerH: PLAYER_H,
+          /** How thick a girder is drawn, so a test can ask about its underside. */
+          beam: BEAM_H,
           drops: { ...drops },
           floors: FLOORS,
           exitX: RIGHT - 34,

@@ -49,6 +49,33 @@ export class ArcadeHub extends Phaser.Scene {
   private promptPlate!: Phaser.GameObjects.Rectangle;
   private target: Target = null;
   private locked = false;
+  /**
+   * THE TWO THINGS ON THE BACK WALL THAT ARE NOT MACHINES.
+   *
+   * The cabinets advertise themselves -- a marquee, a cost badge, a highlight
+   * when you can afford them -- and the prize counter and the change machine
+   * advertised nothing at all: two pieces of scenery that happened to do
+   * something if you walked into the right patch of carpet and pressed a key
+   * nothing had told you about.
+   *
+   * Each gets the same two-stage cue a cabinet gets.  Idle, there is a small
+   * icon floating in front of it -- a ticket for the counter, a coin for the
+   * machine -- bobbing on its own clock, and a faint outline on the object
+   * itself.  In range, the outline comes up and pulses and the ordinary [E]
+   * prompt appears over the player, the same prompt and the same plate the
+   * cabinets use.
+   *
+   * The icons sit UNDER the player's depth, so the player walks in front of
+   * them and they can never cover him; the outlines sit over the back wall,
+   * above where his head can reach.
+   */
+  private cues: Array<{
+    icon: Phaser.GameObjects.Container;
+    glow: Phaser.GameObjects.Rectangle[];
+    at: { x: number; y: number };
+    kind: 'counter' | 'change';
+  }> = [];
+  private cueT = 0;
   private dialogue!: DialogueBox;
   private mutter!: Phaser.GameObjects.BitmapText;
   private returnTo: GameId | null = null;
@@ -138,6 +165,13 @@ export class ArcadeHub extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.openCounter());
 
+    // The change machine is on the wall with the rest of the furniture and had
+    // nothing clickable on it, so the mouse path stopped at the counter.
+    this.add
+      .zone(272, 26, 26, 38)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.openChangeMachine());
+
     // The bell still summons nobody (VOC-18) — but it has to at least answer a
     // click, or it reads as broken rather than as ignored.
     this.add
@@ -149,6 +183,7 @@ export class ArcadeHub extends Phaser.Scene {
         this.say('nobody comes.');
       });
 
+    this.paintCues();
     this.paintAnnexDoor();
 
     this.bounds = new Phaser.Geom.Rectangle(
@@ -190,7 +225,9 @@ export class ArcadeHub extends Phaser.Scene {
       // game, which is an accident every time -- so the floor works the doors
       // and the counter and nothing else.  A machine starts on a click ON THE
       // MACHINE, or on [E] while stood at it, and on nothing else.
-      if (this.target?.kind === 'cabinet') return;
+      if (this.target?.kind === 'cabinet' || this.target?.kind === 'counter' || this.target?.kind === 'change') {
+        return;
+      }
       this.interact();
     });
     this.input.keyboard?.on('keydown-ESC', () => {
@@ -232,6 +269,73 @@ export class ArcadeHub extends Phaser.Scene {
   }
 
   // ------------------------------------------------------------------ the room
+
+  /**
+   * The idle cues, built once.  Nothing here is read by the game: it is two
+   * icons and four outlines, and `stepCues` below is all that touches them.
+   */
+  private paintCues(): void {
+    const ticket = this.add.container(0, 0, [
+      this.add.ellipse(0, 0, 16, 11, PALETTE.gold).setAlpha(0.14),
+      this.add.rectangle(0, 0, 11, 7, PALETTE.gold),
+      this.add.rectangle(0, 0, 11, 1, PALETTE.amberDark).setAlpha(0.7),
+      this.add.circle(-5.5, 0, 1.4, PALETTE.teal),
+      this.add.circle(5.5, 0, 1.4, PALETTE.teal),
+      this.add.rectangle(-2, -2, 4, 1, PALETTE.cream).setAlpha(0.8),
+    ]);
+    const coin = this.add.container(0, 0, [
+      this.add.ellipse(0, 0, 14, 14, PALETTE.gold).setAlpha(0.14),
+      this.add.circle(0, 0, 4.5, PALETTE.amberDark),
+      this.add.circle(0, 0, 3.6, PALETTE.gold),
+      this.add.rectangle(0, 0, 1, 5, PALETTE.amberDark).setAlpha(0.85),
+      this.add.rectangle(-1.4, -1.6, 2, 1, PALETTE.cream).setAlpha(0.7),
+    ]);
+
+    this.cues = [
+      {
+        kind: 'counter',
+        icon: ticket,
+        at: { x: COUNTER.x + COUNTER.w / 2, y: COUNTER.y + COUNTER.h + 10 },
+        glow: [
+          // the case, and the front edge of the counter under it
+          this.add
+            .rectangle(PRIZE_CASE.x + PRIZE_CASE.w / 2, PRIZE_CASE.y - 15, PRIZE_CASE.w + 4, 34)
+            .setStrokeStyle(1, PALETTE.gold)
+            .setFillStyle(),
+          this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, 2, PALETTE.gold).setOrigin(0, 0),
+        ],
+      },
+      {
+        kind: 'change',
+        icon: coin,
+        // Off to the side of the slot the player stands in, so the coin is
+        // still there to be seen while he is stood at the machine.
+        at: { x: 291, y: 48 },
+        glow: [
+          this.add.rectangle(272, 26, 24, 36).setStrokeStyle(1, PALETTE.gold).setFillStyle(),
+        ],
+      },
+    ];
+    for (const cue of this.cues) {
+      // UNDER THE PLAYER: he walks in front of the icon, never behind it.
+      cue.icon.setPosition(cue.at.x, cue.at.y).setDepth(45);
+      for (const g of cue.glow) g.setDepth(55);
+    }
+  }
+
+  /** The cues, once a frame: a bob, and whether the player is at one. */
+  private stepCues(delta: number): void {
+    this.cueT += delta;
+    for (const cue of this.cues) {
+      const near = this.target?.kind === cue.kind;
+      const t = this.cueT / (near ? 320 : 620);
+      cue.icon.setPosition(cue.at.x, cue.at.y + Math.sin(t) * (near ? 2.2 : 1.2));
+      cue.icon.setAlpha(near ? 1 : 0.6);
+      cue.icon.setScale(near ? 1.15 : 1);
+      const pulse = 0.55 + 0.3 * (0.5 + 0.5 * Math.sin(this.cueT / 260));
+      for (const g of cue.glow) g.setAlpha(near ? pulse : 0.2);
+    }
+  }
 
   private paintCounter(): void {
     // Ticket counter along the back wall, prizes visible behind glass.  The
@@ -463,6 +567,7 @@ export class ArcadeHub extends Phaser.Scene {
 
     this.target = this.findTarget();
     this.renderPrompt();
+    this.stepCues(delta);
   }
 
   /**
@@ -544,7 +649,14 @@ export class ArcadeHub extends Phaser.Scene {
 
     this.prompt.setText(msg).setTint(color === PALETTE.gold ? 0xffd45e : 0x5c6b7d);
     const x = Phaser.Math.Clamp(this.player.x, 60, GAME_W - 60);
-    const y = this.player.y - 34;
+    // OVER HIS HEAD, EXCEPT WHERE HIS HEAD IS IN FRONT OF THE PRIZES.  The
+    // counter and the change machine are the two things you walk UP TO rather
+    // than stand beside, so a prompt 34 pixels above the player lands square
+    // on the prize case or on the machine itself -- covering the very thing it
+    // is naming.  For those two it goes on the carpet in front of him instead,
+    // which is empty floor in both cases.
+    const below = t.kind === 'counter' || t.kind === 'change';
+    const y = below ? this.player.y + 15 : this.player.y - 34;
     this.prompt.setPosition(x, y).setVisible(true);
     this.promptPlate
       .setPosition(x, y)
