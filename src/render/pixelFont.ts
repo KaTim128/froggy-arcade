@@ -154,11 +154,6 @@ const GLYPHS: Record<string, string> = {
   '↓': '...../..#../..#../#.#.#/.###./..#../...../.....', // ↓
   '←': '...../..#../.#.../#####/.#.../..#../...../.....', // ←
   '→': '...../..#../...#./#####/...#./..#../...../.....', // →
-  // The mascot, at five by eight: two bumps, a wide head with the eyes cut out
-  // of it, and a mouth.  He is in the font because he is in the dialogue --
-  // the line on the prize counter is written with him in it, and a glyph the
-  // font does not have is a hole in the middle of a sentence.
-  '\u{1F438}': '...../#...#/#####/#.#.#/#####/#...#/.###./.....',
 };
 
 /**

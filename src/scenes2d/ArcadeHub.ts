@@ -9,7 +9,7 @@
 
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
-import { audio } from '../core/audio';
+import { audio, SILENCE } from '../core/audio';
 import { store, type GameId } from '../core/state';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
@@ -68,7 +68,18 @@ const COUNTER_POST = { x: 243, y: COUNTER.y + 17 };
  * he is a mascot leaning on a counter, and at the height he was first drawn at
  * he loomed over the prizes he is pointing at.
  */
-const FROG_POST = { x: 230, y: COUNTER.y + 8, height: 34 };
+const FROG_POST = { x: 230, y: COUNTER.y + 13, height: 30 };
+/**
+ * How much finer the drawing is than the room it is in.
+ *
+ * At one game pixel to one texture pixel his face is about twelve across, and
+ * a face twelve across has eyes three wide: at that size the mascot stops
+ * being a frog and becomes a green block with two dots on it.  The drawing is
+ * rendered at four times the resolution and hung at a quarter scale, so it is
+ * the same size on the counter and carries four times the detail -- which is
+ * about where the game's own pixels land on a full-screen canvas anyway.
+ */
+const FROG_DETAIL = 4;
 const STAFF_DEPTH = COUNTER_DEPTH - 0.01;
 /**
  * ---- AND THE HIGHLIGHTS GO BEHIND EVERYBODY.
@@ -132,11 +143,15 @@ export class ArcadeHub extends Phaser.Scene {
   private frogT = 0;
   /** Whether he has already said it since the player last walked away. */
   private frogSpoke = false;
+  /** His line, while it is up.  Not modal: see `showFrogLine`. */
+  private frogSays: Phaser.GameObjects.Container | null = null;
   /** The staff conversation, while it is up. */
   private talk: Phaser.GameObjects.Container | null = null;
   /** The thing outside the glass.  See `startApparition`. */
   private appT = 0;
   private apparition: 'off' | 'stare' | 'blink' = 'off';
+  /** How many breaths of static have gone by, so each one plays once. */
+  private appHiss = 0;
   private dialogue!: DialogueBox;
   private mutter!: Phaser.GameObjects.BitmapText;
   private returnTo: GameId | null = null;
@@ -438,21 +453,26 @@ export class ArcadeHub extends Phaser.Scene {
   private drawFrogOnCounter(): Phaser.GameObjects.Image {
     const key = 'hub-counter-froggy';
     if (this.textures.exists(key)) this.textures.remove(key);
-    const w = 44;
-    const h = FROG_POST.height + 6;
+    const k = FROG_DETAIL;
+    const w = 44 * k;
+    const h = (FROG_POST.height + 6) * k;
     const tex = this.textures.createCanvas(key, w, h)!;
     const ctx = tex.getContext();
     ctx.clearRect(0, 0, w, h);
     drawFroggy(ctx, {
       x: w / 2,
-      y: h - 2,
-      height: FROG_POST.height,
+      y: h - 2 * k,
+      height: FROG_POST.height * k,
       variant: 'cozy',
       pose: 'idleA',
       bounce: 0.55,
     });
     tex.refresh();
-    const img = this.add.image(FROG_POST.x, FROG_POST.y, key).setOrigin(0.5, 1).setDepth(STAFF_DEPTH);
+    const img = this.add
+      .image(FROG_POST.x, FROG_POST.y, key)
+      .setOrigin(0.5, 1)
+      .setScale(1 / k)
+      .setDepth(STAFF_DEPTH);
     // The same slow breath the staff who replace him have, so the counter is
     // never completely still whoever is on it.
     this.tweens.add({
@@ -485,14 +505,46 @@ export class ArcadeHub extends Phaser.Scene {
     const d = Math.hypot(this.player.x - FROG_POST.x, this.player.y - (COUNTER.y + 24));
     if (d < 46 && !this.frogSpoke && !this.busy()) {
       this.frogSpoke = true;
-      this.say('"FEEL FREE TO CHECK WHAT PRIZES YOU CAN GET! \u{1F438}"');
+      this.showFrogLine();
     } else if (d > 52) {
       // He says it EVERY TIME you come over.  The gap between the two numbers
       // is only there to stop a player stood exactly on the line setting him
       // off once a frame -- step back off the counter and walk up again and he
       // greets you again, which is what a mascot on a counter does.
       this.frogSpoke = false;
+      this.hideFrogLine();
     }
+  }
+
+  /**
+   * ---- WHAT HE SAYS, AND WHAT IT IS SAID IN.
+   *
+   * A box, not a mutter: the line used to go in the small grey text at the
+   * bottom of the screen that the room uses for its own asides, where a thing
+   * a CHARACTER says looks like a thing the building is thinking.  It is the
+   * same panel the staff on the counter get, in his own colours, without the
+   * buttons -- and it is not modal.  Walking up to a mascot should not take
+   * the controls off you: it appears when you are close enough to talk to him,
+   * it goes when you walk away, and the game carries on underneath it.
+   */
+  private showFrogLine(): void {
+    this.hideFrogLine();
+    const LINE = '"FEEL FREE TO TAKE A LOOK AT THE PRIZES AVAILABLE!"';
+    const PAD = 7;
+    const HEAD = 11;
+    const body = text(this, 22, 0, LINE, PALETTE.cream).setMaxWidth(GAME_W - 46);
+    const h = PAD + HEAD + Math.max(8, Math.ceil(body.height)) + PAD;
+    const y = GAME_H - h - 5;
+    body.setY(y + PAD + HEAD);
+    const panel = this.add.rectangle(GAME_W / 2, y + h / 2, GAME_W - 24, h, PALETTE.ink, 0.95);
+    panel.setStrokeStyle(1, PALETTE.mossLight);
+    const who = text(this, 22, y + PAD, 'FROGGY', PALETTE.mossLight);
+    this.frogSays = this.add.container(0, 0, [panel, who, body]).setDepth(880);
+  }
+
+  private hideFrogLine(): void {
+    this.frogSays?.destroy(true);
+    this.frogSays = null;
   }
 
   /**
@@ -619,18 +671,28 @@ export class ArcadeHub extends Phaser.Scene {
     this.locked = true;
     this.apparition = 'stare';
     this.appT = 0;
-    audio.sfx('door_creak', 0.5);
+    this.appHiss = 0;
+    this.hideFrogLine();
+    // ---- AND THE MUSIC STOPS.  Not fades: stops.  The room has had a tune
+    // and a crowd under it since the player walked in, and the whole of this
+    // is that both of them are suddenly not there.
+    audio.setScene(SILENCE);
+    audio.sfx('eerie_swell', 0.5);
   }
 
   private stepApparition(delta: number): void {
     if (this.apparition === 'off') return;
     this.appT += delta;
 
-    // The timings, in order: how long he is simply there, then the lids.
-    const STARE = 1500;
-    const SHUT = 190;
-    const BLACK = 110;
-    const OPEN = 260;
+    // ---- THE TIMINGS.  Eight seconds of him, and then a blink.
+    //
+    // Eight is a long time to look at something that is not moving, which is
+    // the point: past about three the player has taken it in, and what is left
+    // is the part where nothing happens and they have to keep looking at it.
+    const STARE = 8000;
+    const SHUT = 170;
+    const BLACK = 120;
+    const OPEN = 240;
     const t = this.appT;
     const gone = t > STARE + SHUT + BLACK * 0.5;
 
@@ -640,48 +702,14 @@ export class ArcadeHub extends Phaser.Scene {
     else if (t > STARE + SHUT) lid = 1;
     else if (t > STARE) lid = (t - STARE) / SHUT;
 
-    froggyLayer.paint((ctx) => {
-      // ---- the room, dimmed.  Not hidden: the layout underneath is the
-      // point, and this is a wash over it rather than a curtain in front.
-      ctx.fillStyle = 'rgba(2,3,6,0.72)';
-      ctx.fillRect(0, 0, GAME_W, GAME_H);
-      const v = ctx.createRadialGradient(
-        GAME_W / 2, GAME_H * 0.62, GAME_W * 0.12,
-        GAME_W / 2, GAME_H * 0.62, GAME_W * 0.62,
-      );
-      v.addColorStop(0, 'rgba(0,0,0,0)');
-      v.addColorStop(1, 'rgba(0,0,0,0.85)');
-      ctx.fillStyle = v;
-      ctx.fillRect(0, 0, GAME_W, GAME_H);
+    // Two breaths of static across the eight seconds, so the silence has
+    // something wrong with it rather than being merely quiet.
+    if (this.appHiss < 2 && t > 2600 + this.appHiss * 3000) {
+      this.appHiss++;
+      audio.sfx('poison_hiss', 0.22);
+    }
 
-      // ---- him, in the doorway, facing in.  Still: no bounce, no idle, and
-      // nothing in his eyes.
-      if (!gone) {
-        const glow = ctx.createRadialGradient(GAME_W / 2, GAME_H - 18, 2, GAME_W / 2, GAME_H - 18, 34);
-        glow.addColorStop(0, 'rgba(120,150,130,0.16)');
-        glow.addColorStop(1, 'rgba(120,150,130,0)');
-        ctx.fillStyle = glow;
-        ctx.fillRect(GAME_W / 2 - 40, GAME_H - 56, 80, 56);
-        drawFroggy(ctx, {
-          x: GAME_W / 2,
-          y: GAME_H - 2,
-          height: 38,
-          variant: 'cozy',
-          pose: 'idleA',
-          bounce: 0,
-          pupils: false,
-          alpha: 0.96,
-        });
-      }
-
-      // ---- the blink itself, from the top and the bottom at once.
-      if (lid > 0) {
-        const h = (GAME_H / 2) * lid;
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, GAME_W, h + 1);
-        ctx.fillRect(0, GAME_H - h - 1, GAME_W, h + 1);
-      }
-    });
+    froggyLayer.paint((ctx) => this.paintApparition(ctx, t, lid, gone));
 
     if (t > STARE + SHUT + BLACK + OPEN) {
       this.apparition = 'off';
@@ -689,6 +717,118 @@ export class ArcadeHub extends Phaser.Scene {
       store.patch({ sawApparition: true });
       store.flush();
       this.locked = false;
+      // And the arcade comes back on, mid-tune, as though it had never been
+      // off -- which is the last thing that makes the player doubt it.
+      audio.setScene({ music: 'room_hub', ambience: ['cabinet_bleeps', 'crowd_hum'] });
+    }
+  }
+
+  /**
+   * ---- WHAT THE APPARITION LOOKS LIKE.
+   *
+   * The arcade, drawn as a picture rather than as the room: the purple wall
+   * and the strip light along the top of it, the grey floor, a cabinet either
+   * side at the spacing the hub's own are at, and the doorway in the middle
+   * with him standing in it looking out at the player.  It is the place the
+   * player is stood in, painted the way a photograph of it would look -- same
+   * wall, same floor, same machines, nobody else in it.
+   *
+   * He does not move for any of it.  Two eyes, pupils the size of a full stop
+   * pointed straight out of the screen, and a rim of light behind him that is
+   * the only thing in the picture with any warmth in it.
+   */
+  private paintApparition(ctx: CanvasRenderingContext2D, t: number, lid: number, gone: boolean): void {
+    const FLOOR = 122;
+    // ---- the wall, and the light along the top of it.
+    ctx.fillStyle = '#5c2a86';
+    ctx.fillRect(0, 0, GAME_W, FLOOR);
+    ctx.fillStyle = '#4a2170';
+    ctx.fillRect(0, 0, GAME_W, 10);
+    ctx.fillStyle = 'rgba(255,79,163,0.5)';
+    ctx.fillRect(0, 10, GAME_W, 2);
+    // ---- the floor.
+    ctx.fillStyle = '#b9bfcb';
+    ctx.fillRect(0, FLOOR, GAME_W, GAME_H - FLOOR);
+    ctx.fillStyle = 'rgba(60,64,78,0.35)';
+    ctx.fillRect(0, FLOOR, GAME_W, 2);
+
+    // ---- the doorway he is standing in, and what is behind him.
+    const dw = 74;
+    const dx = GAME_W / 2 - dw / 2;
+    ctx.fillStyle = '#dfe8ee';
+    ctx.fillRect(dx, 34, dw, FLOOR - 34);
+    ctx.fillStyle = '#2a2140';
+    ctx.fillRect(dx + 10, 58, dw - 20, FLOOR - 58);
+    ctx.fillStyle = '#8a8f9c';
+    ctx.fillRect(GAME_W / 2 - 1, 34, 2, 26);
+
+    // ---- a cabinet either side, at the spacing the room's own are at.
+    const cab = (x: number, hue: string, lit: string): void => {
+      ctx.fillStyle = '#6b4a2f';
+      ctx.fillRect(x, 44, 34, 8);
+      ctx.fillStyle = hue;
+      ctx.fillRect(x, 52, 34, 26);
+      ctx.fillStyle = '#242c38';
+      ctx.fillRect(x + 4, 56, 26, 18);
+      ctx.fillStyle = lit;
+      ctx.fillRect(x, 78, 34, 8);
+      ctx.fillStyle = '#3a4250';
+      ctx.fillRect(x, 86, 34, FLOOR - 86);
+    };
+    cab(20, '#c08a52', '#6b4a2f');
+    cab(GAME_W - 54, '#a8c23f', '#46a83f');
+
+    // ---- him.  Dead centre, dead still, and looking at you.
+    if (!gone) {
+      const glow = ctx.createRadialGradient(GAME_W / 2, FLOOR - 22, 4, GAME_W / 2, FLOOR - 22, 52);
+      glow.addColorStop(0, 'rgba(180,220,190,0.22)');
+      glow.addColorStop(1, 'rgba(180,220,190,0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(GAME_W / 2 - 60, FLOOR - 80, 120, 80);
+      drawFroggy(ctx, {
+        x: GAME_W / 2,
+        y: FLOOR + 2,
+        height: 74,
+        variant: 'cozy',
+        // The fourth pose: the same face, with the pupils down to a full stop.
+        pose: 'blank',
+        bounce: 0,
+      });
+    }
+
+    // ---- the static.  A scatter of light and dark, redrawn every frame, so
+    // the picture is never quite the same picture twice.
+    const grain = Math.floor(t / 40);
+    for (let i = 0; i < 260; i++) {
+      const n = Math.sin((i * 12.9898 + grain * 78.233) * 43758.5453);
+      const r = n - Math.floor(n);
+      const x = Math.floor((r * GAME_W * 7.3) % GAME_W);
+      const y = Math.floor((r * GAME_H * 13.1) % GAME_H);
+      ctx.fillStyle = r > 0.5 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.10)';
+      ctx.fillRect(x, y, 1, 1);
+    }
+    // and a couple of rolling bands, which is what says SIGNAL rather than dust
+    const band = (t / 9) % (GAME_H + 40);
+    ctx.fillStyle = 'rgba(255,255,255,0.035)';
+    ctx.fillRect(0, band - 40, GAME_W, 3);
+    ctx.fillRect(0, GAME_H - band, GAME_W, 2);
+
+    // ---- the dark at the edges of it.
+    const v = ctx.createRadialGradient(
+      GAME_W / 2, GAME_H * 0.52, GAME_W * 0.18,
+      GAME_W / 2, GAME_H * 0.52, GAME_W * 0.66,
+    );
+    v.addColorStop(0, 'rgba(0,0,0,0)');
+    v.addColorStop(1, 'rgba(0,0,0,0.72)');
+    ctx.fillStyle = v;
+    ctx.fillRect(0, 0, GAME_W, GAME_H);
+
+    // ---- the blink itself, from the top and the bottom at once.
+    if (lid > 0) {
+      const h = (GAME_H / 2) * lid;
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, GAME_W, h + 1);
+      ctx.fillRect(0, GAME_H - h - 1, GAME_W, h + 1);
     }
   }
 
@@ -936,6 +1076,10 @@ export class ArcadeHub extends Phaser.Scene {
     if (this.locked || this.dialogue.isActive()) {
       this.promptPlate.setVisible(false);
       this.prompt.setVisible(false);
+      // Whatever has the room -- a cabinet, the counter, the thing outside the
+      // glass -- has it on its own.  He waits.
+      this.hideFrogLine();
+      this.frogSpoke = false;
       return;
     }
 
