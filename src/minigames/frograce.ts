@@ -449,8 +449,19 @@ const BALLOON_DOWN_S = 0.5;
 const BALLOON_GAIN = 2.0;
 const BALLOON_H = 12;
 
-/** ---- THE FLY.  It crosses the lanes, somebody eats it, and it sleeps it off. */
-const FLY_CROSS_S = 2.6;
+/**
+ * ---- THE FLY.  It crosses the lanes, somebody eats it, and it sleeps it off.
+ *
+ * AND IT IS A WARNING BEFORE IT IS A MEAL.  It used to appear a tongue's
+ * length from the frog and be licked out of the air inside a couple of
+ * tenths -- the player saw a frog fall asleep and nothing that explained it.
+ * It comes in from two lanes out now and no frog may touch it for
+ * `FLY_WARN_S`, so there is a fly crossing the track, visibly, for over a
+ * second before any tongue comes out.  That is the whole of the change: what
+ * the tongue does, how far it reaches and what eating it costs are untouched.
+ */
+const FLY_WARN_S = 1.25;
+const FLY_CROSS_S = 4.0;
 const TONGUE_S = 0.45;
 /** How far the lick goes, in pixels.  A frog is about eleven across. */
 const TONGUE_REACH = 26;
@@ -462,7 +473,7 @@ const WAKE_S = 0.8;
 /** ---- THE GOLDEN FLY.  Same idea, opposite result: eat it and go. */
 const GOLD_GAIN = 1.5;
 const GOLD_SURGE_S = 0.9;
-const GOLD_CROSS_S = 2.2;
+const GOLD_CROSS_S = 3.6;
 
 /** ---- THE BOOST.  A fifth more pace for two seconds, and you can see it. */
 const BOOST_S = 2.0;
@@ -897,6 +908,22 @@ export const frogRace: MinigameModule = {
         }),
         /** Height off the lane for every frog, so a harness can see the hop. */
         lifts: () => racers.map((r) => r.lift),
+        /**
+         * The fly: where it is, whose it is, and how long it has been on the
+         * track.  The warning it gives is a duration, so it has to be readable
+         * as one rather than guessed at from a screenshot.
+         */
+        flyNow: () => ({
+          on: fly.on,
+          gold: fly.gold,
+          t: fly.t,
+          warn: FLY_WARN_S,
+          target: fly.target,
+          x: START_X + fly.x,
+          y: LANE_T + fly.lane * LANE_H + LANE_H / 2 + 1,
+          lane: fly.lane,
+          licking: racers.some((r) => r.i === fly.target && r.going === 'eat'),
+        }),
         /** The comeback as it stands in this race: armed, lit, and who is flying. */
         jet: () => ({
           armed: jet.armed,
@@ -1475,13 +1502,20 @@ export const frogRace: MinigameModule = {
     if (flyArt) {
       flyArt.setVisible(fly.on);
       if (fly.on) {
-        flyArt.setPosition(START_X + fly.x, LANE_T + fly.lane * LANE_H + LANE_H / 2 + 1);
-        const w = flyArt.getData('wing') as Phaser.GameObjects.Rectangle;
-        w.setScale(1, Math.sin(clock / 18) > 0 ? 1 : -1);
+        // A little bob on the way in, because a fly does not fly in a straight
+        // line and a wobble is the thing the eye catches.
+        const bob = Math.sin(clock / 70) * 1.6;
+        flyArt.setPosition(START_X + fly.x, LANE_T + fly.lane * LANE_H + LANE_H / 2 + 1 + bob);
+        const beat = 0.35 + 0.65 * Math.abs(Math.sin(clock / 26));
+        (flyArt.getData('wing') as Phaser.GameObjects.Ellipse).setScale(1, beat);
+        (flyArt.getData('wing2') as Phaser.GameObjects.Ellipse).setScale(1, beat);
         const gold = flyArt.getData('gold') as Phaser.GameObjects.Ellipse;
         const plain = flyArt.getData('plain') as Phaser.GameObjects.Ellipse;
         gold.setVisible(fly.gold);
         plain.setVisible(!fly.gold);
+        for (const part of flyArt.getData('face') as Phaser.GameObjects.GameObject[]) {
+          (part as Phaser.GameObjects.Rectangle).setVisible(!fly.gold);
+        }
         if (fly.gold) gold.setScale(1 + Math.sin(clock / 90) * 0.12);
       }
     }
@@ -1810,8 +1844,10 @@ function fire(kind: EffectKind, r: Run, bird: Bird, fly: Fly): boolean {
       fly.gold = kind === 'golden';
       fly.t = 0;
       fly.target = r.i;
-      fly.x = r.x + 34;
-      fly.lane = r.i + (Math.random() < 0.5 ? -1.1 : 1.1);
+      // Well out in front and two lanes off, so the approach is a flight
+      // across the track rather than a pop-in beside the frog.
+      fly.x = r.x + 62;
+      fly.lane = r.i + (Math.random() < 0.5 ? -2.2 : 2.2);
       // Recorded when it is eaten, not when it is sent.  See `stepFly`.
       return true;
     }
@@ -2033,10 +2069,16 @@ function stepFly(f: Fly, runs: Run[], raceT: number, dt: number): void {
     f.on = false;
     return;
   }
-  // It closes on the frog's lane and on the frog.
+  // It closes on the frog's lane and on the frog, at a pace that takes about
+  // as long as the warning: it is still arriving while the player is noticing
+  // it.
   const k = Phaser.Math.Clamp(f.t / (span * 0.6), 0, 1);
-  f.lane += (r.i - f.lane) * Math.min(1, dt * 2.4);
-  f.x += (r.x + 9 - f.x) * Math.min(1, dt * 2.0);
+  f.lane += (r.i - f.lane) * Math.min(1, dt * 1.0);
+  f.x += (r.x + 9 - f.x) * Math.min(1, dt * 0.85);
+  // ---- AND NOTHING HAPPENS UNTIL THE PLAYER HAS HAD TIME TO SEE IT.  The
+  // one gate: everything past here -- the reach, the lick, the meal -- is
+  // exactly as it was.
+  if (f.t < FLY_WARN_S) return;
   if (k >= 1 || Math.abs(f.x - r.x) > TONGUE_REACH) return;
   if (r.going !== 'run' || r.jet > 0) return;
   // Got it.  The lick is its own short state and the meal follows it.
@@ -2249,22 +2291,44 @@ function paintTrack(scene: Phaser.Scene): void {
   };
   const between = (a: number, b: number): number => a + rnd() * (b - a);
 
-  // ---- the sky, in bands rather than one fill, warming towards the horizon
-  const SKY = [0x1b3358, 0x24436a, 0x2f557f, 0x3f6a92, 0x5885a4, 0x7aa3b4, 0x9dbdb9];
+  // ---- THE SKY.  It is the middle of a summer afternoon.
+  //
+  // It used to be dusk -- deep blue at the top, a low sun sitting in the
+  // hills -- and a night race is a race the player squints at: dark frogs on
+  // dark grass under a dark sky.  Same seven bands, same warming towards the
+  // horizon, but blue daylight now, with the sun high and a few clouds in it.
+  const SKY = [0x2f8fd8, 0x45a0e2, 0x5fb1ea, 0x7cc2f0, 0x9dd3f2, 0xc2e4f1, 0xdcefe4];
   const skyH = TRACK_TOP - 18;
   SKY.forEach((c, i) => {
     scene.add
       .rectangle(0, 18 + (skyH / SKY.length) * i, GAME_W, Math.ceil(skyH / SKY.length) + 1, c)
       .setOrigin(0, 0);
   });
-  // a low sun behind the hills, and its haze
-  scene.add.circle(248, TRACK_TOP - 26, 11, 0xffd9a0).setAlpha(0.85);
-  scene.add.circle(248, TRACK_TOP - 26, 17, 0xffd9a0).setAlpha(0.18);
+  // the sun, high and bright, with its haze around it
+  scene.add.circle(252, 32, 20, 0xfff2c4).setAlpha(0.13);
+  scene.add.circle(252, 32, 13, 0xfff2c4).setAlpha(0.3);
+  scene.add.circle(252, 32, 8, 0xfffbe4).setAlpha(0.95);
+  // and a few fair-weather clouds, flat-bottomed, built out of overlapping
+  // ellipses so that none of them is a lozenge
+  for (const [cx, cy, scale] of [
+    [54, 30, 1],
+    [140, 24, 0.75],
+    [196, 40, 0.6],
+  ] as const) {
+    for (const [ox, oy, w, h] of [
+      [-9, 1, 16, 7],
+      [0, -2, 18, 9],
+      [9, 1, 14, 7],
+    ] as const) {
+      scene.add.ellipse(cx + ox * scale, cy + oy * scale, w * scale, h * scale, PALETTE.white).setAlpha(0.82);
+    }
+    scene.add.rectangle(cx - 12 * scale, cy + 3 * scale, 24 * scale, 2 * scale, 0xdce9f4).setAlpha(0.6);
+  }
 
   // ---- the hills.  Far row first, pale and flat; near row over it, darker.
   for (const [rowY, colour, h, alpha] of [
-    [TRACK_TOP - 20, 0x6f8f92, 13, 0.85],
-    [TRACK_TOP - 13, 0x4a7358, 15, 1],
+    [TRACK_TOP - 20, 0x9dbfae, 13, 0.85],
+    [TRACK_TOP - 13, 0x5f9a5c, 15, 1],
   ] as const) {
     let x = -10;
     while (x < GAME_W + 10) {
@@ -2280,14 +2344,14 @@ function paintTrack(scene: Phaser.Scene): void {
   for (let i = 0; i < 26; i++) {
     const x = between(0, GAME_W);
     const h = between(4, 8);
-    scene.add.ellipse(x, TRACK_TOP - 14 - h / 2, between(4, 7), h, 0x2c5238).setAlpha(0.9);
+    scene.add.ellipse(x, TRACK_TOP - 14 - h / 2, between(4, 7), h, 0x35733f).setAlpha(0.9);
   }
 
   // ---- THE CROWD.  A rail, and heads behind it: two rows, the back row
   // darker and smaller, because a crowd is the one thing that says this is a
   // race and not four frogs in a field.
   const crowdY = TRACK_TOP - 9;
-  scene.add.rectangle(0, crowdY - 1, GAME_W, 7, 0x2a4130).setOrigin(0, 0);
+  scene.add.rectangle(0, crowdY - 1, GAME_W, 7, 0x3a5741).setOrigin(0, 0);
   for (const [row, size, tone] of [
     [0, 3, 0.55],
     [1, 4, 1],
@@ -2314,12 +2378,12 @@ function paintTrack(scene: Phaser.Scene): void {
   // lanes, and grain: three tones of green per lane rather than one flat fill.
   for (let i = 0; i < FIELD; i++) {
     const y = LANE_T + i * LANE_H;
-    const base = i % 2 ? 0x2a6636 : 0x24592f;
+    const base = i % 2 ? 0x368043 : 0x2e7139;
     scene.add.rectangle(0, y, GAME_W, LANE_H, base).setOrigin(0, 0);
     // mowing: vertical bands, alternating a shade either side of the base
     for (let x = 0; x < GAME_W; x += 16) {
       scene.add
-        .rectangle(x, y, 8, LANE_H, i % 2 ? 0x2e7039 : 0x285f33)
+        .rectangle(x, y, 8, LANE_H, i % 2 ? 0x3d8c49 : 0x357a40)
         .setOrigin(0, 0)
         .setAlpha(0.55);
     }
@@ -2333,7 +2397,7 @@ function paintTrack(scene: Phaser.Scene): void {
     scene.add.rectangle(0, y + LANE_H - 1, GAME_W, 1, 0x6fbb6a).setOrigin(0, 0).setAlpha(0.12);
   }
   // the verge in front of the track, so the bottom lane sits on something
-  scene.add.rectangle(0, TRACK_BOTTOM, GAME_W, 6, 0x1d4326).setOrigin(0, 0);
+  scene.add.rectangle(0, TRACK_BOTTOM, GAME_W, 6, 0x265630).setOrigin(0, 0);
   for (let k = 0; k < 40; k++) {
     scene.add.rectangle(between(0, GAME_W), TRACK_BOTTOM + between(0, 5), between(1, 3), 1, 0x2f6b3a).setAlpha(0.6);
   }
@@ -2391,15 +2455,29 @@ function makeBird4(scene: Phaser.Scene): Phaser.GameObjects.Container {
  * things, and the colour is the only warning the player gets.
  */
 function makeFlyArt(scene: Phaser.Scene): Phaser.GameObjects.Container {
-  const plain = scene.add.ellipse(0, 0, 3.5, 2.5, 0x1a1a22);
-  const gold = scene.add.ellipse(0, 0, 4.5, 3.5, PALETTE.gold);
-  const halo = scene.add.ellipse(0, 0, 8, 6, PALETTE.gold).setAlpha(0.22);
-  const wing = scene.add.rectangle(0, -2, 5, 1.5, 0xc8d8ff).setAlpha(0.8);
-  const c = scene.add.container(0, 0, [halo, wing, plain, gold]).setDepth(41);
+  // BIG ENOUGH TO BE A WARNING.  It was a three pixel dark speck on dark
+  // grass, which is a thing the player finds out about afterwards.  It has a
+  // body with a face on it, two wings that beat, and a pale ring behind it so
+  // that it reads against the green -- and it is a couple of pixels bigger all
+  // round, which at this size is the difference between seen and not seen.
+  const ring = scene.add.ellipse(0, 0, 11, 9, PALETTE.cream).setAlpha(0.16);
+  const wingL = scene.add.ellipse(-2, -2.6, 5, 3, 0xdce9ff).setAlpha(0.75);
+  const wingR = scene.add.ellipse(2, -2.6, 5, 3, 0xdce9ff).setAlpha(0.75);
+  const plain = scene.add.ellipse(0, 0, 5.5, 4, 0x24242e);
+  const stripe = scene.add.rectangle(0.6, 0.4, 3.4, 1, 0x4a4a5e).setAlpha(0.9);
+  const eyeL = scene.add.circle(-1.4, -0.8, 0.9, PALETTE.cream);
+  const eyeR = scene.add.circle(1.1, -0.9, 0.9, PALETTE.cream);
+  const gold = scene.add.ellipse(0, 0, 6, 4.6, PALETTE.gold);
+  const halo = scene.add.ellipse(0, 0, 10, 7.5, PALETTE.gold).setAlpha(0.22);
+  const c = scene.add
+    .container(0, 0, [ring, halo, wingL, wingR, plain, stripe, eyeL, eyeR, gold])
+    .setDepth(41);
   c.setVisible(false);
-  c.setData('wing', wing);
+  c.setData('wing', wingL);
+  c.setData('wing2', wingR);
   c.setData('gold', gold);
   c.setData('plain', plain);
+  c.setData('face', [stripe, eyeL, eyeR]);
   return c;
 }
 
