@@ -105,7 +105,7 @@ const ID = 'frograce' as const;
  */
 const RUNNERS: Array<{ name: string; skin: number; lit: number; dark: number; cheek: number }> = [
   { name: 'GREEN', skin: 0x5fc457, lit: 0x9ae88a, dark: 0x2f7a37, cheek: 0xff9aa8 },
-  { name: 'RED', skin: 0xf2685e, lit: 0xffa79c, dark: 0xa8362f, cheek: 0xffc2b0 },
+  { name: 'PINK', skin: 0xf87fb4, lit: 0xffb6d6, dark: 0xb04274, cheek: 0xfff0f4 },
   { name: 'BLUE', skin: 0x59a9ef, lit: 0x9fd6ff, dark: 0x2c66ad, cheek: 0xffa3b8 },
   { name: 'YELLOW', skin: 0xf8d45c, lit: 0xfff3b8, dark: 0xb88f1e, cheek: 0xffab8f },
 ];
@@ -150,7 +150,17 @@ const LANE_H = Math.max(14, Math.min(23, Math.floor(92 / FIELD)));
 const LANE_T = TRACK_TOP;
 /** The bottom of the last lane, which is where the verge starts. */
 const TRACK_BOTTOM = TRACK_TOP + LANE_H * FIELD;
-const START_X = 42;
+/**
+ * WHERE THE FROGS START, AND WHY IT IS NOT WHERE THE PLATES END.
+ *
+ * A frog is about nineteen pixels across now -- nine and a half either side of
+ * its own middle -- so a starting line at 42 put the left half of every frog
+ * on top of the row plate beside it.  The plates were trimmed to end at 29 and
+ * the line moved out to 48, which leaves nine clear pixels between the widest
+ * part of a frog at the gate and the nearest button.
+ */
+const PLATE = { x: 3, w: 26 };
+const START_X = 48;
 const FINISH_X = GAME_W - 30;
 /** One square of the chequered tape, in pixels. */
 const TAPE_SQ = 5;
@@ -188,7 +198,7 @@ const DIST = FINISH_X - START_X;
  * `LEADER_DRAG` is the same idea from the front: whoever is in front is
  * carrying the wind, and gives up three per cent for it.
  */
-const BASE = 8.4;
+const BASE = 4.45;
 const SPREAD = 1.6;
 const WOBBLE = 5.5;
 /** Held for the whole race: uniform over ±LUCK. */
@@ -221,10 +231,20 @@ const SURGE = 2.6;
  * frog with a boost or a good patch goes straight through; what it stops is
  * two frogs sharing one x for four seconds because neither can get by.
  */
-const GAP_MIN = 4;
-const GAP_MAX = 5;
+// ---- AND THE BAND IS IN PIXELS, DELIBERATELY.
+//
+// It was briefly rewritten in seconds, on the grounds that the race is
+// designed in seconds -- and at forty-five seconds half a second of gap is two
+// and a half pixels, which on a nineteen pixel frog is touching.  What has to
+// be true is that the player can SEE who is second and who is third, and that
+// is a distance on the screen, not a duration.  Four pixels of clear grass is
+// about a fifth of a frog; at this pace it is also the better part of a
+// second, which is the same thing said the other way round.
+const GAP_MIN = 4.2;
+const GAP_MAX = 5.2;
 const SEP_EASE = 0.55;
-const CONVOY_GAIN = 0.09;
+/** Per pixel of gap past the band, sized so a second of gap is worth about half. */
+const CONVOY_GAIN = 0.5 / BASE;
 const CONVOY_MAX = 0.5;
 /**
  * ---- AND THE LAST FEW PIXELS, WHICH ARE THE ONES THE PLAYER LOOKS AT.
@@ -238,7 +258,7 @@ const CONVOY_MAX = 0.5;
  * the stretch the player is watching, so the frogs go over the line in a
  * readable order with daylight between them.
  */
-const FINISH_CLEAR = 26;
+const FINISH_CLEAR = 20;
 const FINISH_GAP_MUL = 1.8;
 
 /** The convoy pulls a little tighter over the last stretch.  A little. */
@@ -263,16 +283,16 @@ const LEADER_DRAG = 0.955;
  * until a frog is `TOW_DEAD` behind the middle of the race, and never worth
  * more than `RESCUE_MAX` when it is.
  */
-const TOW_DEAD = 14;
-const RESCUE_GAIN = 0.022;
+const TOW_DEAD = 13;
+const RESCUE_GAIN = 0.03;
 const RESCUE_MAX = 0.3;
 
 /**
- * THE RACE IS THIRTY SECONDS.  BASE is set so a clean run is home at about
- * twenty-eight, which leaves room for a sleep, a slip and a bird inside the
- * cap.  Anyone still running at thirty is settled on distance.
+ * THE RACE IS FORTY-FIVE SECONDS.  BASE is set so a clean run is home at about
+ * forty-two, which leaves room for a sleep, a slip and a bird inside the cap.
+ * Anyone still running at forty-five is settled on distance.
  */
-const RACE_S = 30;
+const RACE_S = 45;
 /** One hop: how long it takes, and how high it goes in pixels. */
 const HOP_S = 0.34;
 /**
@@ -398,6 +418,17 @@ const BIRD_BACK = 2.0;
 /** How high it lifts it off the lane on the way. */
 const BIRD_LIFT = 26;
 /**
+ * AND WHAT BEING DROPPED COSTS.
+ *
+ * The bird lets go and the frog FALLS -- accelerating, not easing down -- hits
+ * the lane, and sits there seeing stars for exactly two seconds before it
+ * picks itself up and runs again.  The fall is its own short beat so the
+ * landing has something to be the end of; the two seconds are the number, and
+ * nothing else in the race is allowed to interrupt them.
+ */
+const BIRD_DROP_S = 0.42;
+const DIZZY_S = 2.0;
+/**
  * WHERE THE BEAK IS, inside the bird's own drawing.
  *
  * The frog it has taken is drawn AT this point rather than at its own place on
@@ -491,7 +522,7 @@ const JET_WINDOW_S = 2.5;
  */
 const JET_AIM_EARLY = { min: 0.78, max: 0.9 };
 const JET_AIM_LATE = { min: 1.1, max: 1.3 };
-const JET_MAX_SPEED = 90;
+const JET_MAX_SPEED = 11 * BASE;
 const JET_LIFT = 7;
 const JET_RISE_S = 0.25;
 
@@ -605,7 +636,7 @@ function tow(r: Run, field: Run[] | undefined): number {
  * way that stops, and each of them is something the player can see happen
  * rather than a number going down.
  */
-type Going = 'run' | 'hole' | 'slip' | 'taken' | 'sleep' | 'eat' | 'balloon' | 'jump';
+type Going = 'run' | 'hole' | 'slip' | 'taken' | 'sleep' | 'eat' | 'balloon' | 'jump' | 'dizzy';
 
 /**
  * Everything that moves a frog, and nothing that draws one.
@@ -744,7 +775,7 @@ export const frogRace: MinigameModule = {
   id: ID,
   title: 'FROG RACE',
   music: 'game_frograce',
-  rules: `pick one, ${FIELD} run, 30 seconds`,
+  rules: `pick one, ${FIELD} run, 45 seconds`,
   payoutNote: 'WIN: 20 A TICKET',
   tutorial: {
     objective: [
@@ -753,7 +784,7 @@ export const frogRace: MinigameModule = {
       'BIRDS, BALLOONS, FLIES, MUD, WIND, A SLIP.',
       'SOMETHING HAPPENS TO EVERY FROG.',
       'THEY RUN CLOSE AND IT IS WON AT THE END.',
-      'THIRTY SECONDS. FIRST TO THE TAPE TAKES IT.',
+      'FORTY-FIVE SECONDS. FIRST TO THE TAPE WINS.',
       '10 A TICKET, 20 BACK ON EACH.',
     ],
     controls: [
@@ -1007,6 +1038,8 @@ export const frogRace: MinigameModule = {
             dist: DIST,
             // ---- spacing, in seconds of running
             meanNeighbourGap: adjN ? adjSum / adjN / BASE : 0,
+            /** The same gap in pixels, which is what the player can actually see. */
+            meanNeighbourPx: adjN ? adjSum / adjN : 0,
             tightestGap: adjTightest / BASE,
             /** How much of the race has two frogs inside two pixels of each other. */
             onTopOfEachOther: adjN ? sameSpot / adjN : 0,
@@ -1248,6 +1281,21 @@ export const frogRace: MinigameModule = {
         body.setScale(1.18, 0.88);
         body.setRotation(-0.22 + Math.sin(clock / 30) * 0.05);
         body.y = laneY - r.lift;
+      } else if (r.going === 'dizzy') {
+        // ---- FLAT, THEN WOBBLING, THEN UP.
+        //
+        // The first beat is the landing itself: squashed wide and low, which
+        // is what a dropped frog looks like for a tenth of a second.  Then it
+        // sits up and sways while it sees stars, and over the last beat it
+        // straightens out -- so it is running again from a frog that got up,
+        // not from a pose that vanished.
+        const left = r.stuck / DIZZY_S;
+        const splat = ease(Math.min(1, (1 - left) * 8));
+        const up = ease(Math.max(0, (0.28 - left) / 0.28));
+        const sway = Math.sin(clock / 105) * (1 - up);
+        body.setScale(1.3 - 0.3 * splat + 0.1 * (1 - up) * 0, 0.55 + 0.35 * splat);
+        body.setRotation(sway * 0.22);
+        body.y = laneY + 3 * (1 - up) + 1.5 * (1 - splat);
       } else if (r.going === 'sleep') {
         // ---- ASLEEP, and waking up out of it.  Sat back on its haunches,
         // breathing slowly, then a stretch and a shake in the last beat so it
@@ -1385,6 +1433,25 @@ export const frogRace: MinigameModule = {
           line.setAlpha(Math.sin(run * Math.PI) * 0.8);
         });
       }
+      // ---- THE STARS, going round its head for as long as it is dizzy.
+      const stars = body.getData('stars') as Phaser.GameObjects.Container[] | undefined;
+      if (stars) {
+        const seeing = r.going === 'dizzy';
+        stars.forEach((st, k) => {
+          st.setVisible(seeing);
+          if (!seeing) return;
+          // An ellipse rather than a circle, because a ring of stars seen from
+          // slightly above is an ellipse, and it keeps them off the frog.
+          const a = clock / 150 + (k * Math.PI * 2) / 3;
+          st.setPosition(Math.cos(a) * 8.5, -12 + Math.sin(a) * 2.6);
+          // The ones going round the back are smaller and dimmer.
+          const far = (Math.sin(a) + 1) / 2;
+          st.setScale(0.7 + far * 0.45);
+          st.setAlpha(0.55 + far * 0.45);
+          st.setRotation(a * 1.5);
+        });
+      }
+
       // ---- THE GOLDEN FLY'S SPARKLE, for as long as the sugar lasts.
       const spark = body.getData('spark') as Phaser.GameObjects.Rectangle[] | undefined;
       if (spark) {
@@ -1564,7 +1631,7 @@ function step(r: Run, dt: number, field?: Run[]): void {
         return;
       }
     }
-    if (r.going === 'slip') {
+  if (r.going === 'slip') {
       // It keeps sliding for a moment after the legs go, and stops dead.
       const k = Phaser.Math.Clamp(r.stuck / SLIP_S, 0, 1);
       r.slide = k;
@@ -1900,20 +1967,29 @@ function stepBird(b: Bird, runs: Run[], raceT: number, dt: number): void {
   }
 
   if (b.phase === 3) {
-    // Let go: the bird climbs, the frog drops the last stretch onto its feet.
-    const k = Phaser.Math.Clamp(b.t / BIRD_RELEASE_S, 0, 1);
-    r.lift = BIRD_LIFT * (1 - ease(k));
-    // It lets go and climbs: the frog comes down on its own from here, so the
-    // bird leaves the frog's height rather than carrying it down with it.
-    b.x = r.x + 26 * ease(k);
-    b.y = -BIRD_LIFT - BEAK.y - 20 * ease(k);
+    // ---- LET GO, AND DOWN IT COMES.
+    //
+    // The frog FALLS: `k * k` is a drop that gathers speed the way a dropped
+    // thing does, where the eased version floated it down like a feather.  The
+    // bird climbs away on its own curve at the same time, so the two separate
+    // in the air rather than the frog being carried down with it.
+    const k = Phaser.Math.Clamp(b.t / BIRD_DROP_S, 0, 1);
+    r.lift = BIRD_LIFT * (1 - k * k);
+    b.x = r.x + 30 * ease(k);
+    b.y = -BIRD_LIFT - BEAK.y - 22 * ease(k);
     if (k >= 1) {
       b.phase = 4;
       b.t = 0;
-      r.going = 'run';
+      // ---- IT HITS THE GROUND, AND IT IS SEEING STARS.
+      //
+      // Two seconds, and it is the ordinary stuck-timer that runs them: a
+      // dizzy frog is a frog that is not running, which the model already
+      // knows how to be, so nothing new has to be unwound if the race ends
+      // in the middle of it.
+      r.going = 'dizzy';
+      r.stuck = DIZZY_S;
       r.lift = 0;
       r.hop = 0;
-      r.fx = null;
     }
     return;
   }
@@ -2120,7 +2196,7 @@ function draft(scene: Phaser.Scene): void {
   racers.forEach((r) => {
     const y = LANE_T + r.i * LANE_H;
     const plate = scene.add
-      .rectangle(4, y + 1, 34, Math.min(15, LANE_H - 2), PALETTE.ink)
+      .rectangle(PLATE.x, y + 1, PLATE.w, Math.min(15, LANE_H - 2), PALETTE.ink)
       .setOrigin(0, 0)
       .setDepth(20)
       .setStrokeStyle(1, PALETTE.steel)
@@ -2134,7 +2210,9 @@ function draft(scene: Phaser.Scene): void {
       .setDepth(19)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => choose(r.i));
-    const label = centerText(scene, 21, y + Math.min(15, LANE_H - 2) / 2, '', PALETTE.cream).setDepth(21);
+    const label = centerText(scene, PLATE.x + PLATE.w / 2, y + Math.min(15, LANE_H - 2) / 2, '', PALETTE.cream).setDepth(
+      21,
+    );
     rows[r.i] = { plate, label };
   });
 }
@@ -2256,7 +2334,7 @@ function paintTrack(scene: Phaser.Scene): void {
   }
 
   // ---- the starting rail, and the chequered line.
-  scene.add.rectangle(START_X - 3, LANE_T, 1, FIELD * LANE_H, PALETTE.bone).setOrigin(0, 0).setAlpha(0.5);
+  scene.add.rectangle(START_X - 11, LANE_T, 1, FIELD * LANE_H, PALETTE.bone).setOrigin(0, 0).setAlpha(0.5);
   // THE CHEQUER RUNS THE WHOLE FIELD, counted off the lanes, so it cannot come
   // up short however many frogs are in the race.
   const tapeH = FIELD * LANE_H;
@@ -2360,6 +2438,20 @@ function moodOf(r: Run, clock: number): Mood {
     // ---- ASLEEP: shut, and a small contented smile.
     return { eye: r.stuck < WAKE_S ? 1 - r.stuck / WAKE_S : 0, smile: 0.6 };
   }
+  if (r.going === 'dizzy') {
+    // ---- SEEING STARS.  The pupils wander in a circle rather than looking at
+    // anything, which is the whole of what reads as dizzy on a face this size,
+    // and the mouth hangs open while it works out which way is up.
+    const roll = clock / 130;
+    return {
+      eye: 0.85,
+      big: 0.85,
+      open: 0.7,
+      smile: -0.2,
+      irisX: Math.cos(roll) * 1.1,
+      irisY: Math.sin(roll) * 0.9,
+    };
+  }
   if (r.going === 'slip') {
     // ---- OVER IT GOES: shocked, then sheepish as it gets back up.
     const early = r.stuck > SLIP_S * 0.45;
@@ -2418,8 +2510,8 @@ function wearMood(body: Phaser.GameObjects.Container, m: Mood, blink: number, dt
     // The lid closes over the eye from the top.
     (e.lid as Phaser.GameObjects.Ellipse).setScale(1, Phaser.Math.Clamp(1 - now, 0, 1) * 1.05);
     const iris = e.iris as Phaser.GameObjects.Arc;
-    const wantX = side * 4.2 + (m.irisX ?? 0);
-    const wantY = -7.1 + (m.irisY ?? 0);
+    const wantX = side * 3.9 + (m.irisX ?? 0);
+    const wantY = -6.9 + (m.irisY ?? 0);
     iris.setPosition(iris.x + (wantX - iris.x) * k, iris.y + (wantY - iris.y) * k);
     const big = m.big ?? 1;
     iris.setScale(iris.scaleX + (big - iris.scaleX) * k);
@@ -2446,7 +2538,7 @@ function wearMood(body: Phaser.GameObjects.Container, m: Mood, blink: number, dt
     if (!brow) return;
     const side = i === 0 ? -1 : 1;
     b.setRotation(side * 0.4 * brow);
-    b.setY(-10.2 + brow * 0.6);
+    b.setY(-9.8 + brow * 0.6);
   });
 }
 
@@ -2520,21 +2612,21 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
   // The eye sits IN the top of the mass rather than on top of it: the mound
   // is the same skin as the crown and overlaps it, so what shows above the
   // silhouette is the top third of an eye, the way a frog's eyes sit.
-  const EYE_X = 4.2;
-  const EYE_Y = -7;
+  const EYE_X = 3.9;
+  const EYE_Y = -6.8;
   const eye = (side: number) => {
-    const rim = scene.add.circle(side * EYE_X, EYE_Y, 4.3, dark);
-    const mound = scene.add.circle(side * EYE_X, EYE_Y, 3.8, skin);
-    const white = scene.add.circle(side * EYE_X, EYE_Y - 0.3, 3.2, 0xffffff);
-    const iris = scene.add.circle(side * EYE_X, EYE_Y - 0.1, 2.0, PALETTE.black);
-    const glint = scene.add.circle(side * EYE_X - 1, EYE_Y - 1.2, 1, 0xffffff).setAlpha(0.95);
-    const spark = scene.add.circle(side * EYE_X + 1, EYE_Y + 0.8, 0.5, 0xffffff).setAlpha(0.7);
+    const rim = scene.add.circle(side * EYE_X, EYE_Y, 3.7, dark);
+    const mound = scene.add.circle(side * EYE_X, EYE_Y, 3.25, skin);
+    const white = scene.add.circle(side * EYE_X, EYE_Y - 0.25, 2.7, 0xffffff);
+    const iris = scene.add.circle(side * EYE_X, EYE_Y - 0.1, 1.7, PALETTE.black);
+    const glint = scene.add.circle(side * EYE_X - 0.85, EYE_Y - 1, 0.85, 0xffffff).setAlpha(0.95);
+    const spark = scene.add.circle(side * EYE_X + 0.85, EYE_Y + 0.7, 0.45, 0xffffff).setAlpha(0.7);
     // The lid comes down over the eye FROM ITS TOP EDGE: with the origin at
     // the top, scaleY 0 is a lid that is not there and 1 is an eye shut.  A
     // lid that scales about its own middle closes over the centre of the eye
     // and leaves a ring of white showing all round it, which is not a blink,
     // it is a mask.
-    const lid = scene.add.ellipse(side * EYE_X, EYE_Y - 3.5, 7.2, 7, skin).setOrigin(0.5, 0).setScale(1, 0);
+    const lid = scene.add.ellipse(side * EYE_X, EYE_Y - 3.1, 6.4, 6.2, skin).setOrigin(0.5, 0).setScale(1, 0);
     return { rim, mound, white, iris, glint, spark, lid };
   };
   const eyes = [eye(-1), eye(1)];
@@ -2546,7 +2638,7 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
   // Brows sit ON the head, not above it: the head's top edge is about -8, and
   // a brow drawn at -9.6 is a pair of sticks floating over a frog.
   const brows = [-1, 1].map((side) =>
-    scene.add.rectangle(side * EYE_X, -10.2, 4, 1.1, dark).setAlpha(0.85).setVisible(false),
+    scene.add.rectangle(side * EYE_X, -9.8, 3.8, 1.1, dark).setAlpha(0.85).setVisible(false),
   );
   c.add([gape, mouthL, mouthR, ...brows]);
   c.setData('eyes', eyes);
@@ -2604,6 +2696,18 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
   const spark = [0, 1, 2].map(() => scene.add.rectangle(0, 0, 1.6, 1.6, PALETTE.gold).setVisible(false));
   spark.forEach((s) => c.add(s));
   c.setData('spark', spark);
+
+  // ---- and the stars that go round its head after the bird drops it.  Each
+  // is a little four-pointed cross rather than a square, so three pixels of
+  // gold still read as a star.
+  const stars = [0, 1, 2].map(() => {
+    const across = scene.add.rectangle(0, 0, 3.4, 1.1, PALETTE.gold);
+    const down = scene.add.rectangle(0, 0, 1.1, 3.4, PALETTE.gold);
+    const core = scene.add.rectangle(0, 0, 1.8, 1.8, PALETTE.cream);
+    return scene.add.container(0, 0, [across, down, core]).setVisible(false);
+  });
+  stars.forEach((st) => c.add(st));
+  c.setData('stars', stars);
 
   return c;
 }
