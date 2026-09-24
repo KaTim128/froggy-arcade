@@ -46,18 +46,156 @@ const SLOT_NAME: Record<Slot, string> = {
 };
 
 /**
+ * ONE ATTACK, OUT OF THE HANDFUL A WEAPON KNOWS.
+ *
+ * A weapon is not one swing with a damage number on it.  Every weapon carries
+ * four to six MOVES, and which one it throws is chosen from the situation --
+ * how far away the other one is, whether it has just slipped a blow, whether
+ * the other one is nearly finished, whether it is buried in armour.
+ *
+ * None of this is decoration.  A move changes the damage, the wind-up, the
+ * distance it will reach, the number of strikes, and what it does on landing,
+ * so picking a thrust instead of a sweep genuinely changes the fight -- and
+ * `anim` changes the arc the arm travels, so it looks like what it is.
+ */
+export type Anim = 'over' | 'sweep' | 'thrust' | 'spin' | 'jab' | 'bash' | 'low';
+export interface Move {
+  name: string;
+  /** Multipliers on the swing this move is a version of. */
+  dmg: number;
+  wind: number;
+  reach: number;
+  hits?: number;
+  stagger?: number;
+  knock?: number;
+  /** Where it wants to be used: far out, in close, or anywhere. */
+  at?: 'far' | 'near';
+  /** What has to be true: off a dodge, finishing, or against armour. */
+  when?: 'counter' | 'finish' | 'armour';
+  anim: Anim;
+}
+
+/**
+ * The shared move vocabulary.  Weapons name their own versions of these, so a
+ * scythe's sweep and a claymore's sweep are the same IDEA with different
+ * numbers on it -- and neither is the other one's animation with a new label.
+ */
+const M = {
+  over: (name: string, dmg = 1.25, wind = 1.3): Move => ({ name, dmg, wind, reach: 0.92, stagger: 0.12, anim: 'over' }),
+  sweep: (name: string, dmg = 1.05, reach = 1.18): Move => ({ name, dmg, wind: 1.12, reach, knock: 3, anim: 'sweep' }),
+  thrust: (name: string, dmg = 1.0, reach = 1.3): Move => ({ name, dmg, wind: 0.9, reach, at: 'far', anim: 'thrust' }),
+  stab: (name: string, dmg = 0.82): Move => ({ name, dmg, wind: 0.6, reach: 0.9, hits: 2, at: 'near', anim: 'jab' }),
+  spin: (name: string, dmg = 1.3): Move => ({ name, dmg, wind: 1.45, reach: 1.1, knock: 5, stagger: 0.18, anim: 'spin' }),
+  slam: (name: string, dmg = 1.5): Move => ({ name, dmg, wind: 1.6, reach: 0.85, stagger: 0.35, knock: 8, anim: 'over' }),
+  combo: (name: string, hits = 3): Move => ({ name, dmg: 0.62, wind: 0.68, reach: 0.9, hits, at: 'near', anim: 'jab' }),
+  counter: (name: string, dmg = 1.45): Move => ({ name, dmg, wind: 0.45, reach: 1.0, when: 'counter', anim: 'thrust' }),
+  finish: (name: string, dmg = 1.7): Move => ({ name, dmg, wind: 1.5, reach: 0.95, when: 'finish', stagger: 0.3, anim: 'over' }),
+  crush: (name: string, dmg = 1.2): Move => ({ name, dmg, wind: 1.25, reach: 0.9, when: 'armour', stagger: 0.2, anim: 'over' }),
+  low: (name: string, dmg = 0.95): Move => ({ name, dmg, wind: 0.95, reach: 1.05, knock: 4, stagger: 0.2, anim: 'low' }),
+  bash: (name: string, dmg = 0.9): Move => ({ name, dmg, wind: 0.8, reach: 0.85, knock: 9, stagger: 0.28, at: 'near', anim: 'bash' }),
+  charge: (name: string, dmg = 1.25): Move => ({ name, dmg, wind: 1.05, reach: 1.45, at: 'far', knock: 6, anim: 'thrust' }),
+};
+
+/** The repertoire each weapon actually fights with. */
+export const MOVES: Record<string, Move[]> = {
+  none: [M.combo('JAB COMBO', 3), M.stab('FAST PUNCH'), M.low('LOW SWEEP'), M.counter('COUNTER PUNCH', 1.3)],
+  knuckles: [M.combo('PUNCH COMBO', 3), M.bash('UPPERCUT', 1.1), M.stab('HOOK'), M.charge('RUSH', 1.0)],
+  dagger: [M.stab('RAPID STAB'), M.combo('DOUBLE STAB', 2), M.low('LOW SLASH'), M.counter('BACKSTEP COUNTER', 1.3)],
+  twindagger: [M.combo('FOUR HIT FLURRY', 4), M.stab('ALTERNATING STABS'), M.spin('SPINNING DOUBLE', 1.0), M.counter('CROSSING SLASH', 1.25)],
+  knife: [M.thrust('PRECISION THRUST', 1.1, 1.15), M.crush('ARMOUR GAP STAB', 1.35), M.stab('QUICK SLASH'), M.counter('COUNTER STRIKE')],
+  rapier: [M.thrust('RAPID THRUST', 0.95, 1.25), M.stab('DOUBLE THRUST'), M.counter('CRITICAL STAB', 1.6), M.charge('PRECISION LUNGE', 1.15)],
+  nunchuck: [M.combo('RAPID FLURRY', 4), M.spin('SPINNING COMBO', 1.05), M.over('OVERHEAD FLURRY', 1.1, 1.1), M.sweep('SIDE SWEEP', 0.95, 1.05)],
+  dual: [M.combo('FOUR HIT COMBO', 4), M.sweep('CROSSING SLASH', 1.0, 1.05), M.spin('SPINNING DOUBLE', 1.2), M.counter('DUAL STRIKE', 1.35)],
+  throwing: [M.thrust('KNIFE THROW', 0.9, 1.6), M.stab('CLOSE KNIFE'), M.combo('THREE KNIFE VOLLEY', 3), M.counter('RETREATING THROW', 1.2)],
+  gladius: [M.stab('FAST SLASH'), M.thrust('SHORT THRUST', 1.05, 1.1), M.combo('CLOSE COMBINATION', 3), M.counter('FINISHING STRIKE', 1.4)],
+  sword: [M.sweep('HORIZONTAL SLASH'), M.over('DIAGONAL SLASH'), M.thrust('THRUST'), M.counter('PARRY COUNTER'), M.combo('TWO HIT SLASH', 2)],
+  katana: [M.sweep('IAI SLASH', 1.15, 1.1), M.counter('COUNTER SLASH', 1.7), M.thrust('PRECISION THRUST', 1.05, 1.15), M.over('DIAGONAL CUT')],
+  shield: [M.bash('SHIELD BASH'), M.charge('FORWARD CHARGE', 1.15), M.counter('BLOCK COUNTER', 1.5), M.stab('STABBING BASH')],
+  spear: [M.thrust('LONG THRUST', 1.1, 1.4), M.stab('DOUBLE THRUST'), M.sweep('SHAFT STRIKE', 0.9, 1.15), M.charge('FORWARD CHARGE')],
+  staff: [M.sweep('WIDE SWEEP'), M.over('OVERHEAD STRIKE'), M.thrust('THRUST'), M.low('LEG SWEEP'), M.bash('KEEPAWAY PUSH', 0.8)],
+  trident: [M.thrust('THREE POINT THRUST', 1.15, 1.35), M.sweep('HORIZONTAL SWEEP'), M.counter('COUNTER THRUST', 1.4), M.charge('CHARGING STAB')],
+  halberd: [M.thrust('LONG THRUST', 1.1, 1.35), M.sweep('HORIZONTAL SWEEP', 1.1), M.over('OVERHEAD CHOP'), M.spin('SPINNING SWEEP'), M.low('HOOK ATTACK')],
+  warscythe: [M.sweep('SWEEPING SLASH', 1.1, 1.25), M.low('LOW SWEEP'), M.spin('SPINNING SWEEP'), M.thrust('HOOKING STRIKE', 0.95, 1.2)],
+  scythe: [M.sweep('HORIZONTAL SWEEP', 1.15, 1.28), M.low('LOW SWEEP'), M.over('OVERHEAD HOOK'), M.spin('SPINNING SWEEP')],
+  club: [M.over('OVERHEAD SMASH', 1.2), M.sweep('HORIZONTAL SWING', 0.95), M.bash('SHOULDER STRIKE'), M.slam('KNOCKBACK STRIKE', 1.2)],
+  axe: [M.over('OVERHEAD CHOP', 1.3), M.over('DIAGONAL CHOP', 1.15, 1.15), M.sweep('HORIZONTAL SWEEP'), M.finish('EXECUTION SWING'), M.slam('STAGGER STRIKE', 1.25)],
+  mace: [M.over('DOWNWARD SMASH', 1.2), M.crush('ARMOUR CRUSHER', 1.45), M.sweep('HORIZONTAL SWEEP'), M.spin('SPINNING MACE'), M.slam('STAGGER BLOW', 1.15)],
+  morningstar: [M.sweep('SWINGING ARC', 1.12, 1.15), M.over('OVERHEAD SWING'), M.spin('CIRCULAR SPIN'), M.low('FOLLOW THROUGH')],
+  flail: [M.spin('CIRCULAR SWING', 1.2), M.over('OVERHEAD SWING'), M.sweep('SIDE SWEEP'), M.crush('SHIELD BYPASS', 1.3)],
+  warhammer: [M.slam('OVERHEAD SMASH', 1.6), M.sweep('HAMMER SWING', 1.0), M.crush('CRUSHING BLOW', 1.5), M.slam('GROUND IMPACT', 1.45)],
+  claymore: [M.sweep('HUGE SWEEP', 1.25, 1.25), M.over('OVERHEAD CLEAVE', 1.35), M.spin('SPINNING CLEAVE', 1.4), M.finish('CHARGED FINISH')],
+  greataxe: [M.over('MASSIVE CLEAVE', 1.35), M.finish('FINISHING CHOP', 1.9), M.spin('SPINNING AXE', 1.3), M.sweep('EXECUTION SWEEP', 1.2, 1.15)],
+  heavyhammer: [M.slam('MASSIVE SMASH', 1.7), M.sweep('SIDE SWING', 0.95), M.slam('GROUND IMPACT', 1.5), M.finish('DEVASTATING STRIKE', 1.8)],
+  goldsword: [M.sweep('POWER SLASH', 1.2), M.over('HEAVY DIAGONAL', 1.25), M.thrust('CHARGED THRUST', 1.15, 1.2), M.slam('KNOCKBACK SWING', 1.3)],
+};
+
+/**
+ * WHAT A WEAPON DOES THAT NO OTHER WEAPON DOES.
+ *
+ * Every field here is read by the simulation at a specific moment, so a
+ * specialty is a behaviour and not a caption: a mace really does hit harder
+ * the more armour is in front of it, a great axe really does get worse for
+ * you the closer you are to dying, and throwing knives really do open the
+ * fight from outside everybody else's reach and then run out.
+ *
+ * A weapon carries a handful of these at most.  Two weapons never carry the
+ * same handful -- if they did, one of them would be the other with a
+ * different name on the card.
+ */
+export interface Spec {
+  /** The line on the card, and the thing you should be able to SEE happening. */
+  note: string;
+  /** Extra chance the blow takes their feet, on top of the damage test. */
+  stagger?: number;
+  /** Share of the target's armour simply ignored. */
+  pierce?: number;
+  /** Chance of a critical, which is 1.8x. */
+  crit?: number;
+  /** Share of the target's avoidance taken away. */
+  dodgeCut?: number;
+  /** Share of a raised guard ignored. */
+  guardCut?: number;
+  /** Extra pixels of knock-back. */
+  knock?: number;
+  /** Multiplier on the chance of chaining a combination. */
+  combo?: number;
+  /** Damage multiplier that grows with the TARGET's defence. */
+  vsArmour?: number;
+  /** Damage multiplier that grows as the target's health falls. */
+  execute?: number;
+  /** Bonus at the far end of its reach, and its opposite. */
+  atRange?: number;
+  atClose?: number;
+  /** Damage handed back to whoever struck a raised shield. */
+  riposte?: number;
+  /** Bonus on the strike taken immediately after a dodge. */
+  counter?: number;
+  /** Can catch somebody who is walking into it. */
+  sweep?: number;
+  /** Throws from beyond reach, this many times, then it is a melee weapon. */
+  ammo?: number;
+  /** Extra recovery, for a swing that takes a week to come back. */
+  slowRecover?: number;
+  /** Walking speed multiplier, for a weapon that is barely there. */
+  fleet?: number;
+}
+
+/**
  * One weapon, and the shape of the rolls it makes.
  *
  * Nothing here is the weapon's actual numbers.  Every weapon rolls four stats
  * on a one-to-ten scale the moment it comes out of a chest -- HEAVINESS,
  * POWER, RESISTANCE, REACH -- so no two daggers are the same dagger and no
  * two fights start from the same place.  What keeps a dagger a dagger is the
- * band it rolls inside: its reach is one to three whatever it rolls, and a
- * scythe's is eight to ten, so the shape of the thing survives the dice.
+ * band it rolls inside: its reach is two to three whatever it rolls, and a
+ * war scythe's is eight to ten, so the shape of the thing survives the dice.
  *
  * `tempo` is the one number that is not rolled, because it is not a quality a
- * weapon has more or less of -- it is what the weapon IS.  Knuckles are fast
- * and an axe is slow, and no roll should ever turn one into the other.
+ * weapon has more or less of -- it is what the weapon IS.  It is set from the
+ * weapon's character: heavy things swing slowly and light things do not.  It
+ * is NOT fitted to make every weapon win half its fights; a great axe is
+ * supposed to beat a wooden club more often than not, and the fight is
+ * supposed to be decided by what came out of the chests.
  */
 export interface WeaponDef {
   key: string;
@@ -67,47 +205,87 @@ export interface WeaponDef {
   heavy: Band;
   resist: Band;
   reach: Band;
-  /** Strikes thrown inside one swing: two for dual swords and nunchucks. */
+  /** Strikes thrown inside one swing. */
   hits: number;
-  /** Damage turned aside simply by being carried.  The shield, and only it. */
+  /** Damage turned aside simply by being carried. */
   guard: number;
-  /** Swings a second at full speed.  Fixed: this is the weapon's character. */
+  /** Swings a second at full speed. */
   tempo: number;
+  /** The one thing it does that nothing else does. */
+  spec: Spec;
 }
 export type Band = readonly [number, number];
 
-// The tempo column is not hand-picked.  Every weapon was run head to head
-// against all the others over identical armour and its tempo nudged toward an
-// even split, twelve passes, until the worst of them sat inside a few points
-// of fifty percent.  NO WEAPON is deliberately left out of that sweep: an
-// empty chest is meant to be the worst row on the table, and it wins about a
-// fifth of its fights, which is the right amount of "not hopeless".
-//
-// Change a band, `hits`, or the reach maths and the tempo beside it is stale.
-// Re-run the sweep rather than guessing at a new one.
 export const WEAPONS: WeaponDef[] = [
-  // ---- NOTHING AT ALL.  A real outcome, not a fallback: a chest can be
-  // empty, and an empty chest is the one that makes the others worth opening.
-  { key: 'none', name: 'NO WEAPON', power: [1, 2], heavy: [1, 1], resist: [10, 10], reach: [1, 2], hits: 1, guard: 0, tempo: 1.05 },
-  // ---- IN CLOSE.  Nothing to speak of in the hand, and quick enough that it
-  // does not matter, provided it can get there.
-  { key: 'knuckles', name: 'BRASS KNUCKLES', power: [2, 4], heavy: [1, 2], resist: [7, 10], reach: [1, 2], hits: 1, guard: 0, tempo: 1.32 },
-  { key: 'dagger', name: 'SHORT DAGGER', power: [2, 4], heavy: [1, 2], resist: [5, 8], reach: [2, 3], hits: 1, guard: 0, tempo: 1.34 },
-  { key: 'knife', name: 'TACTICAL KNIFE', power: [3, 5], heavy: [1, 2], resist: [5, 8], reach: [2, 4], hits: 1, guard: 0, tempo: 1.06 },
-  // ---- TWO AT A TIME.
-  { key: 'nunchuck', name: 'NUNCHUCKS', power: [2, 4], heavy: [2, 3], resist: [3, 6], reach: [4, 6], hits: 2, guard: 0, tempo: 2.17 },
-  { key: 'dual', name: 'DUAL SWORDS', power: [3, 5], heavy: [2, 4], resist: [4, 7], reach: [5, 7], hits: 2, guard: 0, tempo: 1.0 },
-  // ---- THE MIDDLE OF THE RACK.
-  { key: 'sword', name: 'SWORD', power: [4, 7], heavy: [3, 5], resist: [6, 9], reach: [5, 7], hits: 1, guard: 0, tempo: 0.67 },
-  { key: 'katana', name: 'KATANA', power: [5, 8], heavy: [3, 5], resist: [5, 8], reach: [6, 8], hits: 1, guard: 0, tempo: 0.51 },
-  { key: 'shield', name: 'SPIKED SHIELD', power: [3, 5], heavy: [5, 7], resist: [8, 10], reach: [2, 4], hits: 1, guard: 0.3, tempo: 0.63 },
-  // ---- LONG.
-  { key: 'staff', name: 'LONG STICK', power: [3, 6], heavy: [3, 5], resist: [5, 8], reach: [8, 10], hits: 1, guard: 0, tempo: 0.59 },
-  // ---- HEAVY.  Everything they take, they take off the swing and the feet.
-  { key: 'axe', name: 'AXE', power: [7, 10], heavy: [6, 8], resist: [5, 8], reach: [5, 7], hits: 1, guard: 0, tempo: 0.49 },
-  { key: 'flail', name: 'BALL AND CHAIN', power: [6, 9], heavy: [6, 8], resist: [4, 7], reach: [7, 9], hits: 1, guard: 0, tempo: 0.46 },
-  { key: 'scythe', name: 'SCYTHE', power: [6, 9], heavy: [5, 8], resist: [3, 6], reach: [8, 10], hits: 1, guard: 0, tempo: 0.4 },
-  { key: 'goldsword', name: 'GOLD SWORD', power: [8, 10], heavy: [7, 9], resist: [6, 9], reach: [6, 8], hits: 1, guard: 0, tempo: 0.35 },
+  // ---- NOTHING AT ALL.  A real outcome, not a fallback.
+  { key: 'none', name: 'NO WEAPON', power: [1, 2], heavy: [1, 1], resist: [10, 10], reach: [1, 2], hits: 1, guard: 0, tempo: 1.15,
+    spec: { note: 'NOTHING TO CARRY, SO NOTHING SLOWS HIM', fleet: 1.18, combo: 1.15 } },
+
+  // ---- IN CLOSE
+  { key: 'knuckles', name: 'BRASS KNUCKLES', power: [2, 4], heavy: [1, 2], resist: [7, 10], reach: [1, 2], hits: 1, guard: 0, tempo: 1.7,
+    spec: { note: 'POINT BLANK, AND IT ROCKS THEM', atClose: 0.7, stagger: 0.3 } },
+  { key: 'dagger', name: 'SHORT DAGGER', power: [2, 4], heavy: [1, 2], resist: [5, 8], reach: [2, 3], hits: 1, guard: 0, tempo: 1.55,
+    spec: { note: 'FASTER THE CLOSER IT GETS', atClose: 0.45, combo: 1.3 } },
+  { key: 'twindagger', name: 'TWIN DAGGERS', power: [2, 4], heavy: [1, 2], resist: [4, 7], reach: [1, 3], hits: 2, guard: 0, tempo: 1.6,
+    spec: { note: 'IN AND OUT, AND IN AGAIN', combo: 2.2, fleet: 1.15 } },
+  { key: 'knife', name: 'TACTICAL KNIFE', power: [3, 5], heavy: [1, 2], resist: [5, 8], reach: [2, 4], hits: 1, guard: 0, tempo: 1.35,
+    spec: { note: 'FINDS THE GAP IN ANYTHING', pierce: 0.45 } },
+  { key: 'rapier', name: 'RAPIER', power: [2, 5], heavy: [1, 3], resist: [4, 7], reach: [4, 6], hits: 1, guard: 0, tempo: 1.5,
+    spec: { note: 'A HUNDRED THRUSTS, ONE OF THEM PERFECT', crit: 0.3 } },
+
+  // ---- FAST AND REPEATED
+  { key: 'nunchuck', name: 'NUNCHUCKS', power: [2, 4], heavy: [2, 3], resist: [3, 6], reach: [4, 6], hits: 2, guard: 0, tempo: 1.4,
+    spec: { note: 'IT NEVER STOPS COMING', combo: 2.6 } },
+  { key: 'dual', name: 'DUAL SWORDS', power: [3, 5], heavy: [2, 4], resist: [4, 7], reach: [5, 7], hits: 2, guard: 0, tempo: 1.1,
+    spec: { note: 'TWO BLADES, TWO SMALLER WOUNDS', combo: 1.6, dodgeCut: 0.15 } },
+  { key: 'throwing', name: 'THROWING KNIVES', power: [2, 4], heavy: [1, 2], resist: [2, 4], reach: [2, 4], hits: 1, guard: 0, tempo: 1.3,
+    spec: { note: 'OPENS FROM ACROSS THE SAND, THEN RUNS OUT', ammo: 5 } },
+
+  // ---- THE MIDDLE OF THE RACK
+  { key: 'gladius', name: 'GLADIUS', power: [4, 6], heavy: [2, 4], resist: [6, 9], reach: [3, 5], hits: 1, guard: 0, tempo: 1.2,
+    spec: { note: 'BUILT FOR THE CRUSH OF A LINE', atClose: 0.3, guardCut: 0.25 } },
+  { key: 'sword', name: 'SWORD', power: [4, 7], heavy: [3, 5], resist: [6, 9], reach: [5, 7], hits: 1, guard: 0.08, tempo: 1.0,
+    spec: { note: 'NO WEAKNESS, AND NO TRICKS EITHER', crit: 0.1, stagger: 0.08 } },
+  { key: 'katana', name: 'KATANA', power: [5, 8], heavy: [3, 5], resist: [5, 8], reach: [6, 8], hits: 1, guard: 0, tempo: 0.95,
+    spec: { note: 'ANSWERS A MISS BEFORE THEY RECOVER', counter: 1.1 } },
+  { key: 'shield', name: 'SPIKED SHIELD', power: [3, 5], heavy: [5, 7], resist: [8, 10], reach: [2, 4], hits: 1, guard: 0.3, tempo: 0.9,
+    spec: { note: 'THEY HURT THEMSELVES ON IT', riposte: 7 } },
+
+  // ---- LONG
+  { key: 'spear', name: 'SPEAR', power: [4, 7], heavy: [3, 5], resist: [5, 8], reach: [7, 9], hits: 1, guard: 0, tempo: 1.0,
+    spec: { note: 'WORST THING IN THE WORLD TO WALK TOWARDS', atRange: 0.5, pierce: 0.2 } },
+  { key: 'staff', name: 'LONG STICK', power: [3, 6], heavy: [3, 5], resist: [5, 8], reach: [8, 10], hits: 1, guard: 0, tempo: 0.95,
+    spec: { note: 'YOU NEVER GET TO WHERE YOU ARE GOING', sweep: 0.45 } },
+  { key: 'trident', name: 'TRIDENT', power: [4, 7], heavy: [4, 6], resist: [6, 9], reach: [7, 9], hits: 1, guard: 0.12, tempo: 0.9,
+    spec: { note: 'HOLDS THEM OFF AND MAKES THEM PAY', atRange: 0.3, knock: 5 } },
+  { key: 'halberd', name: 'HALBERD', power: [5, 8], heavy: [5, 7], resist: [6, 9], reach: [7, 9], hits: 1, guard: 0, tempo: 0.8,
+    spec: { note: 'A SPEAR ONE MOMENT AND AN AXE THE NEXT', atRange: 0.35, stagger: 0.2 } },
+  { key: 'warscythe', name: 'WAR SCYTHE', power: [5, 8], heavy: [5, 8], resist: [4, 7], reach: [8, 10], hits: 1, guard: 0, tempo: 0.8,
+    spec: { note: 'DECIDES WHERE THE FIGHT HAPPENS', sweep: 0.55, knock: 4 } },
+  { key: 'scythe', name: 'SCYTHE', power: [6, 9], heavy: [5, 8], resist: [3, 6], reach: [8, 10], hits: 1, guard: 0, tempo: 0.78,
+    spec: { note: 'CATCHES THEM ON THE WAY IN', sweep: 0.7 } },
+
+  // ---- HEAVY
+  { key: 'club', name: 'WOODEN CLUB', power: [3, 6], heavy: [4, 6], resist: [6, 9], reach: [3, 5], hits: 1, guard: 0, tempo: 1.0,
+    spec: { note: 'MOSTLY IT JUST SENDS THEM AWAY', knock: 11, stagger: 0.32 } },
+  { key: 'axe', name: 'AXE', power: [7, 10], heavy: [6, 8], resist: [5, 8], reach: [5, 7], hits: 1, guard: 0, tempo: 0.8,
+    spec: { note: 'WHAT IT HITS, IT MOVES', stagger: 0.35 } },
+  { key: 'mace', name: 'MACE', power: [5, 8], heavy: [5, 7], resist: [7, 10], reach: [4, 6], hits: 1, guard: 0, tempo: 0.88,
+    spec: { note: 'THE MORE THEY WEAR, THE WORSE IT IS', vsArmour: 1.5, pierce: 0.25 } },
+  { key: 'morningstar', name: 'MORNING STAR', power: [5, 8], heavy: [5, 7], resist: [5, 8], reach: [5, 7], hits: 1, guard: 0, tempo: 0.85,
+    spec: { note: 'IT COMES ROUND THE GUARD, NOT THROUGH IT', guardCut: 0.8, dodgeCut: 0.2 } },
+  { key: 'flail', name: 'BALL AND CHAIN', power: [6, 9], heavy: [6, 8], resist: [4, 7], reach: [7, 9], hits: 1, guard: 0, tempo: 0.72,
+    spec: { note: 'YOU CANNOT READ IT, SO YOU CANNOT SLIP IT', dodgeCut: 0.5, knock: 7 } },
+  { key: 'warhammer', name: 'WAR HAMMER', power: [7, 10], heavy: [7, 9], resist: [7, 10], reach: [4, 6], hits: 1, guard: 0, tempo: 0.68,
+    spec: { note: 'PLATE IS A SUGGESTION', vsArmour: 1.8, stagger: 0.4 } },
+  { key: 'claymore', name: 'CLAYMORE', power: [8, 10], heavy: [7, 9], resist: [6, 9], reach: [6, 8], hits: 1, guard: 0, tempo: 0.74,
+    spec: { note: 'AN ENORMOUS ARC, AND A LONG WAY BACK', sweep: 0.4, slowRecover: 0.45 } },
+  { key: 'greataxe', name: 'GREAT AXE', power: [8, 10], heavy: [8, 10], resist: [5, 8], reach: [6, 8], hits: 1, guard: 0, tempo: 0.62,
+    spec: { note: 'IT SMELLS BLOOD', execute: 1.3, stagger: 0.25 } },
+  { key: 'heavyhammer', name: 'HEAVY HAMMER', power: [8, 10], heavy: [8, 10], resist: [8, 10], reach: [4, 6], hits: 1, guard: 0, tempo: 0.58,
+    spec: { note: 'ONCE IS USUALLY ENOUGH', knock: 16, stagger: 0.6, slowRecover: 0.4 } },
+  { key: 'goldsword', name: 'GOLD SWORD', power: [8, 10], heavy: [7, 9], resist: [6, 9], reach: [6, 8], hits: 1, guard: 0, tempo: 0.7,
+    spec: { note: 'TOO MUCH SWORD, AND WORTH IT', knock: 6, crit: 0.15 } },
 ];
 
 /** Bare hands, for a weapon that has broken.  The same row as an empty chest. */
@@ -133,17 +311,46 @@ export interface ArmourMat {
   edge: number;
   /** The one line that says what it is for, when the numbers do not. */
   note: string;
+  /**
+   * A name short enough for the kit sheet, which lists three of them on one
+   * centred line.  Trimming " ARMOUR" off the full name was not enough --
+   * three REINFORCED HIDEs came to 330 pixels of a 320 pixel screen and went
+   * off both ends -- and first words collide (ROMAN LEGION, ROMAN HELMET).
+   */
+  short: string;
 }
 export const MATERIALS: ArmourMat[] = [
-  { key: 'none', name: 'NO ARMOUR', def: 0, evade: 0, heavy: [1, 1], resist: [10, 10], colour: 0x6d5a45, edge: 0x4a3c2d, note: 'NOTHING THERE, AND NOTHING TO CARRY' },
-  { key: 'tuxedo', name: 'TUXEDO', def: 0.05, evade: 0, heavy: [1, 2], resist: [2, 4], colour: 0x2a2d3a, edge: 0xdfe4ee, note: 'FIVE PERCENT DEFENCE. THE REST IS FASHION' },
-  { key: 'leather', name: 'LEATHER ARMOUR', def: 0.10, evade: 0, heavy: [2, 4], resist: [5, 7], colour: 0x9c7248, edge: 0x5d4028, note: 'LIGHT, AND ABOUT AS USEFUL AS THAT SOUNDS' },
-  { key: 'tactical', name: 'TACTICAL ARMOUR', def: 0.10, evade: 0.25, heavy: [2, 4], resist: [6, 8], colour: 0x3f4a3a, edge: 0x22281f, note: 'STOPS LITTLE. MUCH HARDER TO HIT' },
-  { key: 'tin', name: 'TIN ARMOUR', def: 0.15, evade: 0, heavy: [3, 5], resist: [3, 5], colour: 0xb9c2c8, edge: 0x6d767c, note: 'CHEAP, LOUD, AND BETTER THAN A SHIRT' },
-  { key: 'chain', name: 'CHAIN ARMOUR', def: 0.20, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8e9cad, edge: 0x4a5665, note: 'THE HONEST MIDDLE OF THE RACK' },
-  { key: 'iron', name: 'IRON ARMOUR', def: 0.25, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x6f7682, edge: 0x3a4149, note: 'HEAVY, AND WORTH IT' },
-  { key: 'gold', name: 'GOLD ARMOUR', def: 0.30, evade: 0, heavy: [7, 9], resist: [4, 6], colour: 0xffd45e, edge: 0xa8801e, note: 'THE BEST THERE IS, AND THE SLOWEST' },
+  // ---- NOTHING, AND THE THINGS THAT BARELY COUNT
+  { key: 'none', name: 'NO ARMOUR', def: 0, evade: 0, heavy: [1, 1], resist: [10, 10], colour: 0x6d5a45, edge: 0x4a3c2d, short: 'NONE', note: 'NOTHING THERE, AND NOTHING TO CARRY' },
+  { key: 'cloth', name: 'LIGHT CLOTH', def: 0.04, evade: 0.04, heavy: [1, 2], resist: [2, 4], colour: 0xd8cbb0, edge: 0x9a8e74, short: 'CLOTH', note: 'YOU WILL BE VERY QUICK AND VERY SORRY' },
+  { key: 'tuxedo', name: 'TUXEDO', def: 0.05, evade: 0, heavy: [1, 2], resist: [2, 4], colour: 0x2a2d3a, edge: 0xdfe4ee, short: 'TUXEDO', note: 'FIVE PERCENT DEFENCE. THE REST IS FASHION' },
+  { key: 'crown', name: 'CROWN', def: 0.06, evade: 0, heavy: [1, 2], resist: [3, 5], colour: 0xffd45e, edge: 0xa8801e, short: 'CROWN', note: 'IT PROTECTS NOTHING AND MEANS EVERYTHING' },
+
+  // ---- LIGHT
+  { key: 'leather', name: 'LEATHER ARMOUR', def: 0.10, evade: 0, heavy: [2, 4], resist: [5, 7], colour: 0x9c7248, edge: 0x5d4028, short: 'LEATHER', note: 'LIGHT, AND ABOUT AS USEFUL AS THAT SOUNDS' },
+  { key: 'tactical', name: 'TACTICAL ARMOUR', def: 0.10, evade: 0.15, heavy: [2, 4], resist: [6, 8], colour: 0x3f4a3a, edge: 0x22281f, short: 'TACTICAL', note: 'STOPS LITTLE. MUCH HARDER TO HIT' },
+  { key: 'reinforced', name: 'REINFORCED HIDE', def: 0.13, evade: 0, heavy: [3, 5], resist: [7, 9], colour: 0x7a5a3a, edge: 0x452f1c, short: 'R.HIDE', note: 'LEATHER THAT HAS BEEN THOUGHT ABOUT' },
+  { key: 'tin', name: 'TIN ARMOUR', def: 0.15, evade: 0, heavy: [3, 5], resist: [3, 5], colour: 0xb9c2c8, edge: 0x6d767c, short: 'TIN', note: 'CHEAP, LOUD, BETTER THAN A SHIRT' },
+  { key: 'hood', name: 'CHAIN HOOD', def: 0.16, evade: 0, heavy: [3, 5], resist: [6, 8], colour: 0x87909c, edge: 0x464e58, short: 'HOOD', note: 'RINGS, AND NOT MANY OF THEM' },
+
+  // ---- THE MIDDLE
+  { key: 'scale', name: 'SCALE ARMOUR', def: 0.18, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x6f8a6a, edge: 0x3a4a38, short: 'SCALE', note: 'OVERLAPPING, SO IT GIVES WHERE YOU DO' },
+  { key: 'chain', name: 'CHAIN ARMOUR', def: 0.20, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8e9cad, edge: 0x4a5665, short: 'CHAIN', note: 'THE HONEST MIDDLE OF THE RACK' },
+  { key: 'bronze', name: 'BRONZE ARMOUR', def: 0.21, evade: 0, heavy: [5, 7], resist: [5, 7], colour: 0xc08a3e, edge: 0x6f4b1c, short: 'BRONZE', note: 'OLDER THAN IRON AND NEARLY AS GOOD' },
+  { key: 'viking', name: 'VIKING HELM', def: 0.22, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x9aa3ad, edge: 0x4e555e, short: 'VIKING', note: 'HORNS, WHICH HELP WITH NOTHING' },
+  { key: 'spartan', name: 'SPARTAN HELM', def: 0.23, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0xb08a3a, edge: 0x63481a, short: 'SPARTAN', note: 'YOU WILL SEE LESS AND MIND IT LESS' },
+  { key: 'legion', name: 'ROMAN LEGION', def: 0.23, evade: 0, heavy: [5, 7], resist: [8, 10], colour: 0xc2a15a, edge: 0x6d5528, short: 'LEGION', note: 'ISSUED, AND IT SHOWS. IT LASTS' },
+  { key: 'roman', name: 'ROMAN HELMET', def: 0.24, evade: 0, heavy: [5, 7], resist: [8, 10], colour: 0xcaa963, edge: 0x77592a, short: 'ROMAN', note: 'A CHEEK GUARD AND A VERY RED BRUSH' },
+
+  // ---- HEAVY
+  { key: 'iron', name: 'IRON ARMOUR', def: 0.25, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x6f7682, edge: 0x3a4149, short: 'IRON', note: 'HEAVY, AND WORTH IT' },
+  { key: 'shoulder', name: 'SHOULDER GUARDS', def: 0.26, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x7e868f, edge: 0x424952, short: 'PAULDRON', note: 'ENORMOUS. YOU WILL NOT TURN QUICKLY' },
+  { key: 'spiked', name: 'SPIKED ARMOUR', def: 0.26, evade: 0, heavy: [6, 8], resist: [6, 8], colour: 0x5e5a63, edge: 0xbfc6cf, short: 'SPIKED', note: 'UNPLEASANT TO HIT AND TO WEAR' },
+  { key: 'plate', name: 'PLATE ARMOUR', def: 0.28, evade: 0, heavy: [7, 9], resist: [8, 10], colour: 0xc3cad4, edge: 0x646c78, short: 'PLATE', note: 'A WALL WITH A FROG INSIDE IT' },
+  { key: 'gold', name: 'GOLD ARMOUR', def: 0.30, evade: 0, heavy: [7, 9], resist: [4, 6], colour: 0xffd45e, edge: 0xa8801e, short: 'GOLD', note: 'THE BEST THERE IS, AND THE SOFTEST' },
+  { key: 'heavyplate', name: 'HEAVY PLATE', def: 0.33, evade: 0, heavy: [9, 10], resist: [9, 10], colour: 0x9aa2ae, edge: 0x4d545e, short: 'H.PLATE', note: 'NOTHING GETS IN. NOTHING GETS OUT EITHER' },
 ];
+
 
 /**
  * How much of a body each slot is, and so what share of a suit it carries.
@@ -230,6 +437,84 @@ export interface Kit {
 }
 
 /**
+ * WHAT KIND OF LIZARD CAME OUT TONIGHT.
+ *
+ * Eight of them, and each one is a set of DECLARED trade-offs on the same
+ * four base numbers Froggy has -- not a bonus.  Every multiplier above one
+ * is paid for by one below it, and the products are close enough to even
+ * that no archetype is simply the best one: a muscular lizard hits harder
+ * and is slower, a fast one is quicker and softer, and so on down the list.
+ *
+ * `nerve` and `spacing` are behaviour rather than statistics, which is how
+ * the trickster and the berserker are meant to be difficult without being
+ * stronger: one of them will not stand still and the other stops caring
+ * about its own health as it loses.
+ *
+ * The lizard's EQUIPMENT is rolled by exactly the same generator as Froggy's,
+ * afterwards and independently, so an armoured lizard can still draw a tuxedo
+ * and a fast one can still be handed a heavy hammer that ruins its whole
+ * plan.  That interaction is the point.
+ */
+export interface LizardType {
+  key: string;
+  name: string;
+  /** Multipliers on the shared base.  Read them as a set, not one at a time. */
+  power: number;
+  speed: number;
+  avoid: number;
+  resist: number;
+  /** How readily it presses in and swings.  1 is Froggy. */
+  nerve: number;
+  /** How much distance it tries to keep. */
+  spacing: number;
+  /** Gets angrier as it loses instead of more careful. */
+  berserk?: boolean;
+  /** Will not be stood still: constant repositioning. */
+  restless?: boolean;
+  /** Hardly ever gives ground. */
+  stubborn?: boolean;
+  /**
+   * How it is BUILT, and it has to be readable as a silhouette.
+   *
+   * `wide` and `tall` shape the torso and the head, `limb` is leg length, and
+   * `head` sizes the skull.  The first pass at this used spreads of about ten
+   * percent, which under a breastplate came to eight lizards nobody could
+   * tell apart.  They are far wider now: an armoured lizard is squat and
+   * enormous, a reach lizard is all legs and neck, and you should be able to
+   * name the archetype from the shape before it swings at anything.
+   */
+  build: { scale: number; wide: number; tall: number; limb: number; head: number; skin: number; light: number; dark: number; crest: number };
+  blurb: string;
+}
+
+export const LIZARDS: LizardType[] = [
+  { key: 'muscle', name: 'MUSCULAR LIZARD', power: 1.22, speed: 0.85, avoid: 0.8, resist: 1.12, nerve: 1.2, spacing: 0.9,
+    build: { scale: 1.12, wide: 1.55, tall: 0.94, limb: 0.86, head: 0.92, skin: 0x8f4a22, light: 0xc07038, dark: 0x532a12, crest: 0xd2452f },
+    blurb: 'HITS LIKE A DOOR' },
+  { key: 'fast', name: 'FAST LIZARD', power: 0.82, speed: 1.32, avoid: 1.2, resist: 0.8, nerve: 1.05, spacing: 1.0,
+    build: { scale: 0.92, wide: 0.7, tall: 1.1, limb: 1.28, head: 0.9, skin: 0xc07a2e, light: 0xe8a94e, dark: 0x6d4114, crest: 0xffd45e },
+    blurb: 'YOU WILL NOT CATCH IT' },
+  { key: 'armoured', name: 'ARMOURED LIZARD', power: 1.0, speed: 0.82, avoid: 0.78, resist: 1.36, nerve: 1.0, spacing: 0.8, stubborn: true,
+    build: { scale: 1.14, wide: 1.62, tall: 0.82, limb: 0.72, head: 1.0, skin: 0x6b6f52, light: 0x969a72, dark: 0x3a3d28, crest: 0x8a8f66 },
+    blurb: 'IT DOES NOT MOVE' },
+  { key: 'assassin', name: 'ASSASSIN LIZARD', power: 1.04, speed: 1.22, avoid: 1.22, resist: 0.74, nerve: 1.15, spacing: 1.05,
+    build: { scale: 0.9, wide: 0.68, tall: 1.04, limb: 1.12, head: 0.84, skin: 0x4a3b52, light: 0x6f5a7e, dark: 0x271e2d, crest: 0x9a6ab0 },
+    blurb: 'QUICK AND VERY FRAGILE' },
+  { key: 'reach', name: 'REACH LIZARD', power: 0.94, speed: 1.0, avoid: 1.08, resist: 0.96, nerve: 0.85, spacing: 1.45,
+    build: { scale: 1.02, wide: 0.66, tall: 1.34, limb: 1.45, head: 0.86, skin: 0x3f6b4a, light: 0x62996d, dark: 0x1f3a26, crest: 0x8fd48f },
+    blurb: 'FIGHTS FROM OVER THERE' },
+  { key: 'berserk', name: 'BERSERKER LIZARD', power: 1.2, speed: 1.05, avoid: 0.8, resist: 1.04, nerve: 1.35, spacing: 0.7, berserk: true,
+    build: { scale: 1.08, wide: 1.34, tall: 0.9, limb: 0.94, head: 1.22, skin: 0xa8331f, light: 0xd4603a, dark: 0x5c1a0e, crest: 0xffb02e },
+    blurb: 'WORSE AS YOU HURT IT' },
+  { key: 'balanced', name: 'BALANCED LIZARD', power: 1.0, speed: 1.0, avoid: 1.0, resist: 1.0, nerve: 1.0, spacing: 1.0,
+    build: { scale: 1.0, wide: 1.0, tall: 1.0, limb: 1.0, head: 1.0, skin: 0x9c5a2e, light: 0xc98243, dark: 0x5e3218, crest: 0xc2522e },
+    blurb: 'BEST AT NOTHING' },
+  { key: 'trickster', name: 'TRICKSTER LIZARD', power: 0.94, speed: 1.06, avoid: 1.16, resist: 0.94, nerve: 1.0, spacing: 1.1, restless: true,
+    build: { scale: 0.96, wide: 1.14, tall: 0.84, limb: 1.2, head: 1.3, skin: 0x2f5f6b, light: 0x4f8f9b, dark: 0x173037, crest: 0xe0e36a },
+    blurb: 'NEVER WHERE IT WAS' },
+];
+
+/**
  * FROGGY, WITH NOTHING ON.
  *
  * Power 10, Speed 100, Avoidance 50, Distance 20.  Everything a chest gives
@@ -237,17 +522,26 @@ export interface Kit {
  */
 export const BASE = { power: 10, speed: 100, avoid: 50, distance: 20 } as const;
 /** Health before any armour, and what a point of suit resistance adds to it. */
-const BASE_HP = 88;
-const HP_PER_RESIST = 6.5;
+const BASE_HP = 104;
+const HP_PER_RESIST = 7.5;
 /** A point of rolled weapon power, in damage. */
-const POWER_PER_ROLL = 2.8;
+const POWER_PER_ROLL = 3.6;
 /** A point of rolled reach, in pixels past the base distance. */
 const PX_PER_REACH = 3.4;
 /** Full load -- every piece at ten and the heaviest weapon -- for scaling. */
 const LOAD_FULL = 10 * SUIT_BULK + 10;
 /** What a full load costs, as a share of speed and of avoidance. */
-const LOAD_ON_SPEED = 0.6;
-const LOAD_ON_AVOID = 0.62;
+// What a full load costs.  These were 0.6 and 0.62, which compounded into an
+// absurdity at the top of the range: plate armour and a claymore came to nine
+// tenths of maximum load, which took sixty percent off speed, which took the
+// same sixty percent off the swing rate on top of an already slow weapon --
+// about one swing every three and a half seconds.  Measured, the best kit in
+// the game lost to an unarmed frog in a cloth vest almost two times in three.
+// Heavy gear is supposed to be slower, not unusable.
+const LOAD_ON_SPEED = 0.42;
+const LOAD_ON_AVOID = 0.5;
+/** And what it costs the swing, which is less than what it costs the legs. */
+const LOAD_ON_RATE = 0.33;
 /** Walking pace at a hundred speed. */
 const PX_PER_SPEED = 0.46;
 /** Swings a weapon survives: eight, and four more for every point of resist. */
@@ -284,8 +578,16 @@ export interface Stats {
  * is why the biggest weapon in the game is not simply the best one: it buys
  * damage with the two things that get damage delivered.
  */
-export function statsOf(kit: Kit, weapon: WeaponDef, wRolls?: Piece): Stats {
+export function statsOf(kit: Kit, weapon: WeaponDef, wRolls?: Piece, type?: LizardType | null): Stats {
   const w = wRolls ?? kit.weapon;
+  // An archetype scales the SHARED base and nothing else.  There is no branch
+  // below this line that knows whether it is looking at a frog or a lizard.
+  const base = {
+    power: BASE.power * (type?.power ?? 1),
+    speed: BASE.speed * (type?.speed ?? 1),
+    avoid: BASE.avoid * (type?.avoid ?? 1),
+    distance: BASE.distance,
+  };
   const suitHeavy = kit.head.heavy + kit.body.heavy + kit.legs.heavy;
   const load = suitHeavy + w.rHeavy;
   // Defence and evasion are quoted per suit; each piece brought its own share.
@@ -295,9 +597,9 @@ export function statsOf(kit: Kit, weapon: WeaponDef, wRolls?: Piece): Stats {
   const resist = (['head', 'body', 'legs'] as const)
     .reduce((n, sl) => n + kit[sl].rResist * COVER[sl], 0);
 
-  const speedPts = Math.max(18, BASE.speed * (1 - (load / LOAD_FULL) * LOAD_ON_SPEED));
-  const avoidPts = Math.max(4, BASE.avoid * (1 - (suitHeavy / (10 * SUIT_BULK)) * LOAD_ON_AVOID) + evade * 100);
-  const distPts = BASE.distance + w.rReach * PX_PER_REACH;
+  const speedPts = Math.max(18, base.speed * (1 - (load / LOAD_FULL) * LOAD_ON_SPEED));
+  const avoidPts = Math.max(4, base.avoid * (1 - (suitHeavy / (10 * SUIT_BULK)) * LOAD_ON_AVOID) + evade * 100);
+  const distPts = base.distance + w.rReach * PX_PER_REACH;
 
   // ---- A SWING IS A SWING, HOWEVER MANY TIMES IT LANDS.
   //
@@ -308,19 +610,30 @@ export function statsOf(kit: Kit, weapon: WeaponDef, wRolls?: Piece): Stats {
   // worth and arrives in however many pieces the weapon deals in -- which is
   // still a real difference, because two smaller blows get past a guard
   // differently from one large one.
-  const perStrike = (BASE.power + w.rPower * POWER_PER_ROLL) / weapon.hits;
+  const perStrike = (base.power + w.rPower * POWER_PER_ROLL) / weapon.hits;
   return {
     power: perStrike,
-    rate: Math.max(0.3, weapon.tempo * (speedPts / 100)),
+    // ---- ARMOUR SLOWS THE FEET MORE THAN THE ARMS.
+    //
+    // Swing rate used to come straight off `speedPts`, so a full load took
+    // forty percent off the swing as well as off the walk -- and because rate
+    // MULTIPLIES damage while defence and health only add to survival, that
+    // one number outweighed everything the heavy kit bought.  Measured: a
+    // claymore in full plate had a third more power, forty percent more
+    // health and forty percent more defence, and still lost three fights in
+    // five to a sword in chain, purely on swinging two thirds as often.
+    // Weight still costs the swing, at about two thirds of what it costs
+    // the legs.
+    rate: Math.max(0.3, weapon.tempo * (1 - (load / LOAD_FULL) * LOAD_ON_RATE)),
     walk: Math.max(14, speedPts * PX_PER_SPEED),
     avoid: Math.min(0.75, avoidPts / 100),
     defence,
-    maxHp: Math.round(BASE_HP + resist * HP_PER_RESIST),
+    maxHp: Math.round((BASE_HP + resist * HP_PER_RESIST) * (type?.resist ?? 1)),
     reach: distPts,
     // It wants to stand a shade outside what it can hit with, and closes in.
     range: distPts + 2,
     guard: weapon.guard,
-    powerPts: BASE.power + w.rPower * POWER_PER_ROLL,  // the sheet shows the whole swing
+    powerPts: base.power + w.rPower * POWER_PER_ROLL,  // the sheet shows the whole swing
     speedPts,
     avoidPts,
     distPts,
@@ -338,6 +651,8 @@ type Act = 'walk' | 'windup' | 'strike' | 'recover' | 'dodge' | 'guard' | 'stagg
 export interface Fighter {
   who: 'frog' | 'lizard';
   kit: Kit;
+  /** The archetype, for a lizard.  Froggy has none and uses the plain base. */
+  type: LizardType | null;
   /** The weapon actually in hand: the kit's, until it breaks. */
   weapon: WeaponDef;
   /** The rolled piece actually in hand, which is where its four stats live. */
@@ -365,6 +680,25 @@ export interface Fighter {
   riposte: boolean;
   chain: number;
   desperate: boolean;
+  /**
+   * Seconds left on the window a dodge opens.
+   *
+   * This was a single boolean handed from the dodge to the very next swing,
+   * and it almost never survived the trip -- three counters in sixty fights,
+   * which is not a specialty anybody could see.  A window is forgiving in the
+   * way the thing it represents actually is: you slipped the blow, and for a
+   * moment afterwards they are open.
+   */
+  counterT: number;
+  countering: boolean;
+  /** Knives left to throw. */
+  ammo: number;
+  /** The attack currently being thrown, chosen when the wind-up started. */
+  move: Move | null;
+  /** Last tick's gap, so a sweeping weapon can tell somebody is walking in. */
+  lastGap: number;
+  /** Seconds this fighter has been at it, which is how a stand-off ends. */
+  clock: number;
   /** Seconds of being knocked about: it cannot act, and it shows. */
   stun: number;
   /** Walk cycle, so the legs move when it does. */
@@ -382,13 +716,13 @@ export interface Fighter {
   art: FighterArt | null;
 }
 
-export function makeFighter(who: 'frog' | 'lizard', kit: Kit, x: number, face: 1 | -1): Fighter {
+export function makeFighter(who: 'frog' | 'lizard', kit: Kit, x: number, face: 1 | -1, type: LizardType | null = null): Fighter {
   const w = kit.weapon.weapon ?? UNARMED;
-  const st = statsOf(kit, w, kit.weapon);
+  const st = statsOf(kit, w, kit.weapon, type);
   return {
-    who, kit, weapon: w, held: kit.weapon, broken: false, dur: durabilityOf(kit.weapon), st,
+    who, kit, type, weapon: w, held: kit.weapon, broken: false, dur: durabilityOf(kit.weapon), st,
     hp: st.maxHp, x, face, act: 'walk', t: 0, cool: 0.4, swing: 0, stun: 0, step: 0,
-    riposte: false, chain: 0, desperate: false,
+    riposte: false, chain: 0, desperate: false, move: null, counterT: 0, countering: false, ammo: kit.weapon.weapon?.spec.ammo ?? 0, lastGap: 999, clock: 0,
     armA: -10, leanA: 0, shove: 0, art: null,
   };
 }
@@ -404,7 +738,7 @@ export function breakWeapon(f: Fighter): void {
   f.weapon = UNARMED;
   f.held = emptyHands();
   f.dur = Infinity;
-  f.st = statsOf(f.kit, UNARMED, f.held);
+  f.st = statsOf(f.kit, UNARMED, f.held, f.type);
   // Health is not re-rolled: the armour is still on, and it is the armour that
   // health comes from.  Only the cap moves, and it moves nowhere, because
   // `maxHp` is made of the suit's resistance and the suit did not change.
@@ -435,6 +769,31 @@ const STAGGER_AT = 0.16;
 const STAGGER_S = 0.5;
 /** And moves them this far, in the rules and not only in the drawing. */
 const KNOCK_PX = 9;
+/** Past this many seconds armour starts failing, and over this many it is gone. */
+const WEARY_AT = 55;
+const WEARY_OVER = 45;
+/** A critical is worth this much of an ordinary blow. */
+const CRIT_MUL = 1.8;
+/** How far a thrown knife carries, and what it is worth out there. */
+const THROW_REACH = 92;
+const THROW_MUL = 0.72;
+/**
+ * How far a move's own multipliers are allowed to move the swing they modify.
+ * At full strength they overruled the equipment; at half they colour it.
+ */
+const MOVE_SHARE = 0.55;
+const MOVE_WEIGHT = (n: number): number => 1 + (n - 1) * MOVE_SHARE;
+/**
+ * A move's reach counts for half too, and for the same reason.
+ *
+ * At face value the sword's THRUST reached thirty percent past the sword,
+ * which let it stand outside a claymore's swing and hit anyway -- so the best
+ * kit in the game lost two fights in three to a middling one.  Reach is the
+ * weapon's, and a move only leans on it.
+ */
+const MOVE_REACH = (m: Move | null | undefined): number => MOVE_WEIGHT(m?.reach ?? 1);
+/** How long a dodge leaves the other one open to an answer. */
+const COUNTER_WINDOW = 1.1;
 /** A counter off a dodge winds up in this share of the usual time. */
 const RIPOSTE_WINDUP = 0.45;
 /** So does the second half of a combination. */
@@ -473,8 +832,6 @@ const SHOVE_DECAY = 7;
 const BODY_CLEAR = 31;
 /** How long the emptied chest takes to fold up before the next five fall. */
 const COLLAPSE_MS = 240;
-/** How long the kit sheet stays up before the walk-on starts by itself. */
-const SUMMARY_MS = 4200;
 /** Inside this share of its own reach, a weapon is being swung wrong, */
 const INSIDE_FRAC = 0.75;
 /** down to this much of its power at nose-to-nose. */
@@ -487,6 +844,13 @@ export interface Blow {
   dodged: boolean;
   /** Both of them swung and the weapons met instead of either body. */
   clashed?: boolean;
+  /** Which attack it was, so the arena can name it. */
+  move?: string;
+  /** It was a critical, a thrown knife, a counter, or it hurt the thrower. */
+  crit?: boolean;
+  thrown?: boolean;
+  countered?: boolean;
+  riposted?: boolean;
   /** It was big enough to take the legs from under them. */
   staggered?: boolean;
   guarded: boolean;
@@ -507,15 +871,18 @@ export interface Blow {
  */
 export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Math.random): Blow {
   const out: Blow = { hit: false, dodged: false, guarded: false, dmg: 0, broke: false };
-  if (gap > att.st.reach) return out;
+  const sp = att.weapon.spec;
+  // Throwing knives reach a great deal further while any are left.
+  const mv = att.move;
+  const thrown = (sp.ammo ?? 0) > 0 && att.ammo > 0 && gap > att.st.reach;
+  if (gap > (thrown ? THROW_REACH : att.st.reach * MOVE_REACH(mv))) return out;
+  out.move = mv?.name;
+  if (thrown) { att.ammo -= 1; out.thrown = true; }
 
-  // The swing lands on something, so the weapon wears whether or not the
-  // something was the lizard.
-  // Wear is charged once per swing, not once per blow to land.  A weapon
-  // that throws two was paying twice for the one swing, so the nunchuck's
-  // twenty-two lasted eleven attacks and it spent most of every fight
-  // bare-handed: seven percent of its duels, bottom of the rack.
-  if (Number.isFinite(att.dur) && att.swing === 0) {
+  // Wear is charged once per swing, not once per blow to land: a weapon that
+  // throws two was paying twice for the one swing.  A throw costs no wear --
+  // what it costs is one of the five knives.
+  if (!thrown && Number.isFinite(att.dur) && att.swing === 0) {
     att.dur -= 1;
     if (att.dur <= 0) {
       breakWeapon(att);
@@ -523,63 +890,93 @@ export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Mat
     }
   }
 
-  const evade = def.st.avoid + (def.act === 'dodge' ? DODGE_BONUS : 0);
+  // ---- GETTING OUT OF THE WAY.  A flail is hard to read and a morning star
+  // comes round corners, so both take a share of the dodge away.
+  const evade = def.st.avoid * (1 - (sp.dodgeCut ?? 0)) + (def.act === 'dodge' ? DODGE_BONUS : 0);
   if (rng() < evade) {
     out.dodged = true;
-    // ---- AND THE ANSWER TO IT.  Slipping a blow leaves the other one
-    // committed and out of shape, so the dodger gets to come back off it
-    // fast.  Both fighters have this; neither has anything else.
+    // ---- SLIPPING A BLOW LEAVES THE OTHER ONE COMMITTED.
+    //
+    // The window opens on ANY evade, not only on a deliberate dodge.  Gating
+    // it on the dodge ACT looked right and was nearly dead in practice: a
+    // fighter can only start a dodge while idle, off cool-down, and watching
+    // a wind-up, which measured out at about one dodge per fight -- so the
+    // katana landed five counters in sixty bouts and its whole specialty was
+    // invisible.  Avoidance mostly does its work through this roll, so this
+    // is where the opening actually happens.
+    def.counterT = COUNTER_WINDOW;
     if (def.act === 'dodge') {
+      // a read dodge is worth more than a lucky one: it also comes back fast
       def.riposte = true;
       def.cool = 0;
     }
     return out;
   }
 
+  // ---- THE GUARD, AND THE THINGS THAT IGNORE IT.
   const guarding = def.act === 'guard';
   out.guarded = guarding || def.st.guard > 0;
-  const soak = (guarding ? GUARD_CUT : 0) + def.st.guard;
+  const soak = ((guarding ? GUARD_CUT : 0) + def.st.guard) * (1 - (sp.guardCut ?? 0));
+  // A spiked shield hands some of it back to whoever hit it.
+  const shield = def.weapon.spec.riposte ?? 0;
+  if (shield > 0 && guarding && att.hp > 0) {
+    out.riposted = true;
+    att.hp = Math.max(0, att.hp - shield);
+  }
+
   // ---- AND A LONG WEAPON IS A BAD WEAPON UP CLOSE.
   //
-  // Reach was pure profit otherwise, and it showed: the scythe took 90% of
-  // its fights and the dagger 10%.  A scythe swung at arm's length is a
-  // length of wood, and that is the short blade's whole win condition -- get
-  // inside the arc and the reach stops counting.  It is the same rule for
-  // both fighters and it is written against reach, not against who is
-  // holding it: a dagger's sweet spot is so short that nothing can get
-  // inside it, which is exactly the point of carrying one.
+  // Reach was pure profit otherwise.  A scythe swung at arm's length is a
+  // length of wood, and that is the short blade's whole win condition: get
+  // inside the arc and the reach stops counting.  Written against reach and
+  // not against who is holding it.
   const sweet = att.st.reach * INSIDE_FRAC;
   const close = gap < sweet ? INSIDE_MIN + (1 - INSIDE_MIN) * (gap / sweet) : 1;
-  const raw = att.st.power * close * (0.85 + rng() * 0.3);
-  // ---- ARMOUR TAKES A SHARE, NOT A SLICE.
+  // The move's own weight.  A flurry hits for less each time and an overhead
+  // cleave hits for a great deal more; this is where that is true.
+  let raw = att.st.power * close * (0.85 + rng() * 0.3) * MOVE_WEIGHT(mv?.dmg ?? 1);
+  if (mv?.hits && mv.hits > 1) raw /= Math.sqrt(mv.hits);
+
+  // ---- AND NOW THE THING THIS PARTICULAR WEAPON IS FOR.
+  const frac = Math.min(1, gap / Math.max(1, att.st.reach));
+  if (sp.atRange) raw *= 1 + sp.atRange * frac;          // spear, trident, halberd
+  if (sp.atClose) raw *= 1 + sp.atClose * (1 - frac);    // knuckles, dagger, gladius
+  if (sp.crit && rng() < sp.crit) { raw *= CRIT_MUL; out.crit = true; }
+  if (sp.vsArmour) raw *= 1 + (sp.vsArmour - 1) * Math.min(1, def.st.defence / 0.3);
+  if (sp.execute) raw *= 1 + (sp.execute - 1) * (1 - def.hp / def.st.maxHp);
+  if (sp.counter && att.countering) { raw *= 1 + sp.counter; out.countered = true; }
+  if (thrown) raw *= THROW_MUL;
+
+  // ---- ARMOUR TAKES A SHARE, NOT A SLICE, and some weapons take a share of
+  // the share: a knife finds the gap, a mace does not care that there is one.
+  // ---- AND EVERYBODY GETS TIRED.
   //
-  // It was a flat subtraction, and a flat subtraction is the end of every
-  // light weapon in the game: six points of plate turned a dagger's five into
-  // the one-damage floor while doing nothing at all to an axe.  Measured over
-  // twelve hundred fights, nine of the thirteen weapons won exactly none and
-  // three in five fights ran to the time cap.
-  //
-  // A share is the same cut whatever is swinging, and it leaves a dagger a
-  // dagger.  `defence` is already that share: a full gold suit is thirty
-  // percent of everything, a tuxedo is five, and nothing is nothing.
+  // Two fighters in heavy plate with blunt weapons could genuinely stand
+  // there all day, and about one fight in a hundred and sixty did -- straight
+  // to the three minute cap with both of them alive.  Past a minute, armour
+  // starts giving out and blows start telling: it runs off a clock both of
+  // them share, so it favours neither, and it means every fight ends.
+  const weary = Math.min(1, Math.max(0, (att.clock - WEARY_AT) / WEARY_OVER));
+  raw *= 1 + weary * 0.6;
+  const armour = def.st.defence * (1 - (sp.pierce ?? 0)) * (1 - weary);
   out.hit = true;
-  out.dmg = Math.max(1, Math.round(raw * (1 - def.st.defence) * (1 - soak)));
+  out.dmg = Math.max(1, Math.round(raw * (1 - armour) * (1 - soak)));
   def.hp = Math.max(0, def.hp - out.dmg);
 
   // ---- WHAT A BIG ONE DOES BESIDES DAMAGE.
   //
   // A blow worth a good share of somebody's health puts them on the back
   // foot: they lose the next beat and they lose GROUND, which is a real
-  // change to the fight and not a flinch -- a staggered fighter has just
-  // given a long weapon the distance it wanted, or lost a short one the
-  // distance it needs.  Both sides, same threshold.
-  if (def.hp > 0 && out.dmg >= def.st.maxHp * STAGGER_AT) {
+  // change to the fight and not a flinch.  Hammers and clubs do it far more
+  // often than the damage alone would earn.
+  const floored = out.dmg >= def.st.maxHp * STAGGER_AT || rng() < ((sp.stagger ?? 0) + (mv?.stagger ?? 0));
+  if (def.hp > 0 && floored) {
     out.staggered = true;
     def.act = 'stagger';
     def.t = STAGGER_S;
     def.chain = 0;
     def.riposte = false;
-    def.x = Phaser.Math.Clamp(def.x + (def.x < att.x ? -1 : 1) * KNOCK_PX, ARENA.left, ARENA.right);
+    def.x = Phaser.Math.Clamp(def.x + (def.x < att.x ? -1 : 1) * (KNOCK_PX + (sp.knock ?? 0) + (mv?.knock ?? 0)), ARENA.left, ARENA.right);
   }
   return out;
 }
@@ -600,9 +997,77 @@ export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Mat
  *   - and when it is badly hurt it does more of the last thing and less of
  *     the middle one
  */
+/**
+ * WHICH ATTACK, AND WHY THAT ONE.
+ *
+ * Every move is scored against the situation rather than drawn from a hat: a
+ * thrust wants distance, a flurry wants to be in close, a finisher wants the
+ * other one nearly done, an armour-breaker wants something to break.  The
+ * best-scoring move wins, with a little noise so a fight is not the same
+ * fight twice -- but the noise never outvotes the situation, which is what
+ * keeps a spear thrusting at range instead of picking at random.
+ */
+export function chooseMove(f: Fighter, other: Fighter, gap: number, rng = Math.random): Move {
+  const list = MOVES[f.weapon.key] ?? MOVES.none;
+  const frac = Math.min(1.4, gap / Math.max(1, f.st.reach));
+  const theirHp = other.hp / other.st.maxHp;
+  let best = list[0];
+  let bestScore = -Infinity;
+  for (const m of list) {
+    // The weights are deliberately close together.  The first pass had the
+    // conditional bonuses at +1.5 to +1.9 against a -3 penalty, which is not
+    // a preference, it is a decision: the mace threw ARMOUR CRUSHER on a
+    // hundred percent of its swings and the war hammer and the flail did the
+    // same.  Situation still decides -- a thrust at range beats a flurry at
+    // range every time -- but two sensible answers to the same moment should
+    // trade places, so a fight is not one animation on a loop.
+    let score = rng() * 1.05;
+    // distance first: a move that wants range is wrong in a clinch
+    if (m.at === 'far') score += frac > 0.7 ? 0.7 : -0.45;
+    if (m.at === 'near') score += frac < 0.55 ? 0.7 : -0.45;
+    // and the conditions that make a special move the obvious one
+    if (m.when === 'counter') score += f.counterT > 0 ? 1.15 : -1.8;
+    if (m.when === 'finish') score += theirHp < 0.35 ? 1.25 : -1.8;
+    if (m.when === 'armour') score += other.st.defence > 0.18 ? 0.55 : -0.9;
+    // ---- AND THE MOVE HAS TO FIT THE DISTANCE.
+    //
+    // A move's reach EXTENDS the swing test, so at the range a fighter
+    // naturally stands at -- its own maximum -- the long moves were the only
+    // ones that could legally be thrown, and the short ones simply never
+    // happened: brass knuckles threw RUSH a hundred times out of a hundred.
+    // Scoring the FIT rather than the length fixes that.  A move that cannot
+    // cover the gap is out, and one that covers it with a great deal to spare
+    // is a waste of a swing, so the shortest adequate attack tends to win --
+    // which is what makes distance choose the attack.
+    const mr = MOVE_REACH(m);
+    if (mr < frac - 0.02) score -= 6;
+    else score -= (mr - frac) * 0.5;
+    // A slow one is a bad idea against somebody much quicker who is still
+    // fresh -- but only MUCH quicker.  At "any faster at all" this fired in
+    // nearly every exchange and cost the heavy weapons the overhead swings
+    // that are the whole reason to carry one: the club threw its horizontal
+    // ninety-one times in a hundred and almost never its smash.
+    if (m.wind > 1.2 && theirHp > 0.6 && other.st.speedPts > f.st.speedPts * 1.25) score -= 0.22;
+    // and something that puts them on the floor is worth more when they are
+    // already crowding you
+    if ((m.stagger ?? 0) > 0.2 && frac < 0.7) score += 0.3;
+    if (score > bestScore) { bestScore = score; best = m; }
+  }
+  return best;
+}
+
 export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random): void {
   const gap = Math.abs(f.x - other.x);
   f.face = other.x >= f.x ? 1 : -1;
+  // kept so a sweeping weapon can tell the difference between somebody
+  // standing at a distance and somebody walking onto the blade
+  const wasGap = f.lastGap;
+  f.lastGap = gap;
+  // The archetype, read once.  `spacing` stretches where it wants to stand,
+  // `restless` will not let it settle, `stubborn` means it does not give
+  // ground for being hurt, `berserk` means it gets worse as it loses.  All
+  // declared trade-offs; none of it is a damage bonus.
+  const ty = f.type;
   const hurt = f.hp / f.st.maxHp < HURT_AT;
 
   // ---- DODGING.  Read the other one's wind-up and try to not be there.
@@ -621,7 +1086,8 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   }
 
   // ---- A SHIELD, OR A BAD DAY, PUTS SOMETHING BETWEEN YOU AND IT.
-  if (f.act === 'walk' && (hurt || f.st.guard > 0) && gap <= other.st.reach + 4 && rng() < (hurt ? 0.9 : 0.4) * dt) {
+  if (f.act === 'walk' && (hurt || f.st.guard > 0) && gap <= other.st.reach + 4 && !f.type?.berserk
+      && rng() < (hurt ? 0.9 : 0.4) * dt) {
     f.act = 'guard';
     f.t = GUARD_S;
     return;
@@ -636,11 +1102,32 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   // a counter off a dodge is the fastest, the back half of a combination is
   // nearly as quick, and a swing started from nothing takes as long as it
   // always did.  A fighter with nothing left to lose skips part of it too.
-  if (gap <= f.st.reach && f.cool <= 0) {
+  const sp = f.weapon.spec;
+  // A sweeping weapon -- scythe, war scythe, staff, claymore -- can catch
+  // somebody who is walking onto it, so its effective reach grows while the
+  // other one is closing.  A thrown knife opens from right across the sand.
+  const closing = gap < wasGap - 0.01 || other.act === 'lunge';
+  const swing = f.st.reach * (1 + (sp.sweep && closing ? sp.sweep : 0));
+  const canThrow = (sp.ammo ?? 0) > 0 && f.ammo > 0;
+  const mv = chooseMove(f, other, gap, rng);
+  if ((gap <= swing * MOVE_REACH(mv) || (canThrow && gap <= THROW_REACH)) && f.cool <= 0) {
     const share = f.riposte ? RIPOSTE_WINDUP : f.chain > 0 ? COMBO_WINDUP : f.desperate ? 0.78 : 1;
     f.act = 'windup';
-    f.t = (WINDUP * share) / f.st.rate;
+    f.move = mv;
+    // A heavy overhead takes longer to bring round than a jab; the move says
+    // how much, so a weapon's slow attacks really are its slow ones.
+    // ---- HALF-WEIGHT, BOTH WAYS.
+    //
+    // Taken at face value the move modifiers compound the thing they sit on
+    // top of: every claymore attack winds up slower than its base swing and
+    // every sword attack winds up faster, so a claymore-and-plate build went
+    // from beating sword-and-chain three times in four to losing three times
+    // in five -- the moves, not the equipment, were deciding it.  Halving
+    // both the wind-up and the damage sides keeps an overhead slower and
+    // heavier than a thrust while leaving the gear in charge.
+    f.t = (WINDUP * share * MOVE_WEIGHT(mv.wind)) / f.st.rate;
     f.swing = 0;
+    f.countering = f.counterT > 0;
     f.riposte = false;
     return;
   }
@@ -651,7 +1138,8 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   // old fight look like two people queueing.  A lunge covers the last stretch
   // in a burst, which is where the sudden changes of distance come from --
   // and being out of position afterwards is what it costs.
-  if (f.cool <= 0 && gap > f.st.reach && gap < f.st.reach + 26 && rng() < (f.desperate ? 2.2 : 1.1) * dt) {
+  const nerve = (ty?.nerve ?? 1) * (ty?.berserk ? 1 + (1 - f.hp / f.st.maxHp) * 0.9 : 1);
+  if (f.cool <= 0 && gap > f.st.reach && gap < f.st.reach + 26 && rng() < (f.desperate ? 2.2 : 1.1) * nerve * dt) {
     f.act = 'lunge';
     f.t = LUNGE_S;
     f.cool = LUNGE_COOL;
@@ -680,12 +1168,29 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   // handing the long weapon its range back for free every other second, and
   // it is the reason a dagger could not stay where a dagger beats a scythe.
   const stuck = gap < other.st.reach * INSIDE_FRAC;
-  const want = f.cool > 0 && !stuck ? f.st.range * (hurt ? 1.25 : 1) : keep;
+  const give = ty?.stubborn ? 1 : hurt ? 1.25 : 1;
+  const drift = ty?.restless ? 1 + Math.sin(f.step * 0.09) * 0.3 : 1;
+  // ---- AND EVENTUALLY THEY STOP CIRCLING.
+  //
+  // Wearing armour out only ends a fight in which somebody is being hit.  A
+  // handful ran to the cap with barely a blow thrown at all -- a long weapon
+  // holding its distance against somebody with no way to close it.  Past the
+  // same weary mark, both of them give up on spacing and come in.
+  const weary = Math.min(1, Math.max(0, (f.clock - WEARY_AT) / WEARY_OVER));
+  const spacing = 1 + ((ty?.spacing ?? 1) - 1) * (1 - weary);
+  // Nobody stands on one spot.  A fighter parked at exactly its own maximum
+  // reach only ever has its longest move available, which is why the club
+  // threw its horizontal sweep ninety-six times in a hundred and never once
+  // used its shoulder strike.  A slow drift in and out of a foot or so gives
+  // the shorter attacks a distance at which they are the right answer.
+  const breathe = 1 + Math.sin(f.clock * 1.9 + (f.who === 'frog' ? 0 : 2.1)) * 0.14;
+  const want = (f.cool > 0 && !stuck ? f.st.range * give * spacing : keep) * (1 - weary * 0.5) * drift * breathe;
   const dir = gap > want + 2 ? 1 : gap < want - 2 ? -1 : 0;
   if (dir !== 0) {
-    f.x += f.face * dir * f.st.walk * dt;
+    const pace = f.st.walk * (f.weapon.spec.fleet ?? 1);
+    f.x += f.face * dir * pace * dt;
     f.x = Phaser.Math.Clamp(f.x, ARENA.left, ARENA.right);
-    f.step += f.st.walk * dt;
+    f.step += pace * dt;
   }
 }
 
@@ -697,7 +1202,9 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
  * and has no say in anything.
  */
 export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random): Blow | null {
+  f.clock += dt;
   if (f.cool > 0) f.cool -= dt;
+  if (f.counterT > 0) f.counterT -= dt;
   if (f.stun > 0) {
     f.stun -= dt;
     return null;
@@ -728,7 +1235,7 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random):
     case 'strike': {
       // A weapon that throws two puts the second one in without a fresh
       // wind-up, which is what "rapid, multiple strikes" actually feels like.
-      if (f.swing < f.weapon.hits) {
+      if (f.swing < Math.max(f.weapon.hits, f.move?.hits ?? 1)) {
         f.t = STRIKE;
         const blow = resolveStrike(f, other, Math.abs(f.x - other.x), rng);
         f.swing += 1;
@@ -738,9 +1245,13 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random):
       // one: the chance comes off SPEED, so it is the same rule for both and
       // the fast kit is the one that gets to use it.
       if (f.chain > 0) f.chain -= 1;
-      else if (rng() < COMBO_MAX * (f.st.speedPts / 100) * (f.desperate ? 1.4 : 1)) f.chain = 1;
+      else if (rng() < COMBO_MAX * (f.st.speedPts / 100) * (f.weapon.spec.combo ?? 1) * (f.desperate ? 1.4 : 1)) f.chain = 1;
       f.act = 'recover';
-      f.t = (RECOVER * (f.chain > 0 ? 0.45 : 1)) / f.st.rate;
+      // A claymore or a heavy hammer takes a week to come back round.
+      const drag = 1 + (f.weapon.spec.slowRecover ?? 0);
+      f.t = (RECOVER * drag * (f.chain > 0 ? 0.45 : 1)) / f.st.rate;
+      f.countering = false;
+      f.counterT = 0;
       return null;
     }
     case 'recover':
@@ -808,9 +1319,9 @@ export function exchange(a: Fighter, b: Fighter, dt: number, rng = Math.random):
  * instead of watched once.  `cap` is there because two fighters in full plate
  * with bare hands can genuinely stand there all day.
  */
-export function simulate(a: Kit, bKit: Kit, rng = Math.random, cap = 180): { winner: 'frog' | 'lizard' | null; seconds: number; breaks: number; clashes: number } {
+export function simulate(a: Kit, bKit: Kit, rng = Math.random, cap = 180, type: LizardType | null = null): { winner: 'frog' | 'lizard' | null; seconds: number; breaks: number; clashes: number } {
   const f = makeFighter('frog', a, 100, 1);
-  const l = makeFighter('lizard', bKit, 220, -1);
+  const l = makeFighter('lizard', bKit, 220, -1, type);
   const dt = 1 / 60;
   let t = 0;
   let breaks = 0;
@@ -948,6 +1459,86 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number): Phaser.Gam
       blade(26, -6, 13, 2.5, -28); blade(30, -11, 8, 2, -62);
       bar(20, 0, 3, 4, PALETTE.gold);
       break;
+    // ---- THE ROMAN AND THE POLEARM RACK
+    case 'gladius':
+      blade(9, 0, 16, 3.5); bar(0, 0, 2.5, 8, PALETTE.gold); bar(-3, 0, 4, 4, 0x6a4a2a);
+      break;
+    case 'spear':
+      haft(6, 0, 30, 2.5);
+      c.add(scene.add.triangle(24, 0, 0, -4, 11, 0, 0, 4, steel));
+      bar(24, -1, 9, 1, shine); bar(10, 0, 3, 4, PALETTE.gold);
+      break;
+    case 'trident':
+      haft(4, 0, 26, 2.5);
+      bar(20, 0, 9, 2, steel); bar(24, -5, 8, 2, steel); bar(24, 5, 8, 2, steel);
+      c.add(scene.add.triangle(29, 0, 0, -2, 6, 0, 0, 2, shine));
+      break;
+    case 'halberd':
+      haft(6, 0, 30, 2.5);
+      bar(20, -4, 9, 8, steel); bar(20, -6, 9, 2, shine);
+      c.add(scene.add.triangle(26, 0, 0, -4, 9, 0, 0, 4, steel));
+      bar(20, 5, 5, 3, shade);
+      break;
+    case 'warscythe':
+      haft(10, 0, 30, 3);
+      blade(26, -4, 15, 2.5, -18); blade(31, -9, 9, 2, -48);
+      bar(16, 0, 3, 4, PALETTE.gold);
+      break;
+    // ---- THE CRUSHING RACK
+    case 'mace':
+      haft(5, 0, 13, 3);
+      c.add(scene.add.circle(16, 0, 5, PALETTE.steel));
+      for (let i = 0; i < 4; i++) bar(16, 0, 12, 2.2, PALETTE.fog, i * 45);
+      c.add(scene.add.circle(15, -1, 1.8, shine).setAlpha(0.6));
+      break;
+    case 'morningstar':
+      haft(4, 0, 11, 2.8);
+      bar(12, 0, 6, 1, PALETTE.fog);
+      c.add(scene.add.circle(20, 0, 5, 0x5e5a63));
+      for (let i = 0; i < 6; i++) bar(20, 0, 12, 1.6, PALETTE.bone, i * 30);
+      break;
+    case 'warhammer':
+      haft(6, 0, 15, 3.2);
+      bar(17, 0, 9, 11, PALETTE.steel); bar(17, -4, 9, 2.5, shine); bar(17, 4, 9, 2, shade);
+      bar(23, 0, 4, 5, PALETTE.fog);
+      break;
+    case 'heavyhammer':
+      haft(5, 0, 14, 3.5);
+      bar(18, 0, 12, 14, PALETTE.steel); bar(18, -5, 12, 3, shine); bar(18, 5, 12, 2.5, shade);
+      bar(12, 0, 3, 14, 0x5a4530);
+      break;
+    case 'club':
+      bar(9, 0, 20, 5, wood); bar(9, -1.6, 20, 1.5, woodLit);
+      bar(17, 0, 8, 8, wood); bar(17, -2.5, 8, 1.5, woodLit);
+      for (let i = 0; i < 3; i++) c.add(scene.add.circle(14 + i * 3, (i % 2 ? -2 : 2), 1, 0x5a4530));
+      break;
+    case 'claymore':
+      blade(15, 0, 28, 4.5); bar(2, 0, 3, 13, PALETTE.steel); bar(-3, 0, 5, 4, grip);
+      bar(2, 0, 3, 3, PALETTE.gold);
+      break;
+    case 'greataxe':
+      haft(9, 0, 19, 3.5);
+      bar(19, -2, 12, 15, PALETTE.steel); bar(19, -7, 12, 3, shine);
+      c.add(scene.add.triangle(25, -2, 0, 0, 6, 7, 0, 14, shade));
+      bar(13, -2, 3, 15, 0x5a4530);
+      break;
+    // ---- THE QUICK RACK
+    case 'rapier':
+      bar(13, 0, 25, 1.5, steel); bar(13, -0.8, 25, 0.8, shine);
+      c.add(scene.add.circle(1, 0, 3.5, PALETTE.gold));
+      c.add(scene.add.circle(1, 0, 2, 0, 0).setStrokeStyle(1, PALETTE.amberDark));
+      bar(-3, 0, 4, 3, grip);
+      break;
+    case 'twindagger':
+      blade(6, -4, 10, 2, -14); blade(6, 4, 10, 2, 14);
+      bar(0, -3, 3, 4, grip); bar(0, 3, 3, 4, grip);
+      break;
+    case 'throwing':
+      // one in the hand and two more held ready between the fingers
+      blade(6, 0, 9, 2);
+      bar(0, 0, 3, 3, grip);
+      blade(3, -5, 6, 1.5, -26); blade(3, 5, 6, 1.5, 26);
+      break;
     default: {
       // The spiked shield: a boss, a rim, and six spikes around it.
       //
@@ -992,9 +1583,22 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // Froggy is green.  The lizard is NOT a second green animal: it is rust and
   // sand, which is the other half of telling them apart at a glance -- shape
   // does the work up close, colour does it across the room.
-  const skin = frog ? PALETTE.moss : 0x9c5a2e;
-  const light = frog ? PALETTE.mossLight : 0xc98243;
-  const dark = frog ? 0x2f5a2a : 0x5e3218;
+  //
+  // And each ARCHETYPE is built differently on top of that: a muscular one is
+  // broad, a reach one is tall and narrow, an assassin is lean and purple.
+  // `wide` and `tall` scale the body and the head, so the silhouette says
+  // which lizard it is before it has swung at anything.
+  const bld = f.type?.build;
+  const wide = bld?.wide ?? 1;
+  const tall = bld?.tall ?? 1;
+  const limb = bld?.limb ?? 1;
+  const skull = bld?.head ?? 1;
+  // Longer legs raise everything above them, or a leggy lizard grows its legs
+  // up through its own chest.
+  const lift = 11 * (limb - 1);
+  const skin = frog ? PALETTE.moss : bld?.skin ?? 0x9c5a2e;
+  const light = frog ? PALETTE.mossLight : bld?.light ?? 0xc98243;
+  const dark = frog ? 0x2f5a2a : bld?.dark ?? 0x5e3218;
   const H = f.kit.head.mat!;
   const B = f.kit.body.mat!;
   const L = f.kit.legs.mat!;
@@ -1005,74 +1609,78 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const shadow = scene.add.ellipse(0, 1, 26, 6, 0x6b5330).setAlpha(0.34);
 
   // ---- LEGS
-  const legL = scene.add.rectangle(-4, -2, 4, 11, dark).setOrigin(0.5, 1);
-  const legR = scene.add.rectangle(4, -2, 4, 11, skin).setOrigin(0.5, 1);
-  const greaveL = scene.add.rectangle(-4, -3, 6, 8, L.colour).setOrigin(0.5, 1).setStrokeStyle(1, L.edge).setVisible(wears(L));
-  const greaveR = scene.add.rectangle(4, -3, 6, 8, L.colour).setOrigin(0.5, 1).setStrokeStyle(1, L.edge).setVisible(wears(L));
-  const kneeL = scene.add.rectangle(-4, -9, 7, 2, L.edge).setVisible(wears(L));
-  const kneeR = scene.add.rectangle(4, -9, 7, 2, L.edge).setVisible(wears(L));
+  const legL = scene.add.rectangle(-4 * wide, -2, 4 * wide, 11 * limb, dark).setOrigin(0.5, 1);
+  const legR = scene.add.rectangle(4 * wide, -2, 4 * wide, 11 * limb, skin).setOrigin(0.5, 1);
+  const greaveL = scene.add.rectangle(-4 * wide, -3, 6 * wide, 8 * limb, L.colour).setOrigin(0.5, 1).setStrokeStyle(1, L.edge).setVisible(wears(L));
+  const greaveR = scene.add.rectangle(4 * wide, -3, 6 * wide, 8 * limb, L.colour).setOrigin(0.5, 1).setStrokeStyle(1, L.edge).setVisible(wears(L));
+  const kneeL = scene.add.rectangle(-4 * wide, -9 * limb, 7 * wide, 2, L.edge).setVisible(wears(L));
+  const kneeR = scene.add.rectangle(4 * wide, -9 * limb, 7 * wide, 2, L.edge).setVisible(wears(L));
   // frogs get broad flat feet, lizards get clawed ones
-  const footL = scene.add.rectangle(-5, 0, frog ? 8 : 7, 2, light).setOrigin(0.5, 1);
-  const footR = scene.add.rectangle(5, 0, frog ? 8 : 7, 2, light).setOrigin(0.5, 1);
+  const footL = scene.add.rectangle(-5 * wide, 0, (frog ? 8 : 7) * wide, 2, light).setOrigin(0.5, 1);
+  const footR = scene.add.rectangle(5 * wide, 0, (frog ? 8 : 7) * wide, 2, light).setOrigin(0.5, 1);
   const clawL = frog ? null : scene.add.triangle(-9, -1, 0, 2, 4, 0, 4, 3, PALETTE.bone);
   const clawR = frog ? null : scene.add.triangle(9, -1, 0, 0, 4, 2, 0, 3, PALETTE.bone);
 
   // ---- THE TAIL, which is half of what says LIZARD
-  const tail = frog ? null : scene.add.triangle(-13, -14, 0, 0, 19, 5, 0, 11, skin).setAngle(14);
-  const tailTip = frog ? null : scene.add.triangle(-21, -12, 0, 0, 9, 3, 0, 6, dark).setAngle(18);
+  const tail = frog ? null : scene.add.triangle(-13 * wide, -14 * tall - lift * 0.6, 0, 0, 19 * wide, 5 * wide, 0, 11 * wide, skin).setAngle(14);
+  const tailTip = frog ? null : scene.add.triangle(-21 * wide, -12 * tall - lift * 0.6, 0, 0, 9 * wide, 3, 0, 6 * wide, dark).setAngle(18);
 
   // ---- TORSO
   const torso = frog
     ? scene.add.ellipse(0, -19, 19, 20, skin)
-    : scene.add.ellipse(-1, -19, 15, 19, skin);
-  const belly = scene.add.ellipse(1, -16, frog ? 12 : 9, 11, light).setAlpha(0.55);
-  const cuirass = scene.add.rectangle(0, -19, frog ? 17 : 15, 15, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
+    : scene.add.ellipse(-1, -19 * tall - lift, 15 * wide, 19 * tall, skin);
+  const belly = scene.add.ellipse(1, -16 * tall - lift, (frog ? 12 : 9) * wide, 11 * tall, light).setAlpha(0.55);
+  // The armour takes the same build as the body under it.  Scaling only the
+  // torso left a muscular lizard's chest sticking out past a standard-issue
+  // breastplate, which reads as a bug rather than as a bigger animal.
+  const cuirass = scene.add.rectangle(0, -19 * tall - lift, (frog ? 17 : 15) * wide, 15 * tall, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
   // shoulders and a belt, so the breastplate is worn rather than held up
-  const pauldL = scene.add.ellipse(-8, -26, 8, 6, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
-  const pauldR = scene.add.ellipse(8, -26, 8, 6, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
-  const belt = scene.add.rectangle(0, -12, frog ? 18 : 16, 3, B.edge).setVisible(wears(B));
-  const ridge = scene.add.rectangle(0, -20, frog ? 15 : 13, 1, B.edge).setAlpha(0.7).setVisible(wears(B));
+  const pauldL = scene.add.ellipse(-8 * wide, -26 * tall - lift, 8 * wide, 6, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
+  const pauldR = scene.add.ellipse(8 * wide, -26 * tall - lift, 8 * wide, 6, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
+  const belt = scene.add.rectangle(0, -12 * tall - lift, (frog ? 18 : 16) * wide, 3, B.edge).setVisible(wears(B));
+  const ridge = scene.add.rectangle(0, -20 * tall - lift, (frog ? 15 : 13) * wide, 1, B.edge).setAlpha(0.7).setVisible(wears(B));
 
   // ---- THE CREST, the other half of LIZARD
   const spines: Phaser.GameObjects.Triangle[] = [];
   if (!frog) for (let i = 0; i < 4; i++) {
-    spines.push(scene.add.triangle(-6 - i * 2, -30 + i * 5, 0, 5, 3, 0, 5, 5, PALETTE.rust));
+    spines.push(scene.add.triangle(-6 - i * 2, (-30 + i * 5) * tall - lift, 0, 5, 3, 0, 5, 5, bld?.crest ?? PALETTE.rust));
   }
 
   // ---- HEAD
   const head = frog
     ? scene.add.ellipse(2, -33, 16, 13, light)
-    : scene.add.ellipse(1, -32, 13, 10, light);
+    : scene.add.ellipse(1, -32 * tall - lift, 13 * wide * skull, 10 * skull, light);
   const jaw = frog
     ? scene.add.ellipse(7, -30, 6, 4, light)
-    : scene.add.triangle(12, -30, 0, 0, 11, 3, 0, 6, light);
-  const teeth = frog ? null : scene.add.rectangle(11, -29, 7, 1, PALETTE.cream);
+    : scene.add.triangle(12 * wide * skull, -30 * tall - lift, 0, 0, 11 * skull, 3, 0, 6 * skull, light);
+  const teeth = frog ? null : scene.add.rectangle(11 * wide * skull, -29 * tall - lift, 7 * skull, 1, PALETTE.cream);
   const mouth = frog ? scene.add.rectangle(6, -29, 8, 1, dark) : null;
   // a frog's eyes sit on top of the dome; a lizard's are set into the side
-  const eyeL = scene.add.circle(-1, frog ? -38 : -34, frog ? 3.4 : 2.6, PALETTE.cream);
-  const eyeR = scene.add.circle(5, frog ? -38 : -34, frog ? 3.4 : 2.6, PALETTE.cream);
+  const ey = frog ? -38 : -34 * tall - lift;
+  const eyeL = scene.add.circle(-1, ey, (frog ? 3.4 : 2.6) * skull, PALETTE.cream);
+  const eyeR = scene.add.circle(5, ey, (frog ? 3.4 : 2.6) * skull, PALETTE.cream);
   const pupL = frog
     ? scene.add.circle(0, -38, 1.5, PALETTE.black)
-    : scene.add.rectangle(0, -34, 1.2, 4, PALETTE.black);
+    : scene.add.rectangle(0, ey, 1.2, 4 * skull, PALETTE.black);
   const pupR = frog
     ? scene.add.circle(6, -38, 1.5, PALETTE.black)
-    : scene.add.rectangle(6, -34, 1.2, 4, PALETTE.black);
-  const brow = frog ? null : scene.add.rectangle(2, -37, 12, 2, dark);
+    : scene.add.rectangle(6, ey, 1.2, 4 * skull, PALETTE.black);
+  const brow = frog ? null : scene.add.rectangle(2, ey - 3 * skull, 12 * wide * skull, 2, dark);
 
   // ---- HELM: a bowl, a brow band, a visor slit, and a plume for the frog
   // A helm caps the skull.  At -40 it came down over the eyes and both of
   // them fought the whole bout blindfolded in a grey box.
-  const hy = frog ? -43 : -39;
-  const helm = scene.add.rectangle(2, hy, frog ? 17 : 14, 6, H.colour).setStrokeStyle(1, H.edge).setVisible(wears(H));
-  const helmDome = scene.add.ellipse(2, hy - 2, frog ? 17 : 14, 7, H.colour).setVisible(wears(H));
-  const visor = scene.add.rectangle(4, hy + 2, frog ? 12 : 10, 1.5, H.edge).setVisible(wears(H));
+  const hy = (frog ? -43 : -39) * tall - lift;
+  const helm = scene.add.rectangle(2, hy, (frog ? 17 : 14) * wide, 6, H.colour).setStrokeStyle(1, H.edge).setVisible(wears(H));
+  const helmDome = scene.add.ellipse(2, hy - 2, (frog ? 17 : 14) * wide, 7, H.colour).setVisible(wears(H));
+  const visor = scene.add.rectangle(4, hy + 2, (frog ? 12 : 10) * wide, 1.5, H.edge).setVisible(wears(H));
   const plume = scene.add.rectangle(-4, hy - 7, 3, 8, frog ? PALETTE.blood : PALETTE.rust).setVisible(wears(H));
 
   // ---- the arm and the weapon, on one hinge at the shoulder
-  const arm = scene.add.container(5, -24);
-  arm.add(scene.add.rectangle(5, 0, 11, 4, skin));
+  const arm = scene.add.container(5 * wide, -24 * tall - lift);
+  arm.add(scene.add.rectangle(5, 0, 11, 4 * wide, skin));
   arm.add(scene.add.rectangle(5, -1, 11, 1, light).setAlpha(0.5));
-  arm.add(scene.add.circle(10, 0, 3, light));
+  arm.add(scene.add.circle(10, 0, 3 * wide, light));
   const weapon = buildWeapon(scene, f.weapon.key, light);
   weapon.setPosition(11, 0);
   arm.add(weapon);
@@ -1091,7 +1699,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   if (brow) parts.push(brow);
   parts.push(eyeL, eyeR, pupL, pupR, helmDome, helm, visor, plume);
   const root = scene.add.container(f.x, FLOOR_Y, parts).setDepth(20);
-  root.setScale(f.face, 1);
+  root.setScale(f.face * (bld?.scale ?? 1), bld?.scale ?? 1);
   return { root, legL, legR, greaveL, greaveR, torso, cuirass, head, helm, arm, weapon, shadow };
 }
 
@@ -1121,7 +1729,10 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   const a = f.art;
   if (!a) return;
   a.root.x = drawX(f, other);
-  a.root.setScale(f.face, 1);
+  // The archetype's build has to survive the per-frame facing flip, or a
+  // muscular lizard shrinks back to standard size on the first tick.
+  const bulk = f.type?.build.scale ?? 1;
+  a.root.setScale(f.face * bulk, bulk);
 
   // the walk: two legs out of phase, and the body riding on it
   const swingL = Math.sin(f.step / 5) * 3;
@@ -1132,11 +1743,28 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   a.root.y = FLOOR_Y - Math.abs(Math.sin(f.step / 5)) * 1.2;
 
   // the arm: back for the wind-up, through for the strike, drooping after
+  // ---- THE ARC THE ARM ACTUALLY TRAVELS, WHICH IS THE MOVE.
+  //
+  // An overhead cleave comes from behind the head and finishes at the floor.
+  // A thrust barely rotates at all and goes straight out.  A sweep travels
+  // the whole width of the body.  A spin goes all the way round.  Same rig,
+  // six different shapes, and they are the shapes the moves say they are --
+  // so the player can watch and tell a hammer smash from a rapier lunge.
+  const A: Record<Anim, { w: number; s: number; r: number; lean: number }> = {
+    over:   { w: -104, s: 62, r: 34, lean: 10 },
+    sweep:  { w: -58, s: 46, r: 20, lean: 6 },
+    thrust: { w: -26, s: 8, r: -4, lean: 12 },
+    spin:   { w: -150, s: 150, r: 40, lean: 0 },
+    jab:    { w: -34, s: 20, r: 4, lean: 5 },
+    bash:   { w: -46, s: 16, r: 6, lean: 16 },
+    low:    { w: -70, s: 88, r: 56, lean: 14 },
+  };
+  const shape = A[f.move?.anim ?? 'sweep'];
   let arm = -10;
   let lean = 0;
-  if (f.act === 'windup') { arm = -70; lean = -6; }
-  else if (f.act === 'strike') { arm = 34; lean = 8; }
-  else if (f.act === 'recover') { arm = 16; lean = 4; }
+  if (f.act === 'windup') { arm = shape.w; lean = -shape.lean * 0.55; }
+  else if (f.act === 'strike') { arm = shape.s; lean = shape.lean; }
+  else if (f.act === 'recover') { arm = shape.r; lean = shape.lean * 0.4; }
   else if (f.act === 'guard') { arm = -96; lean = -4; }
   else if (f.act === 'dodge') { arm = -30; lean = -16; }
   // thrown backwards, arms going up, off balance
@@ -1155,11 +1783,19 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   f.armA += (arm - f.armA) * snap;
   f.leanA += (lean - f.leanA) * snap;
   a.arm.setAngle(f.armA);
+  // and a spinning attack turns the whole animal, not only the arm
+  if (f.move?.anim === 'spin' && (f.act === 'strike' || f.act === 'windup')) {
+    a.root.angle = f.face * (f.act === 'strike' ? 22 : -14);
+  } else if (f.act !== 'stagger' && phase !== 'over') {
+    a.root.angle = 0;
+  }
   a.torso.setAngle(f.leanA);
   a.cuirass.setAngle(f.leanA);
   const duck = f.act === 'dodge' ? 4 : f.act === 'stagger' ? -2 : 0;
-  a.head.y = (f.who === 'frog' ? -33 : -32) + duck;
-  a.helm.y = (f.who === 'frog' ? -43 : -39) + duck;
+  const bd = f.type?.build;
+  const legLift = 11 * ((bd?.limb ?? 1) - 1);
+  a.head.y = (f.who === 'frog' ? -33 : -32 * (bd?.tall ?? 1) - legLift) + duck;
+  a.helm.y = (f.who === 'frog' ? -43 : -39 * (bd?.tall ?? 1) - legLift) + duck;
 
   // ---- THE SHADOW STAYS ON THE SAND.
   //
@@ -1371,6 +2007,19 @@ export function offerFor(slot: Slot): Piece[] {
   };
   if (slot === 'weapon') return shuffled(WEAPONS).slice(0, 5).map((w) => makeWeapon(w));
   return shuffled(MATERIALS).slice(0, 5).map((m) => makeArmour(slot, m));
+}
+
+/**
+ * TONIGHT'S OPPONENT, IN THE ORDER IT IS BUILT.
+ *
+ * Pick the archetype, apply its base, then roll weapon, head, body and legs
+ * out of the SAME generator the chests use -- and only then work out what any
+ * of it is worth.  Nothing consults Froggy's kit at any point, so there is
+ * nothing here that could answer it.
+ */
+export function makeLizard(x: number, rng: () => number = Math.random): Fighter {
+  const type = LIZARDS[Math.floor(rng() * LIZARDS.length)];
+  return makeFighter('lizard', randomKit(), x, -1, type);
 }
 
 /** A kit rolled the same way the chests are, for the lizard. */
@@ -1622,7 +2271,7 @@ function showCard(p: Piece | undefined): void {
       `REACH     ${bar(p.rReach)} ${p.rReach}`,
       `HEAVINESS ${bar(p.rHeavy)} ${p.rHeavy}`,
       `RESIST    ${bar(p.rResist)} ${p.rResist}`,
-      ...wrapTo(WEAPON_NOTE[w.key] ?? ''),
+      ...wrapTo(w.spec.note),
     );
   } else {
     const m = p.mat!;
@@ -1644,22 +2293,6 @@ function showCard(p: Piece | undefined): void {
   panelText.forEach((t, i) => t.setText(lines[i] ?? '').setTint(i === 0 ? PALETTE.gold : i >= 5 ? PALETTE.ash : PALETTE.cream));
 }
 
-const WEAPON_NOTE: Record<string, string> = {
-  none: 'AN EMPTY BOX. HE FIGHTS WITH HIS HANDS',
-  knuckles: 'NO REACH AT ALL, AND IT NEVER STOPS',
-  dagger: 'FAST, AND ONLY WORKS UP CLOSE',
-  knife: 'FAST, AND ONLY WORKS UP CLOSE',
-  nunchuck: 'A BLUR. TWO STRIKES A SWING',
-  dual: 'TWO STRIKES A SWING, LIGHTER EACH',
-  sword: 'GOOD AT NOTHING, BAD AT NOTHING',
-  katana: 'BALANCED, WITH MORE REACH',
-  shield: 'TURNS BLOWS ASIDE WHILE IT IS HELD',
-  staff: 'KEEPS ITS DISTANCE AND KEEPS YOU OUT',
-  axe: 'SLOW AND ENORMOUS',
-  flail: 'LONG, HEAVY, SLOW TO COME ROUND',
-  scythe: 'LONG REACH AND A BIG HIT, BUT SLOW',
-  goldsword: 'THE HARDEST HIT HERE, AND THE SLOWEST',
-};
 
 function take(i: number): void {
   if (phase !== 'pick') return;
@@ -1729,7 +2362,7 @@ function nextStage(): void {
   }
   S().time.delayedCall(COLLAPSE_MS + 60, () => {
     if (stage + 1 < ORDER.length) startStage(stage + 1);
-    else showSummary();
+    else showEntry();
   });
 }
 
@@ -1740,68 +2373,32 @@ function autoPick(): void {
 
 // ------------------------------------------------------------- final build
 
-function showSummary(): void {
-  phase = 'summary';
-  const kit = picked as Kit;
-  frog = makeFighter('frog', kit, 100, 1);
-  lizard = makeFighter('lizard', randomKit(), 220, -1);
-
-  const c = newLayer();
-  c.add(S().add.rectangle(0, 18, GAME_W, 162, 0x241b13).setOrigin(0, 0));
-  c.add(centerText(S(), GAME_W / 2, 27, 'FROGGY IS ARMED', PALETTE.gold, 16));
-
-  const art = buildFighter(S(), frog);
-  art.root.setPosition(52, 128);
-  c.add(art.root);
-
-  const px = 108;
-  c.add(S().add.rectangle(px, 40, GAME_W - px - 6, 98, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel));
-  // The four the spec names, on the scales it names them on, so the sheet and
-  // the brief read the same: ten power, a hundred speed, fifty avoidance and
-  // twenty distance is Froggy with nothing on.
-  const rows: Array<[string, string, number]> = [
-    ['WEAPON', kit.weapon.name, PALETTE.bone],
-    ['POWER', frog.st.powerPts.toFixed(0), PALETTE.ember],
-    ['SPEED', frog.st.speedPts.toFixed(0), PALETTE.gold],
-    ['AVOIDANCE', frog.st.avoidPts.toFixed(0), PALETTE.tealLight],
-    ['DISTANCE', frog.st.distPts.toFixed(0), PALETTE.fog],
-    ['DEFENCE', `${Math.round(frog.st.defence * 100)}%`, PALETTE.steel],
-    ['HEALTH', String(frog.st.maxHp), PALETTE.mossLight],
-  ];
-  rows.forEach(([k, v, col], i) => {
-    c.add(text(S(), px + 7, 45 + i * 13, k, PALETTE.ash));
-    c.add(text(S(), GAME_W - 13, 45 + i * 13, v, col).setOrigin(1, 0));
-  });
-  // The three pieces by MATERIAL only.  Spelling each one out in full came to
-  // "TUXEDO HELM - LEATHER ARMOUR CUIRASS - NO GREAVES", which is forty-nine
-  // characters on a line that holds about fifty-three and was centred, so it
-  // ran off both edges at once.  The slot is obvious from the order.
-  const worn = (['head', 'body', 'legs'] as const)
-    .map((sl) => (kit[sl].mat!.key === 'none' ? 'NONE' : kit[sl].mat!.name.replace(' ARMOUR', '')))
-    .join('  /  ');
-  c.add(centerText(S(), GAME_W / 2, 143, worn, PALETTE.ash));
-  // The last decision the player made was the fourth chest.  This is a sheet
-  // to read, not a thing to answer, so it goes on its own -- the button only
-  // skips the wait for anyone who has finished reading.  `showEntry` guards on
-  // the phase, so the click and the timer cannot both fire it.
-  buttons.push(button(S(), GAME_W / 2, 161, 'TO THE COLOSSEUM', showEntry, { width: 140, height: 14, fill: PALETTE.blood }));
-  S().time.delayedCall(SUMMARY_MS, showEntry);
-}
-
-// ------------------------------------------------------------- the arena
-
+/**
+ * STRAIGHT OUT ONTO THE SAND.
+ *
+ * There used to be a kit sheet in between -- FROGGY IS ARMED, a column of his
+ * numbers, and a TO THE COLOSSEUM button -- and then the arena, which has a
+ * walk-on of its own.  So the fourth chest was followed by two screens and
+ * two presses to see one fight, and the second screen said nothing the first
+ * had not.  The sheet is gone.  The last chest opens onto the colosseum, both
+ * of them walk in, and the card that comes up is about the OPPONENT, which is
+ * the one thing the player has not seen yet.
+ */
 function showEntry(): void {
-  if (phase !== 'summary') return;
+  if (phase !== 'title') return;
   phase = 'entry';
+  frog = makeFighter('frog', picked as Kit, 100, 1);
+  lizard = makeLizard(220);
+
   const c = newLayer();
   crowd = buildArena(S(), c);
 
   // ---- both of them walk in from their own gate.  Nothing is pressed.
-  frog!.x = -20;
-  lizard!.x = GAME_W + 20;
-  frog!.hp = frog!.st.maxHp;
-  lizard!.hp = lizard!.st.maxHp;
-  for (const f of [frog!, lizard!]) {
+  frog.x = -20;
+  lizard.x = GAME_W + 20;
+  frog.hp = frog.st.maxHp;
+  lizard.hp = lizard.st.maxHp;
+  for (const f of [frog, lizard]) {
     f.art = buildFighter(S(), f);
     c.add(f.art.root);
   }
@@ -1822,22 +2419,69 @@ function showEntry(): void {
   } });
   callOut.setText('FROGGY VS LIZARD');
   S().time.delayedCall(1250, () => {
-    callOut?.setText('FIGHT!');
+    callOut?.setText('');
+    showCardOfBoth(c);
+  });
+}
+
+/**
+ * WHO YOU ARE ABOUT TO FIGHT, SIDE BY SIDE WITH WHO YOU BUILT.
+ *
+ * The opponent's archetype is the headline because it is the only thing on
+ * this screen the player has not chosen: eight kinds of lizard, with their
+ * own build and their own trade-offs, and the card names which one turned up
+ * and what it is for.  Froggy's column is beside it so the two can be read
+ * against each other, which is the whole decision the chests just made.
+ */
+function showCardOfBoth(c: Phaser.GameObjects.Container): void {
+  const L = lizard!;
+  const F = frog!;
+  const ty = L.type!;
+  const card: Phaser.GameObjects.GameObject[] = [];
+  const keep = <T extends Phaser.GameObjects.GameObject>(o: T): T => { c.add(o); card.push(o); return o; };
+  keep(S().add.rectangle(8, 48, GAME_W - 16, 96, PALETTE.ink, 0.93).setOrigin(0, 0).setDepth(50).setStrokeStyle(1, PALETTE.gold));
+
+  const col = (x: number, who: string, tint: number, f: Fighter, note: string) => {
+    keep(text(S(), x, 53, who.slice(0, 17), tint).setDepth(52));
+    keep(text(S(), x, 63, note.slice(0, 22), PALETTE.ash).setDepth(52));
+    const rows: Array<[string, string]> = [
+      ['WEAPON', f.kit.weapon.name.slice(0, 15)],
+      ['POWER', f.st.powerPts.toFixed(0)],
+      ['SPEED', f.st.speedPts.toFixed(0)],
+      ['AVOID', f.st.avoidPts.toFixed(0)],
+      ['REACH', f.st.distPts.toFixed(0)],
+      ['DEFENCE', `${Math.round(f.st.defence * 100)}%`],
+      ['HEALTH', String(f.st.maxHp)],
+    ];
+    rows.forEach(([k, v], i) => {
+      const y = 76 + i * 9;
+      keep(text(S(), x, y, k, PALETTE.ash).setDepth(52));
+      keep(text(S(), x + 138, y, v, i === 0 ? PALETTE.bone : tint).setDepth(52).setOrigin(1, 0));
+    });
+  };
+  col(14, 'FROGGY', PALETTE.mossLight, F, 'OUT OF FOUR CHESTS');
+  col(166, ty.name, PALETTE.amber, L, ty.blurb);
+  keep(S().add.rectangle(GAME_W / 2, 50, 1, 92, PALETTE.steel).setOrigin(0.5, 0).setDepth(51));
+
+  buttons.push(button(S(), GAME_W / 2, 158, 'FIGHT', () => {
+    if (phase !== 'entry') return;
+    for (const b of buttons) b.destroy();
+    buttons = [];
+    for (const o of card) o.destroy();
+    callOut?.setText('FIGHT!').setDepth(40);
     audio.sfx('stinger', 0.6);
     S().tweens.add({ targets: callOut, scaleX: 1.4, scaleY: 1.4, alpha: 0, duration: 700 });
     fightT = 0;
     phase = 'fight';
-  });
+  }, { width: 70, height: 16, fill: PALETTE.blood }));
 }
 
 /**
  * THE SCOREBOARD, KEPT TO ONE BAND AT THE TOP.
  *
- * It used to run from 22 down to 56 -- a third of the whole picture -- and
- * the arena was built behind it, so two of the three banks of seating were
- * under the words FROGGY and LIZARD and nobody ever saw them.  Everything is
- * on two lines now inside a single dark strip, and the colosseum starts
- * underneath it.
+ * It used to run a third of the way down the picture with the colosseum built
+ * behind it, so two of the three banks of seating were under the words FROGGY
+ * and LIZARD and nobody ever saw them.
  */
 const HUD_BOT = 44;
 function buildHud(c: Phaser.GameObjects.Container): void {
@@ -1857,7 +2501,9 @@ function buildHud(c: Phaser.GameObjects.Container): void {
     // it ran into the health numbers; in the middle of the strip the two
     // halves of the scoreboard ran into each other.  The weapon name is cut
     // to twelve characters so the two never meet.
-    c.add(text(S(), right ? x : x + 130, 35, `DEF ${def}%`, PALETTE.ash).setDepth(41).setOrigin(right ? 0 : 1, 0));
+    // Just the number.  "DEF " cost four characters of a row that also has to
+    // hold THROWING KNIVES, and the weapon name was being cut to THROWING KNIV.
+    c.add(text(S(), right ? x : x + 130, 35, `${def}%`, PALETTE.ash).setDepth(41).setOrigin(right ? 0 : 1, 0));
   };
   bar(8, 'frog', 'FROGGY', PALETTE.mossLight, frog!.kit, false);
   bar(GAME_W - 138, 'lizard', 'LIZARD', PALETTE.amber, lizard!.kit, true);
@@ -1870,7 +2516,7 @@ function refreshHud(): void {
     const b = hpBar[who];
     if (b) b.width = Math.max(0, Math.round((Math.max(0, f.hp) / f.st.maxHp) * 128));
     hpNum[who]?.setText(`${Math.max(0, f.hp)} / ${f.st.maxHp}`);
-    kitLine[who]?.setText(f.broken ? 'BARE HANDS' : f.weapon.name.slice(0, 14)).setTint(f.broken ? PALETTE.blood : PALETTE.bone);
+    kitLine[who]?.setText(f.broken ? 'BARE HANDS' : f.weapon.name.slice(0, 16)).setTint(f.broken ? PALETTE.blood : PALETTE.bone);
   }
 }
 
@@ -1884,6 +2530,11 @@ function showBlow(f: Fighter, blow: Blow): void {
   }
   if (!blow.hit) return;
   floating(x, `-${blow.dmg}`, blow.guarded ? PALETTE.tealLight : PALETTE.cream);
+  // The move's name on the big ones, so a player watching can learn what each
+  // weapon actually does rather than being told in a menu.
+  if (blow.move && (blow.dmg >= f.st.maxHp * 0.1 || blow.crit || blow.countered)) {
+    floatHigh(x, blow.move, blow.crit ? PALETTE.gold : PALETTE.bone);
+  }
   audio.sfx(blow.dmg >= 12 ? 'boom' : blow.guarded ? 'fence_thunk' : 'whack', blow.dmg >= 12 ? 0.5 : 0.4);
   audio.sfx('item_thud', 0.3);
   f.stun = Math.min(0.28, blow.dmg / 60);
@@ -1904,6 +2555,13 @@ function showBlow(f: Fighter, blow: Blow): void {
     });
   }
   if (blow.dmg >= 12) S().cameras.main.shake(140, 0.005);
+}
+
+/** A label that rises well clear of the damage numbers. */
+function floatHigh(x: number, str: string, colour: number): void {
+  const t = centerText(S(), Phaser.Math.Clamp(x, 40, GAME_W - 40), FLOOR_Y - 52, str, colour).setDepth(62);
+  layer?.add(t);
+  S().tweens.add({ targets: t, y: FLOOR_Y - 68, alpha: 0, duration: 780, onComplete: () => t.destroy() });
 }
 
 function floating(x: number, str: string, colour: number): void {
@@ -2221,7 +2879,7 @@ export const frogsterMash: MinigameModule = {
           if (f && Number.isFinite(f.dur)) f.dur = 1;
         },
         /** The rules and the headless simulator, so a build can be checked. */
-        rules: { WEAPONS, MATERIALS, UNARMED, QUALITY_MUL, statsOf, makeFighter, resolveStrike, tick, think, exchange, simulate, randomKit, offerFor, makeWeapon, makeArmour, breakWeapon, durabilityOf, wrapTo, WEAPON_NOTE, CARD_COLS, BASE },
+        rules: { WEAPONS, MATERIALS, UNARMED, QUALITY_MUL, statsOf, makeFighter, resolveStrike, tick, think, exchange, simulate, randomKit, offerFor, makeWeapon, makeArmour, breakWeapon, durabilityOf, wrapTo, CARD_COLS, BASE, LIZARDS, makeLizard, buildFighter, buildWeapon },
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__mash;
