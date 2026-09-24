@@ -1145,15 +1145,22 @@ export class ArcadeHub extends Phaser.Scene {
     if (this.busy()) return;
     this.scene.launch('ChangeMachine', { from: 'ArcadeHub' });
     this.locked = true;
-    this.events.once('change-closed', () => {
+    this.events.once('change-closed', (traded: boolean) => {
       // ---- AND SOMETIMES HE IS OUTSIDE WHEN YOU LOOK UP.
       //
-      // Once a run, after the night, when the player closes the change
-      // machine: see `startApparition`.  The lock stays on through it -- the
-      // apparition takes the controls off the player for its two seconds and
+      // Once a run, after the night, when the player has PUT SOMETHING IN and
+      // then closed the machine.  See `startApparition`.  The lock stays on
+      // through it -- the apparition takes the controls off the player and
       // hands them back itself.
+      //
+      // `traded` is the whole of the condition.  Opening the machine, reading
+      // what it pays and closing it again is looking at a machine, and the
+      // thing waiting at the end of the corridor has never been interested in
+      // somebody looking at a machine.  It wants the trade: the cash gone,
+      // the tokens counted out, the player a little worse off than they were
+      // and about to go and spend it.  That is the moment it picks.
       const st = store.get();
-      if (st.froggyGone && !st.sawApparition) {
+      if (traded && st.froggyGone && !st.sawApparition) {
         this.startApparition();
         return;
       }
