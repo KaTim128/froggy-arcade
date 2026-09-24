@@ -135,10 +135,10 @@ export interface ArmourMat {
   note: string;
 }
 export const MATERIALS: ArmourMat[] = [
-  { key: 'none', name: 'NO ARMOUR', def: 0, evade: 0, heavy: [1, 1], resist: [10, 10], colour: 0x6d5a45, edge: 0x4a3c2d, note: 'NOTHING THERE. NOTHING TO CARRY EITHER' },
-  { key: 'tuxedo', name: 'TUXEDO', def: 0.05, evade: 0, heavy: [1, 2], resist: [2, 4], colour: 0x2a2d3a, edge: 0xdfe4ee, note: 'FIVE PERCENT DEFENCE, NINETY FIVE PERCENT FASHION' },
-  { key: 'leather', name: 'LEATHER ARMOUR', def: 0.10, evade: 0, heavy: [2, 4], resist: [5, 7], colour: 0x9c7248, edge: 0x5d4028, note: 'LIGHT, AND ABOUT AS MUCH USE AS THAT SOUNDS' },
-  { key: 'tactical', name: 'TACTICAL ARMOUR', def: 0.10, evade: 0.25, heavy: [2, 4], resist: [6, 8], colour: 0x3f4a3a, edge: 0x22281f, note: 'STOPS LITTLE. MAKES A GREAT DEAL HARDER TO HIT' },
+  { key: 'none', name: 'NO ARMOUR', def: 0, evade: 0, heavy: [1, 1], resist: [10, 10], colour: 0x6d5a45, edge: 0x4a3c2d, note: 'NOTHING THERE, AND NOTHING TO CARRY' },
+  { key: 'tuxedo', name: 'TUXEDO', def: 0.05, evade: 0, heavy: [1, 2], resist: [2, 4], colour: 0x2a2d3a, edge: 0xdfe4ee, note: 'FIVE PERCENT DEFENCE. THE REST IS FASHION' },
+  { key: 'leather', name: 'LEATHER ARMOUR', def: 0.10, evade: 0, heavy: [2, 4], resist: [5, 7], colour: 0x9c7248, edge: 0x5d4028, note: 'LIGHT, AND ABOUT AS USEFUL AS THAT SOUNDS' },
+  { key: 'tactical', name: 'TACTICAL ARMOUR', def: 0.10, evade: 0.25, heavy: [2, 4], resist: [6, 8], colour: 0x3f4a3a, edge: 0x22281f, note: 'STOPS LITTLE. MUCH HARDER TO HIT' },
   { key: 'tin', name: 'TIN ARMOUR', def: 0.15, evade: 0, heavy: [3, 5], resist: [3, 5], colour: 0xb9c2c8, edge: 0x6d767c, note: 'CHEAP, LOUD, AND BETTER THAN A SHIRT' },
   { key: 'chain', name: 'CHAIN ARMOUR', def: 0.20, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8e9cad, edge: 0x4a5665, note: 'THE HONEST MIDDLE OF THE RACK' },
   { key: 'iron', name: 'IRON ARMOUR', def: 0.25, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x6f7682, edge: 0x3a4149, note: 'HEAVY, AND WORTH IT' },
@@ -1425,8 +1425,22 @@ function startStage(n: number): void {
   const c = newLayer();
 
   c.add(S().add.rectangle(0, 18, GAME_W, 162, 0x241b13).setOrigin(0, 0));
-  c.add(text(S(), 6, 22, `CHEST ${n + 1} OF 4`, PALETTE.ash));
-  c.add(centerText(S(), GAME_W / 2, 27, SLOT_NAME[slot], PALETTE.gold, 16));
+  const counter = text(S(), 6, 22, `CHEST ${n + 1} OF 4`, PALETTE.ash);
+  c.add(counter);
+  // ---- THE STAGE TITLE, SHRUNK UNTIL IT CLEARS THE COUNTER.
+  //
+  // It is centred on the screen while the counter is pinned to the left, so a
+  // long enough name grows out over the top of it: LOWER BODY ARMOUR at size
+  // sixteen is seventeen characters and ran straight through CHEST 4 OF 4.
+  // Measuring beats counting characters -- the title is laid out, measured,
+  // and stepped down a size at a time until its left edge is past the
+  // counter's right edge, so any name added later fits by construction.
+  const title = centerText(S(), GAME_W / 2, 28, SLOT_NAME[slot], PALETTE.gold, 16);
+  const clear = counter.x + counter.width + 6;
+  for (let size = 16; size > 8 && GAME_W / 2 - title.width / 2 < clear; size -= 2) {
+    title.setFontSize(size - 2);
+  }
+  c.add(title);
   c.add(S().add.rectangle(GAME_W / 2, 38, 240, 3, PALETTE.slate));
   timerBar = S().add.rectangle(GAME_W / 2 - 120, 38, 240, 3, PALETTE.ember).setOrigin(0, 0.5);
   c.add(timerBar);
@@ -1566,12 +1580,35 @@ function showSealed(): void {
 }
 
 /**
- * What was in the chest, once it is open.
+ * THE CARD, AND THE EDGE OF IT.
  *
- * The four rolled numbers get a bar each rather than a decimal, because
- * "POWER 7" against "POWER 4" is a thing you can see across a room and
- * "POWER 7.0" is a thing you have to read.
+ * The panel starts at x=70 and runs to x=315; the text inside it starts at 75.
+ * That is 240 pixels of glass, and the font walks a shade under six to the
+ * character, so a line has about forty in it before it is through the border
+ * and out of the machine.  The tuxedo's note was forty-eight characters and
+ * left the screen entirely.
+ *
+ * Rather than counting every string by hand and hoping nobody adds a longer
+ * one, anything free-form goes through `wrapTo`, and a DEV check shouts if a
+ * finished line is still too wide.
  */
+const CARD_COLS = 38;
+
+/** Break a sentence on its spaces to fit `cols`, in at most `rows` lines. */
+export function wrapTo(str: string, cols = CARD_COLS, rows = 2): string[] {
+  const out: string[] = [];
+  let line = '';
+  for (const word of str.split(' ')) {
+    const next = line ? `${line} ${word}` : word;
+    if (next.length <= cols) { line = next; continue; }
+    if (line) out.push(line);
+    line = word;
+    if (out.length >= rows) break;
+  }
+  if (line && out.length < rows) out.push(line);
+  return out.slice(0, rows);
+}
+
 function showCard(p: Piece | undefined): void {
   if (!p) return;
   const bar = (n: number): string => '#'.repeat(n) + '.'.repeat(10 - n);
@@ -1585,41 +1622,43 @@ function showCard(p: Piece | undefined): void {
       `REACH     ${bar(p.rReach)} ${p.rReach}`,
       `HEAVINESS ${bar(p.rHeavy)} ${p.rHeavy}`,
       `RESIST    ${bar(p.rResist)} ${p.rResist}`,
-      WEAPON_NOTE[w.key] ?? '',
-      '',
+      ...wrapTo(WEAPON_NOTE[w.key] ?? ''),
     );
   } else {
     const m = p.mat!;
     panelChip?.setFillStyle(m.colour);
     lines.push(
       p.name,
-      `DEFENCE   ${(m.def * 100) | 0}% OF A FULL SUIT` + (m.evade > 0 ? `, ${(m.evade * 100) | 0}% AVOID` : ''),
+      `DEFENCE   ${(m.def * 100) | 0}% OF A SUIT` + (m.evade > 0 ? `, ${(m.evade * 100) | 0}% AVOID` : ''),
       `HEAVINESS ${bar(p.rHeavy)} ${p.rHeavy}`,
       `RESIST    ${bar(p.rResist)} ${p.rResist}`,
       '',
-      m.note,
-      '',
+      ...wrapTo(m.note),
     );
+  }
+  if (import.meta.env?.DEV) {
+    lines.forEach((l, i) => {
+      if (l.length > CARD_COLS) console.warn(`[mash] card line ${i} is ${l.length} characters and the card holds ${CARD_COLS}: "${l}"`);
+    });
   }
   panelText.forEach((t, i) => t.setText(lines[i] ?? '').setTint(i === 0 ? PALETTE.gold : i >= 5 ? PALETTE.ash : PALETTE.cream));
 }
 
-/** What each weapon does, in one line, because the numbers do not say it. */
 const WEAPON_NOTE: Record<string, string> = {
   none: 'AN EMPTY BOX. HE FIGHTS WITH HIS HANDS',
-  knuckles: 'NO REACH WHATEVER, AND IT NEVER STOPS',
+  knuckles: 'NO REACH AT ALL, AND IT NEVER STOPS',
   dagger: 'FAST, AND ONLY WORKS UP CLOSE',
   knife: 'FAST, AND ONLY WORKS UP CLOSE',
-  nunchuck: 'A BLUR. TWO STRIKES A SWING, NEITHER HEAVY',
+  nunchuck: 'A BLUR. TWO STRIKES A SWING',
   dual: 'TWO STRIKES A SWING, LIGHTER EACH',
-  sword: 'BALANCED. GOOD AT NOTHING, BAD AT NOTHING',
-  katana: 'BALANCED, WITH A LITTLE MORE REACH',
+  sword: 'GOOD AT NOTHING, BAD AT NOTHING',
+  katana: 'BALANCED, WITH MORE REACH',
   shield: 'TURNS BLOWS ASIDE WHILE IT IS HELD',
-  staff: 'KEEPS ITS DISTANCE AND NEVER LETS YOU IN',
+  staff: 'KEEPS ITS DISTANCE AND KEEPS YOU OUT',
   axe: 'SLOW AND ENORMOUS',
-  flail: 'LONG, HEAVY, AND SLOW TO COME ROUND',
+  flail: 'LONG, HEAVY, SLOW TO COME ROUND',
   scythe: 'LONG REACH AND A BIG HIT, BUT SLOW',
-  goldsword: 'THE HARDEST HIT IN THE GAME, AND THE SLOWEST',
+  goldsword: 'THE HARDEST HIT HERE, AND THE SLOWEST',
 };
 
 function take(i: number): void {
@@ -1662,8 +1701,11 @@ function take(i: number): void {
   S().time.delayedCall(320, () => {
     if (phase !== 'reveal') return;
     revealHint?.setText('');
-    buttons.push(button(S(), GAME_W / 2, 171, stage + 1 < ORDER.length ? 'NEXT' : 'TO THE COLOSSEUM', nextStage, {
-      width: stage + 1 < ORDER.length ? 62 : 128, height: 14, fill: PALETTE.tealDark,
+    // 168, not 171.  At 171 a fourteen-high button ran to 178 of 180 and sat
+    // on the bezel; at 168 it clears the opened chest above it and still has
+    // room below.
+    buttons.push(button(S(), GAME_W / 2, 168, stage + 1 < ORDER.length ? 'NEXT' : 'TO THE COLOSSEUM', nextStage, {
+      width: stage + 1 < ORDER.length ? 62 : 128, height: 13, fill: PALETTE.tealDark,
     }));
   });
 }
@@ -1730,12 +1772,19 @@ function showSummary(): void {
     c.add(text(S(), px + 7, 45 + i * 13, k, PALETTE.ash));
     c.add(text(S(), GAME_W - 13, 45 + i * 13, v, col).setOrigin(1, 0));
   });
-  c.add(centerText(S(), GAME_W / 2, 140, `${kit.head.name}  -  ${kit.body.name}  -  ${kit.legs.name}`, PALETTE.ash));
+  // The three pieces by MATERIAL only.  Spelling each one out in full came to
+  // "TUXEDO HELM - LEATHER ARMOUR CUIRASS - NO GREAVES", which is forty-nine
+  // characters on a line that holds about fifty-three and was centred, so it
+  // ran off both edges at once.  The slot is obvious from the order.
+  const worn = (['head', 'body', 'legs'] as const)
+    .map((sl) => (kit[sl].mat!.key === 'none' ? 'NONE' : kit[sl].mat!.name.replace(' ARMOUR', '')))
+    .join('  /  ');
+  c.add(centerText(S(), GAME_W / 2, 143, worn, PALETTE.ash));
   // The last decision the player made was the fourth chest.  This is a sheet
   // to read, not a thing to answer, so it goes on its own -- the button only
   // skips the wait for anyone who has finished reading.  `showEntry` guards on
   // the phase, so the click and the timer cannot both fire it.
-  buttons.push(button(S(), GAME_W / 2, 160, 'TO THE COLOSSEUM', showEntry, { width: 140, height: 15, fill: PALETTE.blood }));
+  buttons.push(button(S(), GAME_W / 2, 161, 'TO THE COLOSSEUM', showEntry, { width: 140, height: 14, fill: PALETTE.blood }));
   S().time.delayedCall(SUMMARY_MS, showEntry);
 }
 
@@ -2172,7 +2221,7 @@ export const frogsterMash: MinigameModule = {
           if (f && Number.isFinite(f.dur)) f.dur = 1;
         },
         /** The rules and the headless simulator, so a build can be checked. */
-        rules: { WEAPONS, MATERIALS, UNARMED, QUALITY_MUL, statsOf, makeFighter, resolveStrike, tick, think, simulate, randomKit, offerFor, makeWeapon, makeArmour, breakWeapon },
+        rules: { WEAPONS, MATERIALS, UNARMED, QUALITY_MUL, statsOf, makeFighter, resolveStrike, tick, think, exchange, simulate, randomKit, offerFor, makeWeapon, makeArmour, breakWeapon, durabilityOf, wrapTo, WEAPON_NOTE, CARD_COLS, BASE },
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__mash;
