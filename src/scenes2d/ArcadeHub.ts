@@ -9,7 +9,7 @@
 
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
-import { audio, SILENCE } from '../core/audio';
+import { audio, type SfxName } from '../core/audio';
 import { store, type GameId } from '../core/state';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
@@ -101,6 +101,24 @@ const GLOW_ON_COUNTER = COUNTER_DEPTH + 0.001;
 const POST_RANGE = 22;
 /** What the key is worth to the arcade, in cash, once. */
 const KEY_REWARD = 500;
+
+/**
+ * What comes out of the dead air, and when.
+ *
+ * Static runs underneath the whole eight seconds; these are the things on top
+ * of it that are not static.  Two breaths of hiss, and three screams from a
+ * long way off -- left, right, and then one nearly in front, each quieter than
+ * the last, none of them loud enough to be sure of.  They are spread wide on
+ * purpose: a noise every second is a soundtrack, and a noise every two or
+ * three is something happening somewhere you cannot see.
+ */
+const APP_NOISE: { at: number; name: SfxName; vol: number; pan?: number }[] = [
+  { at: 300, name: 'poison_hiss', vol: 0.2 },
+  { at: 2100, name: 'distant_scream', vol: 0.9, pan: -0.55 },
+  { at: 4200, name: 'poison_hiss', vol: 0.16 },
+  { at: 5600, name: 'distant_scream', vol: 0.78, pan: 0.6 },
+  { at: 7100, name: 'distant_scream', vol: 0.62, pan: -0.15 },
+];
 
 export class ArcadeHub extends Phaser.Scene {
   private player!: Player;
@@ -663,7 +681,12 @@ export class ArcadeHub extends Phaser.Scene {
     // ---- AND THE MUSIC STOPS.  Not fades: stops.  The room has had a tune
     // and a crowd under it since the player walked in, and the whole of this
     // is that both of them are suddenly not there.
-    audio.setScene(SILENCE);
+    //
+    // What replaces them is not silence but DEAD AIR: a band of static that
+    // breathes, with nothing on it.  Silence is a room with the sound off;
+    // static is a room with the sound on and nothing in it, which is worse,
+    // and it is what the screams in `APP_NOISE` come out of.
+    audio.setScene({ ambience: ['dead_air'] });
     audio.sfx('eerie_swell', 0.5);
   }
 
@@ -671,16 +694,23 @@ export class ArcadeHub extends Phaser.Scene {
     if (this.apparition === 'off') return;
     this.appT += delta;
 
-    // ---- THE TIMINGS.  Two seconds of him, and then a blink.
+    // ---- THE TIMINGS.  Eight seconds of him, and then a blink.
     //
-    // Two is long enough to register a face and nowhere near long enough to
-    // study it: he is there, he is looking at you, and he is gone.  A close-up
-    // does not need eight -- it needs the player to not quite believe what
-    // they saw.
-    const STARE = 2000;
-    const SHUT = 170;
-    const BLACK = 120;
-    const OPEN = 240;
+    // Long past the point where a face stops being a surprise and starts
+    // being a stand-off.  You have registered him, you have looked away and
+    // back, you have waited for it to end, and it has not -- and he has not
+    // moved for any of it.  Then the blink, and he was never there.
+    const STARE = 8000;
+    // A BLINK, at the speed a blink happens.  It used to take better than
+    // half a second end to end, which is a wince -- long enough to watch the
+    // lids travel and to understand that the picture is being taken away from
+    // you.  A real one is a fifth of that and you do not experience it at all:
+    // the point is that he goes while your eyes are shut, and the less of the
+    // shutting there is to notice, the more it is the frame either side of it
+    // that you are comparing.
+    const SHUT = 80;
+    const BLACK = 55;
+    const OPEN = 115;
     const t = this.appT;
     const gone = t > STARE + SHUT + BLACK * 0.5;
 
@@ -690,11 +720,13 @@ export class ArcadeHub extends Phaser.Scene {
     else if (t > STARE + SHUT) lid = 1;
     else if (t > STARE) lid = (t - STARE) / SHUT;
 
-    // Two breaths of static across the eight seconds, so the silence has
-    // something wrong with it rather than being merely quiet.
-    if (this.appHiss < 2 && t > 250 + this.appHiss * 900) {
+    // Hiss and screaming, off the schedule above.  `behind` is the lowpass
+    // that distance puts on everything: it is what makes a scream something
+    // heard through a building rather than something in the room.
+    while (this.appHiss < APP_NOISE.length && t > APP_NOISE[this.appHiss].at) {
+      const n = APP_NOISE[this.appHiss];
       this.appHiss++;
-      audio.sfx('poison_hiss', 0.22);
+      audio.sfx(n.name, n.vol, n.pan === undefined ? undefined : { behind: 0.92, pan: n.pan });
     }
 
     froggyLayer.paint((ctx) => this.paintApparition(ctx, t, lid, gone));
@@ -722,65 +754,26 @@ export class ArcadeHub extends Phaser.Scene {
    * pointed straight out of it, and the rest of him running off all four
    * edges.
    *
-   * The arcade is still behind him, and still this arcade: the purple wall and
-   * its strip light, the grey floor, a cabinet either side at the spacing the
-   * room's own are at, and the doorway he is stood in.  It is dark and it is
-   * out past the edges of his head, which is exactly as much of it as a face
-   * this close leaves room for -- the player recognises where they are without
-   * ever looking away from him.
+   * AND NOTHING ELSE AT ALL.  Behind him used to be this arcade, darkened --
+   * the purple wall and its strip light, the grey floor, a cabinet either
+   * side, the doorway he was stood in.  Every one of those is something for
+   * the eye to read on its way to him, and on the way back out again.  There
+   * is nothing to read now: one flat grey, edge to edge, with no light in it,
+   * no depth to it and nowhere for it to be.  He is not somewhere.  He is
+   * just there.
+   *
+   * IN BLACK AND WHITE.  The colour comes out in one pass over the finished
+   * picture rather than out of the drawing, so Froggy's greens and golds come
+   * through as the tones they always were: the same face with the colour
+   * taken off it, not a different face drawn in grey.
    */
   private paintApparition(ctx: CanvasRenderingContext2D, t: number, lid: number, gone: boolean): void {
-    const FLOOR = 122;
-    // ---- the wall, and the light along the top of it.
-    ctx.fillStyle = '#5c2a86';
-    ctx.fillRect(0, 0, GAME_W, FLOOR);
-    ctx.fillStyle = '#4a2170';
-    ctx.fillRect(0, 0, GAME_W, 10);
-    ctx.fillStyle = 'rgba(255,79,163,0.5)';
-    ctx.fillRect(0, 10, GAME_W, 2);
-    // ---- the floor.
-    ctx.fillStyle = '#b9bfcb';
-    ctx.fillRect(0, FLOOR, GAME_W, GAME_H - FLOOR);
-    ctx.fillStyle = 'rgba(60,64,78,0.35)';
-    ctx.fillRect(0, FLOOR, GAME_W, 2);
-
-    // ---- the doorway he is standing in, and what is behind him.
-    const dw = 74;
-    const dx = GAME_W / 2 - dw / 2;
-    ctx.fillStyle = '#dfe8ee';
-    ctx.fillRect(dx, 34, dw, FLOOR - 34);
-    ctx.fillStyle = '#2a2140';
-    ctx.fillRect(dx + 10, 58, dw - 20, FLOOR - 58);
-    ctx.fillStyle = '#8a8f9c';
-    ctx.fillRect(GAME_W / 2 - 1, 34, 2, 26);
-
-    // ---- a cabinet either side, at the spacing the room's own are at.
-    const cab = (x: number, hue: string, lit: string): void => {
-      ctx.fillStyle = '#6b4a2f';
-      ctx.fillRect(x, 44, 34, 8);
-      ctx.fillStyle = hue;
-      ctx.fillRect(x, 52, 34, 26);
-      ctx.fillStyle = '#242c38';
-      ctx.fillRect(x + 4, 56, 26, 18);
-      ctx.fillStyle = lit;
-      ctx.fillRect(x, 78, 34, 8);
-      ctx.fillStyle = '#3a4250';
-      ctx.fillRect(x, 86, 34, FLOOR - 86);
-    };
-    cab(20, '#c08a52', '#6b4a2f');
-    cab(GAME_W - 54, '#a8c23f', '#46a83f');
-
-    // ---- the room goes down, because it is not what anybody is looking at.
-    ctx.fillStyle = 'rgba(4,2,10,0.45)';
+    // ---- the background: one flat grey, and not one other thing.
+    ctx.fillStyle = '#5b5b5b';
     ctx.fillRect(0, 0, GAME_W, GAME_H);
 
     // ---- HIM.  Right up against the glass, filling it.
     if (!gone) {
-      const glow = ctx.createRadialGradient(GAME_W / 2, 70, 10, GAME_W / 2, 70, 150);
-      glow.addColorStop(0, 'rgba(150,220,180,0.20)');
-      glow.addColorStop(1, 'rgba(150,220,180,0)');
-      ctx.fillStyle = glow;
-      ctx.fillRect(0, 0, GAME_W, GAME_H);
       drawFroggy(ctx, {
         x: GAME_W / 2,
         // Anchored between the eyes rather than at the feet: what has to be in
@@ -794,6 +787,22 @@ export class ArcadeHub extends Phaser.Scene {
         bounce: 0,
       });
     }
+
+    // ---- AND THE COLOUR COMES OUT OF ALL OF IT.
+    //
+    // One composite pass over the finished picture: `saturation` takes the
+    // saturation of what is painted over it, which is none, and keeps the
+    // luma underneath -- so every tone survives and every hue goes, and the
+    // drawing below never has to know.  This was a `grayscale()` filter on
+    // the context to begin with, which does the same thing but runs on every
+    // path Froggy is made of, at device resolution, every frame, and cost the
+    // scene most of its frame rate: the eight seconds took the best part of a
+    // minute to play.
+    ctx.save();
+    ctx.globalCompositeOperation = 'saturation';
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 0, GAME_W, GAME_H);
+    ctx.restore();
 
     // ---- the static.  A scatter of light and dark, redrawn every frame, so
     // the picture is never quite the same picture twice.
@@ -812,15 +821,9 @@ export class ArcadeHub extends Phaser.Scene {
     ctx.fillRect(0, band - 40, GAME_W, 3);
     ctx.fillRect(0, GAME_H - band, GAME_W, 2);
 
-    // ---- the dark at the edges of it.
-    const v = ctx.createRadialGradient(
-      GAME_W / 2, GAME_H * 0.52, GAME_W * 0.18,
-      GAME_W / 2, GAME_H * 0.52, GAME_W * 0.66,
-    );
-    v.addColorStop(0, 'rgba(0,0,0,0)');
-    v.addColorStop(1, 'rgba(0,0,0,0.72)');
-    ctx.fillStyle = v;
-    ctx.fillRect(0, 0, GAME_W, GAME_H);
+    // The vignette that used to sit here is gone with the room: a grey that
+    // goes dark at the corners has a shape and a light source, and the whole
+    // point of this one is that it has neither.
 
     // ---- the blink itself, from the top and the bottom at once.
     if (lid > 0) {
