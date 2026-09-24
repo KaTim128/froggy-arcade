@@ -263,6 +263,16 @@ export interface Fighter {
   stun: number;
   /** Walk cycle, so the legs move when it does. */
   step: number;
+  /**
+   * DRAWING ONLY, ALL THREE.  The eased arm and lean angles, so a swing is a
+   * movement instead of two still frames, and the knock-back shove, so a blow
+   * that lands moves the body it landed on.  None of it is ever read by the
+   * rules: `shove` in particular is added at draw time and never to `x`,
+   * because `x` is the fighting distance the balance was measured on.
+   */
+  armA: number;
+  leanA: number;
+  shove: number;
   art: FighterArt | null;
 }
 
@@ -271,7 +281,8 @@ export function makeFighter(who: 'frog' | 'lizard', kit: Kit, x: number, face: 1
   const st = statsOf(kit, w, kit.weapon.quality);
   return {
     who, kit, weapon: w, wq: kit.weapon.quality, broken: false, dur: w.dur, st,
-    hp: st.maxHp, x, face, act: 'walk', t: 0, cool: 0.4, swing: 0, stun: 0, step: 0, art: null,
+    hp: st.maxHp, x, face, act: 'walk', t: 0, cool: 0.4, swing: 0, stun: 0, step: 0,
+    armA: -10, leanA: 0, shove: 0, art: null,
   };
 }
 
@@ -313,8 +324,26 @@ const HURT_AT = 0.35;
  */
 const OVER_WIN_MS = 4200;
 const OVER_LOSE_MS = 3200;
+/** How much of the way to the target angle a limb travels each frame. */
+const ARM_SNAP = 0.62;
+const ARM_EASE = 0.3;
+/**
+ * The whole fight runs at this multiple of real time.
+ *
+ * Every duration in the rules is a number of seconds, so multiplying the step
+ * scales wind-up, recovery, cool-down, walking and stun by exactly the same
+ * amount.  Nothing changes rank against anything else and the headless
+ * simulator the balance was measured with is untouched -- it keeps its own
+ * fixed step.  All that moves is the clock on the wall: a median fight goes
+ * from about thirty-four seconds to about twenty-two.
+ */
+const PACE = 1.55;
+/** How fast a knock-back shove slides back to nothing, per second. */
+const SHOVE_DECAY = 7;
 /** Two fighters are never drawn closer than this, whatever the rules say. */
 const BODY_CLEAR = 26;
+/** How long an opened chest shows what was in it before the next five drop. */
+const REVEAL_MS = 1900;
 /** How long the kit sheet stays up before the walk-on starts by itself. */
 const SUMMARY_MS = 4200;
 /** Inside this share of its own reach, a weapon is being swung wrong, */
@@ -687,11 +716,14 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
  * and nothing here is allowed to feed back into it.
  */
 export function drawX(f: Fighter, other?: Fighter): number {
-  if (!other) return f.x;
-  const gap = Math.abs(f.x - other.x);
-  if (gap >= BODY_CLEAR) return f.x;
-  const mid = (f.x + other.x) / 2;
-  return mid + (f.x <= other.x ? -1 : 1) * (BODY_CLEAR / 2);
+  const base = (() => {
+    if (!other) return f.x;
+    const gap = Math.abs(f.x - other.x);
+    if (gap >= BODY_CLEAR) return f.x;
+    const mid = (f.x + other.x) / 2;
+    return mid + (f.x <= other.x ? -1 : 1) * (BODY_CLEAR / 2);
+  })();
+  return base + f.shove;
 }
 
 export function poseFighter(f: Fighter, other?: Fighter): void {
@@ -717,9 +749,19 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   else if (f.act === 'guard') { arm = -96; lean = -4; }
   else if (f.act === 'dodge') { arm = -30; lean = -16; }
   if (f.stun > 0) { arm = 24; lean = 12; }
-  a.arm.setAngle(arm);
-  a.torso.setAngle(lean);
-  a.cuirass.setAngle(lean);
+
+  // These were set straight onto the arm, so every act change was a cut: the
+  // arm was behind the head on one frame and through the other fighter on the
+  // next, and at four acts a second that reads as a stutter rather than as a
+  // swing.  Easing it fixes that, but easing it evenly makes the hit soft --
+  // so the strike goes nearly all the way in one frame and everything else
+  // settles.  Fast in, slow out, which is where the weight comes from.
+  const snap = f.act === 'strike' || f.act === 'windup' ? ARM_SNAP : ARM_EASE;
+  f.armA += (arm - f.armA) * snap;
+  f.leanA += (lean - f.leanA) * snap;
+  a.arm.setAngle(f.armA);
+  a.torso.setAngle(f.leanA);
+  a.cuirass.setAngle(f.leanA);
   a.head.y = -32 + (f.act === 'dodge' ? 4 : 0);
   a.helm.y = -38 + (f.act === 'dodge' ? 4 : 0);
 }
@@ -767,7 +809,7 @@ const CHEST_H = 34;
 const CHEST_Y = 144;
 const CHEST_X = [32, 96, 160, 224, 288];
 
-type Phase = 'title' | 'pick' | 'summary' | 'entry' | 'fight' | 'over';
+type Phase = 'title' | 'pick' | 'reveal' | 'summary' | 'entry' | 'fight' | 'over';
 
 let scene0: Phaser.Scene | null = null;
 let apiRef: MinigameApi | null = null;
@@ -782,6 +824,7 @@ let stage = 0;
 let offer: Piece[] = [];
 let picked: Partial<Kit> = {};
 let hi = 0;
+let revealHint: Phaser.GameObjects.BitmapText | null = null;
 let pickT = 0;
 let chests: Phaser.GameObjects.Container[] = [];
 let timerBar: Phaser.GameObjects.Rectangle | null = null;
@@ -824,7 +867,10 @@ function reset(): void {
   hpNum = { frog: null, lizard: null };
   kitLine = { frog: null, lizard: null };
   callOut = null;
+  revealHint = null;
   buttons = [];
+  // it holds shapes, and those shapes belong to a torn-down scene
+  flashFrom.clear();
 }
 
 function newLayer(): Phaser.GameObjects.Container {
@@ -835,6 +881,7 @@ function newLayer(): Phaser.GameObjects.Container {
   chests = [];
   panelText = [];
   crowd = [];
+  flashFrom.clear();
   return layer;
 }
 
@@ -936,12 +983,13 @@ function startStage(n: number): void {
   // in a row, which is the one moment in this game that says "loot".
   for (let i = 0; i < 5; i++) {
     const box = S().add.container(CHEST_X[i], -40);
-    const piece = offer[i];
     box.add(S().add.rectangle(0, 0, CHEST_W, CHEST_H, 0x6b4a2f).setStrokeStyle(1, PALETTE.gold));
     box.add(S().add.rectangle(0, -CHEST_H / 2 + 7, CHEST_W - 2, 12, 0x8a6138));
     box.add(S().add.rectangle(0, -CHEST_H / 2 + 13, CHEST_W, 2, 0x3f2a18));
     box.add(S().add.rectangle(0, 2, 8, 9, PALETTE.gold));
-    box.add(centerText(S(), 0, CHEST_H / 2 - 6, `Q${piece.quality}`, PALETTE.cream));
+    // No quality tag.  Five identical boxes is the point: a chest that
+    // advertises what grade it is has already been opened.
+    box.add(centerText(S(), 0, CHEST_H / 2 - 6, '?', PALETTE.gold));
     box.setSize(CHEST_W, CHEST_H).setInteractive({ useHandCursor: true });
     box.on('pointerdown', () => {
       if (phase !== 'pick') return;
@@ -959,7 +1007,9 @@ function startStage(n: number): void {
       onComplete: () => audio.sfx('item_thud', 0.3),
     });
   }
-  c.add(centerText(S(), GAME_W / 2, 171, '[<-] [->] INSPECT   [SPACE] OPEN IT', PALETTE.ash));
+  const hint = centerText(S(), GAME_W / 2, 171, '[<-] [->] CHOOSE   [SPACE] OPEN IT', PALETTE.ash);
+  revealHint = hint;
+  c.add(hint);
   highlight(0, true);
 }
 
@@ -994,7 +1044,31 @@ function highlight(i: number, quiet = false): void {
     b.setScale(k === i ? 1.08 : 1);
   });
   if (!quiet) audio.sfx('ui_hover', 0.4);
-  showCard(offer[i]);
+  showSealed();
+}
+
+/**
+ * What a chest tells you before it is opened, which is nothing.
+ *
+ * It used to print the whole card on the way past -- name, power, reach, the
+ * lot -- so the five boxes were really a menu with a lid drawn on it, and
+ * opening one only confirmed something already read.  A reveal has to happen
+ * at the moment of commitment or it is not a reveal.
+ */
+function showSealed(): void {
+  panelChip?.setFillStyle(PALETTE.slate);
+  // Short lines on purpose: the card is 235px of glass and the font walks six
+  // to the character, so anything past about thirty-four runs into the border.
+  const lines = [
+    'SEALED',
+    '',
+    `SOMETHING FOR THE ${SLOT_NAME[ORDER[stage]]}.`,
+    'WHAT IS IN IT IS NOT KNOWN',
+    'UNTIL IT IS OPEN, AND THEN',
+    'IT IS YOURS.',
+    '',
+  ];
+  panelText.forEach((t, i) => t.setText(lines[i] ?? '').setTint(i === 0 ? PALETTE.gold : PALETTE.ash));
 }
 
 /** Everything the chest is worth, spelled out before it is opened. */
@@ -1052,16 +1126,43 @@ function take(i: number): void {
   if (!piece) return;
   // ---- OPENED, AND THAT IS THAT.  There is no putting it back.
   picked[piece.slot] = piece;
+  // 'reveal' stops the clock and takes the chests out of the player's hands
+  // while the lid is up.  It is its own phase rather than the old borrowed
+  // 'title' because something now actually happens during it.
+  phase = 'reveal';
   audio.sfx('ui_blip', 0.6);
   audio.sfx('vault', 0.45);
-  const box = chests[i];
-  if (box) S().tweens.add({ targets: box, scaleX: 1.3, scaleY: 1.3, alpha: 0, duration: 260 });
-  redrawPreview();
-  phase = 'title'; // a holding state: nothing reads the chests while they swap
-  S().time.delayedCall(320, () => {
-    if (stage + 1 < ORDER.length) startStage(stage + 1);
-    else showSummary();
+
+  // the four not chosen drop away; the chosen one stays and opens
+  chests.forEach((b, k) => {
+    if (k === i) { return; }
+    S().tweens.add({ targets: b, alpha: 0, y: CHEST_Y + 8, duration: 200, ease: 'Quad.easeIn' });
   });
+  const box = chests[i];
+  if (box) {
+    // It stays on the floor and barely grows.  Lifting it and scaling it up
+    // put the open lid across the bottom of the card, over the one line that
+    // says what the weapon actually does -- so the reveal covered the reveal.
+    S().tweens.add({ targets: box, scaleX: 1.06, scaleY: 1.06, duration: 220, ease: 'Back.easeOut' });
+    const lid = box.list[1] as Phaser.GameObjects.Rectangle | undefined;
+    if (lid) S().tweens.add({ targets: lid, y: lid.y - 7, angle: -16, duration: 280, ease: 'Quad.easeOut' });
+    const tag = box.list[4] as Phaser.GameObjects.BitmapText | undefined;
+    tag?.setText('');
+  }
+
+  // ---- AND ONLY NOW DOES IT SAY WHAT IT WAS.
+  showCard(piece);
+  if (revealHint) revealHint.setText('[SPACE] CARRY ON').setTint(PALETTE.gold);
+  redrawPreview();
+  S().time.delayedCall(REVEAL_MS, nextStage);
+}
+
+/** Past the reveal: the next five boxes, or the kit sheet if that was four. */
+function nextStage(): void {
+  if (phase !== 'reveal') return;
+  phase = 'title'; // a holding state: nothing reads the chests while they swap
+  if (stage + 1 < ORDER.length) startStage(stage + 1);
+  else showSummary();
 }
 
 /** The clock ran out: open what is lit, or one at random if nothing is. */
@@ -1191,6 +1292,13 @@ function showBlow(f: Fighter, blow: Blow): void {
   audio.sfx(blow.dmg >= 12 ? 'boom' : blow.guarded ? 'fence_thunk' : 'whack', blow.dmg >= 12 ? 0.5 : 0.4);
   audio.sfx('item_thud', 0.3);
   f.stun = Math.min(0.28, blow.dmg / 60);
+
+  // ---- IT MOVES THE BODY IT LANDED ON.  A shove away from the swing, sized
+  // by the damage and capped so a heavy blow cannot fling anybody across the
+  // sand, and a white frame on the part that was hit.  Both are drawing only:
+  // `shove` is added at draw time and `x` never hears about it.
+  f.shove = -f.face * Math.min(7, 1.5 + blow.dmg * 0.34);
+  if (f.art) for (const part of [f.art.torso, f.art.head, f.art.cuirass, f.art.helm]) flashWhite(part);
   for (let i = 0; i < (blow.dmg >= 12 ? 6 : 3); i++) {
     const a = (i / 5) * Math.PI * 2 + Math.random();
     const bit = S().add.rectangle(x, FLOOR_Y - 22, 3, 3, blow.guarded ? PALETTE.steel : PALETTE.blood).setDepth(30);
@@ -1210,6 +1318,25 @@ function floating(x: number, str: string, colour: number): void {
 }
 
 /** A weapon gives out, in front of everybody. */
+/**
+ * One white frame on a piece of a fighter, and then its own colour back.
+ *
+ * The colour is read off the shape the first time it is asked to flash and
+ * kept until it is given back, because a second blow landing mid-flash would
+ * otherwise "restore" it to white for the rest of the fight.
+ */
+const flashFrom = new Map<Phaser.GameObjects.Shape, number>();
+function flashWhite(part: Phaser.GameObjects.Shape): void {
+  if (!flashFrom.has(part)) flashFrom.set(part, part.fillColor);
+  part.setFillStyle(PALETTE.cream);
+  S().time.delayedCall(70, () => {
+    const was = flashFrom.get(part);
+    if (was === undefined) return;
+    flashFrom.delete(part);
+    if (part.active) part.setFillStyle(was);
+  });
+}
+
 function showBreak(f: Fighter): void {
   audio.sfx('crumble', 0.7);
   audio.sfx('buzzer', 0.3);
@@ -1240,13 +1367,24 @@ function showBreak(f: Fighter): void {
  * the only thing that differs between them is the equipment they walked in
  * with.  There is no branch in here on who anybody is.
  */
-function stepFight(dt: number): void {
+function stepFight(real: number): void {
+  // ONE KNOB FOR THE WHOLE FIGHT.  See PACE: scaling the step scales every
+  // duration in the rules together, so the fight is quicker without any two
+  // things changing position relative to each other.
+  const dt = real * PACE;
   fightT += dt;
   for (const [a, b] of [[frog!, lizard!], [lizard!, frog!]] as const) {
     const blow = tick(a, b, dt);
     if (blow) {
       if (blow.broke) showBreak(a);
       showBlow(b, blow);
+    }
+  }
+  // the knock-back easing off, which is drawing and nothing else
+  for (const f of [frog!, lizard!]) {
+    if (f.shove !== 0) {
+      f.shove -= f.shove * Math.min(1, SHOVE_DECAY * real);
+      if (Math.abs(f.shove) < 0.05) f.shove = 0;
     }
   }
   poseFighter(frog!, lizard!);
@@ -1366,6 +1504,7 @@ export const frogsterMash: MinigameModule = {
     };
     const open = (): void => {
       if (phase === 'pick') take(hi);
+      else if (phase === 'reveal') nextStage();
     };
     kb?.on('keydown-LEFT', left);
     kb?.on('keydown-A', left);
@@ -1452,5 +1591,7 @@ function snap(f: Fighter): Record<string, unknown> {
     weapon: f.weapon.key, broken: f.broken, dur: Number.isFinite(f.dur) ? f.dur : -1,
     power: +f.st.power.toFixed(2), rate: +f.st.rate.toFixed(2), walk: +f.st.walk.toFixed(1),
     avoid: +f.st.avoid.toFixed(3), prot: +f.st.prot.toFixed(2), reach: f.st.reach, range: f.st.range,
+    // drawing state, exposed so a test can prove it never reaches `x`
+    shove: +f.shove.toFixed(2), drawX: Math.round(drawX(f, f.who === 'frog' ? lizard ?? undefined : frog ?? undefined)),
   };
 }
