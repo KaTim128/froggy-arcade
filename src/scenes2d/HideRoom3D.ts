@@ -326,6 +326,25 @@ const INSERT_UNTIL = 0.3;
  */
 const CHARGE_AT = 0.6;
 /**
+ * ---- HOW THE WAY OUT OPENS, ONCE THE NIGHT IS SURVIVED.
+ *
+ * Half a second for the chain to come off the handles, a beat, and a second
+ * and a half for the leaves to swing.  All of it inside the 4.2 seconds the
+ * ending runs for, with time left over to stand and look at an open door --
+ * which is the point of opening it.  Eighty-three degrees, not ninety: a door
+ * that stops square to its own frame reads as a diagram of a door.
+ */
+const LOCK_FALL_S = 0.55;
+const DOORS_WAIT_S = 0.3;
+const DOORS_OPEN_S = 1.5;
+// Fifty-four degrees, not eighty-three.  At eighty-three the leaves swing
+// clean out of a 72-degree view and the last shot of the night is a pale
+// rectangle in a hole, which reads as a wall.  At fifty-four they stand open
+// at the edges of the frame with their push bars still catching the light,
+// and what is being held is a pair of OPEN DOORS rather than an absence.
+const DOORS_ANGLE = 0.95;
+
+/**
  * How long the key takes to turn in the front doors.
  *
  * A TAP MUST NOT DO ANYTHING.  The whole shape of the ending is standing
@@ -726,6 +745,14 @@ export class HideRoom3D extends Phaser.Scene {
   private grabT = 0;
   /** The padlock's shackle, so it can come open when the key turns. */
   private shackle: THREE.Object3D | null = null;
+  /**
+   * The two leaves of the front doors and the chain across them, so the end of
+   * the night can open the one and drop the other.  See `openTheWayOut`.
+   */
+  private doorLeaves: { obj: THREE.Object3D; sign: number }[] = [];
+  private doorLock: THREE.Object3D | null = null;
+  /** The morning on the other side of them.  See `openTheWayOut`. */
+  private doorOutside: THREE.Object3D | null = null;
   /** True once the walk behind you has become a run.  Once only. */
   private charging = false;
   /** Whether the counter has been crossed at all, for the harness. */
@@ -825,6 +852,9 @@ export class HideRoom3D extends Phaser.Scene {
     this.keyFall = null;
     this.handProp = null;
     this.shackle = null;
+    this.doorLeaves = [];
+    this.doorLock = null;
+    this.doorOutside = null;
     this.grabbing = false;
     this.grabT = 0;
     this.dropT = 0;
@@ -1001,6 +1031,13 @@ export class HideRoom3D extends Phaser.Scene {
       doors.position.set(d.door.x, 0, doorZ);
       st.scene.add(doors);
       this.shackle = doors.getObjectByName('padlockShackle') ?? null;
+      const leafL = doors.getObjectByName('doorLeafL');
+      const leafR = doors.getObjectByName('doorLeafR');
+      this.doorLeaves = [];
+      if (leafL) this.doorLeaves.push({ obj: leafL, sign: -1 });
+      if (leafR) this.doorLeaves.push({ obj: leafR, sign: 1 });
+      this.doorLock = doors.getObjectByName('doorLock') ?? null;
+      this.doorOutside = doors.getObjectByName('doorOutside') ?? null;
       // AND THEY ARE SOLID.  The room's own clamp stops the player 0.6m short
       // of the wall plane, which is INSIDE a door that stands off it — so the
       // doors get a collider of their own and the player is held half a metre
@@ -1722,7 +1759,16 @@ export class HideRoom3D extends Phaser.Scene {
    * angle simply does not exist for ten seconds.
    */
   private holdOnDoor(): void {
-    if (!this.escaping) return;
+    // ---- AND IT IS STILL NOT THEIRS WHEN IT IS OVER.
+    //
+    // `survive` clears `escaping`, which handed the view straight back: the
+    // words came up, the player dragged the mouse, and the last thing they saw
+    // of the night was the empty room behind them.  The doors are what the
+    // ending is OF -- the lock coming off them and the pair of them opening on
+    // a street -- so the doors are what is being looked at until the scene
+    // ends, and there is no button that says otherwise.
+    const ending = this.mode === 'survived';
+    if (!this.escaping && !ending) return;
     const face = this.doorFacing();
     // ---- ONCE THE KEY IS BACK IN HIS HAND, THE VIEW IS NOT THE PLAYER'S.
     //
@@ -1731,7 +1777,7 @@ export class HideRoom3D extends Phaser.Scene {
     // because the whole of what is being built is a player listening to
     // something come up behind them that they are not allowed to look at, and
     // a few degrees of play is a few degrees of looking for it.
-    if (this.keyTaken) {
+    if (this.keyTaken || ending) {
       this.yaw = face;
       this.pitch = 0;
       return;
@@ -2278,6 +2324,11 @@ export class HideRoom3D extends Phaser.Scene {
       this.caughtT += dt;
     } else if (this.mode === 'survived') {
       this.endT += dt;
+      this.openTheWayOut();
+      // AND THE HEAD STAYS WHERE IT WAS PUT.  Every frame, not only on the
+      // frames a mouse moved: the arrow keys, a stray drag and anything else
+      // that could turn it all go through the same clamp.
+      this.holdOnDoor();
       if (this.isFinal && this.endT > 4.2) this.leaveTheNight();
     }
 
@@ -2504,7 +2555,7 @@ export class HideRoom3D extends Phaser.Scene {
     if (turn !== 0) this.yaw -= turn * TURN_RATE * dt;
     // The arrow keys are a second way of turning, and the door holds the head
     // whichever one is being used.
-    if (this.escaping) this.holdOnDoor();
+    if (this.escaping || this.mode === 'survived') this.holdOnDoor();
 
     if (this.hiding) {
       this.pos.set(this.hiding.x, this.hiding.z);
@@ -3494,7 +3545,16 @@ export class HideRoom3D extends Phaser.Scene {
       if (this.hiding) this.paintPeephole(ctx);
 
       if (this.mode === 'survived') {
-        ctx.fillStyle = `rgba(4,8,10,${Math.min(0.8, this.endT * 1.4)})`;
+        // ---- AND THE WASH STOPS SHORT OF BLACK ON THE LAST ONE.
+        //
+        // Four fifths was right while the ending was a held frame with words
+        // on it.  The ending is now a lock coming off and a pair of doors
+        // opening onto a street, and four fifths of black over that is the
+        // game describing something it has covered up.  Half, and you watch
+        // it happen.  The other four rooms keep the old number: there is
+        // nothing behind those words to see.
+        const wash = this.isFinal ? 0.5 : 0.8;
+        ctx.fillStyle = `rgba(4,8,10,${Math.min(wash, this.endT * 1.4)})`;
         ctx.fillRect(0, 0, GAME_W, GAME_H);
         // Downstairs it is a report on the round.  Out of the arcade it is a
         // verdict on the night, and it gets the bigger of the two.
@@ -3652,6 +3712,13 @@ export class HideRoom3D extends Phaser.Scene {
       yaw: this.yaw,
       pitch: this.pitch,
       doorFacing: this.doorFacing(),
+      /**
+       * The way out at the end of the night: 0 shut, 1 fully open, and whether
+       * the chain is still on the handles.  A harness has to be able to read
+       * "the doors are open" as a number rather than off a screenshot.
+       */
+      doorsOpen: this.doorLeaves.length ? Math.abs(this.doorLeaves[0].obj.rotation.y) / DOORS_ANGLE : 0,
+      lockOn: this.doorLock ? this.doorLock.visible : false,
       keyOnFloor: this.keyOnFloor,
       keyTaken: this.keyTaken,
       grabbing: this.grabbing,
@@ -3775,6 +3842,46 @@ export class HideRoom3D extends Phaser.Scene {
     store.flush();
     froggyLayer.clear();
     this.scene.start('ExteriorDay');
+  }
+
+  /**
+   * ---- THE LOCK COMES OFF AND THE DOORS COME OPEN.
+   *
+   * The night ended with "You have survived." written over a pair of doors
+   * that were still chained shut, which is the game saying one thing and
+   * showing the opposite.  It runs on `endT`, the scene's own clock, like
+   * everything else at this end of it.
+   *
+   * The chain goes first, because the chain is the reason: it drops off the
+   * handles, accelerating, and turns as it goes, and once it is on the floor
+   * it stops being drawn.  The shackle is already hanging open by then -- the
+   * key did that -- so what the player watches is a lock that was undone
+   * finally falling off.  Then both leaves swing out onto the street, eased
+   * out of the last of it so they settle rather than stop.
+   *
+   * There is no door here in the first four rooms; `doorLeaves` is empty and
+   * this does nothing.
+   */
+  private openTheWayOut(): void {
+    if (this.doorLock) {
+      const f = Phaser.Math.Clamp(this.endT / LOCK_FALL_S, 0, 1);
+      this.doorLock.position.y = -f * f * 1.2;
+      this.doorLock.rotation.z = f * 1.1;
+      this.doorLock.visible = f < 1;
+    }
+    const k = Phaser.Math.Clamp((this.endT - DOORS_WAIT_S) / DOORS_OPEN_S, 0, 1);
+    const a = DOORS_ANGLE * (1 - Math.pow(1 - k, 3));
+    for (const d of this.doorLeaves) d.obj.rotation.y = d.sign * a;
+    // ---- AND THE MORNING COMES UP IN THE GAP.
+    //
+    // It comes up WITH the swing rather than on its own timer, so the light is
+    // something the doors let in and not something that happens to be
+    // happening.  It stops short of white: the player is still in a dark room
+    // looking out of it, and a blown-out rectangle would be a title card.
+    for (const band of this.doorOutside?.children ?? []) {
+      const mat = (band as THREE.Mesh).material as THREE.MeshBasicMaterial;
+      mat.opacity = k * 0.86;
+    }
   }
 
   private survive(): void {

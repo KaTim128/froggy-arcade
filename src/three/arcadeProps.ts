@@ -515,31 +515,58 @@ export function buildGlassDoors(w: number, h: number): THREE.Group {
   // ---- the two leaves.  Each is a pane in a thin rail, and the pane is the
   // only transparent thing in the room: what is behind it is the street, and
   // the street is the reason this door is worth crossing a floor for.
+  //
+  // AND EACH ONE HANGS ON ITS OWN HINGE.  Every part of a leaf goes into a
+  // group standing at the outer jamb, so a scene that wants these open turns
+  // that group rather than moving eighteen boxes in step -- and the leaves are
+  // named, because reaching in for them by name is the only way anything ever
+  // opens them.  Positive Z is the street, so the left leaf swings on a
+  // negative rotation and the right on a positive one.
   for (const side of [-1, 1]) {
     const cx = side * (post / 2 + leaf / 2);
+    const hinge = new THREE.Group();
+    hinge.position.set(side * (w / 2 - post / 2), 0, 0);
+    hinge.name = side < 0 ? 'doorLeafL' : 'doorLeafR';
+    g.add(hinge);
+    // The leaf's own coordinates: the door's, less the hinge it hangs from.
+    const lx = cx - hinge.position.x;
+    const put = (mat: THREE.Material, sx: number, sy: number, sz: number, px: number, py: number, pz: number) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+      m.position.set(px, py, pz);
+      hinge.add(m);
+      return m;
+    };
     const glass = new THREE.Mesh(
       new THREE.BoxGeometry(leaf - 0.1, h - 0.5, 0.05),
       new THREE.MeshBasicMaterial({ color: 0x14202e, transparent: true, opacity: 0.55 }),
     );
-    glass.position.set(cx, h / 2, -0.02);
-    g.add(glass);
+    glass.position.set(lx, h / 2, -0.02);
+    hinge.add(glass);
     // rails top and bottom, and the kick plate every public door has
-    add(lam(0x5e6673), leaf, 0.14, 0.12, cx, h - 0.28, -0.04);
-    add(lam(0x5e6673), leaf, 0.12, 0.12, cx, h * 0.52, -0.04);
-    add(lam(0x4e555f), leaf, 0.42, 0.14, cx, 0.21, -0.05);
+    put(lam(0x5e6673), leaf, 0.14, 0.12, lx, h - 0.28, -0.04);
+    put(lam(0x5e6673), leaf, 0.12, 0.12, lx, h * 0.52, -0.04);
+    put(lam(0x4e555f), leaf, 0.42, 0.14, lx, 0.21, -0.05);
     // the push bar, on the room side, at the height a hand goes to
-    add(lit(0xb9b3a0), leaf * 0.72, 0.08, 0.08, cx, 1.02, -0.15);
+    put(lit(0xb9b3a0), leaf * 0.72, 0.08, 0.08, lx, 1.02, -0.15);
     for (const b of [-1, 1]) {
-      add(lam(0x8a8f97), 0.07, 0.07, 0.18, cx + b * leaf * 0.3, 1.02, -0.1);
+      put(lam(0x8a8f97), 0.07, 0.07, 0.18, lx + b * leaf * 0.3, 1.02, -0.1);
     }
     // a strip of faded lettering across the glass: OPEN, on a door that is not
-    add(lit(0xd9b45a), leaf * 0.5, 0.1, 0.02, cx, h * 0.72, -0.06);
+    put(lit(0xd9b45a), leaf * 0.5, 0.1, 0.02, lx, h * 0.72, -0.06);
   }
 
   // ---- THE LOCK.  A chain through both handles and a padlock on it.
   // Links nearly touching, alternating flat and on edge the way a chain does,
   // on a shallow sag between the two push bars.  Spaced out, it read as a row
   // of tiles stuck to the glass rather than as something holding a door shut.
+  //
+  // All of it in one group, because it comes off in one piece: it is the only
+  // thing holding these doors, and a night that ends with them open has to
+  // show it gone rather than assert it.  It stays a child of the DOOR, not of
+  // a leaf -- a chain through both handles belongs to neither.
+  const lock = new THREE.Group();
+  lock.name = 'doorLock';
+  g.add(lock);
   const chain = 15;
   const span = leaf * 0.86;
   for (let i = 0; i < chain; i++) {
@@ -551,10 +578,12 @@ export function buildGlassDoors(w: number, h: number): THREE.Group {
     );
     // slack: it hangs between the two bars rather than running straight
     link.position.set((t - 0.5) * span, 1.02 - Math.sin(t * Math.PI) * 0.14, -0.19);
-    g.add(link);
+    lock.add(link);
   }
-  const body = add(lit(0xc9a62e), 0.2, 0.26, 0.12, 0, 0.74, -0.21);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.26, 0.12), lit(0xc9a62e));
+  body.position.set(0, 0.74, -0.21);
   body.rotation.z = 0.18;
+  lock.add(body);
   const shackle = new THREE.Mesh(
     new THREE.TorusGeometry(0.09, 0.028, 6, 10, Math.PI),
     lit(0xd8d2bc),
@@ -563,7 +592,36 @@ export function buildGlassDoors(w: number, h: number): THREE.Group {
   shackle.rotation.z = 0.18;
   // Named so the room can find it and swing it open when the key turns.
   shackle.name = 'padlockShackle';
-  g.add(shackle);
+  lock.add(shackle);
+
+  // ---- AND THE STREET BEHIND ALL OF IT.
+  //
+  // Nothing was ever built out there, which did not matter while the doors
+  // were shut: what you saw through the glass was the glass.  Open them and
+  // the way out is a black rectangle, which is the one thing the end of this
+  // night must not be.  So there is a morning behind them -- a flat pale
+  // panel filling the opening, turned all the way down until a scene turns it
+  // up, and it is the same daylight the player walks out into.
+  //
+  // Two bands and a horizon rather than one flat fill: a single pale
+  // rectangle in a doorway is a card, and the player has to read this as
+  // somewhere to walk out into.  Sky above the line, wet road below it, and
+  // the line itself a little under eye height.
+  const outside = new THREE.Group();
+  outside.name = 'doorOutside';
+  const horizon = h * 0.42;
+  for (const [colour, top, bottom] of [
+    [0xc2d4dc, h - 0.1, horizon],
+    [0x6d7480, horizon, 0.05],
+  ] as const) {
+    const band = new THREE.Mesh(
+      new THREE.PlaneGeometry(w - post * 2, top - bottom),
+      new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0, side: THREE.DoubleSide }),
+    );
+    band.position.set(0, (top + bottom) / 2, 0.14);
+    outside.add(band);
+  }
+  g.add(outside);
 
   return g;
 }

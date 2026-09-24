@@ -94,12 +94,24 @@ const PLAYER_BOX = { headW: 10, headTop: 28, headH: 20, torsoW: 12, torsoH: 12 }
  * and the box follows, at the top of his breath so it does not shrink and grow
  * under the player twice a second.
  */
+/**
+ * AND A FEW PIXELS OF DAYLIGHT AROUND IT.
+ *
+ * Edge to edge is not far enough apart.  A box that stops the player the frame
+ * the two silhouettes would touch leaves a head resting against his chin with
+ * nothing at all between them, and on a screen three hundred and twenty pixels
+ * across what that reads as is a player standing INSIDE him -- he is on the
+ * overlay, above everything, so the two are one shape and there is no gap to
+ * say otherwise.  Six pixels in front of him and four either side is a gap you
+ * can see at this size.
+ */
+const FROG_CLEAR = { front: 6, side: 4 };
 const FROG_SCALE = (FROG_POST.height / FROGGY_DESIGN.h) * FROGGY_DESIGN.breath;
 const FROG_BODY = {
-  left: FROG_POST.x - FROGGY_DESIGN.halfW * FROG_SCALE,
-  right: FROG_POST.x + FROGGY_DESIGN.halfW * FROG_SCALE,
+  left: FROG_POST.x - FROGGY_DESIGN.halfW * FROG_SCALE - FROG_CLEAR.side,
+  right: FROG_POST.x + FROGGY_DESIGN.halfW * FROG_SCALE + FROG_CLEAR.side,
   top: FROG_POST.y + (FROGGY_DESIGN.top - FROGGY_DESIGN.feet - FROGGY_DESIGN.lift) * FROG_SCALE,
-  bottom: COUNTER.y + 2,
+  bottom: COUNTER.y + 2 + FROG_CLEAR.front,
 };
 const STAFF_DEPTH = COUNTER_DEPTH - 0.01;
 /**
@@ -1201,7 +1213,15 @@ export class ArcadeHub extends Phaser.Scene {
       return { kind: 'change' };
     }
     if (Phaser.Math.Distance.Between(px, py, BELL.x, BELL.y) < INTERACT_RANGE) return { kind: 'bell' };
-    if (py < COUNTER.y + 34 && px > COUNTER.x && px < COUNTER.x + COUNTER.w) {
+    // ---- HOW FAR OUT THE COUNTER STILL ANSWERS.
+    //
+    // Thirty-four was the depth of a customer stood at the glass, and the frog
+    // now holds them six pixels further back than that: at thirty-four the
+    // prompt went out exactly where the room stops you, which is the one place
+    // it has to be up.  Forty-four is past everywhere you are allowed to stand
+    // in front of it and still nowhere near the machines, which are eighty
+    // pixels further down the room and answer first anyway.
+    if (py < COUNTER.y + 44 && px > COUNTER.x && px < COUNTER.x + COUNTER.w) {
       // The right-hand end of the counter is a PERSON, not a shelf: stood
       // there you are talking to whoever is on it, and anywhere else along it
       // you are looking at the prizes.  Only once there is somebody to talk
