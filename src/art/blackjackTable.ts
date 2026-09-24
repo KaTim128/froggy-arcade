@@ -47,29 +47,46 @@ export class BlackjackTable {
     // the dealer's arc, painted on the felt
     scene.add.ellipse(x, y - 20, TABLE_W - 26, TABLE_H - 16, FELT_DARK).setDepth(d).setAlpha(0.7);
 
-    // ---- two cards face up, and the shoe they came out of
-    for (const [cx, ang] of [
-      [x - 6, -12],
-      [x + 5, 9],
-    ] as const) {
+    // ---- WHOSE HALF IS WHOSE, READ OFF THE FELT.
+    //
+    // All of it used to sit on the centre line: two cards and three stacks of
+    // chips in the middle of the green, directly under the dealer's hands,
+    // which made every object on the table HIS.  A blackjack table is two
+    // halves and has to look like two halves -- the dealer's cards up on his
+    // arc at the back, the player's cards and the player's bet down at the
+    // near edge, with the width of the felt between them.  That is the shape
+    // of the game, and it is legible from the doorway.
+    const card = (cx: number, cy: number, ang: number): void => {
       scene.add
-        .rectangle(cx, y - 14, 6, 8, PALETTE.cream)
+        .rectangle(cx, cy, 6, 8, PALETTE.cream)
         .setDepth(d)
         .setAngle(ang)
         .setStrokeStyle(1, PALETTE.ink);
-    }
-    scene.add.rectangle(x + 27, y - 18, 9, 6, PALETTE.slate).setDepth(d);
-    scene.add.rectangle(x + 27, y - 20, 9, 2, PALETTE.steel).setDepth(d);
+    };
 
-    // ---- chip stacks.  The point of the table: they are not all the same size.
+    // the dealer's pair, on his arc, and the shoe on his right where his hand
+    // falls -- the two things on the table that are not the player's
+    card(x - 5, y - 19, -10);
+    card(x + 6, y - 18, 8);
+    scene.add.rectangle(x + 27, y - 21, 9, 6, PALETTE.slate).setDepth(d);
+    scene.add.rectangle(x + 27, y - 23, 9, 2, PALETTE.steel).setDepth(d);
+
+    // the player's pair, at the near edge, lying the way cards lie when they
+    // are held from this side
+    card(x + 8, y - 10, -14);
+    card(x + 18, y - 10, 12);
+
+    // the player's bet, in the betting spot: near edge, and off to the left so
+    // that a player stood at the middle of the table never covers their own
+    // money.  Not all the same size -- that is the point of the stacks.
     const stacks: [number, number, number][] = [
-      [x - 28, 3, PALETTE.neon],
-      [x - 22, 2, PALETTE.cream],
-      [x - 16, 4, PALETTE.gold],
+      [x - 20, 3, PALETTE.neon],
+      [x - 14, 2, PALETTE.cream],
+      [x - 8, 4, PALETTE.gold],
     ];
     for (const [sx, n, col] of stacks) {
       for (let i = 0; i < n; i++) {
-        scene.add.ellipse(sx, y - 14 - i * 2, 6, 3, col).setDepth(d + 0.0001 * i);
+        scene.add.ellipse(sx, y - 9 - i * 2, 6, 3, col).setDepth(d + 0.0001 * i);
       }
     }
 
@@ -87,12 +104,28 @@ export class BlackjackTable {
     // and arms coming forward to the felt.  The dealer sits BETWEEN the
     // bolsters, which is what makes him look sat in it rather than stood in
     // front of it.
-    chairAt(scene, x, y - 30, d - 0.002);
+    //
+    // It sits three pixels further back than it did, on the same line the
+    // dealer is now cut at, so that he is framed by it rather than leaning out
+    // of it.
+    chairAt(scene, x, y - 27, d - 0.002);
 
-    // ---- stools on the player's side
-    for (const sx of [x - 26, x + 26]) {
-      scene.add.ellipse(sx, y + 10, 12, 6, PALETTE.rust).setDepth(d + 0.001);
-      scene.add.rectangle(sx, y + 13, 2, 4, PALETTE.steel).setOrigin(0.5, 0).setDepth(d + 0.001);
+    // ---- THE PLAYER'S CHAIR, pulled up to the near edge.
+    //
+    // The same house chair, at the only seat that faces the dealer, which is
+    // why you are looking at the back of it.  It stands IN FRONT of where the
+    // player stands and BEHIND them in the sort order -- the room draws a
+    // person at fifty-something and every stick of this furniture in the low
+    // hundredths -- so the player's body is always the thing in front and the
+    // chair is always the thing around it.  A chair that covered the player
+    // would be a chair in the way.
+    chairAt(scene, x, y + 26, d + 0.002, 0.72);
+
+    // ---- stools for whoever else is playing, pushed out past the chair's
+    // arms so the near edge belongs to the one seat that matters
+    for (const sx of [x - 38, x + 38]) {
+      scene.add.ellipse(sx, y + 14, 12, 6, PALETTE.rust).setDepth(d + 0.001);
+      scene.add.rectangle(sx, y + 17, 2, 4, PALETTE.steel).setOrigin(0.5, 0).setDepth(d + 0.001);
     }
 
     // ---- sign on the back wall.  It hangs clear above the dealer's head:
@@ -121,13 +154,18 @@ export class BlackjackTable {
   }
 
   /**
-   * Where Froggy sits: the far edge of the felt.
+   * Where the dealer sits: the BACK RAIL of the felt.
    *
    * The room clips him at this line and draws him below it, so the table cuts
-   * across him the way it would across anyone sat at it.
+   * across him the way it would across anyone sat at it.  It used to be five
+   * pixels nearer, inside the green, and those five pixels were the whole
+   * problem -- his chest and both hands came down ON the felt and he read as a
+   * man leaning across the table rather than sitting behind one.  At the rail
+   * the entire top is in front of him: the player looks at a table with a
+   * dealer behind it, which is what a blackjack table is.
    */
   dealerSpot(): { x: number; y: number } {
-    return { x: this.def.x, y: this.def.y - 22 };
+    return { x: this.def.x, y: this.def.y - 27 };
   }
 
   /** PRD §6.8: greys out when the player cannot even make the minimum. */
@@ -138,8 +176,16 @@ export class BlackjackTable {
     this.badgeText.setTint(v ? PALETTE.gold : PALETTE.ash);
   }
 
+  /**
+   * Measured from the NEAR EDGE, not the middle of the felt.
+   *
+   * You play this table from in front of it, and the front is where the table
+   * now makes you stand -- so a range measured from the centre of the green
+   * was measuring from somewhere nobody is allowed to be, and the prompt went
+   * out exactly when the player arrived at the chair.
+   */
   distanceTo(x: number, y: number): number {
-    return Phaser.Math.Distance.Between(this.def.x, this.def.y - 6, x, y);
+    return Phaser.Math.Distance.Between(this.def.x, this.def.y + 8, x, y);
   }
 }
 
@@ -155,7 +201,13 @@ const CHAIR = {
 };
 
 /**
- * One dealer's chair, drawn from the floor up with `by` as the seat line.
+ * One house chair, drawn from the floor up with `by` as the seat line and `s`
+ * as its size -- the dealer's, at full size, and the player's at two thirds,
+ * which is the same chair further forward and nearer the camera than the
+ * projection strictly allows.  It is drawn small on purpose: a full-size one
+ * at the near edge stacked up under the dealer's into a single column of
+ * oxblood running the height of the room, and stopped reading as furniture
+ * at all.
  *
  * Everything here is stacked back-to-front on one depth so it reads as a solid
  * object: the shadow it throws on the wall, the two side bolsters, the padded
@@ -163,7 +215,7 @@ const CHAIR = {
  * top of it clears the felt, which is exactly how much of a chair you see at a
  * card table -- but the part that does clear it now has a shape.
  */
-function chairAt(scene: Phaser.Scene, x: number, by: number, depth: number): void {
+function chairAt(scene: Phaser.Scene, x: number, by: number, depth: number, s = 1): void {
   const add = (
     cx: number,
     cy: number,
@@ -172,7 +224,10 @@ function chairAt(scene: Phaser.Scene, x: number, by: number, depth: number): voi
     colour: number,
     alpha = 1,
   ): Phaser.GameObjects.Rectangle =>
-    scene.add.rectangle(cx, cy, w, h, colour, alpha).setOrigin(0.5, 1).setDepth(depth);
+    scene.add
+      .rectangle(x + (cx - x) * s, by + (cy - by) * s, w * s, h * s, colour, alpha)
+      .setOrigin(0.5, 1)
+      .setDepth(depth);
 
   // ---- what it throws on the wall behind it, so it is standing off the wall
   add(x + 3, by + 2, 40, 34, CHAIR.shadow, 0.45);
