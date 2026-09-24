@@ -219,8 +219,6 @@ class AudioManager {
       stops.push(this.placeholderBleeps(gain));
     } else if (id === 'crickets') {
       stops.push(this.placeholderCrickets(gain));
-    } else if (id === 'dead_air') {
-      stops.push(this.placeholderStatic(gain));
     } else if (id === 'wind_low') {
       stops.push(this.placeholderNoise(gain, 180, 0.035));
     } else if (id === 'street_dusk') {
@@ -578,68 +576,6 @@ class AudioManager {
     g.connect(out);
     src.start();
     return () => {
-      try {
-        src.stop();
-        src.disconnect();
-        g.disconnect();
-      } catch {
-        /* ignore */
-      }
-    };
-  }
-
-  /**
-   * Dead air: a carrier with nothing on it.
-   *
-   * Flat looping noise reads as a fan.  What reads as a SIGNAL is noise that
-   * breathes -- a band that rises and falls on its own schedule with the top
-   * end opening and closing under it, on no cycle the ear can get hold of.
-   * Nothing about it is regular, so you keep listening for the thing it is
-   * nearly carrying.
-   */
-  private placeholderStatic(out: GainNode): () => void {
-    const ctx = this.ctx!;
-    const buf = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    src.loop = true;
-    const hp = ctx.createBiquadFilter();
-    hp.type = 'highpass';
-    hp.frequency.value = 480;
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 4200;
-    const g = ctx.createGain();
-    g.gain.value = 0.05;
-    src.connect(hp);
-    hp.connect(lp);
-    lp.connect(g);
-    g.connect(out);
-    src.start();
-
-    let stopped = false;
-    let timer = 0;
-    const breathe = (): void => {
-      if (stopped || !this.ctx) return;
-      const now = this.ctx.currentTime;
-      const dur = 1.3 + Math.random() * 2.1;
-      for (const [param, to] of [
-        [g.gain, 0.024 + Math.random() * 0.036],
-        [lp.frequency, 2400 + Math.random() * 4000],
-      ] as const) {
-        param.cancelScheduledValues(now);
-        param.setValueAtTime(param.value, now);
-        param.linearRampToValueAtTime(to, now + dur);
-      }
-      timer = window.setTimeout(breathe, dur * 1000);
-    };
-    timer = window.setTimeout(breathe, 200);
-
-    return () => {
-      stopped = true;
-      window.clearTimeout(timer);
       try {
         src.stop();
         src.disconnect();
@@ -1104,18 +1040,19 @@ class AudioManager {
         beep(1500, 0.02, 0.05, 'square');
         noise(0.02, 0.04, 5000);
         break;
-      // Somebody, a long way off, through a wall and a floor.  It climbs,
-      // breaks at the top, and falls away.  It is never clear enough to swear
-      // to -- which is the point, and why the call sites pass `behind`, whose
-      // lowpass is the same thing distance does to everything.  The pitch is
-      // different every time, which is what keeps it a person rather than a
-      // sound effect being played again.
-      case 'distant_scream': {
-        const base = 280 + Math.random() * 150;
-        glide(base * 0.8, base * 1.72, 0.5, 0.105);
-        glide(base * 1.72, base * 0.86, 0.9, 0.082, 'sawtooth', 0.46);
-        glide(base * 1.2, base * 0.66, 0.75, 0.038, 'triangle', 0.6);
-        noise(1.1, 0.022, 700, 0.04);
+      // ---- A SPEAKER WITH SOMETHING WRONG WITH IT.
+      //
+      // Three bursts of noise at dropping cutoffs, a buzz under them that
+      // slides and gives out, and crackle scattered across the whole thing --
+      // a cone being asked for something it cannot make.  Nine tenths of a
+      // second, which is the number `ArcadeHub` waits before it puts the
+      // arcade's own music back on.
+      case 'speaker_fault': {
+        for (let i = 0; i < 3; i++) noise(0.16, 0.09 - i * 0.015, 5200 - i * 1500, i * 0.24);
+        for (let i = 0; i < 9; i++) noise(0.02, 0.05, 7000, 0.05 + i * 0.09 + Math.random() * 0.04);
+        glide(140, 96, 0.55, 0.05, 'square', 0.06);
+        glide(70, 52, 0.4, 0.04, 'sawtooth', 0.42);
+        beep(41, 0.3, 0.035, 'square', 0.6);
         break;
       }
       // The fence taking one instead of the other fellow.
@@ -1307,7 +1244,7 @@ export type SfxName =
   | 'boom'
   | 'heal_up'
   | 'poison_hiss'
-  | 'distant_scream'
+  | 'speaker_fault'
   | 'fence_thunk'
   | 'wheel_tick'
   | 'splash'

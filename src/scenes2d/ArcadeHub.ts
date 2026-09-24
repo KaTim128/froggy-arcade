@@ -9,7 +9,7 @@
 
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
-import { audio, type SfxName } from '../core/audio';
+import { audio } from '../core/audio';
 import { store, type GameId } from '../core/state';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
@@ -140,22 +140,27 @@ const POST_RANGE = 22;
 const KEY_REWARD = 500;
 
 /**
- * What comes out of the dead air, and when.
+ * ---- THE SHAPE OF THE WHOLE THING, IN MILLISECONDS.
  *
- * Static runs underneath the whole eight seconds; these are the things on top
- * of it that are not static.  Two breaths of hiss, and three screams from a
- * long way off -- left, right, and then one nearly in front, each quieter than
- * the last, none of them loud enough to be sure of.  They are spread wide on
- * purpose: a noise every second is a soundtrack, and a noise every two or
- * three is something happening somewhere you cannot see.
+ * A second of his face.  A hard cut back to the arcade.  And then five
+ * seconds in which NOTHING HAPPENS except that the sound has gone.
+ *
+ * The second is short on purpose: long enough to see, too short to study, and
+ * far too short to decide what you saw.  The five that follow are the whole
+ * of the idea -- the room is exactly as it was, the player has their feet
+ * back, and the only thing in the world that is wrong is that a building
+ * which has had a tune and a crowd in it since they walked in has neither.
+ * There is nothing to look at, which means there is nothing to check, which
+ * means the only place the question can go is inward.
+ *
+ * Then the speakers come back badly, for nine tenths of a second, and then
+ * the arcade is an arcade again.
  */
-const APP_NOISE: { at: number; name: SfxName; vol: number; pan?: number }[] = [
-  { at: 300, name: 'poison_hiss', vol: 0.2 },
-  { at: 2100, name: 'distant_scream', vol: 0.9, pan: -0.55 },
-  { at: 4200, name: 'poison_hiss', vol: 0.16 },
-  { at: 5600, name: 'distant_scream', vol: 0.78, pan: 0.6 },
-  { at: 7100, name: 'distant_scream', vol: 0.62, pan: -0.15 },
-];
+const APP_FACE_MS = 1000;
+const APP_HUSH_MS = 5000;
+const APP_GLITCH_MS = 900;
+/** What the arcade sounds like when nothing is wrong with it. */
+const HUB_AUDIO = { music: 'room_hub', ambience: ['cabinet_bleeps', 'crowd_hum'] };
 
 export class ArcadeHub extends Phaser.Scene {
   private player!: Player;
@@ -196,11 +201,9 @@ export class ArcadeHub extends Phaser.Scene {
   private frogSays: Phaser.GameObjects.Container | null = null;
   /** The staff conversation, while it is up. */
   private talk: Phaser.GameObjects.Container | null = null;
-  /** The thing outside the glass.  See `startApparition`. */
+  /** The thing outside the glass, and the silence after it.  See `startApparition`. */
   private appT = 0;
-  private apparition: 'off' | 'stare' | 'blink' = 'off';
-  /** How many breaths of static have gone by, so each one plays once. */
-  private appHiss = 0;
+  private apparition: 'off' | 'face' | 'hush' | 'glitch' = 'off';
   private dialogue!: DialogueBox;
   private mutter!: Phaser.GameObjects.BitmapText;
   private returnTo: GameId | null = null;
@@ -223,7 +226,7 @@ export class ArcadeHub extends Phaser.Scene {
     this.cabinets = [];
 
     fadeIn(this);
-    audio.setScene({ music: 'room_hub', ambience: ['cabinet_bleeps', 'crowd_hum'] });
+    audio.setScene(HUB_AUDIO);
 
     paintHubRoom(this, { night: false });
     // The counter owns the middle of the back wall, so the signs and posters
@@ -693,91 +696,92 @@ export class ArcadeHub extends Phaser.Scene {
   /**
    * ---- THE APPARITION.
    *
-   * The player buys tokens, closes the machine, turns round, and he is stood
-   * outside the front doors looking in.  Not moving, not coming, not doing
-   * anything: just there, at the glass, with nothing in his eyes.  Then the
-   * picture blinks -- the way an eye blinks, lids from the top and the bottom
-   * -- and when it opens he is gone.  No walk-off, no fade: gone while the
-   * screen was shut, which is the whole trick and the reason it is a blink
-   * rather than a cut.
+   * The player buys tokens, closes the machine, and for one second his face is
+   * the entire screen.  Then it is not, and the arcade is exactly where they
+   * left it -- same carpet, same cabinets, same counter, their own feet back
+   * under them -- and the sound has gone out of the building.
    *
-   * IT IS THIS ROOM, DARKENED.  Nothing is rebuilt and nothing is moved: the
-   * cabinets, the counter, the staff on it and the carpet are exactly where
-   * they were a frame ago, under a wash of black and a vignette.  The player
-   * is meant to recognise the room they were just standing in.
+   * THE SILENCE IS THE SCENE.  It used to be eight seconds of him with
+   * screaming under it, which is a thing that happens TO a player: they watch
+   * it, it ends, they know what it was.  A second of a face and then five
+   * seconds of a room they can walk around in with no music in it is not
+   * something that happens to them.  There is nothing to look at, so there is
+   * nothing to check; there is no effect running, so there is nothing to wait
+   * out.  The only evidence left is an absence, and an absence is the one
+   * kind of evidence a person argues themselves out of.
    *
-   * ONCE A RUN.  `sawApparition` is set the moment it finishes, so buying
+   * Then the speakers come back wrong for nine tenths of a second, which is
+   * the room admitting something without saying what, and then the tune is
+   * back as though it had never stopped.
+   *
+   * ONCE A RUN.  `sawApparition` is set the moment the face goes, so buying
    * tokens is buying tokens for the rest of the game.
    */
   private startApparition(): void {
     this.locked = true;
-    this.apparition = 'stare';
+    this.apparition = 'face';
     this.appT = 0;
-    this.appHiss = 0;
     this.hideFrogLine();
-    // ---- AND THE MUSIC STOPS.  Not fades: stops.  The room has had a tune
-    // and a crowd under it since the player walked in, and the whole of this
-    // is that both of them are suddenly not there.
-    //
-    // What replaces them is not silence but DEAD AIR: a band of static that
-    // breathes, with nothing on it.  Silence is a room with the sound off;
-    // static is a room with the sound on and nothing in it, which is worse,
-    // and it is what the screams in `APP_NOISE` come out of.
-    audio.setScene({ ambience: ['dead_air'] });
-    audio.sfx('eerie_swell', 0.5);
+    // The music does NOT stop here.  It stops at the cut, a second from now,
+    // with him already gone and the room already normal -- so the thing the
+    // player is left holding is a quiet arcade rather than a scare with a
+    // soundtrack.
   }
 
+  /**
+   * Three beats, and only the first of them is on the screen.
+   *
+   *   face    one second of him, holding the overlay, controls off the player
+   *   hush    the room back, exactly as it was, and no sound in the building
+   *   glitch  the speakers failing for nine tenths of a second
+   *
+   * The cut out of `face` is a CUT.  No lids, no fade, no wipe: the overlay is
+   * cleared on one frame and the frame after it is an ordinary arcade.  A
+   * transition is a thing to watch, and watching it is the player being told
+   * that something is over.
+   */
   private stepApparition(delta: number): void {
     if (this.apparition === 'off') return;
     this.appT += delta;
-
-    // ---- THE TIMINGS.  Eight seconds of him, and then a blink.
-    //
-    // Long past the point where a face stops being a surprise and starts
-    // being a stand-off.  You have registered him, you have looked away and
-    // back, you have waited for it to end, and it has not -- and he has not
-    // moved for any of it.  Then the blink, and he was never there.
-    const STARE = 8000;
-    // A BLINK, at the speed a blink happens.  It used to take better than
-    // half a second end to end, which is a wince -- long enough to watch the
-    // lids travel and to understand that the picture is being taken away from
-    // you.  A real one is a fifth of that and you do not experience it at all:
-    // the point is that he goes while your eyes are shut, and the less of the
-    // shutting there is to notice, the more it is the frame either side of it
-    // that you are comparing.
-    const SHUT = 80;
-    const BLACK = 55;
-    const OPEN = 115;
     const t = this.appT;
-    const gone = t > STARE + SHUT + BLACK * 0.5;
 
-    // 0 open, 1 shut.  Closing, held, then opening.
-    let lid = 0;
-    if (t > STARE + SHUT + BLACK) lid = Math.max(0, 1 - (t - STARE - SHUT - BLACK) / OPEN);
-    else if (t > STARE + SHUT) lid = 1;
-    else if (t > STARE) lid = (t - STARE) / SHUT;
-
-    // Hiss and screaming, off the schedule above.  `behind` is the lowpass
-    // that distance puts on everything: it is what makes a scream something
-    // heard through a building rather than something in the room.
-    while (this.appHiss < APP_NOISE.length && t > APP_NOISE[this.appHiss].at) {
-      const n = APP_NOISE[this.appHiss];
-      this.appHiss++;
-      audio.sfx(n.name, n.vol, n.pan === undefined ? undefined : { behind: 0.92, pan: n.pan });
-    }
-
-    froggyLayer.paint((ctx) => this.paintApparition(ctx, t, lid, gone));
-
-    if (t > STARE + SHUT + BLACK + OPEN) {
-      this.apparition = 'off';
+    if (this.apparition === 'face') {
+      froggyLayer.paint((ctx) => this.paintApparition(ctx, t));
+      if (t < APP_FACE_MS) return;
+      // ---- AND HE IS SIMPLY NOT THERE ANY MORE.
+      this.apparition = 'hush';
       froggyLayer.clear();
+      // THE SOUND GOES WITH HIM, and this is the only moment anything about
+      // the room changes.
+      //
+      // `hardCut`, not `setScene(SILENCE)`.  Declaring silence is the polite
+      // way to do it and it CROSSFADES: eight hundred milliseconds of the
+      // arcade ebbing away, which is a sixth of the hush spent listening to
+      // the tune die rather than to nothing.  Measured at 0.0115 RMS into a
+      // stretch that is supposed to read as a signal cut.  This yanks every
+      // source out mid-note, so the building is not quiet, it is OFF.
+      audio.hardCut();
       store.patch({ sawApparition: true });
       store.flush();
+      // Their feet back.  The five seconds are only worth anything if they
+      // can be walked around in: a player held still is a player watching a
+      // cutscene, and a cutscene is something they know happened.
       this.locked = false;
-      // And the arcade comes back on, mid-tune, as though it had never been
-      // off -- which is the last thing that makes the player doubt it.
-      audio.setScene({ music: 'room_hub', ambience: ['cabinet_bleeps', 'crowd_hum'] });
+      return;
     }
+
+    if (this.apparition === 'hush') {
+      if (t < APP_FACE_MS + APP_HUSH_MS) return;
+      this.apparition = 'glitch';
+      audio.sfx('speaker_fault', 0.9);
+      return;
+    }
+
+    if (t < APP_FACE_MS + APP_HUSH_MS + APP_GLITCH_MS) return;
+    this.apparition = 'off';
+    // And the arcade comes back on, mid-tune, as though it had never been off
+    // -- which is the last thing that makes the player doubt it.
+    audio.setScene(HUB_AUDIO);
   }
 
   /**
@@ -804,26 +808,24 @@ export class ArcadeHub extends Phaser.Scene {
    * through as the tones they always were: the same face with the colour
    * taken off it, not a different face drawn in grey.
    */
-  private paintApparition(ctx: CanvasRenderingContext2D, t: number, lid: number, gone: boolean): void {
+  private paintApparition(ctx: CanvasRenderingContext2D, t: number): void {
     // ---- the background: one flat grey, and not one other thing.
     ctx.fillStyle = '#5b5b5b';
     ctx.fillRect(0, 0, GAME_W, GAME_H);
 
     // ---- HIM.  Right up against the glass, filling it.
-    if (!gone) {
-      drawFroggy(ctx, {
-        x: GAME_W / 2,
-        // Anchored between the eyes rather than at the feet: what has to be in
-        // frame is the part of him that is looking at you.
-        y: 62,
-        height: 205,
-        anchor: 'face',
-        variant: 'cozy',
-        // The fourth pose: the same face, with the pupils down to a full stop.
-        pose: 'blank',
-        bounce: 0,
-      });
-    }
+    drawFroggy(ctx, {
+      x: GAME_W / 2,
+      // Anchored between the eyes rather than at the feet: what has to be in
+      // frame is the part of him that is looking at you.
+      y: 62,
+      height: 205,
+      anchor: 'face',
+      variant: 'cozy',
+      // The fourth pose: the same face, with the pupils down to a full stop.
+      pose: 'blank',
+      bounce: 0,
+    });
 
     // ---- AND THE COLOUR COMES OUT OF ALL OF IT.
     //
@@ -861,14 +863,13 @@ export class ArcadeHub extends Phaser.Scene {
     // The vignette that used to sit here is gone with the room: a grey that
     // goes dark at the corners has a shape and a light source, and the whole
     // point of this one is that it has neither.
-
-    // ---- the blink itself, from the top and the bottom at once.
-    if (lid > 0) {
-      const h = (GAME_H / 2) * lid;
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(0, 0, GAME_W, h + 1);
-      ctx.fillRect(0, GAME_H - h - 1, GAME_W, h + 1);
-    }
+    //
+    // And the blink that used to end it is gone too.  An eye closing over him
+    // and opening on an empty doorway is a piece of staging: it tells the
+    // player, in the language of film, that the moment is finished and they
+    // may stop looking.  Nothing tells them anything now.  He is on the screen
+    // and then he is not, and the only thing left behind is a room with no
+    // sound in it.
   }
 
   private paintCounter(): void {
