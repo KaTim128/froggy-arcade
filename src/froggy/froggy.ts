@@ -95,6 +95,28 @@ const PREDATOR = {
 /** Local design space: x -60..60, y -62..52.  Scaled to `height` at draw time. */
 const DESIGN_H = 114;
 
+/**
+ * How much room he takes up, in design space, for anything that has to know
+ * without drawing him -- a collider, a layout, a clip.
+ *
+ * `feet` is the ground line `anchor: 'feet'` puts on the caller's `y`, so a
+ * design coordinate `d` lands at `y + (d - feet) * (height / h)` and the whole
+ * silhouette is `top`..`bottom` by `±halfW` through the same conversion.
+ *
+ * `breath` is the idle squash: `drawCozy` scales him by up to three per cent
+ * and lifts him two units on the bounce, so a box measured on the average is
+ * wrong twice a second.  Multiply by it and the box holds at the top of it.
+ */
+export const FROGGY_DESIGN = {
+  h: DESIGN_H,
+  halfW: 60,
+  top: -62,
+  bottom: 52,
+  feet: 50,
+  breath: 1.03,
+  lift: 2,
+};
+
 export function drawFroggy(ctx: CanvasRenderingContext2D, o: FroggyDrawOpts): void {
   const variant = o.variant ?? 'cozy';
   const pose = o.pose ?? 'idleA';
