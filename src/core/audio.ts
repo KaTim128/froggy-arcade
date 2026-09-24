@@ -1040,6 +1040,38 @@ class AudioManager {
         beep(1500, 0.02, 0.05, 'square');
         noise(0.02, 0.04, 5000);
         break;
+      // ---- SOMEBODY, A LONG WAY OFF, THROUGH A WALL AND A FLOOR.
+      //
+      // It climbs, breaks at the top, and falls away, and it is never clear
+      // enough to swear to -- which is the point, and why the call sites pass
+      // `behind`, whose lowpass is the same thing distance does to everything.
+      // The pitch is different every time, which is what keeps it a person
+      // rather than a sound effect being played again.
+      case 'distant_scream': {
+        const base = 280 + Math.random() * 150;
+        glide(base * 0.8, base * 1.72, 0.5, 0.105);
+        glide(base * 1.72, base * 0.86, 0.9, 0.082, 'sawtooth', 0.46);
+        glide(base * 1.2, base * 0.66, 0.75, 0.038, 'triangle', 0.6);
+        noise(1.1, 0.022, 700, 0.04);
+        break;
+      }
+      // ---- AND SOMEBODY ELSE WHO HAS BEEN AT IT LONGER.
+      //
+      // Three catches of breath, each a short rise that breaks and falls
+      // away, and each smaller than the one before it: crying that has been
+      // going on for a while rather than crying that has just started.  The
+      // breath under each one is what makes it a person and not a note.
+      case 'distant_cry': {
+        const base = 330 + Math.random() * 100;
+        for (let i = 0; i < 3; i++) {
+          const at = i * 0.62;
+          const k = 1 - i * 0.2;
+          glide(base * 0.84, base * 1.26 * k, 0.16, 0.058 * k, 'triangle', at);
+          glide(base * 1.26 * k, base * 0.7, 0.42, 0.05 * k, 'triangle', at + 0.15);
+          noise(0.1, 0.014, 1400, at + 0.02);
+        }
+        break;
+      }
       // ---- A SPEAKER WITH SOMETHING WRONG WITH IT.
       //
       // Three bursts of noise at dropping cutoffs, a buzz under them that
@@ -1245,6 +1277,8 @@ export type SfxName =
   | 'heal_up'
   | 'poison_hiss'
   | 'speaker_fault'
+  | 'distant_scream'
+  | 'distant_cry'
   | 'fence_thunk'
   | 'wheel_tick'
   | 'splash'

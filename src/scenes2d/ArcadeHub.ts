@@ -9,7 +9,7 @@
 
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
-import { audio } from '../core/audio';
+import { audio, type SfxName } from '../core/audio';
 import { store, type GameId } from '../core/state';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
@@ -156,9 +156,30 @@ const KEY_REWARD = 500;
  * Then the speakers come back badly, for nine tenths of a second, and then
  * the arcade is an arcade again.
  */
-const APP_FACE_MS = 1000;
+const APP_HALL_MS = 8000;
 const APP_HUSH_MS = 5000;
 const APP_GLITCH_MS = 900;
+/**
+ * ---- AND WHAT IS COMING DOWN THE CORRIDOR AT YOU, WHICH IS NOTHING.
+ *
+ * Crying and screaming, from somewhere that is not the corridor.  Spread
+ * across the eight seconds with gaps between them, because a noise every
+ * second is a soundtrack and a noise every two is something happening
+ * somewhere you cannot see -- and each of them is `behind`, which is the
+ * lowpass distance puts on everything, so none of it is ever clear enough to
+ * swear to.
+ *
+ * The last one starts at five and a half and is done by seven and seven
+ * tenths.  Nothing may still be ringing when the corridor goes, because what
+ * comes next is five seconds that have to be SILENT to be worth anything.
+ */
+const APP_VOICES: { at: number; name: SfxName; vol: number; pan: number }[] = [
+  { at: 200, name: 'distant_cry', vol: 0.8, pan: -0.3 },
+  { at: 1700, name: 'distant_scream', vol: 0.95, pan: 0.55 },
+  { at: 3100, name: 'distant_cry', vol: 0.68, pan: 0.25 },
+  { at: 4300, name: 'distant_scream', vol: 0.85, pan: -0.6 },
+  { at: 5500, name: 'distant_cry', vol: 0.58, pan: -0.1 },
+];
 /** What the arcade sounds like when nothing is wrong with it. */
 const HUB_AUDIO = { music: 'room_hub', ambience: ['cabinet_bleeps', 'crowd_hum'] };
 
@@ -201,9 +222,11 @@ export class ArcadeHub extends Phaser.Scene {
   private frogSays: Phaser.GameObjects.Container | null = null;
   /** The staff conversation, while it is up. */
   private talk: Phaser.GameObjects.Container | null = null;
-  /** The thing outside the glass, and the silence after it.  See `startApparition`. */
+  /** The corridor, and the silence after it.  See `startApparition`. */
   private appT = 0;
-  private apparition: 'off' | 'face' | 'hush' | 'glitch' = 'off';
+  private apparition: 'off' | 'hall' | 'hush' | 'glitch' = 'off';
+  /** How many of `APP_VOICES` have gone off, so each one plays once. */
+  private appVoice = 0;
   private dialogue!: DialogueBox;
   private mutter!: Phaser.GameObjects.BitmapText;
   private returnTo: GameId | null = null;
@@ -696,19 +719,26 @@ export class ArcadeHub extends Phaser.Scene {
   /**
    * ---- THE APPARITION.
    *
-   * The player buys tokens, closes the machine, and for one second his face is
-   * the entire screen.  Then it is not, and the arcade is exactly where they
-   * left it -- same carpet, same cabinets, same counter, their own feet back
-   * under them -- and the sound has gone out of the building.
+   * The player buys tokens, closes the machine, and for eight seconds they are
+   * somewhere else: a white corridor, lit the whole way down, with a door at
+   * the end of it and something small standing in the door.  It does not come
+   * any closer.  Nothing in the picture moves at all.
    *
-   * THE SILENCE IS THE SCENE.  It used to be eight seconds of him with
-   * screaming under it, which is a thing that happens TO a player: they watch
-   * it, it ends, they know what it was.  A second of a face and then five
-   * seconds of a room they can walk around in with no music in it is not
-   * something that happens to them.  There is nothing to look at, so there is
-   * nothing to check; there is no effect running, so there is nothing to wait
-   * out.  The only evidence left is an absence, and an absence is the one
-   * kind of evidence a person argues themselves out of.
+   * WHAT MOVES IS THE SOUND.  Crying and screaming, from rooms the corridor
+   * does not have, spaced out enough that each one has to be waited for.  See
+   * `APP_VOICES`.
+   *
+   * Then the arcade is back, exactly where they left it -- same carpet, same
+   * cabinets, same counter, their own feet under them -- and there is no sound
+   * in the building at all.
+   *
+   * THE SILENCE AFTER IT IS STILL THE SCENE.  Eight seconds of a corridor is
+   * a thing that happens TO a player: they watch it, it ends, they know what
+   * it was.  Five seconds of a room they can walk around in with no sound in
+   * it is not.  There is nothing to look at, so there is nothing to check;
+   * there is no effect running, so there is nothing to wait out.  The only
+   * evidence left is an absence, and an absence is the one kind of evidence a
+   * person argues themselves out of.
    *
    * Then the speakers come back wrong for nine tenths of a second, which is
    * the room admitting something without saying what, and then the tune is
@@ -719,23 +749,30 @@ export class ArcadeHub extends Phaser.Scene {
    */
   private startApparition(): void {
     this.locked = true;
-    this.apparition = 'face';
+    this.apparition = 'hall';
     this.appT = 0;
+    this.appVoice = 0;
     this.hideFrogLine();
-    // The music does NOT stop here.  It stops at the cut, a second from now,
-    // with him already gone and the room already normal -- so the thing the
-    // player is left holding is a quiet arcade rather than a scare with a
-    // soundtrack.
+    // ---- AND THE ARCADE GOES OFF, MID-NOTE.
+    //
+    // `hardCut`, not a declared silence: `setScene` crossfades, and eight
+    // hundred milliseconds of a chiptune ebbing away underneath somebody
+    // crying is the game apologising for the cut.  What is wanted is a room
+    // whose sound has been taken out from under it -- and the voices that
+    // follow have nothing to compete with, which is why they can be as far
+    // off as they are and still be the only thing you can hear.
+    audio.hardCut();
   }
 
   /**
    * Three beats, and only the first of them is on the screen.
    *
-   *   face    one second of him, holding the overlay, controls off the player
+   *   hall    eight seconds of the corridor, holding the overlay, controls
+   *           off the player, and the voices going off in it
    *   hush    the room back, exactly as it was, and no sound in the building
    *   glitch  the speakers failing for nine tenths of a second
    *
-   * The cut out of `face` is a CUT.  No lids, no fade, no wipe: the overlay is
+   * The cut out of `hall` is a CUT.  No lids, no fade, no wipe: the overlay is
    * cleared on one frame and the frame after it is an ordinary arcade.  A
    * transition is a thing to watch, and watching it is the player being told
    * that something is over.
@@ -745,22 +782,20 @@ export class ArcadeHub extends Phaser.Scene {
     this.appT += delta;
     const t = this.appT;
 
-    if (this.apparition === 'face') {
+    if (this.apparition === 'hall') {
       froggyLayer.paint((ctx) => this.paintApparition(ctx, t));
-      if (t < APP_FACE_MS) return;
-      // ---- AND HE IS SIMPLY NOT THERE ANY MORE.
+      // The voices, off the schedule above.  `behind` is the lowpass that
+      // distance puts on everything: it is what makes a scream something heard
+      // through a building rather than something in the room.
+      while (this.appVoice < APP_VOICES.length && t > APP_VOICES[this.appVoice].at) {
+        const v = APP_VOICES[this.appVoice];
+        this.appVoice++;
+        audio.sfx(v.name, v.vol, { behind: 0.9, pan: v.pan });
+      }
+      if (t < APP_HALL_MS) return;
+      // ---- AND IT IS SIMPLY NOT THERE ANY MORE.
       this.apparition = 'hush';
       froggyLayer.clear();
-      // THE SOUND GOES WITH HIM, and this is the only moment anything about
-      // the room changes.
-      //
-      // `hardCut`, not `setScene(SILENCE)`.  Declaring silence is the polite
-      // way to do it and it CROSSFADES: eight hundred milliseconds of the
-      // arcade ebbing away, which is a sixth of the hush spent listening to
-      // the tune die rather than to nothing.  Measured at 0.0115 RMS into a
-      // stretch that is supposed to read as a signal cut.  This yanks every
-      // source out mid-note, so the building is not quiet, it is OFF.
-      audio.hardCut();
       store.patch({ sawApparition: true });
       store.flush();
       // Their feet back.  The five seconds are only worth anything if they
@@ -771,13 +806,13 @@ export class ArcadeHub extends Phaser.Scene {
     }
 
     if (this.apparition === 'hush') {
-      if (t < APP_FACE_MS + APP_HUSH_MS) return;
+      if (t < APP_HALL_MS + APP_HUSH_MS) return;
       this.apparition = 'glitch';
       audio.sfx('speaker_fault', 0.9);
       return;
     }
 
-    if (t < APP_FACE_MS + APP_HUSH_MS + APP_GLITCH_MS) return;
+    if (t < APP_HALL_MS + APP_HUSH_MS + APP_GLITCH_MS) return;
     this.apparition = 'off';
     // And the arcade comes back on, mid-tune, as though it had never been off
     // -- which is the last thing that makes the player doubt it.
@@ -787,45 +822,168 @@ export class ArcadeHub extends Phaser.Scene {
   /**
    * ---- WHAT THE APPARITION LOOKS LIKE.
    *
-   * HIS FACE, AND ALMOST NOTHING ELSE.  He used to be a small figure standing
-   * in a doorway at the back of a picture of the arcade, which is a room with
-   * a frog in it: the eye reads the room first and finds him second, by which
-   * time the moment has gone.  The camera is right up against him now -- two
-   * eyes most of the width of the screen, pupils the size of a full stop
-   * pointed straight out of it, and the rest of him running off all four
-   * edges.
+   * A WHITE CORRIDOR, AND HIM AT THE END OF IT.
    *
-   * AND NOTHING ELSE AT ALL.  Behind him used to be this arcade, darkened --
-   * the purple wall and its strip light, the grey floor, a cabinet either
-   * side, the doorway he was stood in.  Every one of those is something for
-   * the eye to read on its way to him, and on the way back out again.  There
-   * is nothing to read now: one flat grey, edge to edge, with no light in it,
-   * no depth to it and nowhere for it to be.  He is not somewhere.  He is
-   * just there.
+   * It was his face filling the screen, which is a jump: it is at its worst
+   * in the instant it arrives and it gets smaller every instant after.  A
+   * corridor does the opposite.  Everything in it is far away and it stays far
+   * away, and the longer you look down it the more certain you become that you
+   * are going to have to do something about the thing standing at the far end
+   * -- which never moves, and never comes, and is still there when the
+   * picture goes.
    *
-   * IN BLACK AND WHITE.  The colour comes out in one pass over the finished
-   * picture rather than out of the drawing, so Froggy's greens and golds come
-   * through as the tones they always were: the same face with the colour
-   * taken off it, not a different face drawn in grey.
+   * IT IS ONE-POINT PERSPECTIVE AND NOTHING ELSE.  Every line in the drawing
+   * runs to a single vanishing point a little above the middle of the screen,
+   * and everything is built by interpolating between the near rectangle (the
+   * whole screen) and the far one (`HALL`) at a depth `k` -- floor, ceiling,
+   * both walls, the rail down each side, the strip lights, the tiles.  That is
+   * the whole of the geometry, and it is why it reads as a place rather than
+   * as a drawing of a place.
+   *
+   * IN BLACK AND WHITE, like everything else here.  The colour comes out in
+   * one pass over the finished picture, so Froggy's greens and golds come
+   * through as the tones they always were: the same frog with the colour taken
+   * off him, not a different frog drawn in grey.
    */
   private paintApparition(ctx: CanvasRenderingContext2D, t: number): void {
-    // ---- the background: one flat grey, and not one other thing.
-    ctx.fillStyle = '#5b5b5b';
-    ctx.fillRect(0, 0, GAME_W, GAME_H);
+    // The far end of it: the rectangle every line in the picture runs to.
+    const HALL = { x0: 147, x1: 173, y0: 64, y1: 101 };
+    // A point at depth k, from the near rectangle (the screen) to the far one.
+    // u and v are 0..1 across and down the near rectangle.
+    const px = (u: number, k: number): number => u * GAME_W + (HALL.x0 + u * (HALL.x1 - HALL.x0) - u * GAME_W) * k;
+    const py = (v: number, k: number): number => v * GAME_H + (HALL.y0 + v * (HALL.y1 - HALL.y0) - v * GAME_H) * k;
+    // Evenly spaced in DEPTH, not on the screen: things in a corridor bunch up
+    // as they go away, and a row of anything spaced evenly on the screen is a
+    // ladder lying on a wall rather than a corridor.
+    const step = (i: number): number => 1 - 1 / (1 + i * 0.62);
+    const quad = (
+      fill: string,
+      a: [number, number], b: [number, number], c: [number, number], d: [number, number],
+    ): void => {
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+      ctx.lineTo(c[0], c[1]);
+      ctx.lineTo(d[0], d[1]);
+      ctx.closePath();
+      ctx.fill();
+    };
+    const line = (a: [number, number], b: [number, number], w: number, fill: string): void => {
+      ctx.strokeStyle = fill;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+      ctx.stroke();
+    };
 
-    // ---- HIM.  Right up against the glass, filling it.
+    // ---- the four planes.  Each a shade apart, because a corridor made of
+    // one white is a white rectangle.
+    ctx.fillStyle = '#fbfbfc';
+    ctx.fillRect(0, 0, GAME_W, GAME_H);
+    quad('#eaecee', [0, 0], [GAME_W, 0], [HALL.x1, HALL.y0], [HALL.x0, HALL.y0]);
+    quad('#eceeef', [0, 0], [HALL.x0, HALL.y0], [HALL.x0, HALL.y1], [0, GAME_H]);
+    quad('#e5e7e9', [GAME_W, 0], [HALL.x1, HALL.y0], [HALL.x1, HALL.y1], [GAME_W, GAME_H]);
+    quad('#f7f8f9', [0, GAME_H], [GAME_W, GAME_H], [HALL.x1, HALL.y1], [HALL.x0, HALL.y1]);
+
+    // ---- the floor, tiled.  Lines to the vanishing point one way, lines
+    // across at depth the other, and the crossings are the tiles.
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(0, GAME_H);
+    ctx.lineTo(GAME_W, GAME_H);
+    ctx.lineTo(HALL.x1, HALL.y1);
+    ctx.lineTo(HALL.x0, HALL.y1);
+    ctx.closePath();
+    ctx.clip();
+    for (let i = 1; i < 8; i++) {
+      const u = i / 8;
+      line([u * GAME_W, GAME_H], [px(u, 1), py(1, 1)], 0.5, 'rgba(132,140,149,0.17)');
+    }
+    for (let i = 1; i < 16; i++) {
+      const k = step(i);
+      // The far end of a floor is a sheet: the seams go before the tiles do.
+      line([px(0, k), py(1, k)], [px(1, k), py(1, k)], 0.5, `rgba(132,140,149,${(0.19 * (1 - k)).toFixed(3)})`);
+    }
+    // and what the lights leave on a polished floor: one soft streak down the
+    // middle, which is the only thing in the picture that is not a straight
+    // edge.
+    const sheen = ctx.createLinearGradient(0, HALL.y1, 0, GAME_H);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.85)');
+    sheen.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sheen;
+    ctx.beginPath();
+    ctx.moveTo(HALL.x0 + 4, HALL.y1);
+    ctx.lineTo(HALL.x1 - 4, HALL.y1);
+    ctx.lineTo(GAME_W / 2 + 34, GAME_H);
+    ctx.lineTo(GAME_W / 2 - 34, GAME_H);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // ---- the rail down each wall, and the cove up at the ceiling.  Drawn as
+    // a pale line with a darker one under it, which is how a moulding reads
+    // from twenty feet away.
+    for (const u of [0, 1]) {
+      for (const [v, w] of [[0.84, 1.1], [0.035, 0.9]] as const) {
+        line([u * GAME_W, v * GAME_H], [px(u, 1), py(v, 1)], w, '#ffffff');
+        line([u * GAME_W, v * GAME_H + w], [px(u, 1), py(v, 1) + w * 0.4], w * 0.7, 'rgba(150,158,166,0.45)');
+      }
+    }
+
+    // ---- the strip lights, receding down the middle of the ceiling.  Each
+    // one is a bar with a bloom round it; the bloom is most of what says LIT.
+    for (let i = 0; i < 10; i++) {
+      const k = step(i) * 0.95;
+      const cx = px(0.5, k);
+      const cy = py(0.075, k);
+      const w = (1 - k) * 44 + 2.2;
+      const h = (1 - k) * 6.5 + 0.7;
+      // A bloom no wider than the fitting that makes it.  At half again it
+      // ran into its neighbours and the whole ceiling became one smear of
+      // white with no lights in it.
+      const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, w * 0.85);
+      glow.addColorStop(0, 'rgba(255,255,255,0.8)');
+      glow.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(cx - w, cy - w, w * 2, w * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
+    }
+
+    // ---- THE DOOR AT THE END, AND WHAT IS STANDING IN IT.
+    //
+    // Froggy is drawn into the doorway at his own colours and then the whole
+    // recess is multiplied down: everything in it darkens together, so he
+    // keeps his shape against the panel instead of becoming a black blob on
+    // it, and the end of the corridor reads as somewhere with less light in it
+    // rather than as a hole cut in the wall.
+    const dw = 15;
+    const dh = 26;
+    const dx = GAME_W / 2 - dw / 2;
+    const dy = HALL.y1 - dh;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(dx - 2, dy - 2, dw + 4, dh + 2);
+    ctx.fillStyle = '#c3c7cc';
+    ctx.fillRect(dx, dy, dw, dh);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(dx, dy, dw, dh);
+    ctx.clip();
     drawFroggy(ctx, {
       x: GAME_W / 2,
-      // Anchored between the eyes rather than at the feet: what has to be in
-      // frame is the part of him that is looking at you.
-      y: 62,
-      height: 205,
-      anchor: 'face',
+      y: HALL.y1,
+      height: dh * 0.82,
       variant: 'cozy',
       // The fourth pose: the same face, with the pupils down to a full stop.
       pose: 'blank',
       bounce: 0,
     });
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = '#787d83';
+    ctx.fillRect(dx, dy, dw, dh);
+    ctx.restore();
 
     // ---- AND THE COLOUR COMES OUT OF ALL OF IT.
     //
