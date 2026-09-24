@@ -127,6 +127,23 @@ function drawMotif(scene: Phaser.Scene, cx: number, cy: number, def: CabinetDef,
       for (let i = -5; i <= 5; i += 2) put(7.5, i, 2, 2, i % 4 === 1 ? bright : ink);
       break;
     }
+    // FROGSTER MASH.  A monster bolted together out of six blocks.
+    //
+    // Two legs, two arms either side, a torso and a head with a pair of eyes
+    // on it -- the six parts the game is made of, at the size they fit on an
+    // eighteen-by-fourteen screen.  The gaps between them are the point: it
+    // reads as ASSEMBLED rather than as one creature.
+    case 'mash':
+      put(-2.5, 5, 2.5, 4, bright);
+      put(2.5, 5, 2.5, 4, bright);
+      put(-5.5, 0, 2, 6, ink);
+      put(5.5, 0, 2, 6, ink);
+      put(0, 0.5, 8, 7, bright);
+      put(0, 1, 5, 1, ink);
+      put(0, -5.5, 9, 4, ink);
+      dot(-2.5, -6, 1.4, bright);
+      dot(2.5, -6, 1.4, bright);
+      break;
     case 'road':
       put(-4, 0, 1, 12);
       put(4, 0, 1, 12);

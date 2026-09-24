@@ -137,6 +137,20 @@ export const TRACKS: Record<string, TrackPreset> = {
     cutoff: 2600,
     vol: { lead: 0.03, bass: 0.045, arp: 0, drums: 1.2 },
   }),
+  // Frogster Mash: a factory that builds monsters.  A four-on-the-floor stomp
+  // on a minor riff, low and square, with the lead marching up and back down
+  // the same three notes -- machinery with something alive in it.
+  game_frogstermash: preset({
+    bpm: 138,
+    chords: [min(C.d4), min(C.d4), [C.a4 - 12, C.c4, C.f4], min(C.g4 - 12)],
+    bass: [0, 0, _, 0, 2, _, 0, 1],
+    lead: [C.d5, _, C.f5, C.a5, _, C.f5, C.d5, _, C.c5, _, C.e5, C.g5, _, C.e5, C.d5, _],
+    leadWave: 'square',
+    bassWave: 'sawtooth',
+    arpWave: undefined,
+    cutoff: 2400,
+    vol: { lead: 0.028, bass: 0.05, arp: 0, drums: 1.15 },
+  }),
   // Barrel Climb: a rising arpeggio, always climbing.
   game_donkeykong: preset({
     bpm: 132,

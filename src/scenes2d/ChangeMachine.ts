@@ -26,6 +26,15 @@ export class ChangeMachine extends Phaser.Scene {
   private body!: Phaser.GameObjects.Container;
   /** How much of the wallet is going in.  Never more than there is. */
   private amount = 0;
+  /**
+   * Whether any cash actually went in while this was open.
+   *
+   * It goes out with `change-closed`, because what the hub does next depends
+   * on it: opening the machine, reading the rate and closing it again is
+   * looking at a machine, and looking at a machine is not the thing that has
+   * ever been worth anybody's attention.
+   */
+  private traded = false;
 
   constructor() {
     super('ChangeMachine');
@@ -34,6 +43,7 @@ export class ChangeMachine extends Phaser.Scene {
   init(data: { from?: string } = {}): void {
     this.from = data.from ?? 'ArcadeHub';
     this.amount = 0;
+    this.traded = false;
   }
 
   create(): void {
@@ -119,6 +129,7 @@ export class ChangeMachine extends Phaser.Scene {
       return;
     }
     ledger.credit(tokens, 'change');
+    this.traded = true;
     store.flush();
     audio.sfx('ticket_machine');
     this.amount = store.get().cash;
@@ -126,7 +137,7 @@ export class ChangeMachine extends Phaser.Scene {
   }
 
   private close(): void {
-    this.scene.get(this.from)?.events.emit('change-closed');
+    this.scene.get(this.from)?.events.emit('change-closed', this.traded);
     this.scene.stop();
   }
 }

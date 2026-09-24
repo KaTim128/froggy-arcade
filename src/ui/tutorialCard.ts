@@ -162,9 +162,16 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
     ry += ROW_H;
   }
   // ---- the price, and whether it can be met.  Measured up from the buttons.
+  //
+  // WHEN IT CANNOT BE MET THE CARD SAYS SO IN A SENTENCE.  A price in gold and
+  // a price in red are the same line read twice, and the second reading is the
+  // one that matters -- so an unaffordable cabinet stops quoting a price and
+  // states the condition instead, with the shortfall underneath it.
   const priceLine = free
     ? `FREE TO SIT  -  ${opts.cost} TOKEN${opts.cost === 1 ? '' : 'S'} A GO`
-    : `${opts.cost} TOKEN${opts.cost === 1 ? '' : 'S'} TO PLAY`;
+    : affordable
+      ? `${opts.cost} TOKEN${opts.cost === 1 ? '' : 'S'} TO PLAY`
+      : `You need ${opts.cost} tokens to play.`;
   keep(
     centerText(scene, GAME_W / 2, buttonY - PRICE_UP, priceLine, affordable ? PALETTE.gold : PALETTE.blood).setDepth(903),
   );
