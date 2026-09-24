@@ -134,15 +134,20 @@ function drawMotif(scene: Phaser.Scene, cx: number, cy: number, def: CabinetDef,
     // eighteen-by-fourteen screen.  The gaps between them are the point: it
     // reads as ASSEMBLED rather than as one creature.
     case 'mash':
-      put(-2.5, 5, 2.5, 4, bright);
-      put(2.5, 5, 2.5, 4, bright);
-      put(-5.5, 0, 2, 6, ink);
-      put(5.5, 0, 2, 6, ink);
-      put(0, 0.5, 8, 7, bright);
-      put(0, 1, 5, 1, ink);
-      put(0, -5.5, 9, 4, ink);
-      dot(-2.5, -6, 1.4, bright);
-      dot(2.5, -6, 1.4, bright);
+      // A crown over crossed swords.  It used to be the stitched-together
+      // monster the game was before the rewrite, which said nothing about a
+      // colosseum -- and a bolted animal and a gladiator read as the same
+      // grey lump at eighteen by fourteen anyway.  Two shapes, one royal and
+      // one violent, is the most this much glass will carry.
+      bar(0, 2.5, 11, 1.2, 40);
+      bar(0, 2.5, 11, 1.2, -40);
+      put(0, -2.4, 9, 2, bright);
+      put(-3, -4.8, 1.6, 2.6, bright);
+      put(0, -5.2, 1.8, 3.4, bright);
+      put(3, -4.8, 1.6, 2.6, bright);
+      dot(-3, -2.4, 0.5, ink);
+      dot(0, -2.4, 0.5, ink);
+      dot(3, -2.4, 0.5, ink);
       break;
     case 'road':
       put(-4, 0, 1, 12);
