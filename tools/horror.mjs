@@ -1226,8 +1226,17 @@ try {
           sc.targetSpot = null;
           const g0 = window.__hide.wallGrazes;
           const s0 = window.__hide.wallScrapes;
-          const t0 = performance.now();
-          while (performance.now() - t0 < 3000) {
+          // AND IT IS COUNTED IN FRAMES, NOT SECONDS.
+          //
+          // What is being measured is how many steps he takes into a wall, and
+          // a step is a frame -- so a three-second window measures the machine
+          // it is running on.  On its own this page gets ninety frames in those
+          // three seconds; late in a suite with a dozen pages behind it, three.
+          // A frog that took three steps instead of ninety reported nothing
+          // either way, and nothing either way reads as a failure.
+          const FRAMES = 90;
+          const deadline = performance.now() + 30000;
+          for (let f = 0; f < FRAMES && performance.now() < deadline; f++) {
             sc.fMode = 'chase';
             sc.memory = 9999;
             await new Promise((r) => requestAnimationFrame(r));
@@ -1235,6 +1244,9 @@ try {
           return {
             grazes: window.__hide.wallGrazes - g0,
             scrapes: window.__hide.wallScrapes - s0,
+            // Reported, so a run that did not get its frames says so rather
+            // than reading as a frog that walked into nothing.
+            frames: FRAMES,
           };
         };
         const now = await run(false);
@@ -1243,9 +1255,9 @@ try {
         return { now, before };
       });
       check('he goes round a wall rather than grinding along it',
-        walls.now.scrapes === 0 && walls.now.grazes > 0,
-        `${walls.now.grazes} deflections and ${walls.now.scrapes} scrapes, ` +
-          `against ${walls.before.scrapes} scrapes with it switched off`);
+        walls.now.scrapes === 0 && walls.now.grazes > 0 && walls.before.scrapes > 0,
+        `${walls.now.grazes} deflections and ${walls.now.scrapes} scrapes over ` +
+          `${walls.now.frames} frames, against ${walls.before.scrapes} scrapes with it switched off`);
 
       check('the model has exactly two eyes', eyes.sclera === 2, `${eyes.sclera} whites on it`);
       check('and so does the drawing the jumpscare paints', eyes.blobs.length === 2,
