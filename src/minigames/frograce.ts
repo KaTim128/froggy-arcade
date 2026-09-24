@@ -598,8 +598,8 @@ const LAST_CALL = 0.78;
  * `LAST_CALL`, alone among the effects, because its whole point is to land
  * where nothing else is allowed to.
  */
-const BUG_FROM = 0.52;
-const BUG_TO = 0.82;
+const BUG_FROM = 0.5;
+const BUG_TO = 0.72;
 const bugAt = (): number => (BUG_FROM + (BUG_TO - BUG_FROM) * Math.sqrt(Math.random())) * RACE_S;
 
 /** One booked effect: when it goes off, who it goes off on, and what it is. */

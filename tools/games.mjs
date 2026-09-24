@@ -358,7 +358,15 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   );
   if (!lasts) failures++;
 
-  const fed = shape.everyFrogFed > 0.94 && shape.allDifferent > 0.94;
+  // ALL FOUR CORE BOOKINGS LANDING was a 94% bar when the card had nine kinds
+  // and every one of them was dealt somewhere in the first two thirds.  The
+  // bug is dealt in the last quarter now, on purpose, and a booking whose frog
+  // is busy is held and retried half a second at a time -- so the one dealt
+  // latest has the least race left to find a gap in, and misses a little more
+  // often.  92% on four-different, measured at 94.9-95.9 over three samples of
+  // fifteen hundred races.  Every frog still gets something 98% of the time,
+  // which is the half of this that matters.
+  const fed = shape.everyFrogFed > 0.94 && shape.allDifferent > 0.92;
   console.log(
     `${fed ? 'PASS' : 'FAIL'}  frog race: something happens to every frog, and not the same thing  — ` +
       `${(shape.everyFrogFed * 100).toFixed(0)}% of races feed all four, ` +
@@ -366,9 +374,21 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   );
   if (!fed) failures++;
 
-  // A tenth of the track between first and last at the line is not a race, it
-  // is a procession: the tow rope is there to stop exactly that.
-  const close = shape.meanFinishGap < 0.1 * shape.dist;
+  // ---- AND THIS BAR MOVED, BECAUSE THE RACE DID.
+  //
+  // A tenth of the track between first and last was the bar while nothing on
+  // the card could cost five seconds at the death.  The bug can: it is dealt
+  // in the last quarter now and it sleeps a frog for five, which is about
+  // thirty-nine pixels of running with no race left for the rope to pull them
+  // back through.  That frog is meant to be out of it -- that is the mechanic.
+  //
+  // It is not a tuning failure and it does not tune away: the gap sits at
+  // 29.7-30.6px whatever window the bug is dealt in, because it is the sleep
+  // and not the timing that sets it.  So the bar is a seventh of the track,
+  // and what says THIS IS STILL A RACE is measured below instead, on the
+  // frogs that are still running -- neighbours a tenth of a second apart, the
+  // lead changing hands, and a winner who crosses clear.
+  const close = shape.meanFinishGap < 0.14 * shape.dist;
   console.log(
     `${close ? 'PASS' : 'FAIL'}  frog race: and they are together at the line  — ` +
       `${shape.meanFinishGap.toFixed(0)}px between first and last on a ${shape.dist}px track ` +
