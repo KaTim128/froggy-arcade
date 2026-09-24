@@ -1198,6 +1198,18 @@ try {
       // for a way past first now.  Measured both ways in the same room, by
       // driving him nose-first at a wall with the player on the far side of
       // it -- `__noDeflect` turns the new behaviour off for the second half.
+      // AND IT WAITS FOR THE ROUND TO ACTUALLY START.
+      //
+      // `newPage` sleeps a fixed two and a half seconds; the first room's
+      // briefing is the long one, because it is where he explains the rules.
+      // Nothing moves him until the scene is `seeking` -- `moveFroggy` is only
+      // called on that branch -- so a probe that measured while he was still
+      // talking through the door got zero deflections AND zero scrapes, and
+      // reported the absence of a wall as a failure to go round one.
+      for (let i = 0; i < 80; i++) {
+        if ((await hide())?.mode === 'seeking') break;
+        await sleep(250);
+      }
       const walls = await page.evaluate(async () => {
         const sc = window.__froggy.game().scene.getScene('HideRoom3D');
         const run = async (off) => {
