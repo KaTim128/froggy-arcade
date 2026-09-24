@@ -26,7 +26,7 @@ export type GameId =
   | 'danceoff'
   | 'fallingblocks'
   | 'frograce'
-  | 'frograce';
+  | 'frogstermash';
 
 /**
  * How the thumb drives Froggy on a touch screen.  A stick is quicker once you
@@ -205,6 +205,7 @@ function defaultState(): GameState {
       danceoff: 0,
       fallingblocks: 0,
       frograce: 0,
+      frogstermash: 0,
     },
     highScores: {},
     route: 'normal',

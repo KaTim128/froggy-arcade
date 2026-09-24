@@ -337,6 +337,18 @@ export class ArcadeCasino extends Phaser.Scene {
       );
       return;
     }
+    // ---- AND THE SAME REFUSAL FOR THE ROUTE THAT SKIPS THE CARD.
+    //
+    // Pressing E at a machine is an instruction to play, not a question, so a
+    // player who cannot cover it must be told at the machine: the card is what
+    // answers the question, and this route never opens one.  Clicking the
+    // machine still opens the card, which says the same sentence and lets the
+    // rules be read for nothing.
+    if (how === 'play' && !cab.def.freeToEnter && ledger.balance() < cost) {
+      audio.sfx('buzzer');
+      this.say(`You need ${cost} tokens to play.`);
+      return;
+    }
     if (!canEnter('Minigame', store.get(), {})) {
       audio.sfx('buzzer');
       return;
