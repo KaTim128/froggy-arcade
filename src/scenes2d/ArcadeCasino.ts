@@ -23,7 +23,7 @@ import { fadeIn, fadeToScene, text } from '../core/ui';
 import { paintCasinoDressing, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet } from '../art/cabinet';
-import { BlackjackTable } from '../art/blackjackTable';
+import { BlackjackTable, TABLE_H, TABLE_W } from '../art/blackjackTable';
 import { PrizeWheel } from '../art/prizeWheel';
 import { TokenHud } from '../ui/hud';
 import { CABINETS, cabinetsIn } from '../game/content';
@@ -33,6 +33,20 @@ import { drawSuitedMan } from '../froggy/suit';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 
 const INTERACT_RANGE = 24;
+/**
+ * How far in front of the table's near edge the player's feet come to rest.
+ *
+ * The felt is furniture, not floor.  Nothing in this room stops anybody
+ * walking, which was fine while every fixture was a cabinet shoved against a
+ * wall -- the table stands in the middle of the carpet, and a player who held
+ * UP walked straight through the apron and came out stood ON the green with
+ * their head level with the dealer's.  Twenty pixels puts them at the chair,
+ * in front of the table, with the whole top of it between them and the man
+ * dealing.
+ */
+const TABLE_STAND = 20;
+/** How far behind the felt the table stops being walkable. */
+const TABLE_BACK = TABLE_H + 4;
 /** The way back, on this room's right wall. */
 const BACK_DOOR = { x: GAME_W - 20, y: 118 };
 
@@ -193,7 +207,7 @@ export class ArcadeCasino extends Phaser.Scene {
       if (gone) {
         drawSuitedMan(ctx, {
           x: spot.x,
-          y: spot.y + 13,
+          y: spot.y + 8,
           height: 40,
           pose: atTable ? 'talk' : 'idle',
           // A third of the frog's sway.  He breathes and that is all, and a
@@ -204,8 +218,12 @@ export class ArcadeCasino extends Phaser.Scene {
       } else {
         drawFroggy(ctx, {
           x: spot.x,
-          // Below the cut line, so the bottom third of him is behind the table.
-          y: spot.y + 13,
+          // Below the cut line, so the bottom of him is behind the table.
+          // EIGHT, not thirteen: the cut moved back to the felt's rail, and
+          // at thirteen that rail came up across his mouth and left a frog
+          // peering over the table.  At eight it crosses his chest, which is
+          // where a table crosses anyone sitting at one.
+          y: spot.y + 8,
           // SMALLER THAN HE WAS.  At forty he filled the back of the table and
           // read as leaning over it; at thirty he is sat behind it, which is
           // what a dealer does.  Same spot, same drawing, same everything else
@@ -244,9 +262,13 @@ export class ArcadeCasino extends Phaser.Scene {
     if (!this.returnTo) return fallback;
     const def = CABINETS.find((c) => c.id === this.returnTo);
     if (!def) return fallback;
+    // The table is deeper than a cabinet and it is solid now, so twelve
+    // pixels below its front edge is INSIDE it: you would come back from a
+    // hand stood in the middle of the felt.
+    const drop = def.fixture === 'table' ? TABLE_STAND + 2 : 12;
     return {
       x: Phaser.Math.Clamp(def.x, ROOM.left + 12, ROOM.right - 12),
-      y: Phaser.Math.Clamp(def.y + 12, ROOM.top + 12, ROOM.bottom - 8),
+      y: Phaser.Math.Clamp(def.y + drop, ROOM.top + 12, ROOM.bottom - 8),
     };
   }
 
@@ -361,7 +383,9 @@ export class ArcadeCasino extends Phaser.Scene {
 
     const dx = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     const dy = (this.held('down') ? 1 : 0) - (this.held('up') ? 1 : 0);
+    const before = { x: this.player.x, y: this.player.y };
     this.player.move(dx, dy, delta, this.bounds);
+    this.keepOffTheTable(before);
 
     const bal = ledger.balance();
     // The table and the wheel go dark when the pocket cannot cover a go: they
@@ -371,6 +395,34 @@ export class ArcadeCasino extends Phaser.Scene {
 
     this.target = this.findTarget();
     this.renderPrompt();
+  }
+
+  /**
+   * The table is solid, the way a table is.
+   *
+   * Its footprint is a box, and a step that ends inside it is undone on the
+   * axis that walked in -- so you stop dead against the edge you walked into
+   * and keep sliding along the other one, which is what running a shoulder
+   * down a table feels like.  You may still walk round either end of it and
+   * along the wall behind it; what you may not do is end up stood in the
+   * MIDDLE of it, which is the one arrangement that makes the picture
+   * unreadable, with the dealer, the player and every card on one line.
+   *
+   * If both the old position and the new one are inside -- a spawn that
+   * landed on the felt, a scene reused with a stale position -- it puts the
+   * player out at the front edge rather than leaving them stuck in the
+   * furniture.
+   */
+  private keepOffTheTable(before: { x: number; y: number }): void {
+    const t = this.table;
+    if (!t) return;
+    const { x, y } = t.def;
+    const inside = (px: number, py: number): boolean =>
+      Math.abs(px - x) < TABLE_W / 2 && py > y - TABLE_BACK && py < y + TABLE_STAND;
+    if (!inside(this.player.x, this.player.y)) return;
+    if (!inside(before.x, this.player.y)) this.player.setPosition(before.x, this.player.y);
+    else if (!inside(this.player.x, before.y)) this.player.setPosition(this.player.x, before.y);
+    else this.player.setPosition(this.player.x, y + TABLE_STAND);
   }
 
   private findTarget(): Target {
