@@ -23,7 +23,7 @@ import { TokenHud } from '../ui/hud';
 import { ANNEX_DOOR, BELL, CABINETS, COUNTER, COUNTER_DEPTH, PRIZE_CASE, cabinetsIn, prizesForWave } from '../game/content';
 import { DialogueBox } from '../froggy/dialogue';
 import { CounterStaff } from '../art/counterStaff';
-import { drawFroggy } from '../froggy/froggy';
+import { drawFroggy, FROGGY_DESIGN } from '../froggy/froggy';
 import { button } from '../core/ui';
 import { tutorialScript } from '../froggy/script';
 import { froggyLayer } from '../render/froggyLayer';
@@ -76,6 +76,31 @@ const FROG_POST = { x: 230, y: COUNTER.y + 13, height: 30 };
  * matter.  Taken from `art/player.ts` -- if he is ever rebuilt, these move.
  */
 const PLAYER_BOX = { headW: 10, headTop: 28, headH: 20, torsoW: 12, torsoH: 12 };
+/**
+ * ---- AND WHAT YOU CAN SEE OF HIM IS SOLID.
+ *
+ * The counter stops the player's FEET, and the player is not a pair of feet.
+ * He is head and shoulders over the glass, and a customer walking up to the
+ * right-hand end of the counter put their own head straight through his face:
+ * the overlay cut a player-shaped hole in him so the sorting stayed honest,
+ * which is the right answer to "who is in front of whom" and no answer at all
+ * to "may I stand there".
+ *
+ * So this is the box, and it is what is VISIBLE of him rather than where his
+ * feet are: his feet are behind a counter that is already solid, and colliding
+ * with those would stop nobody.  The paint is clipped at `COUNTER.y + 2`, so
+ * that line is the bottom of him, and everything else comes off the drawing's
+ * own extents (`FROGGY_DESIGN`) through `FROG_POST` -- move him or resize him
+ * and the box follows, at the top of his breath so it does not shrink and grow
+ * under the player twice a second.
+ */
+const FROG_SCALE = (FROG_POST.height / FROGGY_DESIGN.h) * FROGGY_DESIGN.breath;
+const FROG_BODY = {
+  left: FROG_POST.x - FROGGY_DESIGN.halfW * FROG_SCALE,
+  right: FROG_POST.x + FROGGY_DESIGN.halfW * FROG_SCALE,
+  top: FROG_POST.y + (FROGGY_DESIGN.top - FROGGY_DESIGN.feet - FROGGY_DESIGN.lift) * FROG_SCALE,
+  bottom: COUNTER.y + 2,
+};
 const STAFF_DEPTH = COUNTER_DEPTH - 0.01;
 /**
  * ---- AND THE HIGHLIGHTS GO BEHIND EVERYBODY.
@@ -1087,8 +1112,10 @@ export class ArcadeHub extends Phaser.Scene {
 
     const dx = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     const dy = (this.held('down') ? 1 : 0) - (this.held('up') ? 1 : 0);
+    const before = { x: this.player.x, y: this.player.y };
     this.player.move(dx, dy, delta, this.bounds);
     this.keepOutOfCounter();
+    this.keepOffFroggy(before);
 
     const bal = ledger.balance();
     for (const c of this.cabinets) c.setAffordable(bal >= c.def.cost);
@@ -1116,6 +1143,42 @@ export class ArcadeHub extends Phaser.Scene {
     if (this.player.y >= front) return;
     if (this.player.x < COUNTER.x - 3 || this.player.x > COUNTER.x + COUNTER.w + 3) return;
     this.player.setPosition(this.player.x, front);
+  }
+
+  /**
+   * You cannot walk through him either.
+   *
+   * His box against the player's own -- torso width, head to heel, both
+   * measured off the sprites rather than guessed at -- and a step that ends
+   * inside it is undone on the axis that walked in.  Come up the room at him
+   * and you stop a head short of the glass; come along the counter and you
+   * stop at his shoulder and go round, under him, at which point the counter
+   * is yours again.
+   *
+   * Nothing this does puts the counter out of reach.  The furthest back it can
+   * push anybody is the line where their head clears the top of the glass,
+   * four pixels inside the range the prize case answers from -- so the prompt
+   * is up before you are stopped, and it stays up while you are.
+   *
+   * Only while it is HIM on the counter.  After the night it is a member of
+   * staff, who is a Phaser sprite sorted under the counter like everything
+   * else in the room and needs none of this.
+   */
+  private keepOffFroggy(before: { x: number; y: number }): void {
+    if (!this.frogOnCounter) return;
+    const halfW = PLAYER_BOX.torsoW / 2;
+    const hits = (px: number, py: number): boolean =>
+      px + halfW > FROG_BODY.left &&
+      px - halfW < FROG_BODY.right &&
+      py > FROG_BODY.top &&
+      py - PLAYER_BOX.headTop < FROG_BODY.bottom;
+    if (!hits(this.player.x, this.player.y)) return;
+    if (!hits(before.x, this.player.y)) this.player.setPosition(before.x, this.player.y);
+    else if (!hits(this.player.x, before.y)) this.player.setPosition(this.player.x, before.y);
+    // Both ends of the step inside him -- put somewhere by a spawn, or walked
+    // in diagonally on the one frame both axes crossed.  Out the front, which
+    // is the only side of him there is any floor on.
+    else this.player.setPosition(this.player.x, FROG_BODY.bottom + PLAYER_BOX.headTop);
   }
 
   private findTarget(): Target {
