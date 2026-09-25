@@ -1163,6 +1163,17 @@ const DODGE_BONUS = 0.4;
 const DODGE_COOL = 0.7;
 /** Damage a guarding fighter turns aside on top of the weapon's own guard. */
 const GUARD_CUT = 0.3;
+/**
+ * WHAT CATCHING A BLOW ON YOUR WEAPON COSTS IT.
+ *
+ * Blocking was free, which made a raised guard strictly better than not
+ * having one and meant the only question was whether the fighter happened to
+ * carry a shield.  Taking a war hammer on the flat of a dagger should tell on
+ * the dagger.  The wear is the damage that was turned aside, divided by how
+ * much weapon there is to turn it aside with -- so a spiked shield can stand
+ * there all afternoon and a bow-stave used as a bar snaps in three or four.
+ */
+const BLOCK_WEAR = 1.15;
 /** Below this share of health a fighter starts looking after itself, */
 const HURT_AT = 0.35;
 /** and below this it stops, because there is nothing left to save it for. */
@@ -1295,6 +1306,8 @@ export interface Blow {
   move?: string;
   /** The blow knocked the weapon clean out of the defender's hand. */
   disarmed?: Dropped;
+  /** The defender's weapon gave out catching this one. */
+  blockBroke?: boolean;
   /** A piece of the defender's armour came off on this one, and its colour. */
   stripped?: 'head' | 'body' | 'legs';
   strippedTint?: number;
@@ -1331,13 +1344,51 @@ export interface Blow {
  * identical arithmetic and a ranged weapon cannot quietly acquire a different
  * set of rules from a melee one.
  */
+/**
+ * HOW MUCH A RAISED WEAPON ACTUALLY TURNS ASIDE.
+ *
+ * A flat share for everybody meant a twig and a tower shield were the same
+ * block.  It reads off the weapon's own resistance roll, so what you are
+ * holding decides whether getting it in the way was worth doing -- and bare
+ * arms are a real block too, just a poor one.
+ */
+function guardPower(def: Fighter): number {
+  if (def.broken || def.weapon.key === 'none') return GUARD_CUT * 0.45;
+  // Deliberately a wide spread.  A block is a thing your EQUIPMENT does for
+  // you, so a well-made weapon should turn aside a great deal more than a
+  // cheap one -- at a narrow spread, blocking helps whoever is losing and
+  // quietly flattens the gap that good gear is supposed to open.
+  return GUARD_CUT * (0.25 + (def.held.rResist ?? 5) / 8);
+}
+
+/**
+ * And what it cost the thing that did the turning aside.
+ *
+ * Charged on the damage that was ACTUALLY stopped, so a block that barely
+ * helped barely wears, and catching something enormous on something flimsy
+ * is how a weapon ends up in two pieces.
+ */
+function wearFromBlock(def: Fighter, stopped: number): boolean {
+  if (def.broken || def.weapon.key === 'none' || !Number.isFinite(def.dur)) return false;
+  def.dur -= (stopped * BLOCK_WEAR) / Math.max(1.5, def.held.rResist);
+  if (def.dur > 0) return false;
+  breakWeapon(def);
+  return true;
+}
+
 function applyDamage(att: Fighter, def: Fighter, raw: number, out: Blow, rng: () => number,
-  o: { pierce: number; soak: number; stagger: number; knock: number; ground?: Dropped[] }): void {
+  o: { pierce: number; soak: number; stagger: number; knock: number; ground?: Dropped[]; blocked?: boolean }): void {
   const weary = Math.min(1, Math.max(0, (att.clock - WEARY_AT) / WEARY_OVER));
   raw *= 1 + weary * 0.6;
   const armour = def.st.defence * (1 - o.pierce) * (1 - weary);
   out.hit = true;
-  out.dmg = Math.max(1, Math.round(raw * (1 - armour) * (1 - o.soak)));
+  const through = raw * (1 - armour);
+  out.dmg = Math.max(1, Math.round(through * (1 - o.soak)));
+  // the share the guard actually stopped is what the weapon pays for
+  if (o.blocked) {
+    const stopped = Math.max(0, through - out.dmg);
+    if (stopped > 0 && wearFromBlock(def, stopped)) out.blockBroke = true;
+  }
   def.hp = Math.max(0, def.hp - out.dmg);
   if (def.hp > 0) {
     const off = wearArmour(def, rng);
@@ -1449,11 +1500,11 @@ export function landShot(att: Fighter, def: Fighter, sh: InFlight, rng = Math.ra
   }
   const guarding = def.act === 'guard';
   out.guarded = guarding || def.st.guard > 0;
-  const soak = (guarding ? GUARD_CUT : 0) + def.st.guard;
+  const soak = (guarding ? guardPower(def) : 0) + def.st.guard;
   let raw = sh.power;
   if (sh.crit) raw *= CRIT_MUL;
   applyDamage(att, def, raw, out, rng,
-    { pierce: r.pierce ?? 0, soak, stagger: r.stagger ?? 0, knock: r.knock ?? 0, ground });
+    { pierce: r.pierce ?? 0, soak, stagger: r.stagger ?? 0, knock: r.knock ?? 0, ground, blocked: guarding });
   return out;
 }
 
@@ -1511,7 +1562,7 @@ export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Mat
   // ---- THE GUARD, AND THE THINGS THAT IGNORE IT.
   const guarding = def.act === 'guard';
   out.guarded = guarding || def.st.guard > 0;
-  const soak = ((guarding ? GUARD_CUT : 0) + def.st.guard) * (1 - (sp.guardCut ?? 0));
+  const soak = ((guarding ? guardPower(def) : 0) + def.st.guard) * (1 - (sp.guardCut ?? 0));
   // A spiked shield hands some of it back to whoever hit it.
   const shield = def.weapon.spec.riposte ?? 0;
   if (shield > 0 && guarding && att.hp > 0) {
@@ -1570,6 +1621,7 @@ export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Mat
     stagger: (sp.stagger ?? 0) + (mv?.stagger ?? 0),
     knock: (sp.knock ?? 0) + (mv?.knock ?? 0),
     ground,
+    blocked: guarding,
   });
   return out;
 }
@@ -1753,8 +1805,26 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random,
   }
 
   // ---- A SHIELD, OR A BAD DAY, PUTS SOMETHING BETWEEN YOU AND IT.
-  if (f.act === 'walk' && (hurt || f.st.guard > 0) && gap <= other.st.reach + 4 && !f.type?.berserk
-      && rng() < (hurt ? 0.9 : 0.4) * dt) {
+  // ---- ANYTHING IN YOUR HANDS WILL BLOCK, IF YOU GET IT THERE IN TIME.
+  //
+  // This only ever fired for a fighter who was hurt or happened to be
+  // carrying a shield, so for most of the rack blocking simply did not exist.
+  // Any weapon can be put between you and what is coming; whether that was a
+  // good idea is a question for the weapon, which pays for it in wear, and
+  // for how much it actually turns aside.  A berserker still will not.
+  const armedNow = !f.broken && f.weapon.key !== 'none';
+  // These were a tenth of this and blocking simply never happened -- a fifth
+  // of a block a bout for most of the rack, which is not a mechanic, it is a
+  // rounding error.  A guard costs the tempo you would have attacked in, so
+  // it is still a decision and not a free action.
+  let wantBlock = hurt ? 3.2 : f.st.guard > 0 ? 2.2 : armedNow ? 1.5 : 0.8;
+  // A berserker used to be barred from blocking outright.  That was a fair
+  // reading of the archetype while nobody blocked much; once everybody did,
+  // never spending tempo on defence became a straight advantage and the
+  // berserker went to 62%.  It still hates doing it -- a fifth as often as
+  // anyone else -- which is a trade-off rather than an exemption.
+  if (f.type?.berserk) wantBlock *= 0.2;
+  if (f.act === 'walk' && gap <= other.st.reach + 4 && rng() < wantBlock * dt) {
     f.act = 'guard';
     f.t = GUARD_S;
     return;
@@ -4039,6 +4109,39 @@ function showPickup(f: Fighter, d: Dropped): void {
   S().tweens.add({ targets: w, scaleX: 1, scaleY: 1, alpha: 1, duration: 200, ease: 'Back.easeOut' });
 }
 
+/**
+ * A WEAPON GIVING OUT UNDER A BLOW RATHER THAN ON ONE.
+ *
+ * Deliberately not the same as wearing out mid-swing: this one fails while
+ * being held still, so the pieces go straight down at the feet instead of
+ * spinning away, and the fighter is left standing in a guard with nothing
+ * in it.
+ */
+function showBlockBreak(f: Fighter): void {
+  audio.sfx('crumble', 0.75);
+  audio.sfx('fence_thunk', 0.5);
+  floatHigh(f.x, 'GUARD SHATTERED!', PALETTE.blood);
+  S().cameras.main.shake(220, 0.007);
+  for (let i = 0; i < 5; i++) {
+    const bit = S().add.rectangle(f.x + f.face * 10, FLOOR_Y - 22, 3, 2, PALETTE.steel).setDepth(31);
+    layer?.add(bit);
+    S().tweens.add({
+      targets: bit, x: bit.x + (Math.random() - 0.5) * 22, y: FLOOR_Y - 2,
+      angle: 180 + Math.random() * 360, alpha: 0, duration: 420 + Math.random() * 200,
+      ease: 'Quad.easeIn', onComplete: () => bit.destroy(),
+    });
+  }
+  if (!f.art) return;
+  f.art.weapon.destroy();
+  const left = f.broken || f.weapon.key === 'none'
+    ? buildWeapon(S(), UNARMED.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber)
+    : buildWeapon(S(), f.weapon.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber, true);
+  left.setPosition(f.art.arm.hand + 1, 0);
+  f.art.arm.fore.add(left);
+  f.art.weapon = left;
+  if (!f.broken) floatHigh(f.x, 'ONE LEFT!', PALETTE.gold);
+}
+
 function showBlow(f: Fighter, blow: Blow): void {
   const x = f.x;
   if (blow.dodged) {
@@ -4230,6 +4333,11 @@ function stepFight(real: number): void {
   for (const e of exchange(frog!, lizard!, dt, Math.random, ground)) {
     if (e.blow.disarmed) showDisarm(e.def, e.blow.disarmed);
     if (e.blow.broke) showBreak(e.att);
+    // A weapon that gave out CATCHING something broke in the defender's
+    // hands, not the attacker's -- attributing it to the swinger would take
+    // the sprite out of the wrong gladiator's grip, which is the same bug
+    // the clash path had.
+    if (e.blow.blockBroke) showBlockBreak(e.def);
     if (e.blow.stripped) showStrip(e.def, e.blow.stripped, e.blow.strippedTint ?? PALETTE.steel);
     // A shot that has only just been loosed has not done anything yet -- the
     // sprite goes up and the damage waits until it gets there.
