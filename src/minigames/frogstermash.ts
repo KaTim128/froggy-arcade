@@ -632,8 +632,12 @@ export interface LizardType {
 }
 
 export const LIZARDS: LizardType[] = [
-  { key: 'muscle', name: 'MUSCULAR LIZARD', power: 1.22, speed: 0.85, avoid: 0.84, resist: 1.2, nerve: 1.2, spacing: 0.9,
-    build: { scale: 1.12, wide: 1.55, tall: 0.94, limb: 0.86, head: 0.92, skin: 0x8f4a22, light: 0xc07038, dark: 0x532a12, crest: 0xd2452f },
+  // ---- THE BIG ONE.  Bigger and a shade taller than Froggy, and still
+  // clearly shorter than the reach lizard, which is the one that towers.
+  // It pays for the size in avoidance: a fifth less than the plain build,
+  // declared here on the same line as the size rather than hidden anywhere.
+  { key: 'muscle', name: 'MUSCULAR LIZARD', power: 1.22, speed: 0.85, avoid: 0.8, resist: 1.2, nerve: 1.2, spacing: 0.9,
+    build: { scale: 1.18, wide: 1.6, tall: 1.04, limb: 1.0, head: 0.95, skin: 0x8f4a22, light: 0xc07038, dark: 0x532a12, crest: 0xd2452f },
     blurb: 'HITS LIKE A DOOR' },
   { key: 'fast', name: 'FAST LIZARD', power: 0.82, speed: 1.32, avoid: 1.2, resist: 0.8, nerve: 1.05, spacing: 1.0,
     build: { scale: 0.92, wide: 0.7, tall: 1.1, limb: 1.28, head: 0.9, skin: 0xc07a2e, light: 0xe8a94e, dark: 0x6d4114, crest: 0xffd45e },
@@ -1812,6 +1816,8 @@ export interface FighterArt {
   helmDome: Phaser.GameObjects.Ellipse;
   visor: Phaser.GameObjects.Rectangle;
   plume: Phaser.GameObjects.Rectangle;
+  /** Everything above the neck, so a duck moves the face and not just the skull. */
+  headGroup: Phaser.GameObjects.Container;
 }
 
 const FLOOR_Y = 138;
@@ -2117,6 +2123,42 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const L = f.kit.legs.mat!;
   const wears = (m: ArmourMat): boolean => m.key !== 'none';
 
+  // ---- ONE LIGHT, FROM ABOVE AND IN FRONT.
+  //
+  // Every flat shape in here was its own colour and nothing else, which is
+  // why the fighters read as cut paper: a body is only a silhouette until
+  // something tells you which way is up.  There is a single light now, and
+  // the rule for the whole rig is the same three bands -- lit along the top,
+  // the body colour through the middle, and the shaded underside -- with the
+  // metal picking up a hard specular the skin does not get.
+  const mix = (a: number, b: number, k: number): number => {
+    const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+    const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+    return (Math.round(ar + (br - ar) * k) << 16) | (Math.round(ag + (bg - ag) * k) << 8) | Math.round(ab + (bb - ab) * k);
+  };
+  const LIT = 0xfff3d2;
+  const SHADE = 0x1a1208;
+  /** Lighter, as if the light above were catching it. */
+  const up = (c: number, k = 0.3): number => mix(c, LIT, k);
+  /** Darker, for an underside or a crease. */
+  const down = (c: number, k = 0.3): number => mix(c, SHADE, k);
+  /** How much a material shines.  Cloth does not; plate does. */
+  const gloss = (m: ArmourMat): number =>
+    m.key.includes('plate') || m.key === 'gold' || m.key === 'steel' ? 0.55
+      : m.key === 'chain' || m.key === 'tin' || m.key === 'iron' ? 0.34 : 0.12;
+  // ---- THE SHADING, IN THREE LAYERS.
+  //
+  // One list would have been simpler and wrong: a highlight has to sit
+  // directly on the thing it lights and under whatever covers that thing.
+  // Collected in one pile, the chest shading drew over the head and the
+  // helm's shine drew underneath the helm.
+  const legDetail: Phaser.GameObjects.GameObject[] = [];
+  const bodyDetail: Phaser.GameObjects.GameObject[] = [];
+  /** Shading that belongs ON the armour, so it has to be drawn after it. */
+  const armourDetail: Phaser.GameObjects.GameObject[] = [];
+  const headDetail: Phaser.GameObjects.GameObject[] = [];
+  const helmDetail: Phaser.GameObjects.GameObject[] = [];
+
   // ---- THE SHADOW.  One soft ellipse on the sand, and the single cheapest
   // thing that stops a sprite looking pasted onto the background.
   const shadow = scene.add.ellipse(0, 1, 26, 6, 0x6b5330).setAlpha(0.34);
@@ -2131,18 +2173,92 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // frogs get broad flat feet, lizards get clawed ones
   const footL = scene.add.rectangle(-5 * wide, 0, (frog ? 8 : 7) * wide, 2, light).setOrigin(0.5, 1);
   const footR = scene.add.rectangle(5 * wide, 0, (frog ? 8 : 7) * wide, 2, light).setOrigin(0.5, 1);
+  // a lit edge down the front of each shin, and the dark where foot meets sand
+  legDetail.push(scene.add.rectangle(-2.6 * wide, -2, 1, 11 * limb, up(dark, 0.22)).setOrigin(0.5, 1));
+  legDetail.push(scene.add.rectangle(5.4 * wide, -2, 1, 11 * limb, up(skin, 0.3)).setOrigin(0.5, 1));
+  legDetail.push(scene.add.rectangle(-5 * wide, 0, (frog ? 8 : 7) * wide, 1, down(light, 0.45)).setOrigin(0.5, 1).setAlpha(0.6));
+  legDetail.push(scene.add.rectangle(5 * wide, 0, (frog ? 8 : 7) * wide, 1, down(light, 0.45)).setOrigin(0.5, 1).setAlpha(0.6));
   const clawL = frog ? null : scene.add.triangle(-9, -1, 0, 2, 4, 0, 4, 3, PALETTE.bone);
   const clawR = frog ? null : scene.add.triangle(9, -1, 0, 0, 4, 2, 0, 3, PALETTE.bone);
 
-  // ---- THE TAIL, which is half of what says LIZARD
-  const tail = frog ? null : scene.add.triangle(-13 * wide, -14 * tall - lift * 0.6, 0, 0, 19 * wide, 5 * wide, 0, 11 * wide, skin).setAngle(14);
-  const tailTip = frog ? null : scene.add.triangle(-21 * wide, -12 * tall - lift * 0.6, 0, 0, 9 * wide, 3, 0, 6 * wide, dark).setAngle(18);
+  // ---- THE TAIL, which is half of what says LIZARD.
+  //
+  // It was one long triangle, and at this size a single triangle is a traffic
+  // cone rather than a tail.  Three tapering segments with a lit top edge
+  // read as something that bends and has weight, and they let the tail droop
+  // the way a heavy one would.
+  //
+  // THREE ROTATED TRIANGLES DID NOT WORK.  Each one turns about its own
+  // centre, so the tips swing apart and the tail arrives as a cone with a
+  // loose shard floating behind it.  One polygon has no seams to come apart:
+  // it leaves the hip at full width and curves down to a point, and a second
+  // thinner one along the top edge catches the light.
+  const tailY = -15 * tall - lift * 0.6;
+  const curve = (w: number, t: number): number[] => [
+    0, -5 * t, -7 * w, -4 * t, -14 * w, -1 * t, -20 * w, 4 * t, -25 * w, 10 * t,
+    -22 * w, 11 * t, -17 * w, 6 * t, -11 * w, 1 * t, -4 * w, -1 * t, 0, 1 * t,
+  ];
+  const tail = frog ? null : scene.add.polygon(0, tailY, curve(wide, tall), skin).setOrigin(0, 0);
+  const tailTip = frog ? null
+    : scene.add.polygon(0, tailY - 1, curve(wide * 0.94, tall * 0.7), up(skin, 0.28)).setOrigin(0, 0).setAlpha(0.75);
+  // and the ridge of plates running down it, which is what makes it a lizard's
+  const tailEnd = frog ? null
+    : scene.add.polygon(0, tailY + 1.5, curve(wide * 0.8, tall * 0.5), down(skin, 0.3)).setOrigin(0, 0).setAlpha(0.6);
 
   // ---- TORSO
+  // ---- AND AN EDGE ROUND THE BIG SHAPES.
+  //
+  // A pixel sprite on a sandy floor in a sandy arena is mostly the same value
+  // as the thing behind it.  A dark line round the torso and the skull is the
+  // single cheapest way to lift the whole animal off the background, and it
+  // is why these read as drawn rather than as coloured-in.
+  const OUTLINE = down(skin, 0.62);
   const torso = frog
-    ? scene.add.ellipse(0, -19, 19, 20, skin)
-    : scene.add.ellipse(-1, -19 * tall - lift, 15 * wide, 19 * tall, skin);
+    ? scene.add.ellipse(0, -19, 19, 20, skin).setStrokeStyle(1, OUTLINE)
+    : scene.add.ellipse(-1, -19 * tall - lift, 15 * wide, 19 * tall, skin).setStrokeStyle(1, OUTLINE);
   const belly = scene.add.ellipse(1, -16 * tall - lift, (frog ? 12 : 9) * wide, 11 * tall, light).setAlpha(0.55);
+  // ---- THE BODY, LIT.  A band of light across the shoulders, a shadow
+  // under the gut, and the creases where the limbs and the head join it.
+  const ty0 = -19 * (frog ? 1 : tall) - (frog ? 0 : lift);
+  bodyDetail.push(scene.add.ellipse(0, ty0 - (frog ? 6 : 6 * tall), (frog ? 15 : 12) * wide, 5, up(skin, 0.34)).setAlpha(0.75));
+  bodyDetail.push(scene.add.ellipse(0, ty0 + (frog ? 7 : 7 * tall), (frog ? 16 : 12) * wide, 4, down(skin, 0.42)).setAlpha(0.6));
+  bodyDetail.push(scene.add.ellipse(0, ty0 - (frog ? 9 : 9 * tall), (frog ? 9 : 7) * wide, 2, up(skin, 0.5)).setAlpha(0.5));
+  // ---- AND THE SKIN ITSELF.  Frogs are speckled, lizards are scaled: a
+  // handful of marks laid out from the build's own numbers, so a muscular
+  // lizard is not a standard one with a bigger box round it.
+  if (frog) {
+    // ---- FROGGY.  He is the one the player is, so he gets the most work.
+    //
+    // A pale throat and chest running up under the chin, the darker dappling
+    // a frog's back actually has laid over the shoulders rather than sprayed
+    // evenly over him, and a wet highlight on the crown.  The pale front is
+    // the important one: it gives him a light side and a dark side, which is
+    // what he was missing when he read as a green oval.
+    bodyDetail.push(scene.add.ellipse(4, ty0 + 2, 11, 15, up(light, 0.34)).setAlpha(0.62));
+    bodyDetail.push(scene.add.ellipse(4, ty0 + 8, 9, 4, up(light, 0.5)).setAlpha(0.4));
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI * (0.62 + i * 0.16);
+      bodyDetail.push(scene.add.circle(Math.cos(a) * 7.4, ty0 + Math.sin(a) * 7 - 2, i % 2 ? 1.6 : 1.1, down(skin, 0.34)).setAlpha(0.5));
+    }
+    bodyDetail.push(scene.add.ellipse(-1, ty0 - 8, 7, 2.4, up(skin, 0.48)).setAlpha(0.55));
+  } else {
+    // ---- THE BELLY PLATES, not stripes of dirt.
+    //
+    // Four flat bands across the middle of the body read as mud at this size.
+    // A reptile's underside is a stack of short scutes running ACROSS it,
+    // lighter than the back and edged underneath, which is both what the
+    // animal looks like and a shape the eye can pick out from two feet away.
+    for (let i = 0; i < 5; i++) {
+      const w = (8 - Math.abs(i - 2) * 1.3) * wide;
+      const y = ty0 - 5 * tall + i * 3.4 * tall;
+      bodyDetail.push(scene.add.rectangle(2.5 * wide, y, w, 2.2 * tall, up(light, 0.3)).setAlpha(0.5));
+      bodyDetail.push(scene.add.rectangle(2.5 * wide, y + 1.4 * tall, w, 0.8, down(skin, 0.35)).setAlpha(0.45));
+    }
+    // and a couple of scale rows over the shoulder, where the light hits
+    for (let i = 0; i < 3; i++) {
+      bodyDetail.push(scene.add.rectangle(-5 * wide, ty0 - (7 - i * 2.4) * tall, (5 - i) * wide, 1, up(skin, 0.36)).setAlpha(0.5));
+    }
+  }
   // The armour takes the same build as the body under it.  Scaling only the
   // torso left a muscular lizard's chest sticking out past a standard-issue
   // breastplate, which reads as a bug rather than as a bigger animal.
@@ -2152,24 +2268,71 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const pauldR = scene.add.ellipse(8 * wide, -26 * tall - lift, 8 * wide, 6, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
   const belt = scene.add.rectangle(0, -12 * tall - lift, (frog ? 18 : 16) * wide, 3, B.edge).setVisible(wears(B));
   const ridge = scene.add.rectangle(0, -20 * tall - lift, (frog ? 15 : 13) * wide, 1, B.edge).setAlpha(0.7).setVisible(wears(B));
+  // ---- WHAT THE ARMOUR IS MADE OF, and not only what colour it is.
+  //
+  // A breastplate and a tunic were the same flat rectangle in two colours.
+  // Plate takes a hard highlight along the top and a dark underside, chain a
+  // softer one, cloth almost none -- so the crowd can tell steel from linen
+  // at a glance and a good suit LOOKS like a good suit.
+  const g = gloss(B);
+  const cuirassLit = scene.add.rectangle(0, -24 * tall - lift, (frog ? 14 : 12) * wide, 2, up(B.colour, 0.3 + g))
+    .setAlpha(0.35 + g * 0.8).setVisible(wears(B));
+  const cuirassLow = scene.add.rectangle(0, -13.5 * tall - lift, (frog ? 16 : 14) * wide, 2, down(B.colour, 0.45))
+    .setAlpha(0.55).setVisible(wears(B));
+  armourDetail.push(cuirassLit, cuirassLow);
+  if (g > 0.3) armourDetail.push(scene.add.rectangle(-4 * wide, -21 * tall - lift, 2, 8 * tall, up(B.colour, 0.55))
+    .setAlpha(g).setVisible(wears(B)).setAngle(-8));
 
   // ---- THE CREST, the other half of LIZARD
+  // Six spines rather than four, biggest at the shoulders and tapering down
+  // the back, each with a lit front edge.  It is the one piece of the animal
+  // that is allowed to be a bright colour, so it carries the character.
   const spines: Phaser.GameObjects.Triangle[] = [];
-  if (!frog) for (let i = 0; i < 4; i++) {
-    spines.push(scene.add.triangle(-6 - i * 2, (-30 + i * 5) * tall - lift, 0, 5, 3, 0, 5, 5, bld?.crest ?? PALETTE.rust));
+  if (!frog) {
+    const crest = bld?.crest ?? PALETTE.rust;
+    // Five, biggest over the shoulder and tapering to the hip -- and they
+    // STOP at the hip.  Run on down the tail they read as flames coming out
+    // of the animal sideways rather than as a ridge along its back.
+    for (let i = 0; i < 7; i++) {
+      const k = 1 - Math.abs(i - 1.5) / 6;
+      const h = (2.4 + k * 3.6) * tall;
+      // Along the top of the body and only then down to the hip.  Stepping
+      // down nearly three pixels a spine put the whole ridge on the tail.
+      const x = -1.5 - i * 2.2 * wide;
+      const y = (-29.5 + i * 1.7) * tall - lift;
+      spines.push(scene.add.triangle(x, y, 0, h, 2.2 * wide + k * 1.4, 0, 4.4 * wide, h, crest).setAngle(-6 - i * 4));
+      spines.push(scene.add.triangle(x + 0.7, y, 0, h, 1, 0, 1.8, h, up(crest, 0.45)).setAngle(-6 - i * 4));
+    }
   }
 
   // ---- HEAD
+  // ---- THE SKULL DOES NOT GROW WITH THE CHEST.
+  //
+  // At the full body width a muscular lizard's head came out very nearly as
+  // wide as its torso, sat straight on top of it in the same value, and the
+  // two read as one brown lump with eyes -- the "potato" the heavy builds
+  // kept turning into.  The skull now widens at half the rate the body does,
+  // rides a little higher, and is mixed up toward the light, so there is a
+  // neck between the two and the head is the brighter of them.
+  const skullW = 13 * (1 + (wide - 1) * 0.48) * skull;
+  const headTone = frog ? light : up(light, 0.16);
+  // And a neck to stand it on.  Lifted clear of the chest without one, the
+  // head simply floated: a separated head is worse than a merged one.
+  const neck = frog ? null
+    : scene.add.ellipse(0, -28.5 * tall - lift, skullW * 0.55, 7 * tall, down(light, 0.1));
   const head = frog
-    ? scene.add.ellipse(2, -33, 16, 13, light)
-    : scene.add.ellipse(1, -32 * tall - lift, 13 * wide * skull, 10 * skull, light);
+    ? scene.add.ellipse(2, -33, 16, 13, light).setStrokeStyle(1, OUTLINE)
+    : scene.add.ellipse(1, -32.6 * tall - lift, skullW, 10 * skull, headTone).setStrokeStyle(1, OUTLINE);
   const jaw = frog
     ? scene.add.ellipse(7, -30, 6, 4, light)
-    : scene.add.triangle(12 * wide * skull, -30 * tall - lift, 0, 0, 11 * skull, 3, 0, 6 * skull, light);
-  const teeth = frog ? null : scene.add.rectangle(11 * wide * skull, -29 * tall - lift, 7 * skull, 1, PALETTE.cream);
-  const mouth = frog ? scene.add.rectangle(6, -29, 8, 1, dark) : null;
+    : scene.add.triangle(skullW * 0.9, -30.4 * tall - lift, 0, 0, 11 * skull, 3, 0, 6 * skull, headTone);
+  const teeth = frog ? null : scene.add.rectangle(skullW * 0.84, -29.4 * tall - lift, 7 * skull, 1, PALETTE.cream);
+  // A wider mouth with a turned-up corner, and the shine on the dome above it
+  const mouth = frog ? scene.add.rectangle(5, -29, 10, 1.2, down(dark, 0.2)) : null;
+  const smile = frog ? scene.add.rectangle(10, -29.8, 2, 1.2, down(dark, 0.2)).setAngle(-34) : null;
+  const cheek = frog ? scene.add.ellipse(9, -31, 4, 2.6, mix(light, 0xff9a8a, 0.35)).setAlpha(0.38) : null;
   // a frog's eyes sit on top of the dome; a lizard's are set into the side
-  const ey = frog ? -38 : -34 * tall - lift;
+  const ey = frog ? -38 : -34.6 * tall - lift;
   const eyeL = scene.add.circle(-1, ey, (frog ? 3.4 : 2.6) * skull, PALETTE.cream);
   const eyeR = scene.add.circle(5, ey, (frog ? 3.4 : 2.6) * skull, PALETTE.cream);
   const pupL = frog
@@ -2178,7 +2341,25 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const pupR = frog
     ? scene.add.circle(6, -38, 1.5, PALETTE.black)
     : scene.add.rectangle(6, ey, 1.2, 4 * skull, PALETTE.black);
-  const brow = frog ? null : scene.add.rectangle(2, ey - 3 * skull, 12 * wide * skull, 2, dark);
+  const brow = frog ? null : scene.add.rectangle(2, ey - 3 * skull, skullW * 0.9, 2, dark);
+  // ---- THE HEAD, LIT, and the small things that make a face a face.
+  //
+  // The dome takes the light first because it is the highest thing on the
+  // animal; underneath it is the shadow it casts on its own jaw, and where
+  // the skull sits down onto the shoulders.  Plus a nostril, and a catchlight
+  // in each eye -- two pixels that do more for a face than anything else here.
+  const hy0 = frog ? -33 : -32.6 * tall - lift;
+  const hw = frog ? 16 : skullW;
+  headDetail.push(scene.add.ellipse(2, hy0 - (frog ? 4 : 3 * skull), hw * 0.72, 3, up(light, 0.42)).setAlpha(0.8));
+  headDetail.push(scene.add.ellipse(2, hy0 + (frog ? 5 : 4 * skull), hw * 0.8, 2.5, down(light, 0.38)).setAlpha(0.55));
+  // The shadow the skull casts onto the chest.  Without it the head and the
+  // body are one lump, which is most of why the heavier builds read as a
+  // potato with eyes.
+  bodyDetail.push(scene.add.ellipse(1, hy0 + (frog ? 8 : 6.5 * skull), hw * 0.82, 3.4, down(skin, 0.55)).setAlpha(0.5));
+  headDetail.push(scene.add.ellipse(0, hy0 + (frog ? 7 : 5.4 * skull), hw * 0.62, 1.8, down(light, 0.42)).setAlpha(0.42));
+  headDetail.push(scene.add.circle(frog ? 9 : skullW * 0.86, hy0 + 1, 0.8, down(skin, 0.55)).setAlpha(0.7));
+  const catchL = scene.add.circle(frog ? -1.8 : -0.8, ey - 1.2, 0.8, 0xffffff).setAlpha(0.85);
+  const catchR = scene.add.circle(frog ? 4.2 : 5.2, ey - 1.2, 0.8, 0xffffff).setAlpha(0.85);
 
   // ---- HELM: a bowl, a brow band, a visor slit, and a plume for the frog
   // A helm caps the skull.  At -40 it came down over the eyes and both of
@@ -2188,6 +2369,12 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const helmDome = scene.add.ellipse(2, hy - 2, (frog ? 17 : 14) * wide, 7, H.colour).setVisible(wears(H));
   const visor = scene.add.rectangle(4, hy + 2, (frog ? 12 : 10) * wide, 1.5, H.edge).setVisible(wears(H));
   const plume = scene.add.rectangle(-4, hy - 7, 3, 8, frog ? PALETTE.blood : PALETTE.rust).setVisible(wears(H));
+  // the helm shines by the same rule the breastplate does
+  const hg = gloss(H);
+  helmDetail.push(scene.add.rectangle(2, hy - 4, (frog ? 12 : 10) * wide, 1.5, up(H.colour, 0.3 + hg))
+    .setAlpha(0.35 + hg * 0.8).setVisible(wears(H)));
+  helmDetail.push(scene.add.rectangle(2, hy + 3, (frog ? 15 : 12) * wide, 1.5, down(H.colour, 0.4))
+    .setAlpha(0.5).setVisible(wears(H)));
 
   // ---- the arm and the weapon, on one hinge at the shoulder
   // ---- TWO ARMS, because one of them cannot hold a guard.
@@ -2206,9 +2393,12 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
     // in the limb's own colour is invisible against the limb, so unarmed the
     // guard read as two green smudges; the dark ring gives each hand an edge
     // it keeps against the arm, against the body and against the face.
-    a2.add(scene.add.circle(10.2, 0, 4 * wide, dark));
-    a2.add(scene.add.circle(10, -0.4, 3 * wide, behind ? skin : light));
-    a2.add(scene.add.rectangle(10.6, 0, 1, 4.6 * wide, dark).setAlpha(0.45));
+    // The hand takes only half the body's width.  At the full multiplier a
+    // muscular lizard was holding two grapefruit.
+    const hw2 = 1 + (wide - 1) * 0.5;
+    a2.add(scene.add.circle(10.2, 0, 4 * hw2, dark));
+    a2.add(scene.add.circle(10, -0.4, 3 * hw2, behind ? skin : light));
+    a2.add(scene.add.rectangle(10.6, 0, 1, 4.6 * hw2, dark).setAlpha(0.45));
     return a2;
   };
   const armOff = buildArm(true);
@@ -2218,23 +2408,38 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   arm.add(weapon);
 
   const parts: Phaser.GameObjects.GameObject[] = [shadow];
+  if (tailEnd) parts.push(tailEnd);
   if (tailTip) parts.push(tailTip);
   if (tail) parts.push(tail);
   parts.push(footL, footR);
   if (clawL) parts.push(clawL, clawR!);
-  parts.push(legL, legR, greaveL, greaveR, kneeL, kneeR);
+  parts.push(legL, legR, ...legDetail, greaveL, greaveR, kneeL, kneeR);
   parts.push(...spines);
   parts.push(armOff);
-  parts.push(torso, belly, cuirass, ridge, belt, arm, pauldL, pauldR);
-  parts.push(head, jaw);
-  if (teeth) parts.push(teeth);
-  if (mouth) parts.push(mouth);
-  if (brow) parts.push(brow);
-  parts.push(eyeL, eyeR, pupL, pupR, helmDome, helm, visor, plume);
+  parts.push(torso, belly, ...bodyDetail, cuirass, ridge, belt, ...armourDetail, arm, pauldL, pauldR);
+  // ---- THE HEAD MOVES AS A HEAD.
+  //
+  // A duck used to be done by setting head.y and helm.y, which was already a
+  // little wrong -- the eyes stayed behind -- and became plainly wrong once
+  // the skull had a snout, a nostril, shading and catchlights to leave behind
+  // as well.  Everything above the neck goes in one container and that is
+  // what moves, so a dodge takes the whole face with it.
+  const headGroup = scene.add.container(0, 0);
+  const headBits: Phaser.GameObjects.GameObject[] = [head, jaw, ...headDetail];
+  if (teeth) headBits.push(teeth);
+  if (cheek) headBits.push(cheek);
+  if (mouth) headBits.push(mouth);
+  if (smile) headBits.push(smile);
+  if (brow) headBits.push(brow);
+  headBits.push(eyeL, eyeR, pupL, pupR, catchL, catchR);
+  headBits.push(helmDome, helm, visor, ...helmDetail, plume);
+  headGroup.add(headBits);
+  if (neck) parts.push(neck);
+  parts.push(headGroup);
   const root = scene.add.container(f.x, FLOOR_Y, parts).setDepth(20);
   root.setScale(f.face * (bld?.scale ?? 1), bld?.scale ?? 1);
   return { root, legL, legR, greaveL, greaveR, kneeL, kneeR, footL, footR, torso, cuirass, belt, ridge,
-    pauldL, pauldR, head, helm, helmDome, visor, plume, arm, armOff, guardUp: false, weapon, shadow };
+    pauldL, pauldR, head, helm, helmDome, visor, plume, headGroup, arm, armOff, guardUp: false, weapon, shadow };
 }
 
 /** Put the fighter into the pose its current act calls for. */
@@ -2389,11 +2594,8 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   }
   a.torso.setAngle(f.leanA);
   a.cuirass.setAngle(f.leanA);
-  const duck = f.act === 'dodge' ? 4 : f.act === 'stagger' ? -2 : 0;
-  const bd = f.type?.build;
-  const legLift = 11 * ((bd?.limb ?? 1) - 1);
-  a.head.y = (f.who === 'frog' ? -33 : -32 * (bd?.tall ?? 1) - legLift) + duck;
-  a.helm.y = (f.who === 'frog' ? -43 : -39 * (bd?.tall ?? 1) - legLift) + duck;
+  // The head, and everything on it, ducks as one.
+  a.headGroup.y = f.act === 'dodge' ? 4 : f.act === 'stagger' ? -2 : 0;
 
   // ---- THE SHADOW STAYS ON THE SAND.
   //
@@ -3768,6 +3970,39 @@ export const frogsterMash: MinigameModule = {
           const f = who === 'frog' ? frog : lizard;
           if (f && Number.isFinite(f.dur)) f.dur = 1;
         },
+        /** How tall each fighter actually stands, measured off the rig. */
+        height: (who: 'frog' | 'lizard') => {
+          const f = who === 'frog' ? frog : lizard;
+          if (!f?.art) return null;
+          const b = f.art.root.getBounds();
+          return { top: +b.top.toFixed(1), h: +(FLOOR_Y - b.top).toFixed(1), w: +b.width.toFixed(1) };
+        },
+        /** Where the first shot in the air has got to, for a flight test. */
+        shot: (who: 'frog' | 'lizard') => {
+          const f = who === 'frog' ? frog : lizard;
+          const sh = f?.flight[0];
+          if (!sh) return null;
+          return { k: 1 - Math.max(0, sh.t) / sh.total, kind: sh.kind,
+            x: sh.art?.x ?? 0, y: sh.art?.y ?? 0, from: sh.from, aim: sh.aim };
+        },
+        /** Put a named weapon in a live fighter's hand, to test one. */
+        arm: (who: 'frog' | 'lizard', key: string) => {
+          const f = who === 'frog' ? frog : lizard;
+          const def = WEAPONS.find((w) => w.key === key);
+          if (!f || !def) return false;
+          f.kit = { ...f.kit, weapon: makeWeapon(def) };
+          f.weapon = def;
+          f.held = f.kit.weapon;
+          f.broken = false;
+          f.dur = durabilityOf(f.kit.weapon);
+          f.ammo = def.spec.ranged?.ammo ?? 0;
+          f.reload = 0;
+          f.st = statsOf(f.kit, def, f.held, f.type);
+          f.hp = Math.min(f.hp, f.st.maxHp);
+          if (f.art) { f.art.weapon.destroy(); const w = buildWeapon(S(), def.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber);
+            w.setPosition(11, 0); f.art.arm.add(w); f.art.weapon = w; }
+          return true;
+        },
         /** Hold the fight still, and park the two apart, to read a pose. */
         freeze: (on: boolean) => { frozen = on; },
         park: (who: 'frog' | 'lizard', x: number) => {
@@ -3838,6 +4073,7 @@ function snap(f: Fighter): Record<string, unknown> {
   return {
     hp: Math.max(0, f.hp), maxHp: f.st.maxHp, x: Math.round(f.x), act: f.act,
     weapon: f.weapon.key, broken: f.broken, gone: { ...f.gone },
+    ammo: Number.isFinite(f.ammo) ? f.ammo : -1, flight: f.flight.length, reload: +f.reload.toFixed(2),
     wear: { head: Math.max(0, Math.round(f.wear.head)), body: Math.max(0, Math.round(f.wear.body)), legs: Math.max(0, Math.round(f.wear.legs)) }, dur: Number.isFinite(f.dur) ? f.dur : -1,
     power: +f.st.power.toFixed(2), rate: +f.st.rate.toFixed(2), walk: +f.st.walk.toFixed(1),
     avoid: +f.st.avoid.toFixed(3), defence: +f.st.defence.toFixed(3), reach: f.st.reach, range: f.st.range,
