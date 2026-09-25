@@ -522,6 +522,26 @@ export interface ArmourMat {
   def: number;
   /** Chance a full suit of it avoids a blow outright.  Tactical, and only it. */
   evade: number;
+  /**
+   * DAMAGE BACK TO A BARE HAND THAT HITS IT.
+   *
+   * Spiked armour's line has always read UNPLEASANT TO HIT and nothing in the
+   * rules ever made that true -- it was a defence number with a story on it.
+   * A fist or a boot driven into a suit of spikes hurts the person throwing
+   * it; a sword does not care, so this only ever answers an UNARMED attacker.
+   * Scaled by how much of the suit is actually spiked, so one spiked greave
+   * is a tenth of the deterrent a full suit is.
+   */
+  thorns?: number;
+  /**
+   * EXTRA SHARE TAKEN OFF A LIGHT BLOW.
+   *
+   * Scale is overlapping plates that ride over each other, so it shrugs off
+   * the fast repeated stuff and gives up on anything with real weight behind
+   * it.  Without this it was chain with a worse defence number and a
+   * different colour.
+   */
+  soft?: number;
   heavy: Band;
   resist: Band;
   colour: number;
@@ -539,19 +559,19 @@ export interface ArmourMat {
 export const MATERIALS: ArmourMat[] = [
   // ---- NOTHING, AND THE THINGS THAT BARELY COUNT
   { key: 'none', name: 'NO ARMOUR', def: 0, evade: 0, heavy: [1, 1], resist: [10, 10], colour: 0x6d5a45, edge: 0x4a3c2d, short: 'NONE', note: 'NOTHING THERE, AND NOTHING TO CARRY' },
-  { key: 'cloth', name: 'LIGHT CLOTH', def: 0.04, evade: 0.04, heavy: [1, 2], resist: [2, 4], colour: 0xd8cbb0, edge: 0x9a8e74, short: 'CLOTH', note: 'YOU WILL BE VERY QUICK AND VERY SORRY' },
+  { key: 'cloth', name: 'LIGHT CLOTH ARMOUR', def: 0.04, evade: 0.09, heavy: [1, 1], resist: [2, 4], colour: 0xd8cbb0, edge: 0x9a8e74, short: 'CLOTH', note: 'YOU WILL BE VERY QUICK AND VERY SORRY' },
   { key: 'tuxedo', name: 'TUXEDO', def: 0.05, evade: 0, heavy: [1, 2], resist: [2, 4], colour: 0x2a2d3a, edge: 0xdfe4ee, short: 'TUXEDO', note: 'FIVE PERCENT DEFENCE. THE REST IS FASHION' },
   { key: 'crown', name: 'CROWN', def: 0.06, evade: 0, heavy: [1, 2], resist: [3, 5], colour: 0xffd45e, edge: 0xa8801e, short: 'CROWN', note: 'IT PROTECTS NOTHING AND MEANS EVERYTHING' },
 
   // ---- LIGHT
   { key: 'leather', name: 'LEATHER ARMOUR', def: 0.10, evade: 0, heavy: [2, 4], resist: [5, 7], colour: 0x9c7248, edge: 0x5d4028, short: 'LEATHER', note: 'LIGHT, AND ABOUT AS USEFUL AS THAT SOUNDS' },
   { key: 'tactical', name: 'TACTICAL ARMOUR', def: 0.10, evade: 0.15, heavy: [2, 4], resist: [6, 8], colour: 0x3f4a3a, edge: 0x22281f, short: 'TACTICAL', note: 'STOPS LITTLE. MUCH HARDER TO HIT' },
-  { key: 'reinforced', name: 'REINFORCED HIDE', def: 0.13, evade: 0, heavy: [3, 5], resist: [7, 9], colour: 0x7a5a3a, edge: 0x452f1c, short: 'R.HIDE', note: 'LEATHER THAT HAS BEEN THOUGHT ABOUT' },
+  { key: 'reinforced', name: 'REINFORCED LEATHER', def: 0.13, evade: 0, heavy: [3, 5], resist: [7, 9], colour: 0x7a5a3a, edge: 0x452f1c, short: 'R.LEATHER', note: 'LEATHER THAT HAS BEEN THOUGHT ABOUT' },
   { key: 'tin', name: 'TIN ARMOUR', def: 0.15, evade: 0, heavy: [3, 5], resist: [3, 5], colour: 0xb9c2c8, edge: 0x6d767c, short: 'TIN', note: 'CHEAP, LOUD, BETTER THAN A SHIRT' },
   { key: 'hood', name: 'CHAIN HOOD', def: 0.16, evade: 0, heavy: [3, 5], resist: [6, 8], colour: 0x87909c, edge: 0x464e58, short: 'HOOD', note: 'RINGS, AND NOT MANY OF THEM' },
 
   // ---- THE MIDDLE
-  { key: 'scale', name: 'SCALE ARMOUR', def: 0.18, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x6f8a6a, edge: 0x3a4a38, short: 'SCALE', note: 'OVERLAPPING, SO IT GIVES WHERE YOU DO' },
+  { key: 'scale', name: 'SCALE ARMOUR', def: 0.18, evade: 0, soft: 0.34, heavy: [4, 6], resist: [6, 8], colour: 0x6f8a6a, edge: 0x3a4a38, short: 'SCALE', note: 'SHRUGS OFF THE QUICK ONES. NOT THE BIG ONES' },
   { key: 'chain', name: 'CHAIN ARMOUR', def: 0.20, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8e9cad, edge: 0x4a5665, short: 'CHAIN', note: 'THE HONEST MIDDLE OF THE RACK' },
   { key: 'bronze', name: 'BRONZE ARMOUR', def: 0.21, evade: 0, heavy: [5, 7], resist: [5, 7], colour: 0xc08a3e, edge: 0x6f4b1c, short: 'BRONZE', note: 'OLDER THAN IRON AND NEARLY AS GOOD' },
   { key: 'viking', name: 'VIKING HELM', def: 0.22, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x9aa3ad, edge: 0x4e555e, short: 'VIKING', note: 'HORNS, WHICH HELP WITH NOTHING' },
@@ -562,7 +582,7 @@ export const MATERIALS: ArmourMat[] = [
   // ---- HEAVY
   { key: 'iron', name: 'IRON ARMOUR', def: 0.25, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x6f7682, edge: 0x3a4149, short: 'IRON', note: 'HEAVY, AND WORTH IT' },
   { key: 'shoulder', name: 'SHOULDER GUARDS', def: 0.26, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x7e868f, edge: 0x424952, short: 'PAULDRON', note: 'ENORMOUS. YOU WILL NOT TURN QUICKLY' },
-  { key: 'spiked', name: 'SPIKED ARMOUR', def: 0.26, evade: 0, heavy: [6, 8], resist: [6, 8], colour: 0x5e5a63, edge: 0xbfc6cf, short: 'SPIKED', note: 'UNPLEASANT TO HIT AND TO WEAR' },
+  { key: 'spiked', name: 'SPIKED ARMOUR', def: 0.26, evade: 0, thorns: 9, heavy: [6, 8], resist: [6, 8], colour: 0x5e5a63, edge: 0xbfc6cf, short: 'SPIKED', note: 'PUNCH IT AND FIND OUT. BLADES DO NOT CARE' },
   { key: 'plate', name: 'PLATE ARMOUR', def: 0.28, evade: 0, heavy: [7, 9], resist: [8, 10], colour: 0xc3cad4, edge: 0x646c78, short: 'PLATE', note: 'A WALL WITH A FROG INSIDE IT' },
   { key: 'gold', name: 'GOLD ARMOUR', def: 0.30, evade: 0, heavy: [7, 9], resist: [4, 6], colour: 0xffd45e, edge: 0xa8801e, short: 'GOLD', note: 'THE BEST THERE IS, AND THE SOFTEST' },
   { key: 'heavyplate', name: 'HEAVY PLATE', def: 0.33, evade: 0, heavy: [9, 10], resist: [9, 10], colour: 0x9aa2ae, edge: 0x4d545e, short: 'H.PLATE', note: 'NOTHING GETS IN. NOTHING GETS OUT EITHER' },
@@ -876,6 +896,23 @@ export function statsOf(kit: Kit, weapon: WeaponDef, wRolls?: Piece, type?: Liza
  * forever.  Resistance is the stat that ought to say how long a thing lasts,
  * and now it does for both.
  */
+/**
+ * HOW MUCH OF A SUIT HAS A GIVEN PROPERTY ON IT, 0..1.
+ *
+ * Armour is three separate pieces and they are rarely the same material, so
+ * "is he wearing spikes" is not a yes or no -- a spiked helm is a quarter of
+ * a spiked suit.  Weighted by COVER, the same share each piece takes of the
+ * blows, so one spiked greave deters a tenth of what a full suit does.
+ */
+function suitShare(kit: Kit, pick: (m: ArmourMat) => number | undefined): number {
+  let n = 0;
+  for (const sl of ['head', 'body', 'legs'] as const) {
+    const m = kit[sl].mat;
+    if (m && m.key !== 'none') n += (pick(m) ?? 0) * COVER[sl];
+  }
+  return n;
+}
+
 export function armourLife(p: Piece): number {
   if (!p.mat || p.mat.key === 'none') return Infinity;
   return ARMOUR_BASE + p.rResist * ARMOUR_PER_RESIST;
@@ -1320,6 +1357,8 @@ export interface Blow {
   disarmed?: Dropped;
   /** The defender's weapon gave out catching this one. */
   blockBroke?: boolean;
+  /** The attacker put a bare hand into a suit of spikes, and this is the bill. */
+  spiked?: number;
   /** A piece of the defender's armour came off on this one, and its colour. */
   stripped?: 'head' | 'body' | 'legs';
   strippedTint?: number;
@@ -1389,12 +1428,24 @@ function wearFromBlock(def: Fighter, stopped: number): boolean {
 }
 
 function applyDamage(att: Fighter, def: Fighter, raw: number, out: Blow, rng: () => number,
-  o: { pierce: number; soak: number; stagger: number; knock: number; ground?: Dropped[]; blocked?: boolean }): void {
+  o: { pierce: number; soak: number; stagger: number; knock: number; ground?: Dropped[]; blocked?: boolean; ranged?: boolean }): void {
   const weary = Math.min(1, Math.max(0, (att.clock - WEARY_AT) / WEARY_OVER));
   raw *= 1 + weary * 0.6;
   const armour = def.st.defence * (1 - o.pierce) * (1 - weary);
   out.hit = true;
-  const through = raw * (1 - armour);
+  // ---- SCALE TAKES THE EDGE OFF A LIGHT BLOW AND NOT A HEAVY ONE.
+  //
+  // Overlapping plates ride over each other, so the fast repeated stuff is
+  // what they are for.  The share falls away as the blow gets bigger and is
+  // gone entirely by the time something is landing a third of a fighter's
+  // health, which is when nothing that flexes is going to help.
+  const soft = suitShare(def.kit, (m) => m.soft);
+  let armour2 = armour;
+  if (soft > 0) {
+    const weight = Math.min(1, raw / Math.max(1, def.st.maxHp * 0.3));
+    armour2 = Math.min(0.92, armour + soft * (1 - weight));
+  }
+  const through = raw * (1 - armour2);
   out.dmg = Math.max(1, Math.round(through * (1 - o.soak)));
   // the share the guard actually stopped is what the weapon pays for
   if (o.blocked) {
@@ -1402,6 +1453,22 @@ function applyDamage(att: Fighter, def: Fighter, raw: number, out: Blow, rng: ()
     if (stopped > 0 && wearFromBlock(def, stopped)) out.blockBroke = true;
   }
   def.hp = Math.max(0, def.hp - out.dmg);
+
+  // ---- AND WHAT A BARE FIST FINDS IN A SUIT OF SPIKES.
+  //
+  // Only an unarmed attacker: a sword, an arrow or a thrown axe meets the
+  // spikes with something that is not skin and does not care.  It is the one
+  // thing in the game that punishes the unarmed state, which is what makes
+  // spiked armour worth carrying against somebody who has lost their weapon.
+  const bareHand = !o.ranged && (att.broken || att.weapon.key === 'none');
+  if (bareHand && att.hp > 0) {
+    const spikes = suitShare(def.kit, (m) => m.thorns);
+    if (spikes > 0) {
+      out.spiked = Math.max(1, Math.round(spikes));
+      att.hp = Math.max(0, att.hp - out.spiked);
+    }
+  }
+
   if (def.hp > 0) {
     const off = wearArmour(def, rng);
     if (off) { out.stripped = off.slot; out.strippedTint = off.tint; }
@@ -1516,7 +1583,7 @@ export function landShot(att: Fighter, def: Fighter, sh: InFlight, rng = Math.ra
   let raw = sh.power;
   if (sh.crit) raw *= CRIT_MUL;
   applyDamage(att, def, raw, out, rng,
-    { pierce: r.pierce ?? 0, soak, stagger: r.stagger ?? 0, knock: r.knock ?? 0, ground, blocked: guarding });
+    { pierce: r.pierce ?? 0, soak, stagger: r.stagger ?? 0, knock: r.knock ?? 0, ground, blocked: guarding, ranged: true });
   return out;
 }
 
@@ -4372,6 +4439,12 @@ function stepFight(real: number): void {
     // the sprite out of the wrong gladiator's grip, which is the same bug
     // the clash path had.
     if (e.blow.blockBroke) showBlockBreak(e.def);
+    // The spikes bill the ATTACKER, so the number floats over them.
+    if (e.blow.spiked) {
+      floating(e.att.x, `-${e.blow.spiked}`, PALETTE.steel);
+      floatHigh(e.att.x, 'SPIKES!', PALETTE.bone);
+      audio.sfx('fence_thunk', 0.5);
+    }
     if (e.blow.stripped) showStrip(e.def, e.blow.stripped, e.blow.strippedTint ?? PALETTE.steel);
     // A shot that has only just been loosed has not done anything yet -- the
     // sprite goes up and the damage waits until it gets there.
