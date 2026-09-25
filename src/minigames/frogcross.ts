@@ -74,8 +74,8 @@ interface Lane {
 let cars: Car[] = [];
 let lanes: Lane[] = [];
 let frog = { col: 9, row: 0 };
-let sprite: Phaser.GameObjects.Rectangle | null = null;
-let eyes: Phaser.GameObjects.Rectangle | null = null;
+let sprite: Phaser.GameObjects.Container | null = null;
+let eyes: Phaser.GameObjects.Container | null = null;
 let points = 0;
 let best = 0;
 let lives = LIVES;
@@ -100,6 +100,13 @@ export function frogPayout(pts: number): number {
 
 const rowY = (row: number): number => (row > LANES ? BANK_TOP + 6 : ROAD_BOTTOM + 7 - row * LANE_H);
 const colX = (col: number): number => 8 + col * COL_W;
+
+/** Lighten (t > 0) or darken (t < 0) a packed colour, for panel shading. */
+function tint(colour: number, t: number): number {
+  const c = Phaser.Display.Color.IntegerToColor(colour);
+  const mix = (v: number): number => Math.round(t >= 0 ? v + (255 - v) * t : v * (1 + t));
+  return Phaser.Display.Color.GetColor(mix(c.red), mix(c.green), mix(c.blue));
+}
 const laneY = (lane: number): number => ROAD_BOTTOM - lane * LANE_H + LANE_H / 2; // centre of lane 1..LANES
 
 export const frogCross: MinigameModule = {
@@ -143,22 +150,98 @@ export const frogCross: MinigameModule = {
 
     // far bank, road, kerb
     scene.add.rectangle(0, 18, GAME_W, 162, 0x10141c).setOrigin(0, 0);
-    scene.add.rectangle(0, BANK_TOP, GAME_W, ROAD_TOP - BANK_TOP, PALETTE.moss).setOrigin(0, 0);
-    scene.add.rectangle(0, BANK_TOP, GAME_W, 2, PALETTE.mossLight).setOrigin(0, 0);
+    // ---- THE FAR BANK, which has to read as SAFE from across the road.
+    //
+    // A flat moss rectangle and a lighter line on top of it.  The one thing
+    // this game asks of the player is telling safe ground from a live lane at
+    // a glance while something is bearing down on them, so the bank is built
+    // to look like a different KIND of surface rather than a different colour:
+    // grass in clumps, with depth in it, and a hard bright lip where it meets
+    // the tarmac.
+    scene.add.rectangle(0, BANK_TOP, GAME_W, ROAD_TOP - BANK_TOP, 0x2c5a30).setOrigin(0, 0);
+    for (let i = 0; i < 40; i++) {
+      const cx2 = (i * 29 + (i % 5) * 7) % GAME_W;
+      const cy2 = BANK_TOP + 2 + ((i * 17) % Math.max(4, ROAD_TOP - BANK_TOP - 6));
+      scene.add.ellipse(cx2, cy2, 9 + (i % 3) * 5, 4, i % 2 ? 0x3d7a42 : 0x255028).setAlpha(0.85);
+    }
+    scene.add.rectangle(0, BANK_TOP, GAME_W, 2, 0x5aa85f).setOrigin(0, 0);
+    // the verge where grass meets tarmac: bright, and the last thing you cross
+    scene.add.rectangle(0, ROAD_TOP - 3, GAME_W, 3, 0x4a8f4e).setOrigin(0, 0);
+    scene.add.rectangle(0, ROAD_TOP - 1, GAME_W, 1, 0x7fc884).setOrigin(0, 0).setAlpha(0.9);
+    // ---- THE ROAD, WITH A SURFACE ON IT.
+    //
+    // It was one flat slab of 0x2a2d33 and a dashed line every lane, which is
+    // a grey band with stripes.  Tarmac is patchy, it is lighter where the
+    // wheels have polished it and darker at the edges, and it has been dug up
+    // and filled in more than once.  None of that is decoration here: the
+    // whole game is reading which strip is safe, so the lanes need to be
+    // TELLABLE APART at a glance and not just separated by a hairline.
     scene.add.rectangle(0, ROAD_TOP, GAME_W, LANES * LANE_H, 0x2a2d33).setOrigin(0, 0);
+    for (let k = 0; k < LANES; k++) {
+      const top = ROAD_BOTTOM - (k + 1) * LANE_H;
+      // alternate lanes sit a shade apart, so a lane is a band and not a gap
+      // between two lines
+      scene.add.rectangle(0, top, GAME_W, LANE_H, k % 2 ? 0x2e3138 : 0x282b31).setOrigin(0, 0);
+      // the polished wheel tracks down the middle of the lane
+      scene.add.rectangle(0, top + LANE_H * 0.32, GAME_W, 2, 0x35383f).setOrigin(0, 0).setAlpha(0.7);
+      scene.add.rectangle(0, top + LANE_H * 0.68, GAME_W, 2, 0x35383f).setOrigin(0, 0).setAlpha(0.7);
+      // patches and repairs, scattered but deterministic
+      for (let i = 0; i < 3; i++) {
+        const px2 = ((k * 71 + i * 113) % (GAME_W - 24)) + 6;
+        scene.add.rectangle(px2, top + 2 + ((i * 5) % (LANE_H - 6)), 10 + (i % 3) * 7, 3, 0x22252b).setOrigin(0, 0).setAlpha(0.55);
+      }
+    }
+    // grit and chippings, so the surface is not perfectly smooth anywhere
+    for (let i = 0; i < 70; i++) {
+      const gx = (i * 37 + (i % 7) * 11) % GAME_W;
+      const gy = ROAD_TOP + ((i * 23) % (LANES * LANE_H));
+      scene.add.rectangle(gx, gy, 1, 1, i % 3 ? 0x3c3f46 : 0x1e2126).setOrigin(0, 0).setAlpha(0.6);
+    }
+    // and the lane markings over the top of all of it
     for (let k = 1; k < LANES; k++) {
       const y = ROAD_BOTTOM - k * LANE_H;
-      for (let x = 4; x < GAME_W; x += 14) scene.add.rectangle(x, y, 7, 1, 0x5c5f66).setOrigin(0, 0.5);
+      for (let x = 4; x < GAME_W; x += 14) {
+        scene.add.rectangle(x, y, 7, 1, 0x6e727a).setOrigin(0, 0.5);
+        scene.add.rectangle(x, y + 1, 7, 1, 0x1c1f24).setOrigin(0, 0.5).setAlpha(0.5);
+      }
     }
     scene.add.rectangle(0, ROAD_BOTTOM, GAME_W, 2, PALETTE.fog).setOrigin(0, 0);
     scene.add.rectangle(0, ROAD_BOTTOM + 2, GAME_W, 178 - ROAD_BOTTOM, PALETTE.slate).setOrigin(0, 0);
+
     // kerb stones along the pavement, and tufts and a shrub or two on the far bank
     for (let x = 0; x < GAME_W; x += 12) scene.add.rectangle(x, ROAD_BOTTOM + 2, 11, 4, 0x2f3a48).setOrigin(0, 0);
     for (let i = 0; i < 26; i++) {
       const tx = 4 + ((i * 47) % (GAME_W - 8));
       scene.add.rectangle(tx, BANK_TOP + 3 + (i % 3) * 3, 1, 3, PALETTE.mossLight).setOrigin(0.5, 1).setAlpha(0.8);
     }
-    for (const sx of [30, 120, 210, 290]) scene.add.ellipse(sx, BANK_TOP + 6, 14, 8, 0x2e5e38);
+    // shrubs, kept clear of the two crossing signs below so neither swallows the other
+    for (const sx of [62, 118, 196, 252]) scene.add.ellipse(sx, BANK_TOP + 6, 14, 8, 0x2e5e38);
+
+    // ---- THE CROSSING'S OWN SIGNAGE.
+    //
+    // Two frog-crossing warnings on the verge, the diamond road sign with a
+    // frog silhouette on it, because this is a road that runs through his
+    // arcade and somebody put them up.  On the bank, clear of the lanes and
+    // clear of the lily-pad goal row.
+    //
+    // The diamond is eleven pixels across the flats: its top tip stops a
+    // pixel under the readouts and its bottom tip reaches the verge, which
+    // is every pixel the bank has.  Cars in the top lane sit from y46 down,
+    // so nothing on the sign can ever hide one.
+    const SIGN_Y = BANK_TOP + 6.5;
+    for (const sx of [26, GAME_W - 26]) {
+      scene.add.rectangle(sx, SIGN_Y, 11, 11, 0x6b5310).setOrigin(0.5, 0.5).setAngle(45);
+      scene.add.rectangle(sx, SIGN_Y, 9.5, 9.5, 0xffd45e).setOrigin(0.5, 0.5).setAngle(45);
+      // Him on it, in silhouette: a squatting frog seen head on.  The eyes
+      // are cut back OUT of the dark head in the sign's own yellow - drawn
+      // dark they merged into the skull and the whole thing read as a cat.
+      scene.add.rectangle(sx - 2.9, SIGN_Y + 1, 1.6, 2.4, 0x2a2410);
+      scene.add.rectangle(sx + 2.9, SIGN_Y + 1, 1.6, 2.4, 0x2a2410);
+      scene.add.ellipse(sx, SIGN_Y + 1.6, 6, 3.2, 0x2a2410);
+      scene.add.ellipse(sx, SIGN_Y - 1.4, 4.4, 2.6, 0x2a2410);
+      scene.add.rectangle(sx - 1.7, SIGN_Y - 1.9, 1, 1, 0xffd45e);
+      scene.add.rectangle(sx + 1.7, SIGN_Y - 1.9, 1, 1, 0xffd45e);
+    }
 
     for (let k = 1; k <= LANES; k++) {
       lanes.push({
@@ -169,8 +252,35 @@ export const frogCross: MinigameModule = {
     }
 
     frog = { col: 9, row: 0 };
-    sprite = scene.add.rectangle(colX(frog.col), rowY(0), 10, 9, PALETTE.mossLight).setDepth(20);
-    eyes = scene.add.rectangle(colX(frog.col), rowY(0) - 4, 8, 2, PALETTE.cream).setDepth(21);
+    // ---- HIM.
+    //
+    // He was a green rectangle with a cream bar across the top, which was
+    // fine when the road was a grey slab and is not fine now.  Same ten by
+    // nine footprint, so nothing about the hitbox or the hop moves: a body
+    // with a lit back and a shadowed belly, haunches either side, and the
+    // eyes kept in their own object because the death animation flattens
+    // him and hides them.
+    const skin = PALETTE.mossLight;
+    const back = tint(skin, 0.3);
+    const under = tint(skin, -0.35);
+    sprite = scene.add.container(colX(frog.col), rowY(0), [
+      scene.add.ellipse(0, 4.4, 10, 3, 0x0d1a12).setAlpha(0.4),
+      scene.add.ellipse(-4.2, 2.6, 3.4, 4, under),
+      scene.add.ellipse(4.2, 2.6, 3.4, 4, under),
+      scene.add.ellipse(0, 0, 9.5, 8, skin),
+      scene.add.ellipse(0, -1.6, 6, 3, back).setAlpha(0.6),
+      scene.add.ellipse(0, 2.8, 6, 2.4, under).setAlpha(0.75),
+      scene.add.rectangle(-3.4, 4.2, 3, 1.5, back),
+      scene.add.rectangle(3.4, 4.2, 3, 1.5, back),
+    ]).setDepth(20);
+    eyes = scene.add.container(colX(frog.col), rowY(0) - 4, [
+      scene.add.ellipse(-2.4, 0, 4, 3.4, back),
+      scene.add.ellipse(2.4, 0, 4, 3.4, back),
+      scene.add.ellipse(-2.4, 0.2, 2.6, 2.2, PALETTE.cream),
+      scene.add.ellipse(2.4, 0.2, 2.6, 2.2, PALETTE.cream),
+      scene.add.rectangle(-2.4, 0.2, 1.2, 1.6, 0x121a14),
+      scene.add.rectangle(2.4, 0.2, 1.2, 1.6, 0x121a14),
+    ]).setDepth(21);
 
     hud = {
       pts: text(scene, 6, 21, '', PALETTE.cream),
@@ -307,13 +417,50 @@ function stepTraffic(dt: number, delta: number): void {
       return;
     }
     const colour = truck ? PALETTE.steel : [PALETTE.ember, PALETTE.neon, PALETTE.tealLight, PALETTE.amber][k % 4];
-    const chassis = sceneRef!.add.rectangle(0, 0, w, CAR_H, colour);
-    const roof = sceneRef!.add.rectangle(truck ? -w / 4 : 0, -1, truck ? w / 3 : w * 0.5, CAR_H - 4, colour === PALETTE.steel ? 0x2a3440 : 0x1a1f2a).setAlpha(0.85);
-    const lampF = sceneRef!.add.rectangle((w / 2 - 1) * lane.dir, -2, 2, 2, 0xfff6c0);
-    const lampR = sceneRef!.add.rectangle((-w / 2 + 1) * lane.dir, -2, 2, 2, 0xff3a3a);
-    const wheelA = sceneRef!.add.rectangle(-w / 3, CAR_H / 2, 4, 2, 0x111318);
-    const wheelB = sceneRef!.add.rectangle(w / 3, CAR_H / 2, 4, 2, 0x111318);
-    const body = sceneRef!.add.container(x, laneY(k), [chassis, roof, lampF, lampR, wheelA, wheelB]).setDepth(10);
+    // ---- THE VEHICLE ITSELF.
+    //
+    // Nine pixels of height to work with, so every band has to earn its row:
+    // a shadow on the tarmac under it, a lit top edge, the paint, a dark
+    // sill, the glass, and the lamps.  A car you can read in a tenth of a
+    // second is the whole game, so the silhouette is built from the roof
+    // down rather than being a coloured slab with a window in it.
+    const dir = lane.dir;
+    const shade = tint(colour, -0.42);
+    const lit = tint(colour, 0.34);
+    const parts: Phaser.GameObjects.GameObject[] = [];
+    const add = (o: Phaser.GameObjects.GameObject): void => {
+      parts.push(o);
+    };
+    // the shadow it throws on the road, offset the way it is travelling
+    add(sceneRef!.add.ellipse(0, CAR_H / 2 + 1, w + 2, 4, 0x15171c).setAlpha(0.45));
+    // wheels, under the sill so only the tyre shows
+    for (const wx of [-w / 3, w / 3]) {
+      add(sceneRef!.add.rectangle(wx, CAR_H / 2 - 0.5, 5, 3, 0x0f1115));
+      add(sceneRef!.add.rectangle(wx, CAR_H / 2 - 1, 5, 1, 0x3a3f48).setAlpha(0.7));
+    }
+    add(sceneRef!.add.rectangle(0, 0, w, CAR_H - 2, colour).setOrigin(0.5, 0.5));
+    // lit top edge and the dark sill that sits it on its wheels
+    add(sceneRef!.add.rectangle(0, -CAR_H / 2 + 1.5, w - 2, 1, lit).setAlpha(0.85));
+    add(sceneRef!.add.rectangle(0, CAR_H / 2 - 2, w, 1.5, shade));
+    if (truck) {
+      // a cab at the front and a slatted box behind it
+      add(sceneRef!.add.rectangle(-(w / 2 - 5) * dir, -1.5, 9, 4, 0x2a3440));
+      add(sceneRef!.add.rectangle((w / 2 - 4) * dir, -1.5, 6, 4, shade));
+      add(sceneRef!.add.rectangle((w / 2 - 4.5) * dir, -1.5, 4, 3, 0x9fd0e8).setAlpha(0.8));
+      for (let i = -2; i <= 2; i++) add(sceneRef!.add.rectangle(-(w / 2 - 5) * dir + i * 2.5, -1.5, 1, 4, 0x1d2530).setAlpha(0.6));
+    } else {
+      // cabin, then the glass inside it, brighter at the front
+      add(sceneRef!.add.rectangle(0, -1.5, w * 0.56, 4, shade));
+      add(sceneRef!.add.rectangle(0, -1.5, w * 0.5, 3, 0x1a2230));
+      add(sceneRef!.add.rectangle(w * 0.16 * dir, -2, w * 0.14, 2, 0x8fc4e0).setAlpha(0.75));
+    }
+    // headlamp and its spill on the tarmac ahead, and the tail light behind
+    add(sceneRef!.add.rectangle((w / 2 - 1) * dir, -1, 2, 2, 0xfff6c0));
+    add(sceneRef!.add.rectangle((w / 2 + 3) * dir, 0, 7, 3, 0xfff0b0).setAlpha(0.14));
+    add(sceneRef!.add.rectangle((-w / 2 + 1) * dir, -1, 2, 2, 0xff3a3a));
+    // bumpers, so front and back are different shapes
+    add(sceneRef!.add.rectangle((w / 2 - 0.5) * dir, 1.5, 1.5, 3, lit).setAlpha(0.8));
+    const body = sceneRef!.add.container(x, laneY(k), parts).setDepth(10);
     cars.push({ x, lane: k, w, dir: lane.dir, speed, body });
     lane.timer = (1500 + Math.random() * 1600) * gapMul();
   });
