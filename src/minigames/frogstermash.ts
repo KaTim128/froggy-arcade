@@ -215,6 +215,15 @@ export interface Spec {
   slowRecover?: number;
   /** Walking speed multiplier, for a weapon that is barely there. */
   fleet?: number;
+  /**
+   * IT IS TWO OBJECTS, NOT ONE.
+   *
+   * Dual swords and twin daggers are a blade in each hand, so losing one --
+   * broken or knocked away -- leaves the other one.  A paired weapon has to
+   * be taken twice before the hands are empty, and in between it fights as a
+   * single blade: the same strike, half as many of them.
+   */
+  paired?: boolean;
 }
 
 /**
@@ -249,6 +258,8 @@ export interface Spec {
 export interface Dropped {
   def: WeaponDef;
   piece: Piece;
+  /** It is one blade of a pair, so whoever takes it gets one blade. */
+  single: boolean;
   x: number;
   /** Seconds left before the sand has it. */
   life: number;
@@ -358,8 +369,16 @@ export type Band = readonly [number, number];
 
 export const WEAPONS: WeaponDef[] = [
   // ---- NOTHING AT ALL.  A real outcome, not a fallback.
-  { key: 'none', name: 'NO WEAPON', power: [1, 2], heavy: [1, 1], resist: [10, 10], reach: [1, 2], hits: 1, guard: 0, tempo: 1.15,
-    spec: { note: 'NOTHING TO CARRY, SO NOTHING SLOWS HIM', fleet: 1.18, combo: 1.15 } },
+  // ---- NOTHING AT ALL, and still dangerous.
+  //
+  // Bare hands have to stay a real outcome rather than a death sentence,
+  // because half the interesting things that happen in a bout -- a break, a
+  // disarm, a scramble for what is on the sand -- put somebody here.  Quick,
+  // relentless, and able to string a combination together; it beats an armed
+  // fighter by never letting them set, and it loses to anyone who can keep
+  // it at arm's length.
+  { key: 'none', name: 'NO WEAPON', power: [2, 4], heavy: [1, 1], resist: [10, 10], reach: [1, 3], hits: 1, guard: 0, tempo: 1.34,
+    spec: { note: 'NOTHING TO CARRY, AND IT NEVER STOPS COMING', fleet: 1.24, combo: 1.7, atClose: 0.5 } },
 
   // ---- IN CLOSE
   { key: 'knuckles', name: 'BRASS KNUCKLES', power: [2, 4], heavy: [1, 2], resist: [7, 10], reach: [1, 2], hits: 1, guard: 0, tempo: 1.7,
@@ -367,7 +386,7 @@ export const WEAPONS: WeaponDef[] = [
   { key: 'dagger', name: 'SHORT DAGGER', power: [2, 4], heavy: [1, 2], resist: [5, 8], reach: [2, 3], hits: 1, guard: 0, tempo: 1.55,
     spec: { note: 'FASTER THE CLOSER IT GETS', atClose: 0.45, combo: 1.3 } },
   { key: 'twindagger', name: 'TWIN DAGGERS', power: [2, 4], heavy: [1, 2], resist: [4, 7], reach: [1, 3], hits: 2, guard: 0, tempo: 1.6,
-    spec: { note: 'IN AND OUT, AND IN AGAIN', combo: 2.2, fleet: 1.15 } },
+    spec: { note: 'IN AND OUT, AND IN AGAIN', combo: 2.2, fleet: 1.15, paired: true } },
   { key: 'knife', name: 'TACTICAL KNIFE', power: [3, 5], heavy: [1, 2], resist: [5, 8], reach: [2, 4], hits: 1, guard: 0, tempo: 1.35,
     spec: { note: 'FINDS THE GAP IN ANYTHING', pierce: 0.45 } },
   { key: 'rapier', name: 'RAPIER', power: [2, 5], heavy: [1, 3], resist: [4, 7], reach: [4, 6], hits: 1, guard: 0, tempo: 1.5,
@@ -377,7 +396,7 @@ export const WEAPONS: WeaponDef[] = [
   { key: 'nunchuck', name: 'NUNCHUCKS', power: [2, 4], heavy: [2, 3], resist: [3, 6], reach: [4, 6], hits: 2, guard: 0, tempo: 1.4,
     spec: { note: 'IT NEVER STOPS COMING', combo: 2.6 } },
   { key: 'dual', name: 'DUAL SWORDS', power: [3, 5], heavy: [2, 4], resist: [4, 7], reach: [5, 7], hits: 2, guard: 0, tempo: 1.1,
-    spec: { note: 'TWO BLADES, TWO SMALLER WOUNDS', combo: 1.6, dodgeCut: 0.15 } },
+    spec: { note: 'TWO BLADES, TWO SMALLER WOUNDS', combo: 1.6, dodgeCut: 0.15, paired: true } },
   { key: 'throwing', name: 'THROWING KNIVES', power: [2, 4], heavy: [1, 2], resist: [2, 4], reach: [2, 4], hits: 1, guard: 0, tempo: 1.3,
     spec: { note: 'SIX OF THEM, FROM RIGHT ACROSS THE SAND',
       ranged: { far: 145, dmg: 0.75, power: [3, 7], ammo: 7, reload: 0.35, wind: 0.75, shot: 'knife', speed: 235, arc: 0.14, hold: 85, drift: 0.16 } } },
@@ -400,13 +419,19 @@ export const WEAPONS: WeaponDef[] = [
   // fight or finishes it, and then the spear is gone and it is a fistfight.
   // The javelin is the other way round -- a strong throw on a weapon that is
   // poor in the hand.  Neither beats the bow at range or the halberd up close.
-  { key: 'spear', name: 'SPEAR', power: [4, 7], heavy: [3, 5], resist: [5, 8], reach: [7, 9], hits: 1, guard: 0, tempo: 1.0,
-    spec: { note: 'WORST THING TO WALK TOWARDS, AND IT THROWS ONCE', atRange: 0.5, pierce: 0.2,
+  // Everything it has is in the distance.  The power band is low and the
+  // range bonus is large, so a spear held at arm's length is the worst thing
+  // in the arena and a spear in a clinch is a stick with a point on it.
+  { key: 'spear', name: 'SPEAR', power: [3, 6], heavy: [3, 5], resist: [5, 8], reach: [7, 9], hits: 1, guard: 0, tempo: 1.0,
+    spec: { note: 'WORST THING TO WALK TOWARDS, AND IT THROWS ONCE', atRange: 0.68, pierce: 0.2,
       ranged: { far: 124, dmg: 0.51, power: [2, 5], ammo: 1, reload: 1.1, wind: 1.25, shot: 'spear', speed: 205, arc: 0.24, hold: 69, drift: 0.2, pierce: 0.09 } } },
   { key: 'staff', name: 'LONG STICK', power: [3, 6], heavy: [3, 5], resist: [5, 8], reach: [8, 10], hits: 1, guard: 0, tempo: 0.95,
     spec: { note: 'YOU NEVER GET TO WHERE YOU ARE GOING', sweep: 0.45 } },
-  { key: 'trident', name: 'TRIDENT', power: [4, 7], heavy: [4, 6], resist: [6, 9], reach: [7, 9], hits: 1, guard: 0.12, tempo: 0.9,
-    spec: { note: 'HOLDS THEM OFF, AND WILL THROW IF IT MUST', atRange: 0.3, knock: 5,
+  // Still the best thing in the game at keeping somebody at arm's length,
+  // and now genuinely committed to every thrust: slower to bring round, a
+  // long recovery if it finds nothing, and less of it to wear out.
+  { key: 'trident', name: 'TRIDENT', power: [4, 7], heavy: [4, 6], resist: [5, 8], reach: [7, 9], hits: 1, guard: 0.12, tempo: 0.84,
+    spec: { note: 'HOLDS THEM OFF, AND COMMITS TO IT', atRange: 0.3, knock: 5, slowRecover: 0.45,
       ranged: { far: 112, dmg: 0.54, power: [2, 5], ammo: 1, reload: 1.2, wind: 1.3, shot: 'spear', speed: 190, arc: 0.26, hold: 66, drift: 0.22 } } },
   { key: 'halberd', name: 'HALBERD', power: [5, 8], heavy: [5, 7], resist: [6, 9], reach: [7, 9], hits: 1, guard: 0, tempo: 0.8,
     spec: { note: 'A SPEAR ONE MOMENT AND AN AXE THE NEXT', atRange: 0.35, stagger: 0.2 } },
@@ -419,7 +444,7 @@ export const WEAPONS: WeaponDef[] = [
   { key: 'club', name: 'WOODEN CLUB', power: [3, 6], heavy: [4, 6], resist: [6, 9], reach: [3, 5], hits: 1, guard: 0, tempo: 1.0,
     spec: { note: 'MOSTLY IT JUST SENDS THEM AWAY', knock: 11, stagger: 0.32 } },
   { key: 'axe', name: 'AXE', power: [7, 10], heavy: [6, 8], resist: [5, 8], reach: [5, 7], hits: 1, guard: 0, tempo: 0.8,
-    spec: { note: 'WHAT IT HITS, IT MOVES', stagger: 0.35 } },
+    spec: { note: 'IT OPENS ARMOUR AND MOVES WHAT IT HITS', stagger: 0.35, knock: 6, vsArmour: 1.35, slowRecover: 0.28 } },
   { key: 'mace', name: 'MACE', power: [5, 8], heavy: [5, 7], resist: [7, 10], reach: [4, 6], hits: 1, guard: 0, tempo: 0.88,
     spec: { note: 'THE MORE THEY WEAR, THE WORSE IT IS', vsArmour: 1.5, pierce: 0.25 } },
   { key: 'morningstar', name: 'MORNING STAR', power: [5, 8], heavy: [5, 7], resist: [5, 8], reach: [5, 7], hits: 1, guard: 0, tempo: 0.85,
@@ -432,7 +457,7 @@ export const WEAPONS: WeaponDef[] = [
     spec: { note: 'AN ENORMOUS ARC, AND A LONG WAY BACK', sweep: 0.4, slowRecover: 0.45 } },
   { key: 'greataxe', name: 'GREAT AXE', power: [8, 10], heavy: [8, 10], resist: [5, 8], reach: [6, 8], hits: 1, guard: 0, tempo: 0.62,
     spec: { note: 'IT SMELLS BLOOD', execute: 1.3, stagger: 0.25 } },
-  { key: 'heavyhammer', name: 'HEAVY HAMMER', power: [8, 10], heavy: [8, 10], resist: [8, 10], reach: [4, 6], hits: 1, guard: 0, tempo: 0.58,
+  { key: 'heavyhammer', name: 'HEAVY HAMMER', power: [8, 10], heavy: [8, 10], resist: [8, 10], reach: [4, 6], hits: 1, guard: 0, tempo: 0.66,
     spec: { note: 'ONCE IS USUALLY ENOUGH', knock: 16, stagger: 0.6, slowRecover: 0.4 } },
   { key: 'goldsword', name: 'GOLD SWORD', power: [8, 10], heavy: [7, 9], resist: [6, 9], reach: [6, 8], hits: 1, guard: 0, tempo: 0.7,
     spec: { note: 'TOO MUCH SWORD, AND WORTH IT', knock: 6, crit: 0.15 } },
@@ -868,7 +893,17 @@ const ARMOUR_PER_RESIST = 0.5;
 /** How many swings this weapon has in it before it can break. */
 export function durabilityOf(w: Piece): number {
   if (!w.weapon || w.weapon.key === 'none') return Infinity;
-  return DUR_BASE + w.rResist * DUR_PER_RESIST;
+  // ---- THE BETTER IT HITS, THE SOONER IT GOES.
+  //
+  // Durability was resistance and nothing else, so the top of the rack could
+  // be the hardest hitting AND the longest lasting at the same time -- which
+  // is the one thing a high tier weapon is not supposed to be.  Power now
+  // eats into it and a light quick weapon keeps a little back, so a claymore
+  // is a loan against the rest of the fight and a dagger is not.
+  const power = (w.weapon.power[0] + w.weapon.power[1]) / 2;
+  const heft = Math.max(0.62, 1 - (power - 4) * 0.045);
+  const nimble = 1 + Math.max(0, w.weapon.tempo - 1) * 0.3;
+  return Math.max(2, (DUR_BASE + w.rResist * DUR_PER_RESIST) * heft * nimble);
 }
 
 type Act = 'walk' | 'windup' | 'strike' | 'recover' | 'dodge' | 'guard' | 'stagger' | 'lunge' | 'pickup';
@@ -943,6 +978,10 @@ export interface Fighter {
    * because `x` is the fighting distance the balance was measured on.
    */
   armA: number;
+  /** How many more of this weapon there are to lose before the hands are empty. */
+  spares: number;
+  /** Down to one blade of a pair: same strike, half as many. */
+  single: boolean;
   /** The weapon on the sand this fighter is currently going for, if any. */
   seeking: Dropped | null;
   /** The eased elbow angle.  Drawing only, like `armA`. */
@@ -963,6 +1002,7 @@ export function makeFighter(who: 'frog' | 'lizard', kit: Kit, x: number, face: 1
     gone: { head: false, body: false, legs: false },
     ammo: kit.weapon.weapon?.spec.ranged?.ammo ?? 0, reload: 0, flight: [],
     lastGap: 999, clock: 0,
+    spares: kit.weapon.weapon?.spec.paired ? 1 : 0, single: false,
     seeking: null, armA: -10, elbowA: -14, leanA: 0, shove: 0, art: null,
   };
 }
@@ -1024,6 +1064,7 @@ export function dropWeapon(f: Fighter, ground: Dropped[], rng: () => number = Ma
   const d: Dropped = {
     def: f.weapon,
     piece: f.kit.weapon,
+    single: true,
     // thrown clear, on the side the blow came from
     x: Phaser.Math.Clamp(f.x - f.face * (16 + rng() * 22), ARENA.left + 4, ARENA.right - 4),
     life: DROP_LIFE,
@@ -1031,8 +1072,21 @@ export function dropWeapon(f: Fighter, ground: Dropped[], rng: () => number = Ma
     art: null,
   };
   ground.push(d);
-  // the hand is empty, but the weapon is NOT broken -- it is over there
+  // ---- ONE OF A PAIR STILL LEAVES THE OTHER.
+  //
+  // Knocking a blade out of a two-handed fighter's grip should cost them a
+  // blade, not the fight.  They keep the one still in the other hand and
+  // fight on with it -- same strike, half as many -- and it takes a second
+  // knock to leave them bare.
+  if (f.spares > 0 && !f.single) {
+    f.spares -= 1;
+    f.single = true;
+    f.st = statsOf(f.kit, f.weapon, f.held, f.type);
+    f.hp = Math.min(f.hp, f.st.maxHp);
+    return d;
+  }
   f.broken = true;
+  f.single = false;
   f.weapon = UNARMED;
   f.held = emptyHands();
   f.dur = Infinity;
@@ -1057,6 +1111,8 @@ export function takeWeapon(f: Fighter, d: Dropped, ground: Dropped[]): void {
   f.weapon = d.def;
   f.held = d.piece;
   f.broken = false;
+  f.single = d.single && !!d.def.spec.paired;
+  f.spares = 0;
   f.dur = durabilityOf(d.piece);
   f.ammo = d.def.spec.ranged?.ammo ?? 0;
   f.reload = 0;
@@ -1066,6 +1122,17 @@ export function takeWeapon(f: Fighter, d: Dropped, ground: Dropped[]): void {
 }
 
 export function breakWeapon(f: Fighter): void {
+  // A snapped blade out of a pair leaves the other one, exactly as a
+  // knocked-away one does, and the durability clock starts again on it.
+  if (f.spares > 0 && !f.single) {
+    f.spares -= 1;
+    f.single = true;
+    f.dur = durabilityOf(f.kit.weapon);
+    f.st = statsOf(f.kit, f.weapon, f.held, f.type);
+    f.hp = Math.min(f.hp, f.st.maxHp);
+    return;
+  }
+  f.single = false;
   f.broken = true;
   f.weapon = UNARMED;
   f.held = emptyHands();
@@ -1335,6 +1402,21 @@ function looseShot(att: Fighter, def: Fighter, gap: number, rng: () => number): 
   out.thrown = true;
   if (Number.isFinite(att.ammo)) att.ammo -= 1;
   att.reload = r.reload;
+  // ---- SHOOTING WEARS A WEAPON OUT AS SWINGING DOES.
+  //
+  // Durability was only ever charged on a melee swing, so a bow never wore
+  // out at all: it was the one thing in the rack that stayed exactly as good
+  // on the last second of a fight as on the first.  A string and a stave go
+  // the same way everything else does, a shade slower than a blade taking
+  // impacts.
+  if (Number.isFinite(att.dur)) {
+    att.dur -= 0.7;
+    if (att.dur <= 0) {
+      breakWeapon(att);
+      out.broke = true;
+      return out;
+    }
+  }
   const crit = !!(att.weapon.spec.crit && rng() < att.weapon.spec.crit);
   const flight = Math.max(0.08, gap / r.speed);
   out.loosed = {
@@ -1393,7 +1475,10 @@ export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Mat
   // Wear is charged once per swing, not once per blow to land: a weapon that
   // throws two was paying twice for the one swing.
   if (Number.isFinite(att.dur) && att.swing === 0) {
-    att.dur -= 1;
+    // A heavy weapon swung into a suit of plate takes more out of itself
+    // than the same swing into cloth does.
+    const heavy = Math.max(0, att.held.rHeavy - 5) / 5;
+    att.dur -= 1 + heavy * def.st.defence * 2.2;
     if (att.dur <= 0) {
       breakWeapon(att);
       out.broke = true;
@@ -1879,7 +1964,11 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random, 
     case 'strike': {
       // A weapon that throws two puts the second one in without a fresh
       // wind-up, which is what "rapid, multiple strikes" actually feels like.
-      if (f.swing < Math.max(f.weapon.hits, f.move?.hits ?? 1)) {
+      // One blade of a pair puts in one strike where two put in two.
+      const strikes = f.single
+        ? Math.max(1, Math.ceil(Math.max(f.weapon.hits, f.move?.hits ?? 1) / 2))
+        : Math.max(f.weapon.hits, f.move?.hits ?? 1);
+      if (f.swing < strikes) {
         f.t = STRIKE;
         const blow = resolveStrike(f, other, Math.abs(f.x - other.x), rng, ground);
         f.swing += 1;
@@ -2089,7 +2178,7 @@ const FLOOR_Y = 138;
  * Three tones is the difference between a sword and a grey stick, and it
  * costs two more rectangles.
  */
-function buildWeapon(scene: Phaser.Scene, key: string, tint: number): Phaser.GameObjects.Container {
+function buildWeapon(scene: Phaser.Scene, key: string, tint: number, single = false): Phaser.GameObjects.Container {
   const c = scene.add.container(0, 0);
   const bar = (x: number, y: number, w: number, h: number, col: number, ang = 0): Phaser.GameObjects.Rectangle => {
     const r = scene.add.rectangle(x, y, w, h, col).setAngle(ang);
@@ -2148,6 +2237,8 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number): Phaser.Gam
       blade(13, -2, 25, 2.5, -6); bar(1, 0, 2, 7, PALETTE.ink); bar(-2, 0, 4, 3, 0x6a2b2b);
       break;
     case 'dual':
+      // down to one blade, it is drawn as one blade
+      if (single) { blade(11, 0, 19, 2.8); bar(0, 0, 3, 5, grip); break; }
       blade(11, -4, 19, 2.5, -12); blade(11, 4, 19, 2.5, 12);
       bar(0, -3, 3, 5, grip); bar(0, 3, 3, 5, grip);
       break;
@@ -2254,6 +2345,7 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number): Phaser.Gam
       bar(-3, 0, 4, 3, grip);
       break;
     case 'twindagger':
+      if (single) { blade(5, 0, 9, 2.5); bar(0, 0, 2, 6, PALETTE.gold); bar(-2, 0, 3, 3, grip); break; }
       blade(6, -4, 10, 2, -14); blade(6, 4, 10, 2, 14);
       bar(0, -3, 3, 4, grip); bar(0, 3, 3, 4, grip);
       break;
@@ -2709,7 +2801,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   };
   const armOff = buildArm(true);
   const arm = buildArm(false);
-  const weapon = buildWeapon(scene, f.weapon.key, light);
+  const weapon = buildWeapon(scene, f.weapon.key, light, f.single);
   // In the hand, which is inside the FOREARM -- so the elbow swings the
   // weapon the way a wrist and an elbow actually do, instead of the whole
   // limb pivoting rigidly from the shoulder.
@@ -3884,7 +3976,18 @@ function showDisarm(f: Fighter, d: Dropped): void {
   audio.sfx('item_thud', 0.45);
   floatHigh(f.x, 'DISARMED!', PALETTE.gold);
   S().cameras.main.shake(180, 0.005);
-  const art = buildWeapon(S(), d.def.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber);
+  // the hand it left: the other blade of a pair, or the bare fist
+  if (f.art) {
+    f.art.weapon.destroy();
+    const left = f.broken || f.weapon.key === 'none'
+      ? buildWeapon(S(), UNARMED.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber)
+      : buildWeapon(S(), f.weapon.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber, true);
+    left.setPosition(f.art.arm.hand + 1, 0);
+    f.art.arm.fore.add(left);
+    f.art.weapon = left;
+    if (!f.broken) floatHigh(f.x, 'ONE LEFT!', PALETTE.gold);
+  }
+  const art = buildWeapon(S(), d.def.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber, d.single && !!d.def.spec.paired);
   art.setPosition(f.x + f.face * 8, FLOOR_Y - 24).setDepth(19);
   layer?.add(art);
   d.art = art;
@@ -3926,7 +4029,7 @@ function showPickup(f: Fighter, d: Dropped): void {
   clearDrop(d);
   if (!f.art) return;
   f.art.weapon.destroy();
-  const w = buildWeapon(S(), d.def.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber);
+  const w = buildWeapon(S(), d.def.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber, f.single);
   w.setPosition(f.art.arm.hand + 1, 0);
   f.art.arm.fore.add(w);
   f.art.weapon = w;
@@ -4081,9 +4184,21 @@ function showBreak(f: Fighter): void {
     targets: shard, x: f.x + f.face * 46, y: FLOOR_Y - 2, angle: 540, alpha: 0,
     duration: 700, onComplete: () => shard.destroy(),
   });
-  // and the hand it left is empty from here on
+  // ---- AND WHAT IS LEFT IN THE HAND.
+  //
+  // For a pair, that is the other blade, so the sprite is redrawn as a
+  // single rather than swapped for a fist: the fighter is down to one, not
+  // out.  Only an actually empty hand gets the knuckles.
   if (f.art) {
     f.art.weapon.destroy();
+    if (!f.broken && f.weapon.key !== 'none') {
+      const one = buildWeapon(S(), f.weapon.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber, true);
+      one.setPosition(f.art.arm.hand + 1, 0);
+      f.art.arm.fore.add(one);
+      f.art.weapon = one;
+      floatHigh(f.x, 'ONE LEFT!', PALETTE.gold);
+      return;
+    }
     // UNARMED.key, not a literal: the literal was 'fists', which stopped
     // being a key when the rack was rebuilt and nobody noticed because the
     // switch quietly answered it with a shield.
@@ -4502,7 +4617,7 @@ export const frogsterMash: MinigameModule = {
           return null;
         },
         /** The rules and the headless simulator, so a build can be checked. */
-        rules: { WEAPONS, MATERIALS, UNARMED, QUALITY_MUL, statsOf, makeFighter, resolveStrike, tick, think, exchange, simulate, randomKit, offerFor, makeWeapon, makeArmour, breakWeapon, durabilityOf, wrapTo, CARD_COLS, BASE, LIZARDS, makeLizard, buildFighter, buildWeapon, rewardFor, armourLife, wearArmour, MOVES },
+        rules: { WEAPONS, MATERIALS, UNARMED, QUALITY_MUL, statsOf, makeFighter, resolveStrike, tick, think, exchange, simulate, randomKit, offerFor, makeWeapon, makeArmour, breakWeapon, durabilityOf, wrapTo, CARD_COLS, BASE, LIZARDS, makeLizard, buildFighter, buildWeapon, rewardFor, armourLife, wearArmour, MOVES, dropWeapon, takeWeapon, landShot },
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__mash;
