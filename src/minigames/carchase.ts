@@ -459,6 +459,11 @@ const HEAT_ROAD = 16;
  * the way a real indicator does — the three that matter are the three BEFORE
  * the car has moved an inch, which is what `blinks` counts.
  */
+/**
+ * The indicator's colour, which belongs to the indicator alone.  No car is
+ * painted this, so the lamp can never be lost against the bodywork.
+ */
+const SIGNAL_ON = 0xff7a1a;
 const SIGNAL_BLINKS = 3;
 const BLINK_ON_MS = 260;
 const BLINK_OFF_MS = 200;
@@ -1810,7 +1815,18 @@ function carSprite(
     // them.
     parts.push(scene.add.rectangle(-2, -4, 3, 1, PALETTE.fog).setAlpha(0.55));
     for (const sx of [-1, 1]) {
-      const lamp = scene.add.rectangle(sx * (CAR_W / 2 - 1), CAR_H / 2 - 3, 2, 4, PALETTE.amber).setVisible(false);
+      // ---- A SIGNAL HAS TO BE VISIBLE ON EVERY CAR IT IS FITTED TO.
+      //
+      // The lamp was PALETTE.amber and amber was one of the five paints a
+      // traffic car could be sprayed, so one car in five announced its lane
+      // change with a light exactly the colour of the panel it was mounted
+      // on.  The warning was there and could not be seen, which is worse than
+      // no warning at all because the player learns to trust it.
+      //
+      // It is a signal orange nothing else on the road uses, and it sits on a
+      // dark housing, so it reads against any paint the spawner picks.
+      parts.push(scene.add.rectangle(sx * (CAR_W / 2 - 1), CAR_H / 2 - 3, 4, 6, 0x1a1208).setVisible(true).setAlpha(0.85));
+      const lamp = scene.add.rectangle(sx * (CAR_W / 2 - 1), CAR_H / 2 - 3, 2.6, 4.4, SIGNAL_ON).setVisible(false);
       lamps.push(lamp);
       parts.push(lamp);
     }
@@ -1906,7 +1922,9 @@ function spawnTraffic(): void {
   if (!laneClear(idx, TOP - CAR_H, CAR_H * 2)) return;
   const lane = LANES[idx];
   const own = TRAFFIC_MIN + Math.random() * TRAFFIC_SPAN;
-  const colours = [PALETTE.ember, PALETTE.neon, PALETTE.amber, PALETTE.violet, PALETTE.bone];
+  // Amber is gone from the paints: it is the indicator's colour, and a car
+  // the same colour as its own indicator cannot announce anything.
+  const colours = [PALETTE.ember, PALETTE.neon, PALETTE.violet, PALETTE.bone, PALETTE.tealLight];
   const body = carSprite(scene0, lane, TOP - CAR_H, colours[Phaser.Math.Between(0, colours.length - 1)], false);
   traffic.push({
     id: nextCarId++,

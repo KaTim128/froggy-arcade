@@ -47,8 +47,13 @@ interface Vec {
 let puck: Phaser.GameObjects.Arc | null = null;
 let pad: Phaser.GameObjects.Arc | null = null;
 let aiPad: Phaser.GameObjects.Arc | null = null;
+/** The faces on the two strikers, moved with them every frame. */
+let padFace: Phaser.GameObjects.GameObject[] = [];
+let aiFace: Phaser.GameObjects.GameObject[] = [];
 let vel: Vec = { x: 0, y: 0 };
 let padPrev: Vec = { x: 0, y: 0 };
+/** Who conceded the last goal, which is all the AI does with the face-off. */
+let openingDir = 1;
 let history: Array<{ t: number; x: number; y: number }> = [];
 let scoreP = 0;
 let scoreA = 0;
@@ -109,8 +114,27 @@ export const airHockey: MinigameModule = {
     scene.add.rectangle(gx, TABLE.y - 1, GOAL_W, 3, PALETTE.neon).setOrigin(0, 0);
     scene.add.rectangle(gx, TABLE.y + TABLE.h - 2, GOAL_W, 3, PALETTE.gold).setOrigin(0, 0);
 
-    aiPad = scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + 26, PAD_R, PALETTE.neon).setStrokeStyle(2, 0xffffff, 0.55);
-    pad = scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + TABLE.h - 26, PAD_R, PALETTE.gold).setStrokeStyle(2, 0xffffff, 0.55);
+    // ---- TWO STRIKERS THAT ARE SOMEBODY, not two coloured discs.
+    //
+    // A gold circle and a cyan circle tell you which end of the table is
+    // yours and nothing else.  Yours is Froggy -- green, with his eyes on
+    // top of it looking down the table -- and the other one is the lizard,
+    // amber with a crest.  Built from the striker outward so the face rides
+    // the mallet without a container to keep in step.
+    aiPad = scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + 26, PAD_R, 0xc07a2e).setStrokeStyle(2, 0x6d4114, 0.9);
+    aiFace = [
+      scene.add.circle(0, 0, PAD_R * 0.62, 0xe8a94e),
+      scene.add.circle(0, 0, PAD_R * 0.3, 0x6d4114),
+      scene.add.triangle(0, 0, 0, 6, 3, 0, 6, 6, 0xffd45e),
+    ];
+    pad = scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + TABLE.h - 26, PAD_R, 0x3d7a42).setStrokeStyle(2, 0x24492a, 0.9);
+    padFace = [
+      scene.add.circle(0, 0, PAD_R * 0.62, 0x5aa85f),
+      scene.add.circle(0, 0, 2.6, PALETTE.cream),
+      scene.add.circle(0, 0, 2.6, PALETTE.cream),
+      scene.add.circle(0, 0, 1.2, PALETTE.black),
+      scene.add.circle(0, 0, 1.2, PALETTE.black),
+    ];
     puck = scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + TABLE.h / 2, PUCK_R, 0x1a1a22).setStrokeStyle(1, PALETTE.cream);
     padPrev = { x: pad.x, y: pad.y };
 
@@ -169,17 +193,32 @@ export const airHockey: MinigameModule = {
     history.push({ t: elapsed, x: puck.x, y: puck.y });
     while (history.length > 2 && elapsed - history[0].t > AI_REACTION_MS) history.shift();
     const seen = history[0];
-    const wantX =
-      vel.y < 0
+    // ---- AND SOMEBODY HAS TO GO AND GET IT.
+    //
+    // A puck that waits to be hit is a puck nobody hits, if the opponent only
+    // ever reacts to one already moving: the round would sit there until the
+    // clock ran out.  Dead on the spot, he comes for it -- keenly if he just
+    // conceded, warily if he just scored, which is the difference between
+    // wanting the restart and being happy to let you take it.
+    const dead = vel.x === 0 && vel.y === 0;
+    const eager = openingDir > 0 ? 1 : 0.55;
+    const wantX = dead
+      ? puck.x + (Math.random() - 0.5) * AI_AIM_ERROR * 0.5
+      : vel.y < 0
         ? seen.x + (Math.random() - 0.5) * AI_AIM_ERROR
         : TABLE.x + TABLE.w / 2 + (seen.x - (TABLE.x + TABLE.w / 2)) * 0.35;
-    const wantY = vel.y < 0 ? Math.min(seen.y + 10, TABLE.y + TABLE.h / 2 - PAD_R) : TABLE.y + 26;
-    const aiSpeed = 150;
+    const wantY = dead
+      ? Math.min(puck.y - PAD_R * 0.4, TABLE.y + TABLE.h / 2 - PAD_R)
+      : vel.y < 0 ? Math.min(seen.y + 10, TABLE.y + TABLE.h / 2 - PAD_R) : TABLE.y + 26;
+    const aiSpeed = dead ? 150 * eager : 150;
     const step = (aiSpeed * delta) / 1000;
     aiPad.x += Phaser.Math.Clamp(wantX - aiPad.x, -step, step);
     aiPad.y += Phaser.Math.Clamp(wantY - aiPad.y, -step, step);
     aiPad.x = Phaser.Math.Clamp(aiPad.x, TABLE.x + PAD_R, TABLE.x + TABLE.w - PAD_R);
     aiPad.y = Phaser.Math.Clamp(aiPad.y, TABLE.y + PAD_R, TABLE.y + TABLE.h / 2 - PAD_R);
+
+    // the faces ride their strikers
+    dressPads();
 
     // ---- puck
     const dt = delta / 1000;
@@ -319,10 +358,39 @@ function goal(playerScored: boolean): void {
  */
 function serve(dir: number): void {
   if (!puck) return;
+  // ---- IT IS A FACE-OFF, NOT A SERVE.
+  //
+  // The puck used to launch itself down the table at one of them the instant
+  // the count ran out, which means the first thing that happens in every
+  // round is decided by a random number rather than by either player.  It
+  // sits dead on the centre spot now and waits to be hit, the way a puck on
+  // a real table does -- whoever gets there first gets the first say.
+  //
+  // `dir` is kept because the caller knows who conceded and the AI reads it
+  // to decide how hard to commit to the opening; nothing moves on its own.
   puck.setPosition(TABLE.x + TABLE.w / 2, TABLE.y + TABLE.h / 2);
-  vel = { x: Phaser.Math.Between(-90, 90), y: 170 * dir };
+  vel = { x: 0, y: 0 };
+  openingDir = dir;
   frozen = ROUND_GAP_MS;
   history = [];
+}
+
+/** Put each striker's face back on it, wherever the mallet has got to. */
+function dressPads(): void {
+  if (pad && padFace.length === 5) {
+    const [belly, eyeL, eyeR, pupL, pupR] = padFace as Phaser.GameObjects.Arc[];
+    belly.setPosition(pad.x, pad.y + 1);
+    eyeL.setPosition(pad.x - 3.2, pad.y - 3);
+    eyeR.setPosition(pad.x + 3.2, pad.y - 3);
+    pupL.setPosition(pad.x - 3.2, pad.y - 3.6);
+    pupR.setPosition(pad.x + 3.2, pad.y - 3.6);
+  }
+  if (aiPad && aiFace.length === 3) {
+    const [belly, snout, crest] = aiFace as Array<Phaser.GameObjects.Arc & { setPosition(x: number, y: number): unknown }>;
+    belly.setPosition(aiPad.x, aiPad.y - 1);
+    snout.setPosition(aiPad.x, aiPad.y + 2);
+    crest.setPosition(aiPad.x - 3, aiPad.y - PAD_R - 1);
+  }
 }
 
 function updateScore(): void {

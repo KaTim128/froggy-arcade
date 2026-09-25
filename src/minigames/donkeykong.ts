@@ -363,9 +363,29 @@ export const donkeyKong: MinigameModule = {
     // the thing at the top that keeps rolling them
     const top = FLOORS[FLOORS.length - 1];
     kong = makeKong(scene, LEFT + 20, top);
-    // and the way out, at the very top
-    scene.add.rectangle(RIGHT - 30, top - 14, 16, 14, PALETTE.gold).setOrigin(0, 0);
-    text(scene, RIGHT - 34, top - 24, 'OUT', PALETTE.gold);
+    // ---- AND THE WAY OUT, which is the thing the whole climb is for.
+    //
+    // It was a plain gold rectangle: the reward for six girders of barrels
+    // was a yellow square.  It is a door now -- a frame, panelled boards, a
+    // handle, and daylight coming round the edge of it -- lit warm against a
+    // dark green jungle so it pulls the eye from the bottom of the screen,
+    // which is where the player is standing when they need to know where
+    // they are going.
+    const dx = RIGHT - 31;
+    const dy = top - 16;
+    scene.add.rectangle(dx - 1, dy - 1, 20, 18, 0xffe9a8).setOrigin(0, 0).setAlpha(0.35);
+    scene.add.rectangle(dx, dy, 18, 16, 0x5a3a1c).setOrigin(0, 0);
+    scene.add.rectangle(dx + 1.5, dy + 1.5, 15, 13, PALETTE.gold).setOrigin(0, 0);
+    // the boards, and the shadow each one casts on the next
+    for (let i = 0; i < 3; i++) {
+      scene.add.rectangle(dx + 2 + i * 5, dy + 2, 4, 12, 0xffd97a).setOrigin(0, 0);
+      scene.add.rectangle(dx + 6 + i * 5, dy + 2, 1, 12, 0xa8801a).setOrigin(0, 0).setAlpha(0.7);
+    }
+    // a cross brace and a handle, so it is a door and not a panel
+    scene.add.rectangle(dx + 2, dy + 7, 14, 1.4, 0xa8801a).setOrigin(0, 0).setAlpha(0.8);
+    scene.add.circle(dx + 14, dy + 9, 1.4, 0x5a3a1c);
+    scene.add.circle(dx + 13.6, dy + 8.6, 0.8, 0xfff3c8);
+    text(scene, RIGHT - 34, top - 26, 'OUT', PALETTE.gold);
 
     player = { x: LEFT + 14, y: FLOORS[0], vy: 0, floor: 0, onLadder: false, climbing: false };
     sprite = scene.add.rectangle(player.x, player.y, 7, 11, 0x46a0e0).setOrigin(0.5, 1).setDepth(20);
@@ -717,15 +737,40 @@ function makeBarrel(scene: Phaser.Scene, bouncer: boolean): Phaser.GameObjects.C
     scene.add.circle(0, 0, BARREL_R + 0.5, dark),
     scene.add.circle(0, 0, BARREL_R, skin),
   ];
+  // ---- IT HAS TO LOOK LIKE A BARREL, not a coloured wheel.
+  //
+  // Two hoops and a flat disc read as a button rolling along the girder.  A
+  // barrel is COOPERED: staves running the length of it, each one a slightly
+  // different tone because each catches the light at a different angle,
+  // bound by wide iron hoops with a rivet on them, and a sunken end with its
+  // own rim.  All of it inside the spinning container, so the silhouette
+  // stays a circle while the staves and hoops turn.
+  const stave = (x: number, w: number, col: number, a = 1) =>
+    scene.add.rectangle(x, 0, w, BARREL_R * 1.92, col).setAlpha(a);
   const spun = [
-    // the shadow down the far side of the curve
-    scene.add.ellipse(1.4, 0.8, BARREL_R * 1.4, BARREL_R * 1.7, dark).setAlpha(0.5),
-    // the hoops, one either side of the end
-    scene.add.rectangle(-2.4, 0, 1, BARREL_R * 1.7, hoop),
-    scene.add.rectangle(2.4, 0, 1, BARREL_R * 1.7, hoop),
-    // and the end itself, which is what you are actually looking at
-    scene.add.circle(-0.4, -0.4, BARREL_R - 1.4, lit),
-    scene.add.circle(-0.4, -0.4, BARREL_R - 2.6, skin),
+    // the barrel end, sunk inside its own rim
+    scene.add.circle(0, 0, BARREL_R - 0.6, dark),
+    scene.add.circle(-0.3, -0.3, BARREL_R - 1.4, skin),
+    // the staves, lit on the near side and falling away across the curve
+    stave(-3.4, 1.8, dark, 0.55),
+    stave(-1.6, 2.0, skin),
+    stave(0.4, 2.2, lit, 0.9),
+    stave(2.4, 1.8, skin),
+    stave(4.0, 1.4, dark, 0.45),
+    // the seams between them
+    stave(-2.5, 0.5, dark, 0.5),
+    stave(-0.6, 0.5, dark, 0.35),
+    stave(1.5, 0.5, dark, 0.4),
+    stave(3.2, 0.5, dark, 0.5),
+    // two iron hoops bound round it, with a rivet showing on each
+    scene.add.rectangle(-2.6, 0, 1.6, BARREL_R * 1.86, hoop),
+    scene.add.rectangle(2.6, 0, 1.6, BARREL_R * 1.86, hoop),
+    scene.add.rectangle(-2.6, -0.4, 1.6, 0.6, lit).setAlpha(0.5),
+    scene.add.rectangle(2.6, -0.4, 1.6, 0.6, lit).setAlpha(0.5),
+    scene.add.circle(-2.6, BARREL_R * 0.55, 0.7, lit).setAlpha(0.8),
+    scene.add.circle(2.6, -BARREL_R * 0.55, 0.7, lit).setAlpha(0.8),
+    // and the shadow down the far side of the curve, over everything
+    scene.add.ellipse(2.2, 0.6, BARREL_R * 0.9, BARREL_R * 1.8, dark).setAlpha(0.42),
   ];
   const spin = scene.add.container(0, 0, spun);
   const c = scene.add.container(0, 0, [...rim, spin]).setDepth(15);

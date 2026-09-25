@@ -2727,6 +2727,21 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
   // just peek out underneath, and eyes set into the top of the mass rather
   // than perched above it.  That is the whole recipe for chubby and cute at
   // this size.
+  // ---- THE LIMBS ARE DARKER THAN THE BODY.
+  //
+  // They were drawn in the frog's own `skin`, which is the one colour on the
+  // animal guaranteed to be the same value as the rest of it -- so the green
+  // frog's feet disappeared into green grass at exactly the moment they are
+  // doing the interesting thing, which is moving.  Every frog gets limbs
+  // mixed part of the way toward its shadow tone, so the rule is the same for
+  // the whole field and no runner is lit differently from the others.
+  const mixTone = (a: number, b: number, k: number): number => {
+    const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+    const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+    return (Math.round(ar + (br - ar) * k) << 16) | (Math.round(ag + (bg - ag) * k) << 8) | Math.round(ab + (bb - ab) * k);
+  };
+  const limb = mixTone(skin, dark, 0.42);
+
   const parts = [
     // ---- THE RIM, which is the outside edge of the whole animal.
     //
@@ -2739,8 +2754,8 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
     // ---- the feet, just showing under the belly
     scene.add.ellipse(-5.5, 6.2, 8, 3.6, dark),
     scene.add.ellipse(5.5, 6.2, 8, 3.6, dark),
-    scene.add.ellipse(-5.5, 5.8, 6.8, 2.6, skin).setAlpha(0.9),
-    scene.add.ellipse(5.5, 5.8, 6.8, 2.6, skin).setAlpha(0.9),
+    scene.add.ellipse(-5.5, 5.8, 6.8, 2.6, limb),
+    scene.add.ellipse(5.5, 5.8, 6.8, 2.6, limb),
     // ---- THE MASS.  Body first, crown over it, same colour, no seam.
     scene.add.ellipse(0, -0.5, 14.4, 11.8, skin),
     scene.add.ellipse(0, -4.8, 12.2, 8.6, skin),
