@@ -58,7 +58,7 @@ const SLOT_NAME: Record<Slot, string> = {
  * so picking a thrust instead of a sweep genuinely changes the fight -- and
  * `anim` changes the arc the arm travels, so it looks like what it is.
  */
-export type Anim = 'over' | 'sweep' | 'thrust' | 'spin' | 'jab' | 'bash' | 'low' | 'punch' | 'kick';
+export type Anim = 'over' | 'sweep' | 'thrust' | 'spin' | 'jab' | 'bash' | 'low' | 'punch' | 'kick' | 'shoot' | 'hurl';
 export interface Move {
   name: string;
   /** Multipliers on the swing this move is a version of. */
@@ -94,6 +94,11 @@ const M = {
   low: (name: string, dmg = 0.95): Move => ({ name, dmg, wind: 0.95, reach: 1.05, knock: 4, stagger: 0.2, anim: 'low' }),
   bash: (name: string, dmg = 0.9): Move => ({ name, dmg, wind: 0.8, reach: 0.85, knock: 9, stagger: 0.28, at: 'near', anim: 'bash' }),
   charge: (name: string, dmg = 1.25): Move => ({ name, dmg, wind: 1.05, reach: 1.45, at: 'far', knock: 6, anim: 'thrust' }),
+  // ---- THE TWO RANGED SHAPES.  `shoot` draws a bow or levels a crossbow and
+  // `hurl` throws overarm; both want distance, so they score badly in a
+  // clinch and the weapon falls back on its close attacks there.
+  shoot: (name: string, dmg = 1.0): Move => ({ name, dmg, wind: 1.0, reach: 1.5, at: 'far', anim: 'shoot' }),
+  hurl: (name: string, dmg = 1.0): Move => ({ name, dmg, wind: 1.05, reach: 1.5, at: 'far', anim: 'hurl' }),
 };
 
 /** The repertoire each weapon actually fights with. */
@@ -115,14 +120,14 @@ export const MOVES: Record<string, Move[]> = {
   rapier: [M.thrust('RAPID THRUST', 0.95, 1.25), M.stab('DOUBLE THRUST'), M.counter('CRITICAL STAB', 1.6), M.charge('PRECISION LUNGE', 1.15)],
   nunchuck: [M.combo('RAPID FLURRY', 4), M.spin('SPINNING COMBO', 1.05), M.over('OVERHEAD FLURRY', 1.1, 1.1), M.sweep('SIDE SWEEP', 0.95, 1.05)],
   dual: [M.combo('FOUR HIT COMBO', 4), M.sweep('CROSSING SLASH', 1.0, 1.05), M.spin('SPINNING DOUBLE', 1.2), M.counter('DUAL STRIKE', 1.35)],
-  throwing: [M.thrust('KNIFE THROW', 0.9, 1.6), M.stab('CLOSE KNIFE'), M.combo('THREE KNIFE VOLLEY', 3), M.counter('RETREATING THROW', 1.2)],
+  throwing: [M.hurl('KNIFE THROW'), M.hurl('SPINNING THROW', 1.1), M.stab('CLOSE KNIFE'), M.counter('RETREATING THROW', 1.2)],
   gladius: [M.stab('FAST SLASH'), M.thrust('SHORT THRUST', 1.05, 1.1), M.combo('CLOSE COMBINATION', 3), M.counter('FINISHING STRIKE', 1.4)],
   sword: [M.sweep('HORIZONTAL SLASH'), M.over('DIAGONAL SLASH'), M.thrust('THRUST'), M.counter('PARRY COUNTER'), M.combo('TWO HIT SLASH', 2)],
   katana: [M.sweep('IAI SLASH', 1.15, 1.1), M.counter('COUNTER SLASH', 1.7), M.thrust('PRECISION THRUST', 1.05, 1.15), M.over('DIAGONAL CUT')],
   shield: [M.bash('SHIELD BASH'), M.charge('FORWARD CHARGE', 1.15), M.counter('BLOCK COUNTER', 1.5), M.stab('STABBING BASH')],
-  spear: [M.thrust('LONG THRUST', 1.1, 1.4), M.stab('DOUBLE THRUST'), M.sweep('SHAFT STRIKE', 0.9, 1.15), M.charge('FORWARD CHARGE')],
+  spear: [M.thrust('LONG THRUST', 1.1, 1.4), M.stab('DOUBLE THRUST'), M.sweep('SHAFT STRIKE', 0.9, 1.15), M.charge('FORWARD CHARGE'), M.hurl('SPEAR THROW', 0.95)],
   staff: [M.sweep('WIDE SWEEP'), M.over('OVERHEAD STRIKE'), M.thrust('THRUST'), M.low('LEG SWEEP'), M.bash('KEEPAWAY PUSH', 0.8)],
-  trident: [M.thrust('THREE POINT THRUST', 1.15, 1.35), M.sweep('HORIZONTAL SWEEP'), M.counter('COUNTER THRUST', 1.4), M.charge('CHARGING STAB')],
+  trident: [M.thrust('THREE POINT THRUST', 1.15, 1.35), M.sweep('HORIZONTAL SWEEP'), M.counter('COUNTER THRUST', 1.4), M.charge('CHARGING STAB'), M.hurl('TRIDENT THROW', 0.95)],
   halberd: [M.thrust('LONG THRUST', 1.1, 1.35), M.sweep('HORIZONTAL SWEEP', 1.1), M.over('OVERHEAD CHOP'), M.spin('SPINNING SWEEP'), M.low('HOOK ATTACK')],
   warscythe: [M.sweep('SWEEPING SLASH', 1.1, 1.25), M.low('LOW SWEEP'), M.spin('SPINNING SWEEP'), M.thrust('HOOKING STRIKE', 0.95, 1.2)],
   scythe: [M.sweep('HORIZONTAL SWEEP', 1.15, 1.28), M.low('LOW SWEEP'), M.over('OVERHEAD HOOK'), M.spin('SPINNING SWEEP')],
@@ -136,6 +141,20 @@ export const MOVES: Record<string, Move[]> = {
   greataxe: [M.over('MASSIVE CLEAVE', 1.35), M.finish('FINISHING CHOP', 1.9), M.spin('SPINNING AXE', 1.3), M.sweep('EXECUTION SWEEP', 1.2, 1.15)],
   heavyhammer: [M.slam('MASSIVE SMASH', 1.7), M.sweep('SIDE SWING', 0.95), M.slam('GROUND IMPACT', 1.5), M.finish('DEVASTATING STRIKE', 1.8)],
   goldsword: [M.sweep('POWER SLASH', 1.2), M.over('HEAVY DIAGONAL', 1.25), M.thrust('CHARGED THRUST', 1.15, 1.2), M.slam('KNOCKBACK SWING', 1.3)],
+
+  // ---- THE RANGED RACK.  Each one keeps a couple of close attacks, because
+  // an empty bow still has to do something when somebody walks in, and what
+  // it can do is deliberately poor.
+  throwaxe: [M.hurl('AXE THROW', 1.05), M.hurl('TUMBLING THROW', 1.15), M.over('CLOSE CHOP', 1.05, 1.15), M.bash('HAFT STRIKE', 0.85)],
+  javelin: [M.hurl('JAVELIN THROW', 1.15), M.hurl('OVERARM CAST', 1.05), M.thrust('SHORT JAB', 0.85, 1.2), M.sweep('SHAFT SWEEP', 0.8, 1.1)],
+  chakram: [M.hurl('DISC THROW'), M.hurl('FLAT SPIN', 1.1), M.stab('EDGE SLASH'), M.counter('RETURN CATCH', 1.2)],
+  sling: [M.shoot('STONE SHOT'), M.shoot('LOBBED STONE', 1.1), M.bash('SLING WHIP', 0.75), M.stab('DESPERATE SWIPE', 0.7)],
+  blowgun: [M.shoot('DART'), M.shoot('DART VOLLEY', 0.9), M.stab('TUBE JAB', 0.65), M.counter('POINT BLANK DART', 1.2)],
+  bow: [M.shoot('ARROW SHOT'), M.shoot('SNAP SHOT', 0.9), M.shoot('AIMED SHOT', 1.2), M.bash('BOW STRIKE', 0.7)],
+  longbow: [M.shoot('LONG SHOT', 1.1), M.shoot('FULL DRAW', 1.25), M.shoot('ARCING SHOT'), M.bash('STAVE STRIKE', 0.75)],
+  crossbow: [M.shoot('BOLT', 1.15), M.shoot('POINT BLANK BOLT', 1.05), M.shoot('PIERCING BOLT', 1.25), M.bash('STOCK BASH', 0.8)],
+  magicstaff: [M.shoot('ARCANE BOLT'), M.shoot('CHARGED BOLT', 1.2), M.sweep('STAFF SWEEP', 0.9, 1.15), M.over('STAFF STRIKE', 0.95, 1.1)],
+  boomerang: [M.hurl('BOOMERANG THROW'), M.hurl('WIDE ARC', 1.1), M.bash('CLOSE CRACK', 0.8), M.counter('RETURN STRIKE', 1.25)],
 };
 
 /**
@@ -181,8 +200,17 @@ export interface Spec {
   counter?: number;
   /** Can catch somebody who is walking into it. */
   sweep?: number;
-  /** Throws from beyond reach, this many times, then it is a melee weapon. */
-  ammo?: number;
+  /**
+   * WHAT IT DOES AT A DISTANCE, or nothing if it only works up close.
+   *
+   * A weapon with this fights at `hold` while it has shots left and falls
+   * back on its melee numbers when it runs out.  The two sides are deliberately
+   * separate: a weapon's melee power band says how good it is in a clinch and
+   * `ranged.dmg` says how good it is across the sand, so a dual-range weapon
+   * is written as good at one and mediocre at the other rather than as good
+   * at both.
+   */
+  ranged?: Ranged;
   /** Extra recovery, for a swing that takes a week to come back. */
   slowRecover?: number;
   /** Walking speed multiplier, for a weapon that is barely there. */
@@ -206,6 +234,61 @@ export interface Spec {
  * supposed to beat a wooden club more often than not, and the fight is
  * supposed to be decided by what came out of the chests.
  */
+/** What flies, which decides how it is drawn and how it travels. */
+export type Shot = 'arrow' | 'bolt' | 'knife' | 'axe' | 'spear' | 'stone' | 'spark' | 'dart' | 'disc';
+
+export interface Ranged {
+  /** How far the shot carries, in pixels of sand. */
+  far: number;
+  /** Multiplier on the weapon's own power when the shot lands. */
+  dmg: number;
+  /** Shots before it is a melee weapon.  Infinity for a bow. */
+  ammo: number;
+  /** Seconds of reloading on top of the ordinary beat between attacks. */
+  reload: number;
+  /** Wind-up weight for a shot, the same scale as a move's. */
+  wind: number;
+  /** What flies. */
+  shot: Shot;
+  /** Pixels a second.  A bolt is flat and fast, a stone is slow and lobbed. */
+  speed: number;
+  /** 0 flies flat, 1 is thrown right up in the air. */
+  arc: number;
+  /** Where the fighter wants to stand while it still has shots. */
+  hold: number;
+  /**
+   * Share of accuracy lost across the whole flight.
+   *
+   * This is what stops a bow being free damage: the shot is resolved when it
+   * ARRIVES, against wherever the target is by then, so a long shot gives
+   * them time to be somewhere else.  It is a real cost of shooting from far
+   * away rather than a number invented to hold the bow down.
+   */
+  drift?: number;
+  /**
+   * WHAT THE SHOT IS WORTH, on the same one-to-ten scale as everything else.
+   *
+   * A bow needs a poor MELEE band, or it is not a bow -- but then its shots
+   * had nothing to scale with either, and every bow in the game hit for very
+   * nearly the same amount however good the chest it came out of was.  That
+   * is how the ranged rack flattened the equipment gradient from 63/73 down
+   * to 53/59: twelve weapons for which better equipment barely mattered.
+   *
+   * The band here is rolled from the SAME roll as the melee one, mapped
+   * across -- a fine bow is a fine bow at both ends of the sheet, and the
+   * fighter who opened a better chest still shoots harder.
+   */
+  power?: Band;
+  /** Share of the target's armour the shot ignores. */
+  pierce?: number;
+  /** Extra chance the shot takes their feet. */
+  stagger?: number;
+  /** Extra pixels of knock-back where the shot lands. */
+  knock?: number;
+  /** The shot comes back, so it never runs out but it is slow to return. */
+  returns?: boolean;
+}
+
 export interface WeaponDef {
   key: string;
   name: string;
@@ -248,7 +331,8 @@ export const WEAPONS: WeaponDef[] = [
   { key: 'dual', name: 'DUAL SWORDS', power: [3, 5], heavy: [2, 4], resist: [4, 7], reach: [5, 7], hits: 2, guard: 0, tempo: 1.1,
     spec: { note: 'TWO BLADES, TWO SMALLER WOUNDS', combo: 1.6, dodgeCut: 0.15 } },
   { key: 'throwing', name: 'THROWING KNIVES', power: [2, 4], heavy: [1, 2], resist: [2, 4], reach: [2, 4], hits: 1, guard: 0, tempo: 1.3,
-    spec: { note: 'OPENS FROM ACROSS THE SAND, THEN RUNS OUT', ammo: 5 } },
+    spec: { note: 'SIX OF THEM, FROM RIGHT ACROSS THE SAND',
+      ranged: { far: 145, dmg: 0.75, power: [3, 7], ammo: 7, reload: 0.35, wind: 0.75, shot: 'knife', speed: 235, arc: 0.14, hold: 85, drift: 0.16 } } },
 
   // ---- THE MIDDLE OF THE RACK
   { key: 'gladius', name: 'GLADIUS', power: [4, 6], heavy: [2, 4], resist: [6, 9], reach: [3, 5], hits: 1, guard: 0, tempo: 1.2,
@@ -261,12 +345,21 @@ export const WEAPONS: WeaponDef[] = [
     spec: { note: 'THEY HURT THEMSELVES ON IT', riposte: 7 } },
 
   // ---- LONG
+  // ---- DUAL RANGE, AND DELIBERATELY NOT BEST AT BOTH.
+  //
+  // The spear is a strong melee weapon that can also be thrown, so its throw
+  // is a WEAK one and there is only the single spear to throw: it opens the
+  // fight or finishes it, and then the spear is gone and it is a fistfight.
+  // The javelin is the other way round -- a strong throw on a weapon that is
+  // poor in the hand.  Neither beats the bow at range or the halberd up close.
   { key: 'spear', name: 'SPEAR', power: [4, 7], heavy: [3, 5], resist: [5, 8], reach: [7, 9], hits: 1, guard: 0, tempo: 1.0,
-    spec: { note: 'WORST THING IN THE WORLD TO WALK TOWARDS', atRange: 0.5, pierce: 0.2 } },
+    spec: { note: 'WORST THING TO WALK TOWARDS, AND IT THROWS ONCE', atRange: 0.5, pierce: 0.2,
+      ranged: { far: 124, dmg: 0.51, power: [2, 5], ammo: 1, reload: 1.1, wind: 1.25, shot: 'spear', speed: 205, arc: 0.24, hold: 69, drift: 0.2, pierce: 0.09 } } },
   { key: 'staff', name: 'LONG STICK', power: [3, 6], heavy: [3, 5], resist: [5, 8], reach: [8, 10], hits: 1, guard: 0, tempo: 0.95,
     spec: { note: 'YOU NEVER GET TO WHERE YOU ARE GOING', sweep: 0.45 } },
   { key: 'trident', name: 'TRIDENT', power: [4, 7], heavy: [4, 6], resist: [6, 9], reach: [7, 9], hits: 1, guard: 0.12, tempo: 0.9,
-    spec: { note: 'HOLDS THEM OFF AND MAKES THEM PAY', atRange: 0.3, knock: 5 } },
+    spec: { note: 'HOLDS THEM OFF, AND WILL THROW IF IT MUST', atRange: 0.3, knock: 5,
+      ranged: { far: 112, dmg: 0.54, power: [2, 5], ammo: 1, reload: 1.2, wind: 1.3, shot: 'spear', speed: 190, arc: 0.26, hold: 66, drift: 0.22 } } },
   { key: 'halberd', name: 'HALBERD', power: [5, 8], heavy: [5, 7], resist: [6, 9], reach: [7, 9], hits: 1, guard: 0, tempo: 0.8,
     spec: { note: 'A SPEAR ONE MOMENT AND AN AXE THE NEXT', atRange: 0.35, stagger: 0.2 } },
   { key: 'warscythe', name: 'WAR SCYTHE', power: [5, 8], heavy: [5, 8], resist: [4, 7], reach: [8, 10], hits: 1, guard: 0, tempo: 0.8,
@@ -295,6 +388,48 @@ export const WEAPONS: WeaponDef[] = [
     spec: { note: 'ONCE IS USUALLY ENOUGH', knock: 16, stagger: 0.6, slowRecover: 0.4 } },
   { key: 'goldsword', name: 'GOLD SWORD', power: [8, 10], heavy: [7, 9], resist: [6, 9], reach: [6, 8], hits: 1, guard: 0, tempo: 0.7,
     spec: { note: 'TOO MUCH SWORD, AND WORTH IT', knock: 6, crit: 0.15 } },
+
+  // ---- THROWN, AND THEN YOU ARE HOLDING NOTHING MUCH
+  //
+  // A handful of shots and a poor weapon underneath.  These win by opening a
+  // lead across the sand and surviving what comes back, which is a different
+  // way to win a fight and loses badly to anyone who closes early.
+  { key: 'throwaxe', name: 'THROWING AXES', power: [3, 6], heavy: [2, 4], resist: [4, 7], reach: [3, 5], hits: 1, guard: 0, tempo: 1.1,
+    spec: { note: 'FOUR AXES, END OVER END', stagger: 0.18,
+      ranged: { far: 128, dmg: 0.83, power: [4, 9], ammo: 4, reload: 0.72, wind: 1.05, shot: 'axe', speed: 168, arc: 0.42, hold: 76, drift: 0.26, stagger: 0.16 } } },
+  { key: 'javelin', name: 'JAVELIN', power: [3, 5], heavy: [2, 4], resist: [3, 6], reach: [6, 8], hits: 1, guard: 0, tempo: 1.05,
+    spec: { note: 'THREE THROWS, AND EACH ONE MEANS IT',
+      ranged: { far: 178, dmg: 0.92, power: [5, 10], ammo: 3, reload: 0.95, wind: 1.2, shot: 'spear', speed: 212, arc: 0.3, hold: 105, drift: 0.24, pierce: 0.11 } } },
+  { key: 'chakram', name: 'CHAKRAM', power: [2, 4], heavy: [1, 3], resist: [3, 6], reach: [3, 5], hits: 1, guard: 0, tempo: 1.35,
+    spec: { note: 'FLAT, FAST, AND IT COMES BACK', combo: 1.4,
+      ranged: { far: 138, dmg: 0.78, power: [3, 7], ammo: 5, reload: 0.44, wind: 0.7, shot: 'disc', speed: 258, arc: 0.03, hold: 81, drift: 0.12 } } },
+
+  // ---- SHOOTS ALL DAY, AND CANNOT FIGHT AT ALL
+  //
+  // Infinite shots, and melee numbers that are honestly awful: a bow in a
+  // clinch is a stick.  The whole weapon is the distance, so anything that
+  // gets inside it wins, and that is the trade the card should make obvious.
+  { key: 'sling', name: 'SLINGSHOT', power: [1, 3], heavy: [1, 2], resist: [2, 4], reach: [1, 3], hits: 1, guard: 0, tempo: 1.45,
+    spec: { note: 'A STONE EVERY SECOND, FOREVER', fleet: 1.16,
+      ranged: { far: 168, dmg: 0.57, power: [2, 6], ammo: Infinity, reload: 0.46, wind: 0.68, shot: 'stone', speed: 152, arc: 0.58, hold: 99, drift: 0.3, stagger: 0.1 } } },
+  { key: 'blowgun', name: 'BLOWGUN', power: [1, 2], heavy: [1, 1], resist: [1, 3], reach: [1, 3], hits: 1, guard: 0, tempo: 1.5,
+    spec: { note: 'LITTLE DARTS, AND A GREAT MANY OF THEM', fleet: 1.2,
+      ranged: { far: 152, dmg: 0.44, power: [1, 5], ammo: Infinity, reload: 0.28, wind: 0.5, shot: 'dart', speed: 244, arc: 0.06, hold: 91, drift: 0.2, pierce: 0.23 } } },
+  { key: 'bow', name: 'SHORT BOW', power: [2, 4], heavy: [1, 3], resist: [2, 5], reach: [1, 3], hits: 1, guard: 0, tempo: 1.2,
+    spec: { note: 'NOTHING IN THE HAND, EVERYTHING AT RANGE',
+      ranged: { far: 196, dmg: 0.68, power: [4, 8], ammo: Infinity, reload: 0.7, wind: 0.85, shot: 'arrow', speed: 218, arc: 0.22, hold: 114, drift: 0.22 } } },
+  { key: 'longbow', name: 'LONG BOW', power: [2, 4], heavy: [2, 4], resist: [3, 6], reach: [2, 4], hits: 1, guard: 0, tempo: 1.0,
+    spec: { note: 'IT REACHES THE FAR WALL', slowRecover: 0.2,
+      ranged: { far: 238, dmg: 0.89, power: [5, 10], ammo: Infinity, reload: 1.0, wind: 1.35, shot: 'arrow', speed: 236, arc: 0.28, hold: 138, drift: 0.28, pierce: 0.07 } } },
+  { key: 'crossbow', name: 'CROSSBOW', power: [3, 5], heavy: [3, 5], resist: [5, 8], reach: [2, 4], hits: 1, guard: 0.06, tempo: 0.9,
+    spec: { note: 'ONE BOLT, STRAIGHT THROUGH THE PLATE', slowRecover: 0.3,
+      ranged: { far: 214, dmg: 0.87, power: [6, 10], ammo: Infinity, reload: 1.78, wind: 1.15, shot: 'bolt', speed: 312, arc: 0.04, hold: 127, drift: 0.1, pierce: 0.2 } } },
+  { key: 'magicstaff', name: 'MAGIC STAFF', power: [3, 5], heavy: [2, 4], resist: [4, 7], reach: [5, 7], hits: 1, guard: 0, tempo: 1.0,
+    spec: { note: 'IT DOES NOT CARE WHAT YOU ARE WEARING', sweep: 0.2,
+      ranged: { far: 182, dmg: 0.59, power: [3, 8], ammo: Infinity, reload: 1.22, wind: 1.0, shot: 'spark', speed: 186, arc: 0.1, hold: 109, drift: 0.18, pierce: 0.25 } } },
+  { key: 'boomerang', name: 'BOOMERANG', power: [2, 4], heavy: [1, 3], resist: [3, 6], reach: [2, 4], hits: 1, guard: 0, tempo: 1.3,
+    spec: { note: 'IT GOES OUT AND IT COMES BACK', fleet: 1.12,
+      ranged: { far: 150, dmg: 0.75, power: [3, 7], ammo: Infinity, reload: 0.66, wind: 0.8, shot: 'disc', speed: 172, arc: 0.36, hold: 89, drift: 0.26, returns: true, knock: 3 } } },
 ];
 
 /** Bare hands, for a weapon that has broken.  The same row as an empty chest. */
@@ -729,8 +864,12 @@ export interface Fighter {
    */
   counterT: number;
   countering: boolean;
-  /** Knives left to throw. */
+  /** Shots left.  Infinity for a bow, 0 once a thrower is empty. */
   ammo: number;
+  /** Seconds of reloading still owed before the next shot. */
+  reload: number;
+  /** Shots in the air, which are resolved when they arrive and not before. */
+  flight: InFlight[];
   /** What is left of each piece of armour, and which are already gone. */
   wear: Record<'head' | 'body' | 'legs', number>;
   gone: Record<'head' | 'body' | 'legs', boolean>;
@@ -766,7 +905,8 @@ export function makeFighter(who: 'frog' | 'lizard', kit: Kit, x: number, face: 1
     riposte: false, chain: 0, desperate: false, move: null, counterT: 0, countering: false,
     wear: { head: armourLife(kit.head), body: armourLife(kit.body), legs: armourLife(kit.legs) },
     gone: { head: false, body: false, legs: false },
-    ammo: kit.weapon.weapon?.spec.ammo ?? 0, lastGap: 999, clock: 0,
+    ammo: kit.weapon.weapon?.spec.ranged?.ammo ?? 0, reload: 0, flight: [],
+    lastGap: 999, clock: 0,
     armA: -10, leanA: 0, shove: 0, art: null,
   };
 }
@@ -820,6 +960,10 @@ export function breakWeapon(f: Fighter): void {
   f.weapon = UNARMED;
   f.held = emptyHands();
   f.dur = Infinity;
+  // A broken bow shoots nothing.  Anything already in the air still arrives --
+  // it left the string before the stave went, and the crowd can see it.
+  f.ammo = 0;
+  f.reload = 0;
   f.st = statsOf(f.kit, UNARMED, f.held, f.type);
   // Health is not re-rolled: the armour is still on, and it is the armour that
   // health comes from.  Only the cap moves, and it moves nowhere, because
@@ -856,14 +1000,13 @@ const WEARY_AT = 55;
 const WEARY_OVER = 45;
 /** A critical is worth this much of an ordinary blow. */
 const CRIT_MUL = 1.8;
-/** How far a thrown knife carries, and what it is worth out there. */
-const THROW_REACH = 92;
-const THROW_MUL = 0.72;
 /**
  * How far a move's own multipliers are allowed to move the swing they modify.
  * At full strength they overruled the equipment; at half they colour it.
  */
 const MOVE_SHARE = 0.55;
+/** Share of walking pace kept while backing away.  See the footwork below. */
+const RETREAT = 0.62;
 const MOVE_WEIGHT = (n: number): number => 1 + (n - 1) * MOVE_SHARE;
 /**
  * A move's reach counts for half too, and for the same reason.
@@ -933,6 +1076,39 @@ const INSIDE_MIN = 0.25;
 /** The arena's two walls, in the fighters' own coordinates. */
 export const ARENA = { left: 26, right: GAME_W - 26 };
 
+/**
+ * A SHOT THAT HAS LEFT THE HAND AND HAS NOT ARRIVED YET.
+ *
+ * The whole point of keeping this is that an arrow is resolved WHERE IT LANDS,
+ * against wherever the target has got to by then -- not at the moment it was
+ * loosed.  That is what makes shooting from the far wall a real decision
+ * rather than free damage: the longer the flight, the more chance they have
+ * moved, dodged, or closed the distance on you.
+ *
+ * It is part of the simulation, not of the drawing: `t` runs off the same dt
+ * as everything else, so a headless run lands its arrows at exactly the same
+ * moments as one with a screen attached.
+ */
+export interface InFlight {
+  kind: Shot;
+  /** Seconds left before it arrives. */
+  t: number;
+  /** Total flight, so the drawing knows how far along it is. */
+  total: number;
+  from: number;
+  /** Where it was aimed, which is not necessarily where they are now. */
+  aim: number;
+  arc: number;
+  /** The attacker's power at the moment of the shot, and the move's name. */
+  power: number;
+  move?: string;
+  r: Ranged;
+  /** Flags for the moment it lands. */
+  crit: boolean;
+  /** Drawing only.  The sprite is hung off the shot so it can be destroyed. */
+  art: Phaser.GameObjects.Container | null;
+}
+
 export interface Blow {
   hit: boolean;
   dodged: boolean;
@@ -946,6 +1122,8 @@ export interface Blow {
   /** It was a critical, a thrown knife, a counter, or it hurt the thrower. */
   crit?: boolean;
   thrown?: boolean;
+  /** A shot has just been loosed -- no damage yet, it is still in the air. */
+  loosed?: InFlight;
   countered?: boolean;
   riposted?: boolean;
   /** It was big enough to take the legs from under them. */
@@ -966,20 +1144,128 @@ export interface Blow {
  * `rng` is injectable so the whole thing can be run ten thousand times with a
  * seeded roll and the answer checked, rather than watched.
  */
+/**
+ * THE HALF OF A BLOW THAT IS THE SAME WHETHER IT WAS SWUNG OR SHOT.
+ *
+ * Weariness, armour, a raised guard, the health, the wear on the suit and
+ * being put on the floor.  Pulled out so an arrow and an axe go through the
+ * identical arithmetic and a ranged weapon cannot quietly acquire a different
+ * set of rules from a melee one.
+ */
+function applyDamage(att: Fighter, def: Fighter, raw: number, out: Blow, rng: () => number,
+  o: { pierce: number; soak: number; stagger: number; knock: number }): void {
+  const weary = Math.min(1, Math.max(0, (att.clock - WEARY_AT) / WEARY_OVER));
+  raw *= 1 + weary * 0.6;
+  const armour = def.st.defence * (1 - o.pierce) * (1 - weary);
+  out.hit = true;
+  out.dmg = Math.max(1, Math.round(raw * (1 - armour) * (1 - o.soak)));
+  def.hp = Math.max(0, def.hp - out.dmg);
+  if (def.hp > 0) {
+    const off = wearArmour(def, rng);
+    if (off) { out.stripped = off.slot; out.strippedTint = off.tint; }
+  }
+  const floored = out.dmg >= def.st.maxHp * STAGGER_AT || rng() < o.stagger;
+  if (def.hp > 0 && floored) {
+    out.staggered = true;
+    def.act = 'stagger';
+    def.t = STAGGER_S;
+    def.chain = 0;
+    def.riposte = false;
+    def.x = Phaser.Math.Clamp(def.x + (def.x < att.x ? -1 : 1) * (KNOCK_PX + o.knock), ARENA.left, ARENA.right);
+  }
+}
+
+/**
+ * LOOSE A SHOT.  Nothing is decided here except that it is on its way.
+ *
+ * Damage, dodging and armour all wait for `landShot`, because an arrow that
+ * takes half a second to cross the sand should be answered by where the
+ * target IS when it gets there.  A fighter who sees it coming and closes the
+ * distance has genuinely done something about it.
+ */
+/**
+ * What this fighter's shots are worth, from the roll already on the sheet.
+ *
+ * The weapon was rolled once.  Where the shot has a band of its own, that one
+ * roll's QUALITY -- how far up its melee band it came out -- is carried
+ * across onto the ranged band, so one chest decides both and a good bow is
+ * good at the thing a bow is for.
+ */
+function shotPower(f: Fighter): number {
+  const r = f.weapon.spec.ranged;
+  if (!r?.power) return f.st.power;
+  const [lo, hi] = f.weapon.power;
+  const qual = hi > lo ? Math.min(1, Math.max(0, (f.held.rPower - lo) / (hi - lo))) : 0.5;
+  const rolled = r.power[0] + qual * (r.power[1] - r.power[0]);
+  return (BASE.power + rolled * POWER_PER_ROLL) / f.weapon.hits;
+}
+
+function looseShot(att: Fighter, def: Fighter, gap: number, rng: () => number): Blow {
+  const out: Blow = { hit: false, dodged: false, guarded: false, dmg: 0, broke: false };
+  const r = att.weapon.spec.ranged!;
+  const mv = att.move;
+  out.move = mv?.name;
+  out.thrown = true;
+  if (Number.isFinite(att.ammo)) att.ammo -= 1;
+  att.reload = r.reload;
+  const crit = !!(att.weapon.spec.crit && rng() < att.weapon.spec.crit);
+  const flight = Math.max(0.08, gap / r.speed);
+  out.loosed = {
+    kind: r.shot, t: flight, total: flight, from: att.x, aim: def.x, arc: r.arc,
+    power: shotPower(att) * r.dmg * (0.85 + rng() * 0.3), move: mv?.name, r, crit, art: null,
+  };
+  att.flight.push(out.loosed);
+  return out;
+}
+
+/**
+ * AND THE SHOT ARRIVES.
+ *
+ * Every test is taken now, against the fighter as they are at this instant.
+ * `drift` is the one thing a shot has that a swing does not: the further it
+ * had to travel the likelier it is to find nobody there, which is the price
+ * of fighting from the far wall.
+ */
+export function landShot(att: Fighter, def: Fighter, sh: InFlight, rng = Math.random): Blow {
+  const out: Blow = { hit: false, dodged: false, guarded: false, dmg: 0, broke: false, thrown: true, move: sh.move, crit: sh.crit };
+  const r = sh.r;
+  // It was aimed at where they were standing.  Moving since is the defence.
+  const slip = Math.min(1, Math.abs(def.x - sh.aim) / 26);
+  const evade = Math.min(0.9, def.st.avoid + (def.act === 'dodge' ? DODGE_BONUS : 0) + (r.drift ?? 0) * slip);
+  if (rng() < evade) {
+    out.dodged = true;
+    def.counterT = COUNTER_WINDOW;
+    if (def.act === 'dodge') { def.riposte = true; def.cool = 0; }
+    return out;
+  }
+  const guarding = def.act === 'guard';
+  out.guarded = guarding || def.st.guard > 0;
+  const soak = (guarding ? GUARD_CUT : 0) + def.st.guard;
+  let raw = sh.power;
+  if (sh.crit) raw *= CRIT_MUL;
+  applyDamage(att, def, raw, out, rng,
+    { pierce: r.pierce ?? 0, soak, stagger: r.stagger ?? 0, knock: r.knock ?? 0 });
+  return out;
+}
+
 export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Math.random): Blow {
   const out: Blow = { hit: false, dodged: false, guarded: false, dmg: 0, broke: false };
   const sp = att.weapon.spec;
-  // Throwing knives reach a great deal further while any are left.
   const mv = att.move;
-  const thrown = (sp.ammo ?? 0) > 0 && att.ammo > 0 && gap > att.st.reach;
-  if (gap > (thrown ? THROW_REACH : att.st.reach * MOVE_REACH(mv))) return out;
+  // ---- A SHOT, IF THIS IS A WEAPON THAT SHOOTS AND THEY ARE OUT THERE.
+  //
+  // Out of melee reach and still holding ammunition means the answer is the
+  // ranged one; inside reach it swings, and so does an empty bow.
+  const r = sp.ranged;
+  if (r && att.ammo > 0 && att.reload <= 0 && gap > att.st.reach && gap <= r.far) {
+    return looseShot(att, def, gap, rng);
+  }
+  if (gap > att.st.reach * MOVE_REACH(mv)) return out;
   out.move = mv?.name;
-  if (thrown) { att.ammo -= 1; out.thrown = true; }
 
   // Wear is charged once per swing, not once per blow to land: a weapon that
-  // throws two was paying twice for the one swing.  A throw costs no wear --
-  // what it costs is one of the five knives.
-  if (!thrown && Number.isFinite(att.dur) && att.swing === 0) {
+  // throws two was paying twice for the one swing.
+  if (Number.isFinite(att.dur) && att.swing === 0) {
     att.dur -= 1;
     if (att.dur <= 0) {
       breakWeapon(att);
@@ -1042,44 +1328,17 @@ export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Mat
   if (sp.vsArmour) raw *= 1 + (sp.vsArmour - 1) * Math.min(1, def.st.defence / 0.3);
   if (sp.execute) raw *= 1 + (sp.execute - 1) * (1 - def.hp / def.st.maxHp);
   if (sp.counter && att.countering) { raw *= 1 + sp.counter; out.countered = true; }
-  if (thrown) raw *= THROW_MUL;
 
   // ---- ARMOUR TAKES A SHARE, NOT A SLICE, and some weapons take a share of
   // the share: a knife finds the gap, a mace does not care that there is one.
-  // ---- AND EVERYBODY GETS TIRED.
-  //
-  // Two fighters in heavy plate with blunt weapons could genuinely stand
-  // there all day, and about one fight in a hundred and sixty did -- straight
-  // to the three minute cap with both of them alive.  Past a minute, armour
-  // starts giving out and blows start telling: it runs off a clock both of
-  // them share, so it favours neither, and it means every fight ends.
-  const weary = Math.min(1, Math.max(0, (att.clock - WEARY_AT) / WEARY_OVER));
-  raw *= 1 + weary * 0.6;
-  const armour = def.st.defence * (1 - (sp.pierce ?? 0)) * (1 - weary);
-  out.hit = true;
-  out.dmg = Math.max(1, Math.round(raw * (1 - armour) * (1 - soak)));
-  def.hp = Math.max(0, def.hp - out.dmg);
-  // and the suit is a little more broken than it was
-  if (def.hp > 0) {
-    const off = wearArmour(def, rng);
-    if (off) { out.stripped = off.slot; out.strippedTint = off.tint; }
-  }
-
-  // ---- WHAT A BIG ONE DOES BESIDES DAMAGE.
-  //
-  // A blow worth a good share of somebody's health puts them on the back
-  // foot: they lose the next beat and they lose GROUND, which is a real
-  // change to the fight and not a flinch.  Hammers and clubs do it far more
-  // often than the damage alone would earn.
-  const floored = out.dmg >= def.st.maxHp * STAGGER_AT || rng() < ((sp.stagger ?? 0) + (mv?.stagger ?? 0));
-  if (def.hp > 0 && floored) {
-    out.staggered = true;
-    def.act = 'stagger';
-    def.t = STAGGER_S;
-    def.chain = 0;
-    def.riposte = false;
-    def.x = Phaser.Math.Clamp(def.x + (def.x < att.x ? -1 : 1) * (KNOCK_PX + (sp.knock ?? 0) + (mv?.knock ?? 0)), ARENA.left, ARENA.right);
-  }
+  // Weariness, the suit and being put on the floor are shared with the shot
+  // path, so the two kinds of attack cannot drift apart.
+  applyDamage(att, def, raw, out, rng, {
+    pierce: sp.pierce ?? 0,
+    soak,
+    stagger: (sp.stagger ?? 0) + (mv?.stagger ?? 0),
+    knock: (sp.knock ?? 0) + (mv?.knock ?? 0),
+  });
   return out;
 }
 
@@ -1158,6 +1417,25 @@ export function chooseMove(f: Fighter, other: Fighter, gap: number, rng = Math.r
   return best;
 }
 
+/** Whether this fighter still has a shot to take at all. */
+function armed(f: Fighter): boolean {
+  return !!f.weapon.spec.ranged && f.ammo > 0;
+}
+
+/**
+ * Whether the SHOOTING is this weapon's plan, as opposed to a thing it can do.
+ *
+ * A spear that can be thrown once is a spear: it should fight at spear range
+ * and throw when the moment comes, not back away across the arena guarding a
+ * single cast.  Letting the one-shot weapons kite made them fight like bows
+ * while keeping a polearm's melee -- good at both, which is the one thing a
+ * dual-range weapon is not allowed to be.
+ */
+function holds(f: Fighter): boolean {
+  const r = f.weapon.spec.ranged;
+  return !!r && f.ammo > 0 && r.ammo > 1;
+}
+
 export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random): void {
   const gap = Math.abs(f.x - other.x);
   f.face = other.x >= f.x ? 1 : -1;
@@ -1210,9 +1488,12 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   // other one is closing.  A thrown knife opens from right across the sand.
   const closing = gap < wasGap - 0.01 || other.act === 'lunge';
   const swing = f.st.reach * (1 + (sp.sweep && closing ? sp.sweep : 0));
-  const canThrow = (sp.ammo ?? 0) > 0 && f.ammo > 0;
+  // A loaded ranged weapon can open from anywhere inside its carry, but only
+  // once it has finished reloading -- that wait is most of what a crossbow
+  // costs and the whole reason a bow is not simply better than a sword.
+  const shooting = armed(f) && f.reload <= 0 && gap > f.st.reach && gap <= sp.ranged!.far;
   const mv = chooseMove(f, other, gap, rng);
-  if ((gap <= swing * MOVE_REACH(mv) || (canThrow && gap <= THROW_REACH)) && f.cool <= 0) {
+  if ((gap <= swing * MOVE_REACH(mv) || shooting) && f.cool <= 0) {
     const share = f.riposte ? RIPOSTE_WINDUP : f.chain > 0 ? COMBO_WINDUP : f.desperate ? 0.78 : 1;
     f.act = 'windup';
     f.move = mv;
@@ -1227,7 +1508,7 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
     // in five -- the moves, not the equipment, were deciding it.  Halving
     // both the wind-up and the damage sides keeps an overhead slower and
     // heavier than a thrust while leaving the gear in charge.
-    f.t = (WINDUP * share * MOVE_WEIGHT(mv.wind)) / f.st.rate;
+    f.t = (WINDUP * share * MOVE_WEIGHT(shooting ? sp.ranged!.wind : mv.wind)) / f.st.rate;
     f.swing = 0;
     f.countering = f.counterT > 0;
     f.riposte = false;
@@ -1240,8 +1521,12 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   // old fight look like two people queueing.  A lunge covers the last stretch
   // in a burst, which is where the sudden changes of distance come from --
   // and being out of position afterwards is what it costs.
+  //
+  // A fighter with shots left has no business lunging into a clinch: closing
+  // the distance is the one thing that beats him, so he must not do it to
+  // himself.  Once the quiver is empty he closes like anybody else.
   const nerve = (ty?.nerve ?? 1) * (ty?.berserk ? 1 + (1 - f.hp / f.st.maxHp) * 0.9 : 1);
-  if (f.cool <= 0 && gap > f.st.reach && gap < f.st.reach + 26 && rng() < (f.desperate ? 2.2 : 1.1) * nerve * dt) {
+  if (!holds(f) && f.cool <= 0 && gap > f.st.reach && gap < f.st.reach + 26 && rng() < (f.desperate ? 2.2 : 1.1) * nerve * dt) {
     f.act = 'lunge';
     f.t = LUNGE_S;
     f.cool = LUNGE_COOL;
@@ -1286,10 +1571,30 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   // used its shoulder strike.  A slow drift in and out of a foot or so gives
   // the shorter attacks a distance at which they are the right answer.
   const breathe = 1 + Math.sin(f.clock * 1.9 + (f.who === 'frog' ? 0 : 2.1)) * 0.14;
-  const want = (f.cool > 0 && !stuck ? f.st.range * give * spacing : keep) * (1 - weary * 0.5) * drift * breathe;
+  // ---- WHERE A SHOOTER WANTS TO BE, which is not where a swordsman does.
+  //
+  // With shots in hand the whole plan is the distance: stand at `hold`, and
+  // back off rather than let anybody walk in.  Weariness still drags both of
+  // them together in the end, so a bow cannot simply kite out the clock.
+  let want = (f.cool > 0 && !stuck ? f.st.range * give * spacing : keep) * (1 - weary * 0.5) * drift * breathe;
+  if (holds(f)) {
+    const hold = sp.ranged!.hold * (ty?.spacing ?? 1) * (1 - weary * 0.45) * breathe;
+    want = Math.min(hold, sp.ranged!.far - 6);
+  }
   const dir = gap > want + 2 ? 1 : gap < want - 2 ? -1 : 0;
   if (dir !== 0) {
-    const pace = f.st.walk * (f.weapon.spec.fleet ?? 1);
+    // ---- GIVING GROUND IS SLOWER THAN TAKING IT.
+    //
+    // Without this an archer simply walks away for ever at exactly the pace
+    // the swordsman walks in, and a bow beats most of the rack by never being
+    // reached: 82% against sword and chain, which is not a weapon, it is a
+    // loophole.  Backing off at under two thirds pace means a bow can hold a
+    // distance it already has and cannot open a new one against somebody
+    // committed to closing -- so getting inside it stays the answer to it.
+    //
+    // It applies to both fighters and to every weapon, so it is a rule about
+    // footwork and not a tax on bows.
+    const pace = f.st.walk * (f.weapon.spec.fleet ?? 1) * (dir < 0 ? RETREAT : 1);
     f.x += f.face * dir * pace * dt;
     f.x = Phaser.Math.Clamp(f.x, ARENA.left, ARENA.right);
     f.step += pace * dt;
@@ -1306,6 +1611,7 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
 export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random): Blow | null {
   f.clock += dt;
   if (f.cool > 0) f.cool -= dt;
+  if (f.reload > 0) f.reload -= dt;
   if (f.counterT > 0) f.counterT -= dt;
   if (f.stun > 0) {
     f.stun -= dt;
@@ -1381,14 +1687,39 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random):
  * mid-strike and in range of each other, so it is rare and never anybody's
  * tactic.  The rule reads the same from either side.
  */
+/**
+ * ADVANCE WHATEVER IS IN THE AIR, and hand back the ones that arrived.
+ *
+ * Done before either fighter acts, so a shot lands against the positions the
+ * tick started from rather than against wherever the footwork has just put
+ * them.  A boomerang that misses comes back and is loaded again; everything
+ * else is simply spent.
+ */
+function advanceFlight(att: Fighter, def: Fighter, dt: number, rng: () => number,
+  out: Array<{ att: Fighter; def: Fighter; blow: Blow }>): void {
+  if (!att.flight.length) return;
+  const still: InFlight[] = [];
+  for (const sh of att.flight) {
+    sh.t -= dt;
+    if (sh.t > 0) { still.push(sh); continue; }
+    const blow = landShot(att, def, sh, rng);
+    blow.loosed = sh;                    // so the drawing can retire the sprite
+    if (sh.r.returns && !Number.isFinite(att.ammo)) att.reload = Math.max(att.reload, sh.r.reload);
+    out.push({ att, def, blow });
+  }
+  att.flight = still;
+}
+
 export function exchange(a: Fighter, b: Fighter, dt: number, rng = Math.random): Array<{ att: Fighter; def: Fighter; blow: Blow }> {
+  const out: Array<{ att: Fighter; def: Fighter; blow: Blow }> = [];
+  advanceFlight(a, b, dt, rng, out);
+  advanceFlight(b, a, dt, rng, out);
   const hpA = a.hp;
   const hpB = b.hp;
   const blowA = tick(a, b, dt, rng);
   const blowB = tick(b, a, dt, rng);
-  const out: Array<{ att: Fighter; def: Fighter; blow: Blow }> = [];
 
-  if (blowA && blowB && blowA.hit && blowB.hit) {
+  if (blowA && blowB && blowA.hit && blowB.hit && !blowA.thrown && !blowB.thrown) {
     // put the damage back and push them apart instead
     a.hp = hpA;
     b.hp = hpB;
@@ -1669,6 +2000,58 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number): Phaser.Gam
       bar(0, 0, 3, 3, grip);
       blade(3, -5, 6, 1.5, -26); blade(3, 5, 6, 1.5, 26);
       break;
+    // ---- THE RANGED RACK.  A bow reads by its limbs and its string, a
+    // crossbow by the cross, a sling by the pouch on the end of a cord.
+    case 'bow': case 'longbow': {
+      const big = key === 'longbow';
+      const h = big ? 22 : 17;
+      bar(2, -h / 2 + 2, 2.5, h / 2 + 2, wood, -16);
+      bar(2, h / 2 - 2, 2.5, h / 2 + 2, wood, 16);
+      bar(2, -h / 2 + 2, 1, h / 2 + 2, woodLit, -16);
+      bar(5, 0, 1, h - 1, 0xe6dcc4);                   // the string
+      bar(0, 0, 3, 5, grip);
+      if (big) { bar(2, -h / 2 - 1, 3, 2, PALETTE.gold); bar(2, h / 2 + 1, 3, 2, PALETTE.gold); }
+      break;
+    }
+    case 'crossbow':
+      haft(6, 0, 15, 3.5); bar(3, 0, 2.5, 14, wood);   // stock and the bow across it
+      bar(3, -6, 3, 2, steel); bar(3, 6, 3, 2, steel);
+      bar(5, 0, 1, 12, 0xe6dcc4);
+      blade(12, 0, 9, 1.5); bar(-1, 1, 4, 4, grip);
+      break;
+    case 'sling':
+      bar(1, 0, 3, 3, grip);
+      bar(5, -3, 8, 1, 0x6b5436, -22); bar(5, 3, 8, 1, 0x6b5436, 22);
+      bar(10, 0, 4, 4, 0x8a6a42); c.add(scene.add.circle(10, 0, 1.6, 0x9a9a9a));
+      break;
+    case 'blowgun':
+      haft(8, 0, 18, 2.5); bar(17, 0, 2, 3.5, PALETTE.ink);
+      bar(0, 0, 3, 3.5, 0x4a3a24);
+      break;
+    case 'magicstaff':
+      haft(7, 2, 20, 3, -8);
+      c.add(scene.add.circle(16, -5, 3.4, 0x6fd8e8));
+      c.add(scene.add.circle(16, -5, 2, 0xdffaff));
+      bar(16, -9, 1.5, 3, 0x9a6ab0); bar(13, -3, 5, 1.5, PALETTE.gold, -20);
+      break;
+    case 'throwaxe':
+      haft(6, 0, 12, 2.5);
+      bar(12, -2, 6, 7, steel); bar(12, -3.5, 6, 1.5, shine); bar(13, 1, 4, 1.5, shade);
+      break;
+    case 'javelin':
+      haft(9, 0, 24, 2.5); blade(21, 0, 7, 2.5);
+      bar(2, 0, 3, 3.5, 0x6a4a2a); bar(6, 0, 2, 4, PALETTE.gold);
+      break;
+    case 'chakram':
+      c.add(scene.add.circle(7, 0, 6, 0x000000).setAlpha(0.18));
+      bar(7, -5.5, 9, 2, steel); bar(7, 5.5, 9, 2, steel);
+      bar(2.5, 0, 2, 9, steel); bar(11.5, 0, 2, 9, steel);
+      bar(7, -6, 9, 1, shine);
+      break;
+    case 'boomerang':
+      bar(5, -3, 11, 3, woodLit, -32); bar(5, 3, 11, 3, wood, 32);
+      bar(5, -4, 11, 1, 0xc6a06a, -32);
+      break;
     case 'shield': {
       // The spiked shield: a boss, a rim, and six spikes around it.
       //
@@ -1913,6 +2296,10 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     punch:  { w: -62, s: 14, r: -40, lean: 9 },
     // a kick is the legs' business; the hands stay up where they were
     kick:   { w: -58, s: -52, r: -50, lean: -8 },
+    // drawing a bow pulls the hand back to the cheek and lets it go forward
+    shoot:  { w: -50, s: -18, r: -34, lean: -6 },
+    // and a throw comes right over the shoulder
+    hurl:   { w: -128, s: 40, r: 12, lean: 14 },
   };
   const shape = A[f.move?.anim ?? 'sweep'];
   let arm = -10;
@@ -2710,7 +3097,12 @@ function showCardOfBoth(c: Phaser.GameObjects.Container): void {
       ['POWER', f.st.powerPts.toFixed(0)],
       ['SPEED', f.st.speedPts.toFixed(0)],
       ['AVOID', f.st.avoidPts.toFixed(0)],
-      ['REACH', f.st.distPts.toFixed(0)],
+      // A ranged weapon says so here, as reach-in-hand against carry.  It
+      // goes in the REACH row rather than a row of its own because the panel
+      // is already the full height of its box.
+      ['REACH', f.weapon.spec.ranged
+        ? `${f.st.distPts.toFixed(0)} / ${f.weapon.spec.ranged.far}`
+        : f.st.distPts.toFixed(0)],
       ['DEFENCE', `${Math.round(f.st.defence * 100)}%`],
       ['HEALTH', String(f.st.maxHp)],
     ];
@@ -2797,11 +3189,110 @@ function refreshHud(): void {
     if (b) b.width = Math.max(0, Math.round((Math.max(0, f.hp) / f.st.maxHp) * 128));
     hpNum[who]?.setText(`${Math.max(0, f.hp)} / ${f.st.maxHp}`);
     defText[who]?.setText(`${Math.round(f.st.defence * 100)}%`);
-    kitLine[who]?.setText(f.broken ? 'BARE HANDS' : f.weapon.name.slice(0, 16)).setTint(f.broken ? PALETTE.blood : PALETTE.bone);
+    // ---- AND HOW MANY SHOTS ARE LEFT, which is the whole story of a
+    // thrower's fight: six knives is a different fighter from none, and the
+    // moment the count reaches nought he has to come and fight you.
+    const r = f.weapon.spec.ranged;
+    const count = r && !f.broken && Number.isFinite(f.ammo) ? ` x${Math.max(0, f.ammo)}` : '';
+    const name = f.broken ? 'BARE HANDS' : f.weapon.name.slice(0, 16 - count.length) + count;
+    kitLine[who]?.setText(name)
+      .setTint(f.broken ? PALETTE.blood : r && f.ammo <= 0 ? PALETTE.fog : PALETTE.bone);
   }
 }
 
 /** A number coming off somebody, and the burst where it landed. */
+/**
+ * WHAT AN ARROW LOOKS LIKE ON ITS WAY ACROSS THE SAND.
+ *
+ * The flight time is the SIMULATION's, not a tween duration picked to look
+ * right: `sh.t` is counted down by `exchange` and the sprite is simply drawn
+ * at however far along it has got.  So the thing the crowd watches land is
+ * the same event the rules resolved, and a shot cannot arrive on screen at a
+ * different moment from the one it arrives in the fight.
+ */
+function buildShot(kind: Shot, face: number): Phaser.GameObjects.Container {
+  const c = S().add.container(0, 0);
+  const put = (x: number, y: number, w: number, h: number, col: number, ang = 0) =>
+    c.add(S().add.rectangle(x, y, w, h, col).setAngle(ang));
+  switch (kind) {
+    case 'arrow':
+      put(0, 0, 11, 1.5, 0x8a6a42); put(5, 0, 3, 2, 0xc6ced9);
+      put(-5, 0, 3, 3, 0xe8e2d0); put(-5, 0, 3, 1, 0xb03030);
+      break;
+    case 'bolt':
+      put(0, 0, 8, 2, 0x5e4a30); put(4, 0, 3.5, 2.5, 0xdfe6f0); put(-4, 0, 2, 3, 0x9aa2ae);
+      break;
+    case 'knife':
+      put(0, 0, 8, 2, 0xc6ced9); put(0, -1, 8, 1, 0xeef3fa); put(-4, 0, 3, 2.5, 0x3b2a1a);
+      break;
+    case 'axe':
+      put(0, 0, 9, 2, 0x7a5a36); put(4, -1, 5, 6, 0xc6ced9); put(4, -3, 5, 1.5, 0xeef3fa);
+      break;
+    case 'spear':
+      put(0, 0, 16, 2, 0x8a6a42); put(8, 0, 6, 2.5, 0xc6ced9); put(8, -1, 6, 1, 0xeef3fa);
+      break;
+    case 'stone':
+      c.add(S().add.circle(0, 0, 2.2, 0x8f8a80));
+      c.add(S().add.circle(-0.6, -0.6, 1.2, 0xb4afa4));
+      break;
+    case 'dart':
+      put(0, 0, 5, 1, 0x2a2d3a); put(2, 0, 2, 1.5, 0xc6ced9); put(-2.5, 0, 2, 2, 0xe0e36a);
+      break;
+    case 'spark':
+      c.add(S().add.circle(0, 0, 3.4, 0x6fd8e8).setAlpha(0.5));
+      c.add(S().add.circle(0, 0, 2, 0xdffaff));
+      break;
+    case 'disc':
+      c.add(S().add.circle(0, 0, 4, 0xc6ced9));
+      c.add(S().add.circle(0, 0, 2.2, 0x2b2118));
+      break;
+  }
+  c.setScale(face, 1).setDepth(26);
+  layer?.add(c);
+  return c;
+}
+
+/** Put every shot in the air where it has got to this frame. */
+function drawFlight(f: Fighter): void {
+  for (const sh of f.flight) {
+    if (!sh.art) {
+      sh.art = buildShot(sh.kind, f.face);
+      audio.sfx('throw_whoosh', 0.35);
+    }
+    const k = 1 - Math.max(0, sh.t) / sh.total;          // 0 at the hand, 1 at the target
+    const x = sh.from + (sh.aim - sh.from) * k;
+    // A believable throw: it leaves the hand at shoulder height, rises, and
+    // comes down onto the target.  `arc` is how much of that there is, so a
+    // bolt is nearly flat and a slung stone is lobbed right over.
+    const lift = Math.sin(k * Math.PI) * sh.arc * Math.abs(sh.aim - sh.from) * 0.42;
+    const y = FLOOR_Y - 24 - lift;
+    sh.art.setPosition(x, y);
+    // and it points where it is going
+    const slope = sh.arc * Math.cos(k * Math.PI) * 52;
+    if (sh.kind === 'disc' || sh.kind === 'stone' || sh.kind === 'spark') {
+      sh.art.setAngle(sh.kind === 'disc' ? (sh.art.angle + 26) % 360 : 0);
+    } else if (sh.kind === 'axe') {
+      sh.art.setAngle((sh.art.angle + 22) % 360);
+    } else {
+      sh.art.setAngle(-slope * Math.sign(sh.aim - sh.from || 1));
+    }
+  }
+}
+
+/** The shot arrived: take the sprite away, with a puff if it hit nothing. */
+function retireShot(sh: InFlight, hit: boolean): void {
+  const art = sh.art;
+  if (!art) return;
+  sh.art = null;
+  if (!hit) {
+    S().tweens.add({ targets: art, y: FLOOR_Y - 2, angle: art.angle + 40, alpha: 0.6,
+      duration: 220, ease: 'Quad.easeIn',
+      onComplete: () => { S().tweens.add({ targets: art, alpha: 0, duration: 500, onComplete: () => art.destroy() }); } });
+    return;
+  }
+  art.destroy();
+}
+
 function showBlow(f: Fighter, blow: Blow): void {
   const x = f.x;
   if (blow.dodged) {
@@ -2977,9 +3468,15 @@ function stepFight(real: number): void {
   for (const e of exchange(frog!, lizard!, dt)) {
     if (e.blow.broke) showBreak(e.att);
     if (e.blow.stripped) showStrip(e.def, e.blow.stripped, e.blow.strippedTint ?? PALETTE.steel);
+    // A shot that has only just been loosed has not done anything yet -- the
+    // sprite goes up and the damage waits until it gets there.
+    if (e.blow.loosed && !e.blow.hit && !e.blow.dodged && e.blow.dmg === 0 && e.att.flight.includes(e.blow.loosed)) continue;
+    if (e.blow.loosed) retireShot(e.blow.loosed, e.blow.hit);
     if (e.blow.clashed) showClash(e.att, e.def);
     else showBlow(e.def, e.blow);
   }
+  drawFlight(frog!);
+  drawFlight(lizard!);
   // the knock-back easing off, which is drawing and nothing else
   for (const f of [frog!, lizard!]) {
     if (f.shove !== 0) {
