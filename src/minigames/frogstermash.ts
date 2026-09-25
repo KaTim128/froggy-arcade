@@ -1401,10 +1401,21 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number): Phaser.Gam
     bar(x, y - h / 4, w, 1, woodLit, ang);
   };
   switch (key) {
+    // ---- BARE HANDS, and the fallback for anything unrecognised.
+    //
+    // This used to be the `none` case with the SPIKED SHIELD sitting in
+    // `default`, which meant any key the switch did not know drew a shield.
+    // A broken weapon asked for 'fists' -- a key that no longer exists --
+    // and was handed a shield in the middle of the fight.  The unknown case
+    // is a fist now: wrong, if it ever happens, in the direction of nothing
+    // rather than in the direction of a free shield.
     case 'none':
-      // nothing in the hand at all: a bound fist, and no more than that
-      bar(2, 0, 4, 5, tint);
-      bar(2, -1, 4, 1, 0xffffff).setAlpha(0.25);
+    default:
+      bar(3, 0, 5, 6, tint);
+      bar(3, -2, 5, 1.5, 0xffffff).setAlpha(0.22);
+      bar(3, 2.5, 5, 1, 0x000000).setAlpha(0.18);
+      // three knuckles across the front of it
+      for (let k = 0; k < 3; k++) c.add(scene.add.circle(5.5, -1.8 + k * 1.9, 0.9, tint));
       break;
     case 'dagger':
       blade(5, 0, 9, 2.5); bar(0, 0, 2, 6, PALETTE.gold); bar(-2, 0, 3, 3, grip);
@@ -1539,7 +1550,7 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number): Phaser.Gam
       bar(0, 0, 3, 3, grip);
       blade(3, -5, 6, 1.5, -26); blade(3, 5, 6, 1.5, 26);
       break;
-    default: {
+    case 'shield': {
       // The spiked shield: a boss, a rim, and six spikes around it.
       //
       // Carried low, at about chest height.  On the arm's own line it sat
@@ -2692,7 +2703,10 @@ function showBreak(f: Fighter): void {
   // and the hand it left is empty from here on
   if (f.art) {
     f.art.weapon.destroy();
-    const fists = buildWeapon(S(), 'fists', f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber);
+    // UNARMED.key, not a literal: the literal was 'fists', which stopped
+    // being a key when the rack was rebuilt and nobody noticed because the
+    // switch quietly answered it with a shield.
+    const fists = buildWeapon(S(), UNARMED.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber);
     fists.setPosition(11, 0);
     f.art.arm.add(fists);
     f.art.weapon = fists;
@@ -2790,20 +2804,31 @@ function showBanked(): void {
   const card: Phaser.GameObjects.GameObject[] = [];
   const keep = <T extends Phaser.GameObjects.GameObject>(o: T): T => { c.add(o); card.push(o); return o; };
 
-  keep(S().add.rectangle(30, 52, GAME_W - 60, 84, PALETTE.ink, 0.94).setOrigin(0, 0).setDepth(60).setStrokeStyle(1, PALETTE.gold));
-  keep(centerText(S(), GAME_W / 2, 64, `ROUND ${round} WON`, PALETTE.gold, 16).setDepth(62));
-  keep(centerText(S(), GAME_W / 2, 82, `+${won} THIS ROUND`, PALETTE.mossLight).setDepth(62));
-  keep(centerText(S(), GAME_W / 2, 94, `BANKED  ${bank}`, PALETTE.cream, 16).setDepth(62));
-  keep(centerText(S(), GAME_W / 2, 112, `ROUND ${round + 1} PAYS ${next}`, PALETTE.amber).setDepth(62));
-  keep(centerText(S(), GAME_W / 2, 124, 'LOSE AND THE BANK GOES WITH IT', PALETTE.ash).setDepth(62));
+  // ---- THE LAYOUT, WITH ROOM TO BREATHE.
+  //
+  // Five lines crammed into eighty-four pixels put the heading on the top
+  // border and left BANKED sitting on the line above it.  Four lines inside
+  // the box on a nine-pixel rhythm now -- text is centred on its y, so a
+  // sixteen-high line needs eight either side of that centre before anything
+  // else starts -- and the warning, which is a caption rather than a figure,
+  // moved outside and underneath where it has the room.
+  keep(S().add.rectangle(30, 48, GAME_W - 60, 92, PALETTE.ink, 0.94).setOrigin(0, 0).setDepth(60).setStrokeStyle(1, PALETTE.gold));
+  keep(centerText(S(), GAME_W / 2, 65, `ROUND ${round} WON`, PALETTE.gold, 16).setDepth(62));
+  keep(centerText(S(), GAME_W / 2, 86, `+${won} THIS ROUND`, PALETTE.mossLight).setDepth(62));
+  keep(centerText(S(), GAME_W / 2, 107, `BANKED  ${bank}`, PALETTE.cream, 16).setDepth(62));
+  keep(centerText(S(), GAME_W / 2, 128, `ROUND ${round + 1} PAYS ${next}`, PALETTE.amber).setDepth(62));
+  // A strip behind it, because out here it is over the sand and whatever is
+  // lying on it -- the warning was reading through a dead lizard.
+  keep(S().add.rectangle(GAME_W / 2, 147, 196, 11, PALETTE.ink, 0.8).setDepth(61));
+  keep(centerText(S(), GAME_W / 2, 147, 'LOSE AND THE BANK GOES WITH IT', PALETTE.ash).setDepth(62));
 
-  buttons.push(button(S(), 84, 152, `TAKE ${bank}`, () => {
+  buttons.push(button(S(), 84, 164, `TAKE ${bank}`, () => {
     if (phase !== 'banked') return;
     for (const o of card) o.destroy();
     finish(true);
   }, { width: 90, height: 16, fill: PALETTE.tealDark }));
 
-  buttons.push(button(S(), GAME_W - 84, 152, 'CONTINUE', () => {
+  buttons.push(button(S(), GAME_W - 84, 164, 'CONTINUE', () => {
     if (phase !== 'banked') return;
     for (const o of card) o.destroy();
     for (const b of buttons) b.destroy();
