@@ -2246,17 +2246,38 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // loose shard floating behind it.  One polygon has no seams to come apart:
   // it leaves the hip at full width and curves down to a point, and a second
   // thinner one along the top edge catches the light.
-  const tailY = -15 * tall - lift * 0.6;
-  const curve = (w: number, t: number): number[] => [
-    0, -5 * t, -7 * w, -4 * t, -14 * w, -1 * t, -20 * w, 4 * t, -25 * w, 10 * t,
-    -22 * w, 11 * t, -17 * w, 6 * t, -11 * w, 1 * t, -4 * w, -1 * t, 0, 1 * t,
-  ];
-  const tail = frog ? null : scene.add.polygon(0, tailY, curve(wide, tall), skin).setOrigin(0, 0);
+  //
+  // A TAIL THAT TAPERS INSTEAD OF A PLANK THAT ENDS.
+  //
+  // The first polygon ran nearly straight for twenty-five pixels and stopped,
+  // which at this size is a plank: the eye reads the two long parallel edges
+  // and calls it a cone.  A tail is thick where it leaves the hip, thins
+  // FAST over the first third, and then carries a long fine whip that curls
+  // -- so the width is sampled off a curve rather than stepped linearly, and
+  // the centre line drops away instead of running flat.
+  const tailY = -16 * tall - lift * 0.6;
+  const LEN = 27;
+  const curve = (w: number, t: number, thin: number): number[] => {
+    const top: number[] = [];
+    const bot: number[] = [];
+    for (let i = 0; i <= 8; i++) {
+      const u = i / 8;
+      const x = -u * LEN * w;
+      // the centre line: level at the hip, then falling away and curling up
+      const y = (u * u * 14 - Math.sin(u * Math.PI) * 2.5) * t;
+      // and the thickness, which is most of the tail's character
+      const half = (1 - u) ** 1.7 * 5.4 * t * thin + 0.5;
+      top.push(x, y - half);
+      bot.unshift(x, y + half);
+    }
+    return [...top, ...bot];
+  };
+  const tail = frog ? null : scene.add.polygon(0, tailY, curve(wide, tall, 1), skin).setOrigin(0, 0);
+  // the lit top edge, and the row of plates along the underside
   const tailTip = frog ? null
-    : scene.add.polygon(0, tailY - 1, curve(wide * 0.94, tall * 0.7), up(skin, 0.28)).setOrigin(0, 0).setAlpha(0.75);
-  // and the ridge of plates running down it, which is what makes it a lizard's
+    : scene.add.polygon(0, tailY - 0.8, curve(wide, tall, 0.55), up(skin, 0.3)).setOrigin(0, 0).setAlpha(0.8);
   const tailEnd = frog ? null
-    : scene.add.polygon(0, tailY + 1.5, curve(wide * 0.8, tall * 0.5), down(skin, 0.3)).setOrigin(0, 0).setAlpha(0.6);
+    : scene.add.polygon(0, tailY + 1.6, curve(wide * 0.98, tall, 0.34), down(skin, 0.34)).setOrigin(0, 0).setAlpha(0.6);
 
   // ---- TORSO
   // ---- AND AN EDGE ROUND THE BIG SHAPES.
@@ -2449,9 +2470,30 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
     // The hand takes only half the body's width.  At the full multiplier a
     // muscular lizard was holding two grapefruit.
     const hw2 = 1 + (wide - 1) * 0.5;
-    a2.add(scene.add.circle(10.2, 0, 4 * hw2, dark));
-    a2.add(scene.add.circle(10, -0.4, 3 * hw2, behind ? skin : light));
-    a2.add(scene.add.rectangle(10.6, 0, 1, 4.6 * hw2, dark).setAlpha(0.45));
+    // ---- A HAND, NOT A BALL ON A STICK.
+    //
+    // Two circles read as exactly what they are: a sphere stuck on the end of
+    // the arm.  A hand at this size is a squarish block of knuckles with the
+    // fingers curled under it and a thumb across the front -- flat planes,
+    // not a curve, which is also what lets the light sit on the back of it
+    // and the shadow sit underneath.
+    // Size scales with the build; POSITION does not.  Multiplying the x
+    // through by the same factor walked the whole hand off the end of the
+    // arm on a wide lizard, so it sat in mid-air a few pixels past the wrist.
+    const hs = hw2;
+    const palm = (x: number, y: number, w: number, h: number, col: number, a = 1) =>
+      a2.add(scene.add.rectangle(x, y * hs, w * hs, h * hs, col).setAlpha(a));
+    palm(10.3, 0.2, 6.4, 6.4, dark);                       // the edge all round
+    palm(10.3, -0.1, 5.2, 5.2, behind ? skin : light);     // the back of the hand
+    palm(10.3, -1.9, 5.2, 1.4, up(behind ? skin : light, 0.4), 0.85);  // lit across the knuckles
+    // three knuckles along the leading edge, and the fingers curled beneath
+    for (let k = 0; k < 3; k++) palm(10.3 + 2.3 * hs, -1.6 + k * 1.6, 1.4, 1.3, up(behind ? skin : light, 0.22));
+    palm(10.4, 2.2, 5, 1.5, down(behind ? skin : light, 0.4), 0.8);
+    // the thumb, laid across the front of the fist
+    palm(11.6, 1.4, 1.6, 3, behind ? skin : light);
+    palm(11.6, 1.4, 1.6, 1, down(behind ? skin : light, 0.35), 0.7);
+    // and the wrist, so the hand is joined to the arm rather than balanced on it
+    palm(7.6, 0.1, 2.2, 3.6, down(tone, 0.12));
     return a2;
   };
   const armOff = buildArm(true);
@@ -3940,10 +3982,13 @@ export const frogsterMash: MinigameModule = {
   rules: 'open four chests, then take it or risk it',
   tutorial: {
     objective: [
-      'OPEN FOUR CHESTS: A WEAPON, AND ARMOUR FOR HEAD, BODY AND LEGS.',
-      'WHAT IS IN THE CHEST IS YOURS. THERE IS NO PUTTING IT BACK.',
+      // The card is 304px wide and the glyph advance is 6, so a centred line
+      // has fifty characters before it runs out over the frame.  These were
+      // 63, 59 and 59.
+      'FOUR CHESTS: A WEAPON, AND ARMOUR FOR EACH SLOT.',
+      'WHAT IS IN THE CHEST IS YOURS. NO SWAPS.',
       'THEN FROGGY FIGHTS. WIN ROUND ONE AND TAKE 50.',
-      'TAKE IT, OR PUT IT ALL ON THE NEXT LIZARD FOR 30, 35, 40...',
+      'TAKE IT, OR RISK IT ALL FOR 30, 35, 40 MORE...',
       'LOSE A ROUND AND THE WHOLE BANK GOES WITH IT.',
     ],
     controls: [
