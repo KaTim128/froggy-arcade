@@ -4950,6 +4950,22 @@ export const frogsterMash: MinigameModule = {
           const f = who === 'frog' ? frog : lizard;
           if (f && Number.isFinite(f.dur)) f.dur = 1;
         },
+        /**
+         * Put a weapon at a given share of its life and cut the marks NOW.
+         *
+         * `fray` plus a running fight was a race: at one swing off breaking
+         * the weapon often broke inside the window, which resets the marks
+         * with the sprite, so the harness read a clean blade and called the
+         * wear marks missing.  This asks for the wear directly and does the
+         * pass by hand, so what is wanted is what is measured.
+         */
+        wearTo: (who: 'frog' | 'lizard', frac: number) => {
+          const f = who === 'frog' ? frog : lizard;
+          if (!f || !Number.isFinite(f.dur)) return null;
+          f.dur = durabilityOf(f.kit.weapon) * frac;
+          wearWeapon(f);
+          return f.art ? f.art.nicks : null;
+        },
         /** What is lying on the sand, and who is going for it. */
         floor: () => ground.map((d) => ({ key: d.def.key, x: Math.round(d.x),
           life: +d.life.toFixed(1), settle: +d.settle.toFixed(2), drawn: !!d.art })),
@@ -5002,6 +5018,12 @@ export const frogsterMash: MinigameModule = {
           f.x = x;
           f.act = 'walk';
           f.move = null;
+          // Stun counts down in the fight tick, and a parked fight is not
+          // ticking -- so a fighter who happened to be reeling when the
+          // harness froze the scene would hold the stunned arm angle for
+          // ever, and every carry read about thirty degrees high.  Clearing
+          // it is what makes "park and read the pose" mean anything.
+          f.stun = 0;
           poseFighter(f, who === 'frog' ? lizard! : frog!);
         },
         /** Both arms' angles and visibility, so a stance can be asserted. */
@@ -5011,6 +5033,7 @@ export const frogsterMash: MinigameModule = {
           return { arm: Math.round(f.art.arm.root.angle), off: Math.round(f.art.armOff.root.angle),
             elbow: Math.round(f.art.arm.fore.angle), offElbow: Math.round(f.art.armOff.fore.angle),
             guardUp: f.art.guardUp, armVis: f.art.arm.root.visible, offVis: f.art.armOff.root.visible,
+            nicks: f.art.nicks, bodyAngle: Math.round(f.art.root.angle), pose: f.pose,
             helm: f.art.helm.visible, cuirass: f.art.cuirass.visible, greave: f.art.greaveL.visible,
             legL: f.art.legL.angle, legR: f.art.legR.angle };
         },
@@ -5065,6 +5088,9 @@ function snap(f: Fighter): Record<string, unknown> {
   return {
     hp: Math.max(0, f.hp), maxHp: f.st.maxHp, x: Math.round(f.x), act: f.act,
     weapon: f.weapon.key, broken: f.broken, gone: { ...f.gone },
+    // how many blades of a pair are left, and which end-of-fight pose the rig
+    // has been handed over to -- both are asserted by the games suite
+    single: f.single, spares: f.spares, pose: f.pose,
     seeking: f.seeking ? f.seeking.def.key : null,
     ammo: Number.isFinite(f.ammo) ? f.ammo : -1, flight: f.flight.length, reload: +f.reload.toFixed(2),
     wear: { head: Math.max(0, Math.round(f.wear.head)), body: Math.max(0, Math.round(f.wear.body)), legs: Math.max(0, Math.round(f.wear.legs)) }, dur: Number.isFinite(f.dur) ? f.dur : -1,

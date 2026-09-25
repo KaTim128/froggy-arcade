@@ -61,6 +61,10 @@ const GAMES = [
   // One spin of the wheel, and a scripted dancer who actually plays the chart.
   { id: 'wheel', drive: async (p) => { await p.keyboard.press('Space'); await sleep(4400); } },
   { id: 'danceoff', drive: async (p) => { for (let i = 0; i < 14; i++) { await p.keyboard.press(['KeyA', 'KeyS', 'KeyW', 'KeyD'][i % 4]); await sleep(190); } } },
+  // Four chests, then the fight: the mash is the one cabinet where the game
+  // proper is four screens in, so the drive walks the picks rather than
+  // waiting a fixed time and screenshotting a chest.
+  { id: 'frogstermash', drive: async (p) => { await mashToFight(p); await sleep(2500); } },
   { id: 'bowling', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(200); await p.keyboard.up('KeyD'); await p.keyboard.down('KeyE'); await sleep(400); await p.keyboard.up('KeyE'); await p.keyboard.down('Space'); await sleep(600); await p.keyboard.up('Space'); await sleep(2600); } },
 ];
 
@@ -117,6 +121,59 @@ const sceneUp = async (page, key, want = true, tries = 32) => {
  * used to break two checks apiece, in tests that had nothing to do with where
  * the machines stand.
  */
+/**
+ * Walk Frogster Mash from its opening chest to the first exchange.
+ *
+ * Four chests -- weapon, head, body, legs -- each with a reveal card and a
+ * button before the next one, then the entry parade and FIGHT.  Every step
+ * waits on the phase rather than on a clock: the reveal has a card animation
+ * in front of it and a fixed sleep either pressed into nothing or pressed
+ * twice.  Returns false if it never reached the sand, so a caller can say so
+ * instead of asserting against a chest.
+ */
+const mashToFight = async (page) => {
+  const st = () => page.evaluate(() => (window.__mash ? window.__mash.state() : null));
+  const phase = async (want, tries = 60) => {
+    for (let i = 0; i < tries; i++) {
+      const s = await st();
+      if (s && s.phase === want) return true;
+      await sleep(200);
+    }
+    return false;
+  };
+  const press = (re) =>
+    page.evaluate((src) => {
+      const rx = new RegExp(src);
+      const s = window.__froggy.game().scene.getScene('Minigame');
+      const hit = [];
+      const walk = (l) => {
+        for (const o of l) {
+          if (typeof o.text === 'string' && rx.test(o.text.trim())) hit.push(o);
+          if (o.list) walk(o.list);
+        }
+      };
+      walk(s.children.list);
+      const t = hit[0];
+      if (t) { (t.parentContainer ?? t).emit('pointerdown'); return true; }
+      return false;
+    }, re);
+
+  if (!(await bridge(page, '__mash'))) return false;
+  for (let i = 0; i < 4; i++) {
+    if (!(await phase('pick'))) return false;
+    // the middle chest every time, so the run is the same shape each pass
+    await page.evaluate(() => window.__mash.take(1));
+    if (!(await phase('reveal'))) return false;
+    await sleep(450);
+    await press('^(NEXT|TO THE COLOSSEUM)$');
+    await sleep(650);
+  }
+  if (!(await phase('entry'))) return false;
+  await sleep(2100);
+  await press('^FIGHT$');
+  return phase('fight');
+};
+
 const cabinetAt = async (page, sceneKey, id) =>
   page.evaluate(
     ([key, want]) => {
@@ -3546,6 +3603,383 @@ for (const g of [
 
   if (errs.length) {
     console.log(`FAIL  frog vs lizard: ${errs.slice(0, 2).join(' | ')}`);
+    failures++;
+  }
+  await page.close();
+}
+
+// ==================================================== frogster mash: the rules
+//
+// The cabinet with the most rules in it had no checks at all: everything about
+// it had been proved by screenshot and by throwaway probes, which is fine for
+// "does it look right" and no use at all for "did that refactor quietly turn
+// the trident back into the only answer".  These run against the same exported
+// functions the scene itself calls, so what is measured here is what is played
+// there.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(e.message));
+  await page.goto(`${URL}/?intro=1&tokens=120&game=frogstermash`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await page.mouse.click(640, 400);
+  await sleep(400);
+  await startGame(page);
+
+  if (!(await bridge(page, '__mash'))) {
+    console.log('FAIL  frogster mash: the dev bridge never appeared');
+    failures++;
+  } else {
+    // ---- THE BALANCE GUARD.
+    //
+    // Every weapon against every other, chain armour both sides, which is the
+    // only measurement that answers "how strong is this" rather than "how does
+    // this do against a sword".  The bug this exists to catch is a real one:
+    // a bonus meant for fighting at the end of your reach was being paid on
+    // every swing, and it ran the spread from 53 points of win rate to 77
+    // before anybody noticed, because each individual fight still looked fine.
+    const rr = await page.evaluate(() => {
+      const R = window.__mash.rules;
+      const mat = (k) => R.MATERIALS.find((m) => m.key === k);
+      const kitFor = (wk) => ({
+        weapon: R.makeWeapon(R.WEAPONS.find((w) => w.key === wk)),
+        head: R.makeArmour('head', mat('chain')),
+        body: R.makeArmour('body', mat('chain')),
+        legs: R.makeArmour('legs', mat('chain')),
+      });
+      const keys = R.WEAPONS.filter((w) => w.key !== 'none').map((w) => w.key);
+      const won = {}, tot = {};
+      for (const k of keys) { won[k] = 0; tot[k] = 0; }
+      for (let i = 0; i < keys.length; i++) {
+        for (let j = i + 1; j < keys.length; j++) {
+          for (let n = 0; n < 12; n++) {
+            const r = R.simulate(kitFor(keys[i]), kitFor(keys[j]));
+            tot[keys[i]]++; tot[keys[j]]++;
+            if (r.winner === 'frog') won[keys[i]]++;
+            else if (r.winner === 'lizard') won[keys[j]]++;
+          }
+        }
+      }
+      const rates = keys.map((k) => ({ k, win: (won[k] / tot[k]) * 100 })).sort((a, x) => x.win - a.win);
+      return { top: rates[0], bottom: rates[rates.length - 1] };
+    });
+    const spread = Math.round(rr.top.win - rr.bottom.win);
+    // Measured at 44 points, top 69% and bottom 25%.  The gates are set wide
+    // enough that an ordinary re-roll cannot trip them and tight enough that
+    // the 77-point regression would have.
+    const spreadOk = rr.top.win <= 80 && rr.bottom.win >= 15 && spread <= 62;
+    console.log(
+      `${spreadOk ? 'PASS' : 'FAIL'}  mash: no weapon is the answer to everything  — ` +
+        `best ${rr.top.k} ${Math.round(rr.top.win)}%, worst ${rr.bottom.k} ${Math.round(rr.bottom.win)}%, spread ${spread} points`,
+    );
+    if (!spreadOk) failures++;
+
+    // ---- BARE HANDS ARE THE WEAKEST ROW, AND NOT A FORMALITY.
+    //
+    // Losing your weapon has to cost you the fight most of the time or there
+    // is no reason to care about durability; it must not cost you the fight
+    // every time or half the systems in here -- picking one back up, the
+    // spares off a pair, the unarmed moveset -- are decoration.
+    const bare = await page.evaluate(() => {
+      const R = window.__mash.rules;
+      const mat = (k) => R.MATERIALS.find((m) => m.key === k);
+      const kitFor = (wk) => ({
+        weapon: R.makeWeapon(R.WEAPONS.find((w) => w.key === wk)),
+        head: R.makeArmour('head', mat('chain')),
+        body: R.makeArmour('body', mat('chain')),
+        legs: R.makeArmour('legs', mat('chain')),
+      });
+      const keys = R.WEAPONS.filter((w) => w.key !== 'none').map((w) => w.key);
+      let won = 0, tot = 0;
+      for (const k of keys) {
+        for (let n = 0; n < 12; n++) {
+          const r = R.simulate(kitFor('none'), kitFor(k));
+          tot++;
+          if (r.winner === 'frog') won++;
+        }
+      }
+      return Math.round((won / tot) * 100);
+    });
+    const bareOk = bare >= 20 && bare <= 50;
+    console.log(`${bareOk ? 'PASS' : 'FAIL'}  mash: bare hands are the weakest row, not a lost cause  — ${bare}% against the whole rack`);
+    if (!bareOk) failures++;
+
+    // ---- THE THING THAT HITS HARDEST GIVES OUT SOONEST.
+    //
+    // This is the whole of the high-tier rebalance in one line: a great axe
+    // has to be on its last legs while a dagger is still fresh, or power has
+    // no price and the trident goes back to being the only pick worth making.
+    const dur = await page.evaluate(() => {
+      const R = window.__mash.rules;
+      const mean = (k) => {
+        let sum = 0;
+        for (let i = 0; i < 300; i++) sum += R.durabilityOf(R.makeWeapon(R.WEAPONS.find((w) => w.key === k)));
+        return sum / 300;
+      };
+      return {
+        greataxe: mean('greataxe'), dagger: mean('dagger'), sword: mean('sword'),
+        // Asked and answered IN THE PAGE: Infinity does not survive the trip
+        // out, it arrives as null, and `!Number.isFinite(null)` is true for
+        // the wrong reason -- so this half of the check would have passed
+        // even if bare hands had been given a durability.
+        bareNeverBreaks: !Number.isFinite(R.durabilityOf(R.makeWeapon(R.WEAPONS.find((w) => w.key === 'none')))),
+      };
+    });
+    const durOk = dur.greataxe < dur.sword && dur.sword < dur.dagger && dur.bareNeverBreaks;
+    console.log(
+      `${durOk ? 'PASS' : 'FAIL'}  mash: the heavier it hits, the sooner it gives out  — ` +
+        `great axe ${dur.greataxe.toFixed(1)} < sword ${dur.sword.toFixed(1)} < dagger ${dur.dagger.toFixed(1)}` +
+        `, bare hands ${dur.bareNeverBreaks ? 'never' : 'DO'}`,
+    );
+    if (!durOk) failures++;
+
+    // ---- BOTH BLADES OF A PAIR.
+    //
+    // Knocking one out of a two-handed grip costs a blade, not the fight: it
+    // takes a second knock to reach bare knuckles.  Asserted on the fighter
+    // rather than on the art, because the art has been right and the model
+    // wrong before.
+    const pair = await page.evaluate(() => {
+      const R = window.__mash.rules;
+      const mat = (k) => R.MATERIALS.find((m) => m.key === k);
+      const kit = {
+        weapon: R.makeWeapon(R.WEAPONS.find((w) => w.key === 'dual')),
+        head: R.makeArmour('head', mat('chain')),
+        body: R.makeArmour('body', mat('chain')),
+        legs: R.makeArmour('legs', mat('chain')),
+      };
+      const f = R.makeFighter('frog', kit, 100, 1);
+      const ground = [];
+      const after = [];
+      for (let i = 0; i < 3; i++) {
+        R.dropWeapon(f, ground);
+        after.push({ broken: f.broken, weapon: f.weapon.key, single: f.single });
+      }
+      return { after, onGround: ground.length };
+    });
+    const pairOk =
+      pair.after[0].broken === false && pair.after[0].single === true &&
+      pair.after[1].broken === true && pair.after[1].weapon === 'none';
+    console.log(
+      `${pairOk ? 'PASS' : 'FAIL'}  mash: a pair takes two knocks to reach bare knuckles  — ` +
+        `after one ${pair.after[0].weapon}${pair.after[0].single ? ' (one left)' : ''}, after two ${pair.after[1].weapon}`,
+    );
+    if (!pairOk) failures++;
+
+    // ---- SPIKES BILL A FIST AND NEVER A BLADE.
+    //
+    // The one piece of armour that hits back, and the whole of it is WHO it
+    // hits back at: punching a spiked cuirass hurts, hitting it with an axe
+    // does not.  Both halves are checked, because an implementation that
+    // charges everybody passes any test that only looks at the fist.
+    //
+    // The claim has to be made per BLOW and not per fight, and this took two
+    // tries to get right.  Swung without a cooldown an axe wears through in
+    // well under a hundred strikes, and the spikes then bill its owner
+    // perfectly correctly, because by that point they are bare-handed -- so a
+    // fight-level total reads as "spikes bill weapons too" when nothing of
+    // the sort has happened.  What is counted here is what the weapon was at
+    // the moment of each blow: bill anything that was struck with something
+    // still in one piece and this fails.
+    const spikes = await page.evaluate(() => {
+      const R = window.__mash.rules;
+      const mat = (k) => R.MATERIALS.find((m) => m.key === k);
+      const spiked = mat('spiked');
+      if (!spiked) return null;
+      const kitOf = (wk, armour) => ({
+        weapon: R.makeWeapon(R.WEAPONS.find((w) => w.key === wk)),
+        head: R.makeArmour('head', armour),
+        body: R.makeArmour('body', armour),
+        legs: R.makeArmour('legs', armour),
+      });
+      const armed = (f) => !f.broken && f.weapon.key !== 'none';
+      const run = (attackerWeapon) => {
+        let whileArmed = 0, onTheBreak = 0, afterwards = 0, blows = 0;
+        for (let n = 0; n < 40; n++) {
+          const att = R.makeFighter('frog', kitOf(attackerWeapon, mat('chain')), 100, 1);
+          const def = R.makeFighter('lizard', kitOf('sword', spiked), 130, -1);
+          for (let i = 0; i < 400 && def.hp > 0 && att.hp > 0; i++) {
+            const was = armed(att);
+            const blow = R.resolveStrike(att, def, 20);
+            const now = armed(att);
+            if (blow.hit) blows++;
+            const sp = blow.spiked ?? 0;
+            if (!sp) continue;
+            if (was && now) whileArmed += sp;
+            else if (was) onTheBreak += sp;
+            else afterwards += sp;
+          }
+        }
+        return { whileArmed, onTheBreak, afterwards, blows };
+      };
+      return { fist: run('none'), blade: run('axe') };
+    });
+    if (!spikes) {
+      console.log('FAIL  mash: spiked armour is not in the materials table');
+      failures++;
+    } else {
+      const spikeOk = spikes.fist.afterwards > 0 && spikes.blade.whileArmed === 0;
+      console.log(
+        `${spikeOk ? 'PASS' : 'FAIL'}  mash: spikes bill bare hands and never a weapon  — ` +
+          `${spikes.fist.afterwards} back over ${spikes.fist.blows} punches, ` +
+          `${spikes.blade.whileArmed} over ${spikes.blade.blows} axe blows ` +
+          `(${spikes.blade.onTheBreak} on the swing it snapped, ${spikes.blade.afterwards} bare-handed after)`,
+      );
+      if (!spikeOk) failures++;
+    }
+
+    // ---- AND THE FIGHT ACTUALLY RUNS.
+    //
+    // Weapons break, weapons get knocked out of hands, and nothing ever ends
+    // in a draw against the clock.  A stall is the failure mode that hides:
+    // two fighters who can neither reach nor hurt each other look fine for a
+    // second and then sit there for three minutes.
+    const runs = await page.evaluate(() => {
+      const R = window.__mash.rules;
+      const mat = (k) => R.MATERIALS.find((m) => m.key === k);
+      const kitFor = (wk) => ({
+        weapon: R.makeWeapon(R.WEAPONS.find((w) => w.key === wk)),
+        head: R.makeArmour('head', mat('chain')),
+        body: R.makeArmour('body', mat('chain')),
+        legs: R.makeArmour('legs', mat('chain')),
+      });
+      const keys = R.WEAPONS.filter((w) => w.key !== 'none').map((w) => w.key);
+      let broke = 0, dis = 0, stalls = 0, n = 0;
+      for (let i = 0; i < 300; i++) {
+        const r = R.simulate(kitFor(keys[i % keys.length]), kitFor(keys[(i * 7 + 3) % keys.length]));
+        n++;
+        if (r.breaks) broke++;
+        if (r.disarms) dis++;
+        if (!r.winner) stalls++;
+      }
+      return { broke: Math.round((broke / n) * 100), dis: Math.round((dis / n) * 100), stalls, n };
+    });
+    const runsOk = runs.stalls === 0 && runs.broke >= 15 && runs.dis >= 10;
+    console.log(
+      `${runsOk ? 'PASS' : 'FAIL'}  mash: weapons break, hands get emptied, nothing stalls  — ` +
+        `a break in ${runs.broke}% and a disarm in ${runs.dis}% of ${runs.n} fights, ${runs.stalls} stalls`,
+    );
+    if (!runsOk) failures++;
+  }
+
+  if (errs.length) {
+    console.log(`FAIL  mash rules: ${errs.slice(0, 2).join(' | ')}`);
+    failures++;
+  }
+  await page.close();
+}
+
+// ===================================================== frogster mash: the rig
+//
+// These exist because of a specific bug that lived for weeks without anybody
+// seeing it.  The winner's celebration and the loser's collapse both drove the
+// arms with `targets: a.arm`, and `a.arm` stopped being a display object when
+// the elbow went in -- it is a rig, `{root, fore, hand}`.  The tweens were
+// setting a property on a plain object.  Nothing threw, nothing logged, the
+// fight ended, the crowd cheered, and neither fighter moved an arm.
+//
+// A screenshot at the wrong moment looks identical either way, which is the
+// whole problem with proving animation by eye.  So the rig is asked, in
+// numbers, whether the thing that is supposed to happen happened.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(e.message));
+  await page.goto(`${URL}/?intro=1&tokens=200&game=frogstermash`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await page.mouse.click(640, 400);
+  await sleep(400);
+  await startGame(page);
+
+  const inTheSand = await mashToFight(page);
+  if (!inTheSand) {
+    console.log('FAIL  mash: never reached the sand from the chests');
+    failures++;
+  } else {
+    await sleep(900);
+    const art = (who) => page.evaluate((w) => window.__mash.art(w), who);
+    const settle = (who, x) =>
+      page.evaluate(
+        ([w, px]) => {
+          // The arm eases toward its rest a fraction per frame, so one pose
+          // call moves it one step: it has to be let settle before it can be
+          // read, or every carry reads as whatever the last one was.
+          for (let i = 0; i < 90; i++) window.__mash.park(w, px);
+        },
+        [who, x],
+      );
+
+    // ---- EVERY WEAPON IS CARRIED DIFFERENTLY.
+    //
+    // Before this, every weapon idled at the same two angles: a fighter with a
+    // war hammer and a fighter with a blowgun stood in exactly the same pose
+    // and the only thing telling them apart was a sprite four pixels long.
+    await page.evaluate(() => window.__mash.freeze(true));
+    const carries = {};
+    for (const key of ['warhammer', 'spear', 'dagger', 'bow', 'sword']) {
+      await page.evaluate((k) => window.__mash.arm('frog', k), key);
+      await settle('frog', 108);
+      const a = await art('frog');
+      // what the CROWD sees is the sum: the weapon hangs off the forearm, so
+      // the shoulder on its own only says where the hand is
+      carries[key] = a.arm + a.elbow;
+    }
+    const shafts = Object.values(carries);
+    const distinct = new Set(shafts.map((v) => Math.round(v / 12))).size;
+    const carryOk = distinct >= 4 && Math.max(...shafts) - Math.min(...shafts) >= 60;
+    console.log(
+      `${carryOk ? 'PASS' : 'FAIL'}  mash: a hammer is not carried like a spear  — ` +
+        Object.entries(carries).map(([k, v]) => `${k} ${Math.round(v)}`).join(', ') +
+        ` (${distinct} distinct)`,
+    );
+    if (!carryOk) failures++;
+
+    // ---- AND A WORN WEAPON LOOKS WORN.
+    //
+    // Durability used to be a number nobody could see: the first the crowd
+    // knew about a blade being nearly gone was it snapping.
+    //
+    // Asked for directly rather than by wearing a sword down in a live fight,
+    // which was a race the harness lost about half the time: a weapon one
+    // swing off breaking usually breaks inside any window long enough to be
+    // worth waiting, and a break resets the marks along with the sprite -- so
+    // the check read a clean blade and reported the marks missing when they
+    // had been cut and thrown away.
+    await page.evaluate(() => window.__mash.arm('frog', 'sword'));
+    const marks = await page.evaluate(() => [1, 0.5, 0.2].map((f) => window.__mash.wearTo('frog', f)));
+    const wearOk = marks[0] === 0 && marks[1] > 0 && marks[2] > marks[1];
+    console.log(
+      `${wearOk ? 'PASS' : 'FAIL'}  mash: a blade about to go is marked before it goes  — ` +
+        `${marks[0]} marks fresh, ${marks[1]} half worn, ${marks[2]} nearly gone`,
+    );
+    if (!wearOk) failures++;
+
+    // ---- THE WINNER RAISES HIS ARMS AND THE LOSER GOES DOWN.
+    //
+    // Both arms, both of them well up from where they idle, and the body on
+    // the sand rolled over rather than standing there at zero.  This is the
+    // check that would have caught the dead tweens on the day they broke.
+    await page.evaluate(() => window.__mash.freeze(false));
+    await sleep(200);
+    const restArm = (await art('frog')).arm;
+    await page.evaluate(() => window.__mash.setHp('lizard', 0));
+    await sleep(1600);
+    const win = await art('frog');
+    const lost = await art('lizard');
+    const st = await page.evaluate(() => window.__mash.state());
+    const raised = win.arm < restArm - 40 && win.off < restArm - 40;
+    const poseOk = st.phase === 'over' && win.pose === 'cheer' && lost.pose === 'down' && raised && Math.abs(lost.bodyAngle) > 30;
+    console.log(
+      `${poseOk ? 'PASS' : 'FAIL'}  mash: the winner gets his arms up and the loser hits the sand  — ` +
+        `rest ${restArm}, up ${win.arm}/${win.off}, loser rolled ${lost.bodyAngle} deg`,
+    );
+    if (!poseOk) failures++;
+  }
+
+  if (errs.length) {
+    console.log(`FAIL  mash rig: ${errs.slice(0, 2).join(' | ')}`);
     failures++;
   }
   await page.close();
