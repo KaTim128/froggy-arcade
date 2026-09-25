@@ -58,7 +58,7 @@ const SLOT_NAME: Record<Slot, string> = {
  * so picking a thrust instead of a sweep genuinely changes the fight -- and
  * `anim` changes the arc the arm travels, so it looks like what it is.
  */
-export type Anim = 'over' | 'sweep' | 'thrust' | 'spin' | 'jab' | 'bash' | 'low';
+export type Anim = 'over' | 'sweep' | 'thrust' | 'spin' | 'jab' | 'bash' | 'low' | 'punch' | 'kick';
 export interface Move {
   name: string;
   /** Multipliers on the swing this move is a version of. */
@@ -98,7 +98,16 @@ const M = {
 
 /** The repertoire each weapon actually fights with. */
 export const MOVES: Record<string, Move[]> = {
-  none: [M.combo('JAB COMBO', 3), M.stab('FAST PUNCH'), M.low('LOW SWEEP'), M.counter('COUNTER PUNCH', 1.3)],
+  // ---- UNARMED, AND IT FIGHTS LIKE IT.  Punches and kicks with their own
+  // arcs, not a sword swing with the sword taken out.  Deliberately the
+  // weakest row on the table: quick, close, and nothing like enough.
+  none: [
+    { name: 'JAB COMBO', dmg: 0.6, wind: 0.55, reach: 0.95, hits: 3, at: 'near', anim: 'punch' },
+    { name: 'STRAIGHT RIGHT', dmg: 0.95, wind: 0.7, reach: 1.0, anim: 'punch' },
+    { name: 'BODY HOOK', dmg: 0.85, wind: 0.62, reach: 0.9, at: 'near', stagger: 0.1, anim: 'punch' },
+    { name: 'LOW KICK', dmg: 1.05, wind: 0.95, reach: 1.15, knock: 4, stagger: 0.18, anim: 'kick' },
+    { name: 'COUNTER PUNCH', dmg: 1.3, wind: 0.45, reach: 1.0, when: 'counter', anim: 'punch' },
+  ],
   knuckles: [M.combo('PUNCH COMBO', 3), M.bash('UPPERCUT', 1.1), M.stab('HOOK'), M.charge('RUSH', 1.0)],
   dagger: [M.stab('RAPID STAB'), M.combo('DOUBLE STAB', 2), M.low('LOW SLASH'), M.counter('BACKSTEP COUNTER', 1.3)],
   twindagger: [M.combo('FOUR HIT FLURRY', 4), M.stab('ALTERNATING STABS'), M.spin('SPINNING DOUBLE', 1.0), M.counter('CROSSING SLASH', 1.25)],
@@ -488,7 +497,7 @@ export interface LizardType {
 }
 
 export const LIZARDS: LizardType[] = [
-  { key: 'muscle', name: 'MUSCULAR LIZARD', power: 1.22, speed: 0.85, avoid: 0.8, resist: 1.12, nerve: 1.2, spacing: 0.9,
+  { key: 'muscle', name: 'MUSCULAR LIZARD', power: 1.22, speed: 0.85, avoid: 0.84, resist: 1.2, nerve: 1.2, spacing: 0.9,
     build: { scale: 1.12, wide: 1.55, tall: 0.94, limb: 0.86, head: 0.92, skin: 0x8f4a22, light: 0xc07038, dark: 0x532a12, crest: 0xd2452f },
     blurb: 'HITS LIKE A DOOR' },
   { key: 'fast', name: 'FAST LIZARD', power: 0.82, speed: 1.32, avoid: 1.2, resist: 0.8, nerve: 1.05, spacing: 1.0,
@@ -503,7 +512,7 @@ export const LIZARDS: LizardType[] = [
   { key: 'reach', name: 'REACH LIZARD', power: 0.94, speed: 1.0, avoid: 1.08, resist: 0.96, nerve: 0.85, spacing: 1.45,
     build: { scale: 1.02, wide: 0.66, tall: 1.34, limb: 1.45, head: 0.86, skin: 0x3f6b4a, light: 0x62996d, dark: 0x1f3a26, crest: 0x8fd48f },
     blurb: 'FIGHTS FROM OVER THERE' },
-  { key: 'berserk', name: 'BERSERKER LIZARD', power: 1.2, speed: 1.05, avoid: 0.8, resist: 1.04, nerve: 1.35, spacing: 0.7, berserk: true,
+  { key: 'berserk', name: 'BERSERKER LIZARD', power: 1.2, speed: 1.05, avoid: 0.86, resist: 1.14, nerve: 1.35, spacing: 0.7, berserk: true,
     build: { scale: 1.08, wide: 1.34, tall: 0.9, limb: 0.94, head: 1.22, skin: 0xa8331f, light: 0xd4603a, dark: 0x5c1a0e, crest: 0xffb02e },
     blurb: 'WORSE AS YOU HURT IT' },
   { key: 'balanced', name: 'BALANCED LIZARD', power: 1.0, speed: 1.0, avoid: 1.0, resist: 1.0, nerve: 1.0, spacing: 1.0,
@@ -522,7 +531,7 @@ export const LIZARDS: LizardType[] = [
  */
 export const BASE = { power: 10, speed: 100, avoid: 50, distance: 20 } as const;
 /** Health before any armour, and what a point of suit resistance adds to it. */
-const BASE_HP = 104;
+const BASE_HP = 118;
 const HP_PER_RESIST = 7.5;
 /** A point of rolled weapon power, in damage. */
 const POWER_PER_ROLL = 3.6;
@@ -594,8 +603,16 @@ export function statsOf(kit: Kit, weapon: WeaponDef, wRolls?: Piece, type?: Liza
   const defence = Math.min(0.75, (kit.head.prot + kit.body.prot + kit.legs.prot) / 100);
   const evade = (['head', 'body', 'legs'] as const)
     .reduce((n, sl) => n + (kit[sl].mat?.evade ?? 0) * COVER[sl], 0);
+  // ---- BARE SKIN IS WORTH NO HEALTH.
+  //
+  // NO ARMOUR rolls resistance ten, which is right for a weapon (bare hands
+  // cannot break) and was quietly catastrophic for a suit: resistance feeds
+  // health, so wearing NOTHING gave more of it than plate -- 179 against 171
+  // -- and every balance figure taken before this was measured against a
+  // game where the best armour in the rack made you easier to kill.  A piece
+  // that is not there contributes nothing.
   const resist = (['head', 'body', 'legs'] as const)
-    .reduce((n, sl) => n + kit[sl].rResist * COVER[sl], 0);
+    .reduce((n, sl) => n + (kit[sl].mat && kit[sl].mat!.key !== 'none' ? kit[sl].rResist : 0) * COVER[sl], 0);
 
   const speedPts = Math.max(18, base.speed * (1 - (load / LOAD_FULL) * LOAD_ON_SPEED));
   const avoidPts = Math.max(4, base.avoid * (1 - (suitHeavy / (10 * SUIT_BULK)) * LOAD_ON_AVOID) + evade * 100);
@@ -639,6 +656,27 @@ export function statsOf(kit: Kit, weapon: WeaponDef, wRolls?: Piece, type?: Liza
     distPts,
   };
 }
+
+/**
+ * How many blows a piece of armour turns aside before it comes apart.
+ *
+ * Armour had no durability at all: a weapon wore out and a breastplate was
+ * forever.  Resistance is the stat that ought to say how long a thing lasts,
+ * and now it does for both.
+ */
+export function armourLife(p: Piece): number {
+  if (!p.mat || p.mat.key === 'none') return Infinity;
+  return ARMOUR_BASE + p.rResist * ARMOUR_PER_RESIST;
+}
+// Sized against what a bout MEASURES, not what it looks like it should be.
+// About five blows land on each fighter in a fifteen second fight -- not the
+// thirty I assumed -- and coverage splits those across three pieces, so the
+// body sees two or three of them.  At a life of eight or nine, nothing broke
+// in forty bouts and the whole system was invisible.  Down here, cloth and
+// tin give out under a sustained beating and plate usually holds, which is
+// the difference they are supposed to make.
+const ARMOUR_BASE = 1.2;
+const ARMOUR_PER_RESIST = 0.5;
 
 /** How many swings this weapon has in it before it can break. */
 export function durabilityOf(w: Piece): number {
@@ -693,6 +731,9 @@ export interface Fighter {
   countering: boolean;
   /** Knives left to throw. */
   ammo: number;
+  /** What is left of each piece of armour, and which are already gone. */
+  wear: Record<'head' | 'body' | 'legs', number>;
+  gone: Record<'head' | 'body' | 'legs', boolean>;
   /** The attack currently being thrown, chosen when the wind-up started. */
   move: Move | null;
   /** Last tick's gap, so a sweeping weapon can tell somebody is walking in. */
@@ -722,7 +763,10 @@ export function makeFighter(who: 'frog' | 'lizard', kit: Kit, x: number, face: 1
   return {
     who, kit, type, weapon: w, held: kit.weapon, broken: false, dur: durabilityOf(kit.weapon), st,
     hp: st.maxHp, x, face, act: 'walk', t: 0, cool: 0.4, swing: 0, stun: 0, step: 0,
-    riposte: false, chain: 0, desperate: false, move: null, counterT: 0, countering: false, ammo: kit.weapon.weapon?.spec.ammo ?? 0, lastGap: 999, clock: 0,
+    riposte: false, chain: 0, desperate: false, move: null, counterT: 0, countering: false,
+    wear: { head: armourLife(kit.head), body: armourLife(kit.body), legs: armourLife(kit.legs) },
+    gone: { head: false, body: false, legs: false },
+    ammo: kit.weapon.weapon?.spec.ammo ?? 0, lastGap: 999, clock: 0,
     armA: -10, leanA: 0, shove: 0, art: null,
   };
 }
@@ -730,6 +774,44 @@ export function makeFighter(who: 'frog' | 'lizard', kit: Kit, x: number, face: 1
 /** Empty hands, rolled at nothing: what a broken weapon leaves behind. */
 function emptyHands(): Piece {
   return { slot: 'weapon', name: 'BARE HANDS', weapon: UNARMED, rPower: 1, rHeavy: 1, rResist: 10, rReach: 1, quality: 3, prot: 0, heavy: 1 };
+}
+
+/**
+ * A BLOW WEARS WHATEVER IT LANDED ON, AND EVENTUALLY THAT PIECE GIVES OUT.
+ *
+ * Which piece it lands on is weighted by how much of a body that piece
+ * covers, so a breastplate takes most of it and a helmet takes least -- the
+ * same `COVER` the defence figures are built from, so the thing that stops
+ * the most damage is the thing that wears out first.
+ *
+ * Losing a piece is a real loss and not a costume change: the suit's defence
+ * drops by that piece's share, the health it was worth goes with it, and the
+ * fighter is measurably easier to kill from that moment.  Returns the slot
+ * that broke so the arena can take it off and make a noise about it.
+ */
+export function wearArmour(f: Fighter, rng: () => number = Math.random): { slot: 'head' | 'body' | 'legs'; tint: number } | null {
+  const live = (['head', 'body', 'legs'] as const).filter((sl) => !f.gone[sl] && Number.isFinite(f.wear[sl]));
+  if (!live.length) return null;
+  const total = live.reduce((n, sl) => n + COVER[sl], 0);
+  let roll = rng() * total;
+  let hit = live[0];
+  for (const sl of live) { roll -= COVER[sl]; if (roll <= 0) { hit = sl; break; } }
+  f.wear[hit] -= 1;
+  if (f.wear[hit] > 0) return null;
+
+  // The colour has to be read BEFORE the piece is swapped for nothing:
+  // afterwards the slot's material is 'none' and every helm, cuirass and
+  // greave in the game came apart in the same dull brown.
+  const tint = (f.kit[hit].mat ?? MATERIALS[0]).colour;
+  f.gone[hit] = true;
+  f.kit = { ...f.kit, [hit]: makeArmour(hit, MATERIALS[0]) };
+  const before = f.st.maxHp;
+  f.st = statsOf(f.kit, f.weapon, f.held, f.type);
+  // Health it was carrying goes with it, but it cannot be the thing that
+  // kills them -- losing a helmet is not a death sentence, it is a worse
+  // position.
+  f.hp = Math.max(1, Math.min(f.hp - Math.max(0, before - f.st.maxHp), f.st.maxHp));
+  return { slot: hit, tint };
 }
 
 /** A weapon gives out.  Everything it was worth goes with it; the armour stays. */
@@ -812,6 +894,18 @@ const LUNGE_COOL = 1.5;
  */
 const OVER_WIN_MS = 4200;
 const OVER_LOSE_MS = 3200;
+/**
+ * Where the hands sit in a guard.
+ *
+ * Two angles, not one: at a single -76 both fists landed on top of the head
+ * and the whole stance read as a green smudge over the face.  The lead hand
+ * sits out in FRONT of the chin and the rear hand higher and closer, which
+ * is both what a guard looks like and the only way to tell there are two of
+ * them at this size.
+ */
+const GUARD_LEAD = -38;
+const GUARD_REAR = -66;
+const OFF_ARM_REST = 24;
 /** How much of the way to the target angle a limb travels each frame. */
 const ARM_SNAP = 0.62;
 const ARM_EASE = 0.3;
@@ -846,6 +940,9 @@ export interface Blow {
   clashed?: boolean;
   /** Which attack it was, so the arena can name it. */
   move?: string;
+  /** A piece of the defender's armour came off on this one, and its colour. */
+  stripped?: 'head' | 'body' | 'legs';
+  strippedTint?: number;
   /** It was a critical, a thrown knife, a counter, or it hurt the thrower. */
   crit?: boolean;
   thrown?: boolean;
@@ -962,6 +1059,11 @@ export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Mat
   out.hit = true;
   out.dmg = Math.max(1, Math.round(raw * (1 - armour) * (1 - soak)));
   def.hp = Math.max(0, def.hp - out.dmg);
+  // and the suit is a little more broken than it was
+  if (def.hp > 0) {
+    const off = wearArmour(def, rng);
+    if (off) { out.stripped = off.slot; out.strippedTint = off.tint; }
+  }
 
   // ---- WHAT A BIG ONE DOES BESIDES DAMAGE.
   //
@@ -1359,9 +1461,26 @@ export interface FighterArt {
   head: Phaser.GameObjects.Ellipse;
   helm: Phaser.GameObjects.Rectangle;
   arm: Phaser.GameObjects.Container;
+  /** The off hand.  Behind the body while a weapon is held; up in a guard
+   *  the moment there is not one. */
+  armOff: Phaser.GameObjects.Container;
+  /** Whether the off hand has been brought round to the front yet. */
+  guardUp: boolean;
   weapon: Phaser.GameObjects.Container;
   /** Stays flat on the sand while everything above it moves. */
   shadow: Phaser.GameObjects.Ellipse;
+  /** Every piece of armour, by slot, so a broken one can be taken off. */
+  kneeL: Phaser.GameObjects.Rectangle;
+  kneeR: Phaser.GameObjects.Rectangle;
+  footL: Phaser.GameObjects.Rectangle;
+  footR: Phaser.GameObjects.Rectangle;
+  belt: Phaser.GameObjects.Rectangle;
+  ridge: Phaser.GameObjects.Rectangle;
+  pauldL: Phaser.GameObjects.Ellipse;
+  pauldR: Phaser.GameObjects.Ellipse;
+  helmDome: Phaser.GameObjects.Ellipse;
+  visor: Phaser.GameObjects.Rectangle;
+  plume: Phaser.GameObjects.Rectangle;
 }
 
 const FLOOR_Y = 138;
@@ -1688,10 +1807,29 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const plume = scene.add.rectangle(-4, hy - 7, 3, 8, frog ? PALETTE.blood : PALETTE.rust).setVisible(wears(H));
 
   // ---- the arm and the weapon, on one hinge at the shoulder
-  const arm = scene.add.container(5 * wide, -24 * tall - lift);
-  arm.add(scene.add.rectangle(5, 0, 11, 4 * wide, skin));
-  arm.add(scene.add.rectangle(5, -1, 11, 1, light).setAlpha(0.5));
-  arm.add(scene.add.circle(10, 0, 3 * wide, light));
+  // ---- TWO ARMS, because one of them cannot hold a guard.
+  //
+  // The rig had a single arm, which is all a weapon needs and is useless the
+  // moment the weapon is gone: a boxer with one arm is a man pointing.  The
+  // OFF arm is built behind the torso and the weapon arm in front of it, so
+  // armed they read as one arm and a body, and unarmed they come up as a
+  // pair with the far one properly behind the near one.
+  const buildArm = (behind: boolean): Phaser.GameObjects.Container => {
+    const a2 = scene.add.container(5 * wide * (behind ? -0.4 : 1), -24 * tall - lift);
+    const tone = behind ? dark : skin;
+    a2.add(scene.add.rectangle(5, 0, 11, 4 * wide, tone));
+    a2.add(scene.add.rectangle(5, -1, 11, 1, behind ? skin : light).setAlpha(0.5));
+    // The hand, as a FIST rather than as the end of the arm.  A plain circle
+    // in the limb's own colour is invisible against the limb, so unarmed the
+    // guard read as two green smudges; the dark ring gives each hand an edge
+    // it keeps against the arm, against the body and against the face.
+    a2.add(scene.add.circle(10.2, 0, 4 * wide, dark));
+    a2.add(scene.add.circle(10, -0.4, 3 * wide, behind ? skin : light));
+    a2.add(scene.add.rectangle(10.6, 0, 1, 4.6 * wide, dark).setAlpha(0.45));
+    return a2;
+  };
+  const armOff = buildArm(true);
+  const arm = buildArm(false);
   const weapon = buildWeapon(scene, f.weapon.key, light);
   weapon.setPosition(11, 0);
   arm.add(weapon);
@@ -1703,6 +1841,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   if (clawL) parts.push(clawL, clawR!);
   parts.push(legL, legR, greaveL, greaveR, kneeL, kneeR);
   parts.push(...spines);
+  parts.push(armOff);
   parts.push(torso, belly, cuirass, ridge, belt, arm, pauldL, pauldR);
   parts.push(head, jaw);
   if (teeth) parts.push(teeth);
@@ -1711,7 +1850,8 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   parts.push(eyeL, eyeR, pupL, pupR, helmDome, helm, visor, plume);
   const root = scene.add.container(f.x, FLOOR_Y, parts).setDepth(20);
   root.setScale(f.face * (bld?.scale ?? 1), bld?.scale ?? 1);
-  return { root, legL, legR, greaveL, greaveR, torso, cuirass, head, helm, arm, weapon, shadow };
+  return { root, legL, legR, greaveL, greaveR, kneeL, kneeR, footL, footR, torso, cuirass, belt, ridge,
+    pauldL, pauldR, head, helm, helmDome, visor, plume, arm, armOff, guardUp: false, weapon, shadow };
 }
 
 /** Put the fighter into the pose its current act calls for. */
@@ -1769,6 +1909,10 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     jab:    { w: -34, s: 20, r: 4, lean: 5 },
     bash:   { w: -46, s: 16, r: 6, lean: 16 },
     low:    { w: -70, s: 88, r: 56, lean: 14 },
+    // a punch barely winds up and goes straight out from the guard
+    punch:  { w: -62, s: 14, r: -40, lean: 9 },
+    // a kick is the legs' business; the hands stay up where they were
+    kick:   { w: -58, s: -52, r: -50, lean: -8 },
   };
   const shape = A[f.move?.anim ?? 'sweep'];
   let arm = -10;
@@ -1794,6 +1938,62 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   f.armA += (arm - f.armA) * snap;
   f.leanA += (lean - f.leanA) * snap;
   a.arm.setAngle(f.armA);
+
+  // ---- THE UNARMED STANCE.
+  //
+  // Hands up by the face, weight down a little, and the off hand doing its
+  // half of the work: it holds the guard while the other one throws, and on
+  // a combination they alternate.  Armed, it hangs at the side where it has
+  // always been.
+  const bare = f.broken || f.weapon.key === 'none';
+  if (bare && !a.guardUp) {
+    // ---- BOTH HANDS WHERE THEY CAN BE SEEN.
+    //
+    // The off arm is built behind the torso, which is right while it is
+    // hanging at the side and useless the moment it comes up: a guard drawn
+    // behind the chest is a guard nobody can see, and the fighter reads as
+    // having one arm.  On going bare it comes round to the front and shifts
+    // out to where a near-side hand actually sits.
+    // The off arm goes in front of the HEAD, not merely in front of the
+    // chest.  At this size the skull is most of the silhouette and the
+    // shoulders sit inside it, so a rear hand drawn behind the head has
+    // nowhere to be: it vanished, and the stance read as one arm pointing.
+    // In front of the face is also where a boxer's rear hand belongs.
+    a.guardUp = true;
+    a.root.bringToTop(a.armOff);
+    a.armOff.x = Math.abs(a.arm.x) * 0.55;
+    a.armOff.y = a.arm.y + 1.5;
+  }
+  if (bare) {
+    const throwing = f.act === 'strike' || f.act === 'recover';
+    const alt = f.swing % 2 === 1;
+    a.armOff.setAngle(throwing && alt ? f.armA : GUARD_REAR);
+    a.arm.setAngle(throwing && !alt ? f.armA : f.act === 'windup' ? f.armA : GUARD_LEAD);
+    a.armOff.setVisible(true);
+  } else {
+    a.armOff.setAngle(OFF_ARM_REST);
+  }
+
+  // ---- THE CROUCH, spelled in the legs.
+  //
+  // Sinking the root drove the feet under the sand and dropping the head
+  // left its eyes behind, since they are their own objects.  The legs are
+  // the one part that can carry it: bent out at the knee the whole animal
+  // settles, and the feet stay where they were standing.
+  if (bare && f.act !== 'dodge' && f.act !== 'stagger') {
+    // An OFFSET on the walk, not a replacement for it.  Set flat this froze
+    // the legs mid-stride and an unarmed fighter slid round the sand without
+    // moving them; added to the swing, he keeps walking, bowed.
+    a.legL.setAngle(swingL - 7); a.legR.setAngle(-swingL + 7);
+    a.greaveL.setAngle(swingL - 7); a.greaveR.setAngle(-swingL + 7);
+  }
+
+  // ---- AND THE KICK, which is a leg and not an arm at all.
+  if (f.move?.anim === 'kick' && (f.act === 'strike' || f.act === 'windup')) {
+    const up = f.act === 'strike' ? -68 : -18;
+    a.legR.setAngle(up);
+    a.greaveR.setAngle(up);
+  }
   // and a spinning attack turns the whole animal, not only the arm
   if (f.move?.anim === 'spin' && (f.act === 'strike' || f.act === 'windup')) {
     a.root.angle = f.face * (f.act === 'strike' ? 22 : -14);
@@ -1944,6 +2144,8 @@ let apiRef: MinigameApi | null = null;
  * "lose it all" impossible, because the shell has no way to take a credit
  * back once it has been made.
  */
+/** DEV only: holds the fight still so a frame can be inspected. */
+let frozen = false;
 let round = 1;
 let bank = 0;
 
@@ -1981,6 +2183,7 @@ let crowd: Phaser.GameObjects.Rectangle[] = [];
 let hpBar: Record<'frog' | 'lizard', Phaser.GameObjects.Rectangle | null> = { frog: null, lizard: null };
 let hpNum: Record<'frog' | 'lizard', Phaser.GameObjects.BitmapText | null> = { frog: null, lizard: null };
 let kitLine: Record<'frog' | 'lizard', Phaser.GameObjects.BitmapText | null> = { frog: null, lizard: null };
+let defText: Record<'frog' | 'lizard', Phaser.GameObjects.BitmapText | null> = { frog: null, lizard: null };
 let callOut: Phaser.GameObjects.BitmapText | null = null;
 let buttons: Array<{ destroy(): void }> = [];
 
@@ -1990,6 +2193,7 @@ const rnd = (n: number): number => Math.floor(Math.random() * n);
 function reset(): void {
   phase = 'title';
   ended = false;
+  frozen = false;
   round = 1;
   bank = 0;
   stage = 0;
@@ -2009,6 +2213,7 @@ function reset(): void {
   hpBar = { frog: null, lizard: null };
   hpNum = { frog: null, lizard: null };
   kitLine = { frog: null, lizard: null };
+  defText = { frog: null, lizard: null };
   callOut = null;
   revealHint = null;
   buttons = [];
@@ -2554,7 +2759,7 @@ function showCardOfBoth(c: Phaser.GameObjects.Container): void {
 const HUD_BOT = 44;
 function buildHud(c: Phaser.GameObjects.Container): void {
   c.add(S().add.rectangle(0, 18, GAME_W, HUD_BOT - 18, 0x0d0a07, 0.72).setOrigin(0, 0).setDepth(39));
-  const bar = (x: number, who: 'frog' | 'lizard', label: string, colour: number, kit: Kit, right: boolean): void => {
+  const bar = (x: number, who: 'frog' | 'lizard', label: string, colour: number, right: boolean): void => {
     c.add(text(S(), x, 20, label, PALETTE.cream).setDepth(41));
     hpNum[who] = text(S(), x + 130, 20, '', colour).setOrigin(1, 0).setDepth(41);
     c.add(hpNum[who]!);
@@ -2562,7 +2767,6 @@ function buildHud(c: Phaser.GameObjects.Container): void {
     hpBar[who] = S().add.rectangle(x + 1, 29, 128, 3, colour).setOrigin(0, 0).setDepth(41);
     c.add(hpBar[who]!);
     // what it is holding and what that is worth, on the one line
-    const def = Math.round(Math.min(75, kit.head.prot + kit.body.prot + kit.legs.prot));
     kitLine[who] = text(S(), right ? x + 130 : x, 35, '', PALETTE.bone).setDepth(41).setOrigin(right ? 1 : 0, 0);
     c.add(kitLine[who]!);
     // Defence shares the weapon's row at the far end of it.  On the name row
@@ -2571,10 +2775,13 @@ function buildHud(c: Phaser.GameObjects.Container): void {
     // to twelve characters so the two never meet.
     // Just the number.  "DEF " cost four characters of a row that also has to
     // hold THROWING KNIVES, and the weapon name was being cut to THROWING KNIV.
-    c.add(text(S(), right ? x : x + 130, 35, `${def}%`, PALETTE.ash).setDepth(41).setOrigin(right ? 0 : 1, 0));
+    // It is live now, because armour comes off mid-fight and a scoreboard
+    // still quoting the suit he started in would be lying.
+    defText[who] = text(S(), right ? x : x + 130, 35, '', PALETTE.ash).setDepth(41).setOrigin(right ? 0 : 1, 0);
+    c.add(defText[who]!);
   };
-  bar(8, 'frog', 'FROGGY', PALETTE.mossLight, frog!.kit, false);
-  bar(GAME_W - 138, 'lizard', 'LIZARD', PALETTE.amber, lizard!.kit, true);
+  bar(8, 'frog', 'FROGGY', PALETTE.mossLight, false);
+  bar(GAME_W - 138, 'lizard', 'LIZARD', PALETTE.amber, true);
   // The strip's middle is the only spare room on the screen, and the round
   // and its prize are the two things worth keeping in front of the player.
   c.add(centerText(S(), GAME_W / 2, 20, `R${round}`, PALETTE.gold).setDepth(41));
@@ -2589,6 +2796,7 @@ function refreshHud(): void {
     const b = hpBar[who];
     if (b) b.width = Math.max(0, Math.round((Math.max(0, f.hp) / f.st.maxHp) * 128));
     hpNum[who]?.setText(`${Math.max(0, f.hp)} / ${f.st.maxHp}`);
+    defText[who]?.setText(`${Math.round(f.st.defence * 100)}%`);
     kitLine[who]?.setText(f.broken ? 'BARE HANDS' : f.weapon.name.slice(0, 16)).setTint(f.broken ? PALETTE.blood : PALETTE.bone);
   }
 }
@@ -2688,6 +2896,45 @@ function showClash(a: Fighter, b: Fighter): void {
   }
 }
 
+/**
+ * A PIECE OF ARMOUR COMES OFF, AND IT IS SUPPOSED TO BE OBVIOUS.
+ *
+ * The pieces are hidden rather than left attached and dented, the body
+ * underneath is uncovered, and a copy of what was there spins away across
+ * the sand so the eye follows it off.  Different noise from a weapon
+ * breaking on purpose -- metal clattering rather than wood snapping -- so a
+ * spectator can tell from across the room which of the two just happened.
+ */
+function showStrip(f: Fighter, slot: 'head' | 'body' | 'legs', tint: number): void {
+  const a = f.art;
+  audio.sfx('fence_thunk', 0.65);
+  audio.sfx('item_thud', 0.5);
+  S().cameras.main.shake(150, 0.005);
+  floatHigh(f.x, `${slot === 'head' ? 'HELM' : slot === 'body' ? 'CUIRASS' : 'GREAVES'} GONE`, PALETTE.steel);
+  if (!a) return;
+
+  const worn: Phaser.GameObjects.Components.Visible[] =
+    slot === 'head' ? [a.helm, a.helmDome, a.visor, a.plume]
+      : slot === 'body' ? [a.cuirass, a.belt, a.ridge, a.pauldL, a.pauldR]
+        : [a.greaveL, a.greaveR, a.kneeL, a.kneeR];
+  // Taken off, not dented: nothing broken stays on the body.
+  for (const w of worn) w.setVisible(false);
+
+  // and the piece itself tumbles away
+  for (let i = 0; i < 4; i++) {
+    const bit = S().add.rectangle(f.x + (i - 2) * 3, FLOOR_Y - (slot === 'head' ? 40 : slot === 'body' ? 24 : 10), 5, 3, tint).setDepth(32);
+    layer?.add(bit);
+    S().tweens.add({
+      targets: bit, x: bit.x - f.face * (14 + Math.random() * 22), y: FLOOR_Y - 2,
+      angle: 200 + Math.random() * 300, alpha: 0, duration: 620 + Math.random() * 220,
+      ease: 'Quad.easeIn', onComplete: () => bit.destroy(),
+    });
+  }
+  // a flash on what is suddenly bare
+  const bare = slot === 'head' ? [a.head] : slot === 'body' ? [a.torso] : [a.legL, a.legR];
+  for (const part of bare) flashWhite(part);
+}
+
 function showBreak(f: Fighter): void {
   audio.sfx('crumble', 0.7);
   audio.sfx('buzzer', 0.3);
@@ -2729,6 +2976,7 @@ function stepFight(real: number): void {
   fightT += dt;
   for (const e of exchange(frog!, lizard!, dt)) {
     if (e.blow.broke) showBreak(e.att);
+    if (e.blow.stripped) showStrip(e.def, e.blow.stripped, e.blow.strippedTint ?? PALETTE.steel);
     if (e.blow.clashed) showClash(e.att, e.def);
     else showBlow(e.def, e.blow);
   }
@@ -3023,8 +3271,37 @@ export const frogsterMash: MinigameModule = {
           const f = who === 'frog' ? frog : lizard;
           if (f && Number.isFinite(f.dur)) f.dur = 1;
         },
+        /** Hold the fight still, and park the two apart, to read a pose. */
+        freeze: (on: boolean) => { frozen = on; },
+        park: (who: 'frog' | 'lizard', x: number) => {
+          const f = who === 'frog' ? frog : lizard;
+          if (!f) return;
+          f.x = x;
+          f.act = 'walk';
+          f.move = null;
+          poseFighter(f, who === 'frog' ? lizard! : frog!);
+        },
+        /** Both arms' angles and visibility, so a stance can be asserted. */
+        art: (who: 'frog' | 'lizard') => {
+          const f = who === 'frog' ? frog : lizard;
+          if (!f?.art) return null;
+          return { arm: Math.round(f.art.arm.angle), off: Math.round(f.art.armOff.angle),
+            guardUp: f.art.guardUp, armVis: f.art.arm.visible, offVis: f.art.armOff.visible,
+            helm: f.art.helm.visible, cuirass: f.art.cuirass.visible, greave: f.art.greaveL.visible,
+            legL: f.art.legL.angle, legR: f.art.legR.angle };
+        },
+        /** Take one piece of armour off, the way a blow eventually would. */
+        strip: (who: 'frog' | 'lizard') => {
+          const f = who === 'frog' ? frog : lizard;
+          if (!f) return null;
+          for (let i = 0; i < 200; i++) {
+            const off = wearArmour(f);
+            if (off) { showStrip(f, off.slot, off.tint); return off.slot; }
+          }
+          return null;
+        },
         /** The rules and the headless simulator, so a build can be checked. */
-        rules: { WEAPONS, MATERIALS, UNARMED, QUALITY_MUL, statsOf, makeFighter, resolveStrike, tick, think, exchange, simulate, randomKit, offerFor, makeWeapon, makeArmour, breakWeapon, durabilityOf, wrapTo, CARD_COLS, BASE, LIZARDS, makeLizard, buildFighter, buildWeapon, rewardFor },
+        rules: { WEAPONS, MATERIALS, UNARMED, QUALITY_MUL, statsOf, makeFighter, resolveStrike, tick, think, exchange, simulate, randomKit, offerFor, makeWeapon, makeArmour, breakWeapon, durabilityOf, wrapTo, CARD_COLS, BASE, LIZARDS, makeLizard, buildFighter, buildWeapon, rewardFor, armourLife, wearArmour, MOVES },
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__mash;
@@ -3042,7 +3319,7 @@ export const frogsterMash: MinigameModule = {
       if (pickT <= 0) autoPick();
       return;
     }
-    if (phase === 'fight') stepFight(dt);
+      if (phase === 'fight' && !frozen) stepFight(dt);
   },
 
   destroy() {
@@ -3063,7 +3340,8 @@ export const frogsterMash: MinigameModule = {
 function snap(f: Fighter): Record<string, unknown> {
   return {
     hp: Math.max(0, f.hp), maxHp: f.st.maxHp, x: Math.round(f.x), act: f.act,
-    weapon: f.weapon.key, broken: f.broken, dur: Number.isFinite(f.dur) ? f.dur : -1,
+    weapon: f.weapon.key, broken: f.broken, gone: { ...f.gone },
+    wear: { head: Math.max(0, Math.round(f.wear.head)), body: Math.max(0, Math.round(f.wear.body)), legs: Math.max(0, Math.round(f.wear.legs)) }, dur: Number.isFinite(f.dur) ? f.dur : -1,
     power: +f.st.power.toFixed(2), rate: +f.st.rate.toFixed(2), walk: +f.st.walk.toFixed(1),
     avoid: +f.st.avoid.toFixed(3), defence: +f.st.defence.toFixed(3), reach: f.st.reach, range: f.st.range,
     // drawing state, exposed so a test can prove it never reaches `x`
