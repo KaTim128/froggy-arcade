@@ -669,7 +669,7 @@ let peak = 0;
  */
 let earned = false;
 let warnT = 0;
-let dashes: Array<Phaser.GameObjects.Rectangle | Phaser.GameObjects.Arc> = [];
+let dashes: Array<Phaser.GameObjects.Rectangle | Phaser.GameObjects.Arc | Phaser.GameObjects.Container> = [];
 let trafficTimer = 0;
 let policeTimer = 0;
 /** Milliseconds left with the road behind you empty.  See RESPITE_MS. */
@@ -798,8 +798,37 @@ export const carChase: MinigameModule = {
     // in, and the shell's title bar has to stay on top of them — so nothing is
     // drawn until it is below the bar (see `onScreen`).  Negative depths were
     // tried for this and put the whole road under the shell's black backdrop.
-    scene.add.rectangle(0, TOP, GAME_W, BOTTOM - TOP, 0x17301c).setOrigin(0, 0).setDepth(1);
+    // ---- THE GROUND EITHER SIDE, IN LAYERS.
+    //
+    // It was one flat 0x17301c slab from edge to edge, which read as a green
+    // wall the road had been cut into.  The verge is built outward from the
+    // kerb instead - gravel where the tarmac has spilled over, then grass,
+    // then the dark treeline at the screen edge - so the eye has somewhere to
+    // measure speed against and the road reads as a road through somewhere
+    // rather than a strip on a background.
+    const VERGE_R = ROAD_L + ROAD_W + 3;
+    scene.add.rectangle(0, TOP, GAME_W, BOTTOM - TOP, 0x1c3a22).setOrigin(0, 0).setDepth(1);
+    for (const [gx, gw] of [[0, 18], [GAME_W - 18, 18]] as const) {
+      scene.add.rectangle(gx, TOP, gw, BOTTOM - TOP, 0x102a17).setOrigin(0, 0).setDepth(1);
+    }
+    for (const [sx2, sw] of [[ROAD_L - 11, 8], [VERGE_R, 8]] as const) {
+      scene.add.rectangle(sx2, TOP, sw, BOTTOM - TOP, 0x3a3a30).setOrigin(0, 0).setDepth(1);
+      scene.add.rectangle(sx2, TOP, sw, BOTTOM - TOP, 0x4a4a3c).setOrigin(0, 0).setDepth(1).setAlpha(0.35);
+    }
+    // ---- THE ROAD.  Wheel tracks down each lane and a scatter of chippings,
+    // because at this camera height the tarmac is half the screen.
     scene.add.rectangle(ROAD_L, TOP, ROAD_W, BOTTOM - TOP, 0x2a2d33).setOrigin(0, 0).setDepth(1);
+    for (let i = 0; i < 4; i++) {
+      const cx2 = ROAD_L + LANE_W * i + LANE_W / 2;
+      for (const off of [-5, 5]) {
+        scene.add.rectangle(cx2 + off, TOP, 5, BOTTOM - TOP, 0x31343b).setOrigin(0.5, 0).setDepth(1).setAlpha(0.6);
+      }
+    }
+    for (let i = 0; i < 90; i++) {
+      const gx2 = ROAD_L + ((i * 53 + (i % 9) * 7) % ROAD_W);
+      const gy2 = TOP + ((i * 31) % (BOTTOM - TOP));
+      scene.add.rectangle(gx2, gy2, 1, 1, i % 3 ? 0x3c3f46 : 0x1f2228).setOrigin(0, 0).setDepth(1).setAlpha(0.55);
+    }
     scene.add.rectangle(ROAD_L - 3, TOP, 3, BOTTOM - TOP, PALETTE.bone).setOrigin(0, 0).setDepth(1);
     scene.add.rectangle(ROAD_L + ROAD_W, TOP, 3, BOTTOM - TOP, PALETTE.bone).setOrigin(0, 0).setDepth(1);
     for (let i = 1; i < 4; i++) {
@@ -807,14 +836,94 @@ export const carChase: MinigameModule = {
         dashes.push(scene.add.rectangle(ROAD_L + LANE_W * i, y, 1, 8, 0x6a6e76).setOrigin(0.5, 0).setDepth(2));
       }
     }
-    // trees and bushes on the verges, scrolling with the road
-    for (let i = 0; i < 14; i++) {
-      // The verges are narrower now the camera is back, so the scenery is
-      // packed into what is left of them rather than off the side of the view.
-      const side = i % 2 ? ROAD_L - 8 - ((i * 37) % 36) : ROAD_L + ROAD_W + 8 + ((i * 41) % 36);
-      const y = TOP + ((i * 53) % (BOTTOM - TOP + 16));
-      const r = 4 + (i % 3) * 2;
-      dashes.push(scene.add.circle(side, y, r, i % 3 === 0 ? 0x2e5e38 : 0x24482c).setDepth(2));
+    // ---- WHAT GOES PAST.
+    //
+    // Everything below scrolls with the road on the same 178 pixel cycle the
+    // lane dashes use, so each piece is one container and wraps whole rather
+    // than coming apart a rectangle at a time.  Nothing reaches past x49 on
+    // the left or x271 on the right: the verge is scenery and the road is the
+    // game, and the two never share a pixel.
+    const scenery = (x: number, y: number, parts: Phaser.GameObjects.GameObject[]): void => {
+      dashes.push(scene.add.container(x, y, parts).setDepth(2));
+    };
+    const tree = (x: number, y: number, big: boolean): void => {
+      const r = big ? 8 : 5;
+      scenery(x, y, [
+        scene.add.ellipse(1, r - 1, r * 2.2, 4, 0x0b1a10).setAlpha(0.5),
+        scene.add.rectangle(0, r - 2, 2, 6, 0x3a2a18),
+        scene.add.circle(0, 0, r, 0x24482c),
+        scene.add.circle(-r * 0.4, -r * 0.4, r * 0.7, 0x2e5e38),
+        scene.add.circle(r * 0.35, r * 0.15, r * 0.5, 0x1a3a22),
+      ]);
+    };
+    const lamp = (x: number, y: number, right: boolean): void => {
+      const arm = right ? -1 : 1;
+      scenery(x, y, [
+        scene.add.rectangle(0, 0, 2, 22, 0x4a4f58).setOrigin(0.5, 0),
+        scene.add.rectangle(arm * 3, 0, 8, 2, 0x4a4f58),
+        scene.add.rectangle(arm * 6, 2, 5, 3, 0xffd98a),
+        scene.add.ellipse(arm * 9, 8, 22, 16, 0xffd98a).setAlpha(0.1),
+      ]);
+    };
+    const shed = (x: number, y: number): void => {
+      scenery(x, y, [
+        scene.add.rectangle(0, 0, 16, 20, 0x3a3f4a).setOrigin(0.5, 0),
+        scene.add.rectangle(0, 0, 16, 3, 0x596170).setOrigin(0.5, 0),
+        scene.add.rectangle(0, 3, 16, 1, 0x232833).setOrigin(0.5, 0),
+        ...[0, 1, 2].flatMap((r) =>
+          [-4, 4].map((c) => scene.add.rectangle(c, 7 + r * 5, 4, 3, 0x1a1f28)),
+        ),
+        scene.add.rectangle(-4, 7, 4, 3, 0xffd98a).setAlpha(0.35),
+        scene.add.rectangle(4, 17, 4, 3, 0xffd98a).setAlpha(0.25),
+      ]);
+    };
+    // A hoarding with him on it, once a side, because it is his arcade the
+    // road runs through and the verge is the only place left to say so.
+    const hoarding = (x: number, y: number): void => {
+      scenery(x, y, [
+        scene.add.rectangle(-6, 6, 2, 10, 0x4a4f58),
+        scene.add.rectangle(6, 6, 2, 10, 0x4a4f58),
+        scene.add.rectangle(0, 0, 30, 16, 0x1d2430),
+        scene.add.rectangle(0, 0, 27, 13, 0x2f7a46),
+        scene.add.ellipse(0, 3, 15, 7, 0x7fc884),
+        scene.add.ellipse(0, -2, 11, 6, 0x7fc884),
+        scene.add.ellipse(-3, -3.5, 3.6, 3.2, PALETTE.cream),
+        scene.add.ellipse(3, -3.5, 3.6, 3.2, PALETTE.cream),
+        scene.add.rectangle(-3, -3.5, 1.4, 1.8, 0x121a14),
+        scene.add.rectangle(3, -3.5, 1.4, 1.8, 0x121a14),
+        scene.add.rectangle(0, 5.5, 17, 1, 0xffd45e).setAlpha(0.8),
+      ]);
+    };
+
+    const CYCLE = BOTTOM - TOP + 16;
+    for (let i = 0; i < 12; i++) {
+      const right = i % 2 === 1;
+      const x = right ? VERGE_R + 12 + ((i * 13) % 22) : ROAD_L - 15 - ((i * 13) % 22);
+      tree(x, TOP + ((i * 61) % CYCLE), i % 3 === 0);
+    }
+    for (let i = 0; i < 6; i++) {
+      const right = i % 2 === 1;
+      lamp(right ? VERGE_R + 6 : ROAD_L - 9, TOP + ((i * 59 + 20) % CYCLE), right);
+    }
+    for (let i = 0; i < 4; i++) {
+      shed(i % 2 ? GAME_W - 10 : 10, TOP + ((i * 83 + 40) % CYCLE));
+    }
+    hoarding(24, TOP + 30);
+    hoarding(GAME_W - 24, TOP + 118);
+
+    // ---- SOMETHING FOR THE READOUTS TO SIT ON.
+    //
+    // The verge used to be a flat green slab and the corner text sat on it
+    // perfectly well.  Now there are trees and a lit hoarding going past
+    // behind it, and CASH over a tree canopy is not a readout.  Three plates,
+    // all of them inside the verge and none of them touching the road, at a
+    // depth under the HUD and over the scenery.
+    for (const [hx, hy, hw, hh] of [
+      [0, TOP, 46, 13],
+      [GAME_W - 46, TOP, 46, 13],
+      [0, 136, 46, BOTTOM - 136],
+    ] as const) {
+      scene.add.rectangle(hx, hy, hw, hh, 0x0b0d12).setOrigin(0, 0).setDepth(8).setAlpha(0.72);
     }
 
     player = carSprite(scene, px, py, PALETTE.mossLight, false, true).setDepth(6).setVisible(true);
