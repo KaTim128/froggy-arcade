@@ -221,7 +221,7 @@ interface Pin {
   down: boolean;
   /** Off the deck entirely: out of play, out of every collision. */
   gone: boolean;
-  body: Phaser.GameObjects.Container;
+  body: Phaser.GameObjects.Arc;
 }
 
 type Turn = 'player' | 'cpu';
@@ -271,6 +271,7 @@ let keys: Record<'left' | 'right' | 'aimL' | 'aimR' | 'hookL' | 'hookR', Phaser.
 };
 let hud: {
   round: Phaser.GameObjects.BitmapText;
+  ball: Phaser.GameObjects.BitmapText;
   you: Phaser.GameObjects.BitmapText;
   cpu: Phaser.GameObjects.BitmapText;
   best: Phaser.GameObjects.BitmapText;
@@ -399,24 +400,27 @@ export const bowling: MinigameModule = {
     scene.add.rectangle(LANE_L - 8, wallY, LANE_W + 16, 18, 0x1b3a22).setOrigin(0, 0);
     scene.add.rectangle(LANE_L - 8, wallY, LANE_W + 16, 2, 0x3d7a42).setOrigin(0, 0);
     scene.add.rectangle(LANE_L - 8, wallY + 16, LANE_W + 16, 2, 0x0e1f12).setOrigin(0, 0);
-    // his eyes over the masking board, at the size of a sign
+    // ---- AND NOTHING IS WATCHING YOU BOWL.
+    //
+    // There were two eyes the size of dinner plates painted across the
+    // masking board, staring back down the lane.  A pair of disembodied eyes
+    // at the dark end of a room is not house branding, it is a horror film,
+    // and it is the first thing on screen every time the game opens.  The
+    // board keeps its green and its lamps; the face is gone.
     const ex = LANE_L + LANE_W / 2;
-    for (const sx of [-1, 1]) {
-      scene.add.ellipse(ex + sx * 11, wallY + 8, 13, 11, 0x5aa85f);
-      scene.add.ellipse(ex + sx * 11, wallY + 7, 9, 8, PALETTE.cream);
-      scene.add.circle(ex + sx * 11, wallY + 7.5, 3.2, PALETTE.black);
-      scene.add.circle(ex + sx * 11 - 1, wallY + 6, 1.1, 0xffffff).setAlpha(0.9);
-    }
+    scene.add.rectangle(ex, wallY + 9, LANE_W - 24, 5, 0x2f6b36).setAlpha(0.55);
+    scene.add.rectangle(ex, wallY + 9, LANE_W - 30, 1, 0x5aa85f).setAlpha(0.5);
     // two lamps washing down onto the deck
     for (const lx of [LANE_L + 8, LANE_L + LANE_W - 8]) {
       scene.add.rectangle(lx - 3, wallY + 17, 6, 2, 0xffe9a8).setOrigin(0, 0).setAlpha(0.8);
       scene.add.triangle(lx, LANE_TOP + 14, -7, 26, 7, 26, 0, 0, 0xfff0c9).setAlpha(0.06);
     }
-    // and a lily pad either side of the approach, down by the foul line
-    for (const px of [LANE_L - 4, LANE_L + LANE_W + 4]) {
-      scene.add.ellipse(px, FOUL_Y - 26, 11, 7, 0x2f6b36).setAlpha(0.9);
-      scene.add.triangle(px + 3, FOUL_Y - 26, 0, 0, 5, 2, 0, 4, 0x1b3a22).setAlpha(0.9);
-    }
+    // A lily pad either side of the approach used to sit here.  An eleven by
+    // seven green oval with a wedge cut out of one edge, at the foul line, on
+    // both sides of the lane: what that reads as at this size is a pair of
+    // green hands reaching in over the gutters.  The approach is bare now --
+    // it is the one part of the alley the ball actually passes through, and
+    // it did not need decorating.
 
     ballBody = scene.add.circle(0, 0, BALL_R, PALETTE.plum).setStrokeStyle(1, PALETTE.violet).setDepth(20);
     aimLine = scene.add.graphics().setDepth(15);
@@ -429,7 +433,15 @@ export const bowling: MinigameModule = {
       // directly over the masking board at the end of the lane -- the round
       // counter was printed across Froggy's eyes.  It lives on the left with
       // the rest of the readouts now, where nothing is drawn behind it.
+      // ROUND and BALL on their own lines.  As one string this read
+      // `ROUND 1/3  -  BALL 1`, about a hundred and twenty pixels of text
+      // from x8, and the masking board starts at x110 -- so the last four
+      // characters were printed over the back wall.
       round: text(scene, 8, 22, '', PALETTE.cream),
+      // Beside it, not under it: the line below is the top edge of the score
+      // panel.  `ROUND 1/3` ends at x62 and `BALL 1` runs x70..106, which
+      // leaves it four pixels clear of the masking board at x110.
+      ball: text(scene, 70, 22, '', PALETTE.cream),
       you: text(scene, 8, 40, '', PALETTE.tealLight),
       cpu: text(scene, 8, 50, '', PALETTE.neon),
       best: text(scene, GAME_W - 6, 21, '', PALETTE.gold).setOrigin(1, 0),
@@ -597,21 +609,18 @@ function rack(): void {
     for (let i = 0; i <= row; i++) {
       const x = cx + (i - row / 2) * PIN_GAP;
       const y = PIN_APEX_Y - row * PIN_GAP * 0.85;
-      // ---- A PIN WITH THE HOUSE MARK ON IT.
+      // ---- A PIN, WHICH IS A ROUND THING SEEN FROM ABOVE.
       //
-      // It was a bone disc with a red ring.  A pin seen from above is a white
-      // crown with a neck ring under it, and this house paints a green band
-      // on every one of them -- the same green as everything else Froggy owns,
-      // so the rack reads as belonging to this arcade and not a stock one.
-      const body = scene0.add.container(x, y, [
-        scene0.add.circle(0, 0, PIN_R, 0xbda98a),
-        scene0.add.circle(-0.3, -0.3, PIN_R - 0.5, PALETTE.bone),
-        // the two stripes round the neck, in the house colours
-        scene0.add.rectangle(0, -0.6, PIN_R * 1.5, 0.9, 0x3d7a42).setAlpha(0.95),
-        scene0.add.rectangle(0, 0.9, PIN_R * 1.3, 0.7, 0x5aa85f).setAlpha(0.8),
-        // and the light on the crown
-        scene0.add.circle(-0.6, -0.9, PIN_R * 0.42, 0xfff8e4).setAlpha(0.85),
-      ]).setDepth(18);
+      // This was briefly a stack of five pieces: an off-centre highlight disc
+      // over a darker one with two stripes across it.  Every one of those
+      // offsets pulls the silhouette off true, and at three pixels of radius
+      // the result was not a pin with a neck band on it, it was an egg.
+      //
+      // Back to the shape it had before -- one concentric disc with a ring
+      // round it, which is what a pin looks like from the ceiling -- keeping
+      // the colours it has now: bone, and the house green rather than the old
+      // red for the ring.
+      const body = scene0.add.circle(x, y, PIN_R, PALETTE.bone).setStrokeStyle(1, 0x3d7a42).setDepth(18);
       pins.push({ x, y, vx: 0, vy: 0, home: { x, y }, down: false, gone: false, body });
     }
   }
@@ -1027,7 +1036,8 @@ function callIt(line: string, big: boolean): void {
 
 function refreshHud(): void {
   if (!hud) return;
-  hud.round.setText(`ROUND ${round}/${ROUNDS}  -  BALL ${ballNo}`);
+  hud.round.setText(`ROUND ${round}/${ROUNDS}`);
+  hud.ball.setText(`BALL ${ballNo}`);
   hud.you.setText(`YOU     ${scores.player}`);
   hud.cpu.setText(`FROGGY  ${scores.cpu}`);
   hud.best.setText(`BEST ${best}`);
