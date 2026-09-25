@@ -58,7 +58,7 @@ const SLOT_NAME: Record<Slot, string> = {
  * so picking a thrust instead of a sweep genuinely changes the fight -- and
  * `anim` changes the arc the arm travels, so it looks like what it is.
  */
-export type Anim = 'over' | 'sweep' | 'thrust' | 'spin' | 'jab' | 'bash' | 'low' | 'punch' | 'kick';
+export type Anim = 'over' | 'sweep' | 'thrust' | 'spin' | 'jab' | 'bash' | 'low' | 'punch' | 'hook' | 'upper' | 'shove' | 'kick' | 'shoot' | 'hurl';
 export interface Move {
   name: string;
   /** Multipliers on the swing this move is a version of. */
@@ -94,6 +94,11 @@ const M = {
   low: (name: string, dmg = 0.95): Move => ({ name, dmg, wind: 0.95, reach: 1.05, knock: 4, stagger: 0.2, anim: 'low' }),
   bash: (name: string, dmg = 0.9): Move => ({ name, dmg, wind: 0.8, reach: 0.85, knock: 9, stagger: 0.28, at: 'near', anim: 'bash' }),
   charge: (name: string, dmg = 1.25): Move => ({ name, dmg, wind: 1.05, reach: 1.45, at: 'far', knock: 6, anim: 'thrust' }),
+  // ---- THE TWO RANGED SHAPES.  `shoot` draws a bow or levels a crossbow and
+  // `hurl` throws overarm; both want distance, so they score badly in a
+  // clinch and the weapon falls back on its close attacks there.
+  shoot: (name: string, dmg = 1.0): Move => ({ name, dmg, wind: 1.0, reach: 1.5, at: 'far', anim: 'shoot' }),
+  hurl: (name: string, dmg = 1.0): Move => ({ name, dmg, wind: 1.05, reach: 1.5, at: 'far', anim: 'hurl' }),
 };
 
 /** The repertoire each weapon actually fights with. */
@@ -104,9 +109,13 @@ export const MOVES: Record<string, Move[]> = {
   none: [
     { name: 'JAB COMBO', dmg: 0.6, wind: 0.55, reach: 0.95, hits: 3, at: 'near', anim: 'punch' },
     { name: 'STRAIGHT RIGHT', dmg: 0.95, wind: 0.7, reach: 1.0, anim: 'punch' },
-    { name: 'BODY HOOK', dmg: 0.85, wind: 0.62, reach: 0.9, at: 'near', stagger: 0.1, anim: 'punch' },
+    { name: 'BODY HOOK', dmg: 0.85, wind: 0.62, reach: 0.9, at: 'near', stagger: 0.1, anim: 'hook' },
+    { name: 'UPPERCUT', dmg: 1.15, wind: 0.85, reach: 0.85, at: 'near', stagger: 0.22, anim: 'upper' },
+    // Almost no damage and a long shove: the point of it is the distance it
+    // buys somebody with nothing in their hands, not the hit.
+    { name: 'SHOVE', dmg: 0.35, wind: 0.5, reach: 0.95, at: 'near', knock: 9, stagger: 0.14, anim: 'shove' },
     { name: 'LOW KICK', dmg: 1.05, wind: 0.95, reach: 1.15, knock: 4, stagger: 0.18, anim: 'kick' },
-    { name: 'COUNTER PUNCH', dmg: 1.3, wind: 0.45, reach: 1.0, when: 'counter', anim: 'punch' },
+    { name: 'COUNTER PUNCH', dmg: 1.3, wind: 0.45, reach: 1.0, when: 'counter', anim: 'upper' },
   ],
   knuckles: [M.combo('PUNCH COMBO', 3), M.bash('UPPERCUT', 1.1), M.stab('HOOK'), M.charge('RUSH', 1.0)],
   dagger: [M.stab('RAPID STAB'), M.combo('DOUBLE STAB', 2), M.low('LOW SLASH'), M.counter('BACKSTEP COUNTER', 1.3)],
@@ -115,14 +124,14 @@ export const MOVES: Record<string, Move[]> = {
   rapier: [M.thrust('RAPID THRUST', 0.95, 1.25), M.stab('DOUBLE THRUST'), M.counter('CRITICAL STAB', 1.6), M.charge('PRECISION LUNGE', 1.15)],
   nunchuck: [M.combo('RAPID FLURRY', 4), M.spin('SPINNING COMBO', 1.05), M.over('OVERHEAD FLURRY', 1.1, 1.1), M.sweep('SIDE SWEEP', 0.95, 1.05)],
   dual: [M.combo('FOUR HIT COMBO', 4), M.sweep('CROSSING SLASH', 1.0, 1.05), M.spin('SPINNING DOUBLE', 1.2), M.counter('DUAL STRIKE', 1.35)],
-  throwing: [M.thrust('KNIFE THROW', 0.9, 1.6), M.stab('CLOSE KNIFE'), M.combo('THREE KNIFE VOLLEY', 3), M.counter('RETREATING THROW', 1.2)],
+  throwing: [M.hurl('KNIFE THROW'), M.hurl('SPINNING THROW', 1.1), M.stab('CLOSE KNIFE'), M.counter('RETREATING THROW', 1.2)],
   gladius: [M.stab('FAST SLASH'), M.thrust('SHORT THRUST', 1.05, 1.1), M.combo('CLOSE COMBINATION', 3), M.counter('FINISHING STRIKE', 1.4)],
   sword: [M.sweep('HORIZONTAL SLASH'), M.over('DIAGONAL SLASH'), M.thrust('THRUST'), M.counter('PARRY COUNTER'), M.combo('TWO HIT SLASH', 2)],
   katana: [M.sweep('IAI SLASH', 1.15, 1.1), M.counter('COUNTER SLASH', 1.7), M.thrust('PRECISION THRUST', 1.05, 1.15), M.over('DIAGONAL CUT')],
   shield: [M.bash('SHIELD BASH'), M.charge('FORWARD CHARGE', 1.15), M.counter('BLOCK COUNTER', 1.5), M.stab('STABBING BASH')],
-  spear: [M.thrust('LONG THRUST', 1.1, 1.4), M.stab('DOUBLE THRUST'), M.sweep('SHAFT STRIKE', 0.9, 1.15), M.charge('FORWARD CHARGE')],
+  spear: [M.thrust('LONG THRUST', 1.1, 1.4), M.stab('DOUBLE THRUST'), M.sweep('SHAFT STRIKE', 0.9, 1.15), M.charge('FORWARD CHARGE'), M.hurl('SPEAR THROW', 0.95)],
   staff: [M.sweep('WIDE SWEEP'), M.over('OVERHEAD STRIKE'), M.thrust('THRUST'), M.low('LEG SWEEP'), M.bash('KEEPAWAY PUSH', 0.8)],
-  trident: [M.thrust('THREE POINT THRUST', 1.15, 1.35), M.sweep('HORIZONTAL SWEEP'), M.counter('COUNTER THRUST', 1.4), M.charge('CHARGING STAB')],
+  trident: [M.thrust('THREE POINT THRUST', 1.15, 1.35), M.sweep('HORIZONTAL SWEEP'), M.counter('COUNTER THRUST', 1.4), M.charge('CHARGING STAB'), M.hurl('TRIDENT THROW', 0.95)],
   halberd: [M.thrust('LONG THRUST', 1.1, 1.35), M.sweep('HORIZONTAL SWEEP', 1.1), M.over('OVERHEAD CHOP'), M.spin('SPINNING SWEEP'), M.low('HOOK ATTACK')],
   warscythe: [M.sweep('SWEEPING SLASH', 1.1, 1.25), M.low('LOW SWEEP'), M.spin('SPINNING SWEEP'), M.thrust('HOOKING STRIKE', 0.95, 1.2)],
   scythe: [M.sweep('HORIZONTAL SWEEP', 1.15, 1.28), M.low('LOW SWEEP'), M.over('OVERHEAD HOOK'), M.spin('SPINNING SWEEP')],
@@ -136,6 +145,20 @@ export const MOVES: Record<string, Move[]> = {
   greataxe: [M.over('MASSIVE CLEAVE', 1.35), M.finish('FINISHING CHOP', 1.9), M.spin('SPINNING AXE', 1.3), M.sweep('EXECUTION SWEEP', 1.2, 1.15)],
   heavyhammer: [M.slam('MASSIVE SMASH', 1.7), M.sweep('SIDE SWING', 0.95), M.slam('GROUND IMPACT', 1.5), M.finish('DEVASTATING STRIKE', 1.8)],
   goldsword: [M.sweep('POWER SLASH', 1.2), M.over('HEAVY DIAGONAL', 1.25), M.thrust('CHARGED THRUST', 1.15, 1.2), M.slam('KNOCKBACK SWING', 1.3)],
+
+  // ---- THE RANGED RACK.  Each one keeps a couple of close attacks, because
+  // an empty bow still has to do something when somebody walks in, and what
+  // it can do is deliberately poor.
+  throwaxe: [M.hurl('AXE THROW', 1.05), M.hurl('TUMBLING THROW', 1.15), M.over('CLOSE CHOP', 1.05, 1.15), M.bash('HAFT STRIKE', 0.85)],
+  javelin: [M.hurl('JAVELIN THROW', 1.15), M.hurl('OVERARM CAST', 1.05), M.thrust('SHORT JAB', 0.85, 1.2), M.sweep('SHAFT SWEEP', 0.8, 1.1)],
+  chakram: [M.hurl('DISC THROW'), M.hurl('FLAT SPIN', 1.1), M.stab('EDGE SLASH'), M.counter('RETURN CATCH', 1.2)],
+  sling: [M.shoot('STONE SHOT'), M.shoot('LOBBED STONE', 1.1), M.bash('SLING WHIP', 0.75), M.stab('DESPERATE SWIPE', 0.7)],
+  blowgun: [M.shoot('DART'), M.shoot('DART VOLLEY', 0.9), M.stab('TUBE JAB', 0.65), M.counter('POINT BLANK DART', 1.2)],
+  bow: [M.shoot('ARROW SHOT'), M.shoot('SNAP SHOT', 0.9), M.shoot('AIMED SHOT', 1.2), M.bash('BOW STRIKE', 0.7)],
+  longbow: [M.shoot('LONG SHOT', 1.1), M.shoot('FULL DRAW', 1.25), M.shoot('ARCING SHOT'), M.bash('STAVE STRIKE', 0.75)],
+  crossbow: [M.shoot('BOLT', 1.15), M.shoot('POINT BLANK BOLT', 1.05), M.shoot('PIERCING BOLT', 1.25), M.bash('STOCK BASH', 0.8)],
+  magicstaff: [M.shoot('ARCANE BOLT'), M.shoot('CHARGED BOLT', 1.2), M.sweep('STAFF SWEEP', 0.9, 1.15), M.over('STAFF STRIKE', 0.95, 1.1)],
+  boomerang: [M.hurl('BOOMERANG THROW'), M.hurl('WIDE ARC', 1.1), M.bash('CLOSE CRACK', 0.8), M.counter('RETURN STRIKE', 1.25)],
 };
 
 /**
@@ -181,12 +204,30 @@ export interface Spec {
   counter?: number;
   /** Can catch somebody who is walking into it. */
   sweep?: number;
-  /** Throws from beyond reach, this many times, then it is a melee weapon. */
-  ammo?: number;
+  /**
+   * WHAT IT DOES AT A DISTANCE, or nothing if it only works up close.
+   *
+   * A weapon with this fights at `hold` while it has shots left and falls
+   * back on its melee numbers when it runs out.  The two sides are deliberately
+   * separate: a weapon's melee power band says how good it is in a clinch and
+   * `ranged.dmg` says how good it is across the sand, so a dual-range weapon
+   * is written as good at one and mediocre at the other rather than as good
+   * at both.
+   */
+  ranged?: Ranged;
   /** Extra recovery, for a swing that takes a week to come back. */
   slowRecover?: number;
   /** Walking speed multiplier, for a weapon that is barely there. */
   fleet?: number;
+  /**
+   * IT IS TWO OBJECTS, NOT ONE.
+   *
+   * Dual swords and twin daggers are a blade in each hand, so losing one --
+   * broken or knocked away -- leaves the other one.  A paired weapon has to
+   * be taken twice before the hands are empty, and in between it fights as a
+   * single blade: the same strike, half as many of them.
+   */
+  paired?: boolean;
 }
 
 /**
@@ -206,6 +247,111 @@ export interface Spec {
  * supposed to beat a wooden club more often than not, and the fight is
  * supposed to be decided by what came out of the chests.
  */
+/**
+ * A WEAPON ON THE FLOOR.
+ *
+ * Knocked out of somebody's hand and lying where it fell.  It keeps the
+ * ROLLED piece, not just the kind, so picking a sword up gets you that
+ * sword -- the one with those four numbers on it -- rather than a fresh
+ * average one.  That is what makes losing your grip on a good weapon hurt
+ * and makes taking somebody else's worth the walk.
+ *
+ * It is part of the simulation and is passed into `exchange`, so a headless
+ * run drops and retrieves weapons exactly as a watched one does.
+ */
+export interface Dropped {
+  def: WeaponDef;
+  piece: Piece;
+  /** It is one blade of a pair, so whoever takes it gets one blade. */
+  single: boolean;
+  x: number;
+  /** Seconds left before the sand has it. */
+  life: number;
+  /** Seconds since it landed, so it is not snatched out of the air. */
+  settle: number;
+  /** Drawing only. */
+  art: Phaser.GameObjects.Container | null;
+}
+
+/** How often a staggering blow also takes the weapon out of their hand. */
+const DISARM_AT = 0.3;
+/** How long a dropped weapon waits to be claimed, and how long to settle. */
+const DROP_LIFE = 22;
+const DROP_SETTLE = 0.55;
+/** How long bending down to pick one up takes, before the weapon's own bulk. */
+const PICKUP_S = 0.42;
+/** How far a fighter will go out of its way for one. */
+const PICKUP_SEEK = 120;
+
+/**
+ * AN ARM, IN TWO PIECES.
+ *
+ * `root` turns at the shoulder and `fore` turns at the elbow, and because the
+ * hand and the weapon are both inside `fore`, bending the elbow carries them
+ * with it.  `hand` is where along the forearm the fist sits, so the weapon
+ * can be hung at the same place without measuring it twice.
+ */
+export interface Arm {
+  root: Phaser.GameObjects.Container;
+  fore: Phaser.GameObjects.Container;
+  hand: number;
+}
+
+/** What flies, which decides how it is drawn and how it travels. */
+export type Shot = 'arrow' | 'bolt' | 'knife' | 'axe' | 'spear' | 'stone' | 'spark' | 'dart' | 'disc';
+
+export interface Ranged {
+  /** How far the shot carries, in pixels of sand. */
+  far: number;
+  /** Multiplier on the weapon's own power when the shot lands. */
+  dmg: number;
+  /** Shots before it is a melee weapon.  Infinity for a bow. */
+  ammo: number;
+  /** Seconds of reloading on top of the ordinary beat between attacks. */
+  reload: number;
+  /** Wind-up weight for a shot, the same scale as a move's. */
+  wind: number;
+  /** What flies. */
+  shot: Shot;
+  /** Pixels a second.  A bolt is flat and fast, a stone is slow and lobbed. */
+  speed: number;
+  /** 0 flies flat, 1 is thrown right up in the air. */
+  arc: number;
+  /** Where the fighter wants to stand while it still has shots. */
+  hold: number;
+  /**
+   * Share of accuracy lost across the whole flight.
+   *
+   * This is what stops a bow being free damage: the shot is resolved when it
+   * ARRIVES, against wherever the target is by then, so a long shot gives
+   * them time to be somewhere else.  It is a real cost of shooting from far
+   * away rather than a number invented to hold the bow down.
+   */
+  drift?: number;
+  /**
+   * WHAT THE SHOT IS WORTH, on the same one-to-ten scale as everything else.
+   *
+   * A bow needs a poor MELEE band, or it is not a bow -- but then its shots
+   * had nothing to scale with either, and every bow in the game hit for very
+   * nearly the same amount however good the chest it came out of was.  That
+   * is how the ranged rack flattened the equipment gradient from 63/73 down
+   * to 53/59: twelve weapons for which better equipment barely mattered.
+   *
+   * The band here is rolled from the SAME roll as the melee one, mapped
+   * across -- a fine bow is a fine bow at both ends of the sheet, and the
+   * fighter who opened a better chest still shoots harder.
+   */
+  power?: Band;
+  /** Share of the target's armour the shot ignores. */
+  pierce?: number;
+  /** Extra chance the shot takes their feet. */
+  stagger?: number;
+  /** Extra pixels of knock-back where the shot lands. */
+  knock?: number;
+  /** The shot comes back, so it never runs out but it is slow to return. */
+  returns?: boolean;
+}
+
 export interface WeaponDef {
   key: string;
   name: string;
@@ -227,8 +373,16 @@ export type Band = readonly [number, number];
 
 export const WEAPONS: WeaponDef[] = [
   // ---- NOTHING AT ALL.  A real outcome, not a fallback.
-  { key: 'none', name: 'NO WEAPON', power: [1, 2], heavy: [1, 1], resist: [10, 10], reach: [1, 2], hits: 1, guard: 0, tempo: 1.15,
-    spec: { note: 'NOTHING TO CARRY, SO NOTHING SLOWS HIM', fleet: 1.18, combo: 1.15 } },
+  // ---- NOTHING AT ALL, and still dangerous.
+  //
+  // Bare hands have to stay a real outcome rather than a death sentence,
+  // because half the interesting things that happen in a bout -- a break, a
+  // disarm, a scramble for what is on the sand -- put somebody here.  Quick,
+  // relentless, and able to string a combination together; it beats an armed
+  // fighter by never letting them set, and it loses to anyone who can keep
+  // it at arm's length.
+  { key: 'none', name: 'NO WEAPON', power: [2, 4], heavy: [1, 1], resist: [10, 10], reach: [1, 3], hits: 1, guard: 0, tempo: 1.34,
+    spec: { note: 'NOTHING TO CARRY, AND IT NEVER STOPS COMING', fleet: 1.24, combo: 1.7, atClose: 0.5 } },
 
   // ---- IN CLOSE
   { key: 'knuckles', name: 'BRASS KNUCKLES', power: [2, 4], heavy: [1, 2], resist: [7, 10], reach: [1, 2], hits: 1, guard: 0, tempo: 1.7,
@@ -236,7 +390,7 @@ export const WEAPONS: WeaponDef[] = [
   { key: 'dagger', name: 'SHORT DAGGER', power: [2, 4], heavy: [1, 2], resist: [5, 8], reach: [2, 3], hits: 1, guard: 0, tempo: 1.55,
     spec: { note: 'FASTER THE CLOSER IT GETS', atClose: 0.45, combo: 1.3 } },
   { key: 'twindagger', name: 'TWIN DAGGERS', power: [2, 4], heavy: [1, 2], resist: [4, 7], reach: [1, 3], hits: 2, guard: 0, tempo: 1.6,
-    spec: { note: 'IN AND OUT, AND IN AGAIN', combo: 2.2, fleet: 1.15 } },
+    spec: { note: 'IN AND OUT, AND IN AGAIN', combo: 2.2, fleet: 1.15, paired: true } },
   { key: 'knife', name: 'TACTICAL KNIFE', power: [3, 5], heavy: [1, 2], resist: [5, 8], reach: [2, 4], hits: 1, guard: 0, tempo: 1.35,
     spec: { note: 'FINDS THE GAP IN ANYTHING', pierce: 0.45 } },
   { key: 'rapier', name: 'RAPIER', power: [2, 5], heavy: [1, 3], resist: [4, 7], reach: [4, 6], hits: 1, guard: 0, tempo: 1.5,
@@ -246,9 +400,10 @@ export const WEAPONS: WeaponDef[] = [
   { key: 'nunchuck', name: 'NUNCHUCKS', power: [2, 4], heavy: [2, 3], resist: [3, 6], reach: [4, 6], hits: 2, guard: 0, tempo: 1.4,
     spec: { note: 'IT NEVER STOPS COMING', combo: 2.6 } },
   { key: 'dual', name: 'DUAL SWORDS', power: [3, 5], heavy: [2, 4], resist: [4, 7], reach: [5, 7], hits: 2, guard: 0, tempo: 1.1,
-    spec: { note: 'TWO BLADES, TWO SMALLER WOUNDS', combo: 1.6, dodgeCut: 0.15 } },
+    spec: { note: 'TWO BLADES, TWO SMALLER WOUNDS', combo: 1.6, dodgeCut: 0.15, paired: true } },
   { key: 'throwing', name: 'THROWING KNIVES', power: [2, 4], heavy: [1, 2], resist: [2, 4], reach: [2, 4], hits: 1, guard: 0, tempo: 1.3,
-    spec: { note: 'OPENS FROM ACROSS THE SAND, THEN RUNS OUT', ammo: 5 } },
+    spec: { note: 'SIX OF THEM, FROM RIGHT ACROSS THE SAND',
+      ranged: { far: 145, dmg: 0.75, power: [3, 7], ammo: 7, reload: 0.35, wind: 0.75, shot: 'knife', speed: 235, arc: 0.14, hold: 85, drift: 0.16 } } },
 
   // ---- THE MIDDLE OF THE RACK
   { key: 'gladius', name: 'GLADIUS', power: [4, 6], heavy: [2, 4], resist: [6, 9], reach: [3, 5], hits: 1, guard: 0, tempo: 1.2,
@@ -261,12 +416,27 @@ export const WEAPONS: WeaponDef[] = [
     spec: { note: 'THEY HURT THEMSELVES ON IT', riposte: 7 } },
 
   // ---- LONG
-  { key: 'spear', name: 'SPEAR', power: [4, 7], heavy: [3, 5], resist: [5, 8], reach: [7, 9], hits: 1, guard: 0, tempo: 1.0,
-    spec: { note: 'WORST THING IN THE WORLD TO WALK TOWARDS', atRange: 0.5, pierce: 0.2 } },
+  // ---- DUAL RANGE, AND DELIBERATELY NOT BEST AT BOTH.
+  //
+  // The spear is a strong melee weapon that can also be thrown, so its throw
+  // is a WEAK one and there is only the single spear to throw: it opens the
+  // fight or finishes it, and then the spear is gone and it is a fistfight.
+  // The javelin is the other way round -- a strong throw on a weapon that is
+  // poor in the hand.  Neither beats the bow at range or the halberd up close.
+  // Everything it has is in the distance.  The power band is low and the
+  // range bonus is large, so a spear held at arm's length is the worst thing
+  // in the arena and a spear in a clinch is a stick with a point on it.
+  { key: 'spear', name: 'SPEAR', power: [3, 6], heavy: [3, 5], resist: [5, 8], reach: [7, 9], hits: 1, guard: 0, tempo: 1.0,
+    spec: { note: 'WORST THING TO WALK TOWARDS, AND IT THROWS ONCE', atRange: 0.68, pierce: 0.2,
+      ranged: { far: 124, dmg: 0.51, power: [2, 5], ammo: 1, reload: 1.1, wind: 1.25, shot: 'spear', speed: 205, arc: 0.24, hold: 69, drift: 0.2, pierce: 0.09 } } },
   { key: 'staff', name: 'LONG STICK', power: [3, 6], heavy: [3, 5], resist: [5, 8], reach: [8, 10], hits: 1, guard: 0, tempo: 0.95,
     spec: { note: 'YOU NEVER GET TO WHERE YOU ARE GOING', sweep: 0.45 } },
-  { key: 'trident', name: 'TRIDENT', power: [4, 7], heavy: [4, 6], resist: [6, 9], reach: [7, 9], hits: 1, guard: 0.12, tempo: 0.9,
-    spec: { note: 'HOLDS THEM OFF AND MAKES THEM PAY', atRange: 0.3, knock: 5 } },
+  // Still the best thing in the game at keeping somebody at arm's length,
+  // and now genuinely committed to every thrust: slower to bring round, a
+  // long recovery if it finds nothing, and less of it to wear out.
+  { key: 'trident', name: 'TRIDENT', power: [4, 7], heavy: [4, 6], resist: [5, 8], reach: [7, 9], hits: 1, guard: 0.12, tempo: 0.84,
+    spec: { note: 'HOLDS THEM OFF, AND COMMITS TO IT', atRange: 0.3, knock: 5, slowRecover: 0.45,
+      ranged: { far: 112, dmg: 0.54, power: [2, 5], ammo: 1, reload: 1.2, wind: 1.3, shot: 'spear', speed: 190, arc: 0.26, hold: 66, drift: 0.22 } } },
   { key: 'halberd', name: 'HALBERD', power: [5, 8], heavy: [5, 7], resist: [6, 9], reach: [7, 9], hits: 1, guard: 0, tempo: 0.8,
     spec: { note: 'A SPEAR ONE MOMENT AND AN AXE THE NEXT', atRange: 0.35, stagger: 0.2 } },
   { key: 'warscythe', name: 'WAR SCYTHE', power: [5, 8], heavy: [5, 8], resist: [4, 7], reach: [8, 10], hits: 1, guard: 0, tempo: 0.8,
@@ -278,7 +448,7 @@ export const WEAPONS: WeaponDef[] = [
   { key: 'club', name: 'WOODEN CLUB', power: [3, 6], heavy: [4, 6], resist: [6, 9], reach: [3, 5], hits: 1, guard: 0, tempo: 1.0,
     spec: { note: 'MOSTLY IT JUST SENDS THEM AWAY', knock: 11, stagger: 0.32 } },
   { key: 'axe', name: 'AXE', power: [7, 10], heavy: [6, 8], resist: [5, 8], reach: [5, 7], hits: 1, guard: 0, tempo: 0.8,
-    spec: { note: 'WHAT IT HITS, IT MOVES', stagger: 0.35 } },
+    spec: { note: 'IT OPENS ARMOUR AND MOVES WHAT IT HITS', stagger: 0.35, knock: 6, vsArmour: 1.35, slowRecover: 0.28 } },
   { key: 'mace', name: 'MACE', power: [5, 8], heavy: [5, 7], resist: [7, 10], reach: [4, 6], hits: 1, guard: 0, tempo: 0.88,
     spec: { note: 'THE MORE THEY WEAR, THE WORSE IT IS', vsArmour: 1.5, pierce: 0.25 } },
   { key: 'morningstar', name: 'MORNING STAR', power: [5, 8], heavy: [5, 7], resist: [5, 8], reach: [5, 7], hits: 1, guard: 0, tempo: 0.85,
@@ -291,10 +461,52 @@ export const WEAPONS: WeaponDef[] = [
     spec: { note: 'AN ENORMOUS ARC, AND A LONG WAY BACK', sweep: 0.4, slowRecover: 0.45 } },
   { key: 'greataxe', name: 'GREAT AXE', power: [8, 10], heavy: [8, 10], resist: [5, 8], reach: [6, 8], hits: 1, guard: 0, tempo: 0.62,
     spec: { note: 'IT SMELLS BLOOD', execute: 1.3, stagger: 0.25 } },
-  { key: 'heavyhammer', name: 'HEAVY HAMMER', power: [8, 10], heavy: [8, 10], resist: [8, 10], reach: [4, 6], hits: 1, guard: 0, tempo: 0.58,
+  { key: 'heavyhammer', name: 'HEAVY HAMMER', power: [8, 10], heavy: [8, 10], resist: [8, 10], reach: [4, 6], hits: 1, guard: 0, tempo: 0.66,
     spec: { note: 'ONCE IS USUALLY ENOUGH', knock: 16, stagger: 0.6, slowRecover: 0.4 } },
   { key: 'goldsword', name: 'GOLD SWORD', power: [8, 10], heavy: [7, 9], resist: [6, 9], reach: [6, 8], hits: 1, guard: 0, tempo: 0.7,
     spec: { note: 'TOO MUCH SWORD, AND WORTH IT', knock: 6, crit: 0.15 } },
+
+  // ---- THROWN, AND THEN YOU ARE HOLDING NOTHING MUCH
+  //
+  // A handful of shots and a poor weapon underneath.  These win by opening a
+  // lead across the sand and surviving what comes back, which is a different
+  // way to win a fight and loses badly to anyone who closes early.
+  { key: 'throwaxe', name: 'THROWING AXES', power: [3, 6], heavy: [2, 4], resist: [4, 7], reach: [3, 5], hits: 1, guard: 0, tempo: 1.1,
+    spec: { note: 'FOUR AXES, END OVER END', stagger: 0.18,
+      ranged: { far: 128, dmg: 0.83, power: [4, 9], ammo: 4, reload: 0.72, wind: 1.05, shot: 'axe', speed: 168, arc: 0.42, hold: 76, drift: 0.26, stagger: 0.16 } } },
+  { key: 'javelin', name: 'JAVELIN', power: [3, 5], heavy: [2, 4], resist: [3, 6], reach: [6, 8], hits: 1, guard: 0, tempo: 1.05,
+    spec: { note: 'THREE THROWS, AND EACH ONE MEANS IT',
+      ranged: { far: 178, dmg: 0.92, power: [5, 10], ammo: 3, reload: 0.95, wind: 1.2, shot: 'spear', speed: 212, arc: 0.3, hold: 105, drift: 0.24, pierce: 0.11 } } },
+  { key: 'chakram', name: 'CHAKRAM', power: [2, 4], heavy: [1, 3], resist: [3, 6], reach: [3, 5], hits: 1, guard: 0, tempo: 1.35,
+    spec: { note: 'FLAT, FAST, AND IT COMES BACK', combo: 1.4,
+      ranged: { far: 138, dmg: 0.78, power: [3, 7], ammo: 5, reload: 0.44, wind: 0.7, shot: 'disc', speed: 258, arc: 0.03, hold: 81, drift: 0.12 } } },
+
+  // ---- SHOOTS ALL DAY, AND CANNOT FIGHT AT ALL
+  //
+  // Infinite shots, and melee numbers that are honestly awful: a bow in a
+  // clinch is a stick.  The whole weapon is the distance, so anything that
+  // gets inside it wins, and that is the trade the card should make obvious.
+  { key: 'sling', name: 'SLINGSHOT', power: [1, 3], heavy: [1, 2], resist: [2, 4], reach: [1, 3], hits: 1, guard: 0, tempo: 1.45,
+    spec: { note: 'A STONE EVERY SECOND, FOREVER', fleet: 1.16,
+      ranged: { far: 168, dmg: 0.57, power: [2, 6], ammo: Infinity, reload: 0.46, wind: 0.68, shot: 'stone', speed: 152, arc: 0.58, hold: 99, drift: 0.3, stagger: 0.1 } } },
+  { key: 'blowgun', name: 'BLOWGUN', power: [1, 2], heavy: [1, 1], resist: [1, 3], reach: [1, 3], hits: 1, guard: 0, tempo: 1.5,
+    spec: { note: 'LITTLE DARTS, AND A GREAT MANY OF THEM', fleet: 1.2,
+      ranged: { far: 152, dmg: 0.44, power: [1, 5], ammo: Infinity, reload: 0.28, wind: 0.5, shot: 'dart', speed: 244, arc: 0.06, hold: 91, drift: 0.2, pierce: 0.23 } } },
+  { key: 'bow', name: 'SHORT BOW', power: [2, 4], heavy: [1, 3], resist: [2, 5], reach: [1, 3], hits: 1, guard: 0, tempo: 1.2,
+    spec: { note: 'NOTHING IN THE HAND, EVERYTHING AT RANGE',
+      ranged: { far: 196, dmg: 0.68, power: [4, 8], ammo: Infinity, reload: 0.7, wind: 0.85, shot: 'arrow', speed: 218, arc: 0.22, hold: 114, drift: 0.22 } } },
+  { key: 'longbow', name: 'LONG BOW', power: [2, 4], heavy: [2, 4], resist: [3, 6], reach: [2, 4], hits: 1, guard: 0, tempo: 1.0,
+    spec: { note: 'IT REACHES THE FAR WALL', slowRecover: 0.2,
+      ranged: { far: 238, dmg: 0.89, power: [5, 10], ammo: Infinity, reload: 1.0, wind: 1.35, shot: 'arrow', speed: 236, arc: 0.28, hold: 138, drift: 0.28, pierce: 0.07 } } },
+  { key: 'crossbow', name: 'CROSSBOW', power: [3, 5], heavy: [3, 5], resist: [5, 8], reach: [2, 4], hits: 1, guard: 0.06, tempo: 0.9,
+    spec: { note: 'ONE BOLT, STRAIGHT THROUGH THE PLATE', slowRecover: 0.3,
+      ranged: { far: 214, dmg: 0.87, power: [6, 10], ammo: Infinity, reload: 1.78, wind: 1.15, shot: 'bolt', speed: 312, arc: 0.04, hold: 127, drift: 0.1, pierce: 0.2 } } },
+  { key: 'magicstaff', name: 'MAGIC STAFF', power: [3, 5], heavy: [2, 4], resist: [4, 7], reach: [5, 7], hits: 1, guard: 0, tempo: 1.0,
+    spec: { note: 'IT DOES NOT CARE WHAT YOU ARE WEARING', sweep: 0.2,
+      ranged: { far: 182, dmg: 0.59, power: [3, 8], ammo: Infinity, reload: 1.22, wind: 1.0, shot: 'spark', speed: 186, arc: 0.1, hold: 109, drift: 0.18, pierce: 0.25 } } },
+  { key: 'boomerang', name: 'BOOMERANG', power: [2, 4], heavy: [1, 3], resist: [3, 6], reach: [2, 4], hits: 1, guard: 0, tempo: 1.3,
+    spec: { note: 'IT GOES OUT AND IT COMES BACK', fleet: 1.12,
+      ranged: { far: 150, dmg: 0.75, power: [3, 7], ammo: Infinity, reload: 0.66, wind: 0.8, shot: 'disc', speed: 172, arc: 0.36, hold: 89, drift: 0.26, returns: true, knock: 3 } } },
 ];
 
 /** Bare hands, for a weapon that has broken.  The same row as an empty chest. */
@@ -314,6 +526,26 @@ export interface ArmourMat {
   def: number;
   /** Chance a full suit of it avoids a blow outright.  Tactical, and only it. */
   evade: number;
+  /**
+   * DAMAGE BACK TO A BARE HAND THAT HITS IT.
+   *
+   * Spiked armour's line has always read UNPLEASANT TO HIT and nothing in the
+   * rules ever made that true -- it was a defence number with a story on it.
+   * A fist or a boot driven into a suit of spikes hurts the person throwing
+   * it; a sword does not care, so this only ever answers an UNARMED attacker.
+   * Scaled by how much of the suit is actually spiked, so one spiked greave
+   * is a tenth of the deterrent a full suit is.
+   */
+  thorns?: number;
+  /**
+   * EXTRA SHARE TAKEN OFF A LIGHT BLOW.
+   *
+   * Scale is overlapping plates that ride over each other, so it shrugs off
+   * the fast repeated stuff and gives up on anything with real weight behind
+   * it.  Without this it was chain with a worse defence number and a
+   * different colour.
+   */
+  soft?: number;
   heavy: Band;
   resist: Band;
   colour: number;
@@ -331,19 +563,19 @@ export interface ArmourMat {
 export const MATERIALS: ArmourMat[] = [
   // ---- NOTHING, AND THE THINGS THAT BARELY COUNT
   { key: 'none', name: 'NO ARMOUR', def: 0, evade: 0, heavy: [1, 1], resist: [10, 10], colour: 0x6d5a45, edge: 0x4a3c2d, short: 'NONE', note: 'NOTHING THERE, AND NOTHING TO CARRY' },
-  { key: 'cloth', name: 'LIGHT CLOTH', def: 0.04, evade: 0.04, heavy: [1, 2], resist: [2, 4], colour: 0xd8cbb0, edge: 0x9a8e74, short: 'CLOTH', note: 'YOU WILL BE VERY QUICK AND VERY SORRY' },
+  { key: 'cloth', name: 'LIGHT CLOTH ARMOUR', def: 0.04, evade: 0.09, heavy: [1, 1], resist: [2, 4], colour: 0xd8cbb0, edge: 0x9a8e74, short: 'CLOTH', note: 'YOU WILL BE VERY QUICK AND VERY SORRY' },
   { key: 'tuxedo', name: 'TUXEDO', def: 0.05, evade: 0, heavy: [1, 2], resist: [2, 4], colour: 0x2a2d3a, edge: 0xdfe4ee, short: 'TUXEDO', note: 'FIVE PERCENT DEFENCE. THE REST IS FASHION' },
   { key: 'crown', name: 'CROWN', def: 0.06, evade: 0, heavy: [1, 2], resist: [3, 5], colour: 0xffd45e, edge: 0xa8801e, short: 'CROWN', note: 'IT PROTECTS NOTHING AND MEANS EVERYTHING' },
 
   // ---- LIGHT
   { key: 'leather', name: 'LEATHER ARMOUR', def: 0.10, evade: 0, heavy: [2, 4], resist: [5, 7], colour: 0x9c7248, edge: 0x5d4028, short: 'LEATHER', note: 'LIGHT, AND ABOUT AS USEFUL AS THAT SOUNDS' },
   { key: 'tactical', name: 'TACTICAL ARMOUR', def: 0.10, evade: 0.15, heavy: [2, 4], resist: [6, 8], colour: 0x3f4a3a, edge: 0x22281f, short: 'TACTICAL', note: 'STOPS LITTLE. MUCH HARDER TO HIT' },
-  { key: 'reinforced', name: 'REINFORCED HIDE', def: 0.13, evade: 0, heavy: [3, 5], resist: [7, 9], colour: 0x7a5a3a, edge: 0x452f1c, short: 'R.HIDE', note: 'LEATHER THAT HAS BEEN THOUGHT ABOUT' },
+  { key: 'reinforced', name: 'REINFORCED LEATHER', def: 0.13, evade: 0, heavy: [3, 5], resist: [7, 9], colour: 0x7a5a3a, edge: 0x452f1c, short: 'R.LEATHER', note: 'LEATHER THAT HAS BEEN THOUGHT ABOUT' },
   { key: 'tin', name: 'TIN ARMOUR', def: 0.15, evade: 0, heavy: [3, 5], resist: [3, 5], colour: 0xb9c2c8, edge: 0x6d767c, short: 'TIN', note: 'CHEAP, LOUD, BETTER THAN A SHIRT' },
   { key: 'hood', name: 'CHAIN HOOD', def: 0.16, evade: 0, heavy: [3, 5], resist: [6, 8], colour: 0x87909c, edge: 0x464e58, short: 'HOOD', note: 'RINGS, AND NOT MANY OF THEM' },
 
   // ---- THE MIDDLE
-  { key: 'scale', name: 'SCALE ARMOUR', def: 0.18, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x6f8a6a, edge: 0x3a4a38, short: 'SCALE', note: 'OVERLAPPING, SO IT GIVES WHERE YOU DO' },
+  { key: 'scale', name: 'SCALE ARMOUR', def: 0.18, evade: 0, soft: 0.34, heavy: [4, 6], resist: [6, 8], colour: 0x6f8a6a, edge: 0x3a4a38, short: 'SCALE', note: 'SHRUGS OFF THE QUICK ONES. NOT THE BIG ONES' },
   { key: 'chain', name: 'CHAIN ARMOUR', def: 0.20, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8e9cad, edge: 0x4a5665, short: 'CHAIN', note: 'THE HONEST MIDDLE OF THE RACK' },
   { key: 'bronze', name: 'BRONZE ARMOUR', def: 0.21, evade: 0, heavy: [5, 7], resist: [5, 7], colour: 0xc08a3e, edge: 0x6f4b1c, short: 'BRONZE', note: 'OLDER THAN IRON AND NEARLY AS GOOD' },
   { key: 'viking', name: 'VIKING HELM', def: 0.22, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x9aa3ad, edge: 0x4e555e, short: 'VIKING', note: 'HORNS, WHICH HELP WITH NOTHING' },
@@ -354,7 +586,7 @@ export const MATERIALS: ArmourMat[] = [
   // ---- HEAVY
   { key: 'iron', name: 'IRON ARMOUR', def: 0.25, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x6f7682, edge: 0x3a4149, short: 'IRON', note: 'HEAVY, AND WORTH IT' },
   { key: 'shoulder', name: 'SHOULDER GUARDS', def: 0.26, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x7e868f, edge: 0x424952, short: 'PAULDRON', note: 'ENORMOUS. YOU WILL NOT TURN QUICKLY' },
-  { key: 'spiked', name: 'SPIKED ARMOUR', def: 0.26, evade: 0, heavy: [6, 8], resist: [6, 8], colour: 0x5e5a63, edge: 0xbfc6cf, short: 'SPIKED', note: 'UNPLEASANT TO HIT AND TO WEAR' },
+  { key: 'spiked', name: 'SPIKED ARMOUR', def: 0.26, evade: 0, thorns: 9, heavy: [6, 8], resist: [6, 8], colour: 0x5e5a63, edge: 0xbfc6cf, short: 'SPIKED', note: 'PUNCH IT AND FIND OUT. BLADES DO NOT CARE' },
   { key: 'plate', name: 'PLATE ARMOUR', def: 0.28, evade: 0, heavy: [7, 9], resist: [8, 10], colour: 0xc3cad4, edge: 0x646c78, short: 'PLATE', note: 'A WALL WITH A FROG INSIDE IT' },
   { key: 'gold', name: 'GOLD ARMOUR', def: 0.30, evade: 0, heavy: [7, 9], resist: [4, 6], colour: 0xffd45e, edge: 0xa8801e, short: 'GOLD', note: 'THE BEST THERE IS, AND THE SOFTEST' },
   { key: 'heavyplate', name: 'HEAVY PLATE', def: 0.33, evade: 0, heavy: [9, 10], resist: [9, 10], colour: 0x9aa2ae, edge: 0x4d545e, short: 'H.PLATE', note: 'NOTHING GETS IN. NOTHING GETS OUT EITHER' },
@@ -497,8 +729,12 @@ export interface LizardType {
 }
 
 export const LIZARDS: LizardType[] = [
-  { key: 'muscle', name: 'MUSCULAR LIZARD', power: 1.22, speed: 0.85, avoid: 0.84, resist: 1.2, nerve: 1.2, spacing: 0.9,
-    build: { scale: 1.12, wide: 1.55, tall: 0.94, limb: 0.86, head: 0.92, skin: 0x8f4a22, light: 0xc07038, dark: 0x532a12, crest: 0xd2452f },
+  // ---- THE BIG ONE.  Bigger and a shade taller than Froggy, and still
+  // clearly shorter than the reach lizard, which is the one that towers.
+  // It pays for the size in avoidance: a fifth less than the plain build,
+  // declared here on the same line as the size rather than hidden anywhere.
+  { key: 'muscle', name: 'MUSCULAR LIZARD', power: 1.22, speed: 0.85, avoid: 0.8, resist: 1.2, nerve: 1.2, spacing: 0.9,
+    build: { scale: 1.18, wide: 1.6, tall: 1.04, limb: 1.0, head: 0.95, skin: 0x8f4a22, light: 0xc07038, dark: 0x532a12, crest: 0xd2452f },
     blurb: 'HITS LIKE A DOOR' },
   { key: 'fast', name: 'FAST LIZARD', power: 0.82, speed: 1.32, avoid: 1.2, resist: 0.8, nerve: 1.05, spacing: 1.0,
     build: { scale: 0.92, wide: 0.7, tall: 1.1, limb: 1.28, head: 0.9, skin: 0xc07a2e, light: 0xe8a94e, dark: 0x6d4114, crest: 0xffd45e },
@@ -664,6 +900,23 @@ export function statsOf(kit: Kit, weapon: WeaponDef, wRolls?: Piece, type?: Liza
  * forever.  Resistance is the stat that ought to say how long a thing lasts,
  * and now it does for both.
  */
+/**
+ * HOW MUCH OF A SUIT HAS A GIVEN PROPERTY ON IT, 0..1.
+ *
+ * Armour is three separate pieces and they are rarely the same material, so
+ * "is he wearing spikes" is not a yes or no -- a spiked helm is a quarter of
+ * a spiked suit.  Weighted by COVER, the same share each piece takes of the
+ * blows, so one spiked greave deters a tenth of what a full suit does.
+ */
+function suitShare(kit: Kit, pick: (m: ArmourMat) => number | undefined): number {
+  let n = 0;
+  for (const sl of ['head', 'body', 'legs'] as const) {
+    const m = kit[sl].mat;
+    if (m && m.key !== 'none') n += (pick(m) ?? 0) * COVER[sl];
+  }
+  return n;
+}
+
 export function armourLife(p: Piece): number {
   if (!p.mat || p.mat.key === 'none') return Infinity;
   return ARMOUR_BASE + p.rResist * ARMOUR_PER_RESIST;
@@ -681,10 +934,20 @@ const ARMOUR_PER_RESIST = 0.5;
 /** How many swings this weapon has in it before it can break. */
 export function durabilityOf(w: Piece): number {
   if (!w.weapon || w.weapon.key === 'none') return Infinity;
-  return DUR_BASE + w.rResist * DUR_PER_RESIST;
+  // ---- THE BETTER IT HITS, THE SOONER IT GOES.
+  //
+  // Durability was resistance and nothing else, so the top of the rack could
+  // be the hardest hitting AND the longest lasting at the same time -- which
+  // is the one thing a high tier weapon is not supposed to be.  Power now
+  // eats into it and a light quick weapon keeps a little back, so a claymore
+  // is a loan against the rest of the fight and a dagger is not.
+  const power = (w.weapon.power[0] + w.weapon.power[1]) / 2;
+  const heft = Math.max(0.62, 1 - (power - 4) * 0.045);
+  const nimble = 1 + Math.max(0, w.weapon.tempo - 1) * 0.3;
+  return Math.max(2, (DUR_BASE + w.rResist * DUR_PER_RESIST) * heft * nimble);
 }
 
-type Act = 'walk' | 'windup' | 'strike' | 'recover' | 'dodge' | 'guard' | 'stagger' | 'lunge';
+type Act = 'walk' | 'windup' | 'strike' | 'recover' | 'dodge' | 'guard' | 'stagger' | 'lunge' | 'pickup';
 
 export interface Fighter {
   who: 'frog' | 'lizard';
@@ -729,8 +992,12 @@ export interface Fighter {
    */
   counterT: number;
   countering: boolean;
-  /** Knives left to throw. */
+  /** Shots left.  Infinity for a bow, 0 once a thrower is empty. */
   ammo: number;
+  /** Seconds of reloading still owed before the next shot. */
+  reload: number;
+  /** Shots in the air, which are resolved when they arrive and not before. */
+  flight: InFlight[];
   /** What is left of each piece of armour, and which are already gone. */
   wear: Record<'head' | 'body' | 'legs', number>;
   gone: Record<'head' | 'body' | 'legs', boolean>;
@@ -752,6 +1019,23 @@ export interface Fighter {
    * because `x` is the fighting distance the balance was measured on.
    */
   armA: number;
+  /** How many more of this weapon there are to lose before the hands are empty. */
+  spares: number;
+  /** Down to one blade of a pair: same strike, half as many. */
+  single: boolean;
+  /** The weapon on the sand this fighter is currently going for, if any. */
+  seeking: Dropped | null;
+  /**
+   * The end-of-fight pose, which the per-frame rig must not fight over.
+   *
+   * `celebrates` and `goesDown` drive the limbs with tweens once the fight is
+   * decided.  `poseFighter` runs every frame and would put every one of those
+   * limbs back where the walk cycle wants them, so it hands the rig over the
+   * moment this stops being 'none'.
+   */
+  pose: 'none' | 'cheer' | 'down';
+  /** The eased elbow angle.  Drawing only, like `armA`. */
+  elbowA: number;
   leanA: number;
   shove: number;
   art: FighterArt | null;
@@ -766,8 +1050,10 @@ export function makeFighter(who: 'frog' | 'lizard', kit: Kit, x: number, face: 1
     riposte: false, chain: 0, desperate: false, move: null, counterT: 0, countering: false,
     wear: { head: armourLife(kit.head), body: armourLife(kit.body), legs: armourLife(kit.legs) },
     gone: { head: false, body: false, legs: false },
-    ammo: kit.weapon.weapon?.spec.ammo ?? 0, lastGap: 999, clock: 0,
-    armA: -10, leanA: 0, shove: 0, art: null,
+    ammo: kit.weapon.weapon?.spec.ranged?.ammo ?? 0, reload: 0, flight: [],
+    lastGap: 999, clock: 0,
+    spares: kit.weapon.weapon?.spec.paired ? 1 : 0, single: false,
+    seeking: null, pose: 'none', armA: -10, elbowA: -14, leanA: 0, shove: 0, art: null,
   };
 }
 
@@ -815,11 +1101,96 @@ export function wearArmour(f: Fighter, rng: () => number = Math.random): { slot:
 }
 
 /** A weapon gives out.  Everything it was worth goes with it; the armour stays. */
+/**
+ * PUT WHAT IS IN A FIGHTER'S HAND ON THE FLOOR.
+ *
+ * Used by a disarm, and the reason `ground` is threaded through the whole
+ * simulation rather than living in the scene: what is lying on the sand
+ * changes how both fighters behave, so it has to be part of the fight and
+ * not part of the drawing.
+ */
+export function dropWeapon(f: Fighter, ground: Dropped[], rng: () => number = Math.random): Dropped | null {
+  if (f.broken || f.weapon.key === 'none') return null;
+  const d: Dropped = {
+    def: f.weapon,
+    piece: f.kit.weapon,
+    single: true,
+    // thrown clear, on the side the blow came from
+    x: Phaser.Math.Clamp(f.x - f.face * (16 + rng() * 22), ARENA.left + 4, ARENA.right - 4),
+    life: DROP_LIFE,
+    settle: DROP_SETTLE,
+    art: null,
+  };
+  ground.push(d);
+  // ---- ONE OF A PAIR STILL LEAVES THE OTHER.
+  //
+  // Knocking a blade out of a two-handed fighter's grip should cost them a
+  // blade, not the fight.  They keep the one still in the other hand and
+  // fight on with it -- same strike, half as many -- and it takes a second
+  // knock to leave them bare.
+  if (f.spares > 0 && !f.single) {
+    f.spares -= 1;
+    f.single = true;
+    f.st = statsOf(f.kit, f.weapon, f.held, f.type);
+    f.hp = Math.min(f.hp, f.st.maxHp);
+    return d;
+  }
+  f.broken = true;
+  f.single = false;
+  f.weapon = UNARMED;
+  f.held = emptyHands();
+  f.dur = Infinity;
+  f.ammo = 0;
+  f.reload = 0;
+  f.st = statsOf(f.kit, UNARMED, f.held, f.type);
+  f.hp = Math.min(f.hp, f.st.maxHp);
+  return d;
+}
+
+/**
+ * PICK ONE UP, and be holding it properly.
+ *
+ * The rolled piece goes back into the kit, so the weapon fights with the
+ * numbers it was rolled with and its durability starts fresh in the new
+ * hand -- it has been dropped, not worn out.
+ */
+export function takeWeapon(f: Fighter, d: Dropped, ground: Dropped[]): void {
+  const i = ground.indexOf(d);
+  if (i >= 0) ground.splice(i, 1);
+  f.kit = { ...f.kit, weapon: d.piece };
+  f.weapon = d.def;
+  f.held = d.piece;
+  f.broken = false;
+  f.single = d.single && !!d.def.spec.paired;
+  f.spares = 0;
+  f.dur = durabilityOf(d.piece);
+  f.ammo = d.def.spec.ranged?.ammo ?? 0;
+  f.reload = 0;
+  f.seeking = null;
+  f.st = statsOf(f.kit, d.def, f.held, f.type);
+  f.hp = Math.min(f.hp, f.st.maxHp);
+}
+
 export function breakWeapon(f: Fighter): void {
+  // A snapped blade out of a pair leaves the other one, exactly as a
+  // knocked-away one does, and the durability clock starts again on it.
+  if (f.spares > 0 && !f.single) {
+    f.spares -= 1;
+    f.single = true;
+    f.dur = durabilityOf(f.kit.weapon);
+    f.st = statsOf(f.kit, f.weapon, f.held, f.type);
+    f.hp = Math.min(f.hp, f.st.maxHp);
+    return;
+  }
+  f.single = false;
   f.broken = true;
   f.weapon = UNARMED;
   f.held = emptyHands();
   f.dur = Infinity;
+  // A broken bow shoots nothing.  Anything already in the air still arrives --
+  // it left the string before the stave went, and the crowd can see it.
+  f.ammo = 0;
+  f.reload = 0;
   f.st = statsOf(f.kit, UNARMED, f.held, f.type);
   // Health is not re-rolled: the armour is still on, and it is the armour that
   // health comes from.  Only the cap moves, and it moves nowhere, because
@@ -842,6 +1213,17 @@ const DODGE_BONUS = 0.4;
 const DODGE_COOL = 0.7;
 /** Damage a guarding fighter turns aside on top of the weapon's own guard. */
 const GUARD_CUT = 0.3;
+/**
+ * WHAT CATCHING A BLOW ON YOUR WEAPON COSTS IT.
+ *
+ * Blocking was free, which made a raised guard strictly better than not
+ * having one and meant the only question was whether the fighter happened to
+ * carry a shield.  Taking a war hammer on the flat of a dagger should tell on
+ * the dagger.  The wear is the damage that was turned aside, divided by how
+ * much weapon there is to turn it aside with -- so a spiked shield can stand
+ * there all afternoon and a bow-stave used as a bar snaps in three or four.
+ */
+const BLOCK_WEAR = 1.15;
 /** Below this share of health a fighter starts looking after itself, */
 const HURT_AT = 0.35;
 /** and below this it stops, because there is nothing left to save it for. */
@@ -856,14 +1238,13 @@ const WEARY_AT = 55;
 const WEARY_OVER = 45;
 /** A critical is worth this much of an ordinary blow. */
 const CRIT_MUL = 1.8;
-/** How far a thrown knife carries, and what it is worth out there. */
-const THROW_REACH = 92;
-const THROW_MUL = 0.72;
 /**
  * How far a move's own multipliers are allowed to move the swing they modify.
  * At full strength they overruled the equipment; at half they colour it.
  */
 const MOVE_SHARE = 0.55;
+/** Share of walking pace kept while backing away.  See the footwork below. */
+const RETREAT = 0.62;
 const MOVE_WEIGHT = (n: number): number => 1 + (n - 1) * MOVE_SHARE;
 /**
  * A move's reach counts for half too, and for the same reason.
@@ -903,8 +1284,20 @@ const OVER_LOSE_MS = 3200;
  * is both what a guard looks like and the only way to tell there are two of
  * them at this size.
  */
-const GUARD_LEAD = -38;
-const GUARD_REAR = -66;
+// ---- A BOXER'S UPPER ARM POINTS DOWN.
+//
+// These were negative, which tips the whole upper arm UPWARD from the
+// shoulder -- and once the elbow folded on top of that the forearm came out
+// at about -120 absolute and put the hand above and behind the skull.  The
+// fighter looked like he was waving.
+//
+// The shape is: upper arm hanging down and slightly forward, elbow tucked
+// near the ribs, forearm coming back UP to the chin.  So the shoulder angle
+// is positive and the elbow does the work.
+const GUARD_LEAD = 34;
+const GUARD_REAR = 22;
+/** How far the elbow shuts in a guard, measured from the upper arm. */
+const GUARD_FOLD = -118;
 const OFF_ARM_REST = 24;
 /** How much of the way to the target angle a limb travels each frame. */
 const ARM_SNAP = 0.62;
@@ -927,11 +1320,44 @@ const BODY_CLEAR = 31;
 /** How long the emptied chest takes to fold up before the next five fall. */
 const COLLAPSE_MS = 240;
 /** Inside this share of its own reach, a weapon is being swung wrong, */
-const INSIDE_FRAC = 0.75;
+const INSIDE_FRAC = 0.88;
 /** down to this much of its power at nose-to-nose. */
 const INSIDE_MIN = 0.25;
 /** The arena's two walls, in the fighters' own coordinates. */
 export const ARENA = { left: 26, right: GAME_W - 26 };
+
+/**
+ * A SHOT THAT HAS LEFT THE HAND AND HAS NOT ARRIVED YET.
+ *
+ * The whole point of keeping this is that an arrow is resolved WHERE IT LANDS,
+ * against wherever the target has got to by then -- not at the moment it was
+ * loosed.  That is what makes shooting from the far wall a real decision
+ * rather than free damage: the longer the flight, the more chance they have
+ * moved, dodged, or closed the distance on you.
+ *
+ * It is part of the simulation, not of the drawing: `t` runs off the same dt
+ * as everything else, so a headless run lands its arrows at exactly the same
+ * moments as one with a screen attached.
+ */
+export interface InFlight {
+  kind: Shot;
+  /** Seconds left before it arrives. */
+  t: number;
+  /** Total flight, so the drawing knows how far along it is. */
+  total: number;
+  from: number;
+  /** Where it was aimed, which is not necessarily where they are now. */
+  aim: number;
+  arc: number;
+  /** The attacker's power at the moment of the shot, and the move's name. */
+  power: number;
+  move?: string;
+  r: Ranged;
+  /** Flags for the moment it lands. */
+  crit: boolean;
+  /** Drawing only.  The sprite is hung off the shot so it can be destroyed. */
+  art: Phaser.GameObjects.Container | null;
+}
 
 export interface Blow {
   hit: boolean;
@@ -940,12 +1366,20 @@ export interface Blow {
   clashed?: boolean;
   /** Which attack it was, so the arena can name it. */
   move?: string;
+  /** The blow knocked the weapon clean out of the defender's hand. */
+  disarmed?: Dropped;
+  /** The defender's weapon gave out catching this one. */
+  blockBroke?: boolean;
+  /** The attacker put a bare hand into a suit of spikes, and this is the bill. */
+  spiked?: number;
   /** A piece of the defender's armour came off on this one, and its colour. */
   stripped?: 'head' | 'body' | 'legs';
   strippedTint?: number;
   /** It was a critical, a thrown knife, a counter, or it hurt the thrower. */
   crit?: boolean;
   thrown?: boolean;
+  /** A shot has just been loosed -- no damage yet, it is still in the air. */
+  loosed?: InFlight;
   countered?: boolean;
   riposted?: boolean;
   /** It was big enough to take the legs from under them. */
@@ -966,21 +1400,228 @@ export interface Blow {
  * `rng` is injectable so the whole thing can be run ten thousand times with a
  * seeded roll and the answer checked, rather than watched.
  */
-export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Math.random): Blow {
+/**
+ * THE HALF OF A BLOW THAT IS THE SAME WHETHER IT WAS SWUNG OR SHOT.
+ *
+ * Weariness, armour, a raised guard, the health, the wear on the suit and
+ * being put on the floor.  Pulled out so an arrow and an axe go through the
+ * identical arithmetic and a ranged weapon cannot quietly acquire a different
+ * set of rules from a melee one.
+ */
+/**
+ * HOW MUCH A RAISED WEAPON ACTUALLY TURNS ASIDE.
+ *
+ * A flat share for everybody meant a twig and a tower shield were the same
+ * block.  It reads off the weapon's own resistance roll, so what you are
+ * holding decides whether getting it in the way was worth doing -- and bare
+ * arms are a real block too, just a poor one.
+ */
+function guardPower(def: Fighter): number {
+  if (def.broken || def.weapon.key === 'none') return GUARD_CUT * 0.45;
+  // Deliberately a wide spread.  A block is a thing your EQUIPMENT does for
+  // you, so a well-made weapon should turn aside a great deal more than a
+  // cheap one -- at a narrow spread, blocking helps whoever is losing and
+  // quietly flattens the gap that good gear is supposed to open.
+  return GUARD_CUT * (0.25 + (def.held.rResist ?? 5) / 8);
+}
+
+/**
+ * And what it cost the thing that did the turning aside.
+ *
+ * Charged on the damage that was ACTUALLY stopped, so a block that barely
+ * helped barely wears, and catching something enormous on something flimsy
+ * is how a weapon ends up in two pieces.
+ */
+function wearFromBlock(def: Fighter, stopped: number): boolean {
+  if (def.broken || def.weapon.key === 'none' || !Number.isFinite(def.dur)) return false;
+  def.dur -= (stopped * BLOCK_WEAR) / Math.max(1.5, def.held.rResist);
+  if (def.dur > 0) return false;
+  breakWeapon(def);
+  return true;
+}
+
+function applyDamage(att: Fighter, def: Fighter, raw: number, out: Blow, rng: () => number,
+  o: { pierce: number; soak: number; stagger: number; knock: number; ground?: Dropped[]; blocked?: boolean; ranged?: boolean }): void {
+  const weary = Math.min(1, Math.max(0, (att.clock - WEARY_AT) / WEARY_OVER));
+  raw *= 1 + weary * 0.6;
+  const armour = def.st.defence * (1 - o.pierce) * (1 - weary);
+  out.hit = true;
+  // ---- SCALE TAKES THE EDGE OFF A LIGHT BLOW AND NOT A HEAVY ONE.
+  //
+  // Overlapping plates ride over each other, so the fast repeated stuff is
+  // what they are for.  The share falls away as the blow gets bigger and is
+  // gone entirely by the time something is landing a third of a fighter's
+  // health, which is when nothing that flexes is going to help.
+  const soft = suitShare(def.kit, (m) => m.soft);
+  let armour2 = armour;
+  if (soft > 0) {
+    const weight = Math.min(1, raw / Math.max(1, def.st.maxHp * 0.3));
+    armour2 = Math.min(0.92, armour + soft * (1 - weight));
+  }
+  const through = raw * (1 - armour2);
+  out.dmg = Math.max(1, Math.round(through * (1 - o.soak)));
+  // the share the guard actually stopped is what the weapon pays for
+  if (o.blocked) {
+    const stopped = Math.max(0, through - out.dmg);
+    if (stopped > 0 && wearFromBlock(def, stopped)) out.blockBroke = true;
+  }
+  def.hp = Math.max(0, def.hp - out.dmg);
+
+  // ---- AND WHAT A BARE FIST FINDS IN A SUIT OF SPIKES.
+  //
+  // Only an unarmed attacker: a sword, an arrow or a thrown axe meets the
+  // spikes with something that is not skin and does not care.  It is the one
+  // thing in the game that punishes the unarmed state, which is what makes
+  // spiked armour worth carrying against somebody who has lost their weapon.
+  const bareHand = !o.ranged && (att.broken || att.weapon.key === 'none');
+  if (bareHand && att.hp > 0) {
+    const spikes = suitShare(def.kit, (m) => m.thorns);
+    if (spikes > 0) {
+      out.spiked = Math.max(1, Math.round(spikes));
+      att.hp = Math.max(0, att.hp - out.spiked);
+    }
+  }
+
+  if (def.hp > 0) {
+    const off = wearArmour(def, rng);
+    if (off) { out.stripped = off.slot; out.strippedTint = off.tint; }
+  }
+  const floored = out.dmg >= def.st.maxHp * STAGGER_AT || rng() < o.stagger;
+  // ---- AND SOMETIMES IT TAKES THE WEAPON WITH IT.
+  //
+  // Only off a blow that already put them on the floor, and likelier the
+  // heavier that blow was and the heavier the thing they were holding --
+  // a hammer swung at somebody clinging to a claymore is how a weapon ends
+  // up in the sand.  It is the same roll for both fighters and reads off
+  // nothing but the damage and the grip.
+  if (def.hp > 0 && floored && !def.broken && def.weapon.key !== 'none' && o.ground) {
+    const share = Math.min(1, out.dmg / Math.max(1, def.st.maxHp * 0.3));
+    const grip = 1 / (1 + def.held.rHeavy * 0.16);
+    if (rng() < DISARM_AT * share * grip) {
+      const d = dropWeapon(def, o.ground, rng);
+      if (d) out.disarmed = d;
+    }
+  }
+  if (def.hp > 0 && floored) {
+    out.staggered = true;
+    def.act = 'stagger';
+    def.t = STAGGER_S;
+    def.chain = 0;
+    def.riposte = false;
+    def.x = Phaser.Math.Clamp(def.x + (def.x < att.x ? -1 : 1) * (KNOCK_PX + o.knock), ARENA.left, ARENA.right);
+  }
+}
+
+/**
+ * LOOSE A SHOT.  Nothing is decided here except that it is on its way.
+ *
+ * Damage, dodging and armour all wait for `landShot`, because an arrow that
+ * takes half a second to cross the sand should be answered by where the
+ * target IS when it gets there.  A fighter who sees it coming and closes the
+ * distance has genuinely done something about it.
+ */
+/**
+ * What this fighter's shots are worth, from the roll already on the sheet.
+ *
+ * The weapon was rolled once.  Where the shot has a band of its own, that one
+ * roll's QUALITY -- how far up its melee band it came out -- is carried
+ * across onto the ranged band, so one chest decides both and a good bow is
+ * good at the thing a bow is for.
+ */
+function shotPower(f: Fighter): number {
+  const r = f.weapon.spec.ranged;
+  if (!r?.power) return f.st.power;
+  const [lo, hi] = f.weapon.power;
+  const qual = hi > lo ? Math.min(1, Math.max(0, (f.held.rPower - lo) / (hi - lo))) : 0.5;
+  const rolled = r.power[0] + qual * (r.power[1] - r.power[0]);
+  return (BASE.power + rolled * POWER_PER_ROLL) / f.weapon.hits;
+}
+
+function looseShot(att: Fighter, def: Fighter, gap: number, rng: () => number): Blow {
+  const out: Blow = { hit: false, dodged: false, guarded: false, dmg: 0, broke: false };
+  const r = att.weapon.spec.ranged!;
+  const mv = att.move;
+  out.move = mv?.name;
+  out.thrown = true;
+  if (Number.isFinite(att.ammo)) att.ammo -= 1;
+  att.reload = r.reload;
+  // ---- SHOOTING WEARS A WEAPON OUT AS SWINGING DOES.
+  //
+  // Durability was only ever charged on a melee swing, so a bow never wore
+  // out at all: it was the one thing in the rack that stayed exactly as good
+  // on the last second of a fight as on the first.  A string and a stave go
+  // the same way everything else does, a shade slower than a blade taking
+  // impacts.
+  if (Number.isFinite(att.dur)) {
+    att.dur -= 0.7;
+    if (att.dur <= 0) {
+      breakWeapon(att);
+      out.broke = true;
+      return out;
+    }
+  }
+  const crit = !!(att.weapon.spec.crit && rng() < att.weapon.spec.crit);
+  const flight = Math.max(0.08, gap / r.speed);
+  out.loosed = {
+    kind: r.shot, t: flight, total: flight, from: att.x, aim: def.x, arc: r.arc,
+    power: shotPower(att) * r.dmg * (0.85 + rng() * 0.3), move: mv?.name, r, crit, art: null,
+  };
+  att.flight.push(out.loosed);
+  return out;
+}
+
+/**
+ * AND THE SHOT ARRIVES.
+ *
+ * Every test is taken now, against the fighter as they are at this instant.
+ * `drift` is the one thing a shot has that a swing does not: the further it
+ * had to travel the likelier it is to find nobody there, which is the price
+ * of fighting from the far wall.
+ */
+export function landShot(att: Fighter, def: Fighter, sh: InFlight, rng = Math.random, ground: Dropped[] = []): Blow {
+  const out: Blow = { hit: false, dodged: false, guarded: false, dmg: 0, broke: false, thrown: true, move: sh.move, crit: sh.crit };
+  const r = sh.r;
+  // It was aimed at where they were standing.  Moving since is the defence.
+  const slip = Math.min(1, Math.abs(def.x - sh.aim) / 26);
+  const evade = Math.min(0.9, def.st.avoid + (def.act === 'dodge' ? DODGE_BONUS : 0) + (r.drift ?? 0) * slip);
+  if (rng() < evade) {
+    out.dodged = true;
+    def.counterT = COUNTER_WINDOW;
+    if (def.act === 'dodge') { def.riposte = true; def.cool = 0; }
+    return out;
+  }
+  const guarding = def.act === 'guard';
+  out.guarded = guarding || def.st.guard > 0;
+  const soak = (guarding ? guardPower(def) : 0) + def.st.guard;
+  let raw = sh.power;
+  if (sh.crit) raw *= CRIT_MUL;
+  applyDamage(att, def, raw, out, rng,
+    { pierce: r.pierce ?? 0, soak, stagger: r.stagger ?? 0, knock: r.knock ?? 0, ground, blocked: guarding, ranged: true });
+  return out;
+}
+
+export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Math.random, ground: Dropped[] = []): Blow {
   const out: Blow = { hit: false, dodged: false, guarded: false, dmg: 0, broke: false };
   const sp = att.weapon.spec;
-  // Throwing knives reach a great deal further while any are left.
   const mv = att.move;
-  const thrown = (sp.ammo ?? 0) > 0 && att.ammo > 0 && gap > att.st.reach;
-  if (gap > (thrown ? THROW_REACH : att.st.reach * MOVE_REACH(mv))) return out;
+  // ---- A SHOT, IF THIS IS A WEAPON THAT SHOOTS AND THEY ARE OUT THERE.
+  //
+  // Out of melee reach and still holding ammunition means the answer is the
+  // ranged one; inside reach it swings, and so does an empty bow.
+  const r = sp.ranged;
+  if (r && att.ammo > 0 && att.reload <= 0 && gap > att.st.reach && gap <= r.far) {
+    return looseShot(att, def, gap, rng);
+  }
+  if (gap > att.st.reach * MOVE_REACH(mv)) return out;
   out.move = mv?.name;
-  if (thrown) { att.ammo -= 1; out.thrown = true; }
 
   // Wear is charged once per swing, not once per blow to land: a weapon that
-  // throws two was paying twice for the one swing.  A throw costs no wear --
-  // what it costs is one of the five knives.
-  if (!thrown && Number.isFinite(att.dur) && att.swing === 0) {
-    att.dur -= 1;
+  // throws two was paying twice for the one swing.
+  if (Number.isFinite(att.dur) && att.swing === 0) {
+    // A heavy weapon swung into a suit of plate takes more out of itself
+    // than the same swing into cloth does.
+    const heavy = Math.max(0, att.held.rHeavy - 5) / 5;
+    att.dur -= 1 + heavy * def.st.defence * 2.2;
     if (att.dur <= 0) {
       breakWeapon(att);
       out.broke = true;
@@ -1013,7 +1654,7 @@ export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Mat
   // ---- THE GUARD, AND THE THINGS THAT IGNORE IT.
   const guarding = def.act === 'guard';
   out.guarded = guarding || def.st.guard > 0;
-  const soak = ((guarding ? GUARD_CUT : 0) + def.st.guard) * (1 - (sp.guardCut ?? 0));
+  const soak = ((guarding ? guardPower(def) : 0) + def.st.guard) * (1 - (sp.guardCut ?? 0));
   // A spiked shield hands some of it back to whoever hit it.
   const shield = def.weapon.spec.riposte ?? 0;
   if (shield > 0 && guarding && att.hp > 0) {
@@ -1035,51 +1676,45 @@ export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Mat
   if (mv?.hits && mv.hits > 1) raw /= Math.sqrt(mv.hits);
 
   // ---- AND NOW THE THING THIS PARTICULAR WEAPON IS FOR.
-  const frac = Math.min(1, gap / Math.max(1, att.st.reach));
-  if (sp.atRange) raw *= 1 + sp.atRange * frac;          // spear, trident, halberd
-  if (sp.atClose) raw *= 1 + sp.atClose * (1 - frac);    // knuckles, dagger, gladius
+  //
+  // MEASURED AGAINST THEIR REACH, NOT AGAINST YOUR OWN.
+  //
+  // These were written as `gap / att.st.reach`, and a fighter stands at its
+  // own reach -- so that fraction sat at 0.94 to 0.99 at the moment a blow
+  // landed, every weapon, every fight.  Which meant `atRange` was not a bonus
+  // at the far end of anything, it was a permanent +47% on the spear; and
+  // `atClose`, being its mirror, paid the dagger +3% and the brass knuckles
+  // +1% and was for practical purposes dead code.  It is the whole reason
+  // the round robin ran spear 93 / trident 86 / halberd 82 at the top and
+  // knuckles 38 / dagger 17 / gladius 31 down at the bottom.
+  //
+  // The question worth asking is about the OTHER fighter: am I hitting them
+  // from outside the arc they can answer with, or have I got inside it?  That
+  // is what a spear is for and what a dagger is for, it is the same thing
+  // `stuck` already means in the footwork, and it makes both bonuses
+  // conditional on a thing the fighters actually contest.
+  const theirs = Math.max(1, def.st.reach);
+  const outside = Math.min(1, Math.max(0, (gap - theirs) / theirs));
+  const inside = Math.min(1, Math.max(0, (theirs - gap) / theirs));
+  if (sp.atRange) raw *= 1 + sp.atRange * outside;       // spear, trident, halberd
+  if (sp.atClose) raw *= 1 + sp.atClose * inside;        // knuckles, dagger, gladius
   if (sp.crit && rng() < sp.crit) { raw *= CRIT_MUL; out.crit = true; }
   if (sp.vsArmour) raw *= 1 + (sp.vsArmour - 1) * Math.min(1, def.st.defence / 0.3);
   if (sp.execute) raw *= 1 + (sp.execute - 1) * (1 - def.hp / def.st.maxHp);
   if (sp.counter && att.countering) { raw *= 1 + sp.counter; out.countered = true; }
-  if (thrown) raw *= THROW_MUL;
 
   // ---- ARMOUR TAKES A SHARE, NOT A SLICE, and some weapons take a share of
   // the share: a knife finds the gap, a mace does not care that there is one.
-  // ---- AND EVERYBODY GETS TIRED.
-  //
-  // Two fighters in heavy plate with blunt weapons could genuinely stand
-  // there all day, and about one fight in a hundred and sixty did -- straight
-  // to the three minute cap with both of them alive.  Past a minute, armour
-  // starts giving out and blows start telling: it runs off a clock both of
-  // them share, so it favours neither, and it means every fight ends.
-  const weary = Math.min(1, Math.max(0, (att.clock - WEARY_AT) / WEARY_OVER));
-  raw *= 1 + weary * 0.6;
-  const armour = def.st.defence * (1 - (sp.pierce ?? 0)) * (1 - weary);
-  out.hit = true;
-  out.dmg = Math.max(1, Math.round(raw * (1 - armour) * (1 - soak)));
-  def.hp = Math.max(0, def.hp - out.dmg);
-  // and the suit is a little more broken than it was
-  if (def.hp > 0) {
-    const off = wearArmour(def, rng);
-    if (off) { out.stripped = off.slot; out.strippedTint = off.tint; }
-  }
-
-  // ---- WHAT A BIG ONE DOES BESIDES DAMAGE.
-  //
-  // A blow worth a good share of somebody's health puts them on the back
-  // foot: they lose the next beat and they lose GROUND, which is a real
-  // change to the fight and not a flinch.  Hammers and clubs do it far more
-  // often than the damage alone would earn.
-  const floored = out.dmg >= def.st.maxHp * STAGGER_AT || rng() < ((sp.stagger ?? 0) + (mv?.stagger ?? 0));
-  if (def.hp > 0 && floored) {
-    out.staggered = true;
-    def.act = 'stagger';
-    def.t = STAGGER_S;
-    def.chain = 0;
-    def.riposte = false;
-    def.x = Phaser.Math.Clamp(def.x + (def.x < att.x ? -1 : 1) * (KNOCK_PX + (sp.knock ?? 0) + (mv?.knock ?? 0)), ARENA.left, ARENA.right);
-  }
+  // Weariness, the suit and being put on the floor are shared with the shot
+  // path, so the two kinds of attack cannot drift apart.
+  applyDamage(att, def, raw, out, rng, {
+    pierce: sp.pierce ?? 0,
+    soak,
+    stagger: (sp.stagger ?? 0) + (mv?.stagger ?? 0),
+    knock: (sp.knock ?? 0) + (mv?.knock ?? 0),
+    ground,
+    blocked: guarding,
+  });
   return out;
 }
 
@@ -1158,7 +1793,26 @@ export function chooseMove(f: Fighter, other: Fighter, gap: number, rng = Math.r
   return best;
 }
 
-export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random): void {
+/** Whether this fighter still has a shot to take at all. */
+function armed(f: Fighter): boolean {
+  return !!f.weapon.spec.ranged && f.ammo > 0;
+}
+
+/**
+ * Whether the SHOOTING is this weapon's plan, as opposed to a thing it can do.
+ *
+ * A spear that can be thrown once is a spear: it should fight at spear range
+ * and throw when the moment comes, not back away across the arena guarding a
+ * single cast.  Letting the one-shot weapons kite made them fight like bows
+ * while keeping a polearm's melee -- good at both, which is the one thing a
+ * dual-range weapon is not allowed to be.
+ */
+function holds(f: Fighter): boolean {
+  const r = f.weapon.spec.ranged;
+  return !!r && f.ammo > 0 && r.ammo > 1;
+}
+
+export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random, ground: Dropped[] = []): void {
   const gap = Math.abs(f.x - other.x);
   f.face = other.x >= f.x ? 1 : -1;
   // kept so a sweeping weapon can tell the difference between somebody
@@ -1171,6 +1825,61 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   // declared trade-offs; none of it is a damage bonus.
   const ty = f.type;
   const hurt = f.hp / f.st.maxHp < HURT_AT;
+
+  // ---- IS THERE A WEAPON ON THE FLOOR, AND SHOULD I WANT IT?
+  //
+  // Only if my hands are empty.  A fighter already holding something walks
+  // straight past -- swapping mid-fight for a weapon you cannot see the
+  // numbers of is not a decision anybody should make for you, and it would
+  // turn every bout into a scramble for whatever landed last.
+  //
+  // If BOTH of them are empty they will both come for it, which is the whole
+  // point: the race is the interesting part, and whoever is nearer and
+  // quicker gets to be the one holding a sword again.
+  const empty = f.broken || f.weapon.key === 'none';
+  if (empty && ground.length) {
+    let best: Dropped | null = null;
+    let bestGap = PICKUP_SEEK;
+    for (const d of ground) {
+      if (d.settle > 0) continue;
+      const g = Math.abs(f.x - d.x);
+      if (g < bestGap) { bestGap = g; best = d; }
+    }
+    f.seeking = best;
+    if (best) {
+      // ---- AND THE RACE HAS TO BE FAIR.
+      //
+      // `exchange` ticks one fighter before the other, so on the frame both
+      // of them were standing over the same sword the one that ticks first
+      // simply took it: 249 to 151 in a race started from identical
+      // distances.  Whoever is actually nearer wins it, and a dead tie is
+      // settled by the roll rather than by the order of two function calls.
+      const theirGap = Math.abs(other.x - best.x);
+      const mine = bestGap < theirGap - 0.5 ? true
+        : theirGap < bestGap - 0.5 ? false
+          : rng() < 0.5;
+      const contested = (other.broken || other.weapon.key === 'none') && theirGap < PICKUP_SEEK;
+      // standing over it: bend down and take it
+      if (bestGap < 7 && (!contested || mine)) {
+        f.act = 'pickup';
+        f.t = PICKUP_S + Math.min(0.5, best.piece.rHeavy * 0.05);
+        f.face = best.x >= f.x ? 1 : -1;
+        return;
+      }
+      // otherwise go and get it, unless they are about to take my head off
+      const danger = gap <= other.st.reach + 4 && other.act === 'windup';
+      if (!danger) {
+        const dir = best.x > f.x ? 1 : -1;
+        f.face = dir;
+        const pace = f.st.walk * (f.weapon.spec.fleet ?? 1) * 1.12;
+        f.x = Phaser.Math.Clamp(f.x + dir * pace * dt, ARENA.left, ARENA.right);
+        f.step += pace * dt;
+        return;
+      }
+    }
+  } else if (f.seeking) {
+    f.seeking = null;
+  }
 
   // ---- DODGING.  Read the other one's wind-up and try to not be there.
   //
@@ -1188,8 +1897,26 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   }
 
   // ---- A SHIELD, OR A BAD DAY, PUTS SOMETHING BETWEEN YOU AND IT.
-  if (f.act === 'walk' && (hurt || f.st.guard > 0) && gap <= other.st.reach + 4 && !f.type?.berserk
-      && rng() < (hurt ? 0.9 : 0.4) * dt) {
+  // ---- ANYTHING IN YOUR HANDS WILL BLOCK, IF YOU GET IT THERE IN TIME.
+  //
+  // This only ever fired for a fighter who was hurt or happened to be
+  // carrying a shield, so for most of the rack blocking simply did not exist.
+  // Any weapon can be put between you and what is coming; whether that was a
+  // good idea is a question for the weapon, which pays for it in wear, and
+  // for how much it actually turns aside.  A berserker still will not.
+  const armedNow = !f.broken && f.weapon.key !== 'none';
+  // These were a tenth of this and blocking simply never happened -- a fifth
+  // of a block a bout for most of the rack, which is not a mechanic, it is a
+  // rounding error.  A guard costs the tempo you would have attacked in, so
+  // it is still a decision and not a free action.
+  let wantBlock = hurt ? 3.2 : f.st.guard > 0 ? 2.2 : armedNow ? 1.5 : 0.8;
+  // A berserker used to be barred from blocking outright.  That was a fair
+  // reading of the archetype while nobody blocked much; once everybody did,
+  // never spending tempo on defence became a straight advantage and the
+  // berserker went to 62%.  It still hates doing it -- a fifth as often as
+  // anyone else -- which is a trade-off rather than an exemption.
+  if (f.type?.berserk) wantBlock *= 0.2;
+  if (f.act === 'walk' && gap <= other.st.reach + 4 && rng() < wantBlock * dt) {
     f.act = 'guard';
     f.t = GUARD_S;
     return;
@@ -1208,11 +1935,34 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   // A sweeping weapon -- scythe, war scythe, staff, claymore -- can catch
   // somebody who is walking onto it, so its effective reach grows while the
   // other one is closing.  A thrown knife opens from right across the sand.
+  // Where this fighter wants to be standing, worked out before it decides
+  // whether to swing -- because when it is out-reached, that decision is
+  // partly "not from here".
+  const theirSweet = other.st.reach * INSIDE_FRAC;
+  const press = other.st.reach > f.st.reach
+    ? Math.min(f.st.reach - 2, theirSweet - 2)
+    : f.st.reach - 2;
   const closing = gap < wasGap - 0.01 || other.act === 'lunge';
   const swing = f.st.reach * (1 + (sp.sweep && closing ? sp.sweep : 0));
-  const canThrow = (sp.ammo ?? 0) > 0 && f.ammo > 0;
+  // A loaded ranged weapon can open from anywhere inside its carry, but only
+  // once it has finished reloading -- that wait is most of what a crossbow
+  // costs and the whole reason a bow is not simply better than a sword.
+  const shooting = armed(f) && f.reload <= 0 && gap > f.st.reach && gap <= sp.ranged!.far;
   const mv = chooseMove(f, other, gap, rng);
-  if ((gap <= swing * MOVE_REACH(mv) || (canThrow && gap <= THROW_REACH)) && f.cool <= 0) {
+  // ---- AND SOMETIMES THE RIGHT ANSWER IS NOT TO SWING YET.
+  //
+  // Pressing inside only moved the mean gap by a pixel, because the swing
+  // test fires the moment the target is at the OUTER edge of your own reach:
+  // the fighter never walked the last few pixels, swung from there, and spent
+  // the cool-down drifting back out.  So it traded every exchange at exactly
+  // the distance the longer weapon was built for.
+  //
+  // Out-reached and still at arm's length, closing is worth more than the
+  // swing.  Desperation and the back half of a combination both override it,
+  // so nobody stands there declining to fight.
+  const holdFire = other.st.reach > f.st.reach * 1.1 && gap > press + 3
+    && !f.desperate && f.chain === 0 && !armed(f);
+  if ((gap <= swing * MOVE_REACH(mv) || shooting) && f.cool <= 0 && !holdFire) {
     const share = f.riposte ? RIPOSTE_WINDUP : f.chain > 0 ? COMBO_WINDUP : f.desperate ? 0.78 : 1;
     f.act = 'windup';
     f.move = mv;
@@ -1227,7 +1977,7 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
     // in five -- the moves, not the equipment, were deciding it.  Halving
     // both the wind-up and the damage sides keeps an overhead slower and
     // heavier than a thrust while leaving the gear in charge.
-    f.t = (WINDUP * share * MOVE_WEIGHT(mv.wind)) / f.st.rate;
+    f.t = (WINDUP * share * MOVE_WEIGHT(shooting ? sp.ranged!.wind : mv.wind)) / f.st.rate;
     f.swing = 0;
     f.countering = f.counterT > 0;
     f.riposte = false;
@@ -1240,8 +1990,12 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   // old fight look like two people queueing.  A lunge covers the last stretch
   // in a burst, which is where the sudden changes of distance come from --
   // and being out of position afterwards is what it costs.
+  //
+  // A fighter with shots left has no business lunging into a clinch: closing
+  // the distance is the one thing that beats him, so he must not do it to
+  // himself.  Once the quiver is empty he closes like anybody else.
   const nerve = (ty?.nerve ?? 1) * (ty?.berserk ? 1 + (1 - f.hp / f.st.maxHp) * 0.9 : 1);
-  if (f.cool <= 0 && gap > f.st.reach && gap < f.st.reach + 26 && rng() < (f.desperate ? 2.2 : 1.1) * nerve * dt) {
+  if (!holds(f) && f.cool <= 0 && gap > f.st.reach && gap < f.st.reach + 26 && rng() < (f.desperate ? 2.2 : 1.1) * nerve * dt) {
     f.act = 'lunge';
     f.t = LUNGE_S;
     f.cool = LUNGE_COOL;
@@ -1264,7 +2018,21 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   // the cool-down, a fighter drifts back out to `range`, which is where a
   // staff gets to be a staff -- it keeps its spacing while it recovers and
   // steps in to land the blow.  A hurt fighter gives up more ground.
-  const keep = Math.min(f.st.range, f.st.reach - 2);
+  // ---- WHEN THEY OUT-REACH YOU, YOUR OWN MAXIMUM IS THE WRONG PLACE.
+  //
+  // Everyone closed to their own reach and stopped, which against a longer
+  // weapon means standing at the one distance where theirs is at its best and
+  // yours is merely adequate.  Measured: only 8% of a spear's blows against a
+  // sword landed inside the spear's sweet spot, so the "a long weapon is bad
+  // up close" rule -- the short blade's entire win condition -- almost never
+  // fired.  Against brass knuckles, which genuinely do get inside, it fired
+  // on 80%, so the rule was sound and nobody was using it.
+  //
+  // A fighter who is out-reached now presses to inside the arc THEIR reach is
+  // measured by, as long as it is still somewhere it can land from.  It is
+  // the same rule for both of them; it simply only has anything to say to
+  // whoever is holding the shorter weapon.
+  const keep = Math.min(f.st.range, press);
   // Already inside the arc of whatever the other one is swinging?  Then the
   // spacing is won: stand in it.  Drifting back out on the cool-down was
   // handing the long weapon its range back for free every other second, and
@@ -1286,10 +2054,30 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   // used its shoulder strike.  A slow drift in and out of a foot or so gives
   // the shorter attacks a distance at which they are the right answer.
   const breathe = 1 + Math.sin(f.clock * 1.9 + (f.who === 'frog' ? 0 : 2.1)) * 0.14;
-  const want = (f.cool > 0 && !stuck ? f.st.range * give * spacing : keep) * (1 - weary * 0.5) * drift * breathe;
+  // ---- WHERE A SHOOTER WANTS TO BE, which is not where a swordsman does.
+  //
+  // With shots in hand the whole plan is the distance: stand at `hold`, and
+  // back off rather than let anybody walk in.  Weariness still drags both of
+  // them together in the end, so a bow cannot simply kite out the clock.
+  let want = (f.cool > 0 && !stuck ? f.st.range * give * spacing : keep) * (1 - weary * 0.5) * drift * breathe;
+  if (holds(f)) {
+    const hold = sp.ranged!.hold * (ty?.spacing ?? 1) * (1 - weary * 0.45) * breathe;
+    want = Math.min(hold, sp.ranged!.far - 6);
+  }
   const dir = gap > want + 2 ? 1 : gap < want - 2 ? -1 : 0;
   if (dir !== 0) {
-    const pace = f.st.walk * (f.weapon.spec.fleet ?? 1);
+    // ---- GIVING GROUND IS SLOWER THAN TAKING IT.
+    //
+    // Without this an archer simply walks away for ever at exactly the pace
+    // the swordsman walks in, and a bow beats most of the rack by never being
+    // reached: 82% against sword and chain, which is not a weapon, it is a
+    // loophole.  Backing off at under two thirds pace means a bow can hold a
+    // distance it already has and cannot open a new one against somebody
+    // committed to closing -- so getting inside it stays the answer to it.
+    //
+    // It applies to both fighters and to every weapon, so it is a rule about
+    // footwork and not a tax on bows.
+    const pace = f.st.walk * (f.weapon.spec.fleet ?? 1) * (dir < 0 ? RETREAT : 1);
     f.x += f.face * dir * pace * dt;
     f.x = Phaser.Math.Clamp(f.x, ARENA.left, ARENA.right);
     f.step += pace * dt;
@@ -1303,16 +2091,17 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
  * Split from `think` because timers must run even while a fighter is stunned
  * and has no say in anything.
  */
-export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random): Blow | null {
+export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random, ground: Dropped[] = []): Blow | null {
   f.clock += dt;
   if (f.cool > 0) f.cool -= dt;
+  if (f.reload > 0) f.reload -= dt;
   if (f.counterT > 0) f.counterT -= dt;
   if (f.stun > 0) {
     f.stun -= dt;
     return null;
   }
   if (f.act === 'walk') {
-    think(f, other, dt, rng);
+    think(f, other, dt, rng, ground);
     return null;
   }
 
@@ -1330,16 +2119,20 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random):
     case 'windup': {
       f.act = 'strike';
       f.t = STRIKE;
-      const blow = resolveStrike(f, other, Math.abs(f.x - other.x), rng);
+      const blow = resolveStrike(f, other, Math.abs(f.x - other.x), rng, ground);
       f.swing += 1;
       return blow;
     }
     case 'strike': {
       // A weapon that throws two puts the second one in without a fresh
       // wind-up, which is what "rapid, multiple strikes" actually feels like.
-      if (f.swing < Math.max(f.weapon.hits, f.move?.hits ?? 1)) {
+      // One blade of a pair puts in one strike where two put in two.
+      const strikes = f.single
+        ? Math.max(1, Math.ceil(Math.max(f.weapon.hits, f.move?.hits ?? 1) / 2))
+        : Math.max(f.weapon.hits, f.move?.hits ?? 1);
+      if (f.swing < strikes) {
         f.t = STRIKE;
-        const blow = resolveStrike(f, other, Math.abs(f.x - other.x), rng);
+        const blow = resolveStrike(f, other, Math.abs(f.x - other.x), rng, ground);
         f.swing += 1;
         return blow;
       }
@@ -1354,6 +2147,16 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random):
       f.t = (RECOVER * drag * (f.chain > 0 ? 0.45 : 1)) / f.st.rate;
       f.countering = false;
       f.counterT = 0;
+      return null;
+    }
+    case 'pickup': {
+      // Bent down over it for as long as its bulk deserves -- a dagger comes
+      // up in a moment and a claymore has to be hauled off the sand.
+      const d = f.seeking;
+      if (d && ground.includes(d) && Math.abs(f.x - d.x) < 14) takeWeapon(f, d, ground);
+      f.seeking = null;
+      f.act = 'walk';
+      f.cool = BEAT / f.st.rate;
       return null;
     }
     case 'recover':
@@ -1381,14 +2184,51 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random):
  * mid-strike and in range of each other, so it is rare and never anybody's
  * tactic.  The rule reads the same from either side.
  */
-export function exchange(a: Fighter, b: Fighter, dt: number, rng = Math.random): Array<{ att: Fighter; def: Fighter; blow: Blow }> {
+/**
+ * ADVANCE WHATEVER IS IN THE AIR, and hand back the ones that arrived.
+ *
+ * Done before either fighter acts, so a shot lands against the positions the
+ * tick started from rather than against wherever the footwork has just put
+ * them.  A boomerang that misses comes back and is loaded again; everything
+ * else is simply spent.
+ */
+function advanceFlight(att: Fighter, def: Fighter, dt: number, rng: () => number,
+  out: Array<{ att: Fighter; def: Fighter; blow: Blow }>, ground: Dropped[] = []): void {
+  if (!att.flight.length) return;
+  const still: InFlight[] = [];
+  for (const sh of att.flight) {
+    sh.t -= dt;
+    if (sh.t > 0) { still.push(sh); continue; }
+    const blow = landShot(att, def, sh, rng, ground);
+    blow.loosed = sh;                    // so the drawing can retire the sprite
+    if (sh.r.returns && !Number.isFinite(att.ammo)) att.reload = Math.max(att.reload, sh.r.reload);
+    out.push({ att, def, blow });
+  }
+  att.flight = still;
+}
+
+export function exchange(a: Fighter, b: Fighter, dt: number, rng = Math.random, ground: Dropped[] = []): Array<{ att: Fighter; def: Fighter; blow: Blow }> {
+  const out: Array<{ att: Fighter; def: Fighter; blow: Blow }> = [];
+  advanceFlight(a, b, dt, rng, out, ground);
+  advanceFlight(b, a, dt, rng, out, ground);
+  // what is on the sand settles, and eventually the sand has it
+  for (let i = ground.length - 1; i >= 0; i--) {
+    const d = ground[i];
+    if (d.settle > 0) d.settle -= dt;
+    d.life -= dt;
+    if (d.life <= 0) {
+      if (a.seeking === d) a.seeking = null;
+      if (b.seeking === d) b.seeking = null;
+      d.art?.destroy();
+      ground.splice(i, 1);
+    }
+  }
   const hpA = a.hp;
   const hpB = b.hp;
-  const blowA = tick(a, b, dt, rng);
-  const blowB = tick(b, a, dt, rng);
-  const out: Array<{ att: Fighter; def: Fighter; blow: Blow }> = [];
+  const blowA = tick(a, b, dt, rng, ground);
+  const blowB = tick(b, a, dt, rng, ground);
 
-  if (blowA && blowB && blowA.hit && blowB.hit) {
+  if (blowA && blowB && blowA.hit && blowB.hit && !blowA.thrown && !blowB.thrown) {
     // put the damage back and push them apart instead
     a.hp = hpA;
     b.hp = hpB;
@@ -1421,23 +2261,26 @@ export function exchange(a: Fighter, b: Fighter, dt: number, rng = Math.random):
  * instead of watched once.  `cap` is there because two fighters in full plate
  * with bare hands can genuinely stand there all day.
  */
-export function simulate(a: Kit, bKit: Kit, rng = Math.random, cap = 180, type: LizardType | null = null): { winner: 'frog' | 'lizard' | null; seconds: number; breaks: number; clashes: number } {
+export function simulate(a: Kit, bKit: Kit, rng = Math.random, cap = 180, type: LizardType | null = null): { winner: 'frog' | 'lizard' | null; seconds: number; breaks: number; clashes: number; disarms: number } {
   const f = makeFighter('frog', a, 100, 1);
   const l = makeFighter('lizard', bKit, 220, -1, type);
   const dt = 1 / 60;
+  const ground: Dropped[] = [];
   let t = 0;
   let breaks = 0;
   let clashes = 0;
+  let disarms = 0;
   while (t < cap && f.hp > 0 && l.hp > 0) {
     // The same call the scene makes, so what is measured here is what is
     // played there -- clashes and all.
-    for (const e of exchange(f, l, dt, rng)) {
+    for (const e of exchange(f, l, dt, rng, ground)) {
       if (e.blow.broke) breaks++;
+      if (e.blow.disarmed) disarms++;
       if (e.blow.clashed) clashes++;
     }
     t += dt;
   }
-  return { winner: f.hp <= 0 ? 'lizard' : l.hp <= 0 ? 'frog' : null, seconds: t, breaks, clashes };
+  return { winner: f.hp <= 0 ? 'lizard' : l.hp <= 0 ? 'frog' : null, seconds: t, breaks, clashes, disarms };
 }
 
 // ====================================================================== art
@@ -1460,10 +2303,10 @@ export interface FighterArt {
   cuirass: Phaser.GameObjects.Rectangle;
   head: Phaser.GameObjects.Ellipse;
   helm: Phaser.GameObjects.Rectangle;
-  arm: Phaser.GameObjects.Container;
+  arm: Arm;
   /** The off hand.  Behind the body while a weapon is held; up in a guard
    *  the moment there is not one. */
-  armOff: Phaser.GameObjects.Container;
+  armOff: Arm;
   /** Whether the off hand has been brought round to the front yet. */
   guardUp: boolean;
   weapon: Phaser.GameObjects.Container;
@@ -1481,6 +2324,11 @@ export interface FighterArt {
   helmDome: Phaser.GameObjects.Ellipse;
   visor: Phaser.GameObjects.Rectangle;
   plume: Phaser.GameObjects.Rectangle;
+  /** Everything above the neck, so a duck moves the face and not just the skull. */
+  headGroup: Phaser.GameObjects.Container;
+  /** Damage marks already cut into the weapon in hand, so they are added
+   *  once each rather than sixty times a second. */
+  nicks: number;
 }
 
 const FLOOR_Y = 138;
@@ -1495,7 +2343,7 @@ const FLOOR_Y = 138;
  * Three tones is the difference between a sword and a grey stick, and it
  * costs two more rectangles.
  */
-function buildWeapon(scene: Phaser.Scene, key: string, tint: number): Phaser.GameObjects.Container {
+function buildWeapon(scene: Phaser.Scene, key: string, tint: number, single = false): Phaser.GameObjects.Container {
   const c = scene.add.container(0, 0);
   const bar = (x: number, y: number, w: number, h: number, col: number, ang = 0): Phaser.GameObjects.Rectangle => {
     const r = scene.add.rectangle(x, y, w, h, col).setAngle(ang);
@@ -1554,6 +2402,8 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number): Phaser.Gam
       blade(13, -2, 25, 2.5, -6); bar(1, 0, 2, 7, PALETTE.ink); bar(-2, 0, 4, 3, 0x6a2b2b);
       break;
     case 'dual':
+      // down to one blade, it is drawn as one blade
+      if (single) { blade(11, 0, 19, 2.8); bar(0, 0, 3, 5, grip); break; }
       blade(11, -4, 19, 2.5, -12); blade(11, 4, 19, 2.5, 12);
       bar(0, -3, 3, 5, grip); bar(0, 3, 3, 5, grip);
       break;
@@ -1660,6 +2510,7 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number): Phaser.Gam
       bar(-3, 0, 4, 3, grip);
       break;
     case 'twindagger':
+      if (single) { blade(5, 0, 9, 2.5); bar(0, 0, 2, 6, PALETTE.gold); bar(-2, 0, 3, 3, grip); break; }
       blade(6, -4, 10, 2, -14); blade(6, 4, 10, 2, 14);
       bar(0, -3, 3, 4, grip); bar(0, 3, 3, 4, grip);
       break;
@@ -1668,6 +2519,58 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number): Phaser.Gam
       blade(6, 0, 9, 2);
       bar(0, 0, 3, 3, grip);
       blade(3, -5, 6, 1.5, -26); blade(3, 5, 6, 1.5, 26);
+      break;
+    // ---- THE RANGED RACK.  A bow reads by its limbs and its string, a
+    // crossbow by the cross, a sling by the pouch on the end of a cord.
+    case 'bow': case 'longbow': {
+      const big = key === 'longbow';
+      const h = big ? 22 : 17;
+      bar(2, -h / 2 + 2, 2.5, h / 2 + 2, wood, -16);
+      bar(2, h / 2 - 2, 2.5, h / 2 + 2, wood, 16);
+      bar(2, -h / 2 + 2, 1, h / 2 + 2, woodLit, -16);
+      bar(5, 0, 1, h - 1, 0xe6dcc4);                   // the string
+      bar(0, 0, 3, 5, grip);
+      if (big) { bar(2, -h / 2 - 1, 3, 2, PALETTE.gold); bar(2, h / 2 + 1, 3, 2, PALETTE.gold); }
+      break;
+    }
+    case 'crossbow':
+      haft(6, 0, 15, 3.5); bar(3, 0, 2.5, 14, wood);   // stock and the bow across it
+      bar(3, -6, 3, 2, steel); bar(3, 6, 3, 2, steel);
+      bar(5, 0, 1, 12, 0xe6dcc4);
+      blade(12, 0, 9, 1.5); bar(-1, 1, 4, 4, grip);
+      break;
+    case 'sling':
+      bar(1, 0, 3, 3, grip);
+      bar(5, -3, 8, 1, 0x6b5436, -22); bar(5, 3, 8, 1, 0x6b5436, 22);
+      bar(10, 0, 4, 4, 0x8a6a42); c.add(scene.add.circle(10, 0, 1.6, 0x9a9a9a));
+      break;
+    case 'blowgun':
+      haft(8, 0, 18, 2.5); bar(17, 0, 2, 3.5, PALETTE.ink);
+      bar(0, 0, 3, 3.5, 0x4a3a24);
+      break;
+    case 'magicstaff':
+      haft(7, 2, 20, 3, -8);
+      c.add(scene.add.circle(16, -5, 3.4, 0x6fd8e8));
+      c.add(scene.add.circle(16, -5, 2, 0xdffaff));
+      bar(16, -9, 1.5, 3, 0x9a6ab0); bar(13, -3, 5, 1.5, PALETTE.gold, -20);
+      break;
+    case 'throwaxe':
+      haft(6, 0, 12, 2.5);
+      bar(12, -2, 6, 7, steel); bar(12, -3.5, 6, 1.5, shine); bar(13, 1, 4, 1.5, shade);
+      break;
+    case 'javelin':
+      haft(9, 0, 24, 2.5); blade(21, 0, 7, 2.5);
+      bar(2, 0, 3, 3.5, 0x6a4a2a); bar(6, 0, 2, 4, PALETTE.gold);
+      break;
+    case 'chakram':
+      c.add(scene.add.circle(7, 0, 6, 0x000000).setAlpha(0.18));
+      bar(7, -5.5, 9, 2, steel); bar(7, 5.5, 9, 2, steel);
+      bar(2.5, 0, 2, 9, steel); bar(11.5, 0, 2, 9, steel);
+      bar(7, -6, 9, 1, shine);
+      break;
+    case 'boomerang':
+      bar(5, -3, 11, 3, woodLit, -32); bar(5, 3, 11, 3, wood, 32);
+      bar(5, -4, 11, 1, 0xc6a06a, -32);
       break;
     case 'shield': {
       // The spiked shield: a boss, a rim, and six spikes around it.
@@ -1734,6 +2637,42 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const L = f.kit.legs.mat!;
   const wears = (m: ArmourMat): boolean => m.key !== 'none';
 
+  // ---- ONE LIGHT, FROM ABOVE AND IN FRONT.
+  //
+  // Every flat shape in here was its own colour and nothing else, which is
+  // why the fighters read as cut paper: a body is only a silhouette until
+  // something tells you which way is up.  There is a single light now, and
+  // the rule for the whole rig is the same three bands -- lit along the top,
+  // the body colour through the middle, and the shaded underside -- with the
+  // metal picking up a hard specular the skin does not get.
+  const mix = (a: number, b: number, k: number): number => {
+    const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+    const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+    return (Math.round(ar + (br - ar) * k) << 16) | (Math.round(ag + (bg - ag) * k) << 8) | Math.round(ab + (bb - ab) * k);
+  };
+  const LIT = 0xfff3d2;
+  const SHADE = 0x1a1208;
+  /** Lighter, as if the light above were catching it. */
+  const up = (c: number, k = 0.3): number => mix(c, LIT, k);
+  /** Darker, for an underside or a crease. */
+  const down = (c: number, k = 0.3): number => mix(c, SHADE, k);
+  /** How much a material shines.  Cloth does not; plate does. */
+  const gloss = (m: ArmourMat): number =>
+    m.key.includes('plate') || m.key === 'gold' || m.key === 'steel' ? 0.55
+      : m.key === 'chain' || m.key === 'tin' || m.key === 'iron' ? 0.34 : 0.12;
+  // ---- THE SHADING, IN THREE LAYERS.
+  //
+  // One list would have been simpler and wrong: a highlight has to sit
+  // directly on the thing it lights and under whatever covers that thing.
+  // Collected in one pile, the chest shading drew over the head and the
+  // helm's shine drew underneath the helm.
+  const legDetail: Phaser.GameObjects.GameObject[] = [];
+  const bodyDetail: Phaser.GameObjects.GameObject[] = [];
+  /** Shading that belongs ON the armour, so it has to be drawn after it. */
+  const armourDetail: Phaser.GameObjects.GameObject[] = [];
+  const headDetail: Phaser.GameObjects.GameObject[] = [];
+  const helmDetail: Phaser.GameObjects.GameObject[] = [];
+
   // ---- THE SHADOW.  One soft ellipse on the sand, and the single cheapest
   // thing that stops a sprite looking pasted onto the background.
   const shadow = scene.add.ellipse(0, 1, 26, 6, 0x6b5330).setAlpha(0.34);
@@ -1748,18 +2687,113 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // frogs get broad flat feet, lizards get clawed ones
   const footL = scene.add.rectangle(-5 * wide, 0, (frog ? 8 : 7) * wide, 2, light).setOrigin(0.5, 1);
   const footR = scene.add.rectangle(5 * wide, 0, (frog ? 8 : 7) * wide, 2, light).setOrigin(0.5, 1);
+  // a lit edge down the front of each shin, and the dark where foot meets sand
+  legDetail.push(scene.add.rectangle(-2.6 * wide, -2, 1, 11 * limb, up(dark, 0.22)).setOrigin(0.5, 1));
+  legDetail.push(scene.add.rectangle(5.4 * wide, -2, 1, 11 * limb, up(skin, 0.3)).setOrigin(0.5, 1));
+  legDetail.push(scene.add.rectangle(-5 * wide, 0, (frog ? 8 : 7) * wide, 1, down(light, 0.45)).setOrigin(0.5, 1).setAlpha(0.6));
+  legDetail.push(scene.add.rectangle(5 * wide, 0, (frog ? 8 : 7) * wide, 1, down(light, 0.45)).setOrigin(0.5, 1).setAlpha(0.6));
   const clawL = frog ? null : scene.add.triangle(-9, -1, 0, 2, 4, 0, 4, 3, PALETTE.bone);
   const clawR = frog ? null : scene.add.triangle(9, -1, 0, 0, 4, 2, 0, 3, PALETTE.bone);
 
-  // ---- THE TAIL, which is half of what says LIZARD
-  const tail = frog ? null : scene.add.triangle(-13 * wide, -14 * tall - lift * 0.6, 0, 0, 19 * wide, 5 * wide, 0, 11 * wide, skin).setAngle(14);
-  const tailTip = frog ? null : scene.add.triangle(-21 * wide, -12 * tall - lift * 0.6, 0, 0, 9 * wide, 3, 0, 6 * wide, dark).setAngle(18);
+  // ---- THE TAIL, which is half of what says LIZARD.
+  //
+  // It was one long triangle, and at this size a single triangle is a traffic
+  // cone rather than a tail.  Three tapering segments with a lit top edge
+  // read as something that bends and has weight, and they let the tail droop
+  // the way a heavy one would.
+  //
+  // THREE ROTATED TRIANGLES DID NOT WORK.  Each one turns about its own
+  // centre, so the tips swing apart and the tail arrives as a cone with a
+  // loose shard floating behind it.  One polygon has no seams to come apart:
+  // it leaves the hip at full width and curves down to a point, and a second
+  // thinner one along the top edge catches the light.
+  //
+  // A TAIL THAT TAPERS INSTEAD OF A PLANK THAT ENDS.
+  //
+  // The first polygon ran nearly straight for twenty-five pixels and stopped,
+  // which at this size is a plank: the eye reads the two long parallel edges
+  // and calls it a cone.  A tail is thick where it leaves the hip, thins
+  // FAST over the first third, and then carries a long fine whip that curls
+  // -- so the width is sampled off a curve rather than stepped linearly, and
+  // the centre line drops away instead of running flat.
+  const tailY = -16 * tall - lift * 0.6;
+  const LEN = 27;
+  const curve = (w: number, t: number, thin: number): number[] => {
+    const top: number[] = [];
+    const bot: number[] = [];
+    for (let i = 0; i <= 8; i++) {
+      const u = i / 8;
+      const x = -u * LEN * w;
+      // the centre line: level at the hip, then falling away and curling up
+      const y = (u * u * 14 - Math.sin(u * Math.PI) * 2.5) * t;
+      // and the thickness, which is most of the tail's character
+      const half = (1 - u) ** 1.7 * 5.4 * t * thin + 0.5;
+      top.push(x, y - half);
+      bot.unshift(x, y + half);
+    }
+    return [...top, ...bot];
+  };
+  const tail = frog ? null : scene.add.polygon(0, tailY, curve(wide, tall, 1), skin).setOrigin(0, 0);
+  // the lit top edge, and the row of plates along the underside
+  const tailTip = frog ? null
+    : scene.add.polygon(0, tailY - 0.8, curve(wide, tall, 0.55), up(skin, 0.3)).setOrigin(0, 0).setAlpha(0.8);
+  const tailEnd = frog ? null
+    : scene.add.polygon(0, tailY + 1.6, curve(wide * 0.98, tall, 0.34), down(skin, 0.34)).setOrigin(0, 0).setAlpha(0.6);
 
   // ---- TORSO
+  // ---- AND AN EDGE ROUND THE BIG SHAPES.
+  //
+  // A pixel sprite on a sandy floor in a sandy arena is mostly the same value
+  // as the thing behind it.  A dark line round the torso and the skull is the
+  // single cheapest way to lift the whole animal off the background, and it
+  // is why these read as drawn rather than as coloured-in.
+  const OUTLINE = down(skin, 0.62);
   const torso = frog
-    ? scene.add.ellipse(0, -19, 19, 20, skin)
-    : scene.add.ellipse(-1, -19 * tall - lift, 15 * wide, 19 * tall, skin);
+    ? scene.add.ellipse(0, -19, 19, 20, skin).setStrokeStyle(1, OUTLINE)
+    : scene.add.ellipse(-1, -19 * tall - lift, 15 * wide, 19 * tall, skin).setStrokeStyle(1, OUTLINE);
   const belly = scene.add.ellipse(1, -16 * tall - lift, (frog ? 12 : 9) * wide, 11 * tall, light).setAlpha(0.55);
+  // ---- THE BODY, LIT.  A band of light across the shoulders, a shadow
+  // under the gut, and the creases where the limbs and the head join it.
+  const ty0 = -19 * (frog ? 1 : tall) - (frog ? 0 : lift);
+  bodyDetail.push(scene.add.ellipse(0, ty0 - (frog ? 6 : 6 * tall), (frog ? 15 : 12) * wide, 5, up(skin, 0.34)).setAlpha(0.75));
+  bodyDetail.push(scene.add.ellipse(0, ty0 + (frog ? 7 : 7 * tall), (frog ? 16 : 12) * wide, 4, down(skin, 0.42)).setAlpha(0.6));
+  bodyDetail.push(scene.add.ellipse(0, ty0 - (frog ? 9 : 9 * tall), (frog ? 9 : 7) * wide, 2, up(skin, 0.5)).setAlpha(0.5));
+  // ---- AND THE SKIN ITSELF.  Frogs are speckled, lizards are scaled: a
+  // handful of marks laid out from the build's own numbers, so a muscular
+  // lizard is not a standard one with a bigger box round it.
+  if (frog) {
+    // ---- FROGGY.  He is the one the player is, so he gets the most work.
+    //
+    // A pale throat and chest running up under the chin, the darker dappling
+    // a frog's back actually has laid over the shoulders rather than sprayed
+    // evenly over him, and a wet highlight on the crown.  The pale front is
+    // the important one: it gives him a light side and a dark side, which is
+    // what he was missing when he read as a green oval.
+    bodyDetail.push(scene.add.ellipse(4, ty0 + 2, 11, 15, up(light, 0.34)).setAlpha(0.62));
+    bodyDetail.push(scene.add.ellipse(4, ty0 + 8, 9, 4, up(light, 0.5)).setAlpha(0.4));
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI * (0.62 + i * 0.16);
+      bodyDetail.push(scene.add.circle(Math.cos(a) * 7.4, ty0 + Math.sin(a) * 7 - 2, i % 2 ? 1.6 : 1.1, down(skin, 0.34)).setAlpha(0.5));
+    }
+    bodyDetail.push(scene.add.ellipse(-1, ty0 - 8, 7, 2.4, up(skin, 0.48)).setAlpha(0.55));
+  } else {
+    // ---- THE BELLY PLATES, not stripes of dirt.
+    //
+    // Four flat bands across the middle of the body read as mud at this size.
+    // A reptile's underside is a stack of short scutes running ACROSS it,
+    // lighter than the back and edged underneath, which is both what the
+    // animal looks like and a shape the eye can pick out from two feet away.
+    for (let i = 0; i < 5; i++) {
+      const w = (8 - Math.abs(i - 2) * 1.3) * wide;
+      const y = ty0 - 5 * tall + i * 3.4 * tall;
+      bodyDetail.push(scene.add.rectangle(2.5 * wide, y, w, 2.2 * tall, up(light, 0.3)).setAlpha(0.5));
+      bodyDetail.push(scene.add.rectangle(2.5 * wide, y + 1.4 * tall, w, 0.8, down(skin, 0.35)).setAlpha(0.45));
+    }
+    // and a couple of scale rows over the shoulder, where the light hits
+    for (let i = 0; i < 3; i++) {
+      bodyDetail.push(scene.add.rectangle(-5 * wide, ty0 - (7 - i * 2.4) * tall, (5 - i) * wide, 1, up(skin, 0.36)).setAlpha(0.5));
+    }
+  }
   // The armour takes the same build as the body under it.  Scaling only the
   // torso left a muscular lizard's chest sticking out past a standard-issue
   // breastplate, which reads as a bug rather than as a bigger animal.
@@ -1769,24 +2803,71 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const pauldR = scene.add.ellipse(8 * wide, -26 * tall - lift, 8 * wide, 6, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
   const belt = scene.add.rectangle(0, -12 * tall - lift, (frog ? 18 : 16) * wide, 3, B.edge).setVisible(wears(B));
   const ridge = scene.add.rectangle(0, -20 * tall - lift, (frog ? 15 : 13) * wide, 1, B.edge).setAlpha(0.7).setVisible(wears(B));
+  // ---- WHAT THE ARMOUR IS MADE OF, and not only what colour it is.
+  //
+  // A breastplate and a tunic were the same flat rectangle in two colours.
+  // Plate takes a hard highlight along the top and a dark underside, chain a
+  // softer one, cloth almost none -- so the crowd can tell steel from linen
+  // at a glance and a good suit LOOKS like a good suit.
+  const g = gloss(B);
+  const cuirassLit = scene.add.rectangle(0, -24 * tall - lift, (frog ? 14 : 12) * wide, 2, up(B.colour, 0.3 + g))
+    .setAlpha(0.35 + g * 0.8).setVisible(wears(B));
+  const cuirassLow = scene.add.rectangle(0, -13.5 * tall - lift, (frog ? 16 : 14) * wide, 2, down(B.colour, 0.45))
+    .setAlpha(0.55).setVisible(wears(B));
+  armourDetail.push(cuirassLit, cuirassLow);
+  if (g > 0.3) armourDetail.push(scene.add.rectangle(-4 * wide, -21 * tall - lift, 2, 8 * tall, up(B.colour, 0.55))
+    .setAlpha(g).setVisible(wears(B)).setAngle(-8));
 
   // ---- THE CREST, the other half of LIZARD
+  // Six spines rather than four, biggest at the shoulders and tapering down
+  // the back, each with a lit front edge.  It is the one piece of the animal
+  // that is allowed to be a bright colour, so it carries the character.
   const spines: Phaser.GameObjects.Triangle[] = [];
-  if (!frog) for (let i = 0; i < 4; i++) {
-    spines.push(scene.add.triangle(-6 - i * 2, (-30 + i * 5) * tall - lift, 0, 5, 3, 0, 5, 5, bld?.crest ?? PALETTE.rust));
+  if (!frog) {
+    const crest = bld?.crest ?? PALETTE.rust;
+    // Five, biggest over the shoulder and tapering to the hip -- and they
+    // STOP at the hip.  Run on down the tail they read as flames coming out
+    // of the animal sideways rather than as a ridge along its back.
+    for (let i = 0; i < 7; i++) {
+      const k = 1 - Math.abs(i - 1.5) / 6;
+      const h = (2.4 + k * 3.6) * tall;
+      // Along the top of the body and only then down to the hip.  Stepping
+      // down nearly three pixels a spine put the whole ridge on the tail.
+      const x = -1.5 - i * 2.2 * wide;
+      const y = (-29.5 + i * 1.7) * tall - lift;
+      spines.push(scene.add.triangle(x, y, 0, h, 2.2 * wide + k * 1.4, 0, 4.4 * wide, h, crest).setAngle(-6 - i * 4));
+      spines.push(scene.add.triangle(x + 0.7, y, 0, h, 1, 0, 1.8, h, up(crest, 0.45)).setAngle(-6 - i * 4));
+    }
   }
 
   // ---- HEAD
+  // ---- THE SKULL DOES NOT GROW WITH THE CHEST.
+  //
+  // At the full body width a muscular lizard's head came out very nearly as
+  // wide as its torso, sat straight on top of it in the same value, and the
+  // two read as one brown lump with eyes -- the "potato" the heavy builds
+  // kept turning into.  The skull now widens at half the rate the body does,
+  // rides a little higher, and is mixed up toward the light, so there is a
+  // neck between the two and the head is the brighter of them.
+  const skullW = 13 * (1 + (wide - 1) * 0.48) * skull;
+  const headTone = frog ? light : up(light, 0.16);
+  // And a neck to stand it on.  Lifted clear of the chest without one, the
+  // head simply floated: a separated head is worse than a merged one.
+  const neck = frog ? null
+    : scene.add.ellipse(0, -28.5 * tall - lift, skullW * 0.55, 7 * tall, down(light, 0.1));
   const head = frog
-    ? scene.add.ellipse(2, -33, 16, 13, light)
-    : scene.add.ellipse(1, -32 * tall - lift, 13 * wide * skull, 10 * skull, light);
+    ? scene.add.ellipse(2, -33, 16, 13, light).setStrokeStyle(1, OUTLINE)
+    : scene.add.ellipse(1, -32.6 * tall - lift, skullW, 10 * skull, headTone).setStrokeStyle(1, OUTLINE);
   const jaw = frog
     ? scene.add.ellipse(7, -30, 6, 4, light)
-    : scene.add.triangle(12 * wide * skull, -30 * tall - lift, 0, 0, 11 * skull, 3, 0, 6 * skull, light);
-  const teeth = frog ? null : scene.add.rectangle(11 * wide * skull, -29 * tall - lift, 7 * skull, 1, PALETTE.cream);
-  const mouth = frog ? scene.add.rectangle(6, -29, 8, 1, dark) : null;
+    : scene.add.triangle(skullW * 0.9, -30.4 * tall - lift, 0, 0, 11 * skull, 3, 0, 6 * skull, headTone);
+  const teeth = frog ? null : scene.add.rectangle(skullW * 0.84, -29.4 * tall - lift, 7 * skull, 1, PALETTE.cream);
+  // A wider mouth with a turned-up corner, and the shine on the dome above it
+  const mouth = frog ? scene.add.rectangle(5, -29, 10, 1.2, down(dark, 0.2)) : null;
+  const smile = frog ? scene.add.rectangle(10, -29.8, 2, 1.2, down(dark, 0.2)).setAngle(-34) : null;
+  const cheek = frog ? scene.add.ellipse(9, -31, 4, 2.6, mix(light, 0xff9a8a, 0.35)).setAlpha(0.38) : null;
   // a frog's eyes sit on top of the dome; a lizard's are set into the side
-  const ey = frog ? -38 : -34 * tall - lift;
+  const ey = frog ? -38 : -34.6 * tall - lift;
   const eyeL = scene.add.circle(-1, ey, (frog ? 3.4 : 2.6) * skull, PALETTE.cream);
   const eyeR = scene.add.circle(5, ey, (frog ? 3.4 : 2.6) * skull, PALETTE.cream);
   const pupL = frog
@@ -1795,7 +2876,25 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const pupR = frog
     ? scene.add.circle(6, -38, 1.5, PALETTE.black)
     : scene.add.rectangle(6, ey, 1.2, 4 * skull, PALETTE.black);
-  const brow = frog ? null : scene.add.rectangle(2, ey - 3 * skull, 12 * wide * skull, 2, dark);
+  const brow = frog ? null : scene.add.rectangle(2, ey - 3 * skull, skullW * 0.9, 2, dark);
+  // ---- THE HEAD, LIT, and the small things that make a face a face.
+  //
+  // The dome takes the light first because it is the highest thing on the
+  // animal; underneath it is the shadow it casts on its own jaw, and where
+  // the skull sits down onto the shoulders.  Plus a nostril, and a catchlight
+  // in each eye -- two pixels that do more for a face than anything else here.
+  const hy0 = frog ? -33 : -32.6 * tall - lift;
+  const hw = frog ? 16 : skullW;
+  headDetail.push(scene.add.ellipse(2, hy0 - (frog ? 4 : 3 * skull), hw * 0.72, 3, up(light, 0.42)).setAlpha(0.8));
+  headDetail.push(scene.add.ellipse(2, hy0 + (frog ? 5 : 4 * skull), hw * 0.8, 2.5, down(light, 0.38)).setAlpha(0.55));
+  // The shadow the skull casts onto the chest.  Without it the head and the
+  // body are one lump, which is most of why the heavier builds read as a
+  // potato with eyes.
+  bodyDetail.push(scene.add.ellipse(1, hy0 + (frog ? 8 : 6.5 * skull), hw * 0.82, 3.4, down(skin, 0.55)).setAlpha(0.5));
+  headDetail.push(scene.add.ellipse(0, hy0 + (frog ? 7 : 5.4 * skull), hw * 0.62, 1.8, down(light, 0.42)).setAlpha(0.42));
+  headDetail.push(scene.add.circle(frog ? 9 : skullW * 0.86, hy0 + 1, 0.8, down(skin, 0.55)).setAlpha(0.7));
+  const catchL = scene.add.circle(frog ? -1.8 : -0.8, ey - 1.2, 0.8, 0xffffff).setAlpha(0.85);
+  const catchR = scene.add.circle(frog ? 4.2 : 5.2, ey - 1.2, 0.8, 0xffffff).setAlpha(0.85);
 
   // ---- HELM: a bowl, a brow band, a visor slit, and a plume for the frog
   // A helm caps the skull.  At -40 it came down over the eyes and both of
@@ -1805,6 +2904,12 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const helmDome = scene.add.ellipse(2, hy - 2, (frog ? 17 : 14) * wide, 7, H.colour).setVisible(wears(H));
   const visor = scene.add.rectangle(4, hy + 2, (frog ? 12 : 10) * wide, 1.5, H.edge).setVisible(wears(H));
   const plume = scene.add.rectangle(-4, hy - 7, 3, 8, frog ? PALETTE.blood : PALETTE.rust).setVisible(wears(H));
+  // the helm shines by the same rule the breastplate does
+  const hg = gloss(H);
+  helmDetail.push(scene.add.rectangle(2, hy - 4, (frog ? 12 : 10) * wide, 1.5, up(H.colour, 0.3 + hg))
+    .setAlpha(0.35 + hg * 0.8).setVisible(wears(H)));
+  helmDetail.push(scene.add.rectangle(2, hy + 3, (frog ? 15 : 12) * wide, 1.5, down(H.colour, 0.4))
+    .setAlpha(0.5).setVisible(wears(H)));
 
   // ---- the arm and the weapon, on one hinge at the shoulder
   // ---- TWO ARMS, because one of them cannot hold a guard.
@@ -1814,44 +2919,114 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // OFF arm is built behind the torso and the weapon arm in front of it, so
   // armed they read as one arm and a body, and unarmed they come up as a
   // pair with the far one properly behind the near one.
-  const buildArm = (behind: boolean): Phaser.GameObjects.Container => {
-    const a2 = scene.add.container(5 * wide * (behind ? -0.4 : 1), -24 * tall - lift);
+  //
+  // ---- AN ARM WITH AN ELBOW IN IT.
+  //
+  // It was one rectangle on one hinge: a straight tube that swung from the
+  // shoulder, which is why a punch read as the whole limb pivoting and why
+  // the hand looked stuck on even after it was rebuilt as a fist.  There are
+  // two segments now -- upper arm from the shoulder, forearm from the elbow
+  // -- so the joint can flex, and `poseFighter` drives the elbow separately
+  // from the shoulder.  Everything below the elbow lives in `fore`, so
+  // bending it carries the forearm, the wrist and the hand together.
+  // ---- WHERE AN ARM STARTS.
+  //
+  // It started at +5 for the near arm and -2 for the far one, which is not a
+  // pair of shoulders: it is one arm on the chest and one arm very nearly on
+  // the breastbone, four pixels apart on a body nineteen wide.  And -24 sits
+  // in the MIDDLE of a torso that runs from -29 to -9, so every punch left
+  // from somewhere around the stomach.
+  //
+  // Both shoulders are the same distance out now, on opposite sides, and high
+  // enough up the body to be shoulders: three pixels under the top of the
+  // torso, on its upper corners, where the shoulder cap can overlap the chest
+  // and the arm can look like it grew there.
+  // MEASURED, not guessed.  Froggy's head runs from -26.5 to -39.5 and his
+  // torso from -9 to -29, so the head hangs down over the top of the body and
+  // "the upper torso" and "inside the skull" are very nearly the same place.
+  // At -26 the shoulder sat level with the jaw and every raised arm ran up
+  // across an eye.  -24 is the top third of the torso and two clear pixels
+  // under the head, which is as high as a shoulder can go on this animal.
+  const shoulderY = -24 * tall - lift;
+  const shoulderX = 4.8 * wide;
+  const buildArm = (behind: boolean): Arm => {
+    const root = scene.add.container(behind ? -shoulderX : shoulderX, shoulderY);
     const tone = behind ? dark : skin;
-    a2.add(scene.add.rectangle(5, 0, 11, 4 * wide, tone));
-    a2.add(scene.add.rectangle(5, -1, 11, 1, behind ? skin : light).setAlpha(0.5));
-    // The hand, as a FIST rather than as the end of the arm.  A plain circle
-    // in the limb's own colour is invisible against the limb, so unarmed the
-    // guard read as two green smudges; the dark ring gives each hand an edge
-    // it keeps against the arm, against the body and against the face.
-    a2.add(scene.add.circle(10.2, 0, 4 * wide, dark));
-    a2.add(scene.add.circle(10, -0.4, 3 * wide, behind ? skin : light));
-    a2.add(scene.add.rectangle(10.6, 0, 1, 4.6 * wide, dark).setAlpha(0.45));
-    return a2;
+    const limbTone = behind ? skin : light;
+    const UPPER = 6;
+    // the shoulder cap, which is what joins the arm to the body rather than
+    // leaving it to start in mid-air beside it
+    root.add(scene.add.ellipse(0.5, 0, 5.4 * wide, 5.6 * wide, tone));
+    root.add(scene.add.ellipse(0.5, -1.2, 4.4 * wide, 2.4, up(tone, 0.3)).setAlpha(0.7));
+    root.add(scene.add.rectangle(UPPER / 2, 0, UPPER, 4.2 * wide, tone));
+    root.add(scene.add.rectangle(UPPER / 2, -1.2, UPPER, 1, limbTone).setAlpha(0.5));
+
+    const fore = scene.add.container(UPPER, 0);
+    root.add(fore);
+    // the elbow itself: a joint you can see, so the bend has somewhere to be
+    fore.add(scene.add.circle(0, 0, 2.5 * wide, down(tone, 0.18)));
+    fore.add(scene.add.circle(-0.3, -0.7, 1.6 * wide, tone));
+    fore.add(scene.add.rectangle(3, 0, 6.5, 3.8 * wide, tone));
+    fore.add(scene.add.rectangle(3, -1, 6.5, 1, limbTone).setAlpha(0.5));
+
+    const hw2 = 1 + (wide - 1) * 0.5;
+    const hs = hw2;
+    // the hand hangs off the FOREARM now, so the elbow carries it
+    const palm = (x: number, y: number, w: number, h: number, col: number, a = 1) =>
+      fore.add(scene.add.rectangle(x, y * hs, w * hs, h * hs, col).setAlpha(a));
+    palm(7.6, 0.1, 2.2, 3.6, down(tone, 0.12));            // the wrist
+    palm(10.3 - UPPER + 6, 0.2, 6.4, 6.4, dark);           // the edge all round
+    palm(10.3 - UPPER + 6, -0.1, 5.2, 5.2, limbTone);      // the back of the hand
+    palm(10.3 - UPPER + 6, -1.9, 5.2, 1.4, up(limbTone, 0.4), 0.85);
+    for (let k = 0; k < 3; k++) palm(10.3 - UPPER + 6 + 2.3 * hs, -1.6 + k * 1.6, 1.4, 1.3, up(limbTone, 0.22));
+    palm(10.4 - UPPER + 6, 2.2, 5, 1.5, down(limbTone, 0.4), 0.8);
+    palm(11.6 - UPPER + 6, 1.4, 1.6, 3, limbTone);         // the thumb
+    palm(11.6 - UPPER + 6, 1.4, 1.6, 1, down(limbTone, 0.35), 0.7);
+    return { root, fore, hand: 10.3 - UPPER + 6 };
   };
   const armOff = buildArm(true);
   const arm = buildArm(false);
-  const weapon = buildWeapon(scene, f.weapon.key, light);
-  weapon.setPosition(11, 0);
-  arm.add(weapon);
+  const weapon = buildWeapon(scene, f.weapon.key, light, f.single);
+  // In the hand, which is inside the FOREARM -- so the elbow swings the
+  // weapon the way a wrist and an elbow actually do, instead of the whole
+  // limb pivoting rigidly from the shoulder.
+  weapon.setPosition(arm.hand + 1, 0);
+  arm.fore.add(weapon);
 
   const parts: Phaser.GameObjects.GameObject[] = [shadow];
+  if (tailEnd) parts.push(tailEnd);
   if (tailTip) parts.push(tailTip);
   if (tail) parts.push(tail);
   parts.push(footL, footR);
   if (clawL) parts.push(clawL, clawR!);
-  parts.push(legL, legR, greaveL, greaveR, kneeL, kneeR);
+  parts.push(legL, legR, ...legDetail, greaveL, greaveR, kneeL, kneeR);
   parts.push(...spines);
-  parts.push(armOff);
-  parts.push(torso, belly, cuirass, ridge, belt, arm, pauldL, pauldR);
-  parts.push(head, jaw);
-  if (teeth) parts.push(teeth);
-  if (mouth) parts.push(mouth);
-  if (brow) parts.push(brow);
-  parts.push(eyeL, eyeR, pupL, pupR, helmDome, helm, visor, plume);
+  parts.push(armOff.root);
+  parts.push(torso, belly, ...bodyDetail, cuirass, ridge, belt, ...armourDetail, arm.root, pauldL, pauldR);
+  // ---- THE HEAD MOVES AS A HEAD.
+  //
+  // A duck used to be done by setting head.y and helm.y, which was already a
+  // little wrong -- the eyes stayed behind -- and became plainly wrong once
+  // the skull had a snout, a nostril, shading and catchlights to leave behind
+  // as well.  Everything above the neck goes in one container and that is
+  // what moves, so a dodge takes the whole face with it.
+  const headGroup = scene.add.container(0, 0);
+  const headBits: Phaser.GameObjects.GameObject[] = [head, jaw, ...headDetail];
+  if (teeth) headBits.push(teeth);
+  if (cheek) headBits.push(cheek);
+  if (mouth) headBits.push(mouth);
+  if (smile) headBits.push(smile);
+  if (brow) headBits.push(brow);
+  headBits.push(eyeL, eyeR, pupL, pupR, catchL, catchR);
+  headBits.push(helmDome, helm, visor, ...helmDetail, plume);
+  headGroup.add(headBits);
+  if (neck) parts.push(neck);
+  parts.push(headGroup);
   const root = scene.add.container(f.x, FLOOR_Y, parts).setDepth(20);
   root.setScale(f.face * (bld?.scale ?? 1), bld?.scale ?? 1);
   return { root, legL, legR, greaveL, greaveR, kneeL, kneeR, footL, footR, torso, cuirass, belt, ridge,
-    pauldL, pauldR, head, helm, helmDome, visor, plume, arm, armOff, guardUp: false, weapon, shadow };
+    pauldL, pauldR, head, helm, helmDome, visor, plume, headGroup, arm, armOff, guardUp: false, weapon, shadow,
+    nicks: 0 };
 }
 
 /** Put the fighter into the pose its current act calls for. */
@@ -1865,6 +3040,61 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
  * a body apart: the simulation still sees the nine pixels it was balanced on,
  * and nothing here is allowed to feed back into it.
  */
+/**
+ * HOW A WEAPON IS CARRIED WHEN NOBODY IS SWINGING IT.
+ *
+ * Every weapon idled at the same two angles, so a fighter holding a war
+ * hammer and a fighter holding a blowgun stood in exactly the same way and
+ * the only thing telling them apart was a sprite four pixels long.  How you
+ * hold a thing is most of what says what it is.
+ *
+ * None of this is a new table: it is read off the numbers the weapon already
+ * has, so every weapon in the rack gets a carry and any weapon added later
+ * gets one too.  A polearm goes on the shoulder because it is long; a hammer
+ * hangs point-down because it is heavy; a dagger comes in close because it is
+ * quick; a bow drops across the body because it is drawn and not swung.
+ *
+ * `sway` is the breath, and it is the inverse of the heft: a knife bobs in
+ * the hand, a great axe does not move.
+ */
+function carryOf(f: Fighter): { arm: number; elbow: number; sway: number } {
+  const w = f.weapon;
+  if (f.broken || w.key === 'none') return { arm: -10, elbow: -14, sway: 3.5 };
+  const heft = (w.heavy[0] + w.heavy[1]) / 2;
+  const span = (w.reach[0] + w.reach[1]) / 2;
+  const sway = Math.max(1, 5 - heft * 0.45);
+  const shot = w.spec.ranged?.shot;
+  // ---- WHICH WAY THE SHAFT ENDS UP POINTING.
+  //
+  // The weapon hangs off the FOREARM and points along its +x, so what the
+  // crowd sees is the SUM of the two angles, and the shoulder on its own
+  // decides only where the hand is.  Reading the shoulder alone is how a
+  // shouldered spear ended up standing straight up out of the helmet: -56 at
+  // the shoulder and -36 more at the elbow is a shaft pointing at the sky.
+  // So each of these is a pair - where the hand sits, and where the shaft
+  // goes from there - and the sum is written next to it.
+  //
+  // Negative is up and back, positive is down toward the sand: a guard is
+  // -96 and an overhead cleave finishes at +62.
+  //
+  // drawn, not swung: string hand down by the hip, stave across the body
+  if (shot === 'arrow' || shot === 'bolt') return { arm: 40, elbow: -60, sway: sway * 0.6 };
+  // a sling or a blowgun is barely carried at all
+  if (shot === 'stone' || shot === 'dart') return { arm: 14, elbow: -44, sway };
+  // something about to be thrown rides high, at the shoulder
+  if (shot) return { arm: -40, elbow: -20, sway: sway * 0.8 };
+  // ---- HEAVY BEFORE LONG, and that order is the whole of it: a great axe
+  // is eight of reach as well as nine of heft, so asking about length first
+  // shouldered it like a pike and stood it up through the top of his head.
+  // Heavy enough that the head of it rests near the sand.
+  if (heft >= 7) return { arm: 40, elbow: 5, sway: sway * 0.5 };
+  // long, and light enough to shoulder: hand low, shaft up over the shoulder
+  if (span >= 7) return { arm: 30, elbow: -65, sway: sway * 0.7 };
+  // quick and short: in close, elbow shut, ready to go again
+  if (w.tempo >= 1.35) return { arm: -6, elbow: -40, sway: sway * 1.2 };
+  return { arm: -10, elbow: -14, sway };
+}
+
 export function drawX(f: Fighter, other?: Fighter): number {
   const base = (() => {
     if (!other) return f.x;
@@ -1876,6 +3106,40 @@ export function drawX(f: Fighter, other?: Fighter): number {
   return base + f.shove;
 }
 
+/**
+ * A WEAPON THAT HAS BEEN USED LOOKS USED.
+ *
+ * Durability was a number nobody could see: the first the crowd knew about a
+ * blade being nearly gone was it snapping.  Two thirds worn puts a notch in
+ * it, a third left puts three more and a rust streak along it, so a fighter
+ * pressing on with something about to go is something you can watch happening
+ * rather than something the log tells you afterwards.
+ *
+ * The marks are cut once each -- `nicks` counts what is already on the blade,
+ * so this can be called every frame and only ever does work on the two frames
+ * that matter.  A fresh weapon in the hand resets the count with the sprite.
+ */
+function wearWeapon(f: Fighter): void {
+  const a = f.art;
+  if (!a) return;
+  if (f.broken || f.weapon.key === 'none' || !Number.isFinite(f.dur)) return;
+  const full = durabilityOf(f.kit.weapon);
+  if (!Number.isFinite(full) || full <= 0) return;
+  const left = Math.max(0, f.dur) / full;
+  const want = left <= 0.33 ? 4 : left <= 0.66 ? 1 : 0;
+  if (want <= a.nicks) return;
+  const sc = S();
+  for (let i = a.nicks; i < want; i++) {
+    const nick = sc.add.rectangle(5 + i * 4, i % 2 ? -1.5 : 1.5, 2, 1, 0x2b2419);
+    a.weapon.add(nick);
+  }
+  if (want === 4 && a.nicks < 4) {
+    // and the rust, which is the one that says it is nearly done
+    a.weapon.add(sc.add.rectangle(9, 0, 12, 1, 0x7a3a1c).setAlpha(0.7));
+  }
+  a.nicks = want;
+}
+
 export function poseFighter(f: Fighter, other?: Fighter): void {
   const a = f.art;
   if (!a) return;
@@ -1884,6 +3148,27 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   // muscular lizard shrinks back to standard size on the first tick.
   const bulk = f.type?.build.scale ?? 1;
   a.root.setScale(f.face * bulk, bulk);
+
+  // ---- AND WHEN THE FIGHT IS OVER, THE RIG IS NOT THIS FUNCTION'S ANY MORE.
+  //
+  // The winner's arms going up and the loser folding into the sand are
+  // tweens, and a tween is no match for something that reassigns the same
+  // angle sixty times a second: every one of them was being overwritten on
+  // the next frame.  Position still tracks, so the shove and the facing keep
+  // working; every limb belongs to the tween from here.
+  //
+  // The shadow is the one exception, and it has to be: it lives inside the
+  // root, so the loser rolling onto his back would roll his shadow up off
+  // the sand with him.  It is put flat again here, exactly as it is on any
+  // other frame.
+  if (f.pose !== 'none') {
+    const fall = FLOOR_Y - a.root.y;
+    a.shadow.y = 1 + fall;
+    a.shadow.setAngle(-a.root.angle);
+    const kk = Phaser.Math.Clamp(1 - fall / 26, 0.45, 1.35);
+    a.shadow.setScale(kk, kk).setAlpha(0.34 * kk);
+    return;
+  }
 
   // the walk: two legs out of phase, and the body riding on it
   const swingL = Math.sin(f.step / 5) * 3;
@@ -1911,11 +3196,48 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     low:    { w: -70, s: 88, r: 56, lean: 14 },
     // a punch barely winds up and goes straight out from the guard
     punch:  { w: -62, s: 14, r: -40, lean: 9 },
+    // ---- AND THE THREE THAT ARE NOT A STRAIGHT PUNCH.
+    //
+    // A hook comes round from outside the shoulder and finishes across the
+    // body; an uppercut starts below the ribs and drives UP past the chin;
+    // a shove barely rotates at all and pushes with the heel of both hands.
+    // Three moves on the unarmed row were all drawn as the same jab, so the
+    // only thing telling a body hook from a straight right was the caption.
+    hook:   { w: -18, s: 52, r: -34, lean: 11 },
+    upper:  { w: 44, s: -56, r: -38, lean: -9 },
+    shove:  { w: -40, s: -4, r: -30, lean: 15 },
     // a kick is the legs' business; the hands stay up where they were
     kick:   { w: -58, s: -52, r: -50, lean: -8 },
+    // drawing a bow pulls the hand back to the cheek and lets it go forward
+    shoot:  { w: -50, s: -18, r: -34, lean: -6 },
+    // and a throw comes right over the shoulder
+    hurl:   { w: -128, s: 40, r: 12, lean: 14 },
   };
   const shape = A[f.move?.anim ?? 'sweep'];
-  let arm = -10;
+  const carry = carryOf(f);
+  let arm = carry.arm;
+  // ---- BENDING DOWN FOR IT.
+  //
+  // Reaching for something on the sand is the one pose where the arm goes
+  // BELOW the shoulder and the whole animal folds over it, so it reads at a
+  // glance as picking something up rather than as another swing.
+  if (f.act === 'pickup') {
+    const grab = Math.min(1, 1 - f.t * 2.2);
+    a.arm.root.setAngle(42 + grab * 26);
+    a.arm.fore.setAngle(-18 - grab * 26);
+    a.armOff.root.setAngle(38);
+    a.armOff.fore.setAngle(-30);
+    a.torso.setAngle(f.face * 16);
+    a.cuirass.setAngle(f.face * 16);
+    a.headGroup.y = 5;
+    a.headGroup.x = f.face * 3;
+    a.legL.setAngle(-13); a.legR.setAngle(11);
+    a.greaveL.setAngle(-13); a.greaveR.setAngle(11);
+    a.root.y = FLOOR_Y + 2;
+    a.shadow.setPosition(0, -1).setScale(1, 1).setAngle(0);
+    return;
+  }
+  a.headGroup.x = 0;
   let lean = 0;
   if (f.act === 'windup') { arm = shape.w; lean = -shape.lean * 0.55; }
   else if (f.act === 'strike') { arm = shape.s; lean = shape.lean; }
@@ -1937,7 +3259,39 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   const snap = f.act === 'strike' || f.act === 'windup' ? ARM_SNAP : ARM_EASE;
   f.armA += (arm - f.armA) * snap;
   f.leanA += (lean - f.leanA) * snap;
-  a.arm.setAngle(f.armA);
+  a.arm.root.setAngle(f.armA);
+
+  // ---- AND THE ELBOW, WHICH IS THE HALF THAT WAS MISSING.
+  //
+  // A straight tube swinging from the shoulder reads as a plank on a hinge.
+  // A real arm COILS -- the elbow shuts on the wind-up, drives open through
+  // the strike, and hangs slightly bent the rest of the time, because a limb
+  // held perfectly straight is a limb nobody is using.
+  //
+  // How far it shuts depends on what is in the hand: you can fold a dagger
+  // right in against your chest and you cannot do that with a claymore, so
+  // the fold is scaled by the weapon's reach.  That is most of what makes a
+  // heavy weapon look heavy from across the arena.
+  const reachy = Math.min(1, f.st.reach / 50);
+  const fold = 1 - reachy * 0.55;
+  let bend = carry.elbow;
+  if (f.act === 'windup') bend = -86 * fold;
+  else if (f.act === 'strike') bend = -6;
+  else if (f.act === 'recover') bend = -42 * fold;
+  else if (f.act === 'guard') bend = -104 * fold;
+  else if (f.act === 'dodge') bend = -66 * fold;
+  else if (f.act === 'stagger') bend = -24;
+  else if (f.act === 'lunge') bend = -30;
+  // a thrust is the one attack that STRAIGHTENS rather than coils
+  if (f.move?.anim === 'thrust' && (f.act === 'windup' || f.act === 'strike')) {
+    bend = f.act === 'windup' ? -74 * fold : 2;
+  }
+  // and drawing a bow pulls the hand back past the cheek
+  if (f.move?.anim === 'shoot') bend = f.act === 'strike' ? -18 : -96;
+  // the idle breath, so nothing is ever perfectly still
+  if (f.act === 'walk') bend += Math.sin(f.clock * 2.3 + (f.who === 'frog' ? 0 : 1.7)) * carry.sway;
+  f.elbowA += (bend - f.elbowA) * snap;
+  a.arm.fore.setAngle(f.elbowA);
 
   // ---- THE UNARMED STANCE.
   //
@@ -1960,18 +3314,44 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     // nowhere to be: it vanished, and the stance read as one arm pointing.
     // In front of the face is also where a boxer's rear hand belongs.
     a.guardUp = true;
-    a.root.bringToTop(a.armOff);
-    a.armOff.x = Math.abs(a.arm.x) * 0.55;
-    a.armOff.y = a.arm.y + 1.5;
+    a.root.bringToTop(a.armOff.root);
+    // Round to the front, but not all the way across -- a boxer's rear hand
+    // sits inside the lead one, not on top of it.
+    a.armOff.root.x = Math.abs(a.arm.root.x) * 0.45;
+    a.armOff.root.y = a.arm.root.y + 1;
   }
   if (bare) {
     const throwing = f.act === 'strike' || f.act === 'recover';
+    // A shove is the one unarmed move thrown with BOTH hands, so it does not
+    // alternate: both arms go out together and both come back together.
+    const shoving = f.move?.anim === 'shove' && (throwing || f.act === 'windup');
     const alt = f.swing % 2 === 1;
-    a.armOff.setAngle(throwing && alt ? f.armA : GUARD_REAR);
-    a.arm.setAngle(throwing && !alt ? f.armA : f.act === 'windup' ? f.armA : GUARD_LEAD);
-    a.armOff.setVisible(true);
+    if (shoving) {
+      a.arm.root.setAngle(f.armA);
+      a.armOff.root.setAngle(f.armA);
+      a.armOff.root.setVisible(true);
+      const open = f.act === 'strike' ? -6 : GUARD_FOLD;
+      f.elbowA += (open - f.elbowA) * snap;
+      a.arm.fore.setAngle(f.elbowA);
+      a.armOff.fore.setAngle(f.elbowA);
+    } else {
+      a.armOff.root.setAngle(throwing && alt ? f.armA : GUARD_REAR);
+      a.arm.root.setAngle(throwing && !alt ? f.armA : f.act === 'windup' ? f.armA : GUARD_LEAD);
+      a.armOff.root.setVisible(true);
+      // ---- A BOXER'S ARMS ARE BENT ARMS.
+      //
+      // The guard is elbows in and fists up; the punch drives the elbow open
+      // and snaps it back.  Whichever hand is not throwing stays folded,
+      // which is what makes the guard read as a guard and not as two arms
+      // pointing.
+      const drive = throwing ? -18 : GUARD_FOLD;
+      f.elbowA += ((throwing && !alt ? drive : GUARD_FOLD) - f.elbowA) * snap;
+      a.arm.fore.setAngle(f.elbowA);
+      a.armOff.fore.setAngle(throwing && alt ? drive : GUARD_FOLD);
+    }
   } else {
-    a.armOff.setAngle(OFF_ARM_REST);
+    a.armOff.root.setAngle(OFF_ARM_REST);
+    a.armOff.fore.setAngle(-22);
   }
 
   // ---- THE CROUCH, spelled in the legs.
@@ -2002,11 +3382,8 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   }
   a.torso.setAngle(f.leanA);
   a.cuirass.setAngle(f.leanA);
-  const duck = f.act === 'dodge' ? 4 : f.act === 'stagger' ? -2 : 0;
-  const bd = f.type?.build;
-  const legLift = 11 * ((bd?.limb ?? 1) - 1);
-  a.head.y = (f.who === 'frog' ? -33 : -32 * (bd?.tall ?? 1) - legLift) + duck;
-  a.helm.y = (f.who === 'frog' ? -43 : -39 * (bd?.tall ?? 1) - legLift) + duck;
+  // The head, and everything on it, ducks as one.
+  a.headGroup.y = f.act === 'dodge' ? 4 : f.act === 'stagger' ? -2 : 0;
 
   // ---- THE SHADOW STAYS ON THE SAND.
   //
@@ -2146,6 +3523,8 @@ let apiRef: MinigameApi | null = null;
  */
 /** DEV only: holds the fight still so a frame can be inspected. */
 let frozen = false;
+/** What is lying on the sand this bout.  The scene's copy of the fight's. */
+let ground: Dropped[] = [];
 let round = 1;
 let bank = 0;
 
@@ -2194,6 +3573,8 @@ function reset(): void {
   phase = 'title';
   ended = false;
   frozen = false;
+  for (const d of ground) clearDrop(d);
+  ground = [];
   round = 1;
   bank = 0;
   stage = 0;
@@ -2710,7 +4091,12 @@ function showCardOfBoth(c: Phaser.GameObjects.Container): void {
       ['POWER', f.st.powerPts.toFixed(0)],
       ['SPEED', f.st.speedPts.toFixed(0)],
       ['AVOID', f.st.avoidPts.toFixed(0)],
-      ['REACH', f.st.distPts.toFixed(0)],
+      // A ranged weapon says so here, as reach-in-hand against carry.  It
+      // goes in the REACH row rather than a row of its own because the panel
+      // is already the full height of its box.
+      ['REACH', f.weapon.spec.ranged
+        ? `${f.st.distPts.toFixed(0)} / ${f.weapon.spec.ranged.far}`
+        : f.st.distPts.toFixed(0)],
       ['DEFENCE', `${Math.round(f.st.defence * 100)}%`],
       ['HEALTH', String(f.st.maxHp)],
     ];
@@ -2797,11 +4183,221 @@ function refreshHud(): void {
     if (b) b.width = Math.max(0, Math.round((Math.max(0, f.hp) / f.st.maxHp) * 128));
     hpNum[who]?.setText(`${Math.max(0, f.hp)} / ${f.st.maxHp}`);
     defText[who]?.setText(`${Math.round(f.st.defence * 100)}%`);
-    kitLine[who]?.setText(f.broken ? 'BARE HANDS' : f.weapon.name.slice(0, 16)).setTint(f.broken ? PALETTE.blood : PALETTE.bone);
+    // ---- AND HOW MANY SHOTS ARE LEFT, which is the whole story of a
+    // thrower's fight: six knives is a different fighter from none, and the
+    // moment the count reaches nought he has to come and fight you.
+    const r = f.weapon.spec.ranged;
+    const count = r && !f.broken && Number.isFinite(f.ammo) ? ` x${Math.max(0, f.ammo)}` : '';
+    const name = f.broken ? 'BARE HANDS' : f.weapon.name.slice(0, 16 - count.length) + count;
+    kitLine[who]?.setText(name)
+      .setTint(f.broken ? PALETTE.blood : r && f.ammo <= 0 ? PALETTE.fog : PALETTE.bone);
   }
 }
 
 /** A number coming off somebody, and the burst where it landed. */
+/**
+ * WHAT AN ARROW LOOKS LIKE ON ITS WAY ACROSS THE SAND.
+ *
+ * The flight time is the SIMULATION's, not a tween duration picked to look
+ * right: `sh.t` is counted down by `exchange` and the sprite is simply drawn
+ * at however far along it has got.  So the thing the crowd watches land is
+ * the same event the rules resolved, and a shot cannot arrive on screen at a
+ * different moment from the one it arrives in the fight.
+ */
+function buildShot(kind: Shot, face: number): Phaser.GameObjects.Container {
+  const c = S().add.container(0, 0);
+  const put = (x: number, y: number, w: number, h: number, col: number, ang = 0) =>
+    c.add(S().add.rectangle(x, y, w, h, col).setAngle(ang));
+  switch (kind) {
+    case 'arrow':
+      put(0, 0, 11, 1.5, 0x8a6a42); put(5, 0, 3, 2, 0xc6ced9);
+      put(-5, 0, 3, 3, 0xe8e2d0); put(-5, 0, 3, 1, 0xb03030);
+      break;
+    case 'bolt':
+      put(0, 0, 8, 2, 0x5e4a30); put(4, 0, 3.5, 2.5, 0xdfe6f0); put(-4, 0, 2, 3, 0x9aa2ae);
+      break;
+    case 'knife':
+      put(0, 0, 8, 2, 0xc6ced9); put(0, -1, 8, 1, 0xeef3fa); put(-4, 0, 3, 2.5, 0x3b2a1a);
+      break;
+    case 'axe':
+      put(0, 0, 9, 2, 0x7a5a36); put(4, -1, 5, 6, 0xc6ced9); put(4, -3, 5, 1.5, 0xeef3fa);
+      break;
+    case 'spear':
+      put(0, 0, 16, 2, 0x8a6a42); put(8, 0, 6, 2.5, 0xc6ced9); put(8, -1, 6, 1, 0xeef3fa);
+      break;
+    case 'stone':
+      c.add(S().add.circle(0, 0, 2.2, 0x8f8a80));
+      c.add(S().add.circle(-0.6, -0.6, 1.2, 0xb4afa4));
+      break;
+    case 'dart':
+      put(0, 0, 5, 1, 0x2a2d3a); put(2, 0, 2, 1.5, 0xc6ced9); put(-2.5, 0, 2, 2, 0xe0e36a);
+      break;
+    case 'spark':
+      c.add(S().add.circle(0, 0, 3.4, 0x6fd8e8).setAlpha(0.5));
+      c.add(S().add.circle(0, 0, 2, 0xdffaff));
+      break;
+    case 'disc':
+      c.add(S().add.circle(0, 0, 4, 0xc6ced9));
+      c.add(S().add.circle(0, 0, 2.2, 0x2b2118));
+      break;
+  }
+  c.setScale(face, 1).setDepth(26);
+  layer?.add(c);
+  return c;
+}
+
+/** Put every shot in the air where it has got to this frame. */
+function drawFlight(f: Fighter): void {
+  for (const sh of f.flight) {
+    if (!sh.art) {
+      sh.art = buildShot(sh.kind, f.face);
+      audio.sfx('throw_whoosh', 0.35);
+    }
+    const k = 1 - Math.max(0, sh.t) / sh.total;          // 0 at the hand, 1 at the target
+    const x = sh.from + (sh.aim - sh.from) * k;
+    // A believable throw: it leaves the hand at shoulder height, rises, and
+    // comes down onto the target.  `arc` is how much of that there is, so a
+    // bolt is nearly flat and a slung stone is lobbed right over.
+    const lift = Math.sin(k * Math.PI) * sh.arc * Math.abs(sh.aim - sh.from) * 0.42;
+    const y = FLOOR_Y - 24 - lift;
+    sh.art.setPosition(x, y);
+    // and it points where it is going
+    const slope = sh.arc * Math.cos(k * Math.PI) * 52;
+    if (sh.kind === 'disc' || sh.kind === 'stone' || sh.kind === 'spark') {
+      sh.art.setAngle(sh.kind === 'disc' ? (sh.art.angle + 26) % 360 : 0);
+    } else if (sh.kind === 'axe') {
+      sh.art.setAngle((sh.art.angle + 22) % 360);
+    } else {
+      sh.art.setAngle(-slope * Math.sign(sh.aim - sh.from || 1));
+    }
+  }
+}
+
+/** The shot arrived: take the sprite away, with a puff if it hit nothing. */
+function retireShot(sh: InFlight, hit: boolean): void {
+  const art = sh.art;
+  if (!art) return;
+  sh.art = null;
+  if (!hit) {
+    S().tweens.add({ targets: art, y: FLOOR_Y - 2, angle: art.angle + 40, alpha: 0.6,
+      duration: 220, ease: 'Quad.easeIn',
+      onComplete: () => { S().tweens.add({ targets: art, alpha: 0, duration: 500, onComplete: () => art.destroy() }); } });
+    return;
+  }
+  art.destroy();
+}
+
+/**
+ * THE WEAPON LEAVING THE HAND, and where it comes to rest.
+ *
+ * It tumbles out on the side the blow came from, bounces once off the sand
+ * and slides the last of the way -- which is the bit that sells it as a
+ * physical object rather than a sprite being moved to a coordinate.
+ */
+function showDisarm(f: Fighter, d: Dropped): void {
+  audio.sfx('fence_thunk', 0.6);
+  audio.sfx('item_thud', 0.45);
+  floatHigh(f.x, 'DISARMED!', PALETTE.gold);
+  S().cameras.main.shake(180, 0.005);
+  // the hand it left: the other blade of a pair, or the bare fist
+  if (f.art) {
+    f.art.weapon.destroy();
+    const left = f.broken || f.weapon.key === 'none'
+      ? buildWeapon(S(), UNARMED.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber)
+      : buildWeapon(S(), f.weapon.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber, true);
+    left.setPosition(f.art.arm.hand + 1, 0);
+    f.art.arm.fore.add(left);
+    f.art.weapon = left;
+    f.art.nicks = 0;
+    if (!f.broken) floatHigh(f.x, 'ONE LEFT!', PALETTE.gold);
+  }
+  const art = buildWeapon(S(), d.def.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber, d.single && !!d.def.spec.paired);
+  art.setPosition(f.x + f.face * 8, FLOOR_Y - 24).setDepth(19);
+  layer?.add(art);
+  d.art = art;
+  const bounce = FLOOR_Y - 10;
+  S().tweens.add({
+    targets: art, x: d.x - (d.x - f.x) * 0.25, y: bounce,
+    angle: 320 + Math.random() * 200, duration: 320, ease: 'Quad.easeOut',
+    onComplete: () => {
+      S().tweens.add({
+        targets: art, x: d.x, y: FLOOR_Y - 3, angle: art.angle + 120,
+        duration: 260, ease: 'Quad.easeIn',
+        onComplete: () => {
+          // laid flat where it stopped, with a glint so it reads as a pickup
+          art.setAngle(f.face > 0 ? 8 : -8).setPosition(d.x, FLOOR_Y - 3);
+          audio.sfx('item_thud', 0.3);
+          const glint = S().add.rectangle(d.x, FLOOR_Y - 7, 9, 1, PALETTE.bone).setDepth(20).setAlpha(0);
+          layer?.add(glint);
+          S().tweens.add({ targets: glint, alpha: 0.75, duration: 420, yoyo: true, repeat: -1 });
+          d.art = art;
+          (art as unknown as { glint?: Phaser.GameObjects.Rectangle }).glint = glint;
+        },
+      });
+    },
+  });
+}
+
+/** Take the sprite and its glint away once somebody has it, or the sand does. */
+function clearDrop(d: Dropped): void {
+  const art = d.art as unknown as { glint?: Phaser.GameObjects.Rectangle } | null;
+  art?.glint?.destroy();
+  d.art?.destroy();
+  d.art = null;
+}
+
+/** The weapon going back into a hand, and the hand closing round it. */
+function showPickup(f: Fighter, d: Dropped): void {
+  audio.sfx('item_thud', 0.5);
+  floatHigh(f.x, `${d.def.name.slice(0, 14)}!`, PALETTE.mossLight);
+  clearDrop(d);
+  if (!f.art) return;
+  f.art.weapon.destroy();
+  const w = buildWeapon(S(), d.def.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber, f.single);
+  w.setPosition(f.art.arm.hand + 1, 0);
+  f.art.arm.fore.add(w);
+  f.art.weapon = w;
+  f.art.nicks = 0;
+  f.art.guardUp = false;
+  // it comes up off the sand rather than appearing in the fist
+  w.setScale(0.4).setAlpha(0.6);
+  S().tweens.add({ targets: w, scaleX: 1, scaleY: 1, alpha: 1, duration: 200, ease: 'Back.easeOut' });
+}
+
+/**
+ * A WEAPON GIVING OUT UNDER A BLOW RATHER THAN ON ONE.
+ *
+ * Deliberately not the same as wearing out mid-swing: this one fails while
+ * being held still, so the pieces go straight down at the feet instead of
+ * spinning away, and the fighter is left standing in a guard with nothing
+ * in it.
+ */
+function showBlockBreak(f: Fighter): void {
+  audio.sfx('crumble', 0.75);
+  audio.sfx('fence_thunk', 0.5);
+  floatHigh(f.x, 'GUARD SHATTERED!', PALETTE.blood);
+  S().cameras.main.shake(220, 0.007);
+  for (let i = 0; i < 5; i++) {
+    const bit = S().add.rectangle(f.x + f.face * 10, FLOOR_Y - 22, 3, 2, PALETTE.steel).setDepth(31);
+    layer?.add(bit);
+    S().tweens.add({
+      targets: bit, x: bit.x + (Math.random() - 0.5) * 22, y: FLOOR_Y - 2,
+      angle: 180 + Math.random() * 360, alpha: 0, duration: 420 + Math.random() * 200,
+      ease: 'Quad.easeIn', onComplete: () => bit.destroy(),
+    });
+  }
+  if (!f.art) return;
+  f.art.weapon.destroy();
+  const left = f.broken || f.weapon.key === 'none'
+    ? buildWeapon(S(), UNARMED.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber)
+    : buildWeapon(S(), f.weapon.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber, true);
+  left.setPosition(f.art.arm.hand + 1, 0);
+  f.art.arm.fore.add(left);
+  f.art.weapon = left;
+  f.art.nicks = 0;
+  if (!f.broken) floatHigh(f.x, 'ONE LEFT!', PALETTE.gold);
+}
+
 function showBlow(f: Fighter, blow: Blow): void {
   const x = f.x;
   if (blow.dodged) {
@@ -2947,16 +4543,30 @@ function showBreak(f: Fighter): void {
     targets: shard, x: f.x + f.face * 46, y: FLOOR_Y - 2, angle: 540, alpha: 0,
     duration: 700, onComplete: () => shard.destroy(),
   });
-  // and the hand it left is empty from here on
+  // ---- AND WHAT IS LEFT IN THE HAND.
+  //
+  // For a pair, that is the other blade, so the sprite is redrawn as a
+  // single rather than swapped for a fist: the fighter is down to one, not
+  // out.  Only an actually empty hand gets the knuckles.
   if (f.art) {
     f.art.weapon.destroy();
+    if (!f.broken && f.weapon.key !== 'none') {
+      const one = buildWeapon(S(), f.weapon.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber, true);
+      one.setPosition(f.art.arm.hand + 1, 0);
+      f.art.arm.fore.add(one);
+      f.art.weapon = one;
+      f.art.nicks = 0;
+      floatHigh(f.x, 'ONE LEFT!', PALETTE.gold);
+      return;
+    }
     // UNARMED.key, not a literal: the literal was 'fists', which stopped
     // being a key when the rack was rebuilt and nobody noticed because the
     // switch quietly answered it with a shield.
     const fists = buildWeapon(S(), UNARMED.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber);
-    fists.setPosition(11, 0);
-    f.art.arm.add(fists);
+    fists.setPosition(f.art.arm.hand + 1, 0);
+    f.art.arm.fore.add(fists);
     f.art.weapon = fists;
+    f.art.nicks = 0;
   }
   S().cameras.main.shake(200, 0.006);
 }
@@ -2974,11 +4584,41 @@ function stepFight(real: number): void {
   // things changing position relative to each other.
   const dt = real * PACE;
   fightT += dt;
-  for (const e of exchange(frog!, lizard!, dt)) {
+  // Whoever is holding nothing keeps an eye on the floor, so the pickup has
+  // to be drawn the moment the rules hand it over.
+  const wasSeeking: Array<[Fighter, Dropped | null]> = [[frog!, frog!.seeking], [lizard!, lizard!.seeking]];
+  const heldBefore = [frog!.weapon.key, lizard!.weapon.key] as const;
+  for (const e of exchange(frog!, lizard!, dt, Math.random, ground)) {
+    if (e.blow.disarmed) showDisarm(e.def, e.blow.disarmed);
     if (e.blow.broke) showBreak(e.att);
+    // A weapon that gave out CATCHING something broke in the defender's
+    // hands, not the attacker's -- attributing it to the swinger would take
+    // the sprite out of the wrong gladiator's grip, which is the same bug
+    // the clash path had.
+    if (e.blow.blockBroke) showBlockBreak(e.def);
+    // The spikes bill the ATTACKER, so the number floats over them.
+    if (e.blow.spiked) {
+      floating(e.att.x, `-${e.blow.spiked}`, PALETTE.steel);
+      floatHigh(e.att.x, 'SPIKES!', PALETTE.bone);
+      audio.sfx('fence_thunk', 0.5);
+    }
     if (e.blow.stripped) showStrip(e.def, e.blow.stripped, e.blow.strippedTint ?? PALETTE.steel);
+    // A shot that has only just been loosed has not done anything yet -- the
+    // sprite goes up and the damage waits until it gets there.
+    if (e.blow.loosed && !e.blow.hit && !e.blow.dodged && e.blow.dmg === 0 && e.att.flight.includes(e.blow.loosed)) continue;
+    if (e.blow.loosed) retireShot(e.blow.loosed, e.blow.hit);
     if (e.blow.clashed) showClash(e.att, e.def);
     else showBlow(e.def, e.blow);
+  }
+  drawFlight(frog!);
+  drawFlight(lizard!);
+  // a hand that was empty and is not any more has just closed on something
+  for (let i = 0; i < 2; i++) {
+    const f = i === 0 ? frog! : lizard!;
+    if (heldBefore[i] === 'none' && f.weapon.key !== 'none') {
+      const was = wasSeeking[i][1];
+      if (was) showPickup(f, was);
+    }
   }
   // the knock-back easing off, which is drawing and nothing else
   for (const f of [frog!, lizard!]) {
@@ -2987,6 +4627,8 @@ function stepFight(real: number): void {
       if (Math.abs(f.shove) < 0.05) f.shove = 0;
     }
   }
+  wearWeapon(frog!);
+  wearWeapon(lizard!);
   poseFighter(frog!, lizard!);
   poseFighter(lizard!, frog!);
   refreshHud();
@@ -3019,6 +4661,10 @@ function finishFight(won: boolean): void {
   audio.sfx(won ? 'zone_clear' : 'death_stinger', 0.7);
   S().cameras.main.shake(260, 0.006);
 
+  // Declared BEFORE the sequences start, so the very first frame after the
+  // last blow is already the tweens' and not the walk cycle's.
+  loser.pose = 'down';
+  winner.pose = 'cheer';
   goesDown(loser);
   celebrates(winner, won);
 
@@ -3113,7 +4759,12 @@ function goesDown(f: Fighter): void {
   sc.tweens.add({ targets: a.cuirass, angle: f.face * 26, duration: 300, delay: 150, ease: 'Quad.easeIn' });
   sc.tweens.add({ targets: [a.head, a.helm], y: '+=7', duration: 300, delay: 150, ease: 'Quad.easeIn' });
   sc.tweens.add({ targets: a.root, y: FLOOR_Y + 5, duration: 300, delay: 150, ease: 'Quad.easeIn' });
-  sc.tweens.add({ targets: a.arm, angle: f.face * 60, duration: 300, delay: 150 });
+  // `a.arm` is a rig, not a display object: tweening it set a property on a
+  // plain object and nothing moved.  It is the shoulder that swings.
+  sc.tweens.add({ targets: a.arm.root, angle: f.face * 60, duration: 300, delay: 150 });
+  sc.tweens.add({ targets: a.arm.fore, angle: -10, duration: 300, delay: 150 });
+  sc.tweens.add({ targets: a.armOff.root, angle: f.face * 48, duration: 300, delay: 150 });
+  sc.tweens.add({ targets: a.armOff.fore, angle: -16, duration: 300, delay: 150 });
   sc.time.delayedCall(430, () => audio.sfx('item_thud', 0.4));
   // 3. and over, flat, into the sand
   sc.tweens.add({
@@ -3137,11 +4788,36 @@ function celebrates(f: Fighter, won: boolean): void {
   const a = f.art;
   if (!a) return;
   const sc = S();
-  sc.tweens.add({ targets: a.arm, angle: -104, duration: 260, delay: 420, ease: 'Back.easeOut' });
+  // ---- THE WINNER'S POSE.
+  //
+  // This raised one arm by tweening `a.arm`, which stopped being a display
+  // object when the elbow went in: the tween set `angle` on a plain rig and
+  // the arm never moved.  Both shoulders go up now, both elbows straighten
+  // into it, the head tips back, and whatever is still in the hand is held
+  // overhead - which is the difference between winning and standing there.
+  // -112 and not -150: past about -130 the shoulder carries the arm over the
+  // top and whatever is in the hand ends up pointing backwards, off behind
+  // him and away from the body on the sand.  This is a salute, held up and
+  // slightly forward, with the blade where the crowd can see it.
+  sc.tweens.add({ targets: a.arm.root, angle: -112, duration: 300, delay: 420, ease: 'Back.easeOut' });
+  sc.tweens.add({ targets: a.arm.fore, angle: -26, duration: 300, delay: 420, ease: 'Back.easeOut' });
+  sc.tweens.add({ targets: a.armOff.root, angle: -104, duration: 300, delay: 500, ease: 'Back.easeOut' });
+  sc.tweens.add({ targets: a.armOff.fore, angle: -30, duration: 300, delay: 500, ease: 'Back.easeOut' });
+  a.armOff.root.setVisible(true);
+  a.root.bringToTop(a.armOff.root);
   sc.tweens.add({ targets: a.torso, angle: 0, duration: 260, delay: 420 });
+  sc.tweens.add({ targets: a.cuirass, angle: 0, duration: 260, delay: 420 });
+  sc.tweens.add({ targets: a.headGroup, y: -2, duration: 260, delay: 420 });
+  // planted, feet apart, rather than caught mid-stride
+  for (const leg of [a.legL, a.greaveL]) sc.tweens.add({ targets: leg, angle: -9, duration: 220, delay: 420 });
+  for (const leg of [a.legR, a.greaveR]) sc.tweens.add({ targets: leg, angle: 9, duration: 220, delay: 420 });
   sc.time.delayedCall(560, () => {
     audio.sfx('zone_clear', 0.45);
     sc.tweens.add({ targets: a.root, y: FLOOR_Y - 11, duration: 190, yoyo: true, repeat: 3, ease: 'Quad.easeOut' });
+    // ---- AND THE TAUNT.  Four hops with the arms pumping on the same beat,
+    // because arms held still through a jump reads as a sprite being moved
+    // up and down rather than as somebody enjoying themselves.
+    sc.tweens.add({ targets: [a.arm.root, a.armOff.root], angle: -134, duration: 190, yoyo: true, repeat: 3, ease: 'Quad.easeOut' });
   });
   // the crowd comes up out of its seats
   crowd.forEach((r, i) => {
@@ -3188,10 +4864,13 @@ export const frogsterMash: MinigameModule = {
   rules: 'open four chests, then take it or risk it',
   tutorial: {
     objective: [
-      'OPEN FOUR CHESTS: A WEAPON, AND ARMOUR FOR HEAD, BODY AND LEGS.',
-      'WHAT IS IN THE CHEST IS YOURS. THERE IS NO PUTTING IT BACK.',
+      // The card is 304px wide and the glyph advance is 6, so a centred line
+      // has fifty characters before it runs out over the frame.  These were
+      // 63, 59 and 59.
+      'FOUR CHESTS: A WEAPON, AND ARMOUR FOR EACH SLOT.',
+      'WHAT IS IN THE CHEST IS YOURS. NO SWAPS.',
       'THEN FROGGY FIGHTS. WIN ROUND ONE AND TAKE 50.',
-      'TAKE IT, OR PUT IT ALL ON THE NEXT LIZARD FOR 30, 35, 40...',
+      'TAKE IT, OR RISK IT ALL FOR 30, 35, 40 MORE...',
       'LOSE A ROUND AND THE WHOLE BANK GOES WITH IT.',
     ],
     controls: [
@@ -3271,6 +4950,50 @@ export const frogsterMash: MinigameModule = {
           const f = who === 'frog' ? frog : lizard;
           if (f && Number.isFinite(f.dur)) f.dur = 1;
         },
+        /** What is lying on the sand, and who is going for it. */
+        floor: () => ground.map((d) => ({ key: d.def.key, x: Math.round(d.x),
+          life: +d.life.toFixed(1), settle: +d.settle.toFixed(2), drawn: !!d.art })),
+        /** Knock the weapon out of a fighter's hand, to test the sequence. */
+        disarm: (who: 'frog' | 'lizard') => {
+          const f = who === 'frog' ? frog : lizard;
+          if (!f) return null;
+          const d = dropWeapon(f, ground);
+          if (d) showDisarm(f, d);
+          return d ? d.def.key : null;
+        },
+        /** How tall each fighter actually stands, measured off the rig. */
+        height: (who: 'frog' | 'lizard') => {
+          const f = who === 'frog' ? frog : lizard;
+          if (!f?.art) return null;
+          const b = f.art.root.getBounds();
+          return { top: +b.top.toFixed(1), h: +(FLOOR_Y - b.top).toFixed(1), w: +b.width.toFixed(1) };
+        },
+        /** Where the first shot in the air has got to, for a flight test. */
+        shot: (who: 'frog' | 'lizard') => {
+          const f = who === 'frog' ? frog : lizard;
+          const sh = f?.flight[0];
+          if (!sh) return null;
+          return { k: 1 - Math.max(0, sh.t) / sh.total, kind: sh.kind,
+            x: sh.art?.x ?? 0, y: sh.art?.y ?? 0, from: sh.from, aim: sh.aim };
+        },
+        /** Put a named weapon in a live fighter's hand, to test one. */
+        arm: (who: 'frog' | 'lizard', key: string) => {
+          const f = who === 'frog' ? frog : lizard;
+          const def = WEAPONS.find((w) => w.key === key);
+          if (!f || !def) return false;
+          f.kit = { ...f.kit, weapon: makeWeapon(def) };
+          f.weapon = def;
+          f.held = f.kit.weapon;
+          f.broken = false;
+          f.dur = durabilityOf(f.kit.weapon);
+          f.ammo = def.spec.ranged?.ammo ?? 0;
+          f.reload = 0;
+          f.st = statsOf(f.kit, def, f.held, f.type);
+          f.hp = Math.min(f.hp, f.st.maxHp);
+          if (f.art) { f.art.weapon.destroy(); const w = buildWeapon(S(), def.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber);
+            w.setPosition(f.art.arm.hand + 1, 0); f.art.arm.fore.add(w); f.art.weapon = w; f.art.nicks = 0; }
+          return true;
+        },
         /** Hold the fight still, and park the two apart, to read a pose. */
         freeze: (on: boolean) => { frozen = on; },
         park: (who: 'frog' | 'lizard', x: number) => {
@@ -3285,8 +5008,9 @@ export const frogsterMash: MinigameModule = {
         art: (who: 'frog' | 'lizard') => {
           const f = who === 'frog' ? frog : lizard;
           if (!f?.art) return null;
-          return { arm: Math.round(f.art.arm.angle), off: Math.round(f.art.armOff.angle),
-            guardUp: f.art.guardUp, armVis: f.art.arm.visible, offVis: f.art.armOff.visible,
+          return { arm: Math.round(f.art.arm.root.angle), off: Math.round(f.art.armOff.root.angle),
+            elbow: Math.round(f.art.arm.fore.angle), offElbow: Math.round(f.art.armOff.fore.angle),
+            guardUp: f.art.guardUp, armVis: f.art.arm.root.visible, offVis: f.art.armOff.root.visible,
             helm: f.art.helm.visible, cuirass: f.art.cuirass.visible, greave: f.art.greaveL.visible,
             legL: f.art.legL.angle, legR: f.art.legR.angle };
         },
@@ -3301,7 +5025,7 @@ export const frogsterMash: MinigameModule = {
           return null;
         },
         /** The rules and the headless simulator, so a build can be checked. */
-        rules: { WEAPONS, MATERIALS, UNARMED, QUALITY_MUL, statsOf, makeFighter, resolveStrike, tick, think, exchange, simulate, randomKit, offerFor, makeWeapon, makeArmour, breakWeapon, durabilityOf, wrapTo, CARD_COLS, BASE, LIZARDS, makeLizard, buildFighter, buildWeapon, rewardFor, armourLife, wearArmour, MOVES },
+        rules: { WEAPONS, MATERIALS, UNARMED, QUALITY_MUL, statsOf, makeFighter, resolveStrike, tick, think, exchange, simulate, randomKit, offerFor, makeWeapon, makeArmour, breakWeapon, durabilityOf, wrapTo, CARD_COLS, BASE, LIZARDS, makeLizard, buildFighter, buildWeapon, rewardFor, armourLife, wearArmour, MOVES, dropWeapon, takeWeapon, landShot },
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__mash;
@@ -3341,6 +5065,8 @@ function snap(f: Fighter): Record<string, unknown> {
   return {
     hp: Math.max(0, f.hp), maxHp: f.st.maxHp, x: Math.round(f.x), act: f.act,
     weapon: f.weapon.key, broken: f.broken, gone: { ...f.gone },
+    seeking: f.seeking ? f.seeking.def.key : null,
+    ammo: Number.isFinite(f.ammo) ? f.ammo : -1, flight: f.flight.length, reload: +f.reload.toFixed(2),
     wear: { head: Math.max(0, Math.round(f.wear.head)), body: Math.max(0, Math.round(f.wear.body)), legs: Math.max(0, Math.round(f.wear.legs)) }, dur: Number.isFinite(f.dur) ? f.dur : -1,
     power: +f.st.power.toFixed(2), rate: +f.st.rate.toFixed(2), walk: +f.st.walk.toFixed(1),
     avoid: +f.st.avoid.toFixed(3), defence: +f.st.defence.toFixed(3), reach: f.st.reach, range: f.st.range,

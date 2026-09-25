@@ -136,8 +136,30 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
   const room = priceTop - PANEL_GAP - panelH - 2 - objTop;
   const maxLines = Math.max(1, Math.floor(room / OBJ_ROW));
 
+  // ---- AND HOW WIDE A LINE MAY BE, which was never checked at all.
+  //
+  // The height was worked out from the geometry and the width was simply
+  // trusted, so a game with more to say ran its objective straight out over
+  // the frame and off both sides of the screen -- Frogster Mash was writing
+  // 63-character lines onto a card that holds 50.  A centred line spans the
+  // card's width, so the budget is the card less a margin, in whole glyphs.
+  //
+  // Wrapping rather than clipping: a card that quietly drops the end of a
+  // sentence is worse than one that takes an extra row, and the row budget
+  // above already knows what to do when there is not enough room.
+  const OBJ_COLS = Math.floor((CARD.w - 8) / FONT_ADVANCE);
+  const wrapped: string[] = [];
+  for (const line of opts.tutorial.objective) {
+    let run = '';
+    for (const word of line.split(' ')) {
+      if (run && (run + ' ' + word).length > OBJ_COLS) { wrapped.push(run); run = word; }
+      else run = run ? run + ' ' + word : word;
+    }
+    if (run) wrapped.push(run);
+  }
+
   let y = objTop;
-  for (const line of opts.tutorial.objective.slice(0, maxLines)) {
+  for (const line of wrapped.slice(0, maxLines)) {
     keep(centerText(scene, GAME_W / 2, y + 3, line, PALETTE.cream).setDepth(903));
     y += OBJ_ROW;
   }

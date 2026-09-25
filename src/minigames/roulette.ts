@@ -172,7 +172,82 @@ export const roulette: MinigameModule = {
     spinVel = SPIN_BASE;
     chamberDots = [];
 
-    scene.add.rectangle(0, 18, GAME_W, 162, 0x1a1012).setOrigin(0, 0);
+    // ---- THE ROOM THIS MACHINE LIVES IN.
+    //
+    // It was one flat maroon rectangle, which puts the cylinder in a void:
+    // nowhere, with nothing at stake but the numbers.  This is a back room --
+    // the one behind the arcade floor with the good carpet and no windows --
+    // and every part of it is arranged to push the eye down onto the machine
+    // and to make standing there feel like a decision.
+    //
+    // Nothing here is bright.  The cylinder and the three buttons are the
+    // only things in the frame allowed to hold light, because they are the
+    // only things the player has to read.
+    const FLOOR_Y2 = 132;
+    scene.add.rectangle(0, 18, GAME_W, 162, 0x140d0f).setOrigin(0, 0);
+
+    // ---- THE BACK WALL: panelling, and a dado rail across it.
+    scene.add.rectangle(0, 18, GAME_W, FLOOR_Y2 - 18, 0x24161a).setOrigin(0, 0);
+    for (let x = 0; x < GAME_W; x += 22) {
+      scene.add.rectangle(x, 18, 1, FLOOR_Y2 - 18, 0x2f1d22).setOrigin(0, 0);
+      scene.add.rectangle(x + 1, 18, 1, FLOOR_Y2 - 18, 0x1b1013).setOrigin(0, 0).setAlpha(0.7);
+    }
+    scene.add.rectangle(0, 92, GAME_W, 3, 0x3a2228).setOrigin(0, 0);
+    scene.add.rectangle(0, 92, GAME_W, 1, 0x50313a).setOrigin(0, 0);
+    // damp creeping up from the skirting, because nobody maintains this room
+    for (let i = 0; i < 9; i++) {
+      const dx = (i * 41) % GAME_W;
+      scene.add.ellipse(dx, FLOOR_Y2 - 4, 26 + (i % 3) * 14, 16, 0x0f0a0c).setAlpha(0.35);
+    }
+
+    // ---- THE FLOOR: boards running away from the player, and the machine's
+    // own shadow pooling under it.
+    scene.add.rectangle(0, FLOOR_Y2, GAME_W, 180 - FLOOR_Y2, 0x2a1a18).setOrigin(0, 0);
+    scene.add.rectangle(0, FLOOR_Y2, GAME_W, 2, 0x140d0f).setOrigin(0, 0);
+    for (let i = 0; i < 7; i++) {
+      scene.add.rectangle(0, FLOOR_Y2 + 6 + i * 7, GAME_W, 1, 0x1e1214).setOrigin(0, 0).setAlpha(0.6);
+    }
+    scene.add.ellipse(CYL_X, FLOOR_Y2 + 8, 150, 26, 0x0c0709).setAlpha(0.55);
+
+    // ---- THE LAMP.  One bulb on a flex, directly over the machine, and the
+    // cone of light it throws.  It is the reason the corners are dark.
+    scene.add.rectangle(CYL_X - 0.5, 18, 1, 14, 0x3a2228).setOrigin(0, 0);
+    scene.add.ellipse(CYL_X, 34, 26, 9, 0x3f2a30);
+    scene.add.ellipse(CYL_X, 33, 22, 7, 0x5a3c44);
+    scene.add.circle(CYL_X, 38, 3.4, 0xffd9a0).setAlpha(0.95);
+    // A Phaser triangle sits on the CENTROID of its points, not on the first
+    // one -- placing this at the bulb put the apex thirty pixels above it,
+    // which is up inside the header.  The offset is a third of the height.
+    const coneH = 104;
+    scene.add.triangle(CYL_X, 38 + coneH / 3, -54, coneH, 54, coneH, 0, 0, 0xffd9a0).setAlpha(0.055);
+    scene.add.triangle(CYL_X, 38 + coneH / 3, -30, coneH, 30, coneH, 0, 0, 0xffd9a0).setAlpha(0.045);
+
+    // ---- AND WHOSE ROOM IT IS.
+    //
+    // A framed portrait on the back wall, off to one side, lit badly: Froggy,
+    // watching whoever is at the machine.  Environmental storytelling rather
+    // than decoration -- the house is present while you gamble, and it is not
+    // saying anything.
+    // Clear of the two rules lines across the top -- it was hanging through
+    // the word CLEAN -- and low enough to sit on the panelling rather than in
+    // the text.
+    const px = 40;
+    const py = 72;
+    scene.add.rectangle(px - 15, py - 16, 30, 32, 0x4a3018).setOrigin(0, 0);
+    scene.add.rectangle(px - 13, py - 14, 26, 28, 0x1c2a1e).setOrigin(0, 0);
+    scene.add.ellipse(px, py + 6, 17, 16, 0x2f5d33);
+    scene.add.ellipse(px, py - 3, 18, 14, 0x3d7a42);
+    for (const sx of [-4.6, 4.6]) {
+      scene.add.ellipse(px + sx, py - 7, 6.4, 6, PALETTE.cream).setAlpha(0.92);
+      scene.add.circle(px + sx, py - 6.6, 2.4, PALETTE.black);
+    }
+    // Badly lit, not unlit.  At 0.45 he was a dark green smear in a frame and
+    // the one thing the portrait is for -- being looked at -- did not happen.
+    scene.add.rectangle(px - 13, py - 14, 26, 28, 0x000000).setOrigin(0, 0).setAlpha(0.2);
+
+    // a bare bulb bracket and a dead one beside the portrait, for the corner
+    scene.add.rectangle(GAME_W - 34, 44, 10, 2, 0x3a2228).setOrigin(0, 0);
+    scene.add.circle(GAME_W - 30, 48, 2.2, 0x2a1a1e);
     scene.add.rectangle(0, 18, GAME_W, 2, 0x40202a).setOrigin(0, 0);
 
     // The machine's face: a cylinder, five chambers, and a hammer.

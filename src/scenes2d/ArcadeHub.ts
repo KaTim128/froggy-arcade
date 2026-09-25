@@ -323,6 +323,28 @@ export class ArcadeHub extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.openChangeMachine());
 
+    // ---- THE DOOR, WHICH HAD NO HITBOX AT ALL.
+    //
+    // It was reachable only through the floor-click path below: you clicked
+    // somewhere near the bottom of the room and the proximity target took you
+    // outside.  That is exactly how a player leaves a room without meaning
+    // to.  The doorway and the door in it are one target -- they go to the
+    // same place, so they should answer to the same click -- and it is drawn
+    // tightly enough that the floor either side of it is floor.
+    // Sized to the DOOR, not to the zone the player stands in to use it.  The
+    // first pass took its numbers from the proximity check -- 52 by 24, which
+    // is where your feet have to be -- and that is a quarter of the bottom of
+    // the screen.  The door itself is drawn 40 wide and 8 tall against the
+    // very bottom edge, so that is what answers a click, and the carpet
+    // either side of it answers nothing.
+    this.add
+      .zone(GAME_W / 2, GAME_H - 3, 40, 10)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        if (this.busy()) return;
+        this.useDoor();
+      });
+
     // The bell still summons nobody (VOC-18) — but it has to at least answer a
     // click, or it reads as broken rather than as ignored.
     this.add
@@ -370,23 +392,21 @@ export class ArcadeHub extends Phaser.Scene {
     // the zone's own handler runs and this must not also fire the proximity
     // target — otherwise clicking a cabinet from the spawn point would open the
     // door standing behind you.
-    this.input.on('pointerdown', (_p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
-      if (over.length > 0 || this.busy()) return;
-      // A click on bare floor is not an instruction to play.  Standing next to
-      // a machine and clicking past it used to charge a token and open the
-      // game, which is an accident every time -- so the floor works the doors
-      // and the counter and nothing else.  A machine starts on a click ON THE
-      // MACHINE, or on [E] while stood at it, and on nothing else.
-      if (
-        this.target?.kind === 'cabinet' ||
-        this.target?.kind === 'counter' ||
-        this.target?.kind === 'staff' ||
-        this.target?.kind === 'change'
-      ) {
-        return;
-      }
-      this.interact();
-    });
+    // ---- AND A CLICK ON THE FLOOR DOES NOTHING.
+    //
+    // It used to fall through to `interact()`, which acts on whatever the
+    // player happens to be STANDING near -- so clicking bare floor a few
+    // steps from the doorway walked you out of the arcade, and clicking bare
+    // floor beside a cabinet was already known to charge a token.  Half of it
+    // had been patched by excluding the cabinet and the counter, which is
+    // treating the symptom: proximity is not a click target.
+    //
+    // Everything that can be clicked now owns a hitbox and answers for
+    // itself: the machines, the doorway and its door, the counter, the prize
+    // case, the change machine, the bell.  Walking up and pressing [E] is
+    // still the other way in, and it is the only thing proximity does.
+    //
+    // Floor, walls, furniture, props, empty space: nothing.
     this.input.keyboard?.on('keydown-ESC', () => {
       if (!this.busy()) this.scene.launch('SettingsModal', { from: 'ArcadeHub' });
     });
@@ -795,28 +815,89 @@ export class ArcadeHub extends Phaser.Scene {
       if (t < APP_HALL_MS) return;
       // ---- AND IT IS SIMPLY NOT THERE ANY MORE.
       this.apparition = 'hush';
-      froggyLayer.clear();
       store.patch({ sawApparition: true });
       store.flush();
-      // Their feet back.  The five seconds are only worth anything if they
-      // can be walked around in: a player held still is a player watching a
-      // cutscene, and a cutscene is something they know happened.
-      this.locked = false;
+      // ---- AND HE IS STANDING IN IT.
+      //
+      // The corridor is gone and the arcade is back exactly as it was, with
+      // one thing in it that was not there before, and no sound in the
+      // building to tell you what to feel about it.
+      //
+      // Their feet DO NOT come back yet.  This used to unlock here, on the
+      // argument that five seconds are only worth anything if they can be
+      // walked around in -- but that was written for an empty room.  With him
+      // standing in it, being able to walk away is being able to not look,
+      // and not looking is the whole of what the moment is for.  They get the
+      // room back when the music does.
       return;
     }
 
     if (this.apparition === 'hush') {
+      // repainted every frame, because the overlay is cleared by anything
+      // else that wants it
+      froggyLayer.paint((ctx) => this.paintWatcher(ctx));
       if (t < APP_HALL_MS + APP_HUSH_MS) return;
       this.apparition = 'glitch';
       audio.sfx('speaker_fault', 0.9);
       return;
     }
 
-    if (t < APP_HALL_MS + APP_HUSH_MS + APP_GLITCH_MS) return;
+    if (t < APP_HALL_MS + APP_HUSH_MS + APP_GLITCH_MS) {
+      froggyLayer.paint((ctx) => this.paintWatcher(ctx));
+      return;
+    }
     this.apparition = 'off';
-    // And the arcade comes back on, mid-tune, as though it had never been off
-    // -- which is the last thing that makes the player doubt it.
+    // ---- AND THE ROOM COMES BACK, WITH NOTHING IN IT.
+    //
+    // He goes on the same frame the tune does.  The player gets their feet
+    // back at the same instant, so what they are left with is an ordinary
+    // arcade and no way to check -- which is the last thing that makes them
+    // doubt it.
+    froggyLayer.clear();
+    this.locked = false;
     audio.setScene(HUB_AUDIO);
+  }
+
+  /**
+   * HIM, IN THE ROOM, AT THE SIZE A PERSON WOULD BE.
+   *
+   * Not a face filling the screen and not a corridor: he is simply standing
+   * on the floor behind the counter, at the scale everything else in the
+   * arcade is drawn at, doing nothing.  Dim, because the room is dim, and
+   * still, because a thing that moves is a thing that is happening -- what is
+   * wanted is the player working out that he has been there for a while.
+   */
+  private paintWatcher(ctx: CanvasRenderingContext2D): void {
+    const x = GAME_W / 2 + 34;
+    const y = 74;
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    // body
+    ctx.fillStyle = '#2f5d33';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 12, 11, 13, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // head
+    ctx.fillStyle = '#3d7a42';
+    ctx.beginPath();
+    ctx.ellipse(x, y - 4, 12, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // eyes, which are the only bright thing on him
+    for (const ex of [-5, 5]) {
+      ctx.fillStyle = '#efe7cd';
+      ctx.beginPath();
+      ctx.ellipse(x + ex, y - 9, 4.4, 4.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#0a0a0a';
+      ctx.beginPath();
+      ctx.ellipse(x + ex, y - 9, 1.9, 2.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // legs
+    ctx.fillStyle = '#24492a';
+    ctx.fillRect(x - 6, y + 22, 4, 7);
+    ctx.fillRect(x + 2, y + 22, 4, 7);
+    ctx.restore();
   }
 
   /**
@@ -1168,6 +1249,24 @@ export class ArcadeHub extends Phaser.Scene {
     });
   }
 
+  /**
+   * Out through the front door.
+   *
+   * Pulled out of `interact` so the doorway's own hitbox and the [E] key run
+   * the identical thing -- the door and the opening it sits in go to the same
+   * place, and should not be two slightly different code paths that drift.
+   *
+   * It goes outside, where the man is, and it comes back in again: the
+   * daytime loop is walking through it with your arms full and walking back
+   * through it with money.  It used to commit `route: 'ejected'` and send you
+   * to the closed arcade at night, which meant leaving with a prize ended the
+   * game whether you meant it to or not.
+   */
+  private useDoor(): void {
+    this.locked = true;
+    fadeToScene(this, 'ExteriorDay');
+  }
+
   private interact(): void {
     // The staff panel is the one thing E closes as well as opens, so it is
     // answered before `busy` -- which the panel itself sets.
@@ -1205,14 +1304,7 @@ export class ArcadeHub extends Phaser.Scene {
     }
 
     if (t.kind === 'door') {
-      // The door is a door.  It goes outside, where the man is, and it comes
-      // back in again — the daytime loop is walking through it with your arms
-      // full and walking back through it with money.  It used to commit
-      // `route: 'ejected'` and send you to the closed arcade at night, which
-      // meant leaving with a prize ended the game whether you meant it to or
-      // not.
-      this.locked = true;
-      fadeToScene(this, 'ExteriorDay');
+      this.useDoor();
       return;
     }
 

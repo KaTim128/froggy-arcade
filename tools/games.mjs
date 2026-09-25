@@ -1026,7 +1026,11 @@ for (const g of [
 
   await page.goto(`${URL}/?intro=1&tokens=20&scene=ArcadeHub`, { waitUntil: 'networkidle2' });
   await sleep(2500);
-  await page.mouse.click(640, 700);
+  // Audio unlock.  It used to be (640, 700), which is bang on the front door
+  // at the bottom of the screen -- harmless while nothing down there answered
+  // a click, and an exit from the arcade the moment the doorway got a hitbox
+  // of its own.  Mid-floor is genuinely inert now and says so.
+  await page.mouse.click(640, 400);
   await sleep(600);
   const cabinet = await cabinetAt(page, 'ArcadeHub', 'tictactoe');
 

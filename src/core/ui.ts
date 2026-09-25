@@ -9,6 +9,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from './audio';
 import { ensurePixelFont, FONT_KEY, FONT_H, FONT_ADVANCE } from '../render/pixelFont';
+import { froggyLayer } from '../render/froggyLayer';
 
 /**
  * `size` is a target pixel height, kept for the call sites that ask for big
@@ -101,12 +102,21 @@ export function button(
 export const FADE_MS = 300;
 
 export function fadeToScene(scene: Phaser.Scene, key: string, data?: object): void {
-  scene.cameras.main.fadeOut(FADE_MS, 0, 0, 0);
+  // Froggy is composited on his own canvas above the game buffer, and the
+  // camera fade does not own that canvas -- so without this he stays brightly
+  // lit over a room going to black.  The same progress that darkens the room
+  // darkens him, so the two are never out of step.
+  scene.cameras.main.fadeOut(FADE_MS, 0, 0, 0, (_cam: Phaser.Cameras.Scene2D.Camera, progress: number) => {
+    froggyLayer.setDim(1 - progress);
+  });
   scene.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+    froggyLayer.setDim(0);
     scene.scene.start(key, data);
   });
 }
 
 export function fadeIn(scene: Phaser.Scene): void {
-  scene.cameras.main.fadeIn(FADE_MS, 0, 0, 0);
+  scene.cameras.main.fadeIn(FADE_MS, 0, 0, 0, (_cam: Phaser.Cameras.Scene2D.Camera, progress: number) => {
+    froggyLayer.setDim(progress);
+  });
 }

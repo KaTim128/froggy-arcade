@@ -221,7 +221,7 @@ interface Pin {
   down: boolean;
   /** Off the deck entirely: out of play, out of every collision. */
   gone: boolean;
-  body: Phaser.GameObjects.Arc;
+  body: Phaser.GameObjects.Container;
 }
 
 type Turn = 'player' | 'cpu';
@@ -339,19 +339,84 @@ export const bowling: MinigameModule = {
     // One line taller than it was: YOU, FROGGY, and the shot you have dialled.
     panel(scene, 6, 34, 96, 40, 0x2a1d14, 0x8a6a3a, 4);
     // gutters, lane, foul line, pin deck
-    scene.add.rectangle(LANE_L - 8, LANE_TOP, LANE_W + 16, FOUL_Y - LANE_TOP + 6, PALETTE.ink).setOrigin(0, 0);
-    scene.add.rectangle(LANE_L, LANE_TOP, LANE_W, FOUL_Y - LANE_TOP + 6, 0xb9884f).setOrigin(0, 0);
-    for (let x = LANE_L + 6; x < LANE_L + LANE_W; x += 12) {
-      scene.add.rectangle(x, LANE_TOP, 1, FOUL_Y - LANE_TOP + 6, 0xa4773f).setOrigin(0, 0).setAlpha(0.6);
+    // ---- THE LANE, AS A FLOOR MADE OF WOOD.
+    //
+    // It was one flat tan rectangle with a seam every twelve pixels, which is
+    // a brown strip rather than a bowling lane.  A real one is narrow boards
+    // laid end to end and polished until the house lights sit on them, and
+    // all of that can be had for a handful of rectangles.
+    const laneH = FOUL_Y - LANE_TOP + 6;
+    scene.add.rectangle(LANE_L - 8, LANE_TOP, LANE_W + 16, laneH, PALETTE.ink).setOrigin(0, 0);
+    // the gutters, sunk and shaded, either side of the boards
+    for (const gx of [LANE_L - 8, LANE_L + LANE_W]) {
+      scene.add.rectangle(gx, LANE_TOP, 8, laneH, 0x120c08).setOrigin(0, 0);
+      scene.add.rectangle(gx + (gx < LANE_L ? 6 : 0), LANE_TOP, 2, laneH, 0x2a1d14).setOrigin(0, 0);
     }
+    scene.add.rectangle(LANE_L, LANE_TOP, LANE_W, laneH, 0xb9884f).setOrigin(0, 0);
+    // ---- THE BOARDS.  Seven of them, each a slightly different tone, because
+    // no two planks in a floor came off the same part of the tree.
+    const BOARDS = 7;
+    const bw = LANE_W / BOARDS;
+    const grain = [0xc59255, 0xb9884f, 0xc08b52, 0xb07f48, 0xc59255, 0xb5824b, 0xbe8b50];
+    for (let i = 0; i < BOARDS; i++) {
+      scene.add.rectangle(LANE_L + i * bw, LANE_TOP, bw, laneH, grain[i]).setOrigin(0, 0);
+      // the seam between this board and the next, and the light on its edge
+      scene.add.rectangle(LANE_L + (i + 1) * bw - 0.5, LANE_TOP, 0.8, laneH, 0x8a6035).setOrigin(0, 0).setAlpha(0.75);
+      scene.add.rectangle(LANE_L + i * bw + 0.4, LANE_TOP, 0.5, laneH, 0xe0b982).setOrigin(0, 0).setAlpha(0.22);
+      // a few knots and short grain marks down each board
+      for (let k = 0; k < 3; k++) {
+        const gy = LANE_TOP + 8 + ((i * 37 + k * 53) % (laneH - 20));
+        scene.add.rectangle(LANE_L + i * bw + 2, gy, bw - 4, 1, 0x9a6d3c).setOrigin(0, 0).setAlpha(0.3);
+      }
+    }
+    // ---- THE HOUSE LIGHTS ON THE POLISH.
+    //
+    // A long soft band down the middle of the lane and a hard glint near the
+    // foul line: it is the one thing that says the surface is polished rather
+    // than matte, and it is what makes the ball look like it is ON something.
+    scene.add.rectangle(LANE_L + LANE_W * 0.3, LANE_TOP, LANE_W * 0.26, laneH, 0xfff0c9).setOrigin(0, 0).setAlpha(0.07);
+    scene.add.rectangle(LANE_L + LANE_W * 0.52, LANE_TOP, LANE_W * 0.1, laneH, 0xfff0c9).setOrigin(0, 0).setAlpha(0.05);
+    scene.add.ellipse(LANE_L + LANE_W / 2, FOUL_Y - 14, LANE_W * 0.8, 20, 0xfff0c9).setAlpha(0.06);
     scene.add.rectangle(LANE_L, FOUL_Y, LANE_W, 1, PALETTE.blood).setOrigin(0, 0);
+    scene.add.rectangle(LANE_L, FOUL_Y + 1, LANE_W, 1, 0x000000).setOrigin(0, 0).setAlpha(0.35);
     // the aiming arrows a real lane has, a third of the way down
     for (let i = -3; i <= 3; i++) {
       const ax = LANE_L + LANE_W / 2 + i * 10;
       const ay = 118 + Math.abs(i) * 5;
       scene.add.triangle(ax, ay, 0, 5, 3, 0, 6, 5, 0x6b4a2a).setOrigin(0.5, 0.5);
     }
+    // the pin deck, a shade darker than the approach
     scene.add.rectangle(LANE_L, LANE_TOP, LANE_W, 46, 0x8d6535).setOrigin(0, 0).setAlpha(0.5);
+
+    // ---- THE HOUSE THIS LANE BELONGS TO.
+    //
+    // A lane ends in a wall and the wall is the one part of an alley that is
+    // allowed to shout.  Froggy's is a green masking board with his eyes over
+    // it, looking back down the lane at whoever is about to bowl, and a pair
+    // of lamps washing the deck.  It is behind the pins and above the deck,
+    // so it never sits under the ball or the rack.
+    const wallY = LANE_TOP - 16;
+    scene.add.rectangle(LANE_L - 8, wallY, LANE_W + 16, 18, 0x1b3a22).setOrigin(0, 0);
+    scene.add.rectangle(LANE_L - 8, wallY, LANE_W + 16, 2, 0x3d7a42).setOrigin(0, 0);
+    scene.add.rectangle(LANE_L - 8, wallY + 16, LANE_W + 16, 2, 0x0e1f12).setOrigin(0, 0);
+    // his eyes over the masking board, at the size of a sign
+    const ex = LANE_L + LANE_W / 2;
+    for (const sx of [-1, 1]) {
+      scene.add.ellipse(ex + sx * 11, wallY + 8, 13, 11, 0x5aa85f);
+      scene.add.ellipse(ex + sx * 11, wallY + 7, 9, 8, PALETTE.cream);
+      scene.add.circle(ex + sx * 11, wallY + 7.5, 3.2, PALETTE.black);
+      scene.add.circle(ex + sx * 11 - 1, wallY + 6, 1.1, 0xffffff).setAlpha(0.9);
+    }
+    // two lamps washing down onto the deck
+    for (const lx of [LANE_L + 8, LANE_L + LANE_W - 8]) {
+      scene.add.rectangle(lx - 3, wallY + 17, 6, 2, 0xffe9a8).setOrigin(0, 0).setAlpha(0.8);
+      scene.add.triangle(lx, LANE_TOP + 14, -7, 26, 7, 26, 0, 0, 0xfff0c9).setAlpha(0.06);
+    }
+    // and a lily pad either side of the approach, down by the foul line
+    for (const px of [LANE_L - 4, LANE_L + LANE_W + 4]) {
+      scene.add.ellipse(px, FOUL_Y - 26, 11, 7, 0x2f6b36).setAlpha(0.9);
+      scene.add.triangle(px + 3, FOUL_Y - 26, 0, 0, 5, 2, 0, 4, 0x1b3a22).setAlpha(0.9);
+    }
 
     ballBody = scene.add.circle(0, 0, BALL_R, PALETTE.plum).setStrokeStyle(1, PALETTE.violet).setDepth(20);
     aimLine = scene.add.graphics().setDepth(15);
@@ -360,7 +425,11 @@ export const bowling: MinigameModule = {
     resetBall();
 
     hud = {
-      round: centerText(scene, GAME_W / 2, 24, '', PALETTE.cream),
+      // Off the lane.  It was centred at the top of the screen, which is
+      // directly over the masking board at the end of the lane -- the round
+      // counter was printed across Froggy's eyes.  It lives on the left with
+      // the rest of the readouts now, where nothing is drawn behind it.
+      round: text(scene, 8, 22, '', PALETTE.cream),
       you: text(scene, 8, 40, '', PALETTE.tealLight),
       cpu: text(scene, 8, 50, '', PALETTE.neon),
       best: text(scene, GAME_W - 6, 21, '', PALETTE.gold).setOrigin(1, 0),
@@ -528,7 +597,21 @@ function rack(): void {
     for (let i = 0; i <= row; i++) {
       const x = cx + (i - row / 2) * PIN_GAP;
       const y = PIN_APEX_Y - row * PIN_GAP * 0.85;
-      const body = scene0.add.circle(x, y, PIN_R, PALETTE.bone).setStrokeStyle(1, PALETTE.blood).setDepth(18);
+      // ---- A PIN WITH THE HOUSE MARK ON IT.
+      //
+      // It was a bone disc with a red ring.  A pin seen from above is a white
+      // crown with a neck ring under it, and this house paints a green band
+      // on every one of them -- the same green as everything else Froggy owns,
+      // so the rack reads as belonging to this arcade and not a stock one.
+      const body = scene0.add.container(x, y, [
+        scene0.add.circle(0, 0, PIN_R, 0xbda98a),
+        scene0.add.circle(-0.3, -0.3, PIN_R - 0.5, PALETTE.bone),
+        // the two stripes round the neck, in the house colours
+        scene0.add.rectangle(0, -0.6, PIN_R * 1.5, 0.9, 0x3d7a42).setAlpha(0.95),
+        scene0.add.rectangle(0, 0.9, PIN_R * 1.3, 0.7, 0x5aa85f).setAlpha(0.8),
+        // and the light on the crown
+        scene0.add.circle(-0.6, -0.9, PIN_R * 0.42, 0xfff8e4).setAlpha(0.85),
+      ]).setDepth(18);
       pins.push({ x, y, vx: 0, vy: 0, home: { x, y }, down: false, gone: false, body });
     }
   }
@@ -689,7 +772,11 @@ function stepPins(dt: number): void {
       const moved = Math.hypot(p.x - p.home.x, p.y - p.home.y) > KNOCK;
       if (moved || Math.hypot(p.vx, p.vy) > TOPPLE) {
         p.down = true;
-        p.body.setFillStyle(PALETTE.ash).setScale(1.3, 0.55).setDepth(12);
+        // Squashed flat and drained of colour: a pin on its side, seen from
+        // above, is a short pale smear rather than a crown.  The whole group
+        // dims together, which is why it is a container and not a disc.
+        p.body.setScale(1.35, 0.5).setAlpha(0.55).setDepth(12);
+        p.body.setAngle(Phaser.Math.Between(-40, 40));
         audio.sfx('ui_hover', 0.6);
       }
     }

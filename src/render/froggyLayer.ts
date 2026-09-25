@@ -87,6 +87,27 @@ class FroggyLayer {
   setVisible(v: boolean): void {
     if (this.canvas) this.canvas.style.display = v ? 'block' : 'none';
   }
+
+  /**
+   * ---- AND HE GOES DARK WITH THE ROOM.
+   *
+   * This canvas sits ON TOP of the game canvas, at device resolution, which
+   * is the whole point of it -- and it is also why a scene transition never
+   * touched him.  Phaser fades the CAMERA, and the camera only owns the
+   * buffer underneath; Froggy stayed at full brightness over a room going to
+   * black, which is the one thing that gives away that he is composited
+   * separately.
+   *
+   * `k` is how lit he is: 1 is the room as normal, 0 is the room gone.  It
+   * drives brightness rather than opacity, so he darkens the way everything
+   * else in the frame darkens instead of dissolving and showing what is
+   * behind him.
+   */
+  setDim(k: number): void {
+    if (!this.canvas) return;
+    const lit = Math.max(0, Math.min(1, k));
+    this.canvas.style.filter = lit >= 0.999 ? '' : `brightness(${lit.toFixed(3)})`;
+  }
 }
 
 export const froggyLayer = new FroggyLayer();
