@@ -104,6 +104,8 @@ interface Slice {
 }
 
 let slices: Slice[] = [];
+/** A backing plate per rim label, shown only for the ones outside the rim. */
+let plates: Phaser.GameObjects.Rectangle[] = [];
 let apiRef: MinigameApi | null = null;
 let sceneRef: Phaser.Scene | null = null;
 let face: Phaser.GameObjects.Graphics | null = null;
@@ -123,7 +125,19 @@ let lastFace = -1;
 /** Cut the rim into faces.  Shares are percentages; the wheel is 2π. */
 function build(): void {
   slices = [];
-  const palette = [PALETTE.tealDark, PALETTE.plum, PALETTE.rust, PALETTE.slate];
+  plates = [];
+  // ---- A POND, NOT A ROULETTE WHEEL.
+  //
+  // The small change alternated through teal, plum, rust and slate, which is
+  // four colours that have nothing to do with each other or with this arcade.
+  // These are four greens and a reed brown -- lily-pad colours -- and they
+  // still alternate, so the rim reads as a wheel rather than a pie chart.
+  //
+  // What does NOT change is the ordering the player reads value by: nothing
+  // else on the rim may be the colour of the top prizes, and the middle money
+  // keeps its gold.  Theming the wheel is not allowed to cost the one job the
+  // colours do.
+  const palette = [0x2f6b36, 0x4a8f4e, 0x3a5c2a, 0x6b7a3a];
   let a = -Math.PI / 2;
   FACES.forEach((f, i) => {
     const span = (f.share / 100) * Math.PI * 2;
@@ -208,17 +222,49 @@ export const wheelOfFortune: MinigameModule = {
       scene.add.rectangle(x, y, 1, 1, 0xffd45e).setOrigin(0, 0).setAlpha(0.06 + (i % 3) * 0.04);
     }
 
-    scene.add.circle(CX, CY, R + 5, PALETTE.brownLight);
+    // ---- THE FRAME.  A brass ring on a green board, with a lily pad behind
+    // the whole thing so the wheel sits ON something.
+    scene.add.ellipse(CX, CY + 4, R * 2.5, R * 2.2, 0x1b3a22).setAlpha(0.55);
+    scene.add.circle(CX, CY, R + 11, 0x24492a);
+    scene.add.circle(CX, CY, R + 9, 0x3d7a42);
+    scene.add.circle(CX, CY, R + 7, 0xc2a15a);
+    scene.add.circle(CX, CY, R + 5, 0xffd45e);
     scene.add.circle(CX, CY, R + 3, PALETTE.ink);
+    // pegs round the rim, which is what the pointer would actually tick off
+    for (let i = 0; i < 24; i++) {
+      const pa = (i / 24) * Math.PI * 2;
+      scene.add.circle(CX + Math.cos(pa) * (R + 6), CY + Math.sin(pa) * (R + 6), 1.3, 0x7a5a2a).setAlpha(0.85).setDepth(7);
+    }
     face = scene.add.graphics().setDepth(4);
     // The labels ride the rim, so they are containers of their own that get
     // re-placed every frame rather than being baked into the graphics.
     for (const s of slices) {
+      // Each rim label gets a plate behind it.  The splinters sit outside the
+      // wheel where they can end up shoulder to shoulder, and a number on a
+      // plate stays readable against another number, against the brass and
+      // against the room -- which is cheaper and more reliable than trying to
+      // find geometry where twenty labels never touch.
+      const plate = scene.add.rectangle(CX, CY, 4, 9, 0x0f1a12).setAlpha(0).setDepth(5);
+      plates.push(plate);
       labels.push(centerText(scene, CX, CY, s.pays === 0 ? '-' : `${s.pays}`, PALETTE.cream).setDepth(6));
     }
-    scene.add.circle(CX, CY, 6, PALETTE.bone).setDepth(7);
-    scene.add.circle(CX, CY, 3, PALETTE.ink).setDepth(7);
-    // the pointer, over the top
+    // ---- THE HUB IS FROGGY.
+    //
+    // Every wheel has a boss in the middle of it and this one is a face: the
+    // whole rim turns around him and he does not move, which is also roughly
+    // the house's relationship with the player.
+    scene.add.circle(CX, CY, 11, 0x24492a).setDepth(7);
+    scene.add.circle(CX, CY, 9.5, 0x3d7a42).setDepth(7);
+    scene.add.ellipse(CX, CY + 2, 13, 9, 0x5aa85f).setDepth(7).setAlpha(0.8);
+    for (const sx of [-3.6, 3.6]) {
+      scene.add.circle(CX + sx, CY - 3, 3.4, PALETTE.cream).setDepth(8);
+      scene.add.circle(CX + sx, CY - 3.4, 1.5, PALETTE.black).setDepth(8);
+      scene.add.circle(CX + sx - 0.6, CY - 4.4, 0.6, 0xffffff).setDepth(8).setAlpha(0.9);
+    }
+    scene.add.rectangle(CX, CY + 4, 7, 1, 0x1b3a22).setDepth(8).setAlpha(0.8);
+    // ---- THE POINTER: a reed over the top, with a brass collar on it.
+    scene.add.rectangle(CX, CY - R - 13, 3, 9, 0x6b7a3a).setOrigin(0.5, 0).setDepth(8);
+    scene.add.rectangle(CX, CY - R - 8, 7, 2.5, 0xc2a15a).setOrigin(0.5, 0).setDepth(8);
     scene.add.triangle(CX, CY - R - 6, 0, 0, 8, 0, 4, 9, PALETTE.cream).setOrigin(0.5, 0).setDepth(8);
 
     // The board names the faces and, next to each, the live percentage read
@@ -290,6 +336,8 @@ statusText = text(scene, 180, 116, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
 function draw(): void {
   if (!face) return;
   face.clear();
+  // how many labels have already been pushed outside the rim this frame
+  let outside = 0;
   slices.forEach((s, i) => {
     face!.fillStyle(s.colour, 1);
     face!.slice(CX, CY, R, s.from + rotation, s.to + rotation, false);
@@ -311,8 +359,35 @@ function draw(): void {
     const chars = lbl.text.length * 6;
     const inside = R * 0.66;
     const fitsInside = (s.to - s.from) * inside >= chars + 3;
-    const lr = fitsInside ? inside : R + 9;
-    lbl.setPosition(CX + Math.cos(mid) * lr, CY + Math.sin(mid) * lr);
+    // ---- AND THE ONES THAT SIT OUTSIDE HAVE TO CLEAR EACH OTHER.
+    //
+    // The splinters -- 5000, 1000, 500 -- are adjacent on the rim and all
+    // three are too thin to carry a label inside, so all three parked at the
+    // same radius a degree apart and printed straight over one another: the
+    // rarest prizes on the wheel were the only unreadable ones.  Consecutive
+    // outside labels step outward in rings instead, so each has its own lane.
+    let lr = inside;
+    let ang = mid;
+    if (!fitsInside) {
+      // Two rings, not three: a third lane reached x=185, which is inside the
+      // prize board on the right and off the screen on the left.  The rest of
+      // the separation is taken ALONG the arc instead, where there is nothing
+      // to run into -- the neighbouring slivers have no labels of their own.
+      // Four distinct places before it repeats -- two rings crossed with two
+      // directions along the arc -- because the splinters come in threes and
+      // two positions is not enough to keep three labels apart.
+      lr = R + 14 + (outside % 2) * 11;
+      ang = mid + [-0.34, 0.34, -0.62, 0.62][outside % 4];
+      outside++;
+    }
+    const lx = Phaser.Math.Clamp(CX + Math.cos(ang) * lr, 16, 162);
+    const ly = CY + Math.sin(ang) * lr;
+    lbl.setPosition(lx, ly);
+    const plate = plates[i];
+    if (plate) {
+      if (fitsInside) plate.setAlpha(0);
+      else plate.setPosition(lx, ly + 3).setSize(chars + 3, 9).setAlpha(0.8);
+    }
     lbl.setTint(!fitsInside ? PALETTE.gold : s.pays >= 50 ? PALETTE.ink : PALETTE.cream);
   });
 }
