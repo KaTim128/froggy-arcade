@@ -234,6 +234,20 @@ export interface Spec {
  * supposed to beat a wooden club more often than not, and the fight is
  * supposed to be decided by what came out of the chests.
  */
+/**
+ * AN ARM, IN TWO PIECES.
+ *
+ * `root` turns at the shoulder and `fore` turns at the elbow, and because the
+ * hand and the weapon are both inside `fore`, bending the elbow carries them
+ * with it.  `hand` is where along the forearm the fist sits, so the weapon
+ * can be hung at the same place without measuring it twice.
+ */
+export interface Arm {
+  root: Phaser.GameObjects.Container;
+  fore: Phaser.GameObjects.Container;
+  hand: number;
+}
+
 /** What flies, which decides how it is drawn and how it travels. */
 export type Shot = 'arrow' | 'bolt' | 'knife' | 'axe' | 'spear' | 'stone' | 'spark' | 'dart' | 'disc';
 
@@ -895,6 +909,8 @@ export interface Fighter {
    * because `x` is the fighting distance the balance was measured on.
    */
   armA: number;
+  /** The eased elbow angle.  Drawing only, like `armA`. */
+  elbowA: number;
   leanA: number;
   shove: number;
   art: FighterArt | null;
@@ -911,7 +927,7 @@ export function makeFighter(who: 'frog' | 'lizard', kit: Kit, x: number, face: 1
     gone: { head: false, body: false, legs: false },
     ammo: kit.weapon.weapon?.spec.ranged?.ammo ?? 0, reload: 0, flight: [],
     lastGap: 999, clock: 0,
-    armA: -10, leanA: 0, shove: 0, art: null,
+    armA: -10, elbowA: -14, leanA: 0, shove: 0, art: null,
   };
 }
 
@@ -1848,10 +1864,10 @@ export interface FighterArt {
   cuirass: Phaser.GameObjects.Rectangle;
   head: Phaser.GameObjects.Ellipse;
   helm: Phaser.GameObjects.Rectangle;
-  arm: Phaser.GameObjects.Container;
+  arm: Arm;
   /** The off hand.  Behind the body while a weapon is held; up in a guard
    *  the moment there is not one. */
-  armOff: Phaser.GameObjects.Container;
+  armOff: Arm;
   /** Whether the off hand has been brought round to the front yet. */
   guardUp: boolean;
   weapon: Phaser.GameObjects.Container;
@@ -2458,49 +2474,59 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // OFF arm is built behind the torso and the weapon arm in front of it, so
   // armed they read as one arm and a body, and unarmed they come up as a
   // pair with the far one properly behind the near one.
-  const buildArm = (behind: boolean): Phaser.GameObjects.Container => {
-    const a2 = scene.add.container(5 * wide * (behind ? -0.4 : 1), -24 * tall - lift);
+  //
+  // ---- AN ARM WITH AN ELBOW IN IT.
+  //
+  // It was one rectangle on one hinge: a straight tube that swung from the
+  // shoulder, which is why a punch read as the whole limb pivoting and why
+  // the hand looked stuck on even after it was rebuilt as a fist.  There are
+  // two segments now -- upper arm from the shoulder, forearm from the elbow
+  // -- so the joint can flex, and `poseFighter` drives the elbow separately
+  // from the shoulder.  Everything below the elbow lives in `fore`, so
+  // bending it carries the forearm, the wrist and the hand together.
+  const buildArm = (behind: boolean): Arm => {
+    const root = scene.add.container(5 * wide * (behind ? -0.4 : 1), -24 * tall - lift);
     const tone = behind ? dark : skin;
-    a2.add(scene.add.rectangle(5, 0, 11, 4 * wide, tone));
-    a2.add(scene.add.rectangle(5, -1, 11, 1, behind ? skin : light).setAlpha(0.5));
-    // The hand, as a FIST rather than as the end of the arm.  A plain circle
-    // in the limb's own colour is invisible against the limb, so unarmed the
-    // guard read as two green smudges; the dark ring gives each hand an edge
-    // it keeps against the arm, against the body and against the face.
-    // The hand takes only half the body's width.  At the full multiplier a
-    // muscular lizard was holding two grapefruit.
+    const limbTone = behind ? skin : light;
+    const UPPER = 6;
+    // the shoulder cap, which is what joins the arm to the body rather than
+    // leaving it to start in mid-air beside it
+    root.add(scene.add.ellipse(0.5, 0, 5.4 * wide, 5.6 * wide, tone));
+    root.add(scene.add.ellipse(0.5, -1.2, 4.4 * wide, 2.4, up(tone, 0.3)).setAlpha(0.7));
+    root.add(scene.add.rectangle(UPPER / 2, 0, UPPER, 4.2 * wide, tone));
+    root.add(scene.add.rectangle(UPPER / 2, -1.2, UPPER, 1, limbTone).setAlpha(0.5));
+
+    const fore = scene.add.container(UPPER, 0);
+    root.add(fore);
+    // the elbow itself: a joint you can see, so the bend has somewhere to be
+    fore.add(scene.add.circle(0, 0, 2.5 * wide, down(tone, 0.18)));
+    fore.add(scene.add.circle(-0.3, -0.7, 1.6 * wide, tone));
+    fore.add(scene.add.rectangle(3, 0, 6.5, 3.8 * wide, tone));
+    fore.add(scene.add.rectangle(3, -1, 6.5, 1, limbTone).setAlpha(0.5));
+
     const hw2 = 1 + (wide - 1) * 0.5;
-    // ---- A HAND, NOT A BALL ON A STICK.
-    //
-    // Two circles read as exactly what they are: a sphere stuck on the end of
-    // the arm.  A hand at this size is a squarish block of knuckles with the
-    // fingers curled under it and a thumb across the front -- flat planes,
-    // not a curve, which is also what lets the light sit on the back of it
-    // and the shadow sit underneath.
-    // Size scales with the build; POSITION does not.  Multiplying the x
-    // through by the same factor walked the whole hand off the end of the
-    // arm on a wide lizard, so it sat in mid-air a few pixels past the wrist.
     const hs = hw2;
+    // the hand hangs off the FOREARM now, so the elbow carries it
     const palm = (x: number, y: number, w: number, h: number, col: number, a = 1) =>
-      a2.add(scene.add.rectangle(x, y * hs, w * hs, h * hs, col).setAlpha(a));
-    palm(10.3, 0.2, 6.4, 6.4, dark);                       // the edge all round
-    palm(10.3, -0.1, 5.2, 5.2, behind ? skin : light);     // the back of the hand
-    palm(10.3, -1.9, 5.2, 1.4, up(behind ? skin : light, 0.4), 0.85);  // lit across the knuckles
-    // three knuckles along the leading edge, and the fingers curled beneath
-    for (let k = 0; k < 3; k++) palm(10.3 + 2.3 * hs, -1.6 + k * 1.6, 1.4, 1.3, up(behind ? skin : light, 0.22));
-    palm(10.4, 2.2, 5, 1.5, down(behind ? skin : light, 0.4), 0.8);
-    // the thumb, laid across the front of the fist
-    palm(11.6, 1.4, 1.6, 3, behind ? skin : light);
-    palm(11.6, 1.4, 1.6, 1, down(behind ? skin : light, 0.35), 0.7);
-    // and the wrist, so the hand is joined to the arm rather than balanced on it
-    palm(7.6, 0.1, 2.2, 3.6, down(tone, 0.12));
-    return a2;
+      fore.add(scene.add.rectangle(x, y * hs, w * hs, h * hs, col).setAlpha(a));
+    palm(7.6, 0.1, 2.2, 3.6, down(tone, 0.12));            // the wrist
+    palm(10.3 - UPPER + 6, 0.2, 6.4, 6.4, dark);           // the edge all round
+    palm(10.3 - UPPER + 6, -0.1, 5.2, 5.2, limbTone);      // the back of the hand
+    palm(10.3 - UPPER + 6, -1.9, 5.2, 1.4, up(limbTone, 0.4), 0.85);
+    for (let k = 0; k < 3; k++) palm(10.3 - UPPER + 6 + 2.3 * hs, -1.6 + k * 1.6, 1.4, 1.3, up(limbTone, 0.22));
+    palm(10.4 - UPPER + 6, 2.2, 5, 1.5, down(limbTone, 0.4), 0.8);
+    palm(11.6 - UPPER + 6, 1.4, 1.6, 3, limbTone);         // the thumb
+    palm(11.6 - UPPER + 6, 1.4, 1.6, 1, down(limbTone, 0.35), 0.7);
+    return { root, fore, hand: 10.3 - UPPER + 6 };
   };
   const armOff = buildArm(true);
   const arm = buildArm(false);
   const weapon = buildWeapon(scene, f.weapon.key, light);
-  weapon.setPosition(11, 0);
-  arm.add(weapon);
+  // In the hand, which is inside the FOREARM -- so the elbow swings the
+  // weapon the way a wrist and an elbow actually do, instead of the whole
+  // limb pivoting rigidly from the shoulder.
+  weapon.setPosition(arm.hand + 1, 0);
+  arm.fore.add(weapon);
 
   const parts: Phaser.GameObjects.GameObject[] = [shadow];
   if (tailEnd) parts.push(tailEnd);
@@ -2510,8 +2536,8 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   if (clawL) parts.push(clawL, clawR!);
   parts.push(legL, legR, ...legDetail, greaveL, greaveR, kneeL, kneeR);
   parts.push(...spines);
-  parts.push(armOff);
-  parts.push(torso, belly, ...bodyDetail, cuirass, ridge, belt, ...armourDetail, arm, pauldL, pauldR);
+  parts.push(armOff.root);
+  parts.push(torso, belly, ...bodyDetail, cuirass, ridge, belt, ...armourDetail, arm.root, pauldL, pauldR);
   // ---- THE HEAD MOVES AS A HEAD.
   //
   // A duck used to be done by setting head.y and helm.y, which was already a
@@ -2624,7 +2650,39 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   const snap = f.act === 'strike' || f.act === 'windup' ? ARM_SNAP : ARM_EASE;
   f.armA += (arm - f.armA) * snap;
   f.leanA += (lean - f.leanA) * snap;
-  a.arm.setAngle(f.armA);
+  a.arm.root.setAngle(f.armA);
+
+  // ---- AND THE ELBOW, WHICH IS THE HALF THAT WAS MISSING.
+  //
+  // A straight tube swinging from the shoulder reads as a plank on a hinge.
+  // A real arm COILS -- the elbow shuts on the wind-up, drives open through
+  // the strike, and hangs slightly bent the rest of the time, because a limb
+  // held perfectly straight is a limb nobody is using.
+  //
+  // How far it shuts depends on what is in the hand: you can fold a dagger
+  // right in against your chest and you cannot do that with a claymore, so
+  // the fold is scaled by the weapon's reach.  That is most of what makes a
+  // heavy weapon look heavy from across the arena.
+  const reachy = Math.min(1, f.st.reach / 50);
+  const fold = 1 - reachy * 0.55;
+  let bend = -14;
+  if (f.act === 'windup') bend = -86 * fold;
+  else if (f.act === 'strike') bend = -6;
+  else if (f.act === 'recover') bend = -42 * fold;
+  else if (f.act === 'guard') bend = -104 * fold;
+  else if (f.act === 'dodge') bend = -66 * fold;
+  else if (f.act === 'stagger') bend = -24;
+  else if (f.act === 'lunge') bend = -30;
+  // a thrust is the one attack that STRAIGHTENS rather than coils
+  if (f.move?.anim === 'thrust' && (f.act === 'windup' || f.act === 'strike')) {
+    bend = f.act === 'windup' ? -74 * fold : 2;
+  }
+  // and drawing a bow pulls the hand back past the cheek
+  if (f.move?.anim === 'shoot') bend = f.act === 'strike' ? -18 : -96;
+  // the idle breath, so nothing is ever perfectly still
+  if (f.act === 'walk') bend += Math.sin(f.clock * 2.3 + (f.who === 'frog' ? 0 : 1.7)) * 3.5;
+  f.elbowA += (bend - f.elbowA) * snap;
+  a.arm.fore.setAngle(f.elbowA);
 
   // ---- THE UNARMED STANCE.
   //
@@ -2647,18 +2705,28 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     // nowhere to be: it vanished, and the stance read as one arm pointing.
     // In front of the face is also where a boxer's rear hand belongs.
     a.guardUp = true;
-    a.root.bringToTop(a.armOff);
-    a.armOff.x = Math.abs(a.arm.x) * 0.55;
-    a.armOff.y = a.arm.y + 1.5;
+    a.root.bringToTop(a.armOff.root);
+    a.armOff.root.x = Math.abs(a.arm.root.x) * 0.55;
+    a.armOff.root.y = a.arm.root.y + 1.5;
   }
   if (bare) {
     const throwing = f.act === 'strike' || f.act === 'recover';
     const alt = f.swing % 2 === 1;
-    a.armOff.setAngle(throwing && alt ? f.armA : GUARD_REAR);
-    a.arm.setAngle(throwing && !alt ? f.armA : f.act === 'windup' ? f.armA : GUARD_LEAD);
-    a.armOff.setVisible(true);
+    a.armOff.root.setAngle(throwing && alt ? f.armA : GUARD_REAR);
+    a.arm.root.setAngle(throwing && !alt ? f.armA : f.act === 'windup' ? f.armA : GUARD_LEAD);
+    a.armOff.root.setVisible(true);
+    // ---- A BOXER'S ARMS ARE BENT ARMS.
+    //
+    // The guard is elbows in and fists up; the punch drives the elbow open
+    // and snaps it back.  Whichever hand is not throwing stays folded, which
+    // is what makes the guard read as a guard and not as two arms pointing.
+    const drive = throwing ? -12 : -96;
+    f.elbowA += ((throwing && !alt ? drive : -96) - f.elbowA) * snap;
+    a.arm.fore.setAngle(f.elbowA);
+    a.armOff.fore.setAngle(throwing && alt ? drive : -96);
   } else {
-    a.armOff.setAngle(OFF_ARM_REST);
+    a.armOff.root.setAngle(OFF_ARM_REST);
+    a.armOff.fore.setAngle(-22);
   }
 
   // ---- THE CROUCH, spelled in the legs.
@@ -3742,8 +3810,8 @@ function showBreak(f: Fighter): void {
     // being a key when the rack was rebuilt and nobody noticed because the
     // switch quietly answered it with a shield.
     const fists = buildWeapon(S(), UNARMED.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber);
-    fists.setPosition(11, 0);
-    f.art.arm.add(fists);
+    fists.setPosition(f.art.arm.hand + 1, 0);
+    f.art.arm.fore.add(fists);
     f.art.weapon = fists;
   }
   S().cameras.main.shake(200, 0.006);
@@ -4098,7 +4166,7 @@ export const frogsterMash: MinigameModule = {
           f.st = statsOf(f.kit, def, f.held, f.type);
           f.hp = Math.min(f.hp, f.st.maxHp);
           if (f.art) { f.art.weapon.destroy(); const w = buildWeapon(S(), def.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber);
-            w.setPosition(11, 0); f.art.arm.add(w); f.art.weapon = w; }
+            w.setPosition(f.art.arm.hand + 1, 0); f.art.arm.fore.add(w); f.art.weapon = w; }
           return true;
         },
         /** Hold the fight still, and park the two apart, to read a pose. */
@@ -4115,8 +4183,9 @@ export const frogsterMash: MinigameModule = {
         art: (who: 'frog' | 'lizard') => {
           const f = who === 'frog' ? frog : lizard;
           if (!f?.art) return null;
-          return { arm: Math.round(f.art.arm.angle), off: Math.round(f.art.armOff.angle),
-            guardUp: f.art.guardUp, armVis: f.art.arm.visible, offVis: f.art.armOff.visible,
+          return { arm: Math.round(f.art.arm.root.angle), off: Math.round(f.art.armOff.root.angle),
+            elbow: Math.round(f.art.arm.fore.angle), offElbow: Math.round(f.art.armOff.fore.angle),
+            guardUp: f.art.guardUp, armVis: f.art.arm.root.visible, offVis: f.art.armOff.root.visible,
             helm: f.art.helm.visible, cuirass: f.art.cuirass.visible, greave: f.art.greaveL.visible,
             legL: f.art.legL.angle, legR: f.art.legR.angle };
         },
