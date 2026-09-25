@@ -58,7 +58,7 @@ const SLOT_NAME: Record<Slot, string> = {
  * so picking a thrust instead of a sweep genuinely changes the fight -- and
  * `anim` changes the arc the arm travels, so it looks like what it is.
  */
-export type Anim = 'over' | 'sweep' | 'thrust' | 'spin' | 'jab' | 'bash' | 'low' | 'punch' | 'kick' | 'shoot' | 'hurl';
+export type Anim = 'over' | 'sweep' | 'thrust' | 'spin' | 'jab' | 'bash' | 'low' | 'punch' | 'hook' | 'upper' | 'shove' | 'kick' | 'shoot' | 'hurl';
 export interface Move {
   name: string;
   /** Multipliers on the swing this move is a version of. */
@@ -109,9 +109,13 @@ export const MOVES: Record<string, Move[]> = {
   none: [
     { name: 'JAB COMBO', dmg: 0.6, wind: 0.55, reach: 0.95, hits: 3, at: 'near', anim: 'punch' },
     { name: 'STRAIGHT RIGHT', dmg: 0.95, wind: 0.7, reach: 1.0, anim: 'punch' },
-    { name: 'BODY HOOK', dmg: 0.85, wind: 0.62, reach: 0.9, at: 'near', stagger: 0.1, anim: 'punch' },
+    { name: 'BODY HOOK', dmg: 0.85, wind: 0.62, reach: 0.9, at: 'near', stagger: 0.1, anim: 'hook' },
+    { name: 'UPPERCUT', dmg: 1.15, wind: 0.85, reach: 0.85, at: 'near', stagger: 0.22, anim: 'upper' },
+    // Almost no damage and a long shove: the point of it is the distance it
+    // buys somebody with nothing in their hands, not the hit.
+    { name: 'SHOVE', dmg: 0.35, wind: 0.5, reach: 0.95, at: 'near', knock: 9, stagger: 0.14, anim: 'shove' },
     { name: 'LOW KICK', dmg: 1.05, wind: 0.95, reach: 1.15, knock: 4, stagger: 0.18, anim: 'kick' },
-    { name: 'COUNTER PUNCH', dmg: 1.3, wind: 0.45, reach: 1.0, when: 'counter', anim: 'punch' },
+    { name: 'COUNTER PUNCH', dmg: 1.3, wind: 0.45, reach: 1.0, when: 'counter', anim: 'upper' },
   ],
   knuckles: [M.combo('PUNCH COMBO', 3), M.bash('UPPERCUT', 1.1), M.stab('HOOK'), M.charge('RUSH', 1.0)],
   dagger: [M.stab('RAPID STAB'), M.combo('DOUBLE STAB', 2), M.low('LOW SLASH'), M.counter('BACKSTEP COUNTER', 1.3)],
@@ -1021,6 +1025,15 @@ export interface Fighter {
   single: boolean;
   /** The weapon on the sand this fighter is currently going for, if any. */
   seeking: Dropped | null;
+  /**
+   * The end-of-fight pose, which the per-frame rig must not fight over.
+   *
+   * `celebrates` and `goesDown` drive the limbs with tweens once the fight is
+   * decided.  `poseFighter` runs every frame and would put every one of those
+   * limbs back where the walk cycle wants them, so it hands the rig over the
+   * moment this stops being 'none'.
+   */
+  pose: 'none' | 'cheer' | 'down';
   /** The eased elbow angle.  Drawing only, like `armA`. */
   elbowA: number;
   leanA: number;
@@ -1040,7 +1053,7 @@ export function makeFighter(who: 'frog' | 'lizard', kit: Kit, x: number, face: 1
     ammo: kit.weapon.weapon?.spec.ranged?.ammo ?? 0, reload: 0, flight: [],
     lastGap: 999, clock: 0,
     spares: kit.weapon.weapon?.spec.paired ? 1 : 0, single: false,
-    seeking: null, armA: -10, elbowA: -14, leanA: 0, shove: 0, art: null,
+    seeking: null, pose: 'none', armA: -10, elbowA: -14, leanA: 0, shove: 0, art: null,
   };
 }
 
@@ -2313,6 +2326,9 @@ export interface FighterArt {
   plume: Phaser.GameObjects.Rectangle;
   /** Everything above the neck, so a duck moves the face and not just the skull. */
   headGroup: Phaser.GameObjects.Container;
+  /** Damage marks already cut into the weapon in hand, so they are added
+   *  once each rather than sixty times a second. */
+  nicks: number;
 }
 
 const FLOOR_Y = 138;
@@ -3009,7 +3025,8 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const root = scene.add.container(f.x, FLOOR_Y, parts).setDepth(20);
   root.setScale(f.face * (bld?.scale ?? 1), bld?.scale ?? 1);
   return { root, legL, legR, greaveL, greaveR, kneeL, kneeR, footL, footR, torso, cuirass, belt, ridge,
-    pauldL, pauldR, head, helm, helmDome, visor, plume, headGroup, arm, armOff, guardUp: false, weapon, shadow };
+    pauldL, pauldR, head, helm, helmDome, visor, plume, headGroup, arm, armOff, guardUp: false, weapon, shadow,
+    nicks: 0 };
 }
 
 /** Put the fighter into the pose its current act calls for. */
@@ -3023,6 +3040,61 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
  * a body apart: the simulation still sees the nine pixels it was balanced on,
  * and nothing here is allowed to feed back into it.
  */
+/**
+ * HOW A WEAPON IS CARRIED WHEN NOBODY IS SWINGING IT.
+ *
+ * Every weapon idled at the same two angles, so a fighter holding a war
+ * hammer and a fighter holding a blowgun stood in exactly the same way and
+ * the only thing telling them apart was a sprite four pixels long.  How you
+ * hold a thing is most of what says what it is.
+ *
+ * None of this is a new table: it is read off the numbers the weapon already
+ * has, so every weapon in the rack gets a carry and any weapon added later
+ * gets one too.  A polearm goes on the shoulder because it is long; a hammer
+ * hangs point-down because it is heavy; a dagger comes in close because it is
+ * quick; a bow drops across the body because it is drawn and not swung.
+ *
+ * `sway` is the breath, and it is the inverse of the heft: a knife bobs in
+ * the hand, a great axe does not move.
+ */
+function carryOf(f: Fighter): { arm: number; elbow: number; sway: number } {
+  const w = f.weapon;
+  if (f.broken || w.key === 'none') return { arm: -10, elbow: -14, sway: 3.5 };
+  const heft = (w.heavy[0] + w.heavy[1]) / 2;
+  const span = (w.reach[0] + w.reach[1]) / 2;
+  const sway = Math.max(1, 5 - heft * 0.45);
+  const shot = w.spec.ranged?.shot;
+  // ---- WHICH WAY THE SHAFT ENDS UP POINTING.
+  //
+  // The weapon hangs off the FOREARM and points along its +x, so what the
+  // crowd sees is the SUM of the two angles, and the shoulder on its own
+  // decides only where the hand is.  Reading the shoulder alone is how a
+  // shouldered spear ended up standing straight up out of the helmet: -56 at
+  // the shoulder and -36 more at the elbow is a shaft pointing at the sky.
+  // So each of these is a pair - where the hand sits, and where the shaft
+  // goes from there - and the sum is written next to it.
+  //
+  // Negative is up and back, positive is down toward the sand: a guard is
+  // -96 and an overhead cleave finishes at +62.
+  //
+  // drawn, not swung: string hand down by the hip, stave across the body
+  if (shot === 'arrow' || shot === 'bolt') return { arm: 40, elbow: -60, sway: sway * 0.6 };
+  // a sling or a blowgun is barely carried at all
+  if (shot === 'stone' || shot === 'dart') return { arm: 14, elbow: -44, sway };
+  // something about to be thrown rides high, at the shoulder
+  if (shot) return { arm: -40, elbow: -20, sway: sway * 0.8 };
+  // ---- HEAVY BEFORE LONG, and that order is the whole of it: a great axe
+  // is eight of reach as well as nine of heft, so asking about length first
+  // shouldered it like a pike and stood it up through the top of his head.
+  // Heavy enough that the head of it rests near the sand.
+  if (heft >= 7) return { arm: 40, elbow: 5, sway: sway * 0.5 };
+  // long, and light enough to shoulder: hand low, shaft up over the shoulder
+  if (span >= 7) return { arm: 30, elbow: -65, sway: sway * 0.7 };
+  // quick and short: in close, elbow shut, ready to go again
+  if (w.tempo >= 1.35) return { arm: -6, elbow: -40, sway: sway * 1.2 };
+  return { arm: -10, elbow: -14, sway };
+}
+
 export function drawX(f: Fighter, other?: Fighter): number {
   const base = (() => {
     if (!other) return f.x;
@@ -3034,6 +3106,40 @@ export function drawX(f: Fighter, other?: Fighter): number {
   return base + f.shove;
 }
 
+/**
+ * A WEAPON THAT HAS BEEN USED LOOKS USED.
+ *
+ * Durability was a number nobody could see: the first the crowd knew about a
+ * blade being nearly gone was it snapping.  Two thirds worn puts a notch in
+ * it, a third left puts three more and a rust streak along it, so a fighter
+ * pressing on with something about to go is something you can watch happening
+ * rather than something the log tells you afterwards.
+ *
+ * The marks are cut once each -- `nicks` counts what is already on the blade,
+ * so this can be called every frame and only ever does work on the two frames
+ * that matter.  A fresh weapon in the hand resets the count with the sprite.
+ */
+function wearWeapon(f: Fighter): void {
+  const a = f.art;
+  if (!a) return;
+  if (f.broken || f.weapon.key === 'none' || !Number.isFinite(f.dur)) return;
+  const full = durabilityOf(f.kit.weapon);
+  if (!Number.isFinite(full) || full <= 0) return;
+  const left = Math.max(0, f.dur) / full;
+  const want = left <= 0.33 ? 4 : left <= 0.66 ? 1 : 0;
+  if (want <= a.nicks) return;
+  const sc = S();
+  for (let i = a.nicks; i < want; i++) {
+    const nick = sc.add.rectangle(5 + i * 4, i % 2 ? -1.5 : 1.5, 2, 1, 0x2b2419);
+    a.weapon.add(nick);
+  }
+  if (want === 4 && a.nicks < 4) {
+    // and the rust, which is the one that says it is nearly done
+    a.weapon.add(sc.add.rectangle(9, 0, 12, 1, 0x7a3a1c).setAlpha(0.7));
+  }
+  a.nicks = want;
+}
+
 export function poseFighter(f: Fighter, other?: Fighter): void {
   const a = f.art;
   if (!a) return;
@@ -3042,6 +3148,27 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   // muscular lizard shrinks back to standard size on the first tick.
   const bulk = f.type?.build.scale ?? 1;
   a.root.setScale(f.face * bulk, bulk);
+
+  // ---- AND WHEN THE FIGHT IS OVER, THE RIG IS NOT THIS FUNCTION'S ANY MORE.
+  //
+  // The winner's arms going up and the loser folding into the sand are
+  // tweens, and a tween is no match for something that reassigns the same
+  // angle sixty times a second: every one of them was being overwritten on
+  // the next frame.  Position still tracks, so the shove and the facing keep
+  // working; every limb belongs to the tween from here.
+  //
+  // The shadow is the one exception, and it has to be: it lives inside the
+  // root, so the loser rolling onto his back would roll his shadow up off
+  // the sand with him.  It is put flat again here, exactly as it is on any
+  // other frame.
+  if (f.pose !== 'none') {
+    const fall = FLOOR_Y - a.root.y;
+    a.shadow.y = 1 + fall;
+    a.shadow.setAngle(-a.root.angle);
+    const kk = Phaser.Math.Clamp(1 - fall / 26, 0.45, 1.35);
+    a.shadow.setScale(kk, kk).setAlpha(0.34 * kk);
+    return;
+  }
 
   // the walk: two legs out of phase, and the body riding on it
   const swingL = Math.sin(f.step / 5) * 3;
@@ -3069,6 +3196,16 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     low:    { w: -70, s: 88, r: 56, lean: 14 },
     // a punch barely winds up and goes straight out from the guard
     punch:  { w: -62, s: 14, r: -40, lean: 9 },
+    // ---- AND THE THREE THAT ARE NOT A STRAIGHT PUNCH.
+    //
+    // A hook comes round from outside the shoulder and finishes across the
+    // body; an uppercut starts below the ribs and drives UP past the chin;
+    // a shove barely rotates at all and pushes with the heel of both hands.
+    // Three moves on the unarmed row were all drawn as the same jab, so the
+    // only thing telling a body hook from a straight right was the caption.
+    hook:   { w: -18, s: 52, r: -34, lean: 11 },
+    upper:  { w: 44, s: -56, r: -38, lean: -9 },
+    shove:  { w: -40, s: -4, r: -30, lean: 15 },
     // a kick is the legs' business; the hands stay up where they were
     kick:   { w: -58, s: -52, r: -50, lean: -8 },
     // drawing a bow pulls the hand back to the cheek and lets it go forward
@@ -3077,7 +3214,8 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     hurl:   { w: -128, s: 40, r: 12, lean: 14 },
   };
   const shape = A[f.move?.anim ?? 'sweep'];
-  let arm = -10;
+  const carry = carryOf(f);
+  let arm = carry.arm;
   // ---- BENDING DOWN FOR IT.
   //
   // Reaching for something on the sand is the one pose where the arm goes
@@ -3136,7 +3274,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   // heavy weapon look heavy from across the arena.
   const reachy = Math.min(1, f.st.reach / 50);
   const fold = 1 - reachy * 0.55;
-  let bend = -14;
+  let bend = carry.elbow;
   if (f.act === 'windup') bend = -86 * fold;
   else if (f.act === 'strike') bend = -6;
   else if (f.act === 'recover') bend = -42 * fold;
@@ -3151,7 +3289,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   // and drawing a bow pulls the hand back past the cheek
   if (f.move?.anim === 'shoot') bend = f.act === 'strike' ? -18 : -96;
   // the idle breath, so nothing is ever perfectly still
-  if (f.act === 'walk') bend += Math.sin(f.clock * 2.3 + (f.who === 'frog' ? 0 : 1.7)) * 3.5;
+  if (f.act === 'walk') bend += Math.sin(f.clock * 2.3 + (f.who === 'frog' ? 0 : 1.7)) * carry.sway;
   f.elbowA += (bend - f.elbowA) * snap;
   a.arm.fore.setAngle(f.elbowA);
 
@@ -3184,19 +3322,33 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   }
   if (bare) {
     const throwing = f.act === 'strike' || f.act === 'recover';
+    // A shove is the one unarmed move thrown with BOTH hands, so it does not
+    // alternate: both arms go out together and both come back together.
+    const shoving = f.move?.anim === 'shove' && (throwing || f.act === 'windup');
     const alt = f.swing % 2 === 1;
-    a.armOff.root.setAngle(throwing && alt ? f.armA : GUARD_REAR);
-    a.arm.root.setAngle(throwing && !alt ? f.armA : f.act === 'windup' ? f.armA : GUARD_LEAD);
-    a.armOff.root.setVisible(true);
-    // ---- A BOXER'S ARMS ARE BENT ARMS.
-    //
-    // The guard is elbows in and fists up; the punch drives the elbow open
-    // and snaps it back.  Whichever hand is not throwing stays folded, which
-    // is what makes the guard read as a guard and not as two arms pointing.
-    const drive = throwing ? -18 : GUARD_FOLD;
-    f.elbowA += ((throwing && !alt ? drive : GUARD_FOLD) - f.elbowA) * snap;
-    a.arm.fore.setAngle(f.elbowA);
-    a.armOff.fore.setAngle(throwing && alt ? drive : GUARD_FOLD);
+    if (shoving) {
+      a.arm.root.setAngle(f.armA);
+      a.armOff.root.setAngle(f.armA);
+      a.armOff.root.setVisible(true);
+      const open = f.act === 'strike' ? -6 : GUARD_FOLD;
+      f.elbowA += (open - f.elbowA) * snap;
+      a.arm.fore.setAngle(f.elbowA);
+      a.armOff.fore.setAngle(f.elbowA);
+    } else {
+      a.armOff.root.setAngle(throwing && alt ? f.armA : GUARD_REAR);
+      a.arm.root.setAngle(throwing && !alt ? f.armA : f.act === 'windup' ? f.armA : GUARD_LEAD);
+      a.armOff.root.setVisible(true);
+      // ---- A BOXER'S ARMS ARE BENT ARMS.
+      //
+      // The guard is elbows in and fists up; the punch drives the elbow open
+      // and snaps it back.  Whichever hand is not throwing stays folded,
+      // which is what makes the guard read as a guard and not as two arms
+      // pointing.
+      const drive = throwing ? -18 : GUARD_FOLD;
+      f.elbowA += ((throwing && !alt ? drive : GUARD_FOLD) - f.elbowA) * snap;
+      a.arm.fore.setAngle(f.elbowA);
+      a.armOff.fore.setAngle(throwing && alt ? drive : GUARD_FOLD);
+    }
   } else {
     a.armOff.root.setAngle(OFF_ARM_REST);
     a.armOff.fore.setAngle(-22);
@@ -4156,6 +4308,7 @@ function showDisarm(f: Fighter, d: Dropped): void {
     left.setPosition(f.art.arm.hand + 1, 0);
     f.art.arm.fore.add(left);
     f.art.weapon = left;
+    f.art.nicks = 0;
     if (!f.broken) floatHigh(f.x, 'ONE LEFT!', PALETTE.gold);
   }
   const art = buildWeapon(S(), d.def.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber, d.single && !!d.def.spec.paired);
@@ -4204,6 +4357,7 @@ function showPickup(f: Fighter, d: Dropped): void {
   w.setPosition(f.art.arm.hand + 1, 0);
   f.art.arm.fore.add(w);
   f.art.weapon = w;
+  f.art.nicks = 0;
   f.art.guardUp = false;
   // it comes up off the sand rather than appearing in the fist
   w.setScale(0.4).setAlpha(0.6);
@@ -4240,6 +4394,7 @@ function showBlockBreak(f: Fighter): void {
   left.setPosition(f.art.arm.hand + 1, 0);
   f.art.arm.fore.add(left);
   f.art.weapon = left;
+  f.art.nicks = 0;
   if (!f.broken) floatHigh(f.x, 'ONE LEFT!', PALETTE.gold);
 }
 
@@ -4400,6 +4555,7 @@ function showBreak(f: Fighter): void {
       one.setPosition(f.art.arm.hand + 1, 0);
       f.art.arm.fore.add(one);
       f.art.weapon = one;
+      f.art.nicks = 0;
       floatHigh(f.x, 'ONE LEFT!', PALETTE.gold);
       return;
     }
@@ -4410,6 +4566,7 @@ function showBreak(f: Fighter): void {
     fists.setPosition(f.art.arm.hand + 1, 0);
     f.art.arm.fore.add(fists);
     f.art.weapon = fists;
+    f.art.nicks = 0;
   }
   S().cameras.main.shake(200, 0.006);
 }
@@ -4470,6 +4627,8 @@ function stepFight(real: number): void {
       if (Math.abs(f.shove) < 0.05) f.shove = 0;
     }
   }
+  wearWeapon(frog!);
+  wearWeapon(lizard!);
   poseFighter(frog!, lizard!);
   poseFighter(lizard!, frog!);
   refreshHud();
@@ -4502,6 +4661,10 @@ function finishFight(won: boolean): void {
   audio.sfx(won ? 'zone_clear' : 'death_stinger', 0.7);
   S().cameras.main.shake(260, 0.006);
 
+  // Declared BEFORE the sequences start, so the very first frame after the
+  // last blow is already the tweens' and not the walk cycle's.
+  loser.pose = 'down';
+  winner.pose = 'cheer';
   goesDown(loser);
   celebrates(winner, won);
 
@@ -4596,7 +4759,12 @@ function goesDown(f: Fighter): void {
   sc.tweens.add({ targets: a.cuirass, angle: f.face * 26, duration: 300, delay: 150, ease: 'Quad.easeIn' });
   sc.tweens.add({ targets: [a.head, a.helm], y: '+=7', duration: 300, delay: 150, ease: 'Quad.easeIn' });
   sc.tweens.add({ targets: a.root, y: FLOOR_Y + 5, duration: 300, delay: 150, ease: 'Quad.easeIn' });
-  sc.tweens.add({ targets: a.arm, angle: f.face * 60, duration: 300, delay: 150 });
+  // `a.arm` is a rig, not a display object: tweening it set a property on a
+  // plain object and nothing moved.  It is the shoulder that swings.
+  sc.tweens.add({ targets: a.arm.root, angle: f.face * 60, duration: 300, delay: 150 });
+  sc.tweens.add({ targets: a.arm.fore, angle: -10, duration: 300, delay: 150 });
+  sc.tweens.add({ targets: a.armOff.root, angle: f.face * 48, duration: 300, delay: 150 });
+  sc.tweens.add({ targets: a.armOff.fore, angle: -16, duration: 300, delay: 150 });
   sc.time.delayedCall(430, () => audio.sfx('item_thud', 0.4));
   // 3. and over, flat, into the sand
   sc.tweens.add({
@@ -4620,11 +4788,36 @@ function celebrates(f: Fighter, won: boolean): void {
   const a = f.art;
   if (!a) return;
   const sc = S();
-  sc.tweens.add({ targets: a.arm, angle: -104, duration: 260, delay: 420, ease: 'Back.easeOut' });
+  // ---- THE WINNER'S POSE.
+  //
+  // This raised one arm by tweening `a.arm`, which stopped being a display
+  // object when the elbow went in: the tween set `angle` on a plain rig and
+  // the arm never moved.  Both shoulders go up now, both elbows straighten
+  // into it, the head tips back, and whatever is still in the hand is held
+  // overhead - which is the difference between winning and standing there.
+  // -112 and not -150: past about -130 the shoulder carries the arm over the
+  // top and whatever is in the hand ends up pointing backwards, off behind
+  // him and away from the body on the sand.  This is a salute, held up and
+  // slightly forward, with the blade where the crowd can see it.
+  sc.tweens.add({ targets: a.arm.root, angle: -112, duration: 300, delay: 420, ease: 'Back.easeOut' });
+  sc.tweens.add({ targets: a.arm.fore, angle: -26, duration: 300, delay: 420, ease: 'Back.easeOut' });
+  sc.tweens.add({ targets: a.armOff.root, angle: -104, duration: 300, delay: 500, ease: 'Back.easeOut' });
+  sc.tweens.add({ targets: a.armOff.fore, angle: -30, duration: 300, delay: 500, ease: 'Back.easeOut' });
+  a.armOff.root.setVisible(true);
+  a.root.bringToTop(a.armOff.root);
   sc.tweens.add({ targets: a.torso, angle: 0, duration: 260, delay: 420 });
+  sc.tweens.add({ targets: a.cuirass, angle: 0, duration: 260, delay: 420 });
+  sc.tweens.add({ targets: a.headGroup, y: -2, duration: 260, delay: 420 });
+  // planted, feet apart, rather than caught mid-stride
+  for (const leg of [a.legL, a.greaveL]) sc.tweens.add({ targets: leg, angle: -9, duration: 220, delay: 420 });
+  for (const leg of [a.legR, a.greaveR]) sc.tweens.add({ targets: leg, angle: 9, duration: 220, delay: 420 });
   sc.time.delayedCall(560, () => {
     audio.sfx('zone_clear', 0.45);
     sc.tweens.add({ targets: a.root, y: FLOOR_Y - 11, duration: 190, yoyo: true, repeat: 3, ease: 'Quad.easeOut' });
+    // ---- AND THE TAUNT.  Four hops with the arms pumping on the same beat,
+    // because arms held still through a jump reads as a sprite being moved
+    // up and down rather than as somebody enjoying themselves.
+    sc.tweens.add({ targets: [a.arm.root, a.armOff.root], angle: -134, duration: 190, yoyo: true, repeat: 3, ease: 'Quad.easeOut' });
   });
   // the crowd comes up out of its seats
   crowd.forEach((r, i) => {
@@ -4798,7 +4991,7 @@ export const frogsterMash: MinigameModule = {
           f.st = statsOf(f.kit, def, f.held, f.type);
           f.hp = Math.min(f.hp, f.st.maxHp);
           if (f.art) { f.art.weapon.destroy(); const w = buildWeapon(S(), def.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber);
-            w.setPosition(f.art.arm.hand + 1, 0); f.art.arm.fore.add(w); f.art.weapon = w; }
+            w.setPosition(f.art.arm.hand + 1, 0); f.art.arm.fore.add(w); f.art.weapon = w; f.art.nicks = 0; }
           return true;
         },
         /** Hold the fight still, and park the two apart, to read a pose. */
