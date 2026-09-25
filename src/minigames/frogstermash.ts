@@ -235,6 +235,40 @@ export interface Spec {
  * supposed to be decided by what came out of the chests.
  */
 /**
+ * A WEAPON ON THE FLOOR.
+ *
+ * Knocked out of somebody's hand and lying where it fell.  It keeps the
+ * ROLLED piece, not just the kind, so picking a sword up gets you that
+ * sword -- the one with those four numbers on it -- rather than a fresh
+ * average one.  That is what makes losing your grip on a good weapon hurt
+ * and makes taking somebody else's worth the walk.
+ *
+ * It is part of the simulation and is passed into `exchange`, so a headless
+ * run drops and retrieves weapons exactly as a watched one does.
+ */
+export interface Dropped {
+  def: WeaponDef;
+  piece: Piece;
+  x: number;
+  /** Seconds left before the sand has it. */
+  life: number;
+  /** Seconds since it landed, so it is not snatched out of the air. */
+  settle: number;
+  /** Drawing only. */
+  art: Phaser.GameObjects.Container | null;
+}
+
+/** How often a staggering blow also takes the weapon out of their hand. */
+const DISARM_AT = 0.3;
+/** How long a dropped weapon waits to be claimed, and how long to settle. */
+const DROP_LIFE = 22;
+const DROP_SETTLE = 0.55;
+/** How long bending down to pick one up takes, before the weapon's own bulk. */
+const PICKUP_S = 0.42;
+/** How far a fighter will go out of its way for one. */
+const PICKUP_SEEK = 120;
+
+/**
  * AN ARM, IN TWO PIECES.
  *
  * `root` turns at the shoulder and `fore` turns at the elbow, and because the
@@ -837,7 +871,7 @@ export function durabilityOf(w: Piece): number {
   return DUR_BASE + w.rResist * DUR_PER_RESIST;
 }
 
-type Act = 'walk' | 'windup' | 'strike' | 'recover' | 'dodge' | 'guard' | 'stagger' | 'lunge';
+type Act = 'walk' | 'windup' | 'strike' | 'recover' | 'dodge' | 'guard' | 'stagger' | 'lunge' | 'pickup';
 
 export interface Fighter {
   who: 'frog' | 'lizard';
@@ -909,6 +943,8 @@ export interface Fighter {
    * because `x` is the fighting distance the balance was measured on.
    */
   armA: number;
+  /** The weapon on the sand this fighter is currently going for, if any. */
+  seeking: Dropped | null;
   /** The eased elbow angle.  Drawing only, like `armA`. */
   elbowA: number;
   leanA: number;
@@ -927,7 +963,7 @@ export function makeFighter(who: 'frog' | 'lizard', kit: Kit, x: number, face: 1
     gone: { head: false, body: false, legs: false },
     ammo: kit.weapon.weapon?.spec.ranged?.ammo ?? 0, reload: 0, flight: [],
     lastGap: 999, clock: 0,
-    armA: -10, elbowA: -14, leanA: 0, shove: 0, art: null,
+    seeking: null, armA: -10, elbowA: -14, leanA: 0, shove: 0, art: null,
   };
 }
 
@@ -975,6 +1011,60 @@ export function wearArmour(f: Fighter, rng: () => number = Math.random): { slot:
 }
 
 /** A weapon gives out.  Everything it was worth goes with it; the armour stays. */
+/**
+ * PUT WHAT IS IN A FIGHTER'S HAND ON THE FLOOR.
+ *
+ * Used by a disarm, and the reason `ground` is threaded through the whole
+ * simulation rather than living in the scene: what is lying on the sand
+ * changes how both fighters behave, so it has to be part of the fight and
+ * not part of the drawing.
+ */
+export function dropWeapon(f: Fighter, ground: Dropped[], rng: () => number = Math.random): Dropped | null {
+  if (f.broken || f.weapon.key === 'none') return null;
+  const d: Dropped = {
+    def: f.weapon,
+    piece: f.kit.weapon,
+    // thrown clear, on the side the blow came from
+    x: Phaser.Math.Clamp(f.x - f.face * (16 + rng() * 22), ARENA.left + 4, ARENA.right - 4),
+    life: DROP_LIFE,
+    settle: DROP_SETTLE,
+    art: null,
+  };
+  ground.push(d);
+  // the hand is empty, but the weapon is NOT broken -- it is over there
+  f.broken = true;
+  f.weapon = UNARMED;
+  f.held = emptyHands();
+  f.dur = Infinity;
+  f.ammo = 0;
+  f.reload = 0;
+  f.st = statsOf(f.kit, UNARMED, f.held, f.type);
+  f.hp = Math.min(f.hp, f.st.maxHp);
+  return d;
+}
+
+/**
+ * PICK ONE UP, and be holding it properly.
+ *
+ * The rolled piece goes back into the kit, so the weapon fights with the
+ * numbers it was rolled with and its durability starts fresh in the new
+ * hand -- it has been dropped, not worn out.
+ */
+export function takeWeapon(f: Fighter, d: Dropped, ground: Dropped[]): void {
+  const i = ground.indexOf(d);
+  if (i >= 0) ground.splice(i, 1);
+  f.kit = { ...f.kit, weapon: d.piece };
+  f.weapon = d.def;
+  f.held = d.piece;
+  f.broken = false;
+  f.dur = durabilityOf(d.piece);
+  f.ammo = d.def.spec.ranged?.ammo ?? 0;
+  f.reload = 0;
+  f.seeking = null;
+  f.st = statsOf(f.kit, d.def, f.held, f.type);
+  f.hp = Math.min(f.hp, f.st.maxHp);
+}
+
 export function breakWeapon(f: Fighter): void {
   f.broken = true;
   f.weapon = UNARMED;
@@ -1136,6 +1226,8 @@ export interface Blow {
   clashed?: boolean;
   /** Which attack it was, so the arena can name it. */
   move?: string;
+  /** The blow knocked the weapon clean out of the defender's hand. */
+  disarmed?: Dropped;
   /** A piece of the defender's armour came off on this one, and its colour. */
   stripped?: 'head' | 'body' | 'legs';
   strippedTint?: number;
@@ -1173,7 +1265,7 @@ export interface Blow {
  * set of rules from a melee one.
  */
 function applyDamage(att: Fighter, def: Fighter, raw: number, out: Blow, rng: () => number,
-  o: { pierce: number; soak: number; stagger: number; knock: number }): void {
+  o: { pierce: number; soak: number; stagger: number; knock: number; ground?: Dropped[] }): void {
   const weary = Math.min(1, Math.max(0, (att.clock - WEARY_AT) / WEARY_OVER));
   raw *= 1 + weary * 0.6;
   const armour = def.st.defence * (1 - o.pierce) * (1 - weary);
@@ -1185,6 +1277,21 @@ function applyDamage(att: Fighter, def: Fighter, raw: number, out: Blow, rng: ()
     if (off) { out.stripped = off.slot; out.strippedTint = off.tint; }
   }
   const floored = out.dmg >= def.st.maxHp * STAGGER_AT || rng() < o.stagger;
+  // ---- AND SOMETIMES IT TAKES THE WEAPON WITH IT.
+  //
+  // Only off a blow that already put them on the floor, and likelier the
+  // heavier that blow was and the heavier the thing they were holding --
+  // a hammer swung at somebody clinging to a claymore is how a weapon ends
+  // up in the sand.  It is the same roll for both fighters and reads off
+  // nothing but the damage and the grip.
+  if (def.hp > 0 && floored && !def.broken && def.weapon.key !== 'none' && o.ground) {
+    const share = Math.min(1, out.dmg / Math.max(1, def.st.maxHp * 0.3));
+    const grip = 1 / (1 + def.held.rHeavy * 0.16);
+    if (rng() < DISARM_AT * share * grip) {
+      const d = dropWeapon(def, o.ground, rng);
+      if (d) out.disarmed = d;
+    }
+  }
   if (def.hp > 0 && floored) {
     out.staggered = true;
     def.act = 'stagger';
@@ -1246,7 +1353,7 @@ function looseShot(att: Fighter, def: Fighter, gap: number, rng: () => number): 
  * had to travel the likelier it is to find nobody there, which is the price
  * of fighting from the far wall.
  */
-export function landShot(att: Fighter, def: Fighter, sh: InFlight, rng = Math.random): Blow {
+export function landShot(att: Fighter, def: Fighter, sh: InFlight, rng = Math.random, ground: Dropped[] = []): Blow {
   const out: Blow = { hit: false, dodged: false, guarded: false, dmg: 0, broke: false, thrown: true, move: sh.move, crit: sh.crit };
   const r = sh.r;
   // It was aimed at where they were standing.  Moving since is the defence.
@@ -1264,11 +1371,11 @@ export function landShot(att: Fighter, def: Fighter, sh: InFlight, rng = Math.ra
   let raw = sh.power;
   if (sh.crit) raw *= CRIT_MUL;
   applyDamage(att, def, raw, out, rng,
-    { pierce: r.pierce ?? 0, soak, stagger: r.stagger ?? 0, knock: r.knock ?? 0 });
+    { pierce: r.pierce ?? 0, soak, stagger: r.stagger ?? 0, knock: r.knock ?? 0, ground });
   return out;
 }
 
-export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Math.random): Blow {
+export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Math.random, ground: Dropped[] = []): Blow {
   const out: Blow = { hit: false, dodged: false, guarded: false, dmg: 0, broke: false };
   const sp = att.weapon.spec;
   const mv = att.move;
@@ -1377,6 +1484,7 @@ export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Mat
     soak,
     stagger: (sp.stagger ?? 0) + (mv?.stagger ?? 0),
     knock: (sp.knock ?? 0) + (mv?.knock ?? 0),
+    ground,
   });
   return out;
 }
@@ -1475,7 +1583,7 @@ function holds(f: Fighter): boolean {
   return !!r && f.ammo > 0 && r.ammo > 1;
 }
 
-export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random): void {
+export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random, ground: Dropped[] = []): void {
   const gap = Math.abs(f.x - other.x);
   f.face = other.x >= f.x ? 1 : -1;
   // kept so a sweeping weapon can tell the difference between somebody
@@ -1488,6 +1596,61 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   // declared trade-offs; none of it is a damage bonus.
   const ty = f.type;
   const hurt = f.hp / f.st.maxHp < HURT_AT;
+
+  // ---- IS THERE A WEAPON ON THE FLOOR, AND SHOULD I WANT IT?
+  //
+  // Only if my hands are empty.  A fighter already holding something walks
+  // straight past -- swapping mid-fight for a weapon you cannot see the
+  // numbers of is not a decision anybody should make for you, and it would
+  // turn every bout into a scramble for whatever landed last.
+  //
+  // If BOTH of them are empty they will both come for it, which is the whole
+  // point: the race is the interesting part, and whoever is nearer and
+  // quicker gets to be the one holding a sword again.
+  const empty = f.broken || f.weapon.key === 'none';
+  if (empty && ground.length) {
+    let best: Dropped | null = null;
+    let bestGap = PICKUP_SEEK;
+    for (const d of ground) {
+      if (d.settle > 0) continue;
+      const g = Math.abs(f.x - d.x);
+      if (g < bestGap) { bestGap = g; best = d; }
+    }
+    f.seeking = best;
+    if (best) {
+      // ---- AND THE RACE HAS TO BE FAIR.
+      //
+      // `exchange` ticks one fighter before the other, so on the frame both
+      // of them were standing over the same sword the one that ticks first
+      // simply took it: 249 to 151 in a race started from identical
+      // distances.  Whoever is actually nearer wins it, and a dead tie is
+      // settled by the roll rather than by the order of two function calls.
+      const theirGap = Math.abs(other.x - best.x);
+      const mine = bestGap < theirGap - 0.5 ? true
+        : theirGap < bestGap - 0.5 ? false
+          : rng() < 0.5;
+      const contested = (other.broken || other.weapon.key === 'none') && theirGap < PICKUP_SEEK;
+      // standing over it: bend down and take it
+      if (bestGap < 7 && (!contested || mine)) {
+        f.act = 'pickup';
+        f.t = PICKUP_S + Math.min(0.5, best.piece.rHeavy * 0.05);
+        f.face = best.x >= f.x ? 1 : -1;
+        return;
+      }
+      // otherwise go and get it, unless they are about to take my head off
+      const danger = gap <= other.st.reach + 4 && other.act === 'windup';
+      if (!danger) {
+        const dir = best.x > f.x ? 1 : -1;
+        f.face = dir;
+        const pace = f.st.walk * (f.weapon.spec.fleet ?? 1) * 1.12;
+        f.x = Phaser.Math.Clamp(f.x + dir * pace * dt, ARENA.left, ARENA.right);
+        f.step += pace * dt;
+        return;
+      }
+    }
+  } else if (f.seeking) {
+    f.seeking = null;
+  }
 
   // ---- DODGING.  Read the other one's wind-up and try to not be there.
   //
@@ -1681,7 +1844,7 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
  * Split from `think` because timers must run even while a fighter is stunned
  * and has no say in anything.
  */
-export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random): Blow | null {
+export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random, ground: Dropped[] = []): Blow | null {
   f.clock += dt;
   if (f.cool > 0) f.cool -= dt;
   if (f.reload > 0) f.reload -= dt;
@@ -1691,7 +1854,7 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random):
     return null;
   }
   if (f.act === 'walk') {
-    think(f, other, dt, rng);
+    think(f, other, dt, rng, ground);
     return null;
   }
 
@@ -1709,7 +1872,7 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random):
     case 'windup': {
       f.act = 'strike';
       f.t = STRIKE;
-      const blow = resolveStrike(f, other, Math.abs(f.x - other.x), rng);
+      const blow = resolveStrike(f, other, Math.abs(f.x - other.x), rng, ground);
       f.swing += 1;
       return blow;
     }
@@ -1718,7 +1881,7 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random):
       // wind-up, which is what "rapid, multiple strikes" actually feels like.
       if (f.swing < Math.max(f.weapon.hits, f.move?.hits ?? 1)) {
         f.t = STRIKE;
-        const blow = resolveStrike(f, other, Math.abs(f.x - other.x), rng);
+        const blow = resolveStrike(f, other, Math.abs(f.x - other.x), rng, ground);
         f.swing += 1;
         return blow;
       }
@@ -1733,6 +1896,16 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random):
       f.t = (RECOVER * drag * (f.chain > 0 ? 0.45 : 1)) / f.st.rate;
       f.countering = false;
       f.counterT = 0;
+      return null;
+    }
+    case 'pickup': {
+      // Bent down over it for as long as its bulk deserves -- a dagger comes
+      // up in a moment and a claymore has to be hauled off the sand.
+      const d = f.seeking;
+      if (d && ground.includes(d) && Math.abs(f.x - d.x) < 14) takeWeapon(f, d, ground);
+      f.seeking = null;
+      f.act = 'walk';
+      f.cool = BEAT / f.st.rate;
       return null;
     }
     case 'recover':
@@ -1769,13 +1942,13 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random):
  * else is simply spent.
  */
 function advanceFlight(att: Fighter, def: Fighter, dt: number, rng: () => number,
-  out: Array<{ att: Fighter; def: Fighter; blow: Blow }>): void {
+  out: Array<{ att: Fighter; def: Fighter; blow: Blow }>, ground: Dropped[] = []): void {
   if (!att.flight.length) return;
   const still: InFlight[] = [];
   for (const sh of att.flight) {
     sh.t -= dt;
     if (sh.t > 0) { still.push(sh); continue; }
-    const blow = landShot(att, def, sh, rng);
+    const blow = landShot(att, def, sh, rng, ground);
     blow.loosed = sh;                    // so the drawing can retire the sprite
     if (sh.r.returns && !Number.isFinite(att.ammo)) att.reload = Math.max(att.reload, sh.r.reload);
     out.push({ att, def, blow });
@@ -1783,14 +1956,26 @@ function advanceFlight(att: Fighter, def: Fighter, dt: number, rng: () => number
   att.flight = still;
 }
 
-export function exchange(a: Fighter, b: Fighter, dt: number, rng = Math.random): Array<{ att: Fighter; def: Fighter; blow: Blow }> {
+export function exchange(a: Fighter, b: Fighter, dt: number, rng = Math.random, ground: Dropped[] = []): Array<{ att: Fighter; def: Fighter; blow: Blow }> {
   const out: Array<{ att: Fighter; def: Fighter; blow: Blow }> = [];
-  advanceFlight(a, b, dt, rng, out);
-  advanceFlight(b, a, dt, rng, out);
+  advanceFlight(a, b, dt, rng, out, ground);
+  advanceFlight(b, a, dt, rng, out, ground);
+  // what is on the sand settles, and eventually the sand has it
+  for (let i = ground.length - 1; i >= 0; i--) {
+    const d = ground[i];
+    if (d.settle > 0) d.settle -= dt;
+    d.life -= dt;
+    if (d.life <= 0) {
+      if (a.seeking === d) a.seeking = null;
+      if (b.seeking === d) b.seeking = null;
+      d.art?.destroy();
+      ground.splice(i, 1);
+    }
+  }
   const hpA = a.hp;
   const hpB = b.hp;
-  const blowA = tick(a, b, dt, rng);
-  const blowB = tick(b, a, dt, rng);
+  const blowA = tick(a, b, dt, rng, ground);
+  const blowB = tick(b, a, dt, rng, ground);
 
   if (blowA && blowB && blowA.hit && blowB.hit && !blowA.thrown && !blowB.thrown) {
     // put the damage back and push them apart instead
@@ -1825,23 +2010,26 @@ export function exchange(a: Fighter, b: Fighter, dt: number, rng = Math.random):
  * instead of watched once.  `cap` is there because two fighters in full plate
  * with bare hands can genuinely stand there all day.
  */
-export function simulate(a: Kit, bKit: Kit, rng = Math.random, cap = 180, type: LizardType | null = null): { winner: 'frog' | 'lizard' | null; seconds: number; breaks: number; clashes: number } {
+export function simulate(a: Kit, bKit: Kit, rng = Math.random, cap = 180, type: LizardType | null = null): { winner: 'frog' | 'lizard' | null; seconds: number; breaks: number; clashes: number; disarms: number } {
   const f = makeFighter('frog', a, 100, 1);
   const l = makeFighter('lizard', bKit, 220, -1, type);
   const dt = 1 / 60;
+  const ground: Dropped[] = [];
   let t = 0;
   let breaks = 0;
   let clashes = 0;
+  let disarms = 0;
   while (t < cap && f.hp > 0 && l.hp > 0) {
     // The same call the scene makes, so what is measured here is what is
     // played there -- clashes and all.
-    for (const e of exchange(f, l, dt, rng)) {
+    for (const e of exchange(f, l, dt, rng, ground)) {
       if (e.blow.broke) breaks++;
+      if (e.blow.disarmed) disarms++;
       if (e.blow.clashed) clashes++;
     }
     t += dt;
   }
-  return { winner: f.hp <= 0 ? 'lizard' : l.hp <= 0 ? 'frog' : null, seconds: t, breaks, clashes };
+  return { winner: f.hp <= 0 ? 'lizard' : l.hp <= 0 ? 'frog' : null, seconds: t, breaks, clashes, disarms };
 }
 
 // ====================================================================== art
@@ -2629,6 +2817,28 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   };
   const shape = A[f.move?.anim ?? 'sweep'];
   let arm = -10;
+  // ---- BENDING DOWN FOR IT.
+  //
+  // Reaching for something on the sand is the one pose where the arm goes
+  // BELOW the shoulder and the whole animal folds over it, so it reads at a
+  // glance as picking something up rather than as another swing.
+  if (f.act === 'pickup') {
+    const grab = Math.min(1, 1 - f.t * 2.2);
+    a.arm.root.setAngle(42 + grab * 26);
+    a.arm.fore.setAngle(-18 - grab * 26);
+    a.armOff.root.setAngle(38);
+    a.armOff.fore.setAngle(-30);
+    a.torso.setAngle(f.face * 16);
+    a.cuirass.setAngle(f.face * 16);
+    a.headGroup.y = 5;
+    a.headGroup.x = f.face * 3;
+    a.legL.setAngle(-13); a.legR.setAngle(11);
+    a.greaveL.setAngle(-13); a.greaveR.setAngle(11);
+    a.root.y = FLOOR_Y + 2;
+    a.shadow.setPosition(0, -1).setScale(1, 1).setAngle(0);
+    return;
+  }
+  a.headGroup.x = 0;
   let lean = 0;
   if (f.act === 'windup') { arm = shape.w; lean = -shape.lean * 0.55; }
   else if (f.act === 'strike') { arm = shape.s; lean = shape.lean; }
@@ -2898,6 +3108,8 @@ let apiRef: MinigameApi | null = null;
  */
 /** DEV only: holds the fight still so a frame can be inspected. */
 let frozen = false;
+/** What is lying on the sand this bout.  The scene's copy of the fight's. */
+let ground: Dropped[] = [];
 let round = 1;
 let bank = 0;
 
@@ -2946,6 +3158,8 @@ function reset(): void {
   phase = 'title';
   ended = false;
   frozen = false;
+  for (const d of ground) clearDrop(d);
+  ground = [];
   round = 1;
   bank = 0;
   stage = 0;
@@ -3658,6 +3872,70 @@ function retireShot(sh: InFlight, hit: boolean): void {
   art.destroy();
 }
 
+/**
+ * THE WEAPON LEAVING THE HAND, and where it comes to rest.
+ *
+ * It tumbles out on the side the blow came from, bounces once off the sand
+ * and slides the last of the way -- which is the bit that sells it as a
+ * physical object rather than a sprite being moved to a coordinate.
+ */
+function showDisarm(f: Fighter, d: Dropped): void {
+  audio.sfx('fence_thunk', 0.6);
+  audio.sfx('item_thud', 0.45);
+  floatHigh(f.x, 'DISARMED!', PALETTE.gold);
+  S().cameras.main.shake(180, 0.005);
+  const art = buildWeapon(S(), d.def.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber);
+  art.setPosition(f.x + f.face * 8, FLOOR_Y - 24).setDepth(19);
+  layer?.add(art);
+  d.art = art;
+  const bounce = FLOOR_Y - 10;
+  S().tweens.add({
+    targets: art, x: d.x - (d.x - f.x) * 0.25, y: bounce,
+    angle: 320 + Math.random() * 200, duration: 320, ease: 'Quad.easeOut',
+    onComplete: () => {
+      S().tweens.add({
+        targets: art, x: d.x, y: FLOOR_Y - 3, angle: art.angle + 120,
+        duration: 260, ease: 'Quad.easeIn',
+        onComplete: () => {
+          // laid flat where it stopped, with a glint so it reads as a pickup
+          art.setAngle(f.face > 0 ? 8 : -8).setPosition(d.x, FLOOR_Y - 3);
+          audio.sfx('item_thud', 0.3);
+          const glint = S().add.rectangle(d.x, FLOOR_Y - 7, 9, 1, PALETTE.bone).setDepth(20).setAlpha(0);
+          layer?.add(glint);
+          S().tweens.add({ targets: glint, alpha: 0.75, duration: 420, yoyo: true, repeat: -1 });
+          d.art = art;
+          (art as unknown as { glint?: Phaser.GameObjects.Rectangle }).glint = glint;
+        },
+      });
+    },
+  });
+}
+
+/** Take the sprite and its glint away once somebody has it, or the sand does. */
+function clearDrop(d: Dropped): void {
+  const art = d.art as unknown as { glint?: Phaser.GameObjects.Rectangle } | null;
+  art?.glint?.destroy();
+  d.art?.destroy();
+  d.art = null;
+}
+
+/** The weapon going back into a hand, and the hand closing round it. */
+function showPickup(f: Fighter, d: Dropped): void {
+  audio.sfx('item_thud', 0.5);
+  floatHigh(f.x, `${d.def.name.slice(0, 14)}!`, PALETTE.mossLight);
+  clearDrop(d);
+  if (!f.art) return;
+  f.art.weapon.destroy();
+  const w = buildWeapon(S(), d.def.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber);
+  w.setPosition(f.art.arm.hand + 1, 0);
+  f.art.arm.fore.add(w);
+  f.art.weapon = w;
+  f.art.guardUp = false;
+  // it comes up off the sand rather than appearing in the fist
+  w.setScale(0.4).setAlpha(0.6);
+  S().tweens.add({ targets: w, scaleX: 1, scaleY: 1, alpha: 1, duration: 200, ease: 'Back.easeOut' });
+}
+
 function showBlow(f: Fighter, blow: Blow): void {
   const x = f.x;
   if (blow.dodged) {
@@ -3830,7 +4108,12 @@ function stepFight(real: number): void {
   // things changing position relative to each other.
   const dt = real * PACE;
   fightT += dt;
-  for (const e of exchange(frog!, lizard!, dt)) {
+  // Whoever is holding nothing keeps an eye on the floor, so the pickup has
+  // to be drawn the moment the rules hand it over.
+  const wasSeeking: Array<[Fighter, Dropped | null]> = [[frog!, frog!.seeking], [lizard!, lizard!.seeking]];
+  const heldBefore = [frog!.weapon.key, lizard!.weapon.key] as const;
+  for (const e of exchange(frog!, lizard!, dt, Math.random, ground)) {
+    if (e.blow.disarmed) showDisarm(e.def, e.blow.disarmed);
     if (e.blow.broke) showBreak(e.att);
     if (e.blow.stripped) showStrip(e.def, e.blow.stripped, e.blow.strippedTint ?? PALETTE.steel);
     // A shot that has only just been loosed has not done anything yet -- the
@@ -3842,6 +4125,14 @@ function stepFight(real: number): void {
   }
   drawFlight(frog!);
   drawFlight(lizard!);
+  // a hand that was empty and is not any more has just closed on something
+  for (let i = 0; i < 2; i++) {
+    const f = i === 0 ? frog! : lizard!;
+    if (heldBefore[i] === 'none' && f.weapon.key !== 'none') {
+      const was = wasSeeking[i][1];
+      if (was) showPickup(f, was);
+    }
+  }
   // the knock-back easing off, which is drawing and nothing else
   for (const f of [frog!, lizard!]) {
     if (f.shove !== 0) {
@@ -4136,6 +4427,17 @@ export const frogsterMash: MinigameModule = {
           const f = who === 'frog' ? frog : lizard;
           if (f && Number.isFinite(f.dur)) f.dur = 1;
         },
+        /** What is lying on the sand, and who is going for it. */
+        floor: () => ground.map((d) => ({ key: d.def.key, x: Math.round(d.x),
+          life: +d.life.toFixed(1), settle: +d.settle.toFixed(2), drawn: !!d.art })),
+        /** Knock the weapon out of a fighter's hand, to test the sequence. */
+        disarm: (who: 'frog' | 'lizard') => {
+          const f = who === 'frog' ? frog : lizard;
+          if (!f) return null;
+          const d = dropWeapon(f, ground);
+          if (d) showDisarm(f, d);
+          return d ? d.def.key : null;
+        },
         /** How tall each fighter actually stands, measured off the rig. */
         height: (who: 'frog' | 'lizard') => {
           const f = who === 'frog' ? frog : lizard;
@@ -4240,6 +4542,7 @@ function snap(f: Fighter): Record<string, unknown> {
   return {
     hp: Math.max(0, f.hp), maxHp: f.st.maxHp, x: Math.round(f.x), act: f.act,
     weapon: f.weapon.key, broken: f.broken, gone: { ...f.gone },
+    seeking: f.seeking ? f.seeking.def.key : null,
     ammo: Number.isFinite(f.ammo) ? f.ammo : -1, flight: f.flight.length, reload: +f.reload.toFixed(2),
     wear: { head: Math.max(0, Math.round(f.wear.head)), body: Math.max(0, Math.round(f.wear.body)), legs: Math.max(0, Math.round(f.wear.legs)) }, dur: Number.isFinite(f.dur) ? f.dur : -1,
     power: +f.st.power.toFixed(2), rate: +f.st.rate.toFixed(2), walk: +f.st.walk.toFixed(1),
