@@ -137,6 +137,10 @@ export const airHockey: MinigameModule = {
     ];
     puck = scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + TABLE.h / 2, PUCK_R, 0x1a1a22).setStrokeStyle(1, PALETTE.cream);
     padPrev = { x: pad.x, y: pad.y };
+    // Every piece of both faces is built at the origin and only gets a
+    // position from `dressPads`, so without this the first frame draws two
+    // sets of eyes in the corner of the table.
+    dressPads();
 
     scoreText = centerText(scene, GAME_W / 2, 178, '', PALETTE.cream);
     // On the centre spot, over the puck it is holding still.
@@ -182,6 +186,16 @@ export const airHockey: MinigameModule = {
       // whatever the mouse did during the count is not a swing.  The machine's
       // mallet is always treated as still -- see the collide call below.
       padPrev = { x: pad.x, y: pad.y };
+      // ---- AND THE FACES COME WITH THEM.
+      //
+      // This is the whole of the goal bug.  Both mallets are moved through
+      // the whole three second face-off -- yours follows the mouse, his walks
+      // back to his own end -- and the only `dressPads` call was further down,
+      // past this `return`, on the live path.  So from the moment the puck
+      // crossed the line until play restarted, both sets of eyes stayed
+      // floating wherever the goal had left them while the strikers they
+      // belong to slid out from under them.
+      dressPads();
       return;
     }
     countText?.setVisible(false);

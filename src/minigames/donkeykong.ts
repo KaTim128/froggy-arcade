@@ -46,8 +46,30 @@ const GIRDER_DEPTH = 25;
  * MAX_RISE, which is measured from it.
  */
 const BEAM_H = 4;
-/** The player, heel to the top of his hat.  See `sprite` and `hat`. */
-const PLAYER_H = 14;
+/**
+ * The player, heel to the crown of his head.  See `sprite`.
+ *
+ * FOURTEEN WAS MOST OF A STOREY.  A storey is twenty-four pixels and four of
+ * those are girder, so a fourteen pixel player left ten to play with and the
+ * jump got six of them -- he was two thirds the height of the gap he was
+ * jumping in, which is why the jump read as a hop and why he loomed over the
+ * eight pixel barrels he was supposed to be hopping.
+ *
+ * Ten makes him about a barrel and a quarter, which is what a small frog
+ * clearing a barrel should look like, and every pixel taken off him goes
+ * straight into MAX_RISE -- the jump is what is LEFT of the storey.
+ */
+const PLAYER_H = 10;
+/**
+ * Daylight over his head at the top of a normal jump.
+ *
+ * The cap used to be measured so his crown arrived exactly against the
+ * underside of the beam: correct, in that nothing was ever drawn over him,
+ * and wrong to look at, because a jump that ends flush against the ceiling
+ * reads as hitting it.  Two pixels is eight on screen at this upscale, which
+ * is a gap you can see without spending jump on it.
+ */
+const HEAD_ROOM = 2;
 /**
  * The storey height.  The girders are evenly spaced and listed from the BOTTOM
  * up, so the one above any given girder is the smaller number.
@@ -90,7 +112,7 @@ const FLOOR_GAP = FLOORS[0] - FLOORS[1];
  * every barrel-spacing rule below is measured in -- comes out at the same 34px
  * it was tuned against.
  */
-const MAX_RISE = FLOOR_GAP - BEAM_H - PLAYER_H;
+const MAX_RISE = FLOOR_GAP - BEAM_H - PLAYER_H - HEAD_ROOM;
 const AIRTIME_S = 0.609;
 const GRAVITY = (8 * MAX_RISE) / (AIRTIME_S * AIRTIME_S);
 const JUMP_V = -Math.sqrt(2 * GRAVITY * MAX_RISE);
@@ -197,8 +219,8 @@ const HIT_DX = 6;
  * height, it covers exactly the frog the player can see, which is what makes
  * the six pixels of jump left under the new ceiling enough to clear a barrel.
  */
-const HIT_DY = 7;
-const PLAYER_MID = 7;
+const HIT_DY = PLAYER_H / 2;
+const PLAYER_MID = PLAYER_H / 2;
 const WALK_UNDER = HIT_DY + PLAYER_MID - BARREL_R;
 
 interface Ladder {
@@ -242,8 +264,8 @@ let ladders: Ladder[] = [];
 let barrels: Barrel[] = [];
 let barrelNo = 0;
 let player = { x: 0, y: 0, vy: 0, floor: 0, onLadder: false, climbing: false };
-let sprite: Phaser.GameObjects.Rectangle | null = null;
-let hat: Phaser.GameObjects.Rectangle | null = null;
+let sprite: Phaser.GameObjects.Container | null = null;
+let hat: Phaser.GameObjects.Container | null = null;
 let lives = LIVES;
 let spawnTimer = 0;
 let elapsed = 0;
@@ -388,8 +410,36 @@ export const donkeyKong: MinigameModule = {
     text(scene, RIGHT - 34, top - 26, 'OUT', PALETTE.gold);
 
     player = { x: LEFT + 14, y: FLOORS[0], vy: 0, floor: 0, onLadder: false, climbing: false };
-    sprite = scene.add.rectangle(player.x, player.y, 7, 11, 0x46a0e0).setOrigin(0.5, 1).setDepth(20);
-    hat = scene.add.rectangle(player.x, player.y - 11, 8, 3, PALETTE.cream).setOrigin(0.5, 1).setDepth(21);
+    // ---- THE CLIMBER, WHO IS A FROG AND NOT A BLUE BOX.
+    //
+    // He was a 7x11 blue rectangle with a cream rectangle on top of it, in an
+    // arcade where every other frog has eyes.  Same rig -- a body pinned by
+    // its feet and a second object above it, so `place` still moves two things
+    // and nothing else has to change -- but the body is a frog's and the
+    // thing above it is his head rather than a hat.
+    // He is the brightest green on the screen ON PURPOSE.  The old blue box
+    // was instantly findable against a black-green jungle and a frog in
+    // jungle colours is not -- turning him into a frog is no good if it
+    // costs the player the ability to see where they are.  Pale body, cream
+    // belly, dark outline under him so he never sits flush on the girder.
+    const SKIN = 0x8fdc94;
+    const SHADE = 0x4f9c58;
+    sprite = scene.add.container(player.x, player.y, [
+      scene.add.ellipse(0, -0.6, 9, 3, 0x0c1f12).setAlpha(0.5),
+      scene.add.ellipse(-3, -1.4, 3.2, 2.8, SHADE),
+      scene.add.ellipse(3, -1.4, 3.2, 2.8, SHADE),
+      scene.add.ellipse(0, -3, 8.4, 6.4, SKIN),
+      scene.add.ellipse(0, -2.2, 5, 3, PALETTE.cream).setAlpha(0.85),
+    ]).setDepth(20);
+    hat = scene.add.container(player.x, player.y - PLAYER_H, [
+      scene.add.ellipse(0, 3, 7.8, 5.4, SKIN),
+      scene.add.ellipse(-2.1, 1.2, 3.4, 3.2, SKIN),
+      scene.add.ellipse(2.1, 1.2, 3.4, 3.2, SKIN),
+      scene.add.ellipse(-2.1, 1.4, 2.2, 2.2, PALETTE.cream),
+      scene.add.ellipse(2.1, 1.4, 2.2, 2.2, PALETTE.cream),
+      scene.add.rectangle(-2.1, 1.4, 1.1, 1.5, 0x101a12),
+      scene.add.rectangle(2.1, 1.4, 1.1, 1.5, 0x101a12),
+    ]).setDepth(21);
 
     // ---- THE PANEL.  See PANEL_TOP.
     scene.add.rectangle(0, PANEL_TOP, GAME_W, PANEL_H, PALETTE.black, 0.72).setOrigin(0, 0).setDepth(30);
@@ -668,7 +718,7 @@ function ceilingY(floor: number): number {
 
 function place(): void {
   sprite?.setPosition(player.x, player.y);
-  hat?.setPosition(player.x, player.y - 11);
+  hat?.setPosition(player.x, player.y - PLAYER_H);
 }
 
 /** The two kinds, and which one the next barrel is. */

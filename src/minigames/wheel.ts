@@ -261,7 +261,10 @@ export const wheelOfFortune: MinigameModule = {
       scene.add.circle(CX + sx, CY - 3.4, 1.5, PALETTE.black).setDepth(8);
       scene.add.circle(CX + sx - 0.6, CY - 4.4, 0.6, 0xffffff).setDepth(8).setAlpha(0.9);
     }
-    scene.add.rectangle(CX, CY + 4, 7, 1, 0x1b3a22).setDepth(8).setAlpha(0.8);
+    // No mouth.  He is a hub with eyes, and the single dark bar that used to
+    // run under them read as a slot cut in the boss rather than as a face.
+    // Nothing is drawn in its place: the muzzle ellipse above already gives
+    // the lower half of him its shape.
     // ---- THE POINTER: a reed over the top, with a brass collar on it.
     scene.add.rectangle(CX, CY - R - 13, 3, 9, 0x6b7a3a).setOrigin(0.5, 0).setDepth(8);
     scene.add.rectangle(CX, CY - R - 8, 7, 2.5, 0xc2a15a).setOrigin(0.5, 0).setDepth(8);
