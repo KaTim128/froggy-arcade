@@ -1912,10 +1912,37 @@ const CHEST_H = 34;
 const CHEST_Y = 144;
 const CHEST_X = [32, 96, 160, 224, 288];
 
-type Phase = 'title' | 'pick' | 'reveal' | 'summary' | 'entry' | 'fight' | 'over';
+type Phase = 'title' | 'pick' | 'reveal' | 'summary' | 'entry' | 'fight' | 'over' | 'banked';
 
 let scene0: Phaser.Scene | null = null;
 let apiRef: MinigameApi | null = null;
+
+/**
+ * THE LADDER.
+ *
+ * Twenty-five tokens buys a seat, and then it is a run rather than a fight:
+ * win and you may take what you have or put it all back on the next lizard.
+ *
+ *   round 1 ....... 50
+ *   round N > 1 ... 25 + (N - 1) * 5   (30, 35, 40, 45, ...)
+ *
+ * `bank` is what has been won and NOT yet paid.  Nothing reaches the ledger
+ * until the player stops: `win(bank)` on the way out, `lose()` if a lizard
+ * gets there first, and in that case the bank and the entry both go with it.
+ * Paying each round as it landed would have been simpler and would have made
+ * "lose it all" impossible, because the shell has no way to take a credit
+ * back once it has been made.
+ */
+let round = 1;
+let bank = 0;
+
+/** What winning round `n` is worth. */
+export function rewardFor(n: number): number {
+  return n <= 1 ? FIRST_PRIZE : ENTRY + (n - 1) * STEP;
+}
+const ENTRY = 25;
+const FIRST_PRIZE = 50;
+const STEP = 5;
 let phase: Phase = 'title';
 /** The one latch that stops a result being reported twice.  See `finish`. */
 let ended = false;
@@ -1952,6 +1979,8 @@ const rnd = (n: number): number => Math.floor(Math.random() * n);
 function reset(): void {
   phase = 'title';
   ended = false;
+  round = 1;
+  bank = 0;
   stage = 0;
   offer = [];
   picked = {};
@@ -2386,6 +2415,22 @@ function autoPick(): void {
  */
 function showEntry(): void {
   if (phase !== 'title') return;
+  startRound();
+}
+
+/**
+ * ONE ROUND: A NEW LIZARD, THE SAME FROG, AND THE SAND AGAIN.
+ *
+ * Round one comes straight off the fourth chest; every round after it comes
+ * off the CONTINUE button and nothing else -- no timer starts the next fight.
+ *
+ * Froggy is rebuilt from the kit he opened, so he comes back whole and with
+ * whatever broke in the last fight repaired.  The run is a gamble on the
+ * BANK, not a war of attrition: carrying damage and a snapped weapon forward
+ * would make round three unwinnable for reasons the player never chose.  The
+ * lizard is rolled fresh by the existing generator, archetype and all.
+ */
+function startRound(): void {
   phase = 'entry';
   frog = makeFighter('frog', picked as Kit, 100, 1);
   lizard = makeLizard(220);
@@ -2439,7 +2484,7 @@ function showCardOfBoth(c: Phaser.GameObjects.Container): void {
   const ty = L.type!;
   const card: Phaser.GameObjects.GameObject[] = [];
   const keep = <T extends Phaser.GameObjects.GameObject>(o: T): T => { c.add(o); card.push(o); return o; };
-  keep(S().add.rectangle(8, 48, GAME_W - 16, 96, PALETTE.ink, 0.93).setOrigin(0, 0).setDepth(50).setStrokeStyle(1, PALETTE.gold));
+  keep(S().add.rectangle(8, 48, GAME_W - 16, 90, PALETTE.ink, 0.93).setOrigin(0, 0).setDepth(50).setStrokeStyle(1, PALETTE.gold));
 
   const col = (x: number, who: string, tint: number, f: Fighter, note: string) => {
     keep(text(S(), x, 53, who.slice(0, 17), tint).setDepth(52));
@@ -2454,16 +2499,28 @@ function showCardOfBoth(c: Phaser.GameObjects.Container): void {
       ['HEALTH', String(f.st.maxHp)],
     ];
     rows.forEach(([k, v], i) => {
-      const y = 76 + i * 9;
+      const y = 74 + i * 9;
       keep(text(S(), x, y, k, PALETTE.ash).setDepth(52));
       keep(text(S(), x + 138, y, v, i === 0 ? PALETTE.bone : tint).setDepth(52).setOrigin(1, 0));
     });
   };
   col(14, 'FROGGY', PALETTE.mossLight, F, 'OUT OF FOUR CHESTS');
   col(166, ty.name, PALETTE.amber, L, ty.blurb);
-  keep(S().add.rectangle(GAME_W / 2, 50, 1, 92, PALETTE.steel).setOrigin(0.5, 0).setDepth(51));
+  keep(S().add.rectangle(GAME_W / 2, 50, 1, 86, PALETTE.steel).setOrigin(0.5, 0).setDepth(51));
 
-  buttons.push(button(S(), GAME_W / 2, 158, 'FIGHT', () => {
+  // ---- WHAT THIS PARTICULAR FIGHT IS WORTH.
+  //
+  // The round, what winning it pays, and -- from round two -- what is already
+  // on the table and would go with a loss.  It sits under the two columns
+  // because it is the reason to read them.
+  const stake = bank > 0
+    ? `ROUND ${round}   WIN +${rewardFor(round)}   BANK ${bank}`
+    : `ROUND ${round}   WIN PAYS ${rewardFor(round)}`;
+  // 147, not 143: centred text is centred on its y, so at 143 it straddled
+  // the panel's bottom edge at 138 and read as sitting on the border.
+  keep(centerText(S(), GAME_W / 2, 147, stake, bank > 0 ? PALETTE.gold : PALETTE.amber).setDepth(52));
+
+  buttons.push(button(S(), GAME_W / 2, 161, 'FIGHT', () => {
     if (phase !== 'entry') return;
     for (const b of buttons) b.destroy();
     buttons = [];
@@ -2507,6 +2564,11 @@ function buildHud(c: Phaser.GameObjects.Container): void {
   };
   bar(8, 'frog', 'FROGGY', PALETTE.mossLight, frog!.kit, false);
   bar(GAME_W - 138, 'lizard', 'LIZARD', PALETTE.amber, lizard!.kit, true);
+  // The strip's middle is the only spare room on the screen, and the round
+  // and its prize are the two things worth keeping in front of the player.
+  c.add(centerText(S(), GAME_W / 2, 20, `R${round}`, PALETTE.gold).setDepth(41));
+  c.add(centerText(S(), GAME_W / 2, 29, `+${rewardFor(round)}`, PALETTE.amber).setDepth(41));
+  if (bank > 0) c.add(centerText(S(), GAME_W / 2, 38, `${bank}`, PALETTE.cream).setDepth(41));
   refreshHud();
 }
 
@@ -2698,7 +2760,57 @@ function finishFight(won: boolean): void {
   goesDown(loser);
   celebrates(winner, won);
 
-  S().time.delayedCall(won ? OVER_WIN_MS : OVER_LOSE_MS, () => finish(won));
+  if (!won) {
+    // The bank goes down with him.  Nothing was ever credited, so there is
+    // nothing to take back -- `lose` simply pays none of it.
+    S().time.delayedCall(OVER_LOSE_MS, () => finish(false));
+    return;
+  }
+  bank += rewardFor(round);
+  S().time.delayedCall(OVER_WIN_MS, showBanked);
+}
+
+/**
+ * THE ONLY DECISION LEFT IN THE GAME: TAKE IT, OR PUT IT BACK.
+ *
+ * Nothing starts the next fight by itself.  The round is over, the bank is on
+ * the table, and the two buttons are the whole of it -- so the player can see
+ * what they are holding and what the next lizard is worth before they decide
+ * to risk one for the other.
+ */
+function showBanked(): void {
+  if (phase !== 'over' || ended) return;
+  phase = 'banked';
+  for (const b of buttons) b.destroy();
+  buttons = [];
+
+  const won = rewardFor(round);
+  const next = rewardFor(round + 1);
+  const c = layer ?? S().add.container(0, 0);
+  const card: Phaser.GameObjects.GameObject[] = [];
+  const keep = <T extends Phaser.GameObjects.GameObject>(o: T): T => { c.add(o); card.push(o); return o; };
+
+  keep(S().add.rectangle(30, 52, GAME_W - 60, 84, PALETTE.ink, 0.94).setOrigin(0, 0).setDepth(60).setStrokeStyle(1, PALETTE.gold));
+  keep(centerText(S(), GAME_W / 2, 64, `ROUND ${round} WON`, PALETTE.gold, 16).setDepth(62));
+  keep(centerText(S(), GAME_W / 2, 82, `+${won} THIS ROUND`, PALETTE.mossLight).setDepth(62));
+  keep(centerText(S(), GAME_W / 2, 94, `BANKED  ${bank}`, PALETTE.cream, 16).setDepth(62));
+  keep(centerText(S(), GAME_W / 2, 112, `ROUND ${round + 1} PAYS ${next}`, PALETTE.amber).setDepth(62));
+  keep(centerText(S(), GAME_W / 2, 124, 'LOSE AND THE BANK GOES WITH IT', PALETTE.ash).setDepth(62));
+
+  buttons.push(button(S(), 84, 152, `TAKE ${bank}`, () => {
+    if (phase !== 'banked') return;
+    for (const o of card) o.destroy();
+    finish(true);
+  }, { width: 90, height: 16, fill: PALETTE.tealDark }));
+
+  buttons.push(button(S(), GAME_W - 84, 152, 'CONTINUE', () => {
+    if (phase !== 'banked') return;
+    for (const o of card) o.destroy();
+    for (const b of buttons) b.destroy();
+    buttons = [];
+    round += 1;
+    startRound();
+  }, { width: 90, height: 16, fill: PALETTE.blood }));
 }
 
 /**
@@ -2767,7 +2879,7 @@ function celebrates(f: Fighter, won: boolean): void {
   // ---- THE REWARD.  Text, but not a box: it rises off him and goes.
   sc.time.delayedCall(700, () => {
     audio.sfx('cha_ching', 0.6);
-    const gain = centerText(sc, a.root.x, FLOOR_Y - 46, '+30 TOKENS', PALETTE.gold, 16).setDepth(61);
+    const gain = centerText(sc, a.root.x, FLOOR_Y - 46, `+${rewardFor(round)} TOKENS`, PALETTE.gold, 16).setDepth(61);
     layer?.add(gain);
     sc.tweens.add({ targets: gain, y: FLOOR_Y - 66, duration: 1500, ease: 'Quad.easeOut' });
     sc.tweens.add({ targets: gain, alpha: 0, duration: 520, delay: 1600 });
@@ -2787,7 +2899,10 @@ function finish(won: boolean): void {
   ended = true;
   for (const b of buttons) b.destroy();
   buttons = [];
-  if (won) apiRef!.win();
+  // `win` carries the BANK rather than the cabinet's headline figure: the
+  // run may have been one round or nine, and this is the only moment any of
+  // it reaches the ledger.
+  if (won) apiRef!.win(bank);
   else apiRef!.lose();
 }
 
@@ -2797,12 +2912,14 @@ export const frogsterMash: MinigameModule = {
   id: ID,
   title: 'FROGSTER MASH',
   music: 'game_frogstermash',
-  rules: 'open four chests, then watch them settle it',
+  rules: 'open four chests, then take it or risk it',
   tutorial: {
     objective: [
       'OPEN FOUR CHESTS: A WEAPON, AND ARMOUR FOR HEAD, BODY AND LEGS.',
       'WHAT IS IN THE CHEST IS YOURS. THERE IS NO PUTTING IT BACK.',
-      'THEN FROGGY FIGHTS THE LIZARD BY HIMSELF. WIN AND TAKE 30.',
+      'THEN FROGGY FIGHTS. WIN ROUND ONE AND TAKE 50.',
+      'TAKE IT, OR PUT IT ALL ON THE NEXT LIZARD FOR 30, 35, 40...',
+      'LOSE A ROUND AND THE WHOLE BANK GOES WITH IT.',
     ],
     controls: [
       ['LEFT/RIGHT', 'INSPECT THE CHESTS'],
@@ -2849,6 +2966,9 @@ export const frogsterMash: MinigameModule = {
       (window as unknown as Record<string, unknown>).__mash = {
         state: () => ({
           phase,
+          round,
+          bank,
+          prize: rewardFor(round),
           stage,
           slot: ORDER[stage],
           hi,
@@ -2879,7 +2999,7 @@ export const frogsterMash: MinigameModule = {
           if (f && Number.isFinite(f.dur)) f.dur = 1;
         },
         /** The rules and the headless simulator, so a build can be checked. */
-        rules: { WEAPONS, MATERIALS, UNARMED, QUALITY_MUL, statsOf, makeFighter, resolveStrike, tick, think, exchange, simulate, randomKit, offerFor, makeWeapon, makeArmour, breakWeapon, durabilityOf, wrapTo, CARD_COLS, BASE, LIZARDS, makeLizard, buildFighter, buildWeapon },
+        rules: { WEAPONS, MATERIALS, UNARMED, QUALITY_MUL, statsOf, makeFighter, resolveStrike, tick, think, exchange, simulate, randomKit, offerFor, makeWeapon, makeArmour, breakWeapon, durabilityOf, wrapTo, CARD_COLS, BASE, LIZARDS, makeLizard, buildFighter, buildWeapon, rewardFor },
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         delete (window as unknown as Record<string, unknown>).__mash;

@@ -224,7 +224,11 @@ export const CABINETS: CabinetDef[] = [
   // the only one you build something in before you play it.  Bottom right of
   // the casino, opposite the Frog Race, with the table and its chair between
   // them.  See minigames/frogstermash.
-  { id: 'frogstermash', title: 'FROGSTER MASH', tier: 'hard', cost: 15, reward: 30, x: 224, y: 162, color: 0x7b4bd8, room: 'casino', symbol: 'FM', motif: 'mash' },
+  // 25 in, and the headline reward is the FIRST round's fifty.  Every round
+  // after that is worth 25 + (N-1)*5 and the machine keeps a running bank, so
+  // what actually gets credited is whatever the player walks away with --
+  // `win(n)` carries it, and `reward` here is only what the card advertises.
+  { id: 'frogstermash', title: 'FROGSTER MASH', tier: 'hard', cost: 25, reward: 50, x: 224, y: 162, color: 0x7b4bd8, room: 'casino', symbol: 'FM', motif: 'mash' },
 ];
 
 /** Cabinets standing in a given room.  Anything unmarked lives in the hub. */
