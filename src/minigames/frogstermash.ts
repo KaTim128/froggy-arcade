@@ -1234,8 +1234,20 @@ const OVER_LOSE_MS = 3200;
  * is both what a guard looks like and the only way to tell there are two of
  * them at this size.
  */
-const GUARD_LEAD = -38;
-const GUARD_REAR = -66;
+// ---- A BOXER'S UPPER ARM POINTS DOWN.
+//
+// These were negative, which tips the whole upper arm UPWARD from the
+// shoulder -- and once the elbow folded on top of that the forearm came out
+// at about -120 absolute and put the hand above and behind the skull.  The
+// fighter looked like he was waving.
+//
+// The shape is: upper arm hanging down and slightly forward, elbow tucked
+// near the ribs, forearm coming back UP to the chin.  So the shoulder angle
+// is positive and the elbow does the work.
+const GUARD_LEAD = 34;
+const GUARD_REAR = 22;
+/** How far the elbow shuts in a guard, measured from the upper arm. */
+const GUARD_FOLD = -118;
 const OFF_ARM_REST = 24;
 /** How much of the way to the target angle a limb travels each frame. */
 const ARM_SNAP = 0.62;
@@ -2834,8 +2846,28 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // -- so the joint can flex, and `poseFighter` drives the elbow separately
   // from the shoulder.  Everything below the elbow lives in `fore`, so
   // bending it carries the forearm, the wrist and the hand together.
+  // ---- WHERE AN ARM STARTS.
+  //
+  // It started at +5 for the near arm and -2 for the far one, which is not a
+  // pair of shoulders: it is one arm on the chest and one arm very nearly on
+  // the breastbone, four pixels apart on a body nineteen wide.  And -24 sits
+  // in the MIDDLE of a torso that runs from -29 to -9, so every punch left
+  // from somewhere around the stomach.
+  //
+  // Both shoulders are the same distance out now, on opposite sides, and high
+  // enough up the body to be shoulders: three pixels under the top of the
+  // torso, on its upper corners, where the shoulder cap can overlap the chest
+  // and the arm can look like it grew there.
+  // MEASURED, not guessed.  Froggy's head runs from -26.5 to -39.5 and his
+  // torso from -9 to -29, so the head hangs down over the top of the body and
+  // "the upper torso" and "inside the skull" are very nearly the same place.
+  // At -26 the shoulder sat level with the jaw and every raised arm ran up
+  // across an eye.  -24 is the top third of the torso and two clear pixels
+  // under the head, which is as high as a shoulder can go on this animal.
+  const shoulderY = -24 * tall - lift;
+  const shoulderX = 4.8 * wide;
   const buildArm = (behind: boolean): Arm => {
-    const root = scene.add.container(5 * wide * (behind ? -0.4 : 1), -24 * tall - lift);
+    const root = scene.add.container(behind ? -shoulderX : shoulderX, shoulderY);
     const tone = behind ? dark : skin;
     const limbTone = behind ? skin : light;
     const UPPER = 6;
@@ -3078,8 +3110,10 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     // In front of the face is also where a boxer's rear hand belongs.
     a.guardUp = true;
     a.root.bringToTop(a.armOff.root);
-    a.armOff.root.x = Math.abs(a.arm.root.x) * 0.55;
-    a.armOff.root.y = a.arm.root.y + 1.5;
+    // Round to the front, but not all the way across -- a boxer's rear hand
+    // sits inside the lead one, not on top of it.
+    a.armOff.root.x = Math.abs(a.arm.root.x) * 0.45;
+    a.armOff.root.y = a.arm.root.y + 1;
   }
   if (bare) {
     const throwing = f.act === 'strike' || f.act === 'recover';
@@ -3092,10 +3126,10 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     // The guard is elbows in and fists up; the punch drives the elbow open
     // and snaps it back.  Whichever hand is not throwing stays folded, which
     // is what makes the guard read as a guard and not as two arms pointing.
-    const drive = throwing ? -12 : -96;
-    f.elbowA += ((throwing && !alt ? drive : -96) - f.elbowA) * snap;
+    const drive = throwing ? -18 : GUARD_FOLD;
+    f.elbowA += ((throwing && !alt ? drive : GUARD_FOLD) - f.elbowA) * snap;
     a.arm.fore.setAngle(f.elbowA);
-    a.armOff.fore.setAngle(throwing && alt ? drive : -96);
+    a.armOff.fore.setAngle(throwing && alt ? drive : GUARD_FOLD);
   } else {
     a.armOff.root.setAngle(OFF_ARM_REST);
     a.armOff.fore.setAngle(-22);

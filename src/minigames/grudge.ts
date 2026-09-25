@@ -101,7 +101,11 @@ interface Art {
   /** The lizard's crest.  The frog has an invisible one, to keep this simple. */
   crest: Phaser.GameObjects.GameObject & { setPosition(x: number, y: number): unknown };
   arm: Phaser.GameObjects.Rectangle;
-  fist: Phaser.GameObjects.Rectangle;
+  /** The glove, and the three pieces that make it look like one. */
+  fist: Phaser.GameObjects.Ellipse;
+  cuff: Phaser.GameObjects.Rectangle;
+  knuckle: Phaser.GameObjects.Ellipse;
+  thumb: Phaser.GameObjects.Ellipse;
   shin: Phaser.GameObjects.Rectangle;
   aura: Phaser.GameObjects.Arc;
   /** The word over their head while a move is wound up or thrown. */
@@ -383,8 +387,25 @@ function makeFighter(scene: Phaser.Scene, x: number, kind: 'frog' | 'lizard', fa
   const torso = scene.add.ellipse(0, -18, kind === 'frog' ? 18 : 14, 18, skin);
   const belly = scene.add.ellipse(1, -16, kind === 'frog' ? 11 : 8, 11, skinLight);
   const shin = scene.add.rectangle(6, -6, 4, 4, skinLight).setOrigin(0, 0.5).setVisible(false);
-  const arm = scene.add.rectangle(4, -22, 4, 4, skin).setOrigin(0, 0.5);
-  const fist = scene.add.rectangle(8, -22, 5, 5, skinLight).setOrigin(0.5, 0.5);
+  // ---- THEY ARE BOXERS, SO THEY WEAR GLOVES.
+  //
+  // The arm was a bare bar with a slightly lighter bar on the end, and at
+  // this size a thin bar with a bulge is not reliably a limb -- which is
+  // exactly the problem with the low attack.  A glove fixes both: it is a
+  // big, blunt, brightly coloured shape that cannot read as anything else,
+  // and it tells the player at a glance that this is a boxing match.
+  //
+  // Red for the frog, blue for the bird, so you can tell whose fist is in
+  // the middle of the ring.  The laced cuff is what joins it to the arm.
+  const gloveCol = kind === 'frog' ? 0xc4342e : 0x2f5fa8;
+  const gloveLit = kind === 'frog' ? 0xe8635a : 0x5b8fd6;
+  const arm = scene.add.rectangle(4, -22, 4, 6, skin).setOrigin(0, 0.5);
+  // Ellipses, not rectangles.  A glove is the roundest thing in a boxing
+  // ring and a square one reads as a parcel taped to the end of an arm.
+  const cuff = scene.add.rectangle(8, -22, 3, 7, PALETTE.cream).setOrigin(0.5, 0.5);
+  const fist = scene.add.ellipse(8, -22, 7, 8, gloveCol);
+  const knuckle = scene.add.ellipse(8, -24, 6, 3, gloveLit);
+  const thumb = scene.add.ellipse(8, -19, 3.5, 3, gloveLit);
   const head = scene.add.ellipse(2, -30, kind === 'frog' ? 15 : 12, 12, skinLight);
   const snout =
     kind === 'lizard'
@@ -405,7 +426,7 @@ function makeFighter(scene: Phaser.Scene, x: number, kind: 'frog' | 'lizard', fa
 
   const parts: Phaser.GameObjects.GameObject[] = [footL, footR, legL, legR];
   if (tail) parts.push(tail);
-  parts.push(aura, torso, belly, shin, arm, fist, head, snout, crest, eyeL, eyeR, pupL, pupR, call);
+  parts.push(aura, torso, belly, shin, arm, cuff, fist, knuckle, thumb, head, snout, crest, eyeL, eyeR, pupL, pupR, call);
   const root = scene.add.container(x, FLOOR_Y, parts).setDepth(20);
   root.setScale(facing, 1);
 
@@ -425,7 +446,7 @@ function makeFighter(scene: Phaser.Scene, x: number, kind: 'frog' | 'lizard', fa
     stun: 0,
     recoil: 0,
     step: 0,
-    art: { root, legL, legR, torso, belly, head, snout, eyeL, eyeR, pupL, pupR, crest, arm, fist, shin, aura, call, skin, skinLight },
+    art: { root, legL, legR, torso, belly, head, snout, eyeL, eyeR, pupL, pupR, crest, arm, fist, cuff, knuckle, thumb, shin, aura, call, skin, skinLight },
   };
 }
 
@@ -707,33 +728,52 @@ function render(f: Fighter, dt: number): void {
   a.shin.setVisible(false);
   a.aura.setVisible(false);
   a.arm.setFillStyle(a.skin);
+  // Everything that makes up the glove hangs off wherever the fist was put,
+  // so no pose has to remember to move four things.
+  const glove = (x: number, y: number, size: number): void => {
+    a.fist.setPosition(x, y).setSize(size * 1.08, size);
+    a.cuff.setPosition(x - size * 0.58, y).setSize(size * 0.4, size * 0.82);
+    a.knuckle.setPosition(x + size * 0.12, y - size * 0.26).setSize(size * 0.68, size * 0.3);
+    a.thumb.setPosition(x - size * 0.1, y + size * 0.3).setSize(size * 0.42, size * 0.34);
+  };
   if (f.move && f.phase) {
     const def = MOVES[f.move];
     if (f.move === 'high') {
       // A straight arm at head height, and the shoulder turned into it.
       if (f.phase === 'startup') {
-        a.arm.setPosition(-2, a.head.y + 4).setSize(6, 5);
-        a.fist.setPosition(-4, a.head.y + 4).setSize(6, 6);
+        a.arm.setPosition(-2, a.head.y + 4).setSize(6, 6);
+        glove(-5, a.head.y + 4, 8);
       } else if (f.phase === 'active') {
-        a.arm.setPosition(4, a.head.y + 3).setSize(def.range * 0.7, 5);
-        a.fist.setPosition(4 + def.range * 0.7, a.head.y + 3).setSize(7, 7);
+        a.arm.setPosition(4, a.head.y + 3).setSize(def.range * 0.7, 6);
+        glove(5 + def.range * 0.7, a.head.y + 3, 9);
       } else {
-        a.arm.setPosition(4, -20).setSize(def.range * 0.3, 4);
-        a.fist.setPosition(4 + def.range * 0.3, -20).setSize(5, 5);
+        a.arm.setPosition(4, -20).setSize(def.range * 0.3, 5);
+        glove(5 + def.range * 0.3, -20, 7);
       }
     } else if (f.move === 'low') {
-      // A sweep at knee height: the leg comes out level with the kneecap,
-      // well clear of the floorboards, with the knee cocked first.  The
-      // fighter leans back over the standing leg to throw it.
-      a.shin.setVisible(true).setFillStyle(a.skinLight);
-      a.arm.setPosition(-1, -22).setSize(4, 4);
-      a.fist.setPosition(1, -22).setSize(4, 4);
+      // ---- A BODY SHOT, AND IT HAS TO LOOK LIKE A PUNCH.
+      //
+      // This was drawn as a shin sweeping along at knee height: a bar four
+      // or five pixels thick and thirty long, coming out of the middle of a
+      // fighter at hip level.  At this size that is not a leg, and the shape
+      // it does read as is not one anybody wants in an arcade cabinet.
+      //
+      // It is a gloved dig to the body now -- same height, same reach, same
+      // purpose of going under a high guard, but thrown with a fist that is
+      // unmistakably a fist, off a short thick arm rather than a long thin
+      // one.  The fighter still drops his weight into it.
+      a.shin.setVisible(false);
+      const ly = -15;
       if (f.phase === 'startup') {
-        a.shin.setPosition(-2, -13).setSize(7, 5);
+        // cocked back against the ribs
+        a.arm.setPosition(-3, ly).setSize(6, 7);
+        glove(-6, ly + 1, 8);
       } else if (f.phase === 'active') {
-        a.shin.setPosition(4, -12).setSize(def.range * 0.8, 5);
+        a.arm.setPosition(3, ly).setSize(def.range * 0.62, 7);
+        glove(4 + def.range * 0.62, ly, 10);
       } else {
-        a.shin.setPosition(3, -12).setSize(def.range * 0.35, 4);
+        a.arm.setPosition(3, ly - 1).setSize(def.range * 0.26, 6);
+        glove(4 + def.range * 0.26, ly - 1, 8);
       }
     } else {
       // The special: wound up with a ring of light, then thrown with both arms.
@@ -745,14 +785,14 @@ function render(f: Fighter, dt: number): void {
         .setFillStyle(PALETTE.ember, f.phase === 'recovery' ? 0.25 : 0.45);
       a.arm.setFillStyle(PALETTE.ember);
       if (f.phase === 'startup') {
-        a.arm.setPosition(-3, -24).setSize(7, 6);
-        a.fist.setPosition(-6, -24).setSize(7, 7);
+        a.arm.setPosition(-3, -24).setSize(7, 7);
+        glove(-7, -24, 9);
       } else if (f.phase === 'active') {
-        a.arm.setPosition(4, -20).setSize(def.range * 0.8, 7);
-        a.fist.setPosition(4 + def.range * 0.8, -20).setSize(9, 9);
+        a.arm.setPosition(4, -20).setSize(def.range * 0.8, 8);
+        glove(6 + def.range * 0.8, -20, 12);
       } else {
-        a.arm.setPosition(3, -18).setSize(def.range * 0.3, 5);
-        a.fist.setPosition(3 + def.range * 0.3, -18).setSize(5, 5);
+        a.arm.setPosition(3, -18).setSize(def.range * 0.3, 6);
+        glove(4 + def.range * 0.3, -18, 8);
       }
     }
     a.call
@@ -763,8 +803,15 @@ function render(f: Fighter, dt: number): void {
     // The container is mirrored, so the label would be too; un-mirror it.
     a.call.setScale(f.facing, 1);
   } else {
-    a.arm.setPosition(4, -22).setSize(4, 4);
-    a.fist.setPosition(8, -22).setSize(5, 5);
+    // ---- AND BETWEEN PUNCHES, THE GUARD IS UP.
+    //
+    // A boxer standing with his arm out straight is a boxer about to be hit.
+    // Idle, the glove comes back to the chin and rides the breathing, which
+    // is also what makes the punches read as punches: they are a departure
+    // from somewhere.
+    const guardBob = Math.sin(sceneClock * 3 + (f === p2 ? 1.6 : 0)) * 0.7;
+    a.arm.setPosition(1, -23).setSize(6, 6);
+    glove(6, -25 + guardBob, 8);
     a.call.setVisible(false);
   }
 
