@@ -940,6 +940,16 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
     await page.evaluate(() => {
       window.__dk.teleport(0, 20);
       window.__dk.grace(600000);
+      // ---- AND NOTHING THROWS ON ITS OWN WHILE THIS IS BEING READ.
+      //
+      // `clearBarrels` also parks the spawn timer, which is the point of it
+      // here.  Without that, the pile keeps to its own two-to-three second
+      // cadence underneath the measurement, and roughly one run in six the
+      // NEXT throw starts inside the 700ms this test waits for the arms to
+      // come back down -- so the final read caught him mid wind-up, with
+      // `holding` false and an arm at -1.32, and reported the throw broken
+      // when what it had actually found was the throw after it.
+      window.__dk.clearBarrels();
     });
     // Wait out whatever throw was already in flight when the cabinet came up.
     for (let i = 0; i < 40 && (await page.evaluate(() => window.__dk.kong().swing)) > 0.01; i++) await sleep(100);
