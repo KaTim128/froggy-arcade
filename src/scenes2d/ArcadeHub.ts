@@ -331,8 +331,14 @@ export class ArcadeHub extends Phaser.Scene {
     // to.  The doorway and the door in it are one target -- they go to the
     // same place, so they should answer to the same click -- and it is drawn
     // tightly enough that the floor either side of it is floor.
+    // Sized to the DOOR, not to the zone the player stands in to use it.  The
+    // first pass took its numbers from the proximity check -- 52 by 24, which
+    // is where your feet have to be -- and that is a quarter of the bottom of
+    // the screen.  The door itself is drawn 40 wide and 8 tall against the
+    // very bottom edge, so that is what answers a click, and the carpet
+    // either side of it answers nothing.
     this.add
-      .zone(GAME_W / 2, ROOM.bottom - 8, 52, 24)
+      .zone(GAME_W / 2, GAME_H - 3, 40, 10)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
         if (this.busy()) return;
