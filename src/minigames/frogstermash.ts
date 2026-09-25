@@ -1074,7 +1074,7 @@ const BODY_CLEAR = 31;
 /** How long the emptied chest takes to fold up before the next five fall. */
 const COLLAPSE_MS = 240;
 /** Inside this share of its own reach, a weapon is being swung wrong, */
-const INSIDE_FRAC = 0.75;
+const INSIDE_FRAC = 0.88;
 /** down to this much of its power at nose-to-nose. */
 const INSIDE_MIN = 0.25;
 /** The arena's two walls, in the fighters' own coordinates. */
@@ -1325,9 +1325,28 @@ export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Mat
   if (mv?.hits && mv.hits > 1) raw /= Math.sqrt(mv.hits);
 
   // ---- AND NOW THE THING THIS PARTICULAR WEAPON IS FOR.
-  const frac = Math.min(1, gap / Math.max(1, att.st.reach));
-  if (sp.atRange) raw *= 1 + sp.atRange * frac;          // spear, trident, halberd
-  if (sp.atClose) raw *= 1 + sp.atClose * (1 - frac);    // knuckles, dagger, gladius
+  //
+  // MEASURED AGAINST THEIR REACH, NOT AGAINST YOUR OWN.
+  //
+  // These were written as `gap / att.st.reach`, and a fighter stands at its
+  // own reach -- so that fraction sat at 0.94 to 0.99 at the moment a blow
+  // landed, every weapon, every fight.  Which meant `atRange` was not a bonus
+  // at the far end of anything, it was a permanent +47% on the spear; and
+  // `atClose`, being its mirror, paid the dagger +3% and the brass knuckles
+  // +1% and was for practical purposes dead code.  It is the whole reason
+  // the round robin ran spear 93 / trident 86 / halberd 82 at the top and
+  // knuckles 38 / dagger 17 / gladius 31 down at the bottom.
+  //
+  // The question worth asking is about the OTHER fighter: am I hitting them
+  // from outside the arc they can answer with, or have I got inside it?  That
+  // is what a spear is for and what a dagger is for, it is the same thing
+  // `stuck` already means in the footwork, and it makes both bonuses
+  // conditional on a thing the fighters actually contest.
+  const theirs = Math.max(1, def.st.reach);
+  const outside = Math.min(1, Math.max(0, (gap - theirs) / theirs));
+  const inside = Math.min(1, Math.max(0, (theirs - gap) / theirs));
+  if (sp.atRange) raw *= 1 + sp.atRange * outside;       // spear, trident, halberd
+  if (sp.atClose) raw *= 1 + sp.atClose * inside;        // knuckles, dagger, gladius
   if (sp.crit && rng() < sp.crit) { raw *= CRIT_MUL; out.crit = true; }
   if (sp.vsArmour) raw *= 1 + (sp.vsArmour - 1) * Math.min(1, def.st.defence / 0.3);
   if (sp.execute) raw *= 1 + (sp.execute - 1) * (1 - def.hp / def.st.maxHp);
@@ -1490,6 +1509,13 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   // A sweeping weapon -- scythe, war scythe, staff, claymore -- can catch
   // somebody who is walking onto it, so its effective reach grows while the
   // other one is closing.  A thrown knife opens from right across the sand.
+  // Where this fighter wants to be standing, worked out before it decides
+  // whether to swing -- because when it is out-reached, that decision is
+  // partly "not from here".
+  const theirSweet = other.st.reach * INSIDE_FRAC;
+  const press = other.st.reach > f.st.reach
+    ? Math.min(f.st.reach - 2, theirSweet - 2)
+    : f.st.reach - 2;
   const closing = gap < wasGap - 0.01 || other.act === 'lunge';
   const swing = f.st.reach * (1 + (sp.sweep && closing ? sp.sweep : 0));
   // A loaded ranged weapon can open from anywhere inside its carry, but only
@@ -1497,7 +1523,20 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   // costs and the whole reason a bow is not simply better than a sword.
   const shooting = armed(f) && f.reload <= 0 && gap > f.st.reach && gap <= sp.ranged!.far;
   const mv = chooseMove(f, other, gap, rng);
-  if ((gap <= swing * MOVE_REACH(mv) || shooting) && f.cool <= 0) {
+  // ---- AND SOMETIMES THE RIGHT ANSWER IS NOT TO SWING YET.
+  //
+  // Pressing inside only moved the mean gap by a pixel, because the swing
+  // test fires the moment the target is at the OUTER edge of your own reach:
+  // the fighter never walked the last few pixels, swung from there, and spent
+  // the cool-down drifting back out.  So it traded every exchange at exactly
+  // the distance the longer weapon was built for.
+  //
+  // Out-reached and still at arm's length, closing is worth more than the
+  // swing.  Desperation and the back half of a combination both override it,
+  // so nobody stands there declining to fight.
+  const holdFire = other.st.reach > f.st.reach * 1.1 && gap > press + 3
+    && !f.desperate && f.chain === 0 && !armed(f);
+  if ((gap <= swing * MOVE_REACH(mv) || shooting) && f.cool <= 0 && !holdFire) {
     const share = f.riposte ? RIPOSTE_WINDUP : f.chain > 0 ? COMBO_WINDUP : f.desperate ? 0.78 : 1;
     f.act = 'windup';
     f.move = mv;
@@ -1553,7 +1592,21 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random)
   // the cool-down, a fighter drifts back out to `range`, which is where a
   // staff gets to be a staff -- it keeps its spacing while it recovers and
   // steps in to land the blow.  A hurt fighter gives up more ground.
-  const keep = Math.min(f.st.range, f.st.reach - 2);
+  // ---- WHEN THEY OUT-REACH YOU, YOUR OWN MAXIMUM IS THE WRONG PLACE.
+  //
+  // Everyone closed to their own reach and stopped, which against a longer
+  // weapon means standing at the one distance where theirs is at its best and
+  // yours is merely adequate.  Measured: only 8% of a spear's blows against a
+  // sword landed inside the spear's sweet spot, so the "a long weapon is bad
+  // up close" rule -- the short blade's entire win condition -- almost never
+  // fired.  Against brass knuckles, which genuinely do get inside, it fired
+  // on 80%, so the rule was sound and nobody was using it.
+  //
+  // A fighter who is out-reached now presses to inside the arc THEIR reach is
+  // measured by, as long as it is still somewhere it can land from.  It is
+  // the same rule for both of them; it simply only has anything to say to
+  // whoever is holding the shorter weapon.
+  const keep = Math.min(f.st.range, press);
   // Already inside the arc of whatever the other one is swinging?  Then the
   // spacing is won: stand in it.  Drifting back out on the cool-down was
   // handing the long weapon its range back for free every other second, and
