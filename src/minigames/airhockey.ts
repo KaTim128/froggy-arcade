@@ -34,8 +34,16 @@ const KEEP_OFF = PAD_R + PUCK_R + 3;
 const MAX_SPEED = 520;
 // Hard tier: it reads the puck sooner and misjudges it less.  At 140ms/18px it
 // was a warm-up opponent; the cabinet costs five tokens now.
-const AI_REACTION_MS = 70;
-const AI_AIM_ERROR = 7;
+const AI_REACTION_MS = 55;
+const AI_AIM_ERROR = 5.5;
+/**
+ * How fast it can move its mallet.
+ *
+ * It was 150 against a puck that tops out at 520, so a well struck shot simply
+ * went past it -- the opponent could only ever cover a shot it was already
+ * standing in front of.
+ */
+const AI_SPEED = 188;
 const TARGET_SCORE = 5;
 const TIME_CAP_MS = 180_000;
 
@@ -122,10 +130,17 @@ export const airHockey: MinigameModule = {
     // amber with a crest.  Built from the striker outward so the face rides
     // the mallet without a container to keep in step.
     aiPad = scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + 26, PAD_R, 0xc07a2e).setStrokeStyle(2, 0x6d4114, 0.9);
+    // A crest drawn as a bare triangle read as a loose yellow wedge stuck to
+    // the mallet rather than as part of anybody, so it is gone.  The lizard
+    // gets eyes instead -- slit ones, which is what tells it apart from the
+    // frog now that both of them have a face -- and they sit on the lower
+    // edge because it is looking DOWN the table at you.
     aiFace = [
       scene.add.circle(0, 0, PAD_R * 0.62, 0xe8a94e),
-      scene.add.circle(0, 0, PAD_R * 0.3, 0x6d4114),
-      scene.add.triangle(0, 0, 0, 6, 3, 0, 6, 6, 0xffd45e),
+      scene.add.circle(0, 0, 2.6, PALETTE.cream),
+      scene.add.circle(0, 0, 2.6, PALETTE.cream),
+      scene.add.rectangle(0, 0, 1.2, 3, PALETTE.black),
+      scene.add.rectangle(0, 0, 1.2, 3, PALETTE.black),
     ];
     pad = scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + TABLE.h - 26, PAD_R, 0x3d7a42).setStrokeStyle(2, 0x24492a, 0.9);
     padFace = [
@@ -150,6 +165,39 @@ export const airHockey: MinigameModule = {
     text(scene, 8, 30, 'MOUSE', PALETTE.ash);
     text(scene, 8, 40, 'TO MOVE', PALETTE.ash);
     updateScore();
+
+    if (import.meta.env?.DEV) {
+      (window as unknown as Record<string, unknown>).__hockey = {
+        /**
+         * Enough to score a game from outside.  "A little more challenging but
+         * not unbeatable" is a claim about a win rate, and a win rate cannot be
+         * read off a screenshot.
+         */
+        state: () => ({
+          you: scoreP,
+          them: scoreA,
+          over,
+          frozen,
+          puck: puck ? { x: puck.x, y: puck.y } : null,
+          vel: { ...vel },
+          pad: pad ? { x: pad.x, y: pad.y } : null,
+          aiPad: aiPad ? { x: aiPad.x, y: aiPad.y } : null,
+          table: { ...TABLE },
+          padR: PAD_R,
+          target: TARGET_SCORE,
+        }),
+        /** Put the player's mallet somewhere, the way the mouse would. */
+        setPad: (x: number, y: number) => {
+          if (!pad) return;
+          pad.x = Phaser.Math.Clamp(x, TABLE.x + PAD_R, TABLE.x + TABLE.w - PAD_R);
+          pad.y = Phaser.Math.Clamp(y, TABLE.y + TABLE.h / 2 + PAD_R, TABLE.y + TABLE.h - PAD_R);
+          dressPads();
+        },
+      };
+      scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        delete (window as unknown as Record<string, unknown>).__hockey;
+      });
+    }
 
     // The opening face-off is the same three seconds as every restart.
     serve(1);
@@ -178,7 +226,7 @@ export const airHockey: MinigameModule = {
       followPointer(scene);
       keepOffPuck(pad);
       // The machine waits at its own end rather than crowding the spot.
-      const back = (150 * delta) / 1000;
+      const back = (AI_SPEED * delta) / 1000;
       aiPad.x += Phaser.Math.Clamp(TABLE.x + TABLE.w / 2 - aiPad.x, -back, back);
       aiPad.y += Phaser.Math.Clamp(TABLE.y + 26 - aiPad.y, -back, back);
       keepOffPuck(aiPad);
@@ -216,15 +264,38 @@ export const airHockey: MinigameModule = {
     // wanting the restart and being happy to let you take it.
     const dead = vel.x === 0 && vel.y === 0;
     const eager = openingDir > 0 ? 1 : 0.55;
+    // ---- AND IT WORKS OUT WHERE THE PUCK IS GOING, not just where it was.
+    //
+    // Chasing `seen.x` means standing where the puck currently is, which for
+    // anything struck at an angle is never where it will arrive: the mallet
+    // trails the shot across the table and is still behind it at the line.
+    // Cushions are walked the same way the puck will actually take them, so a
+    // bank shot off the side is covered rather than watched.
+    const guardY = TABLE.y + 26;
+    let meet = seen.x;
+    if (!dead && vel.y < 0) {
+      const flight = (guardY - seen.y) / vel.y;
+      if (flight > 0 && flight < 3) {
+        let px = seen.x + vel.x * flight;
+        const lo = TABLE.x + PUCK_R;
+        const hi = TABLE.x + TABLE.w - PUCK_R;
+        for (let i = 0; i < 4; i++) {
+          if (px < lo) px = lo + (lo - px);
+          else if (px > hi) px = hi - (px - hi);
+          else break;
+        }
+        meet = px;
+      }
+    }
     const wantX = dead
       ? puck.x + (Math.random() - 0.5) * AI_AIM_ERROR * 0.5
       : vel.y < 0
-        ? seen.x + (Math.random() - 0.5) * AI_AIM_ERROR
+        ? meet + (Math.random() - 0.5) * AI_AIM_ERROR
         : TABLE.x + TABLE.w / 2 + (seen.x - (TABLE.x + TABLE.w / 2)) * 0.35;
     const wantY = dead
       ? Math.min(puck.y - PAD_R * 0.4, TABLE.y + TABLE.h / 2 - PAD_R)
       : vel.y < 0 ? Math.min(seen.y + 10, TABLE.y + TABLE.h / 2 - PAD_R) : TABLE.y + 26;
-    const aiSpeed = dead ? 150 * eager : 150;
+    const aiSpeed = dead ? AI_SPEED * eager : AI_SPEED;
     const step = (aiSpeed * delta) / 1000;
     aiPad.x += Phaser.Math.Clamp(wantX - aiPad.x, -step, step);
     aiPad.y += Phaser.Math.Clamp(wantY - aiPad.y, -step, step);
@@ -399,11 +470,15 @@ function dressPads(): void {
     pupL.setPosition(pad.x - 3.2, pad.y - 3.6);
     pupR.setPosition(pad.x + 3.2, pad.y - 3.6);
   }
-  if (aiPad && aiFace.length === 3) {
-    const [belly, snout, crest] = aiFace as Array<Phaser.GameObjects.Arc & { setPosition(x: number, y: number): unknown }>;
+  if (aiPad && aiFace.length === 5) {
+    const [belly, eyeL, eyeR, pupL, pupR] = aiFace as Array<
+      Phaser.GameObjects.GameObject & { setPosition(x: number, y: number): unknown }
+    >;
     belly.setPosition(aiPad.x, aiPad.y - 1);
-    snout.setPosition(aiPad.x, aiPad.y + 2);
-    crest.setPosition(aiPad.x - 3, aiPad.y - PAD_R - 1);
+    eyeL.setPosition(aiPad.x - 3.2, aiPad.y + 3);
+    eyeR.setPosition(aiPad.x + 3.2, aiPad.y + 3);
+    pupL.setPosition(aiPad.x - 3.2, aiPad.y + 3.4);
+    pupR.setPosition(aiPad.x + 3.2, aiPad.y + 3.4);
   }
 }
 
