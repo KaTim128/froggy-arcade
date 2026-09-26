@@ -3290,7 +3290,7 @@ for (const g of [
     await sleep(60);
     if (ok) built.push(f.key);
   }
-  const all = built.length === roster.length && roster.length === 18 && errs.length === 0;
+  const all = built.length === roster.length && roster.length === 17 && errs.length === 0;
   console.log(`${all ? 'PASS' : 'FAIL'}  grudge: all ${roster.length} opponents build and stand in the ring  — ${built.length} built, ${errs.length} errors${errs[0] ? ': ' + errs[0] : ''}`);
   if (!all) failures++;
 

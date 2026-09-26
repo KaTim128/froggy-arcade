@@ -205,10 +205,6 @@ const FOES: FoeDef[] = [
     skin: 0xcc8e3e, skinLight: 0xecc684, glove: 0x8a1e1e, gloveLit: 0xc04040, bodyW: 18, bodyH: 19, headW: 12, look: 'lion',
     speed: 0.95, power: 1.2, windup: 1.1, reach: 1.0, guard: 0.9, blockRate: 0.9, tempo: 1.0, dodge: 0, style: 'highs', chaos: 0.05, counter: 0.2,
     note: 'KING OF THE RING' },
-  { key: 'crab', name: 'CRAB', rare: false, weight: 10,
-    skin: 0xc8483a, skinLight: 0xf08a6a, glove: 0xa8302a, gloveLit: 0xe86a5a, bodyW: 22, bodyH: 14, headW: 12, look: 'crab',
-    speed: 0.85, power: 1.05, windup: 1.05, reach: 1.25, guard: 0.8, blockRate: 1.1, tempo: 1.05, dodge: 0.04, style: 'highs', chaos: 0.1, counter: 0.15,
-    note: 'SIDEWAYS, AND WIDE HOOKS' },
 
   // ---- THE RARE ONES.  A little better than the regulars on balance, and
   // never by enough to be unfair: a rare draw is a story, not a wall.
@@ -276,7 +272,6 @@ const FACE: Record<string, FaceDef> = {
   rhino: { headW: 13, headH: 11, eyes: [[0, -1]], r: 1.2, col: 0x1a1a1a, pupil: 'none', pr: 0, snout: 'small' },
   monkey: { headW: 13, headH: 12, eyes: [[1, -1.6], [4.4, -1.6]], r: 1.5, col: 0xf6f0e0, pupil: 'dot', pr: 0.8, snout: 'none' },
   penguin: { headH: 11, eyes: [[2, -3]], r: 1.6, col: 0xffffff, pupil: 'dot', pr: 0.9, snout: 'small' },
-  crab: { headH: 10, eyes: [[-3, -11], [3, -11]], r: 2.4, col: 0xf4f4ee, pupil: 'dot', pr: 1.1, snout: 'none' },
   shark: { headW: 14, headH: 11, eyes: [[2, -3]], r: 1.3, col: 0x14161e, pupil: 'none', pr: 0, snout: 'none' },
   gorilla: { headW: 13, headH: 12, eyes: [[1.6, -1.4], [4.8, -1.4]], r: 1.2, col: 0x8a6a4a, pupil: 'dot', pr: 0.7, snout: 'none' },
   chameleon: { headH: 11, eyes: [[3, -2]], r: 2.4, col: 0xf0f0c0, pupil: 'dot', pr: 1, snout: 'lizard' },
@@ -307,7 +302,6 @@ const JUMP: Record<string, { v: number; squat: number; land: number; drift: numb
   rhino: { v: -130, squat: 180, land: 200, drift: 30 },
   monkey: { v: -225, squat: 90, land: 90, drift: 56 },
   penguin: { v: -150, squat: 110, land: 130, drift: 30 },
-  crab: { v: -150, squat: 100, land: 120, drift: 40 },
   shark: { v: -165, squat: 120, land: 130, drift: 40 },
   gorilla: { v: -200, squat: 150, land: 170, drift: 44 },
   chameleon: { v: -170, squat: 100, land: 110, drift: 40 },
@@ -370,7 +364,7 @@ interface Art {
   /** Where the snout and eyes sit on this head. */
   snoutX: number;
   eyeX: [number, number];
-  /** Eyes above the head's centre: -4 on a face, -11 up on a crab's stalks. */
+  /** Eyes above the head's centre, from this animal's face. */
   eyeY: number;
   eyeY2: number;
   /** How far the pupil sits forward of the middle of the eye. */
@@ -655,6 +649,13 @@ export const grudge: MinigameModule = {
           aiFrozen = on;
           aiCounter = 0;
           if (p2 && on) {
+            // and back on the boards: a jump caught mid-air would otherwise
+            // carry it on out of wherever the test has just put it
+            p2.y = FLOOR_Y;
+            p2.vy = 0;
+            p2.jump = 'none';
+            p2.jumpT = 0;
+            p2.jumpVx = 0;
             p2.move = null;
             p2.phase = null;
             p2.blocking = false;
@@ -730,7 +731,7 @@ function shade(c: number, k: number): number {
  * whichever way it is actually looking, so none of this has to know.
  *
  * The test for every look is the silhouette alone, at the size it is drawn:
- * if you covered the colours, would you still know it was a crab?
+ * if you covered the colours, would you still know it was a rhino?
  */
 function foeGear(scene: Phaser.Scene, d: FoeDef): {
   head: Phaser.GameObjects.GameObject[];
@@ -779,7 +780,7 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
   // Every one starts INSIDE the torso, behind it in the draw order, so where
   // the tail meets the body there is no seam and no gap -- it grows out of the
   // hips.  And every one rides `back`, which follows the torso every frame, so
-  // it goes wherever the body goes: crouch, breathe, recoil, scuttle.
+  // it goes wherever the body goes: crouch, breathe, recoil, jump.
   type Pt = [number, number];
   const bw = d.bodyW / 2;
   const bh = d.bodyH / 2;
@@ -1034,23 +1035,6 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       head.push(E(1, -1, 5, 4, 0xf4f4ee));
       body.push(E(2, 1, d.bodyW - 5, d.bodyH - 3, 0xf4f4ee));
       root.push(E(-4, -0.5, 6, 2.4, 0xf0a030), E(4, -0.5, 6, 2.4, 0xf0a030));
-      break;
-    case 'crab':
-      // ---- EYES ON STALKS, AND A LOT OF LEGS.  At this size the stalks are
-      // the whole of what says crab rather than a red blob with gloves on.
-      // Two stalks from inside the top of the head up to where the eyes sit:
-      // the fighter's own eyes are moved up onto them (see `eyeY`).
-      head.push(R(-3, -6.5, 2, 8, d.skin), R(3, -6.5, 2, 8, d.skin));
-      // And the side legs, each one out of the shell rather than beside it:
-      // up and out to a knee, then down towards the boards.
-      for (let i = 0; i < 3; i++) {
-        const y0 = -1 + i * 2.6;
-        for (const side of [-1, 1]) {
-          const x0 = side * (bw - 3);
-          back.push(tube(bez([x0, y0], [x0 + side * 5, y0 - 3], [x0 + side * 8, y0 + 1], [x0 + side * (8.5 + i), y0 + 8 - i], 8), 2.2, 1, dark));
-        }
-      }
-      body.push(E(0, -2, d.bodyW - 6, 4, shade(d.skinLight, 0.05)).setAlpha(0.7));
       break;
     case 'shark':
       // The dorsal fin sweeps back off the shoulders, and the tail narrows to
@@ -1406,7 +1390,7 @@ function runAi(delta: number, dt: number): void {
     // The ideal distance breathes, so he circles the edge of his own kick range
     // instead of parking on it — that in-and-out is the rhythm you play against.
     aiSway += dt;
-    // A long reach stands further off; a crab circles wider than a gecko.
+    // A long reach stands further off; a wolf circles wider than a gecko.
     const ideal = MOVES.low.range * me.reach - 4 + Math.sin(aiSway * 1.7) * 11;
     const toward = Math.sign(p1.x - ai.x) || 1;
     const drift = dist > ideal + 3 ? 1 : dist < ideal - 3 ? -1 : 0;
@@ -1604,7 +1588,7 @@ function tryHit(f: Fighter): void {
   const def = MOVES[f.move];
   const dist = Math.abs(f.x - target.x);
   const facingRight = target.x > f.x;
-  // A crab's hooks go wide; a penguin has to get close.
+  // A long reach goes wide; a penguin has to get close.
   if (dist > def.range * (f.foe?.reach ?? 1)) return;
   if ((facingRight && f.facing !== 1) || (!facingRight && f.facing !== -1)) return;
   if (target.y < FLOOR_Y - JUMP_CLEARANCE[f.move]) return; // jumped over it
@@ -1719,9 +1703,7 @@ function render(f: Fighter, dt: number): void {
   a.headGear.setPosition(a.head.x, a.head.y);
   a.headBack.setPosition(a.head.x, a.head.y);
   a.bodyGear.setPosition(a.torso.x, a.torso.y);
-  // A crab's legs scuttle when it moves; everybody else's back gear is still.
-  const scuttle = f.foe?.look === 'crab' && walking ? Math.sin(f.step * 2) * 0.8 : 0;
-  a.backGear.setPosition(a.torso.x, a.torso.y + scuttle);
+  a.backGear.setPosition(a.torso.x, a.torso.y);
   // ---- THE TAIL, on its hinge at the hips.  It follows the body down into
   // a crouch and turns up by as much as the body dropped, so one that lies
   // on the boards stays on them rather than going through; a hit flicks it;
@@ -1730,7 +1712,7 @@ function render(f: Fighter, dt: number): void {
     const lift = (a.drags ? crouch * 3.2 : crouch * 1.5) + (airborne ? (a.drags ? 14 : 8) : 0);
     const flick = f.stun > 0 ? 9 : 0;
     const sway = Math.sin(sceneClock * 2.2 + (f === p2 ? 0.8 : 0)) * (a.drags ? 1.2 : 3.5);
-    a.tail.setPosition(a.torso.x + a.tailRoot[0], a.torso.y + a.tailRoot[1] + scuttle).setAngle(lift + flick + sway);
+    a.tail.setPosition(a.torso.x + a.tailRoot[0], a.torso.y + a.tailRoot[1]).setAngle(lift + flick + sway);
   }
   // ---- MR FISHY PUFFS UP.  Spikes out and body swollen while he blocks, and
   // back down after -- eased, so it swells rather than pops.
