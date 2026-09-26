@@ -881,7 +881,7 @@ export const LIZARDS: LizardType[] = [
     blurb: 'YOU WILL NOT CATCH IT' },
   // THE ARMOURED ONE is a rhino, which came armoured.
   { key: 'armoured', name: 'RHINO', power: 1.0, speed: 0.82, avoid: 0.78, resist: 1.36, nerve: 1.0, spacing: 0.8, stubborn: true,
-    build: { scale: 1.12, wide: 1.42, tall: 1.02, limb: 0.96, head: 1.0, skin: 0x8a8f97, light: 0xb4b9c0, dark: 0x4a4e56, crest: 0xe8dcc0, animal: 'rhino' },
+    build: { scale: 1.14, wide: 1.42, tall: 1.1, limb: 1.04, head: 1.0, skin: 0x8a8f97, light: 0xb4b9c0, dark: 0x4a4e56, crest: 0xe8dcc0, animal: 'rhino' },
     blurb: 'IT DOES NOT MOVE' },
   // THE ASSASSIN is a hyena: hunched, spotted and grinning.
   { key: 'assassin', name: 'HYENA', power: 1.04, speed: 1.22, avoid: 1.22, resist: 0.74, nerve: 1.15, spacing: 1.05,
@@ -2768,6 +2768,15 @@ export interface FighterArt {
   helmDome: Phaser.GameObjects.Ellipse;
   /** A crown is not a helm and is not drawn as one; see `buildFighter`. */
   crown: Phaser.GameObjects.Container;
+  /**
+   * CUSTOM BODY ARMOUR, for the animals that get their own (the gorilla and
+   * the rhino).  `bodyPlate` is pinned to the torso and leans with it every
+   * frame; `plates` is every piece of it, including the shoulder wraps and
+   * forearm bracers that ride the arm bones, so a stripped suit takes all
+   * of it and a preview can hide it.
+   */
+  bodyPlate: Phaser.GameObjects.Container | null;
+  plates: Phaser.GameObjects.GameObject[];
   visor: Phaser.GameObjects.Rectangle;
   plume: Phaser.GameObjects.Rectangle;
   /** Everything above the neck, so a duck moves the face and not just the skull. */
@@ -3682,11 +3691,97 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // softer one, cloth almost none -- so the crowd can tell steel from linen
   // at a glance and a good suit LOOKS like a good suit.
   const g = gloss(B);
+  // ================================================ CUSTOM ARMOUR
+  //
+  // The gorilla and the rhino get armour made for them, not a plate and two
+  // shoulder pads hung on.  Every piece is a curve that follows the body it
+  // sits on, and every piece is ATTACHED to the bone it covers: the chest,
+  // back, gorget and waist plates are in one group pinned to the torso's
+  // centre that leans exactly as the torso does; the shoulder wraps are
+  // inside the shoulder joints and the bracers inside the forearms, so they
+  // go wherever the arm goes.  Facing is the root's mirror, so it turns with
+  // the animal.  The generic pieces are put away for these two.
+  const plated = wears(B) && (animal === 'gorilla' || animal === 'rhino');
+  const plates: Phaser.GameObjects.GameObject[] = [];
+  let bodyPlate: Phaser.GameObjects.Container | null = null;
+  const plateCol = B.colour;
+  const plateEdge = B.edge;
+  const plateLit = up(B.colour, 0.34 + g * 0.5);
+  const plateDark = down(B.colour, 0.34);
+  /** A curved band along an ellipse arc: a plate edge that follows a body. */
+  const arcBand = (gr: Phaser.GameObjects.Graphics, cx: number, cy: number, rx: number, ry: number, a0: number, a1: number, w: number, col: number, edge: number): void => {
+    const pts: Phaser.Math.Vector2[] = [];
+    const n = 16;
+    for (let i = 0; i <= n; i++) {
+      const a = ((a0 + ((a1 - a0) * i) / n) * Math.PI) / 180;
+      pts.push(new Phaser.Math.Vector2(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry));
+    }
+    gr.lineStyle(w + 1.4, edge, 1).strokePoints(pts, false);
+    gr.lineStyle(w, col, 1).strokePoints(pts, false);
+  };
+  if (plated) {
+    const tw = 15 * wide;
+    const th = 19 * tall;
+    const gr = scene.add.graphics();
+    const bits: Phaser.GameObjects.GameObject[] = [gr];
+    if (animal === 'gorilla') {
+      // ---- THE GORILLA: heavy plate on the upper chest and over the yoke
+      // of the back, a belt at the waist -- and the arms, the gut and the
+      // silhouette left bare, because it is a gorilla wearing armour and
+      // not armour with a gorilla in it.
+      // the upper back: a thick curved plate over the top of the back
+      arcBand(gr, 0, 0, tw * 0.47, th * 0.47, 196, 262, 3.6, plateCol, plateEdge);
+      arcBand(gr, 0, 0, tw * 0.47, th * 0.47, 204, 250, 1, plateLit, plateLit);
+      // the chest: two curved pectoral plates, not a slab
+      // (set below the hunched head and the neck, which cover the top of it)
+      for (const px of [-3.4, 5]) {
+        bits.push(scene.add.ellipse(px, th * 0.02, tw * 0.38, th * 0.42, plateCol).setStrokeStyle(1, plateEdge));
+        bits.push(scene.add.ellipse(px - 0.6, -th * 0.06, tw * 0.24, th * 0.1, plateLit).setAlpha(0.6));
+        bits.push(scene.add.ellipse(px, th * 0.17, tw * 0.3, th * 0.06, plateDark).setAlpha(0.6));
+      }
+      bits.push(scene.add.rectangle(0.8, th * 0.02, 1, th * 0.36, plateEdge));
+      for (const [rx, ry] of [[-7.4, -1.6], [9.4, -1.6], [0.8, -3.6]] as const) bits.push(scene.add.circle(rx, ry, 0.7, plateLit));
+      // the waist: a belt that follows the round of the gut, and a buckle
+      arcBand(gr, 0, 0, tw * 0.46, th * 0.46, 36, 144, 2.4, plateEdge, down(plateEdge, 0.3));
+      bits.push(scene.add.rectangle(2, th * 0.44, 4, 3, plateCol).setStrokeStyle(1, plateEdge));
+    } else {
+      // ---- THE RHINO: built for defence.  A broad breastplate in overlapping
+      // lames that follows the round of its chest, a gorget round the base of
+      // the neck (clear of the head and the horn), a ridged plate over the
+      // upper back, and a skirt of plates at the waist.
+      bits.push(scene.add.ellipse(1, -th * 0.04, tw * 0.8, th * 0.66, plateCol).setStrokeStyle(1, plateEdge));
+      for (let k = 0; k < 3; k++) {
+        const y = -th * 0.24 + k * th * 0.17;
+        arcBand(gr, 1, y - 5, tw * 0.36, 5.4, 30, 150, 0.9, plateDark, plateDark);
+      }
+      bits.push(scene.add.ellipse(0, -th * 0.2, tw * 0.46, th * 0.12, plateLit).setAlpha(0.5));
+      bits.push(scene.add.circle(1.5, -th * 0.02, 1.4, plateLit).setStrokeStyle(0.8, plateEdge));
+      // the gorget: a collar across the top of the chest where the neck
+      // meets it, curving up at the front
+      arcBand(gr, 3, -th * 0.5 + 2.4, 7.4, 3.6, 190, 350, 2.8, plateCol, plateEdge);
+      // the upper back, with a ridge of studs along it
+      arcBand(gr, 0, 0, tw * 0.47, th * 0.47, 192, 258, 3.8, plateCol, plateEdge);
+      for (let k = 0; k < 4; k++) {
+        const a = ((200 + k * 16) * Math.PI) / 180;
+        bits.push(scene.add.circle(Math.cos(a) * tw * 0.47, Math.sin(a) * th * 0.47, 1, plateLit).setStrokeStyle(0.6, plateEdge));
+      }
+      // a skirt of plates at the waist
+      for (let k = -2; k <= 2; k++) {
+        const x = k * tw * 0.14 + 1;
+        bits.push(scene.add.rectangle(x, th * 0.4, tw * 0.13, 4, plateCol).setStrokeStyle(0.8, plateEdge).setAngle(k * 6));
+      }
+    }
+    bodyPlate = scene.add.container(-1, -19 * tall - lift, bits);
+    plates.push(bodyPlate);
+    // the generic plate is put away for these two
+    for (const o of [cuirass, belt, ridge, pauldL, pauldR]) o.setVisible(false);
+  }
   const cuirassLit = scene.add.rectangle(fitted ? -1 : 0, -24 * tall - lift, fitted ? bw0 * 0.56 : (frog ? 14 : 12) * wide, 2, up(B.colour, 0.3 + g))
     .setAlpha(0.35 + g * 0.8).setVisible(wears(B));
   const cuirassLow = scene.add.rectangle(fitted ? -1 : 0, -13.5 * tall - lift, fitted ? bw0 * 0.6 : (frog ? 16 : 14) * wide, 2, down(B.colour, 0.45))
     .setAlpha(0.55).setVisible(wears(B));
   armourDetail.push(cuirassLit, cuirassLow);
+  if (plated) for (const o of [cuirassLit, cuirassLow]) o.setVisible(false);
   // THE BAR DOWN THE FRONT OF THE CHEST IS GONE.  It was meant to be a sheen
   // on polished plate, but a two pixel upright rectangle tilted eight degrees
   // in the middle of a breastplate does not read as light on steel -- it
@@ -3934,6 +4029,27 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
     palm(HD + 1.3, 1.4, 1.6, 1, down(limbTone, 0.35), 0.7);
     // and claws on the knuckles of anything that has them
     if (anat?.claws) for (let k = 0; k < 3; k++) palm(HD + 3.5 * hs, -1.6 + k * 1.6, 1.2, 0.8, PALETTE.bone);
+    // ---- A SHOULDER WRAP AND A BRACER, on the bones.  The wrap is a curved
+    // plate over the top of the shoulder joint -- inside it, so it turns with
+    // every swing -- and the bracer is a sleeve round the forearm, inside
+    // the forearm, so it stays on it through every bend of the elbow.
+    if (plated) {
+      const col = behind ? down(plateCol, 0.2) : plateCol;
+      const edge = behind ? down(plateEdge, 0.2) : plateEdge;
+      const wrap = scene.add.graphics();
+      const r = 2.9 * wide;
+      arcBand(wrap, 0.5, 0.2, r, r * 0.95, 160, 380, animal === 'rhino' ? 3.4 : 3, col, edge);
+      if (animal === 'rhino') arcBand(wrap, 0.5, 0.2, r * 0.7, r * 0.66, 190, 350, 2.2, col, edge);
+      arcBand(wrap, 0.5, 0.2, r, r * 0.95, 200, 300, 0.8, up(col, 0.34), up(col, 0.34));
+      root.add(wrap);
+      const bracer = scene.add.ellipse(FORE * 0.55, 0, FORE * 0.72, 3.8 * wide + 1.6, col).setStrokeStyle(1, edge);
+      const band1 = scene.add.rectangle(FORE * 0.3, 0, 0.9, 3.8 * wide + 1, edge);
+      const band2 = scene.add.rectangle(FORE * 0.8, 0, 0.9, 3.8 * wide + 1, edge);
+      const shine = scene.add.rectangle(FORE * 0.55, -1.1 * wide, FORE * 0.5, 0.8, up(col, 0.4)).setAlpha(0.8);
+      // added just after the forearm itself, so the hand stays over it
+      fore.addAt([bracer, band1, band2, shine], 4);
+      plates.push(wrap, bracer, band1, band2, shine);
+    }
     return { root, fore, hand: HD };
   };
   const armOff = buildArm(true);
@@ -3962,7 +4078,9 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   parts.push(...spines);
   parts.push(armOff.root);
   // The pauldrons are NOT in here: they live inside the two arm rigs now.
-  parts.push(torso, belly, ...bodyDetail, cuirass, ridge, belt, ...armourDetail, arm.root);
+  parts.push(torso, belly, ...bodyDetail, cuirass, ridge, belt, ...armourDetail);
+  if (bodyPlate) parts.push(bodyPlate);
+  parts.push(arm.root);
   // ---- THE HEAD MOVES AS A HEAD.
   //
   // A duck used to be done by setting head.y and helm.y, which was already a
@@ -3985,7 +4103,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const root = scene.add.container(f.x, FLOOR_Y, parts).setDepth(20);
   root.setScale(f.face * (bld?.scale ?? 1), bld?.scale ?? 1);
   return { root, legL, legR, greaveL, greaveR, kneeL, kneeR, footL, footR, torso, cuirass, belt, ridge,
-    pauldL, pauldR, head, helm, helmDome, crown, visor, plume, headGroup, arm, armOff, guardUp: false, offFront: false, offHome: armOff.root.x, weapon, shadow,
+    pauldL, pauldR, head, helm, helmDome, crown, bodyPlate, plates, visor, plume, headGroup, arm, armOff, guardUp: false, offFront: false, offHome: armOff.root.x, weapon, shadow,
     nicks: 0, tail: beastParts?.tail ?? null };
 }
 
@@ -4207,6 +4325,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     a.armOff.fore.setAngle(-30);
     a.torso.setAngle(f.face * 16);
     a.cuirass.setAngle(f.face * 16);
+    a.bodyPlate?.setAngle(f.face * 16);
     a.headGroup.y = 5;
     a.headGroup.x = f.face * 3;
     a.legL.setAngle(-13); a.legR.setAngle(11);
@@ -4470,6 +4589,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   }
   a.torso.setAngle(f.leanA);
   a.cuirass.setAngle(f.leanA);
+  a.bodyPlate?.setAngle(f.leanA);
   // ---- THE TAIL, on its hinge at the hip: a slow sway at rest, a swing with
   // the stride, a lash on a strike, and it goes up when the animal is hit.
   if (a.tail) {
@@ -4767,6 +4887,13 @@ export function makeLizard(x: number, rng: () => number = Math.random): Fighter 
     const want = new URLSearchParams(location.search).get('beast');
     const pick = want && LIZARDS.find((t) => t.build.animal === want || t.key === want);
     if (pick) type = pick;
+    // and `?suit=plate` dresses it head to foot in one material
+    const suit = new URLSearchParams(location.search).get('suit');
+    const mat = suit && MATERIALS.find((m) => m.key === suit);
+    if (mat) {
+      const kit = randomKit();
+      return makeFighter('lizard', { ...kit, head: makeArmour('head', mat), body: makeArmour('body', mat), legs: makeArmour('legs', mat) }, x, -1, type);
+    }
   }
   return makeFighter('lizard', randomKit(), x, -1, type);
 }
@@ -4936,7 +5063,10 @@ function redrawPreview(): void {
   art.root.setDepth(0);
   // Not taken means not drawn.  Not "drawn faintly".
   if (!picked.head) { art.helm.setVisible(false); art.crown.setVisible(false); }
-  if (!picked.body) art.cuirass.setVisible(false);
+  if (!picked.body) {
+    art.cuirass.setVisible(false);
+    for (const o of art.plates) (o as unknown as Phaser.GameObjects.Components.Visible).setVisible(false);
+  }
   if (!picked.legs) { art.greaveL.setVisible(false); art.greaveR.setVisible(false); }
   if (!picked.weapon) art.weapon.setVisible(false);
   previewC.add(art.root);
@@ -5819,7 +5949,7 @@ function showStrip(f: Fighter, slot: 'head' | 'body' | 'legs', tint: number): vo
 
   const worn: Phaser.GameObjects.Components.Visible[] =
     slot === 'head' ? [a.helm, a.helmDome, a.visor, a.plume, a.crown]
-      : slot === 'body' ? [a.cuirass, a.belt, a.ridge, a.pauldL, a.pauldR]
+      : slot === 'body' ? [a.cuirass, a.belt, a.ridge, a.pauldL, a.pauldR, ...(a.plates as unknown as Phaser.GameObjects.Components.Visible[])]
         : [a.greaveL, a.greaveR, a.kneeL, a.kneeR];
   // Taken off, not dented: nothing broken stays on the body.
   for (const w of worn) w.setVisible(false);
@@ -6078,7 +6208,7 @@ function goesDown(f: Fighter): void {
   }
   // 2. the legs go: down onto the knees, head forward
   sc.tweens.add({ targets: a.torso, angle: f.face * 26, duration: 300, delay: 150, ease: 'Quad.easeIn' });
-  sc.tweens.add({ targets: a.cuirass, angle: f.face * 26, duration: 300, delay: 150, ease: 'Quad.easeIn' });
+  sc.tweens.add({ targets: a.bodyPlate ? [a.cuirass, a.bodyPlate] : a.cuirass, angle: f.face * 26, duration: 300, delay: 150, ease: 'Quad.easeIn' });
   sc.tweens.add({ targets: [a.head, a.helm], y: '+=7', duration: 300, delay: 150, ease: 'Quad.easeIn' });
   sc.tweens.add({ targets: a.root, y: FLOOR_Y + 5, duration: 300, delay: 150, ease: 'Quad.easeIn' });
   // `a.arm` is a rig, not a display object: tweening it set a property on a
@@ -6128,7 +6258,7 @@ function celebrates(f: Fighter, won: boolean): void {
   a.armOff.root.setVisible(true);
   a.root.bringToTop(a.armOff.root);
   sc.tweens.add({ targets: a.torso, angle: 0, duration: 260, delay: 420 });
-  sc.tweens.add({ targets: a.cuirass, angle: 0, duration: 260, delay: 420 });
+  sc.tweens.add({ targets: a.bodyPlate ? [a.cuirass, a.bodyPlate] : a.cuirass, angle: 0, duration: 260, delay: 420 });
   sc.tweens.add({ targets: a.headGroup, y: -2, duration: 260, delay: 420 });
   // planted, feet apart, rather than caught mid-stride
   for (const leg of [a.legL, a.greaveL]) sc.tweens.add({ targets: leg, angle: -9, duration: 220, delay: 420 });
