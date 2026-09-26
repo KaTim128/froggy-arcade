@@ -2117,7 +2117,18 @@ function armed(f: Fighter): boolean {
  */
 function holds(f: Fighter): boolean {
   const r = f.weapon.spec.ranged;
-  return !!r && f.ammo > 0 && r.ammo > 1;
+  if (!r || f.ammo <= 0 || r.ammo <= 1) return false;
+  // ---- DOWN TO THE LAST ONE, IT IS A WEAPON AGAIN.
+  //
+  // The last throw of something that leaves the hand is kept for a moment
+  // worth it (see `throwWorthIt`), so a fighter still holding ITS distance
+  // for that throw was waiting at range for a shot it had decided not to
+  // take.  Two of them -- bolas against a chakram -- stood sixty pixels
+  // apart for the better part of a minute, neither closing nor throwing.
+  // On the last one it closes and fights with it, and throws when the
+  // moment comes, which is what a one-shot spear already does.
+  if (r.leaves && Number.isFinite(f.ammo) && f.ammo <= 1) return false;
+  return true;
 }
 
 /** Nobody gives up the thing in their hand in the first seconds of a bout. */

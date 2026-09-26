@@ -4097,6 +4097,29 @@ for (const g of [
     );
     if (!shOk) failures++;
 
+    // ---- NOBODY STANDS OFF.
+    //
+    // Two throwers down to their last throw each held their distance for a
+    // shot they had decided not to take, and stood there for the better part
+    // of a minute: bolas against a chakram ran ninety seconds.  Every pairing
+    // of weapons that throw or shoot, three bouts each, none of them long.
+    const standoff = await page.evaluate(() => {
+      const R = window.__mash.rules;
+      const mat = (k) => R.MATERIALS.find((m) => m.key === k);
+      const kit = (wk) => ({ weapon: R.makeWeapon(R.WEAPONS.find((w) => w.key === wk)), head: R.makeArmour('head', mat('chain')), body: R.makeArmour('body', mat('chain')), legs: R.makeArmour('legs', mat('chain')) });
+      const keys = R.WEAPONS.filter((w) => w.spec.ranged).map((w) => w.key);
+      let worst = { s: 0, pair: '' }, n = 0;
+      for (const a of keys) for (const c of keys) for (let i = 0; i < 3; i++) {
+        const r = R.simulate(kit(a), kit(c));
+        n++;
+        if (r.seconds > worst.s) worst = { s: r.seconds, pair: `${a} v ${c}` };
+      }
+      return { n, worst };
+    });
+    const standOk = standoff.worst.s < 75;
+    console.log(`${standOk ? 'PASS' : 'FAIL'}  mash: two throwers close and fight instead of standing off  — longest of ${standoff.n} bouts ${standoff.worst.s.toFixed(0)}s (${standoff.worst.pair})`);
+    if (!standOk) failures++;
+
     // ---- THE THING THAT HITS HARDEST GIVES OUT SOONEST.
     //
     // This is the whole of the high-tier rebalance in one line: a great axe
