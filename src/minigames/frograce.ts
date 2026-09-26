@@ -414,9 +414,13 @@ function hopTravel(u0: number, du: number): number {
  * two eyes up on top of the head, a smile across the face, a cheek either
  * side -- and they still hop down the lane to the right.
  */
+/** How big a frog is drawn, and where its feet are, which stay put. */
+const FROG_S = 0.8;
+const FROG_FOOT = 7;
+// big eyes on a small frog: the cute ratio
 const EYES = [
-  { x: -3.9, y: -8, r: 3.2 },
-  { x: 3.9, y: -8, r: 3.2 },
+  { x: -3.9, y: -8, r: 3.6 },
+  { x: 3.9, y: -8, r: 3.6 },
 ];
 const MOUTH_X = 0;
 const MOUTH_Y = -2.2;
@@ -1591,6 +1595,8 @@ export const frogRace: MinigameModule = {
       // front of the other rather than as two shapes fighting.  Height still
       // wins over lane, because a frog in the air is nearer than either.
       body.setDepth(r.going === 'taken' ? 39 : 10 + r.i * 0.6 + Math.min(8, r.lift / 2.5));
+      /** Legs flung out wide, 0 to 1: set by a fall, read by the legs below. */
+      let splay = 0;
 
       if (r.going === 'hole') {
         // Down in a hole: sunk to the shoulders, and scrabbling.
@@ -1598,30 +1604,31 @@ export const frogRace: MinigameModule = {
         body.setRotation(0);
         body.y = laneY + 3 + Math.sin(clock / 60) * 0.6;
       } else if (r.going === 'slip') {
-        // ---- THE SLIP, IN FOUR BEATS.
+        // ---- THE SLIP: FEET OUT, BUMP, SIT, UP.
         //
-        // It used to be one number: a single `fallen` that the whole pose was
-        // multiplied by, so the frog tipped over and came back up along
-        // exactly the same line.  A slip is not symmetrical.  It is a
-        // WOBBLE -- the feet go and the body fights it -- then a LANDING, then
-        // a SLIDE along the ground, then a SCRAMBLE back onto its feet.
+        // It used to tip the frog fifty degrees onto its side, which on a
+        // frog drawn face-on is not a fall -- it is the whole picture rotated,
+        // and at this size a rotated sprite is a smear.  A frog that slips
+        // does what anything with its feet taken away does: a wobble as the
+        // feet go, down onto its bottom with a bump and a little bounce, legs
+        // shot out either side, a dazed sit -- then a hop back up.
         //
         // `p` runs 0 to 1 across the whole thing, so every beat below is a
         // slice of one clock and none of them can drift out of step.
         const p = Phaser.Math.Clamp(1 - r.stuck / SLIP_S, 0, 1);
-        const wobble = Math.min(1, p / 0.18);
-        const down = ease(Math.min(1, Math.max(0, (p - 0.1) / 0.25)));
-        const slide = Phaser.Math.Clamp((p - 0.35) / 0.3, 0, 1);
-        const up = ease(Phaser.Math.Clamp((p - 0.62) / 0.38, 0, 1));
-        const flat = down - up;
-        // the feet going: a fast shudder that dies as it actually falls
-        const teeter = Math.sin(p * 34) * 0.26 * wobble * (1 - down);
-        // on its side, squashed along the ground, easing off as it slides out
-        body.setScale(1 + 0.34 * flat - 0.08 * slide * (1 - up), 1 - 0.52 * flat);
-        // Rotation is carried THROUGH: it keeps turning as it slides instead
-        // of unwinding back the way it came, so it gets up facing forwards.
-        body.setRotation(teeter + 0.92 * flat + 0.18 * slide * (1 - up) - 0.12 * up * (1 - up) * 4);
-        body.y = laneY + 3.4 * flat + Math.sin(up * Math.PI) * -1.5;
+        const wobble = Math.min(1, p / 0.16) * (1 - Math.min(1, Math.max(0, (p - 0.16) / 0.06)));
+        const drop = ease(Phaser.Math.Clamp((p - 0.14) / 0.12, 0, 1));
+        const bounce = Math.sin(Phaser.Math.Clamp((p - 0.26) / 0.14, 0, 1) * Math.PI);
+        const up = ease(Phaser.Math.Clamp((p - 0.74) / 0.26, 0, 1));
+        const sit = drop * (1 - up);
+        const hop = Math.sin(up * Math.PI);
+        splay = sit;
+        body.setScale(
+          1 + 0.24 * sit - 0.1 * bounce - 0.08 * hop,
+          1 - 0.3 * sit + 0.12 * bounce + 0.14 * hop,
+        );
+        body.setRotation(Math.sin(p * 38) * 0.22 * wobble + Math.sin(clock / 120) * 0.06 * sit * (1 - bounce));
+        body.y = laneY + 3 * sit - 2 * bounce - 2.5 * hop;
       } else if (r.going === 'falling') {
         // ---- COMING DOWN OUT OF THE SKY.
         //
@@ -1636,9 +1643,15 @@ export const frogRace: MinigameModule = {
         const f = r.fell;
         body.setPosition(START_X + r.x, laneY - r.lift);
         // stretched out at the top of the fall, bracing as the ground arrives
-        const brace = ease(Math.max(0, (f - 0.62) / 0.38));
-        body.setScale(0.9 + 0.22 * brace, 1.16 - 0.3 * brace);
-        body.setRotation(-0.5 + f * f * 5.2 + Math.sin(clock / 40) * 0.12);
+        //
+        // It does not spin.  A face-on frog turned end over end is a smear,
+        // not a frog: it comes down the right way up in a starfish, legs
+        // flung out and kicking, rocking side to side, and tucks up to brace
+        // as the ground arrives.
+        const brace = ease(Math.max(0, (f - 0.7) / 0.3));
+        splay = 1 - brace;
+        body.setScale(0.94 + 0.16 * brace, 1.1 - 0.22 * brace);
+        body.setRotation(Math.sin(clock / 85) * 0.3 * (1 - brace));
       } else if (r.going === 'flutter') {
         // ---- WATCHING THE BUTTERFLY.
         //
@@ -1677,13 +1690,25 @@ export const frogRace: MinigameModule = {
         // sits up and sways while it sees stars, and over the last beat it
         // straightens out -- so it is running again from a frog that got up,
         // not from a pose that vanished.
+        //
+        // The landing has a BOUNCE in it: flat on impact, a little rebound
+        // hop off the grass, a second smaller squash to settle, then the
+        // dazed sway.  One squash and straight into swaying read as the frog
+        // being stamped flat rather than dropped.
         const left = r.stuck / DIZZY_S;
-        const splat = ease(Math.min(1, (1 - left) * 8));
+        const t = 1 - left;
+        const splat = 1 - ease(Math.min(1, t / 0.1));
+        const rebound = Math.sin(Phaser.Math.Clamp((t - 0.06) / 0.14, 0, 1) * Math.PI);
+        const settle = Math.sin(Phaser.Math.Clamp((t - 0.2) / 0.08, 0, 1) * Math.PI);
         const up = ease(Math.max(0, (0.28 - left) / 0.28));
-        const sway = Math.sin(clock / 105) * (1 - up);
-        body.setScale(1.3 - 0.3 * splat + 0.1 * (1 - up) * 0, 0.55 + 0.35 * splat);
-        body.setRotation(sway * 0.22);
-        body.y = laneY + 3 * (1 - up) + 1.5 * (1 - splat);
+        const sway = Math.sin(clock / 105) * (1 - up) * (t > 0.28 ? 1 : 0);
+        splay = Math.max(splat, settle * 0.5);
+        body.setScale(
+          1 + 0.36 * splat - 0.08 * rebound + 0.14 * settle + 0.06 * (1 - up),
+          1 - 0.42 * splat + 0.14 * rebound - 0.16 * settle - 0.08 * (1 - up),
+        );
+        body.setRotation(sway * 0.16);
+        body.y = laneY + 3 * splat - 4 * rebound + 1.4 * settle + 1.2 * (1 - up) * (t > 0.28 ? 1 : 0);
       } else if (r.going === 'sleep') {
         // ---- ASLEEP, and waking up out of it.  Sat back on its haunches,
         // breathing slowly, then a stretch and a shake in the last beat so it
@@ -1807,7 +1832,9 @@ export const frogRace: MinigameModule = {
       let paddle = 0;
       if (r.lift < prevLift - 0.02 && r.lift > 1 && r.going !== 'taken') {
         const high = Phaser.Math.Clamp(r.lift / BALLOON_H, 0, 1);
-        body.setRotation(body.rotation + Math.sin(clock / 46) * 0.42 * high);
+        // the bird's drop draws its own rock (see `falling`); anything else
+        // coming down gets this one
+        if (r.going !== 'falling') body.setRotation(body.rotation + Math.sin(clock / 46) * 0.3 * high);
         paddle = 1 + high * 2.4;
       }
 
@@ -1827,11 +1854,13 @@ export const frogRace: MinigameModule = {
         // they drive DOWN and splay on the push, fold up tight at the top of
         // the hop, and splay again to take the landing.  The front feet do the
         // same under the chest, smaller.
-        legRear.setPosition(REAR_LEG.x + kickA * 0.5, REAR_LEG.y + lp.rear.y * 1.2 - Math.abs(kickA) * 0.4);
-        legRear.setScale(1 + lp.rear.x * 0.06 + Math.abs(lp.rear.a) * 0.1, 1);
+        // `splay` flings both pairs out wide: a frog sat down hard, or one
+        // coming down out of the sky in a starfish.
+        legRear.setPosition(REAR_LEG.x + kickA * 0.5, REAR_LEG.y + lp.rear.y * 1.2 * (1 - splay) - Math.abs(kickA) * 0.4 - splay * 1.2);
+        legRear.setScale((1 + lp.rear.x * 0.06 + Math.abs(lp.rear.a) * 0.1) * (1 + 0.32 * splay), 1 - 0.12 * splay);
         legRear.setRotation(kickA * 0.18);
-        legFore.setPosition(FORE_LEG.x + kickB * 0.4, FORE_LEG.y + lp.fore.y * 0.9 - Math.abs(kickB) * 0.4);
-        legFore.setScale(1 + lp.fore.x * 0.05, 1);
+        legFore.setPosition(FORE_LEG.x + kickB * 0.4, FORE_LEG.y + lp.fore.y * 0.9 * (1 - splay) - Math.abs(kickB) * 0.4 + splay * 0.6);
+        legFore.setScale((1 + lp.fore.x * 0.05) * (1 + 0.7 * splay), 1);
         legFore.setRotation(kickB * 0.18);
       }
 
@@ -3572,6 +3601,14 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
   stars.forEach((st) => c.add(st));
   c.setData('stars', stars);
 
+  // ---- SMALLER, AND CUTER FOR IT.  Everything above is drawn at the size
+  // it always was and then carried in one group at FROG_S, so every pose,
+  // limb and prop keeps its proportions and scales together.  The group is
+  // dropped by what the scale takes off the legs, so the feet stay on the
+  // grass rather than the frog hovering over its own lane.
+  const kids = [...c.list];
+  c.removeAll(false);
+  c.add(scene.add.container(0, FROG_FOOT * (1 - FROG_S), kids).setScale(FROG_S));
   return c;
 }
 
