@@ -53,7 +53,30 @@ const GAMES = [
   // presses.  Rigged clean, or one pull in five ends the round and the
   // screenshot is of the room the player was sent back to, not of the machine.
   { id: 'roulette', drive: async (p) => { for (let i = 0; i < 3; i++) { await p.evaluate(() => window.__chamber?.rig('clean')); await p.keyboard.press('Space'); await sleep(700); await p.keyboard.press('Space'); await sleep(1400); } } },
-  { id: 'battleship', drive: async (p) => { const g = (x, y) => [640 + (x - 160) * 4, 360 + (y - 90) * 4]; for (const [c, r] of [[0, 0], [2, 2], [4, 4], [6, 1]]) { await p.mouse.click(...g(186 + c * 12 + 6, 44 + r * 12 + 6)); await sleep(900); } } },
+  // POND HUNT opens on the placement screen, so a drive that only clicks pads
+  // photographs six unplaced frogs and an inert pond.  Seat the six, start the
+  // hunt, then take a few searches, so the shot is of the game being played.
+  // The old drive clicked a twelve-pixel grid that no longer exists.
+  { id: 'battleship', drive: async (p) => {
+    if (!(await bridge(p, '__pond'))) return;
+    for (let i = 0; i < 6; i++) {
+      const legal = await p.evaluate(() => window.__pond?.legal() ?? []);
+      if (!legal.length) break;
+      await p.evaluate((a) => window.__pond.place(a), legal[Math.floor(legal.length / 2)]);
+      await sleep(150);
+    }
+    await p.evaluate(() => window.__pond?.start());
+    await sleep(600);
+    for (let i = 0; i < 3; i++) {
+      await p.evaluate(() => {
+        const s = window.__pond.state();
+        if (s.busy || s.over) return;
+        const f = s.theirsFrogs.find((x) => x.at.some((q) => !x.foundAt.includes(q)));
+        window.__pond.search(f ? f.at.find((q) => !f.foundAt.includes(q)) : 0);
+      });
+      await sleep(2200);
+    }
+  } },
   { id: 'frogcross', drive: async (p) => { for (let i = 0; i < 4; i++) { await p.keyboard.press('KeyW'); await sleep(350); } await p.keyboard.press('KeyA'); await sleep(600); } },
   { id: 'carchase', drive: async (p) => { await p.keyboard.down('KeyA'); await sleep(500); await p.keyboard.up('KeyA'); await p.keyboard.press('Space'); await sleep(1200); await p.keyboard.down('KeyD'); await sleep(500); await p.keyboard.up('KeyD'); } },
   // Aim, charge, throw one over the fence, then try a special item.
@@ -315,6 +338,214 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
     `${honest >= 2 ? 'PASS' : 'FAIL'}  hoops: a shot the arc calls good goes in  — ${honest}/${tried} scored`,
   );
   if (honest < 2) failures++;
+  await page.close();
+}
+
+// FROG POND HUNT is a tracking game, and every claim it makes is a rule that
+// can be wrong in a way a screenshot would never show: that all six frogs fit
+// in the pond at all, that nothing moves while you are searching, that a hit
+// does not buy a second go, that a frog carries its found pads with it when it
+// hops, and that the two quiet frogs are actually quiet.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=50&game=battleship`, { waitUntil: 'networkidle2' });
+  await sleep(1700);
+  await startGame(page);
+  await bridge(page, '__pond');
+
+  const say = (good, name, detail) => {
+    console.log(`${good ? 'PASS' : 'FAIL'}  ${name}  — ${detail}`);
+    if (!good) failures++;
+  };
+
+  // 1. The placer must seat all six, every time, with nothing overlapping.
+  // Six frogs covering twelve pads in a thirty-six pad pond is tight enough
+  // that a greedy placer used to strand the last one with nowhere to go.
+  const aud = await page.evaluate(() => window.__pond.audit(300));
+  say(
+    aud.full === aud.runs && aud.overlaps === 0 && aud.offPond === 0
+      && Object.keys(aud.counts).length === 6 && Object.values(aud.counts).every((c) => c === aud.runs),
+    'pond hunt: every layout seats all six frogs with nothing overlapping',
+    `${aud.full}/${aud.runs} complete, ${aud.overlaps} overlapping pads, ${aud.offPond} off the pond`,
+  );
+
+  // 2. And a player packing badly -- always the first legal pad -- can finish too.
+  let placed = 0;
+  for (let i = 0; i < 6; i++) {
+    const legal = await page.evaluate(() => window.__pond.legal());
+    if (!legal.length) break;
+    await page.evaluate((a) => window.__pond.place(a), legal[0]);
+    placed++;
+  }
+  const seated = await page.evaluate(() => window.__pond.state());
+  const pads = seated.mineFrogs.flatMap((f) => f.at);
+  say(
+    placed === 6 && seated.toPlace.length === 0 && pads.length === 12 && new Set(pads).size === 12,
+    'pond hunt: a player packing greedily can still seat all six',
+    `${placed} placed on ${new Set(pads).size} distinct pads of ${pads.length}`,
+  );
+
+  await page.evaluate(() => window.__pond.start());
+  const begun = await page.evaluate(() => window.__pond.state());
+  say(
+    begun.phase === 'play' && begun.theirsFrogs.length === 6,
+    'pond hunt: START POND HUNT begins the hunt with six frogs opposite',
+    `phase ${begun.phase}, ${begun.theirsFrogs.length} frogs across the water`,
+  );
+
+  // 3. Nothing moves under your finger, and the turn locks behind the search.
+  const during = await page.evaluate(() => {
+    const at = () => JSON.stringify(window.__pond.state().theirsFrogs.map((f) => f.at));
+    const before = at();
+    window.__pond.search(window.__pond.state().theirsFrogs[0].at[0]);
+    return { still: before === at(), busy: window.__pond.state().busy };
+  });
+  say(during.still && during.busy, 'pond hunt: nothing moves during a search, and the turn locks',
+      `footprints ${during.still ? 'identical' : 'CHANGED'}, turn ${during.busy ? 'locked' : 'still open'}`);
+
+  // 4. A hit is not a free extra go.
+  const extra = await page.evaluate(() => {
+    const s = window.__pond.state();
+    const empty = window.__pond.spots().map((x) => x.i).find((i) => !s.theirsFrogs.some((f) => f.at.includes(i)));
+    window.__pond.search(empty);
+    return { hit: s.theirsFrogs.reduce((a, f) => a + f.found, 0), before: s.searched, after: window.__pond.state().searched };
+  });
+  say(extra.hit >= 1 && extra.after === extra.before,
+      'pond hunt: finding a frog does not buy a second search',
+      `hit landed, the follow-up click was refused at ${extra.after} pads searched`);
+
+  // 5. The turn comes back, once the opponent has taken its one go.
+  await sleep(2800);
+  const back = await page.evaluate(() => window.__pond.state());
+  say(!back.busy && back.mineSearched >= 1 && back.phase === 'play',
+      'pond hunt: the turn hands back after the opponent takes its one go',
+      `they searched ${back.mineSearched} of your pads, board reads ${back.statusText}`);
+
+  // 6. Cooldowns pace the movement, and the sleeping frog is rooted.
+  const paced = await page.evaluate(() => {
+    const at = (k) => window.__pond.state().theirsFrogs.find((f) => f.kind === k)?.at.join(',');
+    const out = {};
+    for (const k of ['bull', 'tiny', 'tree', 'green', 'golden', 'sleeper']) {
+      let prev = at(k); let n = 0;
+      for (let i = 0; i < 60; i++) { window.__pond.settle(); const now = at(k); if (now !== prev) n++; prev = now; }
+      out[k] = n;
+    }
+    return out;
+  });
+  say(paced.sleeper === 0 && Object.entries(paced).every(([k, v]) => k === 'sleeper' || (v > 0 && v <= 31)),
+      'pond hunt: cooldowns pace the movement and the sleeper never moves',
+      'moves in 60 settles — ' + Object.entries(paced).map(([k, v]) => `${k} ${v}`).join(', '));
+
+  // 7. A hop carries the hits it is still sitting on, and stales the rest.
+  // Wiping the lot meant a frog that moves at all could never be finished off.
+  const keeps = await page.evaluate(async () => {
+    const wait = async () => {
+      for (let i = 0; i < 200; i++) {
+        const s = window.__pond.state();
+        if (!s.busy || s.over || s.phase === 'done') return s;
+        await new Promise((r) => setTimeout(r, 40));
+      }
+      return window.__pond.state();
+    };
+    let cases = 0; let carried = 0; let staled = 0;
+    for (let turn = 0; turn < 40 && cases < 8; turn++) {
+      let s = await wait();
+      if (s.over || s.phase === 'done') break;
+      const f = s.theirsFrogs.find((x) => x.at.length > 1 && x.kind !== 'sleeper'
+        && x.at.some((q) => !x.foundAt.includes(q)));
+      if (!f) break;
+      window.__pond.search(f.at.find((q) => !f.foundAt.includes(q)));
+      s = await wait();
+      if (s.over || s.phase === 'done') break;
+      const was = s.theirsFrogs.find((x) => x.kind === f.kind);
+      if (!was || was.found === 0 || was.found >= was.at.length) continue;
+      for (let i = 0; i < 10; i++) {
+        window.__pond.settle();
+        const now = window.__pond.state().theirsFrogs.find((x) => x.kind === f.kind);
+        if (now.at.join(',') === was.at.join(',')) continue;
+        cases++;
+        const kept = was.foundAt.filter((q) => now.at.includes(q));
+        const left = was.foundAt.filter((q) => !now.at.includes(q));
+        if (kept.every((q) => now.foundAt.includes(q)) && now.foundAt.every((q) => now.at.includes(q))) carried++;
+        const st = window.__pond.state().stale;
+        if (left.every((q) => st.includes(q))) staled++;
+        break;
+      }
+    }
+    return { cases, carried, staled };
+  });
+  say(keeps.cases > 0 && keeps.carried === keeps.cases && keeps.staled === keeps.cases,
+      'pond hunt: a hop keeps the hits on pads it still covers, and stales the rest',
+      `${keeps.cases} hops carrying a hit: ${keeps.carried} kept every still-covered pad, ${keeps.staled} left the vacated ones marked`);
+
+  // 8. The mud-hide frog moves without a sound; the loud ones cannot.
+  const quiet = await page.evaluate(() => {
+    const pops = () => {
+      const out = [];
+      const walk = (o) => { if (typeof o.text === 'string') out.push(o.text); (o.list ?? []).forEach(walk); };
+      window.__froggy.game().scene.scenes.forEach((sc) => sc.children?.list?.forEach(walk));
+      return out;
+    };
+    const marks = ['BUBBLES', 'A RIPPLE', 'PADS SHAKING', 'DEEP SPLASH', 'A CROAK'];
+    const tally = {};
+    for (let i = 0; i < 120; i++) {
+      const before = pops();
+      window.__pond.settle();
+      const seen = {};
+      for (const t of pops()) seen[t] = (seen[t] ?? 0) + 1;
+      for (const t of before) seen[t] = (seen[t] ?? 0) - 1;
+      for (const m of marks) if ((seen[m] ?? 0) > 0) tally[m] = (tally[m] ?? 0) + seen[m];
+    }
+    return tally;
+  });
+  const heard = Object.entries(quiet).filter(([, v]) => v > 0).map(([k, v]) => `${k} ${v}`);
+  say(!(quiet.BUBBLES > 0) && heard.length > 0,
+      'pond hunt: the mud-hide frog moves without leaving a clue, the loud ones do not',
+      `over 120 settles: BUBBLES 0, and heard ${heard.join(', ')}`);
+
+  // 9. No naval vocabulary, and the pond vocabulary the brief asked for.
+  const words = await page.evaluate(() => {
+    const out = [];
+    const walk = (o) => { if (typeof o.text === 'string') out.push(o.text); (o.list ?? []).forEach(walk); };
+    window.__froggy.game().scene.scenes.forEach((sc) => sc.children?.list?.forEach(walk));
+    return out;
+  });
+  const blob = words.join(' | ').toUpperCase();
+  const banned = ['FLEET', 'BATTLESHIP', 'SHIP', 'FIRE AT WILL', 'SALVO', 'DESTROYER', 'CARRIER', 'SUBMARINE'];
+  const slipped = banned.filter((w) => blob.includes(w));
+  say(slipped.length === 0, 'pond hunt: not a naval word on the screen',
+      slipped.length ? `found ${slipped.join(', ')}` : `${words.length} strings, none of ${banned.length} banned terms`);
+
+  // 10. And it plays to a finish.
+  const ending = await page.evaluate(async () => {
+    const wait = async () => {
+      for (let i = 0; i < 200; i++) {
+        const s = window.__pond.state();
+        if (!s.busy || s.over || s.phase === 'done') return s;
+        await new Promise((r) => setTimeout(r, 40));
+      }
+      return window.__pond.state();
+    };
+    for (let turn = 0; turn < 120; turn++) {
+      const s = await wait();
+      if (s.phase === 'done' || s.over) return { phase: s.phase, turn, won: s.theirsLeft === 0 };
+      let pad = -1;
+      for (const f of s.theirsFrogs.filter((x) => x.found < x.at.length)
+        .sort((a, b) => (b.found / b.at.length) - (a.found / a.at.length))) {
+        const open = f.at.filter((q) => !f.foundAt.includes(q));
+        if (open.length) { pad = open[0]; break; }
+      }
+      if (pad < 0) break;
+      window.__pond.search(pad);
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    const s = window.__pond.state();
+    return { phase: s.phase, turn: 'ran out', theirsLeft: s.theirsLeft };
+  });
+  say(ending.phase === 'done', 'pond hunt: hunting every frog down finishes the game',
+      `phase ${ending.phase} after ${ending.turn} turns` + (ending.won ? ', all six found' : ''));
+
   await page.close();
 }
 
