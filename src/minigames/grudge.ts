@@ -90,8 +90,8 @@ const JUMP_CLEARANCE: Record<'high' | 'low' | 'special', number> = { high: 20, l
  * ================= THE OTHER CORNER =================
  *
  * It used to be one lizard, every time.  Now it is somebody off a card of
- * fifteen, drawn fresh each time the cabinet is played -- ten regulars and
- * five rare ones that turn up about one fight in eight.
+ * fifteen, drawn fresh each time the cabinet is played -- eleven regulars
+ * and four rare ones that turn up about one fight in eleven.
  *
  * NONE OF THEM IS A RECOLOURED FROG.  Each has its own silhouette -- a shell,
  * a horn, fins and spikes, eyestalks, a coil where the legs would be -- and
@@ -161,10 +161,6 @@ const FOES: FoeDef[] = [
     skin: 0x8a9a3c, skinLight: 0xe0a44a, glove: 0x2f5fa8, gloveLit: 0x5b8fd6, bodyW: 14, bodyH: 18, headW: 12, look: 'lizard',
     speed: 1, power: 1, windup: 1, reach: 1, guard: 1, blockRate: 1, tempo: 1, dodge: 0, style: 'balanced', chaos: 0, counter: 0.35,
     note: 'AGILE COUNTERPUNCHER' },
-  { key: 'fishy', name: 'MR FISHY', rare: false, weight: 10,
-    skin: 0xe8b04a, skinLight: 0xfff0c9, glove: 0xc4342e, gloveLit: 0xe8635a, bodyW: 18, bodyH: 17, headW: 14, look: 'puffer',
-    speed: 0.9, power: 1, windup: 1, reach: 0.95, guard: 0.5, blockRate: 1.35, tempo: 1.05, dodge: 0, style: 'balanced', chaos: 0.05, counter: 0.1,
-    note: 'PUFFS UP WHEN HE BLOCKS' },
   { key: 'croc', name: 'CROC', rare: false, weight: 10,
     skin: 0x3f6e3a, skinLight: 0x9fbf6a, glove: 0x7a2a1e, gloveLit: 0xb04a3a, bodyW: 19, bodyH: 20, headW: 12, look: 'croc',
     speed: 0.8, power: 1.25, windup: 1.2, reach: 1.05, guard: 0.9, blockRate: 0.8, tempo: 1.15, dodge: 0, style: 'highs', chaos: 0.05, counter: 0.1,
@@ -208,10 +204,6 @@ const FOES: FoeDef[] = [
 
   // ---- THE RARE ONES.  A little better than the regulars on balance, and
   // never by enough to be unfair: a rare draw is a story, not a wall.
-  { key: 'shark', name: 'SHARK', rare: true, weight: 2.8,
-    skin: 0x5a7a96, skinLight: 0xe6eef4, glove: 0x14161e, gloveLit: 0x3a3f4e, bodyW: 18, bodyH: 20, headW: 14, look: 'shark',
-    speed: 1.1, power: 1.25, windup: 0.95, reach: 1.05, guard: 1, blockRate: 0.9, tempo: 0.85, dodge: 0.05, style: 'specials', chaos: 0.1, counter: 0.2,
-    note: 'SMELLS WEAKNESS' },
   { key: 'gorilla', name: 'GORILLA', rare: true, weight: 2.8,
     skin: 0x2e2a2a, skinLight: 0x6a5e58, glove: 0xc4342e, gloveLit: 0xe8635a, bodyW: 23, bodyH: 22, headW: 13, look: 'gorilla',
     speed: 0.9, power: 1.35, windup: 1.15, reach: 1.1, guard: 0.7, blockRate: 1, tempo: 1, dodge: 0, style: 'highs', chaos: 0.1, counter: 0.15,
@@ -235,7 +227,7 @@ const FOES: FoeDef[] = [
  *
  * The first roster gave every animal the same head -- an ellipse with two
  * big cartoon eyes on top -- and let the gear do the rest, which is a single
- * face in eighteen costumes.  Each look now sets its own skull (width and
+ * face in a roster of costumes.  Each look now sets its own skull (width and
  * height), its own eyes (how many show, where, how big, what colour, and
  * whether the pupil is round, a reptile's slit, a dot, or not there at all)
  * and whether it has the plain snout.  Eye positions are from the head's
@@ -243,7 +235,7 @@ const FOES: FoeDef[] = [
  *
  *   a croc's eyes sit up on bumps on top of a flat head, yellow and slit
  *   a gecko's are huge and slit; a snake's small and slit on a flat head
- *   a shark's, a rhino's and a tortoise's are small and black
+ *   a rhino's and a tortoise's are small and black
  *   a monkey's and a gorilla's look forward out of a face
  *   a penguin's is a dot in a white ring; a lion's amber and slit
  */
@@ -262,7 +254,6 @@ interface FaceDef {
 const FACE: Record<string, FaceDef> = {
   frog: { headH: 12, eyes: [[-3, -4], [3, -4]], r: 3, col: PALETTE.cream, pupil: 'round', pr: 1.4, snout: 'lizard' },
   lizard: { headH: 12, eyes: [[-3, -4], [3, -4]], r: 3, col: PALETTE.cream, pupil: 'round', pr: 1.4, snout: 'lizard' },
-  puffer: { headW: 14, headH: 13, eyes: [[2, -2]], r: 3.4, col: 0xfff6d8, pupil: 'round', pr: 1.9, snout: 'none' },
   croc: { headH: 9, eyes: [[-4, -5], [-0.6, -5.4]], r: 1.8, col: 0xe8d060, pupil: 'slit', pr: 1.2, snout: 'small', lids: true },
   gator: { headH: 9, eyes: [[-4, -5], [-0.6, -5.4]], r: 1.8, col: 0xd8c050, pupil: 'slit', pr: 1.2, snout: 'small', lids: true },
   komodo: { headH: 9, eyes: [[-1, -2.6]], r: 1.5, col: 0xd8b040, pupil: 'slit', pr: 1, snout: 'small' },
@@ -272,7 +263,6 @@ const FACE: Record<string, FaceDef> = {
   rhino: { headW: 13, headH: 11, eyes: [[0, -1]], r: 1.2, col: 0x1a1a1a, pupil: 'none', pr: 0, snout: 'small' },
   monkey: { headW: 13, headH: 12, eyes: [[1, -1.6], [4.4, -1.6]], r: 1.5, col: 0xf6f0e0, pupil: 'dot', pr: 0.8, snout: 'none' },
   penguin: { headH: 11, eyes: [[2, -3]], r: 1.6, col: 0xffffff, pupil: 'dot', pr: 0.9, snout: 'small' },
-  shark: { headW: 14, headH: 11, eyes: [[2, -3]], r: 1.3, col: 0x14161e, pupil: 'none', pr: 0, snout: 'none' },
   gorilla: { headW: 13, headH: 12, eyes: [[1.6, -1.4], [4.8, -1.4]], r: 1.2, col: 0x8a6a4a, pupil: 'dot', pr: 0.7, snout: 'none' },
   chameleon: { headH: 11, eyes: [[3, -2]], r: 2.4, col: 0xf0f0c0, pupil: 'dot', pr: 1, snout: 'lizard' },
   wolf: { headW: 11, headH: 10, eyes: [[1.6, -2.4]], r: 1.4, col: 0xe8c04a, pupil: 'dot', pr: 0.7, snout: 'none' },
@@ -292,7 +282,6 @@ const FACE: Record<string, FaceDef> = {
 const JUMP: Record<string, { v: number; squat: number; land: number; drift: number }> = {
   frog: { v: -190, squat: 0, land: 110, drift: 0 },
   lizard: { v: -175, squat: 110, land: 120, drift: 40 },
-  puffer: { v: -150, squat: 140, land: 150, drift: 28 },
   croc: { v: -135, squat: 170, land: 180, drift: 30 },
   gator: { v: -135, squat: 170, land: 180, drift: 30 },
   komodo: { v: -145, squat: 150, land: 160, drift: 34 },
@@ -302,7 +291,6 @@ const JUMP: Record<string, { v: number; squat: number; land: number; drift: numb
   rhino: { v: -130, squat: 180, land: 200, drift: 30 },
   monkey: { v: -225, squat: 90, land: 90, drift: 56 },
   penguin: { v: -150, squat: 110, land: 130, drift: 30 },
-  shark: { v: -165, squat: 120, land: 130, drift: 40 },
   gorilla: { v: -200, squat: 150, land: 170, drift: 44 },
   chameleon: { v: -170, squat: 100, land: 110, drift: 40 },
   wolf: { v: -195, squat: 90, land: 100, drift: 50 },
@@ -371,6 +359,9 @@ interface Art {
   pupDX: number;
   /** Behind the head and in front of the body: a mane, ears, a ruff. */
   headBack: Phaser.GameObjects.Container;
+  /** A tortoise's shell, and how far round it has turned to block (0..1). */
+  shell: Phaser.GameObjects.Container | null;
+  shellK: number;
   footL: Phaser.GameObjects.Rectangle;
   footR: Phaser.GameObjects.Rectangle;
   /** On the boards, under the fighter, whatever height the fighter is at. */
@@ -743,6 +734,7 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
   tailRoot: [number, number];
   drags: boolean;
   headBack: Phaser.GameObjects.GameObject[];
+  shell: Phaser.GameObjects.GameObject[];
 } {
   const head: Phaser.GameObjects.GameObject[] = [];
   const body: Phaser.GameObjects.GameObject[] = [];
@@ -755,6 +747,8 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
   const tailParts: Phaser.GameObjects.GameObject[] = [];
   /** Behind the head and in front of the body: a mane, ears, a ruff. */
   const headBack: Phaser.GameObjects.GameObject[] = [];
+  /** A tortoise's shell, which moves to block. */
+  const shell: Phaser.GameObjects.GameObject[] = [];
   let tailRoot0: [number, number] | null = null;
   let drags = false;
   const dark = shade(d.skin, 0.35);
@@ -864,27 +858,6 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       tailParts.push(tube(path.slice(2), 3, 0.6, d.skinLight).setAlpha(0.35));
       break;
     }
-    case 'puffer':
-      // ---- MR FISHY.  Round, finned, and spiked -- and the spikes are what
-      // stand up when he blocks, so they live in their own group.
-      // a stubby tail and a fan of a fin on the end of it, and a soft dorsal
-      {
-        const x0 = -bw + 2;
-        tailParts.push(tube(bez([x0 + 3, 1], [x0 - 1, 1], [x0 - 3, 0.5], [x0 - 5, 0.5], 6), 7, 4, d.skin));
-        tailParts.push(tube(bez([x0 - 4, 0.5], [x0 - 6, -1], [x0 - 8, -3], [x0 - 9, -5.5], 8), 4, 1.4, shade(d.skin, 0.1)));
-        tailParts.push(tube(bez([x0 - 4, 0.5], [x0 - 6, 2], [x0 - 8, 4], [x0 - 9, 6.5], 8), 4, 1.4, shade(d.skin, 0.1)));
-        back.push(tube(bez([2, -bh + 3], [1, -bh - 1], [-1, -bh - 3], [-4, -bh - 3.5], 8), 6, 1.2, shade(d.skin, 0.15)));
-      }
-      body.push(E(0, 1, d.bodyW - 4, d.bodyH - 6, shade(d.skinLight, 0.04)).setAlpha(0.6));
-      for (let i = 0; i < 12; i++) {
-        const a = (i / 12) * Math.PI * 2;
-        const rx = Math.cos(a) * (d.bodyW / 2 + 1);
-        const ry = Math.sin(a) * (d.bodyH / 2 + 1);
-        puff.push(T(rx, ry, 0, -1.4, 0, 1.4, Math.cos(a) * 4, Math.sin(a) * 4, 0x9a6a2a));
-      }
-      head.push(E(6.5, 3, 4, 3, 0xe8637a));
-      for (const [sx, sy] of [[-3, 2], [2, 4], [-5, -2], [4, -1]] as const) body.push(E(sx, sy, 2.2, 2.2, 0xa8742e).setAlpha(0.7));
-      break;
     case 'croc':
     case 'gator':
     case 'komodo': {
@@ -986,17 +959,40 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       break;
     }
     case 'shell': {
-      // ---- THE TORTOISE.  The shell is the silhouette: a dome over the back,
-      // bigger than the fighter under it, with the plates picked out.
-      const sw = d.bodyW + 9;
-      const sh = d.bodyH + 5;
-      back.push(E(-4, -2, sw + 2, sh + 2, shade(d.skin, 0.55)));
-      back.push(E(-4, -2, sw, sh, 0x6a5a34));
-      back.push(E(-5, -4, sw - 7, sh - 7, 0x8a7444));
-      for (const [x, y] of [[-8, -5], [-2, -7], [-9, 2], [-2, 1], [-5, -1]] as const) back.push(E(x, y, 4.4, 3.8, 0x5a4a28).setAlpha(0.8));
+      // ---- THE TORTOISE.  The shell is the silhouette, and it is a shell:
+      // a high dome with a dark rim, a ring of marginal plates round the
+      // bottom edge, a spine of big hexagonal scutes with pale growth rings
+      // in them, and the sun on top.  It lives in its own group because it
+      // MOVES -- when the tortoise blocks, it turns its shell to the blow.
+      const sw = d.bodyW + 10;
+      const sh = d.bodyH + 6;
+      const rim = 0x3a2e18;
+      const hex = (x: number, y: number, r: number, col: number, seam: number) => {
+        const pts: Phaser.Math.Vector2[] = [];
+        for (let k = 0; k < 6; k++) {
+          const a = (k / 6) * Math.PI * 2 + Math.PI / 6;
+          pts.push(new Phaser.Math.Vector2(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.86));
+        }
+        const g = scene.add.graphics().fillStyle(col, 1).fillPoints(pts, true);
+        g.lineStyle(0.8, seam, 1).strokePoints(pts, true);
+        return g;
+      };
+      shell.push(E(0, 0, sw + 2, sh + 2, rim));
+      shell.push(E(0, 0, sw, sh, 0x6e5a30));
+      for (let k = -5; k <= 5; k++) {
+        const a = Math.PI / 2 + (k / 5.6) * (Math.PI / 2.1);
+        shell.push(E(Math.cos(a) * (sw / 2 - 1.8), Math.sin(a) * (sh / 2 - 1.8), 3.2, 2.8, 0x8a7040).setStrokeStyle(0.6, rim));
+      }
+      for (const [x, y, r] of [[0, -4, 4.4], [-5.6, -0.6, 3.8], [5.6, -0.6, 3.8], [-2.8, 4.4, 3.4], [2.8, 4.4, 3.4]] as const) {
+        shell.push(hex(x, y, r, 0x9a7c42, 0x4a3a1c), hex(x, y - 0.3, r * 0.52, 0xb8964e, 0x8a6e36).setAlpha(0.7));
+      }
+      shell.push(E(-2, -sh / 2 + 4, sw * 0.5, 3, 0xefdca8).setAlpha(0.35));
       // a hooked horny beak and a wrinkled old neck
       head.push(TA(3.4, -0.4, 7.6, 0.6, 4, 3.4, 0x5a5230), TA(6, 0.2, 7.6, 0.6, 6.8, 2.2, 0x3a3420));
       head.push(R(-1, 3, 5, 0.8, dark).setAlpha(0.6), R(0, 5, 4, 0.8, dark).setAlpha(0.6));
+      // and the plastron on its front, under the chin
+      body.push(E(2, 1, d.bodyW * 0.62, d.bodyH * 0.8, 0xd8c88a).setStrokeStyle(0.6, 0x8a7a4a));
+      for (let k = -1; k <= 1; k++) body.push(R(2, 1 + k * 3.4, d.bodyW * 0.5, 0.6, 0x8a7a4a).setAlpha(0.7));
       break;
     }
     case 'snake':
@@ -1009,15 +1005,27 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       for (let i = 0; i < 4; i++) body.push(R(0, -6 + i * 4, 3, 3, dark, 45).setAlpha(0.7));
       head.push(R(9, 3, 5, 0.8, 0xd83a4a), T(12, 3, 0, 0, 2.6, -1.4, 2.6, 1.4, 0xd83a4a));
       break;
-    case 'rhino':
-      // a heavy snout out in front of the face, and the horns ON it
-      head.push(E(7, 1.4, 10, 7.4, d.skin), E(8, 3.6, 7, 2.4, shade(d.skin, 0.12)));
-      head.push(TA(6.4, -1.6, 11.4, -1.2, 10.2, -10.4, 0xe6dcc0), TA(9, -1.6, 10.8, -1.4, 10.4, -8.6, 0xf6eed8));
-      head.push(TA(2.6, -4.2, 5.8, -3.8, 4.6, -8.4, 0xe6dcc0));
-      head.push(E(-4, -6, 3, 4.4, d.skin), E(-4, -6, 1.6, 2.4, 0xd88a8a));
-      head.push(R(1, -4.5, 7, 1.4, dark).setAlpha(0.8));
-      for (let i = 0; i < 3; i++) body.push(R(-3, -5 + i * 4, 8, 0.8, dark).setAlpha(0.5));
+    case 'rhino': {
+      // ---- A HEAVY SNOUT WITH THE HORNS GROWING OUT OF IT.  The horns are
+      // smooth tapered curves rooted inside the snout, with a lit edge -- not
+      // flat triangles laid on top.  Ears up on the crown, a small eye set
+      // back, a pale belly, and folds in the hide at the shoulder and hip
+      // in place of the stripes it used to wear.
+      headBack.push(E(-4.6, -6, 3, 5, shade(d.skin, 0.12)).setAngle(-22), E(-2.4, -6.6, 3, 5.2, d.skin).setAngle(-8));
+      headBack.push(E(-2.4, -6.6, 1.3, 3, 0xd8a0a0).setAlpha(0.8).setAngle(-8));
+      head.push(E(6.6, 1.4, 10.6, 8, d.skin).setStrokeStyle(0.8, shade(d.skin, 0.3)));
+      head.push(E(7.4, 3.8, 7.6, 2.8, shade(d.skin, 0.1)).setAlpha(0.8));
+      const big = bez([8.2, 0], [9.8, -3.6], [11.6, -6.6], [10.2, -10.6], 12);
+      head.push(tube(big, 4.4, 0.9, 0xe6dcc0), tube(big.slice(2), 1.3, 0.5, 0xfaf4e4));
+      head.push(tube(bez([3.6, -3.4], [4.2, -5.2], [5, -6.4], [4.4, -8.2], 8), 2.8, 0.7, 0xe6dcc0));
+      head.push(E(1.2, 1.6, 4, 1.1, dark).setAlpha(0.45), R(8.6, 4.4, 4.4, 0.8, dark), scene.add.circle(10.4, 1.2, 0.6, dark));
+      body.push(E(1.5, 2, d.bodyW * 0.6, d.bodyH * 0.62, d.skinLight).setAlpha(0.55));
+      body.push(E(0, -bh + 3.2, d.bodyW * 0.95, 6, shade(d.skin, -0.08)).setStrokeStyle(0.8, shade(d.skin, 0.28)));
+      body.push(tube(bez([-bw + 1, -bh + 6], [-bw + 3, -bh + 8], [-bw + 6, -bh + 8.5], [-bw + 8, -bh + 7.5], 8), 1.1, 0.9, dark).setAlpha(0.45));
+      body.push(tube(bez([bw - 7, bh - 5], [bw - 5, bh - 3.4], [bw - 3, bh - 3.6], [bw - 1.4, bh - 5], 8), 1.1, 0.9, dark).setAlpha(0.45));
+      tailParts.push(tube(bez([-bw + 3, bh - 4.5], [-bw, bh - 2], [-bw - 1.4, bh + 1], [-bw - 2, bh + 4], 8), 1.8, 1.1, d.skin), E(-bw - 2.2, bh + 5.2, 2, 3, dark));
       break;
+    }
     case 'monkey':
       // the face mask round both eyes, the muzzle under it, big round ears
       head.push(E(-5.4, 0, 5, 5, d.skin), E(-5.4, 0, 3, 3, d.skinLight));
@@ -1031,28 +1039,18 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       }
       break;
     case 'penguin':
-      head.push(TA(4.6, -0.8, 10.4, 1, 4.6, 2.8, 0xf0a030), TA(4.6, 1, 10.4, 1, 4.6, 2.8, 0xc07818));
-      head.push(E(1, -1, 5, 4, 0xf4f4ee));
-      body.push(E(2, 1, d.bodyW - 5, d.bodyH - 3, 0xf4f4ee));
-      root.push(E(-4, -0.5, 6, 2.4, 0xf0a030), E(4, -0.5, 6, 2.4, 0xf0a030));
-      break;
-    case 'shark':
-      // The dorsal fin sweeps back off the shoulders, and the tail narrows to
-      // a wrist before the two lobes of the fin -- the top one the longer.
-      back.push(tube(bez([3, -bh + 3], [2, -bh - 2], [-1, -bh - 6], [-5, -bh - 7.5], 10), 8, 0.8, d.skin));
-      // a pointed conical snout, pale underneath
-      head.push(E(4.6, -0.2, 11, 8, d.skin), E(5, 1.8, 9, 3.6, d.skinLight));
-      {
-        const root: Pt = [-bw + 3, 2];
-        const wrist: Pt = [-bw - 7, 0.5];
-        tailParts.push(tube(bez(root, [root[0] - 3, 2], [wrist[0] + 3, 1], wrist, 8), 8, 3.4, d.skin));
-        tailParts.push(tube(bez(wrist, [wrist[0] - 2, -2], [wrist[0] - 4, -6], [wrist[0] - 6, -10], 10), 4.4, 0.8, d.skin));
-        tailParts.push(tube(bez(wrist, [wrist[0] - 2, 2], [wrist[0] - 3, 4], [wrist[0] - 5, 6.5], 8), 3.6, 0.8, d.skin));
-      }
-      head.push(R(4, 3.4, 8, 1.4, 0x14161e));
-      teeth(1, 3, 4);
-      for (let i = 0; i < 3; i++) head.push(R(-3 + i * 1.6, 1, 0.8, 4, dark).setAlpha(0.7));
-      body.push(E(2, 2, d.bodyW - 6, d.bodyH - 6, d.skinLight).setAlpha(0.85));
+      // ---- A PENGUIN IN BLACK AND WHITE.  A glossy black head and back, a
+      // clean white front that runs up under the chin, the golden patch on
+      // the side of the neck, a long two-tone beak, and orange feet.
+      head.push(E(-1.6, -2.6, 5, 2, 0x4a5064).setAlpha(0.7));
+      head.push(E(2.4, 2.6, 6.4, 4.8, 0xf4f4ee));
+      head.push(E(-2.8, 3.4, 3.4, 4.4, 0xf0b030), E(-2.2, 2, 2, 2.4, 0xffd870).setAlpha(0.8));
+      head.push(tube(bez([4.4, 0.2], [6.4, 0.2], [8.6, 0.6], [11, 1.2], 8), 2.8, 1, 0x2a2a30), tube(bez([4.6, 1.4], [6.6, 1.6], [8.4, 1.6], [10.4, 1.6], 8), 1.4, 0.7, 0xf07a30));
+      body.push(E(2, 1.4, d.bodyW - 4.6, d.bodyH - 2.6, 0xf4f4ee));
+      body.push(E(1.2, -bh + 3, d.bodyW - 7, 4, 0xf4f4ee));
+      body.push(E(-bw + 2, 0, 2.6, d.bodyH * 0.7, 0x3a3e4c).setAlpha(0.6));
+      root.push(E(-4, -0.5, 6.4, 2.6, 0xf0a030), E(4, -0.5, 6.4, 2.6, 0xf0a030));
+      root.push(E(-4, -1.4, 5, 0.8, 0xffc060).setAlpha(0.7), E(4, -1.4, 5, 0.8, 0xffc060).setAlpha(0.7));
       break;
     case 'gorilla':
       // ---- SHOULDERS.  A gorilla is a triangle standing on its point.
@@ -1078,13 +1076,13 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       break;
   }
   // The tail is drawn relative to where it hinges, so the hinge can turn.
-  const tailRoot: [number, number] = tailRoot0 ?? (d.look === 'puffer' ? [-bw + 3, 1] : d.look === 'shark' ? [-bw + 3, 2] : [-bw + 3, bh - 4.5]);
+  const tailRoot: [number, number] = tailRoot0 ?? [-bw + 3, bh - 4.5];
   for (const t of tailParts) {
     const o = t as unknown as { x: number; y: number };
     o.x -= tailRoot[0];
     o.y -= tailRoot[1];
   }
-  return { head, body, back, root, puff, tail: tailParts, tailRoot, drags, headBack };
+  return { head, body, back, root, puff, tail: tailParts, tailRoot, drags, headBack, shell };
 }
 
 /**
@@ -1162,8 +1160,9 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
 
   // ---- WHO THEY ARE.  Built on top of the shared parts, in three groups
   // that follow the part they belong to; see `Art.headGear`.
-  const gear = foe ? foeGear(scene, foe) : { head: [], body: [], back: [], root: [], puff: [], tail: [], tailRoot: [0, 0] as [number, number], drags: false, headBack: [] };
+  const gear = foe ? foeGear(scene, foe) : { head: [], body: [], back: [], root: [], puff: [], tail: [], tailRoot: [0, 0] as [number, number], drags: false, headBack: [], shell: [] };
   const headBack = scene.add.container(2, -30, gear.headBack);
+  const shellC = gear.shell.length ? scene.add.container(-4, -20, gear.shell) : null;
   // a shadow on the boards, which is how a jump reads as off the ground
   const shadow = scene.add.ellipse(x, FLOOR_Y + 1, foe ? foe.bodyW + 8 : 24, 4, 0x000000).setAlpha(0.28).setDepth(19);
   const tailC = gear.tail.length ? scene.add.container(gear.tailRoot[0], -18 + gear.tailRoot[1], gear.tail) : null;
@@ -1177,6 +1176,7 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
   const parts: Phaser.GameObjects.GameObject[] = [...gear.root, footL, footR, legL, legR];
   if (tail) parts.push(tail);
   parts.push(backGear);
+  if (shellC) parts.push(shellC);
   if (tailC) parts.push(tailC);
   if (puff) parts.push(puff);
   parts.push(aura, torso, belly, bodyGear, headBack, shin, arm, cuff, fist, knuckle, thumb, head, snout, headGear, crest, eyeL, eyeR, pupL, pupR, call);
@@ -1211,7 +1211,7 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
       eyeY: face.eyes[0][1],
       eyeY2: (face.eyes[1] ?? face.eyes[0])[1],
       pupDX: face.eyes.length > 1 ? 0.8 : 0.5,
-      headBack, footL, footR, shadow,
+      headBack, footL, footR, shadow, shell: shellC, shellK: 0,
       jump: JUMP[look] ?? JUMP.lizard,
       tail: tailC,
       tailRoot: gear.tailRoot,
@@ -1691,6 +1691,20 @@ function render(f: Fighter, dt: number): void {
   a.torso.setScale(1, rising ? 1.08 : 1);
   a.belly.setPosition(1, -16 + crouch + breathe);
   a.head.setPosition(2, -30 + crouch * 1.4 + breathe);
+  // ---- A TORTOISE BLOCKS WITH ITS SHELL.  Guard up, the shell swings round
+  // in front of the body and the head draws in under it; guard down, it
+  // goes back over the back.  Eased, so it turns rather than jumps.
+  if (a.shell) {
+    a.shellK += ((f.blocking ? 1 : 0) - a.shellK) * Math.min(1, dt * 14);
+    const k = a.shellK;
+    const front = k > 0.5;
+    const root = a.root;
+    if (front && root.getIndex(a.shell) < root.getIndex(a.torso)) root.moveAbove(a.shell, a.bodyGear as unknown as Phaser.GameObjects.Container);
+    if (!front && root.getIndex(a.shell) > root.getIndex(a.torso)) root.moveBelow(a.shell, a.torso as unknown as Phaser.GameObjects.Container);
+    a.shell.setPosition(-4 + k * 11, -20 + crouch + breathe - k * 2).setScale(1 - k * 0.12, 1).setAngle(k * 8);
+    a.head.x -= k * 3;
+    a.head.y += k * 5;
+  }
   a.snout.setPosition(a.head.x + a.snoutX, a.head.y + 1);
   a.eyeL.setPosition(a.eyeX[0], a.head.y + a.eyeY);
   a.eyeR.setPosition(a.eyeX[1], a.head.y + a.eyeY2);
