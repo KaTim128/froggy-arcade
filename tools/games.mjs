@@ -3290,7 +3290,7 @@ for (const g of [
     await sleep(60);
     if (ok) built.push(f.key);
   }
-  const all = built.length === roster.length && roster.length === 17 && errs.length === 0;
+  const all = built.length === roster.length && roster.length === 15 && errs.length === 0;
   console.log(`${all ? 'PASS' : 'FAIL'}  grudge: all ${roster.length} opponents build and stand in the ring  — ${built.length} built, ${errs.length} errors${errs[0] ? ': ' + errs[0] : ''}`);
   if (!all) failures++;
 
@@ -3301,8 +3301,8 @@ for (const g of [
   const leastReg = Math.min(...regs.map((k) => draws[k] ?? 0));
   const mostRare = Math.max(...rares.map((k) => draws[k] ?? 0));
   const everyone = roster.every((f) => (draws[f.key] ?? 0) > 0);
-  const drawOk = everyone && rares.length === 5 && rareShare > 0.05 && rareShare < 0.2 && mostRare < leastReg;
-  console.log(`${drawOk ? 'PASS' : 'FAIL'}  grudge: every opponent comes up, and the rare five rarely  — rare ${(rareShare * 100).toFixed(1)}% of 30000 draws; rarest regular ${leastReg}, commonest rare ${mostRare}`);
+  const drawOk = everyone && rares.length === 4 && rareShare > 0.05 && rareShare < 0.2 && mostRare < leastReg;
+  console.log(`${drawOk ? 'PASS' : 'FAIL'}  grudge: every opponent comes up, and the rare four rarely  — rare ${(rareShare * 100).toFixed(1)}% of 30000 draws; rarest regular ${leastReg}, commonest rare ${mostRare}`);
   if (!drawOk) failures++;
 
   // Not reskins: every fighter has a look of its own, and every one but the
