@@ -43,7 +43,7 @@ import { store } from '../core/state';
 import { centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
-import { backdrop, panel } from './decor';
+import { panel } from './decor';
 
 
 const ID = 'bowling' as const;
@@ -246,6 +246,27 @@ let curve = 0;
 let hook = 0;
 /** The oil on the lane right now: one pattern, laid per round. */
 let oil: Oil[] = [];
+
+/**
+ * THE GARDEN, AND THE ONE RULE ABOUT IT.
+ *
+ * Everything in here is drawing.  Not one of these objects is read by the
+ * ball, the pins, the oil or the scoring -- the breeze does not push the
+ * ball, the fish do not move the gutters, and the only thing the lane knows
+ * about the weather is that there is not any.  The environment changes
+ * because a garden does; the lane conditions change because `layOil` says so;
+ * and the two never touch.
+ */
+interface Sway { art: Phaser.GameObjects.GameObject & { x: number; angle: number }; x0: number; give: number; phase: number; }
+let sway: Sway[] = [];
+interface Fish { art: Phaser.GameObjects.Container; x: number; y: number; dir: 1 | -1; speed: number; lane: 0 | 1; bob: number; }
+let fish: Fish[] = [];
+let ripples: Array<{ art: Phaser.GameObjects.Ellipse; lane: 0 | 1; t: number }> = [];
+let drift: Array<{ art: Phaser.GameObjects.GameObject & { x: number; y: number; angle: number }; vx: number; vy: number; spin: number }> = [];
+let breeze = 0;
+let gust = 0;
+let gustIn = 3;
+let windT = 0;
 /**
  * Which channel the rolling ball is in: -1 left, +1 right, 0 still on the
  * lane.  Once it is not zero nothing sets it back — that is the gutter.
@@ -336,7 +357,18 @@ export const bowling: MinigameModule = {
     over = false;
     best = store.highScore(ID);
 
-    backdrop(scene, 0x1c1410, 0x120c08, { speckleColor: 0xffd9a0 });
+    // ================= THE GARDEN =================
+    //
+    // It was a black speckled void, which is an alley at night.  This is the
+    // same lane put outside on a bright afternoon: sky, a hedge line, trees
+    // either side, beds of flowers, and the light coming warm from above.
+    //
+    // Built back to front so the depth reads: sky, the far treeline, the
+    // hedge, the lawn, then everything standing on it.  Nothing here is ever
+    // read by the game -- see the note on `sway`.
+    sway = []; fish = []; ripples = []; drift = [];
+    breeze = 0; gust = 0; gustIn = 2 + Math.random() * 3; windT = 0;
+    garden(scene);
     // One line taller than it was: YOU, FROGGY, and the shot you have dialled.
     panel(scene, 6, 34, 96, 40, 0x2a1d14, 0x8a6a3a, 4);
     // gutters, lane, foul line, pin deck
@@ -348,36 +380,91 @@ export const bowling: MinigameModule = {
     // all of that can be had for a handful of rectangles.
     const laneH = FOUL_Y - LANE_TOP + 6;
     scene.add.rectangle(LANE_L - 8, LANE_TOP, LANE_W + 16, laneH, PALETTE.ink).setOrigin(0, 0);
-    // the gutters, sunk and shaded, either side of the boards
+    // ---- THE GUTTERS ARE PONDS.
+    //
+    // Same eight pixels, same two channels, same everything the ball does
+    // with them -- `enterGutter` and `GUTTER_X` are untouched.  What is drawn
+    // in them is shallow water: a stone kerb, the shelf where it is shallow
+    // and green, the deep in the middle, and the far kerb.  Fish live in
+    // there and a gutter ball goes in with a splash.
+    //
+    // Depth 2 on everything so the ball, which sits above it, is still
+    // visible when it is in the water.
     for (const gx of [LANE_L - 8, LANE_L + LANE_W]) {
-      scene.add.rectangle(gx, LANE_TOP, 8, laneH, 0x120c08).setOrigin(0, 0);
-      scene.add.rectangle(gx + (gx < LANE_L ? 6 : 0), LANE_TOP, 2, laneH, 0x2a1d14).setOrigin(0, 0);
+      const inward = gx < LANE_L ? 1 : -1;
+      const near = inward > 0 ? gx : gx + 7;
+      // the wet stone edging
+      scene.add.rectangle(gx, LANE_TOP, 8, laneH, 0x8e8b7c).setOrigin(0, 0).setDepth(1);
+      // the shallows, then the deep water down the middle of the channel
+      scene.add.rectangle(near + (inward > 0 ? 1 : -6), LANE_TOP, 6, laneH, 0x3f8f96).setOrigin(0, 0).setDepth(1);
+      scene.add.rectangle(near + (inward > 0 ? 2 : -5), LANE_TOP, 4, laneH, 0x2e737f).setOrigin(0, 0).setDepth(1);
+      // the sky caught on the surface, right down the centre line
+      scene.add.rectangle(near + inward * 3, LANE_TOP, 1, laneH, 0xbfe8f2).setOrigin(0, 0).setDepth(2).setAlpha(0.3);
+      // pebbles on the bottom, and weed at the edges
+      for (let i = 0; i < 16; i++) {
+        const py = LANE_TOP + ((i * 31) % (laneH - 6)) + 3;
+        scene.add.circle(near + inward * (2 + (i % 3)), py, 0.9, 0x6f8f86).setDepth(1).setAlpha(0.55);
+      }
+      for (let i = 0; i < 10; i++) {
+        const py = LANE_TOP + ((i * 47) % (laneH - 8)) + 4;
+        const weed = scene.add.rectangle(near + inward * 1, py, 1, 4 + (i % 3), 0x2f7a5a).setOrigin(0.5, 1).setDepth(2).setAlpha(0.8);
+        sway.push({ art: weed, x0: weed.x, give: 1.6, phase: Math.random() * 6.28 });
+      }
     }
-    scene.add.rectangle(LANE_L, LANE_TOP, LANE_W, laneH, 0xb9884f).setOrigin(0, 0);
-    // ---- THE BOARDS.  Seven of them, each a slightly different tone, because
-    // no two planks in a floor came off the same part of the tree.
-    const BOARDS = 7;
+    // ---- AND THE FISH.  Two a pond, nose-first, turning at the ends.
+    for (let i = 0; i < 4; i++) {
+      const lane = (i % 2) as 0 | 1;
+      const body = scene.add.container(0, 0, [
+        scene.add.ellipse(0, 0, 5, 2.6, i % 2 ? 0xff9a52 : 0xffd45e),
+        scene.add.triangle(-3.4, 0, 0, 0, 3, -2, 3, 2, i % 2 ? 0xe8813a : 0xe8bc46),
+        scene.add.circle(1.6, -0.4, 0.6, 0x1a2a2e),
+      ]).setDepth(3);
+      fish.push({
+        art: body, lane, dir: i % 2 ? 1 : -1,
+        x: GUTTER_X[lane], y: LANE_TOP + 20 + i * 24,
+        speed: 9 + Math.random() * 7, bob: Math.random() * 6.28,
+      });
+    }
+    // ---- THE BOARDS.
+    //
+    // EVERY EDGE IS ON A WHOLE PIXEL NOW, and that is the whole of why this
+    // looked dirty.  The seams were 0.8px wide at x + 11.5 and the highlight
+    // 0.5px at x + 0.4: on a 320x180 buffer blown up with NEAREST, a rectangle
+    // narrower than a pixel does not draw a thin line, it drops a partial
+    // sample into whichever pixel it lands in -- so every board edge was a
+    // smear of half-tone rather than an edge, twenty-one of them down the lane.
+    //
+    // Twelve boards of exactly seven pixels, one pixel of seam, and the tone
+    // runs as a SMOOTH ARCH across the lane -- darker at the gutters, lightest
+    // down the middle where the house lights fall -- instead of seven tones
+    // picked at random, which read as noise rather than as a polished floor.
+    const BOARDS = 12;
     const bw = LANE_W / BOARDS;
-    const grain = [0xc59255, 0xb9884f, 0xc08b52, 0xb07f48, 0xc59255, 0xb5824b, 0xbe8b50];
     for (let i = 0; i < BOARDS; i++) {
-      scene.add.rectangle(LANE_L + i * bw, LANE_TOP, bw, laneH, grain[i]).setOrigin(0, 0);
-      // the seam between this board and the next, and the light on its edge
-      scene.add.rectangle(LANE_L + (i + 1) * bw - 0.5, LANE_TOP, 0.8, laneH, 0x8a6035).setOrigin(0, 0).setAlpha(0.75);
-      scene.add.rectangle(LANE_L + i * bw + 0.4, LANE_TOP, 0.5, laneH, 0xe0b982).setOrigin(0, 0).setAlpha(0.22);
-      // a few knots and short grain marks down each board
-      for (let k = 0; k < 3; k++) {
-        const gy = LANE_TOP + 8 + ((i * 37 + k * 53) % (laneH - 20));
-        scene.add.rectangle(LANE_L + i * bw + 2, gy, bw - 4, 1, 0x9a6d3c).setOrigin(0, 0).setAlpha(0.3);
+      const bx = LANE_L + i * bw;
+      // 0 at the gutters, 1 down the centre line
+      const arch = 1 - Math.abs((i + 0.5) / BOARDS - 0.5) * 2;
+      const lift = Math.round(arch * 22);
+      const board = ((0xa8 + lift) << 16) | ((0x78 + Math.round(lift * 0.78)) << 8) | (0x42 + Math.round(lift * 0.5));
+      scene.add.rectangle(bx, LANE_TOP, bw, laneH, board).setOrigin(0, 0);
+      // one pixel of seam on the gutter side of each board
+      scene.add.rectangle(bx, LANE_TOP, 1, laneH, 0x7e5730).setOrigin(0, 0).setAlpha(0.55);
+      // and the grain: two long marks per board, a pixel high, well inside it
+      for (let k = 0; k < 2; k++) {
+        const gy = LANE_TOP + 10 + ((i * 29 + k * 61) % (laneH - 26));
+        const gh = 6 + ((i + k) % 3) * 5;
+        scene.add.rectangle(bx + 2, gy, bw - 4, 1, 0x8a6035).setOrigin(0, 0).setAlpha(0.22);
+        scene.add.rectangle(bx + 3, gy + gh, bw - 6, 1, 0xd6a874).setOrigin(0, 0).setAlpha(0.14);
       }
     }
     // ---- THE HOUSE LIGHTS ON THE POLISH.
     //
-    // A long soft band down the middle of the lane and a hard glint near the
-    // foul line: it is the one thing that says the surface is polished rather
-    // than matte, and it is what makes the ball look like it is ON something.
-    scene.add.rectangle(LANE_L + LANE_W * 0.3, LANE_TOP, LANE_W * 0.26, laneH, 0xfff0c9).setOrigin(0, 0).setAlpha(0.07);
-    scene.add.rectangle(LANE_L + LANE_W * 0.52, LANE_TOP, LANE_W * 0.1, laneH, 0xfff0c9).setOrigin(0, 0).setAlpha(0.05);
-    scene.add.ellipse(LANE_L + LANE_W / 2, FOUL_Y - 14, LANE_W * 0.8, 20, 0xfff0c9).setAlpha(0.06);
+    // Two soft bands down the lane and a pool at the foul line.  Whole pixels
+    // and a shade lighter than before, because the arch in the boards is now
+    // doing most of the work these used to be asked to do on their own.
+    scene.add.rectangle(LANE_L + 22, LANE_TOP, 14, laneH, 0xfff0c9).setOrigin(0, 0).setAlpha(0.05);
+    scene.add.rectangle(LANE_L + 48, LANE_TOP, 7, laneH, 0xfff0c9).setOrigin(0, 0).setAlpha(0.04);
+    scene.add.ellipse(LANE_L + LANE_W / 2, FOUL_Y - 14, 68, 20, 0xfff0c9).setAlpha(0.05);
     scene.add.rectangle(LANE_L, FOUL_Y, LANE_W, 1, PALETTE.blood).setOrigin(0, 0);
     scene.add.rectangle(LANE_L, FOUL_Y + 1, LANE_W, 1, 0x000000).setOrigin(0, 0).setAlpha(0.35);
     // the aiming arrows a real lane has, a third of the way down
@@ -387,7 +474,7 @@ export const bowling: MinigameModule = {
       scene.add.triangle(ax, ay, 0, 5, 3, 0, 6, 5, 0x6b4a2a).setOrigin(0.5, 0.5);
     }
     // the pin deck, a shade darker than the approach
-    scene.add.rectangle(LANE_L, LANE_TOP, LANE_W, 46, 0x8d6535).setOrigin(0, 0).setAlpha(0.5);
+    scene.add.rectangle(LANE_L, LANE_TOP, LANE_W, 46, 0x8d6535).setOrigin(0, 0).setAlpha(0.45);
 
     // ---- THE HOUSE THIS LANE BELONGS TO.
     //
@@ -437,15 +524,15 @@ export const bowling: MinigameModule = {
       // `ROUND 1/3  -  BALL 1`, about a hundred and twenty pixels of text
       // from x8, and the masking board starts at x110 -- so the last four
       // characters were printed over the back wall.
-      round: text(scene, 8, 22, '', PALETTE.cream),
+      round: text(scene, 8, 22, '', PALETTE.cream).setDepth(29),
       // Beside it, not under it: the line below is the top edge of the score
       // panel.  `ROUND 1/3` ends at x62 and `BALL 1` runs x70..106, which
       // leaves it four pixels clear of the masking board at x110.
-      ball: text(scene, 70, 22, '', PALETTE.cream),
+      ball: text(scene, 70, 22, '', PALETTE.cream).setDepth(29),
       you: text(scene, 8, 40, '', PALETTE.tealLight),
       cpu: text(scene, 8, 50, '', PALETTE.neon),
-      best: text(scene, GAME_W - 6, 21, '', PALETTE.gold).setOrigin(1, 0),
-      turn: centerText(scene, 58, 100, '', PALETTE.fog),
+      best: text(scene, GAME_W - 6, 21, '', PALETTE.gold).setOrigin(1, 0).setDepth(29),
+      turn: centerText(scene, 58, 100, '', PALETTE.cream).setDepth(29),
       meter: scene.add.rectangle(GAME_W - 24, 150, 6, 0, PALETTE.gold).setOrigin(0, 1),
       // The shot you have dialled up, said in words.  Which of the two shots
       // is in your hand is a decision the player makes before every ball, so
@@ -453,11 +540,27 @@ export const bowling: MinigameModule = {
       hook: text(scene, 8, 60, '', PALETTE.gold),
     };
     scene.add.rectangle(GAME_W - 25, 96, 8, 54, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
-    text(scene, GAME_W - 40, 154, 'HOLD', PALETTE.ash);
-    text(scene, GAME_W - 40, 162, 'SPACE', PALETTE.ash);
-    text(scene, 8, 138, 'A/D MOVE', PALETTE.ash);
-    text(scene, 8, 146, '←→ AIM', PALETTE.ash);
-    text(scene, 8, 154, 'Q/E HOOK', PALETTE.ash);
+    // ---- SOMETHING FOR THE READOUTS TO SIT ON.
+    //
+    // Every one of these used to be pale text on a black void and could be
+    // set straight onto it.  The void is a sunlit lawn now: ash grey on
+    // bright green is not a control hint, and the header, the high score and
+    // the turn caption all went the same way.  Dark plates, under the text
+    // and over the garden, sized to what they carry.
+    const plate = (x: number, y: number, w: number, h: number): void => {
+      scene.add.rectangle(x, y, w, h, 0x102214).setOrigin(0, 0).setDepth(28).setAlpha(0.66);
+    };
+    plate(0, 18, GAME_W, 13);
+    plate(4, 134, 62, 28);
+    plate(GAME_W - 46, 150, 42, 20);
+    plate(12, 94, 92, 13);
+    for (const t of [
+      text(scene, GAME_W - 40, 154, 'HOLD', PALETTE.bone),
+      text(scene, GAME_W - 40, 162, 'SPACE', PALETTE.bone),
+      text(scene, 8, 138, 'A/D MOVE', PALETTE.bone),
+      text(scene, 8, 146, '←→ AIM', PALETTE.bone),
+      text(scene, 8, 154, 'Q/E HOOK', PALETTE.bone),
+    ]) t.setDepth(29);
     refreshHud();
 
     const kb = scene.input.keyboard;
@@ -539,6 +642,9 @@ export const bowling: MinigameModule = {
   update(_t: number, delta: number) {
     if (over || !ballBody) return;
     const dt = Math.min(delta, 40) / 1000;
+    // The garden does not stop for the scoring.  Called before every early
+    // return below, and it touches nothing the game reads.
+    stepGarden(dt);
 
     // Not while the last roll is still being counted.  The walk below clamps
     // the ball back onto the boards, and a ball that has just died in the
@@ -599,6 +705,220 @@ export const bowling: MinigameModule = {
   },
 };
 
+/**
+ * A SUNNY GARDEN, BUILT BACK TO FRONT.
+ *
+ * Sky, then the far treeline, then the hedge, then the lawn the lane is laid
+ * on, then the planting either side of it.  Every layer is warmer and a shade
+ * lighter than the one behind it, which is the whole of how depth happens on
+ * a flat canvas.
+ *
+ * Anything that should move in the breeze is pushed onto `sway` with a
+ * `give` -- how far the wind bends it -- so one loop in `update` animates the
+ * lot and a leaf and a tree branch lean by the same wind at different
+ * amounts.  Trunks have no give; blossom has a lot.
+ */
+function garden(scene: Phaser.Scene): void {
+  const bend = (o: Phaser.GameObjects.GameObject & { x: number; angle: number }, give: number): void => {
+    sway.push({ art: o, x0: o.x, give, phase: Math.random() * Math.PI * 2 });
+  };
+  // ---- SKY, warm at the horizon and deeper overhead.
+  scene.add.rectangle(0, 18, GAME_W, 162, 0x7cc4ea).setOrigin(0, 0);
+  scene.add.rectangle(0, 18, GAME_W, 26, 0x62b2e2).setOrigin(0, 0);
+  scene.add.rectangle(0, 58, GAME_W, 22, 0x9fd6ee).setOrigin(0, 0).setAlpha(0.7);
+  // the sun, off to one side, with its glare
+  scene.add.circle(268, 40, 26, 0xfff6c8).setAlpha(0.14);
+  scene.add.circle(268, 40, 16, 0xfff6c8).setAlpha(0.3);
+  scene.add.circle(268, 40, 9, 0xfffdf0).setAlpha(0.95);
+  for (const [cx, cy, cw] of [[40, 34, 34], [120, 28, 24], [210, 44, 28], [292, 62, 20]] as const) {
+    for (let i = 0; i < 4; i++) {
+      const c = scene.add.ellipse(cx + (i - 1.5) * (cw / 4), cy + (i % 2) * 2, cw / 2 + i, 6, 0xffffff).setAlpha(0.8);
+      bend(c, 0.25);
+    }
+  }
+  // ---- THE FAR TREELINE: three bands, each nearer and greener.
+  scene.add.rectangle(0, 74, GAME_W, 16, 0x4d7f57).setOrigin(0, 0);
+  for (let i = 0; i < 26; i++) {
+    const t = scene.add.ellipse((i * 13) % (GAME_W + 12) - 6, 76 + (i % 3) * 2, 18 + (i % 4) * 5, 13, i % 2 ? 0x437349 : 0x4f8355);
+    bend(t, 0.5);
+  }
+  scene.add.rectangle(0, 86, GAME_W, 12, 0x3c6b45).setOrigin(0, 0);
+  // ---- THE HEDGE behind the pin end.
+  scene.add.rectangle(0, 92, GAME_W, 14, 0x2f5a37).setOrigin(0, 0);
+  for (let i = 0; i < 30; i++) {
+    const h = scene.add.ellipse((i * 11) % (GAME_W + 10) - 5, 93 + (i % 2) * 3, 14, 10, i % 3 ? 0x376542 : 0x2b5233);
+    bend(h, 0.7);
+  }
+  scene.add.rectangle(0, 104, GAME_W, 2, 0x24462c).setOrigin(0, 0);
+  // ---- THE LAWN the whole thing stands on.
+  scene.add.rectangle(0, 100, GAME_W, 80, 0x54964f).setOrigin(0, 0);
+  scene.add.rectangle(0, 100, GAME_W, 3, 0x66ab5c).setOrigin(0, 0).setAlpha(0.7);
+  // mown stripes, because a kept lawn has them
+  for (let i = 0; i < 9; i++) {
+    scene.add.rectangle(0, 106 + i * 9, GAME_W, 5, i % 2 ? 0x4d8c49 : 0x5a9e54).setOrigin(0, 0).setAlpha(0.55);
+  }
+  // grass tufts, thickest at the edges where nobody walks
+  for (let i = 0; i < 90; i++) {
+    const gx = (i * 37 + (i % 7) * 5) % GAME_W;
+    if (gx > LANE_L - 26 && gx < LANE_L + LANE_W + 26) continue;
+    const g = scene.add.rectangle(gx, 108 + ((i * 23) % 68), 1, 3 + (i % 3), 0x6fb862).setOrigin(0.5, 1).setAlpha(0.85);
+    bend(g, 2.2);
+  }
+  // ---- TREES either side, behind the lane, with a trunk that does not move
+  // and a canopy that does.
+  for (const [tx, scale] of [[16, 1], [300, 1], [46, 0.72], [274, 0.72]] as const) {
+    scene.add.rectangle(tx, 96, 5 * scale, 34 * scale, 0x5a3f25).setOrigin(0.5, 0);
+    scene.add.rectangle(tx - 1.5 * scale, 96, 1.5 * scale, 34 * scale, 0x6e4f2f).setOrigin(0.5, 0).setAlpha(0.8);
+    for (const [ox, oy, r, col] of [[0, -6, 17, 0x3f7a46], [-9, 0, 13, 0x4a8c50], [9, -2, 13, 0x4a8c50], [0, -14, 12, 0x5a9e5c]] as const) {
+      const cup = scene.add.circle(tx + ox * scale, 96 + oy * scale, r * scale, col);
+      bend(cup, 1.5 + r * 0.05);
+    }
+    // blossom, which is the lightest thing in the picture and moves most
+    for (let i = 0; i < 7; i++) {
+      const bl = scene.add.circle(tx + (Math.random() - 0.5) * 30 * scale, 84 + Math.random() * 22, 1.6, i % 2 ? 0xffd6e8 : 0xfff0c9).setAlpha(0.9);
+      bend(bl, 3.2);
+    }
+  }
+  // ---- FLOWER BEDS along the approach, clear of the lane itself.
+  const PETAL = [0xff8fb1, 0xffd45e, 0xd08cf0, 0xff9a52, 0xfff0f5];
+  for (let i = 0; i < 34; i++) {
+    const side = i % 2 ? -1 : 1;
+    const fx = LANE_L + (side < 0 ? -14 - ((i * 7) % 26) : LANE_W + 14 + ((i * 7) % 26));
+    const fy = 112 + ((i * 19) % 62);
+    const stem = scene.add.rectangle(fx, fy, 1, 5, 0x3f7a46).setOrigin(0.5, 1);
+    const head = scene.add.circle(fx, fy - 5, 2.2, PETAL[i % PETAL.length]);
+    const eye = scene.add.circle(fx, fy - 5, 0.9, 0xfff6c8);
+    bend(stem, 2.6); bend(head, 2.9); bend(eye, 2.9);
+  }
+  // ---- BUSHES at the corners, and a couple of garden ornaments.
+  for (const [bx, by, bw] of [[10, 150, 22], [GAME_W - 10, 150, 22], [8, 118, 16], [GAME_W - 8, 118, 16]] as const) {
+    for (let i = 0; i < 5; i++) {
+      const bb = scene.add.ellipse(bx + (i - 2) * (bw / 5), by - (i % 2) * 3, bw / 2, 9, i % 2 ? 0x3f7a46 : 0x356b3c);
+      bend(bb, 1.1);
+    }
+  }
+  // a little stone frog on a plinth, because it is his garden
+  for (const px of [30, GAME_W - 30]) {
+    scene.add.rectangle(px, 170, 12, 5, 0x9a9384).setOrigin(0.5, 1);
+    scene.add.ellipse(px, 164, 10, 7, 0xb3ad9d);
+    scene.add.ellipse(px - 2.4, 161, 3, 3, 0xc8c3b4);
+    scene.add.ellipse(px + 2.4, 161, 3, 3, 0xc8c3b4);
+    scene.add.rectangle(px - 2.4, 161, 1, 1.4, 0x6b665c);
+    scene.add.rectangle(px + 2.4, 161, 1, 1.4, 0x6b665c);
+  }
+}
+
+/**
+ * THE BREEZE, AND EVERYTHING THAT ANSWERS TO IT.
+ *
+ * One wind value drives the whole garden.  It is a slow base sway with an
+ * occasional gust laid over it -- `gustIn` counts down to the next one and
+ * they come at uneven intervals, because wind that pulses on a fixed beat
+ * reads as a machine rather than as weather.
+ *
+ * Each thing that moves carries its own `give` (how far this wind bends it)
+ * and its own `phase` (so a whole hedge does not lean as one object), which
+ * is what turns a single number into a garden full of separate movement.
+ *
+ * NOTHING IN HERE TOUCHES THE GAME.  The ball, the pins and the oil never
+ * read `breeze`, and this function never writes to any of them.
+ */
+function stepGarden(dt: number): void {
+  if (!scene0) return;
+  windT += dt;
+  // the gust: a short push that fades, arriving every few seconds
+  gustIn -= dt;
+  if (gustIn <= 0) {
+    gust = 0.8 + Math.random() * 1.3;
+    gustIn = 2.5 + Math.random() * 4.5;
+  }
+  if (gust > 0) gust = Math.max(0, gust - dt * 0.7);
+  breeze = Math.sin(windT * 0.55) * 0.5 + Math.sin(windT * 1.7) * 0.22 + gust * 0.9;
+
+  for (const w of sway) {
+    const local = breeze + Math.sin(windT * 1.3 + w.phase) * 0.18;
+    w.art.x = w.x0 + local * w.give;
+    w.art.angle = local * w.give * 1.4;
+  }
+
+  // ---- LEAVES BLOWING ACROSS.  More of them in a gust, and they go the way
+  // the wind is going.
+  if (Math.random() < dt * (1.1 + gust * 3)) {
+    const leaf = scene0.add.ellipse(
+      breeze >= 0 ? -4 : GAME_W + 4,
+      100 + Math.random() * 70,
+      3.4, 2, Math.random() < 0.5 ? 0x6fb862 : 0xd8b45a,
+    // Depth 4: above the lane and the water, BELOW the ball at 20 and the
+    // pins at 18.  A leaf is scenery and must never be mistaken for something
+    // on the lane, nor hide the thing the player is aiming at.
+    ).setDepth(4).setAlpha(0.9);
+    drift.push({ art: leaf, vx: (breeze >= 0 ? 1 : -1) * (26 + Math.random() * 40), vy: -4 + Math.random() * 12, spin: 90 + Math.random() * 200 });
+  }
+  for (let i = drift.length - 1; i >= 0; i--) {
+    const d = drift[i];
+    d.art.x += d.vx * dt * (1 + gust * 0.8);
+    d.art.y += (d.vy + Math.sin(windT * 3 + d.spin) * 6) * dt;
+    d.art.angle += d.spin * dt;
+    if (d.art.x < -12 || d.art.x > GAME_W + 12 || d.art.y > 182) {
+      (d.art as unknown as { destroy(): void }).destroy();
+      drift.splice(i, 1);
+    }
+  }
+
+  // ---- THE FISH, up and down their own pond, turning at the ends.
+  for (const f of fish) {
+    f.bob += dt;
+    f.y += f.dir * f.speed * dt;
+    if (f.y < LANE_TOP + 6) { f.y = LANE_TOP + 6; f.dir = 1; }
+    if (f.y > FOUL_Y - 4) { f.y = FOUL_Y - 4; f.dir = -1; }
+    f.art.setPosition(f.x + Math.sin(f.bob * 2.6) * 1.2, f.y);
+    // nose the way it is going, and flick as it swims
+    f.art.setAngle(f.dir > 0 ? 90 : -90);
+    f.art.setScale(1, 1 + Math.sin(f.bob * 8) * 0.14);
+    // a ring on the surface now and then
+    if (Math.random() < dt * 0.55) ripple(f.x, f.y, f.lane);
+  }
+  // wind ripples, which is the water answering the same breeze
+  if (Math.random() < dt * (1.2 + Math.abs(breeze) * 2.2)) {
+    const lane = (Math.random() < 0.5 ? 0 : 1) as 0 | 1;
+    ripple(GUTTER_X[lane], LANE_TOP + 8 + Math.random() * (FOUL_Y - LANE_TOP - 16), lane);
+  }
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const r = ripples[i];
+    r.t += dt;
+    r.art.setSize(2 + r.t * 9, 1 + r.t * 3.2);
+    r.art.setAlpha(Math.max(0, 0.5 - r.t * 0.6));
+    if (r.t > 0.85) { r.art.destroy(); ripples.splice(i, 1); }
+  }
+}
+
+/** One ring on the water.  Drawing only. */
+function ripple(x: number, y: number, lane: 0 | 1): void {
+  if (!scene0 || ripples.length > 18) return;
+  const art = scene0.add.ellipse(x, y, 2, 1, 0xd8f4fa).setDepth(3).setAlpha(0.5).setStrokeStyle(1, 0xe8fbff, 0.6);
+  art.setFillStyle();
+  ripples.push({ art, lane, t: 0 });
+}
+
+/** The ball going into the water rather than into a channel. */
+function splash(x: number, y: number): void {
+  if (!scene0) return;
+  audio.sfx('hop_wet', 0.55);
+  for (let i = 0; i < 9; i++) {
+    const d = scene0.add.circle(x, y, 1 + Math.random(), 0xd8f4fa).setDepth(22).setAlpha(0.9);
+    scene0.tweens.add({
+      targets: d,
+      x: x + (Math.random() - 0.5) * 16,
+      y: y - 5 - Math.random() * 9,
+      alpha: 0,
+      duration: 420 + Math.random() * 260,
+      ease: 'Quad.easeOut',
+      onComplete: () => d.destroy(),
+    });
+  }
+  for (let i = 0; i < 3; i++) scene0.time.delayedCall(i * 110, () => ripple(x, y, x < LANE_L ? 0 : 1));
+}
+
 function rack(): void {
   if (!scene0) return;
   for (const p of pins) p.body.destroy();
@@ -648,22 +968,40 @@ function layOil(spec: OilSpec[] = rollOil()): void {
   for (const o of oil) for (const part of o.parts) part.destroy();
   oil = [];
   for (const s of spec) {
-    const x = LANE_L + s.l * LANE_W;
-    const w = (s.r - s.l) * LANE_W;
-    const y = s.top;
-    const h = s.bottom - s.top;
+    // ---- ROUNDED, because a patch edge at x151.7 is not an edge.
+    //
+    // These come out of `rollOil` as fractions of the lane, so every patch
+    // had fractional corners and every one of its four borders landed as a
+    // half-lit pixel.  The physics reads `oilAt` against the same numbers, so
+    // rounding here keeps the picture and the puddle the same shape.
+    const x = Math.round(LANE_L + s.l * LANE_W);
+    const w = Math.round((s.r - s.l) * LANE_W);
+    const y = Math.round(s.top);
+    const h = Math.round(s.bottom - s.top);
+    // ---- AND IT IS A SHEEN, NOT A SLAB.
+    //
+    // It was a flat 0x4a3a52 at 0.55 -- a grey-purple sheet heavy enough to
+    // kill the grain under it, with a pale blue line top and bottom.  What
+    // oil on a polished lane looks like from above is the boards going
+    // slightly darker and slightly colder while you can still see them, with
+    // the light catching the leading edge.  Half the alpha, a colder tint,
+    // and the top lip warm rather than blue.
     const parts: Phaser.GameObjects.GameObject[] = [
-      scene0.add.rectangle(x, y, w, h, 0x4a3a52).setOrigin(0, 0).setAlpha(0.55).setDepth(4),
-      scene0.add.rectangle(x, y, w, 1, 0x8fa8c8).setOrigin(0, 0).setAlpha(0.45).setDepth(5),
-      scene0.add.rectangle(x, y + h - 1, w, 1, 0x8fa8c8).setOrigin(0, 0).setAlpha(0.45).setDepth(5),
+      scene0.add.rectangle(x, y, w, h, 0x2f3a4a).setOrigin(0, 0).setAlpha(0.26).setDepth(4),
+      scene0.add.rectangle(x, y, w, 1, 0xe8dcc0).setOrigin(0, 0).setAlpha(0.3).setDepth(5),
+      scene0.add.rectangle(x, y + h - 1, w, 1, 0x1a1a24).setOrigin(0, 0).setAlpha(0.3).setDepth(5),
+      scene0.add.rectangle(x, y, 1, h, 0xe8dcc0).setOrigin(0, 0).setAlpha(0.12).setDepth(5),
+      scene0.add.rectangle(x + w - 1, y, 1, h, 0x1a1a24).setOrigin(0, 0).setAlpha(0.2).setDepth(5),
     ];
     // Chevrons down the middle of the patch, pointing the way it pushes.
+    // Cream rather than ice blue: the patch is warm wood seen through oil,
+    // and the only cold thing on the lane was these.
     for (let cy = y + 7; cy < y + h - 4; cy += 11) {
-      const cx = x + w / 2;
+      const cx = Math.round(x + w / 2);
       parts.push(
         scene0.add
-          .triangle(cx, cy, 0, 0, 0, 6, s.push * 4, 3, 0x9fb8d8)
-          .setAlpha(0.7)
+          .triangle(cx, cy, 0, 0, 0, 6, s.push * 4, 3, 0xe8dcc0)
+          .setAlpha(0.5)
           .setDepth(6),
       );
     }
@@ -757,9 +1095,13 @@ function enterGutter(side: -1 | 1): void {
   ball.vx = 0;
   ball.x = GUTTER_X[side < 0 ? 0 : 1];
   ballBody?.setFillStyle(PALETTE.slate);
+  // ---- INTO THE WATER.  The gutter is a pond now, so it makes a pond noise
+  // and throws a pond's worth of water about.  Nothing about where the ball
+  // goes or what it scores changed -- this is the same `enterGutter` it has
+  // always been, with a splash on the end of it.
+  splash(ball.x, ball.y);
   if (ball.y > DECK_Y && scene0) {
-    audio.sfx('ui_hover', 0.4);
-    const t = centerText(scene0, LANE_L + LANE_W / 2, 96, 'GUTTER', PALETTE.fog).setDepth(50);
+    const t = centerText(scene0, LANE_L + LANE_W / 2, 96, 'IN THE POND', PALETTE.bone).setDepth(50);
     scene0.tweens.add({ targets: t, alpha: 0, duration: 1400, onComplete: () => t.destroy() });
   }
 }

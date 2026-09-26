@@ -1,5 +1,13 @@
 /**
- * Basketball Hoops.  PRD §9.5 — Medium, 3 tokens in, 6 out.
+ * LILY HOOPS.  PRD §9.5 — Medium, 5 tokens in, 10 out.
+ *
+ * A POND SPORT, not basketball with frogs drawn on it.  Froggy shoots from a
+ * half-sunk log at one end; the hoop is carried across the water in the mouth
+ * of the big frog of the pond, who swims a steady beat and gets quicker every
+ * time you score through it.  The pond around all of it is alive -- reeds and
+ * trees in the breeze, lily pads riding the swell, fish working the shallows,
+ * dragonflies over the top -- and none of it touches the shot.
+ *
  *
  * Hold SPACE to charge, release to shoot; W and S tilt the shot while you do.
  * The meter bounces back down at the top so there is no infinite hold.  Five
@@ -41,7 +49,6 @@ import { audio } from '../core/audio';
 import { centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
-import { backdrop, silhouettes } from './decor';
 
 
 const CHARGE_MS = 1200;
@@ -103,9 +110,27 @@ let chargeDir = 1;
 let ball: Phaser.GameObjects.Arc | null = null;
 let ballVel = { x: 0, y: 0 };
 let inFlight = false;
-let hoopX = 220;
-let hoopDir = 1;
-let hoopSpeed = 60;
+/**
+ * WHERE THE HOOP IS, AND WHY IT IS A SINE.
+ *
+ * It used to slide at a constant speed and turn round at the walls, which is
+ * predictable but not smooth: the carrier stopped dead and reversed, twice a
+ * length, and a shot timed against it had to be timed against a corner.
+ *
+ * It floats now -- `HOOP_MID` plus a sine -- so it eases at the ends and runs
+ * quickest through the middle, which is the same path a frog swimming a beat
+ * would take.  It is still perfectly learnable, and it is now solvable in
+ * CLOSED FORM, which matters more than it sounds: `hoopAt` no longer walks
+ * the rim forward a sixtieth at a time to guess where it will be when the
+ * ball arrives, it simply evaluates the sine at that moment.  The arc's
+ * promise is exact rather than approximate.
+ */
+const HOOP_MID = 214;
+const HOOP_SWING = 62;
+let hoopPhase = 0;
+/** Radians a second.  Every score winds it up; see `score`. */
+let hoopRate = 0.85;
+let hoopX = HOOP_MID;
 let makes = 0;
 let timeLeft = ROUND_MS;
 let over = false;
@@ -130,20 +155,53 @@ let ringBody: Phaser.GameObjects.Arc | null = null;
 let flames: Phaser.GameObjects.Graphics | null = null;
 let sceneRef: Phaser.Scene | null = null;
 
+/**
+ * THE POND, THE CARRIER AND THE SHOOTER.
+ *
+ * Every one of these is drawing.  Nothing in the pond is read by the shot,
+ * the hoop or the scoring -- the breeze moves reeds, not the ball -- and the
+ * shooter's crouch and leap are a pose laid over a launch point that never
+ * moves, so the arc stays honest about where the ball comes from.
+ */
+let carrier: Phaser.GameObjects.Container | null = null;
+let carrierBody: Phaser.GameObjects.Container | null = null;
+let carrierHead: Phaser.GameObjects.Container | null = null;
+let carrierEyes: Phaser.GameObjects.Container[] = [];
+let blinkIn = 2.4;
+let blinkT = 0;
+let shooter: Phaser.GameObjects.Container | null = null;
+/** 0 standing, 1 fully crouched; and the leap, which decays after a release. */
+let crouch = 0;
+let leap = 0;
+let ballMark: Phaser.GameObjects.Container | null = null;
+interface Reed { art: Phaser.GameObjects.GameObject & { x: number; angle: number }; x0: number; give: number; phase: number; }
+let reeds: Reed[] = [];
+interface Swimmer { art: Phaser.GameObjects.Container; x: number; y: number; dir: 1 | -1; speed: number; bob: number; }
+let swimmers: Swimmer[] = [];
+let pads: Array<{ art: Phaser.GameObjects.Container; x0: number; y0: number; phase: number }> = [];
+let flyers: Array<{ art: Phaser.GameObjects.Container; t: number; y0: number; speed: number }> = [];
+let pondRings: Array<{ art: Phaser.GameObjects.Ellipse; t: number }> = [];
+let pondT = 0;
+let pondGust = 0;
+let gustIn = 3;
+
 export const hoops: MinigameModule = {
+  // The id stays `hoops`: the cabinet, its price, its reward, the high score
+  // table and the registry all key off it, and none of that is changing.
   id: 'hoops',
-  title: 'HOOPS',
+  title: 'LILY HOOPS',
   music: 'game_hoops',
   rules: '5 points in 60 seconds - streaks pay double',
   tutorial: {
     objective: [
       'SCORE 5 IN 60 SECONDS.',
-      'EVERY MAKE RUNS THE RIM FASTER + TIGHTER.',
+      'THE BIG FROG CARRIES THE HOOP AND SWIMS.',
+      'EVERY SCORE MAKES HIM QUICKER + TIGHTER.',
       'TWO IN A ROW LIGHTS THE BALL: MAKES PAY 2.',
       'THE DOTTED ARC IS GREEN WHEN IT GOES IN.',
     ],
     controls: [
-      ['HOLD SPACE', 'CHARGE, LET GO TO SHOOT'],
+      ['HOLD SPACE', 'CROUCH, LET GO TO LEAP'],
       ['W / S', 'TILT THE SHOT'],
     ],
   },
@@ -159,9 +217,9 @@ export const hoops: MinigameModule = {
     inFlight = false;
     makes = 0;
     timeLeft = ROUND_MS;
-    hoopSpeed = 60;
-    hoopX = 220;
-    hoopDir = 1;
+    hoopRate = 0.85;
+    hoopPhase = 0;
+    hoopX = HOOP_MID;
     over = false;
     hoopW = HOOP_W;
     streak = 0;
@@ -170,35 +228,120 @@ export const hoops: MinigameModule = {
     ringTimer = RING_EVERY_MS;
     sceneRef = scene;
 
-    // A gym: a dark wall, a crowd along the back, a boarded court floor.
-    backdrop(scene, 0x232a36, 0x1a1f28, { band: 0.2, speckleColor: 0xffd9a0 });
-    scene.add.rectangle(0, 34, GAME_W, 20, 0x2e3644).setOrigin(0, 0);
-    silhouettes(scene, 48, 26, 0x141a24, 0.9);
-    scene.add.rectangle(0, 54, GAME_W, 2, 0x3a4456).setOrigin(0, 0);
-    scene.add.rectangle(0, 160, GAME_W, 20, PALETTE.brown).setOrigin(0, 0);
-    scene.add.rectangle(0, 160, GAME_W, 2, PALETTE.brownLight).setOrigin(0, 0);
-    for (let x = 0; x < GAME_W; x += 24) scene.add.rectangle(x, 162, 1, 18, 0x5a3e26).setOrigin(0, 0);
-    scene.add.rectangle(GAME_W / 2, 161, 1, 19, PALETTE.cream).setOrigin(0.5, 0).setAlpha(0.5);
+    // ================= THE POND =================
+    //
+    // It was a gym: dark wall, a crowd along the back, boards underfoot.  The
+    // game is the same shot -- charge, tilt, release -- played somewhere else
+    // entirely.  Built back to front so the depth reads, and animated by
+    // `stepPond` from the update loop.
+    buildPond(scene);
 
-    backboard = scene.add.rectangle(hoopX, HOOP_Y - 18, 4, 24, PALETTE.bone).setOrigin(0.5, 0);
-    hoopRim = scene.add.rectangle(hoopX, HOOP_Y, hoopW, 2, PALETTE.ember).setOrigin(0.5, 0);
-    net = scene.add.rectangle(hoopX, HOOP_Y + 2, hoopW - 4, 8, PALETTE.cream).setOrigin(0.5, 0).setAlpha(0.3);
+    // ---- THE CARRIER: a big frog with a hoop in its mouth.
+    //
+    // The hoop is a hoop -- a rim, a backboard and a net, the same three
+    // objects the shot has always been tested against, at the same HOOP_Y --
+    // and the frog is underneath it holding the thing up.  Deliberately NOT a
+    // mouth shaped like a hoop: what the ball goes through is a basketball
+    // hoop, and what is carrying it is a frog.
+    carrier = scene.add.container(hoopX, HOOP_Y).setDepth(14);
+    const bigSkin = 0x4f9e55;
+    const bigDark = 0x2f6b36;
+    // Sized against Froggy, who is seventeen across: this one is twenty-six,
+    // so it reads as the BIG frog of the pond without becoming the pond.  It
+    // was forty-two, which at three hundred and twenty pixels wide is a
+    // landmark -- two green ellipses that read as lily pads with a hoop
+    // somewhere above them rather than as one animal holding one up.
+    carrierBody = scene.add.container(0, 26, [
+      scene.add.ellipse(0, 5, 30, 6, 0x123b2a).setAlpha(0.4),
+      scene.add.ellipse(0, 0, 26, 13, bigDark),
+      scene.add.ellipse(0, -1.5, 23, 11, bigSkin),
+      scene.add.ellipse(0, 2, 15, 5, 0xbfe3a8).setAlpha(0.6),
+      scene.add.ellipse(-10.5, 1.5, 8, 7, bigDark),
+      scene.add.ellipse(10.5, 1.5, 8, 7, bigDark),
+    ]);
+    // The head sits directly under the rim with the post in its jaw, so the
+    // chain from mouth to hoop is one unbroken object.
+    carrierHead = scene.add.container(0, 13, [
+      scene.add.ellipse(0, 0, 18, 11, bigSkin),
+      scene.add.ellipse(0, 2, 12, 4, 0xbfe3a8).setAlpha(0.5),
+      // the jaw clamped round the post, and the post itself running up to the
+      // rim at HOOP_Y
+      scene.add.rectangle(0, -7, 3, 14, 0x7a5a34),
+      scene.add.ellipse(0, -1, 8, 4, bigDark),
+    ]);
+    carrierEyes = [-5, 5].map((sx) =>
+      scene.add.container(sx, -5, [
+        scene.add.ellipse(0, 0, 7, 6.4, bigSkin),
+        scene.add.ellipse(0, 0, 5, 4.6, PALETTE.cream),
+        scene.add.ellipse(0, 0.3, 2.4, 2.8, 0x14251a),
+        scene.add.circle(-1, -1.1, 0.8, 0xffffff).setAlpha(0.9),
+      ]),
+    );
+    carrier.add([carrierBody, carrierHead, ...carrierEyes]);
+
+    // the hoop it is holding, at exactly the height the shot is tested at
+    backboard = scene.add.rectangle(hoopX, HOOP_Y - 18, 4, 24, PALETTE.bone).setOrigin(0.5, 0).setDepth(15);
+    hoopRim = scene.add.rectangle(hoopX, HOOP_Y, hoopW, 2, PALETTE.ember).setOrigin(0.5, 0).setDepth(16);
+    net = scene.add.rectangle(hoopX, HOOP_Y + 2, hoopW - 4, 8, PALETTE.cream).setOrigin(0.5, 0).setAlpha(0.3).setDepth(15);
 
     // The bonus ring lives up above the hoop and is only out some of the time.
     ringBody = scene.add.circle(-20, RING_Y, RING_R, 0x000000, 0).setStrokeStyle(2, PALETTE.gold).setDepth(19).setVisible(false);
     flames = scene.add.graphics().setDepth(21);
 
-    ball = scene.add.circle(LAUNCH.x, LAUNCH.y, 4, PALETTE.ember).setStrokeStyle(1, 0x8a3a10);
+    // ---- FROGGY, ON THE LOG, WITH THE BALL.
+    //
+    // He is a pose over a launch point that does not move: `LAUNCH` is still
+    // exactly where the ball leaves from and what the arc is drawn from, so
+    // crouching and leaping change how the shot LOOKS and nothing about where
+    // it comes from.  An aim you have lined up survives the jump.
+    const skin = 0x5aa85f;
+    const dark = 0x2f6b36;
+    shooter = scene.add.container(LAUNCH.x, LAUNCH.y + 8, [
+      scene.add.ellipse(0, 9, 22, 5, 0x1d5561).setAlpha(0.4),
+      scene.add.ellipse(-7, 4, 8, 7, dark),
+      scene.add.ellipse(7, 4, 8, 7, dark),
+      scene.add.ellipse(0, 0, 17, 14, skin),
+      scene.add.ellipse(0, 3, 11, 6, 0xdff0c8).setAlpha(0.65),
+      scene.add.ellipse(-5, -7, 7, 6.4, skin),
+      scene.add.ellipse(5, -7, 7, 6.4, skin),
+      scene.add.ellipse(-5, -7, 5, 4.6, PALETTE.cream),
+      scene.add.ellipse(5, -7, 5, 4.6, PALETTE.cream),
+      scene.add.ellipse(-5, -6.6, 2.4, 2.8, 0x14251a),
+      scene.add.ellipse(5, -6.6, 2.4, 2.8, 0x14251a),
+    ]).setDepth(12);
 
-    scene.add.rectangle(14, 96, 8, 54, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
-    meterFill = scene.add.rectangle(15, 149, 6, 0, PALETTE.gold).setOrigin(0, 1);
-    text(scene, 8, 154, 'HOLD', PALETTE.ash);
-    text(scene, 8, 162, 'SPACE', PALETTE.ash);
-    text(scene, 44, 162, 'W/S AIM', PALETTE.ash);
+    // ---- THE BALL, which is his.
+    //
+    // Same four-pixel circle the flight has always used -- the physics reads
+    // `ball.x/y` and nothing else -- with the seams a basketball has and a
+    // pair of eye-spots on it, so it is recognisably out of this pond.
+    ball = scene.add.circle(LAUNCH.x, LAUNCH.y, 4, 0x6fbf4e).setStrokeStyle(1, 0x2f6b36).setDepth(20);
+    ballMark = scene.add.container(LAUNCH.x, LAUNCH.y, [
+      scene.add.rectangle(0, 0, 8, 0.8, 0x2f6b36).setAlpha(0.85),
+      scene.add.rectangle(0, 0, 0.8, 8, 0x2f6b36).setAlpha(0.85),
+      scene.add.circle(-1.6, -1.6, 0.9, 0xeaf7d8),
+      scene.add.circle(1.6, -1.6, 0.9, 0xeaf7d8),
+    ]).setDepth(21);
+
+    // ---- THE READOUTS, on plates.
+    //
+    // These were pale grey set straight onto a dark gym.  On a sunlit pond
+    // that is not a control hint, and the shooter stands right where two of
+    // them were printed.
+    scene.add.rectangle(0, 18, GAME_W, 13, 0x123b2a).setOrigin(0, 0).setDepth(28).setAlpha(0.62);
+    scene.add.rectangle(4, 92, 26, 62, 0x123b2a).setOrigin(0, 0).setDepth(28).setAlpha(0.66);
+    scene.add.rectangle(GAME_W - 62, 162, 58, 14, 0x123b2a).setOrigin(0, 0).setDepth(28).setAlpha(0.66);
+    scene.add.rectangle(10, 96, 8, 40, PALETTE.ink).setOrigin(0, 0).setDepth(29).setStrokeStyle(1, PALETTE.steel);
+    meterFill = scene.add.rectangle(11, 135, 6, 0, PALETTE.gold).setOrigin(0, 1).setDepth(29);
+    text(scene, 7, 139, 'HOLD', PALETTE.bone).setDepth(29);
+    text(scene, 7, 147, 'SPACE', PALETTE.bone).setDepth(29);
+    text(scene, GAME_W - 58, 166, 'W/S AIM', PALETTE.bone).setDepth(29);
 
     arrow = scene.add.graphics().setDepth(30);
 
-    hud = centerText(scene, GAME_W / 2, 26, '', PALETTE.cream);
+    // Depth 29: the header plate is at 28, and without this the score was
+    // printed underneath the very thing put there to make it readable.
+    hud = centerText(scene, GAME_W / 2, 21, '', PALETTE.cream).setDepth(29);
     refreshHud();
 
     const kb = scene.input.keyboard;
@@ -294,15 +437,12 @@ export const hoops: MinigameModule = {
     refreshHud();
 
     // ---- hoop slides, and gets faster with every make
-    hoopX += hoopDir * hoopSpeed * dt;
-    if (hoopX > GAME_W - 30) {
-      hoopX = GAME_W - 30;
-      hoopDir = -1;
-    }
-    if (hoopX < 130) {
-      hoopX = 130;
-      hoopDir = 1;
-    }
+    hoopPhase += hoopRate * dt;
+    hoopX = hoopAt(0);
+    stepPond(dt);
+    stepCarrier(dt);
+    stepShooter(dt);
+    ballMark?.setPosition(ball.x, ball.y);
     hoopRim.x = hoopX;
     hoopRim.setSize(hoopW, 2);
     net.x = hoopX;
@@ -330,7 +470,7 @@ export const hoops: MinigameModule = {
         power = 0;
         chargeDir = 1;
       }
-      meterFill?.setSize(6, power * 52);
+      meterFill?.setSize(6, power * 38);
     } else if (!inFlight) {
       meterFill?.setSize(6, 0);
     }
@@ -377,7 +517,9 @@ export const hoops: MinigameModule = {
         Math.abs(crossX - hoopX) < hoopW / 2 - 2
       ) {
         scoredThisFlight = true;
-        hoopSpeed *= 1.15; // PRD §9.5
+        // Every score winds the float up: the carrier swims the same beat a
+        // little quicker, so the last point of a run is the hardest one.
+        hoopRate *= 1.13;
         hoopW = Math.max(HOOP_W_MIN, hoopW - HOOP_SHRINK);
         audio.sfx('chime');
         score(onFire ? FIRE_POINTS : 1, onFire ? 'ON FIRE' : '');
@@ -399,7 +541,11 @@ export const hoops: MinigameModule = {
       }
 
       drawFlames();
-      if (ball.y > 158 || ball.x > GAME_W + 10) reset();
+      // Down into the water, which is where a missed shot ends up.
+      if (ball.y > 158 || ball.x > GAME_W + 10) {
+        if (!scoredThisFlight && ball.y > 150) splashDown(ball.x, 158);
+        reset();
+      }
     }
   },
 
@@ -467,7 +613,63 @@ function score(points: number, note: string): void {
     const pop = centerText(sceneRef, ball.x, ball.y - 10, label, onFire ? PALETTE.gold : PALETTE.cream).setDepth(40);
     sceneRef.tweens.add({ targets: pop, y: pop.y - 16, alpha: 0, duration: 620, onComplete: () => pop.destroy() });
   }
+  celebrate();
   refreshHud();
+}
+
+/**
+ * THE POND ANSWERING A MADE SHOT.
+ *
+ * A splash under the hoop, rings going out from it, every lily pad in range
+ * rocking as the wave reaches it, and Froggy hopping on the spot.  A miss
+ * gets the small version of this from `splashDown` -- the difference between
+ * the two is most of what makes a score feel like one.
+ */
+function celebrate(): void {
+  if (!sceneRef) return;
+  audio.sfx('chime');
+  audio.sfx('hop_wet', 0.5);
+  const sx = hoopX;
+  const sy = HOOP_Y + 34;
+  for (let i = 0; i < 14; i++) {
+    const d = sceneRef.add.circle(sx + (Math.random() - 0.5) * 16, sy, 1 + Math.random() * 1.4, 0xd8f4fa).setDepth(22);
+    sceneRef.tweens.add({
+      targets: d,
+      x: d.x + (Math.random() - 0.5) * 42,
+      y: sy - 12 - Math.random() * 20,
+      alpha: 0,
+      duration: 520 + Math.random() * 380,
+      ease: 'Quad.easeOut',
+      onComplete: () => d.destroy(),
+    });
+  }
+  for (let i = 0; i < 3; i++) sceneRef.time.delayedCall(i * 110, () => pondRing(sx, sy, true));
+  // the wave reaching the pads
+  for (const pd of pads) {
+    const away = Math.abs(pd.x0 - sx);
+    if (away > 110) continue;
+    sceneRef.time.delayedCall(away * 3, () => {
+      sceneRef?.tweens.add({ targets: pd.art, y: pd.y0 - 3, duration: 130, yoyo: true, repeat: 1 });
+    });
+  }
+  // and him, pleased about it
+  if (shooter) {
+    sceneRef.tweens.add({ targets: shooter, y: LAUNCH.y - 2, duration: 130, yoyo: true, repeat: 2, ease: 'Quad.easeOut' });
+  }
+}
+
+/** A miss: the ball hits the water and that is all that happens. */
+function splashDown(x: number, y: number): void {
+  if (!sceneRef) return;
+  audio.sfx('drip', 0.5);
+  for (let i = 0; i < 5; i++) {
+    const d = sceneRef.add.circle(x + (Math.random() - 0.5) * 8, y, 1, 0xd8f4fa).setDepth(22).setAlpha(0.8);
+    sceneRef.tweens.add({
+      targets: d, x: d.x + (Math.random() - 0.5) * 18, y: y - 5 - Math.random() * 8, alpha: 0,
+      duration: 380 + Math.random() * 200, onComplete: () => d.destroy(),
+    });
+  }
+  pondRing(x, y);
 }
 
 /**
@@ -533,6 +735,237 @@ function launchSpeed(p: number): number {
  * descending crossing — the only one a ball can actually drop through a hoop
  * on.  Null when the shot never gets that high, which is itself the answer.
  */
+/**
+ * THE CARRIER, ALIVE.
+ *
+ * It swims with the hoop, so the whole container simply tracks `hoopX`; on
+ * top of that it breathes, its head lags a little behind the turn -- which is
+ * what makes a body look like it is being pulled along rather than slid -- and
+ * it blinks at uneven intervals.
+ */
+function stepCarrier(dt: number): void {
+  if (!carrier || !carrierHead || !carrierBody) return;
+  carrier.x = hoopX;
+  // the swim: a slow rise and fall, and a lean into the direction of travel
+  const drift = Math.cos(hoopPhase) * hoopRate * HOOP_SWING;
+  carrier.y = HOOP_Y + Math.sin(pondT * 1.5) * 1.2;
+  carrier.setAngle(Phaser.Math.Clamp(drift * 0.035, -7, 7));
+  carrierBody.setScale(1, 1 + Math.sin(pondT * 2.2) * 0.035);
+  // the head lags the turn and looks where it is going
+  carrierHead.x = Phaser.Math.Clamp(drift * 0.02, -3, 3);
+  carrierHead.y = 14 + Math.sin(pondT * 2.2 + 0.7) * 0.7;
+
+  blinkT += dt;
+  if (blinkT > blinkIn) {
+    blinkT = 0;
+    blinkIn = 1.8 + Math.random() * 3.4;
+  }
+  // a blink is the last eighth of a second before the timer resets
+  const shut = blinkT > blinkIn - 0.12 ? 0.1 : 1;
+  for (const e of carrierEyes) e.setScale(1, shut);
+}
+
+/**
+ * FROGGY, CROUCHING AND LEAPING.
+ *
+ * `crouch` follows the charge meter, so winding up a big shot visibly gathers
+ * him; `leap` is set on release and decays, which is the hop.  Both are
+ * drawing: `LAUNCH` never moves, so the arc and the flight are unaffected and
+ * an aim lined up before the jump is the aim that is taken.
+ */
+function stepShooter(dt: number): void {
+  if (!shooter) return;
+  const want = charging ? power : 0;
+  crouch += (want - crouch) * Math.min(1, dt * 9);
+  if (leap > 0) leap = Math.max(0, leap - dt * 3.4);
+  // the hop: up fast, down slower, which is what `leap` decaying through a
+  // sine gives without needing a second clock
+  const hop = Math.sin(leap * Math.PI) * 9;
+  shooter.y = LAUNCH.y + 8 + crouch * 5 - hop;
+  // gathered on the crouch, stretched out through the leap
+  shooter.setScale(1 + crouch * 0.16 - hop * 0.012, 1 - crouch * 0.24 + hop * 0.03);
+  shooter.setAngle(-aim * 4 - hop * 0.5);
+}
+
+// ==================================================================== the pond
+
+/** Push something onto the breeze, with how far this wind bends it. */
+function bend(o: Phaser.GameObjects.GameObject & { x: number; angle: number }, give: number): void {
+  reeds.push({ art: o, x0: o.x, give, phase: Math.random() * Math.PI * 2 });
+}
+
+/**
+ * A POND TO SHOOT OVER, built back to front.
+ *
+ * Sky, a far bank of trees, the reed line, then the water itself -- shallow
+ * and bright at the near edge where the shooter stands, deeper and colder
+ * away from him.  Lily pads float on it, fish work along under it, rocks and
+ * a fallen log break the surface and dragonflies cross above it.
+ *
+ * Every moving thing is registered with `bend` or pushed onto one of the
+ * lists at the top of the file; `stepPond` drives all of them off one clock.
+ */
+function buildPond(scene: Phaser.Scene): void {
+  reeds = []; swimmers = []; pads = []; flyers = []; pondRings = [];
+  pondT = 0; pondGust = 0; gustIn = 2 + Math.random() * 3;
+
+  // ---- sky and the light in it
+  scene.add.rectangle(0, 18, GAME_W, 162, 0x8fd0ea).setOrigin(0, 0);
+  scene.add.rectangle(0, 18, GAME_W, 18, 0x77c0e2).setOrigin(0, 0);
+  scene.add.circle(44, 34, 20, 0xfff6c8).setAlpha(0.16);
+  scene.add.circle(44, 34, 11, 0xfffdf0).setAlpha(0.9);
+  for (const [cx, cy, cw] of [[110, 28, 30], [200, 36, 22], [286, 26, 26]] as const) {
+    for (let i = 0; i < 4; i++) {
+      bend(scene.add.ellipse(cx + (i - 1.5) * (cw / 4), cy + (i % 2) * 2, cw / 2 + i, 6, 0xffffff).setAlpha(0.8), 0.3);
+    }
+  }
+  // ---- the far bank: trees, then the ground they stand on
+  for (let i = 0; i < 22; i++) {
+    bend(scene.add.ellipse((i * 15) % (GAME_W + 14) - 7, 48 + (i % 3) * 3, 22 + (i % 4) * 6, 16, i % 2 ? 0x3a7043 : 0x46814c), 0.6);
+  }
+  for (const tx of [22, 132, 252, 306]) {
+    scene.add.rectangle(tx, 44, 4, 24, 0x5a3f25).setOrigin(0.5, 0);
+    for (const [ox, oy, r] of [[0, -4, 14], [-8, 2, 10], [8, 1, 10]] as const) {
+      bend(scene.add.circle(tx + ox, 44 + oy, r, 0x3f7a46), 1.4);
+    }
+  }
+  scene.add.rectangle(0, 60, GAME_W, 10, 0x33632f).setOrigin(0, 0);
+  scene.add.rectangle(0, 60, GAME_W, 2, 0x477f3e).setOrigin(0, 0);
+  // ---- the reed line along the far edge
+  for (let i = 0; i < 46; i++) {
+    const rx = (i * 7 + (i % 5) * 3) % GAME_W;
+    const h = 8 + (i % 4) * 4;
+    bend(scene.add.rectangle(rx, 70, 1, h, i % 3 ? 0x4d8c3f : 0x3d7434).setOrigin(0.5, 1), 2.4);
+    if (i % 5 === 0) bend(scene.add.ellipse(rx, 70 - h, 2, 4, 0x8a6a35), 2.6);
+  }
+
+  // ---- THE WATER.  Bright and shallow near, deep and cold far.
+  scene.add.rectangle(0, 70, GAME_W, 110, 0x2f7f8c).setOrigin(0, 0);
+  scene.add.rectangle(0, 70, GAME_W, 26, 0x26707e).setOrigin(0, 0);
+  scene.add.rectangle(0, 132, GAME_W, 48, 0x3d9599).setOrigin(0, 0);
+  scene.add.rectangle(0, 156, GAME_W, 24, 0x54a9a4).setOrigin(0, 0);
+  // the light banding across it
+  for (let i = 0; i < 26; i++) {
+    const wy = 74 + ((i * 17) % 100);
+    scene.add.rectangle((i * 41) % GAME_W, wy, 10 + (i % 4) * 8, 1, 0xbfe8f2).setOrigin(0, 0).setAlpha(0.16);
+  }
+  // ---- rocks and a fallen log, which is what the shooter stands on
+  for (const [rx, ry, rw] of [[16, 108, 14], [298, 96, 12], [268, 140, 16], [90, 88, 10]] as const) {
+    scene.add.ellipse(rx, ry + 3, rw + 4, 5, 0x1d5561).setAlpha(0.5);
+    scene.add.ellipse(rx, ry, rw, rw * 0.66, 0x7d7b70);
+    scene.add.ellipse(rx - 1, ry - 1.5, rw * 0.6, rw * 0.36, 0x99968a);
+  }
+  scene.add.ellipse(52, 160, 70, 9, 0x1d5561).setAlpha(0.45);
+  scene.add.ellipse(52, 156, 66, 12, 0x6b4a2c);
+  scene.add.ellipse(52, 154, 60, 8, 0x82603a);
+  for (let i = 0; i < 7; i++) scene.add.ellipse(26 + i * 9, 154, 2, 5, 0x5a3d22).setAlpha(0.6);
+
+  // ---- LILY PADS, which bob on their own phase
+  for (const [px, py, pr] of [
+    [104, 122, 13], [160, 148, 11], [214, 116, 12], [244, 158, 14],
+    [126, 164, 10], [188, 96, 9], [286, 124, 11], [74, 136, 12],
+  ] as const) {
+    const pad = scene.add.container(px, py, [
+      scene.add.ellipse(0, 2, pr * 2, pr * 0.9, 0x1d5561).setAlpha(0.35),
+      scene.add.ellipse(0, 0, pr * 2, pr * 1.1, 0x3f8a3c),
+      scene.add.ellipse(-pr * 0.2, -pr * 0.2, pr * 1.2, pr * 0.6, 0x55a64b).setAlpha(0.7),
+      scene.add.triangle(pr * 0.5, pr * 0.1, 0, 0, pr * 0.8, -pr * 0.35, pr * 0.8, pr * 0.35, 0x2f7f8c),
+    ]);
+    // a flower on some of them
+    if (pr > 11) {
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        pad.add(scene.add.ellipse(Math.cos(a) * 3, Math.sin(a) * 2.2 - 2, 3.2, 2.2, 0xffc0d8));
+      }
+      pad.add(scene.add.circle(0, -2, 1.4, 0xffe98a));
+    }
+    pads.push({ art: pad, x0: px, y0: py, phase: Math.random() * 6.28 });
+  }
+
+  // ---- FISH, working along under the surface
+  for (let i = 0; i < 5; i++) {
+    const body = scene.add.container(0, 0, [
+      scene.add.ellipse(0, 0, 7, 3.2, i % 2 ? 0xff9a52 : 0xffd45e).setAlpha(0.75),
+      scene.add.triangle(-4.6, 0, 0, 0, 4, -2.4, 4, 2.4, i % 2 ? 0xe8813a : 0xe8bc46).setAlpha(0.75),
+      scene.add.circle(2.2, -0.5, 0.7, 0x1a2a2e).setAlpha(0.8),
+    ]).setDepth(3);
+    swimmers.push({
+      art: body, x: 40 + i * 54, y: 100 + ((i * 23) % 60),
+      dir: i % 2 ? 1 : -1, speed: 14 + Math.random() * 12, bob: Math.random() * 6.28,
+    });
+  }
+
+  // ---- DRAGONFLIES, crossing above the water
+  for (let i = 0; i < 3; i++) {
+    const d = scene.add.container(0, 0, [
+      scene.add.ellipse(0, 0, 7, 1.6, 0x4fd0c8),
+      scene.add.ellipse(-1.6, -1.6, 5, 1.4, 0xdff7ff).setAlpha(0.55),
+      scene.add.ellipse(-1.6, 1.6, 5, 1.4, 0xdff7ff).setAlpha(0.55),
+      scene.add.circle(3.4, 0, 1.2, 0x2f9c96),
+    ]).setDepth(18);
+    flyers.push({ art: d, t: i * 2.2, y0: 88 + i * 22, speed: 22 + i * 7 });
+  }
+}
+
+/** One ring spreading on the water.  Drawing only. */
+function pondRing(x: number, y: number, strong = false): void {
+  if (!sceneRef || pondRings.length > 22) return;
+  const art = sceneRef.add.ellipse(x, y, 3, 1.4, 0xd8f4fa).setDepth(4).setAlpha(strong ? 0.75 : 0.45);
+  art.setFillStyle();
+  art.setStrokeStyle(1, 0xe8fbff, strong ? 0.8 : 0.5);
+  pondRings.push({ art, t: 0 });
+}
+
+/**
+ * THE POND, A FRAME AT A TIME.
+ *
+ * One breeze drives every plant, with gusts at uneven intervals because wind
+ * on a fixed beat reads as a machine.  Fish swim, pads bob, dragonflies
+ * cross, rings spread and fade.  None of it is read by the shot.
+ */
+function stepPond(dt: number): void {
+  if (!sceneRef) return;
+  pondT += dt;
+  gustIn -= dt;
+  if (gustIn <= 0) { pondGust = 0.7 + Math.random() * 1.2; gustIn = 2.5 + Math.random() * 4; }
+  if (pondGust > 0) pondGust = Math.max(0, pondGust - dt * 0.75);
+  const wind = Math.sin(pondT * 0.6) * 0.5 + Math.sin(pondT * 1.8) * 0.2 + pondGust * 0.9;
+
+  for (const r of reeds) {
+    const local = wind + Math.sin(pondT * 1.4 + r.phase) * 0.2;
+    r.art.x = r.x0 + local * r.give;
+    r.art.angle = local * r.give * 1.6;
+  }
+  for (const pd of pads) {
+    pd.art.x = pd.x0 + Math.sin(pondT * 0.7 + pd.phase) * (1.4 + wind);
+    pd.art.y = pd.y0 + Math.sin(pondT * 1.1 + pd.phase) * 1.1;
+    pd.art.setAngle(Math.sin(pondT * 0.9 + pd.phase) * 3);
+  }
+  for (const f of swimmers) {
+    f.bob += dt;
+    f.x += f.dir * f.speed * dt;
+    if (f.x < 12) { f.x = 12; f.dir = 1; }
+    if (f.x > GAME_W - 12) { f.x = GAME_W - 12; f.dir = -1; }
+    f.art.setPosition(f.x, f.y + Math.sin(f.bob * 1.9) * 2);
+    f.art.setScale(f.dir, 1 + Math.sin(f.bob * 9) * 0.12);
+    if (Math.random() < dt * 0.4) pondRing(f.x, f.y);
+  }
+  for (const d of flyers) {
+    d.t += dt;
+    const x = ((d.t * d.speed) % (GAME_W + 40)) - 20;
+    d.art.setPosition(x, d.y0 + Math.sin(d.t * 3.4) * 6);
+    d.art.setScale(1, 1);
+  }
+  if (Math.random() < dt * 1.3) pondRing(20 + Math.random() * (GAME_W - 40), 90 + Math.random() * 80);
+  for (let i = pondRings.length - 1; i >= 0; i--) {
+    const r = pondRings[i];
+    r.t += dt;
+    r.art.setSize(3 + r.t * 16, 1.4 + r.t * 6);
+    r.art.setAlpha(Math.max(0, 0.6 - r.t * 0.7));
+    if (r.t > 0.9) { r.art.destroy(); pondRings.splice(i, 1); }
+  }
+}
+
 function crossing(p: number): { x: number; t: number } | null {
   const speed = launchSpeed(p);
   const vy = Math.sin(aim) * speed;
@@ -549,27 +982,17 @@ function crossing(p: number): { x: number; t: number } | null {
 /**
  * Where the rim will be in `t` seconds.
  *
- * Walked forward rather than solved, because the rim turns round at the walls
- * and a closed form for a bouncing interval is more code than the loop is.
+ * SOLVED, not walked.  The old rim turned round at the walls, so there was no
+ * closed form for it and this stepped the interval forward a sixtieth at a
+ * time -- which drifts, over a flight a second and a half long, by a pixel or
+ * two against a body integrated at whatever the frame rate gives.  The whole
+ * of `SURE_MARGIN` existed to cover that drift.
+ *
+ * A sine has an answer.  This is exact at any `t`, so the arc's promise is
+ * the arithmetic rather than an approximation of it.
  */
 function hoopAt(t: number): number {
-  let x = hoopX;
-  let dir = hoopDir;
-  let left = t;
-  const dt = 1 / 60;
-  while (left > 0) {
-    const step = Math.min(dt, left);
-    x += dir * hoopSpeed * step;
-    if (x > GAME_W - 30) {
-      x = GAME_W - 30;
-      dir = -1;
-    } else if (x < 130) {
-      x = 130;
-      dir = 1;
-    }
-    left -= step;
-  }
-  return x;
+  return HOOP_MID + Math.sin(hoopPhase + hoopRate * t) * HOOP_SWING;
 }
 
 /** Would the shot at this charge drop through the rim?  The scoring test, asked early. */
@@ -591,6 +1014,8 @@ function sureThing(x: number, rim: number): boolean {
 
 function shoot(): void {
   if (!ball) return;
+  // legs out, and up he goes
+  leap = 1;
   const speed = launchSpeed(power);
   // Exactly the direction the arrow was drawn in.
   ballVel = { x: Math.cos(aim) * speed, y: Math.sin(aim) * speed };

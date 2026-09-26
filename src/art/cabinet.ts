@@ -154,10 +154,15 @@ function drawMotif(scene: Phaser.Scene, cx: number, cy: number, def: CabinetDef,
       put(4, 0, 1, 12);
       for (let i = -4; i <= 4; i += 4) put(0, i, 1, 2, bright);
       break;
-    case 'ship':
-      put(0, 2, 12, 3, bright);
-      put(0, -2, 1, 6);
-      put(2, -3, 5, 3);
+    case 'pond':
+      // Lily pads on open water, seen from above.  This used to be a hull, a
+      // mast and a flag, which put a boat on the front of a cabinet whose
+      // game has no boat in it.
+      dot(-4, -3, 2.6, bright);
+      dot(3, -1, 3, bright);
+      dot(-2, 3, 2.2, bright);
+      put(4, 4, 6, 1);
+      put(2, 6, 4, 1);
       break;
     case 'pins':
       for (const dx of [-4, 0, 4]) put(dx, -2, 2, 6, bright);
