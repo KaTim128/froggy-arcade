@@ -280,6 +280,16 @@ let turn: Turn = 'player';
 let scores = { player: 0, cpu: 0 };
 let standingBefore = 10;
 let settleMs = 0;
+/**
+ * WHAT THE LAST COMPLETED BALL DID, recorded before the deck is re-racked.
+ *
+ * A harness cannot read this off anything else.  `standing` is 10 again by the
+ * time the deck has settled, and the turn passes to the other side after the
+ * second ball whether the rack went down or not -- so "the frame ended" does
+ * not mean "the rack was cleared", and a test that assumed it did was asking
+ * the scoreboard to confirm itself.
+ */
+let lastRoll: { knocked: number; cleared: boolean; strike: boolean; spare: boolean; ballNo: number } | null = null;
 let over = false;
 let best = 0;
 let keys: Record<'left' | 'right' | 'aimL' | 'aimR' | 'hookL' | 'hookR', Phaser.Input.Keyboard.Key[]> = {
@@ -354,6 +364,7 @@ export const bowling: MinigameModule = {
     turn = 'player';
     scores = { player: 0, cpu: 0 };
     settleMs = 0;
+    lastRoll = null;
     over = false;
     best = store.highScore(ID);
 
@@ -601,6 +612,7 @@ export const bowling: MinigameModule = {
            * scoreboard from before the roll it just threw.
            */
           settling: settleMs > 0,
+          lastRoll: lastRoll ? { ...lastRoll } : null,
           best,
           hook,
           curve,
@@ -1271,6 +1283,7 @@ function endRoll(): void {
   const cleared = standing === 0;
   const strike = cleared && ballNo === 1;
   const spare = cleared && ballNo > 1;
+  lastRoll = { knocked, cleared, strike, spare, ballNo };
   if (strike || spare) {
     scores[turn] += strike ? STRIKE_BONUS : SPARE_BONUS;
     callIt(strike ? `STRIKE!  +${STRIKE_BONUS}` : `SPARE  +${SPARE_BONUS}`, strike);

@@ -1118,37 +1118,68 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
 
     // AND THE JUMP IS STILL A JUMP: a roller has to go under it, or the cap
     // has fixed one thing by breaking the game.
+    //
+    // STAGED, NOT WAITED FOR.  This used to stand the player on floor 0 and
+    // wait for a thrown barrel to find him, which meant waiting out a roll
+    // down five girders -- fourteen seconds of a twenty second budget -- while
+    // the spawn cadence kept making barrels behind it.  One of those would
+    // reach him first, kill him, and respawn him at the start, so the geometry
+    // the test had set up was gone before the barrel under test arrived.  It
+    // failed by measuring nothing: "closest it came was 30.6px".
+    //
+    // Now the strays are cleared, the throw is watched until it settles on a
+    // girder, and the player is put 44px along its path so it rolls straight
+    // at him.  Floor 5 is skipped because it is the top girder with no beam
+    // above it, where the jump cap never applies and the pairing with the
+    // check above would prove nothing.
     const cleared = await page.evaluate(async () => {
-      window.__dk.teleport(0, 200);
-      window.__dk.grace(0);
+      window.__dk.clearBarrels();
+      window.__dk.grace(1e9);
       window.__dk.throwNow('roll');
-      const before = window.__dk.state().lives;
+
       const t0 = performance.now();
+      let bar = null;
+      while (performance.now() - t0 < 12000) {
+        const st = window.__dk.state();
+        const cand = st.barrels.find((x) => !x.falling && !x.bouncer && x.dir !== 0 && x.floor <= 4);
+        // far enough from the end of the girder to have room for an approach
+        if (cand && (cand.dir < 0 ? cand.x : 320 - cand.x) > 70) { bar = cand; break; }
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      if (!bar) return { hit: null, low: 99, why: 'no roller settled on a girder' };
+
+      window.__dk.teleport(bar.floor, bar.x + bar.dir * 44);
+      window.__dk.grace(0);
+      const before = window.__dk.state().lives;
       let jumped = false;
       let low = 99;
-      while (performance.now() - t0 < 20000) {
+      const t1 = performance.now();
+      while (performance.now() - t1 < 8000) {
         const st = window.__dk.state();
-        if (st.lives < before) return { hit: true, low };
+        if (st.lives < before) return { hit: true, low, floor: bar.floor };
         for (const bl of st.barrels) {
-          if (bl.floor !== 0 || bl.falling || bl.bouncer) continue;
+          if (bl.floor !== st.player.floor || bl.falling || bl.bouncer) continue;
+          // only one actually coming at him counts
+          if (Math.sign(st.player.x - bl.x) !== bl.dir) continue;
           const d = Math.abs(bl.x - st.player.x);
           if (d < low) low = d;
           // Jumped at the distance a player would pick it at, and then it has
           // to pass right under him.
-          if (!jumped && d > 15 && d < 26 && bl.x > st.player.x) {
+          if (!jumped && d > 15 && d < 26) {
             jumped = true;
             window.__dk.jump();
           }
         }
-        if (jumped && low < 4) return { hit: false, low };
+        if (jumped && low < 4) return { hit: false, low, floor: bar.floor };
         await new Promise((r) => requestAnimationFrame(r));
       }
-      return { hit: null, low };
+      return { hit: null, low, floor: bar.floor, why: 'no approach inside the window' };
     });
     const clears = cleared.hit === false;
     console.log(
       `${clears ? 'PASS' : 'FAIL'}  barrel climb: a rolling barrel still passes under a jump  — ` +
-        `closest it came was ${cleared.low.toFixed(1)}px`,
+        `closest it came was ${cleared.low.toFixed(1)}px on girder ${cleared.floor ?? '?'}` +
+        (cleared.why ? ` (${cleared.why})` : ''),
     );
     if (!clears) failures++;
   }
@@ -2785,38 +2816,79 @@ for (const g of [
         // frame did is in the turn: it moves on when the rack is cleared or
         // the second ball is spent, and stays put with the ball number up when
         // there are pins left to pick up.
-        out.push({ score: st.scores.player, ballNo: st.ballNo, turn: st.turn });
+        out.push({
+          score: st.scores.player,
+          ballNo: st.ballNo,
+          turn: st.turn,
+          // What the ball actually did, recorded before the re-rack.
+          cleared: st.lastRoll?.cleared ?? false,
+          spare: st.lastRoll?.spare ?? false,
+          strike: st.lastRoll?.strike ?? false,
+          knocked: st.lastRoll?.knocked ?? 0,
+        });
         if (st.turn !== 'player') break;
       }
       return out;
     }, shots);
   };
 
-  // 159 is the pocket at full power and takes the rack off the first ball: one
-  // ball, the frame over, and ten pins on the board as fifteen.
-  const struck = await frame([[159, 1]]);
-  const strikeOk = struck.length === 1 && struck[0].turn === 'cpu' && struck[0].score === 15;
+  // WHAT THESE TWO ACTUALLY CLAIM is what clearing the rack PAYS -- ten pins
+  // and the five or three on top -- not that a particular aim is a certainty.
+  // Measured over ten frames each, the pocket at (159, 1) took the rack 5
+  // times out of 10 and the spare pair converted 7 out of 10, so asserting on
+  // a single throw was asserting on a coin toss; both turned up in the failure
+  // list at roughly that rate.
+  //
+  // So the scenario is retried until it HAPPENS, and the score is asserted the
+  // moment it does.  A retry is only ever for "the pins did not go down" -- if
+  // the rack clears and the board reads anything but the expected number, that
+  // is a scoring bug and it fails on the spot rather than being rolled again.
+  // Never getting the scenario at all inside the attempts is also a failure:
+  // it would mean the pocket has stopped working.
+  const TRIES = 8;
+
+  let struck = null;
+  let strikeTries = 0;
+  for (let i = 0; i < TRIES; i++) {
+    strikeTries = i + 1;
+    const r = await frame([[159, 1]]);
+    // rack off the FIRST ball, asked of the deck rather than of the turn
+    if (r.length === 1 && r[0].strike) { struck = r; break; }
+  }
+  const strikeOk = struck !== null && struck[0].score === 15;
   console.log(
     `${strikeOk ? 'PASS' : 'FAIL'}  bowling: the whole rack off the first ball pays 10 and 5  — ` +
-      `${struck.map((r) => `${r.score} (ball ${r.ballNo}, ${r.turn})`).join(' then ')}`,
+      (struck
+        ? `${struck[0].score} (ball ${struck[0].ballNo}, ${struck[0].turn}) on attempt ${strikeTries}`
+        : `the pocket never took the rack in ${TRIES} frames`),
   );
   if (!strikeOk) failures++;
 
   // A soft ball wide of the pocket leaves pins -- the frame stays put and the
   // ball number goes up -- and the pocket then picks them up for thirteen.
-  const spared = await frame([
-    [168, 0.7],
-    [162, 1],
-  ]);
-  const spareOk =
-    spared.length === 2 &&
-    spared[0].turn === 'player' &&
-    spared[0].ballNo === 2 &&
-    spared[1].turn === 'cpu' &&
-    spared[1].score === 13;
+  let spared = null;
+  let spareTries = 0;
+  for (let i = 0; i < TRIES; i++) {
+    spareTries = i + 1;
+    const r = await frame([
+      [168, 0.7],
+      [162, 1],
+    ]);
+    // Ball one left pins and ball two picked them ALL up.  Asking the turn
+    // instead was the bug: the frame hands over after the second ball either
+    // way, so a 6-then-2 that left two standing satisfied it and then failed
+    // the score assertion at 8.
+    if (r.length === 2 && !r[0].cleared && r[0].ballNo === 2 && r[1].spare) {
+      spared = r;
+      break;
+    }
+  }
+  const spareOk = spared !== null && spared[1].score === 13;
   console.log(
     `${spareOk ? 'PASS' : 'FAIL'}  bowling: the whole rack off the second ball pays 10 and 3  — ` +
-      `${spared.map((r) => `${r.score} (ball ${r.ballNo}, ${r.turn})`).join(' then ')}`,
+      (spared
+        ? `${spared.map((r) => `${r.score} (ball ${r.ballNo}, ${r.turn})`).join(' then ')} on attempt ${spareTries}`
+        : `the rack was never picked up off the second ball in ${TRIES} frames`),
   );
   if (!spareOk) failures++;
 

@@ -55,9 +55,23 @@ const CHARGE_MS = 1200;
 const GRAVITY = 420;
 const LAUNCH = { x: 46, y: 150 };
 /** Where the shot starts out, and how far W/S can tilt it either way. */
-const LAUNCH_ANGLE = -Math.PI / 3.1;
-const AIM_MIN = -Math.PI * 0.46; // nearly straight up
-const AIM_MAX = -Math.PI * 0.14; // a flat line drive
+const LAUNCH_ANGLE = -Math.PI * 0.375; // the middle of the band
+const AIM_MIN = -Math.PI * 0.422; // a steep lob
+const AIM_MAX = -Math.PI * 0.328; // a flat drive
+
+/**
+ * HOW FAR AN EMPTY METER AND A FULL ONE THROW IT.
+ *
+ * The hoop rides between x152 and x276, so the meter is scaled to land just
+ * short of the near end of that at nothing and just past the far end at
+ * everything.  Power is a DISTANCE, not a speed -- see `launchSpeed`.
+ */
+const REACH_NEAR = 138;
+const REACH_FAR = 300;
+/** How far the ball has to climb from the log to the rim. */
+const RIM_RISE = 150 - 74;
+/** Nothing leaves his hands faster than this, whatever the arithmetic says. */
+const SPEED_CAP = 520;
 const AIM_RATE = 1.3; // radians per second held
 /** The arrow: this long at zero charge, and this much longer at full. */
 const ARROW_MIN = 12;
@@ -167,6 +181,9 @@ let carrier: Phaser.GameObjects.Container | null = null;
 let carrierBody: Phaser.GameObjects.Container | null = null;
 let carrierHead: Phaser.GameObjects.Container | null = null;
 let carrierEyes: Phaser.GameObjects.Container[] = [];
+let carrierMouth: Phaser.GameObjects.Ellipse | null = null;
+/** How wide open the mouth is, 0 shut to 1 gulping. */
+let gape = 0;
 let blinkIn = 2.4;
 let blinkT = 0;
 let shooter: Phaser.GameObjects.Container | null = null;
@@ -236,13 +253,21 @@ export const hoops: MinigameModule = {
     // `stepPond` from the update loop.
     buildPond(scene);
 
-    // ---- THE CARRIER: a big frog with a hoop in its mouth.
+    // ---- THE CARRIER: a big frog WEARING the hoop.
     //
     // The hoop is a hoop -- a rim, a backboard and a net, the same three
     // objects the shot has always been tested against, at the same HOOP_Y --
-    // and the frog is underneath it holding the thing up.  Deliberately NOT a
-    // mouth shaped like a hoop: what the ball goes through is a basketball
-    // hoop, and what is carrying it is a frog.
+    // but it now sits on the frog's head rather than being held up in front of
+    // it on a post.  The rim is the brim, the net is the band round the crown,
+    // and the frog's own eyes look out from under it.
+    //
+    // Before this the eyes were parked at carrier-local y=-5, level with the
+    // rim itself and a long way above the head, so what the screen showed was
+    // a HOOP WITH A FACE floating over a green lump.  They belong on the frog.
+    //
+    // The geometry falls out of it for free: the net hangs from HOOP_Y+2 down
+    // eight pixels, which is exactly the top of the head, so a ball dropping
+    // through the rim arrives at the frog's mouth -- and it eats it.
     carrier = scene.add.container(hoopX, HOOP_Y).setDepth(14);
     const bigSkin = 0x4f9e55;
     const bigDark = 0x2f6b36;
@@ -251,7 +276,7 @@ export const hoops: MinigameModule = {
     // was forty-two, which at three hundred and twenty pixels wide is a
     // landmark -- two green ellipses that read as lily pads with a hoop
     // somewhere above them rather than as one animal holding one up.
-    carrierBody = scene.add.container(0, 26, [
+    carrierBody = scene.add.container(0, 24, [
       scene.add.ellipse(0, 5, 30, 6, 0x123b2a).setAlpha(0.4),
       scene.add.ellipse(0, 0, 26, 13, bigDark),
       scene.add.ellipse(0, -1.5, 23, 11, bigSkin),
@@ -259,25 +284,27 @@ export const hoops: MinigameModule = {
       scene.add.ellipse(-10.5, 1.5, 8, 7, bigDark),
       scene.add.ellipse(10.5, 1.5, 8, 7, bigDark),
     ]);
-    // The head sits directly under the rim with the post in its jaw, so the
-    // chain from mouth to hoop is one unbroken object.
-    carrierHead = scene.add.container(0, 13, [
-      scene.add.ellipse(0, 0, 18, 11, bigSkin),
-      scene.add.ellipse(0, 2, 12, 4, 0xbfe3a8).setAlpha(0.5),
-      // the jaw clamped round the post, and the post itself running up to the
-      // rim at HOOP_Y
-      scene.add.rectangle(0, -7, 3, 14, 0x7a5a34),
-      scene.add.ellipse(0, -1, 8, 4, bigDark),
+    // The head is raised until its crown meets the rim, so the hoop rests on
+    // it.  The mouth is the thing a ball through the rim lands in.
+    carrierMouth = scene.add.ellipse(0, 4, 11, 1.6, 0x27361f);
+    carrierHead = scene.add.container(0, 10, [
+      scene.add.ellipse(0, 0, 20, 12, bigDark),
+      scene.add.ellipse(0, -0.5, 18, 10.5, bigSkin),
+      scene.add.ellipse(0, 2.5, 13, 4, 0xbfe3a8).setAlpha(0.5),
+      carrierMouth,
     ]);
-    carrierEyes = [-5, 5].map((sx) =>
-      scene.add.container(sx, -5, [
-        scene.add.ellipse(0, 0, 7, 6.4, bigSkin),
-        scene.add.ellipse(0, 0, 5, 4.6, PALETTE.cream),
+    // Its own eyes, on its own head, under the brim -- the frog looking out
+    // from beneath the thing it is wearing.
+    carrierEyes = [-5.5, 5.5].map((sx) =>
+      scene.add.container(sx, -4, [
+        scene.add.ellipse(0, 0, 7, 6.6, bigSkin),
+        scene.add.ellipse(0, 0, 5, 4.8, PALETTE.cream),
         scene.add.ellipse(0, 0.3, 2.4, 2.8, 0x14251a),
         scene.add.circle(-1, -1.1, 0.8, 0xffffff).setAlpha(0.9),
       ]),
     );
-    carrier.add([carrierBody, carrierHead, ...carrierEyes]);
+    carrierHead.add(carrierEyes);
+    carrier.add([carrierBody, carrierHead]);
 
     // the hoop it is holding, at exactly the height the shot is tested at
     backboard = scene.add.rectangle(hoopX, HOOP_Y - 18, 4, 24, PALETTE.bone).setOrigin(0.5, 0).setDepth(15);
@@ -517,6 +544,7 @@ export const hoops: MinigameModule = {
         Math.abs(crossX - hoopX) < hoopW / 2 - 2
       ) {
         scoredThisFlight = true;
+        eatBall();
         // Every score winds the float up: the carrier swims the same beat a
         // little quicker, so the last point of a run is the hardest one.
         hoopRate *= 1.13;
@@ -723,8 +751,45 @@ function drawFlames(): void {
 /** The launch speed for a given charge.  One definition, used by both the
  * shot and the arc that predicts it — so the preview cannot drift from the
  * thing it is previewing. */
+/**
+ * THE METER IS A DISTANCE, AND THE SPEED IS SOLVED FROM IT.
+ *
+ * It used to be `150 + p * 300` -- a raw speed -- and that made most of the
+ * meter useless in both directions.  Measured at the old default aim: half a
+ * meter dropped the ball at x154, the near lip of the hoop's travel; three
+ * quarters put it at x288, already past the far lip; and a full one sent it to
+ * x425, off the right of a three-hundred-and-twenty pixel screen.  Anything
+ * below about 0.45 never climbed to rim height at all.  So the usable band was
+ * a sliver in the middle, and pressing harder stopped meaning "further along
+ * the pond" and started meaning "over the trees".
+ *
+ * Worse, no single speed band could serve the whole aim range, because the
+ * speed a shot needs depends on how steeply it is thrown: a search over every
+ * band and every aim window found no pair that reached the hoop from one end
+ * of the aim range to the other.
+ *
+ * So the meter now says WHERE, and the speed is whatever gets it there from
+ * the current aim.  Reach is exactly linear in power at every aim -- lean on
+ * it and the ball goes further down the pond, in the direction it is pointed,
+ * every time.
+ *
+ * Solving `h = s·v·t - g·t²/2` with `t = d / (c·v)` for v:
+ *
+ *     v² = g·d² / (2·c·(s·d - h·c))
+ *
+ * where d is how far out the target is, h the climb to the rim, and c and s
+ * the cosine and (upward) sine of the aim.  The denominator goes to zero as
+ * the shot approaches the vertical, which is the arithmetic saying a straight
+ * up throw never gets anywhere: that is what the cap is for.
+ */
 function launchSpeed(p: number): number {
-  return 150 + p * 300;
+  const want = REACH_NEAR + Phaser.Math.Clamp(p, 0, 1) * (REACH_FAR - REACH_NEAR);
+  const c = Math.cos(aim);
+  const s = -Math.sin(aim);
+  const d = want - LAUNCH.x;
+  const den = 2 * c * (s * d - RIM_RISE * c);
+  if (den <= 0 || d <= 0) return SPEED_CAP;
+  return Math.min(SPEED_CAP, Math.sqrt((GRAVITY * d * d) / den));
 }
 
 /**
@@ -753,16 +818,59 @@ function stepCarrier(dt: number): void {
   carrierBody.setScale(1, 1 + Math.sin(pondT * 2.2) * 0.035);
   // the head lags the turn and looks where it is going
   carrierHead.x = Phaser.Math.Clamp(drift * 0.02, -3, 3);
-  carrierHead.y = 14 + Math.sin(pondT * 2.2 + 0.7) * 0.7;
+  carrierHead.y = 10 + Math.sin(pondT * 2.2 + 0.7) * 0.7;
+
+  // The gulp: the mouth springs open to take the ball and eases shut after it.
+  gape = Math.max(0, gape - dt * 2.6);
+  if (carrierMouth) carrierMouth.setSize(11 + gape * 3, 1.6 + gape * 7);
+  // and the throat works it down
+  carrierBody.setScale(1 + gape * 0.06, carrierBody.scaleY + gape * 0.05);
 
   blinkT += dt;
   if (blinkT > blinkIn) {
     blinkT = 0;
     blinkIn = 1.8 + Math.random() * 3.4;
   }
-  // a blink is the last eighth of a second before the timer resets
+  // a blink is the last eighth of a second before the timer resets, and a
+  // mouthful squeezes them shut the way a swallow does
   const shut = blinkT > blinkIn - 0.12 ? 0.1 : 1;
-  for (const e of carrierEyes) e.setScale(1, shut);
+  for (const e of carrierEyes) e.setScale(1, shut * (1 - gape * 0.55));
+}
+
+/**
+ * THE FROG EATS IT.
+ *
+ * The ball is food, and a shot that goes in is the frog being fed: the mouth
+ * opens under the rim, the ball drops the last few pixels into it, and it goes
+ * down with a gulp.
+ *
+ * This is a SECOND, cosmetic ball, and the real one is simply hidden.  The
+ * flight is a state machine -- it ends on `ball.y > 158` and clears the shot
+ * on the way out -- and reaching into it to redirect a ball that has already
+ * scored would put a rendering flourish in charge of when a turn is over.  The
+ * real ball finishes its arc unseen and ends the flight exactly as it always
+ * did.
+ */
+function eatBall(): void {
+  if (!sceneRef || !carrier) return;
+  const bite = sceneRef.add.circle(hoopX, HOOP_Y + 3, 4, 0x6fbf4e).setStrokeStyle(1, 0x2f6b36).setDepth(13);
+  ball?.setVisible(false);
+  ballMark?.setVisible(false);
+  sceneRef.tweens.add({
+    targets: bite,
+    x: carrier.x,
+    y: HOOP_Y + 14,
+    scale: 0.55,
+    duration: 190,
+    ease: 'Quad.easeIn',
+    onComplete: () => {
+      bite.destroy();
+      gape = 1;
+      audio.sfx('hop_wet', 0.45);
+    },
+  });
+  // open up to meet it
+  sceneRef.time.delayedCall(60, () => { gape = Math.max(gape, 0.8); });
 }
 
 /**
@@ -1014,6 +1122,9 @@ function sureThing(x: number, rim: number): boolean {
 
 function shoot(): void {
   if (!ball) return;
+  // Back in his hands after the carrier ate the last one.
+  ball.setVisible(true);
+  ballMark?.setVisible(true);
   // legs out, and up he goes
   leap = 1;
   const speed = launchSpeed(power);
@@ -1091,6 +1202,10 @@ function reset(): void {
   flames?.clear();
   inFlight = false;
   ball.setPosition(LAUNCH.x, LAUNCH.y);
+  // Visible again in his hands: a scored ball was hidden so the carrier could
+  // be seen eating a copy of it, and he needs another one to throw.
+  ball.setVisible(true);
+  ballMark?.setVisible(true);
   ballVel = { x: 0, y: 0 };
   power = 0;
   meterFill?.setSize(6, 0);
