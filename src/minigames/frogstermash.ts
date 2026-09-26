@@ -2778,6 +2778,8 @@ export interface FighterArt {
    * of it and a preview can hide it.
    */
   bodyPlate: Phaser.GameObjects.Container | null;
+  /** The second blade of a pair, in the off hand.  See `syncOffBlade`. */
+  offBlade: Phaser.GameObjects.Container | null;
   plates: Phaser.GameObjects.GameObject[];
   visor: Phaser.GameObjects.Rectangle;
   plume: Phaser.GameObjects.Rectangle;
@@ -2803,34 +2805,220 @@ const FLOOR_Y = 138;
  * Three tones is the difference between a sword and a grey stick, and it
  * costs two more rectangles.
  */
+/**
+ * How heavy a weapon swings, 0 to 1.  Drawing only: it sets how far the head
+ * lags behind the hand and how far it carries on past the end of a blow, so a
+ * maul follows through and a dagger goes exactly where the wrist puts it.
+ */
+const HEFT: Record<string, number> = {
+  maul: 1, heavyhammer: 0.95, greataxe: 0.9, warhammer: 0.8, claymore: 0.75, halberd: 0.75,
+  bardiche: 0.75, warscythe: 0.7, glaive: 0.65, pike: 0.6, scythe: 0.6, club: 0.6,
+  morningstar: 0.6, axe: 0.55, mace: 0.55, trident: 0.5, goldsword: 0.45, harpoon: 0.45,
+  spear: 0.4, staff: 0.4, shield: 0.4, sword: 0.35, magicstaff: 0.3, scimitar: 0.3,
+  gladius: 0.3, estoc: 0.3, javelin: 0.3, throwaxe: 0.3, flail: 0.3, katana: 0.25,
+  dual: 0.2, sickle: 0.2, crossbow: 0.2, warfan: 0.15, longbow: 0.15, nunchuck: 0.15,
+  rapier: 0.12, bow: 0.1, blowgun: 0.1, boomerang: 0.1, chakram: 0.1, dagger: 0.08,
+  twindagger: 0.08, knife: 0.08, throwing: 0.05, sling: 0.05, bolas: 0.05,
+};
+
+/**
+ * A FLEXIBLE PART: a chain, a cord or a rope, and whatever hangs on the end
+ * of it.  It is simulated in WORLD space -- a verlet chain pinned to a point
+ * on the weapon -- so it is the hand that moves first, the links that follow
+ * it and the weight on the end that arrives last, and a change of direction
+ * leaves the end carrying on the old way for a beat before it is dragged
+ * round.  Drawn back in the weapon's own space every frame, so it never
+ * leaves the weapon it belongs to.
+ */
+interface Flex {
+  /** Where it is fixed to the weapon, in the weapon's own space. */
+  ax: number;
+  ay: number;
+  /** Links, and the length of each, in the weapon's own space. */
+  n: number;
+  seg: number;
+  /** How much the thing on the end outweighs a link. */
+  mass: number;
+  gfx: Phaser.GameObjects.Graphics;
+  /** What hangs on the end: a ball, a stick, a pouch, a stone. */
+  end: Phaser.GameObjects.Container | null;
+  /** Turn the end to follow the last link (a stick) or not (a ball). */
+  endTurns: boolean;
+  link: (g: Phaser.GameObjects.Graphics, pts: Phaser.Math.Vector2[]) => void;
+  wp: Phaser.Math.Vector2[] | null;
+  pp: Phaser.Math.Vector2[] | null;
+}
+
+/**
+ * A weapon, drawn as ONE made object.
+ *
+ * Every piece is drawn at the exact coordinates it belongs at, in one
+ * graphics layer, and every piece overlaps the one it is fixed to: a blade
+ * runs into its guard, a head sits on a collar that sits on the haft, a
+ * prong grows out of the crossbar that grows out of the socket.  Nothing is
+ * a separate primitive parked beside another one.  (The old rack used
+ * `scene.add.triangle` for every point, and Phaser centres a triangle on its
+ * own box rather than drawing it at the points given -- which is exactly why
+ * spear heads, bardiche blades and trident tips floated off their shafts.)
+ *
+ * The grip is at the origin and the weapon points along +x, the way the hand
+ * holds it; the side that faces +y is the side that leads a downward blow, so
+ * that is where the cutting edges and striking faces are.
+ */
 function buildWeapon(scene: Phaser.Scene, key: string, tint: number, single = false): Phaser.GameObjects.Container {
   const c = scene.add.container(0, 0);
   // What this sprite IS, so anything reconciling the art against the model can
   // ask rather than infer.  `showThrownAway` needs to know whether the hand is
   // already drawn empty before it swaps it for a fist.
   c.setData('key', key);
+  c.setData('tint', tint);
+  c.setData('heft', HEFT[key] ?? 0);
+  const g = scene.add.graphics();
+  c.add(g);
   const bar = (x: number, y: number, w: number, h: number, col: number, ang = 0): Phaser.GameObjects.Rectangle => {
     const r = scene.add.rectangle(x, y, w, h, col).setAngle(ang);
     c.add(r);
     return r;
   };
-  const steel = 0xc6ced9;
-  const shine = 0xeef3fa;
-  const shade = 0x7d8794;
-  const wood = 0x7a5a36;
-  const woodLit = 0x9a7648;
-  const grip = 0x3b2a1a;
-  /** A blade: body, lit spine, shadowed underside. */
-  const blade = (x: number, y: number, w: number, h: number, ang = 0, body = steel): void => {
-    bar(x, y, w, h, body, ang);
-    bar(x, y - h / 2 + 0.5, w, 1, shine, ang);
-    bar(x, y + h / 2 - 0.5, w, 1, shade, ang);
+
+  // ---- THE MATERIALS
+  const STEEL = 0xc6ced9;
+  const SHINE = 0xeef3fa;
+  const SHADE = 0x7d8794;
+  const EDGE = 0x3a4150;
+  const IRON = 0x6f7681;
+  const IRON_LIT = 0x9aa2ae;
+  const IRON_DK = 0x464c56;
+  const WOOD = 0x7a5a36;
+  const WOOD_LIT = 0x9a7648;
+  const WOOD_DK = 0x4f3a22;
+  const GRIP = 0x3b2a1a;
+  const WRAP = 0x6a4a2c;
+  const LEATHER = 0x6b4a2a;
+  const CORD = 0xb49a6a;
+  const GOLD = PALETTE.gold;
+  const GOLD_DK = PALETTE.amberDark;
+  const BRASS = 0xd4a84a;
+
+  // ---- THE PEN
+  const V = (pts: number[]): Phaser.Math.Vector2[] => {
+    const o: Phaser.Math.Vector2[] = [];
+    for (let i = 0; i < pts.length; i += 2) o.push(new Phaser.Math.Vector2(pts[i], pts[i + 1]));
+    return o;
   };
-  /** A shaft of wood with a grain line down it. */
-  const haft = (x: number, y: number, w: number, h: number, ang = 0): void => {
-    bar(x, y, w, h, wood, ang);
-    bar(x, y - h / 4, w, 1, woodLit, ang);
+  /** A filled shape, with a dark edge round it when it is big enough to take one. */
+  const poly = (pts: number[], fill: number, edge?: number, a = 1): void => {
+    const v = V(pts);
+    g.fillStyle(fill, a).fillPoints(v, true, true);
+    if (edge !== undefined) g.lineStyle(0.8, edge, 0.9).strokePoints(v, true, true);
   };
+  const rect = (x: number, y: number, w: number, h: number, col: number, a = 1): void => {
+    g.fillStyle(col, a).fillRect(x, y, w, h);
+  };
+  const line = (x0: number, y0: number, x1: number, y1: number, col: number, w = 1, a = 1): void => {
+    g.lineStyle(w, col, a).lineBetween(x0, y0, x1, y1);
+  };
+  const curve = (pts: number[], col: number, w = 1, a = 1): void => {
+    g.lineStyle(w, col, a).strokePoints(V(pts), false, false);
+  };
+  const disc = (x: number, y: number, r: number, col: number, a = 1): void => {
+    g.fillStyle(col, a).fillCircle(x, y, r);
+  };
+  const ring = (x: number, y: number, r: number, col: number, w = 1): void => {
+    g.lineStyle(w, col, 1).strokeCircle(x, y, r);
+  };
+  /** Rotate a flat list of points about the origin. */
+  const turn = (pts: number[], deg: number, dx = 0, dy = 0): number[] => {
+    const a = (deg * Math.PI) / 180;
+    const o: number[] = [];
+    for (let i = 0; i < pts.length; i += 2) {
+      o.push(dx + pts[i] * Math.cos(a) - pts[i + 1] * Math.sin(a), dy + pts[i] * Math.sin(a) + pts[i + 1] * Math.cos(a));
+    }
+    return o;
+  };
+
+  // ---- THE PARTS EVERY SMITH MAKES
+  /** A wrapped grip from x0 to x1: the binding goes round it in bands. */
+  const hilt = (x0: number, x1: number, h = 2.6, col: number = GRIP, band: number = WRAP): void => {
+    rect(x0, -h / 2, x1 - x0, h, col);
+    for (let x = x0 + 0.6; x < x1 - 0.4; x += 1.6) rect(x, -h / 2, 0.7, h, band);
+  };
+  const pommel = (x: number, r = 1.4, col: number = GOLD): void => {
+    disc(x, 0, r, col);
+    disc(x - r * 0.3, -r * 0.35, r * 0.4, 0xffffff, 0.45);
+  };
+  /** A crossguard: a bar across the blade with a knob on each end. */
+  const guard = (x: number, span: number, t = 1.6, col: number = GOLD): void => {
+    rect(x - t / 2, -span / 2, t, span, col);
+    disc(x, -span / 2, t * 0.7, col);
+    disc(x, span / 2, t * 0.7, col);
+    line(x - t / 2 + 0.3, -span / 2 + 0.6, x - t / 2 + 0.3, span / 2 - 0.6, 0xffffff, 0.5, 0.35);
+  };
+  /** A straight double-edged blade from x0, `len` long, `w` wide, with its point. */
+  const blade = (x0: number, len: number, w: number, tip: number, col: number = STEEL, fuller = w >= 3): void => {
+    const x1 = x0 + len;
+    poly([x0, -w / 2, x1, -w / 2, x1 + tip, 0, x1, w / 2, x0, w / 2], col);
+    line(x0, -w / 2 + 0.45, x1 + tip * 0.45, -w / 4, SHINE, 0.8, 0.9);
+    line(x0, w / 2 - 0.45, x1 + tip * 0.45, w / 4, SHADE, 0.8, 0.8);
+    if (fuller) line(x0 + 0.8, 0, x0 + len * 0.78, 0, SHADE, 0.8, 0.7);
+  };
+  /** A wooden haft from x0 to x1, grain along it and an iron cap on the butt. */
+  const haft = (x0: number, x1: number, h = 2.6, col: number = WOOD): void => {
+    rect(x0, -h / 2, x1 - x0, h, col);
+    rect(x0, -h / 2, x1 - x0, 0.8, WOOD_LIT);
+    rect(x0, h / 2 - 0.7, x1 - x0, 0.7, WOOD_DK);
+    rect(x0 - 1.2, -h / 2 - 0.2, 1.4, h + 0.4, IRON);
+  };
+  /** The iron socket a head is mounted on: it closes the joint. */
+  const collar = (x: number, h = 3.4, w = 2.4): void => {
+    rect(x - w / 2, -h / 2, w, h, IRON);
+    rect(x - w / 2, -h / 2, w, 0.8, IRON_LIT);
+    rect(x - w / 2, h / 2 - 0.7, w, 0.7, IRON_DK);
+  };
+  /** Riveted leather over the hand's place on a haft. */
+  const handWrap = (x0: number, x1: number, h = 3): void => {
+    rect(x0, -h / 2, x1 - x0, h, LEATHER);
+    for (let x = x0 + 0.5; x < x1; x += 1.5) rect(x, -h / 2, 0.6, h, WOOD_DK);
+  };
+  /** A fist, for bare hands and under the knuckle-dusters. */
+  const fist = (): void => {
+    bar(3, 0, 5, 6, tint);
+    bar(3, -2, 5, 1.5, 0xffffff).setAlpha(0.22);
+    bar(3, 2.5, 5, 1, 0x000000).setAlpha(0.18);
+    // three knuckles across the front of it
+    for (let k = 0; k < 3; k++) c.add(scene.add.circle(5.5, -1.8 + k * 1.9, 0.9, tint));
+  };
+
+  // ---- AND THE PARTS THAT MOVE ON THEIR OWN
+  const flexes: Flex[] = [];
+  const chainLink = (lg: Phaser.GameObjects.Graphics, pts: Phaser.Math.Vector2[]): void => {
+    lg.lineStyle(1.3, IRON_DK, 1).strokePoints(pts, false, false);
+    lg.lineStyle(0.6, IRON_LIT, 1).strokePoints(pts, false, false);
+    for (let i = 1; i < pts.length; i++) {
+      const mx = (pts[i].x + pts[i - 1].x) / 2;
+      const my = (pts[i].y + pts[i - 1].y) / 2;
+      if (i % 2) lg.lineStyle(0.7, IRON, 1).strokeCircle(mx, my, 0.9);
+      else lg.fillStyle(IRON_LIT, 1).fillCircle(mx, my, 0.55);
+    }
+  };
+  const cordLink = (col: number) => (lg: Phaser.GameObjects.Graphics, pts: Phaser.Math.Vector2[]): void => {
+    lg.lineStyle(0.9, col, 1).strokePoints(pts, false, false);
+  };
+  const flex = (ax: number, ay: number, n: number, seg: number, mass: number, end: Phaser.GameObjects.Container | null,
+    endTurns: boolean, link: Flex['link'], restDeg = 0): void => {
+    const gfx = scene.add.graphics();
+    c.add(gfx);
+    if (end) c.add(end);
+    const f: Flex = { ax, ay, n, seg, mass, gfx, end, endTurns, link, wp: null, pp: null };
+    // at rest it hangs straight out along the weapon, which is how it lies
+    // on the sand or flies through the air when nothing is stepping it
+    const ra = (restDeg * Math.PI) / 180;
+    const pts = Array.from({ length: n + 1 }, (_, i) => new Phaser.Math.Vector2(ax + i * seg * Math.cos(ra), ay + i * seg * Math.sin(ra)));
+    link(gfx, pts);
+    if (end) end.setPosition(pts[n].x, pts[n].y);
+    flexes.push(f);
+  };
+
   switch (key) {
     // ---- BARE HANDS, and the fallback for anything unrecognised.
     //
@@ -2842,279 +3030,761 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number, single = fa
     // rather than in the direction of a free shield.
     case 'none':
     default:
-      bar(3, 0, 5, 6, tint);
-      bar(3, -2, 5, 1.5, 0xffffff).setAlpha(0.22);
-      bar(3, 2.5, 5, 1, 0x000000).setAlpha(0.18);
-      // three knuckles across the front of it
-      for (let k = 0; k < 3; k++) c.add(scene.add.circle(5.5, -1.8 + k * 1.9, 0.9, tint));
+      fist();
+      break;
+
+    // ================================================ THE QUICK RACK
+    case 'knuckles':
+      // brass across the front of the fist, a finger ring for each knuckle,
+      // and the palm bar the grip closes on
+      fist();
+      rect(1.2, -1, 4.4, 2, GOLD_DK);
+      poly([5.2, -3.8, 7.2, -3.4, 7.2, 3.4, 5.2, 3.8], BRASS, GOLD_DK);
+      for (let k = 0; k < 4; k++) disc(7.3, -2.7 + k * 1.8, 0.95, GOLD);
+      line(5.6, -3.2, 5.6, 3.2, 0xffffff, 0.5, 0.4);
       break;
     case 'dagger':
-      blade(5, 0, 9, 2.5); bar(0, 0, 2, 6, PALETTE.gold); bar(-2, 0, 3, 3, grip);
+    case 'twindagger':
+      // One dagger a hand.  A pair is two of these, and the second is in the
+      // OTHER hand -- see `syncOffBlade` -- not fanned out of this fist.
+      if (key === 'twindagger' && !single) c.setData('pair', true);
+      pommel(-4.2, 1.3);
+      hilt(-3.4, 1.2, 2.2);
+      guard(1.8, 6, 1.3);
+      blade(2.5, 6.5, 2.6, 3, STEEL, false);
+      line(3, 0, 8, 0, SHADE, 0.6, 0.6);
       break;
     case 'knife':
-      blade(6, -1, 10, 2.5); bar(0, 0, 4, 4, grip); bar(0, -1, 4, 1, PALETTE.slate);
+      // a clip-point fighting knife: a black grip with finger grooves, a
+      // stub guard, and teeth along the spine behind the clip
+      poly([-5, -1.3, 1.6, -1.5, 1.6, 1.6, -5, 1.3], 0x26262b, 0x0e0e10);
+      for (let k = 0; k < 3; k++) disc(-3.6 + k * 1.8, 1.5, 0.55, 0x0e0e10);
+      rect(1.6, -2.2, 1.2, 4.4, SHADE);
+      poly([2.8, -1.4, 9.6, -1.4, 13.2, -0.3, 12.4, 0.8, 9, 1.4, 2.8, 1.4], STEEL, EDGE);
+      for (let k = 0; k < 3; k++) poly([3.6 + k * 1.5, -1.4, 4.3 + k * 1.5, -2.3, 5 + k * 1.5, -1.4], SHADE);
+      line(3, -0.9, 12.4, -0.2, SHINE, 0.7, 0.9);
       break;
-    case 'knuckles':
-      bar(2, 0, 5, 5, tint); bar(4, -2, 6, 2, steel); bar(4, -2.5, 6, 1, shine);
-      bar(4, 1, 6, 1.5, shade);
+    case 'rapier':
+      // a swept hilt: a cup over the hand, a knuckle bow round the grip and
+      // a long thin blade
+      pommel(-4.8, 1.4);
+      hilt(-4, 0.6, 2, GRIP, GOLD_DK);
+      curve([1, -3.3, -1.4, -3.9, -3.6, -3, -4.6, -1.6], GOLD, 0.9);
+      disc(1.4, 0, 3.4, GOLD);
+      disc(1.9, 0, 2.2, GOLD_DK);
+      rect(0.8, 2.4, 1.2, 2.8, GOLD);
+      blade(3.2, 22, 1.6, 2.5, STEEL, false);
+      break;
+    case 'nunchuck': {
+      // the stick in the hand, a ferrule, and the other stick on a short
+      // chain -- which swings on its own (see `stepWeapon`)
+      poly([-4.2, -1.6, 6, -1.7, 6, 1.7, -4.2, 1.6], 0x5a3a24, 0x2a1a10);
+      rect(-4.2, -1.6, 10.2, 0.7, 0x7a5236);
+      rect(5.6, -1.9, 1.6, 3.8, IRON);
+      const stick = scene.add.container(0, 0);
+      const sg = scene.add.graphics();
+      sg.fillStyle(0x5a3a24, 1).fillPoints(V([0, -1.7, 10, -1.6, 10, 1.6, 0, 1.7]), true);
+      sg.lineStyle(0.8, 0x2a1a10, 0.9).strokePoints(V([0, -1.7, 10, -1.6, 10, 1.6, 0, 1.7]), true, true);
+      sg.fillStyle(0x7a5236, 1).fillRect(0, -1.7, 10, 0.7);
+      sg.fillStyle(IRON, 1).fillRect(-0.4, -1.9, 1.6, 3.8);
+      stick.add(sg);
+      flex(7.2, 0, 3, 1.7, 3, stick, true, chainLink);
+      break;
+    }
+    case 'dual':
+      // One sword a hand; the second is in the off hand, not in this one.
+      if (!single) c.setData('pair', true);
+      pommel(-4.4, 1.3, STEEL);
+      hilt(-3.6, 0.6, 2.4);
+      guard(1.4, 7, 1.4, STEEL);
+      blade(2.2, 14, 2.8, 3.2);
+      break;
+    case 'throwing': {
+      // Three knives held in one fist: the one in use along the hand and two
+      // more fanned behind it, all three with their ring pommels in the palm
+      // so they come OUT of the hand rather than hovering beside it.
+      const knife = (deg: number, col: number) => {
+        poly(turn([-1, -0.8, 1.5, -0.9, 1.5, 0.9, -1, 0.8], deg), GRIP);
+        poly(turn([1.5, -1.1, 8, -1.1, 10.5, 0, 8, 1.1, 1.5, 1.1], deg), col, EDGE);
+        const [rx, ry] = turn([-1.6, 0], deg);
+        ring(rx, ry, 0.9, IRON, 0.7);
+      };
+      knife(-24, SHADE);
+      knife(24, SHADE);
+      knife(0, STEEL);
+      line(2, -0.5, 9.5, -0.2, SHINE, 0.6, 0.9);
+      break;
+    }
+    case 'sickle':
+      // a turned handle, a ferrule, and a crescent that grows out of it and
+      // curls forward with its edge on the inside
+      poly([-4.5, -1.3, 3, -1.5, 3, 1.5, -4.5, 1.3], WOOD, WOOD_DK);
+      rect(-4.5, -1.3, 7.5, 0.6, WOOD_LIT);
+      collar(3.6, 3, 1.6);
+      {
+        const cx = 9.4, cy = -1.4;
+        const out: number[] = [];
+        const inn: number[] = [];
+        for (let k = 0; k <= 10; k++) {
+          const a = ((188 + k * 15.5) * Math.PI) / 180;
+          out.push(cx + Math.cos(a) * 6.2, cy + Math.sin(a) * 6.2);
+        }
+        for (let k = 10; k >= 0; k--) {
+          const a = ((196 + k * 14.2) * Math.PI) / 180;
+          const r = 4.4 + k * 0.12;
+          inn.push(cx + 0.4 + Math.cos(a) * r, cy + 0.2 + Math.sin(a) * r);
+        }
+        poly([...out, ...inn], STEEL, EDGE);
+        const lit: number[] = [];
+        for (let k = 1; k <= 8; k++) {
+          const a = ((196 + k * 14.2) * Math.PI) / 180;
+          lit.push(cx + 0.4 + Math.cos(a) * (4.6 + k * 0.12), cy + 0.2 + Math.sin(a) * (4.6 + k * 0.12));
+        }
+        curve(lit, SHINE, 0.6);
+      }
+      break;
+    case 'warfan': {
+      // an iron war fan: ribs from one pivot, painted silk between them and a
+      // sharpened iron rim along the outside
+      rect(-3, -1.2, 4.2, 2.4, GRIP);
+      const leaf: number[] = [];
+      for (let k = 0; k <= 8; k++) {
+        const a = ((-42 + k * 10.5) * Math.PI) / 180;
+        leaf.push(1 + Math.cos(a) * 12, Math.sin(a) * 12);
+      }
+      for (let k = 8; k >= 0; k--) {
+        const a = ((-42 + k * 10.5) * Math.PI) / 180;
+        leaf.push(1 + Math.cos(a) * 4, Math.sin(a) * 4);
+      }
+      poly(leaf, 0xa33a2e, 0x4a1612);
+      for (let k = 0; k <= 8; k += 2) {
+        const a = ((-42 + k * 10.5) * Math.PI) / 180;
+        line(1, 0, 1 + Math.cos(a) * 12, Math.sin(a) * 12, IRON_DK, 0.8);
+      }
+      curve(leaf.slice(0, 18), STEEL, 1);
+      disc(1, 0, 1.2, GOLD);
+      break;
+    }
+
+    // ================================================ THE SWORD RACK
+    case 'gladius':
+      // a big ball pommel, a ribbed bone grip, an oval wooden guard, and the
+      // leaf-shaped blade widening before its long point
+      disc(-4.6, 0, 1.9, 0xa47a4a);
+      disc(-5, -0.6, 0.7, 0xffffff, 0.35);
+      rect(-3.4, -1.3, 4, 2.6, 0xcbb89a);
+      for (let x = -3; x < 0.6; x += 1.1) rect(x, -1.3, 0.5, 2.6, 0x9c8a6a);
+      g.fillStyle(0xa47a4a, 1).fillEllipse(1.4, 0, 2.6, 7.2);
+      poly([2.4, -1.6, 11, -2, 14, -1.4, 19, 0, 14, 1.4, 11, 2, 2.4, 1.6], STEEL, EDGE);
+      line(2.6, -1.1, 15, -0.6, SHINE, 0.7, 0.9);
+      line(3, 0, 13, 0, SHADE, 0.6, 0.6);
       break;
     case 'sword':
-      blade(12, 0, 22, 3); bar(1, 0, 2.5, 9, PALETTE.gold); bar(-2, 0, 4, 3, grip);
-      bar(-4, 0, 2, 4, PALETTE.gold);
+      pommel(-5, 1.5);
+      hilt(-4.2, 0.2, 2.6);
+      guard(1, 9, 1.8);
+      blade(1.9, 19, 3, 4);
       break;
-    case 'katana':
-      blade(13, -2, 25, 2.5, -6); bar(1, 0, 2, 7, PALETTE.ink); bar(-2, 0, 4, 3, 0x6a2b2b);
+    case 'katana': {
+      // wrapped tsuka, a round tsuba, a gold collar and a curving blade that
+      // widens a hair before the point, with the temper line along the edge
+      rect(-6.2, -1.3, 1.2, 2.6, 0x2b2b2b);
+      rect(-5, -1.4, 7, 2.8, 0xe8e0d0);
+      for (let x = -4.6; x < 1.6; x += 1.6) poly([x, -1.4, x + 0.8, 0, x, 1.4, x - 0.8, 0], 0x2a1a18);
+      disc(2.4, 0, 2.7, 0x2b2b2b);
+      ring(2.4, 0, 2.7, GOLD_DK, 0.6);
+      rect(3, -1.3, 1.4, 2.6, GOLD);
+      const top: number[] = [];
+      const bot: number[] = [];
+      for (let k = 0; k <= 10; k++) {
+        const t = k / 10;
+        const x = 4.2 + t * 23;
+        const s = -1.2 - 2.6 * t * t;
+        const w = 2.5 - 0.5 * t;
+        top.push(x, s);
+        bot.unshift(x, s + w);
+      }
+      poly([...top, 30, -4.4, ...bot], STEEL, EDGE);
+      curve(bot.slice(0, 18).map((v, i) => (i % 2 ? v - 0.6 : v)), SHINE, 0.6);
       break;
-    case 'dual':
-      // down to one blade, it is drawn as one blade
-      if (single) { blade(11, 0, 19, 2.8); bar(0, 0, 3, 5, grip); break; }
-      blade(11, -4, 19, 2.5, -12); blade(11, 4, 19, 2.5, 12);
-      bar(0, -3, 3, 5, grip); bar(0, 3, 3, 5, grip);
+    }
+    case 'scimitar':
+      // a hooked pommel, a short guard with its quillons turned down, and a
+      // blade that broadens and sweeps up to the point
+      poly([-5.4, -1, -4, -1.4, -4, 1.4, -6, 2.4], GOLD_DK);
+      hilt(-4, 0.6, 2.4, 0x5a2a1a);
+      poly([0.6, -3.6, 2.2, -3.6, 2.2, 3.6, 0.6, 3.6, 0, 4.6, 0, -4.6], GOLD, GOLD_DK);
+      poly([2.2, -1.2, 9, -1.6, 15, -2.8, 19.5, -5, 23, -7.6, 22, -5, 18.5, -1.6, 13, 1.3, 7, 1.8, 2.2, 1.4], STEEL, EDGE);
+      curve([3, 1, 8, 1.3, 13, 0.8, 18, -1.8, 21.6, -5.4], SHINE, 0.6);
       break;
-    case 'nunchuck':
-      haft(3, -3, 8, 3.5, -30); haft(9, 4, 8, 3.5, 40);
-      bar(6, 0, 5, 1, steel); bar(6, 0, 5, 0.5, shine);
+    case 'estoc':
+      // a long stiff thrusting blade with no edge: a ridge down the middle,
+      // a plain cross and a side ring to guard the finger
+      pommel(-5.2, 1.4, STEEL);
+      hilt(-4.4, 0.6, 2.2);
+      guard(1.5, 8, 1.4, IRON);
+      ring(1.5, 3.4, 1.3, IRON, 0.7);
+      poly([2.4, -1.1, 26, -0.5, 29.5, 0, 26, 0.5, 2.4, 1.1], STEEL, EDGE);
+      line(2.6, 0, 27, 0, SHINE, 0.6, 0.9);
       break;
-    case 'axe':
-      haft(8, 0, 16, 3);
-      bar(16, -1, 9, 10, steel); bar(16, -1, 9, 2, shine); bar(18, 3, 5, 2, shade);
-      bar(12, -1, 3, 11, 0x5a4530);
+    case 'claymore':
+      // a wheel pommel, a long two-hand grip, a long cross with quatrefoil
+      // ends sloping forward, a ricasso, and the long broad blade
+      disc(-7.2, 0, 1.9, IRON);
+      disc(-7.2, 0, 0.8, IRON_LIT);
+      hilt(-6.2, 0.4, 2.8, 0x4a2a1a, 0x6a4a2c);
+      poly([0.4, -1, 2.6, -1, 3.8, -7, 2.4, -7.6, 1.6, -7], IRON, IRON_DK);
+      poly([0.4, 1, 2.6, 1, 3.8, 7, 2.4, 7.6, 1.6, 7], IRON, IRON_DK);
+      disc(3, -7.6, 1.2, IRON_LIT);
+      disc(3, 7.6, 1.2, IRON_LIT);
+      rect(2.4, -1.5, 3, 3, SHADE);
+      blade(5.2, 24, 4.2, 5);
       break;
     case 'goldsword':
-      bar(12, 0, 23, 4.5, PALETTE.gold); bar(12, -1.6, 23, 1.5, PALETTE.cream);
-      bar(12, 1.8, 23, 1, PALETTE.amberDark);
-      bar(1, 0, 3.5, 11, PALETTE.amberDark); bar(-3, 0, 4, 4, 0x6a4a12);
-      c.add(scene.add.circle(-5, 0, 2, PALETTE.blood));
+      // the gold sword: a jewelled pommel, red leather bound in gold wire, a
+      // winged guard and a gilded blade
+      disc(-6, 0, 2, GOLD);
+      disc(-6, 0, 1, PALETTE.blood);
+      hilt(-4.8, 0.2, 2.6, 0x7a1e1e, GOLD);
+      poly([0, -1.2, 1.6, -1.2, 3.6, -6, 2, -6.4, 0.4, -4], GOLD, GOLD_DK);
+      poly([0, 1.2, 1.6, 1.2, 3.6, 6, 2, 6.4, 0.4, 4], GOLD, GOLD_DK);
+      disc(1, 0, 1.6, PALETTE.blood);
+      blade(2.2, 20, 4.2, 4, GOLD);
+      line(3, 0, 18, 0, GOLD_DK, 0.8, 0.8);
+      line(2.4, -1.6, 22, -0.8, PALETTE.cream, 0.7, 0.9);
       break;
+
+    // ================================================ THE POLE RACK
     case 'staff':
       // Forty-two long, from a cap behind the hand to one well out in front:
       // it was thirty-four and read as a walking stick next to the spears.
-      haft(12, 0, 42, 3.5);
-      bar(32, 0, 4, 4.5, PALETTE.bone); bar(-8, 0, 4, 4.5, PALETTE.bone);
-      bar(12, 0, 42, 1, 0x5a4530).setAlpha(0.5);
-      break;
-    case 'flail':
-      haft(6, 0, 12, 3);
-      bar(16, 0, 9, 1, PALETTE.fog);
-      c.add(scene.add.circle(24, 0, 5.5, PALETTE.steel));
-      c.add(scene.add.circle(23, -1, 2, shine).setAlpha(0.6));
-      bar(24, 0, 13, 1.5, PALETTE.bone); bar(24, 0, 1.5, 13, PALETTE.bone);
-      break;
-    case 'scythe':
-      haft(12, 0, 26, 3);
-      blade(26, -6, 13, 2.5, -28); blade(30, -11, 8, 2, -62);
-      bar(20, 0, 3, 4, PALETTE.gold);
-      break;
-    // ---- THE ROMAN AND THE POLEARM RACK
-    case 'gladius':
-      blade(9, 0, 16, 3.5); bar(0, 0, 2.5, 8, PALETTE.gold); bar(-3, 0, 4, 4, 0x6a4a2a);
-      break;
-    // ---- THE TEN ADDED TO THE RACK.  Each one has to be recognisable from
-    // its silhouette alone at this size, which is why no two of them share a
-    // head shape.
-    case 'sickle':
-      bar(2, 0, 7, 2.5, 0x6a4a2a);
-      bar(9, -3, 8, 2, steel); bar(13, 1.5, 2, 7, steel); bar(9, -3.6, 8, 1, shine);
-      break;
-    case 'warfan':
-      bar(1, 0, 4, 2.5, 0x3b2a1a);
-      for (let k = -2; k <= 2; k++) c.add(scene.add.rectangle(8, k * 2.1, 11, 1.4, steel).setAngle(k * 9));
-      bar(13, 0, 1.5, 10, shine);
-      break;
-    case 'scimitar':
-      bar(0, 0, 4, 3, 0x6a4a2a); bar(2, 0, 2.5, 7, PALETTE.gold);
-      for (let k = 0; k < 4; k++) bar(6 + k * 4, -k * 0.9, 5, 3 - k * 0.2, k % 2 ? steel : shine);
-      c.add(scene.add.triangle(22, -3.4, 0, 0, 5, -1.5, 0, 3, steel));
-      break;
-    case 'estoc':
-      bar(0, 0, 4, 2.5, 0x3b2a1a); bar(2.5, 0, 2, 8, PALETTE.gold);
-      bar(14, 0, 22, 2, steel); bar(14, -0.8, 22, 0.8, shine);
-      c.add(scene.add.triangle(26, 0, 0, -1.6, 5, 0, 0, 1.6, shine));
-      break;
-    case 'pike':
-      haft(8, 0, 38, 2.5);
-      c.add(scene.add.triangle(30, 0, 0, -3, 9, 0, 0, 3, steel));
-      bar(30, -1, 7, 1, shine); bar(12, 0, 3, 4.5, 0x6a4a2a);
-      break;
-    case 'glaive':
-      haft(5, 0, 28, 2.5);
-      c.add(scene.add.triangle(24, -2.4, 0, 0, 10, -3, 2, 6, steel));
-      bar(23, -4, 8, 1, shine); bar(17, 0, 2, 5, PALETTE.gold);
-      break;
-    case 'maul':
-      haft(4, 0, 22, 3);
-      bar(19, 0, 9, 13, 0x6f7681); bar(19, -5, 9, 2.5, 0x9aa2ae);
-      bar(19, 5.5, 9, 2, 0x4c525b); bar(15, 0, 2, 13, 0x3b2a1a);
-      break;
-    case 'bardiche':
-      haft(5, 0, 26, 2.5);
-      c.add(scene.add.triangle(21, -3, 0, -7, 9, -2, 0, 7, steel));
-      bar(20, -6, 8, 1, shine); bar(14, 0, 2, 4, 0x6a4a2a);
-      break;
-    case 'harpoon':
-      haft(6, 0, 28, 2.5);
-      c.add(scene.add.triangle(23, 0, 0, -3.5, 9, 0, 0, 3.5, steel));
-      // the barbs, which are the whole of what makes it a harpoon
-      bar(19, -3, 5, 1.6, steel, -32); bar(19, 3, 5, 1.6, steel, 32);
-      bar(-6, 0, 6, 1, 0xbfae8a);
-      break;
-    case 'bolas':
-      bar(2, 0, 9, 1, 0x7a6a4a, 18); bar(2, 0, 9, 1, 0x7a6a4a, -18);
-      c.add(scene.add.circle(10, 4, 3, 0x6f7681));
-      c.add(scene.add.circle(10, -4, 3, 0x6f7681));
-      c.add(scene.add.circle(9, 3.2, 1.2, 0x9aa2ae));
-      c.add(scene.add.circle(9, -4.8, 1.2, 0x9aa2ae));
+      haft(-9, 32, 3.2);
+      g.fillStyle(PALETTE.bone, 1).fillRoundedRect(31, -2.2, 4, 4.4, 1.4);
+      g.fillStyle(PALETTE.bone, 1).fillRoundedRect(-12, -2.2, 4, 4.4, 1.4);
+      handWrap(-2, 3, 3.4);
+      handWrap(15, 19, 3.4);
       break;
     case 'spear':
-      haft(6, 0, 30, 2.5);
-      c.add(scene.add.triangle(24, 0, 0, -4, 11, 0, 0, 4, steel));
-      bar(24, -1, 9, 1, shine); bar(10, 0, 3, 4, PALETTE.gold);
+      haft(-8, 22, 2.4);
+      collar(22.4, 3, 2);
+      poly([23.2, -1.2, 27, -3.4, 33.5, 0, 27, 3.4, 23.2, 1.2], STEEL, EDGE);
+      line(23.4, 0, 32.5, 0, SHINE, 0.7, 0.9);
+      handWrap(-1, 3, 2.8);
+      break;
+    case 'pike':
+      // very long, with a small head on long iron langets so the point will
+      // not be lopped off
+      haft(-14, 31, 2.2);
+      line(27, -1.1, 31, -1.1, IRON, 0.7);
+      line(27, 1.1, 31, 1.1, IRON, 0.7);
+      collar(31.4, 2.8, 1.8);
+      poly([32.2, -1.2, 34.6, -2.6, 38.6, 0, 34.6, 2.6, 32.2, 1.2], STEEL, EDGE);
+      line(32.4, 0, 38, 0, SHINE, 0.6, 0.9);
+      handWrap(-1, 2.5, 2.6);
       break;
     case 'trident':
-      haft(4, 0, 26, 2.5);
-      bar(20, 0, 9, 2, steel); bar(24, -5, 8, 2, steel); bar(24, 5, 8, 2, steel);
-      c.add(scene.add.triangle(29, 0, 0, -2, 6, 0, 0, 2, shine));
+      // a socket, a crossbar forged on to it, and three barbed prongs that
+      // grow out of the crossbar -- one piece of iron on the end of the haft
+      haft(-6, 18, 2.4);
+      collar(18.6, 3.2, 2);
+      g.fillStyle(IRON, 1).fillRoundedRect(19.4, -6.6, 2.4, 13.2, 1);
+      line(19.8, -6, 19.8, 6, IRON_LIT, 0.6);
+      for (const py of [-5.6, 0, 5.6]) {
+        const len = py === 0 ? 10 : 7.6;
+        rect(21.6, py - 0.8, len, 1.6, STEEL);
+        poly([21.6 + len, py - 1.8, 21.6 + len + 3.2, py, 21.6 + len, py + 1.8, 21.6 + len - 1, py], STEEL, EDGE);
+        line(21.6, py - 0.5, 21.6 + len, py - 0.5, SHINE, 0.5, 0.9);
+      }
       break;
     case 'halberd':
-      haft(6, 0, 30, 2.5);
-      bar(20, -4, 9, 8, steel); bar(20, -6, 9, 2, shine);
-      c.add(scene.add.triangle(26, 0, 0, -4, 9, 0, 0, 4, steel));
-      bar(20, 5, 5, 3, shade);
+      // a spike on the end, an axe blade on the leading side, a hook on the
+      // back, all on one long socket riveted to the shaft
+      haft(-8, 24, 2.4);
+      rect(16.4, -1.8, 8, 3.6, IRON);
+      disc(18, 0, 0.6, IRON_LIT);
+      disc(22.6, 0, 0.6, IRON_LIT);
+      poly([24.2, -1.1, 31.5, 0, 24.2, 1.1], STEEL, EDGE);
+      poly([17, 1.8, 15.6, 5.6, 17, 9.6, 20.4, 8.6, 23.8, 9.4, 23.8, 1.8], STEEL, EDGE);
+      curve([15.8, 5.6, 17.1, 9.3, 20.4, 8.3, 23.6, 9.1], SHINE, 0.6);
+      poly([19, -1.8, 21, -6.4, 22.6, -1.8], STEEL, EDGE);
+      handWrap(-1, 3, 2.8);
+      break;
+    case 'glaive':
+      // a single-edged blade on the end of a pole, edge leading, with a small
+      // back-hook, seated in a socket
+      haft(-8, 20, 2.4);
+      collar(20.4, 3, 2);
+      poly([21.2, -1.4, 28, -2, 34.4, -4.8, 33, -1, 29, 2.8, 24, 3.6, 21.2, 1.4], STEEL, EDGE);
+      curve([24, 3.2, 29, 2.4, 32.8, -1.2], SHINE, 0.6);
+      poly([24, -1.6, 25.5, -4.4, 26.8, -1.8], STEEL, EDGE);
+      handWrap(-1, 3, 2.8);
+      break;
+    case 'bardiche':
+      // a long crescent axe blade riveted to the shaft at two points, its
+      // upper horn running past the end of the pole
+      haft(-8, 22, 2.4);
+      poly([13.8, 1.2, 13.2, 5, 15.8, 8.6, 21.6, 9.2, 25.8, 6.2, 28.4, -3.4, 24.2, -1.2, 24.2, 1.2], STEEL, EDGE);
+      curve([15.8, 8.2, 21.6, 8.8, 25.4, 6, 27.9, -2.8], SHINE, 0.6);
+      rect(13.4, -1.6, 2.4, 3.2, IRON);
+      rect(22.8, -1.6, 2.4, 3.2, IRON);
+      handWrap(-1, 3, 2.8);
       break;
     case 'warscythe':
-      haft(10, 0, 30, 3);
-      blade(26, -4, 15, 2.5, -18); blade(31, -9, 9, 2, -48);
-      bar(16, 0, 3, 4, PALETTE.gold);
+      // a scythe blade straightened and set on the end of the pole in a
+      // socket, curving up to its point
+      haft(-8, 22, 2.6);
+      collar(22.4, 3.2, 2.2);
+      poly([23.4, -1.4, 28.6, -3.4, 33, -7.6, 35, -11, 34.2, -6.4, 30.4, -1, 23.4, 1.6], STEEL, EDGE);
+      curve([23.6, 1.2, 30.2, -1.2, 33.9, -6.6], SHINE, 0.6);
+      handWrap(-1, 3, 3);
       break;
-    // ---- THE CRUSHING RACK
-    case 'mace':
-      haft(5, 0, 13, 3);
-      c.add(scene.add.circle(16, 0, 5, PALETTE.steel));
-      for (let i = 0; i < 4; i++) bar(16, 0, 12, 2.2, PALETTE.fog, i * 45);
-      c.add(scene.add.circle(15, -1, 1.8, shine).setAlpha(0.6));
+    case 'scythe': {
+      // a snath with a peg handle, and the long blade hung off its end at
+      // right angles, curving forward to the point
+      haft(-6, 20, 2.6);
+      g.fillStyle(WOOD, 1).fillRoundedRect(7.2, -5, 1.8, 4, 0.8);
+      collar(20.2, 3.4, 2.4);
+      const out: number[] = [];
+      const inn: number[] = [];
+      for (let k = 0; k <= 10; k++) {
+        const t = k / 10;
+        out.push(21.4 - 2.2 * Math.sin(t * Math.PI * 0.7) + t * t * 14, -1 - t * 14 + t * t * 1.5);
+        inn.unshift(21.4 + 2.4 - (2.2 * Math.sin(t * Math.PI * 0.7)) * 0.9 + t * t * 14 - t * 1.6, -1 - t * 14 + t * t * 1.5 + 2.6 * (1 - t));
+      }
+      poly([...out, ...inn], STEEL, EDGE);
+      curve(inn.slice(0, 16), SHINE, 0.6);
       break;
-    case 'morningstar':
-      haft(4, 0, 11, 2.8);
-      bar(12, 0, 6, 1, PALETTE.fog);
-      c.add(scene.add.circle(20, 0, 5, 0x5e5a63));
-      for (let i = 0; i < 6; i++) bar(20, 0, 12, 1.6, PALETTE.bone, i * 30);
+    }
+    case 'harpoon':
+      // a barbed head on an iron shank, and the coil of line tied to the butt
+      haft(-8, 18, 2.2);
+      rect(18, -0.7, 4.4, 1.4, IRON);
+      poly([22.2, -1.6, 28.4, 0, 22.2, 1.6], STEEL, EDGE);
+      poly([23.6, -1.1, 21, -4.2, 22.4, -1.2], STEEL, EDGE);
+      poly([23.6, 1.1, 21, 4.2, 22.4, 1.2], STEEL, EDGE);
+      ring(-10.2, 1.6, 2, CORD, 0.9);
+      ring(-10.2, 1.6, 1.2, CORD, 0.7);
+      line(-9, 0, -8.2, 0.6, CORD, 0.8);
+      handWrap(-1, 3, 2.6);
       break;
-    case 'warhammer':
-      haft(6, 0, 15, 3.2);
-      bar(17, 0, 9, 11, PALETTE.steel); bar(17, -4, 9, 2.5, shine); bar(17, 4, 9, 2, shade);
-      bar(23, 0, 4, 5, PALETTE.fog);
+    case 'javelin':
+      // a light shaft with a thong-bound grip, a long thin iron shank and a
+      // small pyramid head
+      haft(-10, 18, 1.9);
+      handWrap(-1.6, 2.6, 2.4);
+      rect(18, -0.6, 5.4, 1.2, IRON);
+      poly([23.2, -1.8, 28.8, 0, 23.2, 1.8], STEEL, EDGE);
+      line(23.4, -0.5, 28, 0, SHINE, 0.5, 0.9);
       break;
-    case 'heavyhammer':
-      haft(5, 0, 14, 3.5);
-      bar(18, 0, 12, 14, PALETTE.steel); bar(18, -5, 12, 3, shine); bar(18, 5, 12, 2.5, shade);
-      bar(12, 0, 3, 14, 0x5a4530);
+    case 'magicstaff': {
+      // a gnarled staff with three gold prongs closing round a glowing orb
+      curve([-9, 2.6, -3, 1.8, 3, 0.6, 9, -0.8, 14.4, -2.6], WOOD_DK, 3);
+      curve([-9, 2.1, -3, 1.3, 3, 0.1, 9, -1.3, 14.4, -3.1], WOOD, 1.8);
+      disc(-2, 1.6, 1, WOOD_DK);
+      disc(6, -0.1, 0.8, WOOD_DK);
+      disc(17.4, -5.6, 5.4, 0x6fd8e8, 0.22);
+      disc(17.4, -5.6, 3.3, 0x6fd8e8);
+      disc(17, -6.2, 1.8, 0xdffaff);
+      curve([14.2, -2.8, 13.8, -6, 15.4, -9.2], GOLD, 1);
+      curve([14.6, -2.6, 17.4, -1.6, 20.6, -3.2], GOLD, 1);
+      curve([14.4, -2.8, 17, -4.4, 19.6, -8.8], GOLD, 0.8);
       break;
+    }
+
+    // ================================================ THE CRUSHING RACK
     case 'club':
-      bar(9, 0, 20, 5, wood); bar(9, -1.6, 20, 1.5, woodLit);
-      bar(17, 0, 8, 8, wood); bar(17, -2.5, 8, 1.5, woodLit);
-      for (let i = 0; i < 3; i++) c.add(scene.add.circle(14 + i * 3, (i % 2 ? -2 : 2), 1, 0x5a4530));
+      // a tapering cudgel of one piece of wood, knots and all, with iron
+      // studs driven into the head and leather round the grip
+      poly([-4.5, -1.6, 6, -2.2, 13, -3.4, 18.4, -4, 21, -2.2, 21, 2.2, 18.4, 4, 13, 3.4, 6, 2.2, -4.5, 1.6], WOOD, WOOD_DK);
+      poly([-4.5, -1.6, 6, -2.2, 13, -3.4, 18.4, -4, 19, -2.8, 13, -2.2, 6, -1.2, -4.5, -0.8], WOOD_LIT);
+      handWrap(-4.5, 1.5, 3.2);
+      disc(9, 1.2, 0.8, WOOD_DK);
+      for (const [sx, sy] of [[15, -2.4], [18, 1.8], [19.6, -1.4], [13.4, 2.2]] as const) {
+        disc(sx, sy, 0.9, IRON);
+        disc(sx - 0.3, sy - 0.3, 0.35, IRON_LIT);
+      }
       break;
-    case 'claymore':
-      blade(15, 0, 28, 4.5); bar(2, 0, 3, 13, PALETTE.steel); bar(-3, 0, 5, 4, grip);
-      bar(2, 0, 3, 3, PALETTE.gold);
+    case 'axe':
+      // a bearded axe: the head sits on the haft through its own eye, the
+      // blade drops forward to a long beard, and the poll sits above
+      haft(-5, 18.6, 2.6);
+      handWrap(-5, 0.5, 3);
+      poly([12.4, -4.2, 17.2, -4.2, 17.2, 2.4, 12.4, 2.4], IRON, IRON_DK);
+      poly([12.8, 2.4, 11.8, 6, 10.6, 9.6, 14.4, 8.4, 19.4, 10.8, 20.4, 6, 17.2, 2.4], STEEL, EDGE);
+      curve([10.8, 9.3, 14.4, 8.1, 19.2, 10.4], SHINE, 0.8);
+      rect(12.4, -4.2, 4.8, 0.8, IRON_LIT);
+      break;
+    case 'throwaxe':
+      // a small tomahawk: short haft, head through its own eye, a little
+      // spike behind
+      haft(-4, 11.6, 2.2);
+      poly([9.2, -2.2, 12.6, -2.2, 12.6, 1.8, 9.2, 1.8], IRON, IRON_DK);
+      poly([9.6, 1.8, 8.6, 5.2, 14.6, 6.8, 13.4, 1.8], STEEL, EDGE);
+      line(8.8, 5.2, 14.4, 6.5, SHINE, 0.7);
+      poly([10, -2.2, 10.9, -5, 11.8, -2.2], STEEL);
       break;
     case 'greataxe':
-      haft(9, 0, 19, 3.5);
-      bar(19, -2, 12, 15, PALETTE.steel); bar(19, -7, 12, 3, shine);
-      c.add(scene.add.triangle(25, -2, 0, 0, 6, 7, 0, 14, shade));
-      bar(13, -2, 3, 15, 0x5a4530);
+      // a huge crescent blade on the leading side, a spike on the poll, a
+      // spike on the end, all on the one socket
+      haft(-8, 22, 3.2);
+      handWrap(-8, -2, 3.4);
+      poly([15.6, -3, 21.4, -3, 21.4, 3, 15.6, 3], IRON, IRON_DK);
+      poly([16, 3, 12.4, 7, 11, 13.6, 15, 11.8, 19.4, 12.8, 24.6, 14, 25, 8, 21.4, 3], STEEL, EDGE);
+      curve([11.4, 13.2, 15, 11.4, 19.4, 12.4, 24.4, 13.4], SHINE, 0.9);
+      poly([16.8, -3, 18.4, -7.8, 20, -3], STEEL, EDGE);
+      poly([21.4, -1.2, 25, 0, 21.4, 1.2], STEEL);
       break;
-    // ---- THE QUICK RACK
-    case 'rapier':
-      bar(13, 0, 25, 1.5, steel); bar(13, -0.8, 25, 0.8, shine);
-      c.add(scene.add.circle(1, 0, 3.5, PALETTE.gold));
-      c.add(scene.add.circle(1, 0, 2, 0, 0).setStrokeStyle(1, PALETTE.amberDark));
-      bar(-3, 0, 4, 3, grip);
+    case 'mace':
+      // a flanged mace: a collar, a heavy head with its flanges standing out
+      // top and bottom, and a knob on the end
+      haft(-4, 12.4, 2.8);
+      handWrap(-4, 1.5, 3.2);
+      collar(12.8, 3.4, 2);
+      g.fillStyle(IRON, 1).fillEllipse(17.8, 0, 9.4, 8);
+      poly([14.2, -3.4, 15.8, -6.8, 20.2, -6.8, 21.6, -3.4], IRON_LIT, IRON_DK);
+      poly([14.2, 3.4, 15.8, 6.8, 20.2, 6.8, 21.6, 3.4], IRON, IRON_DK);
+      disc(22.8, 0, 1.4, IRON_DK);
+      g.fillStyle(0xffffff, 0.3).fillEllipse(16.6, -1.6, 4, 1.6);
       break;
-    case 'twindagger':
-      if (single) { blade(5, 0, 9, 2.5); bar(0, 0, 2, 6, PALETTE.gold); bar(-2, 0, 3, 3, grip); break; }
-      blade(6, -4, 10, 2, -14); blade(6, 4, 10, 2, 14);
-      bar(0, -3, 3, 4, grip); bar(0, 3, 3, 4, grip);
+    case 'morningstar': {
+      // a spiked ball fixed on a short haft: rigid, unlike the ball and chain
+      haft(-4, 13, 2.8);
+      handWrap(-4, 1.5, 3.2);
+      collar(13.4, 3.6, 2.2);
+      const cx = 18.8;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + 0.2;
+        poly([cx + Math.cos(a - 0.3) * 4, Math.sin(a - 0.3) * 4, cx + Math.cos(a) * 7.2, Math.sin(a) * 7.2,
+          cx + Math.cos(a + 0.3) * 4, Math.sin(a + 0.3) * 4], PALETTE.bone, SHADE);
+      }
+      disc(cx, 0, 4.6, 0x5e5a63);
+      disc(cx - 1.2, -1.4, 1.6, 0xffffff, 0.3);
       break;
-    case 'throwing':
-      // one in the hand and two more held ready between the fingers
-      blade(6, 0, 9, 2);
-      bar(0, 0, 3, 3, grip);
-      blade(3, -5, 6, 1.5, -26); blade(3, 5, 6, 1.5, 26);
+    }
+    case 'flail': {
+      // THE BALL AND CHAIN: a short handle with a ring on the end, a chain,
+      // and a spiked iron ball.  The chain and the ball are not drawn here --
+      // they are a flexible part the hand drags about (see `stepWeapon`).
+      haft(-4, 8.6, 3);
+      handWrap(-4, 2, 3.4);
+      collar(9, 3.6, 1.8);
+      ring(10.9, 0, 1.2, IRON_LIT, 0.8);
+      const ball = scene.add.container(0, 0);
+      const bg = scene.add.graphics();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        bg.fillStyle(PALETTE.bone, 1).fillPoints(V([Math.cos(a - 0.32) * 3.6, Math.sin(a - 0.32) * 3.6,
+          Math.cos(a) * 6.6, Math.sin(a) * 6.6, Math.cos(a + 0.32) * 3.6, Math.sin(a + 0.32) * 3.6]), true);
+      }
+      bg.fillStyle(0x3a3f48, 1).fillCircle(0, 0, 4.9);
+      bg.fillStyle(0x5e6470, 1).fillCircle(0, 0, 4.3);
+      bg.fillStyle(0xffffff, 0.35).fillCircle(-1.3, -1.5, 1.5);
+      bg.lineStyle(0.8, IRON_LIT, 1).strokeCircle(-4.6, 0, 0.9);
+      ball.add(bg);
+      flex(12, 0, 6, 2.2, 6, ball, true, chainLink);
       break;
-    // ---- THE RANGED RACK.  A bow reads by its limbs and its string, a
-    // crossbow by the cross, a sling by the pouch on the end of a cord.
-    case 'bow': case 'longbow': {
+    }
+    case 'warhammer':
+      // a hammer face leading the blow, a beak behind for armour, a spike on
+      // the end, and langets down the shaft
+      haft(-5, 16, 2.8);
+      handWrap(-5, 0.5, 3.2);
+      line(11, -1.4, 16, -1.4, IRON, 0.7);
+      line(11, 1.4, 16, 1.4, IRON, 0.7);
+      poly([14.6, -2.6, 19.8, -2.6, 19.8, 4, 14.6, 4], IRON, IRON_DK);
+      poly([13.8, 4, 20.6, 4, 20.6, 6.6, 13.8, 6.6], IRON_LIT, IRON_DK);
+      poly([15.6, -2.6, 17.2, -9.4, 18.8, -2.6], IRON, IRON_DK);
+      poly([19.8, -1, 23.4, 0, 19.8, 1], STEEL);
+      line(14.4, 6.3, 20.2, 6.3, 0xffffff, 0.5, 0.5);
+      break;
+    case 'heavyhammer':
+      // a two-faced sledge: a banded iron head through its own eye, both
+      // faces dressed bright from use
+      haft(-5, 14.4, 3.2);
+      handWrap(-5, 0.5, 3.6);
+      g.fillStyle(IRON, 1).fillRoundedRect(13, -7, 9, 14, 1.6);
+      g.lineStyle(0.8, IRON_DK, 1).strokeRoundedRect(13, -7, 9, 14, 1.6);
+      rect(12.4, -8.2, 10.2, 2, IRON_LIT);
+      rect(12.4, 6.2, 10.2, 2, IRON_LIT);
+      rect(13, -3.6, 9, 0.8, IRON_DK);
+      rect(13, 2.8, 9, 0.8, IRON_DK);
+      disc(17.5, 0, 0.8, IRON_LIT);
+      break;
+    case 'maul':
+      // a two-handed maul: a long haft and a huge drum of a head, capped in
+      // iron at both faces and banded round the middle
+      haft(-8, 16, 3);
+      handWrap(-8, -2, 3.4);
+      handWrap(5, 9, 3.4);
+      g.fillStyle(0x6f7681, 1).fillRoundedRect(15, -7.6, 10.4, 15.2, 2.4);
+      g.lineStyle(0.8, IRON_DK, 1).strokeRoundedRect(15, -7.6, 10.4, 15.2, 2.4);
+      rect(14.4, -8.4, 11.6, 2.4, IRON_LIT);
+      rect(14.4, 6, 11.6, 2.4, 0x4c525b);
+      rect(15, -0.8, 10.4, 1.6, IRON_DK);
+      break;
+
+    // ================================================ THE RANGED RACK
+    case 'bow':
+    case 'longbow': {
+      // A bow is its limbs: they curve from the grip toward the tips, which
+      // sit back toward the archer, with the string running tip to tip behind
+      // the hand.  The short bow's tips recurve forward; the longbow is a
+      // plain deep D with horn nocks.
       const big = key === 'longbow';
-      const h = big ? 22 : 17;
-      bar(2, -h / 2 + 2, 2.5, h / 2 + 2, wood, -16);
-      bar(2, h / 2 - 2, 2.5, h / 2 + 2, wood, 16);
-      bar(2, -h / 2 + 2, 1, h / 2 + 2, woodLit, -16);
-      bar(5, 0, 1, h - 1, 0xe6dcc4);                   // the string
-      bar(0, 0, 3, 5, grip);
-      if (big) { bar(2, -h / 2 - 1, 3, 2, PALETTE.gold); bar(2, h / 2 + 1, 3, 2, PALETTE.gold); }
+      const h = big ? 12 : 9;
+      const limb: number[] = [];
+      for (let k = 0; k <= 12; k++) {
+        const t = k / 6 - 1;
+        limb.push(1.6 - 3.8 * t * t, t * h);
+      }
+      curve(limb, WOOD_DK, 2.6);
+      curve(limb, WOOD, 1.6);
+      curve(limb.slice(0, 12), WOOD_LIT, 0.6);
+      if (!big) {
+        curve([-2.2, -h, -1, -h - 1.4, 0.4, -h - 1.6], WOOD, 1.4);
+        curve([-2.2, h, -1, h + 1.4, 0.4, h + 1.6], WOOD, 1.4);
+      } else {
+        disc(-2.2, -h, 1, PALETTE.bone);
+        disc(-2.2, h, 1, PALETTE.bone);
+      }
+      line(big ? -2.2 : 0.2, big ? -h : -h - 1.4, -2.2, 0, 0xe6dcc4, 0.7);
+      line(big ? -2.2 : 0.2, big ? h : h + 1.4, -2.2, 0, 0xe6dcc4, 0.7);
+      g.fillStyle(GRIP, 1).fillRoundedRect(0.2, -2.6, 2.6, 5.2, 1);
       break;
     }
     case 'crossbow':
-      haft(6, 0, 15, 3.5); bar(3, 0, 2.5, 14, wood);   // stock and the bow across it
-      bar(3, -6, 3, 2, steel); bar(3, 6, 3, 2, steel);
-      bar(5, 0, 1, 12, 0xe6dcc4);
-      blade(12, 0, 9, 1.5); bar(-1, 1, 4, 4, grip);
+      // a stock that drops to a butt, a steel prod across the front, the
+      // string drawn back to the nut, a bolt laid in the groove, a trigger
+      poly([-7, 2.6, -6, -1, 12.6, -1.4, 12.6, 1.4, -1.4, 1.8, -5.6, 3.8], WOOD, WOOD_DK);
+      rect(-6, -1, 18.6, 0.7, WOOD_LIT);
+      curve([10.6, -7.4, 12.2, -3.6, 12.8, 0, 12.2, 3.6, 10.6, 7.4], IRON_DK, 2);
+      curve([10.6, -7.4, 12.2, -3.6, 12.8, 0, 12.2, 3.6, 10.6, 7.4], STEEL, 1);
+      line(10.6, -7.4, 5.6, -0.4, 0xe6dcc4, 0.6);
+      line(10.6, 7.4, 5.6, 0.4, 0xe6dcc4, 0.6);
+      rect(5, -2.3, 9, 0.9, WOOD_DK);
+      poly([14, -2.9, 16.2, -1.85, 14, -0.8], STEEL);
+      rect(0.4, 1.6, 1, 2.4, IRON);
+      rect(12, -1.8, 1.6, 3.6, IRON);
       break;
-    case 'sling':
-      bar(1, 0, 3, 3, grip);
-      bar(5, -3, 8, 1, 0x6b5436, -22); bar(5, 3, 8, 1, 0x6b5436, 22);
-      bar(10, 0, 4, 4, 0x8a6a42); c.add(scene.add.circle(10, 0, 1.6, 0x9a9a9a));
+    case 'sling': {
+      // a loop round the fingers, two cords and the pouch with its stone --
+      // cords and pouch swing free (see `stepWeapon`)
+      ring(0.6, 0, 1.4, LEATHER, 0.9);
+      const pouch = scene.add.container(0, 0);
+      const pg = scene.add.graphics();
+      pg.fillStyle(0x8a6a42, 1).fillEllipse(1.6, 0, 4.4, 4);
+      pg.fillStyle(0x9a9a9a, 1).fillCircle(1.8, -0.4, 1.5);
+      pg.fillStyle(0xffffff, 0.4).fillCircle(1.4, -0.9, 0.5);
+      pouch.add(pg);
+      flex(1.8, 0, 4, 2.2, 2, pouch, true, cordLink(CORD));
       break;
+    }
+    case 'bolas': {
+      // three weighted thongs knotted together in the hand: every thong swings
+      // on its own and the weights clack about at the ends of them
+      disc(1, 0, 1.3, LEATHER);
+      const weight = (): Phaser.GameObjects.Container => {
+        const w = scene.add.container(0, 0);
+        const wg = scene.add.graphics();
+        wg.fillStyle(0x6f7681, 1).fillCircle(0, 0, 2.6);
+        wg.lineStyle(0.6, LEATHER, 1).strokeCircle(0, 0, 2.6);
+        wg.fillStyle(0xffffff, 0.35).fillCircle(-0.8, -0.9, 0.9);
+        w.add(wg);
+        return w;
+      };
+      flex(1.6, -0.6, 4, 2.4, 3, weight(), false, cordLink(CORD), -34);
+      flex(1.6, 0.6, 4, 2, 3, weight(), false, cordLink(CORD), 30);
+      flex(1.8, 0, 3, 2.6, 3, weight(), false, cordLink(CORD), 2);
+      break;
+    }
     case 'blowgun':
-      haft(8, 0, 18, 2.5); bar(17, 0, 2, 3.5, PALETTE.ink);
-      bar(0, 0, 3, 3.5, 0x4a3a24);
-      break;
-    case 'magicstaff':
-      haft(7, 2, 20, 3, -8);
-      c.add(scene.add.circle(16, -5, 3.4, 0x6fd8e8));
-      c.add(scene.add.circle(16, -5, 2, 0xdffaff));
-      bar(16, -9, 1.5, 3, 0x9a6ab0); bar(13, -3, 5, 1.5, PALETTE.gold, -20);
-      break;
-    case 'throwaxe':
-      haft(6, 0, 12, 2.5);
-      bar(12, -2, 6, 7, steel); bar(12, -3.5, 6, 1.5, shine); bar(13, 1, 4, 1.5, shade);
-      break;
-    case 'javelin':
-      haft(9, 0, 24, 2.5); blade(21, 0, 7, 2.5);
-      bar(2, 0, 3, 3.5, 0x6a4a2a); bar(6, 0, 2, 4, PALETTE.gold);
+      // a length of cane: a mouthpiece at the near end, nodes along it
+      rect(-7.6, -1.6, 2.2, 3.2, 0x4a3a24);
+      rect(-5.6, -1.2, 24, 2.4, 0x9c8a4a);
+      rect(-5.6, -1.2, 24, 0.6, 0xc4b070);
+      for (let x = 0.4; x < 18; x += 6) rect(x, -1.3, 0.8, 2.6, 0x6a5a2a);
+      rect(18.2, -1.6, 1.4, 3.2, PALETTE.ink);
       break;
     case 'chakram':
-      c.add(scene.add.circle(7, 0, 6, 0x000000).setAlpha(0.18));
-      bar(7, -5.5, 9, 2, steel); bar(7, 5.5, 9, 2, steel);
-      bar(2.5, 0, 2, 9, steel); bar(11.5, 0, 2, 9, steel);
-      bar(7, -6, 9, 1, shine);
+      // a flat steel ring, sharp all round, with a leather-bound grip section
+      // where the fingers take it
+      ring(8, 0, 5.4, SHADE, 2.6);
+      ring(8, 0, 5.4, STEEL, 1.6);
+      g.lineStyle(0.6, SHINE, 1).beginPath().arc(8, 0, 6.1, -2.6, -0.6).strokePath();
+      rect(1.4, -1.8, 2.2, 3.6, LEATHER);
+      rect(1.4, -1.8, 2.2, 0.6, WRAP);
       break;
     case 'boomerang':
-      bar(5, -3, 11, 3, woodLit, -32); bar(5, 3, 11, 3, wood, 32);
-      bar(5, -4, 11, 1, 0xc6a06a, -32);
+      // one bent piece of wood: an elbow, two arms, painted bands
+      poly([-0.4, 4.6, 5, -1.6, 7.4, -2.6, 15.6, -5.8, 16.4, -3.6, 8.6, 0.4, 6.8, 1.2, 1.8, 6.4], WOOD, WOOD_DK);
+      poly([-0.4, 4.6, 5, -1.6, 7.4, -2.6, 15.6, -5.8, 15.9, -5, 7.6, -1.8, 5.4, -0.8, 0.2, 5], WOOD_LIT);
+      line(3, 1.4, 4.6, 3, PALETTE.rust, 0.9);
+      line(12, -4.2, 12.6, -2.4, PALETTE.rust, 0.9);
       break;
+
     case 'shield': {
       // The spiked shield: a boss, a rim, and six spikes around it.
       //
       // Carried low, at about chest height.  On the arm's own line it sat
-      // squarely over the other fighter's face, and the rim was drawn with
-      // `circle(..., 0)` -- which is a BLACK fill, not an empty one, so a
-      // solid black disc rode over the top of everything.  Alpha 0 is how you
-      // ask for nothing.
+      // squarely over the other fighter's face.  The spikes are drawn at the
+      // rim and point OUT of it, each one seated on the rim, and the grip
+      // runs behind the boss where the hand is.
       const sy = 6;
-      c.add(scene.add.circle(4, sy, 9.5, PALETTE.steel));
-      c.add(scene.add.circle(4, sy, 9.5, 0, 0).setStrokeStyle(1.5, shade));
-      c.add(scene.add.circle(4, sy, 5, PALETTE.fog));
-      c.add(scene.add.circle(2, sy - 2, 2.5, shine).setAlpha(0.5));
       for (let i = 0; i < 6; i++) {
-        const a2 = (i / 6) * Math.PI * 2;
-        bar(4 + Math.cos(a2) * 10, sy + Math.sin(a2) * 10, 5, 1.8, PALETTE.bone, (a2 * 180) / Math.PI);
+        const a2 = (i / 6) * Math.PI * 2 + Math.PI / 6;
+        poly([4 + Math.cos(a2 - 0.16) * 9, sy + Math.sin(a2 - 0.16) * 9, 4 + Math.cos(a2) * 13, sy + Math.sin(a2) * 13,
+          4 + Math.cos(a2 + 0.16) * 9, sy + Math.sin(a2 + 0.16) * 9], PALETTE.bone, SHADE);
       }
+      disc(4, sy, 9.6, 0x5a4a38);
+      disc(4, sy, 8.6, PALETTE.steel);
+      ring(4, sy, 9.6, IRON, 1.2);
+      for (let i = 0; i < 8; i++) {
+        const a2 = (i / 8) * Math.PI * 2;
+        disc(4 + Math.cos(a2) * 7.6, sy + Math.sin(a2) * 7.6, 0.6, IRON_LIT);
+      }
+      disc(4, sy, 4.6, PALETTE.fog);
+      disc(4, sy, 3.2, IRON_LIT);
+      disc(2.6, sy - 1.6, 1.6, SHINE, 0.55);
       break;
     }
   }
+  if (flexes.length) c.setData('flex', flexes);
   return c;
+}
+
+/**
+ * THE WEAPON IN MOTION, every frame.
+ *
+ * Two things the rig's joints cannot give a weapon on their own:
+ *
+ *   WEIGHT.  The weapon's own angle on the wrist is a damped spring.  When
+ *   the forearm turns, the head is left behind by however heavy it is and
+ *   then pulled round after it -- so a maul lags into a swing and carries on
+ *   past the end of it before it settles, and a dagger does neither.
+ *
+ *   FLEX.  Chains, cords and thongs are verlet chains in world space pinned
+ *   to the weapon, with the weight on the end heavier than a link: the hand
+ *   moves, the chain follows, the ball arrives last and keeps going the old
+ *   way for a moment when the hand changes direction.
+ */
+function stepWeapon(w: Phaser.GameObjects.Container | null | undefined): void {
+  if (!w || !w.active || !w.scene) return;
+  const dt = Math.min(0.05, Math.max(0.004, w.scene.game.loop.delta / 1000));
+  const parent = w.parentContainer;
+  const heft = (w.getData('heft') as number | undefined) ?? 0;
+  if (parent && heft > 0) {
+    const pm = parent.getWorldTransformMatrix();
+    const det = pm.a * pm.d - pm.b * pm.c;
+    const flip = det < 0 ? -1 : 1;
+    const ang = Math.atan2(pm.b, pm.a);
+    const last = w.getData('lastA') as number | undefined;
+    let o = (w.getData('lagO') as number | undefined) ?? 0;
+    let v = (w.getData('lagV') as number | undefined) ?? 0;
+    if (last !== undefined) {
+      let d = ang - last;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      // a turn of the whole fighter mirrors the matrix; that is not a swing
+      if (Math.abs(d) < 1.2) o -= ((d * 180) / Math.PI) * flip * heft * 0.55;
+    }
+    const k = 320 - 220 * heft;
+    const damp = 2 * Math.sqrt(k) * (0.62 - 0.22 * heft);
+    v += (-k * o - damp * v) * dt;
+    o = Phaser.Math.Clamp(o + v * dt, -30, 30);
+    w.setData('lastA', ang).setData('lagO', o).setData('lagV', v);
+    w.setAngle(o);
+  }
+  const flexes = w.getData('flex') as Flex[] | undefined;
+  if (!flexes) return;
+  const m = w.getWorldTransformMatrix();
+  const s = Math.hypot(m.a, m.b) || 1;
+  const GRAV = 420;
+  for (const f of flexes) {
+    const anchor = m.transformPoint(f.ax, f.ay) as Phaser.Math.Vector2;
+    if (!f.wp || !f.pp || Phaser.Math.Distance.Between(anchor.x, anchor.y, f.wp[0].x, f.wp[0].y) > 40) {
+      f.wp = [];
+      f.pp = [];
+      for (let i = 0; i <= f.n; i++) {
+        const p = m.transformPoint(f.ax + i * f.seg, f.ay) as Phaser.Math.Vector2;
+        f.wp.push(new Phaser.Math.Vector2(p.x, p.y));
+        f.pp.push(new Phaser.Math.Vector2(p.x, p.y));
+      }
+    }
+    const wp = f.wp;
+    const pp = f.pp;
+    wp[0].set(anchor.x, anchor.y);
+    pp[0].set(anchor.x, anchor.y);
+    for (let i = 1; i <= f.n; i++) {
+      const vx = (wp[i].x - pp[i].x) * 0.985;
+      const vy = (wp[i].y - pp[i].y) * 0.985;
+      pp[i].set(wp[i].x, wp[i].y);
+      wp[i].set(wp[i].x + vx, wp[i].y + vy + GRAV * dt * dt);
+    }
+    // the sand stops it: a ball that reaches the floor drags along it
+    for (let i = 1; i <= f.n; i++) {
+      if (wp[i].y > FLOOR_Y - 1) {
+        wp[i].y = FLOOR_Y - 1;
+        pp[i].x += (wp[i].x - pp[i].x) * 0.4;
+      }
+    }
+    const L = f.seg * s;
+    for (let it = 0; it < 8; it++) {
+      wp[0].set(anchor.x, anchor.y);
+      for (let i = 1; i <= f.n; i++) {
+        const a = wp[i - 1];
+        const b = wp[i];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const d = Math.hypot(dx, dy) || 0.0001;
+        if (d <= L) continue;
+        const diff = (d - L) / d;
+        // the pinned end does not move, and a heavy end moves less than a link
+        const wa = i === 1 ? 0 : i === f.n ? f.mass / (f.mass + 1) : 0.5;
+        const wb = 1 - wa;
+        a.x += dx * diff * wa;
+        a.y += dy * diff * wa;
+        b.x -= dx * diff * wb;
+        b.y -= dy * diff * wb;
+      }
+    }
+    const local = wp.map((p) => {
+      const o = new Phaser.Math.Vector2();
+      m.applyInverse(p.x, p.y, o);
+      return o;
+    });
+    f.gfx.clear();
+    f.link(f.gfx, local);
+    if (f.end) {
+      const e = local[f.n];
+      const b = local[f.n - 1];
+      f.end.setPosition(e.x, e.y);
+      if (f.endTurns) f.end.setRotation(Math.atan2(e.y - b.y, e.x - b.x));
+    }
+  }
+}
+
+/**
+ * THE OTHER BLADE OF A PAIR, in the other hand.
+ *
+ * Dual swords and twin daggers were drawn as two blades fanned out of one
+ * fist.  The main hand holds one now and the off hand the other, which it
+ * carries behind the body and swings with its own arm.  Kept in step with
+ * the main-hand sprite every frame, so every place that swaps the weapon --
+ * a break, a disarm, a throw, a pickup -- is followed without being told.
+ */
+function syncOffBlade(a: FighterArt): void {
+  const want = a.weapon.active && a.weapon.getData('pair') ? (a.weapon.getData('key') as string) : null;
+  if (a.offBlade && (!want || !a.offBlade.active || a.offBlade.getData('key') !== want)) {
+    if (a.offBlade.active) a.offBlade.destroy();
+    a.offBlade = null;
+  }
+  if (want && !a.offBlade) {
+    const o = buildWeapon(a.root.scene, want, (a.weapon.getData('tint') as number) ?? 0xffffff, true);
+    o.setPosition(a.armOff.hand + 1, 0);
+    a.armOff.fore.add(o);
+    a.offBlade = o;
+  }
+  if (a.offBlade) a.offBlade.setVisible(a.weapon.visible && a.armOff.root.visible);
 }
 
 /**
@@ -4142,7 +4812,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const root = scene.add.container(f.x, FLOOR_Y, parts).setDepth(20);
   root.setScale(f.face * (bld?.scale ?? 1), bld?.scale ?? 1);
   return { root, legL, legR, greaveL, greaveR, kneeL, kneeR, footL, footR, torso, cuirass, belt, ridge,
-    pauldL, pauldR, head, helm, helmDome, crown, bodyPlate, plates, visor, plume, headGroup, arm, armOff, guardUp: false, offFront: false, offHome: armOff.root.x, weapon, shadow,
+    pauldL, pauldR, head, helm, helmDome, crown, bodyPlate, offBlade: null, plates, visor, plume, headGroup, arm, armOff, guardUp: false, offFront: false, offHome: armOff.root.x, weapon, shadow,
     nicks: 0, tail: beastParts?.tail ?? null };
 }
 
@@ -4657,6 +5327,12 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   a.shadow.setAngle(-a.root.angle);
   const k = Math.max(0.45, 1 - lift / 26);
   a.shadow.setScale(k, k).setAlpha(0.34 * k);
+
+  // ---- AND THE WEAPON'S OWN MOTION: weight on the wrist, chains that
+  // swing, and the second blade of a pair in the other hand.
+  syncOffBlade(a);
+  stepWeapon(a.weapon);
+  stepWeapon(a.offBlade);
 }
 
 /** The colosseum: sand, two tiers of arches, and a crowd that never stops. */
