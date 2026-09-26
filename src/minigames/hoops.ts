@@ -1,10 +1,15 @@
 /**
- * LILY HOOPS.  PRD §9.5 — Medium, 5 tokens in, 10 out.
+ * CHUBBY CHOMP.  PRD §9.5 — Medium, 5 tokens in, 10 out.  (It was LILY
+ * HOOPS; the cabinet's id is still `hoops`.)
  *
- * A POND SPORT, not basketball with frogs drawn on it.  Froggy shoots from a
- * half-sunk log at one end; the hoop is carried across the water in the mouth
- * of the big frog of the pond, who swims a steady beat and gets quicker every
- * time you score through it.  The pond around all of it is alive -- reeds and
+ * FEEDING TIME, not basketball with frogs drawn on it.  Froggy flicks flies
+ * from a half-sunk log at one end; across the water a big, round, very
+ * hungry frog called Chubby drifts about on a lily pad with its mouth wide
+ * open, and every fly that drops in is a snack.  There is no hoop: the MOUTH
+ * is the target, at the height and width the rim always was, so every shot
+ * that used to score still does.  Chubby drifts quicker with every snack,
+ * gets visibly fatter, and its mouth gets no bigger -- so the last one is
+ * the hardest.  The pond around all of it is alive -- reeds and
  * trees in the breeze, lily pads riding the swell, fish working the shallows,
  * dragonflies over the top -- and none of it touches the shot.
  *
@@ -116,6 +121,9 @@ const RING_UP_MS = 7000;
 const RING_POINTS = 2;
 const RING_Y = 44;
 const RING_R = 7;
+/** The fly: a dark body with a sheen on its edge, and gold when it is lit. */
+const FLY_BODY = 0x2b3140;
+const FLY_EDGE = 0x5d6f8a;
 
 let power = 0;
 let aim = LAUNCH_ANGLE;
@@ -159,9 +167,6 @@ let ringTimer = RING_EVERY_MS;
 let meterFill: Phaser.GameObjects.Rectangle | null = null;
 let arrow: Phaser.GameObjects.Graphics | null = null;
 let aimKeys: { up: Phaser.Input.Keyboard.Key[]; down: Phaser.Input.Keyboard.Key[] } = { up: [], down: [] };
-let hoopRim: Phaser.GameObjects.Rectangle | null = null;
-let backboard: Phaser.GameObjects.Rectangle | null = null;
-let net: Phaser.GameObjects.Rectangle | null = null;
 let hud: Phaser.GameObjects.BitmapText | null = null;
 let apiRef: MinigameApi | null = null;
 let scoredThisFlight = false;
@@ -182,8 +187,18 @@ let carrierBody: Phaser.GameObjects.Container | null = null;
 let carrierHead: Phaser.GameObjects.Container | null = null;
 let carrierEyes: Phaser.GameObjects.Container[] = [];
 let carrierMouth: Phaser.GameObjects.Ellipse | null = null;
-/** How wide open the mouth is, 0 shut to 1 gulping. */
-let gape = 0;
+/** The lip round the mouth, the tongue in it, and the cheeks either side. */
+let carrierLip: Phaser.GameObjects.Ellipse | null = null;
+let carrierTongue: Phaser.GameObjects.Ellipse | null = null;
+let carrierCheeks: Phaser.GameObjects.Ellipse[] = [];
+let carrierPupils: Phaser.GameObjects.Ellipse[] = [];
+/** The shut mouth after a snack: a smile, drawn while the mouth is closed. */
+let carrierSmile: Phaser.GameObjects.Graphics | null = null;
+/** How wide the mouth is drawn, 0 shut to 1 as wide as it goes; eased. */
+let gape = 0.8;
+/** Seconds left of a swallow, and of a sulk after a miss. */
+let gulpT = 0;
+let sulkT = 0;
 let blinkIn = 2.4;
 let blinkT = 0;
 let shooter: Phaser.GameObjects.Container | null = null;
@@ -206,19 +221,19 @@ export const hoops: MinigameModule = {
   // The id stays `hoops`: the cabinet, its price, its reward, the high score
   // table and the registry all key off it, and none of that is changing.
   id: 'hoops',
-  title: 'LILY HOOPS',
+  title: 'CHUBBY CHOMP',
   music: 'game_hoops',
   rules: '5 points in 60 seconds - streaks pay double',
   tutorial: {
     objective: [
-      'SCORE 5 IN 60 SECONDS.',
-      'THE BIG FROG CARRIES THE HOOP AND SWIMS.',
-      'EVERY SCORE MAKES HIM QUICKER + TIGHTER.',
-      'TWO IN A ROW LIGHTS THE BALL: MAKES PAY 2.',
-      'THE DOTTED ARC IS GREEN WHEN IT GOES IN.',
+      'FEED CHUBBY 5 FLIES IN 60 SECONDS.',
+      'CHUBBY DRIFTS ON A LILY PAD: LEAD IT.',
+      'EACH SNACK: CHUBBY GETS FATTER + FASTER.',
+      'TWO IN A ROW LIGHTS THE FLY: PAYS 2.',
+      'THE DOTTED ARC IS GREEN WHEN IT LANDS.',
     ],
     controls: [
-      ['HOLD SPACE', 'CROUCH, LET GO TO LEAP'],
+      ['HOLD SPACE', 'CROUCH, LET GO TO FLICK'],
       ['W / S', 'TILT THE SHOT'],
     ],
   },
@@ -253,63 +268,80 @@ export const hoops: MinigameModule = {
     // `stepPond` from the update loop.
     buildPond(scene);
 
-    // ---- THE CARRIER: a big frog WEARING the hoop.
+    // ---- CHUBBY: A FAT FROG ON A LILY PAD, MOUTH OPEN, WAITING TO BE FED.
     //
-    // The hoop is a hoop -- a rim, a backboard and a net, the same three
-    // objects the shot has always been tested against, at the same HOOP_Y --
-    // but it now sits on the frog's head rather than being held up in front of
-    // it on a post.  The rim is the brim, the net is the band round the crown,
-    // and the frog's own eyes look out from under it.
-    //
-    // Before this the eyes were parked at carrier-local y=-5, level with the
-    // rim itself and a long way above the head, so what the screen showed was
-    // a HOOP WITH A FACE floating over a green lump.  They belong on the frog.
-    //
-    // The geometry falls out of it for free: the net hangs from HOOP_Y+2 down
-    // eight pixels, which is exactly the top of the head, so a ball dropping
-    // through the rim arrives at the frog's mouth -- and it eats it.
+    // The target is the mouth.  It opens at HOOP_Y, as wide as `hoopW`, so
+    // the scoring test -- a fly coming DOWN through that line inside that
+    // width -- is exactly the test the rim always was.  Head and body are one
+    // animal: every outline is drawn first and every fill over the top of all
+    // of them, so there is no seam where the head sits on the body; it is one
+    // round frog with a face at the top of it.  The face is the only part that
+    // moves on its own, and only by a pixel.
     carrier = scene.add.container(hoopX, HOOP_Y).setDepth(14);
-    const bigSkin = 0x4f9e55;
-    const bigDark = 0x2f6b36;
-    // Sized against Froggy, who is seventeen across: this one is twenty-six,
-    // so it reads as the BIG frog of the pond without becoming the pond.  It
-    // was forty-two, which at three hundred and twenty pixels wide is a
-    // landmark -- two green ellipses that read as lily pads with a hoop
-    // somewhere above them rather than as one animal holding one up.
-    carrierBody = scene.add.container(0, 24, [
-      scene.add.ellipse(0, 5, 30, 6, 0x123b2a).setAlpha(0.4),
-      scene.add.ellipse(0, 0, 26, 13, bigDark),
-      scene.add.ellipse(0, -1.5, 23, 11, bigSkin),
-      scene.add.ellipse(0, 2, 15, 5, 0xbfe3a8).setAlpha(0.6),
-      scene.add.ellipse(-10.5, 1.5, 8, 7, bigDark),
-      scene.add.ellipse(10.5, 1.5, 8, 7, bigDark),
+    gape = 0.8;
+    gulpT = 0;
+    sulkT = 0;
+    const cSkin = 0x62b85a;
+    const cDark = 0x2f6b36;
+    const belly = 0xdcf2bc;
+    // the pad it sits on, which is not part of it and does not swell with it
+    const pad = [
+      scene.add.ellipse(0, 31, 54, 12, 0x1d5561).setAlpha(0.4),
+      scene.add.ellipse(0, 29, 50, 11, 0x2f7a35),
+      scene.add.ellipse(0, 28, 46, 9, 0x3f8a3c),
+      scene.add.ellipse(-8, 27, 20, 4, 0x55a64b).setAlpha(0.7),
+    ];
+    // Everything below is placed relative to the bottom of the frog, so a
+    // breath or a mouthful swells it UP off the pad instead of into it.
+    const B = 27;
+    carrierBody = scene.add.container(0, B, [
+      // outlines: haunches, body, head, eye bumps -- all of them, first
+      scene.add.ellipse(-17, 25 - B, 18, 10, cDark),
+      scene.add.ellipse(17, 25 - B, 18, 10, cDark),
+      scene.add.ellipse(0, 15 - B, 42, 28, cDark),
+      scene.add.ellipse(0, 4 - B, 38, 20, cDark),
+      scene.add.ellipse(-10, -6 - B, 13, 12, cDark),
+      scene.add.ellipse(10, -6 - B, 13, 12, cDark),
+      // and the fills over all of it, so it is one frog
+      scene.add.ellipse(-17, 24.5 - B, 16, 8, cSkin),
+      scene.add.ellipse(17, 24.5 - B, 16, 8, cSkin),
+      scene.add.ellipse(0, 14.5 - B, 40, 26, cSkin),
+      scene.add.ellipse(0, 4 - B, 36, 18, cSkin),
+      scene.add.ellipse(-10, -6 - B, 11, 10, cSkin),
+      scene.add.ellipse(10, -6 - B, 11, 10, cSkin),
+      // a highlight across the top of the head, where the sun catches it
+      scene.add.ellipse(-4, -2 - B, 20, 4, 0x8fd480).setAlpha(0.6),
+      // the round pale belly, and the spots on its back
+      scene.add.ellipse(0, 18 - B, 28, 17, belly),
+      scene.add.ellipse(-15, 10 - B, 4, 3, cDark).setAlpha(0.35),
+      scene.add.ellipse(16, 13 - B, 3, 2.4, cDark).setAlpha(0.35),
+      // stubby little arms resting on the belly, and the toes on the pad
+      scene.add.ellipse(-10, 21 - B, 7, 8, cDark),
+      scene.add.ellipse(10, 21 - B, 7, 8, cDark),
+      scene.add.ellipse(-10, 21 - B, 5, 6, cSkin),
+      scene.add.ellipse(10, 21 - B, 5, 6, cSkin),
+      scene.add.ellipse(-24, 28 - B, 7, 3, cSkin),
+      scene.add.ellipse(24, 28 - B, 7, 3, cSkin),
     ]);
-    // The head is raised until its crown meets the rim, so the hoop rests on
-    // it.  The mouth is the thing a ball through the rim lands in.
-    carrierMouth = scene.add.ellipse(0, 4, 11, 1.6, 0x27361f);
-    carrierHead = scene.add.container(0, 10, [
-      scene.add.ellipse(0, 0, 20, 12, bigDark),
-      scene.add.ellipse(0, -0.5, 18, 10.5, bigSkin),
-      scene.add.ellipse(0, 2.5, 13, 4, 0xbfe3a8).setAlpha(0.5),
-      carrierMouth,
-    ]);
-    // Its own eyes, on its own head, under the brim -- the frog looking out
-    // from beneath the thing it is wearing.
-    carrierEyes = [-5.5, 5.5].map((sx) =>
-      scene.add.container(sx, -4, [
-        scene.add.ellipse(0, 0, 7, 6.6, bigSkin),
-        scene.add.ellipse(0, 0, 5, 4.8, PALETTE.cream),
-        scene.add.ellipse(0, 0.3, 2.4, 2.8, 0x14251a),
-        scene.add.circle(-1, -1.1, 0.8, 0xffffff).setAlpha(0.9),
-      ]),
-    );
-    carrierHead.add(carrierEyes);
-    carrier.add([carrierBody, carrierHead]);
-
-    // the hoop it is holding, at exactly the height the shot is tested at
-    backboard = scene.add.rectangle(hoopX, HOOP_Y - 18, 4, 24, PALETTE.bone).setOrigin(0.5, 0).setDepth(15);
-    hoopRim = scene.add.rectangle(hoopX, HOOP_Y, hoopW, 2, PALETTE.ember).setOrigin(0.5, 0).setDepth(16);
-    net = scene.add.rectangle(hoopX, HOOP_Y + 2, hoopW - 4, 8, PALETTE.cream).setOrigin(0.5, 0).setAlpha(0.3).setDepth(15);
+    // ---- THE FACE.  Eyes on top, looking at the fly; blushing cheeks; and
+    // the mouth -- the target -- open underneath them.
+    carrierLip = scene.add.ellipse(0, 3, HOOP_W + 3, 10, cDark);
+    carrierMouth = scene.add.ellipse(0, 3, HOOP_W, 8, 0x6a1f2a);
+    carrierTongue = scene.add.ellipse(0, 5, HOOP_W * 0.55, 3, 0xf07a90);
+    carrierSmile = scene.add.graphics();
+    carrierCheeks = [-14, 14].map((cx) => scene.add.ellipse(cx, 6, 6, 3.4, 0xff9aa8).setAlpha(0.75));
+    carrierPupils = [];
+    carrierEyes = [-10, 10].map((sx) => {
+      const pupil = scene.add.ellipse(0, 0.4, 4, 5, 0x14251a);
+      carrierPupils.push(pupil);
+      return scene.add.container(sx, -6, [
+        scene.add.ellipse(0, 0, 8, 8, PALETTE.cream),
+        pupil,
+        scene.add.circle(-1.2, -1.4, 1.1, 0xffffff).setAlpha(0.95),
+      ]);
+    });
+    carrierHead = scene.add.container(0, 0, [carrierLip, carrierMouth, carrierTongue, carrierSmile, ...carrierCheeks, ...carrierEyes]);
+    carrier.add([...pad, carrierBody, carrierHead]);
 
     // The bonus ring lives up above the hoop and is only out some of the time.
     ringBody = scene.add.circle(-20, RING_Y, RING_R, 0x000000, 0).setStrokeStyle(2, PALETTE.gold).setDepth(19).setVisible(false);
@@ -342,12 +374,16 @@ export const hoops: MinigameModule = {
     // Same four-pixel circle the flight has always used -- the physics reads
     // `ball.x/y` and nothing else -- with the seams a basketball has and a
     // pair of eye-spots on it, so it is recognisably out of this pond.
-    ball = scene.add.circle(LAUNCH.x, LAUNCH.y, 4, 0x6fbf4e).setStrokeStyle(1, 0x2f6b36).setDepth(20);
+    // ---- THE FOOD: a fat juicy fly.  The same four-pixel circle the flight
+    // has always used -- the physics reads `ball.x/y` and nothing else --
+    // with a pair of wings that buzz while it flies and two red eyes.
+    ball = scene.add.circle(LAUNCH.x, LAUNCH.y, 4, FLY_BODY).setStrokeStyle(1, FLY_EDGE).setDepth(20);
     ballMark = scene.add.container(LAUNCH.x, LAUNCH.y, [
-      scene.add.rectangle(0, 0, 8, 0.8, 0x2f6b36).setAlpha(0.85),
-      scene.add.rectangle(0, 0, 0.8, 8, 0x2f6b36).setAlpha(0.85),
-      scene.add.circle(-1.6, -1.6, 0.9, 0xeaf7d8),
-      scene.add.circle(1.6, -1.6, 0.9, 0xeaf7d8),
+      scene.add.ellipse(-2.4, -3.6, 4.6, 3, 0xdff7ff).setAlpha(0.8),
+      scene.add.ellipse(2.4, -3.6, 4.6, 3, 0xdff7ff).setAlpha(0.8),
+      scene.add.circle(-1.5, -0.8, 0.9, 0xd8423a),
+      scene.add.circle(1.5, -0.8, 0.9, 0xd8423a),
+      scene.add.rectangle(0, 1.6, 4, 0.7, 0x4a5060).setAlpha(0.9),
     ]).setDepth(21);
 
     // ---- THE READOUTS, on plates.
@@ -453,7 +489,7 @@ export const hoops: MinigameModule = {
   },
 
   update(_t: number, delta: number) {
-    if (over || !ball || !hoopRim || !backboard || !net) return;
+    if (over || !ball) return;
     const dt = delta / 1000;
 
     timeLeft -= delta;
@@ -470,11 +506,8 @@ export const hoops: MinigameModule = {
     stepCarrier(dt);
     stepShooter(dt);
     ballMark?.setPosition(ball.x, ball.y);
-    hoopRim.x = hoopX;
-    hoopRim.setSize(hoopW, 2);
-    net.x = hoopX;
-    net.setSize(Math.max(2, hoopW - 4), 8);
-    backboard.x = hoopX + hoopW / 2 + 2;
+    // the fly's wings buzz while it is in the air
+    ballMark?.setScale(1, inFlight ? 0.55 + Math.abs(Math.sin(pondT * 40)) * 0.45 : 1);
 
     stepRing(dt, delta);
 
@@ -557,15 +590,12 @@ export const hoops: MinigameModule = {
         }
       }
 
-      // backboard is real, so bank shots work
-      if (
-        Math.abs(ball.x - (hoopX + hoopW / 2 + 2)) < 4 &&
-        ball.y > HOOP_Y - 18 &&
-        ball.y < HOOP_Y + 6 &&
-        ballVel.x > 0
-      ) {
-        ballVel.x = -Math.abs(ballVel.x) * 0.6;
-        audio.sfx('ui_hover');
+      // A fly that has come down past the mouth without going in drops BEHIND
+      // Chubby rather than across its face -- in front, a near miss slides
+      // down over the open mouth and reads as a snack that did not count.
+      if (!scoredThisFlight && ballVel.y > 0 && ball.y > HOOP_Y + 1) {
+        ball.setDepth(13);
+        ballMark?.setDepth(13);
       }
 
       drawFlames();
@@ -579,8 +609,9 @@ export const hoops: MinigameModule = {
 
   destroy() {
     ball = null;
-    hoopRim = null;
     arrow = null;
+    carrier = null;
+    carrierSmile = null;
     ringBody = null;
     flames = null;
     sceneRef = null;
@@ -801,76 +832,117 @@ function launchSpeed(p: number): number {
  * on.  Null when the shot never gets that high, which is itself the answer.
  */
 /**
- * THE CARRIER, ALIVE.
+ * CHUBBY, ALIVE.
  *
- * It swims with the hoop, so the whole container simply tracks `hoopX`; on
- * top of that it breathes, its head lags a little behind the turn -- which is
- * what makes a body look like it is being pulled along rather than slid -- and
- * it blinks at uneven intervals.
+ * It drifts on its pad along the same sine the rim always swam, so the whole
+ * container simply tracks `hoopX`; on top of that it breathes, leans into the
+ * drift, watches the fly with both eyes and blinks at uneven intervals.  And
+ * it is hungry: the mouth hangs open, opens wider while a shot is being lined
+ * up, wider still with a fly in the air -- then shuts on a snack with its
+ * cheeks puffed and its eyes squeezed happy, and pouts after a miss.
+ *
+ * Every snack makes it a little fatter.  The MOUTH does not grow with it --
+ * that is still `hoopW`, which only tightens -- so a fuller frog is a harder
+ * one to feed.
  */
 function stepCarrier(dt: number): void {
-  if (!carrier || !carrierHead || !carrierBody) return;
+  if (!carrier || !carrierHead || !carrierBody || !carrierMouth || !carrierLip || !carrierTongue || !carrierSmile) return;
   carrier.x = hoopX;
-  // the swim: a slow rise and fall, and a lean into the direction of travel
   const drift = Math.cos(hoopPhase) * hoopRate * HOOP_SWING;
-  carrier.y = HOOP_Y + Math.sin(pondT * 1.5) * 1.2;
-  carrier.setAngle(Phaser.Math.Clamp(drift * 0.035, -7, 7));
-  carrierBody.setScale(1, 1 + Math.sin(pondT * 2.2) * 0.035);
-  // the head lags the turn and looks where it is going
-  carrierHead.x = Phaser.Math.Clamp(drift * 0.02, -3, 3);
-  carrierHead.y = 10 + Math.sin(pondT * 2.2 + 0.7) * 0.7;
+  carrier.y = HOOP_Y + Math.sin(pondT * 1.5) * 1.1;
+  carrier.setAngle(Phaser.Math.Clamp(drift * 0.03, -6, 6));
 
-  // The gulp: the mouth springs open to take the ball and eases shut after it.
-  gape = Math.max(0, gape - dt * 2.6);
-  if (carrierMouth) carrierMouth.setSize(11 + gape * 3, 1.6 + gape * 7);
-  // and the throat works it down
-  carrierBody.setScale(1 + gape * 0.06, carrierBody.scaleY + gape * 0.05);
+  gulpT = Math.max(0, gulpT - dt);
+  sulkT = Math.max(0, sulkT - dt);
+  const gulping = gulpT > 0;
+  // ---- how open the mouth wants to be, and it eases there
+  let want = 0.72 + Math.sin(pondT * 3.1) * 0.06;
+  if (charging) want = 0.8 + power * 0.2;
+  if (inFlight) want = 1;
+  if (sulkT > 0) want = 0;
+  if (gulping) want = 0;
+  gape += (want - gape) * Math.min(1, dt * (gulping ? 22 : 9));
 
+  // ---- the mouth: its width IS the target's, its height is how open it is
+  const h = 1 + gape * 8;
+  carrierMouth.setSize(hoopW, h).setVisible(gape > 0.08);
+  carrierMouth.y = 3 - (1 - gape) * 1.5;
+  carrierLip.setSize(hoopW + 3, h + 2.4).setVisible(gape > 0.08);
+  carrierLip.y = carrierMouth.y;
+  carrierTongue.setSize(hoopW * 0.55, Math.max(1, h * 0.38)).setVisible(gape > 0.3);
+  carrierTongue.y = carrierMouth.y + h * 0.26;
+  // shut, it smiles -- or, after a miss, sulks
+  carrierSmile.clear();
+  if (gape <= 0.08 || sulkT > 0) {
+    const sad = sulkT > 0 && !gulping;
+    carrierSmile.lineStyle(1.2, 0x2f6b36, 1);
+    carrierSmile.beginPath();
+    const w = hoopW / 2;
+    for (let i = 0; i <= 8; i++) {
+      const x = -w + (i / 8) * w * 2;
+      const y = 3 + (sad ? -1 : 1) * Math.sin((i / 8) * Math.PI) * 2.2;
+      if (i === 0) carrierSmile.moveTo(x, y);
+      else carrierSmile.lineTo(x, y);
+    }
+    carrierSmile.strokePath();
+  }
+
+  // ---- fuller with every snack, puffed with a mouthful, and breathing
+  const fat = 1 + Math.min(makes, TARGET_MAKES + 2) * 0.045;
+  const swallow = gulping ? Math.sin((gulpT / 0.5) * Math.PI) : 0;
+  const breath = Math.sin(pondT * 2.2) * 0.025;
+  carrierBody.setScale(fat + swallow * 0.08 + breath * 0.5, fat * 0.97 + swallow * 0.06 + breath);
+  for (const c of carrierCheeks) c.setScale(1 + swallow * 0.6, 1 + swallow * 0.5);
+  // the face bobs a pixel with the breath and leans into the drift
+  carrierHead.x = Phaser.Math.Clamp(drift * 0.015, -1.5, 1.5);
+  carrierHead.y = breath * 12 * 0.1 + (fat - 1) * -3;
+
+  // ---- eyes: on the fly, blinking, and squeezed shut on a mouthful
+  const tx = ball && ball.visible ? ball.x : LAUNCH.x;
+  const ty = ball && ball.visible ? ball.y : LAUNCH.y;
+  carrierEyes.forEach((e, i) => {
+    const ex = carrier!.x + e.x;
+    const ey = carrier!.y + e.y;
+    const d = Math.max(1, Math.hypot(tx - ex, ty - ey));
+    carrierPupils[i].setPosition(((tx - ex) / d) * 1.5, 0.4 + ((ty - ey) / d) * 1.3);
+  });
   blinkT += dt;
   if (blinkT > blinkIn) {
     blinkT = 0;
     blinkIn = 1.8 + Math.random() * 3.4;
   }
-  // a blink is the last eighth of a second before the timer resets, and a
-  // mouthful squeezes them shut the way a swallow does
-  const shut = blinkT > blinkIn - 0.12 ? 0.1 : 1;
-  for (const e of carrierEyes) e.setScale(1, shut * (1 - gape * 0.55));
+  const shut = blinkT > blinkIn - 0.12 ? 0.12 : 1;
+  for (const e of carrierEyes) e.setScale(1, gulping ? 0.18 : shut);
 }
 
 /**
- * THE FROG EATS IT.
+ * CHUBBY EATS IT.
  *
- * The ball is food, and a shot that goes in is the frog being fed: the mouth
- * opens under the rim, the ball drops the last few pixels into it, and it goes
- * down with a gulp.
- *
- * This is a SECOND, cosmetic ball, and the real one is simply hidden.  The
- * flight is a state machine -- it ends on `ball.y > 158` and clears the shot
- * on the way out -- and reaching into it to redirect a ball that has already
- * scored would put a rendering flourish in charge of when a turn is over.  The
- * real ball finishes its arc unseen and ends the flight exactly as it always
- * did.
+ * A fly through the mouth is a snack: it drops the last few pixels in and
+ * the mouth shuts on it with a gulp.  This is a SECOND, cosmetic fly, and the
+ * real one is simply hidden -- the flight is a state machine that ends on
+ * `ball.y > 158` and clears the shot on the way out, and reaching into it to
+ * redirect a ball that has already scored would put a flourish in charge of
+ * when a turn is over.  The real one finishes its arc unseen.
  */
 function eatBall(): void {
   if (!sceneRef || !carrier) return;
-  const bite = sceneRef.add.circle(hoopX, HOOP_Y + 3, 4, 0x6fbf4e).setStrokeStyle(1, 0x2f6b36).setDepth(13);
+  const bite = sceneRef.add.circle(hoopX, HOOP_Y, 4, onFire ? PALETTE.gold : FLY_BODY).setStrokeStyle(1, FLY_EDGE).setDepth(15);
   ball?.setVisible(false);
   ballMark?.setVisible(false);
   sceneRef.tweens.add({
     targets: bite,
     x: carrier.x,
-    y: HOOP_Y + 14,
-    scale: 0.55,
-    duration: 190,
+    y: HOOP_Y + 5,
+    scale: 0.5,
+    duration: 150,
     ease: 'Quad.easeIn',
     onComplete: () => {
       bite.destroy();
-      gape = 1;
-      audio.sfx('hop_wet', 0.45);
+      gulpT = 0.5;
+      audio.sfx('hop_wet', 0.5);
     },
   });
-  // open up to meet it
-  sceneRef.time.delayedCall(60, () => { gape = Math.max(gape, 0.8); });
 }
 
 /**
@@ -1173,7 +1245,7 @@ function drawArc(): void {
   // are steering rather than a number you are meant to have in your head.
   const rim = hoopAt(hit.t);
   arrow.lineStyle(1, PALETTE.fog, alpha * 0.55);
-  arrow.strokeRect(rim - hoopW / 2, HOOP_Y - 3, hoopW, 6);
+  arrow.strokeEllipse(rim, HOOP_Y + 3, hoopW, 8);
 
   // The mark: where it would come down through the rim's height, and whether
   // that is inside the rim.  A ring when it is, a cross when it is not.
@@ -1198,7 +1270,10 @@ function reset(): void {
     audio.sfx('ui_hover', 0.5);
   }
   if (!scoredThisFlight) streak = 0;
-  ball.setFillStyle(PALETTE.ember).setStrokeStyle(1, 0x8a3a10);
+  ball.setFillStyle(FLY_BODY).setStrokeStyle(1, FLY_EDGE).setDepth(20);
+  ballMark?.setDepth(21);
+  // a fly that went in the water is a disappointment, and Chubby shows it
+  if (!scoredThisFlight) sulkT = 0.7;
   flames?.clear();
   inFlight = false;
   ball.setPosition(LAUNCH.x, LAUNCH.y);

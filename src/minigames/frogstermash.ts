@@ -854,38 +854,54 @@ export interface LizardType {
    * enormous, a reach lizard is all legs and neck, and you should be able to
    * name the archetype from the shape before it swings at anything.
    */
-  build: { scale: number; wide: number; tall: number; limb: number; head: number; skin: number; light: number; dark: number; crest: number };
+  build: { scale: number; wide: number; tall: number; limb: number; head: number; skin: number; light: number; dark: number; crest: number; animal: Animal };
   blurb: string;
 }
 
+/**
+ * WHAT EACH ARCHETYPE IS.  Not a lizard with a different head on: each one is
+ * built from its own anatomy -- see `ANATOMY` and `dressAnimal`.
+ */
+export type Animal = 'gorilla' | 'cheetah' | 'rhino' | 'hyena' | 'giraffe' | 'lion' | 'lizard' | 'wolf';
+
 export const LIZARDS: LizardType[] = [
-  // ---- THE BIG ONE.  Bigger and a shade taller than Froggy, and still
-  // clearly shorter than the reach lizard, which is the one that towers.
-  // It pays for the size in avoidance: a fifth less than the plain build,
-  // declared here on the same line as the size rather than hidden anywhere.
-  { key: 'muscle', name: 'MUSCULAR LIZARD', power: 1.22, speed: 0.85, avoid: 0.8, resist: 1.2, nerve: 1.2, spacing: 0.9,
-    build: { scale: 1.18, wide: 1.6, tall: 1.04, limb: 1.0, head: 0.95, skin: 0x8f4a22, light: 0xc07038, dark: 0x532a12, crest: 0xd2452f },
+  // ---- EIGHT ANIMALS, one per way of fighting.  The numbers that decide the
+  // fight -- power, speed, avoidance, resistance, nerve, spacing and the
+  // three temperaments -- are exactly what they were; what changed is the
+  // animal each archetype is.  `build` is drawing only: the rules never read
+  // it, so a gorilla drawn a third bigger than the rest hits no harder for it.
+  //
+  // THE MUSCLE is a gorilla, and the biggest thing in the arena.
+  { key: 'muscle', name: 'GORILLA', power: 1.22, speed: 0.85, avoid: 0.8, resist: 1.2, nerve: 1.2, spacing: 0.9,
+    build: { scale: 1.3, wide: 1.72, tall: 1.02, limb: 0.84, head: 1.0, skin: 0x3b3a40, light: 0x6b6468, dark: 0x1f1e23, crest: 0x9a98a0, animal: 'gorilla' },
     blurb: 'HITS LIKE A DOOR' },
-  { key: 'fast', name: 'FAST LIZARD', power: 0.82, speed: 1.32, avoid: 1.2, resist: 0.8, nerve: 1.05, spacing: 1.0,
-    build: { scale: 0.92, wide: 0.7, tall: 1.1, limb: 1.28, head: 0.9, skin: 0xc07a2e, light: 0xe8a94e, dark: 0x6d4114, crest: 0xffd45e },
+  // THE FAST ONE is a cheetah: all leg, nothing spare.
+  { key: 'fast', name: 'CHEETAH', power: 0.82, speed: 1.32, avoid: 1.2, resist: 0.8, nerve: 1.05, spacing: 1.0,
+    build: { scale: 0.94, wide: 0.7, tall: 1.06, limb: 1.36, head: 0.9, skin: 0xd9a441, light: 0xf3dca0, dark: 0x8a5e22, crest: 0x2e2012, animal: 'cheetah' },
     blurb: 'YOU WILL NOT CATCH IT' },
-  { key: 'armoured', name: 'ARMOURED LIZARD', power: 1.0, speed: 0.82, avoid: 0.78, resist: 1.36, nerve: 1.0, spacing: 0.8, stubborn: true,
-    build: { scale: 1.14, wide: 1.62, tall: 0.82, limb: 0.72, head: 1.0, skin: 0x6b6f52, light: 0x969a72, dark: 0x3a3d28, crest: 0x8a8f66 },
+  // THE ARMOURED ONE is a rhino, which came armoured.
+  { key: 'armoured', name: 'RHINO', power: 1.0, speed: 0.82, avoid: 0.78, resist: 1.36, nerve: 1.0, spacing: 0.8, stubborn: true,
+    build: { scale: 1.16, wide: 1.66, tall: 0.86, limb: 0.72, head: 1.0, skin: 0x858a92, light: 0xaeb3ba, dark: 0x4a4e56, crest: 0xe6dcc0, animal: 'rhino' },
     blurb: 'IT DOES NOT MOVE' },
-  { key: 'assassin', name: 'ASSASSIN LIZARD', power: 1.04, speed: 1.22, avoid: 1.22, resist: 0.74, nerve: 1.15, spacing: 1.05,
-    build: { scale: 0.9, wide: 0.68, tall: 1.04, limb: 1.12, head: 0.84, skin: 0x4a3b52, light: 0x6f5a7e, dark: 0x271e2d, crest: 0x9a6ab0 },
+  // THE ASSASSIN is a hyena: hunched, spotted and grinning.
+  { key: 'assassin', name: 'HYENA', power: 1.04, speed: 1.22, avoid: 1.22, resist: 0.74, nerve: 1.15, spacing: 1.05,
+    build: { scale: 0.92, wide: 0.74, tall: 1.0, limb: 1.1, head: 0.92, skin: 0xb49660, light: 0xd8c18e, dark: 0x5c4a2c, crest: 0x3a2c1a, animal: 'hyena' },
     blurb: 'QUICK AND VERY FRAGILE' },
-  { key: 'reach', name: 'REACH LIZARD', power: 0.94, speed: 1.0, avoid: 1.08, resist: 0.96, nerve: 0.85, spacing: 1.45,
-    build: { scale: 1.02, wide: 0.66, tall: 1.34, limb: 1.45, head: 0.86, skin: 0x3f6b4a, light: 0x62996d, dark: 0x1f3a26, crest: 0x8fd48f },
+  // THE REACH is a giraffe, and its reach is its neck and its limbs.
+  { key: 'reach', name: 'GIRAFFE', power: 0.94, speed: 1.0, avoid: 1.08, resist: 0.96, nerve: 0.85, spacing: 1.45,
+    build: { scale: 1.0, wide: 0.66, tall: 1.18, limb: 1.62, head: 0.9, skin: 0xe2b35c, light: 0xf6e7c2, dark: 0x8a5424, crest: 0x94542a, animal: 'giraffe' },
     blurb: 'FIGHTS FROM OVER THERE' },
-  { key: 'berserk', name: 'BERSERKER LIZARD', power: 1.2, speed: 1.05, avoid: 0.86, resist: 1.14, nerve: 1.35, spacing: 0.7, berserk: true,
-    build: { scale: 1.08, wide: 1.34, tall: 0.9, limb: 0.94, head: 1.22, skin: 0xa8331f, light: 0xd4603a, dark: 0x5c1a0e, crest: 0xffb02e },
+  // THE BERSERKER is a lion, mane and all.
+  { key: 'berserk', name: 'LION', power: 1.2, speed: 1.05, avoid: 0.86, resist: 1.14, nerve: 1.35, spacing: 0.7, berserk: true,
+    build: { scale: 1.12, wide: 1.4, tall: 0.96, limb: 0.96, head: 1.12, skin: 0xcc8e3e, light: 0xecc684, dark: 0x6e4418, crest: 0x7e3c16, animal: 'lion' },
     blurb: 'WORSE AS YOU HURT IT' },
-  { key: 'balanced', name: 'BALANCED LIZARD', power: 1.0, speed: 1.0, avoid: 1.0, resist: 1.0, nerve: 1.0, spacing: 1.0,
-    build: { scale: 1.0, wide: 1.0, tall: 1.0, limb: 1.0, head: 1.0, skin: 0x9c5a2e, light: 0xc98243, dark: 0x5e3218, crest: 0xc2522e },
+  // THE BALANCED ONE is still a lizard: the plain reptile the rest are read against.
+  { key: 'balanced', name: 'LIZARD', power: 1.0, speed: 1.0, avoid: 1.0, resist: 1.0, nerve: 1.0, spacing: 1.0,
+    build: { scale: 1.0, wide: 1.0, tall: 1.0, limb: 1.0, head: 1.0, skin: 0x9c5a2e, light: 0xc98243, dark: 0x5e3218, crest: 0xc2522e, animal: 'lizard' },
     blurb: 'BEST AT NOTHING' },
-  { key: 'trickster', name: 'TRICKSTER LIZARD', power: 0.94, speed: 1.06, avoid: 1.16, resist: 0.94, nerve: 1.0, spacing: 1.1, restless: true,
-    build: { scale: 0.96, wide: 1.14, tall: 0.84, limb: 1.2, head: 1.3, skin: 0x2f5f6b, light: 0x4f8f9b, dark: 0x173037, crest: 0xe0e36a },
+  // THE TRICKSTER is a wolf.
+  { key: 'trickster', name: 'WOLF', power: 0.94, speed: 1.06, avoid: 1.16, resist: 0.94, nerve: 1.0, spacing: 1.1, restless: true,
+    build: { scale: 0.98, wide: 0.96, tall: 1.0, limb: 1.16, head: 1.0, skin: 0x6c737e, light: 0xc9cdd3, dark: 0x363a42, crest: 0xe8c04a, animal: 'wolf' },
     blurb: 'NEVER WHERE IT WAS' },
 ];
 
@@ -1530,6 +1546,11 @@ export interface InFlight {
   stretch: number;
   /** Drawing only.  The sprite is hung off the shot so it can be destroyed. */
   art: Phaser.GameObjects.Container | null;
+  /**
+   * Drawing only.  Where a thrown WEAPON came to rest on the sand, so the
+   * sprite that flew can be the one that lies there -- see `retireShot`.
+   */
+  landed?: Dropped;
 }
 
 export interface Blow {
@@ -1868,10 +1889,10 @@ function groundShot(sh: InFlight, def: Fighter, ground: Dropped[], rng: () => nu
   // cap the oldest one nobody is walking towards sinks into the sand.
   if (ground.length >= GROUND_MAX) {
     const stale = ground.findIndex((g) => g.settle <= 0);
-    if (stale >= 0) { ground[stale].art?.destroy(); ground.splice(stale, 1); }
+    if (stale >= 0) { ground[stale].art?.destroy(); ground[stale].art = null; ground.splice(stale, 1); }
   }
   const past = sh.aim > sh.from ? 1 : -1;
-  ground.push({
+  const d: Dropped = {
     def: sh.weapon.def,
     piece: sh.weapon.piece,
     single: sh.weapon.single,
@@ -1881,7 +1902,9 @@ function groundShot(sh: InFlight, def: Fighter, ground: Dropped[], rng: () => nu
     life: Infinity,
     settle: PICKUP_WAIT,
     art: null,
-  });
+  };
+  ground.push(d);
+  sh.landed = d;
 }
 
 export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Math.random, ground: Dropped[] = []): Blow {
@@ -2117,7 +2140,18 @@ function armed(f: Fighter): boolean {
  */
 function holds(f: Fighter): boolean {
   const r = f.weapon.spec.ranged;
-  return !!r && f.ammo > 0 && r.ammo > 1;
+  if (!r || f.ammo <= 0 || r.ammo <= 1) return false;
+  // ---- DOWN TO THE LAST ONE, IT IS A WEAPON AGAIN.
+  //
+  // The last throw of something that leaves the hand is kept for a moment
+  // worth it (see `throwWorthIt`), so a fighter still holding ITS distance
+  // for that throw was waiting at range for a shot it had decided not to
+  // take.  Two of them -- bolas against a chakram -- stood sixty pixels
+  // apart for the better part of a minute, neither closing nor throwing.
+  // On the last one it closes and fights with it, and throws when the
+  // moment comes, which is what a one-shot spear already does.
+  if (r.leaves && Number.isFinite(f.ammo) && f.ammo <= 1) return false;
+  return true;
 }
 
 /** Nobody gives up the thing in their hand in the first seconds of a bout. */
@@ -2725,6 +2759,9 @@ export interface FighterArt {
   plume: Phaser.GameObjects.Rectangle;
   /** Everything above the neck, so a duck moves the face and not just the skull. */
   headGroup: Phaser.GameObjects.Container;
+  /** An animal's tail, hinged at the hip, which sways and swings.  (The
+   *  lizard's is part of the body and does not have one of these.) */
+  tail: Phaser.GameObjects.Container | null;
   /** Damage marks already cut into the weapon in hand, so they are added
    *  once each rather than sixty times a second. */
   nicks: number;
@@ -3072,6 +3109,302 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number, single = fa
  * that wrap the shin -- rather than a rectangle parked in front of it.  NO
  * ARMOUR draws nothing at all, so bare is visibly bare.
  */
+/**
+ * THE SHAPE OF EACH ANIMAL, as the rig needs it.
+ *
+ * `neck` lifts the head clear of the shoulders (a giraffe's is most of it);
+ * `fwd` and `drop` carry it forward of them and down -- a gorilla, a rhino
+ * and a hyena all fight with the head low and out in front, where a giraffe
+ * and a wolf carry it up.  `arm` is the length of the whole arm and `hand`
+ * the size of what is on the end of it: a gorilla's hands are huge and its
+ * arms long, a giraffe's arms are longest of all because that is its reach.
+ * `feet` is what it stands on, and `claws` whether its hands have them.
+ */
+interface Anatomy {
+  neck: number;
+  fwd: number;
+  drop: number;
+  arm: number;
+  hand: number;
+  feet: 'paw' | 'hoof' | 'flat' | 'claw';
+  claws: boolean;
+}
+const ANATOMY: Record<Animal, Anatomy> = {
+  gorilla: { neck: 0, fwd: 3, drop: 3, arm: 1.2, hand: 1.4, feet: 'flat', claws: false },
+  cheetah: { neck: 1, fwd: 2, drop: 0, arm: 1.06, hand: 0.9, feet: 'paw', claws: true },
+  rhino: { neck: 0, fwd: 5, drop: 5, arm: 0.95, hand: 1.15, feet: 'hoof', claws: false },
+  hyena: { neck: 0, fwd: 5, drop: 4, arm: 1.0, hand: 0.95, feet: 'paw', claws: true },
+  giraffe: { neck: 17, fwd: 5, drop: 0, arm: 1.42, hand: 0.85, feet: 'hoof', claws: false },
+  lion: { neck: 0, fwd: 2, drop: 1, arm: 1.06, hand: 1.2, feet: 'paw', claws: true },
+  lizard: { neck: 0, fwd: 0, drop: 0, arm: 1.0, hand: 1.0, feet: 'claw', claws: true },
+  wolf: { neck: 0, fwd: 2, drop: -1, arm: 1.05, hand: 0.95, feet: 'paw', claws: true },
+};
+
+/** What `dressAnimal` hands back: the parts, sorted by where they are drawn. */
+interface AnimalParts {
+  /** Behind the skull, moving with the head: a neck, a mane, the far ear. */
+  headBack: Phaser.GameObjects.GameObject[];
+  /** Over the skull: the face. */
+  face: Phaser.GameObjects.GameObject[];
+  /** Over the torso and under any armour: markings, muscle, a ruff. */
+  body: Phaser.GameObjects.GameObject[];
+  /** The tail, hinged at the hip so it can sway; null for a gorilla. */
+  tail: Phaser.GameObjects.Container | null;
+  /** The skull itself: its size and its colour. */
+  skullW: number;
+  skullH: number;
+  skullCol: number;
+}
+
+/**
+ * EACH ANIMAL'S OWN HEAD, BODY MARKINGS AND TAIL.
+ *
+ * Not one face with the colours changed.  Every head here is built for the
+ * animal it belongs to -- a gorilla's is a broad primate face under a brow
+ * ridge, a cheetah's a short feline muzzle with its tear marks, a rhino's a
+ * long heavy head with the horn on the end of it, a hyena's a blunt dark
+ * muzzle under two huge round ears, a giraffe's a long narrow head on top of
+ * a long neck, a lion's a feline face in a mane, a wolf's a long canine
+ * muzzle under tall pointed ears.  Everything is placed from the head's
+ * centre (`HX`, `HY`), so the rig can carry it wherever the neck puts it,
+ * and all of it rides the head group, so a duck, a dodge or a throw takes the
+ * whole face along.
+ *
+ * Triangles are drawn with Graphics at their exact coordinates: an Arcade
+ * `triangle` centres its bounding box on its position, which puts any point
+ * given above or left of zero somewhere other than where it was written.
+ */
+function dressAnimal(scene: Phaser.Scene, animal: Animal, c: {
+  HX: number; HY: number; skin: number; light: number; dark: number; crest: number; outline: number;
+  torsoCY: number; torsoTop: number; torsoW: number; torsoH: number; hipX: number; hipY: number;
+  up: (c: number, k?: number) => number; down: (c: number, k?: number) => number;
+}): AnimalParts {
+  const { HX, HY, skin, light, dark, crest, outline, torsoCY, torsoTop, torsoW, torsoH, up, down } = c;
+  const E = (x: number, y: number, w: number, h: number, col: number, a = 1) => scene.add.ellipse(x, y, w, h, col).setAlpha(a);
+  const R = (x: number, y: number, w: number, h: number, col: number, ang = 0, a = 1) =>
+    scene.add.rectangle(x, y, w, h, col).setAngle(ang).setAlpha(a);
+  const C = (x: number, y: number, r: number, col: number, a = 1) => scene.add.circle(x, y, r, col).setAlpha(a);
+  const T = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number, col: number) =>
+    scene.add.graphics().fillStyle(col, 1).fillTriangle(ax, ay, bx, by, cx, cy);
+  type Pt = [number, number];
+  const bez = (a: Pt, b: Pt, q: Pt, e: Pt, n = 12): Pt[] => {
+    const out: Pt[] = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const u = 1 - t;
+      out.push([
+        u * u * u * a[0] + 3 * u * u * t * b[0] + 3 * u * t * t * q[0] + t * t * t * e[0],
+        u * u * u * a[1] + 3 * u * u * t * b[1] + 3 * u * t * t * q[1] + t * t * t * e[1],
+      ]);
+    }
+    return out;
+  };
+  /** A smooth tapered limb along a path: a tail, a neck. */
+  const tube = (pts: Pt[], w0: number, w1: number, col: number): Phaser.GameObjects.Graphics => {
+    const L: Phaser.Math.Vector2[] = [];
+    const Rr: Phaser.Math.Vector2[] = [];
+    const last = pts.length - 1;
+    for (let i = 0; i <= last; i++) {
+      const [px, py] = pts[Math.max(0, i - 1)];
+      const [nx, ny] = pts[Math.min(last, i + 1)];
+      const len = Math.hypot(nx - px, ny - py) || 1;
+      const w = (w1 + (w0 - w1) * Math.pow(1 - i / last, 0.85)) / 2;
+      L.push(new Phaser.Math.Vector2(pts[i][0] - ((ny - py) / len) * w, pts[i][1] + ((nx - px) / len) * w));
+      Rr.push(new Phaser.Math.Vector2(pts[i][0] + ((ny - py) / len) * w, pts[i][1] - ((nx - px) / len) * w));
+    }
+    const g = scene.add.graphics().fillStyle(col, 1);
+    g.fillPoints([...L, ...Rr.reverse()], true, true);
+    g.fillCircle(pts[0][0], pts[0][1], w0 / 2);
+    g.fillCircle(pts[last][0], pts[last][1], w1 / 2);
+    return g;
+  };
+  /** Spots or patches scattered over the torso, the same every time. */
+  const spots = (n: number, col: number, r0: number, r1: number, a = 0.85): Phaser.GameObjects.GameObject[] => {
+    const out: Phaser.GameObjects.GameObject[] = [];
+    for (let i = 0; i < n; i++) {
+      const u = ((i * 0.618) % 1) * 2 - 1;
+      const v = ((i * 0.382 + 0.3) % 1) * 2 - 1;
+      const r = r0 + ((i * 7) % 5) / 4 * (r1 - r0);
+      out.push(E(-1 + u * torsoW * 0.36, torsoCY + v * torsoH * 0.36, r * 1.3, r, col, a));
+    }
+    return out;
+  };
+  const headBack: Phaser.GameObjects.GameObject[] = [];
+  const face: Phaser.GameObjects.GameObject[] = [];
+  const body: Phaser.GameObjects.GameObject[] = [];
+  const tailBits: Phaser.GameObjects.GameObject[] = [];
+  // A plain neck from the top of the chest to the underside of the skull,
+  // sunk into both so there is no gap to open when the head moves.
+  const neckTo = (w0: number, w1: number, col: number) =>
+    headBack.push(tube(bez([2, torsoTop + 5], [2, torsoTop - 2], [HX - 3, HY + 6], [HX - 1, HY + 2], 10), w0, w1, col));
+  let skullW = 12;
+  let skullH = 10;
+  let skullCol = skin;
+
+  switch (animal) {
+    case 'gorilla': {
+      // ---- A BROAD PRIMATE FACE, low between huge shoulders.  A domed crown,
+      // a heavy brow ridge over small deep eyes, a pale leathery face with a
+      // flat broad nose, and no neck to speak of.
+      skullW = 14;
+      skullH = 12;
+      neckTo(10, 9, skin);
+      headBack.push(E(HX - 1.5, HY - 4.6, 10, 6.5, skin), E(HX - 6.2, HY + 0.8, 3, 3.8, light));
+      face.push(E(HX + 2.8, HY + 1.8, 9.6, 8.6, light));
+      face.push(E(HX + 2.4, HY - 2.6, 12, 3.4, skin), E(HX + 2.4, HY - 3.2, 10, 1.4, up(skin, 0.25), 0.8));
+      for (const ex of [1, 4.8]) face.push(E(HX + ex, HY - 0.4, 2.8, 2.2, 0x8a6a4a), C(HX + ex + 0.2, HY - 0.4, 0.8, 0x1a0e08), C(HX + ex - 0.3, HY - 0.9, 0.4, 0xffffff, 0.8));
+      face.push(E(HX + 3.3, HY + 2, 5.8, 3.2, down(light, 0.42)));
+      face.push(C(HX + 2.2, HY + 2.3, 0.7, dark), C(HX + 4.4, HY + 2.3, 0.7, dark));
+      face.push(R(HX + 3.2, HY + 5, 6.4, 1.1, dark), E(HX + 3.2, HY + 6, 6, 2, light, 0.6));
+      // Shoulders like a yoke, a chest in two slabs, and the silver saddle
+      body.push(E(-1, torsoTop + 3, torsoW * 1.02, 11, skin));
+      body.push(E(-1, torsoTop + 1.5, torsoW * 0.8, 3, up(skin, 0.22), 0.7));
+      body.push(E(-3.5, torsoCY - 2.5, torsoW * 0.38, 7, up(skin, 0.16)), E(3.5, torsoCY - 2.5, torsoW * 0.38, 7, up(skin, 0.16)));
+      body.push(E(-6, torsoCY + 1, torsoW * 0.4, torsoH * 0.5, crest, 0.45));
+      body.push(E(0, torsoCY + 4, torsoW * 0.5, 7, light, 0.35));
+      return { headBack, face, body, tail: null, skullW, skullH, skullCol };
+    }
+    case 'cheetah': {
+      // ---- A SMALL ROUND FELINE HEAD, a short pale muzzle, amber eyes and
+      // the black tear line from each eye to the mouth.
+      skullW = 10;
+      skullH = 8.6;
+      neckTo(5, 4.2, skin);
+      headBack.push(E(HX - 1, HY - 4.6, 3, 3.2, dark), E(HX - 3.2, HY - 4.2, 3.2, 3.4, skin), E(HX - 3.2, HY - 4, 1.6, 1.8, dark, 0.7));
+      face.push(E(HX + 1, HY + 2.1, 6, 3.6, light, 0.8), E(HX + 4.4, HY + 1.8, 5.6, 4.2, light));
+      face.push(T(HX + 5.4, HY + 0.1, HX + 7.8, HY + 0.1, HX + 6.6, HY + 1.6, 0x3a2418));
+      face.push(E(HX + 2.4, HY - 1.4, 3, 2.2, 0xf0b838), R(HX + 2.7, HY - 1.4, 0.8, 1.8, PALETTE.black), C(HX + 2.1, HY - 1.9, 0.45, 0xffffff));
+      face.push(R(HX + 3.3, HY + 1.4, 0.9, 4.2, 0x2a1a10, -18), R(HX + 5.2, HY + 3.7, 2.8, 0.7, dark));
+      for (const [x, y] of [[-2, -2.5], [0, -3.4], [-3.4, 0.2], [-1.4, 1.4]] as const) face.push(C(HX + x, HY + y, 0.6, crest, 0.9));
+      body.push(...spots(14, crest, 0.9, 1.5));
+      body.push(E(2.5, torsoCY + 2, torsoW * 0.42, torsoH * 0.55, light, 0.55));
+      // a long thin tail with a curl at the end, ringed and black-tipped
+      const path = bez([0, 0], [-6, 3], [-15, 7], [-21, 0], 14);
+      tailBits.push(tube(path, 2.8, 1.8, skin));
+      for (let i = 8; i < path.length; i += 2) tailBits.push(E(path[i][0], path[i][1], 1.2, 2.4, crest, 0.9));
+      tailBits.push(C(path[path.length - 1][0], path[path.length - 1][1], 1.3, crest));
+      break;
+    }
+    case 'rhino': {
+      // ---- A LONG HEAVY HEAD, low and forward, with the great horn on the
+      // end of the snout and a smaller one behind it; small eyes set back,
+      // tubular ears on top, and folds in the hide.
+      skullW = 16;
+      skullH = 11;
+      neckTo(10, 10, skin);
+      headBack.push(E(HX - 5.6, HY - 5.4, 2.6, 5.2, down(skin, 0.1)).setAngle(-20), E(HX - 3.6, HY - 6, 2.6, 5.4, skin).setAngle(-8));
+      face.push(E(HX + 7, HY + 1.6, 10, 8.4, skin).setStrokeStyle(1, outline));
+      face.push(T(HX + 7.2, HY - 1.6, HX + 12.6, HY - 0.4, HX + 11.6, HY - 11.5, crest), T(HX + 9.2, HY - 1.8, HX + 11.2, HY - 1.2, HX + 11.4, HY - 9, up(crest, 0.4)));
+      face.push(T(HX + 2.6, HY - 3.8, HX + 6, HY - 3.4, HX + 5, HY - 8, crest));
+      face.push(C(HX + 0.6, HY - 0.4, 1.1, 0x1a1a1a), R(HX + 0.8, HY + 1.4, 3.4, 0.7, dark, 0, 0.8));
+      face.push(R(HX + 8.6, HY + 4.9, 5, 0.9, dark), R(HX - 2, HY + 3, 5, 0.7, dark, 58, 0.5), R(HX + 4.4, HY + 3.6, 4, 0.7, dark, 70, 0.4));
+      // the hide: plated shoulders, deep folds at the shoulder and the hip
+      body.push(E(4, torsoCY - 3, torsoW * 0.46, torsoH * 0.56, up(skin, 0.1)).setStrokeStyle(1, down(skin, 0.3)));
+      body.push(R(-1 - torsoW * 0.22, torsoCY + 1, 1.1, torsoH * 0.78, dark, 8, 0.5), R(-1 + torsoW * 0.3, torsoCY + 1, 1.1, torsoH * 0.7, dark, -8, 0.5));
+      body.push(R(-1, torsoCY + torsoH * 0.34, torsoW * 0.6, 1, dark, 0, 0.35));
+      // a short tail with a dark tuft on the end
+      tailBits.push(tube(bez([0, 0], [-3, 3], [-4, 6], [-4.5, 9], 8), 2, 1.2, skin), E(-4.5, 10.2, 2, 3, dark));
+      break;
+    }
+    case 'hyena': {
+      // ---- A BLUNT DARK MUZZLE AND TWO HUGE ROUND EARS, carried low and
+      // forward off a hunched back with a bristling ridge down it.
+      skullW = 12;
+      skullH = 9.6;
+      neckTo(7, 6, skin);
+      headBack.push(E(HX + 1.4, HY - 6.6, 5, 6, dark), E(HX - 2.6, HY - 6.2, 5.6, 6.6, skin), E(HX - 2.6, HY - 6, 3, 4, 0x3a2c1a, 0.85));
+      for (let i = 0; i < 4; i++) headBack.push(R(HX - 4.5 - i * 2.2, HY - 2.6 + i * 2.6, 1.4, 3.6, crest, -34));
+      face.push(E(HX + 7, HY + 2, 9.4, 5.6, 0x40321e), E(HX + 6, HY + 0.6, 7.6, 2.6, skin, 0.85));
+      face.push(C(HX + 11.4, HY + 1, 1.5, 0x120e08));
+      face.push(C(HX + 2.4, HY - 1.8, 1.6, 0xf2e6c0), C(HX + 2.8, HY - 1.8, 0.8, PALETTE.black));
+      face.push(R(HX + 7.6, HY + 4, 7.4, 0.9, 0x1a120a), R(HX + 8.8, HY + 3.3, 2.4, 0.9, PALETTE.cream), R(HX + 6.2, HY + 3.3, 1.2, 0.9, PALETTE.cream));
+      face.push(C(HX - 2, HY + 1, 0.8, crest, 0.8), C(HX + 0.2, HY + 2.4, 0.7, crest, 0.8));
+      // the hump over the shoulders, the ridge down the back, the spots
+      body.push(E(3, torsoTop + 2.5, torsoW * 0.9, 8, skin));
+      for (let i = 0; i < 4; i++) body.push(R(-2 - i * 2.4, torsoTop + 0.5 + i * 1.4, 1.3, 3.6, crest, -30));
+      body.push(...spots(9, 0x4a3820, 1.1, 1.9, 0.8));
+      // short, bushy and dark
+      tailBits.push(tube(bez([0, 0], [-3, 2], [-6, 5], [-8, 8], 8), 4.4, 3, crest), E(-8.6, 8.8, 3, 3.4, down(crest, 0.3)));
+      break;
+    }
+    case 'giraffe': {
+      // ---- A LONG NARROW HEAD ON TOP OF A LONG NECK.  The neck rises from
+      // the front of the shoulders and the head sits across the top of it,
+      // pointing forward -- not a face stood on a pole.  Two ossicones, ears
+      // out to the side, a long pale snout, and patches all the way up.
+      skullW = 9;
+      skullH = 6.6;
+      const neck = bez([1, torsoTop + 6], [2, torsoTop - 6], [HX - 3, HY + 10], [HX - 1.5, HY + 2.5], 16);
+      headBack.push(tube(neck, 6.4, 4.4, skin));
+      for (let i = 3; i < neck.length - 2; i += 3) headBack.push(E(neck[i][0] + 0.6, neck[i][1], 2.6, 2, crest, 0.9));
+      for (let i = 2; i < neck.length - 1; i += 2) headBack.push(R(neck[i][0] - 2.8, neck[i][1], 1.4, 1.8, dark, -20));
+      headBack.push(E(HX - 3.8, HY - 2.4, 4.4, 1.8, skin).setAngle(-22));
+      headBack.push(R(HX - 1.5, HY - 5.2, 1.4, 4.4, skin), C(HX - 1.5, HY - 7.6, 1.1, dark));
+      headBack.push(R(HX + 0.8, HY - 5.4, 1.4, 4.6, down(skin, 0.15)), C(HX + 0.8, HY - 7.9, 1.1, dark));
+      face.push(E(HX + 6, HY + 2, 9.4, 4.6, light).setStrokeStyle(1, outline));
+      face.push(C(HX + 9.6, HY + 1.2, 0.6, dark), R(HX + 8, HY + 3.6, 3.6, 0.6, dark));
+      face.push(C(HX + 1.4, HY - 1, 1.3, 0x1a1208), C(HX + 1, HY - 1.4, 0.4, 0xffffff), R(HX + 1.6, HY - 2.5, 2.6, 0.6, dark, -10));
+      face.push(E(HX - 1.5, HY + 1, 2.4, 1.8, crest, 0.8));
+      body.push(...spots(8, crest, 1.8, 2.8, 0.9));
+      tailBits.push(tube(bez([0, 0], [-2.6, 4], [-3.6, 8], [-4, 12], 8), 1.4, 1, skin), E(-4, 13.4, 2.2, 3.4, dark));
+      break;
+    }
+    case 'lion': {
+      // ---- A FELINE FACE IN A GREAT MANE.  The mane rings the head and
+      // runs down onto the chest; broad whisker pads, a strong chin, a dark
+      // nose, amber eyes under a hard brow, and small round ears on top.
+      skullW = 11;
+      skullH = 10;
+      neckTo(9, 8, skin);
+      headBack.push(E(HX - 1, HY + 1, 20, 19, crest));
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        headBack.push(E(HX - 1 + Math.cos(a) * 9, HY + 1 + Math.sin(a) * 8.6, 7, 6.4, i % 2 ? crest : down(crest, 0.18)));
+      }
+      headBack.push(E(HX - 1, HY + 10, 12, 8, crest));
+      headBack.push(E(HX - 2.8, HY - 6.8, 3, 3, skin), E(HX + 1.6, HY - 7.2, 3, 3, skin), C(HX - 2.8, HY - 6.8, 0.8, dark), C(HX + 1.6, HY - 7.2, 0.8, dark));
+      face.push(E(HX + 2.6, HY + 2.4, 4.4, 3.2, light), E(HX + 4.8, HY + 2.2, 4.6, 3.4, light));
+      face.push(E(HX + 5.2, HY + 0.2, 3.2, 2.2, 0x6a3322));
+      face.push(E(HX + 3.8, HY + 4.8, 5, 2.6, light).setStrokeStyle(1, outline));
+      face.push(E(HX + 2.4, HY - 2.3, 2.6, 1.8, 0xe8a630), R(HX + 2.6, HY - 2.3, 0.7, 1.6, PALETTE.black));
+      face.push(R(HX + 2.4, HY - 3.6, 4, 1, dark, 15));
+      for (const y of [1.6, 2.8]) face.push(C(HX + 3.4, HY + y, 0.3, dark), C(HX + 5.4, HY + y + 0.2, 0.3, dark));
+      body.push(E(-1, torsoTop + 3, torsoW * 0.9, 7, up(skin, 0.12), 0.7));
+      body.push(E(3, torsoCY + 1, torsoW * 0.4, torsoH * 0.55, light, 0.5));
+      // long and thin, with the dark tuft on the end
+      const path = bez([0, 0], [-7, 6], [-15, 5], [-18, -2], 14);
+      tailBits.push(tube(path, 2.2, 1.4, skin), E(path[path.length - 1][0], path[path.length - 1][1] - 1, 3.4, 4, crest));
+      break;
+    }
+    case 'wolf': {
+      // ---- A LONG CANINE MUZZLE UNDER TALL POINTED EARS, pale cheeks, a
+      // ruff at the throat, slanted yellow eyes -- and a heavy brush of a tail.
+      skullW = 11;
+      skullH = 9;
+      neckTo(7, 6, skin);
+      headBack.push(T(HX - 0.4, HY - 3, HX + 2.6, HY - 3.2, HX + 1.2, HY - 10.6, dark));
+      headBack.push(T(HX - 4.2, HY - 2.6, HX - 0.8, HY - 3.2, HX - 2.8, HY - 10.4, skin), T(HX - 3.4, HY - 3.2, HX - 1.6, HY - 3.4, HX - 2.7, HY - 8.4, 0x4a3a3a));
+      headBack.push(E(HX - 1.6, HY + 4, 9.4, 6.4, light));
+      for (let i = 0; i < 4; i++) headBack.push(T(HX - 5 + i * 2.4, HY + 6, HX - 3.4 + i * 2.4, HY + 6, HX - 4.4 + i * 2.4, HY + 8.6, light));
+      face.push(E(HX + 6.5, HY + 1.6, 10, 4.4, light), E(HX + 6, HY + 0.4, 9, 2.4, skin));
+      face.push(C(HX + 11.2, HY + 0.8, 1.3, 0x14161a), R(HX + 7.4, HY + 3.4, 6, 0.7, dark));
+      face.push(E(HX + 2.8, HY - 1.6, 2.8, 1.6, crest).setAngle(-14), C(HX + 3, HY - 1.6, 0.6, PALETTE.black));
+      face.push(R(HX + 2.4, HY - 2.9, 3.6, 0.8, dark, -14), E(HX + 1, HY - 3.6, 3, 1.4, light, 0.6));
+      body.push(E(3, torsoTop + 4, torsoW * 0.62, 8, light, 0.85));
+      for (let i = 0; i < 3; i++) body.push(T(-1 + i * 3, torsoTop + 7, 1 + i * 3, torsoTop + 7, i * 3, torsoTop + 10.4, light));
+      body.push(E(-4, torsoCY, torsoW * 0.36, torsoH * 0.6, dark, 0.3));
+      // a heavy brush, pale-tipped, dark along the top
+      const path = bez([0, 0], [-5, 4], [-11, 8], [-14, 13], 12);
+      tailBits.push(tube(path, 6, 3, skin), tube(path.slice(8), 4, 2.4, light), tube(path.slice(0, 7), 2, 1, dark));
+      break;
+    }
+    case 'lizard':
+      break;
+  }
+  const tail = tailBits.length ? scene.add.container(c.hipX, c.hipY, tailBits) : null;
+  return { headBack, face, body, tail, skullW, skullH, skullCol };
+}
+
 export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const frog = f.who === 'frog';
   // Froggy is green.  The lizard is NOT a second green animal: it is rust and
@@ -3087,6 +3420,12 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const tall = bld?.tall ?? 1;
   const limb = bld?.limb ?? 1;
   const skull = bld?.head ?? 1;
+  // Which animal, and the shape of it.  Froggy is not on the table.
+  const animal: Animal | null = frog ? null : bld?.animal ?? 'lizard';
+  const anat = animal ? ANATOMY[animal] : null;
+  // A mammal gets its whole head from `dressAnimal`; the lizard keeps the
+  // reptile head this function has always built.
+  const beast = animal !== null && animal !== 'lizard';
   // Longer legs raise everything above them, or a leggy lizard grows its legs
   // up through its own chest.
   const lift = 11 * (limb - 1);
@@ -3146,15 +3485,32 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const kneeL = scene.add.rectangle(-4 * wide, -9 * limb, 7 * wide, 2, L.edge).setVisible(wears(L));
   const kneeR = scene.add.rectangle(4 * wide, -9 * limb, 7 * wide, 2, L.edge).setVisible(wears(L));
   // frogs get broad flat feet, lizards get clawed ones
-  const footL = scene.add.rectangle(-5 * wide, 0, (frog ? 8 : 7) * wide, 2, light).setOrigin(0.5, 1);
-  const footR = scene.add.rectangle(5 * wide, 0, (frog ? 8 : 7) * wide, 2, light).setOrigin(0.5, 1);
+  // Feet by anatomy: a frog's broad flat ones, a lizard's clawed ones, paws,
+  // hooves, or a gorilla's great flat soles.
+  const feet = anat?.feet ?? 'claw';
+  const footW = frog ? 8 * wide : feet === 'hoof' ? 4.6 * wide : feet === 'flat' ? 8 * wide : feet === 'paw' ? 6.4 * wide : 7 * wide;
+  const footH = feet === 'hoof' || feet === 'flat' ? 2.6 : 2;
+  const footCol = frog ? light : feet === 'hoof' ? 0x2c2622 : feet === 'flat' ? down(skin, 0.3) : feet === 'paw' ? mix(light, skin, 0.35) : light;
+  const footL = scene.add.rectangle(-5 * wide, 0, footW, footH, footCol).setOrigin(0.5, 1);
+  const footR = scene.add.rectangle(5 * wide, 0, footW, footH, footCol).setOrigin(0.5, 1);
   // a lit edge down the front of each shin, and the dark where foot meets sand
   legDetail.push(scene.add.rectangle(-2.6 * wide, -2, 1, 11 * limb, up(dark, 0.22)).setOrigin(0.5, 1));
   legDetail.push(scene.add.rectangle(5.4 * wide, -2, 1, 11 * limb, up(skin, 0.3)).setOrigin(0.5, 1));
-  legDetail.push(scene.add.rectangle(-5 * wide, 0, (frog ? 8 : 7) * wide, 1, down(light, 0.45)).setOrigin(0.5, 1).setAlpha(0.6));
-  legDetail.push(scene.add.rectangle(5 * wide, 0, (frog ? 8 : 7) * wide, 1, down(light, 0.45)).setOrigin(0.5, 1).setAlpha(0.6));
-  const clawL = frog ? null : scene.add.triangle(-9, -1, 0, 2, 4, 0, 4, 3, PALETTE.bone);
-  const clawR = frog ? null : scene.add.triangle(9, -1, 0, 0, 4, 2, 0, 3, PALETTE.bone);
+  legDetail.push(scene.add.rectangle(-5 * wide, 0, footW, 1, down(footCol, 0.45)).setOrigin(0.5, 1).setAlpha(0.6));
+  legDetail.push(scene.add.rectangle(5 * wide, 0, footW, 1, down(footCol, 0.45)).setOrigin(0.5, 1).setAlpha(0.6));
+  const clawL = animal === 'lizard' ? scene.add.triangle(-9, -1, 0, 2, 4, 0, 4, 3, PALETTE.bone) : null;
+  const clawR = animal === 'lizard' ? scene.add.triangle(9, -1, 0, 0, 4, 2, 0, 3, PALETTE.bone) : null;
+  // claws at the toes of a paw, a split and a toenail on a hoof
+  for (const sx of [-5, 5]) {
+    const fx = sx * wide + footW / 2;
+    if (feet === 'paw' && anat?.claws) {
+      legDetail.push(scene.add.rectangle(fx + 0.4, -0.6, 1.2, 0.8, PALETTE.bone), scene.add.rectangle(fx - 1.4, -0.6, 1.2, 0.8, PALETTE.bone));
+    } else if (feet === 'hoof') {
+      legDetail.push(scene.add.rectangle(sx * wide, -1.2, 0.8, 2.4, 0x14100c));
+    } else if (feet === 'flat') {
+      for (let k = 0; k < 3; k++) legDetail.push(scene.add.rectangle(fx - 1 - k * 2.2, -0.8, 1.6, 1.2, down(skin, 0.45)));
+    }
+  }
 
   // ---- THE TAIL, which is half of what says LIZARD.
   //
@@ -3194,11 +3550,11 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
     }
     return [...top, ...bot];
   };
-  const tail = frog ? null : scene.add.polygon(0, tailY, curve(wide, tall, 1), skin).setOrigin(0, 0);
+  const tail = beast || frog ? null : scene.add.polygon(0, tailY, curve(wide, tall, 1), skin).setOrigin(0, 0);
   // the lit top edge, and the row of plates along the underside
-  const tailTip = frog ? null
+  const tailTip = beast || frog ? null
     : scene.add.polygon(0, tailY - 0.8, curve(wide, tall, 0.55), up(skin, 0.3)).setOrigin(0, 0).setAlpha(0.8);
-  const tailEnd = frog ? null
+  const tailEnd = beast || frog ? null
     : scene.add.polygon(0, tailY + 1.6, curve(wide * 0.98, tall, 0.34), down(skin, 0.34)).setOrigin(0, 0).setAlpha(0.6);
 
   // ---- TORSO
@@ -3237,7 +3593,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
       bodyDetail.push(scene.add.circle(Math.cos(a) * 7.4, ty0 + Math.sin(a) * 7 - 2, i % 2 ? 1.6 : 1.1, down(skin, 0.34)).setAlpha(0.5));
     }
     bodyDetail.push(scene.add.ellipse(-1, ty0 - 8, 7, 2.4, up(skin, 0.48)).setAlpha(0.55));
-  } else {
+  } else if (!beast) {
     // ---- THE BELLY PLATES, not stripes of dirt.
     //
     // Four flat bands across the middle of the body read as mud at this size.
@@ -3301,7 +3657,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // the back, each with a lit front edge.  It is the one piece of the animal
   // that is allowed to be a bright colour, so it carries the character.
   const spines: Phaser.GameObjects.Triangle[] = [];
-  if (!frog) {
+  if (!frog && !beast) {
     const crest = bld?.crest ?? PALETTE.rust;
     // Five, biggest over the shoulder and tapering to the hip -- and they
     // STOP at the hip.  Run on down the tail they read as flames coming out
@@ -3317,6 +3673,21 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
       spines.push(scene.add.triangle(x + 0.7, y, 0, h, 1, 0, 1.8, h, up(crest, 0.45)).setAngle(-6 - i * 4));
     }
   }
+
+  // ---- WHERE THE HEAD IS.  The lizard's sits where it always has; every
+  // other animal's is carried out along its own neck -- forward and low for
+  // the heavy ones, up at the top of a long neck for the giraffe.
+  const HX = frog ? 2 : 1 + (anat?.fwd ?? 0);
+  const HY = frog ? -33 : -32.6 * tall - lift - (anat?.neck ?? 0) + (anat?.drop ?? 0);
+  const torsoCY = -19 * tall - lift;
+  const beastParts = beast
+    ? dressAnimal(scene, animal!, {
+      HX, HY, skin, light, dark, crest: bld?.crest ?? dark, outline: OUTLINE,
+      torsoCY, torsoTop: torsoCY - 9.5 * tall, torsoW: 15 * wide, torsoH: 19 * tall,
+      hipX: -1 - 7.5 * wide + 3, hipY: torsoCY + 4 * tall, up, down,
+    })
+    : null;
+  if (beastParts) bodyDetail.push(...beastParts.body);
 
   // ---- HEAD
   // ---- THE SKULL DOES NOT GROW WITH THE CHEST.
@@ -3373,33 +3744,42 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   headDetail.push(scene.add.circle(frog ? 9 : skullW * 0.86, hy0 + 1, 0.8, down(skin, 0.55)).setAlpha(0.7));
   const catchL = scene.add.circle(frog ? -1.8 : -0.8, ey - 1.2, 0.8, 0xffffff).setAlpha(0.85);
   const catchR = scene.add.circle(frog ? 4.2 : 5.2, ey - 1.2, 0.8, 0xffffff).setAlpha(0.85);
+  // ---- A MAMMAL'S HEAD IS ITS OWN.  The reptile face above is put away and
+  // the skull is reshaped and recoloured to the animal's; the face itself
+  // comes from `dressAnimal`.
+  if (beastParts) {
+    for (const o of [jaw, teeth, brow, eyeL, eyeR, pupL, pupR, catchL, catchR, neck, ...headDetail] as Array<Phaser.GameObjects.Components.Visible | null>) o?.setVisible(false);
+    head.setSize(beastParts.skullW * skull, beastParts.skullH * skull).setPosition(HX, HY).setFillStyle(beastParts.skullCol);
+  }
 
   // ---- HELM: a bowl, a brow band, a visor slit, and a plume for the frog
   // A helm caps the skull.  At -40 it came down over the eyes and both of
   // them fought the whole bout blindfolded in a grey box.
-  const hy = (frog ? -43 : -39) * tall - lift;
+  const hy = frog ? -43 * tall : beastParts ? HY - (beastParts.skullH * skull) / 2 - 1.4 : -39 * tall - lift;
+  const hx = frog ? 2 : HX + 1;
+  const helmW = frog ? 17 : beastParts ? Math.min(14 * wide, beastParts.skullW * skull + 4) : 14 * wide;
   // ---- A CROWN IS A CROWN.  It was drawn as a gold helmet -- the same bowl,
   // visor and plume as every other helm -- which is the one thing a crown
   // must not look like.  It is a band that sits on top of the head, points
   // round the rim with a pearl on each, and stones set into the band.
   const crowned = H.key === 'crown';
   const helmOn = wears(H) && !crowned;
-  const helm = scene.add.rectangle(2, hy, (frog ? 17 : 14) * wide, 6, H.colour).setStrokeStyle(1, H.edge).setVisible(helmOn);
-  const helmDome = scene.add.ellipse(2, hy - 2, (frog ? 17 : 14) * wide, 7, H.colour).setVisible(helmOn);
-  const visor = scene.add.rectangle(4, hy + 2, (frog ? 12 : 10) * wide, 1.5, H.edge).setVisible(helmOn);
-  const plume = scene.add.rectangle(-4, hy - 7, 3, 8, frog ? PALETTE.blood : PALETTE.rust).setVisible(helmOn);
+  const helm = scene.add.rectangle(hx, hy, helmW, 6, H.colour).setStrokeStyle(1, H.edge).setVisible(helmOn);
+  const helmDome = scene.add.ellipse(hx, hy - 2, helmW, 7, H.colour).setVisible(helmOn);
+  const visor = scene.add.rectangle(hx + 2, hy + 2, helmW * 0.72, 1.5, H.edge).setVisible(helmOn);
+  const plume = scene.add.rectangle(hx - 6, hy - 7, 3, 8, frog ? PALETTE.blood : PALETTE.rust).setVisible(helmOn);
   // the helm shines by the same rule the breastplate does
   const hg = gloss(H);
   if (!crowned) {
-    helmDetail.push(scene.add.rectangle(2, hy - 4, (frog ? 12 : 10) * wide, 1.5, up(H.colour, 0.3 + hg))
+    helmDetail.push(scene.add.rectangle(hx, hy - 4, helmW * 0.72, 1.5, up(H.colour, 0.3 + hg))
       .setAlpha(0.35 + hg * 0.8).setVisible(wears(H)));
-    helmDetail.push(scene.add.rectangle(2, hy + 3, (frog ? 15 : 12) * wide, 1.5, down(H.colour, 0.4))
+    helmDetail.push(scene.add.rectangle(hx, hy + 3, helmW * 0.88, 1.5, down(H.colour, 0.4))
       .setAlpha(0.5).setVisible(wears(H)));
   }
   // Sat down onto the top of the skull, a little narrower than it.
-  const crown = scene.add.container(2, hy + (frog ? 4 : 3)).setVisible(crowned);
+  const crown = scene.add.container(hx, hy + (frog ? 4 : 3)).setVisible(crowned);
   if (crowned) {
-    const cw = (frog ? 13 : 11) * wide;
+    const cw = frog ? 13 * wide : Math.min(11 * wide, helmW - 3);
     const gold = H.colour;
     const rim = H.edge;
     // the points first, so the band covers their feet
@@ -3461,7 +3841,11 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
     const root = scene.add.container(behind ? -shoulderX : shoulderX, shoulderY);
     const tone = behind ? dark : skin;
     const limbTone = behind ? skin : light;
-    const UPPER = 6;
+    // A giraffe's arms are longest of all, because that is its reach; a
+    // gorilla's are long and end in enormous hands.
+    const aL = anat?.arm ?? 1;
+    const UPPER = 6 * aL;
+    const FORE = 6.5 * aL;
     // the shoulder cap, which is what joins the arm to the body rather than
     // leaving it to start in mid-air beside it
     root.add(scene.add.ellipse(0.5, 0, 5.4 * wide, 5.6 * wide, tone));
@@ -3474,23 +3858,28 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
     // the elbow itself: a joint you can see, so the bend has somewhere to be
     fore.add(scene.add.circle(0, 0, 2.5 * wide, down(tone, 0.18)));
     fore.add(scene.add.circle(-0.3, -0.7, 1.6 * wide, tone));
-    fore.add(scene.add.rectangle(3, 0, 6.5, 3.8 * wide, tone));
-    fore.add(scene.add.rectangle(3, -1, 6.5, 1, limbTone).setAlpha(0.5));
+    fore.add(scene.add.rectangle(FORE / 2, 0, FORE, 3.8 * wide, tone));
+    fore.add(scene.add.rectangle(FORE / 2, -1, FORE, 1, limbTone).setAlpha(0.5));
 
     const hw2 = 1 + (wide - 1) * 0.5;
-    const hs = hw2;
+    const hs = hw2 * (anat?.hand ?? 1);
+    // where the wrist and the hand sit along the forearm
+    const WR = FORE + 1.1;
+    const HD = FORE + 3.8;
     // the hand hangs off the FOREARM now, so the elbow carries it
     const palm = (x: number, y: number, w: number, h: number, col: number, a = 1) =>
       fore.add(scene.add.rectangle(x, y * hs, w * hs, h * hs, col).setAlpha(a));
-    palm(7.6, 0.1, 2.2, 3.6, down(tone, 0.12));            // the wrist
-    palm(10.3 - UPPER + 6, 0.2, 6.4, 6.4, dark);           // the edge all round
-    palm(10.3 - UPPER + 6, -0.1, 5.2, 5.2, limbTone);      // the back of the hand
-    palm(10.3 - UPPER + 6, -1.9, 5.2, 1.4, up(limbTone, 0.4), 0.85);
-    for (let k = 0; k < 3; k++) palm(10.3 - UPPER + 6 + 2.3 * hs, -1.6 + k * 1.6, 1.4, 1.3, up(limbTone, 0.22));
-    palm(10.4 - UPPER + 6, 2.2, 5, 1.5, down(limbTone, 0.4), 0.8);
-    palm(11.6 - UPPER + 6, 1.4, 1.6, 3, limbTone);         // the thumb
-    palm(11.6 - UPPER + 6, 1.4, 1.6, 1, down(limbTone, 0.35), 0.7);
-    return { root, fore, hand: 10.3 - UPPER + 6 };
+    palm(WR, 0.1, 2.2, 3.6, down(tone, 0.12));             // the wrist
+    palm(HD, 0.2, 6.4, 6.4, dark);                         // the edge all round
+    palm(HD, -0.1, 5.2, 5.2, limbTone);                    // the back of the hand
+    palm(HD, -1.9, 5.2, 1.4, up(limbTone, 0.4), 0.85);
+    for (let k = 0; k < 3; k++) palm(HD + 2.3 * hs, -1.6 + k * 1.6, 1.4, 1.3, up(limbTone, 0.22));
+    palm(HD + 0.1, 2.2, 5, 1.5, down(limbTone, 0.4), 0.8);
+    palm(HD + 1.3, 1.4, 1.6, 3, limbTone);                 // the thumb
+    palm(HD + 1.3, 1.4, 1.6, 1, down(limbTone, 0.35), 0.7);
+    // and claws on the knuckles of anything that has them
+    if (anat?.claws) for (let k = 0; k < 3; k++) palm(HD + 3.5 * hs, -1.6 + k * 1.6, 1.2, 0.8, PALETTE.bone);
+    return { root, fore, hand: HD };
   };
   const armOff = buildArm(true);
   const arm = buildArm(false);
@@ -3508,6 +3897,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   arm.fore.add(weapon);
 
   const parts: Phaser.GameObjects.GameObject[] = [shadow];
+  if (beastParts?.tail) parts.push(beastParts.tail);
   if (tailEnd) parts.push(tailEnd);
   if (tailTip) parts.push(tailTip);
   if (tail) parts.push(tail);
@@ -3526,7 +3916,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // as well.  Everything above the neck goes in one container and that is
   // what moves, so a dodge takes the whole face with it.
   const headGroup = scene.add.container(0, 0);
-  const headBits: Phaser.GameObjects.GameObject[] = [head, jaw, ...headDetail];
+  const headBits: Phaser.GameObjects.GameObject[] = [...(beastParts?.headBack ?? []), head, jaw, ...headDetail, ...(beastParts?.face ?? [])];
   if (teeth) headBits.push(teeth);
   if (cheek) headBits.push(cheek);
   if (mouth) headBits.push(mouth);
@@ -3541,7 +3931,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   root.setScale(f.face * (bld?.scale ?? 1), bld?.scale ?? 1);
   return { root, legL, legR, greaveL, greaveR, kneeL, kneeR, footL, footR, torso, cuirass, belt, ridge,
     pauldL, pauldR, head, helm, helmDome, crown, visor, plume, headGroup, arm, armOff, guardUp: false, weapon, shadow,
-    nicks: 0 };
+    nicks: 0, tail: beastParts?.tail ?? null };
 }
 
 /** Put the fighter into the pose its current act calls for. */
@@ -3998,6 +4388,13 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   }
   a.torso.setAngle(f.leanA);
   a.cuirass.setAngle(f.leanA);
+  // ---- THE TAIL, on its hinge at the hip: a slow sway at rest, a swing with
+  // the stride, a lash on a strike, and it goes up when the animal is hit.
+  if (a.tail) {
+    const lash = f.act === 'strike' ? -10 : f.act === 'windup' ? 6 : 0;
+    const hurtUp = f.act === 'stagger' || f.stun > 0 ? -16 : 0;
+    a.tail.setAngle(Math.sin(f.clock * 2.2 + (f.who === 'frog' ? 0 : 0.9)) * 5 + Math.sin(f.step / 5) * 4 + lash + hurtUp);
+  }
   // The head, and everything on it, ducks as one -- unless the attack being
   // thrown is one the head is part of.  A throw carries it over the front
   // foot and a blowgun snaps it back off the breath, and both are set above;
@@ -4282,7 +4679,13 @@ export function offerFor(slot: Slot): Piece[] {
  * nothing here that could answer it.
  */
 export function makeLizard(x: number, rng: () => number = Math.random): Fighter {
-  const type = LIZARDS[Math.floor(rng() * LIZARDS.length)];
+  let type = LIZARDS[Math.floor(rng() * LIZARDS.length)];
+  // DEV: `?beast=lion` (or any animal, or archetype key) pins the opponent.
+  if (import.meta.env?.DEV && typeof location !== 'undefined') {
+    const want = new URLSearchParams(location.search).get('beast');
+    const pick = want && LIZARDS.find((t) => t.build.animal === want || t.key === want);
+    if (pick) type = pick;
+  }
   return makeFighter('lizard', randomKit(), x, -1, type);
 }
 
@@ -4697,7 +5100,7 @@ function startRound(): void {
     poseFighter(frog!, lizard!);
     poseFighter(lizard!, frog!);
   } });
-  callOut.setText('FROGGY VS LIZARD');
+  callOut.setText(`FROGGY VS ${lizard?.type?.name ?? 'LIZARD'}`);
   S().time.delayedCall(1250, () => {
     callOut?.setText('');
     showCardOfBoth(c);
@@ -4805,7 +5208,7 @@ function buildHud(c: Phaser.GameObjects.Container): void {
     c.add(defText[who]!);
   };
   bar(8, 'frog', 'FROGGY', PALETTE.mossLight, false);
-  bar(GAME_W - 138, 'lizard', 'LIZARD', PALETTE.amber, true);
+  bar(GAME_W - 138, 'lizard', lizard?.type?.name ?? 'LIZARD', PALETTE.amber, true);
   // The strip's middle is the only spare room on the screen, and the round
   // and its prize are the two things worth keeping in front of the player.
   c.add(centerText(S(), GAME_W / 2, 20, `R${round}`, PALETTE.gold).setDepth(41));
@@ -4961,11 +5364,29 @@ function drawFlight(f: Fighter): void {
   }
 }
 
-/** The shot arrived: take the sprite away, with a puff if it hit nothing. */
+/**
+ * The shot arrived: take the sprite away, with a puff if it hit nothing --
+ * unless it was a WEAPON, which is not used up by arriving.
+ */
 function retireShot(sh: InFlight, hit: boolean): void {
   const art = sh.art;
   if (!art) return;
   sh.art = null;
+  // ---- A THROWN WEAPON LANDS WHERE IT LIES, AND STAYS VISIBLE THERE.
+  //
+  // The rules put it on the sand as a pickup, but nothing drew it: the
+  // flying sprite faded out on arrival and the one on the ground was never
+  // made, so a thrown spear was lying there, perfectly real and perfectly
+  // invisible, until somebody walked over and picked up thin air.  The
+  // sprite that flew is the one that lands -- it drops, bounces once and
+  // settles flat where the rules put it, with the glint every weapon lying
+  // on the sand has.
+  const d = sh.landed;
+  if (d && !d.art && S()) {
+    d.art = art;
+    settleOnSand(d, art, art.x < d.x ? 1 : -1);
+    return;
+  }
   if (!hit) {
     S().tweens.add({ targets: art, y: FLOOR_Y - 2, angle: art.angle + 40, alpha: 0.6,
       duration: 220, ease: 'Quad.easeIn',
@@ -5024,6 +5445,54 @@ function showDisarm(f: Fighter, d: Dropped): void {
       });
     },
   });
+}
+
+/**
+ * A weapon sprite coming down onto the sand at `d.x`: one bounce, then flat,
+ * with a glint so it reads as something to pick up.  Shared by a weapon
+ * knocked out of a hand and a weapon thrown, so the two lie there the same.
+ */
+function settleOnSand(d: Dropped, art: Phaser.GameObjects.Container, dir: number): void {
+  art.setDepth(19);
+  const midX = art.x + (d.x - art.x) * 0.6;
+  S().tweens.add({
+    targets: art, x: midX, y: FLOOR_Y - 9, angle: art.angle + dir * 160, duration: 220, ease: 'Quad.easeOut',
+    onComplete: () => {
+      S().tweens.add({
+        targets: art, x: d.x, y: FLOOR_Y - 3, angle: dir > 0 ? 8 : -8, duration: 200, ease: 'Quad.easeIn',
+        onComplete: () => {
+          if (d.art !== art) return; // picked up on the way down
+          art.setPosition(d.x, FLOOR_Y - 3);
+          audio.sfx('item_thud', 0.3);
+          addGlint(d, art);
+        },
+      });
+    },
+  });
+}
+
+/** The glint on something lying on the sand; it goes when the sprite goes. */
+function addGlint(d: Dropped, art: Phaser.GameObjects.Container): void {
+  const glint = S().add.rectangle(d.x, FLOOR_Y - 7, 9, 1, PALETTE.bone).setDepth(20).setAlpha(0);
+  layer?.add(glint);
+  S().tweens.add({ targets: glint, alpha: 0.75, duration: 420, yoyo: true, repeat: -1 });
+  (art as unknown as { glint?: Phaser.GameObjects.Rectangle }).glint = glint;
+  art.once(Phaser.GameObjects.Events.DESTROY, () => glint.destroy());
+}
+
+/**
+ * NOTHING ON THE SAND IS INVISIBLE.  Anything the rules put there that has no
+ * sprite yet -- however it got there -- is drawn lying flat where it is.
+ */
+function drawGround(): void {
+  for (const d of ground) {
+    if (d.art) continue;
+    const art = buildWeapon(S(), d.def.key, PALETTE.bone, d.single && !!d.def.spec.paired);
+    art.setPosition(d.x, FLOOR_Y - 3).setAngle(8).setDepth(19);
+    layer?.add(art);
+    d.art = art;
+    addGlint(d, art);
+  }
 }
 
 /** Take the sprite and its glint away once somebody has it, or the sand does. */
@@ -5369,6 +5838,7 @@ function stepFight(real: number): void {
   }
   drawFlight(frog!);
   drawFlight(lizard!);
+  drawGround();
   for (const f of [frog!, lizard!]) {
     if (f.act === 'windup' && f.move?.anim === 'charge' && Math.random() < real * 22) chargeDust(f);
   }

@@ -299,7 +299,7 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   const lead = await page.evaluate(() => window.__hoops.predict(0.8));
   const leads = lead.rim !== undefined && lead.t > 0;
   console.log(
-    `${leads ? 'PASS' : 'FAIL'}  hoops: the arc leads the moving rim  — ` +
+    `${leads ? 'PASS' : 'FAIL'}  chubby chomp: the arc leads the drifting mouth  — ` +
       `lands x${lead.x} at ${lead.t}s, rim ${lead.hoopNow} -> ${lead.rim}`,
   );
   if (!leads) failures++;
@@ -335,7 +335,7 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
     if (after && after.makes > before) honest += 1;
   }
   console.log(
-    `${honest >= 2 ? 'PASS' : 'FAIL'}  hoops: a shot the arc calls good goes in  — ${honest}/${tried} scored`,
+    `${honest >= 2 ? 'PASS' : 'FAIL'}  chubby chomp: a fly the arc calls good goes in the mouth  — ${honest}/${tried} scored`,
   );
   if (honest < 2) failures++;
   await page.close();
@@ -3290,7 +3290,7 @@ for (const g of [
     await sleep(60);
     if (ok) built.push(f.key);
   }
-  const all = built.length === roster.length && roster.length === 15 && errs.length === 0;
+  const all = built.length === roster.length && roster.length === 17 && errs.length === 0;
   console.log(`${all ? 'PASS' : 'FAIL'}  grudge: all ${roster.length} opponents build and stand in the ring  — ${built.length} built, ${errs.length} errors${errs[0] ? ': ' + errs[0] : ''}`);
   if (!all) failures++;
 
@@ -3315,6 +3315,33 @@ for (const g of [
   const distinct = same.length === 0 && looks.size === defs.length;
   console.log(`${distinct ? 'PASS' : 'FAIL'}  grudge: none of them is a reskin  — ${looks.size} distinct looks${same.length ? `; too close to the lizard: ${same.join(', ')}` : ''}`);
   if (!distinct) failures++;
+
+  // ---- AND EVERY ONE OF THEM JUMPS.  Legs load first, the feet leave the
+  // boards, it comes back down and absorbs the landing -- for every animal,
+  // and higher for a monkey than for a tortoise.
+  const jumps = {};
+  for (const f of roster) {
+    await page.evaluate((k) => { window.__grudge.setFoe(k); window.__grudge.freeze(true); window.__grudge.place(80, 200); }, f.key);
+    await sleep(120);
+    await page.evaluate(() => window.__grudge.jump(0));
+    const seen = new Set();
+    let top = 0;
+    for (let i = 0; i < 300; i++) {
+      await sleep(8);
+      const him = await page.evaluate(() => window.__grudge.state().him);
+      seen.add(him.jump);
+      top = Math.max(top, him.up);
+      if (him.jump === 'none' && seen.has('land')) break;
+    }
+    jumps[f.key] = { ok: seen.has('squat') && seen.has('air') && seen.has('land'), top };
+  }
+  await page.evaluate(() => window.__grudge.freeze(false));
+  const everyJump = Object.values(jumps).every((j) => j.ok && j.top >= 9);
+  const styles = jumps.monkey && jumps.tortoise && jumps.monkey.top > jumps.tortoise.top * 2;
+  const jumpOk = everyJump && styles;
+  console.log(`${jumpOk ? 'PASS' : 'FAIL'}  grudge: every opponent jumps -- squat, air, landing  — ` +
+    `${Object.values(jumps).filter((j) => j.ok).length}/${roster.length}; monkey ${jumps.monkey?.top}px, gorilla ${jumps.gorilla?.top}px, tortoise ${jumps.tortoise?.top}px`);
+  if (!jumpOk) failures++;
   await page.close();
 }
 
@@ -4096,6 +4123,29 @@ for (const g of [
         `blocks ${sh.blocks.shield} v ${sh.blocks.sword} for a sword, ${sh.per.shield.toFixed(1)} a hit v ${sh.per.sword.toFixed(1)}`,
     );
     if (!shOk) failures++;
+
+    // ---- NOBODY STANDS OFF.
+    //
+    // Two throwers down to their last throw each held their distance for a
+    // shot they had decided not to take, and stood there for the better part
+    // of a minute: bolas against a chakram ran ninety seconds.  Every pairing
+    // of weapons that throw or shoot, three bouts each, none of them long.
+    const standoff = await page.evaluate(() => {
+      const R = window.__mash.rules;
+      const mat = (k) => R.MATERIALS.find((m) => m.key === k);
+      const kit = (wk) => ({ weapon: R.makeWeapon(R.WEAPONS.find((w) => w.key === wk)), head: R.makeArmour('head', mat('chain')), body: R.makeArmour('body', mat('chain')), legs: R.makeArmour('legs', mat('chain')) });
+      const keys = R.WEAPONS.filter((w) => w.spec.ranged).map((w) => w.key);
+      let worst = { s: 0, pair: '' }, n = 0;
+      for (const a of keys) for (const c of keys) for (let i = 0; i < 3; i++) {
+        const r = R.simulate(kit(a), kit(c));
+        n++;
+        if (r.seconds > worst.s) worst = { s: r.seconds, pair: `${a} v ${c}` };
+      }
+      return { n, worst };
+    });
+    const standOk = standoff.worst.s < 75;
+    console.log(`${standOk ? 'PASS' : 'FAIL'}  mash: two throwers close and fight instead of standing off  — longest of ${standoff.n} bouts ${standoff.worst.s.toFixed(0)}s (${standoff.worst.pair})`);
+    if (!standOk) failures++;
 
     // ---- THE THING THAT HITS HARDEST GIVES OUT SOONEST.
     //
