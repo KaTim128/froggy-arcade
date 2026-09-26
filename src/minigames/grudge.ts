@@ -276,6 +276,12 @@ interface Art {
   /** Where the snout and eyes sit on this head. */
   snoutX: number;
   eyeX: [number, number];
+  /** Eyes above the head's centre: -4 on a face, -11 up on a crab's stalks. */
+  eyeY: number;
+  /** The tail on its hinge at the hips, and whether it lies on the boards. */
+  tail: Phaser.GameObjects.Container | null;
+  tailRoot: [number, number];
+  drags: boolean;
   /** A chameleon changes colour. */
   cycle: boolean;
 }
@@ -471,6 +477,22 @@ export const grudge: MinigameModule = {
           nameFoe();
           return true;
         },
+        /**
+         * Hold the opponent in one pose, for looking at: a move and its phase,
+         * crouched, blocking or reeling.  Freezes the AI and the move clock.
+         */
+        pose: (o: { move?: 'high' | 'low' | 'special' | null; phase?: 'startup' | 'active' | 'recovery' | null; crouch?: boolean; blocking?: boolean; stun?: number }) => {
+          if (!p2) return;
+          aiFrozen = true;
+          p2.move = o.move ?? null;
+          p2.phase = o.move ? (o.phase ?? 'active') : null;
+          p2.timer = 1e9;
+          p2.hitLanded = true;
+          p2.crouch = o.crouch ?? false;
+          p2.blocking = o.blocking ?? false;
+          p2.stun = o.stun ?? 0;
+          p2.recoil = o.stun ? -1 : 0;
+        },
         /** How often each one comes up, over n draws of the real roll. */
         draws: (n: number) => {
           const tally: Record<string, number> = {};
@@ -595,17 +617,33 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
   back: Phaser.GameObjects.GameObject[];
   root: Phaser.GameObjects.GameObject[];
   puff: Phaser.GameObjects.GameObject[];
+  tail: Phaser.GameObjects.GameObject[];
+  tailRoot: [number, number];
+  drags: boolean;
 } {
   const head: Phaser.GameObjects.GameObject[] = [];
   const body: Phaser.GameObjects.GameObject[] = [];
   const back: Phaser.GameObjects.GameObject[] = [];
   const root: Phaser.GameObjects.GameObject[] = [];
   const puff: Phaser.GameObjects.GameObject[] = [];
+  // The tail is its own group, hinged at the hips: it lifts when the body
+  // drops into a crouch instead of being pushed through the floor, and it
+  // sways a little, which is what shows it is attached rather than painted.
+  const tailParts: Phaser.GameObjects.GameObject[] = [];
+  let drags = false;
   const dark = shade(d.skin, 0.35);
   const E = (x: number, y: number, w: number, h: number, c: number) => scene.add.ellipse(x, y, w, h, c);
   const R = (x: number, y: number, w: number, h: number, c: number, a = 0) => scene.add.rectangle(x, y, w, h, c).setAngle(a);
+  // ---- A TRIANGLE WHERE IT WAS ASKED FOR.
+  //
+  // `scene.add.triangle` does not draw its three points at (x, y) plus the
+  // point: it centres the triangle's bounding box on (x, y), so any point
+  // given above or left of zero moves the whole shape off by that much.  A
+  // rhino's horn written to sit on its snout was drawn hovering over its
+  // head.  Graphics draws the exact coordinates, which is what every one of
+  // these was written against.
   const T = (x: number, y: number, ax: number, ay: number, bx: number, by: number, cx: number, cy: number, c: number) =>
-    scene.add.triangle(x, y, ax, ay, bx, by, cx, cy, c);
+    scene.add.graphics().fillStyle(c, 1).fillTriangle(x + ax, y + ay, x + bx, y + by, x + cx, y + cy);
   const teeth = (x0: number, y: number, n: number) => {
     for (let i = 0; i < n; i++) head.push(T(x0 + i * 2.4, y, 0, 0, 1.2, 1.8, 2.4, 0, 0xf4f4ee));
   };
@@ -681,21 +719,21 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
   const along = (pts: Pt[], every: number, w: number, h: number, c: number, lift: number, alpha = 0.7) => {
     for (let i = every; i < pts.length - 2; i += every) {
       const [x, y] = pts[i];
-      back.push(E(x, y - lift * (1 - i / pts.length), w, h, c).setAlpha(alpha));
+      tailParts.push(E(x, y - lift * (1 - i / pts.length), w, h, c).setAlpha(alpha));
     }
   };
   /** The standard reptile tail: out of the hips, down, and a lift at the tip. */
   const tail = (len: number, w0: number, drop: number, lift: number): Pt[] => {
     const root: Pt = [-bw + 3, bh - 5];
     const path = bez(root, [root[0] - len * 0.3, root[1] + drop * 0.8], [root[0] - len * 0.72, root[1] + drop], [root[0] - len, root[1] + drop - lift]);
-    back.push(tube(path, w0, 1.2, d.skin));
+    tailParts.push(tube(path, w0, 1.2, d.skin));
     return path;
   };
 
   switch (d.look) {
     case 'lizard': {
       const path = tail(17, 7, 7, 5);
-      back.push(tube(path.slice(2), 3, 0.6, d.skinLight).setAlpha(0.35));
+      tailParts.push(tube(path.slice(2), 3, 0.6, d.skinLight).setAlpha(0.35));
       break;
     }
     case 'puffer':
@@ -704,9 +742,9 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       // a stubby tail and a fan of a fin on the end of it, and a soft dorsal
       {
         const x0 = -bw + 2;
-        back.push(tube(bez([x0 + 3, 1], [x0 - 1, 1], [x0 - 3, 0.5], [x0 - 5, 0.5], 6), 7, 4, d.skin));
-        back.push(tube(bez([x0 - 4, 0.5], [x0 - 6, -1], [x0 - 8, -3], [x0 - 9, -5.5], 8), 4, 1.4, shade(d.skin, 0.1)));
-        back.push(tube(bez([x0 - 4, 0.5], [x0 - 6, 2], [x0 - 8, 4], [x0 - 9, 6.5], 8), 4, 1.4, shade(d.skin, 0.1)));
+        tailParts.push(tube(bez([x0 + 3, 1], [x0 - 1, 1], [x0 - 3, 0.5], [x0 - 5, 0.5], 6), 7, 4, d.skin));
+        tailParts.push(tube(bez([x0 - 4, 0.5], [x0 - 6, -1], [x0 - 8, -3], [x0 - 9, -5.5], 8), 4, 1.4, shade(d.skin, 0.1)));
+        tailParts.push(tube(bez([x0 - 4, 0.5], [x0 - 6, 2], [x0 - 8, 4], [x0 - 9, 6.5], 8), 4, 1.4, shade(d.skin, 0.1)));
         back.push(tube(bez([2, -bh + 3], [1, -bh - 1], [-1, -bh - 3], [-4, -bh - 3.5], 8), 6, 1.2, shade(d.skin, 0.15)));
       }
       body.push(E(0, 1, d.bodyW - 4, d.bodyH - 6, shade(d.skinLight, 0.04)).setAlpha(0.6));
@@ -733,11 +771,18 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       head.push(E(4 + len / 2, 3.2, len - 1, hgt * 0.45, shade(d.skinLight, 0.15)));
       head.push(E(3 + len, 0.4, 1.4, 1.2, dark));
       if (!komodo) teeth(5, 4.2, Math.floor(len / 2.6));
-      else head.push(R(4 + len + 2, 3, 5, 1, 0xf0c94c), T(4 + len + 5, 3, 0, 0, 3, -1.6, 3, 1.6, 0xf0c94c));
+      else {
+        // out of the mouth, not beside it: the tongue starts two pixels inside
+        // the snout and the two prongs grow straight off its tip
+        const tip = 4 + len + 4;
+        head.push(R(tip - 3, 3, 6, 1.2, 0xf0c94c));
+        head.push(R(tip + 1, 2.3, 2.6, 0.9, 0xf0c94c, -32), R(tip + 1, 3.7, 2.6, 0.9, 0xf0c94c, 32));
+      }
       // A heavy tail that drags on the boards behind them -- the floor is
       // 18px below the torso's centre -- with the scutes carried down it.
       const drag = 18 - (bh - 5) - 1.5;
       const path = tail(komodo ? 24 : gator ? 21 : 20, gator ? 11 : komodo ? 8 : 9.5, drag, 0);
+      drags = true;
       along(path, 2, 2.2, 1.6, dark, gator ? 3.6 : 3);
       // the ridge down the back, as a row of rounded scutes
       for (let i = 0; i < 5; i++) back.push(E(-5 + i * 2.6, -bh + 1, 2.4, 2, dark));
@@ -749,7 +794,7 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       {
         const root: Pt = [-bw + 3, bh - 4];
         const path = bez(root, [root[0] - 5, root[1] + 4], [root[0] - 11, root[1] + 3], [root[0] - 13, root[1] - 3]);
-        back.push(tube(curl(path, 2.4, 0.7, 1), 5, 1, d.skin));
+        tailParts.push(tube(curl(path, 2.4, 0.7, 1), 5, 1, d.skin));
         along(path, 3, 2.2, 1.2, 0xf0c94c, 1.2, 0.6);
       }
       root.push(E(-7, -1, 4, 2.4, d.skinLight), E(-3, -1, 4, 2.4, d.skinLight));
@@ -790,7 +835,7 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       {
         const root: Pt = [-bw + 3, bh - 4];
         const path = bez(root, [root[0] - 9, root[1] + 4], [root[0] - 14, root[1] - 6], [root[0] - 10, root[1] - 14]);
-        back.push(tube(curl(path, 2.6, 0.8, 1), 3.4, 1.4, shade(d.skin, 0.08)));
+        tailParts.push(tube(curl(path, 2.6, 0.8, 1), 3.4, 1.4, shade(d.skin, 0.08)));
       }
       break;
     case 'penguin':
@@ -802,12 +847,17 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
     case 'crab':
       // ---- EYES ON STALKS, AND A LOT OF LEGS.  At this size the stalks are
       // the whole of what says crab rather than a red blob with gloves on.
-      head.push(R(-2, -8, 1.2, 7, d.skin), R(4, -8, 1.2, 7, d.skin));
-      head.push(scene.add.circle(-2, -12, 2.2, 0xf4f4ee), scene.add.circle(4, -12, 2.2, 0xf4f4ee));
-      head.push(scene.add.circle(-1.6, -12, 1.1, 0x14161e), scene.add.circle(4.4, -12, 1.1, 0x14161e));
+      // Two stalks from inside the top of the head up to where the eyes sit:
+      // the fighter's own eyes are moved up onto them (see `eyeY`).
+      head.push(R(-3, -6.5, 2, 8, d.skin), R(3, -6.5, 2, 8, d.skin));
+      // And the side legs, each one out of the shell rather than beside it:
+      // up and out to a knee, then down towards the boards.
       for (let i = 0; i < 3; i++) {
-        back.push(R(-d.bodyW / 2 - 2, 2 + i * 2.4, 7, 1.6, dark, -20 - i * 14));
-        back.push(R(d.bodyW / 2 - 1, 2 + i * 2.4, 7, 1.6, dark, 20 + i * 14));
+        const y0 = -1 + i * 2.6;
+        for (const side of [-1, 1]) {
+          const x0 = side * (bw - 3);
+          back.push(tube(bez([x0, y0], [x0 + side * 5, y0 - 3], [x0 + side * 8, y0 + 1], [x0 + side * (8.5 + i), y0 + 8 - i], 8), 2.2, 1, dark));
+        }
       }
       body.push(E(0, -2, d.bodyW - 6, 4, shade(d.skinLight, 0.05)).setAlpha(0.7));
       break;
@@ -818,9 +868,9 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       {
         const root: Pt = [-bw + 3, 2];
         const wrist: Pt = [-bw - 7, 0.5];
-        back.push(tube(bez(root, [root[0] - 3, 2], [wrist[0] + 3, 1], wrist, 8), 8, 3.4, d.skin));
-        back.push(tube(bez(wrist, [wrist[0] - 2, -2], [wrist[0] - 4, -6], [wrist[0] - 6, -10], 10), 4.4, 0.8, d.skin));
-        back.push(tube(bez(wrist, [wrist[0] - 2, 2], [wrist[0] - 3, 4], [wrist[0] - 5, 6.5], 8), 3.6, 0.8, d.skin));
+        tailParts.push(tube(bez(root, [root[0] - 3, 2], [wrist[0] + 3, 1], wrist, 8), 8, 3.4, d.skin));
+        tailParts.push(tube(bez(wrist, [wrist[0] - 2, -2], [wrist[0] - 4, -6], [wrist[0] - 6, -10], 10), 4.4, 0.8, d.skin));
+        tailParts.push(tube(bez(wrist, [wrist[0] - 2, 2], [wrist[0] - 3, 4], [wrist[0] - 5, 6.5], 8), 3.6, 0.8, d.skin));
       }
       head.push(R(4, 3.4, 8, 1.4, 0x14161e));
       teeth(1, 3, 4);
@@ -842,11 +892,18 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       {
         const root: Pt = [-bw + 3, bh - 4];
         const path = bez(root, [root[0] - 5, root[1] + 3], [root[0] - 10, root[1] + 5], [root[0] - 12, root[1] + 1]);
-        back.push(tube(curl(path, 3.2, 1.25, -1), 5, 1, d.skin));
+        tailParts.push(tube(curl(path, 3.2, 1.25, -1), 5, 1, d.skin));
       }
       break;
   }
-  return { head, body, back, root, puff };
+  // The tail is drawn relative to where it hinges, so the hinge can turn.
+  const tailRoot: [number, number] = d.look === 'puffer' ? [-bw + 3, 1] : d.look === 'shark' ? [-bw + 3, 2] : [-bw + 3, bh - 4.5];
+  for (const t of tailParts) {
+    const o = t as unknown as { x: number; y: number };
+    o.x -= tailRoot[0];
+    o.y -= tailRoot[1];
+  }
+  return { head, body, back, root, puff, tail: tailParts, tailRoot, drags };
 }
 
 /**
@@ -920,7 +977,8 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
 
   // ---- WHO THEY ARE.  Built on top of the shared parts, in three groups
   // that follow the part they belong to; see `Art.headGear`.
-  const gear = foe ? foeGear(scene, foe) : { head: [], body: [], back: [], root: [], puff: [] };
+  const gear = foe ? foeGear(scene, foe) : { head: [], body: [], back: [], root: [], puff: [], tail: [], tailRoot: [0, 0] as [number, number], drags: false };
+  const tailC = gear.tail.length ? scene.add.container(gear.tailRoot[0], -18 + gear.tailRoot[1], gear.tail) : null;
   const headGear = scene.add.container(2, -30, gear.head);
   const bodyGear = scene.add.container(0, -18, gear.body);
   const backGear = scene.add.container(0, -18, gear.back);
@@ -931,6 +989,7 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
   const parts: Phaser.GameObjects.GameObject[] = [...gear.root, footL, footR, legL, legR];
   if (tail) parts.push(tail);
   parts.push(backGear);
+  if (tailC) parts.push(tailC);
   if (puff) parts.push(puff);
   parts.push(aura, torso, belly, bodyGear, shin, arm, cuff, fist, knuckle, thumb, head, snout, headGear, crest, eyeL, eyeR, pupL, pupR, call);
   const root = scene.add.container(x, FLOOR_Y, parts).setDepth(20);
@@ -958,6 +1017,10 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
       snoutX: longJaw ? 3 : 6,
       // eyes set back on the long jaws, higher and further apart on a gecko
       eyeX: longJaw ? [-3, 2] : look === 'gecko' ? [-2, 6] : [-1, 5],
+      eyeY: look === 'crab' ? -11 : -4,
+      tail: tailC,
+      tailRoot: gear.tailRoot,
+      drags: gear.drags,
       cycle: look === 'chameleon',
     },
     foe,
@@ -1315,12 +1378,12 @@ function render(f: Fighter, dt: number): void {
   a.belly.setPosition(1, -16 + crouch + breathe);
   a.head.setPosition(2, -30 + crouch * 1.4 + breathe);
   a.snout.setPosition(a.head.x + a.snoutX, a.head.y + 1);
-  a.eyeL.setPosition(a.eyeX[0], a.head.y - 4);
-  a.eyeR.setPosition(a.eyeX[1], a.head.y - 4);
+  a.eyeL.setPosition(a.eyeX[0], a.head.y + a.eyeY);
+  a.eyeR.setPosition(a.eyeX[1], a.head.y + a.eyeY);
   // The pupils ride the eyes.  Left behind, they float over the fighter's head
   // like two flies, which is exactly how it looked.
-  a.pupL.setPosition(a.eyeX[0] + 1, a.head.y - 4);
-  a.pupR.setPosition(a.eyeX[1] + 1, a.head.y - 4);
+  a.pupL.setPosition(a.eyeX[0] + 1, a.head.y + a.eyeY);
+  a.pupR.setPosition(a.eyeX[1] + 1, a.head.y + a.eyeY);
   a.crest.setPosition(0, a.head.y - 7);
   // ---- AND WHAT MAKES THEM WHO THEY ARE, riding the parts it belongs to.
   a.headGear.setPosition(a.head.x, a.head.y);
@@ -1328,6 +1391,16 @@ function render(f: Fighter, dt: number): void {
   // A crab's legs scuttle when it moves; everybody else's back gear is still.
   const scuttle = f.foe?.look === 'crab' && walking ? Math.sin(f.step * 2) * 0.8 : 0;
   a.backGear.setPosition(a.torso.x, a.torso.y + scuttle);
+  // ---- THE TAIL, on its hinge at the hips.  It follows the body down into
+  // a crouch and turns up by as much as the body dropped, so one that lies
+  // on the boards stays on them rather than going through; a hit flicks it;
+  // and it sways, slowly, the whole time.
+  if (a.tail) {
+    const lift = a.drags ? crouch * 3.2 : crouch * 1.5;
+    const flick = f.stun > 0 ? 9 : 0;
+    const sway = Math.sin(sceneClock * 2.2 + (f === p2 ? 0.8 : 0)) * (a.drags ? 1.2 : 3.5);
+    a.tail.setPosition(a.torso.x + a.tailRoot[0], a.torso.y + a.tailRoot[1] + scuttle).setAngle(lift + flick + sway);
+  }
   // ---- MR FISHY PUFFS UP.  Spikes out and body swollen while he blocks, and
   // back down after -- eased, so it swells rather than pops.
   if (a.puff) {
@@ -1349,6 +1422,9 @@ function render(f: Fighter, dt: number): void {
     a.knuckle.setPosition(x + size * 0.12, y - size * 0.26).setSize(size * 0.68, size * 0.3);
     a.thumb.setPosition(x - size * 0.1, y + size * 0.3).setSize(size * 0.42, size * 0.34);
   };
+  // Every arm position below is written for standing; crouched, the body
+  // is lower, and a glove left at standing height sits on top of the head.
+  const cy = crouch;
   if (f.move && f.phase) {
     const def = MOVES[f.move];
     if (f.move === 'high') {
@@ -1360,8 +1436,8 @@ function render(f: Fighter, dt: number): void {
         a.arm.setPosition(4, a.head.y + 3).setSize(def.range * 0.7, 6);
         glove(5 + def.range * 0.7, a.head.y + 3, 9);
       } else {
-        a.arm.setPosition(4, -20).setSize(def.range * 0.3, 5);
-        glove(5 + def.range * 0.3, -20, 7);
+        a.arm.setPosition(4, -20 + cy).setSize(def.range * 0.3, 5);
+        glove(5 + def.range * 0.3, -20 + cy, 7);
       }
     } else if (f.move === 'low') {
       // ---- A BODY SHOT, AND IT HAS TO LOOK LIKE A PUNCH.
@@ -1376,7 +1452,7 @@ function render(f: Fighter, dt: number): void {
       // unmistakably a fist, off a short thick arm rather than a long thin
       // one.  The fighter still drops his weight into it.
       a.shin.setVisible(false);
-      const ly = -15;
+      const ly = -15 + cy;
       if (f.phase === 'startup') {
         // cocked back against the ribs
         a.arm.setPosition(-3, ly).setSize(6, 7);
@@ -1393,19 +1469,19 @@ function render(f: Fighter, dt: number): void {
       const glow = f.phase === 'startup' ? 1 - f.timer / def.startup : 1;
       a.aura
         .setVisible(true)
-        .setPosition(f.phase === 'active' ? 12 : 2, -20)
+        .setPosition(f.phase === 'active' ? 12 : 2, -20 + cy)
         .setRadius(4 + glow * (f.phase === 'active' ? 14 : 7))
         .setFillStyle(PALETTE.ember, f.phase === 'recovery' ? 0.25 : 0.45);
       a.arm.setFillStyle(PALETTE.ember);
       if (f.phase === 'startup') {
-        a.arm.setPosition(-3, -24).setSize(7, 7);
-        glove(-7, -24, 9);
+        a.arm.setPosition(-3, -24 + cy).setSize(7, 7);
+        glove(-7, -24 + cy, 9);
       } else if (f.phase === 'active') {
-        a.arm.setPosition(4, -20).setSize(def.range * 0.8, 8);
-        glove(6 + def.range * 0.8, -20, 12);
+        a.arm.setPosition(4, -20 + cy).setSize(def.range * 0.8, 8);
+        glove(6 + def.range * 0.8, -20 + cy, 12);
       } else {
-        a.arm.setPosition(3, -18).setSize(def.range * 0.3, 6);
-        glove(4 + def.range * 0.3, -18, 8);
+        a.arm.setPosition(3, -18 + cy).setSize(def.range * 0.3, 6);
+        glove(4 + def.range * 0.3, -18 + cy, 8);
       }
     }
     a.call
@@ -1423,8 +1499,8 @@ function render(f: Fighter, dt: number): void {
     // is also what makes the punches read as punches: they are a departure
     // from somewhere.
     const guardBob = Math.sin(sceneClock * 3 + (f === p2 ? 1.6 : 0)) * 0.7;
-    a.arm.setPosition(1, -23).setSize(6, 6);
-    glove(6, -25 + guardBob, 8);
+    a.arm.setPosition(1, -23 + cy).setSize(6, 6);
+    glove(6, -25 + cy * 1.2 + guardBob, 8);
     a.call.setVisible(false);
   }
 
