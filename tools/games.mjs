@@ -3290,7 +3290,7 @@ for (const g of [
     await sleep(60);
     if (ok) built.push(f.key);
   }
-  const all = built.length === roster.length && roster.length === 15 && errs.length === 0;
+  const all = built.length === roster.length && roster.length === 18 && errs.length === 0;
   console.log(`${all ? 'PASS' : 'FAIL'}  grudge: all ${roster.length} opponents build and stand in the ring  — ${built.length} built, ${errs.length} errors${errs[0] ? ': ' + errs[0] : ''}`);
   if (!all) failures++;
 
@@ -3315,6 +3315,33 @@ for (const g of [
   const distinct = same.length === 0 && looks.size === defs.length;
   console.log(`${distinct ? 'PASS' : 'FAIL'}  grudge: none of them is a reskin  — ${looks.size} distinct looks${same.length ? `; too close to the lizard: ${same.join(', ')}` : ''}`);
   if (!distinct) failures++;
+
+  // ---- AND EVERY ONE OF THEM JUMPS.  Legs load first, the feet leave the
+  // boards, it comes back down and absorbs the landing -- for every animal,
+  // and higher for a monkey than for a tortoise.
+  const jumps = {};
+  for (const f of roster) {
+    await page.evaluate((k) => { window.__grudge.setFoe(k); window.__grudge.freeze(true); window.__grudge.place(80, 200); }, f.key);
+    await sleep(120);
+    await page.evaluate(() => window.__grudge.jump(0));
+    const seen = new Set();
+    let top = 0;
+    for (let i = 0; i < 300; i++) {
+      await sleep(8);
+      const him = await page.evaluate(() => window.__grudge.state().him);
+      seen.add(him.jump);
+      top = Math.max(top, him.up);
+      if (him.jump === 'none' && seen.has('land')) break;
+    }
+    jumps[f.key] = { ok: seen.has('squat') && seen.has('air') && seen.has('land'), top };
+  }
+  await page.evaluate(() => window.__grudge.freeze(false));
+  const everyJump = Object.values(jumps).every((j) => j.ok && j.top >= 9);
+  const styles = jumps.monkey && jumps.tortoise && jumps.monkey.top > jumps.tortoise.top * 2;
+  const jumpOk = everyJump && styles;
+  console.log(`${jumpOk ? 'PASS' : 'FAIL'}  grudge: every opponent jumps -- squat, air, landing  — ` +
+    `${Object.values(jumps).filter((j) => j.ok).length}/${roster.length}; monkey ${jumps.monkey?.top}px, gorilla ${jumps.gorilla?.top}px, tortoise ${jumps.tortoise?.top}px`);
+  if (!jumpOk) failures++;
   await page.close();
 }
 

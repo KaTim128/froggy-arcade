@@ -193,6 +193,18 @@ const FOES: FoeDef[] = [
     skin: 0x22252e, skinLight: 0xf4f4ee, headCol: 0x22252e, glove: 0xd84a3a, gloveLit: 0xff8a6a, bodyW: 15, bodyH: 19, headW: 12, look: 'penguin',
     speed: 1.05, power: 1.1, windup: 0.95, reach: 0.9, guard: 1, blockRate: 0.85, tempo: 0.8, dodge: 0, style: 'lows', chaos: 0.05, counter: 0.1,
     note: 'SMALL, AND WORKS THE BODY' },
+  { key: 'wolf', name: 'WOLF', rare: false, weight: 10,
+    skin: 0x6c737e, skinLight: 0xc9cdd3, glove: 0x2f5fa8, gloveLit: 0x5b8fd6, bodyW: 15, bodyH: 18, headW: 11, look: 'wolf',
+    speed: 1.15, power: 1.0, windup: 0.9, reach: 1.05, guard: 1, blockRate: 0.85, tempo: 0.9, dodge: 0.06, style: 'balanced', chaos: 0.12, counter: 0.3,
+    note: 'CIRCLES, THEN BITES' },
+  { key: 'hyena', name: 'HYENA', rare: false, weight: 10,
+    skin: 0xb49660, skinLight: 0xd8c18e, glove: 0x7a2a6a, gloveLit: 0xb05a9a, bodyW: 14, bodyH: 17, headW: 11, look: 'hyena',
+    speed: 1.1, power: 0.95, windup: 0.9, reach: 0.95, guard: 1.1, blockRate: 0.8, tempo: 0.85, dodge: 0.08, style: 'lows', chaos: 0.35, counter: 0.2,
+    note: 'LAUGHS AND GOES LOW' },
+  { key: 'lion', name: 'LION', rare: false, weight: 10,
+    skin: 0xcc8e3e, skinLight: 0xecc684, glove: 0x8a1e1e, gloveLit: 0xc04040, bodyW: 18, bodyH: 19, headW: 12, look: 'lion',
+    speed: 0.95, power: 1.2, windup: 1.1, reach: 1.0, guard: 0.9, blockRate: 0.9, tempo: 1.0, dodge: 0, style: 'highs', chaos: 0.05, counter: 0.2,
+    note: 'KING OF THE RING' },
   { key: 'crab', name: 'CRAB', rare: false, weight: 10,
     skin: 0xc8483a, skinLight: 0xf08a6a, glove: 0xa8302a, gloveLit: 0xe86a5a, bodyW: 22, bodyH: 14, headW: 12, look: 'crab',
     speed: 0.85, power: 1.05, windup: 1.05, reach: 1.25, guard: 0.8, blockRate: 1.1, tempo: 1.05, dodge: 0.04, style: 'highs', chaos: 0.1, counter: 0.15,
@@ -221,6 +233,88 @@ const FOES: FoeDef[] = [
     speed: 0.85, power: 1.3, windup: 1.2, reach: 1.1, guard: 0.75, blockRate: 0.9, tempo: 1.1, dodge: 0, style: 'lows', chaos: 0.05, counter: 0.15,
     note: 'THE BIG ONE FROM THE SWAMP' },
 ];
+
+/**
+ * EVERY FACE ITS OWN.
+ *
+ * The first roster gave every animal the same head -- an ellipse with two
+ * big cartoon eyes on top -- and let the gear do the rest, which is a single
+ * face in eighteen costumes.  Each look now sets its own skull (width and
+ * height), its own eyes (how many show, where, how big, what colour, and
+ * whether the pupil is round, a reptile's slit, a dot, or not there at all)
+ * and whether it has the plain snout.  Eye positions are from the head's
+ * centre, facing right.
+ *
+ *   a croc's eyes sit up on bumps on top of a flat head, yellow and slit
+ *   a gecko's are huge and slit; a snake's small and slit on a flat head
+ *   a shark's, a rhino's and a tortoise's are small and black
+ *   a monkey's and a gorilla's look forward out of a face
+ *   a penguin's is a dot in a white ring; a lion's amber and slit
+ */
+interface FaceDef {
+  headW?: number;
+  headH: number;
+  eyes: Array<[number, number]>;
+  r: number;
+  col: number;
+  pupil: 'round' | 'slit' | 'dot' | 'none';
+  pr: number;
+  snout: 'lizard' | 'small' | 'none';
+  /** Eyelid bumps: a croc's eyes sit up on top of its head. */
+  lids?: boolean;
+}
+const FACE: Record<string, FaceDef> = {
+  frog: { headH: 12, eyes: [[-3, -4], [3, -4]], r: 3, col: PALETTE.cream, pupil: 'round', pr: 1.4, snout: 'lizard' },
+  lizard: { headH: 12, eyes: [[-3, -4], [3, -4]], r: 3, col: PALETTE.cream, pupil: 'round', pr: 1.4, snout: 'lizard' },
+  puffer: { headW: 14, headH: 13, eyes: [[2, -2]], r: 3.4, col: 0xfff6d8, pupil: 'round', pr: 1.9, snout: 'none' },
+  croc: { headH: 9, eyes: [[-4, -5], [-0.6, -5.4]], r: 1.8, col: 0xe8d060, pupil: 'slit', pr: 1.2, snout: 'small', lids: true },
+  gator: { headH: 9, eyes: [[-4, -5], [-0.6, -5.4]], r: 1.8, col: 0xd8c050, pupil: 'slit', pr: 1.2, snout: 'small', lids: true },
+  komodo: { headH: 9, eyes: [[-1, -2.6]], r: 1.5, col: 0xd8b040, pupil: 'slit', pr: 1, snout: 'small' },
+  gecko: { headH: 11, eyes: [[-4, -4], [3.5, -4]], r: 4, col: 0xd8f070, pupil: 'slit', pr: 1.8, snout: 'lizard' },
+  shell: { headW: 10, headH: 9, eyes: [[2, -1.8]], r: 1.4, col: 0x1a1a14, pupil: 'none', pr: 0, snout: 'none' },
+  snake: { headW: 12, headH: 8, eyes: [[2, -1.8]], r: 1.5, col: 0xf0c030, pupil: 'slit', pr: 1.1, snout: 'none' },
+  rhino: { headW: 13, headH: 11, eyes: [[0, -1]], r: 1.2, col: 0x1a1a1a, pupil: 'none', pr: 0, snout: 'small' },
+  monkey: { headW: 13, headH: 12, eyes: [[1, -1.6], [4.4, -1.6]], r: 1.5, col: 0xf6f0e0, pupil: 'dot', pr: 0.8, snout: 'none' },
+  penguin: { headH: 11, eyes: [[2, -3]], r: 1.6, col: 0xffffff, pupil: 'dot', pr: 0.9, snout: 'small' },
+  crab: { headH: 10, eyes: [[-3, -11], [3, -11]], r: 2.4, col: 0xf4f4ee, pupil: 'dot', pr: 1.1, snout: 'none' },
+  shark: { headW: 14, headH: 11, eyes: [[2, -3]], r: 1.3, col: 0x14161e, pupil: 'none', pr: 0, snout: 'none' },
+  gorilla: { headW: 13, headH: 12, eyes: [[1.6, -1.4], [4.8, -1.4]], r: 1.2, col: 0x8a6a4a, pupil: 'dot', pr: 0.7, snout: 'none' },
+  chameleon: { headH: 11, eyes: [[3, -2]], r: 2.4, col: 0xf0f0c0, pupil: 'dot', pr: 1, snout: 'lizard' },
+  wolf: { headW: 11, headH: 10, eyes: [[1.6, -2.4]], r: 1.4, col: 0xe8c04a, pupil: 'dot', pr: 0.7, snout: 'none' },
+  hyena: { headW: 11, headH: 10, eyes: [[1, -2.4]], r: 1.4, col: 0xf2e6c0, pupil: 'dot', pr: 0.7, snout: 'none' },
+  lion: { headW: 12, headH: 11, eyes: [[2.2, -2.6]], r: 1.6, col: 0xe8a630, pupil: 'slit', pr: 1, snout: 'none' },
+};
+
+/**
+ * HOW EACH ONE JUMPS.
+ *
+ * `v` is the take-off speed (Froggy's is -190, which peaks at 29px), `squat`
+ * how long it loads its legs before it goes, `land` how long it takes to
+ * absorb the landing, `drift` how far forward the jump carries it.  A monkey
+ * and a gecko spring; a gorilla loads for a long moment and drives up hard;
+ * a croc, a rhino and a tortoise get off the ground, briefly.
+ */
+const JUMP: Record<string, { v: number; squat: number; land: number; drift: number }> = {
+  frog: { v: -190, squat: 0, land: 110, drift: 0 },
+  lizard: { v: -175, squat: 110, land: 120, drift: 40 },
+  puffer: { v: -150, squat: 140, land: 150, drift: 28 },
+  croc: { v: -135, squat: 170, land: 180, drift: 30 },
+  gator: { v: -135, squat: 170, land: 180, drift: 30 },
+  komodo: { v: -145, squat: 150, land: 160, drift: 34 },
+  gecko: { v: -205, squat: 60, land: 80, drift: 52 },
+  shell: { v: -120, squat: 180, land: 200, drift: 20 },
+  snake: { v: -160, squat: 120, land: 120, drift: 40 },
+  rhino: { v: -130, squat: 180, land: 200, drift: 30 },
+  monkey: { v: -225, squat: 90, land: 90, drift: 56 },
+  penguin: { v: -150, squat: 110, land: 130, drift: 30 },
+  crab: { v: -150, squat: 100, land: 120, drift: 40 },
+  shark: { v: -165, squat: 120, land: 130, drift: 40 },
+  gorilla: { v: -200, squat: 150, land: 170, drift: 44 },
+  chameleon: { v: -170, squat: 100, land: 110, drift: 40 },
+  wolf: { v: -195, squat: 90, land: 100, drift: 50 },
+  hyena: { v: -180, squat: 100, land: 110, drift: 46 },
+  lion: { v: -190, squat: 130, land: 140, drift: 48 },
+};
 
 /** One off the card, weighted, so the rare ones stay rare. */
 function pickFoe(): FoeDef {
@@ -278,6 +372,17 @@ interface Art {
   eyeX: [number, number];
   /** Eyes above the head's centre: -4 on a face, -11 up on a crab's stalks. */
   eyeY: number;
+  eyeY2: number;
+  /** How far the pupil sits forward of the middle of the eye. */
+  pupDX: number;
+  /** Behind the head and in front of the body: a mane, ears, a ruff. */
+  headBack: Phaser.GameObjects.Container;
+  footL: Phaser.GameObjects.Rectangle;
+  footR: Phaser.GameObjects.Rectangle;
+  /** On the boards, under the fighter, whatever height the fighter is at. */
+  shadow: Phaser.GameObjects.Ellipse;
+  /** How this animal jumps. */
+  jump: { v: number; squat: number; land: number; drift: number };
   /** The tail on its hinge at the hips, and whether it lies on the boards. */
   tail: Phaser.GameObjects.Container | null;
   tailRoot: [number, number];
@@ -308,6 +413,14 @@ interface Fighter {
   art: Art;
   /** Who this is, if it is not Froggy. */
   foe: FoeDef | null;
+  /**
+   * WHERE IN A JUMP.  `squat` is the legs loading before take-off, `air` is
+   * off the boards, `land` is absorbing the landing.  `jumpT` counts down the
+   * squat and the landing; `jumpVx` is how far forward the jump is carrying.
+   */
+  jump: 'none' | 'squat' | 'air' | 'land';
+  jumpT: number;
+  jumpVx: number;
 }
 
 let p1: Fighter | null = null;
@@ -457,7 +570,8 @@ export const grudge: MinigameModule = {
           roundOver,
           over,
           you: p1 && { hp: Math.round(p1.hp), cd: Math.round(Math.max(0, p1.specialCd)), move: p1.move, phase: p1.phase, stun: Math.round(Math.max(0, p1.stun)) },
-          him: p2 && { hp: Math.round(p2.hp), cd: Math.round(Math.max(0, p2.specialCd)), move: p2.move, phase: p2.phase, stun: Math.round(Math.max(0, p2.stun)) },
+          him: p2 && { hp: Math.round(p2.hp), cd: Math.round(Math.max(0, p2.specialCd)), move: p2.move, phase: p2.phase, stun: Math.round(Math.max(0, p2.stun)),
+            up: Math.round(FLOOR_Y - p2.y), jump: p2.jump },
           cooldownMs: SPECIAL_COOLDOWN,
           foe: p2?.foe?.key,
         }),
@@ -471,6 +585,7 @@ export const grudge: MinigameModule = {
           if (!def || !p2) return false;
           const was = p2;
           was.art.root.destroy();
+          was.art.shadow.destroy();
           p2 = makeFighter(scene, was.x, def, -1);
           p2.hp = was.hp;
           aiCounter = 0;
@@ -492,6 +607,12 @@ export const grudge: MinigameModule = {
           p2.blocking = o.blocking ?? false;
           p2.stun = o.stun ?? 0;
           p2.recoil = o.stun ? -1 : 0;
+        },
+        /** Make the opponent jump, as its own AI would: squat, air, land. */
+        jump: (dir = 0) => {
+          if (!p2) return false;
+          startJump(p2, dir);
+          return p2.jump !== 'none';
         },
         /** How often each one comes up, over n draws of the real roll. */
         draws: (n: number) => {
@@ -620,6 +741,7 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
   tail: Phaser.GameObjects.GameObject[];
   tailRoot: [number, number];
   drags: boolean;
+  headBack: Phaser.GameObjects.GameObject[];
 } {
   const head: Phaser.GameObjects.GameObject[] = [];
   const body: Phaser.GameObjects.GameObject[] = [];
@@ -630,6 +752,9 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
   // drops into a crouch instead of being pushed through the floor, and it
   // sways a little, which is what shows it is attached rather than painted.
   const tailParts: Phaser.GameObjects.GameObject[] = [];
+  /** Behind the head and in front of the body: a mane, ears, a ruff. */
+  const headBack: Phaser.GameObjects.GameObject[] = [];
+  let tailRoot0: [number, number] | null = null;
   let drags = false;
   const dark = shade(d.skin, 0.35);
   const E = (x: number, y: number, w: number, h: number, c: number) => scene.add.ellipse(x, y, w, h, c);
@@ -644,6 +769,8 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
   // these was written against.
   const T = (x: number, y: number, ax: number, ay: number, bx: number, by: number, cx: number, cy: number, c: number) =>
     scene.add.graphics().fillStyle(c, 1).fillTriangle(x + ax, y + ay, x + bx, y + by, x + cx, y + cy);
+  /** The same, with the three points given outright. */
+  const TA = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number, c: number) => T(0, 0, ax, ay, bx, by, cx, cy, c);
   const teeth = (x0: number, y: number, n: number) => {
     for (let i = 0; i < n; i++) head.push(T(x0 + i * 2.4, y, 0, 0, 1.2, 1.8, 2.4, 0, 0xf4f4ee));
   };
@@ -760,6 +887,8 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
     case 'croc':
     case 'gator':
     case 'komodo': {
+      // the bumps the eyes sit up on, on top of the flat head
+      if (d.look !== 'komodo') head.push(E(-4, -4.8, 4.4, 3.6, d.skin), E(-0.6, -5.2, 4.4, 3.6, d.skin));
       // ---- THE LONG-SNOUTED ONES.  What separates the three is the snout:
       // a croc's is long and narrow, a gator's short and broad, a komodo's a
       // lizard's with a forked tongue out of it.
@@ -801,6 +930,60 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       root.push(E(3, -1, 4, 2.4, d.skinLight), E(7, -1, 4, 2.4, d.skinLight));
       for (const [x, y] of [[-2, -4], [2, 2], [-3, 4]] as const) body.push(E(x, y, 2.6, 2, 0xf0c94c).setAlpha(0.8));
       break;
+    case 'wolf': {
+      // ---- A LONG CANINE MUZZLE UNDER TALL POINTED EARS, pale cheeks and a
+      // throat ruff, and a heavy brush of a tail.
+      tailRoot0 = [-bw + 3, bh - 5];
+      head.push(E(7, 1.6, 10, 4.4, d.skinLight), E(6.5, 0.4, 9, 2.6, d.skin));
+      head.push(scene.add.circle(11.6, 0.8, 1.3, 0x14161a), R(8, 3.4, 6, 0.7, dark));
+      headBack.push(TA(0.4, -3.6, 3.4, -4, 2, -11, dark));
+      headBack.push(TA(-3.4, -3.2, -0.2, -3.8, -2, -11.2, d.skin), TA(-2.6, -3.8, -0.8, -4, -1.8, -9, 0x4a3a3a));
+      head.push(E(-1.6, 3.6, 8, 5.4, d.skinLight), R(1.4, -3.6, 3.6, 0.8, dark, -14));
+      body.push(E(2, -6, 11, 7, d.skinLight, ).setAlpha(0.9));
+      for (let i = 0; i < 3; i++) body.push(TA(-2 + i * 3, -3, i * 3, -3, -1 + i * 3, 0.4, d.skinLight));
+      {
+        const root: Pt = [-bw + 3, bh - 5];
+        const path = bez(root, [root[0] - 5, root[1] + 4], [root[0] - 11, root[1] + 8], [root[0] - 14, root[1] + 13]);
+        tailParts.push(tube(path, 6, 3, d.skin), tube(path.slice(8), 4, 2.4, d.skinLight), tube(path.slice(0, 7), 2, 1, dark));
+      }
+      break;
+    }
+    case 'hyena': {
+      // ---- A BLUNT DARK MUZZLE AND TWO HUGE ROUND EARS, a bristling ridge
+      // down a sloping back, spots, and a short dark bush of a tail.
+      head.push(E(7, 2, 9.4, 5.6, 0x40321e), E(6, 0.6, 7.6, 2.6, d.skin));
+      head.push(scene.add.circle(11.4, 1, 1.5, 0x120e08), R(7.6, 4, 7.4, 0.9, 0x1a120a), R(8.8, 3.3, 2.4, 0.9, PALETTE.cream));
+      headBack.push(E(1.4, -6.6, 5, 6, dark), E(-2.6, -6.2, 5.6, 6.6, d.skin), E(-2.6, -6, 3, 4, 0x3a2c1a).setAlpha(0.85));
+      for (let i = 0; i < 4; i++) body.push(R(-3 - i * 2.2, -bh + 0.6 + i * 1.8, 1.4, 3.6, 0x3a2c1a, -30));
+      body.push(E(3, -bh + 2, bw * 1.6, 6, d.skin));
+      for (const [x, y] of [[-3, -1], [2, 3], [-1, 5], [4, -3], [-4, 4]] as const) body.push(E(x, y, 2.4, 1.8, 0x4a3820).setAlpha(0.8));
+      {
+        const root: Pt = [-bw + 3, bh - 5];
+        tailParts.push(tube(bez(root, [root[0] - 3, root[1] + 2], [root[0] - 6, root[1] + 5], [root[0] - 8, root[1] + 8], 8), 4.4, 3, 0x3a2c1a));
+      }
+      break;
+    }
+    case 'lion': {
+      // ---- A FELINE FACE IN A GREAT MANE.  The mane is behind the head and
+      // in front of the body, and runs down onto the chest.
+      const mane = 0x7e3c16;
+      headBack.push(E(0, 1, 20, 19, mane));
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        headBack.push(E(Math.cos(a) * 9, 1 + Math.sin(a) * 8.6, 7, 6.4, i % 2 ? mane : shade(mane, 0.2)));
+      }
+      headBack.push(E(-2, -7, 3, 3, d.skin), E(2.4, -7.4, 3, 3, d.skin));
+      head.push(E(3, 2.4, 4.4, 3.2, d.skinLight), E(5.2, 2.2, 4.6, 3.4, d.skinLight));
+      head.push(E(5.6, 0.2, 3.2, 2.2, 0x6a3322), E(4.2, 4.8, 5, 2.6, d.skinLight));
+      head.push(R(2.6, -3.9, 4, 1, dark, 15));
+      body.push(E(2, -6, 13, 8, mane));
+      {
+        const root: Pt = [-bw + 3, bh - 5];
+        const path = bez(root, [root[0] - 7, root[1] + 6], [root[0] - 15, root[1] + 5], [root[0] - 18, root[1] - 2], 14);
+        tailParts.push(tube(path, 2.2, 1.4, d.skin), E(path[path.length - 1][0], path[path.length - 1][1] - 1, 3.4, 4, mane));
+      }
+      break;
+    }
     case 'shell': {
       // ---- THE TORTOISE.  The shell is the silhouette: a dome over the back,
       // bigger than the fighter under it, with the plates picked out.
@@ -810,6 +993,8 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       back.push(E(-4, -2, sw, sh, 0x6a5a34));
       back.push(E(-5, -4, sw - 7, sh - 7, 0x8a7444));
       for (const [x, y] of [[-8, -5], [-2, -7], [-9, 2], [-2, 1], [-5, -1]] as const) back.push(E(x, y, 4.4, 3.8, 0x5a4a28).setAlpha(0.8));
+      // a hooked horny beak and a wrinkled old neck
+      head.push(TA(3.4, -0.4, 7.6, 0.6, 4, 3.4, 0x5a5230), TA(6, 0.2, 7.6, 0.6, 6.8, 2.2, 0x3a3420));
       head.push(R(-1, 3, 5, 0.8, dark).setAlpha(0.6), R(0, 5, 4, 0.8, dark).setAlpha(0.6));
       break;
     }
@@ -817,20 +1002,26 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       // ---- NO LEGS.  A coil where they would be, and it moves on that.
       root.push(E(0, -2, 20, 6, d.skin), E(-1, -5, 17, 5, shade(d.skin, 0.12)), E(1, -8, 13, 4, d.skin));
       root.push(E(0, -2, 17, 2.4, d.skinLight).setAlpha(0.5));
+      // a flat wedge of a head, wider than the neck under it
+      head.push(E(2, 0.4, 15, 8, d.skin), E(3, 2, 12, 3, d.skinLight).setAlpha(0.7));
+      for (const [x, y] of [[-2, -1.6], [1.4, -2.4], [4.6, -1.6]] as const) head.push(R(x, y, 1.6, 1.6, dark, 45).setAlpha(0.6));
       for (let i = 0; i < 4; i++) body.push(R(0, -6 + i * 4, 3, 3, dark, 45).setAlpha(0.7));
       head.push(R(9, 3, 5, 0.8, 0xd83a4a), T(12, 3, 0, 0, 2.6, -1.4, 2.6, 1.4, 0xd83a4a));
       break;
     case 'rhino':
-      head.push(T(8, -4, 0, 4, 3, -5, 6, 4, 0xe6dcc0));
-      head.push(T(4, -5, 0, 3, 1.6, -2, 3.2, 3, 0xe6dcc0));
+      // a heavy snout out in front of the face, and the horns ON it
+      head.push(E(7, 1.4, 10, 7.4, d.skin), E(8, 3.6, 7, 2.4, shade(d.skin, 0.12)));
+      head.push(TA(6.4, -1.6, 11.4, -1.2, 10.2, -10.4, 0xe6dcc0), TA(9, -1.6, 10.8, -1.4, 10.4, -8.6, 0xf6eed8));
+      head.push(TA(2.6, -4.2, 5.8, -3.8, 4.6, -8.4, 0xe6dcc0));
       head.push(E(-4, -6, 3, 4.4, d.skin), E(-4, -6, 1.6, 2.4, 0xd88a8a));
       head.push(R(1, -4.5, 7, 1.4, dark).setAlpha(0.8));
       for (let i = 0; i < 3; i++) body.push(R(-3, -5 + i * 4, 8, 0.8, dark).setAlpha(0.5));
       break;
     case 'monkey':
-      head.push(E(-5, 0, 5, 5, d.skin), E(-5, 0, 3, 3, d.skinLight));
-      head.push(E(3, 2, 8, 7, d.skinLight));
-      head.push(E(5, 3.4, 1.2, 1, dark), E(3, 3.4, 1.2, 1, dark));
+      // the face mask round both eyes, the muzzle under it, big round ears
+      head.push(E(-5.4, 0, 5, 5, d.skin), E(-5.4, 0, 3, 3, d.skinLight));
+      head.push(E(3, 0, 9.6, 8, d.skinLight), E(4.4, 3.6, 6.4, 4.4, shade(d.skinLight, -0.1)));
+      head.push(E(5.6, 3, 1, 0.9, dark), E(3.8, 3, 1, 0.9, dark), R(4.4, 5, 3.4, 0.7, dark));
       // a long tail out of the base of the back, up behind him, and curled
       {
         const root: Pt = [-bw + 3, bh - 4];
@@ -839,7 +1030,7 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       }
       break;
     case 'penguin':
-      head.push(T(8, 1, 0, -1.6, 5, 0.4, 0, 2.2, 0xf0a030));
+      head.push(TA(4.6, -0.8, 10.4, 1, 4.6, 2.8, 0xf0a030), TA(4.6, 1, 10.4, 1, 4.6, 2.8, 0xc07818));
       head.push(E(1, -1, 5, 4, 0xf4f4ee));
       body.push(E(2, 1, d.bodyW - 5, d.bodyH - 3, 0xf4f4ee));
       root.push(E(-4, -0.5, 6, 2.4, 0xf0a030), E(4, -0.5, 6, 2.4, 0xf0a030));
@@ -865,6 +1056,8 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       // The dorsal fin sweeps back off the shoulders, and the tail narrows to
       // a wrist before the two lobes of the fin -- the top one the longer.
       back.push(tube(bez([3, -bh + 3], [2, -bh - 2], [-1, -bh - 6], [-5, -bh - 7.5], 10), 8, 0.8, d.skin));
+      // a pointed conical snout, pale underneath
+      head.push(E(4.6, -0.2, 11, 8, d.skin), E(5, 1.8, 9, 3.6, d.skinLight));
       {
         const root: Pt = [-bw + 3, 2];
         const wrist: Pt = [-bw - 7, 0.5];
@@ -880,9 +1073,13 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
     case 'gorilla':
       // ---- SHOULDERS.  A gorilla is a triangle standing on its point.
       back.push(E(0, -6, d.bodyW + 10, 13, d.skin));
-      head.push(R(2, -3, 11, 2.4, shade(d.skin, 0.3)));
-      head.push(E(4, 2.4, 9, 7, d.skinLight));
-      head.push(E(6, 2, 1.4, 1.2, 0x14161e), E(4, 2, 1.4, 1.2, 0x14161e));
+      // a domed crown, a heavy brow over the eyes, a broad flat nose and a
+      // wide mouth in a pale leathery face
+      headBack.push(E(-1.5, -4.4, 9, 6, d.skin), E(-6, 0.6, 2.6, 3.4, d.skinLight));
+      head.push(E(3.2, 1.2, 10, 9, d.skinLight));
+      head.push(E(3.2, -2.8, 11, 2.8, d.skin));
+      head.push(E(3.4, 2.6, 5.4, 2.8, shade(d.skinLight, 0.35)), E(2.4, 2.8, 0.9, 0.8, 0x14161e), E(4.4, 2.8, 0.9, 0.8, 0x14161e));
+      head.push(R(3.4, 5, 6, 0.9, 0x14161e));
       body.push(E(1, 2, d.bodyW - 8, d.bodyH - 8, d.skinLight).setAlpha(0.8));
       break;
     case 'chameleon':
@@ -897,13 +1094,13 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
       break;
   }
   // The tail is drawn relative to where it hinges, so the hinge can turn.
-  const tailRoot: [number, number] = d.look === 'puffer' ? [-bw + 3, 1] : d.look === 'shark' ? [-bw + 3, 2] : [-bw + 3, bh - 4.5];
+  const tailRoot: [number, number] = tailRoot0 ?? (d.look === 'puffer' ? [-bw + 3, 1] : d.look === 'shark' ? [-bw + 3, 2] : [-bw + 3, bh - 4.5]);
   for (const t of tailParts) {
     const o = t as unknown as { x: number; y: number };
     o.x -= tailRoot[0];
     o.y -= tailRoot[1];
   }
-  return { head, body, back, root, puff, tail: tailParts, tailRoot, drags };
+  return { head, body, back, root, puff, tail: tailParts, tailRoot, drags, headBack };
 }
 
 /**
@@ -950,7 +1147,8 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
   const fist = scene.add.ellipse(8, -22, 7, 8, gloveCol);
   const knuckle = scene.add.ellipse(8, -24, 6, 3, gloveLit);
   const thumb = scene.add.ellipse(8, -19, 3.5, 3, gloveLit);
-  const head = scene.add.ellipse(2, -30, foe ? foe.headW : 15, 12, headCol);
+  const face = FACE[foe?.look ?? 'frog'] ?? FACE.lizard;
+  const head = scene.add.ellipse(2, -30, foe ? face.headW ?? foe.headW : 15, face.headH, headCol);
   // The plain snout is right for a frog and a lizard.  The long-jawed ones
   // draw their own in `foeGear`, and a penguin has a beak instead, so theirs
   // is kept small enough to sit under what is drawn on top.
@@ -958,14 +1156,17 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
   const longJaw = look === 'croc' || look === 'gator' || look === 'komodo';
   const snout =
     kind === 'lizard'
-      ? scene.add.ellipse(9, -29, longJaw || look === 'penguin' ? 3 : 9, longJaw ? 3 : 6, headCol)
+      ? scene.add.ellipse(9, -29, face.snout === 'small' ? 3 : 9, face.snout === 'small' ? 3 : 6, headCol).setVisible(face.snout !== 'none')
       : scene.add.ellipse(7, -28, 5, 4, skinLight);
-  // a gecko's eyes are the biggest thing on its face
-  const eyeR0 = look === 'gecko' ? 4 : look === 'penguin' ? 2.4 : 3;
-  const eyeL = scene.add.circle(-1, -34, eyeR0, PALETTE.cream);
-  const eyeR = scene.add.circle(5, -34, eyeR0, PALETTE.cream);
-  const pupL = scene.add.circle(0, -34, look === 'gecko' ? 2 : 1.4, PALETTE.black);
-  const pupR = scene.add.circle(6, -34, look === 'gecko' ? 2 : 1.4, PALETTE.black);
+  // The eyes are this animal's: how many show, how big, what colour, and
+  // what shape of pupil.  One eye is a profile; the second is hidden.
+  const eyeL = scene.add.circle(-1, -34, face.r, face.col);
+  const eyeR = scene.add.circle(5, -34, face.r, face.col).setVisible(face.eyes.length > 1);
+  const pupL = scene.add.circle(0, -34, Math.max(0.5, face.pr), PALETTE.black).setVisible(face.pupil !== 'none');
+  const pupR = scene.add.circle(6, -34, Math.max(0.5, face.pr), PALETTE.black).setVisible(face.pupil !== 'none' && face.eyes.length > 1);
+  if (face.pupil === 'slit') for (const p of [pupL, pupR]) p.setScale(0.42, 1.25);
+  // a round eye gets a catch of light; it is what makes a face look back
+  if (face.r >= 1.5 && face.pupil !== 'none') for (const e of [eyeL, eyeR]) e.setStrokeStyle(0.6, shade(face.col, 0.3));
   // A lizard has a crest, a frog does not.  At this size that is the whole of
   // telling them apart at a glance.
   const crest =
@@ -977,7 +1178,10 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
 
   // ---- WHO THEY ARE.  Built on top of the shared parts, in three groups
   // that follow the part they belong to; see `Art.headGear`.
-  const gear = foe ? foeGear(scene, foe) : { head: [], body: [], back: [], root: [], puff: [], tail: [], tailRoot: [0, 0] as [number, number], drags: false };
+  const gear = foe ? foeGear(scene, foe) : { head: [], body: [], back: [], root: [], puff: [], tail: [], tailRoot: [0, 0] as [number, number], drags: false, headBack: [] };
+  const headBack = scene.add.container(2, -30, gear.headBack);
+  // a shadow on the boards, which is how a jump reads as off the ground
+  const shadow = scene.add.ellipse(x, FLOOR_Y + 1, foe ? foe.bodyW + 8 : 24, 4, 0x000000).setAlpha(0.28).setDepth(19);
   const tailC = gear.tail.length ? scene.add.container(gear.tailRoot[0], -18 + gear.tailRoot[1], gear.tail) : null;
   const headGear = scene.add.container(2, -30, gear.head);
   const bodyGear = scene.add.container(0, -18, gear.body);
@@ -991,7 +1195,7 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
   parts.push(backGear);
   if (tailC) parts.push(tailC);
   if (puff) parts.push(puff);
-  parts.push(aura, torso, belly, bodyGear, shin, arm, cuff, fist, knuckle, thumb, head, snout, headGear, crest, eyeL, eyeR, pupL, pupR, call);
+  parts.push(aura, torso, belly, bodyGear, headBack, shin, arm, cuff, fist, knuckle, thumb, head, snout, headGear, crest, eyeL, eyeR, pupL, pupR, call);
   const root = scene.add.container(x, FLOOR_Y, parts).setDepth(20);
   root.setScale(facing, 1);
 
@@ -1011,13 +1215,20 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
     stun: 0,
     recoil: 0,
     step: 0,
+    jump: 'none',
+    jumpT: 0,
+    jumpVx: 0,
     art: {
       root, legL, legR, torso, belly, head, snout, eyeL, eyeR, pupL, pupR, crest, arm, fist, cuff, knuckle, thumb, shin, aura, call,
       skin, skinLight, headCol, headGear, bodyGear, backGear, puff,
       snoutX: longJaw ? 3 : 6,
-      // eyes set back on the long jaws, higher and further apart on a gecko
-      eyeX: longJaw ? [-3, 2] : look === 'gecko' ? [-2, 6] : [-1, 5],
-      eyeY: look === 'crab' ? -11 : -4,
+      // from the face: where this animal's eyes are on its head
+      eyeX: [2 + face.eyes[0][0], 2 + (face.eyes[1] ?? face.eyes[0])[0]],
+      eyeY: face.eyes[0][1],
+      eyeY2: (face.eyes[1] ?? face.eyes[0])[1],
+      pupDX: face.eyes.length > 1 ? 0.8 : 0.5,
+      headBack, footL, footR, shadow,
+      jump: JUMP[look] ?? JUMP.lizard,
       tail: tailC,
       tailRoot: gear.tailRoot,
       drags: gear.drags,
@@ -1038,6 +1249,13 @@ function startRound(): void {
   p1.specialCd = p2.specialCd = 0;
   p1.stun = p2.stun = 0;
   p1.recoil = p2.recoil = 0;
+  for (const f of [p1, p2]) {
+    f.y = FLOOR_Y;
+    f.vy = 0;
+    f.jump = 'none';
+    f.jumpT = 0;
+    f.jumpVx = 0;
+  }
   p1.facing = 1;
   p2.facing = -1;
   roundMs = ROUND_MS;
@@ -1098,7 +1316,7 @@ function handleInput(dt: number): void {
   if (!f.move && !f.blocking) {
     if (keys.left?.isDown) f.x -= WALK_SPEED * dt;
     if (keys.right?.isDown) f.x += WALK_SPEED * dt;
-    if (keys.jump?.isDown && f.y >= FLOOR_Y) f.vy = JUMP_V;
+    if (keys.jump?.isDown && f.y >= FLOOR_Y) startJump(f, 0);
   }
   f.x = Phaser.Math.Clamp(f.x, 20, GAME_W - 20);
 
@@ -1142,11 +1360,38 @@ function runAi(delta: number, dt: number): void {
   }
 
   aiTimer -= delta;
+  const grounded = ai.y >= FLOOR_Y && ai.jump !== 'squat' && ai.jump !== 'air';
+  // ---- A JUMP-IN.  Coming down on them from the air is a high blow, and
+  // it can be thrown on the way down.
+  if (ai.jump === 'air' && !ai.move && ai.vy > -60 && dist < reach('high') && Math.random() < 0.12) {
+    startMove(ai, 'high');
+    return;
+  }
+  if (ai.jump === 'squat') return;
   if (ai.move) return;
+  // ---- JUMPING.  Over a sweep it can see coming -- if the legs load in
+  // time, which a gecko's do and a tortoise's mostly do not -- and now and
+  // then up and in over the gap, which is how it closes on a long reach.
+  if (grounded && !ai.blocking) {
+    const toward = Math.sign(p1.x - ai.x) || 1;
+    if (p1.move === 'low' && p1.phase === 'startup' && dist < 46 && Math.random() < 0.28 + me.dodge) {
+      startJump(ai, -toward * 0.3);
+      return;
+    }
+    const idealGap = MOVES.low.range * me.reach + 10;
+    if (dist > idealGap + 8 && Math.random() < dt * (0.9 + me.chaos)) {
+      startJump(ai, toward);
+      return;
+    }
+    if (Math.random() < dt * 0.22 * (1 + me.chaos * 1.5)) {
+      startJump(ai, 0);
+      return;
+    }
+  }
 
   // Blocks about half of punches and a third of kicks -- more for a tortoise,
   // fewer for a rhino, and never every one.
-  if (p1.move && p1.phase === 'startup' && dist < 40) {
+  if (p1.move && p1.phase === 'startup' && dist < 40 && grounded) {
     const chance = Math.min(0.9, (p1.move === 'high' ? 0.5 : 0.3) * me.blockRate);
     ai.blocking = Math.random() < chance;
   } else {
@@ -1195,6 +1440,14 @@ function runAi(delta: number, dt: number): void {
       // The opener is where a fighter's taste shows: the baseline sweeps, a
       // croc leads with the hands, a rhino goes for the big one whenever it is
       // there, and every one of them goes for it when they are hurt.
+      // Now and then the opener is a jump-in: up and over, and the high
+      // blow comes on the way down (see the jump-in above).
+      if (Math.random() < 0.2 && dist < reach('high') + 24 && ai.jump === 'none') {
+        startJump(ai, Math.sign(p1.x - ai.x) || 1);
+        aiTimer = 300 * me.tempo;
+        aiBeat++;
+        break;
+      }
       const hurt = ai.hp < MAX_HP * 0.4 && ai.specialCd <= 0;
       const pick: keyof typeof MOVES =
         hurt || (me.style === 'specials' && ai.specialCd <= 0) ? 'special' : me.style === 'highs' ? 'high' : 'low';
@@ -1245,6 +1498,32 @@ function startMove(f: Fighter, move: keyof typeof MOVES): void {
   if (move === 'special') f.specialCd = SPECIAL_COOLDOWN;
 }
 
+/**
+ * A JUMP, from the legs up.  It loads first -- a squat as long as this animal
+ * needs, which is where a gorilla's jump gets its power and why a gecko's is
+ * off the boards almost before you see it start -- and then it goes.  Froggy's
+ * squat is nothing, because it is the player's and a jump key that waits is a
+ * jump key that feels broken.
+ */
+function startJump(f: Fighter, dir: number): void {
+  if (f.jump === 'squat' || f.jump === 'air' || f.y < FLOOR_Y || f.stun > 0) return;
+  const j = f.art.jump;
+  f.jumpVx = dir * j.drift;
+  if (j.squat <= 0) {
+    launch(f);
+    return;
+  }
+  f.jump = 'squat';
+  f.jumpT = j.squat;
+}
+
+/** Off the boards. */
+function launch(f: Fighter): void {
+  f.jump = 'air';
+  f.vy = f.foe ? f.art.jump.v : JUMP_V;
+  audio.sfx('ui_hover', 0.35);
+}
+
 function tickFighter(f: Fighter, delta: number, dt: number): void {
   if (f.specialCd > 0) {
     f.specialCd -= delta;
@@ -1262,6 +1541,16 @@ function tickFighter(f: Fighter, delta: number, dt: number): void {
     if (f.stun <= 0) f.recoil = 0;
   }
 
+  // ---- the jump's own clock: loading, then off; landing, then done
+  if (f.jump === 'squat') {
+    f.jumpT -= delta;
+    if (f.stun > 0) f.jump = 'none';
+    else if (f.jumpT <= 0) launch(f);
+  } else if (f.jump === 'land') {
+    f.jumpT -= delta;
+    if (f.jumpT <= 0) f.jump = 'none';
+  }
+
   // gravity
   if (f === p2 && aiHover !== null) {
     f.y = FLOOR_Y - aiHover;
@@ -1269,9 +1558,18 @@ function tickFighter(f: Fighter, delta: number, dt: number): void {
   } else if (f.y < FLOOR_Y || f.vy !== 0) {
     f.vy += GRAVITY * dt;
     f.y += f.vy * dt;
+    // a jump carries forward; walking in the air is the player's own business
+    if (f.jump === 'air' && f.jumpVx !== 0) f.x = Phaser.Math.Clamp(f.x + f.jumpVx * dt, 20, GAME_W - 20);
     if (f.y >= FLOOR_Y) {
       f.y = FLOOR_Y;
       f.vy = 0;
+      // and it comes down into its legs rather than stopping dead on them
+      if (f.jump === 'air' || f.jump === 'none') {
+        f.jump = 'land';
+        f.jumpT = f.art.jump.land;
+        f.jumpVx = 0;
+        audio.sfx('item_thud', 0.25);
+      }
     }
   }
 
@@ -1359,7 +1657,16 @@ function render(f: Fighter, dt: number): void {
   // Holding down is a full squat.  Throwing the sweep is only a dip into it:
   // at a full crouch the fighter ended up sitting on the floor with a leg
   // stuck out flat, which is not a kick, it is a fall.
-  const crouch = f.crouch && f.y >= FLOOR_Y ? 5 : f.move === 'low' ? 2 : 0;
+  // The squat before a jump and the landing after one are a crouch too: the
+  // legs load, and they take the weight coming back down.
+  const jd = a.jump;
+  const squash = f.jump === 'squat' ? 1 + 5 * (1 - f.jumpT / Math.max(1, jd.squat))
+    : f.jump === 'land' ? 5 * (f.jumpT / Math.max(1, jd.land)) : 0;
+  const crouch = Math.max(f.crouch && f.y >= FLOOR_Y ? 5 : f.move === 'low' ? 2 : 0, squash);
+  const airborne = f.jump === 'air' || f.y < FLOOR_Y - 0.5;
+  // rising, the legs are still straight from the push; over the top and
+  // falling, they come up under the body ready to land
+  const rising = airborne && f.vy < -50;
   const reel = f.stun > 0 ? f.recoil * Math.min(4, f.stun / 60) : 0;
 
   a.root.setPosition(f.x + reel, f.y);
@@ -1370,23 +1677,47 @@ function render(f: Fighter, dt: number): void {
   const swing = walking ? Math.sin(f.step) * 3 : 0;
   a.legL.setPosition(-4 + swing, -2 - crouch * 0.4).setSize(4, 10 - crouch);
   a.legR.setPosition(4 - swing, -2 - crouch * 0.4).setSize(4, 10 - crouch);
+  a.footL.setPosition(-5 + swing, 0);
+  a.footR.setPosition(5 - swing, 0);
+  if (airborne) {
+    if (rising) {
+      // pushed off: legs long, toes pointed, trailing slightly behind
+      a.legL.setPosition(-4.5, 0).setSize(4, 11);
+      a.legR.setPosition(3.5, 0).setSize(4, 11);
+      a.footL.setPosition(-5.5, 1.5);
+      a.footR.setPosition(4, 1.5);
+    } else {
+      // tucked: knees up under the body, feet off the boards
+      a.legL.setPosition(-5, -5).setSize(4, 6);
+      a.legR.setPosition(5, -4).setSize(4, 6);
+      a.footL.setPosition(-6, -4.5);
+      a.footR.setPosition(6, -3.5);
+    }
+  }
+  // ---- THE SHADOW STAYS ON THE BOARDS, shrinking the higher it goes.
+  const height = Math.max(0, FLOOR_Y - f.y);
+  const shrink = Math.max(0.4, 1 - height * 0.02);
+  a.shadow.setPosition(f.x, FLOOR_Y + 1).setScale(shrink, 1).setAlpha(0.28 * shrink);
   f.step += walking ? dt * 9 : 0;
 
   // ---- body and head, with the crouch taken out of the height
   const breathe = f.move ? 0 : Math.sin(sceneClock * 3 + (f === p2 ? 1.6 : 0)) * 0.6;
   a.torso.setPosition(0, -18 + crouch + breathe);
+  // stretched on the way up, round again at the top
+  a.torso.setScale(1, rising ? 1.08 : 1);
   a.belly.setPosition(1, -16 + crouch + breathe);
   a.head.setPosition(2, -30 + crouch * 1.4 + breathe);
   a.snout.setPosition(a.head.x + a.snoutX, a.head.y + 1);
   a.eyeL.setPosition(a.eyeX[0], a.head.y + a.eyeY);
-  a.eyeR.setPosition(a.eyeX[1], a.head.y + a.eyeY);
+  a.eyeR.setPosition(a.eyeX[1], a.head.y + a.eyeY2);
   // The pupils ride the eyes.  Left behind, they float over the fighter's head
   // like two flies, which is exactly how it looked.
-  a.pupL.setPosition(a.eyeX[0] + 1, a.head.y + a.eyeY);
-  a.pupR.setPosition(a.eyeX[1] + 1, a.head.y + a.eyeY);
+  a.pupL.setPosition(a.eyeX[0] + a.pupDX, a.head.y + a.eyeY);
+  a.pupR.setPosition(a.eyeX[1] + a.pupDX, a.head.y + a.eyeY2);
   a.crest.setPosition(0, a.head.y - 7);
   // ---- AND WHAT MAKES THEM WHO THEY ARE, riding the parts it belongs to.
   a.headGear.setPosition(a.head.x, a.head.y);
+  a.headBack.setPosition(a.head.x, a.head.y);
   a.bodyGear.setPosition(a.torso.x, a.torso.y);
   // A crab's legs scuttle when it moves; everybody else's back gear is still.
   const scuttle = f.foe?.look === 'crab' && walking ? Math.sin(f.step * 2) * 0.8 : 0;
@@ -1396,7 +1727,7 @@ function render(f: Fighter, dt: number): void {
   // on the boards stays on them rather than going through; a hit flicks it;
   // and it sways, slowly, the whole time.
   if (a.tail) {
-    const lift = a.drags ? crouch * 3.2 : crouch * 1.5;
+    const lift = (a.drags ? crouch * 3.2 : crouch * 1.5) + (airborne ? (a.drags ? 14 : 8) : 0);
     const flick = f.stun > 0 ? 9 : 0;
     const sway = Math.sin(sceneClock * 2.2 + (f === p2 ? 0.8 : 0)) * (a.drags ? 1.2 : 3.5);
     a.tail.setPosition(a.torso.x + a.tailRoot[0], a.torso.y + a.tailRoot[1] + scuttle).setAngle(lift + flick + sway);
@@ -1500,7 +1831,8 @@ function render(f: Fighter, dt: number): void {
     // from somewhere.
     const guardBob = Math.sin(sceneClock * 3 + (f === p2 ? 1.6 : 0)) * 0.7;
     a.arm.setPosition(1, -23 + cy).setSize(6, 6);
-    glove(6, -25 + cy * 1.2 + guardBob, 8);
+    // in the air the guard comes up with the rest of it
+    glove(6, -25 + cy * 1.2 + guardBob - (airborne ? 2 : 0), 8);
     a.call.setVisible(false);
   }
 
