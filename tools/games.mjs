@@ -4080,7 +4080,10 @@ for (const g of [
       }
       return Math.round((won / tot) * 100);
     });
-    const bareOk = bare >= 20 && bare <= 50;
+    // Bare knuckles hit softer than any weapon now -- asked for outright -- so
+    // the floor is lower than it was; it still fails if an empty-handed
+    // fighter can never win at all.
+    const bareOk = bare >= 10 && bare <= 50;
     console.log(`${bareOk ? 'PASS' : 'FAIL'}  mash: bare hands are the weakest row, not a lost cause  — ${bare}% against the whole rack`);
     if (!bareOk) failures++;
 

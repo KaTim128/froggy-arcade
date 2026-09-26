@@ -449,7 +449,7 @@ export const WEAPONS: WeaponDef[] = [
   // relentless, and able to string a combination together; it beats an armed
   // fighter by never letting them set, and it loses to anyone who can keep
   // it at arm's length.
-  { key: 'none', name: 'NO WEAPON', power: [2, 4], heavy: [1, 1], resist: [10, 10], reach: [1, 3], hits: 1, guard: 0, tempo: 1.34,
+  { key: 'none', name: 'NO WEAPON', power: [1, 1], heavy: [1, 1], resist: [10, 10], reach: [1, 3], hits: 1, guard: 0, tempo: 1.34,
     spec: { note: 'NOTHING TO CARRY, AND IT NEVER STOPS COMING', fleet: 1.24, combo: 1.7, atClose: 0.5 } },
 
   // ---- IN CLOSE
@@ -915,6 +915,8 @@ export const BASE = { power: 10, speed: 100, avoid: 50, distance: 20 } as const;
 /** Health before any armour, and what a point of suit resistance adds to it. */
 const BASE_HP = 118;
 const HP_PER_RESIST = 7.5;
+/** What a bare fist is worth, as a share of the same roll in a weapon. */
+const BARE_MUL = 0.8;
 /** A point of rolled weapon power, in damage. */
 const POWER_PER_ROLL = 3.6;
 /** A point of rolled reach, in pixels past the base distance. */
@@ -1009,7 +1011,12 @@ export function statsOf(kit: Kit, weapon: WeaponDef, wRolls?: Piece, type?: Liza
   // worth and arrives in however many pieces the weapon deals in -- which is
   // still a real difference, because two smaller blows get past a guard
   // differently from one large one.
-  const perStrike = (base.power + w.rPower * POWER_PER_ROLL) / weapon.hits;
+  // ---- BARE KNUCKLES HIT SOFTER THAN ANY WEAPON.  The unarmed roll is fixed
+  // at the floor and swung at BARE_MUL of it, so a bare fist is below the
+  // weakest swing any weapon can roll -- a slingshot or a blowgun at its
+  // lowest -- for every archetype, the weak ones and the strong ones alike.
+  const bare = weapon.key === 'none' ? BARE_MUL : 1;
+  const perStrike = ((base.power + w.rPower * POWER_PER_ROLL) * bare) / weapon.hits;
   return {
     power: perStrike,
     // ---- ARMOUR SLOWS THE FEET MORE THAN THE ARMS.
@@ -1032,7 +1039,7 @@ export function statsOf(kit: Kit, weapon: WeaponDef, wRolls?: Piece, type?: Liza
     // It wants to stand a shade outside what it can hit with, and closes in.
     range: distPts + 2,
     guard: weapon.guard,
-    powerPts: base.power + w.rPower * POWER_PER_ROLL,  // the sheet shows the whole swing
+    powerPts: (base.power + w.rPower * POWER_PER_ROLL) * bare,  // the sheet shows the whole swing
     speedPts,
     avoidPts,
     distPts,
@@ -2740,6 +2747,10 @@ export interface FighterArt {
   armOff: Arm;
   /** Whether the off hand has been brought round to the front yet. */
   guardUp: boolean;
+  /** The off arm is in front of the body -- a bare guard, or both hands on a
+   *  shield -- and where it lives behind the body when it is not. */
+  offFront: boolean;
+  offHome: number;
   weapon: Phaser.GameObjects.Container;
   /** Stays flat on the sand while everything above it moves. */
   shadow: Phaser.GameObjects.Ellipse;
@@ -3930,7 +3941,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const root = scene.add.container(f.x, FLOOR_Y, parts).setDepth(20);
   root.setScale(f.face * (bld?.scale ?? 1), bld?.scale ?? 1);
   return { root, legL, legR, greaveL, greaveR, kneeL, kneeR, footL, footR, torso, cuirass, belt, ridge,
-    pauldL, pauldR, head, helm, helmDome, crown, visor, plume, headGroup, arm, armOff, guardUp: false, weapon, shadow,
+    pauldL, pauldR, head, helm, helmDome, crown, visor, plume, headGroup, arm, armOff, guardUp: false, offFront: false, offHome: armOff.root.x, weapon, shadow,
     nicks: 0, tail: beastParts?.tail ?? null };
 }
 
@@ -4262,6 +4273,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     // nowhere to be: it vanished, and the stance read as one arm pointing.
     // In front of the face is also where a boxer's rear hand belongs.
     a.guardUp = true;
+    a.offFront = true;
     a.root.bringToTop(a.armOff.root);
     // Round to the front, but not all the way across -- a boxer's rear hand
     // sits inside the lead one, not on top of it.
@@ -4297,7 +4309,33 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
       a.arm.fore.setAngle(f.elbowA);
       a.armOff.fore.setAngle(throwing && alt ? drive : GUARD_FOLD);
     }
+  } else if (f.weapon.key === 'shield') {
+    // ---- A SHIELD IS HELD IN BOTH HANDS.
+    //
+    // The off arm comes round in front of the body, just under the shield
+    // arm in the draw order, and follows it: the same shoulder and elbow a
+    // hair behind, so the second hand closes on the back of the shield
+    // beside the first through the carry, the guard, the bash and the charge.
+    if (!a.offFront) {
+      a.offFront = true;
+      a.root.moveBelow(a.armOff.root, a.arm.root);
+      a.armOff.root.x = a.arm.root.x - 2.4;
+      a.armOff.root.y = a.arm.root.y + 1;
+    }
+    a.armOff.root.setVisible(true);
+    // lower than the shield hand, so it holds the bottom of the rim and the
+    // two hands read as two
+    a.armOff.root.setAngle(f.armA + 24);
+    a.armOff.fore.setAngle(f.elbowA - 12);
   } else {
+    // anything else is held in one hand, and the other goes back to the side
+    if (a.offFront) {
+      a.offFront = false;
+      a.guardUp = false;
+      a.root.moveBelow(a.armOff.root, a.torso as unknown as Phaser.GameObjects.Container);
+      a.armOff.root.x = a.offHome;
+      a.armOff.root.y = a.arm.root.y;
+    }
     a.armOff.root.setAngle(OFF_ARM_REST);
     a.armOff.fore.setAngle(-22);
   }
