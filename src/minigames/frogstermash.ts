@@ -1530,6 +1530,11 @@ export interface InFlight {
   stretch: number;
   /** Drawing only.  The sprite is hung off the shot so it can be destroyed. */
   art: Phaser.GameObjects.Container | null;
+  /**
+   * Drawing only.  Where a thrown WEAPON came to rest on the sand, so the
+   * sprite that flew can be the one that lies there -- see `retireShot`.
+   */
+  landed?: Dropped;
 }
 
 export interface Blow {
@@ -1868,10 +1873,10 @@ function groundShot(sh: InFlight, def: Fighter, ground: Dropped[], rng: () => nu
   // cap the oldest one nobody is walking towards sinks into the sand.
   if (ground.length >= GROUND_MAX) {
     const stale = ground.findIndex((g) => g.settle <= 0);
-    if (stale >= 0) { ground[stale].art?.destroy(); ground.splice(stale, 1); }
+    if (stale >= 0) { ground[stale].art?.destroy(); ground[stale].art = null; ground.splice(stale, 1); }
   }
   const past = sh.aim > sh.from ? 1 : -1;
-  ground.push({
+  const d: Dropped = {
     def: sh.weapon.def,
     piece: sh.weapon.piece,
     single: sh.weapon.single,
@@ -1881,7 +1886,9 @@ function groundShot(sh: InFlight, def: Fighter, ground: Dropped[], rng: () => nu
     life: Infinity,
     settle: PICKUP_WAIT,
     art: null,
-  });
+  };
+  ground.push(d);
+  sh.landed = d;
 }
 
 export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Math.random, ground: Dropped[] = []): Blow {
@@ -4972,11 +4979,29 @@ function drawFlight(f: Fighter): void {
   }
 }
 
-/** The shot arrived: take the sprite away, with a puff if it hit nothing. */
+/**
+ * The shot arrived: take the sprite away, with a puff if it hit nothing --
+ * unless it was a WEAPON, which is not used up by arriving.
+ */
 function retireShot(sh: InFlight, hit: boolean): void {
   const art = sh.art;
   if (!art) return;
   sh.art = null;
+  // ---- A THROWN WEAPON LANDS WHERE IT LIES, AND STAYS VISIBLE THERE.
+  //
+  // The rules put it on the sand as a pickup, but nothing drew it: the
+  // flying sprite faded out on arrival and the one on the ground was never
+  // made, so a thrown spear was lying there, perfectly real and perfectly
+  // invisible, until somebody walked over and picked up thin air.  The
+  // sprite that flew is the one that lands -- it drops, bounces once and
+  // settles flat where the rules put it, with the glint every weapon lying
+  // on the sand has.
+  const d = sh.landed;
+  if (d && !d.art && S()) {
+    d.art = art;
+    settleOnSand(d, art, art.x < d.x ? 1 : -1);
+    return;
+  }
   if (!hit) {
     S().tweens.add({ targets: art, y: FLOOR_Y - 2, angle: art.angle + 40, alpha: 0.6,
       duration: 220, ease: 'Quad.easeIn',
@@ -5035,6 +5060,54 @@ function showDisarm(f: Fighter, d: Dropped): void {
       });
     },
   });
+}
+
+/**
+ * A weapon sprite coming down onto the sand at `d.x`: one bounce, then flat,
+ * with a glint so it reads as something to pick up.  Shared by a weapon
+ * knocked out of a hand and a weapon thrown, so the two lie there the same.
+ */
+function settleOnSand(d: Dropped, art: Phaser.GameObjects.Container, dir: number): void {
+  art.setDepth(19);
+  const midX = art.x + (d.x - art.x) * 0.6;
+  S().tweens.add({
+    targets: art, x: midX, y: FLOOR_Y - 9, angle: art.angle + dir * 160, duration: 220, ease: 'Quad.easeOut',
+    onComplete: () => {
+      S().tweens.add({
+        targets: art, x: d.x, y: FLOOR_Y - 3, angle: dir > 0 ? 8 : -8, duration: 200, ease: 'Quad.easeIn',
+        onComplete: () => {
+          if (d.art !== art) return; // picked up on the way down
+          art.setPosition(d.x, FLOOR_Y - 3);
+          audio.sfx('item_thud', 0.3);
+          addGlint(d, art);
+        },
+      });
+    },
+  });
+}
+
+/** The glint on something lying on the sand; it goes when the sprite goes. */
+function addGlint(d: Dropped, art: Phaser.GameObjects.Container): void {
+  const glint = S().add.rectangle(d.x, FLOOR_Y - 7, 9, 1, PALETTE.bone).setDepth(20).setAlpha(0);
+  layer?.add(glint);
+  S().tweens.add({ targets: glint, alpha: 0.75, duration: 420, yoyo: true, repeat: -1 });
+  (art as unknown as { glint?: Phaser.GameObjects.Rectangle }).glint = glint;
+  art.once(Phaser.GameObjects.Events.DESTROY, () => glint.destroy());
+}
+
+/**
+ * NOTHING ON THE SAND IS INVISIBLE.  Anything the rules put there that has no
+ * sprite yet -- however it got there -- is drawn lying flat where it is.
+ */
+function drawGround(): void {
+  for (const d of ground) {
+    if (d.art) continue;
+    const art = buildWeapon(S(), d.def.key, PALETTE.bone, d.single && !!d.def.spec.paired);
+    art.setPosition(d.x, FLOOR_Y - 3).setAngle(8).setDepth(19);
+    layer?.add(art);
+    d.art = art;
+    addGlint(d, art);
+  }
 }
 
 /** Take the sprite and its glint away once somebody has it, or the sand does. */
@@ -5380,6 +5453,7 @@ function stepFight(real: number): void {
   }
   drawFlight(frog!);
   drawFlight(lizard!);
+  drawGround();
   for (const f of [frog!, lizard!]) {
     if (f.act === 'windup' && f.move?.anim === 'charge' && Math.random() < real * 22) chargeDust(f);
   }
