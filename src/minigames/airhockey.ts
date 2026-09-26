@@ -34,8 +34,41 @@ const KEEP_OFF = PAD_R + PUCK_R + 3;
 const MAX_SPEED = 520;
 // Hard tier: it reads the puck sooner and misjudges it less.  At 140ms/18px it
 // was a warm-up opponent; the cabinet costs five tokens now.
-const AI_REACTION_MS = 70;
-const AI_AIM_ERROR = 7;
+const AI_REACTION_MS = 66;
+const AI_AIM_ERROR = 6.8;
+/**
+ * How fast it can move its mallet.
+ *
+ * It was 150 against a puck that tops out at 520, so a well struck shot simply
+ * went past it -- the opponent could only ever cover a shot it was already
+ * standing in front of.
+ *
+ * TUNED BY MEASUREMENT, because "a little harder but not unbeatable" is a win
+ * rate and nothing else.  Against one fixed scripted player, held identical
+ * across every run:
+ *
+ *     150 / 70ms / 7px     player won 2 of 6, 19 goals for, 25 against
+ *     188 / 55ms / 5.5px   player won 0 of 6,  3 goals for, 30 against
+ *     164 / 63ms / 6.4px   player won 0 of 6,  5 goals for, 30 against
+ *
+ * The middle row is the warning: that is not a harder opponent, it is one you
+ * cannot score on, and it went in as an improvement before it was measured.
+ *
+ * The third row is a warning about the YARDSTICK.  That scripted player moves
+ * its mallet at about 186 px/s, so the win rate falls off a cliff exactly
+ * where the opponent's speed crosses the player's own -- which says more
+ * about the probe than about the game.  A hand on a mouse is far quicker than
+ * that, so the tuning here is deliberately a small step over the original and
+ * is checked against a faster probe player as well as the slow one:
+ *
+ *     158 / 66ms / 6.8px, probe player at 288 px/s
+ *         player won 1 of 6, 10 goals for, 27 against -- one of them 4-2
+ *
+ * Harder than it was, and still losable by the machine: there is a real win
+ * in there rather than a shutout.  If it wants softening, AI_SPEED is the
+ * dial -- it is the one that moved the numbers most.
+ */
+const AI_SPEED = 158;
 const TARGET_SCORE = 5;
 const TIME_CAP_MS = 180_000;
 
@@ -122,10 +155,17 @@ export const airHockey: MinigameModule = {
     // amber with a crest.  Built from the striker outward so the face rides
     // the mallet without a container to keep in step.
     aiPad = scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + 26, PAD_R, 0xc07a2e).setStrokeStyle(2, 0x6d4114, 0.9);
+    // A crest drawn as a bare triangle read as a loose yellow wedge stuck to
+    // the mallet rather than as part of anybody, so it is gone.  The lizard
+    // gets eyes instead -- slit ones, which is what tells it apart from the
+    // frog now that both of them have a face -- and they sit on the lower
+    // edge because it is looking DOWN the table at you.
     aiFace = [
       scene.add.circle(0, 0, PAD_R * 0.62, 0xe8a94e),
-      scene.add.circle(0, 0, PAD_R * 0.3, 0x6d4114),
-      scene.add.triangle(0, 0, 0, 6, 3, 0, 6, 6, 0xffd45e),
+      scene.add.circle(0, 0, 2.6, PALETTE.cream),
+      scene.add.circle(0, 0, 2.6, PALETTE.cream),
+      scene.add.rectangle(0, 0, 1.2, 3, PALETTE.black),
+      scene.add.rectangle(0, 0, 1.2, 3, PALETTE.black),
     ];
     pad = scene.add.circle(TABLE.x + TABLE.w / 2, TABLE.y + TABLE.h - 26, PAD_R, 0x3d7a42).setStrokeStyle(2, 0x24492a, 0.9);
     padFace = [
@@ -150,6 +190,39 @@ export const airHockey: MinigameModule = {
     text(scene, 8, 30, 'MOUSE', PALETTE.ash);
     text(scene, 8, 40, 'TO MOVE', PALETTE.ash);
     updateScore();
+
+    if (import.meta.env?.DEV) {
+      (window as unknown as Record<string, unknown>).__hockey = {
+        /**
+         * Enough to score a game from outside.  "A little more challenging but
+         * not unbeatable" is a claim about a win rate, and a win rate cannot be
+         * read off a screenshot.
+         */
+        state: () => ({
+          you: scoreP,
+          them: scoreA,
+          over,
+          frozen,
+          puck: puck ? { x: puck.x, y: puck.y } : null,
+          vel: { ...vel },
+          pad: pad ? { x: pad.x, y: pad.y } : null,
+          aiPad: aiPad ? { x: aiPad.x, y: aiPad.y } : null,
+          table: { ...TABLE },
+          padR: PAD_R,
+          target: TARGET_SCORE,
+        }),
+        /** Put the player's mallet somewhere, the way the mouse would. */
+        setPad: (x: number, y: number) => {
+          if (!pad) return;
+          pad.x = Phaser.Math.Clamp(x, TABLE.x + PAD_R, TABLE.x + TABLE.w - PAD_R);
+          pad.y = Phaser.Math.Clamp(y, TABLE.y + TABLE.h / 2 + PAD_R, TABLE.y + TABLE.h - PAD_R);
+          dressPads();
+        },
+      };
+      scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        delete (window as unknown as Record<string, unknown>).__hockey;
+      });
+    }
 
     // The opening face-off is the same three seconds as every restart.
     serve(1);
@@ -178,7 +251,7 @@ export const airHockey: MinigameModule = {
       followPointer(scene);
       keepOffPuck(pad);
       // The machine waits at its own end rather than crowding the spot.
-      const back = (150 * delta) / 1000;
+      const back = (AI_SPEED * delta) / 1000;
       aiPad.x += Phaser.Math.Clamp(TABLE.x + TABLE.w / 2 - aiPad.x, -back, back);
       aiPad.y += Phaser.Math.Clamp(TABLE.y + 26 - aiPad.y, -back, back);
       keepOffPuck(aiPad);
@@ -216,6 +289,17 @@ export const airHockey: MinigameModule = {
     // wanting the restart and being happy to let you take it.
     const dead = vel.x === 0 && vel.y === 0;
     const eager = openingDir > 0 ? 1 : 0.55;
+    // ---- IT CHASES THE PUCK ITSELF, and that turns out to be the right call.
+    //
+    // Predicting where the puck would CROSS ITS GOAL LINE and standing there
+    // was tried, and it made the opponent much worse: measured against the
+    // same scripted player it went from taking 4 games of 6 to losing 5 of 6,
+    // conceding 28 instead of 19.  The reason is that the mallet does not wait
+    // on its goal line -- it advances to meet the puck at roughly the puck's
+    // own height -- so aiming at the crossing point put it at the wrong x for
+    // the whole of the approach and only at the right one if the puck got all
+    // the way through.  Predicting a point you do not stand on is worse than
+    // covering the puck you can see.
     const wantX = dead
       ? puck.x + (Math.random() - 0.5) * AI_AIM_ERROR * 0.5
       : vel.y < 0
@@ -224,7 +308,7 @@ export const airHockey: MinigameModule = {
     const wantY = dead
       ? Math.min(puck.y - PAD_R * 0.4, TABLE.y + TABLE.h / 2 - PAD_R)
       : vel.y < 0 ? Math.min(seen.y + 10, TABLE.y + TABLE.h / 2 - PAD_R) : TABLE.y + 26;
-    const aiSpeed = dead ? 150 * eager : 150;
+    const aiSpeed = dead ? AI_SPEED * eager : AI_SPEED;
     const step = (aiSpeed * delta) / 1000;
     aiPad.x += Phaser.Math.Clamp(wantX - aiPad.x, -step, step);
     aiPad.y += Phaser.Math.Clamp(wantY - aiPad.y, -step, step);
@@ -399,11 +483,15 @@ function dressPads(): void {
     pupL.setPosition(pad.x - 3.2, pad.y - 3.6);
     pupR.setPosition(pad.x + 3.2, pad.y - 3.6);
   }
-  if (aiPad && aiFace.length === 3) {
-    const [belly, snout, crest] = aiFace as Array<Phaser.GameObjects.Arc & { setPosition(x: number, y: number): unknown }>;
+  if (aiPad && aiFace.length === 5) {
+    const [belly, eyeL, eyeR, pupL, pupR] = aiFace as Array<
+      Phaser.GameObjects.GameObject & { setPosition(x: number, y: number): unknown }
+    >;
     belly.setPosition(aiPad.x, aiPad.y - 1);
-    snout.setPosition(aiPad.x, aiPad.y + 2);
-    crest.setPosition(aiPad.x - 3, aiPad.y - PAD_R - 1);
+    eyeL.setPosition(aiPad.x - 3.2, aiPad.y + 3);
+    eyeR.setPosition(aiPad.x + 3.2, aiPad.y + 3);
+    pupL.setPosition(aiPad.x - 3.2, aiPad.y + 3.4);
+    pupR.setPosition(aiPad.x + 3.2, aiPad.y + 3.4);
   }
 }
 

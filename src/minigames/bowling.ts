@@ -280,6 +280,16 @@ let turn: Turn = 'player';
 let scores = { player: 0, cpu: 0 };
 let standingBefore = 10;
 let settleMs = 0;
+/**
+ * WHAT THE LAST COMPLETED BALL DID, recorded before the deck is re-racked.
+ *
+ * A harness cannot read this off anything else.  `standing` is 10 again by the
+ * time the deck has settled, and the turn passes to the other side after the
+ * second ball whether the rack went down or not -- so "the frame ended" does
+ * not mean "the rack was cleared", and a test that assumed it did was asking
+ * the scoreboard to confirm itself.
+ */
+let lastRoll: { knocked: number; cleared: boolean; strike: boolean; spare: boolean; ballNo: number } | null = null;
 let over = false;
 let best = 0;
 let keys: Record<'left' | 'right' | 'aimL' | 'aimR' | 'hookL' | 'hookR', Phaser.Input.Keyboard.Key[]> = {
@@ -354,6 +364,7 @@ export const bowling: MinigameModule = {
     turn = 'player';
     scores = { player: 0, cpu: 0 };
     settleMs = 0;
+    lastRoll = null;
     over = false;
     best = store.highScore(ID);
 
@@ -601,6 +612,7 @@ export const bowling: MinigameModule = {
            * scoreboard from before the roll it just threw.
            */
           settling: settleMs > 0,
+          lastRoll: lastRoll ? { ...lastRoll } : null,
           best,
           hook,
           curve,
@@ -706,105 +718,142 @@ export const bowling: MinigameModule = {
 };
 
 /**
- * A SUNNY GARDEN, BUILT BACK TO FRONT.
+ * A SUNNY GARDEN, SEEN FROM DIRECTLY ABOVE.
  *
- * Sky, then the far treeline, then the hedge, then the lawn the lane is laid
- * on, then the planting either side of it.  Every layer is warmer and a shade
- * lighter than the one behind it, which is the whole of how depth happens on
- * a flat canvas.
+ * The lane, the gutters, the pins and the ball have always been drawn in
+ * plan -- you look straight down at the boards and the rack.  The garden
+ * around them was drawn in ELEVATION: sky along the top, a sun, clouds, a
+ * horizon, a treeline, a hedge, then trees standing up on trunks with their
+ * canopies above them.  Two cameras in one picture, and the join was the
+ * horizon line running across the middle of the screen.
  *
- * Anything that should move in the breeze is pushed onto `sway` with a
- * `give` -- how far the wind bends it -- so one loop in `update` animates the
- * lot and a leaf and a tree branch lean by the same wind at different
- * amounts.  Trunks have no give; blossom has a lot.
+ * So there is no sky here and no horizon.  The whole frame is ground, lit
+ * from above, and everything on it is drawn as the shape it makes when you
+ * look down at it: a tree is a crown with its shadow beside it, a flower is a
+ * disc of petals with no stem, a bush is a clump, the stone frogs are seen
+ * from over their backs.  Nothing has a side.
+ *
+ * The one thing that carries over untouched is the wind.  Anything that
+ * should move is pushed onto `sway` with a `give` -- how far the breeze bends
+ * it -- so the same loop in `update` still animates the lot, and grass still
+ * whips while a crown barely stirs.
+ *
+ * NOTHING IN HERE IS READ BY THE GAME.  Not the ball, not the pins, not the
+ * oil, not the scoring.
  */
 function garden(scene: Phaser.Scene): void {
   const bend = (o: Phaser.GameObjects.GameObject & { x: number; angle: number }, give: number): void => {
     sway.push({ art: o, x0: o.x, give, phase: Math.random() * Math.PI * 2 });
   };
-  // ---- SKY, warm at the horizon and deeper overhead.
-  scene.add.rectangle(0, 18, GAME_W, 162, 0x7cc4ea).setOrigin(0, 0);
-  scene.add.rectangle(0, 18, GAME_W, 26, 0x62b2e2).setOrigin(0, 0);
-  scene.add.rectangle(0, 58, GAME_W, 22, 0x9fd6ee).setOrigin(0, 0).setAlpha(0.7);
-  // the sun, off to one side, with its glare
-  scene.add.circle(268, 40, 26, 0xfff6c8).setAlpha(0.14);
-  scene.add.circle(268, 40, 16, 0xfff6c8).setAlpha(0.3);
-  scene.add.circle(268, 40, 9, 0xfffdf0).setAlpha(0.95);
-  for (const [cx, cy, cw] of [[40, 34, 34], [120, 28, 24], [210, 44, 28], [292, 62, 20]] as const) {
-    for (let i = 0; i < 4; i++) {
-      const c = scene.add.ellipse(cx + (i - 1.5) * (cw / 4), cy + (i % 2) * 2, cw / 2 + i, 6, 0xffffff).setAlpha(0.8);
-      bend(c, 0.25);
-    }
+  /** A cast shadow, down and right of the thing casting it, because the sun is up and behind. */
+  const shade = (x: number, y: number, w: number, h: number, a = 0.18): void => {
+    scene.add.ellipse(x + w * 0.16, y + h * 0.26, w, h, 0x1d3a22).setAlpha(a);
+  };
+
+  // ---- THE GROUND.  One surface, corner to corner, no horizon anywhere.
+  scene.add.rectangle(0, 18, GAME_W, 162, 0x54964f).setOrigin(0, 0);
+  // Mown stripes run ALONG the lane, which is the way a mower would take
+  // them -- and from above they are bands laid across the grass rather than
+  // bands stacked up a wall, which is what gave the old sky its horizon.
+  for (let i = 0; i < 17; i++) {
+    scene.add.rectangle(i * 20, 18, 10, 162, i % 2 ? 0x4d8c49 : 0x5c9f56).setOrigin(0, 0).setAlpha(0.5);
   }
-  // ---- THE FAR TREELINE: three bands, each nearer and greener.
-  scene.add.rectangle(0, 74, GAME_W, 16, 0x4d7f57).setOrigin(0, 0);
-  for (let i = 0; i < 26; i++) {
-    const t = scene.add.ellipse((i * 13) % (GAME_W + 12) - 6, 76 + (i % 3) * 2, 18 + (i % 4) * 5, 13, i % 2 ? 0x437349 : 0x4f8355);
-    bend(t, 0.5);
-  }
-  scene.add.rectangle(0, 86, GAME_W, 12, 0x3c6b45).setOrigin(0, 0);
-  // ---- THE HEDGE behind the pin end.
-  scene.add.rectangle(0, 92, GAME_W, 14, 0x2f5a37).setOrigin(0, 0);
-  for (let i = 0; i < 30; i++) {
-    const h = scene.add.ellipse((i * 11) % (GAME_W + 10) - 5, 93 + (i % 2) * 3, 14, 10, i % 3 ? 0x376542 : 0x2b5233);
-    bend(h, 0.7);
-  }
-  scene.add.rectangle(0, 104, GAME_W, 2, 0x24462c).setOrigin(0, 0);
-  // ---- THE LAWN the whole thing stands on.
-  scene.add.rectangle(0, 100, GAME_W, 80, 0x54964f).setOrigin(0, 0);
-  scene.add.rectangle(0, 100, GAME_W, 3, 0x66ab5c).setOrigin(0, 0).setAlpha(0.7);
-  // mown stripes, because a kept lawn has them
-  for (let i = 0; i < 9; i++) {
-    scene.add.rectangle(0, 106 + i * 9, GAME_W, 5, i % 2 ? 0x4d8c49 : 0x5a9e54).setOrigin(0, 0).setAlpha(0.55);
-  }
-  // grass tufts, thickest at the edges where nobody walks
-  for (let i = 0; i < 90; i++) {
+  // NO PATCHES ON THE GRASS.  There were four soft tonal ovals for sunlight
+  // and two brown ones for worn earth, and on a flat green lawn seen from
+  // above none of them read as light or as bare ground -- they read as
+  // SPILLS, dark stains soaked into the turf.  A lawn is allowed to be an
+  // even lawn; the mown stripes already keep it from being a flat field of
+  // one colour.
+
+  // ---- GRASS, everywhere the lane is not.  From above a blade is a short
+  // mark on the ground rather than a spike standing up off a skyline.
+  for (let i = 0; i < 150; i++) {
     const gx = (i * 37 + (i % 7) * 5) % GAME_W;
-    if (gx > LANE_L - 26 && gx < LANE_L + LANE_W + 26) continue;
-    const g = scene.add.rectangle(gx, 108 + ((i * 23) % 68), 1, 3 + (i % 3), 0x6fb862).setOrigin(0.5, 1).setAlpha(0.85);
+    if (gx > LANE_L - 22 && gx < LANE_L + LANE_W + 22) continue;
+    const g = scene.add.rectangle(gx, 22 + ((i * 23) % 154), 1, 2.4 + (i % 3), 0x6fb862)
+      .setOrigin(0.5, 0.5).setAlpha(0.8).setAngle((i % 5) * 14 - 28);
     bend(g, 2.2);
   }
-  // ---- TREES either side, behind the lane, with a trunk that does not move
-  // and a canopy that does.
-  for (const [tx, scale] of [[16, 1], [300, 1], [46, 0.72], [274, 0.72]] as const) {
-    scene.add.rectangle(tx, 96, 5 * scale, 34 * scale, 0x5a3f25).setOrigin(0.5, 0);
-    scene.add.rectangle(tx - 1.5 * scale, 96, 1.5 * scale, 34 * scale, 0x6e4f2f).setOrigin(0.5, 0).setAlpha(0.8);
-    for (const [ox, oy, r, col] of [[0, -6, 17, 0x3f7a46], [-9, 0, 13, 0x4a8c50], [9, -2, 13, 0x4a8c50], [0, -14, 12, 0x5a9e5c]] as const) {
-      const cup = scene.add.circle(tx + ox * scale, 96 + oy * scale, r * scale, col);
-      bend(cup, 1.5 + r * 0.05);
+
+  // ---- TREES, AS CROWNS.  A trunk seen from directly above is a dot in the
+  // middle of its own canopy, so that is all it gets: the crown is the tree.
+  for (const [tx, ty, scale] of [
+    [22, 46, 1], [298, 52, 1], [30, 132, 0.8], [292, 140, 0.86], [54, 22, 0.66], [268, 26, 0.7],
+  ] as const) {
+    shade(tx, ty, 34 * scale, 30 * scale, 0.2);
+    // the crown: overlapping lobes, darkest at the rim and lit in the middle
+    for (const [ox, oy, r, col] of [
+      [0, 0, 16, 0x3f7a46], [-8, -5, 11, 0x477f4c], [8, -4, 11, 0x477f4c],
+      [-6, 7, 10, 0x3a7041], [7, 7, 10, 0x3a7041], [0, -2, 10, 0x4f8f54], [-2, -4, 6, 0x5da45f],
+    ] as const) {
+      const cup = scene.add.circle(tx + ox * scale, ty + oy * scale, r * scale, col);
+      bend(cup, 0.9 + r * 0.03);
     }
-    // blossom, which is the lightest thing in the picture and moves most
-    for (let i = 0; i < 7; i++) {
-      const bl = scene.add.circle(tx + (Math.random() - 0.5) * 30 * scale, 84 + Math.random() * 22, 1.6, i % 2 ? 0xffd6e8 : 0xfff0c9).setAlpha(0.9);
-      bend(bl, 3.2);
+    // the trunk, glimpsed through the leaves at the very centre
+    scene.add.circle(tx, ty, 2.2 * scale, 0x5a3f25).setAlpha(0.75);
+    // blossom on top of the crown, the lightest thing in the picture
+    for (let i = 0; i < 8; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const rr = Math.random() * 15 * scale;
+      const bl = scene.add.circle(tx + Math.cos(a) * rr, ty + Math.sin(a) * rr, 1.5,
+        i % 2 ? 0xffd6e8 : 0xfff0c9).setAlpha(0.9);
+      bend(bl, 2.4);
     }
   }
-  // ---- FLOWER BEDS along the approach, clear of the lane itself.
+
+  // ---- FLOWER BEDS.  No stems: from above a flower is its own face.
   const PETAL = [0xff8fb1, 0xffd45e, 0xd08cf0, 0xff9a52, 0xfff0f5];
-  for (let i = 0; i < 34; i++) {
-    const side = i % 2 ? -1 : 1;
-    const fx = LANE_L + (side < 0 ? -14 - ((i * 7) % 26) : LANE_W + 14 + ((i * 7) % 26));
-    const fy = 112 + ((i * 19) % 62);
-    const stem = scene.add.rectangle(fx, fy, 1, 5, 0x3f7a46).setOrigin(0.5, 1);
-    const head = scene.add.circle(fx, fy - 5, 2.2, PETAL[i % PETAL.length]);
-    const eye = scene.add.circle(fx, fy - 5, 0.9, 0xfff6c8);
-    bend(stem, 2.6); bend(head, 2.9); bend(eye, 2.9);
+  for (const [bx, by, bw, bh] of [
+    [62, 78, 44, 26], [258, 88, 44, 26], [70, 168, 40, 18], [252, 166, 40, 18],
+  ] as const) {
+    // and no bed of turned soil under them either, for the same reason: a
+    // brown oval on grass is a stain.  The flowers simply grow where they grow.
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const fx = bx + Math.cos(a) * (Math.random() * (bw / 2 - 3));
+      const fy = by + Math.sin(a) * (Math.random() * (bh / 2 - 2));
+      const head = scene.add.circle(fx, fy, 2.1, PETAL[i % PETAL.length]);
+      const eye = scene.add.circle(fx, fy, 0.85, 0xfff6c8);
+      bend(head, 1.4); bend(eye, 1.4);
+    }
   }
-  // ---- BUSHES at the corners, and a couple of garden ornaments.
-  for (const [bx, by, bw] of [[10, 150, 22], [GAME_W - 10, 150, 22], [8, 118, 16], [GAME_W - 8, 118, 16]] as const) {
+
+  // ---- BUSHES, which from above are clumps with a shadow under the rim.
+  for (const [bx, by, bw] of [
+    [12, 96, 20], [GAME_W - 12, 100, 20], [16, 172, 18], [GAME_W - 16, 172, 18], [96, 34, 16], [224, 172, 16],
+  ] as const) {
+    shade(bx, by, bw + 4, bw * 0.7, 0.16);
     for (let i = 0; i < 5; i++) {
-      const bb = scene.add.ellipse(bx + (i - 2) * (bw / 5), by - (i % 2) * 3, bw / 2, 9, i % 2 ? 0x3f7a46 : 0x356b3c);
+      const bb = scene.add.ellipse(bx + (i - 2) * (bw / 5.5), by + ((i % 2) - 0.5) * 4, bw / 2.2, bw / 2.6,
+        i % 2 ? 0x3f7a46 : 0x356b3c);
       bend(bb, 1.1);
     }
   }
-  // a little stone frog on a plinth, because it is his garden
-  for (const px of [30, GAME_W - 30]) {
-    scene.add.rectangle(px, 170, 12, 5, 0x9a9384).setOrigin(0.5, 1);
-    scene.add.ellipse(px, 164, 10, 7, 0xb3ad9d);
-    scene.add.ellipse(px - 2.4, 161, 3, 3, 0xc8c3b4);
-    scene.add.ellipse(px + 2.4, 161, 3, 3, 0xc8c3b4);
-    scene.add.rectangle(px - 2.4, 161, 1, 1.4, 0x6b665c);
-    scene.add.rectangle(px + 2.4, 161, 1, 1.4, 0x6b665c);
+
+  // ---- STEPPING STONES down each side of the approach.
+  for (const sx of [LANE_L - 34, LANE_L + LANE_W + 34]) {
+    for (let i = 0; i < 5; i++) {
+      const sy = 46 + i * 28;
+      scene.add.ellipse(sx + 1, sy + 1, 13, 10, 0x1d3a22).setAlpha(0.16);
+      scene.add.ellipse(sx, sy, 13, 10, 0x9a9384);
+      scene.add.ellipse(sx - 1, sy - 1, 8, 6, 0xb3ad9d).setAlpha(0.7);
+    }
+  }
+
+  // ---- THE STONE FROGS, over their backs.  They used to be an ornament on a
+  // plinth seen from the side; from up here you get the top of the animal.
+  for (const [px, py] of [[34, 64], [GAME_W - 34, 116]] as const) {
+    scene.add.ellipse(px + 2, py + 2, 16, 13, 0x1d3a22).setAlpha(0.2);
+    scene.add.ellipse(px, py, 15, 12, 0x9a9384);
+    scene.add.ellipse(px, py - 1, 11, 8, 0xb3ad9d);
+    // the two eye bumps, which are all you see of a frog's face from above
+    scene.add.ellipse(px - 3.2, py - 4, 3.4, 3, 0xc8c3b4);
+    scene.add.ellipse(px + 3.2, py - 4, 3.4, 3, 0xc8c3b4);
+    scene.add.circle(px - 3.2, py - 4.4, 1, 0x6b665c);
+    scene.add.circle(px + 3.2, py - 4.4, 1, 0x6b665c);
+    // and the back legs folded either side
+    scene.add.ellipse(px - 6, py + 3, 5, 7, 0x8e887a);
+    scene.add.ellipse(px + 6, py + 3, 5, 7, 0x8e887a);
   }
 }
 
@@ -846,7 +895,7 @@ function stepGarden(dt: number): void {
   if (Math.random() < dt * (1.1 + gust * 3)) {
     const leaf = scene0.add.ellipse(
       breeze >= 0 ? -4 : GAME_W + 4,
-      100 + Math.random() * 70,
+      26 + Math.random() * 148,
       3.4, 2, Math.random() < 0.5 ? 0x6fb862 : 0xd8b45a,
     // Depth 4: above the lane and the water, BELOW the ball at 20 and the
     // pins at 18.  A leaf is scenery and must never be mistaken for something
@@ -1271,6 +1320,7 @@ function endRoll(): void {
   const cleared = standing === 0;
   const strike = cleared && ballNo === 1;
   const spare = cleared && ballNo > 1;
+  lastRoll = { knocked, cleared, strike, spare, ballNo };
   if (strike || spare) {
     scores[turn] += strike ? STRIKE_BONUS : SPARE_BONUS;
     callIt(strike ? `STRIKE!  +${STRIKE_BONUS}` : `SPARE  +${SPARE_BONUS}`, strike);

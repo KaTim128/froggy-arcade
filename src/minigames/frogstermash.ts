@@ -3074,9 +3074,22 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // torso left a muscular lizard's chest sticking out past a standard-issue
   // breastplate, which reads as a bug rather than as a bigger animal.
   const cuirass = scene.add.rectangle(0, -19 * tall - lift, (frog ? 17 : 15) * wide, 15 * tall, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
-  // shoulders and a belt, so the breastplate is worn rather than held up
-  const pauldL = scene.add.ellipse(-8 * wide, -26 * tall - lift, 8 * wide, 6, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
-  const pauldR = scene.add.ellipse(8 * wide, -26 * tall - lift, 8 * wide, 6, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
+  // ---- THE SHOULDER PLATES ARE WORN ON THE ARMS, not parked beside them.
+  //
+  // These used to be two ellipses pinned at a fixed spot on the torso and
+  // pushed into `parts` as SIBLINGS of `arm.root`.  The arm swings -- through
+  // a wind-up, a strike, a guard, a throw, every one of which turns the
+  // shoulder -- and the plate that is supposed to be strapped to it stayed
+  // exactly where it was, square to the camera, while the limb rotated out
+  // from under it.  That is the whole of why the armour looked stuck on the
+  // screen rather than worn by the animal.
+  //
+  // They are built here, with the rest of the body armour, so they keep the
+  // material's colour and the `wears` test -- and then handed to the arms
+  // below, which is where they are actually attached.  Same for Froggy and
+  // for a lizard: both are built by this function.
+  const pauldL = scene.add.ellipse(0.6, -2.2, 8 * wide, 6, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
+  const pauldR = scene.add.ellipse(0.6, -2.2, 8 * wide, 6, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
   const belt = scene.add.rectangle(0, -12 * tall - lift, (frog ? 18 : 16) * wide, 3, B.edge).setVisible(wears(B));
   const ridge = scene.add.rectangle(0, -20 * tall - lift, (frog ? 15 : 13) * wide, 1, B.edge).setAlpha(0.7).setVisible(wears(B));
   // ---- WHAT THE ARMOUR IS MADE OF, and not only what colour it is.
@@ -3091,8 +3104,12 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const cuirassLow = scene.add.rectangle(0, -13.5 * tall - lift, (frog ? 16 : 14) * wide, 2, down(B.colour, 0.45))
     .setAlpha(0.55).setVisible(wears(B));
   armourDetail.push(cuirassLit, cuirassLow);
-  if (g > 0.3) armourDetail.push(scene.add.rectangle(-4 * wide, -21 * tall - lift, 2, 8 * tall, up(B.colour, 0.55))
-    .setAlpha(g).setVisible(wears(B)).setAngle(-8));
+  // THE BAR DOWN THE FRONT OF THE CHEST IS GONE.  It was meant to be a sheen
+  // on polished plate, but a two pixel upright rectangle tilted eight degrees
+  // in the middle of a breastplate does not read as light on steel -- it
+  // reads as a loose piece of something floating in front of the fighter,
+  // which is exactly what it was reported as.  The top and bottom banding
+  // above already says hard metal without putting a shape on the chest.
 
   // ---- THE CREST, the other half of LIZARD
   // Six spines rather than four, biggest at the shoulders and tapering down
@@ -3262,6 +3279,12 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   };
   const armOff = buildArm(true);
   const arm = buildArm(false);
+  // Strapped on: inside the shoulder container, so every turn of the arm
+  // carries the plate with it and the two can never come apart.  `root` is the
+  // shoulder joint itself, so the plate sits just above and slightly along
+  // the upper arm -- where a pauldron is buckled.
+  armOff.root.add(pauldL);
+  arm.root.add(pauldR);
   const weapon = buildWeapon(scene, f.weapon.key, light, f.single);
   // In the hand, which is inside the FOREARM -- so the elbow swings the
   // weapon the way a wrist and an elbow actually do, instead of the whole
@@ -3278,7 +3301,8 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   parts.push(legL, legR, ...legDetail, greaveL, greaveR, kneeL, kneeR);
   parts.push(...spines);
   parts.push(armOff.root);
-  parts.push(torso, belly, ...bodyDetail, cuirass, ridge, belt, ...armourDetail, arm.root, pauldL, pauldR);
+  // The pauldrons are NOT in here: they live inside the two arm rigs now.
+  parts.push(torso, belly, ...bodyDetail, cuirass, ridge, belt, ...armourDetail, arm.root);
   // ---- THE HEAD MOVES AS A HEAD.
   //
   // A duck used to be done by setting head.y and helm.y, which was already a
