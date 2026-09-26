@@ -408,17 +408,28 @@ function hopTravel(u0: number, du: number): number {
  * gone the frogs stop looking out of the screen at the person betting on them
  * and start looking down the track they are running along.
  */
+/*
+ * FACING THE PLAYER.  The frogs were turned to profile to run down the
+ * track; they are turned back to face the people betting on them, as asked --
+ * two eyes up on top of the head, a smile across the face, a cheek either
+ * side -- and they still hop down the lane to the right.
+ */
+/** How big a frog is drawn, and where its feet are, which stay put. */
+const FROG_S = 0.8;
+const FROG_FOOT = 7;
+// big eyes on a small frog: the cute ratio
 const EYES = [
-  { x: 5.4, y: -6.9, r: 3.8 },
+  { x: -3.9, y: -8, r: 3.6 },
+  { x: 3.9, y: -8, r: 3.6 },
 ];
-const MOUTH_X = 8.2;
-const MOUTH_Y = -2.3;
+const MOUTH_X = 0;
+const MOUTH_Y = -2.2;
 const BROW_Y = -10.6;
 
 const FOOT = 6; // where a frog's feet are, in its own drawing
 /** Where each leg hangs off the body, in the frog's own drawing. */
-const REAR_LEG = { x: -6.4, y: 6.0 };
-const FORE_LEG = { x: 5.8, y: 6.0 };
+const REAR_LEG = { x: 0, y: 5.4 };
+const FORE_LEG = { x: 0, y: 6.4 };
 
 /**
  * WHAT THE LEGS DO OVER ONE HOP.
@@ -468,13 +479,14 @@ function hopPose(u: number): { sx: number; sy: number; rot: number } {
     const a = (u - TAKEOFF) / (LAND - TAKEOFF);
     const v = 1 - 2 * a; // +1 leaving the ground, 0 at the top, -1 coming down
     const rise = Math.abs(v);
-    return { sx: 1 - 0.13 * rise, sy: 1 + 0.2 * rise, rot: -0.3 * v };
+    // facing the player there is no nose to pitch up; it rocks a little
+    return { sx: 1 - 0.13 * rise, sy: 1 + 0.2 * rise, rot: -0.07 * v };
   }
   const groundSpan = 1 - LAND + TAKEOFF;
   const gp = (u >= LAND ? u - LAND : u + 1 - LAND) / groundSpan;
   // 0.66 flat on impact, up to 0.88 as it absorbs, back to 0.74 as it coils
   const sy = gp < 0.45 ? 0.66 + (0.22 * gp) / 0.45 : 0.88 - (0.14 * (gp - 0.45)) / 0.55;
-  return { sx: 1 + (1 - sy) * 0.85, sy, rot: -0.12 * gp };
+  return { sx: 1 + (1 - sy) * 0.85, sy, rot: -0.03 * gp };
 }
 /**
  * ================= WHAT HAPPENS TO FROGS =================
@@ -1583,6 +1595,8 @@ export const frogRace: MinigameModule = {
       // front of the other rather than as two shapes fighting.  Height still
       // wins over lane, because a frog in the air is nearer than either.
       body.setDepth(r.going === 'taken' ? 39 : 10 + r.i * 0.6 + Math.min(8, r.lift / 2.5));
+      /** Legs flung out wide, 0 to 1: set by a fall, read by the legs below. */
+      let splay = 0;
 
       if (r.going === 'hole') {
         // Down in a hole: sunk to the shoulders, and scrabbling.
@@ -1590,30 +1604,31 @@ export const frogRace: MinigameModule = {
         body.setRotation(0);
         body.y = laneY + 3 + Math.sin(clock / 60) * 0.6;
       } else if (r.going === 'slip') {
-        // ---- THE SLIP, IN FOUR BEATS.
+        // ---- THE SLIP: FEET OUT, BUMP, SIT, UP.
         //
-        // It used to be one number: a single `fallen` that the whole pose was
-        // multiplied by, so the frog tipped over and came back up along
-        // exactly the same line.  A slip is not symmetrical.  It is a
-        // WOBBLE -- the feet go and the body fights it -- then a LANDING, then
-        // a SLIDE along the ground, then a SCRAMBLE back onto its feet.
+        // It used to tip the frog fifty degrees onto its side, which on a
+        // frog drawn face-on is not a fall -- it is the whole picture rotated,
+        // and at this size a rotated sprite is a smear.  A frog that slips
+        // does what anything with its feet taken away does: a wobble as the
+        // feet go, down onto its bottom with a bump and a little bounce, legs
+        // shot out either side, a dazed sit -- then a hop back up.
         //
         // `p` runs 0 to 1 across the whole thing, so every beat below is a
         // slice of one clock and none of them can drift out of step.
         const p = Phaser.Math.Clamp(1 - r.stuck / SLIP_S, 0, 1);
-        const wobble = Math.min(1, p / 0.18);
-        const down = ease(Math.min(1, Math.max(0, (p - 0.1) / 0.25)));
-        const slide = Phaser.Math.Clamp((p - 0.35) / 0.3, 0, 1);
-        const up = ease(Phaser.Math.Clamp((p - 0.62) / 0.38, 0, 1));
-        const flat = down - up;
-        // the feet going: a fast shudder that dies as it actually falls
-        const teeter = Math.sin(p * 34) * 0.26 * wobble * (1 - down);
-        // on its side, squashed along the ground, easing off as it slides out
-        body.setScale(1 + 0.34 * flat - 0.08 * slide * (1 - up), 1 - 0.52 * flat);
-        // Rotation is carried THROUGH: it keeps turning as it slides instead
-        // of unwinding back the way it came, so it gets up facing forwards.
-        body.setRotation(teeter + 0.92 * flat + 0.18 * slide * (1 - up) - 0.12 * up * (1 - up) * 4);
-        body.y = laneY + 3.4 * flat + Math.sin(up * Math.PI) * -1.5;
+        const wobble = Math.min(1, p / 0.16) * (1 - Math.min(1, Math.max(0, (p - 0.16) / 0.06)));
+        const drop = ease(Phaser.Math.Clamp((p - 0.14) / 0.12, 0, 1));
+        const bounce = Math.sin(Phaser.Math.Clamp((p - 0.26) / 0.14, 0, 1) * Math.PI);
+        const up = ease(Phaser.Math.Clamp((p - 0.74) / 0.26, 0, 1));
+        const sit = drop * (1 - up);
+        const hop = Math.sin(up * Math.PI);
+        splay = sit;
+        body.setScale(
+          1 + 0.24 * sit - 0.1 * bounce - 0.08 * hop,
+          1 - 0.3 * sit + 0.12 * bounce + 0.14 * hop,
+        );
+        body.setRotation(Math.sin(p * 38) * 0.22 * wobble + Math.sin(clock / 120) * 0.06 * sit * (1 - bounce));
+        body.y = laneY + 3 * sit - 2 * bounce - 2.5 * hop;
       } else if (r.going === 'falling') {
         // ---- COMING DOWN OUT OF THE SKY.
         //
@@ -1628,9 +1643,15 @@ export const frogRace: MinigameModule = {
         const f = r.fell;
         body.setPosition(START_X + r.x, laneY - r.lift);
         // stretched out at the top of the fall, bracing as the ground arrives
-        const brace = ease(Math.max(0, (f - 0.62) / 0.38));
-        body.setScale(0.9 + 0.22 * brace, 1.16 - 0.3 * brace);
-        body.setRotation(-0.5 + f * f * 5.2 + Math.sin(clock / 40) * 0.12);
+        //
+        // It does not spin.  A face-on frog turned end over end is a smear,
+        // not a frog: it comes down the right way up in a starfish, legs
+        // flung out and kicking, rocking side to side, and tucks up to brace
+        // as the ground arrives.
+        const brace = ease(Math.max(0, (f - 0.7) / 0.3));
+        splay = 1 - brace;
+        body.setScale(0.94 + 0.16 * brace, 1.1 - 0.22 * brace);
+        body.setRotation(Math.sin(clock / 85) * 0.3 * (1 - brace));
       } else if (r.going === 'flutter') {
         // ---- WATCHING THE BUTTERFLY.
         //
@@ -1669,13 +1690,25 @@ export const frogRace: MinigameModule = {
         // sits up and sways while it sees stars, and over the last beat it
         // straightens out -- so it is running again from a frog that got up,
         // not from a pose that vanished.
+        //
+        // The landing has a BOUNCE in it: flat on impact, a little rebound
+        // hop off the grass, a second smaller squash to settle, then the
+        // dazed sway.  One squash and straight into swaying read as the frog
+        // being stamped flat rather than dropped.
         const left = r.stuck / DIZZY_S;
-        const splat = ease(Math.min(1, (1 - left) * 8));
+        const t = 1 - left;
+        const splat = 1 - ease(Math.min(1, t / 0.1));
+        const rebound = Math.sin(Phaser.Math.Clamp((t - 0.06) / 0.14, 0, 1) * Math.PI);
+        const settle = Math.sin(Phaser.Math.Clamp((t - 0.2) / 0.08, 0, 1) * Math.PI);
         const up = ease(Math.max(0, (0.28 - left) / 0.28));
-        const sway = Math.sin(clock / 105) * (1 - up);
-        body.setScale(1.3 - 0.3 * splat + 0.1 * (1 - up) * 0, 0.55 + 0.35 * splat);
-        body.setRotation(sway * 0.22);
-        body.y = laneY + 3 * (1 - up) + 1.5 * (1 - splat);
+        const sway = Math.sin(clock / 105) * (1 - up) * (t > 0.28 ? 1 : 0);
+        splay = Math.max(splat, settle * 0.5);
+        body.setScale(
+          1 + 0.36 * splat - 0.08 * rebound + 0.14 * settle + 0.06 * (1 - up),
+          1 - 0.42 * splat + 0.14 * rebound - 0.16 * settle - 0.08 * (1 - up),
+        );
+        body.setRotation(sway * 0.16);
+        body.y = laneY + 3 * splat - 4 * rebound + 1.4 * settle + 1.2 * (1 - up) * (t > 0.28 ? 1 : 0);
       } else if (r.going === 'sleep') {
         // ---- ASLEEP, and waking up out of it.  Sat back on its haunches,
         // breathing slowly, then a stretch and a shake in the last beat so it
@@ -1799,7 +1832,9 @@ export const frogRace: MinigameModule = {
       let paddle = 0;
       if (r.lift < prevLift - 0.02 && r.lift > 1 && r.going !== 'taken') {
         const high = Phaser.Math.Clamp(r.lift / BALLOON_H, 0, 1);
-        body.setRotation(body.rotation + Math.sin(clock / 46) * 0.42 * high);
+        // the bird's drop draws its own rock (see `falling`); anything else
+        // coming down gets this one
+        if (r.going !== 'falling') body.setRotation(body.rotation + Math.sin(clock / 46) * 0.3 * high);
         paddle = 1 + high * 2.4;
       }
 
@@ -1815,10 +1850,18 @@ export const frogRace: MinigameModule = {
         const lp = legPose(r.hop);
         const kickA = paddle > 0 ? Math.sin(clock / 34) * paddle : 0;
         const kickB = paddle > 0 ? Math.sin(clock / 34 + 2.1) * paddle : 0;
-        legRear.setPosition(REAR_LEG.x + lp.rear.x + kickA, REAR_LEG.y + lp.rear.y - Math.abs(kickA) * 0.4);
-        legRear.setRotation(lp.rear.a + kickA * 0.22);
-        legFore.setPosition(FORE_LEG.x + lp.fore.x + kickB, FORE_LEG.y + lp.fore.y - Math.abs(kickB) * 0.4);
-        legFore.setRotation(lp.fore.a + kickB * 0.22);
+        // Seen from the front, the big back legs are a pair out either side:
+        // they drive DOWN and splay on the push, fold up tight at the top of
+        // the hop, and splay again to take the landing.  The front feet do the
+        // same under the chest, smaller.
+        // `splay` flings both pairs out wide: a frog sat down hard, or one
+        // coming down out of the sky in a starfish.
+        legRear.setPosition(REAR_LEG.x + kickA * 0.5, REAR_LEG.y + lp.rear.y * 1.2 * (1 - splay) - Math.abs(kickA) * 0.4 - splay * 1.2);
+        legRear.setScale((1 + lp.rear.x * 0.06 + Math.abs(lp.rear.a) * 0.1) * (1 + 0.32 * splay), 1 - 0.12 * splay);
+        legRear.setRotation(kickA * 0.18);
+        legFore.setPosition(FORE_LEG.x + kickB * 0.4, FORE_LEG.y + lp.fore.y * 0.9 * (1 - splay) - Math.abs(kickB) * 0.4 + splay * 0.6);
+        legFore.setScale((1 + lp.fore.x * 0.05) * (1 + 0.7 * splay), 1);
+        legFore.setRotation(kickB * 0.18);
       }
 
       // ---- THE FACE.  A blink on its own clock, and a mood read off what
@@ -1873,7 +1916,7 @@ export const frogRace: MinigameModule = {
         if (r.going === 'eat') {
           const reach = r.tongue * TONGUE_REACH;
           tongue.setSize(Math.max(1, reach), 2);
-          tongue.setPosition(5 + reach / 2, -2);
+          tongue.setPosition(3.4 + reach / 2, MOUTH_Y);
         }
       }
       // ---- THE SUGAR.  Three streaks off its back, drawn only while it runs.
@@ -3200,8 +3243,8 @@ function wearMood(body: Phaser.GameObjects.Container, m: Mood, blink: number, dt
   const tip = 0.45 * smile;
   mouthL.setRotation(mouthL.rotation + (tip - mouthL.rotation) * k);
   mouthR.setRotation(mouthR.rotation + (-tip - mouthR.rotation) * k);
-  mouthL.setPosition(MOUTH_X - 2.4, MOUTH_Y - smile * 0.6);
-  mouthR.setPosition(MOUTH_X + 0.8, MOUTH_Y - smile * 0.6);
+  mouthL.setPosition(MOUTH_X - 1.8, MOUTH_Y - smile * 0.6);
+  mouthR.setPosition(MOUTH_X + 1.8, MOUTH_Y - smile * 0.6);
   const gasping = (m.open ?? 0) > 0;
   gape.setVisible(gasping);
   if (gasping) gape.setScale(0.7 + (m.open ?? 0) * 0.5);
@@ -3212,9 +3255,8 @@ function wearMood(body: Phaser.GameObjects.Container, m: Mood, blink: number, dt
   brows.forEach((b, i) => {
     b.setVisible(brow !== 0);
     if (!brow) return;
-    // Both brows tip the same way in profile -- a mirrored pair is what a
-    // face seen head on does, and there is only one face here now.
-    b.setRotation(0.34 * brow);
+    // a face seen head on: the two brows are a mirrored pair
+    b.setRotation((i === 0 ? 1 : -1) * 0.34 * brow);
     b.setY(BROW_Y + (EYES[i].y + 8) + brow * 0.6);
   });
 }
@@ -3285,83 +3327,76 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
   // foot and the shank of each leg and are posed every frame from the hop
   // phase by `legPose`, so the push-off, the trail and the reach are all
   // actually drawn.  REAR is the one that does the work.
+  // ---- THE LEGS, FROM THE FRONT.  The big back legs fold out either side
+  // of the body -- a thigh and a long webbed foot each -- and the front feet
+  // sit under the chest.  Both pairs are posed every frame from the hop by
+  // `legPose`, so the push, the tuck and the landing are drawn.
   const legRear = scene.add.container(REAR_LEG.x, REAR_LEG.y, [
-    scene.add.ellipse(1.6, -1.6, 5.4, 4.2, dark),
-    scene.add.ellipse(1.6, -1.8, 4.4, 3.4, limb),
-    scene.add.ellipse(0, 0.2, 8.4, 3.6, dark),
-    scene.add.ellipse(0, -0.2, 7.2, 2.6, limb),
-    scene.add.ellipse(-3, -0.2, 3, 1.8, mixTone(limb, lit, 0.3)).setAlpha(0.7),
+    scene.add.ellipse(-7.4, -2.4, 6, 6.4, dark),
+    scene.add.ellipse(7.4, -2.4, 6, 6.4, dark),
+    scene.add.ellipse(-7.4, -2.6, 5, 5.4, limb),
+    scene.add.ellipse(7.4, -2.6, 5, 5.4, limb),
+    scene.add.ellipse(-8.4, 0.6, 7.2, 2.8, dark),
+    scene.add.ellipse(8.4, 0.6, 7.2, 2.8, dark),
+    scene.add.ellipse(-8.4, 0.4, 6.2, 2, limb),
+    scene.add.ellipse(8.4, 0.4, 6.2, 2, limb),
+    scene.add.ellipse(-10.6, 0.4, 1.4, 1.2, mixTone(limb, lit, 0.35)).setAlpha(0.8),
+    scene.add.ellipse(10.6, 0.4, 1.4, 1.2, mixTone(limb, lit, 0.35)).setAlpha(0.8),
   ]);
   const legFore = scene.add.container(FORE_LEG.x, FORE_LEG.y, [
-    scene.add.ellipse(0, 0.2, 7.6, 3.4, dark),
-    scene.add.ellipse(0, -0.2, 6.4, 2.4, limb),
-    scene.add.ellipse(2.4, -0.2, 2.6, 1.6, mixTone(limb, lit, 0.3)).setAlpha(0.7),
+    scene.add.ellipse(-3.4, 0, 4.4, 2.4, dark),
+    scene.add.ellipse(3.4, 0, 4.4, 2.4, dark),
+    scene.add.ellipse(-3.4, -0.2, 3.6, 1.6, limb),
+    scene.add.ellipse(3.4, -0.2, 3.6, 1.6, limb),
   ]);
 
-  // ================= AND IT FACES DOWN THE TRACK =================
+  // ================= AND IT FACES THE PLAYER =================
   //
-  // It was built perfectly symmetrically: eyes either side of centre, cheeks
-  // either side, a foot either side, a smile in two halves.  That is a frog
-  // looking straight out of the screen, which is the one direction it is not
-  // going -- the race runs left to right, the hop already pitches nose-up off
-  // the ground and nose-down coming in (see `hopPose`), and none of that
-  // reads as anything at all on an animal with no nose.
-  //
-  // Same chubby recipe, turned a quarter: +x is FORWARD.  The mass now runs
-  // longer than it is tall, the big jumping haunch bunches at the BACK where
-  // the power comes from, the head is forward and low over a snout, and the
-  // legs are a trailing one and a leading one rather than a matched pair.
-  // Nothing about the hop moved -- it just has something to be visible on.
+  // One chubby mass seen head on: a wide round body and a head a little
+  // narrower overlapping most of the way down it, both in the same skin with
+  // no edge between them -- the only rim is round the outside.  Two eyes set
+  // into the top, a smile across the face, a cheek either side, two nostrils.
+  // `build` still makes the four of them different animals: it widens and
+  // flattens the body, so one is broad and low and another round and tall.
   const parts = [
-    // ---- THE RIM, the outside edge of the whole animal, a shade larger and
-    // in the frog's own dark tone: it keeps a green frog off green grass.
-    scene.add.ellipse(0, 6.5, 9.4, 4.2, dark),
-    scene.add.ellipse(-4.6 * BX, 1.2, 11.6 * BX, 11.6 * BY, dark),
-    scene.add.ellipse(0.4 * BX, -0.5, 16.6 * BX, 12.4 * BY, dark),
-    scene.add.ellipse(3.4 * BX, -5.6 * BY, 12.8 * BX, 9.6 * BY, dark),
-    scene.add.ellipse(8.6 * BX, -2.9 * BY, 8 * BX, 6.4 * BY, dark),
+    // ---- THE RIM, the outside edge of the whole animal
+    scene.add.ellipse(0, 0.6, 16.6 * BX, 12.6 * BY, dark),
+    scene.add.ellipse(0, -4.4 * BY, 13.8 * BX, 9.6 * BY, dark),
     // ---- the legs, which are LIMBS and not painted-on feet: see `legRear`
     legRear,
     legFore,
-    // ---- THE HAUNCH, which is the whole reason a frog goes anywhere.  Behind
-    // the body and darker, so it reads as the far side of the animal.
-    scene.add.ellipse(-4.6 * BX, 1.2, 10.4 * BX, 10.4 * BY, limb),
-    scene.add.ellipse(-5.2, 0.2, 6.6, 6.6, dark).setAlpha(0.35),
-    // ---- THE MASS.  Body, then the head over the front of it, no seam.
-    scene.add.ellipse(0.4 * BX, -0.5, 15.2 * BX, 11 * BY, skin),
-    scene.add.ellipse(3.4 * BX, -5.6 * BY, 11.4 * BX, 8.2 * BY, skin),
-    // the snout, which is the whole of what says which end is the front
-    scene.add.ellipse(8.6 * BX, -2.9 * BY, 6.8 * BX, 5.2 * BY, skin),
-    scene.add.ellipse(9.4, -3.8, 3, 2.2, lit).setAlpha(0.65),
-    // the nostril, one pixel of it, right out on the end
-    scene.add.ellipse(10.6, -3.2, 1.2, 1, dark).setAlpha(0.7),
-    // the light along the back, from above and behind
-    scene.add.ellipse(-0.6, -6.4, 11, 4.4, lit).setAlpha(0.8),
-    scene.add.ellipse(-3.4, -6.4, 4.4, 2.2, 0xffffff).setAlpha(0.2),
-    // ---- the belly, low and running forward under the chest
-    scene.add.ellipse(1.6, 3.4, 11, 5.4, 0xfff6e0).setAlpha(0.45),
-    scene.add.ellipse(3, 4.4, 7, 2.8, 0xffffff).setAlpha(0.25),
-    // ---- the front leg, tucked under the chest
-    scene.add.ellipse(5.2, 3.2, 4.4, 5, dark).setAlpha(0.9),
-    // ---- and one cheek, on the side of the face we can see
-    scene.add.ellipse(6, -0.8, 4.2, 2.8, cheek).setAlpha(0.5),
+    // ---- THE MASS.  Body, then the head over the top of it, no seam.
+    scene.add.ellipse(0, 0.6, 15.2 * BX, 11.2 * BY, skin),
+    scene.add.ellipse(0, -4.4 * BY, 12.4 * BX, 8.4 * BY, skin),
+    // the light across the top of the head, from above
+    scene.add.ellipse(0, -7.2 * BY, 9 * BX, 3 * BY, lit).setAlpha(0.8),
+    scene.add.ellipse(-2.4, -7.6 * BY, 3.4, 1.6, 0xffffff).setAlpha(0.22),
+    // ---- the pale belly and throat, down the middle of the front
+    scene.add.ellipse(0, 3 * BY, 10 * BX, 6 * BY, 0xfff6e0).setAlpha(0.5),
+    scene.add.ellipse(0, 4.2 * BY, 6.6 * BX, 3 * BY, 0xffffff).setAlpha(0.25),
+    // ---- the two nostrils, and a cheek either side
+    scene.add.ellipse(-1.3, -4.4 * BY, 1, 0.9, dark).setAlpha(0.7),
+    scene.add.ellipse(1.3, -4.4 * BY, 1, 0.9, dark).setAlpha(0.7),
+    scene.add.ellipse(-5.4 * BX, -1.2, 3.6, 2.2, cheek).setAlpha(0.5),
+    scene.add.ellipse(5.4 * BX, -1.2, 3.6, 2.2, cheek).setAlpha(0.5),
   ];
   // ---- MARKINGS, the other half of telling them apart.  A colour swap alone
   // reads as the same frog recoloured; a pattern reads as a different animal.
+  // Laid out symmetrically, the way they are on a frog seen from the front.
   const markCol = mixTone(dark, 0x101010, 0.2);
   if (kit.mark === 'spots') {
-    for (const [mx, my, mr] of [[-2.4, -3.6, 1.9], [1.8, -5.4, 1.5], [-5.6, -1.4, 1.7], [3.8, -1.2, 1.2]] as const) {
+    for (const [mx, my, mr] of [[-4.6, -5.4, 1.4], [4.6, -5.4, 1.4], [-6, 1, 1.5], [6, 1, 1.5], [0, -7, 1.1]] as const) {
       parts.push(scene.add.ellipse(mx * BX, my * BY, mr * 2 * BX, mr * 1.5 * BY, markCol).setAlpha(0.42));
     }
   } else if (kit.mark === 'stripe') {
-    parts.push(scene.add.ellipse(-0.6 * BX, -5.6 * BY, 13 * BX, 2.2 * BY, markCol).setAlpha(0.4));
-    parts.push(scene.add.ellipse(-1.6 * BX, -2.4 * BY, 11 * BX, 1.6 * BY, markCol).setAlpha(0.28));
+    parts.push(scene.add.ellipse(0, -5.6 * BY, 2.2 * BX, 6.6 * BY, markCol).setAlpha(0.4));
+    parts.push(scene.add.ellipse(-5.8 * BX, 0.6, 1.8 * BX, 7 * BY, markCol).setAlpha(0.28));
+    parts.push(scene.add.ellipse(5.8 * BX, 0.6, 1.8 * BX, 7 * BY, markCol).setAlpha(0.28));
   } else if (kit.mark === 'band') {
-    parts.push(scene.add.ellipse(-3.4 * BX, -2.2 * BY, 4.4 * BX, 9 * BY, markCol).setAlpha(0.34));
-    parts.push(scene.add.ellipse(2.8 * BX, -3.6 * BY, 3.4 * BX, 7.6 * BY, markCol).setAlpha(0.26));
+    parts.push(scene.add.ellipse(0, -0.6 * BY, 14 * BX, 2.6 * BY, markCol).setAlpha(0.3));
   } else {
-    parts.push(scene.add.ellipse(-3.8 * BX, -3.2 * BY, 7 * BX, 5.4 * BY, markCol).setAlpha(0.32));
-    parts.push(scene.add.ellipse(2.8 * BX, -4.8 * BY, 4.6 * BX, 3.4 * BY, markCol).setAlpha(0.26));
+    parts.push(scene.add.ellipse(-5 * BX, -3.6 * BY, 4.6 * BX, 3.6 * BY, markCol).setAlpha(0.3));
+    parts.push(scene.add.ellipse(5 * BX, -3.6 * BY, 4.6 * BX, 3.6 * BY, markCol).setAlpha(0.3));
   }
   const c = scene.add.container(0, 0, parts).setDepth(10);
 
@@ -3401,9 +3436,11 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
   // The mouth runs along the side of the snout now rather than across a face:
   // a back half and a front half, so a smile still turns up at the front and
   // a worried one still turns down.
-  const mouthL = scene.add.rectangle(MOUTH_X - 2.4, MOUTH_Y, 3.6, 1, 0x2a1a20).setAlpha(0.8);
-  const mouthR = scene.add.rectangle(MOUTH_X + 0.8, MOUTH_Y, 2.8, 1, 0x2a1a20).setAlpha(0.8);
-  const gape = scene.add.ellipse(MOUTH_X - 0.6, MOUTH_Y + 0.7, 4.2, 3.6, 0x6b2430).setVisible(false);
+  // A smile across the face, in two halves, so each corner can turn up for a
+  // smile and down for a worry.
+  const mouthL = scene.add.rectangle(MOUTH_X - 1.8, MOUTH_Y, 3.6, 1, 0x2a1a20).setAlpha(0.8);
+  const mouthR = scene.add.rectangle(MOUTH_X + 1.8, MOUTH_Y, 3.6, 1, 0x2a1a20).setAlpha(0.8);
+  const gape = scene.add.ellipse(MOUTH_X, MOUTH_Y + 0.7, 4.2, 3.6, 0x6b2430).setVisible(false);
   // Brows sit ON the head, one over each eye, not floating above it.
   const brows = EYES.map((e) =>
     scene.add.rectangle(e.x, BROW_Y + (e.y + 8), e.r * 1.05, 1.1, dark).setAlpha(0.85).setVisible(false),
@@ -3564,6 +3601,14 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
   stars.forEach((st) => c.add(st));
   c.setData('stars', stars);
 
+  // ---- SMALLER, AND CUTER FOR IT.  Everything above is drawn at the size
+  // it always was and then carried in one group at FROG_S, so every pose,
+  // limb and prop keeps its proportions and scales together.  The group is
+  // dropped by what the scale takes off the legs, so the feet stay on the
+  // grass rather than the frog hovering over its own lane.
+  const kids = [...c.list];
+  c.removeAll(false);
+  c.add(scene.add.container(0, FROG_FOOT * (1 - FROG_S), kids).setScale(FROG_S));
   return c;
 }
 
