@@ -138,7 +138,7 @@ export const CABINETS: CabinetDef[] = [
   // been at 48 for the same reason.
   // Five in, ten out: the standard table's five-token rung, moved up off the
   // three-token one.
-  { id: 'hoops', title: 'HOOPS', tier: 'medium', cost: 5, reward: 10, x: 52, y: 164, color: 0xff7a3d, symbol: 'H', motif: 'ball' },
+  { id: 'hoops', title: 'LILY HOOPS', tier: 'medium', cost: 5, reward: 10, x: 52, y: 164, color: 0xff7a3d, symbol: 'H', motif: 'ball' },
   { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 5, reward: 10, x: 98, y: 164, color: 0x6fbb6a, symbol: 'W', motif: 'mallet' },
   { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 5, reward: 10, x: 244, y: 164, color: 0xb9884f, symbol: 'BW', motif: 'pins' },
   { id: 'battleship', title: 'BATTLESHIP', tier: 'medium', cost: 3, reward: 6, x: 290, y: 164, color: 0x1d6f8f, symbol: 'BS', motif: 'ship' },
