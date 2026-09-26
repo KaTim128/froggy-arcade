@@ -34,16 +34,41 @@ const KEEP_OFF = PAD_R + PUCK_R + 3;
 const MAX_SPEED = 520;
 // Hard tier: it reads the puck sooner and misjudges it less.  At 140ms/18px it
 // was a warm-up opponent; the cabinet costs five tokens now.
-const AI_REACTION_MS = 55;
-const AI_AIM_ERROR = 5.5;
+const AI_REACTION_MS = 66;
+const AI_AIM_ERROR = 6.8;
 /**
  * How fast it can move its mallet.
  *
  * It was 150 against a puck that tops out at 520, so a well struck shot simply
  * went past it -- the opponent could only ever cover a shot it was already
  * standing in front of.
+ *
+ * TUNED BY MEASUREMENT, because "a little harder but not unbeatable" is a win
+ * rate and nothing else.  Against one fixed scripted player, held identical
+ * across every run:
+ *
+ *     150 / 70ms / 7px     player won 2 of 6, 19 goals for, 25 against
+ *     188 / 55ms / 5.5px   player won 0 of 6,  3 goals for, 30 against
+ *     164 / 63ms / 6.4px   player won 0 of 6,  5 goals for, 30 against
+ *
+ * The middle row is the warning: that is not a harder opponent, it is one you
+ * cannot score on, and it went in as an improvement before it was measured.
+ *
+ * The third row is a warning about the YARDSTICK.  That scripted player moves
+ * its mallet at about 186 px/s, so the win rate falls off a cliff exactly
+ * where the opponent's speed crosses the player's own -- which says more
+ * about the probe than about the game.  A hand on a mouse is far quicker than
+ * that, so the tuning here is deliberately a small step over the original and
+ * is checked against a faster probe player as well as the slow one:
+ *
+ *     158 / 66ms / 6.8px, probe player at 288 px/s
+ *         player won 1 of 6, 10 goals for, 27 against -- one of them 4-2
+ *
+ * Harder than it was, and still losable by the machine: there is a real win
+ * in there rather than a shutout.  If it wants softening, AI_SPEED is the
+ * dial -- it is the one that moved the numbers most.
  */
-const AI_SPEED = 188;
+const AI_SPEED = 158;
 const TARGET_SCORE = 5;
 const TIME_CAP_MS = 180_000;
 
@@ -264,33 +289,21 @@ export const airHockey: MinigameModule = {
     // wanting the restart and being happy to let you take it.
     const dead = vel.x === 0 && vel.y === 0;
     const eager = openingDir > 0 ? 1 : 0.55;
-    // ---- AND IT WORKS OUT WHERE THE PUCK IS GOING, not just where it was.
+    // ---- IT CHASES THE PUCK ITSELF, and that turns out to be the right call.
     //
-    // Chasing `seen.x` means standing where the puck currently is, which for
-    // anything struck at an angle is never where it will arrive: the mallet
-    // trails the shot across the table and is still behind it at the line.
-    // Cushions are walked the same way the puck will actually take them, so a
-    // bank shot off the side is covered rather than watched.
-    const guardY = TABLE.y + 26;
-    let meet = seen.x;
-    if (!dead && vel.y < 0) {
-      const flight = (guardY - seen.y) / vel.y;
-      if (flight > 0 && flight < 3) {
-        let px = seen.x + vel.x * flight;
-        const lo = TABLE.x + PUCK_R;
-        const hi = TABLE.x + TABLE.w - PUCK_R;
-        for (let i = 0; i < 4; i++) {
-          if (px < lo) px = lo + (lo - px);
-          else if (px > hi) px = hi - (px - hi);
-          else break;
-        }
-        meet = px;
-      }
-    }
+    // Predicting where the puck would CROSS ITS GOAL LINE and standing there
+    // was tried, and it made the opponent much worse: measured against the
+    // same scripted player it went from taking 4 games of 6 to losing 5 of 6,
+    // conceding 28 instead of 19.  The reason is that the mallet does not wait
+    // on its goal line -- it advances to meet the puck at roughly the puck's
+    // own height -- so aiming at the crossing point put it at the wrong x for
+    // the whole of the approach and only at the right one if the puck got all
+    // the way through.  Predicting a point you do not stand on is worse than
+    // covering the puck you can see.
     const wantX = dead
       ? puck.x + (Math.random() - 0.5) * AI_AIM_ERROR * 0.5
       : vel.y < 0
-        ? meet + (Math.random() - 0.5) * AI_AIM_ERROR
+        ? seen.x + (Math.random() - 0.5) * AI_AIM_ERROR
         : TABLE.x + TABLE.w / 2 + (seen.x - (TABLE.x + TABLE.w / 2)) * 0.35;
     const wantY = dead
       ? Math.min(puck.y - PAD_R * 0.4, TABLE.y + TABLE.h / 2 - PAD_R)

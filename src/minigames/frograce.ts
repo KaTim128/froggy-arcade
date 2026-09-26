@@ -107,11 +107,19 @@ const ID = 'frograce' as const;
  * (green and yellow) differ most in brightness, which is the pair a colour
  * blind player has to tell apart.
  */
-const RUNNERS: Array<{ name: string; skin: number; lit: number; dark: number; cheek: number }> = [
-  { name: 'GREEN', skin: 0x5fc457, lit: 0x9ae88a, dark: 0x2f7a37, cheek: 0xff9aa8 },
-  { name: 'PINK', skin: 0xf87fb4, lit: 0xffb6d6, dark: 0xb04274, cheek: 0xfff0f4 },
-  { name: 'BLUE', skin: 0x59a9ef, lit: 0x9fd6ff, dark: 0x2c66ad, cheek: 0xffa3b8 },
-  { name: 'YELLOW', skin: 0xf8d45c, lit: 0xfff3b8, dark: 0xb88f1e, cheek: 0xffab8f },
+const RUNNERS: Array<{
+  name: string; skin: number; lit: number; dark: number; cheek: number;
+  /** Proportions.  Above one is longer and lower, below is shorter and rounder. */
+  build: number;
+  /** How big its eye is, because a frog's eye is most of its face. */
+  eye: number;
+  /** What is on its back.  Four frogs in four colours are still four of the same frog. */
+  mark: 'spots' | 'stripe' | 'band' | 'blotch';
+}> = [
+  { name: 'GREEN', skin: 0x5fc457, lit: 0x9ae88a, dark: 0x2f7a37, cheek: 0xff9aa8, build: 1.0, eye: 1.0, mark: 'spots' },
+  { name: 'PINK', skin: 0xf87fb4, lit: 0xffb6d6, dark: 0xb04274, cheek: 0xfff0f4, build: 0.9, eye: 1.16, mark: 'band' },
+  { name: 'BLUE', skin: 0x59a9ef, lit: 0x9fd6ff, dark: 0x2c66ad, cheek: 0xffa3b8, build: 1.12, eye: 0.9, mark: 'stripe' },
+  { name: 'YELLOW', skin: 0xf8d45c, lit: 0xfff3b8, dark: 0xb88f1e, cheek: 0xffab8f, build: 0.96, eye: 1.06, mark: 'blotch' },
 ];
 
 /**
@@ -394,12 +402,13 @@ function hopTravel(u0: number, du: number): number {
  * separate copies of `side * 3.9`, which is exactly the kind of thing that
  * survives a rewrite of one of them.
  *
- * Index 0 is the FAR eye and index 1 the NEAR one -- drawn in that order so
- * the near eye overlaps the far one, which is most of what sells a head as
- * being turned rather than squashed.
+ * ONE EYE.  There were two -- a small far one set back and a big near one --
+ * which is a head turned three quarters toward the camera, not a profile.
+ * From the side of an animal you see one eye, and the moment the far one is
+ * gone the frogs stop looking out of the screen at the person betting on them
+ * and start looking down the track they are running along.
  */
 const EYES = [
-  { x: 0.9, y: -7.9, r: 2.0 },
   { x: 5.4, y: -6.9, r: 3.8 },
 ];
 const MOUTH_X = 8.2;
@@ -407,6 +416,53 @@ const MOUTH_Y = -2.3;
 const BROW_Y = -10.6;
 
 const FOOT = 6; // where a frog's feet are, in its own drawing
+/** Where each leg hangs off the body, in the frog's own drawing. */
+const REAR_LEG = { x: -6.4, y: 6.0 };
+const FORE_LEG = { x: 5.8, y: 6.0 };
+
+/**
+ * WHAT THE LEGS DO OVER ONE HOP.
+ *
+ * Read off the same `u` the body squash uses, so the push and the stretch
+ * cannot drift apart from each other -- the legs drive at the exact moment
+ * the body leaves the ground, because both are the same number.
+ *
+ *   coiled    folded up under the frog, waiting
+ *   drive     rear leg straight out and back: this is the push
+ *   trail     both legs stretched behind, the airborne shape
+ *   reach     front leg swings forward to take the weight
+ *   absorb    everything folds again as the landing is taken
+ */
+function legPose(u: number): { rear: { x: number; y: number; a: number }; fore: { x: number; y: number; a: number } } {
+  if (u >= TAKEOFF && u < LAND) {
+    const a = (u - TAKEOFF) / (LAND - TAKEOFF);
+    const v = 1 - 2 * a; // +1 leaving the ground, 0 at the top, -1 coming down
+    const drive = Math.max(0, v); // the push, strongest right off the ground
+    const reach = Math.max(0, -v); // the landing gear, coming out on the way down
+    const tuck = 1 - Math.abs(v); // fully folded at the apex
+    return {
+      rear: {
+        x: -3.4 * drive + 1.2 * tuck + 0.6 * reach,
+        y: 1.6 * drive - 2.2 * tuck - 0.4 * reach,
+        a: 0.62 * drive - 0.5 * tuck - 0.18 * reach,
+      },
+      fore: {
+        x: -1.4 * drive - 0.6 * tuck + 2.8 * reach,
+        y: -0.8 * drive - 2 * tuck + 0.8 * reach,
+        a: 0.3 * drive - 0.45 * tuck - 0.5 * reach,
+      },
+    };
+  }
+  const groundSpan = 1 - LAND + TAKEOFF;
+  const gp = (u >= LAND ? u - LAND : u + 1 - LAND) / groundSpan;
+  // splayed as it lands, then gathered under it as it coils for the next one
+  const absorb = gp < 0.45 ? gp / 0.45 : 1 - (gp - 0.45) / 0.55;
+  const coil = gp > 0.55 ? (gp - 0.55) / 0.45 : 0;
+  return {
+    rear: { x: 1.1 * absorb + 1.8 * coil, y: 0.5 * absorb - 0.6 * coil, a: -0.26 * absorb - 0.3 * coil },
+    fore: { x: -0.7 * absorb - 1.2 * coil, y: 0.4 * absorb - 0.4 * coil, a: 0.28 * absorb + 0.22 * coil },
+  };
+}
 function hopPose(u: number): { sx: number; sy: number; rot: number } {
   if (u >= TAKEOFF && u < LAND) {
     const a = (u - TAKEOFF) / (LAND - TAKEOFF);
@@ -1464,6 +1520,40 @@ export const frogRace: MinigameModule = {
         body.setScale(p.sx * (r.gold > 0 ? 1.08 : 1), p.sy);
         body.setRotation(p.rot + gust + lean);
         body.y = laneY - r.lift + FOOT * (1 - p.sy);
+      }
+
+      // ---- FALLING, WHICH IS NOT THE SAME AS DESCENDING.
+      //
+      // A frog that has lost its balloon or run its jetpack dry used to come
+      // straight down like a dropped weight.  It turns over now and its legs
+      // go, and the higher it was when it started coming down the more of
+      // both -- so a long fall reads as a long fall and not as a short one
+      // played further away.
+      const prevLift = (body.getData('prevLift') as number | undefined) ?? r.lift;
+      body.setData('prevLift', r.lift);
+      let paddle = 0;
+      if (r.lift < prevLift - 0.02 && r.lift > 1 && r.going !== 'taken') {
+        const high = Phaser.Math.Clamp(r.lift / BALLOON_H, 0, 1);
+        body.setRotation(body.rotation + Math.sin(clock / 46) * 0.42 * high);
+        paddle = 1 + high * 2.4;
+      }
+
+      // ---- AND THE LEGS.
+      //
+      // Posed off the SAME `r.hop` the body squash is posed from, so the
+      // push-off and the stretch are the same instant rather than two
+      // animations that happen to look alike.  A fall overrides them into a
+      // paddle, because a frog in trouble kicks.
+      const legRear = body.getData('legRear') as Phaser.GameObjects.Container | undefined;
+      const legFore = body.getData('legFore') as Phaser.GameObjects.Container | undefined;
+      if (legRear && legFore) {
+        const lp = legPose(r.hop);
+        const kickA = paddle > 0 ? Math.sin(clock / 34) * paddle : 0;
+        const kickB = paddle > 0 ? Math.sin(clock / 34 + 2.1) * paddle : 0;
+        legRear.setPosition(REAR_LEG.x + lp.rear.x + kickA, REAR_LEG.y + lp.rear.y - Math.abs(kickA) * 0.4);
+        legRear.setRotation(lp.rear.a + kickA * 0.22);
+        legFore.setPosition(FORE_LEG.x + lp.fore.x + kickB, FORE_LEG.y + lp.fore.y - Math.abs(kickB) * 0.4);
+        legFore.setRotation(lp.fore.a + kickB * 0.22);
       }
 
       // ---- THE FACE.  A blink on its own clock, and a mood read off what
@@ -2767,6 +2857,41 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
     return (Math.round(ar + (br - ar) * k) << 16) | (Math.round(ag + (bg - ag) * k) << 8) | Math.round(ab + (bb - ab) * k);
   };
   const limb = mixTone(skin, dark, 0.42);
+  // ---- AND NO TWO OF THEM ARE THE SAME ANIMAL.
+  //
+  // Four frogs in four colours are still four copies of one frog.  `build`
+  // stretches the body front to back and drops it correspondingly lower, so
+  // the blue one is long and low and the pink one is short and round -- and
+  // the mass stays about the same, because a frog twice as long that is also
+  // twice as tall is just a bigger frog.
+  const BX = kit.build;
+  const BY = 1 / Math.sqrt(kit.build);
+
+  // ================= THE LEGS ARE LIMBS =================
+  //
+  // They were four flat ellipses lying in the body drawing, so what the game
+  // called a jump was the whole animal squashing and stretching with its feet
+  // painted on underneath -- the frog changed shape but nothing about it ever
+  // pushed against the ground.
+  //
+  // A frog jumps with its back legs: it folds them right up under itself,
+  // drives them straight out behind, trails them through the air and swings
+  // them forward again to take the landing.  These two containers hold the
+  // foot and the shank of each leg and are posed every frame from the hop
+  // phase by `legPose`, so the push-off, the trail and the reach are all
+  // actually drawn.  REAR is the one that does the work.
+  const legRear = scene.add.container(REAR_LEG.x, REAR_LEG.y, [
+    scene.add.ellipse(1.6, -1.6, 5.4, 4.2, dark),
+    scene.add.ellipse(1.6, -1.8, 4.4, 3.4, limb),
+    scene.add.ellipse(0, 0.2, 8.4, 3.6, dark),
+    scene.add.ellipse(0, -0.2, 7.2, 2.6, limb),
+    scene.add.ellipse(-3, -0.2, 3, 1.8, mixTone(limb, lit, 0.3)).setAlpha(0.7),
+  ]);
+  const legFore = scene.add.container(FORE_LEG.x, FORE_LEG.y, [
+    scene.add.ellipse(0, 0.2, 7.6, 3.4, dark),
+    scene.add.ellipse(0, -0.2, 6.4, 2.4, limb),
+    scene.add.ellipse(2.4, -0.2, 2.6, 1.6, mixTone(limb, lit, 0.3)).setAlpha(0.7),
+  ]);
 
   // ================= AND IT FACES DOWN THE TRACK =================
   //
@@ -2786,24 +2911,22 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
     // ---- THE RIM, the outside edge of the whole animal, a shade larger and
     // in the frog's own dark tone: it keeps a green frog off green grass.
     scene.add.ellipse(0, 6.5, 9.4, 4.2, dark),
-    scene.add.ellipse(-4.6, 1.2, 11.6, 11.6, dark),
-    scene.add.ellipse(0.4, -0.5, 16.6, 12.4, dark),
-    scene.add.ellipse(3.4, -5.6, 12.8, 9.6, dark),
-    scene.add.ellipse(8.6, -2.9, 8, 6.4, dark),
-    // ---- the feet: one trailing under the haunch, one reaching forward
-    scene.add.ellipse(-6.4, 6.2, 8.4, 3.6, dark),
-    scene.add.ellipse(5.8, 6.2, 7.6, 3.4, dark),
-    scene.add.ellipse(-6.4, 5.8, 7.2, 2.6, limb),
-    scene.add.ellipse(5.8, 5.8, 6.4, 2.4, limb),
+    scene.add.ellipse(-4.6 * BX, 1.2, 11.6 * BX, 11.6 * BY, dark),
+    scene.add.ellipse(0.4 * BX, -0.5, 16.6 * BX, 12.4 * BY, dark),
+    scene.add.ellipse(3.4 * BX, -5.6 * BY, 12.8 * BX, 9.6 * BY, dark),
+    scene.add.ellipse(8.6 * BX, -2.9 * BY, 8 * BX, 6.4 * BY, dark),
+    // ---- the legs, which are LIMBS and not painted-on feet: see `legRear`
+    legRear,
+    legFore,
     // ---- THE HAUNCH, which is the whole reason a frog goes anywhere.  Behind
     // the body and darker, so it reads as the far side of the animal.
-    scene.add.ellipse(-4.6, 1.2, 10.4, 10.4, limb),
+    scene.add.ellipse(-4.6 * BX, 1.2, 10.4 * BX, 10.4 * BY, limb),
     scene.add.ellipse(-5.2, 0.2, 6.6, 6.6, dark).setAlpha(0.35),
     // ---- THE MASS.  Body, then the head over the front of it, no seam.
-    scene.add.ellipse(0.4, -0.5, 15.2, 11, skin),
-    scene.add.ellipse(3.4, -5.6, 11.4, 8.2, skin),
+    scene.add.ellipse(0.4 * BX, -0.5, 15.2 * BX, 11 * BY, skin),
+    scene.add.ellipse(3.4 * BX, -5.6 * BY, 11.4 * BX, 8.2 * BY, skin),
     // the snout, which is the whole of what says which end is the front
-    scene.add.ellipse(8.6, -2.9, 6.8, 5.2, skin),
+    scene.add.ellipse(8.6 * BX, -2.9 * BY, 6.8 * BX, 5.2 * BY, skin),
     scene.add.ellipse(9.4, -3.8, 3, 2.2, lit).setAlpha(0.65),
     // the nostril, one pixel of it, right out on the end
     scene.add.ellipse(10.6, -3.2, 1.2, 1, dark).setAlpha(0.7),
@@ -2818,6 +2941,23 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
     // ---- and one cheek, on the side of the face we can see
     scene.add.ellipse(6, -0.8, 4.2, 2.8, cheek).setAlpha(0.5),
   ];
+  // ---- MARKINGS, the other half of telling them apart.  A colour swap alone
+  // reads as the same frog recoloured; a pattern reads as a different animal.
+  const markCol = mixTone(dark, 0x101010, 0.2);
+  if (kit.mark === 'spots') {
+    for (const [mx, my, mr] of [[-2.4, -3.6, 1.9], [1.8, -5.4, 1.5], [-5.6, -1.4, 1.7], [3.8, -1.2, 1.2]] as const) {
+      parts.push(scene.add.ellipse(mx * BX, my * BY, mr * 2 * BX, mr * 1.5 * BY, markCol).setAlpha(0.42));
+    }
+  } else if (kit.mark === 'stripe') {
+    parts.push(scene.add.ellipse(-0.6 * BX, -5.6 * BY, 13 * BX, 2.2 * BY, markCol).setAlpha(0.4));
+    parts.push(scene.add.ellipse(-1.6 * BX, -2.4 * BY, 11 * BX, 1.6 * BY, markCol).setAlpha(0.28));
+  } else if (kit.mark === 'band') {
+    parts.push(scene.add.ellipse(-3.4 * BX, -2.2 * BY, 4.4 * BX, 9 * BY, markCol).setAlpha(0.34));
+    parts.push(scene.add.ellipse(2.8 * BX, -3.6 * BY, 3.4 * BX, 7.6 * BY, markCol).setAlpha(0.26));
+  } else {
+    parts.push(scene.add.ellipse(-3.8 * BX, -3.2 * BY, 7 * BX, 5.4 * BY, markCol).setAlpha(0.32));
+    parts.push(scene.add.ellipse(2.8 * BX, -4.8 * BY, 4.6 * BX, 3.4 * BY, markCol).setAlpha(0.26));
+  }
   const c = scene.add.container(0, 0, parts).setDepth(10);
 
   // ---- THE FACE, which is its own group so it can be given an expression.
@@ -2833,7 +2973,10 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
   // back and a little higher and is drawn SMALLER, which is the cheapest
   // honest way to say that one of them is further away.
   const eye = (i: number) => {
-    const { x: ex, y: ey, r } = EYES[i];
+    const { x: ex0, y: ey0, r: r0 } = EYES[i];
+    const ex = ex0 * BX;
+    const ey = ey0 * BY;
+    const r = r0 * kit.eye;
     const rim = scene.add.circle(ex, ey, r + 0.45, dark);
     const mound = scene.add.circle(ex, ey, r, skin);
     const white = scene.add.circle(ex, ey - 0.25, r * 0.75, 0xffffff);
@@ -2848,8 +2991,7 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
     const lid = scene.add.ellipse(ex, ey - r * 0.86, r * 1.8, r * 1.72, skin).setOrigin(0.5, 0).setScale(1, 0);
     return { rim, mound, white, iris, glint, spark, lid };
   };
-  // far eye first, so the near one is drawn over it
-  const eyes = [eye(0), eye(1)];
+  const eyes = EYES.map((_, i) => eye(i));
   for (const e of eyes) c.add([e.rim, e.mound, e.white, e.iris, e.glint, e.spark, e.lid]);
   // The mouth runs along the side of the snout now rather than across a face:
   // a back half and a front half, so a smile still turns up at the front and
@@ -2862,6 +3004,8 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
     scene.add.rectangle(e.x, BROW_Y + (e.y + 8), e.r * 1.05, 1.1, dark).setAlpha(0.85).setVisible(false),
   );
   c.add([gape, mouthL, mouthR, ...brows]);
+  c.setData('legRear', legRear);
+  c.setData('legFore', legFore);
   c.setData('eyes', eyes);
   c.setData('mouth', [mouthL, mouthR]);
   c.setData('gape', gape);
