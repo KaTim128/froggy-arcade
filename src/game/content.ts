@@ -220,15 +220,17 @@ export const CABINETS: CabinetDef[] = [
   // afford -- the only cabinet in the building where the stake is the player's
   // to set before a single thing happens.  See minigames/frograce.
   { id: 'frograce', title: 'FROG RACE', tier: 'hard', cost: 10, reward: 20, x: 96, y: 162, color: 0x6fbb6a, room: 'casino', symbol: 'RC', motif: 'race' },
-  // Fifteen in and thirty out: the most expensive cabinet in the building and
-  // the only one you build something in before you play it.  Bottom right of
-  // the casino, opposite the Frog Race, with the table and its chair between
-  // them.  See minigames/frogstermash.
-  // 25 in, and the headline reward is the FIRST round's fifty.  Every round
-  // after that is worth 25 + (N-1)*5 and the machine keeps a running bank, so
-  // what actually gets credited is whatever the player walks away with --
-  // `win(n)` carries it, and `reward` here is only what the card advertises.
-  { id: 'frogstermash', title: 'FROGSTER MASH', tier: 'hard', cost: 25, reward: 50, x: 224, y: 162, color: 0x7b4bd8, room: 'casino', symbol: 'FM', motif: 'mash' },
+  // The most expensive cabinet in the building, and the only one you build
+  // something in before you play it.  Bottom right of the casino, opposite
+  // the Frog Race, with the table and its chair between them.  See
+  // minigames/frogstermash.
+  //
+  // 25 in, 15 a win, flat -- so one lizard does not buy the seat back and the
+  // run only starts paying on the second.  The machine keeps a running bank
+  // rather than crediting each round, so what actually reaches the ledger is
+  // whatever the player walks away with: `win(n)` carries it, and `reward`
+  // here is the per-win rate the card advertises.
+  { id: 'frogstermash', title: 'FROGSTER MASH', tier: 'hard', cost: 25, reward: 15, x: 224, y: 162, color: 0x7b4bd8, room: 'casino', symbol: 'FM', motif: 'mash' },
 ];
 
 /** Cabinets standing in a given room.  Anything unmarked lives in the hub. */

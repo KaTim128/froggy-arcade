@@ -348,36 +348,59 @@ export const bowling: MinigameModule = {
     // all of that can be had for a handful of rectangles.
     const laneH = FOUL_Y - LANE_TOP + 6;
     scene.add.rectangle(LANE_L - 8, LANE_TOP, LANE_W + 16, laneH, PALETTE.ink).setOrigin(0, 0);
-    // the gutters, sunk and shaded, either side of the boards
+    // ---- THE GUTTERS, as channels rather than as two black strips.
+    //
+    // Four bands across eight pixels -- the lip catching the house light, the
+    // wall falling away, the dark at the bottom and the far wall coming back
+    // up -- so the eye reads a trough the ball can drop into.
     for (const gx of [LANE_L - 8, LANE_L + LANE_W]) {
-      scene.add.rectangle(gx, LANE_TOP, 8, laneH, 0x120c08).setOrigin(0, 0);
-      scene.add.rectangle(gx + (gx < LANE_L ? 6 : 0), LANE_TOP, 2, laneH, 0x2a1d14).setOrigin(0, 0);
+      const inward = gx < LANE_L ? 1 : -1;
+      const near = inward > 0 ? gx : gx + 7;
+      scene.add.rectangle(gx, LANE_TOP, 8, laneH, 0x1a1109).setOrigin(0, 0);
+      scene.add.rectangle(near - inward * 0, LANE_TOP, 1, laneH, 0x3a2a18).setOrigin(0, 0);
+      scene.add.rectangle(near + inward * 3, LANE_TOP, 2, laneH, 0x0d0805).setOrigin(0, 0);
+      scene.add.rectangle(near + inward * 7, LANE_TOP, 1, laneH, 0x4a3520).setOrigin(0, 0).setAlpha(0.8);
     }
-    scene.add.rectangle(LANE_L, LANE_TOP, LANE_W, laneH, 0xb9884f).setOrigin(0, 0);
-    // ---- THE BOARDS.  Seven of them, each a slightly different tone, because
-    // no two planks in a floor came off the same part of the tree.
-    const BOARDS = 7;
+    // ---- THE BOARDS.
+    //
+    // EVERY EDGE IS ON A WHOLE PIXEL NOW, and that is the whole of why this
+    // looked dirty.  The seams were 0.8px wide at x + 11.5 and the highlight
+    // 0.5px at x + 0.4: on a 320x180 buffer blown up with NEAREST, a rectangle
+    // narrower than a pixel does not draw a thin line, it drops a partial
+    // sample into whichever pixel it lands in -- so every board edge was a
+    // smear of half-tone rather than an edge, twenty-one of them down the lane.
+    //
+    // Twelve boards of exactly seven pixels, one pixel of seam, and the tone
+    // runs as a SMOOTH ARCH across the lane -- darker at the gutters, lightest
+    // down the middle where the house lights fall -- instead of seven tones
+    // picked at random, which read as noise rather than as a polished floor.
+    const BOARDS = 12;
     const bw = LANE_W / BOARDS;
-    const grain = [0xc59255, 0xb9884f, 0xc08b52, 0xb07f48, 0xc59255, 0xb5824b, 0xbe8b50];
     for (let i = 0; i < BOARDS; i++) {
-      scene.add.rectangle(LANE_L + i * bw, LANE_TOP, bw, laneH, grain[i]).setOrigin(0, 0);
-      // the seam between this board and the next, and the light on its edge
-      scene.add.rectangle(LANE_L + (i + 1) * bw - 0.5, LANE_TOP, 0.8, laneH, 0x8a6035).setOrigin(0, 0).setAlpha(0.75);
-      scene.add.rectangle(LANE_L + i * bw + 0.4, LANE_TOP, 0.5, laneH, 0xe0b982).setOrigin(0, 0).setAlpha(0.22);
-      // a few knots and short grain marks down each board
-      for (let k = 0; k < 3; k++) {
-        const gy = LANE_TOP + 8 + ((i * 37 + k * 53) % (laneH - 20));
-        scene.add.rectangle(LANE_L + i * bw + 2, gy, bw - 4, 1, 0x9a6d3c).setOrigin(0, 0).setAlpha(0.3);
+      const bx = LANE_L + i * bw;
+      // 0 at the gutters, 1 down the centre line
+      const arch = 1 - Math.abs((i + 0.5) / BOARDS - 0.5) * 2;
+      const lift = Math.round(arch * 22);
+      const board = ((0xa8 + lift) << 16) | ((0x78 + Math.round(lift * 0.78)) << 8) | (0x42 + Math.round(lift * 0.5));
+      scene.add.rectangle(bx, LANE_TOP, bw, laneH, board).setOrigin(0, 0);
+      // one pixel of seam on the gutter side of each board
+      scene.add.rectangle(bx, LANE_TOP, 1, laneH, 0x7e5730).setOrigin(0, 0).setAlpha(0.55);
+      // and the grain: two long marks per board, a pixel high, well inside it
+      for (let k = 0; k < 2; k++) {
+        const gy = LANE_TOP + 10 + ((i * 29 + k * 61) % (laneH - 26));
+        const gh = 6 + ((i + k) % 3) * 5;
+        scene.add.rectangle(bx + 2, gy, bw - 4, 1, 0x8a6035).setOrigin(0, 0).setAlpha(0.22);
+        scene.add.rectangle(bx + 3, gy + gh, bw - 6, 1, 0xd6a874).setOrigin(0, 0).setAlpha(0.14);
       }
     }
     // ---- THE HOUSE LIGHTS ON THE POLISH.
     //
-    // A long soft band down the middle of the lane and a hard glint near the
-    // foul line: it is the one thing that says the surface is polished rather
-    // than matte, and it is what makes the ball look like it is ON something.
-    scene.add.rectangle(LANE_L + LANE_W * 0.3, LANE_TOP, LANE_W * 0.26, laneH, 0xfff0c9).setOrigin(0, 0).setAlpha(0.07);
-    scene.add.rectangle(LANE_L + LANE_W * 0.52, LANE_TOP, LANE_W * 0.1, laneH, 0xfff0c9).setOrigin(0, 0).setAlpha(0.05);
-    scene.add.ellipse(LANE_L + LANE_W / 2, FOUL_Y - 14, LANE_W * 0.8, 20, 0xfff0c9).setAlpha(0.06);
+    // Two soft bands down the lane and a pool at the foul line.  Whole pixels
+    // and a shade lighter than before, because the arch in the boards is now
+    // doing most of the work these used to be asked to do on their own.
+    scene.add.rectangle(LANE_L + 22, LANE_TOP, 14, laneH, 0xfff0c9).setOrigin(0, 0).setAlpha(0.05);
+    scene.add.rectangle(LANE_L + 48, LANE_TOP, 7, laneH, 0xfff0c9).setOrigin(0, 0).setAlpha(0.04);
+    scene.add.ellipse(LANE_L + LANE_W / 2, FOUL_Y - 14, 68, 20, 0xfff0c9).setAlpha(0.05);
     scene.add.rectangle(LANE_L, FOUL_Y, LANE_W, 1, PALETTE.blood).setOrigin(0, 0);
     scene.add.rectangle(LANE_L, FOUL_Y + 1, LANE_W, 1, 0x000000).setOrigin(0, 0).setAlpha(0.35);
     // the aiming arrows a real lane has, a third of the way down
@@ -387,7 +410,7 @@ export const bowling: MinigameModule = {
       scene.add.triangle(ax, ay, 0, 5, 3, 0, 6, 5, 0x6b4a2a).setOrigin(0.5, 0.5);
     }
     // the pin deck, a shade darker than the approach
-    scene.add.rectangle(LANE_L, LANE_TOP, LANE_W, 46, 0x8d6535).setOrigin(0, 0).setAlpha(0.5);
+    scene.add.rectangle(LANE_L, LANE_TOP, LANE_W, 46, 0x8d6535).setOrigin(0, 0).setAlpha(0.45);
 
     // ---- THE HOUSE THIS LANE BELONGS TO.
     //
@@ -648,22 +671,40 @@ function layOil(spec: OilSpec[] = rollOil()): void {
   for (const o of oil) for (const part of o.parts) part.destroy();
   oil = [];
   for (const s of spec) {
-    const x = LANE_L + s.l * LANE_W;
-    const w = (s.r - s.l) * LANE_W;
-    const y = s.top;
-    const h = s.bottom - s.top;
+    // ---- ROUNDED, because a patch edge at x151.7 is not an edge.
+    //
+    // These come out of `rollOil` as fractions of the lane, so every patch
+    // had fractional corners and every one of its four borders landed as a
+    // half-lit pixel.  The physics reads `oilAt` against the same numbers, so
+    // rounding here keeps the picture and the puddle the same shape.
+    const x = Math.round(LANE_L + s.l * LANE_W);
+    const w = Math.round((s.r - s.l) * LANE_W);
+    const y = Math.round(s.top);
+    const h = Math.round(s.bottom - s.top);
+    // ---- AND IT IS A SHEEN, NOT A SLAB.
+    //
+    // It was a flat 0x4a3a52 at 0.55 -- a grey-purple sheet heavy enough to
+    // kill the grain under it, with a pale blue line top and bottom.  What
+    // oil on a polished lane looks like from above is the boards going
+    // slightly darker and slightly colder while you can still see them, with
+    // the light catching the leading edge.  Half the alpha, a colder tint,
+    // and the top lip warm rather than blue.
     const parts: Phaser.GameObjects.GameObject[] = [
-      scene0.add.rectangle(x, y, w, h, 0x4a3a52).setOrigin(0, 0).setAlpha(0.55).setDepth(4),
-      scene0.add.rectangle(x, y, w, 1, 0x8fa8c8).setOrigin(0, 0).setAlpha(0.45).setDepth(5),
-      scene0.add.rectangle(x, y + h - 1, w, 1, 0x8fa8c8).setOrigin(0, 0).setAlpha(0.45).setDepth(5),
+      scene0.add.rectangle(x, y, w, h, 0x2f3a4a).setOrigin(0, 0).setAlpha(0.26).setDepth(4),
+      scene0.add.rectangle(x, y, w, 1, 0xe8dcc0).setOrigin(0, 0).setAlpha(0.3).setDepth(5),
+      scene0.add.rectangle(x, y + h - 1, w, 1, 0x1a1a24).setOrigin(0, 0).setAlpha(0.3).setDepth(5),
+      scene0.add.rectangle(x, y, 1, h, 0xe8dcc0).setOrigin(0, 0).setAlpha(0.12).setDepth(5),
+      scene0.add.rectangle(x + w - 1, y, 1, h, 0x1a1a24).setOrigin(0, 0).setAlpha(0.2).setDepth(5),
     ];
     // Chevrons down the middle of the patch, pointing the way it pushes.
+    // Cream rather than ice blue: the patch is warm wood seen through oil,
+    // and the only cold thing on the lane was these.
     for (let cy = y + 7; cy < y + h - 4; cy += 11) {
-      const cx = x + w / 2;
+      const cx = Math.round(x + w / 2);
       parts.push(
         scene0.add
-          .triangle(cx, cy, 0, 0, 0, 6, s.push * 4, 3, 0x9fb8d8)
-          .setAlpha(0.7)
+          .triangle(cx, cy, 0, 0, 0, 6, s.push * 4, 3, 0xe8dcc0)
+          .setAlpha(0.5)
           .setDepth(6),
       );
     }

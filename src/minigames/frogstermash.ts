@@ -3506,13 +3506,19 @@ let scene0: Phaser.Scene | null = null;
 let apiRef: MinigameApi | null = null;
 
 /**
- * THE LADDER.
+ * THE LADDER, WHICH IS A FLAT RATE.
  *
  * Twenty-five tokens buys a seat, and then it is a run rather than a fight:
  * win and you may take what you have or put it all back on the next lizard.
+ * Every win is worth the same fifteen, whichever rung it happens on.
  *
- *   round 1 ....... 50
- *   round N > 1 ... 25 + (N - 1) * 5   (30, 35, 40, 45, ...)
+ * It used to open at fifty and then pay 25 + (N - 1) * 5 -- thirty, thirty
+ * five, forty -- which made the FIRST fight the best-paid one in the run and
+ * turned every round after it into a worse bet than the one before.  A flat
+ * rate says the opposite thing, and says it without a table: the seat costs
+ * twenty-five, one win does not buy it back, and the run only starts paying
+ * on the second lizard.  Whether to go again is the whole game, and it is
+ * the same question every time it is asked.
  *
  * `bank` is what has been won and NOT yet paid.  Nothing reaches the ledger
  * until the player stops: `win(bank)` on the way out, `lose()` if a lizard
@@ -3528,13 +3534,22 @@ let ground: Dropped[] = [];
 let round = 1;
 let bank = 0;
 
-/** What winning round `n` is worth. */
-export function rewardFor(n: number): number {
-  return n <= 1 ? FIRST_PRIZE : ENTRY + (n - 1) * STEP;
+/**
+ * What winning a round is worth.  The same on every rung of the ladder.
+ *
+ * `n` is kept in the signature: every caller has a round number to hand and
+ * the cabinet card, the HUD and the banked screen all ask this rather than
+ * printing a constant, so if the rate is ever made to move again there is
+ * one place to do it and nothing else has to change.
+ */
+export function rewardFor(_n: number): number {
+  return PRIZE;
 }
-const ENTRY = 25;
-const FIRST_PRIZE = 50;
-const STEP = 5;
+/**
+ * Fifteen a win.  The seat is twenty-five, charged by the cabinet (see
+ * `cost` in content.ts), so it takes two lizards to be ahead of the house.
+ */
+const PRIZE = 15;
 let phase: Phase = 'title';
 /** The one latch that stops a result being reported twice.  See `finish`. */
 let ended = false;
