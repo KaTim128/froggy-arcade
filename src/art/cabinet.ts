@@ -154,15 +154,24 @@ function drawMotif(scene: Phaser.Scene, cx: number, cy: number, def: CabinetDef,
       put(4, 0, 1, 12);
       for (let i = -4; i <= 4; i += 4) put(0, i, 1, 2, bright);
       break;
+    // CHUBBY CHOMP.  A fly on its way to a lily pad.
+    //
+    // It used to be a big frog face, which at eighteen by fourteen was a
+    // cream blob with holes in it.  Three clean shapes instead: the dotted
+    // arc of a flick, the fly at the top of it, and the pad it is dropping
+    // onto -- the whole game in one glance, and nothing that reads as a face.
     case 'chomp':
-      // A round frog face, mouth wide open for the fly above it.
-      dot(0, 1.5, 5.5, bright);
-      dot(-3.5, -3.5, 2.2, bright);
-      dot(3.5, -3.5, 2.2, bright);
-      put(-3.5, -3.5, 1, 1);
-      put(3.5, -3.5, 1, 1);
-      put(0, 2.5, 6, 3);
-      put(0, -6, 2, 1);
+      // the pad: flat and wide, the way a pad sits on the water, on whole
+      // pixels so it stays a crisp shape at this size
+      put(3, 3, 9, 2, bright);
+      put(3, 1.5, 7, 1, bright);
+      put(5.5, 1.5, 1, 1);
+      // the flick: a dotted arc up from the bottom left
+      for (const [x, y] of [[-7, 3], [-6, 0], [-4.5, -2], [-2.5, -3.5]] as const) put(x, y, 1, 1, bright);
+      // the fly: two cream wings over a dark body
+      put(-0.5, -5, 2, 1, bright);
+      put(2.5, -5, 2, 1, bright);
+      put(1, -3.5, 2, 2);
       break;
     case 'pond':
       // Lily pads on open water, seen from above.  This used to be a hull, a

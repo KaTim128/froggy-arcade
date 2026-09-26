@@ -106,12 +106,14 @@ const ARC_STEP = 0.055;
 const SURE_MARGIN = 3;
 /** Points, not shots: a make on fire is worth two of them. */
 const TARGET_MAKES = 5;
-const ROUND_MS = 60_000;
+const ROUND_MS = 75_000;
 const HOOP_Y = 74;
-const HOOP_W = 22;
+// EASIER THAN IT WAS: a wider mouth that closes less with each snack, a
+// slower drift that winds up more gently, and fifteen more seconds.
+const HOOP_W = 27;
 /** The rim tightens with every score, but never past this. */
-const HOOP_W_MIN = 14;
-const HOOP_SHRINK = 1.6;
+const HOOP_W_MIN = 20;
+const HOOP_SHRINK = 1.2;
 /** Makes in a row before the ball lights up, and what a lit make is worth. */
 const FIRE_AT = 2;
 const FIRE_POINTS = 2;
@@ -151,7 +153,7 @@ const HOOP_MID = 214;
 const HOOP_SWING = 62;
 let hoopPhase = 0;
 /** Radians a second.  Every score winds it up; see `score`. */
-let hoopRate = 0.85;
+let hoopRate = 0.62;
 let hoopX = HOOP_MID;
 let makes = 0;
 let timeLeft = ROUND_MS;
@@ -223,10 +225,10 @@ export const hoops: MinigameModule = {
   id: 'hoops',
   title: 'CHUBBY CHOMP',
   music: 'game_hoops',
-  rules: '5 points in 60 seconds - streaks pay double',
+  rules: '5 points in 75 seconds - streaks pay double',
   tutorial: {
     objective: [
-      'FEED CHUBBY 5 FLIES IN 60 SECONDS.',
+      'FEED CHUBBY 5 FLIES IN 75 SECONDS.',
       'CHUBBY DRIFTS ON A LILY PAD: LEAD IT.',
       'EACH SNACK: CHUBBY GETS FATTER + FASTER.',
       'TWO IN A ROW LIGHTS THE FLY: PAYS 2.',
@@ -249,7 +251,7 @@ export const hoops: MinigameModule = {
     inFlight = false;
     makes = 0;
     timeLeft = ROUND_MS;
-    hoopRate = 0.85;
+    hoopRate = 0.62;
     hoopPhase = 0;
     hoopX = HOOP_MID;
     over = false;
@@ -329,7 +331,7 @@ export const hoops: MinigameModule = {
     carrierMouth = scene.add.ellipse(0, 3, HOOP_W, 8, 0x6a1f2a);
     carrierTongue = scene.add.ellipse(0, 5, HOOP_W * 0.55, 3, 0xf07a90);
     carrierSmile = scene.add.graphics();
-    carrierCheeks = [-14, 14].map((cx) => scene.add.ellipse(cx, 6, 6, 3.4, 0xff9aa8).setAlpha(0.75));
+    carrierCheeks = [-16, 16].map((cx) => scene.add.ellipse(cx, 6, 6, 3.4, 0xff9aa8).setAlpha(0.75));
     carrierPupils = [];
     carrierEyes = [-10, 10].map((sx) => {
       const pupil = scene.add.ellipse(0, 0.4, 4, 5, 0x14251a);
@@ -580,7 +582,7 @@ export const hoops: MinigameModule = {
         eatBall();
         // Every score winds the float up: the carrier swims the same beat a
         // little quicker, so the last point of a run is the hardest one.
-        hoopRate *= 1.13;
+        hoopRate *= 1.07;
         hoopW = Math.max(HOOP_W_MIN, hoopW - HOOP_SHRINK);
         audio.sfx('chime');
         score(onFire ? FIRE_POINTS : 1, onFire ? 'ON FIRE' : '');
