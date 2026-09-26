@@ -1,5 +1,5 @@
 /**
- * FROG POND HUNT.  Medium — 3 tokens in, 6 out.
+ * FROG POND HUNT.  Medium — 5 tokens in, 10 out.
  *
  * Two ponds, a dozen frogs hidden in them, and a search a turn each until one
  * side has found the lot.  It is NOT a naval game with frogs painted on it,
@@ -275,7 +275,7 @@ export function canPlace(pond: Pond, kind: FrogKind, anchor: number): boolean {
 // ----------------------------------------------------------------- the module
 
 export const battleship: MinigameModule = {
-  // The id stays `battleship`: the cabinet, its three-token price, its reward,
+  // The id stays `battleship`: the cabinet, its five-token price, its reward,
   // the registry and the high score table all key off it.  Nothing the player
   // ever reads says that word.
   id: 'battleship',
