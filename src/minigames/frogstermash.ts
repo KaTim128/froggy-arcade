@@ -58,7 +58,7 @@ const SLOT_NAME: Record<Slot, string> = {
  * so picking a thrust instead of a sweep genuinely changes the fight -- and
  * `anim` changes the arc the arm travels, so it looks like what it is.
  */
-export type Anim = 'over' | 'sweep' | 'thrust' | 'spin' | 'jab' | 'bash' | 'low' | 'punch' | 'hook' | 'upper' | 'shove' | 'kick' | 'shoot' | 'hurl' | 'puff';
+export type Anim = 'over' | 'sweep' | 'thrust' | 'spin' | 'jab' | 'bash' | 'low' | 'punch' | 'hook' | 'upper' | 'shove' | 'kick' | 'shoot' | 'hurl' | 'puff' | 'charge';
 export interface Move {
   name: string;
   /** Multipliers on the swing this move is a version of. */
@@ -94,6 +94,14 @@ const M = {
   low: (name: string, dmg = 0.95): Move => ({ name, dmg, wind: 0.95, reach: 1.05, knock: 4, stagger: 0.2, anim: 'low' }),
   bash: (name: string, dmg = 0.9): Move => ({ name, dmg, wind: 0.8, reach: 0.85, knock: 9, stagger: 0.28, at: 'near', anim: 'bash' }),
   charge: (name: string, dmg = 1.25): Move => ({ name, dmg, wind: 1.05, reach: 1.45, at: 'far', knock: 6, anim: 'thrust' }),
+  // ---- A SHIELD CHARGE IS A RUN, NOT A THRUST.
+  //
+  // It starts from well outside the shield's own reach -- the move's reach is
+  // where the run begins -- and the wind-up is the run itself: shield up in
+  // front of the chest, head down behind it, feet going.  What it lands is
+  // not much damage and a great deal of shove: see `CHARGE_MUL` in `tick` and
+  // the push in `resolveStrike`.
+  ram: (name: string, dmg = 0.9): Move => ({ name, dmg, wind: 1.15, reach: 3.0, at: 'far', knock: 12, stagger: 0.18, anim: 'charge' }),
   // ---- THE TWO RANGED SHAPES.  `shoot` draws a bow or levels a crossbow and
   // `hurl` throws overarm; both want distance, so they score badly in a
   // clinch and the weapon falls back on its close attacks there.
@@ -141,7 +149,7 @@ export const MOVES: Record<string, Move[]> = {
   gladius: [M.stab('FAST SLASH'), M.thrust('SHORT THRUST', 1.05, 1.1), M.combo('CLOSE COMBINATION', 3), M.counter('FINISHING STRIKE', 1.4)],
   sword: [M.sweep('HORIZONTAL SLASH'), M.over('DIAGONAL SLASH'), M.thrust('THRUST'), M.counter('PARRY COUNTER'), M.combo('TWO HIT SLASH', 2)],
   katana: [M.sweep('IAI SLASH', 1.15, 1.1), M.counter('COUNTER SLASH', 1.7), M.thrust('PRECISION THRUST', 1.05, 1.15), M.over('DIAGONAL CUT')],
-  shield: [M.bash('SHIELD BASH'), M.charge('FORWARD CHARGE', 1.15), M.counter('BLOCK COUNTER', 1.5), M.stab('STABBING BASH')],
+  shield: [M.bash('SHIELD BASH'), M.ram('FORWARD CHARGE'), M.counter('BLOCK COUNTER', 1.4), M.stab('STABBING BASH', 0.75)],
   spear: [M.thrust('LONG THRUST', 1.1, 1.4), M.stab('DOUBLE THRUST'), M.sweep('SHAFT STRIKE', 0.9, 1.15), M.charge('FORWARD CHARGE'), M.hurl('SPEAR THROW', 0.95)],
   staff: [M.sweep('WIDE SWEEP'), M.over('OVERHEAD STRIKE'), M.thrust('THRUST'), M.low('LEG SWEEP'), M.bash('KEEPAWAY PUSH', 0.8)],
   trident: [M.thrust('THREE POINT THRUST', 1.15, 1.35), M.sweep('HORIZONTAL SWEEP'), M.counter('COUNTER THRUST', 1.4), M.charge('CHARGING STAB'), M.hurl('TRIDENT THROW', 0.95)],
@@ -213,6 +221,11 @@ export interface Spec {
   atClose?: number;
   /** Damage handed back to whoever struck a raised shield. */
   riposte?: number;
+  /**
+   * A weapon BUILT to be hidden behind: how much more a raised guard turns
+   * aside, and how much more often it goes up.  Only the shield has one.
+   */
+  bulwark?: number;
   /** Bonus on the strike taken immediately after a dodge. */
   counter?: number;
   /** Can catch somebody who is walking into it. */
@@ -467,8 +480,11 @@ export const WEAPONS: WeaponDef[] = [
     spec: { note: 'NO WEAKNESS, AND NO TRICKS EITHER', crit: 0.1, stagger: 0.08 } },
   { key: 'katana', name: 'KATANA', power: [5, 8], heavy: [3, 5], resist: [5, 8], reach: [6, 8], hits: 1, guard: 0, tempo: 0.95,
     spec: { note: 'ANSWERS A MISS BEFORE THEY RECOVER', counter: 1.1 } },
-  { key: 'shield', name: 'SPIKED SHIELD', power: [3, 5], heavy: [5, 7], resist: [8, 10], reach: [2, 4], hits: 1, guard: 0.3, tempo: 0.9,
-    spec: { note: 'THEY HURT THEMSELVES ON IT', riposte: 7 } },
+  // More wall and less weapon: it turns aside more, blocks more often and
+  // charges people across the sand, and pays for all of it in what it hits
+  // for -- the power band is the lowest of any melee weapon in the rack.
+  { key: 'shield', name: 'SPIKED SHIELD', power: [2, 4], heavy: [5, 7], resist: [8, 10], reach: [2, 4], hits: 1, guard: 0.36, tempo: 0.9,
+    spec: { note: 'A WALL THAT WALKS INTO YOU', riposte: 6, bulwark: 1.3 } },
 
   // ---- LONG
   // ---- DUAL RANGE, AND DELIBERATELY NOT BEST AT BOTH.
@@ -1355,6 +1371,10 @@ const DODGE_BONUS = 0.4;
 const DODGE_COOL = 0.7;
 /** Damage a guarding fighter turns aside on top of the weapon's own guard. */
 const GUARD_CUT = 0.3;
+/** Nothing turns aside more than this share of a blow, however good the guard. */
+const SOAK_MAX = 0.82;
+/** A shield charge runs at this many times a walk. */
+const CHARGE_MUL = 3.2;
 /**
  * WHAT CATCHING A BLOW ON YOUR WEAPON COSTS IT.
  *
@@ -1539,6 +1559,8 @@ export interface Blow {
   riposted?: boolean;
   /** It was big enough to take the legs from under them. */
   staggered?: boolean;
+  /** A shield charge ran into them and moved them. */
+  rammed?: boolean;
   guarded: boolean;
   dmg: number;
   broke: boolean;
@@ -1573,6 +1595,7 @@ export interface Blow {
  */
 function guardPower(def: Fighter): number {
   if (def.broken || def.weapon.key === 'none') return GUARD_CUT * 0.45;
+  if (def.weapon.spec.bulwark) return GUARD_CUT * (0.25 + (def.held.rResist ?? 5) / 8) * def.weapon.spec.bulwark;
   // Deliberately a wide spread.  A block is a thing your EQUIPMENT does for
   // you, so a well-made weapon should turn aside a great deal more than a
   // cheap one -- at a narrow spread, blocking helps whoever is losing and
@@ -1923,7 +1946,9 @@ export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Mat
   // ---- THE GUARD, AND THE THINGS THAT IGNORE IT.
   const guarding = def.act === 'guard';
   out.guarded = guarding || def.st.guard > 0;
-  const soak = ((guarding ? guardPower(def) : 0) + def.st.guard) * (1 - (sp.guardCut ?? 0));
+  // Capped, because a shield's passive guard plus a raised one could
+  // otherwise add up to a wall that nothing gets through at all.
+  const soak = Math.min(SOAK_MAX, ((guarding ? guardPower(def) : 0) + def.st.guard) * (1 - (sp.guardCut ?? 0)));
   // A spiked shield hands some of it back to whoever hit it.
   const shield = def.weapon.spec.riposte ?? 0;
   if (shield > 0 && guarding && att.hp > 0) {
@@ -1984,6 +2009,17 @@ export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Mat
     ground,
     blocked: guarding,
   });
+  // ---- A CHARGE MOVES WHAT IT HITS, whether or not it floors them.  A blow
+  // that staggered them has already sent them back; one that did not still
+  // shoves them off their spot -- half as far into a raised guard, which
+  // plants its feet.
+  if (mv?.anim === 'charge' && out.hit) {
+    out.rammed = true;
+    if (def.hp > 0 && !out.staggered) {
+      const push = (KNOCK_PX + (mv.knock ?? 0)) * (guarding ? 0.5 : 1);
+      def.x = Phaser.Math.Clamp(def.x + (def.x < att.x ? -1 : 1) * push, ARENA.left, ARENA.right);
+    }
+  }
   return out;
 }
 
@@ -2047,6 +2083,9 @@ export function chooseMove(f: Fighter, other: Fighter, gap: number, rng = Math.r
     // which is what makes distance choose the attack.
     const mr = MOVE_REACH(m);
     if (mr < frac - 0.02) score -= 6;
+    // A charge needs a run-up.  From inside a shield's length there is no
+    // ground to cover and it would be a bash with extra steps.
+    if (m.anim === 'charge' && frac < 1.3) score -= 12;
     else score -= (mr - frac) * 0.5;
     // A slow one is a bad idea against somebody much quicker who is still
     // fresh -- but only MUCH quicker.  At "any faster at all" this fired in
@@ -2232,6 +2271,7 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random,
   // rounding error.  A guard costs the tempo you would have attacked in, so
   // it is still a decision and not a free action.
   let wantBlock = hurt ? 3.2 : f.st.guard > 0 ? 2.2 : armedNow ? 1.5 : 0.8;
+  if (armedNow) wantBlock *= f.weapon.spec.bulwark ?? 1;
   // A berserker used to be barred from blocking outright.  That was a fair
   // reading of the archetype while nobody blocked much; once everybody did,
   // never spending tempo on defence became a straight advantage and the
@@ -2285,8 +2325,10 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random,
   // Out-reached and still at arm's length, closing is worth more than the
   // swing.  Desperation and the back half of a combination both override it,
   // so nobody stands there declining to fight.
+  // A charge is exempt: it IS the answer to being out-reached, and holding
+  // it until the gap was already closed left it nothing to run across.
   const holdFire = other.st.reach > f.st.reach * 1.1 && gap > press + 3
-    && !f.desperate && f.chain === 0 && !armed(f);
+    && !f.desperate && f.chain === 0 && !armed(f) && mv.anim !== 'charge';
   if ((gap <= swing * MOVE_REACH(mv) || shooting) && f.cool <= 0 && !holdFire) {
     const share = f.riposte ? RIPOSTE_WINDUP : f.chain > 0 ? COMBO_WINDUP : f.desperate ? 0.78 : 1;
     f.act = 'windup';
@@ -2452,6 +2494,19 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random, 
   if (f.act === 'lunge') {
     f.x = Phaser.Math.Clamp(f.x + f.face * f.st.walk * LUNGE_MUL * dt, ARENA.left, ARENA.right);
     f.step += f.st.walk * LUNGE_MUL * dt;
+  }
+
+  // ---- AND A CHARGE IS MOVEMENT TOO.  The wind-up is the run: it covers
+  // the ground at better than twice a walk and pulls up at shield's length,
+  // so the blow lands from where a shield actually reaches.
+  if (f.act === 'windup' && f.move?.anim === 'charge') {
+    const gap = Math.abs(f.x - other.x);
+    const stop = f.st.reach * 0.6;
+    if (gap > stop) {
+      const run = Math.min(gap - stop, f.st.walk * CHARGE_MUL * dt);
+      f.x = Phaser.Math.Clamp(f.x + f.face * run, ARENA.left, ARENA.right);
+      f.step += run;
+    }
   }
 
   f.t -= dt;
@@ -2664,6 +2719,8 @@ export interface FighterArt {
   pauldL: Phaser.GameObjects.Ellipse;
   pauldR: Phaser.GameObjects.Ellipse;
   helmDome: Phaser.GameObjects.Ellipse;
+  /** A crown is not a helm and is not drawn as one; see `buildFighter`. */
+  crown: Phaser.GameObjects.Container;
   visor: Phaser.GameObjects.Rectangle;
   plume: Phaser.GameObjects.Rectangle;
   /** Everything above the neck, so a duck moves the face and not just the skull. */
@@ -2769,9 +2826,11 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number, single = fa
       c.add(scene.add.circle(-5, 0, 2, PALETTE.blood));
       break;
     case 'staff':
-      haft(10, 0, 34, 3.5);
-      bar(26, 0, 4, 4.5, PALETTE.bone); bar(-6, 0, 4, 4.5, PALETTE.bone);
-      bar(10, 0, 34, 1, 0x5a4530).setAlpha(0.5);
+      // Forty-two long, from a cap behind the hand to one well out in front:
+      // it was thirty-four and read as a walking stick next to the spears.
+      haft(12, 0, 42, 3.5);
+      bar(32, 0, 4, 4.5, PALETTE.bone); bar(-8, 0, 4, 4.5, PALETTE.bone);
+      bar(12, 0, 42, 1, 0x5a4530).setAlpha(0.5);
       break;
     case 'flail':
       haft(6, 0, 12, 3);
@@ -3319,16 +3378,46 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // A helm caps the skull.  At -40 it came down over the eyes and both of
   // them fought the whole bout blindfolded in a grey box.
   const hy = (frog ? -43 : -39) * tall - lift;
-  const helm = scene.add.rectangle(2, hy, (frog ? 17 : 14) * wide, 6, H.colour).setStrokeStyle(1, H.edge).setVisible(wears(H));
-  const helmDome = scene.add.ellipse(2, hy - 2, (frog ? 17 : 14) * wide, 7, H.colour).setVisible(wears(H));
-  const visor = scene.add.rectangle(4, hy + 2, (frog ? 12 : 10) * wide, 1.5, H.edge).setVisible(wears(H));
-  const plume = scene.add.rectangle(-4, hy - 7, 3, 8, frog ? PALETTE.blood : PALETTE.rust).setVisible(wears(H));
+  // ---- A CROWN IS A CROWN.  It was drawn as a gold helmet -- the same bowl,
+  // visor and plume as every other helm -- which is the one thing a crown
+  // must not look like.  It is a band that sits on top of the head, points
+  // round the rim with a pearl on each, and stones set into the band.
+  const crowned = H.key === 'crown';
+  const helmOn = wears(H) && !crowned;
+  const helm = scene.add.rectangle(2, hy, (frog ? 17 : 14) * wide, 6, H.colour).setStrokeStyle(1, H.edge).setVisible(helmOn);
+  const helmDome = scene.add.ellipse(2, hy - 2, (frog ? 17 : 14) * wide, 7, H.colour).setVisible(helmOn);
+  const visor = scene.add.rectangle(4, hy + 2, (frog ? 12 : 10) * wide, 1.5, H.edge).setVisible(helmOn);
+  const plume = scene.add.rectangle(-4, hy - 7, 3, 8, frog ? PALETTE.blood : PALETTE.rust).setVisible(helmOn);
   // the helm shines by the same rule the breastplate does
   const hg = gloss(H);
-  helmDetail.push(scene.add.rectangle(2, hy - 4, (frog ? 12 : 10) * wide, 1.5, up(H.colour, 0.3 + hg))
-    .setAlpha(0.35 + hg * 0.8).setVisible(wears(H)));
-  helmDetail.push(scene.add.rectangle(2, hy + 3, (frog ? 15 : 12) * wide, 1.5, down(H.colour, 0.4))
-    .setAlpha(0.5).setVisible(wears(H)));
+  if (!crowned) {
+    helmDetail.push(scene.add.rectangle(2, hy - 4, (frog ? 12 : 10) * wide, 1.5, up(H.colour, 0.3 + hg))
+      .setAlpha(0.35 + hg * 0.8).setVisible(wears(H)));
+    helmDetail.push(scene.add.rectangle(2, hy + 3, (frog ? 15 : 12) * wide, 1.5, down(H.colour, 0.4))
+      .setAlpha(0.5).setVisible(wears(H)));
+  }
+  // Sat down onto the top of the skull, a little narrower than it.
+  const crown = scene.add.container(2, hy + (frog ? 4 : 3)).setVisible(crowned);
+  if (crowned) {
+    const cw = (frog ? 13 : 11) * wide;
+    const gold = H.colour;
+    const rim = H.edge;
+    // the points first, so the band covers their feet
+    const points = 5;
+    for (let i = 0; i < points; i++) {
+      const px = -cw / 2 + 1 + (i * (cw - 2)) / (points - 1);
+      const tall2 = i % 2 === 0 ? 5.5 : 4;
+      crown.add(scene.add.triangle(px, -1.5 - tall2 / 2, 0, tall2, 1.9, 0, 3.8, tall2, gold).setStrokeStyle(0.6, rim));
+      crown.add(scene.add.circle(px, -2 - tall2, 1, 0xfff4d0));
+    }
+    // the band, with its shading and a row of stones
+    crown.add(scene.add.rectangle(0, 0, cw, 3.4, gold).setStrokeStyle(0.8, rim));
+    crown.add(scene.add.rectangle(0, -1, cw - 1, 0.8, up(gold, 0.45)).setAlpha(0.8));
+    crown.add(scene.add.rectangle(0, 1.3, cw - 1, 0.8, down(gold, 0.35)).setAlpha(0.8));
+    crown.add(scene.add.circle(0, 0.1, 1.2, PALETTE.blood));
+    crown.add(scene.add.circle(-cw / 2 + 2.2, 0.1, 0.9, 0x3f7fd6));
+    crown.add(scene.add.circle(cw / 2 - 2.2, 0.1, 0.9, 0x3fb86a));
+  }
 
   // ---- the arm and the weapon, on one hinge at the shoulder
   // ---- TWO ARMS, because one of them cannot hold a guard.
@@ -3444,14 +3533,14 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   if (smile) headBits.push(smile);
   if (brow) headBits.push(brow);
   headBits.push(eyeL, eyeR, pupL, pupR, catchL, catchR);
-  headBits.push(helmDome, helm, visor, ...helmDetail, plume);
+  headBits.push(helmDome, helm, visor, ...helmDetail, plume, crown);
   headGroup.add(headBits);
   if (neck) parts.push(neck);
   parts.push(headGroup);
   const root = scene.add.container(f.x, FLOOR_Y, parts).setDepth(20);
   root.setScale(f.face * (bld?.scale ?? 1), bld?.scale ?? 1);
   return { root, legL, legR, greaveL, greaveR, kneeL, kneeR, footL, footR, torso, cuirass, belt, ridge,
-    pauldL, pauldR, head, helm, helmDome, visor, plume, headGroup, arm, armOff, guardUp: false, weapon, shadow,
+    pauldL, pauldR, head, helm, helmDome, crown, visor, plume, headGroup, arm, armOff, guardUp: false, weapon, shadow,
     nicks: 0 };
 }
 
@@ -3652,6 +3741,10 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     // the head snapping back off the breath, which is the only part of a
     // blowgun anybody can see from across an arena.
     puff:   { w: -60, s: -66, r: -48, lean: -4 },
+    // ---- THE SHIELD CHARGE.  The shield comes up across the chest for the
+    // run and is driven straight out on contact; the lean is FORWARD the
+    // whole way (see below), because nobody charges leaning back.
+    charge: { w: 6, s: -8, r: -10, lean: 18 },
   };
   const shape = A[f.move?.anim ?? 'sweep'];
   const carry = carryOf(f);
@@ -3679,7 +3772,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   }
   a.headGroup.x = 0;
   let lean = 0;
-  if (f.act === 'windup') { arm = shape.w; lean = -shape.lean * 0.55; }
+  if (f.act === 'windup') { arm = shape.w; lean = f.move?.anim === 'charge' ? shape.lean : -shape.lean * 0.55; }
   else if (f.act === 'strike') { arm = shape.s; lean = shape.lean; }
   else if (f.act === 'recover') { arm = shape.r; lean = shape.lean * 0.4; }
   else if (f.act === 'guard') { arm = -96; lean = -4; }
@@ -3728,6 +3821,12 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   }
   // and drawing a bow pulls the hand back past the cheek
   if (f.move?.anim === 'shoot') bend = f.act === 'strike' ? -18 : -96;
+  // the shield tucked in tight for the run, then punched out on contact
+  if (f.move?.anim === 'charge') {
+    if (f.act === 'windup') bend = -34;
+    else if (f.act === 'strike') bend = -2;
+    else if (f.act === 'recover') bend = -30;
+  }
   // ---- THE BLOWGUN, and the one sum that matters on it.
   //
   // What the crowd sees is shoulder PLUS elbow, because the pipe hangs off
@@ -3869,10 +3968,29 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     a.legR.setAngle(up);
     a.greaveR.setAngle(up);
   }
+  // ---- AND THE CHARGE, which is legs as much as it is the shield.
+  //
+  // A sprinting stride twice the width of a walk, the whole body pitched
+  // forward over it, and the off hand braced behind the shield; on contact
+  // the front foot plants and the body drives through.
+  const charging = f.move?.anim === 'charge' && (f.act === 'windup' || f.act === 'strike');
+  if (charging) {
+    const run = f.act === 'windup';
+    const stride = run ? Math.sin(f.step / 3.2) * 17 : 0;
+    const plant = run ? 0 : 1;
+    a.legL.setAngle(stride - 4 - plant * 12);
+    a.legR.setAngle(-stride + 4 + plant * 16);
+    a.greaveL.setAngle(stride - 4 - plant * 12);
+    a.greaveR.setAngle(-stride + 4 + plant * 16);
+    a.root.y = FLOOR_Y - (run ? Math.abs(Math.sin(f.step / 3.2)) * 2.2 : 0);
+    a.root.angle = f.face * (run ? 9 : 13);
+    a.armOff.root.setAngle(-36);
+    a.armOff.fore.setAngle(-64);
+  }
   // and a spinning attack turns the whole animal, not only the arm
   if (f.move?.anim === 'spin' && (f.act === 'strike' || f.act === 'windup')) {
     a.root.angle = f.face * (f.act === 'strike' ? 22 : -14);
-  } else if (f.act !== 'stagger' && phase !== 'over'
+  } else if (f.act !== 'stagger' && phase !== 'over' && !charging
     && f.move?.anim !== 'hurl' && f.move?.anim !== 'puff') {
     // A throw and a blowgun both turn the whole body, above; zeroing here
     // would put it back upright on the same frame.
@@ -4332,7 +4450,7 @@ function redrawPreview(): void {
   art.root.setPosition(0, 0);
   art.root.setDepth(0);
   // Not taken means not drawn.  Not "drawn faintly".
-  if (!picked.head) art.helm.setVisible(false);
+  if (!picked.head) { art.helm.setVisible(false); art.crown.setVisible(false); }
   if (!picked.body) art.cuirass.setVisible(false);
   if (!picked.legs) { art.greaveL.setVisible(false); art.greaveR.setVisible(false); }
   if (!picked.weapon) art.weapon.setVisible(false);
@@ -4988,6 +5106,35 @@ function showBlockBreak(f: Fighter): void {
   if (!f.broken) floatHigh(f.x, 'ONE LEFT!', PALETTE.gold);
 }
 
+/**
+ * A SHIELD CHARGE LANDING.  A thump, a jolt of the camera, and a spray of
+ * sand kicked up behind the one it moved -- the shove itself is in `x`.
+ */
+function showRam(f: Fighter): void {
+  audio.sfx('fence_thunk', 0.7);
+  audio.sfx('boom', 0.3);
+  S().cameras.main.shake(160, 0.006);
+  for (let i = 0; i < 7; i++) {
+    const puff = S().add.circle(f.x - f.face * (2 + Math.random() * 8), FLOOR_Y - 1 - Math.random() * 3, 1.5 + Math.random() * 1.8, 0xd8c08a)
+      .setAlpha(0.8).setDepth(19);
+    layer?.add(puff);
+    S().tweens.add({
+      targets: puff, x: puff.x - f.face * (8 + Math.random() * 14), y: puff.y - 3 - Math.random() * 6,
+      scale: 1.8, alpha: 0, duration: 380 + Math.random() * 240, ease: 'Quad.easeOut', onComplete: () => puff.destroy(),
+    });
+  }
+}
+
+/** Sand kicked up behind the feet of somebody running a shield charge. */
+function chargeDust(f: Fighter): void {
+  const puff = S().add.circle(f.x - f.face * 6, FLOOR_Y - 1, 1.4 + Math.random(), 0xd8c08a).setAlpha(0.7).setDepth(19);
+  layer?.add(puff);
+  S().tweens.add({
+    targets: puff, x: puff.x - f.face * (4 + Math.random() * 6), y: puff.y - 2 - Math.random() * 3,
+    scale: 1.7, alpha: 0, duration: 320, onComplete: () => puff.destroy(),
+  });
+}
+
 function showBlow(f: Fighter, blow: Blow): void {
   const x = f.x;
   if (blow.dodged) {
@@ -4997,9 +5144,10 @@ function showBlow(f: Fighter, blow: Blow): void {
   }
   if (!blow.hit) return;
   floating(x, `-${blow.dmg}`, blow.guarded ? PALETTE.tealLight : PALETTE.cream);
+  if (blow.rammed) showRam(f);
   // The move's name on the big ones, so a player watching can learn what each
   // weapon actually does rather than being told in a menu.
-  if (blow.move && (blow.dmg >= f.st.maxHp * 0.1 || blow.crit || blow.countered)) {
+  if (blow.move && (blow.dmg >= f.st.maxHp * 0.1 || blow.crit || blow.countered || blow.rammed)) {
     floatHigh(x, blow.move, blow.crit ? PALETTE.gold : PALETTE.bone);
   }
   // ---- AND IF THE DART GOT THROUGH, SAY SO.
@@ -5029,7 +5177,7 @@ function showBlow(f: Fighter, blow: Blow): void {
   // by the damage and capped so a heavy blow cannot fling anybody across the
   // sand, and a white frame on the part that was hit.  Both are drawing only:
   // `shove` is added at draw time and `x` never hears about it.
-  f.shove = -f.face * Math.min(7, 1.5 + blow.dmg * 0.34);
+  f.shove = -f.face * (blow.rammed ? 10 : Math.min(7, 1.5 + blow.dmg * 0.34));
   if (f.art) for (const part of [f.art.torso, f.art.head, f.art.cuirass, f.art.helm]) flashWhite(part);
   for (let i = 0; i < (blow.dmg >= 12 ? 6 : 3); i++) {
     const a = (i / 5) * Math.PI * 2 + Math.random();
@@ -5119,7 +5267,7 @@ function showStrip(f: Fighter, slot: 'head' | 'body' | 'legs', tint: number): vo
   if (!a) return;
 
   const worn: Phaser.GameObjects.Components.Visible[] =
-    slot === 'head' ? [a.helm, a.helmDome, a.visor, a.plume]
+    slot === 'head' ? [a.helm, a.helmDome, a.visor, a.plume, a.crown]
       : slot === 'body' ? [a.cuirass, a.belt, a.ridge, a.pauldL, a.pauldR]
         : [a.greaveL, a.greaveR, a.kneeL, a.kneeR];
   // Taken off, not dented: nothing broken stays on the body.
@@ -5221,6 +5369,9 @@ function stepFight(real: number): void {
   }
   drawFlight(frog!);
   drawFlight(lizard!);
+  for (const f of [frog!, lizard!]) {
+    if (f.act === 'windup' && f.move?.anim === 'charge' && Math.random() < real * 22) chargeDust(f);
+  }
   // a hand that was empty and is not any more has just closed on something
   for (let i = 0; i < 2; i++) {
     const f = i === 0 ? frog! : lizard!;
@@ -5762,7 +5913,7 @@ export const frogsterMash: MinigameModule = {
 /** One fighter, as numbers, for the harness. */
 function snap(f: Fighter): Record<string, unknown> {
   return {
-    hp: Math.max(0, f.hp), maxHp: f.st.maxHp, x: Math.round(f.x), act: f.act,
+    hp: Math.max(0, f.hp), maxHp: f.st.maxHp, x: Math.round(f.x), act: f.act, move: f.move?.name ?? null,
     weapon: f.weapon.key, broken: f.broken, gone: { ...f.gone },
     // how many blades of a pair are left, and which end-of-fight pose the rig
     // has been handed over to -- both are asserted by the games suite
