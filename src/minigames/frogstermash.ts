@@ -2778,6 +2778,8 @@ export interface FighterArt {
    * of it and a preview can hide it.
    */
   bodyPlate: Phaser.GameObjects.Container | null;
+  /** What makes a helmet that helmet: horns, crest, brush, coif. */
+  helmX: Phaser.GameObjects.Container;
   /** The second blade of a pair, in the off hand.  See `syncOffBlade`. */
   offBlade: Phaser.GameObjects.Container | null;
   plates: Phaser.GameObjects.GameObject[];
@@ -3848,6 +3850,8 @@ interface AnimalParts {
   skullW: number;
   skullH: number;
   skullCol: number;
+  /** The line of a long neck, for armour that has to follow it. */
+  neck?: Array<[number, number]>;
 }
 
 /**
@@ -3881,6 +3885,7 @@ function dressAnimal(scene: Phaser.Scene, animal: Animal, c: {
   const T = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number, col: number) =>
     scene.add.graphics().fillStyle(col, 1).fillTriangle(ax, ay, bx, by, cx, cy);
   type Pt = [number, number];
+  let neckPts: Pt[] | undefined;
   const bez = (a: Pt, b: Pt, q: Pt, e: Pt, n = 12): Pt[] => {
     const out: Pt[] = [];
     for (let i = 0; i <= n; i++) {
@@ -4041,6 +4046,7 @@ function dressAnimal(scene: Phaser.Scene, animal: Animal, c: {
       skullW = 9;
       skullH = 6.6;
       const neck = bez([1, torsoTop + 6], [2, torsoTop - 6], [HX - 3, HY + 10], [HX - 1.5, HY + 2.5], 16);
+      neckPts = neck;
       headBack.push(tube(neck, 6.4, 4.4, skin));
       for (let i = 3; i < neck.length - 2; i += 3) headBack.push(E(neck[i][0] + 0.6, neck[i][1], 2.6, 2, crest, 0.9));
       for (let i = 2; i < neck.length - 1; i += 2) headBack.push(R(neck[i][0] - 2.8, neck[i][1], 1.4, 1.8, dark, -20));
@@ -4108,7 +4114,7 @@ function dressAnimal(scene: Phaser.Scene, animal: Animal, c: {
       break;
   }
   const tail = tailBits.length ? scene.add.container(c.hipX, c.hipY, tailBits) : null;
-  return { headBack, face, body, tail, skullW, skullH, skullCol };
+  return { headBack, face, body, tail, skullW, skullH, skullCol, neck: neckPts };
 }
 
 export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
@@ -4198,11 +4204,105 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // grey on grey: the plates and the hide ran together into one lump.  The
   // rhino's armour is bronzed and edged dark so it reads as a thing it WEARS,
   // and both animals' plates are riveted in brass.
-  const custom = animal === 'gorilla' || animal === 'rhino';
+  // Every fighter wears armour made for its own body now, Froggy included.
+  const custom = true;
   const BRONZE = 0x9a5a22;
   const BRASS = 0xd9a441;
   const forge = (c: number): number => (animal === 'rhino' ? mix(c, BRONZE, 0.62) : c);
   const forgeEdge = (c: number, e: number): number => (animal === 'rhino' ? down(forge(c), 0.62) : e);
+  // ---- WHAT A SUIT IS MADE OF DECIDES WHAT IT LOOKS LIKE, not only its
+  // colour.  Every material belongs to one of eight constructions, and each
+  // construction has its own surface drawn onto every piece cut from it:
+  // quilting on cloth, a stitched edge on leather, studs, rings of mail,
+  // rows of scales, rivets and a hard shine on plate, ribs of bone, spikes.
+  type Weave = 'cloth' | 'leather' | 'studded' | 'chain' | 'scale' | 'plate' | 'bone' | 'spiked';
+  const weaveOf = (k: string): Weave =>
+    ['cloth', 'padded', 'tuxedo', 'none', 'crown'].includes(k) ? 'cloth'
+      : ['leather', 'hide', 'reinforced', 'tactical'].includes(k) ? 'leather'
+        : ['studded', 'brigandine'].includes(k) ? 'studded'
+          : ['chain', 'hood'].includes(k) ? 'chain'
+            : ['scale', 'lamellar', 'dragon'].includes(k) ? 'scale'
+              : k === 'bone' ? 'bone' : k === 'spiked' ? 'spiked' : 'plate';
+  const STUD = 0xd8dde4;
+  /** The surface of one oval piece of armour, drawn inside it. */
+  const weave = (gr: Phaser.GameObjects.Graphics, w: Weave, cx: number, cy: number, rx: number, ry: number, col: number, shine = 0.4): void => {
+    const inside = (x: number, y: number, k = 0.86): boolean => ((x - cx) / (rx * k)) ** 2 + ((y - cy) / (ry * k)) ** 2 <= 1;
+    const half = (y: number, k = 0.86): number => rx * k * Math.sqrt(Math.max(0, 1 - ((y - cy) / (ry * k)) ** 2));
+    if (w === 'cloth') {
+      for (let y = cy - ry + 1.6; y < cy + ry - 0.8; y += 2.2) {
+        const hw = half(y);
+        for (let x = cx - hw; x < cx + hw - 0.6; x += 1.6) gr.fillStyle(down(col, 0.28), 0.8).fillRect(x, y, 0.8, 0.45);
+      }
+    } else if (w === 'leather' || w === 'studded') {
+      gr.fillStyle(down(col, 0.22), 0.45).fillEllipse(cx, cy + ry * 0.4, rx * 1.5, ry * 0.8);
+      const n = Math.max(8, Math.round((rx + ry) * 1.4));
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        gr.fillStyle(up(col, 0.38), 0.9).fillRect(cx + Math.cos(a) * rx * 0.78 - 0.25, cy + Math.sin(a) * ry * 0.78 - 0.25, 0.5, 0.5);
+      }
+      if (w === 'studded') {
+        for (let y = cy - ry + 2.2; y < cy + ry - 1.4; y += 2.6) {
+          for (let x = cx - rx + 2.2; x < cx + rx - 1.4; x += 2.6) {
+            if (inside(x, y, 0.66)) gr.fillStyle(STUD, 1).fillCircle(x, y, 0.55);
+          }
+        }
+      }
+    } else if (w === 'chain') {
+      let row = 0;
+      for (let y = cy - ry + 0.9; y < cy + ry - 0.4; y += 1.3, row++) {
+        for (let x = cx - rx + (row % 2 ? 0.65 : 0) + 0.6; x < cx + rx - 0.4; x += 1.3) {
+          if (inside(x, y, 0.92)) gr.fillStyle(row % 2 ? down(col, 0.38) : up(col, 0.25), 0.9).fillRect(x - 0.3, y - 0.3, 0.6, 0.6);
+        }
+      }
+    } else if (w === 'scale') {
+      let row = 0;
+      for (let y = cy - ry + 1.4; y < cy + ry - 0.6; y += 1.8, row++) {
+        for (let x = cx - rx + (row % 2 ? 1 : 0) + 1; x < cx + rx - 0.6; x += 2) {
+          if (!inside(x, y, 0.94)) continue;
+          gr.fillStyle(down(col, 0.35), 1).fillCircle(x, y + 0.3, 1.05);
+          gr.fillStyle(row % 2 ? col : up(col, 0.15), 1).fillCircle(x, y - 0.1, 0.8);
+        }
+      }
+    } else if (w === 'bone') {
+      for (let y = cy - ry + 1.6; y < cy + ry - 0.8; y += 2.4) {
+        const hw = half(y, 0.95);
+        gr.fillStyle(down(col, 0.4), 1).fillRect(cx - hw, y + 0.9, hw * 2, 0.6);
+        gr.fillStyle(up(col, 0.25), 1).fillRect(cx - hw + 0.4, y - 0.1, hw * 2 - 0.8, 0.5);
+      }
+    } else {
+      // plate (and spiked plate): a hard shine across the top, a shadow
+      // under it, and rivets round the rim
+      gr.fillStyle(up(col, 0.3 + shine * 0.5), 0.75).fillEllipse(cx - rx * 0.15, cy - ry * 0.45, rx * 1.1, ry * 0.32);
+      gr.fillStyle(down(col, 0.35), 0.55).fillEllipse(cx, cy + ry * 0.55, rx * 1.3, ry * 0.5);
+      const n = Math.max(4, Math.round((rx + ry) * 0.55));
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + 0.3;
+        gr.fillStyle(animal === 'rhino' || animal === 'gorilla' ? BRASS : up(col, 0.55), 1).fillCircle(cx + Math.cos(a) * rx * 0.8, cy + Math.sin(a) * ry * 0.8, 0.5);
+      }
+      if (w === 'spiked') {
+        for (const a of [-2.2, -1.57, -0.9]) {
+          const bx = cx + Math.cos(a) * rx * 0.95;
+          const by = cy + Math.sin(a) * ry * 0.95;
+          gr.fillStyle(STUD, 1).fillTriangle(bx - 1, by + 0.6, bx + Math.cos(a) * 3, by + Math.sin(a) * 3, bx + 1, by + 0.6);
+        }
+      }
+    }
+  };
+  /** Decoration along a curved band: rivets, studs, stitches or scales. */
+  const bandDeco = (gr: Phaser.GameObjects.Graphics, w: Weave, cx: number, cy: number, rx: number, ry: number, a0: number, a1: number, col: number): void => {
+    if (w === 'cloth' || w === 'chain') return;
+    const n = Math.max(3, Math.round((Math.abs(a1 - a0) / 360) * (rx + ry) * 2.2));
+    for (let i = 0; i <= n; i++) {
+      const a = ((a0 + ((a1 - a0) * i) / n) * Math.PI) / 180;
+      const x = cx + Math.cos(a) * rx;
+      const y = cy + Math.sin(a) * ry;
+      if (w === 'scale') gr.fillStyle(down(col, 0.3), 1).fillCircle(x, y + 0.3, 0.8);
+      else if (w === 'leather') gr.fillStyle(up(col, 0.38), 1).fillRect(x - 0.25, y - 0.25, 0.5, 0.5);
+      else if (w === 'bone') gr.fillStyle(down(col, 0.4), 1).fillRect(x - 0.25, y - 0.8, 0.5, 1.6);
+      else gr.fillStyle(w === 'plate' && (animal === 'rhino' || animal === 'gorilla') ? BRASS : STUD, 1).fillCircle(x, y, i % 2 ? 0.45 : 0.6);
+    }
+  };
+  const LW = weaveOf(L.key);
   // ---- AND A SHIN GUARD, not a box on the leg.  A rounded plate down the
   // front of the shin with a knee cop over the top of it, drawn with its
   // foot end at the pivot so it swings exactly as the leg does.  The
@@ -4212,7 +4312,9 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
     const col = forge(L.colour);
     const edge = forgeEdge(L.colour, L.edge);
     const w = greaveW;
-    const h = (animal === 'gorilla' ? 4.6 : 6.4) * limb;
+    // the gorilla's short, the cheetah's a light guard low on the shin, the
+    // giraffe's long like its legs
+    const h = (animal === 'gorilla' ? 4.4 : animal === 'cheetah' ? 4.2 : frog ? 5.2 : 5.4) * limb;
     const r = Math.min(w, h) * 0.45;
     gr.fillStyle(edge, 1).fillRoundedRect(-w / 2 - 0.7, -h - 0.4, w + 1.4, h + 1.1, r);
     gr.fillStyle(col, 1).fillRoundedRect(-w / 2, -h, w, h, r * 0.9);
@@ -4222,6 +4324,8 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
     gr.fillStyle(col, 1).fillEllipse(0, -h, w + 1, 3.2);
     gr.fillStyle(up(col, 0.4), 0.8).fillEllipse(-0.6, -h - 0.7, w * 0.6, 1);
     gr.fillStyle(BRASS, 1).fillCircle(0, -h, 0.8);
+    // and the shin plate's own surface, from what it is made of
+    weave(gr, LW, 0, -h / 2 + 0.6, w / 2, h / 2 - 0.4, col);
     return gr;
   };
   const greaveL = custom ? shin(-4 * wide).setVisible(wears(L))
@@ -4406,13 +4510,14 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // inside the shoulder joints and the bracers inside the forearms, so they
   // go wherever the arm goes.  Facing is the root's mirror, so it turns with
   // the animal.  The generic pieces are put away for these two.
-  const plated = wears(B) && (animal === 'gorilla' || animal === 'rhino');
+  const plated = wears(B);
   const plates: Phaser.GameObjects.GameObject[] = [];
   let bodyPlate: Phaser.GameObjects.Container | null = null;
   const plateCol = forge(B.colour);
   const plateEdge = forgeEdge(B.colour, B.edge);
   const plateLit = up(B.colour, 0.34 + g * 0.5);
   const plateDark = down(B.colour, 0.34);
+  const BW = weaveOf(B.key);
   /** A curved band along an ellipse arc: a plate edge that follows a body. */
   const arcBand = (gr: Phaser.GameObjects.Graphics, cx: number, cy: number, rx: number, ry: number, a0: number, a1: number, w: number, col: number, edge: number): void => {
     const pts: Phaser.Math.Vector2[] = [];
@@ -4424,61 +4529,151 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
     gr.lineStyle(w + 1.4, edge, 1).strokePoints(pts, false);
     gr.lineStyle(w, col, 1).strokePoints(pts, false);
   };
+  /** One oval piece cut from the suit, with its surface and its edge. */
+  const piece = (gr: Phaser.GameObjects.Graphics, cx: number, cy: number, rx: number, ry: number, col = plateCol, edge = plateEdge): void => {
+    gr.fillStyle(col, 1).fillEllipse(cx, cy, rx * 2, ry * 2);
+    weave(gr, BW, cx, cy, rx, ry, col, g);
+    gr.lineStyle(0.8, edge, 1).strokeEllipse(cx, cy, rx * 2, ry * 2);
+  };
+  /** A band that follows the body, decorated as the suit is. */
+  const band = (gr: Phaser.GameObjects.Graphics, cx: number, cy: number, rx: number, ry: number, a0: number, a1: number, w: number, col = plateCol, edge = plateEdge): void => {
+    arcBand(gr, cx, cy, rx, ry, a0, a1, w, col, edge);
+    bandDeco(gr, BW, cx, cy, rx, ry, a0 + 6, a1 - 6, col);
+  };
+  /** A strap from one point to another, in the suit's own material. */
+  const strap = (gr: Phaser.GameObjects.Graphics, x0: number, y0: number, x1: number, y1: number, w = 1.8): void => {
+    gr.lineStyle(w + 1.2, plateEdge, 1).lineBetween(x0, y0, x1, y1);
+    gr.lineStyle(w, plateCol, 1).lineBetween(x0, y0, x1, y1);
+    for (let k = 1; k < 4; k++) {
+      const t = k / 4;
+      gr.fillStyle(BW === 'cloth' ? down(plateCol, 0.3) : STUD, 1).fillCircle(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, 0.5);
+    }
+  };
   if (plated) {
-    const tw = 15 * wide;
-    const th = 19 * tall;
+    const tw = (frog ? 19 : 15) * wide;
+    const th = (frog ? 20 : 19) * tall;
     const gr = scene.add.graphics();
     const bits: Phaser.GameObjects.GameObject[] = [gr];
-    if (animal === 'gorilla') {
-      // ---- THE GORILLA: heavy plate on the upper chest and over the yoke
-      // of the back, a belt at the waist -- and the arms, the gut and the
-      // silhouette left bare, because it is a gorilla wearing armour and
-      // not armour with a gorilla in it.
-      // the upper back: a thick curved plate over the top of the back
-      arcBand(gr, 0, 0, tw * 0.47, th * 0.47, 196, 262, 3.6, plateCol, plateEdge);
-      arcBand(gr, 0, 0, tw * 0.47, th * 0.47, 204, 250, 1, plateLit, plateLit);
-      // the chest: two curved pectoral plates, not a slab
-      // (set below the hunched head and the neck, which cover the top of it)
-      // -- two of them, with the black fur of the breastbone and the gut
-      // showing between and below, joined by a studded strap
-      for (const px of [-3.8, 5.4]) {
-        bits.push(scene.add.ellipse(px, -th * 0.02, tw * 0.33, th * 0.34, plateCol).setStrokeStyle(1, plateEdge));
-        bits.push(scene.add.ellipse(px - 0.6, -th * 0.1, tw * 0.2, th * 0.08, plateLit).setAlpha(0.6));
-        bits.push(scene.add.ellipse(px, th * 0.11, tw * 0.25, th * 0.05, plateDark).setAlpha(0.6));
+    switch (animal) {
+      case 'gorilla': {
+        // ---- THE GORILLA: heavy plate on the upper chest and over the yoke
+        // of the back, a belt at the waist -- and the arms, the gut and the
+        // silhouette left bare, because it is a gorilla wearing armour and
+        // not armour with a gorilla in it.
+        band(gr, 0, 0, tw * 0.47, th * 0.47, 196, 262, 3.6);
+        arcBand(gr, 0, 0, tw * 0.47, th * 0.47, 204, 250, 1, plateLit, plateLit);
+        // two pectoral plates with the black fur of the breastbone and the
+        // gut showing between and below, joined by a studded strap
+        for (const px of [-3.8, 5.4]) piece(gr, px, -th * 0.02, tw * 0.165, th * 0.17);
+        gr.fillStyle(plateEdge, 1).fillRect(-1.4, -th * 0.1 - 0.8, 4.4, 1.6);
+        for (const [rx, ry] of [[-7.6, -2.4], [9.6, -2.4], [0.8, -th * 0.1]] as const) gr.fillStyle(BRASS, 1).fillCircle(rx, ry, 0.8);
+        // the waist: a belt that follows the round of the gut, and a buckle
+        arcBand(gr, 0, 0, tw * 0.46, th * 0.46, 36, 144, 2.4, plateEdge, down(plateEdge, 0.3));
+        gr.fillStyle(BRASS, 1).fillRect(0, th * 0.44 - 1.5, 4, 3);
+        break;
       }
-      bits.push(scene.add.rectangle(0.8, -th * 0.1, 4.4, 1.6, plateEdge));
-      for (const [rx, ry] of [[-7.6, -2.4], [9.6, -2.4], [0.8, -th * 0.1]] as const) bits.push(scene.add.circle(rx, ry, 0.8, BRASS));
-      // the waist: a belt that follows the round of the gut, and a buckle
-      arcBand(gr, 0, 0, tw * 0.46, th * 0.46, 36, 144, 2.4, plateEdge, down(plateEdge, 0.3));
-      bits.push(scene.add.rectangle(2, th * 0.44, 4, 3, BRASS).setStrokeStyle(1, plateEdge));
-    } else {
-      // ---- THE RHINO: built for defence.  A broad breastplate in overlapping
-      // lames that follows the round of its chest, a gorget round the base of
-      // the neck (clear of the head and the horn), a ridged plate over the
-      // upper back, and a skirt of plates at the waist.
-      bits.push(scene.add.ellipse(1, -th * 0.04, tw * 0.8, th * 0.66, plateCol).setStrokeStyle(1, plateEdge));
-      for (let k = 0; k < 3; k++) {
-        const y = -th * 0.24 + k * th * 0.17;
-        arcBand(gr, 1, y - 5, tw * 0.36, 5.4, 30, 150, 0.9, plateDark, plateDark);
+      case 'rhino': {
+        // ---- THE RHINO: built for defence.  A broad breastplate in
+        // overlapping lames that follows the round of its chest, a gorget
+        // round the base of the neck (clear of the head and the horn), a
+        // ridged plate over the upper back, and a skirt of plates at the waist.
+        piece(gr, 1, -th * 0.04, tw * 0.4, th * 0.33);
+        for (let k = 0; k < 3; k++) {
+          const y = -th * 0.24 + k * th * 0.17;
+          arcBand(gr, 1, y - 5, tw * 0.36, 5.4, 30, 150, 0.9, plateDark, plateDark);
+        }
+        gr.fillStyle(BRASS, 1).fillCircle(1.5, -th * 0.02, 1.4);
+        band(gr, 3, -th * 0.5 + 2.4, 7.4, 3.6, 190, 350, 2.8);
+        band(gr, 0, 0, tw * 0.47, th * 0.47, 192, 258, 3.8);
+        for (let k = -2; k <= 2; k++) piece(gr, k * tw * 0.14 + 1, th * 0.42, tw * 0.066, 2.2);
+        break;
       }
-      bits.push(scene.add.ellipse(0, -th * 0.2, tw * 0.46, th * 0.12, plateLit).setAlpha(0.5));
-      bits.push(scene.add.circle(1.5, -th * 0.02, 1.4, BRASS).setStrokeStyle(0.8, plateEdge));
-      // the gorget: a collar across the top of the chest where the neck
-      // meets it, curving up at the front
-      arcBand(gr, 3, -th * 0.5 + 2.4, 7.4, 3.6, 190, 350, 2.8, plateCol, plateEdge);
-      // the upper back, with a ridge of studs along it
-      arcBand(gr, 0, 0, tw * 0.47, th * 0.47, 192, 258, 3.8, plateCol, plateEdge);
-      for (let k = 0; k < 4; k++) {
-        const a = ((200 + k * 16) * Math.PI) / 180;
-        bits.push(scene.add.circle(Math.cos(a) * tw * 0.47, Math.sin(a) * th * 0.47, 1, BRASS).setStrokeStyle(0.6, plateEdge));
+      case 'cheetah': {
+        // ---- THE CHEETAH: built to run, so almost nothing.  A baldric across
+        // the chest, one small plate over the heart, a sash at the waist and
+        // the spots everywhere else.
+        strap(gr, tw * 0.42, -th * 0.42, -tw * 0.38, th * 0.34, 1.8);
+        piece(gr, tw * 0.18, -th * 0.2, tw * 0.24, th * 0.13);
+        band(gr, 0, 0, tw * 0.46, th * 0.46, 40, 140, 1.6);
+        break;
       }
-      // a skirt of plates at the waist
-      for (let k = -2; k <= 2; k++) {
-        const x = k * tw * 0.14 + 1;
-        bits.push(scene.add.rectangle(x, th * 0.4, tw * 0.13, 4, plateCol).setStrokeStyle(0.8, plateEdge).setAngle(k * 6));
+      case 'hyena': {
+        // ---- THE HYENA: a spined plate along the humped back it fights
+        // hunched under, a studded collar, a guard over the belly it keeps
+        // low, and a tasset on the hip.
+        band(gr, 0, 0, tw * 0.5, th * 0.49, 188, 286, 3.4);
+        for (let k = 0; k < 4; k++) {
+          const a = ((204 + k * 20) * Math.PI) / 180;
+          const bx = Math.cos(a) * tw * 0.54;
+          const by = Math.sin(a) * th * 0.53;
+          gr.fillStyle(STUD, 1).fillTriangle(bx - Math.sin(a) * 1.1, by + Math.cos(a) * 1.1, bx + Math.cos(a) * 3.2, by + Math.sin(a) * 3.2,
+            bx + Math.sin(a) * 1.1, by - Math.cos(a) * 1.1);
+        }
+        band(gr, tw * 0.1, -th * 0.5 + 2, 5.5, 3, 200, 340, 2.2);
+        piece(gr, tw * 0.16, th * 0.1, tw * 0.2, th * 0.19);
+        band(gr, 0, 0, tw * 0.48, th * 0.48, 22, 84, 2.4);
+        break;
+      }
+      case 'giraffe': {
+        // ---- THE GIRAFFE: a tall narrow breastplate on a tall narrow chest,
+        // a gorget where the neck leaves the shoulders, and rings up the neck
+        // itself (added with the head, which is where the neck is drawn).
+        piece(gr, tw * 0.12, -th * 0.06, tw * 0.28, th * 0.34);
+        band(gr, tw * 0.12, -th * 0.5 + 2.6, 4.6, 2.6, 190, 350, 2.2);
+        band(gr, 0, 0, tw * 0.47, th * 0.47, 40, 140, 1.8);
+        break;
+      }
+      case 'lion': {
+        // ---- THE LION: a gladiator.  Bare-chested under the mane, in a
+        // harness of two crossed straps with a boss where they meet, a broad
+        // belt with strips hanging from it -- and all the iron on one arm
+        // (see the manica in `buildArm`).
+        strap(gr, tw * 0.36, -th * 0.42, -tw * 0.34, th * 0.3, 2);
+        strap(gr, -tw * 0.3, -th * 0.42, tw * 0.38, th * 0.3, 2);
+        piece(gr, tw * 0.03, -th * 0.07, 2.6, 2.6);
+        gr.fillStyle(BRASS, 1).fillCircle(tw * 0.03, -th * 0.07, 1.2);
+        band(gr, 0, 0, tw * 0.47, th * 0.47, 36, 144, 3);
+        for (let k = -2; k <= 2; k++) {
+          const x = k * tw * 0.12 + 1;
+          gr.fillStyle(plateEdge, 1).fillRect(x - 1.3, th * 0.44, 2.6, 5.4);
+          gr.fillStyle(plateCol, 1).fillRect(x - 0.9, th * 0.44, 1.8, 5);
+          gr.fillStyle(STUD, 1).fillCircle(x, th * 0.44 + 4.2, 0.45);
+        }
+        break;
+      }
+      case 'wolf': {
+        // ---- THE WOLF: a close jerkin that does not slow it, a thick fur
+        // collar over the ruff, and a belt with a pouch for whatever it is
+        // about to try.
+        piece(gr, 0.8, 0.4, tw * 0.4, th * 0.37);
+        arcBand(gr, tw * 0.06, -th * 0.46, 6.2, 3.6, 188, 352, 3, up(light, 0.1), down(light, 0.3));
+        for (let k = 0; k < 6; k++) {
+          const a = ((196 + k * 28) * Math.PI) / 180;
+          gr.fillStyle(0xffffff, 0.35).fillRect(tw * 0.06 + Math.cos(a) * 6.2 - 0.3, -th * 0.46 + Math.sin(a) * 3.6 - 0.8, 0.6, 1.6);
+        }
+        band(gr, 0, 0, tw * 0.46, th * 0.46, 40, 140, 2);
+        gr.fillStyle(plateEdge, 1).fillRoundedRect(-tw * 0.32, th * 0.38, 3.6, 3.4, 0.8);
+        gr.fillStyle(plateCol, 1).fillRoundedRect(-tw * 0.32 + 0.4, th * 0.38 + 0.4, 2.8, 2.6, 0.6);
+        break;
+      }
+      case 'lizard': {
+        // ---- THE LIZARD: a scaled shirt close to the body, leaving the crest
+        // free along the back, and a belt.
+        piece(gr, 0.6, -th * 0.02, tw * 0.42, th * 0.4);
+        band(gr, 0, 0, tw * 0.46, th * 0.46, 40, 140, 2);
+        break;
+      }
+      default: {
+        // ---- FROGGY: a round plate on a round belly, held on by two straps
+        // over the shoulders, and a belt under it.
+        piece(gr, 1, 0.6, tw * 0.4, th * 0.38);
+        strap(gr, -tw * 0.3, -th * 0.42, -tw * 0.2, -th * 0.2, 1.6);
+        strap(gr, tw * 0.34, -th * 0.42, tw * 0.26, -th * 0.2, 1.6);
+        band(gr, 0, 0, tw * 0.47, th * 0.47, 42, 138, 2);
+        break;
       }
     }
-    bodyPlate = scene.add.container(-1, -19 * tall - lift, bits);
+    bodyPlate = scene.add.container(frog ? 0 : -1, frog ? -19 : -19 * tall - lift, bits);
     plates.push(bodyPlate);
     // the generic plate is put away for these two
     for (const o of [cuirass, belt, ridge, pauldL, pauldR]) o.setVisible(false);
@@ -4656,6 +4851,114 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
     crown.add(scene.add.circle(cw / 2 - 2.2, 0.1, 0.9, 0x3fb86a));
   }
 
+  // ---- AND EACH HELMET IS ITS OWN HELMET.  The cap above is the bowl every
+  // helmet shares; what makes a viking helm a viking helm -- the horns, the
+  // spartan's crest, the roman's brush and neck guard, the knight's point,
+  // a mail coif -- is drawn onto it here, in the head's own group, so it
+  // turns and ducks with the head it is on.
+  const helmX = scene.add.container(0, 0).setVisible(helmOn);
+  {
+    const hx2 = scene.add.graphics();
+    helmX.add(hx2);
+    const HW2 = beastParts ? skW + 1 : helmW;
+    const top = beastParts ? HY - skH * 0.72 : hy - 5.5;
+    const cx = beastParts ? hx - 0.4 : hx;
+    const hc = H.colour;
+    const he = H.edge;
+    const RED = 0xb3261e;
+    const hw = weaveOf(H.key);
+    let crested = false;
+    switch (H.key) {
+      case 'viking': {
+        // two horns out of the sides of the bowl, curving up
+        for (const sgn of [1, -1]) {
+          const bx = cx + sgn * HW2 * 0.42;
+          const pts = [bx, hy - 1.2, bx + sgn * 2.4, hy - 3.2, bx + sgn * 3, hy - 6.6, bx + sgn * 2, hy - 9.4];
+          hx2.lineStyle(2.4, 0x8a7a5a, 1).strokePoints(pts.reduce<Phaser.Math.Vector2[]>((o, v, i) => (i % 2 ? o : [...o, new Phaser.Math.Vector2(v, pts[i + 1])]), []), false);
+          hx2.lineStyle(1.4, 0xe8dcc0, 1).strokePoints(pts.reduce<Phaser.Math.Vector2[]>((o, v, i) => (i % 2 ? o : [...o, new Phaser.Math.Vector2(v, pts[i + 1])]), []), false);
+          hx2.fillStyle(0x3a3226, 1).fillCircle(bx + sgn * 2, hy - 9.6, 0.6);
+        }
+        hx2.fillStyle(he, 1).fillRect(cx - HW2 / 2, hy - 0.6, HW2, 1.2);
+        crested = true;
+        break;
+      }
+      case 'spartan':
+      case 'corinthian': {
+        // a tall crest of horsehair running front to back on a raised stalk,
+        // and a cheek guard down the side of the face
+        const tall2 = H.key === 'spartan' ? 5.4 : 3.8;
+        hx2.fillStyle(he, 1).fillRect(cx - 0.6, top - 1.6, 1.2, 2.4);
+        hx2.fillStyle(0x6a1612, 1).fillEllipse(cx - 0.6, top - 1.6 - tall2 / 2 + 0.6, HW2 * 1.02, tall2 + 0.8);
+        hx2.fillStyle(RED, 1).fillEllipse(cx - 0.6, top - 1.6 - tall2 / 2, HW2 * 0.96, tall2);
+        for (let k = -3; k <= 3; k++) hx2.fillStyle(0xe05a44, 0.8).fillRect(cx - 0.6 + k * HW2 * 0.12, top - 1.6 - tall2 + 0.8, 0.5, tall2 * 0.6);
+        hx2.fillStyle(hc, 1).fillRoundedRect(cx + HW2 * 0.14, hy - 0.4, 3.2, H.key === 'corinthian' ? 6 : 4.6, 1);
+        hx2.lineStyle(0.6, he, 1).strokeRoundedRect(cx + HW2 * 0.14, hy - 0.4, 3.2, H.key === 'corinthian' ? 6 : 4.6, 1);
+        crested = true;
+        break;
+      }
+      case 'roman':
+      case 'legion': {
+        // a short red brush on a stalk, a neck guard flaring out at the back
+        // and a hinged cheek piece
+        hx2.fillStyle(he, 1).fillRect(cx - 0.6, top - 1.4, 1.2, 2);
+        hx2.fillStyle(RED, 1).fillRoundedRect(cx - HW2 * 0.3, top - 4.4, HW2 * 0.6, 3.2, 1.2);
+        hx2.fillStyle(0xe05a44, 0.8).fillRect(cx - HW2 * 0.26, top - 4, HW2 * 0.52, 0.8);
+        hx2.fillStyle(hc, 1).fillTriangle(cx - HW2 * 0.46, hy - 1, cx - HW2 * 0.5 - 3.4, hy + 2.8, cx - HW2 * 0.28, hy + 2);
+        hx2.lineStyle(0.6, he, 1).strokeTriangle(cx - HW2 * 0.46, hy - 1, cx - HW2 * 0.5 - 3.4, hy + 2.8, cx - HW2 * 0.28, hy + 2);
+        hx2.fillStyle(hc, 1).fillRoundedRect(cx + HW2 * 0.12, hy - 0.2, 3, 4.4, 1);
+        hx2.fillStyle(he, 1).fillCircle(cx + HW2 * 0.12 + 1.5, hy + 0.6, 0.5);
+        crested = true;
+        break;
+      }
+      case 'knight': {
+        // a pointed bascinet with a brim, and mail hanging at the nape
+        hx2.fillStyle(hc, 1).fillTriangle(cx - HW2 * 0.4, top + 2.2, cx - HW2 * 0.06, top - 3.6, cx + HW2 * 0.36, top + 2.2);
+        hx2.lineStyle(0.6, he, 1).strokeTriangle(cx - HW2 * 0.4, top + 2.2, cx - HW2 * 0.06, top - 3.6, cx + HW2 * 0.36, top + 2.2);
+        hx2.fillStyle(up(hc, 0.4), 0.8).fillRect(cx - HW2 * 0.16, top - 1.6, 0.8, 3);
+        hx2.fillStyle(he, 1).fillRect(cx - HW2 / 2 - 0.4, hy - 0.8, HW2 + 0.8, 1.2);
+        for (let k = 0; k < 3; k++) for (let j = 0; j < 4; j++) hx2.fillStyle(0x87909c, 1).fillRect(cx - HW2 * 0.5 + j * 1.3 - 0.8, hy + 0.8 + k * 1.2, 0.8, 0.8);
+        break;
+      }
+      case 'hood': {
+        // a mail coif over the back of the head and down onto the neck
+        const cw = HW2 * 0.7;
+        const ch = beastParts ? skH * 0.9 : 11;
+        hx2.fillStyle(hc, 1).fillEllipse(cx - HW2 * 0.22, hy + 1, cw, ch);
+        let row = 0;
+        for (let y = hy + 1 - ch / 2 + 0.8; y < hy + 1 + ch / 2 - 0.4; y += 1.2, row++) {
+          for (let x = cx - HW2 * 0.22 - cw / 2 + 0.6 + (row % 2 ? 0.6 : 0); x < cx - HW2 * 0.22 + cw / 2 - 0.4; x += 1.2) {
+            if (((x - (cx - HW2 * 0.22)) / (cw * 0.46)) ** 2 + ((y - (hy + 1)) / (ch * 0.46)) ** 2 <= 1) hx2.fillStyle(down(hc, 0.35), 1).fillRect(x - 0.25, y - 0.25, 0.5, 0.5);
+          }
+        }
+        break;
+      }
+      default: {
+        if (hw === 'cloth') {
+          // a headband tied at the back, the ends loose
+          hx2.fillStyle(hc, 1).fillRect(cx - HW2 / 2, hy - 1.4, HW2, 1.8);
+          hx2.lineStyle(1, hc, 1).lineBetween(cx - HW2 / 2, hy - 0.5, cx - HW2 / 2 - 3, hy + 2.4);
+          hx2.lineStyle(1, hc, 1).lineBetween(cx - HW2 / 2, hy - 0.5, cx - HW2 / 2 - 2, hy + 3.4);
+        } else if (hw === 'leather' || hw === 'studded') {
+          // a stitched brim and an ear flap
+          for (let x = cx - HW2 / 2 + 1; x < cx + HW2 / 2 - 0.5; x += 1.6) hx2.fillStyle(hw === 'studded' ? STUD : up(hc, 0.4), 1).fillRect(x, hy - 0.4, 0.6, 0.6);
+          hx2.fillStyle(hc, 1).fillRoundedRect(cx - HW2 * 0.3, hy, 2.6, 4, 1);
+        } else if (hw === 'chain') {
+          for (let x = cx - HW2 / 2 + 0.8; x < cx + HW2 / 2 - 0.4; x += 1.3) for (let y = top + 1; y < hy; y += 1.3) hx2.fillStyle(down(hc, 0.35), 1).fillRect(x, y, 0.5, 0.5);
+        } else if (hw === 'scale' || hw === 'bone') {
+          for (let x = cx - HW2 / 2 + 1.2; x < cx + HW2 / 2 - 0.6; x += 2) hx2.fillStyle(down(hc, 0.3), 1).fillCircle(x, hy - 1.6, 0.9);
+        } else {
+          // plate: rivets round the brim, a ridge over the top and a knob
+          for (let x = cx - HW2 / 2 + 1.2; x < cx + HW2 / 2 - 0.6; x += 2.2) hx2.fillStyle(up(hc, 0.5), 1).fillCircle(x, hy, 0.45);
+          hx2.fillStyle(up(hc, 0.3), 1).fillRect(cx - 0.5, top + 0.4, 1, (hy - top) * 0.7);
+          if (hw === 'spiked') hx2.fillStyle(STUD, 1).fillTriangle(cx - 1.2, top + 1, cx, top - 3.6, cx + 1.2, top + 1);
+          else hx2.fillStyle(he, 1).fillCircle(cx, top + 0.4, 0.9);
+        }
+      }
+    }
+    // a helmet that carries its own crest does not also wear the plume
+    if (crested) plume.setVisible(false);
+  }
+
   // ---- the arm and the weapon, on one hinge at the shoulder
   // ---- TWO ARMS, because one of them cannot hold a guard.
   //
@@ -4744,12 +5047,36 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
       const col = behind ? down(plateCol, 0.2) : plateCol;
       const edge = behind ? down(plateEdge, 0.2) : plateEdge;
       const wrap = scene.add.graphics();
-      const r = 2.9 * wide;
-      arcBand(wrap, 0.5, 0.2, r, r * 0.95, 160, 380, animal === 'rhino' ? 3.4 : 3, col, edge);
-      if (animal === 'rhino') arcBand(wrap, 0.5, 0.2, r * 0.7, r * 0.66, 190, 350, 2.2, col, edge);
-      arcBand(wrap, 0.5, 0.2, r, r * 0.95, 200, 300, 0.8, up(col, 0.34), up(col, 0.34));
+      const r = 2.9 * wide * (animal === 'giraffe' ? 0.9 : 1);
+      // Each animal's shoulder is its own: the cheetah a thin leather band,
+      // the wolf three layered lames, the lion's weapon arm a whole manica
+      // and its other arm nothing but a strap, the hyena's a spike.
+      const manica = animal === 'lion' && !behind;
+      if (animal === 'cheetah' || (animal === 'lion' && behind)) {
+        arcBand(wrap, 0.5, 0.2, r * 0.9, r * 0.85, 200, 340, 1.4, col, edge);
+      } else if (animal === 'wolf') {
+        for (let k = 2; k >= 0; k--) arcBand(wrap, 0.5 + k * 1.2, 0.2 + k * 0.6, r * (1 - k * 0.16), r * 0.9 * (1 - k * 0.16), 190, 350, 2.2, col, edge);
+      } else {
+        arcBand(wrap, 0.5, 0.2, r * (manica ? 1.2 : 1), r * 0.95 * (manica ? 1.2 : 1), 160, 380, animal === 'rhino' || manica ? 3.4 : 3, col, edge);
+        if (animal === 'rhino' || manica) arcBand(wrap, 0.5, 0.2, r * 0.7, r * 0.66, 190, 350, 2.2, col, edge);
+        arcBand(wrap, 0.5, 0.2, r, r * 0.95, 200, 300, 0.8, up(col, 0.34), up(col, 0.34));
+        bandDeco(wrap, BW, 0.5, 0.2, r, r * 0.95, 210, 330, col);
+      }
+      if (animal === 'hyena' || BW === 'spiked') {
+        wrap.fillStyle(STUD, 1).fillTriangle(-0.6, 0.2 - r * 0.9, 0.5, 0.2 - r - 3.2, 1.6, 0.2 - r * 0.9);
+      }
+      if (manica) {
+        // the segmented sleeve down the whole upper arm
+        for (let k = 0; k < 3; k++) {
+          const x = UPPER * (0.3 + k * 0.24);
+          wrap.fillStyle(edge, 1).fillRect(x - 1.1, -2.1 * wide - 0.7, 2.2, 4.2 * wide + 1.4);
+          wrap.fillStyle(col, 1).fillRect(x - 0.8, -2.1 * wide - 0.4, 1.6, 4.2 * wide + 0.8);
+        }
+      }
       root.add(wrap);
-      const bracer = scene.add.ellipse(FORE * 0.55, 0, FORE * 0.72, 3.8 * wide + 1.6, col).setStrokeStyle(1, edge);
+      const light2 = animal === 'cheetah' || (animal === 'lion' && behind);
+      const bLen = manica ? FORE * 0.86 : light2 ? FORE * 0.46 : animal === 'giraffe' ? FORE * 0.6 : FORE * 0.72;
+      const bracer = scene.add.ellipse(FORE * 0.55, 0, bLen, 3.8 * wide + (light2 ? 0.6 : 1.6), col).setStrokeStyle(1, edge);
       const band1 = scene.add.rectangle(FORE * 0.3, 0, 0.9, 3.8 * wide + 1, edge);
       const band2 = scene.add.rectangle(FORE * 0.8, 0, 0.9, 3.8 * wide + 1, edge);
       const shine = scene.add.rectangle(FORE * 0.55, -1.1 * wide, FORE * 0.5, 0.8, up(col, 0.4)).setAlpha(0.8);
@@ -4805,14 +5132,31 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   if (smile) headBits.push(smile);
   if (brow) headBits.push(brow);
   headBits.push(eyeL, eyeR, pupL, pupR, catchL, catchR);
-  headBits.push(helmDome, helm, visor, ...helmDetail, plume, crown);
+  headBits.push(helmDome, helm, visor, ...helmDetail, plume, crown, helmX);
+  // the giraffe's neck rings, which live with the neck in the head group
+  if (plated && animal === 'giraffe' && beastParts?.neck) {
+    const nr = scene.add.graphics();
+    const np = beastParts.neck;
+    for (const k of [3, 6, 9, 12]) {
+      if (k + 1 >= np.length) continue;
+      const [x0, y0] = np[k - 1];
+      const [x1, y1] = np[k + 1];
+      const a = Math.atan2(y1 - y0, x1 - x0) + Math.PI / 2;
+      const [cx, cy] = np[k];
+      const half = 3.6 - k * 0.12;
+      nr.lineStyle(2.8, plateEdge, 1).lineBetween(cx - Math.cos(a) * half, cy - Math.sin(a) * half, cx + Math.cos(a) * half, cy + Math.sin(a) * half);
+      nr.lineStyle(1.8, plateCol, 1).lineBetween(cx - Math.cos(a) * half, cy - Math.sin(a) * half, cx + Math.cos(a) * half, cy + Math.sin(a) * half);
+    }
+    headBits.splice((beastParts.headBack ?? []).length, 0, nr);
+    plates.push(nr);
+  }
   headGroup.add(headBits);
   if (neck) parts.push(neck);
   parts.push(headGroup);
   const root = scene.add.container(f.x, FLOOR_Y, parts).setDepth(20);
   root.setScale(f.face * (bld?.scale ?? 1), bld?.scale ?? 1);
   return { root, legL, legR, greaveL, greaveR, kneeL, kneeR, footL, footR, torso, cuirass, belt, ridge,
-    pauldL, pauldR, head, helm, helmDome, crown, bodyPlate, offBlade: null, plates, visor, plume, headGroup, arm, armOff, guardUp: false, offFront: false, offHome: armOff.root.x, weapon, shadow,
+    pauldL, pauldR, head, helm, helmDome, crown, helmX, bodyPlate, offBlade: null, plates, visor, plume, headGroup, arm, armOff, guardUp: false, offFront: false, offHome: armOff.root.x, weapon, shadow,
     nicks: 0, tail: beastParts?.tail ?? null };
 }
 
@@ -5777,7 +6121,7 @@ function redrawPreview(): void {
   art.root.setPosition(0, 0);
   art.root.setDepth(0);
   // Not taken means not drawn.  Not "drawn faintly".
-  if (!picked.head) { art.helm.setVisible(false); art.crown.setVisible(false); }
+  if (!picked.head) { art.helm.setVisible(false); art.crown.setVisible(false); art.helmX.setVisible(false); }
   if (!picked.body) {
     art.cuirass.setVisible(false);
     for (const o of art.plates) (o as unknown as Phaser.GameObjects.Components.Visible).setVisible(false);
@@ -6663,7 +7007,7 @@ function showStrip(f: Fighter, slot: 'head' | 'body' | 'legs', tint: number): vo
   if (!a) return;
 
   const worn: Phaser.GameObjects.Components.Visible[] =
-    slot === 'head' ? [a.helm, a.helmDome, a.visor, a.plume, a.crown]
+    slot === 'head' ? [a.helm, a.helmDome, a.visor, a.plume, a.crown, a.helmX]
       : slot === 'body' ? [a.cuirass, a.belt, a.ridge, a.pauldL, a.pauldR, ...(a.plates as unknown as Phaser.GameObjects.Components.Visible[])]
         : [a.greaveL, a.greaveR, a.kneeL, a.kneeR];
   // Taken off, not dented: nothing broken stays on the body.
