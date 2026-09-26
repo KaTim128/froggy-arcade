@@ -120,6 +120,17 @@ export const MOVES: Record<string, Move[]> = {
     { name: 'COUNTER PUNCH', dmg: 1.3, wind: 0.45, reach: 1.0, when: 'counter', anim: 'upper' },
   ],
   knuckles: [M.combo('PUNCH COMBO', 3), M.bash('UPPERCUT', 1.1), M.stab('HOOK'), M.charge('RUSH', 1.0)],
+  // ---- the ten added to the rack
+  sickle: [M.stab('HOOKING SLASH'), M.low('ANKLE HOOK'), M.combo('TWO QUICK CUTS', 2), M.counter('CATCH AND PULL', 1.3)],
+  warfan: [M.combo('FAN FLURRY', 3), M.sweep('SPREAD SWEEP', 0.95, 1.1), M.counter('FOLDING PARRY', 1.35), M.stab('FAN JAB')],
+  scimitar: [M.sweep('CURVING SLASH', 1.1, 1.15), M.over('RISING CUT', 1.2), M.spin('TURNING SLASH', 1.1), M.counter('DRAW CUT', 1.3)],
+  estoc: [M.crush('PLATE SPLITTER', 1.4), M.thrust('DRIVING THRUST', 1.05, 1.25), M.stab('SHORT POINT'), M.counter('STOP THRUST', 1.35)],
+  pike: [M.thrust('SET AND BRACE', 1.05, 1.5), M.thrust('LONG REACH', 0.95, 1.6), M.low('BUTT SPIKE'), M.counter('RECEIVE THE CHARGE', 1.45)],
+  glaive: [M.sweep('WIDE ARC', 1.15, 1.25), M.over('OVERHEAD CLEAVE', 1.25), M.thrust('POINT WORK', 1.0, 1.35), M.spin('TURNING CUT', 1.15)],
+  maul: [M.over('OVERHEAD MAUL', 1.35, 1.45), M.slam('FLATTENING BLOW', 1.3), M.bash('HAFT SMASH'), M.finish('FINISHING SWING', 1.4)],
+  bardiche: [M.sweep('HEAVY ARC', 1.2, 1.2), M.over('SPLITTING BLOW', 1.3), M.crush('ARMOUR BREAKER', 1.25), M.low('LEG CHOP')],
+  harpoon: [M.hurl('HARPOON THROW', 1.2), M.thrust('BARBED THRUST', 1.05, 1.3), M.stab('CLOSE BARB'), M.counter('HOOK AND HAUL', 1.3)],
+  bolas: [M.hurl('BOLAS THROW'), M.hurl('TANGLING THROW', 1.05), M.stab('CLOSE SWING'), M.counter('WHIP ROUND', 1.2)],
   dagger: [M.stab('RAPID STAB'), M.combo('DOUBLE STAB', 2), M.low('LOW SLASH'), M.counter('BACKSTEP COUNTER', 1.3)],
   twindagger: [M.combo('FOUR HIT FLURRY', 4), M.stab('ALTERNATING STABS'), M.spin('SPINNING DOUBLE', 1.0), M.counter('CROSSING SLASH', 1.25)],
   knife: [M.thrust('PRECISION THRUST', 1.1, 1.15), M.crush('ARMOUR GAP STAB', 1.35), M.stab('QUICK SLASH'), M.counter('COUNTER STRIKE')],
@@ -548,6 +559,47 @@ export const WEAPONS: WeaponDef[] = [
   { key: 'magicstaff', name: 'MAGIC STAFF', power: [3, 5], heavy: [2, 4], resist: [4, 7], reach: [5, 7], hits: 1, guard: 0, tempo: 1.0,
     spec: { note: 'IT DOES NOT CARE WHAT YOU ARE WEARING', sweep: 0.2,
       ranged: { far: 182, dmg: 0.59, power: [3, 8], ammo: Infinity, reload: 1.22, wind: 1.0, shot: 'spark', speed: 186, arc: 0.1, hold: 109, drift: 0.18, pierce: 0.25 } } },
+  // ================= TEN MORE, SPREAD ACROSS THE EXISTING TIERS =================
+  //
+  // Deliberately NOT at the ends of the range.  The rack is held to a gate --
+  // nothing above 80% and nothing under 15% across every pairing -- and the
+  // quickest way to break a balanced set is to bolt a new best weapon onto
+  // it.  Every one of these earns its place with REACH, TEMPO, GUARD, HITS or
+  // a specialty rather than with raw power, and each is a trade somebody
+  // already in the rack does not offer.
+
+  // ---- LIGHT
+  { key: 'sickle', name: 'SICKLE', power: [2, 5], heavy: [1, 3], resist: [4, 7], reach: [2, 4], hits: 1, guard: 0, tempo: 1.45,
+    spec: { note: 'HOOKS ROUND WHATEVER YOU ARE HIDING BEHIND', pierce: 0.16 } },
+  { key: 'warfan', name: 'WAR FAN', power: [2, 4], heavy: [1, 2], resist: [3, 6], reach: [3, 5], hits: 2, guard: 0.16, tempo: 1.5,
+    spec: { note: 'TWO OF EVERYTHING, AND SOMETHING TO HIDE BEHIND', sweep: 0.3 } },
+
+  // ---- BLADES
+  { key: 'scimitar', name: 'SCIMITAR', power: [4, 7], heavy: [3, 5], resist: [5, 8], reach: [5, 7], hits: 1, guard: 0.05, tempo: 1.08,
+    spec: { note: 'THE CURVE DOES THE WORK', sweep: 0.4 } },
+  { key: 'estoc', name: 'ESTOC', power: [3, 6], heavy: [2, 4], resist: [6, 9], reach: [5, 7], hits: 1, guard: 0, tempo: 1.12,
+    spec: { note: 'FINDS THE GAP IN ANYTHING PLATED', pierce: 0.34 } },
+
+  // ---- POLEARMS
+  { key: 'pike', name: 'PIKE', power: [3, 6], heavy: [4, 6], resist: [5, 8], reach: [9, 10], hits: 1, guard: 0, tempo: 0.7,
+    spec: { note: 'NOTHING REACHES YOU. NOTHING CLOSE GETS HIT', atRange: 0.85 } },
+  { key: 'glaive', name: 'GLAIVE', power: [5, 8], heavy: [5, 7], resist: [5, 8], reach: [7, 9], hits: 1, guard: 0.06, tempo: 0.85,
+    spec: { note: 'A LONG ARC WITH AN EDGE ON IT', sweep: 0.5 } },
+
+  // ---- HEAVY
+  { key: 'maul', name: 'MAUL', power: [7, 10], heavy: [7, 9], resist: [7, 10], reach: [5, 7], hits: 1, guard: 0, tempo: 0.64,
+    spec: { note: 'THEY DO NOT GET TO ANSWER THE FIRST ONE', stagger: 0.35, knock: 6 } },
+  { key: 'bardiche', name: 'BARDICHE', power: [6, 9], heavy: [6, 8], resist: [5, 8], reach: [6, 8], hits: 1, guard: 0, tempo: 0.76,
+    spec: { note: 'AN AXE ON A POLE, AND IT SWINGS LIKE ONE', sweep: 0.35, stagger: 0.18 } },
+
+  // ---- AND TWO MORE THAT LEAVE THE HAND
+  { key: 'harpoon', name: 'HARPOON', power: [3, 6], heavy: [3, 5], resist: [4, 7], reach: [6, 8], hits: 1, guard: 0, tempo: 0.95,
+    spec: { note: 'ONE THROW, AND IT DRAGS THEM BACK WITH IT', atRange: 0.5,
+      ranged: { far: 118, dmg: 1.35, power: [5, 9], ammo: 1, reload: 1.15, wind: 1.25, shot: 'spear', speed: 198, arc: 0.24, hold: 67, drift: 0.2, knock: 7, leaves: true } } },
+  { key: 'bolas', name: 'BOLAS', power: [2, 4], heavy: [2, 3], resist: [3, 6], reach: [2, 4], hits: 1, guard: 0, tempo: 1.2,
+    spec: { note: 'BARELY HURTS. THEY WILL NOT BE GOING ANYWHERE', atRange: 0.4,
+      ranged: { far: 104, dmg: 0.7, power: [2, 5], ammo: 2, reload: 1.0, wind: 0.95, shot: 'disc', speed: 172, arc: 0.3, hold: 60, drift: 0.26, stagger: 0.45, leaves: true } } },
+
   { key: 'boomerang', name: 'BOOMERANG', power: [2, 4], heavy: [1, 3], resist: [3, 6], reach: [2, 4], hits: 1, guard: 0, tempo: 1.3,
     spec: { note: 'IT GOES OUT AND IT COMES BACK', fleet: 1.12,
       ranged: { far: 150, dmg: 0.75, power: [3, 7], ammo: Infinity, reload: 0.66, wind: 0.8, shot: 'disc', speed: 172, arc: 0.36, hold: 89, drift: 0.26, returns: true, knock: 3 } } },
@@ -607,6 +659,24 @@ export interface ArmourMat {
 export const MATERIALS: ArmourMat[] = [
   // ---- NOTHING, AND THE THINGS THAT BARELY COUNT
   { key: 'none', name: 'NO ARMOUR', def: 0, evade: 0, heavy: [1, 1], resist: [10, 10], colour: 0x6d5a45, edge: 0x4a3c2d, short: 'NONE', note: 'NOTHING THERE, AND NOTHING TO CARRY' },
+  // ---- TEN MORE, FILLING THE LADDER RATHER THAN EXTENDING IT.
+  //
+  // None of these is better than HEAVY PLATE and none is lighter than cloth:
+  // they go BETWEEN what was already there, so the rack has steps in it
+  // instead of jumps.  Three of them break the pattern on purpose -- bone and
+  // dragon scale shrug off quick hits and not heavy ones, obsidian stops a
+  // great deal and shatters while it does it.
+  { key: 'padded', name: 'PADDED JACK', def: 0.08, evade: 0.05, heavy: [1, 2], resist: [3, 5], colour: 0xc9b48c, edge: 0x8a7654, short: 'PADDED', note: 'CLOTH, BUT ENOUGH OF IT TO NOTICE' },
+  { key: 'hide', name: 'HIDE ARMOUR', def: 0.12, evade: 0, heavy: [2, 4], resist: [4, 6], colour: 0x8a6440, edge: 0x4f3722, short: 'HIDE', note: 'SOMETHING ELSE WORE IT FIRST' },
+  { key: 'studded', name: 'STUDDED LEATHER', def: 0.14, evade: 0, heavy: [3, 5], resist: [6, 8], colour: 0x7f5c3c, edge: 0x9aa2ae, short: 'STUDDED', note: 'LEATHER WITH OPINIONS HAMMERED INTO IT' },
+  { key: 'bone', name: 'BONE ARMOUR', def: 0.17, evade: 0, soft: 0.38, heavy: [3, 5], resist: [4, 6], colour: 0xe4ddc6, edge: 0x9c9482, short: 'BONE', note: 'TURNS THE QUICK ONES. SPLITS ON THE REST' },
+  { key: 'brigandine', name: 'BRIGANDINE', def: 0.19, evade: 0, heavy: [4, 6], resist: [7, 9], colour: 0x6b4f3a, edge: 0xb9c2c8, short: 'BRIG', note: 'PLATES ON THE INSIDE WHERE THEY CANNOT SEE THEM' },
+  { key: 'lamellar', name: 'LAMELLAR ARMOUR', def: 0.22, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8a7f5e, edge: 0x4e4634, short: 'LAMELLAR', note: 'A THOUSAND LITTLE PLATES, ALL LACED TOGETHER' },
+  { key: 'corinthian', name: 'CORINTHIAN HELM', def: 0.24, evade: 0, heavy: [4, 6], resist: [7, 9], colour: 0xb08d4a, edge: 0x6b5324, short: 'CORINTH', note: 'YOU WILL LOOK MAGNIFICENT AND HEAR NOTHING' },
+  { key: 'knight', name: 'KNIGHT HELM', def: 0.27, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0xa9b2bd, edge: 0x59616b, short: 'KNIGHT', note: 'A LETTERBOX TO SEE THE WHOLE FIGHT THROUGH' },
+  { key: 'obsidian', name: 'OBSIDIAN ARMOUR', def: 0.29, evade: 0, heavy: [5, 7], resist: [2, 4], colour: 0x2b2836, edge: 0x6d5fa0, short: 'OBSIDIAN', note: 'STOPS ALMOST ANYTHING, ALMOST ONCE' },
+  { key: 'dragon', name: 'DRAGON SCALE', def: 0.31, evade: 0, soft: 0.34, heavy: [6, 8], resist: [7, 9], colour: 0x4f7a5a, edge: 0x24402c, short: 'DRAGON', note: 'NOBODY ASKS WHERE IT CAME FROM' },
+
   { key: 'cloth', name: 'LIGHT CLOTH ARMOUR', def: 0.04, evade: 0.09, heavy: [1, 1], resist: [2, 4], colour: 0xd8cbb0, edge: 0x9a8e74, short: 'CLOTH', note: 'YOU WILL BE VERY QUICK AND VERY SORRY' },
   { key: 'tuxedo', name: 'TUXEDO', def: 0.05, evade: 0, heavy: [1, 2], resist: [2, 4], colour: 0x2a2d3a, edge: 0xdfe4ee, short: 'TUXEDO', note: 'FIVE PERCENT DEFENCE. THE REST IS FASHION' },
   { key: 'crown', name: 'CROWN', def: 0.06, evade: 0, heavy: [1, 2], resist: [3, 5], colour: 0xffd45e, edge: 0xa8801e, short: 'CROWN', note: 'IT PROTECTS NOTHING AND MEANS EVERYTHING' },
@@ -2718,6 +2788,62 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number, single = fa
     // ---- THE ROMAN AND THE POLEARM RACK
     case 'gladius':
       blade(9, 0, 16, 3.5); bar(0, 0, 2.5, 8, PALETTE.gold); bar(-3, 0, 4, 4, 0x6a4a2a);
+      break;
+    // ---- THE TEN ADDED TO THE RACK.  Each one has to be recognisable from
+    // its silhouette alone at this size, which is why no two of them share a
+    // head shape.
+    case 'sickle':
+      bar(2, 0, 7, 2.5, 0x6a4a2a);
+      bar(9, -3, 8, 2, steel); bar(13, 1.5, 2, 7, steel); bar(9, -3.6, 8, 1, shine);
+      break;
+    case 'warfan':
+      bar(1, 0, 4, 2.5, 0x3b2a1a);
+      for (let k = -2; k <= 2; k++) c.add(scene.add.rectangle(8, k * 2.1, 11, 1.4, steel).setAngle(k * 9));
+      bar(13, 0, 1.5, 10, shine);
+      break;
+    case 'scimitar':
+      bar(0, 0, 4, 3, 0x6a4a2a); bar(2, 0, 2.5, 7, PALETTE.gold);
+      for (let k = 0; k < 4; k++) bar(6 + k * 4, -k * 0.9, 5, 3 - k * 0.2, k % 2 ? steel : shine);
+      c.add(scene.add.triangle(22, -3.4, 0, 0, 5, -1.5, 0, 3, steel));
+      break;
+    case 'estoc':
+      bar(0, 0, 4, 2.5, 0x3b2a1a); bar(2.5, 0, 2, 8, PALETTE.gold);
+      bar(14, 0, 22, 2, steel); bar(14, -0.8, 22, 0.8, shine);
+      c.add(scene.add.triangle(26, 0, 0, -1.6, 5, 0, 0, 1.6, shine));
+      break;
+    case 'pike':
+      haft(8, 0, 38, 2.5);
+      c.add(scene.add.triangle(30, 0, 0, -3, 9, 0, 0, 3, steel));
+      bar(30, -1, 7, 1, shine); bar(12, 0, 3, 4.5, 0x6a4a2a);
+      break;
+    case 'glaive':
+      haft(5, 0, 28, 2.5);
+      c.add(scene.add.triangle(24, -2.4, 0, 0, 10, -3, 2, 6, steel));
+      bar(23, -4, 8, 1, shine); bar(17, 0, 2, 5, PALETTE.gold);
+      break;
+    case 'maul':
+      haft(4, 0, 22, 3);
+      bar(19, 0, 9, 13, 0x6f7681); bar(19, -5, 9, 2.5, 0x9aa2ae);
+      bar(19, 5.5, 9, 2, 0x4c525b); bar(15, 0, 2, 13, 0x3b2a1a);
+      break;
+    case 'bardiche':
+      haft(5, 0, 26, 2.5);
+      c.add(scene.add.triangle(21, -3, 0, -7, 9, -2, 0, 7, steel));
+      bar(20, -6, 8, 1, shine); bar(14, 0, 2, 4, 0x6a4a2a);
+      break;
+    case 'harpoon':
+      haft(6, 0, 28, 2.5);
+      c.add(scene.add.triangle(23, 0, 0, -3.5, 9, 0, 0, 3.5, steel));
+      // the barbs, which are the whole of what makes it a harpoon
+      bar(19, -3, 5, 1.6, steel, -32); bar(19, 3, 5, 1.6, steel, 32);
+      bar(-6, 0, 6, 1, 0xbfae8a);
+      break;
+    case 'bolas':
+      bar(2, 0, 9, 1, 0x7a6a4a, 18); bar(2, 0, 9, 1, 0x7a6a4a, -18);
+      c.add(scene.add.circle(10, 4, 3, 0x6f7681));
+      c.add(scene.add.circle(10, -4, 3, 0x6f7681));
+      c.add(scene.add.circle(9, 3.2, 1.2, 0x9aa2ae));
+      c.add(scene.add.circle(9, -4.8, 1.2, 0x9aa2ae));
       break;
     case 'spear':
       haft(6, 0, 30, 2.5);
