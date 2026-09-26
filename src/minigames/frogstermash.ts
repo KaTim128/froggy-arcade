@@ -881,7 +881,7 @@ export const LIZARDS: LizardType[] = [
     blurb: 'YOU WILL NOT CATCH IT' },
   // THE ARMOURED ONE is a rhino, which came armoured.
   { key: 'armoured', name: 'RHINO', power: 1.0, speed: 0.82, avoid: 0.78, resist: 1.36, nerve: 1.0, spacing: 0.8, stubborn: true,
-    build: { scale: 1.16, wide: 1.66, tall: 0.86, limb: 0.72, head: 1.0, skin: 0x858a92, light: 0xaeb3ba, dark: 0x4a4e56, crest: 0xe6dcc0, animal: 'rhino' },
+    build: { scale: 1.12, wide: 1.42, tall: 1.02, limb: 0.96, head: 1.0, skin: 0x8a8f97, light: 0xb4b9c0, dark: 0x4a4e56, crest: 0xe8dcc0, animal: 'rhino' },
     blurb: 'IT DOES NOT MOVE' },
   // THE ASSASSIN is a hyena: hunched, spotted and grinning.
   { key: 'assassin', name: 'HYENA', power: 1.04, speed: 1.22, avoid: 1.22, resist: 0.74, nerve: 1.15, spacing: 1.05,
@@ -2738,7 +2738,9 @@ export interface FighterArt {
   greaveL: Phaser.GameObjects.Rectangle;
   greaveR: Phaser.GameObjects.Rectangle;
   torso: Phaser.GameObjects.Ellipse;
-  cuirass: Phaser.GameObjects.Rectangle;
+  /** A breastplate: a plate for Froggy and the lizard, shaped to the body for
+   *  every other animal. */
+  cuirass: Phaser.GameObjects.Rectangle | Phaser.GameObjects.Ellipse;
   head: Phaser.GameObjects.Ellipse;
   helm: Phaser.GameObjects.Rectangle;
   arm: Arm;
@@ -3143,7 +3145,7 @@ interface Anatomy {
 const ANATOMY: Record<Animal, Anatomy> = {
   gorilla: { neck: 0, fwd: 3, drop: 3, arm: 1.2, hand: 1.4, feet: 'flat', claws: false },
   cheetah: { neck: 1, fwd: 2, drop: 0, arm: 1.06, hand: 0.9, feet: 'paw', claws: true },
-  rhino: { neck: 0, fwd: 5, drop: 5, arm: 0.95, hand: 1.15, feet: 'hoof', claws: false },
+  rhino: { neck: 0, fwd: 3, drop: 1, arm: 1.0, hand: 1.15, feet: 'hoof', claws: false },
   hyena: { neck: 0, fwd: 5, drop: 4, arm: 1.0, hand: 0.95, feet: 'paw', claws: true },
   giraffe: { neck: 17, fwd: 5, drop: 0, arm: 1.42, hand: 0.85, feet: 'hoof', claws: false },
   lion: { neck: 0, fwd: 2, drop: 1, arm: 1.06, hand: 1.2, feet: 'paw', claws: true },
@@ -3297,22 +3299,34 @@ function dressAnimal(scene: Phaser.Scene, animal: Animal, c: {
       break;
     }
     case 'rhino': {
-      // ---- A LONG HEAVY HEAD, low and forward, with the great horn on the
-      // end of the snout and a smaller one behind it; small eyes set back,
-      // tubular ears on top, and folds in the hide.
-      skullW = 16;
+      // ---- A HEAVY HEAD ON A THICK NECK, and it stands up on two legs like
+      // everybody else in the arena: a broad chest, plated shoulders, a pale
+      // belly.  The horns GROW out of the snout -- smooth, curved, rooted
+      // inside it -- rather than being two flat triangles set on top.
+      skullW = 14;
       skullH = 11;
       neckTo(10, 10, skin);
-      headBack.push(E(HX - 5.6, HY - 5.4, 2.6, 5.2, down(skin, 0.1)).setAngle(-20), E(HX - 3.6, HY - 6, 2.6, 5.4, skin).setAngle(-8));
-      face.push(E(HX + 7, HY + 1.6, 10, 8.4, skin).setStrokeStyle(1, outline));
-      face.push(T(HX + 7.2, HY - 1.6, HX + 12.6, HY - 0.4, HX + 11.6, HY - 11.5, crest), T(HX + 9.2, HY - 1.8, HX + 11.2, HY - 1.2, HX + 11.4, HY - 9, up(crest, 0.4)));
-      face.push(T(HX + 2.6, HY - 3.8, HX + 6, HY - 3.4, HX + 5, HY - 8, crest));
-      face.push(C(HX + 0.6, HY - 0.4, 1.1, 0x1a1a1a), R(HX + 0.8, HY + 1.4, 3.4, 0.7, dark, 0, 0.8));
-      face.push(R(HX + 8.6, HY + 4.9, 5, 0.9, dark), R(HX - 2, HY + 3, 5, 0.7, dark, 58, 0.5), R(HX + 4.4, HY + 3.6, 4, 0.7, dark, 70, 0.4));
-      // the hide: plated shoulders, deep folds at the shoulder and the hip
-      body.push(E(4, torsoCY - 3, torsoW * 0.46, torsoH * 0.56, up(skin, 0.1)).setStrokeStyle(1, down(skin, 0.3)));
-      body.push(R(-1 - torsoW * 0.22, torsoCY + 1, 1.1, torsoH * 0.78, dark, 8, 0.5), R(-1 + torsoW * 0.3, torsoCY + 1, 1.1, torsoH * 0.7, dark, -8, 0.5));
-      body.push(R(-1, torsoCY + torsoH * 0.34, torsoW * 0.6, 1, dark, 0, 0.35));
+      headBack.push(E(HX - 5, HY - 5.4, 2.8, 5.4, down(skin, 0.12)).setAngle(-22), E(HX - 3, HY - 6.2, 2.8, 5.6, skin).setAngle(-8));
+      headBack.push(E(HX - 3, HY - 6.2, 1.2, 3, 0xd8a0a0, 0.8).setAngle(-8));
+      face.push(E(HX + 6.5, HY + 1.8, 10.5, 8.6, skin).setStrokeStyle(1, outline));
+      face.push(E(HX + 7, HY + 4, 8, 3, down(skin, 0.12), 0.8));
+      // the great horn, and the little one behind it
+      const big = bez([HX + 8.6, HY + 0.4], [HX + 10.2, HY - 3.6], [HX + 12, HY - 7], [HX + 10.6, HY - 11], 12);
+      face.push(tube(big, 4.6, 0.9, crest), tube(big.slice(2), 1.4, 0.5, up(crest, 0.45)));
+      const small = bez([HX + 4.4, HY - 3], [HX + 5, HY - 5], [HX + 5.8, HY - 6.4], [HX + 5.2, HY - 8.4], 8);
+      face.push(tube(small, 3, 0.7, crest));
+      face.push(C(HX + 1, HY - 0.6, 1.1, 0x1a1a1a), C(HX + 0.7, HY - 0.9, 0.35, 0xffffff, 0.8));
+      face.push(E(HX + 1.6, HY + 1.4, 4, 1.2, dark, 0.5));
+      face.push(R(HX + 8.8, HY + 5, 4.6, 0.9, dark));
+      face.push(C(HX + 10.4, HY + 1.6, 0.6, dark));
+      // a broad upright chest: plated shoulders and a paler belly, with the
+      // folds of the hide at the shoulder and the hip
+      body.push(E(-1, torsoTop + 3.5, torsoW * 0.94, 8, up(skin, 0.1)).setStrokeStyle(1, down(skin, 0.28)));
+      body.push(E(1.5, torsoCY + 2, torsoW * 0.54, torsoH * 0.56, light, 0.55));
+      const fold = (x0: number, y0: number, x1: number, y1: number) =>
+        body.push(tube(bez([x0, y0], [x0 + (x1 - x0) * 0.3, y0 + 2], [x0 + (x1 - x0) * 0.7, y1 + 2], [x1, y1], 8), 1.2, 1, dark).setAlpha(0.45));
+      fold(-1 - torsoW * 0.4, torsoTop + 7, -1 - torsoW * 0.1, torsoTop + 8);
+      fold(-1 + torsoW * 0.1, torsoCY + torsoH * 0.3, -1 + torsoW * 0.4, torsoCY + torsoH * 0.26);
       // a short tail with a dark tuft on the end
       tailBits.push(tube(bez([0, 0], [-3, 3], [-4, 6], [-4.5, 9], 8), 2, 1.2, skin), E(-4.5, 10.2, 2, 3, dark));
       break;
@@ -3491,10 +3505,18 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // ---- LEGS
   const legL = scene.add.rectangle(-4 * wide, -2, 4 * wide, 11 * limb, dark).setOrigin(0.5, 1);
   const legR = scene.add.rectangle(4 * wide, -2, 4 * wide, 11 * limb, skin).setOrigin(0.5, 1);
-  const greaveL = scene.add.rectangle(-4 * wide, -3, 6 * wide, 8 * limb, L.colour).setOrigin(0.5, 1).setStrokeStyle(1, L.edge).setVisible(wears(L));
-  const greaveR = scene.add.rectangle(4 * wide, -3, 6 * wide, 8 * limb, L.colour).setOrigin(0.5, 1).setStrokeStyle(1, L.edge).setVisible(wears(L));
-  const kneeL = scene.add.rectangle(-4 * wide, -9 * limb, 7 * wide, 2, L.edge).setVisible(wears(L));
-  const kneeR = scene.add.rectangle(4 * wide, -9 * limb, 7 * wide, 2, L.edge).setVisible(wears(L));
+  // ---- GREAVES FIT THE LEG THEY ARE ON.  On Froggy and the lizard they are
+  // the plates they always were; on every other animal they are the leg's
+  // own width and a pixel and a half more, so a giraffe's are long and thin
+  // and a gorilla's short and thick, rather than one block on every shin.
+  const fitted = beast;
+  const greaveW = fitted ? 4 * wide + 1.6 : 6 * wide;
+  const greaveH = fitted ? 7.2 * limb : 8 * limb;
+  const kneeW = fitted ? 4 * wide + 2.4 : 7 * wide;
+  const greaveL = scene.add.rectangle(-4 * wide, -3, greaveW, greaveH, L.colour).setOrigin(0.5, 1).setStrokeStyle(1, L.edge).setVisible(wears(L));
+  const greaveR = scene.add.rectangle(4 * wide, -3, greaveW, greaveH, L.colour).setOrigin(0.5, 1).setStrokeStyle(1, L.edge).setVisible(wears(L));
+  const kneeL = scene.add.rectangle(-4 * wide, -9 * limb, kneeW, 2, L.edge).setVisible(wears(L));
+  const kneeR = scene.add.rectangle(4 * wide, -9 * limb, kneeW, 2, L.edge).setVisible(wears(L));
   // frogs get broad flat feet, lizards get clawed ones
   // Feet by anatomy: a frog's broad flat ones, a lizard's clawed ones, paws,
   // hooves, or a gorilla's great flat soles.
@@ -3625,7 +3647,15 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // The armour takes the same build as the body under it.  Scaling only the
   // torso left a muscular lizard's chest sticking out past a standard-issue
   // breastplate, which reads as a bug rather than as a bigger animal.
-  const cuirass = scene.add.rectangle(0, -19 * tall - lift, (frog ? 17 : 15) * wide, 15 * tall, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
+  // ---- AND A BREASTPLATE THE SHAPE OF THE CHEST UNDER IT.  A rectangle is
+  // right on Froggy and on the lizard; on a round-bodied animal its corners
+  // stuck out past the body into the air, which is armour on a hanger
+  // rather than on an animal.  Every other animal wears one cut to the curve
+  // of its own torso, with its bands kept inside that curve too.
+  const bw0 = 15 * wide;
+  const cuirass = fitted
+    ? scene.add.ellipse(-1, -19 * tall - lift, bw0 * 0.96, 19 * tall * 0.84, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B))
+    : scene.add.rectangle(0, -19 * tall - lift, (frog ? 17 : 15) * wide, 15 * tall, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
   // ---- THE SHOULDER PLATES ARE WORN ON THE ARMS, not parked beside them.
   //
   // These used to be two ellipses pinned at a fixed spot on the torso and
@@ -3640,10 +3670,11 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // material's colour and the `wears` test -- and then handed to the arms
   // below, which is where they are actually attached.  Same for Froggy and
   // for a lizard: both are built by this function.
-  const pauldL = scene.add.ellipse(0.6, -2.2, 8 * wide, 6, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
-  const pauldR = scene.add.ellipse(0.6, -2.2, 8 * wide, 6, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
-  const belt = scene.add.rectangle(0, -12 * tall - lift, (frog ? 18 : 16) * wide, 3, B.edge).setVisible(wears(B));
-  const ridge = scene.add.rectangle(0, -20 * tall - lift, (frog ? 15 : 13) * wide, 1, B.edge).setAlpha(0.7).setVisible(wears(B));
+  const pauldW = fitted ? 5.4 * wide + 2.4 : 8 * wide;
+  const pauldL = scene.add.ellipse(0.6, -2.2, pauldW, 6, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
+  const pauldR = scene.add.ellipse(0.6, -2.2, pauldW, 6, B.colour).setStrokeStyle(1, B.edge).setVisible(wears(B));
+  const belt = scene.add.rectangle(fitted ? -1 : 0, -12 * tall - lift, fitted ? bw0 * 0.72 : (frog ? 18 : 16) * wide, 3, B.edge).setVisible(wears(B));
+  const ridge = scene.add.rectangle(fitted ? -1 : 0, -20 * tall - lift, fitted ? bw0 * 0.9 : (frog ? 15 : 13) * wide, 1, B.edge).setAlpha(0.7).setVisible(wears(B));
   // ---- WHAT THE ARMOUR IS MADE OF, and not only what colour it is.
   //
   // A breastplate and a tunic were the same flat rectangle in two colours.
@@ -3651,9 +3682,9 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // softer one, cloth almost none -- so the crowd can tell steel from linen
   // at a glance and a good suit LOOKS like a good suit.
   const g = gloss(B);
-  const cuirassLit = scene.add.rectangle(0, -24 * tall - lift, (frog ? 14 : 12) * wide, 2, up(B.colour, 0.3 + g))
+  const cuirassLit = scene.add.rectangle(fitted ? -1 : 0, -24 * tall - lift, fitted ? bw0 * 0.56 : (frog ? 14 : 12) * wide, 2, up(B.colour, 0.3 + g))
     .setAlpha(0.35 + g * 0.8).setVisible(wears(B));
-  const cuirassLow = scene.add.rectangle(0, -13.5 * tall - lift, (frog ? 16 : 14) * wide, 2, down(B.colour, 0.45))
+  const cuirassLow = scene.add.rectangle(fitted ? -1 : 0, -13.5 * tall - lift, fitted ? bw0 * 0.6 : (frog ? 16 : 14) * wide, 2, down(B.colour, 0.45))
     .setAlpha(0.55).setVisible(wears(B));
   armourDetail.push(cuirassLit, cuirassLow);
   // THE BAR DOWN THE FRONT OF THE CHEST IS GONE.  It was meant to be a sheen
@@ -3766,29 +3797,42 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // ---- HELM: a bowl, a brow band, a visor slit, and a plume for the frog
   // A helm caps the skull.  At -40 it came down over the eyes and both of
   // them fought the whole bout blindfolded in a grey box.
-  const hy = frog ? -43 * tall : beastParts ? HY - (beastParts.skullH * skull) / 2 - 1.4 : -39 * tall - lift;
-  const hx = frog ? 2 : HX + 1;
-  const helmW = frog ? 17 : beastParts ? Math.min(14 * wide, beastParts.skullW * skull + 4) : 14 * wide;
+  // ---- A HELMET CUT TO THE SKULL IT IS ON.  Froggy's and the lizard's are
+  // the bowl-and-visor they always were.  Every other animal's is a cap
+  // over the top of its own head: as wide as its skull and a pixel more,
+  // sat down onto the crown with the brim at the brow, and no visor slit
+  // across the eyes -- a face that is the animal's should stay visible.
+  const skW = beastParts ? beastParts.skullW * skull : 0;
+  const skH = beastParts ? beastParts.skullH * skull : 0;
+  const hy = frog ? -43 * tall : beastParts ? HY - skH * 0.18 : -39 * tall - lift;
+  const hx = frog ? 2 : beastParts ? HX : HX + 1;
+  const helmW = frog ? 17 : beastParts ? skW + 2 : 14 * wide;
   // ---- A CROWN IS A CROWN.  It was drawn as a gold helmet -- the same bowl,
   // visor and plume as every other helm -- which is the one thing a crown
   // must not look like.  It is a band that sits on top of the head, points
   // round the rim with a pearl on each, and stones set into the band.
   const crowned = H.key === 'crown';
   const helmOn = wears(H) && !crowned;
-  const helm = scene.add.rectangle(hx, hy, helmW, 6, H.colour).setStrokeStyle(1, H.edge).setVisible(helmOn);
-  const helmDome = scene.add.ellipse(hx, hy - 2, helmW, 7, H.colour).setVisible(helmOn);
-  const visor = scene.add.rectangle(hx + 2, hy + 2, helmW * 0.72, 1.5, H.edge).setVisible(helmOn);
-  const plume = scene.add.rectangle(hx - 6, hy - 7, 3, 8, frog ? PALETTE.blood : PALETTE.rust).setVisible(helmOn);
+  const helm = beastParts
+    ? scene.add.rectangle(hx, hy, helmW, 2.6, H.colour).setStrokeStyle(1, H.edge).setVisible(helmOn)
+    : scene.add.rectangle(hx, hy, helmW, 6, H.colour).setStrokeStyle(1, H.edge).setVisible(helmOn);
+  const helmDome = beastParts
+    ? scene.add.ellipse(hx - 0.4, HY - skH * 0.36, skW + 1, skH * 0.72, H.colour).setVisible(helmOn)
+    : scene.add.ellipse(hx, hy - 2, helmW, 7, H.colour).setVisible(helmOn);
+  const visor = scene.add.rectangle(hx + 2, hy + 2, helmW * 0.72, 1.5, H.edge).setVisible(helmOn && !beastParts);
+  const plume = beastParts
+    ? scene.add.rectangle(hx - skW * 0.25, HY - skH * 0.72 - 2.6, 2.4, 6, PALETTE.rust).setVisible(helmOn)
+    : scene.add.rectangle(hx - 6, hy - 7, 3, 8, frog ? PALETTE.blood : PALETTE.rust).setVisible(helmOn);
   // the helm shines by the same rule the breastplate does
   const hg = gloss(H);
   if (!crowned) {
-    helmDetail.push(scene.add.rectangle(hx, hy - 4, helmW * 0.72, 1.5, up(H.colour, 0.3 + hg))
+    helmDetail.push(scene.add.rectangle(hx, beastParts ? HY - skH * 0.58 : hy - 4, beastParts ? skW * 0.5 : helmW * 0.72, beastParts ? 1.2 : 1.5, up(H.colour, 0.3 + hg))
       .setAlpha(0.35 + hg * 0.8).setVisible(wears(H)));
-    helmDetail.push(scene.add.rectangle(hx, hy + 3, helmW * 0.88, 1.5, down(H.colour, 0.4))
+    helmDetail.push(scene.add.rectangle(hx, beastParts ? hy + 1.6 : hy + 3, helmW * 0.88, beastParts ? 1 : 1.5, down(H.colour, 0.4))
       .setAlpha(0.5).setVisible(wears(H)));
   }
   // Sat down onto the top of the skull, a little narrower than it.
-  const crown = scene.add.container(hx, hy + (frog ? 4 : 3)).setVisible(crowned);
+  const crown = scene.add.container(hx, beastParts ? HY - skH * 0.46 : hy + (frog ? 4 : 3)).setVisible(crowned);
   if (crowned) {
     const cw = frog ? 13 * wide : Math.min(11 * wide, helmW - 3);
     const gold = H.colour;
