@@ -2735,8 +2735,10 @@ export interface FighterArt {
   root: Phaser.GameObjects.Container;
   legL: Phaser.GameObjects.Rectangle;
   legR: Phaser.GameObjects.Rectangle;
-  greaveL: Phaser.GameObjects.Rectangle;
-  greaveR: Phaser.GameObjects.Rectangle;
+  /** A plate on the shin; a curved guard with a knee cop for the gorilla
+   *  and the rhino. */
+  greaveL: Phaser.GameObjects.Rectangle | Phaser.GameObjects.Graphics;
+  greaveR: Phaser.GameObjects.Rectangle | Phaser.GameObjects.Graphics;
   torso: Phaser.GameObjects.Ellipse;
   /** A breastplate: a plate for Froggy and the lizard, shaped to the body for
    *  every other animal. */
@@ -3522,10 +3524,43 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const greaveW = fitted ? 4 * wide + 1.6 : 6 * wide;
   const greaveH = fitted ? 7.2 * limb : 8 * limb;
   const kneeW = fitted ? 4 * wide + 2.4 : 7 * wide;
-  const greaveL = scene.add.rectangle(-4 * wide, -3, greaveW, greaveH, L.colour).setOrigin(0.5, 1).setStrokeStyle(1, L.edge).setVisible(wears(L));
-  const greaveR = scene.add.rectangle(4 * wide, -3, greaveW, greaveH, L.colour).setOrigin(0.5, 1).setStrokeStyle(1, L.edge).setVisible(wears(L));
-  const kneeL = scene.add.rectangle(-4 * wide, -9 * limb, kneeW, 2, L.edge).setVisible(wears(L));
-  const kneeR = scene.add.rectangle(4 * wide, -9 * limb, kneeW, 2, L.edge).setVisible(wears(L));
+  // ---- THE GORILLA'S AND THE RHINO'S OWN METAL.  Steel on a grey rhino is
+  // grey on grey: the plates and the hide ran together into one lump.  The
+  // rhino's armour is bronzed and edged dark so it reads as a thing it WEARS,
+  // and both animals' plates are riveted in brass.
+  const custom = animal === 'gorilla' || animal === 'rhino';
+  const BRONZE = 0x9a5a22;
+  const BRASS = 0xd9a441;
+  const forge = (c: number): number => (animal === 'rhino' ? mix(c, BRONZE, 0.62) : c);
+  const forgeEdge = (c: number, e: number): number => (animal === 'rhino' ? down(forge(c), 0.62) : e);
+  // ---- AND A SHIN GUARD, not a box on the leg.  A rounded plate down the
+  // front of the shin with a knee cop over the top of it, drawn with its
+  // foot end at the pivot so it swings exactly as the leg does.  The
+  // gorilla's is short -- its legs are short, and fur should show above it.
+  const shin = (x: number): Phaser.GameObjects.Graphics => {
+    const gr = scene.add.graphics({ x, y: -3 });
+    const col = forge(L.colour);
+    const edge = forgeEdge(L.colour, L.edge);
+    const w = greaveW;
+    const h = (animal === 'gorilla' ? 4.6 : 6.4) * limb;
+    const r = Math.min(w, h) * 0.45;
+    gr.fillStyle(edge, 1).fillRoundedRect(-w / 2 - 0.7, -h - 0.4, w + 1.4, h + 1.1, r);
+    gr.fillStyle(col, 1).fillRoundedRect(-w / 2, -h, w, h, r * 0.9);
+    gr.fillStyle(up(col, 0.4), 0.8).fillRect(-w / 2 + 1, -h + 1.4, 0.9, Math.max(1, h - 2.6));
+    gr.fillStyle(down(col, 0.3), 0.7).fillRect(-w / 2 + 0.6, -1.4, w - 1.2, 0.9);
+    gr.fillStyle(edge, 1).fillEllipse(0, -h, w + 2.2, 4.4);
+    gr.fillStyle(col, 1).fillEllipse(0, -h, w + 1, 3.2);
+    gr.fillStyle(up(col, 0.4), 0.8).fillEllipse(-0.6, -h - 0.7, w * 0.6, 1);
+    gr.fillStyle(BRASS, 1).fillCircle(0, -h, 0.8);
+    return gr;
+  };
+  const greaveL = custom ? shin(-4 * wide).setVisible(wears(L))
+    : scene.add.rectangle(-4 * wide, -3, greaveW, greaveH, L.colour).setOrigin(0.5, 1).setStrokeStyle(1, L.edge).setVisible(wears(L));
+  const greaveR = custom ? shin(4 * wide).setVisible(wears(L))
+    : scene.add.rectangle(4 * wide, -3, greaveW, greaveH, L.colour).setOrigin(0.5, 1).setStrokeStyle(1, L.edge).setVisible(wears(L));
+  // the knee bar does not swing with the leg, so the knee cop above replaces it
+  const kneeL = scene.add.rectangle(-4 * wide, -9 * limb, kneeW, 2, L.edge).setVisible(wears(L) && !custom);
+  const kneeR = scene.add.rectangle(4 * wide, -9 * limb, kneeW, 2, L.edge).setVisible(wears(L) && !custom);
   // frogs get broad flat feet, lizards get clawed ones
   // Feet by anatomy: a frog's broad flat ones, a lizard's clawed ones, paws,
   // hooves, or a gorilla's great flat soles.
@@ -3704,8 +3739,8 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   const plated = wears(B) && (animal === 'gorilla' || animal === 'rhino');
   const plates: Phaser.GameObjects.GameObject[] = [];
   let bodyPlate: Phaser.GameObjects.Container | null = null;
-  const plateCol = B.colour;
-  const plateEdge = B.edge;
+  const plateCol = forge(B.colour);
+  const plateEdge = forgeEdge(B.colour, B.edge);
   const plateLit = up(B.colour, 0.34 + g * 0.5);
   const plateDark = down(B.colour, 0.34);
   /** A curved band along an ellipse arc: a plate edge that follows a body. */
@@ -3734,16 +3769,18 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
       arcBand(gr, 0, 0, tw * 0.47, th * 0.47, 204, 250, 1, plateLit, plateLit);
       // the chest: two curved pectoral plates, not a slab
       // (set below the hunched head and the neck, which cover the top of it)
-      for (const px of [-3.4, 5]) {
-        bits.push(scene.add.ellipse(px, th * 0.02, tw * 0.38, th * 0.42, plateCol).setStrokeStyle(1, plateEdge));
-        bits.push(scene.add.ellipse(px - 0.6, -th * 0.06, tw * 0.24, th * 0.1, plateLit).setAlpha(0.6));
-        bits.push(scene.add.ellipse(px, th * 0.17, tw * 0.3, th * 0.06, plateDark).setAlpha(0.6));
+      // -- two of them, with the black fur of the breastbone and the gut
+      // showing between and below, joined by a studded strap
+      for (const px of [-3.8, 5.4]) {
+        bits.push(scene.add.ellipse(px, -th * 0.02, tw * 0.33, th * 0.34, plateCol).setStrokeStyle(1, plateEdge));
+        bits.push(scene.add.ellipse(px - 0.6, -th * 0.1, tw * 0.2, th * 0.08, plateLit).setAlpha(0.6));
+        bits.push(scene.add.ellipse(px, th * 0.11, tw * 0.25, th * 0.05, plateDark).setAlpha(0.6));
       }
-      bits.push(scene.add.rectangle(0.8, th * 0.02, 1, th * 0.36, plateEdge));
-      for (const [rx, ry] of [[-7.4, -1.6], [9.4, -1.6], [0.8, -3.6]] as const) bits.push(scene.add.circle(rx, ry, 0.7, plateLit));
+      bits.push(scene.add.rectangle(0.8, -th * 0.1, 4.4, 1.6, plateEdge));
+      for (const [rx, ry] of [[-7.6, -2.4], [9.6, -2.4], [0.8, -th * 0.1]] as const) bits.push(scene.add.circle(rx, ry, 0.8, BRASS));
       // the waist: a belt that follows the round of the gut, and a buckle
       arcBand(gr, 0, 0, tw * 0.46, th * 0.46, 36, 144, 2.4, plateEdge, down(plateEdge, 0.3));
-      bits.push(scene.add.rectangle(2, th * 0.44, 4, 3, plateCol).setStrokeStyle(1, plateEdge));
+      bits.push(scene.add.rectangle(2, th * 0.44, 4, 3, BRASS).setStrokeStyle(1, plateEdge));
     } else {
       // ---- THE RHINO: built for defence.  A broad breastplate in overlapping
       // lames that follows the round of its chest, a gorget round the base of
@@ -3755,7 +3792,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
         arcBand(gr, 1, y - 5, tw * 0.36, 5.4, 30, 150, 0.9, plateDark, plateDark);
       }
       bits.push(scene.add.ellipse(0, -th * 0.2, tw * 0.46, th * 0.12, plateLit).setAlpha(0.5));
-      bits.push(scene.add.circle(1.5, -th * 0.02, 1.4, plateLit).setStrokeStyle(0.8, plateEdge));
+      bits.push(scene.add.circle(1.5, -th * 0.02, 1.4, BRASS).setStrokeStyle(0.8, plateEdge));
       // the gorget: a collar across the top of the chest where the neck
       // meets it, curving up at the front
       arcBand(gr, 3, -th * 0.5 + 2.4, 7.4, 3.6, 190, 350, 2.8, plateCol, plateEdge);
@@ -3763,7 +3800,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
       arcBand(gr, 0, 0, tw * 0.47, th * 0.47, 192, 258, 3.8, plateCol, plateEdge);
       for (let k = 0; k < 4; k++) {
         const a = ((200 + k * 16) * Math.PI) / 180;
-        bits.push(scene.add.circle(Math.cos(a) * tw * 0.47, Math.sin(a) * th * 0.47, 1, plateLit).setStrokeStyle(0.6, plateEdge));
+        bits.push(scene.add.circle(Math.cos(a) * tw * 0.47, Math.sin(a) * th * 0.47, 1, BRASS).setStrokeStyle(0.6, plateEdge));
       }
       // a skirt of plates at the waist
       for (let k = -2; k <= 2; k++) {
@@ -4046,9 +4083,11 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
       const band1 = scene.add.rectangle(FORE * 0.3, 0, 0.9, 3.8 * wide + 1, edge);
       const band2 = scene.add.rectangle(FORE * 0.8, 0, 0.9, 3.8 * wide + 1, edge);
       const shine = scene.add.rectangle(FORE * 0.55, -1.1 * wide, FORE * 0.5, 0.8, up(col, 0.4)).setAlpha(0.8);
+      const rivet = scene.add.circle(FORE * 0.55, 0.4, 0.8, behind ? down(BRASS, 0.2) : BRASS);
+      wrap.fillStyle(behind ? down(BRASS, 0.2) : BRASS, 1).fillCircle(0.5, 0.2 - r * 0.95, 0.8);
       // added just after the forearm itself, so the hand stays over it
-      fore.addAt([bracer, band1, band2, shine], 4);
-      plates.push(wrap, bracer, band1, band2, shine);
+      fore.addAt([bracer, band1, band2, shine, rivet], 4);
+      plates.push(wrap, bracer, band1, band2, shine, rivet);
     }
     return { root, fore, hand: HD };
   };
