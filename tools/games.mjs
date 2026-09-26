@@ -3276,6 +3276,45 @@ for (const g of [
     `${dodged ? 'PASS' : 'FAIL'}  grudge: a jump clears the sweep, not the high strike  — 14px up: low ${beforeAir.him.hp}->${afterAirLow.him.hp}, high ${afterAirLow.him.hp}->${afterAirHigh.him.hp} hp`,
   );
   if (!dodged) failures++;
+
+  // ---- THE ROSTER.  Fifteen opponents, drawn at random each time, the rare
+  // five rarer than the rest -- and every one of them has to actually be
+  // built, stand in the ring and fight by numbers of its own, or it is a
+  // reskin with a name on it.
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(e.message));
+  const roster = await page.evaluate(() => window.__grudge.foes());
+  const built = [];
+  for (const f of roster) {
+    const ok = await page.evaluate((k) => window.__grudge.setFoe(k) && window.__grudge.foe().key === k, f.key);
+    await sleep(60);
+    if (ok) built.push(f.key);
+  }
+  const all = built.length === roster.length && roster.length === 15 && errs.length === 0;
+  console.log(`${all ? 'PASS' : 'FAIL'}  grudge: all ${roster.length} opponents build and stand in the ring  — ${built.length} built, ${errs.length} errors${errs[0] ? ': ' + errs[0] : ''}`);
+  if (!all) failures++;
+
+  const draws = await page.evaluate(() => window.__grudge.draws(30000));
+  const rares = roster.filter((f) => f.rare).map((f) => f.key);
+  const regs = roster.filter((f) => !f.rare).map((f) => f.key);
+  const rareShare = rares.reduce((n, k) => n + (draws[k] ?? 0), 0) / 30000;
+  const leastReg = Math.min(...regs.map((k) => draws[k] ?? 0));
+  const mostRare = Math.max(...rares.map((k) => draws[k] ?? 0));
+  const everyone = roster.every((f) => (draws[f.key] ?? 0) > 0);
+  const drawOk = everyone && rares.length === 5 && rareShare > 0.05 && rareShare < 0.2 && mostRare < leastReg;
+  console.log(`${drawOk ? 'PASS' : 'FAIL'}  grudge: every opponent comes up, and the rare five rarely  — rare ${(rareShare * 100).toFixed(1)}% of 30000 draws; rarest regular ${leastReg}, commonest rare ${mostRare}`);
+  if (!drawOk) failures++;
+
+  // Not reskins: every fighter has a look of its own, and every one but the
+  // baseline lizard fights by at least three numbers that differ from it.
+  const defs = await page.evaluate(async (keys) => keys.map((k) => { window.__grudge.setFoe(k); return window.__grudge.foe(); }), roster.map((f) => f.key));
+  const base = defs.find((d) => d.key === 'lizard');
+  const traits = ['speed', 'power', 'windup', 'reach', 'guard', 'blockRate', 'tempo', 'dodge', 'chaos', 'counter'];
+  const same = defs.filter((d) => d.key !== 'lizard' && traits.filter((t) => d[t] !== base[t]).length < 3).map((d) => d.key);
+  const looks = new Set(defs.map((d) => d.look + d.skin));
+  const distinct = same.length === 0 && looks.size === defs.length;
+  console.log(`${distinct ? 'PASS' : 'FAIL'}  grudge: none of them is a reskin  — ${looks.size} distinct looks${same.length ? `; too close to the lizard: ${same.join(', ')}` : ''}`);
+  if (!distinct) failures++;
   await page.close();
 }
 
@@ -4017,6 +4056,46 @@ for (const g of [
     const bareOk = bare >= 20 && bare <= 50;
     console.log(`${bareOk ? 'PASS' : 'FAIL'}  mash: bare hands are the weakest row, not a lost cause  — ${bare}% against the whole rack`);
     if (!bareOk) failures++;
+
+    // ---- THE SHIELD IS A WALL THAT CHARGES.
+    //
+    // Its FORWARD CHARGE is a run -- it covers real ground in the wind-up --
+    // and it moves whoever it lands on.  And the shield trades damage for
+    // defence: it blocks more often than a sword and hits for less.
+    const sh = await page.evaluate(() => {
+      const R = window.__mash.rules;
+      const mat = (k) => R.MATERIALS.find((m) => m.key === k);
+      const kit = (wk) => ({ weapon: R.makeWeapon(R.WEAPONS.find((w) => w.key === wk)), head: R.makeArmour('head', mat('chain')), body: R.makeArmour('body', mat('chain')), legs: R.makeArmour('legs', mat('chain')) });
+      const s = { runs: [], pushes: [], blocks: { shield: 0, sword: 0 }, dmg: { shield: 0, sword: 0 }, hits: { shield: 0, sword: 0 } };
+      for (const foe of ['sword', 'spear', 'axe', 'dagger']) for (let n = 0; n < 15; n++) for (const wk of ['shield', 'sword']) {
+        const f = R.makeFighter('frog', kit(wk), 100, 1);
+        const l = R.makeFighter('lizard', kit(foe), 220, -1);
+        let x0 = null, last = 'walk';
+        for (let t = 0; t < 180 && f.hp > 0 && l.hp > 0; t += 1 / 60) {
+          const lx = l.x;
+          for (const e of R.exchange(f, l, 1 / 60, Math.random, [])) {
+            if (e.att !== f || !e.blow.hit) continue;
+            s.dmg[wk] += e.blow.dmg; s.hits[wk]++;
+            if (e.blow.rammed) s.pushes.push(Math.abs(l.x - lx));
+          }
+          if (wk === 'shield' && f.act === 'windup' && f.move?.anim === 'charge' && last !== 'windup') x0 = f.x;
+          if (last === 'windup' && f.act !== 'windup' && x0 !== null) { s.runs.push(Math.abs(f.x - x0)); x0 = null; }
+          if (f.act === 'guard' && last !== 'guard') s.blocks[wk]++;
+          last = f.act;
+        }
+      }
+      const avg = (a) => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length);
+      return { charges: s.runs.length, run: avg(s.runs), push: avg(s.pushes), rams: s.pushes.length,
+        blocks: s.blocks, per: { shield: s.dmg.shield / s.hits.shield, sword: s.dmg.sword / s.hits.sword } };
+    });
+    const shOk = sh.charges > 40 && sh.run >= 20 && sh.rams > 20 && sh.push >= 12
+      && sh.blocks.shield > sh.blocks.sword * 1.5 && sh.per.shield < sh.per.sword * 0.8;
+    console.log(
+      `${shOk ? 'PASS' : 'FAIL'}  mash: the shield charges across the sand and shoves, and trades damage for defence  — ` +
+        `${sh.charges} charges, ${sh.run.toFixed(0)}px run, ${sh.push.toFixed(0)}px shove on ${sh.rams}; ` +
+        `blocks ${sh.blocks.shield} v ${sh.blocks.sword} for a sword, ${sh.per.shield.toFixed(1)} a hit v ${sh.per.sword.toFixed(1)}`,
+    );
+    if (!shOk) failures++;
 
     // ---- THE THING THAT HITS HARDEST GIVES OUT SOONEST.
     //
