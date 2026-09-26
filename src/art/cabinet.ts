@@ -154,6 +154,16 @@ function drawMotif(scene: Phaser.Scene, cx: number, cy: number, def: CabinetDef,
       put(4, 0, 1, 12);
       for (let i = -4; i <= 4; i += 4) put(0, i, 1, 2, bright);
       break;
+    case 'chomp':
+      // A round frog face, mouth wide open for the fly above it.
+      dot(0, 1.5, 5.5, bright);
+      dot(-3.5, -3.5, 2.2, bright);
+      dot(3.5, -3.5, 2.2, bright);
+      put(-3.5, -3.5, 1, 1);
+      put(3.5, -3.5, 1, 1);
+      put(0, 2.5, 6, 3);
+      put(0, -6, 2, 1);
+      break;
     case 'pond':
       // Lily pads on open water, seen from above.  This used to be a hull, a
       // mast and a flag, which put a boat on the front of a cabinet whose

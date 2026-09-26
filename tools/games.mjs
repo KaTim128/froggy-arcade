@@ -299,7 +299,7 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   const lead = await page.evaluate(() => window.__hoops.predict(0.8));
   const leads = lead.rim !== undefined && lead.t > 0;
   console.log(
-    `${leads ? 'PASS' : 'FAIL'}  hoops: the arc leads the moving rim  — ` +
+    `${leads ? 'PASS' : 'FAIL'}  chubby chomp: the arc leads the drifting mouth  — ` +
       `lands x${lead.x} at ${lead.t}s, rim ${lead.hoopNow} -> ${lead.rim}`,
   );
   if (!leads) failures++;
@@ -335,7 +335,7 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
     if (after && after.makes > before) honest += 1;
   }
   console.log(
-    `${honest >= 2 ? 'PASS' : 'FAIL'}  hoops: a shot the arc calls good goes in  — ${honest}/${tried} scored`,
+    `${honest >= 2 ? 'PASS' : 'FAIL'}  chubby chomp: a fly the arc calls good goes in the mouth  — ${honest}/${tried} scored`,
   );
   if (honest < 2) failures++;
   await page.close();
