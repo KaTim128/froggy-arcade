@@ -4641,10 +4641,41 @@ function buildShot(kind: Shot, face: number): Phaser.GameObjects.Container {
 }
 
 /** Put every shot in the air where it has got to this frame. */
+/**
+ * WHAT A THROWN WEAPON LOOKS LIKE IN THE AIR.
+ *
+ * If the thing flying IS the weapon -- a spear, a trident, a javelin, a
+ * throwing axe, a knife, a chakram -- then what flies is the weapon's own
+ * sprite, built by `buildWeapon` exactly as it is built for the hand.  Same
+ * geometry, same size, same proportions.
+ *
+ * It used to be `buildShot`, which draws a generic stand-in per projectile
+ * KIND: every `shot: 'spear'` weapon flew as the same sixteen-pixel stick,
+ * so a trident left the hand as a trident and crossed the arena as a twig,
+ * and a javelin and a spear were indistinguishable in flight.
+ *
+ * `buildShot` is still right for everything a weapon SHOOTS rather than
+ * becomes -- an arrow is not the bow, a dart is not the blowgun, a slung
+ * stone is not the sling.
+ */
+function buildFlyingArt(sh: InFlight, f: Fighter): Phaser.GameObjects.Container {
+  if (!sh.weapon) return buildShot(sh.kind, f.face);
+  // The same tint the hand and the sand use, so one weapon does not change
+  // colour between being held, being thrown and being picked up again.
+  const tint = f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber;
+  const art = buildWeapon(S(), sh.weapon.def.key, tint, sh.weapon.single);
+  // NOT rescaled.  The only thing done to it is the facing flip, which is the
+  // same one the hand applies, so it is the same size in the air as it was in
+  // the fist and it stays that size for the whole flight.
+  art.setScale(f.face, 1).setDepth(26);
+  layer?.add(art);
+  return art;
+}
+
 function drawFlight(f: Fighter): void {
   for (const sh of f.flight) {
     if (!sh.art) {
-      sh.art = buildShot(sh.kind, f.face);
+      sh.art = buildFlyingArt(sh, f);
       audio.sfx('throw_whoosh', 0.35);
     }
     const k = 1 - Math.max(0, sh.t) / sh.total;          // 0 at the hand, 1 at the target
@@ -4662,14 +4693,26 @@ function drawFlight(f: Fighter): void {
     // 39 pixels up, so the lips are about thirty-one.
     const y = FLOOR_Y - (sh.kind === 'dart' ? 31 : 24) - lift;
     sh.art.setPosition(x, y);
-    // and it points where it is going
+    // ---- AND IT POINTS WHERE IT IS GOING.
+    //
+    // `slope` is the tangent of the arc it is on, so a long weapon comes out
+    // of the hand nose-up, levels at the top and noses down onto the target
+    // rather than sliding across the arena flat.
     const slope = sh.arc * Math.cos(k * Math.PI) * 52;
+    const dir = Math.sign(sh.aim - sh.from || 1);
     if (sh.kind === 'disc' || sh.kind === 'stone' || sh.kind === 'spark') {
+      // A chakram is a thrown weapon AND a thing that spins: it keeps turning.
       sh.art.setAngle(sh.kind === 'disc' ? (sh.art.angle + 26) % 360 : 0);
     } else if (sh.kind === 'axe') {
-      sh.art.setAngle((sh.art.angle + 22) % 360);
+      // An axe goes end over end, and a real one is heavier, so it turns
+      // slower and more deliberately than the old stand-in did.
+      sh.art.setAngle((sh.art.angle + (sh.weapon ? 16 : 22)) % 360);
     } else {
-      sh.art.setAngle(-slope * Math.sign(sh.aim - sh.from || 1));
+      // A shaft flies POINT FIRST.  The sprite is drawn lying along +x with
+      // its head forward, which is already the direction of travel once the
+      // facing flip is applied -- so the only turn it needs is the arc's own
+      // slope.  Nothing here touches scale.
+      sh.art.setAngle(-slope * dir);
     }
   }
 }
@@ -5467,6 +5510,37 @@ export const frogsterMash: MinigameModule = {
           if (!sh) return null;
           return { k: 1 - Math.max(0, sh.t) / sh.total, kind: sh.kind,
             x: sh.art?.x ?? 0, y: sh.art?.y ?? 0, from: sh.from, aim: sh.aim };
+        },
+        /**
+         * EVERY SHOT THIS FIGHTER HAS IN THE AIR, with the size it is drawn at.
+         *
+         * `shot` only ever reported the first one's position, so neither "one
+         * throw makes one projectile" nor "the projectile is the size of the
+         * weapon" could be checked from outside at all.
+         */
+        flight: (who: 'frog' | 'lizard') => {
+          const f = who === 'frog' ? frog : lizard;
+          if (!f) return [];
+          return f.flight.map((sh) => {
+            const bb = sh.art?.getBounds();
+            return {
+              kind: sh.kind,
+              /** The weapon it IS, when the thing flying is the weapon. */
+              weapon: sh.weapon?.def.key ?? null,
+              w: bb ? Math.round(bb.width * 100) / 100 : 0,
+              h: bb ? Math.round(bb.height * 100) / 100 : 0,
+              sx: sh.art ? Math.round(Math.abs(sh.art.scaleX) * 100) / 100 : 0,
+              k: Math.round((1 - Math.max(0, sh.t) / sh.total) * 100) / 100,
+            };
+          });
+        },
+        /** How big this weapon is drawn in the HAND, to compare a throw against. */
+        heldSize: (key: string, single = false) => {
+          const w = buildWeapon(S(), key, PALETTE.cream, single);
+          const bb = w.getBounds();
+          const out = { w: Math.round(bb.width * 100) / 100, h: Math.round(bb.height * 100) / 100 };
+          w.destroy();
+          return out;
         },
         /** Put a named weapon in a live fighter's hand, to test one. */
         arm: (who: 'frog' | 'lizard', key: string) => {
