@@ -163,6 +163,12 @@ export interface FroggyPose {
    */
   reachAt?: THREE.Vector3 | null;
   /**
+   * Where the player is looking at him from, whatever he is doing.  Only used
+   * to keep his arms off his eyes as seen from there -- climbing, crouching,
+   * reaching -- never to aim anything at them.
+   */
+  viewer?: THREE.Vector3 | null;
+  /**
    * How fast the mouth OPENS, per second (it always closes briskly).  Slow by
    * default: noticing you, it comes open over a second or more.
    */
@@ -221,6 +227,9 @@ export class FroggyMonster {
   private readonly tmp5 = new THREE.Vector3();
   private readonly tmp6 = new THREE.Vector3();
   private readonly q = new THREE.Quaternion();
+  /** Per arm: how far it has been swung out to keep it off his eyes. */
+  private clear = [0, 0];
+  private readonly eyeW = [new THREE.Vector3(), new THREE.Vector3()];
   private twitchIn = 2.5;
   private twitchT = 0;
   /** Where the eyes are looking, in world space; null to look where he faces. */
@@ -1125,6 +1134,14 @@ export class FroggyMonster {
       }
     }
 
+    // ---- NEVER OVER HIS EYES.  From wherever you are looking at him from --
+    // chasing you, or right in front of the lens at the end -- no part of an
+    // arm or a hand is allowed across his eyes: the stare is the point, and
+    // the arms frame it.  An arm that would cross them is swung out, and
+    // eased back only once it is well clear.
+    const viewer = pose.viewer ?? pose.reachAt ?? (this.grabNow > 0.01 ? this.gaze : null);
+    this.keepEyesClear(viewer, dt);
+
     // ---- THE JAW.  Hinged too far back, so it drops a long way; and it
     // drops very slightly crooked, skewed to one side, which no jaw should.
     // Parted a crack while he searches, working, and wide once he has you.
@@ -1134,6 +1151,63 @@ export class FroggyMonster {
     this.jaw.rotation.y = m * 0.035;
 
     this.updateEyes(dt);
+  }
+
+  /**
+   * Swing each arm outward, as far as it needs, so that seen from `viewer`
+   * nothing of it lies over either eye.  The swing is applied first and then
+   * measured, and grows while there is still an overlap, so it finds the
+   * smallest one that works and holds it.
+   */
+  private keepEyesClear(viewer: THREE.Vector3 | null, dt: number): void {
+    for (let h = 0; h < 2; h++) {
+      const out = h === 0 ? -1 : 1;
+      if (!viewer) this.clear[h] = Math.max(0, this.clear[h] - dt * 1.5);
+      this.arms[h].rotation.z += out * this.clear[h];
+    }
+    if (!viewer) return;
+    this.root.updateMatrixWorld(true);
+    // an eye, and a margin round it
+    const rEye = 0.108 * 1.14 * this.size * 1.7;
+    for (let e = 0; e < 2; e++) this.eyes[e].getWorldPosition(this.eyeW[e]);
+    const p = this.tmp;
+    const toEye = this.tmp2;
+    const toP = this.tmp3;
+    const test = (o: THREE.Object3D, y: number, worst: number): number => {
+      o.localToWorld(p.set(0, -y, 0));
+      toP.copy(p).sub(viewer);
+      for (const eye of this.eyeW) {
+        toEye.copy(eye).sub(viewer);
+        const dist = toEye.length();
+        // behind the eyes from here: the head hides it, it is not over them
+        if (toP.length() >= dist) continue;
+        worst = Math.min(worst, toP.angleTo(toEye) / Math.atan(rEye / dist));
+      }
+      return worst;
+    };
+    const measure = (h: number): number => {
+      let worst = Infinity;
+      for (let y = 0.08; y <= 0.57; y += 0.12) worst = test(this.arms[h], y, worst);
+      for (let y = 0; y <= 0.7; y += 0.1) worst = test(this.elbows[h], y, worst);
+      for (const f of this.hands[h]) {
+        worst = test(f, 0, worst);
+        worst = test(f, 0.25, worst);
+      }
+      return worst;
+    };
+    for (let h = 0; h < 2; h++) {
+      const out = h === 0 ? -1 : 1;
+      let worst = measure(h);
+      // still over an eye: out further, now, in this frame -- a fast stroke
+      // must not get one frame across his eyes before this catches it
+      for (let i = 0; worst < 1 && this.clear[h] < 1.7 && i < 8; i++) {
+        this.clear[h] = Math.min(1.7, this.clear[h] + 0.22);
+        this.arms[h].rotation.z += out * 0.22;
+        this.arms[h].updateMatrixWorld(true);
+        worst = measure(h);
+      }
+      if (worst > 1.4) this.clear[h] = Math.max(0, this.clear[h] - dt * 1.2);
+    }
   }
 
   /**

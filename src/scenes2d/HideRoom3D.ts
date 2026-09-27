@@ -3528,6 +3528,8 @@ export class HideRoom3D extends Phaser.Scene {
       // on it.  The pose goes down the hole to the enclosure as well, which
       // drops this -- down there, you are not where he is reaching.
       reachAt: this.fMode === 'chase' && this.stage ? this.stage.camera.position : null,
+      // and from wherever you are, his arms stay off his eyes
+      viewer: this.stage?.camera.position ?? null,
     };
     m.update(dt, pose);
     // ---- AND THE SAME POSE, DOWN THE HOLE.  The enclosure under the secret

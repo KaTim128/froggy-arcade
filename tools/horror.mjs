@@ -1241,6 +1241,58 @@ try {
           `against ${walls.before.scrapes} scrapes with it switched off`);
 
       check('the model has exactly two eyes', eyes.sclera === 2, `${eyes.sclera} whites on it`);
+
+      // ---- HIS ARMS NEVER CROSS HIS EYES.
+      //
+      // The stare is the point of him, and the arms frame it.  Chasing you
+      // from any angle, and climbing -- where they go up over his head --
+      // nothing of an arm or a hand may lie over either eye as seen from where
+      // you are.  Measured on the model, frame by frame, from several places.
+      const arms = await page.evaluate(async (scale) => {
+        const THREE = await import('/node_modules/three/build/three.module.js');
+        const { FroggyMonster } = await import('/src/three/froggyMonster.ts');
+        const V = () => new THREE.Vector3();
+        const clearance = (m, eye) => {
+          m.root.updateMatrixWorld(true);
+          const rEye = 0.108 * 1.14 * m.size * 1.5;
+          const pts = [];
+          for (let h = 0; h < 2; h++) {
+            for (let y = 0.05; y <= 0.57; y += 0.06) pts.push(m.arms[h].localToWorld(V().set(0, -y, 0)));
+            for (let y = 0; y <= 0.66; y += 0.05) pts.push(m.elbows[h].localToWorld(V().set(0, -y, 0)));
+            for (const f of m.hands[h]) f.traverse((o) => { if (o.isMesh) pts.push(o.getWorldPosition(V())); });
+          }
+          let worst = Infinity;
+          for (const e of m.eyes) {
+            const de = e.getWorldPosition(V()).sub(eye);
+            const angR = Math.atan(rEye / de.length());
+            for (const q of pts) {
+              const dq = q.clone().sub(eye);
+              if (dq.length() < de.length()) worst = Math.min(worst, dq.angleTo(de) / angR);
+            }
+          }
+          return worst;
+        };
+        let over = 0;
+        let frames = 0;
+        const runs = [];
+        for (const yaw of [0, 0.8, 1.4]) for (const d of [1.8, 3.4, 5.2]) runs.push({ yaw, eye: new THREE.Vector3(0, 1.55, d), chase: true });
+        for (const eye of [new THREE.Vector3(0, 1.55, 3), new THREE.Vector3(2.2, 1.55, 2.2), new THREE.Vector3(0, 1.55, 1.8)]) runs.push({ yaw: 0, eye, chase: false });
+        for (const r of runs) {
+          const m = new FroggyMonster(scale);
+          for (let i = 0; i < 200; i++) {
+            m.setPose(0, 0, 0, r.yaw);
+            m.update(1 / 60, r.chase
+              ? { speed: 3.4, maw: 1, climb: 0, lunge: 1, reachAt: r.eye, viewer: r.eye }
+              : { speed: 0.6, maw: 0.12, climb: 1, climbT: (i % 120) / 120, viewer: r.eye });
+            if (i < 30) continue;
+            frames++;
+            if (clearance(m, r.eye) < 1) over++;
+          }
+        }
+        return { over, frames };
+      }, (await hide()).froggyScale);
+      check('his arms never cross his eyes, chasing or climbing', arms.over === 0,
+        `${arms.over} of ${arms.frames} frames with an arm over an eye`);
       check('and so does the drawing the jumpscare paints', eyes.blobs.length === 2,
         `${eyes.blobs.length} whites`);
       check('and they are a matched pair',

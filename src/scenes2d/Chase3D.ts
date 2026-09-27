@@ -434,6 +434,7 @@ export class Chase3D extends Phaser.Scene {
         lunge: 1,
         // both arms out for you, the head and the eyes on you
         reachAt: this.stage?.camera.position ?? null,
+        viewer: this.stage?.camera.position ?? null,
       });
     }
   }
