@@ -178,6 +178,23 @@ export interface FroggyPose {
    * default: noticing you, it comes open over a second or more.
    */
   mawRate?: number;
+  /**
+   * A hand on something in the world, [left, right]: a door handle, the edge
+   * of a lid, the floor.  The arm is solved to put the palm there; `weight`
+   * blends it in from wherever the arm was (so it reaches, it does not
+   * snap), `grip` closes the fingers round it, and `twist` turns the forearm
+   * -- the hand turning a handle.
+   */
+  hands?: [HandGoal | null, HandGoal | null];
+  /** 0..1 stooped over something low he is reaching for, on top of everything else. */
+  lean?: number;
+}
+
+export interface HandGoal {
+  at: THREE.Vector3;
+  weight: number;
+  grip: number;
+  twist?: number;
 }
 
 interface ArmSpring {
@@ -242,6 +259,10 @@ export class FroggyMonster {
   private readonly tmp5 = new THREE.Vector3();
   private readonly tmp6 = new THREE.Vector3();
   private readonly q = new THREE.Quaternion();
+  private readonly q2 = new THREE.Quaternion();
+  /** How much each arm is being held on something this frame (for the eye guard). */
+  private held = [0, 0];
+  private leanNow = 0;
   /** Per arm: how far it has been swung out to keep it off his eyes. */
   private clear = [0, 0];
   private readonly eyeW = [new THREE.Vector3(), new THREE.Vector3()];
@@ -822,6 +843,13 @@ export class FroggyMonster {
   update(dt: number, pose: FroggyPose): void {
     const speed = Math.max(0, pose.speed);
     this.breathT += dt;
+    // The IK below writes whole rotations; everything else only ever writes
+    // x and z, so the axes it leaves behind are cleared here.
+    for (let h = 0; h < 2; h++) {
+      this.arms[h].rotation.y = 0;
+      this.elbows[h].rotation.y = 0;
+    }
+    this.leanNow += ((pose.lean ?? 0) - this.leanNow) * Math.min(1, dt * 3);
 
     // Ease every shape change so nothing pops between frames.
     // The mouth comes open SLOWLY -- over a second or more, while he looks at
@@ -1102,7 +1130,7 @@ export class FroggyMonster {
     // further still as he closes.
     this.torso.rotation.x =
       0.14 + Math.min(0.2, speed * 0.05) + this.climbNow * 0.45 + this.lungeNow * (0.42 + this.nearNow * 0.1) +
-      cr * 0.62;
+      cr * 0.62 + this.leanNow * 0.55;
     // The shoulders twist against the hips -- the whole long back wrings a
     // little with every step -- and lean out over the planted foot.
     this.torso.rotation.y = -pelvisYaw * 1.7 * (1 - cr);
@@ -1121,7 +1149,7 @@ export class FroggyMonster {
     const peer = (pose.peer ?? 0) * cr;
     this.neck.rotation.x =
       -0.04 - Math.min(0.16, speed * 0.04) - this.climbNow * 0.2 - this.lungeNow * 0.36 +
-      cr * 0.5;
+      cr * 0.5 - this.leanNow * 0.3;
     // Craning: slow, small, side to side, and offset from the body's own sway
     // so the two never line up into something that looks mechanical.
     this.neck.rotation.y =
@@ -1265,6 +1293,16 @@ export class FroggyMonster {
       }
     }
 
+    // ---- HANDS ON THINGS.
+    this.held[0] = 0;
+    this.held[1] = 0;
+    if (pose.hands) {
+      for (let h = 0; h < 2; h++) {
+        const goal = pose.hands[h];
+        if (goal && goal.weight > 0.001) this.reachFor(h, goal);
+      }
+    }
+
     // ---- NEVER OVER HIS EYES.  From wherever you are looking at him from --
     // chasing you, or right in front of the lens at the end -- no part of an
     // arm or a hand is allowed across his eyes: the stare is the point, and
@@ -1285,6 +1323,60 @@ export class FroggyMonster {
   }
 
   /**
+   * Put a palm on `goal.at`: a two-bone solve, shoulder to elbow to palm, with
+   * the elbow bowed out and back the way a long thin arm bends -- a spider's
+   * leg, not a person's -- blended over the arm's own pose by `weight`.
+   */
+  private reachFor(h: number, goal: HandGoal): void {
+    const out = h === 0 ? -1 : 1;
+    const arm = this.arms[h];
+    const elbow = this.elbows[h];
+    const w = THREE.MathUtils.clamp(goal.weight, 0, 1);
+    this.torso.updateWorldMatrix(true, false);
+    const S = arm.position;
+    const d = this.torso.worldToLocal(this.tmp.copy(goal.at)).sub(S);
+    const A = 0.57; // shoulder to elbow
+    const B = 0.66; // elbow to palm
+    const len = THREE.MathUtils.clamp(d.length(), Math.abs(A - B) + 0.03, (A + B) * 0.995);
+    const u = d.normalize();
+    // where the elbow wants to go: out to the side, back, and a little up
+    const pole = this.tmp2.set(out * 0.85, 0.25, -0.45);
+    pole.addScaledVector(u, -pole.dot(u));
+    if (pole.lengthSq() < 1e-6) pole.set(out, 0, 0).addScaledVector(u, -u.x * out);
+    pole.normalize();
+    const alpha = Math.acos(THREE.MathUtils.clamp((A * A + len * len - B * B) / (2 * A * len), -1, 1));
+    const bend = Math.PI - Math.acos(THREE.MathUtils.clamp((A * A + B * B - len * len) / (2 * A * B), -1, 1));
+    // the upper arm
+    const e = this.tmp3.copy(u).multiplyScalar(Math.cos(alpha)).addScaledVector(pole, Math.sin(alpha)).normalize();
+    // the forearm, from the elbow to the palm
+    const E = this.tmp4.copy(e).multiplyScalar(A);
+    const f = this.tmp5.copy(u).multiplyScalar(len).sub(E).normalize();
+    // rotate "hanging" onto the upper arm, then twist about it so the elbow's
+    // bend (toward its local +z) is toward the forearm
+    const q1 = this.q.setFromUnitVectors(this.tmp6.set(0, -1, 0), e);
+    const zAxis = this.tmp6.set(0, 0, 1).applyQuaternion(q1);
+    const fb = f.clone().addScaledVector(e, -f.dot(e));
+    if (fb.lengthSq() > 1e-8) {
+      fb.normalize();
+      const ang = Math.atan2(zAxis.clone().cross(fb).dot(e), zAxis.dot(fb));
+      q1.premultiply(this.q2.setFromAxisAngle(e, ang));
+    }
+    arm.quaternion.slerp(q1, w);
+    elbow.rotation.x += (-bend - elbow.rotation.x) * w;
+    elbow.rotation.z *= 1 - w;
+    elbow.rotation.y = (goal.twist ?? 0) * w;
+    // the fingers: spread as they come, closing round it
+    for (let f2 = 0; f2 < this.hands[h].length; f2++) {
+      const finger = this.hands[h][f2];
+      const open = f2 === 4 ? 0.15 : 0.05 - f2 * 0.02;
+      const shut = f2 === 4 ? 0.9 : 1.25 + f2 * 0.06;
+      const want = open + (shut - open) * THREE.MathUtils.clamp(goal.grip, 0, 1);
+      finger.rotation.x += (want - finger.rotation.x) * w;
+    }
+    this.held[h] = w;
+  }
+
+  /**
    * Swing each arm outward, as far as it needs, so that seen from `viewer`
    * nothing of it lies over either eye.  The swing is applied first and then
    * measured, and grows while there is still an overlap, so it finds the
@@ -1294,7 +1386,9 @@ export class FroggyMonster {
     for (let h = 0; h < 2; h++) {
       const out = h === 0 ? -1 : 1;
       if (!viewer) this.clear[h] = Math.max(0, this.clear[h] - dt * 1.5);
-      this.arms[h].rotation.z += out * this.clear[h];
+      // a hand that is holding something stays on it
+      if (this.held[h] > 0.3) this.clear[h] = Math.max(0, this.clear[h] - dt * 4);
+      this.arms[h].rotation.z += out * this.clear[h] * (1 - this.held[h]);
     }
     if (!viewer) return;
     this.root.updateMatrixWorld(true);
@@ -1331,7 +1425,7 @@ export class FroggyMonster {
       let worst = measure(h);
       // still over an eye: out further, now, in this frame -- a fast stroke
       // must not get one frame across his eyes before this catches it
-      for (let i = 0; worst < 1 && this.clear[h] < 1.7 && i < 8; i++) {
+      for (let i = 0; worst < 1 && this.clear[h] < 1.7 && i < 8 && this.held[h] < 0.3; i++) {
         this.clear[h] = Math.min(1.7, this.clear[h] + 0.22);
         this.arms[h].rotation.z += out * 0.22;
         this.arms[h].updateMatrixWorld(true);
