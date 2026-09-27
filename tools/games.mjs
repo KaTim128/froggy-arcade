@@ -3342,6 +3342,55 @@ for (const g of [
   console.log(`${jumpOk ? 'PASS' : 'FAIL'}  grudge: every opponent jumps -- squat, air, landing  — ` +
     `${Object.values(jumps).filter((j) => j.ok).length}/${roster.length}; monkey ${jumps.monkey?.top}px, gorilla ${jumps.gorilla?.top}px, tortoise ${jumps.tortoise?.top}px`);
   if (!jumpOk) failures++;
+
+  // ---- CONTACT, NOT PROXIMITY.  A blow lands only where it meets the body:
+  // every opponent's high strike held in its active frames above Froggy's
+  // head does nothing, and the same strike low enough to reach him lands.
+  const reachTable = {};
+  for (const f of roster) {
+    reachTable[f.key] = {};
+    for (const h of [0, 34, 45]) {
+      await page.evaluate((k) => { window.__grudge.setFoe(k); window.__grudge.freeze(true); window.__grudge.heal(); window.__grudge.place(150, 168); }, f.key);
+      await sleep(40);
+      const before = await page.evaluate(() => window.__grudge.state().you.hp);
+      await page.evaluate((h) => window.__grudge.strikeAt('high', h), h);
+      await sleep(140);
+      reachTable[f.key][h] = before - (await page.evaluate(() => window.__grudge.state().you.hp));
+      await page.evaluate(() => { window.__grudge.pose({ move: null }); window.__grudge.hoist(null); });
+      await sleep(60);
+    }
+  }
+  const overhead = Object.entries(reachTable).filter(([, r]) => r[34] > 0 || r[45] > 0).map(([k]) => k);
+  const grounded = Object.values(reachTable).every((r) => r[0] > 0);
+  const contactOk = overhead.length === 0 && grounded;
+  console.log(`${contactOk ? 'PASS' : 'FAIL'}  grudge: a blow from above Froggy's head does not land, one that reaches him does  — ` +
+    `${roster.length} opponents, 0 damage from 34px and 45px up${overhead.length ? `; landed from above: ${overhead.join(', ')}` : ''}${grounded ? '' : '; a grounded blow missed'}`);
+  if (!contactOk) failures++;
+
+  // ---- AND A MONKEY OVER HIS HEAD.  It jumps across Froggy, once doing
+  // nothing and once throwing its blow at the top of the jump: neither may
+  // cost him anything, and nothing may hit twice.
+  const overTrials = [];
+  for (const swing of [false, true, false, true]) {
+    await page.evaluate(() => { window.__grudge.setFoe('monkey'); window.__grudge.freeze(true); window.__grudge.heal(); window.__grudge.place(150, 176); });
+    await sleep(120);
+    const hp0 = await page.evaluate(() => window.__grudge.state().you.hp);
+    await page.evaluate(() => window.__grudge.jump(-1));
+    let top = 0;
+    let thrown = !swing;
+    for (let i = 0; i < 300; i++) {
+      const s = await page.evaluate(() => window.__grudge.state().him);
+      top = Math.max(top, s.up);
+      if (!thrown && s.jump === 'air' && s.up >= top && top > 30) thrown = await page.evaluate(() => window.__grudge.attack('high'));
+      if (s.jump === 'none' && i > 10 && !s.move) break;
+      await sleep(10);
+    }
+    overTrials.push({ swing, thrown, top, lost: hp0 - (await page.evaluate(() => window.__grudge.state().you.hp)) });
+  }
+  const overOk = overTrials.every((t) => t.lost === 0 && t.thrown && t.top > 30);
+  console.log(`${overOk ? 'PASS' : 'FAIL'}  grudge: a monkey jumping over Froggy does not hurt him  — ` +
+    overTrials.map((t) => `${t.swing ? 'swinging' : 'just jumping'} ${t.top}px up: -${t.lost}hp`).join(', '));
+  if (!overOk) failures++;
   await page.close();
 }
 

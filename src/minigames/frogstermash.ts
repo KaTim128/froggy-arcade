@@ -139,6 +139,22 @@ export const MOVES: Record<string, Move[]> = {
   bardiche: [M.sweep('HEAVY ARC', 1.2, 1.2), M.over('SPLITTING BLOW', 1.3), M.crush('ARMOUR BREAKER', 1.25), M.low('LEG CHOP')],
   harpoon: [M.hurl('HARPOON THROW', 1.2), M.thrust('BARBED THRUST', 1.05, 1.3), M.stab('CLOSE BARB'), M.counter('HOOK AND HAUL', 1.3)],
   bolas: [M.hurl('BOLAS THROW'), M.hurl('TANGLING THROW', 1.05), M.stab('CLOSE SWING'), M.counter('WHIP ROUND', 1.2)],
+  // ---- the fifteen added after them
+  cestus: [M.combo('CESTUS COMBO', 3), M.bash('HAMMER FIST', 1.05), M.stab('BODY SHOTS'), M.counter('SLIP AND HIT', 1.25)],
+  kukri: [M.stab('HOOKED SLASH'), M.over('CHOPPING BLOW', 1.15, 1.1), M.combo('TWO CHOPS', 2), M.counter('DRAWING CUT', 1.3)],
+  sai: [M.counter('BLADE TRAP', 1.4), M.stab('PRONG JABS'), M.combo('PAIRED STRIKES', 3), M.bash('BUTT STRIKE', 0.85)],
+  tonfa: [M.counter('SPIN AND STRIKE', 1.35), M.combo('BATON FLURRY', 3), M.bash('FOREARM BLOCK', 0.8), M.over('SWINGING CHOP', 1.05, 1.05)],
+  cutlass: [M.sweep('HACKING SLASH', 1.05, 1.05), M.bash('BASKET PUNCH', 0.9), M.combo('BOARDING CUTS', 2), M.over('DOWNWARD HACK', 1.15, 1.15)],
+  longsword: [M.over('ZORNHAU', 1.2), M.thrust('HALF-SWORD THRUST', 1.05, 1.25), M.bash('POMMEL STRIKE'), M.counter('WINDING PARRY', 1.4)],
+  zweihander: [M.sweep('GREAT ARC', 1.2, 1.3), M.spin('WHIRLING CUT', 1.25), M.over('ROOF STRIKE', 1.3, 1.45), M.thrust('RICASSO THRUST', 1.0, 1.2)],
+  kanabo: [M.over('DEMON SMASH', 1.35, 1.45), M.slam('CRUSHING BLOW', 1.35), M.sweep('STUDDED SWING', 1.05), M.crush('ARMOUR CRACKER', 1.2)],
+  warpick: [M.over('PICK STRIKE', 1.25), M.crush('PLATE PUNCTURE', 1.35), M.bash('HAFT SHOVE'), M.low('KNEE HOOK')],
+  naginata: [M.sweep('WHEEL CUT', 1.1, 1.28), M.low('SHIN CUT'), M.thrust('POINT THRUST', 1.0, 1.35), M.spin('TURNING GUARD', 1.1)],
+  lance: [M.charge('COUCHED CHARGE', 1.35), M.thrust('LONG POINT', 1.05, 1.45), M.bash('SHAFT BUFFET', 0.8), M.charge('RUNNING TILT', 1.2)],
+  whip: [M.thrust('CRACK', 0.95, 1.45), M.low('ANKLE LASH'), M.sweep('WIDE LASH', 0.9, 1.3), M.counter('SNAP BACK', 1.2)],
+  kusarigama: [M.sweep('CHAIN WHIRL', 1.0, 1.3), M.stab('SICKLE CUTS'), M.low('CHAIN TRIP'), M.spin('WHIRLING WEIGHT', 1.15)],
+  shuriken: [M.hurl('STAR THROW', 0.95), M.hurl('SPREAD THROW', 1.05), M.stab('PALM STAR'), M.counter('VANISHING THROW', 1.2)],
+  repeater: [M.shoot('RAPID FIRE', 0.9), M.shoot('VOLLEY', 1.0), M.bash('STOCK BASH', 0.8), M.shoot('POINT BLANK', 1.05)],
   dagger: [M.stab('RAPID STAB'), M.combo('DOUBLE STAB', 2), M.low('LOW SLASH'), M.counter('BACKSTEP COUNTER', 1.3)],
   twindagger: [M.combo('FOUR HIT FLURRY', 4), M.stab('ALTERNATING STABS'), M.spin('SPINNING DOUBLE', 1.0), M.counter('CROSSING SLASH', 1.25)],
   knife: [M.thrust('PRECISION THRUST', 1.1, 1.15), M.crush('ARMOUR GAP STAB', 1.35), M.stab('QUICK SLASH'), M.counter('COUNTER STRIKE')],
@@ -619,6 +635,57 @@ export const WEAPONS: WeaponDef[] = [
   { key: 'boomerang', name: 'BOOMERANG', power: [2, 4], heavy: [1, 3], resist: [3, 6], reach: [2, 4], hits: 1, guard: 0, tempo: 1.3,
     spec: { note: 'IT GOES OUT AND IT COMES BACK', fleet: 1.12,
       ranged: { far: 150, dmg: 0.75, power: [3, 7], ammo: Infinity, reload: 0.66, wind: 0.8, shot: 'disc', speed: 172, arc: 0.36, hold: 89, drift: 0.26, returns: true, knock: 3 } } },
+
+  // ================= FIFTEEN MORE, AND NOT ONE OF THEM A NEW BEST =================
+  //
+  // Held to the same gate as the rest -- nothing above 80% and nothing under
+  // 15% across every pairing -- so each one is mid-rack in raw power and
+  // earns its place with a trade nobody else offers: reach for power, guard
+  // for damage, a charge, a trap, a lash that goes further than it should.
+
+  // ---- IN CLOSE
+  { key: 'cestus', name: 'CESTUS', power: [2, 5], heavy: [1, 3], resist: [6, 9], reach: [1, 2], hits: 1, guard: 0.04, tempo: 1.55,
+    spec: { note: 'EVERY PUNCH LANDS A LITTLE HEAVIER', stagger: 0.22, combo: 1.4, atClose: 0.4 } },
+  { key: 'kukri', name: 'KUKRI', power: [3, 6], heavy: [2, 3], resist: [6, 9], reach: [2, 4], hits: 1, guard: 0, tempo: 1.3,
+    spec: { note: 'CHOPS LIKE AN AXE AND CUTS LIKE A KNIFE', crit: 0.16, atClose: 0.3 } },
+  { key: 'sai', name: 'SAI', power: [2, 4], heavy: [1, 3], resist: [7, 10], reach: [2, 4], hits: 1, guard: 0.1, tempo: 1.4,
+    spec: { note: 'CATCHES THE BLADE, THEN THE WRIST', counter: 1.0, guardCut: 0.2, paired: true } },
+  { key: 'tonfa', name: 'TONFA', power: [2, 5], heavy: [2, 3], resist: [7, 10], reach: [2, 4], hits: 1, guard: 0.14, tempo: 1.3,
+    spec: { note: 'A GUARD THAT HITS BACK', counter: 0.8, stagger: 0.12 } },
+
+  // ---- BLADES
+  { key: 'cutlass', name: 'CUTLASS', power: [4, 6], heavy: [3, 4], resist: [6, 9], reach: [4, 6], hits: 1, guard: 0.06, tempo: 1.12,
+    spec: { note: 'SHORT, HEAVY AND RUDE ABOUT IT', knock: 4, combo: 1.3 } },
+  { key: 'longsword', name: 'LONGSWORD', power: [5, 7], heavy: [4, 6], resist: [6, 9], reach: [6, 8], hits: 1, guard: 0.08, tempo: 0.92,
+    spec: { note: 'EDGE, POINT AND POMMEL, ALL OF IT', guardCut: 0.3, counter: 0.5 } },
+  { key: 'zweihander', name: 'ZWEIHANDER', power: [6, 9], heavy: [8, 10], resist: [6, 9], reach: [8, 10], hits: 1, guard: 0, tempo: 0.6,
+    spec: { note: 'CLEARS A SPACE THE SIZE OF A ROOM', sweep: 0.6, knock: 5, slowRecover: 0.5 } },
+
+  // ---- HEAVY
+  { key: 'kanabo', name: 'KANABO', power: [6, 9], heavy: [7, 9], resist: [8, 10], reach: [5, 7], hits: 1, guard: 0, tempo: 0.66,
+    spec: { note: 'IRON STUDS, AND NOTHING SUBTLE', vsArmour: 1.3, knock: 8 } },
+  { key: 'warpick', name: 'WAR PICK', power: [5, 8], heavy: [5, 7], resist: [6, 9], reach: [4, 6], hits: 1, guard: 0, tempo: 0.82,
+    spec: { note: 'ONE POINT, AND ALL THE WEIGHT BEHIND IT', pierce: 0.4, vsArmour: 1.15 } },
+
+  // ---- LONG
+  { key: 'naginata', name: 'NAGINATA', power: [4, 7], heavy: [4, 6], resist: [5, 8], reach: [8, 10], hits: 1, guard: 0, tempo: 0.88,
+    spec: { note: 'A LONG CURVED EDGE THAT KEEPS THEM THERE', sweep: 0.45, counter: 0.4 } },
+  { key: 'lance', name: 'LANCE', power: [4, 7], heavy: [5, 7], resist: [5, 8], reach: [8, 10], hits: 1, guard: 0.05, tempo: 0.78,
+    spec: { note: 'ALL OF IT IS IN THE CHARGE', atRange: 0.55, knock: 8, slowRecover: 0.35 } },
+
+  // ---- FLEXIBLE: a lash and a chain that swing on their own
+  { key: 'whip', name: 'WHIP', power: [2, 4], heavy: [1, 2], resist: [3, 6], reach: [8, 10], hits: 1, guard: 0, tempo: 1.2,
+    spec: { note: 'REACHES FURTHER THAN IT HAS ANY RIGHT TO', dodgeCut: 0.3, stagger: 0.2, atRange: 0.3 } },
+  { key: 'kusarigama', name: 'KUSARIGAMA', power: [3, 6], heavy: [3, 4], resist: [4, 7], reach: [6, 8], hits: 1, guard: 0, tempo: 1.0,
+    spec: { note: 'A SICKLE IN THE HAND, A WEIGHT ON A CHAIN', dodgeCut: 0.35, sweep: 0.3 } },
+
+  // ---- FROM A DISTANCE
+  { key: 'shuriken', name: 'SHURIKEN', power: [1, 3], heavy: [1, 1], resist: [2, 4], reach: [1, 3], hits: 1, guard: 0, tempo: 1.45,
+    spec: { note: 'TEN STARS, AND THEY ALL GO SOMEWHERE', fleet: 1.1,
+      ranged: { far: 150, dmg: 0.72, power: [3, 7], ammo: 10, reload: 0.4, wind: 0.6, shot: 'disc', speed: 260, arc: 0.05, hold: 88, drift: 0.16, leaves: true } } },
+  { key: 'repeater', name: 'REPEATER', power: [2, 4], heavy: [3, 5], resist: [4, 7], reach: [2, 4], hits: 1, guard: 0.04, tempo: 1.0,
+    spec: { note: 'BOLT AFTER BOLT, NONE OF THEM MUCH', slowRecover: 0.15,
+      ranged: { far: 176, dmg: 0.5, power: [3, 7], ammo: Infinity, reload: 0.55, wind: 0.7, shot: 'bolt', speed: 290, arc: 0.04, hold: 104, drift: 0.14 } } },
 ];
 
 /** Bare hands, for a weapon that has broken.  The same row as an empty chest. */
@@ -665,6 +732,12 @@ export interface ArmourMat {
   /** The one line that says what it is for, when the numbers do not. */
   note: string;
   /**
+   * AND WHAT IT IS ON EACH PART OF THE BODY.  One material is three different
+   * pieces -- a helmet, a chest piece and something for the legs -- and the
+   * card says which one it is looking at rather than repeating the same line.
+   */
+  notes?: Partial<Record<'head' | 'body' | 'legs', string>>;
+  /**
    * A name short enough for the kit sheet, which lists three of them on one
    * centred line.  Trimming " ARMOUR" off the full name was not enough --
    * three REINFORCED HIDEs came to 330 pixels of a 320 pixel screen and went
@@ -674,7 +747,7 @@ export interface ArmourMat {
 }
 export const MATERIALS: ArmourMat[] = [
   // ---- NOTHING, AND THE THINGS THAT BARELY COUNT
-  { key: 'none', name: 'NO ARMOUR', def: 0, evade: 0, heavy: [1, 1], resist: [10, 10], colour: 0x6d5a45, edge: 0x4a3c2d, short: 'NONE', note: 'NOTHING THERE, AND NOTHING TO CARRY' },
+  { key: 'none', name: 'NO ARMOUR', def: 0, evade: 0, heavy: [1, 1], resist: [10, 10], colour: 0x6d5a45, edge: 0x4a3c2d, short: 'NONE', note: 'NOTHING THERE, AND NOTHING TO CARRY', notes: { head: 'A BARE HEAD. EVERY BLOW GOES STRAIGHT IN', body: 'NOTHING THERE, AND NOTHING TO CARRY', legs: 'BARE LEGS. QUICK, AND NOTHING IN THE WAY' } },
   // ---- TEN MORE, FILLING THE LADDER RATHER THAN EXTENDING IT.
   //
   // None of these is better than HEAVY PLATE and none is lighter than cloth:
@@ -682,44 +755,65 @@ export const MATERIALS: ArmourMat[] = [
   // instead of jumps.  Three of them break the pattern on purpose -- bone and
   // dragon scale shrug off quick hits and not heavy ones, obsidian stops a
   // great deal and shatters while it does it.
-  { key: 'padded', name: 'PADDED JACK', def: 0.08, evade: 0.05, heavy: [1, 2], resist: [3, 5], colour: 0xc9b48c, edge: 0x8a7654, short: 'PADDED', note: 'CLOTH, BUT ENOUGH OF IT TO NOTICE' },
-  { key: 'hide', name: 'HIDE ARMOUR', def: 0.12, evade: 0, heavy: [2, 4], resist: [4, 6], colour: 0x8a6440, edge: 0x4f3722, short: 'HIDE', note: 'SOMETHING ELSE WORE IT FIRST' },
-  { key: 'studded', name: 'STUDDED LEATHER', def: 0.14, evade: 0, heavy: [3, 5], resist: [6, 8], colour: 0x7f5c3c, edge: 0x9aa2ae, short: 'STUDDED', note: 'LEATHER WITH OPINIONS HAMMERED INTO IT' },
-  { key: 'bone', name: 'BONE ARMOUR', def: 0.17, evade: 0, soft: 0.38, heavy: [3, 5], resist: [4, 6], colour: 0xe4ddc6, edge: 0x9c9482, short: 'BONE', note: 'TURNS THE QUICK ONES. SPLITS ON THE REST' },
-  { key: 'brigandine', name: 'BRIGANDINE', def: 0.19, evade: 0, heavy: [4, 6], resist: [7, 9], colour: 0x6b4f3a, edge: 0xb9c2c8, short: 'BRIG', note: 'PLATES ON THE INSIDE WHERE THEY CANNOT SEE THEM' },
-  { key: 'lamellar', name: 'LAMELLAR ARMOUR', def: 0.22, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8a7f5e, edge: 0x4e4634, short: 'LAMELLAR', note: 'A THOUSAND LITTLE PLATES, ALL LACED TOGETHER' },
-  { key: 'corinthian', name: 'CORINTHIAN HELM', def: 0.24, evade: 0, heavy: [4, 6], resist: [7, 9], colour: 0xb08d4a, edge: 0x6b5324, short: 'CORINTH', note: 'YOU WILL LOOK MAGNIFICENT AND HEAR NOTHING' },
-  { key: 'knight', name: 'KNIGHT HELM', def: 0.27, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0xa9b2bd, edge: 0x59616b, short: 'KNIGHT', note: 'A LETTERBOX TO SEE THE WHOLE FIGHT THROUGH' },
-  { key: 'obsidian', name: 'OBSIDIAN ARMOUR', def: 0.29, evade: 0, heavy: [5, 7], resist: [2, 4], colour: 0x2b2836, edge: 0x6d5fa0, short: 'OBSIDIAN', note: 'STOPS ALMOST ANYTHING, ALMOST ONCE' },
-  { key: 'dragon', name: 'DRAGON SCALE', def: 0.31, evade: 0, soft: 0.34, heavy: [6, 8], resist: [7, 9], colour: 0x4f7a5a, edge: 0x24402c, short: 'DRAGON', note: 'NOBODY ASKS WHERE IT CAME FROM' },
+  { key: 'padded', name: 'PADDED JACK', def: 0.08, evade: 0.05, heavy: [1, 2], resist: [3, 5], colour: 0xc9b48c, edge: 0x8a7654, short: 'PADDED', note: 'CLOTH, BUT ENOUGH OF IT TO NOTICE', notes: { head: 'A QUILTED CAP. TAKES THE EDGE OFF A KNOCK', body: 'CLOTH, BUT ENOUGH OF IT TO NOTICE', legs: 'QUILTED LEGGINGS. SOFT, WARM, NOT MUCH ELSE' } },
+  { key: 'hide', name: 'HIDE ARMOUR', def: 0.12, evade: 0, heavy: [2, 4], resist: [4, 6], colour: 0x8a6440, edge: 0x4f3722, short: 'HIDE', note: 'SOMETHING ELSE WORE IT FIRST', notes: { head: 'A FUR HOOD WITH THE EARS STILL ON IT', body: 'SOMETHING ELSE WORE IT FIRST', legs: 'RAWHIDE WRAPPED ROUND THE SHINS AND TIED' } },
+  { key: 'studded', name: 'STUDDED LEATHER', def: 0.14, evade: 0, heavy: [3, 5], resist: [6, 8], colour: 0x7f5c3c, edge: 0x9aa2ae, short: 'STUDDED', note: 'LEATHER WITH OPINIONS HAMMERED INTO IT', notes: { head: 'A LEATHER CAP STUDDED ROUND THE BRIM', body: 'LEATHER WITH OPINIONS HAMMERED INTO IT', legs: 'STUDDED LEGGINGS THAT JINGLE WHEN YOU RUN' } },
+  { key: 'bone', name: 'BONE ARMOUR', def: 0.17, evade: 0, soft: 0.38, heavy: [3, 5], resist: [4, 6], colour: 0xe4ddc6, edge: 0x9c9482, short: 'BONE', note: 'TURNS THE QUICK ONES. SPLITS ON THE REST', notes: { head: 'A SKULL FOR A HELMET. IT TURNS THE QUICK ONES', body: 'RIBS OVER RIBS. TURNS THE QUICK ONES, SPLITS ON THE REST', legs: 'BONE SPLINTS ON THE SHINS. LIGHT, AND BRITTLE' } },
+  { key: 'brigandine', name: 'BRIGANDINE', def: 0.19, evade: 0, heavy: [4, 6], resist: [7, 9], colour: 0x6b4f3a, edge: 0xb9c2c8, short: 'BRIG', note: 'PLATES ON THE INSIDE WHERE THEY CANNOT SEE THEM', notes: { head: 'A CLOTH CAP WITH IRON SEWN IN UNDER IT', body: 'PLATES ON THE INSIDE WHERE THEY CANNOT SEE THEM', legs: 'RIVETED CLOTH OVER IRON STRIPS DOWN THE THIGH' } },
+  { key: 'lamellar', name: 'LAMELLAR ARMOUR', def: 0.22, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8a7f5e, edge: 0x4e4634, short: 'LAMELLAR', note: 'A THOUSAND LITTLE PLATES, ALL LACED TOGETHER', notes: { head: 'LITTLE PLATES LACED IN A SKIRT ROUND THE HEAD', body: 'A THOUSAND LITTLE PLATES, ALL LACED TOGETHER', legs: 'LACED LAMES DOWN THE LEG THAT BEND AS IT DOES' } },
+  { key: 'corinthian', name: 'CORINTHIAN HELM', def: 0.24, evade: 0, heavy: [4, 6], resist: [7, 9], colour: 0xb08d4a, edge: 0x6b5324, short: 'CORINTH', note: 'YOU WILL LOOK MAGNIFICENT AND HEAR NOTHING', notes: { head: 'YOU WILL LOOK MAGNIFICENT AND HEAR NOTHING', body: 'A BRONZE CHEST CAST TO LOOK LIKE MUSCLES', legs: 'BRONZE GREAVES CAST TO THE SHAPE OF A SHIN' } },
+  { key: 'knight', name: 'KNIGHT HELM', def: 0.27, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0xa9b2bd, edge: 0x59616b, short: 'KNIGHT', note: 'A LETTERBOX TO SEE THE WHOLE FIGHT THROUGH', notes: { head: 'A LETTERBOX TO SEE THE WHOLE FIGHT THROUGH', body: 'A POLISHED CUIRASS, MADE TO BE SEEN', legs: 'JOINTED STEEL, KNEE TO ANKLE. IT CLANKS' } },
+  { key: 'obsidian', name: 'OBSIDIAN ARMOUR', def: 0.29, evade: 0, heavy: [5, 7], resist: [2, 4], colour: 0x2b2836, edge: 0x6d5fa0, short: 'OBSIDIAN', note: 'STOPS ALMOST ANYTHING, ALMOST ONCE', notes: { head: 'A GLASS HELM THAT STOPS A SKULL-SPLITTER ONCE', body: 'STOPS ALMOST ANYTHING, ALMOST ONCE', legs: 'BLACK GLASS SHIN PLATES. THEY WILL SHATTER' } },
+  { key: 'dragon', name: 'DRAGON SCALE', def: 0.31, evade: 0, soft: 0.34, heavy: [6, 8], resist: [7, 9], colour: 0x4f7a5a, edge: 0x24402c, short: 'DRAGON', note: 'NOBODY ASKS WHERE IT CAME FROM', notes: { head: 'A HORNED CAP OF DRAGON SCALE. NOBODY ASKS', body: 'NOBODY ASKS WHERE IT CAME FROM', legs: 'SCALED LEGGINGS. SHRUGS OFF THE QUICK ONES' } },
 
-  { key: 'cloth', name: 'LIGHT CLOTH ARMOUR', def: 0.04, evade: 0.09, heavy: [1, 1], resist: [2, 4], colour: 0xd8cbb0, edge: 0x9a8e74, short: 'CLOTH', note: 'YOU WILL BE VERY QUICK AND VERY SORRY' },
-  { key: 'tuxedo', name: 'TUXEDO', def: 0.05, evade: 0, heavy: [1, 2], resist: [2, 4], colour: 0x2a2d3a, edge: 0xdfe4ee, short: 'TUXEDO', note: 'FIVE PERCENT DEFENCE. THE REST IS FASHION' },
-  { key: 'crown', name: 'CROWN', def: 0.06, evade: 0, heavy: [1, 2], resist: [3, 5], colour: 0xffd45e, edge: 0xa8801e, short: 'CROWN', note: 'IT PROTECTS NOTHING AND MEANS EVERYTHING' },
+  { key: 'cloth', name: 'LIGHT CLOTH ARMOUR', def: 0.04, evade: 0.09, heavy: [1, 1], resist: [2, 4], colour: 0xd8cbb0, edge: 0x9a8e74, short: 'CLOTH', note: 'YOU WILL BE VERY QUICK AND VERY SORRY', notes: { head: 'A HEADBAND. KEEPS THE SWEAT OUT, NOT THE CLUB', body: 'YOU WILL BE VERY QUICK AND VERY SORRY', legs: 'LOOSE TROUSERS. NOTHING SLOWS YOU DOWN' } },
+  { key: 'tuxedo', name: 'TUXEDO', def: 0.05, evade: 0, heavy: [1, 2], resist: [2, 4], colour: 0x2a2d3a, edge: 0xdfe4ee, short: 'TUXEDO', note: 'FIVE PERCENT DEFENCE. THE REST IS FASHION', notes: { head: 'A TOP HAT. IT WILL NOT SURVIVE THE FIRST ROUND', body: 'FIVE PERCENT DEFENCE. THE REST IS FASHION', legs: 'PRESSED TROUSERS WITH A VERY SHARP CREASE' } },
+  { key: 'crown', name: 'CROWN', def: 0.06, evade: 0, heavy: [1, 2], resist: [3, 5], colour: 0xffd45e, edge: 0xa8801e, short: 'CROWN', note: 'IT PROTECTS NOTHING AND MEANS EVERYTHING', notes: { head: 'IT PROTECTS NOTHING AND MEANS EVERYTHING', body: 'ROYAL ROBES. THE CROWD CHEERS, THE AXE DOES NOT', legs: 'GOLD-TRIMMED HOSE. REGAL AND USELESS' } },
 
   // ---- LIGHT
-  { key: 'leather', name: 'LEATHER ARMOUR', def: 0.10, evade: 0, heavy: [2, 4], resist: [5, 7], colour: 0x9c7248, edge: 0x5d4028, short: 'LEATHER', note: 'LIGHT, AND ABOUT AS USEFUL AS THAT SOUNDS' },
-  { key: 'tactical', name: 'TACTICAL ARMOUR', def: 0.10, evade: 0.15, heavy: [2, 4], resist: [6, 8], colour: 0x3f4a3a, edge: 0x22281f, short: 'TACTICAL', note: 'STOPS LITTLE. MUCH HARDER TO HIT' },
-  { key: 'reinforced', name: 'REINFORCED LEATHER', def: 0.13, evade: 0, heavy: [3, 5], resist: [7, 9], colour: 0x7a5a3a, edge: 0x452f1c, short: 'R.LEATHER', note: 'LEATHER THAT HAS BEEN THOUGHT ABOUT' },
-  { key: 'tin', name: 'TIN ARMOUR', def: 0.15, evade: 0, heavy: [3, 5], resist: [3, 5], colour: 0xb9c2c8, edge: 0x6d767c, short: 'TIN', note: 'CHEAP, LOUD, BETTER THAN A SHIRT' },
-  { key: 'hood', name: 'CHAIN HOOD', def: 0.16, evade: 0, heavy: [3, 5], resist: [6, 8], colour: 0x87909c, edge: 0x464e58, short: 'HOOD', note: 'RINGS, AND NOT MANY OF THEM' },
+  { key: 'leather', name: 'LEATHER ARMOUR', def: 0.10, evade: 0, heavy: [2, 4], resist: [5, 7], colour: 0x9c7248, edge: 0x5d4028, short: 'LEATHER', note: 'LIGHT, AND ABOUT AS USEFUL AS THAT SOUNDS', notes: { head: 'A LEATHER CAP. BETTER THAN HAIR', body: 'LIGHT, AND ABOUT AS USEFUL AS THAT SOUNDS', legs: 'LEATHER CHAPS. THEY STOP A SCRATCH' } },
+  { key: 'tactical', name: 'TACTICAL ARMOUR', def: 0.10, evade: 0.15, heavy: [2, 4], resist: [6, 8], colour: 0x3f4a3a, edge: 0x22281f, short: 'TACTICAL', note: 'STOPS LITTLE. MUCH HARDER TO HIT', notes: { head: 'A PADDED HEADSET. HARDER TO HIT, NOT HARDER', body: 'STOPS LITTLE. MUCH HARDER TO HIT', legs: 'CARGO KNEE PADS. LIGHT FEET, QUICK DODGES' } },
+  { key: 'reinforced', name: 'REINFORCED LEATHER', def: 0.13, evade: 0, heavy: [3, 5], resist: [7, 9], colour: 0x7a5a3a, edge: 0x452f1c, short: 'R.LEATHER', note: 'LEATHER THAT HAS BEEN THOUGHT ABOUT', notes: { head: 'BOILED LEATHER, SET HARD ROUND THE SKULL', body: 'LEATHER THAT HAS BEEN THOUGHT ABOUT', legs: 'STIFFENED LEATHER GREAVES, LACED TIGHT' } },
+  { key: 'tin', name: 'TIN ARMOUR', def: 0.15, evade: 0, heavy: [3, 5], resist: [3, 5], colour: 0xb9c2c8, edge: 0x6d767c, short: 'TIN', note: 'CHEAP, LOUD, BETTER THAN A SHIRT', notes: { head: 'A TIN POT WITH A CHIN STRAP. IT RINGS', body: 'CHEAP, LOUD, BETTER THAN A SHIRT', legs: 'TIN SHIN GUARDS. THEY DENT, THEN THEY BEND' } },
+  { key: 'hood', name: 'CHAIN HOOD', def: 0.16, evade: 0, heavy: [3, 5], resist: [6, 8], colour: 0x87909c, edge: 0x464e58, short: 'HOOD', note: 'RINGS, AND NOT MANY OF THEM', notes: { head: 'A MAIL COIF. RINGS, AND NOT MANY OF THEM', body: 'A SHORT MAIL SHIRT THAT STOPS AT THE RIBS', legs: 'MAIL CHAUSSES. SLICES STOP, BRUISES DO NOT' } },
 
   // ---- THE MIDDLE
-  { key: 'scale', name: 'SCALE ARMOUR', def: 0.18, evade: 0, soft: 0.34, heavy: [4, 6], resist: [6, 8], colour: 0x6f8a6a, edge: 0x3a4a38, short: 'SCALE', note: 'SHRUGS OFF THE QUICK ONES. NOT THE BIG ONES' },
-  { key: 'chain', name: 'CHAIN ARMOUR', def: 0.20, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8e9cad, edge: 0x4a5665, short: 'CHAIN', note: 'THE HONEST MIDDLE OF THE RACK' },
-  { key: 'bronze', name: 'BRONZE ARMOUR', def: 0.21, evade: 0, heavy: [5, 7], resist: [5, 7], colour: 0xc08a3e, edge: 0x6f4b1c, short: 'BRONZE', note: 'OLDER THAN IRON AND NEARLY AS GOOD' },
-  { key: 'viking', name: 'VIKING HELM', def: 0.22, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x9aa3ad, edge: 0x4e555e, short: 'VIKING', note: 'HORNS, WHICH HELP WITH NOTHING' },
-  { key: 'spartan', name: 'SPARTAN HELM', def: 0.23, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0xb08a3a, edge: 0x63481a, short: 'SPARTAN', note: 'YOU WILL SEE LESS AND MIND IT LESS' },
-  { key: 'legion', name: 'ROMAN LEGION', def: 0.23, evade: 0, heavy: [5, 7], resist: [8, 10], colour: 0xc2a15a, edge: 0x6d5528, short: 'LEGION', note: 'ISSUED, AND IT SHOWS. IT LASTS' },
-  { key: 'roman', name: 'ROMAN HELMET', def: 0.24, evade: 0, heavy: [5, 7], resist: [8, 10], colour: 0xcaa963, edge: 0x77592a, short: 'ROMAN', note: 'A CHEEK GUARD AND A VERY RED BRUSH' },
+  { key: 'scale', name: 'SCALE ARMOUR', def: 0.18, evade: 0, soft: 0.34, heavy: [4, 6], resist: [6, 8], colour: 0x6f8a6a, edge: 0x3a4a38, short: 'SCALE', note: 'SHRUGS OFF THE QUICK ONES. NOT THE BIG ONES', notes: { head: 'SCALES ROUND THE CROWN. SHRUGS OFF THE QUICK ONES', body: 'SHRUGS OFF THE QUICK ONES. NOT THE BIG ONES', legs: 'SCALED TASSETS OVER THE THIGHS. LIGHT HITS SLIDE' } },
+  { key: 'chain', name: 'CHAIN ARMOUR', def: 0.20, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8e9cad, edge: 0x4a5665, short: 'CHAIN', note: 'THE HONEST MIDDLE OF THE RACK', notes: { head: 'A MAIL HOOD. THE HONEST MIDDLE OF THE RACK', body: 'THE HONEST MIDDLE OF THE RACK', legs: 'MAIL LEGGINGS. THEY STOP A BLADE, NOT A CLUB' } },
+  { key: 'bronze', name: 'BRONZE ARMOUR', def: 0.21, evade: 0, heavy: [5, 7], resist: [5, 7], colour: 0xc08a3e, edge: 0x6f4b1c, short: 'BRONZE', note: 'OLDER THAN IRON AND NEARLY AS GOOD', notes: { head: 'A BRONZE BOWL. OLDER THAN IRON, NEARLY AS GOOD', body: 'OLDER THAN IRON AND NEARLY AS GOOD', legs: 'BRONZE GREAVES. THEY WILL OUTLAST THE FIGHT' } },
+  { key: 'viking', name: 'VIKING HELM', def: 0.22, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x9aa3ad, edge: 0x4e555e, short: 'VIKING', note: 'HORNS, WHICH HELP WITH NOTHING', notes: { head: 'HORNS, WHICH HELP WITH NOTHING', body: 'A MAIL BYRNIE UNDER A FUR CLOAK', legs: 'WOOL WRAPS AND IRON BANDS ROUND THE CALVES' } },
+  { key: 'spartan', name: 'SPARTAN HELM', def: 0.23, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0xb08a3a, edge: 0x63481a, short: 'SPARTAN', note: 'YOU WILL SEE LESS AND MIND IT LESS', notes: { head: 'YOU WILL SEE LESS AND MIND IT LESS', body: 'A BRONZE BELL CUIRASS. NO RETREAT IN IT', legs: 'BRONZE GREAVES THAT CLIP ON WITHOUT STRAPS' } },
+  { key: 'legion', name: 'ROMAN LEGION', def: 0.23, evade: 0, heavy: [5, 7], resist: [8, 10], colour: 0xc2a15a, edge: 0x6d5528, short: 'LEGION', note: 'ISSUED, AND IT SHOWS. IT LASTS', notes: { head: 'A STANDARD ISSUE HELMET. IT LASTS', body: 'ISSUED, AND IT SHOWS. IT LASTS', legs: 'ISSUED GREAVES AND HOBNAILED SANDALS' } },
+  { key: 'roman', name: 'ROMAN HELMET', def: 0.24, evade: 0, heavy: [5, 7], resist: [8, 10], colour: 0xcaa963, edge: 0x77592a, short: 'ROMAN', note: 'A CHEEK GUARD AND A VERY RED BRUSH', notes: { head: 'A CHEEK GUARD AND A VERY RED BRUSH', body: 'BANDED PLATES OVER THE SHOULDERS AND RIBS', legs: 'A PTERUGES SKIRT OF STRIPS AND TWO GREAVES' } },
 
   // ---- HEAVY
-  { key: 'iron', name: 'IRON ARMOUR', def: 0.25, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x6f7682, edge: 0x3a4149, short: 'IRON', note: 'HEAVY, AND WORTH IT' },
-  { key: 'shoulder', name: 'SHOULDER GUARDS', def: 0.26, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x7e868f, edge: 0x424952, short: 'PAULDRON', note: 'ENORMOUS. YOU WILL NOT TURN QUICKLY' },
-  { key: 'spiked', name: 'SPIKED ARMOUR', def: 0.26, evade: 0, thorns: 9, heavy: [6, 8], resist: [6, 8], colour: 0x5e5a63, edge: 0xbfc6cf, short: 'SPIKED', note: 'PUNCH IT AND FIND OUT. BLADES DO NOT CARE' },
-  { key: 'plate', name: 'PLATE ARMOUR', def: 0.28, evade: 0, heavy: [7, 9], resist: [8, 10], colour: 0xc3cad4, edge: 0x646c78, short: 'PLATE', note: 'A WALL WITH A FROG INSIDE IT' },
-  { key: 'gold', name: 'GOLD ARMOUR', def: 0.30, evade: 0, heavy: [7, 9], resist: [4, 6], colour: 0xffd45e, edge: 0xa8801e, short: 'GOLD', note: 'THE BEST THERE IS, AND THE SOFTEST' },
-  { key: 'heavyplate', name: 'HEAVY PLATE', def: 0.33, evade: 0, heavy: [9, 10], resist: [9, 10], colour: 0x9aa2ae, edge: 0x4d545e, short: 'H.PLATE', note: 'NOTHING GETS IN. NOTHING GETS OUT EITHER' },
+  { key: 'iron', name: 'IRON ARMOUR', def: 0.25, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x6f7682, edge: 0x3a4149, short: 'IRON', note: 'HEAVY, AND WORTH IT', notes: { head: 'AN IRON HELM. HEAVY ON THE NECK, AND WORTH IT', body: 'HEAVY, AND WORTH IT', legs: 'IRON GREAVES. THEY SLOW THE LEGS, NOT THE FIGHT' } },
+  { key: 'shoulder', name: 'SHOULDER GUARDS', def: 0.26, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x7e868f, edge: 0x424952, short: 'PAULDRON', note: 'ENORMOUS. YOU WILL NOT TURN QUICKLY', notes: { head: 'A GREAT HELM TO MATCH. YOU WILL NOT LOOK UP', body: 'ENORMOUS. YOU WILL NOT TURN QUICKLY', legs: 'THIGH PLATES AS BROAD AS THE PAULDRONS' } },
+  { key: 'spiked', name: 'SPIKED ARMOUR', def: 0.26, evade: 0, thorns: 9, heavy: [6, 8], resist: [6, 8], colour: 0x5e5a63, edge: 0xbfc6cf, short: 'SPIKED', note: 'PUNCH IT AND FIND OUT. BLADES DO NOT CARE', notes: { head: 'A SPIKE ON TOP. HEADBUTTS ARE A PLAN NOW', body: 'PUNCH IT AND FIND OUT. BLADES DO NOT CARE', legs: 'SPIKED KNEES. KICK IT AND REGRET IT' } },
+  { key: 'plate', name: 'PLATE ARMOUR', def: 0.28, evade: 0, heavy: [7, 9], resist: [8, 10], colour: 0xc3cad4, edge: 0x646c78, short: 'PLATE', note: 'A WALL WITH A FROG INSIDE IT', notes: { head: 'A CLOSED STEEL HELM. A WALL ROUND YOUR HEAD', body: 'A WALL WITH A FROG INSIDE IT', legs: 'PLATE FROM HIP TO ANKLE. STEADY ON YOUR FEET' } },
+  { key: 'gold', name: 'GOLD ARMOUR', def: 0.30, evade: 0, heavy: [7, 9], resist: [4, 6], colour: 0xffd45e, edge: 0xa8801e, short: 'GOLD', note: 'THE BEST THERE IS, AND THE SOFTEST', notes: { head: 'A GOLD HELM. THE BEST THERE IS, AND THE SOFTEST', body: 'THE BEST THERE IS, AND THE SOFTEST', legs: 'GOLD GREAVES. THE CROWD WATCHES YOUR FEET' } },
+  { key: 'heavyplate', name: 'HEAVY PLATE', def: 0.33, evade: 0, heavy: [9, 10], resist: [9, 10], colour: 0x9aa2ae, edge: 0x4d545e, short: 'H.PLATE', note: 'NOTHING GETS IN. NOTHING GETS OUT EITHER', notes: { head: 'A GREAT HELM. NOTHING GETS IN, NOT EVEN SOUND', body: 'NOTHING GETS IN. NOTHING GETS OUT EITHER', legs: 'HEAVY PLATE LEGS. YOU WALK LIKE A DOOR' } },
+
+
+  // ---- FIFTEEN MORE, BETWEEN WHAT WAS ALREADY THERE.  None of them tops heavy
+  // plate and none is lighter than cloth: each is a different trade -- silk that
+  // slips, crystal that shatters, thorns that bite back, mithril that weighs
+  // nothing -- rather than a bigger number.
+  { key: 'silk', name: 'SILK ARMOUR', def: 0.07, evade: 0.07, heavy: [1, 1], resist: [3, 5], colour: 0xe8d6f0, edge: 0x8f7aa0, short: 'SILK', note: 'ARROWS TANGLE IN IT. SWORDS DO NOT', notes: { head: 'A SILK TURBAN, WOUND MANY TIMES', body: 'LAYERED SILK. ARROWS TANGLE IN IT, SWORDS DO NOT', legs: 'SILK WRAPS. LIGHT ENOUGH TO DANCE IN' } },
+  { key: 'bark', name: 'BARK ARMOUR', def: 0.11, evade: 0, heavy: [2, 3], resist: [4, 6], colour: 0x6e5436, edge: 0x3c2c1a, short: 'BARK', note: 'A TREE WORE IT FIRST, AND IT WAS FINE', notes: { head: 'A BARK CAP. SMELLS OF THE FOREST', body: 'A TREE WORE IT FIRST, AND IT WAS FINE', legs: 'BARK SHIN GUARDS, LASHED WITH VINE' } },
+  { key: 'turtle', name: 'TURTLE SHELL', def: 0.21, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x6f7a3a, edge: 0x39401c, short: 'SHELL', note: 'SLOW, AND VERY HARD TO GET THROUGH', notes: { head: 'HALF A SHELL FOR A HELMET. NOBODY LAUGHS TWICE', body: 'A WHOLE SHELL ON YOUR BACK. SLOW, AND VERY HARD', legs: 'SHELL PLATES ON THE KNEES. HARD, AND HEAVY' } },
+  { key: 'splint', name: 'SPLINT MAIL', def: 0.2, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8d8f86, edge: 0x4a4c44, short: 'SPLINT', note: 'STRIPS OF IRON RIVETED IN A ROW', notes: { head: 'A SPLINTED CAP, STRIPS FROM CROWN TO BRIM', body: 'IRON STRIPS RIVETED DOWN A LEATHER COAT', legs: 'SPLINTED GREAVES. STRIPS THAT BEND AT THE KNEE' } },
+  { key: 'banded', name: 'BANDED MAIL', def: 0.23, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x9a9ea6, edge: 0x4c5058, short: 'BANDED', note: 'HOOPS OF STEEL, ONE OVER THE NEXT', notes: { head: 'A BANDED HELM, HOOPED LIKE A BARREL', body: 'HOOPS OF STEEL ROUND THE BODY, ONE OVER THE NEXT', legs: 'BANDED CUISSES. THEY CREAK WHEN YOU CROUCH' } },
+  { key: 'samurai', name: 'O-YOROI', def: 0.24, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x8c2f2a, edge: 0x3d1412, short: 'O-YOROI', note: 'LACQUERED LAMES, LACED IN SILK', notes: { head: 'A KABUTO WITH A FLARED NECK GUARD', body: 'LACQUERED LAMES, LACED IN SILK CORD', legs: 'HAIDATE: AN APRON OF LITTLE PLATES OVER THE THIGH' } },
+  { key: 'mirror', name: 'MIRROR ARMOUR', def: 0.22, evade: 0, heavy: [4, 6], resist: [5, 7], colour: 0xd9e4ee, edge: 0x6a7684, short: 'MIRROR', note: 'POLISHED UNTIL THEY SQUINT', notes: { head: 'A POLISHED DOME. THEY SEE THEMSELVES COMING', body: 'ROUND MIRRORS SEWN ON MAIL. THEY SQUINT', legs: 'POLISHED GREAVES THAT FLASH IN THE SUN' } },
+  { key: 'coral', name: 'CORAL ARMOUR', def: 0.17, evade: 0, soft: 0.3, heavy: [3, 5], resist: [4, 6], colour: 0xe07a6a, edge: 0x8a3a30, short: 'CORAL', note: 'TURNS THE QUICK ONES. CRUMBLES ON THE REST', notes: { head: 'A CORAL CROWN. TURNS A QUICK BLOW', body: 'GROWN, NOT MADE. TURNS THE QUICK ONES', legs: 'CORAL SHIN PLATES. BRIGHT, AND BRITTLE' } },
+  { key: 'jade', name: 'JADE ARMOUR', def: 0.26, evade: 0, heavy: [6, 8], resist: [4, 6], colour: 0x5fae7e, edge: 0x2a5a3c, short: 'JADE', note: 'PLATES OF STONE, WIRED TOGETHER WITH GOLD', notes: { head: 'A JADE CAP, WIRED IN GOLD. HEAVY ON THE NECK', body: 'JADE PLATES WIRED WITH GOLD. HARD, AND IT CHIPS', legs: 'JADE TILES DOWN THE LEG. SLOW, AND STRONG' } },
+  { key: 'mithril', name: 'MITHRIL MAIL', def: 0.22, evade: 0, heavy: [2, 4], resist: [8, 10], colour: 0xdfe8f2, edge: 0x7c8898, short: 'MITHRIL', note: 'LIGHT AS CLOTH AND IT NEVER WEARS OUT', notes: { head: 'A MITHRIL COIF. YOU FORGET IT IS THERE', body: 'LIGHT AS CLOTH, AND IT NEVER WEARS OUT', legs: 'MITHRIL LEGGINGS. NOT A SOUND WHEN YOU MOVE' } },
+  { key: 'crystal', name: 'CRYSTAL ARMOUR', def: 0.28, evade: 0, heavy: [4, 6], resist: [1, 3], colour: 0x9fe0f0, edge: 0x4a8aa0, short: 'CRYSTAL', note: 'BEAUTIFUL, HARD, AND IT WILL SHATTER', notes: { head: 'A CRYSTAL HELM. IT RINGS, THEN IT BREAKS', body: 'CUT CRYSTAL. STOPS A GREAT DEAL, BRIEFLY', legs: 'CRYSTAL GREAVES. LOVELY UNTIL THE FIRST KICK' } },
+  { key: 'thorn', name: 'THORN MAIL', def: 0.19, evade: 0, thorns: 6, heavy: [4, 6], resist: [5, 7], colour: 0x4e6a3a, edge: 0x9ab86a, short: 'THORN', note: 'A HEDGE YOU CAN WEAR. FISTS REGRET IT', notes: { head: 'A CROWN OF THORNS. HEADBUTTS ARE A MISTAKE', body: 'A HEDGE YOU CAN WEAR. FISTS REGRET IT', legs: 'THORNED LEGGINGS. KICK THEM IF YOU MUST' } },
+  { key: 'shadow', name: 'SHADOW GARB', def: 0.07, evade: 0.13, heavy: [1, 2], resist: [5, 7], colour: 0x26222e, edge: 0x5a4f6e, short: 'SHADOW', note: 'NOTHING TO HIT WHERE YOU JUST WERE', notes: { head: 'A HOOD AND A MASK. THEY LOSE YOUR EYES', body: 'DARK WRAPS. THERE IS NOTHING WHERE YOU WERE', legs: 'SOFT-SOLED WRAPS. SILENT, AND QUICK' } },
+  { key: 'gladiator', name: 'GLADIATOR GEAR', def: 0.18, evade: 0, heavy: [3, 5], resist: [6, 8], colour: 0x8a5a2e, edge: 0xc9a45a, short: 'GLADIATOR', note: 'WHAT THE ARENA ISSUES, AND IT HAS SEEN THINGS', notes: { head: 'A GRATED ARENA HELM WITH A BRASS CREST', body: 'A LEATHER HARNESS AND ONE GOOD SHOULDER', legs: 'A GREAVE ON THE LEAD LEG, WRAPS ON THE OTHER' } },
+  { key: 'adamant', name: 'ADAMANT PLATE', def: 0.31, evade: 0, heavy: [8, 10], resist: [9, 10], colour: 0x5a6a7a, edge: 0x2a3440, short: 'ADAMANT', note: 'IT WILL NOT DENT, AND NEITHER WILL YOU', notes: { head: 'AN ADAMANT HELM. IT WILL NOT EVEN SCRATCH', body: 'IT WILL NOT DENT, AND NEITHER WILL YOU', legs: 'ADAMANT LEGS. PLANTED, AND GOING NOWHERE' } },
 ];
 
 
@@ -2821,6 +2915,9 @@ const HEFT: Record<string, number> = {
   dual: 0.2, sickle: 0.2, crossbow: 0.2, warfan: 0.15, longbow: 0.15, nunchuck: 0.15,
   rapier: 0.12, bow: 0.1, blowgun: 0.1, boomerang: 0.1, chakram: 0.1, dagger: 0.08,
   twindagger: 0.08, knife: 0.08, throwing: 0.05, sling: 0.05, bolas: 0.05,
+  zweihander: 0.85, kanabo: 0.85, warpick: 0.6, lance: 0.55, naginata: 0.5, longsword: 0.35,
+  cutlass: 0.25, repeater: 0.2, kukri: 0.15, kusarigama: 0.15, tonfa: 0.12, sai: 0.08,
+  whip: 0.05, shuriken: 0.02, cestus: 0,
 };
 
 /**
@@ -3624,6 +3721,195 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number, single = fa
       line(12, -4.2, 12.6, -2.4, PALETTE.rust, 0.9);
       break;
 
+    // ================================================ THE FIFTEEN ADDED LAST
+    case 'cestus':
+      // leather thongs wound round the fist and an iron plate over the
+      // knuckles with three short spikes on it
+      fist();
+      for (const x of [1.6, 3.2]) rect(x, -3, 0.8, 6, LEATHER);
+      poly([5, -3.6, 6.8, -3.4, 6.8, 3.4, 5, 3.6], IRON, IRON_DK);
+      for (const y of [-2.2, 0, 2.2]) poly([6.8, y - 0.8, 8.8, y, 6.8, y + 0.8], STEEL);
+      break;
+    case 'kukri':
+      // a forward-bent blade that widens toward the belly, a brass bolster
+      // and the notch at its root
+      hilt(-4.4, 0.4, 2.4, WOOD_DK, WOOD);
+      disc(-4.6, 0, 1.3, BRASS);
+      rect(0.4, -1.6, 1.4, 3.2, BRASS);
+      poly([1.8, -1.2, 6, -1.6, 10, -0.6, 13.4, 1.2, 14.8, 3.4, 13.2, 4.2, 10, 3, 6, 1.8, 1.8, 1.2], STEEL, EDGE);
+      curve([6, 1.4, 10, 2.6, 13, 3.8], SHINE, 0.6);
+      disc(2.6, 1.2, 0.5, EDGE);
+      break;
+    case 'sai':
+      // One sai a hand -- the pair is two -- with its long central prong and
+      // the two side prongs curling up out of the guard.
+      if (!single) c.setData('pair', true);
+      disc(-5, 0, 1.2, IRON);
+      hilt(-4.4, 0, 2, GRIP, WRAP);
+      rect(0, -0.8, 13, 1.6, STEEL);
+      poly([13, -0.8, 15.4, 0, 13, 0.8], STEEL);
+      line(0.4, -0.4, 13, -0.4, SHINE, 0.5, 0.9);
+      curve([0.6, -0.6, 2.2, -2.6, 3.2, -4.6, 4.6, -5], STEEL, 1.4);
+      curve([0.6, 0.6, 2.2, 2.6, 3.2, 4.6, 4.6, 5], STEEL, 1.4);
+      disc(0.6, 0, 1.2, IRON);
+      break;
+    case 'tonfa':
+      // held by the side handle, with the long shaft lying back along the
+      // forearm -- the guard that turns into a strike
+      g.fillStyle(WOOD, 1).fillRoundedRect(-13, 1.6, 18, 3, 1.2);
+      rect(-13, 1.6, 18, 0.8, WOOD_LIT);
+      g.fillStyle(WOOD, 1).fillRoundedRect(-1.2, -1.2, 2.4, 3.6, 1);
+      disc(0, -1.4, 1.3, WOOD_DK);
+      break;
+    case 'cutlass':
+      // a broad, slightly curved sailor's blade under a basket that wraps the
+      // hand
+      hilt(-4.4, 0.4, 2.4);
+      curve([1.2, -3.4, -1.6, -4, -4, -3, -4.8, -1.4], IRON, 1.2);
+      curve([1.2, -2, -1.4, -2.4, -3.6, -1.8], IRON, 0.8);
+      disc(1.2, 0, 2.6, IRON);
+      disc(1.5, 0, 1.6, IRON_LIT);
+      poly([1.6, -1.6, 12, -1.8, 16, -1.4, 18.4, 0.2, 16.4, 2.2, 11, 2.6, 1.6, 1.6], STEEL, EDGE);
+      curve([2, 1.2, 11, 2, 16, 1.6, 17.8, 0.4], SHINE, 0.6);
+      break;
+    case 'longsword':
+      // a hand-and-a-half: a long grip for two hands, a round pommel, a plain
+      // cross and a long blade with a fuller
+      pommel(-7.2, 1.6, STEEL);
+      hilt(-6.4, 0.2, 2.4, 0x3a2418, 0x5a3a24);
+      guard(1, 10, 1.6, IRON);
+      blade(1.9, 22, 3, 4);
+      break;
+    case 'zweihander':
+      // a huge two-hander: a long grip, a wide cross curling at the ends, a
+      // leather-wrapped ricasso with its parrying hooks, and the long blade
+      disc(-8.6, 0, 1.9, IRON);
+      hilt(-7.6, -0.2, 2.8, 0x2a1a12, 0x4a2a1a);
+      rect(0.2, -7, 1.8, 14, IRON);
+      curve([1.1, -7, 3, -8.2, 3.6, -6.4], IRON, 1.4);
+      curve([1.1, 7, 3, 8.2, 3.6, 6.4], IRON, 1.4);
+      rect(2, -1.6, 4.4, 3.2, LEATHER);
+      poly([5.6, -1.8, 7.6, -4.2, 7, -1.8], STEEL, EDGE);
+      poly([5.6, 1.8, 7.6, 4.2, 7, 1.8], STEEL, EDGE);
+      blade(6.4, 26, 4.2, 5);
+      break;
+    case 'kanabo': {
+      // a long club of black-lacquered wood bound in iron, the top two
+      // thirds of it driven full of studs
+      const LAC = 0x2e2824;
+      poly([-5, -1.4, 4, -2, 20, -3.8, 22.4, -3, 22.4, 3, 20, 3.8, 4, 2, -5, 1.4], LAC, 0x14100e);
+      poly([-5, -1.4, 4, -2, 20, -3.8, 21.6, -3.2, 20, -2.8, 4, -1.2, -5, -0.8], 0x4a403a);
+      handWrap(-5, 1, 3);
+      rect(3.4, -2.2, 1.6, 4.4, IRON);
+      rect(21, -3.6, 1.6, 7.2, IRON);
+      for (let x = 7; x < 20.5; x += 2.6) {
+        for (const y of [-2.2, 0, 2.2]) {
+          const yy = y * (0.55 + ((x - 4) / 16) * 0.5);
+          disc(x + (y === 0 ? 1.3 : 0), yy, 0.75, IRON);
+          disc(x + (y === 0 ? 1.3 : 0) - 0.25, yy - 0.25, 0.3, IRON_LIT);
+        }
+      }
+      break;
+    }
+    case 'warpick':
+      // a long spike on the leading side, a small hammer face behind it, all
+      // on a socket through the haft
+      haft(-5, 15.6, 2.6);
+      handWrap(-5, 0.5, 3);
+      poly([12.4, -2.6, 16.8, -2.6, 16.8, 2.6, 12.4, 2.6], IRON, IRON_DK);
+      poly([13, 2.6, 12.8, 6.4, 13.8, 11.4, 14.8, 11.6, 16.2, 6.4, 16.2, 2.6], STEEL, EDGE);
+      line(13.4, 3, 14.2, 11, SHINE, 0.6, 0.9);
+      poly([13.2, -2.6, 13.2, -5.2, 16, -5.2, 16, -2.6], IRON_LIT, IRON_DK);
+      poly([16.8, -1, 19.8, 0, 16.8, 1], STEEL);
+      break;
+    case 'naginata':
+      // a curved blade on a long shaft, seated behind a round guard
+      haft(-10, 20, 2.4, 0x3a2418);
+      handWrap(-2, 2.5, 2.8);
+      handWrap(10, 14, 2.8);
+      disc(19.4, 0, 2.4, 0x2b2b2b);
+      collar(20.8, 2.8, 1.6);
+      poly([21.6, -1.2, 26, -1.6, 30, -3, 33.8, -6, 32.6, -2.2, 28.6, 1.6, 24, 2.4, 21.6, 1.2], STEEL, EDGE);
+      curve([22, 1, 24, 2, 28.6, 1.2, 32.4, -2.4], SHINE, 0.6);
+      break;
+    case 'lance': {
+      // a cone of iron over the hand, and a long tapering shaft painted in a
+      // spiral with a small steel point
+      handWrap(-7, 1.6, 2.8);
+      rect(-8.4, -1.6, 1.4, 3.2, IRON);
+      poly([6, -1.8, 33, -0.7, 33, 0.7, 6, 1.8], WOOD, WOOD_DK);
+      for (let x = 8; x < 32; x += 4) line(x, -1.6 + (x - 6) * 0.04, x + 2, 1.6 - (x - 6) * 0.04, PALETTE.blood, 1, 0.9);
+      poly([33, -0.9, 37.6, 0, 33, 0.9], STEEL, EDGE);
+      poly([1.6, -5, 6.2, -1.9, 6.2, 1.9, 1.6, 5], IRON, IRON_DK);
+      line(2.2, -4, 5.6, -1.6, IRON_LIT, 0.7);
+      break;
+    }
+    case 'whip': {
+      // a braided handle with a knob, and the lash -- a long light thong that
+      // swings on its own, tapering to a popper
+      hilt(-4, 5, 2.2, LEATHER, WRAP);
+      disc(-4.4, 0, 1.4, WOOD_DK);
+      const tip = scene.add.container(0, 0);
+      const tg = scene.add.graphics();
+      tg.fillStyle(CORD, 1).fillTriangle(0, -0.5, 2.4, 0, 0, 0.5);
+      tip.add(tg);
+      const lash = (lg: Phaser.GameObjects.Graphics, pts: Phaser.Math.Vector2[]): void => {
+        for (let i = 1; i < pts.length; i++) {
+          const w = 1.8 - (i / pts.length) * 1.2;
+          lg.lineStyle(w + 0.6, 0x3a2414, 1).lineBetween(pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y);
+          lg.lineStyle(w, LEATHER, 1).lineBetween(pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y);
+        }
+      };
+      flex(5.4, 0, 10, 2.4, 0.6, tip, true, lash);
+      break;
+    }
+    case 'kusarigama': {
+      // the sickle in the hand, and from the butt of it a chain with a weight
+      // on the end that swings free
+      poly([-4.5, -1.3, 3, -1.5, 3, 1.5, -4.5, 1.3], WOOD, WOOD_DK);
+      rect(-4.5, -1.3, 7.5, 0.6, WOOD_LIT);
+      collar(3.6, 3, 1.6);
+      poly([4, -1, 5.4, -4.6, 8.6, -7, 12.6, -7.2, 15.6, -5.4, 12.4, -5.6, 9, -4.8, 6.8, -2.6, 5.6, 0.6], STEEL, EDGE);
+      curve([6.2, -1.6, 8.4, -4.2, 11.6, -5.2, 14.4, -5.2], SHINE, 0.6);
+      ring(-5.4, 0, 1, IRON_LIT, 0.7);
+      const w = scene.add.container(0, 0);
+      const wg = scene.add.graphics();
+      wg.fillStyle(0x4c525b, 1).fillCircle(0, 0, 2.2);
+      wg.fillStyle(0xffffff, 0.3).fillCircle(-0.7, -0.7, 0.8);
+      w.add(wg);
+      flex(-5.6, 0, 6, 2.2, 4, w, false, chainLink, 150);
+      break;
+    }
+    case 'shuriken': {
+      // a stack of four-pointed stars held in the fingers
+      const star = (cx: number, cy: number, r: number, col: number) => {
+        const pts: number[] = [];
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2 + Math.PI / 8;
+          const rr = k % 2 ? r * 0.34 : r;
+          pts.push(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+        }
+        poly(pts, col, EDGE);
+        disc(cx, cy, r * 0.2, EDGE);
+      };
+      star(3, -1.6, 3.6, SHADE);
+      star(4.4, 0.4, 4, STEEL);
+      break;
+    }
+    case 'repeater':
+      // a crossbow with a box magazine riding on top of the stock and the
+      // lever that cocks and loads it in one pull
+      poly([-7, 2.6, -6, -1, 12.6, -1.4, 12.6, 1.4, -1.4, 1.8, -5.6, 3.8], WOOD, WOOD_DK);
+      curve([10.6, -6.6, 12.2, -3.2, 12.8, 0, 12.2, 3.2, 10.6, 6.6], IRON_DK, 2);
+      curve([10.6, -6.6, 12.2, -3.2, 12.8, 0, 12.2, 3.2, 10.6, 6.6], STEEL, 1);
+      line(10.6, -6.6, 6, -0.4, 0xe6dcc4, 0.6);
+      line(10.6, 6.6, 6, 0.4, 0xe6dcc4, 0.6);
+      poly([3, -1.4, 10, -1.4, 10, -6, 3, -6], WOOD_LIT, WOOD_DK);
+      for (let x = 4; x < 9.5; x += 1.6) line(x, -5.6, x, -1.8, WOOD_DK, 0.5, 0.7);
+      curve([3.4, -6, -1, -6.8, -4.6, -4.2], IRON, 1);
+      rect(0.4, 1.6, 1, 2.4, IRON);
+      break;
+
     case 'shield': {
       // The spiked shield: a boss, a rim, and six spikes around it.
       //
@@ -4217,12 +4503,13 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // rows of scales, rivets and a hard shine on plate, ribs of bone, spikes.
   type Weave = 'cloth' | 'leather' | 'studded' | 'chain' | 'scale' | 'plate' | 'bone' | 'spiked';
   const weaveOf = (k: string): Weave =>
-    ['cloth', 'padded', 'tuxedo', 'none', 'crown'].includes(k) ? 'cloth'
-      : ['leather', 'hide', 'reinforced', 'tactical'].includes(k) ? 'leather'
-        : ['studded', 'brigandine'].includes(k) ? 'studded'
-          : ['chain', 'hood'].includes(k) ? 'chain'
-            : ['scale', 'lamellar', 'dragon'].includes(k) ? 'scale'
-              : k === 'bone' ? 'bone' : k === 'spiked' ? 'spiked' : 'plate';
+    ['cloth', 'padded', 'tuxedo', 'none', 'crown', 'silk', 'shadow'].includes(k) ? 'cloth'
+      : ['leather', 'hide', 'reinforced', 'tactical', 'bark'].includes(k) ? 'leather'
+        : ['studded', 'brigandine', 'gladiator'].includes(k) ? 'studded'
+          : ['chain', 'hood', 'mithril'].includes(k) ? 'chain'
+            : ['scale', 'lamellar', 'dragon', 'samurai', 'jade'].includes(k) ? 'scale'
+              : ['bone', 'splint', 'banded', 'coral', 'turtle'].includes(k) ? 'bone'
+                : ['spiked', 'thorn'].includes(k) ? 'spiked' : 'plate';
   const STUD = 0xd8dde4;
   /** The surface of one oval piece of armour, drawn inside it. */
   const weave = (gr: Phaser.GameObjects.Graphics, w: Weave, cx: number, cy: number, rx: number, ry: number, col: number, shine = 0.4): void => {
@@ -6220,7 +6507,7 @@ function showCard(p: Piece | undefined): void {
       `HEAVINESS ${bar(p.rHeavy)} ${p.rHeavy}`,
       `RESIST    ${bar(p.rResist)} ${p.rResist}`,
       '',
-      ...wrapTo(m.note),
+      ...wrapTo(m.notes?.[p.slot as 'head' | 'body' | 'legs'] ?? m.note),
     );
   }
   if (import.meta.env?.DEV) {
