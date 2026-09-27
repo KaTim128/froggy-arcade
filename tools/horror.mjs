@@ -1137,7 +1137,7 @@ try {
         mon.root.traverse((o) => {
           if (!o.isMesh) return;
           meshes++;
-          if (o.material?.color?.getHexString?.() === '6c6852') sclera++;
+          if (o.name === 'sclera') sclera++;
         });
 
         const mod = await import('/src/froggy/froggy.ts');

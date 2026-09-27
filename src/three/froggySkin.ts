@@ -87,7 +87,7 @@ export function roughen(
   return geo;
 }
 
-const SIZE = 256;
+const SIZE = 512;
 
 function canvas(): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const c = document.createElement('canvas');
@@ -101,6 +101,7 @@ function wrap(c: HTMLCanvasElement, repeat = 2): THREE.CanvasTexture {
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeat, repeat);
+  t.anisotropy = 4;
   return t;
 }
 
@@ -114,147 +115,203 @@ function rng(seed: number): () => number {
 }
 
 /**
- * The hide.  Blotches at three scales over a base, then pores, then damp.
- *
- * The values are dark — this is lit by a torch and nothing else, and anything
- * that reads as a colour in here reads as a cartoon.
+ * A WRINKLE: a short curved crease, drawn as a dark groove with a pale lip
+ * along one side of it -- which is what a fold in skin looks like under one
+ * light.  Wrinkles come in little families of near-parallel lines, never
+ * alone, so they are laid down in bundles.
  */
-function paintSkin(ctx: CanvasRenderingContext2D, base: string, seed: number): void {
+function wrinkles(ctx: CanvasRenderingContext2D, r: () => number, n: number, dark: string, lit: string, len = 30): void {
+  for (let i = 0; i < n; i++) {
+    const x = r() * SIZE;
+    const y = r() * SIZE;
+    const a = r() * Math.PI;
+    const lines = 2 + Math.floor(r() * 4);
+    const L = len * (0.5 + r());
+    const bow = (r() - 0.5) * L * 0.6;
+    for (let k = 0; k < lines; k++) {
+      const off = k * (2.2 + r() * 2);
+      const ox = Math.cos(a + Math.PI / 2) * off;
+      const oy = Math.sin(a + Math.PI / 2) * off;
+      const x0 = x + ox - Math.cos(a) * L / 2;
+      const y0 = y + oy - Math.sin(a) * L / 2;
+      const x1 = x + ox + Math.cos(a) * L / 2;
+      const y1 = y + oy + Math.sin(a) * L / 2;
+      const cx = x + ox + Math.cos(a + Math.PI / 2) * bow;
+      const cy = y + oy + Math.sin(a + Math.PI / 2) * bow;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = 0.7 + r() * 0.9;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo(cx, cy, x1, y1);
+      ctx.stroke();
+      ctx.strokeStyle = lit;
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(x0 + 1, y0 + 1);
+      ctx.quadraticCurveTo(cx + 1, cy + 1, x1 + 1, y1 + 1);
+      ctx.stroke();
+    }
+  }
+}
+
+/**
+ * THE HIDE.  A LUMINANCE map, painted round mid-grey and multiplied by the
+ * material's own colour at draw time.
+ *
+ * Grey, thin and old: faint blotching at two scales, thousands of pores,
+ * bundles of fine wrinkles running every which way, darker patches where it
+ * has discoloured, a scatter of raised warts, and the odd blemish.  Nothing
+ * is one value and nothing repeats in a way the eye can pick out.
+ */
+function paintSkin(ctx: CanvasRenderingContext2D, base: string, seed: number, creased = 1): void {
   const r = rng(seed);
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, SIZE, SIZE);
-  // NOTE: this canvas is a LUMINANCE map, not a colour one.  It is painted
-  // around mid-grey and multiplied by the material's own colour at draw time.
-  // Painted in his actual greens it came out as green times green -- a flat
-  // near-black with every bit of the mottling squeezed out of it, which is
-  // exactly what it looked like.
 
-  // big soft patches: the difference between a back and a flank
-  for (let i = 0; i < 26; i++) {
+  // big soft patches: the difference between a flank and a back
+  for (let i = 0; i < 40; i++) {
     const x = r() * SIZE;
     const y = r() * SIZE;
-    const rad = 24 + r() * 52;
+    const rad = 40 + r() * 110;
     const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
-    const dark = r() < 0.5;
-    g.addColorStop(0, dark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.4)');
+    const dark = r() < 0.55;
+    g.addColorStop(0, dark ? 'rgba(20,16,12,0.28)' : 'rgba(255,255,250,0.2)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(x, y, rad, 0, Math.PI * 2);
     ctx.fill();
   }
-
-  // mid blotches with hard-ish edges: the mottling you actually see
-  for (let i = 0; i < 150; i++) {
+  // discoloured patches: soft-edged, faintly brown, the skin of something old
+  for (let i = 0; i < 70; i++) {
     const x = r() * SIZE;
     const y = r() * SIZE;
-    const rad = 3 + r() * 11;
-    ctx.fillStyle = r() < 0.55 ? 'rgba(0,0,0,0.42)' : 'rgba(255,255,255,0.3)';
+    const rad = 6 + r() * 22;
+    ctx.fillStyle = r() < 0.6 ? 'rgba(52,40,30,0.18)' : 'rgba(235,230,215,0.14)';
     ctx.beginPath();
-    ctx.ellipse(x, y, rad, rad * (0.5 + r() * 0.7), r() * Math.PI, 0, Math.PI * 2);
+    ctx.ellipse(x, y, rad, rad * (0.4 + r() * 0.8), r() * Math.PI, 0, Math.PI * 2);
     ctx.fill();
   }
-
-  // pores and warts: two pixels each, thousands of them, and they are what the
-  // bump map turns into a surface
-  for (let i = 0; i < 2600; i++) {
-    const x = r() * SIZE;
-    const y = r() * SIZE;
-    const s = 0.8 + r() * 2.2;
-    ctx.fillStyle = r() < 0.6 ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.42)';
-    ctx.beginPath();
-    ctx.arc(x, y, s, 0, Math.PI * 2);
-    ctx.fill();
+  // the wrinkles, in bundles
+  wrinkles(ctx, r, Math.round(220 * creased), 'rgba(18,14,10,0.22)', 'rgba(255,255,245,0.1)', 9);
+  wrinkles(ctx, r, Math.round(40 * creased), 'rgba(18,14,10,0.16)', 'rgba(255,255,245,0.07)', 22);
+  // grain: the skin is never one value from one pixel to the next
+  for (let i = 0; i < 30000; i++) {
+    ctx.fillStyle = r() < 0.5 ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.07)';
+    ctx.fillRect(r() * SIZE, r() * SIZE, 1, 1);
   }
-
-  // damp: a few pale streaks running one way, so he looks like he has been
-  // somewhere wet rather than dusted
-  for (let i = 0; i < 22; i++) {
+  // pores: tiny, thousands of them, darker than the skin round them
+  for (let i = 0; i < 9000; i++) {
     const x = r() * SIZE;
     const y = r() * SIZE;
-    const len = 12 + r() * 46;
-    const g = ctx.createLinearGradient(x, y, x + 3, y + len);
-    g.addColorStop(0, 'rgba(255,255,255,0.3)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.strokeStyle = g;
-    ctx.lineWidth = 1 + r() * 2;
+    ctx.fillStyle = r() < 0.75 ? 'rgba(15,12,10,0.45)' : 'rgba(255,255,250,0.3)';
+    ctx.fillRect(x, y, 0.8 + r() * 1.1, 0.8 + r() * 1.1);
+  }
+  // warts and blemishes: a few, raised, with a shadow under each
+  for (let i = 0; i < 110; i++) {
+    const x = r() * SIZE;
+    const y = r() * SIZE;
+    const s = 1.2 + r() * 3.2;
+    ctx.fillStyle = 'rgba(20,16,12,0.4)';
     ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.quadraticCurveTo(x + (r() - 0.5) * 8, y + len * 0.5, x + (r() - 0.5) * 6, y + len);
-    ctx.stroke();
+    ctx.arc(x + 0.8, y + 0.9, s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = r() < 0.3 ? 'rgba(90,60,50,0.35)' : 'rgba(240,236,225,0.35)';
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.85, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
-/** The same noise, pushed to black and white: relief for the bump map. */
-function paintBump(ctx: CanvasRenderingContext2D, seed: number): void {
+/** The same features as relief: pores sink, wrinkles are grooves, warts rise. */
+function paintBump(ctx: CanvasRenderingContext2D, seed: number, creased = 1): void {
   const r = rng(seed);
   ctx.fillStyle = '#808080';
   ctx.fillRect(0, 0, SIZE, SIZE);
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < 120; i++) {
     const x = r() * SIZE;
     const y = r() * SIZE;
-    const rad = 8 + r() * 30;
+    const rad = 14 + r() * 50;
     const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
-    const up = r() < 0.5;
-    g.addColorStop(0, up ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)');
+    g.addColorStop(0, r() < 0.5 ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.28)');
     g.addColorStop(1, 'rgba(128,128,128,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(x, y, rad, 0, Math.PI * 2);
     ctx.fill();
   }
-  // the warts.  A highlight on top and a shadow under, so each one has a side.
-  for (let i = 0; i < 2000; i++) {
+  wrinkles(ctx, r, Math.round(260 * creased), 'rgba(0,0,0,0.5)', 'rgba(255,255,255,0.3)', 9);
+  wrinkles(ctx, r, Math.round(50 * creased), 'rgba(0,0,0,0.35)', 'rgba(255,255,255,0.2)', 22);
+  for (let i = 0; i < 9000; i++) {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(r() * SIZE, r() * SIZE, 1 + r(), 1 + r());
+  }
+  for (let i = 0; i < 140; i++) {
     const x = r() * SIZE;
     const y = r() * SIZE;
-    const s = 1 + r() * 2.6;
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    const s = 1.4 + r() * 3.4;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.beginPath();
-    ctx.arc(x + 0.6, y + 0.6, s, 0, Math.PI * 2);
+    ctx.arc(x + 0.7, y + 0.7, s, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
     ctx.beginPath();
     ctx.arc(x, y, s * 0.8, 0, Math.PI * 2);
     ctx.fill();
   }
 }
 
-/** The belly: sallower, striped across rather than blotched, and drier. */
-function paintBelly(ctx: CanvasRenderingContext2D, seed: number): void {
+/**
+ * WHERE HE IS WET.  A specular map: black is dry and matte, white is damp.
+ *
+ * Mostly dry, with patches and runs of damp -- so the torch finds a wet
+ * sheen that breaks up and wanders across him instead of one even plastic
+ * highlight down every limb.
+ */
+function paintWet(ctx: CanvasRenderingContext2D, seed: number): void {
   const r = rng(seed);
-  // Luminance again, for the same reason.
-  ctx.fillStyle = '#a8a8a8';
+  ctx.fillStyle = '#2a2a2a';
   ctx.fillRect(0, 0, SIZE, SIZE);
-  for (let y = 0; y < SIZE; y += 5 + Math.floor(r() * 6)) {
-    ctx.fillStyle = r() < 0.5 ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.3)';
-    ctx.fillRect(0, y, SIZE, 2 + r() * 3);
-  }
-  // veins under the skin, which is a belly rather than a paint job
-  for (let i = 0; i < 26; i++) {
-    ctx.strokeStyle = 'rgba(58,18,18,0.32)';
-    ctx.lineWidth = 0.8 + r() * 1.2;
+  for (let i = 0; i < 46; i++) {
+    const x = r() * SIZE;
+    const y = r() * SIZE;
+    const rad = 16 + r() * 60;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+    g.addColorStop(0, `rgba(255,255,255,${0.35 + r() * 0.4})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
     ctx.beginPath();
-    let x = r() * SIZE;
-    let y = r() * SIZE;
+    ctx.ellipse(x, y, rad, rad * (0.4 + r() * 0.6), r() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (let i = 0; i < 40; i++) {
+    const x = r() * SIZE;
+    const y = r() * SIZE;
+    const len = 20 + r() * 80;
+    ctx.strokeStyle = `rgba(255,255,255,${0.25 + r() * 0.35})`;
+    ctx.lineWidth = 1 + r() * 3;
+    ctx.beginPath();
     ctx.moveTo(x, y);
-    for (let k = 0; k < 5; k++) {
-      x += (r() - 0.5) * 34;
-      y += (r() - 0.5) * 34;
-      ctx.lineTo(x, y);
-    }
+    ctx.quadraticCurveTo(x + (r() - 0.5) * 14, y + len * 0.5, x + (r() - 0.5) * 10, y + len);
     ctx.stroke();
   }
-  for (let i = 0; i < 900; i++) {
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath();
-    ctx.arc(r() * SIZE, r() * SIZE, 0.6 + r() * 1.4, 0, Math.PI * 2);
-    ctx.fill();
+  // and the pores stay dry: a damp skin is broken up by its own texture
+  for (let i = 0; i < 5000; i++) {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(r() * SIZE, r() * SIZE, 1.2, 1.2);
   }
 }
 
 export interface FroggySkin {
   skin: THREE.Texture;
   skinBump: THREE.Texture;
+  /** The face: the same hide, more deeply creased. */
+  face: THREE.Texture;
+  faceBump: THREE.Texture;
+  /** Where it is wet, as a specular map. */
+  wet: THREE.Texture;
+  /** Kept for anything still asking for the old names. */
   belly: THREE.Texture;
   bellyBump: THREE.Texture;
 }
@@ -268,20 +325,25 @@ let cached: FroggySkin | null = null;
 export function froggySkin(): FroggySkin {
   if (cached) return cached;
   const [c1, x1] = canvas();
-  paintSkin(x1, '#9e9e9e', 11);
+  paintSkin(x1, '#a4a4a4', 11);
   const [c2, x2] = canvas();
   paintBump(x2, 11);
   const [c3, x3] = canvas();
-  paintBelly(x3, 29);
+  paintSkin(x3, '#a8a8a8', 29, 1.8);
   const [c4, x4] = canvas();
-  paintBump(x4, 29);
+  paintBump(x4, 29, 1.8);
+  const [c5, x5] = canvas();
+  paintWet(x5, 47);
   cached = {
-    // Tiled hard: on a limb the size of a forearm one tile of a 256px canvas
-    // is the whole of it, and the mottling comes out as three big smudges.
+    // Tiled hard on the limbs, so a forearm gets real pores rather than three
+    // smudges; the face gets its own, more deeply creased, tiled less.
     skin: wrap(c1, 3),
     skinBump: wrap(c2, 3),
-    belly: wrap(c3, 1.5),
-    bellyBump: wrap(c4, 1.5),
+    face: wrap(c3, 1.6),
+    faceBump: wrap(c4, 1.6),
+    wet: wrap(c5, 2),
+    belly: wrap(c3, 1.6),
+    bellyBump: wrap(c4, 1.6),
   };
   return cached;
 }
