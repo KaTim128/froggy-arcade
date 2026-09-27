@@ -130,6 +130,11 @@ function sclera(): THREE.CanvasTexture {
  */
 const BODY_SCALE = 0.93;
 
+/** The leg, in model units: hip to knee, knee to ankle, ankle to sole. */
+const THIGH = 0.47;
+const SHIN = 0.48;
+const SOLE = 0.07;
+
 /** Head to floor, in metres, standing, before the room's own scale. */
 export const FROGGY_HEIGHT = 2.1;
 
@@ -211,6 +216,16 @@ export class FroggyMonster {
   private reachT = 0;
   private crouchNow = 0;
   private grabNow = 0;
+  /** Speed as the legs see it: eased, so a change of pace is a change of gait, not a pop. */
+  private speedNow = 0;
+  /** The facing the room asked for; he turns to it rather than being snapped to it. */
+  private yawWant = 0;
+  private yawReady = false;
+  /** How far the body has still to turn: the head goes first by this much. */
+  private yawLag = 0;
+  private readonly armBaseY: number[] = [];
+  /** Hip height over the floor while walking, in model units. */
+  private hipH = 0;
   /** How close the thing he is reaching for is, 0 far .. 1 on it, eased. */
   private nearNow = 0;
   /** The arms' own momentum: where each one actually is, and how fast it is going. */
@@ -308,6 +323,9 @@ export class FroggyMonster {
     // and a long flat foot with long toes.
     for (const side of [-1, 1]) {
       const leg = new THREE.Group();
+      // Twist last, so the pelvis's turn can be taken back out of a leg
+      // without swinging a foot that is out in front of him sideways.
+      leg.rotation.order = 'YXZ';
       leg.position.set(side * 0.1, HIP, 0);
       leg.add(knob(0.068, skin, 3 + side));
       leg.add(bone(0.058, 0.36, 1.12, 0.72, skin, 5 + side));
@@ -778,8 +796,17 @@ export class FroggyMonster {
 
   /** Drop him into the world.  `y` is the floor he is standing on. */
   setPose(x: number, y: number, z: number, yaw: number): void {
+    // Put somewhere new (a teleport, a respawn, the first frame), he is just
+    // there, facing the way he was asked.  Otherwise he TURNS to it, in
+    // `update`: the room's AI snaps his heading, and a snap on a body this
+    // long reads as the whole creature rotating on a pin.
+    const jump = !this.yawReady || Math.hypot(x - this.root.position.x, z - this.root.position.z) > 2.5;
     this.root.position.set(x, y, z);
-    this.root.rotation.y = yaw;
+    this.yawWant = yaw;
+    if (jump) {
+      this.root.rotation.y = yaw;
+      this.yawReady = true;
+    }
   }
 
   setVisible(v: boolean): void {
@@ -824,61 +851,141 @@ export class FroggyMonster {
       twitch = this.twitchT > 0.24 ? 0.3 : this.twitchT * 0.9;
     }
 
+    // ---- THE TURN.  Toward the heading the room gave him, fast but not
+    // instantly, and the head leads it: it gets there first and the body
+    // comes round after it.
+    {
+      let d = this.yawWant - this.root.rotation.y;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      const turn = THREE.MathUtils.clamp(d * Math.min(1, dt * 7), -dt * 5, dt * 5);
+      this.root.rotation.y += turn;
+      this.yawLag = d - turn;
+    }
+
     // ---- THE GAIT.
     //
-    // It used to be a sine wave at `0.7 + speed * 1.25` cycles a second, which
-    // at a full run is ten strides a second and reads as scrabbling; the two
-    // legs were also run at different frequencies to make a limp, so they
-    // drifted in and out of phase and every few seconds he did something no
-    // animal does.  Both are gone.
+    // Each foot is either ON THE FLOOR or IN THE AIR, never gliding.  On the
+    // floor it travels straight back under him at exactly the speed he is
+    // covering ground -- the stride is sized to the length of his leg and the
+    // cadence to his speed, so the planted foot stays put in the world.  In
+    // the air the knee comes up high, the foot trails toes-down and comes in
+    // to land toes first, the way something that is not a person walks.
+    // The hips ride on whichever leg is holding him, so they rise over it and
+    // drop between, and roll and sway over to it: the weight goes from one
+    // foot to the other instead of floating along.
     //
-    // CADENCE COMES FROM STRIDE LENGTH.  He covers `stride` metres per full
-    // cycle, and the stride lengthens as he speeds up the way a real animal's
-    // does, so a prowl is slow long steps and a run is quick longer ones, and
-    // neither is the other one sped up.  The legs are exactly anti-phase; the
-    // limp is an AMPLITUDE difference, which keeps him uneven without ever
-    // putting both feet on the same side of the cycle.
-    const stride = 1.4 + speed * 0.28;
-    const cadence = speed > 0.05 ? speed / stride : 0;
-    this.walkT += dt * (cadence + 0.1); // the 0.1 keeps him breathing at a stop
+    // (On this rig a POSITIVE hip rotation swings the foot BACK, and a positive
+    // knee bends the shin back.  The old walk had that inside out: the knee
+    // folded while the foot was planted and locked while it swung.)
+    this.speedNow += (speed - this.speedNow) * Math.min(1, dt * 4);
+    const sp = this.speedNow;
+    const sz = this.size;
+    // Pace is judged against HIS size: four metres a second is a stroll for
+    // something this tall, and the rooms' search speed is exactly that.
+    const pace = sp / Math.max(0.01, sz);
+    const moving = THREE.MathUtils.smoothstep(pace, 0.03, 0.55);
+    const run = THREE.MathUtils.smoothstep(pace, 3.0, 4.6);
+    const legLen = THIGH + SHIN + SOLE;
+    // Metres covered per full cycle (two steps), in the world: long, slow
+    // strides at a walk -- nearly two leg-lengths a cycle -- and longer still
+    // at a run, so even the chase is a lope rather than a scurry.
+    const strideW = sz * legLen * (1.9 + 0.55 * run);
+    this.walkT += dt * (sp / Math.max(0.1, strideW));
     const phase = this.walkT * Math.PI * 2;
     const gait = Math.sin(phase);
-    // How much of the walk is switched on at all.  Standing, the legs are
-    // straight and only the breath moves; there is no half-stride held.
-    const moving = Math.min(1, speed / 1.1);
-    const swing = (0.17 + Math.min(0.4, speed * 0.05) + this.lungeNow * 0.1) * moving;
+    // the share of each cycle a foot spends on the floor: long for the stalk,
+    // short enough at a run that both are sometimes off it
+    const duty = 0.62 - 0.22 * run;
+    // half the planted foot's sweep, in model units
+    const half = (duty * strideW) / 2 / Math.max(0.01, sz);
+    const th = [0, 0];
+    const kn = [0, 0];
+    const lift = [0, 0];
+    const planted = [0, 0];
+    const ank = [0, 0];
+    const footX = [0, 0];
+    const footY = [0, 0];
+    /** How much each foot holds the hips down: 1 planted, coming on as a foot reaches to land. */
+    const bear = [0, 0];
+    const reachMax = THIGH + SHIN;
+    for (let i = 0; i < 2; i++) {
+      const pp = (this.walkT + i * 0.5) % 1;
+      // the limp: the right leg a shade shorter in its stride than the left
+      const limp = i === 1 ? 0.9 : 1;
+      if (pp < duty) {
+        // ON THE FLOOR: front to back in a straight line
+        const st = pp / duty;
+        footX[i] = (1 - 2 * st) * half * limp;
+        footY[i] = 0;
+        // coming down toes first, the heel settling after
+        ank[i] = st < 0.14 ? 0.32 * (1 - st / 0.14) : 0;
+        planted[i] = 1;
+        bear[i] = 1;
+      } else {
+        // IN THE AIR: back to front, eased, the foot drawn up high -- higher
+        // than a person lifts one, which is half of what makes it wrong
+        const u = (pp - duty) / (1 - duty);
+        footX[i] = (-1 + 2 * THREE.MathUtils.smoothstep(u, 0, 1)) * half * limp;
+        lift[i] = Math.sin(Math.PI * u);
+        footY[i] = lift[i] * (0.2 + 0.08 * run) * Math.min(1, half / 0.3);
+        // toes trailing off the push, up to clear, then pointed to land
+        ank[i] = u < 0.3 ? 0.55 * (1 - u / 0.3) : u > 0.7 ? 0.32 * ((u - 0.7) / 0.3) : -0.12;
+        // the body starts to come down onto a foot before it lands
+        bear[i] = THREE.MathUtils.smoothstep(u, 0.5, 1);
+      }
+    }
+    // THE HIPS sit as high as the planted feet allow -- never higher, or a
+    // foot would leave the floor, and never so low a knee has nothing left --
+    // so they drop into each double-support and rise over each single leg.
+    const top = reachMax * 0.985;
+    let want = top;
+    for (let i = 0; i < 2; i++) {
+      const r = Math.sqrt(Math.max(0.01, top ** 2 - footX[i] ** 2));
+      want = Math.min(want, top + (r - top) * bear[i]);
+    }
+    // rising takes a moment, dropping does not: a planted foot must never be
+    // asked to reach below the floor
+    this.hipH = Math.min(want, (this.hipH || want) + dt * 2.5);
+    const hipH = this.hipH;
+    // THE LEGS, solved: each ankle put exactly where its foot has to be.
+    for (let i = 0; i < 2; i++) {
+      // measured from this hip joint, which the pelvis's twist carries a
+      // little forward or back
+      const z = footX[i] + (i === 0 ? -1 : 1) * 0.1 * Math.sin(this.hips.rotation.y);
+      const h = Math.max(0.05, hipH - footY[i]);
+      const d = Math.min(reachMax * 0.999, Math.hypot(z, h));
+      const bend = Math.PI - Math.acos(THREE.MathUtils.clamp((THIGH * THIGH + SHIN * SHIN - d * d) / (2 * THIGH * SHIN), -1, 1));
+      const along = Math.acos(THREE.MathUtils.clamp((THIGH * THIGH + d * d - SHIN * SHIN) / (2 * THIGH * d), -1, 1));
+      // forward is negative on this rig; the knee always points forward
+      th[i] = -(Math.atan2(z, h) + along) * moving;
+      kn[i] = bend * moving;
+      ank[i] *= moving;
+    }
+    const gaitDrop = (hipH + SOLE - legLen) * moving;
+    // weight over the planted leg: sway toward it, the free hip dropping
+    const sway = (lift[0] - lift[1]) * (0.026 - 0.01 * run) * moving;
+    const roll = (lift[0] - lift[1]) * (0.07 - 0.03 * run) * moving;
+    // the hip on the forward leg comes forward with it
+    const pelvisYaw = (th[1] - th[0]) * 0.22;
 
-    this.legs[0].rotation.x = gait * swing;
-    this.legs[1].rotation.x = -gait * swing * 0.88;
-
-    // The knee bends THROUGH THE SWING and straightens to take the weight: it
-    // is folded while the foot is travelling forward and locked while the foot
-    // is on the floor taking him.  A climb tucks both up under him.
-    const bend = (0.5 + Math.min(0.45, speed * 0.07)) * moving;
-    const k0 = Math.max(0, Math.cos(phase)) * bend;
-    const k1 = Math.max(0, -Math.cos(phase)) * bend * 0.9;
     // ---- DOWN ON HIS HAUNCHES.  A squat, built the way a squat is: the thigh
     // comes forward, the knee folds hard under it, and the hips drop by what
     // that costs in leg length.  Applied on top of the stride rather than
     // instead of it, so he can still be settling as he arrives.
     const cr = this.crouchNow;
-    this.legs[0].rotation.x += cr * 0.62;
-    this.legs[1].rotation.x += cr * 0.62;
+    this.legs[0].rotation.x = th[0] + cr * 0.62;
+    this.legs[1].rotation.x = th[1] + cr * 0.62;
+    this.knees[0].rotation.x = kn[0] + this.climbNow * 1.1 + cr * 1.35;
+    this.knees[1].rotation.x = kn[1] + this.climbNow * 1.1 + cr * 1.35;
 
-    this.knees[0].rotation.x = k0 + this.climbNow * 1.1 + cr * 1.35;
-    this.knees[1].rotation.x = k1 + this.climbNow * 1.1 + cr * 1.35;
-
-    // And the foot stays flat.  Levelled against everything above it, damped a
-    // little so it is a foot and not a gyroscope, and let go of on a climb —
-    // there is no floor to be level with halfway up a cupboard.
-    // Crouched, the sole is still on the floor -- more so, not less -- so the
-    // levelling gets the crouch terms too, and the clamp is opened up because
-    // a squat asks more of an ankle than a stride does.
-    const level = (leg: number, knee: number) =>
-      THREE.MathUtils.clamp(-(leg + knee) * 0.85, -0.55 - cr * 0.7, 0.55 + cr * 0.7) *
+    // And the foot: flat to the floor when it is on it, whatever the leg is
+    // doing above it; pointed as it leaves and as it lands.  Let go of on a
+    // climb -- there is no floor to be level with halfway up a cupboard.
+    const level = (i: number) =>
+      THREE.MathUtils.clamp(-(this.legs[i].rotation.x + this.knees[i].rotation.x - this.climbNow * 1.1), -0.55 - cr * 0.7, 0.55 + cr * 0.7) *
       (1 - this.climbNow);
-    this.ankles[0].rotation.x = level(this.legs[0].rotation.x, k0 + cr * 1.35);
-    this.ankles[1].rotation.x = level(this.legs[1].rotation.x, k1 + cr * 1.35);
+    this.ankles[0].rotation.x = level(0) + ank[0] * (1 - cr);
+    this.ankles[1].rotation.x = level(1) + ank[1] * (1 - cr);
 
     // ---- THE CLIMB.  `climbT` runs 0..1 over the whole crossing, and the
     // arms haul hand over hand across it instead of both reaching up and
@@ -917,14 +1024,23 @@ export class FroggyMonster {
     const elbowReach = (g: number): number => -reach * (0.15 + 0.75 * (1 - g));
     const carry = 1 - reach * 0.66;
 
+    // Each arm swings with the OPPOSITE leg, and further than a person's
+    // would: the long arms are thrown by the walk more than they are moved.
+    const armSwing = [th[1] * (0.42 + 0.25 * run), th[0] * (0.42 + 0.25 * run)];
     this.arms[0].rotation.x =
-      -gait * swing * 0.8 * carry - this.climbNow * 2.2 - haul * 0.55 + armReach(gL);
+      armSwing[0] * carry - this.climbNow * 2.2 - haul * 0.55 + armReach(gL);
     this.arms[1].rotation.x =
-      gait * swing * 0.8 * carry - this.climbNow * 2.2 + haul * 0.55 + armReach(gR);
+      armSwing[1] * carry - this.climbNow * 2.2 + haul * 0.55 + armReach(gR);
+    // the elbow folds as the arm comes forward, and hangs open going back
     this.elbows[0].rotation.x =
-      -(0.25 + Math.max(0, -gait) * 0.5 * moving) * carry - this.climbNow * 0.5 + haul * 0.45 + elbowReach(gL);
+      -(0.2 + Math.max(0, -armSwing[0]) * (0.7 + 0.5 * run)) * carry - this.climbNow * 0.5 + haul * 0.45 + elbowReach(gL);
     this.elbows[1].rotation.x =
-      -(0.25 + Math.max(0, gait) * 0.5 * moving) * carry - this.climbNow * 0.5 - haul * 0.45 + elbowReach(gR);
+      -(0.2 + Math.max(0, -armSwing[1]) * (0.7 + 0.5 * run)) * carry - this.climbNow * 0.5 - haul * 0.45 + elbowReach(gR);
+    // the shoulders ride up and down with the step, one against the other
+    for (let h = 0; h < 2; h++) {
+      if (this.armBaseY.length < 2) this.armBaseY.push(this.arms[h].position.y);
+      this.arms[h].position.y = this.armBaseY[h] + lift[1 - h] * 0.014 * (1 - reach * 0.5) - lift[h] * 0.006;
+    }
     // Out wide on the push, in on the pull: the gap between his hands opens
     // and closes around where you are standing.
     this.arms[0].rotation.z = this.climbNow * 0.35 - reach * (0.1 + 0.26 * gL);
@@ -953,12 +1069,12 @@ export class FroggyMonster {
     // the two moments a foot lands, which is where the weight goes.  The old
     // one peaked mid-swing, so he bobbed up every time he should have been
     // taking the impact.
-    const dip = (1 - Math.abs(Math.cos(phase))) * Math.min(0.09, 0.02 + speed * 0.018) * moving;
     const breath = Math.sin(this.breathT * 1.5) * 0.01;
     // And the hips come down by what the fold costs: on the long legs, 0.64
     // of a 1.02 hip puts his face at about the height of the gap under a bed,
     // which is the whole point of the pose.
-    this.hips.position.y = dip + breath + crest * 0.12 - cr * 0.64;
+    this.hips.position.y = gaitDrop * (1 - cr) * (1 - this.climbNow) + breath + crest * 0.12 - cr * 0.64;
+    this.hips.position.x = sway * (1 - cr);
     // ---- HE BREATHES WRONG.  The cage swells and falls on a slow rhythm
     // with a catch in it -- two quick shallow pulls, then a long one -- so
     // the one part of him that moves standing still does not move like an
@@ -969,7 +1085,14 @@ export class FroggyMonster {
       this.chest.scale.set(0.98 + hitch * 0.4, 1.55 + hitch, 0.78 + hitch * 0.9);
     }
     // A slight roll off the same limp, so his weight goes side to side.
-    this.hips.rotation.z = gait * 0.035 * moving;
+    this.hips.rotation.z = roll * (1 - cr);
+    this.hips.rotation.y = pelvisYaw * (1 - cr);
+    // ...and the legs take that roll, sway and twist back out of themselves,
+    // so the pelvis moves over the feet and the feet stay where they are
+    for (let i = 0; i < 2; i++) {
+      this.legs[i].rotation.z = (-roll - Math.asin(THREE.MathUtils.clamp(sway / Math.max(0.3, this.hipH), -0.3, 0.3))) * (1 - cr);
+      this.legs[i].rotation.y = -pelvisYaw * (1 - cr);
+    }
 
     // Folded forward, further the faster he moves, and further again once he is
     // coming for you.  A climb folds him over whatever he is on top of.
@@ -980,7 +1103,10 @@ export class FroggyMonster {
     this.torso.rotation.x =
       0.14 + Math.min(0.2, speed * 0.05) + this.climbNow * 0.45 + this.lungeNow * (0.42 + this.nearNow * 0.1) +
       cr * 0.62;
-    this.torso.rotation.z = gait * 0.05;
+    // The shoulders twist against the hips -- the whole long back wrings a
+    // little with every step -- and lean out over the planted foot.
+    this.torso.rotation.y = -pelvisYaw * 1.7 * (1 - cr);
+    this.torso.rotation.z = -roll * 0.6 + gait * 0.02 * moving;
 
     // The head hangs the other way, so the face stays level however far over he
     // is folded — that is the part that has to keep looking at you.  It also
@@ -998,7 +1124,12 @@ export class FroggyMonster {
       cr * 0.5;
     // Craning: slow, small, side to side, and offset from the body's own sway
     // so the two never line up into something that looks mechanical.
-    this.neck.rotation.y = this.scanNow + twitch + Math.sin(this.breathT * 1.9) * 0.3 * peer;
+    this.neck.rotation.y =
+      this.scanNow + twitch + Math.sin(this.breathT * 1.9) * 0.3 * peer +
+      // the head holds its line while the body wrings under it...
+      pelvisYaw * 0.7 * (1 - cr) +
+      // ...and gets round a turn before the body does
+      THREE.MathUtils.clamp(this.yawLag * 0.8, -0.7, 0.7);
     // and the head cocks: slowly over to one side and back, the way a thing
     // does that is listening for you
     this.neck.rotation.z =
@@ -1099,9 +1230,9 @@ export class FroggyMonster {
       const k = sdt / steps;
       for (let i = 0; i < steps; i++) {
         // stiff enough to keep up with the grab, loose enough to swing
-        st.vx += (180 * (arm.rotation.x - st.x) - 2 * 0.42 * 13.4 * st.vx) * k;
+        st.vx += (180 * (arm.rotation.x - st.x) - 2 * 0.58 * 13.4 * st.vx) * k;
         st.x += st.vx * k;
-        st.vz += (180 * (arm.rotation.z - st.z) - 2 * 0.42 * 13.4 * st.vz) * k;
+        st.vz += (180 * (arm.rotation.z - st.z) - 2 * 0.58 * 13.4 * st.vz) * k;
         st.z += st.vz * k;
         st.ve += (240 * (el.rotation.x - st.e) - 2 * 0.4 * 15.5 * st.ve) * k;
         st.e += st.ve * k;
