@@ -71,7 +71,8 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
   const fov = THREE.MathUtils.degToRad(cam.fov);
   const view = (d: number) => 2 * d * Math.tan(fov / 2);
   // close: the head is about nine tenths of the frame's height
-  const near = faceFront + headSize / (view(1) * 1.3);
+  // (the open jaw hangs below the head, so the frame is widened to keep it)
+  const near = faceFront + headSize / (view(1) * 1.0);
   // far: his head, his chest and his hanging arms, towering
   const far = faceFront + (headSize * 2.5) / view(1);
 
@@ -161,7 +162,10 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
     const reaching = t < HOLD_MS ? 0 : closeK > 0 ? 0.65 : 1;
     monster.update(dt, {
       speed: 0,
-      maw: closeK > 0 ? 0.12 + Math.max(0, Math.sin(t / 170)) * 0.1 : 0,
+      // Shut on the hold; coming open as he comes, onto the teeth; and on
+      // you, working -- a little wider, a little less -- never quite still.
+      maw: t < HOLD_MS ? 0.04 : 0.62 + closeK * 0.2 + Math.sin(t / 140) * 0.06,
+      mawRate: 9,
       climb: 0,
       lunge: reaching,
       // the arms come up as he comes in, and stay up
@@ -170,7 +174,9 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
 
     // ---- WHERE HIS FACE GOES: down the camera's line, at `d`, at the height.
     target.copy(basePos).addScaledVector(fwd, d);
-    target.y = basePos.y + lift;
+    // his face a touch above the middle, so the eyes and the open mouth are
+    // both in the frame
+    target.y = basePos.y + lift + headSize * 0.05;
     // a sway across the line while he is still, and none once he is on you
     target.addScaledVector(right, t < HOLD_MS ? Math.sin(t / 260) * 0.04 * s : 0);
     monster.root.rotation.y = yaw;

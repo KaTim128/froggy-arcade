@@ -1200,8 +1200,12 @@ try {
       // it -- `__noDeflect` turns the new behaviour off for the second half.
       const walls = await page.evaluate(async () => {
         const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+        // The page is still in his briefing, where he does not move at all --
+        // so the round is started for the length of the measurement.
+        const mode = sc.mode;
         const run = async (off) => {
           window.__noDeflect = off;
+          sc.mode = 'seeking';
           sc.grace = 0;
           sc.hiding = null;
           const D = sc.def.halfD;
@@ -1228,6 +1232,7 @@ try {
         const now = await run(false);
         const before = await run(true);
         window.__noDeflect = false;
+        sc.mode = mode;
         return { now, before };
       });
       check('he goes round a wall rather than grinding along it',

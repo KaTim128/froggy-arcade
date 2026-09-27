@@ -3524,6 +3524,10 @@ export class HideRoom3D extends Phaser.Scene {
           : Math.sin(this.clock * (this.fMode === 'investigate' ? 1.5 : 0.55)) *
             (this.fMode === 'investigate' ? 0.75 : 0.5),
       lunge: this.fMode === 'chase' ? 1 : 0,
+      // Once he has you: both arms out for your head, and his head and eyes
+      // on it.  The pose goes down the hole to the enclosure as well, which
+      // drops this -- down there, you are not where he is reaching.
+      reachAt: this.fMode === 'chase' && this.stage ? this.stage.camera.position : null,
     };
     m.update(dt, pose);
     // ---- AND THE SAME POSE, DOWN THE HOLE.  The enclosure under the secret
