@@ -28,6 +28,7 @@ import { store } from '../core/state';
 import { ledger } from '../core/ledger';
 import { froggyLayer } from '../render/froggyLayer';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
+import { playJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
 import { FroggyMonster } from '../three/froggyMonster';
 import { drawPixelText } from '../render/pixelFont';
 import { ThreeStage } from '../render/threeStage';
@@ -622,6 +623,8 @@ export class HideRoom3D extends Phaser.Scene {
   private waypoint = new THREE.Vector2();
   private targetSpot: Spot3D | null = null;
   private monster: FroggyMonster | null = null;
+  /** The scare, while it runs: his model, in front of the camera. */
+  private scare: Scare3D | null = null;
   /** How many meshes he is made of.  See buildRoom. */
   private froggyMeshes = 0;
   /**
@@ -820,6 +823,7 @@ export class HideRoom3D extends Phaser.Scene {
     this.clock = HIDE_S;
     this.briefLine = 0;
     this.caughtT = 0;
+    this.scare = null;
     this.endT = 0;
     this.hiding = null;
     this.spots = [];
@@ -2358,6 +2362,8 @@ export class HideRoom3D extends Phaser.Scene {
 
     this.updateCamera(dt);
     this.updateSprite(dt);
+    // the scare goes last, over whatever the room did with him and the camera
+    if (this.mode === 'caught') this.scare?.update(dt);
     this.paintOverlay();
     this.publishTelemetry();
   }
@@ -3455,6 +3461,9 @@ export class HideRoom3D extends Phaser.Scene {
   private updateSprite(dt: number): void {
     const m = this.monster;
     if (!m) return;
+    // Once he has you he belongs to the scare: one thing drives him, or the
+    // room's pose and the scare's fight over his arms every frame.
+    if (this.mode === 'caught' && this.scare) return;
 
     // Height off the floor: on the ground, or partway over something.
     let y = 0;
@@ -3515,6 +3524,12 @@ export class HideRoom3D extends Phaser.Scene {
           : Math.sin(this.clock * (this.fMode === 'investigate' ? 1.5 : 0.55)) *
             (this.fMode === 'investigate' ? 0.75 : 0.5),
       lunge: this.fMode === 'chase' ? 1 : 0,
+      // Once he has you: both arms out for your head, and his head and eyes
+      // on it.  The pose goes down the hole to the enclosure as well, which
+      // drops this -- down there, you are not where he is reaching.
+      reachAt: this.fMode === 'chase' && this.stage ? this.stage.camera.position : null,
+      // and from wherever you are, his arms stay off his eyes
+      viewer: this.stage?.camera.position ?? null,
     };
     m.update(dt, pose);
     // ---- AND THE SAME POSE, DOWN THE HOLE.  The enclosure under the secret
@@ -3766,7 +3781,10 @@ export class HideRoom3D extends Phaser.Scene {
     this.mode = 'caught';
     this.caughtT = 0;
     this.hiding = null;
-    playJumpscare(this);
+    // The creature that was hunting you, not a picture of it: the model is
+    // brought to the camera and the scare is played out with it.
+    this.scare = this.stage && this.monster ? playJumpscare3D(this, this.stage, this.monster) : null;
+    if (!this.scare) playJumpscare(this);
 
     this.time.delayedCall(SCARE_MS + 700, () => {
       froggyLayer.clear();

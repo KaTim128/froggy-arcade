@@ -329,6 +329,10 @@ interface Art {
   cuff: Phaser.GameObjects.Rectangle;
   knuckle: Phaser.GameObjects.Ellipse;
   thumb: Phaser.GameObjects.Ellipse;
+  /** The glove as it is actually drawn: see `drawMitt`. */
+  mitt: Phaser.GameObjects.Graphics;
+  gloveCol: number;
+  gloveLit: number;
   shin: Phaser.GameObjects.Rectangle;
   aura: Phaser.GameObjects.Arc;
   /** The word over their head while a move is wound up or thrown. */
@@ -1160,6 +1164,10 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
   const fist = scene.add.ellipse(8, -22, 7, 8, gloveCol);
   const knuckle = scene.add.ellipse(8, -24, 6, 3, gloveLit);
   const thumb = scene.add.ellipse(8, -19, 3.5, 3, gloveLit);
+  // The pieces above are kept for their names; the glove that is SEEN is
+  // `mitt`, drawn fresh each frame at whatever angle the arm is at.
+  for (const o of [cuff, fist, knuckle, thumb]) o.setVisible(false);
+  const mitt = scene.add.graphics();
   const face = FACE[foe?.look ?? 'frog'] ?? FACE.lizard;
   const head = scene.add.ellipse(2, -30, foe ? face.headW ?? foe.headW : 15, face.headH, headCol);
   // The plain snout is right for a frog and a lizard.  The long-jawed ones
@@ -1210,7 +1218,7 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
   if (shellC) parts.push(shellC);
   if (tailC) parts.push(tailC);
   if (puff) parts.push(puff);
-  parts.push(aura, torso, belly, bodyGear, headBack, shin, arm, cuff, fist, knuckle, thumb, head, snout, headGear, crest, eyeL, eyeR, pupL, pupR, call);
+  parts.push(aura, torso, belly, bodyGear, headBack, shin, arm, cuff, fist, knuckle, thumb, mitt, head, snout, headGear, crest, eyeL, eyeR, pupL, pupR, call);
   const root = scene.add.container(x, FLOOR_Y, parts).setDepth(20);
   root.setScale(facing, 1);
 
@@ -1234,7 +1242,7 @@ function makeFighter(scene: Phaser.Scene, x: number, who: 'frog' | FoeDef, facin
     jumpT: 0,
     jumpVx: 0,
     art: {
-      root, legL, legR, torso, belly, head, snout, eyeL, eyeR, pupL, pupR, crest, arm, fist, cuff, knuckle, thumb, shin, aura, call,
+      root, legL, legR, torso, belly, head, snout, eyeL, eyeR, pupL, pupR, crest, arm, fist, cuff, knuckle, thumb, mitt, gloveCol, gloveLit, shin, aura, call,
       skin, skinLight, headCol, headGear, bodyGear, backGear, puff,
       snoutX: longJaw ? 3 : 6,
       // from the face: where this animal's eyes are on its head
@@ -1818,15 +1826,30 @@ function render(f: Fighter, dt: number): void {
   a.arm.setFillStyle(a.skin);
   // Everything that makes up the glove hangs off wherever the fist was put,
   // so no pose has to remember to move four things.
-  const glove = (x: number, y: number, size: number): void => {
-    a.fist.setPosition(x, y).setSize(size * 1.08, size);
-    a.cuff.setPosition(x - size * 0.58, y).setSize(size * 0.4, size * 0.82);
-    a.knuckle.setPosition(x + size * 0.12, y - size * 0.26).setSize(size * 0.68, size * 0.3);
-    a.thumb.setPosition(x - size * 0.1, y + size * 0.3).setSize(size * 0.42, size * 0.34);
-  };
-  // Every arm position below is written for standing; crouched, the body
-  // is lower, and a glove left at standing height sits on top of the head.
+  //
+  // ---- AN ARM FROM THE SHOULDER, AND A HAND ON THE END OF IT.
+  //
+  // Every punch used to be a flat bar straight out of the body at the
+  // height of the blow, with a round ball and a pale ring on the end.  At
+  // hip height -- the body shot, the special -- that shape did not read as
+  // an arm and a fist at all.  The arm now always starts at the SHOULDER
+  // and runs at whatever angle it takes to reach the fist, so a dig to the
+  // body is an arm driven down and forward; and the glove is a boxing
+  // glove -- a padded mitt with a squared knuckle face, finger creases and
+  // a thumb, laced into a darker cuff -- turned to face where it is going.
   const cy = crouch;
+  const SX = 2;
+  const SY = -23 + cy;
+  const glove = (x: number, y: number, size: number): void => {
+    const thick = f.move === 'special' && f.phase === 'active' ? 5.4 : 4.6;
+    const ang = Math.atan2(y - SY, x - SX);
+    const len = Math.max(1, Math.hypot(x - SX, y - SY) - size * 0.62);
+    a.arm.setPosition(SX, SY).setSize(len, thick).setRotation(ang);
+    // a fist cocked back behind the shoulder still has its knuckles forward
+    const face = x >= SX ? ang : Phaser.Math.Clamp(ang - Math.PI, -0.6, 0.6);
+    drawMitt(a.mitt, size, a.gloveCol, a.gloveLit);
+    a.mitt.setPosition(x, y).setRotation(face);
+  };
   if (f.move && f.phase) {
     const def = MOVES[f.move];
     if (f.move === 'high') {
@@ -1856,9 +1879,8 @@ function render(f: Fighter, dt: number): void {
       a.shin.setVisible(false);
       const ly = -15 + cy;
       if (f.phase === 'startup') {
-        // cocked back against the ribs
-        a.arm.setPosition(-3, ly).setSize(6, 7);
-        glove(-6, ly + 1, 8);
+        // cocked back against the ribs -- the ribs, not the hip
+        glove(-4, ly - 5, 8);
       } else if (f.phase === 'active') {
         a.arm.setPosition(3, ly).setSize(def.range * 0.62, 7);
         glove(4 + def.range * 0.62, ly, 10);
@@ -1871,10 +1893,10 @@ function render(f: Fighter, dt: number): void {
       const glow = f.phase === 'startup' ? 1 - f.timer / def.startup : 1;
       a.aura
         .setVisible(true)
-        .setPosition(f.phase === 'active' ? 12 : 2, -20 + cy)
+        .setPosition(f.phase === 'active' ? 6 + def.range * 0.8 : -7, f.phase === 'active' ? -20 + cy : -24 + cy)
         .setRadius(4 + glow * (f.phase === 'active' ? 14 : 7))
         .setFillStyle(PALETTE.ember, f.phase === 'recovery' ? 0.25 : 0.45);
-      a.arm.setFillStyle(PALETTE.ember);
+      // the glow is round the FIST; the arm stays the arm
       if (f.phase === 'startup') {
         a.arm.setPosition(-3, -24 + cy).setSize(7, 7);
         glove(-7, -24 + cy, 9);
@@ -1901,7 +1923,6 @@ function render(f: Fighter, dt: number): void {
     // is also what makes the punches read as punches: they are a departure
     // from somewhere.
     const guardBob = Math.sin(sceneClock * 3 + (f === p2 ? 1.6 : 0)) * 0.7;
-    a.arm.setPosition(1, -23 + cy).setSize(6, 6);
     // in the air the guard comes up with the rest of it
     glove(6, -25 + cy * 1.2 + guardBob - (airborne ? 2 : 0), 8);
     a.call.setVisible(false);
@@ -1914,6 +1935,37 @@ function render(f: Fighter, dt: number): void {
   // A chameleon never quite settles on one colour.
   const skinNow = a.cycle ? Phaser.Display.Color.HSVToRGB((sceneClock * 0.09) % 1, 0.55, 0.72).color : a.skin;
   a.torso.setFillStyle(f.stun > 0 ? PALETTE.bone : skinNow);
+}
+
+/**
+ * A BOXING GLOVE, SEEN FROM THE SIDE, knuckles along +x.
+ *
+ * Drawn about its own centre so it can be turned with the arm: the laced
+ * cuff behind, the padded body, the squared face of the knuckles with the
+ * creases of the fingers on it, and the thumb folded along the bottom.
+ */
+function drawMitt(g: Phaser.GameObjects.Graphics, size: number, col: number, lit: number): void {
+  const dark = shade(col, 0.45);
+  const w = size * 1.12;
+  const h = size;
+  g.clear();
+  // the cuff, laced, darker than the glove and narrower than it
+  g.fillStyle(dark, 1).fillRoundedRect(-w * 0.86, -h * 0.34, w * 0.4, h * 0.68, 1);
+  g.lineStyle(0.6, 0xf0e6d0, 0.9);
+  g.lineBetween(-w * 0.78, -h * 0.2, -w * 0.56, h * 0.2);
+  g.lineBetween(-w * 0.78, h * 0.2, -w * 0.56, -h * 0.2);
+  // the padded body, squarer at the knuckle end than the wrist end
+  g.fillStyle(dark, 1).fillRoundedRect(-w * 0.52, -h * 0.54, w * 1.02, h * 1.08, Math.min(w, h) * 0.34);
+  g.fillStyle(col, 1).fillRoundedRect(-w * 0.48, -h * 0.5, w * 0.94, h, Math.min(w, h) * 0.3);
+  // light across the back of the hand
+  g.fillStyle(lit, 1).fillRoundedRect(-w * 0.34, -h * 0.44, w * 0.62, h * 0.26, h * 0.12);
+  // the knuckle face, and the creases between the fingers on it
+  g.fillStyle(shade(col, 0.12), 1).fillRoundedRect(w * 0.26, -h * 0.44, w * 0.18, h * 0.72, 1);
+  g.lineStyle(0.7, dark, 0.9);
+  for (const k of [-0.2, 0.02]) g.lineBetween(w * 0.2, h * k, w * 0.44, h * k);
+  // the thumb, folded along the bottom of the fist
+  g.fillStyle(dark, 1).fillEllipse(-w * 0.02, h * 0.36, w * 0.62, h * 0.34);
+  g.fillStyle(lit, 1).fillEllipse(-w * 0.02, h * 0.33, w * 0.54, h * 0.24);
 }
 
 /**

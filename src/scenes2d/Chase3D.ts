@@ -20,6 +20,7 @@ import { audio, SILENCE } from '../core/audio';
 import { store } from '../core/state';
 import { froggyLayer } from '../render/froggyLayer';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
+import { playJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
 import { FroggyMonster } from '../three/froggyMonster';
 import { alleySurfaces, dressAlley } from '../three/alleyDecor';
 import { ThreeStage } from '../render/threeStage';
@@ -68,6 +69,8 @@ export class Chase3D extends Phaser.Scene {
   private pos = new THREE.Vector2();
   private froggy = new THREE.Vector2();
   private monster: FroggyMonster | null = null;
+  /** The scare, while it runs: his model, in front of the camera. */
+  private scare: Scare3D | null = null;
   /** Where he was last frame, so the walk cycle knows how fast he is going. */
   private froggyWas = new THREE.Vector2();
   /** How many meshes he is made of.  See buildAlley.  */
@@ -92,6 +95,7 @@ export class Chase3D extends Phaser.Scene {
   create(): void {
     froggyLayer.clear();
     this.over = false;
+    this.scare = null;
     this.elapsed = 0;
     this.inConeMs = 0;
     this.routeLen = optimalRouteLength(); // BFS once, not once a frame
@@ -287,7 +291,11 @@ export class Chase3D extends Phaser.Scene {
   // -------------------------------------------------------------------- loop
 
   private tick(dt: number): void {
-    if (this.over || !this.stage) return;
+    if (this.over) {
+      this.scare?.update(dt);
+      return;
+    }
+    if (!this.stage) return;
     this.elapsed += dt * 1000;
 
     this.movePlayer(dt);
@@ -424,6 +432,9 @@ export class Chase3D extends Phaser.Scene {
         climb: 0,
         scan: 0,
         lunge: 1,
+        // both arms out for you, the head and the eyes on you
+        reachAt: this.stage?.camera.position ?? null,
+        viewer: this.stage?.camera.position ?? null,
       });
     }
   }
@@ -479,8 +490,10 @@ export class Chase3D extends Phaser.Scene {
     this.over = true;
     this.markOver('caught');
 
-    // The same scare the basement uses, because it is the same creature.
-    playJumpscare(this);
+    // The same scare the basement uses, because it is the same creature --
+    // the model itself, brought to the camera.
+    this.scare = this.stage && this.monster ? playJumpscare3D(this, this.stage, this.monster) : null;
+    if (!this.scare) playJumpscare(this);
 
     this.time.delayedCall(SCARE_MS + 400, () => {
       froggyLayer.clear();

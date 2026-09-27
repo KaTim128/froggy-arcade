@@ -541,7 +541,8 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
     // the room's, not ours.  He never once looks up -- there is nothing in the
     // hunt that knows there is an up.
     monster.setPose(seen.x, seen.y, seen.z, seen.yaw);
-    monster.update(dt, seen.pose);
+    // (all of it but where you are: he reaches for you up there, not down here)
+    monster.update(dt, { ...seen.pose, reachAt: null, viewer: null });
 
     // ---- AND THE LIDS COME UP WHEN THE REAL ONES DO.
     //
