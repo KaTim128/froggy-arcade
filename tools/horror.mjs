@@ -1198,14 +1198,22 @@ try {
       // for a way past first now.  Measured both ways in the same room, by
       // driving him nose-first at a wall with the player on the far side of
       // it -- `__noDeflect` turns the new behaviour off for the second half.
-      const walls = await page.evaluate(async () => {
+      // On a page of its own: driving him at a wall with you parked outside the
+      // room ends the round, and the checks below need this one untouched.
+      const wallPage = await newPage(
+        `?intro=1&charity=1&key=1&route=hide&hideRoom=${room}&scene=HideRoom3D`,
+      );
+      await sleep(2500);
+      const walls = await wallPage.evaluate(async () => {
         const sc = window.__froggy.game().scene.getScene('HideRoom3D');
         // The page is still in his briefing, where he does not move at all --
         // so the round is started for the length of the measurement.
-        const mode = sc.mode;
         const run = async (off) => {
           window.__noDeflect = off;
           sc.mode = 'seeking';
+          // the round's clock has not been set yet, and at zero the first
+          // frame of it would end the round
+          sc.clock = 999;
           sc.grace = 0;
           sc.hiding = null;
           const D = sc.def.halfD;
@@ -1220,6 +1228,8 @@ try {
           const s0 = window.__hide.wallScrapes;
           const t0 = performance.now();
           while (performance.now() - t0 < 3000) {
+            sc.mode = 'seeking';
+            sc.clock = 999;
             sc.fMode = 'chase';
             sc.memory = 9999;
             await new Promise((r) => requestAnimationFrame(r));
@@ -1232,9 +1242,9 @@ try {
         const now = await run(false);
         const before = await run(true);
         window.__noDeflect = false;
-        sc.mode = mode;
         return { now, before };
       });
+      await wallPage.close();
       check('he goes round a wall rather than grinding along it',
         walls.now.scrapes === 0 && walls.now.grazes > 0,
         `${walls.now.grazes} deflections and ${walls.now.scrapes} scrapes, ` +
