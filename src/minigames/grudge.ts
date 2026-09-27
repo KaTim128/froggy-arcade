@@ -593,6 +593,37 @@ export const grudge: MinigameModule = {
           p2.stun = o.stun ?? 0;
           p2.recoil = o.stun ? -1 : 0;
         },
+        /**
+         * Hold the opponent `h` pixels off the floor in the ACTIVE frames of a
+         * live strike, facing Froggy -- the blow is armed, not posed -- so a
+         * harness can see whether it connects from that height.
+         */
+        strikeAt: (move: 'high' | 'low' | 'special', h: number) => {
+          if (!p1 || !p2) return false;
+          aiFrozen = true;
+          aiHover = h;
+          p2.y = FLOOR_Y - h;
+          p2.vy = 0;
+          p2.jump = h > 0 ? 'air' : 'none';
+          p2.stun = 0;
+          p2.facing = p1.x < p2.x ? -1 : 1;
+          p2.move = move;
+          p2.phase = 'active';
+          p2.timer = 1e9;
+          p2.hitLanded = false;
+          return true;
+        },
+        /** Both back to full, so a harness can take as many blows as it needs. */
+        heal: () => {
+          if (p1) p1.hp = MAX_HP;
+          if (p2) p2.hp = MAX_HP;
+        },
+        /** Throw a move now, whatever the AI would have done, jump or no jump. */
+        attack: (move: 'high' | 'low' | 'special') => {
+          if (!p2) return false;
+          startMove(p2, move);
+          return p2.move === move;
+        },
         /** Make the opponent jump, as its own AI would: squat, air, land. */
         jump: (dir = 0) => {
           if (!p2) return false;
@@ -1592,6 +1623,16 @@ function tryHit(f: Fighter): void {
   if (dist > def.range * (f.foe?.reach ?? 1)) return;
   if ((facingRight && f.facing !== 1) || (!facingRight && f.facing !== -1)) return;
   if (target.y < FLOOR_Y - JUMP_CLEARANCE[f.move]) return; // jumped over it
+  // ---- AND THE BLOW HAS TO BE WHERE THE BODY IS.
+  //
+  // Reach and facing are only half of contact.  The rest is height: the fist
+  // or the foot is at a real height on the attacker, and it lands only if
+  // that height overlaps the target's body.  Without it an animal throwing
+  // a punch at the top of a jump -- a monkey forty pixels up, sailing over
+  // Froggy's head -- landed it on him through thin air.  On the ground this
+  // passes in every case the rules above already allow, so a fight on the
+  // boards plays exactly as it did.
+  if (!strikeMeetsBody(f, target, f.move)) return;
 
   // A low sweep goes under a block; a high strike does not go through one.
   const blocked = target.blocking && !(f.move === 'low' && !target.crouch);
@@ -1629,6 +1670,40 @@ function tryHit(f: Fighter): void {
   const hx = f.x + f.facing * (def.range * 0.6);
   const hy = f.y - (f.move === 'low' ? 12 : f.move === 'special' ? 20 : 28);
   impact(hx, hy, f.move, blocked);
+}
+
+/**
+ * WHERE A BLOW IS, AND WHERE A BODY IS, top to bottom.
+ *
+ * A strike is a band of height on the attacker, measured up from its feet:
+ * head height for a high strike, knee height for a sweep, chest for the
+ * special -- the same heights `impact` draws the hit at.  Thrown from the air
+ * a high strike is brought DOWN across the front of the body onto whoever is
+ * underneath, so its band runs lower, but it still has to reach them.  The
+ * target's body is its feet to the top of its head, lower in a crouch.
+ * Contact is the two bands overlapping, and nothing else.
+ */
+const STRIKE_BAND: Record<'high' | 'low' | 'special', [number, number]> = {
+  high: [34, 22],
+  low: [18, 6],
+  special: [28, 12],
+};
+const AIR_STRIKE_BAND: Record<'high' | 'low' | 'special', [number, number]> = {
+  high: [34, 10],
+  low: [18, 0],
+  special: [28, 6],
+};
+const BODY_H = 38;
+const CROUCH_H = 31;
+function strikeMeetsBody(f: Fighter, target: Fighter, move: 'high' | 'low' | 'special'): boolean {
+  const airborne = f.y < FLOOR_Y - 0.5;
+  const [top, bottom] = (airborne ? AIR_STRIKE_BAND : STRIKE_BAND)[move];
+  const blowTop = f.y - top;
+  const blowBottom = f.y - bottom;
+  const crouched = target.crouch && target.y >= FLOOR_Y;
+  const bodyTop = target.y - (crouched ? CROUCH_H : BODY_H);
+  const bodyBottom = target.y;
+  return blowBottom >= bodyTop && blowTop <= bodyBottom;
 }
 
 /**
