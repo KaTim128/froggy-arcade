@@ -665,6 +665,12 @@ export interface ArmourMat {
   /** The one line that says what it is for, when the numbers do not. */
   note: string;
   /**
+   * AND WHAT IT IS ON EACH PART OF THE BODY.  One material is three different
+   * pieces -- a helmet, a chest piece and something for the legs -- and the
+   * card says which one it is looking at rather than repeating the same line.
+   */
+  notes?: Partial<Record<'head' | 'body' | 'legs', string>>;
+  /**
    * A name short enough for the kit sheet, which lists three of them on one
    * centred line.  Trimming " ARMOUR" off the full name was not enough --
    * three REINFORCED HIDEs came to 330 pixels of a 320 pixel screen and went
@@ -674,7 +680,7 @@ export interface ArmourMat {
 }
 export const MATERIALS: ArmourMat[] = [
   // ---- NOTHING, AND THE THINGS THAT BARELY COUNT
-  { key: 'none', name: 'NO ARMOUR', def: 0, evade: 0, heavy: [1, 1], resist: [10, 10], colour: 0x6d5a45, edge: 0x4a3c2d, short: 'NONE', note: 'NOTHING THERE, AND NOTHING TO CARRY' },
+  { key: 'none', name: 'NO ARMOUR', def: 0, evade: 0, heavy: [1, 1], resist: [10, 10], colour: 0x6d5a45, edge: 0x4a3c2d, short: 'NONE', note: 'NOTHING THERE, AND NOTHING TO CARRY', notes: { head: 'A BARE HEAD. EVERY BLOW GOES STRAIGHT IN', body: 'NOTHING THERE, AND NOTHING TO CARRY', legs: 'BARE LEGS. QUICK, AND NOTHING IN THE WAY' } },
   // ---- TEN MORE, FILLING THE LADDER RATHER THAN EXTENDING IT.
   //
   // None of these is better than HEAVY PLATE and none is lighter than cloth:
@@ -682,44 +688,44 @@ export const MATERIALS: ArmourMat[] = [
   // instead of jumps.  Three of them break the pattern on purpose -- bone and
   // dragon scale shrug off quick hits and not heavy ones, obsidian stops a
   // great deal and shatters while it does it.
-  { key: 'padded', name: 'PADDED JACK', def: 0.08, evade: 0.05, heavy: [1, 2], resist: [3, 5], colour: 0xc9b48c, edge: 0x8a7654, short: 'PADDED', note: 'CLOTH, BUT ENOUGH OF IT TO NOTICE' },
-  { key: 'hide', name: 'HIDE ARMOUR', def: 0.12, evade: 0, heavy: [2, 4], resist: [4, 6], colour: 0x8a6440, edge: 0x4f3722, short: 'HIDE', note: 'SOMETHING ELSE WORE IT FIRST' },
-  { key: 'studded', name: 'STUDDED LEATHER', def: 0.14, evade: 0, heavy: [3, 5], resist: [6, 8], colour: 0x7f5c3c, edge: 0x9aa2ae, short: 'STUDDED', note: 'LEATHER WITH OPINIONS HAMMERED INTO IT' },
-  { key: 'bone', name: 'BONE ARMOUR', def: 0.17, evade: 0, soft: 0.38, heavy: [3, 5], resist: [4, 6], colour: 0xe4ddc6, edge: 0x9c9482, short: 'BONE', note: 'TURNS THE QUICK ONES. SPLITS ON THE REST' },
-  { key: 'brigandine', name: 'BRIGANDINE', def: 0.19, evade: 0, heavy: [4, 6], resist: [7, 9], colour: 0x6b4f3a, edge: 0xb9c2c8, short: 'BRIG', note: 'PLATES ON THE INSIDE WHERE THEY CANNOT SEE THEM' },
-  { key: 'lamellar', name: 'LAMELLAR ARMOUR', def: 0.22, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8a7f5e, edge: 0x4e4634, short: 'LAMELLAR', note: 'A THOUSAND LITTLE PLATES, ALL LACED TOGETHER' },
-  { key: 'corinthian', name: 'CORINTHIAN HELM', def: 0.24, evade: 0, heavy: [4, 6], resist: [7, 9], colour: 0xb08d4a, edge: 0x6b5324, short: 'CORINTH', note: 'YOU WILL LOOK MAGNIFICENT AND HEAR NOTHING' },
-  { key: 'knight', name: 'KNIGHT HELM', def: 0.27, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0xa9b2bd, edge: 0x59616b, short: 'KNIGHT', note: 'A LETTERBOX TO SEE THE WHOLE FIGHT THROUGH' },
-  { key: 'obsidian', name: 'OBSIDIAN ARMOUR', def: 0.29, evade: 0, heavy: [5, 7], resist: [2, 4], colour: 0x2b2836, edge: 0x6d5fa0, short: 'OBSIDIAN', note: 'STOPS ALMOST ANYTHING, ALMOST ONCE' },
-  { key: 'dragon', name: 'DRAGON SCALE', def: 0.31, evade: 0, soft: 0.34, heavy: [6, 8], resist: [7, 9], colour: 0x4f7a5a, edge: 0x24402c, short: 'DRAGON', note: 'NOBODY ASKS WHERE IT CAME FROM' },
+  { key: 'padded', name: 'PADDED JACK', def: 0.08, evade: 0.05, heavy: [1, 2], resist: [3, 5], colour: 0xc9b48c, edge: 0x8a7654, short: 'PADDED', note: 'CLOTH, BUT ENOUGH OF IT TO NOTICE', notes: { head: 'A QUILTED CAP. TAKES THE EDGE OFF A KNOCK', body: 'CLOTH, BUT ENOUGH OF IT TO NOTICE', legs: 'QUILTED LEGGINGS. SOFT, WARM, NOT MUCH ELSE' } },
+  { key: 'hide', name: 'HIDE ARMOUR', def: 0.12, evade: 0, heavy: [2, 4], resist: [4, 6], colour: 0x8a6440, edge: 0x4f3722, short: 'HIDE', note: 'SOMETHING ELSE WORE IT FIRST', notes: { head: 'A FUR HOOD WITH THE EARS STILL ON IT', body: 'SOMETHING ELSE WORE IT FIRST', legs: 'RAWHIDE WRAPPED ROUND THE SHINS AND TIED' } },
+  { key: 'studded', name: 'STUDDED LEATHER', def: 0.14, evade: 0, heavy: [3, 5], resist: [6, 8], colour: 0x7f5c3c, edge: 0x9aa2ae, short: 'STUDDED', note: 'LEATHER WITH OPINIONS HAMMERED INTO IT', notes: { head: 'A LEATHER CAP STUDDED ROUND THE BRIM', body: 'LEATHER WITH OPINIONS HAMMERED INTO IT', legs: 'STUDDED LEGGINGS THAT JINGLE WHEN YOU RUN' } },
+  { key: 'bone', name: 'BONE ARMOUR', def: 0.17, evade: 0, soft: 0.38, heavy: [3, 5], resist: [4, 6], colour: 0xe4ddc6, edge: 0x9c9482, short: 'BONE', note: 'TURNS THE QUICK ONES. SPLITS ON THE REST', notes: { head: 'A SKULL FOR A HELMET. IT TURNS THE QUICK ONES', body: 'RIBS OVER RIBS. TURNS THE QUICK ONES, SPLITS ON THE REST', legs: 'BONE SPLINTS ON THE SHINS. LIGHT, AND BRITTLE' } },
+  { key: 'brigandine', name: 'BRIGANDINE', def: 0.19, evade: 0, heavy: [4, 6], resist: [7, 9], colour: 0x6b4f3a, edge: 0xb9c2c8, short: 'BRIG', note: 'PLATES ON THE INSIDE WHERE THEY CANNOT SEE THEM', notes: { head: 'A CLOTH CAP WITH IRON SEWN IN UNDER IT', body: 'PLATES ON THE INSIDE WHERE THEY CANNOT SEE THEM', legs: 'RIVETED CLOTH OVER IRON STRIPS DOWN THE THIGH' } },
+  { key: 'lamellar', name: 'LAMELLAR ARMOUR', def: 0.22, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8a7f5e, edge: 0x4e4634, short: 'LAMELLAR', note: 'A THOUSAND LITTLE PLATES, ALL LACED TOGETHER', notes: { head: 'LITTLE PLATES LACED IN A SKIRT ROUND THE HEAD', body: 'A THOUSAND LITTLE PLATES, ALL LACED TOGETHER', legs: 'LACED LAMES DOWN THE LEG THAT BEND AS IT DOES' } },
+  { key: 'corinthian', name: 'CORINTHIAN HELM', def: 0.24, evade: 0, heavy: [4, 6], resist: [7, 9], colour: 0xb08d4a, edge: 0x6b5324, short: 'CORINTH', note: 'YOU WILL LOOK MAGNIFICENT AND HEAR NOTHING', notes: { head: 'YOU WILL LOOK MAGNIFICENT AND HEAR NOTHING', body: 'A BRONZE CHEST CAST TO LOOK LIKE MUSCLES', legs: 'BRONZE GREAVES CAST TO THE SHAPE OF A SHIN' } },
+  { key: 'knight', name: 'KNIGHT HELM', def: 0.27, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0xa9b2bd, edge: 0x59616b, short: 'KNIGHT', note: 'A LETTERBOX TO SEE THE WHOLE FIGHT THROUGH', notes: { head: 'A LETTERBOX TO SEE THE WHOLE FIGHT THROUGH', body: 'A POLISHED CUIRASS, MADE TO BE SEEN', legs: 'JOINTED STEEL, KNEE TO ANKLE. IT CLANKS' } },
+  { key: 'obsidian', name: 'OBSIDIAN ARMOUR', def: 0.29, evade: 0, heavy: [5, 7], resist: [2, 4], colour: 0x2b2836, edge: 0x6d5fa0, short: 'OBSIDIAN', note: 'STOPS ALMOST ANYTHING, ALMOST ONCE', notes: { head: 'A GLASS HELM THAT STOPS A SKULL-SPLITTER ONCE', body: 'STOPS ALMOST ANYTHING, ALMOST ONCE', legs: 'BLACK GLASS SHIN PLATES. THEY WILL SHATTER' } },
+  { key: 'dragon', name: 'DRAGON SCALE', def: 0.31, evade: 0, soft: 0.34, heavy: [6, 8], resist: [7, 9], colour: 0x4f7a5a, edge: 0x24402c, short: 'DRAGON', note: 'NOBODY ASKS WHERE IT CAME FROM', notes: { head: 'A HORNED CAP OF DRAGON SCALE. NOBODY ASKS', body: 'NOBODY ASKS WHERE IT CAME FROM', legs: 'SCALED LEGGINGS. SHRUGS OFF THE QUICK ONES' } },
 
-  { key: 'cloth', name: 'LIGHT CLOTH ARMOUR', def: 0.04, evade: 0.09, heavy: [1, 1], resist: [2, 4], colour: 0xd8cbb0, edge: 0x9a8e74, short: 'CLOTH', note: 'YOU WILL BE VERY QUICK AND VERY SORRY' },
-  { key: 'tuxedo', name: 'TUXEDO', def: 0.05, evade: 0, heavy: [1, 2], resist: [2, 4], colour: 0x2a2d3a, edge: 0xdfe4ee, short: 'TUXEDO', note: 'FIVE PERCENT DEFENCE. THE REST IS FASHION' },
-  { key: 'crown', name: 'CROWN', def: 0.06, evade: 0, heavy: [1, 2], resist: [3, 5], colour: 0xffd45e, edge: 0xa8801e, short: 'CROWN', note: 'IT PROTECTS NOTHING AND MEANS EVERYTHING' },
+  { key: 'cloth', name: 'LIGHT CLOTH ARMOUR', def: 0.04, evade: 0.09, heavy: [1, 1], resist: [2, 4], colour: 0xd8cbb0, edge: 0x9a8e74, short: 'CLOTH', note: 'YOU WILL BE VERY QUICK AND VERY SORRY', notes: { head: 'A HEADBAND. KEEPS THE SWEAT OUT, NOT THE CLUB', body: 'YOU WILL BE VERY QUICK AND VERY SORRY', legs: 'LOOSE TROUSERS. NOTHING SLOWS YOU DOWN' } },
+  { key: 'tuxedo', name: 'TUXEDO', def: 0.05, evade: 0, heavy: [1, 2], resist: [2, 4], colour: 0x2a2d3a, edge: 0xdfe4ee, short: 'TUXEDO', note: 'FIVE PERCENT DEFENCE. THE REST IS FASHION', notes: { head: 'A TOP HAT. IT WILL NOT SURVIVE THE FIRST ROUND', body: 'FIVE PERCENT DEFENCE. THE REST IS FASHION', legs: 'PRESSED TROUSERS WITH A VERY SHARP CREASE' } },
+  { key: 'crown', name: 'CROWN', def: 0.06, evade: 0, heavy: [1, 2], resist: [3, 5], colour: 0xffd45e, edge: 0xa8801e, short: 'CROWN', note: 'IT PROTECTS NOTHING AND MEANS EVERYTHING', notes: { head: 'IT PROTECTS NOTHING AND MEANS EVERYTHING', body: 'ROYAL ROBES. THE CROWD CHEERS, THE AXE DOES NOT', legs: 'GOLD-TRIMMED HOSE. REGAL AND USELESS' } },
 
   // ---- LIGHT
-  { key: 'leather', name: 'LEATHER ARMOUR', def: 0.10, evade: 0, heavy: [2, 4], resist: [5, 7], colour: 0x9c7248, edge: 0x5d4028, short: 'LEATHER', note: 'LIGHT, AND ABOUT AS USEFUL AS THAT SOUNDS' },
-  { key: 'tactical', name: 'TACTICAL ARMOUR', def: 0.10, evade: 0.15, heavy: [2, 4], resist: [6, 8], colour: 0x3f4a3a, edge: 0x22281f, short: 'TACTICAL', note: 'STOPS LITTLE. MUCH HARDER TO HIT' },
-  { key: 'reinforced', name: 'REINFORCED LEATHER', def: 0.13, evade: 0, heavy: [3, 5], resist: [7, 9], colour: 0x7a5a3a, edge: 0x452f1c, short: 'R.LEATHER', note: 'LEATHER THAT HAS BEEN THOUGHT ABOUT' },
-  { key: 'tin', name: 'TIN ARMOUR', def: 0.15, evade: 0, heavy: [3, 5], resist: [3, 5], colour: 0xb9c2c8, edge: 0x6d767c, short: 'TIN', note: 'CHEAP, LOUD, BETTER THAN A SHIRT' },
-  { key: 'hood', name: 'CHAIN HOOD', def: 0.16, evade: 0, heavy: [3, 5], resist: [6, 8], colour: 0x87909c, edge: 0x464e58, short: 'HOOD', note: 'RINGS, AND NOT MANY OF THEM' },
+  { key: 'leather', name: 'LEATHER ARMOUR', def: 0.10, evade: 0, heavy: [2, 4], resist: [5, 7], colour: 0x9c7248, edge: 0x5d4028, short: 'LEATHER', note: 'LIGHT, AND ABOUT AS USEFUL AS THAT SOUNDS', notes: { head: 'A LEATHER CAP. BETTER THAN HAIR', body: 'LIGHT, AND ABOUT AS USEFUL AS THAT SOUNDS', legs: 'LEATHER CHAPS. THEY STOP A SCRATCH' } },
+  { key: 'tactical', name: 'TACTICAL ARMOUR', def: 0.10, evade: 0.15, heavy: [2, 4], resist: [6, 8], colour: 0x3f4a3a, edge: 0x22281f, short: 'TACTICAL', note: 'STOPS LITTLE. MUCH HARDER TO HIT', notes: { head: 'A PADDED HEADSET. HARDER TO HIT, NOT HARDER', body: 'STOPS LITTLE. MUCH HARDER TO HIT', legs: 'CARGO KNEE PADS. LIGHT FEET, QUICK DODGES' } },
+  { key: 'reinforced', name: 'REINFORCED LEATHER', def: 0.13, evade: 0, heavy: [3, 5], resist: [7, 9], colour: 0x7a5a3a, edge: 0x452f1c, short: 'R.LEATHER', note: 'LEATHER THAT HAS BEEN THOUGHT ABOUT', notes: { head: 'BOILED LEATHER, SET HARD ROUND THE SKULL', body: 'LEATHER THAT HAS BEEN THOUGHT ABOUT', legs: 'STIFFENED LEATHER GREAVES, LACED TIGHT' } },
+  { key: 'tin', name: 'TIN ARMOUR', def: 0.15, evade: 0, heavy: [3, 5], resist: [3, 5], colour: 0xb9c2c8, edge: 0x6d767c, short: 'TIN', note: 'CHEAP, LOUD, BETTER THAN A SHIRT', notes: { head: 'A TIN POT WITH A CHIN STRAP. IT RINGS', body: 'CHEAP, LOUD, BETTER THAN A SHIRT', legs: 'TIN SHIN GUARDS. THEY DENT, THEN THEY BEND' } },
+  { key: 'hood', name: 'CHAIN HOOD', def: 0.16, evade: 0, heavy: [3, 5], resist: [6, 8], colour: 0x87909c, edge: 0x464e58, short: 'HOOD', note: 'RINGS, AND NOT MANY OF THEM', notes: { head: 'A MAIL COIF. RINGS, AND NOT MANY OF THEM', body: 'A SHORT MAIL SHIRT THAT STOPS AT THE RIBS', legs: 'MAIL CHAUSSES. SLICES STOP, BRUISES DO NOT' } },
 
   // ---- THE MIDDLE
-  { key: 'scale', name: 'SCALE ARMOUR', def: 0.18, evade: 0, soft: 0.34, heavy: [4, 6], resist: [6, 8], colour: 0x6f8a6a, edge: 0x3a4a38, short: 'SCALE', note: 'SHRUGS OFF THE QUICK ONES. NOT THE BIG ONES' },
-  { key: 'chain', name: 'CHAIN ARMOUR', def: 0.20, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8e9cad, edge: 0x4a5665, short: 'CHAIN', note: 'THE HONEST MIDDLE OF THE RACK' },
-  { key: 'bronze', name: 'BRONZE ARMOUR', def: 0.21, evade: 0, heavy: [5, 7], resist: [5, 7], colour: 0xc08a3e, edge: 0x6f4b1c, short: 'BRONZE', note: 'OLDER THAN IRON AND NEARLY AS GOOD' },
-  { key: 'viking', name: 'VIKING HELM', def: 0.22, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x9aa3ad, edge: 0x4e555e, short: 'VIKING', note: 'HORNS, WHICH HELP WITH NOTHING' },
-  { key: 'spartan', name: 'SPARTAN HELM', def: 0.23, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0xb08a3a, edge: 0x63481a, short: 'SPARTAN', note: 'YOU WILL SEE LESS AND MIND IT LESS' },
-  { key: 'legion', name: 'ROMAN LEGION', def: 0.23, evade: 0, heavy: [5, 7], resist: [8, 10], colour: 0xc2a15a, edge: 0x6d5528, short: 'LEGION', note: 'ISSUED, AND IT SHOWS. IT LASTS' },
-  { key: 'roman', name: 'ROMAN HELMET', def: 0.24, evade: 0, heavy: [5, 7], resist: [8, 10], colour: 0xcaa963, edge: 0x77592a, short: 'ROMAN', note: 'A CHEEK GUARD AND A VERY RED BRUSH' },
+  { key: 'scale', name: 'SCALE ARMOUR', def: 0.18, evade: 0, soft: 0.34, heavy: [4, 6], resist: [6, 8], colour: 0x6f8a6a, edge: 0x3a4a38, short: 'SCALE', note: 'SHRUGS OFF THE QUICK ONES. NOT THE BIG ONES', notes: { head: 'SCALES ROUND THE CROWN. SHRUGS OFF THE QUICK ONES', body: 'SHRUGS OFF THE QUICK ONES. NOT THE BIG ONES', legs: 'SCALED TASSETS OVER THE THIGHS. LIGHT HITS SLIDE' } },
+  { key: 'chain', name: 'CHAIN ARMOUR', def: 0.20, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8e9cad, edge: 0x4a5665, short: 'CHAIN', note: 'THE HONEST MIDDLE OF THE RACK', notes: { head: 'A MAIL HOOD. THE HONEST MIDDLE OF THE RACK', body: 'THE HONEST MIDDLE OF THE RACK', legs: 'MAIL LEGGINGS. THEY STOP A BLADE, NOT A CLUB' } },
+  { key: 'bronze', name: 'BRONZE ARMOUR', def: 0.21, evade: 0, heavy: [5, 7], resist: [5, 7], colour: 0xc08a3e, edge: 0x6f4b1c, short: 'BRONZE', note: 'OLDER THAN IRON AND NEARLY AS GOOD', notes: { head: 'A BRONZE BOWL. OLDER THAN IRON, NEARLY AS GOOD', body: 'OLDER THAN IRON AND NEARLY AS GOOD', legs: 'BRONZE GREAVES. THEY WILL OUTLAST THE FIGHT' } },
+  { key: 'viking', name: 'VIKING HELM', def: 0.22, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x9aa3ad, edge: 0x4e555e, short: 'VIKING', note: 'HORNS, WHICH HELP WITH NOTHING', notes: { head: 'HORNS, WHICH HELP WITH NOTHING', body: 'A MAIL BYRNIE UNDER A FUR CLOAK', legs: 'WOOL WRAPS AND IRON BANDS ROUND THE CALVES' } },
+  { key: 'spartan', name: 'SPARTAN HELM', def: 0.23, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0xb08a3a, edge: 0x63481a, short: 'SPARTAN', note: 'YOU WILL SEE LESS AND MIND IT LESS', notes: { head: 'YOU WILL SEE LESS AND MIND IT LESS', body: 'A BRONZE BELL CUIRASS. NO RETREAT IN IT', legs: 'BRONZE GREAVES THAT CLIP ON WITHOUT STRAPS' } },
+  { key: 'legion', name: 'ROMAN LEGION', def: 0.23, evade: 0, heavy: [5, 7], resist: [8, 10], colour: 0xc2a15a, edge: 0x6d5528, short: 'LEGION', note: 'ISSUED, AND IT SHOWS. IT LASTS', notes: { head: 'A STANDARD ISSUE HELMET. IT LASTS', body: 'ISSUED, AND IT SHOWS. IT LASTS', legs: 'ISSUED GREAVES AND HOBNAILED SANDALS' } },
+  { key: 'roman', name: 'ROMAN HELMET', def: 0.24, evade: 0, heavy: [5, 7], resist: [8, 10], colour: 0xcaa963, edge: 0x77592a, short: 'ROMAN', note: 'A CHEEK GUARD AND A VERY RED BRUSH', notes: { head: 'A CHEEK GUARD AND A VERY RED BRUSH', body: 'BANDED PLATES OVER THE SHOULDERS AND RIBS', legs: 'A PTERUGES SKIRT OF STRIPS AND TWO GREAVES' } },
 
   // ---- HEAVY
-  { key: 'iron', name: 'IRON ARMOUR', def: 0.25, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x6f7682, edge: 0x3a4149, short: 'IRON', note: 'HEAVY, AND WORTH IT' },
-  { key: 'shoulder', name: 'SHOULDER GUARDS', def: 0.26, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x7e868f, edge: 0x424952, short: 'PAULDRON', note: 'ENORMOUS. YOU WILL NOT TURN QUICKLY' },
-  { key: 'spiked', name: 'SPIKED ARMOUR', def: 0.26, evade: 0, thorns: 9, heavy: [6, 8], resist: [6, 8], colour: 0x5e5a63, edge: 0xbfc6cf, short: 'SPIKED', note: 'PUNCH IT AND FIND OUT. BLADES DO NOT CARE' },
-  { key: 'plate', name: 'PLATE ARMOUR', def: 0.28, evade: 0, heavy: [7, 9], resist: [8, 10], colour: 0xc3cad4, edge: 0x646c78, short: 'PLATE', note: 'A WALL WITH A FROG INSIDE IT' },
-  { key: 'gold', name: 'GOLD ARMOUR', def: 0.30, evade: 0, heavy: [7, 9], resist: [4, 6], colour: 0xffd45e, edge: 0xa8801e, short: 'GOLD', note: 'THE BEST THERE IS, AND THE SOFTEST' },
-  { key: 'heavyplate', name: 'HEAVY PLATE', def: 0.33, evade: 0, heavy: [9, 10], resist: [9, 10], colour: 0x9aa2ae, edge: 0x4d545e, short: 'H.PLATE', note: 'NOTHING GETS IN. NOTHING GETS OUT EITHER' },
+  { key: 'iron', name: 'IRON ARMOUR', def: 0.25, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x6f7682, edge: 0x3a4149, short: 'IRON', note: 'HEAVY, AND WORTH IT', notes: { head: 'AN IRON HELM. HEAVY ON THE NECK, AND WORTH IT', body: 'HEAVY, AND WORTH IT', legs: 'IRON GREAVES. THEY SLOW THE LEGS, NOT THE FIGHT' } },
+  { key: 'shoulder', name: 'SHOULDER GUARDS', def: 0.26, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x7e868f, edge: 0x424952, short: 'PAULDRON', note: 'ENORMOUS. YOU WILL NOT TURN QUICKLY', notes: { head: 'A GREAT HELM TO MATCH. YOU WILL NOT LOOK UP', body: 'ENORMOUS. YOU WILL NOT TURN QUICKLY', legs: 'THIGH PLATES AS BROAD AS THE PAULDRONS' } },
+  { key: 'spiked', name: 'SPIKED ARMOUR', def: 0.26, evade: 0, thorns: 9, heavy: [6, 8], resist: [6, 8], colour: 0x5e5a63, edge: 0xbfc6cf, short: 'SPIKED', note: 'PUNCH IT AND FIND OUT. BLADES DO NOT CARE', notes: { head: 'A SPIKE ON TOP. HEADBUTTS ARE A PLAN NOW', body: 'PUNCH IT AND FIND OUT. BLADES DO NOT CARE', legs: 'SPIKED KNEES. KICK IT AND REGRET IT' } },
+  { key: 'plate', name: 'PLATE ARMOUR', def: 0.28, evade: 0, heavy: [7, 9], resist: [8, 10], colour: 0xc3cad4, edge: 0x646c78, short: 'PLATE', note: 'A WALL WITH A FROG INSIDE IT', notes: { head: 'A CLOSED STEEL HELM. A WALL ROUND YOUR HEAD', body: 'A WALL WITH A FROG INSIDE IT', legs: 'PLATE FROM HIP TO ANKLE. STEADY ON YOUR FEET' } },
+  { key: 'gold', name: 'GOLD ARMOUR', def: 0.30, evade: 0, heavy: [7, 9], resist: [4, 6], colour: 0xffd45e, edge: 0xa8801e, short: 'GOLD', note: 'THE BEST THERE IS, AND THE SOFTEST', notes: { head: 'A GOLD HELM. THE BEST THERE IS, AND THE SOFTEST', body: 'THE BEST THERE IS, AND THE SOFTEST', legs: 'GOLD GREAVES. THE CROWD WATCHES YOUR FEET' } },
+  { key: 'heavyplate', name: 'HEAVY PLATE', def: 0.33, evade: 0, heavy: [9, 10], resist: [9, 10], colour: 0x9aa2ae, edge: 0x4d545e, short: 'H.PLATE', note: 'NOTHING GETS IN. NOTHING GETS OUT EITHER', notes: { head: 'A GREAT HELM. NOTHING GETS IN, NOT EVEN SOUND', body: 'NOTHING GETS IN. NOTHING GETS OUT EITHER', legs: 'HEAVY PLATE LEGS. YOU WALK LIKE A DOOR' } },
 ];
 
 
@@ -6220,7 +6226,7 @@ function showCard(p: Piece | undefined): void {
       `HEAVINESS ${bar(p.rHeavy)} ${p.rHeavy}`,
       `RESIST    ${bar(p.rResist)} ${p.rResist}`,
       '',
-      ...wrapTo(m.note),
+      ...wrapTo(m.notes?.[p.slot as 'head' | 'body' | 'legs'] ?? m.note),
     );
   }
   if (import.meta.env?.DEV) {
