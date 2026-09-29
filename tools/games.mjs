@@ -2395,10 +2395,10 @@ for (const g of [
   }
 }
 
-// The wheel's odds ARE its geometry: every face is cut to the width of its own
-// chance and a spin picks an angle, not a prize.  The board beside it no longer
-// prints the percentages — which is exactly why they are asserted here, since
-// nothing on screen would show them drifting.
+// The wheel's odds are its table: the draw picks the face by FACES and the
+// wheel stops inside it.  The rim is drawn wider than the odds for the rare
+// faces so their numbers can be read, which is exactly why the odds are
+// asserted here -- through the same draw and landing a spin uses.
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
@@ -2411,10 +2411,9 @@ for (const g of [
   const seen = await page.evaluate((n) => window.__wheel.sample(n), N);
   const share = (v) => (seen[v] ?? 0) / N;
 
-  // WHAT EACH FACE SHOULD COME UP AT IS READ OFF THE WHEEL ITSELF.  The odds
-  // are the geometry — every face is cut to the width of its own chance — so
-  // the only honest question is whether four hundred thousand spins land in
-  // the arcs the table actually cut.  Typing the percentages here instead
+  // WHAT EACH FACE SHOULD COME UP AT IS READ OFF THE WHEEL ITSELF: whether
+  // four hundred thousand draws, each read off the face the wheel stopped on,
+  // come up at the table's chances.  Typing the percentages here instead
   // meant that retuning the wheel, which is a thing somebody is allowed to do,
   // failed as though the wheel were broken.
   const want = await page.evaluate(async () => {
@@ -2442,7 +2441,7 @@ for (const g of [
     .map(([v]) => `${v}:${(share(Number(v)) * 100).toFixed(2)}%`)
     .join(' ');
   console.log(
-    `${ok ? 'PASS' : 'FAIL'}  wheel: every face comes up at the width it was cut  — ` +
+    `${ok ? 'PASS' : 'FAIL'}  wheel: every face comes up at its chance, and the wheel stops on it  — ` +
       (whole ? summary : `shares total ${(total * 100).toFixed(2)}%`) +
       (off.length ? `; ${off.slice(0, 3).join(', ')}` : ''),
   );
