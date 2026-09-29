@@ -18,6 +18,14 @@ const RENDER_W = GAME_W * 1.5;
 const RENDER_H = GAME_H * 1.5;
 
 export class ThreeStage {
+  /**
+   * The stage on screen, if any.  There is only ever one (see above), and the
+   * pause menu needs to reach it without knowing which scene owns it.
+   */
+  static current: ThreeStage | null = null;
+  /** Frozen: no frames are stepped and the canvas is out of the way. */
+  private paused = false;
+
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer | null = null;
@@ -44,6 +52,7 @@ export class ThreeStage {
     root.appendChild(c);
 
     this.phaserCanvas = phaserCanvas;
+    ThreeStage.current = this;
     this.layout();
     window.addEventListener('resize', this.resizeRef);
   }
@@ -67,16 +76,36 @@ export class ThreeStage {
       this.raf = requestAnimationFrame(loop);
       const dt = Math.min(0.05, (now - this.last) / 1000);
       this.last = now;
+      // Paused, the world holds still: nothing steps, and on the way back the
+      // clock picks up from now rather than handing over the whole pause as
+      // one enormous frame.
+      if (this.paused) return;
       this.onFrame?.(dt);
       this.renderer?.render(this.scene, this.camera);
     };
     this.raf = requestAnimationFrame(loop);
   }
 
+  /**
+   * Freeze the world under the pause menu.  The canvas is hidden as well as
+   * stopped: it sits over the Phaser canvas the menu is drawn on, so a frozen
+   * room left showing would be drawn straight over the menu.
+   */
+  setPaused(p: boolean): void {
+    this.paused = p;
+    if (this.renderer) this.renderer.domElement.style.visibility = p ? 'hidden' : '';
+  }
+
+  isPaused(): boolean {
+    return this.paused;
+  }
+
   /** PRD SM-2: full teardown, not just a hidden canvas. */
   dispose(): void {
     cancelAnimationFrame(this.raf);
     this.raf = 0;
+    if (ThreeStage.current === this) ThreeStage.current = null;
+    this.paused = false;
     this.onFrame = null;
     window.removeEventListener('resize', this.resizeRef);
 

@@ -10,7 +10,7 @@
  * What it is actually proving, in order:
  *   1. the controls appear on a phone and nowhere else
  *   2. the picture is big enough to read, and the controls do not cover it
- *   3. the stick walks the player around a room
+ *   3. the arrow pad walks the player around a room, diagonals included
  *   4. a cabinet's own buttons appear when it is played, and they play it
  *   5. the door can be reached by pointing at it
  *   6. every scene and every cabinet has a layout, and every key it reads is
@@ -79,22 +79,21 @@ const touch = async (page, x, y, holdMs = 120) => {
   await cdp.detach();
 };
 
-/** Hold the stick in a direction for a while: start, drag, hold, release. */
-const pushStick = async (page, dx, dy, holdMs) => {
+/**
+ * Hold the arrow pad in a direction for a while: a thumb down on the arrow
+ * that points (dx, dy), held, and lifted.
+ */
+const pushPad = async (page, dx, dy, holdMs) => {
   const box = await page.evaluate(() => {
-    const el = document.querySelector('#touch-controls .tc-stick');
+    const el = document.querySelector('#touch-controls .tc-dpad');
     if (!el) return null;
     const r = el.getBoundingClientRect();
     return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, r: r.width / 2 };
   });
   if (!box) return false;
   const cdp = await page.target().createCDPSession();
-  const to = { x: box.cx + dx * box.r * 0.8, y: box.cy + dy * box.r * 0.8, id: 1 };
-  await cdp.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [{ x: box.cx, y: box.cy, id: 1 }],
-  });
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [to] });
+  const to = { x: box.cx + dx * box.r * 0.7, y: box.cy + dy * box.r * 0.7, id: 1 };
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [to] });
   await sleep(holdMs);
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await cdp.detach();
@@ -125,10 +124,10 @@ const labels = (page) =>
   const page = await phone('?intro=1&tokens=20&scene=ArcadeHub');
   const seen = await page.evaluate(() => {
     const root = document.getElementById('touch-controls');
-    const stick = document.querySelector('#touch-controls .tc-stick');
+    const pad = document.querySelector('#touch-controls .tc-dpad');
     return {
       mounted: !!root,
-      stickVisible: stick ? getComputedStyle(stick.parentElement).visibility === 'visible' : false,
+      stickVisible: pad ? getComputedStyle(pad.parentElement).visibility === 'visible' : false,
       buttons: [...document.querySelectorAll('#touch-controls .tc-btn')].map((e) => e.textContent.trim()),
       quit: !!document.querySelector('#touch-controls .tc-corner'),
     };
@@ -137,7 +136,7 @@ const labels = (page) =>
   check(
     'the controls are on a phone',
     seen.mounted && seen.stickVisible && seen.buttons.includes('E') && seen.quit,
-    `stick ${seen.stickVisible}, buttons ${seen.buttons.join('/')}`,
+    `arrow pad ${seen.stickVisible}, buttons ${seen.buttons.join('/')}`,
   );
   await page.close();
 }
@@ -171,7 +170,7 @@ const labels = (page) =>
     const page = await phone('?intro=1&tokens=20&scene=ArcadeHub', { w, h });
     const fit = await page.evaluate(() => {
       const c = document.querySelector('#game-root canvas').getBoundingClientRect();
-      const stick = document.querySelector('#touch-controls .tc-stick').getBoundingClientRect();
+      const stick = document.querySelector('#touch-controls .tc-dpad').getBoundingClientRect();
       const pads = document.querySelector('#touch-controls .tc-pads').getBoundingClientRect();
       const overlaps = (a, b) =>
         a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
@@ -184,6 +183,21 @@ const labels = (page) =>
         hitsPads: overlaps(c, pads),
         stickOn: stick.bottom <= window.innerHeight + 1,
         padsOn: pads.right <= window.innerWidth + 1 && pads.bottom <= window.innerHeight + 1,
+        // Every control a thumb presses: off the screen edge by a margin, and
+        // clear of every other one.
+        tight: (() => {
+          const els = [
+            ...document.querySelectorAll('#touch-controls .tc-dkey, #touch-controls .tc-btn, #touch-controls .tc-corner'),
+          ].filter((e) => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0);
+          const bad = [];
+          const rs = els.map((e) => e.getBoundingClientRect());
+          rs.forEach((r, i) => {
+            if (r.left < 4 || r.top < 4 || r.right > window.innerWidth - 4 || r.bottom > window.innerHeight - 4)
+              bad.push(`${els[i].textContent.trim() || els[i].className} at the edge`);
+            for (let j = i + 1; j < rs.length; j++) if (overlaps(r, rs[j])) bad.push(`${els[i].textContent.trim()}/${els[j].textContent.trim()} overlap`);
+          });
+          return bad;
+        })(),
       };
     });
     await page.screenshot({ path: `${SHOTS}/02-fit-${name.replace(/ /g, '-')}.png` });
@@ -196,14 +210,15 @@ const labels = (page) =>
     const clear = fit.portrait ? !fit.hitsStick && !fit.hitsPads : fit.stickOn && fit.padsOn;
     check(
       `${name}: the picture fits and the thumbs are clear of it`,
-      fit.onScreen && bigEnough && clear,
-      `${fit.w}x${fit.h}, overlap stick=${fit.hitsStick} pads=${fit.hitsPads}`,
+      fit.onScreen && bigEnough && clear && fit.tight.length === 0,
+      `${fit.w}x${fit.h}, overlap stick=${fit.hitsStick} pads=${fit.hitsPads}` +
+        (fit.tight.length ? `; ${fit.tight.join(', ')}` : ''),
     );
     await page.close();
   }
 }
 
-// -------------------------------------------------- 4. the stick walks the frog
+// ---------------------------------------------- 4. the arrow pad walks the frog
 {
   const page = await phone('?intro=1&tokens=20&scene=ArcadeHub');
   const at = () =>
@@ -212,17 +227,50 @@ const labels = (page) =>
       return { x: Math.round(s.player.x), y: Math.round(s.player.y) };
     });
   const before = await at();
-  await pushStick(page, -1, 0, 900);
+  await pushPad(page, -1, 0, 900);
   await sleep(200);
   const left = await at();
-  await pushStick(page, 0, -1, 700);
+  await pushPad(page, 0, -1, 700);
   await sleep(200);
   const up = await at();
   const stuck = await page.evaluate(() => window.__touch.held());
   check(
-    'the stick walks, and lets go when the thumb does',
+    'the arrow pad walks while held, and lets go when the thumb does',
     left.x < before.x - 12 && up.y < left.y - 8 && stuck.length === 0,
     `${before.x},${before.y} -> ${left.x},${left.y} -> ${up.x},${up.y}, held [${stuck}]`,
+  );
+
+  // A diagonal arrow is both directions at once.
+  await pushPad(page, 1, 1, 700);
+  await sleep(200);
+  const diag = await at();
+  check(
+    'the diagonal arrow walks down-and-right in one go',
+    diag.x > up.x + 8 && diag.y > up.y + 6,
+    `${up.x},${up.y} -> ${diag.x},${diag.y}`,
+  );
+
+  // And two fingers on two straight arrows add up to the same thing.
+  const box = await page.evaluate(() => {
+    const r = document.querySelector('#touch-controls .tc-dpad').getBoundingClientRect();
+    return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, r: r.width / 2 };
+  });
+  const cdp = await page.target().createCDPSession();
+  const upF = { x: box.cx, y: box.cy - box.r * 0.7, id: 1 };
+  const leftF = { x: box.cx - box.r * 0.7, y: box.cy, id: 2 };
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [upF] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [upF, leftF] });
+  await sleep(120);
+  const both = await page.evaluate(() => window.__touch.held());
+  await sleep(500);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+  await sleep(200);
+  const two = await at();
+  check(
+    'up and left held together go up-and-left',
+    both.includes('W') && both.includes('A') && two.x < diag.x - 6 && two.y < diag.y - 4,
+    `held [${both}], ${diag.x},${diag.y} -> ${two.x},${two.y}`,
   );
   await page.screenshot({ path: `${SHOTS}/03-walked.png` });
   await page.close();
@@ -334,6 +382,8 @@ const labels = (page) =>
           n === 'CLICK' ||
           n === 'HOLD' ||
           n === 'MOUSE' ||
+          // "NOTHING - THE FIGHT IS NOT YOURS" asks for no key at all.
+          n === 'NOTHING' ||
           (n === 'ARROWS' && [...have].some((h) => ['UP', 'DOWN', 'LEFT', 'RIGHT'].includes(h)));
         const ok = names.some(reachable);
         if (!ok) unreachable.push(`${id}:${keys}`);
@@ -401,33 +451,9 @@ const labels = (page) =>
   await page.close();
 }
 
-// ------------------------------ 9. stick or arrow pad, switched in the settings
+// ------------------------------------- 9. the gear pauses, and RESUME thaws
 {
   const page = await phone('?intro=1&tokens=20&scene=ArcadeHub');
-  const shape = () =>
-    page.evaluate(() => {
-      const stick = document.querySelector('#touch-controls .tc-stick');
-      const dpad = document.querySelector('#touch-controls .tc-dpad');
-      const vis = (el) => !!el && getComputedStyle(el).display !== 'none';
-      return {
-        stick: vis(stick),
-        pad: vis(dpad),
-        arrows: [...document.querySelectorAll('#touch-controls .tc-dkey')]
-          .filter((e) => getComputedStyle(e).display !== 'none').length,
-        stored: JSON.parse(localStorage.getItem('froggy.prefs') || '{}').moveStyle,
-      };
-    });
-
-  const before = await shape();
-  check(
-    'the joystick is what a phone gets by default',
-    before.stick && !before.pad,
-    `stick ${before.stick}, pad ${before.pad}`,
-  );
-
-  // Through the settings screen, the way a player would: ESC, MOVEMENT, ARROWS.
-  await pressButton(page, 'ESC');
-  await sleep(900);
   const tapGame = async (x, y) => {
     const at = await page.evaluate(
       ([gxv, gyv]) => {
@@ -440,46 +466,66 @@ const labels = (page) =>
     await touch(page, at.x, at.y);
     await sleep(500);
   };
-  const inSettings = await page.evaluate(() => window.__froggy.activeScenes().includes('SettingsModal'));
-  await tapGame(214, 34); // MOVEMENT tab
-  await tapGame(160, 104); // ARROW KEYS
-  const after = await shape();
-  await page.screenshot({ path: `${SHOTS}/07-arrow-pad.png` });
-  check(
-    'and the settings swap it for an arrow pad, there and then',
-    inSettings && after.pad && !after.stick && after.arrows === 4 && after.stored === 'pad',
-    `settings ${inSettings}, pad ${after.pad}, ${after.arrows} arrows, stored ${after.stored}`,
-  );
-
-  // Back out, and the pad has to actually walk him.
-  await tapGame(160, 158); // BACK
-  await sleep(700);
-  const at = () =>
-    page.evaluate(() => {
-      const s = window.__froggy.game().scene.getScene('ArcadeHub');
-      return { x: Math.round(s.player.x), y: Math.round(s.player.y) };
-    });
-  const p0 = await at();
-  const hit = await page.evaluate(() => {
-    const el = document.querySelector('#touch-controls .tc-dkey.left');
-    const r = el.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  const gear = await page.evaluate(() => {
+    const el = document.querySelector('#touch-controls .tc-corner');
+    return el ? { text: el.textContent.trim(), hidden: el.hidden } : null;
   });
-  await touch(page, hit.x, hit.y, 900);
-  await sleep(250);
-  const p1 = await at();
-  const stuck = await page.evaluate(() => window.__touch.held());
+  await pressButton(page, gear?.text ?? '');
+  await sleep(700);
+  const paused = await page.evaluate(() => ({
+    scenes: window.__froggy.activeScenes(),
+    frozen: window.__froggy.game().scene.isPaused('ArcadeHub'),
+    pad: getComputedStyle(document.querySelector('#touch-controls .tc-left')).visibility,
+  }));
+  await tapGame(196, 34); // CONTROLS
+  const rows = await page.evaluate(() => {
+    const s = window.__froggy.game().scene.getScene('SettingsModal');
+    const out = [];
+    const walk = (l) => { for (const o of l) { if (typeof o.text === 'string') out.push(o.text); if (o.list) walk(o.list); } };
+    walk(s.children.list);
+    return out;
+  });
+  await page.screenshot({ path: `${SHOTS}/07-paused.png` });
   check(
-    'the arrow pad walks, and lets go when the thumb does',
-    p1.x < p0.x - 12 && stuck.length === 0,
-    `${p0.x},${p0.y} -> ${p1.x},${p1.y}, held [${stuck}]`,
+    'the gear pauses the room and puts the menu up',
+    gear && !gear.hidden && paused.scenes.includes('SettingsModal') && paused.frozen && paused.pad === 'hidden',
+    `gear ${JSON.stringify(gear)}, ${paused.scenes.join(',')}, hub paused ${paused.frozen}, pad ${paused.pad}`,
   );
+  check(
+    "and its controls are the phone's, not the keyboard's",
+    rows.includes('ARROWS') && !rows.some((t) => /^(W A S D|SHIFT|ESC)$/.test(t)),
+    rows.filter((t) => t.length < 30).join(' | '),
+  );
+  await tapGame(120, 158); // RESUME
+  await sleep(600);
+  const back = await page.evaluate(() => ({
+    scenes: window.__froggy.activeScenes(),
+    frozen: window.__froggy.game().scene.isPaused('ArcadeHub'),
+  }));
+  check(
+    'RESUME puts the room back exactly where it was',
+    !back.scenes.includes('SettingsModal') && !back.frozen,
+    back.scenes.join(','),
+  );
+  await page.close();
+}
 
-  // And the choice outlives the reload, since it is kept with the volumes.
-  await page.reload({ waitUntil: 'networkidle2' });
-  await sleep(2400);
-  const kept = await shape();
-  check('the choice survives a reload', kept.pad && !kept.stick, `pad ${kept.pad}, stick ${kept.stick}`);
+// ------------------- 9b. a cabinet's card describes the phone's controls
+{
+  const page = await phone('?intro=1&tokens=20&game=donkeykong');
+  const card = await page.evaluate(() => {
+    const s = window.__froggy.game().scene.getScene('Minigame');
+    const out = [];
+    const walk = (l) => { for (const o of l) { if (typeof o.text === 'string') out.push(o.text); if (o.list) walk(o.list); } };
+    walk(s.children.list);
+    return out;
+  });
+  await page.screenshot({ path: `${SHOTS}/07b-card.png` });
+  check(
+    'the how-to-play card names arrows and buttons, not keys',
+    card.includes('← →') && card.includes('↑ ↓') && !card.includes('A / D') && !card.includes('SPACE'),
+    card.filter((t) => t.length < 24).join(' | '),
+  );
   await page.close();
 }
 

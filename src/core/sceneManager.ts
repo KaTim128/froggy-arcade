@@ -19,6 +19,7 @@ import { audio } from './audio';
 import { Boot } from '../scenes2d/Boot';
 import { StartScreen } from '../scenes2d/StartScreen';
 import { SettingsModal } from '../scenes2d/SettingsModal';
+import { installPause } from './pause';
 import { ProfileModal } from '../scenes2d/ProfileModal';
 import { ArcadeHub } from '../scenes2d/ArcadeHub';
 import { ArcadeAnnex } from '../scenes2d/ArcadeAnnex';
@@ -103,6 +104,7 @@ export function bootGame(): void {
   touchControls.mount();
   attachScaler(game);
   installTouchDirector(game);
+  installPause(game);
   initDebug(game);
 
   // Boot's CLICK TO BEGIN gate is the intended unlock (PRD EC-9), but any first

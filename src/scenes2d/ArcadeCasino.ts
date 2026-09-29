@@ -163,14 +163,6 @@ export class ArcadeCasino extends Phaser.Scene {
       if (this.target?.kind === 'cabinet') return;
       this.interact();
     });
-    this.input.keyboard?.on('keydown-ESC', () => {
-      if (this.busy()) return;
-      // The dealer lives on the overlay, above every Phaser scene including
-      // the settings panel, and the panel pauses this scene — so he is wiped
-      // here, before it opens, or he sits in the middle of the sliders.
-      froggyLayer.clear();
-      this.scene.launch('SettingsModal', { from: 'ArcadeCasino' });
-    });
 
     // The overlay is one canvas shared by every scene, so this room hands it
     // back the moment it stops owning it.

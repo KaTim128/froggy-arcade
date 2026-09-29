@@ -1086,7 +1086,15 @@ export const frogRace: MinigameModule = {
   },
   // The field will not fit on five buttons, and it does not need to: the whole
   // lane is a hit area, so backing one is tapping the frog you want.
-  touch: { buttons: [{ label: 'RACE', key: 'SPACE', primary: true }] },
+  // Tap a frog to back it; the ticket count has its own two buttons, since
+  // UP and DOWN are keys a phone does not have.
+  touch: {
+    buttons: [
+      { label: 'RACE', key: 'SPACE', primary: true },
+      { label: 'MORE', key: 'UP' },
+      { label: 'LESS', key: 'DOWN' },
+    ],
+  },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     sceneRef = scene;

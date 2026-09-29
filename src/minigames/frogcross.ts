@@ -22,6 +22,7 @@
  * shell (MG-3).  The best score is kept per profile (store.highScores).
  */
 
+import { isTouch } from '../core/device';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -566,7 +567,7 @@ function refreshHud(): void {
   hud.lives.setText(`LIVES ${lives}`);
   hud.best.setText(`BEST ${best}`);
   const banked = frogPayout(points);
-  hud.bank.setText(`[ENTER] BANK ${banked} TOKENS`).setVisible(banked > 0);
+  hud.bank.setText(`[${isTouch() ? 'BANK' : 'ENTER'}] BANK ${banked} TOKENS`).setVisible(banked > 0);
 }
 
 function finish(): void {

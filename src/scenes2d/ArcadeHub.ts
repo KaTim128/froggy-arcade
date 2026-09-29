@@ -407,9 +407,7 @@ export class ArcadeHub extends Phaser.Scene {
     // still the other way in, and it is the only thing proximity does.
     //
     // Floor, walls, furniture, props, empty space: nothing.
-    this.input.keyboard?.on('keydown-ESC', () => {
-      if (!this.busy()) this.scene.launch('SettingsModal', { from: 'ArcadeHub' });
-    });
+    // Esc is the pause menu, from core/pause.ts, like everywhere else.
 
     this.dialogue = new DialogueBox(this);
     store.flush();

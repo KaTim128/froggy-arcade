@@ -94,9 +94,6 @@ export class ExteriorDay extends Phaser.Scene {
 
     this.keys = { left: this.bind(KEYS.left), right: this.bind(KEYS.right) };
     this.input.keyboard?.on('keydown-E', () => this.interact());
-    this.input.keyboard?.on('keydown-ESC', () => {
-      if (!this.locked) this.scene.launch('SettingsModal', { from: 'ExteriorDay' });
-    });
 
     // The exchange hands back here; the purse and the man's line may both have
     // changed while it was open.

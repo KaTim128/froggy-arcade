@@ -121,9 +121,6 @@ export class ArcadeAnnex extends Phaser.Scene {
       if (this.target?.kind === 'cabinet') return;
       this.interact();
     });
-    this.input.keyboard?.on('keydown-ESC', () => {
-      if (!this.busy()) this.scene.launch('SettingsModal', { from: 'ArcadeAnnex' });
-    });
 
     store.flush();
   }

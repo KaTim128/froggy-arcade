@@ -27,6 +27,7 @@
  * happened, and says it exactly once (`ended`).
  */
 
+import { isTouch } from '../core/device';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -6378,7 +6379,13 @@ function startStage(n: number): void {
       },
     });
   }
-  const hint = centerText(S(), GAME_W / 2, 171, '[<-] [->] CHOOSE   [SPACE] OPEN IT', PALETTE.ash);
+  const hint = centerText(
+    S(),
+    GAME_W / 2,
+    171,
+    isTouch() ? '[← →] CHOOSE   [OPEN] OPEN IT' : '[<-] [->] CHOOSE   [SPACE] OPEN IT',
+    PALETTE.ash,
+  );
   revealHint = hint;
   c.add(hint);
   highlight(0, true);

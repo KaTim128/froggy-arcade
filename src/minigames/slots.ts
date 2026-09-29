@@ -134,6 +134,8 @@ export const slots: MinigameModule = {
   touch: { buttons: [{ label: 'SPIN', key: 'SPACE', primary: true }] },
   payoutNote: `PAYS ${PAY_THREE} - ${payOf('gold')}`,
 
+  // Every spin is paid the moment it stops, so only a spin still turning is at stake.
+  atRisk: () => (busy ? SPIN_COST : 0),
   create(scene: Phaser.Scene, api: MinigameApi) {
     sceneRef = scene;
     apiRef = api;

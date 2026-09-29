@@ -34,6 +34,7 @@
  * to call out and no A1 to write down.  You click a pad.
  */
 
+import { isTouch } from '../core/device';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -581,7 +582,7 @@ function refreshPicker(): void {
   });
   if (toPlace.length === 0) {
     infoLine?.setText('EVERY FROG IS IN. START POND HUNT.');
-    subStatus?.setText('OR CLICK A FROG TO MOVE IT');
+    subStatus?.setText(`OR ${isTouch() ? 'TAP' : 'CLICK'} A FROG TO MOVE IT`);
   } else {
     const k = kindOf(toPlace[holding] ?? toPlace[0]);
     infoLine?.setText(`${k.name}  ${k.size} PAD${k.size > 1 ? 'S' : ''}  -  ${k.abilityName}`);
@@ -682,7 +683,7 @@ function startHunt(): void {
   startBtn?.destroy();
   startBtn = null;
   status?.setText('POND SEARCH');
-  subStatus?.setText('CLICK A PAD IN THEIR POND');
+  subStatus?.setText(`${isTouch() ? 'TAP' : 'CLICK'} A PAD IN THEIR POND`);
   // said once, as the hunt starts: what the marks on the water mean
   infoLine?.setText('WATCH FOR RIPPLES - A FROG MOVED THERE');
   sceneRef?.time.delayedCall(4200, () => {
@@ -841,7 +842,7 @@ function opponentTurn(): void {
     if (over || !mine) return;
     repaint(mine, true);
     status?.setText('POND SEARCH');
-    subStatus?.setText('CLICK A PAD IN THEIR POND');
+    subStatus?.setText(`${isTouch() ? 'TAP' : 'CLICK'} A PAD IN THEIR POND`);
     busy = false;
     refreshScore();
   });

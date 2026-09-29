@@ -243,6 +243,8 @@ export const wheelOfFortune: MinigameModule = {
   },
   touch: { buttons: [{ label: 'SPIN', key: 'SPACE', primary: true }] },
 
+  // Every spin is paid the moment it stops, so only a spin still turning is at stake.
+  atRisk: () => (spinning ? SPIN_COST : 0),
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;
     sceneRef = scene;

@@ -5,6 +5,7 @@
  * until the player interacts, so we ask for one click before anything else.
  */
 
+import { isTouch } from '../core/device';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -53,7 +54,7 @@ export class Boot extends Phaser.Scene {
       return;
     }
 
-    const prompt = centerText(this, GAME_W / 2, GAME_H / 2 + 22, 'CLICK TO BEGIN', PALETTE.cream);
+    const prompt = centerText(this, GAME_W / 2, GAME_H / 2 + 22, isTouch() ? 'TAP TO BEGIN' : 'CLICK TO BEGIN', PALETTE.cream);
     this.tweens.add({ targets: prompt, alpha: 0.25, duration: 700, yoyo: true, repeat: -1 });
 
     this.input.once('pointerdown', () => {

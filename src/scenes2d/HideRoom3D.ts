@@ -21,6 +21,8 @@
  * fifteen seconds; the room only turns once the count is over.
  */
 
+import { isTouch } from '../core/device';
+import { isPaused } from '../core/pause';
 import Phaser from 'phaser';
 import * as THREE from 'three';
 import { audio, SILENCE, type SfxName } from '../core/audio';
@@ -1429,7 +1431,8 @@ export class HideRoom3D extends Phaser.Scene {
     // Window-level, not Phaser-level: the Three canvas is layered over the
     // Phaser one, so the scene's own pointer events never see the room.
     this.onDown = (e: MouseEvent) => {
-      if (e.button !== 0) return;
+      // A drag on the pause menu is not a turn of the head.
+      if (e.button !== 0 || isPaused()) return;
       this.looking = true;
       this.lookX = e.clientX;
       this.lookY = e.clientY;
@@ -1437,7 +1440,7 @@ export class HideRoom3D extends Phaser.Scene {
       e.preventDefault();
     };
     this.onMove = (e: MouseEvent) => {
-      if (!this.looking) return;
+      if (!this.looking || isPaused()) return;
       // Prefer the browser's own delta, fall back to tracking the cursor: some
       // browsers leave movementX at 0 outside pointer lock.
       const dx = e.movementX || e.clientX - this.lookX;
@@ -2546,7 +2549,7 @@ export class HideRoom3D extends Phaser.Scene {
     // not know they can strafe.
     if (this.clock > 7.5) this.subtitle = 'HIDE';
     else if (this.clock > 5.2) this.subtitle = 'WASD MOVE - SHIFT RUN - C CROUCH';
-    else if (this.clock > 3.0) this.subtitle = 'HOLD LEFT CLICK TO LOOK';
+    else if (this.clock > 3.0) this.subtitle = isTouch() ? 'DRAG THE PICTURE TO LOOK' : 'HOLD LEFT CLICK TO LOOK';
     else if (this.clock > 1.2) this.subtitle = 'FIND SOMEWHERE TO HIDE';
     else this.subtitle = '';
 

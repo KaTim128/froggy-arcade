@@ -80,7 +80,6 @@ export class ExteriorNight extends Phaser.Scene {
     };
     this.input.keyboard?.on('keydown-E', () => this.interact());
     this.input.on('pointerdown', () => this.interact());
-    this.input.keyboard?.on('keydown-ESC', () => this.scene.launch('SettingsModal', {}));
 
     store.flush();
   }
