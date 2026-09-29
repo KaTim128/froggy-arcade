@@ -304,6 +304,12 @@ export class MinigameScene extends Phaser.Scene {
 
   /** Esc answers the quit question with CANCEL while it is up. */
   handleEscape(): boolean {
+    // At the how-to-play card nothing has been paid and nothing is being
+    // played, so Esc is its LEAVE button, as it always was.
+    if (this.card && !this.started && !this.settled) {
+      this.leave();
+      return true;
+    }
     if (!this.asking) return false;
     this.cancelQuit();
     return true;

@@ -23,7 +23,7 @@ import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { ledger } from '../core/ledger';
-import { prizesForWave, type PrizeDef } from '../game/content';
+import { shelfStock, type PrizeDef } from '../game/content';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 
@@ -47,8 +47,10 @@ export class PrizeCounter extends Phaser.Scene {
     // and the shelf never restocks.
     this.redrawing = false;
     const s = store.get();
-    const stock = prizesForWave(s.prizeWave);
+    const stock = shelfStock(s);
     const left = stock.filter((p) => !s.prizesOwned.includes(p.id));
+    // After the night there is nothing out the back to restock with.
+    const restocks = !s.froggyGone;
 
     this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0.88).setOrigin(0, 0).setInteractive();
     this.add.rectangle(GAME_W / 2, GAME_H / 2 - 2, 300, 168, 0x2a1c12).setStrokeStyle(1, PALETTE.gold);
@@ -58,14 +60,17 @@ export class PrizeCounter extends Phaser.Scene {
 
     centerText(this, GAME_W / 2, 14, 'PRIZE COUNTER', PALETTE.gold);
     text(this, 12, 14, `${ledger.balance()} TOKENS`, PALETTE.cream);
-    text(this, GAME_W - 12, 14, `SHELF ${s.prizeWave + 1}`, PALETTE.ash).setOrigin(1, 0);
+    if (restocks) text(this, GAME_W - 12, 14, `SHELF ${s.prizeWave + 1}`, PALETTE.ash).setOrigin(1, 0);
 
-    stock.forEach((p, i) => this.paintSlot(p, i, s.prizesOwned.includes(p.id)));
+    // The camera stands alone, in the middle slot of the middle row, where
+    // the eye goes -- not in the top-left corner of an empty case.
+    const lone = stock.length === 1 ? Math.floor(COLS / 2) + COLS : 0;
+    stock.forEach((p, i) => this.paintSlot(p, i + lone, s.prizesOwned.includes(p.id)));
 
     if (left.length === 0) {
       this.add.rectangle(GAME_W / 2, 96, 220, 34, PALETTE.ink).setDepth(19).setStrokeStyle(1, PALETTE.gold);
       centerText(this, GAME_W / 2, 88, 'SHELF CLEARED', PALETTE.cream).setDepth(20);
-      centerText(this, GAME_W / 2, 102, 'NEW STOCK COMING', PALETTE.gold, 16).setDepth(20);
+      centerText(this, GAME_W / 2, 102, restocks ? 'NEW STOCK COMING' : 'NOTHING LEFT', PALETTE.gold, 16).setDepth(20);
     }
 
     button(this, GAME_W / 2, 170, 'BACK', () => this.close(), { width: 60, height: 12 });
@@ -73,7 +78,7 @@ export class PrizeCounter extends Phaser.Scene {
 
     // The restock happens on the way out of the draw, so the player sees the
     // empty shelf they cleared before the new one arrives.
-    if (left.length === 0) {
+    if (left.length === 0 && restocks) {
       this.time.delayedCall(1400, () => {
         if (this.redrawing) return;
         store.patch({ prizeWave: store.get().prizeWave + 1 });
@@ -222,6 +227,16 @@ export function drawPrize(scene: Phaser.Scene, x: number, y: number, p: PrizeDef
       put(0, -14, 4, 5, PALETTE.blood);
       put(-6, 0, 3, 5, PALETTE.steel);
       put(6, 0, 3, 5, PALETTE.steel);
+      break;
+    case 'camera':
+      // body, grip, the lens, and the flash on top
+      put(0, 0, 18, 11);
+      put(-7, 0, 4, 11, PALETTE.ink);
+      dot(2, -5.5, 4.2, PALETTE.ink);
+      dot(2, -5.5, 2.6, 0x5a86b8);
+      dot(1, -6.5, 0.9, PALETTE.cream);
+      put(5, -11, 5, 2, PALETTE.steel);
+      put(-4, -11, 3, 1, PALETTE.blood);
       break;
     case 'cube':
     default:

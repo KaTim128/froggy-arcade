@@ -629,6 +629,8 @@ export class HideRoom3D extends Phaser.Scene {
 
   private froggy = new THREE.Vector2();
   private froggyYaw = 0;
+  /** Where he is DRAWN, which a step in at a hiding place moves off `froggy`. */
+  private froggyDrawn = { x: 0, z: 0 };
   private fMode: FroggyMode = 'search';
   private fTimer = 0;
   private memory = 0;
@@ -3719,6 +3721,8 @@ export class HideRoom3D extends Phaser.Scene {
     const act = this.spotAction(dt);
     const fx = this.froggy.x + Math.sin(this.froggyYaw) * act.step;
     const fz = this.froggy.y + Math.cos(this.froggyYaw) * act.step;
+    this.froggyDrawn.x = fx;
+    this.froggyDrawn.z = fz;
     m.setPose(fx, y, fz, this.froggyYaw);
     m.lookAt(act.look);
 
@@ -3906,6 +3910,9 @@ export class HideRoom3D extends Phaser.Scene {
       pz: this.pos.y,
       fx: this.froggy.x,
       fz: this.froggy.y,
+      // and where the model actually stands, which the enclosure copies
+      vx: this.froggyDrawn.x,
+      vz: this.froggyDrawn.z,
       dist: this.pos.distanceTo(this.froggy),
       hiding: !!this.hiding,
       climbing: !!this.climb,

@@ -63,6 +63,7 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
 
   ArcadeHub: ROOM,
   ArcadeAnnex: ROOM,
+  ArcadeLounge: ROOM,
   ArcadeCasino: ROOM,
   ArcadeDark: ROOM,
 

@@ -260,7 +260,7 @@ for (const g of GAMES) {
     await g.drive(page);
     await page.screenshot({ path: `${SHOTS}/${g.id}.png` });
 
-    // MG-4: Esc forfeits and returns to the hub.
+    // Esc in a game is the pause menu now; the next page load takes it away.
     await page.keyboard.press('Escape');
     await sleep(2600);
     const back = await page.evaluate(() => {
@@ -677,7 +677,14 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   // and what says THIS IS STILL A RACE is measured below instead, on the
   // frogs that are still running -- neighbours a tenth of a second apart, the
   // lead changing hands, and a winner who crosses clear.
-  const close = shape.meanFinishGap < 0.14 * shape.dist;
+  //
+  // And the rollerskates are gone.  They were the one thing on the card that
+  // put a frog at the back up to speed, and without them the spread at the
+  // line measures 33.4-34.4px over three samples of fifteen hundred races --
+  // right on the old bar, where a sample of six hundred fails about half the
+  // time.  A sixth of the track, with the two-thirds gap (31-32px) showing the
+  // field still bunched where the race is decided.
+  const close = shape.meanFinishGap < 0.16 * shape.dist;
   console.log(
     `${close ? 'PASS' : 'FAIL'}  frog race: and they are together at the line  — ` +
       `${shape.meanFinishGap.toFixed(0)}px between first and last on a ${shape.dist}px track ` +
@@ -2889,7 +2896,9 @@ for (const g of [
   // is a scoring bug and it fails on the spot rather than being rolled again.
   // Never getting the scenario at all inside the attempts is also a failure:
   // it would mean the pocket has stopped working.
-  const TRIES = 8;
+  // Ten, not eight: the pocket took the rack 5 times in 10, and eight
+  // straight misses (1 in 256) turned up in a full run.
+  const TRIES = 10;
 
   let struck = null;
   let strikeTries = 0;

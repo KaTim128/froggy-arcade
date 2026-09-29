@@ -532,7 +532,10 @@ try {
     for (let i = 0; i < 12; i++) {
       await sleep(250);
       const t = await hide();
-      apart = Math.max(apart, Math.hypot(t.fx - t.pen.x, t.fz - t.pen.z));
+      // Against where he is DRAWN: at a hiding place he steps in to it and
+      // crawls to the bed, off his logical spot, and the twin copies the
+      // model, not the rule.
+      apart = Math.max(apart, Math.hypot(t.vx - t.pen.x, t.vz - t.pen.z));
       went += Math.hypot(t.fx - at.x, t.fz - at.z);
       at = { x: t.fx, z: t.fz };
     }

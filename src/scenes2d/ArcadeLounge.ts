@@ -1,13 +1,15 @@
 /**
- * The back room.  PRD §7.5, second floor space.
+ * The new room.  Through the opening in the hub's RIGHT wall.
  *
- * The hub had run out of wall — nine cabinets left the middle of the floor
- * occupied and nowhere to put a tenth.  This is the room through the opening on
- * the hub's left wall: same arcade, more floor, and space for games that have
- * not been built yet.
+ * The hub, the back room and the machines are full, and the next games need
+ * somewhere to stand.  This is that somewhere: the same arcade -- same carpet,
+ * same walls, same light -- with its floor marked out for the machines that
+ * are on their way and a sign saying so.  A cabinet is put in here the way it
+ * is put in any room, by giving it `room: 'lounge'` in `game/content.ts`; the
+ * room builds whatever is listed for it and walks the player up to it exactly
+ * as the others do.
  *
- * Deliberately thinner than the hub: no bell, no prize counter, no tutorial.
- * Everything that only happens once happens in there, not in here.
+ * Deliberately thin, like the back room: no counter, no bell, no tutorial.
  */
 
 import Phaser from 'phaser';
@@ -17,22 +19,30 @@ import { store, type GameId } from '../core/state';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
 import { KEYS } from '../core/input';
-import { fadeIn, fadeToScene, text } from '../core/ui';
+import { centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { paintArcadeDressing, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
-import { CASINO_DOOR, CABINETS, cabinetsIn } from '../game/content';
+import { CABINETS, LOUNGE_DOOR, cabinetsIn } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W } from '../render/pixelScaler';
 
 const INTERACT_RANGE = 24;
-/** The way back, on this room's right wall. */
-const BACK_DOOR = { x: GAME_W - 20, y: 118 };
+/** The way back, on this room's LEFT wall -- the other side of the hub's right. */
+const BACK_DOOR = { x: 20, y: LOUNGE_DOOR.y };
+/**
+ * Where the next machines will stand, marked on the carpet.  Two rows of
+ * four, the hub's own spacing, clear of the doorway on the left.
+ */
+const PLOTS = [
+  ...[84, 142, 200, 258].map((x) => ({ x, y: 104 })),
+  ...[84, 142, 200, 258].map((x) => ({ x, y: 160 })),
+];
 
-type Target = { kind: 'cabinet'; cab: Cabinet } | { kind: 'back' } | { kind: 'casino' } | null;
+type Target = { kind: 'cabinet'; cab: Cabinet } | { kind: 'back' } | null;
 
-export class ArcadeAnnex extends Phaser.Scene {
+export class ArcadeLounge extends Phaser.Scene {
   private player!: Player;
   private bounds!: Phaser.Geom.Rectangle;
   private keys!: Record<string, Phaser.Input.Keyboard.Key[]>;
@@ -44,7 +54,7 @@ export class ArcadeAnnex extends Phaser.Scene {
   private returnTo: GameId | null = null;
 
   constructor() {
-    super('ArcadeAnnex');
+    super('ArcadeLounge');
   }
 
   init(data: { atCabinet?: GameId } = {}): void {
@@ -61,25 +71,21 @@ export class ArcadeAnnex extends Phaser.Scene {
     fadeIn(this);
     audio.setScene({ music: 'room_annex', ambience: ['cabinet_bleeps'] });
 
-    // No front door in here: the only way out of the building is the hub.
     paintHubRoom(this, { night: false, frontDoor: false });
     paintArcadeDressing(this, {
       night: false,
-      // The back room fills its middle with machines, the strip past the last
-      // cabinet is the way in from the hub, and the LEFT WALL IS THE WAY ON TO
-      // THE CASINO — so the whole left-hand side stays bare.  A plant stood
-      // there in two different corners and read as blocking the opening in
-      // both; a doorway you have to be told is a doorway is worth more than a
-      // pot plant.  The bin goes up against the back wall on the right, well
-      // away from either way out, and that is the lot.
-      props: [{ x: 268, y: 62, kind: 'bin' }],
-      // Clear of the poster at 187-205 and the WIN sign at 245-279.
-      vents: [24, 210],
+      props: [{ x: 296, y: 62, kind: 'plant' }],
+      vents: [60, 236],
     });
-    this.paintDoorway();
-    this.paintCasinoDoor();
+    this.paintSign();
 
-    this.cabinets = cabinetsIn('annex').map((def) => new Cabinet(this, def));
+    this.cabinets = cabinetsIn('lounge').map((def) => new Cabinet(this, def));
+    // The floor is marked where a machine is coming, and only where there is
+    // not one standing already.
+    for (const plot of PLOTS) {
+      if (this.cabinets.some((c) => Math.abs(c.def.x - plot.x) < CAB_W && Math.abs(c.def.y - plot.y) < CAB_H)) continue;
+      this.paintPlot(plot.x, plot.y);
+    }
     for (const cab of this.cabinets) {
       this.add
         .zone(cab.def.x, cab.def.y - CAB_H / 2, CAB_W + 4, CAB_H + 2)
@@ -89,6 +95,7 @@ export class ArcadeAnnex extends Phaser.Scene {
           this.launchGame(cab, 'card');
         });
     }
+    this.paintDoorway();
 
     this.bounds = new Phaser.Geom.Rectangle(
       ROOM.left + 8,
@@ -96,8 +103,8 @@ export class ArcadeAnnex extends Phaser.Scene {
       ROOM.right - ROOM.left - 16,
       ROOM.bottom - ROOM.top - 6,
     );
-    // You come in through the right-hand doorway, so you arrive next to it.
-    const spawn = this.spawnPoint({ x: BACK_DOOR.x - 16, y: BACK_DOOR.y });
+    // You come in through the left-hand doorway, so you arrive next to it.
+    const spawn = this.spawnPoint({ x: BACK_DOOR.x + 18, y: BACK_DOOR.y });
     this.player = new Player(this, spawn.x, spawn.y);
 
     new TokenHud(this);
@@ -111,21 +118,59 @@ export class ArcadeAnnex extends Phaser.Scene {
       right: this.bindKeys(KEYS.right),
     };
     this.input.keyboard?.on('keydown-E', () => this.interact());
-    // ---- AND A CLICK ON THE FLOOR IS A CLICK ON THE FLOOR.
-    //
-    // It used to fall through to `interact()`, which acts on whatever the
-    // player happens to be standing near -- so a click on bare carpet by
-    // either doorway walked you out of the room.  The doorways and the
-    // machines each own a hitbox and answer a click on themselves; [E] is the
-    // other way in, and the only thing proximity does.
+    // A click on the floor is floor.  The door answers a click on the door,
+    // a machine a click on the machine; nothing is reached by proximity.
 
     store.flush();
   }
 
-  private paintDoorway(): void {
-    // The opening back to the hub, cut into the right wall.
-    paintOpening(this, { side: 'right', y: BACK_DOOR.y, glow: PALETTE.neon });
+  /** The sign on the back wall, lit, saying what the empty floor is for. */
+  private paintSign(): void {
+    const x = GAME_W / 2;
+    const y = 22;
+    this.add.rectangle(x, y, 122, 26, PALETTE.ink).setStrokeStyle(1, PALETTE.neon).setDepth(1);
+    this.add.rectangle(x, y, 118, 22, PALETTE.plum, 0.35).setDepth(1);
+    centerText(this, x, y - 5, 'NEW GAMES', PALETTE.gold).setDepth(2);
+    centerText(this, x, y + 5, 'COMING SOON', PALETTE.neon).setDepth(2);
+    // It buzzes like every other sign in the building.
+    const glow = this.add.rectangle(x, y, 126, 30, PALETTE.neon, 0.08).setDepth(0.9);
+    this.tweens.add({ targets: glow, alpha: 0.02, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  }
 
+  /**
+   * A machine's footprint taped out on the carpet: the corners of where it
+   * will stand, and the four dents a heavy cabinet leaves in pile.
+   */
+  private paintPlot(x: number, y: number): void {
+    const g = this.add.graphics().setDepth(0.6);
+    const w = CAB_W + 2;
+    const h = 12;
+    const l = x - w / 2;
+    const t = y - h;
+    g.fillStyle(PALETTE.gold, 0.55);
+    for (const [cx, cy, dx, dy] of [
+      [l, t, 1, 1],
+      [l + w, t, -1, 1],
+      [l, t + h, 1, -1],
+      [l + w, t + h, -1, -1],
+    ]) {
+      g.fillRect(dx > 0 ? cx : cx - 5, cy - (dy > 0 ? 0 : 1), 5, 1);
+      g.fillRect(cx - (dx > 0 ? 0 : 1), dy > 0 ? cy : cy - 5, 1, 5);
+    }
+    g.fillStyle(PALETTE.black, 0.22);
+    for (const [fx, fy] of [
+      [l + 3, t + 2],
+      [l + w - 5, t + 2],
+      [l + 3, t + h - 4],
+      [l + w - 5, t + h - 4],
+    ]) {
+      g.fillRect(fx, fy, 2, 2);
+    }
+  }
+
+  private paintDoorway(): void {
+    // The opening back to the hub, in this room's left wall, lit the hub's pink.
+    paintOpening(this, { side: 'left', y: BACK_DOOR.y, glow: PALETTE.neon });
     this.add
       .zone(BACK_DOOR.x, BACK_DOOR.y, 26, 50)
       .setInteractive({ useHandCursor: true })
@@ -134,33 +179,6 @@ export class ArcadeAnnex extends Phaser.Scene {
       });
   }
 
-  /** On through the left wall, to the machines that take money. */
-  private paintCasinoDoor(): void {
-    // Gold, because that is the colour of the room on the other side of it —
-    // the light coming out of an opening is the first thing that says where it
-    // goes.
-    paintOpening(this, { side: 'left', y: CASINO_DOOR.y, glow: PALETTE.gold });
-
-    this.add
-      .zone(CASINO_DOOR.x, CASINO_DOOR.y, 26, 50)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        if (!this.busy()) this.toCasino();
-      });
-  }
-
-  private toCasino(): void {
-    this.locked = true;
-    audio.sfx('footstep_carpet');
-    fadeToScene(this, 'ArcadeCasino');
-  }
-
-
-  /**
-   * Where to stand when a cabinet hands you back.  Just below its base, which
-   * is inside interact range — so the prompt is already up and you can play it
-   * again without walking anywhere.
-   */
   private spawnPoint(fallback: { x: number; y: number }): { x: number; y: number } {
     if (!this.returnTo) return fallback;
     const def = CABINETS.find((c) => c.id === this.returnTo);
@@ -182,7 +200,7 @@ export class ArcadeAnnex extends Phaser.Scene {
   }
 
   private busy(): boolean {
-    return this.locked || this.scene.isActive('SettingsModal');
+    return this.locked;
   }
 
   private interact(): void {
@@ -191,47 +209,23 @@ export class ArcadeAnnex extends Phaser.Scene {
       this.toHub();
       return;
     }
-    if (this.target.kind === 'casino') {
-      this.toCasino();
-      return;
-    }
     this.launchGame(this.target.cab, 'play');
   }
 
   private toHub(): void {
     this.locked = true;
     audio.sfx('footstep_carpet');
-    fadeToScene(this, 'ArcadeHub');
+    fadeToScene(this, 'ArcadeHub', { fromDoor: 'lounge' });
   }
 
-  /**
-   * Into a cabinet, one of two ways.
-   *
-   * `how` is WHICH KIND OF ASK THIS WAS, and it is the whole of the rule:
-   *
-   *   'card'   the player clicked the machine itself.  That is a question --
-   *            what is this, what does it cost -- so it gets the how-to-play
-   *            card and nothing is charged until they press PLAY.
-   *   'play'   the player pressed E, or clicked somewhere else on the floor
-   *            while stood at a machine.  That is not a question, it is an
-   *            instruction, so it goes straight into the game and the token
-   *            moves on the way in.
-   *
-   * It used to be one route for both, which meant a click anywhere on the
-   * floor near a cabinet opened the card for it -- the player had asked to
-   * play and been handed a leaflet.
-   */
+  /** Into a cabinet: see ArcadeAnnex.launchGame, which this follows exactly. */
   private launchGame(cab: Cabinet, how: 'card' | 'play'): void {
-    // Nothing is charged for walking up to a machine (MG-2).  The shell opens
-    // on the how-to-play card with the game unbuilt behind it, and the tokens
-    // move when the player presses PLAY — so a player who cannot afford this
-    // cabinet may still read what it wants and walk away.
     if (!canEnter('Minigame', store.get(), {})) {
       audio.sfx('buzzer');
       return;
     }
     this.locked = true;
-    fadeToScene(this, 'Minigame', { id: cab.def.id, from: 'ArcadeAnnex', straight: how === 'play' });
+    fadeToScene(this, 'Minigame', { id: cab.def.id, from: 'ArcadeLounge', straight: how === 'play' });
   }
 
   update(_time: number, delta: number): void {
@@ -255,7 +249,6 @@ export class ArcadeAnnex extends Phaser.Scene {
   private findTarget(): Target {
     const px = this.player.x;
     const py = this.player.y;
-
     let best: Cabinet | null = null;
     let bestD = INTERACT_RANGE;
     for (const c of this.cabinets) {
@@ -266,9 +259,7 @@ export class ArcadeAnnex extends Phaser.Scene {
       }
     }
     if (best) return { kind: 'cabinet', cab: best };
-
-    if (px > BACK_DOOR.x - 22 && Math.abs(py - BACK_DOOR.y) < 28) return { kind: 'back' };
-    if (px < CASINO_DOOR.x + 20 && Math.abs(py - CASINO_DOOR.y) < 28) return { kind: 'casino' };
+    if (px < BACK_DOOR.x + 20 && Math.abs(py - BACK_DOOR.y) < 28) return { kind: 'back' };
     return null;
   }
 
@@ -279,22 +270,15 @@ export class ArcadeAnnex extends Phaser.Scene {
       this.prompt.setVisible(false);
       return;
     }
-
     let msg: string;
     let colour: number = PALETTE.gold;
     if (t.kind === 'cabinet') {
       const { cost } = t.cab.def;
-      // Name the game on the prompt.  A row of cabinets that all say PLAY is a
-      // row of identical boxes: the marquee is too small to read at this size,
-      // so the thing you are about to spend tokens on says so here.
       msg = `[E] ${t.cab.def.title} - ${cost} TOKEN${cost === 1 ? '' : 'S'}`;
       colour = ledger.balance() >= cost ? PALETTE.gold : PALETTE.ash;
-    } else if (t.kind === 'casino') {
-      msg = '[E] THE MACHINES';
     } else {
       msg = '[E] ARCADE';
     }
-
     this.prompt.setText(msg).setTint(colour === PALETTE.gold ? 0xffd45e : 0x5c6b7d);
     const x = Phaser.Math.Clamp(this.player.x, 70, GAME_W - 70);
     const y = this.player.y - 34;
