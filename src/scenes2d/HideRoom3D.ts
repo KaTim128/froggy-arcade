@@ -60,8 +60,15 @@ const RUN = 4.0;
  */
 const SECRET_RUN = 2.0;
 /** Radians per second on the arrow keys, and per pixel of mouse drag. */
-const TURN_RATE = 2.2;
-const LOOK_SENS = 0.004;
+const TURN_RATE = 1.8;
+/**
+ * Two thirds of what it was.  At 0.004 a flick of the wrist spun you half way
+ * round a room you are meant to be peering into, and a thumb on the look pad
+ * swung the view further than the thumb moved.  At this a drag across the
+ * picture is about a quarter turn: enough to check behind you in one stroke,
+ * slow enough to hold a gap in a door.
+ */
+const LOOK_SENS = 0.0027;
 /**
  * What he does when he can see you: 1.1x your top speed.
  *
@@ -191,10 +198,8 @@ const ZONE_LINES: Array<Array<[string, number]>> = [
     // would read as the clock being broken rather than as him moving the line.
     ['AND THIS TIME IT IS {N} MINUTES.', 2800],
   ],
-  [
-    ['WHERE ARE YOU....', 3200],
-    ['{N} MINUTES.', 2400],
-  ],
+  // Round three: no rules and no clock.  Just him, looking.
+  [['Where are you...', 5200]],
   // THE ARCADE.  One line, said over the top of a player who already has the
   // controls back (see beginArcade), and he does not say what the rules are,
   // because in this room there are none of his to say: no count, no clock,
@@ -819,6 +824,9 @@ export class HideRoom3D extends Phaser.Scene {
    */
   private torch: THREE.SpotLight | null = null;
   private subtitle = '';
+  /** Which subtitle has been on screen, and since when, for the ones that are typed out. */
+  private subShown = '';
+  private subSince = 0;
   private keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
   /** True while the left mouse button is down: dragging the view around. */
   private looking = false;
@@ -1429,6 +1437,7 @@ export class HideRoom3D extends Phaser.Scene {
     // a decision.  CTRL is gone with the holding: the browser owns CTRL+W, and
     // crouch-walking forward should never close the tab.
     kb?.on('keydown-C', () => this.toggleCrouch());
+    kb?.on('keydown-Q', () => this.labDrop());
 
     // Window-level, not Phaser-level: the Three canvas is layered over the
     // Phaser one, so the scene's own pointer events never see the room.
@@ -1503,7 +1512,11 @@ export class HideRoom3D extends Phaser.Scene {
     // Inside the wall there is exactly one thing to press, and nothing else in
     // here answers to E: no spots, no doors, no case.
     if (this.inSecret) {
-      if (this.atButton()) this.leaveBySecret();
+      if (this.atButton()) {
+        this.leaveBySecret();
+        return;
+      }
+      this.labInteract();
       return;
     }
 
@@ -2304,14 +2317,64 @@ export class HideRoom3D extends Phaser.Scene {
     // The air changes.  Warm and thin instead of cold and thick, and it is the
     // first thing the player notices before they have read a single object.
     const st = this.stage;
-    if (st) st.scene.fog = new THREE.FogExp2(0x3a2418, 0.012);
+    if (st) st.scene.fog = new THREE.FogExp2(0x1c3440, 0.01);
     // The lights change hands.  His room goes dark behind you -- it is six
     // hundred metres away and nothing in here can see into it -- and the
     // lounge comes up.
     for (const l of this.roomLights) l.visible = false;
     sec.setActive(true);
-    audio.setScene(SILENCE);
+    // Calm music, and nothing else: a waiting-room tune in a room where the
+    // waiting is being done by the thing in the tube.
+    audio.setScene({ music: 'lab_calm' });
     audio.sfx('door_shut', 0.5);
+  }
+
+  /**
+   * ---- THE LAB'S OWN THINGS.
+   *
+   * The heater by the tube switches on and off, and a moment after it comes on
+   * the glass is warm enough that he feels it -- and screams.  A handful of
+   * things on the benches can be picked up with E and put down with Q; one at
+   * a time, and nothing else in the lab answers to either key.
+   */
+  private labInteract(): void {
+    const sec = this.secret;
+    if (!sec || sec.carrying()) return;
+    if (this.atHeater()) {
+      const on = sec.toggleHeater();
+      audio.sfx('lock_click', 0.6);
+      if (on) {
+        audio.sfx('bulb_flicker', 0.5);
+        this.time.delayedCall(900, () => {
+          if (this.inSecret) {
+            audio.sfx('froggy_screech', 0.9);
+            this.shake = Math.max(this.shake, 0.35);
+          }
+        });
+      }
+      return;
+    }
+    const p = sec.nearestPickable(this.pos.x, this.pos.y, this.floorY);
+    if (p) {
+      sec.pickUp(p.id);
+      audio.sfx('item_thud', 0.25);
+    }
+  }
+
+  /** Q in the lab: put down whatever you are holding, just in front of you. */
+  private labDrop(): void {
+    const sec = this.secret;
+    if (!this.inSecret || !sec || !sec.carrying()) return;
+    const fx = this.pos.x - Math.sin(this.yaw) * 0.7;
+    const fz = this.pos.y - Math.cos(this.yaw) * 0.7;
+    sec.drop(fx, fz, sec.floorAt(fx, fz));
+    audio.sfx('item_thud', 0.4);
+  }
+
+  private atHeater(): boolean {
+    if (!this.inSecret || !this.secret) return false;
+    const h = this.secret.heater;
+    return Math.hypot(this.pos.x - h.x, this.pos.y - h.z) < 1.8 && this.floorY < 1.0;
   }
 
   /** Standing at the pedestal in the lounge. */
@@ -2550,7 +2613,7 @@ export class HideRoom3D extends Phaser.Scene {
     // whose whole game is crossing it quickly cannot afford a player who does
     // not know they can strafe.
     if (this.clock > 7.5) this.subtitle = 'HIDE';
-    else if (this.clock > 5.2) this.subtitle = 'WASD MOVE - SHIFT RUN - C CROUCH';
+    else if (this.clock > 5.2) this.subtitle = isTouch() ? 'ARROWS MOVE - RUN - CROUCH' : 'WASD MOVE - SHIFT RUN - C CROUCH';
     else if (this.clock > 3.0) this.subtitle = isTouch() ? 'DRAG THE PICTURE TO LOOK' : 'HOLD LEFT CLICK TO LOOK';
     else if (this.clock > 1.2) this.subtitle = 'FIND SOMEWHERE TO HIDE';
     else this.subtitle = '';
@@ -3668,6 +3731,13 @@ export class HideRoom3D extends Phaser.Scene {
     cam.rotation.order = 'YXZ';
     cam.rotation.set(this.pitch + (esc ? esc.pitch : 0) + shPit, this.yaw + shYaw, 0);
 
+    // Whatever is in your hands in the lab: held low and to the right, where
+    // a hand would hold it, and turning with you.
+    if (this.inSecret && this.secret?.carrying()) {
+      const at = new THREE.Vector3(0.24, -0.3, -0.62).applyEuler(cam.rotation).add(cam.position);
+      this.secret.carry(at, this.yaw);
+    }
+
     // Being hidden means being close to him and unable to move — the room
     // shakes when he is right outside, which is the only warning you get.
     if (this.hiding) {
@@ -3851,16 +3921,43 @@ export class HideRoom3D extends Phaser.Scene {
       }
 
       if (this.subtitle) {
-        drawPixelText(ctx, this.subtitle, GAME_W / 2, GAME_H - 30, {
+        // WHERE ARE YOU is not announced, it is breathed: a letter at a time,
+        // slow, and the dots slower still, with the line never quite steady.
+        if (this.subtitle !== this.subShown) {
+          this.subShown = this.subtitle;
+          this.subSince = performance.now();
+        }
+        const creep = this.subtitle.startsWith('Where are you');
+        let line = this.subtitle;
+        if (creep) {
+          const ms = performance.now() - this.subSince;
+          const words = 'Where are you'.length;
+          const n = ms < words * 150 ? Math.floor(ms / 150) : words + Math.floor((ms - words * 150) / 520);
+          line = this.subtitle.slice(0, n);
+        }
+        drawPixelText(ctx, line, GAME_W / 2, GAME_H - 30, {
           scale: fitScale(this.subtitle),
           color: '#e8e2cd',
           center: true,
+          alpha: creep ? 0.75 + Math.sin(performance.now() / 90) * 0.12 : 1,
         });
       }
 
       if (this.prompt && !this.hiding && (this.mode === 'hiding' || this.mode === 'seeking')) {
+        // The way on is a compact label on a plate, at the text's own size --
+        // a sentence that long, blown up to fill the frame, covered the room
+        // it was asking you to leave.
+        const compact = this.prompt.startsWith('[E] CONTINUE');
+        if (compact) {
+          const w = this.prompt.length * 6 + 10;
+          ctx.fillStyle = 'rgba(6, 10, 14, 0.72)';
+          ctx.fillRect(GAME_W / 2 - w / 2, GAME_H * 0.62 - 7, w, 14);
+          ctx.strokeStyle = 'rgba(255, 212, 94, 0.6)';
+          ctx.lineWidth = 0.5;
+          ctx.strokeRect(GAME_W / 2 - w / 2, GAME_H * 0.62 - 7, w, 14);
+        }
         drawPixelText(ctx, this.prompt, GAME_W / 2, GAME_H * 0.62, {
-          scale: fitScale(this.prompt),
+          scale: compact ? 1 : fitScale(this.prompt),
           color: '#ffd45e',
           center: true,
           alpha: 0.9,
@@ -4215,7 +4312,24 @@ export class HideRoom3D extends Phaser.Scene {
       // NOTHING PROMPTS THE WALL, on either side of it.  The button is the one
       // thing in the sequence that is allowed to shout, and only once you are
       // standing in a room nobody was told about.
-      this.prompt = this.atButton() ? '[E] GO ON' : '';
+      // Says where it goes, in one short line: the next round by its number,
+      // or on to the chase after the last one.
+      const next = this.roomIndex + 1;
+      const sec = this.secret;
+      const near = sec && !sec.carrying() ? sec.nearestPickable(this.pos.x, this.pos.y, this.floorY) : null;
+      this.prompt = this.atButton()
+        ? next < ROOMS.length
+          ? `[E] CONTINUE TO HIDE AND SEEK ROUND ${next + 1}`
+          : '[E] CONTINUE'
+        : sec?.carrying()
+          ? isTouch()
+            ? '[DROP] PUT IT DOWN'
+            : '[Q] PUT IT DOWN'
+          : this.atHeater()
+            ? '[E] THE HEATER'
+            : near
+              ? `[E] PICK UP ${near.name}`
+              : '';
       return;
     }
     const spot = this.nearestSpot(SPOT_REACH);

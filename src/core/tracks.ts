@@ -62,6 +62,24 @@ const base: TrackPreset = {
 const preset = (p: Partial<TrackPreset>): TrackPreset => ({ ...base, ...p, vol: { ...base.vol, ...(p.vol ?? {}) } });
 
 export const TRACKS: Record<string, TrackPreset> = {
+  // ------------------------------------------------ the laboratory, hidden
+  // Behind the wall.  Slow, soft sine pads a long way apart and a few bell
+  // notes over them: the music of a waiting room in a building where the
+  // waiting is being done by the thing in the tube.  No drums, nothing to
+  // move to, and just enough of a minor turn to be wrong.
+  lab_calm: preset({
+    bpm: 58,
+    chords: [maj7(C.d4 - 12), min7(C.b4 - 24), maj7(C.g4 - 12), min7(C.e4 - 12)],
+    bass: [0, _, _, _, _, _, _, _],
+    lead: [C.a5, _, _, C.f5 + 1, _, _, _, _, C.e5, _, _, _, C.d5, _, _, _],
+    leadWave: 'sine',
+    bassWave: 'sine',
+    arpWave: 'triangle',
+    drums: 'none',
+    cutoff: 1500,
+    vol: { lead: 0.03, bass: 0.045, arp: 0.012, drums: 0 },
+    ring: 5,
+  }),
   // ------------------------------------------------------------- the rooms
   // The front room: bright, bouncy, the tune a kid would hum.
   room_hub: preset({

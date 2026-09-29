@@ -1100,6 +1100,24 @@ class AudioManager {
       // `behind`, whose lowpass is the same thing distance does to everything.
       // The pitch is different every time, which is what keeps it a person
       // rather than a sound effect being played again.
+      // ---- HIM, THROUGH THE GLASS OF THE TUBE.
+      //
+      // Not the jumpscare -- that one goes past the sliders -- but a close,
+      // wet, rising shriek, three voices detuned against each other so they
+      // beat, with a gargle of noise under it and a crack at the top where it
+      // breaks: something big in a small space, and very unhappy about the
+      // heat.
+      case 'froggy_screech': {
+        const base = 520 + Math.random() * 60;
+        glide(base * 0.55, base * 1.9, 0.34, 0.07, 'sawtooth');
+        glide(base * 0.57, base * 1.95, 0.34, 0.06, 'sawtooth', 0.01);
+        glide(base * 1.9, base * 0.7, 0.95, 0.075, 'sawtooth', 0.33);
+        glide(base * 1.97, base * 0.66, 0.95, 0.06, 'square', 0.34);
+        glide(base * 0.5, base * 0.32, 1.1, 0.05, 'triangle', 0.3);
+        noise(1.25, 0.05, 1800, 0.05);
+        noise(0.12, 0.08, 6000, 0.32);
+        break;
+      }
       case 'distant_scream': {
         const base = 280 + Math.random() * 150;
         glide(base * 0.8, base * 1.72, 0.5, 0.105);
@@ -1330,6 +1348,7 @@ export type SfxName =
   | 'heal_up'
   | 'poison_hiss'
   | 'speaker_fault'
+  | 'froggy_screech'
   | 'distant_scream'
   | 'distant_cry'
   | 'fence_thunk'
