@@ -2487,19 +2487,27 @@ for (const g of [
   const N = 200000;
   const seen = await page.evaluate((n) => window.__slots.sample(n), N);
   // Read the odds off the machine rather than restating them here: the point
-  // of the test is that the DRAW matches the constants, not that two copies of
-  // the same number agree.
-  const want = await page.evaluate(async () => {
+  // of the test is that the DRAW -- read off the window it dressed -- matches
+  // the table, not that two copies of the same number agree.
+  const table = await page.evaluate(async () => {
     const m = await import('/src/minigames/slots.ts');
-    return { five: m.P_FIVE, three: m.P_THREE };
+    return m.PAYS.map((x) => ({ win: x.win, p: x.p }));
   });
-  const five = seen.five / N;
-  const three = seen.three / N;
-  const near = (got, target) => Math.abs(got - target) < 0.008;
-  const ok = near(five, want.five) && near(three, want.three);
+  // Tolerance scales with the pattern: the gold one is one spin in ten
+  // thousand and cannot be measured to the same absolute precision as three
+  // in a row.
+  const off = [];
+  for (const { win, p } of table) {
+    const got = (seen[win] ?? 0) / N;
+    const tol = Math.max(0.0006, 4 * Math.sqrt((p * (1 - p)) / N));
+    if (Math.abs(got - p) > tol) off.push(`${win} wants ${(p * 100).toFixed(2)}% got ${(got * 100).toFixed(2)}%`);
+  }
+  const ok = off.length === 0;
   console.log(
-    `${ok ? 'PASS' : 'FAIL'}  slots: five in a row ${(want.five * 100).toFixed(0)}% of spins, three in a row ${(want.three * 100).toFixed(0)}%  — ` +
-      `five ${(five * 100).toFixed(2)}%, three ${(three * 100).toFixed(2)}%, nothing ${((seen.none / N) * 100).toFixed(2)}%`,
+    `${ok ? 'PASS' : 'FAIL'}  slots: every pattern comes up at its chance, read off the window  — ` +
+      table.map(({ win }) => `${win} ${(((seen[win] ?? 0) / N) * 100).toFixed(3)}%`).join(', ') +
+      `, nothing ${((seen.none / N) * 100).toFixed(1)}%` +
+      (off.length ? `; ${off.join(', ')}` : ''),
   );
   if (!ok) failures++;
   await page.close();
