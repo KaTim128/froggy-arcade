@@ -637,8 +637,9 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   // thirty seconds, something happens to EVERY frog and the four guaranteed
   // things are different from each other, they are still together at the line,
   // and whoever leads at two thirds is not the answer.  All four are asked of
-  // three hundred whole fields, run on the model the player watches.
-  const shape = await page.evaluate(() => window.__race.shape(300));
+  // six hundred whole fields, run on the model the player watches -- three
+  // hundred left the 92% bar below only about two spreads from a true 95%.
+  const shape = await page.evaluate(() => window.__race.shape(600));
   const lasts = shape.meanSeconds > 25 && shape.meanSeconds <= cap;
   console.log(
     `${lasts ? 'PASS' : 'FAIL'}  frog race: a race is about thirty seconds  — ` +
@@ -2907,15 +2908,20 @@ for (const g of [
   );
   if (!strikeOk) failures++;
 
-  // A soft ball wide of the pocket leaves pins -- the frame stays put and the
-  // ball number goes up -- and the pocket then picks them up for thirteen.
+  // A soft ball into the pocket leaves pins -- the frame stays put and the
+  // ball number goes up -- and a full ball a little right picks them up for
+  // thirteen.  (The old pair, 168 soft then 162, now leaves a five-pin split
+  // no single ball converts: measured across 150-174 on the second ball,
+  // nothing better than three.  164 at 0.6 leaves three, and 170 takes them.)
   let spared = null;
   let spareTries = 0;
-  for (let i = 0; i < TRIES; i++) {
+  // More goes than the strike: a clean pick-up of a three-pin leave landed on
+  // attempts 2 and 7 in two runs, so eight left too little headroom.
+  for (let i = 0; i < TRIES * 2; i++) {
     spareTries = i + 1;
     const r = await frame([
-      [168, 0.7],
-      [162, 1],
+      [164, 0.6],
+      [170, 1],
     ]);
     // Ball one left pins and ball two picked them ALL up.  Asking the turn
     // instead was the bug: the frame hands over after the second ball either
@@ -2931,7 +2937,7 @@ for (const g of [
     `${spareOk ? 'PASS' : 'FAIL'}  bowling: the whole rack off the second ball pays 10 and 3  — ` +
       (spared
         ? `${spared.map((r) => `${r.score} (ball ${r.ballNo}, ${r.turn})`).join(' then ')} on attempt ${spareTries}`
-        : `the rack was never picked up off the second ball in ${TRIES} frames`),
+        : `the rack was never picked up off the second ball in ${TRIES * 2} frames`),
   );
   if (!spareOk) failures++;
 
@@ -3015,7 +3021,10 @@ for (const g of [
     window.__chase.setCash(800);
     window.__chase.setPlayer(window.__chase.laneX(1), 150);
     window.__chase.armTrap();
-    await new Promise((r) => setTimeout(r, 500));
+    // The strip clock is 300ms of GAME time, which on a slow software-GL
+    // frame is well over 500ms of wall time -- so wait for the strip rather
+    // than for a fixed half second.
+    for (let t = 0; t < 30 && window.__chase.state().traps === 0; t++) await new Promise((r) => setTimeout(r, 100));
     const strip = window.__chase.state().traps;
     for (let i = 0; i < 20; i++) window.__chase.layBarrier();
     const heldOff = window.__chase.state().barriers;
