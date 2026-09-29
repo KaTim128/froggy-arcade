@@ -3723,6 +3723,7 @@ function settle(): void {
   audio.sfx(won ? 'chime' : 'buzzer');
   if (won && sceneRef) sceneRef.cameras.main.flash(220, 255, 240, 180);
   store.setHighScore(ID, won ? 1 : 0);
+  if (won) apiRef?.record(pays);
   over = true;
   // MG-3: the shell pays, once.  A race is one decision and one result, so
   // there is nothing here to pay twice.

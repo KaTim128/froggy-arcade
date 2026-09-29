@@ -229,6 +229,8 @@ let infoLine: Phaser.GameObjects.BitmapText | null = null;
 /** The opponent's memory, the same shape a person's would be. */
 let hunt: number[] = [];
 let tried: Set<number> = new Set();
+/** The player's own searches, every click that looked under a pad: the record. */
+let clicks = 0;
 
 const kindOf = (key: string): FrogKind => KINDS.find((k) => k.key === key)!;
 
@@ -309,6 +311,7 @@ export const battleship: MinigameModule = {
     phase = 'place';
     hunt = [];
     tried = new Set();
+    clicks = 0;
     toPlace = [...ROSTER];
     holding = 0;
 
@@ -750,6 +753,7 @@ function search(at: number): void {
   if (frog && frog.found.has(at)) return;
 
   busy = true;
+  clicks++;
   const { x, y } = padXY(theirs, at);
   if (frog) {
     frog.found.add(at);
@@ -854,6 +858,7 @@ function finish(won: boolean): void {
   if (over) return;
   over = true;
   phase = 'done';
+  if (won) apiRef?.record(clicks);
   status?.setText(won ? 'EVERY FROG FOUND' : 'YOUR POND IS EMPTY');
   subStatus?.setText('');
   if (theirs) {

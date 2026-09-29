@@ -340,6 +340,7 @@ function finish(): void {
   over = true;
   froggyLayer.clear();
   const paid = whackPayout(hits);
+  apiRef?.record(hits);
   const scene = holes[0]?.sprite.scene;
   if (scene) {
     // The final count and what it earned, on screen, before the shell's own

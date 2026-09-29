@@ -2513,6 +2513,42 @@ for (const g of [
   await page.close();
 }
 
+// PERSONAL BESTS KEEP THE BETTER NUMBER, IN EACH RECORD'S OWN DIRECTION.  A
+// slower Froggy Kong time must not replace a faster one, a lower bowling score
+// must not replace a higher one, and a best must outlive the page.
+{
+  const page = await browser.newPage();
+  await page.goto(`${URL}/?intro=1&tokens=80`, { waitUntil: 'networkidle2' });
+  const got = await page.evaluate(async () => {
+    const r = await import('/src/core/records.ts');
+    r.clearRecords();
+    const out = [];
+    out.push(r.submit('donkeykong', 50.04), r.submit('donkeykong', 61), r.submit('donkeykong', 44.26));
+    out.push(r.submit('bowling', 120), r.submit('bowling', 90), r.submit('bowling', 0));
+    out.push(r.submit('battleship', 30), r.submit('battleship', 31), r.submit('battleship', 22));
+    out.push(r.submit('slots', 5));
+    return { out, dk: r.best('donkeykong'), bowl: r.best('bowling'), pond: r.best('battleship'), slots: r.best('slots') };
+  });
+  await page.reload({ waitUntil: 'networkidle2' });
+  const kept = await page.evaluate(async () => {
+    const r = await import('/src/core/records.ts');
+    const v = [r.best('donkeykong'), r.best('bowling'), r.best('battleship')];
+    r.clearRecords();
+    return v;
+  });
+  const want = [true, false, true, true, false, false, true, false, true, false];
+  const ok =
+    JSON.stringify(got.out) === JSON.stringify(want) &&
+    got.dk === 44.3 && got.bowl === 120 && got.pond === 22 && got.slots === null &&
+    JSON.stringify(kept) === JSON.stringify([44.3, 120, 22]);
+  console.log(
+    `${ok ? 'PASS' : 'FAIL'}  records: faster times, higher scores and fewer clicks replace a best, worse never do, and they survive a reload  — ` +
+      `kong ${got.dk}s, bowling ${got.bowl}, pond ${got.pond} clicks, after reload ${kept.join('/')}`,
+  );
+  if (!ok) failures++;
+  await page.close();
+}
+
 // THE TRAFFIC ANNOUNCES ITSELF, AND THE ANNOUNCEMENT IS COUNTED.  A car may
 // not move a pixel sideways until its indicator has blinked three whole times,
 // and the whole point of the rule is that it is three and not "about three" —

@@ -20,7 +20,9 @@
  */
 
 import Phaser from 'phaser';
+import { RECORDS, best as bestRecord, submit as submitRecord } from '../core/records';
 import { PALETTE } from '../render/palette';
+import { FONT_ADVANCE } from '../render/pixelFont';
 import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
 import { store, type GameId } from '../core/state';
@@ -41,6 +43,8 @@ export class MinigameScene extends Phaser.Scene {
   private gameId!: GameId;
   private mod: MinigameModule | null = null;
   private settled = false;
+  /** What this play set as a new personal best, for the result panel. */
+  private newBest: string | null = null;
   private from = 'ArcadeHub';
   private hud!: TokenHud;
   /** Tokens on this play: what PLAY debited, plus anything raised in-game. */
@@ -69,6 +73,7 @@ export class MinigameScene extends Phaser.Scene {
     // hub meant playing a cabinet in the back room spat you out two rooms away.
     this.from = data.from ?? 'ArcadeHub';
     this.settled = false;
+    this.newBest = null;
     this.mod = null;
     this.stake = 0;
     this.paid = 0;
@@ -107,8 +112,21 @@ export class MinigameScene extends Phaser.Scene {
     // fixed left edge: the note is the cabinet's own wording and some of them
     // are twice as long as others, so a fixed start meant "WIN: 15 TOKENS"
     // reached under QUIT while "WIN: +2" sat in the middle of nowhere.
-    text(this, GAME_W - 50, 4, this.mod.payoutNote ?? `WIN: +${def.reward}`, PALETTE.tealLight)
+    const note = text(this, GAME_W - 50, 4, this.mod.payoutNote ?? `WIN: +${def.reward}`, PALETTE.tealLight)
       .setOrigin(1, 0);
+    // The personal best, where this cabinet keeps one, centred in whatever
+    // gap the title and the payout leave -- and shortened until it fits
+    // there, so it never runs into either of them.
+    const rec = RECORDS[this.gameId];
+    const was = bestRecord(this.gameId);
+    if (rec && was !== null) {
+      const from = 4 + def.title.length * FONT_ADVANCE + 6;
+      const to = GAME_W - 50 - note.width - 6;
+      const fit = [rec.short(was), `BEST ${rec.format(was)}`, rec.format(was)].find(
+        (s) => s.length * FONT_ADVANCE <= to - from,
+      );
+      if (fit) centerText(this, Math.round((from + to) / 2), 8, fit, PALETTE.gold).setAlpha(0.9);
+    }
 
     const api: MinigameApi = {
       win: (payout?: number) => this.settle(true, false, payout),
@@ -119,6 +137,10 @@ export class MinigameScene extends Phaser.Scene {
       payout: (n: number) => this.payout(n),
       cashOut: () => this.cashOut(),
       balance: () => ledger.balance(),
+      record: (value: number) => {
+        const rec = RECORDS[this.gameId];
+        if (rec && submitRecord(this.gameId, value)) this.newBest = `NEW BEST!  ${rec.format(bestRecord(this.gameId) ?? value)}`;
+      },
       area: AREA,
     };
 
@@ -190,6 +212,11 @@ export class MinigameScene extends Phaser.Scene {
       balance: ledger.balance(),
       chargesInside: def.freeToEnter === true,
       payNote: mod.payoutNote ?? `WIN: ${def.reward} TOKENS`,
+      record: (() => {
+        const rec = RECORDS[this.gameId];
+        const was = bestRecord(this.gameId);
+        return rec && was !== null ? rec.long(was) : undefined;
+      })(),
       onPlay: start,
       onLeave: () => {
         this.card = null;
@@ -269,6 +296,13 @@ export class MinigameScene extends Phaser.Scene {
     return true;
   }
 
+  /** Under the result, when this play beat the cabinet's best. */
+  private showNewBest(): void {
+    if (!this.newBest) return;
+    centerText(this, GAME_W / 2, GAME_H / 2 + 24, this.newBest, PALETTE.gold).setDepth(991);
+    audio.sfx('bell_ding', 0.6);
+  }
+
   /**
    * End a session that was paid hand by hand.  Nothing changes hands here —
    * the ledger is already square — so the card reports the net instead of a
@@ -296,6 +330,7 @@ export class MinigameScene extends Phaser.Scene {
       16,
     ).setDepth(991);
     centerText(this, GAME_W / 2, GAME_H / 2 + 12, `${ledger.balance()} tokens`, PALETTE.ash).setDepth(991);
+    this.showNewBest();
 
     audio.sfx(up ? 'chime' : 'buzzer');
     this.time.delayedCall(RESULT_MS, () => fadeToScene(this, this.from, { atCabinet: this.gameId }));
@@ -365,6 +400,7 @@ export class MinigameScene extends Phaser.Scene {
       won ? `${ledger.balance()} tokens` : `${ledger.balance()} tokens left`,
       PALETTE.ash,
     ).setDepth(991);
+    this.showNewBest();
 
     audio.sfx(won ? 'chime' : 'buzzer');
 
