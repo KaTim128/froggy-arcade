@@ -1426,11 +1426,12 @@ export class FroggyMonster {
     };
     const measure = (h: number): number => {
       let worst = Infinity;
-      for (let y = 0.08; y <= 0.57; y += 0.12) worst = test(this.arms[h], y, worst);
-      for (let y = 0; y <= 0.7; y += 0.1) worst = test(this.elbows[h], y, worst);
+      // Sampled as finely as a limb this thin needs: at the old spacing a
+      // forearm could pass between two samples and cross an eye for a frame.
+      for (let y = 0.05; y <= 0.57; y += 0.06) worst = test(this.arms[h], y, worst);
+      for (let y = 0; y <= 0.7; y += 0.05) worst = test(this.elbows[h], y, worst);
       for (const f of this.hands[h]) {
-        worst = test(f, 0, worst);
-        worst = test(f, 0.25, worst);
+        for (let y = 0; y <= 0.26; y += 0.065) worst = test(f, y, worst);
       }
       return worst;
     };
@@ -1439,8 +1440,8 @@ export class FroggyMonster {
       let worst = measure(h);
       // still over an eye: out further, now, in this frame -- a fast stroke
       // must not get one frame across his eyes before this catches it
-      for (let i = 0; worst < 1 && this.clear[h] < 1.7 && i < 8 && this.held[h] < 0.3; i++) {
-        this.clear[h] = Math.min(1.7, this.clear[h] + 0.22);
+      for (let i = 0; worst < 1 && this.clear[h] < 2.6 && i < 12 && this.held[h] < 0.3; i++) {
+        this.clear[h] = Math.min(2.6, this.clear[h] + 0.22);
         this.arms[h].rotation.z += out * 0.22;
         this.arms[h].updateMatrixWorld(true);
         worst = measure(h);
