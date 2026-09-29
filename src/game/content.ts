@@ -142,7 +142,8 @@ export const CABINETS: CabinetDef[] = [
   { id: 'hoops', title: 'CHUBBY CHOMP', tier: 'medium', cost: 5, reward: 10, x: 52, y: 164, color: 0xff7a3d, symbol: 'CC', motif: 'chomp' },
   { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 5, reward: 10, x: 98, y: 164, color: 0x6fbb6a, symbol: 'W', motif: 'mallet' },
   { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 5, reward: 10, x: 244, y: 164, color: 0xb9884f, symbol: 'BW', motif: 'pins' },
-  { id: 'battleship', title: 'FROG POND HUNT', tier: 'medium', cost: 5, reward: 10, x: 290, y: 164, color: 0x1d6f8f, symbol: 'PH', motif: 'pond' },
+  // Ten in, twenty out: a hunt takes a while and asks you to think.
+  { id: 'battleship', title: 'FROG POND HUNT', tier: 'medium', cost: 10, reward: 20, x: 290, y: 164, color: 0x1d6f8f, symbol: 'PH', motif: 'pond' },
 
   // ---- the back room: five to seven a go
   { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 10, reward: 20, x: 48, y: 96, color: 0xc31f2e, room: 'annex', symbol: 'VS', motif: 'fist' },
@@ -156,7 +157,9 @@ export const CABINETS: CabinetDef[] = [
   // still `fallingblocks` and that is deliberate — it is the key a saved run's
   // high score and play count are filed under, and renaming it would orphan
   // every save in existence to gain nothing but a tidier string.
-  { id: 'fallingblocks', title: 'THE FLOOD', tier: 'hard', cost: 10, reward: 20, x: 240, y: 96, color: 0x2f7fb5, room: 'annex', symbol: 'FD', motif: 'blocks' },
+  // Twenty to start and twenty for getting out: paid once, by the shell, on
+  // reaching the hatch.
+  { id: 'fallingblocks', title: 'THE FLOOD', tier: 'hard', cost: 20, reward: 20, x: 240, y: 96, color: 0x2f7fb5, room: 'annex', symbol: 'FD', motif: 'blocks' },
   // Along the bottom wall, under the middle two of the row above.  Neither
   // has a fixed reward: a run is worth what it scored, and the module names
   // the payout.

@@ -275,7 +275,7 @@ export function canPlace(pond: Pond, kind: FrogKind, anchor: number): boolean {
 // ----------------------------------------------------------------- the module
 
 export const battleship: MinigameModule = {
-  // The id stays `battleship`: the cabinet, its five-token price, its reward,
+  // The id stays `battleship`: the cabinet, its price, its reward,
   // the registry and the high score table all key off it.  Nothing the player
   // ever reads says that word.
   id: 'battleship',
@@ -283,14 +283,20 @@ export const battleship: MinigameModule = {
   music: 'game_battleship',
   rules: 'find their frogs before they find yours',
   tutorial: {
+    // What a new player needs, in the order they need it: the goal, the two
+    // phases, what a search tells you, and what winning is worth.
     objective: [
-      'HIDE SIX FROGS IN YOUR POND.',
-      'THEN FIND ALL SIX OF THEIRS.',
-      'FROGS MOVE BETWEEN TURNS AND LEAVE CLUES.',
-      'ONE SEARCH A TURN.',
+      'GOAL: FIND ALL 6 HIDDEN FROGS BEFORE',
+      'THE OTHER POND FINDS ALL 6 OF YOURS.',
+      '1. HIDE - PICK A FROG, CLICK YOUR POND.',
+      '2. HUNT - ONE PAD A TURN ON THEIR POND.',
+      'A FROG ON THE PAD IS FOUND. NONE: A MISS.',
+      'FROGS MOVE BETWEEN TURNS. RIPPLES,',
+      'BUBBLES AND CROAKS SHOW WHERE THEY WENT.',
     ],
     controls: [
-      ['MOUSE', 'PICK A FROG, CLICK A PAD'],
+      ['CLICK A FROG', 'PICK WHICH FROG TO HIDE'],
+      ['CLICK A PAD', 'HIDE IT / SEARCH THERE'],
     ],
   },
   touch: {},
@@ -554,7 +560,10 @@ function buildPicker(scene: Phaser.Scene): void {
     b.setDepth(30);
     pickBtns.push(b);
   });
-  startBtn = button(scene, GAME_W / 2, 172, 'START POND HUNT', () => startHunt(), {
+  // Up in the picker's row, which is empty by the time this shows (it only
+  // appears once every frog is in): a clear margin above the bottom edge
+  // rather than sitting on it.
+  startBtn = button(scene, GAME_W / 2, 160, 'START POND HUNT', () => startHunt(), {
     width: 116, height: 14, fill: 0x2f7a46,
   });
   startBtn.setDepth(30);
@@ -671,7 +680,11 @@ function startHunt(): void {
   startBtn = null;
   status?.setText('POND SEARCH');
   subStatus?.setText('CLICK A PAD IN THEIR POND');
-  infoLine?.setText('');
+  // said once, as the hunt starts: what the marks on the water mean
+  infoLine?.setText('WATCH FOR RIPPLES - A FROG MOVED THERE');
+  sceneRef?.time.delayedCall(4200, () => {
+    if (phase === 'play') infoLine?.setText('');
+  });
   audio.sfx('chime');
   refreshScore();
 }

@@ -1,5 +1,5 @@
 /**
- * THE FLOOD.  Hard (long) — 7 tokens in, 15 out.
+ * THE FLOOD.  Hard (long) — 20 tokens in, 20 out (see content.ts).
  *
  * A parkour shaft with the water coming up it.  There is one way out and it is
  * the hatch at the top; there is one way to lose and it is the water reaching
@@ -211,7 +211,6 @@ export const flood: MinigameModule = {
   title: 'THE FLOOD',
   music: 'game_flood',
   rules: 'climb out before the water gets you',
-  payoutNote: 'WIN: 15 TOKENS',
   tutorial: {
     objective: [
       'THE SHAFT IS FLOODING. CLIMB OUT OF IT.',
