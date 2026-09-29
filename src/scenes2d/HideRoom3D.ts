@@ -3591,6 +3591,80 @@ export class HideRoom3D extends Phaser.Scene {
     return { beat: 'land', k: Math.min(1, (c.t - c.mount - c.dur) / c.land) };
   }
 
+  /**
+   * ---- HIS HANDS ON THE THING HE IS CLIMBING.
+   *
+   * Procedural arms swinging near a counter read as a frog floating up past
+   * it.  So the hands go ON it: at the mount both reach up and take the near
+   * edge of the top, fingers hooked over; through the crossing they go hand
+   * over hand -- the left lets go and slaps down on the far edge, then the
+   * right -- and the body is hauled up between them; on the far side, as he
+   * drops, they let go last.  The points are on the top surface, in the
+   * world, so a hand that is planted stays exactly where it was put while
+   * the body moves under it.
+   */
+  private climbHands(): [HandGoal | null, HandGoal | null] | null {
+    const c = this.climb;
+    if (!c) return null;
+    const { beat, k } = this.climbBeat();
+    const dx = c.to.x - c.from.x;
+    const dz = c.to.y - c.from.y;
+    const L = Math.hypot(dx, dz) || 1;
+    const ux = dx / L;
+    const uz = dz / L;
+    // across: his left is to the left of the direction of travel
+    const px = -uz;
+    const pz = ux;
+    const size = this.monster?.size ?? 1;
+    const spread = 0.34 * size;
+    const edge = (along: number, side: number): THREE.Vector3 =>
+      new THREE.Vector3(
+        c.from.x + ux * along * L + px * side * spread,
+        c.top + 0.03,
+        c.from.y + uz * along * L + pz * side * spread,
+      );
+    const NEAR = 0.36;
+    const FAR = 0.64;
+    // which edge each hand is on at this point in the climb, and how firmly
+    let wL = 1;
+    let wR = 1;
+    let aL = NEAR;
+    let aR = NEAR;
+    if (beat === 'mount') {
+      // reaching up to it: the weight comes on as the arms arrive
+      wL = wR = Math.min(1, k * 1.6);
+    } else if (beat === 'cross') {
+      // the left goes over first, then the right; each lifts on the way
+      const lMove = Math.min(1, Math.max(0, (k - 0.28) / 0.14));
+      const rMove = Math.min(1, Math.max(0, (k - 0.44) / 0.14));
+      aL = NEAR + (FAR - NEAR) * lMove;
+      aR = NEAR + (FAR - NEAR) * rMove;
+      // off the top as he goes down the far side
+      const off = Math.max(0, (k - 0.8) / 0.2);
+      wL = wR = 1 - off;
+    } else {
+      return null;
+    }
+    const lift = (a: number, from: number): number => (a > from && a < FAR ? Math.sin(((a - NEAR) / (FAR - NEAR)) * Math.PI) * 0.25 : 0);
+    const l = edge(aL, 1);
+    l.y += lift(aL, NEAR);
+    const r = edge(aR, -1);
+    r.y += lift(aR, NEAR);
+    return [
+      wL > 0.01 ? { at: l, weight: wL, grip: 0.85 } : null,
+      wR > 0.01 ? { at: r, weight: wR, grip: 0.85 } : null,
+    ];
+  }
+
+  /** How far he folds down over the top while crossing it. */
+  private climbCrouch(): number {
+    if (!this.climb) return 0;
+    const { beat, k } = this.climbBeat();
+    if (beat === 'mount') return k * 0.5;
+    if (beat === 'cross') return 0.5 + Math.sin(Math.min(1, k * 1.25) * Math.PI) * 0.45;
+    return (1 - k) * 0.5;
+  }
+
   /** Runs a climb to its end.  Returns true while he is still on top of it. */
   private stepClimb(dt: number): boolean {
     const c = this.climb;
@@ -3812,7 +3886,9 @@ export class HideRoom3D extends Phaser.Scene {
       climbT,
       // Down on his haunches at a bed, craning about under it -- or down at
       // the knees to look into a cupboard he has just opened.
-      crouch: act.crouch ?? act.sink,
+      // ...and folded down low over whatever he is going over, so his hands
+      // can stay on the top of it: a climb is a crawl across it, not a stroll.
+      crouch: Math.max(act.crouch ?? act.sink ?? 0, this.climbCrouch()),
       peek: act.peek ?? 0,
       peer: 1,
       // Hunting, his head swings slowly across the room.  Once he has you it
@@ -3829,7 +3905,7 @@ export class HideRoom3D extends Phaser.Scene {
       // on it.  The pose goes down the hole to the enclosure as well, which
       // drops this -- down there, you are not where he is reaching.
       reachAt: this.fMode === 'chase' && this.stage ? this.stage.camera.position : null,
-      hands: act.hands,
+      hands: this.climbHands() ?? act.hands,
       lean: act.lean,
       // and from wherever you are, his arms stay off his eyes
       viewer: this.stage?.camera.position ?? null,
