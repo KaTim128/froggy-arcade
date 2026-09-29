@@ -188,6 +188,12 @@ export interface FroggyPose {
   hands?: [HandGoal | null, HandGoal | null];
   /** 0..1 stooped over something low he is reaching for, on top of everything else. */
   lean?: number;
+  /**
+   * 0..1 his head going down into a gap to look in: dipped, and rolled over
+   * on its side much further than a neck should go, so one eye comes into
+   * the gap before the rest of the face.
+   */
+  peek?: number;
 }
 
 export interface HandGoal {
@@ -263,6 +269,7 @@ export class FroggyMonster {
   /** How much each arm is being held on something this frame (for the eye guard). */
   private held = [0, 0];
   private leanNow = 0;
+  private peekNow = 0;
   /** Per arm: how far it has been swung out to keep it off his eyes. */
   private clear = [0, 0];
   private readonly eyeW = [new THREE.Vector3(), new THREE.Vector3()];
@@ -850,6 +857,8 @@ export class FroggyMonster {
       this.elbows[h].rotation.y = 0;
     }
     this.leanNow += ((pose.lean ?? 0) - this.leanNow) * Math.min(1, dt * 3);
+    // slow: the head goes into a gap deliberately, and comes out the same way
+    this.peekNow += ((pose.peek ?? 0) - this.peekNow) * Math.min(1, dt * 4);
 
     // Ease every shape change so nothing pops between frames.
     // The mouth comes open SLOWLY -- over a second or more, while he looks at
@@ -1130,7 +1139,9 @@ export class FroggyMonster {
     // further still as he closes.
     this.torso.rotation.x =
       0.14 + Math.min(0.2, speed * 0.05) + this.climbNow * 0.45 + this.lungeNow * (0.42 + this.nearNow * 0.1) +
-      cr * 0.62 + this.leanNow * 0.55;
+      cr * 0.62 + this.leanNow * 0.55 +
+      // flat to the floor to get his face down to a gap
+      this.peekNow * 0.36;
     // The shoulders twist against the hips -- the whole long back wrings a
     // little with every step -- and lean out over the planted foot.
     this.torso.rotation.y = -pelvisYaw * 1.7 * (1 - cr);
@@ -1162,7 +1173,10 @@ export class FroggyMonster {
     // does that is listening for you
     this.neck.rotation.z =
       -gait * 0.05 + twitch * 0.4 + Math.sin(this.breathT * 1.3 + 1.1) * 0.16 * peer +
-      Math.sin(this.breathT * 0.37) * 0.09;
+      Math.sin(this.breathT * 0.37) * 0.09 +
+      // over on its side to look into a gap
+      this.peekNow * (1.2 + Math.sin(this.breathT * 0.8) * 0.08);
+    this.neck.rotation.x += this.peekNow * 0.6;
 
     // The arms come FORWARD and down to take his weight on the floor.  The
     // sign matters and it is not the legs': on an arm hanging from a shoulder,

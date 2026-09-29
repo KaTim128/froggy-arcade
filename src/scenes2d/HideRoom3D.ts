@@ -101,6 +101,12 @@ const ROOM_PACE = [1, 1.08, 1.18];
  * second between hearing him at the box and being found in it.
  */
 const OPEN_S = [1.7, 1.3, 1.0];
+/**
+ * Down on his hands, how far his head is in front of his feet, per unit of
+ * his size -- measured off the model -- so the crawl to a bed stops with his
+ * face at its edge.
+ */
+const BED_HEAD_AHEAD = 1.15;
 /** Crouched: slow, silent, and low enough to lose him behind a sofa. */
 const CROUCH = WALK * 0.55;
 const EYE = 1.55;
@@ -658,6 +664,12 @@ export class HideRoom3D extends Phaser.Scene {
   private spotStepWas = 0;
   /** Which hand he uses on this spot's handle, picked once per opening. */
   private spotHand: 0 | 1 | null = null;
+  /**
+   * The crawl's hands, in the world: where each is, and -- while it is being
+   * moved -- where it came from and where it is going.  `t` is 1 when it is
+   * planted.  A planted hand does not move until the body has gone past it.
+   */
+  private crawlHands: { at: THREE.Vector3; from: THREE.Vector3; to: THREE.Vector3; t: number }[] | null = null;
   private wantYaw = 0;
   /** Toggled with C.  Low, slow, quiet, and it stays on until you say so. */
   private crouching = false;
@@ -3092,14 +3104,6 @@ export class HideRoom3D extends Phaser.Scene {
   }
 
   /**
-   * 0..1 through a check of a bed, for the crouch.
-   *
-   * Eased in over the first quarter, held flat while he is actually looking,
-   * and out over the last fifth -- so he goes down deliberately, stays down
-   * long enough for the player under there to have to watch him, and stands up
-   * as the beat ends rather than snapping upright.
-   */
-  /**
    * OPENING A HIDING PLACE, as a body does it -- laid over the room's own
    * beat for it (`openSeconds`, lid at 53%), which does not move by a frame.
    *
@@ -3112,14 +3116,17 @@ export class HideRoom3D extends Phaser.Scene {
    *   55 - 80%  he leans in and looks inside
    *   80 - 100% lets go, straightens, steps back
    *
-   * A chest is the same with both hands under the lid.  A bed is its own
-   * thing (see `bedCrouch`); here it only gets its blanket thrown back.
+   * A chest is the same with both hands under the lid.  A bed is crawled up
+   * to and looked under instead: see `bedAction`.
    */
   private spotAction(dt: number): {
     step: number;
     lean: number;
     /** Down at the knees for it: a door's opening is half his height. */
     sink: number;
+    /** Down on his hands at a bed (0 for everything else). */
+    crouch?: number;
+    peek?: number;
     hands: [HandGoal | null, HandGoal | null] | undefined;
     look: THREE.Vector3 | null;
   } {
@@ -3127,8 +3134,11 @@ export class HideRoom3D extends Phaser.Scene {
     const spot = this.targetSpot;
     if (this.fMode !== 'openSpot' || !spot || spot.grips.length === 0 || !this.monster) {
       this.spotHand = null;
+      this.crawlHands = null;
       return none;
     }
+    if (spot.kind === 'bed') return this.bedAction(dt, spot);
+    this.crawlHands = null;
     const total = this.openSeconds(spot);
     const k = 1 - Phaser.Math.Clamp(this.fTimer / total, 0, 1);
     const ss = THREE.MathUtils.smoothstep;
@@ -3141,12 +3151,9 @@ export class HideRoom3D extends Phaser.Scene {
     // handle about an arm's comfortable length in front of him.
     const dist = Math.hypot(g0.x - this.froggy.x, g0.z - this.froggy.y);
     const want = Phaser.Math.Clamp(dist - (spot.kind === 'chest' ? 0.85 : 0.95) * size, 0, 1.4);
-    // (a bed is crawled up to instead -- see bedCrouch -- and he is on the
-    // floor for it, so no stoop either)
-    const bed = spot.kind === 'bed';
-    const step = bed ? 0 : want * ss(k, 0, 0.25) * (1 - ss(k, 0.84, 1));
-    const low = spot.kind === 'chest' || bed;
-    const lean = bed ? 0 : (low ? 0.95 : 0.7) * reach + 0.35 * ss(k, 0.55, 0.7) * (1 - ss(k, 0.8, 0.95));
+    const step = want * ss(k, 0, 0.25) * (1 - ss(k, 0.84, 1));
+    const low = spot.kind === 'chest';
+    const lean = (low ? 0.95 : 0.7) * reach + 0.35 * ss(k, 0.55, 0.7) * (1 - ss(k, 0.8, 0.95));
     const hands: [HandGoal | null, HandGoal | null] = [null, null];
     if (spot.kind === 'chest') {
       // both hands, under the lid's front edge; which is which by where they
@@ -3163,24 +3170,128 @@ export class HideRoom3D extends Phaser.Scene {
         const rel = g0.clone().sub(new THREE.Vector3(this.froggy.x, 0, this.froggy.y));
         this.spotHand = rel.dot(right) > 0 ? 0 : 1;
       }
-      const at = spot.kind === 'bed' ? spot.grips[this.spotHand === 0 ? 0 : 1].getWorldPosition(new THREE.Vector3()) : g0;
-      hands[this.spotHand] = { at, weight: spot.kind === 'bed' ? reach * ss(k, 0.46, 0.56) : reach, grip, twist: spot.kind === 'bed' ? 0 : twist };
+      hands[this.spotHand] = { at: g0, weight: reach, grip, twist };
     }
     // and, once it is open, he sinks at the knees to bring his face down to
     // the opening and looks in -- a door is half his height
-    const sink = bed ? 0 : (low ? 0.35 : 0.55) * ss(k, 0.5, 0.66) * (1 - ss(k, 0.8, 0.97));
+    const sink = (low ? 0.35 : 0.55) * ss(k, 0.5, 0.66) * (1 - ss(k, 0.8, 0.97));
     const look = k > 0.5 ? new THREE.Vector3(spot.x, low ? 0.4 : 1.0, spot.z) : null;
     return { step, lean, sink, hands, look };
   }
 
-  private bedCrouch(): number {
-    const spot = this.targetSpot;
-    if (this.fMode !== 'openSpot' || !spot || spot.kind !== 'bed') return 0;
+  /**
+   * SEARCHING UNDER A BED, as a body does it, over the room's own beat for a
+   * bed (`openSeconds` x 2.3; he finds you at 38%, the blanket comes up at
+   * 58% -- neither moves):
+   *
+   *   0 - 13%   down: his hands go to the floor in front of him and he lowers
+   *             himself onto them
+   *   9 - 23%   he CRAWLS to the edge -- each hand planted until the body has
+   *             gone past it, then lifted and put down again ahead, the legs
+   *             walking under him
+   *   19 - 31%  the head goes down to the gap, rolled over on its side so one
+   *             eye comes into it first, then the rest of the face, before he
+   *             finds you; a hand slides to the frame and the long fingers
+   *             curl under its edge.  His eyes go to you if you are there.
+   *   44 - 62%  the other hand goes up and throws the blanket back
+   *   68 - 84%  the head comes out, and he crawls back
+   *   82 - 100% up off his hands
+   *
+   * The crawl is visual: where he is, for every rule in the room, is `froggy`.
+   */
+  private bedAction(dt: number, spot: Spot3D) {
+    const m = this.monster!;
+    const size = m.size;
     const total = this.openSeconds(spot);
     const k = 1 - Phaser.Math.Clamp(this.fTimer / total, 0, 1);
-    if (k < 0.26) return Phaser.Math.Easing.Sine.InOut(k / 0.26);
-    if (k > 0.82) return Phaser.Math.Easing.Sine.InOut((1 - k) / 0.18);
-    return 1;
+    const ss = THREE.MathUtils.smoothstep;
+    const yaw = this.froggyYaw;
+    const fwd = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+    const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+
+    // How far it is to the edge of the bed along the way he is facing: a ray
+    // against the bed's footprint, in the bed's own frame.
+    const rot = spot.hinge.parent?.rotation.y ?? 0;
+    const cr = Math.cos(rot);
+    const sr = Math.sin(rot);
+    const px = this.froggy.x - spot.x;
+    const pz = this.froggy.y - spot.z;
+    const lx = px * cr - pz * sr;
+    const lz = px * sr + pz * cr;
+    const dxl = fwd.x * cr - fwd.z * sr;
+    const dzl = fwd.x * sr + fwd.z * cr;
+    const slab = (p: number, d: number, h: number): number => {
+      if (Math.abs(d) < 1e-6) return Math.abs(p) <= h ? -Infinity : Infinity;
+      return Math.min((-h - p) / d, (h - p) / d);
+    };
+    const edge = Math.max(0, Math.max(slab(lx, dxl, 1.15), slab(lz, dzl, 0.55)));
+    // his head, down on his hands, is this far ahead of where he stands
+    const crawlTo = Phaser.Math.Clamp(edge - BED_HEAD_AHEAD * size + 0.12, 0, 2.5);
+
+    const down = ss(k, 0.0, 0.13);
+    const crawlIn = ss(k, 0.09, 0.23);
+    const peek = ss(k, 0.19, 0.31) * (1 - ss(k, 0.68, 0.78));
+    const crawlOut = ss(k, 0.68, 0.84);
+    const up = ss(k, 0.82, 0.98);
+    const step = crawlTo * crawlIn * (1 - crawlOut);
+    const crouch = down * (1 - up);
+    const handsOn = ss(k, 0.02, 0.14) * (1 - ss(k, 0.84, 0.97));
+
+    // ---- the crawling hands
+    const root = new THREE.Vector3(this.froggy.x, 0, this.froggy.y).addScaledVector(fwd, step);
+    const want = (i: number) =>
+      root.clone().addScaledVector(fwd, 0.92 * size).addScaledVector(right, (i === 0 ? -1 : 1) * 0.3 * size).setY(0.02);
+    if (!this.crawlHands) {
+      this.crawlHands = [0, 1].map((i) => {
+        const w = want(i);
+        return { at: w.clone(), from: w.clone(), to: w.clone(), t: 1 };
+      });
+    }
+    const hs = this.crawlHands;
+    for (let i = 0; i < 2; i++) {
+      const hnd = hs[i];
+      const w = want(i);
+      const other = hs[1 - i];
+      if (hnd.t >= 1 && other.t >= 1 && hnd.at.distanceTo(w) > 0.42 * size) {
+        hnd.from.copy(hnd.at);
+        // put down a little past where it is wanted, the way he is going
+        hnd.to.copy(w).addScaledVector(w.clone().sub(hnd.at).setY(0).normalize(), 0.12 * size).setY(0.02);
+        hnd.t = 0;
+      }
+      if (hnd.t < 1) {
+        hnd.t = Math.min(1, hnd.t + dt / 0.24);
+        const e = ss(hnd.t, 0, 1);
+        hnd.at.lerpVectors(hnd.from, hnd.to, e);
+        hnd.at.y = 0.02 + Math.sin(Math.PI * e) * 0.13 * size;
+      }
+    }
+
+    // ---- the peek: one hand to the frame, the fingers under its edge
+    const hit = new THREE.Vector3(this.froggy.x, 0.4, this.froggy.y).addScaledVector(fwd, edge + 0.04);
+    const rim = hit.clone().addScaledVector(right, -0.32 * size);
+    const rimK = ss(k, 0.2, 0.3) * (1 - ss(k, 0.66, 0.74));
+    const h0 = hs[0].at.clone().lerp(rim, rimK);
+    // ---- the blanket: the other hand goes up to its edge and throws it back
+    const grip = spot.grips
+      .map((o) => o.getWorldPosition(new THREE.Vector3()))
+      .sort((a, b) => a.distanceTo(root) - b.distanceTo(root))[0];
+    const blanketK = grip ? ss(k, 0.44, 0.54) * (1 - ss(k, 0.62, 0.7)) : 0;
+    const h1 = grip ? hs[1].at.clone().lerp(grip, blanketK) : hs[1].at.clone();
+    const lifting = (i: number) => (hs[i].t < 1 ? 1 : 0);
+    const hands: [HandGoal | null, HandGoal | null] = [
+      // flat and pressing on the floor; closing round the frame
+      { at: h0, weight: handsOn, grip: 0.08 + 0.25 * lifting(0) + 0.8 * rimK },
+      { at: h1, weight: handsOn, grip: 0.08 + 0.25 * lifting(1) + 0.9 * blanketK },
+    ];
+
+    // his eyes: on you, if you are under there; otherwise into the dark
+    const look =
+      k > 0.2
+        ? this.hiding === spot && this.stage
+          ? this.stage.camera.position.clone()
+          : new THREE.Vector3(spot.x, 0.25, spot.z)
+        : null;
+    return { step, lean: 0.55 * crouch, sink: 0, crouch, peek, hands, look };
   }
 
   /** What he does on reaching a waypoint: check it, listen, or move on. */
@@ -3624,7 +3735,8 @@ export class HideRoom3D extends Phaser.Scene {
       climbT,
       // Down on his haunches at a bed, craning about under it -- or down at
       // the knees to look into a cupboard he has just opened.
-      crouch: Math.max(this.bedCrouch(), act.sink),
+      crouch: act.crouch ?? act.sink,
+      peek: act.peek ?? 0,
       peer: 1,
       // Hunting, his head swings slowly across the room.  Once he has you it
       // stops dead on you and stays there, which is much worse than the swing.
