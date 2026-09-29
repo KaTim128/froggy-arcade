@@ -111,6 +111,15 @@ export function fadeToScene(scene: Phaser.Scene, key: string, data?: object): vo
   });
   scene.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
     froggyLayer.setDim(0);
+    // ...AND HE COMES BACK UP WITH THE NEXT ROOM, whoever builds it.  The dim
+    // is a CSS filter on his own canvas, so it outlives the scene that set it:
+    // a scene that fades itself in with the camera directly (the two where he
+    // tells you you are out of tokens did) drew the cozy portrait at
+    // brightness zero -- a solid black Froggy.  Restored the moment the next
+    // scene has been created; one that uses `fadeIn` below still ramps him
+    // up with the room, because its fade drives the dim from then on.
+    const next = scene.scene.get(key);
+    next?.events.once(Phaser.Scenes.Events.CREATE, () => froggyLayer.setDim(1));
     scene.scene.start(key, data);
   });
 }
