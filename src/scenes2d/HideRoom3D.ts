@@ -847,6 +847,10 @@ export class HideRoom3D extends Phaser.Scene {
   private peekGlare = 0;
   /** A running clock for the doors he rattles. */
   private hingeT = 0;
+  /** The ending's head twitch: where it snapped to, how long it holds, when the next comes. */
+  private readonly endTwitch = new THREE.Vector3();
+  private endTwitchHold = 0;
+  private endTwitchIn = 0.8;
   /** When the next rattle is heard, while he hauls on something shut. */
   private rattleIn = 0;
   private hiding: Spot3D | null = null;
@@ -5393,11 +5397,12 @@ export class HideRoom3D extends Phaser.Scene {
       w.setPose(wx, 0, wz, Math.atan2(this.pos.x - wx, this.pos.y - wz));
       w.lookAt(cam.position);
       // ---- ALREADY LOOKING AT YOU.  By the time the camera has come round
-      // he has been stood there staring the whole time, and he does nothing
-      // at all: no twitch, no darting eyes, no breath worth the name.  Hunched
-      // over the counter toward you, the head tipped a little to one side,
-      // the long arms hanging dead, the mouth parted onto the teeth and the
-      // jaw held tight.  Pinprick pupils, lids pulled back, eyes lit.
+      // he has been stood there staring the whole time.  Hunched over the
+      // counter toward you, the head tipped a little to one side, the long
+      // arms hanging dead, the mouth parted onto the teeth and the jaw held
+      // tight.  Pinprick pupils, lids pulled back, eyes lit.  His body is
+      // still; his HEAD is not (below) -- and it stays on you, turning after
+      // you as you go, all the way out of the doors.
       w.update(dt, {
         speed: 0,
         maw: 0.24,
@@ -5411,7 +5416,29 @@ export class HideRoom3D extends Phaser.Scene {
         still: 1,
         constrict: 1,
         viewer: cam.position,
+        // his face follows you, not only his eyes
+        faceTo: cam.position,
+        faceK: 0.85,
       });
+      // ---- AND IT TWITCHES.  Every half second or so the head SNAPS --
+      // no ease into it -- a few degrees off, or a hard crick over onto one
+      // side, holds there for a beat, and snaps back.  Under it, a fine fast
+      // tremor that never stops.  The eyes do not move off you through any
+      // of it: the twitch is the head's, the stare is the eyes'.
+      this.endTwitchIn -= dt;
+      if (this.endTwitchIn <= 0) {
+        const hard = Math.random() < 0.3;
+        const k = hard ? 1 : 0.45;
+        const sgn = () => (Math.random() < 0.5 ? -1 : 1);
+        this.endTwitch.set(sgn() * (0.05 + Math.random() * 0.07) * k, sgn() * (0.06 + Math.random() * 0.1) * k, sgn() * (0.12 + Math.random() * 0.25) * k);
+        this.endTwitchHold = hard ? 0.18 + Math.random() * 0.22 : 0.06 + Math.random() * 0.1;
+        this.endTwitchIn = this.endTwitchHold + 0.25 + Math.random() * 0.7;
+      }
+      this.endTwitchHold -= dt;
+      const on = this.endTwitchHold > 0 ? 1 : 0;
+      const tremor = Math.sin(t * 53) * 0.006 + Math.sin(t * 71 + 1) * 0.004;
+      w.twitchHead(this.endTwitch.x * on + tremor, this.endTwitch.y * on, this.endTwitch.z * on + tremor * 0.5);
+      w.updateEyes(dt);
       w.setGlare(0.6);
     }
 

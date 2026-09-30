@@ -589,8 +589,12 @@ export class FroggyMonster {
    * Points on the surface of his head, jaw, neck and trunk, each in its own
    * part's space: what `unclip` keeps out of the floor and out of things.
    */
-  private clipPts: { o: THREE.Object3D; p: THREE.Vector3 }[] = [];
+  private clipPts: { o: THREE.Object3D; p: THREE.Vector3; shell: number }[] = [];
+  private clipShells = 0;
+  /** Where each shape's points start and end in `clipPts` (they are pushed together). */
+  private readonly clipRange: [number, number][] = [];
   private readonly clipW = new THREE.Vector3();
+  private readonly clipLoc: THREE.Vector3[] = [];
   /**
    * The parts of each arm that are drawn out for the pounce, and where they
    * were built, so the length can be set from the rest length every frame.
@@ -1916,6 +1920,15 @@ export class FroggyMonster {
         if (goal && goal.weight > 0.001) this.reachFor(h, goal);
       }
     }
+    // ---- NEVER OVER HIS EYES.  From wherever you are looking at him from --
+    // chasing you, or right in front of the lens at the end -- no part of an
+    // arm or a hand is allowed across his eyes: the stare is the point, and
+    // the arms frame it.  An arm that would cross them is swung out, and
+    // eased back only once it is well clear.
+    const viewer = pose.viewer ?? pose.reachAt ?? (this.grabNow > 0.01 ? this.gaze : null);
+    this.keepEyesClear(viewer, dt);
+
+    // (last, after the eye guard has swung them: nothing after this moves an arm)
     // A hand that is on nothing hangs -- and on a body folded down this low,
     // hanging can put the fingers through the floor.  It is swung forward,
     // the way the hand would be dragged along the boards, until it is not.
@@ -1973,13 +1986,6 @@ export class FroggyMonster {
       }
     }
 
-    // ---- NEVER OVER HIS EYES.  From wherever you are looking at him from --
-    // chasing you, or right in front of the lens at the end -- no part of an
-    // arm or a hand is allowed across his eyes: the stare is the point, and
-    // the arms frame it.  An arm that would cross them is swung out, and
-    // eased back only once it is well clear.
-    const viewer = pose.viewer ?? pose.reachAt ?? (this.grabNow > 0.01 ? this.gaze : null);
-    this.keepEyesClear(viewer, dt);
 
     // ---- THE JAW.  Hinged too far back, so it drops a long way; and it
     // drops very slightly crooked, skewed to one side, which no jaw should.
@@ -2158,12 +2164,15 @@ export class FroggyMonster {
       if (x || y || z) dirs.push(new THREE.Vector3(x, y, z).normalize());
     }
     const shell = (o: THREE.Object3D, c: [number, number, number], r: [number, number, number], half = 0): void => {
+      const id = this.clipShells++;
+      const from = this.clipPts.length;
       for (const d of dirs) {
         // a half-dome: only its own half
         if (half > 0 && d.y < -0.01) continue;
         if (half < 0 && d.y > 0.01) continue;
-        this.clipPts.push({ o, p: new THREE.Vector3(c[0] + d.x * r[0], c[1] + d.y * r[1], c[2] + d.z * r[2]) });
+        this.clipPts.push({ o, p: new THREE.Vector3(c[0] + d.x * r[0], c[1] + d.y * r[1], c[2] + d.z * r[2]), shell: id });
       }
+      this.clipRange.push([from, this.clipPts.length]);
     };
     // the head: the dome, the cheeks, the upper half of the muzzle, the eyes
     shell(this.head, [0, 0.03, 0], [0.256, 0.18, 0.2]);
@@ -2204,7 +2213,6 @@ export class FroggyMonster {
     const sW = this.sizeW;
     const floor = this.floorY + 0.03 * sW;
     const inv = this.q.copy(this.root.quaternion).invert();
-    const loc = new THREE.Vector3();
     for (let iter = 0; iter < 4; iter++) {
       this.root.updateMatrixWorld(true);
       let low = Infinity;
@@ -2214,29 +2222,69 @@ export class FroggyMonster {
       let nx = 0;
       let pz = 0;
       let nz = 0;
-      for (const { o, p } of this.clipPts) {
+      // every point, once, in the world and in his parent's space
+      const pts = this.clipLoc;
+      while (pts.length < this.clipPts.length) pts.push(new THREE.Vector3());
+      for (let i = 0; i < this.clipPts.length; i++) {
+        const { o, p } = this.clipPts[i];
         const w = o.localToWorld(this.clipW.copy(p));
         if (w.y < low) {
           low = w.y;
           lowX = w.x;
           lowZ = w.z;
         }
-        if (!solids) continue;
-        if (par) par.worldToLocal(loc.copy(w));
-        else loc.copy(w);
+        if (par) par.worldToLocal(pts[i].copy(w));
+        else pts[i].copy(w);
+      }
+      // Out of anything solid, a whole shape at a time: for each shape of him
+      // (the dome, a cheek, the ribcage...) inside a box, the one side that
+      // clears ALL of it with the smallest move.  Point by point, a head wider
+      // than a partition is thick was pushed both ways at once and stayed in.
+      if (solids) {
+        const m = 0.03 * s;
+        // where he stands, in the same space as the solids
+        const hipAt = this.hips.getWorldPosition(this.tmp6);
+        if (par) par.worldToLocal(hipAt);
         for (const b of solids) {
-          if (loc.x <= b.x0 || loc.x >= b.x1 || loc.z <= b.z0 || loc.z >= b.z1 || loc.y >= b.y1 || loc.y <= (b.y0 ?? -1)) continue;
-          // out the nearest side, and a little further
-          const m = 0.03 * s;
-          const l = loc.x - b.x0;
-          const r = b.x1 - loc.x;
-          const n = loc.z - b.z0;
-          const f = b.z1 - loc.z;
-          const least = Math.min(l, r, n, f);
-          if (least === l) nx = Math.max(nx, l + m);
-          else if (least === r) px = Math.max(px, r + m);
-          else if (least === n) nz = Math.max(nz, n + m);
-          else pz = Math.max(pz, f + m);
+          const y0 = b.y0 ?? -1;
+          for (const [from, to] of this.clipRange) {
+            let hit = false;
+            let minX = Infinity;
+            let maxX = -Infinity;
+            let minZ = Infinity;
+            let maxZ = -Infinity;
+            for (let i = from; i < to; i++) {
+              const q = pts[i];
+              if (q.y >= b.y1 || q.y <= y0) continue;
+              if (q.x > b.x0 && q.x < b.x1 && q.z > b.z0 && q.z < b.z1) hit = true;
+              // what of it is level with the box, for how far it must go
+              if (q.z > b.z0 && q.z < b.z1) {
+                minX = Math.min(minX, q.x);
+                maxX = Math.max(maxX, q.x);
+              }
+              if (q.x > b.x0 && q.x < b.x1) {
+                minZ = Math.min(minZ, q.z);
+                maxZ = Math.max(maxZ, q.z);
+              }
+            }
+            if (!hit) continue;
+            // Back out the side his body is on: a head leant half through a
+            // thin wall is nearer the far side, and must not be put there.
+            const onPX = hipAt.x >= b.x1;
+            const onNX = hipAt.x <= b.x0;
+            const onPZ = hipAt.z >= b.z1;
+            const onNZ = hipAt.z <= b.z0;
+            const any = onPX || onNX || onPZ || onNZ;
+            const toPX = !any || onPX ? b.x1 - minX + m : Infinity;
+            const toNX = !any || onNX ? maxX - b.x0 + m : Infinity;
+            const toPZ = !any || onPZ ? b.z1 - minZ + m : Infinity;
+            const toNZ = !any || onNZ ? maxZ - b.z0 + m : Infinity;
+            const least = Math.min(toPX, toNX, toPZ, toNZ);
+            if (least === toPX) px = Math.max(px, toPX);
+            else if (least === toNX) nx = Math.max(nx, toNX);
+            else if (least === toPZ) pz = Math.max(pz, toPZ);
+            else nz = Math.max(nz, toNZ);
+          }
         }
       }
       const pen = floor - low;
