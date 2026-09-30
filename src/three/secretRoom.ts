@@ -46,7 +46,7 @@
 
 import * as THREE from 'three';
 import type { Box, RoomDef } from './hideRooms';
-import { FroggyMonster, type FroggyPose } from './froggyMonster';
+import { FroggyMonster, type FroggyPose, type HandGoal } from './froggyMonster';
 
 /**
  * What the room says he is doing this frame, handed straight to the twin in
@@ -780,8 +780,16 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
     // (the floor and the solids are in room space, which is this enclosure's
     // own; where he turns his face is a point in the world, so it comes down
     // the hole with him)
-    const faceTo = seen.pose.faceTo && monster.root.parent ? monster.root.parent.localToWorld(seen.pose.faceTo.clone()) : null;
-    monster.update(dt, { ...seen.pose, reachAt: null, viewer: null, faceTo });
+    const par = monster.root.parent;
+    const down = (v: THREE.Vector3): THREE.Vector3 => (par ? par.localToWorld(v.clone()) : v);
+    const faceTo = seen.pose.faceTo ? down(seen.pose.faceTo) : null;
+    // (and so are his hands on things, and his feet going over something)
+    const hands = seen.pose.hands
+      ? (seen.pose.hands.map((g) => (g ? { ...g, at: down(g.at) } : null)) as [HandGoal | null, HandGoal | null])
+      : undefined;
+    const rig = seen.pose.climbRig;
+    const climbRig = rig ? { ...rig, feet: [down(rig.feet[0]), down(rig.feet[1])] as [THREE.Vector3, THREE.Vector3] } : null;
+    monster.update(dt, { ...seen.pose, reachAt: null, viewer: null, faceTo, hands, climbRig });
 
     // ---- AND THE LIDS COME UP WHEN THE REAL ONES DO.
     //

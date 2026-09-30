@@ -388,7 +388,12 @@ try {
       for (let i = 0; i < 80; i++) {
         await new Promise((r) => setTimeout(r, 50));
         if (window.__hide.climbing) wentOver = true;
-        highest = Math.max(highest, sc.monster.root.position.y);
+        // (his hips do the climbing now, not the whole of him: the lower of
+        // his two feet is how high he actually got onto it)
+        const m = sc.monster;
+        m.root.updateMatrixWorld(true);
+        const feet = m.ankles.map((a) => a.localToWorld(a.position.clone().set(0, 0, 0)).y);
+        highest = Math.max(highest, Math.min(...feet));
         if (!sc.climb && wentOver) break;
       }
       return { started, wentOver, highest, crossed: sc.froggy.y < sofa.z, top: sofa.h };
@@ -396,7 +401,7 @@ try {
     check('he climbs over the furniture rather than stopping at it',
       climbed.started && climbed.wentOver && climbed.crossed,
       `started ${climbed.started}, over ${climbed.top}m, crossed ${climbed.crossed}`);
-    check('he is actually up on top of it while he does',
+    check('he is actually up on top of it while he does, both feet on it',
       climbed.highest > climbed.top * 0.8, `${climbed.highest.toFixed(2)}m up`);
 
     // Hiding, and what hiding costs.

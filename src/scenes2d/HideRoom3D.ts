@@ -31,7 +31,8 @@ import { ledger } from '../core/ledger';
 import { froggyLayer } from '../render/froggyLayer';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
 import { playJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
-import { FroggyMonster, type HandGoal, type Solid } from '../three/froggyMonster';
+import { FroggyMonster, type ClimbRig, type HandGoal, type Solid } from '../three/froggyMonster';
+import { climbFrame, climbSeconds, type ClimbFrame, type ClimbGeom } from '../three/froggyClimb';
 import { buildOpening, hideEye } from '../three/hideOpenings';
 import { drawPixelText } from '../render/pixelFont';
 import { ThreeStage } from '../render/threeStage';
@@ -598,19 +599,6 @@ const STALE_S = 24;
  */
 const CLIMB_MAX_H = 2.9;
 /**
- * How fast he goes over something, in metres of obstacle per second.
- *
- * It was 1.5, which put a full second and a half between him reaching a sofa
- * and him being on your side of it — long enough that climbing was a thing you
- * watched rather than a thing that happened to you, and long enough that the
- * furniture was still most of a hiding place after he had decided to cross it.
- * At 3.2 he is over a chest in under half a second.
- */
-const CLIMB_SPEED = 3.2;
-/** Reaching up before he goes, and gathering himself after.  Beats, not waits. */
-const CLIMB_MOUNT_S = 0.17;
-const CLIMB_LAND_S = 0.15;
-/**
  * How close counts as arriving.  It has to be OUTSIDE the thing he came to
  * check: a spot is solid to him from 1.05m, so the old 0.6m arrival could
  * never be reached and he shouldered the furniture instead of ever opening it.
@@ -784,17 +772,16 @@ export class HideRoom3D extends Phaser.Scene {
   private froggyMeshes = 0;
   /**
    * Set while he is going over something: nothing blocks him until it ends.
-   * Three beats — mount (he reaches up and stops), cross (he goes over), land
-   * (he drops and gathers himself) — so it reads as a climb, not a hop.
+   * It is climbed, a hand and a foot at a time -- see froggyClimb -- and
+   * `geom` is what he is climbing, measured along the way he is going.
    */
   private climb: {
     from: THREE.Vector2;
     to: THREE.Vector2;
     top: number;
     t: number;
-    dur: number;
-    mount: number;
-    land: number;
+    total: number;
+    geom: ClimbGeom;
   } | null = null;
   /** His map of the room, and the route he is on.  See navGrid. */
   private grid: NavGrid | null = null;
@@ -4276,100 +4263,87 @@ export class HideRoom3D extends Phaser.Scene {
     // Landing inside something else is worse than not climbing at all.
     if (this.solid(to.x, to.y, 0.5)) return false;
 
-    this.climb = {
-      from,
-      to,
+    // Where the way he is going goes into it and comes out of it.
+    const L = from.distanceTo(to);
+    const dx = (to.x - from.x) / (L || 1);
+    const dz = (to.y - from.y) / (L || 1);
+    let tIn = 0;
+    let tOut = L;
+    for (const [o, d, lo, hi] of [
+      [from.x, dx, box.x - box.w / 2, box.x + box.w / 2],
+      [from.y, dz, box.z - box.d / 2, box.z + box.d / 2],
+    ]) {
+      if (Math.abs(d) < 1e-6) continue;
+      const t0 = (lo - o) / d;
+      const t1 = (hi - o) / d;
+      tIn = Math.max(tIn, Math.min(t0, t1));
+      tOut = Math.min(tOut, Math.max(t0, t1));
+    }
+    // (clipping a corner, it is the middle of the box that is crossed)
+    if (tOut <= tIn) {
+      const mid = (box.x - from.x) * dx + (box.z - from.y) * dz;
+      tIn = mid - 0.2;
+      tOut = mid + 0.2;
+    }
+    const geom: ClimbGeom = {
+      near: Math.max(0.05, tIn),
+      far: Math.min(L - 0.3, tOut),
+      len: L,
       top: box.h,
-      t: 0,
-      dur: Math.max(0.32, (box.h + from.distanceTo(to)) / CLIMB_SPEED),
-      mount: CLIMB_MOUNT_S,
-      land: CLIMB_LAND_S,
+      size: this.monster?.size ?? FROGGY_SCALE,
     };
+    this.climb = { from, to, top: box.h, t: 0, total: climbSeconds(geom), geom };
     this.wantYaw = Math.atan2(to.x - from.x, to.y - from.y);
     this.play('hop_wet', this.earshot(from.x, from.y, EARSHOT, 0));
     return true;
   }
 
-  /** 0..1 how far into the climb, by beat: -1 mounting, 0..1 crossing, 2 landing. */
-  private climbBeat(): { beat: 'mount' | 'cross' | 'land'; k: number } {
+  /** Where every part of him is, this far through the climb. */
+  private climbNow(): ClimbFrame | null {
+    const c = this.climb;
+    return c ? climbFrame(c.t / c.total, c.geom) : null;
+  }
+
+  /** A point along the climb, in the world: `s` along the way, `y` up, `side` along the model's +x. */
+  private climbPoint(s: number, y: number, side = 0): THREE.Vector3 {
     const c = this.climb!;
-    if (c.t < c.mount) return { beat: 'mount', k: c.t / c.mount };
-    if (c.t < c.mount + c.dur) return { beat: 'cross', k: (c.t - c.mount) / c.dur };
-    return { beat: 'land', k: Math.min(1, (c.t - c.mount - c.dur) / c.land) };
+    const L = c.geom.len || 1;
+    const ux = (c.to.x - c.from.x) / L;
+    const uz = (c.to.y - c.from.y) / L;
+    // (the model faces +z; its first arm hangs off the -x shoulder)
+    return new THREE.Vector3(c.from.x + ux * s + uz * side, y, c.from.y + uz * s - ux * side);
   }
 
   /**
-   * ---- HIS HANDS ON THE THING HE IS CLIMBING.
+   * ---- HIS HANDS AND FEET ON THE THING HE IS CLIMBING.
    *
-   * Procedural arms swinging near a counter read as a frog floating up past
-   * it.  So the hands go ON it: at the mount both reach up and take the near
-   * edge of the top, fingers hooked over; through the crossing they go hand
-   * over hand -- the left lets go and slaps down on the far edge, then the
-   * right -- and the body is hauled up between them; on the far side, as he
-   * drops, they let go last.  The points are on the top surface, in the
-   * world, so a hand that is planted stays exactly where it was put while
-   * the body moves under it.
+   * Arms swinging near a counter read as a frog floating up past it, so they
+   * go ON it: the palms flat on the top with the fingers curled over the
+   * edge, a shoulder's width apart, and moved one at a time.  The points are
+   * in the world, so a planted hand or foot stays exactly where it was put
+   * while the body moves over it.
    */
-  private climbHands(): [HandGoal | null, HandGoal | null] | null {
-    const c = this.climb;
-    if (!c) return null;
-    const { beat, k } = this.climbBeat();
-    const dx = c.to.x - c.from.x;
-    const dz = c.to.y - c.from.y;
-    const L = Math.hypot(dx, dz) || 1;
-    const ux = dx / L;
-    const uz = dz / L;
-    // across: his left is to the left of the direction of travel
-    const px = -uz;
-    const pz = ux;
+  private climbRig(f: ClimbFrame): { rig: ClimbRig; hands: [HandGoal | null, HandGoal | null] } {
     const size = this.monster?.size ?? 1;
     const spread = 0.34 * size;
-    const edge = (along: number, side: number): THREE.Vector3 =>
-      new THREE.Vector3(
-        c.from.x + ux * along * L + px * side * spread,
-        c.top + 0.03,
-        c.from.y + uz * along * L + pz * side * spread,
-      );
-    const NEAR = 0.36;
-    const FAR = 0.64;
-    // which edge each hand is on at this point in the climb, and how firmly
-    let wL = 1;
-    let wR = 1;
-    let aL = NEAR;
-    let aR = NEAR;
-    if (beat === 'mount') {
-      // reaching up to it: the weight comes on as the arms arrive
-      wL = wR = Math.min(1, k * 1.6);
-    } else if (beat === 'cross') {
-      // the left goes over first, then the right; each lifts on the way
-      const lMove = Math.min(1, Math.max(0, (k - 0.28) / 0.14));
-      const rMove = Math.min(1, Math.max(0, (k - 0.44) / 0.14));
-      aL = NEAR + (FAR - NEAR) * lMove;
-      aR = NEAR + (FAR - NEAR) * rMove;
-      // off the top as he goes down the far side
-      const off = Math.max(0, (k - 0.8) / 0.2);
-      wL = wR = 1 - off;
-    } else {
-      return null;
-    }
-    const lift = (a: number, from: number): number => (a > from && a < FAR ? Math.sin(((a - NEAR) / (FAR - NEAR)) * Math.PI) * 0.25 : 0);
-    const l = edge(aL, 1);
-    l.y += lift(aL, NEAR);
-    const r = edge(aR, -1);
-    r.y += lift(aR, NEAR);
-    return [
-      wL > 0.01 ? { at: l, weight: wL, grip: 0.85 } : null,
-      wR > 0.01 ? { at: r, weight: wR, grip: 0.85 } : null,
-    ];
-  }
-
-  /** How far he folds down over the top while crossing it. */
-  private climbCrouch(): number {
-    if (!this.climb) return 0;
-    const { beat, k } = this.climbBeat();
-    if (beat === 'mount') return k * 0.5;
-    if (beat === 'cross') return 0.5 + Math.sin(Math.min(1, k * 1.25) * Math.PI) * 0.45;
-    return (1 - k) * 0.5;
+    const hand = (i: number): HandGoal | null => {
+      const p = f.hands[i];
+      if (p.w < 0.01) return null;
+      // (a palm is a few centimetres thick: it rests ON the top)
+      return { at: this.climbPoint(p.s, p.y + 0.04 * size, i === 0 ? -spread : spread), weight: p.w, grip: 0.95 };
+    };
+    return {
+      rig: {
+        k: f.k,
+        hip: f.hip,
+        pitch: f.pitch,
+        roll: f.roll,
+        top: this.climb!.top,
+        feet: [this.climbPoint(f.feet[0].s, f.feet[0].y), this.climbPoint(f.feet[1].s, f.feet[1].y)],
+        hang: [f.feet[0].hang, f.feet[1].hang],
+      },
+      hands: [hand(0), hand(1)],
+    };
   }
 
   /** Runs a climb to its end.  Returns true while he is still on top of it. */
@@ -4380,11 +4354,9 @@ export class HideRoom3D extends Phaser.Scene {
     // He faces the thing he is climbing, and turns to it before he moves.
     const dyaw = Phaser.Math.Angle.Wrap(this.wantYaw - this.froggyYaw);
     this.froggyYaw = Phaser.Math.Angle.Wrap(this.froggyYaw + Phaser.Math.Clamp(dyaw, -FROGGY_TURN * dt, FROGGY_TURN * dt));
-    const { beat, k } = this.climbBeat();
-    if (beat === 'mount') this.froggy.copy(c.from);
-    else if (beat === 'cross') this.froggy.lerpVectors(c.from, c.to, k);
-    else this.froggy.copy(c.to);
-    if (c.t >= c.mount + c.dur + c.land) {
+    const f = climbFrame(c.t / c.total, c.geom);
+    this.froggy.lerpVectors(c.from, c.to, f.s / (c.geom.len || 1));
+    if (c.t >= c.total) {
       this.climb = null;
       this.fStep = 0;
       this.fSpeed *= 0.5;
@@ -4635,33 +4607,11 @@ export class HideRoom3D extends Phaser.Scene {
     // room's pose and the scare's fight over his arms every frame.
     if (this.mode === 'caught' && this.scare) return;
 
-    // Height off the floor: on the ground, or partway over something.
-    let y = 0;
-    let climbing = 0;
-    // 0..1 across the whole crossing, for the hand-over-hand haul.  The model
-    // needs to know how far up he is, not merely that he is up.
-    let climbT = 0;
-    if (this.climb) {
-      const { beat, k } = this.climbBeat();
-      climbT = beat === 'mount' ? 0 : beat === 'cross' ? k : 1;
-      const top = this.climb.top;
-      if (beat === 'mount') {
-        // Reaching up: the pose comes on, feet still on the floor.
-        climbing = k;
-        y = 0;
-      } else if (beat === 'cross') {
-        // Up the near face, over the top, down the far face — and on the floor
-        // at BOTH ends, so he never stands on air past the far edge.  A
-        // version of this arc ended half the obstacle's height up and he
-        // hung there; that is the floating that was reported.
-        climbing = 1;
-        y = top * Math.max(0, Math.min(1, k * 3, (1 - k) * 3));
-      } else {
-        // Landed: crouched from the drop, straightening as the pose lets go.
-        climbing = 1 - k;
-        y = 0;
-      }
-    }
+    // Going over something, every hand and foot is placed (see froggyClimb);
+    // he stays on the floor he is standing on and his hips do the climbing.
+    const y = 0;
+    const cf = this.climbNow();
+    const cr = cf ? this.climbRig(cf) : null;
 
     // The model is built facing +Z and `froggyYaw` is already the angle that
     // points +Z at whatever he is going towards, so it goes in as it is.  It
@@ -4690,18 +4640,18 @@ export class HideRoom3D extends Phaser.Scene {
     const briefing = this.mode === 'briefing' && !this.waking;
     if (briefing && this.stage) m.lookAt(this.stage.camera.position);
     const pose = {
-      speed: Math.min(6, moved),
+      // (the walk is let go of while the climb has him: his feet are placed)
+      speed: Math.min(6, moved) * (cf ? 1 - cf.k : 1),
       // The mouth is shut while he is looking for you and open once he is not.
       maw: this.fMode === 'chase' ? 1 : this.fMode === 'openSpot' ? 0.45 : briefing ? 0.2 : 0.12,
       // and in a chase the teeth are out, more of them the longer it goes on
       bare: this.fMode === 'chase' ? 0.55 + 0.45 * this.chaseHeat : briefing ? 0.5 : 0.2,
-      climb: climbing,
-      climbT,
+      climb: cf ? cf.k : 0,
+      climbRig: cr?.rig ?? null,
       // Down on his haunches at a bed, craning about under it -- or down at
-      // the knees to look into a cupboard he has just opened.
-      // ...and folded down low over whatever he is going over, so his hands
-      // can stay on the top of it: a climb is a crawl across it, not a stroll.
-      crouch: this.waking ? 1 : Math.max(act.crouch ?? act.sink ?? 0, this.climbCrouch()),
+      // the knees to look into a cupboard he has just opened.  (Going over
+      // something, the climb places him instead.)
+      crouch: this.waking ? 1 : cf ? 0 : (act.crouch ?? act.sink ?? 0),
       peek: act.peek ?? 0,
       peer: this.waking ? 0 : 1,
       // Hunting, his head swings slowly across the room.  Once he has you it
@@ -4718,7 +4668,7 @@ export class HideRoom3D extends Phaser.Scene {
       // on it.  The pose goes down the hole to the enclosure as well, which
       // drops this -- down there, you are not where he is reaching.
       reachAt: this.fMode === 'chase' && this.stage ? this.stage.camera.position : null,
-      hands: this.wakeHands() ?? this.climbHands() ?? act.hands,
+      hands: this.wakeHands() ?? cr?.hands ?? act.hands,
       // folded forward over his hands, on all fours
       lean: this.waking ? 1 : act.lean,
       // pinpricks while he hunts; blown wide once he has you, and staring
