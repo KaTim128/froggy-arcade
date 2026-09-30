@@ -148,6 +148,26 @@ for (let i = 0; i < 40 && !(await state()).hasKey; i++) await sleep(100);
 const afterKey = await state();
 check('hasKey set on pickup', afterKey.hasKey === true);
 
+// The thought about the key is read, then dismissed with CONTINUE, and it is
+// GONE before the bulb starts: nothing of it on the TURN AROUND frame.
+await sleep(900);
+const thoughtUp = await page.evaluate(() => {
+  const s = window.__froggy.game().scene.getScene('BasementSequence');
+  return { up: !!s.thought, index: s.index };
+});
+await page.screenshot({ path: `${SHOTS}/f07b-key-thought.png` });
+check('the key thought waits for CONTINUE', thoughtUp.up && thoughtUp.index === 6, JSON.stringify(thoughtUp));
+await page.mouse.click(640, 360 + (180 - 13 - 90) * 4);
+for (let i = 0; i < 40 && (await frameNow()) === 6; i++) await sleep(100);
+const lingering = await page.evaluate(() => {
+  const s = window.__froggy.game().scene.getScene('BasementSequence');
+  const words = [];
+  const walk = (l) => { for (const o of l) { if (typeof o.text === 'string' && o.visible && o.alpha > 0) words.push(o.text); if (o.list) walk(o.list); } };
+  walk(s.children.list);
+  return { index: s.index, thought: !!s.thought, key: words.filter((w) => /key|CONTINUE/i.test(w)) };
+});
+check('and none of it is left on the TURN AROUND frame', lingering.index === 7 && !lingering.thought && lingering.key.length === 0, JSON.stringify(lingering));
+
 // --- frame 8: TURN AROUND only inside the flicker
 await sleep(300);
 await page.screenshot({ path: `${SHOTS}/f08a-flicker-dark.png` });

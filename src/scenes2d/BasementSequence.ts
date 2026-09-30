@@ -74,6 +74,8 @@ export class BasementSequence extends Phaser.Scene {
   private layer: Phaser.GameObjects.Container | null = null;
   private hotspot: Phaser.GameObjects.Container | null = null;
   private busy = true;
+  /** The thought on screen, if any: see `think`. */
+  private thought: Phaser.GameObjects.Container | null = null;
   /** The frame a walk in progress is heading for, and every timer it is riding on. */
   private walkTo: number | null = null;
   private pending: Phaser.Time.TimerEvent[] = [];
@@ -140,6 +142,7 @@ export class BasementSequence extends Phaser.Scene {
   private show(i: number, fade = CROSSFADE_MS): void {
     this.index = i;
     this.busy = true;
+    this.clearThought();
 
     const next = this.add.container(0, 0).setAlpha(0);
     this.frames[i].paint(this, next);
@@ -195,7 +198,6 @@ export class BasementSequence extends Phaser.Scene {
       });
       return;
     }
-    if (i === 6) this.think('A key... maybe this belongs to the prize case back at the lobby.');
     if (def.hotspot === 'turnAround') {
       // Five seconds to turn round yourself.  Then the game does it for you.
       this.time.delayedCall(5000, () => {
@@ -311,11 +313,19 @@ export class BasementSequence extends Phaser.Scene {
       return;
     }
     if (kind === 'key') {
-      // PRD frame 8: hasKey, then the bulb flickers hard.
+      // PRD frame 8: hasKey, then the bulb flickers hard -- but not before
+      // the thought about it has been read and dismissed.  The line used to
+      // fade on its own clock and was still on screen under TURN AROUND.
       store.patch({ hasKey: true });
       store.flush();
       audio.sfx('lock_click');
-      this.queue(260, 2);
+      this.hotspot?.destroy();
+      this.hotspot = null;
+      // off the table and into your hand, as the flicker frame paints it
+      if (this.layer) {
+        for (const k of this.layer.list.filter((o) => o instanceof Phaser.GameObjects.Container)) k.destroy();
+      }
+      this.think('A key... maybe this belongs to the prize case back at the lobby.', () => this.queue(0, 2));
       return;
     }
 
@@ -483,14 +493,35 @@ export class BasementSequence extends Phaser.Scene {
    * quiet, fading in under the picture and out again.  It is the player
    * working something out, not anybody talking to them.
    */
-  private think(line: string): void {
-    const t = text(this, GAME_W / 2, GAME_H - 30, line, PALETTE.fog)
+  private think(line: string, onContinue: () => void): void {
+    const t = text(this, GAME_W / 2, GAME_H - 34, line, PALETTE.fog)
       .setOrigin(0.5, 0.5)
       .setMaxWidth(GAME_W - 40)
       .setCenterAlign()
-      .setAlpha(0)
-      .setDepth(700);
-    this.tweens.add({ targets: t, alpha: 0.85, duration: 700 });
-    this.tweens.add({ targets: t, alpha: 0, delay: 5200, duration: 900, onComplete: () => t.destroy() });
+      .setAlpha(0);
+    const go = text(this, GAME_W / 2, GAME_H - 13, '[ CONTINUE ]', PALETTE.bone, 8).setOrigin(0.5, 0.5).setAlpha(0);
+    const zone = this.add.rectangle(GAME_W / 2, GAME_H - 13, 90, 18, PALETTE.cream, 0).setAlpha(0.001);
+    const box = this.add.container(0, 0, [t, go, zone]).setDepth(700);
+    this.thought = box;
+    this.tweens.add({ targets: t, alpha: 0.85, duration: 500 });
+    this.tweens.add({ targets: go, alpha: 0.8, delay: 600, duration: 400 });
+    // Continue is live once the line is there to have been read.
+    this.time.delayedCall(600, () => {
+      if (this.thought !== box) return;
+      zone.setInteractive({ useHandCursor: true }).once('pointerdown', () => {
+        // Gone in the same frame, not faded: nothing of it is left on the
+        // screen the bulb starts to flicker on.
+        this.clearThought();
+        onContinue();
+      });
+    });
+  }
+
+  /** The thought and its button, off the screen at once. */
+  private clearThought(): void {
+    if (!this.thought) return;
+    this.tweens.killTweensOf(this.thought.list);
+    this.thought.destroy();
+    this.thought = null;
   }
 }
