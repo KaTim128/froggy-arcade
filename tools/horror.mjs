@@ -212,9 +212,15 @@ try {
     check('the briefing hands over to the count', (await hide()).mode === 'hiding',
       `after ${(waitedForCount / 1000).toFixed(1)}s`);
 
-    await sleep(11000);
+    // Ten seconds of GAME time, polled for rather than slept through: on a
+    // software renderer a wall-clock second can be less than a game second.
+    let counted = 0;
+    while (counted < 20000 && (await hide()).mode === 'hiding') {
+      await sleep(250);
+      counted += 250;
+    }
     let s = await hide();
-    check('the count hands over to the search', s.mode === 'seeking', s.mode);
+    check('the count hands over to the search', s.mode === 'seeking', `${s.mode} after ${(counted / 1000).toFixed(1)}s`);
     // The test player stands in the open at the door for the next while.  He
     // is faster and sharper than he was, and catching a mannequin ends the
     // scene under the rest of these checks, so he is kept blind until a check
@@ -458,10 +464,16 @@ try {
     await page.keyboard.press('KeyE');
     await sleep(150);
     const before = await hide();
+    // Held until it has gone somewhere, up to a second and a half of wall
+    // clock: what is being checked is that the keys work, not the frame rate.
     await page.keyboard.down('KeyW');
-    await sleep(400);
+    let after = before;
+    for (let t = 0; t < 1500; t += 100) {
+      await sleep(100);
+      after = await hide();
+      if (Math.hypot(after.px - before.px, after.pz - before.pz) > 0.4) break;
+    }
     await page.keyboard.up('KeyW');
-    const after = await hide();
     check('W A S D work the moment you are out',
       Math.hypot(after.px - before.px, after.pz - before.pz) > 0.4,
       `${Math.hypot(after.px - before.px, after.pz - before.pz).toFixed(2)}m`);
@@ -574,7 +586,9 @@ try {
       // Against where he is DRAWN: at a hiding place he steps in to it and
       // crawls to the bed, off his logical spot, and the twin copies the
       // model, not the rule.
-      apart = Math.max(apart, Math.hypot(t.vx - t.pen.x, t.vz - t.pen.z));
+      // (the first half second is the gallery settling in after the move
+      // through the wall, and the twin catching up with where he was put)
+      if (i >= 2) apart = Math.max(apart, Math.hypot(t.vx - t.pen.x, t.vz - t.pen.z));
       went += Math.hypot(t.fx - at.x, t.fz - at.z);
       at = { x: t.fx, z: t.fz };
     }

@@ -722,6 +722,8 @@ export class HideRoom3D extends Phaser.Scene {
   /** Where the eye was when you got in, so it goes back there. */
   private readonly hideFrom = new THREE.Vector3();
   private hideBreath = 0;
+  /** The painted inside of each kind of box, drawn once.  See paintPeephole. */
+  private peepCache = new Map<string, HTMLCanvasElement>();
   /**
    * Up and down.
    *
@@ -1375,6 +1377,7 @@ export class HideRoom3D extends Phaser.Scene {
     }
 
     for (const c of d.spots) this.spots.push(this.buildSpot(c.x, c.z, c.rot, c.kind));
+    for (const c of this.spots) this.peepImage(c.kind);
 
     // The dirt, the litter, the damp.  Placed off anything solid.
     dressRoom(st.scene, d, seed, (x, z) => this.solid(x, z, 0.3));
@@ -1704,8 +1707,15 @@ export class HideRoom3D extends Phaser.Scene {
    * round the sides if there is not.
    */
   private stepOut(spot: Spot3D): void {
-    const fx = -Math.sin(this.yaw);
-    const fz = -Math.cos(this.yaw);
+    // Out of the FRONT of it -- the door, the lid, the gap you went under --
+    // and facing on out the way you were looking through it.  It used to go
+    // by the view alone, and with the view held to the opening a head half
+    // way round when you pressed E put you out of the back of a cupboard.
+    const face = spot.rot + Math.PI;
+    const lim = HIDE_VIEW[spot.kind].yaw;
+    this.yaw = face + Phaser.Math.Clamp(Phaser.Math.Angle.Wrap(this.yaw - face), -lim, lim);
+    const fx = Math.sin(spot.rot);
+    const fz = Math.cos(spot.rot);
     const q = Math.PI / 6;
     const offsets = [0, q, -q, 2 * q, -2 * q, 3 * q, -3 * q, 4 * q, -4 * q, 5 * q, -5 * q, Math.PI];
 
@@ -4611,26 +4621,25 @@ export class HideRoom3D extends Phaser.Scene {
    * its edges, and the frame darkens toward the corners.  It closes round the
    * view as you get in and opens as you get out.
    */
-  private paintPeephole(ctx: CanvasRenderingContext2D): void {
-    const spot = this.hiding ?? this.hideIn;
-    if (!spot || this.hideK <= 0) return;
+  /** The inside of a box of this kind, round its opening, at full strength.  See paintPeephole. */
+  private drawPeephole(ctx: CanvasRenderingContext2D, kind: SpotKind): void {
     const W = GAME_W;
     const H = GAME_H;
     const cx = W / 2;
     const cy = H / 2;
-    const k = this.hideK * this.hideK * (3 - 2 * this.hideK);
+    const k = 1;
     const holes: Array<(c: CanvasRenderingContext2D) => void> = [];
     const rect = (x: number, y: number, w: number, h: number, r = 1.5) => (c: CanvasRenderingContext2D) => c.roundRect(x, y, w, h, r);
 
     let inside = '#0c0a09';
     let grain: 'metal' | 'wood' | 'cloth' = 'wood';
-    if (spot.kind === 'locker') {
+    if (kind === 'locker') {
       inside = '#0b0c0e';
       grain = 'metal';
       // five vent slats, pressed out of the door at eye height
       const sw = W * 0.44;
       for (let i = 0; i < 5; i++) holes.push(rect(cx - sw / 2, cy - 17 + i * 7.5, sw, 4.2, 2));
-    } else if (spot.kind === 'cupboard') {
+    } else if (kind === 'cupboard') {
       // the crack where the two doors do not quite meet: narrow, tall, and
       // not quite straight
       holes.push((c) => {
@@ -4642,7 +4651,7 @@ export class HideRoom3D extends Phaser.Scene {
         c.lineTo(cx - 8, cy + 6);
         c.closePath();
       });
-    } else if (spot.kind === 'bed') {
+    } else if (kind === 'bed') {
       grain = 'cloth';
       // under the bed: the mattress is the top of the picture, the floor the
       // bottom, and the gap between them is wide and short
@@ -4712,6 +4721,39 @@ export class HideRoom3D extends Phaser.Scene {
     g.addColorStop(1, 'rgba(0,0,0,0.85)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  /**
+   * The inside of a box of this kind, drawn once and kept: the grain, the
+   * cut-outs, the light and the vignette are a lot of work for a software
+   * canvas, and redrawing them every frame cost the room most of its frame
+   * rate while you were in a box.  Built for every kind in the room as it
+   * loads, so the first time you climb into one is not a stall either.
+   */
+  private peepImage(kind: SpotKind): HTMLCanvasElement {
+    let img = this.peepCache.get(kind);
+    if (!img) {
+      const S = 3;
+      img = document.createElement('canvas');
+      img.width = GAME_W * S;
+      img.height = GAME_H * S;
+      const c = img.getContext('2d')!;
+      c.scale(S, S);
+      this.drawPeephole(c, kind);
+      this.peepCache.set(kind, img);
+    }
+    return img;
+  }
+
+  private paintPeephole(ctx: CanvasRenderingContext2D): void {
+    const spot = this.hiding ?? this.hideIn;
+    if (!spot || this.hideK <= 0) return;
+    const k = this.hideK * this.hideK * (3 - 2 * this.hideK);
+    const img = this.peepImage(spot.kind);
+    ctx.save();
+    ctx.globalAlpha = k;
+    ctx.drawImage(img, 0, 0, GAME_W, GAME_H);
     ctx.restore();
 
     if (this.hiding) {
