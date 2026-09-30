@@ -125,7 +125,7 @@ const SCHEMA_VERSION = 1;
 const FLUSH_DEBOUNCE_MS = 250; // PRD ST-2
 
 export const MAX_SLOTS = 3;
-// (13: long enough for HORROR_NAME, below, to be typed in full)
+// (13: room for any of the passwords below, and for the names already saved at it)
 export const MAX_NAME_LEN = 13;
 
 export interface SlotMeta {
@@ -158,14 +158,14 @@ export const LEDGER_KEY: unique symbol = Symbol('ledger');
  * Name a run this and it never runs out of tokens.
  *
  * Stored as the profile name like any other and compared CASE-INSENSITIVELY,
- * so "admin128" works as well as "ADMIN128" — names keep their case now, and
+ * so "addmin128" works as well as "ADDMIN128" — names keep their case now, and
  * a cheat that depended on the shift key would be a cheat nobody could type.
- * Spacing still matters: "ADMIN 128" is a different name and an ordinary
+ * Spacing still matters: "ADDMIN 128" is a different name and an ordinary
  * run, which is deliberate, a cheat with fuzzy edges is one people trip over
  * by accident.  The ledger is what honours it (see TokenLedger.debit); this is
  * only the password.
  */
-export const ADMIN_NAME = 'ADMIN128';
+export const ADMIN_NAME = 'ADDMIN128';
 /** What the HUD shows for such a run.  It never moves. */
 export const ADMIN_TOKENS = 9999;
 /**
@@ -178,12 +178,12 @@ export const ADMIN_TOKENS = 9999;
  * again, so this is the door into it.
  *
  * It is the same kind of password as ADMIN_NAME and follows the same rules:
- * stored as an ordinary profile name, compared CASE-INSENSITIVELY so "test128"
- * and "TEST128" both work, and matched WHOLE — "TEST 128" and "TEST1280" are
+ * stored as an ordinary profile name, compared CASE-INSENSITIVELY so "testt128"
+ * and "TESTT128" both work, and matched WHOLE — "TESTT 128" and "TESTT1280" are
  * ordinary runs, because a cheat with fuzzy edges is one people trip over by
  * accident.  ProfileModal is what honours it; this is only the password.
  */
-export const TEST_NAME = 'TEST128';
+export const TEST_NAME = 'TESTT128';
 
 /**
  * Name a run this and it opens on the first round of hide and seek: the
@@ -191,7 +191,7 @@ export const TEST_NAME = 'TEST128';
  * alley, the basement and the key) already behind you.  Same rules as
  * TEST_NAME: case-insensitive, whole name only.
  */
-export const HORROR_NAME = 'HORRORDARK128';
+export const HORROR_NAME = 'HNS128';
 
 function defaultState(): GameState {
   return {

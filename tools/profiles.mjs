@@ -163,7 +163,7 @@ try {
     (await page.evaluate(() => window.__froggy.state().tokens)) === 42);
 
   // ------------------------------------------------------- the unlimited run
-  console.log('\nprofiles  a run named admin128 never runs out');
+  console.log('\nprofiles  a run named addmin128 never runs out');
 
   /** Play the dearest cabinet on the floor, through the room's own launch. */
   /**
@@ -201,11 +201,11 @@ try {
   // without regard to case, so this is still the same name.  Spacing is not —
   // see the near-miss below.
   await bootFresh();
-  await newProfile(0, 'admin128');
+  await newProfile(0, 'addmin128');
   const admin = await index();
   const adminTokens = await page.evaluate(() => window.__froggy.state().tokens);
   check('the name is kept in the case it was typed, and still matched',
-    admin?.slots?.[0]?.name === 'admin128', admin?.slots?.[0]?.name);
+    admin?.slots?.[0]?.name === 'addmin128', admin?.slots?.[0]?.name);
   check('it starts full without waiting for the intro', adminTokens === 9999, `${adminTokens} tokens`);
 
   await page.goto(`${URL}?scene=ArcadeHub`, { waitUntil: 'networkidle2' });
@@ -219,11 +219,11 @@ try {
   // The edge of the door.  A name that merely looks like it is an ordinary run,
   // so nobody unlocks this by typing something close.
   await bootFresh();
-  await newProfile(0, 'admin 128');
+  await newProfile(0, 'addmin 128');
   const near = await index();
   const nearTokens = await page.evaluate(() => window.__froggy.state().tokens);
   check('a name that only looks like it does nothing',
-    near?.slots?.[0]?.name === 'admin 128' && nearTokens === 0,
+    near?.slots?.[0]?.name === 'addmin 128' && nearTokens === 0,
     `${near?.slots?.[0]?.name} with ${nearTokens}`);
 
   // And an ordinary run still pays for everything, down the same path.

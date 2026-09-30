@@ -157,9 +157,9 @@ export const CABINETS: CabinetDef[] = [
   // still `fallingblocks` and that is deliberate — it is the key a saved run's
   // high score and play count are filed under, and renaming it would orphan
   // every save in existence to gain nothing but a tidier string.
-  // Twenty to start and twenty for getting out: paid once, by the shell, on
+  // Ten to start and ten for getting out: paid once, by the shell, on
   // reaching the hatch.
-  { id: 'fallingblocks', title: 'THE FLOOD', tier: 'hard', cost: 20, reward: 20, x: 240, y: 96, color: 0x2f7fb5, room: 'annex', symbol: 'FD', motif: 'blocks' },
+  { id: 'fallingblocks', title: 'THE FLOOD', tier: 'hard', cost: 10, reward: 10, x: 240, y: 96, color: 0x2f7fb5, room: 'annex', symbol: 'FD', motif: 'blocks' },
   // Along the bottom wall, under the middle two of the row above.  Neither
   // has a fixed reward: a run is worth what it scored, and the module names
   // the payout.
@@ -229,12 +229,12 @@ export const CABINETS: CabinetDef[] = [
   // the Frog Race, with the table and its chair between them.  See
   // minigames/frogstermash.
   //
-  // 25 in, 15 a win, flat -- so one lizard does not buy the seat back and the
+  // 25 in, 20 a win, flat -- so one lizard does not buy the seat back and the
   // run only starts paying on the second.  The machine keeps a running bank
   // rather than crediting each round, so what actually reaches the ledger is
   // whatever the player walks away with: `win(n)` carries it, and `reward`
   // here is the per-win rate the card advertises.
-  { id: 'frogstermash', title: 'FROGSTER MASH', tier: 'hard', cost: 25, reward: 15, x: 224, y: 162, color: 0x7b4bd8, room: 'casino', symbol: 'FM', motif: 'mash' },
+  { id: 'frogstermash', title: 'FROGSTER MASH', tier: 'hard', cost: 25, reward: 20, x: 224, y: 162, color: 0x7b4bd8, room: 'casino', symbol: 'FM', motif: 'mash' },
 ];
 
 /** Cabinets standing in a given room.  Anything unmarked lives in the hub. */

@@ -327,7 +327,7 @@ export class ProfileModal extends Phaser.Scene {
   }
 
   /**
-   * TEST128, AND STRAIGHT UP INTO THE ARCADE.  See TEST_NAME.
+   * TESTT128, AND STRAIGHT UP INTO THE ARCADE.  See TEST_NAME.
    *
    * The run is real — it was created a moment ago like any other and it saves
    * like any other — it simply starts at the end of the night instead of the
@@ -360,9 +360,9 @@ export class ProfileModal extends Phaser.Scene {
   }
 
   /**
-   * HORRORDARK128, AND STRAIGHT DOWN TO HIDE AND SEEK.  See HORROR_NAME.
+   * HNS128, AND STRAIGHT DOWN TO HIDE AND SEEK.  See HORROR_NAME.
    *
-   * The same kind of jump as TEST128's, into the first room of the round
+   * The same kind of jump as TESTT128's, into the first room of the round
    * rather than the arcade, with the same latches set for the same reason:
    * the route is `hide`, the room is the first one, the key from the basement
    * is in the pocket, and the intro and the charity are spent.  It opens on

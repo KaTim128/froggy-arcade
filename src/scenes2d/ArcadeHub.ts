@@ -843,7 +843,7 @@ export class ArcadeHub extends Phaser.Scene {
     this.closeTalk();
     this.openTalk(
       '"FROGGY? THE FROG ON THE SIGN? MATE, HE\'S A CARTOON. IF HE\'S ANYWHERE HE\'S ACROSS ' +
-        'THE STREET, QUEUEING FOR A HOT DOG." HE GRINS.',
+        'THE STREET, QUEUEING FOR A HOT DOG."',
       [{ label: 'NEXT', fn: () => this.tellAboutKey() }],
     );
   }
@@ -851,7 +851,7 @@ export class ArcadeHub extends Phaser.Scene {
   private tellAboutKey(): void {
     this.closeTalk();
     this.openTalk(
-      '"NOW, A MISSING KEY -- THAT\'S REAL. ONE WALKED OFF AND THE BOSS IS CONVINCED SOMEBODY\'S ' +
+      '"NOW, A MISSING KEY, THAT\'S REAL. ONE WALKED OFF AND THE BOSS IS CONVINCED SOMEBODY\'S ' +
         'GOING TO LET THEMSELVES IN AND EMPTY THE PRIZE CASE. ME? I READ THAT IF A PRIZE SITS ' +
         'UNCLAIMED FOR FIVE YEARS, IT\'S FINDERS KEEPERS. SO IF THAT KEY STAYS LOST... NO RUSH."',
       this.keyOptions(),
@@ -898,9 +898,8 @@ export class ArcadeHub extends Phaser.Scene {
     audio.sfx('coin_drop');
     this.closeTalk();
     this.openTalk(
-      '"...WAIT. THAT\'S IT. THAT\'S THE KEY." HE TURNS IT OVER, AND FOR ONCE HE ISN\'T SMILING. ' +
-        '"WHERE DID YOU... HUH. MAYBE YOU DIDN\'T IMAGINE ALL OF IT AFTER ALL. ' +
-        `HERE -- ${KEY_REWARD} CASH, FOR YOUR TROUBLE. AND DON'T TELL THE BOSS WHAT YOU TOLD ME."`,
+      '"WAIT. THAT\'S IT. THAT\'S THE KEY. WHERE DID YOU... HUH. MAYBE YOU DIDN\'T IMAGINE ALL ' +
+        `OF IT AFTER ALL. HERE, ${KEY_REWARD} CASH, FOR YOUR TROUBLE. AND DON'T TELL THE BOSS WHAT YOU TOLD ME."`,
       [{ label: 'THANKS', fn: () => this.closeTalk() }],
     );
   }
