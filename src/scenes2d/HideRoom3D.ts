@@ -50,7 +50,8 @@ import {
   buildStaffDoor,
 } from '../three/arcadeProps';
 import { buildSecretRoom, SECRET_ORIGIN, type SecretRoom } from '../three/secretRoom';
-import { buildBedSpot, buildChestSpot, buildDoorSpot } from '../three/hideSpots';
+import { buildBedSpot, buildChestSpot, buildDoorSpot, CHEST_SCALE } from '../three/hideSpots';
+import { furnishWalls, trimFurniture, trimPartition } from '../three/hideDressing';
 
 /** A walk is slow and silent; a run is fast and heard.  That is the trade. */
 const WALK = 2.0;
@@ -1328,6 +1329,9 @@ export class HideRoom3D extends Phaser.Scene {
       );
       mesh.position.set(f.x, f.h / 2, f.z);
       st.scene.add(mesh);
+      // and it is made of parts, not one block: see hideDressing
+      if (isWall) trimPartition(st.scene, f);
+      else trimFurniture(st.scene, f);
       this.blockers.push(f);
     }
 
@@ -1335,6 +1339,9 @@ export class HideRoom3D extends Phaser.Scene {
 
     // The dirt, the litter, the damp.  Placed off anything solid.
     dressRoom(st.scene, d, seed, (x, z) => this.solid(x, z, 0.3));
+    // And the walls: crates, barrels, lanterns, vines, lily pads, posters --
+    // all in the strip nobody can stand in, clear of doors and hiding places.
+    furnishWalls(st.scene, { def: d, seed: seed * 7 + 3, blocked: (x, z, r) => this.solid(x, z, r) });
 
     // THE WAY THROUGH TO THE BACK ROOM, WHICH ISN'T ONE.
     //
@@ -3625,7 +3632,7 @@ export class HideRoom3D extends Phaser.Scene {
     // Close enough to reach it: from where he stopped, the step that puts the
     // handle about an arm's comfortable length in front of him.
     const dist = Math.hypot(g0.x - this.froggy.x, g0.z - this.froggy.y);
-    const want = Phaser.Math.Clamp(dist - (spot.kind === 'chest' ? 0.85 : 0.95) * size, 0, 1.4);
+    const want = Phaser.Math.Clamp(dist - (spot.kind === 'chest' ? 0.85 * CHEST_SCALE : 0.95) * size, 0, 1.4);
     const step = want * ss(k, 0, 0.25) * (1 - ss(k, 0.84, 1));
     const low = spot.kind === 'chest';
     const lean = (low ? 0.95 : 0.7) * reach + 0.35 * ss(k, 0.55, 0.7) * (1 - ss(k, 0.8, 0.95));

@@ -263,9 +263,18 @@ export function buildDoorSpot(group: THREE.Group, locker: boolean, number: numbe
   return { hinge, grips: [g], lever };
 }
 
-/** A chest 1.1 wide, 0.8 deep: planks, iron bands, a domed lid on strap hinges. */
+/**
+ * How much bigger a chest is than it was.  They were easy to walk past in a
+ * dark room; at this they are the biggest low thing in it, and the footprint
+ * the room collides with is scaled by the same number (see navGrid's
+ * `spotExtent`), so what you bump into is what you see.
+ */
+export const CHEST_SCALE = 1.22;
+
+/** A chest 1.1 wide, 0.8 deep (before CHEST_SCALE): planks, iron bands, a domed lid on strap hinges. */
 export function buildChestSpot(group: THREE.Group): BuiltSpot {
-  const wood = lam(0x7a5430, woodTex('#7c5632', '#301c0c'), [1.4, 1]);
+  group.scale.setScalar(CHEST_SCALE);
+  const wood = lam(0x8a6036, woodTex('#8c6236', '#301c0c'), [1.4, 1]);
   // the box: four walls and a floor, so the inside is a space
   box(group, wood, 1.1, 0.62, 0.05, 0, 0.35, 0.375);
   box(group, wood, 1.1, 0.62, 0.05, 0, 0.35, -0.375);
@@ -281,9 +290,22 @@ export function buildChestSpot(group: THREE.Group): BuiltSpot {
     box(group, IRON_LIT, 0.08, 0.12, 0.012, cx * 0.49, 0.62, cz * 0.405);
     box(group, IRON_LIT, 0.08, 0.12, 0.012, cx * 0.49, 0.1, cz * 0.405);
   }
-  // the hasp plate on the front, with the lock's keyhole
-  box(group, BRASS, 0.12, 0.14, 0.02, 0, 0.56, 0.41);
-  box(group, DARK, 0.02, 0.04, 0.01, 0, 0.54, 0.422);
+  // rivets down every band, front and back, catching the light
+  for (const bx of [-0.33, 0.33]) {
+    for (const ry of [0.12, 0.26, 0.4, 0.54]) {
+      for (const sz of [-1, 1]) box(group, IRON_LIT, 0.022, 0.022, 0.012, bx, ry, sz * 0.418);
+    }
+  }
+  // a band round the bottom edge, and one round the rim under the lid
+  for (const y of [0.08, 0.64]) {
+    for (const sz of [-1, 1]) box(group, IRON, 1.12, 0.045, 0.02, 0, y, sz * 0.41);
+    for (const sx of [-1, 1]) box(group, IRON, 0.02, 0.045, 0.82, sx * 0.555, y, 0);
+  }
+  // the lock: a big brass plate with a black keyhole dead centre
+  box(group, BRASS, 0.16, 0.18, 0.02, 0, 0.55, 0.415);
+  box(group, IRON, 0.18, 0.02, 0.022, 0, 0.645, 0.415);
+  cyl(group, DARK, 0.016, 0.012, 0, 0.565, 0.428, 'z');
+  box(group, DARK, 0.014, 0.036, 0.012, 0, 0.535, 0.428);
   // side handles
   for (const sx of [-1, 1]) {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.012, 6, 12, Math.PI), IRON_LIT);
@@ -305,6 +327,28 @@ export function buildChestSpot(group: THREE.Group): BuiltSpot {
     box(hinge, IRON, 0.065, 0.02, 0.7, bx, 0.105, 0.4);
   }
   box(hinge, BRASS, 0.08, 0.16, 0.02, 0, -0.06, 0.81);
+  // iron caps on the lid's four corners
+  for (const [cx, cz] of [[-1, 0.02], [1, 0.02], [-1, 0.78], [1, 0.78]]) {
+    box(hinge, IRON_LIT, 0.1, 0.1, 0.1, cx * 0.51, 0.01, cz);
+  }
+  // and a frog on top: a little painted plaque, green, with two eye bumps --
+  // the arcade's own mark on its own boxes
+  const frog = new THREE.MeshLambertMaterial({ color: 0x3fae5a });
+  const frogDark = new THREE.MeshLambertMaterial({ color: 0x1f5e30 });
+  const plaque = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.012, 16), frogDark);
+  plaque.position.set(0, 0.106, 0.4);
+  hinge.add(plaque);
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.016, 16), frog);
+  head.position.set(0, 0.11, 0.41);
+  hinge.add(head);
+  for (const ex of [-0.045, 0.045]) {
+    const eye = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 12), frog);
+    eye.position.set(ex, 0.112, 0.35);
+    hinge.add(eye);
+    const pupil = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.022, 8), DARK);
+    pupil.position.set(ex, 0.114, 0.35);
+    hinge.add(pupil);
+  }
   // the strap hinges, running from the back edge over the lid
   for (const sx of [-0.25, 0.25]) {
     box(hinge, IRON_LIT, 0.06, 0.012, 0.3, sx, 0.05, 0.12);
