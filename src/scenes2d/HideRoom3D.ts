@@ -139,6 +139,32 @@ const BED_HEAD_AHEAD = 1.15;
 const CROUCH = WALK * 0.55;
 const EYE = 1.55;
 const EYE_CROUCH = 0.8;
+
+/**
+ * ---- WHERE YOUR EYE IS, IN EACH KIND OF HIDING PLACE.
+ *
+ * Not at the middle of the box with the whole room free to look round: at
+ * its OPENING -- the slats of a locker door at eye height, the crack between
+ * two wardrobe doors, the gap under a bed with your cheek on the floor, the
+ * seam under a chest lid -- facing out through it, and able to turn only as
+ * far as that opening lets you.  The eye sits just proud of the opening, so
+ * nothing of the box itself -- no wall, no lid, no ceiling -- can ever come
+ * between it and the room; what the box looks like from inside is painted
+ * round the opening instead (see `paintPeephole`).
+ *
+ * `y` eye height; `front` the opening's distance from the middle of the
+ * spot; `yaw` how far either way you can turn; `up` / `down` how far you can
+ * tip your head.
+ */
+const HIDE_VIEW: Record<SpotKind, { y: number; front: number; yaw: number; up: number; down: number }> = {
+  locker: { y: 1.52, front: 0.42, yaw: 0.34, up: 0.1, down: 0.16 },
+  cupboard: { y: 1.32, front: 0.42, yaw: 0.24, up: 0.14, down: 0.24 },
+  // under the bed, just inside its edge: nothing to look up at but mattress
+  bed: { y: 0.24, front: 0.44, yaw: 0.55, up: 0, down: 0.1 },
+  chest: { y: 0.74, front: 0.53, yaw: 0.22, up: 0.03, down: 0.14 },
+};
+/** Seconds to get in, or out: the eye travelling to the opening, the dark closing round it. */
+const HIDE_IN_S = 0.38;
 /** Coming round on the floor: how low your eyes start, and how far off he is. */
 const WAKE_EYE = 0.42;
 const WAKE_DIST = 3.3;
@@ -659,6 +685,8 @@ function fitScale(s: string): number {
 interface Spot3D {
   x: number;
   z: number;
+  /** Which way its door, lid or open side faces: see HideSpot.rot. */
+  rot: number;
   kind: SpotKind;
   /** Half extents of its footprint, world axes. */
   hw: number;
@@ -687,6 +715,13 @@ export class HideRoom3D extends Phaser.Scene {
   private roomIndex = 0;
 
   private yaw = 0;
+  /** 0 out in the room .. 1 at the opening of `hideIn`: the getting in and out. */
+  private hideK = 0;
+  /** The spot being got into or out of: `hiding` goes null the moment you press E to leave. */
+  private hideIn: Spot3D | null = null;
+  /** Where the eye was when you got in, so it goes back there. */
+  private readonly hideFrom = new THREE.Vector3();
+  private hideBreath = 0;
   /**
    * Up and down.
    *
@@ -991,6 +1026,8 @@ export class HideRoom3D extends Phaser.Scene {
     this.scare = null;
     this.endT = 0;
     this.hiding = null;
+    this.hideIn = null;
+    this.hideK = 0;
     this.spots = [];
     this.blockers = [];
     this.fMode = 'search';
@@ -1476,7 +1513,7 @@ export class HideRoom3D extends Phaser.Scene {
     group.add(hinge);
     st.scene.add(group);
     const ext = spotExtent({ x, z, rot, kind });
-    return { x, z, kind, hw: ext.hw, hd: ext.hd, checkedOn: -1, hinge, open: 0, opening: false, sinceChecked: 0, grips, lever: built.lever };
+    return { x, z, rot, kind, hw: ext.hw, hd: ext.hd, checkedOn: -1, hinge, open: 0, opening: false, sinceChecked: 0, grips, lever: built.lever };
   }
 
   // ------------------------------------------------------------------- input
@@ -1604,8 +1641,12 @@ export class HideRoom3D extends Phaser.Scene {
     }
 
     if (this.hiding) {
-      this.stepOut(this.hiding);
+      const was = this.hiding;
+      this.stepOut(was);
       this.hiding = null;
+      // the camera goes back out the way it came, from the opening
+      this.hideIn = was;
+      audio.sfx(was.kind === 'chest' ? 'spot_open' : was.kind === 'bed' ? 'floor_creak' : 'door_open', 0.3);
       audio.sfx('footstep_concrete');
       return;
     }
@@ -1619,7 +1660,10 @@ export class HideRoom3D extends Phaser.Scene {
       // straight to it.  If he is not, it is — a sound is not a sighting.
       const watched = this.mode === 'seeking' && this.grace <= 0 && (this.fMode === 'chase' || this.sees());
       this.hiding = spot;
-      audio.sfx('hop_wet');
+      this.hideIn = spot;
+      this.hideFrom.copy(this.stage?.camera.position ?? new THREE.Vector3(this.pos.x, EYE, this.pos.y));
+      // in, and it shuts behind you
+      audio.sfx(spot.kind === 'chest' ? 'item_thud' : spot.kind === 'bed' ? 'floor_creak' : 'door_shut', 0.32);
       if (watched) {
         this.fMode = 'suspicious';
         this.memory = 0;
@@ -2548,6 +2592,8 @@ export class HideRoom3D extends Phaser.Scene {
     if (!sec || this.inSecret) return;
     this.inSecret = true;
     this.hiding = null;
+    this.hideIn = null;
+    this.hideK = 0;
     for (const h of this.vault?.hands ?? []) h.parent?.remove(h);
     this.vault = null;
     this.crouching = false;
@@ -4233,6 +4279,7 @@ export class HideRoom3D extends Phaser.Scene {
     const swimYaw = dizzy * Math.sin(this.wakeT * 0.7 + 1) * 0.06;
     const vp = this.vault ? this.vaultPose() : null;
     cam.rotation.set(this.pitch + (esc ? esc.pitch : 0) + (vp ? vp.pitch : 0) + shPit, this.yaw + shYaw + swimYaw, swimRoll + (vp ? vp.roll : 0));
+    this.hideCamera(dt, cam);
 
     // Whatever is in your hands in the lab: held low and to the right, where
     // a hand would hold it, and turning with you.
@@ -4246,6 +4293,63 @@ export class HideRoom3D extends Phaser.Scene {
     if (this.hiding) {
       const d = this.froggy.distanceTo(this.pos);
       if (d < 3.2) this.shake = Math.max(this.shake, 1 - d / 3.2);
+    }
+  }
+
+  /**
+   * ---- INSIDE, LOOKING OUT.
+   *
+   * Runs after the ordinary camera, and while you are getting in, hidden, or
+   * getting out, takes it over: the eye travels to the spot's opening, turns
+   * to face out of it, and is held to what the opening lets you see -- by
+   * clamping the head itself, so the mouse, the arrow keys and a finger on
+   * the glass all stop at the same edge.  A slow breath moves it a little.
+   * Getting out it travels back to where you are now standing.
+   */
+  private hideCamera(dt: number, cam: THREE.PerspectiveCamera): void {
+    const want = this.hiding ? 1 : 0;
+    const step = dt / HIDE_IN_S;
+    this.hideK = want > this.hideK ? Math.min(1, this.hideK + step) : Math.max(0, this.hideK - step);
+    const spot = this.hiding ?? this.hideIn;
+    const near = this.hideK > 0 && spot ? 0.02 : 0.1;
+    if (cam.near !== near) {
+      cam.near = near;
+      cam.updateProjectionMatrix();
+    }
+    if (!spot || this.hideK <= 0) {
+      if (!this.hiding) this.hideIn = null;
+      return;
+    }
+    const v = HIDE_VIEW[spot.kind];
+    const fx = Math.sin(spot.rot);
+    const fz = Math.cos(spot.rot);
+    const k = this.hideK * this.hideK * (3 - 2 * this.hideK);
+    this.hideBreath += dt;
+    const breath = Math.sin(this.hideBreath * 1.7);
+    const at = new THREE.Vector3(
+      spot.x + fx * v.front,
+      this.floorY + v.y + breath * 0.006,
+      spot.z + fz * v.front,
+    );
+    // getting in: from where the eye was; getting out: back to where you stand
+    const from = this.hiding ? this.hideFrom : new THREE.Vector3(this.pos.x, this.floorY + this.eyeNow, this.pos.y);
+    cam.position.lerpVectors(from, at, k);
+    // his footsteps outside, through the box
+    if (this.shake > 0) {
+      cam.position.x += (Math.random() - 0.5) * this.shake * 0.015;
+      cam.position.y += (Math.random() - 0.5) * this.shake * 0.015;
+    }
+
+    if (this.hiding) {
+      // Held to the opening.  While getting in the allowance closes from all
+      // the way round down to the opening's, so the head is turned out of it
+      // rather than snapped.
+      const face = spot.rot + Math.PI;
+      const slack = (1 - k) * Math.PI;
+      const off = Phaser.Math.Angle.Wrap(this.yaw - face);
+      this.yaw = face + Phaser.Math.Clamp(off, -(v.yaw + slack), v.yaw + slack);
+      this.pitch = Phaser.Math.Clamp(this.pitch, -(v.down + slack * 0.4), v.up + slack * 0.4);
+      cam.rotation.set(this.pitch + breath * 0.005, this.yaw, 0);
     }
   }
 
@@ -4383,7 +4487,7 @@ export class HideRoom3D extends Phaser.Scene {
     // The jumpscare owns the overlay from the moment he finds you.
     if (this.mode === 'caught') return;
     froggyLayer.paint((ctx) => {
-      if (this.hiding) this.paintPeephole(ctx);
+      this.paintPeephole(ctx);
       this.paintChaseTension(ctx);
 
       if (this.mode === 'survived' && this.isFinal) {
@@ -4422,8 +4526,9 @@ export class HideRoom3D extends Phaser.Scene {
           alpha: 0.75,
         });
       } else if (this.mode === 'hiding') {
-        drawPixelText(ctx, `${Math.max(0, Math.ceil(this.clock))}`, GAME_W / 2, GAME_H * 0.3, {
-          scale: 3,
+        // inside a box the count goes up out of the way of what you can see
+        drawPixelText(ctx, `${Math.max(0, Math.ceil(this.clock))}`, GAME_W / 2, this.hideK > 0.5 ? GAME_H * 0.1 : GAME_H * 0.3, {
+          scale: this.hideK > 0.5 ? 2 : 3,
           color: '#e8e2cd',
           center: true,
           alpha: 0.9,
@@ -4495,33 +4600,129 @@ export class HideRoom3D extends Phaser.Scene {
     });
   }
 
-  /** A slit of vision, and everything else is the inside of the box. */
+  /**
+   * ---- THE INSIDE OF THE BOX, ROUND WHAT YOU CAN SEE OF THE ROOM.
+   *
+   * Each kind of spot has its own opening, cut out of a dark, faintly
+   * textured inside: a locker's row of vent slats, the tall crack between two
+   * wardrobe doors, the wide low gap under a bed with the underside of the
+   * mattress across the top, the thin seam under a chest lid and its keyhole.
+   * The opening is the only light: it spills a little onto the inside round
+   * its edges, and the frame darkens toward the corners.  It closes round the
+   * view as you get in and opens as you get out.
+   */
   private paintPeephole(ctx: CanvasRenderingContext2D): void {
-    const cx = GAME_W / 2;
-    const cy = GAME_H / 2;
+    const spot = this.hiding ?? this.hideIn;
+    if (!spot || this.hideK <= 0) return;
+    const W = GAME_W;
+    const H = GAME_H;
+    const cx = W / 2;
+    const cy = H / 2;
+    const k = this.hideK * this.hideK * (3 - 2 * this.hideK);
+    const holes: Array<(c: CanvasRenderingContext2D) => void> = [];
+    const rect = (x: number, y: number, w: number, h: number, r = 1.5) => (c: CanvasRenderingContext2D) => c.roundRect(x, y, w, h, r);
+
+    let inside = '#0c0a09';
+    let grain: 'metal' | 'wood' | 'cloth' = 'wood';
+    if (spot.kind === 'locker') {
+      inside = '#0b0c0e';
+      grain = 'metal';
+      // five vent slats, pressed out of the door at eye height
+      const sw = W * 0.44;
+      for (let i = 0; i < 5; i++) holes.push(rect(cx - sw / 2, cy - 17 + i * 7.5, sw, 4.2, 2));
+    } else if (spot.kind === 'cupboard') {
+      // the crack where the two doors do not quite meet: narrow, tall, and
+      // not quite straight
+      holes.push((c) => {
+        c.moveTo(cx - 6, H * 0.1);
+        c.lineTo(cx + 5, H * 0.1);
+        c.lineTo(cx + 8, cy);
+        c.lineTo(cx + 5, H * 0.74);
+        c.lineTo(cx - 5, H * 0.74);
+        c.lineTo(cx - 8, cy + 6);
+        c.closePath();
+      });
+    } else if (spot.kind === 'bed') {
+      grain = 'cloth';
+      // under the bed: the mattress is the top of the picture, the floor the
+      // bottom, and the gap between them is wide and short
+      // (and stops short of the bottom edge, where the words go)
+      holes.push(rect(W * 0.05, H * 0.38, W * 0.9, H * 0.4, 3));
+    } else {
+      // under the lid: one thin seam, and the keyhole below it
+      holes.push(rect(cx - W * 0.3, cy - 8, W * 0.6, 5.5, 2));
+      holes.push((c) => {
+        c.moveTo(cx + 3.2, cy + 20);
+        c.arc(cx, cy + 20, 3.2, 0, Math.PI * 2);
+      });
+      holes.push(rect(cx - 1.4, cy + 21, 2.8, 7, 0.8));
+    }
 
     ctx.save();
+    ctx.globalAlpha = k;
+    // the inside, with the openings cut out of it
     ctx.beginPath();
-    ctx.rect(0, 0, GAME_W, GAME_H);
-    ctx.ellipse(cx, cy, GAME_W * 0.23, GAME_H * 0.16, 0, 0, Math.PI * 2);
-    ctx.fillStyle = '#000000';
+    ctx.rect(0, 0, W, H);
+    for (const h of holes) h(ctx);
+    ctx.fillStyle = inside;
     ctx.fill('evenodd');
+    // its surface, only where it is (clipped to the inside, holes excluded)
+    ctx.clip('evenodd');
+    ctx.globalAlpha = k * 0.5;
+    if (grain === 'metal') {
+      for (let y = 0; y < H; y += 3) {
+        ctx.fillStyle = y % 6 === 0 ? 'rgba(90,100,112,0.08)' : 'rgba(0,0,0,0.15)';
+        ctx.fillRect(0, y, W, 1);
+      }
+    } else if (grain === 'wood') {
+      for (let x = 0; x < W; x += 2) {
+        const v = Math.sin(x * 0.37) * 0.5 + Math.sin(x * 0.11 + 1) * 0.5;
+        ctx.fillStyle = v > 0 ? `rgba(70,46,26,${0.05 + v * 0.07})` : `rgba(0,0,0,${-v * 0.2})`;
+        ctx.fillRect(x, 0, 2, H);
+      }
+    } else {
+      // the mattress's underside: ticking, and the slats it rests on
+      for (let x = 0; x < W; x += 4) {
+        ctx.fillStyle = 'rgba(80,72,58,0.12)';
+        ctx.fillRect(x, 0, 1, H * 0.4);
+      }
+      for (let i = 0; i < 6; i++) {
+        ctx.fillStyle = 'rgba(40,40,44,0.8)';
+        ctx.fillRect(i * (W / 5.4) - 4, 0, 9, H * 0.4);
+      }
+      // the bed's legs at the ends, and the blanket hanging past them
+      ctx.fillStyle = 'rgba(20,18,16,0.9)';
+      ctx.fillRect(0, 0, W * 0.05, H);
+      ctx.fillRect(W * 0.95, 0, W * 0.05, H);
+    }
+    // the light that gets in, falling on the inside round the opening
+    ctx.globalAlpha = k;
+    const spill = ctx.createRadialGradient(cx, cy, 4, cx, cy, W * 0.42);
+    spill.addColorStop(0, 'rgba(150,140,120,0.16)');
+    spill.addColorStop(1, 'rgba(150,140,120,0)');
+    ctx.fillStyle = spill;
+    ctx.fillRect(0, 0, W, H);
     ctx.restore();
 
-    // A soft rim, so it reads as a gap in the lid rather than a mask laid over
-    // the picture.
-    const g = ctx.createRadialGradient(cx, cy, GAME_W * 0.15, cx, cy, GAME_W * 0.26);
+    // and the dark closing in at the corners, over all of it
+    ctx.save();
+    ctx.globalAlpha = k;
+    const g = ctx.createRadialGradient(cx, cy, W * 0.16, cx, cy, W * 0.62);
     g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(1, 'rgba(0,0,0,0.95)');
+    g.addColorStop(1, 'rgba(0,0,0,0.85)');
     ctx.fillStyle = g;
-    ctx.fillRect(0, 0, GAME_W, GAME_H);
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
 
-    drawPixelText(ctx, '[E] COME OUT', GAME_W / 2, GAME_H - 16, {
-      scale: 1,
-      color: '#7a8494',
-      center: true,
-      alpha: 0.8,
-    });
+    if (this.hiding) {
+      // Above the bottom edge, clear of the phone's corner buttons.
+      drawPixelText(ctx, '[E] COME OUT', GAME_W / 2, GAME_H - 8, {
+        scale: 1,
+        color: '#7a8494',
+        center: true,
+        alpha: 0.8,
+      });
+    }
   }
 
   private publishTelemetry(): void {
