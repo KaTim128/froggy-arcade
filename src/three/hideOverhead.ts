@@ -119,14 +119,32 @@ export function buildOverhead(o: Overhead, wallH: number): THREE.Group {
     g.add(door);
   }
 
-  // ---- SIGNS over the doorways, one-sided: each faces the way you come at it.
+  // ---- SIGNS over the doorways: each faces the way you come at it, and
+  // each HANGS -- on two rods from plates screwed to the ceiling -- with a
+  // board behind its face, so from the other side it is the back of a sign
+  // and not nothing.  They used to be a face in mid-air.
+  const rodMat = lam(0x2a2c30);
+  const backMat = lam(0x17171a);
   for (const s of o.signs) {
     const t = signTex(s.text, s.color);
     const w = 0.16 * s.text.length + 0.3;
+    const hang = new THREE.Group();
+    hang.position.set(s.x, s.y, s.z);
+    hang.rotation.y = s.rot;
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.34), new THREE.MeshBasicMaterial({ map: t, color: 0xb8b8b8 }));
-    sign.position.set(s.x, s.y, s.z);
-    sign.rotation.y = s.rot;
-    g.add(sign);
+    sign.position.z = 0.012;
+    hang.add(sign);
+    box(hang, backMat, w + 0.04, 0.38, 0.02, 0, 0, 0);
+    // the rods, from the top of the board to the ceiling, and the plates
+    const up = Math.max(0.05, wallH - s.y - 0.19);
+    for (const side of [-1, 1]) {
+      const rx = side * (w / 2 - 0.12);
+      box(hang, rodMat, 0.018, up, 0.018, rx, 0.19 + up / 2, 0);
+      box(hang, rodMat, 0.09, 0.02, 0.09, rx, 0.19 + up - 0.01, 0);
+      // the eye on the board the rod hooks into
+      box(hang, rodMat, 0.04, 0.03, 0.03, rx, 0.2, 0);
+    }
+    g.add(hang);
   }
   bake(g);
   return g;

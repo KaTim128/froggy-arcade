@@ -672,18 +672,26 @@ function duct(g: THREE.Group, w: number, h: number, d: number): void {
     if (along) box(g, STEEL_DARK, 0.03, 0.03, wid + 0.02, a, h, 0);
     else box(g, STEEL_DARK, wid + 0.02, 0.03, 0.03, 0, h, a);
   }
-  // a dark floor inside, and the grille, hanging
+  // a dark floor inside, seen through the bars
   box(g, lam(0x1a1c1e), along ? len : wid - 0.06, 0.01, along ? wid - 0.06 : len, 0, 0.005, 0);
-  // the grille that was over the end, off its screws and lying on the floor
-  // beside the opening -- not across it, which read as the way being shut
-  const grille = new THREE.Group();
-  grille.position.set(along ? len / 2 + 0.35 : wid / 2 + 0.45, 0.012, along ? wid / 2 + 0.45 : len / 2 + 0.35);
-  grille.rotation.y = 0.35;
-  box(grille, STEEL_DARK, 0.7, 0.02, 0.5, 0, 0, 0);
-  for (let i = 0; i < 5; i++) {
-    box(grille, STEEL, 0.66, 0.02, 0.03, 0, 0.015, -0.2 + i * 0.1);
+  // GRILLED SHUT, both ends: a steel frame bolted over the mouth, and bars
+  // across it you can see the dark of the duct through and not get through.
+  for (const end of [-1, 1]) {
+    const grille = new THREE.Group();
+    const at = end * (len / 2 + 0.012);
+    if (along) grille.position.set(at, 0, 0);
+    else grille.position.set(0, 0, at);
+    grille.rotation.y = along ? Math.PI / 2 : 0;
+    // the frame
+    box(grille, STEEL_DARK, wid, 0.05, 0.03, 0, h - 0.04, 0);
+    box(grille, STEEL_DARK, wid, 0.05, 0.03, 0, 0.04, 0);
+    for (const s of [-1, 1]) box(grille, STEEL_DARK, 0.05, h, 0.03, s * (wid / 2 - 0.025), h / 2, 0);
+    // the bars, and a bolt at each corner
+    const bars = Math.round(wid / 0.09);
+    for (let i = 1; i < bars; i++) box(grille, STEEL, 0.018, h - 0.08, 0.02, -wid / 2 + (i * wid) / bars, h / 2, 0);
+    for (const [bx, by] of [[-1, 0], [1, 0], [-1, 1], [1, 1]]) box(grille, STEEL, 0.03, 0.03, 0.04, bx * (wid / 2 - 0.05), by ? h - 0.06 : 0.06, 0);
+    g.add(grille);
   }
-  g.add(grille);
 }
 
 /** Steel stairs up to the catwalk: treads, stringers, a handrail. */

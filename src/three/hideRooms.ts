@@ -199,9 +199,11 @@ export interface CounterRun {
 //   so there is always a loop round the block he is coming down and never a
 //   room you can only leave the way you came.
 //
-//   SHORTCUTS ONLY YOU CAN TAKE.  Ducts at floor level (`crawl`), through
-//   the walls between wings: crouched, you go through; he is far too big and
-//   has to go round -- which is the gap you get to open between you.
+//   VENTS, GRILLED SHUT.  Ducts at floor level (`crawl`) run through the
+//   walls between wings, with a grille bolted over each end.  They used to be
+//   open, a way through on hands and knees that he could not follow -- which
+//   made the inside of one the one place in the building he could never find
+//   you.  He still treats them as walls; now so do you.
 //
 //   BLIND CORNERS AND SAFE POCKETS.  Doorways are offset rather than lined
 //   up, so no two rooms share a sightline; the racking and the machines make
@@ -240,8 +242,8 @@ function runs(a0: number, a1: number, gaps: Array<[number, number]>): Array<[num
 }
 /**
  * A duct through a wall: 1.2 wide, 1.1 high, `len` long, lying across the
- * wall it goes through.  Low enough that he sees over it and cannot get in
- * it; high enough for somebody on their hands and knees.
+ * wall it goes through, grilled shut at both ends.  Low enough that he sees
+ * over it; solid to both of you.
  */
 function duct(x: number, z: number, along: 'x' | 'z', len = 2.6): Box {
   return along === 'x'
@@ -615,7 +617,7 @@ const STAFF_ONLY: RoomDef = {
       { x: -20, z: 12.35, y: 2.9, rot: 0, text: 'OFFICES', color: '#d8e0ff' },
       { x: 0, z: -7.7, y: 2.9, rot: 0, text: 'FIRST AID', color: '#c8ffd8' },
       { x: 20, z: 12.35, y: 2.9, rot: 0, text: 'STAFF LOCKERS', color: '#c8ffd8' },
-      { x: 0, z: 16.2, y: 2.4, rot: 0, text: 'RECEPTION', color: '#ffb45e' },
+      { x: 0, z: 16.2, y: 2.85, rot: 0, text: 'RECEPTION', color: '#ffb45e' },
     ],
   },
 };

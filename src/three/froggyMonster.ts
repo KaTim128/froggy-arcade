@@ -593,6 +593,8 @@ export class FroggyMonster {
   private clipShells = 0;
   /** Where each shape's points start and end in `clipPts` (they are pushed together). */
   private readonly clipRange: [number, number][] = [];
+  /** How many of the points, from the start, are ones the floor is tested against. */
+  private clipFloorPts = 0;
   private readonly clipW = new THREE.Vector3();
   private readonly clipLoc: THREE.Vector3[] = [];
   /**
@@ -1958,6 +1960,12 @@ export class FroggyMonster {
         y = tipY();
       }
     }
+    // AND OUT OF THINGS.  An arm on nothing -- let go of a door, hanging at
+    // his side as he leans in -- is swung out of whatever it has gone into,
+    // whichever way (forward, back, or out from his side) clears it
+    // quickest.  An arm with its hand on something is where it was put.
+    this.armsOutOfSolids(pose.solids ?? null);
+
     // And the fingers.  A palm flat on the floor at the end of a steep
     // forearm would put the long fingers straight on down through it; each
     // one bends at the knuckle instead, whichever way lifts it, until it lies
@@ -2157,6 +2165,58 @@ export class FroggyMonster {
     return low;
   }
 
+  /** How deep, in all, the points down one arm are inside the solids. */
+  private armDepth(h: number, solids: Solid[]): number {
+    const par = this.root.parent;
+    this.arms[h].updateMatrixWorld(true);
+    const e = this.elbows[h];
+    let depth = 0;
+    const ys = [0.2 * this.armK, 0.45 * this.armK];
+    const pts: THREE.Vector3[] = [];
+    for (const y of ys) pts.push(this.arms[h].localToWorld(new THREE.Vector3(0, -y, 0)));
+    for (const y of [0, 0.3 * this.armK, 0.57 * this.armK, 0.57 * this.armK + 0.12 + 0.2 * this.fingerK]) pts.push(e.localToWorld(new THREE.Vector3(0, -y, 0)));
+    for (const w of pts) {
+      if (par) par.worldToLocal(w);
+      for (const b of solids) {
+        if (w.x <= b.x0 || w.x >= b.x1 || w.z <= b.z0 || w.z >= b.z1 || w.y >= b.y1 || w.y <= (b.y0 ?? -1)) continue;
+        depth += Math.min(w.x - b.x0, b.x1 - w.x, w.z - b.z0, b.z1 - w.z, b.y1 - w.y);
+      }
+    }
+    return depth;
+  }
+
+  private armsOutOfSolids(solids: Solid[] | null): void {
+    if (!solids || solids.length === 0 || this.climbNow > 0.3) return;
+    for (let h = 0; h < 2; h++) {
+      if (this.held[h] > 0.95) continue;
+      const arm = this.arms[h];
+      let d = this.armDepth(h, solids);
+      for (let i = 0; i < 9 && d > 0.001; i++) {
+        // try each way a little, keep the best, and go on in it
+        const x0 = arm.rotation.x;
+        const z0 = arm.rotation.z;
+        const out = h === 0 ? -1 : 1;
+        let best = d;
+        let bx = x0;
+        let bz = z0;
+        for (const [dx, dz] of [[-0.25, 0], [0.25, 0], [0, out * 0.25], [-0.18, out * 0.18], [0.18, out * 0.18]]) {
+          arm.rotation.x = x0 + dx;
+          arm.rotation.z = z0 + dz;
+          const t = this.armDepth(h, solids);
+          if (t < best) {
+            best = t;
+            bx = arm.rotation.x;
+            bz = arm.rotation.z;
+          }
+        }
+        arm.rotation.x = bx;
+        arm.rotation.z = bz;
+        if (best >= d - 1e-4) break;
+        d = best;
+      }
+    }
+  }
+
   /** The surface points `unclip` tests, built once, off the shapes the parts were built from. */
   private buildClipPts(): void {
     const dirs: THREE.Vector3[] = [];
@@ -2185,6 +2245,15 @@ export class FroggyMonster {
     shell(this.neck, [0, 0.07, 0], [0.05, 0.12, 0.05]);
     shell(this.torso, [0, 0.47, 0], [0.147, 0.2325, 0.117]);
     shell(this.torso, [0, 0.03, 0], [0.134, 0.08, 0.1]);
+    // Everything above is kept off the floor.  The legs below are only kept
+    // out of things -- the feet belong on the floor, and a squat's knees go
+    // wherever the legs are solved to.
+    this.clipFloorPts = this.clipPts.length;
+    for (let i = 0; i < 2; i++) {
+      shell(this.legs[i], [0, -0.23, 0], [0.07, 0.25, 0.07]);
+      shell(this.knees[i], [0, -0.24, 0], [0.055, 0.25, 0.055]);
+      shell(this.ankles[i], [0, -0.06, 0.1], [0.055, 0.035, 0.16]);
+    }
   }
 
   /**
@@ -2228,7 +2297,7 @@ export class FroggyMonster {
       for (let i = 0; i < this.clipPts.length; i++) {
         const { o, p } = this.clipPts[i];
         const w = o.localToWorld(this.clipW.copy(p));
-        if (w.y < low) {
+        if (i < this.clipFloorPts && w.y < low) {
           low = w.y;
           lowX = w.x;
           lowZ = w.z;

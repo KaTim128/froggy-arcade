@@ -25,13 +25,14 @@ import { isTouch } from '../core/device';
 import { isPaused } from '../core/pause';
 import Phaser from 'phaser';
 import * as THREE from 'three';
-import { audio, SILENCE, type SfxName } from '../core/audio';
+import { audio, SILENCE, type SfxName, type SfxPlace } from '../core/audio';
 import { store } from '../core/state';
 import { ledger } from '../core/ledger';
 import { froggyLayer } from '../render/froggyLayer';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
 import { playJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
 import { FroggyMonster, type HandGoal, type Solid } from '../three/froggyMonster';
+import { buildOpening, hideEye } from '../three/hideOpenings';
 import { drawPixelText } from '../render/pixelFont';
 import { ThreeStage } from '../render/threeStage';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
@@ -151,27 +152,19 @@ const EYE = 1.55;
 const EYE_CROUCH = 0.8;
 
 /**
- * ---- WHERE YOUR EYE IS, IN EACH KIND OF HIDING PLACE.
+ * ---- HOW FAR YOU CAN TURN YOUR HEAD, IN EACH KIND OF HIDING PLACE.
  *
- * Not at the middle of the box with the whole room free to look round: at
- * its OPENING -- the slats of a locker door at eye height, the crack between
- * two wardrobe doors, the gap under a bed with your cheek on the floor, the
- * seam under a chest lid -- facing out through it, and able to turn only as
- * far as that opening lets you.  The eye sits just proud of the opening, so
- * nothing of the box itself -- no wall, no lid, no ceiling -- can ever come
- * between it and the room; what the box looks like from inside is painted
- * round the opening instead (see `paintPeephole`).
- *
- * `y` eye height; `front` the opening's distance from the middle of the
- * spot; `yaw` how far either way you can turn; `up` / `down` how far you can
- * tip your head.
+ * The eye is inside the thing, a hand's width behind the face you look out
+ * of, and the inside is built round it (see hideOpenings): the opening is
+ * fixed to the hiding place, and these only stop the head where the inside
+ * of the box would stop it anyway.  `yaw` either way; `up` / `down` tipping.
  */
-const HIDE_VIEW: Record<SpotKind, { y: number; front: number; yaw: number; up: number; down: number }> = {
-  locker: { y: 1.52, front: 0.42, yaw: 0.34, up: 0.1, down: 0.16 },
-  cupboard: { y: 1.32, front: 0.42, yaw: 0.24, up: 0.14, down: 0.24 },
-  // under the bed, just inside its edge: nothing to look up at but mattress
-  bed: { y: 0.24, front: 0.44, yaw: 0.55, up: 0, down: 0.1 },
-  chest: { y: 0.74, front: 0.53, yaw: 0.22, up: 0.03, down: 0.14 },
+const HIDE_VIEW: Record<SpotKind, { yaw: number; up: number; down: number }> = {
+  locker: { yaw: 0.6, up: 0.2, down: 0.26 },
+  cupboard: { yaw: 0.5, up: 0.3, down: 0.36 },
+  // under the bed: the whole long side, and not much up or down
+  bed: { yaw: 0.85, up: 0.1, down: 0.14 },
+  chest: { yaw: 0.65, up: 0.12, down: 0.14 },
 };
 /** Seconds to get in, or out: the eye travelling to the opening, the dark closing round it. */
 const HIDE_IN_S = 0.38;
@@ -591,6 +584,8 @@ const spoken = (lines: Array<[string, number]>, zone: number): Array<[string, nu
 /** How far his footsteps and the lids carry.  Silence is doing the work. */
 const EARSHOT = 22;
 const OPEN_EARSHOT = 30;
+/** How far off his steps are heard while you are hidden and listening. */
+const HIDDEN_EARSHOT = 26;
 /** How far through his check of a door or a lid he slams it shut again. */
 const SLAM_AT = 0.84;
 /** A spot left alone this long is the next one he goes to. */
@@ -732,6 +727,12 @@ interface Spot3D {
   grips: THREE.Object3D[];
   /** A locker's lever, which turns before its door will move. */
   lever?: THREE.Object3D;
+  /** The inside of it, built round the eye and fixed to it; shown while you are in. */
+  inside: THREE.Group;
+  /** Where your eye is in there, in its own space. */
+  eye: THREE.Vector3;
+  /** Everything of its outside, hidden while you are inside it. */
+  shell: THREE.Object3D[];
 }
 
 export class HideRoom3D extends Phaser.Scene {
@@ -747,8 +748,8 @@ export class HideRoom3D extends Phaser.Scene {
   /** Where the eye was when you got in, so it goes back there. */
   private readonly hideFrom = new THREE.Vector3();
   private hideBreath = 0;
-  /** The painted inside of each kind of box, drawn once.  See paintPeephole. */
-  private peepCache = new Map<string, HTMLCanvasElement>();
+  /** The spot whose inside is showing (and whose outside is hidden) right now. */
+  private insideOf: Spot3D | null = null;
   /**
    * Up and down.
    *
@@ -1429,7 +1430,6 @@ export class HideRoom3D extends Phaser.Scene {
     }
 
     for (const c of d.spots) this.spots.push(this.buildSpot(c.x, c.z, c.rot, c.kind, c.skin));
-    for (const c of this.spots) this.peepImage(c.kind, c.skin);
 
     // Up out of the way: catwalks, locked doors, the signs over the doorways.
     if (d.overhead) st.scene.add(buildOverhead(d.overhead, d.wallH));
@@ -1573,7 +1573,17 @@ export class HideRoom3D extends Phaser.Scene {
     const ext = spotExtent({ x, z, rot, kind });
     // how tall it stands, shut: the top of what he must not put his head through
     const top = new THREE.Box3().setFromObject(group).max.y;
-    return { x, z, rot, kind, skin, hw: ext.hw, hd: ext.hd, top, checkedOn: -1, hinge, open: 0, opening: false, openV: 0, rattle: 0, slammed: false, sinceChecked: 0, grips, lever: built.lever };
+    // Its outside, as built -- and then its inside, hung on the part that
+    // moves, so that when he hauls on the door you are behind, it shakes.
+    const shell: THREE.Object3D[] = [];
+    group.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) shell.push(o);
+    });
+    const eye = hideEye(kind, skin);
+    const inside = buildOpening(kind, skin, eye);
+    inside.position.copy(hinge.position).negate();
+    hinge.add(inside);
+    return { x, z, rot, kind, skin, hw: ext.hw, hd: ext.hd, top, checkedOn: -1, hinge, open: 0, opening: false, openV: 0, rattle: 0, slammed: false, sinceChecked: 0, grips, lever: built.lever, inside, shell, eye: new THREE.Vector3(eye.x, eye.y, eye.z) };
   }
 
   // ------------------------------------------------------------------- input
@@ -3654,6 +3664,27 @@ export class HideRoom3D extends Phaser.Scene {
     const stride = this.fMode === 'chase' ? 1.1 : 1.5;
     if (this.fStep < stride) return;
     this.fStep = 0;
+    if (this.hiding) {
+      // HIDING, HIS STEPS ARE THE ROOM.  Heard from further off than out in
+      // the open -- you are holding your breath and listening for nothing
+      // else -- rising steadily as he comes and falling away as he goes, from
+      // the side he is on, and a little dulled by the box you are in.
+      const dx = this.froggy.x - this.pos.x;
+      const dz = this.froggy.y - this.pos.y;
+      const d = Math.hypot(dx, dz);
+      const near = Math.max(0, 1 - d / HIDDEN_EARSHOT);
+      if (near <= 0) return;
+      const gain = 0.07 + 0.93 * Math.pow(near, 1.6);
+      // which side of your view he is on: the camera looks down -z turned by yaw
+      const rx = Math.cos(this.yaw);
+      const rz = -Math.sin(this.yaw);
+      const side = d > 0.01 ? (dx * rx + dz * rz) / d : 0;
+      const fx = -Math.sin(this.yaw);
+      const fz = -Math.cos(this.yaw);
+      const ahead = d > 0.01 ? (dx * fx + dz * fz) / d : 1;
+      this.play('froggy_step', gain, { pan: side * 0.6, behind: 0.2 + Math.max(0, -ahead) * 0.5 });
+      return;
+    }
     const gain = this.earshot(this.froggy.x, this.froggy.y, EARSHOT, 0);
     if (gain > 0.04) this.play('froggy_step', gain);
   }
@@ -3662,8 +3693,8 @@ export class HideRoom3D extends Phaser.Scene {
    * Everything audible in here goes through one door, so distance is applied
    * once and the round's soundtrack can be read back in one place.
    */
-  private play(name: SfxName, gain = 1): void {
-    audio.sfx(name, gain);
+  private play(name: SfxName, gain = 1, place?: SfxPlace): void {
+    audio.sfx(name, gain, place);
     if (!import.meta.env?.DEV) return;
     this.heard.push({ name, gain: Math.round(gain * 1000) / 1000 });
     if (this.heard.length > 24) this.heard.shift();
@@ -3830,15 +3861,21 @@ export class HideRoom3D extends Phaser.Scene {
     const dist = Math.hypot(g0.x - this.froggy.x, g0.z - this.froggy.y);
     const want = Phaser.Math.Clamp(dist - (spot.kind === 'chest' ? 0.85 * CHEST_SCALE : 0.95) * size, 0, 1.4);
     // (rocked back by the heave and the yank, forward into the slam)
-    const step = want * ss(k, 0, 0.25) * (1 - ss(k, 0.9, 1)) - (heave * 0.05 + yank * 0.16 - slam * 0.1) * size;
+    const step = want * ss(k, 0, 0.25) * (1 - ss(k, 0.9, 1)) - (heave * 0.05 + yank * 0.16 - slam * 0.04) * size;
     const low = spot.kind === 'chest';
     const lean =
       (low ? 0.95 : 0.7) * reach + 0.35 * ss(k, 0.55, 0.7) * (1 - ss(k, 0.8, 0.95)) -
-      yank * 0.35 + slam * 0.3 + heave * 0.12;
+      yank * 0.35 + slam * 0.12 + heave * 0.08;
     // out of the spot, toward him, flat: the way a pull goes
     const out = new THREE.Vector3(this.froggy.x - spot.x, 0, this.froggy.y - spot.z).normalize();
+    // and letting go, the hand comes back off it toward him, rather than
+    // being let fall through the door it has just slammed
+    const release = ss(k, 0.88, 0.99);
     const pulled = (at: THREE.Vector3): THREE.Vector3 =>
-      at.clone().addScaledVector(out, heave * 0.035 * size).setY(at.y + (low ? heave * 0.025 * size : 0));
+      at
+        .clone()
+        .addScaledVector(out, heave * 0.035 * size + release * 0.55 * size)
+        .setY(at.y + (low ? heave * 0.025 * size : 0) - release * 0.25 * size);
     const hands: [HandGoal | null, HandGoal | null] = [null, null];
     if (spot.kind === 'chest') {
       // both hands, under the lid's front edge; which is which by where they
@@ -4367,8 +4404,8 @@ export class HideRoom3D extends Phaser.Scene {
       return false;
     }
     for (const b of this.blockers) {
-      // a duct is a way through on hands and knees, and a wall standing up
-      if (b.crawl && this.crouching) continue;
+      // (the ducts are grilled shut: a way through on hands and knees was a
+      // place he could never reach you, and so never a hiding place at all)
       if (Math.abs(x - b.x) < b.w / 2 + pad && Math.abs(z - b.z) < b.d / 2 + pad) return true;
     }
     for (const c of this.spots) {
@@ -4525,6 +4562,8 @@ export class HideRoom3D extends Phaser.Scene {
    * Getting out it travels back to where you are now standing.
    */
   private hideCamera(dt: number, cam: THREE.PerspectiveCamera): void {
+    // (once he has you, the scare has the camera and the box: see `caught`)
+    if (this.mode === 'caught') return;
     const want = this.hiding ? 1 : 0;
     const step = dt / HIDE_IN_S;
     this.hideK = want > this.hideK ? Math.min(1, this.hideK + step) : Math.max(0, this.hideK - step);
@@ -4534,44 +4573,59 @@ export class HideRoom3D extends Phaser.Scene {
       cam.near = near;
       cam.updateProjectionMatrix();
     }
+    // Most of the way in, you are inside it: its inside is what is round you,
+    // and its outside is not there to get in the way.
+    const inside = spot && this.hideK > 0.8 ? spot : null;
+    if (inside !== this.insideOf) {
+      if (this.insideOf) this.showInside(this.insideOf, false);
+      if (inside) this.showInside(inside, true);
+      this.insideOf = inside;
+    }
     if (!spot || this.hideK <= 0) {
       if (!this.hiding) this.hideIn = null;
       return;
     }
     const v = HIDE_VIEW[spot.kind];
-    // under a table the eye is a little higher than under a bed; in a tube,
-    // higher again; in a crate, down by the gaps in its boards
-    const eyeY = spot.skin === 'tunnel' ? 0.38 : spot.skin === 'table' ? 0.3 : spot.skin === 'crate' ? 0.6 : v.y;
-    const fx = Math.sin(spot.rot);
-    const fz = Math.cos(spot.rot);
     const k = this.hideK * this.hideK * (3 - 2 * this.hideK);
     this.hideBreath += dt;
     const breath = Math.sin(this.hideBreath * 1.7);
-    const at = new THREE.Vector3(
-      spot.x + fx * v.front,
-      this.floorY + eyeY + breath * 0.006,
-      spot.z + fz * v.front,
+    const face = spot.rot + Math.PI;
+    // LEANING INTO IT.  To see along the room to one side through a slot you
+    // put your eye to the OTHER side of it: turning the head moves the eye a
+    // few centimetres the opposite way, and tipping it up drops it a little.
+    const offN = Phaser.Math.Clamp(Phaser.Math.Angle.Wrap(this.yaw - face) / v.yaw, -1, 1);
+    const pitchN = Phaser.Math.Clamp(this.pitch / Math.max(0.01, this.pitch > 0 ? v.up : v.down), -1, 1);
+    const local = new THREE.Vector3(
+      spot.eye.x - offN * 0.05,
+      spot.eye.y + breath * 0.005 - pitchN * 0.015,
+      spot.eye.z,
     );
+    const at = spot.hinge.parent!.localToWorld(local);
     // getting in: from where the eye was; getting out: back to where you stand
     const from = this.hiding ? this.hideFrom : new THREE.Vector3(this.pos.x, this.floorY + this.eyeNow, this.pos.y);
     cam.position.lerpVectors(from, at, k);
     // his footsteps outside, through the box
     if (this.shake > 0) {
-      cam.position.x += (Math.random() - 0.5) * this.shake * 0.015;
-      cam.position.y += (Math.random() - 0.5) * this.shake * 0.015;
+      cam.position.x += (Math.random() - 0.5) * this.shake * 0.01;
+      cam.position.y += (Math.random() - 0.5) * this.shake * 0.01;
     }
 
     if (this.hiding) {
       // Held to the opening.  While getting in the allowance closes from all
       // the way round down to the opening's, so the head is turned out of it
       // rather than snapped.
-      const face = spot.rot + Math.PI;
       const slack = (1 - k) * Math.PI;
       const off = Phaser.Math.Angle.Wrap(this.yaw - face);
       this.yaw = face + Phaser.Math.Clamp(off, -(v.yaw + slack), v.yaw + slack);
       this.pitch = Phaser.Math.Clamp(this.pitch, -(v.down + slack * 0.4), v.up + slack * 0.4);
-      cam.rotation.set(this.pitch + breath * 0.005, this.yaw, 0);
+      cam.rotation.set(this.pitch + breath * 0.004, this.yaw, 0);
     }
+  }
+
+  /** Inside it or not: its inside shown and its outside hidden, or the other way. */
+  private showInside(spot: Spot3D, on: boolean): void {
+    spot.inside.visible = on;
+    for (const o of spot.shell) o.visible = !on;
   }
 
   private updateSprite(dt: number): void {
@@ -4848,174 +4902,12 @@ export class HideRoom3D extends Phaser.Scene {
    * its edges, and the frame darkens toward the corners.  It closes round the
    * view as you get in and opens as you get out.
    */
-  /** The inside of a box of this kind, round its opening, at full strength.  See paintPeephole. */
-  private drawPeephole(ctx: CanvasRenderingContext2D, kind: SpotKind, skin?: SpotSkin): void {
-    const W = GAME_W;
-    const H = GAME_H;
-    const cx = W / 2;
-    const cy = H / 2;
-    const k = 1;
-    const holes: Array<(c: CanvasRenderingContext2D) => void> = [];
-    const rect = (x: number, y: number, w: number, h: number, r = 1.5) => (c: CanvasRenderingContext2D) => c.roundRect(x, y, w, h, r);
 
-    let inside = '#0c0a09';
-    let grain: 'metal' | 'wood' | 'cloth' = 'wood';
-    if (skin === 'table' || skin === 'bench') {
-      // under a cloth that hangs almost to the floor: the only way out to
-      // look is the strip between its hem and the boards, low and wide
-      grain = 'cloth';
-      inside = skin === 'table' ? '#141210' : '#111110';
-      holes.push(rect(W * 0.04, H * 0.66, W * 0.92, H * 0.1, 2));
-    } else if (skin === 'tunnel') {
-      // inside the tube: the flap strips across its doorway, light between them
-      inside = '#1a0c0a';
-      grain = 'cloth';
-      for (let i = 0; i < 8; i++) holes.push(rect(W * 0.14 + i * W * 0.092, H * 0.3, 3.2, H * 0.44, 1));
-    } else if (skin === 'crate') {
-      // the gaps between a crate's boards
-      for (let i = 0; i < 3; i++) holes.push(rect(W * 0.12, cy - 14 + i * 12, W * 0.76, 3, 1));
-    } else if (skin === 'prize') {
-      // the hand-hole in the side of the box
-      holes.push((c) => c.ellipse(cx, cy - 4, 22, 7, 0, 0, Math.PI * 2));
-    } else if (skin === 'hatch') {
-      // the seam round a hatch in a wall: a thin slot and a finger-hole
-      holes.push(rect(cx - W * 0.2, cy - 2, W * 0.4, 3, 1));
-      holes.push((c) => c.ellipse(cx + W * 0.16, cy + 16, 5, 3, 0, 0, Math.PI * 2));
-    } else if (skin === 'cabinet') {
-      inside = '#0b0d0c';
-      grain = 'metal';
-      for (let i = 0; i < 6; i++) holes.push(rect(cx - W * 0.2, cy - 22 + i * 7, W * 0.4, 3, 1.5));
-    } else if (skin === 'arcade') {
-      // from inside a dead machine: its vents, and the coin slot's glow
-      inside = '#090a0c';
-      grain = 'metal';
-      for (let i = 0; i < 6; i++) holes.push(rect(cx - W * 0.22, cy - 20 + i * 7, W * 0.44, 3.4, 1.5));
-      holes.push(rect(cx - 1.5, cy + 30, 3, 9, 0.5));
-    } else if (kind === 'locker') {
-      inside = '#0b0c0e';
-      grain = 'metal';
-      // five vent slats, pressed out of the door at eye height
-      const sw = W * 0.44;
-      for (let i = 0; i < 5; i++) holes.push(rect(cx - sw / 2, cy - 17 + i * 7.5, sw, 4.2, 2));
-    } else if (kind === 'cupboard') {
-      // the crack where the two doors do not quite meet: narrow, tall, and
-      // not quite straight
-      holes.push((c) => {
-        c.moveTo(cx - 6, H * 0.1);
-        c.lineTo(cx + 5, H * 0.1);
-        c.lineTo(cx + 8, cy);
-        c.lineTo(cx + 5, H * 0.74);
-        c.lineTo(cx - 5, H * 0.74);
-        c.lineTo(cx - 8, cy + 6);
-        c.closePath();
-      });
-    } else if (kind === 'bed') {
-      grain = 'cloth';
-      // under the bed: the mattress is the top of the picture, the floor the
-      // bottom, and the gap between them is wide and short
-      // (and stops short of the bottom edge, where the words go)
-      holes.push(rect(W * 0.05, H * 0.38, W * 0.9, H * 0.4, 3));
-    } else {
-      // under the lid: one thin seam, and the keyhole below it
-      holes.push(rect(cx - W * 0.3, cy - 8, W * 0.6, 5.5, 2));
-      holes.push((c) => {
-        c.moveTo(cx + 3.2, cy + 20);
-        c.arc(cx, cy + 20, 3.2, 0, Math.PI * 2);
-      });
-      holes.push(rect(cx - 1.4, cy + 21, 2.8, 7, 0.8));
-    }
-
-    ctx.save();
-    ctx.globalAlpha = k;
-    // the inside, with the openings cut out of it
-    ctx.beginPath();
-    ctx.rect(0, 0, W, H);
-    for (const h of holes) h(ctx);
-    ctx.fillStyle = inside;
-    ctx.fill('evenodd');
-    // its surface, only where it is (clipped to the inside, holes excluded)
-    ctx.clip('evenodd');
-    ctx.globalAlpha = k * 0.5;
-    if (grain === 'metal') {
-      for (let y = 0; y < H; y += 3) {
-        ctx.fillStyle = y % 6 === 0 ? 'rgba(90,100,112,0.08)' : 'rgba(0,0,0,0.15)';
-        ctx.fillRect(0, y, W, 1);
-      }
-    } else if (grain === 'wood') {
-      for (let x = 0; x < W; x += 2) {
-        const v = Math.sin(x * 0.37) * 0.5 + Math.sin(x * 0.11 + 1) * 0.5;
-        ctx.fillStyle = v > 0 ? `rgba(70,46,26,${0.05 + v * 0.07})` : `rgba(0,0,0,${-v * 0.2})`;
-        ctx.fillRect(x, 0, 2, H);
-      }
-    } else {
-      // the mattress's underside: ticking, and the slats it rests on
-      for (let x = 0; x < W; x += 4) {
-        ctx.fillStyle = 'rgba(80,72,58,0.12)';
-        ctx.fillRect(x, 0, 1, H * 0.4);
-      }
-      for (let i = 0; i < 6; i++) {
-        ctx.fillStyle = 'rgba(40,40,44,0.8)';
-        ctx.fillRect(i * (W / 5.4) - 4, 0, 9, H * 0.4);
-      }
-      // the bed's legs at the ends, and the blanket hanging past them
-      ctx.fillStyle = 'rgba(20,18,16,0.9)';
-      ctx.fillRect(0, 0, W * 0.05, H);
-      ctx.fillRect(W * 0.95, 0, W * 0.05, H);
-    }
-    // the light that gets in, falling on the inside round the opening
-    ctx.globalAlpha = k;
-    const spill = ctx.createRadialGradient(cx, cy, 4, cx, cy, W * 0.42);
-    spill.addColorStop(0, 'rgba(150,140,120,0.16)');
-    spill.addColorStop(1, 'rgba(150,140,120,0)');
-    ctx.fillStyle = spill;
-    ctx.fillRect(0, 0, W, H);
-    ctx.restore();
-
-    // and the dark closing in at the corners, over all of it
-    ctx.save();
-    ctx.globalAlpha = k;
-    const g = ctx.createRadialGradient(cx, cy, W * 0.16, cx, cy, W * 0.62);
-    g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(1, 'rgba(0,0,0,0.85)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
-    ctx.restore();
-  }
-
-  /**
-   * The inside of a box of this kind, drawn once and kept: the grain, the
-   * cut-outs, the light and the vignette are a lot of work for a software
-   * canvas, and redrawing them every frame cost the room most of its frame
-   * rate while you were in a box.  Built for every kind in the room as it
-   * loads, so the first time you climb into one is not a stall either.
-   */
-  private peepImage(kind: SpotKind, skin?: SpotSkin): HTMLCanvasElement {
-    const key = `${kind}:${skin ?? ''}`;
-    let img = this.peepCache.get(key);
-    if (!img) {
-      const S = 3;
-      img = document.createElement('canvas');
-      img.width = GAME_W * S;
-      img.height = GAME_H * S;
-      const c = img.getContext('2d')!;
-      c.scale(S, S);
-      this.drawPeephole(c, kind, skin);
-      this.peepCache.set(key, img);
-    }
-    return img;
-  }
 
   private paintPeephole(ctx: CanvasRenderingContext2D): void {
-    const spot = this.hiding ?? this.hideIn;
-    if (!spot || this.hideK <= 0) return;
-    const k = this.hideK * this.hideK * (3 - 2 * this.hideK);
-    const img = this.peepImage(spot.kind, spot.skin);
-    ctx.save();
-    ctx.globalAlpha = k;
-    ctx.drawImage(img, 0, 0, GAME_W, GAME_H);
-    ctx.restore();
-
-    if (this.hiding) {
+    // What you see from in there is the inside of the thing, built round you
+    // and fixed to it (see hideOpenings); all that is drawn here is the way out.
+    if (this.hiding && this.hideK > 0.5) {
       // Above the bottom edge, clear of the phone's corner buttons.
       drawPixelText(ctx, '[E] COME OUT', GAME_W / 2, GAME_H - 8, {
         scale: 1,
@@ -5025,6 +4917,7 @@ export class HideRoom3D extends Phaser.Scene {
       });
     }
   }
+
 
   private publishTelemetry(): void {
     if (!import.meta.env?.DEV) return;
@@ -5149,6 +5042,14 @@ export class HideRoom3D extends Phaser.Scene {
     audio.setScene(SILENCE);
     this.mode = 'caught';
     this.caughtT = 0;
+    // Found inside something: for the second it takes, the box you were in
+    // is not there at all -- neither its inside nor its door stands between
+    // you and his face.  (The round restarts after, and builds it again.)
+    const box = this.hiding ?? this.insideOf;
+    if (box) {
+      box.inside.visible = false;
+      for (const o of box.shell) o.visible = false;
+    }
     this.hiding = null;
     // The creature that was hunting you, not a picture of it: the model is
     // brought to the camera and the scare is played out with it.
