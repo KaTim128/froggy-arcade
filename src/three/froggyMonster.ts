@@ -329,7 +329,18 @@ const BODY_SCALE = 0.93;
 /** The leg, in model units: hip to knee, knee to ankle, ankle to sole. */
 const THIGH = 0.47;
 const SHIN = 0.48;
-const SOLE = 0.07;
+// (ankle to floor: the foot and the toes under it are this deep; at 0.07 the
+// soles went a few centimetres into the floor on every planted step)
+const SOLE = 0.095;
+/** Where the hip joints are built, over the soles, in model units. */
+const HIP_Y = 1.02;
+/** Ankle to the tips of the toes, forward: how far they drop as the foot points. */
+const TOE_REACH = 0.31;
+/**
+ * Hip joint over the ankle, squatting, in model units: the knees folded right
+ * up, and on these legs his face at about the height of the gap under a bed.
+ */
+const SQUAT_HIP = 0.31;
 
 /** Head to floor, in metres, standing, before the room's own scale. */
 export const FROGGY_HEIGHT = 2.1;
@@ -418,6 +429,43 @@ export interface FroggyPose {
   tilt?: number;
   /** 0..1 the jaw going further than a jaw goes: dropped and stretched long. */
   stretch?: number;
+  /**
+   * World height of the floor under him.  Nothing of him goes below it: not
+   * a foot in a squat, not an elbow on all fours, not an eye with his face
+   * down at a gap.  Leave it out and it is where his feet are.
+   */
+  floor?: number;
+  /**
+   * The solid things round him, as world boxes.  His head and his chest stay
+   * out of them -- he leans in to a bed or a locker as far as it lets him and
+   * no further -- and his hands, which are meant to touch them, are left
+   * alone.  Leave it out and nothing is checked.
+   */
+  solids?: Solid[] | null;
+  /**
+   * Somewhere his FACE goes to, not just his eyes: the neck turns the head
+   * onto it (the gap under a bed, the inside of a locker), `faceK` of the
+   * way.  The roll a `peek` puts on the head stays on top.
+   */
+  faceTo?: THREE.Vector3 | null;
+  faceK?: number;
+  /**
+   * 0..1 the last lunge: the arms and fingers drawn out long -- a third as
+   * long again, the fingers half again -- and held up and forward like
+   * something about to drop on you.  The hands go where `hands` puts them.
+   */
+  pounce?: number;
+}
+
+/** A solid box in the world, axis-aligned, from the floor up to `y1`. */
+export interface Solid {
+  x0: number;
+  x1: number;
+  z0: number;
+  z1: number;
+  y1: number;
+  /** Where it starts off the floor, if not at it. */
+  y0?: number;
 }
 
 export interface HandGoal {
@@ -528,6 +576,40 @@ export class FroggyMonster {
   private hunchNow = 0;
   private tiltNow = 0;
   private stretchNow = 0;
+  private pounceNow = 0;
+  private armSkin: THREE.MeshPhongMaterial | null = null;
+  /** World height of the floor this frame.  See FroggyPose.floor. */
+  private floorY = 0;
+  /** World units per model unit, parents and all. */
+  private sizeW = 1;
+  /** How far his face is turned onto `faceTo`, eased, and where that is. */
+  private faceNow = 0;
+  private readonly faceAtV = new THREE.Vector3();
+  /**
+   * Points on the surface of his head, jaw, neck and trunk, each in its own
+   * part's space: what `unclip` keeps out of the floor and out of things.
+   */
+  private clipPts: { o: THREE.Object3D; p: THREE.Vector3; shell: number }[] = [];
+  private clipShells = 0;
+  /** Where each shape's points start and end in `clipPts` (they are pushed together). */
+  private readonly clipRange: [number, number][] = [];
+  private readonly clipW = new THREE.Vector3();
+  private readonly clipLoc: THREE.Vector3[] = [];
+  /**
+   * The parts of each arm that are drawn out for the pounce, and where they
+   * were built, so the length can be set from the rest length every frame.
+   */
+  private armLen: {
+    upper: THREE.Object3D;
+    upperY: number;
+    fore: THREE.Object3D[];
+    foreY: number[];
+    hand: THREE.Object3D[];
+    handY: number[];
+  }[] = [];
+  /** How long the arms are this frame, and the fingers, x their rest length. */
+  private armK = 1;
+  private fingerK = 1;
   private scleraMats: THREE.MeshPhongMaterial[] = [];
   private toothMats: THREE.MeshPhongMaterial[] = [];
   private lowerJaw: THREE.Group | null = null;
@@ -603,7 +685,7 @@ export class FroggyMonster {
     };
 
     // Where everything hangs from, in metres before the room's scale.
-    const HIP = 1.02;
+    const HIP = HIP_Y;
 
     // ================================================================ LEGS
     // Half his height and nothing on them: a long thigh, a knee that is the
@@ -756,26 +838,33 @@ export class FroggyMonster {
     // ================================================================ ARMS
     // Hanging past the knees, the elbow a knob of bone, and on the end a
     // hand far too long: a narrow palm and four jointed fingers and a thumb.
+    // (Their own copy of the skin -- the same shader, so nothing new to
+    // build -- so the pounce can put a cold sheen on them alone.)
+    const armSkin = skin.clone();
+    this.armSkin = armSkin;
     for (const side of [-1, 1]) {
       const arm = new THREE.Group();
       arm.position.set(side * 0.18, SH - 0.03, 0);
       arm.rotation.z = side * 0.06;
       // Far longer than any person's: the elbow comes level with his hip
       // and the fingertips hang to the middle of his shins.
-      arm.add(bone(0.029, 0.5, 1.1, 0.75, skin, 55 + side));
+      const upper = bone(0.029, 0.5, 1.1, 0.75, armSkin, 55 + side);
+      arm.add(upper);
       const elbow = new THREE.Group();
       elbow.position.y = -0.57;
       arm.add(elbow);
-      elbow.add(knob(0.026, skin, 57 + side));
-      elbow.add(bone(0.023, 0.5, 1.05, 0.6, skin, 59 + side));
+      elbow.add(knob(0.026, armSkin, 57 + side));
+      const foreBone = bone(0.023, 0.5, 1.05, 0.6, armSkin, 59 + side);
+      elbow.add(foreBone);
       // what is left of the forearm muscle, just below the elbow
-      const fore = new THREE.Mesh(lumpy(taper(new THREE.CapsuleGeometry(0.026, 0.15, 6, 12), 1.05, 0.55), 0.003, 10, 60 + side), skin);
+      const fore = new THREE.Mesh(lumpy(taper(new THREE.CapsuleGeometry(0.026, 0.15, 6, 12), 1.05, 0.55), 0.003, 10, 60 + side), armSkin);
       fore.position.set(side * 0.005, -0.13, 0.007);
       elbow.add(fore);
-      const wrist = knob(0.018, skin, 61 + side);
+      const handFrom = elbow.children.length;
+      const wrist = knob(0.018, armSkin, 61 + side);
       wrist.position.y = -0.57;
       elbow.add(wrist);
-      const palm = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.04, 12, 10), 0.003, 12, 63 + side), skin);
+      const palm = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.04, 12, 10), 0.003, 12, 63 + side), armSkin);
       palm.scale.set(0.9, 1.6, 0.4);
       palm.position.set(0, -0.635, 0);
       elbow.add(palm);
@@ -787,19 +876,29 @@ export class FroggyMonster {
         if (thumb) finger.rotation.set(0.4, 0, side * 0.5);
         const L1 = thumb ? 0.09 : 0.15 - Math.abs(f - 1.5) * 0.012;
         const L2 = thumb ? 0.07 : 0.13 - Math.abs(f - 1.5) * 0.01;
-        finger.add(strut(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -L1, 0.004), 0.0075, skin));
-        const k1 = knob(0.0088, skin, 67 + f);
+        finger.add(strut(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -L1, 0.004), 0.0075, armSkin));
+        const k1 = knob(0.0088, armSkin, 67 + f);
         k1.position.set(0, -L1, 0.004);
         finger.add(k1);
         const tipSeg = new THREE.Group();
         tipSeg.position.set(0, -L1, 0.004);
         tipSeg.rotation.x = 0.18;
-        tipSeg.add(strut(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -L2, 0), 0.0062, skin));
+        tipSeg.add(strut(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -L2, 0), 0.0062, armSkin));
         finger.add(tipSeg);
         elbow.add(finger);
         hand.push(finger);
       }
       this.hands.push(hand);
+      // everything from the wrist down moves down the forearm as it lengthens
+      const handParts = elbow.children.slice(handFrom);
+      this.armLen.push({
+        upper,
+        upperY: upper.position.y,
+        fore: [foreBone, fore],
+        foreY: [foreBone.position.y, fore.position.y],
+        hand: handParts,
+        handY: handParts.map((o) => o.position.y),
+      });
       this.torso.add(arm);
       this.arms.push(arm);
       this.elbows.push(elbow);
@@ -1245,6 +1344,9 @@ export class FroggyMonster {
    * breathes — which is worse.
    */
   update(dt: number, pose: FroggyPose): void {
+    // (a frame clock can hand over a negative step once, on the first frame
+    // after a scene starts; time does not go backwards for him)
+    dt = Math.max(0, dt);
     const speed = Math.max(0, pose.speed);
     this.breathT += dt;
     // The IK below writes whole rotations; everything else only ever writes
@@ -1252,6 +1354,14 @@ export class FroggyMonster {
     for (let h = 0; h < 2; h++) {
       this.arms[h].rotation.y = 0;
       this.elbows[h].rotation.y = 0;
+    }
+    // The floor and the solids come in the space he is placed in (setPose's);
+    // the tests are done in the world, so the floor is taken across to it.
+    {
+      const par = this.root.parent;
+      const fl = pose.floor ?? this.root.position.y;
+      this.floorY = par ? par.localToWorld(this.tmp.set(this.root.position.x, fl, this.root.position.z)).y : fl;
+      this.sizeW = (par ? par.getWorldScale(this.tmp).y : 1) * this.size;
     }
     this.leanNow += ((pose.lean ?? 0) - this.leanNow) * Math.min(1, dt * 3);
     // slow: the head goes into a gap deliberately, and comes out the same way
@@ -1278,6 +1388,12 @@ export class FroggyMonster {
     this.hunchNow += ((pose.hunch ?? 0) - this.hunchNow) * Math.min(1, dt * 3);
     this.tiltNow += ((pose.tilt ?? 0) - this.tiltNow) * Math.min(1, dt * 3);
     this.stretchNow += ((pose.stretch ?? 0) - this.stretchNow) * Math.min(1, dt * 16);
+    // Drawn out fast -- it is the scare's -- and let back slowly.
+    this.pounceNow += ((pose.pounce ?? 0) - this.pounceNow) * Math.min(1, dt * ((pose.pounce ?? 0) > this.pounceNow ? 18 : 3));
+    this.setArmLength(1 + 0.35 * this.pounceNow, 1 + 0.55 * this.pounceNow);
+    // a cold sheen on the reaching arms, so the long hands read in the dark
+    // at the edges of the frame, where no lamp is pointed
+    this.armSkin?.emissive.setRGB(0.028 * this.pounceNow, 0.03 * this.pounceNow, 0.036 * this.pounceNow);
 
     // ---- THE TWITCH.  Every second or few the head SNAPS -- no ease into it
     // -- somewhere it was not asked to go, holds there, and lets go.  Mostly a
@@ -1338,7 +1454,7 @@ export class FroggyMonster {
     const pace = sp / Math.max(0.01, sz);
     const moving = THREE.MathUtils.smoothstep(pace, 0.03, 0.55);
     const run = THREE.MathUtils.smoothstep(pace, 3.0, 4.6);
-    const legLen = THIGH + SHIN + SOLE;
+    const legLen = HIP_Y;
     // Metres covered per full cycle (two steps), in the world: long, slow
     // strides at a walk -- nearly two leg-lengths a cycle -- and longer still
     // at a run, so even the chase is a lope rather than a scurry.
@@ -1387,6 +1503,15 @@ export class FroggyMonster {
         bear[i] = THREE.MathUtils.smoothstep(u, 0.5, 1);
       }
     }
+    // Standing still, the stride lets go: the feet come back under him
+    // rather than staying wherever the last step left them.
+    for (let i = 0; i < 2; i++) {
+      footX[i] *= moving;
+      footY[i] *= moving;
+      // Toes down means the HEEL is up, not the toes through the boards: the
+      // ankle rides up by what the long toes drop.
+      footY[i] = Math.max(footY[i], TOE_REACH * Math.sin(Math.max(0, ank[i] * moving)));
+    }
     // THE HIPS sit as high as the planted feet allow -- never higher, or a
     // foot would leave the floor, and never so low a knee has nothing left --
     // so they drop into each double-support and rise over each single leg.
@@ -1398,44 +1523,52 @@ export class FroggyMonster {
     }
     // rising takes a moment, dropping does not: a planted foot must never be
     // asked to reach below the floor
-    this.hipH = Math.min(want, (this.hipH || want) + dt * 2.5);
+    this.hipH = Math.max(0.1, Math.min(want, (this.hipH || want) + dt * 2.5));
     const hipH = this.hipH;
+
+    // ---- DOWN ON HIS HAUNCHES.  The hips come right down and the legs are
+    // SOLVED to it, the same as every step: the knees fold up in front of him
+    // and splay out, and the feet stay flat on the floor under him.  (It used
+    // to add a fixed fold to the stride's angles, which put both feet half a
+    // metre through the floor.)  The squat takes the stride's place as it
+    // comes on, so he can still be settling as he arrives.
+    const cr = this.crouchNow;
+    const hipAt = hipH + (SQUAT_HIP - hipH) * cr;
+    const splay = 0.4 * cr;
+    const cosSplay = Math.cos(splay);
     // THE LEGS, solved: each ankle put exactly where its foot has to be.
     for (let i = 0; i < 2; i++) {
       // measured from this hip joint, which the pelvis's twist carries a
       // little forward or back
-      const z = footX[i] + (i === 0 ? -1 : 1) * 0.1 * Math.sin(this.hips.rotation.y);
-      const h = Math.max(0.05, hipH - footY[i]);
+      const z = (footX[i] * (1 - cr) + 0.06 * cr + (i === 0 ? -1 : 1) * 0.1 * Math.sin(this.hips.rotation.y)) / cosSplay;
+      // (a leg splayed out sideways is that much shorter top to bottom)
+      const h = Math.max(0.05, hipAt - footY[i] * (1 - cr)) / cosSplay;
       const d = Math.min(reachMax * 0.999, Math.hypot(z, h));
       const bend = Math.PI - Math.acos(THREE.MathUtils.clamp((THIGH * THIGH + SHIN * SHIN - d * d) / (2 * THIGH * SHIN), -1, 1));
       const along = Math.acos(THREE.MathUtils.clamp((THIGH * THIGH + d * d - SHIN * SHIN) / (2 * THIGH * d), -1, 1));
       // forward is negative on this rig; the knee always points forward
-      th[i] = -(Math.atan2(z, h) + along) * moving;
-      kn[i] = bend * moving;
+      th[i] = -(Math.atan2(z, h) + along);
+      kn[i] = bend;
       ank[i] *= moving;
     }
-    const gaitDrop = (hipH + SOLE - legLen) * moving;
+    // the hip joint is built HIP_Y up; this puts it hipH + SOLE over the floor
+    const gaitDrop = hipH + SOLE - HIP_Y;
     // weight over the planted leg: sway toward it, the free hip dropping
     const sway = (lift[0] - lift[1]) * (0.026 - 0.01 * run) * moving;
     const roll = (lift[0] - lift[1]) * (0.07 - 0.03 * run) * moving;
     // the hip on the forward leg comes forward with it
     const pelvisYaw = (th[1] - th[0]) * 0.22;
 
-    // ---- DOWN ON HIS HAUNCHES.  A squat, built the way a squat is: the thigh
-    // comes forward, the knee folds hard under it, and the hips drop by what
-    // that costs in leg length.  Applied on top of the stride rather than
-    // instead of it, so he can still be settling as he arrives.
-    const cr = this.crouchNow;
-    this.legs[0].rotation.x = th[0] + cr * 0.62;
-    this.legs[1].rotation.x = th[1] + cr * 0.62;
-    this.knees[0].rotation.x = kn[0] + this.climbNow * 1.1 + cr * 1.35;
-    this.knees[1].rotation.x = kn[1] + this.climbNow * 1.1 + cr * 1.35;
+    this.legs[0].rotation.x = th[0];
+    this.legs[1].rotation.x = th[1];
+    this.knees[0].rotation.x = kn[0] + this.climbNow * 1.1;
+    this.knees[1].rotation.x = kn[1] + this.climbNow * 1.1;
 
     // And the foot: flat to the floor when it is on it, whatever the leg is
     // doing above it; pointed as it leaves and as it lands.  Let go of on a
     // climb -- there is no floor to be level with halfway up a cupboard.
     const level = (i: number) =>
-      THREE.MathUtils.clamp(-(this.legs[i].rotation.x + this.knees[i].rotation.x - this.climbNow * 1.1), -0.55 - cr * 0.7, 0.55 + cr * 0.7) *
+      THREE.MathUtils.clamp(-(this.legs[i].rotation.x + this.knees[i].rotation.x - this.climbNow * 1.1), -1.3, 1.3) *
       (1 - this.climbNow);
     this.ankles[0].rotation.x = level(0) + ank[0] * (1 - cr);
     this.ankles[1].rotation.x = level(1) + ank[1] * (1 - cr);
@@ -1526,8 +1659,10 @@ export class FroggyMonster {
     // And the hips come down by what the fold costs: on the long legs, 0.64
     // of a 1.02 hip puts his face at about the height of the gap under a bed,
     // which is the whole point of the pose.
-    this.hips.position.y = gaitDrop * (1 - cr) * (1 - this.climbNow) + breath + crest * 0.12 - cr * 0.64;
+    this.hips.position.y = gaitDrop * (1 - this.climbNow) + (hipAt - hipH) + breath + crest * 0.12;
     this.hips.position.x = sway * (1 - cr);
+    // (and nothing is pushing him out of anything yet: see `unclip`)
+    this.hips.position.z = 0;
     // ---- HE BREATHES WRONG.  The cage swells and falls on a slow rhythm
     // with a catch in it -- two quick shallow pulls, then a long one -- so
     // the one part of him that moves standing still does not move like an
@@ -1544,7 +1679,8 @@ export class FroggyMonster {
     // ...and the legs take that roll, sway and twist back out of themselves,
     // so the pelvis moves over the feet and the feet stay where they are
     for (let i = 0; i < 2; i++) {
-      this.legs[i].rotation.z = (-roll - Math.asin(THREE.MathUtils.clamp(sway / Math.max(0.3, this.hipH), -0.3, 0.3))) * (1 - cr);
+      this.legs[i].rotation.z =
+        (-roll - Math.asin(THREE.MathUtils.clamp(sway / Math.max(0.3, this.hipH), -0.3, 0.3))) * (1 - cr) + (i === 0 ? -1 : 1) * splay;
       this.legs[i].rotation.y = -pelvisYaw * (1 - cr);
     }
 
@@ -1557,8 +1693,10 @@ export class FroggyMonster {
     this.torso.rotation.x =
       0.14 + Math.min(0.2, speed * 0.05) + this.climbNow * 0.45 + this.lungeNow * (0.5 + this.nearNow * 0.1) +
       cr * 0.62 + this.leanNow * 0.55 +
-      // flat to the floor to get his face down to a gap
-      this.peekNow * 0.36;
+      // flat to the floor to get his face down to a gap: past level, the
+      // shoulders lower than the hips, so the huge head can come down to the
+      // boards with its face turned into the dark
+      this.peekNow * 1.05;
     // The shoulders twist against the hips -- the whole long back wrings a
     // little with every step -- and lean out over the planted foot.
     this.torso.rotation.y = -pelvisYaw * 1.7 * (1 - cr);
@@ -1591,10 +1729,12 @@ export class FroggyMonster {
     this.neck.rotation.z =
       -gait * 0.05 + this.twitchTo.z * tw + Math.sin(this.breathT * 1.3 + 1.1) * 0.16 * peer +
       Math.sin(this.breathT * 0.37) * 0.09 * live +
-      this.tiltNow +
-      // over on its side to look into a gap
-      this.peekNow * (1.2 + Math.sin(this.breathT * 0.8) * 0.08);
+      this.tiltNow;
     this.neck.rotation.x += this.peekNow * 0.6;
+    // Over on its side to look into a gap -- rolled about the middle of the
+    // head, not the root of the neck, so the face stays where the neck put
+    // it (at the gap) instead of being swung half a metre off to one side.
+    this.head.rotation.set(0, 0, this.peekNow * (1.45 + Math.sin(this.breathT * 0.8) * 0.06));
     // ---- HUNCHED.  The shoulders round, the whole back comes over, and the
     // head is pushed out in front on its neck -- levelled back up, so the
     // face stays on you while the body leans in toward you.
@@ -1749,6 +1889,28 @@ export class FroggyMonster {
       }
     }
 
+    // ---- HIS FACE ONTO SOMETHING.  Not only the eyes: the head turns to it
+    // (the dark under a bed, the inside of a locker), over the top of
+    // whatever the body is doing, and the roll a peek puts on it stays.
+    const faceWant = pose.faceTo ? THREE.MathUtils.clamp(pose.faceK ?? 1, 0, 1) : 0;
+    this.faceNow += (faceWant - this.faceNow) * Math.min(1, dt * 5);
+    if (pose.faceTo) this.faceAtV.copy(pose.faceTo);
+    if (this.faceNow > 0.001) {
+      this.torso.updateWorldMatrix(true, false);
+      const at = this.torso.worldToLocal(this.tmp.copy(this.faceAtV)).sub(this.neck.position);
+      // aimed from the middle of the head rather than from the root of the neck
+      at.y -= 0.24;
+      const n = Math.max(1e-4, at.length());
+      // (the neck's Euler: pitch, then yaw, then the roll about the face)
+      const yaw = THREE.MathUtils.clamp(Math.asin(THREE.MathUtils.clamp(at.x / n, -1, 1)), -1.1, 1.1);
+      const pitch = THREE.MathUtils.clamp(Math.atan2(-at.y, Math.max(0.05, at.z)), -1.2, 1.5);
+      this.neck.rotation.x += (pitch - this.neck.rotation.x) * this.faceNow;
+      this.neck.rotation.y += (yaw - this.neck.rotation.y) * this.faceNow;
+    }
+
+    // ---- NOTHING OF HIM THROUGH THE FLOOR OR INTO THINGS.
+    this.unclip(pose);
+
     // ---- HANDS ON THINGS.
     this.held[0] = 0;
     this.held[1] = 0;
@@ -1758,7 +1920,6 @@ export class FroggyMonster {
         if (goal && goal.weight > 0.001) this.reachFor(h, goal);
       }
     }
-
     // ---- NEVER OVER HIS EYES.  From wherever you are looking at him from --
     // chasing you, or right in front of the lens at the end -- no part of an
     // arm or a hand is allowed across his eyes: the stare is the point, and
@@ -1766,6 +1927,65 @@ export class FroggyMonster {
     // eased back only once it is well clear.
     const viewer = pose.viewer ?? pose.reachAt ?? (this.grabNow > 0.01 ? this.gaze : null);
     this.keepEyesClear(viewer, dt);
+
+    // (last, after the eye guard has swung them: nothing after this moves an arm)
+    // A hand that is on nothing hangs -- and on a body folded down this low,
+    // hanging can put the fingers through the floor.  It is swung forward,
+    // the way the hand would be dragged along the boards, until it is not.
+    // (A hand coming off the floor as he gets up is half on it and half
+    // hanging, and the blend of the two can be through it: that is caught
+    // here too.  One firmly on something is where it was put.)
+    for (let h = 0; h < 2; h++) {
+      if (this.held[h] > 0.95 || this.climbNow > 0.3) continue;
+      const tipY = (): number => {
+        this.arms[h].updateMatrixWorld(true);
+        // the lower of the elbow, the wrist and the fingertips
+        const e = this.elbows[h];
+        const elbowY = e.getWorldPosition(this.clipW).y;
+        const wristY = e.localToWorld(this.clipW.set(0, -0.57 * this.armK, 0)).y;
+        const tip = e.localToWorld(this.clipW.set(0, -(0.57 * this.armK + 0.12 + 0.28 * this.fingerK), 0)).y;
+        return Math.min(elbowY, wristY, tip);
+      };
+      const floor = this.floorY + 0.03 * this.sizeW;
+      let y = tipY();
+      for (let i = 0; i < 4 && y < floor; i++) {
+        const x0 = this.arms[h].rotation.x;
+        this.arms[h].rotation.x = x0 - 0.1;
+        const yF = tipY();
+        const dir = yF > y ? -1 : 1;
+        const gain = Math.max(1e-3, Math.abs(yF - y) / 0.1);
+        this.arms[h].rotation.x = x0 + dir * Math.min(0.6, (floor - y) / gain + 0.02);
+        y = tipY();
+      }
+    }
+    // And the fingers.  A palm flat on the floor at the end of a steep
+    // forearm would put the long fingers straight on down through it; each
+    // one bends at the knuckle instead, whichever way lifts it, until it lies
+    // along the boards -- which is how a hand that long takes weight.
+    {
+      const floor = this.floorY + 0.015 * this.sizeW;
+      for (let h = 0; h < 2; h++) {
+        this.arms[h].updateMatrixWorld(true);
+        for (const f of this.hands[h]) {
+          const tipY = (): number => {
+            f.updateMatrixWorld(true);
+            return f.localToWorld(this.clipW.set(0, -0.26, 0.004)).y;
+          };
+          let y = tipY();
+          const x0 = f.rotation.x;
+          for (let i = 0; i < 3 && y < floor; i++) {
+            const was = f.rotation.x;
+            f.rotation.x = was + 0.15;
+            const yUp = tipY();
+            const dir = yUp > y ? 1 : -1;
+            const gain = Math.max(1e-3, Math.abs(yUp - y) / 0.15);
+            f.rotation.x = THREE.MathUtils.clamp(was + dir * ((floor - y) / gain + 0.01), x0 - 1.6, x0 + 1.6);
+            y = tipY();
+          }
+        }
+      }
+    }
+
 
     // ---- THE JAW.  Hinged too far back, so it drops a long way; and it
     // drops very slightly crooked, skewed to one side, which no jaw should.
@@ -1845,16 +2065,46 @@ export class FroggyMonster {
     this.torso.updateWorldMatrix(true, false);
     const S = arm.position;
     const d = this.torso.worldToLocal(this.tmp.copy(goal.at)).sub(S);
-    const A = 0.57; // shoulder to elbow
-    const B = 0.66; // elbow to palm
+    const A = 0.57 * this.armK; // shoulder to elbow
+    const B = 0.57 * this.armK + 0.09 * this.fingerK; // elbow to palm
     const len = THREE.MathUtils.clamp(d.length(), Math.abs(A - B) + 0.03, (A + B) * 0.995);
     const u = d.normalize();
-    // where the elbow wants to go: out to the side, back, and a little up
-    const pole = this.tmp2.set(out * 0.85, 0.25, -0.45);
+    // where the elbow wants to go: out to the side, back, and a little up --
+    // and for the pounce, UP: the elbows high over the shoulders, a mantis's
+    const pole = this.tmp2.set(out * (0.85 - 0.25 * this.pounceNow), 0.25 + 0.75 * this.pounceNow, -0.45 + 0.2 * this.pounceNow);
     pole.addScaledVector(u, -pole.dot(u));
     if (pole.lengthSq() < 1e-6) pole.set(out, 0, 0).addScaledVector(u, -u.x * out);
     pole.normalize();
     const alpha = Math.acos(THREE.MathUtils.clamp((A * A + len * len - B * B) / (2 * A * len), -1, 1));
+    // NEVER THROUGH THE FLOOR.  On all fours, with his hands flat and his
+    // shoulders low, the elbow the pole asks for can be under the boards.
+    // The elbow can go anywhere on a circle round the line to the hand; if
+    // this one is too low it is turned round that circle toward the top of it.
+    {
+      const shW = this.torso.localToWorld(this.tmp5.copy(S));
+      const toW = (v: THREE.Vector3) => v.applyQuaternion(this.torso.getWorldQuaternion(this.q2));
+      const scaleW = this.sizeW;
+      const elbowY = (p: THREE.Vector3) => {
+        const e0 = this.tmp6.copy(u).multiplyScalar(Math.cos(alpha)).addScaledVector(p, Math.sin(alpha));
+        return shW.y + toW(e0).y * A * scaleW;
+      };
+      const floor = this.floorY + 0.06 * scaleW;
+      const y0 = elbowY(pole);
+      if (y0 < floor) {
+        // the highest the elbow can be: the world's up, flattened onto the circle
+        const upL = this.tmp6.set(0, 1, 0).applyQuaternion(this.torso.getWorldQuaternion(this.q2).invert());
+        const top = upL.addScaledVector(u, -upL.dot(u));
+        if (top.lengthSq() > 1e-6) {
+          top.normalize();
+          const best = top.clone();
+          const y1 = elbowY(best);
+          if (y1 > y0) {
+            const k = THREE.MathUtils.clamp((floor - y0) / (y1 - y0), 0, 1);
+            pole.lerp(best, k).normalize();
+          }
+        }
+      }
+    }
     const bend = Math.PI - Math.acos(THREE.MathUtils.clamp((A * A + B * B - len * len) / (2 * A * B), -1, 1));
     // the upper arm
     const e = this.tmp3.copy(u).multiplyScalar(Math.cos(alpha)).addScaledVector(pole, Math.sin(alpha)).normalize();
@@ -1880,10 +2130,210 @@ export class FroggyMonster {
       const finger = this.hands[h][f2];
       const open = f2 === 4 ? 0.15 : 0.05 - f2 * 0.02;
       const shut = f2 === 4 ? 0.9 : 1.25 + f2 * 0.06;
-      const want = open + (shut - open) * THREE.MathUtils.clamp(goal.grip, 0, 1);
+      // Coming for you, each long finger works on its own -- curling,
+      // straightening, out of step with the others -- like something that
+      // cannot wait to close them.
+      const claw = this.pounceNow * (0.3 * Math.sin(this.breathT * 11 + f2 * 1.9 + h * 2.3) + 0.12 * Math.sin(this.breathT * 27 + f2 * 4.1));
+      const want = open + (shut - open) * THREE.MathUtils.clamp(goal.grip, 0, 1) + claw;
       finger.rotation.x += (want - finger.rotation.x) * w;
     }
     this.held[h] = w;
+  }
+
+  /**
+   * The lowest point of his head and jaw in the world, as posed right now --
+   * the jaw however far it has dropped and stretched.  For a caller that
+   * puts his face somewhere itself (the jumpscare) and must keep it out of
+   * the floor.
+   */
+  headBottom(): number {
+    if (this.clipPts.length === 0) this.buildClipPts();
+    this.root.updateMatrixWorld(true);
+    let low = Infinity;
+    for (const { o, p } of this.clipPts) {
+      if (o !== this.head && o !== this.jaw) continue;
+      low = Math.min(low, o.localToWorld(this.clipW.copy(p)).y);
+    }
+    return low;
+  }
+
+  /** The surface points `unclip` tests, built once, off the shapes the parts were built from. */
+  private buildClipPts(): void {
+    const dirs: THREE.Vector3[] = [];
+    for (const x of [-1, 0, 1]) for (const y of [-1, 0, 1]) for (const z of [-1, 0, 1]) {
+      if (x || y || z) dirs.push(new THREE.Vector3(x, y, z).normalize());
+    }
+    const shell = (o: THREE.Object3D, c: [number, number, number], r: [number, number, number], half = 0): void => {
+      const id = this.clipShells++;
+      const from = this.clipPts.length;
+      for (const d of dirs) {
+        // a half-dome: only its own half
+        if (half > 0 && d.y < -0.01) continue;
+        if (half < 0 && d.y > 0.01) continue;
+        this.clipPts.push({ o, p: new THREE.Vector3(c[0] + d.x * r[0], c[1] + d.y * r[1], c[2] + d.z * r[2]), shell: id });
+      }
+      this.clipRange.push([from, this.clipPts.length]);
+    };
+    // the head: the dome, the cheeks, the upper half of the muzzle, the eyes
+    shell(this.head, [0, 0.03, 0], [0.256, 0.18, 0.2]);
+    for (const s of [-1, 1]) shell(this.head, [s * 0.13, -0.04, 0.03], [0.12, 0.102, 0.12]);
+    shell(this.head, [0, MOUTH_Y, MOUTH_Z], [MOUTH_W, 0.19, MOUTH_D], 1);
+    for (const e of this.eyes) shell(this.head, [e.position.x, e.position.y, e.position.z], [0.118, 0.118, 0.118]);
+    // the jaw: the chin's lower half, which rides the hinge however far it drops
+    shell(this.jaw, [0, 0, MOUTH_Z - JAW_PIVOT_Z], [MOUTH_W * 0.965, 0.1, MOUTH_D * 0.965], -1);
+    // the neck, the ribcage, the pelvis
+    shell(this.neck, [0, 0.07, 0], [0.05, 0.12, 0.05]);
+    shell(this.torso, [0, 0.47, 0], [0.147, 0.2325, 0.117]);
+    shell(this.torso, [0, 0.03, 0], [0.134, 0.08, 0.1]);
+  }
+
+  /**
+   * Keep his head, neck and trunk above the floor and out of the solid
+   * things round him, AFTER everything else has posed them.
+   *
+   *   The floor: a part of him under it (his face down at a gap, the eye
+   *   nearest the floor on a head rolled over on its side) is lifted by
+   *   bringing the trunk back up -- the smallest change that raises
+   *   everything above the hips, and the one that keeps the feet and the
+   *   hands where they are.
+   *
+   *   Anything solid: a part of him inside it is pushed straight back out,
+   *   the shortest way, by moving the whole body over.  Where he is for the
+   *   room does not change; only where he is drawn.
+   *
+   * The hands are not tested: they are meant to be on things.
+   */
+  private unclip(pose: FroggyPose): void {
+    if (this.climbNow > 0.3) return;
+    if (this.clipPts.length === 0) this.buildClipPts();
+    const solids = pose.solids ?? null;
+    const par = this.root.parent;
+    // solids are in his parent's space and so is `s`; the floor is the world's
+    const s = this.size;
+    const sW = this.sizeW;
+    const floor = this.floorY + 0.03 * sW;
+    const inv = this.q.copy(this.root.quaternion).invert();
+    for (let iter = 0; iter < 4; iter++) {
+      this.root.updateMatrixWorld(true);
+      let low = Infinity;
+      let lowX = 0;
+      let lowZ = 0;
+      let px = 0;
+      let nx = 0;
+      let pz = 0;
+      let nz = 0;
+      // every point, once, in the world and in his parent's space
+      const pts = this.clipLoc;
+      while (pts.length < this.clipPts.length) pts.push(new THREE.Vector3());
+      for (let i = 0; i < this.clipPts.length; i++) {
+        const { o, p } = this.clipPts[i];
+        const w = o.localToWorld(this.clipW.copy(p));
+        if (w.y < low) {
+          low = w.y;
+          lowX = w.x;
+          lowZ = w.z;
+        }
+        if (par) par.worldToLocal(pts[i].copy(w));
+        else pts[i].copy(w);
+      }
+      // Out of anything solid, a whole shape at a time: for each shape of him
+      // (the dome, a cheek, the ribcage...) inside a box, the one side that
+      // clears ALL of it with the smallest move.  Point by point, a head wider
+      // than a partition is thick was pushed both ways at once and stayed in.
+      if (solids) {
+        const m = 0.03 * s;
+        // where he stands, in the same space as the solids
+        const hipAt = this.hips.getWorldPosition(this.tmp6);
+        if (par) par.worldToLocal(hipAt);
+        for (const b of solids) {
+          const y0 = b.y0 ?? -1;
+          for (const [from, to] of this.clipRange) {
+            let hit = false;
+            let minX = Infinity;
+            let maxX = -Infinity;
+            let minZ = Infinity;
+            let maxZ = -Infinity;
+            for (let i = from; i < to; i++) {
+              const q = pts[i];
+              if (q.y >= b.y1 || q.y <= y0) continue;
+              if (q.x > b.x0 && q.x < b.x1 && q.z > b.z0 && q.z < b.z1) hit = true;
+              // what of it is level with the box, for how far it must go
+              if (q.z > b.z0 && q.z < b.z1) {
+                minX = Math.min(minX, q.x);
+                maxX = Math.max(maxX, q.x);
+              }
+              if (q.x > b.x0 && q.x < b.x1) {
+                minZ = Math.min(minZ, q.z);
+                maxZ = Math.max(maxZ, q.z);
+              }
+            }
+            if (!hit) continue;
+            // Back out the side his body is on: a head leant half through a
+            // thin wall is nearer the far side, and must not be put there.
+            const onPX = hipAt.x >= b.x1;
+            const onNX = hipAt.x <= b.x0;
+            const onPZ = hipAt.z >= b.z1;
+            const onNZ = hipAt.z <= b.z0;
+            const any = onPX || onNX || onPZ || onNZ;
+            const toPX = !any || onPX ? b.x1 - minX + m : Infinity;
+            const toNX = !any || onNX ? maxX - b.x0 + m : Infinity;
+            const toPZ = !any || onPZ ? b.z1 - minZ + m : Infinity;
+            const toNZ = !any || onNZ ? maxZ - b.z0 + m : Infinity;
+            const least = Math.min(toPX, toNX, toPZ, toNZ);
+            if (least === toPX) px = Math.max(px, toPX);
+            else if (least === toNX) nx = Math.max(nx, toNX);
+            else if (least === toPZ) pz = Math.max(pz, toPZ);
+            else nz = Math.max(nz, toNZ);
+          }
+        }
+      }
+      const pen = floor - low;
+      const push = this.tmp5.set(px - nx, 0, pz - nz);
+      if (pen <= 0.002 && push.lengthSq() < 1e-6) break;
+      if (pen > 0.002) {
+        // how far the low point is out in front of the waist: the lever the
+        // trunk turns it on
+        const t = this.torso.getWorldPosition(this.tmp6);
+        const lever = Math.max(0.3 * sW, Math.hypot(lowX - t.x, lowZ - t.z));
+        // Only ever back toward upright, and never past it: a low point that
+        // is not out in front of him is not one straightening up will lift.
+        const ahead = (lowX - t.x) * Math.sin(this.root.rotation.y) + (lowZ - t.z) * Math.cos(this.root.rotation.y);
+        if (ahead > 0 && this.torso.rotation.x > 0) {
+          this.torso.rotation.x = Math.max(0, this.torso.rotation.x - Math.min(0.4, pen / lever + 0.01));
+        }
+      }
+      if (push.lengthSq() > 1e-6) {
+        // his parent's space to the body's own: unturned and unscaled
+        push.applyQuaternion(inv).divideScalar(s);
+        this.hips.position.x += push.x;
+        this.hips.position.z += push.z;
+      }
+    }
+  }
+
+  /**
+   * Draw the arms out to `arm` times their length and the fingers to
+   * `finger` times theirs.  The bones stretch along themselves and not across,
+   * so the arm gets longer and no thicker, and everything below each joint
+   * moves down with it: the elbow stays on the end of the upper arm and the
+   * hand on the end of the forearm.
+   */
+  private setArmLength(arm: number, finger: number): void {
+    if (Math.abs(arm - this.armK) < 1e-4 && Math.abs(finger - this.fingerK) < 1e-4) return;
+    this.armK = arm;
+    this.fingerK = finger;
+    for (let h = 0; h < 2; h++) {
+      const p = this.armLen[h];
+      if (!p) continue;
+      p.upper.scale.y = arm;
+      p.upper.position.y = p.upperY * arm;
+      this.elbows[h].position.y = -0.57 * arm;
+      p.fore[0].scale.y = arm;
+      for (let i = 0; i < p.fore.length; i++) p.fore[i].position.y = p.foreY[i] * arm;
+      // the wrist, the palm and the roots of the fingers ride down the forearm
+      for (let i = 0; i < p.hand.length; i++) p.hand[i].position.y = p.handY[i] - 0.57 * (arm - 1);
+      for (const f of this.hands[h]) f.scale.y = finger;
+    }
   }
 
   /**

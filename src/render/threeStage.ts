@@ -74,7 +74,9 @@ export class ThreeStage {
     this.last = performance.now();
     const loop = (now: number) => {
       this.raf = requestAnimationFrame(loop);
-      const dt = Math.min(0.05, (now - this.last) / 1000);
+      // (the first frame's timestamp can be from before `start` was called,
+      // which made the first step negative)
+      const dt = Math.max(0, Math.min(0.05, (now - this.last) / 1000));
       this.last = now;
       // Paused, the world holds still: nothing steps, and on the way back the
       // clock picks up from now rather than handing over the whole pause as

@@ -20,7 +20,7 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
-import { store, cleanName, MAX_SLOTS, MAX_NAME_LEN, TEST_NAME, type SlotMeta } from '../core/state';
+import { store, cleanName, MAX_SLOTS, MAX_NAME_LEN, TEST_NAME, HORROR_NAME, type SlotMeta } from '../core/state';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { ARCADE_ROOM } from '../three/hideRooms';
@@ -319,6 +319,10 @@ export class ProfileModal extends Phaser.Scene {
       this.jumpToArcade();
       return;
     }
+    if (typed.toUpperCase() === HORROR_NAME) {
+      this.jumpToHideAndSeek();
+      return;
+    }
     this.close();
   }
 
@@ -351,6 +355,30 @@ export class ProfileModal extends Phaser.Scene {
     store.flush();
     const mgr = this.scene.manager;
     // Snapshotted: stopping a scene mutates the list this is walking.
+    for (const key of mgr.getScenes(true).map((sc) => sc.scene.key)) mgr.stop(key);
+    mgr.start('HideRoom3D');
+  }
+
+  /**
+   * HORRORDARK128, AND STRAIGHT DOWN TO HIDE AND SEEK.  See HORROR_NAME.
+   *
+   * The same kind of jump as TEST128's, into the first room of the round
+   * rather than the arcade, with the same latches set for the same reason:
+   * the route is `hide`, the room is the first one, the key from the basement
+   * is in the pocket, and the intro and the charity are spent.  It opens on
+   * his briefing, as the round does, not on the waking-up that the basement
+   * leads into.
+   */
+  private jumpToHideAndSeek(): void {
+    store.patch({
+      seenIntro: true,
+      charityUsed: true,
+      hasKey: true,
+      route: 'hide',
+      hideRoom: 0,
+    });
+    store.flush();
+    const mgr = this.scene.manager;
     for (const key of mgr.getScenes(true).map((sc) => sc.scene.key)) mgr.stop(key);
     mgr.start('HideRoom3D');
   }

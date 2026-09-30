@@ -125,7 +125,8 @@ const SCHEMA_VERSION = 1;
 const FLUSH_DEBOUNCE_MS = 250; // PRD ST-2
 
 export const MAX_SLOTS = 3;
-export const MAX_NAME_LEN = 12;
+// (13: long enough for HORROR_NAME, below, to be typed in full)
+export const MAX_NAME_LEN = 13;
 
 export interface SlotMeta {
   id: string;
@@ -183,6 +184,14 @@ export const ADMIN_TOKENS = 9999;
  * accident.  ProfileModal is what honours it; this is only the password.
  */
 export const TEST_NAME = 'TEST128';
+
+/**
+ * Name a run this and it opens on the first round of hide and seek: the
+ * briefing in the first room, with everything before it (the floor, the
+ * alley, the basement and the key) already behind you.  Same rules as
+ * TEST_NAME: case-insensitive, whole name only.
+ */
+export const HORROR_NAME = 'HORRORDARK128';
 
 function defaultState(): GameState {
   return {

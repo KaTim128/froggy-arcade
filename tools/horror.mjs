@@ -520,7 +520,7 @@ try {
       opens.map((x) => x[1]).join(','));
     check('nothing else is making noise in there',
       heard.every(([n]) =>
-        ['froggy_step', 'spot_open', 'floor_creak', 'drip', 'hop_wet', 'step_walk', 'step_run', 'zone_clear', 'eerie_swell', 'door_creak', 'ui_hover'].includes(n),
+        ['froggy_step', 'spot_open', 'door_rattle', 'spot_slam', 'floor_creak', 'drip', 'hop_wet', 'step_walk', 'step_run', 'zone_clear', 'eerie_swell', 'door_creak', 'ui_hover'].includes(n),
       ),
       [...new Set(heard.map(([n]) => n))].join(','));
 
@@ -1183,6 +1183,18 @@ try {
       test.hide && test.hide.pz < 0 && test.hide.prompt === '',
       test.hide ? `${test.hide.px.toFixed(2)}, ${test.hide.pz.toFixed(2)}` : 'not in the room');
     await page.screenshot({ path: `${SHOTS}/arcade-test128.png` });
+
+    // HORRORDARK128: the first round of hide and seek, at his briefing.
+    await page.evaluate(() => localStorage.clear());
+    await page.reload({ waitUntil: 'networkidle2' });
+    await sleep(2800);
+    const dark = await name('horrordark128');
+    check('HORRORDARK128 goes straight to the first round of hide and seek',
+      dark.scenes.includes('HideRoom3D') && dark.hide?.room === 0,
+      `${dark.scenes.join(',')}, room ${dark.hide?.room}`);
+    check('opening on his briefing, with the night behind you',
+      dark.hide?.mode === 'briefing' && dark.state.route === 'hide' && dark.state.hasKey && dark.state.seenIntro,
+      `mode ${dark.hide?.mode}, route ${dark.state.route}, key ${dark.state.hasKey}`);
 
     // And the name is the whole of it: an ordinary run is still an ordinary run.
     await page.evaluate(() => localStorage.clear());
