@@ -371,12 +371,19 @@ const E = {
   turn: 3.2,
   stare: 4.8,
   back: 7.4,
-  run: 7.9,
+  // A quarter of a second, not half: the turn back is a flinch, not a look.
+  run: 7.66,
   fade: 8.6,
   black: 9.6,
   narrate: 14.6,
   leave: 0,
 };
+/**
+ * Where the run goes through the doors, off the door's centre line: the middle
+ * of the right-hand opening, clear of the mullion (0.08m) and of the leaf
+ * swung open to DOORS_ANGLE (whose inner edge comes no nearer than 0.8m).
+ */
+const RUN_THROUGH_X = 0.5;
 /** How long each part of the narration is on the black. */
 const NARRATE_EACH = 5.2;
 /** How narrow the view goes on him, in degrees. */
@@ -835,6 +842,14 @@ export class HideRoom3D extends Phaser.Scene {
    */
   private doorLeaves: { obj: THREE.Object3D; sign: number }[] = [];
   private doorLock: THREE.Object3D | null = null;
+  /** The mouth of the padlock's keyhole, which the key is aimed at, and the lock body. */
+  private keyhole: THREE.Object3D | null = null;
+  private lockBody: THREE.Object3D | null = null;
+  /** Where the key was, in the world, when it left the hand for the lock. */
+  private insertFrom: { pos: THREE.Vector3; quat: THREE.Quaternion } | null = null;
+  /** The lock giving: a flash on the brass and a jolt, decaying. */
+  private unlockFlash = 0;
+  private unlockLight: THREE.PointLight | null = null;
   /** The morning on the other side of them.  See `openTheWayOut`. */
   private doorOutside: THREE.Object3D | null = null;
   /** The staff door's leaf, on its hinge: open behind him at the very end. */
@@ -980,6 +995,11 @@ export class HideRoom3D extends Phaser.Scene {
     this.shackle = null;
     this.doorLeaves = [];
     this.doorLock = null;
+    this.keyhole = null;
+    this.lockBody = null;
+    this.insertFrom = null;
+    this.unlockFlash = 0;
+    this.unlockLight = null;
     this.doorOutside = null;
     this.staffLeaf = null;
     this.watcher = null;
@@ -1192,6 +1212,8 @@ export class HideRoom3D extends Phaser.Scene {
       if (leafL) this.doorLeaves.push({ obj: leafL, sign: -1 });
       if (leafR) this.doorLeaves.push({ obj: leafR, sign: 1 });
       this.doorLock = doors.getObjectByName('doorLock') ?? null;
+      this.keyhole = doors.getObjectByName('padlockKeyhole') ?? null;
+      this.lockBody = doors.getObjectByName('padlockBody') ?? null;
       this.doorOutside = doors.getObjectByName('doorOutside') ?? null;
       // AND THEY ARE SOLID.  The room's own clamp stops the player 0.6m short
       // of the wall plane, which is INSIDE a door that stands off it — so the
@@ -2152,30 +2174,99 @@ export class HideRoom3D extends Phaser.Scene {
   private runInsert(k: number): void {
     const hand = this.handProp;
     if (!hand) return;
-    // ---- up to the lock over the first third of the insert, then it stays.
-    const up = Phaser.Math.Easing.Sine.InOut(Phaser.Math.Clamp(k / (INSERT_UNTIL * 0.45), 0, 1));
-    hand.position.set(
-      Phaser.Math.Linear(HAND_KEY.x, HAND_LOCK.x, up),
-      Phaser.Math.Linear(HAND_KEY.y + 0.1, HAND_LOCK.y, up),
-      Phaser.Math.Linear(HAND_KEY.z, HAND_LOCK.z, up),
-    );
-    hand.rotation.set(-0.1 + (1 - up) * 0.25, HAND_YAW + up * 0.2, 0.08);
-
-    // ---- pushing it home, and then working it round.  The turn is not one
-    // sweep: it goes, stops against a ward, and goes again -- which is the
-    // same shape the tumblers are already making in the audio.
-    const worked = Phaser.Math.Clamp((k - INSERT_UNTIL * 0.45) / (INSERT_UNTIL * 0.55), 0, 1);
     const key = this.keyProp;
-    if (key) {
-      key.position.set(0, -0.02, -0.16 - worked * 0.05);
-      const turn = worked * Math.PI * 0.55;
-      const catchOn = Math.sin(worked * Math.PI * 3) * 0.12 * (1 - worked);
-      key.rotation.set(0, 0, 0.2 + turn + catchOn);
-    }
-    hand.rotation.z = 0.08 + worked * 0.5;
+    const st = this.stage;
+    const hole = this.keyhole;
+    // The beats: carried up to the lock, pushed home, then worked round.
+    const up = Phaser.Math.Easing.Sine.InOut(Phaser.Math.Clamp(k / (INSERT_UNTIL * 0.45), 0, 1));
+    const worked = Phaser.Math.Clamp((k - INSERT_UNTIL * 0.45) / (INSERT_UNTIL * 0.55), 0, 1);
+    const seat = Phaser.Math.Easing.Cubic.InOut(Phaser.Math.Clamp(worked / 0.3, 0, 1));
+    const turnK = Phaser.Math.Clamp((worked - 0.3) / 0.7, 0, 1);
 
-    // ---- and the lock gives.  It opens once, on the far side of the turn.
-    if (this.shackle && worked > 0.92) this.shackle.rotation.z = 0.18 - 1.15;
+    if (!key || !st || !hole) {
+      // (no lock in this room: the old in-hand version)
+      hand.position.set(
+        Phaser.Math.Linear(HAND_KEY.x, HAND_LOCK.x, up),
+        Phaser.Math.Linear(HAND_KEY.y + 0.1, HAND_LOCK.y, up),
+        Phaser.Math.Linear(HAND_KEY.z, HAND_LOCK.z, up),
+      );
+      return;
+    }
+
+    // ---- THE KEY GOES INTO THE KEYHOLE -- THE REAL ONE, ON THE PADLOCK.
+    //
+    // It used to be carried in the hand, in the camera's own space, to a spot
+    // in front of the view that was near the lock and not at it: it turned in
+    // the air a hand's width off the brass.  Now it leaves the hand for the
+    // world on the way up, lines up with the hole in the padlock's face, blade
+    // down to match the slot, slides in, and turns -- and the hand follows the
+    // key, not the other way round.
+    const cam = st.camera;
+    cam.updateMatrixWorld();
+    hole.updateWorldMatrix(true, false);
+    if (key.parent !== st.scene) {
+      st.scene.attach(key);
+      this.insertFrom = { pos: key.position.clone(), quat: key.quaternion.clone() };
+    }
+    const mouth = hole.getWorldPosition(new THREE.Vector3());
+    const holeQ = hole.getWorldQuaternion(new THREE.Quaternion());
+    // Into the lock is the hole's +Z; the slot runs down its -Y.
+    const into = new THREE.Vector3(0, 0, 1).applyQuaternion(holeQ).normalize();
+    const down = new THREE.Vector3(0, -1, 0).applyQuaternion(holeQ);
+    // The key's own axes: +Z is along the shaft to the tip, +X is the side
+    // its bit sticks out of.  Aligned: shaft into the hole, bit down the slot.
+    const zAx = into.clone();
+    const xAx = down.clone().sub(zAx.clone().multiplyScalar(down.dot(zAx))).normalize();
+    const yAx = zAx.clone().cross(xAx);
+    const aligned = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAx, yAx, zAx));
+    // and it turns about its own shaft, catching on a ward on the way
+    const turn = turnK * Math.PI * 0.5 + Math.sin(turnK * Math.PI * 3) * 0.1 * (1 - turnK);
+    const twisted = aligned.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), turn));
+    // Where the tip is: a few centimetres short of the hole when it arrives,
+    // then pushed home until the bit is inside.
+    const TIP = 0.17;
+    const tipAt = mouth.clone().add(into.clone().multiplyScalar(-0.07 + seat * 0.1));
+    const at = tipAt.clone().sub(into.clone().multiplyScalar(TIP));
+    const from = this.insertFrom;
+    if (from) {
+      key.position.copy(from.pos).lerp(at, up);
+      key.quaternion.copy(from.quat).slerp(twisted, up);
+    } else {
+      key.position.copy(at);
+      key.quaternion.copy(twisted);
+    }
+
+    // ---- the hand, on the bow of the key, wherever the key is
+    const bow = key.localToWorld(new THREE.Vector3(0, 0, -0.16));
+    const local = cam.worldToLocal(bow.clone());
+    hand.position.set(local.x + 0.01, local.y - 0.035, local.z + 0.05);
+    hand.rotation.set(-0.1 + (1 - up) * 0.25, HAND_YAW + up * 0.2, 0.08 + turn * 0.6);
+
+    // ---- AND THE LOCK GIVES.  It opens once, on the far side of the turn:
+    // the shackle springs, the brass jolts and catches the light, and the key
+    // stays in it, so it goes wherever the lock goes from here.
+    if (this.shackle && turnK > 0.92 && this.unlockFlash === 0) {
+      this.shackle.rotation.z = 0.18 - 1.15;
+      this.unlockFlash = 1;
+      audio.sfx('lock_click', 1);
+      this.time.delayedCall(90, () => audio.sfx('key_turn', 0.5));
+      if (this.doorLock) this.doorLock.attach(key);
+      if (!this.unlockLight) {
+        const l = new THREE.PointLight(0xffd98a, 0, 1.6, 2);
+        l.position.copy(mouth).add(into.clone().multiplyScalar(-0.25));
+        st.scene.add(l);
+        this.unlockLight = l;
+      }
+    }
+  }
+
+  /** The unlock's jolt and glint, running down after the lock gives. */
+  private runUnlockFlash(dt: number): void {
+    if (this.unlockFlash <= 0) return;
+    this.unlockFlash = Math.max(0.0001, this.unlockFlash - dt * 2.4);
+    const f = this.unlockFlash;
+    if (this.unlockLight) this.unlockLight.intensity = 3.2 * f * f;
+    if (this.lockBody) this.lockBody.rotation.z = 0.18 + Math.sin((1 - f) * 22) * 0.12 * f;
   }
 
   /**
@@ -2200,6 +2291,8 @@ export class HideRoom3D extends Phaser.Scene {
     // ---- THE KEY GOING IN, AND TURNING.  The hand is doing it on screen for
     // the whole of the first third; see runInsert.
     if (k < INSERT_UNTIL) this.runInsert(k);
+    else if (this.unlockFlash === 0) this.runInsert(INSERT_UNTIL);
+    this.runUnlockFlash(dt);
     // ---- the lock, being fought with properly this time
     if (at(0.06)) audio.sfx('key_turn', 0.75);
     if (k > 0.1) {
@@ -4551,9 +4644,18 @@ export class HideRoom3D extends Phaser.Scene {
       this.pitch = himPitch;
       if (t - dt < E.stare) audio.sfx('eerie_swell', 0.35);
     } else if (t < E.run) {
-      const k = Phaser.Math.Easing.Cubic.Out((t - E.back) / (E.run - E.back));
+      // ---- THE TURN BACK.  Panic, not a pan: it bursts off the mark -- most
+      // of the way round in the first few frames -- and snaps home, with a
+      // jolt through the whole view as it goes.
+      const u = (t - E.back) / (E.run - E.back);
+      const k = 1 - Math.pow(1 - u, 4);
       this.yaw = toHim + (face - toHim) * k;
-      this.pitch = himPitch * (1 - k);
+      this.pitch = himPitch * (1 - k) - Math.sin(u * Math.PI) * 0.08;
+      if (t - dt < E.back) {
+        this.shake = Math.max(this.shake, 0.75);
+        audio.sfx('throw_whoosh', 0.8);
+        audio.sfx('item_thud', 0.5);
+      }
     } else if (t < E.black) {
       // ---- RUN.  Out through the doors and on into the road.
       this.yaw = face;
@@ -4562,8 +4664,13 @@ export class HideRoom3D extends Phaser.Scene {
       const k = Phaser.Math.Clamp((t - E.run) / (E.black - E.run), 0, 1);
       const from = this.escapeMark;
       const outZ = d.halfD + 5;
+      // THROUGH A LEAF, NOT THE MULLION.  The doors are a pair with a post
+      // between them, and the run used to aim at the middle of the doorway --
+      // straight through the post.  It goes through the open right-hand leaf,
+      // wide of both the post and the swung leaf.
+      const lane = d.door.x + (d.glassDoor ? RUN_THROUGH_X : 0);
       this.pos.set(
-        Phaser.Math.Linear(from.x, d.door.x, Math.min(1, k * 1.6)),
+        Phaser.Math.Linear(from.x, lane, Phaser.Math.Easing.Sine.Out(Math.min(1, k * 6))),
         Phaser.Math.Linear(from.y, outZ, k * k * 0.4 + k * 0.6),
       );
       this.bob += dt * 11;
