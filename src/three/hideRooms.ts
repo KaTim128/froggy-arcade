@@ -75,6 +75,15 @@ export interface HideSpot {
   skin?: SpotSkin;
 }
 
+/** A scenery doorway in a side wall: see RoomDef.wallOpenings. */
+export interface WallOpening {
+  side: 'left' | 'right';
+  z: number;
+  w: number;
+  h: number;
+  color?: number;
+}
+
 export interface RoomDef {
   name: string;
   theme: RoomTheme;
@@ -124,9 +133,11 @@ export interface RoomDef {
    * and a dark version of that room without one does not look like the same
    * building.  It is lit, framed and recessed so it reads as a genuine opening
    * from across the floor -- and it is bricked up a foot behind the frame, so
-   * there is nothing on the other side of it to go to.
+   * there is nothing on the other side of it to go to.  A room may have more
+   * than one, one per stretch of wall; `color` is the frame's (teal if left
+   * out, which is the lit arcade's).
    */
-  wallOpening?: { side: 'left' | 'right'; z: number; w: number; h: number };
+  wallOpenings?: WallOpening[];
   /** Where he goes once he has finished with the door.  Kept off the furniture. */
   froggyStart: { x: number; z: number };
   /**
@@ -780,8 +791,14 @@ const ARCADE_BASE: RoomDef = {
     { axis: 'z', at: 7.38, from: -10.0, to: -4.8, top: 1.15 },
   ],
   // The way through to the back room, in the left-hand wall where the lit
-  // arcade has its doorway (y 95..141).  Scenery: see RoomDef.wallOpening.
-  wallOpening: { side: 'left', z: 2.5, w: 3.4, h: 2.8 },
+  // arcade has its doorway (y 95..141).  Scenery: see RoomDef.wallOpenings.
+  // And across the floor from it, in the right-hand wall between the end of
+  // the counter and the front row, its pink twin: the same frame, the same
+  // dark recess and the same bricked-up nothing behind it.
+  wallOpenings: [
+    { side: 'left', z: 2.5, w: 3.4, h: 2.8 },
+    { side: 'right', z: -0.4, w: 3.4, h: 2.8, color: 0xe8559f },
+  ],
 };
 
 export const ARCADE: RoomDef = ARCADE_BASE;

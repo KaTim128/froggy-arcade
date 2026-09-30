@@ -1263,25 +1263,24 @@ export class HideRoom3D extends Phaser.Scene {
     // opening is cut into one: there it goes up in two, with a gap left
     // between them.  A dark panel laid flat on an unbroken wall reads as a
     // stain, not as a way through; the eye needs the wall to actually stop.
-    const openSide = d.wallOpening;
     for (const sx of [-1, 1] as const) {
       const wx = sx * (d.halfW + 0.25);
       const side = sx < 0 ? 'left' : 'right';
-      if (!openSide || openSide.side !== side) {
-        wall(wx, 0, 0.5, d.halfD * 2 + 1);
-        continue;
+      const gaps = (d.wallOpenings ?? []).filter((o) => o.side === side).sort((a, b) => a.z - b.z);
+      // the wall in runs between the gaps, and a lintel over each gap so the
+      // hole has a height
+      let from = -d.halfD - 0.5;
+      for (const o of gaps) {
+        const gapA = o.z - o.w / 2;
+        wall(wx, (from + gapA) / 2, 0.5, gapA - from);
+        wall(wx, o.z, 0.5, o.w);
+        const lintelFix = st.scene.children[st.scene.children.length - 1] as THREE.Mesh;
+        lintelFix.scale.y = (d.wallH - o.h) / d.wallH;
+        lintelFix.position.y = o.h + (d.wallH - o.h) / 2;
+        from = o.z + o.w / 2;
       }
-      const lo = -d.halfD - 0.5;
       const hi = d.halfD + 0.5;
-      const gapA = openSide.z - openSide.w / 2;
-      const gapB = openSide.z + openSide.w / 2;
-      wall(wx, (lo + gapA) / 2, 0.5, gapA - lo);
-      wall(wx, (gapB + hi) / 2, 0.5, hi - gapB);
-      // and a lintel across the top of the gap, so the hole has a height
-      wall(wx, openSide.z, 0.5, openSide.w);
-      const lintelFix = st.scene.children[st.scene.children.length - 1] as THREE.Mesh;
-      lintelFix.scale.y = (d.wallH - openSide.h) / d.wallH;
-      lintelFix.position.y = openSide.h + (d.wallH - openSide.h) / 2;
+      wall(wx, (from + hi) / 2, 0.5, hi - from);
     }
 
     // ---- THE WAY OUT, set into the far wall.
@@ -1437,8 +1436,8 @@ export class HideRoom3D extends Phaser.Scene {
     // metre short of the wall plane in the first place -- so there are two
     // independent reasons the player never gets through it, and neither of
     // them is a hole in the collision that could be found somewhere else.
-    if (d.wallOpening) {
-      const w = d.wallOpening;
+    for (const w of d.wallOpenings ?? []) {
+      const frame = w.color ?? 0x2f8f9f;
       const sx = w.side === 'left' ? -1 : 1;
       const wallX = sx * d.halfW;
       // A short passage behind the gap, going away from the room and ending in
@@ -1465,14 +1464,14 @@ export class HideRoom3D extends Phaser.Scene {
       for (const off of [-1, 1]) {
         const jamb = new THREE.Mesh(
           new THREE.BoxGeometry(0.3, w.h + 0.2, 0.26),
-          new THREE.MeshBasicMaterial({ color: 0x2f8f9f }),
+          new THREE.MeshBasicMaterial({ color: frame }),
         );
         jamb.position.set(wallX + sx * -0.2, (w.h + 0.2) / 2, w.z + off * (w.w / 2 + 0.13));
         st.scene.add(jamb);
       }
       const head = new THREE.Mesh(
         new THREE.BoxGeometry(0.3, 0.24, w.w + 0.52),
-        new THREE.MeshBasicMaterial({ color: 0x2f8f9f }),
+        new THREE.MeshBasicMaterial({ color: frame }),
       );
       head.position.set(wallX + sx * -0.2, w.h + 0.1, w.z);
       st.scene.add(head);
@@ -1484,7 +1483,9 @@ export class HideRoom3D extends Phaser.Scene {
       // reaches the floor is a rim on the jambs and nothing else: the doorway
       // is legible as a doorway and the two metres in front of it are as dark
       // as the room gets, which is the point of having it there at all.
-      const spill = new THREE.PointLight(0x46c4bd, 2, 5.5, 2.2);
+      // (the frame's own colour, a shade lighter: teal on the teal one)
+      const glow = w.color ? new THREE.Color(w.color).lerp(new THREE.Color(0xffffff), 0.15) : new THREE.Color(0x46c4bd);
+      const spill = new THREE.PointLight(glow, 2, 5.5, 2.2);
       spill.position.set(wallX + sx * 0.35, w.h * 0.62, w.z);
       st.scene.add(spill);
       this.roomLights.push(spill);
