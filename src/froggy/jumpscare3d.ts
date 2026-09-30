@@ -48,7 +48,16 @@ export interface Scare3D {
   update(dt: number): void;
 }
 
-export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster: FroggyMonster): Scare3D {
+export interface Scare3DOptions {
+  /**
+   * World height of the floor under the player.  Given, his head is kept
+   * above it: caught under a bed, his face comes at you along the floor
+   * rather than half through it, and the view tips up to meet it.
+   */
+  floor?: number;
+}
+
+export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster: FroggyMonster, opts: Scare3DOptions = {}): Scare3D {
   audio.scare();
   audio.sfx('boom', 1);
   // The recorded scream is already going (see `audio.scare`); the synthetic
@@ -136,9 +145,33 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
   };
   scene.time.delayedCall(SCARE_MS + 650, dispose);
 
+  // ---- FROM WHERE HE IS.  If he is already in front of you -- down at the
+  // gap of the bed you are under, at the door he has just pulled open -- the
+  // rush starts from there instead of from a fixed spot further off, so
+  // there is no jump backwards before he comes.  Where he is across the line
+  // and up or down it is taken out over the rush.
+  const startOff = new THREE.Vector3();
+  let farD = far;
+  if (monster.root.visible) {
+    const h0 = monster.faceAt(new THREE.Vector3()).sub(basePos);
+    const along = h0.dot(fwd);
+    if (along > faceFront + 0.1 && along < far) {
+      farD = along;
+      startOff.copy(h0).addScaledVector(fwd, -along);
+    }
+  }
+  // ---- THE FLOOR.  His head is never allowed below it: from a camera on the
+  // floor, the face comes up off the boards rather than through them.
+  const floor = opts.floor;
+  const headLow = headSize * 0.62;
+  const minY = floor !== undefined ? floor + headLow + 0.04 * s : -Infinity;
+  // tipping the view up to meet a face that has to be higher than your eye
+  const tipQ = new THREE.Quaternion();
+  const tipAxis = right.clone();
+
   monster.setVisible(true);
   monster.lookAt(basePos);
-
+  // (anything a room had drawn out of him goes: the scare is lit its own way)
   let t = 0;
   let flick = -1;
   // small wrong adjustments of the head, held between snaps
@@ -148,6 +181,9 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
   const shakeRot = new THREE.Euler();
   const headWorld = new THREE.Vector3();
   const target = new THREE.Vector3();
+  /** Where his feet are from his head, as of the last pose. */
+  const rootFromHead = new THREE.Vector3();
+  let placed = false;
 
   const paint = (): void => {
     froggyLayer.paint((ctx) => {
@@ -208,10 +244,77 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
     const rush = lungeK * lungeK * lungeK;
     const settle = closeK > 0 ? Math.sin(Math.min(1, closeK * 5) * Math.PI) * 0.12 : 0;
     // and once there, he keeps drifting that last little way closer
-    const d = Phaser.Math.Linear(far, near, rush) - (settle + closeK * 0.14) * (near - faceFront);
+    const d = Phaser.Math.Linear(farD, near, rush) - (settle + closeK * 0.14) * (near - faceFront);
     // Towering at first, his head well above yours; bending down to your
-    // eye line as he comes.
-    const lift = (1 - rush) * headSize * 0.35;
+    // eye line as he comes.  (Or, already in front of you, from wherever his
+    // face was.)
+    const yFrom = farD < far ? basePos.y + startOff.y : basePos.y + headSize * 0.45;
+    const yTo = basePos.y + headSize * 0.1;
+
+    // ---- THE HANDS.  The arms are drawn out long and the hands come for
+    // you: from beside his head on the hold, round either side of it on the
+    // lunge, and into the edges of the frame once he is on you -- out in
+    // front of his face, between it and you, huge because they are so close,
+    // the long fingers hooked and working.  They creep on in, closer to the
+    // lens, for as long as it lasts.  Never across the middle: the face is
+    // the scare, and the hands frame it.
+    const tanV = Math.tan(fov / 2);
+    const aspect = cam.aspect || 16 / 9;
+    const handIn = THREE.MathUtils.smoothstep(lungeK, 0.05, 0.85);
+    const handAt = (side: number): THREE.Vector3 => {
+      // beside his head, where the lunge starts them
+      const besideDepth = d + 0.1 * s;
+      const beside = new THREE.Vector3()
+        .copy(basePos)
+        .addScaledVector(fwd, besideDepth)
+        .addScaledVector(right, side * headSize * 0.95)
+        .add(up.clone().multiplyScalar(yFrom - basePos.y - headSize * 0.25));
+      // at the edge of the frame, in front of his face, creeping closer
+      const depth = Math.min(d * 0.55, (0.5 - 0.14 * closeK) * s);
+      const lat = (0.86 - 0.1 * closeK) * depth * tanV * aspect;
+      const vert = (side < 0 ? 0.12 : -0.02) * depth * tanV + Math.sin(t / 90 + side) * 0.012 * s;
+      const edge = new THREE.Vector3()
+        .copy(basePos)
+        .addScaledVector(fwd, depth)
+        .addScaledVector(right, side * lat)
+        .addScaledVector(up, vert);
+      // a fine tremble in them: straining, not still
+      edge.x += Math.sin(t / 23 + side * 3) * 0.006 * s;
+      edge.y += Math.sin(t / 31 + side) * 0.006 * s;
+      const at = beside.lerp(edge, handIn);
+      if (floor !== undefined) at.y = Math.max(at.y, floor + 0.12 * s);
+      return at;
+    };
+    // On them from the first frame: left to the chase's reach for even the
+    // hold, an arm came in across his face on its way to the edge.
+    const handW = 1;
+    // hooked, and each finger working on its own
+    const hook = 0.3 + 0.2 * Math.sin(t / 70);
+
+    // ---- WHERE HIS FACE GOES: down the camera's line, at `d`, at the height.
+    target.copy(basePos).addScaledVector(fwd, d);
+    // his face a touch above the middle, so the eyes and the open mouth are
+    // both in the frame
+    target.y = Phaser.Math.Linear(yFrom, yTo, rush);
+    // from across the line, if that is where he was, onto it
+    target.x += startOff.x * (1 - rush);
+    target.z += startOff.z * (1 - rush);
+    // a sway across the line while he is still, and none once he is on you
+    target.addScaledVector(right, t < HOLD_MS ? Math.sin(t / 260) * 0.04 * s : 0);
+    // and never down through the floor
+    target.y = Math.max(target.y, minY);
+    // Put him there BEFORE he is posed, on last frame's head, so the hands
+    // are solved onto their marks from where his shoulders actually are; the
+    // head is set exactly after.
+    monster.root.rotation.y = yaw;
+    if (!placed) {
+      monster.root.position.set(0, 0, 0);
+      monster.root.updateMatrixWorld(true);
+      rootFromHead.copy(monster.root.position).sub(monster.headObject.getWorldPosition(headWorld));
+      placed = true;
+    }
+    monster.root.position.copy(target).add(rootFromHead);
+    monster.root.updateMatrixWorld(true);
 
     // ---- HIS BODY.  Standing and breathing on the hold; reaching on the
     // lunge, the arms coming up into the frame; still reaching, half, close.
@@ -230,25 +333,32 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
       bare: t < HOLD_MS ? 0.6 : 1,
       climb: 0,
       lunge: reaching,
-      // the arms come up as he comes in, and stay up
-      grab: t < HOLD_MS + LUNGE_MS * 0.3 ? 0 : 1,
+      // the arms drawn out long, the hands coming for you
+      pounce: t < HOLD_MS ? 0.6 : 1,
+      hands: [
+        { at: handAt(-1), weight: handW, grip: hook },
+        { at: handAt(1), weight: handW, grip: hook + 0.1 },
+      ],
       // and the pupils shrink to pinpricks on you: a fixed predator's stare
       constrict: 1,
+      floor,
     });
 
-    // ---- WHERE HIS FACE GOES: down the camera's line, at `d`, at the height.
-    target.copy(basePos).addScaledVector(fwd, d);
-    // his face a touch above the middle, so the eyes and the open mouth are
-    // both in the frame
-    target.y = basePos.y + lift + headSize * 0.1;
-    // a sway across the line while he is still, and none once he is on you
-    target.addScaledVector(right, t < HOLD_MS ? Math.sin(t / 260) * 0.04 * s : 0);
-    monster.root.rotation.y = yaw;
-    monster.root.position.set(0, 0, 0);
+    // the head exactly on its mark, now that he is posed
     monster.root.updateMatrixWorld(true);
     monster.headObject.getWorldPosition(headWorld);
-    monster.root.position.copy(target).sub(headWorld);
+    rootFromHead.copy(monster.root.position).sub(headWorld);
+    monster.root.position.copy(target).add(rootFromHead);
     monster.root.updateMatrixWorld(true);
+    // and the chin, as far as the jaw has dropped and stretched, off the floor
+    if (floor !== undefined) {
+      const sunk = floor + 0.03 * s - monster.headBottom();
+      if (sunk > 0) {
+        target.y += sunk;
+        monster.root.position.y += sunk;
+        monster.root.updateMatrixWorld(true);
+      }
+    }
 
     // ---- THE FACE, straight at the lens, and never quite still.
     monster.headObject.lookAt(basePos);
@@ -291,6 +401,13 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
     const recoil = lungeK >= 1 ? Math.max(0, 1 - closeK * 5) * 0.12 * s : 0;
     cam.position.addScaledVector(fwd, -recoil);
     cam.quaternion.copy(baseQuat);
+    // Caught low (under a bed, in a tube) his face is higher than your eye --
+    // the floor will not let it be lower -- and the view tips up to it, the
+    // way your head would.
+    const above = target.y - yTo;
+    if (above > 0.01 && minY > -Infinity) {
+      cam.quaternion.premultiply(tipQ.setFromAxisAngle(tipAxis, Math.atan2(above, Math.max(0.2, d))));
+    }
     // The impact: a hard kick that dies over a quarter of a second, on top of
     // a tremor that never quite stops while he is there.
     const since = t - hitAt;

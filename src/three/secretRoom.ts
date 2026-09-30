@@ -777,7 +777,11 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
     // hunt that knows there is an up.
     monster.setPose(seen.x, seen.y, seen.z, seen.yaw);
     // (all of it but where you are: he reaches for you up there, not down here)
-    monster.update(dt, { ...seen.pose, reachAt: null, viewer: null });
+    // (the floor and the solids are in room space, which is this enclosure's
+    // own; where he turns his face is a point in the world, so it comes down
+    // the hole with him)
+    const faceTo = seen.pose.faceTo && monster.root.parent ? monster.root.parent.localToWorld(seen.pose.faceTo.clone()) : null;
+    monster.update(dt, { ...seen.pose, reachAt: null, viewer: null, faceTo });
 
     // ---- AND THE LIDS COME UP WHEN THE REAL ONES DO.
     //
