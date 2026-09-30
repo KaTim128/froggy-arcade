@@ -402,6 +402,7 @@ try {
     // Hiding, and what hiding costs.
     await page.evaluate(() => {
       const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+      sc.climb = null;
       sc.pos.set(sc.spots[0].x, sc.spots[0].z);
       sc.froggy.set(sc.spots[0].x, sc.spots[0].z + 5);
     });
@@ -444,6 +445,10 @@ try {
     const out = await page.evaluate(() => {
       const sc = window.__froggy.game().scene.getScene('HideRoom3D');
       sc.grace = 999;
+      // (a climb left running by the check before owns where he is, and would
+      // carry him back across the room to the sofa -- see the open-spot check)
+      sc.climb = null;
+      sc.fMode = 'search';
       sc.froggy.set(sc.def.halfW - 2, -sc.def.halfD + 2);
       const bad = [];
       for (const spot of sc.spots) {
