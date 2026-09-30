@@ -437,33 +437,52 @@ export function buildStaffDoor(w: number, h: number, grunge: THREE.Texture | nul
   for (const side of [-1, 1]) add(arch, jamb, h + jamb, 0.14, side * (w / 2 + jamb / 2), (h + jamb) / 2, 0.06);
   add(arch, w + jamb * 2, jamb, 0.14, 0, h + jamb / 2, 0.06);
 
-  // ---- the leaf, and the four panels in it.
-  add(lam(0x4a3524), w, h, 0.12, 0, h / 2, 0);
+  // ---- the dark behind it: the back office, unlit.  Hidden by the leaf
+  // while it is shut; what you see when it is not.
+  const office = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: 0x030304 }));
+  office.position.set(0, h / 2, -0.05);
+  g.add(office);
+
+  // ---- the leaf, and the four panels in it -- ALL ON A HINGE at the left
+  // jamb, named, so a scene can swing it open into the room (a negative turn
+  // about y brings the free edge out towards +Z).
+  const leaf = new THREE.Group();
+  leaf.name = 'staffLeaf';
+  leaf.position.set(-w / 2, 0, 0);
+  g.add(leaf);
+  const onLeaf = (mat: THREE.Material, sx: number, sy: number, sz: number, px: number, py: number, pz: number) => {
+    const m = add(mat, sx, sy, sz, px + w / 2, py, pz);
+    g.remove(m);
+    leaf.add(m);
+    return m;
+  };
+  onLeaf(lam(0x4a3524), w, h, 0.12, 0, h / 2, 0);
   for (const row of [0.28, 0.66]) {
     for (const side of [-1, 1]) {
-      add(lam(0x33241a), w * 0.36, h * 0.24, 0.05, side * w * 0.21, h * row, 0.06);
+      onLeaf(lam(0x33241a), w * 0.36, h * 0.24, 0.05, side * w * 0.21, h * row, 0.06);
     }
   }
   // ---- the sign plate, lit, because at this light level a painted sign is a
   // slightly different brown.
-  add(lit(0x9aa4b4), w * 0.56, h * 0.12, 0.03, 0, h * 0.86, 0.08);
+  onLeaf(lit(0x9aa4b4), w * 0.56, h * 0.12, 0.03, 0, h * 0.86, 0.08);
   for (const row of [-1, 1]) {
-    add(lam(0x2b2f38, false), w * 0.4, h * 0.012, 0.02, 0, h * 0.86 - row * h * 0.022, 0.1);
+    onLeaf(lam(0x2b2f38, false), w * 0.4, h * 0.012, 0.02, 0, h * 0.86 - row * h * 0.022, 0.1);
   }
 
   // ---- the lever, on a rose, at the hinge-away side.  A lever says a staff
   // door; a ball on a stick says a cupboard.
   const rose = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 10), lit(0xb9a05a));
   rose.rotation.x = Math.PI / 2;
-  rose.position.set(w * 0.33, h * 0.46, 0.08);
-  g.add(rose);
-  add(lit(0xc9a62e), 0.05, 0.05, 0.1, w * 0.33, h * 0.46, 0.13);
-  add(lit(0xc9a62e), 0.19, 0.05, 0.05, w * 0.25, h * 0.46, 0.17);
+  rose.position.set(w * 0.33 + w / 2, h * 0.46, 0.08);
+  leaf.add(rose);
+  onLeaf(lit(0xc9a62e), 0.05, 0.05, 0.1, w * 0.33, h * 0.46, 0.13);
+  onLeaf(lit(0xc9a62e), 0.19, 0.05, 0.05, w * 0.25, h * 0.46, 0.17);
   // the escutcheon under it
-  add(lam(0x8a7b46, false), 0.05, 0.09, 0.03, w * 0.33, h * 0.36, 0.08);
+  onLeaf(lam(0x8a7b46, false), 0.05, 0.09, 0.03, w * 0.33, h * 0.36, 0.08);
+  // the kick plate
+  onLeaf(lam(0x6b727f), w * 0.92, h * 0.12, 0.04, 0, h * 0.07, 0.07);
 
-  // ---- the kick plate and the threshold, both scuffed metal.
-  add(lam(0x6b727f), w * 0.92, h * 0.12, 0.04, 0, h * 0.07, 0.07);
+  // ---- and the threshold, scuffed metal, which stays put.
   add(lam(0x565c68), w + jamb * 2, 0.04, 0.2, 0, 0.02, 0.08);
 
   return g;
@@ -751,5 +770,134 @@ export function buildHand(): THREE.Group {
   thumb.add(t);
   g.add(thumb);
 
+  return g;
+}
+
+/**
+ * THE STREET OUTSIDE, AT NIGHT.
+ *
+ * What the glass doors have been in front of all along, and what they open
+ * on at the end: a pavement, a kerb, an empty two-lane road with its centre
+ * line, the pavement opposite, and a row of shut-up shopfronts with a few
+ * lit windows over them.  Sodium lamps down both sides throw pools of orange
+ * onto the tarmac.  No cars, nobody: it is the middle of the night, and the
+ * emptiness is the point.
+ *
+ * Built with z = 0 on the outer face of the arcade's front wall and +Z out
+ * into the road, centred on the doors.  The lamps and windows ignore fog so
+ * they read from inside a dark room; the ground takes the lamps' light.
+ */
+export function buildNightStreet(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'nightStreet';
+  const lam = (c: number) => new THREE.MeshLambertMaterial({ color: c });
+  const glow = (c: number, opacity = 1) =>
+    new THREE.MeshBasicMaterial({ color: c, fog: false, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
+  const box = (mat: THREE.Material, sx: number, sy: number, sz: number, px: number, py: number, pz: number) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(px, py, pz);
+    g.add(m);
+    return m;
+  };
+  const flat = (mat: THREE.Material, w: number, d: number, x: number, y: number, z: number) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(x, y, z);
+    g.add(m);
+    return m;
+  };
+  const W = 44;
+  // the near pavement, in slabs
+  flat(lam(0x34363c), W, 4, 0, 0.0, 2);
+  for (let i = -10; i <= 10; i++) box(lam(0x26282d), 0.03, 0.005, 4, i * 2.1, 0.004, 2);
+  // the kerb, and the road
+  box(lam(0x5a5c62), W, 0.14, 0.3, 0, 0.07 - 0.12, 4.1);
+  flat(lam(0x17191d), W, 9, 0, -0.12, 8.7);
+  // the centre line: dashes, pale and a little worn
+  for (let i = -8; i <= 8; i++) flat(lam(0x9c947a), 1.6, 0.14, i * 2.8, -0.115, 8.7);
+  // the far kerb and pavement
+  box(lam(0x5a5c62), W, 0.14, 0.3, 0, 0.07 - 0.12, 13.3);
+  flat(lam(0x2d2f35), W, 3.5, 0, 0.0, 15.2);
+
+  // ---- the shopfronts opposite, shuttered, with flats over them
+  let seed = 11;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let x = -21; x < 21; ) {
+    const bw = 4 + rnd() * 3.5;
+    const bh = 6 + rnd() * 5;
+    const cx = x + bw / 2;
+    box(lam(rnd() < 0.5 ? 0x1c1d24 : 0x221f22), bw - 0.1, bh, 1.5, cx, bh / 2, 17.9);
+    // the shutter
+    box(lam(0x3a3d44), bw * 0.8, 2.4, 0.05, cx, 1.3, 17.12);
+    for (let r = 0; r < 12; r++) box(lam(0x2b2d33), bw * 0.8, 0.02, 0.06, cx, 0.2 + r * 0.19, 17.1);
+    // and windows over it: most dark, a few lit behind thin curtains
+    for (let fy = 3.6; fy < bh - 0.8; fy += 1.9) {
+      for (let wx = -1; wx <= 1; wx += 2) {
+        const lit = rnd() < 0.22;
+        const win = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.8, 1.0),
+          lit ? glow(rnd() < 0.5 ? 0xc99a55 : 0x9fb0c8) : lam(0x0c0d11),
+        );
+        win.rotation.y = Math.PI;
+        win.position.set(cx + wx * bw * 0.22, fy, 17.13);
+        g.add(win);
+      }
+    }
+    x += bw;
+  }
+  // ---- the sky over the roofs: nearly black, a little lighter at the horizon
+  const sky = new THREE.Mesh(
+    new THREE.PlaneGeometry(W * 2, 30),
+    new THREE.MeshBasicMaterial({ color: 0x0a1020, fog: false }),
+  );
+  sky.rotation.y = Math.PI;
+  sky.position.set(0, 12, 26);
+  g.add(sky);
+
+  // ---- THE LAMPS.  Tall poles on the kerb edge, a head reaching out over the
+  // road, a sodium bulb, and a pool of orange on the ground under each.
+  const pole = lam(0x3b3f47);
+  const lampAt = (x: number, z: number, out: number, light: boolean): void => {
+    box(pole, 0.14, 5.2, 0.14, x, 2.6, z);
+    box(pole, 0.1, 0.1, 1.2, x, 5.15, z + out * 0.6);
+    box(lam(0x2a2d33), 0.5, 0.16, 0.34, x, 5.08, z + out * 1.15);
+    const bulb = box(glow(0xffc27a), 0.36, 0.05, 0.22, x, 4.98, z + out * 1.15);
+    bulb.name = 'streetBulb';
+    // a soft halo round the bulb, so it glows rather than being a lit brick
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(0.55, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0xff9a40, transparent: true, opacity: 0.16, fog: false, depthWrite: false }),
+    );
+    halo.position.set(x, 4.95, z + out * 1.15);
+    g.add(halo);
+    // the pool on the ground
+    const pool = new THREE.Mesh(
+      new THREE.CircleGeometry(3.2, 28),
+      new THREE.MeshBasicMaterial({
+        color: 0xff9a40,
+        transparent: true,
+        opacity: 0.2,
+        fog: false,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    );
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.set(x, -0.1, z + out * 1.6);
+    g.add(pool);
+    if (light) {
+      const l = new THREE.PointLight(0xffb060, 22, 14, 1.4);
+      l.position.set(x, 4.8, z + out * 1.15);
+      g.add(l);
+    }
+  };
+  // near side: one either side of the doors, lit; far side, staggered
+  lampAt(-6.5, 3.8, 1, true);
+  lampAt(7.5, 3.8, 1, true);
+  lampAt(-18, 3.8, 1, false);
+  lampAt(19, 3.8, 1, false);
+  lampAt(0.5, 13.6, -1, true);
+  lampAt(-12.5, 13.6, -1, false);
+  lampAt(13.5, 13.6, -1, false);
   return g;
 }

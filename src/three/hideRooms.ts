@@ -559,7 +559,10 @@ const ARCADE_BASE: RoomDef = {
   // the end of it.
   spawn: { x: 5.0, z: -7.8 },
   spawnYaw: Math.PI,
-  staffDoor: { x: 6.1 },
+  // Nudged in off the right-hand return, and built narrow (see STAFF_DOOR_W
+  // in HideRoom3D), so the architrave and the end of the counter are two
+  // things with a gap between them rather than one running into the other.
+  staffDoor: { x: 5.95 },
   froggyStart: { x: 0.0, z: 4.6 },
   prizeCase: { x: 1.2, z: -9.5 },
   // All three runs, from either side.  The lit room only lets you over the

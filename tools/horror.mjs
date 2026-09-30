@@ -1019,6 +1019,30 @@ try {
     check('the walk behind you turns into a sprint', sawCharge, sawCharge ? 'it charges' : 'never charged');
     check('and then the lock turns', done.mode === 'survived', done.mode);
     await page.screenshot({ path: `${SHOTS}/arcade-out.png` });
+
+    // ---- AND WHAT COMES AFTER IT.  No verdict on the screen; the doors open
+    // on a night street; you look back and he is behind the counter with the
+    // staff door open; you run; black; what happened after; outside again.
+    const endAt = async (t) => {
+      for (let i = 0; i < 600; i++) {
+        const s = await hide();
+        if (!s || s.endT >= t) return s;
+        await sleep(150);
+      }
+      return hide();
+    };
+    const lookBack = await endAt(5.6);
+    await page.screenshot({ path: `${SHOTS}/arcade-look-back.png` });
+    check('looking back, he is behind the counter and the staff door is open',
+      lookBack?.watcherShown && lookBack?.staffDoorOpen, `shown ${lookBack?.watcherShown}, door ${lookBack?.staffDoorOpen}`);
+    check('and the view narrows onto him', lookBack && lookBack.fov < 40, `fov ${lookBack?.fov?.toFixed(1)}`);
+    let gone = '';
+    for (let i = 0; i < 900 && !gone; i++) {
+      await sleep(200);
+      const scenes = await page.evaluate(() => window.__froggy.activeScenes());
+      if (!scenes.includes('HideRoom3D')) gone = scenes.join(',');
+    }
+    check('the night ends outside the arcade', gone.includes('ExteriorDay'), gone || 'still in the arcade');
     await page.close();
   }
 
