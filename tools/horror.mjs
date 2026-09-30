@@ -1524,7 +1524,9 @@ try {
         walkedTowardsPlayer: sc.froggy.y > 13,
       };
     });
-    check('he faces the way he is walking', Math.abs(facing.modelYaw - facing.headingYaw) < 0.01,
+    // (compared as angles: a model that has turned right round is at 2pi more)
+    const faceOff = Math.atan2(Math.sin(facing.modelYaw - facing.headingYaw), Math.cos(facing.modelYaw - facing.headingYaw));
+    check('he faces the way he is walking', Math.abs(faceOff) < 0.01,
       `model ${facing.modelYaw.toFixed(2)} vs heading ${facing.headingYaw.toFixed(2)}`);
 
     // Reach is reach, whatever he happens to be doing with his hands.
