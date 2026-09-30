@@ -734,6 +734,29 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
       `${(shape.tooCloseToCall * 100).toFixed(1)}% of finishes too close to call`,
   );
   if (!clean) failures++;
+
+  // ---- WATER NEVER SITS ON A HOLE.  A puddle is 22px across and a hole 13;
+  // dealt independently they used to overlap and the hole vanished under
+  // the water.  Three thousand fields, and the nearest any puddle comes to a
+  // hole on its own lane has to leave clear grass between them.
+  const gap = await page.evaluate(() => window.__race.waterGap(3000));
+  const dry = gap >= 24;
+  console.log(`${dry ? 'PASS' : 'FAIL'}  frog race: the water never lies on a hole  — closest ${gap.toFixed(1)}px apart in 3000 fields`);
+  if (!dry) failures++;
+
+  // ---- THE CARD IS A RACE, NOT A FAIRGROUND.  No skates or rockets, no
+  // butterfly, no balloon; and the final stretch deals big moments of its
+  // own -- a rock, a trap, a burst or a leap -- in every race.
+  const kinds = await page.evaluate(() => window.__race.kinds);
+  const gone = ['rocket', 'flutter', 'balloon'].filter((k) => kinds.includes(k));
+  const cards = await page.evaluate(() => window.__race.cards(400));
+  const late = cards.filter((c) => c.some((b) => b.at >= 0.68 * 30 && ['rock', 'snap', 'burst', 'jump'].includes(b.kind))).length / cards.length;
+  const grown = gone.length === 0 && ['rock', 'snap', 'burst'].every((k) => kinds.includes(k)) && late > 0.97;
+  console.log(
+    `${grown ? 'PASS' : 'FAIL'}  frog race: rocks, traps and bursts, no skates or butterfly, and a final stretch in every race  — ` +
+      `${kinds.join('/')}; ${(late * 100).toFixed(0)}% of cards deal the finale${gone.length ? `; still there: ${gone.join(', ')}` : ''}`,
+  );
+  if (!grown) failures++;
   await page.close();
 }
 
