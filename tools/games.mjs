@@ -2335,6 +2335,62 @@ for (const g of [
   await page.close();
 }
 
+// ---- FROGGY'S OUTCOMES, IN THEIR ORDER.  A natural on two cards is settled
+// on the deal for whichever side holds it at twice the win or loss; five
+// cards that have not bust win outright (the charlie), even on a total he
+// could match; five cards on exactly 21 is worth three times, his as well.
+// The shoe is stacked for each hand -- waiting for a shuffle to deal one is a
+// lottery, not a test -- and the tokens are read off the ledger.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=60&game=blackjack`, { waitUntil: 'networkidle2' });
+  await sleep(2400);
+  await startGame(page);
+  if (await bridge(page, '__blackjack')) {
+    const hand = async (shoe, act) => {
+      for (let i = 0; i < 20; i++) {
+        const ph = await page.evaluate(() => window.__blackjack.state().phase);
+        if (ph === 'bet') break;
+        if (ph === 'over') await page.evaluate(() => window.__blackjack.again());
+        await sleep(150);
+      }
+      const before = await page.evaluate(() => window.__blackjack.balance());
+      await page.evaluate((c) => { window.__blackjack.stackShoe(c); window.__blackjack.deal(); }, shoe);
+      if (act) await act();
+      for (let i = 0; i < 40; i++) {
+        if ((await page.evaluate(() => window.__blackjack.state().phase)) === 'over') break;
+        await sleep(200);
+      }
+      const st = await page.evaluate(() => window.__blackjack.state());
+      const after = await page.evaluate(() => window.__blackjack.balance());
+      // the bet is 1: net is what the hand won or lost
+      return { net: after - before, status: st.status.replace('\n', ' / '), cards: st.cards };
+    };
+    const hitTo = (n) => async () => {
+      for (let i = 0; i < n; i++) { await page.evaluate(() => window.__blackjack.hit()); await sleep(60); }
+    };
+    const stand = async () => { await sleep(100); await page.evaluate(() => window.__blackjack.stand()); };
+    const r = {
+      mine: await hand(['A♠', 'K♥', '9♣', '7♦']),
+      his: await hand(['9♣', '7♦', 'A♠', 'K♥']),
+      both: await hand(['A♠', 'K♥', 'A♣', 'Q♦']),
+      charlie: await hand(['2♣', '3♥', '10♠', '7♦', '4♦', '5♠', '6♣'], hitTo(3)),
+      five21: await hand(['2♣', '3♥', '10♠', '7♦', '4♦', '5♠', '7♣'], hitTo(3)),
+      his21: await hand(['K♣', 'Q♥', '2♠', '3♦', '4♦', '5♠', '7♣'], stand),
+    };
+    const want = { mine: 2, his: -2, both: 0, charlie: 1, five21: 3, his21: -3 };
+    const bad = Object.entries(want).filter(([k, v]) => r[k].net !== v);
+    const ok = bad.length === 0;
+    console.log(
+      `${ok ? 'PASS' : 'FAIL'}  blackjack: naturals 2x, five-card charlie wins, five-card 21 is 3x either side  — ` +
+        Object.keys(want).map((k) => `${k} ${r[k].net >= 0 ? '+' : ''}${r[k].net} (${r[k].status})`).join('; '),
+    );
+    if (!ok) failures++;
+  }
+  await page.close();
+}
+
 // HIS CAMEO IS ONE IN TWO THOUSAND, and that number is the spawn decision
 // itself rather than a curtain drawn over a frog that was always there.  The
 // roll is sampled instead of the screen: a test that watched the holes could
