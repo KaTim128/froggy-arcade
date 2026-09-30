@@ -120,6 +120,11 @@ const BED_HEAD_AHEAD = 1.15;
 const CROUCH = WALK * 0.55;
 const EYE = 1.55;
 const EYE_CROUCH = 0.8;
+/** Coming round on the floor: how low your eyes start, and how far off he is. */
+const WAKE_EYE = 0.42;
+const WAKE_DIST = 3.3;
+const WAKE_KNEEL = 0.95;
+const WAKE_NECK_LIFT = 1.15;
 const PLAYER_R = 0.42;
 /**
  * How big he is in here.
@@ -843,8 +848,29 @@ export class HideRoom3D extends Phaser.Scene {
   private headwayT = 0;
   private headwayDist = 0;
 
+  /**
+   * ---- COMING ROUND.
+   *
+   * The key room's scare ends in four seconds of black, and the first room
+   * opens on the player coming to on the floor of it: the view swimming and
+   * dark, clearing over six seconds -- and, as it clears, HIM, down on all
+   * fours an arm's length away, head twitching, staring into the lens.  He
+   * has been waiting.  Only once the picture is sharp does he speak, and what
+   * he says is the briefing.
+   */
+  private wakeNext = false;
+  private waking = false;
+  private wakeT = 0;
+  private wakeSpoken = false;
+  /** The current twitch of his head, and when the next one comes. */
+  private twitch = { p: 0, y: 0, r: 0, next: 0.8 };
+
   constructor() {
     super('HideRoom3D');
+  }
+
+  init(data: { wake?: boolean } = {}): void {
+    this.wakeNext = data?.wake === true;
   }
 
   create(): void {
@@ -853,6 +879,9 @@ export class HideRoom3D extends Phaser.Scene {
 
     // Reset every mutable field: Phaser reuses the instance across restarts.
     this.mode = 'briefing';
+    this.waking = false;
+    this.wakeT = 0;
+    this.wakeSpoken = false;
     this.clock = HIDE_S;
     this.briefLine = 0;
     this.caughtT = 0;
@@ -950,7 +979,8 @@ export class HideRoom3D extends Phaser.Scene {
       this.beginArcade();
     } else {
       const lines = this.roomIndex === 0 ? BRIEFING : ZONE_LINES[Math.min(this.roomIndex, ZONE_LINES.length - 1)];
-      this.beginBriefing(spoken(lines, this.roomIndex));
+      if (this.roomIndex === 0 && this.wakeNext) this.beginWaking();
+      else this.beginBriefing(spoken(lines, this.roomIndex));
     }
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
   }
@@ -2411,6 +2441,7 @@ export class HideRoom3D extends Phaser.Scene {
 
     if (this.mode === 'briefing') {
       // Nothing moves.  He is talking, and there is nowhere to be yet.
+      if (this.waking) this.stepWaking(dt);
       this.updateCamera(dt);
       this.updateSprite(dt);
       this.paintOverlay();
@@ -2483,7 +2514,7 @@ export class HideRoom3D extends Phaser.Scene {
    * then he is gone when the count starts, which is worse than him walking
    * away.  The player is frozen for the whole thing on purpose.
    */
-  private beginBriefing(lines: Array<[string, number]>): void {
+  private beginBriefing(lines: Array<[string, number]>, inPlace = false): void {
     if (lines.length === 0) {
       this.beginCountOnly();
       return;
@@ -2501,7 +2532,9 @@ export class HideRoom3D extends Phaser.Scene {
     // the room and on top of you — close enough that the round opened with him
     // already having you.
     const inward = this.def.spawn.z > 0 ? -1 : 1;
-    if (unseen) {
+    if (inPlace) {
+      // Woken up to: he is already where he is, in front of you.
+    } else if (unseen) {
       // Out of the shot entirely: his own starting corner, which is where the
       // count would have put him anyway.
       this.froggy.set(this.def.froggyStart.x, this.def.froggyStart.z);
@@ -2530,6 +2563,7 @@ export class HideRoom3D extends Phaser.Scene {
         if (this.roomIndex === 0) {
           audio.scare();
           this.cameras.main.shake(900, 0.03);
+          if (this.waking) this.endWaking();
         } else {
           audio.sfx('door_creak');
         }
@@ -2551,6 +2585,116 @@ export class HideRoom3D extends Phaser.Scene {
       this.briefLine = i;
     };
     say(0);
+  }
+
+  /**
+   * Coming round on the floor of the first room, with him in front of you.
+   * See `waking`.
+   */
+  private beginWaking(): void {
+    this.waking = true;
+    this.wakeT = 0;
+    this.wakeSpoken = false;
+    this.mode = 'briefing';
+    this.fMode = 'listen';
+    this.fTimer = 999;
+    // A couple of body lengths off, straight down your line of sight, facing
+    // you: near enough to fill the middle of the picture, far enough that the
+    // whole of him -- hands, knees, head -- is in it.
+    const fx = -Math.sin(this.yaw);
+    const fz = -Math.cos(this.yaw);
+    this.froggy.set(this.pos.x + fx * WAKE_DIST, this.pos.y + fz * WAKE_DIST);
+    this.froggyWas.copy(this.froggy);
+    this.froggyYaw = Math.atan2(this.pos.x - this.froggy.x, this.pos.y - this.froggy.y);
+    this.monster?.setVisible(true);
+    this.pitch = -0.3;
+    this.eyeNow = WAKE_EYE;
+    this.twitch = { p: 0, y: 0, r: 0, next: 0.9 };
+    this.wakeFilter(0);
+  }
+
+  /** How swimmy and dark the picture is, 0 just woken .. 1 clear. */
+  private wakeFilter(k: number): void {
+    const c = document.getElementById('three-canvas');
+    if (!c) return;
+    if (k >= 1) {
+      c.style.filter = '';
+      return;
+    }
+    const blur = 7 * (1 - k) ** 1.4;
+    const bright = 0.2 + 0.8 * Math.min(1, k * 1.6);
+    c.style.filter = `blur(${blur.toFixed(2)}px) brightness(${bright.toFixed(2)})`;
+  }
+
+  private stepWaking(dt: number): void {
+    this.wakeT += dt;
+    const CLEAR_S = 6;
+    const k = Math.min(1, this.wakeT / CLEAR_S);
+    this.wakeFilter(k);
+    // The eyes come up off the floor to his face as the head clears, and
+    // stay on it: whatever the twitching does, you are looking at him.
+    const e = k * k * (3 - 2 * k);
+    if (this.monster && this.stage) {
+      const face = this.monster.faceAt(new THREE.Vector3());
+      const cam = this.stage.camera.position;
+      const want = Math.atan2(face.y - cam.y, Math.hypot(face.x - cam.x, face.z - cam.z));
+      this.pitch = want - (1 - e) * 0.35;
+    }
+    // His head, twitching: a sudden small wrong angle, held a moment, snapped
+    // back.  Never enough to look broken; always enough to look wrong.
+    this.twitch.next -= dt;
+    if (this.twitch.next <= 0) {
+      this.twitch.next = 0.5 + Math.random() * 1.6;
+      this.twitch.p = (Math.random() - 0.5) * 0.22;
+      this.twitch.y = (Math.random() - 0.5) * 0.3;
+      this.twitch.r = (Math.random() - 0.5) * 0.42;
+    }
+    const decay = Math.exp(-dt * 7);
+    this.twitch.p *= decay;
+    this.twitch.y *= decay;
+    this.twitch.r *= decay;
+    // Only once the picture is sharp -- and a beat after, so the player has
+    // taken in what is in front of them -- does he speak.
+    if (!this.wakeSpoken && this.wakeT >= CLEAR_S + 1.2) {
+      this.wakeSpoken = true;
+      this.wakeFilter(1);
+      this.beginBriefing(spoken(BRIEFING, 0), true);
+    }
+  }
+
+  /** The briefing's scream: he is gone in the flash, and the count begins. */
+  private endWaking(): void {
+    this.waking = false;
+    this.wakeFilter(1);
+    const c = document.getElementById('three-canvas');
+    if (c) {
+      c.style.filter = 'brightness(0)';
+      this.time.delayedCall(420, () => {
+        c.style.filter = '';
+      });
+    }
+    this.froggy.set(this.def.froggyStart.x, this.def.froggyStart.z);
+    this.froggyWas.copy(this.froggy);
+  }
+
+  /** On all fours: both hands flat on the floor in front of his shoulders. */
+  private wakeHands(): [HandGoal | null, HandGoal | null] | null {
+    if (!this.waking) return null;
+    const size = this.monster?.size ?? 1;
+    const fx = Math.sin(this.froggyYaw);
+    const fz = Math.cos(this.froggyYaw);
+    const hand = (side: number): HandGoal => ({
+      at: new THREE.Vector3(
+        this.froggy.x + fx * 0.78 * size + fz * side * 0.3 * size,
+        0.03,
+        this.froggy.y + fz * 0.78 * size - fx * side * 0.3 * size,
+      ),
+      weight: 1,
+      grip: 0.35,
+    });
+    // arms[0] is his left (-x in his own frame), and his left is the
+    // player's right: each hand goes down under its own shoulder.
+    return [hand(-1), hand(1)];
   }
 
   /**
@@ -3759,7 +3903,14 @@ export class HideRoom3D extends Phaser.Scene {
         : this.crouching
           ? EYE_CROUCH
           : EYE;
-    if (this.vault) {
+    if (this.waking) {
+      // On the floor where you came round, and up onto your knees -- slowly,
+      // a hand on the boards -- over the last half of the clearing.  No
+      // further: he is down at that height, and that is where his face is.
+      // You stand when he screams, on the ordinary ease below.
+      const u = Math.min(1, Math.max(0, (this.wakeT - 3) / 3.2));
+      this.eyeNow = WAKE_EYE + (WAKE_KNEEL - WAKE_EYE) * u * u * (3 - 2 * u);
+    } else if (this.vault) {
       // Up and over.  Set rather than eased: the lerp below takes most of a
       // second to arrive and the whole climb is shorter than that, so easing
       // it would have him watching the counter go past at chest height.
@@ -3803,7 +3954,12 @@ export class HideRoom3D extends Phaser.Scene {
     // YXZ: yaw about the world's up, then pitch about the camera's own right.
     // The default XYZ order tips the horizon over as soon as both are non-zero.
     cam.rotation.order = 'YXZ';
-    cam.rotation.set(this.pitch + (esc ? esc.pitch : 0) + shPit, this.yaw + shYaw, 0);
+    // Coming round, the head swims: a slow roll and drift that settle as the
+    // picture clears.
+    const dizzy = this.waking ? Math.max(0, 1 - this.wakeT / 6.5) : 0;
+    const swimRoll = dizzy * (Math.sin(this.wakeT * 1.1) * 0.1 + Math.sin(this.wakeT * 2.3) * 0.03);
+    const swimYaw = dizzy * Math.sin(this.wakeT * 0.7 + 1) * 0.06;
+    cam.rotation.set(this.pitch + (esc ? esc.pitch : 0) + shPit, this.yaw + shYaw + swimYaw, swimRoll);
 
     // Whatever is in your hands in the lab: held low and to the right, where
     // a hand would hold it, and turning with you.
@@ -3868,7 +4024,8 @@ export class HideRoom3D extends Phaser.Scene {
     this.froggyDrawn.x = fx;
     this.froggyDrawn.z = fz;
     m.setPose(fx, y, fz, this.froggyYaw);
-    m.lookAt(act.look);
+    // Woken up to, he looks at nothing but you.
+    m.lookAt(this.waking && this.stage ? this.stage.camera.position : act.look);
 
     // The walk runs off ground actually covered rather than off which mode he
     // is in, so a pause reads as a pause and the prowl reads as a prowl --
@@ -3888,9 +4045,9 @@ export class HideRoom3D extends Phaser.Scene {
       // the knees to look into a cupboard he has just opened.
       // ...and folded down low over whatever he is going over, so his hands
       // can stay on the top of it: a climb is a crawl across it, not a stroll.
-      crouch: Math.max(act.crouch ?? act.sink ?? 0, this.climbCrouch()),
+      crouch: this.waking ? 1 : Math.max(act.crouch ?? act.sink ?? 0, this.climbCrouch()),
       peek: act.peek ?? 0,
-      peer: 1,
+      peer: this.waking ? 0 : 1,
       // Hunting, his head swings slowly across the room.  Once he has you it
       // stops dead on you and stays there, which is much worse than the swing.
       // Investigating, he sweeps his head faster and wider: looking FOR
@@ -3905,12 +4062,20 @@ export class HideRoom3D extends Phaser.Scene {
       // on it.  The pose goes down the hole to the enclosure as well, which
       // drops this -- down there, you are not where he is reaching.
       reachAt: this.fMode === 'chase' && this.stage ? this.stage.camera.position : null,
-      hands: this.climbHands() ?? act.hands,
-      lean: act.lean,
+      hands: this.wakeHands() ?? this.climbHands() ?? act.hands,
+      // folded forward over his hands, on all fours
+      lean: this.waking ? 1 : act.lean,
+      // pinpricks while he hunts; blown wide once he has you, and staring
+      // down at you on the floor
+      dilate: this.fMode === 'chase' ? 1 : this.waking ? 0.85 : 0,
       // and from wherever you are, his arms stay off his eyes
       viewer: this.stage?.camera.position ?? null,
     };
     m.update(dt, pose);
+    // Folded over his hands, the pose would have him staring at the floor
+    // between them; the neck is lifted back against the fold so the face
+    // comes up level at you, which is the one thing this scene is for.
+    if (this.waking) m.twitchHead(this.twitch.p - WAKE_NECK_LIFT, this.twitch.y, this.twitch.r);
     // ---- AND THE SAME POSE, DOWN THE HOLE.  The enclosure under the secret
     // room's glass is this room, so the thing in it is this model: one hunt,
     // drawn twice, rather than two hunts that have to be kept in step.
@@ -3961,7 +4126,7 @@ export class HideRoom3D extends Phaser.Scene {
 
       // The count, and then his hunt.  Both are the same clock, and it
       // is the only thing on screen that is not the room.
-      if (this.mode === 'briefing') {
+      if (this.mode === 'briefing' && !(this.waking && !this.wakeSpoken)) {
         // No number yet.  The count has not started, and it says so.
         drawPixelText(ctx, 'DO NOT MOVE', GAME_W / 2, GAME_H * 0.3, {
           scale: 1,
@@ -4197,7 +4362,7 @@ export class HideRoom3D extends Phaser.Scene {
 
     this.time.delayedCall(SCARE_MS + 700, () => {
       froggyLayer.clear();
-      this.scene.restart();
+      this.scene.restart({});
     });
   }
 
@@ -4225,7 +4390,7 @@ export class HideRoom3D extends Phaser.Scene {
       }
       store.patch({ hideRoom: next });
       store.flush();
-      this.scene.restart();
+      this.scene.restart({});
     });
   }
 
@@ -4348,7 +4513,7 @@ export class HideRoom3D extends Phaser.Scene {
       }
       store.patch({ hideRoom: next });
       store.flush();
-      this.scene.restart();
+      this.scene.restart({});
     });
   }
 

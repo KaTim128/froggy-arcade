@@ -433,6 +433,7 @@ export class Chase3D extends Phaser.Scene {
         climb: 0,
         scan: 0,
         lunge: 1,
+        dilate: 1,
         // both arms out for you, the head and the eyes on you
         reachAt: this.stage?.camera.position ?? null,
         viewer: this.stage?.camera.position ?? null,

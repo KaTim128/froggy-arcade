@@ -60,8 +60,11 @@ const TOOTH = [0x6a624f, 0x5a5242, 0x756c58, 0x4f483a];
 /** The mouth's rim, in the head's own units. */
 const MOUTH_Y = -0.1;
 const MOUTH_Z = 0.085;
-/** Half its width: wider than the muzzle was, and a touch wider than the head. */
-const MOUTH_W = 0.262;
+/**
+ * Half its width: wider than the muzzle was, and wider than the head -- the
+ * corners run out past the cheeks, which no face's should.
+ */
+const MOUTH_W = 0.3;
 const MOUTH_D = 0.158;
 /** The hinge, well behind the corners of the mouth. */
 const JAW_PIVOT_Z = -0.07;
@@ -120,6 +123,148 @@ function sclera(): THREE.CanvasTexture {
   scleraTex.colorSpace = THREE.SRGBColorSpace;
   scleraTex.wrapS = THREE.RepeatWrapping;
   return scleraTex;
+}
+
+/** The eyeball's radius, and the pupil's angular size shut down and blown. */
+const EYE_R = 0.108;
+const PUPIL_MIN = 0.125;
+const PUPIL_MAX = 0.4;
+const PUPIL_STEPS = 12;
+const pupilGeoms: THREE.BufferGeometry[] = [];
+/**
+ * The pupil at dilation `k` (0..1): a cap of a sphere just outside the eye,
+ * facing +z.  Built once per step and shared between every Froggy, so opening
+ * the pupils costs a geometry swap, not a rebuild.
+ */
+function pupilCap(k: number): THREE.BufferGeometry {
+  const i = Math.round(THREE.MathUtils.clamp(k, 0, 1) * PUPIL_STEPS);
+  if (!pupilGeoms[i]) {
+    const theta = PUPIL_MIN + (PUPIL_MAX - PUPIL_MIN) * (i / PUPIL_STEPS);
+    const g = new THREE.SphereGeometry(EYE_R * 1.012, 24, 4, 0, Math.PI * 2, 0, theta);
+    g.rotateX(Math.PI / 2);
+    pupilGeoms[i] = g;
+  }
+  return pupilGeoms[i];
+}
+
+/**
+ * SPIT.  Strings of it between the lips that stretch as the jaw goes and
+ * snap when it goes too far, and a drop that swells at the corner of the
+ * mouth until it is heavy enough to fall.  Everything is in the head's own
+ * space: the upper ends are fixed to it, the lower ends ride the jaw.
+ */
+class Drool {
+  private strands: {
+    top: THREE.Vector3;
+    bottom: THREE.Vector3;
+    max: number;
+    r: number;
+    seg: [THREE.Mesh, THREE.Mesh];
+    broken: boolean;
+  }[] = [];
+  private drop: THREE.Mesh;
+  private dropFrom: THREE.Vector3;
+  private dropT = 0;
+  private dropFall = -1;
+  private dropFallAt = new THREE.Vector3();
+  private readonly a = new THREE.Vector3();
+  private readonly b = new THREE.Vector3();
+  private readonly mid = new THREE.Vector3();
+  private readonly dir = new THREE.Vector3();
+  private readonly up = new THREE.Vector3(0, 1, 0);
+
+  constructor(
+    head: THREE.Object3D,
+    private jaw: THREE.Object3D,
+    ends: { top: THREE.Vector3; bottom: THREE.Vector3 }[],
+    dropFrom: THREE.Vector3,
+  ) {
+    const mat = new THREE.MeshPhongMaterial({
+      color: 0x8d8f82,
+      specular: 0xffffff,
+      shininess: 140,
+      transparent: true,
+      opacity: 0.62,
+      depthWrite: false,
+    });
+    const tube = new THREE.CylinderGeometry(1, 1, 1, 5, 1, true);
+    ends.forEach((e, i) => {
+      const seg: [THREE.Mesh, THREE.Mesh] = [new THREE.Mesh(tube, mat), new THREE.Mesh(tube, mat)];
+      for (const s of seg) {
+        s.visible = false;
+        head.add(s);
+      }
+      this.strands.push({ ...e, max: 0.07 + ((i * 37) % 11) * 0.009, r: 0.0022 + (i % 3) * 0.0008, seg, broken: false });
+    });
+    const dg = new THREE.SphereGeometry(1, 8, 6);
+    dg.translate(0, -1, 0);
+    this.drop = new THREE.Mesh(dg, mat);
+    this.drop.visible = false;
+    head.add(this.drop);
+    this.dropFrom = dropFrom;
+  }
+
+  private place(m: THREE.Mesh, from: THREE.Vector3, to: THREE.Vector3, r: number): void {
+    this.dir.subVectors(to, from);
+    const len = this.dir.length();
+    if (len < 1e-5) {
+      m.visible = false;
+      return;
+    }
+    m.visible = true;
+    m.position.addVectors(from, to).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(this.up, this.dir.multiplyScalar(1 / len));
+    m.scale.set(r, len, r);
+  }
+
+  update(dt: number, maw: number): void {
+    this.jaw.updateMatrix();
+    for (const s of this.strands) {
+      this.a.copy(s.top);
+      this.b.copy(s.bottom).applyMatrix4(this.jaw.matrix);
+      const gap = this.a.distanceTo(this.b);
+      // shut, the lips are together and the string reforms between them
+      if (gap < 0.014) s.broken = false;
+      if (gap > s.max) s.broken = true;
+      if (s.broken || gap < 0.008) {
+        s.seg[0].visible = false;
+        s.seg[1].visible = false;
+        continue;
+      }
+      // it sags under its own weight, and thins as it is drawn out
+      this.mid.addVectors(this.a, this.b).multiplyScalar(0.5);
+      this.mid.y -= 0.004 + gap * 0.28;
+      const r = s.r * Math.sqrt(0.02 / Math.max(0.02, gap));
+      this.place(s.seg[0], this.a, this.mid, r);
+      this.place(s.seg[1], this.mid, this.b, r * 0.85);
+    }
+
+    // The drop at the corner: swelling -- faster with the mouth open -- and
+    // then gone, falling away.
+    const d = this.drop;
+    if (this.dropFall >= 0) {
+      this.dropFall += dt;
+      d.position.copy(this.dropFallAt);
+      d.position.y -= 0.5 * 9.8 * 0.25 * this.dropFall * this.dropFall;
+      d.scale.set(0.006, 0.012, 0.006);
+      if (this.dropFall > 0.45) {
+        this.dropFall = -1;
+        this.dropT = 0;
+        d.visible = false;
+      }
+      return;
+    }
+    this.dropT += dt * (0.25 + maw * 0.9);
+    const k = Math.min(1, this.dropT / 2.4);
+    d.visible = k > 0.05;
+    d.position.copy(this.dropFrom).applyMatrix4(this.jaw.matrix);
+    d.scale.set(0.004 + k * 0.003, 0.006 + k * k * 0.03, 0.004 + k * 0.003);
+    if (k >= 1) {
+      this.dropFall = 0;
+      this.dropFallAt.copy(d.position);
+      this.dropFallAt.y -= d.scale.y;
+    }
+  }
 }
 
 /**
@@ -189,6 +334,11 @@ export interface FroggyPose {
   /** 0..1 stooped over something low he is reaching for, on top of everything else. */
   lean?: number;
   /**
+   * 0..1 his pupils: a pinprick while he hunts, blown wide and black when he
+   * has you.  Eased, so it opens over a moment rather than snapping.
+   */
+  dilate?: number;
+  /**
    * 0..1 his head going down into a gap to look in: dipped, and rolled over
    * on its side much further than a neck should go, so one eye comes into
    * the gap before the rest of the face.
@@ -227,7 +377,22 @@ export class FroggyMonster {
   private elbows: THREE.Group[] = [];
   /** The eyes, each a group turned about its own centre to aim the pupil. */
   private eyes: THREE.Group[] = [];
-  private lids: THREE.Mesh[] = [];
+  /** Each eye's lids: hinged at the eye's centre, following it, closing to blink. */
+  private lids: { group: THREE.Group; upper: THREE.Group; lower: THREE.Group }[] = [];
+  private pupils: THREE.Mesh[] = [];
+  /** 0 pinpoint .. 1 blown wide: fear, or the moment he has you. */
+  private dilateNow = 0;
+  private dilateWant = 0;
+  private pupilLevel = -1;
+  private blinkIn = 2.5;
+  private blinkT = -1;
+  /** The swallow: a slow bob of the throat, now and then. */
+  private swallowIn = 4;
+  private swallowT = -1;
+  private apple: THREE.Object3D | null = null;
+  private drool: Drool | null = null;
+  /** Drawn in a little while the mouth is shut, so they stay inside it. */
+  private upperTeeth: THREE.Mesh[] = [];
   private walkT = 0;
   private breathT = 0;
   private mawNow = 0;
@@ -307,6 +472,8 @@ export class FroggyMonster {
     const face = hide(FACE, true, 0.03);
     const muzzle = hide(MUZZLE, true, 0.024);
     const lidMat = hide(LID, true, 0.03);
+    // the lids are open shells: their undersides show at the edge
+    lidMat.side = THREE.DoubleSide;
     const lumpy = (g: THREE.BufferGeometry, amp: number, freq: number, seed: number) => roughen(g, amp, freq, seed);
     /** Squeeze a geometry about its own y: `top` at the highest point, `bottom` at the lowest. */
     const taper = (g: THREE.BufferGeometry, top: number, bottom: number): THREE.BufferGeometry => {
@@ -558,6 +725,7 @@ export class FroggyMonster {
     const apple = knob(0.014, skinPale, 73);
     apple.position.set(0, 0.07, 0.04);
     this.neck.add(apple);
+    this.apple = apple;
 
     // ================================================================ HEAD
     // FROGGY'S HEAD.  The wide dome, the eyes up on its corners, the big pale
@@ -619,22 +787,49 @@ export class FroggyMonster {
       white.rotation.y = side * 0.7;
       white.name = 'sclera';
       eye.add(white);
-      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.0135, 10, 8), flat(PUPIL));
-      pupil.scale.set(1, 1, 0.45);
-      pupil.position.set(0, 0, 0.106);
+      // The pupil is a patch OF the eyeball -- a cap a hair proud of the
+      // white -- rather than a bead stuck on it, so it can open from a
+      // pinprick to most of the front of the eye and stay on the surface.
+      const pupil = new THREE.Mesh(pupilCap(0), flat(PUPIL));
       pupil.name = 'pupil';
       eye.add(pupil);
+      this.pupils.push(pupil);
       this.eyes.push(eye);
-      // the lid: a thin cap of skin over the very top of the eye and a rim
-      // round it -- the eye stays wide open, which is the stare
-      const lid = new THREE.Mesh(new THREE.SphereGeometry(0.113, 22, 8, 0, Math.PI * 2, 0, Math.PI * 0.2), lidMat);
-      lid.position.set(ex, ey, ez);
-      lid.rotation.x = 0.2;
-      const lidRim = new THREE.Mesh(new THREE.TorusGeometry(0.106, 0.009, 6, 28), lidMat);
-      lidRim.position.set(ex, ey, ez + 0.035);
+      // THE LIDS: an upper and a lower, each a shell of skin just proud of
+      // the eyeball and hinged at its centre, so they ride over it rather
+      // than through it.  They follow the eye -- look down and the upper lid
+      // comes down with it, look up and it lifts -- which is what a real lid
+      // does and a painted one does not, and they close together to blink.
+      // Open, the upper one sits low over the top of the iris-less white, and
+      // a thick wet rim runs along the edge of each.
+      const lids = new THREE.Group();
+      lids.position.copy(eye.position);
+      this.head.add(lids);
+      const upper = new THREE.Group();
+      // the top half of a sphere round the eye, its open edge level with the
+      // pupil; the hinge rotation about x lifts that edge or lowers it
+      const upperShell = new THREE.Mesh(new THREE.SphereGeometry(0.116, 26, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), lidMat);
+      upper.add(upperShell);
+      // the rim along its edge: the front half of a ring laid on that edge
+      const upperEdge = new THREE.Mesh(new THREE.TorusGeometry(0.116, 0.0075, 6, 30, Math.PI), lidMat);
+      upperEdge.rotation.x = Math.PI / 2;
+      upper.add(upperEdge);
+      lids.add(upper);
+      const lower = new THREE.Group();
+      const lowerShell = new THREE.Mesh(
+        new THREE.SphereGeometry(0.115, 26, 10, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5),
+        lidMat,
+      );
+      lower.add(lowerShell);
+      const lowerEdge = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.0065, 6, 30, Math.PI), lidMat);
+      lowerEdge.rotation.x = Math.PI / 2;
+      lower.add(lowerEdge);
+      lids.add(lower);
+      this.lids.push({ group: lids, upper, lower });
+      // and a rim of socket round the lot, so it sits IN the head
+      const lidRim = new THREE.Mesh(new THREE.TorusGeometry(0.114, 0.009, 6, 28), lidMat);
+      lidRim.position.set(ex, ey, ez - 0.02);
       this.head.add(lidRim);
-      this.head.add(lid);
-      this.lids.push(lid);
       // creases under and round the eye, which is what ages a face
       for (let c = 0; c < 2; c++) {
         const crease = new THREE.Mesh(new THREE.TorusGeometry(0.125 + c * 0.016, 0.004, 4, 14, Math.PI * 0.6), face);
@@ -689,7 +884,8 @@ export class FroggyMonster {
     const lipLine = (y0: number, bulge: number, droop: number, seed: number): THREE.Mesh => {
       const pts: THREE.Vector3[] = [];
       for (let i = 0; i <= 24; i++) {
-        const a = -0.32 + (i / 24) * (Math.PI + 0.64);
+        // on round past the corners, back toward the jaw hinge
+        const a = -0.42 + (i / 24) * (Math.PI + 0.84);
         const p = rim(a, bulge, droop);
         p.y += y0;
         pts.push(p);
@@ -740,10 +936,21 @@ export class FroggyMonster {
         if (rnd() < 0.08) continue; // one missing
         const a = 0.12 + ((i + 0.5 + (rnd() - 0.5) * 0.6) / n) * (Math.PI - 0.24);
         const side = Math.abs(Math.cos(a));
-        // short at the front, longer toward the sides, and a few much longer
-        const h = (0.012 + rnd() * 0.014) * (0.8 + side * 0.6) * (rnd() < 0.15 ? 1.6 : 1);
-        const w = 0.0026 + rnd() * 0.0022;
-        const g = new THREE.ConeGeometry(w, h, 5, 1);
+        // short at the front, longer toward the sides, and a few much longer:
+        // long thin needles, narrow at the root and fine at the point
+        const h = (0.02 + rnd() * 0.022) * (0.8 + side * 0.6) * (rnd() < 0.18 ? 1.5 : 1) * lengthK;
+        const w = 0.0021 + rnd() * 0.0016;
+        const g = new THREE.ConeGeometry(w, h, 6, 3);
+        // taper faster toward the tip than a cone does, so the point is a point
+        {
+          const p = g.attributes.position as THREE.BufferAttribute;
+          for (let v = 0; v < p.count; v++) {
+            const t = THREE.MathUtils.clamp(p.getY(v) / h + 0.5, 0, 1);
+            const pinch = 1 - 0.45 * t * t;
+            p.setX(v, p.getX(v) * pinch);
+            p.setZ(v, p.getZ(v) * pinch);
+          }
+        }
         g.translate(0, h / 2, 0);
         // a slight hook toward the throat at the tip
         const pos = g.attributes.position as THREE.BufferAttribute;
@@ -760,13 +967,19 @@ export class FroggyMonster {
         tooth.rotation.z = (rnd() - 0.5) * 0.35;
         tooth.rotation.x += (rnd() - 0.5) * 0.3;
         parent.add(tooth);
+        if (down) this.upperTeeth.push(tooth);
       }
     };
-    teeth(this.head, MOUTH_Y + 0.004, true, 0.88, 26, 1301);
+    let lengthK = 1;
+    teeth(this.head, MOUTH_Y + 0.004, true, 0.88, 30, 1301);
+    // and a second row behind the first, shorter, the way a shark's are
+    lengthK = 0.7;
+    teeth(this.head, MOUTH_Y + 0.004, true, 0.72, 22, 1777);
+    lengthK = 1;
     // mouth-corner creases, the skin gathered where the seam ends
     for (const side of [-1, 1]) {
       for (let c = 0; c < 3; c++) {
-        const a = side > 0 ? -0.26 : Math.PI + 0.26;
+        const a = side > 0 ? -0.36 : Math.PI + 0.36;
         const p = rim(a, 1.02, 0.024);
         const q = p.clone().add(new THREE.Vector3(side * (0.012 + c * 0.004), 0.018 - c * 0.02, -0.018 - c * 0.004));
         p.y += MOUTH_Y;
@@ -792,8 +1005,25 @@ export class FroggyMonster {
     const lower = new THREE.Group();
     lower.position.z = -JAW_PIVOT_Z;
     this.jaw.add(lower);
-    teeth(lower, -0.004, false, 0.86, 22, 2203);
+    teeth(lower, -0.004, false, 0.86, 26, 2203);
     this.head.add(this.jaw);
+
+    // Spit between the lips: the upper ends on the roof of the mouth just
+    // inside the upper lip, the lower ends inside the lower lip (jaw space).
+    const ends: { top: THREE.Vector3; bottom: THREE.Vector3 }[] = [];
+    for (const a of [0.34, 0.95, 1.42, 1.83, 2.4, 2.86]) {
+      const top = rim(a, 0.9, 0.024);
+      top.y += MOUTH_Y - 0.002;
+      const bottom = rim(a + 0.06, 0.9, 0);
+      bottom.y -= 0.004;
+      bottom.z -= JAW_PIVOT_Z;
+      ends.push({ top, bottom });
+    }
+    // the drop hangs off the lower lip at the left corner, the one that droops
+    const dropFrom = rim(Math.PI - 0.08, 1.0, 0);
+    dropFrom.y -= 0.008;
+    dropFrom.z -= JAW_PIVOT_Z;
+    this.drool = new Drool(this.head, this.jaw, ends, dropFrom);
 
     this.torso.add(this.neck);
     this.hips.add(this.torso);
@@ -1328,11 +1558,39 @@ export class FroggyMonster {
     // ---- THE JAW.  Hinged too far back, so it drops a long way; and it
     // drops very slightly crooked, skewed to one side, which no jaw should.
     // Parted a crack while he searches, working, and wide once he has you.
+    // Open, it is never still: a fine tremor in it, and now and then a slow
+    // working of the jaw, as if tasting the air.
     const m = this.mawNow;
-    this.jaw.rotation.x = 0.012 + m * 0.44 + Math.max(0, Math.sin(this.breathT * 2.1)) * 0.012 * (0.4 + m);
-    this.jaw.rotation.z = m * 0.07;
+    const work = Math.max(0, Math.sin(this.breathT * 0.9)) ** 3 * 0.05 * m;
+    this.jaw.rotation.x =
+      0.012 + m * 0.5 + Math.max(0, Math.sin(this.breathT * 2.1)) * 0.012 * (0.4 + m) +
+      Math.sin(this.breathT * 23) * 0.006 * m + work;
+    this.jaw.rotation.z = m * 0.07 + Math.sin(this.breathT * 0.9) * 0.02 * m;
     this.jaw.rotation.y = m * 0.035;
+    // the long upper teeth draw up into the gum while the mouth is shut, so
+    // they never come through the chin, and are at full length once it opens
+    const long = 0.6 + 0.4 * THREE.MathUtils.clamp(m * 3, 0, 1);
+    for (const t of this.upperTeeth) t.scale.y = long;
+    this.drool?.update(dt, m);
 
+    // ---- THE THROAT.  A swallow every few seconds: the knot in the neck
+    // goes up and comes down.
+    this.swallowIn -= dt;
+    if (this.swallowIn <= 0 && this.swallowT < 0) {
+      this.swallowT = 0;
+      this.swallowIn = 3 + Math.random() * 5;
+    }
+    if (this.apple) {
+      let lift = 0;
+      if (this.swallowT >= 0) {
+        this.swallowT += dt;
+        lift = Math.sin(Math.min(1, this.swallowT / 0.6) * Math.PI);
+        if (this.swallowT > 0.6) this.swallowT = -1;
+      }
+      this.apple.position.y = 0.07 + lift * 0.035;
+    }
+
+    this.dilateWant = pose.dilate ?? 0;
     this.updateEyes(dt);
   }
 
@@ -1388,6 +1646,26 @@ export class FroggyMonster {
       finger.rotation.x += (want - finger.rotation.x) * w;
     }
     this.held[h] = w;
+  }
+
+  /** Between his eyes, in the world: where a camera looks to meet his stare. */
+  faceAt(out: THREE.Vector3): THREE.Vector3 {
+    this.root.updateMatrixWorld(true);
+    const a = this.eyes[0].getWorldPosition(this.tmp);
+    const b = this.eyes[1].getWorldPosition(this.tmp2);
+    return out.copy(a).add(b).multiplyScalar(0.5);
+  }
+
+  /**
+   * A small wrong movement of the head, on top of whatever `update` just set:
+   * a tick sideways, a jerk of the chin, a tilt that comes from nowhere.  Call
+   * it after `update`, every frame it is wanted.  The neck carries it, so the
+   * head stays on the body however it moves.
+   */
+  twitchHead(pitch: number, yaw: number, roll: number): void {
+    this.neck.rotation.x += pitch;
+    this.neck.rotation.y += yaw;
+    this.neck.rotation.z += roll;
   }
 
   /**
@@ -1474,6 +1752,48 @@ export class FroggyMonster {
       }
       eye.rotation.y += (THREE.MathUtils.clamp(yaw, -0.6, 0.6) - eye.rotation.y) * Math.min(1, dt * 22);
       eye.rotation.x += (THREE.MathUtils.clamp(pitch, -0.5, 0.5) - eye.rotation.x) * Math.min(1, dt * 22);
+    }
+
+    // ---- THE PUPILS.  Opening is quick (fear is quick); closing back down
+    // is slow, so a scare leaves them wide for a while after.
+    const rate = this.dilateWant > this.dilateNow ? 5 : 0.8;
+    this.dilateNow += (this.dilateWant - this.dilateNow) * Math.min(1, dt * rate);
+    const level = Math.round(this.dilateNow * PUPIL_STEPS);
+    if (level !== this.pupilLevel) {
+      this.pupilLevel = level;
+      const g = pupilCap(this.dilateNow);
+      for (const p of this.pupils) p.geometry = g;
+    }
+
+    // ---- THE LIDS.  They ride the eye: the upper one comes down as he looks
+    // down and lifts as he looks up, the lower follows less; so the eye is
+    // always framed the same way, which is what makes it look alive.  With
+    // the pupils blown, the lids part a little -- only a little: a heavy lid
+    // over a black eye is the worse of the two.  A blink is
+    // quick and rare, and never while he has you -- he does not look away.
+    const d = this.dilateNow;
+    if (this.blinkT >= 0) {
+      this.blinkT += dt;
+      if (this.blinkT > 0.17) this.blinkT = -1;
+    } else if (d < 0.5) {
+      this.blinkIn -= dt;
+      if (this.blinkIn <= 0) {
+        this.blinkT = 0;
+        // now and then two in a row
+        this.blinkIn = Math.random() < 0.2 ? 0.25 : 2.5 + Math.random() * 4.5;
+      }
+    }
+    const shut = this.blinkT >= 0 ? Math.sin((this.blinkT / 0.17) * Math.PI) : 0;
+    for (let e = 0; e < this.lids.length; e++) {
+      const { group, upper, lower } = this.lids[e];
+      const eye = this.eyes[e];
+      group.rotation.y = eye.rotation.y;
+      // heavy: the upper lid sits low over the top of the eye (-0.42 would
+      // just clear the pupil); fear lifts it right off
+      const upOpen = -0.42 - d * 0.22 + eye.rotation.x * 0.8;
+      const loOpen = 0.62 + d * 0.12 + eye.rotation.x * 0.45;
+      upper.rotation.x = upOpen + (0.06 - upOpen) * shut;
+      lower.rotation.x = loOpen + (-0.04 - loOpen) * shut;
     }
   }
 }

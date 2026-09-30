@@ -21,7 +21,7 @@
 import { drawMonster } from './monster';
 
 export type FroggyVariant = 'cozy' | 'uncanny' | 'predator' | 'monster';
-export type FroggyPose = 'idleA' | 'idleB' | 'talk' | 'blank';
+export type FroggyPose = 'idleA' | 'idleB' | 'talk' | 'blank' | 'dilated';
 
 export interface FroggyDrawOpts {
   x: number;
@@ -229,7 +229,10 @@ function drawCozy(ctx: CanvasRenderingContext2D, pose: FroggyPose, bounce: numbe
     // the glass at two in the morning, not there at all.
     if (pupils) {
       ctx.beginPath();
-      ctx.arc(ex, ey, blank ? 2 : 10, 0, Math.PI * 2);
+      // ...or blown wide open, black almost to the rim: the stare in the key
+      // room, where he is not the mascot any more and has not yet stopped
+      // looking like him.
+      ctx.arc(ex, ey, blank ? 2 : pose === 'dilated' ? 12.8 : 10, 0, Math.PI * 2);
       ctx.fillStyle = COZY.pupil;
       ctx.fill();
     }
