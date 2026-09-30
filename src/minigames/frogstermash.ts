@@ -391,6 +391,13 @@ export interface Dropped {
   piece: Piece;
   /** It is one blade of a pair, so whoever takes it gets one blade. */
   single: boolean;
+  /**
+   * HOW MANY OF IT THIS IS.  A thrown axe is one axe: five thrown are five
+   * separate things on the sand and each pickup is one of them.  A stack
+   * knocked out of a hand is what was left in it.  Missing means a weapon
+   * that is not counted (a sword is a sword).
+   */
+  count?: number;
   x: number;
   /** Seconds left before the sand has it. */
   life: number;
@@ -1583,10 +1590,13 @@ export function wearArmour(f: Fighter, rng: () => number = Math.random): { slot:
  */
 export function dropWeapon(f: Fighter, ground: Dropped[], rng: () => number = Math.random): Dropped | null {
   if (f.broken || f.weapon.key === 'none') return null;
+  const r0 = f.weapon.spec.ranged;
   const d: Dropped = {
     def: f.weapon,
     piece: f.kit.weapon,
     single: true,
+    // what was still in the hand, and never more than that
+    count: r0?.leaves ? Math.max(1, Number.isFinite(f.ammo) ? f.ammo : 1) : undefined,
     // thrown clear, on the side the blow came from
     x: Phaser.Math.Clamp(f.x - f.face * (16 + rng() * 22), ARENA.left + 4, ARENA.right - 4),
     life: DROP_LIFE,
@@ -1627,6 +1637,17 @@ export function dropWeapon(f: Fighter, ground: Dropped[], rng: () => number = Ma
  * hand -- it has been dropped, not worn out.
  */
 export function takeWeapon(f: Fighter, d: Dropped, ground: Dropped[]): void {
+  const r = d.def.spec.ranged;
+  // One more of what is already in the hand goes on the stack, one at a time
+  // -- and a full stack leaves it lying there.
+  if (!f.broken && f.weapon.key === d.def.key && r?.leaves && Number.isFinite(f.ammo)) {
+    f.seeking = null;
+    if (f.ammo >= r.ammo) return;
+    const i0 = ground.indexOf(d);
+    if (i0 >= 0) ground.splice(i0, 1);
+    f.ammo = Math.min(r.ammo, f.ammo + (d.count ?? 1));
+    return;
+  }
   const i = ground.indexOf(d);
   if (i >= 0) ground.splice(i, 1);
   f.kit = { ...f.kit, weapon: d.piece };
@@ -1636,7 +1657,9 @@ export function takeWeapon(f: Fighter, d: Dropped, ground: Dropped[]): void {
   f.single = d.single && !!d.def.spec.paired;
   f.spares = 0;
   f.dur = durabilityOf(d.piece);
-  f.ammo = d.def.spec.ranged?.ammo ?? 0;
+  // A thrown weapon picked up is the number that was lying there -- one axe,
+  // not the four the rack issues -- and never more than a full stack.
+  f.ammo = r ? (r.leaves ? Math.min(r.ammo, d.count ?? 1) : r.ammo) : 0;
   f.reload = 0;
   f.seeking = null;
   f.st = statsOf(f.kit, d.def, f.held, f.type);
@@ -2205,6 +2228,8 @@ function groundShot(sh: InFlight, def: Fighter, ground: Dropped[], rng: () => nu
     def: sh.weapon.def,
     piece: sh.weapon.piece,
     single: sh.weapon.single,
+    // one throw, one weapon
+    count: 1,
     x: Phaser.Math.Clamp(def.x + past * (6 + rng() * 16), ARENA.left + 4, ARENA.right - 4),
     // It stays.  Not twenty-two seconds and gone: the whole point of giving
     // up your weapon is that it is over there until somebody goes and gets it.
@@ -7268,6 +7293,10 @@ function showEntry(): void {
  */
 function startRound(): void {
   phase = 'entry';
+  // ---- A NEW ROUND IS A CLEAN FLOOR.  Nothing dropped, thrown or knocked
+  // away in the last bout is still lying there to be picked up in this one.
+  for (const d of ground) d.art?.destroy();
+  ground = [];
   frog = makeFighter('frog', picked as Kit, 100, 1);
   lizard = makeLizard(220);
 

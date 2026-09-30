@@ -4322,6 +4322,52 @@ for (const g of [
     );
     if (!pairOk) failures++;
 
+    // ---- ONE AXE ON THE SAND IS ONE AXE IN THE HAND.  Five thrown are five
+    // pickups, not one pickup worth the whole stack; a stack knocked out of a
+    // hand is what was left in it; one more of the same goes on the stack.
+    const pick = await page.evaluate(() => {
+      const R = window.__mash.rules;
+      const mat = (k) => R.MATERIALS.find((m) => m.key === k);
+      const kit = (wk) => ({
+        weapon: R.makeWeapon(R.WEAPONS.find((w) => w.key === wk)),
+        head: R.makeArmour('head', mat('chain')),
+        body: R.makeArmour('body', mat('chain')),
+        legs: R.makeArmour('legs', mat('chain')),
+      });
+      const out = {};
+      for (const wk of ['throwaxe', 'javelin', 'shuriken', 'tomahawk']) {
+        const def = R.WEAPONS.find((w) => w.key === wk);
+        const bare = R.makeFighter('frog', kit('none'), 100, 1);
+        bare.broken = true;
+        const one = { def, piece: R.makeWeapon(def), single: false, count: 1, x: 100, life: 20, settle: 0, art: null };
+        const ground = [one];
+        R.takeWeapon(bare, one, ground);
+        const first = bare.ammo;
+        const two = { ...one, piece: R.makeWeapon(def) };
+        ground.push(two);
+        R.takeWeapon(bare, two, ground);
+        out[wk] = { first, second: bare.ammo, left: ground.length };
+      }
+      const f = R.makeFighter('frog', kit('throwaxe'), 100, 1);
+      f.ammo = 2;
+      const g2 = [];
+      const d = R.dropWeapon(f, g2);
+      const g = R.makeFighter('lizard', kit('none'), 200, -1);
+      g.broken = true;
+      R.takeWeapon(g, d, g2);
+      out.knocked = g.ammo;
+      return out;
+    });
+    // a tomahawk is one weapon: a second one stays on the sand
+    const pickOk = Object.entries(pick).every(([k, v]) => k === 'knocked' ? v === 2
+      : k === 'tomahawk' ? v.first === 1 && v.second === 1 && v.left === 1
+        : v.first === 1 && v.second === 2 && v.left === 0);
+    console.log(
+      `${pickOk ? 'PASS' : 'FAIL'}  mash: one thrown weapon on the sand is one weapon picked up  — ` +
+        Object.entries(pick).map(([k, v]) => (typeof v === 'number' ? `${k} ${v}` : `${k} ${v.first}->${v.second}`)).join(', '),
+    );
+    if (!pickOk) failures++;
+
     // ---- SPIKES BILL A FIST AND NEVER A BLADE.
     //
     // The one piece of armour that hits back, and the whole of it is WHO it

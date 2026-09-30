@@ -532,8 +532,8 @@ const ARCADE_BASE: RoomDef = {
     // what the wall gets.
     { x: -8.13, z: 8.7, w: 2.0, d: 1.3, h: 2.1, color: 0xff7a3d, prop: 'cabinet', face: Math.PI },
     { x: -4.67, z: 8.7, w: 2.0, d: 1.3, h: 2.1, color: 0x6fbb6a, prop: 'cabinet', face: Math.PI },
-    { x: 6.33, z: 8.7, w: 2.0, d: 1.3, h: 2.1, color: 0xb9884f, prop: 'cabinet', face: Math.PI },
-    { x: 9.79, z: 8.7, w: 2.0, d: 1.3, h: 2.1, color: 0x1d6f8f, prop: 'cabinet', face: Math.PI },
+    { x: 4.67, z: 8.7, w: 2.0, d: 1.3, h: 2.1, color: 0xb9884f, prop: 'cabinet', face: Math.PI },
+    { x: 8.13, z: 8.7, w: 2.0, d: 1.3, h: 2.1, color: 0x1d6f8f, prop: 'cabinet', face: Math.PI },
   ],
   // ---- NOTHING TO HIDE IN, and nothing that is not in the lit room either.
   // The bin and the plant that used to be by the doors are gone with the
