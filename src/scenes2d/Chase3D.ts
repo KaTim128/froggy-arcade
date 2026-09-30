@@ -157,7 +157,7 @@ export class Chase3D extends Phaser.Scene {
     // so the drag is listened for at the window.
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (p.event instanceof MouseEvent && document.pointerLockElement) {
-        this.yaw -= p.event.movementX * 0.0022;
+        this.yaw -= p.event.movementX * 0.0027;
       }
     });
     this.onLookDown = (e: MouseEvent) => {
@@ -165,7 +165,8 @@ export class Chase3D extends Phaser.Scene {
     };
     this.onLookMove = (e: MouseEvent) => {
       if (!this.dragging || document.pointerLockElement || isPaused()) return;
-      this.yaw -= (e.movementX || 0) * 0.0035;
+      // A thumb on the look pad carries its own rate, sized to the picture.
+      this.yaw -= (e.movementX || 0) * ((e as MouseEvent & { lookSens?: number }).lookSens ?? 0.0042);
     };
     this.onLookUp = () => {
       this.dragging = false;

@@ -61,8 +61,8 @@ const RUN = 4.0;
  * there to make crossing a room a decision, and there is no decision in here.
  */
 const SECRET_RUN = 2.0;
-/** Radians per second on the arrow keys, and per pixel of mouse drag. */
-const TURN_RATE = 1.8;
+/** Radians per second on the arrow keys. */
+const TURN_RATE = 2.3;
 /**
  * Two thirds of what it was.  At 0.004 a flick of the wrist spun you half way
  * round a room you are meant to be peering into, and a thumb on the look pad
@@ -71,6 +71,13 @@ const TURN_RATE = 1.8;
  * slow enough to hold a gap in a door.
  */
 const LOOK_SENS = 0.0027;
+/**
+ * And a quarter again on top of that for the mouse, which was asked for: the
+ * turn felt sluggish while running.  A phone's swipe carries its own rate,
+ * sized to the width of the picture (see touchControls' look pad), so a thumb
+ * crossing the whole screen turns the same amount on any phone.
+ */
+const MOUSE_SENS = LOOK_SENS * 1.25;
 /**
  * What he does when he can see you: 1.1x your top speed.
  *
@@ -1474,10 +1481,14 @@ export class HideRoom3D extends Phaser.Scene {
       const dy = e.movementY || e.clientY - this.lookY;
       this.lookX = e.clientX;
       this.lookY = e.clientY;
-      this.yaw -= dx * LOOK_SENS;
+      const sens = (e as MouseEvent & { lookSens?: number }).lookSens ?? MOUSE_SENS;
+      this.yaw -= dx * sens;
       // Clamped well short of vertical: past about sixty degrees the room
       // stops having a floor and the player loses which way they are facing.
-      this.pitch = Phaser.Math.Clamp(this.pitch - dy * LOOK_SENS, -1.15, 1.0);
+      // A thumb's up-and-down is damped: a sideways swipe is never perfectly
+      // level, and it should turn you, not nod you.
+      const vert = (e as MouseEvent & { lookSens?: number }).lookSens !== undefined ? 0.7 : 1;
+      this.pitch = Phaser.Math.Clamp(this.pitch - dy * sens * vert, -1.15, 1.0);
       // AND HELD ON THE DOORS while the key is in them.  See holdOnDoor: the
       // clamp is applied here so the drag itself cannot overshoot, and again
       // every frame so no other way of turning gets round it.

@@ -25,17 +25,23 @@
  * so up-and-left is up-and-left either way.  It only shows the arrows the game
  * in front of it reads; a one-axis game gets two.
  *
- * IN PORTRAIT THE CONTROLS ARE NOT ON THE GAME.  A 16:9 screen inside a tall
- * phone leaves a band of dead black under it, and that band is where the
- * controls go — nothing overlaps the picture, so nothing can cover a timer, a
- * score, a dialogue box or a button.  Landscape has no such band, so there the
- * controls sit in the two bottom corners at reduced opacity, in the strip of
- * carpet every room keeps clear.
+ * THE CONTROLS ARE NEVER ON THE GAME.  In portrait a 16:9 picture inside a
+ * tall phone leaves a band under it, and that band is where the controls go.
+ * In landscape they take a column either side of the picture instead -- a
+ * wide phone has most of one going spare already -- and the picture is fitted
+ * between them.  Either way nothing a thumb presses can cover a timer, a
+ * score, a dialogue box or the thing being hidden in.  Every band and column
+ * is a themed panel rather than dead black, and all of it sits inside the
+ * phone's safe area, clear of the notch and the rounded corners.
+ *
+ * AND THEY WEAR THE BUILDING'S MOOD.  Through the horror act they are rusted
+ * iron -- scratched, worn at the edges, a little dried blood; once it is over
+ * they are the arcade's again, but not quite: a shade off, a faint scar.
  *
  * On anything that is not a touch device this module mounts nothing at all.
  */
 
-import { isTouch } from '../core/device';
+import { isTouch, safeInsets } from '../core/device';
 
 /** Every key the building actually binds, with the code Phaser matches on. */
 const KEYS = {
@@ -96,7 +102,11 @@ export interface TouchLayout {
   stick?: 'wasd' | 'lr' | 'ud';
   /** Also send the arrow keys with WASD, for the games bound to arrows only. */
   arrows?: boolean;
-  /** A drag-anywhere-on-the-picture look pad, for the two 3D rooms. */
+  /**
+   * A drag-anywhere-on-the-picture look pad, for the two 3D rooms.  With it,
+   * the arrow pad sends WASD ONLY: in those rooms the arrow keys turn the
+   * head, and the pad must walk without ever turning the camera.
+   */
   look?: boolean;
   /** Up to five, right to left in the order given. */
   buttons?: TouchButton[];
@@ -209,12 +219,88 @@ const STYLE = `
   background: transparent;
 }
 
-/* Landscape has no dead band under the picture, so the controls go over the
-   two bottom corners — the strip every room keeps clear of anything you can
-   read — and they go quiet enough to see the floor through. */
-#touch-controls.overlay .tc-zone { height: var(--tc-band, 150px); opacity: 0.72; }
-#touch-controls.overlay .tc-left { width: 38%; justify-content: flex-start; padding-left: 14px; }
-#touch-controls.overlay .tc-right { width: 46%; justify-content: flex-end; padding-right: 14px; }
+/* The band in portrait sits above the home bar. */
+#touch-controls .tc-zone { padding-bottom: var(--tc-safe-b, 0px); box-sizing: border-box; }
+
+/* Landscape: a column either side of the picture, and the controls in the
+   lower middle of each, where the thumbs rest.  Five buttons go two across,
+   not three, so the column stays narrow. */
+#touch-controls.overlay .tc-zone {
+  top: 0; bottom: 0; height: auto;
+  align-items: center; padding-top: 16vh; padding-bottom: var(--tc-safe-b, 0px);
+}
+#touch-controls.overlay .tc-left { left: 0; width: var(--tc-side, 160px); padding-left: var(--tc-safe-l, 0px); }
+#touch-controls.overlay .tc-right { right: 0; width: var(--tc-side, 160px); padding-right: var(--tc-safe-r, 0px); }
+#touch-controls.overlay .tc-pads.three { grid-template-columns: repeat(2, auto); }
+#touch-controls .tc-corner { top: max(8px, var(--tc-safe-t, 0px)); right: max(8px, var(--tc-safe-r, 0px)); }
+/* In portrait the picture sits right at the top, so the gear lives in the
+   top corner of the controls' panel instead of over the picture, and the
+   controls sit low in the panel, under the thumbs. */
+#touch-controls:not(.overlay) .tc-corner { top: auto; bottom: calc(var(--tc-band, 190px) - 56px); }
+#touch-controls:not(.overlay) .tc-zone { align-items: flex-end; padding-bottom: calc(var(--tc-safe-b, 0px) + min(7vh, 60px)); }
+
+/* The panels behind the controls: the arcade's purple with its pink trim and
+   a scatter of lily pads, never plain black. */
+#touch-controls .tc-panel {
+  position: absolute; pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 30%, rgba(63, 227, 155, 0.08) 0 7px, transparent 8px),
+    radial-gradient(circle at 72% 64%, rgba(63, 227, 155, 0.07) 0 9px, transparent 10px),
+    radial-gradient(circle at 42% 86%, rgba(255, 79, 163, 0.06) 0 6px, transparent 7px),
+    linear-gradient(180deg, #24123a 0%, #150b24 100%);
+  background-size: 120px 120px, 150px 150px, 90px 90px, 100% 100%;
+}
+#touch-controls .tc-panel.l { left: 0; right: 0; bottom: 0; height: var(--tc-band, 190px); border-top: 2px solid rgba(255, 79, 163, 0.55); }
+#touch-controls .tc-panel.r { display: none; }
+#touch-controls.overlay .tc-panel.l { top: 0; right: auto; height: auto; width: var(--tc-side, 160px); border-top: 0; border-right: 2px solid rgba(255, 79, 163, 0.55); }
+#touch-controls.overlay .tc-panel.r { display: block; top: 0; bottom: 0; right: 0; width: var(--tc-side, 160px); border-left: 2px solid rgba(255, 79, 163, 0.55); }
+#touch-controls.bare .tc-panel { display: none !important; }
+
+/* ---- THE HORROR SKIN.  Rusted iron: a mottled rust ground, fine scratches
+   across it, worn bright metal at the edges, and a little dried blood --
+   enough to be unsettling, never enough to hide the arrow or the label. */
+#touch-controls.skin-horror .tc-dkey,
+#touch-controls.skin-horror .tc-btn {
+  color: #efdcc0;
+  border: 2px solid rgba(168, 132, 96, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(40, 20, 10, 0.8), inset 0 -3px 6px rgba(0, 0, 0, 0.45);
+  background:
+    radial-gradient(ellipse 22% 14% at 74% 78%, rgba(92, 10, 10, 0.55), transparent 70%),
+    radial-gradient(circle at 22% 24%, rgba(110, 16, 12, 0.35) 0 3px, transparent 4px),
+    repeating-linear-gradient(115deg, rgba(255, 236, 210, 0.07) 0 1px, transparent 1px 9px),
+    repeating-linear-gradient(28deg, rgba(0, 0, 0, 0.12) 0 1px, transparent 1px 13px),
+    radial-gradient(circle at 30% 30%, #8a5a36 0%, #5e3a22 45%, #3c2414 100%);
+}
+#touch-controls.skin-horror .tc-dkey.diag { opacity: 0.8; }
+#touch-controls.skin-horror .tc-dkey.down,
+#touch-controls.skin-horror .tc-btn.down { background: #b0723e; color: #1b0f08; }
+#touch-controls.skin-horror .tc-dhub { background: rgba(60, 30, 16, 0.6); border-color: rgba(140, 100, 70, 0.6); }
+#touch-controls.skin-horror .tc-panel {
+  background:
+    radial-gradient(ellipse 30% 8% at 64% 12%, rgba(70, 8, 8, 0.35), transparent 70%),
+    repeating-linear-gradient(100deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 11px),
+    linear-gradient(180deg, #1d120c 0%, #0d0806 100%);
+}
+#touch-controls.skin-horror .tc-panel.l,
+#touch-controls.skin-horror .tc-panel.r { border-color: rgba(120, 70, 40, 0.6); }
+#touch-controls.skin-horror .tc-corner { background: rgba(40, 22, 12, 0.85); border-color: rgba(150, 110, 80, 0.7); color: #e0c8a8; }
+
+/* ---- AFTER.  The arcade's own controls again -- same shapes, same places --
+   but a shade off: the teal gone a little sickly, the purple a little grey, a
+   faint scar across each button, and one thin stain nobody cleaned up. */
+#touch-controls.skin-after .tc-dkey { border-color: rgba(120, 176, 150, 0.5); color: #7fbfa5; }
+#touch-controls.skin-after .tc-btn {
+  background:
+    linear-gradient(160deg, transparent 46%, rgba(255, 255, 255, 0.06) 47% 48%, transparent 49%),
+    rgba(58, 44, 78, 0.74);
+  border-color: rgba(220, 196, 120, 0.55);
+}
+#touch-controls.skin-after .tc-btn.primary {
+  background:
+    radial-gradient(ellipse 18% 10% at 70% 80%, rgba(80, 30, 30, 0.22), transparent 70%),
+    rgba(28, 82, 80, 0.8);
+}
+#touch-controls.skin-after .tc-panel { filter: saturate(0.7) hue-rotate(-14deg) brightness(0.92); }
 
 #touch-controls[hidden] { display: none; }
 `;
@@ -260,6 +346,7 @@ class TouchControls {
     const root = document.createElement('div');
     root.id = 'touch-controls';
     root.innerHTML =
+      '<div class="tc-panel l"></div><div class="tc-panel r"></div>' +
       '<div class="tc-look" hidden></div>' +
       '<div class="tc-zone tc-left"><div class="tc-dpad">' +
       PAD.map(([cls, glyph]) => `<div class="tc-dkey ${cls}${cls.length > 1 ? ' diag' : ''}">${glyph}</div>`).join('') +
@@ -298,6 +385,8 @@ class TouchControls {
         labels: () => [...root.querySelectorAll('.tc-btn')].map((b) => b.textContent ?? ''),
         band: () => this.band,
         reserve: () => this.reserveHeight(),
+        sides: () => this.reserveSides(),
+        skin: () => this.skin,
         arrows: () =>
           [...root.querySelectorAll('.tc-dkey')]
             .filter((b) => !(b as HTMLElement).hidden)
@@ -314,6 +403,7 @@ class TouchControls {
   apply(layout: TouchLayout): void {
     if (!this.root) return;
     this.releaseAll();
+    const sidesWere = this.reserveSides().left;
     this.layout = layout;
 
     const zoneL = this.root.querySelector('.tc-left') as HTMLElement;
@@ -336,7 +426,21 @@ class TouchControls {
 
     (this.quit as HTMLElement).hidden = layout.noQuit === true;
     (this.lookPad as HTMLElement).hidden = layout.look !== true;
+    // A layout with nothing on it gets no panels either: nothing to sit on.
+    this.root.classList.toggle('bare', !layout.stick && !buttons.length && layout.noQuit === true);
     this.relayout();
+    // A layout with different columns needs a differently sized picture: ask
+    // the scaler to fit it again.
+    if (this.reserveSides().left !== sidesWere) window.dispatchEvent(new Event('resize'));
+  }
+
+  private skin: 'normal' | 'horror' | 'after' = 'normal';
+  /** The mood the controls are in: see the horror and after skins in STYLE. */
+  setSkin(skin: 'normal' | 'horror' | 'after'): void {
+    this.skin = skin;
+    if (!this.root) return;
+    this.root.classList.toggle('skin-horror', skin === 'horror');
+    this.root.classList.toggle('skin-after', skin === 'after');
   }
 
   /**
@@ -381,21 +485,57 @@ class TouchControls {
   reserveHeight(): number {
     if (!this.root || !isTouch()) return 0;
     if (window.innerHeight < window.innerWidth) return 0;
-    return Math.round(Math.min(Math.max(window.innerHeight * 0.34, 190), window.innerHeight * 0.5));
+    const safe = safeInsets().bottom;
+    return Math.round(Math.min(Math.max(window.innerHeight * 0.34, 190), window.innerHeight * 0.5)) + safe;
+  }
+
+  /**
+   * THE COLUMNS EITHER SIDE OF THE PICTURE, in landscape, in CSS pixels.
+   *
+   * Wide enough for whatever is in them -- the pad on the left, the buttons
+   * (two across) and the gear on the right -- plus a margin and the safe
+   * area, and the same width both sides so the picture stays centred.  A
+   * layout with nothing to press but the gear still keeps a narrow column,
+   * so the gear is never over the picture.  Zero in portrait.
+   */
+  reserveSides(): { left: number; right: number } {
+    if (!this.root || !isTouch() || window.innerHeight >= window.innerWidth) return { left: 0, right: 0 };
+    const safe = safeInsets();
+    const stick = this.stickPx();
+    const btn = this.btnPx();
+    const gap = this.gapPx();
+    const n = Math.min(5, (this.layout.buttons ?? []).length);
+    const primary = (this.layout.buttons ?? []).some((b) => b.primary);
+    const cols = Math.min(2, n);
+    const grid = cols ? cols * btn + (cols - 1) * gap + (primary ? btn * 0.25 : 0) : 0;
+    const left = this.layout.stick ? stick + 28 + safe.left : 0;
+    const right = Math.max(grid ? grid + 28 + safe.right : 0, this.layout.noQuit ? 0 : 44 + 20 + safe.right);
+    const side = Math.max(left, right);
+    return { left: side, right: side };
   }
 
   /** How big the arrow pad is right now, which everything else is sized off. */
   private stickPx(): number {
     const short = Math.min(window.innerWidth, window.innerHeight);
     // Landscape is short: the same fraction of the screen there would be a
-    // pad taller than the strip it has to fit in.
+    // pad taller than the column it has to fit in.
     const portrait = window.innerHeight >= window.innerWidth;
     // Portrait is narrow: the pad and the buttons share one width, so the pad
     // takes 40% of it -- big, but leaving its half of the band a margin on
     // both sides and the buttons enough of theirs to stay off the edge.
     return portrait
-      ? Math.round(Math.min(200, Math.max(120, short * 0.4)))
-      : Math.round(Math.min(144, Math.max(104, short * 0.34)));
+      ? Math.round(Math.min(200, Math.max(124, short * 0.4)))
+      : Math.round(Math.min(144, Math.max(112, short * 0.34)));
+  }
+
+  /** A button: half the pad across, never under the size a thumb can hit blind. */
+  private btnPx(): number {
+    const portrait = window.innerHeight >= window.innerWidth;
+    return Math.max(52, Math.round(this.stickPx() * (portrait ? 0.5 : 0.45)));
+  }
+
+  private gapPx(): number {
+    return Math.round(Math.min(18, Math.max(10, this.stickPx() * 0.08)));
   }
 
   /** How much room the controls actually got.  Set by the scaler. */
@@ -413,14 +553,18 @@ class TouchControls {
     // The pad sets the scale of everything, and the band is whatever holds
     // it — never the other way round, or the pad hangs off the screen.
     const stick = this.stickPx();
-    const band = portrait
-      ? Math.max(this.band, this.reserveHeight(), stick + 24)
-      : Math.min(Math.round(window.innerHeight * 0.5), stick + 30);
+    const safe = safeInsets();
+    const band = portrait ? Math.max(this.band, this.reserveHeight(), stick + 24 + safe.bottom) : 0;
     this.root.style.setProperty('--tc-band', `${band}px`);
+    this.root.style.setProperty('--tc-side', `${this.reserveSides().left}px`);
     this.root.style.setProperty('--tc-stick', `${stick}px`);
-    this.root.style.setProperty('--tc-btn', `${Math.round(stick * (portrait ? 0.46 : 0.44))}px`);
+    this.root.style.setProperty('--tc-btn', `${this.btnPx()}px`);
     this.root.style.setProperty('--tc-font', `${Math.round(Math.min(17, Math.max(11, stick * 0.09)))}px`);
-    this.root.style.setProperty('--tc-gap', `${Math.round(Math.min(16, Math.max(7, stick * 0.06)))}px`);
+    this.root.style.setProperty('--tc-gap', `${this.gapPx()}px`);
+    this.root.style.setProperty('--tc-safe-t', `${safe.top}px`);
+    this.root.style.setProperty('--tc-safe-r', `${safe.right}px`);
+    this.root.style.setProperty('--tc-safe-b', `${safe.bottom}px`);
+    this.root.style.setProperty('--tc-safe-l', `${safe.left}px`);
 
     // The look pad covers exactly the picture, never the controls under it.
     const canvas = document.querySelector('#game-root canvas') as HTMLCanvasElement | null;
@@ -529,6 +673,10 @@ class TouchControls {
     // Both names go down together.  Sending the arrow to a game that only
     // reads WASD costs nothing, and it saves the pad having to know which of
     // the cabinets is in front of it.
+    //
+    // EXCEPT IN THE 3D ROOMS, where the arrow keys TURN THE HEAD.  There the
+    // pad walks and strafes and nothing else: the camera is the swipe's.
+    const arrows = !this.layout.look;
     const want: Array<[boolean, KeyName, KeyName]> = [
       [u && !d, 'W', 'UP'],
       [d && !u, 'S', 'DOWN'],
@@ -538,7 +686,8 @@ class TouchControls {
     for (const [on, wasd, arrow] of want) {
       if (on) {
         this.down(wasd);
-        this.down(arrow);
+        if (arrows) this.down(arrow);
+        else this.up(arrow);
       } else {
         this.up(wasd);
         this.up(arrow);
@@ -567,7 +716,11 @@ class TouchControls {
     // A mouse works too, so the layout can be driven on a desktop with
     // `?touch=1` — which is how it is tested.
     el.addEventListener('mousedown', press);
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('mouseup', (e) => {
+      // The look pad's own drag ends in a mouseup it makes itself; that is a
+      // swipe finishing, not this button being let go of, and a thumb still
+      // holding RUN while the other one turned must keep running.
+      if ((e as MouseEvent & { fromLook?: boolean }).fromLook) return;
       if (el.classList.contains('down')) release(new Event('mouseup'));
     });
   }
@@ -576,6 +729,12 @@ class TouchControls {
    * Drag to look.  The two 3D rooms already turn on a held mouse drag, so the
    * pad speaks their language rather than inventing a second one: a real
    * MouseEvent at the window, with a movementX the room can read.
+   *
+   * AND A SENSITIVITY SIZED TO THE PICTURE.  A phone's picture is a third the
+   * width of a monitor's, so a thumb crossing all of it moved a third as many
+   * pixels and turned a third as far.  Every look event carries `lookSens`,
+   * radians per pixel such that a swipe across the whole picture is about
+   * two-thirds of a turn -- the same on any screen.
    */
   private wireLook(): void {
     const el = this.lookPad;
@@ -596,7 +755,8 @@ class TouchControls {
       const dy = t.clientY - this.lookY;
       this.lookX = t.clientX;
       this.lookY = t.clientY;
-      window.dispatchEvent(mouse('mousemove', t.clientX, t.clientY, dx, dy));
+      const w = (this.lookPad as HTMLElement).getBoundingClientRect().width || window.innerWidth;
+      window.dispatchEvent(mouse('mousemove', t.clientX, t.clientY, dx, dy, (Math.PI * 1.35) / w));
       e.preventDefault();
     };
     const end = (e: TouchEvent) => {
@@ -654,7 +814,7 @@ function keyEvent(type: 'keydown' | 'keyup', name: KeyName): KeyboardEvent {
   return ev;
 }
 
-function mouse(type: string, x: number, y: number, dx: number, dy: number): MouseEvent {
+function mouse(type: string, x: number, y: number, dx: number, dy: number, lookSens?: number): MouseEvent {
   const ev = new MouseEvent(type, {
     clientX: x,
     clientY: y,
@@ -665,6 +825,10 @@ function mouse(type: string, x: number, y: number, dx: number, dy: number): Mous
   });
   Object.defineProperty(ev, 'movementX', { get: () => dx });
   Object.defineProperty(ev, 'movementY', { get: () => dy });
+  // Marked as the look pad's, so a held button does not read its mouseup as
+  // its own release.
+  Object.defineProperty(ev, 'fromLook', { get: () => true });
+  if (lookSens !== undefined) Object.defineProperty(ev, 'lookSens', { get: () => lookSens });
   return ev;
 }
 
