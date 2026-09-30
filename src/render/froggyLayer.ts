@@ -70,9 +70,11 @@ class FroggyLayer {
    * Draw in logical 320x180 space.  One unit = one world pixel, but the stroke
    * that unit produces is as smooth as the display allows.
    */
-  paint(fn: FroggyPainter): void {
+  paint(fn: FroggyPainter, keep = false): void {
     if (!this.ctx) return;
-    this.clear();
+    // `keep` adds to what is already there this frame instead of replacing it
+    // -- a dialogue portrait and the mascot on the counter behind it, say.
+    if (!keep) this.clear();
     this.ctx.save();
     this.ctx.setTransform(this.unit, 0, 0, this.unit, 0, 0);
     fn(this.ctx);
