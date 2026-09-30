@@ -80,7 +80,9 @@ export function buildGrid(def: RoomDef, climbMaxH: number): NavGrid {
       }
       for (const b of def.furniture) {
         if (Math.abs(x - b.x) < b.w / 2 + PAD && Math.abs(z - b.z) < b.d / 2 + PAD) {
-          v = Math.max(v, b.h > climbMaxH ? 2 : 1);
+          // a duct is a wall to him: too small to get into, and not to be gone
+          // over, since it runs through one
+          v = Math.max(v, b.h > climbMaxH || b.crawl ? 2 : 1);
         }
       }
       cell[r * cols + c] = v;

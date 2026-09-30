@@ -35,7 +35,7 @@ import { FroggyMonster, type HandGoal } from '../three/froggyMonster';
 import { drawPixelText } from '../render/pixelFont';
 import { ThreeStage } from '../render/threeStage';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
-import { ROOMS, type Box, type CounterRun, type RoomDef, type SpotKind } from '../three/hideRooms';
+import { ROOMS, type Box, type CounterRun, type RoomDef, type SpotKind, type SpotSkin } from '../three/hideRooms';
 import { buildGrid, findPath, lineOpen, spotExtent, type NavGrid } from '../three/navGrid';
 import { dressRoom, surfaceTexture } from '../three/hideDecor';
 import {
@@ -50,7 +50,11 @@ import {
   buildStaffDoor,
 } from '../three/arcadeProps';
 import { buildSecretRoom, SECRET_ORIGIN, type SecretRoom } from '../three/secretRoom';
-import { buildBedSpot, buildChestSpot, buildDoorSpot, CHEST_SCALE } from '../three/hideSpots';
+import { CHEST_SCALE } from '../three/hideSpots';
+import { buildSkinnedSpot } from '../three/hideSpotSkins';
+import { buildDeco } from '../three/hideThemes';
+import { bake } from '../three/bake';
+import { buildOverhead } from '../three/hideOverhead';
 import { furnishWalls, trimFurniture, trimPartition } from '../three/hideDressing';
 
 /** A walk is slow and silent; a run is fast and heard.  That is the trade. */
@@ -688,6 +692,8 @@ interface Spot3D {
   /** Which way its door, lid or open side faces: see HideSpot.rot. */
   rot: number;
   kind: SpotKind;
+  /** What it is dressed as, if not the kind's own build. */
+  skin?: SpotSkin;
   /** Half extents of its footprint, world axes. */
   hw: number;
   hd: number;
@@ -1359,6 +1365,17 @@ export class HideRoom3D extends Phaser.Scene {
         continue;
       }
 
+      // The building's own things -- see hideThemes.  Same box either way.
+      if (f.deco) {
+        const turned = Math.abs(Math.cos(f.face ?? 0)) < 0.5;
+        const g = buildDeco(f.deco, turned ? f.d : f.w, f.h, turned ? f.w : f.d, f.color, this.blockers.length);
+        g.position.set(f.x, 0, f.z);
+        g.rotation.y = f.face ?? 0;
+        st.scene.add(g);
+        this.blockers.push(f);
+        continue;
+      }
+
       // Full-height partitions are walls and look like the walls; the rest is
       // furniture, worn.
       const isWall = f.h >= d.wallH - 0.05;
@@ -1376,14 +1393,19 @@ export class HideRoom3D extends Phaser.Scene {
       this.blockers.push(f);
     }
 
-    for (const c of d.spots) this.spots.push(this.buildSpot(c.x, c.z, c.rot, c.kind));
-    for (const c of this.spots) this.peepImage(c.kind);
+    for (const c of d.spots) this.spots.push(this.buildSpot(c.x, c.z, c.rot, c.kind, c.skin));
+    for (const c of this.spots) this.peepImage(c.kind, c.skin);
+
+    // Up out of the way: catwalks, locked doors, the signs over the doorways.
+    if (d.overhead) st.scene.add(buildOverhead(d.overhead, d.wallH));
 
     // The dirt, the litter, the damp.  Placed off anything solid.
     dressRoom(st.scene, d, seed, (x, z) => this.solid(x, z, 0.3));
     // And the walls: crates, barrels, lanterns, vines, lily pads, posters --
     // all in the strip nobody can stand in, clear of doors and hiding places.
-    furnishWalls(st.scene, { def: d, seed: seed * 7 + 3, blocked: (x, z, r) => this.solid(x, z, r) });
+    // (merged by material once placed: it is hundreds of little things that
+    // never move, and a draw call each was most of the room's budget)
+    bake(furnishWalls(st.scene, { def: d, seed: seed * 7 + 3, blocked: (x, z, r) => this.solid(x, z, r) }));
 
     // THE WAY THROUGH TO THE BACK ROOM, WHICH ISN'T ONE.
     //
@@ -1499,7 +1521,7 @@ export class HideRoom3D extends Phaser.Scene {
    * lid back; the cupboard and the locker swing a door, which is also why they
    * read differently across a dark room.
    */
-  private buildSpot(x: number, z: number, rot: number, kind: SpotKind): Spot3D {
+  private buildSpot(x: number, z: number, rot: number, kind: SpotKind, skin?: SpotSkin): Spot3D {
     const st = this.stage!;
     const group = new THREE.Group();
     group.position.set(x, 0, z);
@@ -1507,16 +1529,14 @@ export class HideRoom3D extends Phaser.Scene {
 
     // Built in `hideSpots`: every one of them a made object, its moving part
     // on the same pivot and its grips where they always were.
-    const built = kind === 'bed' ? buildBedSpot(group)
-      : kind === 'chest' ? buildChestSpot(group)
-        : buildDoorSpot(group, kind === 'locker', this.spots.length + 1);
+    const built = buildSkinnedSpot(group, kind, skin, this.spots.length + 1);
     const hinge = built.hinge;
     const grips = built.grips;
 
     group.add(hinge);
     st.scene.add(group);
     const ext = spotExtent({ x, z, rot, kind });
-    return { x, z, rot, kind, hw: ext.hw, hd: ext.hd, checkedOn: -1, hinge, open: 0, opening: false, sinceChecked: 0, grips, lever: built.lever };
+    return { x, z, rot, kind, skin, hw: ext.hw, hd: ext.hd, checkedOn: -1, hinge, open: 0, opening: false, sinceChecked: 0, grips, lever: built.lever };
   }
 
   // ------------------------------------------------------------------- input
@@ -1618,6 +1638,8 @@ export class HideRoom3D extends Phaser.Scene {
     // Not while the key is in the door: the sequence owns the eye height for
     // the whole ten seconds, and a crouch toggled under it fights the pose.
     if (this.hiding || this.escaping) return;
+    // no standing up in a duct
+    if (this.crouching && this.inDuct()) return;
     this.crouching = !this.crouching;
   }
 
@@ -3124,7 +3146,7 @@ export class HideRoom3D extends Phaser.Scene {
 
     // SHIFT stands you up rather than being ignored: a player holding run is
     // telling you they want to move, and the toggle should not argue with it.
-    if (this.crouching && this.held('run')) this.crouching = false;
+    if (this.crouching && this.held('run') && !this.inDuct()) this.crouching = false;
     const running = this.held('run') && !this.crouching;
     // ---- TWICE THE PACE, AND ONLY IN HERE.  Nothing behind the wall is
     // listening for a footstep, so the careful pace the hide rooms are built
@@ -4028,7 +4050,9 @@ export class HideRoom3D extends Phaser.Scene {
    * The player cannot do this.  That asymmetry is the threat.
    */
   private startClimb(box: Box, dirX: number, dirZ: number): boolean {
-    if (this.climb || box.h > CLIMB_MAX_H) return false;
+    // A duct is not furniture to him: it is too small to get into and he is
+    // not going over it through a wall.
+    if (this.climb || box.h > CLIMB_MAX_H || box.crawl) return false;
 
     const len = Math.hypot(dirX, dirZ) || 1;
     const ux = dirX / len;
@@ -4169,10 +4193,20 @@ export class HideRoom3D extends Phaser.Scene {
       return false;
     }
     for (const b of this.blockers) {
+      // a duct is a way through on hands and knees, and a wall standing up
+      if (b.crawl && this.crouching) continue;
       if (Math.abs(x - b.x) < b.w / 2 + pad && Math.abs(z - b.z) < b.d / 2 + pad) return true;
     }
     for (const c of this.spots) {
       if (Math.abs(x - c.x) < c.hw + pad && Math.abs(z - c.z) < c.hd + pad) return true;
+    }
+    return false;
+  }
+
+  /** Inside a duct, where there is no room to stand up. */
+  private inDuct(): boolean {
+    for (const b of this.blockers) {
+      if (b.crawl && Math.abs(this.pos.x - b.x) < b.w / 2 + PLAYER_R && Math.abs(this.pos.y - b.z) < b.d / 2 + PLAYER_R) return true;
     }
     return false;
   }
@@ -4331,6 +4365,9 @@ export class HideRoom3D extends Phaser.Scene {
       return;
     }
     const v = HIDE_VIEW[spot.kind];
+    // under a table the eye is a little higher than under a bed; in a tube,
+    // higher again; in a crate, down by the gaps in its boards
+    const eyeY = spot.skin === 'tunnel' ? 0.38 : spot.skin === 'table' ? 0.3 : spot.skin === 'crate' ? 0.6 : v.y;
     const fx = Math.sin(spot.rot);
     const fz = Math.cos(spot.rot);
     const k = this.hideK * this.hideK * (3 - 2 * this.hideK);
@@ -4338,7 +4375,7 @@ export class HideRoom3D extends Phaser.Scene {
     const breath = Math.sin(this.hideBreath * 1.7);
     const at = new THREE.Vector3(
       spot.x + fx * v.front,
-      this.floorY + v.y + breath * 0.006,
+      this.floorY + eyeY + breath * 0.006,
       spot.z + fz * v.front,
     );
     // getting in: from where the eye was; getting out: back to where you stand
@@ -4622,7 +4659,7 @@ export class HideRoom3D extends Phaser.Scene {
    * view as you get in and opens as you get out.
    */
   /** The inside of a box of this kind, round its opening, at full strength.  See paintPeephole. */
-  private drawPeephole(ctx: CanvasRenderingContext2D, kind: SpotKind): void {
+  private drawPeephole(ctx: CanvasRenderingContext2D, kind: SpotKind, skin?: SpotSkin): void {
     const W = GAME_W;
     const H = GAME_H;
     const cx = W / 2;
@@ -4633,7 +4670,38 @@ export class HideRoom3D extends Phaser.Scene {
 
     let inside = '#0c0a09';
     let grain: 'metal' | 'wood' | 'cloth' = 'wood';
-    if (kind === 'locker') {
+    if (skin === 'table' || skin === 'bench') {
+      // under a cloth that hangs almost to the floor: the only way out to
+      // look is the strip between its hem and the boards, low and wide
+      grain = 'cloth';
+      inside = skin === 'table' ? '#141210' : '#111110';
+      holes.push(rect(W * 0.04, H * 0.66, W * 0.92, H * 0.1, 2));
+    } else if (skin === 'tunnel') {
+      // inside the tube: the flap strips across its doorway, light between them
+      inside = '#1a0c0a';
+      grain = 'cloth';
+      for (let i = 0; i < 8; i++) holes.push(rect(W * 0.14 + i * W * 0.092, H * 0.3, 3.2, H * 0.44, 1));
+    } else if (skin === 'crate') {
+      // the gaps between a crate's boards
+      for (let i = 0; i < 3; i++) holes.push(rect(W * 0.12, cy - 14 + i * 12, W * 0.76, 3, 1));
+    } else if (skin === 'prize') {
+      // the hand-hole in the side of the box
+      holes.push((c) => c.ellipse(cx, cy - 4, 22, 7, 0, 0, Math.PI * 2));
+    } else if (skin === 'hatch') {
+      // the seam round a hatch in a wall: a thin slot and a finger-hole
+      holes.push(rect(cx - W * 0.2, cy - 2, W * 0.4, 3, 1));
+      holes.push((c) => c.ellipse(cx + W * 0.16, cy + 16, 5, 3, 0, 0, Math.PI * 2));
+    } else if (skin === 'cabinet') {
+      inside = '#0b0d0c';
+      grain = 'metal';
+      for (let i = 0; i < 6; i++) holes.push(rect(cx - W * 0.2, cy - 22 + i * 7, W * 0.4, 3, 1.5));
+    } else if (skin === 'arcade') {
+      // from inside a dead machine: its vents, and the coin slot's glow
+      inside = '#090a0c';
+      grain = 'metal';
+      for (let i = 0; i < 6; i++) holes.push(rect(cx - W * 0.22, cy - 20 + i * 7, W * 0.44, 3.4, 1.5));
+      holes.push(rect(cx - 1.5, cy + 30, 3, 9, 0.5));
+    } else if (kind === 'locker') {
       inside = '#0b0c0e';
       grain = 'metal';
       // five vent slats, pressed out of the door at eye height
@@ -4731,8 +4799,9 @@ export class HideRoom3D extends Phaser.Scene {
    * rate while you were in a box.  Built for every kind in the room as it
    * loads, so the first time you climb into one is not a stall either.
    */
-  private peepImage(kind: SpotKind): HTMLCanvasElement {
-    let img = this.peepCache.get(kind);
+  private peepImage(kind: SpotKind, skin?: SpotSkin): HTMLCanvasElement {
+    const key = `${kind}:${skin ?? ''}`;
+    let img = this.peepCache.get(key);
     if (!img) {
       const S = 3;
       img = document.createElement('canvas');
@@ -4740,8 +4809,8 @@ export class HideRoom3D extends Phaser.Scene {
       img.height = GAME_H * S;
       const c = img.getContext('2d')!;
       c.scale(S, S);
-      this.drawPeephole(c, kind);
-      this.peepCache.set(kind, img);
+      this.drawPeephole(c, kind, skin);
+      this.peepCache.set(key, img);
     }
     return img;
   }
@@ -4750,7 +4819,7 @@ export class HideRoom3D extends Phaser.Scene {
     const spot = this.hiding ?? this.hideIn;
     if (!spot || this.hideK <= 0) return;
     const k = this.hideK * this.hideK * (3 - 2 * this.hideK);
-    const img = this.peepImage(spot.kind);
+    const img = this.peepImage(spot.kind, spot.skin);
     ctx.save();
     ctx.globalAlpha = k;
     ctx.drawImage(img, 0, 0, GAME_W, GAME_H);

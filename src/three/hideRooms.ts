@@ -1,3 +1,5 @@
+import type { DecoKind } from './hideThemes';
+
 /**
  * The rooms he locks you in.  Geometry only — HideRoom3D owns the behaviour.
  *
@@ -28,6 +30,17 @@ export interface Box {
    * nicely a thing happens to be modelled.
    */
   prop?: 'cabinet' | 'case' | 'counter' | 'change';
+  /**
+   * Built as one of the building's own things -- a bank of dead machines,
+   * racking, a stove, a ball pit -- by `hideThemes`.  Fitted into the box, the
+   * same as a prop: see DecoKind.
+   */
+  deco?: DecoKind;
+  /**
+   * A duct at floor level.  Crouched, the player goes through it; he never
+   * does -- to him and to his map it is a wall.  See `duct` below.
+   */
+  crawl?: boolean;
   /** Which way a prop with a front is facing, in radians.  0 faces +Z. */
   face?: number;
 }
@@ -39,6 +52,17 @@ export interface Box {
  */
 export type SpotKind = 'chest' | 'cupboard' | 'locker' | 'bed';
 
+/**
+ * What a hiding place LOOKS like, where it is not the kind's own build.  The
+ * hunt only ever sees the kind: see `hideSpotSkins`.
+ *
+ *   chest:    crate, prize (a prize box), toybox
+ *   cupboard: cabinet (steel, maintenance), hatch (in a false wall)
+ *   locker:   arcade (a dead machine you get into through its back)
+ *   bed:      table (a cloth to the floor), bench (under a dust sheet), tunnel
+ */
+export type SpotSkin = 'crate' | 'prize' | 'toybox' | 'cabinet' | 'hatch' | 'arcade' | 'table' | 'bench' | 'tunnel';
+
 /** Which set of textures and props dresses the room.  See hideDecor. */
 export type RoomTheme = 'lounge' | 'stores' | 'ward' | 'arcade';
 
@@ -48,6 +72,7 @@ export interface HideSpot {
   /** Facing, radians — the lid or door opens away from this. */
   rot: number;
   kind: SpotKind;
+  skin?: SpotSkin;
 }
 
 export interface RoomDef {
@@ -133,6 +158,16 @@ export interface RoomDef {
    * pressing E at them starts a sequence instead of opening them.
    */
   glassDoor?: { w: number; h: number };
+  /**
+   * What is above the floor and on the walls, none of which is in the way of
+   * anything: catwalks along the top of the tall racking, doors that are
+   * locked for good, and the signs over the doorways that say what is where.
+   */
+  overhead?: {
+    catwalks: Array<{ x: number; z: number; w: number; d: number; y: number }>;
+    lockedDoors: Array<{ x: number; z: number; rot: number; label: string }>;
+    signs: Array<{ x: number; z: number; y: number; rot: number; text: string; color: string }>;
+  };
 }
 
 /**
@@ -150,276 +185,444 @@ export interface CounterRun {
   top: number;
 }
 
+// ============================================================== the layouts
+//
+// THE BACK OF THE BUILDING, IN THREE ZONES.
+//
+// They were a lounge, a store and a ward: one big box each, with partitions
+// and furniture in it.  They are now the parts of an arcade nobody was meant
+// to see after closing -- each zone several places, joined up.
+//
+// HOW THEY ARE LAID OUT, WHATEVER THE THEME:
+//
+//   WINGS WITH MORE THAN ONE WAY IN.  Every area has at least two doorways,
+//   so there is always a loop round the block he is coming down and never a
+//   room you can only leave the way you came.
+//
+//   SHORTCUTS ONLY YOU CAN TAKE.  Ducts at floor level (`crawl`), through
+//   the walls between wings: crouched, you go through; he is far too big and
+//   has to go round -- which is the gap you get to open between you.
+//
+//   BLIND CORNERS AND SAFE POCKETS.  Doorways are offset rather than lined
+//   up, so no two rooms share a sightline; the racking and the machines make
+//   aisles that turn; the lit rooms and the dark ones alternate.
+//
+//   HEIGHT.  Catwalks along the top of the tall racking and shelving, with
+//   the stairs up to them, and a locked door or two -- a building with more
+//   in it than the floor you are on.  (Up there is scenery: the round is
+//   played on the floor, where he is.)
+//
+//   HIDING PLACES OF EVERY SORT.  Still four kinds as far as the hunt is
+//   concerned -- a lid, a door, a locker, something to get under -- dressed
+//   as what the area would have in it: see `SpotSkin`.
+//
+// EVERY ZONE KEEPS ITS WIDTH, AND ITS SECRET DOOR WHERE IT WAS.  The +X wall
+// is where it always was and the way through it is at the same point along
+// it; the zones grew in depth, toward the front doors.
+
+/** A full-height wall along x at `z`, from `x0` to `x1`, with doorways cut in it: [centre, width]. */
+function wallX(z: number, x0: number, x1: number, gaps: Array<[number, number]>, h: number, color: number, t = 0.6): Box[] {
+  return runs(x0, x1, gaps).map(([a, b]) => ({ x: (a + b) / 2, z, w: b - a, d: t, h, color }));
+}
+/** The same, along z at `x`. */
+function wallZ(x: number, z0: number, z1: number, gaps: Array<[number, number]>, h: number, color: number, t = 0.6): Box[] {
+  return runs(z0, z1, gaps).map(([a, b]) => ({ x, z: (a + b) / 2, w: t, d: b - a, h, color }));
+}
+function runs(a0: number, a1: number, gaps: Array<[number, number]>): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  let at = a0;
+  for (const [c, w] of [...gaps].sort((p, q) => p[0] - q[0])) {
+    if (c - w / 2 > at + 0.05) out.push([at, c - w / 2]);
+    at = c + w / 2;
+  }
+  if (a1 > at + 0.05) out.push([at, a1]);
+  return out;
+}
 /**
- * Interior walls are the point of the bigger rooms.  One open box, however
- * large, means he can see you from anywhere in it and the only counterplay is
- * a chest.  Partitions give you the third option — break the sightline and
- * simply not be where he is looking.
+ * A duct through a wall: 1.2 wide, 1.1 high, `len` long, lying across the
+ * wall it goes through.  Low enough that he sees over it and cannot get in
+ * it; high enough for somebody on their hands and knees.
  */
-const LOUNGE_BASE: RoomDef = {
-  name: 'THE LOUNGE',
+function duct(x: number, z: number, along: 'x' | 'z', len = 2.6): Box {
+  return along === 'x'
+    ? { x, z, w: len, d: 1.2, h: 1.1, color: 0x6a7078, low: true, crawl: true, deco: 'duct' }
+    : { x, z, w: 1.2, d: len, h: 1.1, color: 0x6a7078, low: true, crawl: true, deco: 'duct' };
+}
+
+const PI = Math.PI;
+
+// ------------------------------------------------------------ zone one
+//
+// THE PARTY WING.  The front of it is the food court you come in through,
+// the kitchen behind its pass on the left; beyond, the indoor playground on
+// the left, a party room in the middle with a corridor all the way round it,
+// two more party rooms on the right; and at the back, the arcade graveyard --
+// banks of dead machines under a catwalk -- and the prize redemption counter
+// with its stockroom and cage.
+
+const P1 = 0x2e241b;
+const PARTY_WING: RoomDef = {
+  name: 'THE PARTY WING',
   theme: 'lounge',
-  halfW: 18,
-  halfD: 14,
-  // 4.0 rather than a domestic 3.4: the thing hunting you in here stands 3.6m,
-  // and at the old height his head went through the ceiling standing still.
-  // A tall old lounge reads fine and leaves him just enough room to be under
-  // it rather than in it.
+  halfW: 27,
+  halfD: 25,
   wallH: 4.0,
   floor: 0x2a2119,
   wall: 0x35291f,
   ceiling: 0x140f0b,
   lights: [
-    { x: -11, z: -8, color: 0xffb45e, intensity: 16 },
-    { x: 9, z: -6, color: 0xff8c42, intensity: 14 },
-    { x: -8, z: 7, color: 0xffb45e, intensity: 13 },
-    { x: 11, z: 8, color: 0xff8c42, intensity: 12 },
-    { x: 0, z: 0, color: 0xffd9a0, intensity: 10 },
+    // the kitchen's tubes, cold; the food court, warm; the playground's
+    // coloured wash; the party rooms; the prize counter.  Party room one and
+    // the machine graveyard get nothing: the graveyard is lit only by the
+    // one screen in it still on, and that is the point of it.  (Five, as the
+    // other zones have -- every lamp is paid for on every pixel.)
+    { x: -19, z: 18.5, color: 0xd8f0ff, intensity: 11 },
+    { x: 7, z: 18, color: 0xffb45e, intensity: 13 },
+    { x: -17, z: 3, color: 0xff7ab0, intensity: 10 },
+    { x: 11, z: 3, color: 0xb07aff, intensity: 11 },
+    { x: 15, z: -16, color: 0xffb45e, intensity: 10 },
   ],
   furniture: [
-    // ---- partitions.  Full height, so they break sight completely.
-    { x: -6.5, z: -8.0, w: 0.7, d: 12.0, h: 3.4, color: 0x2e241b },
-    { x: 7.5, z: -7.0, w: 0.7, d: 14.0, h: 3.4, color: 0x2e241b },
-    { x: -13.0, z: 2.5, w: 10.0, d: 0.7, h: 3.4, color: 0x2e241b },
-    { x: 9.0, z: 4.5, w: 12.0, d: 0.7, h: 3.4, color: 0x2e241b },
-    { x: 0.5, z: -3.5, w: 8.0, d: 0.7, h: 3.4, color: 0x2e241b },
+    // ---- the kitchen: its wall to the food court, a door and a serving pass
+    { x: -12, z: 13.6, w: 0.6, d: 2.6, h: 3.4, color: P1 },
+    { x: -12, z: 18.05, w: 0.6, d: 1.9, h: 3.4, color: P1 },
+    { x: -12, z: 20.8, w: 0.9, d: 3.6, h: 1.05, color: 0x6e7466, low: true, deco: 'kitchen', face: PI / 2 },
+    { x: -12, z: 23.8, w: 0.6, d: 2.4, h: 3.4, color: P1 },
+    ...wallX(12, -27, -11.7, [[-19, 2.4]], 3.4, P1),
+    { x: -26.0, z: 20.5, w: 0.8, d: 6, h: 1.0, color: 0x6e7466, low: true, deco: 'kitchen', face: PI / 2 },
+    { x: -21, z: 24.05, w: 2.4, d: 0.9, h: 1.0, color: 0x3a3c40, low: true, deco: 'stove', face: PI },
+    { x: -14.2, z: 23.95, w: 1.3, d: 1.0, h: 2.2, color: 0x8a9094, deco: 'fridge', face: PI },
 
-    // ---- tall things you can lose him behind
-    { x: -17.0, z: -3.0, w: 1.0, d: 6.0, h: 2.6, color: 0x3a2c20 },
-    { x: 17.0, z: -2.0, w: 1.0, d: 6.0, h: 2.6, color: 0x3a2c20 },
-    { x: -2.5, z: 9.5, w: 2.0, d: 1.2, h: 2.5, color: 0x3a2c20 },
-    { x: 3.5, z: 11.0, w: 2.4, d: 1.2, h: 2.4, color: 0x3a2c20 },
-    { x: -10.5, z: -12.0, w: 3.0, d: 1.0, h: 2.3, color: 0x3a2c20 },
-    { x: 12.5, z: -11.0, w: 1.0, d: 3.4, h: 2.4, color: 0x3a2c20 },
+    // ---- the food court
+    { x: -7, z: 16.5, w: 1.6, d: 1.6, h: 0.78, color: 0xc8503a, low: true, deco: 'foodTable' },
+    { x: -3.5, z: 20.8, w: 1.6, d: 1.6, h: 0.78, color: 0x3a8ac8, low: true, deco: 'foodTable' },
+    { x: 4.5, z: 20.2, w: 1.6, d: 1.6, h: 0.78, color: 0xe8c040, low: true, deco: 'foodTable' },
+    { x: 9, z: 16, w: 1.6, d: 1.6, h: 0.78, color: 0x5ab45a, low: true, deco: 'foodTable' },
+    { x: 13.5, z: 20.5, w: 1.6, d: 1.6, h: 0.78, color: 0xc8503a, low: true, deco: 'foodTable' },
+    { x: 18, z: 16.5, w: 1.6, d: 1.6, h: 0.78, color: 0x3a8ac8, low: true, deco: 'foodTable' },
+    { x: 22.5, z: 20.5, w: 1.6, d: 1.6, h: 0.78, color: 0xe8c040, low: true, deco: 'foodTable' },
 
-    // ---- sofas and tables, waist height
-    { x: -12.0, z: -6.0, w: 4.4, d: 1.5, h: 0.9, color: 0x5e2a34, low: true },
-    { x: -9.0, z: -9.5, w: 1.5, d: 3.6, h: 0.9, color: 0x5e2a34, low: true },
-    { x: 11.0, z: -8.5, w: 4.0, d: 1.5, h: 0.9, color: 0x5e2a34, low: true },
-    { x: 2.0, z: 6.5, w: 4.6, d: 1.5, h: 0.9, color: 0x4a3a52, low: true },
-    { x: -12.5, z: 8.0, w: 3.0, d: 1.4, h: 0.9, color: 0x4a3a52, low: true },
-    // pulled off the chest beside it: a coffee table half a body-width from a
-    // hiding place is a hiding place you have to sidle into
-    { x: -12.2, z: -2.6, w: 2.6, d: 1.4, h: 0.6, color: 0x4a3524, low: true },
-    { x: 12.0, z: -1.0, w: 2.0, d: 2.0, h: 0.6, color: 0x4a3524, low: true },
-    { x: -3.0, z: 0.5, w: 2.4, d: 1.3, h: 0.6, color: 0x4a3524, low: true },
-    { x: 14.0, z: 9.0, w: 2.2, d: 2.2, h: 1.2, color: 0x3f3128 },
-    { x: -15.5, z: 11.5, w: 2.0, d: 2.0, h: 1.4, color: 0x3f3128 },
-    { x: 6.0, z: -12.5, w: 2.2, d: 1.6, h: 1.3, color: 0x3f3128 },
+    // ---- the playground: its wall to the corridor, with a door and a duct
+    ...wallZ(-7, -5, 12, [[4, 2.4], [-1, 1.2]], 3.4, P1),
+    duct(-7, -1, 'x'),
+    { x: -21.5, z: 7.5, w: 5, d: 3, h: 2.8, color: 0x3a6ab0, deco: 'climbFrame' },
+    { x: -21.5, z: 0.5, w: 5, d: 4, h: 0.9, color: 0x3a6ab0, low: true, deco: 'ballPit' },
+    { x: -10.5, z: 8, w: 1.2, d: 4, h: 2.4, color: 0xc83a3a, deco: 'slide' },
+    { x: -13, z: -2.3, w: 3, d: 3, h: 2.8, color: 0xc8a040, deco: 'climbFrame' },
 
-    // the television, still off
-    { x: -1.0, z: -13.2, w: 3.0, d: 0.6, h: 1.6, color: 0x14161a },
+    // ---- party room one, in the middle, with the corridor round it
+    ...wallX(-1, -3.3, 9.3, [[3, 2.4]], 3.4, P1),
+    ...wallX(8, -3.3, 9.3, [[6, 2.4]], 3.4, P1),
+    ...wallZ(-3, -0.7, 7.7, [[5.5, 1.2]], 3.4, P1),
+    duct(-3, 5.5, 'x'),
+    ...wallZ(9, -0.7, 7.7, [[3, 2.4]], 3.4, P1),
+
+    // ---- party rooms two and three, on the right
+    ...wallZ(13, -5, 12, [[-1, 2.4], [8.5, 2.4]], 3.4, P1),
+    ...wallX(4, 13.3, 27, [[17, 2.4]], 3.4, P1),
+    ...wallX(12, 13, 27, [[20, 2.4]], 3.4, P1),
+    { x: 23.5, z: -3.35, w: 5, d: 2, h: 0.5, color: 0x6a1a2a, low: true, deco: 'stage' },
+    { x: 16.5, z: 7.9, w: 2.4, d: 1.1, h: 0.78, color: 0x8a3a5a, low: true, deco: 'partyTable' },
+
+    // ---- across the building: the wall between the front and the back half
+    ...wallX(-5, -27, 27, [[-20, 2.4], [-13, 1.2], [-5, 2.4], [11, 2.4], [22, 2.4]], 3.4, P1),
+    duct(-13, -5, 'z'),
+
+    // ---- the arcade graveyard, and the wall to the prize room
+    ...wallZ(5, -25, -5.3, [[-15, 2.4]], 3.4, P1),
+    { x: -17, z: -11, w: 6, d: 2.2, h: 2.1, color: 0x14151a, deco: 'arcadeBank' },
+    { x: -5.75, z: -11, w: 6.5, d: 2.2, h: 2.1, color: 0x14151a, deco: 'arcadeBank' },
+    { x: -19.25, z: -19, w: 5.5, d: 2.2, h: 2.1, color: 0x14151a, deco: 'arcadeBank' },
+    { x: -7.5, z: -18.5, w: 7, d: 2.2, h: 2.1, color: 0x14151a, deco: 'arcadeBank' },
+    // the catwalk's shelving along the back wall, and the stairs up to it
+    { x: -15, z: -23.9, w: 16, d: 1.0, h: 3.0, color: 0x3a3e44, deco: 'shelf' },
+    { x: -24.8, z: -20.4, w: 1.4, d: 5, h: 3.0, color: 0x3a3e44, deco: 'stairs', face: 0 },
+
+    // ---- prize redemption
+    { x: 13, z: -13, w: 8, d: 1.1, h: 1.1, color: 0x6b4a2f, low: true, prop: 'counter', face: 0 },
+    { x: 13, z: -24.1, w: 8, d: 0.9, h: 2.8, color: 0x203048, prop: 'case', face: 0 },
+    { x: 23.5, z: -22.5, w: 4, d: 3, h: 2.6, color: 0x5a5e62, deco: 'cage' },
   ],
   spots: [
-    { x: -16.0, z: -11.0, rot: 0, kind: 'cupboard' },
-    { x: -9.5, z: -1.0, rot: Math.PI / 2, kind: 'chest' },
-    { x: -2.0, z: -7.5, rot: 0, kind: 'chest' },
-    { x: 4.5, z: -10.5, rot: 0, kind: 'cupboard' },
-    { x: 14.5, z: -5.0, rot: Math.PI, kind: 'cupboard' },
-    { x: 10.0, z: 1.0, rot: Math.PI / 2, kind: 'chest' },
-    { x: -15.0, z: 5.0, rot: 0, kind: 'cupboard' },
-    { x: -5.5, z: 6.0, rot: Math.PI / 2, kind: 'chest' },
-    { x: 6.5, z: 9.5, rot: 0, kind: 'chest' },
-    { x: 16.0, z: 12.0, rot: Math.PI, kind: 'cupboard' },
-    // a couple of beds that were never meant to be in a lounge
-    { x: -16.0, z: -6.5, rot: Math.PI / 2, kind: 'bed' },
-    { x: 15.5, z: 2.0, rot: Math.PI / 2, kind: 'bed' },
+    // the kitchen
+    { x: -25.9, z: 14.5, rot: PI / 2, kind: 'cupboard' },
+    { x: -16.5, z: 23.7, rot: PI, kind: 'chest', skin: 'crate' },
+    { x: -19.5, z: 18.2, rot: 0, kind: 'bed', skin: 'table' },
+    // the food court
+    { x: 3.5, z: 13.6, rot: PI, kind: 'bed', skin: 'table' },
+    { x: -10.5, z: 23.7, rot: PI, kind: 'locker' },
+    { x: 24.6, z: 23.7, rot: PI, kind: 'chest', skin: 'toybox' },
+    { x: 25.9, z: 16.5, rot: -PI / 2, kind: 'cupboard', skin: 'cabinet' },
+    // the playground
+    { x: -16.5, z: 4.5, rot: 0, kind: 'bed', skin: 'tunnel' },
+    { x: -24.5, z: -3.3, rot: 0, kind: 'bed', skin: 'tunnel' },
+    { x: -8.6, z: 11.0, rot: PI, kind: 'chest', skin: 'toybox' },
+    // party room one
+    { x: 0.5, z: 5.3, rot: PI, kind: 'bed', skin: 'table' },
+    { x: 5.8, z: 1.2, rot: 0, kind: 'bed', skin: 'table' },
+    { x: -1.6, z: 1.3, rot: PI / 2, kind: 'chest', skin: 'prize' },
+    // party rooms two and three
+    { x: 25.9, z: 1.9, rot: -PI / 2, kind: 'cupboard' },
+    { x: 18.5, z: 0.4, rot: 0, kind: 'bed', skin: 'table' },
+    { x: 15.0, z: 10.6, rot: PI, kind: 'chest', skin: 'toybox' },
+    // the arcade graveyard
+    { x: 1.8, z: -18.5, rot: -PI / 2, kind: 'locker', skin: 'arcade' },
+    { x: -25.9, z: -13, rot: PI / 2, kind: 'locker', skin: 'arcade' },
+    { x: -12.8, z: -15, rot: 0, kind: 'chest', skin: 'crate' },
+    // prize redemption
+    { x: 22.5, z: -8.0, rot: PI / 2, kind: 'chest', skin: 'prize' },
+    { x: 13, z: -20.5, rot: 0, kind: 'chest', skin: 'prize' },
+    { x: 25.9, z: -17, rot: -PI / 2, kind: 'cupboard', skin: 'cabinet' },
+    { x: 6.5, z: -23.6, rot: 0, kind: 'locker' },
   ],
   door: { x: 0 },
-  // You come in through the door, so you start beside it, facing the room.
-  spawn: { x: 0, z: 12.2 },
-  froggyStart: { x: -13.0, z: -11.0 },
+  spawn: { x: 0, z: 22.3 },
+  froggyStart: { x: -19, z: -15 },
+  secretDoor: { z: 9.0, w: 1.6 },
+  overhead: {
+    catwalks: [{ x: -15, z: -23.9, w: 16, d: 1.3, y: 3.05 }],
+    lockedDoors: [{ x: 16, z: -4.7, rot: 0, label: 'STAFF ONLY' }],
+    signs: [
+      { x: -11.65, z: 16, y: 2.75, rot: PI / 2, text: 'KITCHEN', color: '#d8f0ff' },
+      { x: -17, z: 12.3, y: 3.0, rot: 0, text: 'PLAY ZONE', color: '#ff7ab0' },
+      { x: 3, z: -1.35, y: 2.9, rot: PI, text: 'PARTY ROOM 1', color: '#ffd45e' },
+      { x: 12.65, z: -1, y: 2.9, rot: -PI / 2, text: 'PARTY ROOM 2', color: '#b07aff' },
+      { x: 12.65, z: 8.5, y: 2.9, rot: -PI / 2, text: 'PARTY ROOM 3', color: '#b07aff' },
+      { x: 13, z: -12.4, y: 2.6, rot: 0, text: 'PRIZES', color: '#ffd45e' },
+    ],
+  },
 };
 
-/** Underground, and bigger again.  Racking makes the sightlines. */
-const STORES_BASE: RoomDef = {
-  name: 'SUB-LEVEL STORES',
+// ------------------------------------------------------------ zone two
+//
+// THE STOCKROOMS.  In through the loading bay, the security office behind
+// its glass on the left; the plant room -- generators, the boiler, pipes --
+// down the left; the racking maze through the middle under its catwalk; the
+// maintenance workshop on the right.
+
+const P2 = 0x26292e;
+const STOCKROOMS: RoomDef = {
+  name: 'THE STOCKROOMS',
   theme: 'stores',
   halfW: 24,
-  halfD: 18,
+  halfD: 22,
   wallH: 4.6,
   floor: 0x24262a,
   wall: 0x1b1d21,
   ceiling: 0x0d0e10,
   lights: [
-    { x: -16, z: -10, color: 0x9fd4ff, intensity: 16 },
-    { x: 0, z: -12, color: 0x8fc0e8, intensity: 13 },
-    { x: 15, z: -6, color: 0x9fd4ff, intensity: 14 },
-    { x: -12, z: 6, color: 0x8fc0e8, intensity: 13 },
-    { x: 10, z: 12, color: 0xffb45e, intensity: 12 },
+    { x: -18, z: 17, color: 0x9fd4ff, intensity: 10 },
+    { x: 5, z: 15, color: 0xffb45e, intensity: 12 },
+    { x: -16, z: -8, color: 0xff6a3a, intensity: 11 },
+    { x: 3, z: -10, color: 0x8fc0e8, intensity: 11 },
+    { x: 19, z: -10, color: 0xd8f0ff, intensity: 11 },
   ],
   furniture: [
-    // racking runs, leaving aisles you can lose him down
-    { x: -18.0, z: -6.0, w: 1.4, d: 20.0, h: 4.0, color: 0x33383f },
-    { x: -11.0, z: -6.0, w: 1.4, d: 20.0, h: 4.0, color: 0x33383f },
-    { x: -4.0, z: -6.0, w: 1.4, d: 20.0, h: 4.0, color: 0x33383f },
-    { x: 3.0, z: -6.0, w: 1.4, d: 20.0, h: 4.0, color: 0x33383f },
-    { x: 10.0, z: -6.0, w: 1.4, d: 20.0, h: 4.0, color: 0x33383f },
-    { x: 17.0, z: -6.0, w: 1.4, d: 20.0, h: 4.0, color: 0x33383f },
-    // a cross wall, so the aisles are not five straight sightlines
-    { x: -7.0, z: 3.0, w: 24.0, d: 0.8, h: 4.0, color: 0x26292e },
-    { x: 14.0, z: 3.0, w: 12.0, d: 0.8, h: 4.0, color: 0x26292e },
+    // ---- the security office
+    ...wallX(12, -24, -11.7, [[-15, 2.4]], 4.0, P2),
+    ...wallZ(-12, 12.3, 22, [[18, 2.4]], 4.0, P2),
+    { x: -19, z: 21.2, w: 5, d: 1.2, h: 2.4, color: 0x2a2a30, deco: 'monitors', face: PI },
+    { x: -16, z: 14.3, w: 1.8, d: 0.9, h: 0.78, color: 0x6a5a44, low: true, deco: 'desk', face: 0 },
+    { x: -23.3, z: 17.5, w: 0.7, d: 2.4, h: 1.3, color: 0x5a6064, low: true, deco: 'filing', face: PI / 2 },
 
-    // ---- concrete pillars, floor to ceiling.  A rack run is one long wall you
-    // either commit to or do not; a pillar is a thing you can put between you
-    // and him and then move around while he decides which side to come down.
-    // Two stand in the aisles at the far end, the rest hold up the open half.
-    // two down the aisles, so a run to the far end has one thing in it
-    { x: -14.5, z: -12.0, w: 1.6, d: 1.6, h: 4.6, color: 0x3b4046 },
-    { x: -0.5, z: -12.0, w: 1.6, d: 1.6, h: 4.6, color: 0x3b4046 },
-    // and six holding up the open half, each clear of the hiding places so
-    // that none of them is a pillar you cannot get round to
-    { x: -21.5, z: 5.0, w: 1.6, d: 1.6, h: 4.6, color: 0x3b4046 },
-    { x: -12.5, z: 6.5, w: 1.6, d: 1.6, h: 4.6, color: 0x3b4046 },
-    { x: -3.0, z: 11.0, w: 1.6, d: 1.6, h: 4.6, color: 0x3b4046 },
-    { x: 4.5, z: 6.0, w: 1.6, d: 1.6, h: 4.6, color: 0x3b4046 },
-    { x: 10.5, z: 11.5, w: 1.6, d: 1.6, h: 4.6, color: 0x3b4046 },
-    { x: 19.5, z: 6.5, w: 1.6, d: 1.6, h: 4.6, color: 0x3b4046 },
+    // ---- the plant room's wall, with two doors and a duct
+    ...wallZ(-8, -22, 10, [[-12, 2.4], [3, 2.4], [-4, 1.2]], 4.0, P2),
+    duct(-8, -4, 'x'),
+    { x: -19.5, z: -16.5, w: 3, d: 2, h: 1.9, color: 0x3a4a3a, deco: 'generator' },
+    { x: -19.5, z: -8.5, w: 3, d: 2, h: 1.9, color: 0x3a4a3a, deco: 'generator' },
+    { x: -12.5, z: -19.5, w: 2.4, d: 2.4, h: 3.2, color: 0x5a4a3a, deco: 'boiler' },
+    { x: -23.7, z: -6, w: 0.4, d: 24, h: 3.5, color: 0x5a4030, deco: 'pipes' },
+    { x: -16, z: -21.55, w: 15, d: 0.5, h: 3.5, color: 0x5a4030, deco: 'pipes' },
+    { x: -14, z: 4, w: 3, d: 1.2, h: 1.2, color: 0x3a4a3a, low: true, deco: 'workbench', face: 0 },
 
-    // pallet stacks in the open half
-    { x: -20.0, z: 10.0, w: 3.2, d: 3.2, h: 2.2, color: 0x4a3a26 },
-    { x: -14.0, z: 13.0, w: 2.6, d: 2.6, h: 1.4, color: 0x4a3a26, low: true },
-    { x: -6.0, z: 9.0, w: 4.0, d: 2.6, h: 2.4, color: 0x4a3a26 },
-    { x: 1.0, z: 13.5, w: 3.4, d: 2.4, h: 2.0, color: 0x4a3a26 },
-    { x: 8.0, z: 8.5, w: 3.0, d: 2.6, h: 2.6, color: 0x4a3a26 },
-    { x: 18.0, z: 11.0, w: 2.4, d: 4.0, h: 2.8, color: 0x3a3f46 },
-    { x: 21.0, z: 0.0, w: 2.0, d: 5.0, h: 3.0, color: 0x3a3f46 },
+    // ---- the racking maze, and the catwalk along the back of it
+    { x: -3.5, z: -14.5, w: 1.2, d: 8, h: 3.2, color: 0x33383f, deco: 'shelf' },
+    { x: 1, z: -11.5, w: 1.2, d: 10, h: 3.2, color: 0x33383f, deco: 'shelf' },
+    { x: 5.5, z: -15, w: 1.2, d: 7, h: 3.2, color: 0x33383f, deco: 'shelf' },
+    { x: 10, z: -10, w: 1.2, d: 12, h: 3.2, color: 0x33383f, deco: 'shelf' },
+    { x: -2, z: -4, w: 5, d: 1.2, h: 3.2, color: 0x33383f, deco: 'shelf' },
+    { x: 6.5, z: 0, w: 5, d: 1.2, h: 3.2, color: 0x33383f, deco: 'shelf' },
+    { x: -4.5, z: 3, w: 1.2, d: 4, h: 3.2, color: 0x33383f, deco: 'shelf' },
+    { x: 2.5, z: 4.5, w: 1.2, d: 3.5, h: 3.2, color: 0x33383f, deco: 'shelf' },
+    { x: 3.5, z: -21.4, w: 16, d: 1.0, h: 3.2, color: 0x33383f, deco: 'shelf' },
+    { x: -6.4, z: -17.5, w: 1.2, d: 5, h: 3.2, color: 0x3a3e44, deco: 'stairs', face: 0 },
+
+    // ---- the workshop, and the wall between it and the maze
+    ...wallZ(14, -22, 6, [[-15, 2.4], [0, 2.4]], 4.0, P2),
+    ...wallX(6, 14.3, 24, [[19, 2.4]], 4.0, P2),
+    { x: 19.5, z: -21.1, w: 4, d: 1.1, h: 0.95, color: 0x5a3e26, low: true, deco: 'workbench', face: 0 },
+    { x: 23.1, z: -8, w: 1.1, d: 3.5, h: 0.95, color: 0x5a3e26, low: true, deco: 'workbench', face: -PI / 2 },
+    { x: 18, z: -9, w: 3, d: 2.5, h: 2.6, color: 0x5a5e62, deco: 'cage' },
+
+    // ---- the loading bay: the wall across it, pallets
+    ...wallX(8, -7.7, 14, [[-2, 2.4], [9, 2.4]], 4.0, P2),
+    { x: 4, z: 14, w: 2.6, d: 2.2, h: 1.3, color: 0x4a3a26, low: true },
+    { x: 10.5, z: 17.5, w: 2.4, d: 2.4, h: 1.8, color: 0x4a3a26 },
+    { x: -6, z: 17, w: 3, d: 2, h: 1.5, color: 0x4a3a26, low: true },
+    { x: 17, z: 13.5, w: 2.4, d: 2.2, h: 2.2, color: 0x4a3a26 },
+
+    // ---- concrete pillars, floor to ceiling, holding the building up and
+    // breaking the open floors into something you can put between you and him
+    { x: -8.5, z: 16, w: 1.2, d: 1.2, h: 4.6, color: 0x3b4046 },
+    { x: 12.5, z: 11, w: 1.2, d: 1.2, h: 4.6, color: 0x3b4046 },
+    { x: 21, z: 17, w: 1.2, d: 1.2, h: 4.6, color: 0x3b4046 },
+    { x: 7.5, z: -5, w: 1.2, d: 1.2, h: 4.6, color: 0x3b4046 },
+    { x: 19.5, z: 2, w: 1.2, d: 1.2, h: 4.6, color: 0x3b4046 },
+    { x: -15, z: -3.5, w: 1.2, d: 1.2, h: 4.6, color: 0x3b4046 },
   ],
   spots: [
-    { x: -21.0, z: -14.0, rot: 0, kind: 'locker' },
-    { x: -14.5, z: -3.0, rot: Math.PI / 2, kind: 'locker' },
-    { x: -7.5, z: -14.0, rot: 0, kind: 'locker' },
-    { x: -0.5, z: -8.0, rot: Math.PI / 2, kind: 'chest' },
-    { x: 6.5, z: -14.0, rot: 0, kind: 'locker' },
-    { x: 13.5, z: -4.0, rot: Math.PI / 2, kind: 'locker' },
-    { x: 21.0, z: -12.0, rot: Math.PI, kind: 'locker' },
-    { x: -17.0, z: 6.0, rot: 0, kind: 'chest' },
-    { x: -2.0, z: 5.5, rot: 0, kind: 'chest' },
-    { x: 12.0, z: 15.0, rot: 0, kind: 'locker' },
-    { x: -10.0, z: 15.5, rot: 0, kind: 'cupboard' },
-    // camp beds, in the open half, where somebody once slept down here
-    { x: 14.0, z: 8.0, rot: 0, kind: 'bed' },
-    { x: -9.5, z: 12.5, rot: Math.PI / 2, kind: 'bed' },
+    // the security office
+    { x: -23.0, z: 13.6, rot: PI / 2, kind: 'locker' },
+    { x: -18.5, z: 16.9, rot: 0, kind: 'bed' },
+    { x: -13.4, z: 20.6, rot: -PI / 2, kind: 'cupboard', skin: 'hatch' },
+    // the loading bay
+    { x: 6.5, z: 20.4, rot: PI, kind: 'chest', skin: 'crate' },
+    { x: -4, z: 11.2, rot: 0, kind: 'bed', skin: 'table' },
+    { x: 20.7, z: 20.8, rot: PI, kind: 'locker' },
+    // the plant room
+    { x: -22.4, z: -1.5, rot: PI / 2, kind: 'cupboard', skin: 'cabinet' },
+    { x: -14, z: -13, rot: 0, kind: 'chest', skin: 'crate' },
+    { x: -16.5, z: 0.2, rot: 0, kind: 'bed', skin: 'bench' },
+    // the racking maze
+    { x: -1.2, z: -19.8, rot: 0, kind: 'locker' },
+    { x: 3.3, z: -8.5, rot: PI / 2, kind: 'chest', skin: 'crate' },
+    { x: 12.1, z: -19.8, rot: 0, kind: 'cupboard', skin: 'cabinet' },
+    { x: -5.6, z: -8.5, rot: PI / 2, kind: 'chest', skin: 'prize' },
+    // the workshop
+    { x: 15.35, z: -13, rot: PI / 2, kind: 'locker' },
+    { x: 23.0, z: 0, rot: -PI / 2, kind: 'cupboard', skin: 'cabinet' },
+    { x: 19, z: -3.2, rot: 0, kind: 'bed', skin: 'bench' },
   ],
   door: { x: 0 },
-  spawn: { x: 0, z: 16.2 },
-  froggyStart: { x: -20.0, z: -15.0 },
+  spawn: { x: 0, z: 20.2 },
+  froggyStart: { x: -18, z: -12.5 },
+  secretDoor: { z: 10.0, w: 1.6 },
+  overhead: {
+    catwalks: [{ x: 3.5, z: -21.4, w: 16, d: 1.3, y: 3.25 }],
+    lockedDoors: [{ x: -24, z: -13, rot: PI / 2, label: 'PLANT' }],
+    signs: [
+      { x: -15, z: 11.65, y: 3.2, rot: PI, text: 'SECURITY', color: '#9fd4ff' },
+      { x: -7.7, z: 3, y: 3.2, rot: PI / 2, text: 'PLANT ROOM', color: '#ff8a5a' },
+      { x: 13.65, z: 0, y: 3.2, rot: -PI / 2, text: 'WORKSHOP', color: '#d8f0ff' },
+      { x: 9, z: 8.3, y: 3.2, rot: 0, text: 'STOCK', color: '#ffb45e' },
+    ],
+  },
 };
 
-/**
- * The last room.  A ward: rows of beds with curtain rails between them, a
- * nurses' station, and lockers along the walls.  Beds are most of the cover,
- * which is the point of it — under one, you can see his feet go past.
- */
-const WARD_BASE: RoomDef = {
-  name: 'THE WARD',
+// ------------------------------------------------------------ zone three
+//
+// STAFF ONLY.  Reception and the break room at the front, the laundry in the
+// corner; the offices -- cubicles, and the manager's office, locked -- down
+// the left; the first-aid ward through the middle; the staff locker room on
+// the right.
+
+const P3 = 0x555e55;
+const STAFF_ONLY: RoomDef = {
+  name: 'STAFF ONLY',
   theme: 'ward',
-  halfW: 26,
-  halfD: 19,
+  halfW: 29,
+  halfD: 25,
   wallH: 3.8,
   floor: 0x3a3d3a,
   wall: 0x505a52,
   ceiling: 0x1a1d1a,
   lights: [
-    { x: -16, z: -11, color: 0xc8ffd8, intensity: 14 },
-    { x: 0, z: -11, color: 0xd8ffe8, intensity: 12 },
-    { x: 16, z: -11, color: 0xc8ffd8, intensity: 14 },
-    { x: -16, z: 7, color: 0xd8ffe8, intensity: 12 },
-    { x: 16, z: 7, color: 0xc8ffd8, intensity: 12 },
-    { x: 0, z: 12, color: 0xffb45e, intensity: 9 },
+    { x: 0, z: -17, color: 0xc8ffd8, intensity: 12 },
+    { x: 0, z: -2, color: 0xd8ffe8, intensity: 10 },
+    { x: -20, z: -3, color: 0xd8e0ff, intensity: 10 },
+    { x: 0, z: 18, color: 0xffb45e, intensity: 10 },
+    { x: 19, z: 18, color: 0xffd9a0, intensity: 10 },
+    { x: 19, z: -10, color: 0xc8ffd8, intensity: 10 },
   ],
   furniture: [
-    // curtain rails: full-height partitions between the bays
-    { x: -13.0, z: -12.0, w: 0.4, d: 12.0, h: 3.8, color: 0x6a7368 },
-    { x: -4.0, z: -12.0, w: 0.4, d: 12.0, h: 3.8, color: 0x6a7368 },
-    { x: 5.0, z: -12.0, w: 0.4, d: 12.0, h: 3.8, color: 0x6a7368 },
-    { x: 14.0, z: -12.0, w: 0.4, d: 12.0, h: 3.8, color: 0x6a7368 },
-    // the corridor wall down the middle, with gaps at both ends
-    { x: -8.0, z: -2.5, w: 22.0, d: 0.6, h: 3.8, color: 0x555e55 },
-    { x: 15.0, z: -2.5, w: 14.0, d: 0.6, h: 3.8, color: 0x555e55 },
-    // the nurses' station, and the wall behind it
-    { x: 0.0, z: 6.0, w: 7.0, d: 2.2, h: 1.1, color: 0x7a7266 },
-    { x: 0.0, z: 8.6, w: 9.0, d: 0.5, h: 3.8, color: 0x555e55 },
-    // trolleys and cabinets you can go over
-    { x: -18.0, z: 3.0, w: 1.6, d: 1.0, h: 1.0, color: 0x8a8f8a, low: true },
-    { x: -9.0, z: 12.0, w: 2.2, d: 1.2, h: 1.6, color: 0x6e6a62 },
-    { x: 9.0, z: 13.0, w: 2.2, d: 1.2, h: 1.6, color: 0x6e6a62 },
-    { x: 20.0, z: 4.0, w: 1.6, d: 1.0, h: 1.0, color: 0x8a8f8a, low: true },
-    { x: -22.0, z: 12.0, w: 2.6, d: 2.6, h: 2.6, color: 0x4a4d4a },
-    { x: 22.0, z: 13.0, w: 2.6, d: 2.6, h: 2.6, color: 0x4a4d4a },
-    { x: -20.0, z: -4.5, w: 3.0, d: 1.4, h: 0.9, color: 0x5c5a52, low: true },
-    { x: 21.0, z: -5.0, w: 3.0, d: 1.4, h: 0.9, color: 0x5c5a52, low: true },
+    // ---- across the building: the front half and the back
+    ...wallX(12, -29, 29, [[-20, 2.4], [-3, 2.4], [5, 2.4], [20, 2.4]], 3.8, P3),
+    // ---- the offices' wall to the ward, two doors and a duct
+    ...wallZ(-10, -25, 11.7, [[-6, 2.4], [6, 2.4], [-18, 1.2]], 3.8, P3),
+    duct(-10, -18, 'x'),
+    // ---- the manager's office: walled up, and locked
+    { x: -24.2, z: -20.3, w: 9.6, d: 9.4, h: 3.8, color: P3 },
+    // cubicles
+    { x: -22, z: -9, w: 8, d: 0.2, h: 1.6, color: 0x4a5a6a, deco: 'cubicle' },
+    { x: -22, z: -1.5, w: 8, d: 0.2, h: 1.6, color: 0x4a5a6a, deco: 'cubicle' },
+    { x: -22, z: 5.5, w: 8, d: 0.2, h: 1.6, color: 0x4a5a6a, deco: 'cubicle' },
+    { x: -14.5, z: -9, w: 5, d: 0.2, h: 1.6, color: 0x4a5a6a, deco: 'cubicle' },
+    { x: -14.5, z: 2, w: 5, d: 0.2, h: 1.6, color: 0x4a5a6a, deco: 'cubicle' },
+    { x: -24, z: -10.2, w: 1.6, d: 0.8, h: 0.76, color: 0x6a5a44, low: true, deco: 'desk', face: PI },
+    { x: -19.5, z: -10.2, w: 1.6, d: 0.8, h: 0.76, color: 0x6a5a44, low: true, deco: 'desk', face: PI },
+    { x: -24, z: -0.3, w: 1.6, d: 0.8, h: 0.76, color: 0x6a5a44, low: true, deco: 'desk', face: 0 },
+    { x: -19.5, z: -0.3, w: 1.6, d: 0.8, h: 0.76, color: 0x6a5a44, low: true, deco: 'desk', face: 0 },
+    { x: -14.5, z: -7.8, w: 1.6, d: 0.8, h: 0.76, color: 0x6a5a44, low: true, deco: 'desk', face: 0 },
+    { x: -24, z: 4.3, w: 1.6, d: 0.8, h: 0.76, color: 0x6a5a44, low: true, deco: 'desk', face: PI },
+    { x: -28.3, z: -4.5, w: 0.7, d: 2.5, h: 1.3, color: 0x5a6064, low: true, deco: 'filing', face: PI / 2 },
+
+    // ---- the ward: bays down the back, a corridor wall with two gaps, the station
+    ...wallZ(-3.5, -25, -14, [], 3.8, 0x6a7368, 0.3),
+    ...wallZ(3.5, -25, -14, [], 3.8, 0x6a7368, 0.3),
+    ...wallX(-8, -9.7, 9.7, [[-6, 2.4], [6, 2.4]], 3.8, P3),
+    { x: 0, z: 3, w: 6, d: 2, h: 1.1, color: 0x7a7266, low: true, prop: 'counter', face: PI },
+    { x: -7.6, z: 9.5, w: 1.6, d: 1.0, h: 1.0, color: 0x8a8f8a, low: true },
+    { x: 7.6, z: -3.5, w: 1.6, d: 1.0, h: 1.0, color: 0x8a8f8a, low: true },
+
+    // ---- the locker room
+    ...wallZ(10, -25, 11.7, [[-15, 2.4], [3, 2.4]], 3.8, P3),
+    { x: 19, z: -17, w: 6, d: 0.8, h: 2.0, color: 0x5a6878, deco: 'shelf' },
+    { x: 19, z: -3, w: 6, d: 0.8, h: 2.0, color: 0x5a6878, deco: 'shelf' },
+
+    // ---- the front: reception, the break room, the laundry
+    { x: 0, z: 15.5, w: 5, d: 1.1, h: 1.1, color: 0x6b4a2f, low: true, prop: 'counter', face: PI },
+    { x: 27.9, z: 17.5, w: 1.0, d: 5, h: 1.0, color: 0x6e7466, low: true, deco: 'kitchen', face: -PI / 2 },
+    { x: 16, z: 21.5, w: 1.6, d: 1.6, h: 0.78, color: 0xc8503a, low: true, deco: 'foodTable' },
+    { x: 22, z: 21.5, w: 1.6, d: 1.6, h: 0.78, color: 0x3a8ac8, low: true, deco: 'foodTable' },
+    { x: 13, z: 14.5, w: 1.3, d: 1.0, h: 2.1, color: 0x4a4258, prop: 'change', face: 0 },
+    { x: -24, z: 24.1, w: 6, d: 0.8, h: 2.0, color: 0x5a6064, deco: 'shelf' },
+    { x: -14.5, z: 18, w: 2.4, d: 1.2, h: 1.1, color: 0x8a9094, low: true },
   ],
   spots: [
-    // a bed in every bay
-    { x: -22.0, z: -14.0, rot: 0, kind: 'bed' },
-    { x: -17.5, z: -8.0, rot: 0, kind: 'bed' },
-    { x: -8.5, z: -14.0, rot: 0, kind: 'bed' },
-    { x: -8.5, z: -7.0, rot: 0, kind: 'bed' },
-    { x: 0.5, z: -14.0, rot: 0, kind: 'bed' },
-    { x: 9.5, z: -14.0, rot: 0, kind: 'bed' },
-    { x: 9.5, z: -7.0, rot: 0, kind: 'bed' },
-    { x: 18.5, z: -14.0, rot: 0, kind: 'bed' },
-    { x: 22.0, z: -8.0, rot: 0, kind: 'bed' },
-    // and lockers and a cupboard in the open half
-    { x: -24.5, z: 0.0, rot: Math.PI / 2, kind: 'locker' },
-    { x: 24.5, z: 0.0, rot: -Math.PI / 2, kind: 'locker' },
-    { x: -14.0, z: 16.5, rot: 0, kind: 'cupboard' },
-    { x: 15.0, z: 16.5, rot: 0, kind: 'locker' },
-    { x: 5.0, z: 3.0, rot: Math.PI / 2, kind: 'chest' },
+    // the ward
+    { x: -7, z: -21.8, rot: 0, kind: 'bed' },
+    { x: 0, z: -21.8, rot: 0, kind: 'bed' },
+    { x: 7, z: -21.8, rot: 0, kind: 'bed' },
+    { x: -6, z: -11.2, rot: PI, kind: 'bed' },
+    { x: 6, z: -11.2, rot: PI, kind: 'bed' },
+    // the offices
+    { x: -16, z: 9.4, rot: PI, kind: 'bed', skin: 'table' },
+    { x: -28.0, z: 1.5, rot: PI / 2, kind: 'cupboard', skin: 'hatch' },
+    { x: -12.3, z: -13, rot: -PI / 2, kind: 'chest', skin: 'crate' },
+    { x: -28.0, z: 9.5, rot: PI / 2, kind: 'locker' },
+    // the front
+    { x: -28.0, z: 17.5, rot: PI / 2, kind: 'cupboard' },
+    { x: -20, z: 20.5, rot: 0, kind: 'bed', skin: 'bench' },
+    { x: -9, z: 23.7, rot: PI, kind: 'chest', skin: 'prize' },
+    { x: 18.5, z: 16.5, rot: 0, kind: 'bed', skin: 'table' },
+    { x: 28.0, z: 23.0, rot: -PI / 2, kind: 'cupboard', skin: 'cabinet' },
+    // the locker room
+    { x: 11.35, z: -21.5, rot: PI / 2, kind: 'locker' },
+    { x: 11.35, z: -8.5, rot: PI / 2, kind: 'locker' },
+    { x: 28.0, z: 4, rot: -PI / 2, kind: 'locker' },
+    { x: 20, z: -23.6, rot: 0, kind: 'locker' },
+    { x: 19, z: -10, rot: 0, kind: 'bed', skin: 'bench' },
+    { x: 24, z: 9.3, rot: PI, kind: 'chest', skin: 'crate' },
   ],
   door: { x: 0 },
-  spawn: { x: 0, z: 17.2 },
-  froggyStart: { x: -23.0, z: -16.0 },
+  spawn: { x: 0, z: 22.9 },
+  froggyStart: { x: -22, z: -5.5 },
+  secretDoor: { z: -10.8, w: 1.6 },
+  overhead: {
+    catwalks: [],
+    lockedDoors: [{ x: -24.2, z: -15.55, rot: 0, label: 'MANAGER' }],
+    signs: [
+      { x: -20, z: 12.35, y: 2.9, rot: 0, text: 'OFFICES', color: '#d8e0ff' },
+      { x: 0, z: -7.7, y: 2.9, rot: 0, text: 'FIRST AID', color: '#c8ffd8' },
+      { x: 20, z: 12.35, y: 2.9, rot: 0, text: 'STAFF LOCKERS', color: '#c8ffd8' },
+      { x: 0, z: 16.2, y: 2.4, rot: 0, text: 'RECEPTION', color: '#ffb45e' },
+    ],
+  },
 };
 
-/**
- * Stretch a room.  Positions scale by `k` and heights never do.
- *
- * Footprints scale separately (`bulk`, defaulting to `k`), and the gap between
- * the two is the useful part: spreading the layout further than the furniture
- * grows opens the floor BETWEEN things without moving a single sightline the
- * layout was designed around.  That is how the first zone gets room to move
- * between hiding places while staying the same room.
- */
-function scaleRoom(def: RoomDef, k: number, bulk = k): RoomDef {
-  return {
-    ...def,
-    halfW: Math.round(def.halfW * k),
-    halfD: Math.round(def.halfD * k),
-    lights: def.lights.map((l) => ({ ...l, x: l.x * k, z: l.z * k })),
-    furniture: def.furniture.map((f) => ({ ...f, x: f.x * k, z: f.z * k, w: f.w * bulk, d: f.d * bulk })),
-    spots: def.spots.map((s) => ({ ...s, x: s.x * k, z: s.z * k })),
-    door: { x: def.door.x * k },
-    spawn: { x: def.spawn.x * k, z: def.spawn.z * k },
-    froggyStart: { x: def.froggyStart.x * k, z: def.froggyStart.z * k },
-  };
-}
-
-/**
- * The lounge is the room you learn the game in, and it was the tightest of the
- * three: sofas and tables at every turn, and a run to the next chest that came
- * down to threading a gap.  It is spread out (1.5) further than its furniture
- * has grown (1.3), so the walls, the partitions and the spots are where they
- * always were relative to each other and there is simply more floor in between.
- */
-export const LIVING_ROOM: RoomDef = { ...scaleRoom(LOUNGE_BASE, 1.5, 1.3), secretDoor: { z: 9.0, w: 1.6 } };
-/**
- * The stores was the largest room in the building and it played like it: long
- * racking runs, a lot of ground between one locker and the next, and a hunt
- * that came down to picking a box and staying in it.  It is pulled back to its
- * drawn size (1.0), and its racking and pallets are slimmed (0.85) so the
- * aisles stay wide — smaller room, same number of ways through it, and a real
- * chance to leave one spot for another while he is working the other end.
- */
-export const WAREHOUSE: RoomDef = { ...scaleRoom(STORES_BASE, 1.0, 0.85), secretDoor: { z: 10.0, w: 1.6 } };
-/**
- * THE SECRET DOORS.  Set after scaling, in final room coordinates, and each
- * one sited on the clearest stretch of its room's +X wall -- clear of every
- * piece of furniture and every hiding place, so walking into it is walking
- * into bare wall and nothing about the dressing hints at it.
- */
-export const WARD: RoomDef = { ...scaleRoom(WARD_BASE, 1.1), secretDoor: { z: -10.8, w: 1.6 } };
+export const LIVING_ROOM: RoomDef = PARTY_WING;
+export const WAREHOUSE: RoomDef = STOCKROOMS;
+export const WARD: RoomDef = STAFF_ONLY;
 
 /**
  * THE ARCADE, IN THREE DIMENSIONS.  The last room of the sequence, and the
