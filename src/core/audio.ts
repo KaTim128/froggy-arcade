@@ -526,11 +526,50 @@ class AudioManager {
    * climbs a little every bar and never resolves.  It stops the instant he
    * loses you, which is the point of it.
    */
+  /**
+   * HOW BAD THE CHASE HAS GOT, 0 to 1.  The room sets it every frame from how
+   * long he has had you in sight; the chase bed reads it on every beat -- it
+   * plays faster, brighter, and grows a snare and a pair of dissonant stabs as
+   * it climbs.  Nothing else in the building reads it.
+   */
+  private chaseHeat = 0;
+  setChaseHeat(h: number): void {
+    this.chaseHeat = Math.max(0, Math.min(1, h));
+  }
+
+  /**
+   * One heartbeat: lub-dub, two low thumps felt more than heard.  Louder and
+   * harder with `gain`, on the sfx bus, so it survives the music being down.
+   */
+  heartbeat(gain = 0.5): void {
+    if (!this.unlocked || !this.ctx) return;
+    const ctx = this.ctx;
+    const bus = this.busGain.sfx;
+    if (!bus) return;
+    const now = ctx.currentTime + 0.01;
+    const thump = (at: number, vol: number, f0: number) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f0, at);
+      osc.frequency.exponentialRampToValueAtTime(34, at + 0.14);
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.linearRampToValueAtTime(vol, at + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.2);
+      osc.connect(g);
+      g.connect(bus);
+      osc.start(at);
+      osc.stop(at + 0.24);
+    };
+    thump(now, 0.5 * gain, 70);
+    thump(now + 0.15, 0.36 * gain, 62);
+  }
+
   private placeholderChase(out: GainNode): () => void {
     const ctx = this.ctx!;
-    const BEAT_MS = 400;
     let beat = 0;
     let stopped = false;
+    let timer = 0;
 
     const tone = ctx.createBiquadFilter();
     tone.type = 'lowpass';
@@ -550,38 +589,67 @@ class AudioManager {
       osc.start(at);
       osc.stop(at + dur + 0.05);
     };
-    const kick = (at: number) => {
+    const kick = (at: number, vol: number) => {
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(140, at);
       osc.frequency.exponentialRampToValueAtTime(38, at + 0.12);
-      g.gain.setValueAtTime(0.16, at);
+      g.gain.setValueAtTime(vol, at);
       g.gain.exponentialRampToValueAtTime(0.0001, at + 0.22);
       osc.connect(g);
       g.connect(out);
       osc.start(at);
       osc.stop(at + 0.25);
     };
+    const snare = (at: number, vol: number) => {
+      const len = Math.floor(ctx.sampleRate * 0.09);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 1.8;
+      const src = ctx.createBufferSource();
+      const f = ctx.createBiquadFilter();
+      const g = ctx.createGain();
+      f.type = 'bandpass';
+      f.frequency.value = 1900;
+      g.gain.value = vol;
+      src.buffer = buf;
+      src.connect(f);
+      f.connect(g);
+      g.connect(out);
+      src.start(at);
+    };
 
+    // ---- AND IT BUILDS.  The beat shortens from 400ms to 250 as the chase
+    // goes on, the filter opens, a snare comes in on the off-beat, and past
+    // two thirds a tritone stab lands on every other beat.
     const tick = () => {
       if (stopped) return;
+      const heat = this.chaseHeat;
+      const beatMs = 400 - 150 * heat;
       const t = ctx.currentTime + 0.02;
       const bar = Math.floor(beat / 4);
-      kick(t);
+      tone.frequency.setTargetAtTime(2600 + 3000 * heat, t, 0.3);
+      kick(t, 0.16 + 0.06 * heat);
       // the low growl, a semitone apart on alternate beats
-      hit(beat % 2 ? 43.65 : 41.2, t, 0.38, 0.05, 'sawtooth');
+      hit(beat % 2 ? 43.65 : 41.2, t, (beatMs / 1000) * 0.95, 0.05 + 0.03 * heat, 'sawtooth');
       // the string, off the beat, creeping up over eight bars then falling back
-      const climb = (bar % 8) * 0.35;
-      hit(880 * Math.pow(2, climb / 12), t + 0.2, 0.18, 0.012, 'triangle');
-      hit(932 * Math.pow(2, climb / 12), t + 0.3, 0.14, 0.01, 'triangle');
+      const climb = (bar % 8) * 0.35 + heat * 3;
+      const off = beatMs / 2000;
+      hit(880 * Math.pow(2, climb / 12), t + off, 0.18, 0.012 + 0.01 * heat, 'triangle');
+      hit(932 * Math.pow(2, climb / 12), t + off * 1.5, 0.14, 0.01 + 0.008 * heat, 'triangle');
+      if (heat > 0.3) snare(t + off, 0.03 * heat);
+      if (heat > 0.66 && beat % 2 === 0) {
+        hit(233.08, t, 0.12, 0.03 * heat, 'square');
+        hit(329.63, t, 0.12, 0.024 * heat, 'square');
+      }
       beat++;
+      timer = window.setTimeout(tick, beatMs);
     };
     tick();
-    const timer = window.setInterval(tick, BEAT_MS);
     return () => {
       stopped = true;
-      clearInterval(timer);
+      clearTimeout(timer);
       try {
         tone.disconnect();
       } catch {
