@@ -334,6 +334,8 @@ const SHIN = 0.48;
 const SOLE = 0.095;
 /** Where the hip joints are built, over the soles, in model units. */
 const HIP_Y = 1.02;
+/** Ankle to the tips of the toes, forward: how far they drop as the foot points. */
+const TOE_REACH = 0.31;
 /**
  * Hip joint over the ankle, squatting, in model units: the knees folded right
  * up, and on these legs his face at about the height of the gap under a bed.
@@ -1502,6 +1504,9 @@ export class FroggyMonster {
     for (let i = 0; i < 2; i++) {
       footX[i] *= moving;
       footY[i] *= moving;
+      // Toes down means the HEEL is up, not the toes through the boards: the
+      // ankle rides up by what the long toes drop.
+      footY[i] = Math.max(footY[i], TOE_REACH * Math.sin(Math.max(0, ank[i] * moving)));
     }
     // THE HIPS sit as high as the planted feet allow -- never higher, or a
     // foot would leave the floor, and never so low a knee has nothing left --
@@ -1559,7 +1564,7 @@ export class FroggyMonster {
     // doing above it; pointed as it leaves and as it lands.  Let go of on a
     // climb -- there is no floor to be level with halfway up a cupboard.
     const level = (i: number) =>
-      THREE.MathUtils.clamp(-(this.legs[i].rotation.x + this.knees[i].rotation.x - this.climbNow * 1.1), -0.55 - cr * 0.7, 0.55 + cr * 0.7) *
+      THREE.MathUtils.clamp(-(this.legs[i].rotation.x + this.knees[i].rotation.x - this.climbNow * 1.1), -1.3, 1.3) *
       (1 - this.climbNow);
     this.ankles[0].rotation.x = level(0) + ank[0] * (1 - cr);
     this.ankles[1].rotation.x = level(1) + ank[1] * (1 - cr);

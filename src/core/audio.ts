@@ -1063,6 +1063,16 @@ class AudioManager {
       case 'door_rattle':
         for (let i = 0; i < 4; i++) noise(0.06, 0.11, 3000, i * 0.11);
         break;
+      // A door or a lid SLAMMED shut by something that wants you to hear it:
+      // the body of it hitting the frame, a clang off the metal, and the
+      // whole thing shaking in its hinges for a moment after.
+      case 'spot_slam':
+        noise(0.09, 0.3, 380);
+        beep(62, 0.2, 0.2, 'sine');
+        beep(410, 0.09, 0.07, 'square', 0.01);
+        beep(1230, 0.06, 0.04, 'square', 0.015);
+        for (let i = 0; i < 3; i++) noise(0.04, 0.07 - i * 0.02, 2400, 0.1 + i * 0.07);
+        break;
       case 'door_creak':
         for (let i = 0; i < 14; i++) beep(180 + i * 22 + Math.random() * 40, 0.14, 0.028, 'sawtooth', i * 0.1);
         break;
@@ -1552,6 +1562,7 @@ export type SfxName =
   | 'lock_click'
   | 'key_turn'
   | 'door_rattle'
+  | 'spot_slam'
   | 'door_creak'
   | 'drip'
   | 'bulb_flicker'

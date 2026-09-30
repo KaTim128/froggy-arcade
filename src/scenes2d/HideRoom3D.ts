@@ -591,6 +591,8 @@ const spoken = (lines: Array<[string, number]>, zone: number): Array<[string, nu
 /** How far his footsteps and the lids carry.  Silence is doing the work. */
 const EARSHOT = 22;
 const OPEN_EARSHOT = 30;
+/** How far through his check of a door or a lid he slams it shut again. */
+const SLAM_AT = 0.84;
 /** A spot left alone this long is the next one he goes to. */
 const STALE_S = 24;
 /**
@@ -712,6 +714,15 @@ interface Spot3D {
   /** 0 shut, 1 fully open. */
   open: number;
   opening: boolean;
+  /**
+   * How it moves when HE works it: on a spring, not an ease -- yanked open
+   * past where it stops and bouncing back, slammed shut and jumping in its
+   * frame -- with `rattle` shaking it against its catch before it gives, and
+   * `slammed` putting it shut again while his check is still running.
+   */
+  openV: number;
+  rattle: number;
+  slammed: boolean;
   /** Seconds since he last looked inside this one. */
   sinceChecked: number;
   /**
@@ -834,6 +845,10 @@ export class HideRoom3D extends Phaser.Scene {
   private readonly solidsNear: Solid[] = [];
   /** How hard his eyes are catching the light, set while he looks under a bed. */
   private peekGlare = 0;
+  /** A running clock for the doors he rattles. */
+  private hingeT = 0;
+  /** When the next rattle is heard, while he hauls on something shut. */
+  private rattleIn = 0;
   private hiding: Spot3D | null = null;
 
   private caughtT = 0;
@@ -1554,7 +1569,7 @@ export class HideRoom3D extends Phaser.Scene {
     const ext = spotExtent({ x, z, rot, kind });
     // how tall it stands, shut: the top of what he must not put his head through
     const top = new THREE.Box3().setFromObject(group).max.y;
-    return { x, z, rot, kind, skin, hw: ext.hw, hd: ext.hd, top, checkedOn: -1, hinge, open: 0, opening: false, sinceChecked: 0, grips, lever: built.lever };
+    return { x, z, rot, kind, skin, hw: ext.hw, hd: ext.hd, top, checkedOn: -1, hinge, open: 0, opening: false, openV: 0, rattle: 0, slammed: false, sinceChecked: 0, grips, lever: built.lever };
   }
 
   // ------------------------------------------------------------------- input
@@ -2811,13 +2826,53 @@ export class HideRoom3D extends Phaser.Scene {
     // moving when you arrive is walking onto a set.
     this.secret?.tick(dt);
 
+    // HIS HANDS ON THEM ARE NOT GENTLE.  A door or a lid he works is on a
+    // spring rather than an ease: it rattles against its catch while he
+    // hauls on it, flies open when it gives -- past where it stops, and back
+    // off the stop -- and is slammed shut hard enough to jump in its frame.
+    this.hingeT += dt;
     for (const c of this.spots) {
       if (this.mode === 'seeking') c.sinceChecked += dt;
-      const want = c.opening ? 1 : 0;
-      c.open += (want - c.open) * Math.min(1, dt * 6);
+      // (only the one he has his hands on rattles)
+      if (c !== this.targetSpot || this.fMode !== 'openSpot') c.rattle = 0;
+      const want = c.opening && !c.slammed ? 1 : 0;
+      const shutting = want < c.open;
+      // stiff and springy going open; stiffer still slammed; a slow settle
+      // for anything else (a round ending with a door still open)
+      const k = shutting ? (c.slammed ? 620 : 40) : 300;
+      const zeta = shutting && !c.slammed ? 1 : 0.3;
+      const was = c.open;
+      const steps = Math.max(1, Math.ceil(dt / (1 / 120)));
+      const h = dt / steps;
+      let hit = 0;
+      for (let i = 0; i < steps; i++) {
+        c.openV += (k * (want - c.open) - 2 * zeta * Math.sqrt(k) * c.openV) * h;
+        c.open += c.openV * h;
+        // against the frame: it stops dead and comes back off it
+        if (c.open < 0) {
+          hit = Math.max(hit, -c.openV);
+          c.open = 0;
+          c.openV = c.openV < -1 ? -c.openV * 0.3 : 0;
+        }
+        // and against its own stop at the other end
+        if (c.open > 1.1) {
+          c.open = 1.1;
+          c.openV = -Math.abs(c.openV) * 0.35;
+        }
+      }
+      if (c.slammed && was > 0.02 && hit > 2) {
+        this.play('spot_slam', this.earshot(c.x, c.z, OPEN_EARSHOT, 0.3));
+      }
+      // Hauled at while it is still shut: it jerks against its catch, never
+      // into the frame -- out a crack, and banged back.
+      const jerk =
+        c.rattle *
+        Math.max(0, Math.sin(this.hingeT * 47) * 0.6 + Math.sin(this.hingeT * 83 + 1.3) * 0.4) *
+        0.05;
+      const a = c.open + jerk;
       // A lid tips back; a door swings out on its side hinge.
-      if (c.kind === 'chest' || c.kind === 'bed') c.hinge.rotation.x = -c.open * 1.5;
-      else c.hinge.rotation.y = c.open * 1.9;
+      if (c.kind === 'chest' || c.kind === 'bed') c.hinge.rotation.x = -a * 1.5;
+      else c.hinge.rotation.y = a * 1.9;
       // the lever goes down first and springs back once the door is moving
       if (c.lever) {
         const turn = c.opening ? Math.min(1, c.open / 0.12) * (1 - Math.min(1, Math.max(0, (c.open - 0.35) / 0.3))) : 0;
@@ -3276,6 +3331,24 @@ export class HideRoom3D extends Phaser.Scene {
         // beside it.  The blanket stays where it is.
         const lidAt = total * (spot.kind === 'bed' ? 0.58 : 0.53);
         spot.opening = spot.kind !== 'bed' && this.fTimer < lidAt;
+        // ROUGH.  From the moment his hand closes on it until it gives, he
+        // hauls on it and it rattles against its catch -- heard as far as his
+        // footsteps are.  And when he has looked, he slams it: shut, hard,
+        // while he is still stood at it.
+        if (spot.kind !== 'bed') {
+          const k = 1 - this.fTimer / total;
+          const lidK = 1 - lidAt / total;
+          const hauling = k > 0.34 && k < lidK;
+          spot.rattle = hauling ? Math.min(1, (k - 0.34) / 0.05) : 0;
+          if (hauling) {
+            this.rattleIn -= dt;
+            if (this.rattleIn <= 0) {
+              this.rattleIn = 0.16 + Math.random() * 0.08;
+              this.play('door_rattle', this.earshot(spot.x, spot.z, EARSHOT, 0.08));
+            }
+          }
+          spot.slammed = k >= SLAM_AT;
+        }
         if (before >= lidAt && this.fTimer < lidAt) {
           this.play('spot_open', this.earshot(spot.x, spot.z, OPEN_EARSHOT, 0.3));
           spot.sinceChecked = 0;
@@ -3293,6 +3366,8 @@ export class HideRoom3D extends Phaser.Scene {
       if (this.fTimer <= 0) {
         if (this.targetSpot) {
           this.targetSpot.opening = false;
+          this.targetSpot.slammed = false;
+          this.targetSpot.rattle = 0;
           this.targetSpot.checkedOn = this.sweep;
         }
         this.targetSpot = null;
@@ -3729,17 +3804,37 @@ export class HideRoom3D extends Phaser.Scene {
     const k = 1 - Phaser.Math.Clamp(this.fTimer / total, 0, 1);
     const ss = THREE.MathUtils.smoothstep;
     const size = this.monster.size;
-    const reach = ss(k, 0.02, 0.3) * (1 - ss(k, 0.8, 0.98));
-    const grip = ss(k, 0.22, 0.36) * (1 - ss(k, 0.78, 0.9));
-    const twist = ss(k, 0.36, 0.5) * (1 - 0.7 * ss(k, 0.55, 0.7)) * 0.7;
+    // The room's own beats for it: the lid or door gives with 53% of the time
+    // still to run (see the timer), and he slams it at SLAM_AT.
+    const lidK = 1 - 0.53;
+    // His hand stays on it from the moment it arrives until he has slammed
+    // it: he opens it, and he shuts it, with the same grip.
+    const reach = ss(k, 0.02, 0.3) * (1 - ss(k, 0.9, 0.99));
+    const grip = ss(k, 0.22, 0.34) * (1 - ss(k, 0.9, 0.96));
+    const twist = ss(k, 0.36, 0.44) * (1 - 0.7 * ss(k, 0.55, 0.7)) * 0.7;
+    // HAULING on it while it is still shut: short, hard jerks, out of rhythm.
+    const hauling = k > 0.34 && k < lidK ? Math.min(1, (k - 0.34) / 0.04) : 0;
+    const t = this.hingeT;
+    const heave = hauling * (Math.max(0, Math.sin(t * 47)) * 0.6 + Math.max(0, Math.sin(t * 83 + 1.3)) * 0.4);
+    // THE YANK when it gives: he is thrown back off it for an instant.
+    const yank = Math.max(0, 1 - Math.abs(k - lidK - 0.02) / 0.05);
+    // THE SLAM: he throws his weight in behind it.
+    const slam = Math.max(0, 1 - Math.abs(k - SLAM_AT - 0.01) / 0.045);
     const g0 = spot.grips[0].getWorldPosition(new THREE.Vector3());
     // Close enough to reach it: from where he stopped, the step that puts the
     // handle about an arm's comfortable length in front of him.
     const dist = Math.hypot(g0.x - this.froggy.x, g0.z - this.froggy.y);
     const want = Phaser.Math.Clamp(dist - (spot.kind === 'chest' ? 0.85 * CHEST_SCALE : 0.95) * size, 0, 1.4);
-    const step = want * ss(k, 0, 0.25) * (1 - ss(k, 0.84, 1));
+    // (rocked back by the heave and the yank, forward into the slam)
+    const step = want * ss(k, 0, 0.25) * (1 - ss(k, 0.9, 1)) - (heave * 0.05 + yank * 0.16 - slam * 0.1) * size;
     const low = spot.kind === 'chest';
-    const lean = (low ? 0.95 : 0.7) * reach + 0.35 * ss(k, 0.55, 0.7) * (1 - ss(k, 0.8, 0.95));
+    const lean =
+      (low ? 0.95 : 0.7) * reach + 0.35 * ss(k, 0.55, 0.7) * (1 - ss(k, 0.8, 0.95)) -
+      yank * 0.35 + slam * 0.3 + heave * 0.12;
+    // out of the spot, toward him, flat: the way a pull goes
+    const out = new THREE.Vector3(this.froggy.x - spot.x, 0, this.froggy.y - spot.z).normalize();
+    const pulled = (at: THREE.Vector3): THREE.Vector3 =>
+      at.clone().addScaledVector(out, heave * 0.035 * size).setY(at.y + (low ? heave * 0.025 * size : 0));
     const hands: [HandGoal | null, HandGoal | null] = [null, null];
     if (spot.kind === 'chest') {
       // both hands, under the lid's front edge; which is which by where they
@@ -3747,8 +3842,8 @@ export class HideRoom3D extends Phaser.Scene {
       const [a, b] = spot.grips.map((o) => o.getWorldPosition(new THREE.Vector3()));
       const right = new THREE.Vector3(Math.cos(this.froggyYaw), 0, -Math.sin(this.froggyYaw));
       const aRight = a.clone().sub(b).dot(right) > 0;
-      hands[aRight ? 0 : 1] = { at: a, weight: reach, grip };
-      hands[aRight ? 1 : 0] = { at: b, weight: reach, grip };
+      hands[aRight ? 0 : 1] = { at: pulled(a), weight: reach, grip };
+      hands[aRight ? 1 : 0] = { at: pulled(b), weight: reach, grip };
     } else {
       // one hand: the one on the handle's side of him, chosen once
       if (this.spotHand === null) {
@@ -3756,13 +3851,23 @@ export class HideRoom3D extends Phaser.Scene {
         const rel = g0.clone().sub(new THREE.Vector3(this.froggy.x, 0, this.froggy.y));
         this.spotHand = rel.dot(right) > 0 ? 0 : 1;
       }
-      hands[this.spotHand] = { at: g0, weight: reach, grip, twist };
+      // and the other one flat on the side of it, bracing, while he hauls
+      const brace = hauling > 0 ? new THREE.Vector3(spot.x, 1.3, spot.z).addScaledVector(out, Math.max(spot.hw, spot.hd) + 0.02) : null;
+      if (brace) {
+        const side = new THREE.Vector3(out.z, 0, -out.x).multiplyScalar((this.spotHand === 0 ? 1 : -1) * Math.min(spot.hw, spot.hd) * 0.8);
+        brace.add(side);
+      }
+      hands[this.spotHand] = { at: pulled(g0), weight: reach, grip, twist };
+      hands[1 - this.spotHand] = brace ? { at: brace, weight: hauling * 0.9, grip: 0.15 } : null;
     }
     // and, once it is open, he sinks at the knees to bring his face down to
     // the opening and looks in -- a door is half his height
     const sink = (low ? 0.35 : 0.55) * ss(k, 0.5, 0.66) * (1 - ss(k, 0.8, 0.97));
-    const look = k > 0.5 ? new THREE.Vector3(spot.x, low ? 0.4 : 1.0, spot.z) : null;
-    return { step, lean, sink, hands, look };
+    const inside = new THREE.Vector3(spot.x, low ? 0.4 : 1.0, spot.z);
+    const look = k > 0.5 ? inside.clone() : null;
+    // his face into it too, not only his eyes, while it is open
+    const faceK = ss(k, 0.52, 0.6) * (1 - ss(k, 0.78, 0.84)) * 0.8;
+    return { step, lean, sink, hands, look, faceTo: inside, faceK, jolt: heave * 0.5 + yank + slam };
   }
 
   /**
@@ -4588,6 +4693,8 @@ export class HideRoom3D extends Phaser.Scene {
     // between them; the neck is lifted back against the fold so the face
     // comes up level at you, which is the one thing this scene is for.
     if (this.waking) m.twitchHead(this.twitch.p - WAKE_NECK_LIFT, this.twitch.y, this.twitch.r);
+    // the heave, the yank and the slam go through his head as well
+    else if (act.jolt) m.twitchHead(-act.jolt * 0.07, Math.sin(this.hingeT * 61) * act.jolt * 0.05, Math.sin(this.hingeT * 37) * act.jolt * 0.04);
     // ---- AND THE SAME POSE, DOWN THE HOLE.  The enclosure under the secret
     // room's glass is this room, so the thing in it is this model: one hunt,
     // drawn twice, rather than two hunts that have to be kept in step.
