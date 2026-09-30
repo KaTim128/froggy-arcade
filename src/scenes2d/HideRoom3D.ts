@@ -50,7 +50,8 @@ import {
   buildStaffDoor,
 } from '../three/arcadeProps';
 import { buildSecretRoom, SECRET_ORIGIN, type SecretRoom } from '../three/secretRoom';
-import { buildBedSpot, buildChestSpot, buildDoorSpot } from '../three/hideSpots';
+import { buildBedSpot, buildChestSpot, buildDoorSpot, CHEST_SCALE } from '../three/hideSpots';
+import { furnishWalls, trimFurniture, trimPartition } from '../three/hideDressing';
 
 /** A walk is slow and silent; a run is fast and heard.  That is the trade. */
 const WALK = 2.0;
@@ -61,8 +62,8 @@ const RUN = 4.0;
  * there to make crossing a room a decision, and there is no decision in here.
  */
 const SECRET_RUN = 2.0;
-/** Radians per second on the arrow keys, and per pixel of mouse drag. */
-const TURN_RATE = 1.8;
+/** Radians per second on the arrow keys. */
+const TURN_RATE = 2.3;
 /**
  * Two thirds of what it was.  At 0.004 a flick of the wrist spun you half way
  * round a room you are meant to be peering into, and a thumb on the look pad
@@ -71,6 +72,13 @@ const TURN_RATE = 1.8;
  * slow enough to hold a gap in a door.
  */
 const LOOK_SENS = 0.0027;
+/**
+ * And a quarter again on top of that for the mouse, which was asked for: the
+ * turn felt sluggish while running.  A phone's swipe carries its own rate,
+ * sized to the width of the picture (see touchControls' look pad), so a thumb
+ * crossing the whole screen turns the same amount on any phone.
+ */
+const MOUSE_SENS = LOOK_SENS * 1.25;
 /**
  * What he does when he can see you: 1.1x your top speed.
  *
@@ -82,6 +90,15 @@ const LOOK_SENS = 0.0027;
  * which is the game this is supposed to be.
  */
 const FROGGY_CHASE = RUN * 2.0;
+/**
+ * ---- AND THE LONGER HE HAS YOU, THE FASTER HE GETS.  Nothing for the first
+ * couple of seconds, then a steady climb to half again his chase pace by
+ * about fourteen seconds of being in his sight -- so running circles round
+ * the furniture is a plan with a clock on it.  It resets the moment he loses
+ * you.  `CHASE_HEAT_S` is also what the chase music and the heartbeat climb on.
+ */
+const CHASE_HEAT_S = 14;
+const CHASE_RAMP = 0.5;
 /**
  * And what he does the rest of the time: 0.8x your top speed.
  *
@@ -364,12 +381,19 @@ const E = {
   turn: 3.2,
   stare: 4.8,
   back: 7.4,
-  run: 7.9,
+  // A quarter of a second, not half: the turn back is a flinch, not a look.
+  run: 7.66,
   fade: 8.6,
   black: 9.6,
   narrate: 14.6,
   leave: 0,
 };
+/**
+ * Where the run goes through the doors, off the door's centre line: the middle
+ * of the right-hand opening, clear of the mullion (0.08m) and of the leaf
+ * swung open to DOORS_ANGLE (whose inner edge comes no nearer than 0.8m).
+ */
+const RUN_THROUGH_X = 0.5;
 /** How long each part of the narration is on the black. */
 const NARRATE_EACH = 5.2;
 /** How narrow the view goes on him, in degrees. */
@@ -491,8 +515,12 @@ const CASE_REACH = { hw: 3.4, hd: 2.4 };
  * stopped a metre from, and the case keeps its own frontage to itself.
  */
 const COUNTER_REACH = 1.8;
-/** How long going over it takes.  Long enough to be a commitment, not a step. */
-const VAULT_S = 0.62;
+/**
+ * How long going over it takes.  Long enough to be a commitment, not a step --
+ * and long enough to SEE: hands down on the top, a crouch and a push, over,
+ * and down the far side onto bent knees.
+ */
+const VAULT_S = 0.82;
 /** How far past the counter you land, so you never come down on top of it. */
 const VAULT_CLEAR = 1.7;
 /** How long his answer to "if not" is allowed to hang there. */
@@ -779,7 +807,16 @@ export class HideRoom3D extends Phaser.Scene {
    * are.  Non-null means the player is committed — no steering, no stopping,
    * and the camera rides up over the top and down the other side.
    */
-  private vault: { from: THREE.Vector2; to: THREE.Vector2; t: number } | null = null;
+  private vault: {
+    from: THREE.Vector2;
+    to: THREE.Vector2;
+    t: number;
+    /** The run of counter being climbed, which side we go over to, and the hands on it. */
+    run: CounterRun;
+    side: number;
+    hands: THREE.Group[];
+    along: number;
+  } | null = null;
   /**
    * The half-step back at the start of the escape: where they were, and the
    * mark in front of the doors they settle onto.  Null once they are on it.
@@ -810,6 +847,9 @@ export class HideRoom3D extends Phaser.Scene {
   /** Seconds into the drop, and then into what follows it. */
   private dropT = 0;
   private chaseT = 0;
+  /** How long he has had you, this chase, and when the next heartbeat is due. */
+  private chaseDur = 0;
+  private heartIn = 0;
   /**
    * THE HAND, and how far through picking the key up it is.
    *
@@ -828,6 +868,14 @@ export class HideRoom3D extends Phaser.Scene {
    */
   private doorLeaves: { obj: THREE.Object3D; sign: number }[] = [];
   private doorLock: THREE.Object3D | null = null;
+  /** The mouth of the padlock's keyhole, which the key is aimed at, and the lock body. */
+  private keyhole: THREE.Object3D | null = null;
+  private lockBody: THREE.Object3D | null = null;
+  /** Where the key was, in the world, when it left the hand for the lock. */
+  private insertFrom: { pos: THREE.Vector3; quat: THREE.Quaternion } | null = null;
+  /** The lock giving: a flash on the brass and a jolt, decaying. */
+  private unlockFlash = 0;
+  private unlockLight: THREE.PointLight | null = null;
   /** The morning on the other side of them.  See `openTheWayOut`. */
   private doorOutside: THREE.Object3D | null = null;
   /** The staff door's leaf, on its hinge: open behind him at the very end. */
@@ -973,6 +1021,11 @@ export class HideRoom3D extends Phaser.Scene {
     this.shackle = null;
     this.doorLeaves = [];
     this.doorLock = null;
+    this.keyhole = null;
+    this.lockBody = null;
+    this.insertFrom = null;
+    this.unlockFlash = 0;
+    this.unlockLight = null;
     this.doorOutside = null;
     this.staffLeaf = null;
     this.watcher = null;
@@ -1185,6 +1238,8 @@ export class HideRoom3D extends Phaser.Scene {
       if (leafL) this.doorLeaves.push({ obj: leafL, sign: -1 });
       if (leafR) this.doorLeaves.push({ obj: leafR, sign: 1 });
       this.doorLock = doors.getObjectByName('doorLock') ?? null;
+      this.keyhole = doors.getObjectByName('padlockKeyhole') ?? null;
+      this.lockBody = doors.getObjectByName('padlockBody') ?? null;
       this.doorOutside = doors.getObjectByName('doorOutside') ?? null;
       // AND THEY ARE SOLID.  The room's own clamp stops the player 0.6m short
       // of the wall plane, which is INSIDE a door that stands off it — so the
@@ -1274,6 +1329,9 @@ export class HideRoom3D extends Phaser.Scene {
       );
       mesh.position.set(f.x, f.h / 2, f.z);
       st.scene.add(mesh);
+      // and it is made of parts, not one block: see hideDressing
+      if (isWall) trimPartition(st.scene, f);
+      else trimFurniture(st.scene, f);
       this.blockers.push(f);
     }
 
@@ -1281,6 +1339,9 @@ export class HideRoom3D extends Phaser.Scene {
 
     // The dirt, the litter, the damp.  Placed off anything solid.
     dressRoom(st.scene, d, seed, (x, z) => this.solid(x, z, 0.3));
+    // And the walls: crates, barrels, lanterns, vines, lily pads, posters --
+    // all in the strip nobody can stand in, clear of doors and hiding places.
+    furnishWalls(st.scene, { def: d, seed: seed * 7 + 3, blocked: (x, z, r) => this.solid(x, z, r) });
 
     // THE WAY THROUGH TO THE BACK ROOM, WHICH ISN'T ONE.
     //
@@ -1474,10 +1535,14 @@ export class HideRoom3D extends Phaser.Scene {
       const dy = e.movementY || e.clientY - this.lookY;
       this.lookX = e.clientX;
       this.lookY = e.clientY;
-      this.yaw -= dx * LOOK_SENS;
+      const sens = (e as MouseEvent & { lookSens?: number }).lookSens ?? MOUSE_SENS;
+      this.yaw -= dx * sens;
       // Clamped well short of vertical: past about sixty degrees the room
       // stops having a floor and the player loses which way they are facing.
-      this.pitch = Phaser.Math.Clamp(this.pitch - dy * LOOK_SENS, -1.15, 1.0);
+      // A thumb's up-and-down is damped: a sideways swipe is never perfectly
+      // level, and it should turn you, not nod you.
+      const vert = (e as MouseEvent & { lookSens?: number }).lookSens !== undefined ? 0.7 : 1;
+      this.pitch = Phaser.Math.Clamp(this.pitch - dy * sens * vert, -1.15, 1.0);
       // AND HELD ON THE DOORS while the key is in them.  See holdOnDoor: the
       // clamp is applied here so the drag itself cannot overshoot, and again
       // every frame so no other way of turning gets round it.
@@ -1734,9 +1799,79 @@ export class HideRoom3D extends Phaser.Scene {
     }
     if (!landed) return;
 
-    this.vault = { from: this.pos.clone(), to, t: 0 };
+    // Two hands, on the camera, that go down onto the counter top.
+    const hands: THREE.Group[] = [];
+    const st = this.stage;
+    if (st) {
+      for (const sgn of [-1, 1]) {
+        const h = buildHand();
+        h.scale.set(sgn, 1, 1);
+        h.visible = false;
+        st.camera.add(h);
+        hands.push(h);
+      }
+    }
+    this.vault = { from: this.pos.clone(), to, t: 0, run: c, side, hands, along };
     this.play('hop_wet', 0.5);
     this.alert();
+  }
+
+  /**
+   * THE CLIMB, AS A BODY DOES IT.  Where the eye is, and how the head is
+   * tipped, at each point of the vault:
+   *
+   *   0.00-0.22  hands down on the top, a dip at the knees, looking at them
+   *   0.22-0.52  the push: up until the head is well over the counter
+   *   0.52-0.78  over the top, rolling a little toward the way it is going
+   *   0.78-1.00  down the far side and onto bent knees, a jolt on landing
+   */
+  private vaultPose(): { eye: number; pitch: number; roll: number } {
+    const v = this.vault;
+    if (!v) return { eye: EYE, pitch: 0, roll: 0 };
+    const t = v.t;
+    const top = v.run.top;
+    const sm = (a: number, b: number) => {
+      const u = Phaser.Math.Clamp((t - a) / (b - a), 0, 1);
+      return u * u * (3 - 2 * u);
+    };
+    const peak = Math.max(EYE, top + 0.95);
+    let eye = EYE - 0.1 * sm(0, 0.22);
+    eye += (peak - (EYE - 0.1)) * sm(0.22, 0.52);
+    eye -= (peak - (top + 0.8)) * sm(0.52, 0.72);
+    eye -= (top + 0.8 - (EYE - 0.16)) * sm(0.72, 0.92);
+    eye += 0.16 * sm(0.92, 1);
+    const pitch = -0.38 * sm(0, 0.2) + 0.38 * sm(0.3, 0.6) - 0.16 * sm(0.72, 0.9) + 0.16 * sm(0.9, 1);
+    const roll = Math.sin(sm(0.45, 0.85) * Math.PI) * 0.07 * v.side;
+    return { eye, pitch, roll };
+  }
+
+  /** The hands on the counter top: planted, bearing the weight, and gone. */
+  private poseVaultHands(): void {
+    const v = this.vault;
+    const st = this.stage;
+    if (!v || !st || !v.hands.length) return;
+    const cam = st.camera;
+    cam.updateMatrixWorld();
+    const c = v.run;
+    // On the near edge of the top, a shoulder's width apart.
+    const nearAcross = c.at - v.side * 0.18;
+    const shown = v.t > 0.04 && v.t < 0.72;
+    v.hands.forEach((h, i) => {
+      h.visible = shown;
+      if (!shown) return;
+      const along = v.along + (i === 0 ? -0.26 : 0.26);
+      const world = c.axis === 'x' ? new THREE.Vector3(along, c.top + 0.03, nearAcross) : new THREE.Vector3(nearAcross, c.top + 0.03, along);
+      // Reaching in: the first fifth of the vault is the hands arriving.
+      const reach = Phaser.Math.Clamp(v.t / 0.18, 0, 1);
+      const local = cam.worldToLocal(world);
+      const rest = new THREE.Vector3((i === 0 ? -1 : 1) * 0.22, -0.42, -0.45);
+      local.lerpVectors(rest, local, reach * reach * (3 - 2 * reach));
+      h.position.copy(local);
+      // palm down on the top, fingers pointing over it, pressing harder as
+      // the weight comes on
+      const press = Math.sin(Phaser.Math.Clamp((v.t - 0.2) / 0.4, 0, 1) * Math.PI);
+      h.rotation.set(-0.35 - press * 0.25, (i === 0 ? 0.25 : -0.25), 0);
+    });
   }
 
   /** The arc: up the near face, across the top, down the far side. */
@@ -1744,15 +1879,20 @@ export class HideRoom3D extends Phaser.Scene {
     const v = this.vault;
     if (!v) return;
     v.t = Math.min(1, v.t + dt / VAULT_S);
-    // Ease in and out, so the weight is at the top rather than at the ends.
-    const k = v.t < 0.5 ? 2 * v.t * v.t : 1 - 2 * (1 - v.t) * (1 - v.t);
+    // The feet stay put while the hands go down and the push starts; the body
+    // goes across the top in the middle of it and lands on the far side.
+    const u = Phaser.Math.Clamp((v.t - 0.18) / 0.66, 0, 1);
+    const k = u * u * (3 - 2 * u);
     this.pos.set(
       Phaser.Math.Linear(v.from.x, v.to.x, k),
       Phaser.Math.Linear(v.from.y, v.to.y, k),
     );
+    this.poseVaultHands();
     if (v.t >= 1) {
+      for (const h of v.hands) h.parent?.remove(h);
       this.vault = null;
       this.vaulted = true;
+      this.shake = Math.max(this.shake, 0.3);
       this.play('footstep_concrete', 0.45);
     }
   }
@@ -2141,30 +2281,116 @@ export class HideRoom3D extends Phaser.Scene {
   private runInsert(k: number): void {
     const hand = this.handProp;
     if (!hand) return;
-    // ---- up to the lock over the first third of the insert, then it stays.
-    const up = Phaser.Math.Easing.Sine.InOut(Phaser.Math.Clamp(k / (INSERT_UNTIL * 0.45), 0, 1));
-    hand.position.set(
-      Phaser.Math.Linear(HAND_KEY.x, HAND_LOCK.x, up),
-      Phaser.Math.Linear(HAND_KEY.y + 0.1, HAND_LOCK.y, up),
-      Phaser.Math.Linear(HAND_KEY.z, HAND_LOCK.z, up),
-    );
-    hand.rotation.set(-0.1 + (1 - up) * 0.25, HAND_YAW + up * 0.2, 0.08);
-
-    // ---- pushing it home, and then working it round.  The turn is not one
-    // sweep: it goes, stops against a ward, and goes again -- which is the
-    // same shape the tumblers are already making in the audio.
-    const worked = Phaser.Math.Clamp((k - INSERT_UNTIL * 0.45) / (INSERT_UNTIL * 0.55), 0, 1);
     const key = this.keyProp;
-    if (key) {
-      key.position.set(0, -0.02, -0.16 - worked * 0.05);
-      const turn = worked * Math.PI * 0.55;
-      const catchOn = Math.sin(worked * Math.PI * 3) * 0.12 * (1 - worked);
-      key.rotation.set(0, 0, 0.2 + turn + catchOn);
-    }
-    hand.rotation.z = 0.08 + worked * 0.5;
+    const st = this.stage;
+    const hole = this.keyhole;
+    // The beats: carried up to the lock, pushed home, then worked round.
+    const up = Phaser.Math.Easing.Sine.InOut(Phaser.Math.Clamp(k / (INSERT_UNTIL * 0.45), 0, 1));
+    const worked = Phaser.Math.Clamp((k - INSERT_UNTIL * 0.45) / (INSERT_UNTIL * 0.55), 0, 1);
+    const seat = Phaser.Math.Easing.Cubic.InOut(Phaser.Math.Clamp(worked / 0.3, 0, 1));
+    const turnK = Phaser.Math.Clamp((worked - 0.3) / 0.7, 0, 1);
 
-    // ---- and the lock gives.  It opens once, on the far side of the turn.
-    if (this.shackle && worked > 0.92) this.shackle.rotation.z = 0.18 - 1.15;
+    if (!key || !st || !hole) {
+      // (no lock in this room: the old in-hand version)
+      hand.position.set(
+        Phaser.Math.Linear(HAND_KEY.x, HAND_LOCK.x, up),
+        Phaser.Math.Linear(HAND_KEY.y + 0.1, HAND_LOCK.y, up),
+        Phaser.Math.Linear(HAND_KEY.z, HAND_LOCK.z, up),
+      );
+      return;
+    }
+
+    // ---- THE KEY GOES INTO THE KEYHOLE -- THE REAL ONE, ON THE PADLOCK.
+    //
+    // It used to be carried in the hand, in the camera's own space, to a spot
+    // in front of the view that was near the lock and not at it: it turned in
+    // the air a hand's width off the brass.  Now it leaves the hand for the
+    // world on the way up, lines up with the hole in the padlock's face, blade
+    // down to match the slot, slides in, and turns -- and the hand follows the
+    // key, not the other way round.
+    // The first stretch of the carry is still the hand's: the key comes up
+    // off the floor in the fist, and only lines up on the lock once it is
+    // nearly there.
+    const LEAVE = 0.35;
+    if (up < LEAVE && key.parent === hand) {
+      hand.position.set(
+        Phaser.Math.Linear(HAND_KEY.x, HAND_LOCK.x, up),
+        Phaser.Math.Linear(HAND_KEY.y + 0.1, HAND_LOCK.y, up),
+        Phaser.Math.Linear(HAND_KEY.z, HAND_LOCK.z, up),
+      );
+      hand.rotation.set(-0.1 + (1 - up) * 0.25, HAND_YAW + up * 0.2, 0.08);
+      return;
+    }
+    const cam = st.camera;
+    cam.updateMatrixWorld();
+    hole.updateWorldMatrix(true, false);
+    if (key.parent !== st.scene && key.parent !== this.doorLock) {
+      st.scene.attach(key);
+      this.insertFrom = { pos: key.position.clone(), quat: key.quaternion.clone() };
+    }
+    const carry = Phaser.Math.Clamp((up - LEAVE) / (1 - LEAVE), 0, 1);
+    const mouth = hole.getWorldPosition(new THREE.Vector3());
+    const holeQ = hole.getWorldQuaternion(new THREE.Quaternion());
+    // Into the lock is the hole's +Z; the slot runs down its -Y.
+    const into = new THREE.Vector3(0, 0, 1).applyQuaternion(holeQ).normalize();
+    const down = new THREE.Vector3(0, -1, 0).applyQuaternion(holeQ);
+    // The key's own axes: +Z is along the shaft to the tip, +X is the side
+    // its bit sticks out of.  Aligned: shaft into the hole, bit down the slot.
+    const zAx = into.clone();
+    const xAx = down.clone().sub(zAx.clone().multiplyScalar(down.dot(zAx))).normalize();
+    const yAx = zAx.clone().cross(xAx);
+    const aligned = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAx, yAx, zAx));
+    // and it turns about its own shaft, catching on a ward on the way
+    const turn = turnK * Math.PI * 0.5 + Math.sin(turnK * Math.PI * 3) * 0.1 * (1 - turnK);
+    const twisted = aligned.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), turn));
+    // Where the tip is: a few centimetres short of the hole when it arrives,
+    // then pushed home until the bit is inside.
+    const TIP = 0.17;
+    const tipAt = mouth.clone().add(into.clone().multiplyScalar(-0.07 + seat * 0.1));
+    const at = tipAt.clone().sub(into.clone().multiplyScalar(TIP));
+    const from = this.insertFrom;
+    if (key.parent === this.doorLock) {
+      // already given: it is the lock's now, and goes where the lock goes
+    } else if (from) {
+      key.position.copy(from.pos).lerp(at, carry);
+      key.quaternion.copy(from.quat).slerp(twisted, carry);
+    } else {
+      key.position.copy(at);
+      key.quaternion.copy(twisted);
+    }
+
+    // ---- the hand, on the bow of the key, wherever the key is
+    const bow = key.localToWorld(new THREE.Vector3(0, 0, -0.16));
+    const local = cam.worldToLocal(bow.clone());
+    hand.position.set(local.x + 0.01, local.y - 0.035, local.z + 0.05);
+    hand.rotation.set(-0.1 + (1 - up) * 0.25, HAND_YAW + up * 0.2, 0.08 + turn * 0.6);
+    if (key.parent === this.doorLock) return;
+
+    // ---- AND THE LOCK GIVES.  It opens once, on the far side of the turn:
+    // the shackle springs, the brass jolts and catches the light, and the key
+    // stays in it, so it goes wherever the lock goes from here.
+    if (this.shackle && turnK > 0.92 && this.unlockFlash === 0) {
+      this.shackle.rotation.z = 0.18 - 1.15;
+      this.unlockFlash = 1;
+      audio.sfx('lock_click', 1);
+      this.time.delayedCall(90, () => audio.sfx('key_turn', 0.5));
+      if (this.doorLock) this.doorLock.attach(key);
+      if (!this.unlockLight) {
+        const l = new THREE.PointLight(0xffd98a, 0, 1.6, 2);
+        l.position.copy(mouth).add(into.clone().multiplyScalar(-0.25));
+        st.scene.add(l);
+        this.unlockLight = l;
+      }
+    }
+  }
+
+  /** The unlock's jolt and glint, running down after the lock gives. */
+  private runUnlockFlash(dt: number): void {
+    if (this.unlockFlash <= 0) return;
+    this.unlockFlash = Math.max(0.0001, this.unlockFlash - dt * 2.4);
+    const f = this.unlockFlash;
+    if (this.unlockLight) this.unlockLight.intensity = 3.2 * f * f;
+    if (this.lockBody) this.lockBody.rotation.z = 0.18 + Math.sin((1 - f) * 22) * 0.12 * f;
   }
 
   /**
@@ -2189,6 +2415,8 @@ export class HideRoom3D extends Phaser.Scene {
     // ---- THE KEY GOING IN, AND TURNING.  The hand is doing it on screen for
     // the whole of the first third; see runInsert.
     if (k < INSERT_UNTIL) this.runInsert(k);
+    else if (this.unlockFlash === 0) this.runInsert(INSERT_UNTIL);
+    this.runUnlockFlash(dt);
     // ---- the lock, being fought with properly this time
     if (at(0.06)) audio.sfx('key_turn', 0.75);
     if (k > 0.1) {
@@ -2318,6 +2546,7 @@ export class HideRoom3D extends Phaser.Scene {
     if (!sec || this.inSecret) return;
     this.inSecret = true;
     this.hiding = null;
+    for (const h of this.vault?.hands ?? []) h.parent?.remove(h);
     this.vault = null;
     this.crouching = false;
     this.subtitle = '';
@@ -2452,9 +2681,11 @@ export class HideRoom3D extends Phaser.Scene {
         this.moveFroggy(dt);
         this.checkCaught();
       }
+      this.runChaseTension(dt);
       this.roomTone(dt);
       if (!this.isFinal && this.clock <= 0) this.survive();
     } else if (this.mode === 'caught') {
+      this.runChaseTension(dt);
       this.caughtT += dt;
     } else if (this.mode === 'survived') {
       this.endT += dt;
@@ -3278,12 +3509,54 @@ export class HideRoom3D extends Phaser.Scene {
     // ONCE HE HAS SEEN YOU HE IS THE SAME EVERYWHERE.  The arcade slows his
     // SEARCH, not his chase: the room is the puzzle up here and you need time
     // in it, but being spotted has to cost exactly what it always cost.
-    if (this.fMode === 'chase') return FROGGY_CHASE * pace;
+    if (this.fMode === 'chase') return FROGGY_CHASE * pace * (1 + CHASE_RAMP * this.chaseHeat);
     const hunt = this.isFinal ? pace * FINAL_SEARCH_PACE : pace;
     // Something made a noise, so he is not dawdling — but he is not chasing
     // either, because he has not seen anything to chase.
     if (this.fMode === 'investigate') return FROGGY_SEARCH * hunt;
     return (this.unseenT > LOST_YOU_S ? FROGGY_PROWL : FROGGY_SEARCH) * hunt;
+  }
+
+  /** 0..1, how far into a long chase this one is: eased, so it builds rather than steps. */
+  private get chaseHeat(): number {
+    const u = Phaser.Math.Clamp((this.chaseDur - 2) / (CHASE_HEAT_S - 2), 0, 1);
+    return u * u * (3 - 2 * u);
+  }
+
+  /**
+   * THE CHASE, GETTING WORSE.  The clock on it, the music reading it, and a
+   * heartbeat that starts slow and ends hammering.  Everything resets the
+   * moment he loses you.
+   */
+  private runChaseTension(dt: number): void {
+    if (this.fMode !== 'chase' || this.mode !== 'seeking') {
+      if (this.chaseDur > 0) audio.setChaseHeat(0);
+      this.chaseDur = 0;
+      this.heartIn = 0;
+      return;
+    }
+    this.chaseDur += dt;
+    const heat = this.chaseHeat;
+    audio.setChaseHeat(heat);
+    this.heartIn -= dt;
+    if (this.heartIn <= 0) {
+      this.heartIn = 1.0 - 0.58 * heat;
+      audio.heartbeat(0.35 + 0.65 * heat);
+    }
+  }
+
+  /** The edges of the picture closing in, red, on the heartbeat.  Never the middle. */
+  private paintChaseTension(ctx: CanvasRenderingContext2D): void {
+    const heat = this.chaseHeat;
+    if (heat <= 0.02 || this.fMode !== 'chase') return;
+    const period = 1.0 - 0.58 * heat;
+    const pulse = Math.pow(Math.max(0, 1 - ((this.chaseDur % period) / period) * 3), 2);
+    const a = (0.12 + 0.14 * pulse) * heat;
+    const g = ctx.createRadialGradient(GAME_W / 2, GAME_H / 2, GAME_H * 0.42, GAME_W / 2, GAME_H / 2, GAME_W * 0.62);
+    g.addColorStop(0, 'rgba(90,0,0,0)');
+    g.addColorStop(1, `rgba(90,0,0,${a.toFixed(3)})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, GAME_W, GAME_H);
   }
 
   /**
@@ -3359,7 +3632,7 @@ export class HideRoom3D extends Phaser.Scene {
     // Close enough to reach it: from where he stopped, the step that puts the
     // handle about an arm's comfortable length in front of him.
     const dist = Math.hypot(g0.x - this.froggy.x, g0.z - this.froggy.y);
-    const want = Phaser.Math.Clamp(dist - (spot.kind === 'chest' ? 0.85 : 0.95) * size, 0, 1.4);
+    const want = Phaser.Math.Clamp(dist - (spot.kind === 'chest' ? 0.85 * CHEST_SCALE : 0.95) * size, 0, 1.4);
     const step = want * ss(k, 0, 0.25) * (1 - ss(k, 0.84, 1));
     const low = spot.kind === 'chest';
     const lean = (low ? 0.95 : 0.7) * reach + 0.35 * ss(k, 0.55, 0.7) * (1 - ss(k, 0.8, 0.95));
@@ -3911,7 +4184,7 @@ export class HideRoom3D extends Phaser.Scene {
       // Up and over.  Set rather than eased: the lerp below takes most of a
       // second to arrive and the whole climb is shorter than that, so easing
       // it would have him watching the counter go past at chest height.
-      this.eyeNow = EYE + Math.sin(this.vault.t * Math.PI) * 0.85;
+      this.eyeNow = this.vaultPose().eye;
     } else {
       this.eyeNow += (eyeWant - this.eyeNow) * Math.min(1, dt * 9);
     }
@@ -3956,7 +4229,8 @@ export class HideRoom3D extends Phaser.Scene {
     const dizzy = this.waking ? Math.max(0, 1 - this.wakeT / 6.5) : 0;
     const swimRoll = dizzy * (Math.sin(this.wakeT * 1.1) * 0.1 + Math.sin(this.wakeT * 2.3) * 0.03);
     const swimYaw = dizzy * Math.sin(this.wakeT * 0.7 + 1) * 0.06;
-    cam.rotation.set(this.pitch + (esc ? esc.pitch : 0) + shPit, this.yaw + shYaw + swimYaw, swimRoll);
+    const vp = this.vault ? this.vaultPose() : null;
+    cam.rotation.set(this.pitch + (esc ? esc.pitch : 0) + (vp ? vp.pitch : 0) + shPit, this.yaw + shYaw + swimYaw, swimRoll + (vp ? vp.roll : 0));
 
     // Whatever is in your hands in the lab: held low and to the right, where
     // a hand would hold it, and turning with you.
@@ -4036,6 +4310,8 @@ export class HideRoom3D extends Phaser.Scene {
       speed: Math.min(6, moved),
       // The mouth is shut while he is looking for you and open once he is not.
       maw: this.fMode === 'chase' ? 1 : this.fMode === 'openSpot' ? 0.45 : 0.12,
+      // and in a chase the teeth are out, more of them the longer it goes on
+      bare: this.fMode === 'chase' ? 0.55 + 0.45 * this.chaseHeat : 0,
       climb: climbing,
       climbT,
       // Down on his haunches at a bed, craning about under it -- or down at
@@ -4064,7 +4340,7 @@ export class HideRoom3D extends Phaser.Scene {
       lean: this.waking ? 1 : act.lean,
       // pinpricks while he hunts; blown wide once he has you, and staring
       // down at you on the floor
-      dilate: this.fMode === 'chase' ? 1 : this.waking ? 0.85 : 0,
+      constrict: this.fMode === 'chase' ? 1 : this.waking ? 0.9 : 0,
       // and from wherever you are, his arms stay off his eyes
       viewer: this.stage?.camera.position ?? null,
     };
@@ -4099,6 +4375,7 @@ export class HideRoom3D extends Phaser.Scene {
     if (this.mode === 'caught') return;
     froggyLayer.paint((ctx) => {
       if (this.hiding) this.paintPeephole(ctx);
+      this.paintChaseTension(ctx);
 
       if (this.mode === 'survived' && this.isFinal) {
         // No verdict on the night.  The doors, the look back, the run, the
@@ -4279,6 +4556,8 @@ export class HideRoom3D extends Phaser.Scene {
       heard: this.heard.slice(),
       playerRun: RUN,
       froggyChase: FROGGY_CHASE,
+      chaseFor: this.chaseDur,
+      chaseHeat: this.chaseHeat,
       doorX: this.def.door.x,
       doorZ: this.def.halfD,
       atDoor: this.atDoor(),
@@ -4540,9 +4819,18 @@ export class HideRoom3D extends Phaser.Scene {
       this.pitch = himPitch;
       if (t - dt < E.stare) audio.sfx('eerie_swell', 0.35);
     } else if (t < E.run) {
-      const k = Phaser.Math.Easing.Cubic.Out((t - E.back) / (E.run - E.back));
+      // ---- THE TURN BACK.  Panic, not a pan: it bursts off the mark -- most
+      // of the way round in the first few frames -- and snaps home, with a
+      // jolt through the whole view as it goes.
+      const u = (t - E.back) / (E.run - E.back);
+      const k = 1 - Math.pow(1 - u, 4);
       this.yaw = toHim + (face - toHim) * k;
-      this.pitch = himPitch * (1 - k);
+      this.pitch = himPitch * (1 - k) - Math.sin(u * Math.PI) * 0.08;
+      if (t - dt < E.back) {
+        this.shake = Math.max(this.shake, 0.75);
+        audio.sfx('throw_whoosh', 0.8);
+        audio.sfx('item_thud', 0.5);
+      }
     } else if (t < E.black) {
       // ---- RUN.  Out through the doors and on into the road.
       this.yaw = face;
@@ -4551,8 +4839,13 @@ export class HideRoom3D extends Phaser.Scene {
       const k = Phaser.Math.Clamp((t - E.run) / (E.black - E.run), 0, 1);
       const from = this.escapeMark;
       const outZ = d.halfD + 5;
+      // THROUGH A LEAF, NOT THE MULLION.  The doors are a pair with a post
+      // between them, and the run used to aim at the middle of the doorway --
+      // straight through the post.  It goes through the open right-hand leaf,
+      // wide of both the post and the swung leaf.
+      const lane = d.door.x + (d.glassDoor ? RUN_THROUGH_X : 0);
       this.pos.set(
-        Phaser.Math.Linear(from.x, d.door.x, Math.min(1, k * 1.6)),
+        Phaser.Math.Linear(from.x, lane, Phaser.Math.Easing.Sine.Out(Math.min(1, k * 6))),
         Phaser.Math.Linear(from.y, outZ, k * k * 0.4 + k * 0.6),
       );
       this.bob += dt * 11;
@@ -4598,7 +4891,7 @@ export class HideRoom3D extends Phaser.Scene {
         climb: 0,
         scan: 0,
         lean: 0.2,
-        dilate: 1,
+        constrict: 1,
         viewer: cam.position,
       });
       // a twitch of the head now and then while you look at him

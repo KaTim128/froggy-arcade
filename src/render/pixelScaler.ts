@@ -18,7 +18,7 @@
 
 import Phaser from 'phaser';
 import { froggyLayer } from './froggyLayer';
-import { isTouch } from '../core/device';
+import { isTouch, safeInsets } from '../core/device';
 import { touchControls } from '../ui/touchControls';
 
 export const GAME_W = 320;
@@ -26,9 +26,20 @@ export const GAME_H = 180;
 export const MIN_ZOOM = 1;
 export const MAX_ZOOM = 8;
 
-export function computeZoom(viewW: number, viewH: number): number {
+/**
+ * THE DESKTOP FIT.  Crisp first: the largest scale that puts every logical
+ * pixel on a whole number of DEVICE pixels -- which on a 1.25x or 1.5x
+ * display is finer-grained than whole CSS pixels, and fills far more of the
+ * window.  But a crisp fit that leaves more than a tenth of the window black
+ * is a letterbox nobody asked for (a 1440x900 screen got 1280x720 and an
+ * eighty pixel frame), so then it fills the window instead and lets
+ * `image-rendering: pixelated` keep the blocks square.
+ */
+export function computeZoom(viewW: number, viewH: number, dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1): number {
   const raw = Math.min(viewW / GAME_W, viewH / GAME_H);
-  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.floor(raw)));
+  const crisp = Math.floor(raw * dpr + 1e-6) / dpr;
+  const zoom = crisp >= raw * 0.9 ? crisp : Math.floor(raw * 100) / 100;
+  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
 }
 
 /** A hand's breadth of black over the picture, so it is not against the notch. */
@@ -39,9 +50,10 @@ export const TOUCH_TOP_PAD = 12;
  * re-sized on every pixel of a scroll bounce.  Never smaller than 1, because
  * below that the pixel font stops being readable at all.
  */
-export function computeTouchZoom(viewW: number, viewH: number, reserve: number): number {
-  const usable = Math.max(120, viewH - reserve - (reserve > 0 ? TOUCH_TOP_PAD : 0));
-  const raw = Math.min(viewW / GAME_W, usable / GAME_H);
+export function computeTouchZoom(viewW: number, viewH: number, reserve: number, sides = 0, topPad = TOUCH_TOP_PAD): number {
+  const usable = Math.max(120, viewH - reserve - (reserve > 0 ? topPad : 0));
+  const across = Math.max(160, viewW - sides);
+  const raw = Math.min(across / GAME_W, usable / GAME_H);
   return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.floor(raw * 100) / 100));
 }
 
@@ -56,17 +68,37 @@ export function attachScaler(game: Phaser.Game): void {
     // The least the controls will accept comes first, because it is what the
     // picture has to fit above.
     const reserve = touch ? touchControls.reserveHeight() : 0;
+    // In landscape the controls own a column either side instead, and the
+    // picture is fitted between them -- never under a thumb.
+    const sides = touch ? touchControls.reserveSides() : { left: 0, right: 0 };
+    // And the whole thing stays inside the phone's safe area: off the notch,
+    // off the rounded corners.
+    const safe = touch ? safeInsets() : { top: 0, right: 0, bottom: 0, left: 0 };
+    const topPad = Math.max(TOUCH_TOP_PAD, safe.top);
     // In portrait the controls own a band along the bottom and the picture is
     // centred in everything above it, so a thumb is never over the game and
     // the two halves of the screen are each centred in their own space.
     if (root) {
-      root.style.paddingBottom = reserve > 0 ? `${reserve}px` : '';
-      root.style.paddingTop = reserve > 0 ? `${TOUCH_TOP_PAD}px` : '';
+      root.style.paddingBottom = reserve > 0 ? `${reserve}px` : safe.bottom ? `${safe.bottom}px` : '';
+      root.style.paddingTop = reserve > 0 ? `${topPad}px` : safe.top ? `${safe.top}px` : '';
+      root.style.paddingLeft = sides.left ? `${sides.left}px` : safe.left ? `${safe.left}px` : '';
+      root.style.paddingRight = sides.right ? `${sides.right}px` : safe.right ? `${safe.right}px` : '';
     }
 
+    const across = sides.left + sides.right || safe.left + safe.right;
     const zoom = touch
-      ? computeTouchZoom(window.innerWidth, window.innerHeight, reserve)
+      ? computeTouchZoom(window.innerWidth, window.innerHeight - (reserve > 0 ? 0 : safe.top + safe.bottom), reserve, across, topPad)
       : computeZoom(window.innerWidth, window.innerHeight);
+    // ---- AND IN PORTRAIT THE BAND TAKES EVERYTHING THE PICTURE DOES NOT.
+    // A phone is narrower than the picture wants, so the picture is fitted
+    // to the width and there is height to spare; that used to be black above
+    // and below it.  The picture goes to the top instead, and the controls'
+    // panel runs from under it to the bottom of the glass.
+    let band = reserve;
+    if (touch && reserve > 0 && root) {
+      band = Math.max(reserve, Math.floor(window.innerHeight - topPad - zoom * GAME_H));
+      root.style.paddingBottom = `${band}px`;
+    }
     if (attached.scale.zoom !== zoom) attached.scale.setZoom(zoom);
     attached.scale.refresh();
     // PRD SM-4: the overlay tracks the scaled canvas exactly, but renders at
@@ -75,7 +107,7 @@ export function attachScaler(game: Phaser.Game): void {
     // Whatever the picture did not use is the controls': they grow into it,
     // and the look pad is re-hung over the canvas where it now sits.
     if (touch) {
-      touchControls.setBand(reserve);
+      touchControls.setBand(band);
       touchControls.relayout();
     }
   };

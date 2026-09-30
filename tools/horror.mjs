@@ -542,6 +542,10 @@ try {
       await sleep(500);
       waited += 500;
     }
+    // Let the round settle first: in room three he is placed in his own
+    // corner as the count ends, and a sample taken across that one move reads
+    // as the twin falling behind him.
+    await sleep(1500);
     const before = await hide();
     check(`room ${room + 1}: there is a way through the wall`, before.hasSecret && before.secretDoorZ !== null,
       `secret door at z=${before.secretDoorZ}`);

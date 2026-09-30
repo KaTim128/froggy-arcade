@@ -56,7 +56,13 @@ const PUPIL = 0x020202;
 const LIP = 0x342d2b;
 const MOUTH_WET = 0x0e0606;
 /** Old ivory gone yellow-grey. */
-const TOOTH = [0x6a624f, 0x5a5242, 0x756c58, 0x4f483a];
+/**
+ * Old ivory, yellowed, one or two nearly brown -- but LIGHT: they were dark
+ * enough to vanish into the mouth they sat in, and the teeth are the scare.
+ */
+const TOOTH = [0xcfc3a0, 0xbdb08a, 0xd9ceae, 0xa89c78];
+/** The gums: raw, dark, wet. */
+const GUM = 0x5c1a24;
 /** The mouth's rim, in the head's own units. */
 const MOUTH_Y = -0.1;
 const MOUTH_Z = 0.085;
@@ -130,7 +136,30 @@ const EYE_R = 0.108;
 const PUPIL_MIN = 0.125;
 const PUPIL_MAX = 0.4;
 const PUPIL_STEPS = 12;
+/** A pupil shrunk to a pinprick: the predatory stare of the scares. */
+const PUPIL_PIN = 0.04;
 const pupilGeoms: THREE.BufferGeometry[] = [];
+const pinGeoms: THREE.BufferGeometry[] = [];
+const ringGeoms: THREE.BufferGeometry[] = [];
+/**
+ * The pupil at constriction `c` (0..1), from its resting size down to a
+ * pinprick, and the thin ring of iris that is all that shows round it --
+ * without the ring a pinprick on a white eye at the length of a room is
+ * nothing at all; with it, it is a stare.
+ */
+function pinCap(c: number): { pupil: THREE.BufferGeometry; ring: THREE.BufferGeometry } {
+  const i = Math.round(THREE.MathUtils.clamp(c, 0, 1) * PUPIL_STEPS);
+  if (!pinGeoms[i]) {
+    const theta = PUPIL_MIN + (PUPIL_PIN - PUPIL_MIN) * (i / PUPIL_STEPS);
+    const g = new THREE.SphereGeometry(EYE_R * 1.012, 20, 3, 0, Math.PI * 2, 0, theta);
+    g.rotateX(Math.PI / 2);
+    pinGeoms[i] = g;
+    const r = new THREE.SphereGeometry(EYE_R * 1.009, 24, 2, 0, Math.PI * 2, theta, 0.06);
+    r.rotateX(Math.PI / 2);
+    ringGeoms[i] = r;
+  }
+  return { pupil: pinGeoms[i], ring: ringGeoms[i] };
+}
 /**
  * The pupil at dilation `k` (0..1): a cap of a sphere just outside the eye,
  * facing +z.  Built once per step and shared between every Froggy, so opening
@@ -339,6 +368,17 @@ export interface FroggyPose {
    */
   dilate?: number;
   /**
+   * 0..1 his teeth bared: the jaw drops further than `maw` alone takes it
+   * and the teeth push out of the gums -- the chase and the attack.
+   */
+  bare?: number;
+  /**
+   * 0..1 the other way: his pupils shrinking to a pinprick inside a thin ring
+   * of sickly iris, and the lids pulled right back -- the fixed, predatory
+   * stare of the key room, the jumpscare and the chase.  Wins over `dilate`.
+   */
+  constrict?: number;
+  /**
    * 0..1 his head going down into a gap to look in: dipped, and rolled over
    * on its side much further than a neck should go, so one eye comes into
    * the gap before the rest of the face.
@@ -383,6 +423,10 @@ export class FroggyMonster {
   /** 0 pinpoint .. 1 blown wide: fear, or the moment he has you. */
   private dilateNow = 0;
   private dilateWant = 0;
+  private constrictNow = 0;
+  private constrictWant = 0;
+  private pinLevel = -1;
+  private rings: THREE.Mesh[] = [];
   private pupilLevel = -1;
   private blinkIn = 2.5;
   private blinkT = -1;
@@ -393,6 +437,9 @@ export class FroggyMonster {
   private drool: Drool | null = null;
   /** Drawn in a little while the mouth is shut, so they stay inside it. */
   private upperTeeth: THREE.Mesh[] = [];
+  private allTeeth: THREE.Mesh[] = [];
+  /** 0..1 teeth bared: the jaw further down and every tooth out to its full length and more. */
+  private bareNow = 0;
   private walkT = 0;
   private breathT = 0;
   private mawNow = 0;
@@ -794,6 +841,11 @@ export class FroggyMonster {
       pupil.name = 'pupil';
       eye.add(pupil);
       this.pupils.push(pupil);
+      // the iris ring round a constricted pupil: hidden until he stares
+      const ring = new THREE.Mesh(pinCap(0).ring, flat(0x8a7a2a));
+      ring.visible = false;
+      eye.add(ring);
+      this.rings.push(ring);
       this.eyes.push(eye);
       // THE LIDS: an upper and a lower, each a shell of skin just proud of
       // the eyeball and hinged at its centre, so they ride over it rather
@@ -938,8 +990,11 @@ export class FroggyMonster {
         const side = Math.abs(Math.cos(a));
         // short at the front, longer toward the sides, and a few much longer:
         // long thin needles, narrow at the root and fine at the point
-        const h = (0.02 + rnd() * 0.022) * (0.8 + side * 0.6) * (rnd() < 0.18 ? 1.5 : 1) * lengthK;
-        const w = 0.0021 + rnd() * 0.0016;
+        // Longer and heavier than they were: needles still, but big enough to
+        // read from across a room, and a few real fangs among them.
+        const fang = rnd() < 0.2;
+        const h = (0.026 + rnd() * 0.026) * (0.8 + side * 0.6) * (fang ? 1.65 : 1) * lengthK;
+        const w = (0.0034 + rnd() * 0.0022) * (fang ? 1.35 : 1);
         const g = new THREE.ConeGeometry(w, h, 6, 3);
         // taper faster toward the tip than a cone does, so the point is a point
         {
@@ -968,8 +1023,24 @@ export class FroggyMonster {
         tooth.rotation.x += (rnd() - 0.5) * 0.3;
         parent.add(tooth);
         if (down) this.upperTeeth.push(tooth);
+        this.allTeeth.push(tooth);
       }
     };
+    // ---- THE GUMS: a raw, lumpy ridge along the root of each row, so the
+    // teeth come out of flesh rather than out of a seam.
+    const gumMat = new THREE.MeshPhongMaterial({ color: GUM, specular: 0x4a2a2a, shininess: 60 });
+    const gum = (parent: THREE.Object3D, y: number, inset: number, droop: number, seed: number): void => {
+      const pts: THREE.Vector3[] = [];
+      for (let i = 0; i <= 20; i++) {
+        const a = 0.1 + (i / 20) * (Math.PI - 0.2);
+        const p = rim(a, inset, droop);
+        p.y += y;
+        pts.push(p);
+      }
+      const g = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.009, 6, false);
+      parent.add(new THREE.Mesh(lumpy(g, 0.0025, 40, seed), gumMat));
+    };
+    gum(this.head, MOUTH_Y + 0.006, 0.9, 0.024, 311);
     let lengthK = 1;
     teeth(this.head, MOUTH_Y + 0.004, true, 0.88, 30, 1301);
     // and a second row behind the first, shorter, the way a shark's are
@@ -1005,6 +1076,7 @@ export class FroggyMonster {
     const lower = new THREE.Group();
     lower.position.z = -JAW_PIVOT_Z;
     this.jaw.add(lower);
+    gum(lower, -0.006, 0.88, 0, 313);
     teeth(lower, -0.004, false, 0.86, 26, 2203);
     this.head.add(this.jaw);
 
@@ -1561,16 +1633,23 @@ export class FroggyMonster {
     // Open, it is never still: a fine tremor in it, and now and then a slow
     // working of the jaw, as if tasting the air.
     const m = this.mawNow;
+    this.bareNow += ((pose.bare ?? 0) - this.bareNow) * Math.min(1, dt * ((pose.bare ?? 0) > this.bareNow ? 12 : 3));
+    const bare = this.bareNow;
     const work = Math.max(0, Math.sin(this.breathT * 0.9)) ** 3 * 0.05 * m;
     this.jaw.rotation.x =
-      0.012 + m * 0.5 + Math.max(0, Math.sin(this.breathT * 2.1)) * 0.012 * (0.4 + m) +
+      0.012 + m * (0.5 + 0.22 * bare) + Math.max(0, Math.sin(this.breathT * 2.1)) * 0.012 * (0.4 + m) +
       Math.sin(this.breathT * 23) * 0.006 * m + work;
     this.jaw.rotation.z = m * 0.07 + Math.sin(this.breathT * 0.9) * 0.02 * m;
     this.jaw.rotation.y = m * 0.035;
     // the long upper teeth draw up into the gum while the mouth is shut, so
     // they never come through the chin, and are at full length once it opens
     const long = 0.6 + 0.4 * THREE.MathUtils.clamp(m * 3, 0, 1);
-    for (const t of this.upperTeeth) t.scale.y = long;
+    // bared, every tooth pushes out of the gum and thickens
+    const out = 1 + 0.35 * bare * THREE.MathUtils.clamp(m * 2, 0, 1);
+    for (const t of this.allTeeth) {
+      t.scale.y = (this.upperTeeth.includes(t) ? long : 1) * out;
+      t.scale.x = t.scale.z = 1 + 0.25 * bare;
+    }
     this.drool?.update(dt, m);
 
     // ---- THE THROAT.  A swallow every few seconds: the knot in the neck
@@ -1591,6 +1670,7 @@ export class FroggyMonster {
     }
 
     this.dilateWant = pose.dilate ?? 0;
+    this.constrictWant = pose.constrict ?? 0;
     this.updateEyes(dt);
   }
 
@@ -1758,11 +1838,33 @@ export class FroggyMonster {
     // is slow, so a scare leaves them wide for a while after.
     const rate = this.dilateWant > this.dilateNow ? 5 : 0.8;
     this.dilateNow += (this.dilateWant - this.dilateNow) * Math.min(1, dt * rate);
-    const level = Math.round(this.dilateNow * PUPIL_STEPS);
-    if (level !== this.pupilLevel) {
-      this.pupilLevel = level;
-      const g = pupilCap(this.dilateNow);
-      for (const p of this.pupils) p.geometry = g;
+    // Constricting is quicker still -- the eyes snapping onto you -- and
+    // it wins: a constricted eye is not also a dilated one.
+    const crate = this.constrictWant > this.constrictNow ? 9 : 1.2;
+    this.constrictNow += (this.constrictWant - this.constrictNow) * Math.min(1, dt * crate);
+    if (this.constrictNow > 0.02) {
+      const lv = Math.round(this.constrictNow * PUPIL_STEPS);
+      if (lv !== this.pinLevel) {
+        this.pinLevel = lv;
+        this.pupilLevel = -1;
+        const g = pinCap(this.constrictNow);
+        for (const p of this.pupils) p.geometry = g.pupil;
+        for (const r of this.rings) {
+          r.geometry = g.ring;
+          r.visible = true;
+        }
+      }
+    } else {
+      if (this.pinLevel !== -1) {
+        this.pinLevel = -1;
+        for (const r of this.rings) r.visible = false;
+      }
+      const level = Math.round(this.dilateNow * PUPIL_STEPS);
+      if (level !== this.pupilLevel) {
+        this.pupilLevel = level;
+        const g = pupilCap(this.dilateNow);
+        for (const p of this.pupils) p.geometry = g;
+      }
     }
 
     // ---- THE LIDS.  They ride the eye: the upper one comes down as he looks
@@ -1771,7 +1873,8 @@ export class FroggyMonster {
     // the pupils blown, the lids part a little -- only a little: a heavy lid
     // over a black eye is the worse of the two.  A blink is
     // quick and rare, and never while he has you -- he does not look away.
-    const d = this.dilateNow;
+    // A constricted stare pulls the lids right back, like fear does.
+    const d = Math.max(this.dilateNow, this.constrictNow * 1.2);
     if (this.blinkT >= 0) {
       this.blinkT += dt;
       if (this.blinkT > 0.17) this.blinkT = -1;

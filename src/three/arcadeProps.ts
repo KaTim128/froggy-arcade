@@ -599,10 +599,31 @@ export function buildGlassDoors(w: number, h: number): THREE.Group {
     link.position.set((t - 0.5) * span, 1.02 - Math.sin(t * Math.PI) * 0.14, -0.19);
     lock.add(link);
   }
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.26, 0.12), lit(0xc9a62e));
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.28, 0.12), lit(0xc9a62e));
   body.position.set(0, 0.74, -0.21);
   body.rotation.z = 0.18;
+  body.name = 'padlockBody';
   lock.add(body);
+  // ---- THE KEYHOLE, dead centre on the face the room sees: a darker brass
+  // escutcheon so it reads against the body in the dark, and the hole itself
+  // in black -- a round top and a slot under it, the shape every keyhole is.
+  // The group is named and sits AT the mouth of the hole, facing the room
+  // (its -Z is out of the lock), so a key can be aimed at it.
+  const keyhole = new THREE.Group();
+  keyhole.name = 'padlockKeyhole';
+  keyhole.position.set(0, -0.02, -0.061);
+  body.add(keyhole);
+  const plate = new THREE.Mesh(new THREE.CircleGeometry(0.05, 18), lit(0x7a5a18));
+  plate.rotation.y = Math.PI;
+  keyhole.add(plate);
+  const round = new THREE.Mesh(new THREE.CircleGeometry(0.022, 16), lit(0x050505));
+  round.rotation.y = Math.PI;
+  round.position.set(0, 0.012, -0.001);
+  keyhole.add(round);
+  const slot = new THREE.Mesh(new THREE.PlaneGeometry(0.016, 0.04), lit(0x050505));
+  slot.rotation.y = Math.PI;
+  slot.position.set(0, -0.012, -0.001);
+  keyhole.add(slot);
   const shackle = new THREE.Mesh(
     new THREE.TorusGeometry(0.09, 0.028, 6, 10, Math.PI),
     lit(0xd8d2bc),

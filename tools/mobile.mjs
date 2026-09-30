@@ -204,10 +204,9 @@ const labels = (page) =>
     // Twice the buffer is the bar: below that the 5x8 pixel font stops being
     // readable at arm's length.
     const bigEnough = fit.w >= 320 * 1.1;
-    // Portrait puts the controls in the dead band UNDER the picture, so
-    // nothing may overlap at all.  Landscape has no band and overlays the
-    // corners on purpose, so only "still on the screen" is asserted there.
-    const clear = fit.portrait ? !fit.hitsStick && !fit.hitsPads : fit.stickOn && fit.padsOn;
+    // Portrait puts the controls in the band UNDER the picture and landscape
+    // in a column either side of it, so nothing may overlap in either.
+    const clear = !fit.hitsStick && !fit.hitsPads && fit.stickOn && fit.padsOn;
     check(
       `${name}: the picture fits and the thumbs are clear of it`,
       fit.onScreen && bigEnough && clear && fit.tight.length === 0,
@@ -448,6 +447,113 @@ const labels = (page) =>
     pad !== null && before !== null && Math.abs(after - before) > 0.05,
     pad ? `yaw ${Number(before).toFixed(3)} -> ${Number(after).toFixed(3)}` : 'no look pad',
   );
+  await page.close();
+}
+
+// -------- 8b. in the horror room the pad walks and the swipe turns, together
+//
+// The pad used to send the arrow keys along with WASD, and in the 3D rooms the
+// arrow keys TURN -- so walking sideways swung the camera.  In landscape, on a
+// wide phone, with real touches: the pad strafes without turning, a swipe turns
+// without walking, both at once do both, a held RUN survives the swipe ending,
+// the controls are clear of the picture, and they are wearing rust.
+{
+  const page = await phone('?intro=1&charity=1&route=basement&scene=HideRoom3D', { w: 844, h: 390 });
+  await sleep(3200);
+  const st = () =>
+    page.evaluate(() => {
+      const s = window.__froggy.game().scene.getScene('HideRoom3D');
+      return { yaw: s.yaw, x: s.pos.x, z: s.pos.y };
+    });
+  const geo = await page.evaluate(() => {
+    const r = (sel) => document.querySelector(sel)?.getBoundingClientRect();
+    const c = r('#game-root canvas');
+    const over = (a, b) => a && b && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    const btns = [...document.querySelectorAll('#touch-controls .tc-btn, #touch-controls .tc-dkey, #touch-controls .tc-corner')]
+      .map((e) => e.getBoundingClientRect())
+      .filter((b) => b.width > 0);
+    return {
+      skin: document.getElementById('touch-controls').className,
+      covered: btns.filter((b) => over(b, c)).length,
+      smallest: Math.min(...[...document.querySelectorAll('#touch-controls .tc-btn')].map((e) => e.getBoundingClientRect().width)),
+      look: (() => { const l = r('#touch-controls .tc-look'); return l && c ? Math.abs(l.width - c.width) + Math.abs(l.left - c.left) : 99; })(),
+    };
+  });
+  await page.screenshot({ path: `${SHOTS}/06b-hideroom-landscape.png` });
+  check(
+    'landscape horror room: controls beside the picture, never on it, and rusted',
+    geo.covered === 0 && geo.look < 2 && /skin-horror/.test(geo.skin) && geo.smallest >= 48,
+    `${geo.covered} controls over the picture, look pad off by ${geo.look}px, smallest button ${Math.round(geo.smallest)}px, [${geo.skin}]`,
+  );
+
+  // He talks first, and nobody walks during the rules: wait for the round.
+  for (let i = 0; i < 60; i++) {
+    const m = await page.evaluate(() => window.__froggy.game().scene.getScene('HideRoom3D').mode);
+    if (m === 'hiding' || m === 'seeking') break;
+    await sleep(500);
+  }
+  // The pad, alone: right is a strafe.
+  const a = await st();
+  const box = await page.evaluate(() => {
+    const r = document.querySelector('#touch-controls .tc-dpad').getBoundingClientRect();
+    return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, r: r.width / 2 };
+  });
+  const cdp = await page.target().createCDPSession();
+  const east = { x: box.cx + box.r * 0.7, y: box.cy, id: 1 };
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [east] });
+  await sleep(150);
+  const heldStrafe = await page.evaluate(() => window.__touch.held());
+  await sleep(700);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await sleep(200);
+  const b = await st();
+  check(
+    'the pad strafes and never turns the camera',
+    heldStrafe.includes('D') && !heldStrafe.includes('RIGHT') && Math.abs(b.yaw - a.yaw) < 1e-6 && Math.hypot(b.x - a.x, b.z - a.z) > 0.2,
+    `held [${heldStrafe}], yaw ${a.yaw.toFixed(3)} -> ${b.yaw.toFixed(3)}, moved ${Math.hypot(b.x - a.x, b.z - a.z).toFixed(2)}m`,
+  );
+
+  // Both thumbs at once: forward on the pad, a swipe on the picture.
+  const look = await page.evaluate(() => {
+    const r = document.querySelector('#touch-controls .tc-look').getBoundingClientRect();
+    return { x: r.left + r.width * 0.5, y: r.top + r.height * 0.4 };
+  });
+  const north = { x: box.cx, y: box.cy - box.r * 0.7, id: 1 };
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [north] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [north, { ...look, id: 2 }] });
+  for (let i = 1; i <= 8; i++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [north, { x: look.x + i * 12, y: look.y, id: 2 }] });
+    await sleep(40);
+  }
+  // Lift the swiping finger only (a move listing the fingers still down).
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [north] });
+  await sleep(300);
+  const stillWalking = await page.evaluate(() => window.__touch.held());
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await sleep(200);
+  const c = await st();
+  // 96px across a ~540px picture at 1.35 pi per picture is about 0.75 rad.
+  check(
+    'walking and turning work at the same time, and a swipe turns far enough',
+    Math.abs(c.yaw - b.yaw) > 0.45 && Math.hypot(c.x - b.x, c.z - b.z) > 0.2 && stillWalking.includes('W'),
+    `yaw ${b.yaw.toFixed(3)} -> ${c.yaw.toFixed(3)}, moved ${Math.hypot(c.x - b.x, c.z - b.z).toFixed(2)}m, held after the swipe [${stillWalking}]`,
+  );
+
+  // A thumb on RUN while the other swipes: the swipe ending is not RUN let go.
+  const run = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('#touch-controls .tc-btn')].find((e) => e.textContent.trim() === 'RUN');
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...run, id: 3 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...run, id: 3 }, { ...look, id: 4 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...run, id: 3 }, { x: look.x + 30, y: look.y, id: 4 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...run, id: 3 }] });
+  await sleep(120);
+  const runHeld = await page.evaluate(() => window.__touch.held());
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+  check('a held RUN survives a swipe ending', runHeld.includes('SHIFT'), `held [${runHeld}]`);
   await page.close();
 }
 

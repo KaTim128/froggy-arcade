@@ -20,6 +20,19 @@
 
 import Phaser from 'phaser';
 import { touchControls, type TouchLayout } from '../ui/touchControls';
+import { store } from '../core/state';
+
+/**
+ * The scenes of the horror act, where the controls are rusted iron.  Once the
+ * act is survived (`froggyGone`) every other scene gets the after skin: the
+ * arcade's own controls, a shade off.
+ */
+const HORROR = new Set(['HideRoom3D', 'Chase3D', 'BasementSequence', 'ArcadeDark', 'SecondBust', 'EjectionCutscene']);
+
+function skinFor(top: string): 'normal' | 'horror' | 'after' {
+  if (HORROR.has(top)) return 'horror';
+  return store.get().froggyGone ? 'after' : 'normal';
+}
 
 /** Walking a room: a stick, interact, and a run key that rooms honour. */
 const ROOM: TouchLayout = {
@@ -188,6 +201,7 @@ export function refreshTouchLayout(): void {
   hookScenes();
   const running = gameRef.scene.getScenes(true);
   const top = running.length ? running[running.length - 1].scene.key : 'Boot';
+  touchControls.setSkin(skinFor(top));
   if (top === 'Minigame' && cabinet) touchControls.apply(cabinet);
   else touchControls.apply(touchLayoutFor(top));
 }

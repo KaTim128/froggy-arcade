@@ -172,7 +172,17 @@ const STAFFER_BODY = {
 const GLOW_DEPTH = 50.04;
 const GLOW_ON_COUNTER = COUNTER_DEPTH + 0.001;
 /** How close you have to be to the post to be talking to them rather than shopping. */
-const POST_RANGE = 22;
+const POST_RANGE = 26;
+/**
+ * ---- WHERE A CUSTOMER STANDS AT THE COUNTER.
+ *
+ * Feet at the front of the counter put the player's head up over the glass,
+ * right under whoever is behind it -- which at this size reads as walking
+ * into Froggy, not as standing at the counter.  A customer's head may cover
+ * no more than the bottom edge of the counter's front: their feet stop a
+ * head's height out, all along it, so nobody is ever drawn inside him.
+ */
+const COUNTER_STAND = COUNTER.y + COUNTER.h - 4 + PLAYER_BOX.headTop;
 /** What the key is worth to the arcade, in cash, once. */
 const KEY_REWARD = 100;
 
@@ -196,7 +206,7 @@ const KEY_REWARD = 100;
  */
 const APP_HALL_MS = 8000;
 const APP_HUSH_MS = 5000;
-const APP_GLITCH_MS = 1300;
+const APP_GLITCH_MS = 850;
 /** The static's frame buffer, made once. */
 let snow: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; img: ImageData } | null = null;
 /** How long the music takes to come back properly after the static. */
@@ -998,6 +1008,8 @@ export class ArcadeHub extends Phaser.Scene {
     // restarting on equipment that is not quite working.
     froggyLayer.clear();
     this.locked = false;
+    // and the case holds the camera and nothing else
+    this.drawCaseStock();
     audio.setScene(HUB_AUDIO);
     audio.musicMalfunction(APP_RESTART_MS);
   }
@@ -1312,6 +1324,30 @@ export class ArcadeHub extends Phaser.Scene {
       .rectangle(PRIZE_CASE.x, PRIZE_CASE.y - 30, PRIZE_CASE.w, 30, PALETTE.ink)
       .setOrigin(0, 0)
       .setStrokeStyle(1, PALETTE.fog);
+    this.drawCaseStock();
+    // glass sheen
+    this.add.rectangle(PRIZE_CASE.x + 4, PRIZE_CASE.y - 27, 3, 25, PALETTE.white).setOrigin(0, 0).setAlpha(0.14).setDepth(0.5);
+
+    // RING FOR SERVICE.  Nobody is coming.
+    this.add.rectangle(BELL.x, BELL.y, 7, 4, PALETTE.gold).setOrigin(0.5, 1);
+    this.add.rectangle(BELL.x, BELL.y - 4, 2, 2, PALETTE.cream).setOrigin(0.5, 1);
+    // The sign is legible.  That matters: the player has to read it, try it,
+    // and get nothing.  (VOC-18)
+    text(this, BELL.x + 10, BELL.y - 12, 'RING FOR', PALETTE.cream, 8);
+    text(this, BELL.x + 10, BELL.y - 4, 'SERVICE', PALETTE.cream, 8);
+  }
+
+  /**
+   * WHAT IS ON THE SHELF, drawn into its own layer so it can be put right at
+   * any moment -- the static ends on a case that holds the camera and nothing
+   * else, whatever it held when the scene was built.
+   */
+  private caseLayer: Phaser.GameObjects.Container | null = null;
+  private drawCaseStock(): void {
+    this.caseLayer?.destroy(true);
+    const layer = this.add.container(0, 0).setDepth(0.4);
+    this.caseLayer = layer;
+    const before = new Set(this.children.list);
     // What is actually still on the shelf, in the same hundred pixels of
     // glass: the pitch follows the list, and a prize that has been redeemed
     // leaves a gap in the case exactly as it leaves a gap on the counter.
@@ -1339,16 +1375,8 @@ export class ArcadeHub extends Phaser.Scene {
       this.add.rectangle(x, PRIZE_CASE.y - 22, pitch - 2, 14, p.color).setOrigin(0, 0);
       this.add.rectangle(x, PRIZE_CASE.y - 22, pitch - 2, 3, PALETTE.white).setOrigin(0, 0).setAlpha(0.18);
     });
-    // glass sheen
-    this.add.rectangle(PRIZE_CASE.x + 4, PRIZE_CASE.y - 27, 3, 25, PALETTE.white).setOrigin(0, 0).setAlpha(0.14);
-
-    // RING FOR SERVICE.  Nobody is coming.
-    this.add.rectangle(BELL.x, BELL.y, 7, 4, PALETTE.gold).setOrigin(0.5, 1);
-    this.add.rectangle(BELL.x, BELL.y - 4, 2, 2, PALETTE.cream).setOrigin(0.5, 1);
-    // The sign is legible.  That matters: the player has to read it, try it,
-    // and get nothing.  (VOC-18)
-    text(this, BELL.x + 10, BELL.y - 12, 'RING FOR', PALETTE.cream, 8);
-    text(this, BELL.x + 10, BELL.y - 4, 'SERVICE', PALETTE.cream, 8);
+    // everything just drawn goes into the layer, so the next redraw takes it
+    for (const o of [...this.children.list]) if (!before.has(o) && o !== layer) layer.add(o);
   }
 
 
@@ -1360,7 +1388,7 @@ export class ArcadeHub extends Phaser.Scene {
   private spawnPoint(fallback: { x: number; y: number }): { x: number; y: number } {
     // Back through the right-hand doorway: stood just inside it, a step clear
     // of its interact zone so a stray click does not walk you back out.
-    if (this.fromDoor === 'lounge') return { x: LOUNGE_DOOR.x - 26, y: LOUNGE_DOOR.y + 4 };
+    if (this.fromDoor === 'lounge') return { x: LOUNGE_DOOR.x - 28, y: LOUNGE_DOOR.y - 12 };
     if (!this.returnTo) return fallback;
     const def = CABINETS.find((c) => c.id === this.returnTo);
     if (!def) return fallback;
@@ -1423,7 +1451,7 @@ export class ArcadeHub extends Phaser.Scene {
    * front of it is carpet, the change machine above it is the change machine.
    */
   private paintLoungeDoor(): void {
-    paintOpening(this, { side: 'right', y: LOUNGE_DOOR.y, h: 40, glow: PALETTE.neon });
+    paintOpening(this, { side: 'right', y: LOUNGE_DOOR.y, h: LOUNGE_DOOR.h, glow: PALETTE.neon });
     this.add
       .zone(LOUNGE_DOOR.x, LOUNGE_DOOR.y, 22, LOUNGE_DOOR.h + 4)
       .setInteractive({ useHandCursor: true })
@@ -1626,7 +1654,7 @@ export class ArcadeHub extends Phaser.Scene {
     const dy = (this.held('down') ? 1 : 0) - (this.held('up') ? 1 : 0);
     const before = { x: this.player.x, y: this.player.y };
     this.player.move(dx, dy, delta, this.bounds);
-    this.keepOutOfCounter();
+    this.keepOutOfCounter(before);
     this.keepOffFroggy(before);
 
     const bal = ledger.balance();
@@ -1651,10 +1679,17 @@ export class ArcadeHub extends Phaser.Scene {
    * strip, and the interact range still reaches across the counter from the
    * customer's side.
    */
-  private keepOutOfCounter(): void {
-    const front = COUNTER.y + COUNTER.h + 2;
+  private keepOutOfCounter(before?: { x: number; y: number }): void {
+    const front = COUNTER_STAND;
     if (this.player.y >= front) return;
-    if (this.player.x < COUNTER.x - 3 || this.player.x > COUNTER.x + COUNTER.w + 3) return;
+    const inside = (x: number): boolean => x >= COUNTER.x - 3 && x <= COUNTER.x + COUNTER.w + 3;
+    if (!inside(this.player.x)) return;
+    // Walked in along the counter's face from the side: stopped at its end,
+    // not lifted to the front of it.
+    if (before && !inside(before.x) && before.y < front) {
+      this.player.setPosition(before.x, this.player.y);
+      return;
+    }
     this.player.setPosition(this.player.x, front);
   }
 
@@ -1723,7 +1758,7 @@ export class ArcadeHub extends Phaser.Scene {
     // it has to be up.  Forty-four is past everywhere you are allowed to stand
     // in front of it and still nowhere near the machines, which are eighty
     // pixels further down the room and answer first anyway.
-    if (py < COUNTER.y + 44 && px > COUNTER.x && px < COUNTER.x + COUNTER.w) {
+    if (py < COUNTER_STAND + 10 && px > COUNTER.x && px < COUNTER.x + COUNTER.w) {
       // The right-hand end of the counter is a PERSON, not a shelf: stood
       // there you are talking to whoever is on it, and anywhere else along it
       // you are looking at the prizes.  Only once there is somebody to talk

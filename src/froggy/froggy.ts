@@ -21,7 +21,7 @@
 import { drawMonster } from './monster';
 
 export type FroggyVariant = 'cozy' | 'uncanny' | 'predator' | 'monster';
-export type FroggyPose = 'idleA' | 'idleB' | 'talk' | 'blank' | 'dilated';
+export type FroggyPose = 'idleA' | 'idleB' | 'talk' | 'blank' | 'constricted';
 
 export interface FroggyDrawOpts {
   x: number;
@@ -229,10 +229,25 @@ function drawCozy(ctx: CanvasRenderingContext2D, pose: FroggyPose, bounce: numbe
     // the glass at two in the morning, not there at all.
     if (pupils) {
       ctx.beginPath();
-      // ...or blown wide open, black almost to the rim: the stare in the key
-      // room, where he is not the mascot any more and has not yet stopped
-      // looking like him.
-      ctx.arc(ex, ey, blank ? 2 : pose === 'dilated' ? 12.8 : 10, 0, Math.PI * 2);
+      // ...or SHRUNK TO A POINT: the stare in the key room, where he is not
+      // the mascot any more and has not yet stopped looking like him.  The
+      // friendly black disc is gone and what is left is the pale of the eye
+      // with a pinprick in it, ringed in a thin dark red -- a predator's
+      // stare, fixed on you.
+      if (pose === 'constricted') {
+        ctx.arc(ex, ey, 11.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#efe6cf';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(ex, ey, 4.2, 0, Math.PI * 2);
+        ctx.strokeStyle = '#7a1414';
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(ex, ey, 2.1, 0, Math.PI * 2);
+      } else {
+        ctx.arc(ex, ey, blank ? 2 : 10, 0, Math.PI * 2);
+      }
       ctx.fillStyle = COZY.pupil;
       ctx.fill();
     }

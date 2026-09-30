@@ -38,37 +38,28 @@
  * AND THEN THERE IS WHAT HAPPENS TO THEM ON THE WAY.  Frogs HOP rather than
  * slide: the x is continuous underneath but every one of them is in the air or
  * on the ground at any moment, and the arc is what you actually watch.  On top
- * of that, seven things can go wrong, and NONE of them happens every race —
- * each is rolled independently per field, so two cards running never look the
- * same:
+ * of that the card deals a different moment to every frog, a couple more on
+ * anybody, and one or two more into THE FINAL STRETCH -- which is where the
+ * race is meant to be at its meanest.  Some of them hurt and some of them
+ * help, and several are a coin flip the player watches land:
  *
- *   POTHOLES  dug in the track.  A frog arriving at one either clears it or
- *             goes in — a straight coin flip — and a fall costs it most of a
- *             second of scrabbling.
- *   SLIPS     on landing: it sprawls and loses a beat.
- *   THE BIRD  comes down mid-race and carries one off in its BEAK — held in
- *             it, not floating under it — and then DROPS IT BACK on the track
- *             to pick itself up and run the rest.  It is out of the race while
- *             it is up there, not out of the race for good.
- *   NAPS      in the last stretch, and only there: a frog that has eaten a bug
- *             sits down and sleeps five seconds off while the others run.
- *   SHOVES    from a frog drawing level with its neighbour: the neighbour goes
- *             over, and gets up again.  Nobody is eliminated by one.
- *   BALLOONS  rare, and a frog that gets one is lifted clean off the lane —
- *             still travelling, more slowly, until it comes back down.
- *   THE FLY   crosses the track and some of them go for it, tongue out, which
- *             costs them speed for as long as they are looking at it.
+ *   ROCKFALL  a shadow grows under a frog for a second, then the rock: it is
+ *             flattened, or missed by inches and runs off scared (a boost).
+ *   THE TRAP  iron jaws set on the lane ahead, in plain view: caught and
+ *             wrenching free, or hopped as they snap shut (a boost).
+ *   THE LEAP  over a log at full tilt: stuck, and it is well up the track;
+ *             crashed, and it tumbles and ends up worse off than before.
+ *   BURSTS    head down and flat out -- a slingshot out of another frog's
+ *             slipstream when there is one to pass.
+ *   SLIPS     traction goes, feet scrabble, down on its seat and a skid.
+ *   THE HAWK  dives, lifts a frog clean off the lane and drops it.
+ *   BUGS      a gulp and a five-second sleep; the golden one is a sprint.
+ *   POTHOLES and PUDDLES are dug into the lanes where everybody can see them,
+ *             and never on top of each other.
  *
- * NONE OF IT COSTS YOU THE RACE, AND NONE OF IT HIDES THE RACE.  Every one of
- * them costs seconds and nothing else — the bird used to take a frog out for
- * good, which killed the bet the moment the shadow arrived, and does not any
- * more.  And a frog under a balloon or up in a beak is still drawn at its own
- * place on the track, so who is ahead never stops having an answer you can
- * read off the screen.
- *
- * AND NOTHING HANDS OUT SPEED.  There was a boost on the card once; there is
- * not now.  Everything on it is a way for a race to go wrong, which is the
- * only kind of race where the running is what decides it.
+ * NONE OF IT HIDES THE RACE.  Every event is announced across the top as it
+ * happens, and a frog in the air or in the jaws is still drawn at its own
+ * place on the track, so who is ahead never stops having an answer.
  *
  * EVERY ONE OF THOSE IS IN THE SAMPLER TOO.  `step` is the only arithmetic
  * that moves a frog, and both the race the player watches and the headless
@@ -479,14 +470,19 @@ function hopPose(u: number): { sx: number; sy: number; rot: number } {
     const a = (u - TAKEOFF) / (LAND - TAKEOFF);
     const v = 1 - 2 * a; // +1 leaving the ground, 0 at the top, -1 coming down
     const rise = Math.abs(v);
-    // facing the player there is no nose to pitch up; it rocks a little
-    return { sx: 1 - 0.13 * rise, sy: 1 + 0.2 * rise, rot: -0.07 * v };
+    // ---- A BODY WITH WEIGHT, NOT A RUBBER BALL.  It was squashed to two
+    // thirds on every landing and stretched a fifth on every take-off, which
+    // is a cartoon.  A frog that is running hard stays mostly the shape it
+    // is: a little long off the ground, a little compressed taking the
+    // landing, and pitched INTO the way it is going the whole time -- more
+    // coming down than going up, because that is where the weight is.
+    return { sx: 1 - 0.07 * rise, sy: 1 + 0.11 * rise, rot: 0.07 - 0.05 * v };
   }
   const groundSpan = 1 - LAND + TAKEOFF;
   const gp = (u >= LAND ? u - LAND : u + 1 - LAND) / groundSpan;
-  // 0.66 flat on impact, up to 0.88 as it absorbs, back to 0.74 as it coils
-  const sy = gp < 0.45 ? 0.66 + (0.22 * gp) / 0.45 : 0.88 - (0.14 * (gp - 0.45)) / 0.55;
-  return { sx: 1 + (1 - sy) * 0.85, sy, rot: -0.03 * gp };
+  // 0.8 taking the landing, up to 0.94 as it absorbs, back to 0.86 as it coils
+  const sy = gp < 0.45 ? 0.8 + (0.14 * gp) / 0.45 : 0.94 - (0.08 * (gp - 0.45)) / 0.55;
+  return { sx: 1 + (1 - sy) * 0.7, sy, rot: 0.1 - 0.06 * gp };
 }
 /**
  * ================= WHAT HAPPENS TO FROGS =================
@@ -558,11 +554,45 @@ const DIZZY_S = BIRD_TAKEN_S - BIRD_LIFT_S - BIRD_DROP_S;
  */
 const BEAK = { x: 1, y: 8 };
 
-/** ---- THE BALLOON.  Lifts, tows it forward, lets go, and it comes down. */
-const BALLOON_S = 2.0;
-const BALLOON_DOWN_S = 0.5;
-const BALLOON_GAIN = 2.0;
-const BALLOON_H = 12;
+/**
+ * ---- THE FALLING ROCK.  A shadow first, growing on the lane under the frog
+ * for over a second, then the rock -- and it either lands on the frog or it
+ * does not.  Flattened is a second and a half on the grass; missed by a hair
+ * is a fright, and a fright is pace (see RUSH).  The shadow is the fairness:
+ * nobody is hit by something they did not see coming.
+ */
+const ROCK_WARN_S = 1.1;
+const ROCK_HIT_S = 1.6;
+const ROCK_ODDS = 0.5;
+
+/**
+ * ---- THE NEAR MISS, which is worth something.  A frog that has just been
+ * missed by a rock or leapt a trap as it snapped runs scared for most of a
+ * second: pure pace, drawn as streaks off its back.
+ */
+const RUSH_S = 0.9;
+const RUSH_GAIN = 0.7;
+
+/**
+ * ---- THE TRAP.  A set of iron jaws is dropped on the lane a second ahead of
+ * the frog, open, where anybody can see it.  The frog either hops it at the
+ * last moment -- the jaws bang shut under it and it is away on a near miss --
+ * or it is caught, and spends a second and a half wrenching itself out.
+ */
+const TRAP_LEAD = 2.6;
+const TRAP_S = 1.4;
+const TRAP_ODDS = 0.5;
+const TRAP_HOP_S = 0.45;
+const TRAP_HOP_GAIN = 0.3;
+const TRAP_HOP_H = 12;
+
+/**
+ * ---- THE BURST.  The frog puts its head down and goes: a second and a bit
+ * of flat-out running, worth about a second and a half of ground.  With a
+ * frog just in front of it, it is a slipstream and a slingshot past.
+ */
+const BURST_S = 1.2;
+const BURST_GAIN = 1.4;
 
 /**
  * ---- THE FLY.  It crosses the lanes, somebody eats it, and it sleeps it off.
@@ -591,24 +621,25 @@ const GOLD_SURGE_S = 0.9;
 const GOLD_CROSS_S = 3.6;
 
 /**
- * ---- AND THERE IS NO BOOST.
- *
- * There was one: a fifth more pace for two seconds, dealt off the same card as
- * everything else.  Nothing in the race hands out speed any more.  What is
- * left is a race between four frogs and a list of things that go wrong, which
- * is the only kind of race where the running matters -- the trail, the lean
- * and the face it used to wear all still exist, because the golden fly wears
- * them, and that is now the one thing on the card that makes anybody quicker.
+ * ---- AND BOOSTS ARE EARNED OR DEALT, NEVER HANDED TO THE LEADER.  The
+ * golden fly, a burst and the fright of a near miss are the ways a frog goes
+ * quicker, and every one of them lands on whoever the card or the luck picks.
  */
 
-/** ---- THE MUD.  A quarter off for two seconds, with the splash to match. */
-
-/** ---- THE WIND.  One second of gust, forward or back, and it is drawn. */
-
-/** ---- THE SUPER JUMP.  One long arc that lands a second and a half up. */
+/**
+ * ---- THE LEAP.  A log across the lane and a frog that takes it at full
+ * tilt: one long arc that lands a second and a half up the track -- or, four
+ * times in ten, does not.  A leap that is going wrong LOOKS wrong from the top
+ * of the arc (it starts to turn over), then comes down short and tumbles for
+ * over a second, which leaves it worse off than if it had never jumped.
+ */
 const JUMP_S = 1.5;
 const JUMP_GAIN = 1.5;
 const JUMP_H = 22;
+const JUMP_CLEAN_ODDS = 0.6;
+const CRASH_S = 1.3;
+/** How much of the gain a leap that is going to crash still gets before it does. */
+const CRASH_SHORT = 0.35;
 
 /** ---- THE SLIP.  Legs go, slides, gets up.  It costs about a second. */
 const SLIP_S = 1.1;
@@ -702,21 +733,9 @@ const JET_RISE_S = 0.25;
  * Nothing traps a frog: every state below runs on its own clock and hands the
  * frog back to `run` when it expires.
  */
-const ROCKET_S = 0.85;
-const ROCKET_GAIN = 2.1;
-const ROCKET_H = 5;
 const PUDDLE_S = 0.6;
 const PUDDLE_H = 9;
 const PUDDLE_COST = 0.45;
-/**
- * THE BUTTERFLY IS A FULL STOP, not a slow.
- *
- * It was a 1.1 second gear at 0.72, which on a track where everything else is
- * doing something dramatic read as a frog having a slightly worse second.  A
- * frog that sees a butterfly stops dead and watches it, and four seconds of
- * standing still in a thirty second race is a real price for a real moment.
- */
-const FLUTTER_S = 4.0;
 
 /**
  * ---- THE CARD OF EFFECTS, AND THE RULE THAT EVERY FROG IS ON IT.
@@ -731,13 +750,15 @@ const FLUTTER_S = 4.0;
  * belongs to the frogs.
  */
 const EFFECTS = [
-  'bird', 'balloon', 'fly', 'golden', 'jump', 'slip',
-  /** Flat, fast, and the biggest gain on the card. */
-  'rocket',
+  'bird', 'fly', 'golden', 'jump', 'slip',
+  /** A rock out of the sky: flattened, or missed by a hair. */
+  'rock',
+  /** Iron jaws set on the lane: caught, or hopped as they snap. */
+  'snap',
+  /** Head down and flat out -- a slipstream when there is someone to pass. */
+  'burst',
   /** A puddle that sits ON THE TRACK -- see `puddles`, which is where it lives. */
   'puddle',
-  /** A butterfly, which is not a slow but a full stop -- see `flutter`. */
-  'flutter',
 ] as const;
 type EffectKind = (typeof EFFECTS)[number];
 const BAND_FROM = 0.12;
@@ -768,8 +789,19 @@ const EXTRA_MAX = 2;
  * the pile-up out instead of dropping it.
  */
 const BUSY_CAP = 2;
-/** Nothing new starts after this much of the race has gone. */
+/** Nothing new starts after this much of the race has gone -- except the finale. */
 const LAST_CALL = 0.78;
+/**
+ * ---- THE FINAL STRETCH.  The race gets meaner at the end on purpose: one or
+ * two more big moments are dealt into the last third -- a rock, a trap, a
+ * burst or a leap, good or bad, on anybody -- so the run-in is where places
+ * change hands rather than a procession to the tape.
+ */
+const FINALE_FROM = 0.68;
+const FINALE_TO = 0.9;
+const FINALE_MIN = 1;
+const FINALE_MAX = 2;
+const FINALE_KINDS: EffectKind[] = ['rock', 'snap', 'burst', 'jump'];
 /**
  * ---- EXCEPT THE BUG, WHICH IS A LATE ONE ON PURPOSE.
  *
@@ -799,6 +831,8 @@ interface Booking {
   done: boolean;
   /** One of the four the field is guaranteed, rather than a sprinkled extra. */
   core: boolean;
+  /** Dealt into the final stretch. */
+  finale?: boolean;
 }
 
 /** Ten a ticket; twenty back.  Kept here so the game and the cabinet agree. */
@@ -880,10 +914,14 @@ function tow(r: Run, field: Run[] | undefined): number {
  * way that stops, and each of them is something the player can see happen
  * rather than a number going down.
  */
-type Going = 'run' | 'hole' | 'slip' | 'taken' | 'sleep' | 'eat' | 'balloon' | 'jump' | 'dizzy'
+type Going = 'run' | 'hole' | 'slip' | 'taken' | 'sleep' | 'eat' | 'jump' | 'dizzy'
   | 'splash'
-  /** Watching a butterfly, and not racing while it does. */
-  | 'flutter'
+  /** Flattened by a rock. */
+  | 'hit'
+  /** In the jaws of a trap. */
+  | 'caught'
+  /** A leap that came down wrong, tumbling. */
+  | 'crash'
   /**
    * LET GO BY THE BIRD AND ON ITS WAY DOWN.
    *
@@ -933,9 +971,23 @@ interface Run {
   /** One long arc: where it left the ground and where it lands. */
   jumpFrom: number;
   jumpTo: number;
-  /** Seconds of float left, and how far through the let-go it is. */
-  balloon: number;
-  balloonDown: number;
+  /** Seconds of flat-out running left (a burst, or a near miss), and what it adds. */
+  rush: number;
+  rushPush: number;
+  /** Seconds until the rock lands, 0 when none is coming; where it came down. */
+  rock: number;
+  rockX: number;
+  /** A trap on this lane: where, and 0 none / 1 set / 2 caught it / 3 hopped it. */
+  trapX: number;
+  trap: number;
+  /** The leap in the air is going to come down wrong. */
+  crash: boolean;
+  /**
+   * What just happened to it, for the drawing and the commentary to pick up
+   * and clear.  The model only ever writes it; the headless sampler never
+   * reads it.
+   */
+  cue: string;
   /** How far through a lick at a fly it is, 0..1. */
   tongue: number;
   /** A slip's slide, and a lean into a shove.  Drawing only. */
@@ -945,15 +997,13 @@ interface Run {
   jet: number;
   jetSpeed: number;
 
-  // ---- THE LAUNCH ARC, so one mechanism serves the super jump, the mushroom,
-  // the rocket, the tongue and the bush.  How long it is in the air and how
-  // high it goes is all that separates a rocket from a hop over a bush.
+  // ---- THE LAUNCH ARC, so one mechanism serves the leap and the hop over a
+  // trap.  How long it is in the air and how high it goes is all that
+  // separates them.
   arcS: number;
   arcH: number;
-  /** A rocket does not arc like a frog: it is held flat. */
+  /** Held flat rather than arced.  Nothing on the card uses it now. */
   arcFlat: number;
-  /** Degrees a second of spin it is carrying.  Drawing only. */
-  spin: number;
   /** How far through the fall from the bird it is, 0 at the top. */
   fell: number;
   /** How far through a splash it is, 1 down to 0. */
@@ -1021,9 +1071,10 @@ let bird: Bird = makeBird();
 let birdArt: Phaser.GameObjects.Container | null = null;
 let fly: Fly = makeFly();
 let flyArt: Phaser.GameObjects.Container | null = null;
-/** The butterfly's own flight: where it is, how it is moving, where it is wandering to. */
-let butterfly = { x: 90, y: 40, vx: 0, vy: 0, wx: 90, wy: 40, wT: 0 };
-let butterflyArt: Phaser.GameObjects.Container | null = null;
+/** The race has reached its final stretch, and says so. */
+let finaleOn = false;
+/** Seconds left on the commentary line before it goes back to quiet. */
+let callT = 0;
 let jet: Jet = makeJet();
 /** What is booked to happen to whom, and when.  See `bookField`. */
 let card: Booking[] = [];
@@ -1038,18 +1089,12 @@ const fxWas = new Map<number, EffectKind | null>();
  */
 const FX_SOUND: Partial<Record<EffectKind, Parameters<typeof audio.sfx>[0]>> = {
   bird: 'throw_whoosh',
-  balloon: 'water_rise',
   fly: 'ui_hover',
   golden: 'cha_ching',
-  jump: 'hop_wet',
-  slip: 'fence_thunk',
-  rocket: 'throw_whoosh',
   puddle: 'splash',
-  flutter: 'ui_hover',
 };
 const FX_VOL: Partial<Record<EffectKind, number>> = {
-  bird: 0.5, balloon: 0.45, fly: 0.4, golden: 0.5, jump: 0.55, slip: 0.5,
-  rocket: 0.6, puddle: 0.55, flutter: 0.4,
+  bird: 0.5, fly: 0.4, golden: 0.5, puddle: 0.55,
 };
 /** How many tickets are on this race.  Ten tokens each, twenty back each. */
 let tickets = 1;
@@ -1072,9 +1117,9 @@ export const frogRace: MinigameModule = {
     objective: [
       `${FIELD_WORD} FROGS RACE. BACK ONE OF THEM.`,
       'NOTHING SAYS WHICH. IT IS A GUESS.',
-      'BIRDS, BALLOONS, FLIES, MUD, WIND, A SLIP.',
-      'SOMETHING HAPPENS TO EVERY FROG.',
-      'THEY RUN CLOSE AND IT IS WON AT THE END.',
+      'ROCKS FALL, TRAPS SNAP, HAWKS DIVE.',
+      'A NEAR MISS OR A BURST CAN STEAL IT.',
+      'THE FINAL STRETCH IS THE WILDEST.',
       'THIRTY SECONDS. FIRST TO THE TAPE WINS.',
       '10 A TICKET, 20 BACK ON EACH.',
     ],
@@ -1174,8 +1219,6 @@ export const frogRace: MinigameModule = {
           birdPhase: bird.phase,
           birdTarget: bird.target,
           card: racers
-            // `balloon` is not a `going` -- a frog under one is still running --
-            // so a harness that only reads `going` cannot see it at all.
             .map((r) => ({
               name: RUNNERS[r.i].name,
               form: Math.round(r.form * 100),
@@ -1246,6 +1289,32 @@ export const frogRace: MinigameModule = {
           return r ? fire(kind, r, bird, fly) : false;
         },
         kinds: [...EFFECTS],
+        /** The trap and the rock on every lane, as drawn. */
+        gearNow: () =>
+          racers.map((r) => {
+            const g = gear.get(r.i);
+            return {
+              trap: r.trap,
+              trapX: r.trapX,
+              rock: r.rock,
+              jawL: g?.jawL.rotation,
+              jawR: g?.jawR.rotation,
+              trapShown: g?.trap.visible,
+              rockShown: g?.rock.visible,
+            };
+          }),
+        /** Holes and puddles on every lane, in pixels along the track. */
+        furniture: () => racers.map((r) => ({ holes: r.holes.map((h) => h * DIST), puddles: r.puddles.map((q) => q * DIST) })),
+        /** Deal fresh fields and report the closest any puddle came to a hole on its lane. */
+        waterGap: (n: number) => {
+          let worst = Infinity;
+          for (let k = 0; k < n; k++) {
+            for (const f of makeField()) {
+              for (const h of f.holes) for (const q of f.puddles) worst = Math.min(worst, Math.abs(h - q) * DIST);
+            }
+          }
+          return worst;
+        },
         /** The card of effects as it stands, and what each frog is in. */
         effects: () => ({
           card: card.map((b) => ({ at: Math.round(b.at * 100) / 100, who: RUNNERS[b.who].name, kind: b.kind, done: b.done })),
@@ -1535,6 +1604,7 @@ export const frogRace: MinigameModule = {
       banner?.setText(n > 0 ? `${n}` : 'GO!');
       if (countdown <= 0) {
         phase = 'racing';
+        callT = 0.8;
         audio.sfx('buzzer', 0.4);
       }
     } else if (phase === 'racing') {
@@ -1556,12 +1626,40 @@ export const frogRace: MinigameModule = {
         const was = fxWas.get(r.i) ?? null;
         if (r.fx !== was) {
           fxWas.set(r.i, r.fx);
-          if (r.fx) audio.sfx(FX_SOUND[r.fx] ?? 'ui_blip', FX_VOL[r.fx] ?? 0.5);
+          if (r.fx && FX_SOUND[r.fx]) audio.sfx(FX_SOUND[r.fx]!, FX_VOL[r.fx] ?? 0.5);
+          if (r.fx === 'bird' && r.going === 'taken') call(`A HAWK TAKES ${RUNNERS[r.i].name}`, PALETTE.blood);
+          if (r.fx === 'golden') call(`${RUNNERS[r.i].name} GULPS A GOLDEN FLY`, PALETTE.gold);
+          if (r.fx === 'fly') call(`${RUNNERS[r.i].name} EATS A BUG - OUT COLD`, PALETTE.ash);
+          if (r.fx === 'puddle') call(`${RUNNERS[r.i].name} HITS THE WATER`, PALETTE.fog);
         }
+      }
+      // ---- WHAT JUST HAPPENED, said out loud and shown.  The model leaves a
+      // cue on the frog; this is the one place that turns it into a sound, a
+      // line of commentary and the dust, and clears it.
+      for (const r of racers) {
+        if (r.cue) {
+          onCue(r, r.cue);
+          r.cue = '';
+        }
+      }
+      if (!finaleOn && raceT >= FINALE_FROM * RACE_S && winner < 0) {
+        finaleOn = true;
+        call('FINAL STRETCH!', PALETTE.gold, 1.8);
+        audio.sfx('bell_ding', 0.6);
+        sceneRef.cameras.main.shake(260, 0.0025);
+      }
+      callT -= dt;
+      if (callT <= 0 && banner) {
+        banner.setText(finaleOn ? 'FINAL STRETCH' : '');
+        banner.setTint(PALETTE.gold);
+        banner.setAlpha(finaleOn ? 0.55 + 0.45 * Math.abs(Math.sin(clock / 180)) : 1);
       }
       const wasLit = jet.who;
       stepJet(jet, racers, raceT, dt);
-      if (jet.who >= 0 && wasLit < 0) audio.sfx('throw_whoosh', 0.75);
+      if (jet.who >= 0 && wasLit < 0) {
+        audio.sfx('throw_whoosh', 0.75);
+        call(`${RUNNERS[jet.who].name} LIGHTS A JETPACK!`, PALETTE.gold);
+      }
       if (bird.phase === 1 && bird.t <= dt) audio.sfx('throw_whoosh', 0.5);
 
       const home = racers.filter((r) => r.going !== 'taken' && r.x >= DIST);
@@ -1600,38 +1698,70 @@ export const frogRace: MinigameModule = {
       body.setDepth(r.going === 'taken' ? 39 : 10 + r.i * 0.6 + Math.min(8, r.lift / 2.5));
       /** Legs flung out wide, 0 to 1: set by a fall, read by the legs below. */
       let splay = 0;
+      /** Where in a stride the legs are drawn: the hop, unless they are scrabbling. */
+      let legU = r.hop;
+      /** Spray coming off it as it skids, 0 to 1. */
+      let spray = 0;
 
       if (r.going === 'hole') {
         // Down in a hole: sunk to the shoulders, and scrabbling.
         body.setScale(1, 0.45);
         body.setRotation(0);
         body.y = laneY + 3 + Math.sin(clock / 60) * 0.6;
-      } else if (r.going === 'slip') {
-        // ---- THE SLIP: FEET OUT, BUMP, SIT, UP.
+      } else if (r.going === 'slip' || r.going === 'crash') {
+        // ---- LOSING IT.
         //
-        // It used to tip the frog fifty degrees onto its side, which on a
-        // frog drawn face-on is not a fall -- it is the whole picture rotated,
-        // and at this size a rotated sprite is a smear.  A frog that slips
-        // does what anything with its feet taken away does: a wobble as the
-        // feet go, down onto its bottom with a bump and a little bounce, legs
-        // shot out either side, a dazed sit -- then a hop back up.
+        // A SLIP starts as a loss of traction you can see: the feet scrabble
+        // faster than the frog is going and it rocks back on them.  Then they
+        // shoot out from under it and it goes down hard on its backside,
+        // skids on across the grass with its legs flung out and spray coming
+        // off it, and scrambles up.  A CRASHED LANDING skips the scrabble --
+        // it arrives nose first and cartwheels once before it skids.
         //
-        // `p` runs 0 to 1 across the whole thing, so every beat below is a
-        // slice of one clock and none of them can drift out of step.
-        const p = Phaser.Math.Clamp(1 - r.stuck / SLIP_S, 0, 1);
-        const wobble = Math.min(1, p / 0.16) * (1 - Math.min(1, Math.max(0, (p - 0.16) / 0.06)));
-        const drop = ease(Phaser.Math.Clamp((p - 0.14) / 0.12, 0, 1));
-        const bounce = Math.sin(Phaser.Math.Clamp((p - 0.26) / 0.14, 0, 1) * Math.PI);
+        // `p` runs 0 to 1 across the whole thing, so every beat is a slice of
+        // one clock and none of them can drift out of step with the model.
+        const crash = r.going === 'crash';
+        const total = crash ? CRASH_S : SLIP_S;
+        const p = Phaser.Math.Clamp(1 - r.stuck / total, 0, 1);
+        const lose = crash ? 1 : Phaser.Math.Clamp(p / 0.2, 0, 1);
+        const scrabble = crash ? 0 : 1 - lose;
+        const goes = crash ? 0 : 0.2;
+        const down = ease(Phaser.Math.Clamp((p - goes) / 0.1, 0, 1));
+        const bump = Math.sin(Phaser.Math.Clamp((p - goes - 0.08) / 0.14, 0, 1) * Math.PI);
         const up = ease(Phaser.Math.Clamp((p - 0.74) / 0.26, 0, 1));
-        const sit = drop * (1 - up);
+        const sit = down * (1 - up);
         const hop = Math.sin(up * Math.PI);
         splay = sit;
-        body.setScale(
-          1 + 0.24 * sit - 0.1 * bounce - 0.08 * hop,
-          1 - 0.3 * sit + 0.12 * bounce + 0.14 * hop,
-        );
-        body.setRotation(Math.sin(p * 38) * 0.22 * wobble + Math.sin(clock / 120) * 0.06 * sit * (1 - bounce));
-        body.y = laneY + 3 * sit - 2 * bounce - 2.5 * hop;
+        spray = sit * Phaser.Math.Clamp(r.slide * 1.6, 0, 1);
+        if (scrabble > 0) legU = (clock / 55) % 1;
+        // rocking back on the scrabble, over onto its seat, a jolt as it lands
+        let rot = -0.34 * lose * (1 - down) + Math.sin(clock / 22) * 0.1 * scrabble;
+        rot += -0.26 * sit * (1 - bump) + Math.sin(clock / 70) * 0.05 * sit;
+        if (crash) rot -= Math.PI * 2 * ease(Phaser.Math.Clamp(p / 0.34, 0, 1));
+        body.setScale(1 + 0.22 * sit - 0.1 * bump - 0.06 * hop, 1 - 0.28 * sit + 0.12 * bump + 0.12 * hop);
+        body.setRotation(rot);
+        body.y = laneY + 3 * sit - 2.5 * bump - 3 * hop - (crash ? 6 * Math.sin(Phaser.Math.Clamp(p / 0.34, 0, 1) * Math.PI) : 0);
+      } else if (r.going === 'hit') {
+        // ---- FLATTENED.  Pressed into the grass under the rock, quivering,
+        // then it peels itself up and shakes it off.
+        const p = Phaser.Math.Clamp(1 - r.stuck / ROCK_HIT_S, 0, 1);
+        const flat = 1 - ease(Phaser.Math.Clamp((p - 0.55) / 0.3, 0, 1));
+        const shake = Math.sin(clock / 18) * 0.05 * flat;
+        const pop = Math.sin(Phaser.Math.Clamp((p - 0.82) / 0.18, 0, 1) * Math.PI);
+        splay = flat;
+        body.setScale(1 + 0.45 * flat + shake, 1 - 0.55 * flat + 0.1 * pop);
+        body.setRotation(shake);
+        body.y = laneY + 4.5 * flat - 3 * pop;
+      } else if (r.going === 'caught') {
+        // ---- IN THE JAWS.  Heaving against them, side to side, and then it
+        // wrenches free with a hop.
+        const p = Phaser.Math.Clamp(1 - r.stuck / TRAP_S, 0, 1);
+        const heave = Math.sin(clock / 48);
+        const free = Math.sin(Phaser.Math.Clamp((p - 0.84) / 0.16, 0, 1) * Math.PI);
+        legU = (clock / 90) % 1;
+        body.setScale(1 + 0.06 * Math.abs(heave), 0.9 - 0.05 * Math.abs(heave) + 0.12 * free);
+        body.setRotation(heave * 0.26 * (1 - free));
+        body.y = laneY + 1 - 4 * free;
       } else if (r.going === 'falling') {
         // ---- COMING DOWN OUT OF THE SKY.
         //
@@ -1655,22 +1785,6 @@ export const frogRace: MinigameModule = {
         splay = 1 - brace;
         body.setScale(0.94 + 0.16 * brace, 1.1 - 0.22 * brace);
         body.setRotation(Math.sin(clock / 85) * 0.3 * (1 - brace));
-      } else if (r.going === 'flutter') {
-        // ---- WATCHING THE BUTTERFLY.
-        //
-        // Not frozen -- STOPPED.  It sits back on its haunches, tracks the
-        // thing with its whole head, paws at it once or twice, and gathers
-        // itself again as the last half second runs out.  A frog that simply
-        // stopped moving would read as the game hanging.
-        const left = Phaser.Math.Clamp(r.stuck / FLUTTER_S, 0, 1);
-        const settle = ease(Math.min(1, (1 - left) * 5));
-        const ready = ease(Math.max(0, (0.32 - left) / 0.32));
-        // one swipe at it, about halfway through
-        const swipe = Math.max(0, Math.sin((1 - left) * Math.PI * 2.4)) * (1 - ready);
-        const track = Math.sin(clock / 210) * 0.16;
-        body.setScale(1.06 - 0.1 * ready + swipe * 0.08, 0.86 + 0.16 * ready + swipe * 0.1);
-        body.setRotation(-0.1 * settle + track * settle - swipe * 0.3 + 0.1 * ready);
-        body.y = laneY + 2.5 * settle * (1 - ready) - swipe * 2;
       } else if (r.going === 'taken') {
         // ---- HELD IN THE BEAK, and held THERE.  The frog is drawn at the
         // beak -- the bird's position plus the beak's own offset inside its
@@ -1727,11 +1841,6 @@ export const frogRace: MinigameModule = {
         body.setScale(0.9, 1.14);
         body.setRotation(-0.2);
         body.y = laneY - 1;
-      } else if (r.going === 'balloon') {
-        // ---- UNDER A BALLOON.  Hanging, swinging, toes pointed.
-        body.setScale(0.94, 1.08);
-        body.setRotation(Math.sin(clock / 240) * 0.22);
-        body.y = laneY - r.lift;
       } else if (r.going === 'splash') {
         // ---- OUT OF THE PUDDLE.  Shot up by the water, arms out, and it
         // comes down flatter than it went up.
@@ -1740,20 +1849,23 @@ export const frogRace: MinigameModule = {
         body.setRotation(Math.sin(k * Math.PI * 2) * 0.3);
         body.y = laneY - r.lift;
       } else if (r.going === 'jump') {
-        // ---- A LAUNCH.  One long arc: tucked at the top, stretched at both
-        // ends, and nose-down coming in.  A ROCKET does not fly like that --
-        // it is held nose-up and rigid by the thing strapped to it, and it
-        // shakes -- so the one branch draws both off `arcFlat`.
+        // ---- A LAUNCH.  Driven off the log stretched out, tucked at the top,
+        // reaching for the ground coming in.  A leap that is going to crash
+        // starts to go over from the top of the arc -- legs flailing, turning
+        // -- so the landing is something the player saw coming.
         const span = r.arcS > 0 ? r.arcS : JUMP_S;
         const k = 1 - Phaser.Math.Clamp(r.stuck / span, 0, 1);
         const v = 1 - 2 * k;
-        if (r.arcFlat > 0) {
-          body.setScale(1.2, 0.86);
-          body.setRotation(-0.18 + Math.sin(clock / 26) * 0.06);
-        } else {
-          body.setScale(1 - 0.18 * Math.abs(v) + 0.1, 1 + 0.26 * Math.abs(v));
-          body.setRotation(-0.55 * v);
+        const tuck = 1 - Math.abs(v);
+        body.setScale(1 - 0.1 * Math.abs(v) + 0.06 * tuck, 1 + 0.16 * Math.abs(v) - 0.08 * tuck);
+        let rot = 0.12 - 0.18 * v;
+        if (r.crash) {
+          const wrong = Phaser.Math.Clamp((k - 0.45) / 0.55, 0, 1);
+          rot += 1.1 * wrong * wrong + Math.sin(clock / 30) * 0.2 * wrong;
+          splay = wrong;
+          legU = (clock / 70) % 1;
         }
+        body.setRotation(rot);
         body.y = laneY - r.lift;
       } else if (phase !== 'racing') {
         // ---- ON THE START LINE, AND STOOD ON IT.
@@ -1779,10 +1891,11 @@ export const frogRace: MinigameModule = {
         // feet are pinned as it squashes — a frog that shrinks about its
         // middle sinks into the track instead of flattening onto it.
         const p = hopPose(r.hop);
-        // A golden fly tips it forward: read off
-        // the same timers the model uses.
-        const lean = r.gold > 0 ? -0.16 : 0;
-        body.setScale(p.sx * (r.gold > 0 ? 1.08 : 1), p.sy);
+        // Flat out -- a golden fly, a burst, the fright of a near miss -- it
+        // leans hard into the way it is going and stretches long.
+        const flat = r.gold > 0 || r.rush > 0;
+        const lean = flat ? 0.2 : finaleOn ? 0.06 : 0;
+        body.setScale(p.sx * (flat ? 1.08 : 1), p.sy * (flat ? 0.96 : 1));
         body.setRotation(p.rot + lean);
         body.y = laneY - r.lift + FOOT * (1 - p.sy);
       }
@@ -1796,9 +1909,6 @@ export const frogRace: MinigameModule = {
         g?.setVisible(on);
         return on ? g : undefined;
       };
-      const launching = r.going === 'jump';
-      const rk = showProp('rocketArt', launching && r.fx === 'rocket');
-      if (rk) rk.setScale(1, 0.8 + Math.random() * 0.45);
       const sp = showProp('splashArt', r.going === 'splash');
       if (sp) sp.setScale(1, 0.5 + r.splash);
 
@@ -1813,10 +1923,10 @@ export const frogRace: MinigameModule = {
       body.setData('prevLift', r.lift);
       let paddle = 0;
       if (r.lift < prevLift - 0.02 && r.lift > 1 && r.going !== 'taken') {
-        const high = Phaser.Math.Clamp(r.lift / BALLOON_H, 0, 1);
+        const high = Phaser.Math.Clamp(r.lift / (JUMP_H / 2), 0, 1);
         // the bird's drop draws its own rock (see `falling`); anything else
         // coming down gets this one
-        if (r.going !== 'falling') body.setRotation(body.rotation + Math.sin(clock / 46) * 0.3 * high);
+        if (r.going !== 'falling' && r.going !== 'jump') body.setRotation(body.rotation + Math.sin(clock / 46) * 0.3 * high);
         paddle = 1 + high * 2.4;
       }
 
@@ -1829,7 +1939,7 @@ export const frogRace: MinigameModule = {
       const legRear = body.getData('legRear') as Phaser.GameObjects.Container | undefined;
       const legFore = body.getData('legFore') as Phaser.GameObjects.Container | undefined;
       if (legRear && legFore) {
-        const lp = legPose(r.hop);
+        const lp = legPose(legU);
         const kickA = paddle > 0 ? Math.sin(clock / 34) * paddle : 0;
         const kickB = paddle > 0 ? Math.sin(clock / 34 + 2.1) * paddle : 0;
         // Seen from the front, the big back legs are a pair out either side:
@@ -1872,16 +1982,24 @@ export const frogRace: MinigameModule = {
           zzz.setAlpha(1 - ((clock / 90) % 6) / 8);
         }
       }
-      const balloon = body.getData('balloon') as Phaser.GameObjects.Container | undefined;
-      if (balloon) {
-        const up = r.going === 'balloon';
-        balloon.setVisible(up);
-        if (up) {
-          // The string stays taut and the skin drifts: it is holding the frog
-          // up, not sitting on top of it.
-          balloon.setRotation(Math.sin(clock / 300) * 0.16);
-          balloon.setScale(1, 1 + Math.sin(clock / 420) * 0.04);
-        }
+      // ---- THE SPRAY off a skid: grass and water thrown up from its heels.
+      const sprayBits = body.getData('spray') as Phaser.GameObjects.Rectangle[] | undefined;
+      if (sprayBits) {
+        sprayBits.forEach((bit, k) => {
+          bit.setVisible(spray > 0.05);
+          if (spray <= 0.05) return;
+          const t = ((clock / 160 + k * 0.27) % 1);
+          bit.setPosition(9 + t * 9 + k, 6 - Math.sin(t * Math.PI) * (4 + k * 1.5));
+          bit.setAlpha((1 - t) * spray);
+        });
+      }
+      // ---- A NEAR MISS: the "!" over its head.
+      const alert = body.getData('alert') as Phaser.GameObjects.BitmapText | undefined;
+      if (alert) {
+        const left = Math.max(0, ((body.getData('alertT') as number) ?? 0) - dt);
+        body.setData('alertT', left);
+        alert.setVisible(left > 0);
+        if (left > 0) alert.setY(-24 - (0.7 - left) * 8);
       }
       const pack = body.getData('jet') as Phaser.GameObjects.Container | undefined;
       if (pack) {
@@ -1904,7 +2022,7 @@ export const frogRace: MinigameModule = {
       // ---- THE SUGAR.  Three streaks off its back, drawn only while it runs.
       const trail = body.getData('trail') as Phaser.GameObjects.Rectangle[] | undefined;
       if (trail) {
-        const going = r.gold > 0 && r.going === 'run';
+        const going = (r.gold > 0 || r.rush > 0) && r.going === 'run';
         trail.forEach((line, k) => {
           line.setVisible(going);
           if (!going) return;
@@ -1948,6 +2066,23 @@ export const frogRace: MinigameModule = {
       }
     }
 
+    // ---- THE TRACK FURNITURE THE EVENTS BRING WITH THEM: the rock and its
+    // shadow, the trap, the log, the dust and the skid marks.
+    for (const r of racers) {
+      const g = gear.get(r.i);
+      if (g) drawGear(r, g, LANE_T + r.i * LANE_H + LANE_H / 2 + 1, dt);
+      // a scuff of dust where it lands, every hop, more of it flat out
+      const body = r.body;
+      const prevHop = (body.getData('prevHop') as number | undefined) ?? r.hop;
+      body.setData('prevHop', r.hop);
+      if (phase === 'racing' && r.going === 'run' && r.hop < prevHop - 0.5) {
+        const flat = r.rush > 0 || r.gold > 0;
+        spawnDust(START_X + r.x - 3, LANE_T + r.i * LANE_H + LANE_H / 2 + 7, flat ? 2 : 1, flat ? 16 : 9);
+      }
+    }
+    stepPuffs(dt);
+    stepSkids(dt);
+
     // ---- the fly, closing on the frog it was sent to
     if (flyArt) {
       flyArt.setVisible(fly.on);
@@ -1969,9 +2104,6 @@ export const frogRace: MinigameModule = {
         if (fly.gold) gold.setScale(1 + Math.sin(clock / 90) * 0.12);
       }
     }
-
-    // ---- the butterfly: always about, and going to whoever it is for
-    if (butterflyArt) stepButterfly(dt);
 
     // ---- the bird, and the shadow that arrives before it does
     if (birdArt) {
@@ -2010,7 +2142,10 @@ export const frogRace: MinigameModule = {
     ticketLabel = null;
     birdArt = null;
     flyArt = null;
-    butterflyArt = null;
+    for (const p of puffs) p.obj.destroy();
+    puffs = [];
+    skids = [];
+    gear.clear();
     banner = null;
     sub = null;
     goBtn = null;
@@ -2039,9 +2174,30 @@ export const frogRace: MinigameModule = {
 function step(r: Run, dt: number, field?: Run[]): void {
   if (r.lean > 0) r.lean = Math.max(0, r.lean - dt);
   if (r.gold > 0) r.gold = Math.max(0, r.gold - dt);
-  // Skates are seconds left like everything else, and expire on their own.
-  if (r.spin > 0 && r.going === 'run') r.spin = Math.max(0, r.spin - dt * 900);
-  if (r.going === 'run' && !r.gold && r.jet <= 0) r.fx = null;
+  if (r.rush > 0) r.rush = Math.max(0, r.rush - dt);
+  if (r.going === 'run' && !r.gold && r.jet <= 0 && r.rush <= 0 && r.rock <= 0 && r.trap !== 1) r.fx = null;
+
+  // ---- THE ROCK COMES DOWN.  Wherever the frog has got to by then: if it is
+  // on its feet and running it is a coin flip, and anything else -- in the
+  // air, in the beak, on a jetpack -- is a miss.
+  if (r.rock > 0) {
+    r.rock -= dt;
+    if (r.rock <= 0) {
+      r.rock = 0;
+      r.rockX = r.x;
+      if (r.going === 'run' && r.jet <= 0 && Math.random() < ROCK_ODDS) {
+        r.going = 'hit';
+        r.stuck = ROCK_HIT_S;
+        r.lift = 0;
+        r.hop = 0;
+        r.fx = 'rock';
+        r.cue = 'rock_hit';
+      } else {
+        rushOn(r, RUSH_S, RUSH_GAIN);
+        r.cue = 'rock_miss';
+      }
+    }
+  }
 
   // ---- IN THE BIRD'S FEET, OR ON ITS WAY DOWN FROM THEM.
   //
@@ -2066,35 +2222,9 @@ function step(r: Run, dt: number, field?: Run[]): void {
     return;
   }
 
-  // ---- UNDER THE BALLOON.  It tows, then it lets go and the frog comes down.
-  if (r.going === 'balloon') {
-    if (r.balloon > 0) {
-      r.balloon -= dt;
-      // up over the first half second, held, and the frog is drawn hanging
-      const up = Math.min(1, (BALLOON_S - r.balloon) / 0.5);
-      r.lift = BALLOON_H * ease(Math.min(up, Math.min(1, r.balloon / 0.5) || up));
-      r.lift = BALLOON_H * ease(Math.min(1, Math.min(BALLOON_S - r.balloon, r.balloon + BALLOON_DOWN_S) / 0.5));
-      r.x = Math.min(DIST, r.x + (BASE + (BALLOON_GAIN * SEC) / BALLOON_S) * dt);
-      if (r.balloon <= 0) r.balloonDown = BALLOON_DOWN_S;
-      return;
-    }
-    // let go: it settles back onto the lane rather than dropping out of the sky
-    r.balloonDown -= dt;
-    const k = Phaser.Math.Clamp(r.balloonDown / BALLOON_DOWN_S, 0, 1);
-    r.lift = BALLOON_H * ease(k) * 0.9;
-    r.x = Math.min(DIST, r.x + BASE * dt);
-    if (r.balloonDown <= 0) {
-      r.going = 'run';
-      r.lift = 0;
-      r.hop = 0;
-      r.fx = null;
-    }
-    return;
-  }
-
-  // ---- A LAUNCH.  One arc, from where it took off to where it lands -- and
-  // the same code for the super jump, the mushroom, the rocket, the tongue
-  // and the bush, which differ only in `arcS`, `arcH` and what is drawn.
+  // ---- A LAUNCH.  One arc, from where it took off to where it lands -- the
+  // same code for the leap and the hop over a trap, which differ only in
+  // `arcS`, `arcH` and what is drawn.
   if (r.going === 'jump') {
     r.stuck -= dt;
     const span = r.arcS > 0 ? r.arcS : JUMP_S;
@@ -2104,14 +2234,25 @@ function step(r: Run, dt: number, field?: Run[]): void {
     const h = r.arcH > 0 ? r.arcH : JUMP_H;
     r.lift = r.arcFlat > 0 ? h * Math.min(1, k * 5) * Math.min(1, (1 - k) * 5) : h * 4 * k * (1 - k);
     if (r.stuck <= 0) {
-      r.going = 'run';
       r.lift = 0;
       r.hop = 0;
-      r.fx = null;
       r.arcS = 0;
       r.arcH = 0;
       r.arcFlat = 0;
       r.tongue = 0;
+      if (r.crash) {
+        // ---- AND IT CAME DOWN WRONG.  Short, nose first, and over it goes.
+        r.crash = false;
+        r.going = 'crash';
+        r.stuck = CRASH_S;
+        r.slide = 1;
+        r.fx = 'jump';
+        r.cue = 'crash';
+      } else {
+        r.going = 'run';
+        if (r.fx === 'jump') r.cue = 'landed';
+        r.fx = null;
+      }
     }
     return;
   }
@@ -2156,12 +2297,14 @@ function step(r: Run, dt: number, field?: Run[]): void {
         return;
       }
     }
-  if (r.going === 'slip') {
+    if (r.going === 'slip' || r.going === 'crash') {
       // It keeps sliding for a moment after the legs go, and stops dead.
-      const k = Phaser.Math.Clamp(r.stuck / SLIP_S, 0, 1);
+      const k = Phaser.Math.Clamp(r.stuck / (r.going === 'slip' ? SLIP_S : CRASH_S), 0, 1);
       r.slide = k;
       r.x = Math.min(DIST, r.x + BASE * SLIP_SLIDE * k * dt);
     }
+    // Out of the jaws: they stay on the lane, shut, and it runs on.
+    if (r.going === 'caught' && r.stuck <= 0) r.cue = 'trap_free';
     if (r.stuck <= 0) {
       r.going = 'run';
       r.hop = 0;
@@ -2177,8 +2320,9 @@ function step(r: Run, dt: number, field?: Run[]): void {
   const surging = t > r.surgeAt && t < r.surgeAt + r.surgeFor;
   let speed = pace(r, field, surging, dt);
   // The golden surge is a push rather than a gear: worth the same ground
-  // whoever it lands on.
+  // whoever it lands on.  So is a burst, and so is the fright of a near miss.
   if (r.gold > 0) speed += (GOLD_GAIN * SEC) / GOLD_SURGE_S;
+  if (r.rush > 0) speed += r.rushPush;
   speed = Math.max(2, speed);
 
   // The hop.  It is a real cycle rather than a bob: the frog gathers itself on
@@ -2195,6 +2339,32 @@ function step(r: Run, dt: number, field?: Run[]): void {
   // across the tick rather than sampling it, so the distance is the same
   // whatever the frame rate.
   r.x = Math.min(DIST, r.x + speed * dt * hopTravel(was, du));
+
+  // ---- THE TRAP, when it gets there.  Hopped as the jaws go, or caught.
+  if (r.trap === 1 && r.x >= r.trapX - 5) {
+    if (r.x > r.trapX + 6) {
+      r.trap = 3; // it was past it before it was ever tested (a jetpack, a leap)
+    } else if (Math.random() < TRAP_ODDS) {
+      r.trap = 2;
+      // the jaws close where the frog is, so that is where they are
+      r.trapX = r.x;
+      r.going = 'caught';
+      r.stuck = TRAP_S;
+      r.lift = 0;
+      r.hop = 0;
+      r.fx = 'snap';
+      r.cue = 'trap_caught';
+      return;
+    } else {
+      r.trap = 3;
+      launch(r, TRAP_HOP_S, TRAP_HOP_GAIN, TRAP_HOP_H);
+      r.fx = 'snap';
+      r.cue = 'trap_dodge';
+      // the fright carries on past the landing
+      rushOn(r, RUSH_S + TRAP_HOP_S, RUSH_GAIN);
+      return;
+    }
+  }
 
   if (!landed && was <= 1) {
     // A POTHOLE IS TESTED ON THE WAY IN, not on landing: a frog reaching one
@@ -2226,6 +2396,12 @@ function step(r: Run, dt: number, field?: Run[]): void {
   if (Math.random() < SLIP_CHANCE) slipUp(r);
 }
 
+/** A spell of flat-out running worth `gain` seconds of ground over `secs`. */
+function rushOn(r: Run, secs: number, gain: number): void {
+  r.rush = secs;
+  r.rushPush = (gain * SEC) / secs;
+}
+
 /** Smooth at both ends.  Every staged effect runs through this. */
 function ease(k: number): number {
   const u = Phaser.Math.Clamp(k, 0, 1);
@@ -2255,6 +2431,7 @@ function slipUp(r: Run): void {
   r.slide = 1;
   r.lift = 0;
   r.fx = 'slip';
+  r.cue = 'slip';
   r.had.push('slip');
 }
 
@@ -2306,6 +2483,18 @@ function bookField(): Booking[] {
       core: false,
     });
   }
+  // ---- AND THE FINAL STRETCH, which gets one or two big moments of its own.
+  const finale = FINALE_MIN + Math.floor(Math.random() * (FINALE_MAX - FINALE_MIN + 1));
+  for (let i = 0; i < finale; i++) {
+    out.push({
+      at: (FINALE_FROM + Math.random() * (FINALE_TO - FINALE_FROM)) * RACE_S,
+      who: Math.floor(Math.random() * FIELD),
+      kind: FINALE_KINDS[Math.floor(Math.random() * FINALE_KINDS.length)],
+      done: false,
+      core: false,
+      finale: true,
+    });
+  }
   out.sort((a, b) => a.at - b.at);
   return out;
 }
@@ -2325,7 +2514,7 @@ function stepCard(card: Booking[], runs: Run[], bird: Bird, fly: Fly, raceT: num
     }
     // Not while the screen is already full: a race where every frog is in the
     // air at the same moment reads as a bug, not as chaos.
-    const busy = runs.filter((o) => o.going !== 'run' || o.jet > 0).length;
+    const busy = runs.filter((o) => o.going !== 'run' || o.jet > 0 || o.rock > 0 || o.trap === 1).length;
     if (busy >= BUSY_CAP) {
       b.at += 0.5;
       continue;
@@ -2343,7 +2532,7 @@ function stepCard(card: Booking[], runs: Run[], bird: Bird, fly: Fly, raceT: num
  * the frog is already in the middle of something, or the one bird is busy.
  */
 function fire(kind: EffectKind, r: Run, bird: Bird, fly: Fly): boolean {
-  if (r.going !== 'run' || r.jet > 0) return false;
+  if (r.going !== 'run' || r.jet > 0 || r.rock > 0 || r.trap === 1) return false;
   switch (kind) {
     case 'bird': {
       if (bird.phase !== 0) return false;
@@ -2372,30 +2561,33 @@ function fire(kind: EffectKind, r: Run, bird: Bird, fly: Fly): boolean {
       // Recorded when it is eaten, not when it is sent.  See `stepFly`.
       return true;
     }
-    case 'balloon':
-      r.going = 'balloon';
-      r.balloon = BALLOON_S;
-      r.balloonDown = BALLOON_DOWN_S;
-      r.lift = 0;
+    case 'jump': {
+      // Decided at the take-off and SHOWN from the top of the arc: a leap
+      // that is going to crash starts to turn over in the air.
+      r.crash = Math.random() >= JUMP_CLEAN_ODDS;
+      launch(r, JUMP_S, r.crash ? JUMP_GAIN * CRASH_SHORT : JUMP_GAIN, JUMP_H);
+      r.cue = 'leap';
       break;
-    case 'jump':
-      launch(r, JUMP_S, JUMP_S + JUMP_GAIN, JUMP_H);
+    }
+    case 'rock':
+      // The shadow is on the lane from this moment; the rock follows it.
+      r.rock = ROCK_WARN_S;
+      r.cue = 'rock';
       break;
-    case 'rocket':
-      // Flat and fast: it does not arc like a frog because a frog is not
-      // doing the flying.
-      launch(r, ROCKET_S, ROCKET_GAIN, ROCKET_H);
-      r.arcFlat = 1;
+    case 'snap': {
+      // Set a second ahead, on clear grass: never in a hole or a puddle.
+      const x = clearGround(r, r.x + TRAP_LEAD * SEC);
+      if (x > DIST - 14) return false;
+      r.trapX = x;
+      r.trap = 1;
+      r.cue = 'trap';
       break;
-    case 'flutter':
-      // ---- THE BUTTERFLY.  Not a slow -- a STOP.  The frog forgets what it
-      // was doing and watches the thing until it leaves.  `stuck` is the same
-      // clock every other standstill in the race runs on, so a butterfly is
-      // as bounded and as interruptible as a nap.
-      r.going = 'flutter';
-      r.stuck = FLUTTER_S;
-      r.lift = 0;
+    }
+    case 'burst': {
+      rushOn(r, BURST_S, BURST_GAIN);
+      r.cue = 'burst';
       break;
+    }
     case 'puddle':
       // The track deals these, not the card -- see `digPuddles`.  Kept here
       // so a harness can start one on demand.
@@ -2411,13 +2603,12 @@ function fire(kind: EffectKind, r: Run, bird: Bird, fly: Fly): boolean {
 }
 
 /**
- * ONE LAUNCH, WHICH IS FIVE EVENTS.
+ * ONE LAUNCH, TWO EVENTS.
  *
- * A super jump, a mushroom, a rocket, a tongue that caught the wrong thing and
- * a dive through a bush are all the same movement: the frog leaves from where
- * it is, arrives somewhere ahead, and takes a fixed time doing it.  What tells
- * them apart is how long, how far, how high -- and the art, which is where all
- * the character is.
+ * The leap over the log and the hop over a snapping trap are the same
+ * movement: the frog leaves from where it is, arrives somewhere ahead, and
+ * takes a fixed time doing it.  What tells them apart is how long, how far,
+ * how high -- and the art.
  *
  * `gain` is in SECONDS OF RUNNING, so a mushroom worth one and a half seconds
  * stays worth one and a half seconds if the pace is ever retuned.  And it is
@@ -2432,6 +2623,21 @@ function launch(r: Run, secs: number, gain: number, height: number): void {
   r.arcFlat = 0;
   r.jumpFrom = r.x;
   r.jumpTo = Math.min(DIST, r.x + (secs + gain) * SEC);
+}
+
+/**
+ * The first spot at or after `x` that is clear grass on this frog's lane:
+ * out of every hole and every puddle by a body's width.  Where the trap goes.
+ */
+function clearGround(r: Run, x: number): number {
+  const busy = [...r.holes, ...r.puddles].map((f) => f * DIST);
+  let at = x;
+  for (let guard = 0; guard < 6; guard++) {
+    const near = busy.find((b) => Math.abs(b - at) < 16);
+    if (near === undefined) return at;
+    at = near + 16;
+  }
+  return at;
 }
 
 /** A jetpack, or not.  Rolled before the gun, the same as everything else. */
@@ -2480,8 +2686,8 @@ function stepJet(j: Jet, runs: Run[], raceT: number, dt: number): void {
   // The burn takes it out of whatever it was in -- a hole, a nap, its own face.
   last.going = 'run';
   last.stuck = 0;
-  last.balloon = 0;
   last.tongue = 0;
+  last.crash = false;
   last.jet = burn;
   last.jetSpeed = need;
   last.lift = 0;
@@ -2573,7 +2779,6 @@ function stepBird(b: Bird, runs: Run[], raceT: number, dt: number): void {
     if (r.going !== 'falling') {
       r.going = 'falling';
       r.hop = 0;
-      r.spin = 0;
     }
     const k = Phaser.Math.Clamp(b.t / BIRD_DROP_S, 0, 1);
     r.lift = BIRD_LIFT * (1 - k * k);
@@ -2659,13 +2864,26 @@ function stepFly(f: Fly, runs: Run[], raceT: number, dt: number): void {
   f.on = false;
 }
 
-/** Potholes for one lane.  One each, well inside the track. */
-/** Where this lane's puddles lie, as fractions of the track. */
-function digPuddles(): number[] {
+/**
+ * Where this lane's puddles lie, as fractions of the track -- and NEVER ON A
+ * HOLE.  They were dealt independently of the potholes, so now and then the
+ * water was drawn straight over the hole and the hole disappeared under it.
+ * A puddle is rerolled until its whole width (and a margin) is clear of every
+ * hole on the lane; the band is wide enough that one always is.
+ */
+const WATER_CLEAR = 30 / DIST;
+function digPuddles(holes: number[]): number[] {
   const out: number[] = [];
   const band = (PUDDLE_TO - PUDDLE_FROM) / PUDDLES_PER_LANE;
   for (let i = 0; i < PUDDLES_PER_LANE; i++) {
-    out.push(PUDDLE_FROM + band * (i + 0.15 + Math.random() * 0.7));
+    let at = PUDDLE_FROM + band * (i + 0.15 + Math.random() * 0.7);
+    for (let tries = 0; tries < 40 && holes.some((h) => Math.abs(h - at) < WATER_CLEAR); tries++) {
+      at = PUDDLE_FROM + band * (i + 0.15 + Math.random() * 0.7);
+    }
+    // Still on top of one after all that: put it on the far side of the hole.
+    const on = holes.find((h) => Math.abs(h - at) < WATER_CLEAR);
+    if (on !== undefined) at = on + (on < 0.5 ? WATER_CLEAR : -WATER_CLEAR);
+    out.push(at);
   }
   return out;
 }
@@ -2692,17 +2910,20 @@ function makeField(): Array<{ i: number; form: number; luck: number; surgeAt: nu
     const j = Math.floor(Math.random() * (i + 1));
     [order[i], order[j]] = [order[j], order[i]];
   }
-  return order.map((idx, k) => ({
-    i: idx,
-    form: forms[k],
-    // Drawn here rather than at the gun, so the sampler and the race are
-    // rolling the same field in the same order.
-    luck: (Math.random() - 0.5) * 2 * LUCK,
-    surgeAt: 0.25 + Math.random() * 0.45,
-    surgeFor: 0.12 + Math.random() * 0.16,
-    puddles: digPuddles(),
-    holes: digHoles(),
-  }));
+  return order.map((idx, k) => {
+    const holes = digHoles();
+    return {
+      i: idx,
+      form: forms[k],
+      // Drawn here rather than at the gun, so the sampler and the race are
+      // rolling the same field in the same order.
+      luck: (Math.random() - 0.5) * 2 * LUCK,
+      surgeAt: 0.25 + Math.random() * 0.45,
+      surgeFor: 0.12 + Math.random() * 0.16,
+      puddles: digPuddles(holes),
+      holes,
+    };
+  });
 }
 
 /** A field turned into runnable state, for the race or for the sampler. */
@@ -2725,14 +2946,17 @@ function toRuns(
     puddles: f.puddles ?? [],
     puddleAt: 0,
     lift: 0,
-    mud: 0,
-    wind: 0,
-    windDir: 1,
     gold: 0,
     jumpFrom: 0,
     jumpTo: 0,
-    balloon: 0,
-    balloonDown: 0,
+    rush: 0,
+    rushPush: 0,
+    rock: 0,
+    rockX: 0,
+    trapX: 0,
+    trap: 0,
+    crash: false,
+    cue: '',
     tongue: 0,
     slide: 0,
     lean: 0,
@@ -2741,7 +2965,6 @@ function toRuns(
     arcS: 0,
     arcH: 0,
     arcFlat: 0,
-    spin: 0,
     fell: 0,
     splash: 0,
     fx: null,
@@ -2806,9 +3029,10 @@ function draft(scene: Phaser.Scene): void {
   birdArt = makeBird4(scene);
   fly = makeFly();
   flyArt = makeFlyArt(scene);
-  butterflyArt?.destroy();
-  butterflyArt = makeButterflyArt(scene);
-  butterfly = { x: 40 + Math.random() * (GAME_W - 80), y: TRACK_TOP - 26, vx: 0, vy: 0, wx: 0, wy: 0, wT: 0 };
+  finaleOn = false;
+  callT = 0;
+  gear.clear();
+  for (const r of racers) gear.set(r.i, makeGear(scene));
   jet = makeJet();
   card = bookField();
   fxWas.clear();
@@ -3058,116 +3282,310 @@ function makeBird4(scene: Phaser.Scene): Phaser.GameObjects.Container {
  * the golden one glows, because they ask for the same lick and pay opposite
  * things, and the colour is the only warning the player gets.
  */
+// ------------------------------------------------------ the track furniture
+
 /**
- * Where the butterfly goes this frame.
- *
- *   A FROG IS WATCHING IT  it hovers in front of that frog's face, circling a
- *                          little, until the last quarter of the frog's stop,
- *                          then it leaves -- which is why the frog goes back to
- *                          running, not a timer running out.
- *   ONE IS BOOKED SOON     it drifts over to that frog in the couple of seconds
- *                          before, aiming a little ahead of it because the frog
- *                          is running, so it is already arriving when the frog
- *                          notices it.
- *   OTHERWISE              it wanders the air over the track, waypoint to
- *                          waypoint, bobbing, the way a butterfly flies.
- *
- * Only ever drawn: the race model does not read it.
+ * EVERYTHING AN EVENT PUTS ON THE TRACK, per lane.  Drawing only: each piece
+ * is posed every frame from numbers the model already keeps (`rock`, `trap`,
+ * `trapX`, ...), so what is on the grass and what the race is doing cannot
+ * disagree.
  */
-function stepButterfly(dt: number): void {
-  const art = butterflyArt;
-  if (!art) return;
-  const b = butterfly;
-  const watching = racers.find((r) => r.going === 'flutter') ?? null;
-  let goal: { x: number; y: number } | null = null;
-  let speed = 38;
-  if (watching && watching.stuck / FLUTTER_S > 0.22) {
-    goal = {
-      x: watching.body.x + 12 + Math.sin(clock / 260) * 7,
-      y: watching.body.y - 19 + Math.sin(clock / 170) * 4,
-    };
-    speed = 60;
-  } else if (!watching && phase === 'racing') {
-    const next = card.find((k) => !k.done && k.kind === 'flutter' && k.at >= raceT && k.at - raceT < 2.2);
-    const who = next ? racers.find((r) => r.i === next.who) : undefined;
-    if (who) {
-      goal = { x: who.body.x + 26, y: who.body.y - 20 };
-      speed = 75;
+interface Gear {
+  shadow: Phaser.GameObjects.Ellipse;
+  rock: Phaser.GameObjects.Container;
+  trap: Phaser.GameObjects.Container;
+  jawL: Phaser.GameObjects.Container;
+  jawR: Phaser.GameObjects.Container;
+  log: Phaser.GameObjects.Container;
+  /** The rock after it has come down: where, how long ago, and whether it hit. */
+  down: { x: number; y: number; t: number; hit: boolean } | null;
+  logX: number;
+  logT: number;
+}
+const gear = new Map<number, Gear>();
+/** The trap's jaws: how long a bar is, where it hinges, and its two angles. */
+const JAW = 6.4;
+const JAW_PIVOT = 4.5;
+const JAW_OPEN_L = -Math.PI;
+const JAW_SHUT_L = -Math.acos(JAW_PIVOT / JAW);
+const JAW_OPEN_R = 0;
+const JAW_SHUT_R = -Math.PI + Math.acos(JAW_PIVOT / JAW);
+/** Dust in the air: kicked up on landings, impacts and bursts. */
+let puffs: Array<{ obj: Phaser.GameObjects.Ellipse; vx: number; vy: number; life: number; max: number }> = [];
+/** Skid marks torn in the grass by a slip or a crashed landing. */
+let skids: Array<{ i: number; lines: Phaser.GameObjects.Rectangle[]; x0: number; fade: number }> = [];
+
+function makeGear(scene: Phaser.Scene): Gear {
+  const shadow = scene.add.ellipse(0, 0, 12, 4, 0x000000).setAlpha(0.35).setDepth(9).setVisible(false);
+  // A boulder: a dark mass, a lit face, a highlight and a crack across it.
+  const rock = scene.add
+    .container(0, 0, [
+      scene.add.ellipse(0, 0, 12, 10, 0x4a4540),
+      scene.add.ellipse(-0.8, -0.8, 10, 8, 0x77716a),
+      scene.add.ellipse(-2.6, -2.6, 3.6, 2.4, 0xb0aa9f).setAlpha(0.85),
+      scene.add.rectangle(1.6, 0.6, 4, 0.9, 0x34302c).setAngle(-30),
+      scene.add.rectangle(3, 2, 2.2, 0.9, 0x34302c).setAngle(40),
+      scene.add.ellipse(1, 3.4, 9, 2.6, 0x3a3632).setAlpha(0.7),
+    ])
+    .setDepth(42)
+    .setVisible(false);
+  // Iron jaws: a base plate and two toothed bars hinged at either end of it.
+  // Open, they lie flat on the grass pointing outwards, teeth up; sprung,
+  // each swings up over the top and they meet in an arch with the teeth
+  // biting inwards -- which is where a caught frog's legs are.
+  const bar = (x: number, teethSide: number) => {
+    const parts: Phaser.GameObjects.GameObject[] = [
+      scene.add.rectangle(JAW / 2, 0, JAW, 1.8, 0x9ea4ae),
+      scene.add.rectangle(JAW / 2, -teethSide * 0.6, JAW, 0.6, 0x5a5e66),
+    ];
+    for (const tx of [1.6, 3.3, 5]) {
+      parts.push(scene.add.triangle(tx, teethSide * 1.5, -0.9, -teethSide * 0.6, 0.9, -teethSide * 0.6, 0, teethSide * 1.4, 0xd8dce2));
+    }
+    return scene.add.container(x, 0, parts);
+  };
+  const jawL = bar(-JAW_PIVOT, 1).setRotation(JAW_OPEN_L);
+  const jawR = bar(JAW_PIVOT, -1).setRotation(JAW_OPEN_R);
+  const trap = scene.add
+    .container(0, 0, [
+      scene.add.ellipse(0, 1.4, 22, 4.4, 0x000000).setAlpha(0.3),
+      scene.add.rectangle(0, 0.8, JAW_PIVOT * 2 + 2, 2, 0x3a3c44),
+      scene.add.circle(0, 0.6, 1.4, 0x7a7e88),
+      scene.add.circle(-JAW_PIVOT, 0, 1, 0x5a5e66),
+      scene.add.circle(JAW_PIVOT, 0, 1, 0x5a5e66),
+      jawL,
+      jawR,
+    ])
+    .setDepth(8)
+    .setVisible(false);
+  // A log across the lane: bark, the cut end with its rings.
+  const log = scene.add
+    .container(0, 0, [
+      scene.add.ellipse(0, 1.5, 12, 3, 0x000000).setAlpha(0.3),
+      scene.add.ellipse(0, 0, 11, 5.4, 0x5a3c22),
+      scene.add.rectangle(-1, -1.2, 7, 0.8, 0x7a5634),
+      scene.add.ellipse(4.8, 0, 2.8, 5, 0xc09a66),
+      scene.add.ellipse(4.8, 0, 1.4, 2.6, 0x8a6a42),
+    ])
+    .setDepth(9)
+    .setVisible(false);
+  return { shadow, rock, trap, jawL, jawR, log, down: null, logX: 0, logT: 0 };
+}
+
+function drawGear(r: Racer, g: Gear, laneY: number, dt: number): void {
+  // ---- THE ROCK, on its way: its shadow grows on the lane under the frog
+  // as the rock drops out of the sky onto the same spot.
+  if (r.rock > 0) {
+    const k = 1 - r.rock / ROCK_WARN_S;
+    const gx = START_X + r.x + 1;
+    g.shadow.setVisible(true).setPosition(gx, laneY + 6).setScale(0.35 + 0.8 * k).setAlpha(0.12 + 0.42 * k);
+    // Out of the sky and onto the spot: it is in the picture for the whole
+    // warning, and it gathers speed as it comes.
+    g.rock.setVisible(true).setAlpha(1).setScale(1).setPosition(gx, laneY - 2 - (1 - k * k) * (laneY - 24)).setRotation(k * 5);
+  } else if (!g.down) {
+    g.shadow.setVisible(false);
+    g.rock.setVisible(false);
+  }
+  // ---- AND DOWN.  On the frog it sits on it, then rolls off; beside it,
+  // it bounces once and crumbles.
+  if (g.down) {
+    const d = g.down;
+    d.t += dt;
+    g.shadow.setVisible(false);
+    let x = d.x;
+    let y = d.y - (d.hit ? 4 : 1);
+    let rot = 0;
+    if (d.hit && d.t > 0.8) {
+      const u = d.t - 0.8;
+      x += u * 26;
+      y += u * u * 30;
+      rot = u * 6;
+    } else if (!d.hit) {
+      y -= Math.abs(Math.sin(d.t * 9)) * 4 * Math.max(0, 1 - d.t * 2);
+    }
+    const gone = Phaser.Math.Clamp((d.t - (d.hit ? 1.2 : 0.7)) / 0.5, 0, 1);
+    g.rock.setVisible(true).setPosition(x, y).setRotation(rot).setAlpha(1 - gone).setScale(1 - gone * 0.4);
+    if (gone >= 1) {
+      g.down = null;
+      g.rock.setVisible(false).setAlpha(1).setScale(1);
     }
   }
-  if (!goal) {
-    b.wT -= dt;
-    if (b.wT <= 0 || Math.hypot(b.wx - b.x, b.wy - b.y) < 6) {
-      b.wx = 24 + Math.random() * (GAME_W - 48);
-      b.wy = TRACK_TOP - 34 + Math.random() * (TRACK_BOTTOM - TRACK_TOP + 26);
-      b.wT = 2 + Math.random() * 2.5;
-    }
-    goal = { x: b.wx, y: b.wy };
+  // ---- THE TRAP.  Open on the lane until it is reached, then shut; while a
+  // frog is in it the jaws are drawn in front of the frog, round its legs.
+  if (r.trap > 0) {
+    g.trap.setVisible(true).setPosition(START_X + r.trapX, laneY + 5);
+    const shut = r.trap >= 2;
+    const k = Math.min(1, dt * 40);
+    const wantL = shut ? JAW_SHUT_L : JAW_OPEN_L;
+    const wantR = shut ? JAW_SHUT_R : JAW_OPEN_R;
+    // Read the angles back from our own copy: Phaser wraps a rotation into
+    // -pi..pi, and the left jaw's open angle sits right on that seam.
+    const aL = (g.jawL.getData('a') as number | undefined) ?? JAW_OPEN_L;
+    const aR = (g.jawR.getData('a') as number | undefined) ?? JAW_OPEN_R;
+    const nL = aL + (wantL - aL) * k;
+    const nR = aR + (wantR - aR) * k;
+    g.jawL.setData('a', nL).setRotation(nL);
+    g.jawR.setData('a', nR).setRotation(nR);
+    g.trap.setDepth(r.going === 'caught' ? 10 + r.i * 0.6 + 6 : 8);
+    g.trap.setAlpha(r.trap === 3 || (r.trap === 2 && r.going !== 'caught') ? 0.75 : 1);
+  } else {
+    g.trap.setVisible(false);
+    g.jawL.setData('a', JAW_OPEN_L).setRotation(JAW_OPEN_L);
+    g.jawR.setData('a', JAW_OPEN_R).setRotation(JAW_OPEN_R);
   }
-  const dx = goal.x - b.x;
-  const dy = goal.y - b.y;
-  const d = Math.hypot(dx, dy) || 1;
-  const want = speed * Math.min(1, d / 18);
-  const turn = Math.min(1, dt * 3);
-  b.vx += ((dx / d) * want - b.vx) * turn;
-  b.vy += ((dy / d) * want - b.vy) * turn;
-  b.x += b.vx * dt;
-  // and the bob: a butterfly never flies level
-  b.y += b.vy * dt + Math.sin(clock / 90) * 14 * dt;
-  art.setPosition(b.x, b.y);
-  art.setVisible(true);
-  // wings beating, and the body turned the way it is going
-  art.setScale((1 + Math.sin(clock / 55) * 0.3) * (b.vx < -2 ? -1 : 1), 1);
+  // ---- THE LOG the leap was taken over.
+  if (g.logT > 0) {
+    g.logT -= dt;
+    g.log.setVisible(true).setPosition(g.logX, laneY + 4).setAlpha(Math.min(1, g.logT / 0.4));
+  } else g.log.setVisible(false);
+}
+
+/** A handful of dust, thrown back and up. */
+function spawnDust(x: number, y: number, n: number, power: number, colour = 0xd8cba4): void {
+  if (!sceneRef) return;
+  for (let k = 0; k < n; k++) {
+    const obj = sceneRef.add.ellipse(x + (Math.random() - 0.5) * 4, y, 3 + Math.random() * 2, 2, colour).setDepth(9).setAlpha(0.7);
+    const max = 0.3 + Math.random() * 0.25 + power / 120;
+    puffs.push({ obj, vx: -power * (0.3 + Math.random() * 0.7), vy: -power * Math.random() * 0.5, life: max, max });
+  }
+}
+
+function stepPuffs(dt: number): void {
+  puffs = puffs.filter((p) => {
+    p.life -= dt;
+    if (p.life <= 0) {
+      p.obj.destroy();
+      return false;
+    }
+    const k = p.life / p.max;
+    p.obj.setPosition(p.obj.x + p.vx * dt, p.obj.y + p.vy * dt);
+    p.vx *= 0.9;
+    p.vy += 30 * dt;
+    p.obj.setScale(1 + (1 - k) * 1.2).setAlpha(0.7 * k);
+    return true;
+  });
+}
+
+/** Two scars in the grass that follow a skidding frog, then fade. */
+function skid(r: Run): void {
+  if (!sceneRef) return;
+  const y = LANE_T + r.i * LANE_H + LANE_H / 2 + 1;
+  const x0 = START_X + r.x;
+  const lines = [6, 8].map((dy) => sceneRef!.add.rectangle(x0, y + dy, 1, 1, 0x1c4424).setOrigin(0, 0.5).setDepth(7).setAlpha(0.75));
+  skids.push({ i: r.i, lines, x0, fade: 2.5 });
+}
+
+function stepSkids(dt: number): void {
+  skids = skids.filter((sk) => {
+    const r = racers.find((o) => o.i === sk.i);
+    const going = r && (r.going === 'slip' || r.going === 'crash');
+    if (going && r) {
+      const w = Math.max(1, START_X + r.x - 4 - sk.x0);
+      sk.lines.forEach((l, k) => l.setSize(w - k * 2, 1));
+      return true;
+    }
+    sk.fade -= dt;
+    sk.lines.forEach((l) => l.setAlpha(0.75 * Math.max(0, sk.fade / 2.5)));
+    if (sk.fade <= 0) {
+      sk.lines.forEach((l) => l.destroy());
+      return false;
+    }
+    return true;
+  });
+}
+
+/** One line of commentary across the top of the track. */
+function call(msg: string, tint: number, secs = 1.5): void {
+  if (!banner) return;
+  banner.setText(msg).setTint(tint).setAlpha(1);
+  callT = secs;
 }
 
 /**
- * THE BUTTERFLY, which lives over the race rather than on a frog.
- *
- * It used to be part of the frog it distracted, drawn a hand's width off its
- * nose and flown in over the first beat -- so it appeared out of nothing in
- * front of the frog.  It is in the air the whole time now, drifting about the
- * track like the fly does, and when a frog's butterfly moment is coming up it
- * makes its way over to that frog; the frog stops because it is THERE.
+ * WHAT HAPPENED, MADE SEEN AND HEARD.  The model sets a cue on a frog; this
+ * says what it was, plays it, throws the dust and starts the marks.
  */
-function makeButterflyArt(scene: Phaser.Scene): Phaser.GameObjects.Container {
-  // ---- A BUTTERFLY, AND RECOGNISABLY ONE.
-  //
-  // The first attempt was two small ellipses either side of a bar, which at
-  // this size is a pill with a stripe down it.  What makes a butterfly read
-  // is the SILHOUETTE: a big rounded forewing above and a smaller pointed
-  // hindwing below, on each side, so the outline notches in at the waist --
-  // plus a dark rim so it holds its shape against grass, a pale spot on each
-  // wing, and antennae with club tips.  Wing colours are deliberately two
-  // different bright ones, because a real one is patterned rather than flat.
-  const wing = (sx: number) => {
-    const g: Phaser.GameObjects.GameObject[] = [];
-    // the dark outline, drawn first and a shade larger than everything on it
-    g.push(scene.add.ellipse(sx * 4.4, -2.4, 9.4, 9, 0x3a2030));
-    g.push(scene.add.triangle(sx * 3.6, 3.4, 0, 0, sx * 7.4, 1.6, sx * 1.4, 6.6, 0x3a2030));
-    // forewing: the big one, up and out
-    g.push(scene.add.ellipse(sx * 4.4, -2.6, 8, 7.6, 0xffc93c));
-    g.push(scene.add.ellipse(sx * 5.4, -4.4, 4, 3.4, 0xfff0a8));
-    // hindwing: smaller, pointed, tucked under
-    g.push(scene.add.triangle(sx * 3.6, 3.3, 0, 0, sx * 6.6, 1.4, sx * 1.2, 5.8, 0xe06fd0));
-    // the eyespot every butterfly seems to have
-    g.push(scene.add.circle(sx * 4.6, -1.6, 1.7, 0x3a2030));
-    g.push(scene.add.circle(sx * 4.6, -1.6, 0.8, 0xfff0f5));
-    return g;
-  };
-  const parts: Phaser.GameObjects.GameObject[] = [
-    ...wing(-1),
-    ...wing(1),
-    // the body: a fat thorax and a segmented abdomen, not a plain bar
-    scene.add.ellipse(0, -1.4, 2.6, 6.4, 0x3a2030),
-    scene.add.ellipse(0, -3.4, 2.2, 2.6, 0x5a3548),
-    scene.add.ellipse(0, 1.4, 1.8, 3.4, 0x2a1620),
-    // antennae, with the little clubs on the ends
-    scene.add.rectangle(-1.4, -5.6, 0.8, 3.4, 0x3a2030).setAngle(-28),
-    scene.add.rectangle(1.4, -5.6, 0.8, 3.4, 0x3a2030).setAngle(28),
-    scene.add.circle(-2.2, -7.2, 0.9, 0x3a2030),
-    scene.add.circle(2.2, -7.2, 0.9, 0x3a2030),
-  ];
-  return scene.add.container(0, 0, parts).setDepth(41).setVisible(true);
+function onCue(r: Racer, cue: string): void {
+  const name = RUNNERS[r.i].name;
+  const g = gear.get(r.i);
+  const laneY = LANE_T + r.i * LANE_H + LANE_H / 2 + 1;
+  const x = START_X + r.x;
+  const cam = sceneRef?.cameras.main;
+  const alertOn = () => r.body.setData('alertT', 0.7);
+  switch (cue) {
+    case 'rock':
+      call(`ROCKFALL OVER ${name}!`, PALETTE.blood);
+      audio.sfx('throw_whoosh', 0.55);
+      break;
+    case 'rock_hit':
+      call(`${name} FLATTENED BY A ROCK`, PALETTE.blood);
+      audio.sfx('boom', 0.5);
+      audio.sfx('crumble', 0.5);
+      cam?.shake(180, 0.005);
+      if (g) g.down = { x, y: laneY, t: 0, hit: true };
+      spawnDust(x, laneY + 5, 6, 30);
+      break;
+    case 'rock_miss':
+      call(`${name} - MISSED BY INCHES!`, PALETTE.mossLight);
+      audio.sfx('item_thud', 0.7);
+      audio.sfx('crumble', 0.4);
+      cam?.shake(120, 0.003);
+      if (g) g.down = { x: x - 11, y: laneY, t: 0, hit: false };
+      spawnDust(x - 11, laneY + 5, 5, 26);
+      alertOn();
+      break;
+    case 'trap':
+      call(`JAWS SET IN FRONT OF ${name}`, PALETTE.fog);
+      audio.sfx('lock_click', 0.5);
+      break;
+    case 'trap_caught':
+      call(`${name} CAUGHT IN THE JAWS!`, PALETTE.blood);
+      audio.sfx('whack', 0.6);
+      audio.sfx('fence_thunk', 0.5);
+      cam?.shake(120, 0.003);
+      break;
+    case 'trap_dodge':
+      call(`${name} LEAPS THE TRAP!`, PALETTE.mossLight);
+      audio.sfx('lock_click', 0.8);
+      audio.sfx('hop_wet', 0.5);
+      alertOn();
+      break;
+    case 'trap_free':
+      audio.sfx('fence_thunk', 0.4);
+      break;
+    case 'leap':
+      call(`${name} GOES FOR THE LOG!`, PALETTE.cream);
+      audio.sfx('throw_whoosh', 0.5);
+      if (g) {
+        g.logX = x + 8;
+        g.logT = 2;
+      }
+      break;
+    case 'landed':
+      call(`${name} STICKS THE LANDING!`, PALETTE.mossLight);
+      audio.sfx('hop_wet', 0.7);
+      spawnDust(x, laneY + 6, 4, 22);
+      break;
+    case 'crash':
+      call(`${name} CRASHES THE LANDING`, PALETTE.blood);
+      audio.sfx('item_thud', 0.8);
+      audio.sfx('crumble', 0.4);
+      cam?.shake(140, 0.004);
+      spawnDust(x, laneY + 6, 6, 28);
+      skid(r);
+      break;
+    case 'slip':
+      call(`${name} LOSES ITS FOOTING`, PALETTE.fog);
+      audio.sfx('fence_thunk', 0.5);
+      skid(r);
+      break;
+    case 'burst': {
+      const ahead = racers.some((o) => o !== r && o.x > r.x && o.x - r.x < 26);
+      call(ahead ? `${name} SLINGSHOTS OUT OF THE DRAFT` : `${name} DIGS IN - BURST!`, PALETTE.gold);
+      audio.sfx('throw_whoosh', 0.7);
+      spawnDust(x - 4, laneY + 6, 3, 20);
+      break;
+    }
+  }
 }
 
 function makeFlyArt(scene: Phaser.Scene): Phaser.GameObjects.Container {
@@ -3256,13 +3674,35 @@ function moodOf(r: Run, clock: number): Mood {
     const early = r.stuck > SLIP_S * 0.45;
     return early ? { eye: 1, big: 1.5, open: 1, smile: -1 } : { eye: 0.55, smile: -0.4, irisY: 0.5 };
   }
-  if (r.going === 'balloon') {
-    // ---- GOING UP: thrilled, looking at the balloon.
-    return { eye: 1, big: 1.25, smile: 1, irisY: -0.9, open: 0.6 };
-  }
   if (r.going === 'jump') {
-    // ---- AIRBORNE AND LOVING IT.
-    return { eye: 1, big: 1.15, smile: 1, irisY: -0.4 };
+    // ---- AIRBORNE: committed, eyes on where it is coming down -- and, on a
+    // leap that is going wrong, knowing it.
+    if (r.crash && r.stuck < r.arcS * 0.55) return { eye: 1.2, big: 1.4, open: 1, smile: -1, brow: 1, irisY: 0.8 };
+    return { eye: 0.9, brow: -1, smile: 0.2, irisY: 0.3, irisX: 0.8 };
+  }
+  if (r.going === 'hit') {
+    // ---- UNDER THE ROCK: eyes screwed shut, then dazed.
+    const early = r.stuck > ROCK_HIT_S * 0.4;
+    return early ? { eye: 0.15, smile: -1, brow: 1 } : { eye: 0.7, open: 0.6, smile: -0.4, irisX: Math.cos(clock / 130) * 0.9 };
+  }
+  if (r.going === 'caught') {
+    // ---- IN THE JAWS: panic.
+    return { eye: 1.2, big: 1.45, open: 1, smile: -1, brow: 1, irisY: 0.7 };
+  }
+  if (r.going === 'crash') {
+    return { eye: 1.2, big: 1.35, open: 1, smile: -1, brow: 1 };
+  }
+  if (r.rock > 0) {
+    // ---- IT HAS SEEN THE SHADOW: eyes up, wide, and worried.
+    return { eye: 1.15, big: 1.3, irisY: -1.1, smile: -0.7, brow: 1 };
+  }
+  if (r.trap === 1) {
+    // ---- EYES ON THE JAWS IN FRONT OF IT.
+    return { eye: 1, big: 1.15, irisX: 1, irisY: 0.6, brow: -1, smile: -0.3 };
+  }
+  if (r.rush > 0) {
+    // ---- FLAT OUT: chin down, eyes front, gritted.
+    return { eye: 0.85, brow: -1, irisX: 1.2, smile: 0.2 };
   }
   if (r.going === 'eat') {
     // ---- MID-LICK: eyes on the fly, mouth open.
@@ -3279,13 +3719,11 @@ function moodOf(r: Run, clock: number): Mood {
     // ---- THE GOLDEN FLY: chin down, eyes front, absolutely going for it.
     return { eye: 0.85, smile: 1, brow: -1, irisX: 1.2, big: 1.05 };
   }
-  if (r.going === 'flutter') {
-    // ---- THE BUTTERFLY: eyes up and wide, mouth open, race forgotten.
-    return { eye: 1.15, smile: 0.9, brow: -1, irisY: -1, irisX: 0.5, big: 1.03 };
-  }
-  // ---- OTHERWISE: running along, having a look about every few seconds.
+  // ---- OTHERWISE: running, and racing -- a glance across at the others
+  // every few seconds, and in the final stretch nothing but grit.
   const look = Math.sin(clock / 900);
-  return { eye: 1, smile: 0.7, irisX: Math.abs(look) > 0.8 ? Math.sign(look) * 0.9 : 0 };
+  if (finaleOn) return { eye: 0.9, brow: -1, smile: 0, irisX: 1 };
+  return { eye: 1, smile: 0.35, irisX: Math.abs(look) > 0.8 ? Math.sign(look) * 0.9 : 0 };
 }
 
 /**
@@ -3545,14 +3983,18 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
   c.add(zzz);
   c.setData('zzz', zzz);
 
-  // ---- the balloon: a string, a skin, a knot and a shine, straight up
-  const string = scene.add.rectangle(0, -9, 1, 10, PALETTE.bone).setAlpha(0.6);
-  const skinB = scene.add.ellipse(0, -19, 11, 13, PALETTE.neon);
-  const shine = scene.add.ellipse(-2.5, -22, 3.5, 5, PALETTE.cream).setAlpha(0.65);
-  const knot = scene.add.triangle(0, -13, 0, 0, 3, 0, 1.5, 2.5, PALETTE.neonDim);
-  const balloon = scene.add.container(0, 0, [string, skinB, shine, knot]).setVisible(false);
-  c.add(balloon);
-  c.setData('balloon', balloon);
+  // ---- a "!" over its head for a near miss
+  const alert = text(scene, -2, -24, '!', PALETTE.gold).setVisible(false);
+  c.add(alert);
+  c.setData('alert', alert);
+  c.setData('alertT', 0);
+
+  // ---- the spray thrown off its heels as it skids
+  const spray = [0, 1, 2, 3].map((k) =>
+    scene.add.rectangle(0, 0, k % 2 ? 1.6 : 2.2, k % 2 ? 1.6 : 1.2, k % 2 ? 0xbfe8f2 : 0x3f8a46).setVisible(false),
+  );
+  spray.forEach((b) => c.add(b));
+  c.setData('spray', spray);
 
   // ---- the jetpack: a tank on its back and the thrust off the bottom of it
   const tank = scene.add.rectangle(-6, -2, 4, 7, PALETTE.ash);
@@ -3582,14 +4024,6 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
     c.add(g);
     return g;
   };
-  // a rocket strapped on, burning
-  const rocketArt = prop([
-    scene.add.rectangle(-7, 0, 8, 5, 0xd8dee6),
-    scene.add.triangle(-2.5, 0, 0, 0, 0, 5, 4, 2.5, 0xe05a4a),
-    scene.add.triangle(-11, 0, 0, 0, 0, 4, -3, 2, 0x8e98a4),
-    scene.add.triangle(-14, 0, 0, 0, 0, 6, -8, 3, PALETTE.gold),
-    scene.add.triangle(-12, 0, 0, 0, 0, 3.4, -4.5, 1.7, PALETTE.cream),
-  ]);
   // the water it came down in
   const splashArt = prop([
     scene.add.ellipse(0, 8, 18, 5, 0x4fa3c7).setAlpha(0.6),
@@ -3600,7 +4034,6 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
     scene.add.circle(7, -5, 1.6, 0xdff5fc),
     scene.add.circle(0, -9, 1.2, 0xdff5fc),
   ]);
-  c.setData('rocketArt', rocketArt);
   c.setData('splashArt', splashArt);
 
   // ---- the streaks off a frog that has eaten something golden, the mud it

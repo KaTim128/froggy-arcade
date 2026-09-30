@@ -734,6 +734,29 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
       `${(shape.tooCloseToCall * 100).toFixed(1)}% of finishes too close to call`,
   );
   if (!clean) failures++;
+
+  // ---- WATER NEVER SITS ON A HOLE.  A puddle is 22px across and a hole 13;
+  // dealt independently they used to overlap and the hole vanished under
+  // the water.  Three thousand fields, and the nearest any puddle comes to a
+  // hole on its own lane has to leave clear grass between them.
+  const gap = await page.evaluate(() => window.__race.waterGap(3000));
+  const dry = gap >= 24;
+  console.log(`${dry ? 'PASS' : 'FAIL'}  frog race: the water never lies on a hole  — closest ${gap.toFixed(1)}px apart in 3000 fields`);
+  if (!dry) failures++;
+
+  // ---- THE CARD IS A RACE, NOT A FAIRGROUND.  No skates or rockets, no
+  // butterfly, no balloon; and the final stretch deals big moments of its
+  // own -- a rock, a trap, a burst or a leap -- in every race.
+  const kinds = await page.evaluate(() => window.__race.kinds);
+  const gone = ['rocket', 'flutter', 'balloon'].filter((k) => kinds.includes(k));
+  const cards = await page.evaluate(() => window.__race.cards(400));
+  const late = cards.filter((c) => c.some((b) => b.at >= 0.68 * 30 && ['rock', 'snap', 'burst', 'jump'].includes(b.kind))).length / cards.length;
+  const grown = gone.length === 0 && ['rock', 'snap', 'burst'].every((k) => kinds.includes(k)) && late > 0.97;
+  console.log(
+    `${grown ? 'PASS' : 'FAIL'}  frog race: rocks, traps and bursts, no skates or butterfly, and a final stretch in every race  — ` +
+      `${kinds.join('/')}; ${(late * 100).toFixed(0)}% of cards deal the finale${gone.length ? `; still there: ${gone.join(', ')}` : ''}`,
+  );
+  if (!grown) failures++;
   await page.close();
 }
 
@@ -2331,6 +2354,62 @@ for (const g of [
         `it came down to ${r.grown.as} for ${r.grown.total}`,
     );
     if (!kind) failures++;
+  }
+  await page.close();
+}
+
+// ---- FROGGY'S OUTCOMES, IN THEIR ORDER.  A natural on two cards is settled
+// on the deal for whichever side holds it at twice the win or loss; five
+// cards that have not bust win outright (the charlie), even on a total he
+// could match; five cards on exactly 21 is worth three times, his as well.
+// The shoe is stacked for each hand -- waiting for a shuffle to deal one is a
+// lottery, not a test -- and the tokens are read off the ledger.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(`${URL}/?intro=1&tokens=60&game=blackjack`, { waitUntil: 'networkidle2' });
+  await sleep(2400);
+  await startGame(page);
+  if (await bridge(page, '__blackjack')) {
+    const hand = async (shoe, act) => {
+      for (let i = 0; i < 20; i++) {
+        const ph = await page.evaluate(() => window.__blackjack.state().phase);
+        if (ph === 'bet') break;
+        if (ph === 'over') await page.evaluate(() => window.__blackjack.again());
+        await sleep(150);
+      }
+      const before = await page.evaluate(() => window.__blackjack.balance());
+      await page.evaluate((c) => { window.__blackjack.stackShoe(c); window.__blackjack.deal(); }, shoe);
+      if (act) await act();
+      for (let i = 0; i < 40; i++) {
+        if ((await page.evaluate(() => window.__blackjack.state().phase)) === 'over') break;
+        await sleep(200);
+      }
+      const st = await page.evaluate(() => window.__blackjack.state());
+      const after = await page.evaluate(() => window.__blackjack.balance());
+      // the bet is 1: net is what the hand won or lost
+      return { net: after - before, status: st.status.replace('\n', ' / '), cards: st.cards };
+    };
+    const hitTo = (n) => async () => {
+      for (let i = 0; i < n; i++) { await page.evaluate(() => window.__blackjack.hit()); await sleep(60); }
+    };
+    const stand = async () => { await sleep(100); await page.evaluate(() => window.__blackjack.stand()); };
+    const r = {
+      mine: await hand(['A♠', 'K♥', '9♣', '7♦']),
+      his: await hand(['9♣', '7♦', 'A♠', 'K♥']),
+      both: await hand(['A♠', 'K♥', 'A♣', 'Q♦']),
+      charlie: await hand(['2♣', '3♥', '10♠', '7♦', '4♦', '5♠', '6♣'], hitTo(3)),
+      five21: await hand(['2♣', '3♥', '10♠', '7♦', '4♦', '5♠', '7♣'], hitTo(3)),
+      his21: await hand(['K♣', 'Q♥', '2♠', '3♦', '4♦', '5♠', '7♣'], stand),
+    };
+    const want = { mine: 2, his: -2, both: 0, charlie: 1, five21: 3, his21: -3 };
+    const bad = Object.entries(want).filter(([k, v]) => r[k].net !== v);
+    const ok = bad.length === 0;
+    console.log(
+      `${ok ? 'PASS' : 'FAIL'}  blackjack: naturals 2x, five-card charlie wins, five-card 21 is 3x either side  — ` +
+        Object.keys(want).map((k) => `${k} ${r[k].net >= 0 ? '+' : ''}${r[k].net} (${r[k].status})`).join('; '),
+    );
+    if (!ok) failures++;
   }
   await page.close();
 }
@@ -4321,6 +4400,52 @@ for (const g of [
         `after one ${pair.after[0].weapon}${pair.after[0].single ? ' (one left)' : ''}, after two ${pair.after[1].weapon}`,
     );
     if (!pairOk) failures++;
+
+    // ---- ONE AXE ON THE SAND IS ONE AXE IN THE HAND.  Five thrown are five
+    // pickups, not one pickup worth the whole stack; a stack knocked out of a
+    // hand is what was left in it; one more of the same goes on the stack.
+    const pick = await page.evaluate(() => {
+      const R = window.__mash.rules;
+      const mat = (k) => R.MATERIALS.find((m) => m.key === k);
+      const kit = (wk) => ({
+        weapon: R.makeWeapon(R.WEAPONS.find((w) => w.key === wk)),
+        head: R.makeArmour('head', mat('chain')),
+        body: R.makeArmour('body', mat('chain')),
+        legs: R.makeArmour('legs', mat('chain')),
+      });
+      const out = {};
+      for (const wk of ['throwaxe', 'javelin', 'shuriken', 'tomahawk']) {
+        const def = R.WEAPONS.find((w) => w.key === wk);
+        const bare = R.makeFighter('frog', kit('none'), 100, 1);
+        bare.broken = true;
+        const one = { def, piece: R.makeWeapon(def), single: false, count: 1, x: 100, life: 20, settle: 0, art: null };
+        const ground = [one];
+        R.takeWeapon(bare, one, ground);
+        const first = bare.ammo;
+        const two = { ...one, piece: R.makeWeapon(def) };
+        ground.push(two);
+        R.takeWeapon(bare, two, ground);
+        out[wk] = { first, second: bare.ammo, left: ground.length };
+      }
+      const f = R.makeFighter('frog', kit('throwaxe'), 100, 1);
+      f.ammo = 2;
+      const g2 = [];
+      const d = R.dropWeapon(f, g2);
+      const g = R.makeFighter('lizard', kit('none'), 200, -1);
+      g.broken = true;
+      R.takeWeapon(g, d, g2);
+      out.knocked = g.ammo;
+      return out;
+    });
+    // a tomahawk is one weapon: a second one stays on the sand
+    const pickOk = Object.entries(pick).every(([k, v]) => k === 'knocked' ? v === 2
+      : k === 'tomahawk' ? v.first === 1 && v.second === 1 && v.left === 1
+        : v.first === 1 && v.second === 2 && v.left === 0);
+    console.log(
+      `${pickOk ? 'PASS' : 'FAIL'}  mash: one thrown weapon on the sand is one weapon picked up  — ` +
+        Object.entries(pick).map(([k, v]) => (typeof v === 'number' ? `${k} ${v}` : `${k} ${v.first}->${v.second}`)).join(', '),
+    );
+    if (!pickOk) failures++;
 
     // ---- SPIKES BILL A FIST AND NEVER A BLADE.
     //

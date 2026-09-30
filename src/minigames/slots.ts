@@ -11,8 +11,13 @@
  *   FULL COLUMN      six down one reel                              40
  *   FOUR CORNERS     a Froggy in every corner of the window         50
  *   DIAGONAL         five on a diagonal                             60
- *   THE X            both diagonals of a five-by-five block        150
- *   GOLDEN FROGGY    the gold one, anywhere                        300
+ *   THE CROSS        both diagonals of a five-by-five block        150
+ *   GOLDEN FROGGY    the gold statue, anywhere                     300
+ *
+ * The patterns are made of frog tokens (token_3, Froggy's green face); every
+ * other token on the reels is filler, drawn by rarity -- bronze lily pads
+ * everywhere, rainbow crystals now and then -- and the golden Froggy statue
+ * is the jackpot, one spin in ten thousand.  The art is in slotSymbols.ts.
  *
  * The paytable is on the machine, the odds are not.  The outcome is decided
  * when the button is pressed and the window is then dressed to show it --
@@ -37,6 +42,7 @@ import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
+import { ensureSlotSymbols, textureOf, type SymbolId } from './slotSymbols';
 import type { MinigameApi, MinigameModule } from './types';
 
 export const SPIN_COST = 3;
@@ -55,8 +61,8 @@ export const PAYS: Array<{ win: Win; name: string; pays: number; p: number }> = 
   { win: 'column', name: 'FULL COLUMN', pays: 40, p: 0.006 },
   { win: 'corners', name: 'FOUR CORNERS', pays: 50, p: 0.002 },
   { win: 'diagonal', name: 'DIAGONAL', pays: 60, p: 0.003 },
-  { win: 'cross', name: 'THE X', pays: 150, p: 0.0004 },
-  { win: 'gold', name: 'GOLD FROGGY', pays: 300, p: 0.0001 },
+  { win: 'cross', name: 'THE CROSS', pays: 150, p: 0.0004 },
+  { win: 'gold', name: 'GOLDEN FROGGY', pays: 300, p: 0.0001 },
 ];
 /** Kept for anything that read the old two-line machine. */
 export const PAY_THREE = PAYS[0].pays;
@@ -75,28 +81,49 @@ const GRID_Y = 44;
 const PITCH_X = 28;
 const PITCH_Y = 16;
 
-/** Colour and label per symbol.  Froggy is 0; the gold one is the last. */
-const SYMBOLS = [
-  { label: 'F', color: 0x3fe39b },
-  { label: '7', color: 0xff4fa3 },
-  { label: 'C', color: 0xffd45e },
-  { label: 'B', color: 0xff7a3d },
-  { label: 'X', color: 0x7b4bd8 },
-  { label: 'O', color: 0x46c4bd },
-  { label: 'V', color: 0xd6dce4 },
-  { label: 'F', color: 0xffc830 },
+/**
+ * The symbols by id.  The frog token is the one the patterns are made of
+ * (index 0); the golden Froggy is the jackpot (last).  In between are the
+ * filler tokens, each with its WEIGHT: how often a filler cell is that token.
+ * Low-value tokens are common, the high ones rare -- a rainbow crystal is ten
+ * times scarcer than a bronze lily pad.  They are only ever filler: what a
+ * spin pays is the pattern table above, drawn once per spin, so the weights
+ * change what the window looks like and never what it pays.
+ */
+const SYMBOLS: Array<{ id: SymbolId; weight: number }> = [
+  { id: 'token_3', weight: 0 },
+  { id: 'token_1', weight: 40 },
+  { id: 'token_5', weight: 24 },
+  { id: 'token_10', weight: 16 },
+  { id: 'token_20', weight: 10 },
+  { id: 'token_50', weight: 6 },
+  { id: 'token_100', weight: 4 },
+  { id: 'golden_froggy', weight: 0 },
 ];
-const FROG = 0;
-const GOLD = SYMBOLS.length - 1;
+const idx = (id: SymbolId) => SYMBOLS.findIndex((s) => s.id === id);
+const FROG = idx('token_3');
+const GOLD = idx('golden_froggy');
 /** The plain symbols a filler cell may be (never gold, never Froggy). */
 const PLAIN = SYMBOLS.length - 2;
+const WEIGHT_SUM = SYMBOLS.reduce((a, s) => a + s.weight, 0);
+/** A filler token, by rarity. */
+function filler(): number {
+  let roll = Math.random() * WEIGHT_SUM;
+  for (let i = 0; i < SYMBOLS.length; i++) {
+    roll -= SYMBOLS[i].weight;
+    if (roll < 0) return i;
+  }
+  return 1;
+}
+/** Behind every token, the cell: dark, and lit up when it made the win. */
+const CELL_BG = 0x2a1233;
+const CELL_LIT = 0x6a2f78;
 
 type Grid = number[][]; // [row][reel]
 
 interface Cell {
   face: Phaser.GameObjects.Rectangle;
-  label: Phaser.GameObjects.BitmapText;
-  eyes: Phaser.GameObjects.Rectangle[];
+  icon: Phaser.GameObjects.Image;
 }
 
 let cells: Cell[][] = [];
@@ -120,10 +147,10 @@ export const slots: MinigameModule = {
   rules: `${SPIN_COST} tokens a spin`,
   tutorial: {
     objective: [
-      `${SPIN_COST} TOKENS A SPIN. LINE UP FROGGYS.`,
+      `${SPIN_COST} TOKENS A SPIN. LINE UP GREEN FROG TOKENS.`,
       `3 IN A ROW PAYS ${PAY_THREE}, A FULL ROW ${PAY_FIVE}.`,
       'COLUMNS, CORNERS AND DIAGONALS PAY MORE.',
-      'THE X AND THE GOLD FROGGY ARE VERY RARE.',
+      'THE CROSS AND THE GOLDEN FROGGY ARE VERY RARE.',
       'THE BEST PATTERN ON THE SCREEN IS PAID.',
     ],
     controls: [
@@ -146,6 +173,7 @@ export const slots: MinigameModule = {
     cells = [];
     spinning = Array.from({ length: REELS }, () => false);
     shown = blank();
+    ensureSlotSymbols(scene);
 
     scene.add.rectangle(0, 18, GAME_W, 162, 0x2b1430).setOrigin(0, 0);
     // the cabinet, and the window the reels turn behind
@@ -160,18 +188,11 @@ export const slots: MinigameModule = {
       for (let c = 0; c < REELS; c++) {
         const x = GRID_X + c * PITCH_X;
         const y = GRID_Y + r * PITCH_Y;
-        const face = scene.add.rectangle(x, y, CELL_W, CELL_H, SYMBOLS[FROG].color);
-        // (centerText is centred on both axes; the glyph sits a pixel high)
-        const label = centerText(scene, x, y + 1, SYMBOLS[FROG].label, PALETTE.ink);
-        // Froggy is a face, not a letter: two eyes with pupils, and a mouth.
-        const eyes = [
-          scene.add.rectangle(x - 5, y - 2, 5, 5, 0xffffff),
-          scene.add.rectangle(x + 5, y - 2, 5, 5, 0xffffff),
-          scene.add.rectangle(x - 5, y - 2, 2, 2, PALETTE.ink),
-          scene.add.rectangle(x + 5, y - 2, 2, 2, PALETTE.ink),
-          scene.add.rectangle(x, y + 4, 8, 1, PALETTE.ink),
-        ];
-        row.push({ face, label, eyes });
+        const face = scene.add.rectangle(x, y, CELL_W, CELL_H, CELL_BG);
+        // The token, 1:1 and centred: the cell is 26x14 and every token is
+        // 12x12, so each has the same padding and none is ever scaled.
+        const icon = scene.add.image(x, y, textureOf(SYMBOLS[FROG].id));
+        row.push({ face, icon });
       }
       cells.push(row);
     }
@@ -179,11 +200,21 @@ export const slots: MinigameModule = {
 
     // THE PAYTABLE, on the machine where a player reads it before paying.
     scene.add.rectangle(184, 26, 128, 108, 0x3a1742).setOrigin(0, 0).setStrokeStyle(1, 0xff4fa3);
-    text(scene, 190, 30, 'PAYS', PALETTE.gold);
+    // It says which token to line up, with the token itself beside the words.
+    text(scene, 190, 30, 'LINE UP', PALETTE.gold);
+    scene.add.image(240, 33, textureOf('token_3'));
+    text(scene, 250, 30, 'TO WIN', PALETTE.gold);
     PAYS.forEach((p, i) => {
       const special = i >= 2;
-      text(scene, 190, 42 + i * 12, p.name, special ? PALETTE.gold : PALETTE.cream);
-      text(scene, 306, 42 + i * 12, `${p.pays}`, special ? PALETTE.gold : PALETTE.cream).setOrigin(1, 0);
+      const y = 42 + i * 12;
+      if (p.win === 'gold') {
+        // the jackpot row shows the statue: it pays wherever it lands
+        scene.add.image(196, y + 3, textureOf('golden_froggy'));
+        text(scene, 206, y, 'ANYWHERE', PALETTE.gold);
+      } else {
+        text(scene, 190, y, p.name, special ? PALETTE.gold : PALETTE.cream);
+      }
+      text(scene, 306, y, `${p.pays}`, special ? PALETTE.gold : PALETTE.cream).setOrigin(1, 0);
     });
 
     // Two lines, not one: the balance on the left and the result centred
@@ -197,7 +228,16 @@ export const slots: MinigameModule = {
 
     if (import.meta.env?.DEV) {
       (window as unknown as Record<string, unknown>).__slots = {
-        state: () => ({ busy, firstSpin, grid: shown.map((r) => [...r]) }),
+        state: () => ({ busy, firstSpin, grid: shown.map((r) => r.map((s) => SYMBOLS[s].id)) }),
+        /** What the reels show right now, by id, and each cell's texture. */
+        textures: () => cells.map((row) => row.map((cl) => cl.icon.texture.key)),
+        /** How often each filler token turns up in a dressed window. */
+        fill: (n: number) => {
+          const seen: Record<string, number> = {};
+          for (const s of SYMBOLS) seen[s.id] = 0;
+          for (let i = 0; i < n; i++) for (const row of draw()) for (const s of row) seen[SYMBOLS[s].id]++;
+          return seen;
+        },
         /**
          * Sample the draw itself, reading each result off the window it
          * dressed -- the reels take a few seconds to stop, and what is under
@@ -245,16 +285,13 @@ export const slots: MinigameModule = {
 // ------------------------------------------------------------------ the window
 
 function blank(): Grid {
-  return Array.from({ length: ROWS }, () => Array.from({ length: REELS }, () => 1));
+  return Array.from({ length: ROWS }, () => Array.from({ length: REELS }, () => filler()));
 }
 
 function showCell(cell: Cell, sym: number, lit = false): void {
-  const s = SYMBOLS[sym];
-  cell.face.setFillStyle(s.color);
+  cell.face.setFillStyle(lit ? CELL_LIT : CELL_BG);
   cell.face.setStrokeStyle(lit ? 1 : 0, 0xffffff, lit ? 1 : 0);
-  const frog = sym === FROG || sym === GOLD;
-  cell.label.setText(frog ? '' : s.label);
-  for (const e of cell.eyes) e.setVisible(frog);
+  cell.icon.setTexture(textureOf(SYMBOLS[sym].id));
 }
 
 function paint(g: Grid, lit: Set<string> = new Set()): void {
@@ -332,10 +369,9 @@ function draw(): Grid {
     }
     roll -= p.p;
   }
-  const plain = () => 1 + Math.floor(Math.random() * PLAIN);
   for (;;) {
     const g: Grid = Array.from({ length: ROWS }, () =>
-      Array.from({ length: REELS }, () => (Math.random() < 0.22 ? FROG : plain())),
+      Array.from({ length: REELS }, () => (Math.random() < 0.22 ? FROG : filler())),
     );
     if (best(g).win !== null) continue;
     if (want === 'gold') {

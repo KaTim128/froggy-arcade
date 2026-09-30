@@ -463,8 +463,8 @@ export class BasementSequence extends Phaser.Scene {
         y: 116,
         height: 34,
         variant: 'uncanny',
-        // Pupils blown wide, black almost to the rim.
-        pose: 'dilated',
+        // Pupils shrunk to a pinprick: a fixed, predatory stare.
+        pose: 'constricted',
       });
     });
 

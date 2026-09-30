@@ -34,8 +34,14 @@ import type { ThreeStage } from '../render/threeStage';
 import type { FroggyMonster } from '../three/froggyMonster';
 import { SCARE_MS } from './jumpscare';
 
-export const HOLD_MS = 200;
-const LUNGE_MS = 250;
+/**
+ * FASTER, BECAUSE A SCARE IS A SHOCK AND NOT A REVEAL.  The hold is under a
+ * tenth of a second -- long enough to register that something is there and
+ * not long enough to read what -- and the lunge is a hundred and forty
+ * milliseconds of a thing coming at the lens still accelerating.
+ */
+export const HOLD_MS = 90;
+const LUNGE_MS = 140;
 
 export interface Scare3D {
   /** Call every frame AFTER the scene has placed its camera and its monster. */
@@ -44,9 +50,18 @@ export interface Scare3D {
 
 export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster: FroggyMonster): Scare3D {
   audio.scare();
-  audio.sfx('boom', 0.85);
-  scene.time.delayedCall(HOLD_MS, () => audio.sfx('death_stinger', 1));
-  scene.time.delayedCall(HOLD_MS + LUNGE_MS, () => audio.sfx('buzzer', 0.7));
+  audio.sfx('boom', 1);
+  scene.time.delayedCall(HOLD_MS, () => {
+    audio.sfx('death_stinger', 1);
+    audio.sfx('froggy_screech', 1);
+  });
+  // THE HIT: a spike of everything at once as he arrives -- a second boom
+  // and a second screech on top of the first, and the buzzer under them.
+  scene.time.delayedCall(HOLD_MS + LUNGE_MS, () => {
+    audio.sfx('boom', 1);
+    audio.scare();
+    audio.sfx('buzzer', 0.8);
+  });
 
   const cam = stage.camera;
   const s = monster.size;
@@ -89,10 +104,27 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
   cam.traverse((o) => {
     if ((o as THREE.Light).isLight) carried.push([o as THREE.Light, (o as THREE.Light).intensity]);
   });
+  // ---- THE PICTURE JOLTS.  A brief distortion of the 3D canvas itself at
+  // the moment he arrives -- blown contrast, a skew, a lurch in scale -- then
+  // straight back.  It is a CSS filter, so nothing in the room is touched.
+  const canvas = document.getElementById('three-canvas') as HTMLCanvasElement | null;
+  const hitAt = HOLD_MS + LUNGE_MS;
+  const distort = (k: number): void => {
+    if (!canvas) return;
+    if (k <= 0) {
+      canvas.style.filter = '';
+      canvas.style.transform = '';
+      return;
+    }
+    const j = (Math.random() - 0.5) * 2;
+    canvas.style.filter = `contrast(${1 + 0.9 * k}) saturate(${1 + 0.8 * k}) brightness(${1 + 0.35 * k})`;
+    canvas.style.transform = `scale(${1 + 0.07 * k}) skewX(${(j * 3.5 * k).toFixed(2)}deg) translate(${(j * 6 * k).toFixed(1)}px, ${(-j * 4 * k).toFixed(1)}px)`;
+  };
   let done = false;
   const dispose = (): void => {
     if (done) return;
     done = true;
+    distort(0);
     stage.scene.remove(under, behind);
     for (const [l, i] of carried) l.intensity = i;
   };
@@ -114,11 +146,23 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
   const paint = (): void => {
     froggyLayer.paint((ctx) => {
       // The light cutting out, for a frame at the start and one in the lunge.
-      const blackout = t < 55 || (t > HOLD_MS + LUNGE_MS * 0.55 && t < HOLD_MS + LUNGE_MS * 0.55 + 40);
+      const blackout = t < 40 || (t > HOLD_MS + LUNGE_MS * 0.55 && t < HOLD_MS + LUNGE_MS * 0.55 + 30);
       if (blackout) {
         ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, GAME_W, GAME_H);
         return;
+      }
+      // THE FLASH as he hits: white for a frame, then a red pulse, twice.
+      const since = t - hitAt;
+      if (since >= 0 && since < 45) {
+        ctx.fillStyle = 'rgba(255,245,235,0.85)';
+        ctx.fillRect(0, 0, GAME_W, GAME_H);
+        return;
+      }
+      if (since >= 45 && since < 330) {
+        const p = Math.max(0, Math.sin(((since - 45) / 285) * Math.PI * 2));
+        ctx.fillStyle = `rgba(150,0,0,${(0.32 * p).toFixed(3)})`;
+        ctx.fillRect(0, 0, GAME_W, GAME_H);
       }
       // the frame closing in: heavy at the edges, never over the face
       const k = Math.min(1, t / SCARE_MS);
@@ -164,14 +208,17 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
       speed: 0,
       // Shut on the hold; coming open as he comes, onto the teeth; and on
       // you, working -- a little wider, a little less -- never quite still.
-      maw: t < HOLD_MS ? 0.04 : 0.62 + closeK * 0.2 + Math.sin(t / 140) * 0.06,
-      mawRate: 9,
+      // Wide -- as wide as the jaw goes -- and fast: the mouth is open before
+      // he arrives, and it keeps working.
+      maw: t < HOLD_MS ? 0.1 : 0.94 + closeK * 0.06 - Math.abs(Math.sin(t / 120)) * 0.05,
+      mawRate: 22,
+      bare: t < HOLD_MS ? 0.3 : 1,
       climb: 0,
       lunge: reaching,
       // the arms come up as he comes in, and stay up
       grab: t < HOLD_MS + LUNGE_MS * 0.3 ? 0 : 1,
-      // and the pupils blow wide and black as he comes
-      dilate: t < HOLD_MS ? 0.4 : 1,
+      // and the pupils shrink to pinpricks on you: a fixed predator's stare
+      constrict: 1,
     });
 
     // ---- WHERE HIS FACE GOES: down the camera's line, at `d`, at the height.
@@ -209,7 +256,7 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
     // ---- THE LIGHT follows the face in: under it and a little in front.
     const hw = headWorld.copy(target);
     under.position.copy(hw).addScaledVector(fwd, -Math.min(d * 0.7, 0.9)).add(new THREE.Vector3(0, -headSize * 0.9, 0));
-    under.intensity = (t < 55 ? 0 : 1.1 + rush * 1.6) * (1 + Math.sin(t / 37) * 0.06);
+    under.intensity = (t < 40 ? 0 : 1.5 + rush * 2.2) * (1 + Math.sin(t / 37) * 0.06);
     behind.position.copy(hw).addScaledVector(fwd, headSize * 1.6).add(new THREE.Vector3(0, headSize * 0.6, 0));
     behind.intensity = 2.5 + rush * 3.5;
     under.distance = 3 * s;
@@ -222,10 +269,15 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
     // ---- THE CAMERA holds its line and takes the hit.  Still on the hold;
     // a jolt back as he arrives; a fine, fast tremor while he is there.
     cam.position.copy(basePos);
-    const recoil = lungeK >= 1 ? Math.max(0, 1 - closeK * 6) * 0.05 * s : 0;
+    const recoil = lungeK >= 1 ? Math.max(0, 1 - closeK * 5) * 0.12 * s : 0;
     cam.position.addScaledVector(fwd, -recoil);
     cam.quaternion.copy(baseQuat);
-    const tremor = t < HOLD_MS ? 0 : (0.004 + rush * 0.012) * (1 - closeK * 0.4);
+    // The impact: a hard kick that dies over a quarter of a second, on top of
+    // a tremor that never quite stops while he is there.
+    const since = t - hitAt;
+    const kick = since >= 0 ? Math.max(0, 1 - since / 260) : 0;
+    const tremor = t < HOLD_MS ? 0 : (0.008 + rush * 0.02) * (1 - closeK * 0.35) + kick * 0.09;
+    distort(since >= 0 && since < 200 ? 1 - since / 200 : 0);
     shakeRot.set((Math.random() - 0.5) * tremor, (Math.random() - 0.5) * tremor, (Math.random() - 0.5) * tremor * 0.6);
     cam.quaternion.multiply(new THREE.Quaternion().setFromEuler(shakeRot));
 

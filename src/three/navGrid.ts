@@ -15,6 +15,7 @@
  */
 
 import type { HideSpot, RoomDef } from './hideRooms';
+import { CHEST_SCALE } from './hideSpots';
 
 export const CELL = 0.5;
 /** What a step through climbable furniture costs, against 1 for open floor. */
@@ -43,6 +44,11 @@ export function spotExtent(s: HideSpot): SpotExtent {
   const turned = Math.abs(Math.sin(s.rot)) > 0.5;
   let hw = 0.55;
   let hd = 0.4;
+  if (s.kind === 'chest') {
+    // Bigger than a cupboard's footprint: see CHEST_SCALE in hideSpots.
+    hw = 0.55 * CHEST_SCALE;
+    hd = 0.41 * CHEST_SCALE;
+  }
   if (s.kind === 'bed') {
     hw = 1.15;
     hd = 0.55;
