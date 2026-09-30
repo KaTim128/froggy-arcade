@@ -557,6 +557,76 @@ const labels = (page) =>
   await page.close();
 }
 
+// ----- 8c. portrait: the empty band under the picture is for looking too
+//
+// Between the bottom of the picture and the tops of the controls there is a
+// stretch of panel with nothing on it.  In the 3D rooms it is a second look
+// surface -- marked, with a swipe hint that goes once it has been used -- and
+// it never covers a control.  In landscape there is no such band and no zone.
+{
+  const page = await phone('?intro=1&charity=1&route=basement&scene=HideRoom3D');
+  await page.evaluate(() => { try { localStorage.removeItem('froggy.lookHintUsed'); } catch {} });
+  await page.reload({ waitUntil: 'networkidle2' });
+  await sleep(3600);
+  const geo = await page.evaluate(() => {
+    const r = (q) => { const el = document.querySelector(q); return el && !el.hidden ? el.getBoundingClientRect() : null; };
+    const zone = r('#touch-controls .tc-lookzone');
+    const pic = document.querySelector('#game-root canvas').getBoundingClientRect();
+    const controls = [...document.querySelectorAll('#touch-controls .tc-dkey, #touch-controls .tc-btn')]
+      .filter((e) => !e.hidden && e.getBoundingClientRect().width > 0)
+      .map((e) => e.getBoundingClientRect());
+    const over = zone ? controls.filter((c) => c.left < zone.right && c.right > zone.left && c.top < zone.bottom && c.bottom > zone.top).length : -1;
+    const hint = document.querySelector('#touch-controls .tc-hint');
+    return {
+      zone: zone && { top: Math.round(zone.top), bottom: Math.round(zone.bottom), h: Math.round(zone.height), w: Math.round(zone.width) },
+      picBottom: Math.round(pic.bottom),
+      over,
+      hint: hint ? getComputedStyle(hint).opacity : null,
+    };
+  });
+  await page.screenshot({ path: `${SHOTS}/06c-lookzone.png` });
+  check(
+    'portrait: the band between the picture and the controls is a marked look zone, clear of every control',
+    !!geo.zone && geo.zone.top >= geo.picBottom && geo.zone.h >= 70 && geo.over === 0 && Number(geo.hint) > 0.1,
+    geo.zone ? `${geo.zone.w}x${geo.zone.h} from ${geo.zone.top} (picture ends ${geo.picBottom}), ${geo.over} controls under it, hint ${geo.hint}` : 'no zone',
+  );
+  // The same swipe, on the picture and in the zone, turns you the same way and as far.
+  const swipe = async (q) => {
+    const at = await page.evaluate((q) => {
+      const r = document.querySelector(q).getBoundingClientRect();
+      return { x: r.left + r.width / 2 - 40, y: r.top + r.height / 2 };
+    }, q);
+    const yaw0 = await page.evaluate(() => window.__froggy.game().scene.getScene('HideRoom3D').yaw);
+    const cdp = await page.target().createCDPSession();
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...at, id: 1 }] });
+    for (let i = 1; i <= 8; i++) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: at.x + i * 10, y: at.y, id: 1 }] });
+      await sleep(40);
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await cdp.detach();
+    await sleep(300);
+    return (await page.evaluate(() => window.__froggy.game().scene.getScene('HideRoom3D').yaw)) - yaw0;
+  };
+  const onPicture = await swipe('#touch-controls .tc-look');
+  const inZone = await swipe('#touch-controls .tc-lookzone');
+  await sleep(1400);
+  const hintAfter = await page.evaluate(() => getComputedStyle(document.querySelector('#touch-controls .tc-hint')).opacity);
+  check(
+    'a swipe in the zone turns you like the same swipe on the picture, and the hint goes once used',
+    Math.abs(inZone) > 0.05 && Math.sign(inZone) === Math.sign(onPicture) && Math.abs(inZone - onPicture) < Math.abs(onPicture) * 0.35 &&
+      Number(hintAfter) < 0.1,
+    `picture ${onPicture.toFixed(3)}, zone ${inZone.toFixed(3)}, hint now ${hintAfter}`,
+  );
+  await page.close();
+
+  const wide = await phone('?intro=1&charity=1&route=basement&scene=HideRoom3D', { w: 844, h: 390 });
+  await sleep(3200);
+  const shown = await wide.evaluate(() => !document.querySelector('#touch-controls .tc-lookzone').hidden);
+  check('landscape: no zone is reserved -- the picture is all look', !shown, shown ? 'zone shown' : 'none');
+  await wide.close();
+}
+
 // ------------------------------------- 9. the gear pauses, and RESUME thaws
 {
   const page = await phone('?intro=1&tokens=20&scene=ArcadeHub');
