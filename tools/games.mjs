@@ -1329,10 +1329,18 @@ for (const g of [
   // One cabinet per room, at its current spot: the floor was re-sorted by price
   // (cheap games out front, the five-to-seven ones in the back room, the
   // gambling in the casino), so these coordinates follow the layout.
+  // Read from the layout itself rather than copied out of it: the cabinets
+  // have moved more than once, and a stale coordinate clicks empty floor.
+  await page.goto(`${URL}/?intro=1&tokens=40&scene=ArcadeHub`, { waitUntil: 'networkidle2' });
+  const where = await page.evaluate(async () => {
+    const { CABINETS } = await import('/src/game/content.ts');
+    const at = (id) => { const c = CABINETS.find((k) => k.id === id); return [c.x, c.y]; };
+    return { battleship: at('battleship'), donkeykong: at('donkeykong'), roulette: at('roulette') };
+  });
   const cases = [
-    ['ArcadeHub', 286, 162],   // BATTLESHIP, bottom right
-    ['ArcadeAnnex', 112, 96],  // BARREL CLIMB
-    ['ArcadeCasino', 224, 96], // CHAMBER
+    ['ArcadeHub', ...where.battleship],    // FROG POND HUNT, bottom right
+    ['ArcadeAnnex', ...where.donkeykong],  // BARREL CLIMB
+    ['ArcadeCasino', ...where.roulette],   // CHAMBER
   ];
 
   for (const [room, cx, cy] of cases) {
@@ -1344,6 +1352,9 @@ for (const g of [
     // card going up take longer than any fixed guess, and a check that fires
     // early reads the player's SPAWN and calls the room broken.
     await sceneUp(page, 'Minigame');
+    // Esc is the card's LEAVE only once the card is up; a press before it
+    // exists goes to the pause menu instead, which is not what this checks.
+    await page.waitForFunction(() => !!window.__froggy.game().scene.getScene('Minigame')?.card, { timeout: 8000 }).catch(() => {});
     await page.keyboard.press('Escape'); // forfeit
     await sceneUp(page, 'Minigame', false);
     await sleep(2500); // the fade back, and the walk to the machine
@@ -1481,13 +1492,48 @@ for (const g of [
   const fromTheSide = await at();
 
   const front = counter.y + counter.h;
-  const behind = (p) => p.x > counter.x - 3 && p.x < counter.x + counter.w + 3 && p.y < front;
-  const kept = !behind(straightUp) && !behind(fromTheSide);
+  // Not just the feet: the whole of the player -- hood included, 28 pixels
+  // above the feet -- has to stay in front of the counter's front face, all
+  // along it and past its ends by half a body.
+  const HEAD = 28;
+  const over = (p) => p.x > counter.x - 7 && p.x < counter.x + counter.w + 7 && p.y - HEAD < front;
+  const kept = !over(straightUp) && !over(fromTheSide);
   console.log(
-    `${kept ? 'PASS' : 'FAIL'}  the player cannot get behind the counter  — ` +
-      `up: ${straightUp.x},${straightUp.y}; along the wall: ${fromTheSide.x},${fromTheSide.y} (front edge ${front})`,
+    `${kept ? 'PASS' : 'FAIL'}  the player cannot get behind the counter, or into it  — ` +
+      `up: ${straightUp.x},${straightUp.y}; along the wall: ${fromTheSide.x},${fromTheSide.y} ` +
+      `(head top ${straightUp.y - HEAD} vs front edge ${front})`,
   );
   if (!kept) failures++;
+
+  // And at the far end, where the member of staff stands: walked up to him
+  // from every side, the player never overlaps the counter or him.
+  const staffEnd = await page.evaluate(async () => {
+    const s = window.__froggy.game().scene.getScene('ArcadeHub');
+    const out = [];
+    for (const [sx, sy, kx, ky] of [
+      [240, 120, 0, -1],
+      [300, 60, 0, 0],
+      [300, 90, -1, 0],
+      [200, 95, 1, -1],
+      [260, 100, -1, -1],
+    ]) {
+      s.player.setPosition(sx, sy);
+      for (let i = 0; i < 180; i++) {
+        const before = { x: s.player.x, y: s.player.y };
+        s.player.move(kx, ky, 16, s.bounds);
+        s.keepOutOfCounter(before);
+        s.keepOffFroggy(before);
+      }
+      out.push({ x: Math.round(s.player.x), y: Math.round(s.player.y) });
+    }
+    return out;
+  });
+  const clear = staffEnd.every((p) => !over(p));
+  console.log(
+    `${clear ? 'PASS' : 'FAIL'}  and nowhere along it, from any side, does the player end up in the counter  — ` +
+      staffEnd.map((p) => `${p.x},${p.y}`).join(' '),
+  );
+  if (!clear) failures++;
 
   await page.close();
 }

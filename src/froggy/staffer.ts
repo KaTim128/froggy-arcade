@@ -31,6 +31,13 @@ export interface StafferDrawOpts {
   /** 0..1, drives a slouchy sway -- more of it than the dealer allows himself. */
   bounce?: number;
   alpha?: number;
+  /**
+   * His right forearm laid along the counter top instead of hanging behind
+   * it, the hand near the end of the counter: the lean of somebody who has
+   * been stood there all shift.  The counter top is his `y`-less design line
+   * 0 to 7 (see ArcadeHub's STAFFER_FEET), so that is where the arm lies.
+   */
+  restArm?: boolean;
 }
 
 const KIT = {
@@ -71,7 +78,7 @@ export function drawStaffer(ctx: CanvasRenderingContext2D, o: StafferDrawOpts): 
   ctx.translate(o.x, o.y);
   ctx.scale(s, s);
   ctx.translate(0, -50);
-  drawHim(ctx, pose, o.bounce ?? 0);
+  drawHim(ctx, pose, o.bounce ?? 0, o.restArm ?? false);
   lightHim(ctx);
   ctx.restore();
 }
@@ -90,7 +97,7 @@ function lightHim(ctx: CanvasRenderingContext2D): void {
   ctx.restore();
 }
 
-function drawHim(ctx: CanvasRenderingContext2D, pose: StafferPose, bounce: number): void {
+function drawHim(ctx: CanvasRenderingContext2D, pose: StafferPose, bounce: number, restArm: boolean): void {
   // A slouch that comes and goes: he shifts his weight, the dealer never does.
   const sway = Math.sin(bounce * Math.PI * 2);
   ctx.translate(sway * 0.8, Math.abs(sway) * 0.6);
@@ -154,6 +161,25 @@ function drawHim(ctx: CanvasRenderingContext2D, pose: StafferPose, bounce: numbe
     ctx.fill();
     ctx.fillStyle = KIT.skin;
     ctx.beginPath();
+    if (sx > 0 && restArm) {
+      // down from the sleeve to the elbow on the counter's back edge, and the
+      // forearm along the top of it, out towards the end
+      roundRect(ctx, 30, -6, 9, 10, 4);
+      ctx.fill();
+      ctx.fillStyle = KIT.skinShade;
+      ctx.beginPath();
+      roundRect(ctx, 30, 0, 14, 7, 3);
+      ctx.fill();
+      ctx.fillStyle = KIT.skin;
+      ctx.beginPath();
+      roundRect(ctx, 30, -0.5, 14, 5, 2.5);
+      // the hand, resting flat, fingers towards the end of the counter
+      ctx.ellipse(46, 2.5, 5, 3.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = KIT.skinShade;
+      ctx.fillRect(43, 4.2, 7, 1);
+      continue;
+    }
     roundRect(ctx, sx < 0 ? -38 : 30, -6, 9, 22, 4);
     ctx.fill();
   }

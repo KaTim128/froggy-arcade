@@ -205,16 +205,24 @@ try {
     // Sit through the whole thing rather than skipping it: the speech and then
     // ten seconds to hide, both of which the player is meant to be able to use.
     let waitedForCount = 0;
-    while (waitedForCount < 24000 && (await hide()).mode === 'briefing') {
+    // (up to forty seconds of wall clock: the first frame of a room on a
+    // software renderer is several seconds of shader compiling on its own)
+    while (waitedForCount < 40000 && (await hide()).mode === 'briefing') {
       await sleep(500);
       waitedForCount += 500;
     }
     check('the briefing hands over to the count', (await hide()).mode === 'hiding',
       `after ${(waitedForCount / 1000).toFixed(1)}s`);
 
-    await sleep(11000);
+    // Ten seconds of GAME time, polled for rather than slept through: on a
+    // software renderer a wall-clock second can be less than a game second.
+    let counted = 0;
+    while (counted < 20000 && (await hide()).mode === 'hiding') {
+      await sleep(250);
+      counted += 250;
+    }
     let s = await hide();
-    check('the count hands over to the search', s.mode === 'seeking', s.mode);
+    check('the count hands over to the search', s.mode === 'seeking', `${s.mode} after ${(counted / 1000).toFixed(1)}s`);
     // The test player stands in the open at the door for the next while.  He
     // is faster and sharper than he was, and catching a mannequin ends the
     // scene under the rest of these checks, so he is kept blind until a check
@@ -248,18 +256,19 @@ try {
     }
     check('he searches the room on his own', travelled > 3, `covered ${travelled.toFixed(1)}m in 8s`);
 
-    // The corner behind a partition.  Room 0's first partition runs into the
-    // back wall; a waypoint two metres away on the far side of it is one he
-    // cannot reach, and he used to shoulder the outer wall there for the rest
-    // of the round.  He has to give the trip up and go somewhere else.
-    const corner = { x: -8, z: -12.8 };
+    // The corner behind a partition.  The wall between the machine graveyard
+    // and prize redemption runs into the back wall; a waypoint two metres away
+    // on the far side of it is one he cannot reach from here without going
+    // the long way round, and he used to shoulder the wall there for the rest
+    // of the round.  He has to route round or go somewhere else.
+    const corner = { x: 3, z: -22, wx: 7 };
     await page.evaluate((c) => {
       const sc = window.__froggy.game().scene.getScene('HideRoom3D');
       sc.grace = 99;
       sc.climb = null;
       sc.fMode = 'search';
       sc.froggy.set(c.x, c.z);
-      sc.waypoint.set(-4.5, c.z);
+      sc.waypoint.set(c.wx, c.z);
       sc.startTrip();
     }, corner);
     // Sampled, because once he has given up he may already be stood at the next
@@ -272,12 +281,12 @@ try {
     }
     const gaveUp = await page.evaluate((c) => {
       const sc = window.__froggy.game().scene.getScene('HideRoom3D');
-      return Math.hypot(sc.waypoint.x + 4.5, sc.waypoint.y - c.z) > 0.01;
+      return Math.hypot(sc.waypoint.x - c.wx, sc.waypoint.y - c.z) > 0.01;
     }, corner);
     // Either answer is right: a route round the partition, or a different spot.
     // What is wrong is staying put.
     check('walled off from a waypoint, he routes round or goes somewhere else',
-      farthest > 2.5 && !s.dbg.froggyBlocked,
+      farthest > 2.5 && (!s.dbg.froggyBlocked || s.climbing),
       `${gaveUp ? 'new waypoint' : 'same waypoint, routed'}, got ${farthest.toFixed(1)}m from the corner`);
 
     // The controls, driven for real through the keyboard rather than by poking
@@ -458,10 +467,16 @@ try {
     await page.keyboard.press('KeyE');
     await sleep(150);
     const before = await hide();
+    // Held until it has gone somewhere, up to a second and a half of wall
+    // clock: what is being checked is that the keys work, not the frame rate.
     await page.keyboard.down('KeyW');
-    await sleep(400);
+    let after = before;
+    for (let t = 0; t < 1500; t += 100) {
+      await sleep(100);
+      after = await hide();
+      if (Math.hypot(after.px - before.px, after.pz - before.pz) > 0.4) break;
+    }
     await page.keyboard.up('KeyW');
-    const after = await hide();
     check('W A S D work the moment you are out',
       Math.hypot(after.px - before.px, after.pz - before.pz) > 0.4,
       `${Math.hypot(after.px - before.px, after.pz - before.pz).toFixed(2)}m`);
@@ -474,14 +489,18 @@ try {
       // six metres from him gets chased, caught and restarted, which tests the
       // chase rather than the search.
       sc.hiding = sc.spots[5];
+      // and nothing left over from the checks before: a climb in progress
+      // owns where he is and would put him back on top of something
+      sc.climb = null;
       const spot = sc.spots[1];
       spot.sinceChecked = 999;
       sc.pos.set(sc.spots[5].x, sc.spots[5].z);
-      sc.froggy.set(spot.x + 2.4, spot.z);
+      // in front of it, where there is floor whatever the room is dressed with
+      sc.froggy.set(spot.x + Math.sin(spot.rot) * 2.4, spot.z + Math.cos(spot.rot) * 2.4);
       sc.fMode = 'search';
       sc.memory = 0;
       sc.waypoint.set(spot.x, spot.z);
-      for (let i = 0; i < 60; i++) {
+      for (let i = 0; i < 120; i++) {
         await new Promise((r) => setTimeout(r, 100));
         if (spot.open > 0.05) return true;
       }
@@ -574,7 +593,9 @@ try {
       // Against where he is DRAWN: at a hiding place he steps in to it and
       // crawls to the bed, off his logical spot, and the twin copies the
       // model, not the rule.
-      apart = Math.max(apart, Math.hypot(t.vx - t.pen.x, t.vz - t.pen.z));
+      // (the first half second is the gallery settling in after the move
+      // through the wall, and the twin catching up with where he was put)
+      if (i >= 2) apart = Math.max(apart, Math.hypot(t.vx - t.pen.x, t.vz - t.pen.z));
       went += Math.hypot(t.fx - at.x, t.fz - at.z);
       at = { x: t.fx, z: t.fz };
     }
@@ -1491,18 +1512,21 @@ try {
       sc.grace = 999;
       sc.hiding = null;
       sc.climb = null;
-      sc.pos.set(0, 8);
-      sc.froggy.set(0, -2);
+      // a straight run of open floor, down the food court toward the doors
+      sc.pos.set(1, 23.5);
+      sc.froggy.set(1, 13);
       sc.fMode = 'search';
-      sc.waypoint.set(0, 6);
+      sc.waypoint.set(1, 21);
       for (let i = 0; i < 60; i++) sc.tick(1 / 60);
       return {
         modelYaw: sc.monster.root.rotation.y,
         headingYaw: sc.froggyYaw,
-        walkedTowardsPlayer: sc.froggy.y > -2,
+        walkedTowardsPlayer: sc.froggy.y > 13,
       };
     });
-    check('he faces the way he is walking', Math.abs(facing.modelYaw - facing.headingYaw) < 0.01,
+    // (compared as angles: a model that has turned right round is at 2pi more)
+    const faceOff = Math.atan2(Math.sin(facing.modelYaw - facing.headingYaw), Math.cos(facing.modelYaw - facing.headingYaw));
+    check('he faces the way he is walking', Math.abs(faceOff) < 0.01,
       `model ${facing.modelYaw.toFixed(2)} vs heading ${facing.headingYaw.toFixed(2)}`);
 
     // Reach is reach, whatever he happens to be doing with his hands.

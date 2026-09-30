@@ -263,6 +263,69 @@ function paintBump(ctx: CanvasRenderingContext2D, seed: number, creased = 1): vo
 }
 
 /**
+ * WEAR.  Cracks in the old skin -- jagged, forking, dark in the split with a
+ * dry pale lip either side -- and scratches: short gouges in parallel sets
+ * of three or four, the way claws leave them.  Painted onto the face's colour
+ * and, with `bump`, onto its relief with the same seed, so every mark that
+ * shows is also a groove the torch catches.
+ */
+function paintWear(ctx: CanvasRenderingContext2D, seed: number, bump: boolean): void {
+  const r = rng(seed);
+  const crack = (x: number, y: number, a: number, len: number, w: number, depth: number): void => {
+    const pts: [number, number][] = [[x, y]];
+    for (let i = 0; i < len; i++) {
+      a += (r() - 0.5) * 0.9;
+      x += Math.cos(a) * (3 + r() * 4);
+      y += Math.sin(a) * (3 + r() * 4);
+      pts.push([x, y]);
+      if (depth > 0 && r() < 0.14) crack(x, y, a + (r() < 0.5 ? -1 : 1) * (0.6 + r() * 0.6), len * 0.45, w * 0.6, depth - 1);
+    }
+    const line = (style: string, width: number, dx: number, dy: number): void => {
+      ctx.strokeStyle = style;
+      ctx.lineWidth = width;
+      ctx.lineJoin = 'miter';
+      ctx.beginPath();
+      pts.forEach(([px, py], i) => (i ? ctx.lineTo(px + dx, py + dy) : ctx.moveTo(px + dx, py + dy)));
+      ctx.stroke();
+    };
+    if (bump) {
+      line('rgba(255,255,255,0.35)', w + 1.4, 0.8, 0.8);
+      line('rgba(0,0,0,0.85)', w, 0, 0);
+    } else {
+      line('rgba(236,228,210,0.18)', w + 1.6, 0.9, 0.9);
+      line('rgba(12,8,6,0.75)', w, 0, 0);
+    }
+  };
+  for (let i = 0; i < 26; i++) crack(r() * SIZE, r() * SIZE, r() * Math.PI * 2, 8 + r() * 16, 0.9 + r() * 1.3, 2);
+  // scratches, in sets
+  for (let i = 0; i < 16; i++) {
+    const x = r() * SIZE;
+    const y = r() * SIZE;
+    const a = r() * Math.PI;
+    const L = 18 + r() * 40;
+    const n = 3 + Math.floor(r() * 2);
+    for (let k = 0; k < n; k++) {
+      const ox = Math.cos(a + Math.PI / 2) * k * (3 + r() * 1.5);
+      const oy = Math.sin(a + Math.PI / 2) * k * (3 + r() * 1.5);
+      const l = L * (0.7 + r() * 0.4);
+      ctx.strokeStyle = bump ? 'rgba(0,0,0,0.7)' : `rgba(${r() < 0.4 ? '70,20,18' : '16,12,10'},0.5)`;
+      ctx.lineWidth = 0.8 + r() * 0.7;
+      ctx.beginPath();
+      ctx.moveTo(x + ox, y + oy);
+      ctx.lineTo(x + ox + Math.cos(a) * l, y + oy + Math.sin(a) * l);
+      ctx.stroke();
+      if (!bump) {
+        ctx.strokeStyle = 'rgba(230,222,205,0.14)';
+        ctx.beginPath();
+        ctx.moveTo(x + ox + 1, y + oy + 1);
+        ctx.lineTo(x + ox + 1 + Math.cos(a) * l, y + oy + 1 + Math.sin(a) * l);
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+/**
  * WHERE HE IS WET.  A specular map: black is dry and matte, white is damp.
  *
  * Mostly dry, with patches and runs of damp -- so the torch finds a wet
@@ -330,8 +393,10 @@ export function froggySkin(): FroggySkin {
   paintBump(x2, 11);
   const [c3, x3] = canvas();
   paintSkin(x3, '#a8a8a8', 29, 1.8);
+  paintWear(x3, 53, false);
   const [c4, x4] = canvas();
   paintBump(x4, 29, 1.8);
+  paintWear(x4, 53, true);
   const [c5, x5] = canvas();
   paintWet(x5, 47);
   cached = {

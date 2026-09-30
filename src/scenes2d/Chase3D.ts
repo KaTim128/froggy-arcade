@@ -94,6 +94,8 @@ export class Chase3D extends Phaser.Scene {
   }
 
   create(): void {
+    // the scream is decoded before anything here can catch you
+    audio.preloadScream();
     froggyLayer.clear();
     this.over = false;
     this.scare = null;

@@ -49,6 +49,10 @@ class AudioManager {
   private current: SceneAudio = SILENCE;
   private unlocked = false;
   private analyser: AnalyserNode | null = null;
+  /** The recorded scream, fetched once and decoded as soon as there is a context. */
+  private screamBytes: Promise<ArrayBuffer | null> | null = null;
+  private screamBuf: AudioBuffer | null = null;
+  private screamDecoding = false;
 
   /** Called from the Boot click gate (PRD EC-9). */
   unlock(): void {
@@ -78,12 +82,60 @@ class AudioManager {
     this.unlocked = true;
     this.applyVolumes();
     void this.ctx.resume();
+    // Decoded now, on the gesture that made the context, so the first scare
+    // never waits on a decode.
+    this.preloadScream();
     // A scene that declared its bed before the context existed would otherwise
     // stay silent for its whole lifetime.  Re-apply what the current scene asked
     // for.  (Silence declarations re-apply as silence, which is free.)
     const pending = this.current;
     this.current = SILENCE;
     this.setScene(pending);
+  }
+
+  /**
+   * A context that a phone suspended behind our back (a call, the lock
+   * screen, a tab switch) is resumed on the next touch rather than left
+   * silent until the scare that needed it.
+   */
+  wake(): void {
+    if (this.ctx && this.ctx.state !== 'running') void this.ctx.resume();
+  }
+
+  /**
+   * ---- THE SCREAM, FETCHED AND DECODED BEFORE IT IS NEEDED.
+   *
+   * Called when a horror level starts (and on unlock).  The bytes are fetched
+   * once whether or not there is a context yet; the decode happens the moment
+   * there is one.  By the time anything can catch the player the buffer is
+   * sitting ready, and `scare()` starts it on the same call.
+   */
+  preloadScream(): void {
+    if (!this.screamBytes) {
+      const url = `${import.meta.env.BASE_URL}audio/froggy-scream.mp3`;
+      this.screamBytes = fetch(url)
+        .then((r) => (r.ok ? r.arrayBuffer() : null))
+        .catch(() => null);
+    }
+    if (this.screamBuf || this.screamDecoding || !this.ctx) return;
+    const ctx = this.ctx;
+    this.screamDecoding = true;
+    void this.screamBytes
+      .then((bytes) => (bytes ? ctx.decodeAudioData(bytes.slice(0)) : null))
+      .then((buf) => {
+        this.screamBuf = buf;
+      })
+      .catch(() => {
+        this.screamBuf = null;
+      })
+      .finally(() => {
+        this.screamDecoding = false;
+      });
+  }
+
+  /** True once the recorded scream is decoded and will play on the next scare. */
+  screamReady(): boolean {
+    return !!this.screamBuf;
   }
 
   isUnlocked(): boolean {
@@ -1251,10 +1303,32 @@ class AudioManager {
     if (store.get().settings.master === 0) return;
 
     const ctx = this.ctx;
+    this.wake();
     const t = ctx.currentTime;
+    // Everything below goes through a hard limiter: louder than it was, and
+    // still held under full scale however the layers stack.
+    const limit = ctx.createDynamicsCompressor();
+    limit.threshold.value = -14;
+    limit.knee.value = 4;
+    limit.ratio.value = 16;
+    limit.attack.value = 0.002;
+    limit.release.value = 0.25;
+    const ceiling = ctx.createGain();
+    ceiling.gain.value = 1.9;
     const out = ctx.createGain();
-    out.gain.value = 0.85; // ceiling, not unity
-    out.connect(ctx.destination);
+    out.gain.value = 1;
+    out.connect(limit);
+    limit.connect(ceiling);
+    // makeup gain after the limiter, then capped below unity again
+    const cap = ctx.createGain();
+    cap.gain.value = 0.5;
+    ceiling.connect(cap);
+    cap.connect(ctx.destination);
+
+    // THE VOICE.  The recorded scream, made his: see `screamVoice`.  With it
+    // playing, the synthesized scream below steps back to a texture under it.
+    const recorded = this.screamBuf ? this.screamVoice(ctx, t, out, this.screamBuf) : false;
+    const synth = recorded ? 0.35 : 1;
 
     // The scream: three detuned saws through a hard clip, sweeping down from
     // a shriek to a roar over most of a second.  The clipping is what makes
@@ -1268,8 +1342,8 @@ class AudioManager {
     clip.curve = curve;
     const clipGain = ctx.createGain();
     clipGain.gain.setValueAtTime(0.0001, t);
-    clipGain.gain.linearRampToValueAtTime(0.45, t + 0.03);
-    clipGain.gain.setValueAtTime(0.45, t + 0.5);
+    clipGain.gain.linearRampToValueAtTime(0.45 * synth, t + 0.03);
+    clipGain.gain.setValueAtTime(0.45 * synth, t + 0.5);
     clipGain.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
     clip.connect(clipGain);
     clipGain.connect(out);
@@ -1336,7 +1410,7 @@ class AudioManager {
       osc.frequency.setValueAtTime(f, t);
       osc.frequency.linearRampToValueAtTime(f * 0.7, t + 0.9);
       g.gain.setValueAtTime(0.0001, t + 0.02);
-      g.gain.linearRampToValueAtTime(0.16, t + 0.05);
+      g.gain.linearRampToValueAtTime(0.16 * synth, t + 0.05);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
       osc.connect(g);
       g.connect(out);
@@ -1362,6 +1436,91 @@ class AudioManager {
     bp.connect(ng);
     ng.connect(out);
     src.start(t);
+  }
+
+  /**
+   * ---- HIS SCREAM.
+   *
+   * The recording is a person's scream, and he is not a person.  It is played
+   * three times at once, each copy pushed somewhere a throat cannot go:
+   *
+   *   THE VOICE: a little under its own pitch and bending lower as it goes,
+   *   driven into saturation so it tears rather than rings.
+   *   THE SHRIEK: the same scream half an octave up, only its top end, a hair
+   *   late -- a second mouth screaming over the first.
+   *   THE GROWL: almost an octave down, cut to the chest, clipped hard and
+   *   fluttered at 38Hz, which is the part that is no animal's.
+   *
+   * The leading silence of the file is skipped, so it starts on the frame the
+   * scare does.  Returns false if it could not play.
+   */
+  private screamVoice(ctx: AudioContext, t: number, out: AudioNode, buf: AudioBuffer): boolean {
+    const OFFSET = 0.17;
+    const DUR = 2.15;
+    const shaper = (drive: number): WaveShaperNode => {
+      const w = ctx.createWaveShaper();
+      const c = new Float32Array(1024);
+      for (let i = 0; i < 1024; i++) c[i] = Math.tanh(((i / 511.5) - 1) * drive);
+      w.curve = c;
+      return w;
+    };
+    const layer = (rate0: number, rate1: number, delay: number, gain: number, chain: AudioNode[]): void => {
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.playbackRate.setValueAtTime(rate0, t + delay);
+      src.playbackRate.linearRampToValueAtTime(rate1, t + delay + DUR * 0.9);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + delay);
+      g.gain.linearRampToValueAtTime(gain, t + delay + 0.012);
+      g.gain.setValueAtTime(gain, t + delay + DUR * 0.62);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + delay + DUR);
+      let at: AudioNode = src;
+      for (const n of chain) {
+        at.connect(n);
+        at = n;
+      }
+      at.connect(g);
+      g.connect(out);
+      src.start(t + delay, OFFSET);
+      src.stop(t + delay + DUR + 0.05);
+    };
+    try {
+      // the voice
+      const body = ctx.createBiquadFilter();
+      body.type = 'peaking';
+      body.frequency.value = 1100;
+      body.gain.value = 5;
+      body.Q.value = 0.9;
+      layer(0.93, 0.84, 0, 0.9, [shaper(2.2), body]);
+
+      // the shriek over it
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 2300;
+      hp.Q.value = 0.7;
+      layer(1.36, 1.22, 0.018, 0.42, [hp, shaper(1.6)]);
+
+      // the growl under it
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 820;
+      lp.Q.value = 1.4;
+      const flutter = ctx.createGain();
+      flutter.gain.value = 0.55;
+      const lfo = ctx.createOscillator();
+      const lfoDepth = ctx.createGain();
+      lfo.type = 'triangle';
+      lfo.frequency.value = 38;
+      lfoDepth.gain.value = 0.45;
+      lfo.connect(lfoDepth);
+      lfoDepth.connect(flutter.gain);
+      lfo.start(t);
+      lfo.stop(t + DUR + 0.1);
+      layer(0.54, 0.47, 0.006, 0.95, [lp, shaper(6), flutter]);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 

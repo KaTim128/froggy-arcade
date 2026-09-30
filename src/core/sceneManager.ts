@@ -113,6 +113,11 @@ export function bootGame(): void {
   // gesture anywhere will do it.  Without this, entering the game at a scene
   // other than Boot leaves the audio context suspended for the whole session.
   window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
+  // ...and every later gesture resumes a context the phone suspended, so the
+  // scare is never the thing that finds it asleep.
+  for (const ev of ['pointerdown', 'touchend', 'keydown'] as const) {
+    window.addEventListener(ev, () => audio.wake(), { passive: true });
+  }
 
   // PRD ST-2: never lose a run to a closed tab.
   window.addEventListener('beforeunload', () => store.flush());

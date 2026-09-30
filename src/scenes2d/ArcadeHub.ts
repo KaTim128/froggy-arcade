@@ -70,7 +70,13 @@ const CHANGE_SPOT = { x: 272, y: 62 };
  * behind it, they are not standing on any floor the player can walk, and
  * nothing about the walkable box changes.
  */
-const COUNTER_POST = { x: 243, y: COUNTER.y + 17 };
+/**
+ * The member of staff stands a little in from the end, not at it: his body is
+ * over the counter's last stretch and his right forearm lies along the top of
+ * it towards the end, the way somebody leans who has been stood there all
+ * shift.  See `restArm` in `drawStaffer`.
+ */
+const COUNTER_POST = { x: 237, y: COUNTER.y + 17 };
 /**
  * And where FROGGY leans on it, which is not the same place.
  *
@@ -178,11 +184,16 @@ const POST_RANGE = 26;
  *
  * Feet at the front of the counter put the player's head up over the glass,
  * right under whoever is behind it -- which at this size reads as walking
- * into Froggy, not as standing at the counter.  A customer's head may cover
- * no more than the bottom edge of the counter's front: their feet stop a
- * head's height out, all along it, so nobody is ever drawn inside him.
+ * into Froggy, not as standing at the counter.  Even four pixels of head over
+ * the bottom of the front read as a head pushed into the woodwork.  So the
+ * whole of the player stays in front of it: their feet stop a head's height
+ * out, all along it, with two pixels of floor showing between the top of the
+ * hood and the counter's bottom edge.
  */
-const COUNTER_STAND = COUNTER.y + COUNTER.h - 4 + PLAYER_BOX.headTop;
+const COUNTER_GAP = 2;
+const COUNTER_STAND = COUNTER.y + COUNTER.h + COUNTER_GAP + PLAYER_BOX.headTop;
+/** How far past the counter's ends it still stops you: half a body, and a pixel. */
+const COUNTER_EDGE = PLAYER_BOX.torsoW / 2 + 1;
 /** What the key is worth to the arcade, in cash, once. */
 const KEY_REWARD = 100;
 
@@ -608,19 +619,26 @@ export class ArcadeHub extends Phaser.Scene {
   }
 
   /** The member of staff, each frame: painted, and talking while you talk to him. */
-  private stepCounterStaffer(delta: number): void {
+  private stepCounterStaffer(delta: number, keep = false): void {
     if (!this.stafferOnCounter) return;
     this.staffT += delta;
     const talking = !!this.talk;
-    this.paintBehindCounter(COUNTER_POST.x, (ctx) =>
-      drawStaffer(ctx, {
-        x: COUNTER_POST.x,
-        y: STAFFER_FEET,
-        height: STAFFER_H,
-        // mouth going while the panel is up, as if he were saying it
-        pose: talking && Math.floor(this.staffT / 140) % 2 === 0 ? 'talk' : 'idle',
-        bounce: (this.staffT / 2600) % 1,
-      }),
+    this.paintBehindCounter(
+      COUNTER_POST.x,
+      (ctx) =>
+        drawStaffer(ctx, {
+          x: COUNTER_POST.x,
+          y: STAFFER_FEET,
+          height: STAFFER_H,
+          // mouth going while the panel is up, as if he were saying it
+          pose: talking && Math.floor(this.staffT / 140) % 2 === 0 ? 'talk' : 'idle',
+          bounce: (this.staffT / 2600) % 1,
+          restArm: true,
+        }),
+      // his forearm is ON the counter top, so the top strip to his right is
+      // painted too: from past his side to the end of the counter
+      { x: COUNTER_POST.x + 13, y: FROG_CUT, w: COUNTER.x + COUNTER.w - (COUNTER_POST.x + 13), h: 4 },
+      keep,
     );
   }
 
@@ -629,13 +647,21 @@ export class ArcadeHub extends Phaser.Scene {
    * the counter's back edge and cut round the player (see paintCounterFroggy),
    * with their shadow on the wall behind them.
    */
-  private paintBehindCounter(x: number, draw: (ctx: CanvasRenderingContext2D) => void): void {
+  private paintBehindCounter(
+    x: number,
+    draw: (ctx: CanvasRenderingContext2D) => void,
+    onTop?: { x: number; y: number; w: number; h: number },
+    keep = false,
+  ): void {
     const px = this.player.x;
     const py = this.player.y;
     froggyLayer.paint((ctx) => {
       ctx.save();
       ctx.beginPath();
       ctx.rect(0, 0, GAME_W, FROG_CUT);
+      // and whatever of them lies ON the counter top, which is in front of
+      // the cut line and still behind nothing
+      if (onTop) ctx.rect(onTop.x, onTop.y, onTop.w, onTop.h);
       ctx.rect(px - PLAYER_BOX.headW / 2, py - PLAYER_BOX.headTop, PLAYER_BOX.headW, PLAYER_BOX.headH);
       ctx.rect(
         px - PLAYER_BOX.torsoW / 2,
@@ -651,7 +677,7 @@ export class ArcadeHub extends Phaser.Scene {
       ctx.fillRect(x - 13, FROG_CUT - 26, 34, 26);
       draw(ctx);
       ctx.restore();
-    });
+    }, keep);
   }
 
   /**
@@ -678,7 +704,7 @@ export class ArcadeHub extends Phaser.Scene {
    * overlapping -- the clip is even-odd, and two overlapping holes cancel each
    * other out and put the frog back.
    */
-  private paintCounterFroggy(): void {
+  private paintCounterFroggy(keep = false): void {
     // His shadow on the wall behind him: the light over the counter is in
     // front of him and a little to the left, so it falls back and right.
     this.paintBehindCounter(FROG_POST.x, (ctx) =>
@@ -690,6 +716,8 @@ export class ArcadeHub extends Phaser.Scene {
         pose: 'idleA',
         bounce: Math.sin(this.frogT / 640) * 0.5 + 0.5,
       }),
+      undefined,
+      keep,
     );
   }
 
@@ -1638,7 +1666,18 @@ export class ArcadeHub extends Phaser.Scene {
       // The overlay is over every Phaser object, the prize counter and the
       // change machine included: whoever is behind the counter is taken off
       // it while something else has the room, and painted again after.
-      if (this.apparition === 'off') froggyLayer.clear();
+      //
+      // Except a conversation.  The box paints its portrait before this runs,
+      // and clearing here wiped him out of it -- the intro played to an empty
+      // portrait well and an empty counter.  While a line is up he stays at
+      // his post, added to the portrait rather than replacing it.
+      if (this.apparition !== 'off') return;
+      if (this.dialogue.isActive()) {
+        this.frogT += delta;
+        this.staffT += delta;
+        if (this.frogOnCounter) this.paintCounterFroggy(true);
+        else if (this.stafferOnCounter) this.stepCounterStaffer(0, true);
+      } else froggyLayer.clear();
       return;
     }
     // In conversation: stood still, no prompt over the panel, and the person
@@ -1682,7 +1721,9 @@ export class ArcadeHub extends Phaser.Scene {
   private keepOutOfCounter(before?: { x: number; y: number }): void {
     const front = COUNTER_STAND;
     if (this.player.y >= front) return;
-    const inside = (x: number): boolean => x >= COUNTER.x - 3 && x <= COUNTER.x + COUNTER.w + 3;
+    // Measured to the edge of the BODY, not the middle of it: a player whose
+    // centre is just off the end of the counter still has half a torso over it.
+    const inside = (x: number): boolean => x >= COUNTER.x - COUNTER_EDGE && x <= COUNTER.x + COUNTER.w + COUNTER_EDGE;
     if (!inside(this.player.x)) return;
     // Walked in along the counter's face from the side: stopped at its end,
     // not lifted to the front of it.
