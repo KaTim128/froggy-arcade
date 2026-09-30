@@ -77,7 +77,8 @@ export function runKeyRoomScare(scene: Phaser.Scene, done: () => void): void {
   const scare = playJumpscare3D(scene, stage, monster);
   // His own scream, on the frame he leaves the spot he was stood on -- not
   // before, so the sound and the rush arrive together.
-  scene.time.delayedCall(HOLD_MS, () => audio.sfx('froggy_screech', 1));
+  // (The recorded scream covers it when it is loaded; see `audio.scare`.)
+  if (!audio.screamReady()) scene.time.delayedCall(HOLD_MS, () => audio.sfx('froggy_screech', 1));
   stage.start((dt) => scare.update(dt));
 
   // The scare's own length, and a beat on the end of it for the red to land;

@@ -86,6 +86,8 @@ export class BasementSequence extends Phaser.Scene {
   }
 
   create(): void {
+    // the scream is decoded before anything here can catch you
+    audio.preloadScream();
     froggyLayer.clear();
     // Scene instances are reused; reset everything mutable.
     this.index = 0;

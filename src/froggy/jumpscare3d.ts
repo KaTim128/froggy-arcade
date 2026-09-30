@@ -10,9 +10,9 @@
  * THE SHAPE OF IT, in the 1.2 seconds it has (SCARE_MS, which the scenes
  * already wait out):
  *
- *   THE HOLD.  The light cuts for a frame and he is simply THERE, a couple of
- *   body-widths off, looking down at you with his head higher than yours.
- *   Dead still but for the breathing.  The eyes are already on you.
+ *   THE HOLD.  No cut, no fade, nothing that warns you: on the frame he
+ *   reaches you he is simply THERE, a couple of body-widths off, looking down
+ *   at you with his head higher than yours.  The eyes are already on you.
  *
  *   THE LUNGE.  He comes at the camera -- not a zoom, a rush that is still
  *   accelerating when it arrives -- folding down into your face, the long
@@ -40,8 +40,8 @@ import { SCARE_MS } from './jumpscare';
  * not long enough to read what -- and the lunge is a hundred and forty
  * milliseconds of a thing coming at the lens still accelerating.
  */
-export const HOLD_MS = 90;
-const LUNGE_MS = 140;
+export const HOLD_MS = 60;
+const LUNGE_MS = 120;
 
 export interface Scare3D {
   /** Call every frame AFTER the scene has placed its camera and its monster. */
@@ -51,9 +51,12 @@ export interface Scare3D {
 export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster: FroggyMonster): Scare3D {
   audio.scare();
   audio.sfx('boom', 1);
+  // The recorded scream is already going (see `audio.scare`); the synthetic
+  // screech is only for when it could not be loaded.
+  const recorded = audio.screamReady();
   scene.time.delayedCall(HOLD_MS, () => {
     audio.sfx('death_stinger', 1);
-    audio.sfx('froggy_screech', 1);
+    if (!recorded) audio.sfx('froggy_screech', 1);
   });
   // THE HIT: a spike of everything at once as he arrives -- a second boom
   // and a second screech on top of the first, and the buzzer under them.
@@ -85,9 +88,9 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
   const faceFront = 0.28 * s;
   const fov = THREE.MathUtils.degToRad(cam.fov);
   const view = (d: number) => 2 * d * Math.tan(fov / 2);
-  // close: the head is about nine tenths of the frame's height
-  // (the open jaw hangs below the head, so the frame is widened to keep it)
-  const near = faceFront + headSize / (view(1) * 1.0);
+  // close: the head a little bigger than the frame -- the eyes at the top
+  // edge, the stretched jaw off the bottom of it, the teeth across the middle
+  const near = faceFront + headSize / (view(1) * 1.18);
   // far: his head, his chest and his hanging arms, towering
   const far = faceFront + (headSize * 2.5) / view(1);
 
@@ -121,9 +124,12 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
     canvas.style.transform = `scale(${1 + 0.07 * k}) skewX(${(j * 3.5 * k).toFixed(2)}deg) translate(${(j * 6 * k).toFixed(1)}px, ${(-j * 4 * k).toFixed(1)}px)`;
   };
   let done = false;
+  // the eyes and the teeth are the last things the dark takes
+  monster.setGlare(1);
   const dispose = (): void => {
     if (done) return;
     done = true;
+    monster.setGlare(0);
     distort(0);
     stage.scene.remove(under, behind);
     for (const [l, i] of carried) l.intensity = i;
@@ -145,19 +151,25 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
 
   const paint = (): void => {
     froggyLayer.paint((ctx) => {
-      // The light cutting out, for a frame at the start and one in the lunge.
-      const blackout = t < 40 || (t > HOLD_MS + LUNGE_MS * 0.55 && t < HOLD_MS + LUNGE_MS * 0.55 + 30);
-      if (blackout) {
-        ctx.fillStyle = '#000000';
+      // NO BLACKOUT.  The screen never goes dark before he is on it: the
+      // frame that catches you is the first frame of him.
+      // THE FLASH as he hits: a frame of white, thin enough to see him
+      // through, then a red pulse, twice.
+      const since = t - hitAt;
+      if (since >= 0 && since < 45) {
+        ctx.fillStyle = 'rgba(255,245,235,0.55)';
         ctx.fillRect(0, 0, GAME_W, GAME_H);
         return;
       }
-      // THE FLASH as he hits: white for a frame, then a red pulse, twice.
-      const since = t - hitAt;
-      if (since >= 0 && since < 45) {
-        ctx.fillStyle = 'rgba(255,245,235,0.85)';
-        ctx.fillRect(0, 0, GAME_W, GAME_H);
-        return;
+      // PANIC: the picture tearing for a moment after the hit -- a few bands
+      // of it slipping sideways, dark and red.
+      if (since >= 45 && since < 420 && Math.random() < 0.6) {
+        for (let b = 0; b < 3; b++) {
+          const y = Math.random() * GAME_H;
+          const h = 2 + Math.random() * 9;
+          ctx.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,0.55)' : 'rgba(140,0,0,0.35)';
+          ctx.fillRect(0, y, GAME_W, h);
+        }
       }
       if (since >= 45 && since < 330) {
         const p = Math.max(0, Math.sin(((since - 45) / 285) * Math.PI * 2));
@@ -210,9 +222,12 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
       // you, working -- a little wider, a little less -- never quite still.
       // Wide -- as wide as the jaw goes -- and fast: the mouth is open before
       // he arrives, and it keeps working.
-      maw: t < HOLD_MS ? 0.1 : 0.94 + closeK * 0.06 - Math.abs(Math.sin(t / 120)) * 0.05,
-      mawRate: 22,
-      bare: t < HOLD_MS ? 0.3 : 1,
+      // Already parted on the hold -- the teeth showing -- and then all the
+      // way, and further than that: the jaw stretching long as he arrives.
+      maw: t < HOLD_MS ? 0.35 : 1,
+      mawRate: 40,
+      stretch: t < HOLD_MS ? 0 : Math.min(1, lungeK * 1.4) * (0.92 + Math.abs(Math.sin(t / 110)) * 0.08),
+      bare: t < HOLD_MS ? 0.6 : 1,
       climb: 0,
       lunge: reaching,
       // the arms come up as he comes in, and stay up
@@ -225,7 +240,7 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
     target.copy(basePos).addScaledVector(fwd, d);
     // his face a touch above the middle, so the eyes and the open mouth are
     // both in the frame
-    target.y = basePos.y + lift + headSize * 0.05;
+    target.y = basePos.y + lift + headSize * 0.1;
     // a sway across the line while he is still, and none once he is on you
     target.addScaledVector(right, t < HOLD_MS ? Math.sin(t / 260) * 0.04 * s : 0);
     monster.root.rotation.y = yaw;
@@ -255,8 +270,12 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
 
     // ---- THE LIGHT follows the face in: under it and a little in front.
     const hw = headWorld.copy(target);
-    under.position.copy(hw).addScaledVector(fwd, -Math.min(d * 0.7, 0.9)).add(new THREE.Vector3(0, -headSize * 0.9, 0));
-    under.intensity = (t < 40 ? 0 : 1.5 + rush * 2.2) * (1 + Math.sin(t / 37) * 0.06);
+    // (level with the teeth rather than under the chin, so it lights the
+    // face and the teeth and not the inside of the jaw)
+    under.position.copy(hw).addScaledVector(fwd, -Math.min(d * 0.7, 0.9)).add(new THREE.Vector3(0, -headSize * 0.35, 0));
+    // Subtle: the face only just lit, so the eyes and teeth -- which light
+    // themselves -- are the brightest things on it.
+    under.intensity = (0.7 + rush * 1.2) * (1 + Math.sin(t / 37) * 0.06);
     behind.position.copy(hw).addScaledVector(fwd, headSize * 1.6).add(new THREE.Vector3(0, headSize * 0.6, 0));
     behind.intensity = 2.5 + rush * 3.5;
     under.distance = 3 * s;

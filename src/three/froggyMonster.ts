@@ -43,18 +43,18 @@ const SKIN_DARK = 0x221f1d;
 const SKIN_PALE = 0x33312d;
 const FACE = 0x3a3835;
 /** The muzzle: the pale half of the face, as it is on the mascot. */
-const MUZZLE = 0x55524e;
-const MOUTH = 0x0b0708;
-const LID = 0x33302d;
+const MUZZLE = 0x4a4743;
+const MOUTH = 0x030202;
+const LID = 0x282421;
 /**
  * The whites.  A dirty grey-white rather than white: a pure white eye under a
  * torch is a lamp, and a lamp is not looking at you.
  */
-const SCLERA = 0x8f8c85;
+const SCLERA = 0x807b73;
 const PUPIL = 0x020202;
 /** The lips: the face's grey, darker and wetter, with a little blood in it. */
 const LIP = 0x342d2b;
-const MOUTH_WET = 0x0e0606;
+const MOUTH_WET = 0x080303;
 /** Old ivory gone yellow-grey. */
 /**
  * Old ivory, yellowed, one or two nearly brown -- but LIGHT: they were dark
@@ -62,7 +62,7 @@ const MOUTH_WET = 0x0e0606;
  */
 const TOOTH = [0xcfc3a0, 0xbdb08a, 0xd9ceae, 0xa89c78];
 /** The gums: raw, dark, wet. */
-const GUM = 0x5c1a24;
+const GUM = 0x44101a;
 /** The mouth's rim, in the head's own units. */
 const MOUTH_Y = -0.1;
 const MOUTH_Z = 0.085;
@@ -107,9 +107,16 @@ function sclera(): THREE.CanvasTexture {
     ctx.ellipse(rnd() * W, H * (0.3 + rnd() * 0.3), 4 + rnd() * 10, 2 + rnd() * 4, 0, 0, Math.PI * 2);
     ctx.fill();
   }
+  // BLOODSHOT: a raw pink-red flush creeping in from the rim, under the veins
+  const flush = ctx.createLinearGradient(0, H * 0.18, 0, H * 0.6);
+  flush.addColorStop(0, 'rgba(150,40,36,0)');
+  flush.addColorStop(0.55, 'rgba(150,40,36,0.16)');
+  flush.addColorStop(1, 'rgba(120,20,22,0.42)');
+  ctx.fillStyle = flush;
+  ctx.fillRect(0, 0, W, H);
   // the veins: from the rim (y ~ 0.55H) up toward the middle, branching
   const vein = (x: number, y: number, len: number, w: number, depth: number): void => {
-    ctx.strokeStyle = `rgba(${150 + rnd() * 40},${30 + rnd() * 20},${30 + rnd() * 16},${0.45 + rnd() * 0.3})`;
+    ctx.strokeStyle = `rgba(${150 + rnd() * 50},${22 + rnd() * 20},${24 + rnd() * 16},${0.55 + rnd() * 0.35})`;
     ctx.lineWidth = w;
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -124,7 +131,15 @@ function sclera(): THREE.CanvasTexture {
     }
     ctx.stroke();
   };
-  for (let i = 0; i < 26; i++) vein(rnd() * W, H * (0.5 + rnd() * 0.12), 12 + rnd() * 26, 0.6 + rnd() * 0.7, 2);
+  // many more of them than a healthy eye has, and thicker at the rim
+  for (let i = 0; i < 70; i++) vein(rnd() * W, H * (0.5 + rnd() * 0.12), 12 + rnd() * 30, 0.7 + rnd() * 1.1, 2);
+  // and a few burst ones: a spot of blood in the white
+  for (let i = 0; i < 6; i++) {
+    ctx.fillStyle = `rgba(130,14,16,${0.25 + rnd() * 0.25})`;
+    ctx.beginPath();
+    ctx.ellipse(rnd() * W, H * (0.3 + rnd() * 0.22), 2 + rnd() * 5, 1 + rnd() * 2.5, rnd() * 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
   scleraTex = new THREE.CanvasTexture(c);
   scleraTex.colorSpace = THREE.SRGBColorSpace;
   scleraTex.wrapS = THREE.RepeatWrapping;
@@ -136,8 +151,13 @@ const EYE_R = 0.108;
 const PUPIL_MIN = 0.125;
 const PUPIL_MAX = 0.4;
 const PUPIL_STEPS = 12;
-/** A pupil shrunk to a pinprick: the predatory stare of the scares. */
-const PUPIL_PIN = 0.04;
+/**
+ * A pupil shrunk to a pinprick: the predatory stare of the scares.  Round
+ * and small, but not a needle -- at 0.04 it vanished on the white at any
+ * distance and read as a scratch up close.  Two and a half times that is
+ * still tight, still wrong, and a hard black dot from across a dark room.
+ */
+const PUPIL_PIN = 0.1;
 const pupilGeoms: THREE.BufferGeometry[] = [];
 const pinGeoms: THREE.BufferGeometry[] = [];
 const ringGeoms: THREE.BufferGeometry[] = [];
@@ -154,7 +174,9 @@ function pinCap(c: number): { pupil: THREE.BufferGeometry; ring: THREE.BufferGeo
     const g = new THREE.SphereGeometry(EYE_R * 1.012, 20, 3, 0, Math.PI * 2, 0, theta);
     g.rotateX(Math.PI / 2);
     pinGeoms[i] = g;
-    const r = new THREE.SphereGeometry(EYE_R * 1.009, 24, 2, 0, Math.PI * 2, theta, 0.06);
+    // a thin rim of dark iris round it, not a bright ring: a yellow halo
+    // read as a cartoon eye
+    const r = new THREE.SphereGeometry(EYE_R * 1.009, 24, 2, 0, Math.PI * 2, theta, 0.045);
     r.rotateX(Math.PI / 2);
     ringGeoms[i] = r;
   }
@@ -384,6 +406,18 @@ export interface FroggyPose {
    * the gap before the rest of the face.
    */
   peek?: number;
+  /**
+   * 0..1 perfectly still: no twitch, no darting eyes, no idle working of the
+   * jaw or cock of the head, no blinking.  A thing that has seen you and is
+   * doing nothing but looking.
+   */
+  still?: number;
+  /** 0..1 shoulders rounded and the head pushed forward on its neck, arms hanging dead. */
+  hunch?: number;
+  /** Radians the head is tipped over to one side. */
+  tilt?: number;
+  /** 0..1 the jaw going further than a jaw goes: dropped and stretched long. */
+  stretch?: number;
 }
 
 export interface HandGoal {
@@ -487,6 +521,18 @@ export class FroggyMonster {
   private readonly eyeW = [new THREE.Vector3(), new THREE.Vector3()];
   private twitchIn = 2.5;
   private twitchT = 0;
+  /** The current twitch: where the head snapped to, held and then let go. */
+  private readonly twitchTo = new THREE.Vector3();
+  private twitchHold = 0;
+  private stillNow = 0;
+  private hunchNow = 0;
+  private tiltNow = 0;
+  private stretchNow = 0;
+  private scleraMats: THREE.MeshPhongMaterial[] = [];
+  private toothMats: THREE.MeshPhongMaterial[] = [];
+  private lowerJaw: THREE.Group | null = null;
+  /** The back and sides of the mouth: a dark wall that deepens as the jaw drops. */
+  private cavity: THREE.Mesh | null = null;
   /** Where the eyes are looking, in world space; null to look where he faces. */
   private gaze: THREE.Vector3 | null = null;
   /** The small darts the eyes make on their own. */
@@ -814,22 +860,41 @@ export class FroggyMonster {
     // THE EYES.  Up on the corners of the dome, far bigger than any animal's,
     // grey-white, each with a very small black pupil -- and a heavy lid over
     // the top of each that never lifts, so the stare has no expression in it.
+    // The dark round each eye: a sunken ring of shadow the lids sit in, so
+    // the whites come out of black rather than out of grey skin.
+    const hollow = new THREE.MeshLambertMaterial({ color: 0x070505 });
     for (const side of [-1, 1]) {
       const ex = side * 0.138;
-      const ey = 0.15;
+      // NOT A PAIR.  The right eye a little bigger and a little lower than the
+      // left: nothing anyone notices, and the face stops being a mask.
+      const ey = side > 0 ? 0.138 : 0.15;
       const ez = 0.075;
+      const eyeK = side > 0 ? 1.06 : 1;
       const socket = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.122, 20, 16), 0.004, 9, 87 + side), face);
       socket.position.set(ex, ey - 0.014, ez - 0.05);
       this.head.add(socket);
       const eye = new THREE.Group();
       eye.position.set(ex, ey, ez + 0.012);
+      eye.scale.setScalar(eyeK);
       this.head.add(eye);
+      const shade = new THREE.Mesh(new THREE.TorusGeometry(0.122 * eyeK, 0.022, 8, 30), hollow);
+      shade.position.set(ex, ey - 0.004, ez - 0.012);
+      this.head.add(shade);
       // fine veins creeping in from the rim, painted on, thin enough to be
       // seen only up close -- which is where you will be
-      const white = new THREE.Mesh(
-        new THREE.SphereGeometry(0.108, 28, 20),
-        new THREE.MeshPhongMaterial({ color: SCLERA, map: sclera(), specular: 0x2a2a26, shininess: 60 }),
-      );
+      // Wet, with a tight hard highlight; and very faintly lit from inside,
+      // so in the dark the two whites are the last thing to go.
+      const scleraMat = new THREE.MeshPhongMaterial({
+        color: SCLERA,
+        map: sclera(),
+        specular: 0x6a665c,
+        shininess: 110,
+        emissive: 0x3a2c26,
+        emissiveMap: sclera(),
+        emissiveIntensity: 0.55,
+      });
+      this.scleraMats.push(scleraMat);
+      const white = new THREE.Mesh(new THREE.SphereGeometry(0.108, 28, 20), scleraMat);
       white.rotation.x = Math.PI / 2;
       white.rotation.y = side * 0.7;
       white.name = 'sclera';
@@ -842,7 +907,7 @@ export class FroggyMonster {
       eye.add(pupil);
       this.pupils.push(pupil);
       // the iris ring round a constricted pupil: hidden until he stares
-      const ring = new THREE.Mesh(pinCap(0).ring, flat(0x8a7a2a));
+      const ring = new THREE.Mesh(pinCap(0).ring, flat(0x2e1a0c));
       ring.visible = false;
       eye.add(ring);
       this.rings.push(ring);
@@ -856,6 +921,7 @@ export class FroggyMonster {
       // a thick wet rim runs along the edge of each.
       const lids = new THREE.Group();
       lids.position.copy(eye.position);
+      lids.scale.setScalar(eyeK);
       this.head.add(lids);
       const upper = new THREE.Group();
       // the top half of a sphere round the eye, its open edge level with the
@@ -924,8 +990,14 @@ export class FroggyMonster {
       specular: 0x2a2320,
       shininess: 44,
     });
-    const wet = new THREE.MeshPhongMaterial({ color: MOUTH_WET, specular: 0x3a2a28, shininess: 70 });
-    const toothMats = TOOTH.map((color) => new THREE.MeshPhongMaterial({ color, specular: 0x2c2a22, shininess: 40 }));
+    // Dark and wet: it glistens where light gets in and is black everywhere else.
+    const wet = new THREE.MeshPhongMaterial({ color: MOUTH_WET, specular: 0x120807, shininess: 60 });
+    // Wet enamel: a small hard highlight on every one, and a trace of their
+    // own light so a mouthful of them still reads in the dark.
+    const toothMats = TOOTH.map(
+      (color) => new THREE.MeshPhongMaterial({ color, specular: 0x8c8672, shininess: 95, emissive: 0x17130c, emissiveIntensity: 1 }),
+    );
+    this.toothMats = toothMats;
     /** A point on the mouth's rim, `a` round from the right corner (0) to the left (PI). */
     const rim = (a: number, inset: number, droop: number): THREE.Vector3 => {
       const c = Math.cos(a);
@@ -976,6 +1048,24 @@ export class FroggyMonster {
     throat.scale.set(1.25, 0.55, 0.8);
     throat.position.set(0, MOUTH_Y - 0.03, MOUTH_Z - 0.06);
     this.head.add(throat);
+    // THE INSIDE OF THE MOUTH.  A curved wall round the back and sides of it,
+    // from the roof down, as deep as the jaw is open -- so however far the
+    // jaw goes there is dark behind the teeth and never the neck and chest
+    // showing through the gap.
+    {
+      const g = new THREE.CylinderGeometry(1, 1, 1, 24, 1, true, Math.PI * 0.32, Math.PI * 1.36);
+      g.translate(0, -0.5, 0);
+      const cav = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x020101, side: THREE.DoubleSide }));
+      cav.position.set(0, MOUTH_Y + 0.004, MOUTH_Z - 0.01);
+      cav.scale.set(MOUTH_W * 0.9, 0.001, MOUTH_D * 0.9);
+      this.head.add(cav);
+      this.cavity = cav;
+    }
+    // and behind it, nothing: a hole no light gets to the bottom of
+    const gullet = new THREE.Mesh(new THREE.SphereGeometry(0.1, 14, 10), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+    gullet.scale.set(1.1, 0.7, 1);
+    gullet.position.set(0, MOUTH_Y - 0.05, MOUTH_Z - 0.1);
+    this.head.add(gullet);
     /**
      * A row of teeth round the rim.  Irregular in every way a real row is:
      * length, thickness, lean, spacing, a gap or two where one is missing, and
@@ -992,9 +1082,12 @@ export class FroggyMonster {
         // long thin needles, narrow at the root and fine at the point
         // Longer and heavier than they were: needles still, but big enough to
         // read from across a room, and a few real fangs among them.
-        const fang = rnd() < 0.2;
-        const h = (0.026 + rnd() * 0.026) * (0.8 + side * 0.6) * (fang ? 1.65 : 1) * lengthK;
-        const w = (0.0034 + rnd() * 0.0022) * (fang ? 1.35 : 1);
+        // Longer again, more of them fangs, and no two alike: a few snapped
+        // off short, which is what makes the rest look used.
+        const fang = rnd() < 0.28;
+        const broken = !fang && rnd() < 0.1;
+        const h = (0.031 + rnd() * 0.034) * (0.8 + side * 0.6) * (fang ? 1.9 : broken ? 0.55 : 1) * lengthK;
+        const w = (0.0034 + rnd() * 0.0024) * (fang ? 1.4 : 1);
         const g = new THREE.ConeGeometry(w, h, 6, 3);
         // taper faster toward the tip than a cone does, so the point is a point
         {
@@ -1019,8 +1112,9 @@ export class FroggyMonster {
         tooth.position.set(p.x, y + p.y, p.z);
         // point down (upper) or up (lower), and face the throat
         tooth.rotation.set(down ? Math.PI : 0, -a + Math.PI / 2 + (down ? Math.PI : 0), 0, 'YXZ');
-        tooth.rotation.z = (rnd() - 0.5) * 0.35;
-        tooth.rotation.x += (rnd() - 0.5) * 0.3;
+        // crooked: every one leaning its own way, some of them a long way
+        tooth.rotation.z = (rnd() - 0.5) * (rnd() < 0.25 ? 0.9 : 0.5);
+        tooth.rotation.x += (rnd() - 0.5) * 0.42;
         parent.add(tooth);
         if (down) this.upperTeeth.push(tooth);
         this.allTeeth.push(tooth);
@@ -1076,6 +1170,7 @@ export class FroggyMonster {
     const lower = new THREE.Group();
     lower.position.z = -JAW_PIVOT_Z;
     this.jaw.add(lower);
+    this.lowerJaw = lower;
     gum(lower, -0.006, 0.88, 0, 313);
     teeth(lower, -0.004, false, 0.86, 26, 2203);
     this.head.add(this.jaw);
@@ -1176,19 +1271,38 @@ export class FroggyMonster {
     this.crouchNow += ((pose.crouch ?? 0) - this.crouchNow) * Math.min(1, dt * 3.5);
     this.grabNow += ((pose.grab ?? 0) - this.grabNow) * Math.min(1, dt * 14);
 
-    // ---- the twitch.  Every few seconds the head snaps a few degrees and
-    // holds, then drifts back.  It is over before you are sure it happened,
-    // and it is the difference between a walking model and something wrong.
+    // Stillness comes on at once -- he stops -- and goes off slowly.
+    const stillWant = pose.still ?? 0;
+    this.stillNow += (stillWant - this.stillNow) * Math.min(1, dt * (stillWant > this.stillNow ? 20 : 2));
+    const live = 1 - this.stillNow;
+    this.hunchNow += ((pose.hunch ?? 0) - this.hunchNow) * Math.min(1, dt * 3);
+    this.tiltNow += ((pose.tilt ?? 0) - this.tiltNow) * Math.min(1, dt * 3);
+    this.stretchNow += ((pose.stretch ?? 0) - this.stretchNow) * Math.min(1, dt * 16);
+
+    // ---- THE TWITCH.  Every second or few the head SNAPS -- no ease into it
+    // -- somewhere it was not asked to go, holds there, and lets go.  Mostly a
+    // tick of a few degrees; now and then a hard turn of the whole head that
+    // stops dead, which is the one that makes a player look where he is
+    // looking.  Hunting, they come more often.
     this.twitchIn -= dt;
     if (this.twitchIn <= 0) {
-      this.twitchIn = 3.5 + Math.random() * 5;
-      this.twitchT = 0.34;
+      const hunting = (pose.lunge ?? 0) > 0.5;
+      this.twitchIn = (hunting ? 0.9 : 1.6) + Math.random() * (hunting ? 2.2 : 3.4);
+      const sharp = Math.random() < 0.3;
+      const k = sharp ? 0.42 + Math.random() * 0.2 : 0.1 + Math.random() * 0.12;
+      const sgn = () => (Math.random() < 0.5 ? -1 : 1);
+      this.twitchTo.set(sgn() * k * 0.35, sgn() * k, sgn() * k * (sharp ? 0.45 : 0.9));
+      this.twitchHold = sharp ? 0.32 + Math.random() * 0.25 : 0.1 + Math.random() * 0.12;
+      this.twitchT = this.twitchHold + 0.35;
     }
-    let twitch = 0;
+    let tw = 0;
     if (this.twitchT > 0) {
       this.twitchT = Math.max(0, this.twitchT - dt);
-      twitch = this.twitchT > 0.24 ? 0.3 : this.twitchT * 0.9;
+      // full on the frame it fires, held, then eased back out
+      tw = this.twitchT > 0.35 ? 1 : this.twitchT / 0.35;
     }
+    tw *= live;
+    const twitch = this.twitchTo.y * tw;
 
     // ---- THE TURN.  Toward the heading the room gave him, fast but not
     // instantly, and the head leads it: it gets there first and the body
@@ -1391,7 +1505,7 @@ export class FroggyMonster {
       // the long fingers hang a little curled, and curl shut on the grab
       for (let f = 0; f < this.hands[h].length; f++) {
         const finger = this.hands[h][f];
-        const idle = 0.12 + Math.sin(this.breathT * 0.9 + f * 1.3 + h) * 0.05;
+        const idle = 0.12 + Math.sin(this.breathT * 0.9 + f * 1.3 + h) * 0.05 * live + this.hunchNow * 0.25;
         // each finger working on its own, a little, as they reach
         const work = Math.sin(this.breathT * (7 + f * 1.3) + h * 2 + f) * 0.14 * reach;
         finger.rotation.x = (f === 4 ? 0.4 : 0) + idle + reach * (0.15 + 0.95 * (1 - g)) + work;
@@ -1421,7 +1535,8 @@ export class FroggyMonster {
     if (this.chest) {
       const b = this.breathT;
       const hitch = Math.max(0, Math.sin(b * 0.9)) * 0.045 + Math.max(0, Math.sin(b * 4.4)) * 0.012 * (Math.sin(b * 0.45) > 0.3 ? 1 : 0);
-      this.chest.scale.set(0.98 + hitch * 0.4, 1.55 + hitch, 0.78 + hitch * 0.9);
+      const hb = hitch * (0.35 + 0.65 * live);
+      this.chest.scale.set(0.98 + hb * 0.4, 1.55 + hb, 0.78 + hb * 0.9);
     }
     // A slight roll off the same limp, so his weight goes side to side.
     this.hips.rotation.z = roll * (1 - cr);
@@ -1440,7 +1555,7 @@ export class FroggyMonster {
     // Chasing, the whole long body goes after you: folded well forward, and
     // further still as he closes.
     this.torso.rotation.x =
-      0.14 + Math.min(0.2, speed * 0.05) + this.climbNow * 0.45 + this.lungeNow * (0.42 + this.nearNow * 0.1) +
+      0.14 + Math.min(0.2, speed * 0.05) + this.climbNow * 0.45 + this.lungeNow * (0.5 + this.nearNow * 0.1) +
       cr * 0.62 + this.leanNow * 0.55 +
       // flat to the floor to get his face down to a gap
       this.peekNow * 0.36;
@@ -1474,11 +1589,19 @@ export class FroggyMonster {
     // and the head cocks: slowly over to one side and back, the way a thing
     // does that is listening for you
     this.neck.rotation.z =
-      -gait * 0.05 + twitch * 0.4 + Math.sin(this.breathT * 1.3 + 1.1) * 0.16 * peer +
-      Math.sin(this.breathT * 0.37) * 0.09 +
+      -gait * 0.05 + this.twitchTo.z * tw + Math.sin(this.breathT * 1.3 + 1.1) * 0.16 * peer +
+      Math.sin(this.breathT * 0.37) * 0.09 * live +
+      this.tiltNow +
       // over on its side to look into a gap
       this.peekNow * (1.2 + Math.sin(this.breathT * 0.8) * 0.08);
     this.neck.rotation.x += this.peekNow * 0.6;
+    // ---- HUNCHED.  The shoulders round, the whole back comes over, and the
+    // head is pushed out in front on its neck -- levelled back up, so the
+    // face stays on you while the body leans in toward you.
+    const hu = this.hunchNow;
+    this.torso.rotation.x += hu * 0.34;
+    this.neck.rotation.x -= hu * 0.3;
+    this.neck.position.z = 0.01 + hu * 0.05;
 
     // The arms come FORWARD and down to take his weight on the floor.  The
     // sign matters and it is not the legs': on an arm hanging from a shoulder,
@@ -1495,6 +1618,15 @@ export class FroggyMonster {
     // torso like the arms of a doll.  Fades out as they come up to reach.
     const hang = (this.torso.rotation.x + this.hips.rotation.x) * (1 - reach) * (1 - this.climbNow) * (1 - cr);
     for (const arm of this.arms) arm.rotation.x -= hang * 0.95 + 0.05 * (1 - reach);
+    // Hunched, they hang DEAD: a little out from the body, one elbow locked
+    // and the other with a slight wrong bend in it, the fingers half shut.
+    if (hu > 0.001) {
+      const dead = hu * (1 - reach) * (1 - this.climbNow);
+      this.arms[0].rotation.z -= 0.07 * dead;
+      this.arms[1].rotation.z += 0.04 * dead;
+      this.elbows[0].rotation.x += (-0.02 - this.elbows[0].rotation.x) * dead;
+      this.elbows[1].rotation.x += (-0.32 - this.elbows[1].rotation.x) * dead;
+    }
 
     // ---- REACHING FOR YOU.
     //
@@ -1547,6 +1679,14 @@ export class FroggyMonster {
       this.gazeByReach = false;
     }
     this.nearNow += (near - this.nearNow) * Math.min(1, dt * 3);
+    // The reach turns the head onto you and would take the twitch out with
+    // it; on the hunt it goes back on top, a jerk away and straight back.
+    if (reach > 0.01) {
+      this.neck.rotation.y += twitch * reach * 0.7;
+      this.neck.rotation.x += this.twitchTo.x * tw * reach;
+    } else {
+      this.neck.rotation.x += this.twitchTo.x * tw;
+    }
 
     // ---- MOMENTUM.  Everything above says where the arms WANT to be; they
     // get there on springs, a little late and a little past, so the long arms
@@ -1635,15 +1775,33 @@ export class FroggyMonster {
     const m = this.mawNow;
     this.bareNow += ((pose.bare ?? 0) - this.bareNow) * Math.min(1, dt * ((pose.bare ?? 0) > this.bareNow ? 12 : 3));
     const bare = this.bareNow;
-    const work = Math.max(0, Math.sin(this.breathT * 0.9)) ** 3 * 0.05 * m;
+    const work = Math.max(0, Math.sin(this.breathT * 0.9)) ** 3 * 0.05 * m * live;
+    const st = this.stretchNow;
+    // NEVER QUITE SHUT.  Parted a crack even at rest, onto the tips of the
+    // teeth, and held there under tension: a fine fast tremor in the jaw that
+    // does not stop when everything else about him does.
+    const tension = Math.sin(this.breathT * 31) * 0.0045 + Math.sin(this.breathT * 47 + 1) * 0.0025;
     this.jaw.rotation.x =
-      0.012 + m * (0.5 + 0.22 * bare) + Math.max(0, Math.sin(this.breathT * 2.1)) * 0.012 * (0.4 + m) +
-      Math.sin(this.breathT * 23) * 0.006 * m + work;
-    this.jaw.rotation.z = m * 0.07 + Math.sin(this.breathT * 0.9) * 0.02 * m;
+      0.05 + m * (0.5 + 0.22 * bare) + Math.max(0, Math.sin(this.breathT * 2.1)) * 0.012 * (0.4 + m) * live +
+      Math.sin(this.breathT * 23) * 0.006 * m + work + tension +
+      // and past where a jaw stops, when it is the last thing you see: a little
+      // further round, and the rest of it DOWN -- the hinge coming out of its
+      // socket -- so the chin stays under the face instead of swinging back
+      st * 0.2;
+    this.jaw.rotation.z = m * 0.07 + Math.sin(this.breathT * 0.9) * 0.02 * m * live;
     this.jaw.rotation.y = m * 0.035;
+    // stretched: the lower jaw drawn out long, the chin going down and away
+    this.jaw.scale.set(1 + st * 0.06, 1 + st * 0.55, 1 + st * 0.22);
+    this.jaw.position.set(0, MOUTH_Y - st * 0.09, JAW_PIVOT_Z + st * 0.035);
+    if (this.lowerJaw) this.lowerJaw.scale.y = 1 + st * 0.35;
+    // the wall inside, as deep as the drop at the back of the jaw
+    if (this.cavity) {
+      const drop = Math.sin(Math.max(0, this.jaw.rotation.x)) * (MOUTH_Z - JAW_PIVOT_Z + MOUTH_D * 0.2) * this.jaw.scale.z;
+      this.cavity.scale.y = Math.max(0.001, drop * this.jaw.scale.y * 1.1 + st * 0.09);
+    }
     // the long upper teeth draw up into the gum while the mouth is shut, so
     // they never come through the chin, and are at full length once it opens
-    const long = 0.6 + 0.4 * THREE.MathUtils.clamp(m * 3, 0, 1);
+    const long = 0.72 + 0.28 * THREE.MathUtils.clamp(m * 3, 0, 1);
     // bared, every tooth pushes out of the gum and thickens
     const out = 1 + 0.35 * bare * THREE.MathUtils.clamp(m * 2, 0, 1);
     for (const t of this.allTeeth) {
@@ -1726,6 +1884,17 @@ export class FroggyMonster {
       finger.rotation.x += (want - finger.rotation.x) * w;
     }
     this.held[h] = w;
+  }
+
+  /**
+   * How hard his eyes and teeth catch whatever light there is: 0 as he is
+   * in the rooms, 1 in a scare, when the only things you should be able to
+   * find in the dark are the two eyes and the teeth.
+   */
+  setGlare(k: number): void {
+    const g = THREE.MathUtils.clamp(k, 0, 1);
+    for (const m of this.scleraMats) m.emissiveIntensity = 0.55 + g * 1.1;
+    for (const m of this.toothMats) m.emissiveIntensity = 1 + g * 2.6;
   }
 
   /** Between his eyes, in the world: where a camera looks to meet his stare. */
@@ -1821,14 +1990,15 @@ export class FroggyMonster {
       this.saccade.set((Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.18);
     }
     this.root.updateMatrixWorld(true);
+    const dart = 1 - this.stillNow;
     for (const eye of this.eyes) {
-      let yaw = this.saccade.x;
-      let pitch = this.saccade.y;
+      let yaw = this.saccade.x * dart;
+      let pitch = this.saccade.y * dart;
       if (this.gaze) {
         const local = eye.parent!.worldToLocal(this.gaze.clone());
         local.sub(eye.position);
-        yaw = Math.atan2(local.x, local.z) + this.saccade.x * 0.15;
-        pitch = -Math.atan2(local.y, Math.hypot(local.x, local.z)) + this.saccade.y * 0.15;
+        yaw = Math.atan2(local.x, local.z) + this.saccade.x * 0.15 * dart;
+        pitch = -Math.atan2(local.y, Math.hypot(local.x, local.z)) + this.saccade.y * 0.15 * dart;
       }
       eye.rotation.y += (THREE.MathUtils.clamp(yaw, -0.6, 0.6) - eye.rotation.y) * Math.min(1, dt * 22);
       eye.rotation.x += (THREE.MathUtils.clamp(pitch, -0.5, 0.5) - eye.rotation.x) * Math.min(1, dt * 22);
@@ -1878,12 +2048,12 @@ export class FroggyMonster {
     if (this.blinkT >= 0) {
       this.blinkT += dt;
       if (this.blinkT > 0.17) this.blinkT = -1;
-    } else if (d < 0.5) {
+    } else if (d < 0.5 && this.stillNow < 0.5) {
+      // Rarely.  Something that is watching you does not keep looking away.
       this.blinkIn -= dt;
       if (this.blinkIn <= 0) {
         this.blinkT = 0;
-        // now and then two in a row
-        this.blinkIn = Math.random() < 0.2 ? 0.25 : 2.5 + Math.random() * 4.5;
+        this.blinkIn = 7 + Math.random() * 8;
       }
     }
     const shut = this.blinkT >= 0 ? Math.sin((this.blinkT / 0.17) * Math.PI) : 0;
@@ -1893,8 +2063,16 @@ export class FroggyMonster {
       group.rotation.y = eye.rotation.y;
       // heavy: the upper lid sits low over the top of the eye (-0.42 would
       // just clear the pupil); fear lifts it right off
-      const upOpen = -0.42 - d * 0.22 + eye.rotation.x * 0.8;
-      const loOpen = 0.62 + d * 0.12 + eye.rotation.x * 0.45;
+      // A stare does not let the lid follow the eye down: looking down at you
+      // from his height, a lid that rode the eye came half over it, and a
+      // half-shut eye is sleepy, not hungry.  Staring, the lids stay pulled
+      // back whichever way he looks.  And the two sides are not a pair: the
+      // left one heavier.
+      const stare = Math.min(1, this.constrictNow);
+      const follow = eye.rotation.x * (1 - 0.8 * stare);
+      const heavy = e === 0 ? 0.05 * (1 - stare) : 0;
+      const upOpen = -0.42 - d * 0.3 + follow * 0.8 + heavy;
+      const loOpen = 0.62 + d * 0.14 + follow * 0.45;
       upper.rotation.x = upOpen + (0.06 - upOpen) * shut;
       lower.rotation.x = loOpen + (-0.04 - loOpen) * shut;
     }

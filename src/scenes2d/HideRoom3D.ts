@@ -975,6 +975,8 @@ export class HideRoom3D extends Phaser.Scene {
   }
 
   create(): void {
+    // the scream is decoded before anything here can catch you
+    audio.preloadScream();
     this.roomIndex = Phaser.Math.Clamp(store.get().hideRoom, 0, ROOMS.length - 1);
     this.def = ROOMS[this.roomIndex];
 
@@ -4306,12 +4308,14 @@ export class HideRoom3D extends Phaser.Scene {
     this.froggyWas.copy(this.froggy);
     this.spotStepWas = act.step;
 
+    const briefing = this.mode === 'briefing' && !this.waking;
+    if (briefing && this.stage) m.lookAt(this.stage.camera.position);
     const pose = {
       speed: Math.min(6, moved),
       // The mouth is shut while he is looking for you and open once he is not.
-      maw: this.fMode === 'chase' ? 1 : this.fMode === 'openSpot' ? 0.45 : 0.12,
+      maw: this.fMode === 'chase' ? 1 : this.fMode === 'openSpot' ? 0.45 : briefing ? 0.2 : 0.12,
       // and in a chase the teeth are out, more of them the longer it goes on
-      bare: this.fMode === 'chase' ? 0.55 + 0.45 * this.chaseHeat : 0,
+      bare: this.fMode === 'chase' ? 0.55 + 0.45 * this.chaseHeat : briefing ? 0.5 : 0.2,
       climb: climbing,
       climbT,
       // Down on his haunches at a bed, craning about under it -- or down at
@@ -4340,7 +4344,12 @@ export class HideRoom3D extends Phaser.Scene {
       lean: this.waking ? 1 : act.lean,
       // pinpricks while he hunts; blown wide once he has you, and staring
       // down at you on the floor
-      constrict: this.fMode === 'chase' ? 1 : this.waking ? 0.9 : 0,
+      constrict: this.fMode === 'chase' || briefing ? 1 : this.waking ? 0.9 : 0,
+      // Telling you the rules, he does not look away or fidget: stood over
+      // you, hunched in, head on one side, very still.
+      hunch: briefing ? 0.8 : this.fMode === 'chase' ? 0.35 : 0,
+      tilt: briefing ? 0.16 : 0,
+      still: briefing ? 0.8 : 0,
       // and from wherever you are, his arms stay off his eyes
       viewer: this.stage?.camera.position ?? null,
     };
@@ -4883,30 +4892,27 @@ export class HideRoom3D extends Phaser.Scene {
     if (w && cam) {
       w.setPose(wx, 0, wz, Math.atan2(this.pos.x - wx, this.pos.y - wz));
       w.lookAt(cam.position);
-      const staring = t > E.stare && t < E.run;
+      // ---- ALREADY LOOKING AT YOU.  By the time the camera has come round
+      // he has been stood there staring the whole time, and he does nothing
+      // at all: no twitch, no darting eyes, no breath worth the name.  Hunched
+      // over the counter toward you, the head tipped a little to one side,
+      // the long arms hanging dead, the mouth parted onto the teeth and the
+      // jaw held tight.  Pinprick pupils, lids pulled back, eyes lit.
       w.update(dt, {
         speed: 0,
-        maw: staring ? 0.1 + Math.min(1, (t - E.stare) / (E.back - E.stare)) * 0.25 : 0.08,
-        mawRate: 0.5,
+        maw: 0.24,
+        mawRate: 3,
+        bare: 0.7,
         climb: 0,
         scan: 0,
-        lean: 0.2,
+        lean: 0.12,
+        hunch: 1,
+        tilt: 0.2,
+        still: 1,
         constrict: 1,
         viewer: cam.position,
       });
-      // a twitch of the head now and then while you look at him
-      this.twitch.next -= dt;
-      if (this.twitch.next <= 0) {
-        this.twitch.next = 0.7 + Math.random() * 1.4;
-        this.twitch.p = (Math.random() - 0.5) * 0.16;
-        this.twitch.y = (Math.random() - 0.5) * 0.22;
-        this.twitch.r = (Math.random() - 0.5) * 0.36;
-      }
-      const decay = Math.exp(-dt * 7);
-      this.twitch.p *= decay;
-      this.twitch.y *= decay;
-      this.twitch.r *= decay;
-      w.twitchHead(this.twitch.p, this.twitch.y, this.twitch.r);
+      w.setGlare(0.6);
     }
 
     // ---- black, and then what came after, and then back outside
