@@ -82,7 +82,9 @@ export function buildGrid(def: RoomDef, climbMaxH: number): NavGrid {
         if (Math.abs(x - b.x) < b.w / 2 + PAD && Math.abs(z - b.z) < b.d / 2 + PAD) {
           // a duct is a wall to him: too small to get into, and not to be gone
           // over, since it runs through one
-          v = Math.max(v, b.h > climbMaxH || b.crawl ? 2 : 1);
+          // ...and so is a thin panel -- a cubicle wall is not something to
+          // climb over, and one that thin he would be half inside
+          v = Math.max(v, b.h > climbMaxH || b.crawl || Math.min(b.w, b.d) < 0.4 ? 2 : 1);
         }
       }
       cell[r * cols + c] = v;

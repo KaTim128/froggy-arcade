@@ -4052,7 +4052,7 @@ export class HideRoom3D extends Phaser.Scene {
   private startClimb(box: Box, dirX: number, dirZ: number): boolean {
     // A duct is not furniture to him: it is too small to get into and he is
     // not going over it through a wall.
-    if (this.climb || box.h > CLIMB_MAX_H || box.crawl) return false;
+    if (this.climb || box.h > CLIMB_MAX_H || box.crawl || Math.min(box.w, box.d) < 0.4) return false;
 
     const len = Math.hypot(dirX, dirZ) || 1;
     const ux = dirX / len;
