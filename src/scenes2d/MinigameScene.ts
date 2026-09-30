@@ -20,11 +20,14 @@
  */
 
 import Phaser from 'phaser';
+import { RECORDS, best as bestRecord, submit as submitRecord } from '../core/records';
+import { deviceControls, deviceObjective, type ControlRow } from '../ui/controlsList';
 import { PALETTE } from '../render/palette';
+import { FONT_ADVANCE } from '../render/pixelFont';
 import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
 import { store, type GameId } from '../core/state';
-import { button, centerText, fadeIn, fadeToScene, text } from '../core/ui';
+import { button, centerText, confirmDialog, fadeIn, fadeToScene, forfeitLines, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { TokenHud } from '../ui/hud';
 import { cabinetById } from '../game/content';
@@ -41,6 +44,8 @@ export class MinigameScene extends Phaser.Scene {
   private gameId!: GameId;
   private mod: MinigameModule | null = null;
   private settled = false;
+  /** What this play set as a new personal best, for the result panel. */
+  private newBest: string | null = null;
   private from = 'ArcadeHub';
   private hud!: TokenHud;
   /** Tokens on this play: what PLAY debited, plus anything raised in-game. */
@@ -56,6 +61,10 @@ export class MinigameScene extends Phaser.Scene {
   /** Opened straight into the game, with no how-to-play card.  See `create`. */
   private straight = false;
   private card: TutorialCard | null = null;
+  /** Where the result card goes afterwards, when it is not back to the room. */
+  private exitTo: string | null = null;
+  /** The quit question, while it is up.  The game is frozen under it. */
+  private asking: Phaser.GameObjects.Container | null = null;
 
   constructor() {
     super('Minigame');
@@ -69,11 +78,14 @@ export class MinigameScene extends Phaser.Scene {
     // hub meant playing a cabinet in the back room spat you out two rooms away.
     this.from = data.from ?? 'ArcadeHub';
     this.settled = false;
+    this.newBest = null;
     this.mod = null;
     this.stake = 0;
     this.paid = 0;
     this.started = false;
     this.card = null;
+    this.exitTo = null;
+    this.asking = null;
   }
 
   create(): void {
@@ -93,9 +105,9 @@ export class MinigameScene extends Phaser.Scene {
     this.add.rectangle(0, 0, GAME_W, 16, PALETTE.ink).setOrigin(0, 0);
     text(this, 4, 4, def.title, PALETTE.gold);
 
-    // A real button, not just the ESC hint — quitting should not require
-    // knowing a key.  It forfeits exactly like ESC does: no refund (MG-4).
-    button(this, GAME_W - 26, 8, 'QUIT', () => this.forfeit(), {
+    // A real button, not just a key.  It asks first, and says what walking
+    // out costs; confirmed, it forfeits exactly as it always has (MG-4).
+    button(this, GAME_W - 26, 8, 'QUIT', () => this.askQuit(), {
       width: 40,
       height: 12,
       fill: PALETTE.plum,
@@ -107,8 +119,21 @@ export class MinigameScene extends Phaser.Scene {
     // fixed left edge: the note is the cabinet's own wording and some of them
     // are twice as long as others, so a fixed start meant "WIN: 15 TOKENS"
     // reached under QUIT while "WIN: +2" sat in the middle of nowhere.
-    text(this, GAME_W - 50, 4, this.mod.payoutNote ?? `WIN: +${def.reward}`, PALETTE.tealLight)
+    const note = text(this, GAME_W - 50, 4, this.mod.payoutNote ?? `WIN: +${def.reward}`, PALETTE.tealLight)
       .setOrigin(1, 0);
+    // The personal best, where this cabinet keeps one, centred in whatever
+    // gap the title and the payout leave -- and shortened until it fits
+    // there, so it never runs into either of them.
+    const rec = RECORDS[this.gameId];
+    const was = bestRecord(this.gameId);
+    if (rec && was !== null) {
+      const from = 4 + def.title.length * FONT_ADVANCE + 6;
+      const to = GAME_W - 50 - note.width - 6;
+      const fit = [rec.short(was), `BEST ${rec.format(was)}`, rec.format(was)].find(
+        (s) => s.length * FONT_ADVANCE <= to - from,
+      );
+      if (fit) centerText(this, Math.round((from + to) / 2), 8, fit, PALETTE.gold).setAlpha(0.9);
+    }
 
     const api: MinigameApi = {
       win: (payout?: number) => this.settle(true, false, payout),
@@ -119,12 +144,15 @@ export class MinigameScene extends Phaser.Scene {
       payout: (n: number) => this.payout(n),
       cashOut: () => this.cashOut(),
       balance: () => ledger.balance(),
+      record: (value: number) => {
+        const rec = RECORDS[this.gameId];
+        if (rec && submitRecord(this.gameId, value)) this.newBest = `NEW BEST!  ${rec.format(bestRecord(this.gameId) ?? value)}`;
+      },
       area: AREA,
     };
 
-    // MG-4: Esc forfeits, but only once there is something to forfeit.  While
-    // the card is up it is the LEAVE button, because nothing has been paid.
-    this.input.keyboard?.on('keydown-ESC', () => (this.card ? this.leave() : this.forfeit()));
+    // Esc is the pause menu here as everywhere (core/pause.ts), and its LEAVE
+    // asks the same question QUIT does before anything is forfeited.
 
     // MG-8: the card comes first — what the cabinet wants, which keys it
     // reads, and what a go costs — with the game unbuilt behind it.  PLAY is
@@ -185,11 +213,20 @@ export class MinigameScene extends Phaser.Scene {
 
     this.card = showTutorial(this, {
       title: def.title,
-      tutorial: mod.tutorial,
+      // The keys on a keyboard, the arrows and buttons on a phone.
+      tutorial: {
+        objective: deviceObjective(mod.tutorial.objective, mod.touch),
+        controls: deviceControls(mod.tutorial.controls, mod.touch),
+      },
       cost: def.cost,
       balance: ledger.balance(),
       chargesInside: def.freeToEnter === true,
       payNote: mod.payoutNote ?? `WIN: ${def.reward} TOKENS`,
+      record: (() => {
+        const rec = RECORDS[this.gameId];
+        const was = bestRecord(this.gameId);
+        return rec && was !== null ? rec.long(was) : undefined;
+      })(),
       onPlay: start,
       onLeave: () => {
         this.card = null;
@@ -221,7 +258,7 @@ export class MinigameScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
-    if (this.settled || !this.started) return;
+    if (this.settled || !this.started || this.asking) return;
     this.mod?.update?.(time, delta);
   }
 
@@ -240,7 +277,89 @@ export class MinigameScene extends Phaser.Scene {
     this.settled = true;
     this.card?.destroy();
     this.card = null;
-    fadeToScene(this, this.from, { atCabinet: this.gameId });
+    fadeToScene(this, this.exitTo ?? this.from, { atCabinet: this.gameId });
+  }
+
+  /**
+   * What quitting right now would forfeit, or null when quitting costs
+   * nothing to ask about: the card is still up (nothing has been paid) or the
+   * play is already over.  A table that pays hand by hand says what is on the
+   * felt this moment; every other cabinet forfeits its whole stake.
+   */
+  forfeitAmount(): number | null {
+    if (this.settled || !this.started) return null;
+    return Math.max(0, Math.floor(this.mod?.atRisk?.() ?? this.stake));
+  }
+
+  /** This cabinet's controls, as this device will actually work them. */
+  controlRows(): ControlRow[] {
+    return this.mod ? deviceControls(this.mod.tutorial.controls, this.mod.touch) : [];
+  }
+
+  /** Forfeit, and go somewhere other than back to the room afterwards. */
+  quitTo(key: string): void {
+    this.exitTo = key;
+    this.forfeit();
+  }
+
+  /** Esc answers the quit question with CANCEL while it is up. */
+  handleEscape(): boolean {
+    // At the how-to-play card nothing has been paid and nothing is being
+    // played, so Esc is its LEAVE button, as it always was.
+    if (this.card && !this.started && !this.settled) {
+      this.leave();
+      return true;
+    }
+    if (!this.asking) return false;
+    this.cancelQuit();
+    return true;
+  }
+
+  /**
+   * QUIT.  At the card there is nothing to lose and it just leaves.  In a
+   * game, the game freezes -- its clock, its tweens, its keys, and Froggy's
+   * overlay -- and the question goes up with the real number on it.  CANCEL
+   * thaws everything exactly where it was; CONFIRM QUIT is the old forfeit.
+   */
+  private askQuit(): void {
+    if (this.settled || this.asking) return;
+    if (!this.started) {
+      this.leave();
+      return;
+    }
+    const risk = this.forfeitAmount() ?? 0;
+    this.freeze(true);
+    this.asking = confirmDialog(this, {
+      lines: ['ARE YOU SURE YOU WANT TO QUIT?', ...forfeitLines(risk)],
+      confirm: 'CONFIRM QUIT',
+      onConfirm: () => {
+        this.asking = null;
+        this.freeze(false);
+        this.forfeit();
+      },
+      onCancel: () => this.cancelQuit(),
+      edge: 0xc31f2e,
+    });
+  }
+
+  private cancelQuit(): void {
+    this.asking?.destroy();
+    this.asking = null;
+    this.freeze(false);
+  }
+
+  private freeze(on: boolean): void {
+    this.time.paused = on;
+    if (on) this.tweens.pauseAll();
+    else this.tweens.resumeAll();
+    if (on) this.anims.pauseAll();
+    else this.anims.resumeAll();
+    const kb = this.input.keyboard;
+    if (kb) {
+      kb.enabled = !on;
+      if (!on) kb.resetKeys();
+    }
+    froggyLayer.setVisible(!on);
   }
 
   private forfeit(): void {
@@ -267,6 +386,13 @@ export class MinigameScene extends Phaser.Scene {
     this.stake += Math.floor(n);
     store.flush();
     return true;
+  }
+
+  /** Under the result, when this play beat the cabinet's best. */
+  private showNewBest(): void {
+    if (!this.newBest) return;
+    centerText(this, GAME_W / 2, GAME_H / 2 + 24, this.newBest, PALETTE.gold).setDepth(991);
+    audio.sfx('bell_ding', 0.6);
   }
 
   /**
@@ -296,9 +422,10 @@ export class MinigameScene extends Phaser.Scene {
       16,
     ).setDepth(991);
     centerText(this, GAME_W / 2, GAME_H / 2 + 12, `${ledger.balance()} tokens`, PALETTE.ash).setDepth(991);
+    this.showNewBest();
 
     audio.sfx(up ? 'chime' : 'buzzer');
-    this.time.delayedCall(RESULT_MS, () => fadeToScene(this, this.from, { atCabinet: this.gameId }));
+    this.time.delayedCall(RESULT_MS, () => fadeToScene(this, this.exitTo ?? this.from, { atCabinet: this.gameId }));
   }
 
   /**
@@ -327,7 +454,7 @@ export class MinigameScene extends Phaser.Scene {
     centerText(this, GAME_W / 2, GAME_H / 2 + 12, `${ledger.balance()} tokens`, PALETTE.ash).setDepth(991);
 
     audio.sfx('coin_drop');
-    this.time.delayedCall(RESULT_MS, () => fadeToScene(this, this.from, { atCabinet: this.gameId }));
+    this.time.delayedCall(RESULT_MS, () => fadeToScene(this, this.exitTo ?? this.from, { atCabinet: this.gameId }));
   }
 
   private settle(won: boolean, quit = false, payout?: number): void {
@@ -365,11 +492,12 @@ export class MinigameScene extends Phaser.Scene {
       won ? `${ledger.balance()} tokens` : `${ledger.balance()} tokens left`,
       PALETTE.ash,
     ).setDepth(991);
+    this.showNewBest();
 
     audio.sfx(won ? 'chime' : 'buzzer');
 
     // Back to the room you came from, standing at the cabinet you played.
-    this.time.delayedCall(RESULT_MS, () => fadeToScene(this, this.from, { atCabinet: this.gameId }));
+    this.time.delayedCall(RESULT_MS, () => fadeToScene(this, this.exitTo ?? this.from, { atCabinet: this.gameId }));
   }
 }
 

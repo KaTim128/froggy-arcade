@@ -496,5 +496,6 @@ function finish(won: boolean): void {
   cashBtn?.setVisible(false);
   audio.sfx(won ? 'chime' : 'buzzer');
   const paid = pot;
+  apiRef?.record(survived);
   sceneRef?.time.delayedCall(1500, () => (won && paid > 0 ? apiRef?.win(paid) : apiRef?.lose()));
 }

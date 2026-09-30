@@ -27,6 +27,7 @@
  * happened, and says it exactly once (`ended`).
  */
 
+import { isTouch } from '../core/device';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -73,6 +74,13 @@ export interface Move {
   /** What has to be true: off a dodge, finishing, or against armour. */
   when?: 'counter' | 'finish' | 'armour';
   anim: Anim;
+  /**
+   * CHOKED UP.  The hand slides up the shaft and the long weapon is used
+   * short: a jab from the hip, the butt, the haft.  For when the other one is
+   * inside the reach, where a full thrust would go straight through them.
+   * Weaker than the real attack, and not docked for being too close.
+   */
+  choke?: boolean;
 }
 
 /**
@@ -109,7 +117,57 @@ const M = {
   /** A pipe raised to the lips and a hard breath down it.  See `poseFighter`. */
   puff: (name: string, dmg = 1.0): Move => ({ name, dmg, wind: 0.85, reach: 1.5, at: 'far', anim: 'puff' }),
   hurl: (name: string, dmg = 1.0): Move => ({ name, dmg, wind: 1.05, reach: 1.5, at: 'far', anim: 'hurl' }),
+  /** Choked up: see `Move.choke`. */
+  choke: (name: string, dmg = 0.55): Move => ({ name, dmg, wind: 0.5, reach: 0.5, at: 'near', knock: 3, anim: 'jab', choke: true }),
 };
+
+/**
+ * THE SHORT ANSWER FOR EVERY LONG WEAPON.
+ *
+ * Anything that fights at the end of a long shaft has to have something to
+ * do when the other one gets inside it, and it is never the long attack
+ * again: a spear jabs short from the hip, a halberd punches with the haft, a
+ * lance shoves with the shaft.  Each is named for what it is and is added to
+ * the weapon's moves by `movesOf`, so no long weapon is ever left thrusting
+ * through somebody standing on its toes.
+ */
+const CLOSE_MOVE: Record<string, Move> = {
+  spear: M.choke('SHORT JAB'),
+  pike: M.choke('CHOKED STAB', 0.5),
+  trident: M.choke('CLOSE PRONG', 0.58),
+  halberd: M.choke('HAFT PUNCH', 0.6),
+  glaive: M.choke('SHORT CUT', 0.6),
+  naginata: M.choke('HAFT STRIKE', 0.58),
+  lance: M.choke('SHAFT SHOVE', 0.45),
+  staff: M.choke('SHORT END', 0.55),
+  warscythe: M.choke('SNATH JAB', 0.5),
+  scythe: M.choke('SNATH JAB', 0.5),
+  bardiche: M.choke('HAFT PUNCH', 0.6),
+  zweihander: M.choke('HALF-SWORD JAB', 0.62),
+  claymore: M.choke('POMMEL JAB', 0.6),
+  javelin: M.choke('HAND JAB', 0.55),
+  harpoon: M.choke('SHORT BARB', 0.55),
+  whip: M.choke('HANDLE CRACK', 0.5),
+  magicstaff: M.choke('STAFF BUTT', 0.5),
+  flail: M.choke('HANDLE BASH', 0.5),
+  flamberge: M.choke('RICASSO JAB', 0.62),
+  lucerne: M.choke('HAFT PUNCH', 0.6),
+  partisan: M.choke('SHORT JAB', 0.55),
+  meteor: M.choke('ROPE STRIKE', 0.5),
+  chainwhip: M.choke('HANDLE STRIKE', 0.5),
+  guandao: M.choke('HAFT STRIKE', 0.6),
+  staffsling: M.choke('STAFF BUTT', 0.5),
+};
+
+/** How far inside its own reach a long weapon has to be to want the short answer. */
+const CHOKE_FRAC = 0.45;
+
+/** A weapon's moves, with its short answer if it is long enough to need one. */
+export function movesOf(key: string): Move[] {
+  const list = MOVES[key] ?? MOVES.none;
+  const close = CLOSE_MOVE[key];
+  return close && !list.some((m) => m.choke) ? [...list, close] : list;
+}
 
 /** The repertoire each weapon actually fights with. */
 export const MOVES: Record<string, Move[]> = {
@@ -166,7 +224,9 @@ export const MOVES: Record<string, Move[]> = {
   sword: [M.sweep('HORIZONTAL SLASH'), M.over('DIAGONAL SLASH'), M.thrust('THRUST'), M.counter('PARRY COUNTER'), M.combo('TWO HIT SLASH', 2)],
   katana: [M.sweep('IAI SLASH', 1.15, 1.1), M.counter('COUNTER SLASH', 1.7), M.thrust('PRECISION THRUST', 1.05, 1.15), M.over('DIAGONAL CUT')],
   shield: [M.bash('SHIELD BASH'), M.ram('FORWARD CHARGE'), M.counter('BLOCK COUNTER', 1.4), M.stab('STABBING BASH', 0.75)],
-  spear: [M.thrust('LONG THRUST', 1.1, 1.4), M.stab('DOUBLE THRUST'), M.sweep('SHAFT STRIKE', 0.9, 1.15), M.charge('FORWARD CHARGE'), M.hurl('SPEAR THROW', 0.95)],
+  // The thrust at the length of the shaft, and SHORT JAB (added by `movesOf`)
+  // when they are inside it -- never a long thrust through somebody close.
+  spear: [M.thrust('LONG THRUST', 1.1, 1.4), M.thrust('QUICK THRUST', 0.9, 1.2), M.sweep('SHAFT STRIKE', 0.9, 1.15), M.charge('FORWARD CHARGE'), M.hurl('SPEAR THROW', 0.95)],
   staff: [M.sweep('WIDE SWEEP'), M.over('OVERHEAD STRIKE'), M.thrust('THRUST'), M.low('LEG SWEEP'), M.bash('KEEPAWAY PUSH', 0.8)],
   trident: [M.thrust('THREE POINT THRUST', 1.15, 1.35), M.sweep('HORIZONTAL SWEEP'), M.counter('COUNTER THRUST', 1.4), M.charge('CHARGING STAB'), M.hurl('TRIDENT THROW', 0.95)],
   halberd: [M.thrust('LONG THRUST', 1.1, 1.35), M.sweep('HORIZONTAL SWEEP', 1.1), M.over('OVERHEAD CHOP'), M.spin('SPINNING SWEEP'), M.low('HOOK ATTACK')],
@@ -196,6 +256,31 @@ export const MOVES: Record<string, Move[]> = {
   crossbow: [M.shoot('BOLT', 1.15), M.shoot('POINT BLANK BOLT', 1.05), M.shoot('PIERCING BOLT', 1.25), M.bash('STOCK BASH', 0.8)],
   magicstaff: [M.shoot('ARCANE BOLT'), M.shoot('CHARGED BOLT', 1.2), M.sweep('STAFF SWEEP', 0.9, 1.15), M.over('STAFF STRIKE', 0.95, 1.1)],
   boomerang: [M.hurl('BOOMERANG THROW'), M.hurl('WIDE ARC', 1.1), M.bash('CLOSE CRACK', 0.8), M.counter('RETURN STRIKE', 1.25)],
+
+  // ---- THE TWENTY ADDED LAST.  Each with the attacks its shape makes: the
+  // sledge only ever comes down or round, the katar only ever punches, the
+  // meteor hammer throws its weight out on the rope, the pair of hatchets
+  // chop one after the other.
+  falchion: [M.over('CLEAVING CUT', 1.2), M.sweep('BACKHAND CHOP', 1.05, 1.05), M.bash('HILT PUNCH', 0.8), M.counter('RISING CUT', 1.3)],
+  machete: [M.combo('HACKING FLURRY', 3), M.over('DOWNWARD HACK', 1.1, 1.0), M.sweep('BRUSH CUT', 0.95, 1.05), M.counter('QUICK RETURN', 1.25)],
+  tomahawk: [M.over('TOMAHAWK CHOP', 1.15, 1.1), M.hurl('TOMAHAWK THROW', 1.1), M.bash('BUTT STRIKE', 0.8), M.sweep('HOOKING SWIPE', 0.95, 1.0)],
+  khopesh: [M.sweep('HOOKING SLASH', 1.1, 1.1), M.over('SICKLE CUT', 1.15), M.counter('HOOK AND PULL', 1.35), M.low('ANKLE HOOK')],
+  flamberge: [M.sweep('WAVE CUT', 1.2, 1.25), M.over('FLAME STRIKE', 1.3), M.spin('WHIRLING FLAME', 1.25), M.thrust('RIPPLED THRUST', 1.0, 1.2)],
+  lucerne: [M.over('PRONG HAMMER', 1.25), M.crush('PLATE BREAKER', 1.35), M.thrust('SPIKE THRUST', 1.0, 1.3), M.low('BACK HOOK')],
+  partisan: [M.thrust('WINGED THRUST', 1.1, 1.35), M.sweep('WING SLASH', 0.95, 1.2), M.counter('BIND AND THRUST', 1.35), M.thrust('LONG POINT', 1.0, 1.45)],
+  sledge: [M.slam('SLEDGE SWING', 1.55), M.over('DRIVING BLOW', 1.35, 1.5), M.sweep('SIDE SMASH', 1.0), M.slam('FLOOR POUND', 1.45)],
+  cleaver: [M.over('BUTCHER CHOP', 1.2, 1.05), M.combo('CHOPPING BLOCK', 2), M.finish('LAST CUT', 1.6), M.bash('FLAT SLAP', 0.8)],
+  meteor: [M.sweep('ROPE WHIRL', 1.05, 1.3), M.thrust('SHOOTING WEIGHT', 1.0, 1.4), M.spin('DOUBLE WHIRL', 1.15), M.low('LEG WRAP')],
+  chainwhip: [M.thrust('CHAIN LASH', 1.0, 1.4), M.sweep('WIDE WRAP', 0.95, 1.3), M.low('SHIN LASH'), M.counter('RECOIL STRIKE', 1.2)],
+  katar: [M.combo('PUNCH STABS', 3), M.thrust('DRIVING PUNCH', 1.05, 1.0), M.crush('PLATE PUNCH', 1.3), M.counter('INSIDE STAB', 1.3)],
+  claws: [M.combo('RAKING FLURRY', 4), M.stab('CLAW SWIPES'), M.sweep('CROSS RAKE', 0.9, 0.95), M.counter('SLASH AND SLIP', 1.25)],
+  hatchets: [M.combo('DOUBLE CHOP', 2), M.over('CROSSED CHOP', 1.1), M.sweep('SPINNING HATCHETS', 1.0, 1.0), M.counter('HOOK AND CHOP', 1.3)],
+  buckler: [M.counter('BUCKLER PARRY', 1.45), M.thrust('SHORT THRUST', 1.0, 1.15), M.bash('BUCKLER PUNCH', 0.85), M.sweep('RISING CUT', 1.0, 1.05)],
+  guandao: [M.sweep('CRESCENT SWEEP', 1.2, 1.3), M.over('SPLITTING ARC', 1.3), M.spin('DRAGON TURN', 1.25), M.low('LOW REAP')],
+  atlatl: [M.hurl('DART CAST', 1.0), M.hurl('HIGH LOB', 1.1), M.bash('STICK SMACK', 0.7), M.stab('HAND DART', 0.65)],
+  staffsling: [M.hurl('OVERHEAD STONE', 1.05), M.hurl('LOBBED STONE', 1.0), M.sweep('STAFF SWEEP', 0.9, 1.2), M.over('STAFF STRIKE', 0.95, 1.1)],
+  sabre: [M.sweep('SWEEPING CUT', 1.05, 1.12), M.over('MOULINET', 1.1), M.counter('RIPOSTE CUT', 1.35), M.thrust('POINT', 0.95, 1.15)],
+  anchor: [M.slam('ANCHOR DROP', 1.7), M.sweep('FLUKE SWING', 1.1, 1.1), M.over('HEAVE', 1.4, 1.55), M.bash('SHANK SHOVE', 0.9)],
 };
 
 /**
@@ -487,7 +572,7 @@ export const WEAPONS: WeaponDef[] = [
     spec: { note: 'TWO BLADES, TWO SMALLER WOUNDS', combo: 1.6, dodgeCut: 0.15, paired: true } },
   { key: 'throwing', name: 'THROWING KNIVES', power: [2, 4], heavy: [1, 2], resist: [2, 4], reach: [2, 4], hits: 1, guard: 0, tempo: 1.3,
     spec: { note: 'SIX OF THEM, FROM RIGHT ACROSS THE SAND',
-      ranged: { far: 145, dmg: 0.75, power: [3, 7], ammo: Infinity, reload: 0.35, wind: 0.75, shot: 'knife', speed: 235, arc: 0.14, hold: 85, drift: 0.16, leaves: true } } },
+      ranged: { far: 145, dmg: 0.8, power: [3, 7], ammo: Infinity, reload: 0.35, wind: 0.75, shot: 'knife', speed: 235, arc: 0.14, hold: 85, drift: 0.16, leaves: true } } },
 
   // ---- THE MIDDLE OF THE RACK
   { key: 'gladius', name: 'GLADIUS', power: [4, 6], heavy: [2, 4], resist: [6, 9], reach: [3, 5], hits: 1, guard: 0, tempo: 1.2,
@@ -682,10 +767,72 @@ export const WEAPONS: WeaponDef[] = [
   // ---- FROM A DISTANCE
   { key: 'shuriken', name: 'SHURIKEN', power: [1, 3], heavy: [1, 1], resist: [2, 4], reach: [1, 3], hits: 1, guard: 0, tempo: 1.45,
     spec: { note: 'TEN STARS, AND THEY ALL GO SOMEWHERE', fleet: 1.1,
-      ranged: { far: 150, dmg: 0.72, power: [3, 7], ammo: 10, reload: 0.4, wind: 0.6, shot: 'disc', speed: 260, arc: 0.05, hold: 88, drift: 0.16, leaves: true } } },
+      ranged: { far: 150, dmg: 0.88, power: [3, 7], ammo: 12, reload: 0.4, wind: 0.6, shot: 'disc', speed: 260, arc: 0.05, hold: 88, drift: 0.16, leaves: true } } },
   { key: 'repeater', name: 'REPEATER', power: [2, 4], heavy: [3, 5], resist: [4, 7], reach: [2, 4], hits: 1, guard: 0.04, tempo: 1.0,
     spec: { note: 'BOLT AFTER BOLT, NONE OF THEM MUCH', slowRecover: 0.15,
       ranged: { far: 176, dmg: 0.5, power: [3, 7], ammo: Infinity, reload: 0.55, wind: 0.7, shot: 'bolt', speed: 290, arc: 0.04, hold: 104, drift: 0.14 } } },
+
+  // ================= TWENTY MORE, EACH A THING THE RACK COULD NOT DO =================
+  //
+  // Held to the same gate: nothing a new best.  What each one brings is a
+  // shape of fight -- a chopper that opens armour, a pole-hammer for plate, a
+  // rope with two weights nobody can read, a punch-dagger that goes through
+  // anything, a pair of hatchets, a sword and a buckler, an anchor.
+
+  // ---- IN CLOSE
+  { key: 'katar', name: 'KATAR', power: [3, 6], heavy: [1, 3], resist: [6, 9], reach: [1, 3], hits: 1, guard: 0, tempo: 1.55,
+    spec: { note: 'A PUNCH WITH A BLADE ON IT. PLATE OR NOT', pierce: 0.4, atClose: 0.45 } },
+  { key: 'claws', name: 'TIGER CLAWS', power: [2, 5], heavy: [1, 2], resist: [4, 7], reach: [1, 2], hits: 2, guard: 0, tempo: 1.6,
+    spec: { note: 'TWO HANDS OF CLAWS, AND NO END TO IT', combo: 2.2, fleet: 1.12, paired: true } },
+  { key: 'cleaver', name: 'CLEAVER', power: [4, 7], heavy: [3, 4], resist: [6, 8], reach: [2, 4], hits: 1, guard: 0, tempo: 1.15,
+    spec: { note: 'IT GETS WORSE FOR THEM THE WORSE THEY ARE', execute: 1.2, atClose: 0.3 } },
+  { key: 'machete', name: 'MACHETE', power: [3, 6], heavy: [2, 3], resist: [5, 8], reach: [3, 5], hits: 1, guard: 0, tempo: 1.3,
+    spec: { note: 'HACKS FAST, AND KEEPS ON HACKING', combo: 1.5, crit: 0.08 } },
+  { key: 'hatchets', name: 'TWIN HATCHETS', power: [3, 6], heavy: [2, 4], resist: [5, 8], reach: [3, 5], hits: 2, guard: 0, tempo: 1.25,
+    spec: { note: 'TWO AXES, ONE CHOP AFTER THE OTHER', combo: 1.6, stagger: 0.1, paired: true } },
+
+  // ---- BLADES
+  { key: 'falchion', name: 'FALCHION', power: [5, 7], heavy: [3, 5], resist: [6, 9], reach: [4, 6], hits: 1, guard: 0.04, tempo: 1.0,
+    spec: { note: 'A CLEAVER WITH A SWORD\'S MANNERS', vsArmour: 1.15, knock: 3 } },
+  { key: 'khopesh', name: 'KHOPESH', power: [4, 7], heavy: [3, 5], resist: [6, 9], reach: [4, 6], hits: 1, guard: 0.04, tempo: 1.0,
+    spec: { note: 'HOOKS THE GUARD ASIDE, THEN CUTS', guardCut: 0.5, counter: 0.3 } },
+  { key: 'sabre', name: 'SABRE', power: [4, 7], heavy: [2, 4], resist: [5, 8], reach: [5, 7], hits: 1, guard: 0.05, tempo: 1.15,
+    spec: { note: 'A CAVALRY CUT, AND GONE BEFORE THE ANSWER', counter: 0.5, fleet: 1.08, dodgeCut: 0.1 } },
+  { key: 'buckler', name: 'SWORD AND BUCKLER', power: [3, 6], heavy: [3, 4], resist: [7, 9], reach: [4, 6], hits: 1, guard: 0.18, tempo: 1.05,
+    spec: { note: 'A LITTLE SHIELD, A SHORT SWORD, AND PATIENCE', counter: 0.7, guardCut: 0.1 } },
+  { key: 'flamberge', name: 'FLAMBERGE', power: [7, 9], heavy: [7, 9], resist: [5, 8], reach: [7, 9], hits: 1, guard: 0, tempo: 0.7,
+    spec: { note: 'THE WAVES TEAR WHAT THEY CATCH', crit: 0.12, stagger: 0.15, slowRecover: 0.4 } },
+
+  // ---- LONG
+  { key: 'partisan', name: 'PARTISAN', power: [4, 7], heavy: [4, 6], resist: [5, 8], reach: [7, 9], hits: 1, guard: 0.04, tempo: 0.9,
+    spec: { note: 'A SPEAR WITH WINGS THAT TURN A BLADE', atRange: 0.45, guardCut: 0.2, pierce: 0.12 } },
+  { key: 'lucerne', name: 'LUCERNE HAMMER', power: [4, 7], heavy: [5, 7], resist: [6, 9], reach: [7, 9], hits: 1, guard: 0, tempo: 0.82,
+    spec: { note: 'A HAMMER ON A POLE, FOR PEOPLE IN PLATE', vsArmour: 1.3, atRange: 0.2 } },
+  { key: 'guandao', name: 'GUANDAO', power: [6, 9], heavy: [6, 8], resist: [5, 8], reach: [8, 10], hits: 1, guard: 0, tempo: 0.72,
+    spec: { note: 'A GREAT CURVED BLADE ON A POLE', sweep: 0.5, knock: 6 } },
+
+  // ---- HEAVY
+  { key: 'sledge', name: 'SLEDGEHAMMER', power: [7, 10], heavy: [8, 10], resist: [8, 10], reach: [4, 6], hits: 1, guard: 0, tempo: 0.6,
+    spec: { note: 'SLOW AS A WALL, AND IT MOVES THEM LIKE ONE', knock: 14, stagger: 0.45, slowRecover: 0.45 } },
+  { key: 'anchor', name: 'ANCHOR', power: [8, 10], heavy: [9, 10], resist: [9, 10], reach: [5, 7], hits: 1, guard: 0, tempo: 0.52,
+    spec: { note: 'SOMEBODY BROUGHT AN ANCHOR. IT IS VERY SLOW', knock: 18, stagger: 0.5, slowRecover: 0.6 } },
+
+  // ---- ON A ROPE OR A CHAIN
+  { key: 'meteor', name: 'METEOR HAMMER', power: [3, 6], heavy: [2, 4], resist: [4, 7], reach: [7, 9], hits: 1, guard: 0, tempo: 0.95,
+    spec: { note: 'TWO WEIGHTS ON A ROPE, AND NO WAY TO READ THEM', dodgeCut: 0.45, sweep: 0.3 } },
+  { key: 'chainwhip', name: 'CHAIN WHIP', power: [3, 5], heavy: [2, 3], resist: [5, 8], reach: [7, 9], hits: 1, guard: 0, tempo: 1.1,
+    spec: { note: 'STEEL LINKS THAT WRAP ROUND A GUARD', guardCut: 0.55, atRange: 0.25 } },
+
+  // ---- FROM A DISTANCE, AND A WEAPON TOO
+  { key: 'tomahawk', name: 'TOMAHAWK', power: [3, 6], heavy: [2, 4], resist: [5, 8], reach: [3, 5], hits: 1, guard: 0, tempo: 1.15,
+    spec: { note: 'CHOP WITH IT, OR THROW IT ONCE', stagger: 0.12,
+      ranged: { far: 120, dmg: 1.05, power: [4, 8], ammo: 1, reload: 0.9, wind: 1.0, shot: 'axe', speed: 175, arc: 0.4, hold: 70, drift: 0.24, stagger: 0.15, leaves: true } } },
+  { key: 'atlatl', name: 'ATLATL', power: [2, 4], heavy: [1, 3], resist: [3, 6], reach: [2, 4], hits: 1, guard: 0, tempo: 1.05,
+    spec: { note: 'A STICK THAT THROWS A DART HARDER THAN AN ARM',
+      ranged: { far: 200, dmg: 0.9, power: [4, 9], ammo: 6, reload: 1.1, wind: 1.1, shot: 'spear', speed: 230, arc: 0.32, hold: 112, drift: 0.24, pierce: 0.1 } } },
+  { key: 'staffsling', name: 'STAFF SLING', power: [3, 5], heavy: [3, 5], resist: [4, 7], reach: [6, 8], hits: 1, guard: 0, tempo: 0.95,
+    spec: { note: 'A STONE OVER THE TOP, OR THE STAFF ITSELF',
+      ranged: { far: 180, dmg: 0.78, power: [3, 8], ammo: Infinity, reload: 1.1, wind: 1.1, shot: 'stone', speed: 150, arc: 0.7, hold: 100, drift: 0.28, stagger: 0.25 } } },
 ];
 
 /** Bare hands, for a weapon that has broken.  The same row as an empty chest. */
@@ -725,6 +872,24 @@ export interface ArmourMat {
    * different colour.
    */
   soft?: number;
+  /**
+   * EXTRA SHARE TAKEN OFF A HEAVY BLOW -- scale's opposite.  Padding and
+   * springs soak the big ones and let the quick ones through.
+   */
+  dense?: number;
+  /** Extra share taken off anything that FLIES: arrows, bolts, thrown iron. */
+  vsShot?: number;
+  /**
+   * HOW HARD IT IS TO MOVE YOU, 0..1: this share comes off the knock-back
+   * and off the chance a blow puts you on the floor.
+   */
+  brace?: number;
+  /** Health grown back a second, for a whole suit of it. */
+  regen?: number;
+  /** Share of a poison's bite it keeps out. */
+  antidote?: number;
+  /** Share added to every swing: armour that makes you hit harder, not live longer. */
+  fury?: number;
   heavy: Band;
   resist: Band;
   colour: number;
@@ -775,23 +940,23 @@ export const MATERIALS: ArmourMat[] = [
   { key: 'tactical', name: 'TACTICAL ARMOUR', def: 0.10, evade: 0.15, heavy: [2, 4], resist: [6, 8], colour: 0x3f4a3a, edge: 0x22281f, short: 'TACTICAL', note: 'STOPS LITTLE. MUCH HARDER TO HIT', notes: { head: 'A PADDED HEADSET. HARDER TO HIT, NOT HARDER', body: 'STOPS LITTLE. MUCH HARDER TO HIT', legs: 'CARGO KNEE PADS. LIGHT FEET, QUICK DODGES' } },
   { key: 'reinforced', name: 'REINFORCED LEATHER', def: 0.13, evade: 0, heavy: [3, 5], resist: [7, 9], colour: 0x7a5a3a, edge: 0x452f1c, short: 'R.LEATHER', note: 'LEATHER THAT HAS BEEN THOUGHT ABOUT', notes: { head: 'BOILED LEATHER, SET HARD ROUND THE SKULL', body: 'LEATHER THAT HAS BEEN THOUGHT ABOUT', legs: 'STIFFENED LEATHER GREAVES, LACED TIGHT' } },
   { key: 'tin', name: 'TIN ARMOUR', def: 0.15, evade: 0, heavy: [3, 5], resist: [3, 5], colour: 0xb9c2c8, edge: 0x6d767c, short: 'TIN', note: 'CHEAP, LOUD, BETTER THAN A SHIRT', notes: { head: 'A TIN POT WITH A CHIN STRAP. IT RINGS', body: 'CHEAP, LOUD, BETTER THAN A SHIRT', legs: 'TIN SHIN GUARDS. THEY DENT, THEN THEY BEND' } },
-  { key: 'hood', name: 'CHAIN HOOD', def: 0.16, evade: 0, heavy: [3, 5], resist: [6, 8], colour: 0x87909c, edge: 0x464e58, short: 'HOOD', note: 'RINGS, AND NOT MANY OF THEM', notes: { head: 'A MAIL COIF. RINGS, AND NOT MANY OF THEM', body: 'A SHORT MAIL SHIRT THAT STOPS AT THE RIBS', legs: 'MAIL CHAUSSES. SLICES STOP, BRUISES DO NOT' } },
+  { key: 'hood', name: 'CHAIN HOOD', def: 0.16, evade: 0, heavy: [3, 5], resist: [6, 8], colour: 0x87909c, edge: 0x464e58, short: 'HOOD', note: 'RINGS, AND NOT MANY OF THEM', notes: { head: 'A MAIL COIF. RINGS, AND NOT MANY OF THEM', body: 'A SHORT MAIL SHIRT THAT STOPS AT THE RIBS', legs: 'MAIL CHAUSSES. LIGHT, AND NOT MUCH MORE' } },
 
   // ---- THE MIDDLE
   { key: 'scale', name: 'SCALE ARMOUR', def: 0.18, evade: 0, soft: 0.34, heavy: [4, 6], resist: [6, 8], colour: 0x6f8a6a, edge: 0x3a4a38, short: 'SCALE', note: 'SHRUGS OFF THE QUICK ONES. NOT THE BIG ONES', notes: { head: 'SCALES ROUND THE CROWN. SHRUGS OFF THE QUICK ONES', body: 'SHRUGS OFF THE QUICK ONES. NOT THE BIG ONES', legs: 'SCALED TASSETS OVER THE THIGHS. LIGHT HITS SLIDE' } },
-  { key: 'chain', name: 'CHAIN ARMOUR', def: 0.20, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8e9cad, edge: 0x4a5665, short: 'CHAIN', note: 'THE HONEST MIDDLE OF THE RACK', notes: { head: 'A MAIL HOOD. THE HONEST MIDDLE OF THE RACK', body: 'THE HONEST MIDDLE OF THE RACK', legs: 'MAIL LEGGINGS. THEY STOP A BLADE, NOT A CLUB' } },
-  { key: 'bronze', name: 'BRONZE ARMOUR', def: 0.21, evade: 0, heavy: [5, 7], resist: [5, 7], colour: 0xc08a3e, edge: 0x6f4b1c, short: 'BRONZE', note: 'OLDER THAN IRON AND NEARLY AS GOOD', notes: { head: 'A BRONZE BOWL. OLDER THAN IRON, NEARLY AS GOOD', body: 'OLDER THAN IRON AND NEARLY AS GOOD', legs: 'BRONZE GREAVES. THEY WILL OUTLAST THE FIGHT' } },
+  { key: 'chain', name: 'CHAIN ARMOUR', def: 0.20, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8e9cad, edge: 0x4a5665, short: 'CHAIN', note: 'THE HONEST MIDDLE OF THE RACK', notes: { head: 'A MAIL HOOD. THE HONEST MIDDLE OF THE RACK', body: 'THE HONEST MIDDLE OF THE RACK', legs: 'MAIL LEGGINGS. MIDDLING AT EVERYTHING' } },
+  { key: 'bronze', name: 'BRONZE ARMOUR', def: 0.21, evade: 0, heavy: [5, 7], resist: [5, 7], colour: 0xc08a3e, edge: 0x6f4b1c, short: 'BRONZE', note: 'OLDER THAN IRON AND NEARLY AS GOOD', notes: { head: 'A BRONZE BOWL. OLDER THAN IRON, NEARLY AS GOOD', body: 'OLDER THAN IRON AND NEARLY AS GOOD', legs: 'BRONZE GREAVES. OLD, HEAVY, AND THEY DENT' } },
   { key: 'viking', name: 'VIKING HELM', def: 0.22, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x9aa3ad, edge: 0x4e555e, short: 'VIKING', note: 'HORNS, WHICH HELP WITH NOTHING', notes: { head: 'HORNS, WHICH HELP WITH NOTHING', body: 'A MAIL BYRNIE UNDER A FUR CLOAK', legs: 'WOOL WRAPS AND IRON BANDS ROUND THE CALVES' } },
-  { key: 'spartan', name: 'SPARTAN HELM', def: 0.23, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0xb08a3a, edge: 0x63481a, short: 'SPARTAN', note: 'YOU WILL SEE LESS AND MIND IT LESS', notes: { head: 'YOU WILL SEE LESS AND MIND IT LESS', body: 'A BRONZE BELL CUIRASS. NO RETREAT IN IT', legs: 'BRONZE GREAVES THAT CLIP ON WITHOUT STRAPS' } },
+  { key: 'spartan', name: 'SPARTAN HELM', def: 0.23, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0xb08a3a, edge: 0x63481a, short: 'SPARTAN', note: 'YOU WILL SEE LESS AND MIND IT LESS', notes: { head: 'YOU WILL SEE LESS AND MIND IT LESS', body: 'A BRONZE BELL CUIRASS, HEAVY AND SOUND', legs: 'BRONZE GREAVES THAT CLIP ON WITHOUT STRAPS' } },
   { key: 'legion', name: 'ROMAN LEGION', def: 0.23, evade: 0, heavy: [5, 7], resist: [8, 10], colour: 0xc2a15a, edge: 0x6d5528, short: 'LEGION', note: 'ISSUED, AND IT SHOWS. IT LASTS', notes: { head: 'A STANDARD ISSUE HELMET. IT LASTS', body: 'ISSUED, AND IT SHOWS. IT LASTS', legs: 'ISSUED GREAVES AND HOBNAILED SANDALS' } },
   { key: 'roman', name: 'ROMAN HELMET', def: 0.24, evade: 0, heavy: [5, 7], resist: [8, 10], colour: 0xcaa963, edge: 0x77592a, short: 'ROMAN', note: 'A CHEEK GUARD AND A VERY RED BRUSH', notes: { head: 'A CHEEK GUARD AND A VERY RED BRUSH', body: 'BANDED PLATES OVER THE SHOULDERS AND RIBS', legs: 'A PTERUGES SKIRT OF STRIPS AND TWO GREAVES' } },
 
   // ---- HEAVY
-  { key: 'iron', name: 'IRON ARMOUR', def: 0.25, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x6f7682, edge: 0x3a4149, short: 'IRON', note: 'HEAVY, AND WORTH IT', notes: { head: 'AN IRON HELM. HEAVY ON THE NECK, AND WORTH IT', body: 'HEAVY, AND WORTH IT', legs: 'IRON GREAVES. THEY SLOW THE LEGS, NOT THE FIGHT' } },
-  { key: 'shoulder', name: 'SHOULDER GUARDS', def: 0.26, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x7e868f, edge: 0x424952, short: 'PAULDRON', note: 'ENORMOUS. YOU WILL NOT TURN QUICKLY', notes: { head: 'A GREAT HELM TO MATCH. YOU WILL NOT LOOK UP', body: 'ENORMOUS. YOU WILL NOT TURN QUICKLY', legs: 'THIGH PLATES AS BROAD AS THE PAULDRONS' } },
-  { key: 'spiked', name: 'SPIKED ARMOUR', def: 0.26, evade: 0, thorns: 9, heavy: [6, 8], resist: [6, 8], colour: 0x5e5a63, edge: 0xbfc6cf, short: 'SPIKED', note: 'PUNCH IT AND FIND OUT. BLADES DO NOT CARE', notes: { head: 'A SPIKE ON TOP. HEADBUTTS ARE A PLAN NOW', body: 'PUNCH IT AND FIND OUT. BLADES DO NOT CARE', legs: 'SPIKED KNEES. KICK IT AND REGRET IT' } },
-  { key: 'plate', name: 'PLATE ARMOUR', def: 0.28, evade: 0, heavy: [7, 9], resist: [8, 10], colour: 0xc3cad4, edge: 0x646c78, short: 'PLATE', note: 'A WALL WITH A FROG INSIDE IT', notes: { head: 'A CLOSED STEEL HELM. A WALL ROUND YOUR HEAD', body: 'A WALL WITH A FROG INSIDE IT', legs: 'PLATE FROM HIP TO ANKLE. STEADY ON YOUR FEET' } },
-  { key: 'gold', name: 'GOLD ARMOUR', def: 0.30, evade: 0, heavy: [7, 9], resist: [4, 6], colour: 0xffd45e, edge: 0xa8801e, short: 'GOLD', note: 'THE BEST THERE IS, AND THE SOFTEST', notes: { head: 'A GOLD HELM. THE BEST THERE IS, AND THE SOFTEST', body: 'THE BEST THERE IS, AND THE SOFTEST', legs: 'GOLD GREAVES. THE CROWD WATCHES YOUR FEET' } },
+  { key: 'iron', name: 'IRON ARMOUR', def: 0.25, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x6f7682, edge: 0x3a4149, short: 'IRON', note: 'HEAVY, AND WORTH IT', notes: { head: 'AN IRON HELM. HEAVY ON THE NECK, AND WORTH IT', body: 'HEAVY, AND WORTH IT', legs: 'IRON GREAVES. HEAVY, AND THEY HOLD' } },
+  { key: 'shoulder', name: 'SHOULDER GUARDS', def: 0.26, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x7e868f, edge: 0x424952, short: 'PAULDRON', note: 'ENORMOUS, AND EVERY STEP IS SLOWER FOR IT', notes: { head: 'A GREAT HELM TO MATCH. YOU WILL NOT LOOK UP', body: 'ENORMOUS, AND EVERY STEP IS SLOWER FOR IT', legs: 'THIGH PLATES AS BROAD AS THE PAULDRONS' } },
+  { key: 'spiked', name: 'SPIKED ARMOUR', def: 0.26, evade: 0, thorns: 9, heavy: [6, 8], resist: [6, 8], colour: 0x5e5a63, edge: 0xbfc6cf, short: 'SPIKED', note: 'PUNCH IT AND FIND OUT. BLADES DO NOT CARE', notes: { head: 'A SPIKED HELM. A BARE FIST PAYS FOR IT', body: 'PUNCH IT AND FIND OUT. BLADES DO NOT CARE', legs: 'SPIKED KNEES. KICK IT AND REGRET IT' } },
+  { key: 'plate', name: 'PLATE ARMOUR', def: 0.28, evade: 0, brace: 0.12, heavy: [7, 9], resist: [8, 10], colour: 0xc3cad4, edge: 0x646c78, short: 'PLATE', note: 'A WALL WITH A FROG INSIDE IT', notes: { head: 'A CLOSED STEEL HELM. A WALL ROUND YOUR HEAD', body: 'A WALL WITH A FROG INSIDE IT', legs: 'PLATE FROM HIP TO ANKLE. STEADY ON YOUR FEET' } },
+  { key: 'gold', name: 'GOLD ARMOUR', def: 0.30, evade: 0, heavy: [7, 9], resist: [4, 6], colour: 0xffd45e, edge: 0xa8801e, short: 'GOLD', note: 'NEARLY THE BEST THERE IS, AND THE SOFTEST', notes: { head: 'A GOLD HELM. STRONG, AND IT WEARS FAST', body: 'NEARLY THE BEST THERE IS, AND THE SOFTEST', legs: 'GOLD GREAVES. THE CROWD WATCHES YOUR FEET' } },
   { key: 'heavyplate', name: 'HEAVY PLATE', def: 0.33, evade: 0, heavy: [9, 10], resist: [9, 10], colour: 0x9aa2ae, edge: 0x4d545e, short: 'H.PLATE', note: 'NOTHING GETS IN. NOTHING GETS OUT EITHER', notes: { head: 'A GREAT HELM. NOTHING GETS IN, NOT EVEN SOUND', body: 'NOTHING GETS IN. NOTHING GETS OUT EITHER', legs: 'HEAVY PLATE LEGS. YOU WALK LIKE A DOOR' } },
 
 
@@ -799,21 +964,50 @@ export const MATERIALS: ArmourMat[] = [
   // plate and none is lighter than cloth: each is a different trade -- silk that
   // slips, crystal that shatters, thorns that bite back, mithril that weighs
   // nothing -- rather than a bigger number.
-  { key: 'silk', name: 'SILK ARMOUR', def: 0.07, evade: 0.07, heavy: [1, 1], resist: [3, 5], colour: 0xe8d6f0, edge: 0x8f7aa0, short: 'SILK', note: 'ARROWS TANGLE IN IT. SWORDS DO NOT', notes: { head: 'A SILK TURBAN, WOUND MANY TIMES', body: 'LAYERED SILK. ARROWS TANGLE IN IT, SWORDS DO NOT', legs: 'SILK WRAPS. LIGHT ENOUGH TO DANCE IN' } },
+  { key: 'silk', name: 'SILK ARMOUR', def: 0.07, evade: 0.07, vsShot: 0.3, heavy: [1, 1], resist: [3, 5], colour: 0xe8d6f0, edge: 0x8f7aa0, short: 'SILK', note: 'ARROWS TANGLE IN IT. SWORDS DO NOT', notes: { head: 'A SILK TURBAN, WOUND MANY TIMES', body: 'LAYERED SILK. ARROWS TANGLE IN IT, SWORDS DO NOT', legs: 'SILK WRAPS. LIGHT ENOUGH TO DANCE IN' } },
   { key: 'bark', name: 'BARK ARMOUR', def: 0.11, evade: 0, heavy: [2, 3], resist: [4, 6], colour: 0x6e5436, edge: 0x3c2c1a, short: 'BARK', note: 'A TREE WORE IT FIRST, AND IT WAS FINE', notes: { head: 'A BARK CAP. SMELLS OF THE FOREST', body: 'A TREE WORE IT FIRST, AND IT WAS FINE', legs: 'BARK SHIN GUARDS, LASHED WITH VINE' } },
-  { key: 'turtle', name: 'TURTLE SHELL', def: 0.21, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x6f7a3a, edge: 0x39401c, short: 'SHELL', note: 'SLOW, AND VERY HARD TO GET THROUGH', notes: { head: 'HALF A SHELL FOR A HELMET. NOBODY LAUGHS TWICE', body: 'A WHOLE SHELL ON YOUR BACK. SLOW, AND VERY HARD', legs: 'SHELL PLATES ON THE KNEES. HARD, AND HEAVY' } },
+  { key: 'turtle', name: 'TURTLE SHELL', def: 0.25, evade: 0, vsShot: 0.1, heavy: [6, 8], resist: [7, 9], colour: 0x6f7a3a, edge: 0x39401c, short: 'SHELL', note: 'SLOW, AND VERY HARD TO GET THROUGH', notes: { head: 'HALF A SHELL FOR A HELMET. NOBODY LAUGHS TWICE', body: 'A WHOLE SHELL ON YOUR BACK. SLOW, AND VERY HARD', legs: 'SHELL PLATES ON THE KNEES. HARD, AND HEAVY' } },
   { key: 'splint', name: 'SPLINT MAIL', def: 0.2, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8d8f86, edge: 0x4a4c44, short: 'SPLINT', note: 'STRIPS OF IRON RIVETED IN A ROW', notes: { head: 'A SPLINTED CAP, STRIPS FROM CROWN TO BRIM', body: 'IRON STRIPS RIVETED DOWN A LEATHER COAT', legs: 'SPLINTED GREAVES. STRIPS THAT BEND AT THE KNEE' } },
   { key: 'banded', name: 'BANDED MAIL', def: 0.23, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x9a9ea6, edge: 0x4c5058, short: 'BANDED', note: 'HOOPS OF STEEL, ONE OVER THE NEXT', notes: { head: 'A BANDED HELM, HOOPED LIKE A BARREL', body: 'HOOPS OF STEEL ROUND THE BODY, ONE OVER THE NEXT', legs: 'BANDED CUISSES. THEY CREAK WHEN YOU CROUCH' } },
   { key: 'samurai', name: 'O-YOROI', def: 0.24, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x8c2f2a, edge: 0x3d1412, short: 'O-YOROI', note: 'LACQUERED LAMES, LACED IN SILK', notes: { head: 'A KABUTO WITH A FLARED NECK GUARD', body: 'LACQUERED LAMES, LACED IN SILK CORD', legs: 'HAIDATE: AN APRON OF LITTLE PLATES OVER THE THIGH' } },
-  { key: 'mirror', name: 'MIRROR ARMOUR', def: 0.22, evade: 0, heavy: [4, 6], resist: [5, 7], colour: 0xd9e4ee, edge: 0x6a7684, short: 'MIRROR', note: 'POLISHED UNTIL THEY SQUINT', notes: { head: 'A POLISHED DOME. THEY SEE THEMSELVES COMING', body: 'ROUND MIRRORS SEWN ON MAIL. THEY SQUINT', legs: 'POLISHED GREAVES THAT FLASH IN THE SUN' } },
+  { key: 'mirror', name: 'MIRROR ARMOUR', def: 0.2, evade: 0.04, heavy: [4, 6], resist: [5, 7], colour: 0xd9e4ee, edge: 0x6a7684, short: 'MIRROR', note: 'POLISHED UNTIL THEY SQUINT, AND SOMETIMES MISS', notes: { head: 'A POLISHED DOME. THE GLARE MAKES THEM MISS', body: 'ROUND MIRRORS SEWN ON MAIL. THEY SQUINT, AND MISS', legs: 'POLISHED GREAVES. THE FLASH PUTS THEM OFF' } },
   { key: 'coral', name: 'CORAL ARMOUR', def: 0.17, evade: 0, soft: 0.3, heavy: [3, 5], resist: [4, 6], colour: 0xe07a6a, edge: 0x8a3a30, short: 'CORAL', note: 'TURNS THE QUICK ONES. CRUMBLES ON THE REST', notes: { head: 'A CORAL CROWN. TURNS A QUICK BLOW', body: 'GROWN, NOT MADE. TURNS THE QUICK ONES', legs: 'CORAL SHIN PLATES. BRIGHT, AND BRITTLE' } },
   { key: 'jade', name: 'JADE ARMOUR', def: 0.26, evade: 0, heavy: [6, 8], resist: [4, 6], colour: 0x5fae7e, edge: 0x2a5a3c, short: 'JADE', note: 'PLATES OF STONE, WIRED TOGETHER WITH GOLD', notes: { head: 'A JADE CAP, WIRED IN GOLD. HEAVY ON THE NECK', body: 'JADE PLATES WIRED WITH GOLD. HARD, AND IT CHIPS', legs: 'JADE TILES DOWN THE LEG. SLOW, AND STRONG' } },
-  { key: 'mithril', name: 'MITHRIL MAIL', def: 0.22, evade: 0, heavy: [2, 4], resist: [8, 10], colour: 0xdfe8f2, edge: 0x7c8898, short: 'MITHRIL', note: 'LIGHT AS CLOTH AND IT NEVER WEARS OUT', notes: { head: 'A MITHRIL COIF. YOU FORGET IT IS THERE', body: 'LIGHT AS CLOTH, AND IT NEVER WEARS OUT', legs: 'MITHRIL LEGGINGS. NOT A SOUND WHEN YOU MOVE' } },
+  { key: 'mithril', name: 'MITHRIL MAIL', def: 0.22, evade: 0, heavy: [2, 4], resist: [8, 10], colour: 0xdfe8f2, edge: 0x7c8898, short: 'MITHRIL', note: 'LIGHT AS CLOTH AND IT LASTS', notes: { head: 'A MITHRIL COIF. YOU FORGET IT IS THERE', body: 'LIGHT AS CLOTH, AND SLOW TO WEAR OUT', legs: 'MITHRIL LEGGINGS. NOT A SOUND WHEN YOU MOVE' } },
   { key: 'crystal', name: 'CRYSTAL ARMOUR', def: 0.28, evade: 0, heavy: [4, 6], resist: [1, 3], colour: 0x9fe0f0, edge: 0x4a8aa0, short: 'CRYSTAL', note: 'BEAUTIFUL, HARD, AND IT WILL SHATTER', notes: { head: 'A CRYSTAL HELM. IT RINGS, THEN IT BREAKS', body: 'CUT CRYSTAL. STOPS A GREAT DEAL, BRIEFLY', legs: 'CRYSTAL GREAVES. LOVELY UNTIL THE FIRST KICK' } },
-  { key: 'thorn', name: 'THORN MAIL', def: 0.19, evade: 0, thorns: 6, heavy: [4, 6], resist: [5, 7], colour: 0x4e6a3a, edge: 0x9ab86a, short: 'THORN', note: 'A HEDGE YOU CAN WEAR. FISTS REGRET IT', notes: { head: 'A CROWN OF THORNS. HEADBUTTS ARE A MISTAKE', body: 'A HEDGE YOU CAN WEAR. FISTS REGRET IT', legs: 'THORNED LEGGINGS. KICK THEM IF YOU MUST' } },
+  { key: 'thorn', name: 'THORN MAIL', def: 0.19, evade: 0, thorns: 6, heavy: [4, 6], resist: [5, 7], colour: 0x4e6a3a, edge: 0x9ab86a, short: 'THORN', note: 'A HEDGE YOU CAN WEAR. FISTS REGRET IT', notes: { head: 'A CROWN OF THORNS. BARE FISTS REGRET IT', body: 'A HEDGE YOU CAN WEAR. FISTS REGRET IT', legs: 'THORNED LEGGINGS. KICK THEM IF YOU MUST' } },
   { key: 'shadow', name: 'SHADOW GARB', def: 0.07, evade: 0.13, heavy: [1, 2], resist: [5, 7], colour: 0x26222e, edge: 0x5a4f6e, short: 'SHADOW', note: 'NOTHING TO HIT WHERE YOU JUST WERE', notes: { head: 'A HOOD AND A MASK. THEY LOSE YOUR EYES', body: 'DARK WRAPS. THERE IS NOTHING WHERE YOU WERE', legs: 'SOFT-SOLED WRAPS. SILENT, AND QUICK' } },
   { key: 'gladiator', name: 'GLADIATOR GEAR', def: 0.18, evade: 0, heavy: [3, 5], resist: [6, 8], colour: 0x8a5a2e, edge: 0xc9a45a, short: 'GLADIATOR', note: 'WHAT THE ARENA ISSUES, AND IT HAS SEEN THINGS', notes: { head: 'A GRATED ARENA HELM WITH A BRASS CREST', body: 'A LEATHER HARNESS AND ONE GOOD SHOULDER', legs: 'A GREAVE ON THE LEAD LEG, WRAPS ON THE OTHER' } },
-  { key: 'adamant', name: 'ADAMANT PLATE', def: 0.31, evade: 0, heavy: [8, 10], resist: [9, 10], colour: 0x5a6a7a, edge: 0x2a3440, short: 'ADAMANT', note: 'IT WILL NOT DENT, AND NEITHER WILL YOU', notes: { head: 'AN ADAMANT HELM. IT WILL NOT EVEN SCRATCH', body: 'IT WILL NOT DENT, AND NEITHER WILL YOU', legs: 'ADAMANT LEGS. PLANTED, AND GOING NOWHERE' } },
+  { key: 'adamant', name: 'ADAMANT PLATE', def: 0.31, evade: 0, brace: 0.2, heavy: [8, 10], resist: [9, 10], colour: 0x5a6a7a, edge: 0x2a3440, short: 'ADAMANT', note: 'IT WILL NOT DENT, AND NEITHER WILL YOU', notes: { head: 'AN ADAMANT HELM. THE LAST THING TO GIVE', body: 'IT WILL NOT DENT, AND NEITHER WILL YOU', legs: 'ADAMANT LEGS. PLANTED, AND GOING NOWHERE' } },
+
+  // ---- TWENTY MORE, AND EACH ONE A DIFFERENT TRADE.
+  //
+  // Not better numbers: different rules.  Padding that soaks the heavy blows
+  // scale lets through, braced suits that will not be knocked about, wicker
+  // that catches arrows and nothing else, a hide that closes its own wounds, a
+  // plague mask against the darts, a pelt that makes you hit harder and
+  // protects nothing.  Every one of them says on the card what it does and
+  // the rules do exactly that (see `traitLine` and `applyDamage`).
+  { key: 'gambeson', name: 'QUILTED GAMBESON', def: 0.1, evade: 0, dense: 0.3, heavy: [2, 3], resist: [5, 7], colour: 0xb89a6a, edge: 0x6e5634, short: 'GAMBESON', note: 'SOAKS THE BIG ONES. THE QUICK ONES GET THROUGH', notes: { head: 'A THICK ARMING CAP. IT DEADENS A CLUB', body: 'SOAKS THE BIG ONES. THE QUICK ONES GET THROUGH', legs: 'QUILTED CHAUSSES THAT DEADEN A HEAVY KICK' } },
+  { key: 'bearpelt', name: 'BEAR PELT', def: 0.12, evade: 0, brace: 0.3, heavy: [3, 5], resist: [5, 7], colour: 0x5a3e28, edge: 0x2e1f12, short: 'PELT', note: 'YOU DO NOT GET PUSHED ABOUT IN IT', notes: { head: 'A BEAR\'S HEAD FOR A HOOD. IT STAYS PUT', body: 'YOU DO NOT GET PUSHED ABOUT IN IT', legs: 'FUR LEG WRAPS. PLANTED FEET, HARD TO FLOOR' } },
+  { key: 'troll', name: 'TROLL HIDE', def: 0.09, evade: 0, regen: 1.6, heavy: [3, 5], resist: [4, 6], colour: 0x6a7a4a, edge: 0x36401e, short: 'TROLL', note: 'IT CLOSES ITS OWN WOUNDS, SLOWLY', notes: { head: 'A WARTY HIDE HOOD. IT KNITS SHUT', body: 'IT CLOSES ITS OWN WOUNDS, SLOWLY', legs: 'TROLL SKIN LEGGINGS. THE CUTS CLOSE UP' } },
+  { key: 'feather', name: 'FEATHER CLOAK', def: 0.04, evade: 0.12, heavy: [1, 1], resist: [2, 3], colour: 0xd9d2c0, edge: 0x7a6f5a, short: 'FEATHER', note: 'LIGHT AS A BIRD, AND ABOUT AS TOUGH', notes: { head: 'A FEATHERED CAP. HARD TO HIT, EASY TO HURT', body: 'LIGHT AS A BIRD, AND ABOUT AS TOUGH', legs: 'FEATHERED LEGGINGS. QUICK, AND NOTHING ELSE' } },
+  { key: 'wicker', name: 'WICKER ARMOUR', def: 0.07, evade: 0, vsShot: 0.45, heavy: [2, 3], resist: [2, 4], colour: 0xc4a05a, edge: 0x7a5a26, short: 'WICKER', note: 'ARROWS STICK IN IT. NOTHING ELSE DOES', notes: { head: 'A WOVEN BASKET HELM. ARROWS STICK IN IT', body: 'ARROWS STICK IN IT. NOTHING ELSE DOES', legs: 'WICKER SHIN CAGES. THEY CATCH A STONE' } },
+  { key: 'riot', name: 'RIOT GEAR', def: 0.16, evade: 0, brace: 0.3, vsShot: 0.15, heavy: [4, 6], resist: [6, 8], colour: 0x2c3038, edge: 0x10131a, short: 'RIOT', note: 'BUILT TO BE PUSHED AND NOT MOVE', notes: { head: 'A VISORED HELMET. STONES BOUNCE, YOU DO NOT', body: 'BUILT TO BE PUSHED AND NOT MOVE', legs: 'HARD SHELL SHIN GUARDS. HARD TO KNOCK DOWN' } },
+  { key: 'barrel', name: 'BARREL ARMOUR', def: 0.18, evade: 0, brace: 0.2, heavy: [5, 7], resist: [5, 7], colour: 0x8a5e32, edge: 0x4a3018, short: 'BARREL', note: 'A BARREL WITH HOLES FOR THE LEGS', notes: { head: 'A BUCKET. IT WORKS, AND IT ECHOES', body: 'A BARREL WITH HOLES FOR THE LEGS. HARD TO TIP', legs: 'STAVES STRAPPED TO THE SHINS' } },
+  { key: 'ice', name: 'ICE ARMOUR', def: 0.27, evade: 0, dense: 0.1, heavy: [4, 6], resist: [1, 2], colour: 0xbfe6f5, edge: 0x5a9ab8, short: 'ICE', note: 'COLD, HARD, AND ALREADY MELTING', notes: { head: 'AN ICE HELM. IT WILL NOT LAST THE ROUND', body: 'COLD, HARD, AND ALREADY MELTING', legs: 'ICE GREAVES. STRONG FOR ABOUT A MINUTE' } },
+  { key: 'rubber', name: 'RUBBER SUIT', def: 0.05, evade: 0, soft: 0.15, brace: 0.45, heavy: [2, 4], resist: [6, 8], colour: 0x2a2a30, edge: 0x5a5a66, short: 'RUBBER', note: 'EVERYTHING BOUNCES OFF, INCLUDING YOU', notes: { head: 'A RUBBER HOOD. YOU BOUNCE, YOU DO NOT FALL', body: 'EVERYTHING BOUNCES OFF, INCLUDING YOU', legs: 'RUBBER WADERS. VERY HARD TO KNOCK OVER' } },
+  { key: 'platecoat', name: 'COAT OF PLATES', def: 0.24, evade: 0, dense: 0.1, brace: 0.1, heavy: [5, 7], resist: [7, 9], colour: 0x7a3a2a, edge: 0xb9a57a, short: 'PLATES', note: 'PLATES RIVETED INSIDE A COAT. STEADY', notes: { head: 'A RIVETED CAP UNDER CLOTH', body: 'PLATES RIVETED INSIDE A COAT. STEADY', legs: 'RIVETED TASSETS. THEY TAKE A HEAVY BLOW' } },
+  { key: 'linothorax', name: 'LINOTHORAX', def: 0.15, evade: 0.02, soft: 0.12, dense: 0.12, heavy: [2, 4], resist: [6, 8], colour: 0xe6dcc2, edge: 0x8a7a54, short: 'LINEN', note: 'GLUED LINEN. A LITTLE GOOD AT EVERYTHING', notes: { head: 'A GLUED LINEN CAP. LIGHT AND FAIR', body: 'GLUED LINEN. A LITTLE GOOD AT EVERYTHING', legs: 'LINEN SKIRT OF STRIPS. IT TAKES SOME OF IT' } },
+  { key: 'sharkskin', name: 'SHARKSKIN', def: 0.12, evade: 0.05, thorns: 4, heavy: [2, 3], resist: [5, 7], colour: 0x6a7a86, edge: 0x34404a, short: 'SHARK', note: 'ROUGH ENOUGH TO FLAY A FIST', notes: { head: 'A SHARKSKIN HOOD. FISTS COME AWAY RAW', body: 'ROUGH ENOUGH TO FLAY A FIST', legs: 'SHARKSKIN LEGGINGS. KICK IT, BLEED' } },
+  { key: 'plague', name: 'PLAGUE DOCTOR', def: 0.1, evade: 0, antidote: 0.7, heavy: [2, 4], resist: [5, 7], colour: 0x2e2a26, edge: 0x8a7a5a, short: 'PLAGUE', note: 'THE MASK KEEPS OUT THE WORST OF THE POISON', notes: { head: 'A BEAKED MASK. DARTS DO LITTLE TO YOU', body: 'WAXED LEATHER. THE POISON RUNS OFF IT', legs: 'WAXED BOOTS. POISON STAYS ON THE OUTSIDE' } },
+  { key: 'moss', name: 'MOSS CLOAK', def: 0.06, evade: 0.05, regen: 1.0, heavy: [1, 2], resist: [3, 5], colour: 0x4f7a3a, edge: 0x2a4a1c, short: 'MOSS', note: 'IT GROWS BACK. SO DO YOU, A LITTLE', notes: { head: 'A MOSSY HOOD. IT GROWS BACK', body: 'IT GROWS BACK. SO DO YOU, A LITTLE', legs: 'MOSS WRAPS. SOFT, AND THEY MEND YOU' } },
+  { key: 'clockwork', name: 'CLOCKWORK PLATE', def: 0.26, evade: 0, dense: 0.18, heavy: [7, 9], resist: [5, 7], colour: 0xa8864a, edge: 0x5a4420, short: 'CLOCK', note: 'SPRINGS TAKE THE WEIGHT OUT OF THE BIG ONES', notes: { head: 'A GEARED HELM. IT TICKS', body: 'SPRINGS TAKE THE WEIGHT OUT OF THE BIG ONES', legs: 'SPRUNG GREAVES. HEAVY, AND THEY ABSORB' } },
+  { key: 'lead', name: 'LEAD-LINED PLATE', def: 0.22, evade: 0, brace: 0.55, heavy: [9, 10], resist: [7, 9], colour: 0x5e6268, edge: 0x2e3034, short: 'LEAD', note: 'NOTHING MOVES YOU. NOT EVEN YOU', notes: { head: 'A LEADEN HELM. NOTHING TURNS YOUR HEAD', body: 'NOTHING MOVES YOU. NOT EVEN YOU', legs: 'LEAD BOOTS. YOU ARE NOT GOING DOWN' } },
+  { key: 'starmetal', name: 'STARMETAL', def: 0.29, evade: 0, vsShot: 0.2, heavy: [6, 8], resist: [8, 10], colour: 0x3a4a78, edge: 0xc9d4ff, short: 'STAR', note: 'IT FELL FROM THE SKY, AND ARROWS KNOW IT', notes: { head: 'A STARMETAL HELM. ARROWS SKATE OFF IT', body: 'IT FELL FROM THE SKY, AND ARROWS KNOW IT', legs: 'STARMETAL GREAVES. HARD, AND THEY LAST' } },
+  { key: 'fishscale', name: 'FISH SCALE', def: 0.11, evade: 0.03, soft: 0.42, heavy: [2, 3], resist: [4, 6], colour: 0x9ab8c0, edge: 0x4a6a74, short: 'FISH', note: 'SLIPPERY. THE QUICK ONES SLIDE RIGHT OFF', notes: { head: 'A SCALED CAP. QUICK BLOWS SLIDE OFF', body: 'SLIPPERY. THE QUICK ONES SLIDE RIGHT OFF', legs: 'SCALED LEGGINGS. LIGHT HITS GLANCE AWAY' } },
+  { key: 'chitin', name: 'BEETLE CHITIN', def: 0.2, evade: 0, vsShot: 0.18, heavy: [3, 5], resist: [5, 7], colour: 0x3a5a3a, edge: 0x9ad07a, short: 'CHITIN', note: 'A LIGHT SHELL. ARROWS SKATE OFF IT', notes: { head: 'A BEETLE-SHELL HELM WITH A HORN', body: 'A LIGHT SHELL. ARROWS SKATE OFF IT', legs: 'CHITIN SHIN PLATES. LIGHT AND HARD' } },
+  { key: 'berserker', name: 'BERSERKER PELT', def: 0.05, evade: 0, fury: 0.14, heavy: [2, 3], resist: [4, 6], colour: 0x7a4a2a, edge: 0xb03030, short: 'BERSERK', note: 'NO PROTECTION. YOU HIT HARDER AND DO NOT CARE', notes: { head: 'A WOLF\'S HEAD. YOU HIT HARDER IN IT', body: 'NO PROTECTION. YOU HIT HARDER AND DO NOT CARE', legs: 'BARE LEGS AND WAR PAINT. MORE POWER' } },
 ];
 
 
@@ -1110,7 +1304,10 @@ export function statsOf(kit: Kit, weapon: WeaponDef, wRolls?: Piece, type?: Liza
   // weakest swing any weapon can roll -- a slingshot or a blowgun at its
   // lowest -- for every archetype, the weak ones and the strong ones alike.
   const bare = weapon.key === 'none' ? BARE_MUL : 1;
-  const perStrike = ((base.power + w.rPower * POWER_PER_ROLL) * bare) / weapon.hits;
+  // armour that makes you hit harder: a berserker's pelt, war paint
+  const fury = 1 + (['head', 'body', 'legs'] as const)
+    .reduce((n, sl) => n + (kit[sl].mat?.fury ?? 0) * COVER[sl], 0);
+  const perStrike = ((base.power + w.rPower * POWER_PER_ROLL) * bare * fury) / weapon.hits;
   return {
     power: perStrike,
     // ---- ARMOUR SLOWS THE FEET MORE THAN THE ARMS.
@@ -1133,7 +1330,7 @@ export function statsOf(kit: Kit, weapon: WeaponDef, wRolls?: Piece, type?: Liza
     // It wants to stand a shade outside what it can hit with, and closes in.
     range: distPts + 2,
     guard: weapon.guard,
-    powerPts: (base.power + w.rPower * POWER_PER_ROLL) * bare,  // the sheet shows the whole swing
+    powerPts: (base.power + w.rPower * POWER_PER_ROLL) * bare * fury,  // the sheet shows the whole swing
     speedPts,
     avoidPts,
     distPts,
@@ -1513,7 +1710,7 @@ const STAGGER_S = 0.5;
 /** And moves them this far, in the rules and not only in the drawing. */
 const KNOCK_PX = 9;
 /** Past this many seconds armour starts failing, and over this many it is gone. */
-const WEARY_AT = 55;
+const WEARY_AT = 50;
 const WEARY_OVER = 45;
 /** A critical is worth this much of an ordinary blow. */
 const CRIT_MUL = 1.8;
@@ -1753,11 +1950,17 @@ function applyDamage(att: Fighter, def: Fighter, raw: number, out: Blow, rng: ()
   // gone entirely by the time something is landing a third of a fighter's
   // health, which is when nothing that flexes is going to help.
   const soft = suitShare(def.kit, (m) => m.soft);
-  let armour2 = armour;
-  if (soft > 0) {
+  // ...and padding and springs the other way about: the heavier the blow,
+  // the more of it they soak.
+  const dense = suitShare(def.kit, (m) => m.dense);
+  // Wicker, silk and a shell catch what FLIES and nothing else.
+  const shotCatch = o.ranged ? suitShare(def.kit, (m) => m.vsShot) : 0;
+  let armour2 = armour + shotCatch;
+  if (soft > 0 || dense > 0) {
     const weight = Math.min(1, raw / Math.max(1, def.st.maxHp * 0.3));
-    armour2 = Math.min(0.92, armour + soft * (1 - weight));
+    armour2 += soft * (1 - weight) + dense * weight;
   }
+  armour2 = Math.min(0.92, armour2);
   const through = raw * (1 - armour2);
   out.dmg = Math.max(1, Math.round(through * (1 - o.soak)));
   // the share the guard actually stopped is what the weapon pays for
@@ -1786,7 +1989,10 @@ function applyDamage(att: Fighter, def: Fighter, raw: number, out: Blow, rng: ()
     const off = wearArmour(def, rng);
     if (off) { out.stripped = off.slot; out.strippedTint = off.tint; }
   }
-  const floored = out.dmg >= def.st.maxHp * STAGGER_AT || rng() < o.stagger;
+  // ---- AND HOW HARD THEY ARE TO MOVE.  A braced suit takes its share off
+  // the chance of going down and off how far a blow sends them.
+  const brace = Math.min(0.8, suitShare(def.kit, (m) => m.brace));
+  const floored = out.dmg >= def.st.maxHp * STAGGER_AT * (1 + brace) || rng() < o.stagger * (1 - brace);
   // ---- AND SOMETIMES IT TAKES THE WEAPON WITH IT.
   //
   // Only off a blow that already put them on the floor, and likelier the
@@ -1808,7 +2014,7 @@ function applyDamage(att: Fighter, def: Fighter, raw: number, out: Blow, rng: ()
     def.t = STAGGER_S;
     def.chain = 0;
     def.riposte = false;
-    def.x = Phaser.Math.Clamp(def.x + (def.x < att.x ? -1 : 1) * (KNOCK_PX + o.knock), ARENA.left, ARENA.right);
+    def.x = Phaser.Math.Clamp(def.x + (def.x < att.x ? -1 : 1) * (KNOCK_PX + o.knock) * (1 - brace), ARENA.left, ARENA.right);
   }
 }
 
@@ -1958,9 +2164,11 @@ export function landShot(att: Fighter, def: Fighter, sh: InFlight, rng = Math.ra
   // that found the sand poisons the sand.  The bite scales with the shot that
   // carried it, so a dart out of a good blowgun is worth being hit by.
   if (r.venom && out.hit) {
+    // a plague mask keeps out its share of it
+    const ward = Math.min(0.9, suitShare(def.kit, (m) => m.antidote));
     def.pox = {
       left: r.venom.turns * POX_TICK,
-      bite: Math.max(1, Math.round(sh.power * r.venom.bite)),
+      bite: Math.max(1, Math.round(sh.power * r.venom.bite * (1 - ward))),
       next: POX_TICK,
     };
     out.poisoned = r.venom.turns;
@@ -2087,7 +2295,9 @@ export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Mat
   // inside the arc and the reach stops counting.  Written against reach and
   // not against who is holding it.
   const sweet = att.st.reach * INSIDE_FRAC;
-  const close = gap < sweet ? INSIDE_MIN + (1 - INSIDE_MIN) * (gap / sweet) : 1;
+  // A choked-up strike is MADE for being inside the reach, so it is not
+  // docked for it; its own damage multiplier is already the smaller number.
+  const close = gap < sweet && !mv?.choke ? INSIDE_MIN + (1 - INSIDE_MIN) * (gap / sweet) : 1;
   // The move's own weight.  A flurry hits for less each time and an overhead
   // cleave hits for a great deal more; this is where that is true.
   let raw = att.st.power * close * (0.85 + rng() * 0.3) * MOVE_WEIGHT(mv?.dmg ?? 1);
@@ -2174,8 +2384,15 @@ export function resolveStrike(att: Fighter, def: Fighter, gap: number, rng = Mat
  * keeps a spear thrusting at range instead of picking at random.
  */
 export function chooseMove(f: Fighter, other: Fighter, gap: number, rng = Math.random): Move {
-  const list = MOVES[f.weapon.key] ?? MOVES.none;
+  const list = movesOf(f.weapon.key);
   const frac = Math.min(1.4, gap / Math.max(1, f.st.reach));
+  // ---- INSIDE A LONG WEAPON'S REACH, THE LONG ATTACKS ARE OUT.
+  //
+  // A thrust, a charge or a wide arc from here would go through the body in
+  // front of it, so they are marked right down and the choked-up strike is
+  // marked up: the spear jabs short, the halberd punches with the haft.
+  const long = !!CLOSE_MOVE[f.weapon.key];
+  const inside = long && frac < CHOKE_FRAC;
   const theirHp = other.hp / other.st.maxHp;
   let best = list[0];
   let bestScore = -Infinity;
@@ -2188,6 +2405,8 @@ export function chooseMove(f: Fighter, other: Fighter, gap: number, rng = Math.r
     // range every time -- but two sensible answers to the same moment should
     // trade places, so a fight is not one animation on a loop.
     let score = rng() * 1.05;
+    if (inside) score += m.choke ? 1.6 : m.anim === 'thrust' || m.anim === 'charge' || m.anim === 'sweep' || m.anim === 'spin' ? -2.4 : -0.6;
+    else if (m.choke) score -= 1.2;
     // distance first: a move that wants range is wrong in a clinch
     if (m.at === 'far') score += frac > 0.7 ? 0.7 : -0.45;
     if (m.at === 'near') score += frac < 0.55 ? 0.7 : -0.45;
@@ -2615,6 +2834,12 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random, 
     }
     if (f.pox.left <= 0) f.pox = { left: 0, bite: 0, next: 0 };
   }
+  // ---- AND A HIDE THAT CLOSES ITS OWN WOUNDS.  Slowly, never past full,
+  // and not once they are down.
+  if (f.hp > 0 && f.hp < f.st.maxHp) {
+    const grow = suitShare(f.kit, (m) => m.regen);
+    if (grow > 0) f.hp = Math.min(f.st.maxHp, f.hp + grow * dt);
+  }
   if (f.stun > 0) {
     f.stun -= dt;
     return null;
@@ -2918,6 +3143,9 @@ const HEFT: Record<string, number> = {
   zweihander: 0.85, kanabo: 0.85, warpick: 0.6, lance: 0.55, naginata: 0.5, longsword: 0.35,
   cutlass: 0.25, repeater: 0.2, kukri: 0.15, kusarigama: 0.15, tonfa: 0.12, sai: 0.08,
   whip: 0.05, shuriken: 0.02, cestus: 0,
+  anchor: 1, sledge: 0.95, flamberge: 0.75, guandao: 0.75, lucerne: 0.7, partisan: 0.45,
+  falchion: 0.35, staffsling: 0.35, tomahawk: 0.3, khopesh: 0.3, cleaver: 0.25, buckler: 0.25,
+  sabre: 0.2, hatchets: 0.2, machete: 0.15, meteor: 0.1, atlatl: 0.1, chainwhip: 0.05, katar: 0.05, claws: 0,
 };
 
 /**
@@ -3910,6 +4138,229 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number, single = fa
       rect(0.4, 1.6, 1, 2.4, IRON);
       break;
 
+    // ================================================ THE TWENTY ADDED LAST
+    case 'falchion':
+      // a short heavy single-edged blade that widens toward the point
+      pommel(-5.2, 1.4);
+      hilt(-4.4, 0.6, 2.4);
+      guard(1.2, 6.4, 1.4);
+      poly([1.8, -1.2, 12, -1.6, 16.4, -2.2, 17.6, 0.4, 14.6, 3.4, 1.8, 1.4], STEEL, EDGE);
+      line(2, -0.8, 16, -1.6, SHINE, 0.7, 0.9);
+      line(2.4, 1, 14.4, 2.8, SHADE, 0.6, 0.7);
+      break;
+    case 'machete':
+      // a riveted slab handle and a long flat blade with an angled tip
+      poly([-5.6, -1.4, 0.6, -1.5, 0.6, 1.5, -5.6, 1.3], 0x2a2420, 0x100c0a);
+      for (const x of [-4, -1.6]) disc(x, 0, 0.5, IRON_LIT);
+      poly([0.6, -1.2, 14.6, -1.8, 17.8, 0.4, 15, 2.4, 0.6, 1.6], STEEL, EDGE);
+      line(1, -0.9, 15, -1.4, SHINE, 0.6, 0.9);
+      line(1, 1.2, 14.6, 2, SHADE, 0.6, 0.7);
+      break;
+    case 'tomahawk':
+      // a light haft, a narrow blade leading, and a spike on the back
+      haft(-6, 11, 2.2);
+      collar(10.2, 3, 1.6);
+      poly([9.6, 1.2, 9, 4.6, 10.6, 7.2, 12.6, 6.4, 11.8, 1.2], STEEL, EDGE);
+      curve([9.2, 4.6, 10.6, 6.9, 12.3, 6.2], SHINE, 0.5);
+      poly([10.2, -1.2, 11.4, -4.6, 11.4, -1.2], IRON, IRON_DK);
+      for (const x of [2, 5]) line(x, -1.1, x, 1.1, 0xb03030, 0.7, 0.9);
+      break;
+    case 'khopesh':
+      // a grip, a short straight neck, and the great hook of the blade
+      pommel(-4.6, 1.2, BRASS);
+      hilt(-3.8, 1, 2.2, GOLD_DK, BRASS);
+      rect(1, -1, 6, 2, 0xb08a4a);
+      poly([7, -1, 9.4, -3.6, 13.6, -4.2, 17, -2.4, 18.4, 0.4, 17.2, 2.6, 15.4, 0.8, 12.8, -0.6, 9.6, -0.2, 7, 1], 0xc49a55, 0x6a4e22);
+      curve([7.6, -1.2, 10, -3.2, 13.6, -3.6, 16.6, -2], 0xf0d8a0, 0.6);
+      break;
+    case 'flamberge': {
+      // a two-hand grip, long quillons, and a blade that waves the whole way
+      pommel(-8.4, 1.6);
+      hilt(-7.6, -0.6, 2.6);
+      rect(-0.6, -1.6, 2.6, 3.2, 0x8a8f99);
+      guard(2.4, 11, 1.6, IRON_LIT);
+      const top: number[] = [];
+      const bot: number[] = [];
+      for (let x = 3.2; x <= 31; x += 1.2) {
+        const w = 1.7 * (1 - (x - 3.2) / 40) + Math.sin(x * 0.9) * 0.55;
+        top.push(x, -w);
+        bot.unshift(x, w);
+      }
+      poly([...top, 34.4, 0, ...bot], STEEL, EDGE);
+      line(3.4, 0, 30, 0, SHADE, 0.6, 0.7);
+      for (let x = 4; x < 30; x += 2.4) disc(x, -1.2 - Math.sin(x * 0.9) * 0.4, 0.3, SHINE, 0.9);
+      break;
+    }
+    case 'lucerne':
+      // a pole, a hammer head of three prongs leading the blow, a beak
+      // behind it and a long spike on top
+      haft(-9, 22, 2.4);
+      rect(18, -1.8, 5.6, 3.6, IRON);
+      for (const py of [2.6, 4.4, 6.2]) poly([19, py - 0.8, 22.6, py - 0.8, 23.4, py, 22.6, py + 0.8, 19, py + 0.8], IRON_LIT, IRON_DK);
+      poly([19.4, -1.8, 21, -6.8, 22.4, -1.8], STEEL, EDGE);
+      poly([23.6, -1, 31.4, 0, 23.6, 1], STEEL, EDGE);
+      line(23.8, 0, 30.6, 0, SHINE, 0.6, 0.9);
+      handWrap(-1, 3, 2.8);
+      break;
+    case 'partisan':
+      // a long broad spear head with two flared wings at its base
+      haft(-9, 20, 2.4);
+      collar(20.4, 3.2, 2);
+      poly([21.2, -1.4, 22.6, -5.6, 24.4, -2, 30, -2.2, 34.6, 0, 30, 2.2, 24.4, 2, 22.6, 5.6, 21.2, 1.4], STEEL, EDGE);
+      line(21.8, 0, 33.4, 0, SHINE, 0.7, 0.9);
+      line(22.8, -4.6, 24, -2.2, SHINE, 0.5, 0.8);
+      handWrap(-1, 3, 2.8);
+      break;
+    case 'sledge':
+      // a long plain haft and a big square iron block on the end
+      haft(-6, 16, 3);
+      g.fillStyle(IRON_DK, 1).fillRoundedRect(14.6, -5.6, 7.6, 11.2, 1.4);
+      g.fillStyle(IRON, 1).fillRoundedRect(15.2, -5, 6.4, 10, 1.2);
+      rect(15.4, -4.6, 1, 9.2, IRON_LIT);
+      rect(15.2, 4, 6.4, 1, 0x3a3f48);
+      handWrap(-5, 0, 3.4);
+      break;
+    case 'cleaver':
+      // a stubby handle and a great square blade hanging below the spine
+      poly([-4.8, -1.3, 1, -1.4, 1, 1.4, -4.8, 1.2], WOOD, WOOD_DK);
+      for (const x of [-3.4, -1]) disc(x, 0, 0.45, IRON_LIT);
+      poly([1, -2.2, 12.6, -2.2, 12.6, 7.4, 3.4, 7.4, 1, 4.6], STEEL, EDGE);
+      rect(1.4, -2, 11, 0.8, SHINE);
+      line(3.6, 7, 12.2, 7, 0xffffff, 0.6, 0.6);
+      ring(10.6, 0, 0.9, SHADE, 0.6);
+      break;
+    case 'meteor': {
+      // a rope held in the middle, with an iron weight swinging off each end
+      // -- the long end out in front, the short end hanging behind the fist
+      ring(0, 0, 1.4, CORD, 0.8);
+      const weight = (r: number): Phaser.GameObjects.Container => {
+        const w = scene.add.container(0, 0);
+        const wg = scene.add.graphics();
+        wg.fillStyle(IRON_DK, 1).fillCircle(0, 0, r + 0.5);
+        wg.fillStyle(0x5e6470, 1).fillCircle(0, 0, r);
+        wg.fillStyle(0xffffff, 0.3).fillCircle(-r * 0.3, -r * 0.3, r * 0.4);
+        w.add(wg);
+        return w;
+      };
+      flex(1.2, 0, 9, 2.4, 5, weight(2.6), false, cordLink(CORD));
+      flex(-1.2, 0, 3, 2, 4, weight(2.1), false, cordLink(CORD), 150);
+      break;
+    }
+    case 'chainwhip': {
+      // a short grip and a chain of steel bars ending in a dart
+      hilt(-4, 3, 2.4, GRIP, WRAP);
+      disc(-4.4, 0, 1.2, IRON_LIT);
+      ring(3.8, 0, 1, IRON_LIT, 0.7);
+      const tip = scene.add.container(0, 0);
+      const tg = scene.add.graphics();
+      tg.fillStyle(STEEL, 1).fillTriangle(0, -1.4, 4.2, 0, 0, 1.4);
+      tg.lineStyle(0.5, EDGE, 1).strokeTriangle(0, -1.4, 4.2, 0, 0, 1.4);
+      tip.add(tg);
+      const bars = (lg: Phaser.GameObjects.Graphics, pts: Phaser.Math.Vector2[]): void => {
+        for (let i = 1; i < pts.length; i++) {
+          lg.lineStyle(1.8, IRON_DK, 1).lineBetween(pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y);
+          lg.lineStyle(1, STEEL, 1).lineBetween(pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y);
+          lg.fillStyle(IRON_LIT, 1).fillCircle(pts[i].x, pts[i].y, 0.6);
+        }
+      };
+      flex(4.6, 0, 9, 2.6, 1.6, tip, true, bars);
+      break;
+    }
+    case 'katar':
+      // the H grip: two side bars along the forearm and the cross grip in
+      // the fist, with the broad triangular blade going straight out
+      fist();
+      rect(-2, -4.4, 8.4, 1.2, GOLD_DK);
+      rect(-2, 3.2, 8.4, 1.2, GOLD_DK);
+      rect(6, -4.4, 1.4, 8.8, BRASS);
+      poly([7.4, -2.6, 16.6, 0, 7.4, 2.6], STEEL, EDGE);
+      line(7.6, 0, 15.4, 0, SHINE, 0.7, 0.9);
+      break;
+    case 'claws':
+      // the back of the fist, a strap across it and three long curved claws
+      if (!single) c.setData('pair', true);
+      fist();
+      rect(1.4, -3.2, 3.4, 6.4, LEATHER);
+      for (let k = 0; k < 3; k++) {
+        const y = -2.2 + k * 2.2;
+        poly([6, y - 0.6, 11.4, y - 0.4, 14.6, y + 1.4, 11, y + 0.7, 6, y + 0.6], STEEL, EDGE);
+      }
+      break;
+    case 'hatchets':
+      // a small axe a hand: a stubby haft, a bearded blade
+      if (!single) c.setData('pair', true);
+      haft(-4, 8.6, 2);
+      collar(8, 2.8, 1.6);
+      poly([7.4, 1.2, 6.8, 3.8, 8.2, 6.4, 10.8, 6, 9.8, 1.2], STEEL, EDGE);
+      curve([7.1, 3.8, 8.3, 6.1, 10.5, 5.8], SHINE, 0.5);
+      break;
+    case 'buckler':
+      // an arming sword, and the small round buckler held in the same fist
+      pommel(-4.6, 1.2);
+      hilt(-3.8, 0.8, 2.2);
+      guard(1.4, 6, 1.3);
+      blade(2, 12, 2.4, 2.6);
+      disc(0.4, 3, 5.4, IRON_DK);
+      disc(0.4, 3, 4.8, 0x8a8f99);
+      ring(0.4, 3, 3.4, IRON_LIT, 0.6);
+      disc(0.4, 3, 1.6, IRON_LIT);
+      disc(-0.4, 2, 0.8, SHINE, 0.6);
+      break;
+    case 'guandao':
+      // a long pole, a great crescent blade with a notch in its back, and a
+      // red tassel at the join
+      haft(-10, 21, 2.6);
+      collar(21.2, 3.4, 2.2);
+      poly([22, -1.4, 26, -1.8, 32, -2.8, 36.6, -5.4, 35.4, 0.6, 31, 3.2, 26, 4.2, 22, 2.4], STEEL, EDGE);
+      poly([27.6, -2.2, 28.8, -3.8, 29.8, -2.4], STEEL, EDGE);
+      curve([26, 3.8, 31, 2.8, 35, 0.4], SHINE, 0.6);
+      for (let k = 0; k < 3; k++) line(20.6, 1.6, 19.4 - k * 0.8, 5.6 + k * 0.6, 0xb3261e, 0.8);
+      handWrap(-2, 3, 3);
+      break;
+    case 'atlatl':
+      // the throwing stick along the forearm, hooked at the far end, with a
+      // long fletched dart laid on it
+      poly([-4, -1, 12, -0.8, 13, -2.4, 13.8, -2.2, 13, 0.8, -4, 1], WOOD, WOOD_DK);
+      line(-3, -2.6, 20, -2.6, WOOD_LIT, 0.9);
+      poly([20, -3.6, 23.4, -2.6, 20, -1.6], STEEL, EDGE);
+      poly([-3.6, -3.8, -1, -2.6, -3.6, -1.4], 0xe8e2d0);
+      break;
+    case 'staffsling': {
+      // a staff with a leather pouch on a cord at the far end, a stone in it
+      haft(-6, 24, 2.6);
+      rect(23.4, -1.6, 1.4, 3.2, IRON);
+      const pouch = scene.add.container(0, 0);
+      const pg = scene.add.graphics();
+      pg.fillStyle(LEATHER, 1).fillEllipse(0, 0, 4, 2.6);
+      pg.fillStyle(0x8f8a80, 1).fillCircle(0.4, -0.4, 1.3);
+      pouch.add(pg);
+      flex(24.4, 0, 3, 2, 3, pouch, false, cordLink(CORD), 70);
+      handWrap(-1, 3, 3);
+      break;
+    }
+    case 'sabre':
+      // a curved single edge and a knuckle-bow round the hand
+      pommel(-4.8, 1.2, BRASS);
+      hilt(-4, 0.8, 2.2, GRIP, BRASS);
+      curve([-4.6, 1.4, -3, 4.2, 1, 4.4, 1.6, 0.8], BRASS, 1);
+      guard(1.2, 4.4, 1.2, BRASS);
+      poly([1.8, -1.2, 10, -1.4, 17, -0.2, 20.4, 2.2, 16.6, 1.4, 10, 1.2, 1.8, 1.2], STEEL, EDGE);
+      curve([2, -0.8, 10, -1, 16.6, 0.2, 19.6, 1.8], SHINE, 0.6);
+      break;
+    case 'anchor':
+      // a ship's anchor held by the shank: a ring at the top, a stock across,
+      // and the two curved arms with their flukes at the business end
+      rect(-4, -1.4, 22, 2.8, IRON);
+      rect(-4, -1.4, 22, 0.8, IRON_LIT);
+      ring(-5.6, 0, 1.8, IRON_LIT, 1.2);
+      rect(-1, -5.6, 1.8, 11.2, WOOD);
+      curve([12, -9, 16, -8.2, 19.4, -4.4, 19.8, 0, 19.4, 4.4, 16, 8.2, 12, 9], IRON_DK, 3);
+      curve([12, -9, 16, -8.2, 19.4, -4.4, 19.8, 0, 19.4, 4.4, 16, 8.2, 12, 9], IRON, 1.8);
+      poly([12.8, -9.4, 10, -11.4, 11.2, -7.6], IRON, IRON_DK);
+      poly([12.8, 9.4, 10, 11.4, 11.2, 7.6], IRON, IRON_DK);
+      handWrap(-3.6, 1, 3.2);
+      break;
+
     case 'shield': {
       // The spiked shield: a boss, a rim, and six spikes around it.
       //
@@ -4501,21 +4952,78 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // construction has its own surface drawn onto every piece cut from it:
   // quilting on cloth, a stitched edge on leather, studs, rings of mail,
   // rows of scales, rivets and a hard shine on plate, ribs of bone, spikes.
-  type Weave = 'cloth' | 'leather' | 'studded' | 'chain' | 'scale' | 'plate' | 'bone' | 'spiked';
+  type Weave = 'cloth' | 'leather' | 'studded' | 'chain' | 'scale' | 'plate' | 'bone' | 'spiked'
+    | 'fur' | 'feather' | 'wicker' | 'glass' | 'wood' | 'quilt';
   const weaveOf = (k: string): Weave =>
-    ['cloth', 'padded', 'tuxedo', 'none', 'crown', 'silk', 'shadow'].includes(k) ? 'cloth'
-      : ['leather', 'hide', 'reinforced', 'tactical', 'bark'].includes(k) ? 'leather'
-        : ['studded', 'brigandine', 'gladiator'].includes(k) ? 'studded'
-          : ['chain', 'hood', 'mithril'].includes(k) ? 'chain'
-            : ['scale', 'lamellar', 'dragon', 'samurai', 'jade'].includes(k) ? 'scale'
-              : ['bone', 'splint', 'banded', 'coral', 'turtle'].includes(k) ? 'bone'
-                : ['spiked', 'thorn'].includes(k) ? 'spiked' : 'plate';
+    ['cloth', 'tuxedo', 'none', 'crown', 'silk', 'shadow'].includes(k) ? 'cloth'
+      : ['padded', 'gambeson', 'linothorax'].includes(k) ? 'quilt'
+        : ['bearpelt', 'moss', 'berserker'].includes(k) ? 'fur'
+          : k === 'feather' ? 'feather'
+            : k === 'wicker' ? 'wicker'
+              : ['ice', 'crystal', 'obsidian', 'starmetal'].includes(k) ? 'glass'
+                : k === 'barrel' ? 'wood'
+                  : ['leather', 'hide', 'reinforced', 'tactical', 'bark', 'troll', 'plague', 'rubber'].includes(k) ? 'leather'
+                    : ['studded', 'brigandine', 'gladiator', 'platecoat'].includes(k) ? 'studded'
+                      : ['chain', 'hood', 'mithril'].includes(k) ? 'chain'
+                        : ['scale', 'lamellar', 'dragon', 'samurai', 'jade', 'fishscale', 'sharkskin'].includes(k) ? 'scale'
+                          : ['bone', 'splint', 'banded', 'coral', 'turtle', 'chitin'].includes(k) ? 'bone'
+                            : ['spiked', 'thorn'].includes(k) ? 'spiked' : 'plate';
   const STUD = 0xd8dde4;
   /** The surface of one oval piece of armour, drawn inside it. */
   const weave = (gr: Phaser.GameObjects.Graphics, w: Weave, cx: number, cy: number, rx: number, ry: number, col: number, shine = 0.4): void => {
     const inside = (x: number, y: number, k = 0.86): boolean => ((x - cx) / (rx * k)) ** 2 + ((y - cy) / (ry * k)) ** 2 <= 1;
     const half = (y: number, k = 0.86): number => rx * k * Math.sqrt(Math.max(0, 1 - ((y - cy) / (ry * k)) ** 2));
-    if (w === 'cloth') {
+    if (w === 'quilt') {
+      // stitched diamonds, puffed between the seams
+      for (let y = cy - ry + 1.4; y < cy + ry - 0.8; y += 2.4) {
+        for (let x = cx - rx + 1.4; x < cx + rx - 0.8; x += 2.4) {
+          if (!inside(x, y, 0.9)) continue;
+          gr.fillStyle(up(col, 0.18), 0.8).fillCircle(x, y, 0.9);
+          gr.fillStyle(down(col, 0.35), 0.9).fillRect(x + 1.1, y - 0.2, 0.4, 0.4);
+        }
+      }
+    } else if (w === 'fur') {
+      // tufts, lighter at the tips, falling downward
+      for (let y = cy - ry + 1; y < cy + ry - 0.4; y += 1.6) {
+        for (let x = cx - rx + 0.8 + ((y * 7) % 1.4); x < cx + rx - 0.4; x += 1.8) {
+          if (!inside(x, y, 0.95)) continue;
+          gr.fillStyle(down(col, 0.3), 1).fillTriangle(x - 0.7, y - 0.6, x + 0.7, y - 0.6, x, y + 1.2);
+          gr.fillStyle(up(col, 0.3), 0.8).fillRect(x - 0.15, y + 0.4, 0.3, 0.6);
+        }
+      }
+    } else if (w === 'feather') {
+      // rows of feathers, overlapping downward, each with its quill
+      let row = 0;
+      for (let y = cy - ry + 1.2; y < cy + ry - 0.4; y += 1.9, row++) {
+        for (let x = cx - rx + (row % 2 ? 1.1 : 0.2) + 0.6; x < cx + rx - 0.4; x += 2.2) {
+          if (!inside(x, y, 0.95)) continue;
+          gr.fillStyle(row % 2 ? col : up(col, 0.18), 1).fillEllipse(x, y + 0.5, 1.8, 2.8);
+          gr.fillStyle(down(col, 0.45), 1).fillRect(x - 0.12, y - 0.6, 0.24, 2.2);
+        }
+      }
+    } else if (w === 'wicker') {
+      // over and under: alternate bars in two directions
+      for (let y = cy - ry + 1; y < cy + ry - 0.4; y += 1.4) {
+        const hw = half(y, 0.95);
+        for (let x = cx - hw; x < cx + hw - 0.6; x += 1.4) {
+          const over = Math.round((x + y) / 1.4) % 2 === 0;
+          gr.fillStyle(over ? up(col, 0.25) : down(col, 0.3), 1).fillRect(x, y, over ? 1.3 : 0.5, over ? 0.5 : 1.3);
+        }
+      }
+    } else if (w === 'glass') {
+      // cut facets and one hard glint
+      for (let k = 0; k < 5; k++) {
+        const a = k * 1.3 + 0.4;
+        const x = cx + Math.cos(a) * rx * 0.45;
+        const y = cy + Math.sin(a) * ry * 0.45;
+        gr.fillStyle(k % 2 ? up(col, 0.35) : down(col, 0.25), 0.7).fillTriangle(x, y - ry * 0.3, x + rx * 0.3, y + ry * 0.2, x - rx * 0.3, y + ry * 0.2);
+      }
+      gr.fillStyle(0xffffff, 0.85).fillRect(cx - rx * 0.4, cy - ry * 0.5, rx * 0.35, 0.6);
+    } else if (w === 'wood') {
+      // staves running top to bottom, and two iron hoops round them
+      for (let x = cx - rx + 1.2; x < cx + rx - 0.6; x += 2) gr.fillStyle(down(col, 0.3), 0.9).fillRect(x, cy - ry * 0.8, 0.45, ry * 1.6);
+      for (const yy of [cy - ry * 0.45, cy + ry * 0.45]) gr.fillStyle(0x4a4e56, 1).fillRect(cx - half(yy, 0.98), yy - 0.5, half(yy, 0.98) * 2, 1);
+    } else if (w === 'cloth') {
       for (let y = cy - ry + 1.6; y < cy + ry - 0.8; y += 2.2) {
         const hw = half(y);
         for (let x = cx - hw; x < cx + hw - 0.6; x += 1.6) gr.fillStyle(down(col, 0.28), 0.8).fillRect(x, y, 0.8, 0.45);
@@ -4577,13 +5085,15 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   };
   /** Decoration along a curved band: rivets, studs, stitches or scales. */
   const bandDeco = (gr: Phaser.GameObjects.Graphics, w: Weave, cx: number, cy: number, rx: number, ry: number, a0: number, a1: number, col: number): void => {
-    if (w === 'cloth' || w === 'chain') return;
+    if (w === 'cloth' || w === 'chain' || w === 'quilt' || w === 'glass') return;
     const n = Math.max(3, Math.round((Math.abs(a1 - a0) / 360) * (rx + ry) * 2.2));
     for (let i = 0; i <= n; i++) {
       const a = ((a0 + ((a1 - a0) * i) / n) * Math.PI) / 180;
       const x = cx + Math.cos(a) * rx;
       const y = cy + Math.sin(a) * ry;
       if (w === 'scale') gr.fillStyle(down(col, 0.3), 1).fillCircle(x, y + 0.3, 0.8);
+      else if (w === 'fur' || w === 'feather') gr.fillStyle(up(col, 0.3), 1).fillTriangle(x - 0.6, y - 0.4, x + 0.6, y - 0.4, x, y + 1.4);
+      else if (w === 'wicker' || w === 'wood') gr.fillStyle(down(col, 0.35), 1).fillRect(x - 0.3, y - 0.3, 0.6, 0.6);
       else if (w === 'leather') gr.fillStyle(up(col, 0.38), 1).fillRect(x - 0.25, y - 0.25, 0.5, 0.5);
       else if (w === 'bone') gr.fillStyle(down(col, 0.4), 1).fillRect(x - 0.25, y - 0.8, 0.5, 1.6);
       else gr.fillStyle(w === 'plate' && (animal === 'rhino' || animal === 'gorilla') ? BRASS : STUD, 1).fillCircle(x, y, i % 2 ? 0.45 : 0.6);
@@ -5206,6 +5716,58 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
         for (let k = 0; k < 3; k++) for (let j = 0; j < 4; j++) hx2.fillStyle(0x87909c, 1).fillRect(cx - HW2 * 0.5 + j * 1.3 - 0.8, hy + 0.8 + k * 1.2, 0.8, 0.8);
         break;
       }
+      case 'plague': {
+        // THE BEAK.  A long curved mask out over the snout, two round glass
+        // eyes, and a brimmed hat above it all.
+        const bx = cx + HW2 * 0.3;
+        hx2.fillStyle(0xd8ccae, 1).fillTriangle(bx, hy - 1.2, bx + 8.4, hy + 3.6, bx, hy + 2.6);
+        hx2.lineStyle(0.6, 0x8a7a5a, 1).strokeTriangle(bx, hy - 1.2, bx + 8.4, hy + 3.6, bx, hy + 2.6);
+        hx2.fillStyle(0x9fd4e0, 1).fillCircle(bx - 0.6, hy - 1.6, 1.1);
+        hx2.lineStyle(0.5, 0x2a2622, 1).strokeCircle(bx - 0.6, hy - 1.6, 1.1);
+        hx2.fillStyle(hc, 1).fillRect(cx - HW2 * 0.62, top + 0.6, HW2 * 1.24, 1.2);
+        hx2.fillStyle(hc, 1).fillRoundedRect(cx - HW2 * 0.34, top - 3.4, HW2 * 0.68, 4.2, 1);
+        crested = true;
+        break;
+      }
+      case 'riot': {
+        // a smooth shell and a clear visor down over the face
+        hx2.fillStyle(0x9fb8c8, 0.55).fillRoundedRect(cx - HW2 * 0.1, hy - 2.8, HW2 * 0.62, 5.6, 1.2);
+        hx2.lineStyle(0.6, 0xd8e4ec, 0.9).strokeRoundedRect(cx - HW2 * 0.1, hy - 2.8, HW2 * 0.62, 5.6, 1.2);
+        hx2.fillStyle(0xffffff, 0.6).fillRect(cx + HW2 * 0.02, hy - 2.2, HW2 * 0.3, 0.6);
+        crested = true;
+        break;
+      }
+      case 'bearpelt':
+      case 'berserker': {
+        // the animal's own head worn over yours: ears, and the muzzle over
+        // the brow
+        for (const sgn of [-1, 1]) {
+          const ex = cx + sgn * HW2 * 0.34;
+          hx2.fillStyle(hc, 1).fillTriangle(ex - 1.6, top + 1.4, ex, top - 2.6, ex + 1.6, top + 1.4);
+          hx2.fillStyle(down(hc, 0.4), 1).fillTriangle(ex - 0.7, top + 1, ex, top - 1.2, ex + 0.7, top + 1);
+        }
+        hx2.fillStyle(down(hc, 0.2), 1).fillEllipse(cx + HW2 * 0.36, hy - 1.4, 5, 2.6);
+        hx2.fillStyle(0x1a1410, 1).fillCircle(cx + HW2 * 0.36 + 2.2, hy - 1.6, 0.6);
+        if (H.key === 'berserker') hx2.fillStyle(0xb03030, 0.9).fillRect(cx - HW2 * 0.2, hy + 0.2, HW2 * 0.5, 0.8);
+        crested = true;
+        break;
+      }
+      case 'chitin': {
+        // a beetle's horn, curving up off the front of the shell
+        hx2.lineStyle(2, he, 1).strokePoints([new Phaser.Math.Vector2(cx + HW2 * 0.2, top + 1.6), new Phaser.Math.Vector2(cx + HW2 * 0.34, top - 1.8), new Phaser.Math.Vector2(cx + HW2 * 0.2, top - 4.6)], false);
+        hx2.fillStyle(up(hc, 0.4), 0.8).fillRect(cx - HW2 * 0.3, top + 0.8, HW2 * 0.6, 0.6);
+        crested = true;
+        break;
+      }
+      case 'barrel': {
+        // a bucket, upside down, with a handle hanging off it
+        hx2.fillStyle(hc, 1).fillRect(cx - HW2 * 0.46, top - 1.2, HW2 * 0.92, hy - top + 1.6);
+        for (let x = cx - HW2 * 0.4; x < cx + HW2 * 0.44; x += 1.8) hx2.fillStyle(down(hc, 0.3), 1).fillRect(x, top - 1, 0.4, hy - top + 1.2);
+        hx2.fillStyle(0x4a4e56, 1).fillRect(cx - HW2 * 0.48, top, HW2 * 0.96, 0.9);
+        hx2.lineStyle(0.6, 0x4a4e56, 1).strokeCircle(cx - HW2 * 0.46, hy - 0.4, 1.4);
+        crested = true;
+        break;
+      }
       case 'hood': {
         // a mail coif over the back of the head and down onto the neck
         const cw = HW2 * 0.7;
@@ -5229,6 +5791,18 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
           // a stitched brim and an ear flap
           for (let x = cx - HW2 / 2 + 1; x < cx + HW2 / 2 - 0.5; x += 1.6) hx2.fillStyle(hw === 'studded' ? STUD : up(hc, 0.4), 1).fillRect(x, hy - 0.4, 0.6, 0.6);
           hx2.fillStyle(hc, 1).fillRoundedRect(cx - HW2 * 0.3, hy, 2.6, 4, 1);
+        } else if (hw === 'fur' || hw === 'feather') {
+          // a ruff of it round the brim, and a tuft or a plume on top
+          for (let x = cx - HW2 / 2 + 0.6; x < cx + HW2 / 2 - 0.4; x += 1.4) hx2.fillStyle(up(hc, 0.2), 1).fillTriangle(x - 0.7, hy - 0.8, x + 0.7, hy - 0.8, x, hy + 1.6);
+          if (hw === 'feather') for (let k = -1; k <= 1; k++) hx2.fillStyle(k ? hc : up(hc, 0.3), 1).fillEllipse(cx + k * 1.6, top - 2.4, 1.6, 5.2);
+        } else if (hw === 'wicker') {
+          for (let x = cx - HW2 / 2 + 0.8; x < cx + HW2 / 2 - 0.4; x += 1.4) for (let y = top + 1; y < hy; y += 1.4) hx2.fillStyle(Math.round((x + y) / 1.4) % 2 ? down(hc, 0.3) : up(hc, 0.25), 1).fillRect(x, y, 1.1, 0.5);
+        } else if (hw === 'glass') {
+          hx2.fillStyle(up(hc, 0.4), 0.8).fillTriangle(cx - HW2 * 0.3, hy - 0.6, cx - HW2 * 0.05, top + 0.6, cx + HW2 * 0.2, hy - 0.6);
+          hx2.fillStyle(0xffffff, 0.8).fillRect(cx - HW2 * 0.2, top + 1.4, 1.6, 0.5);
+        } else if (hw === 'quilt') {
+          for (let x = cx - HW2 / 2 + 1; x < cx + HW2 / 2 - 0.6; x += 2) hx2.fillStyle(down(hc, 0.3), 1).fillRect(x, top + 1, 0.4, hy - top - 0.6);
+          hx2.fillStyle(down(hc, 0.3), 1).fillRect(cx - HW2 / 2 + 0.6, hy - 1, HW2 - 1.2, 0.5);
         } else if (hw === 'chain') {
           for (let x = cx - HW2 / 2 + 0.8; x < cx + HW2 / 2 - 0.4; x += 1.3) for (let y = top + 1; y < hy; y += 1.3) hx2.fillStyle(down(hc, 0.35), 1).fillRect(x, y, 0.5, 0.5);
         } else if (hw === 'scale' || hw === 'bone') {
@@ -5830,6 +6404,35 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     // two hands read as two
     a.armOff.root.setAngle(f.armA + 24);
     a.armOff.fore.setAngle(f.elbowA - 12);
+  } else if (a.offBlade) {
+    // ---- A PAIR FIGHTS AS A PAIR.
+    //
+    // The second blade was hanging at the side while the first did all the
+    // work.  Now both come up in front: on a cut, a sweep or a spin the two
+    // go together, the off hand a beat behind; on a jab or a flurry they
+    // take turns, one striking while the other holds the guard.
+    if (!a.offFront) {
+      a.offFront = true;
+      a.root.moveBelow(a.armOff.root, a.arm.root);
+      a.armOff.root.x = a.arm.root.x - 3;
+      a.armOff.root.y = a.arm.root.y + 1;
+    }
+    a.armOff.root.setVisible(true);
+    const attacking = f.act === 'windup' || f.act === 'strike' || f.act === 'recover';
+    const together = f.move?.anim === 'spin' || f.move?.anim === 'sweep' || f.move?.anim === 'over' || f.move?.anim === 'low';
+    const alt = f.swing % 2 === 1;
+    if (attacking && together) {
+      a.armOff.root.setAngle(f.armA + (f.act === 'strike' ? -16 : 12));
+      a.armOff.fore.setAngle(f.elbowA - 8);
+    } else if (attacking && alt) {
+      a.armOff.root.setAngle(f.armA);
+      a.armOff.fore.setAngle(f.elbowA);
+      a.arm.root.setAngle(-62);
+      a.arm.fore.setAngle(-74);
+    } else {
+      a.armOff.root.setAngle(-56 + Math.sin(f.clock * 2.1) * 3);
+      a.armOff.fore.setAngle(-72);
+    }
   } else {
     // anything else is held in one hand, and the other goes back to the side
     if (a.offFront) {
@@ -5962,6 +6565,18 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   // ---- AND THE WEAPON'S OWN MOTION: weight on the wrist, chains that
   // swing, and the second blade of a pair in the other hand.
   syncOffBlade(a);
+
+  // ---- CHOKING UP.  For a short strike with a long weapon the hand slides
+  // up the shaft -- the weapon moves back through the fist -- so the point
+  // stays in front of the other one instead of passing through them, and the
+  // butt sticks out behind.  Eased, both ways.
+  const choked = !!f.move?.choke && (f.act === 'windup' || f.act === 'strike' || f.act === 'recover');
+  const slideWant = choked ? -Math.min(16, f.st.reach * 0.3) : 0;
+  const slideNow = (a.weapon.getData('slide') as number | undefined) ?? 0;
+  const slide = slideNow + (slideWant - slideNow) * 0.35;
+  a.weapon.setData('slide', slide);
+  a.weapon.x = a.arm.hand + 1 + slide;
+
   stepWeapon(a.weapon);
   stepWeapon(a.offBlade);
 }
@@ -6378,7 +6993,13 @@ function startStage(n: number): void {
       },
     });
   }
-  const hint = centerText(S(), GAME_W / 2, 171, '[<-] [->] CHOOSE   [SPACE] OPEN IT', PALETTE.ash);
+  const hint = centerText(
+    S(),
+    GAME_W / 2,
+    171,
+    isTouch() ? '[← →] CHOOSE   [OPEN] OPEN IT' : '[<-] [->] CHOOSE   [SPACE] OPEN IT',
+    PALETTE.ash,
+  );
   revealHint = hint;
   c.add(hint);
   highlight(0, true);
@@ -6483,6 +7104,25 @@ export function wrapTo(str: string, cols = CARD_COLS, rows = 2): string[] {
   return out.slice(0, rows);
 }
 
+/**
+ * WHAT THE ARMOUR DOES BESIDES STOP THINGS, in the card's own words.  The
+ * numbers the rules read, not a story: if it is on this line, it happens.
+ */
+export function traitLine(m: ArmourMat): string {
+  const pc = (n: number): string => `${Math.round(n * 100)}%`;
+  const t: string[] = [];
+  if (m.soft) t.push(`QUICK HITS -${pc(m.soft)}`);
+  if (m.dense) t.push(`HEAVY HITS -${pc(m.dense)}`);
+  if (m.vsShot) t.push(`MISSILES -${pc(m.vsShot)}`);
+  if (m.brace) t.push(`KNOCKBACK -${pc(m.brace)}`);
+  if (m.regen) t.push(`HEALS ${m.regen.toFixed(1)}/S`);
+  if (m.antidote) t.push(`POISON -${pc(m.antidote)}`);
+  if (m.fury) t.push(`POWER +${pc(m.fury)}`);
+  if (m.thorns) t.push(`CUTS BARE HANDS`);
+  // two at most: the card is thirty-eight characters wide
+  return t.slice(0, 2).join(', ');
+}
+
 function showCard(p: Piece | undefined): void {
   if (!p) return;
   const bar = (n: number): string => '#'.repeat(n) + '.'.repeat(10 - n);
@@ -6506,7 +7146,7 @@ function showCard(p: Piece | undefined): void {
       `DEFENCE   ${(m.def * 100) | 0}% OF A SUIT` + (m.evade > 0 ? `, ${(m.evade * 100) | 0}% AVOID` : ''),
       `HEAVINESS ${bar(p.rHeavy)} ${p.rHeavy}`,
       `RESIST    ${bar(p.rResist)} ${p.rResist}`,
-      '',
+      traitLine(m),
       ...wrapTo(m.notes?.[p.slot as 'head' | 'body' | 'legs'] ?? m.note),
     );
   }
@@ -6780,7 +7420,7 @@ function refreshHud(): void {
     const f = who === 'frog' ? frog! : lizard!;
     const b = hpBar[who];
     if (b) b.width = Math.max(0, Math.round((Math.max(0, f.hp) / f.st.maxHp) * 128));
-    hpNum[who]?.setText(`${Math.max(0, f.hp)} / ${f.st.maxHp}`);
+    hpNum[who]?.setText(`${Math.max(0, Math.round(f.hp))} / ${f.st.maxHp}`);
     defText[who]?.setText(`${Math.round(f.st.defence * 100)}%`);
     // ---- AND HOW MANY SHOTS ARE LEFT, which is the whole story of a
     // thrower's fight: six knives is a different fighter from none, and the
@@ -6872,7 +7512,10 @@ function buildFlyingArt(sh: InFlight, f: Fighter): Phaser.GameObjects.Container 
   // NOT rescaled.  The only thing done to it is the facing flip, which is the
   // same one the hand applies, so it is the same size in the air as it was in
   // the fist and it stays that size for the whole flight.
-  art.setScale(f.face, 1).setDepth(26);
+  // The fighter's own build is the one thing that DOES apply: a hulking
+  // lizard's spear is drawn at his scale in his fist, so it leaves at it.
+  const bulk = f.type?.build.scale ?? 1;
+  art.setScale(f.face * bulk, bulk).setDepth(26);
   layer?.add(art);
   return art;
 }
@@ -7863,6 +8506,21 @@ export const frogsterMash: MinigameModule = {
           f.hp = Math.min(f.hp, f.st.maxHp);
           if (f.art) { f.art.weapon.destroy(); const w = buildWeapon(S(), def.key, f.who === 'frog' ? PALETTE.mossLight : PALETTE.amber);
             w.setPosition(f.art.arm.hand + 1, 0); f.art.arm.fore.add(w); f.art.weapon = w; f.art.nicks = 0; }
+          return true;
+        },
+        /** Put a whole suit of one material on a live fighter and redraw it. */
+        dress: (who: 'frog' | 'lizard', matKey: string) => {
+          const f = who === 'frog' ? frog : lizard;
+          const mat = MATERIALS.find((m) => m.key === matKey);
+          if (!f || !mat || !f.art) return false;
+          f.kit = { ...f.kit, head: makeArmour('head', mat), body: makeArmour('body', mat), legs: makeArmour('legs', mat) };
+          f.wear = { head: armourLife(f.kit.head), body: armourLife(f.kit.body), legs: armourLife(f.kit.legs) };
+          f.st = statsOf(f.kit, f.weapon, f.held, f.type);
+          const parent = f.art.root.parentContainer;
+          f.art.offBlade?.destroy();
+          f.art.root.destroy();
+          f.art = buildFighter(S(), f);
+          parent?.add(f.art.root);
           return true;
         },
         /** Hold the fight still, and park the two apart, to read a pose. */

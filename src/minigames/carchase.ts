@@ -609,7 +609,7 @@ let traps: Trap[] = [];
 let trapTimer = 0;
 /** The lane the last pickup went in, so the next one does not repeat it. */
 let lastJarLane = -1;
-let cash: Array<{ x: number; y: number; body: Phaser.GameObjects.Rectangle }> = [];
+let cash: Array<{ x: number; y: number; body: Phaser.GameObjects.Container }> = [];
 /**
  * WHAT IS LYING ON THE ROAD.
  *
@@ -2412,10 +2412,47 @@ function stepSmoke(dt: number, delta: number, ground: number): void {
   });
 }
 
+/**
+ * A bundle of notes lying on the road.  It used to be a green box with a
+ * pale outline, which at this size reads as a sticker or a tile; money reads
+ * as money from three things -- the pale PAPER BAND round the middle of the
+ * bundle, the framed note with a portrait oval in it, and the thickness of a
+ * stack under it -- so those are what is drawn, and a slight turn so it has
+ * been dropped rather than placed.
+ */
+function cashBundle(scene: Phaser.Scene, x: number, y: number): Phaser.GameObjects.Container {
+  const W = 13;
+  const H = 8;
+  const parts: Phaser.GameObjects.GameObject[] = [
+    // its shadow on the tarmac
+    scene.add.rectangle(1, 1.5, W, H, 0x000000, 0.35),
+    // the notes under the top one: a darker edge, a pixel down and across
+    scene.add.rectangle(0.5, 1, W, H, 0x2f6a3a),
+    scene.add.rectangle(0, 0.5, W, H, 0x3f8248),
+    // the top note, with its printed border and a lighter frame inside it
+    scene.add.rectangle(0, 0, W, H, 0x77bd72).setStrokeStyle(1, 0x2c5e33),
+    scene.add.rectangle(0, 0, W - 4, H - 4, 0x8ccb84, 0).setStrokeStyle(1, 0xa9dca0),
+    // the portrait oval, and a darker mark in it where the face is
+    scene.add.ellipse(1.5, 0, 4, 4, 0xcfe8c4),
+    scene.add.rectangle(1.5, 0, 1, 2, 0x3a7443),
+    // value marks in the corners
+    scene.add.rectangle(-W / 2 + 1.5, -H / 2 + 1.5, 1, 1, 0x2c5e33),
+    scene.add.rectangle(W / 2 - 1.5, H / 2 - 1.5, 1, 1, 0x2c5e33),
+    // and the paper band holding the bundle together
+    scene.add.rectangle(-3, 0, 2, H + 1, 0xece2c2),
+    scene.add.rectangle(-4, 0, 1, H + 1, 0xb9aa82),
+  ];
+  return scene.add
+    .container(x, y, parts)
+    .setAngle(Phaser.Math.Between(-14, 14))
+    .setDepth(3)
+    .setVisible(false);
+}
+
 function spawnCash(): void {
   if (!scene0) return;
   const lane = LANES[Phaser.Math.Between(0, 3)];
-  const body = scene0.add.rectangle(lane, TOP - 6, 9, 7, PALETTE.mossLight).setStrokeStyle(1, PALETTE.cream).setDepth(3).setVisible(false);
+  const body = cashBundle(scene0, lane, TOP - 6);
   cash.push({ x: lane, y: TOP - 6, body });
 }
 

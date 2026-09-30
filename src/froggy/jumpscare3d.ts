@@ -34,7 +34,7 @@ import type { ThreeStage } from '../render/threeStage';
 import type { FroggyMonster } from '../three/froggyMonster';
 import { SCARE_MS } from './jumpscare';
 
-const HOLD_MS = 200;
+export const HOLD_MS = 200;
 const LUNGE_MS = 250;
 
 export interface Scare3D {
@@ -170,6 +170,8 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
       lunge: reaching,
       // the arms come up as he comes in, and stay up
       grab: t < HOLD_MS + LUNGE_MS * 0.3 ? 0 : 1,
+      // and the pupils blow wide and black as he comes
+      dilate: t < HOLD_MS ? 0.4 : 1,
     });
 
     // ---- WHERE HIS FACE GOES: down the camera's line, at `d`, at the height.

@@ -1300,5 +1300,6 @@ function finish(): void {
   arrow?.clear();
   flames?.clear();
   const won = makes >= TARGET_MAKES;
+  if (won) apiRef?.record((ROUND_MS - timeLeft) / 1000);
   ball?.scene.time.delayedCall(500, () => (won ? apiRef?.win() : apiRef?.lose()));
 }

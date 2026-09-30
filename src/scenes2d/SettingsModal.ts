@@ -1,9 +1,15 @@
 /**
- * Settings.  PRD §7.3 / AC-1.
+ * Settings, and the pause menu.  PRD §7.3 / AC-1.
  *
- * Three volume sliders that persist across a reload, and a CONTROLS tab that is
- * RENDERED FROM THE INPUT MAP (PRD IN-1) so the manual can never drift from the
- * actual bindings.
+ * Three volume sliders that persist across a reload, and a CONTROLS tab.
+ *
+ * TWO WAYS IN.  From the title screen it is the settings panel, with BACK.
+ * Anywhere you are playing it is the PAUSE menu (see core/pause.ts): the room
+ * underneath is frozen, the CONTROLS tab lists what THAT place reads -- the
+ * cabinet's own keys in a cabinet, the room's in a room, and the thumb
+ * version of either on a phone -- and the buttons are RESUME and LEAVE.
+ * LEAVE goes to the title screen; from inside a paid game it first asks, and
+ * says what walking out will cost, exactly as the cabinet's own QUIT does.
  */
 
 import Phaser from 'phaser';
@@ -12,25 +18,32 @@ import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { FONT_ADVANCE } from '../render/pixelFont';
 import { BINDINGS } from '../core/input';
-import { button, centerText, text } from '../core/ui';
+import { button, centerText, confirmDialog, forfeitLines, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { isTouch } from '../core/device';
-import { touchControls } from '../ui/touchControls';
-import type { MoveStyle } from '../core/state';
+import { leaveToMenu, pausedScene, resumePause } from '../core/pause';
+import { roomControls, type ControlRow } from '../ui/controlsList';
+import type { MinigameScene } from './MinigameScene';
 
-type Tab = 'audio' | 'controls' | 'move';
+type Tab = 'audio' | 'controls';
 
 export class SettingsModal extends Phaser.Scene {
   private tab: Tab = 'audio';
   private body!: Phaser.GameObjects.Container;
+  /** Opened as the pause menu, over a frozen scene. */
+  private pause = false;
+  private from = '';
+  private asking: Phaser.GameObjects.Container | null = null;
 
   constructor() {
     super('SettingsModal');
   }
 
-  init(data: { from?: string }): void {
-    void data;
+  init(data: { from?: string; pause?: boolean }): void {
     this.tab = 'audio';
+    this.pause = data?.pause === true;
+    this.from = data?.from ?? '';
+    this.asking = null;
   }
 
   create(): void {
@@ -47,24 +60,39 @@ export class SettingsModal extends Phaser.Scene {
     // 280x162 rather than 250x150: the controls list grew past what the old
     // panel could hold without running its last row under the BACK button.
     this.add.rectangle(GAME_W / 2, GAME_H / 2, 280, 162, PALETTE.ink).setStrokeStyle(1, PALETTE.neon);
-    centerText(this, GAME_W / 2, 18, 'SETTINGS', PALETTE.gold, 8);
+    centerText(this, GAME_W / 2, 18, this.pause ? 'PAUSED' : 'SETTINGS', PALETTE.gold, 8);
 
-    // The third tab is only there for a thumb: on a desktop there is no
-    // on-screen stick to choose between, so the choice would be a dead option.
-    if (isTouch()) {
-      button(this, 76, 34, 'AUDIO', () => this.setTab('audio'), { width: 54, height: 13 });
-      button(this, 140, 34, 'CONTROLS', () => this.setTab('controls'), { width: 66, height: 13 });
-      button(this, 214, 34, 'MOVEMENT', () => this.setTab('move'), { width: 70, height: 13 });
-    } else {
-      button(this, 108, 34, 'AUDIO', () => this.setTab('audio'), { width: 60, height: 13 });
-      button(this, 176, 34, 'CONTROLS', () => this.setTab('controls'), { width: 68, height: 13 });
-    }
+    button(this, 124, 34, 'AUDIO', () => this.setTab('audio'), { width: 60, height: 13 });
+    button(this, 196, 34, 'CONTROLS', () => this.setTab('controls'), { width: 68, height: 13 });
 
     this.body = this.add.container(0, 0);
     this.renderBody();
 
-    button(this, GAME_W / 2, 158, 'BACK', () => this.close(), { width: 60, height: 13 });
-    this.input.keyboard?.on('keydown-ESC', () => this.close());
+    if (this.pause) {
+      button(this, GAME_W / 2 - 40, 158, 'RESUME', () => resumePause(), { width: 64, height: 13 });
+      button(this, GAME_W / 2 + 40, 158, 'LEAVE', () => this.leave(), {
+        width: 64,
+        height: 13,
+        fill: 0x5a1a22,
+        hoverFill: 0x8a2b34,
+      });
+      // Esc (and the gear) are core/pause.ts's: one listener, so a press
+      // cannot both close this and reopen it.
+    } else {
+      button(this, GAME_W / 2, 158, 'BACK', () => this.close(), { width: 60, height: 13 });
+      this.input.keyboard?.on('keydown-ESC', () => this.close());
+    }
+  }
+
+  /**
+   * Esc while the LEAVE question is up answers it with CANCEL, rather than
+   * closing the whole menu out from under it.
+   */
+  handleEscape(): boolean {
+    if (!this.asking) return false;
+    this.asking.destroy();
+    this.asking = null;
+    return true;
   }
 
   private setTab(t: Tab): void {
@@ -77,53 +105,63 @@ export class SettingsModal extends Phaser.Scene {
     this.scene.stop();
   }
 
+  /**
+   * To the title screen.  Always asked first -- it is a long way back -- and
+   * from inside a game that has taken tokens, the question says how many
+   * walking out forfeits, and the cabinet's own forfeit is what takes them.
+   */
+  private leave(): void {
+    if (this.asking) return;
+    const mg = this.from === 'Minigame' ? (pausedScene() as MinigameScene | null) : null;
+    const risk = mg?.forfeitAmount() ?? null;
+    const lines =
+      risk === null
+        ? ['LEAVE TO THE TITLE SCREEN?', 'YOUR PROGRESS IS SAVED.']
+        : ['ARE YOU SURE YOU WANT TO QUIT?', ...forfeitLines(risk)];
+    this.asking = confirmDialog(this, {
+      lines,
+      confirm: risk === null ? 'LEAVE' : 'CONFIRM QUIT',
+      onConfirm: () => {
+        this.asking = null;
+        if (mg && risk !== null) {
+          resumePause();
+          mg.quitTo('StartScreen');
+        } else {
+          leaveToMenu();
+        }
+      },
+      onCancel: () => {
+        this.asking = null;
+      },
+      edge: risk === null ? PALETTE.neon : 0xc31f2e,
+    });
+  }
+
   private renderBody(): void {
     this.body.removeAll(true);
     if (this.tab === 'audio') this.renderAudio();
-    else if (this.tab === 'move') this.renderMove();
+    else if (this.pause) this.renderPlaceControls();
     else this.renderControls();
   }
 
   /**
-   * Stick or pad.
-   *
-   * Both drive Froggy with the same four keys, so nothing downstream of this
-   * knows which one is on screen — the choice is only about what the thumb is
-   * resting on.  It takes effect the moment it is tapped, not on the next
-   * room, and it is kept with the volumes rather than in the run, because the
-   * hand holding the phone does not change when the profile does.
+   * The pause menu's controls: what the place underneath reads, on this
+   * device, as a two-column table.
    */
-  private renderMove(): void {
-    this.body.add(centerText(this, GAME_W / 2, 50, 'HOW FROGGY MOVES', PALETTE.cream));
-
-    const rows: Array<[MoveStyle, string, string]> = [
-      ['stick', 'JOYSTICK', 'a thumbstick you push in any direction'],
-      ['pad', 'ARROW KEYS', 'four arrow buttons, one per direction'],
-    ];
-    rows.forEach(([style, label, blurb], i) => {
-      const y = 72 + i * 32;
-      const on = store.get().settings.moveStyle === style;
-      const box = this.add
-        .rectangle(GAME_W / 2, y, 200, 15, on ? PALETTE.tealDark : PALETTE.slate)
-        .setStrokeStyle(1, on ? PALETTE.neon : PALETTE.steel)
-        .setInteractive({ useHandCursor: true });
-      box.on('pointerdown', () => this.setMoveStyle(style));
-      this.body.add(box);
-      this.body.add(centerText(this, GAME_W / 2, y - 3, `${on ? '> ' : '  '}${label}`, on ? PALETTE.gold : PALETTE.cream));
-      this.body.add(centerText(this, GAME_W / 2, y + 13, blurb, PALETTE.ash, 8).setAlpha(0.75));
-    });
-
-    this.body.add(
-      centerText(this, GAME_W / 2, 138, 'change it whenever you like', PALETTE.ash, 8).setAlpha(0.7),
-    );
-  }
-
-  private setMoveStyle(style: MoveStyle): void {
-    if (store.get().settings.moveStyle === style) return;
-    store.setSettings({ moveStyle: style });
-    touchControls.setMoveStyle(style);
-    audio.sfx('ui_blip');
-    this.renderBody();
+  private renderPlaceControls(): void {
+    const mg = this.from === 'Minigame' ? (pausedScene() as MinigameScene | null) : null;
+    const rows: ControlRow[] = mg?.controlRows() ?? roomControls(this.from);
+    const max = 10;
+    const shown = rows.slice(0, max);
+    let y = 50;
+    const keyW = Math.min(118, Math.max(...shown.map((r) => r[0].length), 4) * FONT_ADVANCE + 6);
+    for (const [keys, does] of shown) {
+      this.body.add(text(this, 30, y, keys, PALETTE.gold));
+      const room = Math.floor((280 - 16 - keyW - 8) / FONT_ADVANCE);
+      this.body.add(text(this, 30 + keyW, y, does.length > room ? does.slice(0, room - 1) + '.' : does, PALETTE.cream));
+      y += 9;
+    }
+    if (!rows.length) this.body.add(centerText(this, GAME_W / 2, 80, isTouch() ? 'TAP WHAT YOU SEE' : 'CLICK WHAT YOU SEE', PALETTE.cream));
   }
 
   private renderAudio(): void {

@@ -17,9 +17,10 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio, SILENCE } from '../core/audio';
 import { store } from '../core/state';
-import { centerText, fadeToScene, text } from '../core/ui';
+import { text } from '../core/ui';
 import { froggyLayer } from '../render/froggyLayer';
 import { drawFroggy } from '../froggy/froggy';
+import { runKeyRoomScare } from '../froggy/keyRoomScare';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import {
   paintChairRoom,
@@ -28,7 +29,6 @@ import {
   paintKeyRoom,
   paintPlainDoor,
   paintReverse,
-  paintRoomShell,
   paintStairs,
 } from '../art/basementFrames';
 
@@ -53,8 +53,8 @@ const STEP_GAIN = 0.45;
 const WALK_STEPS = 3;
 /** He stands there this long before he comes at you.  Unskippable. */
 const STARE_MS = 3000;
-/** And the lunge itself, from first twitch to the door appearing. */
-const TRANSFORM_MS = 2200;
+/** The black after the scare, before you wake. */
+const BLACKOUT_MS = 4000;
 /**
  * `arrowOn` is a direction, not a place: it says which way the player is about
  * to go and the glyph is drawn pointing that way.  The corridors used to be
@@ -62,7 +62,7 @@ const TRANSFORM_MS = 2200;
  * corridor itself ran straight away from the camera, so the one piece of UI in
  * the sequence was telling the player to walk sideways into a wall.
  */
-type HotspotKind = 'arrowDown' | 'arrowForward' | 'door' | 'key' | 'turnAround' | 'exitDoor' | 'none';
+type HotspotKind = 'arrowDown' | 'arrowForward' | 'door' | 'key' | 'turnAround' | 'none';
 
 interface FrameDef {
   paint: (scene: BasementSequence, c: Phaser.GameObjects.Container) => void;
@@ -124,8 +124,11 @@ export class BasementSequence extends Phaser.Scene {
       { paint: (s, c) => s.paintKeyFrame(c), hotspot: 'key' },
       { paint: (s, c) => s.paintFlickerFrame(c), hotspot: 'turnAround' },
       { paint: (s, c) => s.paintStare(c), hotspot: 'none' },
-      { paint: (s, c) => s.paintTransform(c), hotspot: 'none' },
-      { paint: (s, c) => s.paintWayOut(c), hotspot: 'exitDoor' },
+      // The scare is not a drawing: see runKeyRoomScare.  This frame is only
+      // the dark it happens in.
+      { paint: (s, c) => s.paintBlack(c), hotspot: 'none' },
+      // And then nothing at all, for four seconds.
+      { paint: (s, c) => s.paintBlack(c), hotspot: 'none' },
     ];
 
     this.time.delayedCall(900, () => this.show(0));
@@ -133,7 +136,8 @@ export class BasementSequence extends Phaser.Scene {
 
   // ------------------------------------------------------------------ frames
 
-  private show(i: number): void {
+  /** `fade` 0 is a hard cut: the scare does not get a crossfade to warn you. */
+  private show(i: number, fade = CROSSFADE_MS): void {
     this.index = i;
     this.busy = true;
 
@@ -145,16 +149,22 @@ export class BasementSequence extends Phaser.Scene {
     this.hotspot?.destroy();
     this.hotspot = null;
 
+    if (fade <= 0) {
+      next.setAlpha(1);
+      prev?.destroy();
+      this.onFrameShown(i);
+      return;
+    }
     this.tweens.add({
       targets: next,
       alpha: 1,
-      duration: CROSSFADE_MS,
+      duration: fade,
       onComplete: () => {
         prev?.destroy();
         this.onFrameShown(i);
       },
     });
-    if (prev) this.tweens.add({ targets: prev, alpha: 0, duration: CROSSFADE_MS });
+    if (prev) this.tweens.add({ targets: prev, alpha: 0, duration: fade });
   }
 
   private onFrameShown(i: number): void {
@@ -164,10 +174,28 @@ export class BasementSequence extends Phaser.Scene {
       // Input is taken away and he simply stands there.  The whole horror beat
       // runs about four seconds: this stare, then the turn.
       this.busy = true;
-      this.time.delayedCall(STARE_MS, () => this.show(9));
+      this.time.delayedCall(STARE_MS, () => this.show(9, 0));
       return;
     }
-    if (i === 9) return; // the transformation drives itself
+    if (i === 9) {
+      // ---- HE COMES AT YOU, AND IT IS HIM.
+      //
+      // The 3D creature, not the drawing: the one that is about to hunt you
+      // through three rooms, driven into the camera by the rooms' own scare.
+      runKeyRoomScare(this, () => this.show(10, 0));
+      return;
+    }
+    if (i === 10) {
+      // ---- AND THEN BLACK.  Four seconds of it, nothing on the screen and
+      // nothing to press, before you come round somewhere else.
+      this.time.delayedCall(BLACKOUT_MS, () => {
+        store.patch({ route: 'hide', hideRoom: 0 });
+        store.flush();
+        this.scene.start('HideRoom3D', { wake: true });
+      });
+      return;
+    }
+    if (i === 6) this.think('A key... maybe this belongs to the prize case back at the lobby.');
     if (def.hotspot === 'turnAround') {
       // Five seconds to turn round yourself.  Then the game does it for you.
       this.time.delayedCall(5000, () => {
@@ -232,12 +260,6 @@ export class BasementSequence extends Phaser.Scene {
       w = 20;
       h = 26;
       arrow = null;
-    } else if (kind === 'exitDoor') {
-      x = GAME_W / 2;
-      y = 100;
-      w = 52;
-      h = 84;
-      arrow = null;
     } else if (kind === 'turnAround') {
       // Not a direction: an instruction to turn on the spot.
       x = GAME_W / 2;
@@ -274,14 +296,6 @@ export class BasementSequence extends Phaser.Scene {
     if (this.busy) return;
     this.busy = true;
 
-    if (kind === 'exitDoor') {
-      // Forward only.  The corridor you came down is not on the other side.
-      audio.sfx('door_creak');
-      store.patch({ route: 'hide', hideRoom: 0 });
-      store.flush();
-      this.time.delayedCall(900, () => fadeToScene(this, 'HideRoom3D'));
-      return;
-    }
     // ---- NOTHING ADVANCES UNTIL THE WALKING HAS STOPPED.
     //
     // Every branch below walks first and shows second, and the gap between
@@ -449,7 +463,8 @@ export class BasementSequence extends Phaser.Scene {
         y: 116,
         height: 34,
         variant: 'uncanny',
-        pose: 'blank', // the pinprick pupils
+        // Pupils blown wide, black almost to the rim.
+        pose: 'dilated',
       });
     });
 
@@ -457,111 +472,25 @@ export class BasementSequence extends Phaser.Scene {
     this.time.delayedCall(260, () => audio.sfx('footstep_concrete', STEP_GAIN));
   }
 
-  /**
-   * And then he crosses it.
-   *
-   * The morph runs in under half a second — sudden, not a dissolve — and the
-   * scare fires on the first frame of it, routed past the volume buses
-   * (audio.scare) so a quiet room stays the setup for something loud.  He
-   * finishes the beat filling the frame, because he has just covered eight
-   * metres of concrete in the time it took you to notice he had moved.
-   */
-  paintTransform(c: Phaser.GameObjects.Container): void {
-    this.tweens.killAll();
-    c.setAlpha(1);
-    paintReverse(this, c);
-    c.add(this.add.rectangle(0, 0, GAME_W, GAME_H, 0x140306, 0.55).setOrigin(0, 0));
-
-    audio.scare();
-    const cam = this.cameras.main;
-    cam.shake(700, 0.045);
-    cam.flash(90, 120, 8, 12);
-
-    const t0 = this.time.now;
-    const paint = () => {
-      const age = this.time.now - t0;
-      const e = Math.min(1, age / 520);
-      const morph = e * e; // slow to start, then all at once
-      // He keeps coming after the shape has finished changing.
-      const lunge = Math.min(1, age / TRANSFORM_MS) ** 1.6;
-      froggyLayer.paint((ctx) => {
-        drawFroggy(ctx, {
-          x: GAME_W / 2,
-          // Framed so the maw stays on screen.  Anchored on the face and scaled
-          // any larger, he becomes two eyes and you lose the mouth entirely.
-          y: 58,
-          height: 96 + morph * 70 + lunge * 250,
-          variant: morph < 0.06 ? 'uncanny' : 'monster',
-          pose: 'blank',
-          anchor: 'face',
-          morph,
-          maw: Math.min(1, morph * 1.4),
-          blood: Math.max(0, (morph - 0.25) / 0.75),
-          pupil: 0.13,
-          t: (this.time.now - t0) / 1000,
-          shake: morph > 0.3 ? 1 : 0,
-        });
-      });
-    };
-
-    const ev = this.time.addEvent({ delay: 16, loop: true, callback: paint });
-    paint();
-
-    // Blood hits the lens as he lands on you.
-    this.time.delayedCall(520, () => {
-      for (let i = 0; i < 14; i++) {
-        const x = Math.random() * GAME_W;
-        const y = Math.random() * GAME_H;
-        const r = 2 + Math.random() * 9;
-        c.add(this.add.ellipse(x, y, r * 2, r * (1.4 + Math.random()), 0x8d0f16, 0.85).setDepth(600));
-      }
-    });
-
-    this.time.delayedCall(TRANSFORM_MS, () => {
-      ev.remove();
-      froggyLayer.clear();
-      this.show(10);
-    });
+  /** The dark the 3D scare happens in, and the four seconds after it. */
+  paintBlack(c: Phaser.GameObjects.Container): void {
+    froggyLayer.clear();
+    c.add(this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000).setOrigin(0, 0));
   }
 
-  paintWayOut(c: Phaser.GameObjects.Container): void {
-    // The same room the rest of the sequence is set in, so the last frame is
-    // not a door floating in front of a black rectangle.
-    paintRoomShell(this, c, { x: 84, y: 46, w: 152, h: 72 }, 8800);
-
-    // wet floor catching what little light there is
-    c.add(this.add.rectangle(0, 148, GAME_W, 32, 0x120d12, 0.55).setOrigin(0, 0));
-
-    // Sized to the wall it is in: the sill sits on the floor line (the back
-    // wall's base, y 118) and the top stays under the ceiling.  It used to be
-    // taller than the wall and hung a foot out over the floor.
-    const doorW = 44;
-    const doorH = 66;
-    const dx = GAME_W / 2;
-    const dy = 118 - doorH / 2;
-    c.add(this.add.rectangle(dx, dy, doorW + 8, doorH + 8, 0x1b1218));
-    c.add(this.add.rectangle(dx, dy, doorW, doorH, 0x2b1d16));
-    // panels, and the light down the hinge side
-    for (let i = 0; i < 4; i++) {
-      c.add(this.add.rectangle(dx, dy - doorH / 2 + 12 + i * 20, doorW - 10, 2, 0x1a110d));
-    }
-    c.add(this.add.rectangle(dx - doorW / 2 + 1, dy, 1, doorH - 6, 0x4a382a, 0.5));
-    c.add(this.add.circle(dx + 17, dy + 6, 2, 0xc9a62e));
-    c.add(this.add.circle(dx + 17, dy + 5, 1, 0xffd45e, 0.6));
-
-    // light bleeding under it
-    const bleed = this.add.rectangle(dx, dy + doorH / 2 + 1, doorW - 6, 2, 0xd8b45a, 0.5);
-    c.add(bleed);
-    this.tweens.add({ targets: bleed, alpha: 0.15, duration: 1400, yoyo: true, repeat: -1 });
-
-    // and his handprint, left on it
-    for (let i = 0; i < 5; i++) {
-      c.add(
-        this.add.ellipse(dx - 14 + i * 6, dy - 12 - Math.abs(i - 2) * 3, 4, 9, 0x6d0a0c, 0.75),
-      );
-    }
-    c.add(this.add.ellipse(dx - 2, dy + 2, 16, 14, 0x6d0a0c, 0.7));
-
-    c.add(centerText(this, GAME_W / 2, 168, 'the only way is forward', PALETTE.fog, 8).setAlpha(0.6));
+  /**
+   * A thought, not a line: no name over it, no box round it, lower case and
+   * quiet, fading in under the picture and out again.  It is the player
+   * working something out, not anybody talking to them.
+   */
+  private think(line: string): void {
+    const t = text(this, GAME_W / 2, GAME_H - 30, line, PALETTE.fog)
+      .setOrigin(0.5, 0.5)
+      .setMaxWidth(GAME_W - 40)
+      .setCenterAlign()
+      .setAlpha(0)
+      .setDepth(700);
+    this.tweens.add({ targets: t, alpha: 0.85, duration: 700 });
+    this.tweens.add({ targets: t, alpha: 0, delay: 5200, duration: 900, onComplete: () => t.destroy() });
   }
 }

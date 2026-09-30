@@ -122,31 +122,62 @@ try {
     check('the stare holds for about three seconds', waited >= 1500 && waited <= 4500, `${waited}ms`);
     check('and then it is its own frame', (await frame()) === 9, `frame ${await frame()}`);
 
-    await sleep(1400);
-    const during = await overlayPixels(page);
-    await page.screenshot({ path: `${SHOTS}/02-transform.png` });
-    check('he closes the distance and fills the frame', during > a * 3, `${a} -> ${during} px`);
+    // A hard cut into the 3D creature: the rooms' own model on a stage of its
+    // own, driven into the camera.
+    let stage3d = false;
+    for (let i = 0; i < 40 && !stage3d; i++) {
+      stage3d = await page.evaluate(() => !!document.getElementById('three-canvas'));
+      if (!stage3d) await sleep(100);
+    }
+    check('the scare is him, in 3D', stage3d);
+    await sleep(700);
+    await page.screenshot({ path: `${SHOTS}/02-scare3d.png` });
 
     waited = 0;
-    while ((await frame()) === 9 && waited < 8000) {
+    while ((await frame()) === 9 && waited < 30000) {
       await sleep(250);
       waited += 250;
     }
-    check('it ends on the way out, not the way in', (await frame()) === 10, `frame ${await frame()}`);
-    check('the overlay is cleared for the door', (await overlayPixels(page)) === 0);
-    await page.screenshot({ path: `${SHOTS}/03-door.png` });
-
-    // The hotspot only exists once the crossfade into the frame has finished.
-    await sleep(1400);
-    await page.mouse.click(640, 360 + (100 - 90) * 4);
-    await sleep(3000);
-    const after = await page.evaluate(() => ({
-      scenes: window.__froggy.activeScenes(),
-      state: window.__froggy.state(),
-    }));
-    check('the door leads on to the rooms', after.scenes.includes('HideRoom3D'), after.scenes.join(','));
-    check('the route commits to hide', after.state.route === 'hide' && after.state.hideRoom === 0,
-      `route=${after.state.route} room=${after.state.hideRoom}`);
+    check('and then black', (await frame()) === 10, `frame ${await frame()}`);
+    await sleep(300);
+    check('nothing at all on the screen', (await overlayPixels(page)) === 0 &&
+      !(await page.evaluate(() => !!document.getElementById('three-canvas'))));
+    await page.screenshot({ path: `${SHOTS}/03-black.png` });
+    // No "you survived", no door: the black runs out on its own.
+    let black = 300;
+    while (!(await page.evaluate(() => window.__froggy.activeScenes().includes('HideRoom3D'))) && black < 15000) {
+      await sleep(250);
+      black += 250;
+    }
+    check('for about four seconds', black >= 3000 && black <= 9000, `${black}ms`);
+    const after = await page.evaluate(() => {
+      const h = window.__froggy.game().scene.getScene('HideRoom3D');
+      return { waking: h.waking, sub: window.__hide?.subtitle ?? '', filter: document.getElementById('three-canvas')?.style.filter ?? '', state: window.__froggy.state() };
+    });
+    check('you come round in the first room', after.waking && after.state.route === 'hide' && after.state.hideRoom === 0,
+      `waking=${after.waking} route=${after.state.route} room=${after.state.hideRoom}`);
+    check('with your eyes still swimming', /blur/.test(after.filter), after.filter);
+    check('and he says nothing yet', after.sub === '', `"${after.sub}"`);
+    const pose = await page.evaluate(() => {
+      const h = window.__froggy.game().scene.getScene('HideRoom3D');
+      const d = Math.hypot(h.froggy.x - h.pos.x, h.froggy.y - h.pos.y);
+      return { d, eye: h.eyeNow };
+    });
+    check('he is on all fours, right in front of you', pose.d > 2.5 && pose.d < 4, `${pose.d.toFixed(2)}m`);
+    check('and you are down on the floor', pose.eye < 0.7, `eye ${pose.eye.toFixed(2)}m`);
+    // He speaks once the picture is sharp, and not before.
+    let spoke = '';
+    let clear = true;
+    for (let i = 0; i < 240 && !spoke; i++) {
+      await sleep(250);
+      const st = await page.evaluate(() => ({ sub: window.__hide?.subtitle ?? '', f: document.getElementById('three-canvas')?.style.filter ?? '' }));
+      if (st.sub) {
+        spoke = st.sub;
+        clear = !/blur/.test(st.f);
+      }
+    }
+    await page.screenshot({ path: `${SHOTS}/04-woken.png` });
+    check('he speaks once your eyes have cleared', !!spoke && clear, `"${spoke}"`);
     await page.close();
   }
 
@@ -529,17 +560,24 @@ try {
     let apart = 0;
     let went = 0;
     let at = { x: inside.fx, z: inside.fz };
-    for (let i = 0; i < 12; i++) {
+    // Up to twenty seconds of wall clock, stopping as soon as he has covered
+    // the ground: the gallery holds three of him (the hunter, his twin under
+    // the glass and the specimen in the tube), and on a software renderer a
+    // wall-clock second can be a small fraction of a game second.
+    for (let i = 0; i < 80 && (i < 12 || went <= 1.5); i++) {
       await sleep(250);
       const t = await hide();
-      apart = Math.max(apart, Math.hypot(t.fx - t.pen.x, t.fz - t.pen.z));
+      // Against where he is DRAWN: at a hiding place he steps in to it and
+      // crawls to the bed, off his logical spot, and the twin copies the
+      // model, not the rule.
+      apart = Math.max(apart, Math.hypot(t.vx - t.pen.x, t.vz - t.pen.z));
       went += Math.hypot(t.fx - at.x, t.fz - at.z);
       at = { x: t.fx, z: t.fz };
     }
     check(`room ${room + 1}: the thing in it is the one hunting you, not a second one`, apart < 0.6,
       `never more than ${apart.toFixed(2)}m apart`);
     check(`room ${room + 1}: and he is still searching while you watch`, went > 1.5,
-      `${went.toFixed(1)}m covered in three seconds`);
+      `${went.toFixed(1)}m covered while you watched`);
 
     const safe = await hide();
     check(`room ${room + 1}: he cannot touch you through it`,
@@ -574,10 +612,30 @@ try {
       await sleep(ms);
       await page.keyboard.up(key);
     };
+    // Walked, not placed -- but held until they get there rather than for a
+    // fixed time, which a slow renderer turns into a shorter walk.
+    // The button is on its pedestal at x 3.2 in the gallery's own space: strafe
+    // until level with it (or until the strafe stops closing on it), then walk
+    // at it until it answers.
+    const holdUntil = async (key, test, max) => {
+      await page.keyboard.down(key);
+      for (let t = 0; t < max; t += 100) {
+        await sleep(100);
+        if (await test()) break;
+      }
+      await page.keyboard.up(key);
+    };
+    void go;
+    let lastGap = Infinity;
     await page.keyboard.down('ShiftLeft');
-    await go('KeyA', 950);
+    await holdUntil('KeyA', async () => {
+      const gap = Math.abs((await hide()).px - 3.2);
+      const done = gap < 0.5 || gap > lastGap + 0.05;
+      lastGap = Math.min(lastGap, gap);
+      return done;
+    }, 8000);
     await sleep(150);
-    await go('KeyW', 700);
+    await holdUntil('KeyW', async () => (await hide()).atButton, 8000);
     await page.keyboard.up('ShiftLeft');
     await sleep(300);
     const atIt = await hide();
@@ -985,6 +1043,30 @@ try {
     check('the walk behind you turns into a sprint', sawCharge, sawCharge ? 'it charges' : 'never charged');
     check('and then the lock turns', done.mode === 'survived', done.mode);
     await page.screenshot({ path: `${SHOTS}/arcade-out.png` });
+
+    // ---- AND WHAT COMES AFTER IT.  No verdict on the screen; the doors open
+    // on a night street; you look back and he is behind the counter with the
+    // staff door open; you run; black; what happened after; outside again.
+    const endAt = async (t) => {
+      for (let i = 0; i < 600; i++) {
+        const s = await hide();
+        if (!s || s.endT >= t) return s;
+        await sleep(150);
+      }
+      return hide();
+    };
+    const lookBack = await endAt(5.6);
+    await page.screenshot({ path: `${SHOTS}/arcade-look-back.png` });
+    check('looking back, he is behind the counter and the staff door is open',
+      lookBack?.watcherShown && lookBack?.staffDoorOpen, `shown ${lookBack?.watcherShown}, door ${lookBack?.staffDoorOpen}`);
+    check('and the view narrows onto him', lookBack && lookBack.fov < 40, `fov ${lookBack?.fov?.toFixed(1)}`);
+    let gone = '';
+    for (let i = 0; i < 900 && !gone; i++) {
+      await sleep(200);
+      const scenes = await page.evaluate(() => window.__froggy.activeScenes());
+      if (!scenes.includes('HideRoom3D')) gone = scenes.join(',');
+    }
+    check('the night ends outside the arcade', gone.includes('ExteriorDay'), gone || 'still in the arcade');
     await page.close();
   }
 

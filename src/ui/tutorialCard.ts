@@ -79,6 +79,8 @@ export interface TutorialCardOpts {
   chargesInside?: boolean;
   /** One line under the price, e.g. "WIN: 6 TOKENS". */
   payNote?: string;
+  /** The player's personal best at this cabinet, as a sentence, if there is one. */
+  record?: string;
   /** Pressed PLAY, and could afford it.  Runs at most once. */
   onPlay: () => void;
   /** Pressed LEAVE, or Esc.  Nothing has been charged. */
@@ -132,7 +134,11 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
   const buttonY = CARD.y + CARD.h - 11;
   const priceTop = buttonY - PRICE_UP - Math.ceil(ROW_H / 2);
   const panelH = rows.length * ROW_H + PANEL_HEAD;
-  const objTop = CARD.y + 13;
+  // the personal best, when there is one, first thing under the title
+  if (opts.record) {
+    keep(centerText(scene, GAME_W / 2, CARD.y + 17, opts.record, PALETTE.gold).setDepth(903));
+  }
+  const objTop = CARD.y + 13 + (opts.record ? OBJ_ROW + 2 : 0);
   const room = priceTop - PANEL_GAP - panelH - 2 - objTop;
   const maxLines = Math.max(1, Math.floor(room / OBJ_ROW));
 

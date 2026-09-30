@@ -3,26 +3,27 @@
  *
  * THE TRICK IS THAT NO GAME KNOWS THIS EXISTS.  Every scene and every cabinet
  * in the building already reads the keyboard — `Key.isDown` for held keys,
- * `keydown-SPACE` for taps — so the thumbstick and the buttons do not talk to
+ * `keydown-SPACE` for taps — so the arrow pad and the buttons do not talk to
  * the games at all.  They dispatch REAL KeyboardEvents at the window, which is
  * exactly where Phaser's keyboard manager is listening, and eighteen cabinets,
  * three rooms and the whole horror act read them as keys because they are
  * keys.  Nothing downstream branches on the platform, so nothing downstream
  * can behave differently on a phone than it does on a desk.
  *
- * WHAT SHOWS IS WHAT THE THING IN FRONT OF YOU READS.  A layout is a stick, a
+ * WHAT SHOWS IS WHAT THE THING IN FRONT OF YOU READS.  A layout is a pad, a
  * look pad and up to five labelled buttons, and it is swapped as scenes come
  * and go (see `game/touchLayouts.ts`); a cabinet declares its own in its
  * module, next to the tutorial card that names the same keys.  A player never
  * sees a button that does nothing here.
  *
- * A STICK OR A PAD, WHICHEVER THE THUMB WANTS.  `Esc -> MOVEMENT` swaps the
- * thumbstick for a four-way arrow pad and back, live.  The pad stands in
- * exactly the stick's footprint so the band does not resize under the player's
- * hand, it shows only the directions the game in front of it reads, and both
- * send the same keys — so nothing downstream, here or anywhere else, knows or
- * can know which one is on the screen.  The choice lives in `froggy.prefs`
- * beside the volumes: it belongs to the hand holding the phone, not the run.
+ * AN ARROW PAD, NOT A STICK.  Eight arrows round an empty middle: the four
+ * straight ones and the four diagonals between them.  The thumb goes down on
+ * one and can slide round the ring without lifting -- whatever arrow is under
+ * it is held, for as long as it is there, so holding right walks right until
+ * the thumb comes off.  A diagonal is its own arrow, and it is also what two
+ * fingers on two straight arrows add up to: both directions go down together,
+ * so up-and-left is up-and-left either way.  It only shows the arrows the game
+ * in front of it reads; a one-axis game gets two.
  *
  * IN PORTRAIT THE CONTROLS ARE NOT ON THE GAME.  A 16:9 screen inside a tall
  * phone leaves a band of dead black under it, and that band is where the
@@ -35,7 +36,6 @@
  */
 
 import { isTouch } from '../core/device';
-import { store, type MoveStyle } from '../core/state';
 
 /** Every key the building actually binds, with the code Phaser matches on. */
 const KEYS = {
@@ -88,9 +88,10 @@ export interface TouchButton {
 
 export interface TouchLayout {
   /**
-   * What the thumbstick sends.  `wasd` is the full four; `lr` and `ud` are the
-   * games that only move on one axis, so the stick cannot send a key the game
-   * would ignore.  Omit for a game with nothing to steer.
+   * What the arrow pad sends.  `wasd` is all eight arrows; `lr` and `ud` are
+   * the games that only move on one axis, so the pad cannot send a key the
+   * game would ignore.  Omit for a game with nothing to steer.  (Named for the
+   * thumbstick it replaced, so no cabinet's layout had to change.)
    */
   stick?: 'wasd' | 'lr' | 'ud';
   /** Also send the arrow keys with WASD, for the games bound to arrows only. */
@@ -99,7 +100,7 @@ export interface TouchLayout {
   look?: boolean;
   /** Up to five, right to left in the order given. */
   buttons?: TouchButton[];
-  /** Hide the standing ESC button — the title screen and the end cards. */
+  /** Hide the standing pause (gear) button — the title screen and the end cards. */
   noQuit?: boolean;
 }
 
@@ -120,58 +121,47 @@ const STYLE = `
 #touch-controls .tc-left { left: 0; width: 46%; justify-content: center; }
 #touch-controls .tc-right { right: 0; width: 54%; justify-content: center; }
 
-#touch-controls .tc-stick {
-  position: relative; pointer-events: auto; touch-action: none;
-  width: var(--tc-stick, 132px); height: var(--tc-stick, 132px);
-  border-radius: 50%;
-  background: rgba(20, 26, 36, 0.62);
-  border: 2px solid rgba(70, 196, 189, 0.5);
-  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.55);
-}
-#touch-controls .tc-stick::before,
-#touch-controls .tc-stick::after {
-  content: ''; position: absolute; background: rgba(70, 196, 189, 0.18);
-}
-#touch-controls .tc-stick::before { left: 8%; right: 8%; top: 50%; height: 1px; }
-#touch-controls .tc-stick::after { top: 8%; bottom: 8%; left: 50%; width: 1px; }
-#touch-controls .tc-nub {
-  position: absolute; left: 50%; top: 50%;
-  width: 42%; height: 42%; margin: -21% 0 0 -21%;
-  border-radius: 50%;
-  background: rgba(70, 196, 189, 0.55);
-  border: 2px solid rgba(255, 240, 201, 0.65);
-  transition: background 90ms linear;
-}
-#touch-controls .tc-stick.on .tc-nub { background: rgba(255, 212, 94, 0.75); }
-
-/* The arrow pad, for the thumb that would rather have four separate targets
-   than one it has to aim.  It stands in exactly the stick's footprint so the
-   band does not change size when the player switches. */
+/* The arrow pad: a ring of eight arrows round an empty middle.  The pad
+   itself takes the touch, so a thumb can slide from arrow to arrow without
+   lifting; the arrows are only what it looks like. */
 #touch-controls .tc-dpad {
-  position: relative; pointer-events: none;
-  width: var(--tc-stick, 132px); height: var(--tc-stick, 132px);
+  position: relative; pointer-events: auto; touch-action: none;
+  width: var(--tc-stick, 150px); height: var(--tc-stick, 150px);
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(3, 1fr);
-  gap: 3px;
+  gap: 4px;
 }
 #touch-controls .tc-dkey {
-  pointer-events: auto; touch-action: none;
+  pointer-events: none;
   display: flex; align-items: center; justify-content: center;
-  border-radius: 10px;
-  background: rgba(20, 26, 36, 0.72);
-  border: 2px solid rgba(70, 196, 189, 0.5);
-  color: #46c4bd; font-size: calc(var(--tc-stick, 132px) * 0.2); line-height: 1;
+  border-radius: 12px;
+  background: rgba(20, 26, 36, 0.74);
+  border: 2px solid rgba(70, 196, 189, 0.55);
+  color: #46c4bd; font-size: calc(var(--tc-stick, 150px) * 0.17); line-height: 1;
   padding: 0;
 }
-#touch-controls .tc-dkey.down { background: rgba(255, 212, 94, 0.85); color: #141a24; }
-/* A display of grid or flex both beat the [hidden] default, so the two rules
-   that carry one have to say so themselves. */
-#touch-controls .tc-dpad[hidden], #touch-controls .tc-dkey[hidden] { display: none; }
-#touch-controls .tc-dkey.up { grid-area: 1 / 2; }
-#touch-controls .tc-dkey.left { grid-area: 2 / 1; }
-#touch-controls .tc-dkey.right { grid-area: 2 / 3; }
-#touch-controls .tc-dkey.dn { grid-area: 3 / 2; }
+#touch-controls .tc-dkey.diag {
+  background: rgba(20, 26, 36, 0.5);
+  border-color: rgba(70, 196, 189, 0.3);
+  font-size: calc(var(--tc-stick, 150px) * 0.13);
+}
+#touch-controls .tc-dkey.down { background: rgba(255, 212, 94, 0.85); color: #141a24; border-color: rgba(255, 240, 201, 0.9); }
+#touch-controls .tc-dhub {
+  grid-area: 2 / 2; border-radius: 50%; margin: 18%;
+  background: rgba(70, 196, 189, 0.16); border: 1px solid rgba(70, 196, 189, 0.3);
+  pointer-events: none;
+}
+/* A display of flex beats the [hidden] default, so the rule has to say so. */
+#touch-controls .tc-dkey[hidden] { display: none; }
+#touch-controls .tc-dkey.n { grid-area: 1 / 2; }
+#touch-controls .tc-dkey.w { grid-area: 2 / 1; }
+#touch-controls .tc-dkey.e { grid-area: 2 / 3; }
+#touch-controls .tc-dkey.s { grid-area: 3 / 2; }
+#touch-controls .tc-dkey.nw { grid-area: 1 / 1; }
+#touch-controls .tc-dkey.ne { grid-area: 1 / 3; }
+#touch-controls .tc-dkey.sw { grid-area: 3 / 1; }
+#touch-controls .tc-dkey.se { grid-area: 3 / 3; }
 
 #touch-controls .tc-pads {
   display: grid; gap: var(--tc-gap, 10px);
@@ -200,14 +190,16 @@ const STYLE = `
 }
 #touch-controls .tc-btn.down { background: rgba(255, 212, 94, 0.85); color: #141a24; }
 
-/* The standing pair: quit at the top right, always reachable, never big. */
+/* The gear: pause and settings, at the top right, always reachable. */
 #touch-controls .tc-corner {
-  position: absolute; top: 6px; right: 6px;
+  position: absolute; top: 8px; right: 8px;
   pointer-events: auto; touch-action: none;
-  padding: 7px 11px; border-radius: 8px;
+  width: 44px; height: 44px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
   background: rgba(11, 13, 18, 0.72);
   border: 1px solid rgba(140, 155, 173, 0.6);
-  color: #d6dce4; font-size: 12px; font-weight: 700;
+  color: #d6dce4; font-size: 26px; line-height: 1;
 }
 #touch-controls .tc-corner.down { background: rgba(195, 31, 46, 0.85); color: #fff; }
 
@@ -221,30 +213,40 @@ const STYLE = `
    two bottom corners — the strip every room keeps clear of anything you can
    read — and they go quiet enough to see the floor through. */
 #touch-controls.overlay .tc-zone { height: var(--tc-band, 150px); opacity: 0.72; }
-#touch-controls.overlay .tc-left { width: 38%; justify-content: flex-start; padding-left: 8px; }
-#touch-controls.overlay .tc-right { width: 46%; justify-content: flex-end; padding-right: 8px; }
+#touch-controls.overlay .tc-left { width: 38%; justify-content: flex-start; padding-left: 14px; }
+#touch-controls.overlay .tc-right { width: 46%; justify-content: flex-end; padding-right: 14px; }
 
 #touch-controls[hidden] { display: none; }
 `;
 
 type Held = Set<KeyName>;
 
+/** The eight arrows, by compass point, and what each one shows. */
+const PAD: Array<[string, string]> = [
+  ['nw', '&#8598;'],
+  ['n', '&#9650;'],
+  ['ne', '&#8599;'],
+  ['w', '&#9664;'],
+  ['e', '&#9654;'],
+  ['sw', '&#8601;'],
+  ['s', '&#9660;'],
+  ['se', '&#8600;'],
+];
+
 class TouchControls {
   private root: HTMLDivElement | null = null;
-  private stick: HTMLDivElement | null = null;
   private dpad: HTMLDivElement | null = null;
-  private nub: HTMLDivElement | null = null;
   private pads: HTMLDivElement | null = null;
   private quit: HTMLButtonElement | null = null;
   private lookPad: HTMLDivElement | null = null;
   private layout: TouchLayout = {};
   private held: Held = new Set();
-  private stickTouch: number | null = null;
+  /** Every finger on the arrow pad, by touch id, and where it is. */
+  private padTouches = new Map<number, { x: number; y: number }>();
   private lookTouch: number | null = null;
   private lookX = 0;
   private lookY = 0;
   private band = 0;
-  private moveStyle: MoveStyle = 'stick';
 
   /** No-op on anything without a thumb on it. */
   mount(): void {
@@ -259,27 +261,20 @@ class TouchControls {
     root.id = 'touch-controls';
     root.innerHTML =
       '<div class="tc-look" hidden></div>' +
-      '<div class="tc-zone tc-left">' +
-      '<div class="tc-stick"><div class="tc-nub"></div></div>' +
-      '<div class="tc-dpad" hidden>' +
-      '<button class="tc-dkey up" type="button">&#9650;</button>' +
-      '<button class="tc-dkey left" type="button">&#9664;</button>' +
-      '<button class="tc-dkey right" type="button">&#9654;</button>' +
-      '<button class="tc-dkey dn" type="button">&#9660;</button>' +
+      '<div class="tc-zone tc-left"><div class="tc-dpad">' +
+      PAD.map(([cls, glyph]) => `<div class="tc-dkey ${cls}${cls.length > 1 ? ' diag' : ''}">${glyph}</div>`).join('') +
+      '<div class="tc-dhub"></div>' +
       '</div></div>' +
       '<div class="tc-zone tc-right"><div class="tc-pads"></div></div>' +
-      '<button class="tc-corner" type="button">ESC</button>';
+      '<button class="tc-corner" type="button" aria-label="Pause and settings">&#9881;</button>';
     document.body.appendChild(root);
 
     this.root = root;
     this.lookPad = root.querySelector('.tc-look');
-    this.stick = root.querySelector('.tc-stick');
     this.dpad = root.querySelector('.tc-dpad');
-    this.nub = root.querySelector('.tc-nub');
     this.pads = root.querySelector('.tc-pads');
     this.quit = root.querySelector('.tc-corner');
 
-    this.wireStick();
     this.wireDpad();
     this.wireLook();
     this.wireHold(this.quit as HTMLElement, ['ESC']);
@@ -293,7 +288,6 @@ class TouchControls {
       if (document.hidden) this.releaseAll();
     });
 
-    this.moveStyle = store.get().settings.moveStyle;
     this.apply({});
     this.relayout();
 
@@ -304,13 +298,10 @@ class TouchControls {
         labels: () => [...root.querySelectorAll('.tc-btn')].map((b) => b.textContent ?? ''),
         band: () => this.band,
         reserve: () => this.reserveHeight(),
-        moveStyle: () => this.moveStyle,
-        setMoveStyle: (m: MoveStyle) => this.setMoveStyle(m),
         arrows: () =>
           [...root.querySelectorAll('.tc-dkey')]
-            .filter((b) => !(b as HTMLButtonElement).hidden)
-            .map((b) => (b.className.match(/up|left|right|dn/) ?? [''])[0]),
-        stickShown: () => !(this.stick as HTMLElement).hidden,
+            .filter((b) => !(b as HTMLElement).hidden)
+            .map((b) => b.className.split(' ')[1]),
       };
     }
   }
@@ -327,7 +318,7 @@ class TouchControls {
 
     const zoneL = this.root.querySelector('.tc-left') as HTMLElement;
     zoneL.style.visibility = layout.stick ? 'visible' : 'hidden';
-    this.syncMoveStyle();
+    this.syncArrows();
 
     const buttons = (layout.buttons ?? []).slice(0, 5);
     const pads = this.pads as HTMLDivElement;
@@ -349,43 +340,24 @@ class TouchControls {
   }
 
   /**
-   * Swap the stick for the arrow pad, or back, without leaving a key down.
-   *
-   * Live: the settings screen calls this the moment the player taps, and the
-   * room underneath carries on reading the same four keys either way.
+   * Only the arrows the game in front of the player reads: a one-axis game
+   * gets two, not eight it would half ignore.
    */
-  setMoveStyle(style: MoveStyle): void {
-    if (style === this.moveStyle) return;
-    this.releaseAll();
-    this.moveStyle = style;
-    this.syncMoveStyle();
-  }
-
-  /**
-   * Show whichever of the two the player chose, with only the directions the
-   * game in front of them actually reads — a one-axis game gets two keys, not
-   * four it would ignore.
-   */
-  private syncMoveStyle(): void {
-    if (!this.stick || !this.dpad) return;
-    const pad = this.moveStyle === 'pad';
-    this.stick.hidden = pad;
-    this.dpad.hidden = !pad;
-
+  private syncArrows(): void {
+    if (!this.dpad) return;
     const axis = this.layout.stick ?? 'wasd';
-    for (const el of Array.from(this.dpad.querySelectorAll('.tc-dkey')) as HTMLButtonElement[]) {
-      const vertical = el.classList.contains('up') || el.classList.contains('dn');
-      el.hidden = vertical ? axis === 'lr' : axis === 'ud';
+    for (const el of Array.from(this.dpad.querySelectorAll('.tc-dkey')) as HTMLElement[]) {
+      const cls = el.className.split(' ')[1];
+      el.hidden =
+        axis === 'lr' ? cls !== 'w' && cls !== 'e' : axis === 'ud' ? cls !== 'n' && cls !== 's' : false;
     }
   }
 
   /** Everything up.  Safe at any moment, and the only way keys are released. */
   releaseAll(): void {
     for (const k of [...this.held]) this.up(k);
-    this.stickTouch = null;
+    this.padTouches.clear();
     this.lookTouch = null;
-    this.stick?.classList.remove('on');
-    if (this.nub) this.nub.style.transform = '';
     this.root?.querySelectorAll('.down').forEach((el) => el.classList.remove('down'));
   }
 
@@ -412,15 +384,18 @@ class TouchControls {
     return Math.round(Math.min(Math.max(window.innerHeight * 0.34, 190), window.innerHeight * 0.5));
   }
 
-  /** How big the thumbstick is right now, which everything else is sized off. */
+  /** How big the arrow pad is right now, which everything else is sized off. */
   private stickPx(): number {
     const short = Math.min(window.innerWidth, window.innerHeight);
     // Landscape is short: the same fraction of the screen there would be a
-    // stick taller than the strip it has to fit in.
+    // pad taller than the strip it has to fit in.
     const portrait = window.innerHeight >= window.innerWidth;
+    // Portrait is narrow: the pad and the buttons share one width, so the pad
+    // takes 40% of it -- big, but leaving its half of the band a margin on
+    // both sides and the buttons enough of theirs to stay off the edge.
     return portrait
-      ? Math.round(Math.min(190, Math.max(110, short * 0.42)))
-      : Math.round(Math.min(122, Math.max(88, short * 0.29)));
+      ? Math.round(Math.min(200, Math.max(120, short * 0.4)))
+      : Math.round(Math.min(144, Math.max(104, short * 0.34)));
   }
 
   /** How much room the controls actually got.  Set by the scaler. */
@@ -435,15 +410,15 @@ class TouchControls {
     const portrait = window.innerHeight >= window.innerWidth;
     this.root.classList.toggle('overlay', !portrait);
 
-    // The stick sets the scale of everything, and the band is whatever holds
-    // it — never the other way round, or the stick hangs off the screen.
+    // The pad sets the scale of everything, and the band is whatever holds
+    // it — never the other way round, or the pad hangs off the screen.
     const stick = this.stickPx();
     const band = portrait
       ? Math.max(this.band, this.reserveHeight(), stick + 24)
-      : Math.min(Math.round(window.innerHeight * 0.46), stick + 18);
+      : Math.min(Math.round(window.innerHeight * 0.5), stick + 30);
     this.root.style.setProperty('--tc-band', `${band}px`);
     this.root.style.setProperty('--tc-stick', `${stick}px`);
-    this.root.style.setProperty('--tc-btn', `${Math.round(stick * (portrait ? 0.48 : 0.44))}px`);
+    this.root.style.setProperty('--tc-btn', `${Math.round(stick * (portrait ? 0.46 : 0.44))}px`);
     this.root.style.setProperty('--tc-font', `${Math.round(Math.min(17, Math.max(11, stick * 0.09)))}px`);
     this.root.style.setProperty('--tc-gap', `${Math.round(Math.min(16, Math.max(7, stick * 0.06)))}px`);
 
@@ -461,102 +436,116 @@ class TouchControls {
 
   // ------------------------------------------------------------------ input
 
-  private wireStick(): void {
-    const el = this.stick;
+  /**
+   * The arrow pad.  The pad takes every finger that lands on it and follows
+   * each one until it lifts, wherever it slides -- off the edge included, so a
+   * thumb that drifts outward keeps walking instead of stopping dead.  What is
+   * held is the union of every finger: one finger on a diagonal, or one on up
+   * and one on left, both hold up-and-left.
+   */
+  private wireDpad(): void {
+    const el = this.dpad;
     if (!el) return;
     const start = (e: TouchEvent) => {
-      if (this.stickTouch !== null || !this.layout.stick) return;
-      const t = e.changedTouches[0];
-      this.stickTouch = t.identifier;
-      el.classList.add('on');
-      this.aim(t);
+      if (!this.layout.stick) return;
+      for (const t of Array.from(e.changedTouches)) this.padTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
+      this.aimPad();
       e.preventDefault();
     };
     const move = (e: TouchEvent) => {
-      const t = this.find(e, this.stickTouch);
-      if (!t) return;
-      this.aim(t);
+      let mine = false;
+      for (const t of Array.from(e.changedTouches)) {
+        if (!this.padTouches.has(t.identifier)) continue;
+        this.padTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
+        mine = true;
+      }
+      if (!mine) return;
+      this.aimPad();
       e.preventDefault();
     };
     const end = (e: TouchEvent) => {
-      if (!this.find(e, this.stickTouch)) return;
-      this.stickTouch = null;
-      el.classList.remove('on');
-      if (this.nub) this.nub.style.transform = '';
-      for (const k of ['W', 'A', 'S', 'D', 'UP', 'DOWN', 'LEFT', 'RIGHT'] as KeyName[]) this.up(k);
+      let mine = false;
+      for (const t of Array.from(e.changedTouches)) mine = this.padTouches.delete(t.identifier) || mine;
+      if (!mine) return;
+      this.aimPad();
       e.preventDefault();
     };
     el.addEventListener('touchstart', start, { passive: false });
     window.addEventListener('touchmove', move, { passive: false });
     window.addEventListener('touchend', end, { passive: false });
     window.addEventListener('touchcancel', end, { passive: false });
+    // A mouse drives it too, so the layout can be tried on a desktop with
+    // `?touch=1`: the mouse is finger -1.
+    el.addEventListener('mousedown', (e) => {
+      if (!this.layout.stick) return;
+      this.padTouches.set(-1, { x: e.clientX, y: e.clientY });
+      this.aimPad();
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!this.padTouches.has(-1)) return;
+      this.padTouches.set(-1, { x: e.clientX, y: e.clientY });
+      this.aimPad();
+    });
+    window.addEventListener('mouseup', () => {
+      if (this.padTouches.delete(-1)) this.aimPad();
+    });
   }
 
   /**
-   * The arrow pad.  One key each, held while the thumb is on it — the same
-   * hold-to-move the stick does, without the aiming.  A diagonal is two
-   * thumbs, or two fingers, exactly as it is on a real arrow pad.
+   * Which arrow a finger is on: one of eight 45-degree slices round the middle
+   * of the pad, with a dead spot in the middle so a resting thumb does not
+   * creep.  A one-axis game only ever gets its own axis out of it.
    */
-  private wireDpad(): void {
-    if (!this.dpad) return;
-    const map: Array<[string, KeyName, KeyName]> = [
-      ['up', 'W', 'UP'],
-      ['dn', 'S', 'DOWN'],
-      ['left', 'A', 'LEFT'],
-      ['right', 'D', 'RIGHT'],
-    ];
-    for (const [cls, wasd, arrow] of map) {
-      const el = this.dpad.querySelector(`.tc-dkey.${cls}`) as HTMLElement | null;
-      // Both names go down together.  Sending the arrow to a game that only
-      // reads WASD costs nothing, and it saves the pad having to know which
-      // of the eighteen cabinets is in front of it.
-      if (el) this.wireHold(el, [wasd, arrow]);
-    }
-  }
-
-  /**
-   * Where the thumb is, as up to two held directions.
-   *
-   * Eight-way with a real dead zone: a thumb resting in the middle of the pad
-   * must not creep, and a thumb pushed up-and-slightly-left must not turn into
-   * a left turn.  The minor axis has to be over half the major one before it
-   * counts, so the four straight directions are wide and the diagonals are
-   * deliberate.
-   */
-  private aim(t: Touch): void {
-    const el = this.stick as HTMLElement;
-    const r = el.getBoundingClientRect();
-    const dx = t.clientX - (r.left + r.width / 2);
-    const dy = t.clientY - (r.top + r.height / 2);
-    const len = Math.hypot(dx, dy);
-    const dead = r.width * 0.18;
-
-    if (this.nub) {
-      const cap = Math.min(len, r.width * 0.29);
-      const nx = len > 0 ? (dx / len) * cap : 0;
-      const ny = len > 0 ? (dy / len) * cap : 0;
-      this.nub.style.transform = `translate(${nx}px, ${ny}px)`;
-    }
-
+  private arrowAt(x: number, y: number): { x: number; y: number } {
+    const r = (this.dpad as HTMLElement).getBoundingClientRect();
+    const dx = x - (r.left + r.width / 2);
+    const dy = y - (r.top + r.height / 2);
+    if (Math.hypot(dx, dy) < r.width * 0.15) return { x: 0, y: 0 };
     const axis = this.layout.stick ?? 'wasd';
-    const want = new Set<KeyName>();
-    if (len > dead) {
-      const ax = Math.abs(dx);
-      const ay = Math.abs(dy);
-      if (axis !== 'ud' && ax > ay * 0.5) want.add(dx > 0 ? 'D' : 'A');
-      if (axis !== 'lr' && ay > ax * 0.5) want.add(dy > 0 ? 'S' : 'W');
+    if (axis === 'lr') return { x: Math.sign(dx), y: 0 };
+    if (axis === 'ud') return { x: 0, y: Math.sign(dy) };
+    const slice = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
+    const a = slice * (Math.PI / 4);
+    return { x: Math.round(Math.cos(a)), y: Math.round(Math.sin(a)) };
+  }
+
+  /** Hold exactly the directions the fingers on the pad add up to. */
+  private aimPad(): void {
+    let l = false;
+    let r = false;
+    let u = false;
+    let d = false;
+    const lit = new Set<string>();
+    for (const { x, y } of this.padTouches.values()) {
+      const a = this.arrowAt(x, y);
+      if (a.x < 0) l = true;
+      if (a.x > 0) r = true;
+      if (a.y < 0) u = true;
+      if (a.y > 0) d = true;
+      const name = (a.y < 0 ? 'n' : a.y > 0 ? 's' : '') + (a.x < 0 ? 'w' : a.x > 0 ? 'e' : '');
+      if (name) lit.add(name);
     }
-    if (this.layout.arrows) {
-      const alias: Partial<Record<KeyName, KeyName>> = { W: 'UP', S: 'DOWN', A: 'LEFT', D: 'RIGHT' };
-      for (const k of [...want]) {
-        const a = alias[k];
-        if (a) want.add(a);
+    // Both names go down together.  Sending the arrow to a game that only
+    // reads WASD costs nothing, and it saves the pad having to know which of
+    // the cabinets is in front of it.
+    const want: Array<[boolean, KeyName, KeyName]> = [
+      [u && !d, 'W', 'UP'],
+      [d && !u, 'S', 'DOWN'],
+      [l && !r, 'A', 'LEFT'],
+      [r && !l, 'D', 'RIGHT'],
+    ];
+    for (const [on, wasd, arrow] of want) {
+      if (on) {
+        this.down(wasd);
+        this.down(arrow);
+      } else {
+        this.up(wasd);
+        this.up(arrow);
       }
     }
-
-    for (const k of ['W', 'A', 'S', 'D', 'UP', 'DOWN', 'LEFT', 'RIGHT'] as KeyName[]) {
-      if (want.has(k)) this.down(k);
-      else this.up(k);
+    for (const el of Array.from((this.dpad as HTMLElement).querySelectorAll('.tc-dkey')) as HTMLElement[]) {
+      el.classList.toggle('down', lit.has(el.className.split(' ')[1]));
     }
   }
 

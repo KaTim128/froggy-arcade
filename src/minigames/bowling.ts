@@ -1450,6 +1450,7 @@ function finish(): void {
   aimLine?.clear();
   if (store.setHighScore(ID, scores.player)) best = scores.player;
   refreshHud();
+  apiRef?.record(scores.player);
   const won = scores.player > scores.cpu;
   const tied = scores.player === scores.cpu;
   const line = won

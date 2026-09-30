@@ -1269,5 +1269,6 @@ function refreshHud(): void {
 function finish(won: boolean): void {
   if (over) return;
   over = true;
+  if (won) apiRef?.record(elapsed / 1000);
   sceneRef?.time.delayedCall(500, () => (won ? apiRef?.win() : apiRef?.lose()));
 }

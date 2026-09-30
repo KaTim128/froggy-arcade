@@ -20,6 +20,7 @@ import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
 import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
+import { openTalkPanel } from '../ui/talkPanel';
 import { paintCasinoDressing, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet } from '../art/cabinet';
@@ -61,15 +62,8 @@ export class ArcadeCasino extends Phaser.Scene {
   private keys!: Record<string, Phaser.Input.Keyboard.Key[]>;
   private cabinets: Fixture[] = [];
   private table: BlackjackTable | null = null;
-  /**
-   * Whether the man in the suit has said his piece yet this visit.
-   *
-   * Once, on the first approach, and then he is quiet.  It is the only answer
-   * anyone in the building gives about where Froggy went, and a line that
-   * repeats every time you walk past stops being an answer and becomes a
-   * barker's call.
-   */
-  private saidIt = false;
+  /** The conversation with the man in the suit, while it is open. */
+  private talk: Phaser.GameObjects.Container | null = null;
   /** Seconds, for the dealer's idle.  He breathes; the room does not. */
   private clock = 0;
   private prompt!: Phaser.GameObjects.BitmapText;
@@ -95,7 +89,7 @@ export class ArcadeCasino extends Phaser.Scene {
     this.cabinets = [];
     this.table = null;
     this.clock = 0;
-    this.saidIt = false;
+    this.talk = null;
 
     fadeIn(this);
     // Its own music, and no ambience: the neon buzz read as static in here.
@@ -153,24 +147,13 @@ export class ArcadeCasino extends Phaser.Scene {
       right: this.bindKeys(KEYS.right),
     };
     this.input.keyboard?.on('keydown-E', () => this.interact());
-    this.input.on('pointerdown', (_p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
-      if (over.length > 0 || this.busy()) return;
-      // A click on bare floor is not an instruction to play.  Standing next to
-      // a machine and clicking past it used to charge a token and open the
-      // game, which is an accident every time -- so the floor works the doors
-      // and the counter and nothing else.  A machine starts on a click ON THE
-      // MACHINE, or on [E] while stood at it, and on nothing else.
-      if (this.target?.kind === 'cabinet') return;
-      this.interact();
-    });
-    this.input.keyboard?.on('keydown-ESC', () => {
-      if (this.busy()) return;
-      // The dealer lives on the overlay, above every Phaser scene including
-      // the settings panel, and the panel pauses this scene — so he is wiped
-      // here, before it opens, or he sits in the middle of the sliders.
-      froggyLayer.clear();
-      this.scene.launch('SettingsModal', { from: 'ArcadeCasino' });
-    });
+    // ---- AND A CLICK ON THE FLOOR IS A CLICK ON THE FLOOR.
+    //
+    // It used to fall through to `interact()`, which acts on whatever the
+    // player happens to be standing near -- so a click on bare carpet by the
+    // doorway walked you out of the room.  The doorway, the table and the
+    // machines each own a hitbox and answer a click on themselves; [E] is the
+    // other way in, and the only thing proximity does.
 
     // The overlay is one canvas shared by every scene, so this room hands it
     // back the moment it stops owning it.
@@ -202,14 +185,17 @@ export class ArcadeCasino extends Phaser.Scene {
       // Clip to everything above the felt: no legs, no feet, no floating.
       ctx.save();
       ctx.beginPath();
-      ctx.rect(0, 0, GAME_W, spot.y);
+      // ...and above the conversation panel, when there is one: the overlay
+      // is over every Phaser object, the panel included.
+      const panelTop = this.talk ? this.talk.getBounds().top : GAME_H;
+      ctx.rect(0, 0, GAME_W, Math.min(spot.y, panelTop));
       ctx.clip();
       if (gone) {
         drawSuitedMan(ctx, {
           x: spot.x,
           y: spot.y + 8,
           height: 40,
-          pose: atTable ? 'talk' : 'idle',
+          pose: this.talk ? (Math.floor(this.clock * 7) % 2 ? 'talk' : 'idle') : atTable ? 'talk' : 'idle',
           // A third of the frog's sway.  He breathes and that is all, and a
           // player who watched Froggy bob at this table for an afternoon reads
           // the stillness before they read the suit.
@@ -283,16 +269,91 @@ export class ArcadeCasino extends Phaser.Scene {
   }
 
   private busy(): boolean {
-    return this.locked || this.scene.isActive('SettingsModal');
+    return this.locked || !!this.talk || this.scene.isActive('SettingsModal');
   }
 
   private interact(): void {
+    // The conversation is the one thing E closes as well as opens.
+    if (this.talk) {
+      this.closeTalk();
+      return;
+    }
     if (this.busy() || !this.target) return;
     if (this.target.kind === 'back') {
       this.toAnnex();
       return;
     }
+    if (this.target.cab === this.table && this.dealerHasAQuestion()) {
+      this.openDealerTalk();
+      return;
+    }
     this.launchGame(this.target.cab, 'play');
+  }
+
+  /**
+   * ---- "WHERE IS FROGGY?"
+   *
+   * After the night, the first time you step up to the table the man in the
+   * suit waits for you to say something, and you can ask him the one thing
+   * you want to know.  He answers it the way he answers everything: politely,
+   * and without the slightest idea what you are talking about.  Froggy is the
+   * mascot.  He is on the cups.
+   *
+   * ONCE.  Asking it sets `dealerAskedFroggy`, and from then on the table is
+   * a table again: E deals you in.  BACK leaves the question unasked, so it is
+   * still there next time; DEAL ME IN plays without asking.
+   */
+  private dealerHasAQuestion(): boolean {
+    const s = store.get();
+    return s.froggyGone && !s.dealerAskedFroggy;
+  }
+
+  private openDealerTalk(): void {
+    this.talk = openTalkPanel(this, {
+      who: 'DEALER',
+      color: PALETTE.gold,
+      line: '"GOOD EVENING. TAKE A SEAT WHENEVER YOU ARE READY."',
+      options: [
+        { label: 'WHERE IS FROGGY?', fn: () => this.askWhereFroggyIs() },
+        { label: 'DEAL ME IN', fn: () => this.dealMeIn() },
+        { label: 'BACK', fn: () => this.closeTalk() },
+      ],
+    });
+  }
+
+  private askWhereFroggyIs(): void {
+    store.patch({ dealerAskedFroggy: true });
+    store.flush();
+    this.closeTalk();
+    this.talk = openTalkPanel(this, {
+      who: 'DEALER',
+      color: PALETTE.gold,
+      line:
+        '"FROGGY?" HE SQUARES THE DECK. "THE FROG ON THE CUPS AND THE CARPET. HE IS OUR MASCOT, ' +
+        'SIR -- A DRAWING, AND A COSTUME AT BIRTHDAY PARTIES. I CONFESS I HAVE NEVER UNDERSTOOD ' +
+        'WHY PEOPLE SPEAK OF HIM AS IF HE WALKS AROUND."',
+      options: [
+        { label: 'DEAL ME IN', fn: () => this.dealMeIn() },
+        { label: 'BACK', fn: () => this.closeTalk() },
+      ],
+    });
+  }
+
+  private dealMeIn(): void {
+    this.closeTalk();
+    if (this.table) this.launchGame(this.table, 'play');
+  }
+
+  /** Esc with a conversation open closes the conversation, not the room. */
+  handleEscape(): boolean {
+    if (!this.talk) return false;
+    this.closeTalk();
+    return true;
+  }
+
+  private closeTalk(): void {
+    this.talk?.destroy(true);
+    this.talk = null;
   }
 
   private toAnnex(): void {
@@ -358,23 +419,6 @@ export class ArcadeCasino extends Phaser.Scene {
     fadeToScene(this, 'Minigame', { id: cab.def.id, from: 'ArcadeCasino', straight: how === 'play' });
   }
 
-  /**
-   * "FROGGY HASN'T BEEN AROUND LATELY..."
-   *
-   * Fired on the first approach to the table after the night, and then never
-   * again this visit.  He does not know, he is not worried, and he is not
-   * going to be asked a second question — which leaves the player holding the
-   * only account of it that exists, which is their own.
-   */
-  private watchForTheQuestion(): void {
-    if (!store.get().froggyGone || this.saidIt || !this.table) return;
-    if (this.target?.kind !== 'cabinet' || this.target.cab !== this.table) return;
-    this.saidIt = true;
-    audio.sfx('dialogue_blip', 0.5);
-    this.say("FROGGY HASN'T BEEN AROUND LATELY...");
-    this.time.delayedCall(1700, () => this.say("I'M NOT SURE WHERE THAT LITTLE GUY WENT."));
-  }
-
   private say(msg: string): void {
     this.mutter.setText(msg).setVisible(true).setAlpha(1);
     this.tweens.killTweensOf(this.mutter);
@@ -385,13 +429,19 @@ export class ArcadeCasino extends Phaser.Scene {
     if (this.busy()) {
       this.promptPlate.setVisible(false);
       this.prompt.setVisible(false);
-      froggyLayer.clear();
+      // Talking to him, he stays where he is and keeps talking; anything
+      // else that stops the room takes him off the overlay.
+      if (this.talk) {
+        this.clock += delta / 1000;
+        this.paintDealer();
+      } else {
+        froggyLayer.clear();
+      }
       return;
     }
 
     this.clock += delta / 1000;
     this.paintDealer();
-    this.watchForTheQuestion();
 
     const dx = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     const dy = (this.held('down') ? 1 : 0) - (this.held('up') ? 1 : 0);
@@ -476,7 +526,9 @@ export class ArcadeCasino extends Phaser.Scene {
         // cannot walk into empty-handed — so the prompt names the bet.
         msg =
           t.cab.def.fixture === 'table'
-            ? `[E] ${t.cab.def.title} - ${cost} MIN BET`
+            ? this.dealerHasAQuestion()
+              ? '[E] TALK TO THE DEALER'
+              : `[E] ${t.cab.def.title} - ${cost} MIN BET`
             : `[E] ${t.cab.def.title} - ${cost} A SPIN`;
       } else {
         msg = `[E] ${t.cab.def.title} - ${cost} TOKEN${cost === 1 ? '' : 'S'}`;

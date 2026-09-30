@@ -102,6 +102,13 @@ export interface GameState {
    * you buy tokens is a mechanic, not an apparition.
    */
   sawApparition: boolean;
+  /**
+   * The two people who will not believe you, and whether you have asked them.
+   * Each question is asked once a run: after that the counter goes straight
+   * to the key, and the dealer goes back to dealing.
+   */
+  staffAskedFroggy: boolean;
+  dealerAskedFroggy: boolean;
   settings: Settings;
 }
 
@@ -216,6 +223,8 @@ function defaultState(): GameState {
     keyReturned: false,
     keyRewardClaimed: false,
     sawApparition: false,
+    staffAskedFroggy: false,
+    dealerAskedFroggy: false,
     settings: { master: 80, music: 70, sfx: 85, moveStyle: 'stick' },
   };
 }

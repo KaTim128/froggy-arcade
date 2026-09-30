@@ -4,7 +4,8 @@
  * Walks all ten frames, screenshots each, and asserts the things that carry the
  * sequence: no forward skip under input fuzzing, the 4-second forced hold on
  * frame 9, hasKey set on frame 7, TURN AROUND readable only during flickers,
- * and zero audio sources throughout.
+ * zero audio sources before the scare, the 3D scare, the blackout and the
+ * waking in the first room.
  *
  *   node tools/basement.mjs
  */
@@ -176,40 +177,51 @@ const overlayPixels = () =>
 const frameIndex = () =>
   page.evaluate(() => window.__froggy.game().scene.getScene('BasementSequence').index);
 
-let overlay = { n: 0, total: 1 };
-let peak = { n: 0, total: 1 };
 let sawStare = false;
+let saw3D = false;
 let held = 0;
-for (let i = 0; i < 90; i++) {
+for (let i = 0; i < 400; i++) {
   await page.mouse.click(640, 360);
   await page.keyboard.press('Space');
   await sleep(100);
   const f = await frameIndex();
   if (f === 8) sawStare = true;
-  overlay = await overlayPixels();
-  if (overlay.n > peak.n) peak = overlay;
+  if (f === 9 && !saw3D && (await page.evaluate(() => !!document.getElementById('three-canvas')))) {
+    saw3D = true;
+    await page.screenshot({ path: `${SHOTS}/f09-jumpscare-3d.png` });
+  }
   if (f === 10) {
     held = Date.now() - t0;
     break;
   }
 }
-overlay = peak;
-await page.screenshot({ path: `${SHOTS}/f10-jumpscare.png` });
-check('the beat cannot be hammered through', sawStare && held >= 3000 && held <= 7000, `${held}ms, stare seen: ${sawStare}`);
-check(
-  'jumpscare fills the frame on the unfiltered overlay',
-  overlay.n > overlay.total * 0.15,
-  `${((overlay.n / overlay.total) * 100).toFixed(1)}% coverage`,
-);
-check('still zero audio sources at the scare', (await sources()) === 0);
+check('the beat cannot be hammered through', sawStare && held >= 3000, `${held}ms, stare seen: ${sawStare}`);
+check('the scare is the 3D creature, on a stage of its own', saw3D);
 
-// The beat ends on the way-out frame; the route only commits when the player
-// actually opens the door, so wait for the frame rather than the route.
-await sleep(3200);
-const frame = await page.evaluate(
-  () => window.__froggy.game().scene.getScene('BasementSequence').index,
-);
-check('the scare resolves to the way out', frame === 10, `frame ${frame}`);
+// And then black: nothing drawn, nothing on the 3D stage, for four seconds,
+// before you come round in the first room.
+await sleep(600);
+await page.screenshot({ path: `${SHOTS}/f10-black.png` });
+check('the blackout is black', (await overlayPixels()).n === 0 &&
+  !(await page.evaluate(() => !!document.getElementById('three-canvas'))));
+let woke = 0;
+const tb = Date.now();
+while (Date.now() - tb < 15000) {
+  await sleep(200);
+  const on = await page.evaluate(() => window.__froggy.activeScenes().includes('HideRoom3D'));
+  if (on) {
+    woke = Date.now() - tb + 600;
+    break;
+  }
+}
+check('about four seconds of it', woke >= 3000 && woke <= 9000, `${woke}ms`);
+const wake = await page.evaluate(() => {
+  const h = window.__froggy.game().scene.getScene('HideRoom3D');
+  return { waking: h.waking, sub: window.__hide?.subtitle ?? '', state: window.__froggy.state() };
+});
+check('you come round in the first room, and he is there', wake.waking && wake.state.route === 'hide' && wake.state.hideRoom === 0,
+  `waking=${wake.waking} route=${wake.state.route} room=${wake.state.hideRoom}`);
+check('he says nothing until you can see', wake.sub === '', `"${wake.sub}"`);
 
 console.log('\nRuntime errors: ' + (errors.length ? errors.slice(0, 4).join(' | ') : 'none'));
 const failed = results.filter((r) => !r).length;

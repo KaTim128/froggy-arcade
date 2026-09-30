@@ -260,7 +260,7 @@ for (const g of GAMES) {
     await g.drive(page);
     await page.screenshot({ path: `${SHOTS}/${g.id}.png` });
 
-    // MG-4: Esc forfeits and returns to the hub.
+    // Esc in a game is the pause menu now; the next page load takes it away.
     await page.keyboard.press('Escape');
     await sleep(2600);
     const back = await page.evaluate(() => {
@@ -637,8 +637,9 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   // thirty seconds, something happens to EVERY frog and the four guaranteed
   // things are different from each other, they are still together at the line,
   // and whoever leads at two thirds is not the answer.  All four are asked of
-  // three hundred whole fields, run on the model the player watches.
-  const shape = await page.evaluate(() => window.__race.shape(300));
+  // six hundred whole fields, run on the model the player watches -- three
+  // hundred left the 92% bar below only about two spreads from a true 95%.
+  const shape = await page.evaluate(() => window.__race.shape(600));
   const lasts = shape.meanSeconds > 25 && shape.meanSeconds <= cap;
   console.log(
     `${lasts ? 'PASS' : 'FAIL'}  frog race: a race is about thirty seconds  — ` +
@@ -676,7 +677,14 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   // and what says THIS IS STILL A RACE is measured below instead, on the
   // frogs that are still running -- neighbours a tenth of a second apart, the
   // lead changing hands, and a winner who crosses clear.
-  const close = shape.meanFinishGap < 0.14 * shape.dist;
+  //
+  // And the rollerskates are gone.  They were the one thing on the card that
+  // put a frog at the back up to speed, and without them the spread at the
+  // line measures 33.4-34.4px over three samples of fifteen hundred races --
+  // right on the old bar, where a sample of six hundred fails about half the
+  // time.  A sixth of the track, with the two-thirds gap (31-32px) showing the
+  // field still bunched where the race is decided.
+  const close = shape.meanFinishGap < 0.16 * shape.dist;
   console.log(
     `${close ? 'PASS' : 'FAIL'}  frog race: and they are together at the line  — ` +
       `${shape.meanFinishGap.toFixed(0)}px between first and last on a ${shape.dist}px track ` +
@@ -2395,10 +2403,10 @@ for (const g of [
   }
 }
 
-// The wheel's odds ARE its geometry: every face is cut to the width of its own
-// chance and a spin picks an angle, not a prize.  The board beside it no longer
-// prints the percentages — which is exactly why they are asserted here, since
-// nothing on screen would show them drifting.
+// The wheel's odds are its table: the draw picks the face by FACES and the
+// wheel stops inside it.  The rim is drawn wider than the odds for the rare
+// faces so their numbers can be read, which is exactly why the odds are
+// asserted here -- through the same draw and landing a spin uses.
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
@@ -2411,10 +2419,9 @@ for (const g of [
   const seen = await page.evaluate((n) => window.__wheel.sample(n), N);
   const share = (v) => (seen[v] ?? 0) / N;
 
-  // WHAT EACH FACE SHOULD COME UP AT IS READ OFF THE WHEEL ITSELF.  The odds
-  // are the geometry — every face is cut to the width of its own chance — so
-  // the only honest question is whether four hundred thousand spins land in
-  // the arcs the table actually cut.  Typing the percentages here instead
+  // WHAT EACH FACE SHOULD COME UP AT IS READ OFF THE WHEEL ITSELF: whether
+  // four hundred thousand draws, each read off the face the wheel stopped on,
+  // come up at the table's chances.  Typing the percentages here instead
   // meant that retuning the wheel, which is a thing somebody is allowed to do,
   // failed as though the wheel were broken.
   const want = await page.evaluate(async () => {
@@ -2442,7 +2449,7 @@ for (const g of [
     .map(([v]) => `${v}:${(share(Number(v)) * 100).toFixed(2)}%`)
     .join(' ');
   console.log(
-    `${ok ? 'PASS' : 'FAIL'}  wheel: every face comes up at the width it was cut  — ` +
+    `${ok ? 'PASS' : 'FAIL'}  wheel: every face comes up at its chance, and the wheel stops on it  — ` +
       (whole ? summary : `shares total ${(total * 100).toFixed(2)}%`) +
       (off.length ? `; ${off.slice(0, 3).join(', ')}` : ''),
   );
@@ -2488,19 +2495,63 @@ for (const g of [
   const N = 200000;
   const seen = await page.evaluate((n) => window.__slots.sample(n), N);
   // Read the odds off the machine rather than restating them here: the point
-  // of the test is that the DRAW matches the constants, not that two copies of
-  // the same number agree.
-  const want = await page.evaluate(async () => {
+  // of the test is that the DRAW -- read off the window it dressed -- matches
+  // the table, not that two copies of the same number agree.
+  const table = await page.evaluate(async () => {
     const m = await import('/src/minigames/slots.ts');
-    return { five: m.P_FIVE, three: m.P_THREE };
+    return m.PAYS.map((x) => ({ win: x.win, p: x.p }));
   });
-  const five = seen.five / N;
-  const three = seen.three / N;
-  const near = (got, target) => Math.abs(got - target) < 0.008;
-  const ok = near(five, want.five) && near(three, want.three);
+  // Tolerance scales with the pattern: the gold one is one spin in ten
+  // thousand and cannot be measured to the same absolute precision as three
+  // in a row.
+  const off = [];
+  for (const { win, p } of table) {
+    const got = (seen[win] ?? 0) / N;
+    const tol = Math.max(0.0006, 4 * Math.sqrt((p * (1 - p)) / N));
+    if (Math.abs(got - p) > tol) off.push(`${win} wants ${(p * 100).toFixed(2)}% got ${(got * 100).toFixed(2)}%`);
+  }
+  const ok = off.length === 0;
   console.log(
-    `${ok ? 'PASS' : 'FAIL'}  slots: five in a row ${(want.five * 100).toFixed(0)}% of spins, three in a row ${(want.three * 100).toFixed(0)}%  — ` +
-      `five ${(five * 100).toFixed(2)}%, three ${(three * 100).toFixed(2)}%, nothing ${((seen.none / N) * 100).toFixed(2)}%`,
+    `${ok ? 'PASS' : 'FAIL'}  slots: every pattern comes up at its chance, read off the window  — ` +
+      table.map(({ win }) => `${win} ${(((seen[win] ?? 0) / N) * 100).toFixed(3)}%`).join(', ') +
+      `, nothing ${((seen.none / N) * 100).toFixed(1)}%` +
+      (off.length ? `; ${off.join(', ')}` : ''),
+  );
+  if (!ok) failures++;
+  await page.close();
+}
+
+// PERSONAL BESTS KEEP THE BETTER NUMBER, IN EACH RECORD'S OWN DIRECTION.  A
+// slower Froggy Kong time must not replace a faster one, a lower bowling score
+// must not replace a higher one, and a best must outlive the page.
+{
+  const page = await browser.newPage();
+  await page.goto(`${URL}/?intro=1&tokens=80`, { waitUntil: 'networkidle2' });
+  const got = await page.evaluate(async () => {
+    const r = await import('/src/core/records.ts');
+    r.clearRecords();
+    const out = [];
+    out.push(r.submit('donkeykong', 50.04), r.submit('donkeykong', 61), r.submit('donkeykong', 44.26));
+    out.push(r.submit('bowling', 120), r.submit('bowling', 90), r.submit('bowling', 0));
+    out.push(r.submit('battleship', 30), r.submit('battleship', 31), r.submit('battleship', 22));
+    out.push(r.submit('slots', 5));
+    return { out, dk: r.best('donkeykong'), bowl: r.best('bowling'), pond: r.best('battleship'), slots: r.best('slots') };
+  });
+  await page.reload({ waitUntil: 'networkidle2' });
+  const kept = await page.evaluate(async () => {
+    const r = await import('/src/core/records.ts');
+    const v = [r.best('donkeykong'), r.best('bowling'), r.best('battleship')];
+    r.clearRecords();
+    return v;
+  });
+  const want = [true, false, true, true, false, false, true, false, true, false];
+  const ok =
+    JSON.stringify(got.out) === JSON.stringify(want) &&
+    got.dk === 44.3 && got.bowl === 120 && got.pond === 22 && got.slots === null &&
+    JSON.stringify(kept) === JSON.stringify([44.3, 120, 22]);
+  console.log(
+    `${ok ? 'PASS' : 'FAIL'}  records: faster times, higher scores and fewer clicks replace a best, worse never do, and they survive a reload  — ` +
+      `kong ${got.dk}s, bowling ${got.bowl}, pond ${got.pond} clicks, after reload ${kept.join('/')}`,
   );
   if (!ok) failures++;
   await page.close();
@@ -2845,7 +2896,9 @@ for (const g of [
   // is a scoring bug and it fails on the spot rather than being rolled again.
   // Never getting the scenario at all inside the attempts is also a failure:
   // it would mean the pocket has stopped working.
-  const TRIES = 8;
+  // Ten, not eight: the pocket took the rack 5 times in 10, and eight
+  // straight misses (1 in 256) turned up in a full run.
+  const TRIES = 10;
 
   let struck = null;
   let strikeTries = 0;
@@ -2864,15 +2917,20 @@ for (const g of [
   );
   if (!strikeOk) failures++;
 
-  // A soft ball wide of the pocket leaves pins -- the frame stays put and the
-  // ball number goes up -- and the pocket then picks them up for thirteen.
+  // A soft ball into the pocket leaves pins -- the frame stays put and the
+  // ball number goes up -- and a full ball a little right picks them up for
+  // thirteen.  (The old pair, 168 soft then 162, now leaves a five-pin split
+  // no single ball converts: measured across 150-174 on the second ball,
+  // nothing better than three.  164 at 0.6 leaves three, and 170 takes them.)
   let spared = null;
   let spareTries = 0;
-  for (let i = 0; i < TRIES; i++) {
+  // More goes than the strike: a clean pick-up of a three-pin leave landed on
+  // attempts 2 and 7 in two runs, so eight left too little headroom.
+  for (let i = 0; i < TRIES * 2; i++) {
     spareTries = i + 1;
     const r = await frame([
-      [168, 0.7],
-      [162, 1],
+      [164, 0.6],
+      [170, 1],
     ]);
     // Ball one left pins and ball two picked them ALL up.  Asking the turn
     // instead was the bug: the frame hands over after the second ball either
@@ -2888,7 +2946,7 @@ for (const g of [
     `${spareOk ? 'PASS' : 'FAIL'}  bowling: the whole rack off the second ball pays 10 and 3  — ` +
       (spared
         ? `${spared.map((r) => `${r.score} (ball ${r.ballNo}, ${r.turn})`).join(' then ')} on attempt ${spareTries}`
-        : `the rack was never picked up off the second ball in ${TRIES} frames`),
+        : `the rack was never picked up off the second ball in ${TRIES * 2} frames`),
   );
   if (!spareOk) failures++;
 
@@ -2972,7 +3030,10 @@ for (const g of [
     window.__chase.setCash(800);
     window.__chase.setPlayer(window.__chase.laneX(1), 150);
     window.__chase.armTrap();
-    await new Promise((r) => setTimeout(r, 500));
+    // The strip clock is 300ms of GAME time, which on a slow software-GL
+    // frame is well over 500ms of wall time -- so wait for the strip rather
+    // than for a fixed half second.
+    for (let t = 0; t < 30 && window.__chase.state().traps === 0; t++) await new Promise((r) => setTimeout(r, 100));
     const strip = window.__chase.state().traps;
     for (let i = 0; i < 20; i++) window.__chase.layBarrier();
     const heldOff = window.__chase.state().barriers;

@@ -71,7 +71,7 @@ export interface CabinetDef {
    * into the annex, which exists so the floor can grow without the hub turning
    * into a wall of cabinets.  Defaults to the hub.
    */
-  room?: 'hub' | 'annex' | 'casino';
+  room?: 'hub' | 'annex' | 'casino' | 'lounge';
 }
 
 /**
@@ -142,7 +142,8 @@ export const CABINETS: CabinetDef[] = [
   { id: 'hoops', title: 'CHUBBY CHOMP', tier: 'medium', cost: 5, reward: 10, x: 52, y: 164, color: 0xff7a3d, symbol: 'CC', motif: 'chomp' },
   { id: 'whack', title: 'WHACK-A-FROG', tier: 'medium', cost: 5, reward: 10, x: 98, y: 164, color: 0x6fbb6a, symbol: 'W', motif: 'mallet' },
   { id: 'bowling', title: 'BOWLING', tier: 'medium', cost: 5, reward: 10, x: 244, y: 164, color: 0xb9884f, symbol: 'BW', motif: 'pins' },
-  { id: 'battleship', title: 'FROG POND HUNT', tier: 'medium', cost: 5, reward: 10, x: 290, y: 164, color: 0x1d6f8f, symbol: 'PH', motif: 'pond' },
+  // Ten in, twenty out: a hunt takes a while and asks you to think.
+  { id: 'battleship', title: 'FROG POND HUNT', tier: 'medium', cost: 10, reward: 20, x: 290, y: 164, color: 0x1d6f8f, symbol: 'PH', motif: 'pond' },
 
   // ---- the back room: five to seven a go
   { id: 'grudge', title: 'GRUDGE', tier: 'hard', cost: 10, reward: 20, x: 48, y: 96, color: 0xc31f2e, room: 'annex', symbol: 'VS', motif: 'fist' },
@@ -156,7 +157,9 @@ export const CABINETS: CabinetDef[] = [
   // still `fallingblocks` and that is deliberate — it is the key a saved run's
   // high score and play count are filed under, and renaming it would orphan
   // every save in existence to gain nothing but a tidier string.
-  { id: 'fallingblocks', title: 'THE FLOOD', tier: 'hard', cost: 10, reward: 20, x: 240, y: 96, color: 0x2f7fb5, room: 'annex', symbol: 'FD', motif: 'blocks' },
+  // Twenty to start and twenty for getting out: paid once, by the shell, on
+  // reaching the hatch.
+  { id: 'fallingblocks', title: 'THE FLOOD', tier: 'hard', cost: 20, reward: 20, x: 240, y: 96, color: 0x2f7fb5, room: 'annex', symbol: 'FD', motif: 'blocks' },
   // Along the bottom wall, under the middle two of the row above.  Neither
   // has a fixed reward: a run is worth what it scored, and the module names
   // the payout.
@@ -235,7 +238,7 @@ export const CABINETS: CabinetDef[] = [
 ];
 
 /** Cabinets standing in a given room.  Anything unmarked lives in the hub. */
-export function cabinetsIn(room: 'hub' | 'annex' | 'casino'): CabinetDef[] {
+export function cabinetsIn(room: 'hub' | 'annex' | 'casino' | 'lounge'): CabinetDef[] {
   return CABINETS.filter((c) => (c.room ?? 'hub') === room);
 }
 
@@ -243,6 +246,14 @@ export function cabinetsIn(room: 'hub' | 'annex' | 'casino'): CabinetDef[] {
 export const ANNEX_DOOR = { x: 20, y: 118, w: 14, h: 40 };
 /** And on through the annex's left wall, into the machines that take money. */
 export const CASINO_DOOR = { x: 20, y: 118, w: 14, h: 40 };
+/**
+ * The doorway in the hub's RIGHT wall, through to the room kept for the next
+ * games.  High on the wall: below the change machine's stretch of the back
+ * wall (which ends at y 45) and above the right-hand cabinet (which starts at
+ * y 126), so it takes nothing's floor and nothing's click.  x is the middle of
+ * the doorway, 20 in from the right edge of the 320-wide room.
+ */
+export const LOUNGE_DOOR = { x: 300, y: 88, w: 14, h: 40 };
 
 export function cabinetById(id: GameId): CabinetDef {
   const c = CABINETS.find((x) => x.id === id);
@@ -265,6 +276,7 @@ export type PrizeShape =
   | 'ball'
   | 'car'
   | 'rocket'
+  | 'camera'
   | 'cube';
 
 export interface PrizeDef {
@@ -384,7 +396,26 @@ export function prizesForWave(wave: number): PrizeDef[] {
   return PRIZE_COSTS.map((_, slot) => makePrize(wave, slot));
 }
 
+/**
+ * ---- AFTER THE NIGHT, ONE THING IS LEFT IN THE CASE.
+ *
+ * A camera.  Everything else has been cleared off the glass -- nobody says
+ * why -- and the one thing on the shelf is the one thing that would let you
+ * prove what you saw, at a price nobody reaches by accident.
+ */
+export const CAMERA_PRIZE: PrizeDef = { id: 'camera', name: 'CAMERA', cost: 1300, color: 0x3a3f4c, shape: 'camera' };
+
+/**
+ * What is in the case right now, for the case, the counter and anything else
+ * that shows the shelf: the camera alone once the night is over, and the
+ * current wave before it.
+ */
+export function shelfStock(s: { prizeWave: number; froggyGone: boolean }): PrizeDef[] {
+  return s.froggyGone ? [CAMERA_PRIZE] : prizesForWave(s.prizeWave);
+}
+
 export function prizeById(id: string): PrizeDef | undefined {
+  if (id === CAMERA_PRIZE.id) return CAMERA_PRIZE;
   const known = PRIZES.find((p) => p.id === id);
   if (known) return known;
   // A generated one: the id is the recipe.

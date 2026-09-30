@@ -52,6 +52,12 @@ export interface MinigameApi {
   cashOut(): void;
   /** What is left in the player's pocket. */
   balance(): number;
+  /**
+   * Offer this play's result for the cabinet's personal best (see
+   * core/records.ts for what each one measures).  Call it when the number is
+   * final.  The shell keeps it only if it beats the best, and says so.
+   */
+  record(value: number): void;
   /** Draw area available to the game, below the title bar. */
   readonly area: { x: number; y: number; w: number; h: number };
 }
@@ -103,6 +109,13 @@ export interface MinigameModule {
    * room's bed into it on launch and the room fades it back out on return.
    */
   music?: string;
+  /**
+   * What walking out this moment would forfeit, for the quit question.  Only
+   * the tables need it -- they pay hand by hand, so what is at stake is the
+   * bet on the felt, not everything bet since sitting down.  Anything that
+   * leaves it out forfeits its whole stake, and the question says so.
+   */
+  atRisk?(): number;
   create(scene: Phaser.Scene, api: MinigameApi): void;
   update?(time: number, delta: number): void;
   destroy?(): void;

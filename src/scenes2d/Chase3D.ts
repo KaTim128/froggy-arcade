@@ -14,6 +14,7 @@
  * He catches players who get lost.  That is the entire fear.
  */
 
+import { isPaused } from '../core/pause';
 import Phaser from 'phaser';
 import * as THREE from 'three';
 import { audio, SILENCE } from '../core/audio';
@@ -160,10 +161,10 @@ export class Chase3D extends Phaser.Scene {
       }
     });
     this.onLookDown = (e: MouseEvent) => {
-      if (e.button === 0) this.dragging = true;
+      if (e.button === 0 && !isPaused()) this.dragging = true;
     };
     this.onLookMove = (e: MouseEvent) => {
-      if (!this.dragging || document.pointerLockElement) return;
+      if (!this.dragging || document.pointerLockElement || isPaused()) return;
       this.yaw -= (e.movementX || 0) * 0.0035;
     };
     this.onLookUp = () => {
@@ -432,6 +433,7 @@ export class Chase3D extends Phaser.Scene {
         climb: 0,
         scan: 0,
         lunge: 1,
+        dilate: 1,
         // both arms out for you, the head and the eyes on you
         reachAt: this.stage?.camera.position ?? null,
         viewer: this.stage?.camera.position ?? null,

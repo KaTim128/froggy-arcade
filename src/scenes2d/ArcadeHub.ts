@@ -15,16 +15,27 @@ import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
 import { evaluateBroke } from '../core/broke';
 import { KEYS } from '../core/input';
-import { fadeIn, fadeToScene, text } from '../core/ui';
+import { centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { paintArcadeDressing, paintChangeMachine, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
-import { ANNEX_DOOR, BELL, CABINETS, COUNTER, COUNTER_DEPTH, PRIZE_CASE, cabinetsIn, prizesForWave } from '../game/content';
+import {
+  ANNEX_DOOR,
+  BELL,
+  CABINETS,
+  COUNTER,
+  COUNTER_DEPTH,
+  LOUNGE_DOOR,
+  PRIZE_CASE,
+  cabinetsIn,
+  shelfStock,
+} from '../game/content';
+import { drawPrize } from './PrizeCounter';
 import { DialogueBox } from '../froggy/dialogue';
-import { CounterStaff } from '../art/counterStaff';
+import { drawStaffer } from '../froggy/staffer';
+import { openTalkPanel, type TalkOption } from '../ui/talkPanel';
 import { drawFroggy, FROGGY_DESIGN } from '../froggy/froggy';
-import { button } from '../core/ui';
 import { tutorialScript } from '../froggy/script';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
@@ -39,6 +50,7 @@ type Target =
   | { kind: 'door' }
   | { kind: 'change' }
   | { kind: 'annex' }
+  | { kind: 'lounge' }
   | null;
 
 /** Where the player has to stand to use the change machine on the back wall. */
@@ -53,10 +65,10 @@ const CHANGE_SPOT = { x: 272, y: 62 };
  * whole point of the swap is that the player walks back in and somebody else
  * is there.
  *
- * `STAFF_DEPTH` puts whoever it is UNDER the counter's own depth, so the
- * counter covers them from the chest down.  They are behind it, they are not
- * standing on any floor the player can walk, and nothing about the walkable
- * box changes.
+ * Both are painted on the overlay and clipped at the counter's back edge
+ * (`FROG_CUT`), so the counter covers them from the chest down.  They are
+ * behind it, they are not standing on any floor the player can walk, and
+ * nothing about the walkable box changes.
  */
 const COUNTER_POST = { x: 243, y: COUNTER.y + 17 };
 /**
@@ -69,6 +81,18 @@ const COUNTER_POST = { x: 243, y: COUNTER.y + 17 };
  * he loomed over the prizes he is pointing at.
  */
 const FROG_POST = { x: 230, y: COUNTER.y + 13, height: 30 };
+/**
+ * ---- AND HE IS BEHIND IT, NOT ON IT.
+ *
+ * Where the paint of him stops: the BACK edge of the counter top, not a line
+ * two pixels down it.  At COUNTER.y + 2 his arms -- drawn out to his sides at
+ * chest height -- showed as two green pads lying on the counter, which is a
+ * frog sat on the furniture with his hands in the prizes.  Cut at the back
+ * edge, the whole counter top is in front of him: his head and shoulders come
+ * up over it, his hands are down behind it, and his shadow lies across the
+ * top of it and up the wall behind him.
+ */
+const FROG_CUT = COUNTER.y;
 /**
  * The player, measured, because Froggy is cut around him.  See
  * `stepCounterFroggy`: hood and head are ten wide over twenty rows, the torso
@@ -111,9 +135,22 @@ const FROG_BODY = {
   left: FROG_POST.x - FROGGY_DESIGN.halfW * FROG_SCALE - FROG_CLEAR.side,
   right: FROG_POST.x + FROGGY_DESIGN.halfW * FROG_SCALE + FROG_CLEAR.side,
   top: FROG_POST.y + (FROGGY_DESIGN.top - FROGGY_DESIGN.feet - FROGGY_DESIGN.lift) * FROG_SCALE,
-  bottom: COUNTER.y + 2 + FROG_CLEAR.front,
+  bottom: FROG_CUT + FROG_CLEAR.front,
 };
-const STAFF_DEPTH = COUNTER_DEPTH - 0.01;
+/**
+ * The member of staff after the night: drawn by `drawStaffer`, feet well down
+ * behind the counter so that what shows over it is head, shoulders and the
+ * top of the uniform -- the badge and the frog on the pocket just clear the
+ * edge.  His box is what is visible of him, the same as Froggy's.
+ */
+const STAFFER_FEET = FROG_CUT + 22;
+const STAFFER_H = 50;
+const STAFFER_BODY = {
+  left: COUNTER_POST.x - 13 - FROG_CLEAR.side,
+  right: COUNTER_POST.x + 13 + FROG_CLEAR.side,
+  top: STAFFER_FEET - STAFFER_H * (118 / 114),
+  bottom: FROG_CUT + FROG_CLEAR.front,
+};
 /**
  * ---- AND THE HIGHLIGHTS GO BEHIND EVERYBODY.
  *
@@ -137,7 +174,7 @@ const GLOW_ON_COUNTER = COUNTER_DEPTH + 0.001;
 /** How close you have to be to the post to be talking to them rather than shopping. */
 const POST_RANGE = 22;
 /** What the key is worth to the arcade, in cash, once. */
-const KEY_REWARD = 500;
+const KEY_REWARD = 100;
 
 /**
  * ---- THE SHAPE OF THE WHOLE THING, IN MILLISECONDS.
@@ -153,12 +190,17 @@ const KEY_REWARD = 500;
  * There is nothing to look at, which means there is nothing to check, which
  * means the only place the question can go is inward.
  *
- * Then the speakers come back badly, for nine tenths of a second, and then
- * the arcade is an arcade again.
+ * Then the speakers come back badly and the picture goes to static with
+ * them, for a second and a bit, and the music restarts through the fault --
+ * stuttering and muffled -- before the arcade is an arcade again.
  */
 const APP_HALL_MS = 8000;
 const APP_HUSH_MS = 5000;
-const APP_GLITCH_MS = 900;
+const APP_GLITCH_MS = 1300;
+/** The static's frame buffer, made once. */
+let snow: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; img: ImageData } | null = null;
+/** How long the music takes to come back properly after the static. */
+const APP_RESTART_MS = 3200;
 /**
  * ---- AND WHAT IS COMING DOWN THE CORRIDOR AT YOU, WHICH IS NOTHING.
  *
@@ -213,8 +255,12 @@ export class ArcadeHub extends Phaser.Scene {
   }> = [];
   private cueT = 0;
   /** Whoever is on the counter.  One of these is null at all times. */
-  private staff: CounterStaff | null = null;
+  /** After the night, the member of staff on the counter, and his idle clock. */
+  private stafferOnCounter = false;
+  private staffT = 0;
   private frogOnCounter = false;
+  /** Which doorway the player just came back through, if not the front. */
+  private fromDoor: 'lounge' | null = null;
   private frogT = 0;
   /** Whether he has already said it since the player last walked away. */
   private frogSpoke = false;
@@ -235,8 +281,9 @@ export class ArcadeHub extends Phaser.Scene {
     super('ArcadeHub');
   }
 
-  init(data: { atCabinet?: GameId } = {}): void {
+  init(data: { atCabinet?: GameId; fromDoor?: 'lounge' } = {}): void {
     this.returnTo = data.atCabinet ?? null;
+    this.fromDoor = data.fromDoor ?? null;
   }
 
   create(): void {
@@ -359,6 +406,7 @@ export class ArcadeHub extends Phaser.Scene {
     this.paintCounterStaff();
     this.paintCues();
     this.paintAnnexDoor();
+    this.paintLoungeDoor();
 
     this.bounds = new Phaser.Geom.Rectangle(
       ROOM.left + 8,
@@ -407,9 +455,7 @@ export class ArcadeHub extends Phaser.Scene {
     // still the other way in, and it is the only thing proximity does.
     //
     // Floor, walls, furniture, props, empty space: nothing.
-    this.input.keyboard?.on('keydown-ESC', () => {
-      if (!this.busy()) this.scene.launch('SettingsModal', { from: 'ArcadeHub' });
-    });
+    // Esc is the pause menu, from core/pause.ts, like everywhere else.
 
     this.dialogue = new DialogueBox(this);
     store.flush();
@@ -512,19 +558,90 @@ export class ArcadeHub extends Phaser.Scene {
    * which is the same way the casino puts a dealer behind its table.
    */
   private paintCounterStaff(): void {
+    this.frogOnCounter = false;
+    this.stafferOnCounter = false;
+    let x: number;
+    let half: number;
     if (store.get().froggyGone) {
-      this.staff = new CounterStaff(this, COUNTER_POST.x, COUNTER_POST.y, STAFF_DEPTH);
-      this.frogOnCounter = false;
-
-      // Phaser reuses scene instances, so the tween inside him has to be
-      // stopped with the room or it keeps running against a destroyed object.
-      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-        this.staff?.destroy();
-        this.staff = null;
-      });
-      return;
+      // ---- AFTER THE NIGHT: A PERSON, DRAWN LIKE ONE.
+      //
+      // He used to be a block of Phaser pixels -- a sprite of a man -- while
+      // the dealer in the casino is drawn on the overlay at the resolution the
+      // frog was.  Two members of staff in one building at two different
+      // levels of drawing read as two different games.  He is on the overlay
+      // now, clipped behind the counter exactly as Froggy was.
+      this.stafferOnCounter = true;
+      x = COUNTER_POST.x;
+      half = 12;
+      // He answers a click on HIM -- the head and shoulders over the counter
+      // -- and the counter under him still opens the prizes.
+      this.add
+        .zone(COUNTER_POST.x, (STAFFER_BODY.top + FROG_CUT) / 2, 28, FROG_CUT - STAFFER_BODY.top)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.talkToStaff());
+    } else {
+      this.frogOnCounter = true;
+      x = FROG_POST.x;
+      half = FROGGY_DESIGN.halfW * FROG_SCALE * 0.8;
     }
-    this.frogOnCounter = true;
+    // And where he meets the counter, the top of it is in his shade: a soft
+    // dark band along its back edge, the width of him, so the counter reads
+    // as the thing in front of him rather than a line he is cut off at.
+    this.add
+      .rectangle(x, FROG_CUT, half * 2, 2, PALETTE.black, 0.28)
+      .setOrigin(0.5, 0)
+      .setDepth(COUNTER_DEPTH + 0.0005);
+    this.add
+      .rectangle(x, FROG_CUT + 2, half * 1.4, 1, PALETTE.black, 0.14)
+      .setOrigin(0.5, 0)
+      .setDepth(COUNTER_DEPTH + 0.0005);
+  }
+
+  /** The member of staff, each frame: painted, and talking while you talk to him. */
+  private stepCounterStaffer(delta: number): void {
+    if (!this.stafferOnCounter) return;
+    this.staffT += delta;
+    const talking = !!this.talk;
+    this.paintBehindCounter(COUNTER_POST.x, (ctx) =>
+      drawStaffer(ctx, {
+        x: COUNTER_POST.x,
+        y: STAFFER_FEET,
+        height: STAFFER_H,
+        // mouth going while the panel is up, as if he were saying it
+        pose: talking && Math.floor(this.staffT / 140) % 2 === 0 ? 'talk' : 'idle',
+        bounce: (this.staffT / 2600) % 1,
+      }),
+    );
+  }
+
+  /**
+   * Whoever is on the counter, painted on the overlay behind it: clipped at
+   * the counter's back edge and cut round the player (see paintCounterFroggy),
+   * with their shadow on the wall behind them.
+   */
+  private paintBehindCounter(x: number, draw: (ctx: CanvasRenderingContext2D) => void): void {
+    const px = this.player.x;
+    const py = this.player.y;
+    froggyLayer.paint((ctx) => {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, GAME_W, FROG_CUT);
+      ctx.rect(px - PLAYER_BOX.headW / 2, py - PLAYER_BOX.headTop, PLAYER_BOX.headW, PLAYER_BOX.headH);
+      ctx.rect(
+        px - PLAYER_BOX.torsoW / 2,
+        py - (PLAYER_BOX.headTop - PLAYER_BOX.headH),
+        PLAYER_BOX.torsoW,
+        PLAYER_BOX.torsoH,
+      );
+      ctx.clip('evenodd');
+      const shadow = ctx.createRadialGradient(x + 3, FROG_CUT - 9, 1, x + 3, FROG_CUT - 9, 14);
+      shadow.addColorStop(0, 'rgba(8, 4, 16, 0.42)');
+      shadow.addColorStop(1, 'rgba(8, 4, 16, 0)');
+      ctx.fillStyle = shadow;
+      ctx.fillRect(x - 13, FROG_CUT - 26, 34, 26);
+      draw(ctx);
+      ctx.restore();
+    });
   }
 
   /**
@@ -552,20 +669,9 @@ export class ArcadeHub extends Phaser.Scene {
    * other out and put the frog back.
    */
   private paintCounterFroggy(): void {
-    const px = this.player.x;
-    const py = this.player.y;
-    froggyLayer.paint((ctx) => {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, 0, GAME_W, COUNTER.y + 2);
-      ctx.rect(px - PLAYER_BOX.headW / 2, py - PLAYER_BOX.headTop, PLAYER_BOX.headW, PLAYER_BOX.headH);
-      ctx.rect(
-        px - PLAYER_BOX.torsoW / 2,
-        py - (PLAYER_BOX.headTop - PLAYER_BOX.headH),
-        PLAYER_BOX.torsoW,
-        PLAYER_BOX.torsoH,
-      );
-      ctx.clip('evenodd');
+    // His shadow on the wall behind him: the light over the counter is in
+    // front of him and a little to the left, so it falls back and right.
+    this.paintBehindCounter(FROG_POST.x, (ctx) =>
       drawFroggy(ctx, {
         x: FROG_POST.x,
         y: FROG_POST.y,
@@ -573,9 +679,8 @@ export class ArcadeHub extends Phaser.Scene {
         variant: 'cozy',
         pose: 'idleA',
         bounce: Math.sin(this.frogT / 640) * 0.5 + 0.5,
-      });
-      ctx.restore();
-    });
+      }),
+    );
   }
 
   /** What he does every frame, which is say hello and nothing else. */
@@ -638,70 +743,95 @@ export class ArcadeHub extends Phaser.Scene {
   /**
    * ---- THE STAFF, AND THE KEY.
    *
-   * One panel, built on demand and torn down on the way out: a line from
-   * whoever is on the counter, and -- only if the player is actually carrying
-   * the key -- the two things they can do about it.
+   * A conversation in three beats, each of which happens once a run:
    *
-   * WHAT IT SAYS DEPENDS ON THREE FLAGS AND NOTHING ELSE.  `keyReturned` is
-   * the quest, `keyRewardClaimed` is the money, and `hasKey` is the player's
-   * pocket; they are separate because handing it over and being paid are two
+   *   1. You ask him whether he has seen Froggy.  He does not believe there is
+   *      a Froggy to see, says so as a joke, and -- because a joke is how he
+   *      changes the subject -- moves on to what is actually bothering the
+   *      place: a key has gone missing, the boss thinks someone will clean out
+   *      the prize case, and he has his own theory about unclaimed prizes.
+   *   2. If you are carrying the key, you can hand it over.  He stops joking
+   *      for a moment -- maybe you did not imagine it -- and pays you for it.
+   *   3. After that there is nothing left to say but a line.
+   *
+   * WHAT IT SAYS DEPENDS ON FLAGS AND NOTHING ELSE.  `staffAskedFroggy` is the
+   * question, `keyReturned` the quest, `keyRewardClaimed` the money and
+   * `hasKey` the player's pocket; handing it over and being paid are two
    * events, and a reward gated on one flag is a reward that can be claimed
-   * twice.  KEEP KEY changes nothing at all, on purpose: the panel closes, the
-   * key stays in the pocket, and the offer is still there the next time.
+   * twice.  KEEP KEY changes nothing, on purpose: the offer is still there.
    */
   private talkToStaff(): void {
     if (this.busy()) return;
     const s = store.get();
-    const canGive = s.hasKey && !s.keyReturned;
-    const line = s.keyReturned
-      ? '"THANKS AGAIN FOR THE KEY. THE BOSS PUT IT STRAIGHT BACK ON THE HOOK."'
-      : '"HEY THERE! WE ACTUALLY LOST A KEY RECENTLY, SO WE HAD TO BOARD UP ONE OF THE ' +
-        'DOORS WITH A WOODEN PLANK. PRETTY CRAZY, RIGHT? THE BOSS SAID IF ANYONE MANAGES ' +
-        `TO FIND THE MISSING KEY, THERE IS A ${KEY_REWARD} CASH REWARD WAITING FOR THEM."`;
-    this.openTalk(line, canGive);
+    if (!s.staffAskedFroggy) {
+      this.openTalk('"HEY! WELCOME TO FROGGY ARCADE. WHAT CAN I DO FOR YOU?"', [
+        { label: 'HAVE YOU SEEN FROGGY AROUND HERE?', fn: () => this.askAboutFroggy() },
+        { label: 'BACK', fn: () => this.closeTalk() },
+      ]);
+      return;
+    }
+    if (s.keyReturned) {
+      this.openTalk('"KEY\'S BACK ON ITS HOOK. THE BOSS SLEPT LIKE A BABY. ALL THANKS TO YOU."', [
+        { label: 'BACK', fn: () => this.closeTalk() },
+      ]);
+      return;
+    }
+    this.openTalk(
+      '"STILL NO SIGN OF THAT KEY. THE BOSS COUNTS THE PRIZES TWICE A NIGHT NOW. ' +
+        'I\'M ONLY FOUR YEARS AND ELEVEN MONTHS AWAY FROM THAT GUITAR."',
+      this.keyOptions(),
+    );
   }
 
-  /** The panel itself.  `withKey` decides whether it has the two buttons on it. */
-  private openTalk(line: string, withKey: boolean): void {
-    // ---- THE PANEL IS BUILT ROUND THE TEXT, NOT THE OTHER WAY ABOUT.
-    //
-    // It used to be a fixed 74 tall with the buttons pinned to the bottom of
-    // it, which is fine until the line wraps to six rows -- and then the
-    // buttons sit ON TOP OF the last two, covering the half of the sentence
-    // that says what the reward is.  The line is measured first, and
-    // everything else is laid out from what it actually came to: header,
-    // text, and the buttons in a band of their own under it.
-    const PAD = 7;
-    const HEAD = 11;
-    const ROW = 19;
-    const body = text(this, 22, 0, line, PALETTE.cream).setMaxWidth(GAME_W - 46);
-    const textH = Math.max(8, Math.ceil(body.height));
-    const h = PAD + HEAD + textH + PAD + (withKey ? ROW : 10);
-    const y = GAME_H - h - 5;
-    body.setY(y + PAD + HEAD);
-
-    const panel = this.add.rectangle(GAME_W / 2, y + h / 2, GAME_W - 24, h, PALETTE.ink, 0.95);
-    panel.setStrokeStyle(1, PALETTE.neon);
-    const who = text(this, 22, y + PAD, 'ARCADE STAFF', PALETTE.neon);
-    // The panel is drawn under the words it is behind.
-    const parts: Phaser.GameObjects.GameObject[] = [panel, who, body];
-    panel.setDepth(0);
-
-    const rowY = y + h - (withKey ? ROW / 2 + 3 : 9);
-    if (withKey) {
-      parts.push(
-        button(this, GAME_W / 2 - 56, rowY, 'GIVE KEY', () => this.giveKey(), { width: 92 }),
-        button(this, GAME_W / 2 + 56, rowY, 'KEEP KEY', () => this.closeTalk(), { width: 92 }),
-      );
-    } else {
-      parts.push(text(this, GAME_W / 2, rowY, '[E] LEAVE IT', PALETTE.ash).setOrigin(0.5, 0.5));
+  /** GIVE KEY / KEEP KEY when the key is in the player's pocket; BACK when it is not. */
+  private keyOptions(): TalkOption[] {
+    const s = store.get();
+    if (s.hasKey && !s.keyReturned) {
+      return [
+        { label: 'GIVE KEY', fn: () => this.giveKey() },
+        { label: 'KEEP KEY', fn: () => this.closeTalk() },
+      ];
     }
+    return [{ label: 'BACK', fn: () => this.closeTalk() }];
+  }
 
-    this.talk = this.add.container(0, 0, parts).setDepth(900);
+  /**
+   * The question, asked once.  The flag goes down before the answer is shown,
+   * so leaving halfway through does not ask it again.
+   */
+  private askAboutFroggy(): void {
+    store.patch({ staffAskedFroggy: true });
+    store.flush();
+    this.closeTalk();
+    this.openTalk(
+      '"FROGGY? THE FROG ON THE SIGN? MATE, HE\'S A CARTOON. IF HE\'S ANYWHERE HE\'S ACROSS ' +
+        'THE STREET, QUEUEING FOR A HOT DOG." HE GRINS.',
+      [{ label: 'NEXT', fn: () => this.tellAboutKey() }],
+    );
+  }
+
+  private tellAboutKey(): void {
+    this.closeTalk();
+    this.openTalk(
+      '"NOW, A MISSING KEY -- THAT\'S REAL. ONE WALKED OFF AND THE BOSS IS CONVINCED SOMEBODY\'S ' +
+        'GOING TO LET THEMSELVES IN AND EMPTY THE PRIZE CASE. ME? I READ THAT IF A PRIZE SITS ' +
+        'UNCLAIMED FOR FIVE YEARS, IT\'S FINDERS KEEPERS. SO IF THAT KEY STAYS LOST... NO RUSH."',
+      this.keyOptions(),
+    );
+  }
+
+  /** The panel itself (see ui/talkPanel): the line, and the answers under it. */
+  private openTalk(line: string, options: TalkOption[] = []): void {
     // E closes it, through `interact` -- the same key that opened it, on the
-    // same handler.  A `once` listener registered here instead was left armed
-    // when a BUTTON closed the panel, and swallowed the next press: the player
-    // walked back up and E did nothing.
+    // same handler.
+    this.talk = openTalkPanel(this, { who: 'ARCADE STAFF', line, options });
+  }
+
+  /** Esc with a conversation open closes the conversation, not the room. */
+  handleEscape(): boolean {
+    if (!this.talk) return false;
+    this.closeTalk();
+    return true;
   }
 
   private closeTalk(): void {
@@ -710,8 +840,8 @@ export class ArcadeHub extends Phaser.Scene {
   }
 
   /**
-   * THE HAND-OVER.  The key leaves the pocket, the cash arrives, and both
-   * flags go down in the same patch -- so a reload in the next quarter of a
+   * THE HAND-OVER.  The key leaves the pocket, the cash arrives, and every
+   * flag goes down in the same patch -- so a reload in the next quarter of a
    * second cannot land between them and leave the arcade owing money.
    */
   private giveKey(): void {
@@ -730,9 +860,10 @@ export class ArcadeHub extends Phaser.Scene {
     audio.sfx('coin_drop');
     this.closeTalk();
     this.openTalk(
-      '"OH! YOU ACTUALLY FOUND THE MISSING KEY! THANK YOU SO MUCH FOR BRINGING IT BACK. ' +
-        `THE BOSS WILL BE VERY HAPPY ABOUT THIS. HERE IS THE ${KEY_REWARD} CASH REWARD I PROMISED!"`,
-      false,
+      '"...WAIT. THAT\'S IT. THAT\'S THE KEY." HE TURNS IT OVER, AND FOR ONCE HE ISN\'T SMILING. ' +
+        '"WHERE DID YOU... HUH. MAYBE YOU DIDN\'T IMAGINE ALL OF IT AFTER ALL. ' +
+        `HERE -- ${KEY_REWARD} CASH, FOR YOUR TROUBLE. AND DON'T TELL THE BOSS WHAT YOU TOLD ME."`,
+      [{ label: 'THANKS', fn: () => this.closeTalk() }],
     );
   }
 
@@ -760,7 +891,7 @@ export class ArcadeHub extends Phaser.Scene {
    * evidence left is an absence, and an absence is the one kind of evidence a
    * person argues themselves out of.
    *
-   * Then the speakers come back wrong for nine tenths of a second, which is
+   * Then the speakers come back wrong, and the picture with them, which is
    * the room admitting something without saying what, and then the tune is
    * back as though it had never stopped.
    *
@@ -790,7 +921,7 @@ export class ArcadeHub extends Phaser.Scene {
    *   hall    eight seconds of the corridor, holding the overlay, controls
    *           off the player, and the voices going off in it
    *   hush    the room back, exactly as it was, and no sound in the building
-   *   glitch  the speakers failing for nine tenths of a second
+   *   glitch  the speakers failing and the picture going to static
    *
    * The cut out of `hall` is a CUT.  No lids, no fade, no wipe: the overlay is
    * cleared on one frame and the frame after it is an ordinary arcade.  A
@@ -842,20 +973,79 @@ export class ArcadeHub extends Phaser.Scene {
       return;
     }
 
+    // ---- THE PICTURE FAILS WITH THE SOUND.
+    //
+    // While the speakers are going, the screen goes to static -- a set losing
+    // its signal -- with the room, and him in it, coming through it in
+    // flickers.  The sequence is not ending; it is malfunctioning.
     if (t < APP_HALL_MS + APP_HUSH_MS + APP_GLITCH_MS) {
-      froggyLayer.paint((ctx) => this.paintWatcher(ctx));
+      const g = (t - APP_HALL_MS - APP_HUSH_MS) / APP_GLITCH_MS;
+      froggyLayer.paint((ctx) => {
+        // the room and him, now and then, through the snow
+        if (Math.random() < 0.35) this.paintWatcher(ctx);
+        this.paintStatic(ctx, g);
+      });
       return;
     }
     this.apparition = 'off';
     // ---- AND THE ROOM COMES BACK, WITH NOTHING IN IT.
     //
-    // He goes on the same frame the tune does.  The player gets their feet
+    // He goes on the same frame the snow does.  The player gets their feet
     // back at the same instant, so what they are left with is an ordinary
     // arcade and no way to check -- which is the last thing that makes them
-    // doubt it.
+    // doubt it.  And the music that comes back does not come back cleanly:
+    // it stutters and comes through muffled before it opens up, a tune
+    // restarting on equipment that is not quite working.
     froggyLayer.clear();
     this.locked = false;
     audio.setScene(HUB_AUDIO);
+    audio.musicMalfunction(APP_RESTART_MS);
+  }
+
+  /**
+   * TV static over the whole picture: grey snow, a bright roll bar sliding
+   * up it, and a few torn lines.  `g` is how far through the failure it is;
+   * the snow thins at the very end, just before it cuts back to the room.
+   */
+  private paintStatic(ctx: CanvasRenderingContext2D, g: number): void {
+    // The snow is a quarter-resolution frame of random greys, blown up with
+    // no smoothing -- one putImageData, not fourteen thousand rectangles.
+    const W = GAME_W / 2;
+    const H = GAME_H / 2;
+    if (!snow) {
+      const c = document.createElement('canvas');
+      c.width = W;
+      c.height = H;
+      const cx = c.getContext('2d');
+      snow = cx ? { canvas: c, ctx: cx, img: cx.createImageData(W, H) } : null;
+    }
+    if (snow) {
+      const d = snow.img.data;
+      const density = g > 0.85 ? 0.55 : 0.92;
+      for (let i = 0; i < d.length; i += 4) {
+        const on = Math.random() < density;
+        const v = on ? Math.floor(Math.random() * 200 + 30) : 0;
+        d[i] = v;
+        d[i + 1] = v;
+        d[i + 2] = v + (on ? 8 : 0);
+        d[i + 3] = on ? 255 : 0;
+      }
+      snow.ctx.putImageData(snow.img, 0, 0);
+      const was = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(snow.canvas, 0, 0, GAME_W, GAME_H);
+      ctx.imageSmoothingEnabled = was;
+    }
+    // the roll bar
+    const barY = (GAME_H * (1 - ((this.appT / 260) % 1))) | 0;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
+    ctx.fillRect(0, barY, GAME_W, 14);
+    // torn scanlines
+    for (let i = 0; i < 4; i++) {
+      const y = Math.random() * GAME_H;
+      ctx.fillStyle = `rgba(0, 0, 0, ${0.3 + Math.random() * 0.4})`;
+      ctx.fillRect(0, y, GAME_W, 1 + Math.random() * 2);
+    }
   }
 
   /**
@@ -1126,8 +1316,19 @@ export class ArcadeHub extends Phaser.Scene {
     // glass: the pitch follows the list, and a prize that has been redeemed
     // leaves a gap in the case exactly as it leaves a gap on the counter.
     const s = store.get();
-    const stock = prizesForWave(s.prizeWave);
-    const pitch = Math.floor((PRIZE_CASE.w - 12) / stock.length);
+    const stock = shelfStock(s);
+    // AFTER THE NIGHT the case holds one thing, and it is drawn as that
+    // thing, alone in the middle of the glass with its price under it --
+    // not stretched into a ninety-pixel bar of colour.
+    if (stock.length === 1) {
+      const p = stock[0];
+      if (!s.prizesOwned.includes(p.id)) {
+        drawPrize(this, PRIZE_CASE.x + PRIZE_CASE.w / 2, PRIZE_CASE.y - 9, p);
+        centerText(this, PRIZE_CASE.x + PRIZE_CASE.w / 2 + 30, PRIZE_CASE.y - 16, `${p.cost}`, PALETTE.gold);
+      }
+      stock.length = 0;
+    }
+    const pitch = Math.floor((PRIZE_CASE.w - 12) / Math.max(1, stock.length));
     stock.forEach((p, i) => {
       const x = PRIZE_CASE.x + 6 + i * pitch;
       if (s.prizesOwned.includes(p.id)) {
@@ -1157,6 +1358,9 @@ export class ArcadeHub extends Phaser.Scene {
    * again without walking anywhere.
    */
   private spawnPoint(fallback: { x: number; y: number }): { x: number; y: number } {
+    // Back through the right-hand doorway: stood just inside it, a step clear
+    // of its interact zone so a stray click does not walk you back out.
+    if (this.fromDoor === 'lounge') return { x: LOUNGE_DOOR.x - 26, y: LOUNGE_DOOR.y + 4 };
     if (!this.returnTo) return fallback;
     const def = CABINETS.find((c) => c.id === this.returnTo);
     if (!def) return fallback;
@@ -1210,6 +1414,28 @@ export class ArcadeHub extends Phaser.Scene {
     this.locked = true;
     audio.sfx('footstep_carpet');
     fadeToScene(this, 'ArcadeAnnex');
+  }
+
+  /**
+   * The opening in the RIGHT wall, through to the room kept for the next
+   * games.  Its own light is the neon pink of the sign over the empty floor.
+   * The click answers on the doorway itself and nowhere else: the carpet in
+   * front of it is carpet, the change machine above it is the change machine.
+   */
+  private paintLoungeDoor(): void {
+    paintOpening(this, { side: 'right', y: LOUNGE_DOOR.y, h: 40, glow: PALETTE.neon });
+    this.add
+      .zone(LOUNGE_DOOR.x, LOUNGE_DOOR.y, 22, LOUNGE_DOOR.h + 4)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        if (!this.busy()) this.toLounge();
+      });
+  }
+
+  private toLounge(): void {
+    this.locked = true;
+    audio.sfx('footstep_carpet');
+    fadeToScene(this, 'ArcadeLounge');
   }
 
   private openCounter(): void {
@@ -1279,6 +1505,10 @@ export class ArcadeHub extends Phaser.Scene {
 
     if (t.kind === 'annex') {
       this.toAnnex();
+      return;
+    }
+    if (t.kind === 'lounge') {
+      this.toLounge();
       return;
     }
 
@@ -1377,6 +1607,18 @@ export class ArcadeHub extends Phaser.Scene {
       // glass -- has it on its own.  He waits.
       this.hideFrogLine();
       this.frogSpoke = false;
+      // The overlay is over every Phaser object, the prize counter and the
+      // change machine included: whoever is behind the counter is taken off
+      // it while something else has the room, and painted again after.
+      if (this.apparition === 'off') froggyLayer.clear();
+      return;
+    }
+    // In conversation: stood still, no prompt over the panel, and the person
+    // you are talking to carries on being drawn -- talking.
+    if (this.talk) {
+      this.promptPlate.setVisible(false);
+      this.prompt.setVisible(false);
+      this.stepCounterStaffer(delta);
       return;
     }
 
@@ -1394,6 +1636,7 @@ export class ArcadeHub extends Phaser.Scene {
     this.renderPrompt();
     this.stepCues(delta);
     this.stepCounterFroggy(delta);
+    this.stepCounterStaffer(delta);
   }
 
   /**
@@ -1435,20 +1678,20 @@ export class ArcadeHub extends Phaser.Scene {
    * else in the room and needs none of this.
    */
   private keepOffFroggy(before: { x: number; y: number }): void {
-    if (!this.frogOnCounter) return;
+    // The member of staff is on the overlay now too, drawn the way the dealer
+    // is, so he is as solid as the frog was, and for the same reason.
+    const body = this.frogOnCounter ? FROG_BODY : this.stafferOnCounter ? STAFFER_BODY : null;
+    if (!body) return;
     const halfW = PLAYER_BOX.torsoW / 2;
     const hits = (px: number, py: number): boolean =>
-      px + halfW > FROG_BODY.left &&
-      px - halfW < FROG_BODY.right &&
-      py > FROG_BODY.top &&
-      py - PLAYER_BOX.headTop < FROG_BODY.bottom;
+      px + halfW > body.left && px - halfW < body.right && py > body.top && py - PLAYER_BOX.headTop < body.bottom;
     if (!hits(this.player.x, this.player.y)) return;
     if (!hits(before.x, this.player.y)) this.player.setPosition(before.x, this.player.y);
     else if (!hits(this.player.x, before.y)) this.player.setPosition(this.player.x, before.y);
     // Both ends of the step inside him -- put somewhere by a spawn, or walked
     // in diagonally on the one frame both axes crossed.  Out the front, which
     // is the only side of him there is any floor on.
-    else this.player.setPosition(this.player.x, FROG_BODY.bottom + PLAYER_BOX.headTop);
+    else this.player.setPosition(this.player.x, body.bottom + PLAYER_BOX.headTop);
   }
 
   private findTarget(): Target {
@@ -1467,6 +1710,7 @@ export class ArcadeHub extends Phaser.Scene {
     if (best) return { kind: 'cabinet', cab: best };
 
     if (px < ANNEX_DOOR.x + 20 && Math.abs(py - ANNEX_DOOR.y) < 28) return { kind: 'annex' };
+    if (px > LOUNGE_DOOR.x - 20 && Math.abs(py - LOUNGE_DOOR.y) < 24) return { kind: 'lounge' };
     if (Phaser.Math.Distance.Between(px, py, CHANGE_SPOT.x, CHANGE_SPOT.y) < INTERACT_RANGE) {
       return { kind: 'change' };
     }
@@ -1518,6 +1762,8 @@ export class ArcadeHub extends Phaser.Scene {
       msg = '[E] TALK TO THE STAFF';
     } else if (t.kind === 'annex') {
       msg = '[E] BACK ROOM';
+    } else if (t.kind === 'lounge') {
+      msg = '[E] NEW ROOM';
     } else if (t.kind === 'bell') {
       msg = '[E] RING';
     } else if (t.kind === 'change') {

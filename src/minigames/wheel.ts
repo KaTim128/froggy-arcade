@@ -1,13 +1,19 @@
 /**
  * WHEEL OF FORTUNE.  Twenty Five tokens a spin, in the corner of the casino.
  *
- * THE ODDS ARE THE GEOMETRY.  Every face on the wheel is cut to the width of
- * its own chance — the five thousand is a hairline sliver and the small
- * money is most of the rim — and a spin picks a stopping angle, not a
- * prize.  Nothing weights the draw afterwards, so what you watch the
- * pointer do is what actually happened, and a spin pays the one face it
- * stopped on: there is no second prize, no bonus, nothing that can stack
- * two payouts onto one go.
+ * THE ODDS ARE THE TABLE, AND THE RIM IS DRAWN SO IT CAN BE READ.
+ *
+ * Every face used to be cut to the exact width of its chance, which made the
+ * five thousand 0.036 of a degree: a face nobody could see, let alone read.
+ * The prize is now drawn by the table below (`FACES`), and the wheel then
+ * stops at a random point INSIDE the face that won -- so the pointer always
+ * lands on what it pays, and the chances are exactly the table's.  The rim
+ * is free to give every face room for its number: the rarest faces are
+ * still the narrowest on the wheel (5000 narrower than 1000, narrower than
+ * 500, narrower than everything else), and the board beside it prints the
+ * real percentage of each.  A spin pays the one face it stopped on: there
+ * is no second prize, no bonus, nothing that can stack two payouts onto one
+ * go.
  *
  *   🏆 5000                  0.01%
  *   💰 1000                   0.1%
@@ -18,10 +24,10 @@
  *   🪙 1 2 3 5 7 10 15      62.39%   (a seventh of it each)
  *   the blank                 10%   (two faces)
  *
- * THE NUMBERS ARE NOT PRINTED ON THE WHEEL ITSELF.  The board beside it now
- * names what the wheel can pay AND the live percentage for each band, read
- * straight off the same FACES table that cuts the rim — so the board can
- * never drift out of sync with the geometry the way a hand-typed table could.
+ * EVERY FACE CARRIES ITS OWN NUMBER, written along the radius inside it.
+ * The board beside the wheel names what it can pay AND the live percentage
+ * for each band, read straight off the same FACES table the draw uses -- so
+ * the board can never drift out of sync with the odds.
  *
  * WALKING UP TO IT IS FREE, but it will not let you stand at it broke: a spin
  * is the only thing this fixture does, so a player who cannot cover one is
@@ -45,6 +51,8 @@ import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
+import { froggyLayer } from '../render/froggyLayer';
+import { drawPixelText } from '../render/pixelFont';
 import type { MinigameApi, MinigameModule } from './types';
 
 const ID = 'wheel' as const;
@@ -89,8 +97,15 @@ export const FACES: Array<{ pays: number; share: number }> = [
 ];
 
 const CX = 96;
-const CY = 102;
-const R = 62;
+const CY = 100;
+/** Bigger than it was (62), so every face has room for its number. */
+const R = 68;
+/**
+ * The narrowest a face may be drawn, in degrees, so its number fits inside it.
+ * The three rarest get their own, stepped, so rarer is always thinner.
+ */
+const MIN_DEG = 10;
+const RARE_DEG: Record<number, number> = { 5000: 7.5, 1000: 8.2, 500: 9 };
 /** Where the pointer sits, in radians: straight up. */
 const POINTER = -Math.PI / 2;
 const SPIN_MS = 3400;
@@ -104,12 +119,9 @@ interface Slice {
 }
 
 let slices: Slice[] = [];
-/** A backing plate per rim label, shown only for the ones outside the rim. */
-let plates: Phaser.GameObjects.Rectangle[] = [];
 let apiRef: MinigameApi | null = null;
 let sceneRef: Phaser.Scene | null = null;
 let face: Phaser.GameObjects.Graphics | null = null;
-let labels: Phaser.GameObjects.BitmapText[] = [];
 let rotation = 0;
 let spinning = false;
 let over = false;
@@ -125,7 +137,6 @@ let lastFace = -1;
 /** Cut the rim into faces.  Shares are percentages; the wheel is 2π. */
 function build(): void {
   slices = [];
-  plates = [];
   // ---- A POND, NOT A ROULETTE WHEEL.
   //
   // The small change alternated through teal, plum, rust and slate, which is
@@ -138,9 +149,18 @@ function build(): void {
   // keeps its gold.  Theming the wheel is not allowed to cost the one job the
   // colours do.
   const palette = [0x2f6b36, 0x4a8f4e, 0x3a5c2a, 0x6b7a3a];
+  // ---- HOW WIDE EACH FACE IS DRAWN.  Its chance, but never narrower than
+  // it can be read at; the room that takes is given up, in proportion, by
+  // the faces that have plenty.
+  const want = FACES.map((f) => (f.share / 100) * 360);
+  const floor = FACES.map((f) => RARE_DEG[f.pays] ?? MIN_DEG);
+  const fixed = want.map((w, i) => w < floor[i]);
+  const fixedDeg = floor.reduce((sum, fl, i) => sum + (fixed[i] ? fl : 0), 0);
+  const freeWant = want.reduce((sum, w, i) => sum + (fixed[i] ? 0 : w), 0);
+  const drawn = want.map((w, i) => (fixed[i] ? floor[i] : (w * (360 - fixedDeg)) / freeWant));
   let a = -Math.PI / 2;
   FACES.forEach((f, i) => {
-    const span = (f.share / 100) * Math.PI * 2;
+    const span = (drawn[i] / 360) * Math.PI * 2;
     slices.push({
       pays: f.pays,
       from: a,
@@ -170,6 +190,28 @@ function pctOf(pays: number[]): string {
   return `${rounded % 1 === 0 ? rounded : rounded.toFixed(1)}%`;
 }
 
+/**
+ * THE DRAW: which face wins, by the table's odds and nothing else, and where
+ * inside it the wheel should stop -- kept off its edges, so there is never a
+ * question which face the pointer is on.
+ */
+function draw1(): { face: number; angle: number } {
+  let r = Math.random() * 100;
+  let i = 0;
+  for (; i < FACES.length - 1; i++) {
+    r -= FACES[i].share;
+    if (r < 0) break;
+  }
+  const s = slices[i];
+  const angle = s.from + (s.to - s.from) * (0.15 + Math.random() * 0.7);
+  return { face: i, angle };
+}
+
+/** The rotation that puts `angle` (a point on the rim, unturned) under the pointer. */
+function rotationFor(angle: number): number {
+  return POINTER - angle;
+}
+
 /** Which face is under the pointer at this rotation. */
 export function faceAt(rot: number): Slice {
   const twoPi = Math.PI * 2;
@@ -190,8 +232,8 @@ export const wheelOfFortune: MinigameModule = {
   tutorial: {
     objective: [
       'ONE SPIN, ONE PRIZE, WHATEVER IT STOPS ON.',
-      'EVERY FACE IS AS WIDE AS ITS CHANCE.',
-      'THE BIG MONEY IS ON THE THIN SLICES.',
+      'THE THINNEST FACES ARE THE RAREST.',
+      'THE BOARD SHOWS THE REAL CHANCE OF EACH.',
       'LEAVE WHENEVER YOU LIKE - IT IS ALL YOURS.',
     ],
     controls: [
@@ -201,6 +243,8 @@ export const wheelOfFortune: MinigameModule = {
   },
   touch: { buttons: [{ label: 'SPIN', key: 'SPACE', primary: true }] },
 
+  // Every spin is paid the moment it stops, so only a spin still turning is at stake.
+  atRisk: () => (spinning ? SPIN_COST : 0),
   create(scene: Phaser.Scene, api: MinigameApi) {
     apiRef = api;
     sceneRef = scene;
@@ -209,7 +253,6 @@ export const wheelOfFortune: MinigameModule = {
     over = false;
     spins = 0;
     won = 0;
-    labels = [];
     lastFace = -1;
     build();
 
@@ -238,16 +281,8 @@ export const wheelOfFortune: MinigameModule = {
     face = scene.add.graphics().setDepth(4);
     // The labels ride the rim, so they are containers of their own that get
     // re-placed every frame rather than being baked into the graphics.
-    for (const s of slices) {
-      // Each rim label gets a plate behind it.  The splinters sit outside the
-      // wheel where they can end up shoulder to shoulder, and a number on a
-      // plate stays readable against another number, against the brass and
-      // against the room -- which is cheaper and more reliable than trying to
-      // find geometry where twenty labels never touch.
-      const plate = scene.add.rectangle(CX, CY, 4, 9, 0x0f1a12).setAlpha(0).setDepth(5);
-      plates.push(plate);
-      labels.push(centerText(scene, CX, CY, s.pays === 0 ? '-' : `${s.pays}`, PALETTE.cream).setDepth(6));
-    }
+    // Every number is inside its own face, along the radius, drawn on the
+    // overlay -- see `draw`.
     // ---- THE HUB IS FROGGY.
     //
     // Every wheel has a boss in the middle of it and this one is a face: the
@@ -304,13 +339,14 @@ statusText = text(scene, 180, 116, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
         /** The face under the pointer for a given rotation, without spinning. */
         faceAt: (rot: number) => faceAt(rot).pays,
         /**
-         * Sample the wheel the way a player does — uniform stopping angles —
-         * so the odds can be checked against the geometry that produces them.
+         * Sample the wheel the way a spin does -- the draw, then the stop --
+         * and read the face off where it stopped, so the check covers both
+         * the odds and the landing.
          */
         sample: (n: number) => {
           const seen: Record<string, number> = {};
           for (let i = 0; i < n; i++) {
-            const p = faceAt(Math.random() * Math.PI * 2).pays;
+            const p = faceAt(rotationFor(draw1().angle)).pays;
             seen[p] = (seen[p] ?? 0) + 1;
           }
           return seen;
@@ -324,8 +360,8 @@ statusText = text(scene, 180, 116, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
   },
 
   destroy() {
+    froggyLayer.clear();
     face = null;
-    labels = [];
     statusText = null;
     balanceText = null;
     spinBtn = null;
@@ -339,9 +375,7 @@ statusText = text(scene, 180, 116, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
 function draw(): void {
   if (!face) return;
   face.clear();
-  // how many labels have already been pushed outside the rim this frame
-  let outside = 0;
-  slices.forEach((s, i) => {
+  slices.forEach((s) => {
     face!.fillStyle(s.colour, 1);
     face!.slice(CX, CY, R, s.from + rotation, s.to + rotation, false);
     face!.fillPath();
@@ -351,47 +385,35 @@ function draw(): void {
     face!.moveTo(CX, CY);
     face!.lineTo(CX + Math.cos(s.from + rotation) * R, CY + Math.sin(s.from + rotation) * R);
     face!.strokePath();
+  });
+  paintNumbers();
+}
 
-    const mid = (s.from + s.to) / 2 + rotation;
-    // A label has to fit across its own face.  The wide faces carry theirs at
-    // two thirds of the radius; the slivers — the hundred especially — have no
-    // room for three digits anywhere inside the rim, so those sit just outside
-    // it, where the arc is wide enough to read.
-    const lbl = labels[i];
-    if (!lbl) return;
-    const chars = lbl.text.length * 6;
-    const inside = R * 0.66;
-    const fitsInside = (s.to - s.from) * inside >= chars + 3;
-    // ---- AND THE ONES THAT SIT OUTSIDE HAVE TO CLEAR EACH OTHER.
-    //
-    // The splinters -- 5000, 1000, 500 -- are adjacent on the rim and all
-    // three are too thin to carry a label inside, so all three parked at the
-    // same radius a degree apart and printed straight over one another: the
-    // rarest prizes on the wheel were the only unreadable ones.  Consecutive
-    // outside labels step outward in rings instead, so each has its own lane.
-    let lr = inside;
-    let ang = mid;
-    if (!fitsInside) {
-      // Two rings, not three: a third lane reached x=185, which is inside the
-      // prize board on the right and off the screen on the left.  The rest of
-      // the separation is taken ALONG the arc instead, where there is nothing
-      // to run into -- the neighbouring slivers have no labels of their own.
-      // Four distinct places before it repeats -- two rings crossed with two
-      // directions along the arc -- because the splinters come in threes and
-      // two positions is not enough to keep three labels apart.
-      lr = R + 14 + (outside % 2) * 11;
-      ang = mid + [-0.34, 0.34, -0.62, 0.62][outside % 4];
-      outside++;
+/**
+ * THE NUMBERS, EACH INSIDE ITS OWN FACE.
+ *
+ * Along the radius, out near the rim where the face is widest, turned over on
+ * the left half of the wheel so none is ever upside down.  They are painted on
+ * the overlay canvas, at the display's own resolution: the game draws at
+ * 320x180 and a pixel font rotated to an arbitrary angle at that size breaks
+ * up into noise -- the rare faces, whose numbers matter most, were the worst.
+ * On the overlay the same glyphs, rotated, stay crisp.
+ */
+function paintNumbers(): void {
+  froggyLayer.paint((ctx) => {
+    for (const s of slices) {
+      const str = s.pays === 0 ? '-' : `${s.pays}`;
+      const mid = (s.from + s.to) / 2 + rotation;
+      const len = str.length * 6;
+      const lr = R - 5 - len / 2;
+      ctx.save();
+      ctx.translate(CX + Math.cos(mid) * lr, CY + Math.sin(mid) * lr);
+      ctx.rotate(Math.cos(mid) >= 0 ? mid : mid + Math.PI);
+      // dark on the gold faces, light on everything else
+      const col = s.pays >= 40 && s.pays < 200 ? PALETTE.ink : PALETTE.cream;
+      drawPixelText(ctx, str, 0, -3, { scale: 1, center: true, color: `#${col.toString(16).padStart(6, '0')}` });
+      ctx.restore();
     }
-    const lx = Phaser.Math.Clamp(CX + Math.cos(ang) * lr, 16, 162);
-    const ly = CY + Math.sin(ang) * lr;
-    lbl.setPosition(lx, ly);
-    const plate = plates[i];
-    if (plate) {
-      if (fitsInside) plate.setAlpha(0);
-      else plate.setPosition(lx, ly + 3).setSize(chars + 3, 9).setAlpha(0.8);
-    }
-    lbl.setTint(!fitsInside ? PALETTE.gold : s.pays >= 50 ? PALETTE.ink : PALETTE.cream);
   });
 }
 
@@ -411,9 +433,14 @@ function spin(): void {
   setButtons(false);
   audio.sfx('coin_drop', 0.6);
 
-  // A uniform stopping angle is the whole of the randomness: the face it lands
-  // on is decided by how wide that face is and by nothing else.
-  const target = rotation + Math.PI * 2 * (5 + Math.random() * 3) + Math.random() * Math.PI * 2;
+  // The draw decides the face, by the table's odds; the wheel is then sent
+  // round five to eight times and stopped inside that face.
+  const pick = draw1();
+  const twoPi = Math.PI * 2;
+  const base = rotationFor(pick.angle);
+  const turns = 5 + Math.floor(Math.random() * 3);
+  const ahead = (((base - rotation) % twoPi) + twoPi) % twoPi;
+  const target = rotation + ahead + twoPi * turns;
   sceneRef.tweens.addCounter({
     from: rotation,
     to: target,

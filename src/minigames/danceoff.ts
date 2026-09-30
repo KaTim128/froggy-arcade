@@ -728,6 +728,7 @@ function endMatch(drawn: boolean): void {
   if (drawn && banked > 0) {
     centerText(sceneRef, GAME_W / 2, 130, 'DRAWN ROUND - THE CLIMB STOPS THERE', PALETTE.ash).setDepth(50);
   }
+  apiRef?.record(score.you);
   sceneRef.time.delayedCall(1800, () =>
     banked > 0 ? apiRef?.win(banked) : refund ? apiRef?.draw() : apiRef?.lose(),
   );

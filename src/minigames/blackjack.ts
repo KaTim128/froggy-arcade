@@ -274,6 +274,9 @@ export const blackjack: MinigameModule = {
   },
   payoutNote: 'PAYS 2X - OR 4X',
 
+  // Walking out mid-hand loses the bet on the felt (doubled, if it was);
+  // between hands nothing is down but the ante, if one is.
+  atRisk: () => (phase === 'play' ? bet * stakeMul : phase === 'bet' ? ante : 0),
   create(scene: Phaser.Scene, api: MinigameApi) {
     sceneRef = scene;
     apiRef = api;
@@ -758,10 +761,13 @@ function render(): void {
     // one on two.
     if (phase === 'play' && !standing) {
       const left = MAX_CARDS - player.length;
+      // Right-aligned to the table's edge: "FIFTH DOUBLES" is thirteen
+      // letters, and started where "4/5 CARDS" does it ran off the frame.
       c.add(
-        text(sceneRef, GAME_W - 74, 92, `${player.length}/${MAX_CARDS} CARDS`, left <= 1 ? PALETTE.blood : PALETTE.ash),
+        text(sceneRef, GAME_W - 8, 92, `${player.length}/${MAX_CARDS} CARDS`, left <= 1 ? PALETTE.blood : PALETTE.ash)
+          .setOrigin(1, 0),
       );
-      if (left === 1) c.add(text(sceneRef, GAME_W - 74, 102, 'FIFTH DOUBLES', PALETTE.blood));
+      if (left === 1) c.add(text(sceneRef, GAME_W - 8, 102, 'FIFTH DOUBLES', PALETTE.blood).setOrigin(1, 0));
     }
   }
 

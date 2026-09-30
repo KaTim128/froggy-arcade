@@ -42,6 +42,8 @@ class AudioManager {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private busGain: Record<BusName, GainNode | null> = { music: null, sfx: null };
+  /** Between the music bus and the master: open, until the music malfunctions. */
+  private musicTone: BiquadFilterNode | null = null;
   private sustained: Sustained[] = [];
   private assets = new Map<string, { howl: Howl; bus: BusName }>();
   private current: SceneAudio = SILENCE;
@@ -58,7 +60,19 @@ class AudioManager {
     this.masterGain.connect(this.ctx.destination);
     for (const bus of ['music', 'sfx'] as const) {
       const g = this.ctx.createGain();
-      g.connect(this.masterGain);
+      if (bus === 'music') {
+        // The music goes out through a filter that is wide open and does
+        // nothing -- until `musicMalfunction` closes it.
+        const tone = this.ctx.createBiquadFilter();
+        tone.type = 'lowpass';
+        tone.frequency.value = 22000;
+        tone.Q.value = 0.7;
+        g.connect(tone);
+        tone.connect(this.masterGain);
+        this.musicTone = tone;
+      } else {
+        g.connect(this.masterGain);
+      }
       this.busGain[bus] = g;
     }
     this.unlocked = true;
@@ -86,6 +100,45 @@ class AudioManager {
       const busVal = a.bus === 'music' ? music : sfx;
       a.howl.volume((master / 100) * (busVal / 100));
     }
+  }
+
+  /**
+   * THE MUSIC COMING BACK WRONG.
+   *
+   * For `ms` after it is called, whatever the music bus is playing is played
+   * through a broken speaker: it cuts in and out on an irregular stutter,
+   * muffled at first as if through a wall, and it opens back up to the tune
+   * everyone knows only at the very end.  The arcade's music, restarting, not
+   * quite managing it.  Nothing is changed for good: the filter ends wide
+   * open and the gain ends where the music slider has it.
+   */
+  musicMalfunction(ms: number): void {
+    const ctx = this.ctx;
+    const g = this.busGain.music;
+    const tone = this.musicTone;
+    if (!ctx || !g || !tone) return;
+    const level = store.get().settings.music / 100;
+    const now = ctx.currentTime;
+    const dur = ms / 1000;
+    g.gain.cancelScheduledValues(now);
+    g.gain.setValueAtTime(0, now);
+    // the stutter: bursts of the tune with holes in them, the holes getting
+    // shorter, the bursts getting longer
+    let t = 0.05;
+    while (t < dur * 0.7) {
+      const on = 0.05 + Math.random() * 0.12 + (t / dur) * 0.25;
+      const off = Math.max(0.02, 0.14 - (t / dur) * 0.12) * (0.5 + Math.random());
+      g.gain.setValueAtTime(level * (0.55 + Math.random() * 0.45), now + t);
+      g.gain.setValueAtTime(0, now + t + on);
+      t += on + off;
+    }
+    g.gain.setValueAtTime(level * 0.7, now + dur * 0.7);
+    g.gain.linearRampToValueAtTime(level, now + dur);
+    // and the muffle, opening up
+    tone.frequency.cancelScheduledValues(now);
+    tone.frequency.setValueAtTime(320, now);
+    tone.frequency.exponentialRampToValueAtTime(900, now + dur * 0.6);
+    tone.frequency.exponentialRampToValueAtTime(22000, now + dur);
   }
 
   busLevel(bus: BusName): number {
@@ -1047,6 +1100,24 @@ class AudioManager {
       // `behind`, whose lowpass is the same thing distance does to everything.
       // The pitch is different every time, which is what keeps it a person
       // rather than a sound effect being played again.
+      // ---- HIM, THROUGH THE GLASS OF THE TUBE.
+      //
+      // Not the jumpscare -- that one goes past the sliders -- but a close,
+      // wet, rising shriek, three voices detuned against each other so they
+      // beat, with a gargle of noise under it and a crack at the top where it
+      // breaks: something big in a small space, and very unhappy about the
+      // heat.
+      case 'froggy_screech': {
+        const base = 520 + Math.random() * 60;
+        glide(base * 0.55, base * 1.9, 0.34, 0.07, 'sawtooth');
+        glide(base * 0.57, base * 1.95, 0.34, 0.06, 'sawtooth', 0.01);
+        glide(base * 1.9, base * 0.7, 0.95, 0.075, 'sawtooth', 0.33);
+        glide(base * 1.97, base * 0.66, 0.95, 0.06, 'square', 0.34);
+        glide(base * 0.5, base * 0.32, 1.1, 0.05, 'triangle', 0.3);
+        noise(1.25, 0.05, 1800, 0.05);
+        noise(0.12, 0.08, 6000, 0.32);
+        break;
+      }
       case 'distant_scream': {
         const base = 280 + Math.random() * 150;
         glide(base * 0.8, base * 1.72, 0.5, 0.105);
@@ -1077,8 +1148,8 @@ class AudioManager {
       // Three bursts of noise at dropping cutoffs, a buzz under them that
       // slides and gives out, and crackle scattered across the whole thing --
       // a cone being asked for something it cannot make.  Nine tenths of a
-      // second, which is the number `ArcadeHub` waits before it puts the
-      // arcade's own music back on.
+      // second, under the static `ArcadeHub` puts on the picture while it
+      // plays, before the arcade's music restarts through the same fault.
       case 'speaker_fault': {
         for (let i = 0; i < 3; i++) noise(0.16, 0.09 - i * 0.015, 5200 - i * 1500, i * 0.24);
         for (let i = 0; i < 9; i++) noise(0.02, 0.05, 7000, 0.05 + i * 0.09 + Math.random() * 0.04);
@@ -1277,6 +1348,7 @@ export type SfxName =
   | 'heal_up'
   | 'poison_hiss'
   | 'speaker_fault'
+  | 'froggy_screech'
   | 'distant_scream'
   | 'distant_cry'
   | 'fence_thunk'

@@ -717,9 +717,6 @@ const PUDDLE_COST = 0.45;
  * standing still in a thirty second race is a real price for a real moment.
  */
 const FLUTTER_S = 4.0;
-/** How long the wheels stay on, and what they are worth while they do. */
-const SKATE_S = 3.2;
-const SKATE_MUL = 1.2;
 
 /**
  * ---- THE CARD OF EFFECTS, AND THE RULE THAT EVERY FROG IS ON IT.
@@ -741,8 +738,6 @@ const EFFECTS = [
   'puddle',
   /** A butterfly, which is not a slow but a full stop -- see `flutter`. */
   'flutter',
-  /** The only thing here that simply makes a frog faster for a while. */
-  'skates',
 ] as const;
 type EffectKind = (typeof EFFECTS)[number];
 const BAND_FROM = 0.12;
@@ -932,8 +927,6 @@ interface Run {
   // ---- the timed modifiers.  Each is seconds left, and each scales or adds
   // to pace rather than moving anything.
   gold: number;
-  /** Seconds of roller skates left.  A gear on the pace, nothing more. */
-  skates: number;
 
   // ---- the staged movements.  Each runs from one place to another over its
   // own length, eased at both ends; see `step`.
@@ -1028,6 +1021,9 @@ let bird: Bird = makeBird();
 let birdArt: Phaser.GameObjects.Container | null = null;
 let fly: Fly = makeFly();
 let flyArt: Phaser.GameObjects.Container | null = null;
+/** The butterfly's own flight: where it is, how it is moving, where it is wandering to. */
+let butterfly = { x: 90, y: 40, vx: 0, vy: 0, wx: 90, wy: 40, wT: 0 };
+let butterflyArt: Phaser.GameObjects.Container | null = null;
 let jet: Jet = makeJet();
 /** What is booked to happen to whom, and when.  See `bookField`. */
 let card: Booking[] = [];
@@ -1050,11 +1046,10 @@ const FX_SOUND: Partial<Record<EffectKind, Parameters<typeof audio.sfx>[0]>> = {
   rocket: 'throw_whoosh',
   puddle: 'splash',
   flutter: 'ui_hover',
-  skates: 'wheel_tick',
 };
 const FX_VOL: Partial<Record<EffectKind, number>> = {
   bird: 0.5, balloon: 0.45, fly: 0.4, golden: 0.5, jump: 0.55, slip: 0.5,
-  rocket: 0.6, puddle: 0.55, flutter: 0.4, skates: 0.5,
+  rocket: 0.6, puddle: 0.55, flutter: 0.4,
 };
 /** How many tickets are on this race.  Ten tokens each, twenty back each. */
 let tickets = 1;
@@ -1091,7 +1086,15 @@ export const frogRace: MinigameModule = {
   },
   // The field will not fit on five buttons, and it does not need to: the whole
   // lane is a hit area, so backing one is tapping the frog you want.
-  touch: { buttons: [{ label: 'RACE', key: 'SPACE', primary: true }] },
+  // Tap a frog to back it; the ticket count has its own two buttons, since
+  // UP and DOWN are keys a phone does not have.
+  touch: {
+    buttons: [
+      { label: 'RACE', key: 'SPACE', primary: true },
+      { label: 'MORE', key: 'UP' },
+      { label: 'LESS', key: 'DOWN' },
+    ],
+  },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
     sceneRef = scene;
@@ -1776,10 +1779,10 @@ export const frogRace: MinigameModule = {
         // feet are pinned as it squashes — a frog that shrinks about its
         // middle sinks into the track instead of flattening onto it.
         const p = hopPose(r.hop);
-        // A golden fly tips it forward and so do skates: both are read off
+        // A golden fly tips it forward: read off
         // the same timers the model uses.
-        const lean = r.gold > 0 ? -0.16 : r.skates > 0 ? -0.1 : 0;
-        body.setScale(p.sx * (r.gold > 0 ? 1.08 : r.skates > 0 ? 1.05 : 1), p.sy);
+        const lean = r.gold > 0 ? -0.16 : 0;
+        body.setScale(p.sx * (r.gold > 0 ? 1.08 : 1), p.sy);
         body.setRotation(p.rot + lean);
         body.y = laneY - r.lift + FOOT * (1 - p.sy);
       }
@@ -1796,27 +1799,6 @@ export const frogRace: MinigameModule = {
       const launching = r.going === 'jump';
       const rk = showProp('rocketArt', launching && r.fx === 'rocket');
       if (rk) rk.setScale(1, 0.8 + Math.random() * 0.45);
-      // ---- THE BUTTERFLY, which arrives, is watched, and leaves.
-      //
-      // It flies IN over the first beat and AWAY over the last, so the frog's
-      // four seconds have a reason to start and a reason to end -- the frog
-      // does not resume running because a timer expired, it resumes because
-      // the butterfly has gone.  Wings beat on their own clock.
-      const bg = showProp('bugArt', r.going === 'flutter');
-      if (bg) {
-        const left = Phaser.Math.Clamp(r.stuck / FLUTTER_S, 0, 1);
-        const arrive = ease(Math.min(1, (1 - left) * 4));
-        const leave = ease(Math.max(0, (0.25 - left) / 0.25));
-        bg.setPosition(
-          26 - 14 * arrive + 30 * leave + Math.sin(clock / 150) * 3,
-          -6 - 8 * arrive - 16 * leave + Math.sin(clock / 95) * 3,
-        );
-        bg.setScale(1 + Math.sin(clock / 55) * 0.3, 1 - leave * 0.4);
-        bg.setAlpha(1 - leave);
-      }
-      // ---- THE SKATES, and the wheels actually turning.
-      const sk = showProp('skateArt', r.skates > 0);
-      if (sk) sk.setScale(1, 0.9 + Math.sin(clock / 40) * 0.12);
       const sp = showProp('splashArt', r.going === 'splash');
       if (sp) sp.setScale(1, 0.5 + r.splash);
 
@@ -1988,6 +1970,9 @@ export const frogRace: MinigameModule = {
       }
     }
 
+    // ---- the butterfly: always about, and going to whoever it is for
+    if (butterflyArt) stepButterfly(dt);
+
     // ---- the bird, and the shadow that arrives before it does
     if (birdArt) {
       const on = bird.phase >= 1 && bird.phase <= 4;
@@ -2025,6 +2010,7 @@ export const frogRace: MinigameModule = {
     ticketLabel = null;
     birdArt = null;
     flyArt = null;
+    butterflyArt = null;
     banner = null;
     sub = null;
     goBtn = null;
@@ -2054,9 +2040,8 @@ function step(r: Run, dt: number, field?: Run[]): void {
   if (r.lean > 0) r.lean = Math.max(0, r.lean - dt);
   if (r.gold > 0) r.gold = Math.max(0, r.gold - dt);
   // Skates are seconds left like everything else, and expire on their own.
-  if (r.skates > 0) r.skates = Math.max(0, r.skates - dt);
   if (r.spin > 0 && r.going === 'run') r.spin = Math.max(0, r.spin - dt * 900);
-  if (r.going === 'run' && !r.gold && !r.skates && r.jet <= 0) r.fx = null;
+  if (r.going === 'run' && !r.gold && r.jet <= 0) r.fx = null;
 
   // ---- IN THE BIRD'S FEET, OR ON ITS WAY DOWN FROM THEM.
   //
@@ -2194,11 +2179,6 @@ function step(r: Run, dt: number, field?: Run[]): void {
   // The golden surge is a push rather than a gear: worth the same ground
   // whoever it lands on.
   if (r.gold > 0) speed += (GOLD_GAIN * SEC) / GOLD_SURGE_S;
-  // ---- SKATES ARE A GEAR, and the only one on the card.  A flat fifth on
-  // top of whatever this frog was already running at, so they are worth more
-  // to a quick frog than a slow one -- which is what a gear is, and what
-  // makes them read as speed rather than as a shove.
-  if (r.skates > 0) speed *= SKATE_MUL;
   speed = Math.max(2, speed);
 
   // The hop.  It is a real cycle rather than a bob: the frog gathers itself on
@@ -2406,12 +2386,6 @@ function fire(kind: EffectKind, r: Run, bird: Bird, fly: Fly): boolean {
       // doing the flying.
       launch(r, ROCKET_S, ROCKET_GAIN, ROCKET_H);
       r.arcFlat = 1;
-      break;
-    case 'skates':
-      // ---- ROLLER SKATES.  The only thing on the card that simply makes a
-      // frog faster: no arc, no standstill, nothing happens TO it.  It keeps
-      // running, a fifth quicker, until the wheels come off.
-      r.skates = SKATE_S;
       break;
     case 'flutter':
       // ---- THE BUTTERFLY.  Not a slow -- a STOP.  The frog forgets what it
@@ -2769,7 +2743,6 @@ function toRuns(
     arcFlat: 0,
     spin: 0,
     fell: 0,
-    skates: 0,
     splash: 0,
     fx: null,
     had: [] as EffectKind[],
@@ -2833,6 +2806,9 @@ function draft(scene: Phaser.Scene): void {
   birdArt = makeBird4(scene);
   fly = makeFly();
   flyArt = makeFlyArt(scene);
+  butterflyArt?.destroy();
+  butterflyArt = makeButterflyArt(scene);
+  butterfly = { x: 40 + Math.random() * (GAME_W - 80), y: TRACK_TOP - 26, vx: 0, vy: 0, wx: 0, wy: 0, wT: 0 };
   jet = makeJet();
   card = bookField();
   fxWas.clear();
@@ -3082,6 +3058,118 @@ function makeBird4(scene: Phaser.Scene): Phaser.GameObjects.Container {
  * the golden one glows, because they ask for the same lick and pay opposite
  * things, and the colour is the only warning the player gets.
  */
+/**
+ * Where the butterfly goes this frame.
+ *
+ *   A FROG IS WATCHING IT  it hovers in front of that frog's face, circling a
+ *                          little, until the last quarter of the frog's stop,
+ *                          then it leaves -- which is why the frog goes back to
+ *                          running, not a timer running out.
+ *   ONE IS BOOKED SOON     it drifts over to that frog in the couple of seconds
+ *                          before, aiming a little ahead of it because the frog
+ *                          is running, so it is already arriving when the frog
+ *                          notices it.
+ *   OTHERWISE              it wanders the air over the track, waypoint to
+ *                          waypoint, bobbing, the way a butterfly flies.
+ *
+ * Only ever drawn: the race model does not read it.
+ */
+function stepButterfly(dt: number): void {
+  const art = butterflyArt;
+  if (!art) return;
+  const b = butterfly;
+  const watching = racers.find((r) => r.going === 'flutter') ?? null;
+  let goal: { x: number; y: number } | null = null;
+  let speed = 38;
+  if (watching && watching.stuck / FLUTTER_S > 0.22) {
+    goal = {
+      x: watching.body.x + 12 + Math.sin(clock / 260) * 7,
+      y: watching.body.y - 19 + Math.sin(clock / 170) * 4,
+    };
+    speed = 60;
+  } else if (!watching && phase === 'racing') {
+    const next = card.find((k) => !k.done && k.kind === 'flutter' && k.at >= raceT && k.at - raceT < 2.2);
+    const who = next ? racers.find((r) => r.i === next.who) : undefined;
+    if (who) {
+      goal = { x: who.body.x + 26, y: who.body.y - 20 };
+      speed = 75;
+    }
+  }
+  if (!goal) {
+    b.wT -= dt;
+    if (b.wT <= 0 || Math.hypot(b.wx - b.x, b.wy - b.y) < 6) {
+      b.wx = 24 + Math.random() * (GAME_W - 48);
+      b.wy = TRACK_TOP - 34 + Math.random() * (TRACK_BOTTOM - TRACK_TOP + 26);
+      b.wT = 2 + Math.random() * 2.5;
+    }
+    goal = { x: b.wx, y: b.wy };
+  }
+  const dx = goal.x - b.x;
+  const dy = goal.y - b.y;
+  const d = Math.hypot(dx, dy) || 1;
+  const want = speed * Math.min(1, d / 18);
+  const turn = Math.min(1, dt * 3);
+  b.vx += ((dx / d) * want - b.vx) * turn;
+  b.vy += ((dy / d) * want - b.vy) * turn;
+  b.x += b.vx * dt;
+  // and the bob: a butterfly never flies level
+  b.y += b.vy * dt + Math.sin(clock / 90) * 14 * dt;
+  art.setPosition(b.x, b.y);
+  art.setVisible(true);
+  // wings beating, and the body turned the way it is going
+  art.setScale((1 + Math.sin(clock / 55) * 0.3) * (b.vx < -2 ? -1 : 1), 1);
+}
+
+/**
+ * THE BUTTERFLY, which lives over the race rather than on a frog.
+ *
+ * It used to be part of the frog it distracted, drawn a hand's width off its
+ * nose and flown in over the first beat -- so it appeared out of nothing in
+ * front of the frog.  It is in the air the whole time now, drifting about the
+ * track like the fly does, and when a frog's butterfly moment is coming up it
+ * makes its way over to that frog; the frog stops because it is THERE.
+ */
+function makeButterflyArt(scene: Phaser.Scene): Phaser.GameObjects.Container {
+  // ---- A BUTTERFLY, AND RECOGNISABLY ONE.
+  //
+  // The first attempt was two small ellipses either side of a bar, which at
+  // this size is a pill with a stripe down it.  What makes a butterfly read
+  // is the SILHOUETTE: a big rounded forewing above and a smaller pointed
+  // hindwing below, on each side, so the outline notches in at the waist --
+  // plus a dark rim so it holds its shape against grass, a pale spot on each
+  // wing, and antennae with club tips.  Wing colours are deliberately two
+  // different bright ones, because a real one is patterned rather than flat.
+  const wing = (sx: number) => {
+    const g: Phaser.GameObjects.GameObject[] = [];
+    // the dark outline, drawn first and a shade larger than everything on it
+    g.push(scene.add.ellipse(sx * 4.4, -2.4, 9.4, 9, 0x3a2030));
+    g.push(scene.add.triangle(sx * 3.6, 3.4, 0, 0, sx * 7.4, 1.6, sx * 1.4, 6.6, 0x3a2030));
+    // forewing: the big one, up and out
+    g.push(scene.add.ellipse(sx * 4.4, -2.6, 8, 7.6, 0xffc93c));
+    g.push(scene.add.ellipse(sx * 5.4, -4.4, 4, 3.4, 0xfff0a8));
+    // hindwing: smaller, pointed, tucked under
+    g.push(scene.add.triangle(sx * 3.6, 3.3, 0, 0, sx * 6.6, 1.4, sx * 1.2, 5.8, 0xe06fd0));
+    // the eyespot every butterfly seems to have
+    g.push(scene.add.circle(sx * 4.6, -1.6, 1.7, 0x3a2030));
+    g.push(scene.add.circle(sx * 4.6, -1.6, 0.8, 0xfff0f5));
+    return g;
+  };
+  const parts: Phaser.GameObjects.GameObject[] = [
+    ...wing(-1),
+    ...wing(1),
+    // the body: a fat thorax and a segmented abdomen, not a plain bar
+    scene.add.ellipse(0, -1.4, 2.6, 6.4, 0x3a2030),
+    scene.add.ellipse(0, -3.4, 2.2, 2.6, 0x5a3548),
+    scene.add.ellipse(0, 1.4, 1.8, 3.4, 0x2a1620),
+    // antennae, with the little clubs on the ends
+    scene.add.rectangle(-1.4, -5.6, 0.8, 3.4, 0x3a2030).setAngle(-28),
+    scene.add.rectangle(1.4, -5.6, 0.8, 3.4, 0x3a2030).setAngle(28),
+    scene.add.circle(-2.2, -7.2, 0.9, 0x3a2030),
+    scene.add.circle(2.2, -7.2, 0.9, 0x3a2030),
+  ];
+  return scene.add.container(0, 0, parts).setDepth(41).setVisible(true);
+}
+
 function makeFlyArt(scene: Phaser.Scene): Phaser.GameObjects.Container {
   // BIG ENOUGH TO BE A WARNING.  It was a three pixel dark speck on dark
   // grass, which is a thing the player finds out about afterwards.  It has a
@@ -3190,10 +3278,6 @@ function moodOf(r: Run, clock: number): Mood {
   if (r.gold > 0) {
     // ---- THE GOLDEN FLY: chin down, eyes front, absolutely going for it.
     return { eye: 0.85, smile: 1, brow: -1, irisX: 1.2, big: 1.05 };
-  }
-  if (r.skates > 0) {
-    // ---- SKATES: delighted, and leaning into it.
-    return { eye: 1, smile: 1, brow: -0.6, irisX: 1, big: 1.04 };
   }
   if (r.going === 'flutter') {
     // ---- THE BUTTERFLY: eyes up and wide, mouth open, race forgotten.
@@ -3506,57 +3590,6 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
     scene.add.triangle(-14, 0, 0, 0, 0, 6, -8, 3, PALETTE.gold),
     scene.add.triangle(-12, 0, 0, 0, 0, 3.4, -4.5, 1.7, PALETTE.cream),
   ]);
-  // the butterfly that took its eye off the race
-  // ---- A BUTTERFLY, AND RECOGNISABLY ONE.
-  //
-  // The first attempt was two small ellipses either side of a bar, which at
-  // this size is a pill with a stripe down it.  What makes a butterfly read
-  // is the SILHOUETTE: a big rounded forewing above and a smaller pointed
-  // hindwing below, on each side, so the outline notches in at the waist --
-  // plus a dark rim so it holds its shape against grass, a pale spot on each
-  // wing, and antennae with club tips.  Wing colours are deliberately two
-  // different bright ones, because a real one is patterned rather than flat.
-  const wing = (sx: number) => {
-    const g: Phaser.GameObjects.GameObject[] = [];
-    // the dark outline, drawn first and a shade larger than everything on it
-    g.push(scene.add.ellipse(sx * 4.4, -2.4, 9.4, 9, 0x3a2030));
-    g.push(scene.add.triangle(sx * 3.6, 3.4, 0, 0, sx * 7.4, 1.6, sx * 1.4, 6.6, 0x3a2030));
-    // forewing: the big one, up and out
-    g.push(scene.add.ellipse(sx * 4.4, -2.6, 8, 7.6, 0xffc93c));
-    g.push(scene.add.ellipse(sx * 5.4, -4.4, 4, 3.4, 0xfff0a8));
-    // hindwing: smaller, pointed, tucked under
-    g.push(scene.add.triangle(sx * 3.6, 3.3, 0, 0, sx * 6.6, 1.4, sx * 1.2, 5.8, 0xe06fd0));
-    // the eyespot every butterfly seems to have
-    g.push(scene.add.circle(sx * 4.6, -1.6, 1.7, 0x3a2030));
-    g.push(scene.add.circle(sx * 4.6, -1.6, 0.8, 0xfff0f5));
-    return g;
-  };
-  const bugArt = prop([
-    ...wing(-1),
-    ...wing(1),
-    // the body: a fat thorax and a segmented abdomen, not a plain bar
-    scene.add.ellipse(0, -1.4, 2.6, 6.4, 0x3a2030),
-    scene.add.ellipse(0, -3.4, 2.2, 2.6, 0x5a3548),
-    scene.add.ellipse(0, 1.4, 1.8, 3.4, 0x2a1620),
-    // antennae, with the little clubs on the ends
-    scene.add.rectangle(-1.4, -5.6, 0.8, 3.4, 0x3a2030).setAngle(-28),
-    scene.add.rectangle(1.4, -5.6, 0.8, 3.4, 0x3a2030).setAngle(28),
-    scene.add.circle(-2.2, -7.2, 0.9, 0x3a2030),
-    scene.add.circle(2.2, -7.2, 0.9, 0x3a2030),
-  ]);
-  // ---- THE ROLLER SKATES, one under each foot.
-  const skateArt = prop([
-    scene.add.rectangle(-6.4, 7.4, 9, 2.6, 0xd8dee6),
-    scene.add.rectangle(5.8, 7.4, 8, 2.6, 0xd8dee6),
-    scene.add.circle(-9.4, 9, 1.7, 0x2a1a20),
-    scene.add.circle(-3.6, 9, 1.7, 0x2a1a20),
-    scene.add.circle(3, 9, 1.7, 0x2a1a20),
-    scene.add.circle(8.4, 9, 1.7, 0x2a1a20),
-    scene.add.circle(-9.4, 9, 0.7, 0xf0c94c),
-    scene.add.circle(-3.6, 9, 0.7, 0xf0c94c),
-    scene.add.circle(3, 9, 0.7, 0xf0c94c),
-    scene.add.circle(8.4, 9, 0.7, 0xf0c94c),
-  ]);
   // the water it came down in
   const splashArt = prop([
     scene.add.ellipse(0, 8, 18, 5, 0x4fa3c7).setAlpha(0.6),
@@ -3568,8 +3601,6 @@ function makeFrog(scene: Phaser.Scene, kit: (typeof RUNNERS)[number]): Phaser.Ga
     scene.add.circle(0, -9, 1.2, 0xdff5fc),
   ]);
   c.setData('rocketArt', rocketArt);
-  c.setData('bugArt', bugArt);
-  c.setData('skateArt', skateArt);
   c.setData('splashArt', splashArt);
 
   // ---- the streaks off a frog that has eaten something golden, the mud it
@@ -3700,6 +3731,7 @@ function settle(): void {
   audio.sfx(won ? 'chime' : 'buzzer');
   if (won && sceneRef) sceneRef.cameras.main.flash(220, 255, 240, 180);
   store.setHighScore(ID, won ? 1 : 0);
+  if (won) apiRef?.record(pays);
   over = true;
   // MG-3: the shell pays, once.  A race is one decision and one result, so
   // there is nothing here to pay twice.

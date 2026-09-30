@@ -111,19 +111,13 @@ export class ArcadeAnnex extends Phaser.Scene {
       right: this.bindKeys(KEYS.right),
     };
     this.input.keyboard?.on('keydown-E', () => this.interact());
-    this.input.on('pointerdown', (_p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
-      if (over.length > 0 || this.busy()) return;
-      // A click on bare floor is not an instruction to play.  Standing next to
-      // a machine and clicking past it used to charge a token and open the
-      // game, which is an accident every time -- so the floor works the doors
-      // and the counter and nothing else.  A machine starts on a click ON THE
-      // MACHINE, or on [E] while stood at it, and on nothing else.
-      if (this.target?.kind === 'cabinet') return;
-      this.interact();
-    });
-    this.input.keyboard?.on('keydown-ESC', () => {
-      if (!this.busy()) this.scene.launch('SettingsModal', { from: 'ArcadeAnnex' });
-    });
+    // ---- AND A CLICK ON THE FLOOR IS A CLICK ON THE FLOOR.
+    //
+    // It used to fall through to `interact()`, which acts on whatever the
+    // player happens to be standing near -- so a click on bare carpet by
+    // either doorway walked you out of the room.  The doorways and the
+    // machines each own a hitbox and answer a click on themselves; [E] is the
+    // other way in, and the only thing proximity does.
 
     store.flush();
   }
