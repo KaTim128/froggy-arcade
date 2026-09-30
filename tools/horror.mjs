@@ -560,7 +560,11 @@ try {
     let apart = 0;
     let went = 0;
     let at = { x: inside.fx, z: inside.fz };
-    for (let i = 0; i < 12; i++) {
+    // Up to twenty seconds of wall clock, stopping as soon as he has covered
+    // the ground: the gallery holds three of him (the hunter, his twin under
+    // the glass and the specimen in the tube), and on a software renderer a
+    // wall-clock second can be a small fraction of a game second.
+    for (let i = 0; i < 80 && (i < 12 || went <= 1.5); i++) {
       await sleep(250);
       const t = await hide();
       // Against where he is DRAWN: at a hiding place he steps in to it and
@@ -573,7 +577,7 @@ try {
     check(`room ${room + 1}: the thing in it is the one hunting you, not a second one`, apart < 0.6,
       `never more than ${apart.toFixed(2)}m apart`);
     check(`room ${room + 1}: and he is still searching while you watch`, went > 1.5,
-      `${went.toFixed(1)}m covered in three seconds`);
+      `${went.toFixed(1)}m covered while you watched`);
 
     const safe = await hide();
     check(`room ${room + 1}: he cannot touch you through it`,
@@ -608,10 +612,30 @@ try {
       await sleep(ms);
       await page.keyboard.up(key);
     };
+    // Walked, not placed -- but held until they get there rather than for a
+    // fixed time, which a slow renderer turns into a shorter walk.
+    // The button is on its pedestal at x 3.2 in the gallery's own space: strafe
+    // until level with it (or until the strafe stops closing on it), then walk
+    // at it until it answers.
+    const holdUntil = async (key, test, max) => {
+      await page.keyboard.down(key);
+      for (let t = 0; t < max; t += 100) {
+        await sleep(100);
+        if (await test()) break;
+      }
+      await page.keyboard.up(key);
+    };
+    void go;
+    let lastGap = Infinity;
     await page.keyboard.down('ShiftLeft');
-    await go('KeyA', 950);
+    await holdUntil('KeyA', async () => {
+      const gap = Math.abs((await hide()).px - 3.2);
+      const done = gap < 0.5 || gap > lastGap + 0.05;
+      lastGap = Math.min(lastGap, gap);
+      return done;
+    }, 8000);
     await sleep(150);
-    await go('KeyW', 700);
+    await holdUntil('KeyW', async () => (await hide()).atButton, 8000);
     await page.keyboard.up('ShiftLeft');
     await sleep(300);
     const atIt = await hide();

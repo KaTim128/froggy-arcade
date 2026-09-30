@@ -1710,7 +1710,7 @@ const STAGGER_S = 0.5;
 /** And moves them this far, in the rules and not only in the drawing. */
 const KNOCK_PX = 9;
 /** Past this many seconds armour starts failing, and over this many it is gone. */
-const WEARY_AT = 55;
+const WEARY_AT = 50;
 const WEARY_OVER = 45;
 /** A critical is worth this much of an ordinary blow. */
 const CRIT_MUL = 1.8;

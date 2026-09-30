@@ -50,6 +50,7 @@ import {
   buildStaffDoor,
 } from '../three/arcadeProps';
 import { buildSecretRoom, SECRET_ORIGIN, type SecretRoom } from '../three/secretRoom';
+import { buildBedSpot, buildChestSpot, buildDoorSpot } from '../three/hideSpots';
 
 /** A walk is slow and silent; a run is fast and heard.  That is the trade. */
 const WALK = 2.0;
@@ -648,6 +649,8 @@ interface Spot3D {
    * handle, the front corners of a lid, the free edge of a blanket.
    */
   grips: THREE.Object3D[];
+  /** A locker's lever, which turns before its door will move. */
+  lever?: THREE.Object3D;
 }
 
 export class HideRoom3D extends Phaser.Scene {
@@ -1399,122 +1402,18 @@ export class HideRoom3D extends Phaser.Scene {
     group.position.set(x, 0, z);
     group.rotation.y = rot;
 
-    const hinge = new THREE.Group();
-    const grips: THREE.Object3D[] = [];
-
-    if (kind === 'bed') {
-      // A bed frame on legs with a gap under it you can get into.  The
-      // blanket is the hinge: he checks a bed by throwing it back.
-      const frame = new THREE.Mesh(
-        new THREE.BoxGeometry(2.3, 0.16, 1.1),
-        new THREE.MeshLambertMaterial({ color: 0x6b6f6b }),
-      );
-      frame.position.y = 0.5;
-      group.add(frame);
-      for (const [lx, lz] of [[-1.05, -0.45], [1.05, -0.45], [-1.05, 0.45], [1.05, 0.45]]) {
-        const leg = new THREE.Mesh(
-          new THREE.BoxGeometry(0.08, 0.5, 0.08),
-          new THREE.MeshLambertMaterial({ color: 0x4a4d4a }),
-        );
-        leg.position.set(lx, 0.25, lz);
-        group.add(leg);
-      }
-      const mattress = new THREE.Mesh(
-        new THREE.BoxGeometry(2.2, 0.22, 1.0),
-        new THREE.MeshLambertMaterial({ color: 0x8a8272 }),
-      );
-      mattress.position.y = 0.69;
-      group.add(mattress);
-      const head = new THREE.Mesh(
-        new THREE.BoxGeometry(0.08, 0.9, 1.1),
-        new THREE.MeshLambertMaterial({ color: 0x4a4d4a }),
-      );
-      head.position.set(-1.12, 0.6, 0);
-      group.add(head);
-      // the blanket, hinged along the far edge
-      hinge.position.set(0, 0.82, -0.5);
-      const blanket = new THREE.Mesh(
-        new THREE.BoxGeometry(2.0, 0.08, 1.0),
-        new THREE.MeshLambertMaterial({ color: 0x3f4a5a }),
-      );
-      blanket.position.z = 0.5;
-      hinge.add(blanket);
-      for (const gx of [-0.45, 0.45]) {
-        const g = new THREE.Object3D();
-        g.position.set(gx, 0.06, 0.98);
-        hinge.add(g);
-        grips.push(g);
-      }
-    } else if (kind === 'chest') {
-      const body = new THREE.Mesh(
-        new THREE.BoxGeometry(1.1, 0.7, 0.8),
-        new THREE.MeshLambertMaterial({ color: 0x4a3520 }),
-      );
-      body.position.y = 0.35;
-      group.add(body);
-
-      // The lid is its own pivot so it can swing rather than slide.
-      hinge.position.set(0, 0.7, -0.4);
-      const lid = new THREE.Mesh(
-        new THREE.BoxGeometry(1.1, 0.14, 0.8),
-        new THREE.MeshLambertMaterial({ color: 0x5c4326 }),
-      );
-      lid.position.z = 0.4;
-      hinge.add(lid);
-      // under the front edge of the lid, a hand's width in from each corner
-      for (const gx of [-0.36, 0.36]) {
-        const g = new THREE.Object3D();
-        g.position.set(gx, -0.02, 0.84);
-        hinge.add(g);
-        grips.push(g);
-      }
-    } else {
-      const locker = kind === 'locker';
-      const h = locker ? 2.0 : 1.8;
-      const w = locker ? 0.9 : 1.2;
-      const body = new THREE.Mesh(
-        new THREE.BoxGeometry(w, h, 0.75),
-        new THREE.MeshLambertMaterial({ color: locker ? 0x3d4652 : 0x4a3520 }),
-      );
-      body.position.y = h / 2;
-      group.add(body);
-
-      // The door hangs off the left edge and swings out towards you.
-      hinge.position.set(-w / 2, h / 2, 0.38);
-      const door = new THREE.Mesh(
-        new THREE.BoxGeometry(w, h - 0.12, 0.09),
-        new THREE.MeshLambertMaterial({ color: locker ? 0x4d5866 : 0x5c4326 }),
-      );
-      door.position.x = w / 2;
-      hinge.add(door);
-      const handle = new THREE.Mesh(
-        new THREE.BoxGeometry(0.07, 0.26, 0.07),
-        new THREE.MeshBasicMaterial({ color: 0x9a8a5c }),
-      );
-      handle.position.set(w - 0.14, 0, 0.08);
-      hinge.add(handle);
-      // just in front of the handle, where a palm closes on it
-      const g = new THREE.Object3D();
-      g.position.set(w - 0.14, 0, 0.16);
-      hinge.add(g);
-      grips.push(g);
-      if (locker) {
-        // Vents.  They are the reason a locker reads as a locker at 20 metres.
-        for (let i = 0; i < 3; i++) {
-          const slat = new THREE.Mesh(
-            new THREE.BoxGeometry(w * 0.6, 0.05, 0.02),
-            new THREE.MeshBasicMaterial({ color: 0x232a33 }),
-          );
-          slat.position.set(w / 2, h * 0.32 - i * 0.12, 0.06);
-          hinge.add(slat);
-        }
-      }
-    }
+    // Built in `hideSpots`: every one of them a made object, its moving part
+    // on the same pivot and its grips where they always were.
+    const built = kind === 'bed' ? buildBedSpot(group)
+      : kind === 'chest' ? buildChestSpot(group)
+        : buildDoorSpot(group, kind === 'locker', this.spots.length + 1);
+    const hinge = built.hinge;
+    const grips = built.grips;
 
     group.add(hinge);
     st.scene.add(group);
     const ext = spotExtent({ x, z, rot, kind });
-    return { x, z, kind, hw: ext.hw, hd: ext.hd, checkedOn: -1, hinge, open: 0, opening: false, sinceChecked: 0, grips };
+    return { x, z, kind, hw: ext.hw, hd: ext.hd, checkedOn: -1, hinge, open: 0, opening: false, sinceChecked: 0, grips, lever: built.lever };
   }
 
   // ------------------------------------------------------------------- input
@@ -2590,6 +2489,11 @@ export class HideRoom3D extends Phaser.Scene {
       // A lid tips back; a door swings out on its side hinge.
       if (c.kind === 'chest' || c.kind === 'bed') c.hinge.rotation.x = -c.open * 1.5;
       else c.hinge.rotation.y = c.open * 1.9;
+      // the lever goes down first and springs back once the door is moving
+      if (c.lever) {
+        const turn = c.opening ? Math.min(1, c.open / 0.12) * (1 - Math.min(1, Math.max(0, (c.open - 0.35) / 0.3))) : 0;
+        c.lever.rotation.z = -turn * 1.2;
+      }
     }
 
     this.updateCamera(dt);
