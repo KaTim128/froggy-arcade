@@ -329,9 +329,9 @@ export class ArcadeCasino extends Phaser.Scene {
       who: 'DEALER',
       color: PALETTE.gold,
       line:
-        '"FROGGY?" HE SQUARES THE DECK. "THE FROG ON THE CUPS AND THE CARPET. HE IS OUR MASCOT, ' +
-        'SIR -- A DRAWING, AND A COSTUME AT BIRTHDAY PARTIES. I CONFESS I HAVE NEVER UNDERSTOOD ' +
-        'WHY PEOPLE SPEAK OF HIM AS IF HE WALKS AROUND."',
+        '"FROGGY? THE FROG ON THE CUPS AND THE CARPET. HE IS OUR MASCOT, SIR, A DRAWING, AND A ' +
+        'COSTUME AT BIRTHDAY PARTIES. I CONFESS I HAVE NEVER UNDERSTOOD WHY PEOPLE SPEAK OF HIM ' +
+        'AS IF HE WALKS AROUND."',
       options: [
         { label: 'DEAL ME IN', fn: () => this.dealMeIn() },
         { label: 'BACK', fn: () => this.closeTalk() },

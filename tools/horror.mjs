@@ -388,7 +388,12 @@ try {
       for (let i = 0; i < 80; i++) {
         await new Promise((r) => setTimeout(r, 50));
         if (window.__hide.climbing) wentOver = true;
-        highest = Math.max(highest, sc.monster.root.position.y);
+        // (his hips do the climbing now, not the whole of him: the lower of
+        // his two feet is how high he actually got onto it)
+        const m = sc.monster;
+        m.root.updateMatrixWorld(true);
+        const feet = m.ankles.map((a) => a.localToWorld(a.position.clone().set(0, 0, 0)).y);
+        highest = Math.max(highest, Math.min(...feet));
         if (!sc.climb && wentOver) break;
       }
       return { started, wentOver, highest, crossed: sc.froggy.y < sofa.z, top: sofa.h };
@@ -396,12 +401,13 @@ try {
     check('he climbs over the furniture rather than stopping at it',
       climbed.started && climbed.wentOver && climbed.crossed,
       `started ${climbed.started}, over ${climbed.top}m, crossed ${climbed.crossed}`);
-    check('he is actually up on top of it while he does',
+    check('he is actually up on top of it while he does, both feet on it',
       climbed.highest > climbed.top * 0.8, `${climbed.highest.toFixed(2)}m up`);
 
     // Hiding, and what hiding costs.
     await page.evaluate(() => {
       const sc = window.__froggy.game().scene.getScene('HideRoom3D');
+      sc.climb = null;
       sc.pos.set(sc.spots[0].x, sc.spots[0].z);
       sc.froggy.set(sc.spots[0].x, sc.spots[0].z + 5);
     });
@@ -444,6 +450,10 @@ try {
     const out = await page.evaluate(() => {
       const sc = window.__froggy.game().scene.getScene('HideRoom3D');
       sc.grace = 999;
+      // (a climb left running by the check before owns where he is, and would
+      // carry him back across the room to the sofa -- see the open-spot check)
+      sc.climb = null;
+      sc.fMode = 'search';
       sc.froggy.set(sc.def.halfW - 2, -sc.def.halfD + 2);
       const bad = [];
       for (const spot of sc.spots) {
@@ -1143,7 +1153,7 @@ try {
 
   // ------------------------------------------------- the way in, for testing it
   // Forty minutes of play stand in front of this room, so it has a password.
-  console.log('\nhorror  a run named TEST128 opens in the arcade');
+  console.log('\nhorror  a run named TESTT128 opens in the arcade');
   {
     const page = await newPage('');
     await sleep(2500);
@@ -1172,8 +1182,8 @@ try {
       };
     };
 
-    const test = await name('test128');
-    check('TEST128 goes straight into the arcade',
+    const test = await name('testt128');
+    check('TESTT128 goes straight into the arcade',
       test.scenes.includes('HideRoom3D') && test.hide?.room === 3,
       `${test.scenes.join(',')}, room ${test.hide?.room}`);
     check('with everything the room reads already set',
@@ -1182,14 +1192,14 @@ try {
     check('and it lands behind the counter like the handover does',
       test.hide && test.hide.pz < 0 && test.hide.prompt === '',
       test.hide ? `${test.hide.px.toFixed(2)}, ${test.hide.pz.toFixed(2)}` : 'not in the room');
-    await page.screenshot({ path: `${SHOTS}/arcade-test128.png` });
+    await page.screenshot({ path: `${SHOTS}/arcade-testt128.png` });
 
-    // HORRORDARK128: the first round of hide and seek, at his briefing.
+    // HNS128: the first round of hide and seek, at his briefing.
     await page.evaluate(() => localStorage.clear());
     await page.reload({ waitUntil: 'networkidle2' });
     await sleep(2800);
-    const dark = await name('horrordark128');
-    check('HORRORDARK128 goes straight to the first round of hide and seek',
+    const dark = await name('hns128');
+    check('HNS128 goes straight to the first round of hide and seek',
       dark.scenes.includes('HideRoom3D') && dark.hide?.room === 0,
       `${dark.scenes.join(',')}, room ${dark.hide?.room}`);
     check('opening on his briefing, with the night behind you',

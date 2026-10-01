@@ -18,7 +18,7 @@ import { audio, SILENCE } from '../core/audio';
 import { store } from '../core/state';
 import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
-import { paintChangeMachine, paintHubRoom, ROOM } from '../art/hubRoom';
+import { paintChangeMachine, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
 import { Cabinet } from '../art/cabinet';
 import { Player } from '../art/player';
 import {
@@ -26,6 +26,7 @@ import {
   COUNTER,
   COUNTER_CLIMB,
   COUNTER_DEPTH,
+  LOUNGE_DOOR,
   PRIZE_CASE,
   prizesForWave,
   STAFF_DOOR,
@@ -33,7 +34,7 @@ import {
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 
-type Spot = 'door' | 'case' | 'counter' | 'staff' | null;
+type Spot = 'door' | 'case' | 'counter' | 'staff' | 'lounge' | null;
 
 export class ArcadeDark extends Phaser.Scene {
   private player!: Player;
@@ -46,8 +47,15 @@ export class ArcadeDark extends Phaser.Scene {
   private locked = false;
   private staffDoor!: Phaser.GameObjects.Rectangle;
 
+  /** In from the new room, through the doorway in the right-hand wall. */
+  private fromLounge = false;
+
   constructor() {
     super('ArcadeDark');
+  }
+
+  init(data: { fromLounge?: boolean } = {}): void {
+    this.fromLounge = data.fromLounge === true;
   }
 
   create(): void {
@@ -64,6 +72,10 @@ export class ArcadeDark extends Phaser.Scene {
 
     paintHubRoom(this, { night: true });
     paintChangeMachine(this, true);
+    // THE DOORWAY IN THE RIGHT-HAND WALL, where the lit hub has it: through
+    // to the new room, which is the way in from the side door.  Its pink is
+    // out with everything else; only a ghost of it is left on the frame.
+    paintOpening(this, { side: 'right', y: LOUNGE_DOOR.y, glow: PALETTE.neon, night: true });
     // THE HUB'S OWN CABINETS, AND ONLY THOSE.  This drew every machine in the
     // building -- the back room's and the casino's on top of the front room's
     // -- which put ten cabinets in a room that has six and made the dark
@@ -106,7 +118,9 @@ export class ArcadeDark extends Phaser.Scene {
     this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, COUNTER.h, PALETTE.ink).setOrigin(0, 0).setDepth(COUNTER_DEPTH);
     this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, 2, PALETTE.slate).setOrigin(0, 0).setDepth(COUNTER_DEPTH);
 
-    this.player = new Player(this, GAME_W / 2, ROOM.bottom - 14, true);
+    this.player = this.fromLounge
+      ? new Player(this, ROOM.right - 26, LOUNGE_DOOR.y + 8, true)
+      : new Player(this, GAME_W / 2, ROOM.bottom - 14, true);
     // Dark or not, it is the same carpeted floor as the lit arcade.
     this.player.setSurface('carpet');
 
@@ -159,6 +173,13 @@ export class ArcadeDark extends Phaser.Scene {
       case 'counter':
         // AD-5: the interaction the arcade never offered while it was open.
         this.climbOver();
+        break;
+
+      case 'lounge':
+        // back through to the new room (its side door stays locked)
+        this.locked = true;
+        audio.sfx('footstep_carpet');
+        fadeToScene(this, 'ArcadeLounge');
         break;
 
       case 'staff': {
@@ -271,6 +292,8 @@ export class ArcadeDark extends Phaser.Scene {
       this.spot = Math.abs(px - (STAFF_DOOR.x + 11)) < 18 ? 'staff' : null;
     } else if (py > ROOM.bottom - 24 && Math.abs(px - GAME_W / 2) < 26) {
       this.spot = 'door';
+    } else if (px > ROOM.right - 30 && Math.abs(py - LOUNGE_DOOR.y) < 26) {
+      this.spot = 'lounge';
     } else if (py < COUNTER.y + 30 && px > PRIZE_CASE.x && px < PRIZE_CASE.x + PRIZE_CASE.w) {
       this.spot = 'case';
     } else if (py < COUNTER.y + 32 && px >= COUNTER_CLIMB.from && px <= COUNTER_CLIMB.to) {
@@ -288,6 +311,8 @@ export class ArcadeDark extends Phaser.Scene {
     const label =
       this.spot === 'door'
         ? '[E] FRONT DOOR'
+        : this.spot === 'lounge'
+          ? '[E] NEW ROOM'
         : this.spot === 'case'
           ? '[E] PRIZE CASE'
           : this.spot === 'counter'

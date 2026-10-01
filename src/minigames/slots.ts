@@ -31,9 +31,10 @@
  * Three tokens a spin: the specials are meant to be moments, not a drip.
  * Taken together the machine hands back about ninety of every hundred.
  *
- * It is a session, like the blackjack table: the first spin is the entry
- * cost the room took, every spin after that is raised through the shell, and
- * every win is paid out on the spot.  LEAVE cashes out; QUIT does the same.
+ * It is a session, like the blackjack table: nothing is taken at the door,
+ * every spin -- the first included -- is raised through the shell as it is
+ * pulled, and every win is paid out on the spot.  Sitting down and getting
+ * straight back up costs nothing.  LEAVE cashes out; QUIT does the same.
  * Nothing here touches cash — tokens in, tokens out, through the ledger.
  */
 
@@ -43,6 +44,7 @@ import { audio } from '../core/audio';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import { ensureSlotSymbols, textureOf, type SymbolId } from './slotSymbols';
+import { buildTemple, GOLD as TEMPLE_GOLD, LAPIS, LAPIS_DK, type Temple } from './slotsTemple';
 import type { MinigameApi, MinigameModule } from './types';
 
 export const SPIN_COST = 3;
@@ -115,9 +117,9 @@ function filler(): number {
   }
   return 1;
 }
-/** Behind every token, the cell: dark, and lit up when it made the win. */
-const CELL_BG = 0x2a1233;
-const CELL_LIT = 0x6a2f78;
+/** Behind every token, the cell: dark lapis, and gold when it made the win. */
+const CELL_BG = 0x141b36;
+const CELL_LIT = 0x7a5a1c;
 
 type Grid = number[][]; // [row][reel]
 
@@ -139,6 +141,7 @@ let spinBtn: Phaser.GameObjects.Container | null = null;
 let leaveBtn: Phaser.GameObjects.Container | null = null;
 let sceneRef: Phaser.Scene | null = null;
 let apiRef: MinigameApi | null = null;
+let temple: Temple | null = null;
 
 export const slots: MinigameModule = {
   id: 'slots',
@@ -175,13 +178,12 @@ export const slots: MinigameModule = {
     shown = blank();
     ensureSlotSymbols(scene);
 
-    scene.add.rectangle(0, 18, GAME_W, 162, 0x2b1430).setOrigin(0, 0);
-    // the cabinet, and the window the reels turn behind
-    scene.add.rectangle(14, 26, 164, 108, 0x53215c).setOrigin(0, 0).setStrokeStyle(1, 0xff4fa3);
-    scene.add.rectangle(20, 32, 152, 96, 0x1a0a1e).setOrigin(0, 0);
+    // The temple the machine stands in, the shrine the reels turn behind and
+    // the tablet the pays are carved on.  See slotsTemple.ts.
+    temple = buildTemple(scene);
     for (let c = 0; c < REELS; c++) {
       // each reel is a strip of its own, so six rows still read as five reels
-      scene.add.rectangle(GRID_X + c * PITCH_X, GRID_Y + ((ROWS - 1) * PITCH_Y) / 2, CELL_W + 2, ROWS * PITCH_Y, 0x08040a);
+      scene.add.rectangle(GRID_X + c * PITCH_X, GRID_Y + ((ROWS - 1) * PITCH_Y) / 2, CELL_W + 2, ROWS * PITCH_Y, 0x070a16);
     }
     for (let r = 0; r < ROWS; r++) {
       const row: Cell[] = [];
@@ -198,8 +200,8 @@ export const slots: MinigameModule = {
     }
     paint(shown);
 
-    // THE PAYTABLE, on the machine where a player reads it before paying.
-    scene.add.rectangle(184, 26, 128, 108, 0x3a1742).setOrigin(0, 0).setStrokeStyle(1, 0xff4fa3);
+    // THE PAYTABLE, on the machine where a player reads it before paying --
+    // carved on the temple's tablet.
     // It says which token to line up, with the token itself beside the words.
     text(scene, 190, 30, 'LINE UP', PALETTE.gold);
     scene.add.image(240, 33, textureOf('token_3'));
@@ -221,8 +223,10 @@ export const slots: MinigameModule = {
     // under the window, so a long result never prints over the balance.
     balance = text(scene, 16, 138, '', PALETTE.cream);
     status = centerText(scene, GAME_W / 2, 148, 'SPIN TO PLAY', PALETTE.cream);
-    spinBtn = button(scene, GAME_W / 2 - 40, 164, `SPIN - ${SPIN_COST}`, () => spin(), { width: 70, height: 14 });
-    leaveBtn = button(scene, GAME_W / 2 + 40, 164, 'LEAVE', () => leave(), { width: 56, height: 14, fill: PALETTE.slate });
+    spinBtn = button(scene, GAME_W / 2 - 40, 164, `SPIN - ${SPIN_COST}`, () => spin(), { width: 70, height: 14, fill: LAPIS, hoverFill: 0x2a4a9a });
+    leaveBtn = button(scene, GAME_W / 2 + 40, 164, 'LEAVE', () => leave(), { width: 56, height: 14, fill: LAPIS_DK, hoverFill: 0x2a4a9a });
+    // gold-edged, like everything else in the temple
+    for (const b of [spinBtn, leaveBtn]) (b.list[0] as Phaser.GameObjects.Rectangle).setStrokeStyle(1, TEMPLE_GOLD);
     scene.input.keyboard?.on('keydown-SPACE', () => spin());
     refresh();
 
@@ -262,6 +266,7 @@ export const slots: MinigameModule = {
   update(_t: number, delta: number) {
     if (over) return;
     tick += delta;
+    temple?.update(tick);
     // Reels blur while they turn; the symbols underneath are only real on a stop.
     for (let c = 0; c < REELS; c++) {
       if (!spinning[c]) continue;
@@ -272,6 +277,7 @@ export const slots: MinigameModule = {
   },
 
   destroy() {
+    temple = null;
     cells = [];
     status = null;
     balance = null;
@@ -388,14 +394,11 @@ function draw(): Grid {
 
 function spin(): void {
   if (over || busy || !sceneRef || !apiRef) return;
-  // The first spin is the entry cost PLAY took on the way in (api.staked());
-  // every one after it is another SPIN_COST tokens, or nothing.
-  if (!firstSpin) {
-    if (apiRef.balance() < SPIN_COST || !apiRef.raise(SPIN_COST)) {
-      status?.setText(`NEED ${SPIN_COST} TOKENS`).setTint(PALETTE.blood);
-      audio.sfx('buzzer');
-      return;
-    }
+  // Every spin is SPIN_COST tokens, taken as it is pulled, or nothing.
+  if (apiRef.balance() < SPIN_COST || !apiRef.raise(SPIN_COST)) {
+    status?.setText(`NEED ${SPIN_COST} TOKENS`).setTint(PALETTE.blood);
+    audio.sfx('buzzer');
+    return;
   }
   firstSpin = false;
   busy = true;

@@ -107,56 +107,28 @@ const FROG_CUT = COUNTER.y;
  */
 const PLAYER_BOX = { headW: 10, headTop: 28, headH: 20, torsoW: 12, torsoH: 12 };
 /**
- * ---- AND WHAT YOU CAN SEE OF HIM IS SOLID.
+ * ---- AND NOTHING OF THEM IS IN FRONT OF THE COUNTER.
  *
- * The counter stops the player's FEET, and the player is not a pair of feet.
- * He is head and shoulders over the glass, and a customer walking up to the
- * right-hand end of the counter put their own head straight through his face:
- * the overlay cut a player-shaped hole in him so the sorting stayed honest,
- * which is the right answer to "who is in front of whom" and no answer at all
- * to "may I stand there".
+ * Froggy and the member of staff are BEHIND the counter, cut off at its back
+ * edge (`FROG_CUT`): from the chest down they are not drawn at all, so there
+ * is no lower half of either of them anywhere a customer can stand.  What is
+ * left -- head, shoulders, a forearm on the top -- is further back than
+ * anybody on the floor, and the player walking right up to the counter stands
+ * in front of it: the overlay cuts a player-shaped hole in them (see
+ * `paintBehindCounter`), so the customer covers the figure and never the
+ * other way round.  The counter is what stops you (see `keepOutOfCounter`);
+ * they need no box of their own.
  *
- * So this is the box, and it is what is VISIBLE of him rather than where his
- * feet are: his feet are behind a counter that is already solid, and colliding
- * with those would stop nobody.  The paint is clipped at `COUNTER.y + 2`, so
- * that line is the bottom of him, and everything else comes off the drawing's
- * own extents (`FROGGY_DESIGN`) through `FROG_POST` -- move him or resize him
- * and the box follows, at the top of his breath so it does not shrink and grow
- * under the player twice a second.
- */
-/**
- * AND A FEW PIXELS OF DAYLIGHT AROUND IT.
- *
- * Edge to edge is not far enough apart.  A box that stops the player the frame
- * the two silhouettes would touch leaves a head resting against his chin with
- * nothing at all between them, and on a screen three hundred and twenty pixels
- * across what that reads as is a player standing INSIDE him -- he is on the
- * overlay, above everything, so the two are one shape and there is no gap to
- * say otherwise.  Six pixels in front of him and four either side is a gap you
- * can see at this size.
- */
-const FROG_CLEAR = { front: 6, side: 4 };
-const FROG_SCALE = (FROG_POST.height / FROGGY_DESIGN.h) * FROGGY_DESIGN.breath;
-const FROG_BODY = {
-  left: FROG_POST.x - FROGGY_DESIGN.halfW * FROG_SCALE - FROG_CLEAR.side,
-  right: FROG_POST.x + FROGGY_DESIGN.halfW * FROG_SCALE + FROG_CLEAR.side,
-  top: FROG_POST.y + (FROGGY_DESIGN.top - FROGGY_DESIGN.feet - FROGGY_DESIGN.lift) * FROG_SCALE,
-  bottom: FROG_CUT + FROG_CLEAR.front,
-};
-/**
  * The member of staff after the night: drawn by `drawStaffer`, feet well down
  * behind the counter so that what shows over it is head, shoulders and the
  * top of the uniform -- the badge and the frog on the pocket just clear the
- * edge.  His box is what is visible of him, the same as Froggy's.
+ * edge.  `STAFFER_TOP` is the top of him, which is what a click on him
+ * answers from.
  */
+const FROG_SCALE = (FROG_POST.height / FROGGY_DESIGN.h) * FROGGY_DESIGN.breath;
 const STAFFER_FEET = FROG_CUT + 22;
 const STAFFER_H = 50;
-const STAFFER_BODY = {
-  left: COUNTER_POST.x - 13 - FROG_CLEAR.side,
-  right: COUNTER_POST.x + 13 + FROG_CLEAR.side,
-  top: STAFFER_FEET - STAFFER_H * (118 / 114),
-  bottom: FROG_CUT + FROG_CLEAR.front,
-};
+const STAFFER_TOP = STAFFER_FEET - STAFFER_H * (118 / 114);
 /**
  * ---- AND THE HIGHLIGHTS GO BEHIND EVERYBODY.
  *
@@ -182,18 +154,23 @@ const POST_RANGE = 26;
 /**
  * ---- WHERE A CUSTOMER STANDS AT THE COUNTER.
  *
- * Feet at the front of the counter put the player's head up over the glass,
- * right under whoever is behind it -- which at this size reads as walking
- * into Froggy, not as standing at the counter.  Even four pixels of head over
- * the bottom of the front read as a head pushed into the woodwork.  So the
- * whole of the player stays in front of it: their feet stop a head's height
- * out, all along it, with two pixels of floor showing between the top of the
- * hood and the counter's bottom edge.
+ * Right up against it.  The feet stop a pixel or so in front of its front
+ * face -- never on it, never through it, never behind it -- so the player
+ * stands AT the counter with their body in front of its face and their head
+ * up over the top, the way a customer leans on one.  They are drawn over the
+ * counter (their feet are in front of its face, and the room sorts by feet),
+ * and over whoever is behind it (see `paintBehindCounter`).
  */
-const COUNTER_GAP = 2;
-const COUNTER_STAND = COUNTER.y + COUNTER.h + COUNTER_GAP + PLAYER_BOX.headTop;
+const COUNTER_GAP = 3;
+const COUNTER_STAND = COUNTER.y + COUNTER.h + COUNTER_GAP;
 /** How far past the counter's ends it still stops you: half a body, and a pixel. */
 const COUNTER_EDGE = PLAYER_BOX.torsoW / 2 + 1;
+/**
+ * And how far down the room it still answers: the counter's prompt reached
+ * this far when customers were held a head's height back from it, and still
+ * does, so standing a step back from the glass is still shopping.
+ */
+const COUNTER_REACH = COUNTER.y + COUNTER.h + 2 + PLAYER_BOX.headTop + 10;
 /** What the key is worth to the arcade, in cash, once. */
 const KEY_REWARD = 100;
 
@@ -597,7 +574,7 @@ export class ArcadeHub extends Phaser.Scene {
       // He answers a click on HIM -- the head and shoulders over the counter
       // -- and the counter under him still opens the prizes.
       this.add
-        .zone(COUNTER_POST.x, (STAFFER_BODY.top + FROG_CUT) / 2, 28, FROG_CUT - STAFFER_BODY.top)
+        .zone(COUNTER_POST.x, (STAFFER_TOP + FROG_CUT) / 2, 28, FROG_CUT - STAFFER_TOP)
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => this.talkToStaff());
     } else {
@@ -657,11 +634,20 @@ export class ArcadeHub extends Phaser.Scene {
     const py = this.player.y;
     froggyLayer.paint((ctx) => {
       ctx.save();
+      // TWO clips, which the canvas intersects.  First, only what is behind
+      // the counter: above its back edge...
       ctx.beginPath();
       ctx.rect(0, 0, GAME_W, FROG_CUT);
-      // and whatever of them lies ON the counter top, which is in front of
+      // ...and whatever of them lies ON the counter top, which is in front of
       // the cut line and still behind nothing
       if (onTop) ctx.rect(onTop.x, onTop.y, onTop.w, onTop.h);
+      ctx.clip();
+      // Then, of that, everything but the player.  (This was one even-odd
+      // path, and wherever the player's box reached BELOW the cut -- a
+      // customer stood at the counter -- the two cancelled and put the hidden
+      // lower half of whoever was behind it back, drawn across the player.)
+      ctx.beginPath();
+      ctx.rect(0, 0, GAME_W, GAME_H);
       ctx.rect(px - PLAYER_BOX.headW / 2, py - PLAYER_BOX.headTop, PLAYER_BOX.headW, PLAYER_BOX.headH);
       ctx.rect(
         px - PLAYER_BOX.torsoW / 2,
@@ -843,7 +829,7 @@ export class ArcadeHub extends Phaser.Scene {
     this.closeTalk();
     this.openTalk(
       '"FROGGY? THE FROG ON THE SIGN? MATE, HE\'S A CARTOON. IF HE\'S ANYWHERE HE\'S ACROSS ' +
-        'THE STREET, QUEUEING FOR A HOT DOG." HE GRINS.',
+        'THE STREET, QUEUEING FOR A HOT DOG."',
       [{ label: 'NEXT', fn: () => this.tellAboutKey() }],
     );
   }
@@ -851,7 +837,7 @@ export class ArcadeHub extends Phaser.Scene {
   private tellAboutKey(): void {
     this.closeTalk();
     this.openTalk(
-      '"NOW, A MISSING KEY -- THAT\'S REAL. ONE WALKED OFF AND THE BOSS IS CONVINCED SOMEBODY\'S ' +
+      '"NOW, A MISSING KEY, THAT\'S REAL. ONE WALKED OFF AND THE BOSS IS CONVINCED SOMEBODY\'S ' +
         'GOING TO LET THEMSELVES IN AND EMPTY THE PRIZE CASE. ME? I READ THAT IF A PRIZE SITS ' +
         'UNCLAIMED FOR FIVE YEARS, IT\'S FINDERS KEEPERS. SO IF THAT KEY STAYS LOST... NO RUSH."',
       this.keyOptions(),
@@ -898,9 +884,8 @@ export class ArcadeHub extends Phaser.Scene {
     audio.sfx('coin_drop');
     this.closeTalk();
     this.openTalk(
-      '"...WAIT. THAT\'S IT. THAT\'S THE KEY." HE TURNS IT OVER, AND FOR ONCE HE ISN\'T SMILING. ' +
-        '"WHERE DID YOU... HUH. MAYBE YOU DIDN\'T IMAGINE ALL OF IT AFTER ALL. ' +
-        `HERE -- ${KEY_REWARD} CASH, FOR YOUR TROUBLE. AND DON'T TELL THE BOSS WHAT YOU TOLD ME."`,
+      '"WAIT. THAT\'S IT. THAT\'S THE KEY. WHERE DID YOU... HUH. MAYBE YOU DIDN\'T IMAGINE ALL ' +
+        `OF IT AFTER ALL. HERE, ${KEY_REWARD} CASH, FOR YOUR TROUBLE. AND DON'T TELL THE BOSS WHAT YOU TOLD ME."`,
       [{ label: 'THANKS', fn: () => this.closeTalk() }],
     );
   }
@@ -1694,7 +1679,6 @@ export class ArcadeHub extends Phaser.Scene {
     const before = { x: this.player.x, y: this.player.y };
     this.player.move(dx, dy, delta, this.bounds);
     this.keepOutOfCounter(before);
-    this.keepOffFroggy(before);
 
     const bal = ledger.balance();
     for (const c of this.cabinets) c.setAffordable(bal >= c.def.cost);
@@ -1734,42 +1718,6 @@ export class ArcadeHub extends Phaser.Scene {
     this.player.setPosition(this.player.x, front);
   }
 
-  /**
-   * You cannot walk through him either.
-   *
-   * His box against the player's own -- torso width, head to heel, both
-   * measured off the sprites rather than guessed at -- and a step that ends
-   * inside it is undone on the axis that walked in.  Come up the room at him
-   * and you stop a head short of the glass; come along the counter and you
-   * stop at his shoulder and go round, under him, at which point the counter
-   * is yours again.
-   *
-   * Nothing this does puts the counter out of reach.  The furthest back it can
-   * push anybody is the line where their head clears the top of the glass,
-   * four pixels inside the range the prize case answers from -- so the prompt
-   * is up before you are stopped, and it stays up while you are.
-   *
-   * Only while it is HIM on the counter.  After the night it is a member of
-   * staff, who is a Phaser sprite sorted under the counter like everything
-   * else in the room and needs none of this.
-   */
-  private keepOffFroggy(before: { x: number; y: number }): void {
-    // The member of staff is on the overlay now too, drawn the way the dealer
-    // is, so he is as solid as the frog was, and for the same reason.
-    const body = this.frogOnCounter ? FROG_BODY : this.stafferOnCounter ? STAFFER_BODY : null;
-    if (!body) return;
-    const halfW = PLAYER_BOX.torsoW / 2;
-    const hits = (px: number, py: number): boolean =>
-      px + halfW > body.left && px - halfW < body.right && py > body.top && py - PLAYER_BOX.headTop < body.bottom;
-    if (!hits(this.player.x, this.player.y)) return;
-    if (!hits(before.x, this.player.y)) this.player.setPosition(before.x, this.player.y);
-    else if (!hits(this.player.x, before.y)) this.player.setPosition(this.player.x, before.y);
-    // Both ends of the step inside him -- put somewhere by a spawn, or walked
-    // in diagonally on the one frame both axes crossed.  Out the front, which
-    // is the only side of him there is any floor on.
-    else this.player.setPosition(this.player.x, body.bottom + PLAYER_BOX.headTop);
-  }
-
   private findTarget(): Target {
     const px = this.player.x;
     const py = this.player.y;
@@ -1799,7 +1747,7 @@ export class ArcadeHub extends Phaser.Scene {
     // it has to be up.  Forty-four is past everywhere you are allowed to stand
     // in front of it and still nowhere near the machines, which are eighty
     // pixels further down the room and answer first anyway.
-    if (py < COUNTER_STAND + 10 && px > COUNTER.x && px < COUNTER.x + COUNTER.w) {
+    if (py < COUNTER_REACH && px > COUNTER.x && px < COUNTER.x + COUNTER.w) {
       // The right-hand end of the counter is a PERSON, not a shelf: stood
       // there you are talking to whoever is on it, and anywhere else along it
       // you are looking at the prizes.  Only once there is somebody to talk

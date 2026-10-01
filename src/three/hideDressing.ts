@@ -213,9 +213,9 @@ export function furnishWalls(scene: THREE.Scene, o: DressOpts): THREE.Group {
     }
     if (w === 'n' && d.staffDoor) return Math.abs(along - d.staffDoor.x) < 1.3;
     if (w === 'e' && d.secretDoor) return Math.abs(along - d.secretDoor.z) < d.secretDoor.w / 2 + 0.8;
-    if (d.wallOpening) {
-      const side: Wall = d.wallOpening.side === 'left' ? 'w' : 'e';
-      if (w === side && Math.abs(along - d.wallOpening.z) < d.wallOpening.w / 2 + 0.7) return true;
+    for (const o of d.wallOpenings ?? []) {
+      const side: Wall = o.side === 'left' ? 'w' : 'e';
+      if (w === side && Math.abs(along - o.z) < o.w / 2 + 0.7) return true;
     }
     return false;
   };

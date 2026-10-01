@@ -10,11 +10,22 @@
  * as the others do.
  *
  * Deliberately thin, like the back room: no counter, no bell, no tutorial.
+ *
+ * ---- AND IT HAS A SIDE DOOR.
+ *
+ * In its right-hand wall, brown, flush with the panelling.  By day it is
+ * barely there -- a door-shaped seam a shade off the wall, the kind of door
+ * nobody notices in a building they are having fun in.  After closing it is
+ * the one that was standing ajar in the alley: the player comes in through
+ * it, into this room with every light in the building off, and it swings
+ * shut behind them.  It does not open again from this side ("The door is
+ * locked from the outside.").  The only way on is through the room and out
+ * of its left-hand doorway into the dark lobby.
  */
 
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
-import { audio } from '../core/audio';
+import { audio, SILENCE } from '../core/audio';
 import { store, type GameId } from '../core/state';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
@@ -29,6 +40,9 @@ import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W } from '../render/pixelScaler';
 
 const INTERACT_RANGE = 24;
+const rgb = (c: number): [number, number, number] => [(c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff];
+/** The side door, in this room's right-hand wall, below the plant. */
+const SIDE_DOOR = { y: 96, h: 40 };
 /** The way back, on this room's LEFT wall -- the other side of the hub's right. */
 const BACK_DOOR = { x: 20, y: LOUNGE_DOOR.y };
 /**
@@ -40,7 +54,7 @@ const PLOTS = [
   ...[84, 142, 200, 258].map((x) => ({ x, y: 160 })),
 ];
 
-type Target = { kind: 'cabinet'; cab: Cabinet } | { kind: 'back' } | null;
+type Target = { kind: 'cabinet'; cab: Cabinet } | { kind: 'back' } | { kind: 'side' } | null;
 
 export class ArcadeLounge extends Phaser.Scene {
   private player!: Player;
@@ -52,13 +66,19 @@ export class ArcadeLounge extends Phaser.Scene {
   private target: Target = null;
   private locked = false;
   private returnTo: GameId | null = null;
+  /** After closing: every light off, and the side door is how you got in. */
+  private night = false;
+  private fromAlley = false;
+  private sideDoor: { leaf: Phaser.GameObjects.Rectangle; gap: Phaser.GameObjects.Rectangle } | null = null;
+  private mutter: Phaser.GameObjects.BitmapText | null = null;
 
   constructor() {
     super('ArcadeLounge');
   }
 
-  init(data: { atCabinet?: GameId } = {}): void {
+  init(data: { atCabinet?: GameId; fromAlley?: boolean } = {}): void {
     this.returnTo = data.atCabinet ?? null;
+    this.fromAlley = data.fromAlley === true;
   }
 
   create(): void {
@@ -68,18 +88,25 @@ export class ArcadeLounge extends Phaser.Scene {
     this.target = null;
     this.cabinets = [];
 
-    fadeIn(this);
-    audio.setScene({ music: 'room_annex', ambience: ['cabinet_bleeps'] });
+    // The night is the break-in's: the route says which side of it we are on.
+    this.night = store.get().route === 'ejected';
+    this.sideDoor = null;
 
-    paintHubRoom(this, { night: false, frontDoor: false });
+    fadeIn(this);
+    // After closing the building is silent, here as in the lobby (see
+    // ArcadeDark's silence contract): footsteps and the door, nothing else.
+    audio.setScene(this.night ? SILENCE : { music: 'room_annex', ambience: ['cabinet_bleeps'] });
+
+    paintHubRoom(this, { night: this.night, frontDoor: false });
     paintArcadeDressing(this, {
-      night: false,
+      night: this.night,
       props: [{ x: 296, y: 62, kind: 'plant' }],
       vents: [60, 236],
     });
     this.paintSign();
+    this.paintSideDoor();
 
-    this.cabinets = cabinetsIn('lounge').map((def) => new Cabinet(this, def));
+    this.cabinets = cabinetsIn('lounge').map((def) => new Cabinet(this, def, this.night));
     // The floor is marked where a machine is coming, and only where there is
     // not one standing already.
     for (const plot of PLOTS) {
@@ -103,11 +130,18 @@ export class ArcadeLounge extends Phaser.Scene {
       ROOM.right - ROOM.left - 16,
       ROOM.bottom - ROOM.top - 6,
     );
-    // You come in through the left-hand doorway, so you arrive next to it.
-    const spawn = this.spawnPoint({ x: BACK_DOOR.x + 18, y: BACK_DOOR.y });
-    this.player = new Player(this, spawn.x, spawn.y);
+    // You come in through the left-hand doorway, so you arrive next to it --
+    // or, after closing, through the side door, so you arrive at that.
+    const spawn = this.fromAlley
+      ? { x: ROOM.right - 22, y: SIDE_DOOR.y + SIDE_DOOR.h / 2 + 4 }
+      : this.spawnPoint({ x: BACK_DOOR.x + 18, y: BACK_DOOR.y });
+    this.player = new Player(this, spawn.x, spawn.y, this.night);
+    if (this.night) this.player.setSurface('carpet');
 
-    new TokenHud(this);
+    // (no tokens to count after closing: the HUD is the daytime's)
+    if (!this.night) new TokenHud(this);
+    this.mutter = text(this, GAME_W / 2, 180 - 30, '', PALETTE.fog).setOrigin(0.5, 0.5).setDepth(802).setVisible(false);
+    if (this.night && this.fromAlley) this.shutBehind();
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
@@ -128,6 +162,13 @@ export class ArcadeLounge extends Phaser.Scene {
   private paintSign(): void {
     const x = GAME_W / 2;
     const y = 22;
+    if (this.night) {
+      // Switched off: the letters are there, dark on dark, and nothing buzzes.
+      this.add.rectangle(x, y, 122, 26, PALETTE.black).setStrokeStyle(1, PALETTE.slate).setDepth(1);
+      centerText(this, x, y - 5, 'NEW GAMES', PALETTE.slate).setDepth(2).setAlpha(0.6);
+      centerText(this, x, y + 5, 'COMING SOON', PALETTE.slate).setDepth(2).setAlpha(0.5);
+      return;
+    }
     this.add.rectangle(x, y, 122, 26, PALETTE.ink).setStrokeStyle(1, PALETTE.neon).setDepth(1);
     this.add.rectangle(x, y, 118, 22, PALETTE.plum, 0.35).setDepth(1);
     centerText(this, x, y - 5, 'NEW GAMES', PALETTE.gold).setDepth(2);
@@ -147,7 +188,7 @@ export class ArcadeLounge extends Phaser.Scene {
     const h = 12;
     const l = x - w / 2;
     const t = y - h;
-    g.fillStyle(PALETTE.gold, 0.55);
+    g.fillStyle(PALETTE.gold, this.night ? 0.12 : 0.55);
     for (const [cx, cy, dx, dy] of [
       [l, t, 1, 1],
       [l + w, t, -1, 1],
@@ -170,13 +211,79 @@ export class ArcadeLounge extends Phaser.Scene {
 
   private paintDoorway(): void {
     // The opening back to the hub, in this room's left wall, lit the hub's pink.
-    paintOpening(this, { side: 'left', y: BACK_DOOR.y, glow: PALETTE.neon });
+    paintOpening(this, { side: 'left', y: BACK_DOOR.y, glow: PALETTE.neon, night: this.night });
     this.add
       .zone(BACK_DOOR.x, BACK_DOOR.y, 26, 50)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
         if (!this.busy()) this.toHub();
       });
+  }
+
+  /**
+   * The side door in the right-hand wall.  It is IN the wall, not on it: the
+   * leaf fills a door-sized patch of the wall's own band and nothing of it
+   * reaches past the wall's face into the room -- no frame, no step, no edge
+   * standing proud.  All there is to see is a pair of hairline seams and a
+   * leaf a shade warmer than the wall round it: by day almost nothing, after
+   * closing a dim brown door.  It swings open and shut within that patch.
+   */
+  private paintSideDoor(): void {
+    const top = SIDE_DOOR.y - SIDE_DOOR.h / 2;
+    // the wall's band runs from the room's right edge to the screen's
+    const x = ROOM.right + 1;
+    const w = GAME_W - ROOM.right - 2;
+    const wall = new Phaser.Display.Color(...rgb(PALETTE.ink));
+    const warm = new Phaser.Display.Color(...rgb(this.night ? 0x2e2218 : PALETTE.brown));
+    // by day a quarter of the way from the wall to brown; at night the door itself
+    const mix = Phaser.Display.Color.Interpolate.ColorWithColor(wall, warm, 100, this.night ? 100 : 22);
+    const leafColour = Phaser.Display.Color.GetColor(mix.r, mix.g, mix.b);
+    // what is behind it when it is open: nothing but black
+    const gap = this.add.rectangle(x, top, w, SIDE_DOOR.h, PALETTE.black).setOrigin(0, 0).setDepth(0.56);
+    const leaf = this.add.rectangle(x, top, w, SIDE_DOOR.h, leafColour).setOrigin(0, 0).setDepth(0.57);
+    // the seams: hairlines down the room-side edge and along the top, flush
+    const seam = this.night ? 0.55 : 0.18;
+    this.add.rectangle(x, top, 1, SIDE_DOOR.h, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(seam);
+    this.add.rectangle(x, top, w, 1, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(seam);
+    // and a handle, barely
+    this.add
+      .rectangle(x + 2, SIDE_DOOR.y + 2, 1, 3, this.night ? 0x5a4a38 : PALETTE.amberDark)
+      .setOrigin(0, 0)
+      .setDepth(0.58)
+      .setAlpha(this.night ? 0.7 : 0.15);
+    this.sideDoor = { leaf, gap };
+  }
+
+  /**
+   * In from the alley: the door is standing open behind the player as the
+   * room comes up, and swings shut on its own a moment later.
+   */
+  private shutBehind(): void {
+    const d = this.sideDoor;
+    if (!d) return;
+    this.locked = true;
+    d.leaf.setScale(0.15, 1);
+    this.time.delayedCall(650, () => {
+      this.tweens.add({
+        targets: d.leaf,
+        scaleX: 1,
+        duration: 260,
+        ease: 'Quad.easeIn',
+        onComplete: () => {
+          audio.sfx('door_shut', 0.7);
+          this.cameras.main.shake(90, 0.003);
+          this.locked = false;
+        },
+      });
+    });
+  }
+
+  private say(msg: string): void {
+    const m = this.mutter;
+    if (!m) return;
+    m.setText(msg).setVisible(true).setAlpha(1);
+    this.tweens.killTweensOf(m);
+    this.tweens.add({ targets: m, alpha: 0, delay: 1800, duration: 600 });
   }
 
   private spawnPoint(fallback: { x: number; y: number }): { x: number; y: number } {
@@ -209,13 +316,20 @@ export class ArcadeLounge extends Phaser.Scene {
       this.toHub();
       return;
     }
+    if (this.target.kind === 'side') {
+      audio.sfx('door_rattle', 0.7);
+      this.say('The door is locked from the outside.');
+      return;
+    }
     this.launchGame(this.target.cab, 'play');
   }
 
   private toHub(): void {
     this.locked = true;
     audio.sfx('footstep_carpet');
-    fadeToScene(this, 'ArcadeHub', { fromDoor: 'lounge' });
+    // after closing the doorway goes to the lobby as it is now: dark
+    if (this.night) fadeToScene(this, 'ArcadeDark', { fromLounge: true });
+    else fadeToScene(this, 'ArcadeHub', { fromDoor: 'lounge' });
   }
 
   /** Into a cabinet: see ArcadeAnnex.launchGame, which this follows exactly. */
@@ -240,7 +354,7 @@ export class ArcadeLounge extends Phaser.Scene {
     this.player.move(dx, dy, delta, this.bounds);
 
     const bal = ledger.balance();
-    for (const c of this.cabinets) c.setAffordable(bal >= c.def.cost);
+    if (!this.night) for (const c of this.cabinets) c.setAffordable(bal >= c.def.cost);
 
     this.target = this.findTarget();
     this.renderPrompt();
@@ -249,8 +363,11 @@ export class ArcadeLounge extends Phaser.Scene {
   private findTarget(): Target {
     const px = this.player.x;
     const py = this.player.y;
+    // After closing, the side door you came in by is something to try --
+    // and the machines are switched off.
+    if (this.night && px > ROOM.right - 32 && Math.abs(py - (SIDE_DOOR.y + SIDE_DOOR.h / 2)) < 26) return { kind: 'side' };
     let best: Cabinet | null = null;
-    let bestD = INTERACT_RANGE;
+    let bestD = this.night ? -1 : INTERACT_RANGE;
     for (const c of this.cabinets) {
       const d = c.distanceTo(px, py);
       if (d < bestD) {
@@ -276,8 +393,10 @@ export class ArcadeLounge extends Phaser.Scene {
       const { cost } = t.cab.def;
       msg = `[E] ${t.cab.def.title} - ${cost} TOKEN${cost === 1 ? '' : 'S'}`;
       colour = ledger.balance() >= cost ? PALETTE.gold : PALETTE.ash;
+    } else if (t.kind === 'side') {
+      msg = '[E] DOOR';
     } else {
-      msg = '[E] ARCADE';
+      msg = this.night ? '[E] LOBBY' : '[E] ARCADE';
     }
     this.prompt.setText(msg).setTint(colour === PALETTE.gold ? 0xffd45e : 0x5c6b7d);
     const x = Phaser.Math.Clamp(this.player.x, 70, GAME_W - 70);

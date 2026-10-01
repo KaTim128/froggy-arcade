@@ -219,6 +219,36 @@ const STYLE = `
   background: transparent;
 }
 
+/* ---- AND IN PORTRAIT, THE EMPTY PART OF THE BAND IS FOR LOOKING TOO.
+   Between the bottom of the picture and the tops of the controls there is a
+   stretch of panel nothing sits on; in the 3D rooms it is a second look
+   surface, the same drag as the picture's.  It is marked, not invisible: a
+   faint inset edge, and a small swipe hint in the middle of it that fades
+   once the player has used it. */
+#touch-controls .tc-lookzone {
+  position: absolute; pointer-events: auto; touch-action: none;
+  border: 1px dashed rgba(214, 220, 228, 0.1); border-radius: 16px;
+  background: radial-gradient(ellipse at 50% 50%, rgba(214, 220, 228, 0.035), transparent 70%);
+  display: flex; align-items: center; justify-content: center;
+  box-sizing: border-box;
+}
+#touch-controls .tc-lookzone[hidden] { display: none; }
+#touch-controls .tc-hint {
+  pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  color: #d6dce4; font-size: var(--tc-font, 13px); letter-spacing: 1.5px;
+  opacity: 0.55; transition: opacity 1.2s ease;
+}
+#touch-controls .tc-hint.quiet { opacity: 0.18; }
+#touch-controls .tc-hint.gone { opacity: 0; }
+#touch-controls .tc-hint .tc-finger { animation: tc-swipe 2.6s ease-in-out infinite; }
+@keyframes tc-swipe {
+  0%, 100% { transform: translateX(-16px); }
+  50% { transform: translateX(16px); }
+}
+#touch-controls.skin-horror .tc-lookzone { border-color: rgba(200, 150, 110, 0.14); }
+#touch-controls.skin-horror .tc-hint { color: #e0c8a8; }
+
 /* The band in portrait sits above the home bar. */
 #touch-controls .tc-zone { padding-bottom: var(--tc-safe-b, 0px); box-sizing: border-box; }
 
@@ -307,6 +337,21 @@ const STYLE = `
 
 type Held = Set<KeyName>;
 
+/**
+ * The swipe hint: arrows either way and a fingertip gliding between them.
+ * Drawn in the current colour so the skins can tint it.
+ */
+const LOOK_HINT =
+  '<svg width="96" height="40" viewBox="0 0 96 40" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M6 20h18M6 20l7-6M6 20l7 6"/>' +
+  '<path d="M90 20H72M90 20l-7-6M90 20l-7 6"/>' +
+  '<path d="M48 6v6M48 6l-4 4M48 6l4 4" opacity="0.6"/>' +
+  '<path d="M48 34v-6M48 34l-4-4M48 34l4-4" opacity="0.6"/>' +
+  '<g class="tc-finger"><circle cx="48" cy="20" r="6.5" fill="currentColor" fill-opacity="0.35"/></g>' +
+  '</svg>';
+/** Remembered: once the player has dragged to look, the hint stays gone. */
+const LOOK_HINT_KEY = 'froggy.lookHintUsed';
+
 /** The eight arrows, by compass point, and what each one shows. */
 const PAD: Array<[string, string]> = [
   ['nw', '&#8598;'],
@@ -325,6 +370,13 @@ class TouchControls {
   private pads: HTMLDivElement | null = null;
   private quit: HTMLButtonElement | null = null;
   private lookPad: HTMLDivElement | null = null;
+  /** Portrait only: the empty band between the picture and the controls, for looking. */
+  private lookZone: HTMLDivElement | null = null;
+  private hint: HTMLDivElement | null = null;
+  private hintTimer = 0;
+  /** How far the current look drag has gone, to tell a real use from a tap. */
+  private lookTravel = 0;
+  private lookFollowed = false;
   private layout: TouchLayout = {};
   private held: Held = new Set();
   /** Every finger on the arrow pad, by touch id, and where it is. */
@@ -348,6 +400,9 @@ class TouchControls {
     root.innerHTML =
       '<div class="tc-panel l"></div><div class="tc-panel r"></div>' +
       '<div class="tc-look" hidden></div>' +
+      '<div class="tc-lookzone" hidden><div class="tc-hint">' +
+      LOOK_HINT +
+      '<span>DRAG TO LOOK</span></div></div>' +
       '<div class="tc-zone tc-left"><div class="tc-dpad">' +
       PAD.map(([cls, glyph]) => `<div class="tc-dkey ${cls}${cls.length > 1 ? ' diag' : ''}">${glyph}</div>`).join('') +
       '<div class="tc-dhub"></div>' +
@@ -358,12 +413,15 @@ class TouchControls {
 
     this.root = root;
     this.lookPad = root.querySelector('.tc-look');
+    this.lookZone = root.querySelector('.tc-lookzone');
+    this.hint = root.querySelector('.tc-hint');
     this.dpad = root.querySelector('.tc-dpad');
     this.pads = root.querySelector('.tc-pads');
     this.quit = root.querySelector('.tc-corner');
 
     this.wireDpad();
-    this.wireLook();
+    this.wireLook(this.lookPad);
+    this.wireLook(this.lookZone);
     this.wireHold(this.quit as HTMLElement, ['ESC']);
 
     window.addEventListener('resize', () => this.relayout());
@@ -426,6 +484,9 @@ class TouchControls {
 
     (this.quit as HTMLElement).hidden = layout.noQuit === true;
     (this.lookPad as HTMLElement).hidden = layout.look !== true;
+    // A fresh look layout (a 3D room coming up) shows the hint again, briefly,
+    // unless the player has already found the zone for themselves.
+    this.resetHint(layout.look === true);
     // A layout with nothing on it gets no panels either: nothing to sit on.
     this.root.classList.toggle('bare', !layout.stick && !buttons.length && layout.noQuit === true);
     this.relayout();
@@ -575,6 +636,69 @@ class TouchControls {
       pad.style.top = `${Math.round(r.top)}px`;
       pad.style.width = `${Math.round(r.width)}px`;
       pad.style.height = `${Math.round(r.height)}px`;
+    }
+    this.placeLookZone(portrait, canvas);
+  }
+
+  /**
+   * In portrait, the part of the band between the bottom of the picture and
+   * the tops of the controls.  Never in landscape (the columns are the
+   * controls', and the picture is already all look), never where there is too
+   * little of it to be worth a thumb, and never over a control: it stops short
+   * of the arrow pad and the buttons, and the gear sits above it.
+   */
+  private placeLookZone(portrait: boolean, canvas: HTMLCanvasElement | null): void {
+    const zone = this.lookZone as HTMLElement;
+    if (!portrait || !this.layout.look || !canvas) {
+      zone.hidden = true;
+      return;
+    }
+    const pic = canvas.getBoundingClientRect();
+    let controlsTop = window.innerHeight;
+    for (const el of [this.dpad, this.pads] as Array<HTMLElement | null>) {
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (r.height > 0) controlsTop = Math.min(controlsTop, r.top);
+    }
+    const safe = safeInsets();
+    const top = Math.round(pic.bottom + 10);
+    const bottom = Math.round(controlsTop - 14);
+    if (bottom - top < 70) {
+      zone.hidden = true;
+      return;
+    }
+    zone.hidden = false;
+    zone.style.left = `${10 + safe.left}px`;
+    zone.style.right = `${10 + safe.right}px`;
+    zone.style.top = `${top}px`;
+    zone.style.height = `${bottom - top}px`;
+  }
+
+  /** The hint: bright on arrival, dimmed after a few seconds, gone once used. */
+  private resetHint(show: boolean): void {
+    const hint = this.hint;
+    if (!hint) return;
+    window.clearTimeout(this.hintTimer);
+    let used = false;
+    try {
+      used = window.localStorage.getItem(LOOK_HINT_KEY) === '1';
+    } catch {
+      // private mode: it just shows again next time
+    }
+    hint.classList.toggle('gone', used || !show);
+    hint.classList.remove('quiet');
+    if (show && !used) this.hintTimer = window.setTimeout(() => hint.classList.add('quiet'), 4000);
+  }
+
+  private hintUsed(): void {
+    const hint = this.hint;
+    if (!hint || hint.classList.contains('gone')) return;
+    window.clearTimeout(this.hintTimer);
+    hint.classList.add('gone');
+    try {
+      window.localStorage.setItem(LOOK_HINT_KEY, '1');
+    } catch {
+      // nothing to remember it in; it goes for this visit anyway
     }
   }
 
@@ -736,13 +860,15 @@ class TouchControls {
    * radians per pixel such that a swipe across the whole picture is about
    * two-thirds of a turn -- the same on any screen.
    */
-  private wireLook(): void {
-    const el = this.lookPad;
+  private wireLook(el: HTMLElement | null): void {
     if (!el) return;
+    // (the picture's pad and the band's zone both come here: one look touch
+    // at a time, whichever it started on, and the window follows it)
     const start = (e: TouchEvent) => {
       if (this.lookTouch !== null) return;
       const t = e.changedTouches[0];
       this.lookTouch = t.identifier;
+      this.lookTravel = 0;
       this.lookX = t.clientX;
       this.lookY = t.clientY;
       window.dispatchEvent(mouse('mousedown', t.clientX, t.clientY, 0, 0));
@@ -755,6 +881,11 @@ class TouchControls {
       const dy = t.clientY - this.lookY;
       this.lookX = t.clientX;
       this.lookY = t.clientY;
+      // a real drag, not a tap, is what tells us the player has found it
+      this.lookTravel += Math.abs(dx) + Math.abs(dy);
+      if (this.lookTravel > 60) this.hintUsed();
+      // (sized to the picture, wherever the drag is: the same turn for the
+      // same swipe on the picture or in the band)
       const w = (this.lookPad as HTMLElement).getBoundingClientRect().width || window.innerWidth;
       window.dispatchEvent(mouse('mousemove', t.clientX, t.clientY, dx, dy, (Math.PI * 1.35) / w));
       e.preventDefault();
@@ -767,6 +898,10 @@ class TouchControls {
       e.preventDefault();
     };
     el.addEventListener('touchstart', start, { passive: false });
+    // The drag is followed at the window, once, however many surfaces start
+    // one: twice would turn the head twice for every move.
+    if (this.lookFollowed) return;
+    this.lookFollowed = true;
     window.addEventListener('touchmove', move, { passive: false });
     window.addEventListener('touchend', end, { passive: false });
     window.addEventListener('touchcancel', end, { passive: false });

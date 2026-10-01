@@ -6754,10 +6754,10 @@ export function rewardFor(_n: number): number {
   return PRIZE;
 }
 /**
- * Fifteen a win.  The seat is twenty-five, charged by the cabinet (see
- * `cost` in content.ts), so it takes two lizards to be ahead of the house.
+ * Twenty a win.  The seat is twenty-five, charged by the cabinet (see
+ * `cost` in content.ts), so it still takes two lizards to be ahead of the house.
  */
-const PRIZE = 15;
+const PRIZE = 20;
 let phase: Phase = 'title';
 /** The one latch that stops a result being reported twice.  See `finish`. */
 let ended = false;

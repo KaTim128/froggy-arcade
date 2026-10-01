@@ -1492,21 +1492,22 @@ for (const g of [
   const fromTheSide = await at();
 
   const front = counter.y + counter.h;
-  // Not just the feet: the whole of the player -- hood included, 28 pixels
-  // above the feet -- has to stay in front of the counter's front face, all
-  // along it and past its ends by half a body.
-  const HEAD = 28;
-  const over = (p) => p.x > counter.x - 7 && p.x < counter.x + counter.w + 7 && p.y - HEAD < front;
-  const kept = !over(straightUp) && !over(fromTheSide);
+  // The player walks right up to it -- their body in front of its face, their
+  // head up over the top, the way a customer leans on one -- but their FEET
+  // never reach the front face, all along it and past its ends by half a body:
+  // nobody gets onto it, through it or behind it.
+  const over = (p) => p.x > counter.x - 7 && p.x < counter.x + counter.w + 7 && p.y <= front;
+  const close = straightUp.y - front <= 5;
+  const kept = !over(straightUp) && !over(fromTheSide) && close;
   console.log(
-    `${kept ? 'PASS' : 'FAIL'}  the player cannot get behind the counter, or into it  — ` +
+    `${kept ? 'PASS' : 'FAIL'}  the player walks right up to the counter but never onto it or behind it  — ` +
       `up: ${straightUp.x},${straightUp.y}; along the wall: ${fromTheSide.x},${fromTheSide.y} ` +
-      `(head top ${straightUp.y - HEAD} vs front edge ${front})`,
+      `(feet ${straightUp.y - front}px in front of its face)`,
   );
   if (!kept) failures++;
 
-  // And at the far end, where the member of staff stands: walked up to him
-  // from every side, the player never overlaps the counter or him.
+  // And at the far end, where the member of staff stands behind it: walked up
+  // to him from every side, the player never gets onto or behind the counter.
   const staffEnd = await page.evaluate(async () => {
     const s = window.__froggy.game().scene.getScene('ArcadeHub');
     const out = [];
@@ -1522,7 +1523,6 @@ for (const g of [
         const before = { x: s.player.x, y: s.player.y };
         s.player.move(kx, ky, 16, s.bounds);
         s.keepOutOfCounter(before);
-        s.keepOffFroggy(before);
       }
       out.push({ x: Math.round(s.player.x), y: Math.round(s.player.y) });
     }
@@ -1530,7 +1530,7 @@ for (const g of [
   });
   const clear = staffEnd.every((p) => !over(p));
   console.log(
-    `${clear ? 'PASS' : 'FAIL'}  and nowhere along it, from any side, does the player end up in the counter  — ` +
+    `${clear ? 'PASS' : 'FAIL'}  and nowhere along it, from any side, does the player end up in or behind the counter  — ` +
       staffEnd.map((p) => `${p.x},${p.y}`).join(' '),
   );
   if (!clear) failures++;
@@ -1563,7 +1563,9 @@ for (const g of [
   // other way round: it pays 20, 35 or 50 depending how far up the ladder you
   // got, and no row of the table says that.  Whack-a-frog joined it for the
   // same reason -- ten or fifteen off a three token cabinet, by score.
-  const OWN_RULES = ['slots', 'wheel', 'blackjack', 'roulette', 'danceoff', 'carchase', 'whack'];
+  // The Flood joined it at ten in and ten out: priced by request, below the
+  // table, and saying so on its card.
+  const OWN_RULES = ['slots', 'wheel', 'blackjack', 'roulette', 'danceoff', 'carchase', 'whack', 'fallingblocks'];
   const wrong = floor.rows.filter(
     (r) => !OWN_RULES.includes(r.id) && floor.table[r.cost] !== undefined && r.reward !== floor.table[r.cost],
   );

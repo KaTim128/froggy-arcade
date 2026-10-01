@@ -75,6 +75,15 @@ export interface HideSpot {
   skin?: SpotSkin;
 }
 
+/** A scenery doorway in a side wall: see RoomDef.wallOpenings. */
+export interface WallOpening {
+  side: 'left' | 'right';
+  z: number;
+  w: number;
+  h: number;
+  color?: number;
+}
+
 export interface RoomDef {
   name: string;
   theme: RoomTheme;
@@ -124,9 +133,11 @@ export interface RoomDef {
    * and a dark version of that room without one does not look like the same
    * building.  It is lit, framed and recessed so it reads as a genuine opening
    * from across the floor -- and it is bricked up a foot behind the frame, so
-   * there is nothing on the other side of it to go to.
+   * there is nothing on the other side of it to go to.  A room may have more
+   * than one, one per stretch of wall; `color` is the frame's (teal if left
+   * out, which is the lit arcade's).
    */
-  wallOpening?: { side: 'left' | 'right'; z: number; w: number; h: number };
+  wallOpenings?: WallOpening[];
   /** Where he goes once he has finished with the door.  Kept off the furniture. */
   froggyStart: { x: number; z: number };
   /**
@@ -199,9 +210,11 @@ export interface CounterRun {
 //   so there is always a loop round the block he is coming down and never a
 //   room you can only leave the way you came.
 //
-//   SHORTCUTS ONLY YOU CAN TAKE.  Ducts at floor level (`crawl`), through
-//   the walls between wings: crouched, you go through; he is far too big and
-//   has to go round -- which is the gap you get to open between you.
+//   VENTS, GRILLED SHUT.  Ducts at floor level (`crawl`) run through the
+//   walls between wings, with a grille bolted over each end.  They used to be
+//   open, a way through on hands and knees that he could not follow -- which
+//   made the inside of one the one place in the building he could never find
+//   you.  He still treats them as walls; now so do you.
 //
 //   BLIND CORNERS AND SAFE POCKETS.  Doorways are offset rather than lined
 //   up, so no two rooms share a sightline; the racking and the machines make
@@ -240,8 +253,8 @@ function runs(a0: number, a1: number, gaps: Array<[number, number]>): Array<[num
 }
 /**
  * A duct through a wall: 1.2 wide, 1.1 high, `len` long, lying across the
- * wall it goes through.  Low enough that he sees over it and cannot get in
- * it; high enough for somebody on their hands and knees.
+ * wall it goes through, grilled shut at both ends.  Low enough that he sees
+ * over it; solid to both of you.
  */
 function duct(x: number, z: number, along: 'x' | 'z', len = 2.6): Box {
   return along === 'x'
@@ -615,7 +628,7 @@ const STAFF_ONLY: RoomDef = {
       { x: -20, z: 12.35, y: 2.9, rot: 0, text: 'OFFICES', color: '#d8e0ff' },
       { x: 0, z: -7.7, y: 2.9, rot: 0, text: 'FIRST AID', color: '#c8ffd8' },
       { x: 20, z: 12.35, y: 2.9, rot: 0, text: 'STAFF LOCKERS', color: '#c8ffd8' },
-      { x: 0, z: 16.2, y: 2.4, rot: 0, text: 'RECEPTION', color: '#ffb45e' },
+      { x: 0, z: 16.2, y: 2.85, rot: 0, text: 'RECEPTION', color: '#ffb45e' },
     ],
   },
 };
@@ -778,8 +791,14 @@ const ARCADE_BASE: RoomDef = {
     { axis: 'z', at: 7.38, from: -10.0, to: -4.8, top: 1.15 },
   ],
   // The way through to the back room, in the left-hand wall where the lit
-  // arcade has its doorway (y 95..141).  Scenery: see RoomDef.wallOpening.
-  wallOpening: { side: 'left', z: 2.5, w: 3.4, h: 2.8 },
+  // arcade has its doorway (y 95..141).  Scenery: see RoomDef.wallOpenings.
+  // And across the floor from it, in the right-hand wall between the end of
+  // the counter and the front row, its pink twin: the same frame, the same
+  // dark recess and the same bricked-up nothing behind it.
+  wallOpenings: [
+    { side: 'left', z: 2.5, w: 3.4, h: 2.8 },
+    { side: 'right', z: -0.4, w: 3.4, h: 2.8, color: 0xe8559f },
+  ],
 };
 
 export const ARCADE: RoomDef = ARCADE_BASE;

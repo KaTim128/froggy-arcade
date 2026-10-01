@@ -46,7 +46,10 @@
 
 import * as THREE from 'three';
 import type { Box, RoomDef } from './hideRooms';
-import { FroggyMonster, type FroggyPose } from './froggyMonster';
+import { FroggyMonster, type FroggyPose, type HandGoal } from './froggyMonster';
+import { buildLab, type LabStatus } from './secretLab';
+import { buildMiniature } from './secretMiniature';
+import { concrete, floorTile, wallTile } from './labTextures';
 
 /**
  * What the room says he is doing this frame, handed straight to the twin in
@@ -110,8 +113,24 @@ export interface SecretRoom {
   floorAt(x: number, z: number): number;
   /** Keep the player inside the shell. */
   clamp(v: THREE.Vector2): void;
-  /** Drives the lab, the tube and the thing under the glass. */
-  tick(dt: number): void;
+  /**
+   * Drives the lab, the tube and the thing under the glass.  `viewer` is the
+   * camera, in the world: the thing in the tube watches it.
+   */
+  tick(dt: number, viewer?: THREE.Vector3 | null): void;
+  /** The experiment machine, the tube's console and the port lever: where to stand at each. */
+  lab: { machine: { x: number; z: number }; panel: { x: number; z: number }; lever: { x: number; z: number } };
+  labStatus(): LabStatus;
+  /**
+   * Pour the carried flask into the machine.  The sequence's name, or why
+   * not (`why`) -- nothing carried, not a flask, the tube not full, a
+   * sequence already running.
+   */
+  pour(): { name?: string; why?: string };
+  /** The console's button: drain or fill the tube. */
+  pressWater(): ReturnType<ReturnType<typeof buildLab>['pressWater']>;
+  /** The lever: open or shut the port in the glass. */
+  pullLever(): ReturnType<ReturnType<typeof buildLab>['pullLever']>;
   /** The heater by the tube: where it is, and switching it. Returns whether it is now on. */
   heater: { x: number; z: number };
   toggleHeater(): boolean;
@@ -210,68 +229,41 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
   };
 
   // ---------------------------------------------------------------- the shell
-  // A laboratory nobody was meant to find: pale blue tile underfoot, pale
-  // blue-white walls, and a ceiling of flat, even, cold light.  Clean the way
-  // somewhere is clean when it has to be hosed down.
-  const floorMat = lam(0x9ec6d6);
+  // A laboratory nobody was meant to find, and it is in use: stained tile
+  // underfoot, poured concrete and grimy wall tile, a ceiling lost in the
+  // dark.  The room's own furniture is in secretLab -- this is the box.
+  const floorMat = new THREE.MeshLambertMaterial({ map: floorTile([(MAX_X - MIN_X) / 2, (MAX_Z - MIN_Z) / 2]) });
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(MAX_X - MIN_X, MAX_Z - MIN_Z), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.set((MIN_X + MAX_X) / 2, 0.01, (MIN_Z + MAX_Z) / 2);
   root.add(floor);
-  // the tile grid: thin grout lines a metre apart over the lab half
-  const grout = lam(0x7fa7b8);
-  for (let x = MIN_X + 1; x < MAX_X; x += 1) {
-    const g = new THREE.Mesh(new THREE.PlaneGeometry(0.04, DIVIDE_Z - MIN_Z), grout);
-    g.rotation.x = -Math.PI / 2;
-    g.position.set(x, 0.015, (MIN_Z + DIVIDE_Z) / 2);
-    root.add(g);
-  }
-  for (let z = MIN_Z + 1; z < DIVIDE_Z; z += 1) {
-    const g = new THREE.Mesh(new THREE.PlaneGeometry(MAX_X - MIN_X, 0.04), grout);
-    g.rotation.x = -Math.PI / 2;
-    g.position.set(0, 0.015, z);
-    root.add(g);
-  }
 
-  const wallMat = lam(0xc9e4ee);
   const H = 7.5;
-  box(wallMat, MAX_X - MIN_X + 1, H, 0.5, 0, 0, MIN_Z - 0.25);
-  box(wallMat, MAX_X - MIN_X + 1, H, 0.5, 0, 0, MAX_Z + 0.25);
-  box(wallMat, 0.5, H, MAX_Z - MIN_Z + 1, MIN_X - 0.25, 0, (MIN_Z + MAX_Z) / 2);
-  box(wallMat, 0.5, H, MAX_Z - MIN_Z + 1, MAX_X + 0.25, 0, (MIN_Z + MAX_Z) / 2);
-  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(MAX_X - MIN_X, MAX_Z - MIN_Z), lam(0xeaf6fb));
+  const wallMat = (along: number) => new THREE.MeshLambertMaterial({ map: concrete([along / 4, H / 4]) });
+  box(wallMat(MAX_X - MIN_X + 1), MAX_X - MIN_X + 1, H, 0.5, 0, 0, MIN_Z - 0.25);
+  box(wallMat(MAX_X - MIN_X + 1), MAX_X - MIN_X + 1, H, 0.5, 0, 0, MAX_Z + 0.25);
+  box(wallMat(MAX_Z - MIN_Z + 1), 0.5, H, MAX_Z - MIN_Z + 1, MIN_X - 0.25, 0, (MIN_Z + MAX_Z) / 2);
+  box(wallMat(MAX_Z - MIN_Z + 1), 0.5, H, MAX_Z - MIN_Z + 1, MAX_X + 0.25, 0, (MIN_Z + MAX_Z) / 2);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(MAX_X - MIN_X, MAX_Z - MIN_Z), lam(0x111517));
   ceil.rotation.x = Math.PI / 2;
   ceil.position.set(0, H, (MIN_Z + MAX_Z) / 2);
   root.add(ceil);
-  // a wipe-clean band round the walls at waist height, and a coved skirting
-  box(lam(0x86b3c6), MAX_X - MIN_X, 0.9, 0.08, 0, 0, MIN_Z + 0.06);
-  box(lam(0x5f8ea3), MAX_X - MIN_X, 0.1, 0.1, 0, 0.9, MIN_Z + 0.08);
-  box(lam(0x86b3c6), 0.08, 0.9, DIVIDE_Z - MIN_Z, MIN_X + 0.06, 0, (MIN_Z + DIVIDE_Z) / 2);
-  box(lam(0x5f8ea3), 0.1, 0.1, DIVIDE_Z - MIN_Z, MIN_X + 0.08, 0.9, (MIN_Z + DIVIDE_Z) / 2);
+  // wipe-clean wall tile to shoulder height round the lab, and a steel skirting
+  const tileX = new THREE.MeshLambertMaterial({ map: wallTile([(MAX_X - MIN_X) / 1.6, 1]) });
+  const tileZ = new THREE.MeshLambertMaterial({ map: wallTile([(DIVIDE_Z - MIN_Z) / 1.6, 1]) });
+  box(tileX, MAX_X - MIN_X, 1.6, 0.06, 0, 0, MIN_Z + 0.04);
+  box(tileZ, 0.06, 1.6, DIVIDE_Z - MIN_Z, MIN_X + 0.04, 0, (MIN_Z + DIVIDE_Z) / 2);
+  box(tileZ, 0.06, 1.6, DIVIDE_Z - MIN_Z, MAX_X - 0.04, 0, (MIN_Z + DIVIDE_Z) / 2);
+  box(lam(0x2b3238), MAX_X - MIN_X, 0.08, 0.1, 0, 1.6, MIN_Z + 0.06);
+  box(lam(0x2b3238), 0.1, 0.08, DIVIDE_Z - MIN_Z, MIN_X + 0.06, 1.6, (MIN_Z + DIVIDE_Z) / 2);
 
-  // ------------------------------------------------------------ cold lighting
-  // Even and pale, from long panels in the ceiling.  The hide rooms run one
-  // dim ambient and a torch; this is the opposite -- you can see everything in
-  // here, which is the problem with it.
-  const amb = new THREE.AmbientLight(0xd6efff, 1.05);
+  // ---------------------------------------------------------- dim lighting
+  // Low and cold, from fixtures that are not all working (see secretLab).
+  // Dark enough to be a place you should not be; never so dark you cannot
+  // see what is in it.
+  const amb = new THREE.AmbientLight(0x8fa4ad, 0.55);
   root.add(amb);
   lights.push(amb);
-  for (const [x, z] of [
-    [-4, -15],
-    [4, -15],
-    [-4, -7],
-    [3, -8],
-    [0, -11.5],
-  ] as const) {
-    const l = new THREE.PointLight(0xcfeeff, 12, 18, 1.3);
-    l.position.set(x, 6.4, z);
-    root.add(l);
-    lights.push(l);
-    // the panel the light comes out of
-    const panel = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.7), lit(0xf2fbff));
-    panel.position.set(x, H - 0.05, z);
-    root.add(panel);
-  }
 
   // ----------------------------------------------------- THE CONTAINMENT TUBE
   // The first thing in frame when you come through the wall: a column of
@@ -385,10 +377,10 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
   // Down the left wall: a long steel bench with monitors, glassware, a
   // centrifuge, and jars with small green things in them.
   const benchX = MIN_X + 1.0;
-  box(lam(0xd7e7ee), 1.4, 0.1, 7.0, benchX, 1.0, -14.0, true, 0xd7e7ee);
+  box(lam(0x6d7880), 1.4, 0.1, 7.0, benchX, 1.0, -14.0, true, 0x6d7880);
   box(steel, 1.3, 1.0, 0.1, benchX, 0, -17.45);
   box(steel, 1.3, 1.0, 0.1, benchX, 0, -10.55);
-  box(lam(0x9fb3be), 1.2, 0.9, 6.6, benchX, 0, -14.0);
+  box(lam(0x2c3338), 1.2, 0.9, 6.6, benchX, 0, -14.0);
   // monitors, each showing a trace
   const screens: THREE.MeshBasicMaterial[] = [];
   for (const z of [-16.4, -14.6]) {
@@ -403,7 +395,7 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
   trace.position.set(benchX - 0.2, 1.55, -16.4);
   root.add(trace);
   // a centrifuge
-  const fuge = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.4, 16), lam(0xe8eef2));
+  const fuge = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.4, 16), lam(0x8e989e));
   fuge.position.set(benchX, 1.3, -12.9);
   root.add(fuge);
   const fugeLid = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 16), lit(0x7fe3ff));
@@ -434,8 +426,8 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
   // In the middle of the floor: a steel gurney with the straps undone and a
   // dent in the pad the shape of something long.
   const gurney = { x: 1.2, z: -15.2 };
-  box(lam(0xd6dde2), 2.6, 0.12, 1.0, gurney.x, 0.9, gurney.z, true, 0xd6dde2);
-  box(lam(0x9fc6d6), 2.4, 0.1, 0.85, gurney.x, 1.02, gurney.z);
+  box(lam(0x7d878d), 2.6, 0.12, 1.0, gurney.x, 0.9, gurney.z, true, 0x7d878d);
+  box(lam(0x3d4a44), 2.4, 0.1, 0.85, gurney.x, 1.02, gurney.z);
   for (const [dx, dz] of [
     [-1.15, -0.4],
     [1.15, -0.4],
@@ -457,7 +449,7 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
 
   // ------------------------------------------------ a rack of blinking things
   // Against the back wall, humming.
-  box(lam(0x2a3038), 2.4, 3.2, 0.9, -5.6, 0, MIN_Z + 0.55, true, 0x2a3038);
+  box(lam(0x1c2126), 2.4, 3.2, 0.9, -5.6, 0, MIN_Z + 0.55, true, 0x1c2126);
   const blinkers: THREE.MeshBasicMaterial[] = [];
   for (let r = 0; r < 6; r++) {
     for (let c = 0; c < 5; c++) {
@@ -470,7 +462,7 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
   }
   // and a cage in the corner, open, empty, and too big for anything that
   // should be kept in a cage
-  const cageMat = lam(0x55636e);
+  const cageMat = lam(0x3c454c);
   const cage = { x: 6.6, z: -17.4 };
   for (let i = 0; i <= 6; i++) {
     box(cageMat, 0.05, 2.0, 0.05, cage.x - 1.1 + i * 0.37, 0, cage.z + 0.8);
@@ -489,12 +481,16 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
     x: number;
     y: number;
     z: number;
+    /** Where it came from: an emptied flask goes back here, refilled. */
+    home: [number, number, number];
+    /** In the machine, being used: not there to be picked up. */
+    away?: boolean;
   }
   const pickables: Pickable[] = [];
   const addPick = (id: string, name: string, mesh: THREE.Object3D, x: number, y: number, z: number): void => {
     mesh.position.set(x, y, z);
     root.add(mesh);
-    pickables.push({ id, name, mesh, x, y, z });
+    pickables.push({ id, name, mesh, x, y, z, home: [x, y, z] });
   };
   const flask = (liquidColor: number): THREE.Group => {
     const g = new THREE.Group();
@@ -515,6 +511,10 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
   addPick('flask-green', 'FLASK', flask(0x6fdc5f), benchX + 0.3, 1.1, -15.4);
   addPick('flask-pink', 'FLASK', flask(0xff5fa8), benchX + 0.35, 1.1, -13.7);
   addPick('flask-blue', 'FLASK', flask(0x5fb8ff), gurney.x - 0.6, 1.07, gurney.z - 0.1);
+  // and two more, for the machine: one on the bench by the jars, one on the
+  // machine's own tray
+  addPick('flask-amber', 'FLASK', flask(0xffb640), benchX + 0.3, 1.1, -10.9);
+  addPick('flask-violet', 'FLASK', flask(0x9b5cff), MIN_X + 1.65, 1.04, -5.45);
   {
     const board = new THREE.Group();
     const back = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.02, 0.46), lam(0x8a5a33));
@@ -549,7 +549,7 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
   // cannot be walked past.  Nothing in the hide rooms hints that this exists,
   // so once you are in here it is allowed to be as loud as it likes.
   const buttonAt = { x: 3.2, z: -12.6 };
-  box(lam(0x3a4050), 1.1, 0.95, 1.1, buttonAt.x, 0, buttonAt.z, true, 0x3a4050);
+  box(lam(0x262d33), 1.1, 0.95, 1.1, buttonAt.x, 0, buttonAt.z, true, 0x262d33);
   box(lam(0x22262f), 1.3, 0.12, 1.3, buttonAt.x, 0.95, buttonAt.z);
   const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.2, 14), lit(0x3fe39b));
   knob.position.set(buttonAt.x, 1.14, buttonAt.z);
@@ -570,8 +570,8 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
   for (let i = 0; i < STEPS; i++) {
     const y = ((i + 1) / STEPS) * MEZZ_Y;
     // each step a solid block down to the floor, so the flight has a side
-    box(lam(i % 2 ? 0x7fa7b8 : 0x8fb6c6), stairW - 0.3, y, run + 0.02, (STAIR_X0 + MAX_X) / 2, 0, STAIR_Z0 + i * run + run / 2);
-    const nose = new THREE.Mesh(new THREE.BoxGeometry(stairW - 0.5, 0.04, 0.06), lit(0x9ff0ff));
+    box(lam(i % 2 ? 0x3a4248 : 0x434c52), stairW - 0.3, y, run + 0.02, (STAIR_X0 + MAX_X) / 2, 0, STAIR_Z0 + i * run + run / 2);
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(stairW - 0.5, 0.04, 0.06), lit(0xd8a824));
     nose.position.set((STAIR_X0 + MAX_X) / 2, y + 0.02, STAIR_Z0 + i * run + 0.04);
     root.add(nose);
   }
@@ -595,7 +595,7 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
     color: 0x7fa7b8,
   });
   // and the divider between the lab and the drop, everywhere except the run
-  box(lam(0xc9e4ee), STAIR_X0 - MIN_X, 5.2, 0.5, (MIN_X + STAIR_X0) / 2, 0, DIVIDE_Z, true, 0xc9e4ee);
+  box(wallMat(STAIR_X0 - MIN_X), STAIR_X0 - MIN_X, 5.2, 0.5, (MIN_X + STAIR_X0) / 2, 0, DIVIDE_Z, true, 0x3a4043);
 
   // ------------------------------------------- THE ENCLOSURE, AND THE GLASS
   //
@@ -621,42 +621,9 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
   pen.position.set(0, 0.02, pitCZ);
   pen.scale.setScalar(k);
   root.add(pen);
-  /** A box in ROOM coordinates, dropped into the enclosure at enclosure scale. */
-  const penBox = (color: number, w: number, h: number, d: number, x: number, z: number, y = 0): void => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), lam(color));
-    m.position.set(x, y + h / 2, z);
-    pen.add(m);
-  };
-
-  const penFloor = new THREE.Mesh(
-    new THREE.PlaneGeometry(watched.halfW * 2, watched.halfD * 2),
-    lam(watched.floor),
-  );
-  penFloor.rotation.x = -Math.PI / 2;
-  pen.add(penFloor);
-  // The shell.  Low enough to see over from up here -- the point of the pane
-  // is that the room has no lid on it any more and he has not noticed.
-  const penH = watched.wallH;
-  penBox(watched.wall, watched.halfW * 2 + 0.6, penH, 0.6, 0, -watched.halfD - 0.3);
-  penBox(watched.wall, watched.halfW * 2 + 0.6, penH, 0.6, 0, watched.halfD + 0.3);
-  penBox(watched.wall, 0.6, penH, watched.halfD * 2 + 0.6, -watched.halfW - 0.3, 0);
-  penBox(watched.wall, 0.6, penH, watched.halfD * 2 + 0.6, watched.halfW + 0.3, 0);
-  // Everything that is in that room, where it is in that room.
-  for (const f of watched.furniture) penBox(f.color, f.w, f.h, f.d, f.x, f.z);
-  // and the boxes he opens, marked out from the furniture so it is obvious
-  // which ones he is working and which ones he has not got to yet.
-  /** The lids, kept, because they open when the real ones do.  See `Watched`. */
-  const penLids: Array<{ mesh: THREE.Mesh; base: number; open: number }> = [];
-  for (const spot of watched.spots) {
-    const h = spot.kind === 'bed' ? 0.7 : 1.4;
-    penBox(0x6b7789, 1.5, h, 1.5, spot.x, spot.z);
-    const lid = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.12, 1.6), lam(0x93a3b8));
-    lid.position.set(spot.x, h + 0.06, spot.z);
-    pen.add(lid);
-    penLids.push({ mesh: lid, base: h + 0.06, open: 0 });
-  }
-  // the door he locked behind you, shut, in the wall it is in
-  penBox(0x2b2119, 2.2, 3.0, 0.5, watched.door.x, watched.halfD - 0.1);
+  // The room itself, as a scale model: walls, doorways, furniture, every
+  // hiding place as what it is, the names of the places, and him marked.
+  const mini = buildMiniature(pen, watched, MEZZ_Y, k);
 
   // ITS OWN LIGHT, taken off the room's own bulbs so the enclosure is lit the
   // colour the room is lit -- two of them, not nine, because ten more lamps in
@@ -707,6 +674,32 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
   // with the room he is searching.  Posed by `watch` and by nothing else.
   const monster = new FroggyMonster(FROGGY_SCALE);
   pen.add(monster.root);
+
+  // ---- THE LAB AT WORK: the room dressed, the containment chamber, the
+  // experiment machine and the tube's own controls.  See secretLab.
+  const lab = buildLab({
+    root,
+    lights,
+    blockers,
+    ambient: amb,
+    shell: { minX: MIN_X, maxX: MAX_X, minZ: MIN_Z, divideZ: DIVIDE_Z, h: H, stairX0: STAIR_X0, stairZ0: STAIR_Z0 },
+    tube: {
+      x: tube.x,
+      z: tube.z,
+      r: TUBE_R,
+      h: TUBE_H,
+      base: 0.6,
+      liquid,
+      liquidMat,
+      glass: tubeGlass,
+      light: tubeLight,
+      bubbles,
+      specimen,
+    },
+  });
+  /** A flask on its way into the hopper: tipped, emptied, then gone until the sequence ends. */
+  let pouring: { id: string; t: number } | null = null;
+  const hopperAt = new THREE.Vector3(MIN_X + 1.6, 2.45, -6.25);
   // Dark and unlit until somebody walks through the wall.  See setActive.
   root.visible = false;
   for (const l of lights) l.visible = false;
@@ -720,7 +713,7 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
     pose: { speed: 0, maw: 0.12, climb: 0, scan: 0 },
   };
 
-  const tick = (dt: number): void => {
+  const tick = (dt: number, viewer?: THREE.Vector3 | null): void => {
     clock += dt;
     knobLight.intensity = 6 + Math.sin(clock * 2.4) * 1.6;
     // The lab ticking over: the traces on the monitors, the LEDs on the rack,
@@ -730,47 +723,49 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
       screens[i].color.setRGB(0.04, 0.18 + k * 0.1, 0.2 + k * 0.08);
     }
     trace.position.y = 1.55 + Math.sin(clock * 9) * 0.06 * (1 + agony * 3);
+    screens[0].color.setRGB(0.04, 0.2, 0.12);
     for (let i = 0; i < blinkers.length; i++) {
       const on = Math.sin(clock * (2 + (i % 7)) + i * 1.7) > 0.3;
       blinkers[i].color.setHex(on ? (i % 5 === 0 ? 0xffd45e : 0x3fe39b) : 0x12301f);
     }
 
-    // ---- THE HEATER, AND HIM.
-    //
-    // Switched on, the coils come up to orange over a second and a half, and
-    // a moment after the glass warms he starts: the calm float goes, the jaw
-    // drops, the arms go for the glass, the whole of him twisting in the
-    // liquid.  Off, he settles back -- slowly -- and stares at whoever did it.
+    // ---- THE HEATER.  Switched on, the coils come up to orange over a
+    // second and a half, and a moment after the glass warms he feels it.
+    // What he does about it -- and everything else that is done to him in
+    // here -- is the lab's (see secretLab).
     heaterT = Math.max(0, Math.min(1.5, heaterT + (heaterOn ? dt : -dt * 0.8)));
     const glow = heaterT / 1.5;
     coilMat.color.setRGB(0.23 + glow * 0.77, 0.08 + glow * 0.34, 0.06 + glow * 0.04);
     heatLight.intensity = glow * 9;
     const want = heaterOn && heaterT > 0.6 ? 1 : 0;
     agony += (want - agony) * Math.min(1, dt * (want ? 3 : 0.8));
-    tubeLight.intensity = 12 + Math.sin(clock * 0.9) * 2 + agony * 6 * Math.abs(Math.sin(clock * 11));
-    for (const b of bubbles) {
-      b.m.position.y += b.speed * (1 + agony * 3) * dt;
-      if (b.m.position.y > 0.6 + TUBE_H - 0.2) b.m.position.y = 0.7;
-      b.a += dt * 0.3;
-      b.m.position.x = tube.x + Math.cos(b.a) * b.r;
-      b.m.position.z = tube.z + Math.sin(b.a) * b.r;
+    lab.tick(dt, viewer ?? null, agony);
+
+    // A flask going into the machine: up over the hopper, tipped, emptied, gone.
+    if (pouring) {
+      pouring.t += dt;
+      const p = pickables.find((q) => q.id === pouring!.id);
+      if (p) {
+        const k = Math.min(1, pouring.t / 0.5);
+        p.mesh.position.set(hopperAt.x, hopperAt.y + 0.25 * (1 - k), hopperAt.z);
+        p.mesh.rotation.set(0, 0, -2.3 * Math.min(1, pouring.t / 0.6));
+        if (pouring.t > 1.4) {
+          p.mesh.visible = false;
+          pouring = null;
+        }
+      } else pouring = null;
     }
-    // He floats: a slow bob and turn, always coming back round to face the
-    // wall you came in through.  In agony he jerks and twists.
-    const bob = Math.sin(clock * 0.7) * 0.12 + agony * Math.sin(clock * 17) * 0.08;
-    const turn = Math.sin(clock * 0.23) * 0.35 + agony * Math.sin(clock * 9) * 0.5;
-    specimen.setPose(tube.x + agony * Math.sin(clock * 13) * 0.12, 0.9 + bob, tube.z, turn);
-    specimen.update(dt, {
-      speed: 0,
-      maw: 0.08 + agony * 0.92,
-      mawRate: 6,
-      climb: 0,
-      scan: 0,
-      lunge: agony,
-      grab: agony,
-      reachAt: null,
-      viewer: null,
-    });
+    // ...and back on its shelf, full again, once the sequence is over
+    if (lab.finished()) {
+      for (const p of pickables) {
+        if (!p.away) continue;
+        p.away = false;
+        [p.x, p.y, p.z] = p.home;
+        p.mesh.position.set(p.x, p.y, p.z);
+        p.mesh.rotation.set(0, 0, 0);
+        p.mesh.visible = true;
+      }
+    }
 
     // Him, doing downstairs exactly what he is doing in the room: the pose is
     // the room's, not ours.  He never once looks up -- there is nothing in the
@@ -780,22 +775,23 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
     // (the floor and the solids are in room space, which is this enclosure's
     // own; where he turns his face is a point in the world, so it comes down
     // the hole with him)
-    const faceTo = seen.pose.faceTo && monster.root.parent ? monster.root.parent.localToWorld(seen.pose.faceTo.clone()) : null;
-    monster.update(dt, { ...seen.pose, reachAt: null, viewer: null, faceTo });
+    const par = monster.root.parent;
+    const down = (v: THREE.Vector3): THREE.Vector3 => (par ? par.localToWorld(v.clone()) : v);
+    const faceTo = seen.pose.faceTo ? down(seen.pose.faceTo) : null;
+    // (and so are his hands on things, and his feet going over something)
+    const hands = seen.pose.hands
+      ? (seen.pose.hands.map((g) => (g ? { ...g, at: down(g.at) } : null)) as [HandGoal | null, HandGoal | null])
+      : undefined;
+    const rig = seen.pose.climbRig;
+    const climbRig = rig ? { ...rig, feet: [down(rig.feet[0]), down(rig.feet[1])] as [THREE.Vector3, THREE.Vector3] } : null;
+    monster.update(dt, { ...seen.pose, reachAt: null, viewer: null, faceTo, hands, climbRig });
 
-    // ---- AND THE LIDS COME UP WHEN THE REAL ONES DO.
-    //
-    // The box he is working down there is the box he is working up here,
-    // because the number comes out of the room's own `spots` every frame.
-    // Eased rather than snapped, so a lid takes a moment to swing -- which is
-    // what makes it read as him opening it rather than as a light going on.
-    for (let i = 0; i < penLids.length; i++) {
-      const want = Math.min(1, Math.max(0, seen.lids?.[i] ?? 0));
-      const lid = penLids[i];
-      lid.open += (want - lid.open) * Math.min(1, dt * 6);
-      lid.mesh.position.y = lid.base + lid.open * 0.55;
-      lid.mesh.rotation.z = lid.open * 0.5;
-    }
+    // ---- AND THE LIDS COME UP WHEN THE REAL ONES DO, and the marker stays
+    // under him.  The box he is working down there is the box he is working
+    // up here, because the number comes out of the room's own `spots` every
+    // frame.  Eased rather than snapped, so a lid takes a moment to swing.
+    mini.setLids(seen.lids ?? [], dt);
+    mini.mark(monster.root.position.x, monster.root.position.z, clock);
   };
 
   return {
@@ -810,6 +806,23 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
     },
     tick,
     heater,
+    lab: { machine: lab.machine, panel: lab.panel, lever: lab.lever },
+    labStatus: () => lab.status(),
+    pour: () => {
+      const p = pickables.find((q) => q.id === carried);
+      if (!p) return { why: 'BRING IT A FLASK' };
+      if (!p.id.startsWith('flask')) return { why: 'IT ONLY TAKES A FLASK' };
+      const why = lab.refuses();
+      if (why) return { why };
+      const name = lab.run(p.id);
+      if (!name) return { why: 'NOTHING HAPPENS' };
+      carried = null;
+      p.away = true;
+      pouring = { id: p.id, t: 0 };
+      return { name };
+    },
+    pressWater: () => lab.pressWater(),
+    pullLever: () => lab.pullLever(),
     toggleHeater: () => {
       heaterOn = !heaterOn;
       return heaterOn;
@@ -818,7 +831,7 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
       let best: Pickable | null = null;
       let bestD = 1.7;
       for (const p of pickables) {
-        if (p.id === carried) continue;
+        if (p.id === carried || p.away) continue;
         if (Math.abs(floorAt(p.x, p.z) - floorY) > 0.8) continue;
         const d = Math.hypot(p.x - x, p.z - z);
         if (d < bestD) {
@@ -857,9 +870,9 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
       yaw: monster.root.rotation.y,
       scale: k,
       // Everything rebuilt from the room definition, the shell included.
-      props: pen.children.length - 2,
+      props: mini.pieces(),
       room: watched.name,
-      lids: penLids.map((l) => +l.open.toFixed(3)),
+      lids: mini.lids(),
     }),
     setActive: (on: boolean) => {
       root.visible = on;

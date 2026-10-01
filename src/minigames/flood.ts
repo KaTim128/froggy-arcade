@@ -1,5 +1,5 @@
 /**
- * THE FLOOD.  Hard (long) — 20 tokens in, 20 out (see content.ts).
+ * THE FLOOD.  Hard (long) — 10 tokens in, 10 out (see content.ts).
  *
  * A parkour shaft with the water coming up it.  There is one way out and it is
  * the hatch at the top; there is one way to lose and it is the water reaching
