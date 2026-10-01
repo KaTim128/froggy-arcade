@@ -1,5 +1,5 @@
 /**
- * FROGSTER MASH.  Fifteen tokens in, thirty out.
+ * FROGSTER MASH.  25 tokens in, 45 out.
  *
  * Four chests, and then you watch.
  *
