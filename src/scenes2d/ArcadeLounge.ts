@@ -40,6 +40,7 @@ import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W } from '../render/pixelScaler';
 
 const INTERACT_RANGE = 24;
+const rgb = (c: number): [number, number, number] => [(c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff];
 /** The side door, in this room's right-hand wall, below the plant. */
 const SIDE_DOOR = { y: 96, h: 40 };
 /** The way back, on this room's LEFT wall -- the other side of the hub's right. */
@@ -220,25 +221,36 @@ export class ArcadeLounge extends Phaser.Scene {
   }
 
   /**
-   * The side door in the right-hand wall.  A brown leaf in a frame, set into
-   * the wall's own thickness.  By day it is drawn faint -- the shape is there
-   * if you look, and nothing about it says door -- and it answers to nothing.
-   * After closing it is a real door, dark, and the leaf can swing.
+   * The side door in the right-hand wall.  It is IN the wall, not on it: the
+   * leaf fills a door-sized patch of the wall's own band and nothing of it
+   * reaches past the wall's face into the room -- no frame, no step, no edge
+   * standing proud.  All there is to see is a pair of hairline seams and a
+   * leaf a shade warmer than the wall round it: by day almost nothing, after
+   * closing a dim brown door.  It swings open and shut within that patch.
    */
   private paintSideDoor(): void {
     const top = SIDE_DOOR.y - SIDE_DOOR.h / 2;
-    const x = ROOM.right - 2;
-    const brown = this.night ? 0x3a2a1c : PALETTE.brown;
-    const a = this.night ? 1 : 0.32;
-    // frame
-    this.add.rectangle(x - 1, top - 2, 13, SIDE_DOOR.h + 4, this.night ? 0x1a1410 : PALETTE.ink).setOrigin(0, 0).setDepth(0.55).setAlpha(this.night ? 1 : 0.35);
+    // the wall's band runs from the room's right edge to the screen's
+    const x = ROOM.right + 1;
+    const w = GAME_W - ROOM.right - 2;
+    const wall = new Phaser.Display.Color(...rgb(PALETTE.ink));
+    const warm = new Phaser.Display.Color(...rgb(this.night ? 0x2e2218 : PALETTE.brown));
+    // by day a quarter of the way from the wall to brown; at night the door itself
+    const mix = Phaser.Display.Color.Interpolate.ColorWithColor(wall, warm, 100, this.night ? 100 : 22);
+    const leafColour = Phaser.Display.Color.GetColor(mix.r, mix.g, mix.b);
     // what is behind it when it is open: nothing but black
-    const gap = this.add.rectangle(x, top, 11, SIDE_DOOR.h, PALETTE.black).setOrigin(0, 0).setDepth(0.56);
-    // the leaf
-    const leaf = this.add.rectangle(x, top, 11, SIDE_DOOR.h, brown).setOrigin(0, 0).setDepth(0.57).setAlpha(a);
-    // a handle and a seam, so it reads as a door to anyone who looks
-    this.add.rectangle(x + 2, SIDE_DOOR.y + 2, 2, 4, this.night ? 0x5a4a38 : PALETTE.amberDark).setOrigin(0, 0).setDepth(0.58).setAlpha(this.night ? 0.8 : 0.3);
-    this.add.rectangle(x, top, 1, SIDE_DOOR.h, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(this.night ? 0.6 : 0.2);
+    const gap = this.add.rectangle(x, top, w, SIDE_DOOR.h, PALETTE.black).setOrigin(0, 0).setDepth(0.56);
+    const leaf = this.add.rectangle(x, top, w, SIDE_DOOR.h, leafColour).setOrigin(0, 0).setDepth(0.57);
+    // the seams: hairlines down the room-side edge and along the top, flush
+    const seam = this.night ? 0.55 : 0.18;
+    this.add.rectangle(x, top, 1, SIDE_DOOR.h, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(seam);
+    this.add.rectangle(x, top, w, 1, PALETTE.black).setOrigin(0, 0).setDepth(0.58).setAlpha(seam);
+    // and a handle, barely
+    this.add
+      .rectangle(x + 2, SIDE_DOOR.y + 2, 1, 3, this.night ? 0x5a4a38 : PALETTE.amberDark)
+      .setOrigin(0, 0)
+      .setDepth(0.58)
+      .setAlpha(this.night ? 0.7 : 0.15);
     this.sideDoor = { leaf, gap };
   }
 
