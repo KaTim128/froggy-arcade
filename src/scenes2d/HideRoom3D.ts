@@ -2682,7 +2682,8 @@ export class HideRoom3D extends Phaser.Scene {
     // The air changes.  Warm and thin instead of cold and thick, and it is the
     // first thing the player notices before they have read a single object.
     const st = this.stage;
-    if (st) st.scene.fog = new THREE.FogExp2(0x1c3440, 0.01);
+    // (dark now, and a little thick: the lab is lit by what is in it)
+    if (st) st.scene.fog = new THREE.FogExp2(0x0b1216, 0.022);
     // The lights change hands.  His room goes dark behind you -- it is six
     // hundred metres away and nothing in here can see into it -- and the
     // lounge comes up.
@@ -2704,7 +2705,31 @@ export class HideRoom3D extends Phaser.Scene {
    */
   private labInteract(): void {
     const sec = this.secret;
-    if (!sec || sec.carrying()) return;
+    if (!sec) return;
+    // The machine takes a flask: carried up to it, E pours it in.
+    if (this.atLab('machine')) {
+      const r = sec.pour();
+      if (r.name) this.say(`SEQUENCE: ${r.name}`, 2600);
+      else if (r.why) {
+        this.say(r.why, 1800);
+        audio.sfx('buzzer', 0.3);
+      }
+      return;
+    }
+    if (sec.carrying()) return;
+    if (this.atLab('panel')) {
+      const r = sec.pressWater();
+      audio.sfx('lock_click', 0.6);
+      if (r === 'hatch-open') this.say('CLOSE THE PORT FIRST', 1800);
+      else if (r === 'running') this.say('NOT DURING A SEQUENCE', 1800);
+      return;
+    }
+    if (this.atLab('lever')) {
+      const r = sec.pullLever();
+      if (r === 'full') this.say('THE PORT ONLY OPENS WITH THE TUBE EMPTY', 2200);
+      else if (r === 'moving') this.say('WAIT FOR THE WATER', 1600);
+      return;
+    }
     if (this.atHeater()) {
       const on = sec.toggleHeater();
       audio.sfx('lock_click', 0.6);
@@ -2740,6 +2765,18 @@ export class HideRoom3D extends Phaser.Scene {
     if (!this.inSecret || !this.secret) return false;
     const h = this.secret.heater;
     return Math.hypot(this.pos.x - h.x, this.pos.y - h.z) < 1.8 && this.floorY < 1.0;
+  }
+
+  /** Standing at one of the lab's controls: the machine, the tube's console, the port lever. */
+  private atLab(which: 'machine' | 'panel' | 'lever'): boolean {
+    if (!this.inSecret || !this.secret || this.floorY > 1.0) return false;
+    const at = this.secret.lab;
+    const reach = { machine: 1.8, panel: 1.3, lever: 1.1 };
+    const d = (p: { x: number; z: number }) => Math.hypot(this.pos.x - p.x, this.pos.y - p.z);
+    const mine = d(at[which]);
+    if (mine > reach[which]) return false;
+    // the nearest of them answers, where two reaches overlap
+    return (['machine', 'panel', 'lever'] as const).every((w) => w === which || d(at[w]) > reach[w] || d(at[w]) >= mine);
   }
 
   /** Standing at the pedestal in the lounge. */
@@ -2826,7 +2863,7 @@ export class HideRoom3D extends Phaser.Scene {
     // The television, the button's lamp and the thing under the glass.  It
     // runs whether or not anyone is in there: walking in on a room that starts
     // moving when you arrive is walking onto a set.
-    this.secret?.tick(dt);
+    this.secret?.tick(dt, this.inSecret ? (this.stage?.camera.position ?? null) : null);
 
     // HIS HANDS ON THEM ARE NOT GENTLE.  A door or a lid he works is on a
     // spring rather than an ease: it rattles against its catch while he
@@ -5406,19 +5443,46 @@ export class HideRoom3D extends Phaser.Scene {
       const next = this.roomIndex + 1;
       const sec = this.secret;
       const near = sec && !sec.carrying() ? sec.nearestPickable(this.pos.x, this.pos.y, this.floorY) : null;
+      const lab = sec?.labStatus();
+      const carryingFlask = !!sec?.carrying()?.startsWith('flask');
+      const drop = isTouch() ? '[DROP] PUT IT DOWN' : '[Q] PUT IT DOWN';
       this.prompt = this.atButton()
         ? next < ROOMS.length
           ? `[E] CONTINUE TO HIDE AND SEEK ROUND ${next + 1}`
           : '[E] CONTINUE'
-        : sec?.carrying()
-          ? isTouch()
-            ? '[DROP] PUT IT DOWN'
-            : '[Q] PUT IT DOWN'
-          : this.atHeater()
-            ? '[E] THE HEATER'
-            : near
-              ? `[E] PICK UP ${near.name}`
-              : '';
+        : this.atLab('machine')
+          ? lab?.running
+            ? `SEQUENCE: ${lab.running}`
+            : carryingFlask
+              ? lab?.water === 'full'
+                ? '[E] POUR IT IN'
+                : 'THE TUBE HAS TO BE FULL'
+              : sec?.carrying()
+                ? drop
+                : 'EXPERIMENT MACHINE: BRING IT A FLASK'
+          : sec?.carrying()
+            ? drop
+            : this.atLab('panel')
+              ? lab?.water === 'full'
+                ? '[E] DRAIN THE TUBE'
+                : lab?.water === 'empty'
+                  ? lab.hatch
+                    ? 'CLOSE THE PORT TO REFILL'
+                    : '[E] REFILL THE TUBE'
+                  : lab?.water === 'draining'
+                    ? 'DRAINING...'
+                    : 'FILLING...'
+              : this.atLab('lever')
+                ? lab?.water === 'empty'
+                  ? lab.hatch
+                    ? '[E] CLOSE THE PORT'
+                    : '[E] OPEN THE PORT'
+                  : 'THE PORT ONLY OPENS WITH THE TUBE EMPTY'
+                : this.atHeater()
+                  ? '[E] THE HEATER'
+                  : near
+                    ? `[E] PICK UP ${near.name}`
+                    : '';
       return;
     }
     const spot = this.nearestSpot(SPOT_REACH);
