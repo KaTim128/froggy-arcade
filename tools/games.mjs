@@ -1563,7 +1563,9 @@ for (const g of [
   // other way round: it pays 20, 35 or 50 depending how far up the ladder you
   // got, and no row of the table says that.  Whack-a-frog joined it for the
   // same reason -- ten or fifteen off a three token cabinet, by score.
-  const OWN_RULES = ['slots', 'wheel', 'blackjack', 'roulette', 'danceoff', 'carchase', 'whack'];
+  // The Flood joined it at ten in and ten out: priced by request, below the
+  // table, and saying so on its card.
+  const OWN_RULES = ['slots', 'wheel', 'blackjack', 'roulette', 'danceoff', 'carchase', 'whack', 'fallingblocks'];
   const wrong = floor.rows.filter(
     (r) => !OWN_RULES.includes(r.id) && floor.table[r.cost] !== undefined && r.reward !== floor.table[r.cost],
   );
