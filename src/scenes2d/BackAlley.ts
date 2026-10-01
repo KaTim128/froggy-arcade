@@ -2,7 +2,7 @@
  * The alley.  PRD §7.12.
  *
  * A dumpster, a fire escape, and a back door standing ajar with a sliver of
- * black behind it.  BA-1: the door is a plain [E] like everything else.  No
+ * black behind it -- the arcade's side door, into the new room.  BA-1: the door is a plain [E] like everything else.  No
  * prompt escalates.  Nothing flashes.  The player can walk back out at any
  * time, including from right in front of it.
  */
@@ -99,11 +99,13 @@ export class BackAlley extends Phaser.Scene {
       return;
     }
 
-    // Inside.  This is the last ordinary thing that happens.
+    // Inside.  This is the last ordinary thing that happens.  The back door is
+    // the arcade's SIDE door: it lets you into the new room, dark, and shuts
+    // behind you.  See ArcadeLounge.
     audio.sfx('door_open');
     store.patch({ route: 'ejected' });
     store.flush();
-    this.time.delayedCall(700, () => fadeToScene(this, 'ArcadeDark'));
+    this.time.delayedCall(700, () => fadeToScene(this, 'ArcadeLounge', { fromAlley: true }));
   }
 
   update(_t: number, delta: number): void {

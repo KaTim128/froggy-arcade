@@ -52,10 +52,15 @@ export function canEnter(scene: SceneId, s: Readonly<GameState>, ctx: GuardConte
     case 'IntroCutscene':
       return s.route === 'normal' && !s.seenIntro;
 
+    // The new room is on both sides of the night: by day it is through the
+    // hub's right wall, and after closing it is the way in from the alley
+    // (its side door) to the dark lobby.
+    case 'ArcadeLounge':
+      return s.route === 'normal' || s.route === 'ejected';
+
     case 'ArcadeHub':
     case 'ArcadeAnnex':
     case 'ArcadeCasino':
-    case 'ArcadeLounge':
     case 'PrizeCounter':
     case 'FroggyCharity':
     case 'SecondBust':
