@@ -808,6 +808,43 @@ export function buildLab(p: LabParts): Lab {
   const waterColor = new THREE.Color(WATER);
   const target = new THREE.Color();
   let floatYaw = 0;
+  /**
+   * How far he has been stood back from where his pose put him, so that none
+   * of his head is past the inside of the glass -- or through the port.
+   */
+  const keepIn = new THREE.Vector2();
+  /** The inside of the glass, less the bars' own thickness: his head stops here. */
+  const HEAD_LIMIT = T.r - 0.045;
+  const sph = new THREE.Sphere();
+  const wscale = new THREE.Vector3();
+  /**
+   * How far the furthest part of his head (eyes, lids, jaw, teeth, all of it)
+   * is past HEAD_LIMIT from the tube's axis, and which way.  Bounding spheres,
+   * so it errs on the side of inside.
+   */
+  const headOver = (): { over: number; ux: number; uz: number } => {
+    specimen.root.updateMatrixWorld(true);
+    let over = -Infinity;
+    let ux = 0;
+    let uz = 0;
+    specimen.headObject.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || !m.visible) return;
+      if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
+      sph.copy(m.geometry.boundingSphere!).applyMatrix4(m.matrixWorld);
+      root.worldToLocal(sph.center);
+      const dx = sph.center.x - T.x;
+      const dz = sph.center.z - T.z;
+      const d = Math.hypot(dx, dz);
+      const r = d + sph.radius / Math.max(1e-6, root.getWorldScale(wscale).x) - HEAD_LIMIT;
+      if (r > over && d > 1e-4) {
+        over = r;
+        ux = dx / d;
+        uz = dz / d;
+      }
+    });
+    return { over, ux, uz };
+  };
 
   const tick = (dt: number, viewer: THREE.Vector3 | null, heat: number): void => {
     clock += dt;
@@ -1171,11 +1208,28 @@ export function buildLab(p: LabParts): Lab {
       // paddling as the water goes down past him
       if (water === 'draining') Object.assign(pose, { lunge: 0.4, maw: 0.5 });
     }
-    specimen.setPose(x, y, z, yaw);
+    specimen.setPose(x - keepIn.x, y, z - keepIn.y, yaw);
     specimen.lookAt(viewer);
     specimen.update(dt, { ...pose, hands, faceTo, faceK });
     specimen.setGlare(glare);
     if (tw) specimen.twitchHead(tw[0], tw[1], tw[2]);
+    // NOTHING OF HIS HEAD PAST THE GLASS.  Stooping to the port, or with his
+    // face to the glass in the dark, the lean carried his head on through
+    // it: his eyes came out past the bars, in front of them.  Posed, he is
+    // measured, and if any of his head is past the inside of the glass he is
+    // stood back by that much -- now, before the frame is drawn, and from
+    // then on, so his hands find the bars again from where he stands.  He
+    // only comes forward again when there is room, so he is never pushed
+    // and pulled at the limit.
+    const h = headOver();
+    if (h.over > 0) {
+      keepIn.x += h.ux * h.over;
+      keepIn.y += h.uz * h.over;
+      specimen.setPose(x - keepIn.x, y, z - keepIn.y, yaw);
+      specimen.root.updateMatrixWorld(true);
+    } else if (h.over < -0.03) {
+      keepIn.multiplyScalar(Math.max(0, 1 - dt * 1.5));
+    }
   };
 
   setScreen('READY', ['INSERT A SAMPLE', 'IN THE HOPPER'], '#3fe39b');
