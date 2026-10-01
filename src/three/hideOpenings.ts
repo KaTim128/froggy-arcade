@@ -19,6 +19,14 @@
  * with a pale line along each edge of the opening where the room's light
  * catches it.  It is only shown while you are in there; the outside of the
  * box is hidden for that time instead, since you are inside it.
+ *
+ * It is fixed to the hiding place itself, never to the door that swings on
+ * it: the eye is placed in the same space, so nothing in front of it can
+ * move a millimetre the eye does not.  The face stops where the walls do (a
+ * hair past, so the corners close), so no part of it reaches into the
+ * furniture or wall either side; and it is drawn from both sides, so the
+ * moment the eye passes through the opening on the way in it is already a
+ * solid face and not a flicker of the room behind it.
  */
 
 import * as THREE from 'three';
@@ -129,12 +137,13 @@ function plan(kind: SpotKind, skin: SpotSkin | undefined, eye: HideEye): Plan {
       return { ...base, ...steel, color: 0x111114, holes: [{ x0: -0.14, x1: 0.14, y0: eye.y - 0.07, y1: eye.y + 0.08 }] };
     }
     if (kind === 'locker') {
-      // four vent slots across the door at eye height
-      return { ...base, ...steel, holes: slots(eye.y, 5, 0.042, 0.032, 0.15) };
+      // five vent slots across the door at eye height, the eye level with the
+      // middle one; the bars between them are solid steel, not hairlines
+      return { ...base, ...steel, holes: slots(eye.y, 5, 0.05, 0.032, 0.15) };
     }
     if (skin === 'cabinet' || skin === 'hatch') {
       // louvres, five of them, a little wider than a locker's
-      return { ...base, ...steel, holes: slots(eye.y, 5, 0.04, 0.03, 0.16) };
+      return { ...base, ...steel, holes: slots(eye.y, 5, 0.048, 0.03, 0.16) };
     }
     // a wardrobe: the two doors not quite met, a crack the height of them
     return { ...base, ...wood, holes: [{ x0: -0.08, x1: 0.08, y0: 0.2, y1: h - 0.14 }] };
@@ -196,14 +205,16 @@ export function buildOpening(kind: SpotKind, skin: SpotSkin | undefined, eye: Hi
   const p = plan(kind, skin, eye);
   const g = new THREE.Group();
   g.name = 'hide-inside';
-  const wall = new THREE.MeshBasicMaterial({ color: p.color, map: grain(p.color) });
-  const edge = new THREE.MeshBasicMaterial({ color: p.edge });
+  const wall = new THREE.MeshBasicMaterial({ color: p.color, map: grain(p.color), side: THREE.DoubleSide });
+  const edge = new THREE.MeshBasicMaterial({ color: p.edge, side: THREE.DoubleSide });
 
   // ---- THE FACE: a panel with the openings cut out of it, facing in.
-  const fx0 = p.fx0 ?? p.x0 - 0.3;
-  const fx1 = p.fx1 ?? p.x1 + 0.3;
-  const fy0 = p.fy0 ?? Math.max(0, p.y0 - 0.3);
-  const fy1 = p.fy1 ?? p.y1 + 0.3;
+  // (only just past the walls: from inside the walls hide anything wider, and
+  // anything wider stood into the next locker along, flush with its door)
+  const fx0 = p.fx0 ?? p.x0 - 0.01;
+  const fx1 = p.fx1 ?? p.x1 + 0.01;
+  const fy0 = p.fy0 ?? Math.max(0, p.y0 - 0.01);
+  const fy1 = p.fy1 ?? p.y1 + 0.01;
   // (built mirrored in x and turned half round, so its front faces the eye)
   const shape = new THREE.Shape();
   shape.moveTo(-fx1, fy0);
@@ -225,9 +236,9 @@ export function buildOpening(kind: SpotKind, skin: SpotSkin | undefined, eye: Hi
   face.position.z = p.face;
   g.add(face);
   // the lit edges of each opening: a thin pale line just inside it
-  const t = 0.004;
+  const t = 0.003;
   for (const h of p.holes) {
-    const z = p.face - 0.004;
+    const z = p.face - 0.005;
     const w = h.x1 - h.x0;
     const hh = h.y1 - h.y0;
     panel(g, edge, w, t, (h.x0 + h.x1) / 2, h.y1 - t / 2, z, Math.PI);
@@ -252,5 +263,7 @@ export function buildOpening(kind: SpotKind, skin: SpotSkin | undefined, eye: Hi
   panel(g, wall, wx, dz, cx, p.y1, cz, 0, Math.PI / 2);
   if (!p.openFloor) panel(g, wall, wx, dz, cx, p.y0, cz, 0, -Math.PI / 2);
   g.visible = false;
+  // where the face is, for whoever has to know which side of it the eye is on
+  g.userData.face = p.face;
   return g;
 }

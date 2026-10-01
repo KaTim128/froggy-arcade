@@ -735,7 +735,12 @@ export class HideRoom3D extends Phaser.Scene {
   private hideIn: Spot3D | null = null;
   /** Where the eye was when you got in, so it goes back there. */
   private readonly hideFrom = new THREE.Vector3();
-  private hideBreath = 0;
+  /**
+   * The eye, in the spot's own space, eased toward where the head says it
+   * should be -- so leaning across a slot glides rather than following every
+   * twitch of a finger on the glass.
+   */
+  private readonly hideEyeNow = new THREE.Vector3();
   /** The spot whose inside is showing (and whose outside is hidden) right now. */
   private insideOf: Spot3D | null = null;
   /**
@@ -1568,9 +1573,12 @@ export class HideRoom3D extends Phaser.Scene {
       if ((o as THREE.Mesh).isMesh) shell.push(o);
     });
     const eye = hideEye(kind, skin);
+    // Its inside, on the hiding place itself and NOT on the door: the eye is
+    // placed in this same space, so nothing round it can move without it.
+    // (It hung on the hinge, so a door settling on its spring or rattled on
+    // its catch swung the slats past an eye that stayed put.)
     const inside = buildOpening(kind, skin, eye);
-    inside.position.copy(hinge.position).negate();
-    hinge.add(inside);
+    group.add(inside);
     return { x, z, rot, kind, skin, hw: ext.hw, hd: ext.hd, top, checkedOn: -1, hinge, open: 0, opening: false, openV: 0, rattle: 0, slammed: false, sinceChecked: 0, grips, lever: built.lever, inside, shell, eye: new THREE.Vector3(eye.x, eye.y, eye.z) };
   }
 
@@ -4568,56 +4576,75 @@ export class HideRoom3D extends Phaser.Scene {
    * getting out, takes it over: the eye travels to the spot's opening, turns
    * to face out of it, and is held to what the opening lets you see -- by
    * clamping the head itself, so the mouse, the arrow keys and a finger on
-   * the glass all stop at the same edge.  A slow breath moves it a little.
-   * Getting out it travels back to where you are now standing.
+   * the glass all stop at the same edge.  Once in, the eye is still: nothing
+   * moves it but your own head.  Getting out it travels back to where you
+   * are now standing.
    */
   private hideCamera(dt: number, cam: THREE.PerspectiveCamera): void {
     // (once he has you, the scare has the camera and the box: see `caught`)
     if (this.mode === 'caught') return;
     const want = this.hiding ? 1 : 0;
     const step = dt / HIDE_IN_S;
-    this.hideK = want > this.hideK ? Math.min(1, this.hideK + step) : Math.max(0, this.hideK - step);
+    const wasK = this.hideK;
+    // (all the way in, it stays all the way in: this used to read "not still
+    // going in, so coming out", which at exactly 1 stepped the eye back out
+    // one frame and in again the next -- a 6mm judder, thirty times a
+    // second, for as long as you were hidden)
+    if (want > this.hideK) this.hideK = Math.min(1, this.hideK + step);
+    else if (want < this.hideK) this.hideK = Math.max(0, this.hideK - step);
     const spot = this.hiding ?? this.hideIn;
-    const near = this.hideK > 0 && spot ? 0.02 : 0.1;
+    // Settled in, the nearest thing is a hand's width away, so the near plane
+    // can sit well back and the depth buffer keep its precision for the room
+    // out there; on the way through the opening it has to be close.
+    const near = !spot || this.hideK <= 0 ? 0.1 : this.hideK >= 1 ? 0.05 : 0.02;
     if (cam.near !== near) {
       cam.near = near;
       cam.updateProjectionMatrix();
     }
-    // Most of the way in, you are inside it: its inside is what is round you,
-    // and its outside is not there to get in the way.
-    const inside = spot && this.hideK > 0.8 ? spot : null;
-    if (inside !== this.insideOf) {
-      if (this.insideOf) this.showInside(this.insideOf, false);
-      if (inside) this.showInside(inside, true);
-      this.insideOf = inside;
-    }
     if (!spot || this.hideK <= 0) {
+      if (this.insideOf) this.showInside(this.insideOf, false);
+      this.insideOf = null;
       if (!this.hiding) this.hideIn = null;
       return;
     }
     const v = HIDE_VIEW[spot.kind];
     const k = this.hideK * this.hideK * (3 - 2 * this.hideK);
-    this.hideBreath += dt;
-    const breath = Math.sin(this.hideBreath * 1.7);
     const face = spot.rot + Math.PI;
+    const space = spot.inside.parent!;
+    const faceZ: number = spot.inside.userData.face;
     // LEANING INTO IT.  To see along the room to one side through a slot you
     // put your eye to the OTHER side of it: turning the head moves the eye a
     // few centimetres the opposite way, and tipping it up drops it a little.
+    // Eased, and nothing else: no breath, no tremble, no shake -- a few
+    // millimetres here is a slat's width across the picture.
     const offN = Phaser.Math.Clamp(Phaser.Math.Angle.Wrap(this.yaw - face) / v.yaw, -1, 1);
     const pitchN = Phaser.Math.Clamp(this.pitch / Math.max(0.01, this.pitch > 0 ? v.up : v.down), -1, 1);
-    const local = new THREE.Vector3(
-      spot.eye.x - offN * 0.05,
-      spot.eye.y + breath * 0.005 - pitchN * 0.015,
-      spot.eye.z,
-    );
-    const at = spot.hinge.parent!.localToWorld(local);
+    const wantEye = new THREE.Vector3(spot.eye.x - offN * 0.05, spot.eye.y - pitchN * 0.015, spot.eye.z);
+    if (wasK <= 0) this.hideEyeNow.copy(wantEye);
+    else this.hideEyeNow.lerp(wantEye, 1 - Math.exp(-dt * 10));
+    const at = space.localToWorld(this.hideEyeNow.clone());
     // getting in: from where the eye was; getting out: back to where you stand
     const from = this.hiding ? this.hideFrom : new THREE.Vector3(this.pos.x, this.floorY + this.eyeNow, this.pos.y);
-    cam.position.lerpVectors(from, at, k);
-    // his footsteps outside, through the box
-    if (this.shake > 0) {
-      cam.position.x += (Math.random() - 0.5) * this.shake * 0.01;
-      cam.position.y += (Math.random() - 0.5) * this.shake * 0.01;
+    // The way in is round to the front of the opening and then straight in
+    // through it, level with the eye -- not a straight line from wherever you
+    // stood, which went through the door, or down through a lid.
+    const front = space.localToWorld(new THREE.Vector3(this.hideEyeNow.x, this.hideEyeNow.y, faceZ + 0.4));
+    const u = 1 - k;
+    cam.position
+      .copy(from)
+      .multiplyScalar(u * u)
+      .addScaledVector(front, 2 * u * k)
+      .addScaledVector(at, k * k);
+
+    // Its inside is round you from the moment the eye is at its face; until
+    // then its outside is what you are walking up to.  (Both are solid from
+    // either side, so the switch is never a frame of the room through it.)
+    const eyeZ = space.worldToLocal(cam.position.clone()).z;
+    const inside = eyeZ < faceZ + 0.12 ? spot : null;
+    if (inside !== this.insideOf) {
+      if (this.insideOf) this.showInside(this.insideOf, false);
+      if (inside) this.showInside(inside, true);
+      this.insideOf = inside;
     }
 
     if (this.hiding) {
@@ -4628,7 +4655,7 @@ export class HideRoom3D extends Phaser.Scene {
       const off = Phaser.Math.Angle.Wrap(this.yaw - face);
       this.yaw = face + Phaser.Math.Clamp(off, -(v.yaw + slack), v.yaw + slack);
       this.pitch = Phaser.Math.Clamp(this.pitch, -(v.down + slack * 0.4), v.up + slack * 0.4);
-      cam.rotation.set(this.pitch + breath * 0.004, this.yaw, 0);
+      cam.rotation.set(this.pitch, this.yaw, 0);
     }
   }
 
