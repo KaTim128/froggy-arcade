@@ -33,7 +33,7 @@ export class StartScreen extends Phaser.Scene {
     // Title plate
     this.add.rectangle(GAME_W / 2, 26, 190, 30, PALETTE.black).setAlpha(0.55);
     centerText(this, GAME_W / 2, 20, 'FROGGY ARCADE', PALETTE.gold, 16).setLetterSpacing?.(1);
-    centerText(this, GAME_W / 2, 34, 'you found ten dollars', PALETTE.cream, 8).setAlpha(0.75);
+    centerText(this, GAME_W / 2, 34, 'The place of froggy dreams! ', PALETTE.cream, 8).setAlpha(0.75);
 
     button(this, GAME_W / 2, 112, 'START', () => this.onStart(), { width: 74 });
     button(this, GAME_W / 2, 130, 'PROFILES', () => this.openProfiles(), { width: 74 });
