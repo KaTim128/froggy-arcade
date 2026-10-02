@@ -235,7 +235,7 @@ export const CABINETS: CabinetDef[] = [
   // rather than crediting each round, so what actually reaches the ledger is
   // whatever the player walks away with: `win(n)` carries it, and `reward`
   // here is the per-win rate the card advertises.
-  { id: 'frogstermash', title: 'FROGSTER MASH', tier: 'hard', cost: 25, reward: 20, x: 224, y: 162, color: 0x7b4bd8, room: 'casino', symbol: 'FM', motif: 'mash' },
+  { id: 'frogstermash', title: 'FROGSTER MASH', tier: 'hard', cost: 25, reward: 25, x: 224, y: 162, color: 0x7b4bd8, room: 'casino', symbol: 'FM', motif: 'mash' },
 ];
 
 /** Cabinets standing in a given room.  Anything unmarked lives in the hub. */
