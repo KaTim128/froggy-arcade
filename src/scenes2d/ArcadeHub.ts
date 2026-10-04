@@ -1534,7 +1534,8 @@ export class ArcadeHub extends Phaser.Scene {
    */
   private useDoor(): void {
     this.locked = true;
-    fadeToScene(this, 'ExteriorDay');
+    // (out through the doors: the street decides whether it is evening yet)
+    fadeToScene(this, 'ExteriorDay', { fromArcade: true });
   }
 
   private interact(): void {

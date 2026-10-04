@@ -33,6 +33,8 @@ import { PrizeCounter } from '../scenes2d/PrizeCounter';
 import { PrizeExchange } from '../scenes2d/PrizeExchange';
 import { ChangeMachine } from '../scenes2d/ChangeMachine';
 import { ExteriorDay } from '../scenes2d/ExteriorDay';
+import { StreetWest } from '../scenes2d/StreetWest';
+import { Hotel } from '../scenes2d/Hotel';
 import { TheEnd } from '../scenes2d/TheEnd';
 import { MinigameScene } from '../scenes2d/MinigameScene';
 import { FroggyCharity } from '../scenes2d/FroggyCharity';
@@ -44,6 +46,7 @@ import { ArcadeDark } from '../scenes2d/ArcadeDark';
 import { BasementSequence } from '../scenes2d/BasementSequence';
 import { HideRoom3D } from '../scenes2d/HideRoom3D';
 import { Chase3D } from '../scenes2d/Chase3D';
+import { NightRoad3D } from '../scenes2d/NightRoad3D';
 import { OutroCutscene3D } from '../scenes2d/OutroCutscene3D';
 import { EndCard } from '../scenes2d/EndCard';
 
@@ -89,6 +92,8 @@ export function bootGame(): void {
       PrizeExchange,
       ChangeMachine,
       ExteriorDay,
+      StreetWest,
+      Hotel,
       MinigameScene,
       FroggyCharity,
       SecondBust,
@@ -99,6 +104,7 @@ export function bootGame(): void {
       BasementSequence,
       HideRoom3D,
       Chase3D,
+      NightRoad3D,
       OutroCutscene3D,
       TheEnd,
       EndCard,

@@ -1303,6 +1303,35 @@ class AudioManager {
         beep(180, 0.11, 0.09, 'triangle');
         noise(0.07, 0.08, 620, 0.01);
         break;
+      // ---- the night road (scenes2d/NightRoad3D.ts)
+      // A frog the size of a man, somewhere behind you: two deep, wet,
+      // rattling pulls, the second lower than the first.
+      case 'croak':
+        for (let i = 0; i < 2; i++) {
+          const at = i * 0.42;
+          for (let j = 0; j < 7; j++) beep(68 - i * 10 + j * 2, 0.045, 0.12, 'sawtooth', at + j * 0.045);
+          glide(130 - i * 18, 82 - i * 12, 0.32, 0.07, 'square', at);
+          noise(0.3, 0.05, 420, at);
+        }
+        break;
+      // A crow, put out by something moving under it.
+      case 'crow_caw':
+        for (let i = 0; i < 2 + Math.floor(Math.random() * 2); i++) {
+          const at = i * 0.32;
+          glide(820, 560, 0.2, 0.05, 'sawtooth', at);
+          noise(0.18, 0.05, 2400, at);
+        }
+        break;
+      // Wings going up out of the trees all at once.
+      case 'wings':
+        for (let i = 0; i < 10; i++) noise(0.06, 0.06 - i * 0.004, 1800, i * 0.07 + Math.random() * 0.03);
+        break;
+      // A dry branch going under a foot.  Short, sharp and very loud at night.
+      case 'twig_snap':
+        noise(0.03, 0.22, 5200);
+        beep(1900, 0.02, 0.06, 'square', 0.005);
+        noise(0.05, 0.08, 1400, 0.03);
+        break;
     }
   }
 
@@ -1600,6 +1629,10 @@ export type SfxName =
   | 'distant_scream'
   | 'distant_cry'
   | 'fence_thunk'
+  | 'croak'
+  | 'crow_caw'
+  | 'wings'
+  | 'twig_snap'
   | 'wheel_tick'
   | 'splash'
   | 'water_rise'

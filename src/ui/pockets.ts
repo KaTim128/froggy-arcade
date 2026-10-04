@@ -99,13 +99,15 @@ export function drawItem(scene: Phaser.Scene, x: number, y: number, d: ItemDef, 
 /**
  * The three slots, and G.  `busy` says when the room is in the middle of
  * something else (a talk, a door) and the pockets should stay shut;
- * `centreX` moves them aside where the middle of the bottom edge is a door.
+ * `centreX` moves them aside where the middle of the bottom edge is a door,
+ * and `top` puts them up in a corner of the sky where you walk the bottom edge.
  */
-export function attachPockets(scene: Phaser.Scene, busy: () => boolean = () => false, centreX = GAME_W / 2): void {
-  const layer = scene.add.container(0, 0).setDepth(940);
+export function attachPockets(scene: Phaser.Scene, busy: () => boolean = () => false, centreX = GAME_W / 2, top = false): void {
+  // (fixed to the screen: in the streets the camera follows you)
+  const layer = scene.add.container(0, 0).setDepth(940).setScrollFactor(0);
   const total = SLOTS * CELL + (SLOTS - 1) * GAP;
   const x0 = Math.round(centreX - total / 2);
-  const y0 = GAME_H - CELL - 3;
+  const y0 = top ? 4 : GAME_H - CELL - 3;
   const draw = (): void => {
     layer.removeAll(true);
     const held = heldItems();
@@ -129,6 +131,7 @@ export function attachPockets(scene: Phaser.Scene, busy: () => boolean = () => f
     .zone(x0 - 2, y0 - 2, total + 4, CELL + 4)
     .setOrigin(0, 0)
     .setDepth(941)
+    .setScrollFactor(0)
     .setInteractive({ useHandCursor: true })
     .on('pointerdown', (_p: unknown, _x: number, _y: number, ev: { stopPropagation(): void }) => {
       ev.stopPropagation();

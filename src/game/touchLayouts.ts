@@ -27,7 +27,7 @@ import { store } from '../core/state';
  * act is survived (`froggyGone`) every other scene gets the after skin: the
  * arcade's own controls, a shade off.
  */
-const HORROR = new Set(['HideRoom3D', 'Chase3D', 'BasementSequence', 'ArcadeDark', 'SecondBust', 'EjectionCutscene']);
+const HORROR = new Set(['HideRoom3D', 'Chase3D', 'NightRoad3D', 'BasementSequence', 'ArcadeDark', 'SecondBust', 'EjectionCutscene']);
 
 function skinFor(top: string): 'normal' | 'horror' | 'after' {
   if (HORROR.has(top)) return 'horror';
@@ -91,6 +91,8 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   ExteriorDay: STREET,
   ExteriorNight: STREET,
   BackAlley: STREET,
+  StreetWest: STREET,
+  Hotel: STREET,
 
   PrizeCounter: TAP,
   PrizeExchange: TAP,
@@ -120,6 +122,17 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
     buttons: [
       { label: '↶', key: 'Q' },
       { label: '↷', key: 'E' },
+    ],
+  },
+
+  // The night road: walk with the stick, drag the picture to look behind
+  // you, and once he is coming, RUN held and JUMP for the rails.
+  NightRoad3D: {
+    stick: 'wasd',
+    look: true,
+    buttons: [
+      { label: 'RUN', key: 'SHIFT', primary: true },
+      { label: 'JUMP', key: 'SPACE' },
     ],
   },
 

@@ -23,6 +23,9 @@ export const SCENES = [
   'PrizeExchange',
   'ChangeMachine',
   'ExteriorDay',
+  'StreetWest',
+  'Hotel',
+  'NightRoad3D',
   'FroggyCharity',
   'SecondBust',
   'EjectionCutscene',
@@ -74,6 +77,9 @@ export function canEnter(scene: SceneId, s: Readonly<GameState>, ctx: GuardConte
     // game: once the arcade has thrown you out, there is no going back to
     // either of them.
     case 'ExteriorDay':
+    case 'StreetWest':
+    case 'Hotel':
+    case 'NightRoad3D':
     case 'PrizeExchange':
     case 'ChangeMachine':
       return s.route === 'normal';
