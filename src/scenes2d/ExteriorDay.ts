@@ -153,7 +153,7 @@ export class ExteriorDay extends Phaser.Scene {
     this.add.rectangle(door.x, door.y, door.w, door.h, 0x3a3e44).setOrigin(0, 0).setDepth(55);
     for (let y = door.y + 3; y < door.y + door.h; y += 4) this.add.rectangle(door.x, y, door.w, 1, 0x26282e).setOrigin(0, 0).setDepth(55);
     // (hung above the shutter, where the door's prompt does not cover it)
-    this.add.rectangle(door.x + door.w / 2, door.y - 7, 34, 9, 0x14100c).setDepth(56).setStrokeStyle(1, 0xc31f2e);
+    this.add.rectangle(door.x + door.w / 2, door.y - 7, 42, 10, 0x14100c).setDepth(56).setStrokeStyle(1, 0xc31f2e);
     centerText(this, door.x + door.w / 2, door.y - 7, 'CLOSED', 0xc31f2e).setDepth(57);
   }
 

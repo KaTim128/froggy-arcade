@@ -40,6 +40,8 @@ export class StreetWest extends Phaser.Scene {
   private keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
   private prompt!: Phaser.GameObjects.BitmapText;
   private mutter!: Phaser.GameObjects.BitmapText;
+  /** A dark plate behind the line, so it reads over the road and the lamps. */
+  private mutterPlate!: Phaser.GameObjects.Rectangle;
   private purse!: Phaser.GameObjects.BitmapText;
   private spot: Spot = null;
   private locked = false;
@@ -73,7 +75,8 @@ export class StreetWest extends Phaser.Scene {
     // and the pockets up in the corner, clear of you walking along the kerb
     attachPockets(this, () => this.locked, GAME_W - 32, true);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
-    this.mutter = centerText(this, 160, GAME_H - 34, '', PALETTE.cream).setDepth(802).setScrollFactor(0).setVisible(false).setMaxWidth(290);
+    this.mutterPlate = this.add.rectangle(0, 0, 1, 1, PALETTE.black, 0.72).setOrigin(0, 0).setDepth(801).setScrollFactor(0).setVisible(false);
+    this.mutter = centerText(this, 160, GAME_H - 40, '', PALETTE.cream).setDepth(802).setScrollFactor(0).setVisible(false).setMaxWidth(290);
 
     const kb = this.input.keyboard;
     const bind = (n: readonly string[]) => (kb ? n.map((k) => kb.addKey(k)) : []);
@@ -185,8 +188,10 @@ export class StreetWest extends Phaser.Scene {
 
   private say(msg: string): void {
     this.mutter.setText(msg).setVisible(true).setAlpha(1);
-    this.tweens.killTweensOf(this.mutter);
-    this.tweens.add({ targets: this.mutter, alpha: 0, delay: 2600, duration: 600 });
+    const b = this.mutter.getBounds();
+    this.mutterPlate.setPosition(b.x - 4, b.y - 3).setDisplaySize(b.width + 8, b.height + 6).setVisible(true).setAlpha(1);
+    this.tweens.killTweensOf([this.mutter, this.mutterPlate]);
+    this.tweens.add({ targets: [this.mutter, this.mutterPlate], alpha: 0, delay: 3200, duration: 600 });
   }
 
   update(_t: number, delta: number): void {
@@ -222,6 +227,7 @@ export class StreetWest extends Phaser.Scene {
       return;
     }
     const label = this.spot === 'door' ? '[E] GO IN' : this.spot === 'doorman' ? '[E] TALK' : '[E] READ';
-    this.prompt.setText(label).setPosition(px, WALK_Y - 36).setVisible(true);
+    // (not while a line is being said: the two would sit on top of each other)
+    this.prompt.setText(label).setPosition(px, WALK_Y - 36).setVisible(!(this.mutter.visible && this.mutter.alpha > 0.2));
   }
 }
