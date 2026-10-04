@@ -4002,7 +4002,7 @@ for (const g of [
   }
 }
 
-// SHIFT across the arcade floor is 1.4x the walk.  Measured rather than
+// SHIFT across the arcade floor is 1.5x the walk.  Measured rather than
 // trusted: the multiplier lives in one constant and the walk speed in another,
 // and a change to either is a change to how the whole building feels.
 {
@@ -4041,9 +4041,9 @@ for (const g of [
   const ran = await runFor(700, true);
 
   const ratio = walked > 0 ? ran / walked : 0;
-  const right = ratio > 1.28 && ratio < 1.52;
+  const right = ratio > 1.38 && ratio < 1.62;
   console.log(
-    `${right ? 'PASS' : 'FAIL'}  the arcade run is 1.4x the walk  — ${walked.toFixed(0)}px vs ${ran.toFixed(0)}px (x${ratio.toFixed(2)})`,
+    `${right ? 'PASS' : 'FAIL'}  the arcade run is 1.5x the walk  — ${walked.toFixed(0)}px vs ${ran.toFixed(0)}px (x${ratio.toFixed(2)})`,
   );
   if (!right) failures++;
   await page.close();

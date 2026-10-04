@@ -618,8 +618,8 @@ try {
     check(`room ${room + 1}: he cannot touch you through it`,
       safe.mode === 'seeking' && !safe.hiding && safe.froggyMode !== 'chase',
       `round is ${safe.mode}, he is ${safe.froggyMode}`);
-    check(`room ${room + 1}: and running in here is worth double`,
-      safe.runNow === before.runNow * safe.secretRun && safe.secretRun === 2,
+    check(`room ${room + 1}: and running in here is the same as anywhere (half again a walk)`,
+      safe.runNow === before.runNow && safe.secretRun === 1,
       `${before.runNow} -> ${safe.runNow}`);
     await page.close();
   }
@@ -680,7 +680,7 @@ try {
     await sleep(2600);
     const out = await hide();
     check('and taking it puts you in the next room at the old pace',
-      out && out.room === 1 && !out.inSecret && out.runNow === 4,
+      out && out.room === 1 && !out.inSecret && out.runNow === out.playerRun,
       `room ${out?.room}, running at ${out?.runNow}`);
     await page.close();
   }
@@ -1513,6 +1513,8 @@ try {
         chasing: at(0, 'chase'),
         search: window.__hide.froggySearch,
         playerRun: window.__hide.playerRun,
+        playerWalk: window.__hide.playerWalk,
+        pace: window.__hide.pace,
         lostAfter: window.__hide.lostYouSeconds,
       };
     });
@@ -1521,10 +1523,12 @@ try {
       `${gears.hunting} -> ${gears.prowling} after ${gears.lostAfter}s`);
     check('hunting he is faster than you can run', gears.chasing > gears.playerRun,
       `${gears.chasing} vs your ${gears.playerRun}`);
-    check('and even searching he is a shade faster than you',
-      Math.abs(gears.search - gears.playerRun * 1.1) < 1e-6 && gears.hunting > gears.playerRun, `${gears.search} vs ${gears.playerRun}`);
-    check('and hunting he is twice your speed', Math.abs(gears.chasing - gears.playerRun * 2) < 1e-6,
+    check('and even searching he is faster than you can run',
+      Math.abs(gears.search - gears.pace * 1.1) < 1e-6 && gears.hunting > gears.playerRun, `${gears.search} vs ${gears.playerRun}`);
+    check('and hunting he is twice the pace, far past your run', Math.abs(gears.chasing - gears.pace * 2) < 1e-6 && gears.chasing > gears.playerRun * 2,
       `${gears.chasing} vs ${gears.playerRun}`);
+    check('SHIFT runs at half again your walk', Math.abs(gears.playerRun - gears.playerWalk * 1.5) < 1e-6,
+      `${gears.playerWalk} -> ${gears.playerRun}`);
 
     // The face goes first.  He spent a whole release walking backwards because
     // the model was handed a half turn it did not need.

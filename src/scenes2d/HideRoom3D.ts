@@ -59,15 +59,25 @@ import { bake } from '../three/bake';
 import { buildOverhead } from '../three/hideOverhead';
 import { furnishWalls, trimFurniture, trimPartition } from '../three/hideDressing';
 
-/** A walk is slow and silent; a run is fast and heard.  That is the trade. */
-const WALK = 2.0;
-const RUN = 4.0;
 /**
- * What running is worth behind the wall.  The gallery is a long room with a
- * staircase in it and nothing in it can hurt you; the hide rooms' pace is
- * there to make crossing a room a decision, and there is no decision in here.
+ * A walk is slow and silent; a run is fast and heard.  That is the trade.
+ * Holding SHIFT is half again a walk -- the same rule as everywhere else you
+ * can run.
  */
-const SECRET_RUN = 2.0;
+const WALK = 2.0;
+const RUN = WALK * 1.5;
+/**
+ * The pace his own speeds are set against: what a run used to be.  His speeds
+ * are fixed numbers in the room, not shares of yours, so slowing your run did
+ * not slow him -- or make him any easier to get away from.
+ */
+const PACE = 4.0;
+/**
+ * What running is worth behind the wall: the same as anywhere else now --
+ * half again a walk.  (It was twice that again, in a gallery nothing in it can
+ * hurt you in; one rule for SHIFT everywhere is easier to play by.)
+ */
+const SECRET_RUN = 1.0;
 /** Radians per second on the arrow keys. */
 const TURN_RATE = 2.3;
 /**
@@ -95,7 +105,7 @@ const MOUSE_SENS = LOOK_SENS * 1.25;
  * get inside something before he arrives.  Hiding is the only counterplay,
  * which is the game this is supposed to be.
  */
-const FROGGY_CHASE = RUN * 2.0;
+const FROGGY_CHASE = PACE * 2.0;
 /**
  * ---- AND THE LONGER HE HAS YOU, THE FASTER HE GETS.  Nothing for the first
  * couple of seconds, then a steady climb to half again his chase pace by
@@ -112,7 +122,7 @@ const CHASE_RAMP = 0.5;
  * slower than you can run, so the room is never big enough to relax in — the
  * distance between you and him closes whether or not he knows where you are.
  */
-const FROGGY_SEARCH = RUN * 1.1;
+const FROGGY_SEARCH = PACE * 1.1;
 /**
  * And what he slows to once he has not laid eyes on you for a while.
  *
@@ -121,7 +131,7 @@ const FROGGY_SEARCH = RUN * 1.1;
  * watch from inside a locker and the thing that gives a player who has just
  * broken his line of sight the seconds they need to get somewhere.
  */
-const FROGGY_PROWL = RUN * 0.9;
+const FROGGY_PROWL = PACE * 0.9;
 const LOST_YOU_S = 5;
 /**
  * How much faster he is in each room than in the first.  Slightly in the
@@ -5196,6 +5206,9 @@ export class HideRoom3D extends Phaser.Scene {
       spots: this.spots.map((c) => ({ x: c.x, z: c.z, kind: c.kind, open: c.open })),
       heard: this.heard.slice(),
       playerRun: RUN,
+      playerWalk: WALK,
+      /** The fixed pace his speeds are set against (what a run used to be). */
+      pace: PACE,
       froggyChase: FROGGY_CHASE,
       chaseFor: this.chaseDur,
       chaseHeat: this.chaseHeat,
