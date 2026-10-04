@@ -447,8 +447,16 @@ export class ProfileModal extends Phaser.Scene {
 }
 
 function describe(s: ReturnType<typeof store.slotSummary>): string {
-  if (s.route === 'ended') return 'FINISHED';
-  if (s.route !== 'normal') return 'IN THE DARK';
-  if (!s.seenIntro) return 'NEW RUN';
-  return `${s.tokens} TOK - ${s.played} PLAYED`;
+  const time = playTime(s.playSeconds);
+  if (s.route === 'ended') return `FINISHED - ${time}`;
+  if (s.route !== 'normal') return `IN THE DARK - ${time}`;
+  if (!s.seenIntro) return s.playSeconds >= 60 ? `NEW RUN - ${time}` : 'NEW RUN';
+  return `${s.tokens} TOK - ${time}`;
+}
+
+/** Hours and minutes: "0M", "42M", "1H 05M", "12H 40M". */
+export function playTime(seconds: number): string {
+  const m = Math.floor(Math.max(0, seconds) / 60);
+  const h = Math.floor(m / 60);
+  return h > 0 ? `${h}H ${String(m % 60).padStart(2, '0')}M` : `${m}M`;
 }

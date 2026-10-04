@@ -9,5 +9,13 @@
  */
 
 import { bootGame } from './core/sceneManager';
+import { store } from './core/state';
 
 bootGame();
+
+// Time played, for the profile cards: counted while the game is open and in
+// front of the player, and written out when the page goes away.
+window.setInterval(() => {
+  if (document.visibilityState === 'visible') store.addPlayTime(1);
+}, 1000);
+window.addEventListener('pagehide', () => store.flush());
