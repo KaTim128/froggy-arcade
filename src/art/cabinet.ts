@@ -7,6 +7,7 @@ import Phaser from 'phaser';
 import { PALETTE, nightify } from '../render/palette';
 import type { CabinetDef } from '../game/content';
 import { centerText } from '../core/ui';
+import { depthFor } from './player';
 
 export const CAB_W = 26;
 export const CAB_H = 36;
@@ -240,7 +241,12 @@ export class Cabinet {
 
     this.bounds = new Phaser.Geom.Rectangle(x - (CAB_W + 4) / 2, y - CAB_H - 1, CAB_W + 4, CAB_H + 2);
 
-    const d = y / 1000; // one depth for the whole cabinet; order decides the rest
+    // ONE DEPTH FOR THE WHOLE CABINET, on the player's own scale (depthFor),
+    // taken at HALF ITS HEIGHT: walk up past the middle of a machine and it is
+    // drawn in front of you, so you are going behind it; below that you are in
+    // front of it.  It sat under every depth the player can have, so the
+    // player was drawn over the machine whichever side of it they were on.
+    const d = depthFor(y - CAB_H / 2);
 
     // ---- the box itself: side panels, a bezel, a deck and a plinth
     const shell = c(PALETTE.slate);
