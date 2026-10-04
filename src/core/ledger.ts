@@ -15,7 +15,9 @@ export type LedgerReason =
   | 'game.refund' // a tie: the entry cost handed straight back
   | 'charity' // Froggy's five
   | 'change' // the machine on the back wall, at half rate
-  | 'prize'; // redemption
+  | 'prize' // redemption
+  | 'crane' // the fourth room's claw machines
+  | 'board'; // Froggopoly's stake, and what it pays back
 
 export type LedgerListener = (next: number, prev: number, reason: LedgerReason) => void;
 export type BrokeListener = (reason: LedgerReason) => void;

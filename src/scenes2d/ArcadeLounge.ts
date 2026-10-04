@@ -37,6 +37,8 @@ import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
 import { CABINETS, LOUNGE_DOOR, cabinetsIn } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
+import { paintBoardTable, paintCrane, CRANE_H, CRANE_W, type CraneKind } from '../art/loungeProps';
+import { FULL_LINE, pocketsFull } from '../game/inventory';
 import { GAME_W } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 
@@ -47,15 +49,24 @@ const SIDE_DOOR = { y: 96, h: 40 };
 /** The way back, on this room's LEFT wall -- the other side of the hub's right. */
 const BACK_DOOR = { x: 20, y: LOUNGE_DOOR.y };
 /**
- * Where the next machines will stand, marked on the carpet.  Two rows of
- * four, the hub's own spacing, clear of the doorway on the left.
+ * ---- THE GAME CORNER.  The two claw machines stand in the top-right of the
+ * room against the back wall, plush on the left and the strange one on the
+ * right; the Froggopoly table is out on the floor to the left.  After
+ * closing they are all still here, in the same places, dark.
  */
-const PLOTS = [
-  ...[84, 142, 200, 258].map((x) => ({ x, y: 104 })),
-  ...[84, 142, 200, 258].map((x) => ({ x, y: 160 })),
+const CRANES: Array<{ kind: CraneKind; x: number; y: number; cost: number; title: string }> = [
+  { kind: 'plush', x: 232, y: 74, cost: 5, title: 'PLUSH CRANE' },
+  { kind: 'oddity', x: 270, y: 74, cost: 3, title: 'ODDITY CRANE' },
 ];
+const TABLE = { x: 104, y: 132 };
 
-type Target = { kind: 'cabinet'; cab: Cabinet } | { kind: 'back' } | { kind: 'side' } | null;
+type Target =
+  | { kind: 'cabinet'; cab: Cabinet }
+  | { kind: 'back' }
+  | { kind: 'side' }
+  | { kind: 'crane'; crane: (typeof CRANES)[number] }
+  | { kind: 'table' }
+  | null;
 
 export class ArcadeLounge extends Phaser.Scene {
   private player!: Player;
@@ -77,9 +88,13 @@ export class ArcadeLounge extends Phaser.Scene {
     super('ArcadeLounge');
   }
 
-  init(data: { atCabinet?: GameId; fromAlley?: boolean } = {}): void {
+  /** Back from a crane or the board: stand where you left it. */
+  private atProp: 'table' | CraneKind | null = null;
+
+  init(data: { atCabinet?: GameId; fromAlley?: boolean; atProp?: 'table' | CraneKind } = {}): void {
     this.returnTo = data.atCabinet ?? null;
     this.fromAlley = data.fromAlley === true;
+    this.atProp = data.atProp ?? null;
   }
 
   create(): void {
@@ -96,7 +111,8 @@ export class ArcadeLounge extends Phaser.Scene {
     fadeIn(this);
     // After closing the building is silent, here as in the lobby (see
     // ArcadeDark's silence contract): footsteps and the door, nothing else.
-    audio.setScene(this.night ? SILENCE : { music: 'room_annex', ambience: ['cabinet_bleeps'] });
+    // Board games and cranes: the room has its own nerdy little tune.
+    audio.setScene(this.night ? SILENCE : { music: 'room_lounge', ambience: ['cabinet_bleeps'] });
 
     paintHubRoom(this, { night: this.night, frontDoor: false });
     paintArcadeDressing(this, {
@@ -108,12 +124,24 @@ export class ArcadeLounge extends Phaser.Scene {
     this.paintSideDoor();
 
     this.cabinets = cabinetsIn('lounge').map((def) => new Cabinet(this, def, this.night));
-    // The floor is marked where a machine is coming, and only where there is
-    // not one standing already.
-    for (const plot of PLOTS) {
-      if (this.cabinets.some((c) => Math.abs(c.def.x - plot.x) < CAB_W && Math.abs(c.def.y - plot.y) < CAB_H)) continue;
-      this.paintPlot(plot.x, plot.y);
+    // The game corner: two cranes, and the table with whoever is waiting at
+    // it -- Froggy, until the night; after it, the boy in the glasses.
+    for (const cr of CRANES) {
+      paintCrane(this, cr.x, cr.y, cr.kind, this.night);
+      this.add
+        .zone(cr.x, cr.y - CRANE_H / 2, CRANE_W + 4, CRANE_H)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          if (!this.busy()) this.useCrane(cr);
+        });
     }
+    paintBoardTable(this, TABLE.x, TABLE.y, this.night ? null : store.get().froggyGone ? 'nerd' : 'froggy', this.night);
+    this.add
+      .zone(TABLE.x, TABLE.y - 16, 44, 34)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        if (!this.busy()) this.useTable();
+      });
     for (const cab of this.cabinets) {
       this.add
         .zone(cab.def.x, cab.def.y - CAB_H / 2, CAB_W + 4, CAB_H + 2)
@@ -133,9 +161,12 @@ export class ArcadeLounge extends Phaser.Scene {
     );
     // You come in through the left-hand doorway, so you arrive next to it --
     // or, after closing, through the side door, so you arrive at that.
+    const prop = this.atProp === 'table' ? { x: TABLE.x, y: TABLE.y + 14 } : CRANES.find((c) => c.kind === this.atProp);
     const spawn = this.fromAlley
       ? { x: ROOM.right - 22, y: SIDE_DOOR.y + SIDE_DOOR.h / 2 + 4 }
-      : this.spawnPoint({ x: BACK_DOOR.x + 18, y: BACK_DOOR.y });
+      : prop
+        ? { x: prop.x, y: this.atProp === 'table' ? prop.y : prop.y + 12 }
+        : this.spawnPoint({ x: BACK_DOOR.x + 18, y: BACK_DOOR.y });
     this.player = new Player(this, spawn.x, spawn.y, this.night);
     if (this.night) this.player.setSurface('carpet');
 
@@ -167,48 +198,17 @@ export class ArcadeLounge extends Phaser.Scene {
     if (this.night) {
       // Switched off: the letters are there, dark on dark, and nothing buzzes.
       this.add.rectangle(x, y, 122, 26, PALETTE.black).setStrokeStyle(1, PALETTE.slate).setDepth(1);
-      centerText(this, x, y - 5, 'NEW GAMES', PALETTE.slate).setDepth(2).setAlpha(0.6);
-      centerText(this, x, y + 5, 'COMING SOON', PALETTE.slate).setDepth(2).setAlpha(0.5);
+      centerText(this, x, y - 5, 'GAME CORNER', PALETTE.slate).setDepth(2).setAlpha(0.6);
+      centerText(this, x, y + 5, 'BOARDS & CRANES', PALETTE.slate).setDepth(2).setAlpha(0.5);
       return;
     }
     this.add.rectangle(x, y, 122, 26, PALETTE.ink).setStrokeStyle(1, PALETTE.neon).setDepth(1);
     this.add.rectangle(x, y, 118, 22, PALETTE.plum, 0.35).setDepth(1);
-    centerText(this, x, y - 5, 'NEW GAMES', PALETTE.gold).setDepth(2);
-    centerText(this, x, y + 5, 'COMING SOON', PALETTE.neon).setDepth(2);
+    centerText(this, x, y - 5, 'GAME CORNER', PALETTE.gold).setDepth(2);
+    centerText(this, x, y + 5, 'BOARDS & CRANES', PALETTE.neon).setDepth(2);
     // It buzzes like every other sign in the building.
     const glow = this.add.rectangle(x, y, 126, 30, PALETTE.neon, 0.08).setDepth(0.9);
     this.tweens.add({ targets: glow, alpha: 0.02, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-  }
-
-  /**
-   * A machine's footprint taped out on the carpet: the corners of where it
-   * will stand, and the four dents a heavy cabinet leaves in pile.
-   */
-  private paintPlot(x: number, y: number): void {
-    const g = this.add.graphics().setDepth(0.6);
-    const w = CAB_W + 2;
-    const h = 12;
-    const l = x - w / 2;
-    const t = y - h;
-    g.fillStyle(PALETTE.gold, this.night ? 0.12 : 0.55);
-    for (const [cx, cy, dx, dy] of [
-      [l, t, 1, 1],
-      [l + w, t, -1, 1],
-      [l, t + h, 1, -1],
-      [l + w, t + h, -1, -1],
-    ]) {
-      g.fillRect(dx > 0 ? cx : cx - 5, cy - (dy > 0 ? 0 : 1), 5, 1);
-      g.fillRect(cx - (dx > 0 ? 0 : 1), dy > 0 ? cy : cy - 5, 1, 5);
-    }
-    g.fillStyle(PALETTE.black, 0.22);
-    for (const [fx, fy] of [
-      [l + 3, t + 2],
-      [l + w - 5, t + 2],
-      [l + 3, t + h - 4],
-      [l + w - 5, t + h - 4],
-    ]) {
-      g.fillRect(fx, fy, 2, 2);
-    }
   }
 
   private paintDoorway(): void {
@@ -323,7 +323,48 @@ export class ArcadeLounge extends Phaser.Scene {
       this.say('The door is locked from the outside.');
       return;
     }
+    if (this.target.kind === 'crane') {
+      this.useCrane(this.target.crane);
+      return;
+    }
+    if (this.target.kind === 'table') {
+      this.useTable();
+      return;
+    }
     this.launchGame(this.target.cab, 'play');
+  }
+
+  /**
+   * A go on a claw machine: it costs what its plate says, and whatever comes
+   * out of it goes in a pocket -- so it asks for a free one before it takes
+   * the tokens, not after.
+   */
+  private useCrane(cr: (typeof CRANES)[number]): void {
+    if (this.night) {
+      this.say('Switched off. The glass is cold.');
+      return;
+    }
+    if (pocketsFull()) {
+      audio.sfx('buzzer');
+      this.say(FULL_LINE);
+      return;
+    }
+    if (!ledger.canAfford(cr.cost)) {
+      audio.sfx('buzzer');
+      this.say(`${cr.cost} tokens a go.`);
+      return;
+    }
+    this.locked = true;
+    fadeToScene(this, 'CraneGame', { kind: cr.kind });
+  }
+
+  private useTable(): void {
+    if (this.night) {
+      this.say('The board is still set up. Nobody is playing tonight.');
+      return;
+    }
+    this.locked = true;
+    fadeToScene(this, 'Froggopoly', {});
   }
 
   private toHub(): void {
@@ -378,6 +419,8 @@ export class ArcadeLounge extends Phaser.Scene {
       }
     }
     if (best) return { kind: 'cabinet', cab: best };
+    for (const cr of CRANES) if (Math.abs(px - cr.x) < 16 && py - cr.y >= -4 && py - cr.y < 22) return { kind: 'crane', crane: cr };
+    if (Math.abs(px - TABLE.x) < 26 && Math.abs(py - TABLE.y) < 18) return { kind: 'table' };
     if (px < BACK_DOOR.x + 20 && Math.abs(py - BACK_DOOR.y) < 28) return { kind: 'back' };
     return null;
   }
@@ -397,6 +440,11 @@ export class ArcadeLounge extends Phaser.Scene {
       colour = ledger.balance() >= cost ? PALETTE.gold : PALETTE.ash;
     } else if (t.kind === 'side') {
       msg = '[E] DOOR';
+    } else if (t.kind === 'crane') {
+      msg = this.night ? '[E] CRANE' : `[E] ${t.crane.title} - ${t.crane.cost} TOKENS`;
+      colour = this.night || ledger.balance() >= t.crane.cost ? PALETTE.gold : PALETTE.ash;
+    } else if (t.kind === 'table') {
+      msg = this.night ? '[E] THE BOARD' : '[E] PLAY FROGGOPOLY';
     } else {
       msg = this.night ? '[E] LOBBY' : '[E] ARCADE';
     }
