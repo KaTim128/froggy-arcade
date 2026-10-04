@@ -13,6 +13,7 @@ import { centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 import { backdrop } from './decor';
+import { makeLizard } from './frogvslizard';
 
 
 const TABLE = { x: 70, y: 22, w: 180, h: 152 };
@@ -95,6 +96,12 @@ let scoreText: Phaser.GameObjects.BitmapText | null = null;
 let countText: Phaser.GameObjects.BitmapText | null = null;
 let elapsed = 0;
 let frozen = 0;
+/**
+ * Whether your mallet may touch the puck yet, this round.  Not until you have
+ * taken it off the ring the count held it on (or the puck is already moving):
+ * see the face-off note in `update`.
+ */
+let armed = false;
 let over = false;
 let apiRef: MinigameApi | null = null;
 
@@ -105,7 +112,7 @@ export const airHockey: MinigameModule = {
   rules: 'first to 5 - 10 in, 20 out',
   tutorial: {
     objective: [
-      'FIRST TO FIVE GOALS TAKES IT.',
+      'YOU AGAINST THE LIZARD. FIRST TO FIVE.',
       'TEN TOKENS IN, TWENTY BACK ON A WIN.',
       'THREE SECONDS ON THE SPOT AFTER A GOAL.',
       'USE THEM - GET BACK INTO YOUR OWN HALF.',
@@ -189,6 +196,10 @@ export const airHockey: MinigameModule = {
       .setVisible(false);
     text(scene, 8, 30, 'MOUSE', PALETTE.ash);
     text(scene, 8, 40, 'TO MOVE', PALETTE.ash);
+    // ---- WHO YOU ARE PLAYING: the lizard, at the far end of the table,
+    // leaning over its rail with its striker.
+    makeLizard(scene, 292, 62).setScale(0.85).setDepth(5);
+    centerText(scene, 287, 70, 'LIZARD', PALETTE.gold);
     updateScore();
 
     if (import.meta.env?.DEV) {
@@ -275,6 +286,21 @@ export const airHockey: MinigameModule = {
 
     // ---- player paddle follows the mouse, clamped to the lower half
     followPointer(scene);
+    // ---- THE FACE-OFF IS NOT PRE-LOADED.  Held against the ring through the
+    // count with the pointer on the puck, the mallet used to jump onto it on
+    // the first live frame -- a first hit every round, decided before the
+    // round began.  Now it stays held off until you take the pointer back off
+    // the ring and come in again (or the puck is already moving, from his
+    // side), the way his mallet has to come in from his end.
+    if (!armed) {
+      const p = scene.input.activePointer;
+      const off = Math.hypot(p.worldX - puck.x, p.worldY - puck.y) >= KEEP_OFF;
+      if (off || vel.x !== 0 || vel.y !== 0) armed = true;
+      else {
+        keepOffPuck(pad);
+        padPrev = { x: pad.x, y: pad.y };
+      }
+    }
 
     // ---- AI: chase a 140ms-old view of the puck
     history.push({ t: elapsed, x: puck.x, y: puck.y });
@@ -471,6 +497,7 @@ function serve(dir: number): void {
   openingDir = dir;
   frozen = ROUND_GAP_MS;
   history = [];
+  armed = false;
 }
 
 /** Put each striker's face back on it, wherever the mallet has got to. */
@@ -496,7 +523,7 @@ function dressPads(): void {
 }
 
 function updateScore(): void {
-  scoreText?.setText(`FROGGY ${scoreA}   -   ${scoreP} YOU`);
+  scoreText?.setText(`LIZARD ${scoreA}   -   ${scoreP} YOU`);
 }
 
 /** PRD §9.4: on timeout the higher score wins.  Level on the clock is a tie. */
