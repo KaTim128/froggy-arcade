@@ -977,6 +977,11 @@ export const MATERIALS: ArmourMat[] = [
   { key: 'splint', name: 'SPLINT MAIL', def: 0.2, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8d8f86, edge: 0x4a4c44, short: 'SPLINT', note: 'STRIPS OF IRON RIVETED IN A ROW', notes: { head: 'A SPLINTED CAP, STRIPS FROM CROWN TO BRIM', body: 'IRON STRIPS RIVETED DOWN A LEATHER COAT', legs: 'SPLINTED GREAVES. STRIPS THAT BEND AT THE KNEE' } },
   { key: 'banded', name: 'BANDED MAIL', def: 0.23, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x9a9ea6, edge: 0x4c5058, short: 'BANDED', note: 'HOOPS OF STEEL, ONE OVER THE NEXT', notes: { head: 'A BANDED HELM, HOOPED LIKE A BARREL', body: 'HOOPS OF STEEL ROUND THE BODY, ONE OVER THE NEXT', legs: 'BANDED CUISSES. THEY CREAK WHEN YOU CROUCH' } },
   { key: 'samurai', name: 'O-YOROI', def: 0.24, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x8c2f2a, edge: 0x3d1412, short: 'O-YOROI', note: 'LACQUERED LAMES, LACED IN SILK', notes: { head: 'A KABUTO WITH A FLARED NECK GUARD', body: 'LACQUERED LAMES, LACED IN SILK CORD', legs: 'HAIDATE: AN APRON OF LITTLE PLATES OVER THE THIGH' } },
+  // ---- AND TWO MORE SAMURAI SETS, either side of the great harness: a
+  // foot soldier's black do-maru, lighter and quicker, and the late iron
+  // tosei gusoku with its snarling face mask, heavier and harder.
+  { key: 'domaru', name: 'DO-MARU', def: 0.2, evade: 0.03, heavy: [3, 5], resist: [6, 8], colour: 0x26262e, edge: 0xc9a24a, short: 'DO-MARU', note: 'BLACK LACQUER THAT WRAPS ROUND AND TIES AT THE SIDE', notes: { head: 'A RIDGED KABUTO WITH A GOLD CRESCENT ON THE BROW', body: 'BLACK LACQUER THAT WRAPS ROUND AND TIES AT THE SIDE', legs: 'A SHORT SKIRT OF LACED PLATES. QUICK ON THE FEET' } },
+  { key: 'tosei', name: 'TOSEI GUSOKU', def: 0.27, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x42464f, edge: 0xb3261e, short: 'GUSOKU', note: 'IRON PLATE LACED IN RED, AND A FACE TO SCARE THEM', notes: { head: 'AN IRON KABUTO AND A SNARLING MENPO MASK', body: 'IRON PLATE LACED IN RED, AND A FACE TO SCARE THEM', legs: 'IRON HAIDATE AND SUNE-ATE. HEAVY, AND THEY HOLD' } },
   { key: 'mirror', name: 'MIRROR ARMOUR', def: 0.2, evade: 0.04, heavy: [4, 6], resist: [5, 7], colour: 0xd9e4ee, edge: 0x6a7684, short: 'MIRROR', note: 'POLISHED UNTIL THEY SQUINT, AND SOMETIMES MISS', notes: { head: 'A POLISHED DOME. THE GLARE MAKES THEM MISS', body: 'ROUND MIRRORS SEWN ON MAIL. THEY SQUINT, AND MISS', legs: 'POLISHED GREAVES. THE FLASH PUTS THEM OFF' } },
   { key: 'coral', name: 'CORAL ARMOUR', def: 0.17, evade: 0, soft: 0.3, heavy: [3, 5], resist: [4, 6], colour: 0xe07a6a, edge: 0x8a3a30, short: 'CORAL', note: 'TURNS THE QUICK ONES. CRUMBLES ON THE REST', notes: { head: 'A CORAL CROWN. TURNS A QUICK BLOW', body: 'GROWN, NOT MADE. TURNS THE QUICK ONES', legs: 'CORAL SHIN PLATES. BRIGHT, AND BRITTLE' } },
   { key: 'jade', name: 'JADE ARMOUR', def: 0.26, evade: 0, heavy: [6, 8], resist: [4, 6], colour: 0x5fae7e, edge: 0x2a5a3c, short: 'JADE', note: 'PLATES OF STONE, WIRED TOGETHER WITH GOLD', notes: { head: 'A JADE CAP, WIRED IN GOLD. HEAVY ON THE NECK', body: 'JADE PLATES WIRED WITH GOLD. HARD, AND IT CHIPS', legs: 'JADE TILES DOWN THE LEG. SLOW, AND STRONG' } },
@@ -4327,16 +4332,27 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number, single = fa
       poly([7.4, -2.6, 16.6, 0, 7.4, 2.6], STEEL, EDGE);
       line(7.6, 0, 15.4, 0, SHINE, 0.7, 0.9);
       break;
-    case 'claws':
-      // the back of the fist, a strap across it and three long curved claws
+    case 'claws': {
+      // ---- TIGER CLAWS.  A bagh nakh: a steel bar across the knuckles with
+      // a ring at each end for the fingers, and four long hooked blades off
+      // it, fanned a little and each with a bright edge -- worn over a wrist
+      // wrap striped like the animal they are named for.
       if (!single) c.setData('pair', true);
+      rect(-2.2, -2.8, 2.8, 5.6, 0xc8782a);
+      for (let k = 0; k < 3; k++) rect(-2 + k * 0.95, -2.8, 0.45, 5.6, 0x2a1a10);
       fist();
-      rect(1.4, -3.2, 3.4, 6.4, LEATHER);
-      for (let k = 0; k < 3; k++) {
-        const y = -2.2 + k * 2.2;
-        poly([6, y - 0.6, 11.4, y - 0.4, 14.6, y + 1.4, 11, y + 0.7, 6, y + 0.6], STEEL, EDGE);
+      rect(5, -4.2, 1.5, 8.4, IRON_DK);
+      rect(5, -4.2, 0.5, 8.4, IRON_LIT);
+      ring(5.8, -4.6, 1.1, IRON_LIT, 0.6);
+      ring(5.8, 4.6, 1.1, IRON_LIT, 0.6);
+      for (let k = 0; k < 4; k++) {
+        const y = -3.3 + k * 2.2;
+        const fan = (k - 1.5) * 0.45;
+        poly([6.2, y - 0.5, 10.6, y - 0.6 + fan * 0.6, 14.2, y + 0.3 + fan, 15.8, y + 2.1 + fan, 13.4, y + 0.9 + fan, 10.4, y + 0.6 + fan * 0.6, 6.2, y + 0.5], STEEL, EDGE);
+        curve([6.8, y - 0.3, 10.6, y - 0.35 + fan * 0.6, 14, y + 0.5 + fan], SHINE, 0.45);
       }
       break;
+    }
     case 'hatchets':
       // a small axe a hand: a stubby haft, a bearded blade
       if (!single) c.setData('pair', true);
@@ -5004,7 +5020,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // quilting on cloth, a stitched edge on leather, studs, rings of mail,
   // rows of scales, rivets and a hard shine on plate, ribs of bone, spikes.
   type Weave = 'cloth' | 'leather' | 'studded' | 'chain' | 'scale' | 'plate' | 'bone' | 'spiked'
-    | 'fur' | 'feather' | 'wicker' | 'glass' | 'wood' | 'quilt';
+    | 'fur' | 'feather' | 'wicker' | 'glass' | 'wood' | 'quilt' | 'lame';
   const weaveOf = (k: string): Weave =>
     ['cloth', 'tuxedo', 'none', 'crown', 'silk', 'shadow'].includes(k) ? 'cloth'
       : ['padded', 'gambeson', 'linothorax'].includes(k) ? 'quilt'
@@ -5016,7 +5032,8 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
                   : ['leather', 'hide', 'reinforced', 'tactical', 'bark', 'troll', 'plague', 'rubber'].includes(k) ? 'leather'
                     : ['studded', 'brigandine', 'gladiator', 'platecoat'].includes(k) ? 'studded'
                       : ['chain', 'hood', 'mithril'].includes(k) ? 'chain'
-                        : ['scale', 'lamellar', 'dragon', 'samurai', 'jade', 'fishscale', 'sharkskin'].includes(k) ? 'scale'
+                        : ['samurai', 'domaru', 'tosei'].includes(k) ? 'lame'
+                        : ['scale', 'lamellar', 'dragon', 'jade', 'fishscale', 'sharkskin'].includes(k) ? 'scale'
                           : ['bone', 'splint', 'banded', 'coral', 'turtle', 'chitin'].includes(k) ? 'bone'
                             : ['spiked', 'thorn'].includes(k) ? 'spiked' : 'plate';
   const STUD = 0xd8dde4;
@@ -5109,6 +5126,18 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
           gr.fillStyle(row % 2 ? col : up(col, 0.15), 1).fillCircle(x, y - 0.1, 0.8);
         }
       }
+    } else if (w === 'lame') {
+      // ---- SAMURAI LAMES: lacquered bands across the body, each a little
+      // proud of the one under it, and laced together top to bottom with
+      // silk cord in short vertical runs -- not scales, and not plate.
+      const lace = mix(col, 0xd8b45a, 0.75);
+      for (let y = cy - ry + 1.2; y < cy + ry - 0.6; y += 2.2) {
+        const hw = half(y + 0.6, 0.95);
+        if (hw < 1) continue;
+        gr.fillStyle(up(col, 0.22), 1).fillRect(cx - hw, y, hw * 2, 0.6);
+        gr.fillStyle(down(col, 0.42), 1).fillRect(cx - hw, y + 1.5, hw * 2, 0.5);
+        for (let x = cx - hw + 0.8; x < cx + hw - 0.4; x += 1.6) gr.fillStyle(lace, 1).fillRect(x, y + 0.5, 0.45, 1.1);
+      }
     } else if (w === 'bone') {
       for (let y = cy - ry + 1.6; y < cy + ry - 0.8; y += 2.4) {
         const hw = half(y, 0.95);
@@ -5143,6 +5172,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
       const x = cx + Math.cos(a) * rx;
       const y = cy + Math.sin(a) * ry;
       if (w === 'scale') gr.fillStyle(down(col, 0.3), 1).fillCircle(x, y + 0.3, 0.8);
+      else if (w === 'lame') gr.fillStyle(mix(col, 0xd8b45a, 0.75), 1).fillRect(x - 0.25, y - 0.6, 0.5, 1.2);
       else if (w === 'fur' || w === 'feather') gr.fillStyle(up(col, 0.3), 1).fillTriangle(x - 0.6, y - 0.4, x + 0.6, y - 0.4, x, y + 1.4);
       else if (w === 'wicker' || w === 'wood') gr.fillStyle(down(col, 0.35), 1).fillRect(x - 0.3, y - 0.3, 0.6, 0.6);
       else if (w === 'leather') gr.fillStyle(up(col, 0.38), 1).fillRect(x - 0.25, y - 0.25, 0.5, 0.5);
@@ -5716,6 +5746,16 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
     const RED = 0xb3261e;
     const hw = weaveOf(H.key);
     let crested = false;
+    // Where the face is -- the lower half of it, mouth and jaw, and the near
+    // eye -- for a mask to sit ON rather than float near.  Froggy's and the
+    // lizard's faces are known shapes; the animals' are their own, and a
+    // mask over a muzzle the length of a giraffe's is not attempted.
+    const faceAt = (): { x0: number; x1: number; y0: number; y1: number; eyeX: number; eyeY: number } | null => {
+      if (beastParts) return null;
+      if (frog) return { x0: 1, x1: 10.6, y0: -31.8, y1: -26.8, eyeX: 5, eyeY: -38 };
+      const hyl = -32.6 * tall - lift;
+      return { x0: skullW * 0.5, x1: skullW * 0.9 + 9 * skull, y0: hyl + 1, y1: hyl + 5.4 * skull, eyeX: 5, eyeY: -34.6 * tall - lift };
+    };
     switch (H.key) {
       case 'viking': {
         // two horns out of the sides of the bowl, curving up
@@ -5768,15 +5808,114 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
         break;
       }
       case 'plague': {
-        // THE BEAK.  A long curved mask out over the snout, two round glass
-        // eyes, and a brimmed hat above it all.
-        const bx = cx + HW2 * 0.3;
-        hx2.fillStyle(0xd8ccae, 1).fillTriangle(bx, hy - 1.2, bx + 8.4, hy + 3.6, bx, hy + 2.6);
-        hx2.lineStyle(0.6, 0x8a7a5a, 1).strokeTriangle(bx, hy - 1.2, bx + 8.4, hy + 3.6, bx, hy + 2.6);
-        hx2.fillStyle(0x9fd4e0, 1).fillCircle(bx - 0.6, hy - 1.6, 1.1);
-        hx2.lineStyle(0.5, 0x2a2622, 1).strokeCircle(bx - 0.6, hy - 1.6, 1.1);
+        // THE BEAK.  A long curved mask out over the snout, a round glass
+        // eye, and a brimmed hat above it all.  On Froggy and the lizard the
+        // beak sits where their mouth is and the glass over the eye, not up
+        // on the hat where it was floating above both.
+        const face = faceAt();
+        const bx = face ? face.x0 + 1 : cx + HW2 * 0.3;
+        const by = face ? face.y0 - 1.2 : hy - 1.2;
+        hx2.fillStyle(0xd8ccae, 1).fillTriangle(bx, by, bx + 9, by + 4.2, bx, by + 4);
+        hx2.lineStyle(0.6, 0x8a7a5a, 1).strokeTriangle(bx, by, bx + 9, by + 4.2, bx, by + 4);
+        hx2.fillStyle(0xbfb090, 1).fillRect(bx + 1.5, by + 2.6, 5, 0.5);
+        const gx = face ? face.eyeX : bx - 0.6;
+        const gy = face ? face.eyeY : hy - 1.6;
+        hx2.fillStyle(0x9fd4e0, 0.85).fillCircle(gx, gy, face ? 2.2 : 1.1);
+        hx2.lineStyle(0.7, 0x2a2622, 1).strokeCircle(gx, gy, face ? 2.2 : 1.1);
+        hx2.fillStyle(0xffffff, 0.7).fillRect(gx - 0.8, gy - 1, 0.8, 0.6);
         hx2.fillStyle(hc, 1).fillRect(cx - HW2 * 0.62, top + 0.6, HW2 * 1.24, 1.2);
         hx2.fillStyle(hc, 1).fillRoundedRect(cx - HW2 * 0.34, top - 3.4, HW2 * 0.68, 4.2, 1);
+        crested = true;
+        break;
+      }
+      case 'samurai':
+      case 'domaru':
+      case 'tosei': {
+        // ---- A KABUTO.  Ridges down the bowl and a knob at the top, a peak
+        // over the brow, the shikoro -- three lames stepping down and out
+        // over the back of the neck, laced in silk -- and a crest on the brow: gold horns on the great
+        // harness and the iron one, a gold crescent on the do-maru.  The
+        // neck guard stops short of a frog's eyes, which are on top of his
+        // head and must not be under a helmet.
+        const lace = H.key === 'tosei' ? 0xb3261e : H.key === 'domaru' ? 0x3f6fd8 : 0xd8b45a;
+        const gold = 0xe8c04a;
+        for (let k = -2; k <= 2; k++) {
+          const x = cx + k * HW2 * 0.17;
+          hx2.fillStyle(down(hc, 0.35), 1).fillRect(x - 0.25, top + 1.2 + Math.abs(k) * 0.6, 0.5, hy - top - 1.6 - Math.abs(k) * 0.6);
+        }
+        hx2.fillStyle(up(hc, 0.4), 1).fillCircle(cx, top + 0.4, 0.9);
+        hx2.fillStyle(down(hc, 0.25), 1).fillPoints([new Phaser.Math.Vector2(cx + HW2 * 0.12, hy + 0.2), new Phaser.Math.Vector2(cx + HW2 * 0.62, hy + 1.2), new Phaser.Math.Vector2(cx + HW2 * 0.6, hy + 2), new Phaser.Math.Vector2(cx + HW2 * 0.12, hy + 1.4)], true);
+        const backEnd = beastParts ? cx - HW2 * 0.2 : cx - HW2 * 0.4;
+        for (let k = 0; k < 3; k++) {
+          const y = hy + 1.6 + k * 1.7;
+          const x0 = cx - HW2 * (0.56 + k * 0.08);
+          const w = backEnd - x0 - k * 0.4;
+          hx2.fillStyle(k % 2 ? down(hc, 0.12) : hc, 1).fillRect(x0, y, w, 1.6);
+          hx2.fillStyle(down(hc, 0.45), 1).fillRect(x0, y + 1.3, w, 0.4);
+          for (let x = x0 + 0.6; x < x0 + w - 0.3; x += 1.5) hx2.fillStyle(lace, 1).fillRect(x, y + 0.3, 0.45, 0.9);
+        }
+        // the crest on the brow
+        const bx = cx + HW2 * 0.24;
+        const by = top + 2.4;
+        if (H.key === 'domaru') {
+          // horns up: the lower half of a circle, sat on the brow
+          hx2.lineStyle(1.3, gold, 1).beginPath().arc(bx, by - 3.4, 3.2, Math.PI * 0.05, Math.PI * 0.95, false).strokePath();
+        } else {
+          for (const [dx, h] of [[-1.6, 7], [2.4, 6.2]] as const) {
+            hx2.lineStyle(1.3, down(gold, 0.3), 1).lineBetween(bx, by, bx + dx, by - h);
+            hx2.lineStyle(0.7, gold, 1).lineBetween(bx, by, bx + dx, by - h);
+          }
+        }
+        hx2.fillStyle(gold, 1).fillCircle(bx, by, 1.1);
+        // ---- THE MENPO: an iron face over the mouth, a lacquered red
+        // inside, a white moustache and a row of teeth.  On a frog or a
+        // lizard, whose faces the mask is made to fit.
+        const face = H.key === 'tosei' ? faceAt() : null;
+        if (face) {
+          const { x0, x1, y0, y1 } = face;
+          const pts = [x0, y0, x1, y0 + 0.4, x1 + 1.2, (y0 + y1) / 2, x1, y1, x0 + 1, y1 + 0.4, x0 - 0.6, (y0 + y1) / 2];
+          const v = pts.reduce<Phaser.Math.Vector2[]>((o, n, i) => (i % 2 ? o : [...o, new Phaser.Math.Vector2(n, pts[i + 1])]), []);
+          hx2.fillStyle(0x2a2c32, 1).fillPoints(v, true);
+          hx2.lineStyle(0.6, 0x15161a, 1).strokePoints(v, true);
+          hx2.fillStyle(0x8c1f1a, 1).fillRect(x0 + (x1 - x0) * 0.35, (y0 + y1) / 2 + 0.4, (x1 - x0) * 0.55, 1.4);
+          for (let x = x0 + (x1 - x0) * 0.4; x < x1 - 0.6; x += 1.1) hx2.fillStyle(0xf2ead8, 1).fillRect(x, (y0 + y1) / 2 + 0.5, 0.6, 0.6);
+          hx2.lineStyle(0.8, 0xf2ead8, 1).lineBetween(x0 + (x1 - x0) * 0.4, (y0 + y1) / 2 - 0.4, x1 - 0.4, (y0 + y1) / 2 - 1.1);
+          hx2.fillStyle(up(0x2a2c32, 0.4), 1).fillRect(x0 + 0.8, y0 + 0.5, (x1 - x0) * 0.5, 0.5);
+        }
+        crested = true;
+        break;
+      }
+      case 'iron': {
+        // ---- AN IRON HELM, not a box: a darker reinforcing band round the
+        // brim, riveted, a ridge over the crown, and a nasal bar down the
+        // front of the face -- at the very front, clear of a frog's eyes.
+        hx2.fillStyle(down(hc, 0.3), 1).fillRect(cx - HW2 / 2, hy - 0.9, HW2, 1.6);
+        for (let x = cx - HW2 / 2 + 1; x < cx + HW2 / 2 - 0.5; x += 1.9) hx2.fillStyle(up(hc, 0.55), 1).fillCircle(x, hy - 0.1, 0.42);
+        hx2.fillStyle(up(hc, 0.35), 1).fillRect(cx - 0.6, top + 0.2, 1.2, hy - top - 0.8);
+        hx2.fillStyle(down(hc, 0.4), 1).fillRect(cx + 0.6, top + 0.6, 0.4, hy - top - 1.2);
+        const nx = beastParts ? cx + HW2 * 0.4 : cx + HW2 * 0.46;
+        const nl = beastParts ? skH * 0.34 : 4.6;
+        hx2.fillStyle(down(hc, 0.2), 1).fillRect(nx - 0.7, hy - 0.6, 1.4, nl);
+        hx2.fillStyle(up(hc, 0.45), 1).fillRect(nx - 0.7, hy - 0.6, 0.5, nl);
+        hx2.fillStyle(up(hc, 0.6), 1).fillCircle(nx, hy + 0.2, 0.4);
+        crested = true;
+        break;
+      }
+      case 'shadow': {
+        // ---- A SHINOBI'S MASK: dark cloth across the lower face, knotted at
+        // the back of the head with the ends loose.  The eyes stay clear.
+        const face = faceAt();
+        const fy = face ? (face.y0 + face.y1) / 2 : hy + 3;
+        const fx0 = face ? face.x0 - 1 : cx - HW2 * 0.2;
+        const fx1 = face ? face.x1 + 0.8 : cx + HW2 * 0.55;
+        hx2.fillStyle(hc, 1).fillRoundedRect(fx0, fy - 2.4, fx1 - fx0, 4.8, 1.2);
+        hx2.fillStyle(up(hc, 0.3), 1).fillRect(fx0 + 0.6, fy - 2, fx1 - fx0 - 1.2, 0.5);
+        hx2.fillStyle(down(hc, 0.4), 1).fillRect(fx0 + 0.6, fy + 1.4, fx1 - fx0 - 1.2, 0.5);
+        const kx = beastParts ? cx - HW2 * 0.45 : cx - HW2 * 0.42;
+        hx2.fillStyle(hc, 1).fillRect(kx, fy - 1.2, fx0 - kx + 0.4, 1.6);
+        hx2.fillStyle(hc, 1).fillCircle(kx, fy - 0.4, 1.2);
+        hx2.lineStyle(1, hc, 1).lineBetween(kx, fy - 0.2, kx - 2.6, fy + 2.8);
+        hx2.lineStyle(1, hc, 1).lineBetween(kx, fy, kx - 1.6, fy + 3.8);
         crested = true;
         break;
       }
