@@ -31,6 +31,8 @@ import { Player } from '../art/player';
 import { PRIZES, allPrizesSold } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
+import { attachPockets } from '../ui/pockets';
+import { heldItems } from '../game/inventory';
 
 const WALK_Y = KERB_Y;
 type Spot = 'door' | 'man' | null;
@@ -87,6 +89,7 @@ export class ExteriorDay extends Phaser.Scene {
     this.add.rectangle(4, 4, 96, 14, PALETTE.black, 0.55).setOrigin(0, 0).setDepth(950);
     this.purse = text(this, 9, 8, '', PALETTE.mossLight).setDepth(951);
     this.refreshPurse();
+    attachPockets(this, () => this.locked || this.busy());
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
@@ -195,7 +198,7 @@ export class ExteriorDay extends Phaser.Scene {
 
     const s = store.get();
     const toSell = s.prizesOwned.filter((id) => !s.prizesSold.includes(id));
-    if (toSell.length === 0) {
+    if (toSell.length === 0 && heldItems(s).length === 0) {
       this.say(s.prizesOwned.length === 0
         ? '"Nothing yet?  The counter is inside, friend."'
         : '"You have sold me everything you are carrying."');

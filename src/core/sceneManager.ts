@@ -19,6 +19,7 @@ import { audio } from './audio';
 import { Boot } from '../scenes2d/Boot';
 import { StartScreen } from '../scenes2d/StartScreen';
 import { SettingsModal } from '../scenes2d/SettingsModal';
+import { InventoryModal } from '../scenes2d/InventoryModal';
 import { installPause } from './pause';
 import { ProfileModal } from '../scenes2d/ProfileModal';
 import { ArcadeHub } from '../scenes2d/ArcadeHub';
@@ -73,6 +74,7 @@ export function bootGame(): void {
       Boot,
       StartScreen,
       SettingsModal,
+      InventoryModal,
       ProfileModal,
       IntroCutscene,
       ArcadeHub,

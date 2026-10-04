@@ -32,6 +32,7 @@ import { froggyLayer } from '../render/froggyLayer';
 import { drawFroggy } from '../froggy/froggy';
 import { drawSuitedMan } from '../froggy/suit';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
+import { attachPockets } from '../ui/pockets';
 
 const INTERACT_RANGE = 24;
 /**
@@ -129,6 +130,7 @@ export class ArcadeCasino extends Phaser.Scene {
     this.player = new Player(this, spawn.x, spawn.y);
 
     new TokenHud(this);
+    attachPockets(this, () => this.busy());
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);

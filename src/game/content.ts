@@ -404,7 +404,7 @@ export function prizesForWave(wave: number): PrizeDef[] {
  * why -- and the one thing on the shelf is the one thing that would let you
  * prove what you saw, at a price nobody reaches by accident.
  */
-export const CAMERA_PRIZE: PrizeDef = { id: 'camera', name: 'CAMERA', cost: 1300, color: 0x3a3f4c, shape: 'camera' };
+export const CAMERA_PRIZE: PrizeDef = { id: 'camera', name: 'VIDEO CAMERA', cost: 1300, color: 0x3a3f4c, shape: 'camera' };
 
 /**
  * What is in the case right now, for the case, the counter and anything else

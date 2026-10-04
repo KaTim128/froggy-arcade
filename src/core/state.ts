@@ -115,6 +115,26 @@ export interface GameState {
    * run does not give anyone their afternoon back.
    */
   playSeconds: number;
+  /**
+   * ---- THE POCKETS.  Three slots of things carried in the hand -- crane
+   * prizes, and the camera once it is bought -- as item ids (see
+   * `game/inventory.ts`).  The counter's prizes go in the bag as they always
+   * did (`prizesOwned`); these are what fills a hand.
+   */
+  items: string[];
+  /**
+   * ---- WHAT TIME IT IS OUTSIDE, after the night in the arcade.
+   *
+   * 'day' until the job is nearly done; 'evening' once the player has more
+   * than six hundred tokens and steps out after surviving him; 'midnight'
+   * once the man has their prizes and there is money for a room -- the
+   * arcade shut, the man gone, and the road to the hotel the only way on.
+   */
+  timeOfDay: 'day' | 'evening' | 'midnight';
+  /** Through the hotel's front doors, which is the only safe place there is. */
+  reachedHotel: boolean;
+  /** Paid for a room and given a key. */
+  checkedIn: boolean;
   settings: Settings;
 }
 
@@ -243,6 +263,10 @@ function defaultState(): GameState {
     staffAskedFroggy: false,
     dealerAskedFroggy: false,
     playSeconds: 0,
+    items: [],
+    timeOfDay: 'day',
+    reachedHotel: false,
+    checkedIn: false,
     settings: { master: 80, music: 70, sfx: 85, moveStyle: 'stick' },
   };
 }
@@ -331,6 +355,8 @@ class Store {
     // first one by definition.
     fresh.prizeWave = Math.max(0, Math.floor(run.prizeWave ?? 0));
     fresh.playSeconds = Math.max(0, Number(run.playSeconds) || 0);
+    fresh.items = Array.isArray(run.items) ? run.items.filter((i) => typeof i === 'string').slice(0, 3) : [];
+    fresh.timeOfDay = run.timeOfDay === 'evening' || run.timeOfDay === 'midnight' ? run.timeOfDay : 'day';
     this.state = fresh;
     // A saved unlimited run comes back unlimited, whatever the file says.
     if (this.isAdmin()) this.state.tokens = ADMIN_TOKENS;

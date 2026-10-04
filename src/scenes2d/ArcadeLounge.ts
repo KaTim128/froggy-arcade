@@ -38,6 +38,7 @@ import { TokenHud } from '../ui/hud';
 import { CABINETS, LOUNGE_DOOR, cabinetsIn } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W } from '../render/pixelScaler';
+import { attachPockets } from '../ui/pockets';
 
 const INTERACT_RANGE = 24;
 const rgb = (c: number): [number, number, number] => [(c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff];
@@ -140,6 +141,7 @@ export class ArcadeLounge extends Phaser.Scene {
 
     // (no tokens to count after closing: the HUD is the daytime's)
     if (!this.night) new TokenHud(this);
+    if (!this.night) attachPockets(this, () => this.busy());
     this.mutter = text(this, GAME_W / 2, 180 - 30, '', PALETTE.fog).setOrigin(0.5, 0.5).setDepth(802).setVisible(false);
     if (this.night && this.fromAlley) this.shutBehind();
 

@@ -65,6 +65,7 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   StartScreen: BARE,
   ProfileModal: BARE,
   SettingsModal: TAP,
+  InventoryModal: TAP,
   // SKIP sends the same Esc the desktop hint names, and it lives in the band
   // under the picture, so it cannot land on the dialogue it is offering to
   // skip.  It goes the moment the intro hands over to the street, because the

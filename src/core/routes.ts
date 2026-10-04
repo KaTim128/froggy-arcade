@@ -11,6 +11,7 @@ export const SCENES = [
   'Boot',
   'StartScreen',
   'SettingsModal',
+  'InventoryModal',
   'IntroCutscene',
   'ArcadeHub',
   'ArcadeAnnex',
@@ -47,6 +48,7 @@ export function canEnter(scene: SceneId, s: Readonly<GameState>, ctx: GuardConte
     case 'Boot':
     case 'StartScreen':
     case 'SettingsModal':
+    case 'InventoryModal':
       return true;
 
     case 'IntroCutscene':
