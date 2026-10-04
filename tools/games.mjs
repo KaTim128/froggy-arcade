@@ -735,14 +735,38 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   );
   if (!clean) failures++;
 
-  // ---- WATER NEVER SITS ON A HOLE.  A puddle is 22px across and a hole 13;
-  // dealt independently they used to overlap and the hole vanished under
-  // the water.  Three thousand fields, and the nearest any puddle comes to a
-  // hole on its own lane has to leave clear grass between them.
+  // ---- NO PUDDLE.  It was taken out of the race: no lane has water on it,
+  // in the field on screen or in three thousand dealt fresh.
+  const wet = await page.evaluate(() => window.__race.furniture().reduce((n, l) => n + l.puddles.length, 0));
   const gap = await page.evaluate(() => window.__race.waterGap(3000));
-  const dry = gap >= 24;
-  console.log(`${dry ? 'PASS' : 'FAIL'}  frog race: the water never lies on a hole  — closest ${gap.toFixed(1)}px apart in 3000 fields`);
+  const dry = wet === 0 && !Number.isFinite(gap);
+  console.log(`${dry ? 'PASS' : 'FAIL'}  frog race: there is no puddle on the track  — ${wet} on screen, ${Number.isFinite(gap) ? 'some' : 'none'} in 3000 fields`);
   if (!dry) failures++;
+
+  // ---- ONLY THE NUMBERS BACK A FROG.  A tap in the middle of a lane -- on
+  // the grass, or on the frog -- must not pick it; a tap on the lane's number
+  // does.  (The lane geometry comes from the cabinet's own row plates.)
+  const at = await page.evaluate(() => {
+    const c = document.querySelector('canvas').getBoundingClientRect();
+    const rows = window.__race.rows ? window.__race.rows() : null;
+    return { c: { x: c.left, y: c.top, w: c.width, h: c.height }, rows };
+  });
+  const toPx = (gx, gy) => [at.c.x + (gx / 320) * at.c.w, at.c.y + (gy / 180) * at.c.h];
+  const row = at.rows?.[1];
+  let picks = { lane: null, number: null };
+  if (row) {
+    const pick0 = (await page.evaluate(() => window.__race.state().pick));
+    await page.mouse.click(...toPx(160, row.y + row.h / 2));
+    await sleep(200);
+    const afterLane = await page.evaluate(() => window.__race.state().pick);
+    await page.mouse.click(...toPx(row.x + row.w / 2, row.y + row.h / 2));
+    await sleep(200);
+    const afterNumber = await page.evaluate(() => window.__race.state().pick);
+    picks = { lane: afterLane === pick0, number: afterNumber === 1 };
+  }
+  const numbersOnly = picks.lane === true && picks.number === true;
+  console.log(`${numbersOnly ? 'PASS' : 'FAIL'}  frog race: only the numbered buttons back a frog  — lane tap ${picks.lane ? 'ignored' : 'PICKED'}, number tap ${picks.number ? 'picked' : 'did nothing'}`);
+  if (!numbersOnly) failures++;
 
   // ---- THE CARD IS A RACE, NOT A FAIRGROUND.  No skates or rockets, no
   // butterfly, no balloon; and the final stretch deals big moments of its

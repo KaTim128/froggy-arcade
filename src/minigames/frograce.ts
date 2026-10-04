@@ -661,7 +661,9 @@ const HOLES_PER_LANE = 1;
  * Tested on the way in, exactly as a pothole is, so a frog either clears it in
  * the air or comes down in the water.
  */
-const PUDDLES_PER_LANE = 1;
+// None: the puddle is gone from the race.  (The machinery stays, at zero, so
+// a lane's furniture is still one list of holes and one of water.)
+const PUDDLES_PER_LANE = 0;
 const PUDDLE_FROM = 0.22;
 const PUDDLE_TO = 0.86;
 /** How often coming down on one actually gets you: the rest are cleared. */
@@ -1124,7 +1126,7 @@ export const frogRace: MinigameModule = {
       '10 A TICKET, 20 BACK ON EACH.',
     ],
     controls: [
-      [`1-${FIELD} / CLICK`, 'BACK THAT FROG'],
+      [`1-${FIELD} / NUMBER`, 'BACK THAT FROG'],
       ['UP / DOWN', 'MORE OR FEWER TICKETS'],
       ['SPACE', 'START THE RACE'],
     ],
@@ -1159,7 +1161,7 @@ export const frogRace: MinigameModule = {
     draft(scene);
 
     banner = centerText(scene, GAME_W / 2, 24, 'BACK A FROG', PALETTE.gold).setDepth(60);
-    sub = centerText(scene, GAME_W / 2, 164, `TAP A ROW OR PRESS 1-${FIELD}`, PALETTE.cream).setDepth(60);
+    sub = centerText(scene, GAME_W / 2, 164, `TAP A NUMBER OR PRESS 1-${FIELD}`, PALETTE.cream).setDepth(60);
     goBtn = {
       box: scene.add
         .rectangle(GAME_W / 2, 150, 78, 14, PALETTE.tealDark)
@@ -1306,6 +1308,8 @@ export const frogRace: MinigameModule = {
         /** Holes and puddles on every lane, in pixels along the track. */
         furniture: () => racers.map((r) => ({ holes: r.holes.map((h) => h * DIST), puddles: r.puddles.map((q) => q * DIST) })),
         /** Deal fresh fields and report the closest any puddle came to a hole on its lane. */
+        /** Where each row's numbered button is, in game pixels. */
+        rows: () => rows.map((r) => ({ x: r.plate.x, y: r.plate.y, w: r.plate.width, h: r.plate.height })),
         waterGap: (n: number) => {
           let worst = Infinity;
           for (let k = 0; k < n; k++) {
@@ -3070,21 +3074,16 @@ function draft(scene: Phaser.Scene): void {
 
   racers.forEach((r) => {
     const y = LANE_T + r.i * LANE_H;
+    // THE NUMBER IS THE BUTTON, and the only one: the lanes and the frogs in
+    // them are the race, not a menu, and a stray tap on the track used to back
+    // whichever frog was under the finger.
     const plate = scene.add
-      .rectangle(PLATE.x, y + 1, PLATE.w, Math.min(15, LANE_H - 2), PALETTE.ink)
+      .rectangle(PLATE.x, y + 1, PLATE.w, Math.min(15, LANE_H - 2), PALETTE.tealDark)
       .setOrigin(0, 0)
       .setDepth(20)
       .setStrokeStyle(1, PALETTE.steel)
       .setInteractive({ useHandCursor: true });
     plate.on('pointerdown', () => choose(r.i));
-    // The whole lane is the hit area, not just the plate: a row you have to
-    // aim at a 34-pixel box to back is a menu wearing a racecard's clothes.
-    scene.add
-      .zone(0, y, GAME_W, LANE_H)
-      .setOrigin(0, 0)
-      .setDepth(19)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => choose(r.i));
     const label = centerText(scene, PLATE.x + PLATE.w / 2, y + Math.min(15, LANE_H - 2) / 2, '', PALETTE.cream).setDepth(
       21,
     );
@@ -4179,6 +4178,6 @@ function refresh(): void {
     row.label.setText(`${r.i + 1}`);
     row.label.setTint(mine ? PALETTE.gold : PALETTE.fog);
     row.plate.setStrokeStyle(1, mine ? PALETTE.gold : PALETTE.steel);
-    row.plate.setFillStyle(mine ? 0x2a2410 : PALETTE.ink);
+    row.plate.setFillStyle(mine ? 0x2a2410 : PALETTE.tealDark);
   }
 }
