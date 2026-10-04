@@ -460,6 +460,13 @@ export interface FroggyPose {
    * something about to drop on you.  The hands go where `hands` puts them.
    */
   pounce?: number;
+  /**
+   * 0..1 THE WARNING.  Not coming for you -- braced to.  The shoulders come
+   * up round the neck, the back comes over you, the arms come off his sides
+   * bent and ready with the long fingers working open and shut, and all of it
+   * shakes very slightly with the effort of not.  He stays where he is.
+   */
+  menace?: number;
 }
 
 /** A solid box in the world, axis-aligned, from the floor up to `y1`. */
@@ -594,6 +601,8 @@ export class FroggyMonster {
   private stillNow = 0;
   private hunchNow = 0;
   private tiltNow = 0;
+  private menaceNow = 0;
+  private neckBaseY = NaN;
   private stretchNow = 0;
   private pounceNow = 0;
   private armSkin: THREE.MeshPhongMaterial | null = null;
@@ -1411,7 +1420,9 @@ export class FroggyMonster {
     this.stretchNow += ((pose.stretch ?? 0) - this.stretchNow) * Math.min(1, dt * 16);
     // Drawn out fast -- it is the scare's -- and let back slowly.
     this.pounceNow += ((pose.pounce ?? 0) - this.pounceNow) * Math.min(1, dt * ((pose.pounce ?? 0) > this.pounceNow ? 18 : 3));
-    this.setArmLength(1 + 0.35 * this.pounceNow, 1 + 0.55 * this.pounceNow);
+    this.menaceNow += ((pose.menace ?? 0) - this.menaceNow) * Math.min(1, dt * 2.5);
+    // (braced, the fingers are drawn out a little long: claws)
+    this.setArmLength(1 + 0.35 * this.pounceNow, 1 + 0.55 * this.pounceNow + 0.22 * this.menaceNow);
     // a cold sheen on the reaching arms, so the long hands read in the dark
     // at the edges of the frame, where no lamp is pointed
     this.armSkin?.emissive.setRGB(0.028 * this.pounceNow, 0.03 * this.pounceNow, 0.036 * this.pounceNow);
@@ -1795,6 +1806,49 @@ export class FroggyMonster {
       this.arms[1].rotation.z += 0.04 * dead;
       this.elbows[0].rotation.x += (-0.02 - this.elbows[0].rotation.x) * dead;
       this.elbows[1].rotation.x += (-0.32 - this.elbows[1].rotation.x) * dead;
+    }
+
+    // ---- THE WARNING.  Everything about him says he is about to, and he
+    // does not.  The breath is deep and ragged and the shoulders ride up on
+    // it; the head sinks down between them; the back comes over you; the arms
+    // come off his sides, bent at the elbow, hands out in front at his hips
+    // with the fingers spreading and clawing shut on their own; and through
+    // all of it a fine fast shake, the effort of holding still.
+    const mn = this.menaceNow * (1 - reach) * (1 - this.climbNow);
+    if (Number.isNaN(this.neckBaseY)) this.neckBaseY = this.neck.position.y;
+    this.neck.position.y = this.neckBaseY;
+    if (mn > 0.001) {
+      const b = this.breathT;
+      // in on a long pull, out in a rush: lowest, then up and held
+      const heave = Math.max(0, Math.sin(b * 1.7)) ** 2;
+      const quiver = (k: number): number => Math.sin(b * 37 + k) * 0.011 + Math.sin(b * 53 + k * 2.1) * 0.007;
+      this.torso.rotation.x += mn * (0.12 + heave * 0.03);
+      this.neck.rotation.x -= mn * 0.1;
+      // the head goes down between the shoulders as they come up
+      this.neck.position.y = this.neckBaseY - mn * (0.045 + heave * 0.012);
+      for (let h = 0; h < 2; h++) {
+        const out = h === 0 ? -1 : 1;
+        if (this.armBaseY.length === 2) this.arms[h].position.y += mn * (0.022 + heave * 0.012);
+        // off the sides, wide, a little forward -- held there, low, so the
+        // claws are at his hips and nothing comes up across his face
+        this.arms[h].rotation.x += (-0.14 - heave * 0.03 + quiver(h) - this.arms[h].rotation.x) * mn;
+        this.arms[h].rotation.z += out * mn * (0.42 + heave * 0.04) + quiver(h + 3) * mn;
+        // the elbows bent, the forearms angled forward and down at you
+        this.elbows[h].rotation.x += (-1.25 + quiver(h + 5) * 1.5 - this.elbows[h].rotation.x) * mn;
+        // the fingers: spread, then clawing in, each on its own beat
+        for (let f = 0; f < this.hands[h].length; f++) {
+          const flex = 0.5 + 0.5 * Math.sin(b * (1.25 + f * 0.19) + h * 1.7 + f * 1.1);
+          const claw = (f === 4 ? 0.3 : 0) + 0.05 + 1.05 * flex * flex + quiver(f + h * 7) * 2;
+          const fing = this.hands[h][f];
+          fing.rotation.x += (claw - fing.rotation.x) * mn;
+        }
+      }
+      if (this.chest) {
+        const deep = heave * 0.07 * mn;
+        this.chest.scale.x += deep * 0.5;
+        this.chest.scale.y += deep;
+        this.chest.scale.z += deep * 1.1;
+      }
     }
 
     // ---- REACHING FOR YOU.

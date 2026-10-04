@@ -25,7 +25,7 @@ import { isTouch } from '../core/device';
 import { isPaused } from '../core/pause';
 import Phaser from 'phaser';
 import * as THREE from 'three';
-import { audio, SILENCE, type SfxName, type SfxPlace } from '../core/audio';
+import { audio, SILENCE, screamLevel, type SfxName, type SfxPlace } from '../core/audio';
 import { store } from '../core/state';
 import { ledger } from '../core/ledger';
 import { froggyLayer } from '../render/froggyLayer';
@@ -1034,6 +1034,21 @@ export class HideRoom3D extends Phaser.Scene {
   private wakeSpoken = false;
   /** The current twitch of his head, and when the next one comes. */
   private twitch = { p: 0, y: 0, r: 0, next: 0.8 };
+  /**
+   * THE WARNING: seconds since "IF NOT...." went up, or -1.  He does not come
+   * at you.  He braces, he opens, and he screams, from where he is -- and the
+   * fear is that he so obviously could.  See `warnPose`.
+   */
+  private warnT = -1;
+  /** When, on `warnT`'s clock, the scream started; -1 before it. */
+  private screamAt = -1;
+  /** The view's field before the warning drew it in on him. */
+  private warnFov = 0;
+  private warnTw = { p: 0, y: 0, r: 0, next: 0.6 };
+  /** The wall clock at the last warning step: see `stepWarning`. */
+  private warnLast = 0;
+  /** A low lamp in front of him, under his face, for the warning only. */
+  private faceLight: THREE.SpotLight | null = null;
 
   constructor() {
     super('HideRoom3D');
@@ -1066,6 +1081,9 @@ export class HideRoom3D extends Phaser.Scene {
     this.blockers = [];
     this.solidsAll = null;
     this.peekGlare = 0;
+    this.warnT = -1;
+    this.screamAt = -1;
+    this.warnFov = 0;
     this.fMode = 'search';
     this.fTimer = 0;
     this.fStep = 0;
@@ -1207,6 +1225,12 @@ export class HideRoom3D extends Phaser.Scene {
     st.camera.add(torch);
     st.camera.add(torch.target);
     st.scene.add(st.camera);
+    // Under his face, from in front, warm: off until the warning.  (Built now
+    // and left in, so lighting him later does not recompile every material.)
+    const faceLight = new THREE.SpotLight(0xff9a70, 0, 7, THREE.MathUtils.degToRad(24), 0.65, 1.4);
+    this.faceLight = faceLight;
+    st.scene.add(faceLight);
+    st.scene.add(faceLight.target);
 
     // Painted surfaces: see hideDecor.  Each is drawn from the room's base
     // colour so the palette the designer picked is still the palette.
@@ -2822,6 +2846,7 @@ export class HideRoom3D extends Phaser.Scene {
     if (this.mode === 'briefing') {
       // Nothing moves.  He is talking, and there is nowhere to be yet.
       if (this.waking) this.stepWaking(dt);
+      this.stepWarning(dt);
       this.updateCamera(dt);
       this.updateSprite(dt);
       this.paintOverlay();
@@ -2979,6 +3004,8 @@ export class HideRoom3D extends Phaser.Scene {
       if (!beat) return;
       this.subtitle = beat[0];
       this.play('ui_hover', 0.35);
+      // "IF NOT...." -- and from here to the end of the scream, he shows you.
+      if (this.roomIndex === 0 && i === lines.length - 1) this.startWarning();
       this.time.delayedCall(beat[1], () => {
         if (this.mode !== 'briefing') return;
         if (i + 1 < lines.length) {
@@ -2989,14 +3016,21 @@ export class HideRoom3D extends Phaser.Scene {
         // first door gets the scream; the later ones a creak and the dark.
         this.subtitle = '';
         if (this.roomIndex === 0) {
+          // The scream, and his face doing it, on the same frame.  (Coming
+          // round on the floor, the blackout used to land here too, on top of
+          // it -- so the scream was heard over black and never seen.  It is at
+          // the end of it now.)
           audio.scare();
-          this.cameras.main.shake(900, 0.03);
-          if (this.waking) this.endWaking();
+          this.screamAt = Math.max(0, this.warnT);
+          this.cameras.main.shake(700, 0.008);
         } else {
           audio.sfx('door_creak');
         }
         this.time.delayedCall(this.roomIndex === 0 ? BRIEFING_TAIL_MS : 900, () => {
           if (this.mode !== 'briefing') return;
+          // he is gone in the flash, and the count begins
+          if (this.waking) this.endWaking();
+          this.endWarning();
           // NO COUNT IN THE ARCADE.  The ten seconds exist because he shuts
           // the door and gives them to you; up here he is already in the room
           // and has promised nothing, so the round simply starts.
@@ -3105,9 +3139,161 @@ export class HideRoom3D extends Phaser.Scene {
     this.froggyWas.copy(this.froggy);
   }
 
+  // ------------------------------------------------------------ the warning
+  //
+  // "IF NOT...." and then the scream.  It used to be a held face and a noise.
+  // Now it is a predator telling you, from where it stands, what it is about
+  // to do: it braces, the shoulders come up, the arms come off its sides with
+  // the long fingers clawing, the head cocks over and twitches -- and the
+  // mouth opens, slowly and far too far, until the scream comes out of it.
+  // It never comes a step closer.  Woken up to, he gets up off all fours
+  // first, to his full height, where he is.
+
+  private startWarning(): void {
+    this.warnT = 0;
+    this.screamAt = -1;
+    this.warnLast = performance.now();
+    this.warnTw = { p: 0, y: 0, r: 0, next: 0.7 };
+    this.warnFov = this.stage?.camera.fov ?? 0;
+  }
+
+  private endWarning(): void {
+    if (this.warnT < 0) return;
+    this.warnT = -1;
+    this.screamAt = -1;
+    const cam = this.stage?.camera;
+    if (cam && this.warnFov > 0 && cam.fov !== this.warnFov) {
+      cam.fov = this.warnFov;
+      cam.updateProjectionMatrix();
+    }
+    this.warnFov = 0;
+    if (this.faceLight) this.faceLight.intensity = 0;
+  }
+
+  /** Seconds since the scream started, or -1. */
+  private get screamS(): number {
+    return this.warnT >= 0 && this.screamAt >= 0 ? this.warnT - this.screamAt : -1;
+  }
+
+  /**
+   * What the warning asks of his body and face at this moment.  The scream's
+   * own loudness (`screamLevel`, the same curve the audio is built on) drives
+   * the jaw, so the mouth is widest exactly while the scream is loudest and
+   * closes as it dies.
+   */
+  private warnPose(): {
+    menace: number;
+    rise: number;
+    maw: number;
+    bare: number;
+    stretch: number;
+    tilt: number;
+    level: number;
+  } | null {
+    if (this.warnT < 0) return null;
+    const t = this.warnT;
+    const ss = THREE.MathUtils.smoothstep;
+    const s = this.screamS;
+    const level = screamLevel(s);
+    // the last of the opening is fast, on the scream's first frame
+    const open = s < 0 ? 0 : ss(s, 0, 0.12);
+    // Before it: the lips peel back off the teeth, and the jaw starts down --
+    // slowly, and then further than a jaw goes, coming out of its hinge.
+    const preMaw = 0.15 + 0.42 * ss(t, 1.0, 2.6);
+    const preStretch = 0.32 * ss(t, 1.5, 2.6);
+    // during it, the jaw shudders with the voice
+    const judder = s >= 0 ? Math.sin(s * 41) * 0.06 * level : 0;
+    return {
+      menace: ss(t, 0, 1.6),
+      rise: ss(t, 0.1, 1.5),
+      maw: preMaw + (1 - preMaw) * open * (0.4 + 0.6 * level),
+      bare: 0.5 + 0.5 * ss(t, 0.4, 1.8),
+      stretch: preStretch + open * level * 0.95 + judder,
+      tilt: 0.16 + 0.24 * ss(t, 0.4, 2.4),
+      level,
+    };
+  }
+
+  /** The warning's clock, the view drawn in onto him, and his lamp. */
+  private stepWarning(dt: number): void {
+    if (this.warnT < 0) return;
+    if (this.mode !== 'briefing') {
+      this.endWarning();
+      return;
+    }
+    // On the wall clock, not the frame clock: the scream is started by a
+    // timer and played by the sound card, both in real seconds, and the
+    // frame clock is capped per frame -- on a slow device it falls behind,
+    // and the mouth would open after the scream had started.
+    const now = performance.now();
+    this.warnT += Math.min(0.25, Math.max(0, (now - this.warnLast) / 1000));
+    this.warnLast = now;
+    const st = this.stage;
+    const m = this.monster;
+    if (!st || !m) return;
+    const ss = THREE.MathUtils.smoothstep;
+    const cam = st.camera;
+    const face = m.faceAt(new THREE.Vector3());
+    const dx = face.x - cam.position.x;
+    const dz = face.z - cam.position.z;
+    const flat = Math.hypot(dx, dz);
+    // What is looked at: his chest, not his face, so the picture holds all of
+    // him -- head, shoulders, arms, hands -- and not a face at the top of it.
+    // (Woken up to, he is close enough that the face is the picture.)
+    const aimY = this.waking ? face.y : face.y * 0.68;
+    const dy = aimY - cam.position.y;
+    // Drawn in on him, so the whole of him is the picture -- shoulders, arms,
+    // hands -- and not a figure at the end of the room.  The lens, not him:
+    // he does not come a step closer.
+    if (this.warnFov > 0) {
+      const want = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan((face.y * 0.66) / Math.max(0.5, flat))), 28, this.warnFov);
+      const fov = this.warnFov + (want - this.warnFov) * ss(this.warnT, 0, 2.4);
+      if (Math.abs(cam.fov - fov) > 0.01) {
+        cam.fov = fov;
+        cam.updateProjectionMatrix();
+      }
+    }
+    // And you are looking at him.  (Woken up to, the head is already held on
+    // his face: see stepWaking.)
+    if (!this.waking) {
+      const k = 1 - Math.exp(-dt * 3 * ss(this.warnT, 0, 0.8));
+      this.yaw += Phaser.Math.Angle.Wrap(Math.atan2(-dx, -dz) - this.yaw) * k;
+      this.pitch += (Math.atan2(dy, flat) - this.pitch) * k;
+    }
+    // His head: a slow cock over to one side, and every second or so a snap
+    // somewhere it should not go, held, and let back.
+    const tw = this.warnTw;
+    tw.next -= dt;
+    if (tw.next <= 0 && this.screamS < 0) {
+      tw.next = 0.55 + Math.random() * 0.9;
+      tw.p = (Math.random() - 0.5) * 0.16;
+      tw.y = (Math.random() - 0.5) * 0.22;
+      tw.r = (Math.random() - 0.5) * 0.34;
+    }
+    const decay = Math.exp(-dt * 4);
+    tw.p *= decay;
+    tw.y *= decay;
+    tw.r *= decay;
+    // His lamp: low, in front of him, up under his face, so the eyes, the
+    // teeth and the inside of the mouth are what is lit.  It swells with the
+    // scream.
+    const w = this.warnPose();
+    if (this.faceLight && w) {
+      const toCam = new THREE.Vector3(-dx, 0, -dz).normalize();
+      const base = this.froggyDrawn;
+      this.faceLight.position.set(base.x + toCam.x * 1.5, 0.45, base.z + toCam.z * 1.5);
+      this.faceLight.target.position.copy(face);
+      this.faceLight.target.updateMatrixWorld();
+      const flicker = 1 + Math.sin(this.warnT * 13) * 0.04 + Math.sin(this.warnT * 29) * 0.03;
+      this.faceLight.intensity = (16 * w.menace + 26 * w.level) * flicker;
+    }
+  }
+
   /** On all fours: both hands flat on the floor in front of his shoulders. */
   private wakeHands(): [HandGoal | null, HandGoal | null] | null {
     if (!this.waking) return null;
+    // getting up for the warning: off the floor
+    if (this.warnT > 0.15) return null;
     const size = this.monster?.size ?? 1;
     const fx = Math.sin(this.froggyYaw);
     const fz = Math.cos(this.froggyYaw);
@@ -4534,6 +4720,19 @@ export class HideRoom3D extends Phaser.Scene {
       shPit = (Math.sin(t * 21.7 + 1.1) * 0.011 + sway * 0.008) * tr * (1 + jolt);
     }
 
+    // THE SCREAM IN THE CAMERA.  A kick on its first frame and a fine shake
+    // under it for as long as it is loud -- smooth, not noise, and small.
+    const sc = this.screamS;
+    if (sc >= 0) {
+      const lv = screamLevel(sc);
+      const t = this.warnT;
+      const kick = Math.exp(-sc * 9);
+      shYaw += lv * (Math.sin(t * 31) * 0.004 + Math.sin(t * 17 + 0.5) * 0.003);
+      shPit += lv * Math.sin(t * 27 + 1) * 0.004 - 0.018 * kick;
+      shx += lv * Math.sin(t * 23) * 0.006;
+      shy += lv * Math.sin(t * 29 + 2) * 0.005 + 0.012 * kick;
+    }
+
     // The secret complex is built at SECRET_ORIGIN, and `pos` stays local to
     // whichever space the player is in, so the offset is applied once, here.
     const o = this.inSecret ? SECRET_ORIGIN : ZERO;
@@ -4704,19 +4903,25 @@ export class HideRoom3D extends Phaser.Scene {
 
     const briefing = this.mode === 'briefing' && !this.waking;
     if (briefing && this.stage) m.lookAt(this.stage.camera.position);
+    const w = this.warnPose();
+    const rise = w ? w.rise : 0;
     const pose = {
       // (the walk is let go of while the climb has him: his feet are placed)
       speed: Math.min(6, moved) * (cf ? 1 - cf.k : 1),
       // The mouth is shut while he is looking for you and open once he is not.
-      maw: this.fMode === 'chase' ? 1 : this.fMode === 'openSpot' ? 0.45 : briefing ? 0.2 : 0.12,
+      maw: w ? w.maw : this.fMode === 'chase' ? 1 : this.fMode === 'openSpot' ? 0.45 : briefing ? 0.2 : 0.12,
+      // (the warning's mouth goes exactly where the scream says)
+      mawRate: w ? 40 : undefined,
       // and in a chase the teeth are out, more of them the longer it goes on
-      bare: this.fMode === 'chase' ? 0.55 + 0.45 * this.chaseHeat : briefing ? 0.5 : 0.2,
+      bare: w ? w.bare : this.fMode === 'chase' ? 0.55 + 0.45 * this.chaseHeat : briefing ? 0.5 : 0.2,
+      stretch: w ? w.stretch : 0,
+      menace: w ? w.menace : 0,
       climb: cf ? cf.k : 0,
       climbRig: cr?.rig ?? null,
       // Down on his haunches at a bed, craning about under it -- or down at
       // the knees to look into a cupboard he has just opened.  (Going over
       // something, the climb places him instead.)
-      crouch: this.waking ? 1 : cf ? 0 : (act.crouch ?? act.sink ?? 0),
+      crouch: this.waking ? 1 - rise : cf ? 0 : (act.crouch ?? act.sink ?? 0),
       peek: act.peek ?? 0,
       peer: this.waking ? 0 : 1,
       // Hunting, his head swings slowly across the room.  Once he has you it
@@ -4735,15 +4940,16 @@ export class HideRoom3D extends Phaser.Scene {
       reachAt: this.fMode === 'chase' && this.stage ? this.stage.camera.position : null,
       hands: this.wakeHands() ?? cr?.hands ?? act.hands,
       // folded forward over his hands, on all fours
-      lean: this.waking ? 1 : act.lean,
+      lean: this.waking ? 1 - rise : act.lean,
       // pinpricks while he hunts; blown wide once he has you, and staring
       // down at you on the floor
-      constrict: this.fMode === 'chase' || briefing ? 1 : this.waking ? 0.9 : 0,
+      constrict: this.fMode === 'chase' || briefing || w ? 1 : this.waking ? 0.9 : 0,
       // Telling you the rules, he does not look away or fidget: stood over
       // you, hunched in, head on one side, very still.
       hunch: briefing ? 0.8 : this.fMode === 'chase' ? 0.35 : 0,
-      tilt: briefing ? 0.16 : 0,
-      still: briefing ? 0.8 : 0,
+      tilt: w ? w.tilt : briefing ? 0.16 : 0,
+      // (still: no blinking, no darting eyes -- on you, all of it)
+      still: briefing || w ? 0.8 : 0,
       // and from wherever you are, his arms stay off his eyes
       viewer: this.stage?.camera.position ?? null,
       // Nothing of him through the floor, and his head and body out of the
@@ -4757,7 +4963,9 @@ export class HideRoom3D extends Phaser.Scene {
     m.update(dt, pose);
     // Down at the gap, his eyes catch what little light gets under a bed:
     // enough for them to be the two things you can make out in the dark.
-    const glare = (act.peek ?? 0) * 0.5;
+    // In the warning the whites and the teeth catch the light, more as he
+    // screams, so the mouth reads as teeth and not as a hole.
+    const glare = Math.max((act.peek ?? 0) * 0.5, w ? 0.2 + 0.4 * w.level : 0);
     if (Math.abs(glare - this.peekGlare) > 0.01) {
       this.peekGlare = glare;
       m.setGlare(glare);
@@ -4765,9 +4973,22 @@ export class HideRoom3D extends Phaser.Scene {
     // Folded over his hands, the pose would have him staring at the floor
     // between them; the neck is lifted back against the fold so the face
     // comes up level at you, which is the one thing this scene is for.
-    if (this.waking) m.twitchHead(this.twitch.p - WAKE_NECK_LIFT, this.twitch.y, this.twitch.r);
+    if (this.waking) m.twitchHead(this.twitch.p - WAKE_NECK_LIFT * (1 - rise), this.twitch.y, this.twitch.r);
     // the heave, the yank and the slam go through his head as well
     else if (act.jolt) m.twitchHead(-act.jolt * 0.07, Math.sin(this.hingeT * 61) * act.jolt * 0.05, Math.sin(this.hingeT * 37) * act.jolt * 0.04);
+    // The warning's twitches -- and screaming, the head thrown up a little and
+    // shaking with it -- and then the eyes put back on you, so whatever the
+    // head does, they never leave you.
+    if (w) {
+      const s = this.screamS;
+      const shake = s >= 0 ? w.level : 0;
+      m.twitchHead(
+        this.warnTw.p - 0.1 * shake + Math.sin(this.warnT * 19) * 0.02 * shake,
+        this.warnTw.y + Math.sin(this.warnT * 26) * 0.035 * shake,
+        this.warnTw.r + Math.sin(this.warnT * 23 + 1) * 0.03 * shake,
+      );
+      m.updateEyes(dt);
+    }
     // ---- AND THE SAME POSE, DOWN THE HOLE.  The enclosure under the secret
     // room's glass is this room, so the thing in it is this model: one hunt,
     // drawn twice, rather than two hunts that have to be kept in step.
@@ -4825,7 +5046,8 @@ export class HideRoom3D extends Phaser.Scene {
       // is the only thing on screen that is not the room.
       if (this.mode === 'briefing' && !(this.waking && !this.wakeSpoken)) {
         // No number yet.  The count has not started, and it says so.
-        drawPixelText(ctx, 'DO NOT MOVE', GAME_W / 2, GAME_H * 0.3, {
+        // (up out of his face while he is the whole picture)
+        drawPixelText(ctx, 'DO NOT MOVE', GAME_W / 2, this.warnT >= 0 ? GAME_H * 0.07 : GAME_H * 0.3, {
           scale: 1,
           color: '#7a8494',
           center: true,

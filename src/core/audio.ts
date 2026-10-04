@@ -18,6 +18,16 @@ import { Howl } from 'howler';
 import { store } from './state';
 import { TRACKS, runTrack } from './tracks';
 
+/**
+ * The scream's shape, so a face can scream it: full from the first hundredth
+ * of a second, held for SCREAM_HOLD, gone by SCREAM_DUR.  (Seconds.)
+ */
+export const SCREAM_DUR = 2.15;
+export const SCREAM_HOLD = SCREAM_DUR * 0.62;
+/** 0..1, how loud the scream is `s` seconds after `scare()`. */
+export const screamLevel = (s: number): number =>
+  s < 0 ? 0 : s < 0.012 ? s / 0.012 : s < SCREAM_HOLD ? 1 : s < SCREAM_DUR ? ((SCREAM_DUR - s) / (SCREAM_DUR - SCREAM_HOLD)) ** 2 : 0;
+
 export const CROSSFADE_MS = 800; // PRD AU-1
 
 export type BusName = 'music' | 'sfx';
@@ -1466,7 +1476,7 @@ class AudioManager {
    */
   private screamVoice(ctx: AudioContext, t: number, out: AudioNode, buf: AudioBuffer): boolean {
     const OFFSET = 0.17;
-    const DUR = 2.15;
+    const DUR = SCREAM_DUR;
     const shaper = (drive: number): WaveShaperNode => {
       const w = ctx.createWaveShaper();
       const c = new Float32Array(1024);
@@ -1482,7 +1492,7 @@ class AudioManager {
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, t + delay);
       g.gain.linearRampToValueAtTime(gain, t + delay + 0.012);
-      g.gain.setValueAtTime(gain, t + delay + DUR * 0.62);
+      g.gain.setValueAtTime(gain, t + delay + SCREAM_HOLD);
       g.gain.exponentialRampToValueAtTime(0.0001, t + delay + DUR);
       let at: AudioNode = src;
       for (const n of chain) {
