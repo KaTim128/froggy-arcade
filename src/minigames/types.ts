@@ -116,6 +116,12 @@ export interface MinigameModule {
    * leaves it out forfeits its whole stake, and the question says so.
    */
   atRisk?(): number;
+  /**
+   * The quit question opens with how the sitting has gone so far -- up, down
+   * or even, on the hands already settled -- before it asks.  For the tables
+   * that pay hand by hand, where that is the number the player is deciding on.
+   */
+  reportsSitting?: boolean;
   create(scene: Phaser.Scene, api: MinigameApi): void;
   update?(time: number, delta: number): void;
   destroy?(): void;

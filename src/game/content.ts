@@ -182,7 +182,7 @@ export const CABINETS: CabinetDef[] = [
   // it is raised at the table through the shell (MinigameApi.raise).
   {
     id: 'blackjack',
-    title: 'BLACKJACK',
+    title: 'FROGGY 21',
     tier: 'easy',
     cost: 1,
     reward: 2,

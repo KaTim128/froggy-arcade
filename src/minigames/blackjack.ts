@@ -1,5 +1,5 @@
 /**
- * BLACKJACK.  Froggy's table, not a cabinet.
+ * FROGGY 21 (blackjack, at Froggy's table).  A table, not a cabinet.
  *
  * Sitting down is free.  The table charges for the HAND, not for the chair:
  * you can walk up, read what he deals and how it pays, and walk away again
@@ -39,12 +39,15 @@
  *   settled on the spot, whoever holds it, at twice the usual win or loss.
  *   Both of you on a natural is a push.
  *
- *   FIVE CARDS WITHOUT BUSTING WINS (the five-card charlie), even on a total
- *   he could match.  And five cards on EXACTLY twenty-one pays three times --
- *   his five-card twenty-one costs you three times, too.
+ *   TWENTY-ONE ON EXACTLY THREE CARDS WINS, there and then.  TWENTY-ONE ON
+ *   FIVE LOSES -- you went one card too far for it.  Both cut both ways: his
+ *   three-card twenty-one beats you, his five-card twenty-one loses.
  *
- *   Outcomes are settled in that order: natural, five-card 21, charlie, then
- *   the ordinary comparison, then the bust.
+ *   FIVE CARDS WITHOUT BUSTING (and not on 21) WINS -- the five-card charlie
+ *   -- even on a total he could match.
+ *
+ *   Outcomes are settled in that order: natural, three-card 21, five-card
+ *   21, charlie, then the ordinary comparison, then the bust.
  *
  *   FIFTEEN ON TWO CARDS IS THE ONE YOU MAY WALK AWAY FROM.  Too high to hit,
  *   too low to stand: leave it and the stake comes back untouched.
@@ -108,7 +111,7 @@ let standing = false;
  * point `score` stops reading it (see the note there).
  */
 let aceAs: AceAs = 11;
-/** What the settled hand's win or loss is multiplied by: a natural, or a five-card 21. */
+/** What the settled hand's win or loss is multiplied by: a natural, or nothing. */
 let stakeMul = 1;
 /** Tokens the player has asked to put up.  Staked for real when he deals. */
 let bet = 1;
@@ -218,18 +221,19 @@ const MINIMUM = 1;
  * over and settled the moment it is dealt, for whichever side holds it, and
  * it is worth twice the ordinary win or loss.  Both sides on one is a push.
  *
- * FIVE_21_MUL: five cards on exactly twenty-one is worth three times -- yours
- * pays three times the win, his costs three times the stake.
+ * THREE_FOR_21: exactly twenty-one on exactly three cards wins on the spot.
+ * FIVE_FOR_21: exactly twenty-one on five cards LOSES.  Both apply to him as
+ * well: his three-card twenty-one beats you, his five-card one loses.
  *
- * A five-card hand that has not bust is a FIVE-CARD CHARLIE and simply wins,
- * even against a total he could have matched.
+ * A five-card hand that has not bust (and is not on 21) is a FIVE-CARD
+ * CHARLIE and simply wins, even against a total he could have matched.
  *
- * The order they are settled in: natural, five-card 21, charlie, the ordinary
- * comparison, and the bust.  They never stack -- one hand, one multiplier.
+ * The order they are settled in: natural, three-card 21, five-card 21,
+ * charlie, the ordinary comparison, and the bust.  They never stack.
  *
  * The multiplier applies to the PROFIT or the LOSS, not to the stake: a plain
  * win hands back the stake and the same again (2x), a natural hands back the
- * stake and twice it (3x), a five-card 21 the stake and three times it (4x).
+ * stake and twice it (3x).
  *
  * SURRENDER_ON: fifteen on two cards is the worst place to be at this table,
  * so it is the one hand you are allowed to walk away from with your stake
@@ -237,7 +241,8 @@ const MINIMUM = 1;
  */
 const MAX_CARDS = 5;
 const NATURAL_MUL = 2;
-const FIVE_21_MUL = 3;
+const THREE_FOR_21 = 3;
+const FIVE_FOR_21 = 5;
 const SURRENDER_ON = 15;
 
 /**
@@ -260,7 +265,7 @@ function maxBet(): number {
 
 export const blackjack: MinigameModule = {
   id: 'blackjack',
-  title: 'BLACKJACK',
+  title: 'FROGGY 21',
   music: 'game_blackjack',
   rules: 'bet what you like, beat the dealer to 21',
   tutorial: {
@@ -269,11 +274,11 @@ export const blackjack: MinigameModule = {
       // the ace rule is two lines because it is two rules, and the fifteen has
       // to survive both of them -- a rule the card drops is a rule the player
       // finds out about by losing to it.
-      'BEAT THE DEALER TO 21. SCOUT/MAGE/KING=10.',
+      'BEAT THE DEALER TO 21. J, Q AND K = 10.',
       'ACE: 1, 10 OR 11 ON TWO CARDS, THEN 1/10.',
       '21 ON TWO CARDS WINS AT ONCE, 2X - HIS TOO.',
-      'FIVE CARDS UNBUST WIN. FIVE-CARD 21: 3X.',
-      'STUCK ON 15 FROM TWO? LEAVE IT FOR FREE.',
+      '21 ON 3 CARDS WINS. 21 ON 5 CARDS LOSES.',
+      '5 UNBUST WIN. 15 ON 2? LEAVE IT FOR FREE.',
     ],
     controls: [
       ['LEFT/RIGHT', 'BET 1 DOWN OR UP'],
@@ -294,11 +299,12 @@ export const blackjack: MinigameModule = {
       { label: 'CASH\nOUT', key: 'C' },
     ],
   },
-  payoutNote: 'PAYS 2X - UP TO 4X',
+  payoutNote: 'PAYS 2X - UP TO 3X',
 
   // Walking out mid-hand loses the bet on the felt (doubled, if it was);
   // between hands nothing is down but the ante, if one is.
   atRisk: () => (phase === 'play' ? bet * stakeMul : phase === 'bet' ? ante : 0),
+  reportsSitting: true,
   create(scene: Phaser.Scene, api: MinigameApi) {
     sceneRef = scene;
     apiRef = api;
@@ -519,7 +525,8 @@ function buildBetUi(scene: Phaser.Scene): void {
   c.add(button(scene, 200, 116, '+1', () => raise(1), { width: 26, height: 13 }));
   c.add(button(scene, 228, 116, '+5', () => raise(5), { width: 26, height: 13 }));
   c.add(button(scene, 268, 116, 'ALL IN', () => raise(maxBet()), { width: 44, height: 13 }));
-  c.add(centerText(scene, GAME_W / 2, 130, 'THE SEAT IS FREE - MINIMUM BET 1', PALETTE.ash));
+  // (above the buttons, not under them: under them it sat on the status line)
+  c.add(centerText(scene, GAME_W / 2, 84, 'THE SEAT IS FREE - MINIMUM BET 1', PALETTE.ash));
   c.add(
     button(scene, GAME_W / 2, 164, 'DEAL', () => deal(), {
       width: 64,
@@ -622,25 +629,36 @@ function hit(): void {
   settleAce();
   audio.sfx('ui_blip');
   render();
-  // On the fifth card the ace takes whichever of its prices lands exactly on
-  // twenty-one, if one does: that is the premium hand, and nobody would turn
-  // it down for a plain charlie.
-  if (player.length >= MAX_CARDS) {
-    const exact = aceChoices(player).find((v) => score(player, v) === 21);
+  // The ace's price is picked for the player where it matters, and picked
+  // kindly: on the THIRD card, whichever price lands on twenty-one (that hand
+  // wins outright); on the FIFTH, anything but twenty-one if there is a price
+  // that does not bust (twenty-one on five loses, a charlie wins).
+  const choices = aceChoices(player);
+  if (choices.length && player.length === THREE_FOR_21) {
+    const exact = choices.find((v) => score(player, v) === 21);
     if (exact !== undefined) aceAs = exact;
+  } else if (choices.length && player.length >= FIVE_FOR_21) {
+    const safe = choices.filter((v) => score(player, v) < 21);
+    if (score(player, aceAs) === 21 && safe.length) aceAs = safe[safe.length - 1];
   }
   const p = mine();
   if (p > 21) {
     finish(false, player.length >= MAX_CARDS ? 'BUST ON THE FIFTH' : 'BUST');
     return;
   }
-  // Five cards and still standing: it is won, and he does not get to play.
+  // Three cards on exactly twenty-one: won, there and then.
+  if (player.length === THREE_FOR_21 && p === 21) {
+    standing = true;
+    finish(true, 'THREE-CARD 21 - YOU WIN');
+    sceneRef.cameras.main.flash(220, 255, 230, 140);
+    return;
+  }
+  // Five cards and still standing: he does not get to play.  On twenty-one
+  // it is lost -- one card too many for it; on anything under, a charlie.
   if (player.length >= MAX_CARDS) {
     standing = true;
-    if (p === 21) {
-      stakeMul = FIVE_21_MUL;
-      finish(true, 'FIVE-CARD 21 - PAYS 3X');
-      sceneRef.cameras.main.flash(260, 255, 230, 140);
+    if (p === 21 && player.length === FIVE_FOR_21) {
+      finish(false, 'FIVE-CARD 21 - YOU LOSE');
       sceneRef.cameras.main.shake(200, 0.004);
     } else {
       finish(true, `FIVE-CARD CHARLIE ON ${p}`);
@@ -737,11 +755,15 @@ function stand(): void {
       settleWon(p, `DEALER BUSTS`);
       return;
     }
-    // His five cards on exactly twenty-one outranks any ordinary comparison.
-    if (dealer.length >= MAX_CARDS && d === 21) {
-      stakeMul = FIVE_21_MUL;
-      finish(false, 'HIS FIVE-CARD 21 - COSTS 3X');
+    // His three-card twenty-one beats you, whatever you are on; his
+    // five-card twenty-one loses, the same as yours would.
+    if (dealer.length === THREE_FOR_21 && d === 21) {
+      settleLost(d, 'HIS THREE-CARD 21 WINS');
       sceneRef?.cameras.main.shake(200, 0.004);
+      return;
+    }
+    if (dealer.length === FIVE_FOR_21 && d === 21) {
+      settleWon(p, 'HIS FIVE-CARD 21 - HE LOSES');
       return;
     }
     // He stopped, and this is the total he stopped on — 17 through 21, and
@@ -846,7 +868,7 @@ function render(): void {
         text(sceneRef, GAME_W - 8, 92, `${player.length}/${MAX_CARDS} CARDS`, left <= 1 ? PALETTE.blood : PALETTE.ash)
           .setOrigin(1, 0),
       );
-      if (left === 1) c.add(text(sceneRef, GAME_W - 8, 102, 'FIFTH CARD WINS', PALETTE.gold).setOrigin(1, 0));
+      if (left === 1) c.add(text(sceneRef, GAME_W - 8, 102, 'FIFTH WINS - NOT ON 21', PALETTE.gold).setOrigin(1, 0));
     }
   }
 

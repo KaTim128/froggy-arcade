@@ -2407,9 +2407,10 @@ for (const g of [
 }
 
 // ---- FROGGY'S OUTCOMES, IN THEIR ORDER.  A natural on two cards is settled
-// on the deal for whichever side holds it at twice the win or loss; five
-// cards that have not bust win outright (the charlie), even on a total he
-// could match; five cards on exactly 21 is worth three times, his as well.
+// on the deal for whichever side holds it at twice the win or loss; 21 on
+// exactly three cards wins (his beats you); five cards that have not bust win
+// outright (the charlie), even on a total he could match; five cards on
+// exactly 21 LOSE, his as well.
 // The shoe is stacked for each hand -- waiting for a shuffle to deal one is a
 // lottery, not a test -- and the tokens are read off the ledger.
 {
@@ -2449,12 +2450,14 @@ for (const g of [
       charlie: await hand(['2♣', '3♥', '10♠', '7♦', '4♦', '5♠', '6♣'], hitTo(3)),
       five21: await hand(['2♣', '3♥', '10♠', '7♦', '4♦', '5♠', '7♣'], hitTo(3)),
       his21: await hand(['K♣', 'Q♥', '2♠', '3♦', '4♦', '5♠', '7♣'], stand),
+      three21: await hand(['K♥', '5♠', '9♦', 'Q♣', '6♥'], hitTo(1)),
+      his3: await hand(['K♣', 'Q♥', '9♠', '5♦', '7♣'], stand),
     };
-    const want = { mine: 2, his: -2, both: 0, charlie: 1, five21: 3, his21: -3 };
+    const want = { mine: 2, his: -2, both: 0, charlie: 1, five21: -1, his21: 1, three21: 1, his3: -1 };
     const bad = Object.entries(want).filter(([k, v]) => r[k].net !== v);
     const ok = bad.length === 0;
     console.log(
-      `${ok ? 'PASS' : 'FAIL'}  blackjack: naturals 2x, five-card charlie wins, five-card 21 is 3x either side  — ` +
+      `${ok ? 'PASS' : 'FAIL'}  froggy 21: naturals 2x, three-card 21 wins, five-card 21 loses (either side), charlie wins  — ` +
         Object.keys(want).map((k) => `${k} ${r[k].net >= 0 ? '+' : ''}${r[k].net} (${r[k].status})`).join('; '),
     );
     if (!ok) failures++;
