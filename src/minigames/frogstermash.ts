@@ -2552,8 +2552,33 @@ function throwWorthIt(f: Fighter, other: Fighter, gap: number, rng: () => number
   return rng() < Math.min(0.9, keen);
 }
 
+/**
+ * ---- REACH IS MEASURED TO THE BODY, NOT TO ITS MIDDLE.
+ *
+ * Every reach in the game was tested against the distance between the two
+ * fighters' middles.  Froggy and the plain lizard are the same width, so
+ * against each other that was fair -- but a gorilla is more than twice as
+ * broad, so a blade had to be most of the way into it before it counted,
+ * and a cheetah could be hit at the end of a reach that never touched its
+ * skin.  `bodyExtra` is how much wider than Froggy a fighter is on each
+ * side, and every "can I hit them" and "can they hit me" uses the gap to
+ * the front of the other one's body, the same for whichever two are out.
+ */
+const BODY_HALF = 7.5;
+export function bodyExtra(f: Fighter): number {
+  const b = f.type?.build;
+  return b ? BODY_HALF * (b.wide * b.scale - 1) : 0;
+}
+/** From `f` to the front of `other`'s body, in Froggy-to-Froggy terms. */
+export function gapTo(f: Fighter, other: Fighter): number {
+  return Math.abs(f.x - other.x) - bodyExtra(other);
+}
+
 export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random, ground: Dropped[] = []): void {
-  const gap = Math.abs(f.x - other.x);
+  const gap = gapTo(f, other);
+  // How far the OTHER one is from the front of me: what their reach is
+  // tested against when it is their swing that matters.
+  const theirGap = gapTo(other, f);
   f.face = other.x >= f.x ? 1 : -1;
   // kept so a sweeping weapon can tell the difference between somebody
   // standing at a distance and somebody walking onto the blade
@@ -2607,7 +2632,7 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random,
         return;
       }
       // otherwise go and get it, unless they are about to take my head off
-      const danger = gap <= other.st.reach + 4 && other.act === 'windup';
+      const danger = theirGap <= other.st.reach + 4 && other.act === 'windup';
       if (!danger) {
         const dir = best.x > f.x ? 1 : -1;
         f.face = dir;
@@ -2626,7 +2651,7 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random,
   // It is a roll against avoidance rather than a certainty, which is what
   // makes a heavy suit cost something: the plate stops the blow it fails to
   // avoid, and it is the reason it failed to avoid it.
-  if (f.cool <= 0 && (f.act === 'walk' || f.act === 'guard') && other.act === 'windup' && gap <= other.st.reach + 6) {
+  if (f.cool <= 0 && (f.act === 'walk' || f.act === 'guard') && other.act === 'windup' && theirGap <= other.st.reach + 6) {
     const want = f.st.avoid * (hurt ? 1.5 : 1) * 2.1;
     if (rng() < want * dt * 8) {
       f.act = 'dodge';
@@ -2657,7 +2682,7 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random,
   // berserker went to 62%.  It still hates doing it -- a fifth as often as
   // anyone else -- which is a trade-off rather than an exemption.
   if (f.type?.berserk) wantBlock *= 0.2;
-  if (f.act === 'walk' && gap <= other.st.reach + 4 && rng() < wantBlock * dt) {
+  if (f.act === 'walk' && theirGap <= other.st.reach + 4 && rng() < wantBlock * dt) {
     f.act = 'guard';
     f.t = GUARD_S;
     return;
@@ -2679,7 +2704,8 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random,
   // Where this fighter wants to be standing, worked out before it decides
   // whether to swing -- because when it is out-reached, that decision is
   // partly "not from here".
-  const theirSweet = other.st.reach * INSIDE_FRAC;
+  // (their reach, put in terms of MY gap to them: see `gapTo`)
+  const theirSweet = other.st.reach * INSIDE_FRAC + bodyExtra(f) - bodyExtra(other);
   const press = other.st.reach > f.st.reach
     ? Math.min(f.st.reach - 2, theirSweet - 2)
     : f.st.reach - 2;
@@ -2783,7 +2809,7 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random,
   // spacing is won: stand in it.  Drifting back out on the cool-down was
   // handing the long weapon its range back for free every other second, and
   // it is the reason a dagger could not stay where a dagger beats a scythe.
-  const stuck = gap < other.st.reach * INSIDE_FRAC;
+  const stuck = theirGap < other.st.reach * INSIDE_FRAC;
   const give = ty?.stubborn ? 1 : hurt ? 1.25 : 1;
   const drift = ty?.restless ? 1 + Math.sin(f.step * 0.09) * 0.3 : 1;
   // ---- AND EVENTUALLY THEY STOP CIRCLING.
@@ -2885,7 +2911,7 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random, 
   // the ground at better than twice a walk and pulls up at shield's length,
   // so the blow lands from where a shield actually reaches.
   if (f.act === 'windup' && f.move?.anim === 'charge') {
-    const gap = Math.abs(f.x - other.x);
+    const gap = gapTo(f, other);
     const stop = f.st.reach * 0.6;
     if (gap > stop) {
       const run = Math.min(gap - stop, f.st.walk * CHARGE_MUL * dt);
@@ -2901,7 +2927,7 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random, 
     case 'windup': {
       f.act = 'strike';
       f.t = STRIKE;
-      const blow = resolveStrike(f, other, Math.abs(f.x - other.x), rng, ground);
+      const blow = resolveStrike(f, other, gapTo(f, other), rng, ground);
       f.swing += 1;
       return blow;
     }
@@ -2914,7 +2940,7 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random, 
         : Math.max(f.weapon.hits, f.move?.hits ?? 1);
       if (f.swing < strikes) {
         f.t = STRIKE;
-        const blow = resolveStrike(f, other, Math.abs(f.x - other.x), rng, ground);
+        const blow = resolveStrike(f, other, gapTo(f, other), rng, ground);
         f.swing += 1;
         return blow;
       }
@@ -6157,7 +6183,30 @@ function wearWeapon(f: Fighter): void {
   a.nicks = want;
 }
 
+/**
+ * ---- A STABBING WEAPON STABS.
+ *
+ * A dagger's combo, a rapier's counter, a spear's charge: the move table
+ * gives each of them its own name and numbers, but drawn as `over` or `sweep`
+ * or `jab` a point weapon was being swung like a club.  For the weapons whose
+ * business end is a point, every swinging move is drawn as a thrust -- the
+ * arm coiled back and then driven straight out -- and the quick ones as a
+ * short jab-thrust.  A shove, a throw or a shot is still what it is.
+ */
+const STABBERS = new Set([
+  'dagger', 'twindagger', 'knife', 'rapier', 'estoc', 'spear', 'pike', 'trident', 'lance', 'katar', 'sai',
+  'partisan', 'harpoon', 'gladius', 'javelin',
+]);
+function poseAnim(f: Fighter): Anim | undefined {
+  const anim = f.move?.anim;
+  if (!anim || !STABBERS.has(f.weapon.key)) return anim;
+  return anim === 'over' || anim === 'sweep' || anim === 'spin' || anim === 'low' || anim === 'jab' ? 'thrust' : anim;
+}
+
 export function poseFighter(f: Fighter, other?: Fighter): void {
+  // What the move LOOKS like, which for a stabbing weapon is always the
+  // point going in: see `poseAnim`.
+  const anim = poseAnim(f);
   const a = f.art;
   if (!a) return;
   a.root.x = drawX(f, other);
@@ -6248,7 +6297,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     // whole way (see below), because nobody charges leaning back.
     charge: { w: 6, s: -8, r: -10, lean: 18 },
   };
-  const shape = A[f.move?.anim ?? 'sweep'];
+  const shape = A[anim ?? 'sweep'];
   const carry = carryOf(f);
   let arm = carry.arm;
   // ---- BENDING DOWN FOR IT.
@@ -6275,7 +6324,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   }
   a.headGroup.x = 0;
   let lean = 0;
-  if (f.act === 'windup') { arm = shape.w; lean = f.move?.anim === 'charge' ? shape.lean : -shape.lean * 0.55; }
+  if (f.act === 'windup') { arm = shape.w; lean = anim === 'charge' ? shape.lean : -shape.lean * 0.55; }
   else if (f.act === 'strike') { arm = shape.s; lean = shape.lean; }
   else if (f.act === 'recover') { arm = shape.r; lean = shape.lean * 0.4; }
   else if (f.act === 'guard') { arm = -96; lean = -4; }
@@ -6319,13 +6368,13 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   else if (f.act === 'stagger') bend = -24;
   else if (f.act === 'lunge') bend = -30;
   // a thrust is the one attack that STRAIGHTENS rather than coils
-  if (f.move?.anim === 'thrust' && (f.act === 'windup' || f.act === 'strike')) {
+  if (anim === 'thrust' && (f.act === 'windup' || f.act === 'strike')) {
     bend = f.act === 'windup' ? -74 * fold : 2;
   }
   // and drawing a bow pulls the hand back past the cheek
-  if (f.move?.anim === 'shoot') bend = f.act === 'strike' ? -18 : -96;
+  if (anim === 'shoot') bend = f.act === 'strike' ? -18 : -96;
   // the shield tucked in tight for the run, then punched out on contact
-  if (f.move?.anim === 'charge') {
+  if (anim === 'charge') {
     if (f.act === 'windup') bend = -34;
     else if (f.act === 'strike') bend = -2;
     else if (f.act === 'recover') bend = -30;
@@ -6342,9 +6391,9 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   // hand up by the chin with the pipe angled twenty degrees above the
   // horizontal, pointing at the other one.  It holds that through the whole
   // attack -- a blowgun does not swing, which is the point of it.
-  if (f.move?.anim === 'puff') bend = f.act === 'strike' ? 46 : 40;
+  if (anim === 'puff') bend = f.act === 'strike' ? 46 : 40;
   // ---- A THROW COILS FURTHER AND OPENS FURTHER THAN A SWING.
-  if (f.move?.anim === 'hurl') {
+  if (anim === 'hurl') {
     if (f.act === 'windup') bend = -96 * fold;
     else if (f.act === 'strike') bend = 8;
     else if (f.act === 'recover') bend = -30;
@@ -6386,7 +6435,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     const throwing = f.act === 'strike' || f.act === 'recover';
     // A shove is the one unarmed move thrown with BOTH hands, so it does not
     // alternate: both arms go out together and both come back together.
-    const shoving = f.move?.anim === 'shove' && (throwing || f.act === 'windup');
+    const shoving = anim === 'shove' && (throwing || f.act === 'windup');
     const alt = f.swing % 2 === 1;
     if (shoving) {
       a.arm.root.setAngle(f.armA);
@@ -6444,7 +6493,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     }
     a.armOff.root.setVisible(true);
     const attacking = f.act === 'windup' || f.act === 'strike' || f.act === 'recover';
-    const together = f.move?.anim === 'spin' || f.move?.anim === 'sweep' || f.move?.anim === 'over' || f.move?.anim === 'low';
+    const together = anim === 'spin' || anim === 'sweep' || anim === 'over' || anim === 'low';
     const alt = f.swing % 2 === 1;
     if (attacking && together) {
       a.armOff.root.setAngle(f.armA + (f.act === 'strike' ? -16 : 12));
@@ -6492,7 +6541,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   // everything drives forward together and the head finishes over the front
   // foot.  Without this the arm swings past a fighter standing still, which
   // reads as a flick rather than as somebody committing to a throw.
-  if (f.move?.anim === 'hurl' && f.act !== 'walk') {
+  if (anim === 'hurl' && f.act !== 'walk') {
     const load = f.act === 'windup' ? -1 : f.act === 'strike' ? 1 : 0.45;
     // the stance: back foot loaded on the wind-up, front foot driven into on
     // the release
@@ -6510,7 +6559,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     a.armOff.fore.setAngle(-26 - load * 14);
   }
   // ---- AND THE BLOWGUN, where the recoil is in the neck and not the arm.
-  if (f.move?.anim === 'puff' && f.act !== 'walk') {
+  if (anim === 'puff' && f.act !== 'walk') {
     const blow = f.act === 'strike' ? 1 : f.act === 'recover' ? 0.4 : 0;
     // chin down and shoulders in to take the breath, then the head snaps back
     a.headGroup.y = blow > 0 ? -2.4 * blow : 1.4;
@@ -6522,7 +6571,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     a.armOff.root.setVisible(true);
   }
   // ---- AND THE KICK, which is a leg and not an arm at all.
-  if (f.move?.anim === 'kick' && (f.act === 'strike' || f.act === 'windup')) {
+  if (anim === 'kick' && (f.act === 'strike' || f.act === 'windup')) {
     const up = f.act === 'strike' ? -68 : -18;
     a.legR.setAngle(up);
     a.greaveR.setAngle(up);
@@ -6532,7 +6581,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   // A sprinting stride twice the width of a walk, the whole body pitched
   // forward over it, and the off hand braced behind the shield; on contact
   // the front foot plants and the body drives through.
-  const charging = f.move?.anim === 'charge' && (f.act === 'windup' || f.act === 'strike');
+  const charging = anim === 'charge' && (f.act === 'windup' || f.act === 'strike');
   if (charging) {
     const run = f.act === 'windup';
     const stride = run ? Math.sin(f.step / 3.2) * 17 : 0;
@@ -6547,10 +6596,10 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     a.armOff.fore.setAngle(-64);
   }
   // and a spinning attack turns the whole animal, not only the arm
-  if (f.move?.anim === 'spin' && (f.act === 'strike' || f.act === 'windup')) {
+  if (anim === 'spin' && (f.act === 'strike' || f.act === 'windup')) {
     a.root.angle = f.face * (f.act === 'strike' ? 22 : -14);
   } else if (f.act !== 'stagger' && phase !== 'over' && !charging
-    && f.move?.anim !== 'hurl' && f.move?.anim !== 'puff') {
+    && anim !== 'hurl' && anim !== 'puff') {
     // A throw and a blowgun both turn the whole body, above; zeroing here
     // would put it back upright on the same frame.
     a.root.angle = 0;
@@ -6569,7 +6618,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   // thrown is one the head is part of.  A throw carries it over the front
   // foot and a blowgun snaps it back off the breath, and both are set above;
   // this line ran after them and put it back on centre every frame.
-  const headOwned = f.move?.anim === 'hurl' || f.move?.anim === 'puff';
+  const headOwned = anim === 'hurl' || anim === 'puff';
   if (!headOwned || f.act === 'walk') {
     a.headGroup.x = 0;
     a.headGroup.y = f.act === 'dodge' ? 4 : f.act === 'stagger' ? -2 : 0;
@@ -6754,10 +6803,11 @@ export function rewardFor(_n: number): number {
   return PRIZE;
 }
 /**
- * Twenty a win.  The seat is twenty-five, charged by the cabinet (see
- * `cost` in content.ts), so it still takes two lizards to be ahead of the house.
+ * Twenty-five a win: a round won pays the seat back.  The seat is
+ * twenty-five, charged by the cabinet (see `cost` in content.ts), so one win
+ * is even and every win after it is profit -- if the run is not lost first.
  */
-const PRIZE = 20;
+const PRIZE = 25;
 let phase: Phase = 'title';
 /** The one latch that stops a result being reported twice.  See `finish`. */
 let ended = false;
@@ -8339,8 +8389,8 @@ export const frogsterMash: MinigameModule = {
       // 63, 59 and 59.
       'FOUR CHESTS: A WEAPON, AND ARMOUR FOR EACH SLOT.',
       'WHAT IS IN THE CHEST IS YOURS. NO SWAPS.',
-      'THEN FROGGY FIGHTS. WIN ROUND ONE AND TAKE 50.',
-      'TAKE IT, OR RISK IT ALL FOR 30, 35, 40 MORE...',
+      'THEN FROGGY FIGHTS. EVERY ROUND WON PAYS 25.',
+      'TAKE THE BANK, OR RISK IT ALL FOR 25 MORE...',
       'LOSE A ROUND AND THE WHOLE BANK GOES WITH IT.',
     ],
     controls: [
