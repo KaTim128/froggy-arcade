@@ -269,6 +269,14 @@ export const flood: MinigameModule = {
       gaugeYou: scene.add.rectangle(GAME_W - 9, 0, 6, 2, PALETTE.mossLight).setOrigin(0, 0.5).setDepth(61),
       note: centerText(scene, GAME_W / 2, 96, '', PALETTE.gold, 16).setDepth(70).setVisible(false),
     };
+    // ---- NOTHING SHOWS ABOVE THE PICTURE.  The ledges were drawn up into the
+    // strip the HUD sits on, so the next ones were on show over the readouts
+    // before the camera reached them.  The strip is solid now and over the
+    // shaft: a ledge comes in under its lower edge as the camera climbs to it,
+    // the way it would come into any frame -- seen when it is in the picture,
+    // and not before.
+    scene.add.rectangle(0, 18, GAME_W, TOP_SY - 18, 0x0b1019).setOrigin(0, 0).setDepth(55);
+    scene.add.rectangle(0, TOP_SY - 1, GAME_W, 1, PALETTE.steel).setOrigin(0, 0).setDepth(55).setAlpha(0.6);
     // The gauge: the whole shaft as one column, with the hatch at the top of it.
     scene.add.rectangle(GAME_W - 9, TOP_SY, 6, VIEW_H, PALETTE.ink).setOrigin(0, 0).setDepth(60).setStrokeStyle(1, PALETTE.steel);
     scene.add.rectangle(GAME_W - 9, TOP_SY, 6, 2, PALETTE.gold).setOrigin(0, 0).setDepth(61);
