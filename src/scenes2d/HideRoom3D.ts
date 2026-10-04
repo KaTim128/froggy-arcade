@@ -1064,9 +1064,15 @@ export class HideRoom3D extends Phaser.Scene {
     super('HideRoom3D');
   }
 
-  init(data: { wake?: boolean } = {}): void {
+  init(data: { wake?: boolean; retry?: boolean } = {}): void {
     this.wakeNext = data?.wake === true;
+    this.retryNext = data?.retry === true;
   }
+  /**
+   * Back from being caught: the round starts again clean, straight into the
+   * ten-second count -- no briefing, no line from him, nothing carried over.
+   */
+  private retryNext = false;
 
   create(): void {
     // the scream is decoded before anything here can catch you
@@ -1191,7 +1197,9 @@ export class HideRoom3D extends Phaser.Scene {
     // the instant it hands the arcade over reads as another cutscene rather
     // than as being back on the floor.
     if (this.isFinal) {
-      this.beginArcade();
+      this.beginArcade(this.retryNext);
+    } else if (this.retryNext) {
+      this.beginRetry();
     } else {
       const lines = this.roomIndex === 0 ? BRIEFING : ZONE_LINES[Math.min(this.roomIndex, ZONE_LINES.length - 1)];
       if (this.roomIndex === 0 && this.wakeNext) this.beginWaking();
@@ -2749,7 +2757,7 @@ export class HideRoom3D extends Phaser.Scene {
     const sec = this.secret;
     if (!sec) return;
     // The machine takes a flask: carried up to it, E pours it in.
-    if (this.atLab('machine')) {
+    if (this.atLab('machine') && (!sec.carrying() || sec.carrying()?.startsWith('flask'))) {
       const r = sec.pour();
       if (r.name) this.say(`SEQUENCE: ${r.name}`, 2600);
       else if (r.why) {
@@ -2758,7 +2766,12 @@ export class HideRoom3D extends Phaser.Scene {
       }
       return;
     }
-    if (sec.carrying()) return;
+    // Holding something and not pouring it: E puts it down.  (There is no
+    // DROP button any more; Q still does it on a keyboard.)
+    if (sec.carrying()) {
+      this.labDrop();
+      return;
+    }
     if (this.atLab('panel')) {
       const r = sec.pressWater();
       audio.sfx('lock_click', 0.6);
@@ -3334,7 +3347,7 @@ export class HideRoom3D extends Phaser.Scene {
    * What the room wants is stated as an objective on the overlay rather than
    * by him, because in here he is not promising anything.
    */
-  private beginArcade(): void {
+  private beginArcade(retry = false): void {
     this.mode = 'seeking';
     this.clock = 0;
     this.fMode = 'search';
@@ -3342,8 +3355,29 @@ export class HideRoom3D extends Phaser.Scene {
     this.grace = 1.5;
     this.monster?.setVisible(this.hunted);
     audio.sfx('door_shut', 0.5);
-    const [text, ms] = ZONE_LINES[FINAL_ROOM][0];
-    this.say(text, ms);
+    // (back from being caught, he says nothing: see `beginRetry`)
+    if (!retry) {
+      const [text, ms] = ZONE_LINES[FINAL_ROOM][0];
+      this.say(text, ms);
+    }
+    this.freeFroggy();
+    this.pickWaypoint();
+  }
+
+  /**
+   * ---- CAUGHT, AND AGAIN.  The scene has been rebuilt from nothing (the
+   * restart is a whole new room: his position, his search, what he had heard,
+   * the chase, every door and lid), and the round opens straight onto the
+   * ordinary ten-second count.  No briefing and no words from him: he does
+   * not get to say anything about it.
+   */
+  private beginRetry(): void {
+    this.monster?.setVisible(false);
+    this.subtitle = '';
+    this.mode = 'hiding';
+    this.clock = HIDE_S;
+    this.fMode = 'search';
+    this.fTimer = 0;
     this.freeFroggy();
     this.pickWaypoint();
   }
@@ -5308,9 +5342,10 @@ export class HideRoom3D extends Phaser.Scene {
     this.scare = this.stage && this.monster ? playJumpscare3D(this, this.stage, this.monster, { floor: this.floorY }) : null;
     if (!this.scare) playJumpscare(this);
 
+    // Straight back into the round, clean: see `beginRetry`.
     this.time.delayedCall(SCARE_MS + 700, () => {
       froggyLayer.clear();
-      this.scene.restart({});
+      this.scene.restart({ retry: true });
     });
   }
 
@@ -5707,7 +5742,7 @@ export class HideRoom3D extends Phaser.Scene {
       const near = sec && !sec.carrying() ? sec.nearestPickable(this.pos.x, this.pos.y, this.floorY) : null;
       const lab = sec?.labStatus();
       const carryingFlask = !!sec?.carrying()?.startsWith('flask');
-      const drop = isTouch() ? '[DROP] PUT IT DOWN' : '[Q] PUT IT DOWN';
+      const drop = '[E] PUT IT DOWN';
       this.prompt = this.atButton()
         ? next < ROOMS.length
           ? `[E] CONTINUE TO HIDE AND SEEK ROUND ${next + 1}`

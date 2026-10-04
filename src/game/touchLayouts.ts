@@ -100,9 +100,7 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
       { label: 'E', key: 'E', primary: true },
       { label: 'CROUCH', key: 'C' },
       { label: 'RUN', key: 'SHIFT' },
-      // Q: put down what you picked up in the hidden lab.  It does nothing
-      // anywhere else, and says so by not being asked for anywhere else.
-      { label: 'DROP', key: 'Q' },
+      // (No DROP: E puts down what you are carrying in the lab.)
     ],
   },
   // The chase turns on Q and E, not on E alone — E is a turn here, not an
