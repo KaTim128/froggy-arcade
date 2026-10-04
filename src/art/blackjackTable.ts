@@ -23,6 +23,26 @@ export const TABLE_H = 30;
 const FELT = 0x1d5c2d;
 const FELT_DARK = 0x123b1e;
 
+/**
+ * The felt itself, front edge at `y`: its shadow, the apron, the padded rail,
+ * the green and the dealer's arc painted on it.  The game corner's Froggopoly
+ * table is the same piece of furniture, so it is built here once and handed
+ * back for the caller to place.
+ */
+export function paintFelt(scene: Phaser.Scene, x: number, y: number): Array<Phaser.GameObjects.Shape> {
+  return [
+    scene.add.ellipse(x, y + 2, TABLE_W + 6, 12, PALETTE.black, 0.35),
+    // apron
+    scene.add.rectangle(x, y, TABLE_W - 6, 14, PALETTE.brown).setOrigin(0.5, 1),
+    scene.add.rectangle(x, y, TABLE_W - 6, 3, 0x4a3320).setOrigin(0.5, 1),
+    // felt top, with a padded rail around it
+    scene.add.ellipse(x, y - 14, TABLE_W, TABLE_H, PALETTE.brown),
+    scene.add.ellipse(x, y - 15, TABLE_W - 8, TABLE_H - 7, FELT),
+    // the dealer's arc, painted on the felt
+    scene.add.ellipse(x, y - 20, TABLE_W - 26, TABLE_H - 16, FELT_DARK).setAlpha(0.7),
+  ];
+}
+
 export class BlackjackTable {
   readonly def: CabinetDef;
   /** Where the interact zone and the pointer hit box sit. */
@@ -37,15 +57,7 @@ export class BlackjackTable {
     const d = y / 1000;
 
     // ---- the table, seen the same low-angle way the cabinets are
-    scene.add.ellipse(x, y + 2, TABLE_W + 6, 12, PALETTE.black, 0.35).setDepth(d);
-    // apron
-    scene.add.rectangle(x, y, TABLE_W - 6, 14, PALETTE.brown).setOrigin(0.5, 1).setDepth(d);
-    scene.add.rectangle(x, y, TABLE_W - 6, 3, 0x4a3320).setOrigin(0.5, 1).setDepth(d);
-    // felt top, with a padded rail around it
-    scene.add.ellipse(x, y - 14, TABLE_W, TABLE_H, PALETTE.brown).setDepth(d);
-    scene.add.ellipse(x, y - 15, TABLE_W - 8, TABLE_H - 7, FELT).setDepth(d);
-    // the dealer's arc, painted on the felt
-    scene.add.ellipse(x, y - 20, TABLE_W - 26, TABLE_H - 16, FELT_DARK).setDepth(d).setAlpha(0.7);
+    for (const o of paintFelt(scene, x, y)) o.setDepth(d);
 
     // ---- WHOSE HALF IS WHOSE, READ OFF THE FELT.
     //
@@ -215,7 +227,8 @@ const CHAIR = {
  * top of it clears the felt, which is exactly how much of a chair you see at a
  * card table -- but the part that does clear it now has a shape.
  */
-function chairAt(scene: Phaser.Scene, x: number, by: number, depth: number, s = 1): void {
+export function chairAt(scene: Phaser.Scene, x: number, by: number, depth: number, s = 1): Phaser.GameObjects.Rectangle[] {
+  const made: Phaser.GameObjects.Rectangle[] = [];
   const add = (
     cx: number,
     cy: number,
@@ -223,11 +236,14 @@ function chairAt(scene: Phaser.Scene, x: number, by: number, depth: number, s = 
     h: number,
     colour: number,
     alpha = 1,
-  ): Phaser.GameObjects.Rectangle =>
-    scene.add
+  ): Phaser.GameObjects.Rectangle => {
+    const r = scene.add
       .rectangle(x + (cx - x) * s, by + (cy - by) * s, w * s, h * s, colour, alpha)
       .setOrigin(0.5, 1)
       .setDepth(depth);
+    made.push(r);
+    return r;
+  };
 
   // ---- what it throws on the wall behind it, so it is standing off the wall
   add(x + 3, by + 2, 40, 34, CHAIR.shadow, 0.45);
@@ -264,4 +280,5 @@ function chairAt(scene: Phaser.Scene, x: number, by: number, depth: number, s = 
     add(x + sx * 19, by + 6, 6, 14, CHAIR.bolster);
     add(x + sx * 19, by + 6, 6, 3, CHAIR.hide);
   }
+  return made;
 }

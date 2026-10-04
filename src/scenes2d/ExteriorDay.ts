@@ -117,8 +117,7 @@ export class ExteriorDay extends Phaser.Scene {
     this.add.rectangle(4, 4, 96, 14, PALETTE.black, 0.55).setOrigin(0, 0).setDepth(950);
     this.purse = text(this, 9, 8, '', PALETTE.mossLight).setDepth(951);
     this.refreshPurse();
-    // up in the sky's corner: the bottom edge is the pavement you walk
-    attachPockets(this, () => this.locked || this.busy(), GAME_W - 32, true);
+    attachPockets(this, () => this.locked || this.busy());
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);

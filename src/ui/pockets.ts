@@ -15,7 +15,7 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { store } from '../core/state';
-import { GAME_W, GAME_H } from '../render/pixelScaler';
+import { GAME_W } from '../render/pixelScaler';
 import { CAMERA_PRIZE } from '../game/content';
 import { SLOTS, heldItems, itemDef, type ItemDef } from '../game/inventory';
 import { drawPrize } from '../scenes2d/PrizeCounter';
@@ -99,15 +99,17 @@ export function drawItem(scene: Phaser.Scene, x: number, y: number, d: ItemDef, 
 /**
  * The three slots, and G.  `busy` says when the room is in the middle of
  * something else (a talk, a door) and the pockets should stay shut;
- * `centreX` moves them aside where the middle of the bottom edge is a door,
- * and `top` puts them up in a corner of the sky where you walk the bottom edge.
+ *
+ * TOP RIGHT, in every room.  Along the bottom edge they sat where the player
+ * walks -- over feet, doors and the machines' fronts -- and the top left is
+ * the purse.  The phone's gear is placed below the title bar, under them.
  */
-export function attachPockets(scene: Phaser.Scene, busy: () => boolean = () => false, centreX = GAME_W / 2, top = false): void {
+export function attachPockets(scene: Phaser.Scene, busy: () => boolean = () => false): void {
   // (fixed to the screen: in the streets the camera follows you)
   const layer = scene.add.container(0, 0).setDepth(940).setScrollFactor(0);
   const total = SLOTS * CELL + (SLOTS - 1) * GAP;
-  const x0 = Math.round(centreX - total / 2);
-  const y0 = top ? 4 : GAME_H - CELL - 3;
+  const x0 = GAME_W - 4 - total;
+  const y0 = 4;
   const draw = (): void => {
     layer.removeAll(true);
     const held = heldItems();

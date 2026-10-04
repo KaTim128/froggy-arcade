@@ -421,7 +421,7 @@ export class ArcadeHub extends Phaser.Scene {
 
     new TokenHud(this);
     // (the front door is in the middle of the bottom wall: the pockets sit beside it)
-    attachPockets(this, () => this.busy(), 112);
+    attachPockets(this, () => this.busy());
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);

@@ -37,9 +37,11 @@ import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
 import { CABINETS, LOUNGE_DOOR, cabinetsIn } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
-import { paintBoardTable, paintCrane, CRANE_H, CRANE_W, type CraneKind } from '../art/loungeProps';
+import { boardSeat, paintBoardTable, paintCrane, CRANE_H, CRANE_W, type CraneKind } from '../art/loungeProps';
+import { TABLE_W } from '../art/blackjackTable';
+import { drawFroggy } from '../froggy/froggy';
 import { FULL_LINE, pocketsFull } from '../game/inventory';
-import { GAME_W } from '../render/pixelScaler';
+import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 
 const INTERACT_RANGE = 24;
@@ -49,16 +51,17 @@ const SIDE_DOOR = { y: 96, h: 40 };
 /** The way back, on this room's LEFT wall -- the other side of the hub's right. */
 const BACK_DOOR = { x: 20, y: LOUNGE_DOOR.y };
 /**
- * ---- THE GAME CORNER.  The two claw machines stand in the top-right of the
+ * ---- THE GAME CORNER.  The two claw machines stand in the top-left of the
  * room against the back wall, plush on the left and the strange one on the
- * right; the Froggopoly table is out on the floor to the left.  After
+ * right; the Froggopoly table is out on the floor in the bottom right.  After
  * closing they are all still here, in the same places, dark.
  */
 const CRANES: Array<{ kind: CraneKind; x: number; y: number; cost: number; title: string }> = [
-  { kind: 'plush', x: 232, y: 74, cost: 5, title: 'PLUSH CRANE' },
-  { kind: 'oddity', x: 270, y: 74, cost: 3, title: 'ODDITY CRANE' },
+  { kind: 'plush', x: 44, y: 74, cost: 5, title: 'PLUSH CRANE' },
+  { kind: 'oddity', x: 82, y: 74, cost: 3, title: 'ODDITY CRANE' },
 ];
-const TABLE = { x: 104, y: 132 };
+/** The table's near edge.  It is Froggy 21's table: TABLE_W wide. */
+const TABLE = { x: 234, y: 140 };
 
 type Target =
   | { kind: 'cabinet'; cab: Cabinet }
@@ -83,6 +86,8 @@ export class ArcadeLounge extends Phaser.Scene {
   private fromAlley = false;
   private sideDoor: { leaf: Phaser.GameObjects.Rectangle; gap: Phaser.GameObjects.Rectangle } | null = null;
   private mutter: Phaser.GameObjects.BitmapText | null = null;
+  /** Seconds, for Froggy's sway at the board. */
+  private clock = 0;
 
   constructor() {
     super('ArcadeLounge');
@@ -118,7 +123,8 @@ export class ArcadeLounge extends Phaser.Scene {
     paintArcadeDressing(this, {
       night: this.night,
       props: [{ x: 296, y: 62, kind: 'plant' }],
-      vents: [60, 236],
+      // (one, clear of the claw machines that now stand where the other was)
+      vents: [236],
     });
     this.paintSign();
     this.paintSideDoor();
@@ -137,7 +143,7 @@ export class ArcadeLounge extends Phaser.Scene {
     }
     paintBoardTable(this, TABLE.x, TABLE.y, this.night ? null : store.get().froggyGone ? 'nerd' : 'froggy', this.night);
     this.add
-      .zone(TABLE.x, TABLE.y - 16, 44, 34)
+      .zone(TABLE.x, TABLE.y - 16, TABLE_W, 34)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
         if (!this.busy()) this.useTable();
@@ -185,6 +191,7 @@ export class ArcadeLounge extends Phaser.Scene {
       right: this.bindKeys(KEYS.right),
     };
     this.input.keyboard?.on('keydown-E', () => this.interact());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => froggyLayer.clear());
     // A click on the floor is floor.  The door answers a click on the door,
     // a machine a click on the machine; nothing is reached by proximity.
 
@@ -386,6 +393,8 @@ export class ArcadeLounge extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    this.clock += delta / 1000;
+    this.paintOpponent();
     if (this.busy()) {
       this.promptPlate.setVisible(false);
       this.prompt.setVisible(false);
@@ -401,6 +410,41 @@ export class ArcadeLounge extends Phaser.Scene {
 
     this.target = this.findTarget();
     this.renderPrompt();
+  }
+
+  /**
+   * Froggy at the board, sat in the house chair at its back rail: drawn the
+   * way the casino draws him dealing -- the same frog, the same height, cut
+   * at the rail so the table crosses his chest.  Only by day and only before
+   * the night; after it the boy in the glasses has the seat (loungeProps).
+   *
+   * The overlay is over every Phaser object, so where the player stands in
+   * front of the table their own outline is cut out of him too.
+   */
+  private paintOpponent(): void {
+    if (this.night || store.get().froggyGone) return;
+    const seat = boardSeat(TABLE.x, TABLE.y);
+    const atTable = this.target?.kind === 'table';
+    const p = this.player?.sprite;
+    froggyLayer.paint((ctx) => {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, GAME_W, Math.min(seat.y, GAME_H));
+      if (p && this.player.y > seat.y) {
+        const b = p.getBounds();
+        ctx.rect(b.x, b.y, b.width, b.height);
+      }
+      ctx.clip('evenodd');
+      drawFroggy(ctx, {
+        x: seat.x,
+        y: seat.y + 8,
+        height: 30,
+        variant: 'cozy',
+        pose: atTable ? 'talk' : 'idleA',
+        bounce: (this.clock * 0.4) % 1,
+      });
+      ctx.restore();
+    });
   }
 
   private findTarget(): Target {
@@ -420,7 +464,7 @@ export class ArcadeLounge extends Phaser.Scene {
     }
     if (best) return { kind: 'cabinet', cab: best };
     for (const cr of CRANES) if (Math.abs(px - cr.x) < 16 && py - cr.y >= -4 && py - cr.y < 22) return { kind: 'crane', crane: cr };
-    if (Math.abs(px - TABLE.x) < 26 && Math.abs(py - TABLE.y) < 18) return { kind: 'table' };
+    if (Math.abs(px - TABLE.x) < TABLE_W / 2 && Math.abs(py - TABLE.y) < 18) return { kind: 'table' };
     if (px < BACK_DOOR.x + 20 && Math.abs(py - BACK_DOOR.y) < 28) return { kind: 'back' };
     return null;
   }
