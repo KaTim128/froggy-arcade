@@ -115,11 +115,16 @@ export function hideEye(kind: SpotKind, skin: SpotSkin | undefined): HideEye {
       // at the lid seam; a crate's gaps are lower down its boards
       return skin === 'crate' ? { x: 0, y: 0.53, z: 0.29 } : { x: 0, y: 0.66, z: 0.29 };
     case 'bed':
+      // Lying further in under it, not with your face on the hem: from a
+      // hand's width behind it, the gap filled the whole picture and there was
+      // nothing of the bed or the cloth to say you were under anything.  From
+      // here the hem frames a strip of floor and the room beyond it -- and
+      // there is room to turn your head round.
       return skin === 'tunnel'
         ? { x: 0, y: 0.4, z: 0.38 }
         : skin === 'table'
-          ? { x: 0, y: 0.3, z: 0.38 }
-          : { x: 0, y: 0.24, z: 0.36 };
+          ? { x: 0, y: 0.17, z: 0.1 }
+          : { x: 0, y: 0.22, z: 0.12 };
   }
 }
 
@@ -167,7 +172,10 @@ function plan(kind: SpotKind, skin: SpotSkin | undefined, eye: HideEye): Plan {
   }
   if (skin === 'table' || skin === 'bench') {
     const top = skin === 'table' ? 0.78 : 0.58;
-    const lift = skin === 'table' ? 0.38 : 0.33;
+    // (the table's cloth held up a hand's height to peek under, not raised
+    // like a curtain: the gap is the view, and a gap the height of the room
+    // was not hiding anything)
+    const lift = skin === 'table' ? 0.24 : 0.33;
     const half = skin === 'table' ? 0.5 : 0.45;
     // the cloth held up in front of you; along the rest, the gap under its hem
     return {

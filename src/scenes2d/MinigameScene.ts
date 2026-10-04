@@ -328,9 +328,16 @@ export class MinigameScene extends Phaser.Scene {
       return;
     }
     const risk = this.forfeitAmount() ?? 0;
+    // How the sitting stands, first: the hands already settled, so whatever
+    // is on the felt right now is the forfeit line's and not counted twice.
+    const sitting: string[] = [];
+    if (this.mod?.reportsSitting) {
+      const net = this.paid - this.stake + risk;
+      sitting.push(net === 0 ? 'SO FAR YOU ARE EVEN' : net > 0 ? `SO FAR YOU ARE UP ${net}` : `SO FAR YOU ARE DOWN ${-net}`);
+    }
     this.freeze(true);
     this.asking = confirmDialog(this, {
-      lines: ['ARE YOU SURE YOU WANT TO QUIT?', ...forfeitLines(risk)],
+      lines: [...sitting, 'ARE YOU SURE YOU WANT TO QUIT?', ...forfeitLines(risk)],
       confirm: 'CONFIRM QUIT',
       onConfirm: () => {
         this.asking = null;

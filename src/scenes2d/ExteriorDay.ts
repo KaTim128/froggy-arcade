@@ -31,9 +31,13 @@ import { Player } from '../art/player';
 import { PRIZES, allPrizesSold } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
+import { attachPockets } from '../ui/pockets';
+import { heldItems } from '../game/inventory';
 
 const WALK_Y = KERB_Y;
-type Spot = 'door' | 'man' | null;
+type Spot = 'door' | 'man' | 'alley' | null;
+/** More tokens than this, walking out of the arcade after the night, and it is evening. */
+export const EVENING_TOKENS = 600;
 
 export class ExteriorDay extends Phaser.Scene {
   private player!: Player;
@@ -53,23 +57,49 @@ export class ExteriorDay extends Phaser.Scene {
     super('ExteriorDay');
   }
 
+  /** Where the player came from: the arcade's doors, or the street to the west. */
+  private cameFrom: 'arcade' | 'west' | 'other' = 'other';
+  /** It has just turned midnight: the thoughts play, and nobody moves till they have. */
+  private nightfall = false;
+
+  init(data: { fromArcade?: boolean; fromWest?: boolean; nightfall?: boolean } = {}): void {
+    this.cameFrom = data.fromArcade ? 'arcade' : data.fromWest ? 'west' : 'other';
+    this.nightfall = data.nightfall === true;
+  }
+
   create(): void {
     froggyLayer.clear();
     this.locked = false;
     this.spot = null;
 
-    fadeIn(this);
-    audio.setScene({ music: 'theme_arcade', ambience: ['street_dusk'] });
+    // ---- WHAT TIME IT IS.  After the night in the arcade it stays sunny --
+    // nothing forces the evening -- until the player has more than six
+    // hundred tokens and walks out of the doors, and then it is evening.
+    // Midnight is the man's doing (see PrizeExchange): the arcade is shut,
+    // he is gone, and the road west to the hotel is the only way on.
+    const st0 = store.get();
+    if (this.cameFrom === 'arcade' && st0.froggyGone && st0.timeOfDay === 'day' && st0.tokens > EVENING_TOKENS) {
+      store.patch({ timeOfDay: 'evening' });
+      store.flush();
+    }
+    const time = store.get().timeOfDay;
+    this.time0 = time;
 
-    const refs = paintExterior(this, { night: false, day: true });
+    fadeIn(this);
+    audio.setScene(time === 'midnight' ? { music: 'neon_buzz', ambience: ['wind_low', 'crickets'] } : { music: 'theme_arcade', ambience: ['street_dusk'] });
+
+    const refs = paintExterior(this, { night: time === 'midnight', day: time === 'day' });
     startSignFlicker(this, refs);
     this.doorX = refs.doorX;
     this.errand = null;
     this.makeSpotsClickable(refs.doorRect);
 
     // He stands where he stands.  Nothing in this scene ever moves him, so he
-    // does not need keeping hold of.
-    new MysteryMan(this, MAN_X, WALK_Y + 4);
+    // does not need keeping hold of -- and at midnight he is not there.
+    if (time !== 'midnight') new MysteryMan(this, MAN_X, WALK_Y + 4);
+    else this.paintClosed(refs.doorRect);
+    // the alley round the right-hand side, its door boarded up at midnight
+    this.paintAlley(time === 'midnight');
     // You come out of the doors standing at them, so going back in is one key
     // press away — the loop is meant to be walked dozens of times.
     // DAY COLOURS, on the one scene in the game that is painted in daylight.
@@ -77,7 +107,7 @@ export class ExteriorDay extends Phaser.Scene {
     // has through `nightify`: cap, hood, coat and trousers all came out the
     // same desaturated blue-grey, stood on a sunlit forecourt.  The night
     // scenes -- the alley, the dark arcade, the street after hours -- keep it.
-    this.player = new Player(this, this.doorX + 16, WALK_Y, false);
+    this.player = new Player(this, this.cameFrom === 'west' ? 26 : this.doorX + 16, WALK_Y, time === 'midnight');
     // The forecourt is loose ground, not the arcade's carpet.  This scene
     // never said so, which left the walk outside sounding like the walk in.
     this.player.setSurface('gravel');
@@ -87,6 +117,8 @@ export class ExteriorDay extends Phaser.Scene {
     this.add.rectangle(4, 4, 96, 14, PALETTE.black, 0.55).setOrigin(0, 0).setDepth(950);
     this.purse = text(this, 9, 8, '', PALETTE.mossLight).setDepth(951);
     this.refreshPurse();
+    // up in the sky's corner: the bottom edge is the pavement you walk
+    attachPockets(this, () => this.locked || this.busy(), GAME_W - 32, true);
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
@@ -99,10 +131,65 @@ export class ExteriorDay extends Phaser.Scene {
     // changed while it was open.
     this.events.on('exchange-closed', () => {
       this.refreshPurse();
+      if (store.get().timeOfDay === 'midnight' && this.time0 !== 'midnight') {
+        // He packs up and goes; the light goes with him.
+        this.locked = true;
+        fadeToScene(this, 'ExteriorDay', { nightfall: true });
+        return;
+      }
       this.checkFinished();
     });
 
     this.checkFinished();
+    // the way west, marked at the edge of the pavement
+    text(this, 6, WALK_Y + 4, '<', time === 'midnight' ? PALETTE.ash : PALETTE.cream).setDepth(800).setAlpha(0.7);
+    if (time === 'midnight' && this.nightfall) this.midnightThoughts();
+  }
+
+  private time0: 'day' | 'evening' | 'midnight' = 'day';
+
+  /** The arcade shut: shutters down over the doors, the sign dark, CLOSED. */
+  private paintClosed(door: { x: number; y: number; w: number; h: number }): void {
+    this.add.rectangle(door.x, door.y, door.w, door.h, 0x3a3e44).setOrigin(0, 0).setDepth(55);
+    for (let y = door.y + 3; y < door.y + door.h; y += 4) this.add.rectangle(door.x, y, door.w, 1, 0x26282e).setOrigin(0, 0).setDepth(55);
+    // (hung above the shutter, where the door's prompt does not cover it)
+    this.add.rectangle(door.x + door.w / 2, door.y - 7, 42, 10, 0x14100c).setDepth(56).setStrokeStyle(1, 0xc31f2e);
+    centerText(this, door.x + door.w / 2, door.y - 7, 'CLOSED', 0xc31f2e).setDepth(57);
+  }
+
+  /** The alley's mouth on the right, and at midnight, planks across its door. */
+  private paintAlley(planked: boolean): void {
+    const x = GAME_W - 12;
+    this.add.rectangle(x, WALK_Y - 2, 14, 46, 0x14100c).setOrigin(0.5, 1).setDepth(54);
+    if (!planked) return;
+    this.add.rectangle(x, WALK_Y - 2, 10, 34, 0x5a4030).setOrigin(0.5, 1).setDepth(55);
+    for (const [y, a] of [[-30, -18], [-18, 14], [-8, -10]] as const) {
+      this.add.rectangle(x, WALK_Y - 2 + y, 16, 3, 0x8a6a4a).setAngle(a).setDepth(56);
+    }
+  }
+
+  /**
+   * ---- MIDNIGHT.  The man has gone, the arcade is shut, and the player
+   * stands on the pavement and thinks, three thoughts, and does not move
+   * until they have.
+   */
+  private midnightThoughts(): void {
+    this.locked = true;
+    const lines = [
+      "It's getting dark...",
+      'I finally have enough to afford a decent place to rest. Maybe I should try that hotel down the street.',
+      'I can get back to grabbing arcade prizes tomorrow.',
+    ];
+    lines.forEach((l, i) => {
+      this.time.delayedCall(800 + i * 3200, () => {
+        this.mutter.setText(l).setVisible(true).setAlpha(1).setMaxWidth(290);
+        this.tweens.killTweensOf(this.mutter);
+      });
+    });
+    this.time.delayedCall(800 + lines.length * 3200, () => {
+      this.tweens.add({ targets: this.mutter, alpha: 0, duration: 600 });
+      this.locked = false;
+    });
   }
 
   /**
@@ -187,15 +274,25 @@ export class ExteriorDay extends Phaser.Scene {
     if (this.locked || this.busy() || !this.spot) return;
 
     if (this.spot === 'door') {
+      if (this.time0 === 'midnight') {
+        audio.sfx('door_rattle', 0.7);
+        this.say('Shut. The lights are off inside, all of them.');
+        return;
+      }
       this.locked = true;
       audio.sfx('door_open');
       fadeToScene(this, 'ArcadeHub');
       return;
     }
+    if (this.spot === 'alley') {
+      audio.sfx('door_rattle', 0.6);
+      this.say(this.time0 === 'midnight' ? 'The alley door is boarded up. Planks nailed right across it.' : 'The alley. Nothing down there I need.');
+      return;
+    }
 
     const s = store.get();
     const toSell = s.prizesOwned.filter((id) => !s.prizesSold.includes(id));
-    if (toSell.length === 0) {
+    if (toSell.length === 0 && heldItems(s).length === 0) {
       this.say(s.prizesOwned.length === 0
         ? '"Nothing yet?  The counter is inside, friend."'
         : '"You have sold me everything you are carrying."');
@@ -236,11 +333,24 @@ export class ExteriorDay extends Phaser.Scene {
       }
       dx = gap > 0 ? 1 : -1;
     }
-    this.player.move(dx, 0, delta, new Phaser.Geom.Rectangle(20, WALK_Y, GAME_W - 40, 0));
+    this.player.move(dx, 0, delta, new Phaser.Geom.Rectangle(4, WALK_Y, GAME_W - 24, 0));
+    // ---- WEST, off the left-hand end: the street to the hotel by day and
+    // by evening; at midnight, the night road.
+    if (this.player.x <= 5 && dx < 0) {
+      this.locked = true;
+      fadeToScene(this, this.time0 === 'midnight' ? 'NightRoad3D' : 'StreetWest', {});
+      return;
+    }
 
     const px = this.player.x;
     this.spot =
-      Math.abs(px - MAN_X) < 22 ? 'man' : Math.abs(px - this.doorX) < 24 ? 'door' : null;
+      this.time0 !== 'midnight' && Math.abs(px - MAN_X) < 22
+        ? 'man'
+        : Math.abs(px - this.doorX) < 24
+          ? 'door'
+          : px > GAME_W - 30
+            ? 'alley'
+            : null;
 
     if (!this.spot) {
       this.prompt.setVisible(false);
@@ -248,7 +358,7 @@ export class ExteriorDay extends Phaser.Scene {
       return;
     }
 
-    const label = this.spot === 'man' ? '[E] TALK' : '[E] GO IN';
+    const label = this.spot === 'man' ? '[E] TALK' : this.spot === 'alley' ? '[E] ALLEY' : this.time0 === 'midnight' ? '[E] DOOR' : '[E] GO IN';
     const x = Phaser.Math.Clamp(px, 40, GAME_W - 40);
     this.prompt.setText(label).setPosition(x, WALK_Y - 34).setVisible(true);
     this.promptPlate

@@ -18,6 +18,12 @@ import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { PRIZES, cashFor, prizeById, type PrizeDef } from '../game/content';
 import { button, centerText, text } from '../core/ui';
+import { CAMERA_ITEM, heldItems, itemDef, removeItem, type ItemDef } from '../game/inventory';
+
+/** Cash at which the man calls it a day: there is enough for a room. */
+export const ROOM_MONEY = 300;
+/** What he says when the player has it, and then he is gone till morning. */
+export const MAN_DONE_LINE = '"That will do for today. Bring me more prizes tomorrow morning -- I\'ll wait right here."';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 
 export class PrizeExchange extends Phaser.Scene {
@@ -25,6 +31,12 @@ export class PrizeExchange extends Phaser.Scene {
   private body!: Phaser.GameObjects.Container;
   /** Which row is selected, as an index into the carried list. */
   private picked: string | null = null;
+  /** Prizes from the counter, or what is in the pockets. */
+  private tab: 'prizes' | 'pockets' = 'prizes';
+  /** A line from the player or the man, under the table, until the next pick. */
+  private note = '';
+  /** Set once the man has said he is done for the day. */
+  private done = false;
 
   constructor() {
     super('PrizeExchange');
@@ -33,6 +45,9 @@ export class PrizeExchange extends Phaser.Scene {
   init(data: { from?: string } = {}): void {
     this.from = data.from ?? 'ExteriorDay';
     this.picked = null;
+    this.tab = 'prizes';
+    this.note = '';
+    this.done = false;
   }
 
   create(): void {
@@ -51,12 +66,29 @@ export class PrizeExchange extends Phaser.Scene {
 
   private render(): void {
     this.body.removeAll(true);
+    // The two tabs: the counter's prizes, and the pockets.
+    for (const [i, t] of (['prizes', 'pockets'] as const).entries()) {
+      this.body.add(
+        button(this, GAME_W / 2 - 36 + i * 72, 31, t === 'prizes' ? 'PRIZES' : 'POCKETS', () => {
+          this.tab = t;
+          this.picked = null;
+          this.note = '';
+          this.render();
+        }, { width: 64, height: 10, fill: this.tab === t ? PALETTE.moss : PALETTE.plum }),
+      );
+    }
+    if (this.tab === 'pockets') {
+      this.renderPockets();
+      return;
+    }
     const s = store.get();
     // Everything in the bag, in the order it was won, resolved through the
     // catalogue — a prize from a restocked shelf is rebuilt from its id, so
     // the man will buy those too.  Unsold first, because those are the ones
     // there is anything to do about.
+    // (the camera is carried in the hand, and is on the pockets tab)
     const carried = s.prizesOwned
+      .filter((id) => id !== CAMERA_ITEM.id)
       .map((id) => prizeById(id))
       .filter((p): p is PrizeDef => !!p)
       .sort((a, b) => Number(s.prizesSold.includes(a.id)) - Number(s.prizesSold.includes(b.id)));
@@ -64,9 +96,9 @@ export class PrizeExchange extends Phaser.Scene {
     // Column headings, so the two numbers are never mistaken for each other.
     // They sit above the first row rather than on it: the list is seven long
     // now and it starts higher up the panel than it used to.
-    this.body.add(text(this, 30, 32, 'PRIZE', PALETTE.ash));
-    this.body.add(text(this, 150, 32, 'COST', PALETTE.ash));
-    this.body.add(text(this, 196, 32, 'HE PAYS', PALETTE.ash));
+    this.body.add(text(this, 30, 40, 'PRIZE', PALETTE.ash));
+    this.body.add(text(this, 150, 40, 'COST', PALETTE.ash));
+    this.body.add(text(this, 196, 40, 'HE PAYS', PALETTE.ash));
 
     if (carried.length === 0) {
       this.body.add(
@@ -76,8 +108,8 @@ export class PrizeExchange extends Phaser.Scene {
 
     // Everything you are carrying, not the first five of it: the shelf is
     // seven things long now and a truncated list hides prizes you own.
-    carried.slice(0, PRIZES.length).forEach((p, i) => {
-      const y = 42 + i * 12;
+    carried.slice(0, PRIZES.length - 1).forEach((p, i) => {
+      const y = 50 + i * 12;
       const sold = s.prizesSold.includes(p.id);
       const cash = cashFor(p);
 
@@ -107,10 +139,12 @@ export class PrizeExchange extends Phaser.Scene {
         this,
         GAME_W / 2,
         156,
-        pick
-          ? `${pick.name}: ${pick.cost} TOKENS  ->  $${cashFor(pick)} CASH`
-          : `you have $${s.cash}`,
-        pick ? PALETTE.gold : PALETTE.fog,
+        this.note
+          ? this.note
+          : pick
+            ? `${pick.name}: $${cashFor(pick)}  ->  YOU'LL HAVE $${s.cash + cashFor(pick)}`
+            : `you have $${s.cash}`,
+        this.note ? PALETTE.cream : pick ? PALETTE.gold : PALETTE.fog,
       ),
     );
 
@@ -122,6 +156,7 @@ export class PrizeExchange extends Phaser.Scene {
    * one-way door in the daytime half of the game, so it asks.
    */
   private pick(p: PrizeDef): void {
+    this.note = '';
     if (this.picked !== p.id) {
       this.picked = p.id;
       audio.sfx('ui_blip');
@@ -133,17 +168,105 @@ export class PrizeExchange extends Phaser.Scene {
 
   private sell(p: PrizeDef): void {
     const s = store.get();
-    if (!s.prizesOwned.includes(p.id) || s.prizesSold.includes(p.id)) return;
+    if (!s.prizesOwned.includes(p.id) || s.prizesSold.includes(p.id) || p.id === CAMERA_ITEM.id) return;
 
     store.earnCash(cashFor(p));
     store.patch({ prizesSold: [...s.prizesSold, p.id] });
     store.flush();
     audio.sfx('coin_spin');
     this.picked = null;
+    this.afterSale();
     this.render();
   }
 
+  /**
+   * ---- THE POCKETS TAB: crane prizes, and the camera.  Each row says what
+   * it is and what he pays; the camera says NOT FOR SALE, and picking it has
+   * the player say why they are keeping it.
+   */
+  private renderPockets(): void {
+    const s = store.get();
+    const held = heldItems(s);
+    this.body.add(text(this, 30, 40, 'ITEM', PALETTE.ash));
+    this.body.add(text(this, 196, 40, 'HE PAYS', PALETTE.ash));
+    if (held.length === 0) {
+      this.body.add(centerText(this, GAME_W / 2, 88, 'your pockets are empty', PALETTE.fog).setAlpha(0.8));
+    }
+    held.forEach((id, i) => {
+      const d = itemDef(id);
+      if (!d) return;
+      const y = 50 + i * 14;
+      const key = `${id}#${i}`;
+      this.body.add(this.add.rectangle(30, y, 10, 10, d.color).setOrigin(0, 0));
+      this.body.add(text(this, 46, y + 2, d.name, PALETTE.cream));
+      if (d.value <= 0) {
+        this.body.add(text(this, 196, y + 2, 'NOT FOR SALE', PALETTE.steel));
+        this.body.add(
+          button(this, 266, y + 5, 'WHY?', () => {
+            this.note = d.thought;
+            this.render();
+          }, { width: 40, height: 11, fill: PALETTE.ink }),
+        );
+        return;
+      }
+      this.body.add(text(this, 200, y + 2, `$${d.value}`, PALETTE.mossLight));
+      this.body.add(
+        button(this, 266, y + 5, this.picked === key ? 'SURE?' : 'SELL', () => this.pickItem(d, key), {
+          width: 40,
+          height: 11,
+          fill: this.picked === key ? PALETTE.moss : PALETTE.plum,
+        }),
+      );
+    });
+    const pick = this.picked ? itemDef(this.picked.split('#')[0]) : undefined;
+    this.body.add(
+      centerText(
+        this,
+        GAME_W / 2,
+        156,
+        this.note ? this.note : pick ? `${pick.name}: $${pick.value}  ->  YOU'LL HAVE $${s.cash + pick.value}` : `you have $${s.cash}`,
+        this.note ? PALETTE.cream : pick ? PALETTE.gold : PALETTE.fog,
+      ).setMaxWidth(270),
+    );
+    this.body.add(button(this, GAME_W / 2, 167, 'DONE', () => this.close(), { width: 60, height: 12 }));
+  }
+
+  private pickItem(d: ItemDef, key: string): void {
+    this.note = '';
+    if (this.picked !== key) {
+      this.picked = key;
+      audio.sfx('ui_blip');
+      this.render();
+      return;
+    }
+    if (d.id === CAMERA_ITEM.id || d.value <= 0 || !removeItem(d.id)) return;
+    store.earnCash(d.value);
+    store.flush();
+    audio.sfx('coin_spin');
+    this.picked = null;
+    this.afterSale();
+    this.render();
+  }
+
+  /**
+   * ---- ENOUGH FOR A ROOM.  After the night in the arcade, the first time
+   * the player's cash reaches what a hotel room costs, the man calls it a
+   * day: he says so, and when the table is put away it is night, the arcade
+   * is shut and he has gone.  (See ExteriorDay.)
+   */
+  private afterSale(): void {
+    const s = store.get();
+    if (this.done || !s.froggyGone || s.timeOfDay === 'midnight' || s.cash < ROOM_MONEY) return;
+    this.done = true;
+    this.note = MAN_DONE_LINE;
+  }
+
   private close(): void {
+    // He said he was done: the table goes away and the day goes with it.
+    if (this.done) {
+      store.patch({ timeOfDay: 'midnight' });
+      store.flush();
+    }
     this.scene.get(this.from)?.events.emit('exchange-closed');
     this.scene.stop();
   }

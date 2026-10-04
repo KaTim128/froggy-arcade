@@ -14,6 +14,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { button, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
+import { touchControls } from './touchControls';
 import { FONT_ADVANCE } from '../render/pixelFont';
 
 export interface TalkOption {
@@ -36,10 +37,17 @@ export function openTalkPanel(scene: Phaser.Scene, o: TalkOpts): Phaser.GameObje
   const HEAD = 11;
   const ROW = 17;
   const GAP = 10;
-  const inner = GAME_W - 46;
+  // On a phone: the arrow pad goes while someone is talking, and the panel
+  // keeps clear of whatever of the buttons still reaches in over the bottom
+  // of the picture.
+  touchControls.holdStick();
+  const over = touchControls.overBottom();
+  const L = over.left;
+  const R = over.right;
+  const inner = GAME_W - 46 - L - R;
   const color = o.color ?? PALETTE.neon;
   const options = o.options ?? [];
-  const body = text(scene, 22, 0, o.line, PALETTE.cream).setMaxWidth(inner);
+  const body = text(scene, 22 + L, 0, o.line, PALETTE.cream).setMaxWidth(inner);
   const textH = Math.max(8, Math.ceil(body.height));
   const widths = options.map((op) => Math.max(60, op.label.length * FONT_ADVANCE + 14));
   const across = widths.reduce((a, w) => a + w, 0) + Math.max(0, widths.length - 1) * GAP;
@@ -49,24 +57,30 @@ export function openTalkPanel(scene: Phaser.Scene, o: TalkOpts): Phaser.GameObje
   const y = GAME_H - h - 5;
   body.setY(y + PAD + HEAD);
 
-  const panel = scene.add.rectangle(GAME_W / 2, y + h / 2, GAME_W - 24, h, PALETTE.ink, 0.95);
+  const cx = GAME_W / 2 + (L - R) / 2;
+  const panel = scene.add.rectangle(cx, y + h / 2, GAME_W - 24 - L - R, h, PALETTE.ink, 0.95);
   panel.setStrokeStyle(1, color);
-  const who = text(scene, 22, y + PAD, o.who, color);
+  const who = text(scene, 22 + L, y + PAD, o.who, color);
   const parts: Phaser.GameObjects.GameObject[] = [panel, who, body];
 
   const top = y + PAD + HEAD + textH + PAD + ROW / 2;
   if (rows === 0) {
-    parts.push(text(scene, GAME_W / 2, y + h - 9, '[E] LEAVE IT', PALETTE.ash).setOrigin(0.5, 0.5));
+    // (on a phone the E button is put away while someone is talking, so the
+    // panel itself is the way to leave it: a tap on it is the E)
+    parts.push(text(scene, cx, y + h - 9, touchControls.mounted() ? 'TAP TO LEAVE IT' : '[E] LEAVE IT', PALETTE.ash).setOrigin(0.5, 0.5));
+    if (touchControls.mounted()) panel.setInteractive().on('pointerdown', () => touchControls.tap('E'));
   } else if (oneRow) {
-    let x = GAME_W / 2 - across / 2;
+    let x = cx - across / 2;
     options.forEach((op, i) => {
       parts.push(button(scene, x + widths[i] / 2, top, op.label, op.fn, { width: widths[i], height: 13 }));
       x += widths[i] + GAP;
     });
   } else {
     options.forEach((op, i) => {
-      parts.push(button(scene, GAME_W / 2, top + i * ROW, op.label, op.fn, { width: widths[i], height: 13 }));
+      parts.push(button(scene, cx, top + i * ROW, op.label, op.fn, { width: widths[i], height: 13 }));
     });
   }
-  return scene.add.container(0, 0, parts).setDepth(o.depth ?? 900);
+  const panelBox = scene.add.container(0, 0, parts).setDepth(o.depth ?? 900);
+  panelBox.once(Phaser.GameObjects.Events.DESTROY, () => touchControls.releaseStick());
+  return panelBox;
 }

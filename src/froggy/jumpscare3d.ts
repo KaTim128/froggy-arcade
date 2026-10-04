@@ -33,6 +33,7 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import type { ThreeStage } from '../render/threeStage';
 import type { FroggyMonster } from '../three/froggyMonster';
 import { SCARE_MS } from './jumpscare';
+import { touchControls } from '../ui/touchControls';
 
 /**
  * FASTER, BECAUSE A SCARE IS A SHOCK AND NOT A REVEAL.  The hold is under a
@@ -59,6 +60,9 @@ export interface Scare3DOptions {
 
 export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster: FroggyMonster, opts: Scare3DOptions = {}): Scare3D {
   audio.scare();
+  // The scare is the whole screen: no pad, no buttons, no gear over it.
+  // They come back on their own once it has played and the room is back.
+  touchControls.suspendFor(SCARE_MS + 1500);
   audio.sfx('boom', 1);
   // The recorded scream is already going (see `audio.scare`); the synthetic
   // screech is only for when it could not be loaded.

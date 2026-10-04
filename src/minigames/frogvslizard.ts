@@ -405,7 +405,8 @@ function makeFrog(scene: Phaser.Scene, x: number, groundY: number): Phaser.GameO
  * The opponent: long, low, tan and spiny, so that at 320 pixels wide nobody
  * mistakes him for a second frog.
  */
-function makeLizard(scene: Phaser.Scene, x: number, groundY: number): Phaser.GameObjects.Container {
+/** The lizard, side on, facing left.  Also the opponent at the air hockey table. */
+export function makeLizard(scene: Phaser.Scene, x: number, groundY: number): Phaser.GameObjects.Container {
   const hide = 0xc39a3e;
   const dark = 0x8a6a22;
   const parts: Phaser.GameObjects.GameObject[] = [

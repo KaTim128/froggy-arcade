@@ -46,6 +46,7 @@ import { audio } from '../core/audio';
 import { froggyLayer } from '../render/froggyLayer';
 import { drawFroggy } from './froggy';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
+import { touchControls } from '../ui/touchControls';
 
 /**
  * How long he takes to fill the frame, including the hold at the front.
@@ -75,6 +76,9 @@ const NEGATIVE = [0.34, 0.66];
  */
 export function playJumpscare(scene: Phaser.Scene): void {
   audio.scare();
+  // The scare is the whole screen: no pad, no buttons, no gear over it.
+  // They come back on their own once it has played and the room is back.
+  touchControls.suspendFor(SCARE_MS + 1500);
   // Under the stinger: a low hit on the hold, so the still frame has weight
   // rather than being silence, and a second one on the lunge.
   audio.sfx('boom', 0.85);

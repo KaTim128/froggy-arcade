@@ -181,6 +181,11 @@ const labels = (page) =>
         portrait: window.innerHeight >= window.innerWidth,
         hitsStick: overlaps(c, stick),
         hitsPads: overlaps(c, pads),
+        // Where the black around the picture is too thin for them, the
+        // clusters sit over its bottom corners -- see-through, and marked so.
+        over: document.getElementById('touch-controls').classList.contains('over'),
+        corners: stick.top >= c.top + c.height * 0.4 && pads.top >= c.top + c.height * 0.4 &&
+          stick.right <= c.left + c.width * 0.42 && pads.left >= c.right - c.width * 0.42,
         stickOn: stick.bottom <= window.innerHeight + 1,
         padsOn: pads.right <= window.innerWidth + 1 && pads.bottom <= window.innerHeight + 1,
         // Every control a thumb presses: off the screen edge by a margin, and
@@ -204,13 +209,16 @@ const labels = (page) =>
     // Twice the buffer is the bar: below that the 5x8 pixel font stops being
     // readable at arm's length.
     const bigEnough = fit.w >= 320 * 1.1;
-    // Portrait puts the controls in the band UNDER the picture and landscape
-    // in a column either side of it, so nothing may overlap in either.
-    const clear = !fit.hitsStick && !fit.hitsPads && fit.stickOn && fit.padsOn;
+    // The picture is the whole screen it fits.  The controls go in the black
+    // around it when there is room (the band under it, in portrait), and only
+    // when there is not do they come in over it: translucent, and kept to the
+    // bottom corners, out of the middle where the game happens.
+    const clear =
+      (fit.hitsStick || fit.hitsPads ? fit.over && fit.corners : !fit.over) && fit.stickOn && fit.padsOn;
     check(
       `${name}: the picture fits and the thumbs are clear of it`,
       fit.onScreen && bigEnough && clear && fit.tight.length === 0,
-      `${fit.w}x${fit.h}, overlap stick=${fit.hitsStick} pads=${fit.hitsPads}` +
+      `${fit.w}x${fit.h}, overlap stick=${fit.hitsStick} pads=${fit.hitsPads} over=${fit.over} corners=${fit.corners}` +
         (fit.tight.length ? `; ${fit.tight.join(', ')}` : ''),
     );
     await page.close();
@@ -354,6 +362,7 @@ const labels = (page) =>
         have.add(k);
         if (mod.touch.arrows) have.add(ARROW[k]);
       }
+      for (const k of Object.values(mod.touch.cross ?? {})) if (typeof k === 'string') have.add(k);
       for (const b of mod.touch.buttons ?? []) {
         have.add(b.key);
         if (b.also) have.add(b.also);
@@ -379,6 +388,8 @@ const labels = (page) =>
         const reachable = (n) =>
           have.has(n) ||
           n === 'CLICK' ||
+          // The race's numbered plates are drawn in the game and tapped there.
+          n === 'NUMBER' ||
           n === 'HOLD' ||
           n === 'MOUSE' ||
           // "NOTHING - THE FIGHT IS NOT YOURS" asks for no key at all.
@@ -472,18 +483,21 @@ const labels = (page) =>
     const btns = [...document.querySelectorAll('#touch-controls .tc-btn, #touch-controls .tc-dkey, #touch-controls .tc-corner')]
       .map((e) => e.getBoundingClientRect())
       .filter((b) => b.width > 0);
+    // Over the picture only in its bottom corners, never the middle third.
+    const mid = { left: c.left + c.width / 3, right: c.right - c.width / 3, top: c.top, bottom: c.bottom };
+    const high = { left: c.left, right: c.right, top: c.top, bottom: c.top + c.height * 0.4 };
     return {
       skin: document.getElementById('touch-controls').className,
-      covered: btns.filter((b) => over(b, c)).length,
+      covered: btns.filter((b) => over(b, mid) || over(b, high)).length,
       smallest: Math.min(...[...document.querySelectorAll('#touch-controls .tc-btn')].map((e) => e.getBoundingClientRect().width)),
       look: (() => { const l = r('#touch-controls .tc-look'); return l && c ? Math.abs(l.width - c.width) + Math.abs(l.left - c.left) : 99; })(),
     };
   });
   await page.screenshot({ path: `${SHOTS}/06b-hideroom-landscape.png` });
   check(
-    'landscape horror room: controls beside the picture, never on it, and rusted',
+    'landscape horror room: controls in the bottom corners, out of the middle, and rusted',
     geo.covered === 0 && geo.look < 2 && /skin-horror/.test(geo.skin) && geo.smallest >= 48,
-    `${geo.covered} controls over the picture, look pad off by ${geo.look}px, smallest button ${Math.round(geo.smallest)}px, [${geo.skin}]`,
+    `${geo.covered} controls in the middle or the top, look pad off by ${geo.look}px, smallest button ${Math.round(geo.smallest)}px, [${geo.skin}]`,
   );
 
   // He talks first, and nobody walks during the rules: wait for the round.
@@ -732,6 +746,106 @@ const labels = (page) =>
     'tapping it leaves the opening at once, and takes itself with it',
     out.scenes.includes('ExteriorDay') && !out.buttons.includes('SKIP'),
     `${out.scenes.join(',')} with [${out.buttons}]`,
+  );
+  await page.close();
+}
+
+// ------------------- 12. the Dance Off is one big cross, in the middle, clear
+//
+// Its four arrows are the game: one large cross of four separate buttons, in
+// the middle -- under the picture in portrait, over the bottom of the stage in
+// landscape with the dancers stepped up out of its way -- and every arm sends
+// its own lane's key.
+for (const [name, w, h] of [
+  ['portrait', 390, 844],
+  ['landscape', 844, 390],
+]) {
+  const page = await phone('?intro=1&tokens=40&game=danceoff', { w, h });
+  await page.keyboard.press('Enter');
+  await sleep(1400);
+  const geo = await page.evaluate(() => {
+    const c = document.querySelector('#game-root canvas').getBoundingClientRect();
+    const cross = document.querySelector('#touch-controls .tc-cross');
+    const arms = [...cross.querySelectorAll('.tc-xbtn')].map((e) => e.getBoundingClientRect());
+    const r = cross.getBoundingClientRect();
+    const per = 320 / c.width;
+    return {
+      shown: !cross.hidden && arms.every((a) => a.width > 0),
+      size: Math.min(...arms.map((a) => a.width)),
+      offCentre: Math.abs(r.left + r.width / 2 - (c.left + c.width / 2)),
+      below: r.top >= c.bottom - 1,
+      crossTop: (r.top - c.top) * per,
+      feet: window.__dance.state().feet,
+      corners: document.querySelectorAll('#touch-controls .tc-btn').length,
+    };
+  });
+  const sent = [];
+  for (const dir of ['up', 'left', 'down', 'right']) {
+    const p = await page.evaluate((d) => {
+      const b = document.querySelector(`#touch-controls .tc-xbtn[data-dir="${d}"]`).getBoundingClientRect();
+      return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+    }, dir);
+    const cdp = await page.target().createCDPSession();
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...p, id: 1 }] });
+    await sleep(60);
+    sent.push((await page.evaluate(() => window.__touch.held())).join('+'));
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await cdp.detach();
+  }
+  await page.screenshot({ path: `${SHOTS}/09-dance-${name}.png` });
+  const clear = name === 'portrait' ? geo.below : geo.crossTop >= geo.feet;
+  check(
+    `${name}: the Dance Off is one big cross in the middle, clear of the dancers, each arm its own key`,
+    geo.shown && geo.corners === 0 && geo.offCentre < 4 && clear && geo.size >= 44 && sent.join(',') === 'W,A,S,D',
+    `arms ${Math.round(geo.size)}px, ${Math.round(geo.offCentre)}px off centre, cross top ${Math.round(geo.crossTop)} vs feet ${geo.feet}, sent [${sent}]`,
+  );
+  await page.close();
+}
+
+// --------- 13. the Car Chase steers off a small thumbstick, gently and smoothly
+//
+// The arrow pad was full lock at the lightest touch.  Now a compact stick:
+// a small push steers a little, a full push steers more but under the
+// keyboard's lock, and the steering eases in rather than snapping.
+{
+  const page = await phone('?intro=1&tokens=40&game=carchase', { w: 844, h: 390 });
+  await page.keyboard.press('Enter');
+  await sleep(1500);
+  const box = await page.evaluate(() => {
+    const j = document.querySelector('#touch-controls .tc-joy');
+    const r = j.getBoundingClientRect();
+    return { shown: !j.hidden && r.width > 0, w: r.width, cx: r.left + r.width / 2, cy: r.top + r.height / 2, pad: !document.querySelector('#touch-controls .tc-dpad').hidden };
+  });
+  const drive = async (push, ms) => {
+    await page.evaluate(() => {
+      window.__chase.clearRoad();
+      window.__chase.setPlayer(window.__chase.laneX(0), 140);
+    });
+    await sleep(250);
+    const x0 = await page.evaluate(() => window.__chase.state().px);
+    const cdp = await page.target().createCDPSession();
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.cx, y: box.cy, id: 1 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: box.cx + (box.w / 2) * push, y: box.cy, id: 1 }] });
+    await sleep(90);
+    const early = await page.evaluate(() => window.__chase.state().thumbSteer);
+    await sleep(ms - 90);
+    const x1 = await page.evaluate(() => window.__chase.state().px);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await cdp.detach();
+    return { moved: x1 - x0, early };
+  };
+  const light = await drive(0.45, 500);
+  const full = await drive(1, 500);
+  const after = await page.evaluate(() => window.__touch.held());
+  // The keyboard's full lock over the same half second, for the bar.
+  const keyLock = 170 * 0.5;
+  await page.screenshot({ path: `${SHOTS}/10-chase-stick.png` });
+  check(
+    'the car chase steers off a compact stick: a little push a little, a full push under full lock, eased in',
+    box.shown && !box.pad && box.w <= 110 &&
+      light.moved > 1 && light.moved < full.moved * 0.5 && full.moved < keyLock * 0.85 && full.moved > keyLock * 0.4 &&
+      full.early < 0.75 && after.length === 0,
+    `stick ${Math.round(box.w)}px, light ${light.moved.toFixed(1)}px, full ${full.moved.toFixed(1)}px (keys ${keyLock}), eased to ${full.early.toFixed(2)} after 90ms, held [${after}]`,
   );
   await page.close();
 }

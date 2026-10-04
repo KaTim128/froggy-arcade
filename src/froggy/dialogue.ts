@@ -13,6 +13,7 @@ import { froggyLayer } from '../render/froggyLayer';
 import { drawFroggy, type FroggyPose } from './froggy';
 import { GAME_W } from '../render/pixelScaler';
 import { text } from '../core/ui';
+import { touchControls } from '../ui/touchControls';
 
 export const DEFAULT_CPS = 28;
 
@@ -65,6 +66,8 @@ export class DialogueBox {
   private painted = false;
   private onDone: (() => void) | null = null;
   private updateRef: (t: number, d: number) => void;
+  /** Whether this box is the reason the phone's arrow pad is away. */
+  private holdingStick = false;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -91,6 +94,14 @@ export class DialogueBox {
     this.index = 0;
     this.onDone = onDone ?? null;
     this.container.setVisible(true);
+    // On a phone: no walking while he talks (the pad goes, and with it the
+    // corner of the box it was on), and the words stop short of the buttons
+    // that still reach in over the bottom right of the picture.
+    if (!this.holdingStick) touchControls.holdStick();
+    this.holdingStick = true;
+    const over = touchControls.overBottom().right;
+    this.label.setMaxWidth(GAME_W - 70 - over);
+    this.prompt.setX(GAME_W - 14 - over);
     this.beginLine();
 
     // E is the world's "use" key and reads naturally inside a conversation,
@@ -266,7 +277,13 @@ export class DialogueBox {
     else this.beginLine();
   }
 
+  private letGoOfStick(): void {
+    if (this.holdingStick) touchControls.releaseStick();
+    this.holdingStick = false;
+  }
+
   private finish(): void {
+    this.letGoOfStick();
     this.state = 'idle';
     this.container.setVisible(false);
     this.highlight.setVisible(false);
@@ -280,6 +297,7 @@ export class DialogueBox {
 
   private destroy(): void {
     this.scene.events.off(Phaser.Scenes.Events.UPDATE, this.updateRef);
+    this.letGoOfStick();
     froggyLayer.clear();
   }
 }

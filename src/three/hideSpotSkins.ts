@@ -68,6 +68,40 @@ function tex(key: string, w: number, h: number, draw: (c: CanvasRenderingContext
   return t;
 }
 
+/**
+ * A party tablecloth: faded red gingham on cream, the hang of the folds
+ * shaded down it, and a stitched hem along the bottom when it is a drape.
+ * Drawn at the shape of the panel it covers, so the checks stay square.
+ */
+function clothTex(key: string, w: number, h: number, hem: boolean): THREE.CanvasTexture {
+  return tex(`cloth:${key}`, w, h, (c) => {
+    c.fillStyle = '#d6ccb8';
+    c.fillRect(0, 0, w, h);
+    c.fillStyle = 'rgba(160, 58, 52, 0.28)';
+    for (let x = 0; x < w; x += 8) c.fillRect(x, 0, 4, h);
+    for (let y = 0; y < h; y += 8) c.fillRect(0, y, w, 4);
+    // where the two stripes cross, the red is doubled
+    c.fillStyle = 'rgba(140, 40, 38, 0.18)';
+    for (let x = 0; x < w; x += 8) for (let y = 0; y < h; y += 8) c.fillRect(x, y, 4, 4);
+    if (hem) {
+      // the folds: a soft shadow down each one, a lighter ridge beside it
+      for (let x = 10; x < w; x += 22) {
+        c.fillStyle = 'rgba(0, 0, 0, 0.16)';
+        c.fillRect(x, 0, 3, h);
+        c.fillStyle = 'rgba(0, 0, 0, 0.08)';
+        c.fillRect(x + 3, 0, 2, h);
+        c.fillStyle = 'rgba(255, 255, 255, 0.07)';
+        c.fillRect(x - 2, 0, 2, h);
+      }
+      // the hem, and the stitching along it
+      c.fillStyle = 'rgba(90, 30, 28, 0.55)';
+      c.fillRect(0, h - 4, w, 4);
+      c.fillStyle = 'rgba(230, 220, 200, 0.6)';
+      for (let x = 1; x < w; x += 3) c.fillRect(x, h - 3, 1, 1);
+    }
+  });
+}
+
 /** Rough boards with gaps: a crate. */
 function slatTex(): THREE.CanvasTexture {
   return tex('slats', 64, 64, (c) => {
@@ -321,16 +355,20 @@ function under(group: THREE.Group, skin: 'table' | 'bench' | 'tunnel'): BuiltSpo
   under.rotation.x = -Math.PI / 2;
   under.position.set(0, 0.01, 0);
   group.add(under);
-  // the cloth hanging at the ends and the back, fixed
-  const cloth = table ? lam(0x8a8276) : lam(0x6e6b62);
-  box(group, cloth, 0.03, top - 0.08, 1.0, -1.12, top / 2 + 0.05, 0);
-  box(group, cloth, 0.03, top - 0.08, 1.0, 1.12, top / 2 + 0.05, 0);
-  box(group, cloth, 2.26, top - 0.08, 0.03, 0, top / 2 + 0.05, -0.51);
+  // the cloth hanging at the ends and the back, fixed.  The table's is a
+  // real tablecloth -- checked, folded, hemmed -- and toned down, because a
+  // plain pale cloth in the torch at a metre burned out to a white block.
+  const drapeCloth = table ? lam(0xc9c0b0, clothTex('drape', 128, 40, true)) : lam(0x6e6b62);
+  const endCloth = table ? lam(0xc9c0b0, clothTex('end', 56, 40, true)) : drapeCloth;
+  const topCloth = table ? lam(0xc9c0b0, clothTex('top', 128, 56, false)) : drapeCloth;
+  box(group, endCloth, 0.03, top - 0.08, 1.0, -1.12, top / 2 + 0.05, 0);
+  box(group, endCloth, 0.03, top - 0.08, 1.0, 1.12, top / 2 + 0.05, 0);
+  box(group, drapeCloth, 2.26, top - 0.08, 0.03, 0, top / 2 + 0.05, -0.51);
   // ---- THE FRONT, over the gap, on the blanket's pivot at the far edge
   const hinge = new THREE.Group();
   hinge.position.set(0, top + 0.03, -0.5);
-  box(hinge, cloth, 2.26, 0.02, 1.04, 0, 0, 0.5);
-  const drape = box(hinge, cloth, 2.26, top - 0.1, 0.03, 0, -(top - 0.1) / 2, 1.02);
+  box(hinge, topCloth, 2.26, 0.02, 1.04, 0, 0, 0.5);
+  const drape = box(hinge, drapeCloth, 2.26, top - 0.1, 0.03, 0, -(top - 0.1) / 2, 1.02);
   drape.rotation.x = 0.03;
   if (table) {
     // a place laid on it, a cake with a candle, gone grey
@@ -351,12 +389,20 @@ function tunnel(group: THREE.Group): BuiltSpot {
   // The tube, as staves round its length -- open along the front for the
   // doorway -- so the inside is the inside of boxes, not a double-sided
   // surface (one fewer shader to build on the way into a room).
+  //
+  // `a` is round the tube from the top (0) towards the back; the stave at `a`
+  // sits at (y, z) = (cos a, -sin a) * r from the axis and is turned by -a so
+  // its thin side faces out from the axis -- turned by +a, they fanned out
+  // like a dropped barrel.  The gap is the quarter of the circle facing the
+  // front (+z, a = -PI/2), which is the way in.
   const shell = lam(0xffffff, tubeTex('#c84a3a'));
-  const staves = 14;
+  const staves = 18;
+  const from = -Math.PI / 2 + Math.PI * 0.25;
+  const span = Math.PI * 1.5;
   for (let i = 0; i < staves; i++) {
-    const a = Math.PI * 0.22 + (i / (staves - 1)) * Math.PI * 1.56;
-    const st = box(group, shell, 2.25, 0.05, 0.24, 0, r + 0.02 + Math.cos(a) * r, Math.sin(a) * r * -1);
-    st.rotation.x = a;
+    const a = from + (i / (staves - 1)) * span;
+    const st = box(group, shell, 2.25, 0.05, 0.2, 0, r + 0.02 + Math.cos(a) * r, -Math.sin(a) * r);
+    st.rotation.x = -a;
   }
   // padded rings at each end, and the frame it sits in
   for (const ex of [-1.12, 1.12]) {

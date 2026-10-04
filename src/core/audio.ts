@@ -18,6 +18,16 @@ import { Howl } from 'howler';
 import { store } from './state';
 import { TRACKS, runTrack } from './tracks';
 
+/**
+ * The scream's shape, so a face can scream it: full from the first hundredth
+ * of a second, held for SCREAM_HOLD, gone by SCREAM_DUR.  (Seconds.)
+ */
+export const SCREAM_DUR = 2.15;
+export const SCREAM_HOLD = SCREAM_DUR * 0.62;
+/** 0..1, how loud the scream is `s` seconds after `scare()`. */
+export const screamLevel = (s: number): number =>
+  s < 0 ? 0 : s < 0.012 ? s / 0.012 : s < SCREAM_HOLD ? 1 : s < SCREAM_DUR ? ((SCREAM_DUR - s) / (SCREAM_DUR - SCREAM_HOLD)) ** 2 : 0;
+
 export const CROSSFADE_MS = 800; // PRD AU-1
 
 export type BusName = 'music' | 'sfx';
@@ -1293,6 +1303,35 @@ class AudioManager {
         beep(180, 0.11, 0.09, 'triangle');
         noise(0.07, 0.08, 620, 0.01);
         break;
+      // ---- the night road (scenes2d/NightRoad3D.ts)
+      // A frog the size of a man, somewhere behind you: two deep, wet,
+      // rattling pulls, the second lower than the first.
+      case 'croak':
+        for (let i = 0; i < 2; i++) {
+          const at = i * 0.42;
+          for (let j = 0; j < 7; j++) beep(68 - i * 10 + j * 2, 0.045, 0.12, 'sawtooth', at + j * 0.045);
+          glide(130 - i * 18, 82 - i * 12, 0.32, 0.07, 'square', at);
+          noise(0.3, 0.05, 420, at);
+        }
+        break;
+      // A crow, put out by something moving under it.
+      case 'crow_caw':
+        for (let i = 0; i < 2 + Math.floor(Math.random() * 2); i++) {
+          const at = i * 0.32;
+          glide(820, 560, 0.2, 0.05, 'sawtooth', at);
+          noise(0.18, 0.05, 2400, at);
+        }
+        break;
+      // Wings going up out of the trees all at once.
+      case 'wings':
+        for (let i = 0; i < 10; i++) noise(0.06, 0.06 - i * 0.004, 1800, i * 0.07 + Math.random() * 0.03);
+        break;
+      // A dry branch going under a foot.  Short, sharp and very loud at night.
+      case 'twig_snap':
+        noise(0.03, 0.22, 5200);
+        beep(1900, 0.02, 0.06, 'square', 0.005);
+        noise(0.05, 0.08, 1400, 0.03);
+        break;
     }
   }
 
@@ -1466,7 +1505,7 @@ class AudioManager {
    */
   private screamVoice(ctx: AudioContext, t: number, out: AudioNode, buf: AudioBuffer): boolean {
     const OFFSET = 0.17;
-    const DUR = 2.15;
+    const DUR = SCREAM_DUR;
     const shaper = (drive: number): WaveShaperNode => {
       const w = ctx.createWaveShaper();
       const c = new Float32Array(1024);
@@ -1482,7 +1521,7 @@ class AudioManager {
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, t + delay);
       g.gain.linearRampToValueAtTime(gain, t + delay + 0.012);
-      g.gain.setValueAtTime(gain, t + delay + DUR * 0.62);
+      g.gain.setValueAtTime(gain, t + delay + SCREAM_HOLD);
       g.gain.exponentialRampToValueAtTime(0.0001, t + delay + DUR);
       let at: AudioNode = src;
       for (const n of chain) {
@@ -1590,6 +1629,10 @@ export type SfxName =
   | 'distant_scream'
   | 'distant_cry'
   | 'fence_thunk'
+  | 'croak'
+  | 'crow_caw'
+  | 'wings'
+  | 'twig_snap'
   | 'wheel_tick'
   | 'splash'
   | 'water_rise'

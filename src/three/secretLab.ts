@@ -1181,11 +1181,18 @@ export function buildLab(p: LabParts): Lab {
         Object.assign(pose, { hunch: 0.3 * go, constrict: 1, maw: 0.2 + 0.15 * Math.abs(Math.sin(clock * 1.7)), still: go });
         faceTo = portWorld(0.35, (PORT_Y0 + PORT_Y1) / 2);
         faceK = go;
-        // one hand's fingers curled on the bars, the other flat on the glass --
-        // all of him on the inside
+        // Both hands flat on the glass either side of the window, framing his
+        // face in it -- all of him on the inside.  Close in and at the height
+        // of the port, so each arm is bent at the elbow and the long fingers
+        // lie on the glass.  (One hand was sent high and far round the tube,
+        // past where an arm reaches, and that arm locked out into a straight
+        // rod with the hand hanging in the air; the other was a fist jammed
+        // under the bottom of the frame.)
+        const beside = PORT_HALF + RIM + 0.12;
+        const mid = (PORT_Y0 + PORT_Y1) / 2;
         hands = [
-          { at: portWorld(0.1, PORT_Y0 + 0.05, 0.06), weight: go, grip: 1 },
-          { at: portWorld(0.1, PORT_Y1 + 0.35, -0.5), weight: go, grip: 0.2 },
+          { at: portWorld(0.1, mid + 0.03, -beside), weight: go, grip: 0.3 },
+          { at: portWorld(0.1, mid - 0.05, beside), weight: go, grip: 0.3 },
         ];
       } else {
         yaw = toViewer;

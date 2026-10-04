@@ -27,7 +27,7 @@ import { store } from '../core/state';
  * act is survived (`froggyGone`) every other scene gets the after skin: the
  * arcade's own controls, a shade off.
  */
-const HORROR = new Set(['HideRoom3D', 'Chase3D', 'BasementSequence', 'ArcadeDark', 'SecondBust', 'EjectionCutscene']);
+const HORROR = new Set(['HideRoom3D', 'Chase3D', 'NightRoad3D', 'BasementSequence', 'ArcadeDark', 'SecondBust', 'EjectionCutscene']);
 
 function skinFor(top: string): 'normal' | 'horror' | 'after' {
   if (HORROR.has(top)) return 'horror';
@@ -44,11 +44,14 @@ const ROOM: TouchLayout = {
   ],
 };
 
-/** A pavement: you only ever go left and right on one. */
+/** A pavement: you only ever go left and right on one -- and you can run on it. */
 const STREET: TouchLayout = {
   stick: 'lr',
   arrows: true,
-  buttons: [{ label: 'E', key: 'E', primary: true }],
+  buttons: [
+    { label: 'E', key: 'E', primary: true },
+    { label: 'RUN', key: 'SHIFT' },
+  ],
 };
 
 /** Nothing but the picture, which is already tappable. */
@@ -62,6 +65,7 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   StartScreen: BARE,
   ProfileModal: BARE,
   SettingsModal: TAP,
+  InventoryModal: TAP,
   // SKIP sends the same Esc the desktop hint names, and it lives in the band
   // under the picture, so it cannot land on the dialogue it is offering to
   // skip.  It goes the moment the intro hands over to the street, because the
@@ -77,12 +81,18 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   ArcadeHub: ROOM,
   ArcadeAnnex: ROOM,
   ArcadeLounge: ROOM,
+  // the claw: left and right to aim, and the one button that drops it
+  // the board is all buttons and spaces you tap
+  Froggopoly: TAP,
+  CraneGame: { stick: 'lr', arrows: true, buttons: [{ label: 'DROP', key: 'SPACE', primary: true }] },
   ArcadeCasino: ROOM,
   ArcadeDark: ROOM,
 
   ExteriorDay: STREET,
   ExteriorNight: STREET,
   BackAlley: STREET,
+  StreetWest: STREET,
+  Hotel: STREET,
 
   PrizeCounter: TAP,
   PrizeExchange: TAP,
@@ -100,9 +110,7 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
       { label: 'E', key: 'E', primary: true },
       { label: 'CROUCH', key: 'C' },
       { label: 'RUN', key: 'SHIFT' },
-      // Q: put down what you picked up in the hidden lab.  It does nothing
-      // anywhere else, and says so by not being asked for anywhere else.
-      { label: 'DROP', key: 'Q' },
+      // (No DROP: E puts down what you are carrying in the lab.)
     ],
   },
   // The chase turns on Q and E, not on E alone — E is a turn here, not an
@@ -114,6 +122,17 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
     buttons: [
       { label: '↶', key: 'Q' },
       { label: '↷', key: 'E' },
+    ],
+  },
+
+  // The night road: walk with the stick, drag the picture to look behind
+  // you, and once he is coming, RUN held and JUMP for the rails.
+  NightRoad3D: {
+    stick: 'wasd',
+    look: true,
+    buttons: [
+      { label: 'RUN', key: 'SHIFT', primary: true },
+      { label: 'JUMP', key: 'SPACE' },
     ],
   },
 

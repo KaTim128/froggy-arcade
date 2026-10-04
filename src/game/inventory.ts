@@ -1,0 +1,101 @@
+/**
+ * ---- THE POCKETS.
+ *
+ * Three slots of things carried in the hand.  The counter's prizes still go
+ * in the bag (`prizesOwned`) and are sold from it as they always were; these
+ * are the other kind of thing -- what comes out of the cranes in the fourth
+ * room, and the camera once it has been bought -- and there is room for
+ * three of them, no more.  A full set of pockets refuses the next one with a
+ * line saying so, and the ticket crane will not take tokens from someone who
+ * has nowhere to put what it gives them.
+ *
+ * An item is an id: `plush:frog`, `oddity:musicbox`, `camera`.  Everything
+ * about it -- what it is called, what it is worth to the man outside, what
+ * the player thinks looking at it -- is looked up from the id here.
+ */
+
+import { store } from '../core/state';
+
+export const SLOTS = 3;
+
+export type ItemKind = 'plush' | 'oddity' | 'camera';
+
+export interface ItemDef {
+  id: string;
+  name: string;
+  kind: ItemKind;
+  color: number;
+  /** What the man outside pays for it in cash.  0: he does not get it. */
+  value: number;
+  /** What the player thinks, looking at it in the inventory. */
+  thought: string;
+}
+
+/** The left crane's animals.  Cheap, soft, and worth very little to anyone. */
+export const PLUSHIES: ItemDef[] = [
+  { id: 'plush:frog', name: 'FROG PLUSH', kind: 'plush', color: 0x46c46e, value: 3, thought: 'A little frog. It looks happier than the real one.' },
+  { id: 'plush:bear', name: 'BEAR PLUSH', kind: 'plush', color: 0xa8743e, value: 3, thought: 'Soft. Somebody will want this more than I do.' },
+  { id: 'plush:bunny', name: 'BUNNY PLUSH', kind: 'plush', color: 0xf2e6d8, value: 3, thought: 'One ear is longer than the other. Still cute.' },
+  { id: 'plush:duck', name: 'DUCK PLUSH', kind: 'plush', color: 0xffc830, value: 3, thought: 'It squeaks if you squeeze it. I keep squeezing it.' },
+  { id: 'plush:cat', name: 'CAT PLUSH', kind: 'plush', color: 0x8a8f99, value: 3, thought: 'It has button eyes. One is hanging by a thread.' },
+  { id: 'plush:owl', name: 'OWL PLUSH', kind: 'plush', color: 0x7b4bd8, value: 3, thought: 'A purple owl. Not a colour owls come in.' },
+];
+
+/** What the right crane's capsules sometimes hold.  He pays well for these. */
+export const ODDITIES: ItemDef[] = [
+  { id: 'oddity:musicbox', name: 'OLD MUSIC BOX', kind: 'oddity', color: 0x6a3a8a, value: 250, thought: 'It plays a tune I almost know. That man outside would want this.' },
+  { id: 'oddity:glasseye', name: 'GLASS EYE', kind: 'oddity', color: 0x9fd4e0, value: 250, thought: 'It is cold, and it keeps ending up facing me.' },
+  { id: 'oddity:waxhand', name: 'WAX HAND', kind: 'oddity', color: 0xe8dcc0, value: 250, thought: 'A hand made of wax. The fingerprints are real.' },
+  { id: 'oddity:dollhead', name: 'DOLL HEAD', kind: 'oddity', color: 0xf0c8c0, value: 250, thought: 'Porcelain. The eyes close when you tip it. I wish they would stay closed.' },
+  { id: 'oddity:amber', name: 'MOTH IN AMBER', kind: 'oddity', color: 0xe8a030, value: 250, thought: 'A moth, stopped mid-flight. Something about it feels old.' },
+];
+
+/** Bought off the counter after the night, and not for sale to anyone. */
+export const CAMERA_ITEM: ItemDef = {
+  id: 'camera',
+  name: 'VIDEO CAMERA',
+  kind: 'camera',
+  color: 0x3a3f4c,
+  value: 0,
+  thought: "I'm not selling this. It might be the only proof of what happened in there.",
+};
+
+export function itemDef(id: string): ItemDef | undefined {
+  if (id === CAMERA_ITEM.id) return CAMERA_ITEM;
+  return PLUSHIES.find((p) => p.id === id) ?? ODDITIES.find((o) => o.id === id);
+}
+
+/** Everything in the pockets, in slot order: the camera first, if it is held. */
+export function heldItems(s = store.get()): string[] {
+  const out: string[] = [];
+  if (s.prizesOwned.includes(CAMERA_ITEM.id) && !s.prizesSold.includes(CAMERA_ITEM.id)) out.push(CAMERA_ITEM.id);
+  return [...out, ...s.items].slice(0, SLOTS);
+}
+
+export function pocketsFull(s = store.get()): boolean {
+  return heldItems(s).length >= SLOTS;
+}
+
+/** The line said when something will not fit. */
+export const FULL_LINE = 'My hands are full. I need to get rid of something first.';
+
+/** Put it in a pocket.  False, and nothing changes, when there is no room. */
+export function addItem(id: string): boolean {
+  const s = store.get();
+  if (pocketsFull(s)) return false;
+  store.patch({ items: [...s.items, id] });
+  store.flush();
+  return true;
+}
+
+/** Take one of it out of the pockets (the first, if there are two the same). */
+export function removeItem(id: string): boolean {
+  const s = store.get();
+  const i = s.items.indexOf(id);
+  if (i < 0) return false;
+  const next = s.items.slice();
+  next.splice(i, 1);
+  store.patch({ items: next });
+  store.flush();
+  return true;
+}

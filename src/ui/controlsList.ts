@@ -83,6 +83,12 @@ function touchRow([keys, does]: ControlRow, layout: TouchLayout): ControlRow | n
       if (!names.includes(btn.label)) names.push(btn.label);
       continue;
     }
+    // An arm of the big cross is named by its arrow.
+    const arm = layout.cross ? (['up', 'left', 'down', 'right'] as const).find((d) => layout.cross?.[d] === key) : undefined;
+    if (arm) {
+      names.push({ up: '↑', left: '←', down: '↓', right: '→' }[arm]);
+      continue;
+    }
     if (DIR[tok] && layout.stick) axes.add(DIR[tok]);
   }
   if (axes.size) {
@@ -90,7 +96,8 @@ function touchRow([keys, does]: ControlRow, layout: TouchLayout): ControlRow | n
     names.unshift(pad);
   }
   if (!names.length) return null;
-  return [`${hold ? 'HOLD ' : ''}${names.join(' / ')}`, doesT];
+  const arrowsOnly = names.every((n) => n.length === 1 && '↑←↓→'.includes(n));
+  return [`${hold ? 'HOLD ' : ''}${names.join(arrowsOnly ? ' ' : ' / ')}`, doesT];
 }
 
 /**

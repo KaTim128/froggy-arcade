@@ -9,8 +9,10 @@
  *            Queen the FROG MAGE (pointed hat with a star, a robe) and the
  *            King the FROG KING (gold crown, red robe with ermine).  All three
  *            are still worth ten.
- *   BACK     the arcade's own: the pink cabinet trim, a purple field with
- *            lily pads, and Froggy's face in the middle.
+ *   BACK     the arcade's own, printed like a real deck's: a black edge, a
+ *            white margin and the pink cabinet trim, then a diamond lattice
+ *            in gold over two purples, and Froggy's face in a cream oval in
+ *            the middle.
  *
  * Painted once into textures and drawn 1:1, so they stay crisp.
  */
@@ -32,9 +34,11 @@ export const SUIT_OF: Record<string, { key: string; name: string; ink: number }>
 };
 
 /** What the face cards are called, and the letter in their corner. */
+// (The corner says what the card IS -- J, Q, K -- not the frog's title: an
+// S and an M in the corner read as two ranks nobody has heard of.)
 export const FACE_OF: Record<string, { key: string; name: string; corner: string }> = {
-  J: { key: 'card_face_scout', name: 'FROG SCOUT', corner: 'S' },
-  Q: { key: 'card_face_mage', name: 'FROG MAGE', corner: 'M' },
+  J: { key: 'card_face_scout', name: 'FROG SCOUT', corner: 'J' },
+  Q: { key: 'card_face_mage', name: 'FROG MAGE', corner: 'Q' },
   K: { key: 'card_face_king', name: 'FROG KING', corner: 'K' },
 };
 
@@ -130,20 +134,38 @@ function paintRows(scene: Phaser.Scene, key: string, rows: string[], pal: Pal): 
   tex.refresh();
 }
 
-/** The back: pink trim, a purple field of lily pads, Froggy in the middle. */
+/**
+ * The back: a black edge, a white margin, the pink trim, a gold diamond
+ * lattice over two purples, and Froggy's face in a cream oval in the middle.
+ */
 function paintBack(scene: Phaser.Scene): void {
   if (scene.textures.exists(CARD_BACK)) return;
+  const cx = (CARD_W - 1) / 2;
+  const cy = (CARD_H - 1) / 2;
   const rows: string[] = [];
   for (let y = 0; y < CARD_H; y++) {
     let row = '';
     for (let x = 0; x < CARD_W; x++) {
       const edge = Math.min(x, y, CARD_W - 1 - x, CARD_H - 1 - y);
       if (edge === 0) row += 'k';
-      else if (edge === 1) row += 'P';
-      else if (edge === 2) row += (x + y) % 2 ? 'd' : 'y';
-      // a lattice of small pads over the field
-      else if ((x + 2 * y) % 8 === 0 && (x - 2 * y + 64) % 8 === 0) row += 'g';
-      else row += 'd';
+      else if (edge === 1) row += 'W';
+      else if (edge === 2) row += 'P';
+      else {
+        // the medallion: a cream oval with a pink rim
+        const ox = (x - cx) / 7.5;
+        const oy = (y - cy) / 6;
+        const r = ox * ox + oy * oy;
+        if (r <= 1) row += 'c';
+        else if (r <= 1.45) row += 'P';
+        else {
+          // the lattice: gold lines on the diagonals, the diamonds between
+          // them alternating dark and light
+          const a = x + y;
+          const b = x - y + 60;
+          if (a % 6 === 0 || b % 6 === 0) row += 'y';
+          else row += (Math.floor(a / 6) + Math.floor(b / 6)) % 2 ? 'd' : 'D';
+        }
+      }
     }
     rows.push(row);
   }
@@ -158,9 +180,11 @@ function paintBack(scene: Phaser.Scene): void {
   paintRows(scene, CARD_BACK, rows, {
     ...FACE_PAL,
     P: 0xff4fa3,
+    W: 0xf4ecd8,
     d: 0x3a1742,
+    D: 0x5a2470,
     y: 0xffc830,
-    g: 0x2c7a44,
+    c: 0xf4ecd8,
   });
 }
 

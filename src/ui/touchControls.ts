@@ -25,14 +25,16 @@
  * so up-and-left is up-and-left either way.  It only shows the arrows the game
  * in front of it reads; a one-axis game gets two.
  *
- * THE CONTROLS ARE NEVER ON THE GAME.  In portrait a 16:9 picture inside a
- * tall phone leaves a band under it, and that band is where the controls go.
- * In landscape they take a column either side of the picture instead -- a
- * wide phone has most of one going spare already -- and the picture is fitted
- * between them.  Either way nothing a thumb presses can cover a timer, a
- * score, a dialogue box or the thing being hidden in.  Every band and column
- * is a themed panel rather than dead black, and all of it sits inside the
- * phone's safe area, clear of the notch and the rounded corners.
+ * THE GAME GETS THE WHOLE SCREEN, AND THE CONTROLS FLOAT ON IT.  Nothing is
+ * reserved for them: the picture is fitted as large as the glass allows, and
+ * the pad and the buttons sit in the bottom corners as an overlay, with no
+ * panel or background behind them -- just the buttons.  Where the picture
+ * leaves black either side of it (landscape) or under it (portrait) they sit
+ * in that black, so they cover nothing; where it does not, they sit over the
+ * corners of the picture, see-through until a thumb is on them.  The gear
+ * goes wherever it is clear of the game's own QUIT.  All of it stays inside
+ * the phone's safe area, clear of the notch and the rounded corners, and all
+ * of it goes away for a jumpscare (`suspendFor`).
  *
  * AND THEY WEAR THE BUILDING'S MOOD.  Through the horror act they are rusted
  * iron -- scratched, worn at the edges, a little dried blood; once it is over
@@ -110,6 +112,27 @@ export interface TouchLayout {
   look?: boolean;
   /** Up to five, right to left in the order given. */
   buttons?: TouchButton[];
+  /**
+   * ONE BIG CROSS of four separate buttons, in the middle at the bottom, for
+   * a game whose four directions ARE the game (the Dance Off).  Under the
+   * picture in portrait; over the bottom middle of it in landscape, where the
+   * game is told how far it reaches (`crossReach`) and keeps clear of it.
+   * `tints` colours each arm like the game's own lanes.
+   */
+  cross?: {
+    up: KeyName;
+    left: KeyName;
+    down: KeyName;
+    right: KeyName;
+    tints?: Partial<Record<'up' | 'left' | 'down' | 'right', string>>;
+  };
+  /**
+   * A small analogue thumbstick in place of the arrow pad, for steering.  It
+   * still sends the keys (past half way), and the game can read how far it is
+   * pushed from `touchControls.joy()` to steer by degrees rather than all or
+   * nothing.
+   */
+  joystick?: boolean;
   /** Hide the standing pause (gear) button — the title screen and the end cards. */
   noQuit?: boolean;
 }
@@ -124,12 +147,12 @@ const STYLE = `
   font-family: ui-monospace, "Courier New", monospace;
 }
 #touch-controls .tc-zone {
-  position: absolute; bottom: 0; height: var(--tc-band, 190px);
-  display: flex; align-items: center;
+  position: absolute; bottom: var(--tc-bottom, 16px);
+  display: flex; align-items: flex-end;
   pointer-events: none;
 }
-#touch-controls .tc-left { left: 0; width: 46%; justify-content: center; }
-#touch-controls .tc-right { right: 0; width: 54%; justify-content: center; }
+#touch-controls .tc-left { left: var(--tc-left, 16px); }
+#touch-controls .tc-right { right: var(--tc-right, 16px); }
 
 /* The arrow pad: a ring of eight arrows round an empty middle.  The pad
    itself takes the touch, so a thumb can slide from arrow to arrow without
@@ -249,25 +272,9 @@ const STYLE = `
 #touch-controls.skin-horror .tc-lookzone { border-color: rgba(200, 150, 110, 0.14); }
 #touch-controls.skin-horror .tc-hint { color: #e0c8a8; }
 
-/* The band in portrait sits above the home bar. */
-#touch-controls .tc-zone { padding-bottom: var(--tc-safe-b, 0px); box-sizing: border-box; }
-
-/* Landscape: a column either side of the picture, and the controls in the
-   lower middle of each, where the thumbs rest.  Five buttons go two across,
-   not three, so the column stays narrow. */
-#touch-controls.overlay .tc-zone {
-  top: 0; bottom: 0; height: auto;
-  align-items: center; padding-top: 16vh; padding-bottom: var(--tc-safe-b, 0px);
-}
-#touch-controls.overlay .tc-left { left: 0; width: var(--tc-side, 160px); padding-left: var(--tc-safe-l, 0px); }
-#touch-controls.overlay .tc-right { right: 0; width: var(--tc-side, 160px); padding-right: var(--tc-safe-r, 0px); }
+/* Landscape: five buttons go two across, not three, so the cluster stays
+   in the corner.  The gear is placed by relayout(). */
 #touch-controls.overlay .tc-pads.three { grid-template-columns: repeat(2, auto); }
-#touch-controls .tc-corner { top: max(8px, var(--tc-safe-t, 0px)); right: max(8px, var(--tc-safe-r, 0px)); }
-/* In portrait the picture sits right at the top, so the gear lives in the
-   top corner of the controls' panel instead of over the picture, and the
-   controls sit low in the panel, under the thumbs. */
-#touch-controls:not(.overlay) .tc-corner { top: auto; bottom: calc(var(--tc-band, 190px) - 56px); }
-#touch-controls:not(.overlay) .tc-zone { align-items: flex-end; padding-bottom: calc(var(--tc-safe-b, 0px) + min(7vh, 60px)); }
 
 /* The panels behind the controls: the arcade's purple with its pink trim and
    a scatter of lily pads, never plain black. */
@@ -331,6 +338,69 @@ const STYLE = `
     rgba(28, 82, 80, 0.8);
 }
 #touch-controls.skin-after .tc-panel { filter: saturate(0.7) hue-rotate(-14deg) brightness(0.92); }
+
+/* Over the picture (landscape without room in the black either side) the
+   controls are see-through until a thumb is on them, so the game shows
+   through them; in the black they are solid. */
+#touch-controls.over .tc-dpad { opacity: 0.62; }
+#touch-controls.over .tc-btn { opacity: 0.66; }
+#touch-controls.over .tc-dkey { background: rgba(20, 26, 36, 0.42); }
+#touch-controls.over .tc-dkey.diag { background: rgba(20, 26, 36, 0.28); }
+#touch-controls.over .tc-btn { background: rgba(61, 42, 92, 0.42); }
+#touch-controls.over .tc-btn.primary { background: rgba(20, 92, 95, 0.48); }
+#touch-controls.over .tc-btn.down, #touch-controls.over .tc-dkey.down { opacity: 1; }
+#touch-controls.over .tc-dpad:has(.down) { opacity: 1; }
+
+/* ---- THE CROSS.  Four buttons, apart, round an empty middle. */
+#touch-controls .tc-cross {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: var(--tc-cross-b, 24px);
+  display: grid; gap: var(--tc-cross-gap, 8px);
+  grid-template-columns: repeat(3, var(--tc-cell, 72px));
+  grid-template-rows: repeat(3, var(--tc-cell, 72px));
+  pointer-events: none;
+}
+#touch-controls .tc-cross[hidden] { display: none; }
+#touch-controls .tc-xbtn {
+  pointer-events: auto; touch-action: none; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 16px;
+  background: rgba(20, 26, 36, 0.72);
+  border: 3px solid var(--tint, rgba(255, 212, 94, 0.7));
+  color: var(--tint, #fff0c9);
+  font-size: calc(var(--tc-cell, 72px) * 0.42); line-height: 1;
+}
+#touch-controls .tc-xbtn.down { background: var(--tint, #ffd45e); color: #141a24; }
+#touch-controls .tc-xbtn.up { grid-area: 1 / 2; }
+#touch-controls .tc-xbtn.left { grid-area: 2 / 1; }
+#touch-controls .tc-xbtn.right { grid-area: 2 / 3; }
+#touch-controls .tc-xbtn.down-arm { grid-area: 3 / 2; }
+#touch-controls.over .tc-xbtn { background: rgba(20, 26, 36, 0.4); opacity: 0.8; }
+#touch-controls.over .tc-xbtn.down { opacity: 1; }
+
+/* ---- THE THUMBSTICK.  A ring and a knob that follows the thumb. */
+#touch-controls .tc-joy {
+  position: relative; pointer-events: auto; touch-action: none;
+  width: var(--tc-joy, 110px); height: var(--tc-joy, 110px);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(70, 196, 189, 0.1) 0 55%, rgba(20, 26, 36, 0.55) 56%);
+  border: 2px solid rgba(70, 196, 189, 0.55);
+}
+#touch-controls .tc-joy[hidden] { display: none; }
+#touch-controls .tc-knob {
+  position: absolute; left: 50%; top: 50%;
+  width: 46%; height: 46%; margin: -23% 0 0 -23%;
+  border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle at 35% 35%, #7fe0d8, #2a8c86);
+  border: 2px solid rgba(255, 240, 201, 0.7);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+#touch-controls.over .tc-joy { opacity: 0.7; }
+#touch-controls.over .tc-joy.held { opacity: 1; }
+#touch-controls .tc-dpad[hidden] { display: none; }
+
+/* No panels: the controls are buttons on the screen and nothing else. */
+#touch-controls .tc-panel { display: none !important; }
 
 #touch-controls[hidden] { display: none; }
 `;
@@ -406,7 +476,13 @@ class TouchControls {
       '<div class="tc-zone tc-left"><div class="tc-dpad">' +
       PAD.map(([cls, glyph]) => `<div class="tc-dkey ${cls}${cls.length > 1 ? ' diag' : ''}">${glyph}</div>`).join('') +
       '<div class="tc-dhub"></div>' +
-      '</div></div>' +
+      '</div><div class="tc-joy" hidden><div class="tc-knob"></div></div></div>' +
+      '<div class="tc-cross" hidden>' +
+      '<button type="button" class="tc-xbtn up" data-dir="up">&#9650;</button>' +
+      '<button type="button" class="tc-xbtn left" data-dir="left">&#9664;</button>' +
+      '<button type="button" class="tc-xbtn right" data-dir="right">&#9654;</button>' +
+      '<button type="button" class="tc-xbtn down-arm" data-dir="down">&#9660;</button>' +
+      '</div>' +
       '<div class="tc-zone tc-right"><div class="tc-pads"></div></div>' +
       '<button class="tc-corner" type="button" aria-label="Pause and settings">&#9881;</button>';
     document.body.appendChild(root);
@@ -418,8 +494,38 @@ class TouchControls {
     this.dpad = root.querySelector('.tc-dpad');
     this.pads = root.querySelector('.tc-pads');
     this.quit = root.querySelector('.tc-corner');
+    this.joyEl = root.querySelector('.tc-joy');
+    this.crossEl = root.querySelector('.tc-cross');
 
     this.wireDpad();
+    this.wireJoy();
+    // The cross's buttons send whatever the layout says each arm is.
+    for (const el of Array.from(root.querySelectorAll('.tc-xbtn')) as HTMLElement[]) {
+      const dir = el.dataset.dir as 'up' | 'left' | 'down' | 'right';
+      const press = (e: Event) => {
+        const k = this.layout.cross?.[dir];
+        if (!k) return;
+        el.classList.add('down');
+        el.dataset.sent = k;
+        this.down(k);
+        e.preventDefault();
+      };
+      const release = (e: Event) => {
+        el.classList.remove('down');
+        const k = el.dataset.sent as KeyName | undefined;
+        if (k) this.up(k);
+        delete el.dataset.sent;
+        e.preventDefault();
+      };
+      el.addEventListener('touchstart', press, { passive: false });
+      el.addEventListener('touchend', release, { passive: false });
+      el.addEventListener('touchcancel', release, { passive: false });
+      el.addEventListener('mousedown', press);
+      window.addEventListener('mouseup', (e) => {
+        if ((e as MouseEvent & { fromLook?: boolean }).fromLook) return;
+        if (el.classList.contains('down')) release(new Event('mouseup'));
+      });
+    }
     this.wireLook(this.lookPad);
     this.wireLook(this.lookZone);
     this.wireHold(this.quit as HTMLElement, ['ESC']);
@@ -441,6 +547,7 @@ class TouchControls {
         held: () => this.heldKeys(),
         layout: () => this.layout,
         labels: () => [...root.querySelectorAll('.tc-btn')].map((b) => b.textContent ?? ''),
+        joy: () => this.joy(),
         band: () => this.band,
         reserve: () => this.reserveHeight(),
         sides: () => this.reserveSides(),
@@ -464,8 +571,7 @@ class TouchControls {
     const sidesWere = this.reserveSides().left;
     this.layout = layout;
 
-    const zoneL = this.root.querySelector('.tc-left') as HTMLElement;
-    zoneL.style.visibility = layout.stick ? 'visible' : 'hidden';
+    this.syncStick();
     this.syncArrows();
 
     const buttons = (layout.buttons ?? []).slice(0, 5);
@@ -482,13 +588,21 @@ class TouchControls {
       this.wireHold(el, b.also ? [b.key, b.also] : [b.key]);
     }
 
+    const cross = this.crossEl as HTMLElement;
+    cross.hidden = !layout.cross;
+    for (const el of Array.from(cross.querySelectorAll('.tc-xbtn')) as HTMLElement[]) {
+      const tint = layout.cross?.tints?.[el.dataset.dir as 'up'];
+      if (tint) el.style.setProperty('--tint', tint);
+      else el.style.removeProperty('--tint');
+    }
+
     (this.quit as HTMLElement).hidden = layout.noQuit === true;
     (this.lookPad as HTMLElement).hidden = layout.look !== true;
     // A fresh look layout (a 3D room coming up) shows the hint again, briefly,
     // unless the player has already found the zone for themselves.
     this.resetHint(layout.look === true);
     // A layout with nothing on it gets no panels either: nothing to sit on.
-    this.root.classList.toggle('bare', !layout.stick && !buttons.length && layout.noQuit === true);
+    this.root.classList.toggle('bare', !layout.stick && !layout.cross && !buttons.length && layout.noQuit === true);
     this.relayout();
     // A layout with different columns needs a differently sized picture: ask
     // the scaler to fit it again.
@@ -520,6 +634,7 @@ class TouchControls {
 
   /** Everything up.  Safe at any moment, and the only way keys are released. */
   releaseAll(): void {
+    this.joyRelease();
     for (const k of [...this.held]) this.up(k);
     this.padTouches.clear();
     this.lookTouch = null;
@@ -544,35 +659,228 @@ class TouchControls {
    * drawn over the corners of the picture instead of under it.
    */
   reserveHeight(): number {
-    if (!this.root || !isTouch()) return 0;
-    if (window.innerHeight < window.innerWidth) return 0;
-    const safe = safeInsets().bottom;
-    return Math.round(Math.min(Math.max(window.innerHeight * 0.34, 190), window.innerHeight * 0.5)) + safe;
+    // Nothing: the picture is never made smaller for the controls.
+    return 0;
+  }
+
+  /** Nothing either: no columns either side, the picture is fitted to the screen. */
+  reserveSides(): { left: number; right: number } {
+    return { left: 0, right: 0 };
   }
 
   /**
-   * THE COLUMNS EITHER SIDE OF THE PICTURE, in landscape, in CSS pixels.
-   *
-   * Wide enough for whatever is in them -- the pad on the left, the buttons
-   * (two across) and the gear on the right -- plus a margin and the safe
-   * area, and the same width both sides so the picture stays centred.  A
-   * layout with nothing to press but the gear still keeps a narrow column,
-   * so the gear is never over the picture.  Zero in portrait.
+   * ---- GONE FOR A JUMPSCARE.  The whole overlay is hidden for `ms` -- the
+   * scare is the whole screen, and a gear or a RUN button over his face is a
+   * gear over his face -- and comes back by itself afterwards.  Keys held when
+   * it went are let go.
    */
-  reserveSides(): { left: number; right: number } {
-    if (!this.root || !isTouch() || window.innerHeight >= window.innerWidth) return { left: 0, right: 0 };
-    const safe = safeInsets();
-    const stick = this.stickPx();
-    const btn = this.btnPx();
-    const gap = this.gapPx();
-    const n = Math.min(5, (this.layout.buttons ?? []).length);
-    const primary = (this.layout.buttons ?? []).some((b) => b.primary);
-    const cols = Math.min(2, n);
-    const grid = cols ? cols * btn + (cols - 1) * gap + (primary ? btn * 0.25 : 0) : 0;
-    const left = this.layout.stick ? stick + 28 + safe.left : 0;
-    const right = Math.max(grid ? grid + 28 + safe.right : 0, this.layout.noQuit ? 0 : 44 + 20 + safe.right);
-    const side = Math.max(left, right);
-    return { left: side, right: side };
+  suspendFor(ms: number): void {
+    if (!this.root) return;
+    this.releaseAll();
+    this.root.hidden = true;
+    window.clearTimeout(this.suspendTimer);
+    this.suspendTimer = window.setTimeout(() => {
+      if (this.root) this.root.hidden = false;
+      this.relayout();
+    }, Math.max(0, ms));
+  }
+  private suspendTimer = 0;
+
+  /**
+   * How far, in GAME pixels, the corner clusters reach in over the bottom of
+   * the picture from its left and right edges -- zero where they sit in the
+   * black beside or under it.  For a scene that draws a line of text along
+   * the bottom of the picture, so it can keep it inside the clear middle.
+   */
+  overBottom(): { left: number; right: number } {
+    if (!this.root || this.root.hidden || this.stickHeld > 0) return { left: 0, right: 0 };
+    const canvas = document.querySelector('#game-root canvas') as HTMLCanvasElement | null;
+    if (!canvas) return { left: 0, right: 0 };
+    const pic = canvas.getBoundingClientRect();
+    const per = 320 / pic.width;
+    const reach = (el: HTMLElement | null, side: 'l' | 'r'): number => {
+      if (!el || el.offsetParent === null) return 0;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.top > pic.bottom || r.bottom < pic.top) return 0;
+      return Math.max(0, side === 'l' ? r.right - pic.left : pic.right - r.left) * per;
+    };
+    const zoneL = this.root.querySelector('.tc-left') as HTMLElement | null;
+    const showL = !!this.layout.stick && zoneL?.style.visibility !== 'hidden';
+    const leftEl = this.layout.joystick ? this.joyEl : this.dpad;
+    return { left: showL ? reach(leftEl, 'l') : 0, right: reach(this.pads, 'r') };
+  }
+
+  /**
+   * How far, in GAME pixels, the cross comes up over the bottom middle of the
+   * picture, and how wide it is there -- 0 when it is under the picture (in
+   * portrait) or not up at all.  A game with a cross keeps its people above it.
+   */
+  crossReach(): { h: number; w: number } {
+    const cross = this.crossEl;
+    if (!this.root || this.root.hidden || !cross || cross.hidden) return { h: 0, w: 0 };
+    const canvas = document.querySelector('#game-root canvas') as HTMLCanvasElement | null;
+    if (!canvas) return { h: 0, w: 0 };
+    const pic = canvas.getBoundingClientRect();
+    const r = cross.getBoundingClientRect();
+    const per = 320 / pic.width;
+    if (r.top >= pic.bottom) return { h: 0, w: 0 };
+    return { h: Math.ceil((pic.bottom - r.top) * per), w: Math.ceil(r.width * per) };
+  }
+
+  // ---- THE THUMBSTICK.
+  private joyEl: HTMLDivElement | null = null;
+  private crossEl: HTMLDivElement | null = null;
+  private joyTouch: number | null = null;
+  private joyVec = { x: 0, y: 0 };
+  private joyKeys = new Set<KeyName>();
+
+  /**
+   * How far the thumbstick is pushed, -1..1 on each axis (up is -y), with a
+   * small dead middle so a resting thumb is no input at all.  Zero when there
+   * is no stick up.
+   */
+  joy(): { x: number; y: number; active: boolean } {
+    const active = !!this.root && !this.root.hidden && this.layout.joystick === true && this.stickHeld === 0;
+    return active ? { ...this.joyVec, active } : { x: 0, y: 0, active };
+  }
+
+  private wireJoy(): void {
+    const el = this.joyEl as HTMLElement;
+    const knob = el.querySelector('.tc-knob') as HTMLElement;
+    const DEAD = 0.14;
+    const move = (cx: number, cy: number) => {
+      const r = el.getBoundingClientRect();
+      const rad = r.width / 2;
+      let dx = (cx - (r.left + rad)) / rad;
+      let dy = (cy - (r.top + rad)) / rad;
+      const len = Math.hypot(dx, dy);
+      if (len > 1) {
+        dx /= len;
+        dy /= len;
+      }
+      knob.style.transform = `translate(${dx * rad * 0.55}px, ${dy * rad * 0.55}px)`;
+      // the dead middle, then the rest of the throw rescaled to start from 0
+      const m = Math.hypot(dx, dy);
+      const k = m < DEAD ? 0 : (m - DEAD) / (1 - DEAD) / (m || 1);
+      this.joyVec = { x: dx * k, y: dy * k };
+      // and the keys, past half way, for anything that only reads keys
+      const want = new Set<KeyName>();
+      if (this.joyVec.x < -0.5) want.add('A');
+      if (this.joyVec.x > 0.5) want.add('D');
+      if (this.joyVec.y < -0.5) want.add('W');
+      if (this.joyVec.y > 0.5) want.add('S');
+      for (const k2 of [...this.joyKeys]) {
+        if (want.has(k2)) continue;
+        this.joyKeys.delete(k2);
+        this.up(k2);
+      }
+      for (const k2 of want) {
+        if (this.joyKeys.has(k2)) continue;
+        this.joyKeys.add(k2);
+        this.down(k2);
+      }
+    };
+    el.addEventListener(
+      'touchstart',
+      (e) => {
+        const t = e.changedTouches[0];
+        if (this.joyTouch === null && t) {
+          this.joyTouch = t.identifier;
+          el.classList.add('held');
+          move(t.clientX, t.clientY);
+        }
+        e.preventDefault();
+      },
+      { passive: false },
+    );
+    el.addEventListener(
+      'touchmove',
+      (e) => {
+        for (const t of Array.from(e.changedTouches)) if (t.identifier === this.joyTouch) move(t.clientX, t.clientY);
+        e.preventDefault();
+      },
+      { passive: false },
+    );
+    const end = (e: TouchEvent) => {
+      for (const t of Array.from(e.changedTouches)) if (t.identifier === this.joyTouch) this.joyRelease();
+      e.preventDefault();
+    };
+    el.addEventListener('touchend', end, { passive: false });
+    el.addEventListener('touchcancel', end, { passive: false });
+    // and a mouse, for `?touch=1` on a desktop
+    let mouse = false;
+    el.addEventListener('mousedown', (e) => {
+      mouse = true;
+      el.classList.add('held');
+      move(e.clientX, e.clientY);
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (mouse) move(e.clientX, e.clientY);
+    });
+    window.addEventListener('mouseup', () => {
+      if (mouse) this.joyRelease();
+      mouse = false;
+    });
+  }
+
+  private joyRelease(): void {
+    this.joyTouch = null;
+    this.joyVec = { x: 0, y: 0 };
+    for (const k of [...this.joyKeys]) this.up(k);
+    this.joyKeys.clear();
+    const el = this.joyEl;
+    if (!el) return;
+    el.classList.remove('held');
+    (el.querySelector('.tc-knob') as HTMLElement).style.transform = '';
+  }
+
+  /**
+   * While something is being SAID -- a dialogue box or a talk panel up -- the
+   * controls go, all of them: the pad, the buttons, the cross.  Nobody walks
+   * or presses anything mid-sentence (a tap on the picture moves the talk
+   * on), and they come back when it is over.  Counted, so two panels and one
+   * close cannot bring them back early.  The gear stays.
+   */
+  /** Whether talk has the controls put away right now. */
+  talking(): boolean {
+    return this.stickHeld > 0;
+  }
+
+  /** One press of a key, as if a button had been tapped: for a tap on a talk panel. */
+  tap(k: KeyName): void {
+    this.down(k);
+    window.setTimeout(() => this.up(k), 60);
+  }
+
+  holdStick(): void {
+    this.stickHeld++;
+    this.syncStick();
+  }
+  releaseStick(): void {
+    this.stickHeld = Math.max(0, this.stickHeld - 1);
+    this.syncStick();
+  }
+  private stickHeld = 0;
+  private syncStick(): void {
+    if (!this.root) return;
+    const zoneL = this.root.querySelector('.tc-left') as HTMLElement;
+    zoneL.style.visibility = this.layout.stick && this.stickHeld === 0 ? 'visible' : 'hidden';
+    const zoneR = this.root.querySelector('.tc-right') as HTMLElement;
+    zoneR.style.visibility = this.stickHeld === 0 ? 'visible' : 'hidden';
+    if (this.crossEl) this.crossEl.style.visibility = this.stickHeld === 0 ? 'visible' : 'hidden';
+    (this.dpad as HTMLElement).hidden = this.layout.joystick === true;
+    (this.joyEl as HTMLElement).hidden = this.layout.joystick !== true;
+    if (this.stickHeld || !this.layout.joystick) this.joyRelease();
+    if (this.stickHeld) {
+      for (const k of [...this.held]) this.up(k);
+      this.padTouches.clear();
+      this.root.querySelectorAll('.down').forEach((el) => el.classList.remove('down'));
+    }
+  }
+
+  /** Whether the overlay is up right now (it is not, during a jumpscare). */
+  isShown(): boolean {
+    return !!this.root && !this.root.hidden;
   }
 
   /** How big the arrow pad is right now, which everything else is sized off. */
@@ -584,9 +892,11 @@ class TouchControls {
     // Portrait is narrow: the pad and the buttons share one width, so the pad
     // takes 40% of it -- big, but leaving its half of the band a margin on
     // both sides and the buttons enough of theirs to stay off the edge.
+    // (landscape: smaller, because there it sits over the corner of the
+    // picture rather than in the black under it)
     return portrait
       ? Math.round(Math.min(200, Math.max(124, short * 0.4)))
-      : Math.round(Math.min(144, Math.max(112, short * 0.34)));
+      : Math.round(Math.min(124, Math.max(96, short * 0.28)));
   }
 
   /** A button: half the pad across, never under the size a thumb can hit blind. */
@@ -611,31 +921,106 @@ class TouchControls {
     const portrait = window.innerHeight >= window.innerWidth;
     this.root.classList.toggle('overlay', !portrait);
 
-    // The pad sets the scale of everything, and the band is whatever holds
-    // it — never the other way round, or the pad hangs off the screen.
     const stick = this.stickPx();
+    const btn = this.btnPx();
+    const gap = this.gapPx();
     const safe = safeInsets();
-    const band = portrait ? Math.max(this.band, this.reserveHeight(), stick + 24 + safe.bottom) : 0;
-    this.root.style.setProperty('--tc-band', `${band}px`);
-    this.root.style.setProperty('--tc-side', `${this.reserveSides().left}px`);
+    const canvas = document.querySelector('#game-root canvas') as HTMLCanvasElement | null;
+    const pic = canvas?.getBoundingClientRect() ?? new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+    // The black the picture leaves: under it in portrait, either side of it
+    // in landscape.
+    const under = Math.max(0, window.innerHeight - pic.bottom);
+    const barL = Math.max(0, pic.left);
+    const barR = Math.max(0, window.innerWidth - pic.right);
+    this.root.style.setProperty('--tc-band', `${Math.round(under)}px`);
     this.root.style.setProperty('--tc-stick', `${stick}px`);
-    this.root.style.setProperty('--tc-btn', `${this.btnPx()}px`);
+    // The thumbstick is compact: three quarters of the pad it replaces.
+    this.root.style.setProperty('--tc-joy', `${Math.round(stick * 0.78)}px`);
+    this.root.style.setProperty('--tc-btn', `${btn}px`);
     this.root.style.setProperty('--tc-font', `${Math.round(Math.min(17, Math.max(11, stick * 0.09)))}px`);
-    this.root.style.setProperty('--tc-gap', `${this.gapPx()}px`);
+    this.root.style.setProperty('--tc-gap', `${gap}px`);
     this.root.style.setProperty('--tc-safe-t', `${safe.top}px`);
     this.root.style.setProperty('--tc-safe-r', `${safe.right}px`);
     this.root.style.setProperty('--tc-safe-b', `${safe.bottom}px`);
     this.root.style.setProperty('--tc-safe-l', `${safe.left}px`);
 
-    // The look pad covers exactly the picture, never the controls under it.
-    const canvas = document.querySelector('#game-root canvas') as HTMLCanvasElement | null;
+    // ---- WHERE THE CLUSTERS GO.  Bottom corners, in the black if the black
+    // is big enough to hold them, over the picture's corners if it is not.
+    const margin = 14;
+    const n = Math.min(5, (this.layout.buttons ?? []).length);
+    // Landscape: up to three buttons in ONE column hugging the right edge, so
+    // the cluster is narrow and stays off a subtitle or a score along the
+    // bottom of the picture; more than three go two across.
+    const cols = portrait ? Math.min(n >= 5 ? 3 : 2, n) : n <= 3 ? Math.min(1, n) : 2;
+    (this.pads as HTMLElement).style.gridTemplateColumns = cols ? `repeat(${cols}, auto)` : '';
+    const primary = (this.layout.buttons ?? []).some((b) => b.primary);
+    const padsW = cols ? cols * btn + (cols - 1) * gap + (primary ? btn * 0.25 : 0) : 0;
+    const leftW = this.layout.joystick ? Math.round(stick * 0.78) : stick;
+    const left = barL >= leftW + margin * 2 ? Math.round((barL - leftW) / 2) : margin + safe.left;
+    const right = barR >= padsW + margin * 2 ? Math.round((barR - padsW) / 2) : margin + safe.right;
+    const bottom = portrait
+      ? safe.bottom + Math.round(Math.min(window.innerHeight * 0.07, 60, Math.max(margin, (under - stick) * 0.35)))
+      : safe.bottom + margin;
+    this.root.style.setProperty('--tc-left', `${left}px`);
+    this.root.style.setProperty('--tc-right', `${right}px`);
+    this.root.style.setProperty('--tc-bottom', `${bottom}px`);
+    // Over the picture means see-through (see STYLE): in landscape whenever
+    // a cluster is not in the black, and in portrait if the picture runs down
+    // into the controls (a very short, wide-ish phone).
+    const overPic = portrait ? under < stick + bottom + 8 : barL < leftW + margin * 2 || barR < padsW + margin * 2;
+    this.root.classList.toggle('over', overPic);
+
+    // ---- THE CROSS.  Big, in the middle.  Portrait: as big as the black
+    // under the picture allows (below the gear), centred in it.  Landscape:
+    // over the bottom middle of the picture, as small as still hits blind.
+    if (this.layout.cross) {
+      let cell: number;
+      let crossB: number;
+      const xgap = portrait ? 10 : 6;
+      if (portrait) {
+        const room = under - 64 - safe.bottom - 12;
+        cell = Math.round(Math.max(52, Math.min(96, (room - 2 * xgap) / 3, (window.innerWidth * 0.78 - 2 * xgap) / 3)));
+        const h = cell * 3 + xgap * 2;
+        crossB = safe.bottom + Math.max(12, Math.round((room - h) / 2) + 12);
+      } else {
+        cell = Math.round(Math.max(44, Math.min(56, pic.height * 0.13)));
+        crossB = safe.bottom + 8;
+      }
+      this.root.style.setProperty('--tc-cell', `${cell}px`);
+      this.root.style.setProperty('--tc-cross-gap', `${xgap}px`);
+      this.root.style.setProperty('--tc-cross-b', `${crossB}px`);
+      if (!portrait) this.root.classList.add('over');
+    }
+
+    // ---- THE GEAR.  Never over the game's own QUIT (top right of the
+    // picture).  Portrait: the top right of the black under the picture.
+    // Landscape: the top of the right-hand black if there is any; if not,
+    // the right edge just under the picture's title bar.
+    const quit = this.quit as HTMLElement;
+    const zoom = pic.width / 320;
+    let gearTop: number;
+    let gearRight: number;
+    if (portrait) {
+      gearTop = Math.round(pic.bottom + 10);
+      gearRight = margin + safe.right;
+    } else if (barR >= 56) {
+      gearTop = Math.max(8, safe.top + 8);
+      gearRight = Math.round((barR - 44) / 2);
+    } else {
+      gearTop = Math.round(pic.top + 20 * zoom + 6);
+      gearRight = Math.max(8, safe.right + 8);
+    }
+    quit.style.top = `${gearTop}px`;
+    quit.style.right = `${gearRight}px`;
+    quit.style.bottom = 'auto';
+
+    // The look pad covers exactly the picture.
     const pad = this.lookPad as HTMLElement;
     if (canvas) {
-      const r = canvas.getBoundingClientRect();
-      pad.style.left = `${Math.round(r.left)}px`;
-      pad.style.top = `${Math.round(r.top)}px`;
-      pad.style.width = `${Math.round(r.width)}px`;
-      pad.style.height = `${Math.round(r.height)}px`;
+      pad.style.left = `${Math.round(pic.left)}px`;
+      pad.style.top = `${Math.round(pic.top)}px`;
+      pad.style.width = `${Math.round(pic.width)}px`;
+      pad.style.height = `${Math.round(pic.height)}px`;
     }
     this.placeLookZone(portrait, canvas);
   }

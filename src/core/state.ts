@@ -109,6 +109,32 @@ export interface GameState {
    */
   staffAskedFroggy: boolean;
   dealerAskedFroggy: boolean;
+  /**
+   * Seconds this profile has been played, with the game open and in front of
+   * the player.  It belongs to the profile rather than the run: resetting the
+   * run does not give anyone their afternoon back.
+   */
+  playSeconds: number;
+  /**
+   * ---- THE POCKETS.  Three slots of things carried in the hand -- crane
+   * prizes, and the camera once it is bought -- as item ids (see
+   * `game/inventory.ts`).  The counter's prizes go in the bag as they always
+   * did (`prizesOwned`); these are what fills a hand.
+   */
+  items: string[];
+  /**
+   * ---- WHAT TIME IT IS OUTSIDE, after the night in the arcade.
+   *
+   * 'day' until the job is nearly done; 'evening' once the player has more
+   * than six hundred tokens and steps out after surviving him; 'midnight'
+   * once the man has their prizes and there is money for a room -- the
+   * arcade shut, the man gone, and the road to the hotel the only way on.
+   */
+  timeOfDay: 'day' | 'evening' | 'midnight';
+  /** Through the hotel's front doors, which is the only safe place there is. */
+  reachedHotel: boolean;
+  /** Paid for a room and given a key. */
+  checkedIn: boolean;
   settings: Settings;
 }
 
@@ -141,6 +167,8 @@ export interface SlotSummary {
   seenIntro: boolean;
   prizes: number;
   played: number;
+  /** Seconds played on this profile. */
+  playSeconds: number;
 }
 
 interface SlotIndex {
@@ -234,6 +262,11 @@ function defaultState(): GameState {
     sawApparition: false,
     staffAskedFroggy: false,
     dealerAskedFroggy: false,
+    playSeconds: 0,
+    items: [],
+    timeOfDay: 'day',
+    reachedHotel: false,
+    checkedIn: false,
     settings: { master: 80, music: 70, sfx: 85, moveStyle: 'stick' },
   };
 }
@@ -321,6 +354,9 @@ class Store {
     // A save from before the shelf restocked has no wave on it; it is on the
     // first one by definition.
     fresh.prizeWave = Math.max(0, Math.floor(run.prizeWave ?? 0));
+    fresh.playSeconds = Math.max(0, Number(run.playSeconds) || 0);
+    fresh.items = Array.isArray(run.items) ? run.items.filter((i) => typeof i === 'string').slice(0, 3) : [];
+    fresh.timeOfDay = run.timeOfDay === 'evening' || run.timeOfDay === 'midnight' ? run.timeOfDay : 'day';
     this.state = fresh;
     // A saved unlimited run comes back unlimited, whatever the file says.
     if (this.isAdmin()) this.state.tokens = ADMIN_TOKENS;
@@ -355,6 +391,8 @@ class Store {
       seenIntro: run?.seenIntro ?? false,
       prizes: Array.isArray(run?.prizesOwned) ? run.prizesOwned.length : 0,
       played,
+      // the one in play is ahead of what is on disk by up to a flush
+      playSeconds: id === this.index.active ? this.state.playSeconds : Math.max(0, Number(run?.playSeconds) || 0),
     };
   }
 
@@ -459,6 +497,22 @@ class Store {
     return true;
   }
 
+  /**
+   * Time played, a second or so at a time.  Quiet: nothing on screen shows it
+   * live, so it does not wake every listener once a second; it is written out
+   * every so often, and with everything else on the next flush.
+   */
+  addPlayTime(seconds: number): void {
+    if (!this.index.active || !Number.isFinite(seconds) || seconds <= 0) return;
+    this.state.playSeconds += seconds;
+    this.sincePlayFlush += seconds;
+    if (this.sincePlayFlush >= 15) {
+      this.sincePlayFlush = 0;
+      this.flush();
+    }
+  }
+  private sincePlayFlush = 0;
+
   /** Ledger-only.  PRD TK-5. */
   setTokens(key: typeof LEDGER_KEY, value: number): void {
     if (key !== LEDGER_KEY) {
@@ -536,8 +590,10 @@ class Store {
   /** PRD §7.17 / AC-9: wipe the run, keep the prefs — and keep the profile. */
   resetRun(): void {
     const settings = { ...this.state.settings };
+    const playSeconds = this.state.playSeconds;
     this.state = defaultState();
     this.state.settings = settings;
+    this.state.playSeconds = playSeconds;
     this.flush();
     this.emit();
   }

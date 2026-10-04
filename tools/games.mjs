@@ -735,14 +735,38 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
   );
   if (!clean) failures++;
 
-  // ---- WATER NEVER SITS ON A HOLE.  A puddle is 22px across and a hole 13;
-  // dealt independently they used to overlap and the hole vanished under
-  // the water.  Three thousand fields, and the nearest any puddle comes to a
-  // hole on its own lane has to leave clear grass between them.
+  // ---- NO PUDDLE.  It was taken out of the race: no lane has water on it,
+  // in the field on screen or in three thousand dealt fresh.
+  const wet = await page.evaluate(() => window.__race.furniture().reduce((n, l) => n + l.puddles.length, 0));
   const gap = await page.evaluate(() => window.__race.waterGap(3000));
-  const dry = gap >= 24;
-  console.log(`${dry ? 'PASS' : 'FAIL'}  frog race: the water never lies on a hole  — closest ${gap.toFixed(1)}px apart in 3000 fields`);
+  const dry = wet === 0 && !Number.isFinite(gap);
+  console.log(`${dry ? 'PASS' : 'FAIL'}  frog race: there is no puddle on the track  — ${wet} on screen, ${Number.isFinite(gap) ? 'some' : 'none'} in 3000 fields`);
   if (!dry) failures++;
+
+  // ---- ONLY THE NUMBERS BACK A FROG.  A tap in the middle of a lane -- on
+  // the grass, or on the frog -- must not pick it; a tap on the lane's number
+  // does.  (The lane geometry comes from the cabinet's own row plates.)
+  const at = await page.evaluate(() => {
+    const c = document.querySelector('canvas').getBoundingClientRect();
+    const rows = window.__race.rows ? window.__race.rows() : null;
+    return { c: { x: c.left, y: c.top, w: c.width, h: c.height }, rows };
+  });
+  const toPx = (gx, gy) => [at.c.x + (gx / 320) * at.c.w, at.c.y + (gy / 180) * at.c.h];
+  const row = at.rows?.[1];
+  let picks = { lane: null, number: null };
+  if (row) {
+    const pick0 = (await page.evaluate(() => window.__race.state().pick));
+    await page.mouse.click(...toPx(160, row.y + row.h / 2));
+    await sleep(200);
+    const afterLane = await page.evaluate(() => window.__race.state().pick);
+    await page.mouse.click(...toPx(row.x + row.w / 2, row.y + row.h / 2));
+    await sleep(200);
+    const afterNumber = await page.evaluate(() => window.__race.state().pick);
+    picks = { lane: afterLane === pick0, number: afterNumber === 1 };
+  }
+  const numbersOnly = picks.lane === true && picks.number === true;
+  console.log(`${numbersOnly ? 'PASS' : 'FAIL'}  frog race: only the numbered buttons back a frog  — lane tap ${picks.lane ? 'ignored' : 'PICKED'}, number tap ${picks.number ? 'picked' : 'did nothing'}`);
+  if (!numbersOnly) failures++;
 
   // ---- THE CARD IS A RACE, NOT A FAIRGROUND.  No skates or rockets, no
   // butterfly, no balloon; and the final stretch deals big moments of its
@@ -2407,9 +2431,10 @@ for (const g of [
 }
 
 // ---- FROGGY'S OUTCOMES, IN THEIR ORDER.  A natural on two cards is settled
-// on the deal for whichever side holds it at twice the win or loss; five
-// cards that have not bust win outright (the charlie), even on a total he
-// could match; five cards on exactly 21 is worth three times, his as well.
+// on the deal for whichever side holds it at twice the win or loss; 21 on
+// exactly three cards wins (his beats you); five cards that have not bust win
+// outright (the charlie), even on a total he could match; five cards on
+// exactly 21 LOSE, his as well.
 // The shoe is stacked for each hand -- waiting for a shuffle to deal one is a
 // lottery, not a test -- and the tokens are read off the ledger.
 {
@@ -2449,12 +2474,14 @@ for (const g of [
       charlie: await hand(['2♣', '3♥', '10♠', '7♦', '4♦', '5♠', '6♣'], hitTo(3)),
       five21: await hand(['2♣', '3♥', '10♠', '7♦', '4♦', '5♠', '7♣'], hitTo(3)),
       his21: await hand(['K♣', 'Q♥', '2♠', '3♦', '4♦', '5♠', '7♣'], stand),
+      three21: await hand(['K♥', '5♠', '9♦', 'Q♣', '6♥'], hitTo(1)),
+      his3: await hand(['K♣', 'Q♥', '9♠', '5♦', '7♣'], stand),
     };
-    const want = { mine: 2, his: -2, both: 0, charlie: 1, five21: 3, his21: -3 };
+    const want = { mine: 2, his: -2, both: 0, charlie: 1, five21: -1, his21: 1, three21: 1, his3: -1 };
     const bad = Object.entries(want).filter(([k, v]) => r[k].net !== v);
     const ok = bad.length === 0;
     console.log(
-      `${ok ? 'PASS' : 'FAIL'}  blackjack: naturals 2x, five-card charlie wins, five-card 21 is 3x either side  — ` +
+      `${ok ? 'PASS' : 'FAIL'}  froggy 21: naturals 2x, three-card 21 wins, five-card 21 loses (either side), charlie wins  — ` +
         Object.keys(want).map((k) => `${k} ${r[k].net >= 0 ? '+' : ''}${r[k].net} (${r[k].status})`).join('; '),
     );
     if (!ok) failures++;
@@ -3975,7 +4002,7 @@ for (const g of [
   }
 }
 
-// SHIFT across the arcade floor is 1.4x the walk.  Measured rather than
+// SHIFT across the arcade floor is 1.5x the walk.  Measured rather than
 // trusted: the multiplier lives in one constant and the walk speed in another,
 // and a change to either is a change to how the whole building feels.
 {
@@ -4014,9 +4041,9 @@ for (const g of [
   const ran = await runFor(700, true);
 
   const ratio = walked > 0 ? ran / walked : 0;
-  const right = ratio > 1.28 && ratio < 1.52;
+  const right = ratio > 1.38 && ratio < 1.62;
   console.log(
-    `${right ? 'PASS' : 'FAIL'}  the arcade run is 1.4x the walk  — ${walked.toFixed(0)}px vs ${ran.toFixed(0)}px (x${ratio.toFixed(2)})`,
+    `${right ? 'PASS' : 'FAIL'}  the arcade run is 1.5x the walk  — ${walked.toFixed(0)}px vs ${ran.toFixed(0)}px (x${ratio.toFixed(2)})`,
   );
   if (!right) failures++;
   await page.close();
@@ -4708,6 +4735,111 @@ for (const g of [
 
   if (errs.length) {
     console.log(`FAIL  mash rig: ${errs.slice(0, 2).join(' | ')}`);
+    failures++;
+  }
+  await page.close();
+}
+
+// ------------------------------------------------ the fourth room's games
+//
+// Froggopoly's rules run a whole game to the end, AI against AI, a few
+// hundred times: nobody stalls, money is never negative, bankruptcy and the
+// thirty-round limit both end games, and winners are decided on what they
+// own.  Then the stake at the table: taken once at the start, a draw hands it
+// back, quitting keeps it.  And the oddity crane's capsule odds.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(e.message));
+  await page.goto(`${URL}/?intro=1&tokens=200&scene=ArcadeLounge`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  const sim = await page.evaluate(async () => {
+    const R = await import('/src/game/froggopoly.ts');
+    let bankrupts = 0, limits = 0, draws = 0, stalls = 0, negative = 0, games = 300;
+    for (let n = 0; n < games; n++) {
+      const g = R.newGame();
+      let guard = 0;
+      while (!g.over && guard++ < 2000) {
+        const who = g.turn;
+        const p = g.players[who];
+        const [a, b] = R.rollDice();
+        if (p.swamp > 0) {
+          if (a === b) p.swamp = 0; else { p.swamp -= 1; if (p.swamp > 0) { R.endTurn(g); continue; } }
+        }
+        R.moveBy(g, who, a + b);
+        const i = p.pos;
+        const s = R.BOARD[i];
+        const pay = (amt, to) => {
+          if (p.cash < amt) R.aiRaise(g, who, amt);
+          if (p.cash < amt) { R.bankrupt(g, who); return; }
+          p.cash -= amt; if (to !== null) g.players[to].cash += amt;
+        };
+        if ((s.kind === 'prop' || s.kind === 'util') && g.owner[i] === null && R.aiWantsToBuy(g, who, i)) { p.cash -= s.price; g.owner[i] = who; }
+        else if ((s.kind === 'prop' || s.kind === 'util') && g.owner[i] !== null && g.owner[i] !== who) pay(R.rentOf(g, i, a + b), g.owner[i]);
+        else if (s.kind === 'tax') pay(s.tax, null);
+        else if (s.kind === 'goswamp') R.toSwamp(g, who);
+        if (g.over) break;
+        R.aiBuild(g, who);
+        if (g.players.some((q) => q.cash < 0)) negative++;
+        R.endTurn(g);
+      }
+      if (!g.over) stalls++;
+      else if (g.players.some((q) => q.bankrupt)) bankrupts++;
+      else { limits++; if (g.winner === 'draw') draws++; }
+    }
+    return { games, bankrupts, limits, draws, stalls, negative };
+  });
+  const simOk = sim.stalls === 0 && sim.negative === 0 && sim.bankrupts > 0 && sim.limits > 0;
+  console.log(`${simOk ? 'PASS' : 'FAIL'}  froggopoly: whole games finish, by bankruptcy or the round limit  — ${JSON.stringify(sim)}`);
+  if (!simOk) failures++;
+
+  await page.goto(`${URL}/?intro=1&tokens=200&scene=Froggopoly`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  const bal = () => page.evaluate(() => window.__froggy.state().tokens);
+  const b0 = await bal();
+  await page.evaluate(() => window.__froggopoly.start(30));
+  await sleep(200);
+  const b1 = await bal();
+  await page.evaluate(() => window.__froggopoly.start(30));
+  const b1b = await bal();
+  await page.evaluate(() => {
+    const st = window.__froggopoly.state();
+    void st;
+    window.__froggopoly.finish();
+  });
+  await sleep(300);
+  const fin = await page.evaluate(() => window.__froggopoly.state());
+  const b2 = await bal();
+  const want = fin.g.winner === 0 ? b1 + 60 : fin.g.winner === 'draw' ? b1 + 30 : b1;
+  const stakeOk = b1 === b0 - 30 && b1b === b1 && b2 === want && fin.settled;
+  console.log(`${stakeOk ? 'PASS' : 'FAIL'}  froggopoly: the stake is taken once and settled once  — ${b0} -> ${b1} (again ${b1b}) -> ${b2} on ${fin.g.winner}`);
+  if (!stakeOk) failures++;
+
+  await page.goto(`${URL}/?intro=1&tokens=200&scene=Froggopoly`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  const q0 = await bal();
+  await page.evaluate(() => window.__froggopoly.start(10));
+  await page.evaluate(() => window.__froggopoly.quit());
+  await sleep(1200);
+  const q1 = await bal();
+  const quitOk = q1 === q0 - 10;
+  console.log(`${quitOk ? 'PASS' : 'FAIL'}  froggopoly: walking away is a loss  — ${q0} -> ${q1}`);
+  if (!quitOk) failures++;
+
+  const odds = await page.evaluate(async () => {
+    const C = await import('/src/scenes2d/CraneGame.ts');
+    const n = 200000;
+    const c = { tokens: 0, golden: 0, oddity: 0, nothing: 0 };
+    for (let i = 0; i < n; i++) c[C.rollCapsule()]++;
+    return { tokens: c.tokens / n, golden: c.golden / n, oddity: c.oddity / n, nothing: c.nothing / n };
+  });
+  const oddsOk = Math.abs(odds.tokens - 0.05) < 0.004 && Math.abs(odds.golden - 0.01) < 0.002 && odds.oddity > 0 && odds.nothing > 0.85;
+  console.log(`${oddsOk ? 'PASS' : 'FAIL'}  oddity crane: 5% ten tokens, 1% golden ticket, rare oddities, mostly empty  — ${JSON.stringify(odds)}`);
+  if (!oddsOk) failures++;
+
+  if (errs.length) {
+    console.log(`FAIL  fourth room: ${errs.slice(0, 2).join(' | ')}`);
     failures++;
   }
   await page.close();

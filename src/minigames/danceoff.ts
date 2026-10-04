@@ -55,10 +55,11 @@
  */
 
 import Phaser from 'phaser';
+import { touchControls } from '../ui/touchControls';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { centerText, text } from '../core/ui';
-import { GAME_W } from '../render/pixelScaler';
+import { GAME_W, GAME_H } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 
 const ID = 'danceoff' as const;
@@ -176,6 +177,13 @@ let misses = 0;
 let wrongs = 0;
 let receptors: Phaser.GameObjects.Rectangle[] = [];
 let dancers: { you: Phaser.GameObjects.Container | null; rival: Phaser.GameObjects.Container | null } = { you: null, rival: null };
+/** The stage under them, which goes up with them. */
+let stageGlow: Phaser.GameObjects.Ellipse | null = null;
+/** How far the dancers have stepped up out of the phone's cross. */
+let lift = 0;
+let clearCheckMs = 0;
+/** Where the dancers' feet are, with nothing in the way. */
+const FEET_Y = 148;
 let hud: {
   you: Phaser.GameObjects.BitmapText;
   rival: Phaser.GameObjects.BitmapText;
@@ -252,14 +260,18 @@ export const danceOff: MinigameModule = {
     ],
   },
   payoutNote: 'WIN: 20/35/50',
-  // The four arrows ARE the game, so they are four buttons and not a stick.
+  // The four arrows ARE the game, so they are one big cross of four separate
+  // buttons in the middle, each the colour of its lane -- not a stick, and not
+  // four small buttons in a corner.  In landscape it comes up over the bottom
+  // of the stage, and the dancers step up out of its way (see `keepClear`).
   touch: {
-    buttons: [
-      { label: '\u25c0', key: 'A' },
-      { label: '\u25bc', key: 'S' },
-      { label: '\u25b2', key: 'W' },
-      { label: '\u25b6', key: 'D' },
-    ],
+    cross: {
+      up: 'W',
+      left: 'A',
+      down: 'S',
+      right: 'D',
+      tints: { left: '#ff4fa3', down: '#7fe0d8', up: '#9be08a', right: '#ff8a3a' },
+    },
   },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
@@ -285,7 +297,9 @@ export const danceOff: MinigameModule = {
     // the hall: a dark room, a lit floor, a speaker stack either side
     scene.add.rectangle(0, 18, GAME_W, 162, 0x1d1030).setOrigin(0, 0);
     scene.add.rectangle(0, 150, GAME_W, 30, 0x140a24).setOrigin(0, 0);
-    scene.add.ellipse(GAME_W / 2, 150, 150, 40, 0x3a2060).setAlpha(0.6);
+    stageGlow = scene.add.ellipse(GAME_W / 2, 150, 150, 40, 0x3a2060).setAlpha(0.6);
+    lift = 0;
+    clearCheckMs = 0;
     for (const sx of [8, GAME_W - 8]) {
       scene.add.rectangle(sx, 96, 14, 54, PALETTE.ink).setOrigin(0.5, 0).setStrokeStyle(1, PALETTE.slate);
       scene.add.circle(sx, 110, 5, PALETTE.slate);
@@ -307,8 +321,8 @@ export const danceOff: MinigameModule = {
     }
 
     dancers = {
-      rival: makeRival(scene, 138, 148),
-      you: makeDancer(scene, 182, 148),
+      rival: makeRival(scene, 138, FEET_Y),
+      you: makeDancer(scene, 182, FEET_Y),
     };
 
     hud = {
@@ -357,6 +371,8 @@ export const danceOff: MinigameModule = {
           over,
           round,
           wins: { ...wins },
+          /** Where the dancers' feet are now (up, when a phone's cross is under them). */
+          feet: FEET_Y - lift,
           /** What the rungs climbed so far are worth, in tokens. */
           banked: PRIZE[Math.min(wins.you, PRIZE.length - 1)],
           prize: [...PRIZE],
@@ -435,6 +451,11 @@ export const danceOff: MinigameModule = {
 
   update(_t: number, delta: number) {
     if (over) return;
+    clearCheckMs -= delta;
+    if (clearCheckMs <= 0) {
+      clearCheckMs = 300;
+      keepClear();
+    }
 
     // Between rounds: the card is up, nothing is on the mats, and no key
     // pressed at it reaches the next round's chart.
@@ -511,6 +532,7 @@ export const danceOff: MinigameModule = {
     banners = [];
     receptors = [];
     dancers = { you: null, rival: null };
+    stageGlow = null;
     hud = null;
     keys = [];
     apiRef = null;
@@ -562,6 +584,41 @@ function clear(n: Note): void {
 }
 
 /** A dancer leans the way the arrow pointed. */
+/**
+ * On a phone held sideways the cross sits over the bottom middle of the
+ * stage, which is where the dancers are: they step up out of its way, the
+ * stage glow and the combo and judge words with them, so nothing the player
+ * is watching is under a thumb.  Back down if the cross goes.
+ */
+function keepClear(): void {
+  const reach = touchControls.crossReach().h;
+  const want = reach > 0 ? Math.min(64, Math.max(0, FEET_Y - (GAME_H - reach - 3))) : 0;
+  if (want === lift || !sceneRef) return;
+  const d = want - lift;
+  lift = want;
+  for (const who of [dancers.you, dancers.rival]) {
+    if (!who) continue;
+    sceneRef.tweens.killTweensOf(who);
+    who.setY(FEET_Y - lift);
+  }
+  stageGlow?.setY(150 - lift);
+  if (hud) {
+    hud.combo.setY(hud.combo.y - d);
+    hud.judge.setY(hud.judge.y - d);
+  }
+  // The round's title: over the dancers' heads when they are where they
+  // belong, just under the clock when they have stepped up.
+  const [by, sy] = BANNER_Y[lift ? 1 : 0];
+  (banners[0] as Phaser.GameObjects.BitmapText | undefined)?.setY(by);
+  (banners[1] as Phaser.GameObjects.BitmapText | undefined)?.setY(sy);
+}
+
+/** The round title and its line under it: [title, line] for feet down and feet up. */
+const BANNER_Y: Array<[number, number]> = [
+  [88, 106],
+  [44, 58],
+];
+
 function bob(who: Phaser.GameObjects.Container | null, lane: number): void {
   if (!who || !sceneRef) return;
   const dx = lane === 0 ? -3 : lane === 3 ? 3 : 0;
@@ -609,11 +666,11 @@ function startRound(i: number): void {
   audio.setScene({ music: cfg.music });
   refreshHud();
 
-  const banner = centerText(sceneRef, GAME_W / 2, 88, cfg.label, PALETTE.gold, 16).setDepth(50);
+  const banner = centerText(sceneRef, GAME_W / 2, BANNER_Y[lift ? 1 : 0][0], cfg.label, PALETTE.gold, 16).setDepth(50);
   const sub = centerText(
     sceneRef,
     GAME_W / 2,
-    106,
+    BANNER_Y[lift ? 1 : 0][1],
     // The first banner has to say what the round is FOR, because the ladder is
     // the whole game and a player who missed the card would otherwise think
     // they were three rounds from being paid rather than one.

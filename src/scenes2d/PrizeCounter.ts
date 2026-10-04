@@ -24,6 +24,7 @@ import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { ledger } from '../core/ledger';
 import { shelfStock, type PrizeDef } from '../game/content';
+import { CAMERA_ITEM, FULL_LINE, pocketsFull } from '../game/inventory';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 
@@ -36,6 +37,8 @@ const GRID_Y = 34;
 
 export class PrizeCounter extends Phaser.Scene {
   private redrawing = false;
+
+  private notice: Phaser.GameObjects.BitmapText | null = null;
 
   constructor() {
     super('PrizeCounter');
@@ -128,6 +131,13 @@ export class PrizeCounter extends Phaser.Scene {
   /** PRD PC-2/PC-3: redemption does not end the game.  The player keeps playing. */
   private redeem(p: PrizeDef): void {
     if (store.get().prizesOwned.includes(p.id)) return;
+    // The camera is carried in the hand, so it needs a free pocket.
+    if (p.id === CAMERA_ITEM.id && pocketsFull()) {
+      audio.sfx('buzzer');
+      this.notice?.destroy();
+      this.notice = centerText(this, GAME_W / 2, 158, FULL_LINE, PALETTE.ember).setDepth(30);
+      return;
+    }
     if (!ledger.debit(p.cost, 'prize')) {
       audio.sfx('buzzer');
       return;

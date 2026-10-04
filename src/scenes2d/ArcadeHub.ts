@@ -39,6 +39,7 @@ import { drawFroggy, FROGGY_DESIGN } from '../froggy/froggy';
 import { tutorialScript } from '../froggy/script';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
+import { attachPockets } from '../ui/pockets';
 
 const INTERACT_RANGE = 24;
 
@@ -419,6 +420,8 @@ export class ArcadeHub extends Phaser.Scene {
     this.player = new Player(this, spawn.x, spawn.y);
 
     new TokenHud(this);
+    // (the front door is in the middle of the bottom wall: the pockets sit beside it)
+    attachPockets(this, () => this.busy(), 112);
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
@@ -1531,7 +1534,8 @@ export class ArcadeHub extends Phaser.Scene {
    */
   private useDoor(): void {
     this.locked = true;
-    fadeToScene(this, 'ExteriorDay');
+    // (out through the doors: the street decides whether it is evening yet)
+    fadeToScene(this, 'ExteriorDay', { fromArcade: true });
   }
 
   private interact(): void {

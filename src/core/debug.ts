@@ -66,6 +66,11 @@ export function initDebug(g: Phaser.Game): void {
       else if (n < have) store.spendCash(have - n);
       store.flush();
     },
+    /** Any run field at all, for a test that needs a state the URL cannot set. */
+    patch: (p: Record<string, unknown>) => {
+      store.patch(p as never);
+      store.flush();
+    },
   };
 
   applyLaunchParams(g);
@@ -105,6 +110,20 @@ function applyLaunchParams(g: Phaser.Game): void {
   // behind it, and the blackjack hand he deals -- could not be reached by the
   // harness or looked at without playing the whole game to get there.
   if (q.get('gone') === '1') store.patch({ froggyGone: true });
+  //   ?items=plush:frog,oddity:musicbox   what is in the pockets
+  //   ?cash=300                           money
+  //   ?time=evening|midnight              the hour outside
+  const items = q.get('items');
+  if (items !== null) store.patch({ items: items.split(',').filter(Boolean).slice(0, 3) });
+  const cash = q.get('cash');
+  if (cash !== null) {
+    const have = store.get().cash;
+    const want = Math.max(0, Number(cash) | 0);
+    if (want > have) store.earnCash(want - have);
+    else if (want < have) store.spendCash(have - want);
+  }
+  const time = q.get('time');
+  if (time === 'day' || time === 'evening' || time === 'midnight') store.patch({ timeOfDay: time });
 
   const game = q.get('game');
   const scene = q.get('scene');

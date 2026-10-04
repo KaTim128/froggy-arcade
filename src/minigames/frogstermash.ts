@@ -185,7 +185,15 @@ export const MOVES: Record<string, Move[]> = {
     { name: 'LOW KICK', dmg: 1.05, wind: 0.95, reach: 1.15, knock: 4, stagger: 0.18, anim: 'kick' },
     { name: 'COUNTER PUNCH', dmg: 1.3, wind: 0.45, reach: 1.0, when: 'counter', anim: 'upper' },
   ],
-  knuckles: [M.combo('PUNCH COMBO', 3), M.bash('UPPERCUT', 1.1), M.stab('HOOK'), M.charge('RUSH', 1.0)],
+  // Thrown like a boxer's punches, because that is what they are: the
+  // unarmed row's own shapes -- jab, straight, hook, uppercut.
+  knuckles: [
+    { name: 'BRASS JAB COMBO', dmg: 0.62, wind: 0.55, reach: 0.95, hits: 3, at: 'near', anim: 'punch' },
+    { name: 'BRASS STRAIGHT', dmg: 1.0, wind: 0.7, reach: 1.0, anim: 'punch' },
+    { name: 'BRASS HOOK', dmg: 0.95, wind: 0.62, reach: 0.9, at: 'near', stagger: 0.12, anim: 'hook' },
+    { name: 'BRASS UPPERCUT', dmg: 1.2, wind: 0.85, reach: 0.85, at: 'near', stagger: 0.24, anim: 'upper' },
+    { name: 'BRASS COUNTER', dmg: 1.35, wind: 0.45, reach: 1.0, when: 'counter', anim: 'upper' },
+  ],
   // ---- the ten added to the rack
   sickle: [M.stab('HOOKING SLASH'), M.low('ANKLE HOOK'), M.combo('TWO QUICK CUTS', 2), M.counter('CATCH AND PULL', 1.3)],
   warfan: [M.combo('FAN FLURRY', 3), M.sweep('SPREAD SWEEP', 0.95, 1.1), M.counter('FOLDING PARRY', 1.35), M.stab('FAN JAB')],
@@ -561,8 +569,14 @@ export const WEAPONS: WeaponDef[] = [
     spec: { note: 'NOTHING TO CARRY, AND IT NEVER STOPS COMING', fleet: 1.24, combo: 1.7, atClose: 0.5 } },
 
   // ---- IN CLOSE
-  { key: 'knuckles', name: 'BRASS KNUCKLES', power: [2, 4], heavy: [1, 2], resist: [7, 10], reach: [1, 2], hits: 1, guard: 0, tempo: 1.7,
-    spec: { note: 'POINT BLANK, AND IT ROCKS THEM', atClose: 0.7, stagger: 0.3 } },
+  // ---- BRASS KNUCKLES ARE A FIST, A LITTLE HARDER.  They hit more than a
+  // bare hand and less than anything with an edge or a weight on it: the
+  // lowest roll there is, at KNUCKLE_MUL of it (see `statsOf`), and the
+  // point-blank bonus kept small.  What they have is speed and the knock.
+  // (and everything a bare fist has -- the quick feet, the combinations, the
+  // close-in bonus -- because it IS a fist; brass only adds to it)
+  { key: 'knuckles', name: 'BRASS KNUCKLES', power: [1, 1], heavy: [1, 2], resist: [7, 10], reach: [1, 3], hits: 1, guard: 0, tempo: 1.4,
+    spec: { note: 'A HARDER FIST, AND IT ROCKS THEM', fleet: 1.24, combo: 1.8, atClose: 0.5, stagger: 0.3 } },
   { key: 'dagger', name: 'SHORT DAGGER', power: [2, 4], heavy: [1, 2], resist: [5, 8], reach: [2, 3], hits: 1, guard: 0, tempo: 1.55,
     spec: { note: 'FASTER THE CLOSER IT GETS', atClose: 0.45, combo: 1.3 } },
   { key: 'twindagger', name: 'TWIN DAGGERS', power: [2, 4], heavy: [1, 2], resist: [4, 7], reach: [1, 3], hits: 2, guard: 0, tempo: 1.6,
@@ -977,6 +991,11 @@ export const MATERIALS: ArmourMat[] = [
   { key: 'splint', name: 'SPLINT MAIL', def: 0.2, evade: 0, heavy: [4, 6], resist: [6, 8], colour: 0x8d8f86, edge: 0x4a4c44, short: 'SPLINT', note: 'STRIPS OF IRON RIVETED IN A ROW', notes: { head: 'A SPLINTED CAP, STRIPS FROM CROWN TO BRIM', body: 'IRON STRIPS RIVETED DOWN A LEATHER COAT', legs: 'SPLINTED GREAVES. STRIPS THAT BEND AT THE KNEE' } },
   { key: 'banded', name: 'BANDED MAIL', def: 0.23, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x9a9ea6, edge: 0x4c5058, short: 'BANDED', note: 'HOOPS OF STEEL, ONE OVER THE NEXT', notes: { head: 'A BANDED HELM, HOOPED LIKE A BARREL', body: 'HOOPS OF STEEL ROUND THE BODY, ONE OVER THE NEXT', legs: 'BANDED CUISSES. THEY CREAK WHEN YOU CROUCH' } },
   { key: 'samurai', name: 'O-YOROI', def: 0.24, evade: 0, heavy: [5, 7], resist: [7, 9], colour: 0x8c2f2a, edge: 0x3d1412, short: 'O-YOROI', note: 'LACQUERED LAMES, LACED IN SILK', notes: { head: 'A KABUTO WITH A FLARED NECK GUARD', body: 'LACQUERED LAMES, LACED IN SILK CORD', legs: 'HAIDATE: AN APRON OF LITTLE PLATES OVER THE THIGH' } },
+  // ---- AND TWO MORE SAMURAI SETS, either side of the great harness: a
+  // foot soldier's black do-maru, lighter and quicker, and the late iron
+  // tosei gusoku with its snarling face mask, heavier and harder.
+  { key: 'domaru', name: 'DO-MARU', def: 0.2, evade: 0.03, heavy: [3, 5], resist: [6, 8], colour: 0x26262e, edge: 0xc9a24a, short: 'DO-MARU', note: 'BLACK LACQUER THAT WRAPS ROUND AND TIES AT THE SIDE', notes: { head: 'A RIDGED KABUTO WITH A GOLD CRESCENT ON THE BROW', body: 'BLACK LACQUER THAT WRAPS ROUND AND TIES AT THE SIDE', legs: 'A SHORT SKIRT OF LACED PLATES. QUICK ON THE FEET' } },
+  { key: 'tosei', name: 'TOSEI GUSOKU', def: 0.27, evade: 0, heavy: [6, 8], resist: [7, 9], colour: 0x42464f, edge: 0xb3261e, short: 'GUSOKU', note: 'IRON PLATE LACED IN RED, AND A FACE TO SCARE THEM', notes: { head: 'AN IRON KABUTO AND A SNARLING MENPO MASK', body: 'IRON PLATE LACED IN RED, AND A FACE TO SCARE THEM', legs: 'IRON HAIDATE AND SUNE-ATE. HEAVY, AND THEY HOLD' } },
   { key: 'mirror', name: 'MIRROR ARMOUR', def: 0.2, evade: 0.04, heavy: [4, 6], resist: [5, 7], colour: 0xd9e4ee, edge: 0x6a7684, short: 'MIRROR', note: 'POLISHED UNTIL THEY SQUINT, AND SOMETIMES MISS', notes: { head: 'A POLISHED DOME. THE GLARE MAKES THEM MISS', body: 'ROUND MIRRORS SEWN ON MAIL. THEY SQUINT, AND MISS', legs: 'POLISHED GREAVES. THE FLASH PUTS THEM OFF' } },
   { key: 'coral', name: 'CORAL ARMOUR', def: 0.17, evade: 0, soft: 0.3, heavy: [3, 5], resist: [4, 6], colour: 0xe07a6a, edge: 0x8a3a30, short: 'CORAL', note: 'TURNS THE QUICK ONES. CRUMBLES ON THE REST', notes: { head: 'A CORAL CROWN. TURNS A QUICK BLOW', body: 'GROWN, NOT MADE. TURNS THE QUICK ONES', legs: 'CORAL SHIN PLATES. BRIGHT, AND BRITTLE' } },
   { key: 'jade', name: 'JADE ARMOUR', def: 0.26, evade: 0, heavy: [6, 8], resist: [4, 6], colour: 0x5fae7e, edge: 0x2a5a3c, short: 'JADE', note: 'PLATES OF STONE, WIRED TOGETHER WITH GOLD', notes: { head: 'A JADE CAP, WIRED IN GOLD. HEAVY ON THE NECK', body: 'JADE PLATES WIRED WITH GOLD. HARD, AND IT CHIPS', legs: 'JADE TILES DOWN THE LEG. SLOW, AND STRONG' } },
@@ -1212,6 +1231,8 @@ const BASE_HP = 118;
 const HP_PER_RESIST = 7.5;
 /** What a bare fist is worth, as a share of the same roll in a weapon. */
 const BARE_MUL = 0.8;
+/** And brass on the fist: between a bare hand and the weakest weapon there is. */
+const KNUCKLE_MUL = 0.92;
 /** A point of rolled weapon power, in damage. */
 const POWER_PER_ROLL = 3.6;
 /** A point of rolled reach, in pixels past the base distance. */
@@ -1310,7 +1331,7 @@ export function statsOf(kit: Kit, weapon: WeaponDef, wRolls?: Piece, type?: Liza
   // at the floor and swung at BARE_MUL of it, so a bare fist is below the
   // weakest swing any weapon can roll -- a slingshot or a blowgun at its
   // lowest -- for every archetype, the weak ones and the strong ones alike.
-  const bare = weapon.key === 'none' ? BARE_MUL : 1;
+  const bare = weapon.key === 'none' ? BARE_MUL : weapon.key === 'knuckles' ? KNUCKLE_MUL : 1;
   // armour that makes you hit harder: a berserker's pelt, war paint
   const fury = 1 + (['head', 'body', 'legs'] as const)
     .reduce((n, sl) => n + (kit[sl].mat?.fury ?? 0) * COVER[sl], 0);
@@ -2552,8 +2573,33 @@ function throwWorthIt(f: Fighter, other: Fighter, gap: number, rng: () => number
   return rng() < Math.min(0.9, keen);
 }
 
+/**
+ * ---- REACH IS MEASURED TO THE BODY, NOT TO ITS MIDDLE.
+ *
+ * Every reach in the game was tested against the distance between the two
+ * fighters' middles.  Froggy and the plain lizard are the same width, so
+ * against each other that was fair -- but a gorilla is more than twice as
+ * broad, so a blade had to be most of the way into it before it counted,
+ * and a cheetah could be hit at the end of a reach that never touched its
+ * skin.  `bodyExtra` is how much wider than Froggy a fighter is on each
+ * side, and every "can I hit them" and "can they hit me" uses the gap to
+ * the front of the other one's body, the same for whichever two are out.
+ */
+const BODY_HALF = 7.5;
+export function bodyExtra(f: Fighter): number {
+  const b = f.type?.build;
+  return b ? BODY_HALF * (b.wide * b.scale - 1) : 0;
+}
+/** From `f` to the front of `other`'s body, in Froggy-to-Froggy terms. */
+export function gapTo(f: Fighter, other: Fighter): number {
+  return Math.abs(f.x - other.x) - bodyExtra(other);
+}
+
 export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random, ground: Dropped[] = []): void {
-  const gap = Math.abs(f.x - other.x);
+  const gap = gapTo(f, other);
+  // How far the OTHER one is from the front of me: what their reach is
+  // tested against when it is their swing that matters.
+  const theirGap = gapTo(other, f);
   f.face = other.x >= f.x ? 1 : -1;
   // kept so a sweeping weapon can tell the difference between somebody
   // standing at a distance and somebody walking onto the blade
@@ -2607,7 +2653,7 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random,
         return;
       }
       // otherwise go and get it, unless they are about to take my head off
-      const danger = gap <= other.st.reach + 4 && other.act === 'windup';
+      const danger = theirGap <= other.st.reach + 4 && other.act === 'windup';
       if (!danger) {
         const dir = best.x > f.x ? 1 : -1;
         f.face = dir;
@@ -2626,7 +2672,7 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random,
   // It is a roll against avoidance rather than a certainty, which is what
   // makes a heavy suit cost something: the plate stops the blow it fails to
   // avoid, and it is the reason it failed to avoid it.
-  if (f.cool <= 0 && (f.act === 'walk' || f.act === 'guard') && other.act === 'windup' && gap <= other.st.reach + 6) {
+  if (f.cool <= 0 && (f.act === 'walk' || f.act === 'guard') && other.act === 'windup' && theirGap <= other.st.reach + 6) {
     const want = f.st.avoid * (hurt ? 1.5 : 1) * 2.1;
     if (rng() < want * dt * 8) {
       f.act = 'dodge';
@@ -2657,7 +2703,7 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random,
   // berserker went to 62%.  It still hates doing it -- a fifth as often as
   // anyone else -- which is a trade-off rather than an exemption.
   if (f.type?.berserk) wantBlock *= 0.2;
-  if (f.act === 'walk' && gap <= other.st.reach + 4 && rng() < wantBlock * dt) {
+  if (f.act === 'walk' && theirGap <= other.st.reach + 4 && rng() < wantBlock * dt) {
     f.act = 'guard';
     f.t = GUARD_S;
     return;
@@ -2679,7 +2725,8 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random,
   // Where this fighter wants to be standing, worked out before it decides
   // whether to swing -- because when it is out-reached, that decision is
   // partly "not from here".
-  const theirSweet = other.st.reach * INSIDE_FRAC;
+  // (their reach, put in terms of MY gap to them: see `gapTo`)
+  const theirSweet = other.st.reach * INSIDE_FRAC + bodyExtra(f) - bodyExtra(other);
   const press = other.st.reach > f.st.reach
     ? Math.min(f.st.reach - 2, theirSweet - 2)
     : f.st.reach - 2;
@@ -2783,7 +2830,7 @@ export function think(f: Fighter, other: Fighter, dt: number, rng = Math.random,
   // spacing is won: stand in it.  Drifting back out on the cool-down was
   // handing the long weapon its range back for free every other second, and
   // it is the reason a dagger could not stay where a dagger beats a scythe.
-  const stuck = gap < other.st.reach * INSIDE_FRAC;
+  const stuck = theirGap < other.st.reach * INSIDE_FRAC;
   const give = ty?.stubborn ? 1 : hurt ? 1.25 : 1;
   const drift = ty?.restless ? 1 + Math.sin(f.step * 0.09) * 0.3 : 1;
   // ---- AND EVENTUALLY THEY STOP CIRCLING.
@@ -2885,7 +2932,7 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random, 
   // the ground at better than twice a walk and pulls up at shield's length,
   // so the blow lands from where a shield actually reaches.
   if (f.act === 'windup' && f.move?.anim === 'charge') {
-    const gap = Math.abs(f.x - other.x);
+    const gap = gapTo(f, other);
     const stop = f.st.reach * 0.6;
     if (gap > stop) {
       const run = Math.min(gap - stop, f.st.walk * CHARGE_MUL * dt);
@@ -2901,7 +2948,7 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random, 
     case 'windup': {
       f.act = 'strike';
       f.t = STRIKE;
-      const blow = resolveStrike(f, other, Math.abs(f.x - other.x), rng, ground);
+      const blow = resolveStrike(f, other, gapTo(f, other), rng, ground);
       f.swing += 1;
       return blow;
     }
@@ -2914,7 +2961,7 @@ export function tick(f: Fighter, other: Fighter, dt: number, rng = Math.random, 
         : Math.max(f.weapon.hits, f.move?.hits ?? 1);
       if (f.swing < strikes) {
         f.t = STRIKE;
-        const blow = resolveStrike(f, other, Math.abs(f.x - other.x), rng, ground);
+        const blow = resolveStrike(f, other, gapTo(f, other), rng, ground);
         f.swing += 1;
         return blow;
       }
@@ -4301,16 +4348,27 @@ function buildWeapon(scene: Phaser.Scene, key: string, tint: number, single = fa
       poly([7.4, -2.6, 16.6, 0, 7.4, 2.6], STEEL, EDGE);
       line(7.6, 0, 15.4, 0, SHINE, 0.7, 0.9);
       break;
-    case 'claws':
-      // the back of the fist, a strap across it and three long curved claws
+    case 'claws': {
+      // ---- TIGER CLAWS.  A bagh nakh: a steel bar across the knuckles with
+      // a ring at each end for the fingers, and four long hooked blades off
+      // it, fanned a little and each with a bright edge -- worn over a wrist
+      // wrap striped like the animal they are named for.
       if (!single) c.setData('pair', true);
+      rect(-2.2, -2.8, 2.8, 5.6, 0xc8782a);
+      for (let k = 0; k < 3; k++) rect(-2 + k * 0.95, -2.8, 0.45, 5.6, 0x2a1a10);
       fist();
-      rect(1.4, -3.2, 3.4, 6.4, LEATHER);
-      for (let k = 0; k < 3; k++) {
-        const y = -2.2 + k * 2.2;
-        poly([6, y - 0.6, 11.4, y - 0.4, 14.6, y + 1.4, 11, y + 0.7, 6, y + 0.6], STEEL, EDGE);
+      rect(5, -4.2, 1.5, 8.4, IRON_DK);
+      rect(5, -4.2, 0.5, 8.4, IRON_LIT);
+      ring(5.8, -4.6, 1.1, IRON_LIT, 0.6);
+      ring(5.8, 4.6, 1.1, IRON_LIT, 0.6);
+      for (let k = 0; k < 4; k++) {
+        const y = -3.3 + k * 2.2;
+        const fan = (k - 1.5) * 0.45;
+        poly([6.2, y - 0.5, 10.6, y - 0.6 + fan * 0.6, 14.2, y + 0.3 + fan, 15.8, y + 2.1 + fan, 13.4, y + 0.9 + fan, 10.4, y + 0.6 + fan * 0.6, 6.2, y + 0.5], STEEL, EDGE);
+        curve([6.8, y - 0.3, 10.6, y - 0.35 + fan * 0.6, 14, y + 0.5 + fan], SHINE, 0.45);
       }
       break;
+    }
     case 'hatchets':
       // a small axe a hand: a stubby haft, a bearded blade
       if (!single) c.setData('pair', true);
@@ -4978,7 +5036,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
   // quilting on cloth, a stitched edge on leather, studs, rings of mail,
   // rows of scales, rivets and a hard shine on plate, ribs of bone, spikes.
   type Weave = 'cloth' | 'leather' | 'studded' | 'chain' | 'scale' | 'plate' | 'bone' | 'spiked'
-    | 'fur' | 'feather' | 'wicker' | 'glass' | 'wood' | 'quilt';
+    | 'fur' | 'feather' | 'wicker' | 'glass' | 'wood' | 'quilt' | 'lame';
   const weaveOf = (k: string): Weave =>
     ['cloth', 'tuxedo', 'none', 'crown', 'silk', 'shadow'].includes(k) ? 'cloth'
       : ['padded', 'gambeson', 'linothorax'].includes(k) ? 'quilt'
@@ -4990,7 +5048,8 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
                   : ['leather', 'hide', 'reinforced', 'tactical', 'bark', 'troll', 'plague', 'rubber'].includes(k) ? 'leather'
                     : ['studded', 'brigandine', 'gladiator', 'platecoat'].includes(k) ? 'studded'
                       : ['chain', 'hood', 'mithril'].includes(k) ? 'chain'
-                        : ['scale', 'lamellar', 'dragon', 'samurai', 'jade', 'fishscale', 'sharkskin'].includes(k) ? 'scale'
+                        : ['samurai', 'domaru', 'tosei'].includes(k) ? 'lame'
+                        : ['scale', 'lamellar', 'dragon', 'jade', 'fishscale', 'sharkskin'].includes(k) ? 'scale'
                           : ['bone', 'splint', 'banded', 'coral', 'turtle', 'chitin'].includes(k) ? 'bone'
                             : ['spiked', 'thorn'].includes(k) ? 'spiked' : 'plate';
   const STUD = 0xd8dde4;
@@ -5083,6 +5142,18 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
           gr.fillStyle(row % 2 ? col : up(col, 0.15), 1).fillCircle(x, y - 0.1, 0.8);
         }
       }
+    } else if (w === 'lame') {
+      // ---- SAMURAI LAMES: lacquered bands across the body, each a little
+      // proud of the one under it, and laced together top to bottom with
+      // silk cord in short vertical runs -- not scales, and not plate.
+      const lace = mix(col, 0xd8b45a, 0.75);
+      for (let y = cy - ry + 1.2; y < cy + ry - 0.6; y += 2.2) {
+        const hw = half(y + 0.6, 0.95);
+        if (hw < 1) continue;
+        gr.fillStyle(up(col, 0.22), 1).fillRect(cx - hw, y, hw * 2, 0.6);
+        gr.fillStyle(down(col, 0.42), 1).fillRect(cx - hw, y + 1.5, hw * 2, 0.5);
+        for (let x = cx - hw + 0.8; x < cx + hw - 0.4; x += 1.6) gr.fillStyle(lace, 1).fillRect(x, y + 0.5, 0.45, 1.1);
+      }
     } else if (w === 'bone') {
       for (let y = cy - ry + 1.6; y < cy + ry - 0.8; y += 2.4) {
         const hw = half(y, 0.95);
@@ -5117,6 +5188,7 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
       const x = cx + Math.cos(a) * rx;
       const y = cy + Math.sin(a) * ry;
       if (w === 'scale') gr.fillStyle(down(col, 0.3), 1).fillCircle(x, y + 0.3, 0.8);
+      else if (w === 'lame') gr.fillStyle(mix(col, 0xd8b45a, 0.75), 1).fillRect(x - 0.25, y - 0.6, 0.5, 1.2);
       else if (w === 'fur' || w === 'feather') gr.fillStyle(up(col, 0.3), 1).fillTriangle(x - 0.6, y - 0.4, x + 0.6, y - 0.4, x, y + 1.4);
       else if (w === 'wicker' || w === 'wood') gr.fillStyle(down(col, 0.35), 1).fillRect(x - 0.3, y - 0.3, 0.6, 0.6);
       else if (w === 'leather') gr.fillStyle(up(col, 0.38), 1).fillRect(x - 0.25, y - 0.25, 0.5, 0.5);
@@ -5690,6 +5762,31 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
     const RED = 0xb3261e;
     const hw = weaveOf(H.key);
     let crested = false;
+    // Where the face is -- the lower half of it, mouth and jaw, and the near
+    // eye -- for a mask to sit ON rather than float near: Froggy's, the
+    // lizard's, and every animal's own muzzle.
+    const faceAt = (): { x0: number; x1: number; y0: number; y1: number; eyeX: number; eyeY: number } | null => {
+      if (beastParts && animal) {
+        // Each animal's own muzzle and near eye, measured off `dressAnimal`
+        // (offsets from the head's centre): a mask goes over THAT, whether
+        // it is a gorilla's flat face or a hyena's long snout.
+        const F: Record<Animal, [number, number, number, number, number, number]> = {
+          gorilla: [-0.6, 7.2, 0.4, 6.8, 4.8, -0.4],
+          cheetah: [1.2, 8.2, -0.2, 4.2, 2.4, -1.4],
+          rhino: [2, 11.6, 0.6, 6.2, 1, -0.6],
+          hyena: [2.4, 12.4, -0.4, 5.2, 2.4, -1.8],
+          giraffe: [1.4, 10.8, -0.2, 4.4, 1.4, -1],
+          lion: [1.6, 7.8, 0.4, 6.4, 2.4, -2.3],
+          lizard: [1, 9, 0, 5, 2, -2],
+          wolf: [2, 12, -0.4, 4.4, 2.8, -1.6],
+        };
+        const [x0, x1, y0, y1, ex, ey] = F[animal];
+        return { x0: HX + x0, x1: HX + x1, y0: HY + y0, y1: HY + y1, eyeX: HX + ex, eyeY: HY + ey };
+      }
+      if (frog) return { x0: 1, x1: 10.6, y0: -31.8, y1: -26.8, eyeX: 5, eyeY: -38 };
+      const hyl = -32.6 * tall - lift;
+      return { x0: skullW * 0.5, x1: skullW * 0.9 + 9 * skull, y0: hyl + 1, y1: hyl + 5.4 * skull, eyeX: 5, eyeY: -34.6 * tall - lift };
+    };
     switch (H.key) {
       case 'viking': {
         // two horns out of the sides of the bowl, curving up
@@ -5742,15 +5839,114 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
         break;
       }
       case 'plague': {
-        // THE BEAK.  A long curved mask out over the snout, two round glass
-        // eyes, and a brimmed hat above it all.
-        const bx = cx + HW2 * 0.3;
-        hx2.fillStyle(0xd8ccae, 1).fillTriangle(bx, hy - 1.2, bx + 8.4, hy + 3.6, bx, hy + 2.6);
-        hx2.lineStyle(0.6, 0x8a7a5a, 1).strokeTriangle(bx, hy - 1.2, bx + 8.4, hy + 3.6, bx, hy + 2.6);
-        hx2.fillStyle(0x9fd4e0, 1).fillCircle(bx - 0.6, hy - 1.6, 1.1);
-        hx2.lineStyle(0.5, 0x2a2622, 1).strokeCircle(bx - 0.6, hy - 1.6, 1.1);
+        // THE BEAK.  A long curved mask out over the snout, a round glass
+        // eye, and a brimmed hat above it all.  On every face -- Froggy's,
+        // the lizard's, each animal's -- the beak sits over the mouth and the
+        // glass over the eye, not up on the hat where it floated above both.
+        const face = faceAt();
+        const bx = face ? face.x0 + 1 : cx + HW2 * 0.3;
+        const by = face ? face.y0 - 1.2 : hy - 1.2;
+        hx2.fillStyle(0xd8ccae, 1).fillTriangle(bx, by, bx + 9, by + 4.2, bx, by + 4);
+        hx2.lineStyle(0.6, 0x8a7a5a, 1).strokeTriangle(bx, by, bx + 9, by + 4.2, bx, by + 4);
+        hx2.fillStyle(0xbfb090, 1).fillRect(bx + 1.5, by + 2.6, 5, 0.5);
+        const gx = face ? face.eyeX : bx - 0.6;
+        const gy = face ? face.eyeY : hy - 1.6;
+        hx2.fillStyle(0x9fd4e0, 0.85).fillCircle(gx, gy, face ? 2.2 : 1.1);
+        hx2.lineStyle(0.7, 0x2a2622, 1).strokeCircle(gx, gy, face ? 2.2 : 1.1);
+        hx2.fillStyle(0xffffff, 0.7).fillRect(gx - 0.8, gy - 1, 0.8, 0.6);
         hx2.fillStyle(hc, 1).fillRect(cx - HW2 * 0.62, top + 0.6, HW2 * 1.24, 1.2);
         hx2.fillStyle(hc, 1).fillRoundedRect(cx - HW2 * 0.34, top - 3.4, HW2 * 0.68, 4.2, 1);
+        crested = true;
+        break;
+      }
+      case 'samurai':
+      case 'domaru':
+      case 'tosei': {
+        // ---- A KABUTO.  Ridges down the bowl and a knob at the top, a peak
+        // over the brow, the shikoro -- three lames stepping down and out
+        // over the back of the neck, laced in silk -- and a crest on the brow: gold horns on the great
+        // harness and the iron one, a gold crescent on the do-maru.  The
+        // neck guard stops short of a frog's eyes, which are on top of his
+        // head and must not be under a helmet.
+        const lace = H.key === 'tosei' ? 0xb3261e : H.key === 'domaru' ? 0x3f6fd8 : 0xd8b45a;
+        const gold = 0xe8c04a;
+        for (let k = -2; k <= 2; k++) {
+          const x = cx + k * HW2 * 0.17;
+          hx2.fillStyle(down(hc, 0.35), 1).fillRect(x - 0.25, top + 1.2 + Math.abs(k) * 0.6, 0.5, hy - top - 1.6 - Math.abs(k) * 0.6);
+        }
+        hx2.fillStyle(up(hc, 0.4), 1).fillCircle(cx, top + 0.4, 0.9);
+        hx2.fillStyle(down(hc, 0.25), 1).fillPoints([new Phaser.Math.Vector2(cx + HW2 * 0.12, hy + 0.2), new Phaser.Math.Vector2(cx + HW2 * 0.62, hy + 1.2), new Phaser.Math.Vector2(cx + HW2 * 0.6, hy + 2), new Phaser.Math.Vector2(cx + HW2 * 0.12, hy + 1.4)], true);
+        const backEnd = beastParts ? cx - HW2 * 0.2 : cx - HW2 * 0.4;
+        for (let k = 0; k < 3; k++) {
+          const y = hy + 1.6 + k * 1.7;
+          const x0 = cx - HW2 * (0.56 + k * 0.08);
+          const w = backEnd - x0 - k * 0.4;
+          hx2.fillStyle(k % 2 ? down(hc, 0.12) : hc, 1).fillRect(x0, y, w, 1.6);
+          hx2.fillStyle(down(hc, 0.45), 1).fillRect(x0, y + 1.3, w, 0.4);
+          for (let x = x0 + 0.6; x < x0 + w - 0.3; x += 1.5) hx2.fillStyle(lace, 1).fillRect(x, y + 0.3, 0.45, 0.9);
+        }
+        // the crest on the brow
+        const bx = cx + HW2 * 0.24;
+        const by = top + 2.4;
+        if (H.key === 'domaru') {
+          // horns up: the lower half of a circle, sat on the brow
+          hx2.lineStyle(1.3, gold, 1).beginPath().arc(bx, by - 3.4, 3.2, Math.PI * 0.05, Math.PI * 0.95, false).strokePath();
+        } else {
+          for (const [dx, h] of [[-1.6, 7], [2.4, 6.2]] as const) {
+            hx2.lineStyle(1.3, down(gold, 0.3), 1).lineBetween(bx, by, bx + dx, by - h);
+            hx2.lineStyle(0.7, gold, 1).lineBetween(bx, by, bx + dx, by - h);
+          }
+        }
+        hx2.fillStyle(gold, 1).fillCircle(bx, by, 1.1);
+        // ---- THE MENPO: an iron face over the mouth, a lacquered red
+        // inside, a white moustache and a row of teeth, fitted over whatever
+        // face it is on.
+        const face = H.key === 'tosei' ? faceAt() : null;
+        if (face) {
+          const { x0, x1, y0, y1 } = face;
+          const pts = [x0, y0, x1, y0 + 0.4, x1 + 1.2, (y0 + y1) / 2, x1, y1, x0 + 1, y1 + 0.4, x0 - 0.6, (y0 + y1) / 2];
+          const v = pts.reduce<Phaser.Math.Vector2[]>((o, n, i) => (i % 2 ? o : [...o, new Phaser.Math.Vector2(n, pts[i + 1])]), []);
+          hx2.fillStyle(0x2a2c32, 1).fillPoints(v, true);
+          hx2.lineStyle(0.6, 0x15161a, 1).strokePoints(v, true);
+          hx2.fillStyle(0x8c1f1a, 1).fillRect(x0 + (x1 - x0) * 0.35, (y0 + y1) / 2 + 0.4, (x1 - x0) * 0.55, 1.4);
+          for (let x = x0 + (x1 - x0) * 0.4; x < x1 - 0.6; x += 1.1) hx2.fillStyle(0xf2ead8, 1).fillRect(x, (y0 + y1) / 2 + 0.5, 0.6, 0.6);
+          hx2.lineStyle(0.8, 0xf2ead8, 1).lineBetween(x0 + (x1 - x0) * 0.4, (y0 + y1) / 2 - 0.4, x1 - 0.4, (y0 + y1) / 2 - 1.1);
+          hx2.fillStyle(up(0x2a2c32, 0.4), 1).fillRect(x0 + 0.8, y0 + 0.5, (x1 - x0) * 0.5, 0.5);
+        }
+        crested = true;
+        break;
+      }
+      case 'iron': {
+        // ---- AN IRON HELM, not a box: a darker reinforcing band round the
+        // brim, riveted, a ridge over the crown, and a nasal bar down the
+        // front of the face -- at the very front, clear of a frog's eyes.
+        hx2.fillStyle(down(hc, 0.3), 1).fillRect(cx - HW2 / 2, hy - 0.9, HW2, 1.6);
+        for (let x = cx - HW2 / 2 + 1; x < cx + HW2 / 2 - 0.5; x += 1.9) hx2.fillStyle(up(hc, 0.55), 1).fillCircle(x, hy - 0.1, 0.42);
+        hx2.fillStyle(up(hc, 0.35), 1).fillRect(cx - 0.6, top + 0.2, 1.2, hy - top - 0.8);
+        hx2.fillStyle(down(hc, 0.4), 1).fillRect(cx + 0.6, top + 0.6, 0.4, hy - top - 1.2);
+        const nx = beastParts ? cx + HW2 * 0.4 : cx + HW2 * 0.46;
+        const nl = beastParts ? skH * 0.34 : 4.6;
+        hx2.fillStyle(down(hc, 0.2), 1).fillRect(nx - 0.7, hy - 0.6, 1.4, nl);
+        hx2.fillStyle(up(hc, 0.45), 1).fillRect(nx - 0.7, hy - 0.6, 0.5, nl);
+        hx2.fillStyle(up(hc, 0.6), 1).fillCircle(nx, hy + 0.2, 0.4);
+        crested = true;
+        break;
+      }
+      case 'shadow': {
+        // ---- A SHINOBI'S MASK: dark cloth across the lower face, knotted at
+        // the back of the head with the ends loose.  The eyes stay clear.
+        const face = faceAt();
+        const fy = face ? (face.y0 + face.y1) / 2 : hy + 3;
+        const fx0 = face ? face.x0 - 1 : cx - HW2 * 0.2;
+        const fx1 = face ? face.x1 + 0.8 : cx + HW2 * 0.55;
+        hx2.fillStyle(hc, 1).fillRoundedRect(fx0, fy - 2.4, fx1 - fx0, 4.8, 1.2);
+        hx2.fillStyle(up(hc, 0.3), 1).fillRect(fx0 + 0.6, fy - 2, fx1 - fx0 - 1.2, 0.5);
+        hx2.fillStyle(down(hc, 0.4), 1).fillRect(fx0 + 0.6, fy + 1.4, fx1 - fx0 - 1.2, 0.5);
+        const kx = beastParts ? cx - HW2 * 0.45 : cx - HW2 * 0.42;
+        hx2.fillStyle(hc, 1).fillRect(kx, fy - 1.2, fx0 - kx + 0.4, 1.6);
+        hx2.fillStyle(hc, 1).fillCircle(kx, fy - 0.4, 1.2);
+        hx2.lineStyle(1, hc, 1).lineBetween(kx, fy - 0.2, kx - 2.6, fy + 2.8);
+        hx2.lineStyle(1, hc, 1).lineBetween(kx, fy, kx - 1.6, fy + 3.8);
         crested = true;
         break;
       }
@@ -6157,7 +6353,30 @@ function wearWeapon(f: Fighter): void {
   a.nicks = want;
 }
 
+/**
+ * ---- A STABBING WEAPON STABS.
+ *
+ * A dagger's combo, a rapier's counter, a spear's charge: the move table
+ * gives each of them its own name and numbers, but drawn as `over` or `sweep`
+ * or `jab` a point weapon was being swung like a club.  For the weapons whose
+ * business end is a point, every swinging move is drawn as a thrust -- the
+ * arm coiled back and then driven straight out -- and the quick ones as a
+ * short jab-thrust.  A shove, a throw or a shot is still what it is.
+ */
+const STABBERS = new Set([
+  'dagger', 'twindagger', 'knife', 'rapier', 'estoc', 'spear', 'pike', 'trident', 'lance', 'katar', 'sai',
+  'partisan', 'harpoon', 'gladius', 'javelin',
+]);
+function poseAnim(f: Fighter): Anim | undefined {
+  const anim = f.move?.anim;
+  if (!anim || !STABBERS.has(f.weapon.key)) return anim;
+  return anim === 'over' || anim === 'sweep' || anim === 'spin' || anim === 'low' || anim === 'jab' ? 'thrust' : anim;
+}
+
 export function poseFighter(f: Fighter, other?: Fighter): void {
+  // What the move LOOKS like, which for a stabbing weapon is always the
+  // point going in: see `poseAnim`.
+  const anim = poseAnim(f);
   const a = f.art;
   if (!a) return;
   a.root.x = drawX(f, other);
@@ -6248,7 +6467,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     // whole way (see below), because nobody charges leaning back.
     charge: { w: 6, s: -8, r: -10, lean: 18 },
   };
-  const shape = A[f.move?.anim ?? 'sweep'];
+  const shape = A[anim ?? 'sweep'];
   const carry = carryOf(f);
   let arm = carry.arm;
   // ---- BENDING DOWN FOR IT.
@@ -6275,7 +6494,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   }
   a.headGroup.x = 0;
   let lean = 0;
-  if (f.act === 'windup') { arm = shape.w; lean = f.move?.anim === 'charge' ? shape.lean : -shape.lean * 0.55; }
+  if (f.act === 'windup') { arm = shape.w; lean = anim === 'charge' ? shape.lean : -shape.lean * 0.55; }
   else if (f.act === 'strike') { arm = shape.s; lean = shape.lean; }
   else if (f.act === 'recover') { arm = shape.r; lean = shape.lean * 0.4; }
   else if (f.act === 'guard') { arm = -96; lean = -4; }
@@ -6319,13 +6538,13 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   else if (f.act === 'stagger') bend = -24;
   else if (f.act === 'lunge') bend = -30;
   // a thrust is the one attack that STRAIGHTENS rather than coils
-  if (f.move?.anim === 'thrust' && (f.act === 'windup' || f.act === 'strike')) {
+  if (anim === 'thrust' && (f.act === 'windup' || f.act === 'strike')) {
     bend = f.act === 'windup' ? -74 * fold : 2;
   }
   // and drawing a bow pulls the hand back past the cheek
-  if (f.move?.anim === 'shoot') bend = f.act === 'strike' ? -18 : -96;
+  if (anim === 'shoot') bend = f.act === 'strike' ? -18 : -96;
   // the shield tucked in tight for the run, then punched out on contact
-  if (f.move?.anim === 'charge') {
+  if (anim === 'charge') {
     if (f.act === 'windup') bend = -34;
     else if (f.act === 'strike') bend = -2;
     else if (f.act === 'recover') bend = -30;
@@ -6342,9 +6561,9 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   // hand up by the chin with the pipe angled twenty degrees above the
   // horizontal, pointing at the other one.  It holds that through the whole
   // attack -- a blowgun does not swing, which is the point of it.
-  if (f.move?.anim === 'puff') bend = f.act === 'strike' ? 46 : 40;
+  if (anim === 'puff') bend = f.act === 'strike' ? 46 : 40;
   // ---- A THROW COILS FURTHER AND OPENS FURTHER THAN A SWING.
-  if (f.move?.anim === 'hurl') {
+  if (anim === 'hurl') {
     if (f.act === 'windup') bend = -96 * fold;
     else if (f.act === 'strike') bend = 8;
     else if (f.act === 'recover') bend = -30;
@@ -6386,7 +6605,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     const throwing = f.act === 'strike' || f.act === 'recover';
     // A shove is the one unarmed move thrown with BOTH hands, so it does not
     // alternate: both arms go out together and both come back together.
-    const shoving = f.move?.anim === 'shove' && (throwing || f.act === 'windup');
+    const shoving = anim === 'shove' && (throwing || f.act === 'windup');
     const alt = f.swing % 2 === 1;
     if (shoving) {
       a.arm.root.setAngle(f.armA);
@@ -6444,7 +6663,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     }
     a.armOff.root.setVisible(true);
     const attacking = f.act === 'windup' || f.act === 'strike' || f.act === 'recover';
-    const together = f.move?.anim === 'spin' || f.move?.anim === 'sweep' || f.move?.anim === 'over' || f.move?.anim === 'low';
+    const together = anim === 'spin' || anim === 'sweep' || anim === 'over' || anim === 'low';
     const alt = f.swing % 2 === 1;
     if (attacking && together) {
       a.armOff.root.setAngle(f.armA + (f.act === 'strike' ? -16 : 12));
@@ -6492,7 +6711,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   // everything drives forward together and the head finishes over the front
   // foot.  Without this the arm swings past a fighter standing still, which
   // reads as a flick rather than as somebody committing to a throw.
-  if (f.move?.anim === 'hurl' && f.act !== 'walk') {
+  if (anim === 'hurl' && f.act !== 'walk') {
     const load = f.act === 'windup' ? -1 : f.act === 'strike' ? 1 : 0.45;
     // the stance: back foot loaded on the wind-up, front foot driven into on
     // the release
@@ -6510,7 +6729,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     a.armOff.fore.setAngle(-26 - load * 14);
   }
   // ---- AND THE BLOWGUN, where the recoil is in the neck and not the arm.
-  if (f.move?.anim === 'puff' && f.act !== 'walk') {
+  if (anim === 'puff' && f.act !== 'walk') {
     const blow = f.act === 'strike' ? 1 : f.act === 'recover' ? 0.4 : 0;
     // chin down and shoulders in to take the breath, then the head snaps back
     a.headGroup.y = blow > 0 ? -2.4 * blow : 1.4;
@@ -6522,7 +6741,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     a.armOff.root.setVisible(true);
   }
   // ---- AND THE KICK, which is a leg and not an arm at all.
-  if (f.move?.anim === 'kick' && (f.act === 'strike' || f.act === 'windup')) {
+  if (anim === 'kick' && (f.act === 'strike' || f.act === 'windup')) {
     const up = f.act === 'strike' ? -68 : -18;
     a.legR.setAngle(up);
     a.greaveR.setAngle(up);
@@ -6532,7 +6751,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   // A sprinting stride twice the width of a walk, the whole body pitched
   // forward over it, and the off hand braced behind the shield; on contact
   // the front foot plants and the body drives through.
-  const charging = f.move?.anim === 'charge' && (f.act === 'windup' || f.act === 'strike');
+  const charging = anim === 'charge' && (f.act === 'windup' || f.act === 'strike');
   if (charging) {
     const run = f.act === 'windup';
     const stride = run ? Math.sin(f.step / 3.2) * 17 : 0;
@@ -6547,10 +6766,10 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
     a.armOff.fore.setAngle(-64);
   }
   // and a spinning attack turns the whole animal, not only the arm
-  if (f.move?.anim === 'spin' && (f.act === 'strike' || f.act === 'windup')) {
+  if (anim === 'spin' && (f.act === 'strike' || f.act === 'windup')) {
     a.root.angle = f.face * (f.act === 'strike' ? 22 : -14);
   } else if (f.act !== 'stagger' && phase !== 'over' && !charging
-    && f.move?.anim !== 'hurl' && f.move?.anim !== 'puff') {
+    && anim !== 'hurl' && anim !== 'puff') {
     // A throw and a blowgun both turn the whole body, above; zeroing here
     // would put it back upright on the same frame.
     a.root.angle = 0;
@@ -6569,7 +6788,7 @@ export function poseFighter(f: Fighter, other?: Fighter): void {
   // thrown is one the head is part of.  A throw carries it over the front
   // foot and a blowgun snaps it back off the breath, and both are set above;
   // this line ran after them and put it back on centre every frame.
-  const headOwned = f.move?.anim === 'hurl' || f.move?.anim === 'puff';
+  const headOwned = anim === 'hurl' || anim === 'puff';
   if (!headOwned || f.act === 'walk') {
     a.headGroup.x = 0;
     a.headGroup.y = f.act === 'dodge' ? 4 : f.act === 'stagger' ? -2 : 0;
@@ -6754,10 +6973,11 @@ export function rewardFor(_n: number): number {
   return PRIZE;
 }
 /**
- * Twenty a win.  The seat is twenty-five, charged by the cabinet (see
- * `cost` in content.ts), so it still takes two lizards to be ahead of the house.
+ * Twenty-five a win: a round won pays the seat back.  The seat is
+ * twenty-five, charged by the cabinet (see `cost` in content.ts), so one win
+ * is even and every win after it is profit -- if the run is not lost first.
  */
-const PRIZE = 20;
+const PRIZE = 25;
 let phase: Phase = 'title';
 /** The one latch that stops a result being reported twice.  See `finish`. */
 let ended = false;
@@ -8339,8 +8559,8 @@ export const frogsterMash: MinigameModule = {
       // 63, 59 and 59.
       'FOUR CHESTS: A WEAPON, AND ARMOUR FOR EACH SLOT.',
       'WHAT IS IN THE CHEST IS YOURS. NO SWAPS.',
-      'THEN FROGGY FIGHTS. WIN ROUND ONE AND TAKE 50.',
-      'TAKE IT, OR RISK IT ALL FOR 30, 35, 40 MORE...',
+      'THEN FROGGY FIGHTS. EVERY ROUND WON PAYS 25.',
+      'TAKE THE BANK, OR RISK IT ALL FOR 25 MORE...',
       'LOSE A ROUND AND THE WHOLE BANK GOES WITH IT.',
     ],
     controls: [
