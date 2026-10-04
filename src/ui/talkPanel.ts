@@ -65,7 +65,10 @@ export function openTalkPanel(scene: Phaser.Scene, o: TalkOpts): Phaser.GameObje
 
   const top = y + PAD + HEAD + textH + PAD + ROW / 2;
   if (rows === 0) {
-    parts.push(text(scene, cx, y + h - 9, '[E] LEAVE IT', PALETTE.ash).setOrigin(0.5, 0.5));
+    // (on a phone the E button is put away while someone is talking, so the
+    // panel itself is the way to leave it: a tap on it is the E)
+    parts.push(text(scene, cx, y + h - 9, touchControls.mounted() ? 'TAP TO LEAVE IT' : '[E] LEAVE IT', PALETTE.ash).setOrigin(0.5, 0.5));
+    if (touchControls.mounted()) panel.setInteractive().on('pointerdown', () => touchControls.tap('E'));
   } else if (oneRow) {
     let x = cx - across / 2;
     options.forEach((op, i) => {

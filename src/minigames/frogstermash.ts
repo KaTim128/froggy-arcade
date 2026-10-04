@@ -185,7 +185,15 @@ export const MOVES: Record<string, Move[]> = {
     { name: 'LOW KICK', dmg: 1.05, wind: 0.95, reach: 1.15, knock: 4, stagger: 0.18, anim: 'kick' },
     { name: 'COUNTER PUNCH', dmg: 1.3, wind: 0.45, reach: 1.0, when: 'counter', anim: 'upper' },
   ],
-  knuckles: [M.combo('PUNCH COMBO', 3), M.bash('UPPERCUT', 1.1), M.stab('HOOK'), M.charge('RUSH', 1.0)],
+  // Thrown like a boxer's punches, because that is what they are: the
+  // unarmed row's own shapes -- jab, straight, hook, uppercut.
+  knuckles: [
+    { name: 'BRASS JAB COMBO', dmg: 0.62, wind: 0.55, reach: 0.95, hits: 3, at: 'near', anim: 'punch' },
+    { name: 'BRASS STRAIGHT', dmg: 1.0, wind: 0.7, reach: 1.0, anim: 'punch' },
+    { name: 'BRASS HOOK', dmg: 0.95, wind: 0.62, reach: 0.9, at: 'near', stagger: 0.12, anim: 'hook' },
+    { name: 'BRASS UPPERCUT', dmg: 1.2, wind: 0.85, reach: 0.85, at: 'near', stagger: 0.24, anim: 'upper' },
+    { name: 'BRASS COUNTER', dmg: 1.35, wind: 0.45, reach: 1.0, when: 'counter', anim: 'upper' },
+  ],
   // ---- the ten added to the rack
   sickle: [M.stab('HOOKING SLASH'), M.low('ANKLE HOOK'), M.combo('TWO QUICK CUTS', 2), M.counter('CATCH AND PULL', 1.3)],
   warfan: [M.combo('FAN FLURRY', 3), M.sweep('SPREAD SWEEP', 0.95, 1.1), M.counter('FOLDING PARRY', 1.35), M.stab('FAN JAB')],
@@ -561,8 +569,14 @@ export const WEAPONS: WeaponDef[] = [
     spec: { note: 'NOTHING TO CARRY, AND IT NEVER STOPS COMING', fleet: 1.24, combo: 1.7, atClose: 0.5 } },
 
   // ---- IN CLOSE
-  { key: 'knuckles', name: 'BRASS KNUCKLES', power: [2, 4], heavy: [1, 2], resist: [7, 10], reach: [1, 2], hits: 1, guard: 0, tempo: 1.7,
-    spec: { note: 'POINT BLANK, AND IT ROCKS THEM', atClose: 0.7, stagger: 0.3 } },
+  // ---- BRASS KNUCKLES ARE A FIST, A LITTLE HARDER.  They hit more than a
+  // bare hand and less than anything with an edge or a weight on it: the
+  // lowest roll there is, at KNUCKLE_MUL of it (see `statsOf`), and the
+  // point-blank bonus kept small.  What they have is speed and the knock.
+  // (and everything a bare fist has -- the quick feet, the combinations, the
+  // close-in bonus -- because it IS a fist; brass only adds to it)
+  { key: 'knuckles', name: 'BRASS KNUCKLES', power: [1, 1], heavy: [1, 2], resist: [7, 10], reach: [1, 3], hits: 1, guard: 0, tempo: 1.4,
+    spec: { note: 'A HARDER FIST, AND IT ROCKS THEM', fleet: 1.24, combo: 1.8, atClose: 0.5, stagger: 0.3 } },
   { key: 'dagger', name: 'SHORT DAGGER', power: [2, 4], heavy: [1, 2], resist: [5, 8], reach: [2, 3], hits: 1, guard: 0, tempo: 1.55,
     spec: { note: 'FASTER THE CLOSER IT GETS', atClose: 0.45, combo: 1.3 } },
   { key: 'twindagger', name: 'TWIN DAGGERS', power: [2, 4], heavy: [1, 2], resist: [4, 7], reach: [1, 3], hits: 2, guard: 0, tempo: 1.6,
@@ -1217,6 +1231,8 @@ const BASE_HP = 118;
 const HP_PER_RESIST = 7.5;
 /** What a bare fist is worth, as a share of the same roll in a weapon. */
 const BARE_MUL = 0.8;
+/** And brass on the fist: between a bare hand and the weakest weapon there is. */
+const KNUCKLE_MUL = 0.92;
 /** A point of rolled weapon power, in damage. */
 const POWER_PER_ROLL = 3.6;
 /** A point of rolled reach, in pixels past the base distance. */
@@ -1315,7 +1331,7 @@ export function statsOf(kit: Kit, weapon: WeaponDef, wRolls?: Piece, type?: Liza
   // at the floor and swung at BARE_MUL of it, so a bare fist is below the
   // weakest swing any weapon can roll -- a slingshot or a blowgun at its
   // lowest -- for every archetype, the weak ones and the strong ones alike.
-  const bare = weapon.key === 'none' ? BARE_MUL : 1;
+  const bare = weapon.key === 'none' ? BARE_MUL : weapon.key === 'knuckles' ? KNUCKLE_MUL : 1;
   // armour that makes you hit harder: a berserker's pelt, war paint
   const fury = 1 + (['head', 'body', 'legs'] as const)
     .reduce((n, sl) => n + (kit[sl].mat?.fury ?? 0) * COVER[sl], 0);
@@ -5747,11 +5763,26 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
     const hw = weaveOf(H.key);
     let crested = false;
     // Where the face is -- the lower half of it, mouth and jaw, and the near
-    // eye -- for a mask to sit ON rather than float near.  Froggy's and the
-    // lizard's faces are known shapes; the animals' are their own, and a
-    // mask over a muzzle the length of a giraffe's is not attempted.
+    // eye -- for a mask to sit ON rather than float near: Froggy's, the
+    // lizard's, and every animal's own muzzle.
     const faceAt = (): { x0: number; x1: number; y0: number; y1: number; eyeX: number; eyeY: number } | null => {
-      if (beastParts) return null;
+      if (beastParts && animal) {
+        // Each animal's own muzzle and near eye, measured off `dressAnimal`
+        // (offsets from the head's centre): a mask goes over THAT, whether
+        // it is a gorilla's flat face or a hyena's long snout.
+        const F: Record<Animal, [number, number, number, number, number, number]> = {
+          gorilla: [-0.6, 7.2, 0.4, 6.8, 4.8, -0.4],
+          cheetah: [1.2, 8.2, -0.2, 4.2, 2.4, -1.4],
+          rhino: [2, 11.6, 0.6, 6.2, 1, -0.6],
+          hyena: [2.4, 12.4, -0.4, 5.2, 2.4, -1.8],
+          giraffe: [1.4, 10.8, -0.2, 4.4, 1.4, -1],
+          lion: [1.6, 7.8, 0.4, 6.4, 2.4, -2.3],
+          lizard: [1, 9, 0, 5, 2, -2],
+          wolf: [2, 12, -0.4, 4.4, 2.8, -1.6],
+        };
+        const [x0, x1, y0, y1, ex, ey] = F[animal];
+        return { x0: HX + x0, x1: HX + x1, y0: HY + y0, y1: HY + y1, eyeX: HX + ex, eyeY: HY + ey };
+      }
       if (frog) return { x0: 1, x1: 10.6, y0: -31.8, y1: -26.8, eyeX: 5, eyeY: -38 };
       const hyl = -32.6 * tall - lift;
       return { x0: skullW * 0.5, x1: skullW * 0.9 + 9 * skull, y0: hyl + 1, y1: hyl + 5.4 * skull, eyeX: 5, eyeY: -34.6 * tall - lift };
@@ -5809,9 +5840,9 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
       }
       case 'plague': {
         // THE BEAK.  A long curved mask out over the snout, a round glass
-        // eye, and a brimmed hat above it all.  On Froggy and the lizard the
-        // beak sits where their mouth is and the glass over the eye, not up
-        // on the hat where it was floating above both.
+        // eye, and a brimmed hat above it all.  On every face -- Froggy's,
+        // the lizard's, each animal's -- the beak sits over the mouth and the
+        // glass over the eye, not up on the hat where it floated above both.
         const face = faceAt();
         const bx = face ? face.x0 + 1 : cx + HW2 * 0.3;
         const by = face ? face.y0 - 1.2 : hy - 1.2;
@@ -5868,8 +5899,8 @@ export function buildFighter(scene: Phaser.Scene, f: Fighter): FighterArt {
         }
         hx2.fillStyle(gold, 1).fillCircle(bx, by, 1.1);
         // ---- THE MENPO: an iron face over the mouth, a lacquered red
-        // inside, a white moustache and a row of teeth.  On a frog or a
-        // lizard, whose faces the mask is made to fit.
+        // inside, a white moustache and a row of teeth, fitted over whatever
+        // face it is on.
         const face = H.key === 'tosei' ? faceAt() : null;
         if (face) {
           const { x0, x1, y0, y1 } = face;

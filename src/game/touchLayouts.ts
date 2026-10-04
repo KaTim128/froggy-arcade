@@ -44,11 +44,14 @@ const ROOM: TouchLayout = {
   ],
 };
 
-/** A pavement: you only ever go left and right on one. */
+/** A pavement: you only ever go left and right on one -- and you can run on it. */
 const STREET: TouchLayout = {
   stick: 'lr',
   arrows: true,
-  buttons: [{ label: 'E', key: 'E', primary: true }],
+  buttons: [
+    { label: 'E', key: 'E', primary: true },
+    { label: 'RUN', key: 'SHIFT' },
+  ],
 };
 
 /** Nothing but the picture, which is already tappable. */

@@ -5828,9 +5828,22 @@ export class HideRoom3D extends Phaser.Scene {
     this.stage = null;
     froggyLayer.clear();
     delete (window as unknown as Record<string, unknown>).__hide;
+    if (this.talkHold) touchControls.releaseStick();
+    this.talkHold = false;
   }
 
+  /** Whether the briefing's talk has the phone's controls put away. */
+  private talkHold = false;
+
   update(): void {
+    // While he is talking -- the rules, before a round -- the phone's controls
+    // are put away, like any other dialogue's, and come back when he stops.
+    const talking = this.mode === 'briefing' && !!this.subtitle && !this.atKey();
+    if (talking !== this.talkHold) {
+      this.talkHold = talking;
+      if (talking) touchControls.holdStick();
+      else touchControls.releaseStick();
+    }
     // The prompt is cheap to recompute and needs to track the player.
     // It also comes DOWN for the escape: there is nothing left to press, and
     // a line reading HOLD [E] over a sequence that no longer wants anything

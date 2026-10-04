@@ -693,7 +693,7 @@ class TouchControls {
    * the bottom of the picture, so it can keep it inside the clear middle.
    */
   overBottom(): { left: number; right: number } {
-    if (!this.root || this.root.hidden) return { left: 0, right: 0 };
+    if (!this.root || this.root.hidden || this.stickHeld > 0) return { left: 0, right: 0 };
     const canvas = document.querySelector('#game-root canvas') as HTMLCanvasElement | null;
     if (!canvas) return { left: 0, right: 0 };
     const pic = canvas.getBoundingClientRect();
@@ -835,10 +835,23 @@ class TouchControls {
   }
 
   /**
-   * While something is being SAID -- a talk panel up -- the arrow pad goes:
-   * nobody walks mid-sentence, and it was sitting on the corner of the panel.
-   * Counted, so two panels and one close cannot bring it back early.
+   * While something is being SAID -- a dialogue box or a talk panel up -- the
+   * controls go, all of them: the pad, the buttons, the cross.  Nobody walks
+   * or presses anything mid-sentence (a tap on the picture moves the talk
+   * on), and they come back when it is over.  Counted, so two panels and one
+   * close cannot bring them back early.  The gear stays.
    */
+  /** Whether talk has the controls put away right now. */
+  talking(): boolean {
+    return this.stickHeld > 0;
+  }
+
+  /** One press of a key, as if a button had been tapped: for a tap on a talk panel. */
+  tap(k: KeyName): void {
+    this.down(k);
+    window.setTimeout(() => this.up(k), 60);
+  }
+
   holdStick(): void {
     this.stickHeld++;
     this.syncStick();
@@ -852,12 +865,16 @@ class TouchControls {
     if (!this.root) return;
     const zoneL = this.root.querySelector('.tc-left') as HTMLElement;
     zoneL.style.visibility = this.layout.stick && this.stickHeld === 0 ? 'visible' : 'hidden';
+    const zoneR = this.root.querySelector('.tc-right') as HTMLElement;
+    zoneR.style.visibility = this.stickHeld === 0 ? 'visible' : 'hidden';
+    if (this.crossEl) this.crossEl.style.visibility = this.stickHeld === 0 ? 'visible' : 'hidden';
     (this.dpad as HTMLElement).hidden = this.layout.joystick === true;
     (this.joyEl as HTMLElement).hidden = this.layout.joystick !== true;
     if (this.stickHeld || !this.layout.joystick) this.joyRelease();
     if (this.stickHeld) {
-      for (const k of ['W', 'A', 'S', 'D', 'UP', 'DOWN', 'LEFT', 'RIGHT'] as KeyName[]) this.up(k);
+      for (const k of [...this.held]) this.up(k);
       this.padTouches.clear();
+      this.root.querySelectorAll('.down').forEach((el) => el.classList.remove('down'));
     }
   }
 

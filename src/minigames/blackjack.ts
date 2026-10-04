@@ -931,6 +931,10 @@ function finish(won: boolean, why: string, push = false): void {
   // Froggy takes what is there rather than pushing the balance below nothing.
   if (won) {
     apiRef?.payout(bet + bet * stakeMul);
+    // What the hand was worth, said with the result -- before he asks about
+    // the next one -- so a win is never a number you have to work out.
+    outcome = `${why} - YOU WIN ${bet * stakeMul}`;
+    setStatus(outcome);
   } else if (push) {
     apiRef?.payout(bet);
   } else if (stakeMul > 1) {
