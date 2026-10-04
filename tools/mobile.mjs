@@ -802,6 +802,54 @@ for (const [name, w, h] of [
   await page.close();
 }
 
+// --------- 13. the Car Chase steers off a small thumbstick, gently and smoothly
+//
+// The arrow pad was full lock at the lightest touch.  Now a compact stick:
+// a small push steers a little, a full push steers more but under the
+// keyboard's lock, and the steering eases in rather than snapping.
+{
+  const page = await phone('?intro=1&tokens=40&game=carchase', { w: 844, h: 390 });
+  await page.keyboard.press('Enter');
+  await sleep(1500);
+  const box = await page.evaluate(() => {
+    const j = document.querySelector('#touch-controls .tc-joy');
+    const r = j.getBoundingClientRect();
+    return { shown: !j.hidden && r.width > 0, w: r.width, cx: r.left + r.width / 2, cy: r.top + r.height / 2, pad: !document.querySelector('#touch-controls .tc-dpad').hidden };
+  });
+  const drive = async (push, ms) => {
+    await page.evaluate(() => {
+      window.__chase.clearRoad();
+      window.__chase.setPlayer(window.__chase.laneX(0), 140);
+    });
+    await sleep(250);
+    const x0 = await page.evaluate(() => window.__chase.state().px);
+    const cdp = await page.target().createCDPSession();
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.cx, y: box.cy, id: 1 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: box.cx + (box.w / 2) * push, y: box.cy, id: 1 }] });
+    await sleep(90);
+    const early = await page.evaluate(() => window.__chase.state().thumbSteer);
+    await sleep(ms - 90);
+    const x1 = await page.evaluate(() => window.__chase.state().px);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await cdp.detach();
+    return { moved: x1 - x0, early };
+  };
+  const light = await drive(0.45, 500);
+  const full = await drive(1, 500);
+  const after = await page.evaluate(() => window.__touch.held());
+  // The keyboard's full lock over the same half second, for the bar.
+  const keyLock = 170 * 0.5;
+  await page.screenshot({ path: `${SHOTS}/10-chase-stick.png` });
+  check(
+    'the car chase steers off a compact stick: a little push a little, a full push under full lock, eased in',
+    box.shown && !box.pad && box.w <= 110 &&
+      light.moved > 1 && light.moved < full.moved * 0.5 && full.moved < keyLock * 0.85 && full.moved > keyLock * 0.4 &&
+      full.early < 0.75 && after.length === 0,
+    `stick ${Math.round(box.w)}px, light ${light.moved.toFixed(1)}px, full ${full.moved.toFixed(1)}px (keys ${keyLock}), eased to ${full.early.toFixed(2)} after 90ms, held [${after}]`,
+  );
+  await page.close();
+}
+
 // -------------------------------- 11. and the desktop opening is left alone
 {
   const page = await browser.newPage();

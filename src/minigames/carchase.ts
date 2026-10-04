@@ -107,6 +107,7 @@ import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
+import { touchControls } from '../ui/touchControls';
 import type { MinigameApi, MinigameModule } from './types';
 
 const ID = 'carchase' as const;
@@ -185,6 +186,18 @@ const SPEED_MAX = 190;
  */
 const STEER = 170;
 const CREEP = 50;
+/**
+ * ON A PHONE: a small thumbstick, steered by degrees.  The arrow pad was all
+ * or nothing -- a touch was full lock -- so the car flicked across lanes at
+ * the lightest press.  The stick's push is curved (a little push is a very
+ * little steer, the edge of it is most of the lock), capped below the
+ * keyboard's full lock, and eased in and out so the car drifts across rather
+ * than snapping.  The keyboard is untouched.
+ */
+const TOUCH_STEER_MAX = 0.8;
+const TOUCH_STEER_CURVE = 1.7;
+/** How quickly the steering follows the thumb, per second. */
+const TOUCH_STEER_EASE = 7;
 /**
  * THE RESPITE.  Ten seconds with nobody behind you.
  *
@@ -685,6 +698,8 @@ let over = false;
 /** What ended the run, for the HUD's sake and for the harness's. */
 let reason = '';
 let keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
+/** The steering the thumbstick has eased to so far, -1..1 (keyboard: unused). */
+let thumbSteer = 0;
 let hud: {
   cash: Phaser.GameObjects.BitmapText;
   best: Phaser.GameObjects.BitmapText;
@@ -744,6 +759,7 @@ export const carChase: MinigameModule = {
   },
   touch: {
     stick: 'wasd',
+    joystick: true,
     buttons: [
       { label: 'BOMB\n30', key: 'SPACE', primary: true },
     ],
@@ -754,6 +770,7 @@ export const carChase: MinigameModule = {
     scene0 = scene;
     apiRef = api;
     px = LANES[1];
+    thumbSteer = 0;
     py = 140;
     speed = SPEED_START;
     elapsed = 0;
@@ -982,6 +999,9 @@ export const carChase: MinigameModule = {
           smoking: potholeHits >= SMOKE_FROM,
           smoke: smoke.length,
           broken: brokenMs > 0,
+          /** Where the car is, and how much the thumbstick is steering. */
+          px,
+          thumbSteer,
           stage: stage(),
           barriers: barriers.length,
           barrierLanes: barriers.map((b) => b.lane),
@@ -1222,8 +1242,19 @@ export const carChase: MinigameModule = {
     // ---- the road, and you on it.  It runs quicker the more you are carrying.
     speed = Math.min(SPEED_MAX + heat * HEAT_ROAD, SPEED_START + (elapsed / 1000) * SPEED_RAMP + heat * HEAT_ROAD);
     const ground = speed * (jolted ? POTHOLE_SPEED : 1) * engine;
-    const dx = (held('right') ? 1 : 0) - (held('left') ? 1 : 0);
-    const dy = (held('down') ? 1 : 0) - (held('up') ? 1 : 0);
+    let dx = (held('right') ? 1 : 0) - (held('left') ? 1 : 0);
+    let dy = (held('down') ? 1 : 0) - (held('up') ? 1 : 0);
+    const joy = touchControls.joy();
+    if (joy.active) {
+      // the thumbstick, by degrees and eased: see TOUCH_STEER_MAX
+      const want = Math.sign(joy.x) * Math.abs(joy.x) ** TOUCH_STEER_CURVE * TOUCH_STEER_MAX;
+      thumbSteer += (want - thumbSteer) * Math.min(1, dt * TOUCH_STEER_EASE);
+      if (Math.abs(thumbSteer) < 0.005 && want === 0) thumbSteer = 0;
+      dx = thumbSteer;
+      dy = Math.abs(joy.y) < 0.3 ? 0 : joy.y;
+    } else {
+      thumbSteer = 0;
+    }
     // What is left of the steering.  A pothole takes half of it for under a
     // second; a slick takes four fifths of it for three.
     // A broken car does not steer at all; a spinning one barely does.
