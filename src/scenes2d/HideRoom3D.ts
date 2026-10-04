@@ -140,6 +140,14 @@ const LOST_YOU_S = 5;
  */
 const ROOM_PACE = [1, 1.08, 1.18];
 /**
+ * And on top of that, how briskly he SEARCHES each zone -- not how fast he
+ * chases.  The first zone is the biggest room with the most places in it and
+ * the shortest clock, and at the old pace he got round about half of it
+ * before the bell; this is what lets him realistically work each room in
+ * the time it has, without making being seen any worse.
+ */
+const SEARCH_BOOST = [1.22, 1.08, 1.0];
+/**
  * How long he takes to open a hiding place, by zone.  The lid comes up a
  * little over halfway through, so in the last room you have well under a
  * second between hearing him at the box and being found in it.
@@ -173,8 +181,9 @@ const EYE_CROUCH = 0.8;
 const HIDE_VIEW: Record<SpotKind, { yaw: number; up: number; down: number }> = {
   locker: { yaw: 0.6, up: 0.2, down: 0.26 },
   cupboard: { yaw: 0.5, up: 0.3, down: 0.36 },
-  // under the bed: the whole long side, and not much up or down
-  bed: { yaw: 0.85, up: 0.1, down: 0.14 },
+  // Under something: all the way round -- you are lying in there and can
+  // turn your head to look anywhere -- and not much up or down.
+  bed: { yaw: Math.PI, up: 0.1, down: 0.14 },
   chest: { yaw: 0.65, up: 0.12, down: 0.14 },
 };
 /** Seconds to get in, or out: the eye travelling to the opening, the dark closing round it. */
@@ -822,6 +831,17 @@ export class HideRoom3D extends Phaser.Scene {
   private eyeNow = EYE;
   /** Which pass over the hiding places he is on.  Every spot gets opened once per pass. */
   private sweep = 0;
+  /**
+   * How long the check he is on takes, fixed when he starts it: the clock can
+   * hurry him between checks but not halfway through one.
+   */
+  private checkTotal = 0;
+  /** The spot he is about to look at again -- the double take.  See `endCheck`. */
+  private recheck: Spot3D | null = null;
+  /** How many times in a row he has checked the spot he is on. */
+  private rechecks = 0;
+  /** The last spot he finished with, so the next trip is not straight back to it by chance. */
+  private lastChecked: Spot3D | null = null;
   /** Distance he has walked since his last step sound. */
   private fStep = 0;
   /** Where he stood last frame, so the walk animates off real movement. */
@@ -1161,6 +1181,10 @@ export class HideRoom3D extends Phaser.Scene {
     this.crouching = false;
     this.eyeNow = EYE;
     this.sweep = 0;
+    this.checkTotal = 0;
+    this.recheck = null;
+    this.rechecks = 0;
+    this.lastChecked = null;
     this.grace = 0;
 
     froggyLayer.clear();
@@ -3602,7 +3626,7 @@ export class HideRoom3D extends Phaser.Scene {
         // The lid comes up a little past the halfway mark, and it is heard
         // when it does — from anywhere in the room.  This is the sound the
         // round is played by.
-        const total = this.openSeconds(spot);
+        const total = this.checkTotal || this.openSeconds(spot);
         // A lid comes up just past halfway.  A bed is NOT opened: he gets down
         // and looks under it, and what is heard at 58% is him on the floor
         // beside it.  The blanket stays where it is.
@@ -3641,6 +3665,17 @@ export class HideRoom3D extends Phaser.Scene {
         }
       }
       if (this.fTimer <= 0) {
+        // A pause to listen that was a double take: back to the same spot.
+        if (this.fMode === 'listen' && this.recheck) {
+          const again = this.recheck;
+          this.recheck = null;
+          this.startCheck(again);
+          return;
+        }
+        if (this.fMode === 'openSpot' && this.targetSpot) {
+          this.endCheck(this.targetSpot);
+          return;
+        }
         if (this.targetSpot) {
           this.targetSpot.opening = false;
           this.targetSpot.slammed = false;
@@ -3985,8 +4020,25 @@ export class HideRoom3D extends Phaser.Scene {
     const hunt = this.isFinal ? pace * FINAL_SEARCH_PACE : pace;
     // Something made a noise, so he is not dawdling — but he is not chasing
     // either, because he has not seen anything to chase.
-    if (this.fMode === 'investigate') return FROGGY_SEARCH * hunt;
-    return (this.unseenT > LOST_YOU_S ? FROGGY_PROWL : FROGGY_SEARCH) * hunt;
+    // AND AS THE CLOCK RUNS DOWN HE HURRIES: up to a third again on his
+    // search pace in the last stretch of the round (see `urgency`).
+    const hurry = (1 + 0.4 * this.urgency) * SEARCH_BOOST[Math.min(this.roomIndex, SEARCH_BOOST.length - 1)];
+    if (this.fMode === 'investigate') return FROGGY_SEARCH * hunt * hurry;
+    return (this.unseenT > LOST_YOU_S ? FROGGY_PROWL : FROGGY_SEARCH) * hunt * hurry;
+  }
+
+  /**
+   * 0..1, how short the round is getting: nothing for the first sixty per
+   * cent of it, then eased up to 1 at the bell.  The arcade has no clock, so
+   * none there.  He moves faster on it, checks quicker, double-takes less and
+   * goes for what he has not opened yet -- so he can get round the room before
+   * time is up, and the end of a round is the worst part of it.
+   */
+  private get urgency(): number {
+    if (this.isFinal || this.mode !== 'seeking') return 0;
+    const total = seekFor(this.roomIndex);
+    const u = Phaser.Math.Clamp((0.4 - this.clock / total) / 0.4, 0, 1);
+    return u * u * (3 - 2 * u);
   }
 
   /** 0..1, how far into a long chase this one is: eased, so it builds rather than steps. */
@@ -4053,8 +4105,46 @@ export class HideRoom3D extends Phaser.Scene {
    * sequence is a twitch.  Twice and a bit gives each beat room to land.
    */
   private openSeconds(spot?: Spot3D | null): number {
-    const base = OPEN_S[Math.min(this.roomIndex, OPEN_S.length - 1)];
+    const base = OPEN_S[Math.min(this.roomIndex, OPEN_S.length - 1)] * (1 - 0.28 * this.urgency);
     return spot?.kind === 'bed' ? base * 2.3 : base;
+  }
+
+  /** He goes to work on a hiding place: the check's length is fixed now. */
+  private startCheck(spot: Spot3D): void {
+    this.targetSpot = spot;
+    this.fMode = 'openSpot';
+    this.checkTotal = this.openSeconds(spot);
+    this.fTimer = this.checkTotal;
+    this.froggyYaw = Math.atan2(spot.x - this.froggy.x, spot.z - this.froggy.y);
+  }
+
+  /**
+   * ---- AND HE MIGHT LOOK AGAIN.  Done with a hiding place, now and then he
+   * stops, listens -- and goes back to it: a double take, and once in a while
+   * a third.  Having been checked is not the same as being safe, and he
+   * cannot be timed by "he has done that one".  Less of it as the clock runs
+   * down, when he is trying to get round.
+   */
+  private endCheck(spot: Spot3D): void {
+    spot.opening = false;
+    spot.slammed = false;
+    spot.rattle = 0;
+    spot.checkedOn = this.sweep;
+    spot.sinceChecked = 0;
+    this.targetSpot = null;
+    this.checkTotal = 0;
+    const odds = (this.rechecks === 0 ? 0.24 : this.rechecks === 1 ? 0.3 : 0) * (1 - 0.65 * this.urgency);
+    if (Math.random() < odds) {
+      this.rechecks++;
+      this.recheck = spot;
+      this.fMode = 'listen';
+      this.fTimer = 0.5 + Math.random() * 0.8;
+      return;
+    }
+    this.rechecks = 0;
+    this.lastChecked = spot;
+    this.fMode = 'search';
+    this.pickWaypoint();
   }
 
   /**
@@ -4098,7 +4188,7 @@ export class HideRoom3D extends Phaser.Scene {
     }
     if (spot.kind === 'bed') return this.bedAction(dt, spot);
     this.crawlHands = null;
-    const total = this.openSeconds(spot);
+    const total = this.checkTotal || this.openSeconds(spot);
     const k = 1 - Phaser.Math.Clamp(this.fTimer / total, 0, 1);
     const ss = THREE.MathUtils.smoothstep;
     const size = this.monster.size;
@@ -4199,7 +4289,7 @@ export class HideRoom3D extends Phaser.Scene {
   private bedAction(dt: number, spot: Spot3D) {
     const m = this.monster!;
     const size = m.size;
-    const total = this.openSeconds(spot);
+    const total = this.checkTotal || this.openSeconds(spot);
     const k = 1 - Phaser.Math.Clamp(this.fTimer / total, 0, 1);
     const ss = THREE.MathUtils.smoothstep;
     const yaw = this.froggyYaw;
@@ -4336,14 +4426,13 @@ export class HideRoom3D extends Phaser.Scene {
     const roll = Math.random();
     // He opens what he walked to.  Every spot gets checked once a sweep, and
     // a spot he has not touched in a while gets opened whatever the sweep says.
-    if (spot && (spot.checkedOn < this.sweep || spot.sinceChecked > STALE_S || roll < 0.5)) {
-      this.targetSpot = spot;
-      this.fMode = 'openSpot';
-      this.fTimer = this.openSeconds(spot);
-      this.froggyYaw = Math.atan2(spot.x - this.froggy.x, spot.z - this.froggy.y);
+    if (spot && (spot.checkedOn < this.sweep || spot.sinceChecked > STALE_S || roll < 0.45 * (1 - 0.6 * this.urgency))) {
+      this.rechecks = 0;
+      this.startCheck(spot);
       return;
     }
-    if (roll < 0.65) {
+    // (pausing to listen is a luxury he has less time for late on)
+    if (roll < 0.65 - 0.3 * this.urgency) {
       // Stops dead and listens.  If you are running, this is when he hears it.
       this.fMode = 'listen';
       this.fTimer = 0.9 + Math.random() * 0.9;
@@ -4402,18 +4491,35 @@ export class HideRoom3D extends Phaser.Scene {
       // the nearest one still to do, so a sweep is a walk around the room and
       // not a tour of its far corners — and one trip in five is a spot he has
       // already done, so having been checked is not the same as being safe.
-      let pool = this.spots.filter((c) => c.checkedOn < this.sweep);
-      if (pool.length === 0) {
-        this.sweep++;
-        pool = this.spots.slice();
-      }
-      let pick: Spot3D;
-      if (Math.random() < 0.2) {
-        pick = Phaser.Utils.Array.GetRandom(this.spots);
-      } else {
-        const here = this.froggy;
-        pool.sort((a, b) => Math.hypot(a.x - here.x, a.z - here.y) - Math.hypot(b.x - here.x, b.z - here.y));
-        pick = pool[Math.floor(Math.random() * Math.min(2, pool.length))];
+      // NOT THE SAME ROUTE TWICE.  Every hiding place has a chance, weighted:
+      // the ones not yet opened this sweep most, the ones left alone longest
+      // more, the near ones more than the far -- and the one he has just done
+      // hardly at all, unless that is the double take.  So the order is
+      // different every round and every sweep, he goes back over old ground
+      // now and then, and late in the round (urgency) the weights tighten
+      // onto what he has not checked and what is close, which is how he gets
+      // round before the clock.
+      if (!this.spots.some((c) => c.checkedOn < this.sweep)) this.sweep++;
+      const u = this.urgency;
+      const here = this.froggy;
+      const weights = this.spots.map((c) => {
+        const d = Math.hypot(c.x - here.x, c.z - here.y);
+        const fresh = c.checkedOn < this.sweep ? 1 + 2.2 * u : 0.3 * (1 - 0.8 * u);
+        const stale = 1 + Math.min(1.5, c.sinceChecked / STALE_S);
+        // (strongly: crossing the room for every check spent most of a round
+        // walking, and left half of the first zone unopened at the bell)
+        const near = 1 / (1 + d / 6) ** (2 + 1.5 * u);
+        const again = c === this.lastChecked ? 0.15 : 1;
+        return fresh * stale * near * again * (0.6 + Math.random() * 0.8);
+      });
+      let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
+      let pick = this.spots[this.spots.length - 1];
+      for (let i = 0; i < this.spots.length; i++) {
+        roll -= weights[i];
+        if (roll <= 0) {
+          pick = this.spots[i];
+          break;
+        }
       }
       this.waypoint.set(pick.x, pick.z);
     } else {
