@@ -21,6 +21,7 @@
  * fifteen seconds; the room only turns once the count is over.
  */
 
+import { touchControls } from '../ui/touchControls';
 import { isTouch } from '../core/device';
 import { isPaused } from '../core/pause';
 import Phaser from 'phaser';
@@ -692,8 +693,8 @@ type FroggyMode = 'search' | 'listen' | 'openSpot' | 'investigate' | 'chase' | '
  * prompts, less for a long subtitle.  The overlay is device resolution, so
  * a fractional scale stays sharp.
  */
-function fitScale(s: string): number {
-  return Math.max(1, Math.min(2, (GAME_W - 24) / (s.length * 6)));
+function fitScale(s: string, room = GAME_W - 24): number {
+  return Math.max(1, Math.min(2, room / (s.length * 6)));
 }
 
 interface Spot3D {
@@ -5246,8 +5247,12 @@ export class HideRoom3D extends Phaser.Scene {
           const n = ms < words * 150 ? Math.floor(ms / 150) : words + Math.floor((ms - words * 150) / 520);
           line = this.subtitle.slice(0, n);
         }
-        drawPixelText(ctx, line, GAME_W / 2, GAME_H - 30, {
-          scale: fitScale(this.subtitle),
+        // On a phone held sideways the thumbs' controls can reach in over the
+        // bottom corners of the picture; the line keeps to the clear middle.
+        const over = touchControls.overBottom();
+        const room = GAME_W - 24 - over.left - over.right;
+        drawPixelText(ctx, line, GAME_W / 2 + (over.left - over.right) / 2, GAME_H - 30, {
+          scale: fitScale(this.subtitle, room),
           color: '#e8e2cd',
           center: true,
           alpha: creep ? 0.75 + Math.sin(performance.now() / 90) * 0.12 : 1,

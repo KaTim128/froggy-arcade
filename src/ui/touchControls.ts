@@ -25,14 +25,16 @@
  * so up-and-left is up-and-left either way.  It only shows the arrows the game
  * in front of it reads; a one-axis game gets two.
  *
- * THE CONTROLS ARE NEVER ON THE GAME.  In portrait a 16:9 picture inside a
- * tall phone leaves a band under it, and that band is where the controls go.
- * In landscape they take a column either side of the picture instead -- a
- * wide phone has most of one going spare already -- and the picture is fitted
- * between them.  Either way nothing a thumb presses can cover a timer, a
- * score, a dialogue box or the thing being hidden in.  Every band and column
- * is a themed panel rather than dead black, and all of it sits inside the
- * phone's safe area, clear of the notch and the rounded corners.
+ * THE GAME GETS THE WHOLE SCREEN, AND THE CONTROLS FLOAT ON IT.  Nothing is
+ * reserved for them: the picture is fitted as large as the glass allows, and
+ * the pad and the buttons sit in the bottom corners as an overlay, with no
+ * panel or background behind them -- just the buttons.  Where the picture
+ * leaves black either side of it (landscape) or under it (portrait) they sit
+ * in that black, so they cover nothing; where it does not, they sit over the
+ * corners of the picture, see-through until a thumb is on them.  The gear
+ * goes wherever it is clear of the game's own QUIT.  All of it stays inside
+ * the phone's safe area, clear of the notch and the rounded corners, and all
+ * of it goes away for a jumpscare (`suspendFor`).
  *
  * AND THEY WEAR THE BUILDING'S MOOD.  Through the horror act they are rusted
  * iron -- scratched, worn at the edges, a little dried blood; once it is over
@@ -124,12 +126,12 @@ const STYLE = `
   font-family: ui-monospace, "Courier New", monospace;
 }
 #touch-controls .tc-zone {
-  position: absolute; bottom: 0; height: var(--tc-band, 190px);
-  display: flex; align-items: center;
+  position: absolute; bottom: var(--tc-bottom, 16px);
+  display: flex; align-items: flex-end;
   pointer-events: none;
 }
-#touch-controls .tc-left { left: 0; width: 46%; justify-content: center; }
-#touch-controls .tc-right { right: 0; width: 54%; justify-content: center; }
+#touch-controls .tc-left { left: var(--tc-left, 16px); }
+#touch-controls .tc-right { right: var(--tc-right, 16px); }
 
 /* The arrow pad: a ring of eight arrows round an empty middle.  The pad
    itself takes the touch, so a thumb can slide from arrow to arrow without
@@ -249,25 +251,9 @@ const STYLE = `
 #touch-controls.skin-horror .tc-lookzone { border-color: rgba(200, 150, 110, 0.14); }
 #touch-controls.skin-horror .tc-hint { color: #e0c8a8; }
 
-/* The band in portrait sits above the home bar. */
-#touch-controls .tc-zone { padding-bottom: var(--tc-safe-b, 0px); box-sizing: border-box; }
-
-/* Landscape: a column either side of the picture, and the controls in the
-   lower middle of each, where the thumbs rest.  Five buttons go two across,
-   not three, so the column stays narrow. */
-#touch-controls.overlay .tc-zone {
-  top: 0; bottom: 0; height: auto;
-  align-items: center; padding-top: 16vh; padding-bottom: var(--tc-safe-b, 0px);
-}
-#touch-controls.overlay .tc-left { left: 0; width: var(--tc-side, 160px); padding-left: var(--tc-safe-l, 0px); }
-#touch-controls.overlay .tc-right { right: 0; width: var(--tc-side, 160px); padding-right: var(--tc-safe-r, 0px); }
+/* Landscape: five buttons go two across, not three, so the cluster stays
+   in the corner.  The gear is placed by relayout(). */
 #touch-controls.overlay .tc-pads.three { grid-template-columns: repeat(2, auto); }
-#touch-controls .tc-corner { top: max(8px, var(--tc-safe-t, 0px)); right: max(8px, var(--tc-safe-r, 0px)); }
-/* In portrait the picture sits right at the top, so the gear lives in the
-   top corner of the controls' panel instead of over the picture, and the
-   controls sit low in the panel, under the thumbs. */
-#touch-controls:not(.overlay) .tc-corner { top: auto; bottom: calc(var(--tc-band, 190px) - 56px); }
-#touch-controls:not(.overlay) .tc-zone { align-items: flex-end; padding-bottom: calc(var(--tc-safe-b, 0px) + min(7vh, 60px)); }
 
 /* The panels behind the controls: the arcade's purple with its pink trim and
    a scatter of lily pads, never plain black. */
@@ -331,6 +317,21 @@ const STYLE = `
     rgba(28, 82, 80, 0.8);
 }
 #touch-controls.skin-after .tc-panel { filter: saturate(0.7) hue-rotate(-14deg) brightness(0.92); }
+
+/* Over the picture (landscape without room in the black either side) the
+   controls are see-through until a thumb is on them, so the game shows
+   through them; in the black they are solid. */
+#touch-controls.over .tc-dpad { opacity: 0.62; }
+#touch-controls.over .tc-btn { opacity: 0.66; }
+#touch-controls.over .tc-dkey { background: rgba(20, 26, 36, 0.42); }
+#touch-controls.over .tc-dkey.diag { background: rgba(20, 26, 36, 0.28); }
+#touch-controls.over .tc-btn { background: rgba(61, 42, 92, 0.42); }
+#touch-controls.over .tc-btn.primary { background: rgba(20, 92, 95, 0.48); }
+#touch-controls.over .tc-btn.down, #touch-controls.over .tc-dkey.down { opacity: 1; }
+#touch-controls.over .tc-dpad:has(.down) { opacity: 1; }
+
+/* No panels: the controls are buttons on the screen and nothing else. */
+#touch-controls .tc-panel { display: none !important; }
 
 #touch-controls[hidden] { display: none; }
 `;
@@ -464,8 +465,7 @@ class TouchControls {
     const sidesWere = this.reserveSides().left;
     this.layout = layout;
 
-    const zoneL = this.root.querySelector('.tc-left') as HTMLElement;
-    zoneL.style.visibility = layout.stick ? 'visible' : 'hidden';
+    this.syncStick();
     this.syncArrows();
 
     const buttons = (layout.buttons ?? []).slice(0, 5);
@@ -544,35 +544,83 @@ class TouchControls {
    * drawn over the corners of the picture instead of under it.
    */
   reserveHeight(): number {
-    if (!this.root || !isTouch()) return 0;
-    if (window.innerHeight < window.innerWidth) return 0;
-    const safe = safeInsets().bottom;
-    return Math.round(Math.min(Math.max(window.innerHeight * 0.34, 190), window.innerHeight * 0.5)) + safe;
+    // Nothing: the picture is never made smaller for the controls.
+    return 0;
+  }
+
+  /** Nothing either: no columns either side, the picture is fitted to the screen. */
+  reserveSides(): { left: number; right: number } {
+    return { left: 0, right: 0 };
   }
 
   /**
-   * THE COLUMNS EITHER SIDE OF THE PICTURE, in landscape, in CSS pixels.
-   *
-   * Wide enough for whatever is in them -- the pad on the left, the buttons
-   * (two across) and the gear on the right -- plus a margin and the safe
-   * area, and the same width both sides so the picture stays centred.  A
-   * layout with nothing to press but the gear still keeps a narrow column,
-   * so the gear is never over the picture.  Zero in portrait.
+   * ---- GONE FOR A JUMPSCARE.  The whole overlay is hidden for `ms` -- the
+   * scare is the whole screen, and a gear or a RUN button over his face is a
+   * gear over his face -- and comes back by itself afterwards.  Keys held when
+   * it went are let go.
    */
-  reserveSides(): { left: number; right: number } {
-    if (!this.root || !isTouch() || window.innerHeight >= window.innerWidth) return { left: 0, right: 0 };
-    const safe = safeInsets();
-    const stick = this.stickPx();
-    const btn = this.btnPx();
-    const gap = this.gapPx();
-    const n = Math.min(5, (this.layout.buttons ?? []).length);
-    const primary = (this.layout.buttons ?? []).some((b) => b.primary);
-    const cols = Math.min(2, n);
-    const grid = cols ? cols * btn + (cols - 1) * gap + (primary ? btn * 0.25 : 0) : 0;
-    const left = this.layout.stick ? stick + 28 + safe.left : 0;
-    const right = Math.max(grid ? grid + 28 + safe.right : 0, this.layout.noQuit ? 0 : 44 + 20 + safe.right);
-    const side = Math.max(left, right);
-    return { left: side, right: side };
+  suspendFor(ms: number): void {
+    if (!this.root) return;
+    this.releaseAll();
+    this.root.hidden = true;
+    window.clearTimeout(this.suspendTimer);
+    this.suspendTimer = window.setTimeout(() => {
+      if (this.root) this.root.hidden = false;
+      this.relayout();
+    }, Math.max(0, ms));
+  }
+  private suspendTimer = 0;
+
+  /**
+   * How far, in GAME pixels, the corner clusters reach in over the bottom of
+   * the picture from its left and right edges -- zero where they sit in the
+   * black beside or under it.  For a scene that draws a line of text along
+   * the bottom of the picture, so it can keep it inside the clear middle.
+   */
+  overBottom(): { left: number; right: number } {
+    if (!this.root || this.root.hidden) return { left: 0, right: 0 };
+    const canvas = document.querySelector('#game-root canvas') as HTMLCanvasElement | null;
+    if (!canvas) return { left: 0, right: 0 };
+    const pic = canvas.getBoundingClientRect();
+    const per = 320 / pic.width;
+    const reach = (el: HTMLElement | null, side: 'l' | 'r'): number => {
+      if (!el || el.offsetParent === null) return 0;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.top > pic.bottom || r.bottom < pic.top) return 0;
+      return Math.max(0, side === 'l' ? r.right - pic.left : pic.right - r.left) * per;
+    };
+    const zoneL = this.root.querySelector('.tc-left') as HTMLElement | null;
+    const showL = !!this.layout.stick && zoneL?.style.visibility !== 'hidden';
+    return { left: showL ? reach(this.dpad, 'l') : 0, right: reach(this.pads, 'r') };
+  }
+
+  /**
+   * While something is being SAID -- a talk panel up -- the arrow pad goes:
+   * nobody walks mid-sentence, and it was sitting on the corner of the panel.
+   * Counted, so two panels and one close cannot bring it back early.
+   */
+  holdStick(): void {
+    this.stickHeld++;
+    this.syncStick();
+  }
+  releaseStick(): void {
+    this.stickHeld = Math.max(0, this.stickHeld - 1);
+    this.syncStick();
+  }
+  private stickHeld = 0;
+  private syncStick(): void {
+    if (!this.root) return;
+    const zoneL = this.root.querySelector('.tc-left') as HTMLElement;
+    zoneL.style.visibility = this.layout.stick && this.stickHeld === 0 ? 'visible' : 'hidden';
+    if (this.stickHeld) {
+      for (const k of ['W', 'A', 'S', 'D', 'UP', 'DOWN', 'LEFT', 'RIGHT'] as KeyName[]) this.up(k);
+      this.padTouches.clear();
+    }
+  }
+
+  /** Whether the overlay is up right now (it is not, during a jumpscare). */
+  isShown(): boolean {
+    return !!this.root && !this.root.hidden;
   }
 
   /** How big the arrow pad is right now, which everything else is sized off. */
@@ -584,9 +632,11 @@ class TouchControls {
     // Portrait is narrow: the pad and the buttons share one width, so the pad
     // takes 40% of it -- big, but leaving its half of the band a margin on
     // both sides and the buttons enough of theirs to stay off the edge.
+    // (landscape: smaller, because there it sits over the corner of the
+    // picture rather than in the black under it)
     return portrait
       ? Math.round(Math.min(200, Math.max(124, short * 0.4)))
-      : Math.round(Math.min(144, Math.max(112, short * 0.34)));
+      : Math.round(Math.min(124, Math.max(96, short * 0.28)));
   }
 
   /** A button: half the pad across, never under the size a thumb can hit blind. */
@@ -611,31 +661,81 @@ class TouchControls {
     const portrait = window.innerHeight >= window.innerWidth;
     this.root.classList.toggle('overlay', !portrait);
 
-    // The pad sets the scale of everything, and the band is whatever holds
-    // it — never the other way round, or the pad hangs off the screen.
     const stick = this.stickPx();
+    const btn = this.btnPx();
+    const gap = this.gapPx();
     const safe = safeInsets();
-    const band = portrait ? Math.max(this.band, this.reserveHeight(), stick + 24 + safe.bottom) : 0;
-    this.root.style.setProperty('--tc-band', `${band}px`);
-    this.root.style.setProperty('--tc-side', `${this.reserveSides().left}px`);
+    const canvas = document.querySelector('#game-root canvas') as HTMLCanvasElement | null;
+    const pic = canvas?.getBoundingClientRect() ?? new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+    // The black the picture leaves: under it in portrait, either side of it
+    // in landscape.
+    const under = Math.max(0, window.innerHeight - pic.bottom);
+    const barL = Math.max(0, pic.left);
+    const barR = Math.max(0, window.innerWidth - pic.right);
+    this.root.style.setProperty('--tc-band', `${Math.round(under)}px`);
     this.root.style.setProperty('--tc-stick', `${stick}px`);
-    this.root.style.setProperty('--tc-btn', `${this.btnPx()}px`);
+    this.root.style.setProperty('--tc-btn', `${btn}px`);
     this.root.style.setProperty('--tc-font', `${Math.round(Math.min(17, Math.max(11, stick * 0.09)))}px`);
-    this.root.style.setProperty('--tc-gap', `${this.gapPx()}px`);
+    this.root.style.setProperty('--tc-gap', `${gap}px`);
     this.root.style.setProperty('--tc-safe-t', `${safe.top}px`);
     this.root.style.setProperty('--tc-safe-r', `${safe.right}px`);
     this.root.style.setProperty('--tc-safe-b', `${safe.bottom}px`);
     this.root.style.setProperty('--tc-safe-l', `${safe.left}px`);
 
-    // The look pad covers exactly the picture, never the controls under it.
-    const canvas = document.querySelector('#game-root canvas') as HTMLCanvasElement | null;
+    // ---- WHERE THE CLUSTERS GO.  Bottom corners, in the black if the black
+    // is big enough to hold them, over the picture's corners if it is not.
+    const margin = 14;
+    const n = Math.min(5, (this.layout.buttons ?? []).length);
+    // Landscape: up to three buttons in ONE column hugging the right edge, so
+    // the cluster is narrow and stays off a subtitle or a score along the
+    // bottom of the picture; more than three go two across.
+    const cols = portrait ? Math.min(n >= 5 ? 3 : 2, n) : n <= 3 ? Math.min(1, n) : 2;
+    (this.pads as HTMLElement).style.gridTemplateColumns = cols ? `repeat(${cols}, auto)` : '';
+    const primary = (this.layout.buttons ?? []).some((b) => b.primary);
+    const padsW = cols ? cols * btn + (cols - 1) * gap + (primary ? btn * 0.25 : 0) : 0;
+    const left = barL >= stick + margin * 2 ? Math.round((barL - stick) / 2) : margin + safe.left;
+    const right = barR >= padsW + margin * 2 ? Math.round((barR - padsW) / 2) : margin + safe.right;
+    const bottom = portrait
+      ? safe.bottom + Math.round(Math.min(window.innerHeight * 0.07, 60, Math.max(margin, (under - stick) * 0.35)))
+      : safe.bottom + margin;
+    this.root.style.setProperty('--tc-left', `${left}px`);
+    this.root.style.setProperty('--tc-right', `${right}px`);
+    this.root.style.setProperty('--tc-bottom', `${bottom}px`);
+    // Over the picture means see-through (see STYLE): in landscape whenever
+    // a cluster is not in the black, and in portrait if the picture runs down
+    // into the controls (a very short, wide-ish phone).
+    const overPic = portrait ? under < stick + bottom + 8 : barL < stick + margin * 2 || barR < padsW + margin * 2;
+    this.root.classList.toggle('over', overPic);
+
+    // ---- THE GEAR.  Never over the game's own QUIT (top right of the
+    // picture).  Portrait: the top right of the black under the picture.
+    // Landscape: the top of the right-hand black if there is any; if not,
+    // the right edge just under the picture's title bar.
+    const quit = this.quit as HTMLElement;
+    const zoom = pic.width / 320;
+    let gearTop: number;
+    let gearRight: number;
+    if (portrait) {
+      gearTop = Math.round(pic.bottom + 10);
+      gearRight = margin + safe.right;
+    } else if (barR >= 56) {
+      gearTop = Math.max(8, safe.top + 8);
+      gearRight = Math.round((barR - 44) / 2);
+    } else {
+      gearTop = Math.round(pic.top + 20 * zoom + 6);
+      gearRight = Math.max(8, safe.right + 8);
+    }
+    quit.style.top = `${gearTop}px`;
+    quit.style.right = `${gearRight}px`;
+    quit.style.bottom = 'auto';
+
+    // The look pad covers exactly the picture.
     const pad = this.lookPad as HTMLElement;
     if (canvas) {
-      const r = canvas.getBoundingClientRect();
-      pad.style.left = `${Math.round(r.left)}px`;
-      pad.style.top = `${Math.round(r.top)}px`;
-      pad.style.width = `${Math.round(r.width)}px`;
-      pad.style.height = `${Math.round(r.height)}px`;
+      pad.style.left = `${Math.round(pic.left)}px`;
+      pad.style.top = `${Math.round(pic.top)}px`;
+      pad.style.width = `${Math.round(pic.width)}px`;
+      pad.style.height = `${Math.round(pic.height)}px`;
     }
     this.placeLookZone(portrait, canvas);
   }

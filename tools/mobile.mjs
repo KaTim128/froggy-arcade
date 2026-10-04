@@ -181,6 +181,11 @@ const labels = (page) =>
         portrait: window.innerHeight >= window.innerWidth,
         hitsStick: overlaps(c, stick),
         hitsPads: overlaps(c, pads),
+        // Where the black around the picture is too thin for them, the
+        // clusters sit over its bottom corners -- see-through, and marked so.
+        over: document.getElementById('touch-controls').classList.contains('over'),
+        corners: stick.top >= c.top + c.height * 0.4 && pads.top >= c.top + c.height * 0.4 &&
+          stick.right <= c.left + c.width * 0.42 && pads.left >= c.right - c.width * 0.42,
         stickOn: stick.bottom <= window.innerHeight + 1,
         padsOn: pads.right <= window.innerWidth + 1 && pads.bottom <= window.innerHeight + 1,
         // Every control a thumb presses: off the screen edge by a margin, and
@@ -204,13 +209,16 @@ const labels = (page) =>
     // Twice the buffer is the bar: below that the 5x8 pixel font stops being
     // readable at arm's length.
     const bigEnough = fit.w >= 320 * 1.1;
-    // Portrait puts the controls in the band UNDER the picture and landscape
-    // in a column either side of it, so nothing may overlap in either.
-    const clear = !fit.hitsStick && !fit.hitsPads && fit.stickOn && fit.padsOn;
+    // The picture is the whole screen it fits.  The controls go in the black
+    // around it when there is room (the band under it, in portrait), and only
+    // when there is not do they come in over it: translucent, and kept to the
+    // bottom corners, out of the middle where the game happens.
+    const clear =
+      (fit.hitsStick || fit.hitsPads ? fit.over && fit.corners : !fit.over) && fit.stickOn && fit.padsOn;
     check(
       `${name}: the picture fits and the thumbs are clear of it`,
       fit.onScreen && bigEnough && clear && fit.tight.length === 0,
-      `${fit.w}x${fit.h}, overlap stick=${fit.hitsStick} pads=${fit.hitsPads}` +
+      `${fit.w}x${fit.h}, overlap stick=${fit.hitsStick} pads=${fit.hitsPads} over=${fit.over} corners=${fit.corners}` +
         (fit.tight.length ? `; ${fit.tight.join(', ')}` : ''),
     );
     await page.close();
@@ -379,6 +387,8 @@ const labels = (page) =>
         const reachable = (n) =>
           have.has(n) ||
           n === 'CLICK' ||
+          // The race's numbered plates are drawn in the game and tapped there.
+          n === 'NUMBER' ||
           n === 'HOLD' ||
           n === 'MOUSE' ||
           // "NOTHING - THE FIGHT IS NOT YOURS" asks for no key at all.
@@ -472,18 +482,21 @@ const labels = (page) =>
     const btns = [...document.querySelectorAll('#touch-controls .tc-btn, #touch-controls .tc-dkey, #touch-controls .tc-corner')]
       .map((e) => e.getBoundingClientRect())
       .filter((b) => b.width > 0);
+    // Over the picture only in its bottom corners, never the middle third.
+    const mid = { left: c.left + c.width / 3, right: c.right - c.width / 3, top: c.top, bottom: c.bottom };
+    const high = { left: c.left, right: c.right, top: c.top, bottom: c.top + c.height * 0.4 };
     return {
       skin: document.getElementById('touch-controls').className,
-      covered: btns.filter((b) => over(b, c)).length,
+      covered: btns.filter((b) => over(b, mid) || over(b, high)).length,
       smallest: Math.min(...[...document.querySelectorAll('#touch-controls .tc-btn')].map((e) => e.getBoundingClientRect().width)),
       look: (() => { const l = r('#touch-controls .tc-look'); return l && c ? Math.abs(l.width - c.width) + Math.abs(l.left - c.left) : 99; })(),
     };
   });
   await page.screenshot({ path: `${SHOTS}/06b-hideroom-landscape.png` });
   check(
-    'landscape horror room: controls beside the picture, never on it, and rusted',
+    'landscape horror room: controls in the bottom corners, out of the middle, and rusted',
     geo.covered === 0 && geo.look < 2 && /skin-horror/.test(geo.skin) && geo.smallest >= 48,
-    `${geo.covered} controls over the picture, look pad off by ${geo.look}px, smallest button ${Math.round(geo.smallest)}px, [${geo.skin}]`,
+    `${geo.covered} controls in the middle or the top, look pad off by ${geo.look}px, smallest button ${Math.round(geo.smallest)}px, [${geo.skin}]`,
   );
 
   // He talks first, and nobody walks during the rules: wait for the round.

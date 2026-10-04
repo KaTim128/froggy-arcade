@@ -65,51 +65,32 @@ export function attachScaler(game: Phaser.Game): void {
   const apply = () => {
     if (!attached) return;
     const touch = isTouch();
-    // The least the controls will accept comes first, because it is what the
-    // picture has to fit above.
-    const reserve = touch ? touchControls.reserveHeight() : 0;
-    // In landscape the controls own a column either side instead, and the
-    // picture is fitted between them -- never under a thumb.
-    const sides = touch ? touchControls.reserveSides() : { left: 0, right: 0 };
-    // And the whole thing stays inside the phone's safe area: off the notch,
-    // off the rounded corners.
+    // THE WHOLE SCREEN IS THE GAME'S.  Nothing is reserved for the controls
+    // any more: they float over it (see touchControls).  The picture is fitted
+    // as large as the safe area allows -- across a portrait phone and up its
+    // top, or as tall as a landscape one and centred.
     const safe = touch ? safeInsets() : { top: 0, right: 0, bottom: 0, left: 0 };
-    const topPad = Math.max(TOUCH_TOP_PAD, safe.top);
-    // In portrait the controls own a band along the bottom and the picture is
-    // centred in everything above it, so a thumb is never over the game and
-    // the two halves of the screen are each centred in their own space.
-    if (root) {
-      root.style.paddingBottom = reserve > 0 ? `${reserve}px` : safe.bottom ? `${safe.bottom}px` : '';
-      root.style.paddingTop = reserve > 0 ? `${topPad}px` : safe.top ? `${safe.top}px` : '';
-      root.style.paddingLeft = sides.left ? `${sides.left}px` : safe.left ? `${safe.left}px` : '';
-      root.style.paddingRight = sides.right ? `${sides.right}px` : safe.right ? `${safe.right}px` : '';
-    }
-
-    const across = sides.left + sides.right || safe.left + safe.right;
+    const portrait = touch && window.innerHeight >= window.innerWidth;
+    const topPad = portrait ? Math.max(TOUCH_TOP_PAD, safe.top) : safe.top;
     const zoom = touch
-      ? computeTouchZoom(window.innerWidth, window.innerHeight - (reserve > 0 ? 0 : safe.top + safe.bottom), reserve, across, topPad)
+      ? computeTouchZoom(window.innerWidth, window.innerHeight - topPad - safe.bottom, 0, safe.left + safe.right, 0)
       : computeZoom(window.innerWidth, window.innerHeight);
-    // ---- AND IN PORTRAIT THE BAND TAKES EVERYTHING THE PICTURE DOES NOT.
-    // A phone is narrower than the picture wants, so the picture is fitted
-    // to the width and there is height to spare; that used to be black above
-    // and below it.  The picture goes to the top instead, and the controls'
-    // panel runs from under it to the bottom of the glass.
-    let band = reserve;
-    if (touch && reserve > 0 && root) {
-      band = Math.max(reserve, Math.floor(window.innerHeight - topPad - zoom * GAME_H));
-      root.style.paddingBottom = `${band}px`;
+    if (root) {
+      root.style.paddingTop = topPad ? `${topPad}px` : '';
+      root.style.paddingLeft = safe.left ? `${safe.left}px` : '';
+      root.style.paddingRight = safe.right ? `${safe.right}px` : '';
+      // In portrait the picture goes to the top: everything under it is
+      // padding, which is where the thumbs end up.
+      const below = portrait ? Math.max(safe.bottom, Math.floor(window.innerHeight - topPad - zoom * GAME_H)) : safe.bottom;
+      root.style.paddingBottom = below ? `${below}px` : '';
     }
     if (attached.scale.zoom !== zoom) attached.scale.setZoom(zoom);
     attached.scale.refresh();
     // PRD SM-4: the overlay tracks the scaled canvas exactly, but renders at
     // full device resolution so Froggy stays smooth at every zoom level.
     froggyLayer.syncTo(attached.canvas, zoom);
-    // Whatever the picture did not use is the controls': they grow into it,
-    // and the look pad is re-hung over the canvas where it now sits.
-    if (touch) {
-      touchControls.setBand(band);
-      touchControls.relayout();
-    }
+    // The controls are placed against wherever the picture now sits.
+    if (touch) touchControls.relayout();
   };
 
   apply();
