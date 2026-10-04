@@ -1519,7 +1519,9 @@ try {
       };
     });
     check('losing sight of you for five seconds slows him down',
-      gears.hunting === gears.search && gears.stillHunting === gears.search && gears.prowling < gears.search,
+      // (his hunting pace is his search pace times the room's search boost, so
+      // compare the three with each other rather than with the bare constant)
+      gears.hunting >= gears.search && gears.stillHunting === gears.hunting && gears.prowling < gears.hunting,
       `${gears.hunting} -> ${gears.prowling} after ${gears.lostAfter}s`);
     check('hunting he is faster than you can run', gears.chasing > gears.playerRun,
       `${gears.chasing} vs your ${gears.playerRun}`);

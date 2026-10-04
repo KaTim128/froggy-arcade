@@ -496,9 +496,15 @@ function slide(g: THREE.Group, w: number, h: number, d: number, color: number): 
   const chute = box(g, lam(color), w * 0.8, 0.06, Math.hypot(h, d - 0.6), 0, h / 2, 0.3);
   chute.rotation.x = Math.atan2(h, d - 0.6);
   for (const sx of [-1, 1]) {
-    const lip = box(g, lam(color), 0.05, 0.14, Math.hypot(h, d - 0.6), sx * w * 0.4, h / 2 + 0.05, 0.3);
+    // the chute's walls, tall enough to read as a slide from the side
+    const lip = box(g, lam(color), 0.05, 0.24, Math.hypot(h, d - 0.6), sx * w * 0.4, h / 2 + 0.1, 0.3);
     lip.rotation.x = chute.rotation.x;
+    // and what holds it up: the platform's front legs, and a pair of legs
+    // under the middle of the run, so it is not a plank in the air
+    cyl(g, frame, 0.035, h, sx * (w / 2 - 0.08), h / 2, -d / 2 + 0.6);
+    cyl(g, frame, 0.03, h / 2 - 0.04, sx * w * 0.32, (h / 2 - 0.04) / 2, 0.3);
   }
+  box(g, frame, w * 0.7, 0.04, 0.04, 0, h / 2 - 0.06, 0.3);
 }
 
 /** A little stage, a curtain behind it, a dead spotlight on a stand. */
@@ -696,20 +702,40 @@ function duct(g: THREE.Group, w: number, h: number, d: number): void {
 
 /** Steel stairs up to the catwalk: treads, stringers, a handrail. */
 function stairs(g: THREE.Group, w: number, h: number, d: number): void {
+  // Solid steps, each a block down to the floor, so from the side it is a
+  // staircase and not slats in the air -- and so what you see is what you
+  // bump into (the whole box is solid).  A steel tread on each with a yellow
+  // safety nosing, and handrails on posts that stand on the steps.
   const steps = Math.max(4, Math.round(h / 0.2));
-  const tread = lam(0x3a3e44);
+  const run = d / steps;
+  const rise = h / steps;
+  const body = lam(0x3a3e44);
+  const tread = lam(0x5a6068);
+  const nosing = lam(0xc8a82a);
   for (let i = 0; i < steps; i++) {
-    const t = (i + 0.5) / steps;
-    box(g, tread, w, 0.04, d / steps + 0.02, 0, h * t, d / 2 - d * t);
+    const top = rise * (i + 1);
+    const zc = d / 2 - run * (i + 0.5);
+    box(g, body, w, top, run, 0, top / 2, zc);
+    box(g, tread, w - 0.04, 0.02, run - 0.02, 0, top + 0.01, zc);
+    box(g, nosing, w - 0.04, 0.025, 0.05, 0, top + 0.012, zc + run / 2 - 0.025);
   }
+  const slope = Math.atan2(h, d);
+  const len = Math.hypot(h, d);
+  const rail = lam(0xa08a2a);
   for (const sx of [-1, 1]) {
-    const s = box(g, STEEL_DARK, 0.05, 0.2, Math.hypot(h, d), sx * (w / 2), h / 2, 0);
-    s.rotation.x = Math.atan2(h, d);
-    const rail = box(g, lam(0xa08a2a), 0.04, 0.04, Math.hypot(h, d), sx * (w / 2), h / 2 + 0.9, 0);
-    rail.rotation.x = Math.atan2(h, d);
+    const x = sx * (w / 2 - 0.04);
+    // the rail, 0.9 over the line of the step noses
+    const r = box(g, rail, 0.05, 0.05, len, x, h / 2 + 0.9, 0);
+    r.rotation.x = slope;
+    // and the posts it is held up on, standing on the steps
+    for (const t of [0.06, 0.36, 0.66, 0.94]) {
+      const i = Math.min(steps - 1, Math.floor(t * steps));
+      const zc = d / 2 - run * (i + 0.5);
+      const foot = rise * (i + 1);
+      const railY = h / 2 + 0.9 + (0 - zc) * Math.tan(slope);
+      box(g, STEEL_DARK, 0.04, railY - foot, 0.04, x, (railY + foot) / 2, zc);
+    }
   }
-  // under the stairs, what is kept under stairs
-  box(g, lam(0xa0805a, cardboardTex()), w * 0.6, 0.4, 0.5, 0, 0.2, d / 2 - 0.5);
 }
 
 /** A mesh cage: the prize stock, locked, a padlock on its door. */

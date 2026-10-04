@@ -389,12 +389,20 @@ function tunnel(group: THREE.Group): BuiltSpot {
   // The tube, as staves round its length -- open along the front for the
   // doorway -- so the inside is the inside of boxes, not a double-sided
   // surface (one fewer shader to build on the way into a room).
+  //
+  // `a` is round the tube from the top (0) towards the back; the stave at `a`
+  // sits at (y, z) = (cos a, -sin a) * r from the axis and is turned by -a so
+  // its thin side faces out from the axis -- turned by +a, they fanned out
+  // like a dropped barrel.  The gap is the quarter of the circle facing the
+  // front (+z, a = -PI/2), which is the way in.
   const shell = lam(0xffffff, tubeTex('#c84a3a'));
-  const staves = 14;
+  const staves = 18;
+  const from = -Math.PI / 2 + Math.PI * 0.25;
+  const span = Math.PI * 1.5;
   for (let i = 0; i < staves; i++) {
-    const a = Math.PI * 0.22 + (i / (staves - 1)) * Math.PI * 1.56;
-    const st = box(group, shell, 2.25, 0.05, 0.24, 0, r + 0.02 + Math.cos(a) * r, Math.sin(a) * r * -1);
-    st.rotation.x = a;
+    const a = from + (i / (staves - 1)) * span;
+    const st = box(group, shell, 2.25, 0.05, 0.2, 0, r + 0.02 + Math.cos(a) * r, -Math.sin(a) * r);
+    st.rotation.x = -a;
   }
   // padded rings at each end, and the frame it sits in
   for (const ex of [-1.12, 1.12]) {
