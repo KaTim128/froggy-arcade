@@ -362,6 +362,7 @@ const labels = (page) =>
         have.add(k);
         if (mod.touch.arrows) have.add(ARROW[k]);
       }
+      for (const k of Object.values(mod.touch.cross ?? {})) if (typeof k === 'string') have.add(k);
       for (const b of mod.touch.buttons ?? []) {
         have.add(b.key);
         if (b.also) have.add(b.also);
@@ -745,6 +746,58 @@ const labels = (page) =>
     'tapping it leaves the opening at once, and takes itself with it',
     out.scenes.includes('ExteriorDay') && !out.buttons.includes('SKIP'),
     `${out.scenes.join(',')} with [${out.buttons}]`,
+  );
+  await page.close();
+}
+
+// ------------------- 12. the Dance Off is one big cross, in the middle, clear
+//
+// Its four arrows are the game: one large cross of four separate buttons, in
+// the middle -- under the picture in portrait, over the bottom of the stage in
+// landscape with the dancers stepped up out of its way -- and every arm sends
+// its own lane's key.
+for (const [name, w, h] of [
+  ['portrait', 390, 844],
+  ['landscape', 844, 390],
+]) {
+  const page = await phone('?intro=1&tokens=40&game=danceoff', { w, h });
+  await page.keyboard.press('Enter');
+  await sleep(1400);
+  const geo = await page.evaluate(() => {
+    const c = document.querySelector('#game-root canvas').getBoundingClientRect();
+    const cross = document.querySelector('#touch-controls .tc-cross');
+    const arms = [...cross.querySelectorAll('.tc-xbtn')].map((e) => e.getBoundingClientRect());
+    const r = cross.getBoundingClientRect();
+    const per = 320 / c.width;
+    return {
+      shown: !cross.hidden && arms.every((a) => a.width > 0),
+      size: Math.min(...arms.map((a) => a.width)),
+      offCentre: Math.abs(r.left + r.width / 2 - (c.left + c.width / 2)),
+      below: r.top >= c.bottom - 1,
+      crossTop: (r.top - c.top) * per,
+      feet: window.__dance.state().feet,
+      corners: document.querySelectorAll('#touch-controls .tc-btn').length,
+    };
+  });
+  const sent = [];
+  for (const dir of ['up', 'left', 'down', 'right']) {
+    const p = await page.evaluate((d) => {
+      const b = document.querySelector(`#touch-controls .tc-xbtn[data-dir="${d}"]`).getBoundingClientRect();
+      return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+    }, dir);
+    const cdp = await page.target().createCDPSession();
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...p, id: 1 }] });
+    await sleep(60);
+    sent.push((await page.evaluate(() => window.__touch.held())).join('+'));
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await cdp.detach();
+  }
+  await page.screenshot({ path: `${SHOTS}/09-dance-${name}.png` });
+  const clear = name === 'portrait' ? geo.below : geo.crossTop >= geo.feet;
+  check(
+    `${name}: the Dance Off is one big cross in the middle, clear of the dancers, each arm its own key`,
+    geo.shown && geo.corners === 0 && geo.offCentre < 4 && clear && geo.size >= 44 && sent.join(',') === 'W,A,S,D',
+    `arms ${Math.round(geo.size)}px, ${Math.round(geo.offCentre)}px off centre, cross top ${Math.round(geo.crossTop)} vs feet ${geo.feet}, sent [${sent}]`,
   );
   await page.close();
 }
