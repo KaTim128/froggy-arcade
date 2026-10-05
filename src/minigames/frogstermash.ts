@@ -1190,13 +1190,13 @@ export const LIZARDS: LizardType[] = [
     build: { scale: 1.3, wide: 1.72, tall: 1.02, limb: 0.84, head: 1.0, skin: 0x3b3a40, light: 0x6b6468, dark: 0x1f1e23, crest: 0x9a98a0, animal: 'gorilla' },
     blurb: 'HITS LIKE A DOOR' },
   // THE FAST ONE is a cheetah: all leg, nothing spare.
-  { key: 'fast', name: 'CHEETAH', power: 0.82, speed: 1.32, avoid: 1.2, resist: 0.8, nerve: 1.05, spacing: 1.0,
+  { key: 'fast', name: 'CHEETAH', power: 0.82, speed: 1.35, avoid: 1.2, resist: 0.8, nerve: 1.05, spacing: 1.0,
     build: { scale: 0.94, wide: 0.7, tall: 1.06, limb: 1.36, head: 0.9, skin: 0xd9a441, light: 0xf3dca0, dark: 0x8a5e22, crest: 0x2e2012, animal: 'cheetah' },
-    blurb: 'YOU WILL NOT CATCH IT' },
+    blurb: 'UNCATCHABLE' },
   // THE ARMOURED ONE is a rhino, which came armoured.
   { key: 'armoured', name: 'RHINO', power: 1.0, speed: 0.82, avoid: 0.78, resist: 1.36, nerve: 1.0, spacing: 0.8, stubborn: true,
     build: { scale: 1.14, wide: 1.42, tall: 1.1, limb: 1.04, head: 1.0, skin: 0x8a8f97, light: 0xb4b9c0, dark: 0x4a4e56, crest: 0xe8dcc0, animal: 'rhino' },
-    blurb: 'IT DOES NOT MOVE' },
+    blurb: 'ARMOURED AND READY' },
   // THE ASSASSIN is a hyena: hunched, spotted and grinning.
   { key: 'assassin', name: 'HYENA', power: 1.04, speed: 1.22, avoid: 1.22, resist: 0.74, nerve: 1.15, spacing: 1.05,
     build: { scale: 0.92, wide: 0.74, tall: 1.0, limb: 1.1, head: 0.92, skin: 0xb49660, light: 0xd8c18e, dark: 0x5c4a2c, crest: 0x3a2c1a, animal: 'hyena' },
@@ -1208,11 +1208,11 @@ export const LIZARDS: LizardType[] = [
   // THE BERSERKER is a lion, mane and all.
   { key: 'berserk', name: 'LION', power: 1.2, speed: 1.05, avoid: 0.86, resist: 1.14, nerve: 1.35, spacing: 0.7, berserk: true,
     build: { scale: 1.12, wide: 1.4, tall: 0.96, limb: 0.96, head: 1.12, skin: 0xcc8e3e, light: 0xecc684, dark: 0x6e4418, crest: 0x7e3c16, animal: 'lion' },
-    blurb: 'WORSE AS YOU HURT IT' },
+    blurb: 'FEARLESS WARRIOR' },
   // THE BALANCED ONE is still a lizard: the plain reptile the rest are read against.
   { key: 'balanced', name: 'LIZARD', power: 1.0, speed: 1.0, avoid: 1.0, resist: 1.0, nerve: 1.0, spacing: 1.0,
     build: { scale: 1.0, wide: 1.0, tall: 1.0, limb: 1.0, head: 1.0, skin: 0x9c5a2e, light: 0xc98243, dark: 0x5e3218, crest: 0xc2522e, animal: 'lizard' },
-    blurb: 'BEST AT NOTHING' },
+    blurb: 'VERSATILE COMBATANT' },
   // THE TRICKSTER is a wolf.
   { key: 'trickster', name: 'WOLF', power: 0.94, speed: 1.06, avoid: 1.16, resist: 0.94, nerve: 1.0, spacing: 1.1, restless: true,
     build: { scale: 0.98, wide: 0.96, tall: 1.0, limb: 1.16, head: 1.0, skin: 0x6c737e, light: 0xc9cdd3, dark: 0x363a42, crest: 0xe8c04a, animal: 'wolf' },
@@ -4650,7 +4650,7 @@ const ANATOMY: Record<Animal, Anatomy> = {
   cheetah: { neck: 1, fwd: 2, drop: 0, arm: 1.06, hand: 0.9, feet: 'paw', claws: true },
   rhino: { neck: 0, fwd: 3, drop: 1, arm: 1.0, hand: 1.15, feet: 'hoof', claws: false },
   hyena: { neck: 0, fwd: 5, drop: 4, arm: 1.0, hand: 0.95, feet: 'paw', claws: true },
-  giraffe: { neck: 17, fwd: 5, drop: 0, arm: 1.42, hand: 0.85, feet: 'hoof', claws: false },
+  giraffe: { neck: 17, fwd: 5, drop: 0, arm: 1.45, hand: 0.85, feet: 'hoof', claws: false },
   lion: { neck: 0, fwd: 2, drop: 1, arm: 1.06, hand: 1.2, feet: 'paw', claws: true },
   lizard: { neck: 0, fwd: 0, drop: 0, arm: 1.0, hand: 1.0, feet: 'claw', claws: true },
   wolf: { neck: 0, fwd: 2, drop: -1, arm: 1.05, hand: 0.95, feet: 'paw', claws: true },
