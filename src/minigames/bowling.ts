@@ -44,6 +44,7 @@ import { centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 import { panel } from './decor';
+import { isTouch } from '../core/device';
 
 
 const ID = 'bowling' as const;
@@ -333,17 +334,16 @@ export const bowling: MinigameModule = {
       ['HOLD SPACE', 'POWER, LET GO TO THROW'],
     ],
   },
-  // Three separate axes: the stick walks the foul line, one pair of buttons
-  // swings the aim and the other bends the ball.  Aliasing any of them onto
-  // the stick would walk and aim with one thumb.
+  // ON A PHONE, THREE THINGS: the stick swings the aim, HOOK steps the
+  // shot through straight, hook left and hook right, and ROLL is held for
+  // power and let go to throw.  Five buttons and a stick that both walked
+  // and aimed was a keyboard laid out under two thumbs.  (The keyboard keeps
+  // all of it: walking the line, the aim and the hook dial.)
   touch: {
     stick: 'lr',
     buttons: [
       { label: 'ROLL', key: 'SPACE', primary: true },
-      { label: 'AIM\n\u25c0', key: 'LEFT' },
-      { label: 'AIM\n\u25b6', key: 'RIGHT' },
-      { label: 'HOOK\n\u25c0', key: 'Q' },
-      { label: 'HOOK\n\u25b6', key: 'E' },
+      { label: 'HOOK', key: 'H' },
     ],
   },
 
@@ -567,10 +567,10 @@ export const bowling: MinigameModule = {
     plate(12, 94, 92, 13);
     for (const t of [
       text(scene, GAME_W - 40, 154, 'HOLD', PALETTE.bone),
-      text(scene, GAME_W - 40, 162, 'SPACE', PALETTE.bone),
-      text(scene, 8, 138, 'A/D MOVE', PALETTE.bone),
-      text(scene, 8, 146, '←→ AIM', PALETTE.bone),
-      text(scene, 8, 154, 'Q/E HOOK', PALETTE.bone),
+      text(scene, GAME_W - 40, 162, isTouch() ? 'ROLL' : 'SPACE', PALETTE.bone),
+      text(scene, 8, 138, isTouch() ? 'STICK AIM' : 'A/D MOVE', PALETTE.bone),
+      text(scene, 8, 146, isTouch() ? 'HOOK BTN' : '←→ AIM', PALETTE.bone),
+      text(scene, 8, 154, isTouch() ? 'HOLD ROLL' : 'Q/E HOOK', PALETTE.bone),
     ]) t.setDepth(29);
     refreshHud();
 
@@ -584,6 +584,13 @@ export const bowling: MinigameModule = {
       hookL: bind(['Q']),
       hookR: bind(['E']),
     };
+    // H steps the hook dial: straight, full left, full right, straight.
+    kb?.on('keydown-H', () => {
+      if (over || turn !== 'player' || ball.rolling || settleMs > 0 || charging) return;
+      hook = hook === 0 ? -HOOK_MAX : hook < 0 ? HOOK_MAX : 0;
+      audio.sfx('ui_blip');
+      refreshHud();
+    });
     kb?.on('keydown-SPACE', () => {
       if (over || turn !== 'player' || ball.rolling || settleMs > 0 || charging) return;
       charging = true;
@@ -673,7 +680,8 @@ export const bowling: MinigameModule = {
         hook = Phaser.Math.Clamp(hook + bend * HOOK_RATE * dt, -HOOK_MAX, HOOK_MAX);
         refreshHud();
       }
-      const walk = (keys.right.some((k) => k.isDown) ? 1 : 0) - (keys.left.some((k) => k.isDown) ? 1 : 0);
+      // (on a phone the stick sends A/D with the arrows: it aims, it does not walk)
+      const walk = isTouch() ? 0 : (keys.right.some((k) => k.isDown) ? 1 : 0) - (keys.left.some((k) => k.isDown) ? 1 : 0);
       ball.x = Phaser.Math.Clamp(ball.x + walk * WALK * dt, LANE_L + BALL_R + 1, LANE_L + LANE_W - BALL_R - 1);
       ballBody.setPosition(ball.x, ball.y);
       if (charging) {
