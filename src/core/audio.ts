@@ -1215,6 +1215,25 @@ class AudioManager {
         beep(92, 0.26, 0.1, 'square', 0.03);
         beep(41, 0.6, 0.09, 'sine', 0.05);
         break;
+      // ---- THE MAGIC STAFF.  The cast is a rising arpeggio as the orb fills;
+      // the blast is a bright crack falling into a low thump, a burst of
+      // noise for the fire, and a glassy shimmer ringing on after it -- like
+      // nothing else in the arena, so it is known by ear from across the sand.
+      case 'arcane_cast':
+        beep(440, 0.1, 0.03, 'triangle');
+        beep(587, 0.1, 0.03, 'triangle', 0.08);
+        beep(784, 0.1, 0.035, 'triangle', 0.16);
+        beep(1046, 0.16, 0.04, 'sine', 0.24);
+        break;
+      case 'arcane_blast':
+        beep(1320, 0.08, 0.06, 'square');
+        beep(990, 0.1, 0.06, 'triangle', 0.03);
+        beep(660, 0.18, 0.07, 'sawtooth', 0.05);
+        noise(0.35, 0.18, 2400, 0.02);
+        beep(70, 0.45, 0.12, 'sine', 0.04);
+        beep(1760, 0.3, 0.03, 'sine', 0.12);
+        beep(2093, 0.28, 0.025, 'sine', 0.18);
+        break;
       // Health going the other way: a bright rising third.
       case 'heal_up':
         beep(659, 0.12, 0.07, 'sine');
@@ -1636,6 +1655,8 @@ export type SfxName =
   | 'wheel_tick'
   | 'splash'
   | 'water_rise'
-  | 'crumble';
+  | 'crumble'
+  | 'arcane_cast'
+  | 'arcane_blast';
 
 export const audio = new AudioManager();
