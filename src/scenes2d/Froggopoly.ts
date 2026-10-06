@@ -52,6 +52,7 @@ import {
   type Game,
   type Who,
 } from '../game/froggopoly';
+import { INK, drawDiorama, drawIcon, drawPiece, outlined, paintCell, shade, shadowed, type DioramaKind, type IconKind, type PieceLook } from '../art/froggopolyArt';
 
 export const STAKES = [10, 30, 100];
 
@@ -100,6 +101,10 @@ export class Froggopoly extends Phaser.Scene {
   private panel!: Phaser.GameObjects.Container;
   private diceLayer!: Phaser.GameObjects.Container;
   private stakeLayer: Phaser.GameObjects.Container | null = null;
+  /** The two pieces, each with the shadow it leaves on the board. */
+  private pieces: Array<{ body: Phaser.GameObjects.Container; shadow: Phaser.GameObjects.Ellipse; at: number; hopping: boolean }> = [];
+  private turnGlow!: Phaser.GameObjects.Rectangle;
+  private card: Phaser.GameObjects.Container | null = null;
 
   constructor() {
     super('Froggopoly');
@@ -121,11 +126,17 @@ export class Froggopoly extends Phaser.Scene {
     this.status = '';
     this.owed = null;
 
-    this.add.rectangle(0, 0, GAME_W, GAME_H, 0x2a1a10).setOrigin(0, 0);
-    this.boardLayer = this.add.container(0, 0);
+    this.paintTable();
+    this.paintBoard();
+    this.boardLayer = this.add.container(0, 0).setDepth(5);
     this.diceLayer = this.add.container(0, 0).setDepth(20);
     this.panel = this.add.container(0, 0).setDepth(30);
+    this.turnGlow = this.add.rectangle(0, 0, 10, 10, PALETTE.gold, 0.12).setStrokeStyle(1, PALETTE.gold).setDepth(31).setVisible(false);
+    this.tweens.add({ targets: this.turnGlow, alpha: 0.35, duration: 600, yoyo: true, repeat: -1 });
+    this.card = null;
+    this.makePieces();
     this.drawBoard();
+    this.drawDice(false);
     this.showStake();
 
     this.input.keyboard?.on('keydown-ESC', () => this.askQuit());
@@ -163,27 +174,26 @@ export class Froggopoly extends Phaser.Scene {
     const c = this.add.container(0, 0).setDepth(100);
     this.stakeLayer = c;
     c.add(this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0.7).setOrigin(0, 0).setInteractive());
-    c.add(this.add.rectangle(GAME_W / 2, GAME_H / 2, 250, 150, PALETTE.ink).setStrokeStyle(1, PALETTE.gold));
-    c.add(centerText(this, GAME_W / 2, 26, 'FROGGOPOLY', PALETTE.gold, 16));
+    c.add(this.add.rectangle(GAME_W / 2 + 3, GAME_H / 2 + 4, 256, 160, 0x000000, 0.5));
+    c.add(this.add.rectangle(GAME_W / 2, GAME_H / 2, 256, 160, PALETTE.ink).setStrokeStyle(1, PALETTE.gold));
+    c.add(outlined(this, GAME_W / 2, 24, 'FROGGOPOLY', PALETTE.gold, { center: true, shadow: true }));
     const hello = this.after
       ? '"Oh. Hi. You can sit there. I have been waiting a long time."'
       : '"A game? Oh, I LOVE this game. I always win it!"';
-    c.add(centerText(this, GAME_W / 2, 46, `${this.opp}:`, PALETTE.mossLight));
-    c.add(centerText(this, GAME_W / 2, 56, hello, PALETTE.cream).setMaxWidth(230));
+    c.add(centerText(this, GAME_W / 2, 38, `${this.opp}:`, PALETTE.mossLight));
+    c.add(text(this, GAME_W / 2, 45, hello, PALETTE.cream).setOrigin(0.5, 0).setMaxWidth(236).setCenterAlign());
     const bal = ledger.balance();
-    c.add(centerText(this, GAME_W / 2, 80, `YOU HAVE ${bal} TOKENS.  CHOOSE THE STAKE:`, PALETTE.ash));
+    c.add(centerText(this, GAME_W / 2, 74, `YOU HAVE ${bal} TOKENS`, PALETTE.ash));
+    c.add(centerText(this, GAME_W / 2, 84, 'CHOOSE THE STAKE:', PALETTE.ash));
     STAKES.forEach((st, i) => {
       const can = bal >= st;
       c.add(
-        button(this, GAME_W / 2 - 70 + i * 70, 98, `${st} TOKENS`, () => (can ? this.confirmStake(st) : audio.sfx('buzzer')), {
-          width: 64,
-          height: 14,
-          fill: can ? PALETTE.plum : PALETTE.ink,
-        }),
+        this.fitButton(GAME_W / 2 - 78 + i * 78, 100, `${st} TOKENS`, () => (can ? this.confirmStake(st) : audio.sfx('buzzer')), 72, 15, can ? PALETTE.plum : PALETTE.ink),
       );
     });
-    c.add(centerText(this, GAME_W / 2, 118, 'WIN: DOUBLE BACK   LOSE: IT IS GONE   DRAW: STAKE BACK', PALETTE.ash).setMaxWidth(240));
-    c.add(button(this, GAME_W / 2, 142, 'LEAVE', () => this.leave(), { width: 60, height: 13 }));
+    c.add(centerText(this, GAME_W / 2, 118, 'WIN: DOUBLE BACK    LOSE: IT IS GONE', PALETTE.ash));
+    c.add(centerText(this, GAME_W / 2, 128, 'DRAW: YOUR STAKE BACK', PALETTE.ash));
+    c.add(this.fitButton(GAME_W / 2, 150, 'LEAVE', () => this.leave(), 64, 14));
   }
 
   private confirmStake(st: number): void {
@@ -216,72 +226,174 @@ export class Froggopoly extends Phaser.Scene {
 
   // ------------------------------------------------------------- the board
 
+  /** The wooden table the board lies on: planks, grain, and a soft shadow under the board. */
+  private paintTable(): void {
+    const g = this.add.graphics();
+    g.fillStyle(0x2a1a10, 1).fillRect(0, 0, GAME_W, GAME_H);
+    for (let y = 0; y < GAME_H; y += 12) {
+      g.fillStyle(y % 24 ? 0x30200f : 0x281808, 1).fillRect(0, y, GAME_W, 12);
+      g.fillStyle(0x1a1008, 1).fillRect(0, y, GAME_W, 1);
+      for (let k = 0; k < 6; k++) g.fillStyle(0x3a2814, 1).fillRect(((y * 7 + k * 53) % GAME_W), y + 4 + (k % 3) * 2, 18, 1);
+    }
+    g.fillStyle(0x000000, 0.45).fillRect(BX + 3, BY + 4, CELL * 7, CELL * 7);
+  }
+
+  /**
+   * The board, printed once: the felt in the middle with its logo, then each
+   * space as a piece of card with its grain, bevel, colour bar, picture and
+   * price.  What changes in play (owners, pads, the focus) is drawn over it by
+   * `drawBoard`.
+   */
+  private paintBoard(): void {
+    const g = this.add.graphics().setDepth(1);
+    // the felt middle, with a fine diagonal weave and a gold line round it
+    const mx = BX + CELL;
+    const my = BY + CELL;
+    const mw = CELL * 5;
+    g.fillStyle(INK, 1).fillRect(BX - 1, BY - 1, CELL * 7 + 2, CELL * 7 + 2);
+    g.fillStyle(0x2a6a3a, 1).fillRect(mx, my, mw, mw);
+    for (let k = -mw; k < mw; k += 5) {
+      g.lineStyle(1, 0x327a44, 0.6).lineBetween(Math.max(mx, mx + k), Math.max(my, my - k), Math.min(mx + mw, mx + mw + k), Math.min(my + mw, my + mw - k));
+    }
+    g.lineStyle(1, 0xc8a040, 1).strokeRect(mx + 3, my + 3, mw - 6, mw - 6);
+    // a pond in the middle for the dice to land in
+    g.fillStyle(0x1e5a7a, 0.55).fillEllipse(mx + mw / 2, my + mw / 2, 64, 34);
+    g.lineStyle(1, 0x7ec8e8, 0.35).strokeEllipse(mx + mw / 2, my + mw / 2, 64, 34);
+    for (const [lx, ly] of [[-26, -8], [24, 9], [-20, 11]]) {
+      g.fillStyle(0x46a84e, 0.8).fillEllipse(mx + mw / 2 + lx, my + mw / 2 + ly, 9, 5);
+    }
+    const logo = outlined(this, mx + mw / 2, my + 15, 'FROGGOPOLY', PALETTE.gold, { center: true, shadow: true });
+    logo.setDepth(2);
+    BOARD.forEach((sp, i) => {
+      const { cx, cy } = cellOf(i);
+      const corner = sp.kind === 'go' || sp.kind === 'swamp' || sp.kind === 'free' || sp.kind === 'goswamp';
+      const paper = corner ? 0xe8dcc0 : 0xf2ead8;
+      paintCell(g, i, cx, cy, CELL, paper, sp.color);
+      const icon: IconKind | null =
+        sp.kind === 'util' ? (sp.name.startsWith('FIRE') ? 'pwr' : 'h2o')
+          : sp.kind === 'tax' ? 'tax'
+            : sp.kind === 'go' ? 'go'
+              : sp.kind === 'swamp' ? 'swamp'
+                : sp.kind === 'goswamp' ? 'goswamp'
+                  : sp.kind === 'free' ? 'free'
+                    : sp.kind === 'chance' ? 'chance'
+                      : null;
+      if (icon) drawIcon(g, icon, cx, cy + (sp.kind === 'util' || sp.kind === 'tax' ? -3 : sp.kind === 'go' ? 1 : 0), paper);
+      if (sp.kind === 'chance') outlined(this, cx, cy - 1, '?', 0xa870e8, { center: true }).setDepth(2);
+      if (sp.kind === 'go') outlined(this, cx, cy - 6, 'GO', PALETTE.cream, { center: true }).setDepth(2);
+      // the price, outlined, along the foot of the card
+      const price = sp.kind === 'prop' || sp.kind === 'util' ? sp.price : sp.kind === 'tax' ? sp.tax : undefined;
+      // dark figures with a light 1px outline: crisp on the card and on a colour
+      if (price !== undefined) outlined(this, cx, cy + 6, `${price}`, sp.kind === 'tax' ? 0xb82020 : INK, { center: true, outline: 0xfffaf0 }).setDepth(2);
+      const hit = this.add.rectangle(cx, cy, CELL - 1, CELL - 1, 0xffffff, 0.001).setDepth(3);
+      hit.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.cellClicked(i));
+    });
+  }
+
+  /** What changes as you play: whose each space is, its pads, the focus and the build glow. */
   private drawBoard(): void {
     const L = this.boardLayer;
     L.removeAll(true);
-    L.add(this.add.rectangle(BX, BY, CELL * 7, CELL * 7, 0x2a6a3a).setOrigin(0, 0).setStrokeStyle(1, 0xf2e6d8));
-    L.add(centerText(this, BX + CELL * 3.5, BY + CELL * 2.2, 'FROGGOPOLY', PALETTE.gold));
-    L.add(centerText(this, BX + CELL * 3.5, BY + CELL * 4.9, `ROUND ${Math.min(this.g.round, ROUNDS)}/${ROUNDS}`, PALETTE.cream));
-    BOARD.forEach((s, i) => {
+    L.add(outlined(this, BX + CELL * 3.5, BY + CELL * 5.3, `ROUND ${Math.min(this.g.round, ROUNDS)}/${ROUNDS}`, PALETTE.cream, { center: true }));
+    BOARD.forEach((_, i) => {
       const { cx, cy } = cellOf(i);
-      const corner = s.kind === 'go' || s.kind === 'swamp' || s.kind === 'free' || s.kind === 'goswamp';
-      const fill = corner ? 0xe8dcc0 : 0xf2ead8;
-      const cell = this.add.rectangle(cx, cy, CELL - 1, CELL - 1, fill).setStrokeStyle(1, 0x3a2a1a);
-      cell.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.cellClicked(i));
-      L.add(cell);
-      if (s.color) L.add(this.add.rectangle(cx, cy - CELL / 2 + 3.5, CELL - 3, 5, s.color));
-      // a short label
-      const label = s.kind === 'chance' ? '?' : s.kind === 'tax' ? 'TAX' : s.kind === 'go' ? 'GO' : s.kind === 'swamp' ? 'SWMP' : s.kind === 'free' ? 'FREE' : s.kind === 'goswamp' ? '>SWP' : s.kind === 'util' ? (s.name.startsWith('FIRE') ? 'PWR' : 'H2O') : '';
-      if (label) L.add(centerText(this, cx, cy + (s.color ? 2 : 0), label, s.kind === 'chance' ? PALETTE.plum : 0x3a2a1a));
-      if (s.price && s.kind === 'prop') L.add(centerText(this, cx, cy + 4, `${s.price}`, 0x3a2a1a));
-      // who owns it, and its lily pads
       const o = this.g.owner[i];
       if (o !== null) {
-        L.add(this.add.rectangle(cx, cy + CELL / 2 - 2.5, CELL - 3, 3, o === 0 ? 0x46c46e : 0x7b4bd8));
-        for (let k = 0; k < this.g.level[i]; k++) L.add(this.add.circle(cx - 6 + k * 6, cy - 4, 2, 0x2e9a4a).setStrokeStyle(0.6, 0x123a22));
+        const col = o === 0 ? 0x46c46e : this.oppColour();
+        // an owner's ribbon along the foot of the card, and the pads in a row
+        L.add(this.add.rectangle(cx, cy + CELL / 2 - 2.5, CELL - 3, 3, col).setStrokeStyle(0.5, INK));
+        for (let k = 0; k < this.g.level[i]; k++) {
+          L.add(this.add.circle(cx - 6 + k * 6, cy - 1, 2.2, 0x46a84e).setStrokeStyle(1, INK));
+        }
       }
-      if (i === this.focus) L.add(this.add.rectangle(cx, cy, CELL - 1, CELL - 1).setStrokeStyle(1, PALETTE.gold));
-      if (this.step === 'build' && canUpgrade(this.g, i, 0)) {
-        const glow = this.add.rectangle(cx, cy, CELL - 1, CELL - 1, PALETTE.gold, 0.25);
-        L.add(glow);
-      }
+      if (i === this.focus) L.add(this.add.rectangle(cx, cy, CELL - 1, CELL - 1).setStrokeStyle(1.5, PALETTE.gold));
+      if (this.step === 'build' && canUpgrade(this.g, i, 0)) L.add(this.add.rectangle(cx, cy, CELL - 1, CELL - 1, PALETTE.gold, 0.28));
     });
-    // the pieces
-    for (const who of [0, 1] as Who[]) {
-      const p = this.g.players[who];
-      const { cx, cy } = cellOf(p.pos);
-      const x = cx + (who === 0 ? -5 : 5);
-      const y = cy + 3;
-      L.add(this.piece(x, y, who));
-    }
+    this.placePieces();
   }
 
-  /** Your piece is a little Froggy -- a dead one, after the night.  Theirs is a crown, or a die. */
-  private piece(x: number, y: number, who: Who): Phaser.GameObjects.Container {
-    const c = this.add.container(x, y);
-    if (who === 0) {
-      const dead = this.after;
-      c.add(this.add.ellipse(0, 0, 9, 7, dead ? 0x6a7a5a : 0x46c46e).setStrokeStyle(1, 0x123a22));
-      if (dead) {
-        for (const ex of [-2, 2]) {
-          c.add(this.add.line(0, 0, ex - 1, -4, ex + 1, -2, 0x1a1410).setOrigin(0, 0));
-          c.add(this.add.line(0, 0, ex + 1, -4, ex - 1, -2, 0x1a1410).setOrigin(0, 0));
-        }
-        c.add(this.add.rectangle(0, 1.5, 4, 0.8, 0x1a1410));
-      } else {
-        c.add(this.add.circle(-2, -3, 1.6, 0xf2ead8));
-        c.add(this.add.circle(2, -3, 1.6, 0xf2ead8));
-        c.add(this.add.circle(-2, -3, 0.7, 0x111111));
-        c.add(this.add.circle(2, -3, 0.7, 0x111111));
+  private oppColour(): number {
+    return this.after ? 0x3f6fd8 : 0x7b4bd8;
+  }
+
+  private pieceLook(who: Who): PieceLook {
+    if (who === 0) return { kind: 'king', body: this.after ? 0x7a8a6a : 0x46c46e, dead: this.after };
+    return this.after ? { kind: 'rook', body: 0x3f6fd8 } : { kind: 'knight', body: 0x7b4bd8 };
+  }
+
+  /** Your piece is the Frog King (a dead one, after the night); theirs is the Knight, or the boy's Rook. */
+  private makePieces(): void {
+    this.pieces = ([0, 1] as Who[]).map((who) => {
+      const shadow = this.add.ellipse(0, 0, 11, 3.5, 0x000000, 0.4).setDepth(9);
+      const body = this.add.container(0, 0).setDepth(10);
+      const g = this.add.graphics();
+      drawPiece(g, this.pieceLook(who));
+      body.add(g);
+      return { body, shadow, at: 0, hopping: false };
+    });
+    this.placePieces(true);
+  }
+
+  private spotFor(who: Who, i: number): { x: number; y: number } {
+    const { cx, cy } = cellOf(i);
+    return { x: cx + (who === 0 ? -5 : 5), y: cy + 9 };
+  }
+
+  /** Put each piece where it stands, hopping it there if it moved and nothing is animating it. */
+  private placePieces(snap = false): void {
+    ([0, 1] as Who[]).forEach((who) => {
+      const pc = this.pieces[who];
+      if (!pc || pc.hopping) return;
+      const pos = this.g.players[who].pos;
+      if (snap || pc.at === pos) {
+        const p = this.spotFor(who, pos);
+        pc.body.setPosition(p.x, p.y);
+        pc.shadow.setPosition(p.x, p.y);
+        pc.at = pos;
+        return;
       }
-    } else if (!this.after) {
-      c.add(this.add.rectangle(0, 0, 8, 4, PALETTE.gold).setStrokeStyle(0.8, PALETTE.amberDark));
-      for (const k of [-3, 0, 3]) c.add(this.add.triangle(k, -3, -1.2, 1.5, 1.2, 1.5, 0, -1.5, PALETTE.gold));
-    } else {
-      c.add(this.add.polygon(0, 0, [0, -5, 4.5, -1.5, 3, 4, -3, 4, -4.5, -1.5], 0x3f6fd8).setStrokeStyle(0.8, 0xc9d4ff));
-      c.add(centerText(this, 0, 0, '20', 0xf2ead8));
-    }
-    return c;
+      // a jump across the board (to the swamp, or a ripple's move)
+      void this.hop(who, pos, 420, 16);
+    });
+  }
+
+  /**
+   * A parabolic hop from where the piece is to space `to`: up and over on an
+   * arc, the shadow sliding along the board beneath and shrinking at the top,
+   * then a little squash on landing.
+   */
+  private hop(who: Who, to: number, ms = 170, height = 7): Promise<void> {
+    const pc = this.pieces[who];
+    const from = { x: pc.body.x, y: pc.body.y };
+    const end = this.spotFor(who, to);
+    pc.hopping = true;
+    pc.at = to;
+    // a piece in flight goes over the other one
+    pc.body.setDepth(12);
+    return new Promise((res) => {
+      this.tweens.addCounter({
+        from: 0,
+        to: 1,
+        duration: ms,
+        onUpdate: (tw) => {
+          const t = tw.getValue() ?? 0;
+          const x = from.x + (end.x - from.x) * t;
+          const y = from.y + (end.y - from.y) * t;
+          const lift = 4 * height * t * (1 - t);
+          pc.body.setPosition(x, y - lift);
+          pc.shadow.setPosition(x, y).setScale(1 - (lift / height) * 0.35).setAlpha(0.4 - (lift / height) * 0.15);
+          pc.body.setScale(1 - 0.06 * Math.sin(t * Math.PI), 1 + 0.08 * Math.sin(t * Math.PI));
+        },
+        onComplete: () => {
+          pc.body.setPosition(end.x, end.y);
+          pc.shadow.setPosition(end.x, end.y).setScale(1).setAlpha(0.4);
+          pc.body.setDepth(10);
+          pc.hopping = false;
+          this.tweens.add({ targets: pc.body, scaleY: 0.86, scaleX: 1.08, duration: 55, yoyo: true, onComplete: () => pc.body.setScale(1) });
+          res();
+        },
+      });
+    });
   }
 
   private drawDice(spin = false): void {
@@ -299,8 +411,13 @@ export class Froggopoly extends Phaser.Scene {
       const x = BX + CELL * 3.5 + (k === 0 ? -11 : 11);
       const y = BY + CELL * 3.5;
       const die = this.add.container(x, y);
-      die.add(this.add.rectangle(0, 0, 15, 15, 0xf8f4ea).setStrokeStyle(1, 0x3a2a1a));
-      for (const [px, py] of pips[v]) die.add(this.add.circle(px, py, 1.4, 0x1a1410));
+      // a shadow, the cube with a bevel, and the pips
+      die.add(this.add.rectangle(2, 2, 15, 15, 0x000000, 0.4));
+      die.add(this.add.rectangle(0, 0, 15, 15, 0xf8f4ea).setStrokeStyle(1, INK));
+      die.add(this.add.rectangle(-0.5, -6.5, 13, 1, 0xffffff));
+      die.add(this.add.rectangle(6.5, 0.5, 1, 13, 0xd8ccb4));
+      die.add(this.add.rectangle(0.5, 6.5, 13, 1, 0xd8ccb4));
+      for (const [px, py] of pips[v]) die.add(this.add.circle(px, py, 1.5, v === 1 ? 0xd8202a : INK));
       if (spin) die.setAngle(Phaser.Math.Between(-25, 25));
       D.add(die);
     });
@@ -308,74 +425,208 @@ export class Froggopoly extends Phaser.Scene {
 
   // ------------------------------------------------------------- the panel
 
+  /**
+   * The side panel: the stake, both players with their piece in a little
+   * frame (the one whose turn it is glows), the card for the space in focus,
+   * what just happened, and the buttons for this moment.  Text has a drop
+   * shadow; the numbers that matter are outlined; every button's label is cut
+   * to fit inside it.
+   */
   private renderPanel(): void {
     const P = this.panel;
     P.removeAll(true);
+    this.turnGlow.setVisible(false);
     if (this.phase === 'stake') return;
     const g = this.g;
-    P.add(this.add.rectangle(PANEL_X, 4, GAME_W - PANEL_X - 4, GAME_H - 8, PALETTE.ink, 0.92).setOrigin(0, 0).setStrokeStyle(1, PALETTE.slate));
-    P.add(button(this, GAME_W - 22, 12, 'QUIT', () => this.askQuit(), { width: 30, height: 10, fill: 0x5a1a22 }));
-    P.add(text(this, PANEL_X + 6, 9, `STAKE ${this.stake}`, PALETTE.gold));
+    const pw = GAME_W - PANEL_X - 4;
+    P.add(this.add.rectangle(PANEL_X + 3, 7, pw, GAME_H - 8, 0x000000, 0.5).setOrigin(0, 0));
+    P.add(this.add.rectangle(PANEL_X, 4, pw, GAME_H - 8, 0x1c1428, 0.97).setOrigin(0, 0).setStrokeStyle(1, INK));
+    P.add(this.add.rectangle(PANEL_X + 1, 5, pw - 2, 1, 0x4a3a5a).setOrigin(0, 0));
+    P.add(outlined(this, PANEL_X + 6, 9, `STAKE ${this.stake}`, PALETTE.gold, { shadow: true }));
+    P.add(this.fitButton(GAME_W - 24, 12, 'QUIT', () => this.askQuit(), 36, 12, 0x5a1a22));
     const row = (y: number, who: Who, name: string) => {
       const p = g.players[who];
-      P.add(this.add.rectangle(PANEL_X + 8, y + 3, 6, 6, who === 0 ? 0x46c46e : 0x7b4bd8));
-      P.add(text(this, PANEL_X + 14, y, `${name} L$${p.cash}`, g.turn === who && this.phase === 'play' ? PALETTE.cream : PALETTE.ash));
-      if (p.swamp > 0) P.add(text(this, GAME_W - 34, y, 'SWAMP', PALETTE.ember));
+      const mine = g.turn === who && this.phase === 'play';
+      if (mine) this.turnGlow.setPosition(PANEL_X + pw / 2, y + 7).setSize(pw - 6, 17).setVisible(true);
+      // the piece in its frame
+      P.add(this.add.rectangle(PANEL_X + 13, y + 7, 15, 15, 0x0c0814).setStrokeStyle(1, mine ? PALETTE.gold : 0x4a3a5a));
+      const av = this.add.graphics();
+      drawPiece(av, this.pieceLook(who));
+      av.setPosition(PANEL_X + 13, y + 14.5).setScale(0.62);
+      P.add(av);
+      P.add(shadowed(this, PANEL_X + 24, y + 3, name, mine ? PALETTE.cream : PALETTE.ash).box);
+      const cash = `L$${p.cash}`;
+      P.add(outlined(this, GAME_W - 10 - cash.length * 6, y + 3, cash, mine ? PALETTE.gold : PALETTE.cream));
+      if (p.swamp > 0) {
+        const r = this.add.graphics();
+        drawIcon(r, 'swamp', 0, 0, 0x0c0814);
+        r.setPosition(PANEL_X + 19, y + 9).setScale(0.45);
+        P.add(r);
+      }
     };
     row(22, 0, 'YOU');
-    row(32, 1, this.opp);
-    // the space in focus
+    row(40, 1, this.opp);
+    // the card for the space in focus
     const s = BOARD[this.focus];
     const o = g.owner[this.focus];
-    P.add(this.add.rectangle(PANEL_X + 4, 44, GAME_W - PANEL_X - 12, 38, 0x14100c).setOrigin(0, 0).setStrokeStyle(1, s.color ?? PALETTE.slate));
-    P.add(text(this, PANEL_X + 8, 47, s.name, s.color ?? PALETTE.cream));
-    const info: string[] = [];
+    const band = s.color ?? (s.kind === 'util' ? (s.name.startsWith('FIRE') ? 0xc8a020 : 0x2a88b8) : 0x4a3a5a);
+    const cy = 60;
+    P.add(this.add.rectangle(PANEL_X + 6, cy + 2, pw - 8, 44, 0x000000, 0.45).setOrigin(0, 0));
+    P.add(this.add.rectangle(PANEL_X + 4, cy, pw - 8, 44, 0x14100c).setOrigin(0, 0).setStrokeStyle(1, INK));
+    P.add(this.add.rectangle(PANEL_X + 4, cy, pw - 8, 11, band).setOrigin(0, 0));
+    P.add(this.add.rectangle(PANEL_X + 4, cy, pw - 8, 1, shade(band, 0.4)).setOrigin(0, 0));
+    P.add(this.add.rectangle(PANEL_X + 4, cy + 10, pw - 8, 1, shade(band, -0.4)).setOrigin(0, 0));
+    P.add(outlined(this, PANEL_X + 4 + (pw - 8) / 2, cy + 6, s.name, PALETTE.cream, { center: true }));
+    const lines: Array<[string, number, string?, number?]> = [];
     if (s.price) {
-      info.push(`PRICE L$${s.price}   ${o === null ? 'FOR SALE' : o === 0 ? 'YOURS' : this.opp}`);
-      if (s.kind === 'prop') info.push(`RENT L$${o === null ? baseRent(this.focus) : rentOf(g, this.focus, 7)}  PADS ${g.level[this.focus]}/${MAX_LEVEL}`);
-      else info.push('RENT: DICE x4 (x10 WITH BOTH)');
-    } else if (s.kind === 'tax') info.push(`PAY L$${s.tax}`);
-    else if (s.kind === 'chance') info.push('DRAW A POND RIPPLE');
-    else if (s.kind === 'go') info.push('COLLECT L$200 PASSING');
-    else if (s.kind === 'swamp') info.push(`STUCK? PAY L$${SWAMP_FINE} OR ROLL DOUBLES`);
-    else if (s.kind === 'goswamp') info.push('STRAIGHT TO THE SWAMP');
-    else info.push('A NICE PLACE TO SIT');
-    info.forEach((l, k) => P.add(text(this, PANEL_X + 8, 57 + k * 9, l, PALETTE.ash).setMaxWidth(GAME_W - PANEL_X - 16)));
+      lines.push([`PRICE L$${s.price}`, PALETTE.cream, o === null ? 'FOR SALE' : o === 0 ? 'YOURS' : this.opp, o === null ? PALETTE.mossLight : o === 0 ? 0x46c46e : this.oppColour()]);
+      if (s.kind === 'prop') lines.push([`RENT L$${o === null ? baseRent(this.focus) : rentOf(g, this.focus, 7)}`, PALETTE.ash, `PADS ${g.level[this.focus]}/${MAX_LEVEL}`, PALETTE.ash]);
+      else lines.push(['RENT: DICE x4', PALETTE.ash], ['(x10 WITH BOTH)', PALETTE.ash]);
+    } else if (s.kind === 'tax') lines.push([`PAY L$${s.tax}`, 0xff8a7a]);
+    else if (s.kind === 'chance') lines.push(['DRAW A POND RIPPLE', PALETTE.ash]);
+    else if (s.kind === 'go') lines.push(['COLLECT L$200', PALETTE.ash], ['EACH TIME YOU PASS', PALETTE.ash]);
+    else if (s.kind === 'swamp') lines.push([`STUCK? PAY L$${SWAMP_FINE}`, PALETTE.ash], ['OR ROLL DOUBLES', PALETTE.ash]);
+    else if (s.kind === 'goswamp') lines.push(['STRAIGHT TO THE SWAMP', PALETTE.ash]);
+    else lines.push(['A NICE PLACE TO SIT', PALETTE.ash]);
+    lines.slice(0, 3).forEach(([l, c, r, rc], k) => {
+      P.add(shadowed(this, PANEL_X + 8, cy + 14 + k * 9, l, c).box);
+      if (r) P.add(shadowed(this, GAME_W - 12 - r.length * 6, cy + 14 + k * 9, r, rc ?? c).box);
+    });
     // what just happened
-    P.add(text(this, PANEL_X + 6, 86, this.status, PALETTE.cream).setMaxWidth(GAME_W - PANEL_X - 12));
+    P.add(shadowed(this, PANEL_X + 6, 110, this.status, PALETTE.cream, pw - 12).box);
     // the buttons for this moment
-    const bw = GAME_W - PANEL_X - 16;
-    const bx = PANEL_X + 4 + bw / 2 + 4;
-    const btn = (y: number, label: string, fn: () => void, fill?: number) => P.add(button(this, bx, y, label, fn, { width: bw, height: 13, fill }));
+    const bw = pw - 12;
+    const bx = PANEL_X + pw / 2;
+    const btn = (y: number, label: string, fn: () => void, fill?: number) => P.add(this.fitButton(bx, y, label, fn, bw, 14, fill));
     const half = (y: number, a: [string, () => void], b: [string, () => void]) => {
-      P.add(button(this, bx - bw / 4 - 1, y, a[0], a[1], { width: bw / 2 - 2, height: 13 }));
-      P.add(button(this, bx + bw / 4 + 1, y, b[0], b[1], { width: bw / 2 - 2, height: 13 }));
+      P.add(this.fitButton(bx - bw / 4 - 1, y, a[0], a[1], bw / 2 - 2, 14));
+      P.add(this.fitButton(bx + bw / 4 + 1, y, b[0], b[1], bw / 2 - 2, 14));
     };
-    if (this.step === 'roll') btn(160, 'ROLL THE DICE', () => this.playerRoll(), PALETTE.moss);
-    else if (this.step === 'swamp') half(160, [`PAY L$${SWAMP_FINE}`, () => this.payOut()], ['ROLL', () => this.playerRoll()]);
-    else if (this.step === 'buy') half(160, [`BUY L$${BOARD[g.players[0].pos].price}`, () => this.buy()], ['PASS', () => this.declineBuy()]);
+    if (this.step === 'roll') btn(162, 'ROLL THE DICE', () => this.playerRoll(), PALETTE.moss);
+    else if (this.step === 'swamp') half(162, [`PAY L$${SWAMP_FINE}`, () => this.payOut()], ['ROLL', () => this.playerRoll()]);
+    else if (this.step === 'buy') half(162, [`BUY L$${BOARD[g.players[0].pos].price}`, () => this.buy()], ['PASS', () => this.declineBuy()]);
     else if (this.step === 'act') {
       const canBuild = BOARD.some((_, i) => canUpgrade(g, i, 0));
-      if (canBuild) btn(144, 'BUILD LILY PADS', () => this.enterBuild());
-      btn(160, g.doubles > 0 ? 'DOUBLES! ROLL AGAIN' : 'END TURN', () => this.endPlayerTurn(), PALETTE.moss);
+      if (canBuild) btn(146, 'BUILD LILY PADS', () => this.enterBuild());
+      btn(162, g.doubles > 0 ? 'DOUBLES! ROLL AGAIN' : 'END TURN', () => this.endPlayerTurn(), PALETTE.moss);
     } else if (this.step === 'build') {
-      P.add(text(this, PANEL_X + 6, 124, 'TAP A LIT SPACE TO BUILD', PALETTE.gold));
-      btn(160, 'DONE BUILDING', () => {
+      P.add(shadowed(this, PANEL_X + 6, 134, 'TAP A LIT SPACE', PALETTE.gold).box);
+      btn(162, 'DONE BUILDING', () => {
         this.step = 'act';
         this.refresh();
       });
     } else if (this.step === 'debt' && this.owed) {
-      const assets = sellable(g, 0).slice(0, 3);
-      P.add(text(this, PANEL_X + 6, 104, `OWE L$${this.owed.amt}. SELL:`, PALETTE.ember));
+      const assets = sellable(g, 0).slice(0, 2);
+      P.add(outlined(this, PANEL_X + 6, 120, `OWE L$${this.owed.amt}. SELL:`, PALETTE.ember));
       assets.forEach((a, k) => {
-        btn(118 + k * 14, `${a.what === 'pad' ? 'PAD ON ' : ''}${BOARD[a.i].name.slice(0, 12)} +${a.value}`, () => {
+        btn(134 + k * 14, `${a.what === 'pad' ? 'PAD ' : ''}${BOARD[a.i].name} +${a.value}`, () => {
           sell(g, 0, a);
           audio.sfx('coin_spin');
           this.checkDebt();
         });
       });
-      if (!assets.length || g.players[0].cash + canRaise(g, 0) < this.owed.amt) btn(162, 'GO BANKRUPT', () => this.goBankrupt(0), 0x5a1a22);
+      if (!assets.length || g.players[0].cash + canRaise(g, 0) < this.owed.amt) btn(164, 'GO BANKRUPT', () => this.goBankrupt(0), 0x5a1a22);
     }
+  }
+
+  /**
+   * A button whose label always sits inside it, centred: a label too long
+   * for the width loses letters from the middle of the name, never the price
+   * at its end.
+   */
+  private fitButton(x: number, y: number, label: string, fn: () => void, w: number, h: number, fill?: number): Phaser.GameObjects.Container {
+    const max = Math.max(2, Math.floor((w - 6) / 6));
+    let l = label;
+    if (l.length > max) {
+      const tail = l.match(/ [+-]?(L\$)?\d+$/)?.[0] ?? '';
+      l = `${l.slice(0, Math.max(1, max - tail.length - 1)).trimEnd()}.${tail}`.slice(0, max);
+    }
+    const b = button(this, x, y, l, fn, { width: w, height: h, fill });
+    return b;
+  }
+
+  // ------------------------------------------------------------- the deed card
+
+  /**
+   * THE PURCHASE CARD: a title deed laid over the board when you land on a
+   * space you can buy, with a little four-frame diorama of the place, the
+   * price and the rent, and BUY / PASS.  Buying thumps a SOLD stamp on it.
+   */
+  private openCard(i: number): void {
+    this.closeCard(true);
+    const s = BOARD[i];
+    const kind: DioramaKind = s.kind === 'util' ? (s.name.startsWith('FIRE') ? 'pwr' : 'h2o') : 'prop';
+    const tint = s.color ?? (kind === 'pwr' ? 0xc8a020 : 0x2a88b8);
+    const cx = BX + CELL * 3.5;
+    const cy = BY + CELL * 3.5;
+    const W = 112;
+    const H = 112;
+    const c = this.add.container(cx, cy).setDepth(60);
+    this.card = c;
+    c.add(this.add.rectangle(3, 4, W, H, 0x000000, 0.5));
+    c.add(this.add.rectangle(0, 0, W, H, 0xf8f0dc).setStrokeStyle(1, INK));
+    c.add(this.add.rectangle(0, -H / 2 + 1, W - 2, 1, 0xffffff));
+    c.add(this.add.rectangle(0, -H / 2 + 9, W - 6, 13, tint).setStrokeStyle(1, INK));
+    c.add(this.add.rectangle(0, -H / 2 + 3.5, W - 7, 1, shade(tint, 0.45)));
+    c.add(outlined(this, 0, -H / 2 + 9, s.name, PALETTE.cream, { center: true }));
+    // the diorama, animated
+    const dg = this.add.graphics();
+    c.add(dg);
+    const dw = 96;
+    const dh = 40;
+    let f = 0;
+    const paint = () => drawDiorama(dg, kind, tint, f, -dw / 2, -H / 2 + 19, dw, dh);
+    paint();
+    const tick = this.time.addEvent({
+      delay: 260,
+      loop: true,
+      callback: () => {
+        f = (f + 1) % 4;
+        paint();
+      },
+    });
+    c.once(Phaser.GameObjects.Events.DESTROY, () => tick.remove());
+    const rent = s.kind === 'prop' ? `RENT L$${baseRent(i)}` : 'RENT DICE x4';
+    c.add(outlined(this, 0, 18, `PRICE L$${s.price}`, PALETTE.gold, { center: true, shadow: true }));
+    c.add(centerText(this, 0, 29, rent, 0x5a4a3a));
+    c.add(this.fitButton(-26, 44, `BUY ${s.price}`, () => this.buy(), 48, 14, PALETTE.moss));
+    c.add(this.fitButton(26, 44, 'PASS', () => this.declineBuy(), 48, 14));
+    // it drops in
+    c.setScale(0.6).setAlpha(0);
+    this.tweens.add({ targets: c, scale: 1, alpha: 1, duration: 180, ease: 'Back.easeOut' });
+  }
+
+  private closeCard(now = false): void {
+    const c = this.card;
+    this.card = null;
+    if (!c) return;
+    if (now) {
+      c.destroy();
+      return;
+    }
+    this.tweens.add({ targets: c, alpha: 0, y: c.y + 8, duration: 200, onComplete: () => c.destroy() });
+  }
+
+  /** A red rubber stamp, slammed down: on the card when you buy, small on the space when they do. */
+  private stamp(x: number, y: number, scale: number, into?: Phaser.GameObjects.Container): Phaser.GameObjects.Container {
+    const st = this.add.container(x, y).setDepth(70).setAngle(-14);
+    st.add(this.add.rectangle(0, 0, 40, 16).setStrokeStyle(2, 0xd8202a));
+    st.add(this.add.rectangle(0, 0, 34, 10).setStrokeStyle(1, 0xd8202a, 0.7));
+    st.add(outlined(this, 0, 0, 'SOLD', 0xe02a20, { center: true, outline: 0xfff4e8 }));
+    if (into) into.add(st);
+    st.setScale(scale * 2.2).setAlpha(0);
+    this.tweens.add({
+      targets: st,
+      scale,
+      alpha: 1,
+      duration: 160,
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        audio.sfx('door_shut', 0.25);
+        this.cameras.main.shake(70, 0.004);
+      },
+    });
+    return st;
   }
 
   private refresh(): void {
@@ -504,10 +755,11 @@ export class Froggopoly extends Phaser.Scene {
         this.status = `${who === 0 ? 'YOU PASS' : `${this.opp} PASSES`} LILY START: +L$200`;
       }
       this.focus = this.g.players[who].pos;
-      this.refresh();
+      this.renderPanel();
       audio.sfx('footstep_carpet', 0.3);
-      await this.wait(110);
+      await this.hop(who, this.g.players[who].pos);
       if (!this.alive) return;
+      this.drawBoard();
     }
   }
 
@@ -524,7 +776,11 @@ export class Froggopoly extends Phaser.Scene {
           if (g.players[0].cash >= (s.price ?? 0)) {
             this.status = `${s.name} IS FOR SALE: L$${s.price}.`;
             this.step = 'buy';
-          } else this.status = `${s.name} - YOU CANNOT AFFORD IT.`;
+            this.refresh();
+            this.openCard(i);
+            return;
+          }
+          this.status = `${s.name} - YOU CANNOT AFFORD IT.`;
           this.refresh();
           return;
         }
@@ -533,6 +789,9 @@ export class Froggopoly extends Phaser.Scene {
           g.owner[i] = 1;
           audio.sfx('cha_ching', 0.5);
           this.status = `${this.opp} BUYS ${s.name}.`;
+          const at = cellOf(i);
+          const st = this.stamp(at.cx, at.cy, 0.5);
+          this.time.delayedCall(900, () => this.tweens.add({ targets: st, alpha: 0, duration: 250, onComplete: () => st.destroy() }));
         } else this.status = `${this.opp} PASSES ON ${s.name}.`;
         this.refresh();
         await this.wait(700);
@@ -670,12 +929,20 @@ export class Froggopoly extends Phaser.Scene {
     this.status = `YOU BUY ${s.name}.`;
     this.step = 'act';
     this.refresh();
+    const c = this.card;
+    if (c) {
+      // SOLD, thumped on the deed, which then goes
+      this.card = null;
+      this.stamp(0, -6, 1.3, c);
+      this.time.delayedCall(800, () => this.tweens.add({ targets: c, alpha: 0, y: c.y + 8, duration: 220, onComplete: () => c.destroy() }));
+    }
   }
 
   private declineBuy(): void {
     if (this.step !== 'buy') return;
     this.status = `YOU LEAVE ${BOARD[this.g.players[0].pos].name} FOR NOW.`;
     this.step = 'act';
+    this.closeCard();
     this.refresh();
   }
 
