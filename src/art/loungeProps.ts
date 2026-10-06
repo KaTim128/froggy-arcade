@@ -27,32 +27,63 @@ export function paintCrane(scene: Phaser.Scene, x: number, y: number, kind: Cran
   const eerie = kind === 'oddity';
   const frame = n(eerie ? 0x2a1a3a : PALETTE.neon);
   const trim = n(eerie ? 0x6a3a8a : PALETTE.tealLight);
-  // the cabinet: a base with the prize chute, a glass box, a lit header
-  c.add(scene.add.rectangle(0, -7, W, 14, frame).setStrokeStyle(1, n(PALETTE.ink)));
-  c.add(scene.add.rectangle(W / 2 - 6, -8, 7, 6, n(PALETTE.black)));
-  c.add(scene.add.rectangle(-W / 2 + 6, -9, 6, 3, n(PALETTE.gold)));
-  const glass = scene.add.rectangle(0, -14 - 11, W - 2, 22, n(eerie ? 0x140c1c : 0x1c2a3a)).setStrokeStyle(1, trim);
-  c.add(glass);
-  // what is in it, heaped on the floor of the box
-  const pile = eerie ? [0x6a3a8a, 0x9fd4e0, 0xe8dcc0, 0x3a2a4a, 0xe8a030] : [0x46c46e, 0xa8743e, 0xf2e6d8, 0xffc830, 0x8a8f99, 0x7b4bd8];
-  for (let i = 0; i < 7; i++) {
-    const px = -W / 2 + 4 + ((i * 17) % (W - 8));
-    const py = -16 - (i % 2) * 3;
-    if (eerie) c.add(scene.add.circle(px, py, 2.4, n(pile[i % pile.length])).setStrokeStyle(0.5, n(0x8a7aa0)));
-    else {
-      c.add(scene.add.circle(px, py, 2.6, n(pile[i % pile.length])));
-      c.add(scene.add.circle(px - 1.6, py - 2.4, 1, n(pile[i % pile.length])));
-      c.add(scene.add.circle(px + 1.6, py - 2.4, 1, n(pile[i % pile.length])));
+  const side = n(eerie ? 0x1a1024 : 0xb0205a);
+  const glassCol = n(eerie ? 0x140c1c : 0x1c2a48);
+  // ---- THE BASE: the coloured body, a stripe, the prize door and the panel
+  c.add(scene.add.rectangle(0, -8, W, 16, frame).setStrokeStyle(1, n(PALETTE.ink)));
+  c.add(scene.add.rectangle(0, -3, W - 2, 2, trim));
+  c.add(scene.add.rectangle(0, -15, W, 2, side));
+  // the prize door, front left, with its flap
+  c.add(scene.add.rectangle(-W / 2 + 6, -8, 8, 7, n(PALETTE.black)).setStrokeStyle(0.6, trim));
+  c.add(scene.add.rectangle(-W / 2 + 6, -10.5, 8, 1.4, n(0x5a5a6a)));
+  // the coin slot and the stick and button on the panel
+  c.add(scene.add.rectangle(W / 2 - 5, -8, 3, 5, n(0x3a3a3a)));
+  c.add(scene.add.rectangle(W / 2 - 5, -8, 1, 3, n(PALETTE.gold)));
+  c.add(scene.add.rectangle(1, -14, 1, 3, n(0x2a2a2a)));
+  c.add(scene.add.circle(1, -16, 1.4, n(0xd8202a)));
+  c.add(scene.add.circle(5, -15, 1.2, n(0x46c46e)));
+  // ---- THE GLASS BOX, heaped to halfway with prizes
+  const gTop = -H + 9;
+  const gH = -16 - gTop;
+  c.add(scene.add.rectangle(0, gTop + gH / 2, W - 2, gH, glassCol));
+  c.add(scene.add.rectangle(0, gTop + 2, W - 4, 4, 0xffffff, eerie ? 0.03 : 0.08));
+  const pile = eerie ? [0x6a3a8a, 0x8a7aa0, 0x3a2a4a, 0x5a2a6a, 0x9fd4e0] : [0x46c46e, 0xa8743e, 0xf2e6d8, 0xffc830, 0x8a8f99, 0x7b4bd8, 0xff7ab0];
+  let i = 0;
+  // three layers, the back row first, each a bit narrower and higher
+  for (const [row, y0, inset] of [[0, -20, 3], [1, -18.5, 5], [2, -23, 7], [3, -26, 9]] as const) {
+    for (let px = -W / 2 + inset; px <= W / 2 - inset; px += 3.6) {
+      const col = n(pile[(i++ * 5 + row * 3) % pile.length]);
+      const py = y0 + ((i * 7) % 3) * 0.5;
+      if (eerie) {
+        c.add(scene.add.circle(px, py, 1.8, col));
+        c.add(scene.add.rectangle(px, py, 3.4, 0.5, n(0xc8b0d8)));
+      } else {
+        c.add(scene.add.circle(px, py, 1.9, col));
+        c.add(scene.add.circle(px - 1.1, py - 1.7, 0.7, col));
+        c.add(scene.add.circle(px + 1.1, py - 1.7, 0.7, col));
+      }
     }
   }
-  // the claw on its gantry
-  c.add(scene.add.rectangle(0, -34, W - 4, 1, n(PALETTE.steel)));
-  c.add(scene.add.rectangle(2, -31, 1, 6, n(PALETTE.steel)));
-  c.add(scene.add.triangle(2, -27, -2, 0, 2, 0, 0, 3, n(PALETTE.steel)));
-  // the header, lit
-  const head = scene.add.rectangle(0, -H + 1, W, 8, frame).setStrokeStyle(1, trim);
+  // the claw on its gantry, holding nothing yet
+  c.add(scene.add.rectangle(0, gTop + 1.5, W - 4, 1, n(PALETTE.steel)));
+  c.add(scene.add.rectangle(3, gTop + 2, 3, 2, n(0x5a7aa8)));
+  c.add(scene.add.rectangle(3, gTop + 5, 0.6, 5, n(0xb0b8c4)));
+  c.add(scene.add.triangle(3, gTop + 9, -2, 0, 2, 0, 0, 3, n(PALETTE.steel)));
+  // the corner posts, and a glint down the glass
+  for (const sx of [-W / 2 + 0.5, W / 2 - 0.5]) c.add(scene.add.rectangle(sx, gTop + gH / 2, 1.5, gH, n(0xc8d0dc)));
+  c.add(scene.add.rectangle(-W / 2 + 5, gTop + gH / 2, 1.2, gH - 2, 0xffffff, 0.12).setAngle(6));
+  c.add(scene.add.rectangle(-W / 2 + 7.5, gTop + gH / 2, 0.6, gH - 4, 0xffffff, 0.1).setAngle(6));
+  // ---- THE MARQUEE: a lit sign with a row of bulbs round it
+  const head = scene.add.rectangle(0, -H + 3.5, W, 10, n(0x0c0814)).setStrokeStyle(1, trim);
   c.add(head);
-  c.add(centerText(scene, 0, -H + 1, eerie ? '? ? ?' : 'GRAB', n(eerie ? 0xc8a0e0 : PALETTE.gold)));
+  c.add(scene.add.rectangle(0, -H - 1.5, W + 2, 2, frame));
+  c.add(centerText(scene, 0, -H + 4, eerie ? '? ? ?' : 'GRAB', n(eerie ? 0xc8a0e0 : PALETTE.gold)));
+  const bulbs: Phaser.GameObjects.Arc[] = [];
+  for (let b = 0; b < 7; b++) {
+    const bulb = scene.add.circle(-W / 2 + 1 + b * ((W - 2) / 6), -H - 1.5, 0.8, n(eerie ? 0xc8a0e0 : 0xffe080));
+    bulbs.push(bulb);
+    c.add(bulb);
+  }
   if (!night) {
     // The plush crane chases its lights; the other one flickers, unwell.
     const glow = scene.add.rectangle(0, -25, W + 2, 24, eerie ? 0x8a4ab8 : PALETTE.tealLight, 0.07);
@@ -61,10 +92,23 @@ export function paintCrane(scene: Phaser.Scene, x: number, y: number, kind: Cran
       scene.time.addEvent({
         delay: 140,
         loop: true,
-        callback: () => glow.setAlpha(Math.random() < 0.12 ? 0.02 : 0.07 + Math.random() * 0.05),
+        callback: () => {
+          const a = Math.random() < 0.12 ? 0.02 : 0.07 + Math.random() * 0.05;
+          glow.setAlpha(a);
+          bulbs.forEach((bl) => bl.setAlpha(a < 0.05 ? 0.2 : 1));
+        },
       });
     } else {
       scene.tweens.add({ targets: glow, alpha: 0.03, duration: 700, yoyo: true, repeat: -1 });
+      let step = 0;
+      scene.time.addEvent({
+        delay: 180,
+        loop: true,
+        callback: () => {
+          step++;
+          bulbs.forEach((bl, k) => bl.setAlpha((k + step) % 3 === 0 ? 0.3 : 1));
+        },
+      });
     }
   }
   return c;
