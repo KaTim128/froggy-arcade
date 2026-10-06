@@ -1198,7 +1198,7 @@ export const LIZARDS: LizardType[] = [
     build: { scale: 1.14, wide: 1.42, tall: 1.1, limb: 1.04, head: 1.0, skin: 0x8a8f97, light: 0xb4b9c0, dark: 0x4a4e56, crest: 0xe8dcc0, animal: 'rhino' },
     blurb: 'ARMOURED TANK' },
   // THE ASSASSIN is a hyena: hunched, spotted and grinning.
-  { key: 'assassin', name: 'HYENA', power: 1.04, speed: 1.15, avoid: 1.5, resist: 0.74, nerve: 1.15, spacing: 1.05,
+  { key: 'assassin', name: 'HYENA', power: 1.04, speed: 1.15, avoid: 1.45, resist: 0.74, nerve: 1.15, spacing: 1.05,
     build: { scale: 0.92, wide: 0.74, tall: 1.0, limb: 1.1, head: 0.92, skin: 0xb49660, light: 0xd8c18e, dark: 0x5c4a2c, crest: 0x3a2c1a, animal: 'hyena' },
     blurb: 'AVOIDANT AND FRAGILE' },
   // THE REACH is a giraffe, and its reach is its neck and its limbs.
