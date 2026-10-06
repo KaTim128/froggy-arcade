@@ -29,6 +29,7 @@ import * as THREE from 'three';
 import { audio, SILENCE, screamLevel, type SfxName, type SfxPlace } from '../core/audio';
 import { store } from '../core/state';
 import { ledger } from '../core/ledger';
+import { addItem, KEY_ITEM } from '../game/inventory';
 import { froggyLayer } from '../render/froggyLayer';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
 import { playJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
@@ -5521,6 +5522,8 @@ export class HideRoom3D extends Phaser.Scene {
     if (this.left) return;
     this.left = true;
     store.patch({ route: 'normal', hideRoom: 0, froggyGone: true });
+    // The key that opened the doors comes out with you, into a pocket.
+    if (!store.get().items.includes(KEY_ITEM.id)) addItem(KEY_ITEM.id);
     // AND YOU COME OUT WITH ONE TOKEN.  Not a reward and not a handout -- it
     // is what was in the pocket, and it is exactly enough for one go on the
     // cheapest machine in the building.

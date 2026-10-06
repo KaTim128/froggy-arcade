@@ -122,7 +122,7 @@ export class ArcadeLounge extends Phaser.Scene {
     paintHubRoom(this, { night: this.night, frontDoor: false });
     paintArcadeDressing(this, {
       night: this.night,
-      props: [{ x: 296, y: 62, kind: 'plant' }],
+      props: [{ x: 284, y: 70, kind: 'plant' }],
       // (one, clear of the claw machines that now stand where the other was)
       vents: [236],
     });

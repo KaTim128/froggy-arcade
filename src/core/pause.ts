@@ -152,6 +152,15 @@ export function resumePause(): void {
  * screen picks it up from the last place it can be picked up from.
  */
 export function leaveToMenu(): void {
+  jumpToScene('StartScreen');
+}
+
+/**
+ * Everything stopped, as for the title screen, and then `key` started with
+ * `data` instead.  The admin run's test buttons use it to drop straight into
+ * a point of the story (see SettingsModal).
+ */
+export function jumpToScene(key: string, data?: object): void {
   if (!game) return;
   frozen = null;
   store.flush();
@@ -163,8 +172,11 @@ export function leaveToMenu(): void {
   if (document.pointerLockElement) document.exitPointerLock?.();
   for (const s of [...game.scene.getScenes(false)]) {
     const k = s.scene.key;
-    if (k === 'StartScreen') continue;
+    if (k === key) continue;
     if (game.scene.isActive(k) || game.scene.isPaused(k) || game.scene.isSleeping(k)) game.scene.stop(k);
   }
-  game.scene.start('StartScreen');
+  // and once more as the new scene comes up: the rooms being stopped can
+  // still repaint the overlay on their way out, after the clear above
+  game.scene.getScene(key)?.events.once('create', () => froggyLayer.clear());
+  game.scene.start(key, data);
 }

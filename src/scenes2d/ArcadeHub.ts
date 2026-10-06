@@ -15,7 +15,7 @@ import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
 import { evaluateBroke } from '../core/broke';
 import { KEYS } from '../core/input';
-import { centerText, fadeIn, fadeToScene, text } from '../core/ui';
+import { fadeIn, fadeToScene, text } from '../core/ui';
 import { paintArcadeDressing, paintChangeMachine, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
 import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
@@ -1369,14 +1369,21 @@ export class ArcadeHub extends Phaser.Scene {
     // leaves a gap in the case exactly as it leaves a gap on the counter.
     const s = store.get();
     const stock = shelfStock(s);
-    // AFTER THE NIGHT the case holds one thing, and it is drawn as that
-    // thing, alone in the middle of the glass with its price under it --
-    // not stretched into a ninety-pixel bar of colour.
+    // AFTER THE NIGHT the case is the same case -- the same glass, the same
+    // row of slots -- cleared: an empty peg where every prize stood, and in
+    // the middle slot the one thing left, the camcorder, drawn as itself.
     if (stock.length === 1) {
       const p = stock[0];
-      if (!s.prizesOwned.includes(p.id)) {
-        drawPrize(this, PRIZE_CASE.x + PRIZE_CASE.w / 2, PRIZE_CASE.y - 9, p);
-        centerText(this, PRIZE_CASE.x + PRIZE_CASE.w / 2 + 30, PRIZE_CASE.y - 16, `${p.cost}`, PALETTE.gold);
+      const slots = 9;
+      const pitch = Math.floor((PRIZE_CASE.w - 12) / slots);
+      const mid = Math.floor(slots / 2);
+      for (let i = 0; i < slots; i++) {
+        const x = PRIZE_CASE.x + 6 + i * pitch;
+        if (i === mid && !s.prizesOwned.includes(p.id)) {
+          drawPrize(this, x + (pitch - 2) / 2, PRIZE_CASE.y - 9, p, 0.85);
+          continue;
+        }
+        this.add.rectangle(x + (pitch - 2) / 2, PRIZE_CASE.y - 10, 1, 4, PALETTE.steel).setOrigin(0.5, 1).setAlpha(0.5);
       }
       stock.length = 0;
     }

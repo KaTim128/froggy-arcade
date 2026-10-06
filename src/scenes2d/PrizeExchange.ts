@@ -186,7 +186,8 @@ export class PrizeExchange extends Phaser.Scene {
    */
   private renderPockets(): void {
     const s = store.get();
-    const held = heldItems(s);
+    // (the counter's prizes are sold from the PRIZES tab; the camera is here)
+    const held = heldItems(s).filter((id) => id === CAMERA_ITEM.id || itemDef(id)?.kind !== 'prize');
     this.body.add(text(this, 30, 40, 'ITEM', PALETTE.ash));
     this.body.add(text(this, 196, 40, 'HE PAYS', PALETTE.ash));
     if (held.length === 0) {

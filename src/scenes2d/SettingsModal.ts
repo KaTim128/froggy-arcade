@@ -21,11 +21,12 @@ import { BINDINGS } from '../core/input';
 import { button, centerText, confirmDialog, forfeitLines, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { isTouch } from '../core/device';
-import { leaveToMenu, pausedScene, resumePause } from '../core/pause';
+import { jumpToScene, leaveToMenu, pausedScene, resumePause } from '../core/pause';
+import { ROOM_MONEY } from './PrizeExchange';
 import { roomControls, type ControlRow } from '../ui/controlsList';
 import type { MinigameScene } from './MinigameScene';
 
-type Tab = 'audio' | 'controls';
+type Tab = 'audio' | 'controls' | 'test';
 
 export class SettingsModal extends Phaser.Scene {
   private tab: Tab = 'audio';
@@ -62,8 +63,11 @@ export class SettingsModal extends Phaser.Scene {
     this.add.rectangle(GAME_W / 2, GAME_H / 2, 280, 162, PALETTE.ink).setStrokeStyle(1, PALETTE.neon);
     centerText(this, GAME_W / 2, 18, this.pause ? 'PAUSED' : 'SETTINGS', PALETTE.gold, 8);
 
-    button(this, 124, 34, 'AUDIO', () => this.setTab('audio'), { width: 60, height: 13 });
-    button(this, 196, 34, 'CONTROLS', () => this.setTab('controls'), { width: 68, height: 13 });
+    // The admin run gets a third tab: jumps to points of the story, for testing.
+    const tester = store.isTester();
+    button(this, tester ? 98 : 124, 34, 'AUDIO', () => this.setTab('audio'), { width: 60, height: 13 });
+    button(this, tester ? 166 : 196, 34, 'CONTROLS', () => this.setTab('controls'), { width: 68, height: 13 });
+    if (tester) button(this, 228, 34, 'TEST', () => this.setTab('test'), { width: 46, height: 13, fill: 0x5a3a12 });
 
     this.body = this.add.container(0, 0);
     this.renderBody();
@@ -140,6 +144,7 @@ export class SettingsModal extends Phaser.Scene {
   private renderBody(): void {
     this.body.removeAll(true);
     if (this.tab === 'audio') this.renderAudio();
+    else if (this.tab === 'test') this.renderTest();
     else if (this.pause) this.renderPlaceControls();
     else this.renderControls();
   }
@@ -162,6 +167,51 @@ export class SettingsModal extends Phaser.Scene {
       y += 9;
     }
     if (!rows.length) this.body.add(centerText(this, GAME_W / 2, 80, isTouch() ? 'TAP WHAT YOU SEE' : 'CLICK WHAT YOU SEE', PALETTE.cream));
+  }
+
+  /**
+   * ---- THE ADMIN RUN'S TEST BUTTONS.  Only for ADDMIN128 (store.isTester).
+   *
+   * Each sets the latches the real story would have set by then and starts
+   * the real scene: no copies of anything.
+   */
+  private renderTest(): void {
+    const rows: Array<[string, string, () => void]> = [
+      [
+        'H&S KEY SCENE',
+        'BASEMENT: KEY, TURN ROUND',
+        () => {
+          store.patch({ seenIntro: true, charityUsed: true, hasKey: false, froggyGone: false, route: 'basement', hideRoom: 0, timeOfDay: 'day' });
+          store.flush();
+          jumpToScene('BasementSequence', { atKey: true });
+        },
+      ],
+      [
+        'H&S COMPLETED',
+        'SURVIVED, OUTSIDE BY DAY',
+        () => {
+          store.patch({ seenIntro: true, charityUsed: true, hasKey: true, froggyGone: true, route: 'normal', hideRoom: 0, timeOfDay: 'day' });
+          store.flush();
+          jumpToScene('ExteriorDay', {});
+        },
+      ],
+      [
+        'MIDNIGHT HOTEL RUN',
+        `$${ROOM_MONEY}, MIDNIGHT, HOTEL`,
+        () => {
+          const s = store.get();
+          if (s.cash < ROOM_MONEY) store.earnCash(ROOM_MONEY - s.cash);
+          store.patch({ seenIntro: true, charityUsed: true, hasKey: true, froggyGone: true, route: 'normal', hideRoom: 0, timeOfDay: 'midnight' });
+          store.flush();
+          jumpToScene('ExteriorDay', { nightfall: true });
+        },
+      ],
+    ];
+    rows.forEach(([label, what, go], i) => {
+      const y = 62 + i * 28;
+      this.body.add(button(this, 92, y, label, go, { width: 112, height: 14 }));
+      this.body.add(text(this, 152, y - 3, what, PALETTE.ash));
+    });
   }
 
   private renderAudio(): void {

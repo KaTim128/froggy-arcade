@@ -62,6 +62,9 @@ const BLACKOUT_MS = 4000;
  * corridor itself ran straight away from the camera, so the one piece of UI in
  * the sequence was telling the player to walk sideways into a wall.
  */
+/** Where the key lies on the table (frames, below). */
+const KEY_FRAME = 6;
+
 type HotspotKind = 'arrowDown' | 'arrowForward' | 'door' | 'key' | 'turnAround' | 'none';
 
 interface FrameDef {
@@ -81,8 +84,15 @@ export class BasementSequence extends Phaser.Scene {
   private pending: Phaser.Time.TimerEvent[] = [];
   private frames: FrameDef[] = [];
 
+  /** The frame to open on: the key's, for the admin run's test button. */
+  private startAt = 0;
+
   constructor() {
     super('BasementSequence');
+  }
+
+  init(data: { atKey?: boolean } = {}): void {
+    this.startAt = data.atKey ? KEY_FRAME : 0;
   }
 
   create(): void {
@@ -135,7 +145,7 @@ export class BasementSequence extends Phaser.Scene {
       { paint: (s, c) => s.paintBlack(c), hotspot: 'none' },
     ];
 
-    this.time.delayedCall(900, () => this.show(0));
+    this.time.delayedCall(900, () => this.show(this.startAt));
   }
 
   // ------------------------------------------------------------------ frames

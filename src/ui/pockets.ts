@@ -16,7 +16,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { store } from '../core/state';
 import { GAME_W } from '../render/pixelScaler';
-import { CAMERA_PRIZE } from '../game/content';
+import { CAMERA_PRIZE, prizeById } from '../game/content';
 import { SLOTS, heldItems, itemDef, type ItemDef } from '../game/inventory';
 import { drawPrize } from '../scenes2d/PrizeCounter';
 
@@ -42,6 +42,25 @@ export function drawItem(scene: Phaser.Scene, x: number, y: number, d: ItemDef, 
     const before = new Set(scene.children.list);
     drawPrize(scene, x, y, CAMERA_PRIZE, 0.62 * S);
     for (const o of scene.children.list) if (!before.has(o)) out.push(o);
+    return out;
+  }
+  if (d.kind === 'prize') {
+    const p = prizeById(d.id);
+    if (p) {
+      const before = new Set(scene.children.list);
+      drawPrize(scene, x, y, p, 0.55 * S);
+      for (const o of scene.children.list) if (!before.has(o)) out.push(o);
+    }
+    return out;
+  }
+  if (d.kind === 'key') {
+    // a brass key lying on its side: the bow, the shaft, the bit
+    E(-4, -5, 6, 6, d.color);
+    E(-4, -5, 2.6, 2.6, 0x2a2018);
+    R(1.5, -5, 8, 1.8, d.color);
+    R(4, -3.4, 1.4, 2, d.color);
+    R(5.8, -3.6, 1.2, 1.6, d.color);
+    R(1, -5.6, 6, 0.6, 0xf2d880);
     return out;
   }
   if (d.kind === 'plush') {

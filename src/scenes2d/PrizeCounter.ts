@@ -24,7 +24,7 @@ import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { ledger } from '../core/ledger';
 import { shelfStock, type PrizeDef } from '../game/content';
-import { CAMERA_ITEM, FULL_LINE, pocketsFull } from '../game/inventory';
+import { FULL_LINE, pocketsFull } from '../game/inventory';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 
@@ -131,8 +131,9 @@ export class PrizeCounter extends Phaser.Scene {
   /** PRD PC-2/PC-3: redemption does not end the game.  The player keeps playing. */
   private redeem(p: PrizeDef): void {
     if (store.get().prizesOwned.includes(p.id)) return;
-    // The camera is carried in the hand, so it needs a free pocket.
-    if (p.id === CAMERA_ITEM.id && pocketsFull()) {
+    // Every prize is carried in a pocket, so it needs a free one: a full set
+    // of pockets refuses the purchase and takes nothing.
+    if (pocketsFull()) {
       audio.sfx('buzzer');
       this.notice?.destroy();
       this.notice = centerText(this, GAME_W / 2, 158, FULL_LINE, PALETTE.ember).setDepth(30);
@@ -239,14 +240,25 @@ export function drawPrize(scene: Phaser.Scene, x: number, y: number, p: PrizeDef
       put(6, 0, 3, 5, PALETTE.steel);
       break;
     case 'camera':
-      // body, grip, the lens, and the flash on top
-      put(0, 0, 18, 11);
-      put(-7, 0, 4, 11, PALETTE.ink);
-      dot(2, -5.5, 4.2, PALETTE.ink);
-      dot(2, -5.5, 2.6, 0x5a86b8);
-      dot(1, -6.5, 0.9, PALETTE.cream);
-      put(5, -11, 5, 2, PALETTE.steel);
-      put(-4, -11, 3, 1, PALETTE.blood);
+      // A CAMCORDER, not a stills camera: a long boxy body lying on its side,
+      // the lens barrel out of the front, the handle over the top, the
+      // fold-out screen on the side, and the red REC light.
+      put(-1, 0, 16, 9);
+      put(-1, -9, 16, 1, PALETTE.steel);
+      // lens barrel and its glass
+      put(9, -1.5, 5, 6, PALETTE.ink);
+      put(12, -2, 2, 5, 0x5a86b8);
+      put(12.5, -5, 1, 1, PALETTE.cream);
+      // handle over the top
+      put(-1, -10, 12, 1.5, PALETTE.ink);
+      put(-6.5, -10, 1.5, 3, PALETTE.ink);
+      put(4.5, -10, 1.5, 3, PALETTE.ink);
+      // the screen folded out on the near side
+      put(-5, -1.5, 6, 5, PALETTE.ink);
+      put(-5, -2.2, 4.6, 3.6, 0x3a6a8a);
+      // REC light, eyepiece at the back
+      dot(-7, -7.5, 0.8, PALETTE.blood);
+      put(-10.5, -4, 2, 3, PALETTE.ink);
       break;
     case 'cube':
     default:
