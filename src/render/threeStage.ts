@@ -17,6 +17,28 @@ import { GAME_W, GAME_H } from './pixelScaler';
 const RENDER_W = GAME_W * 1.5;
 const RENDER_H = GAME_H * 1.5;
 
+/**
+ * Whether WebGL here is drawn by the CPU (SwiftShader, llvmpipe and the
+ * like).  Multisampling there costs four times the fill on a processor that
+ * is already doing all of it, and the frame rate drops through the floor --
+ * so a smoothed stage is smoothed only where there is a GPU to do it.
+ */
+let software: boolean | null = null;
+function softwareGL(): boolean {
+  if (software !== null) return software;
+  software = false;
+  try {
+    const gl = document.createElement('canvas').getContext('webgl');
+    const info = gl?.getExtension('WEBGL_debug_renderer_info');
+    const name = info && gl ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : '';
+    software = /swiftshader|llvmpipe|software|softpipe/i.test(name);
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+  } catch {
+    software = false;
+  }
+  return software;
+}
+
 export class ThreeStage {
   /**
    * The stage on screen, if any.  There is only ever one (see above), and the
@@ -44,7 +66,7 @@ export class ThreeStage {
   }
 
   mount(root: HTMLElement, phaserCanvas: HTMLCanvasElement): void {
-    this.renderer = new THREE.WebGLRenderer({ antialias: this.smooth, powerPreference: 'low-power' });
+    this.renderer = new THREE.WebGLRenderer({ antialias: this.smooth && !softwareGL(), powerPreference: 'low-power' });
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(RENDER_W, RENDER_H, false);
 

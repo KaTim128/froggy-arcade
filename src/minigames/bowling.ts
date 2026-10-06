@@ -331,6 +331,7 @@ export const bowling: MinigameModule = {
       ['A / D', 'WALK THE FOUL LINE'],
       ['LEFT/RIGHT', 'SWING THE AIM'],
       ['Q / E', 'HOOK LEFT OR RIGHT'],
+      ['H', 'STEP THE HOOK: STRAIGHT, LEFT, RIGHT'],
       ['HOLD SPACE', 'POWER, LET GO TO THROW'],
     ],
   },
@@ -340,7 +341,9 @@ export const bowling: MinigameModule = {
   // and aimed was a keyboard laid out under two thumbs.  (The keyboard keeps
   // all of it: walking the line, the aim and the hook dial.)
   touch: {
+    // the pad sends the arrows as well, which is what swings the aim
     stick: 'lr',
+    arrows: true,
     buttons: [
       { label: 'ROLL', key: 'SPACE', primary: true },
       { label: 'HOOK', key: 'H' },
