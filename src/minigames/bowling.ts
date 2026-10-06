@@ -330,8 +330,7 @@ export const bowling: MinigameModule = {
     controls: [
       ['A / D', 'WALK THE FOUL LINE'],
       ['LEFT/RIGHT', 'SWING THE AIM'],
-      ['Q / E', 'HOOK LEFT OR RIGHT'],
-      ['H', 'STEP THE HOOK: STRAIGHT, LEFT, RIGHT'],
+      ['Q / E / H', 'HOOK LEFT OR RIGHT (H STEPS IT)'],
       ['HOLD SPACE', 'POWER, LET GO TO THROW'],
     ],
   },
