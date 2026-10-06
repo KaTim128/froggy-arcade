@@ -85,7 +85,10 @@ export class StartScreen extends Phaser.Scene {
       // the dark, with the door locked behind them — was handed back a warm
       // arcade and no explanation.  Every other route was covered; this one
       // fell through to the hub.
-      fadeToScene(this, 'HideRoom3D');
+      // Back to the first room, it opens as it did the first time: coming
+      // round on the floor with him already staring at you -- never on the
+      // briefing from across the room.
+      fadeToScene(this, 'HideRoom3D', { wake: s.hideRoom === 0 });
       return;
     }
     if (s.route === 'chase') {

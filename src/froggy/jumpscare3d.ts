@@ -71,11 +71,11 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
     audio.sfx('death_stinger', 1);
     if (!recorded) audio.sfx('froggy_screech', 1);
   });
-  // THE HIT: a spike of everything at once as he arrives -- a second boom
-  // and a second screech on top of the first, and the buzzer under them.
+  // THE HIT: a spike as he arrives -- a second boom and the buzzer under it.
+  // Not a second scream: one of his three is already going (see
+  // `audio.scare`), and two at once is a noise, not a voice.
   scene.time.delayedCall(HOLD_MS + LUNGE_MS, () => {
     audio.sfx('boom', 1);
-    audio.scare();
     audio.sfx('buzzer', 0.8);
   });
 

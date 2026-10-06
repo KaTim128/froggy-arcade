@@ -34,13 +34,17 @@ export class ThreeStage {
   private last = 0;
   private resizeRef: () => void;
 
-  constructor() {
+  /** Multisampled, so thin geometry has clean edges instead of stair-steps. */
+  private readonly smooth: boolean;
+
+  constructor(opts: { smooth?: boolean } = {}) {
     this.camera = new THREE.PerspectiveCamera(72, GAME_W / GAME_H, 0.1, 120);
     this.resizeRef = () => this.layout();
+    this.smooth = !!opts.smooth;
   }
 
   mount(root: HTMLElement, phaserCanvas: HTMLCanvasElement): void {
-    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'low-power' });
+    this.renderer = new THREE.WebGLRenderer({ antialias: this.smooth, powerPreference: 'low-power' });
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(RENDER_W, RENDER_H, false);
 

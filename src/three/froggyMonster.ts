@@ -435,6 +435,12 @@ export interface FroggyPose {
   /** 0..1 the jaw going further than a jaw goes: dropped and stretched long. */
   stretch?: number;
   /**
+   * 0..1 the scream itself, at full voice: the arms come up off his sides
+   * with the claws out, the back comes over you and the head is thrown at
+   * you.  See the warning in `update`.
+   */
+  rage?: number;
+  /**
    * World height of the floor under him.  Nothing of him goes below it: not
    * a foot in a squat, not an elbow on all fours, not an eye with his face
    * down at a gap.  Leave it out and it is where his feet are.
@@ -602,6 +608,16 @@ export class FroggyMonster {
   private hunchNow = 0;
   private tiltNow = 0;
   private menaceNow = 0;
+  private rageNow = 0;
+  /**
+   * WHO HE IS TONIGHT.  Small, consistent differences picked once per
+   * appearance (see `vary`) so he is never quite the same figure twice: how
+   * far he stoops, which way his head sits, how far his arms hang from his
+   * sides, one eye bigger than the other.
+   */
+  private varHunch = 0;
+  private varTilt = 0;
+  private varSplay = 0;
   private neckBaseY = NaN;
   private stretchNow = 0;
   private pounceNow = 0;
@@ -1181,10 +1197,30 @@ export class FroggyMonster {
     // from the roof down, as deep as the jaw is open -- so however far the
     // jaw goes there is dark behind the teeth and never the neck and chest
     // showing through the gap.
+    //
+    // It is a rounded pouch -- the back half of a ball, hung from the roof of
+    // the mouth -- so it has no straight edges to read as a box behind the
+    // teeth, and it is flesh, not paint: a dark wet red at the lips going down
+    // to black at the back of the throat, so the open mouth reads as a mouth.
     {
-      const g = new THREE.CylinderGeometry(1, 1, 1, 24, 1, true, Math.PI * 0.32, Math.PI * 1.36);
-      g.translate(0, -0.5, 0);
-      const cav = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x020101, side: THREE.DoubleSide }));
+      const g = new THREE.SphereGeometry(1, 28, 16, Math.PI * 0.3, Math.PI * 1.4);
+      g.translate(0, -1, 0);
+      const pos = g.attributes.position;
+      const cols = new Float32Array(pos.count * 3);
+      const lip = new THREE.Color(0x4a0e14);
+      const deep = new THREE.Color(0x070102);
+      const c = new THREE.Color();
+      for (let i = 0; i < pos.count; i++) {
+        // front (toward the lips) and high is flesh; back and down is the dark
+        const front = THREE.MathUtils.clamp((pos.getZ(i) + 1) / 1.9, 0, 1);
+        const high = THREE.MathUtils.clamp(1 + pos.getY(i) / 2, 0, 1);
+        c.copy(deep).lerp(lip, front * front * (0.45 + 0.55 * high));
+        cols[i * 3] = c.r;
+        cols[i * 3 + 1] = c.g;
+        cols[i * 3 + 2] = c.b;
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+      const cav = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
       cav.position.set(0, MOUTH_Y + 0.004, MOUTH_Z - 0.01);
       cav.scale.set(MOUTH_W * 0.9, 0.001, MOUTH_D * 0.9);
       this.head.add(cav);
@@ -1415,14 +1451,17 @@ export class FroggyMonster {
     const stillWant = pose.still ?? 0;
     this.stillNow += (stillWant - this.stillNow) * Math.min(1, dt * (stillWant > this.stillNow ? 20 : 2));
     const live = 1 - this.stillNow;
-    this.hunchNow += ((pose.hunch ?? 0) - this.hunchNow) * Math.min(1, dt * 3);
-    this.tiltNow += ((pose.tilt ?? 0) - this.tiltNow) * Math.min(1, dt * 3);
+    this.hunchNow += ((pose.hunch ?? 0) + this.varHunch - this.hunchNow) * Math.min(1, dt * 3);
+    this.tiltNow += ((pose.tilt ?? 0) + this.varTilt - this.tiltNow) * Math.min(1, dt * 3);
     this.stretchNow += ((pose.stretch ?? 0) - this.stretchNow) * Math.min(1, dt * 16);
     // Drawn out fast -- it is the scare's -- and let back slowly.
     this.pounceNow += ((pose.pounce ?? 0) - this.pounceNow) * Math.min(1, dt * ((pose.pounce ?? 0) > this.pounceNow ? 18 : 3));
     this.menaceNow += ((pose.menace ?? 0) - this.menaceNow) * Math.min(1, dt * 2.5);
-    // (braced, the fingers are drawn out a little long: claws)
-    this.setArmLength(1 + 0.35 * this.pounceNow, 1 + 0.55 * this.pounceNow + 0.22 * this.menaceNow);
+    // the scream comes on at once and goes slowly
+    this.rageNow += ((pose.rage ?? 0) - this.rageNow) * Math.min(1, dt * ((pose.rage ?? 0) > this.rageNow ? 14 : 3));
+    // (braced, the fingers are drawn out a touch: claws -- a touch, not the
+    // stretched rake they were, which read as a different, broken hand)
+    this.setArmLength(1 + 0.35 * this.pounceNow, 1 + 0.55 * this.pounceNow + 0.08 * this.menaceNow);
     // a cold sheen on the reaching arms, so the long hands read in the dark
     // at the edges of the frame, where no lamp is pointed
     this.armSkin?.emissive.setRGB(0.028 * this.pounceNow, 0.03 * this.pounceNow, 0.036 * this.pounceNow);
@@ -1669,8 +1708,8 @@ export class FroggyMonster {
     }
     // Out wide on the push, in on the pull: the gap between his hands opens
     // and closes around where you are standing.
-    this.arms[0].rotation.z = -rk * 0.2 - reach * (0.1 + 0.26 * gL);
-    this.arms[1].rotation.z = rk * 0.2 + reach * (0.1 + 0.26 * gR);
+    this.arms[0].rotation.z = -rk * 0.2 - reach * (0.1 + 0.26 * gL) - this.varSplay * (1 - reach);
+    this.arms[1].rotation.z = rk * 0.2 + reach * (0.1 + 0.26 * gR) + this.varSplay * (1 - reach);
     // And the hands close as they come back, which is what makes it a grab
     // rather than a wave.
     for (let h = 0; h < this.hands.length; h++) {
@@ -1848,6 +1887,29 @@ export class FroggyMonster {
         this.chest.scale.x += deep * 0.5;
         this.chest.scale.y += deep;
         this.chest.scale.z += deep * 1.1;
+      }
+      // ---- AND THE SCREAM.  At full voice the arms come UP: the upper arms
+      // swing forward and out to either side of him, the elbows bend so the
+      // forearms rise toward you, and the hands open into claws at the height
+      // of his chest -- a thing about to come at you with both of them, not
+      // two long arms hanging.  The back comes over and the head is thrown
+      // forward into it, and the whole of him shakes with the voice.
+      const rg = this.rageNow * mn;
+      if (rg > 0.001) {
+        const shake = Math.sin(b * 61) * 0.02 + Math.sin(b * 89) * 0.012;
+        this.torso.rotation.x += rg * (0.14 + shake);
+        this.neck.rotation.x += rg * (-0.16 + shake * 0.6);
+        for (let h = 0; h < 2; h++) {
+          const out = h === 0 ? -1 : 1;
+          this.arms[h].rotation.x += (-1.2 + shake - this.arms[h].rotation.x) * rg;
+          this.arms[h].rotation.z += (out * 0.42 + shake * out - this.arms[h].rotation.z) * rg;
+          this.elbows[h].rotation.x += (-0.85 - this.elbows[h].rotation.x) * rg;
+          for (let f = 0; f < this.hands[h].length; f++) {
+            const fing = this.hands[h][f];
+            // spread wide and hooked at the tips: a claw, held open
+            fing.rotation.x += ((f === 4 ? 0.5 : 0.75) + Math.sin(b * 23 + f) * 0.06 - fing.rotation.x) * rg;
+          }
+        }
       }
     }
 
@@ -2109,7 +2171,8 @@ export class FroggyMonster {
     // the wall inside, as deep as the drop at the back of the jaw
     if (this.cavity) {
       const drop = Math.sin(Math.max(0, this.jaw.rotation.x)) * (MOUTH_Z - JAW_PIVOT_Z + MOUTH_D * 0.2) * this.jaw.scale.z;
-      this.cavity.scale.y = Math.max(0.001, drop * this.jaw.scale.y * 1.1 + st * 0.09);
+      // (the pouch is a ball two units tall, hung from the roof: half as much)
+      this.cavity.scale.y = Math.max(0.001, (drop * this.jaw.scale.y * 1.1 + st * 0.09) * 0.5);
     }
     // the long upper teeth draw up into the gum while the mouth is shut, so
     // they never come through the chin, and are at full length once it opens
@@ -2471,6 +2534,26 @@ export class FroggyMonster {
    * moves down with it: the elbow stays on the end of the upper arm and the
    * hand on the end of the forearm.
    */
+  /**
+   * A variation of him, from a seed: a little more or less stooped, the head
+   * sitting a little to one side or the other, the arms hanging a little
+   * further out, one eye larger.  Every one of them is the same Froggy -- the
+   * model, the face and the colours do not change -- and none of them is the
+   * same picture.
+   */
+  vary(seed: number): void {
+    let x = (Math.floor(seed * 9301) % 233280 + 233280) % 233280 || 1;
+    const r = (): number => ((x = (x * 9301 + 49297) % 233280) / 233280);
+    this.varHunch = r() * 0.22;
+    this.varTilt = (r() - 0.5) * 0.22;
+    this.varSplay = r() * 0.07;
+    const big = 1 + r() * 0.12;
+    const which = r() < 0.5 ? 0 : 1;
+    if (this.eyes[which]) this.eyes[which].scale.multiplyScalar(big);
+    const head = 0.97 + r() * 0.07;
+    this.head.scale.multiplyScalar(head);
+  }
+
   private setArmLength(arm: number, finger: number): void {
     if (Math.abs(arm - this.armK) < 1e-4 && Math.abs(finger - this.fingerK) < 1e-4) return;
     this.armK = arm;

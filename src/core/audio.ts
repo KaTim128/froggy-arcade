@@ -28,6 +28,39 @@ export const SCREAM_HOLD = SCREAM_DUR * 0.62;
 export const screamLevel = (s: number): number =>
   s < 0 ? 0 : s < 0.012 ? s / 0.012 : s < SCREAM_HOLD ? 1 : s < SCREAM_DUR ? ((SCREAM_DUR - s) / (SCREAM_DUR - SCREAM_HOLD)) ** 2 : 0;
 
+/**
+ * ---- HIS THREE SCREAMS.
+ *
+ * The same throat and the same recording, pushed three different ways, so a
+ * scare is never the same noise twice running -- and all three have the same
+ * shape in time (`screamLevel`), so his jaw opens on any of them exactly as
+ * it does now.
+ *
+ *   THE ROAR     the one he has always had: a torn voice a little under its
+ *                pitch, a shriek over it and a growl under it.
+ *   THE SHRIEK   higher and sharper, the top end loud, the sweep down fast,
+ *                and the voice stuttering fourteen times a second.
+ *   THE CROAK    lower and slower, driven harder, the growl the loudest part
+ *                and fluttering slower, opening on two wet croaks.
+ *
+ * `voice`/`shriek`/`growl` are [rate at the start, rate at the end, gain, and
+ * drive / delay / flutter Hz]; `pitch` and `sweep` bend the synthesized half.
+ */
+export interface ScreamVoice {
+  voice: [number, number, number, number];
+  shriek: [number, number, number, number];
+  growl: [number, number, number, number];
+  pitch: number;
+  sweep: number;
+  stutter?: number;
+  croak?: boolean;
+}
+export const SCREAMS: ScreamVoice[] = [
+  { voice: [0.93, 0.84, 0.9, 2.2], shriek: [1.36, 1.22, 0.42, 0.018], growl: [0.54, 0.47, 0.95, 38], pitch: 1, sweep: 0.9 },
+  { voice: [1.12, 0.96, 0.85, 2.6], shriek: [1.62, 1.38, 0.62, 0.01], growl: [0.64, 0.58, 0.6, 46], pitch: 1.32, sweep: 0.55, stutter: 14 },
+  { voice: [0.79, 0.66, 0.9, 3.4], shriek: [1.18, 1.05, 0.24, 0.11], growl: [0.46, 0.38, 1.15, 24], pitch: 0.74, sweep: 1.25, croak: true },
+];
+
 export const CROSSFADE_MS = 800; // PRD AU-1
 
 export type BusName = 'music' | 'sfx';
@@ -1366,13 +1399,33 @@ class AudioManager {
    * said something clear, and blasting them in headphones is not a scare, it is
    * an injury.  The peak is also capped below full scale for the same reason.
    */
-  scare(): void {
+  /** The last scream's voice, so the next is a different one; see `SCREAMS`. */
+  private lastScream = -1;
+  /** The scream bus still sounding, and until when -- one scream at a time. */
+  private scareBus: GainNode | null = null;
+  private scareUntil = 0;
+
+  scare(variant?: number): void {
     if (!this.unlocked || !this.ctx) return;
     if (store.get().settings.master === 0) return;
 
     const ctx = this.ctx;
     this.wake();
     const t = ctx.currentTime;
+    // ---- ONE SCREAM AT A TIME.  A scream still sounding is cut, fast, before
+    // the next one starts, so two never pile up into one noise.
+    if (this.scareBus && t < this.scareUntil) {
+      const old = this.scareBus;
+      old.gain.cancelScheduledValues(t);
+      old.gain.setValueAtTime(old.gain.value, t);
+      old.gain.linearRampToValueAtTime(0, t + 0.03);
+      setTimeout(() => old.disconnect(), 80);
+    }
+    // ---- AND ONE OF THREE.  Picked at random, never the same twice running.
+    let v = variant ?? Math.floor(Math.random() * SCREAMS.length);
+    if (variant === undefined && v === this.lastScream) v = (v + 1 + Math.floor(Math.random() * (SCREAMS.length - 1))) % SCREAMS.length;
+    this.lastScream = v;
+    const V = SCREAMS[v];
     // Everything below goes through a hard limiter: louder than it was, and
     // still held under full scale however the layers stack.
     const limit = ctx.createDynamicsCompressor();
@@ -1386,6 +1439,8 @@ class AudioManager {
     const out = ctx.createGain();
     out.gain.value = 1;
     out.connect(limit);
+    this.scareBus = out;
+    this.scareUntil = t + SCREAM_DUR + 0.2;
     limit.connect(ceiling);
     // makeup gain after the limiter, then capped below unity again
     const cap = ctx.createGain();
@@ -1395,7 +1450,7 @@ class AudioManager {
 
     // THE VOICE.  The recorded scream, made his: see `screamVoice`.  With it
     // playing, the synthesized scream below steps back to a texture under it.
-    const recorded = this.screamBuf ? this.screamVoice(ctx, t, out, this.screamBuf) : false;
+    const recorded = this.screamBuf ? this.screamVoice(ctx, t, out, this.screamBuf, V) : false;
     const synth = recorded ? 0.35 : 1;
 
     // The scream: three detuned saws through a hard clip, sweeping down from
@@ -1423,8 +1478,8 @@ class AudioManager {
     ]) {
       const osc = ctx.createOscillator();
       osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(f0, t + d);
-      osc.frequency.exponentialRampToValueAtTime(f1, t + d + 0.9);
+      osc.frequency.setValueAtTime(f0 * V.pitch, t + d);
+      osc.frequency.exponentialRampToValueAtTime(f1 * V.pitch, t + d + V.sweep);
       // a wobble in the throat
       const lfo = ctx.createOscillator();
       const lfoG = ctx.createGain();
@@ -1471,12 +1526,13 @@ class AudioManager {
     }
 
     // the shriek, detuned against itself so it beats
-    for (const f of [1180, 1213, 1760]) {
+    for (const f0 of [1180, 1213, 1760]) {
+      const f = f0 * V.pitch;
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
       osc.type = 'square';
       osc.frequency.setValueAtTime(f, t);
-      osc.frequency.linearRampToValueAtTime(f * 0.7, t + 0.9);
+      osc.frequency.linearRampToValueAtTime(f * 0.7, t + V.sweep);
       g.gain.setValueAtTime(0.0001, t + 0.02);
       g.gain.linearRampToValueAtTime(0.16 * synth, t + 0.05);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
@@ -1504,6 +1560,24 @@ class AudioManager {
     bp.connect(ng);
     ng.connect(out);
     src.start(t);
+    // ---- THE CROAK.  The third voice opens with two wet, sub-heavy croaks
+    // under the scream -- the frog in it, which is worse.
+    if (V.croak) {
+      for (const at of [0, 0.16]) {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(160, t + at);
+        osc.frequency.exponentialRampToValueAtTime(62, t + at + 0.13);
+        g.gain.setValueAtTime(0.0001, t + at);
+        g.gain.linearRampToValueAtTime(0.5, t + at + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.15);
+        osc.connect(g);
+        g.connect(out);
+        osc.start(t + at);
+        osc.stop(t + at + 0.18);
+      }
+    }
   }
 
   /**
@@ -1522,7 +1596,7 @@ class AudioManager {
    * The leading silence of the file is skipped, so it starts on the frame the
    * scare does.  Returns false if it could not play.
    */
-  private screamVoice(ctx: AudioContext, t: number, out: AudioNode, buf: AudioBuffer): boolean {
+  private screamVoice(ctx: AudioContext, t: number, out: AudioNode, buf: AudioBuffer, V: ScreamVoice = SCREAMS[0]): boolean {
     const OFFSET = 0.17;
     const DUR = SCREAM_DUR;
     const shaper = (drive: number): WaveShaperNode => {
@@ -1559,14 +1633,31 @@ class AudioManager {
       body.frequency.value = 1100;
       body.gain.value = 5;
       body.Q.value = 0.9;
-      layer(0.93, 0.84, 0, 0.9, [shaper(2.2), body]);
+      // a stutter in the throat on the shrieking one: the voice chopped at
+      // fourteen a second, which no throat can do
+      const chain: AudioNode[] = [shaper(V.voice[3]), body];
+      if (V.stutter) {
+        const chop = ctx.createGain();
+        chop.gain.value = 0.6;
+        const lfo2 = ctx.createOscillator();
+        const depth = ctx.createGain();
+        lfo2.type = 'square';
+        lfo2.frequency.value = V.stutter;
+        depth.gain.value = 0.4;
+        lfo2.connect(depth);
+        depth.connect(chop.gain);
+        lfo2.start(t);
+        lfo2.stop(t + DUR + 0.1);
+        chain.push(chop);
+      }
+      layer(V.voice[0], V.voice[1], 0, V.voice[2], chain);
 
       // the shriek over it
       const hp = ctx.createBiquadFilter();
       hp.type = 'highpass';
       hp.frequency.value = 2300;
       hp.Q.value = 0.7;
-      layer(1.36, 1.22, 0.018, 0.42, [hp, shaper(1.6)]);
+      layer(V.shriek[0], V.shriek[1], V.shriek[3], V.shriek[2], [hp, shaper(1.6)]);
 
       // the growl under it
       const lp = ctx.createBiquadFilter();
@@ -1578,13 +1669,13 @@ class AudioManager {
       const lfo = ctx.createOscillator();
       const lfoDepth = ctx.createGain();
       lfo.type = 'triangle';
-      lfo.frequency.value = 38;
+      lfo.frequency.value = V.growl[3];
       lfoDepth.gain.value = 0.45;
       lfo.connect(lfoDepth);
       lfoDepth.connect(flutter.gain);
       lfo.start(t);
       lfo.stop(t + DUR + 0.1);
-      layer(0.54, 0.47, 0.006, 0.95, [lp, shaper(6), flutter]);
+      layer(V.growl[0], V.growl[1], 0.006, V.growl[2], [lp, shaper(6), flutter]);
       return true;
     } catch {
       return false;
