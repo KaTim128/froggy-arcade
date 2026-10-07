@@ -265,6 +265,12 @@ const BRIEFING: Array<[string, number]> = [
   ['THE ENTIRE TIME DURING OUR LITTLE GAME.', 2800],
   ['IF NOT....', 2600],
 ];
+/** What he says through the open port, in turn.  The first is always the first. */
+const PORT_LINES = [
+  "YOU WON'T BE GETTING AWAY WITH THIS.",
+  'I KNOW YOUR FACE NOW.',
+  "THIS GLASS WON'T HOLD ME FOREVER.",
+];
 /**
  * What he says at the later doors.  Short: you know the rules.  Zone two he
  * is angry about the key; zone three he is barely speaking at all.
@@ -1006,6 +1012,10 @@ export class HideRoom3D extends Phaser.Scene {
    * hear, path to or catch somebody who is not in his building any more.
    */
   private secret: SecretRoom | null = null;
+  /** How many times the port has been opened, for which line he has for it. */
+  private portOpens = 0;
+  /** His line through the port while it is up: the count's teaching lines wait for it. */
+  private portLine = '';
   private inSecret = false;
   /** Floor height under the player.  Only the secret room has more than one. */
   private floorY = 0;
@@ -2810,9 +2820,7 @@ export class HideRoom3D extends Phaser.Scene {
       return;
     }
     if (this.atLab('lever')) {
-      const r = sec.pullLever();
-      if (r === 'full') this.say('THE PORT ONLY OPENS WITH THE TUBE EMPTY', 2200);
-      else if (r === 'moving') this.say('WAIT FOR THE WATER', 1600);
+      this.pullLabLever(sec);
       return;
     }
     if (this.atHeater()) {
@@ -2869,6 +2877,33 @@ export class HideRoom3D extends Phaser.Scene {
     if (!this.inSecret || !this.secret) return false;
     const b = this.secret.button;
     return Math.hypot(this.pos.x - b.x, this.pos.y - b.z) < 2.2 && this.floorY < 1.0;
+  }
+
+  private pullLabLever(sec: SecretRoom): ReturnType<SecretRoom['pullLever']> {
+    const r = sec.pullLever();
+    if (r === 'full') this.say('THE PORT ONLY OPENS WITH THE TUBE EMPTY', 2200);
+    else if (r === 'moving') this.say('WAIT FOR THE WATER', 1600);
+    else if (r === 'open') this.portThreat();
+    return r;
+  }
+
+  /**
+   * The port is open and he is coming to it.  Once his face is at the bars --
+   * and only if it still is -- he says one thing, low, through them.  The
+   * first time it is always the same; after that he has others.
+   */
+  private portThreat(): void {
+    const n = this.portOpens++;
+    const line = PORT_LINES[n % PORT_LINES.length];
+    this.time.delayedCall(1500, () => {
+      if (!this.secret?.labStatus().hatch) return;
+      this.play('ui_hover', 0.35);
+      this.portLine = line;
+      this.say(line, 3000);
+      this.time.delayedCall(3000, () => {
+        if (this.portLine === line) this.portLine = '';
+      });
+    });
   }
 
   private say(text: string, ms: number): void {
@@ -3457,7 +3492,10 @@ export class HideRoom3D extends Phaser.Scene {
     // rendered from BINDINGS and is full to the bottom of its panel, and a room
     // whose whole game is crossing it quickly cannot afford a player who does
     // not know they can strafe.
-    if (this.clock > 7.5) this.subtitle = 'HIDE';
+    // (Unless he is talking to you through the port: his line holds.)
+    if (this.portLine && this.subtitle === this.portLine) {
+      /* his */
+    } else if (this.clock > 7.5) this.subtitle = 'HIDE';
     else if (this.clock > 5.2) this.subtitle = isTouch() ? 'ARROWS MOVE - RUN - CROUCH' : 'WASD MOVE - SHIFT RUN - C CROUCH';
     else if (this.clock > 3.0) this.subtitle = isTouch() ? 'DRAG THE PICTURE TO LOOK' : 'HOLD LEFT CLICK TO LOOK';
     else if (this.clock > 1.2) this.subtitle = 'FIND SOMEWHERE TO HIDE';
@@ -5388,6 +5426,14 @@ export class HideRoom3D extends Phaser.Scene {
       /** The enclosure under the glass, and the twin of him in it. */
       pen: this.secret?.watching() ?? null,
       toSecret: () => this.enterSecret(),
+      labWater: () => this.secret?.pressWater() ?? null,
+      labLever: () => (this.secret ? this.pullLabLever(this.secret) : null),
+      labStatus: () => this.secret?.labStatus() ?? null,
+      stand: (x: number, z: number, yaw: number) => {
+        this.pos.set(x, z);
+        this.yaw = yaw;
+      },
+      labSpots: () => this.secret?.lab ?? null,
       hasSecret: !!this.def.secretDoor,
       secretDoorZ: this.def.secretDoor?.z ?? null,
       atButton: this.atButton(),

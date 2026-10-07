@@ -505,6 +505,12 @@ export interface HandGoal {
   weight: number;
   grip: number;
   twist?: number;
+  /**
+   * Which way the elbow goes, in the world, when it should not bow out to
+   * the side as it does by default -- an arm in a tight space keeps its
+   * elbow down and in.
+   */
+  pole?: THREE.Vector3;
 }
 
 interface ArmSpring {
@@ -1384,6 +1390,11 @@ export class FroggyMonster {
     return this.head;
   }
 
+  /** Both arms, shoulder to fingertips, for anything that must keep them inside something. */
+  get armObjects(): readonly THREE.Object3D[] {
+    return this.arms;
+  }
+
   /** Drop him into the world.  `y` is the floor he is standing on. */
   setPose(x: number, y: number, z: number, yaw: number): void {
     // Put somewhere new (a teleport, a respawn, the first frame), he is just
@@ -2226,7 +2237,9 @@ export class FroggyMonster {
     const u = d.normalize();
     // where the elbow wants to go: out to the side, back, and a little up --
     // and for the pounce, UP: the elbows high over the shoulders, a mantis's
-    const pole = this.tmp2.set(out * (0.85 - 0.25 * this.pounceNow), 0.25 + 0.75 * this.pounceNow, -0.45 + 0.2 * this.pounceNow);
+    const pole = goal.pole
+      ? this.tmp2.copy(goal.pole).applyQuaternion(this.torso.getWorldQuaternion(this.q2).invert())
+      : this.tmp2.set(out * (0.85 - 0.25 * this.pounceNow), 0.25 + 0.75 * this.pounceNow, -0.45 + 0.2 * this.pounceNow);
     pole.addScaledVector(u, -pole.dot(u));
     if (pole.lengthSq() < 1e-6) pole.set(out, 0, 0).addScaledVector(u, -u.x * out);
     pole.normalize();
