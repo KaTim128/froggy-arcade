@@ -125,6 +125,16 @@ export interface TouchLayout {
     down: KeyName;
     right: KeyName;
     tints?: Partial<Record<'up' | 'left' | 'down' | 'right', string>>;
+    /**
+     * Laid out as one straight row of tall coloured tiles -- left, down, up,
+     * right, like piano keys or a dance machine's lanes -- instead of a cross.
+     */
+    row?: boolean;
+    /**
+     * Held sideways, the row is kept inside this stretch of the picture
+     * (game x, left and right), so it never covers anything either side of it.
+     */
+    span?: [number, number];
   };
   /**
    * A small analogue thumbstick in place of the arrow pad, for steering.  It
@@ -361,6 +371,24 @@ const STYLE = `
   pointer-events: none;
 }
 #touch-controls .tc-cross[hidden] { display: none; }
+/* ---- AS A ROW OF TILES.  Four tall keys side by side, each filled with
+   its lane's colour, the arrow in dark on it; pressed, it lights up. */
+#touch-controls .tc-cross.row {
+  grid-template-columns: repeat(4, var(--tc-tile-w, 72px));
+  grid-template-rows: var(--tc-tile-h, 96px);
+}
+#touch-controls .tc-cross.row .tc-xbtn {
+  grid-area: auto; border-radius: 10px;
+  background: var(--tint, #ffd45e); color: #141a24; opacity: 0.82;
+  border: 3px solid rgba(20, 26, 36, 0.85);
+  box-shadow: inset 0 -8px 0 rgba(0, 0, 0, 0.25), inset 0 3px 0 rgba(255, 255, 255, 0.35);
+  font-size: calc(var(--tc-tile-w, 72px) * 0.42);
+}
+#touch-controls .tc-cross.row .tc-xbtn.down { opacity: 1; filter: brightness(1.35); transform: translateY(2px); }
+#touch-controls .tc-cross.row .tc-xbtn.left { order: 1; }
+#touch-controls .tc-cross.row .tc-xbtn.down-arm { order: 2; }
+#touch-controls .tc-cross.row .tc-xbtn.up { order: 3; }
+#touch-controls .tc-cross.row .tc-xbtn.right { order: 4; }
 #touch-controls .tc-xbtn {
   pointer-events: auto; touch-action: none; padding: 0;
   display: flex; align-items: center; justify-content: center;
@@ -590,6 +618,7 @@ class TouchControls {
 
     const cross = this.crossEl as HTMLElement;
     cross.hidden = !layout.cross;
+    cross.classList.toggle('row', !!layout.cross?.row);
     for (const el of Array.from(cross.querySelectorAll('.tc-xbtn')) as HTMLElement[]) {
       const tint = layout.cross?.tints?.[el.dataset.dir as 'up'];
       if (tint) el.style.setProperty('--tint', tint);
@@ -986,6 +1015,27 @@ class TouchControls {
       } else {
         cell = Math.round(Math.max(56, Math.min(66, pic.height * 0.16)));
         crossB = safe.bottom + 8;
+      }
+      if (this.layout.cross.row) {
+        // ---- THE TILES.  Portrait: across the black under the picture, as
+        // wide as the phone and as tall as the room there.  Landscape: a low
+        // strip along the bottom of the picture, which the stage keeps clear.
+        const gap = 6;
+        const span = this.layout.cross.span;
+        const across = !portrait && span ? ((span[1] - span[0]) / 320) * pic.width - 8 : window.innerWidth * (portrait ? 0.94 : 0.56);
+        const tw = Math.round(Math.min(130, (across - 3 * gap) / 4));
+        let th: number;
+        if (portrait) {
+          const room = under - 64 - safe.bottom - 12;
+          th = Math.round(Math.max(64, Math.min(170, room - 16)));
+          crossB = safe.bottom + Math.max(12, Math.round((room - th) / 2) + 12);
+        } else {
+          th = Math.round(Math.max(44, Math.min(58, pic.height * 0.15)));
+          crossB = safe.bottom + 6;
+        }
+        this.root.style.setProperty('--tc-tile-w', `${tw}px`);
+        this.root.style.setProperty('--tc-tile-h', `${th}px`);
+        cell = tw;
       }
       this.root.style.setProperty('--tc-cell', `${cell}px`);
       this.root.style.setProperty('--tc-cross-gap', `${xgap}px`);
