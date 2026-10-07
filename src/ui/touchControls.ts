@@ -985,8 +985,14 @@ class TouchControls {
     const primary = (this.layout.buttons ?? []).some((b) => b.primary);
     const padsW = cols ? cols * btn + (cols - 1) * gap + (primary ? btn * 0.25 : 0) : 0;
     const leftW = this.layout.joystick ? Math.round(stick * 0.78) : stick;
-    const left = barL >= leftW + margin * 2 ? Math.round((barL - leftW) / 2) : margin + safe.left;
-    const right = barR >= padsW + margin * 2 ? Math.round((barR - padsW) / 2) : margin + safe.right;
+    // Upright: in the black under the picture.  Sideways: ALWAYS over the
+    // picture's own bottom corners, never out in the bands either side of it.
+    const left = portrait
+      ? (barL >= leftW + margin * 2 ? Math.round((barL - leftW) / 2) : margin + safe.left)
+      : Math.round(barL) + margin + Math.max(0, safe.left - barL);
+    const right = portrait
+      ? (barR >= padsW + margin * 2 ? Math.round((barR - padsW) / 2) : margin + safe.right)
+      : Math.round(barR) + margin + Math.max(0, safe.right - barR);
     const bottom = portrait
       ? safe.bottom + Math.round(Math.min(window.innerHeight * 0.07, 60, Math.max(margin, (under - stick) * 0.35)))
       : safe.bottom + margin;
@@ -996,7 +1002,7 @@ class TouchControls {
     // Over the picture means see-through (see STYLE): in landscape whenever
     // a cluster is not in the black, and in portrait if the picture runs down
     // into the controls (a very short, wide-ish phone).
-    const overPic = portrait ? under < stick + bottom + 8 : barL < leftW + margin * 2 || barR < padsW + margin * 2;
+    const overPic = portrait ? under < stick + bottom + 8 : true;
     this.root.classList.toggle('over', overPic);
 
     // ---- THE CROSS.  Big, in the middle.  Portrait: as big as the black
@@ -1054,12 +1060,10 @@ class TouchControls {
     if (portrait) {
       gearTop = Math.round(pic.bottom + 10);
       gearRight = margin + safe.right;
-    } else if (barR >= 56) {
-      gearTop = Math.max(8, safe.top + 8);
-      gearRight = Math.round((barR - 44) / 2);
     } else {
+      // sideways: inside the picture, at its right edge under the title bar
       gearTop = Math.round(pic.top + 20 * zoom + 6);
-      gearRight = Math.max(8, safe.right + 8);
+      gearRight = Math.round(barR) + 8 + Math.max(0, safe.right - barR);
     }
     quit.style.top = `${gearTop}px`;
     quit.style.right = `${gearRight}px`;
