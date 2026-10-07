@@ -99,6 +99,12 @@ export class StartScreen extends Phaser.Scene {
       fadeToScene(this, 'EndCard');
       return;
     }
+    // The hotel is a checkpoint twice over: through its doors after the
+    // road, and asleep in 612 -- which comes back at 3 AM, at the knocking.
+    if (s.timeOfDay === 'midnight' && s.reachedHotel) {
+      fadeToScene(this, 'Hotel', s.hotelNight ? { area: 'room', late: true } : { area: 'lobby' });
+      return;
+    }
     fadeToScene(this, s.seenIntro ? 'ArcadeHub' : 'IntroCutscene');
   }
 }

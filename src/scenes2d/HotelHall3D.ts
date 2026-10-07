@@ -41,13 +41,13 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { touchControls } from '../ui/touchControls';
 import {
   texBlock,
+  texConcrete,
   texCarpet,
   texCarpetBorder,
   texFireDoor,
   texLiftDoors,
   texRoomDoor,
   texSign,
-  texTread,
   texWainscot,
   texWallpaper,
 } from '../art/hotelInterior';
@@ -145,7 +145,8 @@ export class HotelHall3D extends Phaser.Scene {
   private door612: THREE.Mesh | null = null;
   private doorBroken: THREE.CanvasTexture | null = null;
   private doorFly: { v: THREE.Vector3; spin: number } | null = null;
-  private splinters: Array<{ m: THREE.Mesh; v: THREE.Vector3 }> = [];
+  private splinters: Array<{ m: THREE.Mesh; v: THREE.Vector3; spin: THREE.Vector3; half: number; rest: boolean }> = [];
+  private dust: Array<{ s: THREE.Sprite; v: THREE.Vector3; t: number; life: number; grow: number }> = [];
   private bangT = 0;
   private hallLights: THREE.PointLight[] = [];
   private wellLight: THREE.PointLight | null = null;
@@ -180,6 +181,7 @@ export class HotelHall3D extends Phaser.Scene {
     this.lungeCd = 3;
     this.holdT = 0;
     this.splinters = [];
+    this.dust = [];
     this.doorFly = null;
     this.hallLights = [];
     this.autoTurn = null;
@@ -473,7 +475,7 @@ export class HotelHall3D extends Phaser.Scene {
     const blockT = tex(texBlock(), 1, 1);
     const blockMat = (w: number): THREE.MeshLambertMaterial => {
       const t = blockT.clone();
-      t.repeat.set(w / 1.2, hgt / 1.2);
+      t.repeat.set(w / 1.6, hgt / 1.6);
       t.needsUpdate = true;
       return new THREE.MeshLambertMaterial({ map: t, color: 0xd8d2c4 });
     };
@@ -497,9 +499,13 @@ export class HotelHall3D extends Phaser.Scene {
     roof.position.set(SX, top, cz);
     S.add(roof);
 
-    const slab = new THREE.MeshLambertMaterial({ color: 0x8a8680 });
-    const under = new THREE.MeshLambertMaterial({ color: 0xa8a294 });
-    const treadMat = new THREE.MeshLambertMaterial({ map: tex(texTread()) });
+    // Poured concrete, all of it, and the undersides lit a little from the
+    // landings below so they read as concrete, not a black hole overhead.
+    const slab = new THREE.MeshLambertMaterial({ map: tex(texConcrete('#8a8680'), 2, 1) });
+    const under = new THREE.MeshLambertMaterial({ map: tex(texConcrete('#b4aea0'), 1, 3), emissive: 0x2e2a24 });
+    const concrete = new THREE.MeshLambertMaterial({ map: tex(texConcrete('#96928a'), 2, 1) });
+    const string = new THREE.MeshLambertMaterial({ map: tex(texConcrete('#a29c90'), 1, 4), emissive: 0x1c1a16 });
+    const nosingMat = new THREE.MeshLambertMaterial({ color: 0xc8a030 });
     const rail = new THREE.MeshLambertMaterial({ color: 0x8a1a1a });
     const post = new THREE.MeshLambertMaterial({ color: 0x5a5e62 });
     const fireMat = new THREE.MeshLambertMaterial({ map: tex(texFireDoor()) });
@@ -507,8 +513,17 @@ export class HotelHall3D extends Phaser.Scene {
     const steps = 10;
     const stepD = FLIGHT / steps;
     const stepH = FLOOR_H / 2 / steps;
-    const stepGeo = new THREE.BoxGeometry(W / 2 - WELL, stepH, stepD);
-    const treads = new THREE.InstancedMesh(stepGeo, treadMat, LEVELS * steps * 2);
+    /**
+     * EACH STEP IS A SOLID BLOCK down to the slab under the flight (no gap
+     * under it), its top exactly the height you walk at over its middle (so
+     * nobody sinks into it or floats over it), with the yellow nosing laid on
+     * its DOWNHILL edge as its own strip -- so it is on the front of every
+     * step whichever way the flight runs.
+     */
+    const stepDeep = stepH + 0.32;
+    const stepGeo = new THREE.BoxGeometry(W / 2 - WELL, stepDeep, stepD);
+    const treads = new THREE.InstancedMesh(stepGeo, concrete, LEVELS * steps * 2);
+    const nosings = new THREE.InstancedMesh(new THREE.BoxGeometry(W / 2 - WELL, 0.012, 0.05), nosingMat, LEVELS * steps * 2);
     let ti = 0;
     const m4 = new THREE.Matrix4();
     for (let f = 0; f < LEVELS; f++) {
@@ -554,20 +569,38 @@ export class HotelHall3D extends Phaser.Scene {
         for (let k = 0; k < steps; k++) {
           // A descends going -z from the floor; B descends going +z from the half landing
           const z = side < 0 ? SZ - (k + 0.5) * stepD : SZ - FLIGHT + (k + 0.5) * stepD;
-          const yTop = side < 0 ? y0 - (k + 1) * stepH : y0 - FLOOR_H / 2 - (k + 1) * stepH;
-          m4.makeTranslation(x, yTop + stepH / 2 - 0.0, z);
-          treads.setMatrixAt(ti++, m4);
+          const top = side < 0 ? y0 - (k + 0.5) * stepH : y0 - FLOOR_H / 2 - (k + 0.5) * stepH;
+          m4.makeTranslation(x, top - stepDeep / 2, z);
+          treads.setMatrixAt(ti, m4);
+          // the nosing, on the edge you step down off
+          const edge = side < 0 ? z - stepD / 2 + 0.025 : z + stepD / 2 - 0.025;
+          m4.makeTranslation(x, top + 0.006, edge);
+          nosings.setMatrixAt(ti, m4);
+          ti++;
         }
+        // The slab under the flight and the rail over it run WITH the
+        // stairs: A is high at its +z end (the floor), B is high at its -z
+        // end (the half landing).  (rotation.x of +a drops the +z end.)
         const slope = Math.atan2(FLOOR_H / 2, FLIGHT);
+        const tilt = side < 0 ? -slope : slope;
         const len = Math.hypot(FLOOR_H / 2, FLIGHT);
-        const u = new THREE.Mesh(new THREE.BoxGeometry(W / 2 - WELL, 0.12, len), under);
+        const u = new THREE.Mesh(new THREE.BoxGeometry(W / 2 - WELL, 0.2, len), under);
         const ymid = side < 0 ? y0 - FLOOR_H / 4 : y0 - (3 * FLOOR_H) / 4;
-        u.position.set(x, ymid - 0.22, SZ - FLIGHT / 2);
-        u.rotation.x = side < 0 ? slope : -slope;
+        // (deep enough that every step block ends inside it: no sawtooth underneath)
+        u.position.set(x, ymid - 0.45, SZ - FLIGHT / 2);
+        u.rotation.x = tilt;
         S.add(u);
-        const r = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, len + 0.2), rail);
+        // The string along the well side: a smooth band of concrete that
+        // hides the ends of the step blocks, so the flight's edge is one
+        // clean slope instead of a saw.  Its top rides just above the steps.
+        const sh = 0.78;
+        const st = new THREE.Mesh(new THREE.BoxGeometry(0.07, sh * Math.cos(slope), len + 0.02), string);
+        st.position.set(SX + side * (WELL + 0.035), ymid + 0.14 - sh / 2, SZ - FLIGHT / 2);
+        st.rotation.x = tilt;
+        S.add(st);
+        const r = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, len + 0.1), rail);
         r.position.set(SX + side * WELL, ymid + 0.95, SZ - FLIGHT / 2);
-        r.rotation.x = side < 0 ? slope : -slope;
+        r.rotation.x = tilt;
         S.add(r);
         for (let k = 0; k <= 3; k++) {
           const pz = SZ - (k / 3) * FLIGHT;
@@ -577,13 +610,33 @@ export class HotelHall3D extends Phaser.Scene {
           S.add(p);
         }
       }
-      // a rail round the well at the half landing
+      // a rail round the well at the half landing, and across its end at this floor
       const hr = new THREE.Mesh(new THREE.BoxGeometry(WELL * 2 + 0.05, 0.05, 0.05), rail);
       hr.position.set(SX, y0 - FLOOR_H / 2 + 0.95, SZ - FLIGHT);
       S.add(hr);
+      const tr = new THREE.Mesh(new THREE.BoxGeometry(WELL * 2 + 0.05, 0.05, 0.05), rail);
+      tr.position.set(SX, y0 + 0.95, SZ);
+      S.add(tr);
+      // At the sixth floor nothing comes up on the right: the second flight
+      // below is a drop off the landing's edge, so it is railed off.
+      if (f === 0) {
+        const span = W / 2 + WELL;
+        for (const yy of [0.95, 0.5]) {
+          const g = new THREE.Mesh(new THREE.BoxGeometry(span, 0.05, 0.05), rail);
+          g.position.set(SX - WELL + span / 2, y0 + yy, SZ);
+          S.add(g);
+        }
+        for (const px of [SX + 0.8, SX + W / 2 - 0.05]) {
+          const p = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.95, 0.03), post);
+          p.position.set(px, y0 + 0.475, SZ);
+          S.add(p);
+        }
+      }
     }
     treads.count = ti;
+    nosings.count = ti;
     S.add(treads);
+    S.add(nosings);
     // light that goes where you go, and a little everywhere
     this.wellLight = new THREE.PointLight(0xe8f0ff, 3.5, 10, 1.2);
     S.add(this.wellLight);
@@ -871,6 +924,9 @@ export class HotelHall3D extends Phaser.Scene {
       // where it fell
       d.position.set(-0.4, 0.06, DOOR612_Z - 1.2);
       d.rotation.set(-Math.PI / 2, 0, 0.4);
+      // and everything that came out with it, already down
+      this.burst();
+      for (let k = 0; k < 300; k++) this.animateDoor(1 / 60);
       return;
     }
     audio.sfx('door_smash', 1);
@@ -878,13 +934,75 @@ export class HotelHall3D extends Phaser.Scene {
     this.doorFly = { v: new THREE.Vector3(3.2, 2.2, -1.2), spin: 4 };
     this.fpos.set(-HALF - 0.2, 0, DOOR612_Z);
     this.fWas.copy(this.fpos);
-    // splinters
-    const wood = new THREE.MeshLambertMaterial({ color: 0x6a4428 });
-    for (let k = 0; k < 18; k++) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(0.03 + Math.random() * 0.05, 0.02, 0.1 + Math.random() * 0.25), wood);
-      m.position.set(-HALF + 0.1, 0.6 + Math.random() * 1.4, DOOR612_Z + (Math.random() - 0.5) * 0.9);
-      this.stage?.scene.add(m);
-      this.splinters.push({ m, v: new THREE.Vector3(1.5 + Math.random() * 3, Math.random() * 3, (Math.random() - 0.5) * 3) });
+    this.burst();
+  }
+
+  /**
+   * What comes out with the door: the panel's shattered edge, the jamb and
+   * its trim torn off the wall, a spray of splinters, and a cloud of dust and
+   * plaster -- most of it thrown into the corridor toward you, all of it
+   * coming down, bouncing and lying where it lands.
+   */
+  private burst(): void {
+    const S = this.stage?.scene;
+    if (!S) return;
+    const woods = [0x6a4428, 0x7a5232, 0x5a361e, 0x8a6240, 0xb08a5a].map((c) => new THREE.MeshLambertMaterial({ color: c }));
+    const paint = new THREE.MeshLambertMaterial({ color: 0xe8dcc0 });
+    const plaster = new THREE.MeshLambertMaterial({ color: 0xd8d0c0 });
+    const add = (w: number, h: number, l: number, mat: THREE.Material, at: THREE.Vector3, v: THREE.Vector3, spin: number): void => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, l), mat);
+      m.position.copy(at);
+      m.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+      S.add(m);
+      const sp = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(spin);
+      this.splinters.push({ m, v, spin: sp, half: Math.min(w, h, l) / 2, rest: false });
+    };
+    const fromDoor = (): THREE.Vector3 =>
+      new THREE.Vector3(-HALF + 0.05 + Math.random() * 0.1, 0.2 + Math.random() * 1.9, DOOR612_Z + (Math.random() - 0.5) * 0.95);
+    const out = (pace: number, up: number): THREE.Vector3 =>
+      new THREE.Vector3(pace * (0.6 + Math.random()), up * (0.3 + Math.random()), (Math.random() - 0.5) * pace * 1.2);
+    // splinters: long thin shards, most of them
+    for (let k = 0; k < 70; k++) {
+      const l = 0.08 + Math.random() * 0.4;
+      add(0.015 + Math.random() * 0.04, 0.01 + Math.random() * 0.02, l, woods[k % woods.length], fromDoor(), out(3.6, 3.2), 14);
+    }
+    // chunks of the panel, painted on the face that was the corridor side
+    for (let k = 0; k < 14; k++) {
+      add(0.1 + Math.random() * 0.18, 0.035, 0.12 + Math.random() * 0.3, k % 3 ? woods[k % woods.length] : paint, fromDoor(), out(2.6, 2.6), 7);
+    }
+    // the jamb and its trim, torn off the latch side in lengths
+    for (let k = 0; k < 5; k++) {
+      const at = new THREE.Vector3(-HALF + 0.08, 0.4 + k * 0.4, DOOR612_Z - 0.5 + (Math.random() - 0.5) * 0.06);
+      add(0.05, 0.05 + Math.random() * 0.03, 0.4 + Math.random() * 0.45, k % 2 ? paint : woods[1], at, out(2.2, 2), 5);
+    }
+    // plaster and crumbs of the wall round the frame
+    for (let k = 0; k < 24; k++) {
+      const s = 0.02 + Math.random() * 0.05;
+      add(s, s * 0.8, s * 1.2, plaster, fromDoor(), out(2.8, 2.8), 10);
+    }
+    // the dust
+    const puff = new THREE.CanvasTexture(
+      (() => {
+        const c = document.createElement('canvas');
+        c.width = c.height = 64;
+        const g = c.getContext('2d')!;
+        const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+        grad.addColorStop(0, 'rgba(225,215,195,0.9)');
+        grad.addColorStop(0.5, 'rgba(200,188,166,0.4)');
+        grad.addColorStop(1, 'rgba(200,188,166,0)');
+        g.fillStyle = grad;
+        g.fillRect(0, 0, 64, 64);
+        return c;
+      })(),
+    );
+    for (let k = 0; k < 26; k++) {
+      const mat = new THREE.SpriteMaterial({ map: puff, transparent: true, depthWrite: false, opacity: 0 });
+      const sp = new THREE.Sprite(mat);
+      sp.position.copy(fromDoor());
+      sp.scale.setScalar(0.3);
+      S.add(sp);
+      const life = 1.6 + Math.random() * 1.8;
+      this.dust.push({ s: sp, v: out(1.4, 0.6), t: 0, life, grow: 0.6 + Math.random() * 1.2 });
     }
   }
 
@@ -903,12 +1021,46 @@ export class HotelHall3D extends Phaser.Scene {
       }
     }
     for (const s of this.splinters) {
-      if (s.m.position.y <= 0.02) continue;
+      if (s.rest) continue;
       s.m.position.addScaledVector(s.v, dt);
       s.v.y -= 9.8 * dt;
-      s.m.rotation.x += dt * 8;
-      s.m.rotation.y += dt * 5;
-      if (s.m.position.y < 0.02) s.m.position.y = 0.02;
+      s.m.rotation.x += s.spin.x * dt;
+      s.m.rotation.y += s.spin.y * dt;
+      s.m.rotation.z += s.spin.z * dt;
+      // off the walls of the corridor
+      if (Math.abs(s.m.position.x) > HALF - 0.03 && s.m.position.x * s.v.x > 0) {
+        s.m.position.x = Math.sign(s.m.position.x) * (HALF - 0.03);
+        s.v.x *= -0.35;
+      }
+      // down on the carpet: a bounce or two, a skid, and still
+      if (s.m.position.y < s.half && s.v.y < 0) {
+        s.m.position.y = s.half;
+        s.v.y *= -0.3;
+        s.v.x *= 0.55;
+        s.v.z *= 0.55;
+        s.spin.multiplyScalar(0.5);
+        if (Math.abs(s.v.y) < 0.6) {
+          s.rest = true;
+          // lying flat on its broad side
+          s.m.rotation.x = Math.round(s.m.rotation.x / (Math.PI / 2)) * (Math.PI / 2);
+          s.m.rotation.z = Math.round(s.m.rotation.z / (Math.PI / 2)) * (Math.PI / 2);
+        }
+      }
+    }
+    for (let i = this.dust.length - 1; i >= 0; i--) {
+      const d = this.dust[i];
+      d.t += dt;
+      const k = d.t / d.life;
+      d.s.position.addScaledVector(d.v, dt);
+      d.v.multiplyScalar(Math.max(0, 1 - dt * 1.8));
+      d.v.y -= dt * 0.15;
+      d.s.scale.setScalar(0.3 + d.grow * Math.sqrt(k));
+      (d.s.material as THREE.SpriteMaterial).opacity = Math.min(1, d.t * 8) * 0.55 * (1 - k);
+      if (k >= 1) {
+        d.s.removeFromParent();
+        d.s.material.dispose();
+        this.dust.splice(i, 1);
+      }
     }
   }
 
@@ -1009,8 +1161,7 @@ export class HotelHall3D extends Phaser.Scene {
     if (!this.scare) playJumpscare(this);
     this.time.delayedCall(SCARE_MS + 600, () => {
       froggyLayer.clear();
-      this.teardown();
-      this.scene.restart({ retry: true });
+      this.scene.start('DeathScreen', { key: 'HotelHall3D', data: { retry: true } });
     });
   }
 

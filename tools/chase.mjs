@@ -123,19 +123,25 @@ console.log('\n  lethality');
   await page.screenshot({ path: `${SHOTS}/02-death.png` });
   check('standing still is lethal', caught, `${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
-  // Poll rather than sleep a fixed spell.  The reset lands about two seconds
-  // after the scare, and four seconds after THAT the death card hands over to
-  // Boot — which re-applies this page's own `?route=chase` deep link and puts
-  // the route straight back.  A fixed wait that drifts past that window reads
-  // the re-applied route and calls a working reset a failure.
-  let st = null;
+  // A death no longer wipes the run: it lands on the death screen, which
+  // offers RESPAWN (the chase again) or LEAVE (the title, run kept).
+  let scenes = '';
   for (let i = 0; i < 24; i++) {
     await sleep(250);
-    st = await page.evaluate(() => window.__froggy.state());
-    if (st.route === 'normal' && st.tokens === 0) break;
+    scenes = (await page.evaluate(() => window.__froggy.activeScenes())).join(',');
+    if (scenes.includes('DeathScreen')) break;
   }
-  check('death resets the run', st.route === 'normal' && st.tokens === 0,
-    `route=${st.route}, ${st.tokens} tokens`);
+  const st = await page.evaluate(() => window.__froggy.state());
+  check('death goes to RESPAWN / LEAVE, run kept', scenes.includes('DeathScreen') && st.route === 'chase', `${scenes}; route=${st.route}`);
+  await sleep(1500);
+  await page.keyboard.press('KeyR');
+  let back = '';
+  for (let i = 0; i < 24; i++) {
+    await sleep(250);
+    back = (await page.evaluate(() => window.__froggy.activeScenes())).join(',');
+    if (back.includes('Chase3D')) break;
+  }
+  check('RESPAWN runs the chase again', back.includes('Chase3D'), back);
   await page.close();
 }
 

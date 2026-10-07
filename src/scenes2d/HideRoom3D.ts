@@ -5546,7 +5546,7 @@ export class HideRoom3D extends Phaser.Scene {
     });
     this.time.delayedCall(SCARE_MS + 700, () => {
       froggyLayer.clear();
-      this.scene.restart({ retry: true });
+      this.scene.start('DeathScreen', { key: 'HideRoom3D', data: { retry: true } });
     });
   }
 

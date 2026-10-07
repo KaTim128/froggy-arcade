@@ -2150,8 +2150,7 @@ export class NightRoad3D extends Phaser.Scene {
     if (!this.scare) playJumpscare(this);
     this.time.delayedCall(SCARE_MS + 600, () => {
       froggyLayer.clear();
-      this.teardown();
-      this.scene.restart({ retry: true });
+      this.scene.start('DeathScreen', { key: 'NightRoad3D', data: { retry: true } });
     });
   }
 

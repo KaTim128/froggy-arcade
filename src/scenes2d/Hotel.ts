@@ -618,6 +618,9 @@ export class Hotel extends Phaser.Scene {
   private sleep(): void {
     this.locked = true;
     this.night = 'sleeping';
+    // a checkpoint: come back to this run and it is 3 AM, and the knocking
+    store.patch({ hotelNight: true });
+    store.flush();
     this.lines = [];
     this.nextLine();
     if (this.curtainsOpen) this.setCurtains(false, false, 1400);
@@ -840,7 +843,7 @@ export class Hotel extends Phaser.Scene {
     this.locked = true;
     this.runHint?.destroy();
     runHotelScare(this, () => {
-      this.time.delayedCall(900, () => this.scene.restart({ area: 'room', late: true }));
+      this.time.delayedCall(600, () => this.scene.start('DeathScreen', { key: 'Hotel', data: { area: 'room', late: true }, line: 'He came in through the window.' }));
     });
   }
 
