@@ -127,12 +127,14 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   },
 
   // The night road: walk with the stick, drag the picture to look behind
-  // you, and once he is coming, RUN held and JUMP for the rails.
+  // you, and once he is coming, RUN held; CROUCH toggles; JUMP is for logs
+  // and water (the rails are solid).
   NightRoad3D: {
     stick: 'wasd',
     look: true,
     buttons: [
       { label: 'RUN', key: 'SHIFT', primary: true },
+      { label: 'CROUCH', key: 'C' },
       { label: 'JUMP', key: 'SPACE' },
     ],
   },

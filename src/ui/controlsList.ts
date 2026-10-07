@@ -150,6 +150,14 @@ const PLACE_ROWS: Record<string, ControlRow[]> = {
     ['SHIFT', 'RUN - LOUDER'],
     ['ESC', 'PAUSE'],
   ],
+  NightRoad3D: [
+    ['W A S D', 'WALK'],
+    ['DRAG', 'LOOK AROUND'],
+    ['SHIFT', 'RUN - LOUDER'],
+    ['C', 'CROUCH - QUIETER, HARDER TO SEE'],
+    ['SPACE', 'JUMP'],
+    ['ESC', 'PAUSE'],
+  ],
   Chase3D: [
     ['W A S D', 'RUN AND STEER'],
     ['Q / E', 'TURN'],
