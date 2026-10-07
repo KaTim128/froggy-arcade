@@ -67,30 +67,21 @@ function drawMotif(scene: Phaser.Scene, cx: number, cy: number, def: CabinetDef,
   };
 
   switch (def.motif) {
-    // MINI DUELS.  Two games, so two sides squaring up: an X off the
-    // tic-tac-toe board on the left, a hand thrown as scissors on the right,
-    // and a jagged split between them; the marquee over it says VS.
+    // MINI DUELS.  One sword, drawn corner to corner, and nothing else: on a
+    // screen this small a single clean shape reads where three crowded ones
+    // turned to mush.  Stepped a pixel at a time so it stays crisp.
     case 'grid': {
-      // two dark corners for the two sides, so the pale strokes stand out
-      put(-4.5, 0, 8, 13, ink, 0.6);
-      put(4.5, 0, 8, 13, ink, 0.6);
-      // the X, stepped a pixel at a time so it stays crisp
-      for (let k = -3; k <= 3; k++) {
-        put(-4.5 + k, k, 2, 2, bright);
-        put(-4.5 + k, -k, 2, 2, bright);
-      }
-      // the split: a lightning stroke down the middle
-      put(0.5, -5, 1, 4, PALETTE.gold);
-      put(-0.5, -1.5, 1, 4, PALETTE.gold);
-      put(0.5, 2, 1, 4, PALETTE.gold);
-      put(-0.5, 5, 1, 3, PALETTE.gold);
-      // scissors: a fist, two fingers out in a V, a knuckle line across
-      put(4.5, 3, 5, 4, bright);
-      put(3, -1, 2, 4, bright);
-      put(2.5, -4, 2, 3, bright);
-      put(6, -1, 2, 4, bright);
-      put(6.5, -4, 2, 3, bright);
-      put(4.5, 2, 3, 1, ink);
+      // [x, y, colour] of each 2x2 step, the point up and to the right
+      const steps: Array<[number, number, number]> = [];
+      for (let k = 0; k <= 6; k++) steps.push([-1.5 + k, 0.5 - k, bright]);
+      for (let k = -2; k <= 2; k++) steps.push([-2.5 + k, 1.5 + k, PALETTE.gold]); // crossguard
+      steps.push([-3.5, 2.5, PALETTE.brownLight], [-4.5, 3.5, PALETTE.brownLight]); // grip
+      steps.push([-5.5, 4.5, PALETTE.gold]); // pommel
+      // a dark outline first, so it stands off the coloured glass
+      for (const [x, y] of steps) put(x, y, 3, 3, ink);
+      for (const [x, y, col] of steps) put(x, y, 2, 2, col);
+      // the blade's shaded edge
+      for (let k = 0; k <= 6; k++) put(-1 + k, 1 - k, 1, 1, PALETTE.steel);
       break;
     }
     case 'blocks':
