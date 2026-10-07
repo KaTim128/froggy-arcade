@@ -124,6 +124,42 @@ export class ThreeStage {
     if (this.renderer) this.renderer.domElement.style.visibility = p ? 'hidden' : '';
   }
 
+  /**
+   * Get `obj` ready to draw, now, while nothing is watching.  Something kept
+   * hidden for a reveal otherwise pays on the frame it is first seen for
+   * everything a first draw costs -- its shaders, its textures, every one of
+   * its meshes' buffers going up to the GPU -- and for a whole creature that
+   * was a stall of the best part of a second at the worst moment there is.
+   * So it is drawn once here, for real, against the scene's lights as they
+   * stand (call it once they are in): shown, never culled, and squeezed into
+   * a single pixel in the corner that the next frame paints over.
+   */
+  warm(obj: THREE.Object3D): void {
+    const r = this.renderer;
+    if (!r) return;
+    const shown: THREE.Object3D[] = [];
+    const culled: THREE.Object3D[] = [];
+    obj.traverse((o) => {
+      if (!o.visible) {
+        o.visible = true;
+        shown.push(o);
+      }
+      if (o.frustumCulled) {
+        o.frustumCulled = false;
+        culled.push(o);
+      }
+    });
+    const vp = r.getViewport(new THREE.Vector4());
+    r.setScissorTest(true);
+    r.setScissor(0, 0, 1, 1);
+    r.setViewport(0, 0, 1, 1);
+    r.render(this.scene, this.camera);
+    r.setScissorTest(false);
+    r.setViewport(vp);
+    for (const o of culled) o.frustumCulled = true;
+    for (const o of shown) o.visible = false;
+  }
+
   isPaused(): boolean {
     return this.paused;
   }

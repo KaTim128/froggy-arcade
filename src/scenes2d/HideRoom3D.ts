@@ -999,6 +999,7 @@ export class HideRoom3D extends Phaser.Scene {
   /** The camera's own field of view before the ending narrowed it, and his light. */
   private endFov = 0;
   private watchLight: THREE.PointLight | null = null;
+  private watchLit = false;
   /** True once the walk behind you has become a run.  Once only. */
   private charging = false;
   /** Whether the counter has been crossed at all, for the harness. */
@@ -1174,6 +1175,7 @@ export class HideRoom3D extends Phaser.Scene {
     this.runStepIn = 0;
     this.endFov = 0;
     this.watchLight = null;
+    this.watchLit = false;
     this.grabbing = false;
     this.grabT = 0;
     this.dropT = 0;
@@ -1610,6 +1612,21 @@ export class HideRoom3D extends Phaser.Scene {
       w.setVisible(false);
       st.scene.add(w.root);
       this.watcher = w;
+      // ...and so are the two lights the end turns on: the glint when the
+      // lock gives and the cold light over the desk on him.  Dark until then.
+      // Adding a light to the scene makes every material in it build its
+      // shaders again, and that was a stall of a second or more on a phone
+      // at the exact moment you turn round to see him.
+      const glint = new THREE.PointLight(0xffd98a, 0, 1.6, 2);
+      st.scene.add(glint);
+      this.unlockLight = glint;
+      const watch = new THREE.PointLight(0xa8b8d8, 0, 7, 1.4);
+      watch.position.set((d.staffDoor?.x ?? 0) - 0.25 + 0.3, 3.2, -d.halfD + 1.15 + 2.4);
+      st.scene.add(watch);
+      this.watchLight = watch;
+      this.watchLit = false;
+      // and him: his shaders and textures, now, not on the frame he is seen
+      st.warm(w.root);
     }
     if (!this.hunted) return;
     this.monster = new FroggyMonster(this.isFinal ? FINAL_SCALE : FROGGY_SCALE);
@@ -1617,6 +1634,8 @@ export class HideRoom3D extends Phaser.Scene {
     this.monster.vary(Math.random() * 1000);
     this.monster.setVisible(false);
     st.scene.add(this.monster.root);
+    // drawn once now, so his first step into view is not a stall (see warm)
+    st.warm(this.monster.root);
     // A fingerprint of the model, published for the harness: the alley reports
     // the same number, and that is how "it is still the same creature over
     // there" stops being a thing anyone has to remember to check by eye.
@@ -2579,11 +2598,10 @@ export class HideRoom3D extends Phaser.Scene {
       this.time.delayedCall(90, () => audio.sfx('key_turn', 0.5));
       if (this.doorLock) this.doorLock.attach(key);
       if (!this.unlockLight) {
-        const l = new THREE.PointLight(0xffd98a, 0, 1.6, 2);
-        l.position.copy(mouth).add(into.clone().multiplyScalar(-0.25));
-        st.scene.add(l);
-        this.unlockLight = l;
+        this.unlockLight = new THREE.PointLight(0xffd98a, 0, 1.6, 2);
+        st.scene.add(this.unlockLight);
       }
+      this.unlockLight.position.copy(mouth).add(into.clone().multiplyScalar(-0.25));
     }
   }
 
@@ -5755,11 +5773,15 @@ export class HideRoom3D extends Phaser.Scene {
       }
     }
     // a cold light on him from over the desk, so he is a face and not a shape
-    if (w && !this.watchLight && this.stage && t > E.creak) {
-      const l = new THREE.PointLight(0xa8b8d8, 7, 7, 1.4);
-      l.position.set(wx + 0.3, 3.2, wz + 2.4);
-      this.stage.scene.add(l);
-      this.watchLight = l;
+    // (built with the room, dark, so turning it on costs nothing)
+    if (w && !this.watchLit && this.stage && t > E.creak) {
+      if (!this.watchLight) {
+        this.watchLight = new THREE.PointLight(0xa8b8d8, 0, 7, 1.4);
+        this.stage.scene.add(this.watchLight);
+      }
+      this.watchLight.position.set(wx + 0.3, 3.2, wz + 2.4);
+      this.watchLight.intensity = 7;
+      this.watchLit = true;
     }
 
     // ---- him, stood still, watching you go
