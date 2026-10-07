@@ -67,12 +67,32 @@ function drawMotif(scene: Phaser.Scene, cx: number, cy: number, def: CabinetDef,
   };
 
   switch (def.motif) {
-    case 'grid':
-      put(0, -3, 11, 1);
-      put(0, 2, 11, 1);
-      put(-3, 0, 1, 11);
-      put(3, 0, 1, 11);
+    // MINI DUELS.  Two games, so two sides squaring up: an X off the
+    // tic-tac-toe board on the left, a hand thrown as scissors on the right,
+    // and a jagged split between them; the marquee over it says VS.
+    case 'grid': {
+      // two dark corners for the two sides, so the pale strokes stand out
+      put(-4.5, 0, 8, 13, ink, 0.6);
+      put(4.5, 0, 8, 13, ink, 0.6);
+      // the X, stepped a pixel at a time so it stays crisp
+      for (let k = -3; k <= 3; k++) {
+        put(-4.5 + k, k, 2, 2, bright);
+        put(-4.5 + k, -k, 2, 2, bright);
+      }
+      // the split: a lightning stroke down the middle
+      put(0.5, -5, 1, 4, PALETTE.gold);
+      put(-0.5, -1.5, 1, 4, PALETTE.gold);
+      put(0.5, 2, 1, 4, PALETTE.gold);
+      put(-0.5, 5, 1, 3, PALETTE.gold);
+      // scissors: a fist, two fingers out in a V, a knuckle line across
+      put(4.5, 3, 5, 4, bright);
+      put(3, -1, 2, 4, bright);
+      put(2.5, -4, 2, 3, bright);
+      put(6, -1, 2, 4, bright);
+      put(6.5, -4, 2, 3, bright);
+      put(4.5, 2, 3, 1, ink);
       break;
+    }
     case 'blocks':
       put(-3, 3, 5, 4, bright);
       put(3, 3, 5, 4);

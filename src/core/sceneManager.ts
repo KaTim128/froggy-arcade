@@ -7,6 +7,7 @@
  */
 
 import Phaser from 'phaser';
+import { attachLandscapeFill } from '../render/landscapeFill';
 import { PALETTE } from '../render/palette';
 import { GAME_W, GAME_H, attachScaler } from '../render/pixelScaler';
 import { froggyLayer } from '../render/froggyLayer';
@@ -117,6 +118,7 @@ export function bootGame(): void {
   // screen both of these do nothing at all.
   touchControls.mount();
   attachScaler(game);
+  attachLandscapeFill(game);
   installTouchDirector(game);
   installPause(game);
   initDebug(game);

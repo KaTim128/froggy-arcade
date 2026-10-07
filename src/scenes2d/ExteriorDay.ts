@@ -98,7 +98,7 @@ export class ExteriorDay extends Phaser.Scene {
     // does not need keeping hold of -- and at midnight he is not there.
     if (time !== 'midnight') new MysteryMan(this, MAN_X, WALK_Y + 4);
     else this.paintClosed(refs.doorRect);
-    // the alley round the right-hand side, its side door boarded up
+    // the alley round the right-hand side
     this.paintAlley();
     // You come out of the doors standing at them, so going back in is one key
     // press away — the loop is meant to be walked dozens of times.
@@ -162,13 +162,11 @@ export class ExteriorDay extends Phaser.Scene {
    * The same mouth the night street has (ExteriorNight): a slot down the
    * right edge past the streetlight, from the rooftops to the kerb -- and in
    * it the alley's own wall (BackAlley's), the blue-grey render with its rows
-   * of dark brick, and its own brown side door.  By day it is the alley in
+   * of dark brick.  By day it is the alley in
    * shade rather than in the dark: the same colours run through the street's
    * mood (`daylight`, dusk as painted, `nightify` at midnight).
    *
-   * The door stands where it always stood, and it is BOARDED: three planks
-   * nailed across leaf and frame, each with the shadow it throws and a nail
-   * at each end, so they read as fixed to it rather than laid over it.
+   * No door: the old side door is not shown from the street at all.
    */
   private paintAlley(): void {
     const t = this.time0;
@@ -186,37 +184,6 @@ export class ExteriorDay extends Phaser.Scene {
     this.add.rectangle(x0, top, 1, KERB_Y - top, c(PALETTE.ink)).setOrigin(0, 0).setDepth(d);
     // and the alley floor running back from the pavement, a shade darker
     this.add.rectangle(x0, KERB_Y, GAME_W - x0, GAME_H - KERB_Y, PALETTE.black, 0.22).setOrigin(0, 0).setDepth(d);
-
-    // ---- the side door, where it was
-    const dx = GAME_W - 9;
-    const foot = WALK_Y - 2;
-    const dw = 12;
-    const dh = 44;
-    // frame
-    this.add.rectangle(dx, foot, dw + 2, dh + 1, c(0x2a2018)).setOrigin(0.5, 1).setDepth(d + 0.1);
-    // leaf, BackAlley's brown, and its edge
-    this.add.rectangle(dx, foot, dw, dh, c(PALETTE.brown, 0.14)).setOrigin(0.5, 1).setDepth(d + 0.2);
-    this.add.rectangle(dx - dw / 2 + 1, foot, 1, dh, c(0x4a3320, 0.14)).setOrigin(0.5, 1).setDepth(d + 0.2);
-    // the handle, under the boards
-    this.add.rectangle(dx + 3, foot - 20, 2, 1, c(PALETTE.steel)).setDepth(d + 0.2);
-
-    // ---- the boards: shadow, plank, its lit top edge, a nail at each end
-    const planks: Array<[number, number, number]> = [
-      [-36, -9, 18],
-      [-22, 7, 19],
-      [-9, -5, 18],
-    ];
-    for (const [y, ang, len] of planks) {
-      const cy = foot + y;
-      this.add.rectangle(dx, cy + 1.5, len, 4, PALETTE.black, 0.3).setAngle(ang).setDepth(d + 0.3);
-      this.add.rectangle(dx, cy, len, 4, c(0x8a6a4a, 0.12)).setAngle(ang).setDepth(d + 0.4);
-      this.add.rectangle(dx, cy - 1.5, len, 1, c(0xb08a62, 0.12)).setAngle(ang).setDepth(d + 0.41);
-      const r = Phaser.Math.DegToRad(ang);
-      for (const k of [-1, 1]) {
-        const off = (len / 2 - 2) * k;
-        this.add.rectangle(dx + Math.cos(r) * off, cy + Math.sin(r) * off, 1, 1, c(0x2a2420)).setDepth(d + 0.42);
-      }
-    }
   }
 
   /**
@@ -336,8 +303,7 @@ export class ExteriorDay extends Phaser.Scene {
       return;
     }
     if (this.spot === 'alley') {
-      audio.sfx('door_rattle', 0.6);
-      this.say(this.time0 === 'midnight' ? 'The alley door is boarded up. Planks nailed right across it.' : 'The alley. Nothing down there I need.');
+      this.say('The alley. Nothing down there I need.');
       return;
     }
 

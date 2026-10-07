@@ -125,6 +125,16 @@ export interface TouchLayout {
     down: KeyName;
     right: KeyName;
     tints?: Partial<Record<'up' | 'left' | 'down' | 'right', string>>;
+    /**
+     * Laid out as one straight row of tall coloured tiles -- left, down, up,
+     * right, like piano keys or a dance machine's lanes -- instead of a cross.
+     */
+    row?: boolean;
+    /**
+     * Held sideways, the row is kept inside this stretch of the picture
+     * (game x, left and right), so it never covers anything either side of it.
+     */
+    span?: [number, number];
   };
   /**
    * A small analogue thumbstick in place of the arrow pad, for steering.  It
@@ -361,6 +371,24 @@ const STYLE = `
   pointer-events: none;
 }
 #touch-controls .tc-cross[hidden] { display: none; }
+/* ---- AS A ROW OF TILES.  Four tall keys side by side, each filled with
+   its lane's colour, the arrow in dark on it; pressed, it lights up. */
+#touch-controls .tc-cross.row {
+  grid-template-columns: repeat(4, var(--tc-tile-w, 72px));
+  grid-template-rows: var(--tc-tile-h, 96px);
+}
+#touch-controls .tc-cross.row .tc-xbtn {
+  grid-area: auto; border-radius: 10px;
+  background: var(--tint, #ffd45e); color: #141a24; opacity: 0.82;
+  border: 3px solid rgba(20, 26, 36, 0.85);
+  box-shadow: inset 0 -8px 0 rgba(0, 0, 0, 0.25), inset 0 3px 0 rgba(255, 255, 255, 0.35);
+  font-size: calc(var(--tc-tile-w, 72px) * 0.42);
+}
+#touch-controls .tc-cross.row .tc-xbtn.down { opacity: 1; filter: brightness(1.35); transform: translateY(2px); }
+#touch-controls .tc-cross.row .tc-xbtn.left { order: 1; }
+#touch-controls .tc-cross.row .tc-xbtn.down-arm { order: 2; }
+#touch-controls .tc-cross.row .tc-xbtn.up { order: 3; }
+#touch-controls .tc-cross.row .tc-xbtn.right { order: 4; }
 #touch-controls .tc-xbtn {
   pointer-events: auto; touch-action: none; padding: 0;
   display: flex; align-items: center; justify-content: center;
@@ -590,6 +618,7 @@ class TouchControls {
 
     const cross = this.crossEl as HTMLElement;
     cross.hidden = !layout.cross;
+    cross.classList.toggle('row', !!layout.cross?.row);
     for (const el of Array.from(cross.querySelectorAll('.tc-xbtn')) as HTMLElement[]) {
       const tint = layout.cross?.tints?.[el.dataset.dir as 'up'];
       if (tint) el.style.setProperty('--tint', tint);
@@ -956,8 +985,14 @@ class TouchControls {
     const primary = (this.layout.buttons ?? []).some((b) => b.primary);
     const padsW = cols ? cols * btn + (cols - 1) * gap + (primary ? btn * 0.25 : 0) : 0;
     const leftW = this.layout.joystick ? Math.round(stick * 0.78) : stick;
-    const left = barL >= leftW + margin * 2 ? Math.round((barL - leftW) / 2) : margin + safe.left;
-    const right = barR >= padsW + margin * 2 ? Math.round((barR - padsW) / 2) : margin + safe.right;
+    // Upright: in the black under the picture.  Sideways: ALWAYS over the
+    // picture's own bottom corners, never out in the bands either side of it.
+    const left = portrait
+      ? (barL >= leftW + margin * 2 ? Math.round((barL - leftW) / 2) : margin + safe.left)
+      : Math.round(barL) + margin + Math.max(0, safe.left - barL);
+    const right = portrait
+      ? (barR >= padsW + margin * 2 ? Math.round((barR - padsW) / 2) : margin + safe.right)
+      : Math.round(barR) + margin + Math.max(0, safe.right - barR);
     const bottom = portrait
       ? safe.bottom + Math.round(Math.min(window.innerHeight * 0.07, 60, Math.max(margin, (under - stick) * 0.35)))
       : safe.bottom + margin;
@@ -967,7 +1002,7 @@ class TouchControls {
     // Over the picture means see-through (see STYLE): in landscape whenever
     // a cluster is not in the black, and in portrait if the picture runs down
     // into the controls (a very short, wide-ish phone).
-    const overPic = portrait ? under < stick + bottom + 8 : barL < leftW + margin * 2 || barR < padsW + margin * 2;
+    const overPic = portrait ? under < stick + bottom + 8 : true;
     this.root.classList.toggle('over', overPic);
 
     // ---- THE CROSS.  Big, in the middle.  Portrait: as big as the black
@@ -987,6 +1022,27 @@ class TouchControls {
         cell = Math.round(Math.max(56, Math.min(66, pic.height * 0.16)));
         crossB = safe.bottom + 8;
       }
+      if (this.layout.cross.row) {
+        // ---- THE TILES.  Portrait: across the black under the picture, as
+        // wide as the phone and as tall as the room there.  Landscape: a low
+        // strip along the bottom of the picture, which the stage keeps clear.
+        const gap = 6;
+        const span = this.layout.cross.span;
+        const across = !portrait && span ? ((span[1] - span[0]) / 320) * pic.width - 8 : window.innerWidth * (portrait ? 0.94 : 0.56);
+        const tw = Math.round(Math.min(130, (across - 3 * gap) / 4));
+        let th: number;
+        if (portrait) {
+          const room = under - 64 - safe.bottom - 12;
+          th = Math.round(Math.max(64, Math.min(170, room - 16)));
+          crossB = safe.bottom + Math.max(12, Math.round((room - th) / 2) + 12);
+        } else {
+          th = Math.round(Math.max(44, Math.min(58, pic.height * 0.15)));
+          crossB = safe.bottom + 6;
+        }
+        this.root.style.setProperty('--tc-tile-w', `${tw}px`);
+        this.root.style.setProperty('--tc-tile-h', `${th}px`);
+        cell = tw;
+      }
       this.root.style.setProperty('--tc-cell', `${cell}px`);
       this.root.style.setProperty('--tc-cross-gap', `${xgap}px`);
       this.root.style.setProperty('--tc-cross-b', `${crossB}px`);
@@ -1004,12 +1060,10 @@ class TouchControls {
     if (portrait) {
       gearTop = Math.round(pic.bottom + 10);
       gearRight = margin + safe.right;
-    } else if (barR >= 56) {
-      gearTop = Math.max(8, safe.top + 8);
-      gearRight = Math.round((barR - 44) / 2);
     } else {
+      // sideways: inside the picture, at its right edge under the title bar
       gearTop = Math.round(pic.top + 20 * zoom + 6);
-      gearRight = Math.max(8, safe.right + 8);
+      gearRight = Math.round(barR) + 8 + Math.max(0, safe.right - barR);
     }
     quit.style.top = `${gearTop}px`;
     quit.style.right = `${gearRight}px`;

@@ -126,7 +126,7 @@ export const CABINETS: CabinetDef[] = [
   // ---- the front room: everything that costs one to three tokens
   // A token in, two out: you win one.  Three out was a 3x on the cheapest
   // games in the building and the only positive-EV corner of the floor.
-  { id: 'tictactoe', title: 'TIC-TAC-TOE', tier: 'easy', cost: 1, reward: 2, x: 52, y: 88, color: 0xff4fa3, symbol: 'X', motif: 'grid' },
+  { id: 'tictactoe', title: 'MINI DUELS', tier: 'easy', cost: 1, reward: 2, x: 52, y: 88, color: 0xff4fa3, symbol: 'VS', motif: 'grid' },
   // The bottom row: two either side of the front door, in line with the two
   // above.  Nothing sits under the change machine on the right wall, because a
   // cabinet's click zone up there swallows every attempt to use it.

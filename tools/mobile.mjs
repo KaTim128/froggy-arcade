@@ -480,15 +480,19 @@ const labels = (page) =>
     const r = (sel) => document.querySelector(sel)?.getBoundingClientRect();
     const c = r('#game-root canvas');
     const over = (a, b) => a && b && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-    const btns = [...document.querySelectorAll('#touch-controls .tc-btn, #touch-controls .tc-dkey, #touch-controls .tc-corner')]
+    const btns = [...document.querySelectorAll('#touch-controls .tc-btn, #touch-controls .tc-dkey')]
       .map((e) => e.getBoundingClientRect())
       .filter((b) => b.width > 0);
+    // The gear sits inside the picture, in its top-right corner.
+    const gear = r('#touch-controls .tc-corner');
+    const gearOk = !gear || !gear.width || (gear.left >= c.right - c.width / 4 && gear.right <= c.right && gear.top >= c.top && gear.bottom <= c.top + c.height / 3);
     // Over the picture only in its bottom corners, never the middle third.
     const mid = { left: c.left + c.width / 3, right: c.right - c.width / 3, top: c.top, bottom: c.bottom };
     const high = { left: c.left, right: c.right, top: c.top, bottom: c.top + c.height * 0.4 };
     return {
       skin: document.getElementById('touch-controls').className,
       covered: btns.filter((b) => over(b, mid) || over(b, high)).length,
+      gearOk,
       smallest: Math.min(...[...document.querySelectorAll('#touch-controls .tc-btn')].map((e) => e.getBoundingClientRect().width)),
       look: (() => { const l = r('#touch-controls .tc-look'); return l && c ? Math.abs(l.width - c.width) + Math.abs(l.left - c.left) : 99; })(),
     };
@@ -496,8 +500,8 @@ const labels = (page) =>
   await page.screenshot({ path: `${SHOTS}/06b-hideroom-landscape.png` });
   check(
     'landscape horror room: controls in the bottom corners, out of the middle, and rusted',
-    geo.covered === 0 && geo.look < 2 && /skin-horror/.test(geo.skin) && geo.smallest >= 48,
-    `${geo.covered} controls in the middle or the top, look pad off by ${geo.look}px, smallest button ${Math.round(geo.smallest)}px, [${geo.skin}]`,
+    geo.covered === 0 && geo.gearOk && geo.look < 2 && /skin-horror/.test(geo.skin) && geo.smallest >= 48,
+    `${geo.covered} controls in the middle or the top, gear in its corner ${geo.gearOk}, look pad off by ${geo.look}px, smallest button ${Math.round(geo.smallest)}px, [${geo.skin}]`,
   );
 
   // He talks first, and nobody walks during the rules: wait for the round.

@@ -271,6 +271,10 @@ export const danceOff: MinigameModule = {
       down: 'S',
       right: 'D',
       tints: { left: '#ff4fa3', down: '#7fe0d8', up: '#9be08a', right: '#ff8a3a' },
+      // a straight row of coloured tiles, in the lanes' order
+      row: true,
+      // held sideways: between the two lane columns, under the dancers
+      span: [100, 220],
     },
   },
 
