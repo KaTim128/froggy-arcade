@@ -592,6 +592,14 @@ class TouchControls {
     return this.root !== null;
   }
 
+  /** Show or hide the button that sends `key`, without swapping the layout. */
+  showButton(key: KeyName, visible: boolean): void {
+    if (!this.root) return;
+    for (const el of Array.from(this.root.querySelectorAll('.tc-btn')) as HTMLElement[]) {
+      if (el.dataset.key === key) el.hidden = !visible;
+    }
+  }
+
   /** Change what the button that sends `key` says, without swapping the layout. */
   relabel(key: KeyName, label: string): void {
     if (!this.root) return;

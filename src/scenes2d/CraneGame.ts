@@ -2,9 +2,18 @@
  * ---- THE CLAW MACHINES.  The fourth room's two cranes, played up close.
  *
  * You are stood at the cabinet, looking in through the glass at a machine
- * piled to the top with prizes.  The claw rides a gantry in two directions:
- * left and right, and back and forth into the machine (it gets smaller the
- * further back it goes).  DROP sends it down from wherever it is, drifting a
+ * piled to the top with prizes.  The controls are LEFT and RIGHT only, and
+ * what they move depends on the view: from the front, the claw left and
+ * right along the gantry; from the SIDE, where the front of the machine is
+ * on the left and the back on the right, the claw forward and back into it.
+ *
+ * THE BUTTONS, IN ORDER, AND NONE CAN BE SKIPPED:
+ *   front view       [SIDE VIEW]                 -- line it up left/right
+ *   side view        [DROP]      and [BACK]      -- line it up front/back
+ *   front, after     [DROP]      and [SIDE VIEW] -- (look again if you like)
+ *   lowering         [...]
+ *   settled          [GRAB]
+ * The clock running out still drops it, wherever it is.  DROP sends it down from wherever it is, drifting a
  * little the way it was travelling, until it settles on the pile -- and there
  * it waits, open, until you press GRAB (the same button, relabelled).  Then
  * it shuts, comes up, and goes back to the chute at the front, where it lets
@@ -155,7 +164,6 @@ export class CraneGame extends Phaser.Scene {
   private clockText!: Phaser.GameObjects.BitmapText;
   private result: Phaser.GameObjects.Container | null = null;
   private keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
-  private pointerDrop = false;
   /** Where the held prize was when the claw closed on it, and how long since. */
   private heldFrom = new Phaser.Math.Vector2();
   private heldT = 0;
@@ -172,6 +180,8 @@ export class CraneGame extends Phaser.Scene {
   private sideRig!: Phaser.GameObjects.Graphics;
   private sideHeld: Phaser.GameObjects.Image | null = null;
   private sideBtn: Phaser.GameObjects.Container | null = null;
+  /** The side view has been used this go: DROP is open. */
+  private viewedSide = false;
 
   constructor() {
     super('CraneGame');
@@ -194,7 +204,6 @@ export class CraneGame extends Phaser.Scene {
     this.held = null;
     this.result = null;
     this.toys = [];
-    this.pointerDrop = false;
     this.froggies = 0;
     this.sideOn = false;
     this.sideHeld = null;
@@ -218,16 +227,15 @@ export class CraneGame extends Phaser.Scene {
     this.clockText = text(this, 246, 160, '', 0xff6a5a).setDepth(60);
     new TokenHud(this);
     button(this, GAME_W - 24, 10, 'QUIT', () => this.leave(true), { width: 40, height: 13, fill: 0x5a1a22 }).setDepth(70);
-    this.sideBtn = button(this, 245, 10, 'SIDE VIEW', () => this.toggleSide(), { width: 60, height: 13 }).setDepth(70);
-    touchControls.relabel('SPACE', 'DROP');
+    // the view button: BACK in the side view, SIDE VIEW once you have
+    // been there; hidden until then (the action button takes you the first time)
+    this.sideBtn = button(this, 245, 10, 'SIDE VIEW', () => this.viewButton(), { width: 60, height: 13 }).setDepth(70);
 
     const kb = this.input.keyboard;
     const bind = (names: string[]) => (kb ? names.map((n) => kb.addKey(n)) : []);
     this.keys = {
       left: bind(['A', 'LEFT']),
       right: bind(['D', 'RIGHT']),
-      back: bind(['W', 'UP']),
-      front: bind(['S', 'DOWN']),
       drop: bind(['SPACE', 'E']),
     };
     kb?.on('keydown-ESC', () => this.leave(true));
@@ -240,18 +248,23 @@ export class CraneGame extends Phaser.Scene {
     };
     kb?.on('keydown-SPACE', press);
     kb?.on('keydown-E', press);
-    kb?.on('keydown-V', () => this.toggleSide());
+    kb?.on('keydown-X', () => this.viewButton());
+    kb?.on('keydown-V', () => this.viewButton());
+    kb?.on('keydown-B', () => this.viewButton());
     // a tap on the glass does the same
     this.input.on('pointerdown', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
       // not a press on a button (AGAIN starts a go on the same press)
       if (!over.length && p.y > BOX.top && p.y < BOX.bottom) this.press();
     });
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => touchControls.relabel('SPACE', 'DROP'));
-    this.input.on('pointerup', () => {
-      this.pointerDrop = false;
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      touchControls.relabel('SPACE', 'SIDE VIEW');
+      touchControls.showButton('X', true);
     });
 
     this.startGo();
+    // (the touch layout is put up after create, which shows every button:
+    // set them again once it is there)
+    this.time.delayedCall(60, () => this.syncButtons());
 
     if (import.meta.env?.DEV) {
       (window as unknown as Record<string, unknown>).__crane = {
@@ -271,6 +284,8 @@ export class CraneGame extends Phaser.Scene {
         /** DROP, or GRAB once it has settled: the button. */
         drop: () => this.press(),
         side: () => this.toggleSide(),
+        view: () => this.viewButton(),
+        buttons: () => ({ action: this.actionLabel(), view: this.viewLabel() }),
         /** The toy under the claw and where the fingertips are, on screen. */
         target: () => {
           const t = this.targetUnder();
@@ -357,7 +372,7 @@ export class CraneGame extends Phaser.Scene {
     this.add.circle(68, 165, 5, 0x46c46e).setStrokeStyle(1, 0x2a7a44).setDepth(59);
     this.add.circle(84, 165, 5, 0xd8202a).setStrokeStyle(1, 0x7a1018).setDepth(59);
     text(this, 100, 157, `CREDIT ${CRANE_COST[this.kind]}`, ink).setDepth(59);
-    text(this, 100, 168, isTouch() ? 'STICK  DROP, GRAB' : 'WASD  SPACE: DROP, GRAB', ink).setDepth(59);
+    this.hint = text(this, 100, 168, '', ink).setDepth(59);
     // the clock window
     this.add.rectangle(244, 158, 54, 14, 0x0c0814).setOrigin(0, 0).setStrokeStyle(1, 0x5a3a10).setDepth(59);
     if (eerie) {
@@ -481,14 +496,68 @@ export class CraneGame extends Phaser.Scene {
     }
     audio.sfx('coin_drop');
     this.phase = 'aim';
+    // every go starts at the first step: line it up from the front
+    this.viewedSide = false;
+    if (this.sideOn) this.toggleSide();
     this.clock = CLOCK_S;
     this.drop = 0;
+    this.syncButtons();
   }
 
-  /** The one button: DROP while aiming, GRAB once the claw has settled. */
+  /**
+   * The action button.  Aiming: SIDE VIEW the first time (into the side
+   * view), DROP once you have been there.  Settled: GRAB.  Anything else --
+   * lowering, coming up, carrying -- it does nothing.
+   */
   private press(): void {
-    if (this.phase === 'aim') this.beginLower();
-    else if (this.phase === 'wait') this.shut();
+    if (this.phase === 'aim') {
+      if (!this.viewedSide && !this.sideOn) this.toggleSide();
+      else this.beginLower();
+    } else if (this.phase === 'wait') this.shut();
+  }
+
+  /** The view button: BACK from the side view; SIDE VIEW again from the front. */
+  private viewButton(): void {
+    if (this.phase !== 'aim') return;
+    if (this.sideOn || this.viewedSide) this.toggleSide();
+  }
+
+  private actionLabel(): string {
+    if (this.phase === 'aim') return this.viewedSide || this.sideOn ? 'DROP' : 'SIDE VIEW';
+    if (this.phase === 'wait') return 'GRAB';
+    return '...';
+  }
+
+  /** '' when the view button is not shown. */
+  private viewLabel(): string {
+    if (this.phase !== 'aim') return '';
+    return this.sideOn ? 'BACK' : this.viewedSide ? 'SIDE VIEW' : '';
+  }
+
+  /** Put every button's label and visibility right for where the go is. */
+  private syncButtons(): void {
+    const view = this.viewLabel();
+    touchControls.relabel('SPACE', this.actionLabel());
+    touchControls.relabel('X', view || 'BACK');
+    touchControls.showButton('X', !!view);
+    if (this.sideBtn) {
+      this.sideBtn.setVisible(!!view);
+      this.sideBtn.list.forEach((o) => {
+        if (o instanceof Phaser.GameObjects.BitmapText) o.setText(view || 'SIDE VIEW');
+      });
+    }
+    this.hint?.setText(this.hintLine());
+  }
+
+  private hint: Phaser.GameObjects.BitmapText | null = null;
+
+  /** The control panel's second line: what to do now. */
+  private hintLine(): string {
+    const key = isTouch() ? '' : 'SPACE: ';
+    if (this.phase === 'wait') return `${key}GRAB`;
+    if (this.phase !== 'aim') return '';
+    if (this.sideOn) return `${isTouch() ? '' : 'A/D '}FRONT/REAR  ${key}DROP`;
+    return `${isTouch() ? '' : 'A/D '}LEFT/RIGHT  ${key}${this.viewedSide ? 'DROP' : 'SIDE VIEW'}`;
   }
 
   /** From wherever it is, carrying the way it was going. */
@@ -498,8 +567,7 @@ export class CraneGame extends Phaser.Scene {
     audio.sfx('ui_blip');
     // the drop is watched from the front
     if (this.sideOn) this.toggleSide();
-    // the same button, now the one that closes the claw
-    touchControls.relabel('SPACE', 'GRAB');
+    this.syncButtons();
   }
 
   /** GRAB: the claw closes on whatever it has settled on. */
@@ -509,12 +577,8 @@ export class CraneGame extends Phaser.Scene {
     this.grabCue.setVisible(false);
     this.drawClaw(true);
     audio.sfx('door_shut', 0.25);
-    touchControls.relabel('SPACE', 'DROP');
+    this.syncButtons();
     this.time.delayedCall(350, () => this.grab());
-  }
-
-  private dropHeld(): boolean {
-    return this.pointerDrop || (this.keys.drop?.some((k) => k.isDown) ?? false);
   }
 
   /** The screen y of the top of a toy's head. */
@@ -555,8 +619,12 @@ export class CraneGame extends Phaser.Scene {
     const dt = Math.min(delta, 50) / 1000;
     const held = (g: string) => this.keys[g]?.some((k) => k.isDown) ?? false;
     if (this.phase === 'aim') {
-      const ix = (held('right') ? 1 : 0) - (held('left') ? 1 : 0);
-      const iz = (held('back') ? 1 : 0) - (held('front') ? 1 : 0);
+      // LEFT and RIGHT only: along the gantry from the front, and -- the side
+      // view has the front of the machine on the left -- in and out of it
+      // from the side
+      const lr = (held('right') ? 1 : 0) - (held('left') ? 1 : 0);
+      const ix = this.sideOn ? 0 : lr;
+      const iz = this.sideOn ? lr : 0;
       // a little weight to it: it eases into a move and out of one
       this.vx += (ix * MOVE_X - this.vx) * Math.min(1, dt * 8);
       this.vz += (iz * MOVE_Z - this.vz) * Math.min(1, dt * 8);
@@ -564,8 +632,8 @@ export class CraneGame extends Phaser.Scene {
       this.clawZ = Phaser.Math.Clamp(this.clawZ + this.vz * dt, 0, 1);
       this.clock -= dt;
       this.clockText.setText(`TIME ${Math.max(0, Math.ceil(this.clock))}`);
-      // one press is the whole drop: down, grab, up, chute
-      if (this.dropHeld() || this.clock <= 0) this.beginLower();
+      // the clock running out drops it, wherever it is
+      if (this.clock <= 0) this.beginLower();
     } else if (this.phase === 'lower') {
       // the way it was going carries it on a little, and dies away
       this.clawX = Phaser.Math.Clamp(this.clawX + this.vx * dt, CLAW_MIN_X, PILE_R);
@@ -582,6 +650,7 @@ export class CraneGame extends Phaser.Scene {
         this.phase = 'wait';
         this.vx = this.vz = 0;
         this.grabCue.setVisible(true);
+        this.syncButtons();
         audio.sfx('ui_blip', 0.5);
       }
     } else if (this.phase === 'up') {
@@ -805,7 +874,7 @@ export class CraneGame extends Phaser.Scene {
       c.add(this.add.rectangle(x, SIDE.floor + 1, 1, 4, 0xffffff, 0.35).setOrigin(0.5, 0));
     }
     c.add(text(this, SIDE.l - 6, BOX.bottom - 9, 'FRONT', PALETTE.gold).setOrigin(0, 0.5));
-    c.add(text(this, SIDE.r + 6, BOX.bottom - 9, 'BACK', PALETTE.gold).setOrigin(1, 0.5));
+    c.add(text(this, SIDE.r + 6, BOX.bottom - 9, 'REAR', PALETTE.gold).setOrigin(1, 0.5));
     c.add(centerText(this, GAME_W / 2, BOX.top + 22, 'SIDE VIEW', 0xffffff).setAlpha(0.5));
     this.sideToys = this.add.container(0, 0);
     c.add(this.sideToys);
@@ -820,12 +889,13 @@ export class CraneGame extends Phaser.Scene {
   private toggleSide(): void {
     if (this.phase === 'result') return;
     this.sideOn = !this.sideOn;
+    if (this.sideOn) this.viewedSide = true;
+    // a move in one view does not carry on into the other's axis
+    this.vx = this.vz = 0;
     this.sideBox.setVisible(this.sideOn);
-    this.sideBtn?.list.forEach((o) => {
-      if (o instanceof Phaser.GameObjects.BitmapText) o.setText(this.sideOn ? 'FRONT' : 'SIDE VIEW');
-    });
     audio.sfx('ui_blip', 0.4);
     if (this.sideOn) this.fillSide();
+    this.syncButtons();
   }
 
   /** The pile, end on: every toy at its depth and height, back to front. */
