@@ -592,6 +592,14 @@ class TouchControls {
     return this.root !== null;
   }
 
+  /** Change what the button that sends `key` says, without swapping the layout. */
+  relabel(key: KeyName, label: string): void {
+    if (!this.root) return;
+    for (const el of Array.from(this.root.querySelectorAll('.tc-btn')) as HTMLElement[]) {
+      if (el.dataset.key === key) el.textContent = label;
+    }
+  }
+
   /** Swap what is on screen.  Called as scenes and cabinets come and go. */
   apply(layout: TouchLayout): void {
     if (!this.root) return;
