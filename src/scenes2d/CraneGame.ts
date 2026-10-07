@@ -7,16 +7,16 @@
  * further back it goes).  One press of DROP sends it down from wherever it
  * is, drifting a little the way it was travelling; when it touches the pile
  * it shuts, comes up, and goes back to the chute at the front, where it lets
- * go of whatever it is holding.  Then it glides home to where it started, so
- * every go begins from the same place.  When the clock runs out it drops on
+ * go of whatever it is holding.  Every go starts with the claw parked over
+ * that chute, and ends there.  When the clock runs out it drops on
  * its own.  QUIT leaves at any time.
  *
  *   PLUSH CRANE (5 tokens).  Animal plushies, and a Froggy or two.  It is a
- *   real claw machine's claw: a weak grip, and it holds one time in twenty.
+ *   real claw machine's claw: a weak grip, and it holds one time in ten.
  *
  *   THE OTHER ONE (3 tokens).  Capsules, in the dark, under a flickering
- *   light.  Its grip is good -- the claw comes up with a capsule four times
- *   in five -- but most of them are empty.  Five in a hundred hold ten tokens, one in a
+ *   light.  The same claw -- it holds one time in ten -- and most of what
+ *   it comes up with is empty.  Five in a hundred hold ten tokens, one in a
  *   hundred holds a golden ticket worth ten more, and a few hold something
  *   that should not be in a toy machine at all, which the man outside will
  *   pay a great deal for.
@@ -33,7 +33,7 @@ import { button, centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { TokenHud } from '../ui/hud';
 import { drawItem } from '../ui/pockets';
-import { CAPSULE_VARIANTS, plushKind, toyTexture } from '../art/craneToys';
+import { CAPSULE_VARIANTS, TOY_H, TOY_RES, plushKind, toyTexture } from '../art/craneToys';
 import { FULL_LINE, ODDITIES, PLUSHIES, addItem, itemDef, pocketsFull } from '../game/inventory';
 import { isTouch } from '../core/device';
 
@@ -63,24 +63,26 @@ export function rollCapsule(r = Math.random()): 'tokens' | 'golden' | 'oddity' |
 }
 
 /** The inside of the machine, in the cabinet's picture. */
-const BOX = { l: 32, r: 288, top: 30, bottom: 148 };
+const BOX = { l: 14, r: 306, top: 26, bottom: 150 };
 /** Where the pile is: left/right in pixels, back/forth 0 (front) to 1 (back). */
 const PILE_L = 84;
-const PILE_R = 280;
+const PILE_R = 292;
 /** The prize chute, front left, behind its own little glass wall. */
-const CHUTE = { x: 56, z: 0.05, l: 36, r: 76 };
+const CHUTE = { x: 46, z: 0.05, l: 20, r: 72 };
 const CLOCK_S = 15;
 /** How far the claw can be let down, in pixels below the gantry. */
-const MAX_DROP = 104;
+const MAX_DROP = 118;
+/** The claw is drawn this much bigger than its design, to match the toys. */
+const CLAW_K = TOY_RES;
 const MOVE_X = 70;
 const MOVE_Z = 0.85;
 const LOWER = 60;
 const RAISE = 70;
-/** The plush crane holds one time in twenty; the capsule crane four in five. */
-export const GRIP: Record<CraneKind, number> = { plush: 0.05, oddity: 0.8 };
+/** Both cranes hold exactly one grab in ten. */
+export const GRIP: Record<CraneKind, number> = { plush: 0.1, oddity: 0.1 };
 
 /** Front of the floor is lower on screen; the back of it is higher. */
-const floorY = (z: number): number => 144 - z * 30;
+const floorY = (z: number): number => 146 - z * 32;
 /** Further back, smaller. */
 const scaleAt = (z: number): number => 1 - z * 0.28;
 /** And drawn a little in toward the middle, for the depth. */
@@ -96,8 +98,11 @@ interface Toy {
   art: Phaser.GameObjects.Container;
 }
 
-/** Where the claw starts every go, and goes back to after each one. */
-const HOME = { x: PILE_L + 40, z: 0.3 };
+/** Where the claw starts every go, and goes back to after each one: right
+ *  over the prize chute. */
+const HOME = { x: CHUTE.x, z: CHUTE.z };
+/** How far left the claw can go: over the chute. */
+const CLAW_MIN_X = CHUTE.x;
 
 type Phase = 'aim' | 'lower' | 'shut' | 'up' | 'carry' | 'release' | 'result';
 
@@ -160,7 +165,7 @@ export class CraneGame extends Phaser.Scene {
     this.claw = this.add.container(0, 0).setDepth(43);
     this.drawClaw(false);
 
-    this.clockText = text(this, 238, 158, '', 0xff6a5a).setDepth(60);
+    this.clockText = text(this, 246, 160, '', 0xff6a5a).setDepth(60);
     new TokenHud(this);
     button(this, GAME_W - 24, 10, 'QUIT', () => this.leave(true), { width: 40, height: 13, fill: 0x5a1a22 }).setDepth(70);
 
@@ -181,7 +186,7 @@ export class CraneGame extends Phaser.Scene {
     // a held press on the glass lowers it too
     this.input.on('pointerdown', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
       // not a press on a button (AGAIN starts a go on the same press)
-      if (this.phase === 'aim' && !over.length && p.y > 30 && p.y < 148) this.beginLower();
+      if (this.phase === 'aim' && !over.length && p.y > BOX.top && p.y < BOX.bottom) this.beginLower();
     });
     this.input.on('pointerup', () => {
       this.pointerDrop = false;
@@ -200,7 +205,7 @@ export class CraneGame extends Phaser.Scene {
           held: this.held?.id ?? null,
         }),
         aim: (x: number, z = this.clawZ) => {
-          this.clawX = Phaser.Math.Clamp(x, PILE_L - 40, PILE_R);
+          this.clawX = Phaser.Math.Clamp(x, CLAW_MIN_X, PILE_R);
           this.clawZ = Phaser.Math.Clamp(z, 0, 1);
           this.vx = this.vz = 0;
         },
@@ -262,23 +267,23 @@ export class CraneGame extends Phaser.Scene {
       this.add.rectangle(x - 1, BOX.top, 1, BOX.bottom - BOX.top, 0xffffff, 0.6).setOrigin(0.5, 0).setDepth(55);
     }
     // glass streaks over the whole box
-    for (const [x, w2] of [[60, 6], [70, 2], [250, 4]] as const) {
+    for (const [x, w2] of [[96, 6], [106, 2], [270, 4]] as const) {
       this.add.rectangle(x, BOX.top + 4, w2, BOX.bottom - BOX.top - 8, 0xffffff, 0.06).setOrigin(0, 0).setAngle(8).setDepth(56);
     }
     // the control panel along the bottom
     this.add.rectangle(BOX.l - 6, BOX.bottom + 2, BOX.r - BOX.l + 12, GAME_H - BOX.bottom - 6, eerie ? 0x2a1a3a : 0xffc830).setOrigin(0, 0).setStrokeStyle(1, eerie ? 0x7a4aa8 : 0xb88a20).setDepth(58);
     const ink = eerie ? 0xc8a0e0 : 0x5a3a10;
     // the stick
-    this.add.rectangle(52, 168, 14, 4, 0x2a2a2a).setDepth(59);
-    this.add.rectangle(52, 162, 2, 10, 0x3a3a3a).setDepth(59);
-    this.add.circle(52, 157, 4, 0xd8202a).setStrokeStyle(1, 0x7a1018).setDepth(59);
+    this.add.rectangle(42, 170, 14, 4, 0x2a2a2a).setDepth(59);
+    this.add.rectangle(42, 164, 2, 10, 0x3a3a3a).setDepth(59);
+    this.add.circle(42, 159, 4, 0xd8202a).setStrokeStyle(1, 0x7a1018).setDepth(59);
     // the buttons
-    this.add.circle(76, 163, 5, 0x46c46e).setStrokeStyle(1, 0x2a7a44).setDepth(59);
-    this.add.circle(92, 163, 5, 0xd8202a).setStrokeStyle(1, 0x7a1018).setDepth(59);
-    text(this, 108, 155, `CREDIT ${CRANE_COST[this.kind]}`, ink).setDepth(59);
-    text(this, 108, 166, isTouch() ? 'STICK  TAP DROP' : 'WASD  SPACE DROPS', ink).setDepth(59);
+    this.add.circle(68, 165, 5, 0x46c46e).setStrokeStyle(1, 0x2a7a44).setDepth(59);
+    this.add.circle(84, 165, 5, 0xd8202a).setStrokeStyle(1, 0x7a1018).setDepth(59);
+    text(this, 100, 157, `CREDIT ${CRANE_COST[this.kind]}`, ink).setDepth(59);
+    text(this, 100, 168, isTouch() ? 'STICK  TAP DROP' : 'WASD  SPACE DROPS', ink).setDepth(59);
     // the clock window
-    this.add.rectangle(236, 156, 54, 14, 0x0c0814).setOrigin(0, 0).setStrokeStyle(1, 0x5a3a10).setDepth(59);
+    this.add.rectangle(244, 158, 54, 14, 0x0c0814).setOrigin(0, 0).setStrokeStyle(1, 0x5a3a10).setDepth(59);
     if (eerie) {
       // the light in here is not well
       const dark = this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0).setOrigin(0, 0).setDepth(80);
@@ -292,33 +297,31 @@ export class CraneGame extends Phaser.Scene {
 
   /** The chute's own little glass wall, in front of the pile. */
   private paintChuteGlass(eerie: boolean): void {
-    const top = floorY(0) - 34;
+    const top = floorY(0) - 46;
     this.add.rectangle(CHUTE.l, top, CHUTE.r - CHUTE.l, floorY(0) + 6 - top, 0x9fd4ff, 0.12).setOrigin(0, 0).setStrokeStyle(1, 0xc8e0ff, 0.6).setDepth(50);
     this.add.rectangle(CHUTE.l, top, CHUTE.r - CHUTE.l, 2, 0xc8e0ff, 0.6).setOrigin(0, 0).setDepth(50);
     centerText(this, (CHUTE.l + CHUTE.r) / 2, top - 6, 'PRIZE', eerie ? 0xc8a0e0 : PALETTE.gold).setDepth(50);
   }
 
   /**
-   * THE PILE: a machine full to the glass.  Four rows from the back to the
-   * front and three deep, every gap filled, so the claw comes down on a heap
-   * of prizes rather than nine in a line.
+   * THE PILE: fewer prizes than before, each half again as big, heaped close
+   * -- three rows from the back to the front, three layers deep in the middle
+   * -- so every toy is easy to see and to aim at, and still touches its
+   * neighbours.
    */
   private fillPile(): void {
-    // Big toys, packed close enough that every one overlaps its neighbours:
-    // five rows back to front, five layers deep in the middle of the heap,
-    // each a little off its spot so it reads as tipped in, not laid out.
-    const rows = 5;
-    const layers = 5;
+    const rows = 3;
+    const layers = 3;
     const specs: Array<{ x: number; z: number; lift: number }> = [];
     for (let layer = 0; layer < layers; layer++) {
       for (let r = 0; r < rows; r++) {
-        const z = 0.95 - r * 0.21;
-        const step = 16 + layer * 2;
-        for (let x = PILE_L + 8 + (r % 2) * 8 + layer * 5; x < PILE_R - 6 - layer * 5; x += step) {
+        const z = 0.85 - r * 0.3;
+        const step = 30 + layer * 4;
+        for (let x = PILE_L + 14 + (r % 2) * 14 + layer * 12; x < PILE_R - 12 - layer * 12; x += step) {
           // the heap is taller in the middle than at the edges
           const mid = 1 - Math.abs((x - (PILE_L + PILE_R) / 2) / ((PILE_R - PILE_L) / 2));
-          if (layer > 0 && Math.random() > 0.35 + mid * 0.75 - (layer - 1) * 0.16) continue;
-          specs.push({ x: x + Phaser.Math.Between(-3, 3), z: z + Phaser.Math.FloatBetween(-0.05, 0.05), lift: layer * 12 + Phaser.Math.Between(0, 3) });
+          if (layer > 0 && Math.random() > 0.2 + mid * 0.8 - (layer - 1) * 0.25) continue;
+          specs.push({ x: x + Phaser.Math.Between(-3, 3), z: z + Phaser.Math.FloatBetween(-0.04, 0.04), lift: layer * 18 + Phaser.Math.Between(0, 3) });
         }
       }
     }
@@ -351,7 +354,7 @@ export class CraneGame extends Phaser.Scene {
     // stood on its feet (its bottom edge), a little tumbled, a little bigger
     // or smaller than the next one: they were tipped in, not arranged
     const img = this.add.image(0, 0, key).setOrigin(0.5, 1);
-    img.setAngle(Phaser.Math.Between(-10, 10)).setScale(Phaser.Math.FloatBetween(0.92, 1.04));
+    img.setAngle(Phaser.Math.Between(-8, 8)).setScale(Phaser.Math.FloatBetween(0.95, 1.03));
     if (Math.random() < 0.5 && this.kind === 'plush') img.setFlipX(true);
     c.add(img);
     const t: Toy = { id, x, z, lift, art: c };
@@ -405,11 +408,11 @@ export class CraneGame extends Phaser.Scene {
   private floorUnder(): number {
     let lift = 0;
     for (const t of this.toys) {
-      // (a toy's top is a good twenty pixels above where it sits)
-      if (Math.abs(t.x - this.clawX) < 9 && Math.abs(t.z - this.clawZ) < 0.12) lift = Math.max(lift, t.lift + 20);
+      // (a toy's top is about three quarters of its picture above where it sits)
+      if (Math.abs(t.x - this.clawX) < 14 && Math.abs(t.z - this.clawZ) < 0.15) lift = Math.max(lift, t.lift + TOY_H * 0.72);
     }
     const k = scaleAt(this.clawZ);
-    return floorY(this.clawZ) - lift * k - 12 * k - gantryY(this.clawZ);
+    return floorY(this.clawZ) - lift * k - 14 * CLAW_K * k - gantryY(this.clawZ);
   }
 
   update(_t: number, delta: number): void {
@@ -421,7 +424,7 @@ export class CraneGame extends Phaser.Scene {
       // a little weight to it: it eases into a move and out of one
       this.vx += (ix * MOVE_X - this.vx) * Math.min(1, dt * 8);
       this.vz += (iz * MOVE_Z - this.vz) * Math.min(1, dt * 8);
-      this.clawX = Phaser.Math.Clamp(this.clawX + this.vx * dt, PILE_L - 40, PILE_R);
+      this.clawX = Phaser.Math.Clamp(this.clawX + this.vx * dt, CLAW_MIN_X, PILE_R);
       this.clawZ = Phaser.Math.Clamp(this.clawZ + this.vz * dt, 0, 1);
       this.clock -= dt;
       this.clockText.setText(`TIME ${Math.max(0, Math.ceil(this.clock))}`);
@@ -429,7 +432,7 @@ export class CraneGame extends Phaser.Scene {
       if (this.dropHeld() || this.clock <= 0) this.beginLower();
     } else if (this.phase === 'lower') {
       // the way it was going carries it on a little, and dies away
-      this.clawX = Phaser.Math.Clamp(this.clawX + this.vx * dt, PILE_L - 40, PILE_R);
+      this.clawX = Phaser.Math.Clamp(this.clawX + this.vx * dt, CLAW_MIN_X, PILE_R);
       this.clawZ = Phaser.Math.Clamp(this.clawZ + this.vz * dt, 0, 1);
       this.vx *= Math.exp(-dt * 3.5);
       this.vz *= Math.exp(-dt * 3.5);
@@ -489,7 +492,7 @@ export class CraneGame extends Phaser.Scene {
       const k = scaleAt(this.clawZ);
       const hx = screenX(this.clawX, this.clawZ) + this.sway;
       // hanging from the closed claw by its head
-      const hy = gantryY(this.clawZ) + (this.drop + 34) * k;
+      const hy = gantryY(this.clawZ) + (this.drop + 10 * CLAW_K + TOY_H * 0.8) * k;
       this.held.art.setPosition(hx, hy).setScale(k).setDepth(44);
     }
   }
@@ -499,10 +502,10 @@ export class CraneGame extends Phaser.Scene {
     const gy = gantryY(this.clawZ);
     const sx = screenX(this.clawX, this.clawZ);
     this.bar.setPosition(GAME_W / 2, gy).setScale(1 - this.clawZ * 0.1, 1);
-    this.motor.setPosition(sx, gy).setScale(k);
+    this.motor.setPosition(sx, gy).setScale(k * CLAW_K);
     const tipY = gy + this.drop * k;
     this.cable.setPosition(sx, gy + 2).setSize(1, Math.max(1, tipY - gy));
-    this.claw.setPosition(sx + this.sway, tipY + 4).setScale(k);
+    this.claw.setPosition(sx + this.sway, tipY + 4 * CLAW_K).setScale(k * CLAW_K);
   }
 
   /** The claw shuts.  What it comes up with depends on the machine. */
@@ -512,7 +515,7 @@ export class CraneGame extends Phaser.Scene {
     for (const t of this.toys) {
       const dx = Math.abs(t.x - this.clawX);
       const dz = Math.abs(t.z - this.clawZ) * 60;
-      if (dx > 14 || dz > 12) continue;
+      if (dx > 20 || dz > 14) continue;
       // the one on top, nearest the middle of the claw
       const score = dx + dz - t.lift * 0.6;
       if (score < bestScore) {
@@ -579,7 +582,7 @@ export class CraneGame extends Phaser.Scene {
     if (itemId) {
       const d = itemDef(itemId);
       // a plush is shown as the toy itself, the one that came out of the pile
-      if (d?.kind === 'plush') c.add(this.add.image(GAME_W / 2, 99, toyTexture(this, plushKind(d.id))).setOrigin(0.5, 1).setScale(1.2));
+      if (d?.kind === 'plush') c.add(this.add.image(GAME_W / 2, 99, toyTexture(this, plushKind(d.id))).setOrigin(0.5, 1));
       else if (d) c.add(drawItem(this, GAME_W / 2, 92, d, 1.6));
     }
     const cost = CRANE_COST[this.kind];
