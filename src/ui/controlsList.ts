@@ -158,6 +158,13 @@ const PLACE_ROWS: Record<string, ControlRow[]> = {
     ['SPACE', 'JUMP'],
     ['ESC', 'PAUSE'],
   ],
+  HotelHall3D: [
+    ['W A S D', 'WALK'],
+    ['DRAG', 'LOOK AROUND'],
+    ['SHIFT', 'RUN'],
+    ['E', 'PRESS THE LIFT BUTTON'],
+    ['ESC', 'PAUSE'],
+  ],
   Chase3D: [
     ['W A S D', 'RUN AND STEER'],
     ['Q / E', 'TURN'],

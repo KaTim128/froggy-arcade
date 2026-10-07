@@ -25,6 +25,7 @@ export const SCENES = [
   'ExteriorDay',
   'StreetWest',
   'Hotel',
+  'HotelHall3D',
   'NightRoad3D',
   'FroggyCharity',
   'SecondBust',
@@ -79,6 +80,7 @@ export function canEnter(scene: SceneId, s: Readonly<GameState>, ctx: GuardConte
     case 'ExteriorDay':
     case 'StreetWest':
     case 'Hotel':
+    case 'HotelHall3D':
     case 'NightRoad3D':
     case 'PrizeExchange':
     case 'ChangeMachine':
