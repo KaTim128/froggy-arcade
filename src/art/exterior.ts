@@ -100,6 +100,14 @@ export function paintExterior(scene: Phaser.Scene, opts: ExteriorOpts): Exterior
   scene.add.rectangle(fx, fy, fw, 4, c(PALETTE.steel)).setOrigin(0, 0);
   scene.add.rectangle(fx, fy + fh - 3, fw, 3, c(PALETTE.ink)).setOrigin(0, 0);
 
+  // ---- THE ALLEY MOUTH, off the arcade's right-hand corner: the gap between
+  // it and the next building, in shadow, behind the pavement -- not a wall
+  // standing on it.  The arcade's side wall runs back into it, the far wall
+  // of the alley shows its rows of dark brick (BackAlley's), the alley's own
+  // ground runs back from the kerb, and the end of the dumpster you meet in
+  // there just shows.  Every view of this street has it, the same.
+  paintAlleyMouth(scene, c, fx + fw, fy);
+
   // ---- windows, warm light spilling out
   const windows: Phaser.GameObjects.Rectangle[] = [];
   const winColor = opts.night ? PALETTE.black : opts.day ? PALETTE.amber : PALETTE.gold;
@@ -197,6 +205,41 @@ export function paintExterior(scene: Phaser.Scene, opts: ExteriorOpts): Exterior
     doorY,
     doorRect: { x: doorX - 15, y: fy + fh - 30, w: 30, h: 30 },
   };
+}
+
+function paintAlleyMouth(scene: Phaser.Scene, c: (n: number) => number, x0: number, top: number): void {
+  const g = scene.add.graphics();
+  const deep = c(PALETTE.night);
+  // the gap itself, from the roofline down to the pavement
+  g.fillStyle(deep, 1).fillRect(x0, top + 4, GAME_W - x0, 150 - top - 4);
+  // the far wall of the alley, set back: a shade lighter, with its brick rows
+  g.fillStyle(c(PALETTE.nightMid), 1).fillRect(x0 + 14, top + 12, GAME_W - x0 - 14, 150 - top - 18);
+  g.fillStyle(deep, 0.9);
+  for (let i = 0; i < 7; i++) g.fillRect(x0 + 16 + (i % 2) * 8, top + 16 + i * 8, 12, 2);
+  // the arcade's side wall, running back into the gap
+  g.fillStyle(c(PALETTE.ink), 1).fillPoints(
+    [
+      new Phaser.Math.Vector2(x0, top),
+      new Phaser.Math.Vector2(x0 + 14, top + 12),
+      new Phaser.Math.Vector2(x0 + 14, 144),
+      new Phaser.Math.Vector2(x0, 150),
+    ],
+    true,
+  );
+  g.fillStyle(c(PALETTE.slate), 0.35).fillRect(x0, top, 1, 150 - top);
+  // the alley's ground, running back from the kerb
+  g.fillStyle(c(PALETTE.nightMid), 1).fillPoints(
+    [
+      new Phaser.Math.Vector2(x0, 150),
+      new Phaser.Math.Vector2(GAME_W, 150),
+      new Phaser.Math.Vector2(GAME_W, 144),
+      new Phaser.Math.Vector2(x0 + 14, 144),
+    ],
+    true,
+  );
+  // the near end of the dumpster, just round the corner
+  g.fillStyle(c(PALETTE.moss), 1).fillRect(x0 + 26, 132, 22, 12);
+  g.fillStyle(c(PALETTE.mossLight), 0.5).fillRect(x0 + 26, 130, 22, 3);
 }
 
 function paintCar(scene: Phaser.Scene, x: number, y: number, body: number, c: (n: number) => number): void {

@@ -8,7 +8,10 @@
  *
  * A and D walk the ball along the foul line, the arrows swing the aim, Q and E
  * bend it, the line shows where the ball is going, SPACE holds for power and
- * lets go to throw.
+ * lets go to throw.  On a phone the MOVE/AIM button switches the stick between
+ * walking the ball along the line and swinging the aim.  Froggy picks a
+ * starting spot too -- left, middle or right -- and walks the ball to it
+ * before he throws.
  *
  * THE LANE IS OILED, AND THE OIL IS THE GAME.  Two or three patches of it are
  * laid across the boards, you can see exactly where they are, and each one
@@ -45,6 +48,7 @@ import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
 import { panel } from './decor';
 import { isTouch } from '../core/device';
+import { touchControls } from '../ui/touchControls';
 
 
 const ID = 'bowling' as const;
@@ -234,6 +238,9 @@ let ball = { x: 0, y: 0, vx: 0, vy: 0, rolling: false };
 let ballBody: Phaser.GameObjects.Arc | null = null;
 let aimLine: Phaser.GameObjects.Graphics | null = null;
 let aim = 0;
+/** On a phone, what the stick does: swing the aim, or walk the ball. */
+let stickMode: 'aim' | 'move' = 'aim';
+let stickHint: Phaser.GameObjects.BitmapText | null = null;
 let power = 0;
 /**
  * The curve on the ball currently rolling: signed sideways pull, 0 for a
@@ -334,7 +341,8 @@ export const bowling: MinigameModule = {
       ['HOLD SPACE', 'POWER, LET GO TO THROW'],
     ],
   },
-  // ON A PHONE, THREE THINGS: the stick swings the aim, HOOK steps the
+  // ON A PHONE: the stick swings the aim -- or, after a press of the
+  // AIM/MOVE button, walks the ball along the foul line -- HOOK steps the
   // shot through straight, hook left and hook right, and ROLL is held for
   // power and let go to throw.  Five buttons and a stick that both walked
   // and aimed was a keyboard laid out under two thumbs.  (The keyboard keeps
@@ -346,6 +354,7 @@ export const bowling: MinigameModule = {
     buttons: [
       { label: 'ROLL', key: 'SPACE', primary: true },
       { label: 'HOOK', key: 'H' },
+      { label: 'MOVE', key: 'X' },
     ],
   },
 
@@ -354,6 +363,7 @@ export const bowling: MinigameModule = {
     apiRef = api;
     pins = [];
     aim = 0;
+    stickMode = 'aim';
     power = 0;
     curve = 0;
     hook = 0;
@@ -570,7 +580,7 @@ export const bowling: MinigameModule = {
     for (const t of [
       text(scene, GAME_W - 40, 154, 'HOLD', PALETTE.bone),
       text(scene, GAME_W - 40, 162, isTouch() ? 'ROLL' : 'SPACE', PALETTE.bone),
-      text(scene, 8, 138, isTouch() ? 'STICK AIM' : 'A/D MOVE', PALETTE.bone),
+      (stickHint = text(scene, 8, 138, isTouch() ? 'STICK AIM' : 'A/D MOVE', PALETTE.bone)),
       text(scene, 8, 146, isTouch() ? 'HOOK BTN' : '←→ AIM', PALETTE.bone),
       text(scene, 8, 154, isTouch() ? 'HOLD ROLL' : 'Q/E HOOK', PALETTE.bone),
     ]) t.setDepth(29);
@@ -593,6 +603,21 @@ export const bowling: MinigameModule = {
       audio.sfx('ui_blip');
       refreshHud();
     });
+    // The phone's MOVE/AIM button: what the stick does next.  The button
+    // names the other mode -- the one a press switches to.
+    const setStick = (m: 'aim' | 'move') => {
+      stickMode = m;
+      stickHint?.setText(m === 'aim' ? 'STICK AIM' : 'STICK MOVE');
+      touchControls.relabel('X', m === 'aim' ? 'MOVE' : 'AIM');
+    };
+    if (isTouch()) {
+      setStick('aim');
+      kb?.on('keydown-X', () => {
+        if (over || charging) return;
+        setStick(stickMode === 'aim' ? 'move' : 'aim');
+        audio.sfx('ui_blip');
+      });
+    }
     kb?.on('keydown-SPACE', () => {
       if (over || turn !== 'player' || ball.rolling || settleMs > 0 || charging) return;
       charging = true;
@@ -673,7 +698,10 @@ export const bowling: MinigameModule = {
     // dead ball out of the channel and putting it back on the lane while the
     // pins settled.  SPACE was already refused during a settle; so is this.
     if (!ball.rolling && settleMs <= 0 && turn === 'player') {
-      const swing = (keys.aimR.some((k) => k.isDown) ? 1 : 0) - (keys.aimL.some((k) => k.isDown) ? 1 : 0);
+      // (on a phone the stick sends A/D and the arrows together: it walks the
+      // ball in MOVE and swings the aim in AIM, never both at once)
+      const phoneMove = isTouch() && stickMode === 'move';
+      const swing = phoneMove ? 0 : (keys.aimR.some((k) => k.isDown) ? 1 : 0) - (keys.aimL.some((k) => k.isDown) ? 1 : 0);
       aim = Phaser.Math.Clamp(aim + swing * AIM_RATE * dt, -AIM_MAX, AIM_MAX);
       // Q and E swing the hook dial through zero; there is no separate key for
       // "straight", because straight is what the middle of the dial IS.
@@ -682,8 +710,7 @@ export const bowling: MinigameModule = {
         hook = Phaser.Math.Clamp(hook + bend * HOOK_RATE * dt, -HOOK_MAX, HOOK_MAX);
         refreshHud();
       }
-      // (on a phone the stick sends A/D with the arrows: it aims, it does not walk)
-      const walk = isTouch() ? 0 : (keys.right.some((k) => k.isDown) ? 1 : 0) - (keys.left.some((k) => k.isDown) ? 1 : 0);
+      const walk = isTouch() && !phoneMove ? 0 : (keys.right.some((k) => k.isDown) ? 1 : 0) - (keys.left.some((k) => k.isDown) ? 1 : 0);
       ball.x = Phaser.Math.Clamp(ball.x + walk * WALK * dt, LANE_L + BALL_R + 1, LANE_L + LANE_W - BALL_R - 1);
       ballBody.setPosition(ball.x, ball.y);
       if (charging) {
@@ -1382,9 +1409,12 @@ function endRoll(): void {
 
 /**
  * Froggy's arm.  He now has the same two shots and the same oiled lane, so he
- * plays it the way a decent club bowler does: try a handful of lines and hooks
- * against the pattern, keep whichever arrives nearest the pocket — and then
- * throw it with an unsteady arm, because he is a frog.
+ * plays it the way a decent club bowler does.  First he picks where to stand
+ * on the foul line -- the left, the middle or the right, a different spot from
+ * ball to ball -- then he tries a handful of lines and hooks from there
+ * against the pattern and keeps whichever arrives nearest the pocket, walks
+ * the ball over to it, and throws it with an unsteady arm, because he is a
+ * frog.
  *
  * The wobble is what leaves him beatable.  He still gets sevens and eights and
  * the odd strike, which is where he was before the lane had oil on it.
@@ -1396,9 +1426,11 @@ function cpuThrow(): void {
   scene0.time.delayedCall(900, () => {
     if (over || turn !== 'cpu') return;
     const pow = 0.62 + Math.random() * 0.34;
+    // where he stands: a third of the line, picked fresh each ball
+    const side = Phaser.Math.Between(0, 2);
     let bestLine = { x: LANE_L + LANE_W / 2, angle: 0, miss: Infinity, bend: 0 };
     for (const bend of [-HOOK_MAX * 0.7, 0, HOOK_MAX * 0.7]) {
-      for (let i = 0; i < 9; i++) {
+      for (let i = side * 3; i < side * 3 + 3; i++) {
         const x = LANE_L + BALL_R + 3 + (i / 8) * (LANE_W - BALL_R * 2 - 6);
         for (const angle of [-0.14, -0.05, 0, 0.05, 0.14]) {
           const at = ball.y;
@@ -1411,13 +1443,27 @@ function cpuThrow(): void {
         }
       }
     }
-    // and then his arm goes where his arm goes
-    ball.x = Phaser.Math.Clamp(
-      bestLine.x + (Math.random() - 0.5) * 10,
-      LANE_L + BALL_R + 1,
-      LANE_L + LANE_W - BALL_R - 1,
-    );
-    throwBall(bestLine.angle + (Math.random() - 0.5) * 0.16, pow, bestLine.bend);
+    // he walks the ball over to his spot -- and his feet, like his arm, go
+    // where they go
+    const to = Phaser.Math.Clamp(bestLine.x + (Math.random() - 0.5) * 10, LANE_L + BALL_R + 1, LANE_L + LANE_W - BALL_R - 1);
+    const walker = { x: ball.x };
+    scene0?.tweens.add({
+      targets: walker,
+      x: to,
+      duration: 200 + Math.abs(to - ball.x) * 14,
+      ease: 'Sine.easeInOut',
+      onUpdate: () => {
+        ball.x = walker.x;
+        ballBody?.setPosition(ball.x, ball.y);
+      },
+      onComplete: () => {
+        if (over || turn !== 'cpu') return;
+        scene0?.time.delayedCall(250, () => {
+          if (over || turn !== 'cpu') return;
+          throwBall(bestLine.angle + (Math.random() - 0.5) * 0.16, pow, bestLine.bend);
+        });
+      },
+    });
   });
 }
 

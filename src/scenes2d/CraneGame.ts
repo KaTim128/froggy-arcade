@@ -4,14 +4,16 @@
  * You are stood at the cabinet, looking in through the glass at a machine
  * piled to the top with prizes.  The claw rides a gantry in two directions:
  * left and right, and back and forth into the machine (it gets smaller the
- * further back it goes).  One press of DROP sends it down from wherever it
- * is, drifting a little the way it was travelling; when it touches the pile
+ * further back it goes).  DROP sends it down from wherever it is, drifting a
+ * little the way it was travelling, until it settles on the pile -- and there
+ * it waits, open, until you press GRAB (the same button, relabelled).  Then
  * it shuts, comes up, and goes back to the chute at the front, where it lets
- * go of whatever it is holding.  Every go starts with the claw parked over
+ * go of whatever it is holding.  SIDE VIEW (or V) swaps the glass for a look
+ * in from the side, to judge how far back the claw is over the pile.  Every go starts with the claw parked over
  * that chute, and ends there.  When the clock runs out it drops on
  * its own.  QUIT leaves at any time.
  *
- *   PLUSH CRANE (5 tokens).  Animal plushies, and a Froggy or two.  It is a
+ *   PLUSH CRANE (5 tokens).  Animal plushies, and -- rarely -- a Froggy.  It is a
  *   real claw machine's claw: a weak grip, and it holds one time in ten.
  *
  *   THE OTHER ONE (3 tokens).  Capsules, in the dark, under a flickering
@@ -36,6 +38,7 @@ import { drawItem } from '../ui/pockets';
 import { CAPSULE_VARIANTS, TOY_H, TOY_RES, plushKind, toyTexture } from '../art/craneToys';
 import { FULL_LINE, ODDITIES, PLUSHIES, addItem, itemDef, pocketsFull } from '../game/inventory';
 import { isTouch } from '../core/device';
+import { touchControls } from '../ui/touchControls';
 
 export type CraneKind = 'plush' | 'oddity';
 
@@ -104,7 +107,18 @@ const HOME = { x: CHUTE.x, z: CHUTE.z };
 /** How far left the claw can go: over the chute. */
 const CLAW_MIN_X = CHUTE.x;
 
-type Phase = 'aim' | 'lower' | 'shut' | 'up' | 'carry' | 'release' | 'result';
+type Phase = 'aim' | 'lower' | 'wait' | 'shut' | 'up' | 'carry' | 'release' | 'result';
+
+/** One heap in this many draws a Froggy in each spot: he is the rare one. */
+const FROGGY_CHANCE = 0.03;
+
+/** THE SIDE VIEW: the glass seen from its right-hand end.  Front of the
+ *  machine on the left, back on the right, the floor along the bottom. */
+const SIDE = { l: BOX.l + 34, r: BOX.r - 26, top: BOX.top + 12, floor: BOX.bottom - 10 };
+const sideX = (z: number): number => SIDE.l + z * (SIDE.r - SIDE.l);
+/** Front-view pixels at depth z, as side-view pixels: both measure the same
+ *  drop from the gantry to the floor, so the claw meets a toy in both at once. */
+const sideK = (z: number): number => (SIDE.floor - SIDE.top) / (floorY(z) - gantryY(z));
 
 export class CraneGame extends Phaser.Scene {
   private kind: CraneKind = 'plush';
@@ -128,6 +142,16 @@ export class CraneGame extends Phaser.Scene {
   private result: Phaser.GameObjects.Container | null = null;
   private keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
   private pointerDrop = false;
+  /** How many Froggies this heap has (at most one). */
+  private froggies = 0;
+  private grabCue!: Phaser.GameObjects.BitmapText;
+  private sideOn = false;
+  private sideBox!: Phaser.GameObjects.Container;
+  private sideToys!: Phaser.GameObjects.Container;
+  private sideClaw!: Phaser.GameObjects.Container;
+  private sideRig!: Phaser.GameObjects.Graphics;
+  private sideHeld: Phaser.GameObjects.Image | null = null;
+  private sideBtn: Phaser.GameObjects.Container | null = null;
 
   constructor() {
     super('CraneGame');
@@ -151,6 +175,9 @@ export class CraneGame extends Phaser.Scene {
     this.result = null;
     this.toys = [];
     this.pointerDrop = false;
+    this.froggies = 0;
+    this.sideOn = false;
+    this.sideHeld = null;
 
     this.paintCabinet(eerie);
     this.fillPile();
@@ -164,10 +191,15 @@ export class CraneGame extends Phaser.Scene {
     this.cable = this.add.rectangle(0, 0, 1, 1, 0xb0b8c4).setOrigin(0.5, 0).setDepth(42);
     this.claw = this.add.container(0, 0).setDepth(43);
     this.drawClaw(false);
+    this.buildSideView(eerie);
+    this.grabCue = centerText(this, GAME_W / 2, BOX.top + 10, isTouch() ? 'TAP GRAB!' : 'PRESS SPACE TO GRAB!', PALETTE.gold).setDepth(65).setVisible(false);
+    this.tweens.add({ targets: this.grabCue, alpha: 0.35, duration: 380, yoyo: true, repeat: -1 });
 
     this.clockText = text(this, 246, 160, '', 0xff6a5a).setDepth(60);
     new TokenHud(this);
     button(this, GAME_W - 24, 10, 'QUIT', () => this.leave(true), { width: 40, height: 13, fill: 0x5a1a22 }).setDepth(70);
+    this.sideBtn = button(this, 245, 10, 'SIDE VIEW', () => this.toggleSide(), { width: 60, height: 13 }).setDepth(70);
+    touchControls.relabel('SPACE', 'DROP');
 
     const kb = this.input.keyboard;
     const bind = (names: string[]) => (kb ? names.map((n) => kb.addKey(n)) : []);
@@ -179,15 +211,22 @@ export class CraneGame extends Phaser.Scene {
       drop: bind(['SPACE', 'E']),
     };
     kb?.on('keydown-ESC', () => this.leave(true));
-    // a press, however short, is the whole drop (polling `isDown` in the loop
-    // misses a tap that goes down and up between two frames)
-    kb?.on('keydown-SPACE', () => this.beginLower());
-    kb?.on('keydown-E', () => this.beginLower());
-    // a held press on the glass lowers it too
+    // A press is DROP while aiming and GRAB once the claw has settled
+    // (polling `isDown` in the loop misses a tap that goes down and up
+    // between two frames; a key held down and auto-repeating is one press).
+    const press = (e?: KeyboardEvent) => {
+      if (e?.repeat) return;
+      this.press();
+    };
+    kb?.on('keydown-SPACE', press);
+    kb?.on('keydown-E', press);
+    kb?.on('keydown-V', () => this.toggleSide());
+    // a tap on the glass does the same
     this.input.on('pointerdown', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
       // not a press on a button (AGAIN starts a go on the same press)
-      if (this.phase === 'aim' && !over.length && p.y > BOX.top && p.y < BOX.bottom) this.beginLower();
+      if (!over.length && p.y > BOX.top && p.y < BOX.bottom) this.press();
     });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => touchControls.relabel('SPACE', 'DROP'));
     this.input.on('pointerup', () => {
       this.pointerDrop = false;
     });
@@ -209,8 +248,11 @@ export class CraneGame extends Phaser.Scene {
           this.clawZ = Phaser.Math.Clamp(z, 0, 1);
           this.vx = this.vz = 0;
         },
-        /** All the way down, as if DROP were held. */
-        drop: () => this.beginLower(),
+        /** DROP, or GRAB once it has settled: the button. */
+        drop: () => this.press(),
+        side: () => this.toggleSide(),
+        sideOn: () => this.sideOn,
+        froggies: () => this.toys.filter((t) => t.id === PLUSHIES[0].id).length,
         home: () => ({ x: HOME.x, z: HOME.z }),
       };
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => delete (window as unknown as Record<string, unknown>).__crane);
@@ -234,15 +276,16 @@ export class CraneGame extends Phaser.Scene {
     // the frame
     this.add.rectangle(BOX.l - 8, 2, BOX.r - BOX.l + 16, GAME_H - 4, frame).setOrigin(0, 0).setStrokeStyle(2, trim);
     // the marquee, with the name in lit letters
-    this.add.rectangle(GAME_W / 2, 15, 170, 20, 0x0c0814).setStrokeStyle(1, trim);
-    const name = eerie ? '? ? ?  CAPSULES  ? ? ?' : 'FROGGY GRAB!';
+    // (narrow enough to leave room for SIDE VIEW and QUIT on its right)
+    this.add.rectangle(GAME_W / 2 - 6, 15, 116, 20, 0x0c0814).setStrokeStyle(1, trim);
+    const name = eerie ? '? CAPSULES ?' : 'FROGGY GRAB!';
     const cols = eerie ? [0xc8a0e0, 0x8a6ab0] : [0xff4fa3, 0xffc830, 0x46c46e, 0x3fb8e8, 0xff7a3d, 0xa870e8];
     const w = name.length * 6;
     [...name].forEach((ch, i) => {
       if (ch === ' ') return;
-      centerText(this, GAME_W / 2 - w / 2 + i * 6 + 3, 15, ch, cols[i % cols.length]);
+      centerText(this, GAME_W / 2 - 6 - w / 2 + i * 6 + 3, 15, ch, cols[i % cols.length]);
     });
-    for (const sx of [GAME_W / 2 - 78, GAME_W / 2 + 78]) {
+    for (const sx of [GAME_W / 2 - 56, GAME_W / 2 + 44]) {
       const star = this.add.star(sx, 15, 4, 1.5, 4, eerie ? 0xc8a0e0 : 0xffe080);
       this.tweens.add({ targets: star, alpha: 0.3, duration: 500 + Math.random() * 300, yoyo: true, repeat: -1 });
     }
@@ -281,7 +324,7 @@ export class CraneGame extends Phaser.Scene {
     this.add.circle(68, 165, 5, 0x46c46e).setStrokeStyle(1, 0x2a7a44).setDepth(59);
     this.add.circle(84, 165, 5, 0xd8202a).setStrokeStyle(1, 0x7a1018).setDepth(59);
     text(this, 100, 157, `CREDIT ${CRANE_COST[this.kind]}`, ink).setDepth(59);
-    text(this, 100, 168, isTouch() ? 'STICK  TAP DROP' : 'WASD  SPACE DROPS', ink).setDepth(59);
+    text(this, 100, 168, isTouch() ? 'STICK  DROP, GRAB' : 'WASD  SPACE: DROP, GRAB', ink).setDepth(59);
     // the clock window
     this.add.rectangle(244, 158, 54, 14, 0x0c0814).setOrigin(0, 0).setStrokeStyle(1, 0x5a3a10).setDepth(59);
     if (eerie) {
@@ -344,8 +387,11 @@ export class CraneGame extends Phaser.Scene {
     let id = 'capsule';
     let key: string;
     if (this.kind === 'plush') {
-      // Froggies are the rare one in the heap
-      const def = Math.random() < 0.12 ? PLUSHIES[0] : PLUSHIES[Phaser.Math.Between(1, PLUSHIES.length - 1)];
+      // Froggy is the rare one: a small chance at each spot, and never more
+      // than one in a heap
+      const froggy = this.froggies < 1 && Math.random() < FROGGY_CHANCE;
+      if (froggy) this.froggies++;
+      const def = froggy ? PLUSHIES[0] : PLUSHIES[Phaser.Math.Between(1, PLUSHIES.length - 1)];
       id = def.id;
       key = toyTexture(this, plushKind(def.id));
     } else {
@@ -356,23 +402,31 @@ export class CraneGame extends Phaser.Scene {
     const img = this.add.image(0, 0, key).setOrigin(0.5, 1);
     img.setAngle(Phaser.Math.Between(-8, 8)).setScale(Phaser.Math.FloatBetween(0.95, 1.03));
     if (Math.random() < 0.5 && this.kind === 'plush') img.setFlipX(true);
+    // THE DEPTH.  A soft contact shadow where it sits, on the floor or on the
+    // toys under it; and the light falls off into the pile -- the further back
+    // and the further down a toy is, the more it is in the shade of the rest.
+    c.add(this.add.ellipse(0, -1, 34, 8, 0x000000, lift > 0 ? 0.28 : 0.38));
+    const light = Phaser.Math.Clamp(1 - z * 0.32 - (lift < 6 ? 0.1 : 0) + lift * 0.004, 0.55, 1);
+    const v = Math.round(255 * light);
+    img.setTint(Phaser.Display.Color.GetColor(v, v, Math.min(255, v + 8)));
     c.add(img);
     const t: Toy = { id, x, z, lift, art: c };
     this.placeToy(t);
     return t;
   }
 
-  private drawClaw(shut: boolean): void {
-    this.claw.removeAll(true);
+  private drawClaw(shut: boolean, into: Phaser.GameObjects.Container = this.claw): void {
+    into.removeAll(true);
     // the head, the prongs, and the hooked tips
-    this.claw.add(this.add.rectangle(0, 0, 10, 5, 0x9aa6b6).setStrokeStyle(1, 0x4a5666));
-    this.claw.add(this.add.rectangle(0, 3, 4, 2, 0x6a7686));
+    into.add(this.add.rectangle(0, 0, 10, 5, 0x9aa6b6).setStrokeStyle(1, 0x4a5666));
+    into.add(this.add.rectangle(0, 3, 4, 2, 0x6a7686));
     const o = shut ? 2.5 : 7;
     for (const sx of [-1, 1]) {
-      this.claw.add(this.add.line(0, 0, sx * 2, 3, sx * o, 11, 0xc8d0dc).setLineWidth(1.6).setOrigin(0, 0));
-      this.claw.add(this.add.line(0, 0, sx * o, 11, sx * (o - 3), 15, 0xc8d0dc).setLineWidth(1.6).setOrigin(0, 0));
+      into.add(this.add.line(0, 0, sx * 2, 3, sx * o, 11, 0xc8d0dc).setLineWidth(1.6).setOrigin(0, 0));
+      into.add(this.add.line(0, 0, sx * o, 11, sx * (o - 3), 15, 0xc8d0dc).setLineWidth(1.6).setOrigin(0, 0));
     }
-    this.claw.add(this.add.line(0, 0, 0, 3, 0, 13, 0xc8d0dc).setLineWidth(1.4).setOrigin(0, 0));
+    into.add(this.add.line(0, 0, 0, 3, 0, 13, 0xc8d0dc).setLineWidth(1.4).setOrigin(0, 0));
+    if (into === this.claw && this.sideClaw) this.drawClaw(shut, this.sideClaw);
   }
 
   // ------------------------------------------------------------------ a go
@@ -393,11 +447,30 @@ export class CraneGame extends Phaser.Scene {
     this.drop = 0;
   }
 
+  /** The one button: DROP while aiming, GRAB once the claw has settled. */
+  private press(): void {
+    if (this.phase === 'aim') this.beginLower();
+    else if (this.phase === 'wait') this.shut();
+  }
+
   /** From wherever it is, carrying the way it was going. */
   private beginLower(): void {
     if (this.phase !== 'aim') return;
     this.phase = 'lower';
     audio.sfx('ui_blip');
+    // the same button, now the one that closes the claw
+    touchControls.relabel('SPACE', 'GRAB');
+  }
+
+  /** GRAB: the claw closes on whatever it has settled on. */
+  private shut(): void {
+    if (this.phase !== 'wait') return;
+    this.phase = 'shut';
+    this.grabCue.setVisible(false);
+    this.drawClaw(true);
+    audio.sfx('door_shut', 0.25);
+    touchControls.relabel('SPACE', 'DROP');
+    this.time.delayedCall(350, () => this.grab());
   }
 
   private dropHeld(): boolean {
@@ -441,11 +514,12 @@ export class CraneGame extends Phaser.Scene {
       this.drop += LOWER * dt;
       const bottom = Math.min(MAX_DROP, this.floorUnder());
       if (this.drop >= bottom) {
+        // settled on the pile, open: it waits there for GRAB, however long
         this.drop = bottom;
-        this.phase = 'shut';
-        this.drawClaw(true);
-        audio.sfx('door_shut', 0.25);
-        this.time.delayedCall(350, () => this.grab());
+        this.phase = 'wait';
+        this.vx = this.vz = 0;
+        this.grabCue.setVisible(true);
+        audio.sfx('ui_blip', 0.5);
       }
     } else if (this.phase === 'up') {
       this.drop -= RAISE * dt;
@@ -488,6 +562,7 @@ export class CraneGame extends Phaser.Scene {
     // the swing on the cable, more the faster it went
     this.sway = Math.sin(this.time.now / 160) * Math.min(2.5, Math.abs(this.vx) / 25 + this.drop / 80);
     this.drawRig();
+    if (this.sideOn) this.drawSide();
     if (this.held && this.phase !== 'release') {
       const k = scaleAt(this.clawZ);
       const hx = screenX(this.clawX, this.clawZ) + this.sway;
@@ -591,6 +666,114 @@ export class CraneGame extends Phaser.Scene {
     }
     c.add(button(this, GAME_W / 2 + (played ? 46 : 0), 116, 'LEAVE', () => this.leave(true), { width: 60, height: 13 }));
     this.result = c;
+  }
+
+  // ---------------------------------------------------------- the side view
+
+  /**
+   * The glass from its right-hand end: the front of the machine (the chute,
+   * where the player stands) on the left and the back wall on the right, the
+   * pile at its real depths and heights, and the claw at its own depth and
+   * drop.  Toys in the claw's left-right lane are drawn solid; the rest of the
+   * heap is a faint ghost behind them, so it is plain what the claw will come
+   * down on.
+   */
+  private buildSideView(eerie: boolean): void {
+    const c = this.add.container(0, 0).setDepth(57).setVisible(false);
+    const wall = eerie ? 0x120a1c : 0x1c2a48;
+    c.add(this.add.rectangle(BOX.l, BOX.top, BOX.r - BOX.l, BOX.bottom - BOX.top, wall).setOrigin(0, 0));
+    c.add(this.add.rectangle(BOX.l, BOX.top, BOX.r - BOX.l, 18, 0xffffff, eerie ? 0.03 : 0.07).setOrigin(0, 0));
+    // the floor, the front glass and the back wall, end on
+    c.add(this.add.rectangle(BOX.l, SIDE.floor, BOX.r - BOX.l, BOX.bottom - SIDE.floor, eerie ? 0x1a1024 : 0x2a3e66).setOrigin(0, 0));
+    c.add(this.add.rectangle(SIDE.l - 10, BOX.top, 2, BOX.bottom - BOX.top, 0xc8e0ff, 0.5).setOrigin(0.5, 0));
+    c.add(this.add.rectangle(SIDE.r + 10, BOX.top, 3, BOX.bottom - BOX.top, 0x4a5666).setOrigin(0.5, 0));
+    // the gantry rail, the length of the machine
+    c.add(this.add.rectangle(sideX(0), SIDE.top - 4, sideX(1) - sideX(0) + 16, 2, 0x8a96a6).setOrigin(0, 0.5).setX(sideX(0) - 8));
+    // depth marks along the floor, a quarter of the machine apart
+    for (let q = 0; q <= 4; q++) {
+      const x = sideX(q / 4);
+      c.add(this.add.rectangle(x, SIDE.floor + 1, 1, 4, 0xffffff, 0.35).setOrigin(0.5, 0));
+    }
+    c.add(text(this, SIDE.l - 6, BOX.bottom - 9, 'FRONT', PALETTE.gold).setOrigin(0, 0.5));
+    c.add(text(this, SIDE.r + 6, BOX.bottom - 9, 'BACK', PALETTE.gold).setOrigin(1, 0.5));
+    c.add(centerText(this, GAME_W / 2, BOX.top + 22, 'SIDE VIEW', 0xffffff).setAlpha(0.5));
+    this.sideToys = this.add.container(0, 0);
+    c.add(this.sideToys);
+    this.sideRig = this.add.graphics();
+    c.add(this.sideRig);
+    this.sideClaw = this.add.container(0, 0);
+    c.add(this.sideClaw);
+    this.sideBox = c;
+    this.drawClaw(false, this.sideClaw);
+  }
+
+  private toggleSide(): void {
+    if (this.phase === 'result') return;
+    this.sideOn = !this.sideOn;
+    this.sideBox.setVisible(this.sideOn);
+    this.sideBtn?.list.forEach((o) => {
+      if (o instanceof Phaser.GameObjects.BitmapText) o.setText(this.sideOn ? 'FRONT' : 'SIDE VIEW');
+    });
+    audio.sfx('ui_blip', 0.4);
+    if (this.sideOn) this.fillSide();
+  }
+
+  /** The pile, end on: every toy at its depth and height, back to front. */
+  private fillSide(): void {
+    this.sideToys.removeAll(true);
+    this.sideHeld = null;
+    for (const t of this.toys) {
+      const k = scaleAt(t.z) * sideK(t.z);
+      const src = t.art.list[1] as Phaser.GameObjects.Image;
+      const img = this.add.image(sideX(t.z), SIDE.floor - t.lift * k, src.texture.key).setOrigin(0.5, 1).setScale(k * 0.95);
+      img.setData('toy', t);
+      this.sideToys.add(img);
+    }
+    // the lower ones first, so a toy on top is drawn over the one it sits on
+    this.sideToys.sort('y', (a: Phaser.GameObjects.Image, b: Phaser.GameObjects.Image) => (b.y - a.y) || 0);
+  }
+
+  private drawSide(): void {
+    const k = scaleAt(this.clawZ) * sideK(this.clawZ);
+    const x = sideX(this.clawZ);
+    const tip = SIDE.top + this.drop * k;
+    // the lane the claw is over, solid; the rest of the heap, a ghost
+    const lane: Phaser.GameObjects.Image[] = [];
+    for (const o of [...this.sideToys.list] as Phaser.GameObjects.Image[]) {
+      const t = o.getData('toy') as Toy;
+      if (!this.toys.includes(t)) {
+        o.setVisible(false);
+        continue;
+      }
+      if (Math.abs(t.x - this.clawX) < 22) {
+        o.setAlpha(1).clearTint();
+        lane.push(o);
+      } else o.setAlpha(0.18).setTint(0x404a60);
+    }
+    // the claw's lane drawn over the ghosts, lowest first
+    lane.sort((a, b) => b.y - a.y).forEach((o) => this.sideToys.bringToTop(o));
+    const g = this.sideRig;
+    g.clear();
+    // the carriage on the rail, the cable down, and a guide straight down from
+    // the claw to the floor so you can see where it will land
+    g.fillStyle(0x5a7aa8, 1).fillRect(x - 7, SIDE.top - 8, 14, 7);
+    g.fillStyle(0xb0b8c4, 1).fillRect(x, SIDE.top - 1, 1, Math.max(1, tip - SIDE.top + 4));
+    g.fillStyle(PALETTE.gold, 0.55);
+    for (let y = tip + 22 * k; y < SIDE.floor; y += 5) g.fillRect(x, y, 1, 2);
+    g.fillStyle(PALETTE.gold, 0.8).fillTriangle(x - 4, SIDE.floor + 6, x + 4, SIDE.floor + 6, x, SIDE.floor + 1);
+    this.sideClaw.setPosition(x, tip + 4 * CLAW_K * k).setScale(k * CLAW_K);
+    // a held prize hangs from it here too
+    if (this.held && this.phase !== 'release') {
+      if (!this.sideHeld) {
+        const src = this.held.art.list[1] as Phaser.GameObjects.Image;
+        this.sideHeld = this.add.image(0, 0, src.texture.key).setOrigin(0.5, 1);
+        this.sideBox.add(this.sideHeld);
+      }
+      this.sideHeld.setPosition(x, tip + (10 * CLAW_K + TOY_H * 0.8) * k).setScale(k * 0.95).setVisible(true);
+    } else if (this.sideHeld) {
+      this.sideHeld.destroy();
+      this.sideHeld = null;
+    }
   }
 
   private again(): void {
