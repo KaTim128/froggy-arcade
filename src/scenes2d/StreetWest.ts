@@ -93,48 +93,132 @@ export class StreetWest extends Phaser.Scene {
     this.errand = s;
   }
 
-  /** The street, the bus stop, the forest and the hotel, painted once. */
+  /**
+   * The street, the bus stop, the forest and the hotel, painted once.  From
+   * the back: the trees, the fence along them, a pavement on the far side of
+   * the road, the road, and the pavement you walk on -- with the bus shelter
+   * standing on it, at the back, out of the way.
+   */
   private paint(dusk: boolean): void {
     const sky = dusk ? [PALETTE.plum, PALETTE.violet, PALETTE.ember, PALETTE.amber] : [0x8fd0e8, 0x8fd0e8, 0x7ec0dc, 0xbfe0ee];
     for (let i = 0; i < 4; i++) this.add.rectangle(0, i * 18, WORLD_W, 18, sky[i]).setOrigin(0, 0);
+    // the sky goes on down to the treeline, and under the trees the forest
+    // floor -- nothing behind the street is ever bare black
+    this.add.rectangle(0, 72, WORLD_W, 32, sky[3]).setOrigin(0, 0);
+    this.add.rectangle(0, 100, WORLD_W, 18, dusk ? 0x1c1828 : 0x2e5e3c).setOrigin(0, 0);
     // the forest behind the fence: three rows of trees, darker nearer
     const rows = dusk ? [0x3a2a4a, 0x2a2238, 0x1c1828] : [0x5a9a6a, 0x3f7a4f, 0x2e5e3c];
     rows.forEach((col, r) => {
       for (let x = 150 + r * 7; x < WORLD_W + 20; x += 15 + r * 3) {
         const h = 26 + ((x * 7 + r * 13) % 18);
-        const base = 116 + r * 6;
+        const base = 110 + r * 3;
         this.add.triangle(x, base - h / 2, -9, h / 2, 9, h / 2, 0, -h / 2, col);
       }
     });
+    // everything from the fence forward, over the trees
+    const g = this.add.graphics();
+    // ROW Y's, back to front
+    const FENCE = 118; // the foot of the fence
+    const FAR = 118; // far pavement, to its kerb
+    const FAR_KERB = 127;
+    const ROAD = 129;
+    const NEAR_KERB = 153;
+    const NEAR = 156; // the pavement you walk on, to the bottom of the picture
+    const X0 = 0; // (the hotel stands over the left-hand end of all of it)
+    // a strip of verge under the fence
+    g.fillStyle(dusk ? 0x1c1828 : 0x3f7a4f, 1).fillRect(X0, FENCE - 4, WORLD_W - X0, 4);
     // the fence along the forest
-    for (let x = 160; x < WORLD_W; x += 8) this.add.rectangle(x, 124, 2, 12, dusk ? 0x4a3a3a : 0x8a7a5a).setOrigin(0.5, 1);
-    this.add.rectangle(160, 118, WORLD_W - 160, 1, dusk ? 0x4a3a3a : 0x8a7a5a).setOrigin(0, 0.5);
-    // the road: empty, both ways, as far as you can see
-    this.add.rectangle(0, 126, WORLD_W, 30, dusk ? 0x2a2630 : 0x4a4e56).setOrigin(0, 0);
-    for (let x = 6; x < WORLD_W; x += 26) this.add.rectangle(x, 141, 12, 2, dusk ? 0x8a7a50 : 0xf2e6c0).setOrigin(0, 0.5);
-    // the kerb and the pavement
-    this.add.rectangle(0, 156, WORLD_W, 3, dusk ? 0x6a6070 : 0xb8b8b0).setOrigin(0, 0);
-    this.add.rectangle(0, 159, WORLD_W, 21, dusk ? 0x4a4450 : 0x9a9a92).setOrigin(0, 0);
-    for (let x = 0; x < WORLD_W; x += 20) this.add.rectangle(x, 159, 1, 21, dusk ? 0x3a3440 : 0x86867e).setOrigin(0, 0);
-    // street lamps
-    for (const lx of [210, 330, 470, 600]) {
-      this.add.rectangle(lx, 158, 2, 40, 0x3a3e44).setOrigin(0.5, 1);
-      this.add.rectangle(lx + 4, 118, 10, 2, 0x3a3e44);
-      this.add.circle(lx + 8, 120, 2.4, dusk ? 0xffe090 : 0xd8dce0);
-      if (dusk) this.add.circle(lx + 8, 128, 12, 0xffe090, 0.08);
+    const fenceCol = dusk ? 0x4a3a3a : 0x8a7a5a;
+    for (let x = X0 + 6; x < WORLD_W; x += 8) g.fillStyle(fenceCol, 1).fillRect(x, FENCE - 12, 2, 12);
+    g.fillStyle(fenceCol, 1).fillRect(X0, FENCE - 10, WORLD_W - X0, 1).fillRect(X0, FENCE - 5, WORLD_W - X0, 1);
+
+    // ---- the far pavement: slabs, and its kerb onto the road
+    const slab = dusk ? 0x4a4450 : 0xa8a8a0;
+    const joint = dusk ? 0x3a3440 : 0x8e8e86;
+    const kerb = dusk ? 0x6a6070 : 0xc8c8c0;
+    g.fillStyle(slab, 1).fillRect(X0, FAR, WORLD_W - X0, FAR_KERB - FAR);
+    g.fillStyle(joint, 1);
+    for (let x = X0; x < WORLD_W; x += 16) g.fillRect(x, FAR, 1, FAR_KERB - FAR);
+    g.fillRect(X0, FAR + 4, WORLD_W - X0, 1);
+    g.fillStyle(kerb, 1).fillRect(X0, FAR_KERB, WORLD_W - X0, 2);
+
+    // ---- the road: empty, both ways, as far as you can see
+    const tar = dusk ? 0x2a2630 : 0x4a4e56;
+    g.fillStyle(tar, 1).fillRect(0, ROAD, WORLD_W, NEAR_KERB - ROAD);
+    // the grain of it, and the gutters darker along both kerbs
+    for (let i = 0; i < 260; i++) {
+      const x = (i * 97) % WORLD_W;
+      const y = ROAD + 1 + ((i * 53) % (NEAR_KERB - ROAD - 2));
+      g.fillStyle(i % 3 ? 0x000000 : 0xffffff, i % 3 ? 0.12 : 0.06).fillRect(x, y, 1, 1);
     }
-    // ---- the bus stop: a shelter, a bench, a timetable nobody updates
+    g.fillStyle(0x000000, 0.18).fillRect(0, ROAD, WORLD_W, 1).fillRect(0, NEAR_KERB - 1, WORLD_W, 1);
+    // edge lines, and the dashes down the middle
+    const paint = dusk ? 0x8a7a50 : 0xf2e6c0;
+    g.fillStyle(paint, 0.55).fillRect(X0, ROAD + 2, WORLD_W - X0, 1).fillRect(0, NEAR_KERB - 3, WORLD_W, 1);
+    g.fillStyle(paint, 1);
+    for (let x = 6; x < WORLD_W; x += 26) g.fillRect(x, ROAD + 11, 12, 2);
+    // drains in the gutter
+    g.fillStyle(0x1a1c22, 1);
+    for (const x of [240, 420, 560]) for (let k = 0; k < 4; k++) g.fillRect(x + k * 2, NEAR_KERB - 2, 1, 2);
+
+    // ---- the near kerb and the pavement you walk on
+    g.fillStyle(kerb, 1).fillRect(0, NEAR_KERB, WORLD_W, 3);
+    g.fillStyle(joint, 1);
+    for (let x = 0; x < WORLD_W; x += 12) g.fillRect(x, NEAR_KERB, 1, 3);
+    g.fillStyle(dusk ? 0x4a4450 : 0x9a9a92, 1).fillRect(0, NEAR, WORLD_W, GAME_H - NEAR);
+    g.fillStyle(joint, 1);
+    for (const [y, off] of [
+      [NEAR, 0],
+      [NEAR + 8, 10],
+      [NEAR + 16, 4],
+    ] as const) {
+      g.fillRect(0, y, WORLD_W, 1);
+      for (let x = off; x < WORLD_W; x += 20) g.fillRect(x, y, 1, 8);
+    }
+
+    // street lamps, on the far pavement, leaning out over the road
+    for (const lx of [210, 330, 470, 600]) {
+      g.fillStyle(0x3a3e44, 1).fillRect(lx - 1, FAR + 4 - 34, 2, 34);
+      g.fillStyle(0x3a3e44, 1).fillRect(lx, FAR + 4 - 34, 9, 2);
+      g.fillStyle(0x2a2e34, 1).fillRect(lx - 2, FAR + 2, 4, 2);
+      this.add.circle(lx + 9, FAR + 4 - 31, 2.2, dusk ? 0xffe090 : 0xd8dce0);
+      if (dusk) {
+        this.add.circle(lx + 9, FAR - 22, 12, 0xffe090, 0.08);
+        g.fillStyle(0xffe090, 0.06).fillEllipse(lx + 9, ROAD + 6, 30, 6);
+      }
+    }
+
+    // ---- THE BUS STOP, on this side of the road, at the back of the
+    // pavement: a blue roof on two posts, a glass back panel with an advert
+    // at one end, and a bench under it.  No sign.
     const B = BUS_X;
-    this.add.rectangle(B - 22, 158, 2, 32, 0x5a626e).setOrigin(0.5, 1);
-    this.add.rectangle(B + 22, 158, 2, 32, 0x5a626e).setOrigin(0.5, 1);
-    this.add.rectangle(B, 126, 50, 4, 0x3f6fd8).setOrigin(0.5, 0.5);
-    this.add.rectangle(B + 6, 140, 30, 18, 0xbfe0ee, 0.35).setStrokeStyle(1, 0x8a9aa8);
-    this.add.rectangle(B - 4, 152, 26, 3, 0x8a5a2e);
-    this.add.rectangle(B - 14, 156, 1.5, 5, 0x5a3a1e);
-    this.add.rectangle(B + 6, 156, 1.5, 5, 0x5a3a1e);
-    this.add.rectangle(B + 34, 158, 2, 30, 0x5a626e).setOrigin(0.5, 1);
-    this.add.circle(B + 34, 126, 6, PALETTE.white).setStrokeStyle(1.5, 0xc31f2e);
-    centerText(this, B + 34, 126, 'BUS', 0xc31f2e);
+    const foot = NEAR + 4; // where the posts stand
+    const top = foot - 34;
+    // its shadow on the slabs
+    g.fillStyle(0x000000, 0.14).fillRect(B - 26, foot - 1, 52, 3);
+    // the back panel: glass in a frame, the advert at the right-hand end
+    g.fillStyle(0x8a9aa8, 1).fillRect(B - 22, top + 6, 44, 24);
+    g.fillStyle(0xbfe0ee, dusk ? 0.25 : 0.4).fillRect(B - 21, top + 7, 28, 22);
+    g.fillStyle(dusk ? 0x7b4bd8 : 0xff4fa3, 0.8).fillRect(B + 8, top + 7, 13, 22);
+    g.fillStyle(PALETTE.mossLight, 0.9).fillEllipse(B + 14, top + 15, 7, 5);
+    g.fillStyle(PALETTE.cream, 0.8).fillRect(B + 10, top + 22, 9, 2);
+    g.fillStyle(0xffffff, 0.25);
+    for (let i = 0; i < 3; i++) g.fillRect(B - 18 + i * 2, top + 9 + i * 2, 1, 5);
+    // the two posts
+    g.fillStyle(0x5a626e, 1).fillRect(B - 24, top, 2, foot - top).fillRect(B + 22, top, 2, foot - top);
+    g.fillStyle(0x3a424e, 1).fillRect(B - 23, top, 1, foot - top).fillRect(B + 23, top, 1, foot - top);
+    // the roof: blue, with an edge and its shadow on the glass
+    g.fillStyle(0x3f6fd8, 1).fillRect(B - 27, top - 3, 54, 4);
+    g.fillStyle(0x7fa0ec, 1).fillRect(B - 27, top - 3, 54, 1);
+    g.fillStyle(0x2a4a9a, 1).fillRect(B - 27, top + 1, 54, 1);
+    g.fillStyle(0x000000, 0.12).fillRect(B - 22, top + 2, 44, 3);
+    // the bench, in front of the glass, on its legs
+    g.fillStyle(0x8a5a2e, 1).fillRect(B - 18, foot - 9, 26, 2);
+    g.fillStyle(0x6a4422, 1).fillRect(B - 18, foot - 7, 26, 1);
+    g.fillStyle(0x5a3a1e, 1).fillRect(B - 16, foot - 6, 1, 6).fillRect(B + 5, foot - 6, 1, 6);
+    // the timetable, a small sheet behind the glass by the left-hand post
+    g.fillStyle(PALETTE.bone, 0.9).fillRect(B - 20, top + 9, 6, 8);
+    g.fillStyle(0x5a626e, 1).fillRect(B - 19, top + 10, 4, 1).fillRect(B - 19, top + 12, 4, 1).fillRect(B - 19, top + 14, 3, 1);
     // ---- the hotel, at the end of the street
     const H = dusk ? 0x5a4a5a : 0xd8c8a8;
     this.add.rectangle(4, 158, 150, 150, H).setOrigin(0, 1).setStrokeStyle(1, dusk ? 0x3a2e3a : 0x8a7a5a);
@@ -168,7 +252,7 @@ export class StreetWest extends Phaser.Scene {
     const cash = store.get().cash;
     const welcome = cash >= ROOM_MONEY || store.get().checkedIn;
     if (this.spot === 'bus') {
-      this.say('BUS 12.  The timetable is from three years ago.  Nothing is coming.');
+      this.say('The timetable in the shelter is from three years ago.  Nothing is coming.');
       return;
     }
     if (!welcome) {
@@ -220,7 +304,7 @@ export class StreetWest extends Phaser.Scene {
       return;
     }
     const px = this.player.x;
-    this.spot = Math.abs(px - DOOR_X) < 10 ? 'door' : Math.abs(px - DOORMAN_X) < 18 ? 'doorman' : Math.abs(px - BUS_X - 34) < 14 ? 'bus' : null;
+    this.spot = Math.abs(px - DOOR_X) < 10 ? 'door' : Math.abs(px - DOORMAN_X) < 18 ? 'doorman' : Math.abs(px - BUS_X) < 22 ? 'bus' : null;
     if (!this.spot) {
       this.prompt.setVisible(false);
       return;

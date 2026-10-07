@@ -59,9 +59,10 @@ export class ExteriorNight extends Phaser.Scene {
     const refs = paintExterior(this, { night: true });
     this.doorX = refs.doorX;
 
-    // CLOSED, hanging in the door
-    this.add.rectangle(this.doorX, 118, 26, 10, PALETTE.bone).setOrigin(0.5, 0);
-    centerText(this, this.doorX, 120, 'CLOSED', PALETTE.blood).setOrigin(0.5, 0);
+    // CLOSED, over the chained doors
+    const door = refs.doorRect;
+    this.add.rectangle(this.doorX, door.y - 7, 42, 10, 0x14100c).setStrokeStyle(1, 0xc31f2e);
+    centerText(this, this.doorX, door.y - 7, 'CLOSED', 0xc31f2e);
 
     // (the alley is the mouth off the building's right-hand corner, painted
     // with the street)

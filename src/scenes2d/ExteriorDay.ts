@@ -154,13 +154,12 @@ export class ExteriorDay extends Phaser.Scene {
 
   private time0: 'day' | 'evening' | 'midnight' = 'day';
 
-  /** The arcade shut: shutters down over the doors, the sign dark, CLOSED. */
+  /**
+   * The arcade shut: the glass doors chained through their handles (see
+   * paintExterior), the sign dark, and CLOSED over the door.
+   */
   private paintClosed(door: { x: number; y: number; w: number; h: number }): void {
-    // (part of the building: the player walks in FRONT of it -- under 50,
-    // where `depthFor` puts anyone stood on the pavement)
-    this.add.rectangle(door.x, door.y, door.w, door.h, 0x3a3e44).setOrigin(0, 0).setDepth(45);
-    for (let y = door.y + 3; y < door.y + door.h; y += 4) this.add.rectangle(door.x, y, door.w, 1, 0x26282e).setOrigin(0, 0).setDepth(45);
-    // (hung above the shutter, where the door's prompt does not cover it)
+    // (hung above the doors, where the door's prompt does not cover it)
     this.add.rectangle(door.x + door.w / 2, door.y - 7, 42, 10, 0x14100c).setDepth(46).setStrokeStyle(1, 0xc31f2e);
     centerText(this, door.x + door.w / 2, door.y - 7, 'CLOSED', 0xc31f2e).setDepth(47);
   }
