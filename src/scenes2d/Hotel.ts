@@ -63,9 +63,19 @@ import {
 } from '../art/hotelInterior';
 import { HITS, WF, WF_H, WF_W, drawBrokenEdge, drawCracks, drawWindowFroggy } from '../art/windowFroggy';
 import { runHotelScare } from '../froggy/hotelScare';
+import { drawClerk } from '../froggy/clerk';
+import { froggyLayer } from '../render/froggyLayer';
 
 export const ROOM_PRICE = 300;
 const WALK_Y = 160;
+/**
+ * The clerk: drawn like every person in the building (froggy/clerk.ts), on
+ * the smooth overlay, behind the desk -- clipped at the marble top, with a
+ * hole where the player stands and where the guest book lies on the desk.
+ */
+const CLERK = { x: 160, feet: 132, h: 46 };
+const DESK_TOP = 116;
+const BOOK = { x: 140, y: 112, w: 15, h: 4 };
 
 type Area = 'lobby' | 'lift' | 'corridor' | 'room' | 'bath';
 type Spot = 'out' | 'desk' | 'lift' | 'stairs' | 'door612' | 'roomdoor' | 'bathdoor' | 'bed' | 'window' | 'mirror' | null;
@@ -126,6 +136,10 @@ export class Hotel extends Phaser.Scene {
   /** The reflection, in the bathroom mirror. */
   private reflection: Phaser.GameObjects.Container | null = null;
   private clock = 0;
+  /** The check-in dialog, while it is up: the clerk dims under it. */
+  private dialog: Phaser.GameObjects.Container | null = null;
+  private clerkOn = false;
+  private clerkDimmed = false;
 
   constructor() {
     super('Hotel');
@@ -160,6 +174,12 @@ export class Hotel extends Phaser.Scene {
     this.playerCols = [];
     this.reflection = null;
     this.clock = 0;
+    this.dialog = null;
+    this.clerkOn = false;
+    this.clerkDimmed = false;
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (this.clerkOn) froggyLayer.clear();
+    });
     this.curtainsOpen = this.registry.get('hotelCurtains') !== false;
     fadeIn(this);
     // Safe: the hotel is the end of the night, whatever is out there.
@@ -242,8 +262,10 @@ export class Hotel extends Phaser.Scene {
 
   private buildLobby(dark: boolean): void {
     const night = store.get().timeOfDay !== 'day';
-    const key = `hotel_lobby_${dark ? 'empty' : night ? 'n' : 'd'}`;
-    const img = this.add.image(0, 0, this.painted(key, GAME_W, GAME_H, (g) => paintLobby(g, night || dark, dark))).setOrigin(0, 0);
+    // (the desk is painted empty: the clerk behind it is on the overlay)
+    const key = `hotel_lobby_${dark ? 'dark' : night ? 'night' : 'day'}`;
+    const img = this.add.image(0, 0, this.painted(key, GAME_W, GAME_H, (g) => paintLobby(g, night || dark, true))).setOrigin(0, 0);
+    this.clerkOn = !dark;
     // the lights are out and the desk is empty
     if (dark) img.setTint(0x3a4058);
     centerText(this, 280, 82, dark ? '-' : '1', 0xff7a3d);
@@ -493,13 +515,14 @@ export class Hotel extends Phaser.Scene {
     this.closeTalk();
     const cash = store.get().cash;
     this.locked = true;
-    confirmDialog(this, {
+    this.dialog = confirmDialog(this, {
       lines: [`CHECK IN FOR $${ROOM_PRICE}?`, `YOU HAVE $${cash}.  YOU WILL HAVE $${cash - ROOM_PRICE}.`],
       confirm: 'CHECK IN',
       cancel: 'NO',
       edge: PALETTE.gold,
       onConfirm: () => {
         this.locked = false;
+        this.dialog = null;
         if (!store.spendCash(ROOM_PRICE)) {
           audio.sfx('buzzer');
           return;
@@ -512,6 +535,7 @@ export class Hotel extends Phaser.Scene {
       },
       onCancel: () => {
         this.locked = false;
+        this.dialog = null;
       },
     });
   }
@@ -811,9 +835,59 @@ export class Hotel extends Phaser.Scene {
     });
   }
 
+  /** The clerk, each frame: behind the desk, talking while you talk to him. */
+  private paintClerk(): void {
+    if (!this.clerkOn) return;
+    const p = this.player;
+    // under the reception panel, he stops at its top edge
+    const panelTop = this.talk ? (this.talk.getBounds().top || DESK_TOP) : DESK_TOP;
+    const cut = Math.min(DESK_TOP, panelTop);
+    const talking = !!this.talk && Math.floor(this.clock / 0.14) % 2 === 0;
+    // (only when the dialog comes or goes: the scene fades drive it otherwise)
+    const dimmed = !!this.dialog;
+    if (dimmed !== this.clerkDimmed) {
+      this.clerkDimmed = dimmed;
+      froggyLayer.setDim(dimmed ? 0.4 : 1);
+    }
+    froggyLayer.paint((ctx) => {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, GAME_W, cut);
+      ctx.clip();
+      // everything but the player and the guest book on the desk
+      ctx.beginPath();
+      ctx.rect(0, 0, GAME_W, GAME_H);
+      if (p && p.sprite.visible) ctx.rect(p.x - 6, p.y - 30, 12, 30);
+      // (holes must not overlap one another: even-odd would cancel them)
+      const panel = this.dialog?.list[1] as Phaser.GameObjects.Rectangle | undefined;
+      if (panel) {
+        // the check-in dialog, in front of everybody
+        const b = panel.getBounds();
+        ctx.rect(b.x - 1, b.y - 1, b.width + 2, b.height + 2);
+      } else {
+        ctx.rect(BOOK.x, BOOK.y, BOOK.w, BOOK.h);
+        // and the [E] prompt over the desk, which is the player's, not his
+        if (this.prompt.visible) {
+          const b = this.prompt.getBounds();
+          ctx.rect(b.x - 1, b.y - 1, b.width + 2, Math.min(b.height + 2, DESK_TOP - (b.y - 1)));
+        }
+      }
+      ctx.clip('evenodd');
+      // his shadow on the pigeonholes behind him
+      const sh = ctx.createRadialGradient(CLERK.x + 3, 104, 1, CLERK.x + 3, 104, 18);
+      sh.addColorStop(0, 'rgba(8, 4, 16, 0.4)');
+      sh.addColorStop(1, 'rgba(8, 4, 16, 0)');
+      ctx.fillStyle = sh;
+      ctx.fillRect(CLERK.x - 16, 84, 38, 34);
+      drawClerk(ctx, { x: CLERK.x, y: CLERK.feet, height: CLERK.h, pose: talking ? 'talk' : 'idle', breath: (this.clock / 4) % 1 });
+      ctx.restore();
+    });
+  }
+
   update(_t: number, delta: number): void {
     const dt = delta / 1000;
     this.clock += dt;
+    this.paintClerk();
     // dust in the lamplight
     for (const [k, m] of this.motes.entries()) {
       m.y -= dt * (1.5 + (k % 3));
@@ -873,7 +947,8 @@ export class Hotel extends Phaser.Scene {
     this.prompt
       .setText(label[this.spot])
       .setTint(this.night === 'late' && this.spot === 'window' ? 0xffb0a0 : PALETTE.gold)
-      .setPosition(Phaser.Math.Clamp(x, 60, GAME_W - 60), WALK_Y - 44)
+      // (at the desk, on its front: the clerk is where the prompt would go)
+      .setPosition(Phaser.Math.Clamp(x, 60, GAME_W - 60), this.spot === 'desk' ? DESK_TOP + 13 : WALK_Y - 44)
       .setVisible(true);
   }
 
