@@ -32,7 +32,7 @@ import { PRIZES, allPrizesSold } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
-import { heldItems } from '../game/inventory';
+import { ensureKeyInPocket, heldItems } from '../game/inventory';
 
 const WALK_Y = KERB_Y;
 /** Where the alley mouth is, off the arcade's right-hand corner. */
@@ -75,6 +75,8 @@ export class ExteriorDay extends Phaser.Scene {
     froggyLayer.clear();
     this.locked = false;
     this.spot = null;
+    // out of the night with the key in a pocket, however you got here
+    ensureKeyInPocket();
 
     // ---- WHAT TIME IT IS.  After the night in the arcade it stays sunny --
     // nothing forces the evening -- until the player has more than six

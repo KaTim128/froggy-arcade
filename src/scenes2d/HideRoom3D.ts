@@ -5612,10 +5612,9 @@ export class HideRoom3D extends Phaser.Scene {
     store.patch({ route: 'normal', hideRoom: 0, froggyGone: true });
     // The key that opened the doors comes out with you, into a pocket.
     if (!store.get().items.includes(KEY_ITEM.id)) addItem(KEY_ITEM.id);
-    // AND YOU COME OUT WITH ONE TOKEN.  Not a reward and not a handout -- it
-    // is what was in the pocket, and it is exactly enough for one go on the
-    // cheapest machine in the building.
-    ledger.setAfterNight(1);
+    // AND YOU COME OUT WITH NOTHING.  Not a token: whatever you went in with
+    // is gone.  What you do have is the key -- and the arcade wants it back.
+    ledger.setAfterNight(0);
     store.flush();
     froggyLayer.clear();
     this.scene.start('ExteriorDay');
