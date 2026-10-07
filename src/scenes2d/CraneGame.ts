@@ -72,7 +72,7 @@ const PILE_L = 84;
 const PILE_R = 292;
 /** The prize chute, front left, behind its own little glass wall. */
 const CHUTE = { x: 46, z: 0.05, l: 20, r: 72 };
-const CLOCK_S = 15;
+const CLOCK_S = 25;
 /** How far the claw can be let down, in pixels below the gantry. */
 const MAX_DROP = 118;
 /** The claw is drawn this much bigger than its design, to match the toys. */
@@ -82,7 +82,21 @@ const MOVE_Z = 0.85;
 const LOWER = 60;
 const RAISE = 70;
 /** Both cranes hold exactly one grab in ten. */
-export const GRIP: Record<CraneKind, number> = { plush: 0.1, oddity: 0.1 };
+export const GRIP: Record<CraneKind, number> = { plush: 0.34, oddity: 0.34 };
+/**
+ * THE ODDS, ALL TOLD, ARE ABOUT ONE GO IN FIVE -- and they come out of how a
+ * claw machine actually loses.  The claw lifts what it closed on GRIP of the
+ * time with its fingers dead centre on the toy, less the further off centre
+ * they came down (down to just over half that at the edge of the claw); and
+ * a prize it has lifted slips out on the way to the chute SLIP of the time.
+ * Aimed fairly well, that is 0.34 x ~0.75 x 0.8: about 20%.
+ */
+export const SLIP = 0.2;
+/** How close the fingers must come down to a toy to close on it at all. */
+const REACH_X = 9;
+const REACH_Z = 0.1;
+/** From the claw's hanging point down to its fingertips, in claw units. */
+const FINGERS = 19 * TOY_RES;
 
 /** Front of the floor is lower on screen; the back of it is higher. */
 const floorY = (z: number): number => 146 - z * 32;
@@ -142,6 +156,12 @@ export class CraneGame extends Phaser.Scene {
   private result: Phaser.GameObjects.Container | null = null;
   private keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
   private pointerDrop = false;
+  /** Where the held prize was when the claw closed on it, and how long since. */
+  private heldFrom = new Phaser.Math.Vector2();
+  private heldT = 0;
+  /** How far through the carry the prize slips out, or -1 if it holds. */
+  private slipAt = -1;
+  private carryFrom = new Phaser.Math.Vector2();
   /** How many Froggies this heap has (at most one). */
   private froggies = 0;
   private grabCue!: Phaser.GameObjects.BitmapText;
@@ -251,6 +271,19 @@ export class CraneGame extends Phaser.Scene {
         /** DROP, or GRAB once it has settled: the button. */
         drop: () => this.press(),
         side: () => this.toggleSide(),
+        /** The toy under the claw and where the fingertips are, on screen. */
+        target: () => {
+          const t = this.targetUnder();
+          const k = scaleAt(this.clawZ);
+          return {
+            toy: t ? { x: t.x, z: t.z, sx: screenX(t.x, t.z), top: this.topOf(t) } : null,
+            claw: { sx: screenX(this.clawX, this.clawZ), tips: gantryY(this.clawZ) + this.drop * k + FINGERS * k },
+          };
+        },
+        toyAt: (i: number) => {
+          const t = this.toys[i];
+          return t ? { x: t.x, z: t.z } : null;
+        },
         sideOn: () => this.sideOn,
         froggies: () => this.toys.filter((t) => t.id === PLUSHIES[0].id).length,
         home: () => ({ x: HOME.x, z: HOME.z }),
@@ -373,6 +406,11 @@ export class CraneGame extends Phaser.Scene {
     for (const sp of specs) this.toys.push(this.makeToy(sp.x, sp.z, sp.lift));
   }
 
+  /** Over any toy at the claw's depth or further back, however high it is piled. */
+  private clawDepth(): number {
+    return this.toyDepth(this.clawZ, 80) + 0.2;
+  }
+
   private toyDepth(z: number, lift: number): number {
     return 10 + (1 - z) * 20 + lift * 0.05;
   }
@@ -458,6 +496,8 @@ export class CraneGame extends Phaser.Scene {
     if (this.phase !== 'aim') return;
     this.phase = 'lower';
     audio.sfx('ui_blip');
+    // the drop is watched from the front
+    if (this.sideOn) this.toggleSide();
     // the same button, now the one that closes the claw
     touchControls.relabel('SPACE', 'GRAB');
   }
@@ -477,15 +517,38 @@ export class CraneGame extends Phaser.Scene {
     return this.pointerDrop || (this.keys.drop?.some((k) => k.isDown) ?? false);
   }
 
-  /** How high the pile comes up under the claw, as a drop distance. */
-  private floorUnder(): number {
-    let lift = 0;
+  /** The screen y of the top of a toy's head. */
+  private topOf(t: Toy): number {
+    return floorY(t.z) - (t.lift + TOY_H * 0.72) * scaleAt(t.z);
+  }
+
+  /**
+   * THE TOY THE CLAW IS OVER: of the toys within the claw's reach, the one
+   * whose head is highest -- the one the fingers meet first coming down.  The
+   * drop stops on it and the grab closes on it, so what the claw comes down
+   * on is what it picks up.
+   */
+  private targetUnder(): Toy | null {
+    let best: Toy | null = null;
     for (const t of this.toys) {
-      // (a toy's top is about three quarters of its picture above where it sits)
-      if (Math.abs(t.x - this.clawX) < 14 && Math.abs(t.z - this.clawZ) < 0.15) lift = Math.max(lift, t.lift + TOY_H * 0.72);
+      if (Math.abs(t.x - this.clawX) >= REACH_X || Math.abs(t.z - this.clawZ) >= REACH_Z) continue;
+      if (!best || this.topOf(t) < this.topOf(best)) best = t;
     }
+    return best;
+  }
+
+  /**
+   * How far down the claw goes, in its own units (`drawRig` scales the drop
+   * by the depth once -- this used to be in screen pixels and got scaled
+   * again, so the further back you aimed the higher above the toy it stopped).
+   * The fingertips come down a little over the target's head, or to the
+   * floor if there is nothing under it.
+   */
+  private floorUnder(): number {
     const k = scaleAt(this.clawZ);
-    return floorY(this.clawZ) - lift * k - 14 * CLAW_K * k - gantryY(this.clawZ);
+    const t = this.targetUnder();
+    const y = t ? this.topOf(t) + 6 * scaleAt(t.z) : floorY(this.clawZ);
+    return (y - gantryY(this.clawZ)) / k - FINGERS;
   }
 
   update(_t: number, delta: number): void {
@@ -527,11 +590,19 @@ export class CraneGame extends Phaser.Scene {
         this.drop = 0;
         // held or not, back to the chute: that is where a go ends
         this.phase = 'carry';
+        this.carryFrom.set(this.clawX, this.clawZ);
       }
     } else if (this.phase === 'carry') {
       // over to the chute, front left
       const dx = CHUTE.x - this.clawX;
       const dz = CHUTE.z - this.clawZ;
+      if (this.held && this.slipAt >= 0) {
+        const all = Math.max(1, Math.abs(CHUTE.x - this.carryFrom.x));
+        if (1 - Math.abs(dx) / all >= this.slipAt) {
+          this.slipAt = -1;
+          this.slip();
+        }
+      }
       this.clawX += Math.sign(dx) * Math.min(Math.abs(dx), 80 * dt);
       this.clawZ += Math.sign(dz) * Math.min(Math.abs(dz), 1 * dt);
       if (Math.abs(dx) < 0.5 && Math.abs(dz) < 0.01) {
@@ -568,7 +639,13 @@ export class CraneGame extends Phaser.Scene {
       const hx = screenX(this.clawX, this.clawZ) + this.sway;
       // hanging from the closed claw by its head
       const hy = gantryY(this.clawZ) + (this.drop + 10 * CLAW_K + TOY_H * 0.8) * k;
-      this.held.art.setPosition(hx, hy).setScale(k).setDepth(44);
+      // from where it lay into the claw's fingers, over a moment, not a snap
+      this.heldT = Math.min(1, this.heldT + dt / 0.3);
+      const e = this.heldT * this.heldT * (3 - 2 * this.heldT);
+      this.held.art
+        .setPosition(Phaser.Math.Linear(this.heldFrom.x, hx, e), Phaser.Math.Linear(this.heldFrom.y, hy, e))
+        .setScale(k)
+        .setDepth(this.clawDepth() - 0.005);
     }
   }
 
@@ -581,32 +658,65 @@ export class CraneGame extends Phaser.Scene {
     const tipY = gy + this.drop * k;
     this.cable.setPosition(sx, gy + 2).setSize(1, Math.max(1, tipY - gy));
     this.claw.setPosition(sx + this.sway, tipY + 4 * CLAW_K).setScale(k * CLAW_K);
+    // In the pile at its own depth: over every toy as far back as it is or
+    // further, under the ones nearer the glass -- so it goes down INTO the
+    // heap, behind the front row, instead of being pasted over all of it.
+    const d = this.clawDepth();
+    this.claw.setDepth(d);
+    this.cable.setDepth(d - 0.01);
   }
 
   /** The claw shuts.  What it comes up with depends on the machine. */
   private grab(): void {
-    let best: Toy | null = null;
-    let bestScore = Infinity;
-    for (const t of this.toys) {
-      const dx = Math.abs(t.x - this.clawX);
-      const dz = Math.abs(t.z - this.clawZ) * 60;
-      if (dx > 20 || dz > 14) continue;
-      // the one on top, nearest the middle of the claw
-      const score = dx + dz - t.lift * 0.6;
-      if (score < bestScore) {
-        bestScore = score;
-        best = t;
+    const best = this.targetUnder();
+    if (best) {
+      // dead centre is the best grip there is; at the edge of the claw it
+      // is just over half that
+      const off = Math.max(Math.abs(best.x - this.clawX) / REACH_X, Math.abs(best.z - this.clawZ) / REACH_Z);
+      const odds = GRIP[this.kind] * (1 - 0.45 * Math.min(1, off));
+      if (Math.random() < odds) {
+        this.held = best;
+        this.heldFrom.set(best.art.x, best.art.y);
+        this.heldT = 0;
+        this.toys = this.toys.filter((t) => t !== best);
+        // and some of what comes up does not make it to the chute
+        this.slipAt = Math.random() < SLIP ? 0.25 + Math.random() * 0.5 : -1;
+      } else {
+        // it closes on it, lifts it a fraction, and lets it go
+        this.tweens.add({ targets: best.art, y: '-=4', duration: 140, yoyo: true });
       }
     }
-    if (best && Math.random() < GRIP[this.kind]) {
-      this.held = best;
-      this.toys = this.toys.filter((t) => t !== best);
-    } else if (best) {
-      // it closes on it, lifts it a fraction, and lets it go
-      const t = best;
-      this.tweens.add({ targets: t.art, y: '-=4', duration: 140, yoyo: true });
-    }
     this.phase = 'up';
+  }
+
+  /**
+   * The prize slips out of the fingers on the way over and drops back onto
+   * the pile, wherever the claw is.
+   */
+  private slip(): void {
+    const t = this.held;
+    if (!t) return;
+    this.held = null;
+    this.drawClaw(false);
+    audio.sfx('door_shut', 0.15);
+    t.x = this.clawX;
+    t.z = Phaser.Math.Clamp(this.clawZ, 0.25, 0.95);
+    let lift = 0;
+    for (const o of this.toys) {
+      if (Math.abs(o.x - t.x) < 16 && Math.abs(o.z - t.z) < 0.2) lift = Math.max(lift, o.lift + 18);
+    }
+    t.lift = Math.min(lift, 40);
+    const k = scaleAt(t.z);
+    this.toys.push(t);
+    this.tweens.add({
+      targets: t.art,
+      x: screenX(t.x, t.z),
+      y: floorY(t.z) - t.lift * k,
+      scale: k,
+      duration: 380,
+      ease: 'Bounce.easeOut',
+      onComplete: () => this.placeToy(t),
+    });
   }
 
   private payOut(): void {
