@@ -4837,12 +4837,16 @@ for (const g of [
   const odds = await page.evaluate(async () => {
     const C = await import('/src/scenes2d/CraneGame.ts');
     const n = 200000;
-    let jackpot = 0, oddity = 0, min = 99, max = 0, empty = 0, sum = 0;
+    let jackpot = 0, lucky = 0, oddity = 0, min = 99, max = 0, lmax = 0, empty = 0, sum = 0, all = 0;
     for (let i = 0; i < n; i++) {
       const c = C.rollCapsule();
+      all += c.tokens;
       if (c.jackpot) {
         jackpot++;
         if (c.tokens !== 50) empty++;
+      } else if (c.lucky) {
+        lucky++;
+        lmax = Math.max(lmax, c.tokens);
       } else {
         min = Math.min(min, c.tokens);
         max = Math.max(max, c.tokens);
@@ -4851,10 +4855,10 @@ for (const g of [
       if (c.tokens <= 0) empty++;
       if (c.oddity) oddity++;
     }
-    return { jackpot: jackpot / n, oddity: oddity / n, min, max, mean: sum / (n - jackpot), bad: empty };
+    return { jackpot: jackpot / n, lucky: lucky / n, oddity: oddity / n, min, max, lmax, mean: sum / (n - jackpot - lucky), perCapsule: all / n, bad: empty };
   });
-  const oddsOk = Math.abs(odds.jackpot - 0.02) < 0.002 && odds.min === 1 && odds.max === 6 && Math.abs(odds.mean - 3.5) < 0.05 && odds.bad === 0 && odds.oddity > 0;
-  console.log(`${oddsOk ? 'PASS' : 'FAIL'}  oddity crane: every capsule 1-6 tokens, 1 in 50 a 50-token jackpot  — ${JSON.stringify(odds)}`);
+  const oddsOk = Math.abs(odds.jackpot - 0.02) < 0.002 && Math.abs(odds.lucky - 0.098) < 0.004 && odds.min === 1 && odds.max === 6 && odds.lmax === 15 && Math.abs(odds.mean - 3.5) < 0.05 && odds.bad === 0 && odds.oddity > 0 && odds.perCapsule < 5;
+  console.log(`${oddsOk ? 'PASS' : 'FAIL'}  oddity crane: capsules 1-6, 1 in 10 lucky up to 15, 1 in 50 a 50-token jackpot  — ${JSON.stringify(odds)}`);
   if (!oddsOk) failures++;
 
   if (errs.length) {

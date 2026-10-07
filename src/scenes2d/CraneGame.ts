@@ -29,7 +29,8 @@
  *   THE OTHER ONE (5 tokens).  Capsules, in the dark, under a flickering
  *   light.  A strong claw -- come down on a capsule and it brings it home
  *   four times in five -- and every capsule it brings up has tokens in it:
- *   anything from 1 to 6 -- or, one in fifty, the JACKPOT, 50.  On average
+ *   anything from 1 to 6 -- now and then (one in ten) a LUCKY one with up
+ *   to 15 -- or, one in fifty, the JACKPOT, 50.  On average
  *   a go comes back with less than it cost; the jackpot is why you stay.  And a few
  *   hold something more, that should not be in a toy machine at all, which
  *   the man outside will pay a great deal for.
@@ -61,20 +62,29 @@ export const CAPSULE_MAX = 6;
 /** One in fifty is the jackpot. */
 export const CAPSULE_JACKPOT = 50;
 export const JACKPOT_CHANCE = 1 / 50;
+/**
+ * And one in ten of the rest is a LUCKY capsule: anything up to 15 inside,
+ * so there is a real chance of coming out ahead without the jackpot.
+ */
+export const LUCKY_MAX = 15;
+export const LUCKY_CHANCE = 1 / 10;
 /** And now and then something else in with them, for the man outside. */
 export const ODDITY_CHANCE = 0.03;
 
 export interface Capsule {
   tokens: number;
   jackpot: boolean;
+  lucky: boolean;
   oddity: boolean;
 }
 
 /** A capsule's contents.  `rnd` is there so the odds can be tested. */
 export function rollCapsule(rnd: () => number = Math.random): Capsule {
   const jackpot = rnd() < JACKPOT_CHANCE;
-  const tokens = jackpot ? CAPSULE_JACKPOT : CAPSULE_MIN + Math.floor(rnd() * (CAPSULE_MAX - CAPSULE_MIN + 1));
-  return { tokens, jackpot, oddity: rnd() < ODDITY_CHANCE };
+  const lucky = !jackpot && rnd() < LUCKY_CHANCE;
+  const top = lucky ? LUCKY_MAX : CAPSULE_MAX;
+  const tokens = jackpot ? CAPSULE_JACKPOT : CAPSULE_MIN + Math.floor(rnd() * (top - CAPSULE_MIN + 1));
+  return { tokens, jackpot, lucky, oddity: rnd() < ODDITY_CHANCE };
 }
 
 /** The inside of the machine, in the cabinet's picture. */
@@ -849,11 +859,11 @@ export class CraneGame extends Phaser.Scene {
       const def = ODDITIES[Phaser.Math.Between(0, ODDITIES.length - 1)];
       if (addItem(def.id)) {
         audio.sfx('chime');
-        this.showResult(`${cap.jackpot ? 'JACKPOT!  ' : ''}${coins} + ${def.name}`, 0xc8a0e0, true, def.id);
+        this.showResult(`${cap.jackpot ? 'JACKPOT!  ' : cap.lucky ? 'LUCKY!  ' : ''}${coins} + ${def.name}`, 0xc8a0e0, true, def.id);
         return;
       }
     }
-    this.showResult(cap.jackpot ? `JACKPOT!  ${coins}` : `INSIDE: ${coins}`, PALETTE.gold, true);
+    this.showResult(cap.jackpot ? `JACKPOT!  ${coins}` : cap.lucky ? `LUCKY CAPSULE!  ${coins}` : `INSIDE: ${coins}`, PALETTE.gold, true);
   }
 
   private showResult(line: string, colour: number, played: boolean, itemId?: string): void {
