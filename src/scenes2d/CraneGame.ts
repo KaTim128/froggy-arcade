@@ -13,14 +13,15 @@
  *   front, after     [DROP]      and [SIDE VIEW] -- (look again if you like)
  *   lowering         [...]
  *   settled          [GRAB]
- * The clock running out still drops it, wherever it is.  DROP sends it down from wherever it is, drifting a
+ * The clock running out drops it, wherever it is, and grabs as it settles.  DROP sends it down from wherever it is, drifting a
  * little the way it was travelling, until it settles on the pile -- and there
  * it waits, open, until you press GRAB (the same button, relabelled).  Then
  * it shuts, comes up, and goes back to the chute at the front, where it lets
  * go of whatever it is holding.  SIDE VIEW (or V) swaps the glass for a look
  * in from the side, to judge how far back the claw is over the pile.  Every go starts with the claw parked over
- * that chute, and ends there.  When the clock runs out it drops on
- * its own.  QUIT leaves at any time.
+ * that chute, and ends there.  When the clock runs out it drops and grabs on
+ * its own -- and the clock keeps running while it waits on the pile, so
+ * waiting out the clock there grabs too.  QUIT leaves at any time.
  *
  *   PLUSH CRANE (5 tokens).  Animal plushies, and -- rarely -- a Froggy.  It is a
  *   real claw machine's claw: a weak grip, and it holds one time in ten.
@@ -155,6 +156,8 @@ export class CraneGame extends Phaser.Scene {
   /** Gliding back to HOME after a go. */
   private homing = false;
   private clock = CLOCK_S;
+  /** The clock ran out this go: the claw drops and grabs by itself. */
+  private timedOut = false;
   private toys: Toy[] = [];
   private held: Toy | null = null;
   private claw!: Phaser.GameObjects.Container;
@@ -302,6 +305,9 @@ export class CraneGame extends Phaser.Scene {
         sideOn: () => this.sideOn,
         froggies: () => this.toys.filter((t) => t.id === PLUSHIES[0].id).length,
         home: () => ({ x: HOME.x, z: HOME.z }),
+        setClock: (sec: number) => {
+          this.clock = sec;
+        },
       };
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => delete (window as unknown as Record<string, unknown>).__crane);
     }
@@ -500,6 +506,7 @@ export class CraneGame extends Phaser.Scene {
     this.viewedSide = false;
     if (this.sideOn) this.toggleSide();
     this.clock = CLOCK_S;
+    this.timedOut = false;
     this.drop = 0;
     this.syncButtons();
   }
@@ -632,8 +639,11 @@ export class CraneGame extends Phaser.Scene {
       this.clawZ = Phaser.Math.Clamp(this.clawZ + this.vz * dt, 0, 1);
       this.clock -= dt;
       this.clockText.setText(`TIME ${Math.max(0, Math.ceil(this.clock))}`);
-      // the clock running out drops it, wherever it is
-      if (this.clock <= 0) this.beginLower();
+      // the clock running out drops it, wherever it is -- and grabs (below)
+      if (this.clock <= 0) {
+        this.timedOut = true;
+        this.beginLower();
+      }
     } else if (this.phase === 'lower') {
       // the way it was going carries it on a little, and dies away
       this.clawX = Phaser.Math.Clamp(this.clawX + this.vx * dt, CLAW_MIN_X, PILE_R);
@@ -642,16 +652,29 @@ export class CraneGame extends Phaser.Scene {
       this.vz *= Math.exp(-dt * 3.5);
       this.clock -= dt;
       this.clockText.setText(`TIME ${Math.max(0, Math.ceil(this.clock))}`);
+      if (this.clock <= 0) this.timedOut = true;
       this.drop += LOWER * dt;
       const bottom = Math.min(MAX_DROP, this.floorUnder());
       if (this.drop >= bottom) {
-        // settled on the pile, open: it waits there for GRAB, however long
+        // settled on the pile, open: it waits there for GRAB -- or, out of
+        // time, it shuts on its own a beat after it lands
         this.drop = bottom;
         this.phase = 'wait';
         this.vx = this.vz = 0;
         this.grabCue.setVisible(true);
         this.syncButtons();
         audio.sfx('ui_blip', 0.5);
+        if (this.timedOut) this.time.delayedCall(300, () => this.shut());
+      }
+    } else if (this.phase === 'wait') {
+      // the clock does not stop for it: run it out here and it grabs
+      if (!this.timedOut) {
+        this.clock -= dt;
+        this.clockText.setText(`TIME ${Math.max(0, Math.ceil(this.clock))}`);
+        if (this.clock <= 0) {
+          this.timedOut = true;
+          this.shut();
+        }
       }
     } else if (this.phase === 'up') {
       this.drop -= RAISE * dt;
