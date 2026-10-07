@@ -24,9 +24,33 @@ import Phaser from 'phaser';
 
 export type PlushKind = 'frog' | 'bear' | 'bunny' | 'duck' | 'cat' | 'owl';
 
+/**
+ * How much finer than its 30px design a toy is drawn.  Every shape below is
+ * laid out on a 30x30 grid, and the pen multiplies it up -- so a toy is a
+ * true 45x45 drawing with half again the pixels in every curve and face, not
+ * a 30px one stretched.
+ */
+export const TOY_RES = 1.5;
 /** The canvas each toy is drawn on; its feet stand at the bottom middle. */
-export const TOY_W = 30;
-export const TOY_H = 30;
+export const TOY_W = 30 * TOY_RES;
+export const TOY_H = 30 * TOY_RES;
+/** The 30x30 design grid the shapes are laid out on. */
+const DW = 30;
+const DH = 30;
+
+/** A Graphics that takes design-grid coordinates and draws them TOY_RES larger. */
+class Pen {
+  constructor(readonly g: Phaser.GameObjects.Graphics, readonly k: number) {}
+  fillStyle(col: number, a = 1): this { this.g.fillStyle(col, a); return this; }
+  lineStyle(w: number, col: number, a = 1): this { this.g.lineStyle(w * this.k, col, a); return this; }
+  fillRect(x: number, y: number, w: number, h: number): this { const k = this.k; this.g.fillRect(x * k, y * k, w * k, h * k); return this; }
+  fillEllipse(x: number, y: number, w: number, h: number): this { const k = this.k; this.g.fillEllipse(x * k, y * k, w * k, h * k); return this; }
+  fillCircle(x: number, y: number, r: number): this { const k = this.k; this.g.fillCircle(x * k, y * k, r * k); return this; }
+  fillTriangle(a: number, b: number, c: number, d: number, e: number, f: number): this { const k = this.k; this.g.fillTriangle(a * k, b * k, c * k, d * k, e * k, f * k); return this; }
+  lineBetween(a: number, b: number, c: number, d: number): this { const k = this.k; this.g.lineBetween(a * k, b * k, c * k, d * k); return this; }
+  slice(x: number, y: number, r: number, a0: number, a1: number, acw = false): this { const k = this.k; this.g.slice(x * k, y * k, r * k, a0, a1, acw); return this; }
+  fillPath(): this { this.g.fillPath(); return this; }
+}
 
 const INK = 0x1a1210;
 
@@ -59,8 +83,9 @@ export function toyTexture(scene: Phaser.Scene, kind: PlushKind | `capsule-${num
   const key = `crane-toy-${kind}`;
   if (scene.textures.exists(key)) return key;
   const g = scene.make.graphics({ x: 0, y: 0 }, false);
-  if (kind.startsWith('capsule-')) drawCapsule(g, Number(kind.slice(8)));
-  else drawPlush(g, kind as PlushKind);
+  const pen = new Pen(g, TOY_RES);
+  if (kind.startsWith('capsule-')) drawCapsule(pen, Number(kind.slice(8)));
+  else drawPlush(pen, kind as PlushKind);
   g.generateTexture(key, TOY_W, TOY_H);
   g.destroy();
   return key;
@@ -76,12 +101,12 @@ export const CAPSULE_VARIANTS = 5;
 
 // ------------------------------------------------------------------ plushies
 
-function drawPlush(g: Phaser.GameObjects.Graphics, kind: PlushKind): void {
+function drawPlush(g: Pen, kind: PlushKind): void {
   const p = PLUSH[kind];
   const b = p.body;
   const dark = shade(b, -0.32);
   const lit = shade(b, 0.32);
-  const cx = TOY_W / 2;
+  const cx = DW / 2;
   // a little lower and wider for the duck and the owl, which have no neck
   const headY = kind === 'duck' || kind === 'owl' ? 12 : 11;
   const headR = kind === 'frog' ? 0 : 7.5;
@@ -142,7 +167,7 @@ function drawPlush(g: Phaser.GameObjects.Graphics, kind: PlushKind): void {
 }
 
 /** Ears, tufts and crests: `outline` 1 draws them a pixel bigger in ink. */
-function earsOrTop(g: Phaser.GameObjects.Graphics, kind: PlushKind, cx: number, hy: number, col: number, outline: number): void {
+function earsOrTop(g: Pen, kind: PlushKind, cx: number, hy: number, col: number, outline: number): void {
   const o = outline;
   g.fillStyle(col, 1);
   switch (kind) {
@@ -172,7 +197,7 @@ function earsOrTop(g: Phaser.GameObjects.Graphics, kind: PlushKind, cx: number, 
   }
 }
 
-function face(g: Phaser.GameObjects.Graphics, kind: PlushKind, cx: number, hy: number, body: number): void {
+function face(g: Pen, kind: PlushKind, cx: number, hy: number, body: number): void {
   const eye = (x: number, y: number, r = 1.4) => {
     g.fillStyle(INK, 1).fillCircle(x, y, r);
     g.fillStyle(0xffffff, 1).fillRect(x - 0.6, y - 0.9, 1, 1);
@@ -253,10 +278,10 @@ const CAPSULE_COLS = [0x8a3ab8, 0x2a8a8a, 0xc84a7a, 0x4a5ab8, 0x6a8a3a];
  * A mystery capsule, sitting on the pile: about twenty pixels across, with a
  * shadowy something in its clear top half.
  */
-function drawCapsule(g: Phaser.GameObjects.Graphics, v: number): void {
+function drawCapsule(g: Pen, v: number): void {
   const col = CAPSULE_COLS[((v % CAPSULE_COLS.length) + CAPSULE_COLS.length) % CAPSULE_COLS.length];
-  const cx = TOY_W / 2;
-  const cy = TOY_H - 11;
+  const cx = DW / 2;
+  const cy = DH - 11;
   const r = 10;
   // outline
   g.fillStyle(INK, 1).fillCircle(cx, cy, r + 1);
