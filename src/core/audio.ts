@@ -1258,6 +1258,55 @@ class AudioManager {
         beep(784, 0.1, 0.035, 'triangle', 0.16);
         beep(1046, 0.16, 0.04, 'sine', 0.24);
         break;
+      // ---- the hotel, at three in the morning
+      // Knuckles on glass from outside: a hard tap and the pane ringing.
+      case 'knock_glass':
+        noise(0.04, 0.22, 3800);
+        beep(1900, 0.09, 0.03, 'sine');
+        beep(240, 0.07, 0.08, 'sine');
+        break;
+      // A blow on the window: a thump through the frame and the crack running.
+      case 'glass_crack':
+        beep(62, 0.22, 0.2, 'sine');
+        noise(0.08, 0.32, 1200);
+        noise(0.18, 0.16, 7000, 0.02);
+        beep(2400, 0.05, 0.04, 'square', 0.03);
+        beep(3100, 0.04, 0.03, 'square', 0.07);
+        break;
+      // The whole pane going: the burst, then the pieces raining down.
+      case 'glass_shatter':
+        noise(0.12, 0.4, 9000);
+        beep(55, 0.4, 0.2, 'sawtooth');
+        for (let i = 0; i < 9; i++) {
+          beep(2600 + Math.random() * 2400, 0.06, 0.035, 'sine', 0.08 + i * 0.07);
+          noise(0.05, 0.08, 8000, 0.1 + i * 0.08);
+        }
+        break;
+      // The reveal: one huge low orchestral hit.
+      case 'dun':
+        for (const f of [41, 55, 82, 110]) beep(f, 1.6, 0.17, 'sawtooth');
+        beep(27.5, 2, 0.2, 'sine');
+        noise(0.35, 0.3, 900);
+        noise(1.2, 0.08, 300, 0.05);
+        break;
+      // A door coming off its hinges: the split, the slam, the splinters.
+      case 'door_smash':
+        noise(0.12, 0.38, 2400);
+        beep(48, 0.5, 0.22, 'sawtooth');
+        beep(90, 0.3, 0.14, 'square', 0.02);
+        for (let i = 0; i < 6; i++) noise(0.04, 0.12, 4200, 0.06 + i * 0.05);
+        break;
+      // A lift that will not come: the button's click and a dead clunk.
+      case 'lift_dead':
+        beep(1400, 0.03, 0.05, 'square');
+        beep(70, 0.25, 0.12, 'square', 0.12);
+        noise(0.1, 0.06, 500, 0.12);
+        break;
+      // A lamp switched off.
+      case 'lamp_click':
+        noise(0.015, 0.12, 5000);
+        beep(2200, 0.02, 0.03, 'square');
+        break;
       case 'arcane_blast':
         beep(1320, 0.08, 0.06, 'square');
         beep(990, 0.1, 0.06, 'triangle', 0.03);
@@ -1762,6 +1811,13 @@ export type SfxName =
   | 'water_rise'
   | 'crumble'
   | 'arcane_cast'
-  | 'arcane_blast';
+  | 'arcane_blast'
+  | 'knock_glass'
+  | 'glass_crack'
+  | 'glass_shatter'
+  | 'dun'
+  | 'door_smash'
+  | 'lift_dead'
+  | 'lamp_click';
 
 export const audio = new AudioManager();

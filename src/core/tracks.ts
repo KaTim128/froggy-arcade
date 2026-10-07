@@ -80,6 +80,38 @@ export const TRACKS: Record<string, TrackPreset> = {
     vol: { lead: 0.03, bass: 0.045, arp: 0.012, drums: 0 },
     ring: 5,
   }),
+  // ------------------------------------------------- the Grand Lily Hotel
+  // The lobby: a slow lounge piano over brushed drums -- warm, unhurried, the
+  // sound of a building where somebody else is awake so you do not have to be.
+  hotel_lobby: preset({
+    bpm: 76,
+    chords: [maj7(C.f4 - 12), min7(C.d4), min7(C.g4 - 12), maj7(C.c4)],
+    bass: [0, _, _, 1, 0, _, 2, _],
+    lead: [C.a5, _, C.g5, _, C.f5, _, C.e5, _, C.d5, _, _, C.f5, C.e5, _, _, _, C.g5, _, C.f5, _, C.e5, _, C.c5, _, C.d5, _, _, _, C.e5, _, _, _],
+    leadWave: 'triangle',
+    bassWave: 'sine',
+    arpWave: 'sine',
+    drums: 'sparse',
+    cutoff: 1800,
+    vol: { lead: 0.032, bass: 0.045, arp: 0.012, drums: 0.4 },
+    swing: 0.18,
+    ring: 3,
+  }),
+  // The room: a lullaby.  Soft sines in a major key, nothing to move to and
+  // nothing to worry about -- which is the point of it.
+  hotel_room: preset({
+    bpm: 60,
+    chords: [maj7(C.g4 - 12), maj7(C.c4), maj7(C.e4 - 12 - 1), maj7(C.d4)],
+    bass: [0, _, _, _, 1, _, _, _],
+    lead: [C.b5 - 12, _, C.d5, _, C.g5, _, _, _, C.f5 + 1, _, C.e5, _, C.d5, _, _, _],
+    leadWave: 'sine',
+    bassWave: 'sine',
+    arpWave: 'triangle',
+    drums: 'none',
+    cutoff: 1300,
+    vol: { lead: 0.03, bass: 0.04, arp: 0.01, drums: 0 },
+    ring: 6,
+  }),
   // ------------------------------------------------------------- the rooms
   // The front room: bright, bouncy, the tune a kid would hum.
   room_hub: preset({

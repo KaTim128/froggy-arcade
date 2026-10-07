@@ -18,9 +18,10 @@
  *   he HEARS you: running, a branch snapping, water, gravel, the crows you put
  *     up out of the trees -- each has its own reach
  *   three seconds without sight of you and he stops chasing and starts looking
- *   the guard rails stop you walking -- a jump takes you over, and the gaps
- *     (the bus stop, the footpaths) let you through -- and they are a hop for
- *     him, which costs him; the ponds and the river are slow, and splash, for
+ *   the guard rails are solid on the walk in; once he is after you (RUN), a
+ *     jump takes you over them -- walking never does -- and the gaps (the bus
+ *     stop, the footpaths) let you through; they are a hop for him, which
+ *     costs him; the ponds and the river are slow, and splash, for
  *     both
  *   push through the low branches and they rustle: the deeper in and the
  *     faster, the louder, and a loud rustle carries to him
@@ -33,6 +34,7 @@
  *   the hotel's doors are safe.  Nothing follows you through them.
  */
 
+import { lookScale } from '../core/look';
 import { isPaused } from '../core/pause';
 import Phaser from 'phaser';
 import * as THREE from 'three';
@@ -46,6 +48,7 @@ import { FroggyMonster } from '../three/froggyMonster';
 import { ThreeStage } from '../render/threeStage';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { touchControls } from '../ui/touchControls';
+import { HOTEL_CANOPY, HOTEL_DOOR, HOTEL_H, HOTEL_PLANTERS, HOTEL_POSTS, HOTEL_W, paintCanopy, paintHotel } from '../art/hotel';
 
 // ------------------------------------------------------------------- the map
 //
@@ -112,6 +115,8 @@ const PATROL = 2.6;
 const CATCH = 1.4;
 /** Seconds without sight of you before he gives up chasing and starts looking. */
 const LOST_AFTER = 3;
+/** What to do, said straight after RUN. */
+export const CHASE_HOW = 'Jump over the rails, hide behind trees or bushes to avoid Froggy, and make your way to the hotel.';
 
 type Phase = 'walk' | 'turn' | 'creep' | 'reveal' | 'chase' | 'safe' | 'caught';
 
@@ -247,6 +252,12 @@ export class NightRoad3D extends Phaser.Scene {
 
   private lines: { text: string; from: number; until: number; red?: boolean }[] = [];
   private hintT = 0;
+  /** Once over a rail in the chase: the hiding hint, for a while, the first time. */
+  private overRail = false;
+  private hideHintT = 0;
+  /** How long the jump hint has been up at the rail, and whether it is up. */
+  private railHint = 0;
+  private padSyncT = 0;
 
   constructor() {
     super('NightRoad3D');
@@ -289,6 +300,11 @@ export class NightRoad3D extends Phaser.Scene {
     this.autoTurn = null;
     this.heardSnap = false;
     this.shake = 0;
+    this.hintT = 0;
+    this.overRail = false;
+    this.hideHintT = 0;
+    this.railHint = 0;
+    this.padSyncT = 0;
 
     this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000).setOrigin(0, 0);
     this.cameras.main.fadeIn(800, 0, 0, 0);
@@ -313,6 +329,7 @@ export class NightRoad3D extends Phaser.Scene {
       this.phase = 'chase';
       this.fMode = 'wait';
       this.sayNow('RUN.', 1.8, true);
+      this.say(CHASE_HOW, 6);
     } else {
       this.say("It's so quiet out here.", 3);
       this.say('The hotel is at the end of this road.', 3.4);
@@ -342,14 +359,14 @@ export class NightRoad3D extends Phaser.Scene {
     // held left-drag if not, which is what the on-screen look pad sends.
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (this.autoTurn) return;
-      if (p.event instanceof MouseEvent && document.pointerLockElement) this.yaw -= p.event.movementX * 0.0027;
+      if (p.event instanceof MouseEvent && document.pointerLockElement) this.yaw -= p.event.movementX * 0.0027 * lookScale();
     });
     this.onLookDown = (e: MouseEvent) => {
       if (e.button === 0 && !isPaused()) this.dragging = true;
     };
     this.onLookMove = (e: MouseEvent) => {
       if (!this.dragging || document.pointerLockElement || isPaused() || this.autoTurn) return;
-      this.yaw -= (e.movementX || 0) * ((e as MouseEvent & { lookSens?: number }).lookSens ?? 0.0042);
+      this.yaw -= (e.movementX || 0) * ((e as MouseEvent & { lookSens?: number }).lookSens ?? 0.0042) * lookScale();
     };
     this.onLookUp = () => {
       this.dragging = false;
@@ -618,22 +635,27 @@ export class NightRoad3D extends Phaser.Scene {
     this.buildLitter(S, R);
     this.buildLamps(S);
     this.buildBusStop(S);
-    this.buildHotel(S, R);
+    this.buildHotel(S);
 
     this.monster = new FroggyMonster(FROGGY_SCALE);
     S.add(this.monster.root);
   }
 
   /**
-   * Steel guard rails on posts, both sides, past the pavements: an upper
-   * beam and a lower one, so they read as a barrier and not a step.  They
-   * stop for the gaps -- the bus stop and the footpaths -- with a post either
-   * side, and a trodden path runs off into the trees from each footpath gap.
+   * ROADSIDE GUARDRAILS, both sides, past the pavements: a continuous
+   * galvanised W-beam -- two rounded ridges with the groove between them --
+   * on steel posts every two metres, each through a spacer block that holds
+   * the beam off the post, the way a crash barrier is built.  No fence rails
+   * and nothing to climb.  They stop for the gaps -- the bus stop and the
+   * footpaths -- with a post either side, and a trodden path runs off into
+   * the trees from each footpath gap.
    */
   private buildRails(S: THREE.Scene): void {
-    const steel = new THREE.MeshLambertMaterial({ color: 0x767c82 });
-    const postMat = new THREE.MeshLambertMaterial({ color: 0x3e4248 });
+    const steel = new THREE.MeshLambertMaterial({ color: 0x8c9298 });
+    const ridge = new THREE.MeshLambertMaterial({ color: 0xa4aab0 });
+    const postMat = new THREE.MeshLambertMaterial({ color: 0x4a4e54 });
     const posts: THREE.Matrix4[] = [];
+    const blocks: THREE.Matrix4[] = [];
     for (const side of [-1, 1]) {
       const cuts = GAPS.filter((g) => g.side === side).sort((a, b) => b.z0 - a.z0);
       const runs: [number, number][] = [];
@@ -646,18 +668,31 @@ export class NightRoad3D extends Phaser.Scene {
       for (const [a, b] of runs) {
         const len = a - b;
         const mid = (a + b) / 2;
-        const beam = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, len), steel);
-        beam.position.set(side * RAIL_X, RAIL_H - 0.18, mid);
-        const low = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, len), steel);
-        low.position.set(side * RAIL_X, 0.32, mid);
-        S.add(beam, low);
-        const n = Math.max(1, Math.round(len / 3));
-        for (let k = 0; k <= n; k++) posts.push(new THREE.Matrix4().makeTranslation(side * (RAIL_X + 0.1), RAIL_H / 2, a - (k * len) / n));
+        // the beam: a flat web, and the two ridges standing proud of it
+        const beamY = RAIL_H - 0.17;
+        const web = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.32, len), steel);
+        web.position.set(side * (RAIL_X - 0.02), beamY, mid);
+        S.add(web);
+        for (const dy of [0.09, -0.09]) {
+          const r = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, len, 8, 1), ridge);
+          r.rotation.x = Math.PI / 2;
+          r.position.set(side * (RAIL_X - 0.05), beamY + dy, mid);
+          S.add(r);
+        }
+        const n = Math.max(1, Math.round(len / 2));
+        for (let k = 0; k <= n; k++) {
+          const z = a - (k * len) / n;
+          posts.push(new THREE.Matrix4().makeTranslation(side * (RAIL_X + 0.16), RAIL_H / 2 - 0.02, z));
+          blocks.push(new THREE.Matrix4().makeTranslation(side * (RAIL_X + 0.06), beamY, z));
+        }
       }
     }
-    const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, RAIL_H, 0.12), postMat, posts.length);
+    const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, RAIL_H - 0.04, 0.14), postMat, posts.length);
     posts.forEach((m, i) => inst.setMatrixAt(i, m));
     S.add(inst);
+    const spacers = new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, 0.2, 0.12), postMat, blocks.length);
+    blocks.forEach((m, i) => spacers.setMatrixAt(i, m));
+    S.add(spacers);
     const path = decal(new THREE.MeshLambertMaterial({ color: 0x2a2219 }), 1);
     for (const g of GAPS.slice(1)) {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(10, g.z0 - g.z1 - 0.4), path);
@@ -1157,58 +1192,89 @@ export class NightRoad3D extends Phaser.Scene {
    * warm doorway, and none of it fogged -- it is the one thing on this road
    * you can always see, a long way off.
    */
-  private buildHotel(S: THREE.Scene, R: () => number): void {
-    const W = 30;
-    const H = 22;
+  /**
+   * The Grand Lily, head-on: the front is the very painting the pixel street
+   * hangs on its wall (art/hotel.ts), five pixels to a metre, so the two are
+   * one building.  What stands out from the front is built: the maroon canopy
+   * on its gold posts, the bay trees either side of the door.
+   */
+  private buildHotel(S: THREE.Scene): void {
+    const PX = 5;
+    const W = HOTEL_W / PX;
+    const H = HOTEL_H / PX;
     const D = 14;
-    const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), new THREE.MeshLambertMaterial({ color: 0x1a1c22 }));
+    const fx = (px: number): number => (px - HOTEL_DOOR) / PX;
+    const fy = (py: number): number => (HOTEL_H - py) / PX;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), new THREE.MeshLambertMaterial({ color: 0x3a2e3e }));
     body.position.set(0, H / 2, HOTEL_Z - 2 - D / 2);
     S.add(body);
-    const facade = canvasTex(120, 88, (g) => {
-      g.fillStyle = '#16181e';
-      g.fillRect(0, 0, 120, 88);
-      for (let row = 0; row < 7; row++)
-        for (let col = 0; col < 12; col++) {
-          const lit = R() < 0.42;
-          g.fillStyle = lit ? (R() < 0.2 ? '#ffe9b0' : '#e8b860') : '#22262e';
-          g.fillRect(4 + col * 9.6, 4 + row * 10.4, 5, 6);
-        }
-      g.fillStyle = '#16181e';
-      g.fillRect(44, 74, 32, 14);
-    });
+    const facade = canvasTex(HOTEL_W, HOTEL_H, (g) => paintHotel(g, { dusk: true }));
     const front = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ map: facade, fog: false }));
     front.position.set(0, H / 2, HOTEL_Z - 1.98);
     S.add(front);
-    const sign = canvasTex(128, 20, (g) => {
-      g.fillStyle = '#100a14';
-      g.fillRect(0, 0, 128, 20);
-      g.font = 'bold 13px monospace';
-      g.textAlign = 'center';
-      g.textBaseline = 'middle';
-      g.fillStyle = '#ff7ab8';
-      g.fillText('GRAND LILY HOTEL', 64, 10);
-    });
-    const signM = new THREE.Mesh(new THREE.PlaneGeometry(13, 2), new THREE.MeshBasicMaterial({ map: sign, fog: false }));
-    signM.position.set(0, 5.4, HOTEL_Z - 1.9);
-    S.add(signM);
-    const doorTex = canvasTex(32, 32, (g) => {
-      g.fillStyle = '#ffcf86';
-      g.fillRect(0, 0, 32, 32);
-      g.fillStyle = '#c99348';
-      g.fillRect(15, 0, 2, 32);
-      g.fillRect(0, 0, 32, 2);
-      g.fillStyle = '#fff1d0';
-      g.fillRect(4, 6, 8, 20);
-      g.fillRect(20, 6, 8, 20);
-    });
-    const door = new THREE.Mesh(new THREE.PlaneGeometry(SAFE_HALF * 2, 3.2), new THREE.MeshBasicMaterial({ map: doorTex, fog: false }));
-    door.position.set(0, 1.6, HOTEL_Z - 1.95);
-    S.add(door);
-    const canopy = new THREE.Mesh(new THREE.BoxGeometry(8, 0.3, 3.4), new THREE.MeshLambertMaterial({ color: 0x5a1e34 }));
-    canopy.position.set(0, 3.7, HOTEL_Z - 0.4);
+
+    // the canopy: out over the step, its scalloped front the street's
+    const C = HOTEL_CANOPY;
+    const cw = (C.x1 - C.x0) / PX;
+    const ch = (C.bottom - C.top) / PX;
+    const depth = 3.6;
+    const cz = HOTEL_Z - 1.98 + depth / 2;
+    const face = canvasTex(C.x1 - C.x0, C.bottom - C.top, (g) => paintCanopy(g, { dusk: true }));
+    const maroon = new THREE.MeshLambertMaterial({ color: 0x6a2232, emissive: 0x2a0a12 });
+    const under = new THREE.MeshBasicMaterial({ color: 0x2a0e16, fog: false });
+    const canopy = new THREE.Mesh(new THREE.BoxGeometry(cw, ch, depth), [
+      maroon,
+      maroon,
+      maroon,
+      under,
+      new THREE.MeshBasicMaterial({ map: face, transparent: true, fog: false }),
+      maroon,
+    ]);
+    canopy.position.set(0, fy(C.top) - ch / 2, cz);
     S.add(canopy);
-    const warm = new THREE.PointLight(0xffc27a, 60, 16, 1.2);
-    warm.position.set(0, 3.2, HOTEL_Z + 1);
+    // the bulbs under it
+    for (const k of [-0.32, 0, 0.32]) {
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff0b0, fog: false }));
+      bulb.position.set(k * cw, fy(C.bottom) - 0.1, cz + depth * 0.3);
+      S.add(bulb);
+    }
+    const gold = new THREE.MeshLambertMaterial({ color: 0xc9a24a, emissive: 0x3a2a08 });
+    const postH = fy(C.bottom);
+    for (const px of HOTEL_POSTS) {
+      const x = fx(px);
+      const z = cz + depth / 2 - 0.2;
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, postH, 8), gold);
+      post.position.set(x, postH / 2, z);
+      S.add(post);
+      const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.18, 10), gold);
+      foot.position.set(x, 0.09, z);
+      S.add(foot);
+      this.boxes.push({ x0: x - 0.15, x1: x + 0.15, z0: z - 0.15, z1: z + 0.15 });
+    }
+    // the bay trees in their planters, either side of the door
+    const pot = new THREE.MeshLambertMaterial({ color: 0x3a3238 });
+    const leaf = new THREE.MeshLambertMaterial({ color: 0x2e4a2a, emissive: 0x0a1408 });
+    for (const px of HOTEL_PLANTERS) {
+      const x = fx(px);
+      const z = HOTEL_Z - 1.3;
+      const box = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.9, 1.1), pot);
+      box.position.set(x, 0.45, z);
+      S.add(box);
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.8, 6), new THREE.MeshLambertMaterial({ color: 0x3a2a1e }));
+      stem.position.set(x, 1.3, z);
+      S.add(stem);
+      const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.7, 1), leaf);
+      ball.position.set(x, 2.1, z);
+      S.add(ball);
+      this.boxes.push({ x0: x - 0.6, x1: x + 0.6, z0: z - 0.6, z1: z + 0.6 });
+    }
+    // the carpet down the step, and the light the doors and the canopy throw
+    const carpet = new THREE.Mesh(new THREE.PlaneGeometry(SAFE_HALF * 2 - 0.4, 4.2), decal(new THREE.MeshLambertMaterial({ color: 0x6a1a28 }), 2));
+    carpet.rotation.x = -Math.PI / 2;
+    carpet.position.set(0, 0.02, HOTEL_Z + 0.1);
+    S.add(carpet);
+    const warm = new THREE.PointLight(0xffc27a, 70, 18, 1.2);
+    warm.position.set(0, postH - 0.6, HOTEL_Z + 1);
     S.add(warm);
     // the forecourt: flagstones out to where the rails end
     const court = new THREE.Mesh(new THREE.PlaneGeometry(26, 12), decal(new THREE.MeshLambertMaterial({ color: 0x3a3a3c }), 1));
@@ -1237,6 +1303,7 @@ export class NightRoad3D extends Phaser.Scene {
       this.busTube.color.setHex(on ? 0xcfe8ff : 0x4a5866);
     }
     this.movePlayer(dt);
+    this.chaseHints(dt);
     this.story(dt);
     this.moveFroggy(dt);
     this.ambience(dt);
@@ -1246,6 +1313,35 @@ export class NightRoad3D extends Phaser.Scene {
 
     if (this.phase === 'chase' && this.pos.distanceTo(this.froggy) < CATCH && this.y < 0.9) this.caught();
     if (this.phase !== 'safe' && this.pos.y < SAFE_Z && Math.abs(this.pos.x) < SAFE_HALF) this.reachSafety();
+  }
+
+  /**
+   * What the controls offer, and what to press, as each becomes the thing to
+   * do.  On the walk in there is no RUN and no JUMP on the touch pad -- only
+   * walking.  RUN brings both.  Up against a rail in the chase, how to jump it;
+   * over the first one, how to hide.
+   */
+  private chaseHints(dt: number): void {
+    const chase = this.phase === 'chase';
+    // (the pad is put up again after create, and on every pause and resume,
+    // showing every button: so it is kept in step a few times a second)
+    this.padSyncT -= dt;
+    if (isTouch() && this.padSyncT <= 0) {
+      this.padSyncT = 0.25;
+      touchControls.showButton('SHIFT', chase);
+      touchControls.showButton('SPACE', chase);
+    }
+    if (!chase) return;
+    const ax = Math.abs(this.pos.x);
+    if (!this.overRail && ax > RAIL_X + 0.2) {
+      this.overRail = true;
+      this.hideHintT = 7;
+      this.railHint = 0;
+    }
+    this.hideHintT = Math.max(0, this.hideHintT - dt);
+    // at a rail, your side of it, with no gap to walk through
+    const atRail = !this.overRail && ax > RAIL_X - 1.1 && ax < RAIL_X && this.railBlocks(this.pos.x, this.pos.y);
+    this.railHint = atRail ? this.railHint + dt : Math.max(0, Math.min(this.railHint, 1.5) - dt);
   }
 
   private held(g: string): boolean {
@@ -1286,9 +1382,10 @@ export class NightRoad3D extends Phaser.Scene {
     this.eye += (eyeWant - this.eye) * Math.min(1, dt * 8);
     if (this.phase === 'safe') return;
 
-    // the jump: over a rail, a log, out of the water
+    // the jump: over a log, out of the water -- and, once he is after you, a rail
     const grounded = this.y <= 0;
-    if (grounded && !this.crouched && this.jumpKeys.some((k) => Phaser.Input.Keyboard.JustDown(k))) {
+    // (walking in, you are tired and going home: no running, no jumping)
+    if (grounded && !this.crouched && this.jumpKeys.some((k) => Phaser.Input.Keyboard.JustDown(k)) && this.phase === 'chase') {
       this.vy = this.inWater(this.pos.x, this.pos.y) ? JUMP_V * 0.7 : JUMP_V;
       audio.sfx('step_run', 0.5);
     }
@@ -1323,9 +1420,10 @@ export class NightRoad3D extends Phaser.Scene {
     const was = this.pos.x;
     const nx = this.pos.x + dx;
     const nz = this.pos.y + dz;
-    // THE RAILS: walking, you cannot get past one -- jumping, you go over the
-    // top of it, and a gap lets you through.
-    const over = this.y >= RAIL_H - 0.08;
+    // THE RAILS: solid while you walk in -- walking or jumping, you do not
+    // get past one, only through a gap.  From the moment RUN is said (the
+    // chase), a jump takes you over the top; walking still does not.
+    const over = this.phase === 'chase' && this.y >= RAIL_H - 0.08;
     const crosses = Math.sign(Math.abs(this.pos.x) - RAIL_X) !== Math.sign(Math.abs(nx) - RAIL_X);
     if (!(crosses && !over && this.railBlocks(nx, this.pos.y)) && Math.abs(nx) < WORLD_X) this.pos.x = nx;
     if (nz < BACK_Z && nz > HOTEL_Z - 1.4 && !(nz < HOTEL_Z + 0.3 && Math.abs(this.pos.x) > SAFE_HALF + 0.2)) this.pos.y = nz;
@@ -1518,19 +1616,17 @@ export class NightRoad3D extends Phaser.Scene {
     if (this.phase !== 'chase' || this.fMode === 'wait') return;
     const d = Math.hypot(this.froggy.x - x, this.froggy.y - z);
     if (d > r) return;
-    this.lastKnown.set(x, z);
-    if (this.fMode === 'hunt') {
-      // he already has you; a sound only refreshes where he thinks you are
-      this.lostT = Math.min(this.lostT, 1.5);
-      return;
-    }
+    // A SOUND IS A DIRECTION, NOT AN ADDRESS.  He learns roughly where it
+    // came from -- the further off, the rougher -- and goes to look there.
+    // It never tells him where you are now, and while he cannot see you it
+    // does not keep him on you: he has to find you with his eyes.
+    const blur = Math.min(6, 0.8 + d * 0.22);
+    const a = Math.random() * Math.PI * 2;
+    const rr = Math.random() * blur;
+    this.lastKnown.set(x + Math.cos(a) * rr, z + Math.sin(a) * rr);
+    if (this.fMode === 'hunt') return;
     this.searchT = 0;
-    if (d < r * 0.45) {
-      this.fMode = 'hunt';
-      this.lostT = 1.5;
-    } else {
-      this.fMode = 'investigate';
-    }
+    this.fMode = 'investigate';
   }
 
   // ---------------------------------------------------------------- the story
@@ -1620,6 +1716,7 @@ export class NightRoad3D extends Phaser.Scene {
         this.phaseT = 0;
         this.fMode = 'wait';
         this.sayNow('RUN.', 1.8, true);
+        this.say(CHASE_HOW, 6);
         audio.sfx('froggy_screech', 0.8, this.placeOf(this.froggy.x, this.froggy.y));
       }
     }
@@ -1655,6 +1752,9 @@ export class NightRoad3D extends Phaser.Scene {
     if (Math.random() > 0.2) return;
     const far = this.froggy.distanceTo(this.pos);
     if (far > 70) return;
+    // only where his search already is: near where he last had you, not
+    // wherever you have got to since
+    if (this.lastKnown.distanceTo(this.pos) > 25) return;
     // the line he walks: from his side of you, past you at 3.5 - 6 m, and on
     const dir = new THREE.Vector2(this.froggy.x - this.pos.x, this.froggy.y - this.pos.y).normalize();
     const perp = new THREE.Vector2(-dir.y, dir.x).multiplyScalar((Math.random() < 0.5 ? -1 : 1) * (3.5 + Math.random() * 2.5));
@@ -1682,12 +1782,13 @@ export class NightRoad3D extends Phaser.Scene {
     const lit = LAMP_ZS.some((z, i) => Math.hypot(this.pos.x - (i % 2 ? 1 : -1) * (RAIL_X - 1.2), this.pos.y - z) < 7.5);
     const range = (lit ? 36 : this.onRoad() ? 27 : this.pos.y < HOTEL_Z + 12 ? 30 : 13) * (this.crouched ? 0.6 : 1);
     if (d > range) return false;
-    if (this.fMode !== 'hunt') {
-      // looking, he sees what is in front of him
+    {
+      // He sees what is in front of him: looking about, a cone of seventy
+      // degrees either side; on your heels, wider -- but never behind him.
       const ang = Math.atan2(dx, dz);
       let diff = Math.abs(ang - this.fYaw) % (Math.PI * 2);
       if (diff > Math.PI) diff = Math.PI * 2 - diff;
-      if (diff > THREE.MathUtils.degToRad(70)) return false;
+      if (diff > THREE.MathUtils.degToRad(this.fMode === 'hunt' ? 115 : 70)) return false;
     }
     return this.lineClear(this.froggy.x, this.froggy.y, this.pos.x, this.pos.y);
   }
@@ -1737,7 +1838,8 @@ export class NightRoad3D extends Phaser.Scene {
     if (this.phase === 'chase' && this.fMode !== 'wait') {
       // Turn and look at him while he is looking for you, close enough, and
       // he sees you looking.
-      if ((this.fMode === 'search' || this.fMode === 'patrol' || this.fMode === 'investigate') && watched && toYou < (this.crouched ? 9 : 24) && !(this.crouched && this.underBoughs()) && this.lineClear(this.froggy.x, this.froggy.y, this.pos.x, this.pos.y)) {
+      // (only if he can see you too: in front of him, in range, not hidden)
+      if ((this.fMode === 'search' || this.fMode === 'patrol' || this.fMode === 'investigate') && watched && toYou < (this.crouched ? 9 : 24) && this.sees()) {
         this.fMode = 'hunt';
         this.lostT = 0;
         this.lastKnown.copy(this.pos);
@@ -1786,7 +1888,7 @@ export class NightRoad3D extends Phaser.Scene {
           if (this.searchT > 12) {
             // He goes back to the road between you and the doors, and walks it.
             this.fMode = 'patrol';
-            this.wander.set(0, Math.max(HOTEL_Z + 14, Math.min(this.lastKnown.y, this.pos.y) - 12));
+            this.wander.set(0, Math.max(HOTEL_Z + 14, this.lastKnown.y - 12));
           }
           break;
         case 'patrol':
@@ -1806,7 +1908,9 @@ export class NightRoad3D extends Phaser.Scene {
             break;
           }
           if (this.froggy.distanceTo(this.wander) < 1.5) {
-            this.wander.set((Math.random() - 0.5) * 6, Phaser.Math.Clamp(this.pos.y + (Math.random() - 0.4) * 30, HOTEL_Z + 10, BACK_Z - 2));
+            // up and down the road between where he last had you and the
+            // hotel -- where he knows you are going -- not where you are
+            this.wander.set((Math.random() - 0.5) * 6, Phaser.Math.Clamp(this.lastKnown.y - Math.random() * 30 + 6, HOTEL_Z + 10, BACK_Z - 2));
           }
           break;
       }
@@ -1854,7 +1958,8 @@ export class NightRoad3D extends Phaser.Scene {
     }
     // HE LOOKS BACK.  Still, or creeping, or caught in your eye while he goes
     // about the woods, his body comes round to face you -- not snapped, turned.
-    const faceYou = this.phase === 'creep' || this.phase === 'reveal' || this.fMode === 'wait' || (watched && this.fSpeed < 3.6);
+    // (and only if he can SEE you: hidden, you can stare at him all you like)
+    const faceYou = this.phase === 'creep' || this.phase === 'reveal' || this.fMode === 'wait' || (watched && this.seen && this.fSpeed < 3.6);
     if (faceYou) {
       const want = Math.atan2(this.pos.x - this.froggy.x, this.pos.y - this.froggy.y);
       let diff = want - this.fYaw;
@@ -1879,7 +1984,7 @@ export class NightRoad3D extends Phaser.Scene {
     const cam = this.stage?.camera.position ?? null;
     // his eyes and his face are on you whenever he is after you, or you are
     // looking at him
-    this.monster.lookAt(cam && (hunting || staring || creeping || watched) ? cam : null);
+    this.monster.lookAt(cam && (staring || creeping || ((hunting || watched) && this.seen)) ? cam : null);
     this.monster.update(dt, {
       speed: this.fSpeed,
       maw: hunting ? 1 : revealing ? 0.25 + rise * 0.55 : staring ? 0.15 : creeping ? 0.08 : 0.3,
@@ -1892,7 +1997,7 @@ export class NightRoad3D extends Phaser.Scene {
       crouch: creeping ? 0.75 : revealing ? 0.75 * (1 - rise) : 0,
       hunch: creeping || revealing ? 1 : 0,
       menace: revealing ? rise : this.phase === 'chase' && this.fMode === 'wait' ? 1 : 0,
-      faceTo: cam && (staring || watched) ? cam : null,
+      faceTo: cam && (staring || (watched && this.seen)) ? cam : null,
       faceK: 0.8,
       reachAt: hunting && this.pos.distanceTo(this.froggy) < 9 ? cam : null,
       viewer: cam,
@@ -1985,12 +2090,25 @@ export class NightRoad3D extends Phaser.Scene {
       if (line && line.text && this.clock >= line.from) {
         const over = touchControls.overBottom();
         const room = GAME_W - 24 - over.left - over.right;
-        const scale = line.red ? 2 : line.text.length * 6 > room ? Math.max(0.5, room / (line.text.length * 6)) : 1;
-        drawPixelText(ctx, line.text, GAME_W / 2 + (over.left - over.right) / 2, line.red ? GAME_H * 0.4 : GAME_H - 30, {
-          scale,
-          color: line.red ? '#ff4a4a' : '#e8e2cd',
-          center: true,
-        });
+        const cx = GAME_W / 2 + (over.left - over.right) / 2;
+        if (line.red) {
+          drawPixelText(ctx, line.text, cx, GAME_H * 0.4, { scale: 2, color: '#ff4a4a', center: true });
+        } else {
+          // too long for one line: wrapped onto as many as it needs, at full size
+          const per = Math.max(10, Math.floor(room / 6));
+          const rows: string[] = [];
+          for (const word of line.text.split(' ')) {
+            const last = rows[rows.length - 1];
+            if (last !== undefined && (last + ' ' + word).length <= per) rows[rows.length - 1] = last + ' ' + word;
+            else rows.push(word);
+          }
+          rows.forEach((r, i) => {
+            const y = GAME_H - 30 - (rows.length - 1 - i) * 9;
+            ctx.fillStyle = 'rgba(0,0,0,0.45)';
+            ctx.fillRect(cx - (r.length * 6) / 2 - 2, y - 2, r.length * 6 + 3, 11);
+            drawPixelText(ctx, r, cx, y, { scale: 1, color: '#e8e2cd', center: true });
+          });
+        }
       }
       if (this.crouched && this.phase !== 'safe') {
         drawPixelText(ctx, 'CROUCHED', GAME_W / 2, GAME_H - 12, { scale: 1, color: '#7a8494', center: true, alpha: 0.7 });
@@ -2003,13 +2121,21 @@ export class NightRoad3D extends Phaser.Scene {
           alpha: 0.8,
         });
       }
-      if (this.phase === 'chase' && this.phaseT > 1.2 && this.phaseT < 7) {
-        drawPixelText(ctx, isTouch() ? 'HOLD RUN - JUMP THE RAILS - CROUCH TO HIDE' : 'SHIFT RUN - SPACE JUMPS THE RAILS - C CROUCH', GAME_W / 2, GAME_H - 44, {
-          scale: 1,
-          color: '#7a8494',
-          center: true,
-          alpha: 0.8,
-        });
+      // what to press, only when it is the thing to do (under the objective,
+      // clear of the subtitles at the bottom)
+      if (this.phase === 'chase') {
+        const touch = isTouch();
+        let hint = '';
+        if (this.phaseT > 1.2 && this.phaseT < 5.5 && !this.overRail) hint = touch ? 'HOLD RUN TO RUN' : 'HOLD SHIFT TO RUN';
+        if (this.railHint > 0) hint = touch ? 'TAP JUMP TO JUMP OVER THE RAIL' : 'PRESS SPACE TO JUMP OVER THE RAIL';
+        if (this.hideHintT > 0) hint = touch ? 'HIDE BEHIND TREES AND BUSHES - TAP CROUCH' : 'HIDE BEHIND TREES AND BUSHES - C TO CROUCH';
+        if (hint) {
+          const a = this.hideHintT > 0 ? Math.min(1, this.hideHintT, 7 - this.hideHintT + 0.2) : 1;
+          const y = 44;
+          ctx.fillStyle = `rgba(0,0,0,${0.55 * a})`;
+          ctx.fillRect(GAME_W / 2 - (hint.length * 6) / 2 - 4, y - 3, hint.length * 6 + 7, 13);
+          drawPixelText(ctx, hint, GAME_W / 2, y, { scale: 1, color: '#f0d890', center: true, alpha: a });
+        }
       }
     });
   }

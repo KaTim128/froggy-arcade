@@ -154,13 +154,12 @@ export class ExteriorDay extends Phaser.Scene {
 
   private time0: 'day' | 'evening' | 'midnight' = 'day';
 
-  /** The arcade shut: shutters down over the doors, the sign dark, CLOSED. */
+  /**
+   * The arcade shut: the glass doors chained through their handles (see
+   * paintExterior), the sign dark, and CLOSED over the door.
+   */
   private paintClosed(door: { x: number; y: number; w: number; h: number }): void {
-    // (part of the building: the player walks in FRONT of it -- under 50,
-    // where `depthFor` puts anyone stood on the pavement)
-    this.add.rectangle(door.x, door.y, door.w, door.h, 0x3a3e44).setOrigin(0, 0).setDepth(45);
-    for (let y = door.y + 3; y < door.y + door.h; y += 4) this.add.rectangle(door.x, y, door.w, 1, 0x26282e).setOrigin(0, 0).setDepth(45);
-    // (hung above the shutter, where the door's prompt does not cover it)
+    // (hung above the doors, where the door's prompt does not cover it)
     this.add.rectangle(door.x + door.w / 2, door.y - 7, 42, 10, 0x14100c).setDepth(46).setStrokeStyle(1, 0xc31f2e);
     centerText(this, door.x + door.w / 2, door.y - 7, 'CLOSED', 0xc31f2e).setDepth(47);
   }
@@ -170,6 +169,10 @@ export class ExteriorDay extends Phaser.Scene {
    * stands on the pavement and thinks, three thoughts, and does not move
    * until they have.
    */
+  /**
+   * Nightfall, thought aloud: each line holds for a few seconds, and a click
+   * or a tap on the words (or SPACE / ENTER) moves on to the next at once.
+   */
   private midnightThoughts(): void {
     this.locked = true;
     const lines = [
@@ -177,16 +180,36 @@ export class ExteriorDay extends Phaser.Scene {
       'I finally have enough to afford a decent place to rest. Maybe I should try that hotel down the street.',
       'I can get back to grabbing arcade prizes tomorrow.',
     ];
-    lines.forEach((l, i) => {
-      this.time.delayedCall(800 + i * 3200, () => {
-        this.mutter.setText(l).setVisible(true).setAlpha(1).setMaxWidth(290);
+    let i = -1;
+    let timer: Phaser.Time.TimerEvent | null = null;
+    // the text area: the bottom of the screen, where the line is written
+    const zone = this.add.zone(0, GAME_H - 64, GAME_W, 64).setOrigin(0, 0).setScrollFactor(0).setDepth(900).setInteractive({ useHandCursor: true });
+    const kb = this.input.keyboard;
+    const next = (): void => {
+      timer?.remove(false);
+      timer = null;
+      if (i >= lines.length) return;
+      i++;
+      if (i < lines.length) {
+        this.mutter.setText(lines[i]).setVisible(true).setAlpha(1).setMaxWidth(290);
         this.tweens.killTweensOf(this.mutter);
-      });
-    });
-    this.time.delayedCall(800 + lines.length * 3200, () => {
+        timer = this.time.delayedCall(3200, next);
+        return;
+      }
+      zone.destroy();
+      kb?.off('keydown-SPACE', next);
+      kb?.off('keydown-ENTER', next);
       this.tweens.add({ targets: this.mutter, alpha: 0, duration: 600 });
       this.locked = false;
+    };
+    zone.on('pointerdown', next);
+    kb?.on('keydown-SPACE', next);
+    kb?.on('keydown-ENTER', next);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      kb?.off('keydown-SPACE', next);
+      kb?.off('keydown-ENTER', next);
     });
+    timer = this.time.delayedCall(800, next);
   }
 
   /**

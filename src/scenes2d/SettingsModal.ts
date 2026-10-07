@@ -15,7 +15,7 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
-import { store } from '../core/state';
+import { LOOK_SENS_MAX, LOOK_SENS_MIN, store } from '../core/state';
 import { FONT_ADVANCE } from '../render/pixelFont';
 import { BINDINGS } from '../core/input';
 import { button, centerText, confirmDialog, forfeitLines, text } from '../core/ui';
@@ -156,7 +156,7 @@ export class SettingsModal extends Phaser.Scene {
   private renderPlaceControls(): void {
     const mg = this.from === 'Minigame' ? (pausedScene() as MinigameScene | null) : null;
     const rows: ControlRow[] = mg?.controlRows() ?? roomControls(this.from);
-    const max = 10;
+    const max = 9;
     const shown = rows.slice(0, max);
     let y = 50;
     const keyW = Math.min(118, Math.max(...shown.map((r) => r[0].length), 4) * FONT_ADVANCE + 6);
@@ -167,6 +167,7 @@ export class SettingsModal extends Phaser.Scene {
       y += 9;
     }
     if (!rows.length) this.body.add(centerText(this, GAME_W / 2, 80, isTouch() ? 'TAP WHAT YOU SEE' : 'CLICK WHAT YOU SEE', PALETTE.cream));
+    this.lookSlider(143);
   }
 
   /**
@@ -230,9 +231,15 @@ export class SettingsModal extends Phaser.Scene {
     );
   }
 
-  private slider(y: number, key: 'master' | 'music' | 'sfx'): void {
-    const x0 = 116;
-    const w = 100;
+  private slider(
+    y: number,
+    key: 'master' | 'music' | 'sfx' | 'lookSens',
+    range: { min: number; max: number; x0?: number; w?: number; suffix?: string } = { min: 0, max: 100 },
+  ): void {
+    const x0 = range.x0 ?? 116;
+    const w = range.w ?? 100;
+    const { min, max } = range;
+    const k = (v: number) => (v - min) / (max - min);
 
     const track = this.add.rectangle(x0, y, w, 3, PALETTE.slate).setOrigin(0, 0.5);
     const fill = this.add.rectangle(x0, y, 0, 3, PALETTE.neon).setOrigin(0, 0.5);
@@ -241,13 +248,13 @@ export class SettingsModal extends Phaser.Scene {
 
     const refresh = () => {
       const v = store.get().settings[key];
-      fill.width = (v / 100) * w;
-      knob.x = x0 + (v / 100) * w;
-      val.setText(String(v).padStart(3, ' '));
+      fill.width = k(v) * w;
+      knob.x = x0 + k(v) * w;
+      val.setText(String(v).padStart(3, ' ') + (range.suffix ?? ''));
     };
 
     const setFromX = (px: number) => {
-      const v = Math.round(Math.max(0, Math.min(1, (px - x0) / w)) * 100);
+      const v = Math.round(min + Math.max(0, Math.min(1, (px - x0) / w)) * (max - min));
       store.setSettings({ [key]: v });
       audio.applyVolumes(); // PRD AU-6: live
       refresh();
@@ -272,7 +279,7 @@ export class SettingsModal extends Phaser.Scene {
     // Eleven rows at 9px from y=46 end at 136, clearing BACK at 151.  The
     // longest action reaches x=200 in the 6px-advance font, so the keycaps start
     // at 204 and the widest row (W A S D) still ends inside the panel.
-    let y = 46;
+    let y = 42;
     for (const b of BINDINGS) {
       this.body.add(text(this, 32, y, b.action, PALETTE.cream, 8));
       let kx = 204;
@@ -285,5 +292,15 @@ export class SettingsModal extends Phaser.Scene {
       }
       y += 9;
     }
+    this.lookSlider(147);
+  }
+
+  /**
+   * LOOK SENSITIVITY: how fast the camera turns in the 3D rooms, mouse and
+   * touch alike.  100% is as each room was tuned.
+   */
+  private lookSlider(y: number): void {
+    this.body.add(text(this, 32, y - 4, 'LOOK SENSITIVITY', PALETTE.cream, 8));
+    this.slider(y, 'lookSens', { min: LOOK_SENS_MIN, max: LOOK_SENS_MAX, x0: 140, w: 92, suffix: '%' });
   }
 }
