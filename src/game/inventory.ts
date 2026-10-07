@@ -34,13 +34,13 @@ export interface ItemDef {
 
 /** The left crane's animals.  Cheap, soft, and worth very little to anyone. */
 export const PLUSHIES: ItemDef[] = [
-  // What the man pays: the Froggy is the one he wants, at 50; the rest 20 to 30.
+  // What the man pays: 20 for any plush -- and 50 for a Froggy, the one he wants.
   { id: 'plush:frog', name: 'FROGGY PLUSH', kind: 'plush', color: 0x46c46e, value: 50, thought: 'A little frog. It looks happier than the real one.' },
   { id: 'plush:bear', name: 'BEAR PLUSH', kind: 'plush', color: 0xa8743e, value: 20, thought: 'Soft. Somebody will want this more than I do.' },
-  { id: 'plush:bunny', name: 'BUNNY PLUSH', kind: 'plush', color: 0xf2e6d8, value: 25, thought: 'One ear is longer than the other. Still cute.' },
-  { id: 'plush:duck', name: 'DUCK PLUSH', kind: 'plush', color: 0xffc830, value: 30, thought: 'It squeaks if you squeeze it. I keep squeezing it.' },
+  { id: 'plush:bunny', name: 'BUNNY PLUSH', kind: 'plush', color: 0xf2e6d8, value: 20, thought: 'One ear is longer than the other. Still cute.' },
+  { id: 'plush:duck', name: 'DUCK PLUSH', kind: 'plush', color: 0xffc830, value: 20, thought: 'It squeaks if you squeeze it. I keep squeezing it.' },
   { id: 'plush:cat', name: 'CAT PLUSH', kind: 'plush', color: 0x8a8f99, value: 20, thought: 'It has button eyes. One is hanging by a thread.' },
-  { id: 'plush:owl', name: 'OWL PLUSH', kind: 'plush', color: 0x7b4bd8, value: 25, thought: 'A purple owl. Not a colour owls come in.' },
+  { id: 'plush:owl', name: 'OWL PLUSH', kind: 'plush', color: 0x7b4bd8, value: 20, thought: 'A purple owl. Not a colour owls come in.' },
 ];
 
 /** What the right crane's capsules sometimes hold.  He pays well for these. */
