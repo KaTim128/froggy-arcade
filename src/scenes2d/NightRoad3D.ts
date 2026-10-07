@@ -18,10 +18,12 @@
  *   he HEARS you: running, a branch snapping, water, gravel, the crows you put
  *     up out of the trees -- each has its own reach
  *   three seconds without sight of you and he stops chasing and starts looking
- *   the guard rails are solid for you -- no climbing, no jumping them; the
- *     gaps in them (the bus stop, the footpaths) are the ways into the woods --
- *     and a hop for him, which costs him; the ponds and the river are slow and
- *     loud for both
+ *   the guard rails stop you walking -- a jump takes you over, and the gaps
+ *     (the bus stop, the footpaths) let you through -- and they are a hop for
+ *     him, which costs him; the ponds and the river are slow, and splash, for
+ *     both
+ *   push through the low branches and they rustle: the deeper in and the
+ *     faster, the louder, and a loud rustle carries to him
  *   crouch (C) and you are slow, near silent and hard to pick out
  *   he follows your footsteps, and when you turn and look at him he looks
  *     back
@@ -134,6 +136,8 @@ interface Circle {
   x: number;
   z: number;
   r: number;
+  /** How far its branches reach out at a man's height (0: bare, or too high). */
+  leaf?: number;
 }
 
 /** Same woods every night: a seeded generator, so a retry is the same road. */
@@ -193,6 +197,13 @@ export class NightRoad3D extends Phaser.Scene {
   private moving = false;
   private running = false;
   private crouched = false;
+  private wasWet = false;
+  /** (for the test hooks: how many of each the scene has made) */
+  private counts = { rustle: 0, splash: 0, wade: 0 };
+  private rustleT = 0;
+  private ripples: { m: THREE.Mesh; t: number }[] = [];
+  private rippleMat: THREE.MeshBasicMaterial | null = null;
+  private twinkle: THREE.PointsMaterial | null = null;
   private eye = EYE;
   /** The camera being turned for you: from, to, and how far along. */
   private autoTurn: { from: number; to: number; t: number } | null = null;
@@ -270,6 +281,10 @@ export class NightRoad3D extends Phaser.Scene {
     this.passBy = null;
     this.waterMats = [];
     this.crouched = false;
+    this.wasWet = false;
+    this.counts = { rustle: 0, splash: 0, wade: 0 };
+    this.rustleT = 0;
+    this.ripples = [];
     this.eye = EYE;
     this.autoTurn = null;
     this.heardSnap = false;
@@ -377,23 +392,127 @@ export class NightRoad3D extends Phaser.Scene {
     st.camera.add(fill);
     S.add(st.camera);
 
-    // ---- the sky: a moon and stars, out past the fog
-    const moonDisc = new THREE.Mesh(
-      new THREE.CircleGeometry(9, 24),
-      new THREE.MeshBasicMaterial({ color: 0xe8ecd8, fog: false }),
-    );
-    moonDisc.position.set(-120, 120, -300);
-    moonDisc.lookAt(0, 0, 0);
-    S.add(moonDisc);
-    const starPos: number[] = [];
-    for (let i = 0; i < 420; i++) {
-      const a = R() * Math.PI * 2;
-      const e = 0.12 + R() * 1.3;
-      starPos.push(Math.cos(a) * Math.cos(e) * 380, Math.sin(e) * 380, Math.sin(a) * Math.cos(e) * 380);
+    // ---- THE SKY.  A dome, out past the fog: near black overhead, a deep
+    // navy at the horizon with the faint glow of the town in it, and paler
+    // round the moon.  Stars of different sizes and colours, the brightest
+    // twinkling, and the faint band of the Milky Way across it.
+    const moonDir = new THREE.Vector3(-120, 120, -300).normalize();
+    const domeGeo = new THREE.SphereGeometry(400, 40, 20);
+    const dc: number[] = [];
+    const zen = new THREE.Color(0x020309);
+    const mid = new THREE.Color(0x060b18);
+    const hor = new THREE.Color(0x15223a);
+    const glow = new THREE.Color(0x24345a);
+    const v = new THREE.Vector3();
+    const cc = new THREE.Color();
+    const pos = domeGeo.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).normalize();
+      const up = Math.max(0, v.y);
+      cc.copy(hor).lerp(mid, Math.min(1, up / 0.25)).lerp(zen, Math.max(0, (up - 0.25) / 0.75));
+      if (v.y < 0) cc.copy(hor).multiplyScalar(0.6);
+      const near = Math.max(0, v.dot(moonDir));
+      cc.lerp(glow, Math.pow(near, 14) * 0.85);
+      dc.push(cc.r, cc.g, cc.b);
     }
-    const stars = new THREE.BufferGeometry();
-    stars.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
-    S.add(new THREE.Points(stars, new THREE.PointsMaterial({ color: 0xc8d0e8, size: 1.4, sizeAttenuation: false, fog: false })));
+    domeGeo.setAttribute('color', new THREE.Float32BufferAttribute(dc, 3));
+    const dome = new THREE.Mesh(domeGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+    dome.renderOrder = -10;
+    S.add(dome);
+
+    const starLayer = (n: number, size: number, bright: boolean, band: boolean): THREE.PointsMaterial => {
+      const p2: number[] = [];
+      const c2: number[] = [];
+      for (let i = 0; i < n; i++) {
+        let a = R() * Math.PI * 2;
+        let e = 0.1 + Math.asin(R()) * 0.95;
+        if (band) {
+          // the Milky Way: a band tipped across the sky
+          a = R() * Math.PI * 2;
+          e = 0.35 + Math.sin(a * 1.0 + 0.6) * 0.45 + (R() - 0.5) * 0.18;
+          if (e < 0.08) continue;
+        }
+        p2.push(Math.cos(a) * Math.cos(e) * 380, Math.sin(e) * 380, Math.sin(a) * Math.cos(e) * 380);
+        const tint = R();
+        cc.setHex(tint < 0.15 ? 0xffd8b0 : tint < 0.35 ? 0xb8ccff : 0xe8ecf8).multiplyScalar(band ? 0.35 + R() * 0.2 : bright ? 1 : 0.45 + R() * 0.45);
+        c2.push(cc.r, cc.g, cc.b);
+      }
+      const g2 = new THREE.BufferGeometry();
+      g2.setAttribute('position', new THREE.Float32BufferAttribute(p2, 3));
+      g2.setAttribute('color', new THREE.Float32BufferAttribute(c2, 3));
+      const mat = new THREE.PointsMaterial({ size, sizeAttenuation: false, vertexColors: true, fog: false, transparent: true, depthWrite: false });
+      const pts = new THREE.Points(g2, mat);
+      pts.renderOrder = -9;
+      S.add(pts);
+      return mat;
+    };
+    starLayer(1400, 1, false, true);
+    starLayer(700, 1, false, false);
+    this.twinkle = starLayer(70, 2, true, false);
+
+    // ---- THE MOON: a shaded disc with its seas and craters, and a soft
+    // glow round it that thins out into the sky
+    const moonTex = canvasTex(64, 64, (g) => {
+      const grd = g.createRadialGradient(26, 26, 4, 32, 32, 30);
+      grd.addColorStop(0, '#f6f4e6');
+      grd.addColorStop(0.7, '#d8d6c6');
+      grd.addColorStop(1, '#a8a89c');
+      g.fillStyle = grd;
+      g.beginPath();
+      g.arc(32, 32, 30, 0, Math.PI * 2);
+      g.fill();
+      // the seas
+      g.fillStyle = 'rgba(120,124,128,0.45)';
+      for (const [x, y, rx, ry] of [[24, 22, 9, 6], [38, 30, 7, 9], [30, 42, 10, 5], [44, 20, 4, 4]]) {
+        g.beginPath();
+        g.ellipse(x, y, rx, ry, 0.4, 0, Math.PI * 2);
+        g.fill();
+      }
+      // craters: a dark ring and a lit lip
+      for (let k = 0; k < 14; k++) {
+        const x = 10 + R() * 44;
+        const y = 10 + R() * 44;
+        if (Math.hypot(x - 32, y - 32) > 26) continue;
+        const r = 1 + R() * 2.4;
+        g.fillStyle = 'rgba(110,112,112,0.55)';
+        g.beginPath();
+        g.arc(x, y, r, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = 'rgba(255,255,245,0.5)';
+        g.fillRect(x + r * 0.3, y + r * 0.3, 1, 1);
+      }
+      // the terminator: a little shadow down one side
+      const sh = g.createLinearGradient(58, 0, 40, 0);
+      sh.addColorStop(0, 'rgba(10,14,24,0.55)');
+      sh.addColorStop(1, 'rgba(10,14,24,0)');
+      g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = sh;
+      g.fillRect(0, 0, 64, 64);
+    });
+    moonTex.magFilter = THREE.LinearFilter;
+    const moonDisc = new THREE.Mesh(
+      new THREE.PlaneGeometry(18, 18),
+      new THREE.MeshBasicMaterial({ map: moonTex, transparent: true, fog: false, depthWrite: false }),
+    );
+    moonDisc.position.copy(moonDir).multiplyScalar(330);
+    moonDisc.lookAt(0, 0, 0);
+    moonDisc.renderOrder = -7;
+    S.add(moonDisc);
+    const haloTex = canvasTex(64, 64, (g) => {
+      const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      grd.addColorStop(0, 'rgba(200,214,255,0.55)');
+      grd.addColorStop(0.25, 'rgba(150,170,230,0.22)');
+      grd.addColorStop(0.6, 'rgba(90,110,170,0.07)');
+      grd.addColorStop(1, 'rgba(60,80,140,0)');
+      g.fillStyle = grd;
+      g.fillRect(0, 0, 64, 64);
+    });
+    haloTex.magFilter = THREE.LinearFilter;
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, blending: THREE.AdditiveBlending, fog: false, depthWrite: false, transparent: true }));
+    halo.position.copy(moonDir).multiplyScalar(335);
+    halo.scale.set(90, 90, 1);
+    halo.renderOrder = -8;
+    S.add(halo);
 
     // ---- the ground: grass gone to seed, bare earth, pine needles
     const groundTex = canvasTex(128, 128, (g) => {
@@ -705,7 +824,12 @@ export class NightRoad3D extends Phaser.Scene {
     const cones = new THREE.InstancedMesh(coneGeo, new THREE.MeshLambertMaterial({ map: needles }), spots.length * TIERS);
     const limbGeo = new THREE.CylinderGeometry(0.02, 0.05, 1, 4);
     limbGeo.translate(0, 0.5, 0);
-    const limbs = new THREE.InstancedMesh(limbGeo, new THREE.MeshLambertMaterial({ map: bark }), 240);
+    const limbs = new THREE.InstancedMesh(limbGeo, new THREE.MeshLambertMaterial({ map: bark }), 1600);
+    // the bare ones: a trunk that tapers to a snapped top, weathered grey
+    const snagGeo = new THREE.CylinderGeometry(0.28, 1, 1, 6);
+    snagGeo.translate(0, 0.5, 0);
+    const snags = new THREE.InstancedMesh(snagGeo, new THREE.MeshLambertMaterial({ map: bark }), spots.length);
+    let ns = 0;
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const sc = new THREE.Vector3();
@@ -717,8 +841,17 @@ export class NightRoad3D extends Phaser.Scene {
       const h = 7 + R() * 7;
       const dead = Math.abs(t.x) < RAIL_X + 5 && R() < 0.25;
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), R() * 6.28);
-      m.compose(p.set(t.x, 0, t.z), q, sc.set(t.r, dead ? h * 0.7 : h * 0.5, t.r));
+      if (dead) {
+        // a little lean, and grey with weather
+        const lean = new THREE.Quaternion().setFromEuler(new THREE.Euler((R() - 0.5) * 0.12, R() * 6.28, (R() - 0.5) * 0.12));
+        m.compose(p.set(t.x, 0, t.z), lean, sc.set(t.r * 1.1, h * 0.75, t.r * 1.1));
+        snags.setMatrixAt(ns, m);
+        snags.setColorAt(ns, col.setHSL(0.08, 0.06, 0.42 + R() * 0.12));
+        ns++;
+        m.compose(p.set(t.x, -50, t.z), q, sc.set(0.001, 0.001, 0.001));
+      } else m.compose(p.set(t.x, 0, t.z), q, sc.set(t.r, h * 0.5, t.r));
       trunks.setMatrixAt(i, m);
+      let reach = 0;
       // one tree's green, a little lighter towards the top
       const hue = 0.33 + (R() - 0.5) * 0.06;
       const light = 0.06 + R() * 0.04;
@@ -737,13 +870,39 @@ export class NightRoad3D extends Phaser.Scene {
         cones.setMatrixAt(c, m);
         cones.setColorAt(c, col.setHSL(hue, 0.38, light + k * 0.01));
         c++;
+        // how far this tier's boughs stand out from the trunk at hip, chest
+        // and head height
+        const b0 = h * base;
+        const th = h * (big && k < 2 ? 0.46 : 0.4);
+        for (const y of [0.6, 1.1, 1.6]) {
+          if (y >= b0 && y <= b0 + th) reach = Math.max(reach, w * (1 - (y - b0) / th));
+        }
       }
+      t.leaf = reach;
       if (dead) {
-        // bare limbs off the trunk, up at an angle
-        for (let k = 0; k < 4 && nl < 240; k++) {
-          const lq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.9 + R() * 0.5, R() * 6.28, 0, 'YXZ'));
-          m.compose(p.set(t.x, h * (0.3 + k * 0.1), t.z), lq, sc.set(1, 1.2 + R() * 1.4, 1));
+        // Bare limbs all the way up -- longer low down, shorter towards the
+        // snapped top, angled up as pine limbs are -- and on the bigger ones a
+        // fork part way along, so the outline is a tangle and not a hat-stand.
+        const n = 7 + Math.floor(R() * 5);
+        for (let k = 0; k < n && nl < 1590; k++) {
+          const f = 0.2 + (k / n) * 0.7;
+          const yaw = R() * 6.28;
+          const tilt = 0.7 + R() * 0.6 + f * 0.3;
+          const len = (2.6 - f * 2) * (0.7 + R() * 0.5);
+          const lq = new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt, yaw, 0, 'YXZ'));
+          const y0 = h * 0.75 * f;
+          m.compose(p.set(t.x, y0, t.z), lq, sc.set(1, len, 1));
           limbs.setMatrixAt(nl++, m);
+          if (len > 1.4) {
+            // the fork: from halfway out, off to one side and up
+            const dir = new THREE.Vector3(0, 1, 0).applyQuaternion(lq);
+            const mx = t.x + dir.x * len * 0.5;
+            const my = y0 + dir.y * len * 0.5;
+            const mz = t.z + dir.z * len * 0.5;
+            const fq = new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt - 0.5, yaw + (R() < 0.5 ? -0.7 : 0.7), 0, 'YXZ'));
+            m.compose(p.set(mx, my, mz), fq, sc.set(0.7, len * 0.45, 0.7));
+            limbs.setMatrixAt(nl++, m);
+          }
         }
       }
       if (Math.abs(t.x) <= WORLD_X + 0.5) this.addTree(t);
@@ -751,7 +910,8 @@ export class NightRoad3D extends Phaser.Scene {
     trunks.count = spots.length;
     cones.count = c;
     limbs.count = nl;
-    S.add(trunks, cones, limbs);
+    snags.count = ns;
+    S.add(trunks, cones, limbs, snags);
 
     // ---- the scrub: low, dark, rounded bushes between the trunks
     const bushGeo = new THREE.IcosahedronGeometry(1, 1);
@@ -1068,6 +1228,8 @@ export class NightRoad3D extends Phaser.Scene {
     this.clock += dt;
     this.phaseT += dt;
     for (const t of this.waterMats) t.offset.set(this.clock * 0.012, Math.sin(this.clock * 0.3) * 0.02);
+    this.stepRipples(dt);
+    if (this.twinkle) this.twinkle.opacity = 0.7 + Math.sin(this.clock * 2.3) * 0.2 + Math.sin(this.clock * 5.1) * 0.1;
     if (this.busLight && this.busTube) {
       // the tube is not well: mostly on, now and then a stutter
       const on = Math.sin(this.clock * 23) > -0.92 || Math.sin(this.clock * 1.7) < 0.6;
@@ -1124,7 +1286,7 @@ export class NightRoad3D extends Phaser.Scene {
     this.eye += (eyeWant - this.eye) * Math.min(1, dt * 8);
     if (this.phase === 'safe') return;
 
-    // the jump: a log, out of the water -- never a rail
+    // the jump: over a rail, a log, out of the water
     const grounded = this.y <= 0;
     if (grounded && !this.crouched && this.jumpKeys.some((k) => Phaser.Input.Keyboard.JustDown(k))) {
       this.vy = this.inWater(this.pos.x, this.pos.y) ? JUMP_V * 0.7 : JUMP_V;
@@ -1161,19 +1323,22 @@ export class NightRoad3D extends Phaser.Scene {
     const was = this.pos.x;
     const nx = this.pos.x + dx;
     const nz = this.pos.y + dz;
-    // THE RAILS ARE SOLID: at any height, jumping or not.  Only a gap lets you
-    // through.
+    // THE RAILS: walking, you cannot get past one -- jumping, you go over the
+    // top of it, and a gap lets you through.
+    const over = this.y >= RAIL_H - 0.08;
     const crosses = Math.sign(Math.abs(this.pos.x) - RAIL_X) !== Math.sign(Math.abs(nx) - RAIL_X);
-    if (!(crosses && this.railBlocks(nx, this.pos.y)) && Math.abs(nx) < WORLD_X) this.pos.x = nx;
+    if (!(crosses && !over && this.railBlocks(nx, this.pos.y)) && Math.abs(nx) < WORLD_X) this.pos.x = nx;
     if (nz < BACK_Z && nz > HOTEL_Z - 1.4 && !(nz < HOTEL_Z + 0.3 && Math.abs(this.pos.x) > SAFE_HALF + 0.2)) this.pos.y = nz;
     // (walking along the line from a gap into the rail, you stay your side)
-    if (this.railBlocks(this.pos.x, this.pos.y)) {
+    if (!over && this.railBlocks(this.pos.x, this.pos.y)) {
       const inside = Math.abs(was) < RAIL_X;
       if (inside && Math.abs(this.pos.x) > RAIL_X - PLAYER_R) this.pos.x = Math.sign(this.pos.x) * (RAIL_X - PLAYER_R);
       if (!inside && Math.abs(this.pos.x) < RAIL_X + PLAYER_R) this.pos.x = Math.sign(this.pos.x) * (RAIL_X + PLAYER_R);
     }
     this.pushOutOfTrees(this.pos, PLAYER_R);
     this.pushOutOfBoxes(this.pos, PLAYER_R);
+    this.touchWater();
+    this.brushLeaves(dt);
 
     this.bobT += dt * (this.running ? 1.5 : this.crouched ? 0.6 : 1);
     this.stepT += dt;
@@ -1181,6 +1346,77 @@ export class NightRoad3D extends Phaser.Scene {
       this.stepT = 0;
       this.footstep(wet);
     }
+  }
+
+  /**
+   * INTO AND OUT OF THE WATER.  Stepping into a pond or the river is a
+   * splash, with rings spreading from your feet; every step in it is a wade
+   * (see footstep); climbing out, the water runs off you.  All of it carries.
+   */
+  private touchWater(): void {
+    const wet = this.y === 0 && this.inWater(this.pos.x, this.pos.y);
+    if (wet && !this.wasWet) {
+      audio.sfx('splash', this.running ? 0.75 : this.crouched ? 0.35 : 0.55);
+      this.counts.splash++;
+      this.noise(this.running ? 20 : this.crouched ? 7 : 13, this.pos.x, this.pos.y);
+      this.ripple();
+    } else if (!wet && this.wasWet && this.y === 0) {
+      audio.sfx('wade', 0.25);
+    }
+    this.wasWet = wet;
+  }
+
+  /** A ring spreading out on the water from where you stand. */
+  private ripple(): void {
+    const S = this.stage?.scene;
+    if (!S) return;
+    if (!this.rippleMat) {
+      this.rippleMat = decal(new THREE.MeshBasicMaterial({ color: 0x9ab8d8, transparent: true, opacity: 0.5, depthWrite: false }), 5);
+    }
+    const m = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 24), this.rippleMat.clone());
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(this.pos.x, 0.012, this.pos.y);
+    m.scale.setScalar(0.2);
+    S.add(m);
+    this.ripples.push({ m, t: 0 });
+  }
+
+  private stepRipples(dt: number): void {
+    this.ripples = this.ripples.filter((r) => {
+      r.t += dt;
+      const k = r.t / 1.4;
+      r.m.scale.setScalar(0.2 + k * 1.6);
+      (r.m.material as THREE.MeshBasicMaterial).opacity = 0.5 * (1 - k);
+      if (k >= 1) {
+        r.m.removeFromParent();
+        r.m.geometry.dispose();
+        (r.m.material as THREE.Material).dispose();
+        return false;
+      }
+      return true;
+    });
+  }
+
+  /**
+   * THROUGH THE BRANCHES.  How deep you are into a tree's boughs (0 at their
+   * tips, 1 against the trunk) and how fast you are going decide the rustle:
+   * brushing the tips is a soft shush now and then; pushing through the
+   * middle of a low pine at a run is loud and quick, and it carries.
+   */
+  private brushLeaves(dt: number): void {
+    let deep = 0;
+    for (const t of this.treesNear(this.pos.x, this.pos.y)) {
+      if (!t.leaf) continue;
+      const d = Math.hypot(this.pos.x - t.x, this.pos.y - t.z) - PLAYER_R;
+      if (d < t.leaf) deep = Math.max(deep, 1 - Math.max(0, d) / t.leaf);
+    }
+    this.rustleT -= dt;
+    if (deep <= 0 || this.rustleT > 0) return;
+    const pace = this.running ? 1.35 : this.crouched ? 0.55 : 1;
+    this.rustleT = (0.5 - deep * 0.28) / pace;
+    audio.sfx('leaf_rustle', Math.min(1, (0.25 + deep * 0.75) * pace));
+    this.counts.rustle++;
+    this.noise((2 + deep * 8) * pace, this.pos.x, this.pos.y);
   }
 
   private pushOutOfTrees(p: THREE.Vector2, r: number): void {
@@ -1230,7 +1466,10 @@ export class NightRoad3D extends Phaser.Scene {
     const soft = this.crouched ? 0.4 : 1;
     const { x, y: z } = this.pos;
     if (wet) {
-      audio.sfx('splash', (run ? 0.55 : 0.32) * soft);
+      audio.sfx('wade', (run ? 0.8 : 0.5) * soft);
+      this.counts.wade++;
+      if (run) audio.sfx('splash', 0.35);
+      if (Math.random() < 0.6) this.ripple();
       this.noise((run ? 20 : 11) * soft, x, z);
       return;
     }
@@ -1259,6 +1498,10 @@ export class NightRoad3D extends Phaser.Scene {
 
   private land(): void {
     const wet = this.inWater(this.pos.x, this.pos.y);
+    if (wet) {
+      this.ripple();
+      this.wasWet = true;
+    }
     audio.sfx(wet ? 'splash' : 'footstep_gravel', wet ? 0.7 : 0.5);
     this.noise(wet ? 20 : 8, this.pos.x, this.pos.y);
   }
@@ -1761,7 +2004,7 @@ export class NightRoad3D extends Phaser.Scene {
         });
       }
       if (this.phase === 'chase' && this.phaseT > 1.2 && this.phaseT < 7) {
-        drawPixelText(ctx, isTouch() ? 'HOLD RUN - CROUCH TO HIDE - GAPS IN THE RAILS' : 'SHIFT RUN - C CROUCH - GAPS IN THE RAILS', GAME_W / 2, GAME_H - 44, {
+        drawPixelText(ctx, isTouch() ? 'HOLD RUN - JUMP THE RAILS - CROUCH TO HIDE' : 'SHIFT RUN - SPACE JUMPS THE RAILS - C CROUCH', GAME_W / 2, GAME_H - 44, {
           scale: 1,
           color: '#7a8494',
           center: true,
@@ -1821,6 +2064,7 @@ export class NightRoad3D extends Phaser.Scene {
       yaw: this.yaw,
       clock: this.clock,
       crouched: this.crouched,
+      counts: { ...this.counts, ripples: this.ripples.length },
       eye: this.eye,
       fyaw: this.fYaw,
     });
@@ -1845,6 +2089,7 @@ export class NightRoad3D extends Phaser.Scene {
       },
       blocks: (x: number, z: number) => this.railBlocks(x, z),
       skirts: () => this.skirts.map((k) => [k.x, k.z]),
+      leafy: () => this.trees.filter((t) => (t.leaf ?? 0) > 1).slice(0, 40).map((t) => [t.x, t.z, t.leaf]),
       under: () => this.underBoughs(),
       passBy: () => (this.passBy ? { leg: this.passBy.leg, a: [this.passBy.a.x, this.passBy.a.y], b: [this.passBy.b.x, this.passBy.b.y] } : null),
       setMode: (m: FrogMode) => {
