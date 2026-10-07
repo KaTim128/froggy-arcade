@@ -27,7 +27,8 @@
  *   real claw machine's claw: a weak grip, and it holds one time in ten.
  *
  *   THE OTHER ONE (3 tokens).  Capsules, in the dark, under a flickering
- *   light.  The same claw, and every capsule it brings up has tokens in it:
+ *   light.  A strong claw -- come down on a capsule and it brings it home
+ *   four times in five -- and every capsule it brings up has tokens in it:
  *   anything from 1 to 10 -- or, one in fifty, the JACKPOT, 50.  And a few
  *   hold something more, that should not be in a toy machine at all, which
  *   the man outside will pay a great deal for.
@@ -91,17 +92,24 @@ const MOVE_X = 70;
 const MOVE_Z = 0.85;
 const LOWER = 60;
 const RAISE = 70;
-/** Both cranes hold exactly one grab in ten. */
-export const GRIP: Record<CraneKind, number> = { plush: 0.34, oddity: 0.34 };
+/**
+ * How often the claw lifts what it closed on.  The capsule crane's is the
+ * whole of its odds: come down on a capsule and it is yours 80% of the
+ * time, wherever on it the fingers landed, and nothing slips on the way.
+ */
+export const GRIP: Record<CraneKind, number> = { plush: 0.34, oddity: 0.8 };
 /**
  * THE ODDS, ALL TOLD, ARE ABOUT ONE GO IN FIVE -- and they come out of how a
  * claw machine actually loses.  The claw lifts what it closed on GRIP of the
  * time with its fingers dead centre on the toy, less the further off centre
  * they came down (down to just over half that at the edge of the claw); and
  * a prize it has lifted slips out on the way to the chute SLIP of the time.
- * Aimed fairly well, that is 0.34 x ~0.75 x 0.8: about 20%.
+ * Aimed fairly well, that is 0.34 x ~0.75 x 0.8: about 20%.  (The plush
+ * crane's: the capsule crane's odds are GRIP alone.)
  */
-export const SLIP = 0.2;
+export const SLIP: Record<CraneKind, number> = { plush: 0.2, oddity: 0 };
+/** Only the plush crane's grip weakens off centre. */
+const OFF_CENTRE: Record<CraneKind, number> = { plush: 0.45, oddity: 0 };
 /** How close the fingers must come down to a toy to close on it at all. */
 const REACH_X = 9;
 const REACH_Z = 0.1;
@@ -765,14 +773,14 @@ export class CraneGame extends Phaser.Scene {
       // dead centre is the best grip there is; at the edge of the claw it
       // is just over half that
       const off = Math.max(Math.abs(best.x - this.clawX) / REACH_X, Math.abs(best.z - this.clawZ) / REACH_Z);
-      const odds = GRIP[this.kind] * (1 - 0.45 * Math.min(1, off));
+      const odds = GRIP[this.kind] * (1 - OFF_CENTRE[this.kind] * Math.min(1, off));
       if (Math.random() < odds) {
         this.held = best;
         this.heldFrom.set(best.art.x, best.art.y);
         this.heldT = 0;
         this.toys = this.toys.filter((t) => t !== best);
         // and some of what comes up does not make it to the chute
-        this.slipAt = Math.random() < SLIP ? 0.25 + Math.random() * 0.5 : -1;
+        this.slipAt = Math.random() < SLIP[this.kind] ? 0.25 + Math.random() * 0.5 : -1;
       } else {
         // it closes on it, lifts it a fraction, and lets it go
         this.tweens.add({ targets: best.art, y: '-=4', duration: 140, yoyo: true });
