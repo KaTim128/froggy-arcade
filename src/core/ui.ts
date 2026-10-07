@@ -203,7 +203,11 @@ export function fadeToScene(scene: Phaser.Scene, key: string, data?: object): vo
     // up with the room, because its fade drives the dim from then on.
     const next = scene.scene.get(key);
     next?.events.once(Phaser.Scenes.Events.CREATE, () => froggyLayer.setDim(1));
-    scene.scene.start(key, data);
+    // ALWAYS SOMETHING, never nothing.  Started without data, Phaser hands the
+    // scene whatever it was given LAST time -- so walking in off the street
+    // put you back where you had last come in from (the lounge doorway, a
+    // cabinet) instead of in front of the doors you just came through.
+    scene.scene.start(key, data ?? {});
   });
 }
 

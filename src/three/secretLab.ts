@@ -846,6 +846,46 @@ export function buildLab(p: LabParts): Lab {
     return { over, ux, uz };
   };
 
+  const corner = new THREE.Vector3();
+  const rootQ = new THREE.Quaternion();
+  /** How far each arm (shoulder to fingertips) is past `limit` from the tube's axis. */
+  const armsOver = (limit: number): [number, number] => {
+    specimen.root.updateMatrixWorld(true);
+    const res: [number, number] = [-Infinity, -Infinity];
+    specimen.armObjects.forEach((arm, h) =>
+      arm.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh || !m.visible) return;
+        if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+        const bb = m.geometry.boundingBox!;
+        for (let c = 0; c < 8; c++) {
+          corner.set(c & 1 ? bb.max.x : bb.min.x, c & 2 ? bb.max.y : bb.min.y, c & 4 ? bb.max.z : bb.min.z);
+          root.worldToLocal(corner.applyMatrix4(m.matrixWorld));
+          res[h] = Math.max(res[h], Math.hypot(corner.x - T.x, corner.z - T.z) - limit);
+        }
+      }),
+    );
+    return res;
+  };
+  /** The inside of the glass, for his fingertips. */
+  const ARM_LIMIT = T.r - 0.035;
+  /**
+   * How far each hand's goal is drawn in from where the pose put it, so that
+   * no part of that arm -- his long fingers above all -- is past ARM_LIMIT.
+   */
+  const armIn: [number, number] = [0, 0];
+  const pullIn = (goal: HandGoal | null, by: number): HandGoal | null => {
+    if (!goal || by <= 0) return goal;
+    const p = root.worldToLocal(goal.at.clone());
+    const dx = p.x - T.x;
+    const dz = p.z - T.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 1e-4) return goal;
+    const k = Math.max(0, d - by) / d;
+    p.set(T.x + dx * k, p.y, T.z + dz * k);
+    return { ...goal, at: root.localToWorld(p) };
+  };
+
   const tick = (dt: number, viewer: THREE.Vector3 | null, heat: number): void => {
     clock += dt;
     lineAt.t = clock;
@@ -1188,11 +1228,27 @@ export function buildLab(p: LabParts): Lab {
         // past where an arm reaches, and that arm locked out into a straight
         // rod with the hand hanging in the air; the other was a fist jammed
         // under the bottom of the frame.)
-        const beside = PORT_HALF + RIM + 0.12;
+        //
+        // And the elbows DOWN, tucked in under the hands.  Left to bow out to
+        // the side the way they do in the open, his arms stood straight out
+        // from his shoulders like rods, and from anywhere but square on they
+        // looked to be reaching out of the tube.  Each palm is beside the
+        // frame, close in, the elbow under it and in toward the middle of the
+        // tube -- something gripping the edge of the window to look through it.
+        const beside = PORT_HALF + RIM + 0.07;
         const mid = (PORT_Y0 + PORT_Y1) / 2;
+        const elbowDown = (spread: number): THREE.Vector3 => {
+          const a = portA + spread;
+          // down, in toward the axis, and a little out to its own side
+          return tmp
+            .set(-Math.sin(portA) * 0.45 + Math.sin(a) * 0.3 - Math.sin(portA) * 0.3, -1, -Math.cos(portA) * 0.45 + Math.cos(a) * 0.3 - Math.cos(portA) * 0.3)
+            .applyQuaternion(root.getWorldQuaternion(rootQ))
+            .normalize()
+            .clone();
+        };
         hands = [
-          { at: portWorld(0.1, mid + 0.03, -beside), weight: go, grip: 0.3 },
-          { at: portWorld(0.1, mid - 0.05, beside), weight: go, grip: 0.3 },
+          { at: portWorld(0.1, mid + 0.02, -beside), weight: go, grip: 0.55, pole: elbowDown(-1.2) },
+          { at: portWorld(0.1, mid - 0.04, beside), weight: go, grip: 0.55, pole: elbowDown(1.2) },
         ];
       } else {
         yaw = toViewer;
@@ -1217,6 +1273,7 @@ export function buildLab(p: LabParts): Lab {
     }
     specimen.setPose(x - keepIn.x, y, z - keepIn.y, yaw);
     specimen.lookAt(viewer);
+    if (hands) hands = [pullIn(hands[0], armIn[0]), pullIn(hands[1], armIn[1])];
     specimen.update(dt, { ...pose, hands, faceTo, faceK });
     specimen.setGlare(glare);
     if (tw) specimen.twitchHead(tw[0], tw[1], tw[2]);
@@ -1236,6 +1293,18 @@ export function buildLab(p: LabParts): Lab {
       specimen.root.updateMatrixWorld(true);
     } else if (h.over < -0.03) {
       keepIn.multiplyScalar(Math.max(0, 1 - dt * 1.5));
+    }
+    // NOTHING OF HIS ARMS PAST THE GLASS EITHER.  A palm put on the glass
+    // left his fingers -- longer than a hand has any right to be -- running on
+    // in the line of the forearm, out through it and through the port's
+    // frame, so a hand seemed to reach out of the tube.  Each arm is measured
+    // to the fingertips; one past the glass has its hand drawn in by that much
+    // from the next frame on, so the tips come to rest on the inside of it.
+    // It lets go again only once there is room, so it never hunts.
+    const ao = armsOver(ARM_LIMIT);
+    for (let a = 0; a < 2; a++) {
+      if (ao[a] > 0) armIn[a] = Math.min(0.6, armIn[a] + ao[a] + 0.01);
+      else if (ao[a] < -0.04) armIn[a] = Math.max(0, armIn[a] - dt * 0.25);
     }
   };
 

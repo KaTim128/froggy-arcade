@@ -11,7 +11,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio, type SfxName } from '../core/audio';
 import { store, type GameId } from '../core/state';
-import { KEY_ITEM } from '../game/inventory';
+import { KEY_ITEM, ensureKeyInPocket, holdingKey } from '../game/inventory';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
 import { evaluateBroke } from '../core/broke';
@@ -32,7 +32,6 @@ import {
   cabinetsIn,
   shelfStock,
 } from '../game/content';
-import { drawPrize } from './PrizeCounter';
 import { DialogueBox } from '../froggy/dialogue';
 import { drawStaffer } from '../froggy/staffer';
 import { openTalkPanel, type TalkOption } from '../ui/talkPanel';
@@ -174,7 +173,7 @@ const COUNTER_EDGE = PLAYER_BOX.torsoW / 2 + 1;
  */
 const COUNTER_REACH = COUNTER.y + COUNTER.h + 2 + PLAYER_BOX.headTop + 10;
 /** What the key is worth to the arcade, in cash, once. */
-const KEY_REWARD = 100;
+const KEY_REWARD = 200;
 
 /**
  * ---- THE SHAPE OF THE WHOLE THING, IN MILLISECONDS.
@@ -288,6 +287,8 @@ export class ArcadeHub extends Phaser.Scene {
 
   create(): void {
     froggyLayer.clear();
+    // the key out of the night, in a pocket, however the run got here
+    ensureKeyInPocket();
     // Phaser reuses scene instances across start/stop, so every mutable field
     // has to be reset here.  Left alone, `locked` stayed true after the first
     // minigame and froze the player in the hub for the rest of the run.
@@ -792,8 +793,11 @@ export class ArcadeHub extends Phaser.Scene {
     if (this.busy()) return;
     const s = store.get();
     if (!s.staffAskedFroggy) {
+      // With the key in your pocket you can hand it over straight away: he
+      // does not have to have told you about it first.
       this.openTalk('"HEY! WELCOME TO FROGGY ARCADE. WHAT CAN I DO FOR YOU?"', [
         { label: 'HAVE YOU SEEN FROGGY AROUND HERE?', fn: () => this.askAboutFroggy() },
+        ...(holdingKey() ? [{ label: 'I FOUND A KEY', fn: () => this.giveKey() }] : []),
         { label: 'BACK', fn: () => this.closeTalk() },
       ]);
       return;
@@ -813,8 +817,7 @@ export class ArcadeHub extends Phaser.Scene {
 
   /** GIVE KEY / KEEP KEY when the key is in the player's pocket; BACK when it is not. */
   private keyOptions(): TalkOption[] {
-    const s = store.get();
-    if (s.hasKey && !s.keyReturned) {
+    if (holdingKey()) {
       return [
         { label: 'GIVE KEY', fn: () => this.giveKey() },
         { label: 'KEEP KEY', fn: () => this.closeTalk() },
@@ -874,7 +877,7 @@ export class ArcadeHub extends Phaser.Scene {
    */
   private giveKey(): void {
     const s = store.get();
-    if (!s.hasKey || s.keyReturned) {
+    if (!holdingKey(s)) {
       this.closeTalk();
       return;
     }
@@ -1027,7 +1030,7 @@ export class ArcadeHub extends Phaser.Scene {
     // restarting on equipment that is not quite working.
     froggyLayer.clear();
     this.locked = false;
-    // and the case holds the camera and nothing else
+    // and the case is restocked as it stands after the night
     this.drawCaseStock();
     audio.setScene(HUB_AUDIO);
     audio.musicMalfunction(APP_RESTART_MS);
@@ -1358,8 +1361,8 @@ export class ArcadeHub extends Phaser.Scene {
 
   /**
    * WHAT IS ON THE SHELF, drawn into its own layer so it can be put right at
-   * any moment -- the static ends on a case that holds the camera and nothing
-   * else, whatever it held when the scene was built.
+   * any moment -- the static ends on the shelf as it stands after the night,
+   * whatever it held when the scene was built.
    */
   private caseLayer: Phaser.GameObjects.Container | null = null;
   private drawCaseStock(): void {
@@ -1372,24 +1375,8 @@ export class ArcadeHub extends Phaser.Scene {
     // leaves a gap in the case exactly as it leaves a gap on the counter.
     const s = store.get();
     const stock = shelfStock(s);
-    // AFTER THE NIGHT the case is the same case -- the same glass, the same
-    // row of slots -- cleared: an empty peg where every prize stood, and in
-    // the middle slot the one thing left, the camcorder, drawn as itself.
-    if (stock.length === 1) {
-      const p = stock[0];
-      const slots = 9;
-      const pitch = Math.floor((PRIZE_CASE.w - 12) / slots);
-      const mid = Math.floor(slots / 2);
-      for (let i = 0; i < slots; i++) {
-        const x = PRIZE_CASE.x + 6 + i * pitch;
-        if (i === mid && !s.prizesOwned.includes(p.id)) {
-          drawPrize(this, x + (pitch - 2) / 2, PRIZE_CASE.y - 9, p, 0.85);
-          continue;
-        }
-        this.add.rectangle(x + (pitch - 2) / 2, PRIZE_CASE.y - 10, 1, 4, PALETTE.steel).setOrigin(0.5, 1).setAlpha(0.5);
-      }
-      stock.length = 0;
-    }
+    // AFTER THE NIGHT it is the same case, as full as ever: the camera is
+    // one more box on the glass, and you only see what it is at the counter.
     const pitch = Math.floor((PRIZE_CASE.w - 12) / Math.max(1, stock.length));
     stock.forEach((p, i) => {
       const x = PRIZE_CASE.x + 6 + i * pitch;

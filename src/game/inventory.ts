@@ -69,7 +69,7 @@ export const KEY_ITEM: ItemDef = {
   kind: 'key',
   color: 0xd8b04a,
   value: 0,
-  thought: 'The key from the basement. It opened the doors and got me out. I am keeping it.',
+  thought: 'The key from the basement. It got me out. The staff at the counter said one went missing...',
 };
 
 export function itemDef(id: string): ItemDef | undefined {
@@ -116,6 +116,22 @@ export function addItem(id: string): boolean {
   store.patch({ items: [...s.items, id] });
   store.flush();
   return true;
+}
+
+/**
+ * Surviving the night leaves the key in a pocket.  Put it there if it is not
+ * -- an older save, or a jump straight to the morning after -- so long as it
+ * has not been handed back and there is room for it.
+ */
+export function ensureKeyInPocket(): void {
+  const s = store.get();
+  if (!s.froggyGone || s.keyReturned || s.items.includes(KEY_ITEM.id)) return;
+  addItem(KEY_ITEM.id);
+}
+
+/** Is the key in a pocket right now? */
+export function holdingKey(s = store.get()): boolean {
+  return !s.keyReturned && s.items.includes(KEY_ITEM.id);
 }
 
 /** Take one of it out of the pockets (the first, if there are two the same). */

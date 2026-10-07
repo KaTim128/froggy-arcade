@@ -13,24 +13,26 @@
  *   front, after     [DROP]      and [SIDE VIEW] -- (look again if you like)
  *   lowering         [...]
  *   settled          [GRAB]
- * The clock running out still drops it, wherever it is.  DROP sends it down from wherever it is, drifting a
+ * The clock running out drops it, wherever it is, and grabs as it settles.  DROP sends it down from wherever it is, drifting a
  * little the way it was travelling, until it settles on the pile -- and there
  * it waits, open, until you press GRAB (the same button, relabelled).  Then
  * it shuts, comes up, and goes back to the chute at the front, where it lets
  * go of whatever it is holding.  SIDE VIEW (or V) swaps the glass for a look
  * in from the side, to judge how far back the claw is over the pile.  Every go starts with the claw parked over
- * that chute, and ends there.  When the clock runs out it drops on
- * its own.  QUIT leaves at any time.
+ * that chute, and ends there.  When the clock runs out it drops and grabs on
+ * its own -- and the clock keeps running while it waits on the pile, so
+ * waiting out the clock there grabs too.  QUIT leaves at any time.
  *
  *   PLUSH CRANE (5 tokens).  Animal plushies, and -- rarely -- a Froggy.  It is a
  *   real claw machine's claw: a weak grip, and it holds one time in ten.
  *
- *   THE OTHER ONE (3 tokens).  Capsules, in the dark, under a flickering
- *   light.  The same claw -- it holds one time in ten -- and most of what
- *   it comes up with is empty.  Five in a hundred hold ten tokens, one in a
- *   hundred holds a golden ticket worth ten more, and a few hold something
- *   that should not be in a toy machine at all, which the man outside will
- *   pay a great deal for.
+ *   THE OTHER ONE (5 tokens).  Capsules, in the dark, under a flickering
+ *   light.  A strong claw -- come down on a capsule and it brings it home
+ *   four times in five -- and every capsule it brings up has tokens in it:
+ *   anything from 1 to 6 -- or, one in fifty, the JACKPOT, 50.  On average
+ *   a go comes back with less than it cost; the jackpot is why you stay.  And a few
+ *   hold something more, that should not be in a toy machine at all, which
+ *   the man outside will pay a great deal for.
  *
  * Whatever it gives you goes in a pocket, so a go is refused with full
  * pockets (the room checks before you get here, and AGAIN checks again).
@@ -51,27 +53,28 @@ import { touchControls } from '../ui/touchControls';
 
 export type CraneKind = 'plush' | 'oddity';
 
-export const CRANE_COST: Record<CraneKind, number> = { plush: 5, oddity: 3 };
+export const CRANE_COST: Record<CraneKind, number> = { plush: 5, oddity: 5 };
 
-/**
- * What a capsule from the dark crane holds, in order: the chance of each,
- * and the rest is an empty capsule.  The two ten-token results are separate
- * on purpose -- a plain ten, and the rare golden ticket.
- */
-export const ODDITY_TABLE: Array<{ what: 'tokens' | 'golden' | 'oddity'; chance: number }> = [
-  { what: 'tokens', chance: 0.05 },
-  { what: 'golden', chance: 0.01 },
-  { what: 'oddity', chance: 0.03 },
-];
+/** What a capsule from the dark crane holds: tokens, always. */
+export const CAPSULE_MIN = 1;
+export const CAPSULE_MAX = 6;
+/** One in fifty is the jackpot. */
+export const CAPSULE_JACKPOT = 50;
+export const JACKPOT_CHANCE = 1 / 50;
+/** And now and then something else in with them, for the man outside. */
+export const ODDITY_CHANCE = 0.03;
 
-/** A capsule's contents, off one roll. */
-export function rollCapsule(r = Math.random()): 'tokens' | 'golden' | 'oddity' | 'nothing' {
-  let acc = 0;
-  for (const row of ODDITY_TABLE) {
-    acc += row.chance;
-    if (r < acc) return row.what;
-  }
-  return 'nothing';
+export interface Capsule {
+  tokens: number;
+  jackpot: boolean;
+  oddity: boolean;
+}
+
+/** A capsule's contents.  `rnd` is there so the odds can be tested. */
+export function rollCapsule(rnd: () => number = Math.random): Capsule {
+  const jackpot = rnd() < JACKPOT_CHANCE;
+  const tokens = jackpot ? CAPSULE_JACKPOT : CAPSULE_MIN + Math.floor(rnd() * (CAPSULE_MAX - CAPSULE_MIN + 1));
+  return { tokens, jackpot, oddity: rnd() < ODDITY_CHANCE };
 }
 
 /** The inside of the machine, in the cabinet's picture. */
@@ -90,17 +93,24 @@ const MOVE_X = 70;
 const MOVE_Z = 0.85;
 const LOWER = 60;
 const RAISE = 70;
-/** Both cranes hold exactly one grab in ten. */
-export const GRIP: Record<CraneKind, number> = { plush: 0.34, oddity: 0.34 };
+/**
+ * How often the claw lifts what it closed on.  The capsule crane's is the
+ * whole of its odds: come down on a capsule and it is yours 80% of the
+ * time, wherever on it the fingers landed, and nothing slips on the way.
+ */
+export const GRIP: Record<CraneKind, number> = { plush: 0.34, oddity: 0.8 };
 /**
  * THE ODDS, ALL TOLD, ARE ABOUT ONE GO IN FIVE -- and they come out of how a
  * claw machine actually loses.  The claw lifts what it closed on GRIP of the
  * time with its fingers dead centre on the toy, less the further off centre
  * they came down (down to just over half that at the edge of the claw); and
  * a prize it has lifted slips out on the way to the chute SLIP of the time.
- * Aimed fairly well, that is 0.34 x ~0.75 x 0.8: about 20%.
+ * Aimed fairly well, that is 0.34 x ~0.75 x 0.8: about 20%.  (The plush
+ * crane's: the capsule crane's odds are GRIP alone.)
  */
-export const SLIP = 0.2;
+export const SLIP: Record<CraneKind, number> = { plush: 0.2, oddity: 0 };
+/** Only the plush crane's grip weakens off centre. */
+const OFF_CENTRE: Record<CraneKind, number> = { plush: 0.45, oddity: 0 };
 /** How close the fingers must come down to a toy to close on it at all. */
 const REACH_X = 9;
 const REACH_Z = 0.1;
@@ -155,6 +165,8 @@ export class CraneGame extends Phaser.Scene {
   /** Gliding back to HOME after a go. */
   private homing = false;
   private clock = CLOCK_S;
+  /** The clock ran out this go: the claw drops and grabs by itself. */
+  private timedOut = false;
   private toys: Toy[] = [];
   private held: Toy | null = null;
   private claw!: Phaser.GameObjects.Container;
@@ -302,6 +314,9 @@ export class CraneGame extends Phaser.Scene {
         sideOn: () => this.sideOn,
         froggies: () => this.toys.filter((t) => t.id === PLUSHIES[0].id).length,
         home: () => ({ x: HOME.x, z: HOME.z }),
+        setClock: (sec: number) => {
+          this.clock = sec;
+        },
       };
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => delete (window as unknown as Record<string, unknown>).__crane);
     }
@@ -500,6 +515,7 @@ export class CraneGame extends Phaser.Scene {
     this.viewedSide = false;
     if (this.sideOn) this.toggleSide();
     this.clock = CLOCK_S;
+    this.timedOut = false;
     this.drop = 0;
     this.syncButtons();
   }
@@ -632,8 +648,11 @@ export class CraneGame extends Phaser.Scene {
       this.clawZ = Phaser.Math.Clamp(this.clawZ + this.vz * dt, 0, 1);
       this.clock -= dt;
       this.clockText.setText(`TIME ${Math.max(0, Math.ceil(this.clock))}`);
-      // the clock running out drops it, wherever it is
-      if (this.clock <= 0) this.beginLower();
+      // the clock running out drops it, wherever it is -- and grabs (below)
+      if (this.clock <= 0) {
+        this.timedOut = true;
+        this.beginLower();
+      }
     } else if (this.phase === 'lower') {
       // the way it was going carries it on a little, and dies away
       this.clawX = Phaser.Math.Clamp(this.clawX + this.vx * dt, CLAW_MIN_X, PILE_R);
@@ -642,16 +661,29 @@ export class CraneGame extends Phaser.Scene {
       this.vz *= Math.exp(-dt * 3.5);
       this.clock -= dt;
       this.clockText.setText(`TIME ${Math.max(0, Math.ceil(this.clock))}`);
+      if (this.clock <= 0) this.timedOut = true;
       this.drop += LOWER * dt;
       const bottom = Math.min(MAX_DROP, this.floorUnder());
       if (this.drop >= bottom) {
-        // settled on the pile, open: it waits there for GRAB, however long
+        // settled on the pile, open: it waits there for GRAB -- or, out of
+        // time, it shuts on its own a beat after it lands
         this.drop = bottom;
         this.phase = 'wait';
         this.vx = this.vz = 0;
         this.grabCue.setVisible(true);
         this.syncButtons();
         audio.sfx('ui_blip', 0.5);
+        if (this.timedOut) this.time.delayedCall(300, () => this.shut());
+      }
+    } else if (this.phase === 'wait') {
+      // the clock does not stop for it: run it out here and it grabs
+      if (!this.timedOut) {
+        this.clock -= dt;
+        this.clockText.setText(`TIME ${Math.max(0, Math.ceil(this.clock))}`);
+        if (this.clock <= 0) {
+          this.timedOut = true;
+          this.shut();
+        }
       }
     } else if (this.phase === 'up') {
       this.drop -= RAISE * dt;
@@ -742,14 +774,14 @@ export class CraneGame extends Phaser.Scene {
       // dead centre is the best grip there is; at the edge of the claw it
       // is just over half that
       const off = Math.max(Math.abs(best.x - this.clawX) / REACH_X, Math.abs(best.z - this.clawZ) / REACH_Z);
-      const odds = GRIP[this.kind] * (1 - 0.45 * Math.min(1, off));
+      const odds = GRIP[this.kind] * (1 - OFF_CENTRE[this.kind] * Math.min(1, off));
       if (Math.random() < odds) {
         this.held = best;
         this.heldFrom.set(best.art.x, best.art.y);
         this.heldT = 0;
         this.toys = this.toys.filter((t) => t !== best);
         // and some of what comes up does not make it to the chute
-        this.slipAt = Math.random() < SLIP ? 0.25 + Math.random() * 0.5 : -1;
+        this.slipAt = Math.random() < SLIP[this.kind] ? 0.25 + Math.random() * 0.5 : -1;
       } else {
         // it closes on it, lifts it a fraction, and lets it go
         this.tweens.add({ targets: best.art, y: '-=4', duration: 140, yoyo: true });
@@ -807,24 +839,21 @@ export class CraneGame extends Phaser.Scene {
       }
       return;
     }
-    // a capsule: open it
-    const what = rollCapsule();
-    if (what === 'tokens' || what === 'golden') {
-      ledger.credit(10, 'crane');
-      audio.sfx('cha_ching');
-      this.showResult(what === 'golden' ? 'A GOLDEN TICKET!  10 TOKENS' : 'INSIDE: 10 TOKENS', PALETTE.gold, true);
-      return;
-    }
-    if (what === 'oddity') {
+    // a capsule: open it.  There are always tokens in it.
+    const cap = rollCapsule();
+    ledger.credit(cap.tokens, 'crane');
+    audio.sfx('cha_ching');
+    const coins = `${cap.tokens} TOKEN${cap.tokens === 1 ? '' : 'S'}`;
+    if (cap.oddity) {
+      // and something else, under them
       const def = ODDITIES[Phaser.Math.Between(0, ODDITIES.length - 1)];
       if (addItem(def.id)) {
         audio.sfx('chime');
-        this.showResult(`INSIDE: ${def.name}`, 0xc8a0e0, true, def.id);
-      } else this.showResult(FULL_LINE, PALETTE.ember, true);
-      return;
+        this.showResult(`${cap.jackpot ? 'JACKPOT!  ' : ''}${coins} + ${def.name}`, 0xc8a0e0, true, def.id);
+        return;
+      }
     }
-    audio.sfx('ui_blip', 0.4);
-    this.showResult('THE CAPSULE IS EMPTY.', PALETTE.ash, true);
+    this.showResult(cap.jackpot ? `JACKPOT!  ${coins}` : `INSIDE: ${coins}`, PALETTE.gold, true);
   }
 
   private showResult(line: string, colour: number, played: boolean, itemId?: string): void {

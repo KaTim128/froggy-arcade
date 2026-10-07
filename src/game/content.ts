@@ -398,21 +398,23 @@ export function prizesForWave(wave: number): PrizeDef[] {
 }
 
 /**
- * ---- AFTER THE NIGHT, ONE THING IS LEFT IN THE CASE.
+ * ---- AFTER THE NIGHT, THERE IS A CAMERA IN THE CASE.
  *
- * A camera.  Everything else has been cleared off the glass -- nobody says
- * why -- and the one thing on the shelf is the one thing that would let you
- * prove what you saw, at a price nobody reaches by accident.
+ * Not on its own in the middle of an emptied shelf -- that announced it.  It
+ * is one more thing on an ordinary shelf, at a price nobody reaches by
+ * accident, and the one thing on it that would let you prove what you saw.
  */
 export const CAMERA_PRIZE: PrizeDef = { id: 'camera', name: 'VIDEO CAMERA', cost: 1300, color: 0x3a3f4c, shape: 'camera' };
 
 /**
  * What is in the case right now, for the case, the counter and anything else
- * that shows the shelf: the camera alone once the night is over, and the
- * current wave before it.
+ * that shows the shelf: the current wave, and once the night is over the
+ * camera in the last slot, where the dearest thing on the shelf always goes.
  */
 export function shelfStock(s: { prizeWave: number; froggyGone: boolean }): PrizeDef[] {
-  return s.froggyGone ? [CAMERA_PRIZE] : prizesForWave(s.prizeWave);
+  const wave = prizesForWave(s.prizeWave);
+  if (!s.froggyGone) return wave;
+  return [...wave.slice(0, wave.length - 1), CAMERA_PRIZE];
 }
 
 export function prizeById(id: string): PrizeDef | undefined {

@@ -45,7 +45,8 @@ const FACE = 0x3a3835;
 /** The muzzle: the pale half of the face, as it is on the mascot. */
 const MUZZLE = 0x4a4743;
 const MOUTH = 0x030202;
-const LID = 0x282421;
+/** The lids: the face's own skin, a shade darker, not a black cap. */
+const LID = 0x312d2a;
 /**
  * The whites.  A dirty grey-white rather than white: a pure white eye under a
  * torch is a lamp, and a lamp is not looking at you.
@@ -67,10 +68,11 @@ const GUM = 0x44101a;
 const MOUTH_Y = -0.1;
 const MOUTH_Z = 0.085;
 /**
- * Half its width: wider than the muzzle was, and wider than the head -- the
- * corners run out past the cheeks, which no face's should.
+ * Half its width: wider than the muzzle was, and a touch wider than the head
+ * -- but the corners end IN the face, sunk into the jowls (below), never
+ * standing out past the cheeks in the air.
  */
-const MOUTH_W = 0.3;
+const MOUTH_W = 0.27;
 const MOUTH_D = 0.158;
 /** The hinge, well behind the corners of the mouth. */
 const JAW_PIVOT_Z = -0.07;
@@ -505,6 +507,12 @@ export interface HandGoal {
   weight: number;
   grip: number;
   twist?: number;
+  /**
+   * Which way the elbow goes, in the world, when it should not bow out to
+   * the side as it does by default -- an arm in a tight space keeps its
+   * elbow down and in.
+   */
+  pole?: THREE.Vector3;
 }
 
 interface ArmSpring {
@@ -1074,7 +1082,7 @@ export class FroggyMonster {
       const upperShell = new THREE.Mesh(new THREE.SphereGeometry(0.116, 26, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), lidMat);
       upper.add(upperShell);
       // the rim along its edge: the front half of a ring laid on that edge
-      const upperEdge = new THREE.Mesh(new THREE.TorusGeometry(0.116, 0.0075, 6, 30, Math.PI), lidMat);
+      const upperEdge = new THREE.Mesh(new THREE.TorusGeometry(0.116, 0.0115, 8, 30, Math.PI), lidMat);
       upperEdge.rotation.x = Math.PI / 2;
       upper.add(upperEdge);
       lids.add(upper);
@@ -1084,7 +1092,7 @@ export class FroggyMonster {
         lidMat,
       );
       lower.add(lowerShell);
-      const lowerEdge = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.0065, 6, 30, Math.PI), lidMat);
+      const lowerEdge = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.009, 8, 30, Math.PI), lidMat);
       lowerEdge.rotation.x = Math.PI / 2;
       lower.add(lowerEdge);
       lids.add(lower);
@@ -1153,8 +1161,10 @@ export class FroggyMonster {
     const lipLine = (y0: number, bulge: number, droop: number, seed: number): THREE.Mesh => {
       const pts: THREE.Vector3[] = [];
       for (let i = 0; i <= 24; i++) {
-        // on round past the corners, back toward the jaw hinge
-        const a = -0.42 + (i / 24) * (Math.PI + 0.84);
+        // corner to corner, and no further: run on past them (as it once did,
+        // back toward the hinge) the lip stood out from the side of the face
+        // on its own, a seam with nothing behind it
+        const a = -0.12 + (i / 24) * (Math.PI + 0.24);
         const p = rim(a, bulge, droop);
         p.y += y0;
         pts.push(p);
@@ -1306,15 +1316,23 @@ export class FroggyMonster {
     lengthK = 0.7;
     teeth(this.head, MOUTH_Y + 0.004, true, 0.72, 22, 1777);
     lengthK = 1;
-    // mouth-corner creases, the skin gathered where the seam ends
+    // THE CORNERS OF THE MOUTH, in the face.  A fold of flesh at each end --
+    // a jowl -- that the lips run into and that runs back into the cheek, so
+    // the seam ends in skin.  (Without it the corners stood out past the side
+    // of the head with daylight behind them: lips that were not attached.)
     for (const side of [-1, 1]) {
+      const at = rim(side > 0 ? -0.06 : Math.PI + 0.06, 0.97, 0.024);
+      at.y += MOUTH_Y - 0.004;
+      const jowl = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.05, 14, 10), 0.003, 9, 401 + side), face);
+      jowl.scale.set(0.95, 0.85, 1.5);
+      jowl.position.set(at.x - side * 0.018, at.y, at.z - 0.04);
+      this.head.add(jowl);
+      // and the skin gathered where the seam ends: creases fanning back
+      // across the jowl from the corner, lying on it
       for (let c = 0; c < 3; c++) {
-        const a = side > 0 ? -0.36 : Math.PI + 0.36;
-        const p = rim(a, 1.02, 0.024);
-        const q = p.clone().add(new THREE.Vector3(side * (0.012 + c * 0.004), 0.018 - c * 0.02, -0.018 - c * 0.004));
-        p.y += MOUTH_Y;
-        q.y += MOUTH_Y;
-        this.head.add(strut(p, q, 0.0032, skinDark));
+        const p = at.clone().add(new THREE.Vector3(side * 0.006, 0.006 - c * 0.012, -0.012));
+        const q = p.clone().add(new THREE.Vector3(side * 0.008, 0.012 - c * 0.012, -0.03 - c * 0.004));
+        this.head.add(strut(p, q, 0.0028, skinDark));
       }
     }
     // THE JAW: hinged well behind the corners, which is what lets it drop as
@@ -1382,6 +1400,11 @@ export class FroggyMonster {
   /** The head, for anything that needs to put a camera in front of his face. */
   get headObject(): THREE.Object3D {
     return this.head;
+  }
+
+  /** Both arms, shoulder to fingertips, for anything that must keep them inside something. */
+  get armObjects(): readonly THREE.Object3D[] {
+    return this.arms;
   }
 
   /** Drop him into the world.  `y` is the floor he is standing on. */
@@ -2226,7 +2249,9 @@ export class FroggyMonster {
     const u = d.normalize();
     // where the elbow wants to go: out to the side, back, and a little up --
     // and for the pounce, UP: the elbows high over the shoulders, a mantis's
-    const pole = this.tmp2.set(out * (0.85 - 0.25 * this.pounceNow), 0.25 + 0.75 * this.pounceNow, -0.45 + 0.2 * this.pounceNow);
+    const pole = goal.pole
+      ? this.tmp2.copy(goal.pole).applyQuaternion(this.torso.getWorldQuaternion(this.q2).invert())
+      : this.tmp2.set(out * (0.85 - 0.25 * this.pounceNow), 0.25 + 0.75 * this.pounceNow, -0.45 + 0.2 * this.pounceNow);
     pole.addScaledVector(u, -pole.dot(u));
     if (pole.lengthSq() < 1e-6) pole.set(out, 0, 0).addScaledVector(u, -u.x * out);
     pole.normalize();
