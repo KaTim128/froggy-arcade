@@ -1378,6 +1378,18 @@ class AudioManager {
       case 'wings':
         for (let i = 0; i < 10; i++) noise(0.06, 0.06 - i * 0.004, 1800, i * 0.07 + Math.random() * 0.03);
         break;
+      // Pine boughs dragged past a body: a soft, airy shush with the dry
+      // tick of needles in it, in a few overlapping strokes.
+      case 'leaf_rustle':
+        for (let i = 0; i < 4; i++) noise(0.09 + Math.random() * 0.06, 0.045 - i * 0.006, 2600 + Math.random() * 1800, i * 0.05 + Math.random() * 0.03);
+        noise(0.02, 0.03, 6000, 0.04);
+        break;
+      // Wading: a leg pushing water aside, low and sloshing, and the drip back.
+      case 'wade':
+        noise(0.22, 0.11, 520);
+        noise(0.12, 0.05, 1300, 0.08);
+        beep(180, 0.12, 0.025, 'sine', 0.05);
+        break;
       // A dry branch going under a foot.  Short, sharp and very loud at night.
       case 'twig_snap':
         noise(0.03, 0.22, 5200);
@@ -1743,6 +1755,8 @@ export type SfxName =
   | 'crow_caw'
   | 'wings'
   | 'twig_snap'
+  | 'leaf_rustle'
+  | 'wade'
   | 'wheel_tick'
   | 'splash'
   | 'water_rise'
