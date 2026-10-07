@@ -1067,6 +1067,6 @@ export class Froggopoly extends Phaser.Scene {
 
   private leave(): void {
     this.alive = false;
-    fadeToScene(this, 'ArcadeLounge', { atProp: 'table' });
+    fadeToScene(this, 'ArcadeLounge', {});
   }
 }
