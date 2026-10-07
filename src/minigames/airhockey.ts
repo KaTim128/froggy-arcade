@@ -222,6 +222,14 @@ export const airHockey: MinigameModule = {
           padR: PAD_R,
           target: TARGET_SCORE,
         }),
+        /** Put the puck somewhere, moving or not -- to test what he does about it. */
+        setPuck: (x: number, y: number, vx = 0, vy = 0) => {
+          if (!puck) return;
+          puck.setPosition(x, y);
+          vel = { x: vx, y: vy };
+          frozen = 0;
+          armed = true;
+        },
         /** Put the player's mallet somewhere, the way the mouse would. */
         setPad: (x: number, y: number) => {
           if (!pad) return;
@@ -326,14 +334,34 @@ export const airHockey: MinigameModule = {
     // the whole of the approach and only at the right one if the puck got all
     // the way through.  Predicting a point you do not stand on is worse than
     // covering the puck you can see.
-    const wantX = dead
-      ? puck.x + (Math.random() - 0.5) * AI_AIM_ERROR * 0.5
-      : vel.y < 0
-        ? seen.x + (Math.random() - 0.5) * AI_AIM_ERROR
-        : TABLE.x + TABLE.w / 2 + (seen.x - (TABLE.x + TABLE.w / 2)) * 0.35;
-    const wantY = dead
-      ? Math.min(puck.y - PAD_R * 0.4, TABLE.y + TABLE.h / 2 - PAD_R)
-      : vel.y < 0 ? Math.min(seen.y + 10, TABLE.y + TABLE.h / 2 - PAD_R) : TABLE.y + 26;
+    //
+    // ---- AND A SLOW PUCK ON HIS SIDE IS HIS TO HIT.  "Dead" used to mean a
+    // speed of exactly nothing, which only the face-off ever has: friction
+    // never quite stops a puck, so one dribbling along the boards in his half
+    // was "moving away" and he went home and watched it.  Now anything slow
+    // that he can reach -- his half, and the strip of yours his mallet can
+    // still touch across the line -- is a loose puck, and he goes and STRIKES
+    // it: round behind it (the side away from your goal), then through it.
+    const midY = TABLE.y + TABLE.h / 2;
+    const speed = Math.hypot(vel.x, vel.y);
+    const reach = puck.y < midY + PUCK_R + 1;
+    const loose = !dead && reach && speed < 140;
+    let wantX: number;
+    let wantY: number;
+    if (loose) {
+      const strike = strikePoint(aiPad, puck);
+      wantX = strike.x;
+      wantY = strike.y;
+    } else {
+      wantX = dead
+        ? puck.x + (Math.random() - 0.5) * AI_AIM_ERROR * 0.5
+        : vel.y < 0
+          ? seen.x + (Math.random() - 0.5) * AI_AIM_ERROR
+          : TABLE.x + TABLE.w / 2 + (seen.x - (TABLE.x + TABLE.w / 2)) * 0.35;
+      wantY = dead
+        ? Math.min(puck.y - PAD_R * 0.4, midY - PAD_R)
+        : vel.y < 0 ? Math.min(seen.y + 10, midY - PAD_R) : TABLE.y + 26;
+    }
     const aiSpeed = dead ? AI_SPEED * eager : AI_SPEED;
     const step = (aiSpeed * delta) / 1000;
     aiPad.x += Phaser.Math.Clamp(wantX - aiPad.x, -step, step);
@@ -399,6 +427,49 @@ export const airHockey: MinigameModule = {
   },
 };
 
+/**
+ * Where his mallet goes to hit a loose puck: BEHIND it, on the line from your
+ * goal through the puck, so moving onto that point drives it at your end.
+ * Coming at it from the wrong side, he first goes round it, wide of it, so
+ * he does not knock it back into his own goal on the way.  Pinned against his
+ * own end wall, with no room behind it, he knocks it out sideways instead.
+ */
+function strikePoint(ai: Vec, p: Vec): Vec {
+  const goalX = TABLE.x + TABLE.w / 2;
+  const goalY = TABLE.y + TABLE.h;
+  let dx = p.x - goalX;
+  let dy = p.y - goalY;
+  const d = Math.hypot(dx, dy) || 1;
+  dx /= d;
+  dy /= d;
+  const contact = PAD_R + PUCK_R;
+  const top = TABLE.y + PAD_R;
+  // no room behind it: against the end wall, from the side, toward the middle
+  if (p.y - contact * 0.6 < top) {
+    const side = p.x < goalX ? -1 : 1;
+    const x = p.x + side * (contact - 3);
+    // ...unless it is in the corner, where there is no side to get to either.
+    // Pressing on it there only wedges it; he stands off on the diagonal and
+    // lets it come off the boards to him.
+    if (x < TABLE.x + PAD_R || x > TABLE.x + TABLE.w - PAD_R) {
+      return { x: p.x - side * (contact + 4) * 0.71, y: p.y + (contact + 4) * 0.71 };
+    }
+    return { x, y: Math.max(top, p.y) };
+  }
+  // the wrong side of it: round it first
+  if (ai.y > p.y - 3) {
+    const room = (s: number) => {
+      const x = p.x + s * (contact + 5);
+      return x > TABLE.x + PAD_R && x < TABLE.x + TABLE.w - PAD_R;
+    };
+    let side = ai.x < p.x ? -1 : 1;
+    if (!room(side)) side = -side;
+    return { x: p.x + side * (contact + 5), y: Math.max(top, p.y - contact) };
+  }
+  // behind it, and through it
+  return { x: p.x + dx * (contact - 4), y: p.y + dy * (contact - 4) };
+}
+
 /** The player's mallet, under the mouse and inside its own half. */
 function followPointer(scene: Phaser.Scene): void {
   if (!pad) return;
@@ -441,6 +512,21 @@ function collide(p: Phaser.GameObjects.Arc, padVel: Vec, delta: number): void {
   const ny = dy / d;
   puck.x = p.x + nx * (PAD_R + PUCK_R + 0.5);
   puck.y = p.y + ny * (PAD_R + PUCK_R + 0.5);
+  // Never out through the boards: a mallet pressing a puck into a corner used
+  // to shove it clean outside the table, where it sat forever.  Kept in, it
+  // comes off the boards instead.
+  let nxOut = nx;
+  let nyOut = ny;
+  if (puck.x < TABLE.x + PUCK_R || puck.x > TABLE.x + TABLE.w - PUCK_R) {
+    puck.x = Phaser.Math.Clamp(puck.x, TABLE.x + PUCK_R, TABLE.x + TABLE.w - PUCK_R);
+    nxOut = -nx;
+  }
+  const gx0 = TABLE.x + (TABLE.w - GOAL_W) / 2;
+  const inGoalX = puck.x > gx0 && puck.x < gx0 + GOAL_W;
+  if (!inGoalX && (puck.y < TABLE.y + PUCK_R || puck.y > TABLE.y + TABLE.h - PUCK_R)) {
+    puck.y = Phaser.Math.Clamp(puck.y, TABLE.y + PUCK_R, TABLE.y + TABLE.h - PUCK_R);
+    nyOut = -ny;
+  }
 
   const dot = vel.x * nx + vel.y * ny;
   vel.x = (vel.x - 2 * dot * nx) * 0.98;
@@ -451,10 +537,15 @@ function collide(p: Phaser.GameObjects.Arc, padVel: Vec, delta: number): void {
   vel.x += padVel.x * inherit * 0.28;
   vel.y += padVel.y * inherit * 0.28;
 
+  if (nxOut !== nx || nyOut !== ny) {
+    // wedged: off the boards, whichever way is open
+    vel.x = Math.max(Math.abs(vel.x), 60) * Math.sign(nxOut || 1);
+    vel.y = Math.max(Math.abs(vel.y), 60) * Math.sign(nyOut || 1);
+  }
   const sp = Math.hypot(vel.x, vel.y);
   if (sp < 120) {
-    vel.x = nx * 150;
-    vel.y = ny * 150;
+    vel.x = nxOut * 150;
+    vel.y = nyOut * 150;
   }
   audio.sfx('whack');
 }

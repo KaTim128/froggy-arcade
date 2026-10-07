@@ -1115,31 +1115,100 @@ export function texSign(label: string, bg: string, fg: string, w = 256, h = 96):
 
 /** The stairwell: painted block, a stripe at the floor numbers. */
 export function texBlock(): HTMLCanvasElement {
-  return canvas(256, 256, (g) => {
-    g.fillStyle = '#c8c2b4';
-    g.fillRect(0, 0, 256, 256);
-    for (let y = 0; y < 256; y += 32) {
-      g.fillStyle = '#a8a294';
-      g.fillRect(0, y, 256, 3);
-      for (let x = (y / 32) % 2 ? 64 : 0; x < 256; x += 128) g.fillRect(x, y, 3, 32);
+  // Painted concrete block: each block its own tone, a soft bevel (light on
+  // the top edge, shadow under), recessed mortar, scuffs and paint runs.
+  let seed = 7;
+  const rnd = (): number => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  return canvas(512, 512, (g) => {
+    g.fillStyle = '#9a9488';
+    g.fillRect(0, 0, 512, 512);
+    const bh = 64;
+    const bw = 128;
+    for (let row = 0; row < 512 / bh; row++) {
+      const y = row * bh;
+      const off = row % 2 ? bw / 2 : 0;
+      for (let x = -off; x < 512; x += bw) {
+        const tone = 196 + Math.floor((rnd() - 0.5) * 16);
+        const bx = x + 3;
+        const by = y + 3;
+        const w = bw - 6;
+        const h = bh - 6;
+        const grad = g.createLinearGradient(0, by, 0, by + h);
+        grad.addColorStop(0, `rgb(${tone + 10},${tone + 6},${tone - 4})`);
+        grad.addColorStop(0.15, `rgb(${tone},${tone - 4},${tone - 14})`);
+        grad.addColorStop(1, `rgb(${tone - 12},${tone - 16},${tone - 26})`);
+        g.fillStyle = grad;
+        for (const dx of [0, 512, -512]) g.fillRect(bx + dx, by, w, h);
+        // the bevel
+        g.fillStyle = 'rgba(255,250,235,0.35)';
+        for (const dx of [0, 512, -512]) g.fillRect(bx + dx, by, w, 2);
+        g.fillStyle = 'rgba(40,34,26,0.28)';
+        for (const dx of [0, 512, -512]) {
+          g.fillRect(bx + dx, by + h - 2, w, 2);
+          g.fillRect(bx + dx + w - 2, by, 2, h);
+        }
+      }
     }
-    for (let k = 0; k < 500; k++) {
-      g.fillStyle = `rgba(60,50,40,${0.03 + (k % 5) * 0.01})`;
-      g.fillRect((k * 71) % 256, (k * 43) % 256, 2, 2);
+    // pores in the block under the paint
+    for (let k = 0; k < 2600; k++) {
+      const x = rnd() * 512;
+      const y = rnd() * 512;
+      g.fillStyle = rnd() < 0.7 ? `rgba(60,52,40,${0.06 + rnd() * 0.08})` : `rgba(255,250,240,${0.05 + rnd() * 0.06})`;
+      g.fillRect(x, y, 1 + Math.floor(rnd() * 2), 1 + Math.floor(rnd() * 2));
+    }
+    // scuffs and grime runs
+    for (let k = 0; k < 18; k++) {
+      const x = rnd() * 512;
+      const y = rnd() * 512;
+      const r = 10 + rnd() * 30;
+      const grad = g.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, 'rgba(50,44,36,0.12)');
+      grad.addColorStop(1, 'rgba(50,44,36,0)');
+      g.fillStyle = grad;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    for (let k = 0; k < 7; k++) {
+      const x = rnd() * 512;
+      const y = rnd() * 400;
+      g.fillStyle = 'rgba(70,60,46,0.08)';
+      g.fillRect(x, y, 2, 30 + rnd() * 80);
     }
   });
 }
 
-/** A concrete stair tread with its yellow nosing. */
-export function texTread(): HTMLCanvasElement {
-  return canvas(128, 64, (g) => {
-    g.fillStyle = '#7a7670';
-    g.fillRect(0, 0, 128, 64);
-    for (let k = 0; k < 200; k++) {
-      g.fillStyle = `rgba(0,0,0,${0.05 + (k % 3) * 0.03})`;
-      g.fillRect((k * 29) % 128, (k * 17) % 64, 2, 2);
+/** Poured concrete: treads, slabs, the undersides of the flights. */
+export function texConcrete(base = '#8e8a84'): HTMLCanvasElement {
+  let seed = 11;
+  const rnd = (): number => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  return canvas(256, 256, (g) => {
+    g.fillStyle = base;
+    g.fillRect(0, 0, 256, 256);
+    // big soft clouds of tone, then aggregate, then the odd pit
+    for (let k = 0; k < 40; k++) {
+      const x = rnd() * 256;
+      const y = rnd() * 256;
+      const r = 20 + rnd() * 50;
+      const light = rnd() < 0.5;
+      const grad = g.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, light ? 'rgba(255,250,240,0.07)' : 'rgba(30,26,20,0.08)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grad;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
     }
-    g.fillStyle = '#c8a030';
-    g.fillRect(0, 54, 128, 10);
+    for (let k = 0; k < 3200; k++) {
+      const v = rnd();
+      g.fillStyle = v < 0.5 ? `rgba(30,26,22,${0.08 + rnd() * 0.1})` : `rgba(240,236,226,${0.06 + rnd() * 0.1})`;
+      g.fillRect(rnd() * 256, rnd() * 256, 1, 1);
+    }
+    for (let k = 0; k < 60; k++) {
+      g.fillStyle = 'rgba(20,18,14,0.3)';
+      g.fillRect(rnd() * 256, rnd() * 256, 2, 2);
+    }
   });
 }

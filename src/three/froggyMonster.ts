@@ -902,42 +902,56 @@ export class FroggyMonster {
       arm.rotation.z = side * 0.06;
       // Far longer than any person's: the elbow comes level with his hip
       // and the fingertips hang to the middle of his shins.
-      const upper = bone(0.029, 0.5, 1.1, 0.75, armSkin, 55 + side);
+      // (Thin, but not sticks: a shoulder of muscle wasted down to a cord at
+      // the elbow, a forearm with its two bones showing, a real wrist.)
+      const upper = bone(0.038, 0.5, 1.15, 0.72, armSkin, 55 + side);
       arm.add(upper);
       const elbow = new THREE.Group();
       elbow.position.y = -0.57;
       arm.add(elbow);
-      elbow.add(knob(0.026, armSkin, 57 + side));
-      const foreBone = bone(0.023, 0.5, 1.05, 0.6, armSkin, 59 + side);
+      elbow.add(knob(0.032, armSkin, 57 + side));
+      const foreBone = bone(0.03, 0.5, 1.05, 0.68, armSkin, 59 + side);
       elbow.add(foreBone);
       // what is left of the forearm muscle, just below the elbow
-      const fore = new THREE.Mesh(lumpy(taper(new THREE.CapsuleGeometry(0.026, 0.15, 6, 12), 1.05, 0.55), 0.003, 10, 60 + side), armSkin);
-      fore.position.set(side * 0.005, -0.13, 0.007);
+      const fore = new THREE.Mesh(lumpy(taper(new THREE.CapsuleGeometry(0.037, 0.2, 6, 12), 1.05, 0.55), 0.003, 10, 60 + side), armSkin);
+      fore.position.set(side * 0.006, -0.15, 0.008);
       elbow.add(fore);
       const handFrom = elbow.children.length;
-      const wrist = knob(0.018, armSkin, 61 + side);
+      const wrist = knob(0.026, armSkin, 61 + side);
+      wrist.scale.set(1.25, 1, 0.8);
       wrist.position.y = -0.57;
       elbow.add(wrist);
-      const palm = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.04, 12, 10), 0.003, 12, 63 + side), armSkin);
-      palm.scale.set(0.9, 1.6, 0.4);
-      palm.position.set(0, -0.635, 0);
+      // a broad, flat palm with the knuckles standing up along its end
+      const palm = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.046, 14, 12), 0.003, 12, 63 + side), armSkin);
+      palm.scale.set(1.15, 1.35, 0.45);
+      palm.position.set(0, -0.64, 0);
       elbow.add(palm);
+      for (let f = 0; f < 4; f++) {
+        const kn = knob(0.013, armSkin, 80 + f + side * 7);
+        kn.position.set((f - 1.5) * 0.021, -0.684, -0.004);
+        elbow.add(kn);
+      }
       const hand: THREE.Group[] = [];
       for (let f = 0; f < 5; f++) {
         const thumb = f === 4;
         const finger = new THREE.Group();
-        finger.position.set(thumb ? 0 : (f - 1.5) * 0.016, thumb ? -0.61 : -0.69, thumb ? 0.03 : 0);
+        finger.position.set(thumb ? side * 0.03 : (f - 1.5) * 0.021, thumb ? -0.62 : -0.69, thumb ? 0.026 : 0);
         if (thumb) finger.rotation.set(0.4, 0, side * 0.5);
-        const L1 = thumb ? 0.09 : 0.15 - Math.abs(f - 1.5) * 0.012;
-        const L2 = thumb ? 0.07 : 0.13 - Math.abs(f - 1.5) * 0.01;
-        finger.add(strut(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -L1, 0.004), 0.0075, armSkin));
-        const k1 = knob(0.0088, armSkin, 67 + f);
+        const L1 = thumb ? 0.085 : 0.14 - Math.abs(f - 1.5) * 0.012;
+        const L2 = thumb ? 0.065 : 0.12 - Math.abs(f - 1.5) * 0.01;
+        finger.add(strut(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -L1, 0.004), 0.0115, armSkin));
+        const k1 = knob(0.0125, armSkin, 67 + f);
         k1.position.set(0, -L1, 0.004);
         finger.add(k1);
         const tipSeg = new THREE.Group();
         tipSeg.position.set(0, -L1, 0.004);
         tipSeg.rotation.x = 0.18;
-        tipSeg.add(strut(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -L2, 0), 0.0062, armSkin));
+        tipSeg.add(strut(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -L2, 0), 0.0095, armSkin));
+        // and a frog's round pad on the end of every one
+        const pad = knob(0.0155, armSkin, 74 + f);
+        pad.scale.set(1.1, 0.8, 0.75);
+        pad.position.set(0, -L2 - 0.004, 0.002);
+        tipSeg.add(pad);
         finger.add(tipSeg);
         elbow.add(finger);
         hand.push(finger);

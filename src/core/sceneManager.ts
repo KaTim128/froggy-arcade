@@ -51,6 +51,7 @@ import { NightRoad3D } from '../scenes2d/NightRoad3D';
 import { HotelHall3D } from '../scenes2d/HotelHall3D';
 import { OutroCutscene3D } from '../scenes2d/OutroCutscene3D';
 import { EndCard } from '../scenes2d/EndCard';
+import { DeathScreen } from '../scenes2d/DeathScreen';
 
 let game: Phaser.Game | null = null;
 
@@ -111,6 +112,7 @@ export function bootGame(): void {
       OutroCutscene3D,
       TheEnd,
       EndCard,
+      DeathScreen,
     ],
   });
 

@@ -143,6 +143,8 @@ export interface GameState {
   reachedHotel: boolean;
   /** Paid for a room and given a key. */
   checkedIn: boolean;
+  /** Gone to bed in 612: the night picks up again at 3 AM, at the knocking. */
+  hotelNight: boolean;
   settings: Settings;
 }
 
@@ -284,6 +286,7 @@ function defaultState(): GameState {
     timeOfDay: 'day',
     reachedHotel: false,
     checkedIn: false,
+    hotelNight: false,
     settings: { master: 80, music: 70, sfx: 85, moveStyle: 'stick', lookSens: 100 },
   };
 }

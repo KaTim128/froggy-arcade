@@ -504,11 +504,9 @@ export class Chase3D extends Phaser.Scene {
 
     this.time.delayedCall(SCARE_MS + 400, () => {
       froggyLayer.clear();
-      this.teardown();
-      // PRD CH-5 / open question #5: a death is a full reset to Boot.
-      store.resetRun();
-      this.scene.start('EndCard', { title: 'YOU WERE EATEN', quiet: true, noReset: true });
-      this.time.delayedCall(4000, () => this.scene.start('Boot'));
+      // No longer a full reset: RESPAWN runs the chase again, LEAVE keeps
+      // the run where it is (START comes back to the chase).
+      this.scene.start('DeathScreen', { key: 'Chase3D', data: {}, line: 'He was faster.' });
     });
   }
 

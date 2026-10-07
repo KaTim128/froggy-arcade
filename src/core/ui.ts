@@ -174,7 +174,14 @@ export function button(
     scene.tweens.add({ targets: c, y: y - 1, duration: 90, yoyo: true, ease: 'Quad.easeOut' });
   });
   c.on('pointerout', () => box.setFillStyle(fill));
+  // One tap, one press: a phone can hand the same tap over twice (the touch,
+  // then the mouse event made from it), and a toggle pressed twice in a
+  // quarter of a second looks like a button that does nothing.
+  let last = -Infinity;
   c.on('pointerdown', () => {
+    const now = performance.now();
+    if (now - last < 250) return;
+    last = now;
     audio.sfx('ui_blip');
     onClick();
   });

@@ -207,9 +207,33 @@ export class SettingsModal extends Phaser.Scene {
           jumpToScene('ExteriorDay', { nightfall: true });
         },
       ],
+      [
+        'HOTEL ARRIVAL',
+        `AFTER THE ROAD: LOBBY, $${ROOM_MONEY}`,
+        () => {
+          // Exactly where the night road leaves you: through the hotel's doors,
+          // midnight, the price of a room in your pocket, not yet checked in.
+          const s = store.get();
+          if (s.cash < ROOM_MONEY) store.earnCash(ROOM_MONEY - s.cash);
+          store.patch({
+            seenIntro: true,
+            charityUsed: true,
+            hasKey: true,
+            froggyGone: true,
+            route: 'normal',
+            hideRoom: 0,
+            timeOfDay: 'midnight',
+            reachedHotel: true,
+            checkedIn: false,
+            hotelNight: false,
+          });
+          store.flush();
+          jumpToScene('Hotel', { area: 'lobby' });
+        },
+      ],
     ];
     rows.forEach(([label, what, go], i) => {
-      const y = 62 + i * 28;
+      const y = 62 + i * 22;
       this.body.add(button(this, 92, y, label, go, { width: 112, height: 14 }));
       this.body.add(text(this, 152, y - 3, what, PALETTE.ash));
     });

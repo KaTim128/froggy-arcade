@@ -29,7 +29,7 @@ import { touchControls } from '../ui/touchControls';
 import { store } from './state';
 
 /** Scenes where Esc is not a pause: nothing is being played. */
-const NEVER = new Set(['Boot', 'StartScreen', 'ProfileModal', 'IntroCutscene', 'TheEnd', 'EndCard']);
+const NEVER = new Set(['Boot', 'StartScreen', 'ProfileModal', 'IntroCutscene', 'TheEnd', 'EndCard', 'DeathScreen']);
 
 /** Panels that close themselves on Esc; while one is up, Esc is theirs. */
 const OWN_ESC = new Set(['SettingsModal', 'ChangeMachine', 'PrizeCounter', 'PrizeExchange', 'ProfileModal']);

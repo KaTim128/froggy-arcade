@@ -163,6 +163,7 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   OutroCutscene3D: BARE,
   TheEnd: BARE,
   EndCard: BARE,
+  DeathScreen: BARE,
   // Set by the cabinet itself the moment its module is built; until then the
   // how-to-play card is up, and that is two big buttons you tap.
   Minigame: TAP,

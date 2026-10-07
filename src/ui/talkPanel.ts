@@ -46,7 +46,23 @@ export function openTalkPanel(scene: Phaser.Scene, o: TalkOpts): Phaser.GameObje
   const R = over.right;
   const inner = GAME_W - 46 - L - R;
   const color = o.color ?? PALETTE.neon;
-  const options = o.options ?? [];
+  // EVERY ANSWER TAKES DOWN THE PANEL IT IS ON, AND ANSWERS ONCE.  A phone
+  // can deliver one tap twice (the touch, then the mouse event the browser
+  // makes from it), and a scene that loses track of a panel would otherwise
+  // leave it on the screen with buttons that close some other one.  So the
+  // panel goes first, whatever the answer then does -- close, or open the
+  // next one -- and a second fire of the same tap does nothing.
+  let panelBox: Phaser.GameObjects.Container | null = null;
+  let answered = false;
+  const options = (o.options ?? []).map((op) => ({
+    label: op.label,
+    fn: () => {
+      if (answered) return;
+      answered = true;
+      if (panelBox?.active) panelBox.destroy();
+      op.fn();
+    },
+  }));
   const body = text(scene, 22 + L, 0, o.line, PALETTE.cream).setMaxWidth(inner);
   const textH = Math.max(8, Math.ceil(body.height));
   const widths = options.map((op) => Math.max(60, op.label.length * FONT_ADVANCE + 14));
@@ -80,7 +96,7 @@ export function openTalkPanel(scene: Phaser.Scene, o: TalkOpts): Phaser.GameObje
       parts.push(button(scene, cx, top + i * ROW, op.label, op.fn, { width: widths[i], height: 13 }));
     });
   }
-  const panelBox = scene.add.container(0, 0, parts).setDepth(o.depth ?? 900);
+  panelBox = scene.add.container(0, 0, parts).setDepth(o.depth ?? 900);
   panelBox.once(Phaser.GameObjects.Events.DESTROY, () => touchControls.releaseStick());
   return panelBox;
 }

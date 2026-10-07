@@ -412,7 +412,7 @@ export class Hotel extends Phaser.Scene {
     this.mutter.setText(l.text).setTint(l.red ? 0xff4a4a : PALETTE.cream).setVisible(true).setAlpha(1);
     const b = this.mutter.getBounds();
     this.mutterPlate.setPosition(b.x - 4, b.y - 3).setDisplaySize(b.width + 8, b.height + 6).setVisible(true).setAlpha(1);
-    this.tapZone.setInteractive({ useHandCursor: true });
+    if (!this.talk) this.tapZone.setInteractive({ useHandCursor: true });
     this.lineTimer = this.time.delayedCall(l.dur * 1000, () => this.nextLine());
   }
 
@@ -540,13 +540,21 @@ export class Hotel extends Phaser.Scene {
     });
   }
 
+  /**
+   * A panel, and only ever one: whatever was up goes first.
+   */
   private openTalk(line: string, options: Array<{ label: string; fn: () => void }>, who = 'RECEPTION'): void {
+    this.closeTalk();
+    // the words under it are not a button while the panel is up
+    this.tapZone.disableInteractive();
+    // (each answer takes its own panel down: see ui/talkPanel)
     this.talk = openTalkPanel(this, { who, line, options, color: PALETTE.gold });
   }
 
   private closeTalk(): void {
-    this.talk?.destroy();
+    if (this.talk?.active) this.talk.destroy();
     this.talk = null;
+    if (this.lineUp) this.tapZone.setInteractive({ useHandCursor: true });
   }
 
   /** The mirror: close in on it, and on the face in it. */
@@ -610,6 +618,9 @@ export class Hotel extends Phaser.Scene {
   private sleep(): void {
     this.locked = true;
     this.night = 'sleeping';
+    // a checkpoint: come back to this run and it is 3 AM, and the knocking
+    store.patch({ hotelNight: true });
+    store.flush();
     this.lines = [];
     this.nextLine();
     if (this.curtainsOpen) this.setCurtains(false, false, 1400);
@@ -832,7 +843,7 @@ export class Hotel extends Phaser.Scene {
     this.locked = true;
     this.runHint?.destroy();
     runHotelScare(this, () => {
-      this.time.delayedCall(900, () => this.scene.restart({ area: 'room', late: true }));
+      this.time.delayedCall(600, () => this.scene.start('DeathScreen', { key: 'Hotel', data: { area: 'room', late: true }, line: 'He came in through the window.' }));
     });
   }
 
