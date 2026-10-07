@@ -26,10 +26,11 @@
  *   PLUSH CRANE (5 tokens).  Animal plushies, and -- rarely -- a Froggy.  It is a
  *   real claw machine's claw: a weak grip, and it holds one time in ten.
  *
- *   THE OTHER ONE (3 tokens).  Capsules, in the dark, under a flickering
+ *   THE OTHER ONE (5 tokens).  Capsules, in the dark, under a flickering
  *   light.  A strong claw -- come down on a capsule and it brings it home
  *   four times in five -- and every capsule it brings up has tokens in it:
- *   anything from 1 to 10 -- or, one in fifty, the JACKPOT, 50.  And a few
+ *   anything from 1 to 6 -- or, one in fifty, the JACKPOT, 50.  On average
+ *   a go comes back with less than it cost; the jackpot is why you stay.  And a few
  *   hold something more, that should not be in a toy machine at all, which
  *   the man outside will pay a great deal for.
  *
@@ -52,11 +53,11 @@ import { touchControls } from '../ui/touchControls';
 
 export type CraneKind = 'plush' | 'oddity';
 
-export const CRANE_COST: Record<CraneKind, number> = { plush: 5, oddity: 3 };
+export const CRANE_COST: Record<CraneKind, number> = { plush: 5, oddity: 5 };
 
 /** What a capsule from the dark crane holds: tokens, always. */
 export const CAPSULE_MIN = 1;
-export const CAPSULE_MAX = 10;
+export const CAPSULE_MAX = 6;
 /** One in fifty is the jackpot. */
 export const CAPSULE_JACKPOT = 50;
 export const JACKPOT_CHANCE = 1 / 50;

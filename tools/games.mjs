@@ -4853,8 +4853,8 @@ for (const g of [
     }
     return { jackpot: jackpot / n, oddity: oddity / n, min, max, mean: sum / (n - jackpot), bad: empty };
   });
-  const oddsOk = Math.abs(odds.jackpot - 0.02) < 0.002 && odds.min === 1 && odds.max === 10 && Math.abs(odds.mean - 5.5) < 0.05 && odds.bad === 0 && odds.oddity > 0;
-  console.log(`${oddsOk ? 'PASS' : 'FAIL'}  oddity crane: every capsule 1-10 tokens, 1 in 50 a 50-token jackpot  — ${JSON.stringify(odds)}`);
+  const oddsOk = Math.abs(odds.jackpot - 0.02) < 0.002 && odds.min === 1 && odds.max === 6 && Math.abs(odds.mean - 3.5) < 0.05 && odds.bad === 0 && odds.oddity > 0;
+  console.log(`${oddsOk ? 'PASS' : 'FAIL'}  oddity crane: every capsule 1-6 tokens, 1 in 50 a 50-token jackpot  — ${JSON.stringify(odds)}`);
   if (!oddsOk) failures++;
 
   if (errs.length) {

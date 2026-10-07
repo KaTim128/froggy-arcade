@@ -37,6 +37,7 @@ import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
 import { CABINETS, LOUNGE_DOOR, cabinetsIn } from '../game/content';
 import { paintCrane, CRANE_H, CRANE_W, type CraneKind } from '../art/loungeProps';
+import { CRANE_COST } from './CraneGame';
 import { FULL_LINE, pocketsFull } from '../game/inventory';
 import { GAME_W } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
@@ -54,8 +55,8 @@ const BACK_DOOR = { x: 20, y: LOUNGE_DOOR.y };
  * here, in the same places, dark.
  */
 const CRANES: Array<{ kind: CraneKind; x: number; y: number; cost: number; title: string }> = [
-  { kind: 'plush', x: 44, y: 74, cost: 5, title: 'PLUSH CRANE' },
-  { kind: 'oddity', x: 82, y: 74, cost: 3, title: 'ODDITY CRANE' },
+  { kind: 'plush', x: 44, y: 74, cost: CRANE_COST.plush, title: 'PLUSH CRANE' },
+  { kind: 'oddity', x: 82, y: 74, cost: CRANE_COST.oddity, title: 'ODDITY CRANE' },
 ];
 
 type Target =
