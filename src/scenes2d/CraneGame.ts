@@ -27,11 +27,10 @@
  *   real claw machine's claw: a weak grip, and it holds one time in ten.
  *
  *   THE OTHER ONE (3 tokens).  Capsules, in the dark, under a flickering
- *   light.  The same claw -- it holds one time in ten -- and most of what
- *   it comes up with is empty.  Five in a hundred hold ten tokens, one in a
- *   hundred holds a golden ticket worth ten more, and a few hold something
- *   that should not be in a toy machine at all, which the man outside will
- *   pay a great deal for.
+ *   light.  The same claw, and every capsule it brings up has tokens in it:
+ *   anything from 1 to 10 -- or, one in fifty, the JACKPOT, 50.  And a few
+ *   hold something more, that should not be in a toy machine at all, which
+ *   the man outside will pay a great deal for.
  *
  * Whatever it gives you goes in a pocket, so a go is refused with full
  * pockets (the room checks before you get here, and AGAIN checks again).
@@ -54,25 +53,26 @@ export type CraneKind = 'plush' | 'oddity';
 
 export const CRANE_COST: Record<CraneKind, number> = { plush: 5, oddity: 3 };
 
-/**
- * What a capsule from the dark crane holds, in order: the chance of each,
- * and the rest is an empty capsule.  The two ten-token results are separate
- * on purpose -- a plain ten, and the rare golden ticket.
- */
-export const ODDITY_TABLE: Array<{ what: 'tokens' | 'golden' | 'oddity'; chance: number }> = [
-  { what: 'tokens', chance: 0.05 },
-  { what: 'golden', chance: 0.01 },
-  { what: 'oddity', chance: 0.03 },
-];
+/** What a capsule from the dark crane holds: tokens, always. */
+export const CAPSULE_MIN = 1;
+export const CAPSULE_MAX = 10;
+/** One in fifty is the jackpot. */
+export const CAPSULE_JACKPOT = 50;
+export const JACKPOT_CHANCE = 1 / 50;
+/** And now and then something else in with them, for the man outside. */
+export const ODDITY_CHANCE = 0.03;
 
-/** A capsule's contents, off one roll. */
-export function rollCapsule(r = Math.random()): 'tokens' | 'golden' | 'oddity' | 'nothing' {
-  let acc = 0;
-  for (const row of ODDITY_TABLE) {
-    acc += row.chance;
-    if (r < acc) return row.what;
-  }
-  return 'nothing';
+export interface Capsule {
+  tokens: number;
+  jackpot: boolean;
+  oddity: boolean;
+}
+
+/** A capsule's contents.  `rnd` is there so the odds can be tested. */
+export function rollCapsule(rnd: () => number = Math.random): Capsule {
+  const jackpot = rnd() < JACKPOT_CHANCE;
+  const tokens = jackpot ? CAPSULE_JACKPOT : CAPSULE_MIN + Math.floor(rnd() * (CAPSULE_MAX - CAPSULE_MIN + 1));
+  return { tokens, jackpot, oddity: rnd() < ODDITY_CHANCE };
 }
 
 /** The inside of the machine, in the cabinet's picture. */
@@ -830,24 +830,21 @@ export class CraneGame extends Phaser.Scene {
       }
       return;
     }
-    // a capsule: open it
-    const what = rollCapsule();
-    if (what === 'tokens' || what === 'golden') {
-      ledger.credit(10, 'crane');
-      audio.sfx('cha_ching');
-      this.showResult(what === 'golden' ? 'A GOLDEN TICKET!  10 TOKENS' : 'INSIDE: 10 TOKENS', PALETTE.gold, true);
-      return;
-    }
-    if (what === 'oddity') {
+    // a capsule: open it.  There are always tokens in it.
+    const cap = rollCapsule();
+    ledger.credit(cap.tokens, 'crane');
+    audio.sfx('cha_ching');
+    const coins = `${cap.tokens} TOKEN${cap.tokens === 1 ? '' : 'S'}`;
+    if (cap.oddity) {
+      // and something else, under them
       const def = ODDITIES[Phaser.Math.Between(0, ODDITIES.length - 1)];
       if (addItem(def.id)) {
         audio.sfx('chime');
-        this.showResult(`INSIDE: ${def.name}`, 0xc8a0e0, true, def.id);
-      } else this.showResult(FULL_LINE, PALETTE.ember, true);
-      return;
+        this.showResult(`${cap.jackpot ? 'JACKPOT!  ' : ''}${coins} + ${def.name}`, 0xc8a0e0, true, def.id);
+        return;
+      }
     }
-    audio.sfx('ui_blip', 0.4);
-    this.showResult('THE CAPSULE IS EMPTY.', PALETTE.ash, true);
+    this.showResult(cap.jackpot ? `JACKPOT!  ${coins}` : `INSIDE: ${coins}`, PALETTE.gold, true);
   }
 
   private showResult(line: string, colour: number, played: boolean, itemId?: string): void {
