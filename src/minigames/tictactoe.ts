@@ -77,12 +77,13 @@ let busy = false;
 
 export const ticTacToe: MinigameModule = {
   id: 'tictactoe',
-  title: 'TIC-TAC-TOE',
+  // two little games for a token apiece, so the cabinet is named for both
+  title: 'MINI DUELS',
   music: 'game_tictactoe',
   rules: 'tic-tac-toe or rock paper scissors',
   tutorial: {
     objective: [
-      'PICK A GAME: TIC-TAC-TOE OR ROCK PAPER SCISSORS.',
+      'TWO DUELS WITH FROGGY: TIC-TAC-TOE OR ROCK PAPER SCISSORS.',
       'BEAT FROGGY AND THE ROUND PAYS.',
       'A DRAW GETS YOUR TOKEN BACK.',
       'THEN PLAY AGAIN, OR LEAVE.',
@@ -103,6 +104,8 @@ export const ticTacToe: MinigameModule = {
     apiRef = api;
     layer = null;
     current = null;
+    // the entry cost pays for the first game picked
+    paidGo = true;
 
     // A wooden table, and the board a cream card on it.
     backdrop(scene, 0x3b2a1c, 0x2a1d14, { speckleColor: 0xffd9a0 });
@@ -126,7 +129,13 @@ export const ticTacToe: MinigameModule = {
           render();
           settle();
         },
-        pick: (g: 'ttt' | 'rps') => (g === 'ttt' ? startTicTacToe() : startRps()),
+        /** Pick a game from the menu, paying for it as a tap on its card does. */
+        pick: (g: 'ttt' | 'rps') => {
+          if (!spendGo()) return false;
+          if (g === 'ttt') startTicTacToe();
+          else startRps();
+          return true;
+        },
         /** Throw a hand against a hand Froggy is forced to throw. */
         rps: (mine: Hand, his: Hand) => throwHands(mine, his),
       };
@@ -154,6 +163,41 @@ let apiRef: MinigameApi | null = null;
 /** Everything of the current view, so a view change takes all of it. */
 let layer: Phaser.GameObjects.Container | null = null;
 let current: 'ttt' | 'rps' | null = null;
+/**
+ * A go has been paid for and not played yet: the entry cost, or a go backed
+ * out of before it finished.  Picking a game spends it; with none in hand,
+ * picking a game costs the cabinet's price.
+ */
+let paidGo = false;
+/** The game on screen has been settled (won, lost or drawn). */
+let settled = false;
+
+/** Pay for a go if one is not already paid for.  False if they cannot. */
+function spendGo(): boolean {
+  if (paidGo) {
+    paidGo = false;
+    return true;
+  }
+  const api = apiRef;
+  if (!api) return false;
+  if (!api.raise(cabinetById('tictactoe').cost)) return false;
+  audio.sfx('coin_drop');
+  return true;
+}
+
+/**
+ * A small MENU button in the corner of either game: back to the choice of
+ * games.  A game left before it finished gives its go back, so the next pick
+ * is already paid for.
+ */
+function menuButton(L: Phaser.GameObjects.Container): void {
+  const s = sceneRef!;
+  // under the cabinet's title bar, in the corner clear of the game's text
+  L.add(button(s, 26, 27, 'MENU', () => {
+    if (!settled) paidGo = true;
+    showPicker();
+  }, { width: 44, height: 14 }));
+}
 
 function freshLayer(): Phaser.GameObjects.Container {
   layer?.destroy(true);
@@ -162,29 +206,62 @@ function freshLayer(): Phaser.GameObjects.Container {
   return layer;
 }
 
-/** The two games, side by side. */
+/**
+ * ---- THE MENU.  The two games as two big cards side by side, each with its
+ * picture and its name, the whole card a button; and LEAVE under them.  Both
+ * games always come back here, so the player picks again freely.
+ */
 function showPicker(): void {
   const s = sceneRef;
   if (!s) return;
   current = null;
+  settled = false;
   const L = freshLayer();
-  L.add(centerText(s, GAME_W / 2, 34, 'PICK A GAME', PALETTE.gold, 16));
-  L.add(centerText(s, GAME_W / 2, 52, 'BEAT FROGGY - A DRAW GETS YOUR TOKEN BACK', PALETTE.cream));
-  // a little picture of each over its button
-  const g = s.add.graphics();
-  L.add(g);
-  g.fillStyle(0xfff0c9, 1).fillRoundedRect(68, 72, 54, 54, 4);
-  g.lineStyle(2, 0x8a6a3a, 1);
-  for (let k = 1; k < 3; k++) {
-    g.lineBetween(68 + k * 18, 74, 68 + k * 18, 124);
-    g.lineBetween(70, 72 + k * 18, 120, 72 + k * 18);
-  }
-  g.lineStyle(3, PALETTE.ember, 1).lineBetween(73, 77, 83, 87).lineBetween(83, 77, 73, 87);
-  g.lineStyle(3, PALETTE.teal, 1).strokeCircle(95, 99, 5);
-  L.add(drawHand(s, 'rock', 214, 102, 1, SKIN, false));
-  L.add(drawHand(s, 'scissors', 250, 102, 1, FROG, true));
-  L.add(button(s, 95, 146, 'TIC-TAC-TOE', () => startTicTacToe(), { width: 96, height: 16 }));
-  L.add(button(s, 232, 146, 'ROCK PAPER SCISSORS', () => startRps(), { width: 128, height: 16 }));
+  // (the cabinet's own title bar already says MINI DUELS)
+  L.add(centerText(s, GAME_W / 2, 26, paidGo ? 'PICK A GAME - THIS ONE IS PAID FOR' : `PICK A GAME - ${cabinetById('tictactoe').cost} TOKEN A GO`, PALETTE.cream));
+  const CARD_W = 136;
+  const CARD_H = 100;
+  const CY = 92;
+  const card = (cx: number, label: string, go: () => void, art: (g: Phaser.GameObjects.Graphics) => void): void => {
+    const box = s.add.rectangle(cx, CY, CARD_W, CARD_H, 0x2a1d14).setStrokeStyle(2, PALETTE.gold);
+    box.setInteractive({ useHandCursor: true });
+    box.on('pointerover', () => box.setFillStyle(0x3b2a1c));
+    box.on('pointerout', () => box.setFillStyle(0x2a1d14));
+    box.on('pointerdown', go);
+    L.add(box);
+    const g = s.add.graphics();
+    L.add(g);
+    art(g);
+    // the name across the foot of the card, on its own band
+    L.add(s.add.rectangle(cx, CY + CARD_H / 2 - 12, CARD_W - 8, 18, PALETTE.plum).setStrokeStyle(1, PALETTE.neon));
+    L.add(centerText(s, cx, CY + CARD_H / 2 - 12, label, PALETTE.cream));
+  };
+  const pick = (start: () => void) => () => {
+    if (!spendGo()) {
+      notice.setText('NOT ENOUGH TOKENS');
+      audio.sfx('buzzer');
+      return;
+    }
+    start();
+  };
+  card(82, 'TIC-TAC-TOE', pick(startTicTacToe), (g) => {
+    const x0 = 82 - 27;
+    const y0 = CY - 40;
+    g.fillStyle(0xfff0c9, 1).fillRoundedRect(x0, y0, 54, 54, 4);
+    g.lineStyle(2, 0x8a6a3a, 1);
+    for (let k = 1; k < 3; k++) {
+      g.lineBetween(x0 + k * 18, y0 + 2, x0 + k * 18, y0 + 52);
+      g.lineBetween(x0 + 2, y0 + k * 18, x0 + 52, y0 + k * 18);
+    }
+    g.lineStyle(3, PALETTE.ember, 1).lineBetween(x0 + 5, y0 + 5, x0 + 13, y0 + 13).lineBetween(x0 + 13, y0 + 5, x0 + 5, y0 + 13);
+    g.lineStyle(3, PALETTE.teal, 1).strokeCircle(x0 + 27, y0 + 27, 5);
+  });
+  card(238, 'ROCK PAPER SCISSORS', pick(startRps), () => undefined);
+  L.add(drawHand(s, 'rock', 220, CY - 12, 1, SKIN, false));
+  L.add(drawHand(s, 'scissors', 256, CY - 12, 1, FROG, true));
+  const notice = centerText(s, GAME_W / 2, 150, '', PALETTE.ember);
+  L.add(notice);
+  L.add(button(s, GAME_W / 2, 168, 'LEAVE', () => apiRef?.cashOut(), { width: 76, height: 16, fill: 0x5a1a22 }));
 }
 
 /** The board, empty. */
@@ -197,7 +274,9 @@ function startTicTacToe(): void {
   marks = [];
   busy = false;
   const L = freshLayer();
+  settled = false;
   L.add(centerText(s, GAME_W / 2, 26, 'YOU ARE X   -   A DRAW REFUNDS', PALETTE.gold));
+  menuButton(L);
 
   const size = 34;
   const ox = GAME_W / 2 - size * 1.5;
@@ -288,7 +367,9 @@ function startRps(): void {
   current = 'rps';
   busy = false;
   const L = freshLayer();
+  settled = false;
   L.add(centerText(s, GAME_W / 2, 26, 'ROCK PAPER SCISSORS   -   A DRAW REFUNDS', PALETTE.gold));
+  menuButton(L);
   L.add(centerText(s, 70, 44, 'YOU', PALETTE.cream));
   L.add(centerText(s, 250, 44, 'FROGGY', PALETTE.mossLight));
   myHand = drawHand(s, 'rock', 74, 84, 1.6, SKIN, false);
@@ -354,6 +435,7 @@ function roundOver(result: 'win' | 'lose' | 'draw', detail = ''): void {
   const api = apiRef;
   if (!s || !api) return;
   busy = true;
+  settled = true;
   const def = cabinetById('tictactoe');
   if (result === 'win') {
     api.payout(def.reward);
@@ -365,34 +447,30 @@ function roundOver(result: 'win' | 'lose' | 'draw', detail = ''): void {
     audio.sfx('buzzer');
   }
   const L = layer!;
-  const box = s.add.rectangle(GAME_W / 2, 150, 236, 48, PALETTE.ink, 0.92).setStrokeStyle(1, result === 'win' ? PALETTE.gold : PALETTE.steel);
+  const box = s.add.rectangle(GAME_W / 2, 150, 292, 52, PALETTE.ink, 0.92).setStrokeStyle(1, result === 'win' ? PALETTE.gold : PALETTE.steel);
   const head =
     result === 'win' ? `YOU WIN  +${def.reward}` : result === 'draw' ? `A DRAW  -  ${def.cost} BACK` : 'FROGGY WINS';
   L.add(box);
   L.add(centerText(s, GAME_W / 2, 135, detail ? `${detail}  -  ${head}` : head, result === 'win' ? PALETTE.gold : PALETTE.cream));
   const game = current;
+  // three buttons of one size, a clear gap between each
+  const BW = 84;
+  const GAP = 10;
   L.add(
-    button(s, GAME_W / 2 - 74, 158, 'PLAY AGAIN', () => {
+    button(s, GAME_W / 2 - BW - GAP, 160, 'PLAY AGAIN', () => {
       if (!api.raise(def.cost)) {
-        L.add(centerText(s, GAME_W / 2, 124, 'NOT ENOUGH TOKENS', PALETTE.ember));
+        L.add(centerText(s, GAME_W / 2, 118, 'NOT ENOUGH TOKENS', PALETTE.ember));
         audio.sfx('buzzer');
         return;
       }
       audio.sfx('coin_drop');
       if (game === 'rps') startRps();
       else startTicTacToe();
-    }, { width: 80, height: 14, fill: PALETTE.moss }),
+    }, { width: BW, height: 16, fill: PALETTE.moss }),
   );
-  L.add(button(s, GAME_W / 2, 158, 'OTHER GAME', () => {
-    if (!api.raise(def.cost)) {
-      L.add(centerText(s, GAME_W / 2, 124, 'NOT ENOUGH TOKENS', PALETTE.ember));
-      audio.sfx('buzzer');
-      return;
-    }
-    if (game === 'rps') startTicTacToe();
-    else startRps();
-  }, { width: 64, height: 14 }));
-  L.add(button(s, GAME_W / 2 + 74, 158, 'LEAVE', () => api.cashOut(), { width: 56, height: 14, fill: 0x5a1a22 }));
+  // back to the choice of games; the next one is paid for when it is picked
+  L.add(button(s, GAME_W / 2, 160, 'GAME MENU', () => showPicker(), { width: BW, height: 16 }));
+  L.add(button(s, GAME_W / 2 + BW + GAP, 160, 'LEAVE', () => api.cashOut(), { width: BW, height: 16, fill: 0x5a1a22 }));
 }
 
 function render(): void {
