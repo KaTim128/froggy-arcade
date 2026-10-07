@@ -93,9 +93,12 @@ export function canEnter(scene: SceneId, s: Readonly<GameState>, ctx: GuardConte
 
     // PRD AC-6: the break-in is reachable ONLY from the ejected route.
     case 'ExteriorNight':
-    case 'BackAlley':
     case 'ArcadeDark':
       return s.route === 'ejected';
+    // The alley too -- and, once the night in the arcade is behind you, by
+    // day as well: its side door chained shut (see BackAlley).
+    case 'BackAlley':
+      return s.route === 'ejected' || (s.route === 'normal' && s.froggyGone);
 
     case 'BasementSequence':
       return s.route === 'basement';

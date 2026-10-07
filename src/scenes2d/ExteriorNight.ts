@@ -63,9 +63,8 @@ export class ExteriorNight extends Phaser.Scene {
     this.add.rectangle(this.doorX, 118, 26, 10, PALETTE.bone).setOrigin(0.5, 0);
     centerText(this, this.doorX, 120, 'CLOSED', PALETTE.blood).setOrigin(0.5, 0);
 
-    // the alley, right edge, barely lit
-    this.add.rectangle(GAME_W - 14, 96, 14, 84, PALETTE.black).setOrigin(0, 0);
-    text(this, GAME_W - 13, 150, '>', PALETTE.ash, 8);
+    // (the alley is the mouth off the building's right-hand corner, painted
+    // with the street)
 
     this.player = new Player(this, this.doorX - 50, WALK_Y, true);
     this.player.setSurface('gravel');
