@@ -14,8 +14,8 @@
  *   real claw machine's claw: a weak grip, and it holds one time in twenty.
  *
  *   THE OTHER ONE (3 tokens).  Capsules, in the dark, under a flickering
- *   light.  It never misses -- the claw always comes up with a capsule -- but
- *   most of them are empty.  Five in a hundred hold ten tokens, one in a
+ *   light.  Its grip is good -- the claw comes up with a capsule four times
+ *   in five -- but most of them are empty.  Five in a hundred hold ten tokens, one in a
  *   hundred holds a golden ticket worth ten more, and a few hold something
  *   that should not be in a toy machine at all, which the man outside will
  *   pay a great deal for.
@@ -75,8 +75,8 @@ const MOVE_X = 70;
 const MOVE_Z = 0.85;
 const LOWER = 60;
 const RAISE = 70;
-/** The plush crane holds one time in twenty.  The other one always does. */
-export const GRIP: Record<CraneKind, number> = { plush: 0.05, oddity: 1 };
+/** The plush crane holds one time in twenty; the capsule crane four in five. */
+export const GRIP: Record<CraneKind, number> = { plush: 0.05, oddity: 0.8 };
 
 /** Front of the floor is lower on screen; the back of it is higher. */
 const floorY = (z: number): number => 144 - z * 30;
