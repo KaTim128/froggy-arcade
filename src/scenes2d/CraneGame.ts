@@ -4,10 +4,11 @@
  * You are stood at the cabinet, looking in through the glass at a machine
  * piled to the top with prizes.  The claw rides a gantry in two directions:
  * left and right, and back and forth into the machine (it gets smaller the
- * further back it goes).  HOLD DROP to lower it, let go to stop it; it goes
- * down from wherever it is and drifts a little the way it was travelling.
- * When it touches the pile it shuts, comes up, and carries whatever it is
- * holding to the chute at the front.  When the clock runs out it lowers on
+ * further back it goes).  One press of DROP sends it down from wherever it
+ * is, drifting a little the way it was travelling; when it touches the pile
+ * it shuts, comes up, and goes back to the chute at the front, where it lets
+ * go of whatever it is holding.  Then it glides home to where it started, so
+ * every go begins from the same place.  When the clock runs out it drops on
  * its own.  QUIT leaves at any time.
  *
  *   PLUSH CRANE (5 tokens).  Animal plushies, and a Froggy or two.  It is a
@@ -95,18 +96,22 @@ interface Toy {
   art: Phaser.GameObjects.Container;
 }
 
+/** Where the claw starts every go, and goes back to after each one. */
+const HOME = { x: PILE_L + 40, z: 0.3 };
+
 type Phase = 'aim' | 'lower' | 'shut' | 'up' | 'carry' | 'release' | 'result';
 
 export class CraneGame extends Phaser.Scene {
   private kind: CraneKind = 'plush';
   private phase: Phase = 'aim';
-  private clawX = PILE_L + 40;
-  private clawZ = 0.3;
+  private clawX = HOME.x;
+  private clawZ = HOME.z;
   private drop = 0;
   private vx = 0;
   private vz = 0;
   private sway = 0;
-  private auto = false;
+  /** Gliding back to HOME after a go. */
+  private homing = false;
   private clock = CLOCK_S;
   private toys: Toy[] = [];
   private held: Toy | null = null;
@@ -132,15 +137,15 @@ export class CraneGame extends Phaser.Scene {
     const eerie = this.kind === 'oddity';
     audio.setScene({ music: eerie ? 'lab_calm' : 'room_lounge', ambience: ['cabinet_bleeps'] });
     this.phase = 'aim';
-    this.clawX = PILE_L + 40;
-    this.clawZ = 0.3;
+    this.clawX = HOME.x;
+    this.clawZ = HOME.z;
+    this.homing = false;
     this.drop = 0;
     this.vx = this.vz = 0;
     this.held = null;
     this.result = null;
     this.toys = [];
     this.pointerDrop = false;
-    this.auto = false;
 
     this.paintCabinet(eerie);
     this.fillPile();
@@ -169,9 +174,14 @@ export class CraneGame extends Phaser.Scene {
       drop: bind(['SPACE', 'E']),
     };
     kb?.on('keydown-ESC', () => this.leave(true));
+    // a press, however short, is the whole drop (polling `isDown` in the loop
+    // misses a tap that goes down and up between two frames)
+    kb?.on('keydown-SPACE', () => this.beginLower());
+    kb?.on('keydown-E', () => this.beginLower());
     // a held press on the glass lowers it too
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if ((this.phase === 'aim' || this.phase === 'lower') && p.y > 30 && p.y < 148) this.pointerDrop = true;
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
+      // not a press on a button (AGAIN starts a go on the same press)
+      if (this.phase === 'aim' && !over.length && p.y > 30 && p.y < 148) this.beginLower();
     });
     this.input.on('pointerup', () => {
       this.pointerDrop = false;
@@ -195,7 +205,8 @@ export class CraneGame extends Phaser.Scene {
           this.vx = this.vz = 0;
         },
         /** All the way down, as if DROP were held. */
-        drop: () => this.beginLower(true),
+        drop: () => this.beginLower(),
+        home: () => ({ x: HOME.x, z: HOME.z }),
       };
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => delete (window as unknown as Record<string, unknown>).__crane);
     }
@@ -265,7 +276,7 @@ export class CraneGame extends Phaser.Scene {
     this.add.circle(76, 163, 5, 0x46c46e).setStrokeStyle(1, 0x2a7a44).setDepth(59);
     this.add.circle(92, 163, 5, 0xd8202a).setStrokeStyle(1, 0x7a1018).setDepth(59);
     text(this, 108, 155, `CREDIT ${CRANE_COST[this.kind]}`, ink).setDepth(59);
-    text(this, 108, 166, isTouch() ? 'STICK  HOLD DROP' : 'WASD  HOLD SPACE', ink).setDepth(59);
+    text(this, 108, 166, isTouch() ? 'STICK  TAP DROP' : 'WASD  SPACE DROPS', ink).setDepth(59);
     // the clock window
     this.add.rectangle(236, 156, 54, 14, 0x0c0814).setOrigin(0, 0).setStrokeStyle(1, 0x5a3a10).setDepth(59);
     if (eerie) {
@@ -377,14 +388,12 @@ export class CraneGame extends Phaser.Scene {
     this.phase = 'aim';
     this.clock = CLOCK_S;
     this.drop = 0;
-    this.auto = false;
   }
 
   /** From wherever it is, carrying the way it was going. */
-  private beginLower(auto = false): void {
+  private beginLower(): void {
     if (this.phase !== 'aim') return;
     this.phase = 'lower';
-    this.auto = auto;
     audio.sfx('ui_blip');
   }
 
@@ -416,8 +425,8 @@ export class CraneGame extends Phaser.Scene {
       this.clawZ = Phaser.Math.Clamp(this.clawZ + this.vz * dt, 0, 1);
       this.clock -= dt;
       this.clockText.setText(`TIME ${Math.max(0, Math.ceil(this.clock))}`);
-      if (this.dropHeld()) this.beginLower();
-      else if (this.clock <= 0) this.beginLower(true);
+      // one press is the whole drop: down, grab, up, chute
+      if (this.dropHeld() || this.clock <= 0) this.beginLower();
     } else if (this.phase === 'lower') {
       // the way it was going carries it on a little, and dies away
       this.clawX = Phaser.Math.Clamp(this.clawX + this.vx * dt, PILE_L - 40, PILE_R);
@@ -426,8 +435,7 @@ export class CraneGame extends Phaser.Scene {
       this.vz *= Math.exp(-dt * 3.5);
       this.clock -= dt;
       this.clockText.setText(`TIME ${Math.max(0, Math.ceil(this.clock))}`);
-      if (this.clock <= 0) this.auto = true;
-      if (this.auto || this.dropHeld()) this.drop += LOWER * dt;
+      this.drop += LOWER * dt;
       const bottom = Math.min(MAX_DROP, this.floorUnder());
       if (this.drop >= bottom) {
         this.drop = bottom;
@@ -440,8 +448,8 @@ export class CraneGame extends Phaser.Scene {
       this.drop -= RAISE * dt;
       if (this.drop <= 0) {
         this.drop = 0;
-        this.phase = this.held ? 'carry' : 'release';
-        if (!this.held) this.time.delayedCall(200, () => this.payOut());
+        // held or not, back to the chute: that is where a go ends
+        this.phase = 'carry';
       }
     } else if (this.phase === 'carry') {
       // over to the chute, front left
@@ -456,7 +464,22 @@ export class CraneGame extends Phaser.Scene {
         if (t) {
           this.tweens.add({ targets: t.art, y: floorY(0) + 4, duration: 260, ease: 'Quad.easeIn' });
         }
-        this.time.delayedCall(320, () => this.payOut());
+        this.time.delayedCall(320, () => {
+          this.payOut();
+          // and home again, so the next go starts where every go starts
+          this.homing = true;
+        });
+      }
+    }
+    if (this.homing) {
+      const dx = HOME.x - this.clawX;
+      const dz = HOME.z - this.clawZ;
+      this.clawX += Math.sign(dx) * Math.min(Math.abs(dx), 80 * dt);
+      this.clawZ += Math.sign(dz) * Math.min(Math.abs(dz), 1 * dt);
+      if (Math.abs(dx) < 0.5 && Math.abs(dz) < 0.01) {
+        this.clawX = HOME.x;
+        this.clawZ = HOME.z;
+        this.homing = false;
       }
     }
     // the swing on the cable, more the faster it went
@@ -578,9 +601,12 @@ export class CraneGame extends Phaser.Scene {
     }
     this.result?.destroy();
     this.result = null;
-    this.clawX = PILE_L + 40;
-    this.clawZ = 0.3;
+    // (a go always starts from home, even if it is not quite back yet)
+    this.homing = false;
+    this.clawX = HOME.x;
+    this.clawZ = HOME.z;
     this.vx = this.vz = 0;
+    this.drop = 0;
     this.drawClaw(false);
     this.startGo();
   }
