@@ -11,6 +11,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio, type SfxName } from '../core/audio';
 import { store, type GameId } from '../core/state';
+import { KEY_ITEM } from '../game/inventory';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
 import { evaluateBroke } from '../core/broke';
@@ -882,6 +883,8 @@ export class ArcadeHub extends Phaser.Scene {
       keyReturned: true,
       keyRewardClaimed: true,
       cash: s.cash + KEY_REWARD,
+      // and out of the pocket, in the same patch: the key and nothing else
+      items: s.items.filter((id) => id !== KEY_ITEM.id),
     });
     store.flush();
     audio.sfx('coin_drop');

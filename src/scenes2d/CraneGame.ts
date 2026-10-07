@@ -32,6 +32,7 @@ import { button, centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { TokenHud } from '../ui/hud';
 import { drawItem } from '../ui/pockets';
+import { CAPSULE_VARIANTS, plushKind, toyTexture } from '../art/craneToys';
 import { FULL_LINE, ODDITIES, PLUSHIES, addItem, itemDef, pocketsFull } from '../game/inventory';
 import { isTouch } from '../core/device';
 
@@ -292,18 +293,21 @@ export class CraneGame extends Phaser.Scene {
    * of prizes rather than nine in a line.
    */
   private fillPile(): void {
+    // Big toys, packed close enough that every one overlaps its neighbours:
+    // five rows back to front, five layers deep in the middle of the heap,
+    // each a little off its spot so it reads as tipped in, not laid out.
     const rows = 5;
-    const layers = 3;
+    const layers = 5;
     const specs: Array<{ x: number; z: number; lift: number }> = [];
     for (let layer = 0; layer < layers; layer++) {
       for (let r = 0; r < rows; r++) {
         const z = 0.95 - r * 0.21;
-        const step = 13 + layer * 2;
-        for (let x = PILE_L + 6 + (r % 2) * 6 + layer * 4; x < PILE_R - 4 - layer * 4; x += step) {
+        const step = 16 + layer * 2;
+        for (let x = PILE_L + 8 + (r % 2) * 8 + layer * 5; x < PILE_R - 6 - layer * 5; x += step) {
           // the heap is taller in the middle than at the edges
           const mid = 1 - Math.abs((x - (PILE_L + PILE_R) / 2) / ((PILE_R - PILE_L) / 2));
-          if (layer > 0 && Math.random() > 0.35 + mid * 0.6) continue;
-          specs.push({ x: x + Phaser.Math.Between(-2, 2), z: z + Phaser.Math.FloatBetween(-0.04, 0.04), lift: layer * 9 + Phaser.Math.Between(0, 2) });
+          if (layer > 0 && Math.random() > 0.35 + mid * 0.75 - (layer - 1) * 0.16) continue;
+          specs.push({ x: x + Phaser.Math.Between(-3, 3), z: z + Phaser.Math.FloatBetween(-0.05, 0.05), lift: layer * 12 + Phaser.Math.Between(0, 3) });
         }
       }
     }
@@ -324,21 +328,21 @@ export class CraneGame extends Phaser.Scene {
   private makeToy(x: number, z: number, lift: number): Toy {
     const c = this.add.container(0, 0);
     let id = 'capsule';
+    let key: string;
     if (this.kind === 'plush') {
       // Froggies are the rare one in the heap
       const def = Math.random() < 0.12 ? PLUSHIES[0] : PLUSHIES[Phaser.Math.Between(1, PLUSHIES.length - 1)];
       id = def.id;
-      c.add(drawItem(this, 0, 0, def, 1.25));
+      key = toyTexture(this, plushKind(def.id));
     } else {
-      // a capsule: two halves, one clouded so you cannot see in
-      const cols = [0x6a3a8a, 0x3a2a4a, 0x8a7aa0, 0x2a3a4a, 0x5a2a6a];
-      const col = cols[Phaser.Math.Between(0, cols.length - 1)];
-      c.add([
-        this.add.circle(0, -6, 6.5, col).setStrokeStyle(1, 0x1a1020),
-        this.add.rectangle(0, -6, 13, 1.4, 0xc8b0d8),
-        this.add.circle(-2, -8.5, 1.4, 0xffffff, 0.4),
-      ]);
+      key = toyTexture(this, `capsule-${Phaser.Math.Between(0, CAPSULE_VARIANTS - 1)}`);
     }
+    // stood on its feet (its bottom edge), a little tumbled, a little bigger
+    // or smaller than the next one: they were tipped in, not arranged
+    const img = this.add.image(0, 0, key).setOrigin(0.5, 1);
+    img.setAngle(Phaser.Math.Between(-10, 10)).setScale(Phaser.Math.FloatBetween(0.92, 1.04));
+    if (Math.random() < 0.5 && this.kind === 'plush') img.setFlipX(true);
+    c.add(img);
     const t: Toy = { id, x, z, lift, art: c };
     this.placeToy(t);
     return t;
@@ -392,7 +396,8 @@ export class CraneGame extends Phaser.Scene {
   private floorUnder(): number {
     let lift = 0;
     for (const t of this.toys) {
-      if (Math.abs(t.x - this.clawX) < 8 && Math.abs(t.z - this.clawZ) < 0.12) lift = Math.max(lift, t.lift + 8);
+      // (a toy's top is a good twenty pixels above where it sits)
+      if (Math.abs(t.x - this.clawX) < 9 && Math.abs(t.z - this.clawZ) < 0.12) lift = Math.max(lift, t.lift + 20);
     }
     const k = scaleAt(this.clawZ);
     return floorY(this.clawZ) - lift * k - 12 * k - gantryY(this.clawZ);
@@ -460,7 +465,8 @@ export class CraneGame extends Phaser.Scene {
     if (this.held && this.phase !== 'release') {
       const k = scaleAt(this.clawZ);
       const hx = screenX(this.clawX, this.clawZ) + this.sway;
-      const hy = gantryY(this.clawZ) + (this.drop + 22) * k;
+      // hanging from the closed claw by its head
+      const hy = gantryY(this.clawZ) + (this.drop + 34) * k;
       this.held.art.setPosition(hx, hy).setScale(k).setDepth(44);
     }
   }
@@ -483,7 +489,7 @@ export class CraneGame extends Phaser.Scene {
     for (const t of this.toys) {
       const dx = Math.abs(t.x - this.clawX);
       const dz = Math.abs(t.z - this.clawZ) * 60;
-      if (dx > 12 || dz > 12) continue;
+      if (dx > 14 || dz > 12) continue;
       // the one on top, nearest the middle of the claw
       const score = dx + dz - t.lift * 0.6;
       if (score < bestScore) {
@@ -549,7 +555,9 @@ export class CraneGame extends Phaser.Scene {
     c.add(centerText(this, GAME_W / 2, itemId ? 104 : 80, line, colour).setMaxWidth(220));
     if (itemId) {
       const d = itemDef(itemId);
-      if (d) c.add(drawItem(this, GAME_W / 2, 92, d, 1.6));
+      // a plush is shown as the toy itself, the one that came out of the pile
+      if (d?.kind === 'plush') c.add(this.add.image(GAME_W / 2, 99, toyTexture(this, plushKind(d.id))).setOrigin(0.5, 1).setScale(1.2));
+      else if (d) c.add(drawItem(this, GAME_W / 2, 92, d, 1.6));
     }
     const cost = CRANE_COST[this.kind];
     if (played) {
