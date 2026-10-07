@@ -79,14 +79,28 @@ const PLUSH: Record<PlushKind, Plush> = {
  * The texture key for a plush (or `capsule-N`), drawn into the scene's
  * texture manager the first time it is asked for.
  */
-export function toyTexture(scene: Phaser.Scene, kind: PlushKind | `capsule-${number}`): string {
-  const key = `crane-toy-${kind}`;
+export function toyTexture(scene: Phaser.Scene, kind: PlushKind | `capsule-${number}`, size = 1, tilt = 0): string {
+  // DRAWN AT THE SIZE IT IS SHOWN.  A 45px toy shrunk to 34 on screen with
+  // nearest sampling loses whole rows and columns -- eyes, seams and shines
+  // went missing at random and the heap read as mush.  So each size (and
+  // tilt) is its own drawing, laid out at that size and shown 1:1.
+  const s = Math.round(size * 25) / 25;
+  const a = Math.round(tilt);
+  const key = `crane-toy-${kind}@${s}r${a}`;
   if (scene.textures.exists(key)) return key;
   const g = scene.make.graphics({ x: 0, y: 0 }, false);
-  const pen = new Pen(g, TOY_RES);
+  const w = Math.ceil(TOY_W * s);
+  const h = Math.ceil(TOY_H * s);
+  if (a) {
+    // tipped over about its feet
+    g.translateCanvas(w / 2, h);
+    g.rotateCanvas((a * Math.PI) / 180);
+    g.translateCanvas(-w / 2, -h);
+  }
+  const pen = new Pen(g, TOY_RES * s);
   if (kind.startsWith('capsule-')) drawCapsule(pen, Number(kind.slice(8)));
   else drawPlush(pen, kind as PlushKind);
-  g.generateTexture(key, TOY_W, TOY_H);
+  g.generateTexture(key, w, h);
   g.destroy();
   return key;
 }
