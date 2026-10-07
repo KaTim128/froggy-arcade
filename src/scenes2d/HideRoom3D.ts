@@ -21,6 +21,7 @@
  * fifteen seconds; the room only turns once the count is over.
  */
 
+import { lookScale } from '../core/look';
 import { touchControls } from '../ui/touchControls';
 import { isTouch } from '../core/device';
 import { isPaused } from '../core/pause';
@@ -1741,7 +1742,7 @@ export class HideRoom3D extends Phaser.Scene {
       const dy = e.movementY || e.clientY - this.lookY;
       this.lookX = e.clientX;
       this.lookY = e.clientY;
-      const sens = (e as MouseEvent & { lookSens?: number }).lookSens ?? MOUSE_SENS;
+      const sens = ((e as MouseEvent & { lookSens?: number }).lookSens ?? MOUSE_SENS) * lookScale();
       this.yaw -= dx * sens;
       // Clamped well short of vertical: past about sixty degrees the room
       // stops having a floor and the player loses which way they are facing.

@@ -42,7 +42,15 @@ export interface Settings {
   music: number; // 0..100
   sfx: number; // 0..100
   moveStyle: MoveStyle;
+  /** How fast the camera turns in the 3D rooms, in percent: 100 is as built. */
+  lookSens: number;
 }
+
+/** The look sensitivity slider's range, in percent. */
+export const LOOK_SENS_MIN = 25;
+export const LOOK_SENS_MAX = 200;
+const clampSens = (n: number): number =>
+  Number.isFinite(n) ? Math.round(Math.min(LOOK_SENS_MAX, Math.max(LOOK_SENS_MIN, n))) : 100;
 
 export interface GameState {
   schemaVersion: 1;
@@ -276,7 +284,7 @@ function defaultState(): GameState {
     timeOfDay: 'day',
     reachedHotel: false,
     checkedIn: false,
-    settings: { master: 80, music: 70, sfx: 85, moveStyle: 'stick' },
+    settings: { master: 80, music: 70, sfx: 85, moveStyle: 'stick', lookSens: 100 },
   };
 }
 
@@ -308,6 +316,7 @@ class Store {
           music: clamp100(prefs.music ?? fresh.settings.music),
           sfx: clamp100(prefs.sfx ?? fresh.settings.sfx),
           moveStyle: prefs.moveStyle === 'pad' ? 'pad' : 'stick',
+          lookSens: clampSens(prefs.lookSens ?? 100),
         };
       }
     } catch {
@@ -551,6 +560,7 @@ class Store {
       music: clamp100(partial.music ?? this.state.settings.music),
       sfx: clamp100(partial.sfx ?? this.state.settings.sfx),
       moveStyle: partial.moveStyle ?? this.state.settings.moveStyle,
+      lookSens: clampSens(partial.lookSens ?? this.state.settings.lookSens),
     };
     this.touch();
   }

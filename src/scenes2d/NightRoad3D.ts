@@ -33,6 +33,7 @@
  *   the hotel's doors are safe.  Nothing follows you through them.
  */
 
+import { lookScale } from '../core/look';
 import { isPaused } from '../core/pause';
 import Phaser from 'phaser';
 import * as THREE from 'three';
@@ -342,14 +343,14 @@ export class NightRoad3D extends Phaser.Scene {
     // held left-drag if not, which is what the on-screen look pad sends.
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (this.autoTurn) return;
-      if (p.event instanceof MouseEvent && document.pointerLockElement) this.yaw -= p.event.movementX * 0.0027;
+      if (p.event instanceof MouseEvent && document.pointerLockElement) this.yaw -= p.event.movementX * 0.0027 * lookScale();
     });
     this.onLookDown = (e: MouseEvent) => {
       if (e.button === 0 && !isPaused()) this.dragging = true;
     };
     this.onLookMove = (e: MouseEvent) => {
       if (!this.dragging || document.pointerLockElement || isPaused() || this.autoTurn) return;
-      this.yaw -= (e.movementX || 0) * ((e as MouseEvent & { lookSens?: number }).lookSens ?? 0.0042);
+      this.yaw -= (e.movementX || 0) * ((e as MouseEvent & { lookSens?: number }).lookSens ?? 0.0042) * lookScale();
     };
     this.onLookUp = () => {
       this.dragging = false;
