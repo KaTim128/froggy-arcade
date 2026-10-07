@@ -70,20 +70,15 @@ function drawMotif(scene: Phaser.Scene, cx: number, cy: number, def: CabinetDef,
     // MINI DUELS.  One sword, drawn corner to corner, and nothing else: on a
     // screen this small a single clean shape reads where three crowded ones
     // turned to mush.  Stepped a pixel at a time so it stays crisp.
-    case 'grid': {
-      // [x, y, colour] of each 2x2 step, the point up and to the right
-      const steps: Array<[number, number, number]> = [];
-      for (let k = 0; k <= 6; k++) steps.push([-1.5 + k, 0.5 - k, bright]);
-      for (let k = -2; k <= 2; k++) steps.push([-2.5 + k, 1.5 + k, PALETTE.gold]); // crossguard
-      steps.push([-3.5, 2.5, PALETTE.brownLight], [-4.5, 3.5, PALETTE.brownLight]); // grip
-      steps.push([-5.5, 4.5, PALETTE.gold]); // pommel
-      // a dark outline first, so it stands off the coloured glass
-      for (const [x, y] of steps) put(x, y, 3, 3, ink);
-      for (const [x, y, col] of steps) put(x, y, 2, 2, col);
-      // the blade's shaded edge
-      for (let k = 0; k <= 6; k++) put(-1 + k, 1 - k, 1, 1, PALETTE.steel);
+    case 'grid':
+      // in the screen's own two colours, like every other cabinet: blade
+      // bright, guard and grip dark, a bright pommel
+      for (let k = 0; k <= 5; k++) put(0 + k, -0.5 - k, 2, 2, bright);
+      for (let k = -2; k <= 2; k++) put(-1 + k, 0.5 + k, 2, 2, ink);
+      put(-2, 1.5, 2, 2, ink);
+      put(-3, 2.5, 2, 2, ink);
+      put(-4, 3.5, 2, 2, bright);
       break;
-    }
     case 'blocks':
       put(-3, 3, 5, 4, bright);
       put(3, 3, 5, 4);
