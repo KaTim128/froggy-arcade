@@ -18,9 +18,9 @@
  *   he HEARS you: running, a branch snapping, water, gravel, the crows you put
  *     up out of the trees -- each has its own reach
  *   three seconds without sight of you and he stops chasing and starts looking
- *   the guard rails stop you walking -- a jump takes you over, and the gaps
- *     (the bus stop, the footpaths) let you through -- and they are a hop for
- *     him, which costs him; the ponds and the river are slow, and splash, for
+ *   the guard rails are solid -- you cannot walk through them or jump them;
+ *     only the gaps (the bus stop, the footpaths) let you through -- and they
+ *     are a hop for him, which costs him; the ponds and the river are slow, and splash, for
  *     both
  *   push through the low branches and they rustle: the deeper in and the
  *     faster, the louder, and a loud rustle carries to him
@@ -626,15 +626,20 @@ export class NightRoad3D extends Phaser.Scene {
   }
 
   /**
-   * Steel guard rails on posts, both sides, past the pavements: an upper
-   * beam and a lower one, so they read as a barrier and not a step.  They
-   * stop for the gaps -- the bus stop and the footpaths -- with a post either
-   * side, and a trodden path runs off into the trees from each footpath gap.
+   * ROADSIDE GUARDRAILS, both sides, past the pavements: a continuous
+   * galvanised W-beam -- two rounded ridges with the groove between them --
+   * on steel posts every two metres, each through a spacer block that holds
+   * the beam off the post, the way a crash barrier is built.  No fence rails
+   * and nothing to climb.  They stop for the gaps -- the bus stop and the
+   * footpaths -- with a post either side, and a trodden path runs off into
+   * the trees from each footpath gap.
    */
   private buildRails(S: THREE.Scene): void {
-    const steel = new THREE.MeshLambertMaterial({ color: 0x767c82 });
-    const postMat = new THREE.MeshLambertMaterial({ color: 0x3e4248 });
+    const steel = new THREE.MeshLambertMaterial({ color: 0x8c9298 });
+    const ridge = new THREE.MeshLambertMaterial({ color: 0xa4aab0 });
+    const postMat = new THREE.MeshLambertMaterial({ color: 0x4a4e54 });
     const posts: THREE.Matrix4[] = [];
+    const blocks: THREE.Matrix4[] = [];
     for (const side of [-1, 1]) {
       const cuts = GAPS.filter((g) => g.side === side).sort((a, b) => b.z0 - a.z0);
       const runs: [number, number][] = [];
@@ -647,18 +652,31 @@ export class NightRoad3D extends Phaser.Scene {
       for (const [a, b] of runs) {
         const len = a - b;
         const mid = (a + b) / 2;
-        const beam = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, len), steel);
-        beam.position.set(side * RAIL_X, RAIL_H - 0.18, mid);
-        const low = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, len), steel);
-        low.position.set(side * RAIL_X, 0.32, mid);
-        S.add(beam, low);
-        const n = Math.max(1, Math.round(len / 3));
-        for (let k = 0; k <= n; k++) posts.push(new THREE.Matrix4().makeTranslation(side * (RAIL_X + 0.1), RAIL_H / 2, a - (k * len) / n));
+        // the beam: a flat web, and the two ridges standing proud of it
+        const beamY = RAIL_H - 0.17;
+        const web = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.32, len), steel);
+        web.position.set(side * (RAIL_X - 0.02), beamY, mid);
+        S.add(web);
+        for (const dy of [0.09, -0.09]) {
+          const r = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, len, 8, 1), ridge);
+          r.rotation.x = Math.PI / 2;
+          r.position.set(side * (RAIL_X - 0.05), beamY + dy, mid);
+          S.add(r);
+        }
+        const n = Math.max(1, Math.round(len / 2));
+        for (let k = 0; k <= n; k++) {
+          const z = a - (k * len) / n;
+          posts.push(new THREE.Matrix4().makeTranslation(side * (RAIL_X + 0.16), RAIL_H / 2 - 0.02, z));
+          blocks.push(new THREE.Matrix4().makeTranslation(side * (RAIL_X + 0.06), beamY, z));
+        }
       }
     }
-    const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, RAIL_H, 0.12), postMat, posts.length);
+    const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, RAIL_H - 0.04, 0.14), postMat, posts.length);
     posts.forEach((m, i) => inst.setMatrixAt(i, m));
     S.add(inst);
+    const spacers = new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, 0.2, 0.12), postMat, blocks.length);
+    blocks.forEach((m, i) => spacers.setMatrixAt(i, m));
+    S.add(spacers);
     const path = decal(new THREE.MeshLambertMaterial({ color: 0x2a2219 }), 1);
     for (const g of GAPS.slice(1)) {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(10, g.z0 - g.z1 - 0.4), path);
@@ -1287,7 +1305,7 @@ export class NightRoad3D extends Phaser.Scene {
     this.eye += (eyeWant - this.eye) * Math.min(1, dt * 8);
     if (this.phase === 'safe') return;
 
-    // the jump: over a rail, a log, out of the water
+    // the jump: over a log, out of the water (never a rail: see below)
     const grounded = this.y <= 0;
     if (grounded && !this.crouched && this.jumpKeys.some((k) => Phaser.Input.Keyboard.JustDown(k))) {
       this.vy = this.inWater(this.pos.x, this.pos.y) ? JUMP_V * 0.7 : JUMP_V;
@@ -1324,14 +1342,13 @@ export class NightRoad3D extends Phaser.Scene {
     const was = this.pos.x;
     const nx = this.pos.x + dx;
     const nz = this.pos.y + dz;
-    // THE RAILS: walking, you cannot get past one -- jumping, you go over the
-    // top of it, and a gap lets you through.
-    const over = this.y >= RAIL_H - 0.08;
+    // THE RAILS: solid.  Walking or jumping, you do not get past one; only
+    // a gap lets you through.
     const crosses = Math.sign(Math.abs(this.pos.x) - RAIL_X) !== Math.sign(Math.abs(nx) - RAIL_X);
-    if (!(crosses && !over && this.railBlocks(nx, this.pos.y)) && Math.abs(nx) < WORLD_X) this.pos.x = nx;
+    if (!(crosses && this.railBlocks(nx, this.pos.y)) && Math.abs(nx) < WORLD_X) this.pos.x = nx;
     if (nz < BACK_Z && nz > HOTEL_Z - 1.4 && !(nz < HOTEL_Z + 0.3 && Math.abs(this.pos.x) > SAFE_HALF + 0.2)) this.pos.y = nz;
     // (walking along the line from a gap into the rail, you stay your side)
-    if (!over && this.railBlocks(this.pos.x, this.pos.y)) {
+    if (this.railBlocks(this.pos.x, this.pos.y)) {
       const inside = Math.abs(was) < RAIL_X;
       if (inside && Math.abs(this.pos.x) > RAIL_X - PLAYER_R) this.pos.x = Math.sign(this.pos.x) * (RAIL_X - PLAYER_R);
       if (!inside && Math.abs(this.pos.x) < RAIL_X + PLAYER_R) this.pos.x = Math.sign(this.pos.x) * (RAIL_X + PLAYER_R);

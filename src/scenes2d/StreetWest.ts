@@ -3,7 +3,7 @@
  *
  * Off the left edge of the forecourt the pavement carries on: an empty road
  * beside it, a bus stop that no bus comes to, the edge of the forest behind
- * a fence, and at the far end, further down than it looks, the hotel -- a
+ * a guardrail, and at the far end, further down than it looks, the hotel -- a
  * proper one, with a canopy and a man in a uniform at the door.
  *
  * The doorman decides who goes in.  Without the price of a room in your
@@ -95,9 +95,9 @@ export class StreetWest extends Phaser.Scene {
 
   /**
    * The street, the bus stop, the forest and the hotel, painted once.  From
-   * the back: the trees, the fence along them, a pavement on the far side of
-   * the road, the road, and the pavement you walk on -- with the bus shelter
-   * standing on it, at the back, out of the way.
+   * the back: the trees, the guardrail along them, the pavement on the far
+   * side of the road with the bus shelter standing on it, the road, and the
+   * pavement you walk on.
    */
   private paint(dusk: boolean): void {
     const sky = dusk ? [PALETTE.plum, PALETTE.violet, PALETTE.ember, PALETTE.amber] : [0x8fd0e8, 0x8fd0e8, 0x7ec0dc, 0xbfe0ee];
@@ -115,22 +115,39 @@ export class StreetWest extends Phaser.Scene {
         this.add.triangle(x, base - h / 2, -9, h / 2, 9, h / 2, 0, -h / 2, col);
       }
     });
-    // everything from the fence forward, over the trees
+    // everything from the guardrail forward, over the trees
     const g = this.add.graphics();
     // ROW Y's, back to front
-    const FENCE = 118; // the foot of the fence
-    const FAR = 118; // far pavement, to its kerb
+    const RAIL = 113; // where the guardrail's posts stand, at the forest's edge
+    const FAR = 113; // far pavement, to its kerb
     const FAR_KERB = 127;
     const ROAD = 129;
     const NEAR_KERB = 153;
     const NEAR = 156; // the pavement you walk on, to the bottom of the picture
     const X0 = 0; // (the hotel stands over the left-hand end of all of it)
-    // a strip of verge under the fence
-    g.fillStyle(dusk ? 0x1c1828 : 0x3f7a4f, 1).fillRect(X0, FENCE - 4, WORLD_W - X0, 4);
-    // the fence along the forest
-    const fenceCol = dusk ? 0x4a3a3a : 0x8a7a5a;
-    for (let x = X0 + 6; x < WORLD_W; x += 8) g.fillStyle(fenceCol, 1).fillRect(x, FENCE - 12, 2, 12);
-    g.fillStyle(fenceCol, 1).fillRect(X0, FENCE - 10, WORLD_W - X0, 1).fillRect(X0, FENCE - 5, WORLD_W - X0, 1);
+    // a strip of verge along the forest
+    g.fillStyle(dusk ? 0x1c1828 : 0x3f7a4f, 1).fillRect(X0, RAIL - 4, WORLD_W - X0, 4);
+
+    // ---- THE GUARDRAIL.  A roadside crash barrier, not a fence: one
+    // continuous galvanised W-beam -- two ridges and the groove between them
+    // -- bolted through a spacer block to a steel post every couple of metres.
+    const beamTop = RAIL - 9;
+    const rail = dusk
+      ? { post: 0x3a3e46, block: 0x2e3238, face: 0x6a707a, hi: 0x8a909a, groove: 0x4a5058, lo: 0x50565e }
+      : { post: 0x5a6068, block: 0x4a5058, face: 0x9aa2aa, hi: 0xd0d6dc, groove: 0x6a727a, lo: 0x7a828a };
+    for (let x = X0 + 4; x < WORLD_W; x += 14) {
+      g.fillStyle(rail.post, 1).fillRect(x, beamTop + 1, 2, RAIL - beamTop - 1);
+      g.fillStyle(rail.block, 1).fillRect(x - 1, beamTop + 2, 4, 3);
+    }
+    g.fillStyle(rail.face, 1).fillRect(X0, beamTop, WORLD_W - X0, 5);
+    g.fillStyle(rail.hi, 1).fillRect(X0, beamTop, WORLD_W - X0, 1);
+    g.fillStyle(rail.groove, 1).fillRect(X0, beamTop + 2, WORLD_W - X0, 1);
+    g.fillStyle(rail.lo, 1).fillRect(X0, beamTop + 4, WORLD_W - X0, 1);
+    // the bolts at each post, and the splice where one length meets the next
+    for (let x = X0 + 4; x < WORLD_W; x += 14) g.fillStyle(rail.groove, 1).fillRect(x + 1, beamTop + 1, 1, 1).fillRect(x + 1, beamTop + 3, 1, 1);
+    for (let x = X0 + 60; x < WORLD_W; x += 56) g.fillStyle(rail.lo, 1).fillRect(x, beamTop, 1, 5);
+    // its shadow on the verge
+    g.fillStyle(0x000000, 0.18).fillRect(X0, RAIL - 1, WORLD_W - X0, 1);
 
     // ---- the far pavement: slabs, and its kerb onto the road
     const slab = dusk ? 0x4a4450 : 0xa8a8a0;
@@ -139,7 +156,7 @@ export class StreetWest extends Phaser.Scene {
     g.fillStyle(slab, 1).fillRect(X0, FAR, WORLD_W - X0, FAR_KERB - FAR);
     g.fillStyle(joint, 1);
     for (let x = X0; x < WORLD_W; x += 16) g.fillRect(x, FAR, 1, FAR_KERB - FAR);
-    g.fillRect(X0, FAR + 4, WORLD_W - X0, 1);
+    g.fillRect(X0, FAR + 6, WORLD_W - X0, 1);
     g.fillStyle(kerb, 1).fillRect(X0, FAR_KERB, WORLD_W - X0, 2);
 
     // ---- the road: empty, both ways, as far as you can see
@@ -176,49 +193,55 @@ export class StreetWest extends Phaser.Scene {
       for (let x = off; x < WORLD_W; x += 20) g.fillRect(x, y, 1, 8);
     }
 
-    // street lamps, on the far pavement, leaning out over the road
+    // street lamps, on the far pavement in front of the rail, leaning out
+    // over the road
+    const lampFoot = FAR + 8;
     for (const lx of [210, 330, 470, 600]) {
-      g.fillStyle(0x3a3e44, 1).fillRect(lx - 1, FAR + 4 - 34, 2, 34);
-      g.fillStyle(0x3a3e44, 1).fillRect(lx, FAR + 4 - 34, 9, 2);
-      g.fillStyle(0x2a2e34, 1).fillRect(lx - 2, FAR + 2, 4, 2);
-      this.add.circle(lx + 9, FAR + 4 - 31, 2.2, dusk ? 0xffe090 : 0xd8dce0);
+      g.fillStyle(0x3a3e44, 1).fillRect(lx - 1, lampFoot - 38, 2, 38);
+      g.fillStyle(0x3a3e44, 1).fillRect(lx, lampFoot - 38, 9, 2);
+      g.fillStyle(0x2a2e34, 1).fillRect(lx - 2, lampFoot - 2, 4, 2);
+      this.add.circle(lx + 9, lampFoot - 35, 2.2, dusk ? 0xffe090 : 0xd8dce0);
       if (dusk) {
-        this.add.circle(lx + 9, FAR - 22, 12, 0xffe090, 0.08);
+        this.add.circle(lx + 9, lampFoot - 26, 12, 0xffe090, 0.08);
         g.fillStyle(0xffe090, 0.06).fillEllipse(lx + 9, ROAD + 6, 30, 6);
       }
     }
 
-    // ---- THE BUS STOP, on this side of the road, at the back of the
-    // pavement: a blue roof on two posts, a glass back panel with an advert
-    // at one end, and a bench under it.  No sign.
+    // ---- THE BUS STOP, across the road, on the far pavement with its back
+    // to the guardrail, facing the road: a blue roof on two posts, a glass
+    // back panel with an advert at one end, a bench under it, and the
+    // timetable behind the glass.  No sign.  (A little smaller than it would
+    // be on this side: it is the width of the road away.)
     const B = BUS_X;
-    const foot = NEAR + 4; // where the posts stand
-    const top = foot - 34;
+    const k = 0.8;
+    const foot = FAR + 9; // where its posts stand
+    const top = foot - Math.round(34 * k);
+    const half = Math.round(24 * k);
+    const S = (n: number) => Math.round(n * k);
     // its shadow on the slabs
-    g.fillStyle(0x000000, 0.14).fillRect(B - 26, foot - 1, 52, 3);
+    g.fillStyle(0x000000, 0.14).fillRect(B - half - 2, foot - 1, half * 2 + 4, 2);
     // the back panel: glass in a frame, the advert at the right-hand end
-    g.fillStyle(0x8a9aa8, 1).fillRect(B - 22, top + 6, 44, 24);
-    g.fillStyle(0xbfe0ee, dusk ? 0.25 : 0.4).fillRect(B - 21, top + 7, 28, 22);
-    g.fillStyle(dusk ? 0x7b4bd8 : 0xff4fa3, 0.8).fillRect(B + 8, top + 7, 13, 22);
-    g.fillStyle(PALETTE.mossLight, 0.9).fillEllipse(B + 14, top + 15, 7, 5);
-    g.fillStyle(PALETTE.cream, 0.8).fillRect(B + 10, top + 22, 9, 2);
+    g.fillStyle(0x8a9aa8, 1).fillRect(B - S(22), top + S(6), S(44), foot - top - S(6) - 2);
+    g.fillStyle(0xbfe0ee, dusk ? 0.25 : 0.4).fillRect(B - S(21), top + S(7), S(28), foot - top - S(8) - 2);
+    g.fillStyle(dusk ? 0x7b4bd8 : 0xff4fa3, 0.8).fillRect(B + S(8), top + S(7), S(13), foot - top - S(8) - 2);
+    g.fillStyle(PALETTE.mossLight, 0.9).fillEllipse(B + S(14), top + S(15), 5, 4);
+    g.fillStyle(PALETTE.cream, 0.8).fillRect(B + S(10), top + S(22), S(9), 1);
     g.fillStyle(0xffffff, 0.25);
-    for (let i = 0; i < 3; i++) g.fillRect(B - 18 + i * 2, top + 9 + i * 2, 1, 5);
-    // the two posts
-    g.fillStyle(0x5a626e, 1).fillRect(B - 24, top, 2, foot - top).fillRect(B + 22, top, 2, foot - top);
-    g.fillStyle(0x3a424e, 1).fillRect(B - 23, top, 1, foot - top).fillRect(B + 23, top, 1, foot - top);
-    // the roof: blue, with an edge and its shadow on the glass
-    g.fillStyle(0x3f6fd8, 1).fillRect(B - 27, top - 3, 54, 4);
-    g.fillStyle(0x7fa0ec, 1).fillRect(B - 27, top - 3, 54, 1);
-    g.fillStyle(0x2a4a9a, 1).fillRect(B - 27, top + 1, 54, 1);
-    g.fillStyle(0x000000, 0.12).fillRect(B - 22, top + 2, 44, 3);
-    // the bench, in front of the glass, on its legs
-    g.fillStyle(0x8a5a2e, 1).fillRect(B - 18, foot - 9, 26, 2);
-    g.fillStyle(0x6a4422, 1).fillRect(B - 18, foot - 7, 26, 1);
-    g.fillStyle(0x5a3a1e, 1).fillRect(B - 16, foot - 6, 1, 6).fillRect(B + 5, foot - 6, 1, 6);
+    for (let i = 0; i < 3; i++) g.fillRect(B - S(18) + i * 2, top + S(9) + i * 2, 1, 4);
     // the timetable, a small sheet behind the glass by the left-hand post
-    g.fillStyle(PALETTE.bone, 0.9).fillRect(B - 20, top + 9, 6, 8);
-    g.fillStyle(0x5a626e, 1).fillRect(B - 19, top + 10, 4, 1).fillRect(B - 19, top + 12, 4, 1).fillRect(B - 19, top + 14, 3, 1);
+    g.fillStyle(PALETTE.bone, 0.9).fillRect(B - S(20), top + S(9), 5, 6);
+    g.fillStyle(0x5a626e, 1).fillRect(B - S(20) + 1, top + S(9) + 1, 3, 1).fillRect(B - S(20) + 1, top + S(9) + 3, 3, 1);
+    // the two posts
+    g.fillStyle(0x5a626e, 1).fillRect(B - half, top, 2, foot - top).fillRect(B + half - 2, top, 2, foot - top);
+    g.fillStyle(0x3a424e, 1).fillRect(B - half + 1, top, 1, foot - top).fillRect(B + half - 1, top, 1, foot - top);
+    // the roof: blue, with an edge and its shadow on the glass
+    g.fillStyle(0x3f6fd8, 1).fillRect(B - half - 3, top - 3, half * 2 + 6, 3);
+    g.fillStyle(0x7fa0ec, 1).fillRect(B - half - 3, top - 3, half * 2 + 6, 1);
+    g.fillStyle(0x2a4a9a, 1).fillRect(B - half - 3, top, half * 2 + 6, 1);
+    g.fillStyle(0x000000, 0.12).fillRect(B - S(22), top + 1, S(44), 2);
+    // the bench, in front of the glass, on its legs
+    g.fillStyle(0x8a5a2e, 1).fillRect(B - S(18), foot - 7, S(26), 2);
+    g.fillStyle(0x5a3a1e, 1).fillRect(B - S(16), foot - 5, 1, 5).fillRect(B + S(5), foot - 5, 1, 5);
     // ---- the hotel, at the end of the street
     const H = dusk ? 0x5a4a5a : 0xd8c8a8;
     this.add.rectangle(4, 158, 150, 150, H).setOrigin(0, 1).setStrokeStyle(1, dusk ? 0x3a2e3a : 0x8a7a5a);
@@ -252,7 +275,7 @@ export class StreetWest extends Phaser.Scene {
     const cash = store.get().cash;
     const welcome = cash >= ROOM_MONEY || store.get().checkedIn;
     if (this.spot === 'bus') {
-      this.say('The timetable in the shelter is from three years ago.  Nothing is coming.');
+      this.say('The bus stop across the road.  Nothing has stopped there in years.');
       return;
     }
     if (!welcome) {
@@ -309,7 +332,7 @@ export class StreetWest extends Phaser.Scene {
       this.prompt.setVisible(false);
       return;
     }
-    const label = this.spot === 'door' ? '[E] GO IN' : this.spot === 'doorman' ? '[E] TALK' : '[E] READ';
+    const label = this.spot === 'door' ? '[E] GO IN' : this.spot === 'doorman' ? '[E] TALK' : '[E] LOOK';
     // (not while a line is being said: the two would sit on top of each other)
     this.prompt.setText(label).setPosition(px, WALK_Y - 36).setVisible(!(this.mutter.visible && this.mutter.alpha > 0.2));
   }
