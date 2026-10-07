@@ -113,7 +113,43 @@ const REST = { left: { x: 30, y: 30 }, right: { x: 98, y: 34 } };
  * a narrow cage of ribs over a belly sunk in; legs that fold at knobbed knees
  * down to splayed frog's feet; and arms far too long, up the glass.
  */
+/**
+ * HOW BIG HE IS, AGAINST YOU.  He is drawn full size in his own design space
+ * (about 94 pixels from his feet to the top of his head) and then shrunk,
+ * smoothly, about his feet on the ledge: at this he stands a head and a bit
+ * taller than you -- wrong, thin and too tall, but a body, not a building.
+ */
+export const FIGURE_K = 0.46;
+const FEET = { x: 64, y: 98 };
+
+/** A point in the window to the same point in his design space. */
+function toDesign(p: { x: number; y: number }): { x: number; y: number } {
+  return { x: FEET.x + (p.x - FEET.x) / FIGURE_K, y: FEET.y + (p.y - FEET.y) / FIGURE_K };
+}
+
+let full: HTMLCanvasElement | null = null;
+
+/** Him, at the window, at his real size against the room. */
 export function drawWindowFroggy(g: Ctx, o: WindowFroggyOpts): void {
+  if (!full) {
+    full = document.createElement('canvas');
+    full.width = WF_W;
+    full.height = WF_H;
+  }
+  const fg = full.getContext('2d')!;
+  drawFull(fg, { ...o, strike: o.strike ? { ...o.strike, at: toDesign(o.strike.at) } : null });
+  g.clearRect(0, 0, WF_W, WF_H);
+  g.save();
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = 'high';
+  g.translate(WF.pad + FEET.x, WF.pad + FEET.y);
+  g.scale(FIGURE_K, FIGURE_K);
+  g.translate(-(WF.pad + FEET.x), -(WF.pad + FEET.y));
+  g.drawImage(full, 0, 0);
+  g.restore();
+}
+
+function drawFull(g: Ctx, o: WindowFroggyOpts): void {
   g.clearRect(0, 0, WF_W, WF_H);
   const P = WF.pad;
   const breathe = Math.sin(o.t * 2.1) * 0.6;
@@ -195,7 +231,8 @@ export function drawWindowFroggy(g: Ctx, o: WindowFroggyOpts): void {
     if (o.enter > 0) {
       // through the frame: the hands take the sides of it
       const e = Math.min(1, o.enter * 2);
-      const grip = { x: side < 0 ? -1 : WF.winW + 1, y: 46 };
+      // (reaching out of the frame for you, as he comes through)
+      const grip = { x: side < 0 ? -16 : WF.winW + 16, y: 50 };
       hand = { x: hand.x + (grip.x - hand.x) * e, y: hand.y + (grip.y - hand.y) * e };
     }
     // the elbow hangs low and wide: the arm is longer than his legs
@@ -298,14 +335,15 @@ export function drawWindowFroggy(g: Ctx, o: WindowFroggyOpts): void {
 
 /** Where the blows land, in window coordinates, one per hit. */
 export const HITS: Array<{ x: number; y: number; side: -1 | 1 }> = [
-  { x: 40, y: 48, side: -1 },
-  { x: 90, y: 44, side: 1 },
-  { x: 34, y: 64, side: -1 },
-  { x: 94, y: 62, side: 1 },
-  { x: 52, y: 36, side: -1 },
-  { x: 78, y: 66, side: 1 },
-  { x: 46, y: 54, side: -1 },
-  { x: 84, y: 50, side: 1 },
+  // (within his reach, round where he stands on the ledge)
+  { x: 50, y: 64, side: -1 },
+  { x: 79, y: 62, side: 1 },
+  { x: 46, y: 72, side: -1 },
+  { x: 83, y: 71, side: 1 },
+  { x: 54, y: 56, side: -1 },
+  { x: 75, y: 76, side: 1 },
+  { x: 51, y: 60, side: -1 },
+  { x: 78, y: 57, side: 1 },
 ];
 
 const seeded = (n: number): (() => number) => {
@@ -328,11 +366,11 @@ export function drawCracks(g: Ctx, hits: number, fresh: number): void {
     const R = seeded(i + 1);
     const age = hits - 1 - i;
     const grow = i === hits - 1 ? fresh : 1;
-    const reach = (12 + age * 10) * grow;
+    const reach = (10 + age * 8) * grow;
     // the white bruise where it landed
     ell(g, p.x, p.y, 2 + Math.min(3, age), 2 + Math.min(2, age), '#e8f0f4', 0.5);
     ell(g, p.x, p.y, 1, 1, '#ffffff', 0.8);
-    const rays = 5 + (i % 3);
+    const rays = 4 + (i % 3);
     for (let k = 0; k < rays; k++) {
       let a = (k / rays) * Math.PI * 2 + R() * 0.5;
       let x = p.x;

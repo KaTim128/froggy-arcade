@@ -707,7 +707,7 @@ export class Hotel extends Phaser.Scene {
     this.nextLine();
     this.setCurtains(true, false, 260);
     audio.sfx('door_creak', 0.5);
-    this.froggyImg?.setVisible(true).setTint(0xa8b0c8);
+    this.froggyImg?.setVisible(true).setTint(0xc4cce2);
     this.drawHim();
     this.time.delayedCall(200, () => {
       audio.sfx('dun', 1);
@@ -754,9 +754,10 @@ export class Hotel extends Phaser.Scene {
     drawWindowFroggy(g, { t: this.clock, maw: 0.55 + Math.min(0.45, t * 0.06), strike, enter, lean });
     g.restore();
     this.froggyTex.refresh();
-    // through the frame and down into the room, growing as he comes at you
+    // through the frame and down into the room, coming at you
     const e = enter * enter;
-    this.froggyImg?.setScale(1 + e * 0.55).setPosition(ROOM_WINDOW.x + ROOM_WINDOW.w / 2 - e * 18, ROOM_WINDOW.y + ROOM_WINDOW.h / 2 + e * 22);
+    // (off the ledge and down onto the floor of the room, a step toward you)
+    this.froggyImg?.setScale(1 + e * 0.25).setPosition(ROOM_WINDOW.x + ROOM_WINDOW.w / 2 - e * 30, ROOM_WINDOW.y + ROOM_WINDOW.h / 2 + e * 24);
   }
 
   /** A blow lands: the crack runs, the room jumps. */
@@ -766,7 +767,7 @@ export class Hotel extends Phaser.Scene {
     if (i % 3 === 2) audio.sfx('boom', 0.35);
     this.cameras.main.shake(140, 0.006 + i * 0.0012);
     this.froggyImg?.setTint(0xe0e6f4);
-    this.time.delayedCall(70, () => this.froggyImg?.setTint(0xa8b0c8));
+    this.time.delayedCall(70, () => this.froggyImg?.setTint(0xc4cce2));
     const grow = { k: 0 };
     this.tweens.add({
       targets: grow,
