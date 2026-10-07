@@ -25,6 +25,9 @@
  *   crouch (C) and you are slow, near silent and hard to pick out
  *   he follows your footsteps, and when you turn and look at him he looks
  *     back
+ *   stay put too long while he is looking for you and, now and then, his
+ *     search brings him past -- a few metres off, slow, looking about.  Under
+ *     the low, heavy boughs of the big pines, crouched, he walks on by
  *   the hotel's doors are safe.  Nothing follows you through them.
  */
 
@@ -220,6 +223,12 @@ export class NightRoad3D extends Phaser.Scene {
   private trees: Circle[] = [];
   private treeGrid = new Map<string, number[]>();
   private ponds: Circle[] = [];
+  /** The big pines' low boughs: crouch inside one and you are under cover. */
+  private skirts: Circle[] = [];
+  /** How long you have stood in one place, and his walk past if it comes. */
+  private stillT = 0;
+  private passT = 0;
+  private passBy: { a: THREE.Vector2; b: THREE.Vector2; leg: 0 | 1 } | null = null;
   private rubble: Circle[] = [];
   private twigs: { x: number; z: number; t: number }[] = [];
   private crows: Crow[] = [];
@@ -255,6 +264,10 @@ export class NightRoad3D extends Phaser.Scene {
     this.crows = [];
     this.boxes = [];
     this.posts = [];
+    this.skirts = [];
+    this.stillT = 0;
+    this.passT = 0;
+    this.passBy = null;
     this.waterMats = [];
     this.crouched = false;
     this.eye = EYE;
@@ -709,11 +722,18 @@ export class NightRoad3D extends Phaser.Scene {
       // one tree's green, a little lighter towards the top
       const hue = 0.33 + (R() - 0.5) * 0.06;
       const light = 0.06 + R() * 0.04;
+      // About one in four is an old, heavy pine: its lowest boughs spread
+      // wide and sweep down nearly to the ground -- room under them for a
+      // man crouched against the trunk.
+      const big = !dead && Math.abs(t.x) <= WORLD_X && R() < 0.26;
+      if (big) this.skirts.push({ x: t.x, z: t.z, r: 2.3 });
       for (let k = 0; k < TIERS; k++) {
         // narrow, tall, overlapping tiers: a spruce's outline, not a stack of shades
-        const w = (dead ? 0 : 1) * (2.3 - k * 0.4) * (0.82 + R() * 0.3);
+        const spread = big ? [1.55, 1.25, 1.1, 1, 1][k] : 1;
+        const w = (dead ? 0 : 1) * (2.3 - k * 0.4) * (0.82 + R() * 0.3) * spread;
+        const base = big && k === 0 ? 0.03 : big && k === 1 ? 0.12 : 0.16 + k * 0.15;
         const tq = new THREE.Quaternion().setFromEuler(new THREE.Euler((R() - 0.5) * 0.08, R() * 6.28, (R() - 0.5) * 0.08));
-        m.compose(p.set(t.x, h * (0.16 + k * 0.15), t.z), tq, sc.set(w || 0.001, h * 0.4, w || 0.001));
+        m.compose(p.set(t.x, h * base, t.z), tq, sc.set(w || 0.001, h * (big && k < 2 ? 0.46 : 0.4), w || 0.001));
         cones.setMatrixAt(c, m);
         cones.setColorAt(c, col.setHSL(hue, 0.38, light + k * 0.01));
         c++;
@@ -1371,12 +1391,51 @@ export class NightRoad3D extends Phaser.Scene {
 
   // ------------------------------------------------------------------ Froggy
 
+  /**
+   * STAY PUT AND HE MAY COME BY.  Once you have been still for a while
+   * and he is only looking for you (not on you), every few seconds there is a
+   * small chance his search turns your way: he walks a line that passes a few
+   * metres from where you are -- from the side he is already on, at a slow
+   * searching walk, looking about -- and on past.  He comes from wherever he
+   * is; nothing is put anywhere.  He still has to SEE you: in the open he
+   * will; crouched under the boughs of a big pine, or behind its trunk, he
+   * walks on by.
+   */
+  private maybePassBy(dt: number): void {
+    this.stillT = this.moving ? 0 : this.stillT + dt;
+    if (this.passBy && (this.fMode === 'hunt' || this.moving)) this.passBy = null;
+    if (this.passBy || this.fMode === 'hunt' || this.fMode === 'wait' || this.fMode === 'investigate') return;
+    if (this.stillT < 9) return;
+    this.passT -= dt;
+    if (this.passT > 0) return;
+    this.passT = 4;
+    if (Math.random() > 0.2) return;
+    const far = this.froggy.distanceTo(this.pos);
+    if (far > 70) return;
+    // the line he walks: from his side of you, past you at 3.5 - 6 m, and on
+    const dir = new THREE.Vector2(this.froggy.x - this.pos.x, this.froggy.y - this.pos.y).normalize();
+    const perp = new THREE.Vector2(-dir.y, dir.x).multiplyScalar((Math.random() < 0.5 ? -1 : 1) * (3.5 + Math.random() * 2.5));
+    const clampP = (v: THREE.Vector2) =>
+      v.set(Phaser.Math.Clamp(v.x, -WORLD_X + 1, WORLD_X - 1), Phaser.Math.Clamp(v.y, HOTEL_Z + 6, BACK_Z - 1));
+    const a = clampP(new THREE.Vector2(this.pos.x + perp.x + dir.x * 9, this.pos.y + perp.y + dir.y * 9));
+    const b = clampP(new THREE.Vector2(this.pos.x + perp.x - dir.x * 12, this.pos.y + perp.y - dir.y * 12));
+    this.passBy = { a, b, leg: 0 };
+    this.fMode = 'patrol';
+    this.passT = 15;
+  }
+
+  private underBoughs(): boolean {
+    return this.skirts.some((k) => Math.hypot(this.pos.x - k.x, this.pos.y - k.z) < k.r);
+  }
+
   /** Can he see you from where he is? */
   private sees(): boolean {
     const dx = this.pos.x - this.froggy.x;
     const dz = this.pos.y - this.froggy.y;
     const d = Math.hypot(dx, dz);
     if (d < (this.crouched ? 2.5 : 3.5)) return true;
+    // crouched in under a big pine's low boughs, you are a shape in the dark
+    if (this.crouched && this.underBoughs()) return false;
     const lit = LAMP_ZS.some((z, i) => Math.hypot(this.pos.x - (i % 2 ? 1 : -1) * (RAIL_X - 1.2), this.pos.y - z) < 7.5);
     const range = (lit ? 36 : this.onRoad() ? 27 : this.pos.y < HOTEL_Z + 12 ? 30 : 13) * (this.crouched ? 0.6 : 1);
     if (d > range) return false;
@@ -1430,10 +1489,12 @@ export class NightRoad3D extends Phaser.Scene {
       speed = this.froggy.distanceTo(back) > 2.5 ? 4.4 : this.moving ? WALK * 1.05 : 1.2;
     }
 
+    if (this.phase === 'chase') this.maybePassBy(dt);
+
     if (this.phase === 'chase' && this.fMode !== 'wait') {
       // Turn and look at him while he is looking for you, close enough, and
       // he sees you looking.
-      if ((this.fMode === 'search' || this.fMode === 'patrol' || this.fMode === 'investigate') && watched && toYou < (this.crouched ? 14 : 24) && this.lineClear(this.froggy.x, this.froggy.y, this.pos.x, this.pos.y)) {
+      if ((this.fMode === 'search' || this.fMode === 'patrol' || this.fMode === 'investigate') && watched && toYou < (this.crouched ? 9 : 24) && !(this.crouched && this.underBoughs()) && this.lineClear(this.froggy.x, this.froggy.y, this.pos.x, this.pos.y)) {
         this.fMode = 'hunt';
         this.lostT = 0;
         this.lastKnown.copy(this.pos);
@@ -1488,6 +1549,19 @@ export class NightRoad3D extends Phaser.Scene {
         case 'patrol':
           speed = PATROL;
           target = this.wander;
+          if (this.passBy) {
+            // the walk past: slow, looking about, along a line a few metres off you
+            speed = SEARCH;
+            target = this.passBy.leg === 0 ? this.passBy.a : this.passBy.b;
+            if (this.froggy.distanceTo(target) < 1.3) {
+              if (this.passBy.leg === 0) this.passBy.leg = 1;
+              else {
+                this.passBy = null;
+                this.wander.copy(this.froggy);
+              }
+            }
+            break;
+          }
           if (this.froggy.distanceTo(this.wander) < 1.5) {
             this.wander.set((Math.random() - 0.5) * 6, Phaser.Math.Clamp(this.pos.y + (Math.random() - 0.4) * 30, HOTEL_Z + 10, BACK_Z - 2));
           }
@@ -1770,6 +1844,12 @@ export class NightRoad3D extends Phaser.Scene {
         this.crouched = !this.crouched;
       },
       blocks: (x: number, z: number) => this.railBlocks(x, z),
+      skirts: () => this.skirts.map((k) => [k.x, k.z]),
+      under: () => this.underBoughs(),
+      passBy: () => (this.passBy ? { leg: this.passBy.leg, a: [this.passBy.a.x, this.passBy.a.y], b: [this.passBy.b.x, this.passBy.b.y] } : null),
+      setMode: (m: FrogMode) => {
+        this.fMode = m;
+      },
     };
   }
 
