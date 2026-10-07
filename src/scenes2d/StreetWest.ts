@@ -24,10 +24,13 @@ import { Player } from '../art/player';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 import { ROOM_MONEY } from './PrizeExchange';
+import { HOTEL_DOOR, HOTEL_H, HOTEL_W, paintHotel } from '../art/hotel';
 
 export const WORLD_W = 640;
 const WALK_Y = 168;
-const DOOR_X = 86;
+/** The hotel's front, from the left, and its door: the middle of it. */
+const HOTEL_X = 4;
+const DOOR_X = HOTEL_X + HOTEL_DOOR;
 const DOORMAN_X = 116;
 const BUS_X = 388;
 
@@ -242,23 +245,23 @@ export class StreetWest extends Phaser.Scene {
     // the bench, in front of the glass, on its legs
     g.fillStyle(0x8a5a2e, 1).fillRect(B - S(18), foot - 7, S(26), 2);
     g.fillStyle(0x5a3a1e, 1).fillRect(B - S(16), foot - 5, 1, 5).fillRect(B + S(5), foot - 5, 1, 5);
-    // ---- the hotel, at the end of the street
-    const H = dusk ? 0x5a4a5a : 0xd8c8a8;
-    this.add.rectangle(4, 158, 150, 150, H).setOrigin(0, 1).setStrokeStyle(1, dusk ? 0x3a2e3a : 0x8a7a5a);
-    for (let f = 0; f < 6; f++) {
-      for (let w = 0; w < 6; w++) {
-        const lit = dusk ? (f * 7 + w * 3) % 4 !== 0 : false;
-        this.add.rectangle(16 + w * 22, 22 + f * 16, 10, 9, lit ? 0xffe090 : dusk ? 0x2a2230 : 0x8ab8d0).setStrokeStyle(1, dusk ? 0x3a2e3a : 0x8a7a5a);
+    // ---- the hotel, at the end of the street: the same painting as the
+    // front of it at the end of the night road (art/hotel.ts)
+    const key = dusk ? 'grand_lily_dusk' : 'grand_lily_day';
+    if (!this.textures.exists(key)) {
+      const tex = this.textures.createCanvas(key, HOTEL_W, HOTEL_H);
+      if (tex) {
+        paintHotel(tex.getContext(), { dusk, flat: true });
+        tex.refresh();
       }
     }
-    this.add.rectangle(4, 6, 150, 10, dusk ? 0x3a2e3a : 0x8a5a2e).setOrigin(0, 0);
-    centerText(this, 79, 11, 'GRAND LILY HOTEL', dusk ? 0xffe090 : PALETTE.gold);
-    // the canopy over the door, and the door
-    this.add.rectangle(DOOR_X + 4, 124, 52, 5, 0x7b2a3a).setStrokeStyle(1, 0x4a1a24);
-    this.add.rectangle(DOOR_X - 20, 158, 1.5, 34, 0xc9a24a).setOrigin(0.5, 1);
-    this.add.rectangle(DOOR_X + 28, 158, 1.5, 34, 0xc9a24a).setOrigin(0.5, 1);
-    this.add.rectangle(DOOR_X, 158, 20, 32, dusk ? 0x2a1a20 : 0x3a2a24).setOrigin(0.5, 1).setStrokeStyle(1, 0xc9a24a);
-    this.add.rectangle(DOOR_X, 158, 1, 32, 0xc9a24a).setOrigin(0.5, 1);
+    this.add.image(HOTEL_X, 158, key).setOrigin(0, 1);
+    // the carpet out over the pavement, and at dusk the light from the door on it
+    if (dusk) this.add.ellipse(DOOR_X, 161, 76, 9, 0xffc070, 0.22).setBlendMode(Phaser.BlendModes.ADD);
+    this.add.rectangle(DOOR_X, 158, 26, 4, 0x7b2a3a).setOrigin(0.5, 0);
+    this.add.rectangle(DOOR_X, 158, 26, 1, 0x4a1a24).setOrigin(0.5, 0);
+    this.add.rectangle(DOOR_X - 13, 158, 1, 4, 0xc9a24a).setOrigin(0, 0);
+    this.add.rectangle(DOOR_X + 12, 158, 1, 4, 0xc9a24a).setOrigin(0, 0);
     // the doorman: a long coat, a peaked cap, gold buttons, arms folded
     const d = DOORMAN_X;
     this.add.rectangle(d, 158, 9, 12, 0x2a2a3a).setOrigin(0.5, 1);

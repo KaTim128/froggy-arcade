@@ -169,6 +169,10 @@ export class ExteriorDay extends Phaser.Scene {
    * stands on the pavement and thinks, three thoughts, and does not move
    * until they have.
    */
+  /**
+   * Nightfall, thought aloud: each line holds for a few seconds, and a click
+   * or a tap on the words (or SPACE / ENTER) moves on to the next at once.
+   */
   private midnightThoughts(): void {
     this.locked = true;
     const lines = [
@@ -176,16 +180,36 @@ export class ExteriorDay extends Phaser.Scene {
       'I finally have enough to afford a decent place to rest. Maybe I should try that hotel down the street.',
       'I can get back to grabbing arcade prizes tomorrow.',
     ];
-    lines.forEach((l, i) => {
-      this.time.delayedCall(800 + i * 3200, () => {
-        this.mutter.setText(l).setVisible(true).setAlpha(1).setMaxWidth(290);
+    let i = -1;
+    let timer: Phaser.Time.TimerEvent | null = null;
+    // the text area: the bottom of the screen, where the line is written
+    const zone = this.add.zone(0, GAME_H - 64, GAME_W, 64).setOrigin(0, 0).setScrollFactor(0).setDepth(900).setInteractive({ useHandCursor: true });
+    const kb = this.input.keyboard;
+    const next = (): void => {
+      timer?.remove(false);
+      timer = null;
+      if (i >= lines.length) return;
+      i++;
+      if (i < lines.length) {
+        this.mutter.setText(lines[i]).setVisible(true).setAlpha(1).setMaxWidth(290);
         this.tweens.killTweensOf(this.mutter);
-      });
-    });
-    this.time.delayedCall(800 + lines.length * 3200, () => {
+        timer = this.time.delayedCall(3200, next);
+        return;
+      }
+      zone.destroy();
+      kb?.off('keydown-SPACE', next);
+      kb?.off('keydown-ENTER', next);
       this.tweens.add({ targets: this.mutter, alpha: 0, duration: 600 });
       this.locked = false;
+    };
+    zone.on('pointerdown', next);
+    kb?.on('keydown-SPACE', next);
+    kb?.on('keydown-ENTER', next);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      kb?.off('keydown-SPACE', next);
+      kb?.off('keydown-ENTER', next);
     });
+    timer = this.time.delayedCall(800, next);
   }
 
   /**
