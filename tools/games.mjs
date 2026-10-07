@@ -4074,7 +4074,14 @@ for (const g of [
   console.log(`${taken ? 'PASS' : 'FAIL'}  prize counter: redeeming takes it off the shelf  — ${oneGone.prizesOwned.join(',')}`);
   if (!taken) failures++;
 
+  // Prizes take a pocket now and there are three, so between buys the ones
+  // in hand are sold on -- as a player clearing a shelf would have to.
+  const emptyPockets = () => page.evaluate(() => {
+    const s = window.__froggy.state();
+    window.__froggy.patch({ prizesSold: s.prizesOwned.slice() });
+  });
   for (let i = 1; i < 9; i++) {
+    await emptyPockets();
     await page.mouse.click(...slot(i));
     await sleep(700);
   }

@@ -979,11 +979,12 @@ class TouchControls {
       const xgap = portrait ? 10 : 6;
       if (portrait) {
         const room = under - 64 - safe.bottom - 12;
-        cell = Math.round(Math.max(52, Math.min(96, (room - 2 * xgap) / 3, (window.innerWidth * 0.78 - 2 * xgap) / 3)));
+        // (bigger arms: the Dance Off is played on them, and blind)
+        cell = Math.round(Math.max(64, Math.min(124, (room - 2 * xgap) / 3, (window.innerWidth * 0.94 - 2 * xgap) / 3)));
         const h = cell * 3 + xgap * 2;
         crossB = safe.bottom + Math.max(12, Math.round((room - h) / 2) + 12);
       } else {
-        cell = Math.round(Math.max(44, Math.min(56, pic.height * 0.13)));
+        cell = Math.round(Math.max(56, Math.min(66, pic.height * 0.16)));
         crossB = safe.bottom + 8;
       }
       this.root.style.setProperty('--tc-cell', `${cell}px`);

@@ -1,3 +1,4 @@
+import { froggyLayer } from '../render/froggyLayer';
 /**
  * Dev debug panel.  PRD §6.9 / DB-1 / QFD A6.
  *
@@ -66,6 +67,10 @@ export function initDebug(g: Phaser.Game): void {
       else if (n < have) store.spendCash(have - n);
       store.flush();
     },
+    /** The overlay itself, for a test that needs to look at what is on it. */
+    overlay: () => froggyLayer,
+    /** A new profile under this name, made the active one (for the name cheats). */
+    createSlot: (name: string) => store.createSlot(name),
     /** Any run field at all, for a test that needs a state the URL cannot set. */
     patch: (p: Record<string, unknown>) => {
       store.patch(p as never);

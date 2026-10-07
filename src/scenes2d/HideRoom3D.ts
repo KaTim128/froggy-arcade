@@ -29,6 +29,7 @@ import * as THREE from 'three';
 import { audio, SILENCE, screamLevel, type SfxName, type SfxPlace } from '../core/audio';
 import { store } from '../core/state';
 import { ledger } from '../core/ledger';
+import { addItem, KEY_ITEM } from '../game/inventory';
 import { froggyLayer } from '../render/froggyLayer';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
 import { playJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
@@ -1204,7 +1205,9 @@ export class HideRoom3D extends Phaser.Scene {
     this.froggy.set(this.def.froggyStart.x, this.def.froggyStart.z);
     this.froggyWas.copy(this.froggy);
 
-    this.stage = new ThreeStage();
+    // Smoothed edges: his long thin limbs and fingers were stair-stepped at
+    // the low render size, so his outline read as jagged and torn.
+    this.stage = new ThreeStage({ smooth: true });
     const root = document.getElementById('game-root');
     if (root) this.stage.mount(root, this.game.canvas);
     this.buildRoom();
@@ -1600,6 +1603,8 @@ export class HideRoom3D extends Phaser.Scene {
     }
     if (!this.hunted) return;
     this.monster = new FroggyMonster(this.isFinal ? FINAL_SCALE : FROGGY_SCALE);
+    // a slightly different him each time the room is built: see `vary`
+    this.monster.vary(Math.random() * 1000);
     this.monster.setVisible(false);
     st.scene.add(this.monster.root);
     // A fingerprint of the model, published for the harness: the alley reports
@@ -3256,7 +3261,8 @@ export class HideRoom3D extends Phaser.Scene {
       rise: ss(t, 0.1, 1.5),
       maw: preMaw + (1 - preMaw) * open * (0.4 + 0.6 * level),
       bare: 0.5 + 0.5 * ss(t, 0.4, 1.8),
-      stretch: preStretch + open * level * 0.95 + judder,
+      // (the jaw drops far, but not so far it stops being a jaw)
+      stretch: preStretch + open * level * 0.62 + judder,
       tilt: 0.16 + 0.24 * ss(t, 0.4, 2.4),
       level,
     };
@@ -3397,6 +3403,18 @@ export class HideRoom3D extends Phaser.Scene {
    * not get to say anything about it.
    */
   private beginRetry(): void {
+    // out of the dark the scare ended in, onto the count
+    const c = document.getElementById('three-canvas');
+    if (c) {
+      c.style.transition = 'filter 0.6s ease-out';
+      c.style.filter = 'brightness(0)';
+      this.time.delayedCall(60, () => {
+        c.style.filter = '';
+      });
+      this.time.delayedCall(800, () => {
+        c.style.transition = '';
+      });
+    }
     this.monster?.setVisible(false);
     this.subtitle = '';
     this.mode = 'hiding';
@@ -5067,6 +5085,7 @@ export class HideRoom3D extends Phaser.Scene {
       bare: w ? w.bare : this.fMode === 'chase' ? 0.55 + 0.45 * this.chaseHeat : briefing ? 0.5 : 0.2,
       stretch: w ? w.stretch : 0,
       menace: w ? w.menace : 0,
+      rage: w ? w.level : 0,
       climb: cf ? cf.k : 0,
       climbRig: cr?.rig ?? null,
       // Down on his haunches at a bed, craning about under it -- or down at
@@ -5453,7 +5472,13 @@ export class HideRoom3D extends Phaser.Scene {
     this.scare = this.stage && this.monster ? playJumpscare3D(this, this.stage, this.monster, { floor: this.floorY }) : null;
     if (!this.scare) playJumpscare(this);
 
-    // Straight back into the round, clean: see `beginRetry`.
+    // The screen goes dark when the scare has played, and the round comes
+    // back out of the dark straight onto the count -- never the waking-up
+    // again: see `beginRetry`.
+    this.time.delayedCall(SCARE_MS, () => {
+      const c = document.getElementById('three-canvas');
+      if (c) c.style.filter = 'brightness(0)';
+    });
     this.time.delayedCall(SCARE_MS + 700, () => {
       froggyLayer.clear();
       this.scene.restart({ retry: true });
@@ -5521,6 +5546,8 @@ export class HideRoom3D extends Phaser.Scene {
     if (this.left) return;
     this.left = true;
     store.patch({ route: 'normal', hideRoom: 0, froggyGone: true });
+    // The key that opened the doors comes out with you, into a pocket.
+    if (!store.get().items.includes(KEY_ITEM.id)) addItem(KEY_ITEM.id);
     // AND YOU COME OUT WITH ONE TOKEN.  Not a reward and not a handout -- it
     // is what was in the pocket, and it is exactly enough for one go on the
     // cheapest machine in the building.

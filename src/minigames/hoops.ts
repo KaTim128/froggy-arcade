@@ -48,6 +48,7 @@
  *                     than the hoop under it.
  */
 
+import { isTouch } from '../core/device';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -398,9 +399,10 @@ export const hoops: MinigameModule = {
     scene.add.rectangle(GAME_W - 62, 162, 58, 14, 0x123b2a).setOrigin(0, 0).setDepth(28).setAlpha(0.66);
     scene.add.rectangle(10, 96, 8, 40, PALETTE.ink).setOrigin(0, 0).setDepth(29).setStrokeStyle(1, PALETTE.steel);
     meterFill = scene.add.rectangle(11, 135, 6, 0, PALETTE.gold).setOrigin(0, 1).setDepth(29);
+    // The phone's names for the controls, not the keyboard's.
     text(scene, 7, 139, 'HOLD', PALETTE.bone).setDepth(29);
-    text(scene, 7, 147, 'SPACE', PALETTE.bone).setDepth(29);
-    text(scene, GAME_W - 58, 166, 'W/S AIM', PALETTE.bone).setDepth(29);
+    text(scene, 7, 147, isTouch() ? 'SHOOT' : 'SPACE', PALETTE.bone).setDepth(29);
+    text(scene, GAME_W - 58, 166, isTouch() ? '↑↓ AIM' : 'W/S AIM', PALETTE.bone).setDepth(29);
 
     arrow = scene.add.graphics().setDepth(30);
 

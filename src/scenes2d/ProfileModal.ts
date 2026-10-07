@@ -20,7 +20,7 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
-import { store, cleanName, MAX_SLOTS, MAX_NAME_LEN, TEST_NAME, HORROR_NAME, type SlotMeta } from '../core/state';
+import { store, cleanName, MAX_SLOTS, MAX_NAME_LEN, TEST_NAME, HORROR_NAME, DARK_NAME, type SlotMeta } from '../core/state';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { ARCADE_ROOM } from '../three/hideRooms';
@@ -323,6 +323,10 @@ export class ProfileModal extends Phaser.Scene {
       this.jumpToHideAndSeek();
       return;
     }
+    if (typed.toUpperCase() === DARK_NAME) {
+      this.jumpToDarkStreet();
+      return;
+    }
     this.close();
   }
 
@@ -381,6 +385,30 @@ export class ProfileModal extends Phaser.Scene {
     const mgr = this.scene.manager;
     for (const key of mgr.getScenes(true).map((sc) => sc.scene.key)) mgr.stop(key);
     mgr.start('HideRoom3D');
+  }
+
+  /**
+   * DARKSTREET128, AND OUT ONTO THE DARK STREET.  See DARK_NAME.
+   *
+   * The night after the night: Hide and Seek survived, the man's money in
+   * the pocket, the arcade shut, midnight -- and the road to the hotel.  The
+   * road is NightRoad3D, and reaching the hotel's doors takes the run on into
+   * the lobby exactly as it does for anybody who walked there.
+   */
+  private jumpToDarkStreet(): void {
+    store.patch({
+      seenIntro: true,
+      charityUsed: true,
+      hasKey: true,
+      froggyGone: true,
+      route: 'normal',
+      hideRoom: 0,
+      timeOfDay: 'midnight',
+    });
+    store.flush();
+    const mgr = this.scene.manager;
+    for (const key of mgr.getScenes(true).map((sc) => sc.scene.key)) mgr.stop(key);
+    mgr.start('NightRoad3D');
   }
 
   private play(id: string): void {

@@ -242,11 +242,11 @@ export class Cabinet {
     this.bounds = new Phaser.Geom.Rectangle(x - (CAB_W + 4) / 2, y - CAB_H - 1, CAB_W + 4, CAB_H + 2);
 
     // ONE DEPTH FOR THE WHOLE CABINET, on the player's own scale (depthFor),
-    // taken at HALF ITS HEIGHT: walk up past the middle of a machine and it is
-    // drawn in front of you, so you are going behind it; below that you are in
-    // front of it.  It sat under every depth the player can have, so the
+    // taken at FOUR TENTHS OF ITS HEIGHT: walk up past that line on a machine
+    // and it is drawn in front of you, so you are going behind it; below it you
+    // are in front of it.  It sat under every depth the player can have, so the
     // player was drawn over the machine whichever side of it they were on.
-    const d = depthFor(y - CAB_H / 2);
+    const d = depthFor(y - CAB_H * 0.4);
 
     // ---- the box itself: side panels, a bezel, a deck and a plinth
     const shell = c(PALETTE.slate);

@@ -72,8 +72,7 @@ export class StreetWest extends Phaser.Scene {
     // (top right: the hotel's name is across the top left of the street)
     this.add.rectangle(GAME_W - 164, 4, 96, 14, PALETTE.black, 0.55).setOrigin(0, 0).setDepth(950).setScrollFactor(0);
     this.purse = text(this, GAME_W - 159, 8, `$${store.get().cash}`, PALETTE.mossLight).setDepth(951).setScrollFactor(0);
-    // and the pockets up in the corner, clear of you walking along the kerb
-    attachPockets(this, () => this.locked, GAME_W - 32, true);
+    attachPockets(this, () => this.locked);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
     this.mutterPlate = this.add.rectangle(0, 0, 1, 1, PALETTE.black, 0.72).setOrigin(0, 0).setDepth(801).setScrollFactor(0).setVisible(false);
     this.mutter = centerText(this, 160, GAME_H - 40, '', PALETTE.cream).setDepth(802).setScrollFactor(0).setVisible(false).setMaxWidth(290);

@@ -221,6 +221,15 @@ export const TEST_NAME = 'TESTT128';
  */
 export const HORROR_NAME = 'HNS128';
 
+/**
+ * Name a run this and it opens on the dark street at midnight, the road to the
+ * hotel, with tokens AND cash that never run out.  Same rules as the others:
+ * case-insensitive, whole name only.
+ */
+export const DARK_NAME = 'DARKSTREET128';
+/** What the purse shows for the dark-street run.  It never moves. */
+export const DARK_CASH = 9999;
+
 function defaultState(): GameState {
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -360,6 +369,7 @@ class Store {
     this.state = fresh;
     // A saved unlimited run comes back unlimited, whatever the file says.
     if (this.isAdmin()) this.state.tokens = ADMIN_TOKENS;
+    if (this.isRich()) this.state.cash = DARK_CASH;
   }
 
   // ------------------------------------------------------------------ profiles
@@ -378,7 +388,18 @@ class Store {
 
   /** True when the run in play is the one that never pays for anything. */
   isAdmin(): boolean {
-    return (this.activeSlotName() ?? "").toUpperCase() === ADMIN_NAME;
+    const n = (this.activeSlotName() ?? '').toUpperCase();
+    return n === ADMIN_NAME || n === DARK_NAME;
+  }
+
+  /** The admin run proper, which also gets the test buttons in the pause menu. */
+  isTester(): boolean {
+    return (this.activeSlotName() ?? '').toUpperCase() === ADMIN_NAME;
+  }
+
+  /** The dark-street run, whose cash never runs out either. */
+  isRich(): boolean {
+    return (this.activeSlotName() ?? '').toUpperCase() === DARK_NAME;
   }
 
   /** Progress for the picker, read straight from storage — never made active. */
@@ -413,6 +434,7 @@ class Store {
     // the balance to top it up.  Written here rather than through the ledger
     // because this is the store loading its own state, not a transaction.
     if (this.isAdmin()) this.state.tokens = ADMIN_TOKENS;
+    if (this.isRich()) this.state.cash = DARK_CASH;
     this.flush();
     this.emit();
     return meta.id;
@@ -492,7 +514,8 @@ class Store {
   spendCash(n: number): boolean {
     const amount = Math.floor(n);
     if (!Number.isFinite(amount) || amount <= 0 || this.state.cash < amount) return false;
-    this.state.cash -= amount;
+    // the dark-street run pays and the purse never moves
+    if (!this.isRich()) this.state.cash -= amount;
     this.touch();
     return true;
   }

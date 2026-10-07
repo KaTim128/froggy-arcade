@@ -84,7 +84,8 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   // the claw: left and right to aim, and the one button that drops it
   // the board is all buttons and spaces you tap
   Froggopoly: TAP,
-  CraneGame: { stick: 'lr', arrows: true, buttons: [{ label: 'DROP', key: 'SPACE', primary: true }] },
+  // the claw rides a gantry two ways: the joystick moves it, DROP is held to lower it
+  CraneGame: { stick: 'wasd', joystick: true, buttons: [{ label: 'DROP', key: 'SPACE', primary: true }] },
   ArcadeCasino: ROOM,
   ArcadeDark: ROOM,
 

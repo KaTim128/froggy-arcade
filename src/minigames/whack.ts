@@ -10,8 +10,8 @@
  * was not spent the last fifteen seconds whacking for nothing.  Now the clock
  * is the whole game and the score is how far up the ladder you got:
  *
- *   50 or more   15 tokens
- *   45 to 49     10 tokens
+ *   55 or more   15 tokens
+ *   45 to 54     10 tokens
  *   under 45     nothing
  *
  * WHICH MEANT THE FROGS HAD TO COME FASTER.  Fifty in thirty seconds is one
@@ -52,7 +52,7 @@ import type { MinigameApi, MinigameModule } from './types';
  */
 const ROUND_MS = 30_000;
 const PAYS: Array<{ at: number; tokens: number }> = [
-  { at: 50, tokens: 15 },
+  { at: 55, tokens: 15 },
   { at: 45, tokens: 10 },
 ];
 /**
@@ -95,6 +95,10 @@ interface Hole {
 let holes: Hole[] = [];
 let hits = 0;
 let timeLeft = ROUND_MS;
+/** A three-second count before the first frog, so nobody starts on a miss. */
+const COUNTDOWN_MS = 3000;
+let countdown = COUNTDOWN_MS;
+let countText: Phaser.GameObjects.BitmapText | null = null;
 let spawnTimer = 0;
 let hud: Phaser.GameObjects.BitmapText | null = null;
 let over = false;
@@ -110,8 +114,8 @@ export const whackAFrog: MinigameModule = {
     objective: [
       'THIRTY SECONDS. WHACK ALL YOU CAN.',
       'THERE IS NO TARGET - THE CLOCK ENDS IT.',
-      '50 WHACKS OR MORE PAYS 15 TOKENS.',
-      '45 TO 49 PAYS 10. UNDER 45 PAYS NOTHING.',
+      '55 WHACKS OR MORE PAYS 15 TOKENS.',
+      '45 TO 54 PAYS 10. UNDER 45 PAYS NOTHING.',
       'THEY GET QUICKER AS YOU GO.',
     ],
     controls: [
@@ -128,6 +132,7 @@ export const whackAFrog: MinigameModule = {
     timeLeft = ROUND_MS;
     spawnTimer = 0;
     over = false;
+    countdown = COUNTDOWN_MS;
     sceneRef = scene;
     holes = [];
 
@@ -183,6 +188,9 @@ export const whackAFrog: MinigameModule = {
 
     scene.input.on('pointerdown', (p: Phaser.Input.Pointer) => onClick(p.worldX, p.worldY));
     refreshHud();
+    // 3, 2, 1 -- big, in the middle of the lawn, before anything comes up
+    countText = centerText(scene, GAME_W / 2, 104, '3', PALETTE.gold, 32).setDepth(40);
+    audio.sfx('ui_blip');
 
     if (import.meta.env?.DEV) {
       (window as unknown as Record<string, unknown>).__whack = {
@@ -211,6 +219,23 @@ export const whackAFrog: MinigameModule = {
 
   update(_t: number, delta: number) {
     if (over) return;
+
+    if (countdown > 0) {
+      const was = Math.ceil(countdown / 1000);
+      countdown -= delta;
+      const now = Math.ceil(countdown / 1000);
+      if (countdown <= 0) {
+        countText?.setText('GO!');
+        audio.sfx('chime');
+        const t = countText;
+        sceneRef?.tweens.add({ targets: t, alpha: 0, delay: 350, duration: 300, onComplete: () => t?.destroy() });
+        countText = null;
+      } else if (now !== was) {
+        countText?.setText(String(now));
+        audio.sfx('ui_blip');
+      }
+      return;
+    }
 
     timeLeft -= delta;
     if (timeLeft <= 0) {
@@ -285,7 +310,7 @@ export const whackAFrog: MinigameModule = {
 };
 
 function onClick(x: number, y: number): void {
-  if (over) return;
+  if (over || countdown > 0) return;
   for (const h of holes) {
     if (!h.occupant) continue;
     if (Math.abs(x - h.x) > 20 || y < h.y - 26 || y > h.y + 16) continue;

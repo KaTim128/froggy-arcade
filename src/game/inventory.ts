@@ -15,10 +15,11 @@
  */
 
 import { store } from '../core/state';
+import { cashFor, prizeById } from './content';
 
 export const SLOTS = 3;
 
-export type ItemKind = 'plush' | 'oddity' | 'camera';
+export type ItemKind = 'plush' | 'oddity' | 'camera' | 'key' | 'prize';
 
 export interface ItemDef {
   id: string;
@@ -33,12 +34,13 @@ export interface ItemDef {
 
 /** The left crane's animals.  Cheap, soft, and worth very little to anyone. */
 export const PLUSHIES: ItemDef[] = [
-  { id: 'plush:frog', name: 'FROG PLUSH', kind: 'plush', color: 0x46c46e, value: 3, thought: 'A little frog. It looks happier than the real one.' },
-  { id: 'plush:bear', name: 'BEAR PLUSH', kind: 'plush', color: 0xa8743e, value: 3, thought: 'Soft. Somebody will want this more than I do.' },
-  { id: 'plush:bunny', name: 'BUNNY PLUSH', kind: 'plush', color: 0xf2e6d8, value: 3, thought: 'One ear is longer than the other. Still cute.' },
-  { id: 'plush:duck', name: 'DUCK PLUSH', kind: 'plush', color: 0xffc830, value: 3, thought: 'It squeaks if you squeeze it. I keep squeezing it.' },
-  { id: 'plush:cat', name: 'CAT PLUSH', kind: 'plush', color: 0x8a8f99, value: 3, thought: 'It has button eyes. One is hanging by a thread.' },
-  { id: 'plush:owl', name: 'OWL PLUSH', kind: 'plush', color: 0x7b4bd8, value: 3, thought: 'A purple owl. Not a colour owls come in.' },
+  // What the man pays: the Froggy is the one he wants, at 50; the rest 20 to 30.
+  { id: 'plush:frog', name: 'FROGGY PLUSH', kind: 'plush', color: 0x46c46e, value: 50, thought: 'A little frog. It looks happier than the real one.' },
+  { id: 'plush:bear', name: 'BEAR PLUSH', kind: 'plush', color: 0xa8743e, value: 20, thought: 'Soft. Somebody will want this more than I do.' },
+  { id: 'plush:bunny', name: 'BUNNY PLUSH', kind: 'plush', color: 0xf2e6d8, value: 25, thought: 'One ear is longer than the other. Still cute.' },
+  { id: 'plush:duck', name: 'DUCK PLUSH', kind: 'plush', color: 0xffc830, value: 30, thought: 'It squeaks if you squeeze it. I keep squeezing it.' },
+  { id: 'plush:cat', name: 'CAT PLUSH', kind: 'plush', color: 0x8a8f99, value: 20, thought: 'It has button eyes. One is hanging by a thread.' },
+  { id: 'plush:owl', name: 'OWL PLUSH', kind: 'plush', color: 0x7b4bd8, value: 25, thought: 'A purple owl. Not a colour owls come in.' },
 ];
 
 /** What the right crane's capsules sometimes hold.  He pays well for these. */
@@ -60,16 +62,44 @@ export const CAMERA_ITEM: ItemDef = {
   thought: "I'm not selling this. It might be the only proof of what happened in there.",
 };
 
+/** The key from the basement, in the pocket once the night is survived. */
+export const KEY_ITEM: ItemDef = {
+  id: 'key',
+  name: 'BRASS KEY',
+  kind: 'key',
+  color: 0xd8b04a,
+  value: 0,
+  thought: 'The key from the basement. It opened the doors and got me out. I am keeping it.',
+};
+
 export function itemDef(id: string): ItemDef | undefined {
   if (id === CAMERA_ITEM.id) return CAMERA_ITEM;
+  if (id === KEY_ITEM.id) return KEY_ITEM;
+  // a prize off the counter, carried in a pocket until it is sold
+  const p = prizeById(id);
+  if (p) {
+    return {
+      id,
+      name: p.name,
+      kind: 'prize',
+      color: p.color,
+      value: cashFor(p),
+      thought: 'From the prize counter. That man outside might buy this.',
+    };
+  }
   return PLUSHIES.find((p) => p.id === id) ?? ODDITIES.find((o) => o.id === id);
 }
 
-/** Everything in the pockets, in slot order: the camera first, if it is held. */
+/**
+ * Everything in the pockets, in slot order: the counter's prizes that are
+ * still unsold (the camera first, if it is held), then the cranes' things.
+ * A prize off the counter is carried like anything else, so it takes a
+ * pocket until the man outside buys it.
+ */
 export function heldItems(s = store.get()): string[] {
-  const out: string[] = [];
-  if (s.prizesOwned.includes(CAMERA_ITEM.id) && !s.prizesSold.includes(CAMERA_ITEM.id)) out.push(CAMERA_ITEM.id);
-  return [...out, ...s.items].slice(0, SLOTS);
+  const prizes = s.prizesOwned.filter((id) => !s.prizesSold.includes(id));
+  prizes.sort((a, b) => Number(b === CAMERA_ITEM.id) - Number(a === CAMERA_ITEM.id));
+  return [...prizes, ...s.items].slice(0, SLOTS);
 }
 
 export function pocketsFull(s = store.get()): boolean {

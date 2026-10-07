@@ -171,7 +171,7 @@ const FOES: FoeDef[] = [
     note: 'FAST HANDS, LIGHT ONES' },
   { key: 'tortoise', name: 'TORTOISE', rare: false, weight: 10,
     skin: 0x7a8a4a, skinLight: 0xc9c99a, glove: 0x6a4a2a, gloveLit: 0x9a7040, bodyW: 16, bodyH: 17, headW: 10, look: 'shell',
-    speed: 0.72, power: 1, windup: 1.1, reach: 0.95, guard: 0.35, blockRate: 1.7, tempo: 1.2, dodge: 0, style: 'balanced', chaos: 0, counter: 0.25,
+    speed: 0.72, power: 1, windup: 1.1, reach: 0.95, guard: 0, blockRate: 1.7, tempo: 1.2, dodge: 0, style: 'balanced', chaos: 0, counter: 0.25,
     note: 'WILL NOT BE HIT' },
   { key: 'snake', name: 'SNAKE', rare: false, weight: 10,
     skin: 0x6a8a2a, skinLight: 0xd8d070, glove: 0x7a3aa8, gloveLit: 0xa870d8, bodyW: 11, bodyH: 20, headW: 11, look: 'snake',
@@ -1012,19 +1012,34 @@ function foeGear(scene: Phaser.Scene, d: FoeDef): {
         g.lineStyle(0.8, seam, 1).strokePoints(pts, true);
         return g;
       };
+      // the shadow it throws on itself, a dark rim, then the dome in two
+      // tones -- the sunlit top and the shaded skirt -- so it reads as round
+      shell.push(E(1, 2, sw + 3, sh + 2, 0x1e180c).setAlpha(0.5));
       shell.push(E(0, 0, sw + 2, sh + 2, rim));
-      shell.push(E(0, 0, sw, sh, 0x6e5a30));
-      for (let k = -5; k <= 5; k++) {
-        const a = Math.PI / 2 + (k / 5.6) * (Math.PI / 2.1);
-        shell.push(E(Math.cos(a) * (sw / 2 - 1.8), Math.sin(a) * (sh / 2 - 1.8), 3.2, 2.8, 0x8a7040).setStrokeStyle(0.6, rim));
+      shell.push(E(0, 0.6, sw, sh, 0x5e4c26));
+      shell.push(E(0, -1, sw - 2, sh - 3, 0x7a6232));
+      // the marginal plates round the skirt, each with its own seam
+      for (let k = -6; k <= 6; k++) {
+        const a = Math.PI / 2 + (k / 6.6) * (Math.PI / 2.05);
+        shell.push(E(Math.cos(a) * (sw / 2 - 1.6), Math.sin(a) * (sh / 2 - 1.6), 3, 2.6, k % 2 ? 0x8a7040 : 0x7e6638).setStrokeStyle(0.6, rim));
       }
-      for (const [x, y, r] of [[0, -4, 4.4], [-5.6, -0.6, 3.8], [5.6, -0.6, 3.8], [-2.8, 4.4, 3.4], [2.8, 4.4, 3.4]] as const) {
-        shell.push(hex(x, y, r, 0x9a7c42, 0x4a3a1c), hex(x, y - 0.3, r * 0.52, 0xb8964e, 0x8a6e36).setAlpha(0.7));
+      // the scutes: a spine of three down the middle and two pairs either
+      // side, every one with pale growth rings and a dark seam
+      for (const [x, y, r] of [[0, -5, 4.2], [0, 0.6, 4], [-6, -2, 3.6], [6, -2, 3.6], [-5.2, 3.6, 3.2], [5.2, 3.6, 3.2]] as const) {
+        shell.push(hex(x, y, r, 0x9a7c42, 0x3a2c14));
+        shell.push(hex(x, y - 0.3, r * 0.68, 0xa8884a, 0x8a6e36).setAlpha(0.8));
+        shell.push(hex(x, y - 0.5, r * 0.36, 0xc8a85e, 0xa8884a).setAlpha(0.75));
       }
-      shell.push(E(-2, -sh / 2 + 4, sw * 0.5, 3, 0xefdca8).setAlpha(0.35));
-      // a hooked horny beak and a wrinkled old neck
+      // the keel along the top, and the sun on the dome
+      shell.push(R(0, -2, 1, sh - 8, 0x4a3a1c).setAlpha(0.45));
+      shell.push(E(-3, -sh / 2 + 3.6, sw * 0.46, 2.6, 0xfff0c0).setAlpha(0.4));
+      shell.push(E(-5, -sh / 2 + 5.2, 3, 1.4, 0xffffff).setAlpha(0.35));
+      // a hooked horny beak, a wrinkled old neck, and scales on the crown
       head.push(TA(3.4, -0.4, 7.6, 0.6, 4, 3.4, 0x5a5230), TA(6, 0.2, 7.6, 0.6, 6.8, 2.2, 0x3a3420));
-      head.push(R(-1, 3, 5, 0.8, dark).setAlpha(0.6), R(0, 5, 4, 0.8, dark).setAlpha(0.6));
+      head.push(R(-1, 3, 5, 0.8, dark).setAlpha(0.6), R(0, 5, 4, 0.8, dark).setAlpha(0.6), R(-0.5, 6.8, 3.4, 0.7, dark).setAlpha(0.5));
+      for (const [sx, sy] of [[-2, -3.4], [0.4, -3.8], [-0.8, -2.2], [1.8, -2.6]] as const) head.push(E(sx, sy, 1.8, 1.3, shade(d.skin, 0.18)).setAlpha(0.8));
+      // a wise old eyebrow over the eye
+      head.push(R(2.2, -3.2, 3, 0.7, dark).setAngle(-12).setAlpha(0.7));
       // and the plastron on its front, under the chin
       body.push(E(2, 1, d.bodyW * 0.62, d.bodyH * 0.8, 0xd8c88a).setStrokeStyle(0.6, 0x8a7a4a));
       for (let k = -1; k <= 1; k++) body.push(R(2, 1 + k * 3.4, d.bodyW * 0.5, 0.6, 0x8a7a4a).setAlpha(0.7));
@@ -1656,7 +1671,7 @@ function tryHit(f: Fighter): void {
   }
 
   f.hitLanded = true;
-  // A tortoise's guard lets through a third of what anybody else's does.
+  // A tortoise's guard is its shell, and the shell lets NOTHING through.
   const guard = BLOCK_MULT * (target.foe?.guard ?? 1);
   const dmg = (blocked ? def.dmg * guard : def.dmg) * (f.foe?.power ?? 1);
   // And after a block, the counterpunchers answer straight back.

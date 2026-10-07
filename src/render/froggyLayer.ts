@@ -62,8 +62,22 @@ class FroggyLayer {
 
   clear(): void {
     if (!this.canvas || !this.ctx) return;
-    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    // A FULL RESET, not just a clearRect.  A painter that left a clip on the
+    // context (a save without its restore, somewhere down a drawing call)
+    // made every later clearRect clip to it, so whatever lay outside it --
+    // the mascot on the hub's counter -- stayed on the overlay into the next
+    // scene.  Resetting the context drops any clip, transform and state
+    // left behind, and clears the pixels with them.
+    // Re-setting the width reallocates the backing store, which is the one
+    // clear a browser cannot defer: a clearRect on a canvas hidden under the
+    // pause menu was being put off, and the old frame came back.
+    // eslint-disable-next-line no-self-assign
+    this.canvas.width = this.canvas.width;
+    const c = this.ctx;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    c.imageSmoothingEnabled = true;
+    c.imageSmoothingQuality = 'high';
   }
 
   /**
