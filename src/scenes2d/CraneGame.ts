@@ -152,7 +152,7 @@ const HOME = { x: CHUTE.x, z: CHUTE.z };
 /** How far left the claw can go: over the chute. */
 const CLAW_MIN_X = CHUTE.x;
 
-type Phase = 'aim' | 'lower' | 'wait' | 'shut' | 'up' | 'carry' | 'release' | 'result';
+type Phase = 'pay' | 'aim' | 'lower' | 'wait' | 'shut' | 'up' | 'carry' | 'release' | 'result';
 
 /** One heap in this many draws a Froggy in each spot: he is the rare one. */
 const FROGGY_CHANCE = 0.03;
@@ -204,6 +204,8 @@ export class CraneGame extends Phaser.Scene {
   private sideRig!: Phaser.GameObjects.Graphics;
   private sideHeld: Phaser.GameObjects.Image | null = null;
   private sideBtn: Phaser.GameObjects.Container | null = null;
+  private marquee: Phaser.GameObjects.BitmapText[] = [];
+  private sideTag: Phaser.GameObjects.BitmapText | null = null;
   /** The side view has been used this go: DROP is open. */
   private viewedSide = false;
 
@@ -231,6 +233,8 @@ export class CraneGame extends Phaser.Scene {
     this.froggies = 0;
     this.sideOn = false;
     this.sideHeld = null;
+    this.marquee = [];
+    this.payPanel = null;
 
     this.paintCabinet(eerie);
     this.fillPile();
@@ -250,12 +254,12 @@ export class CraneGame extends Phaser.Scene {
 
     this.clockText = text(this, CLOCK_X, 160, '', 0xff6a5a).setDepth(60);
     new TokenHud(this);
-    button(this, GAME_W - 24, 10, 'QUIT', () => this.leave(true), { width: 40, height: 13, fill: 0x5a1a22 }).setDepth(70);
+    button(this, GAME_W - 23, 10, 'QUIT', () => this.leave(true), { width: 40, height: 13, fill: 0x5a1a22 }).setDepth(70);
     // the view button: BACK in the side view, SIDE VIEW once you have
     // been there; hidden until then (the action button takes you the first time).
     // Clear of QUIT and the title plate, and the only view button on touch too:
     // a second one in the touch pad sat on top of DROP.
-    this.sideBtn = button(this, 244, 10, 'SIDE VIEW', () => this.viewButton(), { width: 52, height: 13 }).setDepth(70);
+    this.sideBtn = button(this, 246, 10, 'SIDE VIEW', () => this.viewButton(), { width: 52, height: 13 }).setDepth(70);
 
     const kb = this.input.keyboard;
     const bind = (names: string[]) => (kb ? names.map((n) => kb.addKey(n)) : []);
@@ -281,7 +285,7 @@ export class CraneGame extends Phaser.Scene {
     // dropped the claw and grabbed)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => touchControls.relabel('SPACE', 'SIDE VIEW'));
 
-    this.startGo();
+    this.askToPay();
     // (the touch layout is put up after create, which shows every button:
     // set them again once it is there)
     this.time.delayedCall(60, () => this.syncButtons());
@@ -348,15 +352,19 @@ export class CraneGame extends Phaser.Scene {
     this.add.rectangle(BOX.l - 8, 2, BOX.r - BOX.l + 16, GAME_H - 4, frame).setOrigin(0, 0).setStrokeStyle(2, trim);
     // the marquee, with the name in lit letters
     // (narrow enough to leave room for SIDE VIEW and QUIT on its right)
-    this.add.rectangle(GAME_W / 2 - 6, 15, 116, 20, 0x0c0814).setStrokeStyle(1, trim);
+    const MQ = 169; // the marquee's centre: clear of the token readout on its left
+    this.add.rectangle(MQ, 15, 96, 20, 0x0c0814).setStrokeStyle(1, trim);
     const name = eerie ? '? CAPSULES ?' : 'FROGGY GRAB!';
     const cols = eerie ? [0xc8a0e0, 0x8a6ab0] : [0xff4fa3, 0xffc830, 0x46c46e, 0x3fb8e8, 0xff7a3d, 0xa870e8];
     const w = name.length * 6;
     [...name].forEach((ch, i) => {
       if (ch === ' ') return;
-      centerText(this, GAME_W / 2 - 6 - w / 2 + i * 6 + 3, 15, ch, cols[i % cols.length]);
+      this.marquee.push(centerText(this, MQ - w / 2 + i * 6 + 3, 15, ch, cols[i % cols.length]));
     });
-    for (const sx of [GAME_W / 2 - 56, GAME_W / 2 + 44]) {
+    // in the side view the plate says so (it used to be written across the
+    // glass, where the claw went straight through it)
+    this.sideTag = centerText(this, MQ, 15, 'SIDE VIEW', 0xffffff).setVisible(false);
+    for (const sx of [MQ - 44, MQ + 44]) {
       const star = this.add.star(sx, 15, 4, 1.5, 4, eerie ? 0xc8a0e0 : 0xffe080);
       this.tweens.add({ targets: star, alpha: 0.3, duration: 500 + Math.random() * 300, yoyo: true, repeat: -1 });
     }
@@ -394,7 +402,7 @@ export class CraneGame extends Phaser.Scene {
     // the buttons
     this.add.circle(68, 165, 5, 0x46c46e).setStrokeStyle(1, 0x2a7a44).setDepth(59);
     this.add.circle(84, 165, 5, 0xd8202a).setStrokeStyle(1, 0x7a1018).setDepth(59);
-    text(this, 100, 157, `CREDIT ${CRANE_COST[this.kind]}`, ink).setDepth(59);
+    this.credit = text(this, 100, 157, `CREDIT ${CRANE_COST[this.kind]}`, ink).setDepth(59);
     this.hint = text(this, 100, 168, '', ink).setDepth(59);
     // the clock window
     this.add.rectangle(CLOCK_X - 2, 158, 54, 14, 0x0c0814).setOrigin(0, 0).setStrokeStyle(1, 0x5a3a10).setDepth(59);
@@ -514,6 +522,43 @@ export class CraneGame extends Phaser.Scene {
 
   // ------------------------------------------------------------------ a go
 
+  private payPanel: Phaser.GameObjects.Container | null = null;
+
+  /**
+   * PAY FIRST.  Walking up to the machine starts nothing: it asks for its
+   * tokens, and the clock does not run until they are in.  No tokens (or no
+   * free pocket for a prize), and it says so and does not start at all.
+   */
+  private askToPay(): void {
+    this.phase = 'pay';
+    this.clockText.setText(`TIME ${CLOCK_S}`);
+    if (pocketsFull()) {
+      this.showResult(FULL_LINE, PALETTE.ember, false);
+      return;
+    }
+    const cost = CRANE_COST[this.kind];
+    if (!ledger.canAfford(cost)) {
+      this.showResult(`${cost} TOKENS TO PLAY - NOT ENOUGH TOKENS`, PALETTE.ember, false);
+      return;
+    }
+    const c = this.add.container(0, 0).setDepth(90);
+    c.add(this.add.rectangle(GAME_W / 2, 92, 210, 62, PALETTE.ink, 0.95).setStrokeStyle(1, PALETTE.gold));
+    c.add(centerText(this, GAME_W / 2, 74, `${cost} TOKENS A GO`, PALETTE.gold));
+    c.add(centerText(this, GAME_W / 2, 86, `you have ${ledger.balance()}`, PALETTE.fog));
+    c.add(button(this, GAME_W / 2 - 46, 106, `INSERT ${cost}`, () => this.pay(), { width: 76, height: 13 }));
+    c.add(button(this, GAME_W / 2 + 46, 106, 'LEAVE', () => this.leave(true), { width: 60, height: 13 }));
+    this.payPanel = c;
+    this.syncButtons();
+  }
+
+  /** The tokens go in -- once -- and only then does the go (and the clock) start. */
+  private pay(): void {
+    if (this.phase !== 'pay' || !this.payPanel) return;
+    this.payPanel.destroy();
+    this.payPanel = null;
+    this.startGo();
+  }
+
   /** Take the tokens for a go. */
   private startGo(): void {
     if (pocketsFull()) {
@@ -541,6 +586,7 @@ export class CraneGame extends Phaser.Scene {
    * lowering, coming up, carrying -- it does nothing.
    */
   private press(): void {
+    if (this.phase === 'pay') return this.pay();
     if (this.phase === 'aim') {
       if (!this.viewedSide && !this.sideOn) this.toggleSide();
       else this.beginLower();
@@ -556,6 +602,7 @@ export class CraneGame extends Phaser.Scene {
   private actionLabel(): string {
     if (this.phase === 'aim') return this.viewedSide || this.sideOn ? 'DROP' : 'SIDE VIEW';
     if (this.phase === 'wait') return 'GRAB';
+    if (this.phase === 'pay') return 'INSERT';
     return '...';
   }
 
@@ -575,18 +622,22 @@ export class CraneGame extends Phaser.Scene {
         if (o instanceof Phaser.GameObjects.BitmapText) o.setText(view || 'SIDE VIEW');
       });
     }
+    // two short lines, so neither runs into the clock window
+    const move = this.phase === 'aim' ? `  ${isTouch() ? '' : 'A/D '}${this.sideOn ? 'DEPTH' : 'MOVE'}` : '';
+    this.credit?.setText(`CREDIT ${CRANE_COST[this.kind]}${move}`);
     this.hint?.setText(this.hintLine());
   }
 
   private hint: Phaser.GameObjects.BitmapText | null = null;
+  private credit: Phaser.GameObjects.BitmapText | null = null;
 
-  /** The control panel's second line: what to do now. */
+  /** The control panel's second line: the button, and what it does now. */
   private hintLine(): string {
     const key = isTouch() ? '' : 'SPACE: ';
     if (this.phase === 'wait') return `${key}GRAB`;
+    if (this.phase === 'pay') return `${key}INSERT ${CRANE_COST[this.kind]} TOKENS`;
     if (this.phase !== 'aim') return '';
-    if (this.sideOn) return `${isTouch() ? '' : 'A/D '}FRONT/REAR  ${key}DROP`;
-    return `${isTouch() ? '' : 'A/D '}LEFT/RIGHT  ${key}${this.viewedSide ? 'DROP' : 'SIDE VIEW'}`;
+    return `${key}${this.viewedSide || this.sideOn ? 'DROP' : 'SIDE VIEW'}`;
   }
 
   /** From wherever it is, carrying the way it was going. */
@@ -917,7 +968,6 @@ export class CraneGame extends Phaser.Scene {
     }
     c.add(text(this, SIDE.l - 6, BOX.bottom - 9, 'FRONT', PALETTE.gold).setOrigin(0, 0.5));
     c.add(text(this, SIDE.r + 6, BOX.bottom - 9, 'REAR', PALETTE.gold).setOrigin(1, 0.5));
-    c.add(centerText(this, GAME_W / 2, BOX.top + 22, 'SIDE VIEW', 0xffffff).setAlpha(0.5));
     this.sideToys = this.add.container(0, 0);
     c.add(this.sideToys);
     this.sideRig = this.add.graphics();
@@ -935,6 +985,8 @@ export class CraneGame extends Phaser.Scene {
     // a move in one view does not carry on into the other's axis
     this.vx = this.vz = 0;
     this.sideBox.setVisible(this.sideOn);
+    for (const m of this.marquee) m.setVisible(!this.sideOn);
+    this.sideTag?.setVisible(this.sideOn);
     audio.sfx('ui_blip', 0.4);
     if (this.sideOn) this.fillSide();
     this.syncButtons();

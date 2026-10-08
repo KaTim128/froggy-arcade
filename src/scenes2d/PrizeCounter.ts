@@ -31,14 +31,14 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 /** Three across, three down, and the slot is what a prize stands in. */
 const COLS = 3;
 const SLOT_W = 84;
-const SLOT_H = 42;
+const SLOT_H = 40;
 const GRID_X = Math.round((GAME_W - COLS * SLOT_W) / 2);
 const GRID_Y = 34;
 
 export class PrizeCounter extends Phaser.Scene {
   private redrawing = false;
 
-  private notice: Phaser.GameObjects.BitmapText | null = null;
+  private notice: Phaser.GameObjects.Container | null = null;
 
   constructor() {
     super('PrizeCounter');
@@ -71,7 +71,7 @@ export class PrizeCounter extends Phaser.Scene {
       centerText(this, GAME_W / 2, 102, 'NEW STOCK COMING', PALETTE.gold, 16).setDepth(20);
     }
 
-    button(this, GAME_W / 2, 170, 'BACK', () => this.close(), { width: 60, height: 12 });
+    button(this, GAME_W / 2, 166, 'BACK', () => this.close(), { width: 60, height: 11 });
     this.input.keyboard?.on('keydown-ESC', () => this.close());
 
     // The restock happens on the way out of the draw, so the player sees the
@@ -95,8 +95,8 @@ export class PrizeCounter extends Phaser.Scene {
     const y = GRID_Y + row * SLOT_H;
 
     // the board itself, and the shadow it throws on the back of the case
-    this.add.rectangle(x + 3, y + SLOT_H - 9, SLOT_W - 6, 3, PALETTE.brown).setOrigin(0, 0);
-    this.add.rectangle(x + 3, y + SLOT_H - 6, SLOT_W - 6, 2, 0x000000).setOrigin(0, 0).setAlpha(0.35);
+    this.add.rectangle(x + 3, y + SLOT_H - 11, SLOT_W - 6, 3, PALETTE.brown).setOrigin(0, 0);
+    this.add.rectangle(x + 3, y + SLOT_H - 8, SLOT_W - 6, 2, 0x000000).setOrigin(0, 0).setAlpha(0.35);
 
     if (owned) {
       // Gone means gone: the board, and nothing standing on it.  Labelling the
@@ -105,11 +105,14 @@ export class PrizeCounter extends Phaser.Scene {
       return;
     }
 
-    drawPrize(this, x + SLOT_W / 2, y + SLOT_H - 10, p);
+    drawPrize(this, x + SLOT_W / 2, y + SLOT_H - 12, p);
 
     const can = ledger.canAfford(p.cost);
-    centerText(this, x + SLOT_W / 2, y + SLOT_H - 5, p.name, can ? PALETTE.cream : PALETTE.ash);
-    const price = centerText(this, x + SLOT_W / 2, y + 2, `${p.cost}`, can ? PALETTE.gold : PALETTE.steel);
+    // the name under the shelf's edge
+    centerText(this, x + SLOT_W / 2, y + SLOT_H - 2, p.name, can ? PALETTE.cream : PALETTE.ash);
+    // the price tag stands on the shelf to the right of the toy: clear of the
+    // toy, the name, and the row above
+    const price = text(this, x + SLOT_W - 6, y + SLOT_H - 13, `${p.cost}`, can ? PALETTE.gold : PALETTE.steel).setOrigin(1, 1);
     price.setAlpha(can ? 1 : 0.7);
 
     // The whole slot is the button.  A shelf you have to aim at a 50px REDEEM
@@ -131,7 +134,10 @@ export class PrizeCounter extends Phaser.Scene {
     if (pocketsFull()) {
       audio.sfx('buzzer');
       this.notice?.destroy();
-      this.notice = centerText(this, GAME_W / 2, 158, FULL_LINE, PALETTE.ember).setDepth(30);
+      // in its own box over the shelf, not printed across the bottom row
+      const box = this.add.rectangle(GAME_W / 2, 96, 260, 30, PALETTE.ink).setDepth(29).setStrokeStyle(1, PALETTE.ember);
+      const line = centerText(this, GAME_W / 2, 96, FULL_LINE, PALETTE.ember).setMaxWidth(244).setCenterAlign().setDepth(30);
+      this.notice = this.add.container(0, 0, [box, line]).setDepth(30);
       return;
     }
     if (!ledger.debit(p.cost, 'prize')) {
