@@ -464,6 +464,10 @@ export class CraneGame extends Phaser.Scene {
     const c = this.add.container(0, 0);
     let id = 'capsule';
     let key: string;
+    // drawn at the size it sits at, a little bigger or smaller than the next
+    // one and a little tumbled: they were tipped in, not arranged
+    const size = scaleAt(z) * Phaser.Math.FloatBetween(0.96, 1.04);
+    const tilt = Phaser.Math.Between(-2, 2) * 3;
     if (this.kind === 'plush') {
       // Froggy is the rare one: a small chance at each spot, and never more
       // than one in a heap
@@ -471,20 +475,23 @@ export class CraneGame extends Phaser.Scene {
       if (froggy) this.froggies++;
       const def = froggy ? PLUSHIES[0] : PLUSHIES[Phaser.Math.Between(1, PLUSHIES.length - 1)];
       id = def.id;
-      key = toyTexture(this, plushKind(def.id));
+      key = toyTexture(this, plushKind(def.id), size, tilt);
     } else {
-      key = toyTexture(this, `capsule-${Phaser.Math.Between(0, CAPSULE_VARIANTS - 1)}`);
+      key = toyTexture(this, `capsule-${Phaser.Math.Between(0, CAPSULE_VARIANTS - 1)}`, size, tilt);
     }
     // stood on its feet (its bottom edge), a little tumbled, a little bigger
     // or smaller than the next one: they were tipped in, not arranged
-    const img = this.add.image(0, 0, key).setOrigin(0.5, 1);
-    img.setAngle(Phaser.Math.Between(-8, 8)).setScale(Phaser.Math.FloatBetween(0.95, 1.03));
+    // (shown at 1 / its drawn size inside a container scaled by the depth: one
+    // texel to one pixel)
+    const drawn = Math.round(size * 25) / 25;
+    const img = this.add.image(0, 0, key).setOrigin(0.5, 1).setScale(1 / drawn).setData('drawn', drawn);
     if (Math.random() < 0.5 && this.kind === 'plush') img.setFlipX(true);
     // THE DEPTH.  A soft contact shadow where it sits, on the floor or on the
     // toys under it; and the light falls off into the pile -- the further back
     // and the further down a toy is, the more it is in the shade of the rest.
     c.add(this.add.ellipse(0, -1, 34, 8, 0x000000, lift > 0 ? 0.28 : 0.38));
-    const light = Phaser.Math.Clamp(1 - z * 0.32 - (lift < 6 ? 0.1 : 0) + lift * 0.004, 0.55, 1);
+    // (gently: shaded too far, the back of the heap was a brown blur)
+    const light = Phaser.Math.Clamp(1 - z * 0.18 - (lift < 6 ? 0.06 : 0) + lift * 0.003, 0.74, 1);
     const v = Math.round(255 * light);
     img.setTint(Phaser.Display.Color.GetColor(v, v, Math.min(255, v + 8)));
     c.add(img);
@@ -944,7 +951,7 @@ export class CraneGame extends Phaser.Scene {
     for (const t of this.toys) {
       const k = scaleAt(t.z) * sideK(t.z);
       const src = t.art.list[1] as Phaser.GameObjects.Image;
-      const img = this.add.image(sideX(t.z), SIDE.floor - t.lift * k, src.texture.key).setOrigin(0.5, 1).setScale(k * 0.95);
+      const img = this.add.image(sideX(t.z), SIDE.floor - t.lift * k, src.texture.key).setOrigin(0.5, 1).setScale((k * 0.95) / ((src.getData('drawn') as number) || 1));
       img.setData('toy', t);
       this.sideToys.add(img);
     }
@@ -985,10 +992,10 @@ export class CraneGame extends Phaser.Scene {
     if (this.held && this.phase !== 'release') {
       if (!this.sideHeld) {
         const src = this.held.art.list[1] as Phaser.GameObjects.Image;
-        this.sideHeld = this.add.image(0, 0, src.texture.key).setOrigin(0.5, 1);
+        this.sideHeld = this.add.image(0, 0, src.texture.key).setOrigin(0.5, 1).setData('drawn', src.getData('drawn') || 1);
         this.sideBox.add(this.sideHeld);
       }
-      this.sideHeld.setPosition(x, tip + (10 * CLAW_K + TOY_H * 0.8) * k).setScale(k * 0.95).setVisible(true);
+      this.sideHeld.setPosition(x, tip + (10 * CLAW_K + TOY_H * 0.8) * k).setScale((k * 0.95) / (this.sideHeld.getData('drawn') as number)).setVisible(true);
     } else if (this.sideHeld) {
       this.sideHeld.destroy();
       this.sideHeld = null;
