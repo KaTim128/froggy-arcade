@@ -10,8 +10,8 @@
  *     buffer, so its type and its halftone photographs are sharp.
  *   2 YEARS LATER.
  *   THE GATE.  Out of prison, on an overcast morning, with nothing to carry.
- *   THE ARCADE.  Boarded up.  Shut for good.  And in the dark behind the
- *     boards, for a moment, something looks back.
+ *   THE ARCADE.  Doors boarded up.  Shut for good.  And in the dark behind
+ *     the boards, for a moment, something looks back.
  *
  * It is an ending: the run is marked finished, and the end card resets it.
  */
@@ -244,7 +244,7 @@ export class ArrestEnding extends Phaser.Scene {
     g.fillStyle(0x5a6068, 0.85).fillRect(sb.x + sb.width * 0.55, sb.y + 4, 9, sb.height - 8);
     // rust running down the wall from the brackets
     g.fillStyle(0x6a4a30, 0.35).fillRect(sb.x + sb.width - 10, sb.y + 4, 2, 22);
-    // boards across the doors and the windows, nailed, weathered
+    // boards across the doors, nailed, weathered
     const d = refs.doorRect;
     const board = (x: number, y: number, w: number, a: number) => {
       const b = this.add.rectangle(x, y, w, 5, 0x7a5c3a).setDepth(6).setAngle(a);
@@ -274,14 +274,6 @@ export class ArrestEnding extends Phaser.Scene {
     this.add.rectangle(nx + 27, ny + 9, 5, 4, 0xc8c0a4).setDepth(8).setAngle(-3);
     centerText(this, nx, ny - 4, 'CLOSED', 0xb02a2a).setDepth(9).setAngle(-3);
     centerText(this, nx, ny + 5, 'FOR GOOD', 0x2a2a2a).setDepth(9).setAngle(-3);
-    // ---- THE WINDOWS: dark inside, glass cracked behind the boards
-    for (const wx of [refs.doorX - 70, refs.doorX + 62]) {
-      g.fillStyle(0x08080c, 1).fillRect(wx - 18, 96, 36, 26);
-      g.lineStyle(1, 0x8a96a2, 0.5);
-      g.lineBetween(wx - 10, 98, wx - 2, 110).lineBetween(wx - 2, 110, wx - 14, 118).lineBetween(wx - 2, 110, wx + 8, 104);
-      board(wx, 101, 44, -5);
-      board(wx, 115, 44, 6);
-    }
     // ---- A POSTER, torn, hanging by a corner
     g.fillStyle(0xd8d0b8, 0.7).fillTriangle(refs.doorX - 112, 98, refs.doorX - 98, 98, refs.doorX - 112, 112);
     // a FOR LEASE board on a post, out front
@@ -301,12 +293,13 @@ export class ArrestEnding extends Phaser.Scene {
     for (let k = 0; k < 18; k++) {
       g.fillStyle([0xd8d0c0, 0x6a6a6a, 0x8a6a40, 0x2a3a5a][k % 4], 0.85).fillRect(40 + Math.random() * 240, 150 + Math.random() * 8, 2 + Math.random() * 3, 1 + Math.random() * 2);
     }
-    // a pigeon on the sill, the only one still coming here
-    g.fillStyle(0x6a6e78, 1).fillRect(refs.doorX - 60, 120, 5, 3).fillRect(refs.doorX - 57, 118, 2, 2);
-    g.fillStyle(0xd8a040, 1).fillRect(refs.doorX - 55, 119, 1, 1);
-    // and behind the boards of the right-hand window, in the dark, two eyes
+    // a pigeon on the pavement, the only one still coming here
+    g.fillStyle(0x6a6e78, 1).fillRect(refs.doorX - 60, 155, 5, 3).fillRect(refs.doorX - 57, 153, 2, 2);
+    g.fillStyle(0xd8a040, 1).fillRect(refs.doorX - 55, 154, 1, 1);
+    // and in the gap between the door boards, in the dark, two eyes
+    const ey = d.y + Math.round(d.h * 0.4);
     this.eyes = this.add.graphics().setDepth(5.5);
-    this.eyes.fillStyle(0xd8e060, 1).fillRect(refs.doorX + 56, 107, 2, 1).fillRect(refs.doorX + 64, 107, 2, 1);
+    this.eyes.fillStyle(0xd8e060, 1).fillRect(nx - 5, ey, 2, 1).fillRect(nx + 3, ey, 2, 1);
     this.eyes.setAlpha(0);
     this.eyes.setVisible(false);
     this.player = new Player(this, -10, 162, false);
@@ -317,7 +310,7 @@ export class ArrestEnding extends Phaser.Scene {
     this.tweens.add({ targets: this.black, alpha: 0, duration: 1800 });
     this.time.delayedCall(4200, () => {
       this.say('Closed.', 2.2);
-      this.say('Boarded up. All of it.', 2.6);
+      this.say('Doors boarded up.', 2.6);
       this.say('Where did everyone go?', 2.6);
       this.say('...and what happened to Froggy?', 3.4);
     });
