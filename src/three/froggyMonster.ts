@@ -715,6 +715,20 @@ export class FroggyMonster {
         shininess: 28,
       });
     const skin = hide(SKIN);
+    /**
+     * The arms and hands: the tileable limb hide on limb-tube UVs, with its
+     * own relief and a wetter, tighter sheen -- slime, beading on the bumps.
+     * (Their own material, so the pounce can put a cold sheen on them alone.)
+     */
+    const limbSkin = new THREE.MeshPhongMaterial({
+      color: SKIN,
+      map: tex.limb,
+      bumpMap: tex.limbBump,
+      bumpScale: 0.06,
+      specularMap: tex.limbWet,
+      specular: 0x24221a,
+      shininess: 42,
+    });
     const skinDark = hide(SKIN_DARK);
     const skinPale = hide(SKIN_PALE);
     const face = hide(FACE, true, 0.045);
@@ -752,40 +766,123 @@ export class FroggyMonster {
     /** A small ball: a joint, a knuckle, a knob of bone under the skin. */
     const knob = (r: number, mat: THREE.Material, seed: number) =>
       new THREE.Mesh(lumpy(new THREE.SphereGeometry(r, 12, 10), r * 0.12, 14, seed), mat);
-    /**
-     * A finger bone from one point to another: rounder than a strut, its skin
-     * gathered into creases at both knuckles (rings pressed into the mesh,
-     * deepest on the top) and a little lumpy all along.
-     */
-    const fingerBone = (a: THREE.Vector3, b: THREE.Vector3, r: number, mat: THREE.Material, seed: number): THREE.Mesh => {
-      const len = a.distanceTo(b);
-      // a lathe: rounded ends, the shaft between pinched into creases at
-      // both knuckles
-      const prof: THREE.Vector2[] = [];
-      const N = 30;
-      for (let i = 0; i <= N; i++) {
-        const t = i / N;
-        const y = -len / 2 + t * len;
-        // round off the ends over one radius
-        const e = Math.min(t * len, (1 - t) * len) / r;
-        const cap = e >= 1 ? 1 : Math.sqrt(Math.max(0, 1 - (1 - e) ** 2));
-        let k = 1;
-        for (const tg of [0.1, 0.17, 0.24, 0.8, 0.88]) k -= 0.12 * Math.exp(-(((t - tg) / 0.025) ** 2));
-        prof.push(new THREE.Vector2(Math.max(1e-4, r * cap * k), y));
-      }
-      const g = new THREE.LatheGeometry(prof, 14);
-      g.computeVertexNormals();
-      const m = new THREE.Mesh(lumpy(g, r * 0.06, 60, seed), mat);
-      m.position.copy(a).add(b).multiplyScalar(0.5);
-      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
-      return m;
-    };
     /** A capsule from one point to another, for tendons, collarbones, ribs of the hand. */
     const strut = (a: THREE.Vector3, b: THREE.Vector3, r: number, mat: THREE.Material): THREE.Mesh => {
       const len = a.distanceTo(b);
       const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(0.001, len - r * 2), 4, 8), mat);
       m.position.copy(a).add(b).multiplyScalar(0.5);
       m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+      return m;
+    };
+
+    // ------------------------------------------------------------ LIMB TUBES
+    // The arms and hands were capsules, spheres and cones pushed into each
+    // other: hard facets at torch range, a pinch at every pole, and UVs that
+    // stretched the hide down a long bone and bunched it at the caps.  They
+    // are built here as one kind of thing instead -- a smooth tube swept
+    // down its own axis, as many rings as it needs, its radius a function of
+    // how far along it is (and, for the forearm, which way round) -- with
+    // UVs in world units: round the limb a whole number of tiles, so the
+    // tileable hide closes on itself with no seam; down it, by arc length,
+    // so the grain never stretches.  The duplicated column where the UVs
+    // wrap is welded for shading, so the seam does not show in the light
+    // either.
+    const TILE = 0.1;
+    const weldNormals = (g: THREE.BufferGeometry): THREE.BufferGeometry => {
+      g.computeVertexNormals();
+      const pos = g.attributes.position as THREE.BufferAttribute;
+      const nrm = g.attributes.normal as THREE.BufferAttribute;
+      const acc = new Map<string, THREE.Vector3>();
+      const key = (i: number) => `${Math.round(pos.getX(i) * 1e5)},${Math.round(pos.getY(i) * 1e5)},${Math.round(pos.getZ(i) * 1e5)}`;
+      for (let i = 0; i < pos.count; i++) {
+        const k = key(i);
+        const v = acc.get(k) ?? acc.set(k, new THREE.Vector3()).get(k)!;
+        v.x += nrm.getX(i);
+        v.y += nrm.getY(i);
+        v.z += nrm.getZ(i);
+      }
+      for (let i = 0; i < pos.count; i++) {
+        const v = acc.get(key(i))!.clone().normalize();
+        nrm.setXYZ(i, v.x, v.y, v.z);
+      }
+      nrm.needsUpdate = true;
+      return g;
+    };
+    /** Rounded ends: 0 at t = 0 and 1, full inside, over `e` of the length at each end. */
+    const capEnds = (t: number, e0: number, e1 = e0): number => {
+      const a = e0 > 0 && t < e0 ? Math.sqrt(Math.max(0, 1 - (1 - t / e0) ** 2)) : 1;
+      const b = e1 > 0 && t > 1 - e1 ? Math.sqrt(Math.max(0, 1 - (1 - (1 - t) / e1) ** 2)) : 1;
+      return Math.max(1e-4, Math.min(a, b));
+    };
+    const bell = (t: number, at: number, w: number): number => Math.exp(-(((t - at) / w) ** 2));
+    /**
+     * A tube hanging from the origin down -y for `len`: `radius(t, a)` at
+     * fraction t of the way down and angle a round it (a = 0 faces +z),
+     * `sx`/`sz` flatten the section, `bend(t)` swings the axis in z.
+     */
+    const tubeGeo = (
+      len: number,
+      radius: (t: number, a: number) => number,
+      o: { sx?: number; sz?: number; segs?: number; rows?: number; bend?: (t: number) => number } = {},
+    ): THREE.BufferGeometry => {
+      const sx = o.sx ?? 1;
+      const sz = o.sz ?? 1;
+      const segs = o.segs ?? 24;
+      const rows = o.rows ?? Math.max(10, Math.ceil(len / 0.005));
+      // round the limb: a whole number of tiles, sized from its mean girth
+      let girth = 0;
+      for (let i = 0; i <= 8; i++) girth += radius(0.1 + (i / 8) * 0.8, 0);
+      girth = ((girth / 9) * Math.PI * (sx + sz)) / TILE;
+      const ku = Math.max(1, Math.round(girth));
+      const P: number[] = [];
+      const UV: number[] = [];
+      const I: number[] = [];
+      let v = 0;
+      let prevY = 0;
+      let prevR = radius(0, 0);
+      for (let i = 0; i <= rows; i++) {
+        const t = i / rows;
+        const y = -t * len;
+        const zc = o.bend ? o.bend(t) : 0;
+        const r0 = radius(t, 0);
+        if (i > 0) v += Math.hypot(y - prevY, r0 - prevR) / TILE;
+        prevY = y;
+        prevR = r0;
+        for (let j = 0; j <= segs; j++) {
+          const a = (j / segs) * Math.PI * 2;
+          const r = radius(t, a);
+          P.push(Math.sin(a) * r * sx, y, zc + Math.cos(a) * r * sz);
+          UV.push((j / segs) * ku, v);
+        }
+      }
+      for (let i = 0; i < rows; i++) {
+        for (let j = 0; j < segs; j++) {
+          const a = i * (segs + 1) + j;
+          const b = a + segs + 1;
+          I.push(a, b, a + 1, a + 1, b, b + 1);
+        }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2));
+      g.setIndex(I);
+      g.computeVertexNormals();
+      return g;
+    };
+    /** Finish a limb: a little lump through it, then shading welded across the wrap. */
+    const limbMesh = (g: THREE.BufferGeometry, mat: THREE.Material, amp: number, freq: number, seed: number): THREE.Mesh =>
+      new THREE.Mesh(weldNormals(roughen(g, amp, freq, seed)), mat);
+    /** A rounded ball on the limb's UVs (no pinched poles of texture): a joint, a pad. */
+    const ball = (r: number, mat: THREE.Material, seed: number, segs = 20): THREE.Mesh => {
+      const m = limbMesh(tubeGeo(r * 2, (t) => r * capEnds(t, 0.5), { segs, rows: 16 }), mat, r * 0.06, 14, seed);
+      m.geometry.translate(0, r, 0);
+      return m;
+    };
+    /** A tube from a to b. */
+    const tubeBetween = (a: THREE.Vector3, b: THREE.Vector3, radius: (t: number, ang: number) => number, mat: THREE.Material, seed: number, amp: number, o: { sx?: number; sz?: number; segs?: number } = {}): THREE.Mesh => {
+      const m = limbMesh(tubeGeo(a.distanceTo(b), radius, o), mat, amp, 40, seed);
+      m.position.copy(a);
+      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), b.clone().sub(a).normalize());
       return m;
     };
 
@@ -935,7 +1032,9 @@ export class FroggyMonster {
     const SH = 0.66;
     for (const side of [-1, 1]) {
       this.torso.add(strut(new THREE.Vector3(side * 0.02, SH + 0.005, 0.085), new THREE.Vector3(side * 0.17, SH - 0.005, 0.02), 0.011, skinPale));
-      const sh = knob(0.046, skin, 51 + side);
+      // the shoulder cap is the top of the arm, in the arm's own hide, so
+      // the arm runs up into it with no change of skin at the join
+      const sh = ball(0.046, limbSkin, 51 + side);
       sh.position.set(side * 0.175, SH - 0.02, 0);
       this.torso.add(sh);
     }
@@ -945,7 +1044,7 @@ export class FroggyMonster {
     // hand far too long: a narrow palm and four jointed fingers and a thumb.
     // (Their own copy of the skin -- the same shader, so nothing new to
     // build -- so the pounce can put a cold sheen on them alone.)
-    const armSkin = skin.clone();
+    const armSkin = limbSkin;
     this.armSkin = armSkin;
     for (const side of [-1, 1]) {
       const arm = new THREE.Group();
@@ -955,37 +1054,122 @@ export class FroggyMonster {
       // and the fingertips hang to the middle of his shins.
       // (Thin, but not sticks: a shoulder of muscle wasted down to a cord at
       // the elbow, a forearm with its two bones showing, a real wrist.)
-      const upper = bone(0.038, 0.5, 1.15, 0.72, armSkin, 55 + side);
+      // The upper arm: one smooth tube from inside the shoulder cap to inside
+      // the elbow -- a wasted deltoid at the top, the ghost of a biceps, and
+      // a cord of tendon by the time it reaches the elbow, which flares a
+      // little to meet the joint instead of stopping short of it.
+      // (it runs one radius past the elbow, so its rounded end is centred ON
+      // the joint, and the forearm's is too: bend the elbow and the two
+      // simply roll on each other, as a skinned arm does -- no lip, no gap)
+      const upperGeo = tubeGeo(
+        0.635,
+        (t) =>
+          capEnds(t, 0.07, 0.045) *
+          (0.043 - 0.018 * t + 0.008 * bell(t, 0.12, 0.09) + 0.004 * bell(t, 0.42, 0.13) + 0.005 * bell(t, 0.93, 0.05)),
+        { sz: 0.9 },
+      );
+      const upper = limbMesh(upperGeo, armSkin, 0.0025, 9, 55 + side);
+      upper.position.y = 0.035;
       arm.add(upper);
       const elbow = new THREE.Group();
       elbow.position.y = -0.57;
       arm.add(elbow);
-      elbow.add(knob(0.032, armSkin, 57 + side));
-      const foreBone = bone(0.03, 0.5, 1.05, 0.68, armSkin, 59 + side);
-      elbow.add(foreBone);
-      // what is left of the forearm muscle, just below the elbow
-      const fore = new THREE.Mesh(lumpy(taper(new THREE.CapsuleGeometry(0.037, 0.2, 6, 12), 1.05, 0.55), 0.003, 10, 60 + side), armSkin);
-      fore.position.set(side * 0.006, -0.15, 0.008);
+      // the point of the elbow: a knob of bone standing out at the back of
+      // the joint, not a ball round it
+      const eKnob = ball(0.022, armSkin, 57 + side);
+      eKnob.scale.set(1.1, 1.05, 0.9);
+      eKnob.position.set(0, -0.004, -0.014);
+      elbow.add(eKnob);
+      // The forearm, in one piece: the muscle swells just below the elbow and
+      // thins to a wrist of tendon; flatter front-to-back than side-to-side,
+      // with the two bones riding as faint ridges down either edge.
+      const foreGeo = tubeGeo(
+        0.628,
+        (t, ang) =>
+          capEnds(t, 0.045, 0.05) *
+          (0.026 - 0.006 * t + 0.012 * bell(t, 0.24, 0.15)) *
+          (1 + 0.05 * Math.cos(2 * ang) * Math.min(1, t * 2.5)),
+        { sx: 1.16, sz: 0.88 },
+      );
+      const fore = limbMesh(foreGeo, armSkin, 0.002, 10, 59 + side);
+      fore.position.set(0, 0.028, 0);
       elbow.add(fore);
       const handFrom = elbow.children.length;
-      const wrist = knob(0.026, armSkin, 61 + side);
-      wrist.scale.set(1.25, 1, 0.8);
-      wrist.position.y = -0.57;
+      // the wrist: no wider than the forearm runs into it, so it reads as
+      // the end of the bones, not a bead strung between arm and hand
+      const wrist = ball(0.021, armSkin, 61 + side);
+      wrist.scale.set(1.18, 1.15, 0.8);
+      wrist.position.y = -0.575;
       elbow.add(wrist);
-      // a broad, flat palm with the knuckles standing up along its end
-      const palm = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.046, 14, 12), 0.003, 12, 63 + side), armSkin);
-      palm.scale.set(1.15, 1.35, 0.45);
-      palm.position.set(0, -0.64, 0);
+      // The palm: a broad flat pad, square-ended where the fingers come out
+      // of it (a superellipse down its length, not a squashed ball), thicker
+      // at the heel, cupped very slightly.
+      const palmGeo = tubeGeo(
+        0.128,
+        (t) => {
+          // the heel narrows into the wrist; the far end is squared off for
+          // the knuckles
+          const heel = THREE.MathUtils.smoothstep(t, 0, 0.42);
+          const end = t < 0.5 ? capEnds(t, 0.14) : Math.pow(Math.max(1e-4, 1 - Math.abs(2 * t - 1) ** 3.2), 1 / 3.2);
+          return 0.052 * end * (0.5 + 0.5 * heel) * (1.04 - 0.1 * t);
+        },
+        { sx: 1.04, sz: 0.38, bend: (t) => 0.004 * Math.sin(t * Math.PI) },
+      );
+      const palm = limbMesh(palmGeo, armSkin, 0.0015, 18, 63 + side);
+      palm.position.set(0, -0.568, 0);
       elbow.add(palm);
       for (let f = 0; f < 4; f++) {
-        const kn = knob(0.013, armSkin, 80 + f + side * 7);
-        kn.position.set((f - 1.5) * 0.021, -0.684, -0.004);
+        // the knuckle: a rounded rise on the back of the hand
+        const kn = ball(0.0128, armSkin, 80 + f + side * 7, 16);
+        kn.scale.set(1, 0.9, 0.85);
+        kn.position.set((f - 1.5) * 0.021, -0.684, -0.005);
         elbow.add(kn);
         // the tendon to it, standing up under the thin skin of the back of
-        // the hand, fanning out from the wrist
-        elbow.add(strut(new THREE.Vector3((f - 1.5) * 0.008, -0.6, -0.012), new THREE.Vector3((f - 1.5) * 0.021, -0.68, -0.011), 0.0035, armSkin));
+        // the hand, fanning out from the wrist, tapering into the knuckle
+        elbow.add(
+          tubeBetween(
+            new THREE.Vector3((f - 1.5) * 0.008, -0.598, -0.0105),
+            new THREE.Vector3((f - 1.5) * 0.021, -0.682, -0.0105),
+            (t) => capEnds(t, 0.15, 0.2) * 0.0034 * (1 - 0.25 * t),
+            armSkin,
+            170 + f + side * 5,
+            0.0002,
+            { segs: 10 },
+          ),
+        );
       }
       const hand: THREE.Group[] = [];
+      /**
+       * One finger segment, `L` from joint to joint.  It runs one radius past
+       * each end, so both its rounded ends are centred ON the joints and the
+       * next segment's end sits in the same place: curl the finger and the
+       * two roll on each other with nothing showing between.  Waisted in the
+       * middle, a soft fullness on the palm side, and fine creases rucked
+       * across the BACK just either side of each knuckle (deepest on top,
+       * gone underneath, as on a real finger).
+       */
+      const segment = (L: number, r: number, seed: number, rTip = r): THREE.Mesh => {
+        const len = L + r + rTip;
+        const j0 = r / len;
+        const j1 = (r + L) / len;
+        const g = tubeGeo(
+          len,
+          (t, ang) => {
+            const top = Math.max(0, -Math.cos(ang)); // the back of the finger is -z
+            const under = Math.max(0, Math.cos(ang));
+            const along = Math.min(1, Math.max(0, (t - j0) / (j1 - j0)));
+            let k = (1 - 0.08 * bell(along, 0.5, 0.3)) * (r + (rTip - r) * along);
+            for (const d of [0.005, 0.0085]) {
+              k -= r * 0.09 * top * (bell(t, j0 + d / len, 0.0016 / len) + bell(t, j1 - d / len, 0.0016 / len));
+            }
+            k += r * 0.05 * under * bell(along, 0.5, 0.3);
+            return capEnds(t, j0, 1 - j1) * k;
+          },
+          { segs: 18, rows: Math.max(30, Math.ceil(len / 0.002)) },
+        );
+        g.translate(0, r, 0);
+        return limbMesh(g, armSkin, r * 0.03, 60, seed);
+      };
       for (let f = 0; f < 5; f++) {
         const thumb = f === 4;
         const finger = new THREE.Group();
@@ -993,24 +1177,43 @@ export class FroggyMonster {
         if (thumb) finger.rotation.set(0.4, 0, side * 0.5);
         const L1 = thumb ? 0.085 : 0.14 - Math.abs(f - 1.5) * 0.012;
         const L2 = thumb ? 0.065 : 0.12 - Math.abs(f - 1.5) * 0.01;
-        finger.add(fingerBone(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -L1, 0.004), 0.0115, armSkin, 140 + f + side * 9));
-        const k1 = knob(0.0125, armSkin, 67 + f);
-        k1.position.set(0, -L1, 0.004);
+        // its root runs back up into the palm, so there is no gap at the base
+        // however far the finger closes
+        const s1 = segment(L1, 0.0112, 140 + f + side * 9, 0.0104);
+        s1.rotation.x = -0.03;
+        finger.add(s1);
+        // the knuckle: bone standing up on the back of the joint
+        const k1 = ball(0.0085, armSkin, 67 + f, 14);
+        k1.scale.set(1.1, 0.9, 0.8);
+        k1.position.set(0, -L1, 0.004 - 0.0045);
         finger.add(k1);
         const tipSeg = new THREE.Group();
         tipSeg.position.set(0, -L1, 0.004);
         tipSeg.rotation.x = 0.18;
-        tipSeg.add(fingerBone(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -L2, 0), 0.0095, armSkin, 150 + f + side * 9));
-        // and a frog's round pad on the end of every one
-        const pad = knob(0.0155, armSkin, 74 + f);
-        pad.scale.set(1.1, 0.8, 0.75);
-        pad.position.set(0, -L2 - 0.004, 0.002);
+        tipSeg.add(segment(L2, 0.0104, 150 + f + side * 9, 0.0108));
+        // and a frog's round pad on the end of every one, swelling out of the
+        // last segment rather than stuck on it
+        const pad = ball(0.0128, armSkin, 74 + f, 20);
+        pad.scale.set(1.14, 1.08, 0.8);
+        pad.position.set(0, -L2 - 0.003, 0.0025);
         tipSeg.add(pad);
-        // and a claw out of the end of it: a thick, dark, ridged nail that
-        // hooks down over the pad
-        const claw = new THREE.Mesh(lumpy(new THREE.ConeGeometry(0.0062, 0.034, 8, 3), 0.0006, 90, 160 + f), clawMat);
-        claw.position.set(0, -L2 - 0.018, -0.006);
-        claw.rotation.x = Math.PI + 0.55;
+        // and a claw out of the end of it: a thick, dark nail that hooks
+        // down over the pad, rooted in the pad, curving as it narrows
+        const claw = limbMesh(
+          tubeGeo(0.036, (t) => 0.0062 * capEnds(t, 0.12, 0) * Math.pow(1 - t, 0.85) + 2e-4, {
+            segs: 14,
+            rows: 18,
+            sx: 1,
+            sz: 0.8,
+            bend: (t) => 0.009 * t * t,
+          }),
+          clawMat,
+          0.0003,
+          90,
+          160 + f,
+        );
+        claw.position.set(0, -L2 - 0.004, 0.002);
+        claw.rotation.x = 0.55;
         tipSeg.add(claw);
         finger.add(tipSeg);
         elbow.add(finger);
@@ -1022,8 +1225,8 @@ export class FroggyMonster {
       this.armLen.push({
         upper,
         upperY: upper.position.y,
-        fore: [foreBone, fore],
-        foreY: [foreBone.position.y, fore.position.y],
+        fore: [fore],
+        foreY: [fore.position.y],
         hand: handParts,
         handY: handParts.map((o) => o.position.y),
       });
