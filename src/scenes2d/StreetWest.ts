@@ -261,6 +261,7 @@ export class StreetWest extends Phaser.Scene {
     this.add.rectangle(DOOR_X, 158, 26, 1, 0x4a1a24).setOrigin(0.5, 0);
     this.add.rectangle(DOOR_X - 13, 158, 1, 4, 0xc9a24a).setOrigin(0, 0);
     this.add.rectangle(DOOR_X + 12, 158, 1, 4, 0xc9a24a).setOrigin(0, 0);
+    if (store.get().hotelAfter === 'escaped') return this.paintAftermath();
     // the doorman: a long coat, a peaked cap, gold buttons, arms folded
     const d = DOORMAN_X;
     this.add.rectangle(d, 158, 9, 12, 0x2a2a3a).setOrigin(0.5, 1);
@@ -272,8 +273,79 @@ export class StreetWest extends Phaser.Scene {
     this.add.rectangle(d + 2, 125, 6, 1, 0x1a1a24).setOrigin(0.5, 1);
   }
 
+  /**
+   * ---- THE MORNING AFTER.  The Grand Lily as the night left it: 612's
+   * window a black hole six floors up with its curtain hanging out of it,
+   * the front doors smashed in and boarded, glass all over the steps, police
+   * tape across the whole entrance, and an officer where the doorman stood.
+   */
+  private paintAftermath(): void {
+    const g = this.add.graphics().setDepth(2);
+    // 612: top floor, the right-hand window, out of its frame
+    const wx = HOTEL_X + 130;
+    const wy = 158 - 152 + 22;
+    g.fillStyle(0x0a0a0e, 1).fillRect(wx, wy, 10, 11);
+    g.fillStyle(0xdfeaf2, 0.85).fillTriangle(wx, wy, wx + 3, wy, wx, wy + 4).fillTriangle(wx + 10, wy + 11, wx + 6, wy + 11, wx + 10, wy + 6);
+    g.fillStyle(0x6a1a28, 1).fillRect(wx + 7, wy + 2, 3, 9).fillRect(wx + 9, wy + 9, 2, 6);
+    // soot and scrapes down the stone under it
+    g.fillStyle(0x2a2420, 0.35).fillRect(wx + 1, wy + 11, 8, 10);
+    // the entrance: doors gone, boarded, glass on the steps
+    const dx = DOOR_X;
+    g.fillStyle(0x0c0a0a, 1).fillRect(dx - 9, 128, 18, 30);
+    g.fillStyle(0x8a6a44, 1).fillRect(dx - 11, 134, 22, 3).fillRect(dx - 11, 146, 22, 3);
+    g.fillStyle(0xa88a5a, 1).fillRect(dx - 11, 134, 22, 1).fillRect(dx - 11, 146, 22, 1);
+    g.fillStyle(0x6a5030, 1).fillRect(dx - 10, 140, 20, 2);
+    for (let k = 0; k < 30; k++) {
+      g.fillStyle(0xdfeaf2, 0.5 + Math.random() * 0.4).fillRect(dx - 24 + Math.random() * 48, 158 + Math.random() * 10, 1 + Math.random() * 2, 1);
+    }
+    // debris: a bent door frame, a chunk of the canopy
+    g.fillStyle(0xc9a24a, 1).fillRect(dx + 14, 160, 12, 1).fillRect(dx + 25, 156, 1, 5);
+    g.fillStyle(0x7b2a3a, 1).fillRect(dx - 30, 162, 10, 3);
+    // the tape, on two posts and a cone, sagging, across the whole front
+    const tape = (x0: number, x1: number, y: number, sag: number) => {
+      for (let x = x0; x <= x1; x++) {
+        const t = (x - x0) / (x1 - x0);
+        const yy = y + Math.sin(t * Math.PI) * sag;
+        g.fillStyle((Math.floor(x / 5) % 2) ? 0xf0d020 : 0x141414, 1).fillRect(x, yy, 1, 2);
+      }
+    };
+    g.fillStyle(0x3a3a3a, 1).fillRect(dx - 40, 148, 2, 20).fillRect(dx + 40, 148, 2, 20);
+    g.fillStyle(0xe86020, 1).fillTriangle(dx + 2, 168, dx + 8, 168, dx + 5, 159);
+    g.fillStyle(0xf0f0f0, 1).fillRect(dx + 3, 163, 4, 1);
+    tape(dx - 40, dx + 41, 150, 3);
+    tape(dx - 40, dx + 41, 156, 4);
+    // evidence markers on the steps
+    for (const [mx, n] of [[dx - 16, 0xe8c020], [dx + 18, 0xe8c020]] as const) g.fillStyle(n, 1).fillTriangle(mx, 167, mx + 4, 167, mx + 2, 163);
+    // the officer: dark uniform, cap, a notebook out
+    const o = DOORMAN_X;
+    this.add.rectangle(o, 158, 8, 10, 0x14182a).setOrigin(0.5, 1).setDepth(3);
+    this.add.rectangle(o, 148, 10, 13, 0x1e2a4a).setOrigin(0.5, 1).setDepth(3);
+    this.add.rectangle(o + 1, 142, 2, 2, 0xe8c040).setDepth(3);
+    this.add.rectangle(o, 135, 7, 7, 0xd8b090).setOrigin(0.5, 1).setDepth(3);
+    this.add.rectangle(o, 129, 9, 3, 0x0c1020).setOrigin(0.5, 1).setDepth(3);
+    this.add.rectangle(o + 3, 128, 4, 1, 0x0c1020).setOrigin(0, 1).setDepth(3);
+    this.add.rectangle(o - 6, 143, 3, 4, 0xe8e4d8).setDepth(3);
+    // a patrol car at the kerb, its lightbar turning over, slow, in the daylight
+    const car = this.add.graphics().setDepth(1);
+    const cx = 170;
+    car.fillStyle(0xe8e8ec, 1).fillRect(cx, 148, 46, 10).fillRect(cx + 10, 141, 24, 8);
+    car.fillStyle(0x1e2a4a, 1).fillRect(cx, 151, 46, 3);
+    car.fillStyle(0x2a3a5a, 1).fillRect(cx + 12, 142, 9, 6).fillRect(cx + 23, 142, 9, 6);
+    car.fillStyle(0x141414, 1).fillCircle(cx + 9, 158, 4).fillCircle(cx + 37, 158, 4);
+    const bar = this.add.rectangle(cx + 22, 139, 12, 2, 0xff2a3a).setDepth(1);
+    this.time.addEvent({ delay: 260, loop: true, callback: () => bar.setFillStyle(bar.fillColor === 0xff2a3a ? 0x2a5aff : 0xff2a3a) });
+  }
+
   private interact(): void {
     if (this.locked || !this.spot) return;
+    if (store.get().hotelAfter === 'escaped' && this.spot !== 'bus') {
+      if (this.spot === 'doorman') {
+        this.say('POLICE: "Who could have done this? They completely trashed the place."');
+        return;
+      }
+      this.say('POLICE: "Crime scene. Nobody goes in, I\'m afraid."');
+      return;
+    }
     const cash = store.get().cash;
     const welcome = cash >= ROOM_MONEY || store.get().checkedIn;
     if (this.spot === 'bus') {

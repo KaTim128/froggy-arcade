@@ -99,9 +99,19 @@ export class StartScreen extends Phaser.Scene {
       fadeToScene(this, 'EndCard');
       return;
     }
+    // After the hotel: out on the roofs, or still in the lobby with the
+    // police outside -- each picks up where it was saved.
+    if (s.hotelAfter === 'escape') {
+      fadeToScene(this, 'RooftopEscape', {});
+      return;
+    }
+    if (s.hotelAfter === 'police' && s.reachedHotel) {
+      fadeToScene(this, 'Hotel', { area: 'lobby', from: 'storage' });
+      return;
+    }
     // The hotel is a checkpoint twice over: through its doors after the
     // road, and asleep in 612 -- which comes back at 3 AM, at the knocking.
-    if (s.timeOfDay === 'midnight' && s.reachedHotel) {
+    if (s.timeOfDay === 'midnight' && s.reachedHotel && s.hotelAfter === 'none') {
       fadeToScene(this, 'Hotel', s.hotelNight ? { area: 'room', late: true } : { area: 'lobby' });
       return;
     }

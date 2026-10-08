@@ -1314,6 +1314,44 @@ class AudioManager {
         beep(70, 0.25, 0.12, 'square', 0.12);
         noise(0.1, 0.06, 500, 0.12);
         break;
+      // Police, outside: the two-tone wail, rising and falling, ~2 s.
+      case 'siren':
+        glide(620, 980, 0.5, 0.05, 'sawtooth');
+        glide(980, 620, 0.5, 0.05, 'sawtooth', 0.5);
+        glide(620, 980, 0.5, 0.05, 'sawtooth', 1.0);
+        glide(980, 620, 0.5, 0.05, 'sawtooth', 1.5);
+        glide(624, 988, 0.5, 0.025, 'square', 0.01);
+        glide(988, 624, 0.5, 0.025, 'square', 0.51);
+        break;
+      // A helicopter overhead: the rotor's chop, one second of it.
+      case 'helicopter':
+        for (let k = 0; k < 9; k++) {
+          noise(0.06, 0.09, 380, k * 0.11);
+          beep(58, 0.07, 0.07, 'sine', k * 0.11);
+        }
+        beep(140, 1.0, 0.012, 'sawtooth');
+        break;
+      // A voice through a megaphone: the click on, the crackle.
+      case 'megaphone':
+        beep(1800, 0.02, 0.04, 'square');
+        for (let k = 0; k < 8; k++) noise(0.08, 0.03, 2200 + Math.random() * 1200, 0.03 + k * 0.1);
+        beep(420, 0.7, 0.02, 'square', 0.05);
+        break;
+      // A weighted net dropping out of the dark, and landing.
+      case 'net_drop':
+        glide(1400, 300, 0.35, 0.05, 'sawtooth');
+        noise(0.35, 0.08, 2600, 0);
+        noise(0.25, 0.12, 400, 0.33);
+        beep(70, 0.3, 0.12, 'sine', 0.33);
+        break;
+      // Into a full skip: bags burst, the lid bangs, everything settles.
+      case 'bin_land':
+        beep(60, 0.4, 0.14, 'sine');
+        noise(0.5, 0.16, 900, 0);
+        noise(0.4, 0.07, 3000, 0.08);
+        beep(180, 0.5, 0.05, 'square', 0.12);
+        for (let k = 0; k < 5; k++) noise(0.08, 0.04, 1500 + k * 300, 0.3 + k * 0.08);
+        break;
       // A lamp switched off.
       case 'lamp_click':
         noise(0.015, 0.12, 5000);
@@ -1992,6 +2030,11 @@ export type SfxName =
   | 'dun'
   | 'door_smash'
   | 'lift_dead'
-  | 'lamp_click';
+  | 'lamp_click'
+  | 'siren'
+  | 'helicopter'
+  | 'megaphone'
+  | 'net_drop'
+  | 'bin_land';
 
 export const audio = new AudioManager();

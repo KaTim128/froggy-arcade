@@ -124,6 +124,8 @@ export class Hotel extends Phaser.Scene {
   private lines: Array<{ text: string; dur: number; red?: boolean }> = [];
   private lineTimer: Phaser.Time.TimerEvent | null = null;
   private lineUp = false;
+  /** Run once, when the lines queued now have all been said. */
+  private afterLines: (() => void) | null = null;
 
   // ---- room 612
   private night: Night = 'calm';
@@ -154,6 +156,14 @@ export class Hotel extends Phaser.Scene {
   private dialog: Phaser.GameObjects.Container | null = null;
   private clerkOn = false;
   private clerkDimmed = false;
+  // ---- the police, outside, after the night (see startPolice)
+  private policeOn = false;
+  private policeGlows: Phaser.GameObjects.Image[] = [];
+  private policeBeam: Phaser.GameObjects.Image | null = null;
+  private policeTint: Phaser.GameObjects.Rectangle | null = null;
+  private sirenT = 0;
+  private shoutT = 0;
+  private shouts = 0;
 
   constructor() {
     super('Hotel');
@@ -177,6 +187,7 @@ export class Hotel extends Phaser.Scene {
     this.lines = [];
     this.lineTimer = null;
     this.lineUp = false;
+    this.afterLines = null;
     this.curtainL = this.curtainR = this.view = this.roomImg = this.glazing = this.lampLight = null;
     this.sleeper = this.black = null;
     this.froggyTex = this.crackTex = null;
@@ -193,6 +204,13 @@ export class Hotel extends Phaser.Scene {
     this.dialog = null;
     this.clerkOn = false;
     this.clerkDimmed = false;
+    this.policeOn = false;
+    this.policeGlows = [];
+    this.policeBeam = null;
+    this.policeTint = null;
+    this.sirenT = 0;
+    this.shoutT = 0;
+    this.shouts = 0;
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (this.clerkOn) froggyLayer.clear();
     });
@@ -254,10 +272,15 @@ export class Hotel extends Phaser.Scene {
 
     if (this.area === 'lobby') {
       this.cameras.main.setBounds(0, 0, LOBBY_W, GAME_H);
-      if (this.from === 'storage') {
+      if (this.from === 'storage' && store.get().hotelAfter === 'police') {
+        // (back to it: the police are still out there)
+        this.time.delayedCall(400, () => this.startPolice(false));
+      } else if (this.from === 'storage') {
         this.say('Gone...', 2.4);
         this.say('He went straight through the front doors.', 3.2);
         this.say("I'm still here. I'm still alive.", 3);
+        // ...and the moment the words are done, the sirens
+        this.afterLines = () => this.startPolice(true);
       } else if (dark) {
         // and he is on the stairs behind you
         this.hunted = true;
@@ -266,10 +289,15 @@ export class Hotel extends Phaser.Scene {
         this.say('Where is everyone?', 3);
       } else if (this.from === 'outside') this.time.delayedCall(500, () => this.say('A safe place to stay the night.', 3));
     }
+    if ((this.area === 'corridor' || this.area === 'room' || this.area === 'bath') && store.get().hotelAfter === 'police') {
+      this.time.delayedCall(300, () => this.startPolice(false));
+    }
     if (this.area === 'room') {
       if (this.night === 'late') this.beginLate(true);
       else if (this.morning) this.time.delayedCall(700, () => this.say('Morning.  The light is on the bed.', 3));
-      else if (this.from !== 'room' && !this.registry.get('hotelRoomSeen')) {
+      else if (store.get().hotelAfter !== 'none') {
+        if (store.get().hotelAfter === 'police') this.time.delayedCall(700, () => this.say('The window. He left it wide open for me.', 3));
+      } else if (this.from !== 'room' && !this.registry.get('hotelRoomSeen')) {
         this.registry.set('hotelRoomSeen', true);
         this.time.delayedCall(600, () => {
           this.say('Finally. Somewhere safe.', 2.8);
@@ -395,7 +423,11 @@ export class Hotel extends Phaser.Scene {
     this.glazing = this.add.image(x, y, this.painted('hotel_glazing', w, h, (g) => paintGlazing(g, w, h))).setOrigin(0, 0).setDepth(3);
     this.crackTex = this.textures.exists('hotel_cracks') ? (this.textures.get('hotel_cracks') as Phaser.Textures.CanvasTexture) : this.textures.createCanvas('hotel_cracks', WF.winW, WF.winH);
     this.crackTex?.getContext().clearRect(0, 0, WF.winW, WF.winH);
+    // after that night the window stays as he left it: out of its frame
+    const broken = store.get().hotelAfter !== 'none';
+    if (broken && this.crackTex) drawBrokenEdge(this.crackTex.getContext());
     this.crackTex?.refresh();
+    if (broken) this.glazing.setVisible(false);
     this.add.image(x, y, 'hotel_cracks').setOrigin(0, 0).setDepth(4);
     this.roomImg = this.add.image(0, 0, this.painted('hotel_room', GAME_W, GAME_H, paintRoom)).setOrigin(0, 0).setDepth(5);
     // the curtains: full width when drawn, squeezed to the sides when open
@@ -409,6 +441,14 @@ export class Hotel extends Phaser.Scene {
     for (let k = 0; k < 10; k++) {
       const m = this.add.rectangle(200 + Math.random() * 120, 90 + Math.random() * 50, 1, 1, 0xfff0c8, 0.5).setDepth(8);
       this.motes.push(m);
+    }
+    if (broken) {
+      // the glass, still all over the floor under it, and the night coming in
+      for (let k = 0; k < 60; k++) {
+        const sx = x - 30 + Math.random() * (w + 60);
+        this.add.rectangle(sx, WALK_Y + 2 + Math.random() * 14, 1 + Math.random() * 3, 1 + Math.random() * 2, 0xdfeaf2, 0.55 + Math.random() * 0.35).setDepth(9).setAngle(Math.random() * 90);
+      }
+      this.setCurtains(true, true);
     }
     this.black = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0).setOrigin(0, 0).setDepth(900);
   }
@@ -438,6 +478,148 @@ export class Hotel extends Phaser.Scene {
       s.setFillStyle((col(r, 0) << 16) | (col(g, 0) << 8) | col(b, blue * 30));
     }
     for (const { s } of this.sleeper ? this.sleeper.list.map((o) => ({ s: o as Phaser.GameObjects.Rectangle })) : []) s.setAlpha(Math.max(0.35, k));
+  }
+
+  // ------------------------------------------------------------- the police
+
+  /**
+   * THE POLICE.  The night is over and somebody called it in: sirens in the
+   * street, red and blue through every pane of glass, and a megaphone.
+   * Outside is the end of it.  Upstairs is the window he left open.
+   * The run is saved here: come back to it and they are still out there.
+   */
+  private startPolice(first: boolean): void {
+    if (this.policeOn) return;
+    this.policeOn = true;
+    if (store.get().hotelAfter !== 'police') {
+      store.patch({ hotelAfter: 'police' });
+      store.flush();
+    }
+    const glowKey = this.painted('police_glow', 128, 128, (g) => {
+      const r = g.createRadialGradient(64, 64, 2, 64, 64, 64);
+      r.addColorStop(0, 'rgba(255,255,255,1)');
+      r.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+      r.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = r;
+      g.fillRect(0, 0, 128, 128);
+    });
+    const beamKey = this.painted('police_beam', 48, 128, (g) => {
+      const r = g.createLinearGradient(0, 0, 48, 0);
+      r.addColorStop(0, 'rgba(255,255,255,0)');
+      r.addColorStop(0.5, 'rgba(255,255,255,0.8)');
+      r.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = r;
+      g.fillRect(0, 0, 48, 128);
+    });
+    const glow = (x: number, y: number, sx: number, sy: number) =>
+      this.add.image(x, y, glowKey).setScale(sx, sy).setBlendMode(Phaser.BlendModes.ADD).setDepth(60).setAlpha(0);
+    if (this.area === 'lobby') {
+      // through the smashed front doors, onto the floor in front of them,
+      // and swept along the walls by the light bars
+      this.policeGlows.push(glow(24, 120, 1.1, 1.1), glow(40, 158, 1.8, 0.35), glow(24, 98, 0.7, 0.5));
+      // ...and thrown the length of the lobby: up the walls and across the
+      // marble, all the way to the far end, so wherever you stand it is on you
+      for (const lx of [110, 200, 290, 380]) this.policeGlows.push(glow(lx, 150, 1.4, 0.3), glow(lx + 40, 70, 0.9, 0.7));
+      this.policeBeam = this.add.image(0, 92, beamKey).setOrigin(0.5, 0.5).setScale(1.6, 1.1).setBlendMode(Phaser.BlendModes.ADD).setDepth(59).setAlpha(0);
+    } else if (this.area === 'room') {
+      const { x, y, w, h } = ROOM_WINDOW;
+      this.policeGlows.push(glow(x + w / 2, y + h / 2, 1.6, 1.2), glow(x + w / 2, WALK_Y + 6, 2.2, 0.35));
+    }
+    // and the whole picture breathing red and blue with it
+    this.policeTint = this.add.rectangle(0, 0, GAME_W, GAME_H, 0xff0000, 0).setOrigin(0, 0).setScrollFactor(0).setDepth(790).setBlendMode(Phaser.BlendModes.ADD);
+    this.sirenT = 0;
+    this.shoutT = first ? 1.4 : 6;
+    audio.setScene(SILENCE);
+    if (first) {
+      audio.sfx('siren', 0.7);
+      this.time.delayedCall(2600, () => {
+        this.say('Sirens...?', 2.2);
+        this.say('The police. Right outside.', 2.6);
+      });
+    } else if (this.area === 'lobby') {
+      this.say('They are still out there.', 2.6);
+      this.say('Outside to them -- or back up to my room?', 3.4);
+    }
+  }
+
+  private tickPolice(dt: number): void {
+    if (!this.policeOn) return;
+    const far = this.area === 'lobby' ? 1 : 0.45;
+    this.sirenT -= dt;
+    if (this.sirenT <= 0) {
+      this.sirenT = 2.05;
+      audio.sfx('siren', 0.55 * far);
+    }
+    // the light bars: red, red, blue, blue, fast
+    const ph = Math.floor(this.clock * 6) % 4;
+    const red = ph < 2;
+    const on = ph % 2 === 0 ? 1 : 0.55;
+    const col = red ? 0xff2a3a : 0x2a5aff;
+    // (the far glows a beat behind the near ones: the bars turning over)
+    this.policeGlows.forEach((g, i) => {
+      const c2 = i > 2 && i % 2 ? (red ? 0x2a5aff : 0xff2a3a) : col;
+      g.setTint(c2).setAlpha((i > 2 ? 0.32 : 0.55) * on * (0.85 + Math.random() * 0.15));
+    });
+    if (this.policeBeam) {
+      const sweep = (this.clock * 0.55) % 1;
+      this.policeBeam.setTint(col).setAlpha(0.22 * on).setPosition(10 + sweep * 300, 96);
+    }
+    this.policeTint?.setFillStyle(col, 0.08 * on * far);
+    // the megaphone, over and over
+    if (this.area !== 'lobby') return;
+    this.shoutT -= dt;
+    if (this.shoutT <= 0) {
+      this.shoutT = 13;
+      this.shouts++;
+      audio.sfx('megaphone', 0.8);
+      if (this.shouts === 1) {
+        this.say('POLICE: "Put your hands up!"', 2.4, true);
+        this.say('POLICE: "You are under arrest! Come outside now!"', 3.4, true);
+        this.say("They think I did all this.", 2.6);
+        this.say('Outside to them -- or back up to my room?', 3.6);
+      } else {
+        const lines = ['POLICE: "Come out with your hands up!"', 'POLICE: "This is your last warning! Come outside now!"', 'POLICE: "We know you are in there!"'];
+        this.say(lines[(this.shouts - 2) % lines.length], 3, true);
+      }
+    }
+  }
+
+  /** Out of the front doors to them: the end of it. */
+  private surrender(): void {
+    const c = confirmDialog(this, {
+      lines: ['GO OUTSIDE TO THE POLICE?', 'THERE IS NO COMING BACK FROM THIS.'],
+      confirm: 'GO OUTSIDE',
+      cancel: 'STAY',
+      edge: 0xff3a4a,
+      onConfirm: () => {
+        this.locked = true;
+        this.lines = [];
+        this.nextLine();
+        audio.sfx('door_open', 0.8);
+        this.player?.move(-1, 0, 400, new Phaser.Geom.Rectangle(0, WALK_Y, LOBBY_W, 0));
+        this.time.delayedCall(500, () => audio.sfx('megaphone', 1));
+        this.say('POLICE: "Hands where we can see them! Down on the ground!"', 3, true);
+        // slowly, all the way to black
+        this.cameras.main.fadeOut(3200, 0, 0, 0);
+        this.time.delayedCall(3500, () => this.scene.start('ArrestEnding'));
+      },
+      onCancel: () => undefined,
+    });
+    c.setScrollFactor(0);
+  }
+
+  /** Out through the hole he left in the glass, onto the roofs. */
+  private climbOut(): void {
+    this.locked = true;
+    this.lines = [];
+    this.nextLine();
+    // the checkpoint: from here the run comes back on the roofs
+    store.patch({ hotelAfter: 'escape' });
+    store.flush();
+    audio.sfx('glass_crack', 0.6);
+    this.say('Up onto the sill... and out.', 2.2);
+    this.cameras.main.fadeOut(1100, 0, 0, 0);
+    this.time.delayedCall(1300, () => this.scene.start('RooftopEscape', {}));
   }
 
   // ------------------------------------------------------------- the lift
@@ -482,6 +664,9 @@ export class Hotel extends Phaser.Scene {
     if (!l) {
       this.lineUp = false;
       this.tapZone.disableInteractive();
+      const then = this.afterLines;
+      this.afterLines = null;
+      then?.();
       this.tweens.add({ targets: [this.mutter, this.mutterPlate], alpha: 0, duration: 300 });
       return;
     }
@@ -498,6 +683,7 @@ export class Hotel extends Phaser.Scene {
     const s = store.get();
     switch (this.spot) {
       case 'out':
+        if (this.policeOn) return this.surrender();
         if (this.from === 'stairs') {
           this.say("Locked. They're locked from the outside.");
           return;
@@ -533,11 +719,23 @@ export class Hotel extends Phaser.Scene {
         fadeToScene(this, 'Hotel', { area: 'lift', up: this.area === 'lobby' });
         return;
       case 'stairs':
+        if (this.policeOn) {
+          this.locked = true;
+          fadeToScene(this, 'Hotel', { area: 'lobby', from: 'storage' });
+          return;
+        }
         this.say("The stairs. Six floors. I'll take the lift.");
         return;
       case 'stairdoor':
         if (this.from === 'stairs') {
           this.say(this.bangs ? "He's right behind it!" : "I'm not going back in there.");
+          return;
+        }
+        if (this.policeOn) {
+          // back up, six floors, to the room and its broken window
+          this.locked = true;
+          audio.sfx('door_creak', 0.6);
+          fadeToScene(this, 'Hotel', { area: 'corridor', from: 'stairs' });
           return;
         }
         if (this.from === 'storage') {
@@ -580,9 +778,14 @@ export class Hotel extends Phaser.Scene {
       case 'mirror':
         return this.lookInMirror();
       case 'bed':
+        if (this.policeOn) {
+          this.say('Not now. Not with them out there.');
+          return;
+        }
         return this.askSleep();
       case 'window':
         if (this.night === 'late') return this.reveal();
+        if (this.policeOn) return this.climbOut();
         audio.sfx('door_creak', 0.25);
         this.setCurtains(!this.curtainsOpen);
         if (!this.curtainsOpen) return;
@@ -1070,6 +1273,7 @@ export class Hotel extends Phaser.Scene {
       if (m.y < 70) m.y = 150;
     }
     if (this.area === 'room') this.tickNight(dt);
+    this.tickPolice(dt);
     const p = this.player;
     if (!p) return;
     if (this.area === 'bath' && this.reflection) {
@@ -1124,17 +1328,17 @@ export class Hotel extends Phaser.Scene {
       return;
     }
     const label: Record<Exclude<Spot, null>, string> = {
-      out: '[E] OUTSIDE',
+      out: this.policeOn ? '[E] GO OUTSIDE TO THE POLICE' : '[E] OUTSIDE',
       desk: '[E] RECEPTION',
       lift: '[E] LIFT',
-      stairs: '[E] STAIRS',
-      stairdoor: '[E] STAIRS',
+      stairs: this.policeOn ? '[E] STAIRS DOWN' : '[E] STAIRS',
+      stairdoor: this.policeOn ? '[E] BACK UPSTAIRS' : '[E] STAIRS',
       storage: this.from === 'stairs' ? '[E] HIDE IN THE STORAGE ROOM' : '[E] STORAGE ROOM',
       door612: '[E] ROOM 612',
       roomdoor: '[E] CORRIDOR',
       bathdoor: this.area === 'bath' ? '[E] BACK TO THE ROOM' : '[E] BATHROOM',
       bed: '[E] SLEEP',
-      window: this.night === 'late' ? '[E] OPEN THE CURTAINS' : this.curtainsOpen ? '[E] CLOSE THE CURTAINS' : '[E] OPEN THE CURTAINS',
+      window: this.policeOn ? '[E] CLIMB OUT OF THE WINDOW' : this.night === 'late' ? '[E] OPEN THE CURTAINS' : this.curtainsOpen ? '[E] CLOSE THE CURTAINS' : '[E] OPEN THE CURTAINS',
       mirror: '[E] LOOK IN THE MIRROR',
     };
     this.prompt

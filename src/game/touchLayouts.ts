@@ -166,6 +166,15 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
     ],
   },
 
+  // Over the roofs: the pad runs (and climbs ladders), JUMP jumps.
+  RooftopEscape: {
+    stick: 'wasd',
+    arrows: true,
+    buttons: [{ label: 'JUMP', key: 'SPACE', primary: true }],
+  },
+  // The paper, the gate, the arcade: a tap moves the paper on, nothing else.
+  ArrestEnding: BARE,
+
   SecondBust: BARE,
   EjectionCutscene: BARE,
   OutroCutscene3D: BARE,

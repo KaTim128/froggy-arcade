@@ -26,6 +26,8 @@ export const SCENES = [
   'StreetWest',
   'Hotel',
   'HotelHall3D',
+  'RooftopEscape',
+  'ArrestEnding',
   'NightRoad3D',
   'FroggyCharity',
   'SecondBust',
@@ -82,6 +84,7 @@ export function canEnter(scene: SceneId, s: Readonly<GameState>, ctx: GuardConte
     case 'Hotel':
     case 'HotelHall3D':
     case 'NightRoad3D':
+    case 'RooftopEscape':
     case 'PrizeExchange':
     case 'ChangeMachine':
       return s.route === 'normal';
@@ -113,6 +116,7 @@ export function canEnter(scene: SceneId, s: Readonly<GameState>, ctx: GuardConte
 
     case 'OutroCutscene3D':
     case 'EndCard':
+    case 'ArrestEnding':
       return s.route === 'ended';
 
     // The job finished.  Reachable from the ordinary route, because that is the
