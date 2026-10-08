@@ -2,11 +2,10 @@
  * FROGGY SLOTS.  Two tokens a spin, and it keeps taking them.
  *
  * Five reels, six rows.  Every token on the reels pays when it lines up:
- * three, four or five of the same token in a LINE -- across a row from the
- * left reel, down a reel from the top, or along a diagonal from its left end
- * -- pays that token's prize for that many (six down a reel pays as five).
- * Only the best line on the window is paid, once, never two of them for the
- * same spin.
+ * three, four or five of the same token in a LINE -- across a row, down a
+ * reel or along a diagonal, anywhere on it -- pays that token's prize for
+ * that many (six down a reel pays as five).  Every line on the window pays,
+ * each once, and they add up.
  *
  *   TOKEN                    RARITY      3     4     5
  *   bronze lily-pad coin     common      1     2     3
@@ -59,7 +58,7 @@ export const SYMBOLS: Array<{ id: SymbolId; name: string; tier: Tier; weight: nu
   { id: 'token_20', name: 'FIREFLY', tier: 'UNCOMMON', weight: 13, pays: [3, 6, 10] },
   { id: 'token_50', name: 'GOLD LILY', tier: 'RARE', weight: 12, pays: [4, 7, 11] },
   { id: 'token_100', name: 'CRYSTAL', tier: 'RARE', weight: 11, pays: [4, 8, 12] },
-  { id: 'token_3', name: 'FROGGY', tier: 'V.RARE', weight: 8, pays: [5, 10, 15] },
+  { id: 'token_3', name: 'FROGGY', tier: 'V.RARE', weight: 5, pays: [5, 10, 15] },
   { id: 'golden_froggy', name: 'WILD', tier: 'WILD', weight: 0.3, pays: [0, 0, 0] },
 ];
 const idx = (id: SymbolId) => SYMBOLS.findIndex((s) => s.id === id);
@@ -128,11 +127,11 @@ export const slots: MinigameModule = {
   tutorial: {
     objective: [
       `${SPIN_COST} TOKENS A SPIN. LINE UP 3, 4 OR 5 OF A TOKEN:`,
-      'ACROSS FROM THE LEFT, DOWN FROM THE TOP, OR DIAGONALLY.',
+      'ACROSS, DOWN OR DIAGONAL. EVERY LINE PAYS, AND THEY ADD UP.',
       'EVERY TOKEN PAYS: COMMON ONES A LITTLE, RARE ONES MORE.',
       `FROGGY IS THE RAREST: 3 PAY ${payFor(FROG, 3)}, 5 PAY ${JACKPOT}.`,
       'THE GOLDEN FROGGY IS WILD: IT COUNTS AS ANY TOKEN.',
-      'THE BEST LINE ON THE SCREEN IS PAID. MOST SPINS LOSE.',
+      'MOST SPINS LOSE.',
     ],
     controls: [
       ['SPACE', 'SPIN'],
@@ -298,8 +297,10 @@ export const slots: MinigameModule = {
 // ------------------------------------------------------------------ the window
 
 function blank(): Grid {
-  return Array.from({ length: ROWS }, () => Array.from({ length: REELS }, () => filler()));
+  return clumpless();
 }
+/** How often a token matching a neighbour is drawn again (see `draw`). */
+const CLUMP_REDRAW = 0.55;
 
 function showCell(cell: Cell, sym: number, lit = false): void {
   cell.face.setFillStyle(lit ? CELL_LIT : CELL_BG);
@@ -344,22 +345,37 @@ function lines(): Cells[] {
 const LINES = lines();
 
 /**
- * The best line on the window: three or more of the same token from the
- * start of a line (the wild standing in for any of them), the one that pays
- * the most.  Only that one is paid -- never two lines, never the three inside
- * a five as well as the five.
+ * Everything the window pays: every run of three or more of the same token
+ * anywhere along a row, a reel or a diagonal (the wild standing in for any of
+ * them), each paid once, added together -- a row of three and a column of
+ * four through it pay both.  A run is counted at its full length, never as
+ * the three inside it as well.
  */
-export function best(g: Grid): { pays: number; sym: number; n: number; cells: Cells } {
-  let top: { pays: number; sym: number; n: number; cells: Cells } = { pays: 0, sym: -1, n: 0, cells: [] };
+export function best(g: Grid): { pays: number; sym: number; n: number; cells: Cells; wins: Array<{ sym: number; n: number; pays: number }> } {
+  let pays = 0;
+  let top = { sym: -1, n: 0, pays: 0 };
+  const cells: Cells = [];
+  const wins: Array<{ sym: number; n: number; pays: number }> = [];
   for (const line of LINES) {
-    for (let sym = 0; sym < PAYING; sym++) {
-      let n = 0;
-      while (n < line.length && (g[line[n][0]][line[n][1]] === sym || g[line[n][0]][line[n][1]] === WILD)) n++;
-      const pays = payFor(sym, n);
-      if (pays > top.pays) top = { pays, sym, n, cells: line.slice(0, n) };
+    let s0 = 0;
+    while (s0 < line.length) {
+      let win = { sym: -1, n: 1, pays: 0 };
+      for (let sym = 0; sym < PAYING; sym++) {
+        let n = 0;
+        while (s0 + n < line.length && (g[line[s0 + n][0]][line[s0 + n][1]] === sym || g[line[s0 + n][0]][line[s0 + n][1]] === WILD)) n++;
+        const p = payFor(sym, n);
+        if (p > win.pays) win = { sym, n, pays: p };
+      }
+      if (win.pays) {
+        pays += win.pays;
+        wins.push(win);
+        cells.push(...line.slice(s0, s0 + win.n));
+        if (win.pays > top.pays) top = win;
+        s0 += win.n;
+      } else s0++;
     }
   }
-  return top;
+  return { pays, sym: top.sym, n: top.n, cells, wins };
 }
 
 /** The next window, if a test has set one. */
@@ -374,9 +390,29 @@ function draw(): Grid {
     forced = null;
     return g.map((r) => [...r]);
   }
-  return Array.from({ length: ROWS }, () => Array.from({ length: REELS }, () => filler()));
+  return clumpless();
 }
 
+/** The reels' draw: by weight, and seldom beside its own kind. */
+function clumpless(): Grid {
+  // A token is less likely to land next to its own kind: a neighbour that
+  // matches is redrawn more often than not.  With every line counting, this
+  // is what keeps most spins from paying.
+  const g: Grid = [];
+  for (let r = 0; r < ROWS; r++) {
+    g.push([]);
+    for (let c = 0; c < REELS; c++) {
+      let x = filler();
+      for (let tries = 0; tries < 4 && Math.random() < CLUMP_REDRAW; tries++) {
+        const near = (c > 0 && g[r][c - 1] === x) || (r > 0 && (g[r - 1][c] === x || (c > 0 && g[r - 1][c - 1] === x) || (c < REELS - 1 && g[r - 1][c + 1] === x)));
+        if (!near) break;
+        x = filler();
+      }
+      g[r].push(x);
+    }
+  }
+  return g;
+}
 // -------------------------------------------------------------------- the spin
 
 function spin(): void {
@@ -419,18 +455,22 @@ function settle(): void {
     apiRef.payout(got.pays);
     paidCount++;
     const sym = SYMBOLS[got.sym];
-    const big = got.sym === FROG || got.n === 5;
+    const big = got.sym === FROG || got.n >= 5 || got.wins.length > 1;
     // the cells that made it light up, and stay lit until the next spin
     paint(shown, new Set(got.cells.map(([r, c]) => `${r},${c}`)));
     status
-      ?.setText(`${got.sym === FROG && got.n === 5 ? 'JACKPOT! ' : big ? 'BIG WIN! ' : ''}${got.n} ${sym.name}  +${got.pays} TOKENS`)
+      ?.setText(
+        got.wins.length > 1
+          ? `${got.wins.length} LINES!  +${got.pays} TOKENS`
+          : `${got.sym === FROG && got.n >= 5 ? 'JACKPOT! ' : big ? 'BIG WIN! ' : ''}${got.n} ${sym.name}  +${got.pays} TOKENS`,
+      )
       .setTint(big ? PALETTE.gold : PALETTE.cream);
     audio.sfx('chime');
     if (big) {
       // a big one is announced, not just paid: the machine flashes, and the
       // jackpot shakes it
       sceneRef.cameras.main.flash(220, 255, 230, 140);
-      if (got.pays >= JACKPOT) {
+      if (got.sym === FROG && got.n >= 5) {
         sceneRef.cameras.main.shake(260, 0.006);
         audio.sfx('bell_ding');
       }

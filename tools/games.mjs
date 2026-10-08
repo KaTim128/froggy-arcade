@@ -2676,9 +2676,9 @@ for (const g of [
   // What a line pays, read off constructed windows: the best line, once.
   // The base window makes no line anywhere (each step along a row, a reel or
   // a diagonal changes token), and each case stamps one line onto it.
-  const BASE = ['token_1', 'token_10', 'token_5', 'token_20', 'token_50', 'token_100'];
+  const BASE = ['token_100', 'token_50', 'token_10', 'token_20'];
   const grid = (cells) => {
-    const g = Array.from({ length: 6 }, (_, r) => Array.from({ length: 5 }, (_, c) => BASE[(2 * r + c) % 6]));
+    const g = Array.from({ length: 6 }, (_, r) => Array.from({ length: 5 }, (_, c) => BASE[(r + 2 * c) % 4]));
     for (const [r, c, id] of cells) g[r][c] = id;
     return g;
   };
@@ -2686,16 +2686,17 @@ for (const g of [
   const cases = [
     ['three Froggys across pay 5', grid(line('token_3', [[2, 0], [2, 1], [2, 2]])), 5],
     ['five Froggys across pay 15', grid(line('token_3', [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]])), 15],
-    ['three bronze across pay 1', grid([...line('token_1', [[4, 0], [4, 1], [4, 2]]), [4, 3, 'token_5']]), 1],
-    ['three blue rubies across pay 3', grid([...line('token_5', [[1, 0], [1, 1], [1, 2]]), [1, 3, 'token_20']]), 3],
+    ['three bronze across pay 1', grid(line('token_1', [[4, 0], [4, 1], [4, 2]])), 1],
+    ['three blue rubies across pay 3', grid(line('token_5', [[1, 0], [1, 1], [1, 2]])), 3],
     ['five blue rubies across pay 8', grid(line('token_5', [[3, 0], [3, 1], [3, 2], [3, 3], [3, 4]])), 8],
     ['three Froggys down a reel pay 5', grid(line('token_3', [[0, 3], [1, 3], [2, 3]])), 5],
     ['six down a reel pays as five', grid(line('token_3', [[0, 1], [1, 1], [2, 1], [3, 1], [4, 1], [5, 1]])), 15],
     ['three Froggys on a diagonal pay 5', grid(line('token_3', [[1, 0], [2, 1], [3, 2]])), 5],
-    ['five gold lilies on the other diagonal pay 11', grid(line('token_50', [[5, 0], [4, 1], [3, 2], [2, 3], [1, 4]])), 11],
-    ['two lines pay only the best one', grid([...line('token_1', [[0, 0], [0, 1], [0, 2]]), ...line('token_3', [[5, 0], [5, 1], [5, 2]])]), 5],
+    ['five blue rubies on the other diagonal pay 8', grid(line('token_5', [[5, 0], [4, 1], [3, 2], [2, 3], [1, 4]])), 8],
+    ['two lines pay both', grid([...line('token_1', [[0, 0], [0, 1], [0, 2]]), ...line('token_3', [[5, 0], [5, 1], [5, 2]])]), 6],
+    ['a row and a column through it pay both (3 + 5)', grid(line('token_5', [[2, 0], [2, 1], [2, 2], [3, 2], [4, 2], [5, 2]])), 3 + 5],
     ['the wild fills a line', grid(line('token_3', [[2, 0], [2, 2]]).concat([[2, 1, 'golden_froggy']])), 5],
-    ['a line must start at its edge', grid(line('token_3', [[2, 1], [2, 2], [2, 3]])), 0],
+    ['a line can be anywhere along it', grid(line('token_3', [[2, 1], [2, 2], [2, 3]])), 5],
     ['nothing in a line pays nothing', grid([]), 0],
   ];
   for (const [what, g, want] of cases) {
