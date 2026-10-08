@@ -89,11 +89,19 @@ export function roughen(
 
 const SIZE = 512;
 
-function canvas(): [HTMLCanvasElement, CanvasRenderingContext2D] {
+/**
+ * A canvas to paint on in SIZE units.  `hi` paints the same picture at twice
+ * the resolution (the context is scaled), so a face pressed against the lens
+ * keeps its pores and creases sharp instead of going to soft squares.
+ */
+function canvas(hi = false): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const c = document.createElement('canvas');
-  c.width = SIZE;
-  c.height = SIZE;
-  return [c, c.getContext('2d')!];
+  const k = hi ? 2 : 1;
+  c.width = SIZE * k;
+  c.height = SIZE * k;
+  const ctx = c.getContext('2d')!;
+  ctx.scale(k, k);
+  return [c, ctx];
 }
 
 function wrap(c: HTMLCanvasElement, repeat = 2): THREE.CanvasTexture {
@@ -101,7 +109,9 @@ function wrap(c: HTMLCanvasElement, repeat = 2): THREE.CanvasTexture {
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeat, repeat);
-  t.anisotropy = 4;
+  t.anisotropy = 8;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.magFilter = THREE.LinearFilter;
   return t;
 }
 
@@ -379,6 +389,43 @@ export interface FroggySkin {
   bellyBump: THREE.Texture;
 }
 
+/**
+ * The finest layer, only there at the doubled resolution: hair-thin crease
+ * lines in crossing families (the crepe of old skin) and pinprick pores,
+ * painted the same on the colour and on the relief so the light finds them.
+ */
+function fineCreases(ctx: CanvasRenderingContext2D, seed: number, bump: boolean, k = 1): void {
+  const r = rng(seed * 7 + 3);
+  const dark = bump ? 'rgba(40,40,40,0.45)' : 'rgba(18,14,10,0.2)';
+  const lit = bump ? 'rgba(200,200,200,0.25)' : 'rgba(255,255,245,0.07)';
+  const save = ctx.lineWidth;
+  // crepe: very short, very fine, in families
+  for (let i = 0; i < Math.round(520 * k); i++) {
+    const x = r() * SIZE;
+    const y = r() * SIZE;
+    const a = r() * Math.PI;
+    for (let j = 0; j < 3; j++) {
+      const o = j * 1.1;
+      const L = 2.5 + r() * 4;
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = 0.35;
+      ctx.beginPath();
+      ctx.moveTo(x - Math.cos(a) * L + Math.sin(a) * o, y - Math.sin(a) * L - Math.cos(a) * o);
+      ctx.quadraticCurveTo(x + Math.sin(a) * (o + 0.6), y - Math.cos(a) * (o + 0.6), x + Math.cos(a) * L + Math.sin(a) * o, y + Math.sin(a) * L - Math.cos(a) * o);
+      ctx.stroke();
+      ctx.strokeStyle = lit;
+      ctx.lineWidth = 0.25;
+      ctx.stroke();
+    }
+  }
+  // pinprick pores
+  for (let i = 0; i < Math.round(14000 * k); i++) {
+    ctx.fillStyle = bump ? 'rgba(30,30,30,0.5)' : 'rgba(12,10,8,0.3)';
+    ctx.fillRect(r() * SIZE, r() * SIZE, 0.45, 0.45);
+  }
+  ctx.lineWidth = save;
+}
+
 let cached: FroggySkin | null = null;
 
 /**
@@ -387,16 +434,20 @@ let cached: FroggySkin | null = null;
  */
 export function froggySkin(): FroggySkin {
   if (cached) return cached;
-  const [c1, x1] = canvas();
+  const [c1, x1] = canvas(true);
   paintSkin(x1, '#a4a4a4', 11);
-  const [c2, x2] = canvas();
+  fineCreases(x1, 13, false);
+  const [c2, x2] = canvas(true);
   paintBump(x2, 11);
-  const [c3, x3] = canvas();
+  fineCreases(x2, 13, true);
+  const [c3, x3] = canvas(true);
   paintSkin(x3, '#a8a8a8', 29, 1.8);
   paintWear(x3, 53, false);
-  const [c4, x4] = canvas();
+  fineCreases(x3, 31, false, 1.6);
+  const [c4, x4] = canvas(true);
   paintBump(x4, 29, 1.8);
   paintWear(x4, 53, true);
+  fineCreases(x4, 31, true, 1.6);
   const [c5, x5] = canvas();
   paintWet(x5, 47);
   cached = {

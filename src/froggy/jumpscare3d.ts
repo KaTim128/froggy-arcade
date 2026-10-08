@@ -170,10 +170,13 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
   let done = false;
   // the eyes and the teeth are the last things the dark takes
   monster.setGlare(1);
+  // his face fills the screen: render it sharp for the length of the scare
+  stage.boost(true);
   const dispose = (): void => {
     if (done) return;
     done = true;
     monster.setGlare(0);
+    stage.boost(false);
     distort(0);
     under.intensity = 0;
     behind.intensity = 0;

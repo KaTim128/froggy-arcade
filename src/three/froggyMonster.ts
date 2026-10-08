@@ -717,9 +717,13 @@ export class FroggyMonster {
     const skin = hide(SKIN);
     const skinDark = hide(SKIN_DARK);
     const skinPale = hide(SKIN_PALE);
-    const face = hide(FACE, true, 0.03);
-    const muzzle = hide(MUZZLE, true, 0.024);
-    const lidMat = hide(LID, true, 0.03);
+    const face = hide(FACE, true, 0.045);
+    const muzzle = hide(MUZZLE, true, 0.034);
+    const lidMat = hide(LID, true, 0.045);
+    // claws: thick, horn-dark, a little wet
+    const clawMat = new THREE.MeshPhongMaterial({ color: 0x2e241a, specular: 0x5a5040, shininess: 60 });
+    // the raw wet rim of a lid: inflamed, red at the lash line
+    const lidRim = new THREE.MeshPhongMaterial({ color: 0x6a2a2a, specular: 0x5a3a34, shininess: 70, map: tex.face, bumpMap: tex.faceBump, bumpScale: 0.02 });
     // the lids are open shells: their undersides show at the edge
     lidMat.side = THREE.DoubleSide;
     const lumpy = (g: THREE.BufferGeometry, amp: number, freq: number, seed: number) => roughen(g, amp, freq, seed);
@@ -748,6 +752,34 @@ export class FroggyMonster {
     /** A small ball: a joint, a knuckle, a knob of bone under the skin. */
     const knob = (r: number, mat: THREE.Material, seed: number) =>
       new THREE.Mesh(lumpy(new THREE.SphereGeometry(r, 12, 10), r * 0.12, 14, seed), mat);
+    /**
+     * A finger bone from one point to another: rounder than a strut, its skin
+     * gathered into creases at both knuckles (rings pressed into the mesh,
+     * deepest on the top) and a little lumpy all along.
+     */
+    const fingerBone = (a: THREE.Vector3, b: THREE.Vector3, r: number, mat: THREE.Material, seed: number): THREE.Mesh => {
+      const len = a.distanceTo(b);
+      // a lathe: rounded ends, the shaft between pinched into creases at
+      // both knuckles
+      const prof: THREE.Vector2[] = [];
+      const N = 30;
+      for (let i = 0; i <= N; i++) {
+        const t = i / N;
+        const y = -len / 2 + t * len;
+        // round off the ends over one radius
+        const e = Math.min(t * len, (1 - t) * len) / r;
+        const cap = e >= 1 ? 1 : Math.sqrt(Math.max(0, 1 - (1 - e) ** 2));
+        let k = 1;
+        for (const tg of [0.1, 0.17, 0.24, 0.8, 0.88]) k -= 0.12 * Math.exp(-(((t - tg) / 0.025) ** 2));
+        prof.push(new THREE.Vector2(Math.max(1e-4, r * cap * k), y));
+      }
+      const g = new THREE.LatheGeometry(prof, 14);
+      g.computeVertexNormals();
+      const m = new THREE.Mesh(lumpy(g, r * 0.06, 60, seed), mat);
+      m.position.copy(a).add(b).multiplyScalar(0.5);
+      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+      return m;
+    };
     /** A capsule from one point to another, for tendons, collarbones, ribs of the hand. */
     const strut = (a: THREE.Vector3, b: THREE.Vector3, r: number, mat: THREE.Material): THREE.Mesh => {
       const len = a.distanceTo(b);
@@ -949,6 +981,9 @@ export class FroggyMonster {
         const kn = knob(0.013, armSkin, 80 + f + side * 7);
         kn.position.set((f - 1.5) * 0.021, -0.684, -0.004);
         elbow.add(kn);
+        // the tendon to it, standing up under the thin skin of the back of
+        // the hand, fanning out from the wrist
+        elbow.add(strut(new THREE.Vector3((f - 1.5) * 0.008, -0.6, -0.012), new THREE.Vector3((f - 1.5) * 0.021, -0.68, -0.011), 0.0035, armSkin));
       }
       const hand: THREE.Group[] = [];
       for (let f = 0; f < 5; f++) {
@@ -958,19 +993,25 @@ export class FroggyMonster {
         if (thumb) finger.rotation.set(0.4, 0, side * 0.5);
         const L1 = thumb ? 0.085 : 0.14 - Math.abs(f - 1.5) * 0.012;
         const L2 = thumb ? 0.065 : 0.12 - Math.abs(f - 1.5) * 0.01;
-        finger.add(strut(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -L1, 0.004), 0.0115, armSkin));
+        finger.add(fingerBone(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -L1, 0.004), 0.0115, armSkin, 140 + f + side * 9));
         const k1 = knob(0.0125, armSkin, 67 + f);
         k1.position.set(0, -L1, 0.004);
         finger.add(k1);
         const tipSeg = new THREE.Group();
         tipSeg.position.set(0, -L1, 0.004);
         tipSeg.rotation.x = 0.18;
-        tipSeg.add(strut(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -L2, 0), 0.0095, armSkin));
+        tipSeg.add(fingerBone(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -L2, 0), 0.0095, armSkin, 150 + f + side * 9));
         // and a frog's round pad on the end of every one
         const pad = knob(0.0155, armSkin, 74 + f);
         pad.scale.set(1.1, 0.8, 0.75);
         pad.position.set(0, -L2 - 0.004, 0.002);
         tipSeg.add(pad);
+        // and a claw out of the end of it: a thick, dark, ridged nail that
+        // hooks down over the pad
+        const claw = new THREE.Mesh(lumpy(new THREE.ConeGeometry(0.0062, 0.034, 8, 3), 0.0006, 90, 160 + f), clawMat);
+        claw.position.set(0, -L2 - 0.018, -0.006);
+        claw.rotation.x = Math.PI + 0.55;
+        tipSeg.add(claw);
         finger.add(tipSeg);
         elbow.add(finger);
         hand.push(finger);
@@ -1013,7 +1054,35 @@ export class FroggyMonster {
     this.head.position.set(0, 0.22, 0.025);
     this.head.scale.setScalar(1.14);
     this.neck.add(this.head);
-    const dome = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.2, 28, 22), 0.006, 6, 79), face);
+    // THE DOME.  Its sphere is turned so the poles -- where a sphere's
+    // texture pinches to a point and smears into streaks -- are at the sides,
+    // under the eyes' sockets, and never on the forehead.  And the brow
+    // between the eyes is SCULPTED: two deep vertical furrows over the bridge
+    // and a stack of horizontal ones across the forehead, cut into the mesh
+    // itself so they catch light and shadow as real folds do.
+    const domeGeo = new THREE.SphereGeometry(0.2, 72, 56);
+    domeGeo.rotateZ(Math.PI / 2);
+    {
+      const pos = domeGeo.attributes.position as THREE.BufferAttribute;
+      const v = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i);
+        if (v.z < 0.08) continue;
+        const front = THREE.MathUtils.smoothstep(v.z, 0.08, 0.17);
+        // in the dome's own (unscaled) frame: x is across, y is up
+        const across = Math.abs(v.x);
+        const brow = THREE.MathUtils.smoothstep(v.y, 0.0, 0.05) * (1 - THREE.MathUtils.smoothstep(v.y, 0.15, 0.19));
+        // the two vertical furrows over the bridge of the nose
+        const vert = Math.exp(-(((across - 0.016) / 0.007) ** 2)) * (1 - THREE.MathUtils.smoothstep(v.y, 0.06, 0.13));
+        // horizontal furrows across the forehead, fading out to the sides
+        const horiz = Math.max(0, Math.sin(v.y * 140 + Math.sin(v.x * 30) * 0.8)) ** 3 * (1 - THREE.MathUtils.smoothstep(across, 0.05, 0.11)) * THREE.MathUtils.smoothstep(v.y, 0.07, 0.1);
+        const d = -(vert * 0.012 + horiz * 0.006) * front * brow;
+        v.addScaledVector(v.clone().normalize(), d);
+        pos.setXYZ(i, v.x, v.y, v.z);
+      }
+      domeGeo.computeVertexNormals();
+    }
+    const dome = new THREE.Mesh(lumpy(domeGeo, 0.004, 6, 79), face);
     dome.scale.set(1.28, 0.9, 1.0);
     dome.position.set(0, 0.03, 0);
     this.head.add(dome);
@@ -1115,7 +1184,7 @@ export class FroggyMonster {
       const upperShell = new THREE.Mesh(new THREE.SphereGeometry(0.116, 26, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), lidMat);
       upper.add(upperShell);
       // the rim along its edge: the front half of a ring laid on that edge
-      const upperEdge = new THREE.Mesh(new THREE.TorusGeometry(0.116, 0.0115, 8, 30, Math.PI), lidMat);
+      const upperEdge = new THREE.Mesh(new THREE.TorusGeometry(0.116, 0.0115, 10, 36, Math.PI), lidRim);
       upperEdge.rotation.x = Math.PI / 2;
       upper.add(upperEdge);
       lids.add(upper);
@@ -1125,7 +1194,7 @@ export class FroggyMonster {
         lidMat,
       );
       lower.add(lowerShell);
-      const lowerEdge = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.009, 8, 30, Math.PI), lidMat);
+      const lowerEdge = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.009, 10, 36, Math.PI), lidRim);
       lowerEdge.rotation.x = Math.PI / 2;
       lower.add(lowerEdge);
       lids.add(lower);
@@ -1148,21 +1217,10 @@ export class FroggyMonster {
       cheek.position.set(ex, ey - 0.004, ez - 0.032);
       cheek.scale.set(1.03, 0.9, 0.88);
       this.head.add(cheek);
-      // creases under and round the eye, which is what ages a face
-      for (let c = 0; c < 2; c++) {
-        const crease = new THREE.Mesh(new THREE.TorusGeometry(0.125 + c * 0.016, 0.004, 4, 14, Math.PI * 0.6), face);
-        crease.position.set(ex, ey - 0.012, ez - 0.01 - c * 0.008);
-        crease.rotation.set(0.25, 0, Math.PI + Math.PI * 0.15);
-        this.head.add(crease);
-      }
+      // (the creases round the eye are in the skin's relief now: thin rings
+      // laid on the face read up close as stray lines, not as folds)
     }
-    // a furrow across the brow between the eyes
-    for (let c = 0; c < 3; c++) {
-      const f = new THREE.Mesh(new THREE.TorusGeometry(0.07 + c * 0.012, 0.004, 4, 12, Math.PI * 0.5), face);
-      f.position.set(0, 0.16 - c * 0.02, 0.13 - c * 0.01);
-      f.rotation.set(-0.4, 0, Math.PI * 0.25);
-      this.head.add(f);
-    }
+    // (the furrows between the eyes are sculpted into the dome above)
     // warts and marks scattered over the dome
     for (let w = 0; w < 14; w++) {
       const a = (w / 14) * Math.PI * 2;
@@ -1315,7 +1373,7 @@ export class FroggyMonster {
         const broken = !fang && rnd() < 0.1;
         const h = (0.031 + rnd() * 0.034) * (0.8 + side * 0.6) * (fang ? 1.9 : broken ? 0.55 : 1) * lengthK;
         const w = (0.0034 + rnd() * 0.0024) * (fang ? 1.4 : 1);
-        const g = new THREE.ConeGeometry(w, h, 6, 3);
+        const g = new THREE.ConeGeometry(w, h, 9, 6);
         // taper faster toward the tip than a cone does, so the point is a point
         {
           const p = g.attributes.position as THREE.BufferAttribute;

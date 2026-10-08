@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { GAME_W, GAME_H } from './pixelScaler';
 import { applyDisplay, onGraphicsChange, qualityProfile, shadowsOn } from '../core/graphics';
+import { isTouch } from '../core/device';
 
 /** Rendered low and scaled up, so the 3D matches the pixel aesthetic. */
 const RENDER_W = GAME_W * 1.5;
@@ -228,6 +229,22 @@ export class ThreeStage {
       this.renderer?.render(this.scene, this.camera);
     };
     this.raf = requestAnimationFrame(loop);
+  }
+
+  /**
+   * For a jumpscare: render the picture sharper for as long as his face is
+   * against the lens -- pores and teeth instead of soft squares -- then put
+   * the quality level back.  (A phone gets less of a boost than a desktop.)
+   */
+  boost(on: boolean): void {
+    const r = this.renderer;
+    if (!r) return;
+    if (!on) {
+      this.applyQuality();
+      return;
+    }
+    const k = Math.max(qualityProfile().res, isTouch() ? 2 : 3);
+    r.setSize(Math.round(GAME_W * k), Math.round(GAME_H * k), false);
   }
 
   /**
