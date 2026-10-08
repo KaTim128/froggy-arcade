@@ -35,6 +35,7 @@
  */
 
 import Phaser from 'phaser';
+import { TokenHud } from '../ui/hud';
 import { PALETTE } from '../render/palette';
 import { audio, SILENCE } from '../core/audio';
 import { store } from '../core/state';
@@ -225,6 +226,8 @@ export class Hotel extends Phaser.Scene {
     this.player.setSurface('carpet');
     this.playerCols = this.player.sprite.list.map((s) => ({ s: s as Phaser.GameObjects.Rectangle, col: (s as Phaser.GameObjects.Rectangle).fillColor }));
     attachPockets(this, () => this.locked || !!this.talk || this.night === 'reveal');
+    // cash and tokens, top left, as everywhere else
+    new TokenHud(this);
 
     if (this.area === 'lobby') {
       if (dark) {

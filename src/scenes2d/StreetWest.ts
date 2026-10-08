@@ -15,13 +15,14 @@
  */
 
 import Phaser from 'phaser';
+import { TokenHud } from '../ui/hud';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { KEYS } from '../core/input';
 import { centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { Player } from '../art/player';
-import { GAME_W, GAME_H } from '../render/pixelScaler';
+import { GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 import { ROOM_MONEY } from './PrizeExchange';
 import { HOTEL_DOOR, HOTEL_H, HOTEL_W, paintHotel } from '../art/hotel';
@@ -45,7 +46,6 @@ export class StreetWest extends Phaser.Scene {
   private mutter!: Phaser.GameObjects.BitmapText;
   /** A dark plate behind the line, so it reads over the road and the lamps. */
   private mutterPlate!: Phaser.GameObjects.Rectangle;
-  private purse!: Phaser.GameObjects.BitmapText;
   private spot: Spot = null;
   private locked = false;
   private spawn: 'east' | 'hotel' = 'east';
@@ -73,8 +73,7 @@ export class StreetWest extends Phaser.Scene {
 
     // the purse, fixed to the screen
     // (top right: the hotel's name is across the top left of the street)
-    this.add.rectangle(GAME_W - 164, 4, 96, 14, PALETTE.black, 0.55).setOrigin(0, 0).setDepth(950).setScrollFactor(0);
-    this.purse = text(this, GAME_W - 159, 8, `$${store.get().cash}`, PALETTE.mossLight).setDepth(951).setScrollFactor(0);
+    new TokenHud(this);
     attachPockets(this, () => this.locked);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
     this.mutterPlate = this.add.rectangle(0, 0, 1, 1, PALETTE.black, 0.72).setOrigin(0, 0).setDepth(801).setScrollFactor(0).setVisible(false);
@@ -304,7 +303,6 @@ export class StreetWest extends Phaser.Scene {
   }
 
   update(_t: number, delta: number): void {
-    this.purse.setText(`$${store.get().cash}`);
     if (this.locked) {
       this.prompt.setVisible(false);
       return;

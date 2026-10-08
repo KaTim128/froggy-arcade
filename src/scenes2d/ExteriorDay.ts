@@ -20,6 +20,7 @@
  */
 
 import Phaser from 'phaser';
+import { TokenHud } from '../ui/hud';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
@@ -119,10 +120,10 @@ export class ExteriorDay extends Phaser.Scene {
     // never said so, which left the walk outside sounding like the walk in.
     this.player.setSurface('gravel');
 
-    // What you are carrying, and what you have made.  Cash is not tokens and
-    // the HUD says so by keeping them apart and only showing cash out here.
-    this.add.rectangle(4, 4, 96, 14, PALETTE.black, 0.55).setOrigin(0, 0).setDepth(950);
-    this.purse = text(this, 9, 8, '', PALETTE.mossLight).setDepth(951);
+    // What you are carrying: cash and tokens, side by side and never added
+    // together -- the same HUD as inside -- and under it, how the job is going.
+    new TokenHud(this);
+    this.purse = text(this, 6, 21, '', PALETTE.ash).setDepth(951);
     this.refreshPurse();
     attachPockets(this, () => this.locked || this.busy());
 
@@ -290,7 +291,7 @@ export class ExteriorDay extends Phaser.Scene {
 
   private refreshPurse(): void {
     const s = store.get();
-    this.purse.setText(`$${s.cash}   ${s.prizesSold.length}/${PRIZES.length} SOLD`);
+    this.purse.setText(`${s.prizesSold.length}/${PRIZES.length} PRIZES SOLD`);
   }
 
   /** Everything sold is the end of the job, and of the game. */
