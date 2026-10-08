@@ -77,7 +77,7 @@ export function paintCrane(scene: Phaser.Scene, x: number, y: number, kind: Cran
   const head = scene.add.rectangle(0, -H + 3.5, W, 10, n(0x0c0814)).setStrokeStyle(1, trim);
   c.add(head);
   c.add(scene.add.rectangle(0, -H - 1.5, W + 2, 2, frame));
-  c.add(centerText(scene, 0, -H + 4, eerie ? '? ? ?' : 'GRAB', n(eerie ? 0xc8a0e0 : PALETTE.gold)));
+  c.add(centerText(scene, 0, -H + 4, eerie ? '???' : 'GRAB', n(eerie ? 0xc8a0e0 : PALETTE.gold)));
   const bulbs: Phaser.GameObjects.Arc[] = [];
   for (let b = 0; b < 7; b++) {
     const bulb = scene.add.circle(-W / 2 + 1 + b * ((W - 2) / 6), -H - 1.5, 0.8, n(eerie ? 0xc8a0e0 : 0xffe080));
