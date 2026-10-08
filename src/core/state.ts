@@ -5,6 +5,8 @@
  * the settings (PRD ST-5, QFD FMEA #11).
  */
 
+import { isTouch } from './device';
+
 export type Route = 'normal' | 'ejected' | 'basement' | 'hide' | 'chase' | 'ended';
 
 export type GameId =
@@ -44,7 +46,35 @@ export interface Settings {
   moveStyle: MoveStyle;
   /** How fast the camera turns in the 3D rooms, in percent: 100 is as built. */
   lookSens: number;
+  /** The same for a thumb on the look pad (touch screens), in percent. */
+  camSens: number;
+  /** Screen brightness, in percent: 100 is as drawn. */
+  brightness: number;
+  /** Graphics quality: 0 LOW, 1 MEDIUM, 2 HIGH (as built), 3 ULTRA, 4 CINEMATIC. */
+  quality: number;
+  /** Real-time shadows from the scene's spot and directional lights. */
+  shadows: boolean;
+  /** Desktop: the mouse turns the head with no button held, cursor hidden. */
+  mouseLook: boolean;
 }
+
+/** Brightness slider range, in percent. */
+export const BRIGHT_MIN = 50;
+export const BRIGHT_MAX = 150;
+const clampBright = (n: number): number => (Number.isFinite(n) ? Math.round(Math.min(BRIGHT_MAX, Math.max(BRIGHT_MIN, n))) : 100);
+const clampQuality = (n: number): number => (Number.isFinite(n) ? Math.round(Math.min(4, Math.max(0, n))) : defaultQuality());
+/** HIGH on a desktop (the game as built), MEDIUM on a phone. */
+export const defaultQuality = (): number => (isTouch() ? 1 : 2);
+
+/** The GENERAL tab's settings as they come out of the box. */
+export const generalDefaults = (): Pick<Settings, 'lookSens' | 'camSens' | 'brightness' | 'quality' | 'shadows' | 'mouseLook'> => ({
+  lookSens: 100,
+  camSens: 100,
+  brightness: 100,
+  quality: defaultQuality(),
+  shadows: false,
+  mouseLook: false,
+});
 
 /** The look sensitivity slider's range, in percent. */
 export const LOOK_SENS_MIN = 25;
@@ -287,7 +317,7 @@ function defaultState(): GameState {
     reachedHotel: false,
     checkedIn: false,
     hotelNight: false,
-    settings: { master: 80, music: 70, sfx: 85, moveStyle: 'stick', lookSens: 100 },
+    settings: { master: 80, music: 70, sfx: 85, moveStyle: 'stick', ...generalDefaults() },
   };
 }
 
@@ -320,6 +350,11 @@ class Store {
           sfx: clamp100(prefs.sfx ?? fresh.settings.sfx),
           moveStyle: prefs.moveStyle === 'pad' ? 'pad' : 'stick',
           lookSens: clampSens(prefs.lookSens ?? 100),
+          camSens: clampSens(prefs.camSens ?? 100),
+          brightness: clampBright(prefs.brightness ?? 100),
+          quality: clampQuality(prefs.quality ?? defaultQuality()),
+          shadows: prefs.shadows === true,
+          mouseLook: prefs.mouseLook === true,
         };
       }
     } catch {
@@ -564,6 +599,11 @@ class Store {
       sfx: clamp100(partial.sfx ?? this.state.settings.sfx),
       moveStyle: partial.moveStyle ?? this.state.settings.moveStyle,
       lookSens: clampSens(partial.lookSens ?? this.state.settings.lookSens),
+      camSens: clampSens(partial.camSens ?? this.state.settings.camSens),
+      brightness: clampBright(partial.brightness ?? this.state.settings.brightness),
+      quality: clampQuality(partial.quality ?? this.state.settings.quality),
+      shadows: partial.shadows ?? this.state.settings.shadows,
+      mouseLook: partial.mouseLook ?? this.state.settings.mouseLook,
     };
     this.touch();
   }

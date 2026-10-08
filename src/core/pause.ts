@@ -27,6 +27,8 @@ import { froggyLayer } from '../render/froggyLayer';
 import { ThreeStage } from '../render/threeStage';
 import { touchControls } from '../ui/touchControls';
 import { store } from './state';
+import { isLookScene, mouseLookOn, requestMouseLook } from './look';
+import { applyDisplay } from './graphics';
 
 /** Scenes where Esc is not a pause: nothing is being played. */
 const NEVER = new Set(['Boot', 'StartScreen', 'ProfileModal', 'IntroCutscene', 'TheEnd', 'EndCard', 'DeathScreen']);
@@ -50,6 +52,8 @@ let lockOwner: string | null = null;
 export function installPause(g: Phaser.Game): void {
   if (game) return;
   game = g;
+  // the player's brightness on every canvas from the first frame
+  applyDisplay();
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' || e.repeat) return;
     togglePause();
@@ -60,8 +64,14 @@ export function installPause(g: Phaser.Game): void {
   // Only for the scene that took the lock, and only while it is still the
   // one on top: a room that lets go of the mouse as it shuts down must not
   // pause whatever comes after it.
+  // THE CURSOR IS THE PLAYER'S.  Only mouse-look mode (Settings > General)
+  // may hide it; anything else that locks the mouse is handed straight back.
   document.addEventListener('pointerlockchange', () => {
     if (document.pointerLockElement) {
+      if (!mouseLookOn() || frozen) {
+        document.exitPointerLock?.();
+        return;
+      }
       lockOwner = topScene()?.scene.key ?? null;
       return;
     }
@@ -141,6 +151,9 @@ export function resumePause(): void {
   froggyLayer.setVisible(true);
   ThreeStage.current?.setPaused(false);
   if (scene && game.scene.isPaused(key)) scene.scene.resume();
+  // back into a mouse-look room: the mouse is taken again (RESUME, or Esc, is
+  // the click a browser needs to allow it)
+  if (isLookScene(key)) requestMouseLook(game.canvas);
 }
 
 /**

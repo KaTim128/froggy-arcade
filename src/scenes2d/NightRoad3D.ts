@@ -34,7 +34,7 @@
  *   the hotel's doors are safe.  Nothing follows you through them.
  */
 
-import { lookScale } from '../core/look';
+import { attachMouseLook, lockedDelta, lookScale } from '../core/look';
 import { isPaused } from '../core/pause';
 import Phaser from 'phaser';
 import * as THREE from 'three';
@@ -43,12 +43,12 @@ import { isTouch } from '../core/device';
 import { froggyLayer } from '../render/froggyLayer';
 import { drawPixelText } from '../render/pixelFont';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
-import { playJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
+import { playJumpscare3D, prepareJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
 import { FroggyMonster } from '../three/froggyMonster';
 import { ThreeStage } from '../render/threeStage';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { touchControls } from '../ui/touchControls';
-import { HOTEL_CANOPY, HOTEL_DOOR, HOTEL_H, HOTEL_PLANTERS, HOTEL_POSTS, HOTEL_W, paintCanopy, paintHotel } from '../art/hotel';
+import { HOTEL_CANOPY, HOTEL_DOOR, HOTEL_FLOORS, HOTEL_GROUND, HOTEL_H, HOTEL_PLANTERS, HOTEL_POSTS, HOTEL_W, paintCanopy, paintHotel } from '../art/hotel';
 
 // ------------------------------------------------------------------- the map
 //
@@ -404,7 +404,7 @@ export class NightRoad3D extends Phaser.Scene {
     // held left-drag if not, which is what the on-screen look pad sends.
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (this.autoTurn) return;
-      if (p.event instanceof MouseEvent && document.pointerLockElement) this.yaw -= p.event.movementX * 0.0027 * lookScale();
+      if (p.event instanceof MouseEvent && document.pointerLockElement) this.yaw -= lockedDelta(p.event).dx * 0.0027 * lookScale();
     });
     this.onLookDown = (e: MouseEvent) => {
       if (e.button === 0 && !isPaused()) this.dragging = true;
@@ -420,12 +420,7 @@ export class NightRoad3D extends Phaser.Scene {
     window.addEventListener('mousemove', this.onLookMove);
     window.addEventListener('mouseup', this.onLookUp);
     window.addEventListener('blur', this.onLookUp);
-    this.game.canvas.addEventListener('click', () => {
-      // not while the pause menu is up: its buttons are on this canvas too, and a
-      // click on AUDIO or CONTROLS would take the mouse away again
-      if (isPaused() || this.game.scene.isActive('SettingsModal')) return;
-      void this.game.canvas.requestPointerLock?.();
-    });
+    attachMouseLook(this);
 
     this.stage.start((dt) => this.tick(dt));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
@@ -606,6 +601,13 @@ export class NightRoad3D extends Phaser.Scene {
     ground.rotation.x = -Math.PI / 2;
     ground.position.z = -90;
     S.add(ground);
+    // past the woods the ground goes on, dark, out under the fog -- so there
+    // is never an edge to see
+    const farGround = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600), new THREE.MeshLambertMaterial({ color: 0x0c0f0c }));
+    farGround.rotation.x = -Math.PI / 2;
+    farGround.position.set(0, -0.03, -90);
+    S.add(farGround);
+    this.buildHorizon(R);
 
     // ---- the road: worn asphalt, its edge lines, the dashes down the middle
     const roadLen = BACK_Z - ROAD_END;
@@ -694,6 +696,7 @@ export class NightRoad3D extends Phaser.Scene {
 
     this.monster = new FroggyMonster(FROGGY_SCALE);
     S.add(this.monster.root);
+    if (this.stage) prepareJumpscare3D(this.stage, this.monster);
   }
 
   /**
@@ -1061,7 +1064,10 @@ gl_Position = projectionMatrix * mvPosition;`,
       (parts[kind] ??= { geo, mat, items: [] }).items.push({ m: mm.clone(), c: c.clone() });
     };
     const flush = (): void => {
-      for (const part of Object.values(parts)) {
+      // (what the graphics level may thin: greenery only -- never trunks, which
+      // are what you hide behind, nor the thickets you hide in)
+      const thin = new Set(['bough', 'clump', 'limb', 'tip', 'scrub']);
+      for (const [kind, part] of Object.entries(parts)) {
         const groups = new Map<string, { m: THREE.Matrix4; c: THREE.Color }[]>();
         for (const it of part.items) {
           const key = `${Math.floor(it.m.elements[14] / 22)}:${Math.floor(it.m.elements[12] / 22)}`;
@@ -1070,12 +1076,21 @@ gl_Position = projectionMatrix * mvPosition;`,
           g.push(it);
         }
         for (const g of groups.values()) {
+          // shuffled, so a lower graphics level thins every tree a little
+          // rather than stripping the last few bare
+          if (thin.has(kind)) {
+            for (let k = g.length - 1; k > 0; k--) {
+              const j = Math.floor(R() * (k + 1));
+              [g[k], g[j]] = [g[j], g[k]];
+            }
+          }
           const im = new THREE.InstancedMesh(part.geo, part.mat, g.length);
           g.forEach((it, k) => {
             im.setMatrixAt(k, it.m);
             im.setColorAt(k, it.c);
           });
           im.computeBoundingSphere();
+          if (thin.has(kind)) im.userData.foliage = g.length;
           S.add(im);
         }
       }
@@ -1843,6 +1858,197 @@ gl_Position = projectionMatrix * mvPosition;`,
     glow.position.set(0, 25, BACK_Z + 125);
     glow.rotation.y = Math.PI;
     S.add(glow);
+
+    // ---- THE TOWN CLOSES ROUND YOU.  Behind the arcade an alley, a fence and
+    // warehouses; beyond the shops more blocks; the street ends at a building
+    // across it.  From anywhere you can stand, every way you look is town or
+    // trees -- never the end of the world.
+    const texes = [0, 1, 2, 3, 4, 5].map((k) =>
+      facade(6, 6, ['#3a3438', '#2e3038', '#40362e', '#34343a', '#3a2e30', '#2c2e30'][k], 0.12 + (k % 3) * 0.08, 211 + k * 13),
+    );
+    const roof = new THREE.MeshLambertMaterial({ color: 0x15161a });
+    const bld = (x: number, z: number, w: number, d: number, h: number, k: number): void => {
+      const t = texes[k % texes.length];
+      const wall = new THREE.MeshLambertMaterial({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.25 });
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [wall, wall, roof, roof, wall, wall]);
+      b.position.set(x, h / 2, z);
+      S.add(b);
+      // a parapet and, now and then, something on the roof
+      box(roof, w + 0.3, 0.5, d + 0.3, x, h, z);
+      if (R() < 0.35) box(lam(0x2a2c30), 1.6, 1.4, 1.6, x + (R() - 0.5) * w * 0.5, h + 0.5, z + (R() - 0.5) * d * 0.5);
+    };
+    // the warehouses: long, low, corrugated
+    const tin = canvasTex(64, 32, (g) => {
+      g.fillStyle = '#3a3e42';
+      g.fillRect(0, 0, 64, 32);
+      for (let x = 0; x < 64; x += 4) {
+        g.fillStyle = '#2a2e32';
+        g.fillRect(x, 0, 1, 32);
+        g.fillStyle = '#4a4e52';
+        g.fillRect(x + 2, 0, 1, 32);
+      }
+      g.fillStyle = 'rgba(90,50,30,0.35)';
+      for (let i = 0; i < 12; i++) g.fillRect(Math.floor(R() * 64), 20 + Math.floor(R() * 12), 3, 12);
+    });
+    tin.wrapS = tin.wrapT = THREE.RepeatWrapping;
+    const shed = (x: number, z: number, w: number, d: number, h: number): void => {
+      const t = tin.clone();
+      t.repeat.set(Math.max(w, d) / 4, h / 4);
+      t.needsUpdate = true;
+      const m = new THREE.MeshLambertMaterial({ map: t });
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [m, m, roof, roof, m, m]);
+      b.position.set(x, h / 2, z);
+      S.add(b);
+      // a roller door and a caged lamp over it, facing the alley (-x)
+      box(lam(0x24282c), 0.1, 3.2, 3.6, x - w / 2 - 0.05, 0, z);
+      box(new THREE.MeshBasicMaterial({ color: 0xffcf8a }), 0.2, 0.15, 0.3, x - w / 2 - 0.2, 3.7, z);
+    };
+    const AX = ROAD_HALF + 3.4 + 16; // the arcade's back wall
+    // the alley behind it: cracked concrete, bins, a dumpster, pallets
+    const alley = new THREE.Mesh(new THREE.PlaneGeometry(9, 70), lam(0x1c1d20));
+    alley.rotation.x = -Math.PI / 2;
+    alley.position.set(AX + 4.5, 0.025, Z0 + 30);
+    S.add(alley);
+    box(lam(0x2a4a34), 1.8, 1.3, 1.1, AX + 1.2, 0, Z0 + 8);
+    box(lam(0x22262a), 0.7, 1, 0.7, AX + 0.6, 0, Z0 + 11);
+    box(lam(0x22262a), 0.7, 1, 0.7, AX + 0.6, 0, Z0 + 12);
+    for (let k = 0; k < 3; k++) box(lam(0x5a4630), 1.2, 0.15, 1, AX + 1, k * 0.16, Z0 + 21);
+    // a chain-link fence along the far side of the alley, on posts
+    const mesh = canvasTex(16, 16, (g) => {
+      g.clearRect(0, 0, 16, 16);
+      g.strokeStyle = '#7a8088';
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.lineTo(16, 16);
+      g.moveTo(16, 0);
+      g.lineTo(0, 16);
+      g.stroke();
+    });
+    mesh.wrapS = mesh.wrapT = THREE.RepeatWrapping;
+    mesh.repeat.set(70 / 0.6, 2.4 / 0.6);
+    const fence = new THREE.Mesh(
+      new THREE.PlaneGeometry(70, 2.4),
+      new THREE.MeshLambertMaterial({ map: mesh, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide }),
+    );
+    fence.rotation.y = Math.PI / 2;
+    fence.position.set(AX + 8.5, 1.2, Z0 + 30);
+    S.add(fence);
+    for (let z = Z0 - 4; z < Z0 + 65; z += 3) box(lam(0x4a4e54), 0.08, 2.5, 0.08, AX + 8.5, 0, z);
+    // power poles down the alley, with the wires sagging between them
+    let last: THREE.Vector3 | null = null;
+    for (let z = Z0 - 2; z < Z0 + 64; z += 12) {
+      box(lam(0x3a2e24), 0.25, 9, 0.25, AX + 7.6, 0, z);
+      box(lam(0x3a2e24), 2.2, 0.15, 0.15, AX + 7.6, 8.4, z);
+      const top = new THREE.Vector3(AX + 7.6, 8.5, z);
+      if (last) {
+        for (const off of [-0.9, 0, 0.9]) {
+          const a = last.clone().setX(last.x + off);
+          const b = top.clone().setX(top.x + off);
+          const mid = a.clone().lerp(b, 0.5).setY(a.y - 0.8);
+          const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
+          S.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(10)), new THREE.LineBasicMaterial({ color: 0x0a0a0c })));
+        }
+      }
+      last = top;
+    }
+    // the warehouses past the fence, end to end, one with a water tank on it
+    shed(AX + 18, Z0 + 4, 18, 16, 7);
+    shed(AX + 17, Z0 + 24, 16, 18, 9);
+    shed(AX + 19, Z0 + 46, 20, 20, 8);
+    box(lam(0x3a3028), 3, 3.2, 3, AX + 19, 9, Z0 + 24);
+    for (const [dx, dz] of [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]]) box(lam(0x2a2420), 0.15, 0.9, 0.15, AX + 19 + dx, 9, Z0 + 24 + dz);
+    // and blocks past them, out to the trees
+    for (let k = 0; k < 6; k++) bld(AX + 40 + (k % 2) * 12, Z0 - 6 + k * 12, 10, 10, 10 + R() * 14, k);
+    // beyond the arcade's far end (the side away from the trees), a block
+    bld(ROAD_HALF + 12, Z0 + 30, 14, 9, 12, 2);
+    bld(ROAD_HALF + 12, Z0 + 44, 14, 12, 16, 3);
+    // behind the shops across the road, more of the town, rising
+    for (let k = 0; k < 6; k++) bld(-30 - (k % 2) * 14, Z0 - 2 + k * 11, 12, 10, 12 + R() * 16, k + 1);
+    for (let k = 0; k < 5; k++) bld(-60 - (k % 2) * 12, Z0 + k * 13, 12, 12, 16 + R() * 18, k + 3);
+    // the street does not just stop: a building across the end of it
+    bld(0, Z0 + 66, 34, 10, 18, 4);
+    bld(-24, Z0 + 66, 14, 10, 13, 5);
+    bld(24, Z0 + 68, 14, 10, 22, 0);
+  }
+
+  /**
+   * THE HORIZON.  A band all the way round, out past everything and moving
+   * with you: the fog's own colour at the bottom, so the ground melts into
+   * it, rising to a skyline -- treetops round the woods, and over the town
+   * behind you roofs and a few lit windows.  Whatever way you look, the land
+   * goes on.
+   */
+  private buildHorizon(R: () => number): void {
+    if (!this.sky) return;
+    const W = 2048;
+    const H = 128;
+    const tex = canvasTex(W, H, (g) => {
+      g.clearRect(0, 0, W, H);
+      const fogC = '#05080f';
+      // the town lies behind the start: +z, which on this band is u ~ 0.75
+      const townAt = (u: number) => {
+        const d = Math.abs(((u - 0.75 + 1.5) % 1) - 0.5);
+        return d < 0.14;
+      };
+      let x = 0;
+      while (x < W) {
+        const u = x / W;
+        if (townAt(u)) {
+          const w = 10 + Math.floor(R() * 22);
+          const h = 30 + Math.floor(R() * 60);
+          g.fillStyle = '#0a0c14';
+          g.fillRect(x, H - h, w, h);
+          for (let y = H - h + 4; y < H - 30; y += 5) {
+            for (let wx = x + 2; wx < x + w - 2; wx += 4) {
+              if (R() < 0.12) {
+                g.fillStyle = R() < 0.7 ? '#d8a050' : '#8aa0d0';
+                g.fillRect(wx, y, 2, 2);
+              }
+            }
+          }
+          x += w;
+        } else {
+          // treetops: pines' points and the rounder broadleaf crowns
+          const w = 6 + Math.floor(R() * 10);
+          const h = 26 + Math.floor(R() * 34);
+          g.fillStyle = '#060a0a';
+          g.beginPath();
+          if (R() < 0.6) {
+            g.moveTo(x - 4, H);
+            g.lineTo(x + w / 2, H - h);
+            g.lineTo(x + w + 4, H);
+          } else {
+            g.ellipse(x + w / 2, H - h * 0.7, w, h * 0.35, 0, 0, Math.PI * 2);
+            g.rect(x, H - h * 0.7, w, h * 0.7);
+          }
+          g.fill();
+          x += w - 2;
+        }
+      }
+      // and the fog over the lower part of all of it
+      const grd = g.createLinearGradient(0, 0, 0, H);
+      grd.addColorStop(0.35, 'rgba(5,8,15,0)');
+      grd.addColorStop(0.85, fogC);
+      g.fillStyle = grd;
+      g.fillRect(0, 0, W, H);
+    });
+    tex.wrapS = THREE.RepeatWrapping;
+    // the band: 60 m tall, 300 m out, from well below your feet to a little
+    // above the horizon; and a skirt of solid fog under it
+    const band = new THREE.Mesh(
+      new THREE.CylinderGeometry(300, 300, 60, 64, 1, true),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.BackSide, fog: false, depthWrite: false }),
+    );
+    band.position.y = 5;
+    band.renderOrder = -9;
+    this.sky.add(band);
+    const skirt = new THREE.Mesh(
+      new THREE.CylinderGeometry(300, 300, 200, 64, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x05080f, side: THREE.BackSide, fog: false, depthWrite: false }),
+    );
+    skirt.position.y = -125;
+    skirt.renderOrder = -9;
+    this.sky.add(skirt);
   }
 
   private buildLamps(S: THREE.Scene): void {
@@ -1884,34 +2090,55 @@ gl_Position = projectionMatrix * mvPosition;`,
     const PX = 5;
     const W = HOTEL_W / PX;
     const H = HOTEL_H / PX;
-    const D = 14;
+    const D = 22;
     const fx = (px: number): number => (px - HOTEL_DOOR) / PX;
     const fy = (py: number): number => (HOTEL_H - py) / PX;
     // Its sides: stone with rows of windows, a few lit, so from an angle it is
     // a building and not a painted board on a box.
-    const sideTex = canvasTex(D * 8, H * 8, (g) => {
-      g.fillStyle = '#4a3c48';
-      g.fillRect(0, 0, D * 8, H * 8);
-      for (let y = 0; y < H * 8; y += 6) {
-        g.fillStyle = 'rgba(0,0,0,0.2)';
-        g.fillRect(0, y + 5, D * 8, 1);
-        for (let x = (y / 6) % 2 ? -6 : 0; x < D * 8; x += 12) {
-          g.fillStyle = `rgba(255,240,230,${(((x * 7 + y * 3) % 9) / 9) * 0.06})`;
-          g.fillRect(x, y, 11, 5);
+    // Its sides: stone, with windows on exactly the front's floors -- six
+    // above the ground floor, level with the front's -- so from an angle it
+    // is the same six-storey building, not a taller one.  `hm` metres of wall
+    // up from the ground, `wm` across: the wings are built from the same.
+    const sideFace = (wm: number, hm: number): THREE.CanvasTexture => {
+      const TW = Math.round(wm * 8);
+      const TH = Math.round(hm * 8);
+      const k = 8 / PX; // texture pixels per painting pixel
+      const cut = HOTEL_H - hm * PX; // the painting's y at the top of this wall
+      const t = canvasTex(TW, TH, (g) => {
+        g.fillStyle = '#4a3c48';
+        g.fillRect(0, 0, TW, TH);
+        for (let y = 0; y < TH; y += 6) {
+          g.fillStyle = 'rgba(0,0,0,0.2)';
+          g.fillRect(0, y + 5, TW, 1);
+          for (let x = (y / 6) % 2 ? -6 : 0; x < TW; x += 12) {
+            g.fillStyle = `rgba(255,240,230,${(((x * 7 + y * 3) % 9) / 9) * 0.06})`;
+            g.fillRect(x, y, 11, 5);
+          }
         }
-      }
-      for (let fy2 = 14; fy2 < H * 8 - 20; fy2 += 22) {
-        for (let fx2 = 10; fx2 < D * 8 - 10; fx2 += 22) {
-          const on = (fx2 * 13 + fy2 * 7) % 5 === 0;
-          g.fillStyle = '#2a2430';
-          g.fillRect(fx2 - 2, fy2 - 2, 14, 18);
-          g.fillStyle = on ? '#f0c070' : '#141018';
-          g.fillRect(fx2, fy2, 10, 14);
-          g.fillStyle = '#9a8a88';
-          g.fillRect(fx2 - 3, fy2 + 15, 16, 2);
-        }
-      }
-    });
+        // a belt course at the ground floor, as on the front
+        g.fillStyle = '#6a5a66';
+        g.fillRect(0, Math.round((HOTEL_GROUND - 2 - cut) * k), TW, 4);
+        const rows = [...HOTEL_FLOORS, HOTEL_GROUND + 8].filter((top) => top >= cut + 2);
+        rows.forEach((top) => {
+          const fy2 = Math.round((top - cut) * k);
+          const wh = Math.round(11 * k);
+          for (let fx2 = 10; fx2 < TW - 14; fx2 += 22) {
+            const on = (fx2 * 13 + fy2 * 7) % 5 === 0;
+            g.fillStyle = '#2a2430';
+            g.fillRect(fx2 - 2, fy2 - 2, 14, wh + 4);
+            g.fillStyle = on ? '#f0c070' : '#141018';
+            g.fillRect(fx2, fy2, 10, wh);
+            g.fillStyle = '#9a8a88';
+            g.fillRect(fx2 - 3, fy2 + wh + 1, 16, 2);
+          }
+        });
+      });
+      t.magFilter = THREE.LinearFilter;
+      t.minFilter = THREE.LinearMipmapLinearFilter;
+      return t;
+    };
+    const faceMat = (t: THREE.Texture) => new THREE.MeshLambertMaterial({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.25 });
+    const sideTex = sideFace(D, H);
     sideTex.magFilter = THREE.LinearFilter;
     sideTex.minFilter = THREE.LinearMipmapLinearFilter;
     const sideMat = new THREE.MeshLambertMaterial({ map: sideTex, emissive: 0xffffff, emissiveMap: sideTex, emissiveIntensity: 0.25 });
@@ -1956,6 +2183,74 @@ gl_Position = projectionMatrix * mvPosition;`,
     const front = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ map: facade, fog: false }));
     front.position.set(0, H / 2, HOTEL_Z - 1.98);
     S.add(front);
+
+    // IT IS A BUILDING, NOT A BOARD.  Real stone stands out of the painting:
+    // corner piers, a heavy cornice along the top, a plinth either side of
+    // the doors; a parapet and plant on the roof; lower wings set back either
+    // side; and the city's towers behind it, over its shoulders.
+    const stone = new THREE.MeshLambertMaterial({ color: 0x6a5a66, emissive: 0x1a1218 });
+    const slab = (w: number, h: number, d: number, x: number, y: number, z: number, m: THREE.Material = stone): void => {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+      b.position.set(x, y + h / 2, z);
+      S.add(b);
+    };
+    const FZ = HOTEL_Z - 2;
+    for (const sx of [-1, 1]) {
+      slab(1.4, H + 0.4, 1.2, sx * (W / 2 + 0.2), 0, FZ - 0.3);
+      slab(W / 2 - 4.5, 0.7, 0.5, sx * (W / 4 + 2.25), 0, FZ + 0.2);
+    }
+    slab(W + 2, 1.1, 1.6, 0, H - 0.2, FZ - 0.4);
+    slab(W + 1.4, 0.35, 1.0, 0, H - 0.75, FZ - 0.2);
+    // the parapet round the roof, and what sits on it
+    slab(W, 1.2, 0.4, 0, H + 0.9, FZ - 0.4);
+    slab(W, 1.2, 0.4, 0, H + 0.9, FZ - D + 0.2);
+    for (const sx of [-1, 1]) slab(0.4, 1.2, D, sx * (W / 2 - 0.2), H + 0.9, FZ - D / 2);
+    slab(8, 3.5, 6, -5, H, FZ - D / 2 - 2, roofMat);
+    slab(3, 4, 3, 7, H, FZ - D / 2 + 3, roofMat);
+    const tank = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 2.6, 10), new THREE.MeshLambertMaterial({ color: 0x3a3430 }));
+    tank.position.set(7, H + 5.3, FZ - D / 2 + 3);
+    S.add(tank);
+    // the wings: lower, set back, windowed like the sides
+    // (the ground floor and three above it, topping out under the main block's
+    // level-4 sills)
+    const WH = (HOTEL_H - (HOTEL_FLOORS[3] - 4)) / PX;
+    const wingSide = faceMat(sideFace(18, WH));
+    const wingEnd = faceMat(sideFace(9, WH));
+    for (const sx of [-1, 1]) {
+      const wing = new THREE.Mesh(new THREE.BoxGeometry(9, WH, 18), [wingSide, wingSide, roofMat, roofMat, wingEnd, wingEnd]);
+      wing.position.set(sx * (W / 2 + 4.5), WH / 2, FZ - 4 - 9);
+      S.add(wing);
+      slab(9.6, 0.8, 18.6, sx * (W / 2 + 4.5), WH, FZ - 13);
+    }
+    // the city behind it: towers rising past its roof, lit here and there
+    const towerTex = canvasTex(64, 256, (g) => {
+      g.fillStyle = '#1a1c24';
+      g.fillRect(0, 0, 64, 256);
+      for (let y = 6; y < 250; y += 8) {
+        for (let x = 4; x < 60; x += 8) {
+          const k = (x * 7 + y * 13) % 17;
+          g.fillStyle = k < 2 ? '#e0a860' : k < 3 ? '#9ab0e0' : '#0c0d12';
+          g.fillRect(x, y, 4, 5);
+        }
+      }
+    });
+    towerTex.magFilter = THREE.LinearFilter;
+    const towerMat = new THREE.MeshLambertMaterial({ map: towerTex, emissive: 0xffffff, emissiveMap: towerTex, emissiveIntensity: 0.4 });
+    const backs: Array<[number, number, number, number]> = [
+      // x, z (behind the hotel), width, height
+      [-26, -40, 14, 44],
+      [-8, -48, 16, 52],
+      [12, -44, 14, 40],
+      [30, -38, 12, 36],
+      [-44, -30, 12, 30],
+      [46, -28, 12, 28],
+      [0, -70, 30, 60],
+    ];
+    for (const [x, dz, w, h] of backs) {
+      const t = new THREE.Mesh(new THREE.BoxGeometry(w, h, 12), [towerMat, towerMat, roofMat, roofMat, towerMat, towerMat]);
+      t.position.set(x, h / 2, HOTEL_Z + dz);
+      S.add(t);
+    }
 
     // the canopy: out over the step, its scalloped front the street's
     const C = HOTEL_CANOPY;
@@ -2945,6 +3240,7 @@ gl_Position = projectionMatrix * mvPosition;`,
     });
     const pts = new THREE.Points(geo, new THREE.PointsMaterial({ map: tex, size: 0.14, alphaTest: 0.5, color: 0x8a8a6a }));
     pts.frustumCulled = false;
+    pts.userData.particles = N;
     S.add(pts);
     this.fall = { pts, vel };
   }

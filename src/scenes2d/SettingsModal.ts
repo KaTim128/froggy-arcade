@@ -15,7 +15,8 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
-import { LOOK_SENS_MAX, LOOK_SENS_MIN, store } from '../core/state';
+import { BRIGHT_MAX, BRIGHT_MIN, LOOK_SENS_MAX, LOOK_SENS_MIN, generalDefaults, store } from '../core/state';
+import { QUALITY_NAMES, graphicsChanged, maxQuality, quality } from '../core/graphics';
 import { FONT_ADVANCE } from '../render/pixelFont';
 import { BINDINGS } from '../core/input';
 import { button, centerText, confirmDialog, forfeitLines, text } from '../core/ui';
@@ -26,10 +27,10 @@ import { ROOM_MONEY } from './PrizeExchange';
 import { roomControls, type ControlRow } from '../ui/controlsList';
 import type { MinigameScene } from './MinigameScene';
 
-type Tab = 'audio' | 'controls' | 'test';
+type Tab = 'general' | 'audio' | 'controls' | 'test';
 
 export class SettingsModal extends Phaser.Scene {
-  private tab: Tab = 'audio';
+  private tab: Tab = 'general';
   private body!: Phaser.GameObjects.Container;
   /** Opened as the pause menu, over a frozen scene. */
   private pause = false;
@@ -41,7 +42,7 @@ export class SettingsModal extends Phaser.Scene {
   }
 
   init(data: { from?: string; pause?: boolean }): void {
-    this.tab = 'audio';
+    this.tab = 'general';
     this.pause = data?.pause === true;
     this.from = data?.from ?? '';
     this.asking = null;
@@ -65,9 +66,10 @@ export class SettingsModal extends Phaser.Scene {
 
     // The admin run gets a third tab: jumps to points of the story, for testing.
     const tester = store.isTester();
-    button(this, tester ? 98 : 124, 34, 'AUDIO', () => this.setTab('audio'), { width: 60, height: 13 });
-    button(this, tester ? 166 : 196, 34, 'CONTROLS', () => this.setTab('controls'), { width: 68, height: 13 });
-    if (tester) button(this, 228, 34, 'TEST', () => this.setTab('test'), { width: 46, height: 13, fill: 0x5a3a12 });
+    button(this, tester ? 81 : 103, 34, 'GENERAL', () => this.setTab('general'), { width: 54, height: 13 });
+    button(this, tester ? 135 : 157, 34, 'AUDIO', () => this.setTab('audio'), { width: 46, height: 13 });
+    button(this, tester ? 192 : 214, 34, 'CONTROLS', () => this.setTab('controls'), { width: 60, height: 13 });
+    if (tester) button(this, 244, 34, 'TEST', () => this.setTab('test'), { width: 40, height: 13, fill: 0x5a3a12 });
 
     this.body = this.add.container(0, 0);
     this.renderBody();
@@ -143,7 +145,8 @@ export class SettingsModal extends Phaser.Scene {
 
   private renderBody(): void {
     this.body.removeAll(true);
-    if (this.tab === 'audio') this.renderAudio();
+    if (this.tab === 'general') this.renderGeneral();
+    else if (this.tab === 'audio') this.renderAudio();
     else if (this.tab === 'test') this.renderTest();
     else if (this.pause) this.renderPlaceControls();
     else this.renderControls();
@@ -167,7 +170,6 @@ export class SettingsModal extends Phaser.Scene {
       y += 9;
     }
     if (!rows.length) this.body.add(centerText(this, GAME_W / 2, 80, isTouch() ? 'TAP WHAT YOU SEE' : 'CLICK WHAT YOU SEE', PALETTE.cream));
-    this.lookSlider(143);
   }
 
   /**
@@ -319,8 +321,25 @@ export class SettingsModal extends Phaser.Scene {
     this.body.add([track, fill, knob, val]);
   }
 
-  /** PRD §7.3: pixel keycap diagram, generated from BINDINGS. */
+  /** PRD §7.3: pixel keycap diagram, generated from BINDINGS -- or, on a
+   * phone, what the thumbs do instead. */
   private renderControls(): void {
+    if (isTouch()) {
+      const rows: ControlRow[] = [
+        ['ARROW PAD', 'MOVE / WALK'],
+        ['DRAG RIGHT SIDE', 'LOOK AROUND IN 3D'],
+        ['TAP', 'USE, SELECT, TALK'],
+        ['BUTTONS', 'RUN / CROUCH / JUMP WHEN SHOWN'],
+        ['GEAR', 'PAUSE AND SETTINGS'],
+      ];
+      let ty = 52;
+      for (const [k, d] of rows) {
+        this.body.add(text(this, 32, ty, k, PALETTE.gold));
+        this.body.add(text(this, 128, ty, d, PALETTE.cream));
+        ty += 14;
+      }
+      return;
+    }
     // Eleven rows at 9px from y=46 end at 136, clearing BACK at 151.  The
     // longest action reaches x=200 in the 6px-advance font, so the keycaps start
     // at 204 and the widest row (W A S D) still ends inside the panel.
@@ -337,15 +356,127 @@ export class SettingsModal extends Phaser.Scene {
       }
       y += 9;
     }
-    this.lookSlider(147);
+    // and the mouse, in the 3D rooms, by the chosen camera mode
+    this.body.add(text(this, 32, y, 'Look around (3D)', PALETTE.cream, 8));
+    const how = store.get().settings.mouseLook ? 'MOUSE' : 'DRAG';
+    const w = how.length * FONT_ADVANCE + 4;
+    this.body.add(this.add.rectangle(204, y - 2, w, 11, PALETTE.slate).setOrigin(0, 0).setStrokeStyle(1, PALETTE.ash));
+    this.body.add(centerText(this, 204 + w / 2, y + 3.5, how, PALETTE.gold));
   }
 
   /**
-   * LOOK SENSITIVITY: how fast the camera turns in the 3D rooms, mouse and
-   * touch alike.  100% is as each room was tuned.
+   * GENERAL: what you see and how you look round.  Every change is applied
+   * the moment it is made -- the picture, the cursor, the rate -- and saved
+   * with the volumes, so it is there next time.
    */
-  private lookSlider(y: number): void {
-    this.body.add(text(this, 32, y - 4, 'LOOK SENSITIVITY', PALETTE.cream, 8));
-    this.slider(y, 'lookSens', { min: LOOK_SENS_MIN, max: LOOK_SENS_MAX, x0: 140, w: 92, suffix: '%' });
+  private renderGeneral(): void {
+    const touch = isTouch();
+    const set = this.store();
+    let y = 50;
+    // brightness
+    this.body.add(text(this, 32, y - 4, 'BRIGHTNESS', PALETTE.cream, 8));
+    this.gslider(y, () => set.get().brightness, (v) => set.put({ brightness: v }), BRIGHT_MIN, BRIGHT_MAX, (v) => `${v}%`);
+    y += 15;
+    // graphics quality: a stepped slider, LOW to the top level this device gets
+    this.body.add(text(this, 32, y - 4, 'GRAPHICS', PALETTE.cream, 8));
+    this.gslider(y, () => quality(), (v) => set.put({ quality: v }), 0, maxQuality(), (v) => QUALITY_NAMES[v]);
+    y += 15;
+    // shadows
+    this.body.add(text(this, 32, y - 4, 'SHADOWS', PALETTE.cream, 8));
+    this.body.add(this.toggle(146, y, set.get().shadows ? 'ON' : 'OFF', () => set.put({ shadows: !set.get().shadows })));
+    y += 15;
+    // camera mode (a mouse only)
+    if (!touch) {
+      this.body.add(text(this, 32, y - 4, 'CAMERA', PALETTE.cream, 8));
+      this.body.add(
+        this.toggle(146, y, set.get().mouseLook ? 'MOUSE-LOOK' : 'CURSOR', () => set.put({ mouseLook: !set.get().mouseLook }), 64),
+      );
+      y += 15;
+    }
+    // sensitivity: the mouse's on a desktop, the thumb's on a phone
+    this.body.add(text(this, 32, y - 4, touch ? 'CAMERA SENS' : 'MOUSE SENS', PALETTE.cream, 8));
+    if (touch) this.gslider(y, () => set.get().camSens, (v) => set.put({ camSens: v }), LOOK_SENS_MIN, LOOK_SENS_MAX, (v) => `${v}%`);
+    else this.gslider(y, () => set.get().lookSens, (v) => set.put({ lookSens: v }), LOOK_SENS_MIN, LOOK_SENS_MAX, (v) => `${v}%`);
+    y += 17;
+    this.body.add(
+      button(this, GAME_W / 2, y, 'RESET TO DEFAULT', () => {
+        set.put(generalDefaults());
+        this.renderBody();
+        this.flash('DEFAULTS RESTORED');
+      }, { width: 104, height: 12 }),
+    );
+    // what the current level means, and whether it took
+    const what = ['FASTEST - LIGHT FOLIAGE, SHORT VIEW', 'BALANCED', 'AS DESIGNED', 'SHARPER, FURTHER, CRISP TEXTURES', 'MAXIMUM DETAIL + LENS VIGNETTE'][quality()];
+    const note = centerText(this, GAME_W / 2, y + 12, what, PALETTE.ash);
+    this.note = note;
+    this.body.add(note);
+  }
+
+  private note: Phaser.GameObjects.BitmapText | null = null;
+
+  /** Settings read and written, with the side effects applied at once. */
+  private store() {
+    return {
+      get: () => store.get().settings,
+      put: (p: Parameters<typeof store.setSettings>[0]) => {
+        const was = store.get().settings;
+        store.setSettings(p);
+        graphicsChanged();
+        // mouse-look switched off with the mouse held: let it go now
+        if (p.mouseLook === false && document.pointerLockElement) document.exitPointerLock?.();
+        if (p.quality !== undefined && p.quality !== was.quality) this.flash(`GRAPHICS: ${QUALITY_NAMES[quality()]}`);
+      },
+    };
+  }
+
+  private flash(msg: string): void {
+    if (!this.note) return;
+    this.note.setText(msg).setTint(PALETTE.gold);
+  }
+
+  private toggle(x: number, y: number, label: string, flip: () => void, width = 40): Phaser.GameObjects.GameObject {
+    return button(this, x + width / 2, y, label, () => {
+      flip();
+      this.renderBody();
+    }, { width, height: 11 });
+  }
+
+  /** A slider for one setting; `step` 1, values `min`..`max`, live. */
+  private gslider(y: number, get: () => number, put: (v: number) => void, min: number, max: number, fmt: (v: number) => string): void {
+    const x0 = 120;
+    const w = 100;
+    const k = (v: number) => (max === min ? 0 : (v - min) / (max - min));
+    const track = this.add.rectangle(x0, y, w, 3, PALETTE.slate).setOrigin(0, 0.5);
+    const fill = this.add.rectangle(x0, y, 0, 3, PALETTE.neon).setOrigin(0, 0.5);
+    // on a stepped slider, a tick for each step
+    if (max - min <= 6) {
+      for (let v = min; v <= max; v++) this.body.add(this.add.rectangle(x0 + k(v) * w, y, 1, 5, PALETTE.ash));
+    }
+    const knob = this.add.rectangle(x0, y, 4, 9, PALETTE.gold);
+    const val = text(this, x0 + w + 8, y - 4, '', PALETTE.cream);
+    const refresh = () => {
+      const v = get();
+      fill.width = k(v) * w;
+      knob.x = x0 + k(v) * w;
+      val.setText(fmt(v));
+    };
+    let last = get();
+    const setFromX = (px: number) => {
+      const v = Math.round(min + Math.max(0, Math.min(1, (px - x0) / w)) * (max - min));
+      if (v === last) return;
+      last = v;
+      put(v);
+      refresh();
+    };
+    track.setInteractive(new Phaser.Geom.Rectangle(0, -6, w, 15), Phaser.Geom.Rectangle.Contains);
+    track.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      setFromX(p.worldX);
+      audio.sfx('ui_blip');
+    });
+    knob.setInteractive({ draggable: true });
+    this.input.setDraggable(knob);
+    knob.on('drag', (_p: Phaser.Input.Pointer, dx: number) => setFromX(dx));
+    refresh();
+    this.body.add([track, fill, knob, val]);
   }
 }

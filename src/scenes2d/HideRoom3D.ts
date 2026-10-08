@@ -21,7 +21,7 @@
  * fifteen seconds; the room only turns once the count is over.
  */
 
-import { lookScale } from '../core/look';
+import { attachMouseLook, lockedDelta, lookScale } from '../core/look';
 import { touchControls } from '../ui/touchControls';
 import { isTouch } from '../core/device';
 import { isPaused } from '../core/pause';
@@ -33,7 +33,7 @@ import { ledger } from '../core/ledger';
 import { addItem, KEY_ITEM } from '../game/inventory';
 import { froggyLayer } from '../render/froggyLayer';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
-import { playJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
+import { playJumpscare3D, prepareJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
 import { FroggyMonster, type ClimbRig, type HandGoal, type Solid } from '../three/froggyMonster';
 import { climbFrame, climbSeconds, type ClimbFrame, type ClimbGeom } from '../three/froggyClimb';
 import { buildOpening, hideEye } from '../three/hideOpenings';
@@ -1635,6 +1635,7 @@ export class HideRoom3D extends Phaser.Scene {
     this.monster.vary(Math.random() * 1000);
     this.monster.setVisible(false);
     st.scene.add(this.monster.root);
+    prepareJumpscare3D(st, this.monster);
     // drawn once now, so his first step into view is not a stall (see warm)
     st.warm(this.monster.root);
     // A fingerprint of the model, published for the harness: the alley reports
@@ -1735,11 +1736,15 @@ export class HideRoom3D extends Phaser.Scene {
       e.preventDefault();
     };
     this.onMove = (e: MouseEvent) => {
-      if (!this.looking || isPaused()) return;
+      // (in mouse-look mode the mouse is held, and turns the head with no
+      // button down)
+      const locked = !!document.pointerLockElement;
+      if ((!this.looking && !locked) || isPaused()) return;
       // Prefer the browser's own delta, fall back to tracking the cursor: some
       // browsers leave movementX at 0 outside pointer lock.
-      const dx = e.movementX || e.clientX - this.lookX;
-      const dy = e.movementY || e.clientY - this.lookY;
+      const ld = lockedDelta(e);
+      const dx = locked ? ld.dx : e.movementX || e.clientX - this.lookX;
+      const dy = locked ? ld.dy : e.movementY || e.clientY - this.lookY;
       this.lookX = e.clientX;
       this.lookY = e.clientY;
       const sens = ((e as MouseEvent & { lookSens?: number }).lookSens ?? MOUSE_SENS) * lookScale();
@@ -1764,6 +1769,7 @@ export class HideRoom3D extends Phaser.Scene {
     // Letting go outside the window, or alt-tabbing mid-drag, must not leave
     // the view stuck to the mouse.
     window.addEventListener('blur', this.onUp);
+    attachMouseLook(this);
   }
 
   private held(g: string): boolean {

@@ -170,6 +170,7 @@ export class Hotel extends Phaser.Scene {
 
   create(): void {
     this.locked = false;
+    audio.preloadScream();
     this.spot = null;
     this.talk = null;
     this.player = null;
