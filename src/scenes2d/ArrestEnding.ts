@@ -209,6 +209,7 @@ export class ArrestEnding extends Phaser.Scene {
 
   private toArcade(): void {
     this.act = 'arcade';
+    froggyLayer.clear();
     this.player?.sprite.destroy();
     this.player = null;
     this.layer.removeAll(true);
@@ -217,39 +218,92 @@ export class ArrestEnding extends Phaser.Scene {
     const refs = paintExterior(this, { night: false, day: true, closed: true });
     // everything the street painter put down goes under the words and the fade
     for (const o of this.children.list.slice(before)) (o as unknown as { setDepth?: (d: number) => void }).setDepth?.(1);
-    refs.sign.setAlpha(0.35);
     refs.signGlow.setVisible(false);
     refs.moth?.setVisible(false);
     const g = this.add.graphics().setDepth(5);
-    // the whole morning greyed down
-    g.fillStyle(0x5a6068, 0.42).fillRect(0, 0, GAME_W, GAME_H);
+    // ---- AN OVERCAST MORNING.  No sun: a low, heavy sky, layered cloud,
+    // and the whole street drained of its colour under it.
+    const skyBands = [0x5e646c, 0x686e76, 0x737880, 0x7e8288, 0x888b90];
+    skyBands.forEach((c, i) => g.fillStyle(c, 1).fillRect(0, i * 11, GAME_W, 11));
+    for (let i = 0; i < 9; i++) {
+      const cx = (i * 47 + 13) % (GAME_W + 40) - 20;
+      const cy = 8 + (i % 3) * 12;
+      g.fillStyle(0x4e545c, 0.55).fillEllipse(cx, cy + 3, 74, 12);
+      g.fillStyle(0x9a9ea2, 0.35).fillEllipse(cx - 6, cy, 60, 8);
+    }
+    // a fine drizzle against it
+    for (let k = 0; k < 70; k++) g.fillStyle(0xc8ccd0, 0.18).fillRect(Math.random() * GAME_W, Math.random() * GAME_H, 1, 3);
+    const tint = this.add.graphics().setDepth(4.5);
+    tint.fillStyle(0x4a5058, 0.38).fillRect(0, 55, GAME_W, GAME_H - 55);
+    // ---- THE SIGN, dead: unlit, a letter gone, hanging off one bracket
+    refs.sign.setAlpha(0.55).setAngle(-4);
+    refs.sign.y += 3;
+    const sb = refs.sign.getBounds();
+    g.fillStyle(0x3a3a3e, 1).fillRect(sb.x + sb.width - 10, sb.y - 6, 2, 10);
+    g.fillStyle(0x2a2a2e, 1).fillRect(sb.x + 8, sb.y - 3, 1, 6);
+    g.fillStyle(0x5a6068, 0.85).fillRect(sb.x + sb.width * 0.55, sb.y + 4, 9, sb.height - 8);
+    // rust running down the wall from the brackets
+    g.fillStyle(0x6a4a30, 0.35).fillRect(sb.x + sb.width - 10, sb.y + 4, 2, 22);
     // boards across the doors and the windows, nailed, weathered
     const d = refs.doorRect;
     const board = (x: number, y: number, w: number, a: number) => {
-      const b = this.add.rectangle(x, y, w, 5, 0x8a6a44).setDepth(6).setAngle(a);
-      this.add.rectangle(x, y - 1, w, 1, 0xa88a5a).setDepth(6).setAngle(a);
-      this.add.rectangle(x - w / 2 + 3, y, 1, 1, 0x2a1a0c).setDepth(7).setAngle(a);
-      this.add.rectangle(x + w / 2 - 3, y, 1, 1, 0x2a1a0c).setDepth(7).setAngle(a);
+      const b = this.add.rectangle(x, y, w, 5, 0x7a5c3a).setDepth(6).setAngle(a);
+      this.add.rectangle(x, y - 2, w, 1, 0x9a7a4e).setDepth(6).setAngle(a);
+      this.add.rectangle(x, y + 2, w, 1, 0x4a3420).setDepth(6).setAngle(a);
+      for (const nx of [-w / 2 + 3, w / 2 - 3]) this.add.rectangle(x + nx, y, 1, 1, 0x1a120a).setDepth(7).setAngle(a);
       return b;
     };
-    board(d.x + d.w / 2, d.y + 10, d.w + 10, -8);
-    board(d.x + d.w / 2, d.y + 24, d.w + 10, 6);
-    board(d.x + d.w / 2, d.y + d.h - 10, d.w + 10, -4);
+    // ---- THE DOORS: boarded, and a chain and padlock through the handles
+    g.fillStyle(0x0a0a0e, 1).fillRect(d.x, d.y, d.w, d.h);
+    board(d.x + d.w / 2, d.y + 8, d.w + 12, -7);
+    board(d.x + d.w / 2, d.y + d.h / 2 + 12, d.w + 12, 5);
+    board(d.x + d.w / 2, d.y + d.h - 6, d.w + 12, -3);
+    const chain = this.add.graphics().setDepth(8);
+    for (let k = 0; k <= 14; k++) {
+      const t = k / 14;
+      const cx = d.x + 3 + t * (d.w - 6);
+      const cy = d.y + d.h / 2 + 4 + Math.sin(t * Math.PI) * 5;
+      chain.fillStyle(k % 2 ? 0x8a8e94 : 0x5a5e64, 1).fillRect(cx, cy, 2, 2);
+    }
+    chain.fillStyle(0xb08a30, 1).fillRect(d.x + d.w / 2 - 3, d.y + d.h / 2 + 9, 6, 5);
+    chain.fillStyle(0x6a5020, 1).fillRect(d.x + d.w / 2 - 2, d.y + d.h / 2 + 7, 4, 2).fillRect(d.x + d.w / 2, d.y + d.h / 2 + 11, 1, 2);
+    // the notice, nailed up at the top, curling, sized to what it says
+    const nx = d.x + d.w / 2;
+    const ny = d.y - 13;
+    this.add.rectangle(nx, ny, 60, 22, 0xe4dcc0).setDepth(8).setAngle(-3).setStrokeStyle(1, 0x7a7460);
+    this.add.rectangle(nx + 27, ny + 9, 5, 4, 0xc8c0a4).setDepth(8).setAngle(-3);
+    centerText(this, nx, ny - 4, 'CLOSED', 0xb02a2a).setDepth(9).setAngle(-3);
+    centerText(this, nx, ny + 5, 'FOR GOOD', 0x2a2a2a).setDepth(9).setAngle(-3);
+    // ---- THE WINDOWS: dark inside, glass cracked behind the boards
     for (const wx of [refs.doorX - 70, refs.doorX + 62]) {
-      g.fillStyle(0x0c0c10, 1).fillRect(wx - 18, 96, 36, 26);
-      board(wx, 102, 42, -5);
-      board(wx, 114, 42, 7);
+      g.fillStyle(0x08080c, 1).fillRect(wx - 18, 96, 36, 26);
+      g.lineStyle(1, 0x8a96a2, 0.5);
+      g.lineBetween(wx - 10, 98, wx - 2, 110).lineBetween(wx - 2, 110, wx - 14, 118).lineBetween(wx - 2, 110, wx + 8, 104);
+      board(wx, 101, 44, -5);
+      board(wx, 115, 44, 6);
     }
-    // the notice on the boards
-    this.add.rectangle(d.x + d.w / 2, d.y + d.h / 2 + 2, 46, 22, 0xe8e2c8).setDepth(8).setAngle(-3).setStrokeStyle(1, 0x8a8470);
-    centerText(this, d.x + d.w / 2, d.y + d.h / 2 - 2, 'CLOSED', 0xb02a2a).setDepth(9).setAngle(-3);
-    centerText(this, d.x + d.w / 2, d.y + d.h / 2 + 6, 'FOR GOOD', 0x2a2a2a).setDepth(9).setAngle(-3);
-    // graffiti, a weed in the step, rubbish blown against the wall
-    g.fillStyle(0x5a8a4a, 1).fillRect(d.x - 4, d.y + d.h - 6, 2, 6).fillRect(d.x - 6, d.y + d.h - 4, 2, 2);
-    g.fillStyle(0x9a3a8a, 0.8).fillRect(refs.doorX + 34, 128, 18, 2).fillRect(refs.doorX + 36, 124, 2, 8).fillRect(refs.doorX + 44, 124, 2, 8);
-    for (let k = 0; k < 14; k++) {
-      g.fillStyle([0xd8d0c0, 0x6a6a6a, 0x8a6a40][k % 3], 0.8).fillRect(50 + Math.random() * 220, 150 + Math.random() * 6, 2 + Math.random() * 3, 1 + Math.random() * 2);
+    // ---- A POSTER, torn, hanging by a corner
+    g.fillStyle(0xd8d0b8, 0.7).fillTriangle(refs.doorX - 112, 98, refs.doorX - 98, 98, refs.doorX - 112, 112);
+    // a FOR LEASE board on a post, out front
+    g.fillStyle(0x3a3a3e, 1).fillRect(refs.doorX + 118, 128, 2, 30);
+    g.fillStyle(0xe8e4d8, 1).fillRect(refs.doorX + 104, 118, 30, 14);
+    g.fillStyle(0x2a5a8a, 1).fillRect(refs.doorX + 104, 118, 30, 3);
+    centerText(this, refs.doorX + 119, 126, 'LEASE', 0x2a2a2a).setDepth(6);
+    // ---- NEGLECT: graffiti, weeds out of every crack, rubbish, a puddle
+    g.fillStyle(0x8a3a8a, 0.8).fillRect(refs.doorX + 30, 128, 18, 2).fillRect(refs.doorX + 32, 123, 2, 9).fillRect(refs.doorX + 42, 123, 2, 9);
+    g.fillStyle(0x3a7a8a, 0.7).fillRect(refs.doorX - 50, 126, 12, 2).fillRect(refs.doorX - 46, 122, 2, 8);
+    for (const wx of [d.x - 5, d.x + d.w + 3, refs.doorX - 90, refs.doorX + 70, 52, 266]) {
+      g.fillStyle(0x4a7a3a, 1).fillRect(wx, 145, 1, 6).fillRect(wx - 2, 147, 2, 1).fillRect(wx + 1, 146, 2, 1);
+      g.fillStyle(0x6a9a4a, 1).fillRect(wx - 1, 144, 3, 1);
     }
+    g.fillStyle(0x3a4048, 0.8).fillEllipse(196, 166, 40, 5);
+    g.fillStyle(0x9aa4ae, 0.35).fillRect(186, 165, 14, 1);
+    for (let k = 0; k < 18; k++) {
+      g.fillStyle([0xd8d0c0, 0x6a6a6a, 0x8a6a40, 0x2a3a5a][k % 4], 0.85).fillRect(40 + Math.random() * 240, 150 + Math.random() * 8, 2 + Math.random() * 3, 1 + Math.random() * 2);
+    }
+    // a pigeon on the sill, the only one still coming here
+    g.fillStyle(0x6a6e78, 1).fillRect(refs.doorX - 60, 120, 5, 3).fillRect(refs.doorX - 57, 118, 2, 2);
+    g.fillStyle(0xd8a040, 1).fillRect(refs.doorX - 55, 119, 1, 1);
     // and behind the boards of the right-hand window, in the dark, two eyes
     this.eyes = this.add.graphics().setDepth(5.5);
     this.eyes.fillStyle(0xd8e060, 1).fillRect(refs.doorX + 56, 107, 2, 1).fillRect(refs.doorX + 64, 107, 2, 1);
