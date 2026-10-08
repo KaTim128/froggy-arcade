@@ -1051,7 +1051,7 @@ export class FroggyMonster {
       eye.position.set(ex, ey, ez + 0.012);
       eye.scale.setScalar(eyeK);
       this.head.add(eye);
-      const shade = new THREE.Mesh(new THREE.TorusGeometry(0.122 * eyeK, 0.022, 8, 30), hollow);
+      const shade = new THREE.Mesh(new THREE.TorusGeometry(0.108 * eyeK, 0.014, 8, 30), hollow);
       shade.position.set(ex, ey - 0.004, ez - 0.012);
       this.head.add(shade);
       // fine veins creeping in from the rim, painted on, thin enough to be
@@ -1118,10 +1118,24 @@ export class FroggyMonster {
       lower.add(lowerEdge);
       lids.add(lower);
       this.lids.push({ group: lids, upper, lower });
-      // and a rim of socket round the lot, so it sits IN the head
-      const lidRim = new THREE.Mesh(new THREE.TorusGeometry(0.114, 0.009, 6, 28), lidMat);
-      lidRim.position.set(ex, ey, ez - 0.02);
-      this.head.add(lidRim);
+      // THE LIDS GROW OUT OF THE HEAD.  A brow of skin over the top of each
+      // eye and a pad of cheek under it, both behind the lids and running back
+      // into the dome, so there is never daylight between a lid and the face
+      // it belongs to -- a lid is the head's skin folded over the eye.
+      const brow = new THREE.Mesh(
+        lumpy(new THREE.SphereGeometry(0.128 * eyeK, 22, 10, 0, Math.PI * 2, 0, Math.PI * 0.52), 0.003, 11, 61 + side),
+        lidMat,
+      );
+      brow.position.set(ex, ey + 0.004, ez - 0.03);
+      brow.scale.set(1.04, 0.95, 0.9);
+      this.head.add(brow);
+      const cheek = new THREE.Mesh(
+        lumpy(new THREE.SphereGeometry(0.126 * eyeK, 22, 10, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5), 0.003, 11, 71 + side),
+        lidMat,
+      );
+      cheek.position.set(ex, ey - 0.004, ez - 0.032);
+      cheek.scale.set(1.03, 0.9, 0.88);
+      this.head.add(cheek);
       // creases under and round the eye, which is what ages a face
       for (let c = 0; c < 2; c++) {
         const crease = new THREE.Mesh(new THREE.TorusGeometry(0.125 + c * 0.016, 0.004, 4, 14, Math.PI * 0.6), face);
@@ -1179,7 +1193,7 @@ export class FroggyMonster {
       const fall = droop * Math.pow(Math.abs(c), 4) * (c < 0 ? 1.3 : 1);
       return new THREE.Vector3(c * MOUTH_W * inset, -fall, MOUTH_Z + Math.sin(a) * MOUTH_D * inset);
     };
-    const lipLine = (y0: number, bulge: number, droop: number, seed: number): THREE.Mesh => {
+    const lipLine = (y0: number, bulge: number, droop: number, seed: number, thick = 0.0095): THREE.Mesh => {
       const pts: THREE.Vector3[] = [];
       for (let i = 0; i <= 24; i++) {
         // corner to corner, and no further: run on past them (as it once did,
@@ -1190,7 +1204,7 @@ export class FroggyMonster {
         p.y += y0;
         pts.push(p);
       }
-      const g = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 64, 0.0058, 6, false);
+      const g = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 64, thick, 8, false);
       // thin out to nothing at the corners, where the lips run into the skin
       const pos = g.attributes.position as THREE.BufferAttribute;
       const uv = g.attributes.uv as THREE.BufferAttribute;
@@ -1211,8 +1225,13 @@ export class FroggyMonster {
       return new THREE.Mesh(lumpy(g, 0.0015, 30, seed), lipMat);
     };
     // the upper lip, on the rim of the half-dome
-    const upperLip = lipLine(MOUTH_Y - 0.002, 1.015, 0.024, 95);
+    const upperLip = lipLine(MOUTH_Y - 0.002, 1.0, 0.024, 95);
     this.head.add(upperLip);
+    // and the flesh above it, rolling back up into the muzzle: the lip is the
+    // edge of the face, not a cord laid along it
+    const upperRoll = lipLine(MOUTH_Y + 0.012, 0.975, 0.024, 96, 0.016);
+    upperRoll.material = face;
+    this.head.add(upperRoll);
     // the roof of the mouth, dark and wet, closing the underside of the dome
     const palate = new THREE.Mesh(new THREE.CircleGeometry(0.2, 28), wet);
     palate.rotation.x = Math.PI / 2;
@@ -1371,6 +1390,10 @@ export class FroggyMonster {
     const lowerLip = lipLine(-0.002, 0.985, 0.0, 99);
     lowerLip.position.z = -JAW_PIVOT_Z;
     this.jaw.add(lowerLip);
+    const lowerRoll = lipLine(-0.015, 0.962, 0.0, 98, 0.015);
+    lowerRoll.material = face;
+    lowerRoll.position.z = -JAW_PIVOT_Z;
+    this.jaw.add(lowerRoll);
     const lower = new THREE.Group();
     lower.position.z = -JAW_PIVOT_Z;
     this.jaw.add(lower);
