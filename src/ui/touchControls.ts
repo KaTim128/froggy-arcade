@@ -232,6 +232,7 @@ const STYLE = `
   height: calc(var(--tc-btn, 62px) * 1.25);
 }
 #touch-controls .tc-btn.down { background: rgba(255, 212, 94, 0.85); color: #141a24; }
+#touch-controls .tc-btn[hidden] { display: none; }
 
 /* The gear: pause and settings, at the top right, always reachable. */
 #touch-controls .tc-corner {

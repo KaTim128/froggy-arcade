@@ -88,6 +88,8 @@ export function rollCapsule(rnd: () => number = Math.random): Capsule {
 }
 
 /** The inside of the machine, in the cabinet's picture. */
+/** The clock's left edge: moved left on touch, out from under the DROP button. */
+const CLOCK_X = isTouch() ? 208 : 246;
 const BOX = { l: 14, r: 306, top: 26, bottom: 150 };
 /** Where the pile is: left/right in pixels, back/forth 0 (front) to 1 (back). */
 const PILE_L = 84;
@@ -246,12 +248,14 @@ export class CraneGame extends Phaser.Scene {
     this.grabCue = centerText(this, GAME_W / 2, BOX.top + 10, isTouch() ? 'TAP GRAB!' : 'PRESS SPACE TO GRAB!', PALETTE.gold).setDepth(65).setVisible(false);
     this.tweens.add({ targets: this.grabCue, alpha: 0.35, duration: 380, yoyo: true, repeat: -1 });
 
-    this.clockText = text(this, 246, 160, '', 0xff6a5a).setDepth(60);
+    this.clockText = text(this, CLOCK_X, 160, '', 0xff6a5a).setDepth(60);
     new TokenHud(this);
     button(this, GAME_W - 24, 10, 'QUIT', () => this.leave(true), { width: 40, height: 13, fill: 0x5a1a22 }).setDepth(70);
     // the view button: BACK in the side view, SIDE VIEW once you have
-    // been there; hidden until then (the action button takes you the first time)
-    this.sideBtn = button(this, 245, 10, 'SIDE VIEW', () => this.viewButton(), { width: 60, height: 13 }).setDepth(70);
+    // been there; hidden until then (the action button takes you the first time).
+    // Clear of QUIT and the title plate, and the only view button on touch too:
+    // a second one in the touch pad sat on top of DROP.
+    this.sideBtn = button(this, 244, 10, 'SIDE VIEW', () => this.viewButton(), { width: 52, height: 13 }).setDepth(70);
 
     const kb = this.input.keyboard;
     const bind = (names: string[]) => (kb ? names.map((n) => kb.addKey(n)) : []);
@@ -273,15 +277,9 @@ export class CraneGame extends Phaser.Scene {
     kb?.on('keydown-X', () => this.viewButton());
     kb?.on('keydown-V', () => this.viewButton());
     kb?.on('keydown-B', () => this.viewButton());
-    // a tap on the glass does the same
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
-      // not a press on a button (AGAIN starts a go on the same press)
-      if (!over.length && p.y > BOX.top && p.y < BOX.bottom) this.press();
-    });
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      touchControls.relabel('SPACE', 'SIDE VIEW');
-      touchControls.showButton('X', true);
-    });
+    // (no tap-on-the-glass drop: a tap meant for BACK that missed it
+    // dropped the claw and grabbed)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => touchControls.relabel('SPACE', 'SIDE VIEW'));
 
     this.startGo();
     // (the touch layout is put up after create, which shows every button:
@@ -399,7 +397,7 @@ export class CraneGame extends Phaser.Scene {
     text(this, 100, 157, `CREDIT ${CRANE_COST[this.kind]}`, ink).setDepth(59);
     this.hint = text(this, 100, 168, '', ink).setDepth(59);
     // the clock window
-    this.add.rectangle(244, 158, 54, 14, 0x0c0814).setOrigin(0, 0).setStrokeStyle(1, 0x5a3a10).setDepth(59);
+    this.add.rectangle(CLOCK_X - 2, 158, 54, 14, 0x0c0814).setOrigin(0, 0).setStrokeStyle(1, 0x5a3a10).setDepth(59);
     if (eerie) {
       // the light in here is not well
       const dark = this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0).setOrigin(0, 0).setDepth(80);
@@ -571,8 +569,6 @@ export class CraneGame extends Phaser.Scene {
   private syncButtons(): void {
     const view = this.viewLabel();
     touchControls.relabel('SPACE', this.actionLabel());
-    touchControls.relabel('X', view || 'BACK');
-    touchControls.showButton('X', !!view);
     if (this.sideBtn) {
       this.sideBtn.setVisible(!!view);
       this.sideBtn.list.forEach((o) => {
