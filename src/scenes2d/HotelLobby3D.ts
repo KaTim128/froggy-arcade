@@ -49,7 +49,7 @@ const LIFT_X = lx(280);
 const DOOR_Z = 3.4;
 const DOOR_W = 0.9;
 const DOOR_H = 2.1;
-const WIN = { w: 0.42, y0: 1.22, y1: 1.7 };
+const WIN = { w: 0.42, y0: 1.4, y1: 1.7 };
 /** Where you are in there, and how high your eyes are. */
 const HIDE = { x: X1 + 0.38, z: DOOR_Z };
 const EYE_UP = 1.62;
@@ -1229,8 +1229,9 @@ export class HotelLobby3D extends Phaser.Scene {
         if (this.holdT <= 0) this.legs.shift();
       }
     } else if (this.phase === 'watch') {
-      // at the door, the face at the glass, waiting for you to move
-      faceTo = new THREE.Vector3(X1, WIN.y0 + 0.2 + Math.sin(this.clock * 0.7) * 0.15, DOOR_Z + Math.sin(this.clock * 0.43) * 0.25);
+      // at the door, the face at the glass, looking over the top of you: down
+      // below the sill he cannot see you, and his eyes never drop to you
+      faceTo = new THREE.Vector3(X1 + 2, WIN.y1 + Math.sin(this.clock * 0.7) * 0.08, DOOR_Z + Math.sin(this.clock * 0.43) * 0.25);
       this.fYaw = this.turnTo(this.fYaw, Math.PI / 2, dt * 2);
       still = 0.55 + Math.sin(this.clock * 0.6) * 0.3;
       tilt = Math.sin(this.clock * 0.37) * 0.25;
