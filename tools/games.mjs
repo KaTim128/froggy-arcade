@@ -2665,13 +2665,13 @@ for (const g of [
     ['Froggy is rarer than the common tokens', fill.token_3 < fill.token_1 * 0.6 && fill.token_3 < fill.token_10 * 0.6],
     ['most spins lose', lose > 0.5],
     ['five in a row is far rarer than three', fives * 20 < threes],
-    ['the machine keeps more than it pays', paid < N * 2],
+    ['the machine keeps more than it pays', paid < N * 3],
   ];
   for (const [what, ok] of checks) {
     console.log(`${ok ? 'PASS' : 'FAIL'}  slots: ${what}`);
     if (!ok) failures++;
   }
-  console.log(`      lose ${(lose * 100).toFixed(1)}%, threes ${(threes * 100).toFixed(2)}%, fives ${(fives * 100).toFixed(3)}%, return ${((paid / (N * 2)) * 100).toFixed(1)}%`);
+  console.log(`      lose ${(lose * 100).toFixed(1)}%, threes ${(threes * 100).toFixed(2)}%, fives ${(fives * 100).toFixed(3)}%, return ${((paid / (N * 3)) * 100).toFixed(1)}%`);
 
   // What a line pays, read off constructed windows: the best line, once.
   // The base window makes no line anywhere (each step along a row, a reel or
@@ -2726,8 +2726,8 @@ for (const g of [
   await spinWith(cases[cases.length - 1][1]);
   const b2 = await bal();
   const p2 = await page.evaluate(() => window.__slots.paidCount());
-  const okWin = b1 === b0 - 2 + 5 && p1 === p0 + 1;
-  const okLose = b2 === b1 - 2 && p2 === p1;
+  const okWin = b1 === b0 - 3 + 5 && p1 === p0 + 1;
+  const okLose = b2 === b1 - 3 && p2 === p1;
   console.log(`${okWin ? 'PASS' : 'FAIL'}  slots: a win adds exactly its prize to the player's tokens, once  — ${b0} -> ${b1} (paid ${p1 - p0}x)`);
   console.log(`${okLose ? 'PASS' : 'FAIL'}  slots: a losing spin adds nothing  — ${b1} -> ${b2}`);
   if (!okWin) failures++;

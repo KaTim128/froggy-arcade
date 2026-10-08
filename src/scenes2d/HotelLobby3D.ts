@@ -49,7 +49,7 @@ const LIFT_X = lx(280);
 const DOOR_Z = 3.4;
 const DOOR_W = 0.9;
 const DOOR_H = 2.1;
-const WIN = { w: 0.42, y0: 1.22, y1: 1.7 };
+const WIN = { w: 0.42, y0: 1.4, y1: 1.7 };
 /** Where you are in there, and how high your eyes are. */
 const HIDE = { x: X1 + 0.38, z: DOOR_Z };
 const EYE_UP = 1.62;
@@ -69,7 +69,13 @@ interface Leg {
   lean?: number;
   hold?: number;
   scan?: boolean;
+  /** Lift the bin's lid while he is there. */
+  bin?: boolean;
 }
+
+/** Along the front wall, on your left from the storage room: a sofa, its table, a bin. */
+const SOFA_X = 2.6;
+const BIN = new THREE.Vector3(7.2, 0, DEPTH - 0.45);
 
 function tex(c: HTMLCanvasElement, rx = 1, ry = 1): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(c);
@@ -289,6 +295,8 @@ export class HotelLobby3D extends Phaser.Scene {
   private frontLeaves: THREE.Group[] = [];
   private frontFly: Array<{ v: THREE.Vector3; spin: number }> = [];
   private staffDoor: THREE.Group | null = null;
+  private binLid: THREE.Group | null = null;
+  private binOpen = 0;
   private bulb: THREE.PointLight | null = null;
   private bits: Array<{ m: THREE.Mesh; v: THREE.Vector3; spin: THREE.Vector3; rest: boolean; half: number }> = [];
   private bangT = 0;
@@ -614,6 +622,47 @@ export class HotelLobby3D extends Phaser.Scene {
     const dial = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.26, 0.04), new THREE.MeshLambertMaterial({ color: 0x141820 }));
     dial.position.set(LIFT_X, 2.95, 0.03);
     S.add(dial);
+
+    // ---- along the front wall: a sofa, a low table, and a bin with a lid
+    const leather = new THREE.MeshLambertMaterial({ color: 0x5a2a22 });
+    const sz = DEPTH - 0.5;
+    for (const [w, h, d, x, y, z] of [
+      [2.0, 0.42, 0.85, SOFA_X, 0.3, sz],
+      [2.0, 0.75, 0.2, SOFA_X, 0.72, sz + 0.33],
+      [0.2, 0.6, 0.85, SOFA_X - 1.0, 0.45, sz],
+      [0.2, 0.6, 0.85, SOFA_X + 1.0, 0.45, sz],
+    ] as const) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), leather);
+      b.position.set(x, y, z);
+      S.add(b);
+    }
+    const tableTop = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 0.6), wood);
+    tableTop.position.set(SOFA_X, 0.42, sz - 1.0);
+    S.add(tableTop);
+    for (const [dx, dz] of [[-0.52, -0.24], [0.52, -0.24], [-0.52, 0.24], [0.52, 0.24]]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.4, 0.05), wood);
+      leg.position.set(SOFA_X + dx, 0.2, sz - 1.0 + dz);
+      S.add(leg);
+    }
+    const steel = new THREE.MeshLambertMaterial({ color: 0x6a6e72 });
+    const can = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.2, 0.75, 16), steel);
+    can.position.set(BIN.x, 0.375, BIN.z);
+    S.add(can);
+    const inside = new THREE.Mesh(new THREE.CircleGeometry(0.22, 16), new THREE.MeshBasicMaterial({ color: 0x0a0a0a }));
+    inside.rotation.x = -Math.PI / 2;
+    inside.position.set(BIN.x, 0.74, BIN.z);
+    S.add(inside);
+    // the lid, hinged at the wall side
+    const lid = new THREE.Group();
+    lid.position.set(BIN.x, 0.76, BIN.z + 0.24);
+    const lidTop = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.05, 16), steel);
+    lidTop.position.set(0, 0.02, -0.24);
+    lid.add(lidTop);
+    const lidKnob = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.04, 0.04), brass);
+    lidKnob.position.set(0, 0.07, -0.24);
+    lid.add(lidKnob);
+    S.add(lid);
+    this.binLid = lid;
 
     // ---- the armchair, the lamp beside it, the trolley past the lift
     const velvet = new THREE.MeshLambertMaterial({ color: 0x2e5a48 });
@@ -965,6 +1014,8 @@ export class HotelLobby3D extends Phaser.Scene {
       if (this.phaseT > 6.5) this.burst();
       return;
     }
+    // looking round the lobby: on your feet at the glass, he sees you
+    if (this.mode === 'hide' && (this.phase === 'search' || (this.phase === 'burst' && this.phaseT > 0.6)) && this.standing()) return this.detect();
     if (this.phase === 'burst' && this.phaseT > 1.6) {
       if (this.mode === 'exposed') {
         // he has seen you
@@ -987,9 +1038,8 @@ export class HotelLobby3D extends Phaser.Scene {
       ];
     }
     if (this.phase === 'approach') {
-      // right up to the door, and you are still on your feet
-      const near = this.fpos.distanceTo(WATCH) < 2.6;
-      if (near && this.standing()) return this.detect();
+      // coming at the door, and you are still on your feet
+      if (this.standing()) return this.detect();
       if (this.legs.length === 0) {
         this.phase = 'watch';
         this.phaseT = 0;
@@ -1053,6 +1103,10 @@ export class HotelLobby3D extends Phaser.Scene {
       { to: new THREE.Vector3(DESK_X - 1.4, 0, 2.5), speed: 0.7, look: new THREE.Vector3(DESK_X - 1.4, 0.6, 0.9), lean: 0.45, hold: 1.8 },
       { to: new THREE.Vector3(lx(69) + 0.4, 0, 2.3), speed: 0.75, look: new THREE.Vector3(lx(69), 0.4, 0.9), lean: 0.4, hold: 1.8 },
       { to: new THREE.Vector3(lx(69) + 1.6, 0, 3.6), speed: 0.7, hold: 2.2, scan: true },
+      // the sofa: behind it and under the table
+      { to: new THREE.Vector3(SOFA_X, 0, DEPTH - 2.3), speed: 0.75, look: new THREE.Vector3(SOFA_X, 0.3, DEPTH - 0.6), lean: 0.6, hold: 2.2 },
+      // the bin: the lid up, a long look in
+      { to: new THREE.Vector3(BIN.x, 0, BIN.z - 0.75), speed: 0.7, look: new THREE.Vector3(BIN.x, 0.5, BIN.z), lean: 0.8, hold: 2.6, bin: true },
     ];
   }
 
@@ -1171,6 +1225,7 @@ export class HotelLobby3D extends Phaser.Scene {
     if (!m || !m.root.visible) return;
     const cam = this.camPos.clone();
     let speedWant = 0;
+    let binWant = 0;
     let still = 0;
     let scan = 0;
     let tilt = 0;
@@ -1225,12 +1280,15 @@ export class HotelLobby3D extends Phaser.Scene {
           this.fYaw = this.turnTo(this.fYaw, Math.atan2(leg.look.x - this.fpos.x, leg.look.z - this.fpos.z), dt * 1.6);
         }
         if (leg.scan) scan = Math.sin(this.clock * 1.3) * 0.9;
+        if (leg.bin && this.binOpen === 0) audio.sfx('door_shut', 0.35);
+        if (leg.bin) binWant = 1;
         this.holdT -= dt;
         if (this.holdT <= 0) this.legs.shift();
       }
     } else if (this.phase === 'watch') {
-      // at the door, the face at the glass, waiting for you to move
-      faceTo = new THREE.Vector3(X1, WIN.y0 + 0.2 + Math.sin(this.clock * 0.7) * 0.15, DOOR_Z + Math.sin(this.clock * 0.43) * 0.25);
+      // at the door, the face at the glass, looking over the top of you: down
+      // below the sill he cannot see you, and his eyes never drop to you
+      faceTo = new THREE.Vector3(X1 + 2, WIN.y1 + Math.sin(this.clock * 0.7) * 0.08, DOOR_Z + Math.sin(this.clock * 0.43) * 0.25);
       this.fYaw = this.turnTo(this.fYaw, Math.PI / 2, dt * 2);
       still = 0.55 + Math.sin(this.clock * 0.6) * 0.3;
       tilt = Math.sin(this.clock * 0.37) * 0.25;
@@ -1262,6 +1320,11 @@ export class HotelLobby3D extends Phaser.Scene {
     this.faceK += ((faceTo ? 1 : 0) - this.faceK) * Math.min(1, dt * 2);
     this.lean += (leanWant - this.lean) * Math.min(1, dt * 1.5);
     this.scanT = scan;
+    // the bin's lid: up while he looks in, dropped with a clang after
+    const wasOpen = this.binOpen;
+    this.binOpen = Phaser.Math.Clamp(this.binOpen + (binWant ? 2.5 : -4) * dt, 0, 1);
+    if (wasOpen > 0 && this.binOpen === 0) audio.sfx('item_thud', 0.5);
+    if (this.binLid) this.binLid.rotation.x = this.binOpen * 1.7;
     m.setPose(this.fpos.x, 0, this.fpos.z, this.fYaw);
     m.update(dt, {
       speed: moved,
