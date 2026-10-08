@@ -75,7 +75,7 @@ interface Leg {
 
 /** Along the front wall, on your left from the storage room: a sofa, its table, a bin. */
 const SOFA_X = 2.6;
-const BIN = new THREE.Vector3(7.2, 0, DEPTH - 0.45);
+const BIN = new THREE.Vector3(4.7, 0, DEPTH - 0.45);
 
 function tex(c: HTMLCanvasElement, rx = 1, ry = 1): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(c);
@@ -297,6 +297,9 @@ export class HotelLobby3D extends Phaser.Scene {
   private staffDoor: THREE.Group | null = null;
   private binLid: THREE.Group | null = null;
   private binOpen = 0;
+  private binRustle = 0;
+  /** How long his eyes have been on you, standing at the glass. */
+  private seenT = 0;
   private bulb: THREE.PointLight | null = null;
   private bits: Array<{ m: THREE.Mesh; v: THREE.Vector3; spin: THREE.Vector3; rest: boolean; half: number }> = [];
   private bangT = 0;
@@ -330,6 +333,8 @@ export class HotelLobby3D extends Phaser.Scene {
     this.frontFly = [];
     this.stairFly = null;
     this.crouched = false;
+    this.seenT = 0;
+    this.binOpen = 0;
     this.eye = EYE_UP;
     this.faceTo = null;
     this.faceK = 0;
@@ -394,6 +399,9 @@ export class HotelLobby3D extends Phaser.Scene {
     window.addEventListener('mouseup', this.onLookUp);
     window.addEventListener('blur', this.onLookUp);
     this.game.canvas.addEventListener('click', () => {
+      // not while the pause menu is up: its buttons are on this canvas too, and a
+      // click on AUDIO or CONTROLS would take the mouse away again
+      if (isPaused() || this.game.scene.isActive('SettingsModal')) return;
       void this.game.canvas.requestPointerLock?.();
     });
 
@@ -624,7 +632,7 @@ export class HotelLobby3D extends Phaser.Scene {
     S.add(dial);
 
     // ---- along the front wall: a sofa, a low table, and a bin with a lid
-    const leather = new THREE.MeshLambertMaterial({ color: 0x5a2a22 });
+    const leather = new THREE.MeshLambertMaterial({ color: 0x9a4436, emissive: 0x1a0806 });
     const sz = DEPTH - 0.5;
     for (const [w, h, d, x, y, z] of [
       [2.0, 0.42, 0.85, SOFA_X, 0.3, sz],
@@ -644,7 +652,7 @@ export class HotelLobby3D extends Phaser.Scene {
       leg.position.set(SOFA_X + dx, 0.2, sz - 1.0 + dz);
       S.add(leg);
     }
-    const steel = new THREE.MeshLambertMaterial({ color: 0x6a6e72 });
+    const steel = new THREE.MeshLambertMaterial({ color: 0xb4bac0, emissive: 0x15171a });
     const can = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.2, 0.75, 16), steel);
     can.position.set(BIN.x, 0.375, BIN.z);
     S.add(can);
@@ -663,6 +671,13 @@ export class HotelLobby3D extends Phaser.Scene {
     lid.add(lidKnob);
     S.add(lid);
     this.binLid = lid;
+    // a wall light over them, so they read from the storage room
+    const sconce = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.08), new THREE.MeshLambertMaterial({ color: 0xf0e0b8, emissive: 0x806030 }));
+    sconce.position.set((SOFA_X + BIN.x) / 2, 2.3, DEPTH - 0.05);
+    S.add(sconce);
+    const sconceLight = new THREE.PointLight(0xffd090, 2.2, 7, 1.4);
+    sconceLight.position.set((SOFA_X + BIN.x) / 2, 2.1, DEPTH - 0.6);
+    S.add(sconceLight);
 
     // ---- the armchair, the lamp beside it, the trolley past the lift
     const velvet = new THREE.MeshLambertMaterial({ color: 0x2e5a48 });
@@ -1001,6 +1016,12 @@ export class HotelLobby3D extends Phaser.Scene {
    * turned, or his body and the sweep of his head -- is on the door.  Up
    * while he is looking elsewhere, he does not see you.
    */
+  /** Seen only when the contact holds: a glance across the glass is not enough. */
+  private spotted(dt: number): boolean {
+    this.seenT = this.sees() ? this.seenT + dt : Math.max(0, this.seenT - dt * 2);
+    return this.seenT > 0.6;
+  }
+
   private sees(): boolean {
     if (!this.standing()) return false;
     const fx = this.fpos.x;
@@ -1010,7 +1031,7 @@ export class HotelLobby3D extends Phaser.Scene {
     let d = toYou - gaze;
     while (d > Math.PI) d -= Math.PI * 2;
     while (d < -Math.PI) d += Math.PI * 2;
-    return Math.abs(d) < 0.75;
+    return Math.abs(d) < 0.45;
   }
 
   private story(dt: number): void {
@@ -1033,8 +1054,9 @@ export class HotelLobby3D extends Phaser.Scene {
     }
     // looking round the lobby: on your feet at the glass, he sees you
     // (a second to get down after the door goes, before he looks your way)
-    if (this.mode === 'hide' && (this.phase === 'search' || (this.phase === 'burst' && this.phaseT > 1.0)) && this.sees()) return this.detect();
-    if (this.phase === 'burst' && this.phaseT > 1.6) {
+    if (this.mode === 'hide' && (this.phase === 'search' || (this.phase === 'burst' && this.phaseT > 1.0)) && this.spotted(dt)) return this.detect();
+    // (hiding: he stands and stares at the storage door a moment before the search)
+    if (this.phase === 'burst' && this.phaseT > (this.mode === 'hide' ? 2.8 : 1.6)) {
       if (this.mode === 'exposed') {
         // he has seen you
         this.phase = 'detect';
@@ -1057,7 +1079,7 @@ export class HotelLobby3D extends Phaser.Scene {
     }
     if (this.phase === 'approach') {
       // coming at the door, and you are still on your feet
-      if (this.sees()) return this.detect();
+      if (this.spotted(dt)) return this.detect();
       if (this.legs.length === 0) {
         this.phase = 'watch';
         this.phaseT = 0;
@@ -1065,7 +1087,7 @@ export class HotelLobby3D extends Phaser.Scene {
       }
     }
     if (this.phase === 'watch') {
-      if (this.sees()) return this.detect();
+      if (this.spotted(dt)) return this.detect();
       // the heart, going hard, and nothing else
       this.heartT -= dt;
       if (this.heartT <= 0) {
@@ -1086,7 +1108,7 @@ export class HotelLobby3D extends Phaser.Scene {
     }
     if (this.phase === 'lookback') {
       // the last look back at the door: quiet, and long
-      if (this.phaseT > 1.6 && this.phaseT < 4.4 && this.sees()) return this.detect();
+      if (this.phaseT > 1.6 && this.phaseT < 4.4 && this.spotted(dt)) return this.detect();
       if (this.phaseT > 5.2) {
         this.phase = 'exit';
         this.phaseT = 0;
@@ -1114,10 +1136,13 @@ export class HotelLobby3D extends Phaser.Scene {
 
   /** The search: out of the stairwell, the counter, the chairs, the floor. */
   private searchPlan(): Leg[] {
-    const behindDesk = new THREE.Vector3(DESK_X + 0.3, 0.7, 0.9);
     return [
       { to: new THREE.Vector3(STAIR_X, 0, 1.7), speed: 0.7, hold: 2.4, scan: true },
-      { to: new THREE.Vector3(DESK_X + 0.5, 0, 2.45), speed: 0.85, look: behindDesk, lean: 0.6, hold: 3.0 },
+      // round the end of the counter and along behind it, looking down
+      { to: new THREE.Vector3(DESK_X + 2.3, 0, 0.6), speed: 0.85 },
+      { to: new THREE.Vector3(DESK_X + 0.6, 0, 0.6), speed: 0.6, look: new THREE.Vector3(DESK_X - 0.4, 0.1, 0.7), lean: 0.85, hold: 2.6 },
+      { to: new THREE.Vector3(DESK_X - 1.0, 0, 0.6), speed: 0.6, look: new THREE.Vector3(DESK_X - 1.0, 0.2, 1.1), lean: 0.7, hold: 1.8 },
+      { to: new THREE.Vector3(DESK_X - 2.4, 0, 0.7), speed: 0.75 },
       { to: new THREE.Vector3(DESK_X - 1.4, 0, 2.5), speed: 0.7, look: new THREE.Vector3(DESK_X - 1.4, 0.6, 0.9), lean: 0.45, hold: 1.8 },
       { to: new THREE.Vector3(lx(69) + 0.4, 0, 2.3), speed: 0.75, look: new THREE.Vector3(lx(69), 0.4, 0.9), lean: 0.4, hold: 1.8 },
       { to: new THREE.Vector3(lx(69) + 1.6, 0, 3.6), speed: 0.7, hold: 2.2, scan: true },
@@ -1298,7 +1323,14 @@ export class HotelLobby3D extends Phaser.Scene {
           this.fYaw = this.turnTo(this.fYaw, Math.atan2(leg.look.x - this.fpos.x, leg.look.z - this.fpos.z), dt * 1.6);
         }
         if (leg.scan) scan = Math.sin(this.clock * 1.3) * 0.9;
-        if (leg.bin && this.binOpen === 0) audio.sfx('door_shut', 0.35);
+        if (leg.bin && this.binOpen === 0) this.heard(BIN.clone().setY(0.8), 'bin_lid', 0.9);
+        if (leg.bin && this.binOpen > 0.8) {
+          this.binRustle -= dt;
+          if (this.binRustle <= 0) {
+            this.binRustle = 0.35 + Math.random() * 0.3;
+            this.heard(BIN.clone().setY(0.6), 'bin_rummage', 0.8);
+          }
+        }
         if (leg.bin) binWant = 1;
         this.holdT -= dt;
         if (this.holdT <= 0) this.legs.shift();
@@ -1343,7 +1375,10 @@ export class HotelLobby3D extends Phaser.Scene {
     // the bin's lid: up while he looks in, dropped with a clang after
     const wasOpen = this.binOpen;
     this.binOpen = Phaser.Math.Clamp(this.binOpen + (binWant ? 2.5 : -4) * dt, 0, 1);
-    if (wasOpen > 0 && this.binOpen === 0) audio.sfx('item_thud', 0.5);
+    if (wasOpen > 0 && this.binOpen === 0) {
+      this.heard(BIN.clone().setY(0.8), 'bin_lid', 1);
+      this.heard(BIN.clone().setY(0.8), 'item_thud', 0.4);
+    }
     if (this.binLid) this.binLid.rotation.x = this.binOpen * 1.7;
     m.setPose(this.fpos.x, 0, this.fpos.z, this.fYaw);
     m.update(dt, {
