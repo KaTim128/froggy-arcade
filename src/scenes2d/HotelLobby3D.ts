@@ -27,7 +27,7 @@ import { isTouch } from '../core/device';
 import { froggyLayer } from '../render/froggyLayer';
 import { drawPixelText } from '../render/pixelFont';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
-import { playJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
+import { playJumpscare3D, prepareJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
 import { FroggyMonster, type ClimbRig, type HandGoal } from '../three/froggyMonster';
 import { climbFrame, climbSeconds, type ClimbGeom } from '../three/froggyClimb';
 import { ThreeStage } from '../render/threeStage';
@@ -444,6 +444,7 @@ export class HotelLobby3D extends Phaser.Scene {
     this.monster = new FroggyMonster(FROG_SCALE);
     this.monster.root.visible = false;
     S.add(this.monster.root);
+    if (this.stage) prepareJumpscare3D(this.stage, this.monster);
     // a cold light that goes with him, so his face reads in the dark
     this.frogLight = new THREE.PointLight(0xb8c4e0, 4.5, 6, 1.5);
     S.add(this.frogLight);

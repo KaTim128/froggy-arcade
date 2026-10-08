@@ -34,7 +34,7 @@ import { isTouch } from '../core/device';
 import { froggyLayer } from '../render/froggyLayer';
 import { drawPixelText } from '../render/pixelFont';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
-import { playJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
+import { playJumpscare3D, prepareJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
 import { FroggyMonster } from '../three/froggyMonster';
 import { ThreeStage } from '../render/threeStage';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
@@ -287,6 +287,7 @@ export class HotelHall3D extends Phaser.Scene {
     this.monster = new FroggyMonster(FROG_SCALE);
     this.monster.root.visible = false;
     S.add(this.monster.root);
+    if (this.stage) prepareJumpscare3D(this.stage, this.monster);
     this.frogLight = new THREE.PointLight(0xb8c4e0, 7, 7, 1.4);
     S.add(this.frogLight);
   }

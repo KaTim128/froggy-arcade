@@ -115,6 +115,15 @@ export class ThreeStage {
   }
 
   /**
+   * Build every shader the scene will need now, while nothing is happening,
+   * instead of on the first frame a material is seen -- which, for a scare,
+   * is the one frame that must not stall.
+   */
+  compile(): void {
+    this.renderer?.compile(this.scene, this.camera);
+  }
+
+  /**
    * Freeze the world under the pause menu.  The canvas is hidden as well as
    * stopped: it sits over the Phaser canvas the menu is drawn on, so a frozen
    * room left showing would be drawn straight over the menu.

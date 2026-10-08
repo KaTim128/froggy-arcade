@@ -33,7 +33,7 @@ import { ledger } from '../core/ledger';
 import { addItem, KEY_ITEM } from '../game/inventory';
 import { froggyLayer } from '../render/froggyLayer';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
-import { playJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
+import { playJumpscare3D, prepareJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
 import { FroggyMonster, type ClimbRig, type HandGoal, type Solid } from '../three/froggyMonster';
 import { climbFrame, climbSeconds, type ClimbFrame, type ClimbGeom } from '../three/froggyClimb';
 import { buildOpening, hideEye } from '../three/hideOpenings';
@@ -1635,6 +1635,7 @@ export class HideRoom3D extends Phaser.Scene {
     this.monster.vary(Math.random() * 1000);
     this.monster.setVisible(false);
     st.scene.add(this.monster.root);
+    prepareJumpscare3D(st, this.monster);
     // drawn once now, so his first step into view is not a stall (see warm)
     st.warm(this.monster.root);
     // A fingerprint of the model, published for the harness: the alley reports

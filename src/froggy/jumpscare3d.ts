@@ -58,6 +58,36 @@ export interface Scare3DOptions {
   floor?: number;
 }
 
+/**
+ * READY BEFORE IT IS NEEDED.  The scare's two lights live in the room from
+ * the moment it is built, switched off.  Adding a light at the moment of the
+ * scare changes how every lit material in the room is drawn, and the GPU
+ * stops to rebuild all of them -- a hitch of a frame or several, on exactly
+ * the frame he lands in your face.  Built in, at nothing, they cost nothing
+ * to turn up.  `prepareJumpscare3D` also builds every shader now (with him
+ * shown, glaring, as he will be), so the scare never waits on one.
+ */
+const rigs = new WeakMap<THREE.Scene, { under: THREE.PointLight; behind: THREE.PointLight }>();
+function rigFor(stage: ThreeStage): { under: THREE.PointLight; behind: THREE.PointLight } {
+  let r = rigs.get(stage.scene);
+  if (!r || r.under.parent !== stage.scene) {
+    r = { under: new THREE.PointLight(0xc6d2df, 0, 6, 1.4), behind: new THREE.PointLight(0x7a0c0c, 0, 8, 1.6) };
+    stage.scene.add(r.under, r.behind);
+    rigs.set(stage.scene, r);
+  }
+  return r;
+}
+
+export function prepareJumpscare3D(stage: ThreeStage, monster: FroggyMonster): void {
+  rigFor(stage);
+  const shown = monster.root.visible;
+  monster.root.visible = true;
+  monster.setGlare(1);
+  stage.compile();
+  monster.setGlare(0);
+  monster.root.visible = shown;
+}
+
 export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster: FroggyMonster, opts: Scare3DOptions = {}): Scare3D {
   audio.scare();
   // The scare is the whole screen: no pad, no buttons, no gear over it.
@@ -110,9 +140,9 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
   // ---- THE LIGHT.  Something cold from underneath and in front, which is
   // the one angle a face is never lit from; a dim red behind him; and the
   // camera's own torch left as it was.
-  const under = new THREE.PointLight(0xc6d2df, 0, 6, 1.4);
-  const behind = new THREE.PointLight(0x7a0c0c, 0, 8, 1.6);
-  stage.scene.add(under, behind);
+  const { under, behind } = rigFor(stage);
+  under.intensity = 0;
+  behind.intensity = 0;
   // The lamps the player carries are tuned for a room, not for a face a
   // hand's width away, and would burn it to a white disc.  They are turned
   // down as he comes in, so the skin stays skin all the way to the end.
@@ -144,7 +174,8 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
     done = true;
     monster.setGlare(0);
     distort(0);
-    stage.scene.remove(under, behind);
+    under.intensity = 0;
+    behind.intensity = 0;
     for (const [l, i] of carried) l.intensity = i;
   };
   scene.time.delayedCall(SCARE_MS + 650, dispose);

@@ -22,7 +22,7 @@ import { audio, SILENCE } from '../core/audio';
 import { store } from '../core/state';
 import { froggyLayer } from '../render/froggyLayer';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
-import { playJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
+import { playJumpscare3D, prepareJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
 import { FroggyMonster } from '../three/froggyMonster';
 import { alleySurfaces, dressAlley } from '../three/alleyDecor';
 import { ThreeStage } from '../render/threeStage';
@@ -288,6 +288,7 @@ export class Chase3D extends Phaser.Scene {
     // he clears the pipes, and he is unmistakably the thing from the rooms.
     this.monster = new FroggyMonster(FROGGY_SCALE);
     st.scene.add(this.monster.root);
+    prepareJumpscare3D(st, this.monster);
     this.froggyWas.copy(this.froggy);
     // Same fingerprint the hide rooms publish: the harness compares them.
     this.froggyMeshes = 0;
