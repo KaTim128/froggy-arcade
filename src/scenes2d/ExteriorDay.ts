@@ -29,7 +29,7 @@ import { centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { paintExterior, startSignFlicker, KERB_Y, MAN_X } from '../art/exterior';
 import { MysteryMan } from '../art/mysteryMan';
 import { Player } from '../art/player';
-import { PRIZES, allPrizesSold } from '../game/content';
+import { CAMERA_PRIZE, shelfStock } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
@@ -137,6 +137,7 @@ export class ExteriorDay extends Phaser.Scene {
     // The exchange hands back here; the purse and the man's line may both have
     // changed while it was open.
     this.events.on('exchange-closed', () => {
+      this.checkFinished();
       this.refreshPurse();
       if (store.get().timeOfDay === 'midnight' && this.time0 !== 'midnight') {
         // He packs up and goes; the light goes with him.
@@ -144,7 +145,6 @@ export class ExteriorDay extends Phaser.Scene {
         fadeToScene(this, 'ExteriorDay', { nightfall: true });
         return;
       }
-      this.checkFinished();
     });
 
     this.checkFinished();
@@ -290,17 +290,27 @@ export class ExteriorDay extends Phaser.Scene {
   }
 
   private refreshPurse(): void {
+    // (what is on the shelf now: a fresh lot starts again at none sold)
     const s = store.get();
-    this.purse.setText(`${s.prizesSold.length}/${PRIZES.length} PRIZES SOLD`);
+    const shelf = shelfStock(s).filter((p) => p.id !== CAMERA_PRIZE.id);
+    const sold = shelf.filter((p) => s.prizesSold.includes(p.id)).length;
+    this.purse.setText(`${sold}/${shelf.length} PRIZES SOLD`);
   }
 
-  /** Everything sold is not the end: the night goes on.  Just a word on it. */
+  /**
+   * Everything on the shelf sold: nothing is said, and the game goes on.  The
+   * case is restocked quietly, so the next time you are inside the arcade
+   * there is a fresh lot behind the glass.  (The camera does not count: he
+   * will not take it.)
+   */
   private checkFinished(): void {
-    if (this.locked || this.soldOut || !allPrizesSold(store.get().prizesSold)) return;
-    this.soldOut = true;
-    this.time.delayedCall(700, () => this.say('That was the last of it. Now what?'));
+    const s = store.get();
+    const shelf = shelfStock(s).filter((p) => p.id !== CAMERA_PRIZE.id);
+    if (!shelf.length || !shelf.every((p) => s.prizesSold.includes(p.id))) return;
+    store.patch({ prizeWave: s.prizeWave + 1 });
+    store.flush();
+    this.refreshPurse();
   }
-  private soldOut = false;
 
   private interact(): void {
     if (this.locked || this.busy() || !this.spot) return;
