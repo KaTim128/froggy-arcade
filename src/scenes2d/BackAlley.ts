@@ -53,35 +53,9 @@ export class BackAlley extends Phaser.Scene {
     fadeIn(this);
     audio.setScene(this.chained && time !== 'midnight' ? { ambience: ['street_dusk'] } : { ambience: ['wind_low', 'crickets'] });
 
-    this.add.rectangle(0, 0, GAME_W, GAME_H, c(PALETTE.night)).setOrigin(0, 0);
-    // brick walls closing in on both sides
-    this.add.rectangle(0, 0, 40, GAME_H, c(PALETTE.black)).setOrigin(0, 0);
-    this.add.rectangle(GAME_W - 26, 0, 26, GAME_H, c(PALETTE.black)).setOrigin(0, 0);
-    this.add.rectangle(40, 0, GAME_W - 66, 150, c(PALETTE.nightMid)).setOrigin(0, 0);
-    for (let i = 0; i < 9; i++) {
-      this.add.rectangle(44 + i * 28, 14 + (i % 2) * 8, 24, 5, c(PALETTE.night)).setOrigin(0, 0);
-    }
-    if (this.chained && time !== 'midnight') {
-      // a strip of the sky the street is under, over the top of the walls
-      this.add.rectangle(40, 0, GAME_W - 66, 6, time === 'day' ? PALETTE.tealLight : PALETTE.amber).setOrigin(0, 0).setAlpha(0.55);
-    }
-
-    // ground
-    this.add.rectangle(0, 150, GAME_W, 30, c(PALETTE.nightMid)).setOrigin(0, 0);
-    this.add.rectangle(0, 150, GAME_W, 2, c(PALETTE.nightLight)).setOrigin(0, 0);
-    // a puddle reflecting nothing useful
-    this.add.ellipse(120, 172, 40, 7, c(PALETTE.nightLight)).setAlpha(0.4);
-
-    // dumpster
-    this.add.rectangle(56, 126, 54, 26, c(PALETTE.moss)).setOrigin(0, 0);
-    this.add.rectangle(56, 122, 54, 5, c(PALETTE.mossLight)).setOrigin(0, 0).setAlpha(0.5);
-
-    // fire escape
-    this.add.rectangle(150, 40, 3, 86, c(PALETTE.steel)).setOrigin(0, 0);
-    this.add.rectangle(196, 40, 3, 86, c(PALETTE.steel)).setOrigin(0, 0);
-    for (let i = 0; i < 7; i++) {
-      this.add.rectangle(150, 44 + i * 12, 49, 2, c(PALETTE.steel)).setOrigin(0, 0);
-    }
+    const key = `alley_${this.chained ? time : 'eject'}`;
+    if (!this.textures.exists(key)) paintAlley(this, key, c, this.chained && time !== 'midnight' ? time : null);
+    this.add.image(0, 0, key).setOrigin(0, 0);
 
     if (this.chained) this.paintChainedDoor(c);
     else {
@@ -199,4 +173,200 @@ export class BackAlley extends Phaser.Scene {
       .setPosition(Phaser.Math.Clamp(px, 40, GAME_W - 40), WALK_Y - 34)
       .setVisible(true);
   }
+}
+
+const hex = (n: number): string => `#${(n & 0xffffff).toString(16).padStart(6, '0')}`;
+
+/**
+ * The alley, painted once into a texture: brick walls with their mortar and
+ * the odd broken brick, the side walls in shadow, a drainpipe, a caged lamp
+ * over the door throwing a cone of light, wet asphalt with cracks and a
+ * drain, a proper dumpster (lid, ribs, wheels) with bags beside it, crates,
+ * and a fire escape with its landing and ladder.  `c` is the time of day.
+ */
+function paintAlley(scene: Phaser.Scene, key: string, c: (n: number) => number, sky: string | null): void {
+  const tex = scene.textures.createCanvas(key, GAME_W, GAME_H);
+  if (!tex) return;
+  const g = tex.getContext();
+  const col = (n: number) => hex(c(n));
+  let seed = 7;
+  const R = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+
+  // the back wall: bricks
+  g.fillStyle = col(0x3c2a30);
+  g.fillRect(0, 0, GAME_W, 152);
+  for (let row = 0; row * 6 < 152; row++) {
+    const off = row % 2 ? 6 : 0;
+    for (let x = -off; x < GAME_W; x += 12) {
+      const tone = [0x6a3a34, 0x5e3430, 0x74423a, 0x583030][Math.floor(R() * 4)];
+      g.fillStyle = col(tone);
+      g.fillRect(x + 1, row * 6 + 1, 10, 4);
+      g.fillStyle = col(0x8a5446);
+      g.fillRect(x + 1, row * 6 + 1, 10, 1);
+      if (R() < 0.04) {
+        g.fillStyle = col(0x2a1c20);
+        g.fillRect(x + 3, row * 6 + 2, 4, 2);
+      }
+    }
+  }
+  // grime running down from the top, darker toward the ground
+  const grime = g.createLinearGradient(0, 0, 0, 152);
+  grime.addColorStop(0, 'rgba(0,0,0,0.05)');
+  grime.addColorStop(1, 'rgba(10,6,10,0.4)');
+  g.fillStyle = grime;
+  g.fillRect(0, 0, GAME_W, 152);
+  if (sky) {
+    g.fillStyle = sky === 'day' ? '#8fd4e8' : '#e8a050';
+    g.fillRect(40, 0, GAME_W - 66, 6);
+    g.fillStyle = 'rgba(255,255,255,0.25)';
+    g.fillRect(40, 6, GAME_W - 66, 2);
+  }
+  // the side walls, in shadow, with their own brick edges
+  for (const [x, w] of [[0, 40], [GAME_W - 26, 26]]) {
+    g.fillStyle = col(0x1c1418);
+    g.fillRect(x, 0, w, GAME_H);
+    for (let y = 0; y < GAME_H; y += 6) {
+      g.fillStyle = col(0x2a1e22);
+      g.fillRect(x + ((y / 6) % 2 ? 2 : 6), y + 1, w - 8, 4);
+    }
+  }
+  g.fillStyle = 'rgba(0,0,0,0.35)';
+  g.fillRect(40, 0, 6, 152);
+  g.fillRect(GAME_W - 32, 0, 6, 152);
+
+  // a drainpipe down the wall
+  g.fillStyle = col(0x4a5258);
+  g.fillRect(118, 0, 4, 150);
+  g.fillStyle = col(0x6a747c);
+  g.fillRect(118, 0, 1, 150);
+  for (const y of [30, 70, 110]) {
+    g.fillStyle = col(0x30363a);
+    g.fillRect(117, y, 6, 2);
+  }
+
+  // ground: wet asphalt, a kerb line, cracks, a drain
+  g.fillStyle = col(0x2a2c34);
+  g.fillRect(0, 150, GAME_W, 30);
+  g.fillStyle = col(0x4a4e58);
+  g.fillRect(0, 150, GAME_W, 2);
+  for (let i = 0; i < 140; i++) {
+    g.fillStyle = R() < 0.5 ? col(0x34363e) : col(0x22242a);
+    g.fillRect(Math.floor(R() * GAME_W), 153 + Math.floor(R() * 27), 1 + Math.floor(R() * 2), 1);
+  }
+  g.strokeStyle = col(0x18191e);
+  g.lineWidth = 1;
+  for (const [x, y] of [[90, 160], [200, 166], [270, 158]]) {
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + 6, y + 3);
+    g.lineTo(x + 4, y + 7);
+    g.lineTo(x + 11, y + 10);
+    g.stroke();
+  }
+  g.fillStyle = col(0x16171c);
+  g.fillRect(186, 170, 16, 5);
+  g.fillStyle = col(0x3a3c44);
+  for (let k = 0; k < 4; k++) g.fillRect(188 + k * 4, 171, 1, 3);
+  // a puddle with a light in it
+  g.fillStyle = col(0x3e4a5c);
+  g.beginPath();
+  g.ellipse(132, 172, 20, 3.5, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = 'rgba(255,220,150,0.35)';
+  g.fillRect(140, 171, 6, 1);
+
+  // the caged lamp over the door, and its cone of light
+  const lx = 253;
+  const cone = g.createRadialGradient(lx, 92, 2, lx, 130, 60);
+  cone.addColorStop(0, 'rgba(255,214,140,0.45)');
+  cone.addColorStop(1, 'rgba(255,214,140,0)');
+  g.fillStyle = cone;
+  g.beginPath();
+  g.moveTo(lx - 4, 92);
+  g.lineTo(lx + 4, 92);
+  g.lineTo(lx + 44, 178);
+  g.lineTo(lx - 44, 178);
+  g.fill();
+  g.fillStyle = col(0x2a2c30);
+  g.fillRect(lx - 6, 84, 12, 3);
+  g.fillStyle = '#ffe6a8';
+  g.fillRect(lx - 4, 87, 8, 5);
+  g.fillStyle = col(0x2a2c30);
+  for (let k = 0; k < 3; k++) g.fillRect(lx - 4 + k * 3, 87, 1, 5);
+
+  // dumpster: body with ribs, a lid propped, wheels, and bags beside it
+  const dx = 52;
+  g.fillStyle = col(0x2f6a3e);
+  g.fillRect(dx, 124, 58, 28);
+  g.fillStyle = col(0x3f8250);
+  g.fillRect(dx, 124, 58, 3);
+  for (let k = 0; k < 5; k++) {
+    g.fillStyle = col(0x24542f);
+    g.fillRect(dx + 6 + k * 11, 128, 2, 22);
+  }
+  g.fillStyle = col(0x1c4026);
+  g.fillRect(dx - 2, 118, 62, 4);
+  g.fillStyle = col(0x5aa06a);
+  g.fillRect(dx - 2, 118, 62, 1);
+  g.fillStyle = col(0xe8e0c8);
+  g.fillRect(dx + 20, 134, 18, 6);
+  g.fillStyle = col(0x24542f);
+  g.fillRect(dx + 22, 136, 14, 1);
+  g.fillStyle = col(0x111214);
+  for (const wx of [dx + 6, dx + 50]) {
+    g.beginPath();
+    g.arc(wx, 152, 3, 0, Math.PI * 2);
+    g.fill();
+  }
+  for (const [bx, r, tone] of [[dx + 66, 9, 0x1a1c22], [dx + 76, 7, 0x24262e], [dx + 62, 6, 0x2c2e36]] as const) {
+    g.fillStyle = col(tone);
+    g.beginPath();
+    g.ellipse(bx, 152 - r, r, r, 0, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = 'rgba(160,170,190,0.25)';
+    g.fillRect(bx - r / 2, 152 - r * 1.6, 2, 2);
+  }
+  // crates under the fire escape
+  for (const [cx, cy, w] of [[204, 134, 18], [208, 120, 14]]) {
+    g.fillStyle = col(0x8a6238);
+    g.fillRect(cx, cy, w, 150 - cy - (cy === 120 ? 14 : 0));
+    g.fillStyle = col(0x6b4a2a);
+    g.strokeStyle = col(0x5a3c22);
+    g.strokeRect(cx + 0.5, cy + 0.5, w - 1, (cy === 120 ? 14 : 16) - 1);
+    g.beginPath();
+    g.moveTo(cx, cy);
+    g.lineTo(cx + w, cy + (cy === 120 ? 14 : 16));
+    g.stroke();
+  }
+
+  // the fire escape: a landing with railings, and the ladder down from it
+  g.fillStyle = col(0x2c3238);
+  g.fillRect(138, 36, 70, 4);
+  g.fillStyle = col(0x5a646e);
+  g.fillRect(138, 36, 70, 1);
+  for (let x = 140; x < 208; x += 6) {
+    g.fillStyle = col(0x3a424a);
+    g.fillRect(x, 24, 1, 12);
+  }
+  g.fillRect(138, 24, 70, 2);
+  g.fillStyle = col(0x4a545e);
+  g.fillRect(152, 40, 3, 86);
+  g.fillRect(196, 40, 3, 86);
+  for (let i = 0; i < 7; i++) {
+    g.fillStyle = col(0x5e6a74);
+    g.fillRect(152, 46 + i * 12, 47, 2);
+    g.fillStyle = col(0x262c32);
+    g.fillRect(152, 48 + i * 12, 47, 1);
+  }
+  // a window up on the wall, lit or dark
+  g.fillStyle = col(0x1a1c24);
+  g.fillRect(60, 40, 26, 30);
+  g.fillStyle = sky ? 'rgba(140,190,220,0.5)' : 'rgba(255,200,120,0.35)';
+  g.fillRect(62, 42, 10, 12);
+  g.fillRect(74, 42, 10, 12);
+  g.fillRect(62, 56, 10, 12);
+  g.fillRect(74, 56, 10, 12);
+  g.fillStyle = col(0x6a5a4a);
+  g.fillRect(58, 70, 30, 3);
+  tex.refresh();
 }

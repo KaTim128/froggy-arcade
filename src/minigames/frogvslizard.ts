@@ -43,7 +43,6 @@ import { store } from '../core/state';
 import { centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
-import { backdrop } from './decor';
 
 const ID = 'frogvslizard' as const;
 export const ROUNDS = 1;
@@ -344,32 +343,104 @@ export const frogVsLizard: MinigameModule = {
 
 /** Two gardens, a hedge line behind them, and the fence between. */
 function paintYard(scene: Phaser.Scene): void {
-  backdrop(scene, 0x2e5a86, 0x1b3a5c, { band: 0.18, speckle: 40, speckleColor: 0xffffff });
-  scene.add.circle(40, 46, 11, 0xffe9a0).setAlpha(0.45);
-  for (const [cx, cy, r] of [
-    [96, 40, 7],
-    [104, 38, 9],
-    [113, 41, 6],
-    [216, 52, 6],
-    [224, 50, 8],
-    [232, 53, 5],
-  ]) {
-    scene.add.circle(cx, cy, r, 0xdfe9f4).setAlpha(0.5);
+  // A bright summer afternoon, painted once: a warm blue sky, a sun with its
+  // glow, fat white clouds, soft green hills, a trimmed hedge, flower beds,
+  // and textured lawn.
+  const key = 'fvl_yard_sunny';
+  if (!scene.textures.exists(key)) {
+    const tex = scene.textures.createCanvas(key, GAME_W, GAME_H);
+    if (tex) {
+      const g = tex.getContext();
+      let seed = 11;
+      const R = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      const sky = g.createLinearGradient(0, 0, 0, GROUND_Y);
+      sky.addColorStop(0, '#3fa8f0');
+      sky.addColorStop(0.65, '#8fd4fa');
+      sky.addColorStop(1, '#d8f2ff');
+      g.fillStyle = sky;
+      g.fillRect(0, 0, GAME_W, GROUND_Y);
+      // the sun and its warm glow
+      const glow = g.createRadialGradient(46, 46, 4, 46, 46, 46);
+      glow.addColorStop(0, 'rgba(255,248,200,0.95)');
+      glow.addColorStop(0.3, 'rgba(255,236,150,0.45)');
+      glow.addColorStop(1, 'rgba(255,236,150,0)');
+      g.fillStyle = glow;
+      g.fillRect(0, 0, 100, 100);
+      g.fillStyle = '#fff6c8';
+      g.beginPath();
+      g.arc(46, 46, 11, 0, Math.PI * 2);
+      g.fill();
+      // clouds: puffs with a lit top and a soft blue belly
+      const cloud = (cx: number, cy: number, w: number) => {
+        for (const [dx, dy, r] of [[-w * 0.35, 2, w * 0.22], [0, -2, w * 0.3], [w * 0.32, 1, w * 0.24], [w * 0.12, 4, w * 0.22]]) {
+          g.fillStyle = '#d6e8f6';
+          g.beginPath();
+          g.arc(cx + dx, cy + dy + 2, r, 0, Math.PI * 2);
+          g.fill();
+          g.fillStyle = '#ffffff';
+          g.beginPath();
+          g.arc(cx + dx, cy + dy, r, 0, Math.PI * 2);
+          g.fill();
+        }
+      };
+      cloud(110, 44, 34);
+      cloud(226, 56, 28);
+      cloud(286, 34, 20);
+      // far hills, then nearer ones
+      for (const [base, colr, amp, f] of [[GROUND_Y - 34, '#8cc98a', 10, 0.02], [GROUND_Y - 24, '#5fae63', 8, 0.035]] as const) {
+        g.fillStyle = colr;
+        g.beginPath();
+        g.moveTo(0, GROUND_Y);
+        for (let x = 0; x <= GAME_W; x += 4) g.lineTo(x, base - Math.sin(x * f + base) * amp - Math.sin(x * f * 2.3) * amp * 0.4);
+        g.lineTo(GAME_W, GROUND_Y);
+        g.fill();
+      }
+      // the hedge: rounded tops, light on the sunny side
+      g.fillStyle = '#2f7a3c';
+      g.fillRect(0, GROUND_Y - 22, GAME_W, 22);
+      for (let x = 0; x < GAME_W + 10; x += 10) {
+        g.fillStyle = '#2f7a3c';
+        g.beginPath();
+        g.arc(x, GROUND_Y - 22, 7, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = '#4fa556';
+        g.beginPath();
+        g.arc(x - 2, GROUND_Y - 25, 3, 0, Math.PI * 2);
+        g.fill();
+      }
+      for (let i = 0; i < 160; i++) {
+        g.fillStyle = R() < 0.5 ? '#3b8c46' : '#266a32';
+        g.fillRect(Math.floor(R() * GAME_W), GROUND_Y - 26 + Math.floor(R() * 24), 2, 1);
+      }
+      // flowers along the hedge foot
+      const petals = ['#ff6b8a', '#ffd84a', '#ffffff', '#ff9a3c', '#c78bff'];
+      for (let i = 0; i < 46; i++) {
+        const fx = Math.floor(R() * GAME_W);
+        const fy = GROUND_Y - 3 - Math.floor(R() * 5);
+        g.fillStyle = '#2f7a3c';
+        g.fillRect(fx, fy, 1, 3);
+        g.fillStyle = petals[i % petals.length];
+        g.fillRect(fx - 1, fy - 1, 3, 2);
+      }
+      // the lawn: stripes from the mower, tufts, a little shade under the hedge
+      g.fillStyle = '#6cc35e';
+      g.fillRect(0, GROUND_Y, GAME_W, GAME_H - GROUND_Y);
+      for (let x = 0; x < GAME_W; x += 32) {
+        g.fillStyle = 'rgba(255,255,255,0.08)';
+        g.fillRect(x, GROUND_Y, 16, GAME_H - GROUND_Y);
+      }
+      g.fillStyle = '#9ae07c';
+      g.fillRect(0, GROUND_Y, GAME_W, 2);
+      g.fillStyle = 'rgba(30,80,30,0.25)';
+      g.fillRect(0, GROUND_Y, GAME_W, 1);
+      for (let i = 0; i < 260; i++) {
+        g.fillStyle = R() < 0.5 ? '#58ad4e' : '#86d06e';
+        g.fillRect(Math.floor(R() * GAME_W), GROUND_Y + 3 + Math.floor(R() * (GAME_H - GROUND_Y - 3)), 1, 2);
+      }
+      tex.refresh();
+    }
   }
-  // a hedge along the back of both gardens
-  for (let x = 0; x < GAME_W; x += 11) {
-    scene.add.circle(x, GROUND_Y - 32, 8, 0x2c5c38).setAlpha(0.9);
-  }
-  scene.add.rectangle(0, GROUND_Y - 32, GAME_W, 32, 0x2c5c38).setOrigin(0, 0);
-
-  // grass, and a mown line between the two halves of it
-  scene.add.rectangle(0, GROUND_Y, GAME_W, GAME_H - GROUND_Y, 0x4a8a52).setOrigin(0, 0);
-  scene.add.rectangle(0, GROUND_Y, GAME_W, 2, 0x6fbb6a).setOrigin(0, 0);
-  for (let i = 0; i < 70; i++) {
-    const gx = (i * 97 + ((i * i) % 17) * 5) % GAME_W;
-    const gy = GROUND_Y + 3 + ((i * 53) % 22);
-    scene.add.rectangle(gx, gy, 1, 2 + (i % 2), 0x63a86a).setOrigin(0.5, 1).setAlpha(0.7);
-  }
+  scene.add.image(0, 0, key).setOrigin(0, 0);
 
   // the fence: planks with two rails and a pointed top, the thing in the way
   const h = GROUND_Y - FENCE.top;
