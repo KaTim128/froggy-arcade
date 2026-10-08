@@ -91,7 +91,6 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
     stick: 'lr',
     buttons: [
       { label: 'SIDE VIEW', key: 'SPACE', primary: true },
-      { label: 'BACK', key: 'X' },
     ],
   },
   ArcadeCasino: ROOM,
