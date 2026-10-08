@@ -2647,31 +2647,79 @@ for (const g of [
   await bridge(page, '__slots');
 
   const N = 200000;
-  const seen = await page.evaluate((n) => window.__slots.sample(n), N);
-  // Read the odds off the machine rather than restating them here: the point
-  // of the test is that the DRAW -- read off the window it dressed -- matches
-  // the table, not that two copies of the same number agree.
-  const table = await page.evaluate(async () => {
-    const m = await import('/src/minigames/slots.ts');
-    return m.PAYS.map((x) => ({ win: x.win, p: x.p }));
-  });
-  // Tolerance scales with the pattern: the gold one is one spin in ten
-  // thousand and cannot be measured to the same absolute precision as three
-  // in a row.
-  const off = [];
-  for (const { win, p } of table) {
-    const got = (seen[win] ?? 0) / N;
-    const tol = Math.max(0.0006, 4 * Math.sqrt((p * (1 - p)) / N));
-    if (Math.abs(got - p) > tol) off.push(`${win} wants ${(p * 100).toFixed(2)}% got ${(got * 100).toFixed(2)}%`);
+  const { seen, paid } = await page.evaluate((n) => window.__slots.sample(n), N);
+  const table = await page.evaluate(() => window.__slots.table());
+  const fill = await page.evaluate(() => window.__slots.fill(4000));
+  const by = (id) => table.find((t) => t.id === id);
+  const lose = seen.none / N;
+  const fives = Object.entries(seen).filter(([k]) => k.endsWith('x5')).reduce((a, [, v]) => a + v, 0) / N;
+  const threes = Object.entries(seen).filter(([k]) => k.endsWith('x3')).reduce((a, [, v]) => a + v, 0) / N;
+  const paying = table.filter((t) => t.tier !== 'WILD');
+  const rarerPaysMore = paying.every((t, i) => i === 0 || (t.weight <= paying[i - 1].weight && t.pays[0] >= paying[i - 1].pays[0] && t.pays[2] >= paying[i - 1].pays[2]));
+  const commonMoreOften = paying.every((t, i) => i === 0 || fill[t.id] <= fill[paying[i - 1].id] * 1.05);
+  const frog = by('token_3');
+  const checks = [
+    ['the board: bronze 1/3, blue ruby 3/8, Froggy 5/15', by('token_1').pays[0] === 1 && by('token_1').pays[2] === 3 && by('token_5').pays[0] === 3 && by('token_5').pays[2] === 8 && frog.pays[0] === 5 && frog.pays[2] === 15],
+    ['five Froggys is the biggest prize on the board', paying.every((t) => t.pays[2] <= frog.pays[2])],
+    ['rarer tokens pay more, commoner ones turn up more', rarerPaysMore && commonMoreOften],
+    ['Froggy is rarer than the common tokens', fill.token_3 < fill.token_1 / 2 && fill.token_3 < fill.token_10 / 2],
+    ['most spins lose', lose > 0.5],
+    ['five in a row is far rarer than three', fives * 20 < threes],
+    ['the machine keeps more than it pays', paid < N * 3],
+  ];
+  for (const [what, ok] of checks) {
+    console.log(`${ok ? 'PASS' : 'FAIL'}  slots: ${what}`);
+    if (!ok) failures++;
   }
-  const ok = off.length === 0;
-  console.log(
-    `${ok ? 'PASS' : 'FAIL'}  slots: every pattern comes up at its chance, read off the window  — ` +
-      table.map(({ win }) => `${win} ${(((seen[win] ?? 0) / N) * 100).toFixed(3)}%`).join(', ') +
-      `, nothing ${((seen.none / N) * 100).toFixed(1)}%` +
-      (off.length ? `; ${off.join(', ')}` : ''),
-  );
-  if (!ok) failures++;
+  console.log(`      lose ${(lose * 100).toFixed(1)}%, threes ${(threes * 100).toFixed(2)}%, fives ${(fives * 100).toFixed(3)}%, return ${((paid / (N * 3)) * 100).toFixed(1)}%`);
+
+  // What a line pays, read off constructed windows: the best line, once.
+  const row = (...ids) => [...ids];
+  const filler = ['token_10', 'token_20', 'token_1', 'token_50', 'token_5'];
+  const grid = (lines) => Array.from({ length: 6 }, (_, r) => lines[r] ?? filler.map((_, c) => filler[(c + r) % 5]));
+  const cases = [
+    ['three Froggys pay 5', grid({ 2: row('token_3', 'token_3', 'token_3', 'token_10', 'token_1') }), 5],
+    ['five Froggys pay 15', grid({ 0: row('token_3', 'token_3', 'token_3', 'token_3', 'token_3') }), 15],
+    ['three bronze pay 1', grid({ 4: row('token_5', 'token_1', 'token_1', 'token_1', 'token_10') }), 1],
+    ['three blue rubies pay 3', grid({ 1: row('token_5', 'token_5', 'token_5', 'token_20', 'token_1') }), 3],
+    ['five blue rubies pay 8', grid({ 3: row('token_5', 'token_5', 'token_5', 'token_5', 'token_5') }), 8],
+    ['two lines pay only the best one', grid({ 0: row('token_1', 'token_1', 'token_1', 'token_10', 'token_5'), 5: row('token_3', 'token_3', 'token_3', 'token_5', 'token_1') }), 5],
+    ['the wild fills a line', grid({ 2: row('token_3', 'golden_froggy', 'token_3', 'token_1', 'token_5') }), 5],
+    ['nothing in a row pays nothing', grid({}), 0],
+  ];
+  for (const [what, g, want] of cases) {
+    const got = await page.evaluate((g) => window.__slots.best(g), g);
+    const ok = got.pays === want;
+    console.log(`${ok ? 'PASS' : 'FAIL'}  slots: ${what}  — paid ${got.pays}`);
+    if (!ok) failures++;
+  }
+
+  // And it lands in the player's own tokens: a forced three-Froggy spin, then
+  // a forced losing one, read off the global balance.
+  const bal = () => page.evaluate(() => window.__froggy.state().tokens);
+  const spinWith = async (g) => {
+    await page.evaluate((g) => window.__slots.force(g), g);
+    await page.keyboard.press('Space');
+    for (let i = 0; i < 40; i++) {
+      await sleep(150);
+      if (!(await page.evaluate(() => window.__slots.state().busy))) break;
+    }
+    await sleep(300);
+  };
+  const b0 = await bal();
+  const p0 = await page.evaluate(() => window.__slots.paidCount());
+  await spinWith(cases[0][1]);
+  const b1 = await bal();
+  const p1 = await page.evaluate(() => window.__slots.paidCount());
+  await spinWith(cases[7][1]);
+  const b2 = await bal();
+  const p2 = await page.evaluate(() => window.__slots.paidCount());
+  const okWin = b1 === b0 - 3 + 5 && p1 === p0 + 1;
+  const okLose = b2 === b1 - 3 && p2 === p1;
+  console.log(`${okWin ? 'PASS' : 'FAIL'}  slots: a win adds exactly its prize to the player's tokens, once  — ${b0} -> ${b1} (paid ${p1 - p0}x)`);
+  console.log(`${okLose ? 'PASS' : 'FAIL'}  slots: a losing spin adds nothing  — ${b1} -> ${b2}`);
+  if (!okWin) failures++;
+  if (!okLose) failures++;
   await page.close();
 }
 
