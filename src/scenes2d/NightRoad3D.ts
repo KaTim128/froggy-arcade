@@ -420,12 +420,6 @@ export class NightRoad3D extends Phaser.Scene {
     window.addEventListener('mousemove', this.onLookMove);
     window.addEventListener('mouseup', this.onLookUp);
     window.addEventListener('blur', this.onLookUp);
-    this.game.canvas.addEventListener('click', () => {
-      // not while the pause menu is up: its buttons are on this canvas too, and a
-      // click on AUDIO or CONTROLS would take the mouse away again
-      if (isPaused() || this.game.scene.isActive('SettingsModal')) return;
-      void this.game.canvas.requestPointerLock?.();
-    });
 
     this.stage.start((dt) => this.tick(dt));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());

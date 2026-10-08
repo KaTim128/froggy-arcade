@@ -60,9 +60,12 @@ export function installPause(g: Phaser.Game): void {
   // Only for the scene that took the lock, and only while it is still the
   // one on top: a room that lets go of the mouse as it shuts down must not
   // pause whatever comes after it.
+  // THE CURSOR STAYS.  Nothing takes the mouse any more (the 3D rooms look
+  // by click-and-drag), and should anything lock it all the same -- a library,
+  // an extension, a stray call -- it is handed straight back.
   document.addEventListener('pointerlockchange', () => {
     if (document.pointerLockElement) {
-      lockOwner = topScene()?.scene.key ?? null;
+      document.exitPointerLock?.();
       return;
     }
     const owner = lockOwner;
