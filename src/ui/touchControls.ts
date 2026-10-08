@@ -768,9 +768,10 @@ class TouchControls {
     if (!canvas) return { h: 0, w: 0 };
     const pic = canvas.getBoundingClientRect();
     const r = cross.getBoundingClientRect();
-    const per = 320 / pic.width;
+    // (across and down are measured separately: a sideways phone stretches
+    // the picture wider than it is tall)
     if (r.top >= pic.bottom) return { h: 0, w: 0 };
-    return { h: Math.ceil((pic.bottom - r.top) * per), w: Math.ceil(r.width * per) };
+    return { h: Math.ceil((pic.bottom - r.top) * (180 / pic.height)), w: Math.ceil(r.width * (320 / pic.width)) };
   }
 
   // ---- THE THUMBSTICK.
