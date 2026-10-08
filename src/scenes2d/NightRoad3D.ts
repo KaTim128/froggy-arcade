@@ -44,6 +44,7 @@ import { froggyLayer } from '../render/froggyLayer';
 import { drawPixelText } from '../render/pixelFont';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
 import { playJumpscare3D, prepareJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
+import { FootDust } from '../three/footDust';
 import { FroggyMonster } from '../three/froggyMonster';
 import { ThreeStage } from '../render/threeStage';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
@@ -192,6 +193,7 @@ function decal<M extends THREE.Material>(m: M, k = 1): M {
 export class NightRoad3D extends Phaser.Scene {
   private stage: ThreeStage | null = null;
   private monster: FroggyMonster | null = null;
+  private footDust: FootDust | null = null;
   private scare: Scare3D | null = null;
   private keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
   private jumpKeys: Phaser.Input.Keyboard.Key[] = [];
@@ -238,7 +240,6 @@ export class NightRoad3D extends Phaser.Scene {
   private fYaw = 0;
   private fMode: FrogMode = 'wait';
   private fHop = 0;
-  private fStepT = 0;
   private fSpeed = 0;
   private lostT = 0;
   private searchT = 0;
@@ -709,6 +710,16 @@ export class NightRoad3D extends Phaser.Scene {
 
     this.monster = new FroggyMonster(FROGGY_SCALE);
     S.add(this.monster.root);
+    // his steps are his feet: each sound, and its kick of grit, the moment a
+    // foot lands -- softly while he creeps, a splash in the water
+    this.footDust = new FootDust(S, 0x4a4a40);
+    this.monster.onFootfall = (_foot, at, hard) => {
+      if (!this.monster?.root.visible) return;
+      const wet = this.fy === 0 && this.inWater(at.x, at.z);
+      const g = this.gainAt(at.x, at.z) * (this.phase === 'creep' ? 0.3 : 1);
+      if (g > 0.03) audio.sfx(wet ? 'splash' : this.fSpeed > 4 ? 'hop_wet' : 'froggy_step', g * (wet ? 0.8 : 1) * (0.8 + hard * 0.3), this.placeOf(at.x, at.z));
+      if (!wet) this.footDust?.puff(at, hard, FROGGY_SCALE * 0.7);
+    };
     if (this.stage) prepareJumpscare3D(this.stage, this.monster);
   }
 
@@ -3174,13 +3185,7 @@ gl_Position = projectionMatrix * mvPosition;`,
         while (diff > Math.PI) diff -= Math.PI * 2;
         while (diff < -Math.PI) diff += Math.PI * 2;
         this.fYaw += diff * Math.min(1, dt * 8);
-        this.fStepT += dt;
-        if (this.fStepT > (speed > 4 ? 0.3 : 0.55)) {
-          this.fStepT = 0;
-          // creeping, his feet go down softly -- barely there behind you
-          const g = this.gainAt(this.froggy.x, this.froggy.y) * (this.phase === 'creep' ? 0.3 : 1);
-          if (g > 0.03) audio.sfx(wet ? 'splash' : speed > 4 ? 'hop_wet' : 'froggy_step', g * (wet ? 0.8 : 1), this.placeOf(this.froggy.x, this.froggy.y));
-        }
+        // (his steps are his footfalls: see onFootfall)
       }
     }
     // HE LOOKS BACK.  Still, or creeping, or caught in your eye while he goes
@@ -3212,6 +3217,7 @@ gl_Position = projectionMatrix * mvPosition;`,
     // his eyes and his face are on you whenever he is after you, or you are
     // looking at him
     this.monster.lookAt(cam && (staring || creeping || ((hunting || watched) && this.seen)) ? cam : null);
+    this.footDust?.update(dt);
     this.monster.update(dt, {
       speed: this.fSpeed,
       maw: hunting ? 1 : revealing ? 0.25 + rise * 0.55 : staring ? 0.15 : creeping ? 0.08 : 0.3,

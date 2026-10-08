@@ -28,6 +28,7 @@ import { froggyLayer } from '../render/froggyLayer';
 import { drawPixelText } from '../render/pixelFont';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
 import { playJumpscare3D, prepareJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
+import { FootDust } from '../three/footDust';
 import { FroggyMonster, type ClimbRig, type HandGoal } from '../three/froggyMonster';
 import { climbFrame, climbSeconds, type ClimbGeom } from '../three/froggyClimb';
 import { ThreeStage } from '../render/threeStage';
@@ -266,6 +267,7 @@ function texNight(): HTMLCanvasElement {
 export class HotelLobby3D extends Phaser.Scene {
   private stage: ThreeStage | null = null;
   private monster: FroggyMonster | null = null;
+  private footDust: FootDust | null = null;
   private scare: Scare3D | null = null;
   private mode: Mode = 'hide';
   private startX = 238;
@@ -292,7 +294,6 @@ export class HotelLobby3D extends Phaser.Scene {
   private fYaw = 0;
   private legs: Leg[] = [];
   private holdT = 0;
-  private stepT = 0;
   private watchFor = 6;
   private faceTo: THREE.Vector3 | null = null;
   private faceK = 0;
@@ -442,6 +443,14 @@ export class HotelLobby3D extends Phaser.Scene {
     this.monster = new FroggyMonster(FROG_SCALE);
     this.monster.root.visible = false;
     S.add(this.monster.root);
+    // his steps are his feet: the sound and a kick of grit the moment each
+    // one comes down, where it comes down
+    this.footDust = new FootDust(S);
+    this.monster.onFootfall = (_foot, at, hard) => {
+      if (!this.monster?.root.visible) return;
+      this.heard(at.clone().setY(0.1), 'froggy_step', 0.75 + hard * 0.45);
+      this.footDust?.puff(at, hard, FROG_SCALE * 0.8);
+    };
     if (this.stage) prepareJumpscare3D(this.stage, this.monster);
     // a cold light that goes with him, so his face reads in the dark
     this.frogLight = new THREE.PointLight(0xb8c4e0, 4.5, 6, 1.5);
@@ -1544,13 +1553,7 @@ export class HotelLobby3D extends Phaser.Scene {
     // his steps: you hear him coming, stopping, and going
     const moved = this.fpos.distanceTo(this.fWas) / Math.max(dt, 1e-4);
     this.fWas.copy(this.fpos);
-    if (moved > 0.15) {
-      this.stepT -= dt;
-      if (this.stepT <= 0) {
-        this.stepT = Phaser.Math.Clamp(0.62 / Math.max(0.4, moved / 0.9), 0.18, 0.9);
-        this.heard(this.fpos.clone().setY(0.1), 'froggy_step', lunge ? 1.2 : 1);
-      }
-    } else this.stepT = 0.1;
+    // (the steps themselves are his footfalls: see onFootfall)
 
     // out of the stairwell, a second, then the head comes round to the storage door
     if (this.phase === 'burst' && this.phaseT > 0.9 && this.mode === 'hide') faceTo = new THREE.Vector3(X1, 1.5, DOOR_Z);
@@ -1567,6 +1570,7 @@ export class HotelLobby3D extends Phaser.Scene {
     }
     if (this.binLid) this.binLid.rotation.x = this.binOpen * 1.7;
     m.setPose(this.fpos.x, 0, this.fpos.z, this.fYaw);
+    this.footDust?.update(dt);
     m.update(dt, {
       speed: moved,
       maw: lunge ? 1 : this.phase === 'detect' ? 0.6 : 0.15,
