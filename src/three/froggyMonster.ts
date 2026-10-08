@@ -68,8 +68,11 @@ const GUM = 0x44101a;
 const MOUTH_Y = -0.1;
 /** How far an arm may swing out sideways to clear his face (about shoulder
  * height), and then how far back. */
-const CLEAR_SIDE_MAX = 1.3;
-const CLEAR_BACK_MAX = 1.1;
+const CLEAR_SIDE_MAX = 0.9;
+/** An arm's range when he is only walking or standing (radians). */
+const ARM_WALK_X = 1.2;
+const ARM_WALK_Z = 0.95;
+const CLEAR_BACK_MAX = 0.8;
 const MOUTH_Z = 0.085;
 /**
  * Half its width: wider than the muzzle was, and a touch wider than the head
@@ -2161,6 +2164,22 @@ export class FroggyMonster {
     // eased back only once it is well clear.
     const viewer = pose.viewer ?? pose.reachAt ?? (this.grabNow > 0.01 ? this.gaze : null);
     this.keepEyesClear(viewer, dt);
+
+    // ARMS DOWN unless he is DOING something with them.  Walking, standing,
+    // looking about, the arms stay in a walk's range -- out to the side no
+    // further than about fifty degrees, forward or back no further than about
+    // seventy -- whatever the guard above or a speed spike would ask.  Only a
+    // real action raises them: the chase's reach, the scream, a climb, a
+    // grab, or a hand put on something.
+    const acting = this.lungeNow > 0.05 || this.rageNow > 0.05 || this.climbNow > 0.05 || this.grabNow > 0.05;
+    if (!acting) {
+      for (let h = 0; h < 2; h++) {
+        if (this.held[h] > 0.3) continue;
+        const a = this.arms[h].rotation;
+        a.x = THREE.MathUtils.clamp(a.x, -ARM_WALK_X, ARM_WALK_X);
+        a.z = h === 0 ? THREE.MathUtils.clamp(a.z, -ARM_WALK_Z, 0.3) : THREE.MathUtils.clamp(a.z, -0.3, ARM_WALK_Z);
+      }
+    }
 
     // (last, after the eye guard has swung them: nothing after this moves an arm)
     // A hand that is on nothing hangs -- and on a body folded down this low,
