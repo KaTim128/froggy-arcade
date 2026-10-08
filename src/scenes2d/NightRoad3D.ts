@@ -137,6 +137,14 @@ interface Crow {
   flying: number;
 }
 
+interface Thicket {
+  x: number;
+  z: number;
+  r: number;
+  h: number;
+  dense: number;
+}
+
 interface Circle {
   x: number;
   z: number;
@@ -218,6 +226,8 @@ export class NightRoad3D extends Phaser.Scene {
   private posts: Circle[] = [];
   private waterMats: THREE.Texture[] = [];
   private sky: THREE.Group | null = null;
+  /** The CLOSED sign over the arcade's doors, flickering. */
+  private beacon: { mesh: THREE.Mesh; light: THREE.PointLight } | null = null;
   /** Going to a sound he could place exactly: he comes at a run. */
   private urgent = false;
   /** The river's current and its glints, which run downstream (-x). */
@@ -246,6 +256,26 @@ export class NightRoad3D extends Phaser.Scene {
   private ponds: Circle[] = [];
   /** The big pines' low boughs: crouch inside one and you are under cover. */
   private skirts: Circle[] = [];
+  /** Big bushes you can get into: h is how tall, dense how thick (0..1). */
+  private thickets: Thicket[] = [];
+  private inThicket: Thicket | null = null;
+  private thicketT = 0;
+  /** What the foliage shaders read: the breeze, you, and how hard you shook it. */
+  private wind = {
+    uTime: { value: 0 },
+    uPlayer: { value: new THREE.Vector4() },
+    uShake: { value: 0 },
+    uGust: { value: 0 },
+  };
+  private gustT = 8;
+  private gust = 0;
+  private riverT = 0;
+  private rapidsT = 0;
+  private plipT = 3;
+  private creakT = 6;
+  private rapids: { x: number; z: number }[] = [];
+  private foam: THREE.MeshBasicMaterial[] = [];
+  private fall: { pts: THREE.Points; vel: Float32Array } | null = null;
   /** How long you have stood in one place, and his walk past if it comes. */
   private stillT = 0;
   private passT = 0;
@@ -293,6 +323,14 @@ export class NightRoad3D extends Phaser.Scene {
     this.boxes = [];
     this.posts = [];
     this.skirts = [];
+    this.thickets = [];
+    this.inThicket = null;
+    this.thicketT = 0;
+    this.rapids = [];
+    this.foam = [];
+    this.fall = null;
+    this.gust = 0;
+    this.gustT = 8;
     this.stillT = 0;
     this.passT = 0;
     this.passBy = null;
@@ -652,6 +690,7 @@ export class NightRoad3D extends Phaser.Scene {
     this.buildLamps(S);
     this.buildBusStop(S);
     this.buildHotel(S);
+    this.buildTown(S, R);
 
     this.monster = new FroggyMonster(FROGGY_SCALE);
     S.add(this.monster.root);
@@ -875,146 +914,360 @@ export class NightRoad3D extends Phaser.Scene {
       const z = HOTEL_Z - 30 + R() * (BACK_Z + 40 - HOTEL_Z);
       spots.push({ x, z, r: 0.3 + R() * 0.2 });
     }
-    // Behind the start the road is shut by the dark: trees across it.
-    for (let k = 0; k < 24; k++) spots.push({ x: -20 + R() * 40, z: BACK_Z + 2 + R() * 6, r: 0.3 });
+    // (Behind the start is the town now -- see buildTown -- so no trees across it.)
 
-    const bark = canvasTex(16, 64, (g) => {
-      g.fillStyle = '#2a2018';
-      g.fillRect(0, 0, 16, 64);
-      for (let i = 0; i < 40; i++) {
-        g.fillStyle = i % 2 ? '#1c150f' : '#36291d';
-        g.fillRect(Math.floor(R() * 16), Math.floor(R() * 64), 1, 3 + Math.floor(R() * 8));
+    // bark: deep vertical furrows, and plates between them catching the light
+    const bark = canvasTex(32, 64, (g) => {
+      g.fillStyle = '#6a5a4a';
+      g.fillRect(0, 0, 32, 64);
+      for (let i = 0; i < 110; i++) {
+        g.fillStyle = ['#3a2e24', '#54463a', '#7e6e5c', '#2a2018'][i % 4];
+        g.fillRect(Math.floor(R() * 32), Math.floor(R() * 64), 1 + Math.floor(R() * 2), 3 + Math.floor(R() * 10));
       }
     });
     bark.wrapS = bark.wrapT = THREE.RepeatWrapping;
     bark.repeat.set(2, 3);
-    const needles = canvasTex(32, 32, (g) => {
-      g.fillStyle = '#6e7c6e';
-      g.fillRect(0, 0, 32, 32);
-      // needle clumps hanging down: short dark and light strokes
-      for (let i = 0; i < 320; i++) {
-        g.fillStyle = ['#56645a', '#86947f', '#3e4a40', '#98a690', '#4a564a'][i % 5];
-        g.fillRect(Math.floor(R() * 32), Math.floor(R() * 32), 1, 2 + Math.floor(R() * 2));
+    // Leaves: a sheet of them on clear ground, each a pointed oval with a
+    // midrib, in five greens -- cut out, so a clump of them is ragged at its
+    // edge and the sky shows through it.
+    const leafTex = (dark: boolean): THREE.CanvasTexture => {
+      const t = canvasTex(64, 64, (g) => {
+        g.clearRect(0, 0, 64, 64);
+        const greens = dark
+          ? ['#1e3020', '#28402a', '#173018', '#30482e', '#22381e']
+          : ['#3e5a30', '#4e6a38', '#2e4a26', '#5e7a42', '#36522c'];
+        for (let i = 0; i < 85; i++) {
+          const x = R() * 64;
+          const y = R() * 64;
+          const a = R() * Math.PI;
+          g.save();
+          g.translate(x, y);
+          g.rotate(a);
+          g.fillStyle = greens[i % 5];
+          g.beginPath();
+          g.ellipse(0, 0, 4 + R() * 2.5, 1.6 + R() * 1.2, 0, 0, Math.PI * 2);
+          g.fill();
+          g.fillStyle = 'rgba(0,0,0,0.25)';
+          g.fillRect(-3, -0.25, 6, 0.5);
+          g.restore();
+        }
+      });
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(4, 3);
+      return t;
+    };
+    // A pine bough's needles: a fringe of strokes hanging off a twig, cut out
+    const boughTex = canvasTex(64, 32, (g) => {
+      g.clearRect(0, 0, 64, 32);
+      for (let i = 0; i < 260; i++) {
+        const x = R() * 64;
+        const y = 2 + R() * 28;
+        g.strokeStyle = ['#2a3e2c', '#3a5038', '#1e3020', '#4a6044', '#2e4630'][i % 5];
+        g.lineWidth = 1;
+        g.beginPath();
+        g.moveTo(x, y);
+        g.lineTo(x + (R() - 0.5) * 3, y + 3 + R() * 4);
+        g.stroke();
       }
     });
-    needles.wrapS = needles.wrapT = THREE.RepeatWrapping;
-    needles.repeat.set(3, 2);
+    boughTex.wrapS = boughTex.wrapT = THREE.RepeatWrapping;
 
-    const trunkGeo = new THREE.CylinderGeometry(0.6, 1, 1, 7);
-    trunkGeo.translate(0, 0.5, 0);
-    const coneGeo = new THREE.ConeGeometry(1, 1, 9);
-    coneGeo.translate(0, 0.5, 0);
-    const TIERS = 5;
-    const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ map: bark }), spots.length);
-    const cones = new THREE.InstancedMesh(coneGeo, new THREE.MeshLambertMaterial({ map: needles }), spots.length * TIERS);
-    const limbGeo = new THREE.CylinderGeometry(0.02, 0.05, 1, 4);
-    limbGeo.translate(0, 0.5, 0);
-    const limbs = new THREE.InstancedMesh(limbGeo, new THREE.MeshLambertMaterial({ map: bark }), 1600);
-    // the bare ones: a trunk that tapers to a snapped top, weathered grey
-    const snagGeo = new THREE.CylinderGeometry(0.28, 1, 1, 6);
-    snagGeo.translate(0, 0.5, 0);
-    const snags = new THREE.InstancedMesh(snagGeo, new THREE.MeshLambertMaterial({ map: bark }), spots.length);
-    let ns = 0;
+    // EVERYTHING GREEN MOVES.  A breeze that comes and goes leans the crowns
+    // (more the higher up), and anything near you is pushed aside by your
+    // body and shaken when you barge through it.  Done on the GPU, per vertex,
+    // from the world position, so ten thousand boughs cost nothing to move.
+    const windify = <M extends THREE.Material>(mat: M, sway: number, pushR: number, base = 0.6): M => {
+      mat.onBeforeCompile = (sh) => {
+        sh.uniforms.uTime = this.wind.uTime;
+        sh.uniforms.uPlayer = this.wind.uPlayer;
+        sh.uniforms.uShake = this.wind.uShake;
+        sh.uniforms.uGust = this.wind.uGust;
+        sh.vertexShader = sh.vertexShader
+          .replace(
+            '#include <common>',
+            `#include <common>
+uniform float uTime; uniform vec4 uPlayer; uniform float uShake; uniform float uGust;`,
+          )
+          .replace(
+            '#include <project_vertex>',
+            `vec4 wpos = vec4(transformed, 1.0);
+#ifdef USE_INSTANCING
+wpos = instanceMatrix * wpos;
+#endif
+wpos = modelMatrix * wpos;
+float hh = max(0.0, wpos.y - ${base.toFixed(2)});
+float ph = wpos.x * 0.13 + wpos.z * 0.11;
+float gust = (0.55 + 0.45 * sin(uTime * 0.31 + wpos.x * 0.015 + wpos.z * 0.01)) * (1.0 + uGust);
+wpos.x += (sin(uTime * 1.6 + ph) + 0.4 * sin(uTime * 4.1 + ph * 3.0)) * ${sway.toFixed(4)} * hh * gust;
+wpos.z += (cos(uTime * 1.2 + ph * 1.3) + 0.3 * sin(uTime * 3.7 + ph * 2.0)) * ${(sway * 0.7).toFixed(4)} * hh * gust;
+vec2 dp = wpos.xz - uPlayer.xy;
+float dd = length(dp);
+float near = 1.0 - smoothstep(0.0, ${pushR.toFixed(2)}, dd);
+float low = clamp(1.0 - wpos.y / 2.6, 0.0, 1.0);
+wpos.xz += (dd > 0.001 ? dp / dd : vec2(0.0)) * near * low * uPlayer.z * 0.55;
+wpos.x += sin(uTime * 37.0 + ph * 9.0) * uShake * near * 0.07;
+wpos.y += cos(uTime * 31.0 + ph * 7.0) * uShake * near * 0.04;
+vec4 mvPosition = viewMatrix * wpos;
+gl_Position = projectionMatrix * mvPosition;`,
+          );
+      };
+      return mat;
+    };
+
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const sc = new THREE.Vector3();
     const p = new THREE.Vector3();
     const col = new THREE.Color();
-    let c = 0;
-    let nl = 0;
-    spots.forEach((t, i) => {
-      const h = 7 + R() * 7;
-      const dead = Math.abs(t.x) < RAIL_X + 5 && R() < 0.25;
-      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), R() * 6.28);
-      if (dead) {
-        // a little lean, and grey with weather
-        const lean = new THREE.Quaternion().setFromEuler(new THREE.Euler((R() - 0.5) * 0.12, R() * 6.28, (R() - 0.5) * 0.12));
-        m.compose(p.set(t.x, 0, t.z), lean, sc.set(t.r * 1.1, h * 0.75, t.r * 1.1));
-        snags.setMatrixAt(ns, m);
-        snags.setColorAt(ns, col.setHSL(0.08, 0.06, 0.42 + R() * 0.12));
-        ns++;
-        m.compose(p.set(t.x, -50, t.z), q, sc.set(0.001, 0.001, 0.001));
-      } else m.compose(p.set(t.x, 0, t.z), q, sc.set(t.r, h * 0.5, t.r));
-      trunks.setMatrixAt(i, m);
-      let reach = 0;
-      // one tree's green, a little lighter towards the top
-      const hue = 0.33 + (R() - 0.5) * 0.06;
-      const light = 0.06 + R() * 0.04;
-      // About one in four is an old, heavy pine: its lowest boughs spread
-      // wide and sweep down nearly to the ground -- room under them for a
-      // man crouched against the trunk.
-      const big = !dead && Math.abs(t.x) <= WORLD_X && R() < 0.26;
-      if (big) this.skirts.push({ x: t.x, z: t.z, r: 2.3 });
-      for (let k = 0; k < TIERS; k++) {
-        // narrow, tall, overlapping tiers: a spruce's outline, not a stack of shades
-        const spread = big ? [1.55, 1.25, 1.1, 1, 1][k] : 1;
-        const w = (dead ? 0 : 1) * (2.3 - k * 0.4) * (0.82 + R() * 0.3) * spread;
-        const base = big && k === 0 ? 0.03 : big && k === 1 ? 0.12 : 0.16 + k * 0.15;
-        const tq = new THREE.Quaternion().setFromEuler(new THREE.Euler((R() - 0.5) * 0.08, R() * 6.28, (R() - 0.5) * 0.08));
-        m.compose(p.set(t.x, h * base, t.z), tq, sc.set(w || 0.001, h * (big && k < 2 ? 0.46 : 0.4), w || 0.001));
-        cones.setMatrixAt(c, m);
-        cones.setColorAt(c, col.setHSL(hue, 0.38, light + k * 0.01));
-        c++;
-        // how far this tier's boughs stand out from the trunk at hip, chest
-        // and head height
-        const b0 = h * base;
-        const th = h * (big && k < 2 ? 0.46 : 0.4);
-        for (const y of [0.6, 1.1, 1.6]) {
-          if (y >= b0 && y <= b0 + th) reach = Math.max(reach, w * (1 - (y - b0) / th));
+    const up = new THREE.Vector3(0, 1, 0);
+
+    // The parts every tree is made of, each an instanced mesh: a tapering
+    // trunk; limbs (and the branches and twigs off them, the same shape
+    // smaller); pine boughs, each a drooping fan of needles; and the leafy
+    // clumps of the broadleaves.
+    const trunkGeo = new THREE.CylinderGeometry(0.55, 1, 1, 7, 1, true);
+    trunkGeo.translate(0, 0.5, 0);
+    const limbGeo = new THREE.CylinderGeometry(0.45, 1, 1, 4, 1, true);
+    limbGeo.translate(0, 0.5, 0);
+    // a bough: an open, flattened cone lying on its side, apex at the trunk
+    const boughGeo = new THREE.ConeGeometry(0.5, 1, 5, 1, true);
+    boughGeo.translate(0, -0.5, 0);
+    boughGeo.rotateZ(Math.PI / 2);
+    boughGeo.scale(1, 0.45, 1);
+    const clumpGeo = new THREE.IcosahedronGeometry(1, 0);
+    const tipGeo = new THREE.ConeGeometry(1, 1, 8, 1, true);
+    tipGeo.translate(0, 0.5, 0);
+
+    const barkMat = windify(new THREE.MeshLambertMaterial({ map: bark }), 0.004, 0, 2);
+    const limbMat = windify(new THREE.MeshLambertMaterial({ map: bark }), 0.012, 1.4, 1.5);
+    const boughMat = windify(
+      new THREE.MeshLambertMaterial({ map: boughTex, alphaTest: 0.35, side: THREE.DoubleSide }),
+      0.02,
+      1.6,
+      0.4,
+    );
+    const leafMat = windify(
+      new THREE.MeshLambertMaterial({ map: leafTex(false), alphaTest: 0.4, side: THREE.DoubleSide }),
+      0.022,
+      1.5,
+      0.5,
+    );
+    // Every part is filed by where it stands, and each patch of woods drawn
+    // as its own batch -- so the woods behind you, or off to the side, are
+    // not drawn at all.
+    type Part = { geo: THREE.BufferGeometry; mat: THREE.Material; items: { m: THREE.Matrix4; c: THREE.Color }[] };
+    const parts: Record<string, Part> = {};
+    const put = (kind: string, geo: THREE.BufferGeometry, mat: THREE.Material, mm: THREE.Matrix4, c: THREE.Color): void => {
+      (parts[kind] ??= { geo, mat, items: [] }).items.push({ m: mm.clone(), c: c.clone() });
+    };
+    const flush = (): void => {
+      for (const part of Object.values(parts)) {
+        const groups = new Map<string, { m: THREE.Matrix4; c: THREE.Color }[]>();
+        for (const it of part.items) {
+          const key = `${Math.floor(it.m.elements[14] / 22)}:${Math.floor(it.m.elements[12] / 22)}`;
+          let g = groups.get(key);
+          if (!g) groups.set(key, (g = []));
+          g.push(it);
+        }
+        for (const g of groups.values()) {
+          const im = new THREE.InstancedMesh(part.geo, part.mat, g.length);
+          g.forEach((it, k) => {
+            im.setMatrixAt(k, it.m);
+            im.setColorAt(k, it.c);
+          });
+          im.computeBoundingSphere();
+          S.add(im);
         }
       }
-      t.leaf = reach;
+      for (const k of Object.keys(parts)) delete parts[k];
+    };
+    const limb = (x: number, y: number, z: number, dir: THREE.Vector3, len: number, rad: number, tint: THREE.Color): void => {
+      q.setFromUnitVectors(up, dir);
+      m.compose(p.set(x, y, z), q, sc.set(rad, len, rad));
+      put('limb', limbGeo, limbMat, m, tint);
+    };
+    const clump = (x: number, y: number, z: number, r: number, hue: number, light: number): void => {
+      q.setFromEuler(new THREE.Euler(R() * 6.28, R() * 6.28, R() * 6.28));
+      m.compose(p.set(x, y, z), q, sc.set(r * (0.9 + R() * 0.3), r * (0.7 + R() * 0.25), r * (0.9 + R() * 0.3)));
+      put('clump', clumpGeo, leafMat, m, col.setHSL(hue, 0.42, light));
+    };
+    const dirFrom = (yaw: number, tilt: number): THREE.Vector3 =>
+      new THREE.Vector3(Math.sin(tilt) * Math.cos(yaw), Math.cos(tilt), Math.sin(tilt) * Math.sin(yaw));
+
+    spots.forEach((t) => {
+      const far = Math.abs(t.x) > WORLD_X + 0.5;
+      const dead = !far && Math.abs(t.x) < RAIL_X + 5 && R() < 0.2;
+      // a third of the woods is broadleaf: oak-ish, and here and there a birch
+      const broad = !dead && R() < 0.34;
+      const birch = broad && R() < 0.3;
+      const h = broad ? 6 + R() * 5 : 7 + R() * 7;
+      const barkTint = new THREE.Color().setHSL(0.07, birch ? 0.04 : 0.18, birch ? 0.85 + R() * 0.1 : dead ? 0.6 + R() * 0.12 : 0.5 + R() * 0.15);
+      const lean = new THREE.Quaternion().setFromEuler(new THREE.Euler((R() - 0.5) * 0.08, R() * 6.28, (R() - 0.5) * 0.08));
+      const trunkH = dead ? h * 0.75 : broad ? h * 0.62 : h * 0.96;
+      m.compose(p.set(t.x, 0, t.z), lean, sc.set(t.r * (birch ? 0.7 : 1), trunkH, t.r * (birch ? 0.7 : 1)));
+      put('trunk', trunkGeo, barkMat, m, barkTint);
+      let reach = 0;
+      const hue = 0.3 + (R() - 0.5) * 0.07;
+      const light = 0.13 + R() * 0.08;
+
       if (dead) {
-        // Bare limbs all the way up -- longer low down, shorter towards the
-        // snapped top, angled up as pine limbs are -- and on the bigger ones a
-        // fork part way along, so the outline is a tangle and not a hat-stand.
+        // Bare limbs all the way up, longer low down, angled up, some forked.
         const n = 7 + Math.floor(R() * 5);
-        for (let k = 0; k < n && nl < 1590; k++) {
+        for (let k = 0; k < n; k++) {
           const f = 0.2 + (k / n) * 0.7;
           const yaw = R() * 6.28;
-          const tilt = 0.7 + R() * 0.6 + f * 0.3;
+          const dir = dirFrom(yaw, 0.7 + R() * 0.6);
           const len = (2.6 - f * 2) * (0.7 + R() * 0.5);
-          const lq = new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt, yaw, 0, 'YXZ'));
-          const y0 = h * 0.75 * f;
-          m.compose(p.set(t.x, y0, t.z), lq, sc.set(1, len, 1));
-          limbs.setMatrixAt(nl++, m);
-          if (len > 1.4) {
-            // the fork: from halfway out, off to one side and up
-            const dir = new THREE.Vector3(0, 1, 0).applyQuaternion(lq);
-            const mx = t.x + dir.x * len * 0.5;
-            const my = y0 + dir.y * len * 0.5;
-            const mz = t.z + dir.z * len * 0.5;
-            const fq = new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt - 0.5, yaw + (R() < 0.5 ? -0.7 : 0.7), 0, 'YXZ'));
-            m.compose(p.set(mx, my, mz), fq, sc.set(0.7, len * 0.45, 0.7));
-            limbs.setMatrixAt(nl++, m);
+          const y0 = trunkH * f;
+          limb(t.x, y0, t.z, dir, len, 0.05, barkTint);
+          if (len > 1.2) {
+            const fd = dirFrom(yaw + (R() < 0.5 ? -0.7 : 0.7), 0.5 + R() * 0.4);
+            limb(t.x + dir.x * len * 0.5, y0 + dir.y * len * 0.5, t.z + dir.z * len * 0.5, fd, len * 0.45, 0.03, barkTint);
           }
         }
+      } else if (broad) {
+        // THE BROADLEAF: the trunk forks into three to five limbs, each limb
+        // into branches, each branch into twigs, and the leaves hang in
+        // clumps off the ends -- a crown, with sky through it.
+        const nLimb = 3 + Math.floor(R() * 3);
+        const forkY = trunkH * (0.55 + R() * 0.25);
+        for (let k = 0; k < nLimb; k++) {
+          const yaw = (k / nLimb) * 6.28 + R() * 0.8;
+          const dir = dirFrom(yaw, 0.45 + R() * 0.45);
+          const len = h * (0.32 + R() * 0.14);
+          limb(t.x, forkY, t.z, dir, len, t.r * 0.55, barkTint);
+          const ex = t.x + dir.x * len;
+          const ey = forkY + dir.y * len;
+          const ez = t.z + dir.z * len;
+          clump(ex, ey + 0.3, ez, 1.2 + R() * 0.6, hue, light + 0.03);
+          // branches off the limb, and twigs off those (past the edge, where
+          // you never come near, the crown is enough)
+          const nBr = far ? 0 : 2 + Math.floor(R() * 2);
+          for (let b = 0; b < nBr; b++) {
+            const f = 0.45 + R() * 0.4;
+            const bx = t.x + dir.x * len * f;
+            const by = forkY + dir.y * len * f;
+            const bz = t.z + dir.z * len * f;
+            const bd = dirFrom(yaw + (R() - 0.5) * 1.8, 0.6 + R() * 0.7);
+            const bl = len * (0.4 + R() * 0.3);
+            limb(bx, by, bz, bd, bl, t.r * 0.25, barkTint);
+            const cx = bx + bd.x * bl;
+            const cy = by + bd.y * bl;
+            const cz = bz + bd.z * bl;
+            clump(cx, cy, cz, 0.9 + R() * 0.6, hue + (R() - 0.5) * 0.02, light + R() * 0.03);
+            for (let w = 0; w < 1; w++) {
+              const td = dirFrom(yaw + (R() - 0.5) * 2.6, 0.4 + R() * 1.0);
+              limb(cx, cy, cz, td, 0.5 + R() * 0.5, 0.025, barkTint);
+            }
+            // the lowest leaves can hang to head height: those are the ones you brush
+            if (cy - 1 < 1.8) reach = Math.max(reach, Math.hypot(cx - t.x, cz - t.z) + 0.9);
+          }
+        }
+        clump(t.x, forkY + h * 0.38, t.z, 1.5 + R() * 0.6, hue, light + 0.04);
+      } else {
+        // THE PINE: whorls of boughs up the trunk, four to six to a whorl,
+        // long and drooping low down, short and lifted near the top, each
+        // with its limb inside it, and a spire of needles at the crown.
+        // About one in four is an old, heavy one: its lowest boughs sweep
+        // nearly to the ground, and there is room under them for a man.
+        const big = Math.abs(t.x) <= WORLD_X && R() < 0.26;
+        if (big) this.skirts.push({ x: t.x, z: t.z, r: 2.3 });
+        const start = big ? 0.5 : 1.3 + R() * 0.8;
+        const gap = far ? 2.2 : 1.15 + R() * 0.3;
+        const crown = trunkH;
+        for (let y = start; y < crown - 0.6; y += gap) {
+          const f = y / crown;
+          const per = far ? 3 : 3 + Math.floor(R() * 2);
+          const yaw0 = R() * 6.28;
+          const len = (2.6 * (1 - f) + 0.45) * (big && f < 0.25 ? 1.5 : 1) * (0.85 + R() * 0.3);
+          for (let k = 0; k < per; k++) {
+            const yaw = yaw0 + (k / per) * 6.28 + (R() - 0.5) * 0.5;
+            const droop = (0.15 + (1 - f) * 0.35) * (0.8 + R() * 0.4);
+            const e = new THREE.Euler(0, -yaw, -droop, 'YXZ');
+            q.setFromEuler(e);
+            const wide = len * (0.7 + R() * 0.3);
+            m.compose(p.set(t.x, y, t.z), q, sc.set(len, wide, wide));
+            put('bough', boughGeo, boughMat, m, col.setHSL(hue, 0.35, 0.34 + f * 0.12 + R() * 0.06));
+            if (!far && len > 1.5 && y < 3) {
+              const dir = new THREE.Vector3(Math.cos(yaw), -Math.sin(droop), Math.sin(yaw)).normalize();
+              limb(t.x, y, t.z, dir, len * 0.8, 0.04, barkTint);
+            }
+          }
+          for (const yy of [0.6, 1.1, 1.6]) {
+            // how far its boughs stand out at hip, chest and head height
+            if (Math.abs(yy - y) < gap) reach = Math.max(reach, len * (1 - Math.abs(yy - y) / (gap * 1.5)));
+          }
+        }
+        // the spire
+        m.compose(p.set(t.x, crown - 1.4, t.z), lean, sc.set(0.55, 2.4, 0.55));
+        put('tip', tipGeo, boughMat, m, col.setHSL(hue, 0.35, 0.42));
       }
-      if (Math.abs(t.x) <= WORLD_X + 0.5) this.addTree(t);
+      t.leaf = reach;
+      if (!far) this.addTree(t);
     });
-    trunks.count = spots.length;
-    cones.count = c;
-    limbs.count = nl;
-    snags.count = ns;
-    S.add(trunks, cones, limbs, snags);
+    flush();
 
-    // ---- the scrub: low, dark, rounded bushes between the trunks
-    const bushGeo = new THREE.IcosahedronGeometry(1, 1);
-    const bushes = new THREE.InstancedMesh(bushGeo, new THREE.MeshLambertMaterial({ map: needles }), 420);
-    let nb = 0;
-    for (let k = 0; k < 1400 && nb < 420; k++) {
+    // ---- the scrub: low leafy bushes between the trunks, that lean in the
+    // wind and part round your legs
+    const scrubMat = windify(
+      new THREE.MeshLambertMaterial({ map: leafTex(true), alphaTest: 0.4, side: THREE.DoubleSide }),
+      0.05,
+      1.3,
+      0,
+    );
+    let ns = 0;
+    for (let k = 0; k < 1400 && ns < 420; k++) {
       const x = (R() < 0.5 ? -1 : 1) * (RAIL_X + 1.2 + R() * (WORLD_X - RAIL_X - 1.2));
       const z = HOTEL_Z + 8 + R() * (BACK_Z - HOTEL_Z - 8);
       if (!this.clearGround(x, z, 1.2)) continue;
-      const s2 = 0.35 + R() * 0.7;
-      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), R() * 6.28);
-      m.compose(p.set(x, s2 * 0.35, z), q, sc.set(s2 * (1 + R() * 0.5), s2 * 0.7, s2));
-      bushes.setMatrixAt(nb, m);
-      bushes.setColorAt(nb, col.setHSL(0.3 + (R() - 0.5) * 0.08, 0.35, 0.07 + R() * 0.05));
-      nb++;
+      const s2 = 0.35 + R() * 0.55;
+      q.setFromAxisAngle(up, R() * 6.28);
+      m.compose(p.set(x, s2 * 0.4, z), q, sc.set(s2 * (1 + R() * 0.5), s2 * 0.75, s2));
+      put('scrub', clumpGeo, scrubMat, m, col.setHSL(0.3 + (R() - 0.5) * 0.08, 0.4, 0.35 + R() * 0.2));
+      ns++;
     }
-    bushes.count = nb;
-    S.add(bushes);
+
+    // ---- THICKETS.  Big, dense bushes you can get INTO: a ring of leafy
+    // masses round a hollow, some waist high and thin, some over a man's head
+    // and thick.  Inside, the world is glimpses between leaves.  Going in is
+    // loud; moving inside rustles; keeping still is silent.
+    const thickMat = windify(
+      new THREE.MeshLambertMaterial({ map: leafTex(true), alphaTest: 0.45, side: THREE.DoubleSide }),
+      0.035,
+      1.8,
+      0,
+    );
+    for (let k = 0; k < 2400 && this.thickets.length < 64; k++) {
+      const x = (R() < 0.5 ? -1 : 1) * (RAIL_X + 2.5 + R() * (WORLD_X - RAIL_X - 4));
+      const z = HOTEL_Z + 14 + R() * (BACK_Z - HOTEL_Z - 18);
+      const r = 1.2 + R() * 1.1;
+      if (!this.clearGround(x, z, r + 0.4)) continue;
+      if (this.treesNear(x, z).some((t) => Math.hypot(t.x - x, t.z - z) < r + t.r + 0.3)) continue;
+      if (this.thickets.some((b) => Math.hypot(b.x - x, b.z - z) < b.r + r + 2)) continue;
+      const tall = R() < 0.55;
+      const hgt = tall ? 1.85 + R() * 0.5 : 1.2 + R() * 0.35;
+      const dense = 0.35 + R() * 0.65;
+      this.thickets.push({ x, z, r, h: hgt, dense });
+      const pieces = 6 + Math.floor(dense * 6);
+      const tint = 0.3 + R() * 0.15;
+      for (let n = 0; n < pieces; n++) {
+        const a = (n / pieces) * 6.28 + R() * 0.4;
+        const rr = r * (0.55 + R() * 0.3);
+        const s2 = r * (0.5 + R() * 0.25);
+        q.setFromEuler(new THREE.Euler(R() * 6.28, R() * 6.28, R() * 6.28));
+        m.compose(p.set(x + Math.cos(a) * rr, hgt * (0.35 + R() * 0.2), z + Math.sin(a) * rr), q, sc.set(s2, hgt * 0.55, s2));
+        put('thick', clumpGeo, thickMat, m, col.setHSL(0.29 + (R() - 0.5) * 0.06, 0.4, tint + R() * 0.08));
+      }
+      // and a crown over the hollow: from inside, a roof of leaves
+      q.setFromEuler(new THREE.Euler(R() * 6.28, R() * 6.28, R() * 6.28));
+      m.compose(p.set(x, hgt * 0.85, z), q, sc.set(r * 0.9, hgt * 0.3, r * 0.9));
+      put('thick', clumpGeo, thickMat, m, col.setHSL(0.3, 0.4, tint));
+    }
+    flush();
+
+    // ---- leaves coming down: a few hundred, around wherever you are
+    this.buildFallingLeaves(S, R);
+    this.buildRapids(S, R);
   }
 
   /**
@@ -1213,6 +1466,385 @@ export class NightRoad3D extends Phaser.Scene {
   }
 
   /** Streetlights, alternating sides, with the arm out over the road. */
+  /**
+   * ---- BEHIND YOU: THE TOWN YOU RAN FROM.
+   *
+   * Turn round on the road and the arcade is there on your left, from the
+   * back: its service door and roll-up loading bay, vents and ducts, air
+   * conditioners on brackets and on the roof, pipes, dumpsters, a warning
+   * beacon, a ladder, its old sign dark.  Across the road, more of the town:
+   * shops and flats with a few windows lit, neon, the mouths of alleys, street
+   * lights going on up the road, and past all of it a skyline of lit windows
+   * that the fog cannot quite swallow.
+   *
+   * None of it can be reached.  The road's back edge (BACK_Z) is a hard stop
+   * on your position, whatever your height -- it is tested on where you are,
+   * not on what you collide with, so there is nothing to jump, climb or slip
+   * past -- and the world's sides (WORLD_X) are the same.  The town is all
+   * past that line.
+   */
+  private buildTown(S: THREE.Scene, R: () => number): void {
+    const Z0 = BACK_Z + 4;
+    const lam = (c: number, e = 0) => new THREE.MeshLambertMaterial({ color: c, emissive: e });
+    const box = (m: THREE.Material, w: number, h: number, d: number, x: number, y: number, z: number): THREE.Mesh => {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+      b.position.set(x, y + h / 2, z);
+      S.add(b);
+      return b;
+    };
+    /**
+     * A facade, drawn at 32 pixels a bay: brick courses with their mortar, a
+     * ledge at every floor, each window framed with a sill under it, the lit
+     * ones warm or cold with a curtain half across or a blind, a few with
+     * someone's lamp in them -- and a shop level at the bottom.
+     */
+    const facade = (cols: number, rows: number, base: string, lit: number, seed: number): THREE.CanvasTexture => {
+      let q = seed;
+      const RR = () => ((q = (q * 16807) % 2147483647) / 2147483647);
+      const BW = 32;
+      const BH = 40;
+      const W = cols * BW;
+      const H = rows * BH;
+      const t = canvasTex(W, H, (g) => {
+        g.fillStyle = base;
+        g.fillRect(0, 0, W, H);
+        // brick courses, every brick a hair different
+        for (let y = 0; y < H; y += 4) {
+          for (let x = (y / 4) % 2 ? -4 : 0; x < W; x += 8) {
+            const v = Math.floor((RR() - 0.5) * 18);
+            g.fillStyle = `rgba(${v > 0 ? 255 : 0},${v > 0 ? 240 : 0},${v > 0 ? 230 : 0},${Math.abs(v) / 120})`;
+            g.fillRect(x, y, 7, 3);
+          }
+          g.fillStyle = 'rgba(0,0,0,0.22)';
+          g.fillRect(0, y + 3, W, 1);
+        }
+        // grime down from every ledge
+        for (let ry = 0; ry < rows; ry++) {
+          const grd = g.createLinearGradient(0, ry * BH, 0, ry * BH + 14);
+          grd.addColorStop(0, 'rgba(0,0,0,0.3)');
+          grd.addColorStop(1, 'rgba(0,0,0,0)');
+          g.fillStyle = grd;
+          g.fillRect(0, ry * BH, W, 14);
+          g.fillStyle = 'rgba(200,200,210,0.18)';
+          g.fillRect(0, ry * BH, W, 2);
+        }
+        for (let cx = 0; cx < cols; cx++) {
+          for (let ry = 0; ry < rows - 1; ry++) {
+            const x = cx * BW + 7;
+            const y = ry * BH + 9;
+            // frame and sill
+            g.fillStyle = '#2a2a30';
+            g.fillRect(x - 2, y - 2, 22, 27);
+            g.fillStyle = '#9a9690';
+            g.fillRect(x - 3, y + 25, 24, 3);
+            const on = RR() < lit;
+            if (on) {
+              const warm = RR() < 0.7;
+              const glass = g.createLinearGradient(x, y, x, y + 23);
+              glass.addColorStop(0, warm ? '#ffe2a0' : '#bcd8ff');
+              glass.addColorStop(1, warm ? '#d89048' : '#5a7ab8');
+              g.fillStyle = glass;
+              g.fillRect(x, y, 18, 23);
+              // a curtain, or a blind, or a lamp in the room
+              const k = RR();
+              g.fillStyle = warm ? 'rgba(120,40,30,0.75)' : 'rgba(30,40,70,0.7)';
+              if (k < 0.4) g.fillRect(x, y, 6 + Math.floor(RR() * 4), 23);
+              else if (k < 0.7) for (let b = 0; b < 23; b += 3) g.fillRect(x, y + b, 18, 1);
+              else {
+                g.fillStyle = 'rgba(255,250,220,0.9)';
+                g.fillRect(x + 11, y + 12, 3, 4);
+              }
+            } else {
+              g.fillStyle = '#0c0e14';
+              g.fillRect(x, y, 18, 23);
+              g.fillStyle = 'rgba(120,140,180,0.18)';
+              g.fillRect(x + 2, y + 2, 5, 9);
+            }
+            // the glazing bars
+            g.fillStyle = '#2a2a30';
+            g.fillRect(x + 8, y, 2, 23);
+            g.fillRect(x, y + 11, 18, 2);
+          }
+        }
+        // the shop level: a fascia, glass, a door
+        const sy = (rows - 1) * BH;
+        g.fillStyle = '#1a1c22';
+        g.fillRect(0, sy, W, BH);
+        g.fillStyle = '#2a2c34';
+        g.fillRect(0, sy, W, 8);
+        for (let cx = 0; cx < cols; cx++) {
+          const shopLit = RR() < lit * 0.8;
+          g.fillStyle = shopLit ? '#7a6a4a' : '#101218';
+          g.fillRect(cx * BW + 3, sy + 11, BW - 6, BH - 14);
+          g.fillStyle = 'rgba(0,0,0,0.5)';
+          g.fillRect(cx * BW + 3, sy + 11, BW - 6, 2);
+        }
+      });
+      t.magFilter = THREE.LinearFilter;
+      t.minFilter = THREE.LinearMipmapLinearFilter;
+      t.anisotropy = 4;
+      return t;
+    };
+    const faced = (tex: THREE.Texture, w: number, h: number, d: number, x: number, z: number, color = 0x8a8a90) => {
+      const side = new THREE.MeshLambertMaterial({ color: 0x1a1a20 });
+      const front = new THREE.MeshLambertMaterial({ map: tex, color, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.35 });
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [side, side, side, side, side, front]);
+      // the windowed face (-z) looks down the road, toward you
+      b.position.set(x, h / 2, z);
+      S.add(b);
+      return b;
+    };
+
+    // the road goes on into town, kerbs and all, and a lamp each side
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_HALF * 2, 60), lam(0x1e2024));
+    road.rotation.x = -Math.PI / 2;
+    road.position.set(0, 0.03, BACK_Z + 30);
+    S.add(road);
+    for (let z = BACK_Z + 3; z < BACK_Z + 60; z += 6) box(lam(0x8a7a3a), 0.15, 0.01, 2, 0, 0.035, z);
+    for (const sx of [-1, 1]) box(lam(0x3a3c40), 2.4, KERB_H, 60, sx * (ROAD_HALF + 1.2), 0, BACK_Z + 30);
+    // (only two of them really light anything: every real light costs every
+    // pixel in the scene, and the road already carries a dozen)
+    [[-6, Z0 + 2], [6, Z0 + 14], [-6, Z0 + 26], [6, Z0 + 38]].forEach(([x, z], i) => {
+      box(lam(0x3a3e44), 0.14, 6, 0.14, x, 0, z);
+      box(new THREE.MeshBasicMaterial({ color: 0xffd9a0 }), 0.6, 0.12, 0.3, x - Math.sign(x) * 1.2, 5.8, z);
+      if (i % 2 === 0) {
+        const l = new THREE.PointLight(0xffc98a, 30, 16, 1.4);
+        l.position.set(x - Math.sign(x) * 1.2, 5.5, z);
+        S.add(l);
+      }
+    });
+
+    // ---- THE ARCADE, FROM BEHIND (your left, turned round: +x), its back to the road
+    // Built facing -z in its own space and turned to face the road: its back
+    // wall, with all the service end of the business on it, looks across the
+    // road at the shops opposite.
+    const arc = new THREE.Group();
+    arc.rotation.y = Math.PI / 2;
+    arc.position.set(ROAD_HALF + 3.4, 0, Z0 + 13);
+    S.add(arc);
+    const boxA = (mm: THREE.Material, w: number, h: number, d: number, x: number, y: number, z: number): THREE.Mesh => {
+      const bb = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mm);
+      bb.position.set(x, y + h / 2, z);
+      arc.add(bb);
+      return bb;
+    };
+    const ax = 0;
+    const az = 0;
+    const aw = 18;
+    const ad = 16;
+    const ah = 8;
+    // Brick at 64 pixels a metre: mortar beds, each brick its own shade with
+    // a lit top edge and speckle, so the wall reads as laid brick up close.
+    const brick = canvasTex(128, 128, (g) => {
+      let q = 91;
+      const RB = () => ((q = (q * 16807) % 2147483647) / 2147483647);
+      g.fillStyle = '#5a5054';
+      g.fillRect(0, 0, 128, 128);
+      for (let row = 0; row < 16; row++) {
+        for (let x = (row % 2) * -8; x < 128; x += 16) {
+          const k = RB();
+          g.fillStyle = k < 0.33 ? '#7a4038' : k < 0.66 ? '#6a3832' : '#844a3e';
+          g.fillRect(x + 1, row * 8 + 1, 14, 6);
+          g.fillStyle = 'rgba(255,220,200,0.12)';
+          g.fillRect(x + 1, row * 8 + 1, 14, 1);
+          g.fillStyle = 'rgba(0,0,0,0.22)';
+          g.fillRect(x + 1, row * 8 + 6, 14, 1);
+          for (let n = 0; n < 4; n++) {
+            g.fillStyle = RB() < 0.5 ? 'rgba(0,0,0,0.18)' : 'rgba(255,230,210,0.1)';
+            g.fillRect(x + 2 + Math.floor(RB() * 12), row * 8 + 2 + Math.floor(RB() * 4), 1, 1);
+          }
+        }
+      }
+    });
+    brick.wrapS = brick.wrapT = THREE.RepeatWrapping;
+    brick.repeat.set(aw / 2, ah / 2);
+    brick.anisotropy = 4;
+    const brickMat = new THREE.MeshLambertMaterial({ map: brick, emissive: 0xffffff, emissiveMap: brick, emissiveIntensity: 0.12 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(aw, ah, ad), brickMat);
+    body.position.set(ax, ah / 2, az + ad / 2);
+    arc.add(body);
+    // ---- ITS FRONT, AS THE STREET KNOWS IT (the 2D street's own painting,
+    // built): a cornice, the sign board with the frog on it, two pillars, a
+    // poster either side of each, the glass doors chained shut and padlocked,
+    // and CLOSED in red over them.
+    const fz = az - 0.01;
+    const steel = lam(0x5a6068);
+    const trim = lam(0x4a5468);
+    // the cornice along the top, and the pilasters at the corners
+    boxA(trim, aw + 0.6, 0.5, 0.5, ax, ah - 0.5, fz - 0.2);
+    for (const px of [ax - aw / 2 + 0.3, ax + aw / 2 - 0.3]) boxA(trim, 0.6, ah - 0.5, 0.5, px, 0, fz - 0.2);
+    // the sign board: dark, a purple frame, the frog and the name
+    const board = canvasTex(256, 48, (g) => {
+      g.fillStyle = '#141820';
+      g.fillRect(0, 0, 256, 48);
+      g.strokeStyle = '#7a5aa8';
+      g.lineWidth = 2;
+      g.strokeRect(2, 2, 252, 44);
+      // the frog's head
+      g.fillStyle = '#5a86a8';
+      g.beginPath();
+      g.ellipse(30, 26, 16, 13, 0, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.arc(22, 13, 5, 0, Math.PI * 2);
+      g.arc(38, 13, 5, 0, Math.PI * 2);
+      g.fill();
+      g.font = 'bold 22px monospace';
+      g.fillStyle = '#8a96a8';
+      g.fillText('FROGGY ARCADE', 56, 33);
+    });
+    const boardM = new THREE.Mesh(
+      new THREE.PlaneGeometry(9, 1.7),
+      new THREE.MeshLambertMaterial({ map: board, emissive: 0xffffff, emissiveMap: board, emissiveIntensity: 0.4 }),
+    );
+    boardM.rotation.y = Math.PI;
+    boardM.position.set(ax, ah + 0.4, fz - 0.3);
+    arc.add(boardM);
+    boxA(lam(0x1a1c24), 9.4, 2.1, 0.3, ax, ah - 0.65, fz - 0.1);
+    // two pillars either side of the doorway, a lamp on each
+    for (const sx of [-1, 1]) {
+      boxA(trim, 0.45, ah - 0.6, 0.45, ax + sx * 2.6, 0, fz - 0.3);
+      boxA(lam(0x2a2c34), 0.25, 0.3, 0.2, ax + sx * 2.6, 3.4, fz - 0.6);
+      boxA(new THREE.MeshBasicMaterial({ color: 0x8a96b0 }), 0.15, 0.08, 0.05, ax + sx * 2.6, 3.42, fz - 0.71);
+    }
+    // the posters: a frog face on each, four colours
+    const poster = (bg: string, band: string) =>
+      canvasTex(32, 48, (g) => {
+        g.fillStyle = '#20242e';
+        g.fillRect(0, 0, 32, 48);
+        g.fillStyle = bg;
+        g.fillRect(2, 2, 28, 44);
+        g.fillStyle = band;
+        g.fillRect(6, 6, 20, 3);
+        g.fillRect(8, 38, 16, 2);
+        g.fillStyle = '#7aa0b8';
+        g.beginPath();
+        g.ellipse(16, 25, 8, 6, 0, 0, Math.PI * 2);
+        g.fill();
+        g.fillRect(9, 16, 4, 4);
+        g.fillRect(19, 16, 4, 4);
+        g.fillStyle = '#1a2028';
+        g.fillRect(11, 23, 2, 2);
+        g.fillRect(19, 23, 2, 2);
+      });
+    for (const [px, bg, band] of [
+      [ax - 7, '#3e3e8a', '#b8b8e8'],
+      [ax - 4.4, '#2e3e4e', '#7a6ab8'],
+      [ax + 4.4, '#5a2a3e', '#b8a8e8'],
+      [ax + 7, '#3e5a6a', '#c8d8e8'],
+    ] as const) {
+      const t = poster(bg, band);
+      const pm = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.2), new THREE.MeshLambertMaterial({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.25 }));
+      pm.rotation.y = Math.PI;
+      pm.position.set(px, 2.6, fz - 0.03);
+      arc.add(pm);
+    }
+    // the doors: a frame, two glass leaves, a dark lobby behind them, and
+    // the chain across the handles with a padlock on it
+    boxA(lam(0x6a7078), 2.8, 3.0, 0.2, ax, 0, fz - 0.05);
+    boxA(lam(0x05070a), 2.5, 2.7, 0.05, ax, 0.05, fz - 0.16);
+    const glass = new THREE.MeshLambertMaterial({ color: 0x5a7088, transparent: true, opacity: 0.45 });
+    for (const sx of [-1, 1]) {
+      boxA(glass, 1.15, 2.6, 0.04, ax + sx * 0.62, 0.08, fz - 0.2);
+      boxA(steel, 0.06, 0.6, 0.06, ax + sx * 0.12, 1.0, fz - 0.26);
+    }
+    const chain = lam(0x9aa4ae);
+    for (let k = 0; k < 10; k++) {
+      const link = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.012, 4, 8), chain);
+      link.position.set(ax - 0.4 + k * 0.09, 1.35 - Math.sin((k / 9) * Math.PI) * 0.15, fz - 0.3);
+      link.rotation.y = k % 2 ? Math.PI / 2 : 0;
+      arc.add(link);
+    }
+    boxA(lam(0xc8a040, 0x2a1c08), 0.14, 0.16, 0.06, ax, 1.06, fz - 0.32);
+    // CLOSED, in red, over the doors -- and the one light it throws
+    const closed = canvasTex(96, 24, (g) => {
+      g.fillStyle = '#1a0606';
+      g.fillRect(0, 0, 96, 24);
+      g.strokeStyle = '#e8323c';
+      g.strokeRect(1, 1, 94, 22);
+      g.font = 'bold 16px monospace';
+      g.fillStyle = '#ff3a3a';
+      g.fillText('CLOSED', 18, 18);
+    });
+    const closedM = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.65), new THREE.MeshBasicMaterial({ map: closed }));
+    closedM.rotation.y = Math.PI;
+    closedM.position.set(ax, 3.45, fz - 0.06);
+    arc.add(closedM);
+    const red = new THREE.PointLight(0xff3020, 5, 9, 1.6);
+    red.position.set(ax, 3.3, fz - 1);
+    arc.add(red);
+    this.beacon = { mesh: closedM, light: red };
+    // the pavement in front, and a car parked at the kerb
+    boxA(lam(0x3a3c44), aw, 0.12, 2.2, ax, 0, fz - 1.1);
+    boxA(lam(0x5a2a30), 3.6, 0.8, 1.6, ax - 6, 0.3, fz - 4.9);
+    boxA(lam(0x5a2a30), 2, 0.6, 1.5, ax - 6.2, 1.1, fz - 4.9);
+    boxA(lam(0x5a6a88), 1.8, 0.4, 1.52, ax - 6.2, 1.15, fz - 4.9);
+    for (const wx of [-1.2, 1.2]) {
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 1.7, 10), lam(0x111214));
+      w.rotation.x = Math.PI / 2;
+      w.position.set(ax - 6 + wx, 0.32, fz - 4.9);
+      arc.add(w);
+    }
+
+    // ---- ACROSS THE ROAD (your right: -x): a row of shops and flats, alleys
+    // between them, and neon
+    const blocks: Array<[number, number, number, number, string, number]> = [
+      // x, z, width, height, wall colour, lit fraction
+      [-11, Z0 + 4, 7, 9, '#4a4248', 0.35],
+      [-11, Z0 + 14, 6, 13, '#3a3e48', 0.25],
+      [-12, Z0 + 25, 8, 7, '#504038', 0.4],
+      [-11, Z0 + 36, 7, 16, '#383840', 0.3],
+      [-13, Z0 + 48, 9, 11, '#463a40', 0.3],
+    ];
+    blocks.forEach(([x, z, w, h, colr, lit], i) => {
+      const t = facade(Math.round(w / 1.3), Math.round(h / 2.2), colr, lit, 31 + i * 17);
+      const b = new THREE.Mesh(new THREE.BoxGeometry(8, h, w), [
+        new THREE.MeshLambertMaterial({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.35 }),
+        new THREE.MeshLambertMaterial({ color: 0x1a1a20 }),
+        new THREE.MeshLambertMaterial({ color: 0x1a1a20 }),
+        new THREE.MeshLambertMaterial({ color: 0x1a1a20 }),
+        new THREE.MeshLambertMaterial({ color: 0x1a1a20 }),
+        new THREE.MeshLambertMaterial({ color: 0x1a1a20 }),
+      ]);
+      // the windowed face is +x: toward the road
+      b.position.set(x - 4, h / 2, z);
+      S.add(b);
+    });
+    // neon: a bar, a laundrette, a noodle place
+    for (const [z, y, colr, w] of [[Z0 + 4, 3.2, 0xff3fa0, 2.4], [Z0 + 25, 2.8, 0x3fd8ff, 3], [Z0 + 36, 3.6, 0xffb040, 2]] as const) {
+      box(new THREE.MeshBasicMaterial({ color: colr, fog: false }), 0.08, 0.5, w, -6.9, y, z);
+      if (z === Z0 + 4) {
+        const nl = new THREE.PointLight(colr, 6, 8, 1.8);
+        nl.position.set(-6.3, y, z);
+        S.add(nl);
+      }
+    }
+    // an awning and a shop window, lit, at street level
+    box(lam(0x6a1a28), 1.2, 0.1, 5, -7.6, 2.6, Z0 + 4);
+    box(new THREE.MeshBasicMaterial({ color: 0x2a3a48 }), 0.05, 1.6, 4, -6.98, 0.5, Z0 + 4);
+
+    // ---- FAR OFF: the rest of the town, a skyline of lit windows the fog
+    // only half takes, and the glow of it on the low cloud
+    for (let k = 0; k < 22; k++) {
+      const x = -70 + k * 6.5 + (R() - 0.5) * 3;
+      const h = 14 + R() * 30;
+      const t = facade(4, Math.round(h / 3), '#141820', 0.22, 101 + k);
+      const tower = faced(t, 5 + R() * 3, h, 5, x, BACK_Z + 95 + R() * 25, 0x8088a0);
+      (tower.material as THREE.Material[]).forEach((m) => ((m as THREE.MeshLambertMaterial).fog = false));
+      if (R() < 0.3) {
+        const blink = box(new THREE.MeshBasicMaterial({ color: 0xff2a2a, fog: false }), 0.4, 0.4, 0.4, x, h, tower.position.z);
+        void blink;
+      }
+    }
+    const glow = new THREE.Mesh(
+      new THREE.PlaneGeometry(220, 60),
+      new THREE.MeshBasicMaterial({ color: 0x3a2a40, transparent: true, opacity: 0.35, fog: false, depthWrite: false }),
+    );
+    glow.position.set(0, 25, BACK_Z + 125);
+    glow.rotation.y = Math.PI;
+    S.add(glow);
+  }
+
   private buildLamps(S: THREE.Scene): void {
     const pole = new THREE.MeshLambertMaterial({ color: 0x3a3e44 });
     const bulb = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
@@ -1255,10 +1887,72 @@ export class NightRoad3D extends Phaser.Scene {
     const D = 14;
     const fx = (px: number): number => (px - HOTEL_DOOR) / PX;
     const fy = (py: number): number => (HOTEL_H - py) / PX;
-    const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), new THREE.MeshLambertMaterial({ color: 0x3a2e3e }));
+    // Its sides: stone with rows of windows, a few lit, so from an angle it is
+    // a building and not a painted board on a box.
+    const sideTex = canvasTex(D * 8, H * 8, (g) => {
+      g.fillStyle = '#4a3c48';
+      g.fillRect(0, 0, D * 8, H * 8);
+      for (let y = 0; y < H * 8; y += 6) {
+        g.fillStyle = 'rgba(0,0,0,0.2)';
+        g.fillRect(0, y + 5, D * 8, 1);
+        for (let x = (y / 6) % 2 ? -6 : 0; x < D * 8; x += 12) {
+          g.fillStyle = `rgba(255,240,230,${(((x * 7 + y * 3) % 9) / 9) * 0.06})`;
+          g.fillRect(x, y, 11, 5);
+        }
+      }
+      for (let fy2 = 14; fy2 < H * 8 - 20; fy2 += 22) {
+        for (let fx2 = 10; fx2 < D * 8 - 10; fx2 += 22) {
+          const on = (fx2 * 13 + fy2 * 7) % 5 === 0;
+          g.fillStyle = '#2a2430';
+          g.fillRect(fx2 - 2, fy2 - 2, 14, 18);
+          g.fillStyle = on ? '#f0c070' : '#141018';
+          g.fillRect(fx2, fy2, 10, 14);
+          g.fillStyle = '#9a8a88';
+          g.fillRect(fx2 - 3, fy2 + 15, 16, 2);
+        }
+      }
+    });
+    sideTex.magFilter = THREE.LinearFilter;
+    sideTex.minFilter = THREE.LinearMipmapLinearFilter;
+    const sideMat = new THREE.MeshLambertMaterial({ map: sideTex, emissive: 0xffffff, emissiveMap: sideTex, emissiveIntensity: 0.25 });
+    const roofMat = new THREE.MeshLambertMaterial({ color: 0x2a2430 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), [sideMat, sideMat, roofMat, roofMat, roofMat, roofMat]);
     body.position.set(0, H / 2, HOTEL_Z - 2 - D / 2);
     S.add(body);
-    const facade = canvasTex(HOTEL_W, HOTEL_H, (g) => paintHotel(g, { dusk: true }));
+    // The front: the street's painting, drawn four times over with the stone
+    // between the windows given courses and grain, so up close it is masonry
+    // and not a blown-up sprite.
+    const facade = canvasTex(HOTEL_W * 4, HOTEL_H * 4, (g) => {
+      const small = document.createElement('canvas');
+      small.width = HOTEL_W;
+      small.height = HOTEL_H;
+      const sg = small.getContext('2d')!;
+      paintHotel(sg, { dusk: true });
+      g.imageSmoothingEnabled = false;
+      g.drawImage(small, 0, 0, HOTEL_W * 4, HOTEL_H * 4);
+      const px = sg.getImageData(0, 0, HOTEL_W, HOTEL_H).data;
+      for (let y = 0; y < HOTEL_H; y++) {
+        for (let x = 0; x < HOTEL_W; x++) {
+          const i = (y * HOTEL_W + x) * 4;
+          const lum = px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11;
+          if (px[i + 3] < 10 || lum > 120) continue; // windows, lamps, the sign: left clean
+          // stone: a mortar line every few rows, and grain
+          if (y % 3 === 0) {
+            g.fillStyle = 'rgba(0,0,0,0.16)';
+            g.fillRect(x * 4, y * 4, 4, 1);
+          }
+          if ((x + (Math.floor(y / 3) % 2) * 3) % 6 === 0) {
+            g.fillStyle = 'rgba(0,0,0,0.12)';
+            g.fillRect(x * 4, y * 4, 1, 4);
+          }
+          g.fillStyle = `rgba(255,245,235,${(((x * 31 + y * 17) % 7) / 7) * 0.07})`;
+          g.fillRect(x * 4 + ((x * y) % 3), y * 4 + 1, 2, 2);
+        }
+      }
+    });
+    facade.magFilter = THREE.LinearFilter;
+    facade.minFilter = THREE.LinearMipmapLinearFilter;
+    facade.anisotropy = 4;
     const front = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ map: facade, fog: false }));
     front.position.set(0, H / 2, HOTEL_Z - 1.98);
     S.add(front);
@@ -1399,7 +2093,14 @@ export class NightRoad3D extends Phaser.Scene {
       this.riverFlow[1].offset.set(this.clock * 0.3, Math.sin(this.clock * 0.9) * 0.06 + this.clock * 0.01);
     }
     this.stepRipples(dt);
+    this.stirFoliage(dt);
     this.sky?.position.copy(this.stage.camera.position);
+    if (this.beacon) {
+      // the CLOSED sign: a tired neon, mostly on, now and then a stutter
+      const on = Math.sin(this.clock * 23) > -0.85 || Math.sin(this.clock * 1.3) < 0.7;
+      this.beacon.light.intensity = on ? 5 : 0.6;
+      (this.beacon.mesh.material as THREE.MeshBasicMaterial).color.setHex(on ? 0xffffff : 0x502020);
+    }
     if (this.twinkle) this.twinkle.opacity = 0.7 + Math.sin(this.clock * 2.3) * 0.2 + Math.sin(this.clock * 5.1) * 0.1;
     if (this.busLight && this.busTube) {
       // the tube is not well: mostly on, now and then a stutter
@@ -1506,6 +2207,7 @@ export class NightRoad3D extends Phaser.Scene {
     // Running is the chase's.  Before then you are walking home, tired.
     this.running = this.phase === 'chase' && this.held('run') && !this.crouched;
     this.moving = fwd !== 0 || strafe !== 0;
+    this.brushThickets(dt);
     if (!this.moving) return;
 
     const sin = Math.sin(this.yaw);
@@ -1618,8 +2320,45 @@ export class NightRoad3D extends Phaser.Scene {
     const pace = this.running ? 1.35 : this.crouched ? 0.55 : 1;
     this.rustleT = (0.5 - deep * 0.28) / pace;
     audio.sfx('leaf_rustle', Math.min(1, (0.25 + deep * 0.75) * pace));
+    this.wind.uShake.value = Math.max(this.wind.uShake.value, (0.3 + deep * 0.7) * pace);
     this.counts.rustle++;
     this.noise((3 + deep * 13) * pace, this.pos.x, this.pos.y, true);
+  }
+
+  private thicketAt(x: number, z: number): Thicket | null {
+    return this.thickets.find((b) => Math.hypot(x - b.x, z - b.z) < b.r * 0.9) ?? null;
+  }
+
+  /**
+   * INTO A THICKET.  Pushing in is loud -- the whole bush thrashes, and it
+   * carries.  Inside, every move rustles: a crouched creep barely, a walk
+   * plainly, a run like an animal breaking cover.  Keep still and it is
+   * silent.  Out again, one last shush.
+   */
+  private brushThickets(dt: number): void {
+    const b = this.thicketAt(this.pos.x, this.pos.y);
+    const pace = this.running ? 1.5 : this.crouched ? 0.45 : 1;
+    if (b && b !== this.inThicket) {
+      audio.sfx('bush_rustle', Math.min(1, 0.45 + 0.4 * pace));
+      this.wind.uShake.value = 1.2;
+      this.counts.rustle++;
+      this.noise((7 + 9 * b.dense) * pace, this.pos.x, this.pos.y, true);
+      this.thicketT = 0.5;
+    } else if (b && this.moving) {
+      this.thicketT -= dt;
+      if (this.thicketT <= 0) {
+        this.thicketT = this.running ? 0.28 : this.crouched ? 0.8 : 0.45;
+        audio.sfx('bush_rustle', this.running ? 0.85 : this.crouched ? 0.2 : 0.45);
+        this.wind.uShake.value = Math.max(this.wind.uShake.value, this.running ? 1 : this.crouched ? 0.25 : 0.55);
+        this.counts.rustle++;
+        const carry = this.running ? 15 : this.crouched ? 2.5 : 7;
+        this.noise(carry * (0.6 + b.dense * 0.6), this.pos.x, this.pos.y, true);
+      }
+    } else if (!b && this.inThicket) {
+      audio.sfx('bush_rustle', 0.3 * pace);
+      this.wind.uShake.value = Math.max(this.wind.uShake.value, 0.5);
+    }
+    this.inThicket = b;
   }
 
   private pushOutOfTrees(p: THREE.Vector2, r: number): void {
@@ -1887,8 +2626,17 @@ export class NightRoad3D extends Phaser.Scene {
     if (d < (this.crouched ? 2.5 : 3.5)) return true;
     // crouched in under a big pine's low boughs, you are a shape in the dark
     if (this.crouched && this.underBoughs()) return false;
+    // In a thicket: down in a thick one, or in one taller than you, you are
+    // gone; a thin one only blurs you.
+    const bush = this.thicketAt(this.pos.x, this.pos.y);
+    let cover = 1;
+    if (bush) {
+      const under = this.crouched || bush.h > 1.8;
+      if (under && bush.dense > 0.55) return false;
+      cover = under ? 0.3 : 0.65;
+    }
     const lit = LAMP_ZS.some((z, i) => Math.hypot(this.pos.x - (i % 2 ? 1 : -1) * (RAIL_X - 1.2), this.pos.y - z) < 7.5);
-    const range = (lit ? 36 : this.onRoad() ? 27 : this.pos.y < HOTEL_Z + 12 ? 30 : 13) * (this.crouched ? 0.6 : 1);
+    const range = (lit ? 36 : this.onRoad() ? 27 : this.pos.y < HOTEL_Z + 12 ? 30 : 13) * (this.crouched ? 0.6 : 1) * cover;
     if (d > range) return false;
     {
       // He sees what is in front of him: looking about, a cone of seventy
@@ -2138,7 +2886,136 @@ export class NightRoad3D extends Phaser.Scene {
     return Phaser.Math.Clamp(1 - d / 34, 0, 1) ** 1.4;
   }
 
+  /** The breeze, your body in the leaves, the foam, the leaves coming down. */
+  private stirFoliage(dt: number): void {
+    const w = this.wind;
+    w.uTime.value = this.clock;
+    w.uPlayer.value.set(this.pos.x, this.pos.y, this.crouched ? 0.7 : 1, 0);
+    w.uShake.value = Math.max(0, w.uShake.value - dt * 2.2);
+    // a gust: comes up over a second or two, holds, and dies away
+    this.gustT -= dt;
+    if (this.gustT <= 0) {
+      this.gustT = 10 + Math.random() * 12;
+      this.gust = 1;
+      audio.sfx('wind_gust', 0.35 + Math.random() * 0.2, { pan: (Math.random() - 0.5) * 1.2, behind: Math.random() * 0.5 });
+    }
+    this.gust = Math.max(0, this.gust - dt * 0.22);
+    w.uGust.value = Math.sin(Math.min(1, this.gust) * Math.PI) * 1.3;
+    this.foam.forEach((f, i) => (f.opacity = 0.45 + Math.sin(this.clock * (7 + i) + i * 2) * 0.2 + Math.sin(this.clock * 13.3 + i) * 0.1));
+    if (this.fall && this.stage) {
+      const c = this.stage.camera.position;
+      const pos = this.fall.pts.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const a = pos.array as Float32Array;
+      const v = this.fall.vel;
+      const drift = 0.4 + w.uGust.value * 1.2;
+      for (let i = 0; i < pos.count; i++) {
+        const k = i * 3;
+        a[k] += (Math.sin(this.clock * 2.1 + i) * 0.5 + drift) * dt;
+        a[k + 1] -= v[i] * dt;
+        a[k + 2] += Math.cos(this.clock * 1.7 + i * 1.3) * 0.4 * dt;
+        // keep them in a box round you: what leaves one side comes in the other
+        if (a[k + 1] < 0.02) a[k + 1] = 9 + Math.random() * 4;
+        if (a[k] - c.x > 16) a[k] -= 32;
+        if (a[k] - c.x < -16) a[k] += 32;
+        if (a[k + 2] - c.z > 16) a[k + 2] -= 32;
+        if (a[k + 2] - c.z < -16) a[k + 2] += 32;
+      }
+      pos.needsUpdate = true;
+    }
+  }
+
+  private buildFallingLeaves(S: THREE.Scene, R: () => number): void {
+    const N = 240;
+    const a = new Float32Array(N * 3);
+    const vel = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      a[i * 3] = (R() - 0.5) * 32;
+      a[i * 3 + 1] = R() * 12;
+      a[i * 3 + 2] = BACK_Z - 10 + (R() - 0.5) * 32;
+      vel[i] = 0.35 + R() * 0.5;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(a, 3));
+    const tex = canvasTex(8, 8, (g) => {
+      g.clearRect(0, 0, 8, 8);
+      g.fillStyle = '#6a5a2a';
+      g.beginPath();
+      g.ellipse(4, 4, 3.5, 1.6, 0.6, 0, Math.PI * 2);
+      g.fill();
+    });
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ map: tex, size: 0.14, alphaTest: 0.5, color: 0x8a8a6a }));
+    pts.frustumCulled = false;
+    S.add(pts);
+    this.fall = { pts, vel };
+  }
+
+  /**
+   * Rapids: rocks across part of the river, with white water flickering
+   * round them -- what you hear before you see.
+   */
+  private buildRapids(S: THREE.Scene, R: () => number): void {
+    const rockMat = new THREE.MeshLambertMaterial({ color: 0x3a3e44 });
+    for (const x of [-(RAIL_X + 11), RAIL_X + 17]) {
+      this.rapids.push({ x, z: RIVER_Z });
+      for (let k = 0; k < 9; k++) {
+        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.3 + R() * 0.45, 0), rockMat);
+        rock.position.set(x + (R() - 0.5) * 5, 0.05, RIVER_Z + (R() - 0.5) * (RIVER_HALF * 1.6));
+        rock.rotation.set(R() * 3, R() * 3, R() * 3);
+        rock.scale.y = 0.55;
+        S.add(rock);
+        const foam = new THREE.MeshBasicMaterial({ color: 0xd8e4ee, transparent: true, opacity: 0.5, depthWrite: false });
+        this.foam.push(foam);
+        const f = new THREE.Mesh(new THREE.CircleGeometry(0.5 + R() * 0.5, 7), foam);
+        f.rotation.x = -Math.PI / 2;
+        f.scale.set(1.8, 0.7, 1);
+        f.position.set(rock.position.x - 0.5, 0.02, rock.position.z);
+        S.add(f);
+      }
+    }
+  }
+
+  /**
+   * The woods' own sounds.  The river: a rush that swells as you come
+   * nearer, from where it is; white water at the rapids; a plip now and then.
+   * And branches creaking in the trees round you.
+   */
+  private woodsSound(dt: number): void {
+    const toRiver = Math.max(0, Math.abs(this.pos.y - RIVER_Z) - RIVER_HALF);
+    const rg = Math.max(0, 1 - toRiver / 42) ** 1.6;
+    this.riverT -= dt;
+    if (this.riverT <= 0) {
+      this.riverT = 1.4;
+      if (rg > 0.02) audio.sfx('river_flow', rg * 0.9, this.placeOf(this.pos.x, RIVER_Z));
+    }
+    this.rapidsT -= dt;
+    if (this.rapidsT <= 0) {
+      this.rapidsT = 0.9;
+      for (const r of this.rapids) {
+        const g = Math.max(0, 1 - Math.hypot(r.x - this.pos.x, r.z - this.pos.y) / 40) ** 1.5;
+        if (g > 0.03) audio.sfx('river_rapids', g, this.placeOf(r.x, r.z));
+      }
+    }
+    this.plipT -= dt;
+    if (this.plipT <= 0) {
+      this.plipT = 1.5 + Math.random() * 3.5;
+      if (rg > 0.12) {
+        const x = this.pos.x + (Math.random() - 0.5) * 24;
+        audio.sfx(Math.random() < 0.7 ? 'water_plip' : 'splash', rg * (0.25 + Math.random() * 0.3), this.placeOf(x, RIVER_Z));
+      }
+    }
+    this.creakT -= dt;
+    if (this.creakT <= 0) {
+      this.creakT = 5 + Math.random() * 9 - this.gust * 3;
+      const near = this.treesNear(this.pos.x, this.pos.y).filter((t) => Math.hypot(t.x - this.pos.x, t.z - this.pos.y) < 18);
+      if (near.length) {
+        const t = near[Math.floor(Math.random() * near.length)];
+        audio.sfx('branch_creak', 0.25 + this.gust * 0.3, this.placeOf(t.x, t.z));
+      }
+    }
+  }
+
   private ambience(dt: number): void {
+    this.woodsSound(dt);
     this.crowAmbientT -= dt;
     if (this.crowAmbientT <= 0) {
       this.crowAmbientT = 9 + Math.random() * 10;
@@ -2186,6 +3063,14 @@ export class NightRoad3D extends Phaser.Scene {
         ctx.fillStyle = `rgba(0,0,0,${black})`;
         ctx.fillRect(0, 0, GAME_W, GAME_H);
         if (this.phase === 'safe') return;
+      }
+      if (this.inThicket) {
+        // in the bush: leaves crowd the edges of what you can see
+        const g = ctx.createRadialGradient(GAME_W / 2, GAME_H / 2, GAME_H * 0.25, GAME_W / 2, GAME_H / 2, GAME_W * 0.6);
+        g.addColorStop(0, 'rgba(6,14,6,0)');
+        g.addColorStop(1, `rgba(6,14,6,${0.55 + this.inThicket.dense * 0.3})`);
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, GAME_W, GAME_H);
       }
       if (this.phase === 'chase' && this.phaseT > 1.2) {
         drawPixelText(ctx, 'OBJECTIVE', 6, 6, { scale: 1, color: '#9a4848', alpha: 0.85 });
@@ -2328,6 +3213,8 @@ export class NightRoad3D extends Phaser.Scene {
       skirts: () => this.skirts.map((k) => [k.x, k.z]),
       leafy: () => this.trees.filter((t) => (t.leaf ?? 0) > 1).slice(0, 40).map((t) => [t.x, t.z, t.leaf]),
       under: () => this.underBoughs(),
+      thickets: () => this.thickets.map((b) => ({ ...b })),
+      inBush: () => !!this.inThicket,
       passBy: () => (this.passBy ? { leg: this.passBy.leg, a: [this.passBy.a.x, this.passBy.a.y], b: [this.passBy.b.x, this.passBy.b.y] } : null),
       setMode: (m: FrogMode) => {
         this.fMode = m;
