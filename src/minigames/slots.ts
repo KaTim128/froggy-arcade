@@ -1,5 +1,5 @@
 /**
- * FROGGY SLOTS.  Three tokens a spin, and it keeps taking them.
+ * FROGGY SLOTS.  Two tokens a spin, and it keeps taking them.
  *
  * Five reels, six rows.  Every token on the reels pays when it lines up:
  * three, four or five of the same token in a LINE -- across a row from the
@@ -23,7 +23,7 @@
  * often and pay little; Froggy turns up far less and pays the most, and five
  * Froggys across is a jackpot measured in hundreds of thousands of spins.  Most
  * spins pay nothing at all (nearly six in ten), and the machine hands back
- * well under half of what goes in: it is a gamble, and it is meant to feel
+ * about two thirds of what goes in: it is a gamble, and it is meant to feel
  * like one.  The art is in slotSymbols.ts.
  *
  * It is a session, like the blackjack table: nothing is taken at the door,
@@ -42,7 +42,7 @@ import { ensureSlotSymbols, textureOf, type SymbolId } from './slotSymbols';
 import { buildTemple, GOLD as TEMPLE_GOLD, LAPIS, LAPIS_DK, type Temple } from './slotsTemple';
 import type { MinigameApi, MinigameModule } from './types';
 
-export const SPIN_COST = 3;
+export const SPIN_COST = 2;
 
 export type Tier = 'COMMON' | 'UNCOMMON' | 'RARE' | 'V.RARE' | 'WILD';
 
