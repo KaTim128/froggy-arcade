@@ -14,7 +14,7 @@
  * He catches players who get lost.  That is the entire fear.
  */
 
-import { lookScale } from '../core/look';
+import { attachMouseLook, lockedDelta, lookScale } from '../core/look';
 import { isPaused } from '../core/pause';
 import Phaser from 'phaser';
 import * as THREE from 'three';
@@ -160,7 +160,7 @@ export class Chase3D extends Phaser.Scene {
     // so the drag is listened for at the window.
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (p.event instanceof MouseEvent && document.pointerLockElement) {
-        this.yaw -= p.event.movementX * 0.0027 * lookScale();
+        this.yaw -= lockedDelta(p.event).dx * 0.0027 * lookScale();
       }
     });
     this.onLookDown = (e: MouseEvent) => {
@@ -178,6 +178,7 @@ export class Chase3D extends Phaser.Scene {
     window.addEventListener('mousemove', this.onLookMove);
     window.addEventListener('mouseup', this.onLookUp);
     window.addEventListener('blur', this.onLookUp);
+    attachMouseLook(this);
 
     this.stage.start((dt) => this.tick(dt));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());

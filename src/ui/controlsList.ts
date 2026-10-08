@@ -14,6 +14,7 @@
  */
 
 import { isTouch } from '../core/device';
+import { store } from '../core/state';
 import { touchLayoutFor } from '../game/touchLayouts';
 import type { TouchLayout, KeyName } from './touchControls';
 
@@ -183,6 +184,8 @@ const PLACE_ROWS: Record<string, ControlRow[]> = {
 
 /** What the pause menu lists for a place that is not a cabinet. */
 export function roomControls(sceneKey: string): ControlRow[] {
-  const rows = PLACE_ROWS[sceneKey] ?? ROOM_ROWS;
+  let rows = PLACE_ROWS[sceneKey] ?? ROOM_ROWS;
+  // in mouse-look mode the head follows the mouse, no button held
+  if (!isTouch() && store.get().settings.mouseLook) rows = rows.map(([k, d]) => (k === 'DRAG' ? ['MOUSE', d] : [k, d]));
   return deviceControls(rows, touchLayoutFor(sceneKey));
 }

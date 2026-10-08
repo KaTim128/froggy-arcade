@@ -27,7 +27,7 @@
 
 import Phaser from 'phaser';
 import * as THREE from 'three';
-import { lookScale } from '../core/look';
+import { attachMouseLook, lockedDelta, lookScale } from '../core/look';
 import { isPaused } from '../core/pause';
 import { audio, SILENCE } from '../core/audio';
 import { isTouch } from '../core/device';
@@ -234,7 +234,7 @@ export class HotelHall3D extends Phaser.Scene {
     }
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (this.autoTurn) return;
-      if (p.event instanceof MouseEvent && document.pointerLockElement) this.yaw -= p.event.movementX * 0.0027 * lookScale();
+      if (p.event instanceof MouseEvent && document.pointerLockElement) this.yaw -= lockedDelta(p.event).dx * 0.0027 * lookScale();
     });
     // a click or a tap on the words moves them on
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
@@ -254,6 +254,7 @@ export class HotelHall3D extends Phaser.Scene {
     window.addEventListener('mousemove', this.onLookMove);
     window.addEventListener('mouseup', this.onLookUp);
     window.addEventListener('blur', this.onLookUp);
+    attachMouseLook(this);
 
     this.stage.start((dt) => this.tick(dt));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());

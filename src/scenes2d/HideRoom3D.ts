@@ -21,7 +21,7 @@
  * fifteen seconds; the room only turns once the count is over.
  */
 
-import { lookScale } from '../core/look';
+import { attachMouseLook, lockedDelta, lookScale } from '../core/look';
 import { touchControls } from '../ui/touchControls';
 import { isTouch } from '../core/device';
 import { isPaused } from '../core/pause';
@@ -1736,11 +1736,15 @@ export class HideRoom3D extends Phaser.Scene {
       e.preventDefault();
     };
     this.onMove = (e: MouseEvent) => {
-      if (!this.looking || isPaused()) return;
+      // (in mouse-look mode the mouse is held, and turns the head with no
+      // button down)
+      const locked = !!document.pointerLockElement;
+      if ((!this.looking && !locked) || isPaused()) return;
       // Prefer the browser's own delta, fall back to tracking the cursor: some
       // browsers leave movementX at 0 outside pointer lock.
-      const dx = e.movementX || e.clientX - this.lookX;
-      const dy = e.movementY || e.clientY - this.lookY;
+      const ld = lockedDelta(e);
+      const dx = locked ? ld.dx : e.movementX || e.clientX - this.lookX;
+      const dy = locked ? ld.dy : e.movementY || e.clientY - this.lookY;
       this.lookX = e.clientX;
       this.lookY = e.clientY;
       const sens = ((e as MouseEvent & { lookSens?: number }).lookSens ?? MOUSE_SENS) * lookScale();
@@ -1765,6 +1769,7 @@ export class HideRoom3D extends Phaser.Scene {
     // Letting go outside the window, or alt-tabbing mid-drag, must not leave
     // the view stuck to the mouse.
     window.addEventListener('blur', this.onUp);
+    attachMouseLook(this);
   }
 
   private held(g: string): boolean {

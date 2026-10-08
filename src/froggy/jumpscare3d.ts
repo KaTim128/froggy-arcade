@@ -34,6 +34,7 @@ import type { ThreeStage } from '../render/threeStage';
 import type { FroggyMonster } from '../three/froggyMonster';
 import { SCARE_MS } from './jumpscare';
 import { touchControls } from '../ui/touchControls';
+import { baseFilter } from '../core/graphics';
 
 /**
  * FASTER, BECAUSE A SCARE IS A SHOCK AND NOT A REVEAL.  The hold is under a
@@ -158,12 +159,12 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
   const distort = (k: number): void => {
     if (!canvas) return;
     if (k <= 0) {
-      canvas.style.filter = '';
+      canvas.style.filter = baseFilter();
       canvas.style.transform = '';
       return;
     }
     const j = (Math.random() - 0.5) * 2;
-    canvas.style.filter = `contrast(${1 + 0.9 * k}) saturate(${1 + 0.8 * k}) brightness(${1 + 0.35 * k})`;
+    canvas.style.filter = `${baseFilter()} contrast(${1 + 0.9 * k}) saturate(${1 + 0.8 * k}) brightness(${1 + 0.35 * k})`;
     canvas.style.transform = `scale(${1 + 0.07 * k}) skewX(${(j * 3.5 * k).toFixed(2)}deg) translate(${(j * 6 * k).toFixed(1)}px, ${(-j * 4 * k).toFixed(1)}px)`;
   };
   let done = false;

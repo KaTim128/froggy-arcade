@@ -20,7 +20,7 @@
 
 import Phaser from 'phaser';
 import * as THREE from 'three';
-import { lookScale } from '../core/look';
+import { attachMouseLook, lockedDelta, lookScale } from '../core/look';
 import { isPaused } from '../core/pause';
 import { audio, SILENCE } from '../core/audio';
 import { isTouch } from '../core/device';
@@ -392,7 +392,7 @@ export class HotelLobby3D extends Phaser.Scene {
       kb.on('keydown-E', () => this.press());
     }
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (p.event instanceof MouseEvent && document.pointerLockElement) this.turn(p.event.movementX * 0.0027, p.event.movementY * 0.0027);
+      if (p.event instanceof MouseEvent && document.pointerLockElement) this.turn(lockedDelta(p.event).dx * 0.0027, lockedDelta(p.event).dy * 0.0027);
     });
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (p.y > GAME_H * 0.62 && this.lines.length) this.lines.shift();
@@ -412,6 +412,7 @@ export class HotelLobby3D extends Phaser.Scene {
     window.addEventListener('mousemove', this.onLookMove);
     window.addEventListener('mouseup', this.onLookUp);
     window.addEventListener('blur', this.onLookUp);
+    attachMouseLook(this);
 
     this.stage.start((dt) => this.tick(dt));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());

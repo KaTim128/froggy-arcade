@@ -104,8 +104,9 @@ export function hotelColumns(): number[] {
   return [0, 1, 2, 3, 4, 5].map((w) => HOTEL_DOOR + (w - 2.5) * 24);
 }
 
-/** Window rows' tops, six floors. */
-const FLOORS = [22, 38, 54, 70, 86, 102];
+/** Window rows' tops, six floors (levels 6 down to 1; the ground floor is below). */
+export const HOTEL_FLOORS = [22, 38, 54, 70, 86, 102];
+const FLOORS = HOTEL_FLOORS;
 
 export function paintHotel(g: CanvasRenderingContext2D, o: HotelOpts): void {
   const P = o.dusk ? DUSK : DAY;

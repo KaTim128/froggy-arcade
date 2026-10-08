@@ -34,7 +34,7 @@
  *   the hotel's doors are safe.  Nothing follows you through them.
  */
 
-import { lookScale } from '../core/look';
+import { attachMouseLook, lockedDelta, lookScale } from '../core/look';
 import { isPaused } from '../core/pause';
 import Phaser from 'phaser';
 import * as THREE from 'three';
@@ -48,7 +48,7 @@ import { FroggyMonster } from '../three/froggyMonster';
 import { ThreeStage } from '../render/threeStage';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { touchControls } from '../ui/touchControls';
-import { HOTEL_CANOPY, HOTEL_DOOR, HOTEL_H, HOTEL_PLANTERS, HOTEL_POSTS, HOTEL_W, paintCanopy, paintHotel } from '../art/hotel';
+import { HOTEL_CANOPY, HOTEL_DOOR, HOTEL_FLOORS, HOTEL_GROUND, HOTEL_H, HOTEL_PLANTERS, HOTEL_POSTS, HOTEL_W, paintCanopy, paintHotel } from '../art/hotel';
 
 // ------------------------------------------------------------------- the map
 //
@@ -404,7 +404,7 @@ export class NightRoad3D extends Phaser.Scene {
     // held left-drag if not, which is what the on-screen look pad sends.
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (this.autoTurn) return;
-      if (p.event instanceof MouseEvent && document.pointerLockElement) this.yaw -= p.event.movementX * 0.0027 * lookScale();
+      if (p.event instanceof MouseEvent && document.pointerLockElement) this.yaw -= lockedDelta(p.event).dx * 0.0027 * lookScale();
     });
     this.onLookDown = (e: MouseEvent) => {
       if (e.button === 0 && !isPaused()) this.dragging = true;
@@ -420,6 +420,7 @@ export class NightRoad3D extends Phaser.Scene {
     window.addEventListener('mousemove', this.onLookMove);
     window.addEventListener('mouseup', this.onLookUp);
     window.addEventListener('blur', this.onLookUp);
+    attachMouseLook(this);
 
     this.stage.start((dt) => this.tick(dt));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
@@ -1063,7 +1064,10 @@ gl_Position = projectionMatrix * mvPosition;`,
       (parts[kind] ??= { geo, mat, items: [] }).items.push({ m: mm.clone(), c: c.clone() });
     };
     const flush = (): void => {
-      for (const part of Object.values(parts)) {
+      // (what the graphics level may thin: greenery only -- never trunks, which
+      // are what you hide behind, nor the thickets you hide in)
+      const thin = new Set(['bough', 'clump', 'limb', 'tip', 'scrub']);
+      for (const [kind, part] of Object.entries(parts)) {
         const groups = new Map<string, { m: THREE.Matrix4; c: THREE.Color }[]>();
         for (const it of part.items) {
           const key = `${Math.floor(it.m.elements[14] / 22)}:${Math.floor(it.m.elements[12] / 22)}`;
@@ -1072,12 +1076,21 @@ gl_Position = projectionMatrix * mvPosition;`,
           g.push(it);
         }
         for (const g of groups.values()) {
+          // shuffled, so a lower graphics level thins every tree a little
+          // rather than stripping the last few bare
+          if (thin.has(kind)) {
+            for (let k = g.length - 1; k > 0; k--) {
+              const j = Math.floor(R() * (k + 1));
+              [g[k], g[j]] = [g[j], g[k]];
+            }
+          }
           const im = new THREE.InstancedMesh(part.geo, part.mat, g.length);
           g.forEach((it, k) => {
             im.setMatrixAt(k, it.m);
             im.setColorAt(k, it.c);
           });
           im.computeBoundingSphere();
+          if (thin.has(kind)) im.userData.foliage = g.length;
           S.add(im);
         }
       }
@@ -2082,29 +2095,50 @@ gl_Position = projectionMatrix * mvPosition;`,
     const fy = (py: number): number => (HOTEL_H - py) / PX;
     // Its sides: stone with rows of windows, a few lit, so from an angle it is
     // a building and not a painted board on a box.
-    const sideTex = canvasTex(D * 8, H * 8, (g) => {
-      g.fillStyle = '#4a3c48';
-      g.fillRect(0, 0, D * 8, H * 8);
-      for (let y = 0; y < H * 8; y += 6) {
-        g.fillStyle = 'rgba(0,0,0,0.2)';
-        g.fillRect(0, y + 5, D * 8, 1);
-        for (let x = (y / 6) % 2 ? -6 : 0; x < D * 8; x += 12) {
-          g.fillStyle = `rgba(255,240,230,${(((x * 7 + y * 3) % 9) / 9) * 0.06})`;
-          g.fillRect(x, y, 11, 5);
+    // Its sides: stone, with windows on exactly the front's floors -- six
+    // above the ground floor, level with the front's -- so from an angle it
+    // is the same six-storey building, not a taller one.  `hm` metres of wall
+    // up from the ground, `wm` across: the wings are built from the same.
+    const sideFace = (wm: number, hm: number): THREE.CanvasTexture => {
+      const TW = Math.round(wm * 8);
+      const TH = Math.round(hm * 8);
+      const k = 8 / PX; // texture pixels per painting pixel
+      const cut = HOTEL_H - hm * PX; // the painting's y at the top of this wall
+      const t = canvasTex(TW, TH, (g) => {
+        g.fillStyle = '#4a3c48';
+        g.fillRect(0, 0, TW, TH);
+        for (let y = 0; y < TH; y += 6) {
+          g.fillStyle = 'rgba(0,0,0,0.2)';
+          g.fillRect(0, y + 5, TW, 1);
+          for (let x = (y / 6) % 2 ? -6 : 0; x < TW; x += 12) {
+            g.fillStyle = `rgba(255,240,230,${(((x * 7 + y * 3) % 9) / 9) * 0.06})`;
+            g.fillRect(x, y, 11, 5);
+          }
         }
-      }
-      for (let fy2 = 14; fy2 < H * 8 - 20; fy2 += 22) {
-        for (let fx2 = 10; fx2 < D * 8 - 10; fx2 += 22) {
-          const on = (fx2 * 13 + fy2 * 7) % 5 === 0;
-          g.fillStyle = '#2a2430';
-          g.fillRect(fx2 - 2, fy2 - 2, 14, 18);
-          g.fillStyle = on ? '#f0c070' : '#141018';
-          g.fillRect(fx2, fy2, 10, 14);
-          g.fillStyle = '#9a8a88';
-          g.fillRect(fx2 - 3, fy2 + 15, 16, 2);
-        }
-      }
-    });
+        // a belt course at the ground floor, as on the front
+        g.fillStyle = '#6a5a66';
+        g.fillRect(0, Math.round((HOTEL_GROUND - 2 - cut) * k), TW, 4);
+        const rows = [...HOTEL_FLOORS, HOTEL_GROUND + 8].filter((top) => top >= cut + 2);
+        rows.forEach((top) => {
+          const fy2 = Math.round((top - cut) * k);
+          const wh = Math.round(11 * k);
+          for (let fx2 = 10; fx2 < TW - 14; fx2 += 22) {
+            const on = (fx2 * 13 + fy2 * 7) % 5 === 0;
+            g.fillStyle = '#2a2430';
+            g.fillRect(fx2 - 2, fy2 - 2, 14, wh + 4);
+            g.fillStyle = on ? '#f0c070' : '#141018';
+            g.fillRect(fx2, fy2, 10, wh);
+            g.fillStyle = '#9a8a88';
+            g.fillRect(fx2 - 3, fy2 + wh + 1, 16, 2);
+          }
+        });
+      });
+      t.magFilter = THREE.LinearFilter;
+      t.minFilter = THREE.LinearMipmapLinearFilter;
+      return t;
+    };
+    const faceMat = (t: THREE.Texture) => new THREE.MeshLambertMaterial({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.25 });
+    const sideTex = sideFace(D, H);
     sideTex.magFilter = THREE.LinearFilter;
     sideTex.minFilter = THREE.LinearMipmapLinearFilter;
     const sideMat = new THREE.MeshLambertMaterial({ map: sideTex, emissive: 0xffffff, emissiveMap: sideTex, emissiveIntensity: 0.25 });
@@ -2177,11 +2211,16 @@ gl_Position = projectionMatrix * mvPosition;`,
     tank.position.set(7, H + 5.3, FZ - D / 2 + 3);
     S.add(tank);
     // the wings: lower, set back, windowed like the sides
+    // (the ground floor and three above it, topping out under the main block's
+    // level-4 sills)
+    const WH = (HOTEL_H - (HOTEL_FLOORS[3] - 4)) / PX;
+    const wingSide = faceMat(sideFace(18, WH));
+    const wingEnd = faceMat(sideFace(9, WH));
     for (const sx of [-1, 1]) {
-      const wing = new THREE.Mesh(new THREE.BoxGeometry(9, H * 0.62, 18), [sideMat, sideMat, roofMat, roofMat, sideMat, sideMat]);
-      wing.position.set(sx * (W / 2 + 4.5), (H * 0.62) / 2, FZ - 4 - 9);
+      const wing = new THREE.Mesh(new THREE.BoxGeometry(9, WH, 18), [wingSide, wingSide, roofMat, roofMat, wingEnd, wingEnd]);
+      wing.position.set(sx * (W / 2 + 4.5), WH / 2, FZ - 4 - 9);
       S.add(wing);
-      slab(9.6, 0.8, 18.6, sx * (W / 2 + 4.5), H * 0.62, FZ - 13);
+      slab(9.6, 0.8, 18.6, sx * (W / 2 + 4.5), WH, FZ - 13);
     }
     // the city behind it: towers rising past its roof, lit here and there
     const towerTex = canvasTex(64, 256, (g) => {
@@ -3201,6 +3240,7 @@ gl_Position = projectionMatrix * mvPosition;`,
     });
     const pts = new THREE.Points(geo, new THREE.PointsMaterial({ map: tex, size: 0.14, alphaTest: 0.5, color: 0x8a8a6a }));
     pts.frustumCulled = false;
+    pts.userData.particles = N;
     S.add(pts);
     this.fall = { pts, vel };
   }
