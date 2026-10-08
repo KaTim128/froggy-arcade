@@ -1292,9 +1292,22 @@ export class NightRoad3D extends Phaser.Scene {
       }
     });
 
-    // ---- THE ARCADE, FROM BEHIND (your left, turned round: +x)
-    const ax = 15;
-    const az = Z0 + 10;
+    // ---- THE ARCADE, FROM BEHIND (your left, turned round: +x), its back to the road
+    // Built facing -z in its own space and turned to face the road: its back
+    // wall, with all the service end of the business on it, looks across the
+    // road at the shops opposite.
+    const arc = new THREE.Group();
+    arc.rotation.y = Math.PI / 2;
+    arc.position.set(ROAD_HALF + 3.4, 0, Z0 + 13);
+    S.add(arc);
+    const boxA = (mm: THREE.Material, w: number, h: number, d: number, x: number, y: number, z: number): THREE.Mesh => {
+      const bb = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mm);
+      bb.position.set(x, y + h / 2, z);
+      arc.add(bb);
+      return bb;
+    };
+    const ax = 0;
+    const az = 0;
     const aw = 18;
     const ad = 16;
     const ah = 8;
@@ -1313,65 +1326,65 @@ export class NightRoad3D extends Phaser.Scene {
     const brickMat = new THREE.MeshLambertMaterial({ map: brick });
     const body = new THREE.Mesh(new THREE.BoxGeometry(aw, ah, ad), brickMat);
     body.position.set(ax, ah / 2, az + ad / 2);
-    S.add(body);
+    arc.add(body);
     const backZ = az - 0.01; // the face toward you
     const steel = lam(0x5a6068);
     const dark = lam(0x1a1c20);
     // the service door, with a lit sign over it
-    box(lam(0x4a5058), 1.1, 2.2, 0.08, ax - 5, 0, backZ - 0.04);
-    box(lam(0x8a8e94), 0.1, 0.06, 0.06, ax - 4.65, 1.05, backZ - 0.1);
-    box(new THREE.MeshBasicMaterial({ color: 0x3fe39b }), 0.6, 0.18, 0.04, ax - 5, 2.45, backZ - 0.06);
+    boxA(lam(0x4a5058), 1.1, 2.2, 0.08, ax - 5, 0, backZ - 0.04);
+    boxA(lam(0x8a8e94), 0.1, 0.06, 0.06, ax - 4.65, 1.05, backZ - 0.1);
+    boxA(new THREE.MeshBasicMaterial({ color: 0x3fe39b }), 0.6, 0.18, 0.04, ax - 5, 2.45, backZ - 0.06);
     // the loading bay: a ribbed roll-up shutter, a dock lip, bollards
-    box(dark, 4, 3.4, 0.1, ax + 1.5, 0, backZ - 0.03);
-    for (let k = 0; k < 11; k++) box(lam(0x6a7078), 3.8, 0.06, 0.04, ax + 1.5, 0.2 + k * 0.3, backZ - 0.09);
-    box(lam(0x2a2c30), 4.6, 0.9, 0.9, ax + 1.5, 0, backZ - 0.45);
-    for (const bx of [ax - 0.9, ax + 3.9]) box(lam(0xd8b020), 0.2, 1, 0.2, bx, 0, backZ - 1.2);
+    boxA(dark, 4, 3.4, 0.1, ax + 1.5, 0, backZ - 0.03);
+    for (let k = 0; k < 11; k++) boxA(lam(0x6a7078), 3.8, 0.06, 0.04, ax + 1.5, 0.2 + k * 0.3, backZ - 0.09);
+    boxA(lam(0x2a2c30), 4.6, 0.9, 0.9, ax + 1.5, 0, backZ - 0.45);
+    for (const bx of [ax - 0.9, ax + 3.9]) boxA(lam(0xd8b020), 0.2, 1, 0.2, bx, 0, backZ - 1.2);
     // vents and a duct running up the wall
     for (const [vx, vy] of [[ax - 7.5, 4.2], [ax - 2.4, 5.6], [ax + 5.5, 4.8]]) {
-      box(steel, 1, 0.6, 0.12, vx, vy, backZ - 0.06);
-      for (let k = 0; k < 4; k++) box(dark, 0.9, 0.04, 0.02, vx, vy + 0.1 + k * 0.12, backZ - 0.13);
+      boxA(steel, 1, 0.6, 0.12, vx, vy, backZ - 0.06);
+      for (let k = 0; k < 4; k++) boxA(dark, 0.9, 0.04, 0.02, vx, vy + 0.1 + k * 0.12, backZ - 0.13);
     }
-    box(steel, 0.5, ah - 1, 0.5, ax + 7.8, 0.6, backZ - 0.3);
+    boxA(steel, 0.5, ah - 1, 0.5, ax + 7.8, 0.6, backZ - 0.3);
     // pipes: two down the wall, one along under the eaves
     for (const px of [ax - 3.4, ax - 3.1]) {
       const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, ah, 8), lam(0x6a4a30));
       pipe.position.set(px, ah / 2, backZ - 0.12);
-      S.add(pipe);
+      arc.add(pipe);
     }
     const run = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, aw - 1, 8), lam(0x4a5058));
     run.rotation.z = Math.PI / 2;
     run.position.set(ax, ah - 0.6, backZ - 0.14);
-    S.add(run);
+    arc.add(run);
     // air conditioners: one on brackets, two on the roof
-    box(lam(0x9aa0a6), 1.2, 0.8, 0.7, ax - 7.2, 2.4, backZ - 0.4);
-    box(dark, 1.0, 0.04, 0.6, ax - 7.2, 2.4, backZ - 0.4);
+    boxA(lam(0x9aa0a6), 1.2, 0.8, 0.7, ax - 7.2, 2.4, backZ - 0.4);
+    boxA(dark, 1.0, 0.04, 0.6, ax - 7.2, 2.4, backZ - 0.4);
     const fanMat = lam(0x30343a);
     const fan = new THREE.Mesh(new THREE.CircleGeometry(0.3, 14), fanMat);
     fan.rotation.y = Math.PI;
     fan.position.set(ax - 7.2, 2.8, backZ - 0.76);
-    S.add(fan);
+    arc.add(fan);
     for (const rx of [ax - 4, ax + 4]) {
-      box(lam(0x8a9096), 2, 1.1, 1.4, rx, ah, az + 2);
-      box(fanMat, 0.9, 0.05, 0.9, rx, ah + 1.1, az + 2);
+      boxA(lam(0x8a9096), 2, 1.1, 1.4, rx, ah, az + 2);
+      boxA(fanMat, 0.9, 0.05, 0.9, rx, ah + 1.1, az + 2);
     }
     // a ladder up to the roof
-    for (const lx of [ax + 6.4, ax + 6.9]) box(steel, 0.06, ah, 0.06, lx, 0, backZ - 0.2);
-    for (let k = 0; k < 16; k++) box(steel, 0.5, 0.04, 0.04, ax + 6.65, 0.4 + k * 0.48, backZ - 0.2);
+    for (const lx of [ax + 6.4, ax + 6.9]) boxA(steel, 0.06, ah, 0.06, lx, 0, backZ - 0.2);
+    for (let k = 0; k < 16; k++) boxA(steel, 0.5, 0.04, 0.04, ax + 6.65, 0.4 + k * 0.48, backZ - 0.2);
     // dumpsters and bags
     for (const [dx, col] of [[ax - 1.2, 0x2f6a3e], [ax - 3.0 + 7, 0x2a4a7a]] as const) {
-      box(lam(col), 1.9, 1.2, 1.1, dx - 3, 0, backZ - 0.9);
-      box(lam(0x1c2a20), 2.0, 0.08, 1.2, dx - 3, 1.2, backZ - 0.9);
+      boxA(lam(col), 1.9, 1.2, 1.1, dx - 3, 0, backZ - 0.9);
+      boxA(lam(0x1c2a20), 2.0, 0.08, 1.2, dx - 3, 1.2, backZ - 0.9);
     }
     for (let k = 0; k < 5; k++) {
       const bag = new THREE.Mesh(new THREE.SphereGeometry(0.3 + R() * 0.15, 8, 6), lam(0x16181c));
       bag.position.set(ax - 5.5 + R() * 2, 0.28, backZ - 0.8 - R() * 0.8);
-      S.add(bag);
+      arc.add(bag);
     }
     // the warning beacon over the bay, turning (see tick), and the old sign, dark
-    const beacon = box(new THREE.MeshBasicMaterial({ color: 0xff3020 }), 0.25, 0.25, 0.25, ax + 1.5, 3.7, backZ - 0.2);
+    const beacon = boxA(new THREE.MeshBasicMaterial({ color: 0xff3020 }), 0.25, 0.25, 0.25, ax + 1.5, 3.7, backZ - 0.2);
     const beaconL = new THREE.PointLight(0xff3020, 6, 9, 1.6);
     beaconL.position.set(ax + 1.5, 3.8, backZ - 0.8);
-    S.add(beaconL);
+    arc.add(beaconL);
     this.beacon = { mesh: beacon, light: beaconL };
     const sign = canvasTex(128, 24, (g) => {
       g.fillStyle = '#100810';
@@ -1383,12 +1396,12 @@ export class NightRoad3D extends Phaser.Scene {
     const signM = new THREE.Mesh(new THREE.PlaneGeometry(7, 1.3), new THREE.MeshBasicMaterial({ map: sign, color: 0x9a6a8a }));
     signM.rotation.y = Math.PI;
     signM.position.set(ax, ah - 1.5, backZ - 0.05);
-    S.add(signM);
+    arc.add(signM);
     // a security light over the door, throwing a pool on the yard
     const sec = new THREE.PointLight(0xd8e4ff, 14, 12, 1.5);
     sec.position.set(ax - 5, 3.2, backZ - 1.2);
-    S.add(sec);
-    box(new THREE.MeshBasicMaterial({ color: 0xe8f0ff }), 0.4, 0.2, 0.2, ax - 5, 3.1, backZ - 0.15);
+    arc.add(sec);
+    boxA(new THREE.MeshBasicMaterial({ color: 0xe8f0ff }), 0.4, 0.2, 0.2, ax - 5, 3.1, backZ - 0.15);
 
     // ---- ACROSS THE ROAD (your right: -x): a row of shops and flats, alleys
     // between them, and neon
