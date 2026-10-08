@@ -66,6 +66,10 @@ const TOOTH = [0xcfc3a0, 0xbdb08a, 0xd9ceae, 0xa89c78];
 const GUM = 0x44101a;
 /** The mouth's rim, in the head's own units. */
 const MOUTH_Y = -0.1;
+/** How far an arm may swing out sideways to clear his face (about shoulder
+ * height), and then how far back. */
+const CLEAR_SIDE_MAX = 1.3;
+const CLEAR_BACK_MAX = 1.1;
 const MOUTH_Z = 0.085;
 /**
  * Half its width: wider than the muzzle was, and a touch wider than the head
@@ -613,6 +617,8 @@ export class FroggyMonster {
   private peekNow = 0;
   /** Per arm: how far it has been swung out to keep it off his eyes. */
   private clear = [0, 0];
+  /** And, past shoulder height, how far each arm is swung back instead (signed). */
+  private clearBack = [0, 0];
   private readonly eyeW = [new THREE.Vector3(), new THREE.Vector3()];
   /** The mouth, kept clear the same way: the middle of the open jaw, and its radius. */
   private readonly mouthW = new THREE.Vector3();
@@ -2706,10 +2712,18 @@ export class FroggyMonster {
     }
     for (let h = 0; h < 2; h++) {
       const out = h === 0 ? -1 : 1;
-      if (!viewer) this.clear[h] = Math.max(0, this.clear[h] - dt * 1.5);
+      const ease = (v: number, k: number) => Math.sign(v) * Math.max(0, Math.abs(v) - k);
+      if (!viewer) {
+        this.clear[h] = Math.max(0, this.clear[h] - dt * 1.5);
+        this.clearBack[h] = ease(this.clearBack[h], dt * 1.5);
+      }
       // a hand that is holding something stays on it
-      if (this.held[h] > 0.3) this.clear[h] = Math.max(0, this.clear[h] - dt * 4);
+      if (this.held[h] > 0.3) {
+        this.clear[h] = Math.max(0, this.clear[h] - dt * 4);
+        this.clearBack[h] = ease(this.clearBack[h], dt * 4);
+      }
       this.arms[h].rotation.z += out * this.clear[h] * (1 - this.held[h]);
+      this.arms[h].rotation.x += this.clearBack[h] * (1 - this.held[h]);
     }
     if (!viewer) return;
     this.root.updateMatrixWorld(true);
@@ -2755,14 +2769,43 @@ export class FroggyMonster {
       let worst = measure(h);
       // still over an eye: out further, now, in this frame -- a fast stroke
       // must not get one frame across his eyes before this catches it
-      for (let i = 0; worst < 1 && this.clear[h] < 2.6 && i < 12 && this.held[h] < 0.3; i++) {
-        this.clear[h] = Math.min(2.6, this.clear[h] + 0.22);
-        this.arms[h].rotation.z += out * 0.22;
+      // Out to the side only as far as shoulder height: an arm swung further
+      // went straight up into the air.  Past that, it goes BACK, away from
+      // whoever is looking, which clears the face just as well and keeps the
+      // arm down by his side.
+      for (let i = 0; worst < 1 && i < 12 && this.held[h] < 0.3; i++) {
+        if (this.clear[h] < CLEAR_SIDE_MAX) {
+          this.clear[h] = Math.min(CLEAR_SIDE_MAX, this.clear[h] + 0.22);
+          this.arms[h].rotation.z += out * 0.22;
+        } else {
+          if (Math.abs(this.clearBack[h]) >= CLEAR_BACK_MAX) break;
+          // which way is back, from here: try both, keep the better
+          const sgn = this.clearBack[h] !== 0 ? Math.sign(this.clearBack[h]) : this.backSign(h, measure);
+          this.clearBack[h] += sgn * 0.22;
+          this.arms[h].rotation.x += sgn * 0.22;
+        }
         this.arms[h].updateMatrixWorld(true);
         worst = measure(h);
       }
-      if (worst > 1.4) this.clear[h] = Math.max(0, this.clear[h] - dt * 1.2);
+      if (worst > 1.4) {
+        this.clear[h] = Math.max(0, this.clear[h] - dt * 1.2);
+        this.clearBack[h] = Math.sign(this.clearBack[h]) * Math.max(0, Math.abs(this.clearBack[h]) - dt * 1.2);
+      }
     }
+  }
+
+  /** Which way round the shoulder takes arm `h` further off the face. */
+  private backSign(h: number, measure: (h: number) => number): number {
+    const arm = this.arms[h];
+    arm.rotation.x += 0.22;
+    arm.updateMatrixWorld(true);
+    const a = measure(h);
+    arm.rotation.x -= 0.44;
+    arm.updateMatrixWorld(true);
+    const b = measure(h);
+    arm.rotation.x += 0.22;
+    arm.updateMatrixWorld(true);
+    return a >= b ? 1 : -1;
   }
 
   /**
