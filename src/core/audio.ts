@@ -1543,9 +1543,51 @@ class AudioManager {
         break;
       // Pine boughs dragged past a body: a soft, airy shush with the dry
       // tick of needles in it, in a few overlapping strokes.
-      case 'leaf_rustle':
-        for (let i = 0; i < 4; i++) noise(0.09 + Math.random() * 0.06, 0.045 - i * 0.006, 2600 + Math.random() * 1800, i * 0.05 + Math.random() * 0.03);
+      // (three takes, so a run through the trees is never the same shush twice)
+      case 'leaf_rustle': {
+        const take = Math.floor(Math.random() * 3);
+        const n = take === 0 ? 4 : take === 1 ? 6 : 3;
+        for (let i = 0; i < n; i++) {
+          noise(0.07 + Math.random() * (take === 2 ? 0.14 : 0.06), 0.045 - i * 0.005, (take === 1 ? 3600 : 2400) + Math.random() * 1800, i * (take === 1 ? 0.035 : 0.06) + Math.random() * 0.03);
+        }
         noise(0.02, 0.03, 6000, 0.04);
+        if (take === 2) noise(0.015, 0.05, 7000, 0.09); // a needle-tick snap
+        break;
+      }
+      // A body going into a thick bush: a broad leafy thrash, twigs ticking
+      // against each other in it, lower and fuller than a brush past a pine.
+      case 'bush_rustle':
+        for (let i = 0; i < 6; i++) noise(0.1 + Math.random() * 0.1, 0.06 - i * 0.006, 1500 + Math.random() * 1500, i * 0.045 + Math.random() * 0.03);
+        for (let i = 0; i < 3; i++) noise(0.012, 0.05, 6500, 0.03 + Math.random() * 0.25);
+        break;
+      // A branch moving against its trunk: a slow wooden groan, bending pitch.
+      case 'branch_creak': {
+        const f = 70 + Math.random() * 60;
+        glide(f, f * (0.75 + Math.random() * 0.4), 0.7 + Math.random() * 0.6, 0.022, 'sawtooth');
+        glide(f * 2.02, f * 1.7, 0.5, 0.01, 'triangle', 0.1);
+        noise(0.4, 0.012, 900, 0.05);
+        break;
+      }
+      // The river: a wide rush, laid in overlapping swells so that, played
+      // every second and a half, it never quite gaps.
+      case 'river_flow':
+        for (let i = 0; i < 3; i++) noise(1.9, 0.045, 520 + Math.random() * 380, i * 0.5);
+        noise(1.5, 0.018, 2200, 0.2 + Math.random() * 0.3);
+        break;
+      // White water over rocks: brighter, choppier, a constant churn.
+      case 'river_rapids':
+        for (let i = 0; i < 5; i++) noise(0.4 + Math.random() * 0.4, 0.04, 1800 + Math.random() * 2400, i * 0.18);
+        noise(1.2, 0.03, 700, 0);
+        break;
+      // Something small breaking the surface: a drop, a fish.
+      case 'water_plip':
+        glide(600 + Math.random() * 500, 1500 + Math.random() * 600, 0.08, 0.04, 'sine');
+        noise(0.05, 0.03, 2500, 0.01);
+        break;
+      // The wind coming up through the trees, and dying again.
+      case 'wind_gust':
+        for (let i = 0; i < 5; i++) noise(1.6, 0.03 + i * 0.006, 380 + i * 260, i * 0.35);
+        for (let i = 0; i < 6; i++) noise(0.3, 0.02, 3200, 0.8 + i * 0.3 + Math.random() * 0.2);
         break;
       // Wading: a leg pushing water aside, low and sloshing, and the drip back.
       case 'wade':
@@ -1931,6 +1973,12 @@ export type SfxName =
   | 'wings'
   | 'twig_snap'
   | 'leaf_rustle'
+  | 'bush_rustle'
+  | 'branch_creak'
+  | 'river_flow'
+  | 'river_rapids'
+  | 'water_plip'
+  | 'wind_gust'
   | 'wade'
   | 'wheel_tick'
   | 'splash'

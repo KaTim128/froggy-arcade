@@ -137,6 +137,14 @@ interface Crow {
   flying: number;
 }
 
+interface Thicket {
+  x: number;
+  z: number;
+  r: number;
+  h: number;
+  dense: number;
+}
+
 interface Circle {
   x: number;
   z: number;
@@ -248,6 +256,26 @@ export class NightRoad3D extends Phaser.Scene {
   private ponds: Circle[] = [];
   /** The big pines' low boughs: crouch inside one and you are under cover. */
   private skirts: Circle[] = [];
+  /** Big bushes you can get into: h is how tall, dense how thick (0..1). */
+  private thickets: Thicket[] = [];
+  private inThicket: Thicket | null = null;
+  private thicketT = 0;
+  /** What the foliage shaders read: the breeze, you, and how hard you shook it. */
+  private wind = {
+    uTime: { value: 0 },
+    uPlayer: { value: new THREE.Vector4() },
+    uShake: { value: 0 },
+    uGust: { value: 0 },
+  };
+  private gustT = 8;
+  private gust = 0;
+  private riverT = 0;
+  private rapidsT = 0;
+  private plipT = 3;
+  private creakT = 6;
+  private rapids: { x: number; z: number }[] = [];
+  private foam: THREE.MeshBasicMaterial[] = [];
+  private fall: { pts: THREE.Points; vel: Float32Array } | null = null;
   /** How long you have stood in one place, and his walk past if it comes. */
   private stillT = 0;
   private passT = 0;
@@ -295,6 +323,14 @@ export class NightRoad3D extends Phaser.Scene {
     this.boxes = [];
     this.posts = [];
     this.skirts = [];
+    this.thickets = [];
+    this.inThicket = null;
+    this.thicketT = 0;
+    this.rapids = [];
+    this.foam = [];
+    this.fall = null;
+    this.gust = 0;
+    this.gustT = 8;
     this.stillT = 0;
     this.passT = 0;
     this.passBy = null;
@@ -880,143 +916,358 @@ export class NightRoad3D extends Phaser.Scene {
     }
     // (Behind the start is the town now -- see buildTown -- so no trees across it.)
 
-    const bark = canvasTex(16, 64, (g) => {
-      g.fillStyle = '#2a2018';
-      g.fillRect(0, 0, 16, 64);
-      for (let i = 0; i < 40; i++) {
-        g.fillStyle = i % 2 ? '#1c150f' : '#36291d';
-        g.fillRect(Math.floor(R() * 16), Math.floor(R() * 64), 1, 3 + Math.floor(R() * 8));
+    // bark: deep vertical furrows, and plates between them catching the light
+    const bark = canvasTex(32, 64, (g) => {
+      g.fillStyle = '#6a5a4a';
+      g.fillRect(0, 0, 32, 64);
+      for (let i = 0; i < 110; i++) {
+        g.fillStyle = ['#3a2e24', '#54463a', '#7e6e5c', '#2a2018'][i % 4];
+        g.fillRect(Math.floor(R() * 32), Math.floor(R() * 64), 1 + Math.floor(R() * 2), 3 + Math.floor(R() * 10));
       }
     });
     bark.wrapS = bark.wrapT = THREE.RepeatWrapping;
     bark.repeat.set(2, 3);
-    const needles = canvasTex(32, 32, (g) => {
-      g.fillStyle = '#6e7c6e';
-      g.fillRect(0, 0, 32, 32);
-      // needle clumps hanging down: short dark and light strokes
-      for (let i = 0; i < 320; i++) {
-        g.fillStyle = ['#56645a', '#86947f', '#3e4a40', '#98a690', '#4a564a'][i % 5];
-        g.fillRect(Math.floor(R() * 32), Math.floor(R() * 32), 1, 2 + Math.floor(R() * 2));
+    // Leaves: a sheet of them on clear ground, each a pointed oval with a
+    // midrib, in five greens -- cut out, so a clump of them is ragged at its
+    // edge and the sky shows through it.
+    const leafTex = (dark: boolean): THREE.CanvasTexture => {
+      const t = canvasTex(64, 64, (g) => {
+        g.clearRect(0, 0, 64, 64);
+        const greens = dark
+          ? ['#1e3020', '#28402a', '#173018', '#30482e', '#22381e']
+          : ['#3e5a30', '#4e6a38', '#2e4a26', '#5e7a42', '#36522c'];
+        for (let i = 0; i < 85; i++) {
+          const x = R() * 64;
+          const y = R() * 64;
+          const a = R() * Math.PI;
+          g.save();
+          g.translate(x, y);
+          g.rotate(a);
+          g.fillStyle = greens[i % 5];
+          g.beginPath();
+          g.ellipse(0, 0, 4 + R() * 2.5, 1.6 + R() * 1.2, 0, 0, Math.PI * 2);
+          g.fill();
+          g.fillStyle = 'rgba(0,0,0,0.25)';
+          g.fillRect(-3, -0.25, 6, 0.5);
+          g.restore();
+        }
+      });
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(4, 3);
+      return t;
+    };
+    // A pine bough's needles: a fringe of strokes hanging off a twig, cut out
+    const boughTex = canvasTex(64, 32, (g) => {
+      g.clearRect(0, 0, 64, 32);
+      for (let i = 0; i < 260; i++) {
+        const x = R() * 64;
+        const y = 2 + R() * 28;
+        g.strokeStyle = ['#2a3e2c', '#3a5038', '#1e3020', '#4a6044', '#2e4630'][i % 5];
+        g.lineWidth = 1;
+        g.beginPath();
+        g.moveTo(x, y);
+        g.lineTo(x + (R() - 0.5) * 3, y + 3 + R() * 4);
+        g.stroke();
       }
     });
-    needles.wrapS = needles.wrapT = THREE.RepeatWrapping;
-    needles.repeat.set(3, 2);
+    boughTex.wrapS = boughTex.wrapT = THREE.RepeatWrapping;
 
-    const trunkGeo = new THREE.CylinderGeometry(0.6, 1, 1, 7);
-    trunkGeo.translate(0, 0.5, 0);
-    const coneGeo = new THREE.ConeGeometry(1, 1, 9);
-    coneGeo.translate(0, 0.5, 0);
-    const TIERS = 5;
-    const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ map: bark }), spots.length);
-    const cones = new THREE.InstancedMesh(coneGeo, new THREE.MeshLambertMaterial({ map: needles }), spots.length * TIERS);
-    const limbGeo = new THREE.CylinderGeometry(0.02, 0.05, 1, 4);
-    limbGeo.translate(0, 0.5, 0);
-    const limbs = new THREE.InstancedMesh(limbGeo, new THREE.MeshLambertMaterial({ map: bark }), 1600);
-    // the bare ones: a trunk that tapers to a snapped top, weathered grey
-    const snagGeo = new THREE.CylinderGeometry(0.28, 1, 1, 6);
-    snagGeo.translate(0, 0.5, 0);
-    const snags = new THREE.InstancedMesh(snagGeo, new THREE.MeshLambertMaterial({ map: bark }), spots.length);
-    let ns = 0;
+    // EVERYTHING GREEN MOVES.  A breeze that comes and goes leans the crowns
+    // (more the higher up), and anything near you is pushed aside by your
+    // body and shaken when you barge through it.  Done on the GPU, per vertex,
+    // from the world position, so ten thousand boughs cost nothing to move.
+    const windify = <M extends THREE.Material>(mat: M, sway: number, pushR: number, base = 0.6): M => {
+      mat.onBeforeCompile = (sh) => {
+        sh.uniforms.uTime = this.wind.uTime;
+        sh.uniforms.uPlayer = this.wind.uPlayer;
+        sh.uniforms.uShake = this.wind.uShake;
+        sh.uniforms.uGust = this.wind.uGust;
+        sh.vertexShader = sh.vertexShader
+          .replace(
+            '#include <common>',
+            `#include <common>
+uniform float uTime; uniform vec4 uPlayer; uniform float uShake; uniform float uGust;`,
+          )
+          .replace(
+            '#include <project_vertex>',
+            `vec4 wpos = vec4(transformed, 1.0);
+#ifdef USE_INSTANCING
+wpos = instanceMatrix * wpos;
+#endif
+wpos = modelMatrix * wpos;
+float hh = max(0.0, wpos.y - ${base.toFixed(2)});
+float ph = wpos.x * 0.13 + wpos.z * 0.11;
+float gust = (0.55 + 0.45 * sin(uTime * 0.31 + wpos.x * 0.015 + wpos.z * 0.01)) * (1.0 + uGust);
+wpos.x += (sin(uTime * 1.6 + ph) + 0.4 * sin(uTime * 4.1 + ph * 3.0)) * ${sway.toFixed(4)} * hh * gust;
+wpos.z += (cos(uTime * 1.2 + ph * 1.3) + 0.3 * sin(uTime * 3.7 + ph * 2.0)) * ${(sway * 0.7).toFixed(4)} * hh * gust;
+vec2 dp = wpos.xz - uPlayer.xy;
+float dd = length(dp);
+float near = 1.0 - smoothstep(0.0, ${pushR.toFixed(2)}, dd);
+float low = clamp(1.0 - wpos.y / 2.6, 0.0, 1.0);
+wpos.xz += (dd > 0.001 ? dp / dd : vec2(0.0)) * near * low * uPlayer.z * 0.55;
+wpos.x += sin(uTime * 37.0 + ph * 9.0) * uShake * near * 0.07;
+wpos.y += cos(uTime * 31.0 + ph * 7.0) * uShake * near * 0.04;
+vec4 mvPosition = viewMatrix * wpos;
+gl_Position = projectionMatrix * mvPosition;`,
+          );
+      };
+      return mat;
+    };
+
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const sc = new THREE.Vector3();
     const p = new THREE.Vector3();
     const col = new THREE.Color();
-    let c = 0;
-    let nl = 0;
-    spots.forEach((t, i) => {
-      const h = 7 + R() * 7;
-      const dead = Math.abs(t.x) < RAIL_X + 5 && R() < 0.25;
-      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), R() * 6.28);
-      if (dead) {
-        // a little lean, and grey with weather
-        const lean = new THREE.Quaternion().setFromEuler(new THREE.Euler((R() - 0.5) * 0.12, R() * 6.28, (R() - 0.5) * 0.12));
-        m.compose(p.set(t.x, 0, t.z), lean, sc.set(t.r * 1.1, h * 0.75, t.r * 1.1));
-        snags.setMatrixAt(ns, m);
-        snags.setColorAt(ns, col.setHSL(0.08, 0.06, 0.42 + R() * 0.12));
-        ns++;
-        m.compose(p.set(t.x, -50, t.z), q, sc.set(0.001, 0.001, 0.001));
-      } else m.compose(p.set(t.x, 0, t.z), q, sc.set(t.r, h * 0.5, t.r));
-      trunks.setMatrixAt(i, m);
-      let reach = 0;
-      // one tree's green, a little lighter towards the top
-      const hue = 0.33 + (R() - 0.5) * 0.06;
-      const light = 0.06 + R() * 0.04;
-      // About one in four is an old, heavy pine: its lowest boughs spread
-      // wide and sweep down nearly to the ground -- room under them for a
-      // man crouched against the trunk.
-      const big = !dead && Math.abs(t.x) <= WORLD_X && R() < 0.26;
-      if (big) this.skirts.push({ x: t.x, z: t.z, r: 2.3 });
-      for (let k = 0; k < TIERS; k++) {
-        // narrow, tall, overlapping tiers: a spruce's outline, not a stack of shades
-        const spread = big ? [1.55, 1.25, 1.1, 1, 1][k] : 1;
-        const w = (dead ? 0 : 1) * (2.3 - k * 0.4) * (0.82 + R() * 0.3) * spread;
-        const base = big && k === 0 ? 0.03 : big && k === 1 ? 0.12 : 0.16 + k * 0.15;
-        const tq = new THREE.Quaternion().setFromEuler(new THREE.Euler((R() - 0.5) * 0.08, R() * 6.28, (R() - 0.5) * 0.08));
-        m.compose(p.set(t.x, h * base, t.z), tq, sc.set(w || 0.001, h * (big && k < 2 ? 0.46 : 0.4), w || 0.001));
-        cones.setMatrixAt(c, m);
-        cones.setColorAt(c, col.setHSL(hue, 0.38, light + k * 0.01));
-        c++;
-        // how far this tier's boughs stand out from the trunk at hip, chest
-        // and head height
-        const b0 = h * base;
-        const th = h * (big && k < 2 ? 0.46 : 0.4);
-        for (const y of [0.6, 1.1, 1.6]) {
-          if (y >= b0 && y <= b0 + th) reach = Math.max(reach, w * (1 - (y - b0) / th));
+    const up = new THREE.Vector3(0, 1, 0);
+
+    // The parts every tree is made of, each an instanced mesh: a tapering
+    // trunk; limbs (and the branches and twigs off them, the same shape
+    // smaller); pine boughs, each a drooping fan of needles; and the leafy
+    // clumps of the broadleaves.
+    const trunkGeo = new THREE.CylinderGeometry(0.55, 1, 1, 7, 1, true);
+    trunkGeo.translate(0, 0.5, 0);
+    const limbGeo = new THREE.CylinderGeometry(0.45, 1, 1, 4, 1, true);
+    limbGeo.translate(0, 0.5, 0);
+    // a bough: an open, flattened cone lying on its side, apex at the trunk
+    const boughGeo = new THREE.ConeGeometry(0.5, 1, 5, 1, true);
+    boughGeo.translate(0, -0.5, 0);
+    boughGeo.rotateZ(Math.PI / 2);
+    boughGeo.scale(1, 0.45, 1);
+    const clumpGeo = new THREE.IcosahedronGeometry(1, 0);
+    const tipGeo = new THREE.ConeGeometry(1, 1, 8, 1, true);
+    tipGeo.translate(0, 0.5, 0);
+
+    const barkMat = windify(new THREE.MeshLambertMaterial({ map: bark }), 0.004, 0, 2);
+    const limbMat = windify(new THREE.MeshLambertMaterial({ map: bark }), 0.012, 1.4, 1.5);
+    const boughMat = windify(
+      new THREE.MeshLambertMaterial({ map: boughTex, alphaTest: 0.35, side: THREE.DoubleSide }),
+      0.02,
+      1.6,
+      0.4,
+    );
+    const leafMat = windify(
+      new THREE.MeshLambertMaterial({ map: leafTex(false), alphaTest: 0.4, side: THREE.DoubleSide }),
+      0.022,
+      1.5,
+      0.5,
+    );
+    // Every part is filed by where it stands, and each patch of woods drawn
+    // as its own batch -- so the woods behind you, or off to the side, are
+    // not drawn at all.
+    type Part = { geo: THREE.BufferGeometry; mat: THREE.Material; items: { m: THREE.Matrix4; c: THREE.Color }[] };
+    const parts: Record<string, Part> = {};
+    const put = (kind: string, geo: THREE.BufferGeometry, mat: THREE.Material, mm: THREE.Matrix4, c: THREE.Color): void => {
+      (parts[kind] ??= { geo, mat, items: [] }).items.push({ m: mm.clone(), c: c.clone() });
+    };
+    const flush = (): void => {
+      for (const part of Object.values(parts)) {
+        const groups = new Map<string, { m: THREE.Matrix4; c: THREE.Color }[]>();
+        for (const it of part.items) {
+          const key = `${Math.floor(it.m.elements[14] / 22)}:${Math.floor(it.m.elements[12] / 22)}`;
+          let g = groups.get(key);
+          if (!g) groups.set(key, (g = []));
+          g.push(it);
+        }
+        for (const g of groups.values()) {
+          const im = new THREE.InstancedMesh(part.geo, part.mat, g.length);
+          g.forEach((it, k) => {
+            im.setMatrixAt(k, it.m);
+            im.setColorAt(k, it.c);
+          });
+          im.computeBoundingSphere();
+          S.add(im);
         }
       }
-      t.leaf = reach;
+      for (const k of Object.keys(parts)) delete parts[k];
+    };
+    const limb = (x: number, y: number, z: number, dir: THREE.Vector3, len: number, rad: number, tint: THREE.Color): void => {
+      q.setFromUnitVectors(up, dir);
+      m.compose(p.set(x, y, z), q, sc.set(rad, len, rad));
+      put('limb', limbGeo, limbMat, m, tint);
+    };
+    const clump = (x: number, y: number, z: number, r: number, hue: number, light: number): void => {
+      q.setFromEuler(new THREE.Euler(R() * 6.28, R() * 6.28, R() * 6.28));
+      m.compose(p.set(x, y, z), q, sc.set(r * (0.9 + R() * 0.3), r * (0.7 + R() * 0.25), r * (0.9 + R() * 0.3)));
+      put('clump', clumpGeo, leafMat, m, col.setHSL(hue, 0.42, light));
+    };
+    const dirFrom = (yaw: number, tilt: number): THREE.Vector3 =>
+      new THREE.Vector3(Math.sin(tilt) * Math.cos(yaw), Math.cos(tilt), Math.sin(tilt) * Math.sin(yaw));
+
+    spots.forEach((t) => {
+      const far = Math.abs(t.x) > WORLD_X + 0.5;
+      const dead = !far && Math.abs(t.x) < RAIL_X + 5 && R() < 0.2;
+      // a third of the woods is broadleaf: oak-ish, and here and there a birch
+      const broad = !dead && R() < 0.34;
+      const birch = broad && R() < 0.3;
+      const h = broad ? 6 + R() * 5 : 7 + R() * 7;
+      const barkTint = new THREE.Color().setHSL(0.07, birch ? 0.04 : 0.18, birch ? 0.85 + R() * 0.1 : dead ? 0.6 + R() * 0.12 : 0.5 + R() * 0.15);
+      const lean = new THREE.Quaternion().setFromEuler(new THREE.Euler((R() - 0.5) * 0.08, R() * 6.28, (R() - 0.5) * 0.08));
+      const trunkH = dead ? h * 0.75 : broad ? h * 0.62 : h * 0.96;
+      m.compose(p.set(t.x, 0, t.z), lean, sc.set(t.r * (birch ? 0.7 : 1), trunkH, t.r * (birch ? 0.7 : 1)));
+      put('trunk', trunkGeo, barkMat, m, barkTint);
+      let reach = 0;
+      const hue = 0.3 + (R() - 0.5) * 0.07;
+      const light = 0.13 + R() * 0.08;
+
       if (dead) {
-        // Bare limbs all the way up -- longer low down, shorter towards the
-        // snapped top, angled up as pine limbs are -- and on the bigger ones a
-        // fork part way along, so the outline is a tangle and not a hat-stand.
+        // Bare limbs all the way up, longer low down, angled up, some forked.
         const n = 7 + Math.floor(R() * 5);
-        for (let k = 0; k < n && nl < 1590; k++) {
+        for (let k = 0; k < n; k++) {
           const f = 0.2 + (k / n) * 0.7;
           const yaw = R() * 6.28;
-          const tilt = 0.7 + R() * 0.6 + f * 0.3;
+          const dir = dirFrom(yaw, 0.7 + R() * 0.6);
           const len = (2.6 - f * 2) * (0.7 + R() * 0.5);
-          const lq = new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt, yaw, 0, 'YXZ'));
-          const y0 = h * 0.75 * f;
-          m.compose(p.set(t.x, y0, t.z), lq, sc.set(1, len, 1));
-          limbs.setMatrixAt(nl++, m);
-          if (len > 1.4) {
-            // the fork: from halfway out, off to one side and up
-            const dir = new THREE.Vector3(0, 1, 0).applyQuaternion(lq);
-            const mx = t.x + dir.x * len * 0.5;
-            const my = y0 + dir.y * len * 0.5;
-            const mz = t.z + dir.z * len * 0.5;
-            const fq = new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt - 0.5, yaw + (R() < 0.5 ? -0.7 : 0.7), 0, 'YXZ'));
-            m.compose(p.set(mx, my, mz), fq, sc.set(0.7, len * 0.45, 0.7));
-            limbs.setMatrixAt(nl++, m);
+          const y0 = trunkH * f;
+          limb(t.x, y0, t.z, dir, len, 0.05, barkTint);
+          if (len > 1.2) {
+            const fd = dirFrom(yaw + (R() < 0.5 ? -0.7 : 0.7), 0.5 + R() * 0.4);
+            limb(t.x + dir.x * len * 0.5, y0 + dir.y * len * 0.5, t.z + dir.z * len * 0.5, fd, len * 0.45, 0.03, barkTint);
           }
         }
+      } else if (broad) {
+        // THE BROADLEAF: the trunk forks into three to five limbs, each limb
+        // into branches, each branch into twigs, and the leaves hang in
+        // clumps off the ends -- a crown, with sky through it.
+        const nLimb = 3 + Math.floor(R() * 3);
+        const forkY = trunkH * (0.55 + R() * 0.25);
+        for (let k = 0; k < nLimb; k++) {
+          const yaw = (k / nLimb) * 6.28 + R() * 0.8;
+          const dir = dirFrom(yaw, 0.45 + R() * 0.45);
+          const len = h * (0.32 + R() * 0.14);
+          limb(t.x, forkY, t.z, dir, len, t.r * 0.55, barkTint);
+          const ex = t.x + dir.x * len;
+          const ey = forkY + dir.y * len;
+          const ez = t.z + dir.z * len;
+          clump(ex, ey + 0.3, ez, 1.2 + R() * 0.6, hue, light + 0.03);
+          // branches off the limb, and twigs off those (past the edge, where
+          // you never come near, the crown is enough)
+          const nBr = far ? 0 : 2 + Math.floor(R() * 2);
+          for (let b = 0; b < nBr; b++) {
+            const f = 0.45 + R() * 0.4;
+            const bx = t.x + dir.x * len * f;
+            const by = forkY + dir.y * len * f;
+            const bz = t.z + dir.z * len * f;
+            const bd = dirFrom(yaw + (R() - 0.5) * 1.8, 0.6 + R() * 0.7);
+            const bl = len * (0.4 + R() * 0.3);
+            limb(bx, by, bz, bd, bl, t.r * 0.25, barkTint);
+            const cx = bx + bd.x * bl;
+            const cy = by + bd.y * bl;
+            const cz = bz + bd.z * bl;
+            clump(cx, cy, cz, 0.9 + R() * 0.6, hue + (R() - 0.5) * 0.02, light + R() * 0.03);
+            for (let w = 0; w < 1; w++) {
+              const td = dirFrom(yaw + (R() - 0.5) * 2.6, 0.4 + R() * 1.0);
+              limb(cx, cy, cz, td, 0.5 + R() * 0.5, 0.025, barkTint);
+            }
+            // the lowest leaves can hang to head height: those are the ones you brush
+            if (cy - 1 < 1.8) reach = Math.max(reach, Math.hypot(cx - t.x, cz - t.z) + 0.9);
+          }
+        }
+        clump(t.x, forkY + h * 0.38, t.z, 1.5 + R() * 0.6, hue, light + 0.04);
+      } else {
+        // THE PINE: whorls of boughs up the trunk, four to six to a whorl,
+        // long and drooping low down, short and lifted near the top, each
+        // with its limb inside it, and a spire of needles at the crown.
+        // About one in four is an old, heavy one: its lowest boughs sweep
+        // nearly to the ground, and there is room under them for a man.
+        const big = Math.abs(t.x) <= WORLD_X && R() < 0.26;
+        if (big) this.skirts.push({ x: t.x, z: t.z, r: 2.3 });
+        const start = big ? 0.5 : 1.3 + R() * 0.8;
+        const gap = far ? 2.2 : 1.15 + R() * 0.3;
+        const crown = trunkH;
+        for (let y = start; y < crown - 0.6; y += gap) {
+          const f = y / crown;
+          const per = far ? 3 : 3 + Math.floor(R() * 2);
+          const yaw0 = R() * 6.28;
+          const len = (2.6 * (1 - f) + 0.45) * (big && f < 0.25 ? 1.5 : 1) * (0.85 + R() * 0.3);
+          for (let k = 0; k < per; k++) {
+            const yaw = yaw0 + (k / per) * 6.28 + (R() - 0.5) * 0.5;
+            const droop = (0.15 + (1 - f) * 0.35) * (0.8 + R() * 0.4);
+            const e = new THREE.Euler(0, -yaw, -droop, 'YXZ');
+            q.setFromEuler(e);
+            const wide = len * (0.7 + R() * 0.3);
+            m.compose(p.set(t.x, y, t.z), q, sc.set(len, wide, wide));
+            put('bough', boughGeo, boughMat, m, col.setHSL(hue, 0.35, 0.34 + f * 0.12 + R() * 0.06));
+            if (!far && len > 1.5 && y < 3) {
+              const dir = new THREE.Vector3(Math.cos(yaw), -Math.sin(droop), Math.sin(yaw)).normalize();
+              limb(t.x, y, t.z, dir, len * 0.8, 0.04, barkTint);
+            }
+          }
+          for (const yy of [0.6, 1.1, 1.6]) {
+            // how far its boughs stand out at hip, chest and head height
+            if (Math.abs(yy - y) < gap) reach = Math.max(reach, len * (1 - Math.abs(yy - y) / (gap * 1.5)));
+          }
+        }
+        // the spire
+        m.compose(p.set(t.x, crown - 1.4, t.z), lean, sc.set(0.55, 2.4, 0.55));
+        put('tip', tipGeo, boughMat, m, col.setHSL(hue, 0.35, 0.42));
       }
-      if (Math.abs(t.x) <= WORLD_X + 0.5) this.addTree(t);
+      t.leaf = reach;
+      if (!far) this.addTree(t);
     });
-    trunks.count = spots.length;
-    cones.count = c;
-    limbs.count = nl;
-    snags.count = ns;
-    S.add(trunks, cones, limbs, snags);
+    flush();
 
-    // ---- the scrub: low, dark, rounded bushes between the trunks
-    const bushGeo = new THREE.IcosahedronGeometry(1, 1);
-    const bushes = new THREE.InstancedMesh(bushGeo, new THREE.MeshLambertMaterial({ map: needles }), 420);
-    let nb = 0;
-    for (let k = 0; k < 1400 && nb < 420; k++) {
+    // ---- the scrub: low leafy bushes between the trunks, that lean in the
+    // wind and part round your legs
+    const scrubMat = windify(
+      new THREE.MeshLambertMaterial({ map: leafTex(true), alphaTest: 0.4, side: THREE.DoubleSide }),
+      0.05,
+      1.3,
+      0,
+    );
+    let ns = 0;
+    for (let k = 0; k < 1400 && ns < 420; k++) {
       const x = (R() < 0.5 ? -1 : 1) * (RAIL_X + 1.2 + R() * (WORLD_X - RAIL_X - 1.2));
       const z = HOTEL_Z + 8 + R() * (BACK_Z - HOTEL_Z - 8);
       if (!this.clearGround(x, z, 1.2)) continue;
-      const s2 = 0.35 + R() * 0.7;
-      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), R() * 6.28);
-      m.compose(p.set(x, s2 * 0.35, z), q, sc.set(s2 * (1 + R() * 0.5), s2 * 0.7, s2));
-      bushes.setMatrixAt(nb, m);
-      bushes.setColorAt(nb, col.setHSL(0.3 + (R() - 0.5) * 0.08, 0.35, 0.07 + R() * 0.05));
-      nb++;
+      const s2 = 0.35 + R() * 0.55;
+      q.setFromAxisAngle(up, R() * 6.28);
+      m.compose(p.set(x, s2 * 0.4, z), q, sc.set(s2 * (1 + R() * 0.5), s2 * 0.75, s2));
+      put('scrub', clumpGeo, scrubMat, m, col.setHSL(0.3 + (R() - 0.5) * 0.08, 0.4, 0.35 + R() * 0.2));
+      ns++;
     }
-    bushes.count = nb;
-    S.add(bushes);
+
+    // ---- THICKETS.  Big, dense bushes you can get INTO: a ring of leafy
+    // masses round a hollow, some waist high and thin, some over a man's head
+    // and thick.  Inside, the world is glimpses between leaves.  Going in is
+    // loud; moving inside rustles; keeping still is silent.
+    const thickMat = windify(
+      new THREE.MeshLambertMaterial({ map: leafTex(true), alphaTest: 0.45, side: THREE.DoubleSide }),
+      0.035,
+      1.8,
+      0,
+    );
+    for (let k = 0; k < 2400 && this.thickets.length < 64; k++) {
+      const x = (R() < 0.5 ? -1 : 1) * (RAIL_X + 2.5 + R() * (WORLD_X - RAIL_X - 4));
+      const z = HOTEL_Z + 14 + R() * (BACK_Z - HOTEL_Z - 18);
+      const r = 1.2 + R() * 1.1;
+      if (!this.clearGround(x, z, r + 0.4)) continue;
+      if (this.treesNear(x, z).some((t) => Math.hypot(t.x - x, t.z - z) < r + t.r + 0.3)) continue;
+      if (this.thickets.some((b) => Math.hypot(b.x - x, b.z - z) < b.r + r + 2)) continue;
+      const tall = R() < 0.55;
+      const hgt = tall ? 1.85 + R() * 0.5 : 1.2 + R() * 0.35;
+      const dense = 0.35 + R() * 0.65;
+      this.thickets.push({ x, z, r, h: hgt, dense });
+      const pieces = 6 + Math.floor(dense * 6);
+      const tint = 0.3 + R() * 0.15;
+      for (let n = 0; n < pieces; n++) {
+        const a = (n / pieces) * 6.28 + R() * 0.4;
+        const rr = r * (0.55 + R() * 0.3);
+        const s2 = r * (0.5 + R() * 0.25);
+        q.setFromEuler(new THREE.Euler(R() * 6.28, R() * 6.28, R() * 6.28));
+        m.compose(p.set(x + Math.cos(a) * rr, hgt * (0.35 + R() * 0.2), z + Math.sin(a) * rr), q, sc.set(s2, hgt * 0.55, s2));
+        put('thick', clumpGeo, thickMat, m, col.setHSL(0.29 + (R() - 0.5) * 0.06, 0.4, tint + R() * 0.08));
+      }
+      // and a crown over the hollow: from inside, a roof of leaves
+      q.setFromEuler(new THREE.Euler(R() * 6.28, R() * 6.28, R() * 6.28));
+      m.compose(p.set(x, hgt * 0.85, z), q, sc.set(r * 0.9, hgt * 0.3, r * 0.9));
+      put('thick', clumpGeo, thickMat, m, col.setHSL(0.3, 0.4, tint));
+    }
+    flush();
+
+    // ---- leaves coming down: a few hundred, around wherever you are
+    this.buildFallingLeaves(S, R);
+    this.buildRapids(S, R);
   }
 
   /**
@@ -1842,6 +2093,7 @@ export class NightRoad3D extends Phaser.Scene {
       this.riverFlow[1].offset.set(this.clock * 0.3, Math.sin(this.clock * 0.9) * 0.06 + this.clock * 0.01);
     }
     this.stepRipples(dt);
+    this.stirFoliage(dt);
     this.sky?.position.copy(this.stage.camera.position);
     if (this.beacon) {
       // the CLOSED sign: a tired neon, mostly on, now and then a stutter
@@ -1955,6 +2207,7 @@ export class NightRoad3D extends Phaser.Scene {
     // Running is the chase's.  Before then you are walking home, tired.
     this.running = this.phase === 'chase' && this.held('run') && !this.crouched;
     this.moving = fwd !== 0 || strafe !== 0;
+    this.brushThickets(dt);
     if (!this.moving) return;
 
     const sin = Math.sin(this.yaw);
@@ -2067,8 +2320,45 @@ export class NightRoad3D extends Phaser.Scene {
     const pace = this.running ? 1.35 : this.crouched ? 0.55 : 1;
     this.rustleT = (0.5 - deep * 0.28) / pace;
     audio.sfx('leaf_rustle', Math.min(1, (0.25 + deep * 0.75) * pace));
+    this.wind.uShake.value = Math.max(this.wind.uShake.value, (0.3 + deep * 0.7) * pace);
     this.counts.rustle++;
     this.noise((3 + deep * 13) * pace, this.pos.x, this.pos.y, true);
+  }
+
+  private thicketAt(x: number, z: number): Thicket | null {
+    return this.thickets.find((b) => Math.hypot(x - b.x, z - b.z) < b.r * 0.9) ?? null;
+  }
+
+  /**
+   * INTO A THICKET.  Pushing in is loud -- the whole bush thrashes, and it
+   * carries.  Inside, every move rustles: a crouched creep barely, a walk
+   * plainly, a run like an animal breaking cover.  Keep still and it is
+   * silent.  Out again, one last shush.
+   */
+  private brushThickets(dt: number): void {
+    const b = this.thicketAt(this.pos.x, this.pos.y);
+    const pace = this.running ? 1.5 : this.crouched ? 0.45 : 1;
+    if (b && b !== this.inThicket) {
+      audio.sfx('bush_rustle', Math.min(1, 0.45 + 0.4 * pace));
+      this.wind.uShake.value = 1.2;
+      this.counts.rustle++;
+      this.noise((7 + 9 * b.dense) * pace, this.pos.x, this.pos.y, true);
+      this.thicketT = 0.5;
+    } else if (b && this.moving) {
+      this.thicketT -= dt;
+      if (this.thicketT <= 0) {
+        this.thicketT = this.running ? 0.28 : this.crouched ? 0.8 : 0.45;
+        audio.sfx('bush_rustle', this.running ? 0.85 : this.crouched ? 0.2 : 0.45);
+        this.wind.uShake.value = Math.max(this.wind.uShake.value, this.running ? 1 : this.crouched ? 0.25 : 0.55);
+        this.counts.rustle++;
+        const carry = this.running ? 15 : this.crouched ? 2.5 : 7;
+        this.noise(carry * (0.6 + b.dense * 0.6), this.pos.x, this.pos.y, true);
+      }
+    } else if (!b && this.inThicket) {
+      audio.sfx('bush_rustle', 0.3 * pace);
+      this.wind.uShake.value = Math.max(this.wind.uShake.value, 0.5);
+    }
+    this.inThicket = b;
   }
 
   private pushOutOfTrees(p: THREE.Vector2, r: number): void {
@@ -2336,8 +2626,17 @@ export class NightRoad3D extends Phaser.Scene {
     if (d < (this.crouched ? 2.5 : 3.5)) return true;
     // crouched in under a big pine's low boughs, you are a shape in the dark
     if (this.crouched && this.underBoughs()) return false;
+    // In a thicket: down in a thick one, or in one taller than you, you are
+    // gone; a thin one only blurs you.
+    const bush = this.thicketAt(this.pos.x, this.pos.y);
+    let cover = 1;
+    if (bush) {
+      const under = this.crouched || bush.h > 1.8;
+      if (under && bush.dense > 0.55) return false;
+      cover = under ? 0.3 : 0.65;
+    }
     const lit = LAMP_ZS.some((z, i) => Math.hypot(this.pos.x - (i % 2 ? 1 : -1) * (RAIL_X - 1.2), this.pos.y - z) < 7.5);
-    const range = (lit ? 36 : this.onRoad() ? 27 : this.pos.y < HOTEL_Z + 12 ? 30 : 13) * (this.crouched ? 0.6 : 1);
+    const range = (lit ? 36 : this.onRoad() ? 27 : this.pos.y < HOTEL_Z + 12 ? 30 : 13) * (this.crouched ? 0.6 : 1) * cover;
     if (d > range) return false;
     {
       // He sees what is in front of him: looking about, a cone of seventy
@@ -2587,7 +2886,136 @@ export class NightRoad3D extends Phaser.Scene {
     return Phaser.Math.Clamp(1 - d / 34, 0, 1) ** 1.4;
   }
 
+  /** The breeze, your body in the leaves, the foam, the leaves coming down. */
+  private stirFoliage(dt: number): void {
+    const w = this.wind;
+    w.uTime.value = this.clock;
+    w.uPlayer.value.set(this.pos.x, this.pos.y, this.crouched ? 0.7 : 1, 0);
+    w.uShake.value = Math.max(0, w.uShake.value - dt * 2.2);
+    // a gust: comes up over a second or two, holds, and dies away
+    this.gustT -= dt;
+    if (this.gustT <= 0) {
+      this.gustT = 10 + Math.random() * 12;
+      this.gust = 1;
+      audio.sfx('wind_gust', 0.35 + Math.random() * 0.2, { pan: (Math.random() - 0.5) * 1.2, behind: Math.random() * 0.5 });
+    }
+    this.gust = Math.max(0, this.gust - dt * 0.22);
+    w.uGust.value = Math.sin(Math.min(1, this.gust) * Math.PI) * 1.3;
+    this.foam.forEach((f, i) => (f.opacity = 0.45 + Math.sin(this.clock * (7 + i) + i * 2) * 0.2 + Math.sin(this.clock * 13.3 + i) * 0.1));
+    if (this.fall && this.stage) {
+      const c = this.stage.camera.position;
+      const pos = this.fall.pts.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const a = pos.array as Float32Array;
+      const v = this.fall.vel;
+      const drift = 0.4 + w.uGust.value * 1.2;
+      for (let i = 0; i < pos.count; i++) {
+        const k = i * 3;
+        a[k] += (Math.sin(this.clock * 2.1 + i) * 0.5 + drift) * dt;
+        a[k + 1] -= v[i] * dt;
+        a[k + 2] += Math.cos(this.clock * 1.7 + i * 1.3) * 0.4 * dt;
+        // keep them in a box round you: what leaves one side comes in the other
+        if (a[k + 1] < 0.02) a[k + 1] = 9 + Math.random() * 4;
+        if (a[k] - c.x > 16) a[k] -= 32;
+        if (a[k] - c.x < -16) a[k] += 32;
+        if (a[k + 2] - c.z > 16) a[k + 2] -= 32;
+        if (a[k + 2] - c.z < -16) a[k + 2] += 32;
+      }
+      pos.needsUpdate = true;
+    }
+  }
+
+  private buildFallingLeaves(S: THREE.Scene, R: () => number): void {
+    const N = 240;
+    const a = new Float32Array(N * 3);
+    const vel = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      a[i * 3] = (R() - 0.5) * 32;
+      a[i * 3 + 1] = R() * 12;
+      a[i * 3 + 2] = BACK_Z - 10 + (R() - 0.5) * 32;
+      vel[i] = 0.35 + R() * 0.5;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(a, 3));
+    const tex = canvasTex(8, 8, (g) => {
+      g.clearRect(0, 0, 8, 8);
+      g.fillStyle = '#6a5a2a';
+      g.beginPath();
+      g.ellipse(4, 4, 3.5, 1.6, 0.6, 0, Math.PI * 2);
+      g.fill();
+    });
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ map: tex, size: 0.14, alphaTest: 0.5, color: 0x8a8a6a }));
+    pts.frustumCulled = false;
+    S.add(pts);
+    this.fall = { pts, vel };
+  }
+
+  /**
+   * Rapids: rocks across part of the river, with white water flickering
+   * round them -- what you hear before you see.
+   */
+  private buildRapids(S: THREE.Scene, R: () => number): void {
+    const rockMat = new THREE.MeshLambertMaterial({ color: 0x3a3e44 });
+    for (const x of [-(RAIL_X + 11), RAIL_X + 17]) {
+      this.rapids.push({ x, z: RIVER_Z });
+      for (let k = 0; k < 9; k++) {
+        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.3 + R() * 0.45, 0), rockMat);
+        rock.position.set(x + (R() - 0.5) * 5, 0.05, RIVER_Z + (R() - 0.5) * (RIVER_HALF * 1.6));
+        rock.rotation.set(R() * 3, R() * 3, R() * 3);
+        rock.scale.y = 0.55;
+        S.add(rock);
+        const foam = new THREE.MeshBasicMaterial({ color: 0xd8e4ee, transparent: true, opacity: 0.5, depthWrite: false });
+        this.foam.push(foam);
+        const f = new THREE.Mesh(new THREE.CircleGeometry(0.5 + R() * 0.5, 7), foam);
+        f.rotation.x = -Math.PI / 2;
+        f.scale.set(1.8, 0.7, 1);
+        f.position.set(rock.position.x - 0.5, 0.02, rock.position.z);
+        S.add(f);
+      }
+    }
+  }
+
+  /**
+   * The woods' own sounds.  The river: a rush that swells as you come
+   * nearer, from where it is; white water at the rapids; a plip now and then.
+   * And branches creaking in the trees round you.
+   */
+  private woodsSound(dt: number): void {
+    const toRiver = Math.max(0, Math.abs(this.pos.y - RIVER_Z) - RIVER_HALF);
+    const rg = Math.max(0, 1 - toRiver / 42) ** 1.6;
+    this.riverT -= dt;
+    if (this.riverT <= 0) {
+      this.riverT = 1.4;
+      if (rg > 0.02) audio.sfx('river_flow', rg * 0.9, this.placeOf(this.pos.x, RIVER_Z));
+    }
+    this.rapidsT -= dt;
+    if (this.rapidsT <= 0) {
+      this.rapidsT = 0.9;
+      for (const r of this.rapids) {
+        const g = Math.max(0, 1 - Math.hypot(r.x - this.pos.x, r.z - this.pos.y) / 40) ** 1.5;
+        if (g > 0.03) audio.sfx('river_rapids', g, this.placeOf(r.x, r.z));
+      }
+    }
+    this.plipT -= dt;
+    if (this.plipT <= 0) {
+      this.plipT = 1.5 + Math.random() * 3.5;
+      if (rg > 0.12) {
+        const x = this.pos.x + (Math.random() - 0.5) * 24;
+        audio.sfx(Math.random() < 0.7 ? 'water_plip' : 'splash', rg * (0.25 + Math.random() * 0.3), this.placeOf(x, RIVER_Z));
+      }
+    }
+    this.creakT -= dt;
+    if (this.creakT <= 0) {
+      this.creakT = 5 + Math.random() * 9 - this.gust * 3;
+      const near = this.treesNear(this.pos.x, this.pos.y).filter((t) => Math.hypot(t.x - this.pos.x, t.z - this.pos.y) < 18);
+      if (near.length) {
+        const t = near[Math.floor(Math.random() * near.length)];
+        audio.sfx('branch_creak', 0.25 + this.gust * 0.3, this.placeOf(t.x, t.z));
+      }
+    }
+  }
+
   private ambience(dt: number): void {
+    this.woodsSound(dt);
     this.crowAmbientT -= dt;
     if (this.crowAmbientT <= 0) {
       this.crowAmbientT = 9 + Math.random() * 10;
@@ -2635,6 +3063,14 @@ export class NightRoad3D extends Phaser.Scene {
         ctx.fillStyle = `rgba(0,0,0,${black})`;
         ctx.fillRect(0, 0, GAME_W, GAME_H);
         if (this.phase === 'safe') return;
+      }
+      if (this.inThicket) {
+        // in the bush: leaves crowd the edges of what you can see
+        const g = ctx.createRadialGradient(GAME_W / 2, GAME_H / 2, GAME_H * 0.25, GAME_W / 2, GAME_H / 2, GAME_W * 0.6);
+        g.addColorStop(0, 'rgba(6,14,6,0)');
+        g.addColorStop(1, `rgba(6,14,6,${0.55 + this.inThicket.dense * 0.3})`);
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, GAME_W, GAME_H);
       }
       if (this.phase === 'chase' && this.phaseT > 1.2) {
         drawPixelText(ctx, 'OBJECTIVE', 6, 6, { scale: 1, color: '#9a4848', alpha: 0.85 });
@@ -2777,6 +3213,8 @@ export class NightRoad3D extends Phaser.Scene {
       skirts: () => this.skirts.map((k) => [k.x, k.z]),
       leafy: () => this.trees.filter((t) => (t.leaf ?? 0) > 1).slice(0, 40).map((t) => [t.x, t.z, t.leaf]),
       under: () => this.underBoughs(),
+      thickets: () => this.thickets.map((b) => ({ ...b })),
+      inBush: () => !!this.inThicket,
       passBy: () => (this.passBy ? { leg: this.passBy.leg, a: [this.passBy.a.x, this.passBy.a.y], b: [this.passBy.b.x, this.passBy.b.y] } : null),
       setMode: (m: FrogMode) => {
         this.fMode = m;
