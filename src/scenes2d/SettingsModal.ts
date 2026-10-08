@@ -231,9 +231,30 @@ export class SettingsModal extends Phaser.Scene {
           jumpToScene('Hotel', { area: 'lobby' });
         },
       ],
+      [
+        'LOBBY HIDE',
+        'DOWN THE STAIRS: HE FOLLOWS',
+        () => {
+          // the bottom of the stairwell, survived: the lobby, and him behind
+          store.patch({
+            seenIntro: true,
+            charityUsed: true,
+            hasKey: true,
+            froggyGone: true,
+            route: 'normal',
+            hideRoom: 0,
+            timeOfDay: 'midnight',
+            reachedHotel: true,
+            checkedIn: true,
+            hotelNight: true,
+          });
+          store.flush();
+          jumpToScene('Hotel', { area: 'lobby', from: 'stairs' });
+        },
+      ],
     ];
     rows.forEach(([label, what, go], i) => {
-      const y = 62 + i * 22;
+      const y = 58 + i * 18;
       this.body.add(button(this, 92, y, label, go, { width: 112, height: 14 }));
       this.body.add(text(this, 152, y - 3, what, PALETTE.ash));
     });
