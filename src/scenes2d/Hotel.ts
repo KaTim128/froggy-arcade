@@ -39,6 +39,7 @@ import { TokenHud } from '../ui/hud';
 import { PALETTE } from '../render/palette';
 import { audio, SILENCE } from '../core/audio';
 import { store } from '../core/state';
+import { ledger } from '../core/ledger';
 import { KEYS } from '../core/input';
 import { centerText, confirmDialog, fadeIn, fadeToScene, text } from '../core/ui';
 import { openTalkPanel } from '../ui/talkPanel';
@@ -163,7 +164,8 @@ export class Hotel extends Phaser.Scene {
     this.goingUp = data.up !== false;
     this.morning = data.morning === true;
     this.from = data.from ?? (this.area === 'lobby' && this.goingUp ? 'outside' : 'lift');
-    this.night = data.late ? 'late' : 'calm';
+    // (no 3 AM, ever, until the hide-and-seek night is survived)
+    this.night = data.late && store.get().froggyGone ? 'late' : 'calm';
   }
 
   create(): void {
@@ -645,11 +647,12 @@ export class Hotel extends Phaser.Scene {
       this.openTalk('"Room 612, sixth floor. The lift is on your right."', [{ label: 'THANKS', fn: () => this.closeTalk() }]);
       return;
     }
-    const can = s.cash >= ROOM_PRICE;
+    // (300 in tokens will do as well as $300: the desk takes either)
+    const can = s.cash >= ROOM_PRICE || s.tokens >= ROOM_PRICE;
     this.openTalk(
       can
-        ? `"Good evening, welcome to the Grand Lily. A room for the night is $${ROOM_PRICE}. Cash only."`
-        : `"A room is $${ROOM_PRICE}, cash. You have $${s.cash}. I'm sorry."`,
+        ? `"Good evening, welcome to the Grand Lily. A room for the night is $${ROOM_PRICE}, or ${ROOM_PRICE} tokens."`
+        : `"A room is $${ROOM_PRICE}, or ${ROOM_PRICE} tokens. You have $${s.cash} and ${s.tokens}. I'm sorry."`,
       can
         ? [
           { label: `CHECK IN - $${ROOM_PRICE}`, fn: () => this.confirmCheckIn() },
@@ -661,17 +664,20 @@ export class Hotel extends Phaser.Scene {
 
   private confirmCheckIn(): void {
     this.closeTalk();
-    const cash = store.get().cash;
+    const { cash, tokens } = store.get();
+    const byTokens = cash < ROOM_PRICE;
     this.locked = true;
     this.dialog = confirmDialog(this, {
-      lines: [`CHECK IN FOR $${ROOM_PRICE}?`, `YOU HAVE $${cash}.  YOU WILL HAVE $${cash - ROOM_PRICE}.`],
+      lines: byTokens
+        ? [`CHECK IN FOR ${ROOM_PRICE} TOKENS?`, `YOU HAVE ${tokens}.  YOU WILL HAVE ${tokens - ROOM_PRICE}.`]
+        : [`CHECK IN FOR $${ROOM_PRICE}?`, `YOU HAVE $${cash}.  YOU WILL HAVE $${cash - ROOM_PRICE}.`],
       confirm: 'CHECK IN',
       cancel: 'NO',
       edge: PALETTE.gold,
       onConfirm: () => {
         this.locked = false;
         this.dialog = null;
-        if (!store.spendCash(ROOM_PRICE)) {
+        if (!(byTokens ? ledger.debit(ROOM_PRICE, 'hotel') : store.spendCash(ROOM_PRICE))) {
           audio.sfx('buzzer');
           return;
         }
@@ -745,6 +751,12 @@ export class Hotel extends Phaser.Scene {
   // ------------------------------------------------------------- the night
 
   private askSleep(): void {
+    // Before the hide-and-seek night is behind you, the room is a room: you can
+    // be in it, sit in it, but not sleep -- and so nothing comes at 3 AM.
+    if (!store.get().froggyGone) {
+      this.say("I'm wide awake. Something about tonight isn't finished yet.");
+      return;
+    }
     if (this.night !== 'calm') {
       if (this.night === 'late') this.say("I can't sleep with that noise.");
       return;

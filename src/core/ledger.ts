@@ -17,7 +17,8 @@ export type LedgerReason =
   | 'change' // the machine on the back wall, at half rate
   | 'prize' // redemption
   | 'crane' // the fourth room's claw machines
-  | 'board'; // Froggopoly's stake, and what it pays back
+  | 'board' // Froggopoly's stake, and what it pays back
+  | 'hotel'; // a room at the Grand Lily, paid in tokens
 
 export type LedgerListener = (next: number, prev: number, reason: LedgerReason) => void;
 export type BrokeListener = (reason: LedgerReason) => void;
