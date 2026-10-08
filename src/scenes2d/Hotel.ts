@@ -811,7 +811,7 @@ export class Hotel extends Phaser.Scene {
 
   /** Out of the black, slowly: 3 AM.  A click or a tap moves it on. */
   private threeAM(): void {
-    const t = centerText(this, GAME_W / 2, GAME_H / 2 - 4, '3 AM', PALETTE.cream, 16).setDepth(910).setAlpha(0);
+    const t = centerText(this, GAME_W / 2, GAME_H / 2 - 4, '3:00 AM', PALETTE.cream, 16).setDepth(910).setAlpha(0);
     let done = false;
     const finish = (): void => {
       if (done) return;
@@ -851,7 +851,7 @@ export class Hotel extends Phaser.Scene {
       this.tweens.add({ targets: this.black, fillAlpha: 0, duration: retry ? 1200 : 3200, ease: 'Sine.easeOut' });
     }
     if (retry) {
-      const t = centerText(this, GAME_W / 2, GAME_H / 2 - 4, '3 AM', PALETTE.cream, 16).setDepth(910);
+      const t = centerText(this, GAME_W / 2, GAME_H / 2 - 4, '3:00 AM', PALETTE.cream, 16).setDepth(910);
       this.tweens.add({ targets: t, alpha: 0, duration: 900, delay: 900, onComplete: () => t.destroy() });
     }
     // the knocking starts in the quiet; you get up to it

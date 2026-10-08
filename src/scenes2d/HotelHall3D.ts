@@ -83,6 +83,9 @@ const RUN = 4.4;
 const FROG_SCALE = 1.25;
 const CATCH = 1.15;
 
+/** Seconds in the corridor before he comes through the door anyway. */
+const ESCAPE_TIME = 10;
+
 type Phase = 'escape' | 'lift' | 'smash' | 'chase' | 'stairs' | 'safe' | 'caught';
 /** Where on the stairs: a landing at a floor, the first flight, the half landing, the second flight. */
 type Seg = 'top' | 'A' | 'bot' | 'B';
@@ -905,6 +908,17 @@ export class HotelHall3D extends Phaser.Scene {
         });
       }
       this.prompt = this.nearPanel() ? (isTouch() ? 'TAP E - CALL THE LIFT' : '[E] CALL THE LIFT') : '';
+      // Ten seconds to get to the lift.  Dawdle and he does not wait: you
+      // are turned round to the door as it comes off its hinges.
+      if (this.phaseT > ESCAPE_TIME) {
+        this.phase = 'smash';
+        this.phaseT = 0;
+        this.prompt = '';
+        this.lines = [];
+        const to = this.yawToward(0, DOOR612_Z);
+        this.autoTurn = { from: this.yaw, to: this.unwrap(this.yaw, to), t: 0, dur: 0.6 };
+        this.breakDoor(false);
+      }
       return;
     }
     this.prompt = '';
