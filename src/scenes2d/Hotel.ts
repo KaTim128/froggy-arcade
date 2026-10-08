@@ -58,6 +58,9 @@ import {
   paintGlazing,
   paintLift,
   paintLobby,
+  LOBBY_W,
+  STAIR_DOOR_X,
+  STORAGE_X,
   paintRoom,
   paintRoomLight,
   paintView,
@@ -79,7 +82,7 @@ const DESK_TOP = 116;
 const BOOK = { x: 140, y: 112, w: 15, h: 4 };
 
 type Area = 'lobby' | 'lift' | 'corridor' | 'room' | 'bath';
-type Spot = 'out' | 'desk' | 'lift' | 'stairs' | 'door612' | 'roomdoor' | 'bathdoor' | 'bed' | 'window' | 'mirror' | null;
+type Spot = 'out' | 'desk' | 'lift' | 'stairs' | 'stairdoor' | 'storage' | 'door612' | 'roomdoor' | 'bathdoor' | 'bed' | 'window' | 'mirror' | null;
 /** Where the night is, in room 612. */
 type Night = 'calm' | 'sleeping' | 'late' | 'reveal' | 'gone';
 
@@ -105,7 +108,16 @@ export class Hotel extends Phaser.Scene {
   private talk: Phaser.GameObjects.Container | null = null;
   private goingUp = true;
   private morning = false;
-  private from: 'outside' | 'lift' | 'room' | 'corridor' | 'stairs' = 'outside';
+  private from: 'outside' | 'lift' | 'room' | 'corridor' | 'stairs' | 'storage' = 'outside';
+  /**
+   * Down the stairs alive, and him on the stairs behind: seconds since the
+   * lobby, and the next blow on the stairwell door.  Hide before he is
+   * through it.
+   */
+  private hideT = 0;
+  private bangT = 0;
+  private bangs = 0;
+  private hunted = false;
 
   /** The lines being said: one at a time, each skippable. */
   private lines: Array<{ text: string; dur: number; red?: boolean }> = [];
@@ -187,7 +199,7 @@ export class Hotel extends Phaser.Scene {
     store.patch({ reachedHotel: true });
     store.flush();
     const calm = this.area === 'room' || this.area === 'bath';
-    const dark = this.from === 'stairs';
+    const dark = this.from === 'stairs' || this.from === 'storage';
     audio.setScene(this.night === 'late' || dark ? SILENCE : { music: calm ? 'hotel_room' : 'hotel_lobby', ambience: [] });
     const kb = this.input.keyboard;
     const bind = (n: readonly string[]) => (kb ? n.map((k) => kb.addKey(k)) : []);
@@ -198,6 +210,12 @@ export class Hotel extends Phaser.Scene {
     this.mutter = centerText(this, GAME_W / 2, GAME_H - 34, '', PALETTE.cream).setDepth(821).setVisible(false).setMaxWidth(290);
     // the words are the button: a click or a tap on them moves on
     this.tapZone = this.add.zone(0, GAME_H - 76, GAME_W, 76).setOrigin(0, 0).setDepth(850);
+    // (the lobby is wider than the screen: the words stay put while it scrolls)
+    for (const o of [this.mutterPlate, this.mutter, this.tapZone]) o.setScrollFactor(0);
+    this.hideT = 0;
+    this.bangT = 0;
+    this.bangs = 0;
+    this.hunted = false;
     this.tapZone.on('pointerdown', () => this.nextLine());
 
     if (this.area === 'lift') return this.rideLift();
@@ -209,7 +227,9 @@ export class Hotel extends Phaser.Scene {
     const startX =
       this.area === 'lobby'
         ? this.from === 'stairs'
-          ? 300
+          ? STAIR_DOOR_X
+          : this.from === 'storage'
+            ? STORAGE_X - 20
           : this.goingUp
             ? 30
             : 270
@@ -230,7 +250,14 @@ export class Hotel extends Phaser.Scene {
     new TokenHud(this);
 
     if (this.area === 'lobby') {
-      if (dark) {
+      this.cameras.main.setBounds(0, 0, LOBBY_W, GAME_H);
+      if (this.from === 'storage') {
+        this.say('Gone...', 2.4);
+        this.say('He went straight through the front doors.', 3.2);
+        this.say("I'm still here. I'm still alive.", 3);
+      } else if (dark) {
+        // and he is on the stairs behind you
+        this.hunted = true;
         this.say('The ground floor...', 2.6);
         this.say('I made it down.', 2.4);
         this.say('Where is everyone?', 3);
@@ -266,12 +293,25 @@ export class Hotel extends Phaser.Scene {
   private buildLobby(dark: boolean): void {
     const night = store.get().timeOfDay !== 'day';
     // (the desk is painted empty: the clerk behind it is on the overlay)
-    const key = `hotel_lobby_${dark ? 'dark' : night ? 'night' : 'day'}`;
-    const img = this.add.image(0, 0, this.painted(key, GAME_W, GAME_H, (g) => paintLobby(g, night || dark, true))).setOrigin(0, 0);
+    const key = `hotel_lobby_${dark ? 'dark' : night ? 'night' : 'day'}_w${LOBBY_W}`;
+    const img = this.add.image(0, 0, this.painted(key, LOBBY_W, GAME_H, (g) => paintLobby(g, night || dark, true))).setOrigin(0, 0);
     this.clerkOn = !dark;
     // the lights are out and the desk is empty
     if (dark) img.setTint(0x3a4058);
     centerText(this, 280, 82, dark ? '-' : '1', 0xff7a3d);
+    if (this.from === 'storage') {
+      // what he left: the stairwell door hanging open on the dark, and the
+      // front doors gone, glass across the marble
+      const g = this.add.graphics().setDepth(1);
+      g.fillStyle(0x05060a, 1).fillRect(STAIR_DOOR_X - 12, 99, 24, 53);
+      g.fillStyle(0x4a3422, 1).fillRect(STAIR_DOOR_X + 8, 99, 5, 53);
+      g.fillStyle(0x07101e, 1).fillRect(7, 104, 32, 46);
+      g.fillStyle(0x3a4a68, 0.6);
+      for (const [x, y, w, h] of [[8, 104, 4, 9], [20, 104, 6, 5], [33, 106, 5, 12], [8, 140, 6, 9], [30, 138, 8, 11]]) g.fillRect(x, y, w, h);
+      g.fillStyle(0x9ab8d8, 0.7);
+      for (let k = 0; k < 22; k++) g.fillRect(10 + ((k * 37) % 70), 152 + ((k * 13) % 7), 1 + (k % 3), 1);
+      g.fillStyle(0x6a4a2e, 1).fillRect(52, 153, 14, 2).fillRect(70, 156, 9, 2);
+    }
   }
 
   private buildCorridor(): void {
@@ -459,6 +499,10 @@ export class Hotel extends Phaser.Scene {
           this.say("Locked. They're locked from the outside.");
           return;
         }
+        if (this.from === 'storage') {
+          this.say("Smashed wide open. And he's out there, somewhere. Not tonight.");
+          return;
+        }
         if (s.timeOfDay === 'midnight') {
           this.say("I'm not going back out there tonight.");
           return;
@@ -468,13 +512,13 @@ export class Hotel extends Phaser.Scene {
         fadeToScene(this, 'StreetWest', { from: 'hotel' });
         return;
       case 'desk':
-        if (this.from === 'stairs') {
+        if (this.from === 'stairs' || this.from === 'storage') {
           this.say('Nobody. The bell, the book, the keys -- and nobody.');
           return;
         }
         return this.reception();
       case 'lift':
-        if (this.from === 'stairs') {
+        if (this.from === 'stairs' || this.from === 'storage') {
           this.say('Dead. Nothing lights up.');
           return;
         }
@@ -487,6 +531,25 @@ export class Hotel extends Phaser.Scene {
         return;
       case 'stairs':
         this.say("The stairs. Six floors. I'll take the lift.");
+        return;
+      case 'stairdoor':
+        if (this.from === 'stairs') {
+          this.say(this.bangs ? "He's right behind it!" : "I'm not going back in there.");
+          return;
+        }
+        if (this.from === 'storage') {
+          this.say('Hanging off its hinges. He came through it like it was paper.');
+          return;
+        }
+        this.say("The stairs. I'll take the lift.");
+        return;
+      case 'storage':
+        if (this.from === 'stairs') return this.hide();
+        if (this.from === 'storage') {
+          this.say("Mops and buckets. I'm not going back in there.");
+          return;
+        }
+        this.say('STAFF ONLY. Locked.');
         return;
       case 'door612':
         this.locked = true;
@@ -523,6 +586,57 @@ export class Hotel extends Phaser.Scene {
         this.time.delayedCall(700, () => this.say(this.morning ? 'The street, the bus stop, and the arcade sign, small, at the end of it.' : 'The moon over the trees. The road I came down, all the way back to the arcade.', 3.4));
         return;
     }
+  }
+
+  /**
+   * Down the stairs alive -- and he is on the stairs behind you.  A while of
+   * quiet, then the stairwell door starts to take it, harder each time, and
+   * there is about as long as that lasts to get out of sight.
+   */
+  private tickHunted(dt: number): void {
+    this.hideT += dt;
+    if (this.hideT < 8.5) return;
+    this.bangT -= dt;
+    if (this.bangT > 0) return;
+    this.bangs++;
+    const hard = Math.min(1, 0.45 + this.bangs * 0.08);
+    this.bangT = Math.max(0.9, 1.9 - this.bangs * 0.1);
+    audio.sfx('item_thud', hard);
+    audio.sfx('door_rattle', hard);
+    this.cameras.main.shake(140, 0.0025 + hard * 0.003);
+    if (this.bangs === 1) {
+      this.lines = [];
+      this.nextLine();
+      this.say("He's coming down the stairs!", 2.6, true);
+      this.say('I need to hide. The storage room, past the lift!', 4, true);
+    }
+    if (this.bangs === 7) this.say('The door is giving!', 2.4, true);
+    // too late: he is through it, and you are standing in the lobby
+    if (this.bangs >= 11) this.exposed();
+  }
+
+  /** Into the storage room and the door pulled to: from here it is all his. */
+  private hide(): void {
+    if (this.locked) return;
+    this.locked = true;
+    this.hunted = false;
+    audio.sfx('door_open', 0.7);
+    this.player?.sprite.setVisible(false);
+    this.time.delayedCall(260, () => audio.sfx('door_shut', 0.5));
+    this.cameras.main.fadeOut(420, 0, 0, 0);
+    this.time.delayedCall(520, () => this.scene.start('HotelLobby3D', { mode: 'hide' }));
+  }
+
+  /** Still out in the open when the stairwell door goes. */
+  private exposed(): void {
+    if (this.locked) return;
+    this.locked = true;
+    this.hunted = false;
+    audio.sfx('door_smash', 1);
+    this.cameras.main.shake(300, 0.012);
+    const x = this.player?.x ?? STAIR_DOOR_X;
+    this.cameras.main.fadeOut(260, 0, 0, 0);
+    this.time.delayedCall(320, () => this.scene.start('HotelLobby3D', { mode: 'exposed', x }));
   }
 
   private reception(): void {
@@ -897,6 +1011,8 @@ export class Hotel extends Phaser.Scene {
     }
     froggyLayer.paint((ctx) => {
       ctx.save();
+      // (the lobby scrolls past the lift: he stays where his desk is)
+      ctx.translate(-this.cameras.main.scrollX, 0);
       ctx.beginPath();
       ctx.rect(0, 0, GAME_W, cut);
       ctx.clip();
@@ -953,14 +1069,30 @@ export class Hotel extends Phaser.Scene {
       return;
     }
     const dx = (this.keys.right?.some((k) => k.isDown) ? 1 : 0) - (this.keys.left?.some((k) => k.isDown) ? 1 : 0);
-    p.move(dx, 0, delta, new Phaser.Geom.Rectangle(14, WALK_Y, GAME_W - 28, 0));
+    const worldW = this.area === 'lobby' ? LOBBY_W : GAME_W;
+    p.move(dx, 0, delta, new Phaser.Geom.Rectangle(14, WALK_Y, worldW - 28, 0));
     const x = p.x;
+    // the lobby runs on past the lift: it scrolls once you are past the desk
+    if (this.area === 'lobby') this.cameras.main.scrollX = Phaser.Math.Clamp(x - 250, 0, LOBBY_W - GAME_W);
+    if (this.hunted) this.tickHunted(delta / 1000);
     if (this.night === 'reveal') {
       this.prompt.setVisible(false);
       if (x < ROOM_DOOR_X + 10) this.escape();
       return;
     }
-    if (this.area === 'lobby') this.spot = x < 44 ? 'out' : Math.abs(x - 160) < 30 ? 'desk' : x > 262 ? 'lift' : null;
+    if (this.area === 'lobby')
+      this.spot =
+        x < 44
+          ? 'out'
+          : Math.abs(x - 160) < 30
+            ? 'desk'
+            : Math.abs(x - STAIR_DOOR_X) < 12
+              ? 'stairdoor'
+              : x > 262 && x < 306
+                ? 'lift'
+                : Math.abs(x - STORAGE_X) < 14
+                  ? 'storage'
+                  : null;
     else if (this.area === 'corridor') this.spot = x < 38 ? 'lift' : Math.abs(x - 56) < 10 ? 'stairs' : x > CORRIDOR_DOORS[5] - 16 ? 'door612' : null;
     else if (this.area === 'bath') this.spot = x < 34 ? 'bathdoor' : Math.abs(x - (MIRROR.x + MIRROR.w / 2)) < 16 ? 'mirror' : null;
     else
@@ -983,6 +1115,8 @@ export class Hotel extends Phaser.Scene {
       desk: '[E] RECEPTION',
       lift: '[E] LIFT',
       stairs: '[E] STAIRS',
+      stairdoor: '[E] STAIRS',
+      storage: this.from === 'stairs' ? '[E] HIDE IN THE STORAGE ROOM' : '[E] STORAGE ROOM',
       door612: '[E] ROOM 612',
       roomdoor: '[E] CORRIDOR',
       bathdoor: this.area === 'bath' ? '[E] BACK TO THE ROOM' : '[E] BATHROOM',
@@ -994,7 +1128,7 @@ export class Hotel extends Phaser.Scene {
       .setText(label[this.spot])
       .setTint(this.night === 'late' && this.spot === 'window' ? 0xffb0a0 : PALETTE.gold)
       // (at the desk, on its front: the clerk is where the prompt would go)
-      .setPosition(Phaser.Math.Clamp(x, 60, GAME_W - 60), this.spot === 'desk' ? DESK_TOP + 13 : WALK_Y - 44)
+      .setPosition(Phaser.Math.Clamp(x, 60, worldW - 90), this.spot === 'desk' ? DESK_TOP + 13 : WALK_Y - 44)
       .setVisible(true);
   }
 

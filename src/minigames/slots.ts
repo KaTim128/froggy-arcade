@@ -1,41 +1,34 @@
 /**
  * FROGGY SLOTS.  Three tokens a spin, and it keeps taking them.
  *
- * Five reels, six rows.  It was one row of five: three Froggys in a row or
- * five, and nothing else to hope for.  Five more rows under it make room for
- * the patterns a real machine sells -- a full row, a full column, a diagonal
- * five long -- and for a few special ones that are genuinely rare:
+ * Five reels, six rows.  Every token on the reels pays when it lines up:
+ * three, four or five of the same token side by side in a row, anywhere along
+ * it, pays that token's prize for that many -- and only the best line on the
+ * window is paid, once, never two of them for the same spin.
  *
- *   THREE IN A ROW   three Froggys side by side in any row          10
- *   FULL ROW         five across                                    30
- *   FULL COLUMN      six down one reel                              40
- *   FOUR CORNERS     a Froggy in every corner of the window         50
- *   DIAGONAL         five on a diagonal                             60
- *   THE CROSS        both diagonals of a five-by-five block        150
- *   GOLDEN FROGGY    the gold statue, anywhere                     300
+ *   TOKEN                    RARITY      3     4     5
+ *   bronze lily-pad coin     common      1     2     3
+ *   purple royal medallion   common      2     3     5
+ *   blue ruby tile           uncommon    3     5     8
+ *   red firefly diamond      uncommon    3     6    10
+ *   gold lily flower         rare        4     7    11
+ *   rainbow crystal          rare        4     8    12
+ *   FROGGY                   very rare   5    10    15
+ *   golden Froggy statue     wild        stands in for any token
  *
- * The patterns are made of frog tokens (token_3, Froggy's green face); every
- * other token on the reels is filler, drawn by rarity -- bronze lily pads
- * everywhere, rainbow crystals now and then -- and the golden Froggy statue
- * is the jackpot, one spin in ten thousand.  The art is in slotSymbols.ts.
- *
- * The paytable is on the machine, the odds are not.  The outcome is decided
- * when the button is pressed and the window is then dressed to show it --
- * which is exactly how a real one works.  The odds live in the DRAW, not in
- * the animation: `draw()` rolls once against the table below, fills the
- * window with symbols that make no pattern at all, stamps the one that was
- * drawn, and checks that what is on show pays exactly that and nothing
- * better.  The spin pays what `best()` reads off the window, so what you see
- * is what you are paid.
- *
- * Three tokens a spin: the specials are meant to be moments, not a drip.
- * Taken together the machine hands back about ninety of every hundred.
+ * The odds ARE the reels: each cell is drawn on its own, by the token's
+ * weight, and the window pays exactly what is on it.  Common tokens line up
+ * often and pay little; Froggy turns up far less and pays the most, and five
+ * Froggys across is a jackpot measured in hundreds of thousands of spins.  Most
+ * spins pay nothing at all (about six in ten), and the machine hands back
+ * roughly a third of what goes in: it is a gamble, and it is meant to feel
+ * like one.  The art is in slotSymbols.ts.
  *
  * It is a session, like the blackjack table: nothing is taken at the door,
  * every spin -- the first included -- is raised through the shell as it is
- * pulled, and every win is paid out on the spot.  Sitting down and getting
- * straight back up costs nothing.  LEAVE cashes out; QUIT does the same.
- * Nothing here touches cash — tokens in, tokens out, through the ledger.
+ * pulled, and every win is paid out on the spot through the ledger, into the
+ * player's own tokens.  Sitting down and getting straight back up costs
+ * nothing.  LEAVE cashes out; QUIT does the same.  Nothing here touches cash.
  */
 
 import Phaser from 'phaser';
@@ -49,30 +42,37 @@ import type { MinigameApi, MinigameModule } from './types';
 
 export const SPIN_COST = 3;
 
-export type Win = 'three' | 'row' | 'column' | 'corners' | 'diagonal' | 'cross' | 'gold';
+export type Tier = 'COMMON' | 'UNCOMMON' | 'RARE' | 'V.RARE' | 'WILD';
 
 /**
- * The paytable and the odds, rarest last.  On the machine the odds are a
- * secret; in the code they are a fact, and the fact the harness checks.
- * Every spin is drawn against these and nothing else -- no pity timer, no
- * streak memory, no adjusting for how the session has gone.
+ * Every token on the reels: how often a cell is that token (its WEIGHT out of
+ * the total) and what three, four and five of it in a row pay.  Rarer pays
+ * more; Froggy is the rarest that pays and pays the most.  The golden statue
+ * pays nothing of its own: it is wild, and rarer than anything.
  */
-export const PAYS: Array<{ win: Win; name: string; pays: number; p: number }> = [
-  { win: 'three', name: '3 IN A ROW', pays: 10, p: 0.15 },
-  { win: 'row', name: 'FULL ROW', pays: 30, p: 0.02 },
-  { win: 'column', name: 'FULL COLUMN', pays: 40, p: 0.006 },
-  { win: 'corners', name: 'FOUR CORNERS', pays: 50, p: 0.002 },
-  { win: 'diagonal', name: 'DIAGONAL', pays: 60, p: 0.003 },
-  { win: 'cross', name: 'THE CROSS', pays: 150, p: 0.0004 },
-  { win: 'gold', name: 'GOLDEN FROGGY', pays: 300, p: 0.0001 },
+export const SYMBOLS: Array<{ id: SymbolId; name: string; tier: Tier; weight: number; pays: [number, number, number] }> = [
+  { id: 'token_1', name: 'BRONZE', tier: 'COMMON', weight: 22, pays: [1, 2, 3] },
+  { id: 'token_10', name: 'PURPLE', tier: 'COMMON', weight: 20, pays: [2, 3, 5] },
+  { id: 'token_5', name: 'BLUE RUBY', tier: 'UNCOMMON', weight: 16, pays: [3, 5, 8] },
+  { id: 'token_20', name: 'FIREFLY', tier: 'UNCOMMON', weight: 14, pays: [3, 6, 10] },
+  { id: 'token_50', name: 'GOLD LILY', tier: 'RARE', weight: 11, pays: [4, 7, 11] },
+  { id: 'token_100', name: 'CRYSTAL', tier: 'RARE', weight: 8, pays: [4, 8, 12] },
+  { id: 'token_3', name: 'FROGGY', tier: 'V.RARE', weight: 6, pays: [5, 10, 15] },
+  { id: 'golden_froggy', name: 'WILD', tier: 'WILD', weight: 0.5, pays: [0, 0, 0] },
 ];
-/** Kept for anything that read the old two-line machine. */
-export const PAY_THREE = PAYS[0].pays;
-export const PAY_FIVE = PAYS[1].pays;
-export const P_THREE = PAYS[0].p;
-export const P_FIVE = PAYS[1].p;
-
-const payOf = (w: Win): number => PAYS.find((x) => x.win === w)!.pays;
+const idx = (id: SymbolId) => SYMBOLS.findIndex((s) => s.id === id);
+const FROG = idx('token_3');
+const WILD = idx('golden_froggy');
+/** The tokens that pay: everything but the wild. */
+const PAYING = SYMBOLS.length - 1;
+const WEIGHT_SUM = SYMBOLS.reduce((a, s) => a + s.weight, 0);
+/** What `n` in a row of symbol `sym` pays (0 under three). */
+export function payFor(sym: number, n: number): number {
+  if (n < 3 || sym < 0 || sym >= PAYING) return 0;
+  return SYMBOLS[sym].pays[Math.min(n, 5) - 3];
+}
+/** The jackpot: five Froggys. */
+const JACKPOT = payFor(FROG, 5);
 
 const REELS = 5;
 const ROWS = 6;
@@ -83,39 +83,14 @@ const GRID_Y = 44;
 const PITCH_X = 28;
 const PITCH_Y = 16;
 
-/**
- * The symbols by id.  The frog token is the one the patterns are made of
- * (index 0); the golden Froggy is the jackpot (last).  In between are the
- * filler tokens, each with its WEIGHT: how often a filler cell is that token.
- * Low-value tokens are common, the high ones rare -- a rainbow crystal is ten
- * times scarcer than a bronze lily pad.  They are only ever filler: what a
- * spin pays is the pattern table above, drawn once per spin, so the weights
- * change what the window looks like and never what it pays.
- */
-const SYMBOLS: Array<{ id: SymbolId; weight: number }> = [
-  { id: 'token_3', weight: 0 },
-  { id: 'token_1', weight: 40 },
-  { id: 'token_5', weight: 24 },
-  { id: 'token_10', weight: 16 },
-  { id: 'token_20', weight: 10 },
-  { id: 'token_50', weight: 6 },
-  { id: 'token_100', weight: 4 },
-  { id: 'golden_froggy', weight: 0 },
-];
-const idx = (id: SymbolId) => SYMBOLS.findIndex((s) => s.id === id);
-const FROG = idx('token_3');
-const GOLD = idx('golden_froggy');
-/** The plain symbols a filler cell may be (never gold, never Froggy). */
-const PLAIN = SYMBOLS.length - 2;
-const WEIGHT_SUM = SYMBOLS.reduce((a, s) => a + s.weight, 0);
-/** A filler token, by rarity. */
+/** A cell, drawn on its own by the tokens' weights. */
 function filler(): number {
   let roll = Math.random() * WEIGHT_SUM;
   for (let i = 0; i < SYMBOLS.length; i++) {
     roll -= SYMBOLS[i].weight;
     if (roll < 0) return i;
   }
-  return 1;
+  return 0;
 }
 /** Behind every token, the cell: dark lapis, and gold when it made the win. */
 const CELL_BG = 0x141b36;
@@ -150,11 +125,11 @@ export const slots: MinigameModule = {
   rules: `${SPIN_COST} tokens a spin`,
   tutorial: {
     objective: [
-      `${SPIN_COST} TOKENS A SPIN. LINE UP GREEN FROG TOKENS.`,
-      `3 IN A ROW PAYS ${PAY_THREE}, A FULL ROW ${PAY_FIVE}.`,
-      'COLUMNS, CORNERS AND DIAGONALS PAY MORE.',
-      'THE CROSS AND THE GOLDEN FROGGY ARE VERY RARE.',
-      'THE BEST PATTERN ON THE SCREEN IS PAID.',
+      `${SPIN_COST} TOKENS A SPIN. LINE UP 3, 4 OR 5 OF A TOKEN IN A ROW.`,
+      'EVERY TOKEN PAYS: COMMON ONES A LITTLE, RARE ONES MORE.',
+      `FROGGY IS THE RAREST: 3 PAY ${payFor(FROG, 3)}, 5 PAY ${JACKPOT}.`,
+      'THE GOLDEN FROGGY IS WILD: IT COUNTS AS ANY TOKEN.',
+      'THE BEST LINE ON THE SCREEN IS PAID. MOST SPINS LOSE.',
     ],
     controls: [
       ['SPACE', 'SPIN'],
@@ -162,7 +137,7 @@ export const slots: MinigameModule = {
     ],
   },
   touch: { buttons: [{ label: 'SPIN', key: 'SPACE', primary: true }] },
-  payoutNote: `PAYS ${PAY_THREE} - ${payOf('gold')}`,
+  payoutNote: `PAYS ${payFor(0, 3)} - ${JACKPOT}`,
 
   // Every spin is paid the moment it stops, so only a spin still turning is at stake.
   atRisk: () => (busy ? SPIN_COST : 0),
@@ -176,6 +151,8 @@ export const slots: MinigameModule = {
     cells = [];
     spinning = Array.from({ length: REELS }, () => false);
     shown = blank();
+    forced = null;
+    paidCount = 0;
     ensureSlotSymbols(scene);
 
     // The temple the machine stands in, the shrine the reels turn behind and
@@ -201,22 +178,33 @@ export const slots: MinigameModule = {
     paint(shown);
 
     // THE PAYTABLE, on the machine where a player reads it before paying --
-    // carved on the temple's tablet.
-    // It says which token to line up, with the token itself beside the words.
-    text(scene, 190, 30, 'LINE UP', PALETTE.gold);
-    scene.add.image(240, 33, textureOf('token_3'));
-    text(scene, 250, 30, 'TO WIN', PALETTE.gold);
-    PAYS.forEach((p, i) => {
-      const special = i >= 2;
-      const y = 42 + i * 12;
-      if (p.win === 'gold') {
-        // the jackpot row shows the statue: it pays wherever it lands
-        scene.add.image(196, y + 3, textureOf('golden_froggy'));
-        text(scene, 206, y, 'ANYWHERE', PALETTE.gold);
-      } else {
-        text(scene, 190, y, p.name, special ? PALETTE.gold : PALETTE.cream);
+    // carved on the temple's tablet.  Every token, its rarity, and what three,
+    // four and five of it in a row pay -- read off the same table the spin
+    // pays from, so the board can never say something the machine does not.
+    const TIER_COL: Record<Tier, number> = {
+      COMMON: PALETTE.ash,
+      UNCOMMON: PALETTE.mossLight,
+      RARE: 0x6aa8ff,
+      'V.RARE': PALETTE.gold,
+      WILD: PALETTE.gold,
+    };
+    const COLS = [262, 284, 306];
+    text(scene, 190, 29, 'IN A ROW', PALETTE.gold);
+    ['3', '4', '5'].forEach((n, i) => text(scene, COLS[i], 29, n, PALETTE.gold).setOrigin(1, 0));
+    SYMBOLS.forEach((sym, i) => {
+      const y = 40.5 + i * 10;
+      const froggy = i === FROG;
+      scene.add.image(195, y + 3, textureOf(sym.id));
+      text(scene, 204, y, sym.tier, TIER_COL[sym.tier]);
+      if (sym.tier === 'WILD') {
+        text(scene, COLS[2], y, 'ANY', PALETTE.gold).setOrigin(1, 0);
+        return;
       }
-      text(scene, 306, y, `${p.pays}`, special ? PALETTE.gold : PALETTE.cream).setOrigin(1, 0);
+      sym.pays.forEach((p, k) => {
+        // the five is the prize: brighter than the three it grows from
+        const col = froggy ? PALETTE.gold : k === 2 ? PALETTE.cream : PALETTE.fog;
+        text(scene, COLS[k], y, `${p}`, col).setOrigin(1, 0);
+      });
     });
 
     // Two lines, not one: the balance on the left and the result centred
@@ -235,7 +223,7 @@ export const slots: MinigameModule = {
         state: () => ({ busy, firstSpin, grid: shown.map((r) => r.map((s) => SYMBOLS[s].id)) }),
         /** What the reels show right now, by id, and each cell's texture. */
         textures: () => cells.map((row) => row.map((cl) => cl.icon.texture.key)),
-        /** How often each filler token turns up in a dressed window. */
+        /** How often each token turns up on the reels. */
         fill: (n: number) => {
           const seen: Record<string, number> = {};
           for (const s of SYMBOLS) seen[s.id] = 0;
@@ -243,18 +231,34 @@ export const slots: MinigameModule = {
           return seen;
         },
         /**
-         * Sample the draw itself, reading each result off the window it
-         * dressed -- the reels take a few seconds to stop, and what is under
-         * test is the decision and that the window shows it.
+         * Sample the draw itself: what each window pays, by token and length.
+         * The reels take seconds to stop; what is under test is the decision.
          */
         sample: (n: number) => {
           const seen: Record<string, number> = { none: 0 };
-          for (const p of PAYS) seen[p.win] = 0;
+          let paid = 0;
           for (let i = 0; i < n; i++) {
-            const got = best(draw()).win;
-            seen[got ?? 'none']++;
+            const got = best(draw());
+            if (!got.pays) seen.none++;
+            else {
+              const k = `${SYMBOLS[got.sym].name} x${got.n}`;
+              seen[k] = (seen[k] ?? 0) + 1;
+              paid += got.pays;
+            }
           }
-          return seen;
+          return { seen, paid };
+        },
+        /** The paytable as it is painted on the board. */
+        table: () => SYMBOLS.map((s) => ({ id: s.id, tier: s.tier, weight: s.weight, pays: [...s.pays] })),
+        /** The next spin shows exactly this window (ids, row by row). */
+        force: (rows: SymbolId[][]) => {
+          forced = rows.map((r) => r.map((id) => idx(id)));
+        },
+        /** How many times the spin was paid, all told. */
+        paidCount: () => paidCount,
+        best: (rows: SymbolId[][]) => {
+          const got = best(rows.map((r) => r.map((id) => idx(id))));
+          return { pays: got.pays, n: got.n, sym: got.sym >= 0 ? SYMBOLS[got.sym].id : null };
         },
       };
       scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -271,7 +275,7 @@ export const slots: MinigameModule = {
     for (let c = 0; c < REELS; c++) {
       if (!spinning[c]) continue;
       for (let r = 0; r < ROWS; r++) {
-        showCell(cells[r][c], Math.floor((tick / 55 + c * 2 + r * 3) % PLAIN) + (r % 2));
+        showCell(cells[r][c], Math.floor((tick / 55 + c * 2 + r * 3) % PAYING));
       }
     }
   },
@@ -308,86 +312,45 @@ function refresh(): void {
   balance?.setText(`TOKENS ${apiRef?.balance() ?? 0}`);
 }
 
-// ------------------------------------------------------------------ patterns
+// ------------------------------------------------------------------ the lines
 
 type Cells = Array<[number, number]>;
 
-/** Every way each pattern can be made on a six-by-five window. */
-function shapes(): Record<Win, Cells[]> {
-  const rows: Cells[] = [];
-  const threes: Cells[] = [];
-  const cols: Cells[] = [];
-  const diags: Cells[] = [];
-  const crosses: Cells[] = [];
-  for (let r = 0; r < ROWS; r++) {
-    rows.push(Array.from({ length: REELS }, (_, c) => [r, c] as [number, number]));
-    for (let c = 0; c + 2 < REELS; c++) threes.push([[r, c], [r, c + 1], [r, c + 2]]);
-  }
-  for (let c = 0; c < REELS; c++) cols.push(Array.from({ length: ROWS }, (_, r) => [r, c] as [number, number]));
-  for (let r0 = 0; r0 + REELS <= ROWS; r0++) {
-    const down = Array.from({ length: REELS }, (_, k) => [r0 + k, k] as [number, number]);
-    const up = Array.from({ length: REELS }, (_, k) => [r0 + REELS - 1 - k, k] as [number, number]);
-    diags.push(down, up);
-    const x = new Map<string, [number, number]>();
-    for (const p of [...down, ...up]) x.set(`${p[0]},${p[1]}`, p);
-    crosses.push([...x.values()]);
-  }
-  const corners: Cells[] = [[[0, 0], [0, REELS - 1], [ROWS - 1, 0], [ROWS - 1, REELS - 1]]];
-  return { three: threes, row: rows, column: cols, corners, diagonal: diags, cross: crosses, gold: [] };
-}
-const SHAPES = shapes();
-
 /**
- * The best thing on the window: what it pays and which cells made it.  Only
- * the one pattern is paid, the highest-paying one on show -- never two.
+ * The best line on the window: the run of three or more of the same token,
+ * side by side in a row (the wild standing in for any of them), that pays the
+ * most.  Only that one is paid -- never two lines, never the three inside a
+ * five as well as the five.
  */
-export function best(g: Grid): { win: Win | null; pays: number; cells: Cells } {
-  let top: { win: Win | null; pays: number; cells: Cells } = { win: null, pays: 0, cells: [] };
-  const frog = (r: number, c: number) => g[r][c] === FROG || g[r][c] === GOLD;
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < REELS; c++) {
-      if (g[r][c] === GOLD && payOf('gold') > top.pays) top = { win: 'gold', pays: payOf('gold'), cells: [[r, c]] };
+export function best(g: Grid): { pays: number; sym: number; n: number; cells: Cells } {
+  let top: { pays: number; sym: number; n: number; cells: Cells } = { pays: 0, sym: -1, n: 0, cells: [] };
+  for (let r = 0; r < g.length; r++) {
+    const row = g[r];
+    for (let s0 = 0; s0 + 2 < row.length; s0++) {
+      for (let sym = 0; sym < PAYING; sym++) {
+        let n = 0;
+        while (s0 + n < row.length && (row[s0 + n] === sym || row[s0 + n] === WILD)) n++;
+        const pays = payFor(sym, n);
+        if (pays > top.pays) top = { pays, sym, n, cells: Array.from({ length: n }, (_, k) => [r, s0 + k] as [number, number]) };
+      }
     }
-  }
-  for (const w of ['three', 'row', 'column', 'corners', 'diagonal', 'cross'] as Win[]) {
-    const pays = payOf(w);
-    if (pays <= top.pays) continue;
-    const hit = SHAPES[w].find((cs) => cs.every(([r, c]) => frog(r, c)));
-    if (hit) top = { win: w, pays, cells: hit };
   }
   return top;
 }
 
-/**
- * Decide the spin, then dress the window to show it.  The filler is drawn
- * with Froggys scattered about -- so there is always something nearly there
- * -- and rerolled until it makes no pattern at all; the drawn pattern is then
- * stamped on, and the window is kept only if the best thing on it is exactly
- * what was drawn.
- */
+/** The next window, if a test has set one. */
+let forced: Grid | null = null;
+/** Every payout this machine has made: one spin, one payout, at most. */
+let paidCount = 0;
+
+/** Every cell on its own, by the tokens' weights: the reels are the odds. */
 function draw(): Grid {
-  let roll = Math.random();
-  let want: Win | null = null;
-  for (const p of PAYS) {
-    if (roll < p.p) {
-      want = p.win;
-      break;
-    }
-    roll -= p.p;
+  if (forced) {
+    const g = forced;
+    forced = null;
+    return g.map((r) => [...r]);
   }
-  for (;;) {
-    const g: Grid = Array.from({ length: ROWS }, () =>
-      Array.from({ length: REELS }, () => (Math.random() < 0.22 ? FROG : filler())),
-    );
-    if (best(g).win !== null) continue;
-    if (want === 'gold') {
-      g[Math.floor(Math.random() * ROWS)][Math.floor(Math.random() * REELS)] = GOLD;
-    } else if (want) {
-      const options = SHAPES[want];
-      for (const [r, c] of options[Math.floor(Math.random() * options.length)]) g[r][c] = FROG;
-    }
-    if (best(g).win === want) return g;
-  }
+  return Array.from({ length: ROWS }, () => Array.from({ length: REELS }, () => filler()));
 }
 
 // -------------------------------------------------------------------- the spin
@@ -424,21 +387,26 @@ function spin(): void {
 }
 
 function settle(): void {
-  if (!apiRef || !sceneRef) return;
+  if (!apiRef || !sceneRef || !busy) return;
+  // (the spin is over the moment it is read: nothing can pay it twice)
+  busy = false;
   const got = best(shown);
-  if (got.win) {
+  if (got.pays > 0) {
     apiRef.payout(got.pays);
-    const name = PAYS.find((p) => p.win === got.win)!.name;
-    const special = got.win !== 'three' && got.win !== 'row';
+    paidCount++;
+    const sym = SYMBOLS[got.sym];
+    const big = got.sym === FROG || got.n === 5;
     // the cells that made it light up, and stay lit until the next spin
     paint(shown, new Set(got.cells.map(([r, c]) => `${r},${c}`)));
-    status?.setText(`${special ? 'BONUS! ' : ''}${name}  -  ${got.pays} TOKENS`).setTint(special ? PALETTE.gold : PALETTE.cream);
+    status
+      ?.setText(`${got.sym === FROG && got.n === 5 ? 'JACKPOT! ' : big ? 'BIG WIN! ' : ''}${got.n} ${sym.name}  +${got.pays} TOKENS`)
+      .setTint(big ? PALETTE.gold : PALETTE.cream);
     audio.sfx('chime');
-    if (special) {
-      // A bonus is announced, not just paid: the machine flashes, and the big
-      // two shake it.
+    if (big) {
+      // a big one is announced, not just paid: the machine flashes, and the
+      // jackpot shakes it
       sceneRef.cameras.main.flash(220, 255, 230, 140);
-      if (got.pays >= 150) {
+      if (got.pays >= JACKPOT) {
         sceneRef.cameras.main.shake(260, 0.006);
         audio.sfx('bell_ding');
       }
@@ -448,7 +416,6 @@ function settle(): void {
     audio.sfx('buzzer', 0.6);
   }
   refresh();
-  busy = false;
 }
 
 function leave(): void {

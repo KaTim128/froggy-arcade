@@ -230,17 +230,23 @@ function marbleFloor(g: Ctx, w: number): void {
 
 // ============================================================ the lobby
 
+/** The lobby runs on past the lift, to the storage room: wider than a screen. */
+export const LOBBY_W = 420;
+/** The staircase door, where the palm was; and the storage room's, past the lift. */
+export const STAIR_DOOR_X = 238;
+export const STORAGE_X = 372;
+
 export function paintLobby(g: Ctx, night: boolean, empty = false): void {
-  const W = 320;
+  const W = LOBBY_W;
   crown(g, W);
   wallpaper(g, 0, 11, W, 96, { paper: HP.paper, shade: HP.paperShade, motif: HP.paperMotif });
   wainscot(g, 0, W, 108, 146);
   marbleFloor(g, W);
   // the runner, from the doors to the lift
-  rect(g, 30, 160, 270, 14, HP.carpet);
-  rect(g, 30, 160, 270, 1, HP.gold);
-  rect(g, 30, 173, 270, 1, HP.gold);
-  for (let x = 34; x < 296; x += 8) rect(g, x, 166, 2, 2, HP.gold, 0.6);
+  rect(g, 30, 160, 370, 14, HP.carpet);
+  rect(g, 30, 160, 370, 1, HP.gold);
+  rect(g, 30, 173, 370, 1, HP.gold);
+  for (let x = 34; x < 396; x += 8) rect(g, x, 166, 2, 2, HP.gold, 0.6);
 
   // ---- the front doors: glass and brass, the night (or the day) in them
   const out = night ? '#0c1426' : '#9ac8e0';
@@ -374,21 +380,9 @@ function desk(g: Ctx): void {
 }
 
 function paintLobbyRest(g: Ctx): void {
-  // ---- a palm in a brass pot
-  rect(g, 232, 140, 12, 12, HP.gold);
-  rect(g, 232, 140, 12, 1, HP.goldHi);
-  rect(g, 233, 150, 10, 2, HP.goldDark);
-  for (const [dx, dy, len] of [
-    [-10, -8, 10],
-    [-6, -16, 8],
-    [0, -20, 4],
-    [6, -16, 8],
-    [10, -8, 10],
-  ]) {
-    rect(g, 238 + Math.min(0, dx), 140 + dy, Math.abs(dx) || 2, 2, '#3f7a4f');
-    rect(g, 238 + dx - 1, 140 + dy, 3, len / 3, '#2e6a3e');
-  }
-  rect(g, 237, 124, 2, 16, '#5a4a2a');
+  // ---- the staircase door, where the palm stood: a heavy fire door in a
+  // walnut frame, a push bar, a wired-glass slit, the green running man over it
+  stairDoor(g, STAIR_DOOR_X);
 
   // ---- the lift: brass surround, brushed steel doors, the dial above
   const lx = 280;
@@ -411,7 +405,7 @@ function paintLobbyRest(g: Ctx): void {
   rect(g, 306, 123, 2, 2, HP.goldHi);
 
   // ---- the chandeliers, and what they do to the room
-  for (const chx of [56, 252]) {
+  for (const chx of [56, 252, 380]) {
     rect(g, chx, 0, 1, 16, HP.goldDark);
     rect(g, chx - 12, 16, 25, 2, HP.gold);
     rect(g, chx - 8, 18, 17, 2, HP.goldDark);
@@ -426,6 +420,82 @@ function paintLobbyRest(g: Ctx): void {
   sconce(g, 104, 62);
   sconce(g, 216, 62);
   glow(g, 160, 152, 90, 0.1);
+
+  // ---- past the lift: a quiet end of the lobby, a luggage trolley, and the
+  // storage room door
+  luggageTrolley(g, 336);
+  storageDoor(g, STORAGE_X);
+  sconce(g, 404, 62);
+}
+
+/** A fire door into the stairwell, dressed for the lobby. */
+function stairDoor(g: Ctx, cx: number): void {
+  const w = 24;
+  const x = cx - w / 2;
+  rect(g, x - 3, 96, w + 6, 56, HP.woodDark);
+  rect(g, x - 3, 96, w + 6, 1, HP.woodHi);
+  rect(g, x - 1, 98, w + 2, 54, HP.woodDeep);
+  rect(g, x, 99, w, 53, '#7a5a3a');
+  rect(g, x + 1, 100, w - 2, 1, '#9a7a52');
+  // panels
+  rect(g, x + 3, 118, w - 6, 14, '#6a4a2e');
+  rect(g, x + 3, 136, w - 6, 13, '#6a4a2e');
+  // the narrow wired-glass window
+  rect(g, x + 8, 102, 8, 13, HP.goldDark);
+  rect(g, x + 9, 103, 6, 11, '#2a3440');
+  for (let k = 0; k < 11; k += 3) rect(g, x + 9, 103 + k, 6, 1, '#4a5868', 0.7);
+  rect(g, x + 11, 103, 1, 11, '#4a5868', 0.7);
+  // push bar and kick plate
+  rect(g, x + 2, 128, w - 4, 2, '#c8c8c0');
+  rect(g, x + 2, 130, w - 4, 1, '#8a8a84');
+  rect(g, x + 1, 147, w - 2, 4, HP.gold);
+  // the exit sign over it, glowing green, and STAIRS on a plate
+  rect(g, cx - 9, 86, 18, 7, '#0e5a2e');
+  rect(g, cx - 8, 87, 16, 5, '#2ec466');
+  rect(g, cx - 6, 88, 2, 3, '#e8ffe8');
+  rect(g, cx - 4, 89, 3, 1, '#e8ffe8');
+  rect(g, cx + 1, 88, 5, 3, '#e8ffe8', 0.8);
+  glow(g, cx, 89, 16, 0.25);
+  rect(g, cx - 10, 106, 1, 1, HP.ink);
+  drawPixelText(g, 'STAIRS', cx, 77, { scale: 1, color: '#c8f0d0', center: true });
+}
+
+/** A brass luggage trolley, parked by the wall. */
+function luggageTrolley(g: Ctx, cx: number): void {
+  rect(g, cx - 12, 146, 24, 3, HP.gold);
+  rect(g, cx - 12, 108, 2, 40, HP.gold);
+  rect(g, cx + 10, 108, 2, 40, HP.gold);
+  rect(g, cx - 12, 106, 24, 3, HP.goldHi);
+  rect(g, cx - 9, 128, 12, 18, '#5a2a3a');
+  rect(g, cx - 9, 128, 12, 1, '#7a3a4a');
+  rect(g, cx + 2, 134, 8, 12, '#2a3a5a');
+  rect(g, cx - 4, 125, 4, 3, HP.goldDark);
+  for (const wx of [cx - 10, cx + 9]) {
+    rect(g, wx - 1, 149, 3, 3, HP.ink);
+  }
+}
+
+/** The storage room: a plain staff door with a small window in it. */
+function storageDoor(g: Ctx, cx: number): void {
+  const w = 22;
+  const x = cx - w / 2;
+  rect(g, x - 2, 98, w + 4, 54, HP.creamShade);
+  rect(g, x, 100, w, 52, '#8a7e6a');
+  rect(g, x + 1, 101, w - 2, 1, '#a89c86');
+  rect(g, x, 100, 1, 52, '#6a604e');
+  // the little window: dark inside, a mop handle and a bucket rim just showing
+  rect(g, x + 6, 105, 10, 13, '#4a4436');
+  rect(g, x + 7, 106, 8, 11, '#1a1c22');
+  rect(g, x + 9, 106, 1, 11, '#8a6a3a');
+  rect(g, x + 11, 113, 4, 4, '#c8a020');
+  rect(g, x + 7, 106, 2, 4, '#ffffff', 0.12);
+  // handle, kick plate, sign
+  rect(g, x + w - 5, 126, 3, 2, HP.goldHi);
+  rect(g, x + w - 4, 128, 1, 3, HP.goldDark);
+  rect(g, x + 1, 147, w - 2, 4, '#6a604e');
+  rect(g, cx - 17, 87, 34, 9, HP.goldDark);
+  rect(g, cx - 16, 88, 32, 7, HP.ink);
+  drawPixelText(g, 'STAFF', cx, 88, { scale: 1, color: '#c8c2b4', center: true });
 }
 
 // ============================================================ the corridor
