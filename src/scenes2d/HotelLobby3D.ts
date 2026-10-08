@@ -49,7 +49,7 @@ const LIFT_X = lx(280);
 const DOOR_Z = 3.4;
 const DOOR_W = 0.9;
 const DOOR_H = 2.1;
-const WIN = { w: 0.42, y0: 0.85, y1: 1.7 };
+const WIN = { w: 0.42, y0: 1.22, y1: 1.7 };
 /** Where you are in there, and how high your eyes are. */
 const HIDE = { x: X1 + 0.78, z: DOOR_Z };
 const EYE_UP = 1.62;
