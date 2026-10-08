@@ -432,8 +432,35 @@ export class HotelHall3D extends Phaser.Scene {
       fl.position.set(0.3 + Math.cos(k * 1.3) * 0.08, 1.2 + (k % 2) * 0.05, BACK_Z - 0.22 + Math.sin(k * 1.3) * 0.06);
       S.add(fl);
     }
-    const mirror = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.0), new THREE.MeshPhongMaterial({ color: 0x8a96a0, shininess: 120, specular: 0xffffff }));
-    mirror.position.set(0, 1.65, BACK_Z - 0.02);
+    // The glass: a painted reflection of the corridor (no specular -- a shiny
+    // material under the wall lamp blew out to a white blob), set clear in
+    // front of the frame so the two never fight for the same depth.
+    const glass = document.createElement('canvas');
+    glass.width = 90;
+    glass.height = 100;
+    {
+      const g = glass.getContext('2d')!;
+      const grad = g.createLinearGradient(0, 0, 0, 100);
+      grad.addColorStop(0, '#c8ccc8');
+      grad.addColorStop(0.55, '#b4b4ac');
+      grad.addColorStop(1, '#8a7a68');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 90, 100);
+      // the far wall and its wainscot, softly, and the ceiling line
+      g.fillStyle = 'rgba(120,90,60,0.35)';
+      g.fillRect(0, 70, 90, 30);
+      g.fillStyle = 'rgba(160,130,80,0.5)';
+      g.fillRect(0, 69, 90, 2);
+      g.fillStyle = 'rgba(255,255,255,0.18)';
+      g.fillRect(0, 8, 90, 2);
+      // a sheen across the glass
+      g.fillStyle = 'rgba(255,255,255,0.22)';
+      for (let k = 0; k < 14; k++) g.fillRect(8 + k, 10 + k * 3, 4, 3);
+      g.fillStyle = 'rgba(255,255,255,0.12)';
+      for (let k = 0; k < 10; k++) g.fillRect(22 + k, 10 + k * 3, 2, 3);
+    }
+    const mirror = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.0), new THREE.MeshLambertMaterial({ map: tex(glass), emissive: 0x202020 }));
+    mirror.position.set(0, 1.65, BACK_Z - 0.035);
     mirror.rotation.y = Math.PI;
     S.add(mirror);
     const mFrame = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.1, 0.03), brass);
