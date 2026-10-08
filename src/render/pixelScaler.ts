@@ -11,7 +11,8 @@
  * at postage-stamp size with two thirds of the glass unused.  Touch devices
  * therefore get a continuous fit of the space actually left over after the
  * on-screen controls have taken theirs, and `image-rendering: pixelated` keeps
- * the blocks square.  At the two-and-three-times device pixel ratios phones
+ * the blocks crisp.  Held sideways, a phone is filled outright: the picture
+ * is stretched to the whole screen rather than banded at 16:9.  At the two-and-three-times device pixel ratios phones
  * ship with, the unevenness a fractional factor introduces lands inside a
  * single physical pixel and cannot be seen.  Desktop is untouched.
  */
@@ -72,10 +73,24 @@ export function attachScaler(game: Phaser.Game): void {
     const safe = touch ? safeInsets() : { top: 0, right: 0, bottom: 0, left: 0 };
     const portrait = touch && window.innerHeight >= window.innerWidth;
     const topPad = portrait ? Math.max(TOUCH_TOP_PAD, safe.top) : safe.top;
-    const zoom = touch
-      ? computeTouchZoom(window.innerWidth, window.innerHeight - topPad - safe.bottom, 0, safe.left + safe.right, 0)
-      : computeZoom(window.innerWidth, window.innerHeight);
-    if (root) {
+    // A phone held sideways is FILLED, edge to edge: the picture is fitted to
+    // the screen's height and then stretched across the rest of its width,
+    // however much wider than 16:9 the phone is.  No bands either side.  (The
+    // stretch is a CSS transform on the canvas, which Phaser leaves alone;
+    // its pointer mapping reads the transformed box, so taps still land
+    // where they are drawn.)
+    const fill = touch && !portrait;
+    const zoom = fill
+      ? computeTouchZoom(window.innerWidth, window.innerHeight, 0, 0, 0)
+      : touch
+        ? computeTouchZoom(window.innerWidth, window.innerHeight - topPad - safe.bottom, 0, safe.left + safe.right, 0)
+        : computeZoom(window.innerWidth, window.innerHeight);
+    attached.canvas.style.transform = fill
+      ? `scale(${window.innerWidth / (GAME_W * zoom)}, ${window.innerHeight / (GAME_H * zoom)})`
+      : '';
+    if (fill && root) {
+      root.style.padding = '';
+    } else if (root) {
       root.style.paddingTop = topPad ? `${topPad}px` : '';
       root.style.paddingLeft = safe.left ? `${safe.left}px` : '';
       root.style.paddingRight = safe.right ? `${safe.right}px` : '';

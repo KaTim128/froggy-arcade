@@ -49,11 +49,14 @@ class FroggyLayer {
       this.canvas.height = backH;
     }
 
-    // Sit precisely on top of the game canvas.
+    // Sit precisely on top of the game canvas -- stretched with it, when a
+    // sideways phone stretches it to fill the screen (both scale about their
+    // centres, so the untransformed boxes share a centre too).
     const r = gameCanvas.getBoundingClientRect();
-    this.canvas.style.left = `${Math.round(r.left)}px`;
-    this.canvas.style.top = `${Math.round(r.top)}px`;
+    this.canvas.style.left = `${Math.round(r.left + r.width / 2 - cssW / 2)}px`;
+    this.canvas.style.top = `${Math.round(r.top + r.height / 2 - cssH / 2)}px`;
     this.canvas.style.position = 'fixed';
+    this.canvas.style.transform = gameCanvas.style.transform;
 
     this.unit = zoom * dpr;
     this.ctx.imageSmoothingEnabled = true;

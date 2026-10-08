@@ -772,13 +772,13 @@ for (const [name, w, h] of [
     const cross = document.querySelector('#touch-controls .tc-cross');
     const arms = [...cross.querySelectorAll('.tc-xbtn')].map((e) => e.getBoundingClientRect());
     const r = cross.getBoundingClientRect();
-    const per = 320 / c.width;
     return {
       shown: !cross.hidden && arms.every((a) => a.width > 0),
       size: Math.min(...arms.map((a) => a.width)),
       offCentre: Math.abs(r.left + r.width / 2 - (c.left + c.width / 2)),
       below: r.top >= c.bottom - 1,
-      crossTop: (r.top - c.top) * per,
+      // (down is scaled on its own: sideways, the picture is stretched wider)
+      crossTop: (r.top - c.top) * (180 / c.height),
       feet: window.__dance.state().feet,
       corners: document.querySelectorAll('#touch-controls .tc-btn').length,
     };
