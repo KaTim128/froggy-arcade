@@ -39,7 +39,7 @@ export function evaluateBroke(): BrokeOutcome {
  * beat a formality rather than a second chance.  Ten is a few goes: enough
  * that what happens next is something the player did.
  */
-export const CHARITY_TOKENS = 10;
+export const CHARITY_TOKENS = 20;
 
 export function grantCharity(): void {
   if (store.get().charityUsed) return;

@@ -8,7 +8,7 @@
 import { store, LEDGER_KEY, ADMIN_TOKENS } from './state';
 
 export type LedgerReason =
-  | 'seed' // the $10 -> 20 tokens at the intro
+  | 'seed' // the man's 30 tokens at the intro
   | 'survived' // whatever is left in the pocket after the night
   | 'game.cost' // minigame launch
   | 'game.reward' // minigame win
