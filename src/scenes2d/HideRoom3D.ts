@@ -3162,6 +3162,7 @@ export class HideRoom3D extends Phaser.Scene {
    */
   private beginWaking(): void {
     this.waking = true;
+    this.steadyAim = null;
     this.wakeT = 0;
     this.wakeSpoken = false;
     this.mode = 'briefing';
@@ -3195,6 +3196,15 @@ export class HideRoom3D extends Phaser.Scene {
     c.style.filter = `blur(${blur.toFixed(2)}px) brightness(${bright.toFixed(2)})`;
   }
 
+  /** His face, slowly averaged: what the camera aims at, so a twitch moves him and not you. */
+  private steadyAim: THREE.Vector3 | null = null;
+  private steadyFace(dt: number): THREE.Vector3 {
+    const now = this.monster!.faceAt(new THREE.Vector3());
+    if (!this.steadyAim) this.steadyAim = now.clone();
+    else this.steadyAim.lerp(now, 1 - Math.exp(-dt * 0.8));
+    return this.steadyAim.clone();
+  }
+
   private stepWaking(dt: number): void {
     this.wakeT += dt;
     const CLEAR_S = 6;
@@ -3204,7 +3214,7 @@ export class HideRoom3D extends Phaser.Scene {
     // stay on it: whatever the twitching does, you are looking at him.
     const e = k * k * (3 - 2 * k);
     if (this.monster && this.stage) {
-      const face = this.monster.faceAt(new THREE.Vector3());
+      const face = this.steadyFace(dt);
       const cam = this.stage.camera.position;
       const want = Math.atan2(face.y - cam.y, Math.hypot(face.x - cam.x, face.z - cam.z));
       this.pitch = want - (1 - e) * 0.35;
@@ -3258,6 +3268,7 @@ export class HideRoom3D extends Phaser.Scene {
 
   private startWarning(): void {
     this.warnT = 0;
+    this.steadyAim = null;
     this.screamAt = -1;
     this.warnLast = performance.now();
     this.warnTw = { p: 0, y: 0, r: 0, next: 0.7 };
@@ -3341,7 +3352,9 @@ export class HideRoom3D extends Phaser.Scene {
     if (!st || !m) return;
     const ss = THREE.MathUtils.smoothstep;
     const cam = st.camera;
-    const face = m.faceAt(new THREE.Vector3());
+    // (where his face is on average, not this frame: his head twitches and
+    // snaps, and the camera is not on a string tied to it)
+    const face = this.steadyFace(dt);
     const dx = face.x - cam.position.x;
     const dz = face.z - cam.position.z;
     const flat = Math.hypot(dx, dz);
