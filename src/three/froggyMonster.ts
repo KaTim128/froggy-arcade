@@ -723,7 +723,7 @@ export class FroggyMonster {
     // claws: thick, horn-dark, a little wet
     const clawMat = new THREE.MeshPhongMaterial({ color: 0x2e241a, specular: 0x5a5040, shininess: 60 });
     // the raw wet rim of a lid: inflamed, red at the lash line
-    const lidRim = new THREE.MeshPhongMaterial({ color: 0x6a2a2a, specular: 0x5a3a34, shininess: 70, map: tex.face, bumpMap: tex.faceBump, bumpScale: 0.02 });
+    const lidRim = new THREE.MeshPhongMaterial({ color: 0x6e4644, specular: 0x4a3430, shininess: 60, map: tex.face, bumpMap: tex.faceBump, bumpScale: 0.03 });
     // the lids are open shells: their undersides show at the edge
     lidMat.side = THREE.DoubleSide;
     const lumpy = (g: THREE.BufferGeometry, amp: number, freq: number, seed: number) => roughen(g, amp, freq, seed);
@@ -1082,6 +1082,56 @@ export class FroggyMonster {
       }
       domeGeo.computeVertexNormals();
     }
+    // THE SOCKETS.  The eyes and their lids are spheres sat on the dome; left
+    // alone, the dome (and the top of the muzzle) ran straight through the
+    // lids, and their rims came out of the skin like rings pushed into
+    // clay.  So every vertex of the head that lies inside a lid's sphere is
+    // pushed out to just clear it: the skin wraps round each eye in a soft
+    // rounded rim -- a socket -- instead of the lid being buried in it.
+    const eyeBalls = [-1, 1].map((side) => ({
+      c: new THREE.Vector3(side * 0.138, side > 0 ? 0.138 : 0.15, 0.087),
+      r: 0.129 * (side > 0 ? 1.06 : 1),
+    }));
+    const EDGE = 0.024;
+    const SOFT = 0.01;
+    const clearOfEyes = (g: THREE.BufferGeometry, scale: THREE.Vector3, at: THREE.Vector3): THREE.BufferGeometry => {
+      const pos = g.attributes.position as THREE.BufferAttribute;
+      const p = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) {
+        p.fromBufferAttribute(pos, i).multiply(scale).add(at);
+        let moved = false;
+        for (const e of eyeBalls) {
+          // Inside the lid's sphere: back onto the sphere's rear surface, so
+          // the skin forms a cup the eye sits in, its edge meeting the eye
+          // exactly where the lid's rim runs -- the rim lies on the skin
+          // instead of in it, and the front of the eye stays clear.
+          // The cup's edge is eased rather than cut: a hard clamp snapped
+          // whole rows of vertices back at once and left steps in the skin.
+          // So the push fades out over a band round the lid (EDGE) and the
+          // clamp itself is a soft minimum (SOFT), and the skin rolls over
+          // into the socket like a brow.
+          const dx = p.x - e.c.x;
+          const dy = p.y - e.c.y;
+          const R = e.r;
+          const rho = Math.hypot(dx, dy);
+          if (rho >= R + EDGE) continue;
+          const back = rho < R ? e.c.z - Math.sqrt(R * R - rho * rho) : e.c.z;
+          const pen = p.z - back;
+          if (pen <= -SOFT) continue;
+          const push = pen >= SOFT ? pen : ((pen + SOFT) * (pen + SOFT)) / (4 * SOFT);
+          const t = Math.max(0, Math.min(1, (rho - R) / EDGE));
+          p.z -= push * (1 - t * t * (3 - 2 * t));
+          moved = true;
+        }
+        if (moved) {
+          p.sub(at).divide(scale);
+          pos.setXYZ(i, p.x, p.y, p.z);
+        }
+      }
+      g.computeVertexNormals();
+      return g;
+    };
+    clearOfEyes(domeGeo, new THREE.Vector3(1.28, 0.9, 1.0), new THREE.Vector3(0, 0.03, 0));
     const dome = new THREE.Mesh(lumpy(domeGeo, 0.004, 6, 79), face);
     dome.scale.set(1.28, 0.9, 1.0);
     dome.position.set(0, 0.03, 0);
@@ -1098,7 +1148,12 @@ export class FroggyMonster {
     // so when the jaw goes there is nothing in the way.  It is widest at the
     // bottom, which makes the mouth the widest thing on the face: a little
     // wider than the head it is on.
-    const snout = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.2, 30, 14, 0, Math.PI * 2, 0, Math.PI * 0.5), 0.004, 7, 83), muzzle);
+    const snoutGeo = clearOfEyes(
+      new THREE.SphereGeometry(0.2, 72, 36, 0, Math.PI * 2, 0, Math.PI * 0.5),
+      new THREE.Vector3(MOUTH_W / 0.2, 0.19 / 0.2, MOUTH_D / 0.2),
+      new THREE.Vector3(0, MOUTH_Y, MOUTH_Z),
+    );
+    const snout = new THREE.Mesh(lumpy(snoutGeo, 0.004, 7, 83), muzzle);
     snout.scale.set(MOUTH_W / 0.2, 0.19 / 0.2, MOUTH_D / 0.2);
     snout.position.set(0, MOUTH_Y, MOUTH_Z);
     this.head.add(snout);
