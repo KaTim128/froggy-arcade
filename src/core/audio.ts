@@ -1360,6 +1360,108 @@ class AudioManager {
       // beat, with a gargle of noise under it and a crack at the top where it
       // breaks: something big in a small space, and very unhappy about the
       // heat.
+      // ---- THE VOICES IN THE TUBE.  One kind per sequence, none of them his,
+      // each layered (see the lab) with the tube's own echo, a breath run
+      // backwards, radio crackle and something metal a long way off.
+      case 'voice_whisper': {
+        // deep, breathy, ghostly: hiss shaped by a low moving formant
+        const base = 70 + Math.random() * 15;
+        for (let k = 0; k < 4; k++) {
+          noise(0.42, 0.05, 900 + k * 260, k * 0.36);
+          glide(base * (1 + k * 0.08), base * 0.82, 0.45, 0.022, 'sine', k * 0.36);
+        }
+        break;
+      }
+      case 'voice_children': {
+        // high, frightened, a few of them at once and none in step
+        for (let k = 0; k < 3; k++) {
+          const f = 620 + Math.random() * 260;
+          glide(f, f * 1.45, 0.22, 0.03, 'triangle', k * 0.13);
+          glide(f * 1.45, f * 0.9, 0.5, 0.026, 'triangle', k * 0.13 + 0.22);
+          glide(f * 2.01, f * 1.3, 0.6, 0.008, 'sine', k * 0.13 + 0.1);
+        }
+        noise(0.9, 0.012, 3000, 0.05);
+        break;
+      }
+      case 'voice_robot': {
+        // a warning, in a voice made of square waves that keeps breaking up
+        const f = 140;
+        for (let k = 0; k < 5; k++) {
+          const at = k * 0.17;
+          beep(k % 2 ? f : f * 1.26, 0.13, 0.04, 'square', at);
+          beep((k % 2 ? f : f * 1.26) * 2.01, 0.13, 0.015, 'sawtooth', at);
+          if (Math.random() < 0.5) noise(0.05, 0.05, 5000, at + 0.08);
+        }
+        break;
+      }
+      case 'voice_croak': {
+        // something big and wet in its throat: low pulsed croaks
+        for (let k = 0; k < 4; k++) {
+          const f = 55 + Math.random() * 18;
+          glide(f * 1.4, f, 0.16, 0.09, 'sawtooth', k * 0.19);
+          glide(f * 2.1, f * 1.4, 0.16, 0.03, 'square', k * 0.19);
+          noise(0.14, 0.04, 500, k * 0.19);
+        }
+        break;
+      }
+      case 'voice_laugh': {
+        // spectral laughter: a falling ha-ha-ha, each one fainter, echoing
+        for (let k = 0; k < 6; k++) {
+          const f = 420 - k * 26;
+          const v = 0.045 * (1 - k * 0.12);
+          glide(f * 1.2, f, 0.12, v, 'triangle', k * 0.16);
+          glide(f * 1.2, f, 0.12, v * 0.35, 'triangle', k * 0.16 + 0.32);
+          noise(0.08, v * 0.5, 2400, k * 0.16);
+        }
+        break;
+      }
+      case 'voice_muffled': {
+        // a call from something that is not in any book, through a wall
+        const f = 160 + Math.random() * 60;
+        glide(f, f * 1.6, 0.4, 0.05, 'sine');
+        glide(f * 1.6, f * 0.7, 0.7, 0.045, 'sine', 0.38);
+        glide(f * 0.5, f * 0.8, 1.0, 0.03, 'triangle', 0.1);
+        noise(1.0, 0.02, 380, 0.05);
+        break;
+      }
+      case 'tube_echo': {
+        // a hollow ring down the glass, and its echoes
+        for (let k = 0; k < 4; k++) glide(220, 205, 0.5, 0.03 * (1 - k * 0.22), 'sine', k * 0.24);
+        noise(0.6, 0.012, 1200, 0);
+        break;
+      }
+      case 'reverse_breath': {
+        // a breath played backwards: swelling up out of nothing and cut off
+        const len = 0.9;
+        const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * len), ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(i / d.length, 2.2);
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const filt = ctx.createBiquadFilter();
+        filt.type = 'bandpass';
+        filt.frequency.value = 1100;
+        const g = ctx.createGain();
+        g.gain.value = 0.12;
+        src.connect(filt);
+        filt.connect(g);
+        g.connect(out);
+        src.start(t);
+        break;
+      }
+      case 'radio_static': {
+        for (let k = 0; k < 6; k++) noise(0.06 + Math.random() * 0.08, 0.035, 4000 + Math.random() * 3000, k * 0.09 + Math.random() * 0.04);
+        beep(1900, 0.04, 0.012, 'square', 0.2);
+        break;
+      }
+      case 'metal_distant': {
+        // something metal, struck, a long way off down the pipes
+        beep(310, 1.2, 0.02, 'triangle');
+        beep(457, 1.0, 0.012, 'sine', 0.01);
+        beep(683, 0.7, 0.008, 'sine', 0.02);
+        noise(0.08, 0.02, 2500, 0);
+        break;
+      }
       case 'froggy_screech': {
         const base = 520 + Math.random() * 60;
         glide(base * 0.55, base * 1.9, 0.34, 0.07, 'sawtooth');
@@ -1811,6 +1913,16 @@ export type SfxName =
   | 'poison_hiss'
   | 'speaker_fault'
   | 'froggy_screech'
+  | 'voice_whisper'
+  | 'voice_children'
+  | 'voice_robot'
+  | 'voice_croak'
+  | 'voice_laugh'
+  | 'voice_muffled'
+  | 'tube_echo'
+  | 'reverse_breath'
+  | 'radio_static'
+  | 'metal_distant'
   | 'distant_scream'
   | 'distant_cry'
   | 'fence_thunk'

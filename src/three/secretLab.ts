@@ -993,6 +993,30 @@ export function buildLab(p: LabParts): Lab {
       machineLight.intensity = 1.2 + 2.5 * k;
       if (Math.floor(t * 4) !== Math.floor((t - dt) * 4)) setScreen(`SEQ: ${s.name}`, [...s.lines, t < 2 ? 'INJECTING...' : 'RUNNING'], '#' + target.getHexString(), Math.min(1, t / s.dur));
 
+      // ---- THE VOICES.  Each sequence has its own -- croaking monsters in the
+      // caustic, frightened children in the night terror, deep whispers in the
+      // cold, a broken robot warning through the shocks, spectral laughter and
+      // a muffled call from something unnamed in the void -- and under every
+      // one the tube's own echo, a breath run backwards, radio crackle and
+      // metal struck far off down the pipes.
+      const VOICES: Record<string, Array<[number, Parameters<typeof audio.sfx>[0], number]>> = {
+        acid: [[0.9, 'voice_croak', 0.8], [3.6, 'voice_croak', 0.7], [6.4, 'voice_croak', 0.6]],
+        dream: [[1.0, 'voice_children', 0.75], [4.6, 'voice_children', 0.65], [7.8, 'voice_children', 0.55]],
+        cryo: [[0.8, 'voice_whisper', 0.9], [3.8, 'voice_whisper', 0.85], [6.8, 'voice_whisper', 0.8]],
+        shock: [[0.6, 'voice_robot', 0.7], [2.7, 'voice_robot', 0.6], [5.8, 'voice_robot', 0.65]],
+        void: [[1.4, 'voice_laugh', 0.75], [4.4, 'voice_muffled', 0.8], [7.0, 'voice_laugh', 0.6]],
+      };
+      for (const [i, [at, name, g]] of (VOICES[s.id] ?? []).entries()) {
+        once(`vo${i}`, at, name, g);
+        // layered: the glass ringing with it, and the radio under it
+        once(`ve${i}`, at + 0.15, 'tube_echo', 0.6);
+        once(`vr${i}`, at + 0.05, 'radio_static', 0.45);
+      }
+      once('lb0', 0.4, 'reverse_breath', 0.6);
+      once('lb1', s.dur * 0.55, 'reverse_breath', 0.5);
+      once('lm0', 2.2, 'metal_distant', 0.7);
+      once('lm1', s.dur * 0.7, 'metal_distant', 0.6);
+
       if (s.id === 'acid') {
         bubbleSpeed = 1 + 5 * k;
         steamK = k;
@@ -1270,6 +1294,56 @@ export function buildLab(p: LabParts): Lab {
       Object.assign(pose, { maw: 0.08 + agony * 0.92, lunge: agony, grab: agony });
       // paddling as the water goes down past him
       if (water === 'draining') Object.assign(pose, { lunge: 0.4, maw: 0.5 });
+    }
+    // ---- HE HOLDS THE TUBE.  Whatever is being done to him, unless his
+    // hands already have somewhere on the glass to be, they are on it in
+    // front of him -- palms flat, fingers curled to it -- and in every case his
+    // body is drawn in close enough to reach and leans into the glass, so no
+    // arm is ever stretched out to a hand hanging in the water.
+    const portHold = (standing || water === 'empty') && shutterK > 0.3;
+    if (!portHold) {
+      const shaking = seq && level >= 0.99 && (seq.id === 'shock' || seq.id === 'cryo') ? 1 : 0;
+      if (!hands || (seq && level >= 0.99 && seq.id === 'cryo')) {
+        const holdAt = (da: number, hy: number): THREE.Vector3 =>
+          root.localToWorld(new THREE.Vector3(T.x + Math.sin(yaw + da) * (T.r - 0.06), hy, T.z + Math.cos(yaw + da) * (T.r - 0.06)));
+        const jitter = shaking * (Math.random() - 0.5) * 0.03;
+        // chest high, a shoulder's width apart, the elbows down and in under
+        // them: gripping the glass, not waving at it
+        const down = new THREE.Vector3(0, -1, 0);
+        hands = [
+          { at: holdAt(-0.36, y + 1.5 + jitter), weight: 1, grip: 0.85, pole: down },
+          { at: holdAt(0.36, y + 1.46 - jitter), weight: 1, grip: 0.85, pole: down },
+        ];
+      }
+      // in to the glass where the hands are, and leaning toward it
+      let hx = 0;
+      let hz = 0;
+      let n = 0;
+      for (const hgl of hands) {
+        if (!hgl) continue;
+        const lp = root.worldToLocal(hgl.at.clone());
+        hx += lp.x;
+        hz += lp.z;
+        n++;
+      }
+      if (n) {
+        hx /= n;
+        hz /= n;
+        const dx = hx - x;
+        const dz = hz - z;
+        const d = Math.hypot(dx, dz);
+        const reach = 0.5;
+        if (d > reach) {
+          x += (dx / d) * (d - reach);
+          z += (dz / d) * (d - reach);
+        }
+        // the body turns and leans toward the glass it is holding
+        let dy = Math.atan2(dx, dz) - yaw;
+        while (dy > Math.PI) dy -= Math.PI * 2;
+        while (dy < -Math.PI) dy += Math.PI * 2;
+        yaw += dy * 0.6;
+        pose.lean = Math.max(pose.lean ?? 0, 0.35);
+      }
     }
     specimen.setPose(x - keepIn.x, y, z - keepIn.y, yaw);
     specimen.lookAt(viewer);
