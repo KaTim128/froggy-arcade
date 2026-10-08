@@ -3,11 +3,9 @@
  *
  * Every prize out of the arcade and into the man's hands.  This is the only
  * ending in the game that is neither an escape nor a death: the player set out
- * to make money and made it, and the game says so and stops.
+ * to make money and made it, and the game stops.
  *
- * It is paced like the basement is — one line, a long hold, then the next.  A
- * card that arrives and leaves in two seconds reads as a game over screen; the
- * hold is what makes it read as an ending.
+ * No story card: just The End, held long enough to read as an ending.
  */
 
 import Phaser from 'phaser';
@@ -18,16 +16,6 @@ import { centerText } from '../core/ui';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 
-const STORY = [
-  'You finally managed to escape the gutter and',
-  'leave your life of homelessness behind.',
-  'Maybe this experience will inspire you to',
-  'pursue a future as a gamer, or perhaps even',
-  'a gambler... who knows...',
-];
-
-/** How long the story sits on screen before THE END replaces it. */
-const STORY_MS = 9500;
 /** And how long THE END sits there before the run is wiped. */
 const END_MS = 9000;
 
@@ -43,18 +31,7 @@ export class TheEnd extends Phaser.Scene {
 
     this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black).setOrigin(0, 0);
 
-    const lines = STORY.map((line, i) =>
-      centerText(this, GAME_W / 2, 54 + i * 13, line, PALETTE.cream).setAlpha(0),
-    );
-    // The lines fade up one after another, at reading speed.
-    lines.forEach((l, i) => {
-      this.tweens.add({ targets: l, alpha: 1, delay: 600 + i * 900, duration: 900 });
-    });
-
-    const purse = centerText(this, GAME_W / 2, 130, `$${store.get().cash}`, PALETTE.mossLight).setAlpha(0);
-    this.tweens.add({ targets: purse, alpha: 0.9, delay: 600 + STORY.length * 900, duration: 900 });
-
-    this.time.delayedCall(STORY_MS, () => this.theEnd([...lines, purse]));
+    this.theEnd([]);
   }
 
   private theEnd(previous: Phaser.GameObjects.BitmapText[]): void {
