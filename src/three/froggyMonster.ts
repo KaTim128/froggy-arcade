@@ -597,6 +597,16 @@ export class FroggyMonster {
   private readonly armBaseY: number[] = [];
   /** Hip height over the floor while walking, in model units. */
   private hipH = 0;
+  /** Where each foot is in its own cycle, last frame (a wrap past the stance's start is a footfall). */
+  private stepWas = [-1, -1];
+  /** Where each planted foot came down, in the world: it stays there until it lifts. */
+  private plant: (THREE.Vector3 | null)[] = [null, null];
+  /** The nod a footfall puts through his body, decaying. */
+  private stepNod = 0;
+  /** How far each planted foot is held off to the side of where the leg would put it (model units). */
+  private pinX = [0, 0];
+  /** Called the moment a foot strikes the floor: which foot, where, and how hard (0..1). */
+  onFootfall: ((foot: number, at: THREE.Vector3, hard: number) => void) | null = null;
   /** How close the thing he is reaching for is, 0 far .. 1 on it, eased. */
   private nearNow = 0;
   /** The arms' own momentum: where each one actually is, and how fast it is going. */
@@ -1969,6 +1979,42 @@ export class FroggyMonster {
         bear[i] = THREE.MathUtils.smoothstep(u, 0.5, 1);
       }
     }
+    // ---- PLANTED MEANS PLANTED.  The stride above is sized so a stance foot
+    // sweeps back at the speed he covers ground, but a turn, a change of
+    // pace or a shove from a wall would still slide it.  So each foot is
+    // pinned where it came down, in the world, and the leg is solved to that
+    // spot until it lifts -- held only as far as the leg can reach.  The
+    // moment it comes down is a FOOTFALL: the scene's step sound and dust.
+    const pinK = moving * (1 - this.crouchNow) * (pose.climbRig ? 0 : 1);
+    this.root.updateMatrixWorld(true);
+    for (let i = 0; i < 2; i++) {
+      const pp = (this.walkT + i * 0.5) % 1;
+      const was = this.stepWas[i];
+      this.stepWas[i] = pp;
+      const landed = was >= 0 && pp < duty && (was >= duty || was > pp);
+      this.pinX[i] = 0;
+      if (pp >= duty) {
+        this.plant[i] = null;
+        continue;
+      }
+      const nominal = this.tmp.set((i === 0 ? -1 : 1) * 0.1, 0, footX[i]).multiplyScalar(BODY_SCALE);
+      if (landed || !this.plant[i]) {
+        this.plant[i] = this.root.localToWorld(nominal.clone());
+        if (landed && moving > 0.3) {
+          this.stepNod = 1;
+          this.onFootfall?.(i, this.plant[i]!.clone(), THREE.MathUtils.clamp(0.45 + run * 0.4 + this.lungeNow * 0.15, 0, 1));
+        }
+      }
+      if (pinK > 0) {
+        const held = this.root.worldToLocal(this.tmp.copy(this.plant[i]!)).divideScalar(BODY_SCALE);
+        const lim = half * 1.3;
+        footX[i] += (THREE.MathUtils.clamp(held.z, -lim, lim) - footX[i]) * pinK;
+        // ...and across: a turn swings the body round over a foot that stays
+        this.pinX[i] = THREE.MathUtils.clamp(held.x - (i === 0 ? -1 : 1) * 0.1, -0.25, 0.25) * pinK;
+      }
+    }
+    this.stepNod = Math.max(0, this.stepNod - dt * 5);
+
     // Standing still, the stride lets go: the feet come back under him
     // rather than staying wherever the last step left them.
     for (let i = 0; i < 2; i++) {
@@ -1981,7 +2027,11 @@ export class FroggyMonster {
     // THE HIPS sit as high as the planted feet allow -- never higher, or a
     // foot would leave the floor, and never so low a knee has nothing left --
     // so they drop into each double-support and rise over each single leg.
-    const top = reachMax * 0.985;
+    // (never all the way up: at full reach the legs went straight as poles
+    // and he walked on stilts.  Walking he CREEPS, knees always bent and the
+    // hips lowest as the body passes over the planted foot; running he rises
+    // a little onto them.)
+    const top = reachMax * (0.985 - (0.11 - 0.05 * run) * moving);
     let want = top;
     for (let i = 0; i < 2; i++) {
       const r = Math.sqrt(Math.max(0.01, top ** 2 - footX[i] ** 2));
@@ -1989,6 +2039,8 @@ export class FroggyMonster {
     }
     // rising takes a moment, dropping does not: a planted foot must never be
     // asked to reach below the floor
+    // ...and he sinks into each stride as the body passes over the foot
+    want -= reachMax * 0.035 * moving * (1 - run) * (1 - Math.abs(gait));
     this.hipH = Math.max(0.1, Math.min(want, (this.hipH || want) + dt * 2.5));
     const hipH = this.hipH;
 
@@ -2007,7 +2059,9 @@ export class FroggyMonster {
     const hipRig = rig ? rig.hip / this.sizeW - SOLE : hipWalk;
     const hipAt = hipWalk + (hipRig - hipWalk) * rk;
     if (rig) this.root.updateMatrixWorld(true);
-    const splay = Math.max(0.4 * cr, (rig?.splay ?? 0) * rk);
+    // (and walking, the knees turn out a little: a long thing creeping, not
+    // a man striding)
+    const splay = Math.max(0.4 * cr, (rig?.splay ?? 0) * rk, 0.07 * moving * (1 - run));
     const cosSplay = Math.cos(splay);
     // THE LEGS, solved: each ankle put exactly where its foot has to be.
     for (let i = 0; i < 2; i++) {
@@ -2150,7 +2204,8 @@ export class FroggyMonster {
     // so the pelvis moves over the feet and the feet stay where they are
     for (let i = 0; i < 2; i++) {
       this.legs[i].rotation.z =
-        (-roll - Math.asin(THREE.MathUtils.clamp(sway / Math.max(0.3, this.hipH), -0.3, 0.3))) * (1 - cr) + (i === 0 ? -1 : 1) * splay;
+        (-roll - Math.asin(THREE.MathUtils.clamp(sway / Math.max(0.3, this.hipH), -0.3, 0.3))) * (1 - cr) + (i === 0 ? -1 : 1) * splay +
+        Math.atan2(this.pinX[i], Math.max(0.3, this.hipH));
       this.legs[i].rotation.y = -pelvisYaw * (1 - cr);
     }
 
@@ -2163,6 +2218,8 @@ export class FroggyMonster {
     this.torso.rotation.x =
       0.14 + Math.min(0.2, speed * 0.05) * (1 - rk) + this.lungeNow * (0.5 + this.nearNow * 0.1) * (1 - rk) +
       cr * 0.62 + this.leanNow * 0.55 +
+      // each footfall goes through the top-heavy body as a nod
+      this.stepNod * this.stepNod * 0.05 * moving * (1 - rk) +
       // flat to the floor to get his face down to a gap: past level, the
       // shoulders lower than the hips, so the huge head can come down to the
       // boards with its face turned into the dark

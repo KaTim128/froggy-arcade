@@ -35,6 +35,7 @@ import { froggyLayer } from '../render/froggyLayer';
 import { drawPixelText } from '../render/pixelFont';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
 import { playJumpscare3D, prepareJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
+import { FootDust } from '../three/footDust';
 import { FroggyMonster } from '../three/froggyMonster';
 import { ThreeStage } from '../render/threeStage';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
@@ -83,6 +84,9 @@ const RUN = 4.4;
 const FROG_SCALE = 1.25;
 const CATCH = 1.15;
 
+/** Seconds in the corridor before he comes through the door anyway. */
+const ESCAPE_TIME = 10;
+
 type Phase = 'escape' | 'lift' | 'smash' | 'chase' | 'stairs' | 'safe' | 'caught';
 /** Where on the stairs: a landing at a floor, the first flight, the half landing, the second flight. */
 type Seg = 'top' | 'A' | 'bot' | 'B';
@@ -105,6 +109,7 @@ function tex(c: HTMLCanvasElement, rx = 1, ry = 1): THREE.CanvasTexture {
 export class HotelHall3D extends Phaser.Scene {
   private stage: ThreeStage | null = null;
   private monster: FroggyMonster | null = null;
+  private footDust: FootDust | null = null;
   private scare: Scare3D | null = null;
   private keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
   private dragging = false;
@@ -137,7 +142,6 @@ export class HotelHall3D extends Phaser.Scene {
   private trailIdx = 0;
   private lungeT = 0;
   private lungeCd = 3;
-  private hopT = 0;
   /** A beat before he comes, on a retry: you have to see where he is. */
   private holdT = 0;
 
@@ -282,6 +286,15 @@ export class HotelHall3D extends Phaser.Scene {
     this.monster = new FroggyMonster(FROG_SCALE);
     this.monster.root.visible = false;
     S.add(this.monster.root);
+    // his steps are his feet: heavy, wet, louder the closer he is, the moment
+    // each one lands -- with a kick of grit off the carpet
+    this.footDust = new FootDust(S);
+    this.monster.onFootfall = (_foot, at, hard) => {
+      if (!this.monster?.root.visible) return;
+      const dist = at.distanceTo(new THREE.Vector3(this.pos.x, this.h, this.pos.y));
+      if (dist < 26) audio.sfx('froggy_step', Phaser.Math.Clamp(1.2 - dist / 26, 0.2, 1) * (0.8 + hard * 0.3));
+      this.footDust?.puff(at, hard, FROG_SCALE * 0.8);
+    };
     if (this.stage) prepareJumpscare3D(this.stage, this.monster);
     this.frogLight = new THREE.PointLight(0xb8c4e0, 7, 7, 1.4);
     S.add(this.frogLight);
@@ -905,6 +918,17 @@ export class HotelHall3D extends Phaser.Scene {
         });
       }
       this.prompt = this.nearPanel() ? (isTouch() ? 'TAP E - CALL THE LIFT' : '[E] CALL THE LIFT') : '';
+      // Ten seconds to get to the lift.  Dawdle and he does not wait: you
+      // are turned round to the door as it comes off its hinges.
+      if (this.phaseT > ESCAPE_TIME) {
+        this.phase = 'smash';
+        this.phaseT = 0;
+        this.prompt = '';
+        this.lines = [];
+        const to = this.yawToward(0, DOOR612_Z);
+        this.autoTurn = { from: this.yaw, to: this.unwrap(this.yaw, to), t: 0, dur: 0.6 };
+        this.breakDoor(false);
+      }
       return;
     }
     this.prompt = '';
@@ -1140,18 +1164,14 @@ export class HotelHall3D extends Phaser.Scene {
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
       this.fYaw += d * Math.min(1, dt * 8);
-      // his steps, wet and heavy, faster the closer he is
-      this.hopT -= dt;
+      // (his steps are his footfalls: see onFootfall)
       const dist = this.fpos.distanceTo(you);
-      if (this.hopT <= 0) {
-        this.hopT = Phaser.Math.Clamp(dist / 14, 0.26, 0.7);
-        if (dist < 26) audio.sfx('froggy_step', Phaser.Math.Clamp(1.2 - dist / 26, 0.2, 1));
-      }
       if (dist < CATCH && Math.abs(this.fpos.y - this.h) < 1.4) this.caught();
     }
     const moved = this.fpos.distanceTo(this.fWas) / Math.max(dt, 1e-4);
     this.fWas.copy(this.fpos);
     m.setPose(this.fpos.x, this.fpos.y, this.fpos.z, this.fYaw);
+    this.footDust?.update(dt, this.fpos.y);
     const cam = this.stage?.camera.position ?? null;
     m.update(dt, { speed: moved, maw: 1, climb: 0, scan: 0, lunge: this.lungeT > 0 ? 1 : 0.5, constrict: 1, bare: 0.8, reachAt: hunting ? cam : null, viewer: cam });
     this.frogLight?.position.set(this.fpos.x, this.fpos.y + 2.4, this.fpos.z);

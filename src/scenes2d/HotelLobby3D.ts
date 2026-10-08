@@ -28,6 +28,7 @@ import { froggyLayer } from '../render/froggyLayer';
 import { drawPixelText } from '../render/pixelFont';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
 import { playJumpscare3D, prepareJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
+import { FootDust } from '../three/footDust';
 import { FroggyMonster, type ClimbRig, type HandGoal } from '../three/froggyMonster';
 import { climbFrame, climbSeconds, type ClimbGeom } from '../three/froggyClimb';
 import { ThreeStage } from '../render/threeStage';
@@ -58,6 +59,38 @@ const EYE_DOWN = 1.0;
 /** Where he stands to stare at the door. */
 const WATCH = new THREE.Vector3(X1 - 1.15, 0, DOOR_Z);
 const FROG_SCALE = 1.25;
+
+/**
+ * ---- HIS AWARENESS, while you hide.  Tune here.
+ *
+ * Not a yes/no glance: SUSPICION, 0..1, that builds while he can see any
+ * part of you through the storage room's glass and drains only slowly once
+ * he cannot -- so ducking the moment you are seen buys you nothing if you
+ * keep coming back up.  Every fresh sighting (a head appearing where there
+ * was none) jolts it on top.  At 1 he has you.
+ */
+const AWARE = {
+  /** Seconds of a full, square-on view of you for suspicion to go 0 -> 1 (from mid-lobby). */
+  timeToDetect: 1.1,
+  /** Suspicion lost per second while he cannot see you: slow, so peeks add up. */
+  suspicionDecayRate: 0.05,
+  /** The jolt the instant he catches a head coming up at the glass. */
+  peekDetectionSensitivity: 0.18,
+  /** Half-width of his gaze, radians. */
+  fov: 0.45,
+  /** At or near the storage room: wider eyes, quicker to be sure, sharper ears. */
+  janitorRoomAwarenessMultiplier: 1.7,
+  /** Metres from the storage door that count as "at it". */
+  janitorRange: 4.5,
+  /** Uneasy: his head snaps round to the storage door, and you hear it. */
+  suspiciousThreshold: 0.2,
+  /** He drops what he is doing and comes to the door to look. */
+  investigateThreshold: 0.45,
+  /** Getting up or down in there, heard at the door (suspicion added, at point-blank). */
+  crouchNoise: 0.12,
+  /** Metres that noise carries. */
+  hearing: 6,
+};
 
 type Mode = 'hide' | 'exposed';
 type Phase = 'settle' | 'burst' | 'search' | 'approach' | 'watch' | 'leave' | 'lookback' | 'exit' | 'gone' | 'detect' | 'lunge' | 'caught';
@@ -266,6 +299,7 @@ function texNight(): HTMLCanvasElement {
 export class HotelLobby3D extends Phaser.Scene {
   private stage: ThreeStage | null = null;
   private monster: FroggyMonster | null = null;
+  private footDust: FootDust | null = null;
   private scare: Scare3D | null = null;
   private mode: Mode = 'hide';
   private startX = 238;
@@ -292,7 +326,6 @@ export class HotelLobby3D extends Phaser.Scene {
   private fYaw = 0;
   private legs: Leg[] = [];
   private holdT = 0;
-  private stepT = 0;
   private watchFor = 6;
   private faceTo: THREE.Vector3 | null = null;
   private faceK = 0;
@@ -314,7 +347,14 @@ export class HotelLobby3D extends Phaser.Scene {
   private devCam: { at: THREE.Vector3; to: THREE.Vector3 } | null = null;
   private binRustle = 0;
   /** How long his eyes have been on you, standing at the glass. */
-  private seenT = 0;
+  /** His suspicion, 0..1: see AWARE. */
+  private sus = 0;
+  /** Whether he could see any of you last frame (a new sighting is a jolt). */
+  private susSeen = false;
+  /** 0 calm, 1 uneasy, 2 coming to check: the cues fire as it climbs. */
+  private susStage = 0;
+  /** His head snapped round to the storage door, for this long. */
+  private alertLook = 0;
   private bulb: THREE.PointLight | null = null;
   private bits: Array<{ m: THREE.Mesh; v: THREE.Vector3; spin: THREE.Vector3; rest: boolean; half: number; flat?: boolean }> = [];
   private bangT = 0;
@@ -349,7 +389,10 @@ export class HotelLobby3D extends Phaser.Scene {
     this.frontPanes = [];
     this.stairFly = null;
     this.crouched = false;
-    this.seenT = 0;
+    this.sus = 0;
+    this.susSeen = false;
+    this.susStage = 0;
+    this.alertLook = 0;
     this.climbing = null;
     this.binOpen = 0;
     this.eye = EYE_UP;
@@ -442,6 +485,14 @@ export class HotelLobby3D extends Phaser.Scene {
     this.monster = new FroggyMonster(FROG_SCALE);
     this.monster.root.visible = false;
     S.add(this.monster.root);
+    // his steps are his feet: the sound and a kick of grit the moment each
+    // one comes down, where it comes down
+    this.footDust = new FootDust(S);
+    this.monster.onFootfall = (_foot, at, hard) => {
+      if (!this.monster?.root.visible) return;
+      this.heard(at.clone().setY(0.1), 'froggy_step', 0.75 + hard * 0.45);
+      this.footDust?.puff(at, hard, FROG_SCALE * 0.8);
+    };
     if (this.stage) prepareJumpscare3D(this.stage, this.monster);
     // a cold light that goes with him, so his face reads in the dark
     this.frogLight = new THREE.PointLight(0xb8c4e0, 4.5, 6, 1.5);
@@ -1049,6 +1100,7 @@ export class HotelLobby3D extends Phaser.Scene {
     // down below the glass, the eyes go up to it
     this.pitch = this.crouched ? Math.max(this.pitch, 0.1) : Math.min(this.pitch, 0.05);
     audio.sfx('floor_creak', 0.25);
+    this.crouchNoise();
   }
 
   private press(): void {
@@ -1098,22 +1150,117 @@ export class HotelLobby3D extends Phaser.Scene {
    * turned, or his body and the sweep of his head -- is on the door.  Up
    * while he is looking elsewhere, he does not see you.
    */
-  /** Seen only when the contact holds: a glance across the glass is not enough. */
-  private spotted(dt: number): boolean {
-    this.seenT = this.sees() ? this.seenT + dt : Math.max(0, this.seenT - dt * 2);
-    return this.seenT > 0.6;
+  /** Whether he is at, or close by, the storage room. */
+  private nearStore(): boolean {
+    return this.fpos.distanceTo(new THREE.Vector3(X1, 0, DOOR_Z)) < AWARE.janitorRange;
   }
 
-  private sees(): boolean {
-    if (!this.standing()) return false;
+  /**
+   * How much of you he can see, 0..1.  Not one point at your middle: the
+   * top of your head, your eyes and both shoulders, each tested against the
+   * actual opening of the glass -- so the top of a head coming up into the
+   * window is seen before your eyes are over the sill -- and then against
+   * where he is looking.
+   */
+  private visibleOfYou(): number {
+    if (this.mode !== 'hide') return this.standing() ? 1 : 0;
     const fx = this.fpos.x;
     const fz = this.fpos.z;
-    const toYou = Math.atan2(this.camPos.x - fx, this.camPos.z - fz);
     const gaze = this.faceTo && this.faceK > 0.5 ? Math.atan2(this.faceTo.x - fx, this.faceTo.z - fz) : this.fYaw + this.scanT;
-    let d = toYou - gaze;
-    while (d > Math.PI) d -= Math.PI * 2;
-    while (d < -Math.PI) d += Math.PI * 2;
-    return Math.abs(d) < 0.45;
+    const fov = AWARE.fov * (this.nearStore() ? AWARE.janitorRoomAwarenessMultiplier : 1);
+    const pts: [number, number, number][] = [
+      // [height, sideways, weight]
+      [this.eye + 0.14, 0, 1],
+      [this.eye, 0, 1],
+      [this.eye - 0.24, -0.18, 0.5],
+      [this.eye - 0.24, 0.18, 0.5],
+    ];
+    let seen = 0;
+    for (const [y, side, w] of pts) {
+      if (y < WIN.y0 - 0.02 || y > WIN.y1 + 0.04 || Math.abs(side) > WIN.w / 2) continue;
+      let d = Math.atan2(this.camPos.x - fx, this.camPos.z + side - fz) - gaze;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      if (Math.abs(d) < fov) seen += w;
+    }
+    return Math.min(1, seen / 2);
+  }
+
+  /**
+   * Suspicion: up while he can see you (faster the closer he is, and at the
+   * storage room), a jolt for every fresh sighting, slowly down when he
+   * cannot.  True when he is sure.
+   */
+  private spotted(dt: number): boolean {
+    const near = this.nearStore();
+    const mult = near ? AWARE.janitorRoomAwarenessMultiplier : 1;
+    const vis = this.visibleOfYou();
+    if (vis > 0) {
+      const dist = this.fpos.distanceTo(new THREE.Vector3(this.camPos.x, 0, this.camPos.z));
+      const closeK = Phaser.Math.Clamp(1.6 - dist / 12, 0.5, 1.5);
+      if (!this.susSeen) this.sus += AWARE.peekDetectionSensitivity * mult * vis;
+      this.sus += (dt / AWARE.timeToDetect) * vis * closeK * mult;
+    } else this.sus -= AWARE.suspicionDecayRate * dt;
+    this.susSeen = vis > 0;
+    this.sus = Phaser.Math.Clamp(this.sus, 0, 1);
+    this.reactToSuspicion();
+    return this.sus >= 1;
+  }
+
+  /**
+   * What he does about it, so you can tell: uneasy, his head snaps round to
+   * the storage door with a sound; past investigateThreshold he leaves the
+   * search and marches on the door to look.
+   */
+  private reactToSuspicion(): void {
+    if (this.sus < AWARE.suspiciousThreshold * 0.5) this.susStage = 0;
+    if (this.susStage < 1 && this.sus >= AWARE.suspiciousThreshold) {
+      this.susStage = 1;
+      this.alertLook = 1.4;
+      this.heard(this.fpos.clone().setY(1.6), 'floor_creak', 0.6);
+      audio.sfx('eerie_swell', 0.3);
+    }
+    if (this.susStage < 2 && this.sus >= AWARE.investigateThreshold) {
+      this.susStage = 2;
+      this.investigate();
+    }
+  }
+
+  /** Off his round and straight to the storage door, to look in. */
+  private investigate(): void {
+    this.alertLook = 1.8;
+    audio.sfx('dun', 0.55);
+    if (this.phase === 'watch') {
+      // already at it: he stays longer
+      this.watchFor = Math.max(this.watchFor, this.phaseT + 4);
+      return;
+    }
+    if (this.phase === 'approach') return;
+    if (!(this.phase === 'search' || this.phase === 'leave' || this.phase === 'lookback') || this.climbing) {
+      // (mid-climb: as soon as he is down)
+      this.susStage = 1;
+      return;
+    }
+    this.phase = 'approach';
+    this.phaseT = 0;
+    this.holdT = 0;
+    const path: Leg[] = [];
+    if (this.fpos.x < 2.5) path.push({ to: new THREE.Vector3(2.5, 0, 3.3), speed: 1.5 });
+    path.push({ to: new THREE.Vector3(7.6, 0, DOOR_Z), speed: 1.5 }, { to: WATCH.clone(), speed: 0.8 });
+    this.legs = path;
+    this.watchFor = 6 + Math.random() * 3;
+  }
+
+  /** Getting up or down in there makes a sound, and at the door he hears it. */
+  private crouchNoise(): void {
+    const m = this.monster;
+    if (!m?.root.visible || this.mode !== 'hide') return;
+    if (!['burst', 'search', 'approach', 'watch', 'leave', 'lookback'].includes(this.phase)) return;
+    const d = this.fpos.distanceTo(new THREE.Vector3(X1, 0, DOOR_Z));
+    if (d > AWARE.hearing) return;
+    const mult = this.nearStore() ? AWARE.janitorRoomAwarenessMultiplier : 1;
+    this.sus = Math.min(0.99, this.sus + AWARE.crouchNoise * (1 - d / AWARE.hearing) * mult);
+    this.reactToSuspicion();
   }
 
   private story(dt: number): void {
@@ -1136,7 +1283,21 @@ export class HotelLobby3D extends Phaser.Scene {
     }
     // looking round the lobby: on your feet at the glass, he sees you
     // (a second to get down after the door goes, before he looks your way)
-    if (this.mode === 'hide' && (this.phase === 'search' || (this.phase === 'burst' && this.phaseT > 1.0)) && this.spotted(dt)) return this.detect();
+    // (one check for all of it: his suspicion, see AWARE)
+    if (this.alertLook > 0) this.alertLook -= dt;
+    const hunting = this.phase === 'search' || this.phase === 'approach' || this.phase === 'watch' || this.phase === 'leave' || this.phase === 'lookback' || (this.phase === 'burst' && this.phaseT > 1.0);
+    if (this.mode === 'hide') {
+      if (hunting && this.spotted(dt)) return this.detect();
+      if (!hunting) this.sus = Math.max(0, this.sus - AWARE.suspicionDecayRate * dt);
+      // your heart, louder and faster the surer he is
+      if (this.phase !== 'watch' && this.sus > 0.15) {
+        this.heartT -= dt;
+        if (this.heartT <= 0) {
+          this.heartT = 0.9 - this.sus * 0.45;
+          audio.heartbeat(0.3 + this.sus * 0.4);
+        }
+      }
+    }
     // (hiding: he stands and stares at the storage door a moment before the search)
     if (this.phase === 'burst' && this.phaseT > (this.mode === 'hide' ? 2.8 : 1.6)) {
       if (this.mode === 'exposed') {
@@ -1160,8 +1321,6 @@ export class HotelLobby3D extends Phaser.Scene {
       ];
     }
     if (this.phase === 'approach') {
-      // coming at the door, and you are still on your feet
-      if (this.spotted(dt)) return this.detect();
       if (this.legs.length === 0) {
         this.phase = 'watch';
         this.phaseT = 0;
@@ -1169,14 +1328,14 @@ export class HotelLobby3D extends Phaser.Scene {
       }
     }
     if (this.phase === 'watch') {
-      if (this.spotted(dt)) return this.detect();
       // the heart, going hard, and nothing else
       this.heartT -= dt;
       if (this.heartT <= 0) {
-        this.heartT = 0.62;
-        audio.heartbeat(0.55);
+        this.heartT = 0.62 - this.sus * 0.2;
+        audio.heartbeat(0.55 + this.sus * 0.3);
       }
-      if (this.phaseT > this.watchFor) {
+      // (and he does not go while he is still unsure)
+      if (this.phaseT > this.watchFor && this.sus < AWARE.investigateThreshold) {
         this.phase = 'leave';
         this.phaseT = 0;
         this.legs = [{ to: new THREE.Vector3(X0 + 2.2, 0, DOOR_Z), speed: 1.2 }];
@@ -1190,7 +1349,6 @@ export class HotelLobby3D extends Phaser.Scene {
     }
     if (this.phase === 'lookback') {
       // the last look back at the door: quiet, and long
-      if (this.phaseT > 1.6 && this.phaseT < 4.4 && this.spotted(dt)) return this.detect();
       if (this.phaseT > 5.2) {
         this.phase = 'exit';
         this.phaseT = 0;
@@ -1544,16 +1702,12 @@ export class HotelLobby3D extends Phaser.Scene {
     // his steps: you hear him coming, stopping, and going
     const moved = this.fpos.distanceTo(this.fWas) / Math.max(dt, 1e-4);
     this.fWas.copy(this.fpos);
-    if (moved > 0.15) {
-      this.stepT -= dt;
-      if (this.stepT <= 0) {
-        this.stepT = Phaser.Math.Clamp(0.62 / Math.max(0.4, moved / 0.9), 0.18, 0.9);
-        this.heard(this.fpos.clone().setY(0.1), 'froggy_step', lunge ? 1.2 : 1);
-      }
-    } else this.stepT = 0.1;
+    // (the steps themselves are his footfalls: see onFootfall)
 
     // out of the stairwell, a second, then the head comes round to the storage door
     if (this.phase === 'burst' && this.phaseT > 0.9 && this.mode === 'hide') faceTo = new THREE.Vector3(X1, 1.5, DOOR_Z);
+    // uneasy: the head snaps round to the storage door's glass
+    if (this.alertLook > 0 && this.phase !== 'detect' && this.phase !== 'lunge') faceTo = new THREE.Vector3(X1, (WIN.y0 + WIN.y1) / 2, DOOR_Z);
     this.faceTo = faceTo;
     this.faceK += ((faceTo ? 1 : 0) - this.faceK) * Math.min(1, dt * 2);
     this.lean += (leanWant - this.lean) * Math.min(1, dt * 1.5);
@@ -1567,6 +1721,7 @@ export class HotelLobby3D extends Phaser.Scene {
     }
     if (this.binLid) this.binLid.rotation.x = this.binOpen * 1.7;
     m.setPose(this.fpos.x, 0, this.fpos.z, this.fYaw);
+    this.footDust?.update(dt);
     m.update(dt, {
       speed: moved,
       maw: lunge ? 1 : this.phase === 'detect' ? 0.6 : 0.15,
@@ -1699,6 +1854,7 @@ export class HotelLobby3D extends Phaser.Scene {
       fx: this.fpos.x,
       fz: this.fpos.z,
       watchFor: this.watchFor,
+      sus: this.sus,
       outcome: outcome ?? t.outcome,
     });
     w.__lobby = t;

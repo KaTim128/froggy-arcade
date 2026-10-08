@@ -44,6 +44,7 @@ import { froggyLayer } from '../render/froggyLayer';
 import { drawPixelText } from '../render/pixelFont';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
 import { playJumpscare3D, prepareJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
+import { FootDust } from '../three/footDust';
 import { FroggyMonster } from '../three/froggyMonster';
 import { ThreeStage } from '../render/threeStage';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
@@ -192,6 +193,7 @@ function decal<M extends THREE.Material>(m: M, k = 1): M {
 export class NightRoad3D extends Phaser.Scene {
   private stage: ThreeStage | null = null;
   private monster: FroggyMonster | null = null;
+  private footDust: FootDust | null = null;
   private scare: Scare3D | null = null;
   private keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
   private jumpKeys: Phaser.Input.Keyboard.Key[] = [];
@@ -238,7 +240,6 @@ export class NightRoad3D extends Phaser.Scene {
   private fYaw = 0;
   private fMode: FrogMode = 'wait';
   private fHop = 0;
-  private fStepT = 0;
   private fSpeed = 0;
   private lostT = 0;
   private searchT = 0;
@@ -502,7 +503,9 @@ export class NightRoad3D extends Phaser.Scene {
       const c2: number[] = [];
       for (let i = 0; i < n; i++) {
         let a = R() * Math.PI * 2;
-        let e = 0.1 + Math.asin(R()) * 0.95;
+        // even over the whole sky, right down to the skyline (the old spread
+        // bunched them overhead and left the lower sky bare)
+        let e = 0.03 + Math.asin(R()) * 1.5;
         if (band) {
           // the Milky Way: a band tipped across the sky
           a = R() * Math.PI * 2;
@@ -524,7 +527,7 @@ export class NightRoad3D extends Phaser.Scene {
       return mat;
     };
     starLayer(1400, 1, false, true);
-    starLayer(700, 1, false, false);
+    starLayer(1300, 1, false, false);
     this.twinkle = starLayer(70, 2, true, false);
 
     // ---- THE MOON: a shaded disc with its seas and craters, and a soft
@@ -707,6 +710,16 @@ export class NightRoad3D extends Phaser.Scene {
 
     this.monster = new FroggyMonster(FROGGY_SCALE);
     S.add(this.monster.root);
+    // his steps are his feet: each sound, and its kick of grit, the moment a
+    // foot lands -- softly while he creeps, a splash in the water
+    this.footDust = new FootDust(S, 0x4a4a40);
+    this.monster.onFootfall = (_foot, at, hard) => {
+      if (!this.monster?.root.visible) return;
+      const wet = this.fy === 0 && this.inWater(at.x, at.z);
+      const g = this.gainAt(at.x, at.z) * (this.phase === 'creep' ? 0.3 : 1);
+      if (g > 0.03) audio.sfx(wet ? 'splash' : this.fSpeed > 4 ? 'hop_wet' : 'froggy_step', g * (wet ? 0.8 : 1) * (0.8 + hard * 0.3), this.placeOf(at.x, at.z));
+      if (!wet) this.footDust?.puff(at, hard, FROGGY_SCALE * 0.7);
+    };
     if (this.stage) prepareJumpscare3D(this.stage, this.monster);
   }
 
@@ -1632,6 +1645,9 @@ gl_Position = projectionMatrix * mvPosition;`,
     // pixel in the scene, and the road already carries a dozen)
     [[-6, Z0 + 2], [6, Z0 + 14], [-6, Z0 + 26], [6, Z0 + 38]].forEach(([x, z], i) => {
       box(lam(0x3a3e44), 0.14, 6, 0.14, x, 0, z);
+      // the arm out to the lamp head (without it the head hung in mid-air)
+      box(lam(0x4a4e54), 1.5, 0.1, 0.1, x - Math.sign(x) * 0.68, 5.92, z);
+      box(lam(0x4a4e54), 0.7, 0.08, 0.36, x - Math.sign(x) * 1.2, 5.92, z);
       box(new THREE.MeshBasicMaterial({ color: 0xffd9a0 }), 0.6, 0.12, 0.3, x - Math.sign(x) * 1.2, 5.8, z);
       if (i % 2 === 0) {
         const l = new THREE.PointLight(0xffc98a, 30, 16, 1.4);
@@ -1862,12 +1878,22 @@ gl_Position = projectionMatrix * mvPosition;`,
         void blink;
       }
     }
+    // (soft all round -- a flat sheet left a hard edge across the sky and
+    // blotted out the stars -- and drawn under the stars, not over them)
+    const glowTex = canvasTex(128, 64, (g) => {
+      const grd = g.createRadialGradient(64, 64, 4, 64, 64, 64);
+      grd.addColorStop(0, 'rgba(58,42,64,0.45)');
+      grd.addColorStop(1, 'rgba(58,42,64,0)');
+      g.fillStyle = grd;
+      g.fillRect(0, 0, 128, 64);
+    });
     const glow = new THREE.Mesh(
       new THREE.PlaneGeometry(220, 60),
-      new THREE.MeshBasicMaterial({ color: 0x3a2a40, transparent: true, opacity: 0.35, fog: false, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, fog: false, depthWrite: false }),
     );
     glow.position.set(0, 25, BACK_Z + 125);
     glow.rotation.y = Math.PI;
+    glow.renderOrder = -9.5;
     S.add(glow);
 
     // ---- THE TOWN CLOSES ROUND YOU.  Behind the arcade an alley, a fence and
@@ -2071,7 +2097,7 @@ gl_Position = projectionMatrix * mvPosition;`,
       const x = side * (RAIL_X + 0.7);
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 6, 6), pole);
       post.position.set(x, 3, z);
-      const arm = new THREE.Mesh(new THREE.BoxGeometry(2, 0.08, 0.08), pole);
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(2, 0.12, 0.12), new THREE.MeshLambertMaterial({ color: 0x4a4e54 }));
       arm.position.set(x - side * 1, 5.9, z);
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.12, 0.3), bulb);
       head.position.set(x - side * 1.9, 5.82, z);
@@ -3159,13 +3185,7 @@ gl_Position = projectionMatrix * mvPosition;`,
         while (diff > Math.PI) diff -= Math.PI * 2;
         while (diff < -Math.PI) diff += Math.PI * 2;
         this.fYaw += diff * Math.min(1, dt * 8);
-        this.fStepT += dt;
-        if (this.fStepT > (speed > 4 ? 0.3 : 0.55)) {
-          this.fStepT = 0;
-          // creeping, his feet go down softly -- barely there behind you
-          const g = this.gainAt(this.froggy.x, this.froggy.y) * (this.phase === 'creep' ? 0.3 : 1);
-          if (g > 0.03) audio.sfx(wet ? 'splash' : speed > 4 ? 'hop_wet' : 'froggy_step', g * (wet ? 0.8 : 1), this.placeOf(this.froggy.x, this.froggy.y));
-        }
+        // (his steps are his footfalls: see onFootfall)
       }
     }
     // HE LOOKS BACK.  Still, or creeping, or caught in your eye while he goes
@@ -3197,6 +3217,7 @@ gl_Position = projectionMatrix * mvPosition;`,
     // his eyes and his face are on you whenever he is after you, or you are
     // looking at him
     this.monster.lookAt(cam && (staring || creeping || ((hunting || watched) && this.seen)) ? cam : null);
+    this.footDust?.update(dt);
     this.monster.update(dt, {
       speed: this.fSpeed,
       maw: hunting ? 1 : revealing ? 0.25 + rise * 0.55 : staring ? 0.15 : creeping ? 0.08 : 0.3,

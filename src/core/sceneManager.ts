@@ -49,6 +49,8 @@ import { HideRoom3D } from '../scenes2d/HideRoom3D';
 import { Chase3D } from '../scenes2d/Chase3D';
 import { NightRoad3D } from '../scenes2d/NightRoad3D';
 import { HotelHall3D } from '../scenes2d/HotelHall3D';
+import { RooftopEscape } from '../scenes2d/RooftopEscape';
+import { ArrestEnding } from '../scenes2d/ArrestEnding';
 import { HotelLobby3D } from '../scenes2d/HotelLobby3D';
 import { OutroCutscene3D } from '../scenes2d/OutroCutscene3D';
 import { EndCard } from '../scenes2d/EndCard';
@@ -98,6 +100,8 @@ export function bootGame(): void {
       ExteriorDay,
       StreetWest,
       Hotel,
+      RooftopEscape,
+      ArrestEnding,
       MinigameScene,
       FroggyCharity,
       SecondBust,

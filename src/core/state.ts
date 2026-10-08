@@ -175,6 +175,14 @@ export interface GameState {
   checkedIn: boolean;
   /** Gone to bed in 612: the night picks up again at 3 AM, at the knocking. */
   hotelNight: boolean;
+  /**
+   * ---- AFTER THE HOTEL.  'police': out of the storage room alive, and the
+   * police outside -- the run comes back to the lobby with them there.
+   * 'escape': out through the broken window of 612, onto the roofs -- it
+   * comes back at the start of the rooftop run.  'escaped': away, and the
+   * hotel left wrecked, taped off and watched.
+   */
+  hotelAfter: 'none' | 'police' | 'escape' | 'escaped';
   settings: Settings;
 }
 
@@ -317,6 +325,7 @@ function defaultState(): GameState {
     reachedHotel: false,
     checkedIn: false,
     hotelNight: false,
+    hotelAfter: 'none',
     settings: { master: 80, music: 70, sfx: 85, moveStyle: 'stick', ...generalDefaults() },
   };
 }
@@ -412,6 +421,7 @@ class Store {
     fresh.prizeWave = Math.max(0, Math.floor(run.prizeWave ?? 0));
     fresh.playSeconds = Math.max(0, Number(run.playSeconds) || 0);
     fresh.items = Array.isArray(run.items) ? run.items.filter((i) => typeof i === 'string').slice(0, 3) : [];
+    fresh.hotelAfter = run.hotelAfter === 'police' || run.hotelAfter === 'escape' || run.hotelAfter === 'escaped' ? run.hotelAfter : 'none';
     fresh.timeOfDay = run.timeOfDay === 'evening' || run.timeOfDay === 'midnight' ? run.timeOfDay : 'day';
     this.state = fresh;
     // A saved unlimited run comes back unlimited, whatever the file says.
