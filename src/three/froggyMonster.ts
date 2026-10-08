@@ -614,6 +614,9 @@ export class FroggyMonster {
   /** Per arm: how far it has been swung out to keep it off his eyes. */
   private clear = [0, 0];
   private readonly eyeW = [new THREE.Vector3(), new THREE.Vector3()];
+  /** The mouth, kept clear the same way: the middle of the open jaw, and its radius. */
+  private readonly mouthW = new THREE.Vector3();
+  private mouthR = 0;
   private twitchIn = 2.5;
   private twitchT = 0;
   /** The current twitch: where the head snapped to, held and then let go. */
@@ -2713,6 +2716,11 @@ export class FroggyMonster {
     // an eye, and a margin round it
     const rEye = 0.108 * 1.14 * this.size * 1.7;
     for (let e = 0; e < 2; e++) this.eyes[e].getWorldPosition(this.eyeW[e]);
+    // AND THE MOUTH.  Opened, the jaw drops a long way in front of his chest,
+    // and an arm hanging across it cut the teeth in half: it is kept clear
+    // like the eyes are, sized to how far the jaw is open.
+    this.jaw.localToWorld(this.mouthW.set(0, -0.06, MOUTH_Z - JAW_PIVOT_Z));
+    this.mouthR = (0.16 + 0.12 * Math.min(1, Math.abs(this.jaw.rotation.x) * 1.5)) * this.size * 1.4;
     const p = this.tmp;
     const toEye = this.tmp2;
     const toP = this.tmp3;
@@ -2726,6 +2734,9 @@ export class FroggyMonster {
         if (toP.length() >= dist) continue;
         worst = Math.min(worst, toP.angleTo(toEye) / Math.atan(rEye / dist));
       }
+      toEye.copy(this.mouthW).sub(viewer);
+      const md = toEye.length();
+      if (toP.length() < md) worst = Math.min(worst, toP.angleTo(toEye) / Math.atan(this.mouthR / md));
       return worst;
     };
     const measure = (h: number): number => {
