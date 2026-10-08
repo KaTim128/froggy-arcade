@@ -500,6 +500,13 @@ export interface ClimbRig {
   feet: [THREE.Vector3, THREE.Vector3];
   /** [left, right] 0..1 hanging in the air rather than standing on anything: the toes point down. */
   hang?: [number, number];
+  /** The S-curve: the shoulders wrung round (+ to his right), and the pulling one dropped. */
+  twist?: number;
+  drop?: number;
+  /** 0..1 straining on the haul: a tremble through the back and arms. */
+  strain?: number;
+  /** Knees out, radians. */
+  splay?: number;
 }
 
 export interface HandGoal {
@@ -1649,7 +1656,7 @@ export class FroggyMonster {
     const hipRig = rig ? rig.hip / this.sizeW - SOLE : hipWalk;
     const hipAt = hipWalk + (hipRig - hipWalk) * rk;
     if (rig) this.root.updateMatrixWorld(true);
-    const splay = 0.4 * cr;
+    const splay = Math.max(0.4 * cr, (rig?.splay ?? 0) * rk);
     const cosSplay = Math.cos(splay);
     // THE LEGS, solved: each ankle put exactly where its foot has to be.
     for (let i = 0; i < 2; i++) {
@@ -1814,6 +1821,15 @@ export class FroggyMonster {
     // little with every step -- and lean out over the planted foot.
     this.torso.rotation.y = -pelvisYaw * 1.7 * (1 - cr);
     this.torso.rotation.z = -roll * 0.6 + gait * 0.02 * moving;
+    // Climbing, the back is an S: the shoulders wrung one way, the hips
+    // the other, the pulling shoulder dropped -- trembling while it hauls.
+    const climbTwist = rig ? (rig.twist ?? 0) * rk : 0;
+    const climbDrop = rig ? (rig.drop ?? 0) * rk : 0;
+    const shake = rig ? (rig.strain ?? 0) * rk * (Math.sin(this.breathT * 41) * 0.6 + Math.sin(this.breathT * 29 + 1) * 0.4) : 0;
+    this.torso.rotation.y += climbTwist;
+    this.hips.rotation.y -= climbTwist * 0.45;
+    this.torso.rotation.z += climbDrop + shake * 0.025;
+    this.torso.rotation.x += shake * 0.015;
 
     // The head hangs the other way, so the face stays level however far over he
     // is folded — that is the part that has to keep looking at you.  It also
@@ -1830,7 +1846,8 @@ export class FroggyMonster {
       -0.04 - Math.min(0.16, speed * 0.04) * (1 - rk) - this.lungeNow * 0.36 * (1 - rk) -
       // folded right over going across something, the head is lifted back
       // against the fold: the face stays on the room, which is worse
-      (rig ? Math.max(0, rig.pitch - 0.2) * 0.8 * rk : 0) +
+      // (all of it: the head stays level and staring however he heaves)
+      (rig ? Math.max(0, rig.pitch - 0.1) * 1.0 * rk : 0) +
       cr * 0.5 - this.leanNow * 0.3;
     // Craning: slow, small, side to side, and offset from the body's own sway
     // so the two never line up into something that looks mechanical.
@@ -1839,13 +1856,15 @@ export class FroggyMonster {
       // the head holds its line while the body wrings under it...
       pelvisYaw * 0.7 * (1 - cr) +
       // ...and gets round a turn before the body does
-      THREE.MathUtils.clamp(this.yawLag * 0.8, -0.7, 0.7);
+      THREE.MathUtils.clamp(this.yawLag * 0.8, -0.7, 0.7) -
+      // the gaze is locked: the head does not ride the wringing back
+      climbTwist;
     // and the head cocks: slowly over to one side and back, the way a thing
     // does that is listening for you
     this.neck.rotation.z =
       -gait * 0.05 + this.twitchTo.z * tw + Math.sin(this.breathT * 1.3 + 1.1) * 0.16 * peer +
       Math.sin(this.breathT * 0.37) * 0.09 * live +
-      this.tiltNow;
+      this.tiltNow - climbDrop - shake * 0.025;
     this.neck.rotation.x += this.peekNow * 0.6;
     // Over on its side to look into a gap -- rolled about the middle of the
     // head, not the root of the neck, so the face stays where the neck put
@@ -1892,7 +1911,8 @@ export class FroggyMonster {
     // all of it a fine fast shake, the effort of holding still.
     const mn = this.menaceNow * (1 - reach) * (1 - this.climbNow);
     if (Number.isNaN(this.neckBaseY)) this.neckBaseY = this.neck.position.y;
-    this.neck.position.y = this.neckBaseY;
+    // going over something, the head sinks down between the shoulders
+    this.neck.position.y = this.neckBaseY - 0.05 * this.climbNow;
     if (mn > 0.001) {
       const b = this.breathT;
       // in on a long pull, out in a rush: lowest, then up and held

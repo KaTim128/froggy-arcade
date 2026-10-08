@@ -68,6 +68,16 @@ export interface ClimbFrame {
   /** [left, right]. */
   feet: [ClimbFoot, ClimbFoot];
   hands: [ClimbPoint, ClimbPoint];
+  /**
+   * The S-curve: + wrings the shoulders toward his right.  The reaching side
+   * stretches long and the pulling side's shoulder drops (`drop`).
+   */
+  twist: number;
+  drop: number;
+  /** 0..1 straining: the slow haul, before the slide over. */
+  strain: number;
+  /** How far the knees go out, radians: frog legs, not a man's. */
+  splay: number;
 }
 
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
@@ -75,6 +85,20 @@ const ss = (v: number): number => {
   const t = clamp01(v);
   return t * t * (3 - 2 * t);
 };
+
+/**
+ * The hands' clock: in bursts.  Each stretch of it is mostly a dead stop --
+ * an arm hanging, stretched out, held -- and then a dart forward to the next
+ * grip.  The end points are kept, so a hand is still where it has to be when.
+ */
+function bursts(u: number, n = 7): number {
+  const x = clamp01(u) * n;
+  const i = Math.min(n - 1, Math.floor(x));
+  const f = x - i;
+  // 0.62 of each stretch nearly still, then the rest of it in a rush
+  const g = f < 0.62 ? f * 0.12 : 0.0744 + (1 - 0.0744) * ss((f - 0.62) / 0.38);
+  return (i + g) / n;
+}
 
 /** One place a hand or a foot is put, and when it is there. */
 interface Plant {
@@ -170,8 +194,8 @@ export function climbFrame(u: number, g: ClimbGeom): ClimbFrame {
   // ---- THE HIPS.
   const stand = 1.03 * S;
   // over the top: lower the taller it is, until he is right down on all fours
-  const onTop = h + (0.86 - 0.18 * tall) * S;
-  const foldTop = 0.95 + 0.4 * tall;
+  const onTop = h + (0.6 - 0.14 * tall) * S;
+  const foldTop = 1.2 + 0.35 * tall;
   // the top, from a bit in from each edge (all of it, if it is narrow)
   const mid = (a + b) / 2;
   const topIn = Math.min(a + 0.22 * S, mid);
@@ -200,23 +224,27 @@ export function climbFrame(u: number, g: ClimbGeom): ClimbFrame {
     } else if (u < tP) {
       // the haul: slow off the bottom, quick at the top
       const t = (u - tR) / dur(tR, tP);
-      const e = t * t * (2.2 - 1.2 * t);
+      // the hips hang back, stretched, while the arms take it...
+      const e = t * t * t * 0.35;
       s = inS + (pullS - inS) * ss(t);
       hip = stand * 0.88 + (pullY - stand * 0.88) * e;
       pitch = reachFold + 0.1 * ss(t);
     } else if (u < tO) {
       // over the edge: UP first, then in, so the hips go over the corner
       const t = (u - tP) / dur(tP, tO);
-      s = pullS + (topIn - pullS) * ss((t - 0.25) / 0.75);
-      hip = pullY + (onTop - pullY) * ss(t / 0.6);
+      // ...and then come up and over all at once
+      const from = stand * 0.88 + (pullY - stand * 0.88) * 0.35;
+      s = pullS + (topIn - pullS) * ss((t - 0.3) / 0.3);
+      hip = from + (onTop - from) * ss((t - 0.15) / 0.3);
       // (and he only folds over it once his hips are up past the edge)
       pitch =
         reachFold + 0.1 + (foldTop - reachFold - 0.1) * ss((t - 0.3) / 0.7);
     } else if (u < tC) {
       // across the top, low
       const t = (u - tO) / dur(tO, tC);
-      s = topIn + (topOut - topIn) * ss(t);
-      hip = onTop + Math.sin(Math.PI * t * 2) * 0.03 * S;
+      // the slide across: too smooth, too fast, the belly on the top
+      s = topIn + (topOut - topIn) * ss(t * 1.4);
+      hip = onTop + Math.sin(Math.PI * t * 2) * 0.015 * S;
       pitch = foldTop;
     } else if (u < tD) {
       // down the far side: OUT first, then down
@@ -389,8 +417,9 @@ export function climbFrame(u: number, g: ClimbGeom): ClimbFrame {
     },
     { ...letGo, on: tD + dur(tD, 1) * 0.2, off: 1 },
   ];
-  const lh = along(lHand, u, 0.2 * S);
-  const rh = along(rHand, u, 0.2 * S);
+  const uh = bursts(u);
+  const lh = along(lHand, uh, 0.2 * S);
+  const rh = along(rHand, uh, 0.2 * S);
   // on as they arrive at the edge the first time, off once they are clear of it
   const handW = () =>
     ss(u / 0.04) * (1 - ss((u - tD - dur(tD, 1) * 0.2) / (dur(tD, 1) * 0.6)));
@@ -399,12 +428,24 @@ export function climbFrame(u: number, g: ClimbGeom): ClimbFrame {
   const roll = (rf.swing - lf.swing) * 0.1;
 
   const k = ss(u / 0.05) * (1 - ss((u - 0.94) / 0.06));
+  // ---- THE S-CURVE.  The hand that is further on is the reaching side: that
+  // side of the back stretches long, the other shoulder -- the one pulling --
+  // drops and the spine wrings toward it.
+  const ahead = Math.max(-1, Math.min(1, (rh.s - lh.s) / (0.35 * S) + (rh.swing - lh.swing) * 0.6));
+  const twist = ahead * 0.38;
+  const drop = -ahead * 0.22;
+  // straining on the haul: the slow part, before the hips come
+  const strain = u > tR && u < tP + dur(tP, tO) * 0.15 ? Math.sin(Math.PI * clamp01((u - tR) / (dur(tR, tP) * 1.15))) : 0;
   return {
     k,
     s,
     hip,
     pitch,
     roll,
+    twist,
+    drop,
+    strain,
+    splay: 0.75 * k,
     feet: [
       { s: lFoot.s, y: lFoot.y, w: 1 - lf.swing, hang: lFoot.hang },
       { s: rFoot.s, y: rFoot.y, w: 1 - rf.swing, hang: rFoot.hang },
