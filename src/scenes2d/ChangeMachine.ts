@@ -59,9 +59,8 @@ export class ChangeMachine extends Phaser.Scene {
     this.add.rectangle(GAME_W / 2, 18, 300, 22, 0x2a2410).setStrokeStyle(2, PALETTE.gold);
     centerText(this, GAME_W / 2, 18, 'CHANGE MACHINE', PALETTE.gold, 16);
 
-    // Start with everything: most players are here to convert the lot, and the
-    // buttons are for the ones who are not.
-    this.amount = store.get().cash;
+    // Start from nothing, every time you come to it: you choose what goes in.
+    this.amount = 0;
     this.body = this.add.container(0, 0);
     this.render();
 
@@ -99,11 +98,24 @@ export class ChangeMachine extends Phaser.Scene {
     // how much: big buttons, minus on the left, plus on the right
     const y = 113;
     const opts = (w: number) => ({ width: w, height: 18 });
-    add(button(this, 40, y, '-10', () => this.bump(-10), opts(34)));
-    add(button(this, 78, y, '-1', () => this.bump(-1), opts(30)));
-    add(button(this, GAME_W / 2, y, 'ALL', () => this.bump(cash), opts(44)));
-    add(button(this, GAME_W - 78, y, '+1', () => this.bump(1), opts(30)));
-    add(button(this, GAME_W - 40, y, '+10', () => this.bump(10), opts(34)));
+    // -50 -10 -1 | RESET ALL | +1 +10 +50, evenly across the panel
+    const row: Array<[string, () => void, number]> = [
+      ['-50', () => this.bump(-50), 32],
+      ['-10', () => this.bump(-10), 32],
+      ['-1', () => this.bump(-1), 28],
+      ['RESET', () => this.bump(-this.amount), 40],
+      ['ALL', () => this.bump(cash), 32],
+      ['+1', () => this.bump(1), 28],
+      ['+10', () => this.bump(10), 32],
+      ['+50', () => this.bump(50), 32],
+    ];
+    const gap = 4;
+    const total = row.reduce((a, [, , w]) => a + w, 0) + gap * (row.length - 1);
+    let bx = GAME_W / 2 - total / 2;
+    for (const [label, fn, w] of row) {
+      add(button(this, bx + w / 2, y, label, fn, opts(w)));
+      bx += w + gap;
+    }
 
     const canFeed = this.amount >= 2 && this.amount <= cash;
     add(
@@ -149,7 +161,7 @@ export class ChangeMachine extends Phaser.Scene {
     this.traded = true;
     store.flush();
     audio.sfx('ticket_machine');
-    this.amount = store.get().cash;
+    this.amount = 0;
     this.render();
     // and say so, big, so there is no doubt it worked
     const done = centerText(this, GAME_W / 2, 96, `+${tokens} TOKENS!`, PALETTE.gold, 16).setDepth(10);
