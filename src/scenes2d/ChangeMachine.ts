@@ -18,8 +18,9 @@ import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { ledger } from '../core/ledger';
 import { tokensForCash } from '../game/content';
-import { button, centerText, text } from '../core/ui';
+import { button, centerText } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
+import { froggyLayer } from '../render/froggyLayer';
 
 export class ChangeMachine extends Phaser.Scene {
   private from = 'ArcadeHub';
@@ -48,11 +49,15 @@ export class ChangeMachine extends Phaser.Scene {
 
   create(): void {
     this.scene.bringToTop();
+    // the smooth overlay (Froggy at the counter) sits above the game canvas:
+    // dim him right down so he is not drawn over the panel
+    froggyLayer.setVisible(false);
     this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0.84).setOrigin(0, 0).setInteractive();
-    this.add.rectangle(GAME_W / 2, GAME_H / 2, 250, 140, PALETTE.ink).setStrokeStyle(1, PALETTE.gold);
-
-    centerText(this, GAME_W / 2, 30, 'CHANGE MACHINE', PALETTE.gold);
-    centerText(this, GAME_W / 2, 41, 'TOKENS ARE HALF WHAT YOU PUT IN', PALETTE.ash).setAlpha(0.8);
+    // A big friendly panel: nearly the whole screen, so every number and
+    // button is large enough to read and hit on a phone.
+    this.add.rectangle(GAME_W / 2, GAME_H / 2, 300, 168, PALETTE.ink).setStrokeStyle(2, PALETTE.gold);
+    this.add.rectangle(GAME_W / 2, 18, 300, 22, 0x2a2410).setStrokeStyle(2, PALETTE.gold);
+    centerText(this, GAME_W / 2, 18, 'CHANGE MACHINE', PALETTE.gold, 16);
 
     // Start with everything: most players are here to convert the lot, and the
     // buttons are for the ones who are not.
@@ -61,6 +66,9 @@ export class ChangeMachine extends Phaser.Scene {
     this.render();
 
     this.input.keyboard?.on('keydown-ESC', () => this.close());
+    this.input.keyboard?.on('keydown-ENTER', () => this.insert());
+    this.input.keyboard?.on('keydown-LEFT', () => this.bump(-1));
+    this.input.keyboard?.on('keydown-RIGHT', () => this.bump(1));
   }
 
   private render(): void {
@@ -68,40 +76,49 @@ export class ChangeMachine extends Phaser.Scene {
     const cash = store.get().cash;
     this.amount = Phaser.Math.Clamp(this.amount, 0, cash);
     const tokens = tokensForCash(this.amount);
+    const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => {
+      this.body.add(o);
+      return o;
+    };
 
-    this.body.add(text(this, 46, 58, `YOU HAVE $${cash}`, PALETTE.mossLight));
-    this.body.add(text(this, 46, 70, `TOKENS NOW ${ledger.balance()}`, PALETTE.gold));
+    // what you have, both currencies, in one line
+    add(centerText(this, GAME_W / 2 - 60, 38, `WALLET  $${cash}`, PALETTE.mossLight));
+    add(centerText(this, GAME_W / 2 + 60, 38, `TOKENS  ${ledger.balance()}`, PALETTE.gold));
+    add(centerText(this, GAME_W / 2, 49, 'EVERY $2 GIVES YOU 1 TOKEN', PALETTE.fog));
 
-    // The trade, spelled out, in the machine's own words — and inside its own
-    // panel.  "$260   ->   130 TOKENS" at sixteen pixels a character is 264px
-    // wide against a 250px box, so it ran off both ends of the machine: the
-    // numbers keep the big font and the words that label them go underneath in
-    // the small one, which fits at any amount the wallet can hold.
-    this.body.add(centerText(this, GAME_W / 2, 88, `$${this.amount}  ->  ${tokens}`, PALETTE.cream, 16));
-    this.body.add(centerText(this, GAME_W / 2, 102, 'CASH IN    ->    TOKENS OUT', PALETTE.ash).setAlpha(0.85));
+    // The trade, as two boxes: what goes in, and what comes out.
+    const box = (x: number, label: string, value: string, col: number, fill: number): void => {
+      add(this.add.rectangle(x, 76, 112, 38, fill).setStrokeStyle(2, col));
+      add(centerText(this, x, 64, label, col));
+      add(centerText(this, x, 81, value, PALETTE.cream, 16));
+    };
+    box(GAME_W / 2 - 72, 'YOU PUT IN', `$${this.amount}`, PALETTE.mossLight, 0x12301a);
+    box(GAME_W / 2 + 72, 'YOU GET', `${tokens} TOK`, PALETTE.gold, 0x302a10);
+    add(centerText(this, GAME_W / 2, 77, '>', PALETTE.cream, 16));
 
-    this.body.add(button(this, 60, 116, '-10', () => this.bump(-10), { width: 30, height: 13 }));
-    this.body.add(button(this, 94, 116, '-1', () => this.bump(-1), { width: 26, height: 13 }));
-    this.body.add(button(this, 226, 116, '+1', () => this.bump(1), { width: 26, height: 13 }));
-    this.body.add(button(this, 260, 116, '+10', () => this.bump(10), { width: 30, height: 13 }));
-    this.body.add(
-      button(this, GAME_W / 2, 116, 'ALL', () => this.bump(cash), { width: 36, height: 13 }),
-    );
+    // how much: big buttons, minus on the left, plus on the right
+    const y = 113;
+    const opts = (w: number) => ({ width: w, height: 18 });
+    add(button(this, 40, y, '-10', () => this.bump(-10), opts(34)));
+    add(button(this, 78, y, '-1', () => this.bump(-1), opts(30)));
+    add(button(this, GAME_W / 2, y, 'ALL', () => this.bump(cash), opts(44)));
+    add(button(this, GAME_W - 78, y, '+1', () => this.bump(1), opts(30)));
+    add(button(this, GAME_W - 40, y, '+10', () => this.bump(10), opts(34)));
 
     const canFeed = this.amount >= 2 && this.amount <= cash;
-    this.body.add(
-      button(this, GAME_W / 2 - 40, 142, 'INSERT', () => this.insert(), {
-        width: 64,
-        height: 14,
+    add(
+      button(this, GAME_W / 2 - 52, 143, canFeed ? `CHANGE $${this.amount}` : 'CHANGE', () => this.insert(), {
+        width: 96,
+        height: 22,
         fill: PALETTE.tealDark,
         disabled: !canFeed,
       }),
     );
-    this.body.add(button(this, GAME_W / 2 + 40, 142, 'BACK', () => this.close(), { width: 64, height: 14 }));
+    add(button(this, GAME_W / 2 + 52, 143, 'BACK', () => this.close(), { width: 96, height: 22 }));
 
-    if (cash === 0) {
-      this.body.add(
-        centerText(this, GAME_W / 2, 130, 'no cash. the man outside pays cash.', PALETTE.ash).setAlpha(0.8),
+    if (cash < 2) {
+      add(
+        centerText(this, GAME_W / 2, 163, cash === 0 ? 'No cash. The man outside pays cash.' : 'You need at least $2.', PALETTE.ember),
       );
     }
   }
@@ -134,9 +151,13 @@ export class ChangeMachine extends Phaser.Scene {
     audio.sfx('ticket_machine');
     this.amount = store.get().cash;
     this.render();
+    // and say so, big, so there is no doubt it worked
+    const done = centerText(this, GAME_W / 2, 96, `+${tokens} TOKENS!`, PALETTE.gold, 16).setDepth(10);
+    this.tweens.add({ targets: done, y: 88, alpha: 0, delay: 700, duration: 700, onComplete: () => done.destroy() });
   }
 
   private close(): void {
+    froggyLayer.setVisible(true);
     this.scene.get(this.from)?.events.emit('change-closed', this.traded);
     this.scene.stop();
   }
