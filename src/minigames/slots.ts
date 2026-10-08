@@ -41,7 +41,7 @@ import { ensureSlotSymbols, textureOf, type SymbolId } from './slotSymbols';
 import { buildTemple, GOLD as TEMPLE_GOLD, LAPIS, LAPIS_DK, type Temple } from './slotsTemple';
 import type { MinigameApi, MinigameModule } from './types';
 
-export const SPIN_COST = 2;
+export const SPIN_COST = 3;
 
 export type Tier = 'COMMON' | 'UNCOMMON' | 'RARE' | 'V.RARE' | 'WILD';
 
