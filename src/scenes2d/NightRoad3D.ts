@@ -502,7 +502,9 @@ export class NightRoad3D extends Phaser.Scene {
       const c2: number[] = [];
       for (let i = 0; i < n; i++) {
         let a = R() * Math.PI * 2;
-        let e = 0.1 + Math.asin(R()) * 0.95;
+        // even over the whole sky, right down to the skyline (the old spread
+        // bunched them overhead and left the lower sky bare)
+        let e = 0.03 + Math.asin(R()) * 1.5;
         if (band) {
           // the Milky Way: a band tipped across the sky
           a = R() * Math.PI * 2;
@@ -524,7 +526,7 @@ export class NightRoad3D extends Phaser.Scene {
       return mat;
     };
     starLayer(1400, 1, false, true);
-    starLayer(700, 1, false, false);
+    starLayer(1300, 1, false, false);
     this.twinkle = starLayer(70, 2, true, false);
 
     // ---- THE MOON: a shaded disc with its seas and craters, and a soft
@@ -1632,6 +1634,9 @@ gl_Position = projectionMatrix * mvPosition;`,
     // pixel in the scene, and the road already carries a dozen)
     [[-6, Z0 + 2], [6, Z0 + 14], [-6, Z0 + 26], [6, Z0 + 38]].forEach(([x, z], i) => {
       box(lam(0x3a3e44), 0.14, 6, 0.14, x, 0, z);
+      // the arm out to the lamp head (without it the head hung in mid-air)
+      box(lam(0x4a4e54), 1.5, 0.1, 0.1, x - Math.sign(x) * 0.68, 5.92, z);
+      box(lam(0x4a4e54), 0.7, 0.08, 0.36, x - Math.sign(x) * 1.2, 5.92, z);
       box(new THREE.MeshBasicMaterial({ color: 0xffd9a0 }), 0.6, 0.12, 0.3, x - Math.sign(x) * 1.2, 5.8, z);
       if (i % 2 === 0) {
         const l = new THREE.PointLight(0xffc98a, 30, 16, 1.4);
@@ -1862,12 +1867,22 @@ gl_Position = projectionMatrix * mvPosition;`,
         void blink;
       }
     }
+    // (soft all round -- a flat sheet left a hard edge across the sky and
+    // blotted out the stars -- and drawn under the stars, not over them)
+    const glowTex = canvasTex(128, 64, (g) => {
+      const grd = g.createRadialGradient(64, 64, 4, 64, 64, 64);
+      grd.addColorStop(0, 'rgba(58,42,64,0.45)');
+      grd.addColorStop(1, 'rgba(58,42,64,0)');
+      g.fillStyle = grd;
+      g.fillRect(0, 0, 128, 64);
+    });
     const glow = new THREE.Mesh(
       new THREE.PlaneGeometry(220, 60),
-      new THREE.MeshBasicMaterial({ color: 0x3a2a40, transparent: true, opacity: 0.35, fog: false, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, fog: false, depthWrite: false }),
     );
     glow.position.set(0, 25, BACK_Z + 125);
     glow.rotation.y = Math.PI;
+    glow.renderOrder = -9.5;
     S.add(glow);
 
     // ---- THE TOWN CLOSES ROUND YOU.  Behind the arcade an alley, a fence and
@@ -2071,7 +2086,7 @@ gl_Position = projectionMatrix * mvPosition;`,
       const x = side * (RAIL_X + 0.7);
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 6, 6), pole);
       post.position.set(x, 3, z);
-      const arm = new THREE.Mesh(new THREE.BoxGeometry(2, 0.08, 0.08), pole);
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(2, 0.12, 0.12), new THREE.MeshLambertMaterial({ color: 0x4a4e54 }));
       arm.position.set(x - side * 1, 5.9, z);
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.12, 0.3), bulb);
       head.position.set(x - side * 1.9, 5.82, z);
