@@ -55,8 +55,8 @@ export class PrizeExchange extends Phaser.Scene {
     this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0.84).setOrigin(0, 0).setInteractive();
     this.add.rectangle(GAME_W / 2, GAME_H / 2 - 2, 286, 168, PALETTE.ink).setStrokeStyle(1, PALETTE.mossLight);
 
-    centerText(this, GAME_W / 2, 14, 'WHAT HAVE YOU GOT?', PALETTE.mossLight);
-    centerText(this, GAME_W / 2, 24, 'he pays half of what the counter charges', PALETTE.ash).setAlpha(0.75);
+    centerText(this, GAME_W / 2, 13, 'WHAT HAVE YOU GOT?', PALETTE.mossLight);
+    centerText(this, GAME_W / 2, 22, 'he pays half of what the counter charges', PALETTE.ash).setAlpha(0.75);
 
     this.body = this.add.container(0, 0);
     this.render();
@@ -69,7 +69,7 @@ export class PrizeExchange extends Phaser.Scene {
     // The two tabs: the counter's prizes, and the pockets.
     for (const [i, t] of (['prizes', 'pockets'] as const).entries()) {
       this.body.add(
-        button(this, GAME_W / 2 - 36 + i * 72, 31, t === 'prizes' ? 'PRIZES' : 'POCKETS', () => {
+        button(this, GAME_W / 2 - 38 + i * 76, 36, t === 'prizes' ? 'PRIZES' : 'POCKETS', () => {
           this.tab = t;
           this.picked = null;
           this.note = '';
@@ -96,9 +96,9 @@ export class PrizeExchange extends Phaser.Scene {
     // Column headings, so the two numbers are never mistaken for each other.
     // They sit above the first row rather than on it: the list is seven long
     // now and it starts higher up the panel than it used to.
-    this.body.add(text(this, 30, 40, 'PRIZE', PALETTE.ash));
-    this.body.add(text(this, 150, 40, 'COST', PALETTE.ash));
-    this.body.add(text(this, 196, 40, 'HE PAYS', PALETTE.ash));
+    this.body.add(text(this, 30, 46, 'PRIZE', PALETTE.ash));
+    this.body.add(text(this, 150, 46, 'COST', PALETTE.ash));
+    this.body.add(text(this, 196, 46, 'HE PAYS', PALETTE.ash));
 
     if (carried.length === 0) {
       this.body.add(
@@ -109,7 +109,7 @@ export class PrizeExchange extends Phaser.Scene {
     // Everything you are carrying, not the first five of it: the shelf is
     // seven things long now and a truncated list hides prizes you own.
     carried.slice(0, PRIZES.length - 1).forEach((p, i) => {
-      const y = 50 + i * 12;
+      const y = 56 + i * 12;
       const sold = s.prizesSold.includes(p.id);
       const cash = cashFor(p);
 
@@ -138,7 +138,7 @@ export class PrizeExchange extends Phaser.Scene {
       centerText(
         this,
         GAME_W / 2,
-        156,
+        149,
         this.note
           ? this.note
           : pick
@@ -148,7 +148,7 @@ export class PrizeExchange extends Phaser.Scene {
       ),
     );
 
-    this.body.add(button(this, GAME_W / 2, 167, 'DONE', () => this.close(), { width: 60, height: 12 }));
+    this.body.add(button(this, GAME_W / 2, 161, 'DONE', () => this.close(), { width: 60, height: 11 }));
   }
 
   /**
@@ -188,20 +188,20 @@ export class PrizeExchange extends Phaser.Scene {
     const s = store.get();
     // (the counter's prizes are sold from the PRIZES tab; the camera is here)
     const held = heldItems(s).filter((id) => id === CAMERA_ITEM.id || itemDef(id)?.kind !== 'prize');
-    this.body.add(text(this, 30, 40, 'ITEM', PALETTE.ash));
-    this.body.add(text(this, 196, 40, 'HE PAYS', PALETTE.ash));
+    this.body.add(text(this, 30, 46, 'ITEM', PALETTE.ash));
+    this.body.add(text(this, 196, 46, 'HE PAYS', PALETTE.ash));
     if (held.length === 0) {
       this.body.add(centerText(this, GAME_W / 2, 88, 'your pockets are empty', PALETTE.fog).setAlpha(0.8));
     }
     held.forEach((id, i) => {
       const d = itemDef(id);
       if (!d) return;
-      const y = 50 + i * 14;
+      const y = 56 + i * 13;
       const key = `${id}#${i}`;
       this.body.add(this.add.rectangle(30, y, 10, 10, d.color).setOrigin(0, 0));
       this.body.add(text(this, 46, y + 2, d.name, PALETTE.cream));
       if (d.value <= 0) {
-        this.body.add(text(this, 196, y + 2, 'NOT FOR SALE', PALETTE.steel));
+        this.body.add(text(this, 168, y + 2, 'NOT FOR SALE', PALETTE.steel));
         this.body.add(
           button(this, 266, y + 5, 'WHY?', () => {
             this.note = d.thought;
@@ -224,12 +224,12 @@ export class PrizeExchange extends Phaser.Scene {
       centerText(
         this,
         GAME_W / 2,
-        156,
+        149,
         this.note ? this.note : pick ? `${pick.name}: $${pick.value}  ->  YOU'LL HAVE $${s.cash + pick.value}` : `you have $${s.cash}`,
         this.note ? PALETTE.cream : pick ? PALETTE.gold : PALETTE.fog,
       ).setMaxWidth(270),
     );
-    this.body.add(button(this, GAME_W / 2, 167, 'DONE', () => this.close(), { width: 60, height: 12 }));
+    this.body.add(button(this, GAME_W / 2, 161, 'DONE', () => this.close(), { width: 60, height: 11 }));
   }
 
   private pickItem(d: ItemDef, key: string): void {

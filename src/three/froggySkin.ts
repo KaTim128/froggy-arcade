@@ -89,11 +89,19 @@ export function roughen(
 
 const SIZE = 512;
 
-function canvas(): [HTMLCanvasElement, CanvasRenderingContext2D] {
+/**
+ * A canvas to paint on in SIZE units.  `hi` paints the same picture at twice
+ * the resolution (the context is scaled), so a face pressed against the lens
+ * keeps its pores and creases sharp instead of going to soft squares.
+ */
+function canvas(hi = false): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const c = document.createElement('canvas');
-  c.width = SIZE;
-  c.height = SIZE;
-  return [c, c.getContext('2d')!];
+  const k = hi ? 2 : 1;
+  c.width = SIZE * k;
+  c.height = SIZE * k;
+  const ctx = c.getContext('2d')!;
+  ctx.scale(k, k);
+  return [c, ctx];
 }
 
 function wrap(c: HTMLCanvasElement, repeat = 2): THREE.CanvasTexture {
@@ -101,7 +109,9 @@ function wrap(c: HTMLCanvasElement, repeat = 2): THREE.CanvasTexture {
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeat, repeat);
-  t.anisotropy = 4;
+  t.anisotropy = 8;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.magFilter = THREE.LinearFilter;
   return t;
 }
 
@@ -374,9 +384,210 @@ export interface FroggySkin {
   faceBump: THREE.Texture;
   /** Where it is wet, as a specular map. */
   wet: THREE.Texture;
+  /**
+   * The arms and hands: a TILEABLE hide (nothing is cut at the edge of the
+   * canvas, so it wraps round a limb with no seam), its relief, and a wet
+   * map for the slimy sheen.  The limb meshes carry UVs in world units --
+   * once round, a whole number of tiles; down the length, by the metre --
+   * so these are tiled by the geometry and left at repeat 1.
+   */
+  limb: THREE.Texture;
+  limbBump: THREE.Texture;
+  limbWet: THREE.Texture;
   /** Kept for anything still asking for the old names. */
   belly: THREE.Texture;
   bellyBump: THREE.Texture;
+}
+
+/**
+ * The finest layer, only there at the doubled resolution: hair-thin crease
+ * lines in crossing families (the crepe of old skin) and pinprick pores,
+ * painted the same on the colour and on the relief so the light finds them.
+ */
+function fineCreases(ctx: CanvasRenderingContext2D, seed: number, bump: boolean, k = 1): void {
+  const r = rng(seed * 7 + 3);
+  const dark = bump ? 'rgba(40,40,40,0.45)' : 'rgba(18,14,10,0.2)';
+  const lit = bump ? 'rgba(200,200,200,0.25)' : 'rgba(255,255,245,0.07)';
+  const save = ctx.lineWidth;
+  // crepe: very short, very fine, in families
+  for (let i = 0; i < Math.round(520 * k); i++) {
+    const x = r() * SIZE;
+    const y = r() * SIZE;
+    const a = r() * Math.PI;
+    for (let j = 0; j < 3; j++) {
+      const o = j * 1.1;
+      const L = 2.5 + r() * 4;
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = 0.35;
+      ctx.beginPath();
+      ctx.moveTo(x - Math.cos(a) * L + Math.sin(a) * o, y - Math.sin(a) * L - Math.cos(a) * o);
+      ctx.quadraticCurveTo(x + Math.sin(a) * (o + 0.6), y - Math.cos(a) * (o + 0.6), x + Math.cos(a) * L + Math.sin(a) * o, y + Math.sin(a) * L - Math.cos(a) * o);
+      ctx.stroke();
+      ctx.strokeStyle = lit;
+      ctx.lineWidth = 0.25;
+      ctx.stroke();
+    }
+  }
+  // pinprick pores
+  for (let i = 0; i < Math.round(14000 * k); i++) {
+    ctx.fillStyle = bump ? 'rgba(30,30,30,0.5)' : 'rgba(12,10,8,0.3)';
+    ctx.fillRect(r() * SIZE, r() * SIZE, 0.45, 0.45);
+  }
+  ctx.lineWidth = save;
+}
+
+/**
+ * Draw `fn` at (x, y) and again wherever it would run off an edge, so the
+ * canvas tiles with no seam.  `pad` is how far the mark reaches from its
+ * centre.
+ */
+function tiled(x: number, y: number, pad: number, fn: (x: number, y: number) => void): void {
+  for (const ox of [-SIZE, 0, SIZE]) {
+    if (ox < 0 ? x + ox + pad < 0 : ox > 0 ? x + ox - pad > SIZE : false) continue;
+    for (const oy of [-SIZE, 0, SIZE]) {
+      if (oy < 0 ? y + oy + pad < 0 : oy > 0 ? y + oy - pad > SIZE : false) continue;
+      fn(x + ox, y + oy);
+    }
+  }
+}
+
+/**
+ * THE LIMB HIDE, in three passes from one seed so they agree mark for mark:
+ * `color`, the relief (`bump`) and the damp (`wet`).
+ *
+ * An amphibian's arm, old and thin: soft mottling, a grain that runs DOWN
+ * the limb (v is the limb's length), rings of fine creasing across it, a
+ * pebbling of rounded tubercles with a lit top and a shadowed foot, pores
+ * between them, and a slime that sits in broad damp runs and beads on the
+ * tops of the bumps.
+ */
+function paintLimb(ctx: CanvasRenderingContext2D, seed: number, pass: 'color' | 'bump' | 'wet'): void {
+  const r = rng(seed);
+  const color = pass === 'color';
+  const bump = pass === 'bump';
+  ctx.fillStyle = color ? '#a6a6a6' : bump ? '#808080' : '#303030';
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  const blob = (x: number, y: number, rad: number, sy: number, inner: string): void =>
+    tiled(x, y, rad, (px, py) => {
+      const g = ctx.createRadialGradient(px, py, 0, px, py, rad);
+      g.addColorStop(0, inner);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(px, py, rad, rad * sy, 0, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  // mottling: big and soft, then smaller and browner
+  for (let i = 0; i < 46; i++) {
+    const x = r() * SIZE, y = r() * SIZE, rad = 36 + r() * 90, dark = r() < 0.55, k = r();
+    if (color) blob(x, y, rad, 1.3, dark ? `rgba(26,22,16,${0.18 + k * 0.12})` : `rgba(250,250,240,${0.1 + k * 0.1})`);
+    else if (bump) blob(x, y, rad, 1.3, dark ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)');
+    else blob(x, y, rad * 0.8, 1.6, `rgba(255,255,255,${0.25 + k * 0.4})`);
+  }
+  for (let i = 0; i < 90; i++) {
+    const x = r() * SIZE, y = r() * SIZE, rad = 5 + r() * 18, k = r();
+    if (color) blob(x, y, rad, 1.4, k < 0.6 ? 'rgba(70,52,36,0.2)' : 'rgba(150,160,130,0.12)');
+  }
+  // the grain: long faint streaks down the limb
+  for (let i = 0; i < 420; i++) {
+    const x = r() * SIZE, y = r() * SIZE, L = 20 + r() * 50, w = 0.7 + r() * 1.3, d = r() < 0.5, b1 = (r() - 0.5) * 3, b2 = (r() - 0.5) * 2;
+    tiled(x, y, L + 4, (px, py) => {
+      ctx.strokeStyle = bump ? (d ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.14)') : color ? (d ? 'rgba(20,16,12,0.08)' : 'rgba(255,255,245,0.06)') : 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.quadraticCurveTo(px + b1, py + L / 2, px + b2, py + L);
+      ctx.stroke();
+    });
+  }
+  // creases ACROSS the limb, in loose families, the way thin skin rucks:
+  // each line bowed and wavering, at its own length, the family tilted
+  for (let i = 0; i < 120; i++) {
+    const x = r() * SIZE, y = r() * SIZE, n = 2 + Math.floor(r() * 4), tilt = (r() - 0.5) * 0.7;
+    const lines: { oy: number; L: number; bow: number; w1: number; w2: number; a: number }[] = [];
+    for (let j = 0; j < n; j++) {
+      lines.push({ oy: j * (3 + r() * 2.5), L: 8 + r() * 22, bow: (r() - 0.5) * 9, w1: (r() - 0.5) * 3, w2: (r() - 0.5) * 3, a: 0.5 + r() * 0.5 });
+    }
+    if (pass === 'wet') continue;
+    tiled(x, y, 60, (px, py) => {
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(tilt);
+      for (const l of lines) {
+        const path = (dy: number): void => {
+          ctx.beginPath();
+          ctx.moveTo(-l.L, l.oy + dy + l.w1);
+          ctx.bezierCurveTo(-l.L * 0.35, l.oy + dy + l.bow, l.L * 0.35, l.oy + dy - l.bow * 0.4, l.L, l.oy + dy + l.w2);
+        };
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 1.1;
+        ctx.strokeStyle = bump ? `rgba(0,0,0,${0.45 * l.a})` : `rgba(16,12,10,${0.17 * l.a})`;
+        path(0);
+        ctx.stroke();
+        ctx.lineWidth = 0.8;
+        ctx.strokeStyle = bump ? `rgba(255,255,255,${0.25 * l.a})` : `rgba(255,255,245,${0.06 * l.a})`;
+        path(1.3);
+        ctx.stroke();
+      }
+      ctx.restore();
+    });
+  }
+  // tubercles: the amphibian pebbling, rounded, every size -- soft domes,
+  // lit on top and shading off into the skin, never a ring round them
+  for (let i = 0; i < 900; i++) {
+    const x = r() * SIZE, y = r() * SIZE, big = r() < 0.1, s = big ? 6 + r() * 7 : 2.2 + r() * 3.4, tint = r(), sy = 0.75 + r() * 0.5;
+    tiled(x, y, s * 1.6 + 2, (px, py) => {
+      const g = ctx.createRadialGradient(px - s * 0.25, py - s * 0.3, 0, px, py, s * 1.25);
+      if (bump) {
+        g.addColorStop(0, 'rgba(255,255,255,0.7)');
+        g.addColorStop(0.55, 'rgba(210,210,210,0.32)');
+        g.addColorStop(1, 'rgba(128,128,128,0)');
+      } else if (color) {
+        g.addColorStop(0, tint < 0.25 ? 'rgba(126,100,80,0.3)' : 'rgba(240,236,224,0.24)');
+        g.addColorStop(0.6, 'rgba(160,156,146,0.08)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+      } else {
+        // slime beads on the tops of the bumps
+        g.addColorStop(0, 'rgba(255,255,255,0.6)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+      }
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(px, py, s * 1.25, s * 1.25 * sy, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // a soft shadow at the foot, below the light
+      if (pass !== 'wet') {
+        const h = ctx.createRadialGradient(px + s * 0.25, py + s * 0.4, s * 0.6, px + s * 0.25, py + s * 0.4, s * 1.4);
+        h.addColorStop(0, 'rgba(0,0,0,0)');
+        h.addColorStop(0.6, bump ? 'rgba(0,0,0,0.18)' : 'rgba(12,10,8,0.08)');
+        h.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = h;
+        ctx.beginPath();
+        ctx.arc(px + s * 0.25, py + s * 0.4, s * 1.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+  }
+  // slime runs down the limb
+  if (pass === 'wet') {
+    for (let i = 0; i < 50; i++) {
+      const x = r() * SIZE, y = r() * SIZE, L = 30 + r() * 90, w = 1 + r() * 3, a = 0.25 + r() * 0.35, b1 = (r() - 0.5) * 8, b2 = (r() - 0.5) * 6;
+      tiled(x, y, L + 10, (px, py) => {
+        ctx.strokeStyle = `rgba(255,255,255,${a})`;
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.quadraticCurveTo(px + b1, py + L * 0.5, px + b2, py + L);
+        ctx.stroke();
+      });
+    }
+  }
+  // pores and grain at the pixel: dark pits, and dry where the slime is
+  for (let i = 0; i < 12000; i++) {
+    const x = r() * SIZE, y = r() * SIZE, s = 0.7 + r() * 1.1, lit = r() < 0.3;
+    ctx.fillStyle = bump ? 'rgba(20,20,20,0.5)' : color ? (lit ? 'rgba(255,255,250,0.12)' : 'rgba(12,10,8,0.32)') : 'rgba(0,0,0,0.45)';
+    ctx.fillRect(x, y, s, s);
+  }
 }
 
 let cached: FroggySkin | null = null;
@@ -387,18 +598,28 @@ let cached: FroggySkin | null = null;
  */
 export function froggySkin(): FroggySkin {
   if (cached) return cached;
-  const [c1, x1] = canvas();
+  const [c1, x1] = canvas(true);
   paintSkin(x1, '#a4a4a4', 11);
-  const [c2, x2] = canvas();
+  fineCreases(x1, 13, false);
+  const [c2, x2] = canvas(true);
   paintBump(x2, 11);
-  const [c3, x3] = canvas();
+  fineCreases(x2, 13, true);
+  const [c3, x3] = canvas(true);
   paintSkin(x3, '#a8a8a8', 29, 1.8);
   paintWear(x3, 53, false);
-  const [c4, x4] = canvas();
+  fineCreases(x3, 31, false, 1.6);
+  const [c4, x4] = canvas(true);
   paintBump(x4, 29, 1.8);
   paintWear(x4, 53, true);
+  fineCreases(x4, 31, true, 1.6);
   const [c5, x5] = canvas();
   paintWet(x5, 47);
+  const [c6, x6] = canvas(true);
+  paintLimb(x6, 61, 'color');
+  const [c7, x7] = canvas(true);
+  paintLimb(x7, 61, 'bump');
+  const [c8, x8] = canvas(true);
+  paintLimb(x8, 61, 'wet');
   cached = {
     // Tiled hard on the limbs, so a forearm gets real pores rather than three
     // smudges; the face gets its own, more deeply creased, tiled less.
@@ -407,6 +628,9 @@ export function froggySkin(): FroggySkin {
     face: wrap(c3, 1.6),
     faceBump: wrap(c4, 1.6),
     wet: wrap(c5, 2),
+    limb: wrap(c6, 1),
+    limbBump: wrap(c7, 1),
+    limbWet: wrap(c8, 1),
     belly: wrap(c3, 1.6),
     bellyBump: wrap(c4, 1.6),
   };

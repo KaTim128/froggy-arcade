@@ -50,7 +50,6 @@ export class ExteriorDay extends Phaser.Scene {
   private prompt!: Phaser.GameObjects.BitmapText;
   private promptPlate!: Phaser.GameObjects.Rectangle;
   private mutter!: Phaser.GameObjects.BitmapText;
-  private purse!: Phaser.GameObjects.BitmapText;
   private spot: Spot = null;
   private locked = false;
   private doorX = GAME_W / 2;
@@ -121,10 +120,8 @@ export class ExteriorDay extends Phaser.Scene {
     this.player.setSurface('gravel');
 
     // What you are carrying: cash and tokens, side by side and never added
-    // together -- the same HUD as inside -- and under it, how the job is going.
+    // together -- the same HUD as inside.
     new TokenHud(this);
-    this.purse = text(this, 6, 21, '', PALETTE.ash).setDepth(951);
-    this.refreshPurse();
     attachPockets(this, () => this.locked || this.busy());
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
@@ -138,7 +135,6 @@ export class ExteriorDay extends Phaser.Scene {
     // changed while it was open.
     this.events.on('exchange-closed', () => {
       this.checkFinished();
-      this.refreshPurse();
       if (store.get().timeOfDay === 'midnight' && this.time0 !== 'midnight') {
         // He packs up and goes; the light goes with him.
         this.locked = true;
@@ -291,14 +287,6 @@ export class ExteriorDay extends Phaser.Scene {
     return this.keys[g]?.some((k) => k.isDown) ?? false;
   }
 
-  private refreshPurse(): void {
-    // (what is on the shelf now: a fresh lot starts again at none sold)
-    const s = store.get();
-    const shelf = shelfStock(s).filter((p) => p.id !== CAMERA_PRIZE.id);
-    const sold = shelf.filter((p) => s.prizesSold.includes(p.id)).length;
-    this.purse.setText(`${sold}/${shelf.length} PRIZES SOLD`);
-  }
-
   /**
    * Everything on the shelf sold: nothing is said, and the game goes on.  The
    * case is restocked quietly, so the next time you are inside the arcade
@@ -311,7 +299,6 @@ export class ExteriorDay extends Phaser.Scene {
     if (!shelf.length || !shelf.every((p) => s.prizesSold.includes(p.id))) return;
     store.patch({ prizeWave: s.prizeWave + 1 });
     store.flush();
-    this.refreshPurse();
   }
 
   private interact(): void {
