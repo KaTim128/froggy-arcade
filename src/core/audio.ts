@@ -1241,6 +1241,18 @@ class AudioManager {
         noise(0.09, 0.17, 800);
         beep(140, 0.1, 0.09, 'square');
         break;
+      // A metal bin's lid lifted or let drop: a short tinny clank.
+      case 'bin_lid':
+        beep(880, 0.06, 0.05, 'square');
+        beep(1320, 0.12, 0.03, 'triangle', 0.01);
+        noise(0.05, 0.12, 3200);
+        break;
+      // A hand in a bin: paper and plastic crackling.
+      case 'bin_rummage':
+        noise(0.08, 0.1, 4200);
+        noise(0.06, 0.08, 2600, 0.09);
+        noise(0.07, 0.07, 5200, 0.2);
+        break;
       // Dynamite.  Low, long and clearly a different order of event.
       case 'boom':
         noise(0.55, 0.3, 520);
@@ -1792,6 +1804,8 @@ export type SfxName =
   | 'cha_ching'
   | 'throw_whoosh'
   | 'item_thud'
+  | 'bin_lid'
+  | 'bin_rummage'
   | 'boom'
   | 'heal_up'
   | 'poison_hiss'
