@@ -217,6 +217,11 @@ export class NightRoad3D extends Phaser.Scene {
   private boxes: Box[] = [];
   private posts: Circle[] = [];
   private waterMats: THREE.Texture[] = [];
+  private sky: THREE.Group | null = null;
+  /** Going to a sound he could place exactly: he comes at a run. */
+  private urgent = false;
+  /** The river's current and its glints, which run downstream (-x). */
+  private riverFlow: THREE.Texture[] = [];
 
   private froggy = new THREE.Vector2();
   private fy = 0;
@@ -275,6 +280,7 @@ export class NightRoad3D extends Phaser.Scene {
     this.phaseT = 0;
     this.clock = 0;
     this.fMode = 'wait';
+    this.urgent = false;
     this.scare = null;
     this.lines = [];
     this.y = this.vy = 0;
@@ -291,6 +297,7 @@ export class NightRoad3D extends Phaser.Scene {
     this.passT = 0;
     this.passBy = null;
     this.waterMats = [];
+    this.riverFlow = [];
     this.crouched = false;
     this.wasWet = false;
     this.counts = { rustle: 0, splash: 0, wade: 0 };
@@ -416,6 +423,12 @@ export class NightRoad3D extends Phaser.Scene {
     // navy at the horizon with the faint glow of the town in it, and paler
     // round the moon.  Stars of different sizes and colours, the brightest
     // twinkling, and the faint band of the Milky Way across it.
+    // (all of it hung on one group that rides with the camera: the dome is 400
+    // across and the far plane 420, so left at the world's origin its far side
+    // was clipped away to a black disc in the sky once you were down the road)
+    const sky = new THREE.Group();
+    S.add(sky);
+    this.sky = sky;
     const moonDir = new THREE.Vector3(-120, 120, -300).normalize();
     const domeGeo = new THREE.SphereGeometry(400, 40, 20);
     const dc: number[] = [];
@@ -438,7 +451,7 @@ export class NightRoad3D extends Phaser.Scene {
     domeGeo.setAttribute('color', new THREE.Float32BufferAttribute(dc, 3));
     const dome = new THREE.Mesh(domeGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
     dome.renderOrder = -10;
-    S.add(dome);
+    sky.add(dome);
 
     const starLayer = (n: number, size: number, bright: boolean, band: boolean): THREE.PointsMaterial => {
       const p2: number[] = [];
@@ -463,7 +476,7 @@ export class NightRoad3D extends Phaser.Scene {
       const mat = new THREE.PointsMaterial({ size, sizeAttenuation: false, vertexColors: true, fog: false, transparent: true, depthWrite: false });
       const pts = new THREE.Points(g2, mat);
       pts.renderOrder = -9;
-      S.add(pts);
+      sky.add(pts);
       return mat;
     };
     starLayer(1400, 1, false, true);
@@ -517,7 +530,7 @@ export class NightRoad3D extends Phaser.Scene {
     moonDisc.position.copy(moonDir).multiplyScalar(330);
     moonDisc.lookAt(0, 0, 0);
     moonDisc.renderOrder = -7;
-    S.add(moonDisc);
+    sky.add(moonDisc);
     const haloTex = canvasTex(64, 64, (g) => {
       const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
       grd.addColorStop(0, 'rgba(200,214,255,0.55)');
@@ -532,7 +545,7 @@ export class NightRoad3D extends Phaser.Scene {
     halo.position.copy(moonDir).multiplyScalar(335);
     halo.scale.set(90, 90, 1);
     halo.renderOrder = -8;
-    S.add(halo);
+    sky.add(halo);
 
     // ---- the ground: grass gone to seed, bare earth, pine needles
     const groundTex = canvasTex(128, 128, (g) => {
@@ -768,12 +781,46 @@ export class NightRoad3D extends Phaser.Scene {
       }
       this.ponds.push({ x, z, r });
     }
+    // THE RIVER MOVES.  Long streaks of current drawn along it, and over them a
+    // second, brighter layer of ripples and glints going a little faster and
+    // wobbling across -- two speeds against each other read as running water.
+    const current = canvasTex(128, 64, (g) => {
+      g.fillStyle = '#0a1620';
+      g.fillRect(0, 0, 128, 64);
+      for (let i = 0; i < 160; i++) {
+        const y = Math.floor(R() * 64);
+        g.fillStyle = i % 4 ? 'rgba(36,62,84,0.5)' : 'rgba(70,104,132,0.4)';
+        g.fillRect(Math.floor(R() * 128), y, 10 + Math.floor(R() * 26), 1);
+      }
+    });
+    current.wrapS = current.wrapT = THREE.RepeatWrapping;
+    current.repeat.set(5, 1.4);
+    const glints = canvasTex(128, 64, (g) => {
+      g.clearRect(0, 0, 128, 64);
+      for (let i = 0; i < 70; i++) {
+        const x = R() * 128;
+        const y = R() * 64;
+        g.strokeStyle = i % 3 ? 'rgba(120,150,190,0.35)' : 'rgba(200,215,240,0.45)';
+        g.beginPath();
+        g.ellipse(x, y, 3 + R() * 6, 0.6 + R() * 1.2, 0, Math.PI * 0.1, Math.PI * 0.9);
+        g.stroke();
+      }
+    });
+    glints.wrapS = glints.wrapT = THREE.RepeatWrapping;
+    glints.repeat.set(4, 1.2);
+    this.riverFlow = [current, glints];
+    const riverMat = decal(new THREE.MeshPhongMaterial({ color: 0x0d1c28, map: current, specular: 0x9ab0d0, shininess: 80, emissive: 0x02060a }), 3);
+    const glintMat = new THREE.MeshBasicMaterial({ map: glints, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
     for (const side of [-1, 1]) {
       const w = WORLD_X + 8 - RAIL_X;
-      const river = new THREE.Mesh(new THREE.PlaneGeometry(w, RIVER_HALF * 2), water);
+      const river = new THREE.Mesh(new THREE.PlaneGeometry(w, RIVER_HALF * 2), riverMat);
       river.rotation.x = -Math.PI / 2;
       river.position.set(side * (RAIL_X + w / 2), 0.006, RIVER_Z);
       S.add(river);
+      const sheen = new THREE.Mesh(new THREE.PlaneGeometry(w, RIVER_HALF * 2), glintMat);
+      sheen.rotation.x = -Math.PI / 2;
+      sheen.position.set(side * (RAIL_X + w / 2), 0.011, RIVER_Z);
+      S.add(sheen);
       // the banks: a lip of mud either side, with reeds along it
       for (const edge of [-1, 1]) {
         const bank = new THREE.Mesh(new THREE.BoxGeometry(w, 0.12, 0.6), new THREE.MeshLambertMaterial({ color: 0x231c13 }));
@@ -1280,7 +1327,57 @@ export class NightRoad3D extends Phaser.Scene {
     warm.position.set(0, postH - 0.6, HOTEL_Z + 1);
     S.add(warm);
     // the forecourt: flagstones out to where the rails end
-    const court = new THREE.Mesh(new THREE.PlaneGeometry(26, 12), decal(new THREE.MeshLambertMaterial({ color: 0x3a3a3c }), 1));
+    // Polished stone: big veined slabs in two tones laid as a chequer, a fine
+    // dark joint between them, and a gloss that takes the canopy's light.
+    const R2 = rng(77);
+    const slabTex = canvasTex(256, 256, (g) => {
+      const T = 64;
+      for (let ty = 0; ty < 4; ty++) {
+        for (let tx = 0; tx < 4; tx++) {
+          const light = (tx + ty) % 2 === 0;
+          g.fillStyle = light ? '#b8b0a2' : '#5c5650';
+          g.fillRect(tx * T, ty * T, T, T);
+          // soft cloud in the stone
+          for (let k = 0; k < 14; k++) {
+            g.fillStyle = light ? 'rgba(150,142,128,0.18)' : 'rgba(40,36,34,0.22)';
+            g.beginPath();
+            g.ellipse(tx * T + R2() * T, ty * T + R2() * T, 6 + R2() * 14, 4 + R2() * 9, R2() * 3, 0, Math.PI * 2);
+            g.fill();
+          }
+          // veins
+          g.strokeStyle = light ? 'rgba(110,100,90,0.45)' : 'rgba(170,160,148,0.3)';
+          g.lineWidth = 1;
+          g.beginPath();
+          let x = tx * T + R2() * T;
+          let y = ty * T;
+          g.moveTo(x, y);
+          for (let k = 0; k < 6; k++) {
+            x += (R2() - 0.5) * 18;
+            y += T / 6;
+            g.lineTo(Math.max(tx * T, Math.min(tx * T + T, x)), y);
+          }
+          g.stroke();
+          // a sheen along the top edge, a shadow along the bottom
+          g.fillStyle = 'rgba(255,250,240,0.12)';
+          g.fillRect(tx * T, ty * T, T, 2);
+          g.fillStyle = 'rgba(0,0,0,0.18)';
+          g.fillRect(tx * T, ty * T + T - 2, T, 2);
+        }
+      }
+      // the joints
+      g.fillStyle = '#1c1a18';
+      for (let k = 0; k <= 4; k++) {
+        g.fillRect(k * 64 - 1, 0, 2, 256);
+        g.fillRect(0, k * 64 - 1, 256, 2);
+      }
+    });
+    slabTex.wrapS = slabTex.wrapT = THREE.RepeatWrapping;
+    slabTex.repeat.set(26 / 4.8, 12 / 4.8);
+    slabTex.anisotropy = 4;
+    const court = new THREE.Mesh(
+      new THREE.PlaneGeometry(26, 12),
+      decal(new THREE.MeshPhongMaterial({ map: slabTex, color: 0xd8d2c8, specular: 0x6a6460, shininess: 90 }), 1),
+    );
     court.rotation.x = -Math.PI / 2;
     court.position.set(0, 0.015, HOTEL_Z + 4);
     S.add(court);
@@ -1297,7 +1394,12 @@ export class NightRoad3D extends Phaser.Scene {
     this.clock += dt;
     this.phaseT += dt;
     for (const t of this.waterMats) t.offset.set(this.clock * 0.012, Math.sin(this.clock * 0.3) * 0.02);
+    if (this.riverFlow.length === 2) {
+      this.riverFlow[0].offset.set(this.clock * 0.18, Math.sin(this.clock * 0.4) * 0.03);
+      this.riverFlow[1].offset.set(this.clock * 0.3, Math.sin(this.clock * 0.9) * 0.06 + this.clock * 0.01);
+    }
     this.stepRipples(dt);
+    this.sky?.position.copy(this.stage.camera.position);
     if (this.twinkle) this.twinkle.opacity = 0.7 + Math.sin(this.clock * 2.3) * 0.2 + Math.sin(this.clock * 5.1) * 0.1;
     if (this.busLight && this.busTube) {
       // the tube is not well: mostly on, now and then a stutter
@@ -1517,7 +1619,7 @@ export class NightRoad3D extends Phaser.Scene {
     this.rustleT = (0.5 - deep * 0.28) / pace;
     audio.sfx('leaf_rustle', Math.min(1, (0.25 + deep * 0.75) * pace));
     this.counts.rustle++;
-    this.noise((2 + deep * 8) * pace, this.pos.x, this.pos.y);
+    this.noise((3 + deep * 13) * pace, this.pos.x, this.pos.y, true);
   }
 
   private pushOutOfTrees(p: THREE.Vector2, r: number): void {
@@ -1604,7 +1706,7 @@ export class NightRoad3D extends Phaser.Scene {
       this.wasWet = true;
     }
     audio.sfx(wet ? 'splash' : 'footstep_gravel', wet ? 0.7 : 0.5);
-    this.noise(wet ? 20 : 8, this.pos.x, this.pos.y);
+    this.noise(wet ? 24 : 8, this.pos.x, this.pos.y, wet);
   }
 
   private startle(c: Crow): void {
@@ -1615,7 +1717,7 @@ export class NightRoad3D extends Phaser.Scene {
   }
 
   /** Something made a sound at (x, z) that carries `r` metres. */
-  private noise(r: number, x: number, z: number): void {
+  private noise(r: number, x: number, z: number, exact = false): void {
     if (this.phase !== 'chase' || this.fMode === 'wait') return;
     const d = Math.hypot(this.froggy.x - x, this.froggy.y - z);
     if (d > r) return;
@@ -1623,13 +1725,16 @@ export class NightRoad3D extends Phaser.Scene {
     // came from -- the further off, the rougher -- and goes to look there.
     // It never tells him where you are now, and while he cannot see you it
     // does not keep him on you: he has to find you with his eyes.
-    const blur = Math.min(6, 0.8 + d * 0.22);
+    // (leaves thrashing and water splashing are easy to place: he comes
+    // straight to them)
+    const blur = exact ? Math.min(1.5, 0.3 + d * 0.05) : Math.min(6, 0.8 + d * 0.22);
     const a = Math.random() * Math.PI * 2;
     const rr = Math.random() * blur;
     this.lastKnown.set(x + Math.cos(a) * rr, z + Math.sin(a) * rr);
     if (this.fMode === 'hunt') return;
     this.searchT = 0;
     this.fMode = 'investigate';
+    this.urgent = exact;
   }
 
   // ---------------------------------------------------------------- the story
@@ -1869,7 +1974,7 @@ export class NightRoad3D extends Phaser.Scene {
           break;
         case 'investigate':
           target = this.lastKnown;
-          speed = INVESTIGATE;
+          speed = this.urgent ? INVESTIGATE * 1.25 : INVESTIGATE;
           if (this.froggy.distanceTo(this.lastKnown) < 1.2) {
             this.fMode = 'search';
             this.searchT = 0;
@@ -1917,6 +2022,10 @@ export class NightRoad3D extends Phaser.Scene {
           }
           break;
       }
+      // YOU RUN, HE RUNS.  Your feet set his pace: whatever he is doing, he
+      // goes up into a run when you do -- just short of yours while he is
+      // on you, so running still buys distance but never much.
+      if (this.running && this.moving) speed = Math.max(speed, this.fMode === 'hunt' ? RUN * 0.98 : RUN * 0.85);
     }
 
     if (target && speed > 0) {

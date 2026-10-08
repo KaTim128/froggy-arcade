@@ -294,12 +294,13 @@ export class ExteriorDay extends Phaser.Scene {
     this.purse.setText(`${s.prizesSold.length}/${PRIZES.length} PRIZES SOLD`);
   }
 
-  /** Everything sold is the end of the job, and of the game. */
+  /** Everything sold is not the end: the night goes on.  Just a word on it. */
   private checkFinished(): void {
-    if (this.locked || !allPrizesSold(store.get().prizesSold)) return;
-    this.locked = true;
-    this.time.delayedCall(700, () => fadeToScene(this, 'TheEnd'));
+    if (this.locked || this.soldOut || !allPrizesSold(store.get().prizesSold)) return;
+    this.soldOut = true;
+    this.time.delayedCall(700, () => this.say('That was the last of it. Now what?'));
   }
+  private soldOut = false;
 
   private interact(): void {
     if (this.locked || this.busy() || !this.spot) return;
