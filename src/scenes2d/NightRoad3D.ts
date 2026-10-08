@@ -218,6 +218,8 @@ export class NightRoad3D extends Phaser.Scene {
   private posts: Circle[] = [];
   private waterMats: THREE.Texture[] = [];
   private sky: THREE.Group | null = null;
+  /** The warning beacon on the back of the arcade, turning. */
+  private beacon: { mesh: THREE.Mesh; light: THREE.PointLight } | null = null;
   /** Going to a sound he could place exactly: he comes at a run. */
   private urgent = false;
   /** The river's current and its glints, which run downstream (-x). */
@@ -652,6 +654,7 @@ export class NightRoad3D extends Phaser.Scene {
     this.buildLamps(S);
     this.buildBusStop(S);
     this.buildHotel(S);
+    this.buildTown(S, R);
 
     this.monster = new FroggyMonster(FROGGY_SCALE);
     S.add(this.monster.root);
@@ -875,8 +878,7 @@ export class NightRoad3D extends Phaser.Scene {
       const z = HOTEL_Z - 30 + R() * (BACK_Z + 40 - HOTEL_Z);
       spots.push({ x, z, r: 0.3 + R() * 0.2 });
     }
-    // Behind the start the road is shut by the dark: trees across it.
-    for (let k = 0; k < 24; k++) spots.push({ x: -20 + R() * 40, z: BACK_Z + 2 + R() * 6, r: 0.3 });
+    // (Behind the start is the town now -- see buildTown -- so no trees across it.)
 
     const bark = canvasTex(16, 64, (g) => {
       g.fillStyle = '#2a2018';
@@ -1213,6 +1215,240 @@ export class NightRoad3D extends Phaser.Scene {
   }
 
   /** Streetlights, alternating sides, with the arm out over the road. */
+  /**
+   * ---- BEHIND YOU: THE TOWN YOU RAN FROM.
+   *
+   * Turn round on the road and the arcade is there on your left, from the
+   * back: its service door and roll-up loading bay, vents and ducts, air
+   * conditioners on brackets and on the roof, pipes, dumpsters, a warning
+   * beacon, a ladder, its old sign dark.  Across the road, more of the town:
+   * shops and flats with a few windows lit, neon, the mouths of alleys, street
+   * lights going on up the road, and past all of it a skyline of lit windows
+   * that the fog cannot quite swallow.
+   *
+   * None of it can be reached.  The road's back edge (BACK_Z) is a hard stop
+   * on your position, whatever your height -- it is tested on where you are,
+   * not on what you collide with, so there is nothing to jump, climb or slip
+   * past -- and the world's sides (WORLD_X) are the same.  The town is all
+   * past that line.
+   */
+  private buildTown(S: THREE.Scene, R: () => number): void {
+    const Z0 = BACK_Z + 4;
+    const lam = (c: number, e = 0) => new THREE.MeshLambertMaterial({ color: c, emissive: e });
+    const box = (m: THREE.Material, w: number, h: number, d: number, x: number, y: number, z: number): THREE.Mesh => {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+      b.position.set(x, y + h / 2, z);
+      S.add(b);
+      return b;
+    };
+    /** A facade: brick or render, rows of windows, some lit. */
+    const facade = (cols: number, rows: number, base: string, lit: number, seed: number): THREE.CanvasTexture => {
+      let q = seed;
+      const RR = () => ((q = (q * 16807) % 2147483647) / 2147483647);
+      return canvasTex(cols * 16, rows * 20, (g) => {
+        g.fillStyle = base;
+        g.fillRect(0, 0, cols * 16, rows * 20);
+        for (let i = 0; i < cols * rows * 3; i++) {
+          g.fillStyle = 'rgba(0,0,0,0.18)';
+          g.fillRect(Math.floor(RR() * cols * 16), Math.floor(RR() * rows * 20), 4, 1);
+        }
+        for (let cx = 0; cx < cols; cx++) {
+          for (let ry = 0; ry < rows; ry++) {
+            const on = RR() < lit;
+            g.fillStyle = on ? (RR() < 0.7 ? '#ffd890' : '#a8d0ff') : '#0c0e14';
+            g.fillRect(cx * 16 + 4, ry * 20 + 5, 8, 11);
+            g.fillStyle = 'rgba(0,0,0,0.5)';
+            g.fillRect(cx * 16 + 4, ry * 20 + 10, 8, 1);
+          }
+        }
+      });
+    };
+    const faced = (tex: THREE.Texture, w: number, h: number, d: number, x: number, z: number, color = 0x8a8a90) => {
+      const side = new THREE.MeshLambertMaterial({ color: 0x1a1a20 });
+      const front = new THREE.MeshLambertMaterial({ map: tex, color, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.35 });
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [side, side, side, side, side, front]);
+      // the windowed face (-z) looks down the road, toward you
+      b.position.set(x, h / 2, z);
+      S.add(b);
+      return b;
+    };
+
+    // the road goes on into town, kerbs and all, and a lamp each side
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_HALF * 2, 60), lam(0x1e2024));
+    road.rotation.x = -Math.PI / 2;
+    road.position.set(0, 0.03, BACK_Z + 30);
+    S.add(road);
+    for (let z = BACK_Z + 3; z < BACK_Z + 60; z += 6) box(lam(0x8a7a3a), 0.15, 0.01, 2, 0, 0.035, z);
+    for (const sx of [-1, 1]) box(lam(0x3a3c40), 2.4, KERB_H, 60, sx * (ROAD_HALF + 1.2), 0, BACK_Z + 30);
+    // (only two of them really light anything: every real light costs every
+    // pixel in the scene, and the road already carries a dozen)
+    [[-6, Z0 + 2], [6, Z0 + 14], [-6, Z0 + 26], [6, Z0 + 38]].forEach(([x, z], i) => {
+      box(lam(0x3a3e44), 0.14, 6, 0.14, x, 0, z);
+      box(new THREE.MeshBasicMaterial({ color: 0xffd9a0 }), 0.6, 0.12, 0.3, x - Math.sign(x) * 1.2, 5.8, z);
+      if (i % 2 === 0) {
+        const l = new THREE.PointLight(0xffc98a, 30, 16, 1.4);
+        l.position.set(x - Math.sign(x) * 1.2, 5.5, z);
+        S.add(l);
+      }
+    });
+
+    // ---- THE ARCADE, FROM BEHIND (your left, turned round: +x)
+    const ax = 15;
+    const az = Z0 + 10;
+    const aw = 18;
+    const ad = 16;
+    const ah = 8;
+    const brick = canvasTex(64, 64, (g) => {
+      g.fillStyle = '#3a2a2e';
+      g.fillRect(0, 0, 64, 64);
+      for (let row = 0; row < 16; row++) {
+        for (let x = (row % 2) * -4; x < 64; x += 8) {
+          g.fillStyle = ['#4a3036', '#42292e', '#523840'][(row * 7 + x) % 3];
+          g.fillRect(x + 1, row * 4 + 1, 6, 2);
+        }
+      }
+    });
+    brick.wrapS = brick.wrapT = THREE.RepeatWrapping;
+    brick.repeat.set(aw / 2, ah / 2);
+    const brickMat = new THREE.MeshLambertMaterial({ map: brick });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(aw, ah, ad), brickMat);
+    body.position.set(ax, ah / 2, az + ad / 2);
+    S.add(body);
+    const backZ = az - 0.01; // the face toward you
+    const steel = lam(0x5a6068);
+    const dark = lam(0x1a1c20);
+    // the service door, with a lit sign over it
+    box(lam(0x4a5058), 1.1, 2.2, 0.08, ax - 5, 0, backZ - 0.04);
+    box(lam(0x8a8e94), 0.1, 0.06, 0.06, ax - 4.65, 1.05, backZ - 0.1);
+    box(new THREE.MeshBasicMaterial({ color: 0x3fe39b }), 0.6, 0.18, 0.04, ax - 5, 2.45, backZ - 0.06);
+    // the loading bay: a ribbed roll-up shutter, a dock lip, bollards
+    box(dark, 4, 3.4, 0.1, ax + 1.5, 0, backZ - 0.03);
+    for (let k = 0; k < 11; k++) box(lam(0x6a7078), 3.8, 0.06, 0.04, ax + 1.5, 0.2 + k * 0.3, backZ - 0.09);
+    box(lam(0x2a2c30), 4.6, 0.9, 0.9, ax + 1.5, 0, backZ - 0.45);
+    for (const bx of [ax - 0.9, ax + 3.9]) box(lam(0xd8b020), 0.2, 1, 0.2, bx, 0, backZ - 1.2);
+    // vents and a duct running up the wall
+    for (const [vx, vy] of [[ax - 7.5, 4.2], [ax - 2.4, 5.6], [ax + 5.5, 4.8]]) {
+      box(steel, 1, 0.6, 0.12, vx, vy, backZ - 0.06);
+      for (let k = 0; k < 4; k++) box(dark, 0.9, 0.04, 0.02, vx, vy + 0.1 + k * 0.12, backZ - 0.13);
+    }
+    box(steel, 0.5, ah - 1, 0.5, ax + 7.8, 0.6, backZ - 0.3);
+    // pipes: two down the wall, one along under the eaves
+    for (const px of [ax - 3.4, ax - 3.1]) {
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, ah, 8), lam(0x6a4a30));
+      pipe.position.set(px, ah / 2, backZ - 0.12);
+      S.add(pipe);
+    }
+    const run = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, aw - 1, 8), lam(0x4a5058));
+    run.rotation.z = Math.PI / 2;
+    run.position.set(ax, ah - 0.6, backZ - 0.14);
+    S.add(run);
+    // air conditioners: one on brackets, two on the roof
+    box(lam(0x9aa0a6), 1.2, 0.8, 0.7, ax - 7.2, 2.4, backZ - 0.4);
+    box(dark, 1.0, 0.04, 0.6, ax - 7.2, 2.4, backZ - 0.4);
+    const fanMat = lam(0x30343a);
+    const fan = new THREE.Mesh(new THREE.CircleGeometry(0.3, 14), fanMat);
+    fan.rotation.y = Math.PI;
+    fan.position.set(ax - 7.2, 2.8, backZ - 0.76);
+    S.add(fan);
+    for (const rx of [ax - 4, ax + 4]) {
+      box(lam(0x8a9096), 2, 1.1, 1.4, rx, ah, az + 2);
+      box(fanMat, 0.9, 0.05, 0.9, rx, ah + 1.1, az + 2);
+    }
+    // a ladder up to the roof
+    for (const lx of [ax + 6.4, ax + 6.9]) box(steel, 0.06, ah, 0.06, lx, 0, backZ - 0.2);
+    for (let k = 0; k < 16; k++) box(steel, 0.5, 0.04, 0.04, ax + 6.65, 0.4 + k * 0.48, backZ - 0.2);
+    // dumpsters and bags
+    for (const [dx, col] of [[ax - 1.2, 0x2f6a3e], [ax - 3.0 + 7, 0x2a4a7a]] as const) {
+      box(lam(col), 1.9, 1.2, 1.1, dx - 3, 0, backZ - 0.9);
+      box(lam(0x1c2a20), 2.0, 0.08, 1.2, dx - 3, 1.2, backZ - 0.9);
+    }
+    for (let k = 0; k < 5; k++) {
+      const bag = new THREE.Mesh(new THREE.SphereGeometry(0.3 + R() * 0.15, 8, 6), lam(0x16181c));
+      bag.position.set(ax - 5.5 + R() * 2, 0.28, backZ - 0.8 - R() * 0.8);
+      S.add(bag);
+    }
+    // the warning beacon over the bay, turning (see tick), and the old sign, dark
+    const beacon = box(new THREE.MeshBasicMaterial({ color: 0xff3020 }), 0.25, 0.25, 0.25, ax + 1.5, 3.7, backZ - 0.2);
+    const beaconL = new THREE.PointLight(0xff3020, 6, 9, 1.6);
+    beaconL.position.set(ax + 1.5, 3.8, backZ - 0.8);
+    S.add(beaconL);
+    this.beacon = { mesh: beacon, light: beaconL };
+    const sign = canvasTex(128, 24, (g) => {
+      g.fillStyle = '#100810';
+      g.fillRect(0, 0, 128, 24);
+      g.font = 'bold 15px monospace';
+      g.fillStyle = '#7a2a5a';
+      g.fillText('FROGGY ARCADE', 4, 18);
+    });
+    const signM = new THREE.Mesh(new THREE.PlaneGeometry(7, 1.3), new THREE.MeshBasicMaterial({ map: sign, color: 0x9a6a8a }));
+    signM.rotation.y = Math.PI;
+    signM.position.set(ax, ah - 1.5, backZ - 0.05);
+    S.add(signM);
+    // a security light over the door, throwing a pool on the yard
+    const sec = new THREE.PointLight(0xd8e4ff, 14, 12, 1.5);
+    sec.position.set(ax - 5, 3.2, backZ - 1.2);
+    S.add(sec);
+    box(new THREE.MeshBasicMaterial({ color: 0xe8f0ff }), 0.4, 0.2, 0.2, ax - 5, 3.1, backZ - 0.15);
+
+    // ---- ACROSS THE ROAD (your right: -x): a row of shops and flats, alleys
+    // between them, and neon
+    const blocks: Array<[number, number, number, number, string, number]> = [
+      // x, z, width, height, wall colour, lit fraction
+      [-11, Z0 + 4, 7, 9, '#4a4248', 0.35],
+      [-11, Z0 + 14, 6, 13, '#3a3e48', 0.25],
+      [-12, Z0 + 25, 8, 7, '#504038', 0.4],
+      [-11, Z0 + 36, 7, 16, '#383840', 0.3],
+      [-13, Z0 + 48, 9, 11, '#463a40', 0.3],
+    ];
+    blocks.forEach(([x, z, w, h, colr, lit], i) => {
+      const t = facade(Math.round(w / 1.3), Math.round(h / 2.2), colr, lit, 31 + i * 17);
+      const b = new THREE.Mesh(new THREE.BoxGeometry(8, h, w), [
+        new THREE.MeshLambertMaterial({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.35 }),
+        new THREE.MeshLambertMaterial({ color: 0x1a1a20 }),
+        new THREE.MeshLambertMaterial({ color: 0x1a1a20 }),
+        new THREE.MeshLambertMaterial({ color: 0x1a1a20 }),
+        new THREE.MeshLambertMaterial({ color: 0x1a1a20 }),
+        new THREE.MeshLambertMaterial({ color: 0x1a1a20 }),
+      ]);
+      // the windowed face is +x: toward the road
+      b.position.set(x - 4, h / 2, z);
+      S.add(b);
+    });
+    // neon: a bar, a laundrette, a noodle place
+    for (const [z, y, colr, w] of [[Z0 + 4, 3.2, 0xff3fa0, 2.4], [Z0 + 25, 2.8, 0x3fd8ff, 3], [Z0 + 36, 3.6, 0xffb040, 2]] as const) {
+      box(new THREE.MeshBasicMaterial({ color: colr, fog: false }), 0.08, 0.5, w, -6.9, y, z);
+      if (z === Z0 + 4) {
+        const nl = new THREE.PointLight(colr, 6, 8, 1.8);
+        nl.position.set(-6.3, y, z);
+        S.add(nl);
+      }
+    }
+    // an awning and a shop window, lit, at street level
+    box(lam(0x6a1a28), 1.2, 0.1, 5, -7.6, 2.6, Z0 + 4);
+    box(new THREE.MeshBasicMaterial({ color: 0x2a3a48 }), 0.05, 1.6, 4, -6.98, 0.5, Z0 + 4);
+
+    // ---- FAR OFF: the rest of the town, a skyline of lit windows the fog
+    // only half takes, and the glow of it on the low cloud
+    for (let k = 0; k < 22; k++) {
+      const x = -70 + k * 6.5 + (R() - 0.5) * 3;
+      const h = 14 + R() * 30;
+      const t = facade(4, Math.round(h / 3), '#141820', 0.22, 101 + k);
+      const tower = faced(t, 5 + R() * 3, h, 5, x, BACK_Z + 95 + R() * 25, 0x8088a0);
+      (tower.material as THREE.Material[]).forEach((m) => ((m as THREE.MeshLambertMaterial).fog = false));
+      if (R() < 0.3) {
+        const blink = box(new THREE.MeshBasicMaterial({ color: 0xff2a2a, fog: false }), 0.4, 0.4, 0.4, x, h, tower.position.z);
+        void blink;
+      }
+    }
+    const glow = new THREE.Mesh(
+      new THREE.PlaneGeometry(220, 60),
+      new THREE.MeshBasicMaterial({ color: 0x3a2a40, transparent: true, opacity: 0.35, fog: false, depthWrite: false }),
+    );
+    glow.position.set(0, 25, BACK_Z + 125);
+    glow.rotation.y = Math.PI;
+    S.add(glow);
+  }
+
   private buildLamps(S: THREE.Scene): void {
     const pole = new THREE.MeshLambertMaterial({ color: 0x3a3e44 });
     const bulb = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
@@ -1400,6 +1636,11 @@ export class NightRoad3D extends Phaser.Scene {
     }
     this.stepRipples(dt);
     this.sky?.position.copy(this.stage.camera.position);
+    if (this.beacon) {
+      const on = Math.sin(this.clock * 6) > 0.2;
+      this.beacon.light.intensity = on ? 6 : 0.3;
+      (this.beacon.mesh.material as THREE.MeshBasicMaterial).color.setHex(on ? 0xff3020 : 0x401008);
+    }
     if (this.twinkle) this.twinkle.opacity = 0.7 + Math.sin(this.clock * 2.3) * 0.2 + Math.sin(this.clock * 5.1) * 0.1;
     if (this.busLight && this.busTube) {
       // the tube is not well: mostly on, now and then a stutter
