@@ -291,18 +291,49 @@ export class Hotel extends Phaser.Scene {
     this.reflection = this.add.container(0, 0).setDepth(2);
     const shape = this.make.graphics({}, false).fillRect(m.x, m.y, m.w, m.h);
     this.reflection.setMask(shape.createGeometryMask());
-    const body = [
+    const body: Phaser.GameObjects.GameObject[] = [
       this.add.rectangle(0, 0, 10, 8, PALETTE.rust).setOrigin(0.5, 1),
       this.add.rectangle(0, -8, 12, 12, PALETTE.brownLight).setOrigin(0.5, 1),
-      this.add.rectangle(0, -20, 8, 8, PALETTE.cream).setOrigin(0.5, 1),
-      this.add.rectangle(0, -22, 10, 5, PALETTE.brown).setOrigin(0.5, 1),
-      // a face, in the mirror: tired eyes, a flat mouth
-      this.add.rectangle(-2, -24, 1, 1, 0x2a1a10).setOrigin(0, 0),
-      this.add.rectangle(1, -24, 1, 1, 0x2a1a10).setOrigin(0, 0),
-      this.add.rectangle(-2, -23, 1, 1, 0x9a7a6a).setOrigin(0, 0),
-      this.add.rectangle(1, -23, 1, 1, 0x9a7a6a).setOrigin(0, 0),
-      this.add.rectangle(-1, -21, 3, 1, 0x8a5a4a).setOrigin(0, 0),
     ];
+    // The face, drawn pixel by pixel: a proper head with ears, a hair cap and
+    // fringe, eyes with a glint under brows, a little blush and a tired mouth.
+    const face = this.add.graphics();
+    const px = (x: number, y: number, w: number, h: number, c: number): void => {
+      face.fillStyle(c, 1).fillRect(x, y, w, h);
+    };
+    const SKIN = 0xf2d2b0;
+    const SHADE = 0xd8b08c;
+    px(-2, -21, 4, 2, SHADE); // neck
+    px(-4, -31, 8, 10, SKIN); // head
+    px(-5, -29, 1, 6, SKIN); // cheeks, rounding it out
+    px(4, -29, 1, 6, SKIN);
+    px(-3, -21, 6, 1, SKIN); // chin
+    px(-6, -27, 1, 3, SHADE); // ears
+    px(5, -27, 1, 3, SHADE);
+    px(3, -30, 2, 8, SHADE); // the shadow side of the face
+    // hair: a cap, a side part, a fringe, sideburns
+    px(-5, -33, 10, 3, PALETTE.brown);
+    px(-4, -34, 8, 1, PALETTE.brown);
+    px(-5, -30, 2, 2, PALETTE.brown);
+    px(1, -30, 4, 1, PALETTE.brown);
+    px(-5, -28, 1, 2, PALETTE.brown);
+    px(4, -28, 1, 2, PALETTE.brown);
+    px(-2, -33, 3, 1, 0x8a6040); // a shine on the hair
+    // brows, eyes (dark, with a glint), tired bags under them
+    px(-3, -28, 2, 1, 0x5a3a24);
+    px(1, -28, 2, 1, 0x5a3a24);
+    px(-3, -27, 2, 2, 0x2a1a10);
+    px(1, -27, 2, 2, 0x2a1a10);
+    px(-3, -27, 1, 1, 0xffffff);
+    px(1, -27, 1, 1, 0xffffff);
+    px(-3, -25, 2, 1, 0xe0b898);
+    px(1, -25, 2, 1, 0xe0b898);
+    // nose, blush, and a small flat mouth
+    px(0, -25, 1, 2, SHADE);
+    px(-4, -24, 1, 1, 0xf0a090);
+    px(3, -24, 1, 1, 0xf0a090);
+    px(-1, -22, 3, 1, 0x9a5a4a);
+    body.push(face);
     this.reflection.add(body);
     // the glass over it: a sheen
     const sheen = this.add.graphics().setDepth(3);
