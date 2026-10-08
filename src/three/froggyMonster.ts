@@ -2669,6 +2669,15 @@ export class FroggyMonster {
    * smallest one that works and holds it.
    */
   private keepEyesClear(viewer: THREE.Vector3 | null, dt: number): void {
+    // Only when his face is turned to you: with it turned away -- down behind
+    // a counter, into a bin -- there is no stare to keep clear, and swinging an
+    // arm out of the way only threw it up in the air.
+    if (viewer) {
+      this.head.updateWorldMatrix(true, false);
+      const fwd = this.tmp.set(0, 0, 1).transformDirection(this.head.matrixWorld);
+      const to = this.tmp2.copy(viewer).sub(this.head.getWorldPosition(this.tmp3)).normalize();
+      if (fwd.dot(to) < 0.35) viewer = null;
+    }
     for (let h = 0; h < 2; h++) {
       const out = h === 0 ? -1 : 1;
       if (!viewer) this.clear[h] = Math.max(0, this.clear[h] - dt * 1.5);
