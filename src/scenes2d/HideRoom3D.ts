@@ -4797,8 +4797,16 @@ export class HideRoom3D extends Phaser.Scene {
         pitch: f.pitch,
         roll: f.roll,
         top: this.climb!.top,
-        feet: [this.climbPoint(f.feet[0].s, f.feet[0].y), this.climbPoint(f.feet[1].s, f.feet[1].y)],
+        // (splayed: the feet go out wide to the sides, gripping, not under him)
+        feet: [
+          this.climbPoint(f.feet[0].s, f.feet[0].y, -0.24 * size * f.splay),
+          this.climbPoint(f.feet[1].s, f.feet[1].y, 0.24 * size * f.splay),
+        ],
         hang: [f.feet[0].hang, f.feet[1].hang],
+        twist: f.twist,
+        drop: f.drop,
+        strain: f.strain,
+        splay: f.splay,
       },
       hands: [hand(0), hand(1)],
     };

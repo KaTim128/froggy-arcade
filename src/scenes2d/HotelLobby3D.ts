@@ -28,7 +28,8 @@ import { froggyLayer } from '../render/froggyLayer';
 import { drawPixelText } from '../render/pixelFont';
 import { playJumpscare, SCARE_MS } from '../froggy/jumpscare';
 import { playJumpscare3D, type Scare3D } from '../froggy/jumpscare3d';
-import { FroggyMonster } from '../three/froggyMonster';
+import { FroggyMonster, type ClimbRig, type HandGoal } from '../three/froggyMonster';
+import { climbFrame, climbSeconds, type ClimbGeom } from '../three/froggyClimb';
 import { ThreeStage } from '../render/threeStage';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { touchControls } from '../ui/touchControls';
@@ -71,6 +72,16 @@ interface Leg {
   scan?: boolean;
   /** Lift the bin's lid while he is there. */
   bin?: boolean;
+  /** Get there by going OVER something this high, between these distances along the way. */
+  over?: { top: number; near: number; far: number };
+}
+
+interface LobbyClimb {
+  from: THREE.Vector3;
+  to: THREE.Vector3;
+  t: number;
+  total: number;
+  geom: ClimbGeom;
 }
 
 /** Along the front wall, on your left from the storage room: a sofa, its table, a bin. */
@@ -297,6 +308,8 @@ export class HotelLobby3D extends Phaser.Scene {
   private staffDoor: THREE.Group | null = null;
   private binLid: THREE.Group | null = null;
   private binOpen = 0;
+  private climbing: LobbyClimb | null = null;
+  private devCam: { at: THREE.Vector3; to: THREE.Vector3 } | null = null;
   private binRustle = 0;
   /** How long his eyes have been on you, standing at the glass. */
   private seenT = 0;
@@ -334,6 +347,7 @@ export class HotelLobby3D extends Phaser.Scene {
     this.stairFly = null;
     this.crouched = false;
     this.seenT = 0;
+    this.climbing = null;
     this.binOpen = 0;
     this.eye = EYE_UP;
     this.faceTo = null;
@@ -632,25 +646,93 @@ export class HotelLobby3D extends Phaser.Scene {
     S.add(dial);
 
     // ---- along the front wall: a sofa, a low table, and a bin with a lid
-    const leather = new THREE.MeshLambertMaterial({ color: 0x9a4436, emissive: 0x1a0806 });
-    const sz = DEPTH - 0.5;
-    for (const [w, h, d, x, y, z] of [
-      [2.0, 0.42, 0.85, SOFA_X, 0.3, sz],
-      [2.0, 0.75, 0.2, SOFA_X, 0.72, sz + 0.33],
-      [0.2, 0.6, 0.85, SOFA_X - 1.0, 0.45, sz],
-      [0.2, 0.6, 0.85, SOFA_X + 1.0, 0.45, sz],
-    ] as const) {
-      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), leather);
+    // A chesterfield: buttoned leather, rolled arms, three seat cushions on
+    // a dark plinth with turned feet.  Its back is to the wall (+z).
+    const leather = new THREE.MeshLambertMaterial({ color: 0x8e3a2c, emissive: 0x1a0705 });
+    const leatherLit = new THREE.MeshLambertMaterial({ color: 0xa8493a, emissive: 0x200906 });
+    const darkWood = new THREE.MeshLambertMaterial({ color: 0x3a2214 });
+    const brassStud = new THREE.MeshLambertMaterial({ color: 0xc9a050, emissive: 0x2a1c08 });
+    const sz = DEPTH - 0.55;
+    const box = (w: number, h: number, d: number, x: number, y: number, z: number, m: THREE.Material): THREE.Mesh => {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
       b.position.set(x, y, z);
       S.add(b);
+      return b;
+    };
+    // the plinth and its feet
+    box(2.1, 0.12, 0.86, SOFA_X, 0.17, sz, darkWood);
+    for (const dx of [-0.98, 0.98]) {
+      for (const dz of [-0.36, 0.36]) {
+        const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.025, 0.12, 8), darkWood);
+        foot.position.set(SOFA_X + dx, 0.06, sz + dz);
+        S.add(foot);
+      }
     }
-    const tableTop = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 0.6), wood);
-    tableTop.position.set(SOFA_X, 0.42, sz - 1.0);
-    S.add(tableTop);
-    for (const [dx, dz] of [[-0.52, -0.24], [0.52, -0.24], [-0.52, 0.24], [0.52, 0.24]]) {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.4, 0.05), wood);
-      leg.position.set(SOFA_X + dx, 0.2, sz - 1.0 + dz);
+    // the seat base, then three cushions with a seam between each
+    box(1.7, 0.2, 0.8, SOFA_X, 0.33, sz, leather);
+    for (const i of [-1, 0, 1]) {
+      box(0.55, 0.13, 0.66, SOFA_X + i * 0.565, 0.495, sz - 0.05, leatherLit);
+    }
+    // the back, tall and slightly raked, buttoned in a diamond grid
+    const sofaBack = box(1.9, 0.62, 0.2, SOFA_X, 0.74, sz + 0.33, leather);
+    sofaBack.rotation.x = -0.08;
+    for (let row = 0; row < 2; row++) {
+      for (let col = 0; col < 7 - row; col++) {
+        const btn = new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 4), darkWood);
+        btn.position.set(SOFA_X - 0.78 + row * 0.13 + col * 0.26, 0.68 + row * 0.18, sz + 0.22 + row * 0.015);
+        S.add(btn);
+      }
+    }
+    // rolled arms: a block with a fat roll along the top, studded with brass
+    for (const side of [-1, 1]) {
+      const ax = SOFA_X + side * 0.95;
+      box(0.2, 0.42, 0.84, ax, 0.44, sz, leather);
+      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.86, 14), leatherLit);
+      roll.rotation.x = Math.PI / 2;
+      roll.position.set(ax + side * 0.02, 0.68, sz);
+      S.add(roll);
+      const scroll = new THREE.Mesh(new THREE.CircleGeometry(0.13, 14), leather);
+      scroll.position.set(ax + side * 0.02, 0.68, sz - 0.431);
+      scroll.rotation.y = Math.PI;
+      S.add(scroll);
+      for (let k = 0; k < 6; k++) {
+        const stud = new THREE.Mesh(new THREE.SphereGeometry(0.012, 5, 4), brassStud);
+        stud.position.set(ax + side * 0.105, 0.26 + k * 0.05, sz - 0.42);
+        S.add(stud);
+      }
+    }
+    // a cushion thrown in the corner
+    const pillow = box(0.32, 0.3, 0.12, SOFA_X - 0.62, 0.7, sz + 0.12, new THREE.MeshLambertMaterial({ color: 0xc8a868 }));
+    pillow.rotation.set(-0.3, 0.25, 0.15);
+
+    // The table: a walnut top with a lipped edge, turned legs, a shelf below,
+    // and what a hotel leaves on one -- magazines, an ashtray, a lamp-lit vase.
+    const tz = sz - 1.05;
+    box(1.2, 0.05, 0.6, SOFA_X, 0.45, tz, wood);
+    box(1.26, 0.03, 0.66, SOFA_X, 0.415, tz, darkWood);
+    box(1.05, 0.03, 0.46, SOFA_X, 0.12, tz, darkWood);
+    for (const [dx, dz] of [[-0.55, -0.25], [0.55, -0.25], [-0.55, 0.25], [0.55, 0.25]]) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.035, 0.4, 8), darkWood);
+      leg.position.set(SOFA_X + dx, 0.2, tz + dz);
       S.add(leg);
+      const knob = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), darkWood);
+      knob.position.set(SOFA_X + dx, 0.3, tz + dz);
+      S.add(knob);
+    }
+    for (const [i, col] of [[0, 0x2a4a7a], [1, 0xd8c8a0], [2, 0x7a2a2a]] as const) {
+      const mag = box(0.28, 0.012, 0.2, SOFA_X - 0.3 + i * 0.02, 0.48 + i * 0.012, tz + i * 0.015, new THREE.MeshLambertMaterial({ color: col }));
+      mag.rotation.y = 0.2 - i * 0.25;
+    }
+    const tray = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.03, 12), new THREE.MeshLambertMaterial({ color: 0x9aa4ac }));
+    tray.position.set(SOFA_X + 0.15, 0.49, tz + 0.1);
+    S.add(tray);
+    const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.26, 12), new THREE.MeshLambertMaterial({ color: 0x3a6a5a, emissive: 0x0a1a14 }));
+    vase.position.set(SOFA_X + 0.38, 0.6, tz - 0.05);
+    S.add(vase);
+    for (const [dx, dy, dz] of [[0, 0.82, 0], [-0.05, 0.78, 0.04], [0.05, 0.79, -0.03]]) {
+      const bloom = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), new THREE.MeshLambertMaterial({ color: 0xd8c0a0 }));
+      bloom.position.set(SOFA_X + 0.38 + dx, dy, tz - 0.05 + dz);
+      S.add(bloom);
     }
     const steel = new THREE.MeshLambertMaterial({ color: 0xb4bac0, emissive: 0x15171a });
     const can = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.2, 0.75, 16), steel);
@@ -1139,8 +1221,10 @@ export class HotelLobby3D extends Phaser.Scene {
     return [
       { to: new THREE.Vector3(STAIR_X, 0, 1.7), speed: 0.7, hold: 2.4, scan: true },
       // round the end of the counter and along behind it, looking down
-      { to: new THREE.Vector3(DESK_X + 2.3, 0, 0.6), speed: 0.85 },
-      { to: new THREE.Vector3(DESK_X + 0.6, 0, 0.6), speed: 0.6, look: new THREE.Vector3(DESK_X - 0.4, 0.1, 0.7), lean: 0.85, hold: 2.6 },
+      // up to the counter, and over it -- not round
+      { to: new THREE.Vector3(DESK_X + 0.6, 0, 2.7), speed: 0.85 },
+      { to: new THREE.Vector3(DESK_X + 0.6, 0, 0.5), speed: 0.6, over: { top: 1.16, near: 2.7 - 1.85, far: 2.7 - 1.15 } },
+      { to: new THREE.Vector3(DESK_X + 0.6, 0, 0.55), speed: 0.6, look: new THREE.Vector3(DESK_X - 0.4, 0.1, 0.7), lean: 0.85, hold: 2.6 },
       { to: new THREE.Vector3(DESK_X - 1.0, 0, 0.6), speed: 0.6, look: new THREE.Vector3(DESK_X - 1.0, 0.2, 1.1), lean: 0.7, hold: 1.8 },
       { to: new THREE.Vector3(DESK_X - 2.4, 0, 0.7), speed: 0.75 },
       { to: new THREE.Vector3(DESK_X - 1.4, 0, 2.5), speed: 0.7, look: new THREE.Vector3(DESK_X - 1.4, 0.6, 0.9), lean: 0.45, hold: 1.8 },
@@ -1269,6 +1353,9 @@ export class HotelLobby3D extends Phaser.Scene {
     const cam = this.camPos.clone();
     let speedWant = 0;
     let binWant = 0;
+    let climbK = 0;
+    let rig: ClimbRig | null = null;
+    let hands: [HandGoal | null, HandGoal | null] | undefined;
     let still = 0;
     let scan = 0;
     let tilt = 0;
@@ -1303,6 +1390,52 @@ export class HotelLobby3D extends Phaser.Scene {
       if (d > 0.01) this.fpos.addScaledVector(dir.normalize(), Math.min(step, d));
       this.fYaw = this.turnTo(this.fYaw, Math.atan2(to.x - this.fpos.x, to.z - this.fpos.z), dt * 10);
       if (d < 1.25) return this.caught();
+    } else if (this.legs.length && this.legs[0].over) {
+      const leg = this.legs[0];
+      const o = leg.over!;
+      if (!this.climbing) {
+        const len = Math.max(0.1, leg.to.distanceTo(this.fpos.clone().setY(0)));
+        const geom: ClimbGeom = { near: o.near, far: o.far, len, top: o.top, size: FROG_SCALE };
+        this.climbing = { from: this.fpos.clone().setY(0), to: leg.to.clone(), t: 0, total: climbSeconds(geom) * 1.35, geom };
+        this.heard(this.fpos.clone().setY(1), 'item_thud', 0.5);
+      }
+      const c = this.climbing;
+      c.t += dt;
+      const f = climbFrame(c.t / c.total, c.geom);
+      this.fpos.lerpVectors(c.from, c.to, f.s / c.geom.len);
+      this.fYaw = this.turnTo(this.fYaw, Math.atan2(c.to.x - c.from.x, c.to.z - c.from.z), dt * 6);
+      climbK = f.k;
+      const pt = (sAlong: number, y: number, side = 0): THREE.Vector3 => {
+        const ux = (c.to.x - c.from.x) / c.geom.len;
+        const uz = (c.to.z - c.from.z) / c.geom.len;
+        return new THREE.Vector3(c.from.x + ux * sAlong + uz * side, y, c.from.z + uz * sAlong - ux * side);
+      };
+      const spread = 0.34 * FROG_SCALE;
+      rig = {
+        k: f.k,
+        hip: f.hip,
+        pitch: f.pitch,
+        roll: f.roll,
+        top: o.top,
+        feet: [pt(f.feet[0].s, f.feet[0].y, -0.24 * FROG_SCALE * f.splay), pt(f.feet[1].s, f.feet[1].y, 0.24 * FROG_SCALE * f.splay)],
+        hang: [f.feet[0].hang, f.feet[1].hang],
+        twist: f.twist,
+        drop: f.drop,
+        strain: f.strain,
+        splay: f.splay,
+      };
+      hands = [0, 1].map((i) => {
+        const p = f.hands[i];
+        return p.w < 0.01 ? null : { at: pt(p.s, p.y + 0.04 * FROG_SCALE, i === 0 ? -spread : spread), weight: p.w, grip: 0.95 };
+      }) as [HandGoal | null, HandGoal | null];
+      // the gaze stays on the room while the body heaves
+      faceTo = new THREE.Vector3(c.to.x, 1.4, c.to.z - 3);
+      if (c.t >= c.total) {
+        this.fpos.copy(c.to);
+        this.climbing = null;
+        this.legs.shift();
+        this.heard(this.fpos.clone().setY(0.2), 'item_thud', 0.7);
+      }
     } else if (this.legs.length) {
       const leg = this.legs[0];
       const dir = leg.to.clone().sub(this.fpos).setY(0);
@@ -1384,7 +1517,9 @@ export class HotelLobby3D extends Phaser.Scene {
     m.update(dt, {
       speed: moved,
       maw: lunge ? 1 : this.phase === 'detect' ? 0.6 : 0.15,
-      climb: 0,
+      climb: climbK,
+      climbRig: rig,
+      hands,
       scan: this.scanT,
       lunge,
       constrict: 1,
@@ -1422,6 +1557,11 @@ export class HotelLobby3D extends Phaser.Scene {
     cam.position.set(this.camPos.x + (Math.random() - 0.5) * shake, this.camPos.y, this.camPos.z + (Math.random() - 0.5) * shake);
     cam.rotation.order = 'YXZ';
     cam.rotation.set(this.pitch, this.yaw, 0);
+    // (dev only: a free camera, to look at things from where the player cannot)
+    if (this.devCam) {
+      cam.position.copy(this.devCam.at);
+      cam.lookAt(this.devCam.to);
+    }
   }
 
   // ================================================================= endings
@@ -1517,6 +1657,10 @@ export class HotelLobby3D extends Phaser.Scene {
       crouch: (v: boolean) => {
         this.crouched = v;
       },
+      cam: (at: number[] | null, to?: number[]) => {
+        this.devCam = at && to ? { at: new THREE.Vector3(...at), to: new THREE.Vector3(...to) } : null;
+      },
+      froggy: () => ({ x: this.fpos.x, z: this.fpos.z, climbing: !!this.climbing }),
       look: (yaw: number, pitch: number) => {
         this.yaw = yaw;
         this.pitch = pitch;
