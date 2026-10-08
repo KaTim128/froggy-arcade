@@ -305,6 +305,8 @@ export class HotelLobby3D extends Phaser.Scene {
   private stairFly: { v: THREE.Vector3; spin: number } | null = null;
   private frontLeaves: THREE.Group[] = [];
   private frontFly: Array<{ v: THREE.Vector3; spin: number }> = [];
+  /** The front doors' glass, which goes to pieces when he goes through it. */
+  private frontPanes: THREE.Mesh[] = [];
   private staffDoor: THREE.Group | null = null;
   private binLid: THREE.Group | null = null;
   private binOpen = 0;
@@ -314,7 +316,7 @@ export class HotelLobby3D extends Phaser.Scene {
   /** How long his eyes have been on you, standing at the glass. */
   private seenT = 0;
   private bulb: THREE.PointLight | null = null;
-  private bits: Array<{ m: THREE.Mesh; v: THREE.Vector3; spin: THREE.Vector3; rest: boolean; half: number }> = [];
+  private bits: Array<{ m: THREE.Mesh; v: THREE.Vector3; spin: THREE.Vector3; rest: boolean; half: number; flat?: boolean }> = [];
   private bangT = 0;
   private heartT = 0;
 
@@ -344,6 +346,7 @@ export class HotelLobby3D extends Phaser.Scene {
     this.bits = [];
     this.frontLeaves = [];
     this.frontFly = [];
+    this.frontPanes = [];
     this.stairFly = null;
     this.crouched = false;
     this.seenT = 0;
@@ -817,6 +820,7 @@ export class HotelLobby3D extends Phaser.Scene {
       const pane = new THREE.Mesh(new THREE.BoxGeometry(0.03, 2.5, 0.78), glass);
       pane.position.set(0, 1.3, -side * 0.42);
       g.add(pane);
+      this.frontPanes.push(pane);
       for (const [h, y] of [
         [0.1, 0.06],
         [0.08, 2.58],
@@ -1250,11 +1254,60 @@ export class HotelLobby3D extends Phaser.Scene {
     if (this.monster) this.monster.root.visible = true;
   }
 
-  /** The front doors: through them, glass everywhere. */
+  /**
+   * The front doors: he goes through them and the glass SHATTERS.  Both panes
+   * burst into shards -- big jagged plates and a spray of small ones -- that
+   * fly out into the night and skitter back across the marble; a few jagged
+   * teeth stay stuck in the frames; and the frames, torn off their hinges,
+   * are thrown out after them.
+   */
   private smashFront(): void {
-    audio.sfx('glass_shatter', 0.9);
+    audio.sfx('glass_shatter', 1);
+    this.time.delayedCall(90, () => audio.sfx('glass_shatter', 0.7));
+    this.time.delayedCall(260, () => audio.sfx('glass_crack', 0.5));
     audio.sfx('door_smash', 0.8);
-    this.frontFly = this.frontLeaves.map((_, i) => ({ v: new THREE.Vector3(-3.4, 1.2, (i ? 1 : -1) * 1.1), spin: 3 }));
+    const S = this.stage?.scene;
+    for (const p of this.frontPanes) p.visible = false;
+    this.frontFly = this.frontLeaves.map((_, i) => ({ v: new THREE.Vector3(-2.2, 0.9, (i ? 1 : -1) * 0.8), spin: 2 }));
+    if (!S) return;
+    const glassMat = new THREE.MeshLambertMaterial({ color: 0xa8c4e0, transparent: true, opacity: 0.55, side: THREE.DoubleSide, emissive: 0x1a2a3a });
+    const shard = (size: number): THREE.BufferGeometry => {
+      // a jagged triangle, never the same twice
+      const a = Math.random() * Math.PI * 2;
+      const pts = [0, 1, 2].map((k) => {
+        const ang = a + k * 2.1 + (Math.random() - 0.5) * 0.9;
+        const r = size * (0.5 + Math.random() * 0.7);
+        return new THREE.Vector2(Math.cos(ang) * r, Math.sin(ang) * r);
+      });
+      return new THREE.ShapeGeometry(new THREE.Shape(pts));
+    };
+    for (const pane of this.frontPanes) {
+      const c = pane.getWorldPosition(new THREE.Vector3());
+      for (let k = 0; k < 70; k++) {
+        const big = k < 10;
+        const m = new THREE.Mesh(shard(big ? 0.12 + Math.random() * 0.14 : 0.025 + Math.random() * 0.06), glassMat);
+        m.position.set(c.x, c.y + (Math.random() - 0.5) * 2.3, c.z + (Math.random() - 0.5) * 0.75);
+        m.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+        S.add(m);
+        // out into the night, mostly; some of it back in across the floor
+        const inward = Math.random() < 0.3;
+        const v = new THREE.Vector3(
+          inward ? 0.8 + Math.random() * 2 : -(1.5 + Math.random() * 3.5),
+          Math.random() * 2.2,
+          (Math.random() - 0.5) * 3,
+        );
+        this.bits.push({ m, v, spin: new THREE.Vector3(Math.random() * 14, Math.random() * 14, Math.random() * 14), rest: false, half: 0.006, flat: true });
+      }
+      // jagged teeth left in the frame
+      const leaf = pane.parent!;
+      for (let k = 0; k < 5; k++) {
+        const t = new THREE.Mesh(shard(0.08 + Math.random() * 0.1), glassMat);
+        const top = k < 2;
+        t.position.set(0, top ? 2.45 : k < 4 ? 0.2 : 1.3, pane.position.z + (Math.random() - 0.5) * 0.6);
+        t.rotation.set(0, Math.PI / 2, Math.random() * 6);
+        leaf.add(t);
+      }
+    }
     this.debris(new THREE.Vector3(X0, 1.3, DOOR_Z), new THREE.Vector3(-1, 0, 0), 0x9ab8d8, true);
   }
 
@@ -1283,7 +1336,11 @@ export class HotelLobby3D extends Phaser.Scene {
         b.m.position.y = b.half;
         b.v.multiplyScalar(0.4);
         b.v.y = Math.abs(b.v.y) * 0.4;
-        if (b.v.length() < 0.4) b.rest = true;
+        if (b.v.length() < 0.4) {
+          b.rest = true;
+          // a shard comes to rest lying flat on the floor
+          if (b.flat) b.m.rotation.set(-Math.PI / 2, 0, Math.random() * 6);
+        }
       }
     }
     const fly = (o: THREE.Object3D, f: { v: THREE.Vector3; spin: number }, floorY: number): boolean => {

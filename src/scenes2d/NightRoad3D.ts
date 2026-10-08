@@ -245,6 +245,15 @@ export class NightRoad3D extends Phaser.Scene {
   private wander = new THREE.Vector2();
   private lastKnown = new THREE.Vector2();
   private seen = false;
+  /**
+   * HOW AWARE OF YOU HE IS, 0..1+.  It builds while he can see you -- faster
+   * close up, in the open, moving, dead ahead of him -- and drains slowly
+   * once he can't.  Past a third he has half-seen something and goes to look
+   * where it was; at 1 he has you.  (See `watchFor`.)
+   */
+  private aware = 0;
+  /** Seconds since he last actually saw you. */
+  private sinceSeen = 99;
 
   private phase: Phase = 'walk';
   private phaseT = 0;
@@ -334,6 +343,8 @@ export class NightRoad3D extends Phaser.Scene {
     this.stillT = 0;
     this.passT = 0;
     this.passBy = null;
+    this.aware = 0;
+    this.sinceSeen = 99;
     this.waterMats = [];
     this.riverFlow = [];
     this.crouched = false;
@@ -2913,12 +2924,57 @@ gl_Position = projectionMatrix * mvPosition;`,
     return this.skirts.some((k) => Math.hypot(this.pos.x - k.x, this.pos.y - k.z) < k.r);
   }
 
+  /**
+   * AWARENESS.  Seeing you is not a switch.  While you are in his sight his
+   * awareness of you builds -- quickly close up, quickly if you move, more
+   * quickly still dead ahead of him; slowly far off, crouched and still --
+   * and once he has had a clear look, crouching where you stand does not
+   * take you out of it: you have to get behind something, into a bush,
+   * under the boughs, into the dark or away.  Lose him and he still has
+   * you for a moment -- where you were a second ago, where you were going --
+   * and the awareness drains away over a few seconds, not at once.
+   *
+   * Returns whether he has you now (the old `seen`).
+   */
+  private watchFor(dt: number, d: number): boolean {
+    const had = this.fMode === 'hunt' || this.aware >= 0.6;
+    const vis = this.sees(had);
+    if (vis) {
+      this.sinceSeen = 0;
+      // dead ahead of him: within 25 degrees of where he is facing
+      const ang = Math.atan2(this.pos.x - this.froggy.x, this.pos.y - this.froggy.y);
+      let off = Math.abs(ang - this.fYaw) % (Math.PI * 2);
+      if (off > Math.PI) off = Math.PI * 2 - off;
+      const ahead = off < THREE.MathUtils.degToRad(25) ? 1.4 : 1;
+      const motion = this.moving ? (this.running ? 2.2 : 1.5) : 0.7;
+      const rate = (1.1 + 9 / Math.max(2, d)) * (this.crouched ? 0.55 : 1) * motion * ahead;
+      this.aware = d < 3.5 ? 1.4 : Math.min(1.4, this.aware + rate * dt);
+      this.lastKnown.copy(this.pos);
+    } else {
+      this.sinceSeen += dt;
+      this.aware = Math.max(0, this.aware - dt * 0.3);
+    }
+    // half-seen: something there -- he goes to look, straight to where it was
+    if (vis && this.aware >= 0.35 && this.aware < 1 && this.fMode !== 'hunt' && this.fMode !== 'investigate') {
+      this.searchT = 0;
+      this.fMode = 'investigate';
+      this.urgent = this.aware > 0.6;
+    }
+    if (this.aware >= 1 && vis) return true;
+    // just lost: he still has you for a beat
+    return this.fMode === 'hunt' && this.sinceSeen < 0.8 && this.aware >= 0.6;
+  }
+
   /** Can he see you from where he is? */
-  private sees(): boolean {
+  private sees(asIfStanding = false): boolean {
+    // Once he has a good look at you, ducking down where you stand does not
+    // make you vanish: only real cover does (the boughs, a thicket, a trunk
+    // between you, the dark, distance).
+    const low = this.crouched && !asIfStanding;
     const dx = this.pos.x - this.froggy.x;
     const dz = this.pos.y - this.froggy.y;
     const d = Math.hypot(dx, dz);
-    if (d < (this.crouched ? 2.5 : 3.5)) return true;
+    if (d < (low ? 2.5 : 3.5)) return true;
     // crouched in under a big pine's low boughs, you are a shape in the dark
     if (this.crouched && this.underBoughs()) return false;
     // In a thicket: down in a thick one, or in one taller than you, you are
@@ -2931,7 +2987,7 @@ gl_Position = projectionMatrix * mvPosition;`,
       cover = under ? 0.3 : 0.65;
     }
     const lit = LAMP_ZS.some((z, i) => Math.hypot(this.pos.x - (i % 2 ? 1 : -1) * (RAIL_X - 1.2), this.pos.y - z) < 7.5);
-    const range = (lit ? 36 : this.onRoad() ? 27 : this.pos.y < HOTEL_Z + 12 ? 30 : 13) * (this.crouched ? 0.6 : 1) * cover;
+    const range = (lit ? 36 : this.onRoad() ? 27 : this.pos.y < HOTEL_Z + 12 ? 30 : 13) * (low ? 0.6 : 1) * cover;
     if (d > range) return false;
     {
       // He sees what is in front of him: looking about, a cone of seventy
@@ -2993,10 +3049,11 @@ gl_Position = projectionMatrix * mvPosition;`,
       if ((this.fMode === 'search' || this.fMode === 'patrol' || this.fMode === 'investigate') && watched && toYou < (this.crouched ? 9 : 24) && this.sees()) {
         this.fMode = 'hunt';
         this.lostT = 0;
+        this.aware = 1.2;
         this.lastKnown.copy(this.pos);
         audio.sfx('froggy_screech', 0.3, this.placeOf(this.froggy.x, this.froggy.y));
       }
-      this.seen = this.sees();
+      this.seen = this.watchFor(dt, toYou);
       if (this.seen) {
         if (this.fMode !== 'hunt') audio.sfx('froggy_screech', 0.25, this.placeOf(this.froggy.x, this.froggy.y));
         this.fMode = 'hunt';
@@ -3373,6 +3430,16 @@ gl_Position = projectionMatrix * mvPosition;`,
         drawPixelText(ctx, 'RUN and hide - reach the hotel', 6, 16, { scale: 1, color: '#ff4a4a', alpha: 0.95 });
         const left = Math.max(0, Math.round(this.pos.y - HOTEL_Z));
         drawPixelText(ctx, `HOTEL ${left}m`, 6, 26, { scale: 1, color: '#7a8494', alpha: 0.75 });
+        // how close he is to having you: an eye's worth of bar, top right,
+        // filling amber to red as he looks, draining as you get away
+        if (this.aware > 0.02 && !(this.seen && this.fMode === 'hunt')) {
+          const w = 54;
+          const k = Math.min(1, this.aware);
+          ctx.fillStyle = 'rgba(0,0,0,0.5)';
+          ctx.fillRect(GAME_W - 6 - w, 16, w, 4);
+          ctx.fillStyle = k < 0.35 ? '#c8a050' : k < 1 ? '#e07030' : '#ff3a3a';
+          ctx.fillRect(GAME_W - 6 - w, 16, Math.round(w * k), 4);
+        }
         if (this.seen && this.fMode === 'hunt') {
           drawPixelText(ctx, 'HE SEES YOU', GAME_W - 6 - 11 * 6, 6, { scale: 1, color: '#ff4a4a', alpha: 0.6 + Math.sin(this.clock * 9) * 0.3 });
         } else if (this.fMode === 'search' || this.fMode === 'investigate' || this.fMode === 'patrol') {
@@ -3478,6 +3545,7 @@ gl_Position = projectionMatrix * mvPosition;`,
       fz: this.froggy.y,
       dist: this.pos.distanceTo(this.froggy),
       sees: this.seen,
+      aware: this.aware,
       line: this.lines[0]?.text ?? '',
       yaw: this.yaw,
       clock: this.clock,
