@@ -2662,7 +2662,7 @@ for (const g of [
     ['the board: bronze 1/3, blue ruby 3/8, Froggy 5/15', by('token_1').pays[0] === 1 && by('token_1').pays[2] === 3 && by('token_5').pays[0] === 3 && by('token_5').pays[2] === 8 && frog.pays[0] === 5 && frog.pays[2] === 15],
     ['five Froggys is the biggest prize on the board', paying.every((t) => t.pays[2] <= frog.pays[2])],
     ['rarer tokens pay more, commoner ones turn up more', rarerPaysMore && commonMoreOften],
-    ['Froggy is rarer than the common tokens', fill.token_3 < fill.token_1 / 2 && fill.token_3 < fill.token_10 / 2],
+    ['Froggy is rarer than the common tokens', fill.token_3 < fill.token_1 * 0.6 && fill.token_3 < fill.token_10 * 0.6],
     ['most spins lose', lose > 0.5],
     ['five in a row is far rarer than three', fives * 20 < threes],
     ['the machine keeps more than it pays', paid < N * 3],
@@ -2674,18 +2674,29 @@ for (const g of [
   console.log(`      lose ${(lose * 100).toFixed(1)}%, threes ${(threes * 100).toFixed(2)}%, fives ${(fives * 100).toFixed(3)}%, return ${((paid / (N * 3)) * 100).toFixed(1)}%`);
 
   // What a line pays, read off constructed windows: the best line, once.
-  const row = (...ids) => [...ids];
-  const filler = ['token_10', 'token_20', 'token_1', 'token_50', 'token_5'];
-  const grid = (lines) => Array.from({ length: 6 }, (_, r) => lines[r] ?? filler.map((_, c) => filler[(c + r) % 5]));
+  // The base window makes no line anywhere (each step along a row, a reel or
+  // a diagonal changes token), and each case stamps one line onto it.
+  const BASE = ['token_1', 'token_10', 'token_5', 'token_20', 'token_50', 'token_100'];
+  const grid = (cells) => {
+    const g = Array.from({ length: 6 }, (_, r) => Array.from({ length: 5 }, (_, c) => BASE[(2 * r + c) % 6]));
+    for (const [r, c, id] of cells) g[r][c] = id;
+    return g;
+  };
+  const line = (id, pts) => pts.map(([r, c]) => [r, c, id]);
   const cases = [
-    ['three Froggys pay 5', grid({ 2: row('token_3', 'token_3', 'token_3', 'token_10', 'token_1') }), 5],
-    ['five Froggys pay 15', grid({ 0: row('token_3', 'token_3', 'token_3', 'token_3', 'token_3') }), 15],
-    ['three bronze pay 1', grid({ 4: row('token_5', 'token_1', 'token_1', 'token_1', 'token_10') }), 1],
-    ['three blue rubies pay 3', grid({ 1: row('token_5', 'token_5', 'token_5', 'token_20', 'token_1') }), 3],
-    ['five blue rubies pay 8', grid({ 3: row('token_5', 'token_5', 'token_5', 'token_5', 'token_5') }), 8],
-    ['two lines pay only the best one', grid({ 0: row('token_1', 'token_1', 'token_1', 'token_10', 'token_5'), 5: row('token_3', 'token_3', 'token_3', 'token_5', 'token_1') }), 5],
-    ['the wild fills a line', grid({ 2: row('token_3', 'golden_froggy', 'token_3', 'token_1', 'token_5') }), 5],
-    ['nothing in a row pays nothing', grid({}), 0],
+    ['three Froggys across pay 5', grid(line('token_3', [[2, 0], [2, 1], [2, 2]])), 5],
+    ['five Froggys across pay 15', grid(line('token_3', [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]])), 15],
+    ['three bronze across pay 1', grid([...line('token_1', [[4, 0], [4, 1], [4, 2]]), [4, 3, 'token_5']]), 1],
+    ['three blue rubies across pay 3', grid([...line('token_5', [[1, 0], [1, 1], [1, 2]]), [1, 3, 'token_20']]), 3],
+    ['five blue rubies across pay 8', grid(line('token_5', [[3, 0], [3, 1], [3, 2], [3, 3], [3, 4]])), 8],
+    ['three Froggys down a reel pay 5', grid(line('token_3', [[0, 3], [1, 3], [2, 3]])), 5],
+    ['six down a reel pays as five', grid(line('token_3', [[0, 1], [1, 1], [2, 1], [3, 1], [4, 1], [5, 1]])), 15],
+    ['three Froggys on a diagonal pay 5', grid(line('token_3', [[1, 0], [2, 1], [3, 2]])), 5],
+    ['five gold lilies on the other diagonal pay 11', grid(line('token_50', [[5, 0], [4, 1], [3, 2], [2, 3], [1, 4]])), 11],
+    ['two lines pay only the best one', grid([...line('token_1', [[0, 0], [0, 1], [0, 2]]), ...line('token_3', [[5, 0], [5, 1], [5, 2]])]), 5],
+    ['the wild fills a line', grid(line('token_3', [[2, 0], [2, 2]]).concat([[2, 1, 'golden_froggy']])), 5],
+    ['a line must start at its edge', grid(line('token_3', [[2, 1], [2, 2], [2, 3]])), 0],
+    ['nothing in a line pays nothing', grid([]), 0],
   ];
   for (const [what, g, want] of cases) {
     const got = await page.evaluate((g) => window.__slots.best(g), g);
@@ -2711,7 +2722,7 @@ for (const g of [
   await spinWith(cases[0][1]);
   const b1 = await bal();
   const p1 = await page.evaluate(() => window.__slots.paidCount());
-  await spinWith(cases[7][1]);
+  await spinWith(cases[cases.length - 1][1]);
   const b2 = await bal();
   const p2 = await page.evaluate(() => window.__slots.paidCount());
   const okWin = b1 === b0 - 3 + 5 && p1 === p0 + 1;

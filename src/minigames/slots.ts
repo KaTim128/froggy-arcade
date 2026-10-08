@@ -2,9 +2,11 @@
  * FROGGY SLOTS.  Three tokens a spin, and it keeps taking them.
  *
  * Five reels, six rows.  Every token on the reels pays when it lines up:
- * three, four or five of the same token side by side in a row, anywhere along
- * it, pays that token's prize for that many -- and only the best line on the
- * window is paid, once, never two of them for the same spin.
+ * three, four or five of the same token in a LINE -- across a row from the
+ * left reel, down a reel from the top, or along a diagonal from its left end
+ * -- pays that token's prize for that many (six down a reel pays as five).
+ * Only the best line on the window is paid, once, never two of them for the
+ * same spin.
  *
  *   TOKEN                    RARITY      3     4     5
  *   bronze lily-pad coin     common      1     2     3
@@ -20,8 +22,8 @@
  * weight, and the window pays exactly what is on it.  Common tokens line up
  * often and pay little; Froggy turns up far less and pays the most, and five
  * Froggys across is a jackpot measured in hundreds of thousands of spins.  Most
- * spins pay nothing at all (about six in ten), and the machine hands back
- * roughly a third of what goes in: it is a gamble, and it is meant to feel
+ * spins pay nothing at all (nearly six in ten), and the machine hands back
+ * well under half of what goes in: it is a gamble, and it is meant to feel
  * like one.  The art is in slotSymbols.ts.
  *
  * It is a session, like the blackjack table: nothing is taken at the door,
@@ -51,14 +53,14 @@ export type Tier = 'COMMON' | 'UNCOMMON' | 'RARE' | 'V.RARE' | 'WILD';
  * pays nothing of its own: it is wild, and rarer than anything.
  */
 export const SYMBOLS: Array<{ id: SymbolId; name: string; tier: Tier; weight: number; pays: [number, number, number] }> = [
-  { id: 'token_1', name: 'BRONZE', tier: 'COMMON', weight: 22, pays: [1, 2, 3] },
-  { id: 'token_10', name: 'PURPLE', tier: 'COMMON', weight: 20, pays: [2, 3, 5] },
-  { id: 'token_5', name: 'BLUE RUBY', tier: 'UNCOMMON', weight: 16, pays: [3, 5, 8] },
-  { id: 'token_20', name: 'FIREFLY', tier: 'UNCOMMON', weight: 14, pays: [3, 6, 10] },
-  { id: 'token_50', name: 'GOLD LILY', tier: 'RARE', weight: 11, pays: [4, 7, 11] },
-  { id: 'token_100', name: 'CRYSTAL', tier: 'RARE', weight: 8, pays: [4, 8, 12] },
-  { id: 'token_3', name: 'FROGGY', tier: 'V.RARE', weight: 6, pays: [5, 10, 15] },
-  { id: 'golden_froggy', name: 'WILD', tier: 'WILD', weight: 0.5, pays: [0, 0, 0] },
+  { id: 'token_1', name: 'BRONZE', tier: 'COMMON', weight: 16, pays: [1, 2, 3] },
+  { id: 'token_10', name: 'PURPLE', tier: 'COMMON', weight: 15, pays: [2, 3, 5] },
+  { id: 'token_5', name: 'BLUE RUBY', tier: 'UNCOMMON', weight: 14, pays: [3, 5, 8] },
+  { id: 'token_20', name: 'FIREFLY', tier: 'UNCOMMON', weight: 13, pays: [3, 6, 10] },
+  { id: 'token_50', name: 'GOLD LILY', tier: 'RARE', weight: 12, pays: [4, 7, 11] },
+  { id: 'token_100', name: 'CRYSTAL', tier: 'RARE', weight: 11, pays: [4, 8, 12] },
+  { id: 'token_3', name: 'FROGGY', tier: 'V.RARE', weight: 8, pays: [5, 10, 15] },
+  { id: 'golden_froggy', name: 'WILD', tier: 'WILD', weight: 0.3, pays: [0, 0, 0] },
 ];
 const idx = (id: SymbolId) => SYMBOLS.findIndex((s) => s.id === id);
 const FROG = idx('token_3');
@@ -125,7 +127,8 @@ export const slots: MinigameModule = {
   rules: `${SPIN_COST} tokens a spin`,
   tutorial: {
     objective: [
-      `${SPIN_COST} TOKENS A SPIN. LINE UP 3, 4 OR 5 OF A TOKEN IN A ROW.`,
+      `${SPIN_COST} TOKENS A SPIN. LINE UP 3, 4 OR 5 OF A TOKEN:`,
+      'ACROSS FROM THE LEFT, DOWN FROM THE TOP, OR DIAGONALLY.',
       'EVERY TOKEN PAYS: COMMON ONES A LITTLE, RARE ONES MORE.',
       `FROGGY IS THE RAREST: 3 PAY ${payFor(FROG, 3)}, 5 PAY ${JACKPOT}.`,
       'THE GOLDEN FROGGY IS WILD: IT COUNTS AS ANY TOKEN.',
@@ -189,7 +192,7 @@ export const slots: MinigameModule = {
       WILD: PALETTE.gold,
     };
     const COLS = [262, 284, 306];
-    text(scene, 190, 29, 'IN A ROW', PALETTE.gold);
+    text(scene, 190, 29, 'IN A LINE', PALETTE.gold);
     ['3', '4', '5'].forEach((n, i) => text(scene, COLS[i], 29, n, PALETTE.gold).setOrigin(1, 0));
     SYMBOLS.forEach((sym, i) => {
       const y = 40.5 + i * 10;
@@ -317,22 +320,43 @@ function refresh(): void {
 type Cells = Array<[number, number]>;
 
 /**
- * The best line on the window: the run of three or more of the same token,
- * side by side in a row (the wild standing in for any of them), that pays the
- * most.  Only that one is paid -- never two lines, never the three inside a
- * five as well as the five.
+ * Every line a win can be made on, each listed from the end it must start at:
+ * the rows from the left reel, the reels from the top row, and both
+ * diagonals of every length three or more from their left end.
+ */
+function lines(): Cells[] {
+  const out: Cells[] = [];
+  for (let r = 0; r < ROWS; r++) out.push(Array.from({ length: REELS }, (_, c) => [r, c] as [number, number]));
+  for (let c = 0; c < REELS; c++) out.push(Array.from({ length: ROWS }, (_, r) => [r, c] as [number, number]));
+  for (let k = -(REELS - 1); k < ROWS; k++) {
+    const down: Cells = [];
+    const up: Cells = [];
+    for (let c = 0; c < REELS; c++) {
+      if (k + c >= 0 && k + c < ROWS) down.push([k + c, c]);
+      const r2 = k + (REELS - 1 - c);
+      if (r2 >= 0 && r2 < ROWS) up.push([r2, c]);
+    }
+    if (down.length >= 3) out.push(down);
+    if (up.length >= 3) out.push(up);
+  }
+  return out;
+}
+const LINES = lines();
+
+/**
+ * The best line on the window: three or more of the same token from the
+ * start of a line (the wild standing in for any of them), the one that pays
+ * the most.  Only that one is paid -- never two lines, never the three inside
+ * a five as well as the five.
  */
 export function best(g: Grid): { pays: number; sym: number; n: number; cells: Cells } {
   let top: { pays: number; sym: number; n: number; cells: Cells } = { pays: 0, sym: -1, n: 0, cells: [] };
-  for (let r = 0; r < g.length; r++) {
-    const row = g[r];
-    for (let s0 = 0; s0 + 2 < row.length; s0++) {
-      for (let sym = 0; sym < PAYING; sym++) {
-        let n = 0;
-        while (s0 + n < row.length && (row[s0 + n] === sym || row[s0 + n] === WILD)) n++;
-        const pays = payFor(sym, n);
-        if (pays > top.pays) top = { pays, sym, n, cells: Array.from({ length: n }, (_, k) => [r, s0 + k] as [number, number]) };
-      }
+  for (const line of LINES) {
+    for (let sym = 0; sym < PAYING; sym++) {
+      let n = 0;
+      while (n < line.length && (g[line[n][0]][line[n][1]] === sym || g[line[n][0]][line[n][1]] === WILD)) n++;
+      const pays = payFor(sym, n);
+      if (pays > top.pays) top = { pays, sym, n, cells: line.slice(0, n) };
     }
   }
   return top;
