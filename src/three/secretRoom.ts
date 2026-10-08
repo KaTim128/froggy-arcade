@@ -713,8 +713,65 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
     pose: { speed: 0, maw: 0.12, climb: 0, scan: 0 },
   };
 
+  // WHEN NOTHING IS FEEDING THE GLASS.  The enclosure draws the room's own
+  // hunt -- but a room with nobody hunting in it (the arcade) sends nothing,
+  // and he stood frozen behind the glass.  So if the room has gone quiet for
+  // a moment, he works the enclosure on his own: walks to a place, stops,
+  // looks round, goes on.  The moment the room speaks again it takes over.
+  let lastWatch = -1;
+  const roam = { x: watched.froggyStart.x, z: watched.froggyStart.z, yaw: 0, tx: watched.froggyStart.x, tz: watched.froggyStart.z, wait: 1.5 };
+  const freeAt = (x: number, z: number): boolean =>
+    !watched.furniture.some((b) => Math.abs(x - b.x) < b.w / 2 + 0.6 && Math.abs(z - b.z) < b.d / 2 + 0.6) &&
+    !watched.spots.some((sp) => Math.hypot(x - sp.x, z - sp.z) < 1.1);
+  const roamStep = (dt: number): void => {
+    let speed = 0;
+    let scan = 0;
+    if (roam.wait > 0) {
+      roam.wait -= dt;
+      scan = Math.sin(clock * 1.3) * 0.8;
+      if (roam.wait <= 0) {
+        for (let i = 0; i < 20; i++) {
+          const x = (Math.random() * 2 - 1) * (watched.halfW - 1.2);
+          const z = (Math.random() * 2 - 1) * (watched.halfD - 1.2);
+          if (freeAt(x, z)) {
+            roam.tx = x;
+            roam.tz = z;
+            break;
+          }
+        }
+      }
+    } else {
+      const dx = roam.tx - roam.x;
+      const dz = roam.tz - roam.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 0.2) roam.wait = 1.5 + Math.random() * 2.5;
+      else {
+        speed = 1.3;
+        const step = Math.min(d, speed * dt);
+        const nx = roam.x + (dx / d) * step;
+        const nz = roam.z + (dz / d) * step;
+        // (something in the way: give up on that place and pick another)
+        if (freeAt(nx, nz)) {
+          roam.x = nx;
+          roam.z = nz;
+        } else roam.wait = 0.4;
+        let dy = Math.atan2(dx, dz) - roam.yaw;
+        while (dy > Math.PI) dy -= Math.PI * 2;
+        while (dy < -Math.PI) dy += Math.PI * 2;
+        roam.yaw += dy * Math.min(1, dt * 4);
+      }
+    }
+    seen = { x: roam.x, y: 0, z: roam.z, yaw: roam.yaw, pose: { speed, maw: 0.12, climb: 0, scan } };
+  };
+
   const tick = (dt: number, viewer?: THREE.Vector3 | null): void => {
     clock += dt;
+    if (clock - lastWatch > 0.5) roamStep(dt);
+    else {
+      roam.x = seen.x;
+      roam.z = seen.z;
+      roam.yaw = seen.yaw;
+    }
     knobLight.intensity = 6 + Math.sin(clock * 2.4) * 1.6;
     // The lab ticking over: the traces on the monitors, the LEDs on the rack,
     // the centrifuge lid glowing, the tube's own light breathing.
@@ -863,6 +920,7 @@ export function buildSecretRoom(scene: THREE.Scene, watched: RoomDef): SecretRoo
     carrying: () => carried,
     watch: (w: Watched) => {
       seen = w;
+      lastWatch = clock;
     },
     watching: () => ({
       x: monster.root.position.x,
