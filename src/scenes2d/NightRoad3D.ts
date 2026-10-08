@@ -218,7 +218,7 @@ export class NightRoad3D extends Phaser.Scene {
   private posts: Circle[] = [];
   private waterMats: THREE.Texture[] = [];
   private sky: THREE.Group | null = null;
-  /** The warning beacon on the back of the arcade, turning. */
+  /** The CLOSED sign over the arcade's doors, flickering. */
   private beacon: { mesh: THREE.Mesh; light: THREE.PointLight } | null = null;
   /** Going to a sound he could place exactly: he comes at a run. */
   private urgent = false;
@@ -1241,27 +1241,98 @@ export class NightRoad3D extends Phaser.Scene {
       S.add(b);
       return b;
     };
-    /** A facade: brick or render, rows of windows, some lit. */
+    /**
+     * A facade, drawn at 32 pixels a bay: brick courses with their mortar, a
+     * ledge at every floor, each window framed with a sill under it, the lit
+     * ones warm or cold with a curtain half across or a blind, a few with
+     * someone's lamp in them -- and a shop level at the bottom.
+     */
     const facade = (cols: number, rows: number, base: string, lit: number, seed: number): THREE.CanvasTexture => {
       let q = seed;
       const RR = () => ((q = (q * 16807) % 2147483647) / 2147483647);
-      return canvasTex(cols * 16, rows * 20, (g) => {
+      const BW = 32;
+      const BH = 40;
+      const W = cols * BW;
+      const H = rows * BH;
+      const t = canvasTex(W, H, (g) => {
         g.fillStyle = base;
-        g.fillRect(0, 0, cols * 16, rows * 20);
-        for (let i = 0; i < cols * rows * 3; i++) {
-          g.fillStyle = 'rgba(0,0,0,0.18)';
-          g.fillRect(Math.floor(RR() * cols * 16), Math.floor(RR() * rows * 20), 4, 1);
+        g.fillRect(0, 0, W, H);
+        // brick courses, every brick a hair different
+        for (let y = 0; y < H; y += 4) {
+          for (let x = (y / 4) % 2 ? -4 : 0; x < W; x += 8) {
+            const v = Math.floor((RR() - 0.5) * 18);
+            g.fillStyle = `rgba(${v > 0 ? 255 : 0},${v > 0 ? 240 : 0},${v > 0 ? 230 : 0},${Math.abs(v) / 120})`;
+            g.fillRect(x, y, 7, 3);
+          }
+          g.fillStyle = 'rgba(0,0,0,0.22)';
+          g.fillRect(0, y + 3, W, 1);
+        }
+        // grime down from every ledge
+        for (let ry = 0; ry < rows; ry++) {
+          const grd = g.createLinearGradient(0, ry * BH, 0, ry * BH + 14);
+          grd.addColorStop(0, 'rgba(0,0,0,0.3)');
+          grd.addColorStop(1, 'rgba(0,0,0,0)');
+          g.fillStyle = grd;
+          g.fillRect(0, ry * BH, W, 14);
+          g.fillStyle = 'rgba(200,200,210,0.18)';
+          g.fillRect(0, ry * BH, W, 2);
         }
         for (let cx = 0; cx < cols; cx++) {
-          for (let ry = 0; ry < rows; ry++) {
+          for (let ry = 0; ry < rows - 1; ry++) {
+            const x = cx * BW + 7;
+            const y = ry * BH + 9;
+            // frame and sill
+            g.fillStyle = '#2a2a30';
+            g.fillRect(x - 2, y - 2, 22, 27);
+            g.fillStyle = '#9a9690';
+            g.fillRect(x - 3, y + 25, 24, 3);
             const on = RR() < lit;
-            g.fillStyle = on ? (RR() < 0.7 ? '#ffd890' : '#a8d0ff') : '#0c0e14';
-            g.fillRect(cx * 16 + 4, ry * 20 + 5, 8, 11);
-            g.fillStyle = 'rgba(0,0,0,0.5)';
-            g.fillRect(cx * 16 + 4, ry * 20 + 10, 8, 1);
+            if (on) {
+              const warm = RR() < 0.7;
+              const glass = g.createLinearGradient(x, y, x, y + 23);
+              glass.addColorStop(0, warm ? '#ffe2a0' : '#bcd8ff');
+              glass.addColorStop(1, warm ? '#d89048' : '#5a7ab8');
+              g.fillStyle = glass;
+              g.fillRect(x, y, 18, 23);
+              // a curtain, or a blind, or a lamp in the room
+              const k = RR();
+              g.fillStyle = warm ? 'rgba(120,40,30,0.75)' : 'rgba(30,40,70,0.7)';
+              if (k < 0.4) g.fillRect(x, y, 6 + Math.floor(RR() * 4), 23);
+              else if (k < 0.7) for (let b = 0; b < 23; b += 3) g.fillRect(x, y + b, 18, 1);
+              else {
+                g.fillStyle = 'rgba(255,250,220,0.9)';
+                g.fillRect(x + 11, y + 12, 3, 4);
+              }
+            } else {
+              g.fillStyle = '#0c0e14';
+              g.fillRect(x, y, 18, 23);
+              g.fillStyle = 'rgba(120,140,180,0.18)';
+              g.fillRect(x + 2, y + 2, 5, 9);
+            }
+            // the glazing bars
+            g.fillStyle = '#2a2a30';
+            g.fillRect(x + 8, y, 2, 23);
+            g.fillRect(x, y + 11, 18, 2);
           }
         }
+        // the shop level: a fascia, glass, a door
+        const sy = (rows - 1) * BH;
+        g.fillStyle = '#1a1c22';
+        g.fillRect(0, sy, W, BH);
+        g.fillStyle = '#2a2c34';
+        g.fillRect(0, sy, W, 8);
+        for (let cx = 0; cx < cols; cx++) {
+          const shopLit = RR() < lit * 0.8;
+          g.fillStyle = shopLit ? '#7a6a4a' : '#101218';
+          g.fillRect(cx * BW + 3, sy + 11, BW - 6, BH - 14);
+          g.fillStyle = 'rgba(0,0,0,0.5)';
+          g.fillRect(cx * BW + 3, sy + 11, BW - 6, 2);
+        }
       });
+      t.magFilter = THREE.LinearFilter;
+      t.minFilter = THREE.LinearMipmapLinearFilter;
+      t.anisotropy = 4;
+      return t;
     };
     const faced = (tex: THREE.Texture, w: number, h: number, d: number, x: number, z: number, color = 0x8a8a90) => {
       const side = new THREE.MeshLambertMaterial({ color: 0x1a1a20 });
@@ -1311,97 +1382,158 @@ export class NightRoad3D extends Phaser.Scene {
     const aw = 18;
     const ad = 16;
     const ah = 8;
-    const brick = canvasTex(64, 64, (g) => {
-      g.fillStyle = '#3a2a2e';
-      g.fillRect(0, 0, 64, 64);
+    // Brick at 64 pixels a metre: mortar beds, each brick its own shade with
+    // a lit top edge and speckle, so the wall reads as laid brick up close.
+    const brick = canvasTex(128, 128, (g) => {
+      let q = 91;
+      const RB = () => ((q = (q * 16807) % 2147483647) / 2147483647);
+      g.fillStyle = '#5a5054';
+      g.fillRect(0, 0, 128, 128);
       for (let row = 0; row < 16; row++) {
-        for (let x = (row % 2) * -4; x < 64; x += 8) {
-          g.fillStyle = ['#4a3036', '#42292e', '#523840'][(row * 7 + x) % 3];
-          g.fillRect(x + 1, row * 4 + 1, 6, 2);
+        for (let x = (row % 2) * -8; x < 128; x += 16) {
+          const k = RB();
+          g.fillStyle = k < 0.33 ? '#7a4038' : k < 0.66 ? '#6a3832' : '#844a3e';
+          g.fillRect(x + 1, row * 8 + 1, 14, 6);
+          g.fillStyle = 'rgba(255,220,200,0.12)';
+          g.fillRect(x + 1, row * 8 + 1, 14, 1);
+          g.fillStyle = 'rgba(0,0,0,0.22)';
+          g.fillRect(x + 1, row * 8 + 6, 14, 1);
+          for (let n = 0; n < 4; n++) {
+            g.fillStyle = RB() < 0.5 ? 'rgba(0,0,0,0.18)' : 'rgba(255,230,210,0.1)';
+            g.fillRect(x + 2 + Math.floor(RB() * 12), row * 8 + 2 + Math.floor(RB() * 4), 1, 1);
+          }
         }
       }
     });
     brick.wrapS = brick.wrapT = THREE.RepeatWrapping;
     brick.repeat.set(aw / 2, ah / 2);
-    const brickMat = new THREE.MeshLambertMaterial({ map: brick });
+    brick.anisotropy = 4;
+    const brickMat = new THREE.MeshLambertMaterial({ map: brick, emissive: 0xffffff, emissiveMap: brick, emissiveIntensity: 0.12 });
     const body = new THREE.Mesh(new THREE.BoxGeometry(aw, ah, ad), brickMat);
     body.position.set(ax, ah / 2, az + ad / 2);
     arc.add(body);
-    const backZ = az - 0.01; // the face toward you
+    // ---- ITS FRONT, AS THE STREET KNOWS IT (the 2D street's own painting,
+    // built): a cornice, the sign board with the frog on it, two pillars, a
+    // poster either side of each, the glass doors chained shut and padlocked,
+    // and CLOSED in red over them.
+    const fz = az - 0.01;
     const steel = lam(0x5a6068);
-    const dark = lam(0x1a1c20);
-    // the service door, with a lit sign over it
-    boxA(lam(0x4a5058), 1.1, 2.2, 0.08, ax - 5, 0, backZ - 0.04);
-    boxA(lam(0x8a8e94), 0.1, 0.06, 0.06, ax - 4.65, 1.05, backZ - 0.1);
-    boxA(new THREE.MeshBasicMaterial({ color: 0x3fe39b }), 0.6, 0.18, 0.04, ax - 5, 2.45, backZ - 0.06);
-    // the loading bay: a ribbed roll-up shutter, a dock lip, bollards
-    boxA(dark, 4, 3.4, 0.1, ax + 1.5, 0, backZ - 0.03);
-    for (let k = 0; k < 11; k++) boxA(lam(0x6a7078), 3.8, 0.06, 0.04, ax + 1.5, 0.2 + k * 0.3, backZ - 0.09);
-    boxA(lam(0x2a2c30), 4.6, 0.9, 0.9, ax + 1.5, 0, backZ - 0.45);
-    for (const bx of [ax - 0.9, ax + 3.9]) boxA(lam(0xd8b020), 0.2, 1, 0.2, bx, 0, backZ - 1.2);
-    // vents and a duct running up the wall
-    for (const [vx, vy] of [[ax - 7.5, 4.2], [ax - 2.4, 5.6], [ax + 5.5, 4.8]]) {
-      boxA(steel, 1, 0.6, 0.12, vx, vy, backZ - 0.06);
-      for (let k = 0; k < 4; k++) boxA(dark, 0.9, 0.04, 0.02, vx, vy + 0.1 + k * 0.12, backZ - 0.13);
-    }
-    boxA(steel, 0.5, ah - 1, 0.5, ax + 7.8, 0.6, backZ - 0.3);
-    // pipes: two down the wall, one along under the eaves
-    for (const px of [ax - 3.4, ax - 3.1]) {
-      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, ah, 8), lam(0x6a4a30));
-      pipe.position.set(px, ah / 2, backZ - 0.12);
-      arc.add(pipe);
-    }
-    const run = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, aw - 1, 8), lam(0x4a5058));
-    run.rotation.z = Math.PI / 2;
-    run.position.set(ax, ah - 0.6, backZ - 0.14);
-    arc.add(run);
-    // air conditioners: one on brackets, two on the roof
-    boxA(lam(0x9aa0a6), 1.2, 0.8, 0.7, ax - 7.2, 2.4, backZ - 0.4);
-    boxA(dark, 1.0, 0.04, 0.6, ax - 7.2, 2.4, backZ - 0.4);
-    const fanMat = lam(0x30343a);
-    const fan = new THREE.Mesh(new THREE.CircleGeometry(0.3, 14), fanMat);
-    fan.rotation.y = Math.PI;
-    fan.position.set(ax - 7.2, 2.8, backZ - 0.76);
-    arc.add(fan);
-    for (const rx of [ax - 4, ax + 4]) {
-      boxA(lam(0x8a9096), 2, 1.1, 1.4, rx, ah, az + 2);
-      boxA(fanMat, 0.9, 0.05, 0.9, rx, ah + 1.1, az + 2);
-    }
-    // a ladder up to the roof
-    for (const lx of [ax + 6.4, ax + 6.9]) boxA(steel, 0.06, ah, 0.06, lx, 0, backZ - 0.2);
-    for (let k = 0; k < 16; k++) boxA(steel, 0.5, 0.04, 0.04, ax + 6.65, 0.4 + k * 0.48, backZ - 0.2);
-    // dumpsters and bags
-    for (const [dx, col] of [[ax - 1.2, 0x2f6a3e], [ax - 3.0 + 7, 0x2a4a7a]] as const) {
-      boxA(lam(col), 1.9, 1.2, 1.1, dx - 3, 0, backZ - 0.9);
-      boxA(lam(0x1c2a20), 2.0, 0.08, 1.2, dx - 3, 1.2, backZ - 0.9);
-    }
-    for (let k = 0; k < 5; k++) {
-      const bag = new THREE.Mesh(new THREE.SphereGeometry(0.3 + R() * 0.15, 8, 6), lam(0x16181c));
-      bag.position.set(ax - 5.5 + R() * 2, 0.28, backZ - 0.8 - R() * 0.8);
-      arc.add(bag);
-    }
-    // the warning beacon over the bay, turning (see tick), and the old sign, dark
-    const beacon = boxA(new THREE.MeshBasicMaterial({ color: 0xff3020 }), 0.25, 0.25, 0.25, ax + 1.5, 3.7, backZ - 0.2);
-    const beaconL = new THREE.PointLight(0xff3020, 6, 9, 1.6);
-    beaconL.position.set(ax + 1.5, 3.8, backZ - 0.8);
-    arc.add(beaconL);
-    this.beacon = { mesh: beacon, light: beaconL };
-    const sign = canvasTex(128, 24, (g) => {
-      g.fillStyle = '#100810';
-      g.fillRect(0, 0, 128, 24);
-      g.font = 'bold 15px monospace';
-      g.fillStyle = '#7a2a5a';
-      g.fillText('FROGGY ARCADE', 4, 18);
+    const trim = lam(0x4a5468);
+    // the cornice along the top, and the pilasters at the corners
+    boxA(trim, aw + 0.6, 0.5, 0.5, ax, ah - 0.5, fz - 0.2);
+    for (const px of [ax - aw / 2 + 0.3, ax + aw / 2 - 0.3]) boxA(trim, 0.6, ah - 0.5, 0.5, px, 0, fz - 0.2);
+    // the sign board: dark, a purple frame, the frog and the name
+    const board = canvasTex(256, 48, (g) => {
+      g.fillStyle = '#141820';
+      g.fillRect(0, 0, 256, 48);
+      g.strokeStyle = '#7a5aa8';
+      g.lineWidth = 2;
+      g.strokeRect(2, 2, 252, 44);
+      // the frog's head
+      g.fillStyle = '#5a86a8';
+      g.beginPath();
+      g.ellipse(30, 26, 16, 13, 0, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.arc(22, 13, 5, 0, Math.PI * 2);
+      g.arc(38, 13, 5, 0, Math.PI * 2);
+      g.fill();
+      g.font = 'bold 22px monospace';
+      g.fillStyle = '#8a96a8';
+      g.fillText('FROGGY ARCADE', 56, 33);
     });
-    const signM = new THREE.Mesh(new THREE.PlaneGeometry(7, 1.3), new THREE.MeshBasicMaterial({ map: sign, color: 0x9a6a8a }));
-    signM.rotation.y = Math.PI;
-    signM.position.set(ax, ah - 1.5, backZ - 0.05);
-    arc.add(signM);
-    // a security light over the door, throwing a pool on the yard
-    const sec = new THREE.PointLight(0xd8e4ff, 14, 12, 1.5);
-    sec.position.set(ax - 5, 3.2, backZ - 1.2);
-    arc.add(sec);
-    boxA(new THREE.MeshBasicMaterial({ color: 0xe8f0ff }), 0.4, 0.2, 0.2, ax - 5, 3.1, backZ - 0.15);
+    const boardM = new THREE.Mesh(
+      new THREE.PlaneGeometry(9, 1.7),
+      new THREE.MeshLambertMaterial({ map: board, emissive: 0xffffff, emissiveMap: board, emissiveIntensity: 0.4 }),
+    );
+    boardM.rotation.y = Math.PI;
+    boardM.position.set(ax, ah + 0.4, fz - 0.3);
+    arc.add(boardM);
+    boxA(lam(0x1a1c24), 9.4, 2.1, 0.3, ax, ah - 0.65, fz - 0.1);
+    // two pillars either side of the doorway, a lamp on each
+    for (const sx of [-1, 1]) {
+      boxA(trim, 0.45, ah - 0.6, 0.45, ax + sx * 2.6, 0, fz - 0.3);
+      boxA(lam(0x2a2c34), 0.25, 0.3, 0.2, ax + sx * 2.6, 3.4, fz - 0.6);
+      boxA(new THREE.MeshBasicMaterial({ color: 0x8a96b0 }), 0.15, 0.08, 0.05, ax + sx * 2.6, 3.42, fz - 0.71);
+    }
+    // the posters: a frog face on each, four colours
+    const poster = (bg: string, band: string) =>
+      canvasTex(32, 48, (g) => {
+        g.fillStyle = '#20242e';
+        g.fillRect(0, 0, 32, 48);
+        g.fillStyle = bg;
+        g.fillRect(2, 2, 28, 44);
+        g.fillStyle = band;
+        g.fillRect(6, 6, 20, 3);
+        g.fillRect(8, 38, 16, 2);
+        g.fillStyle = '#7aa0b8';
+        g.beginPath();
+        g.ellipse(16, 25, 8, 6, 0, 0, Math.PI * 2);
+        g.fill();
+        g.fillRect(9, 16, 4, 4);
+        g.fillRect(19, 16, 4, 4);
+        g.fillStyle = '#1a2028';
+        g.fillRect(11, 23, 2, 2);
+        g.fillRect(19, 23, 2, 2);
+      });
+    for (const [px, bg, band] of [
+      [ax - 7, '#3e3e8a', '#b8b8e8'],
+      [ax - 4.4, '#2e3e4e', '#7a6ab8'],
+      [ax + 4.4, '#5a2a3e', '#b8a8e8'],
+      [ax + 7, '#3e5a6a', '#c8d8e8'],
+    ] as const) {
+      const t = poster(bg, band);
+      const pm = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.2), new THREE.MeshLambertMaterial({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.25 }));
+      pm.rotation.y = Math.PI;
+      pm.position.set(px, 2.6, fz - 0.03);
+      arc.add(pm);
+    }
+    // the doors: a frame, two glass leaves, a dark lobby behind them, and
+    // the chain across the handles with a padlock on it
+    boxA(lam(0x6a7078), 2.8, 3.0, 0.2, ax, 0, fz - 0.05);
+    boxA(lam(0x05070a), 2.5, 2.7, 0.05, ax, 0.05, fz - 0.16);
+    const glass = new THREE.MeshLambertMaterial({ color: 0x5a7088, transparent: true, opacity: 0.45 });
+    for (const sx of [-1, 1]) {
+      boxA(glass, 1.15, 2.6, 0.04, ax + sx * 0.62, 0.08, fz - 0.2);
+      boxA(steel, 0.06, 0.6, 0.06, ax + sx * 0.12, 1.0, fz - 0.26);
+    }
+    const chain = lam(0x9aa4ae);
+    for (let k = 0; k < 10; k++) {
+      const link = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.012, 4, 8), chain);
+      link.position.set(ax - 0.4 + k * 0.09, 1.35 - Math.sin((k / 9) * Math.PI) * 0.15, fz - 0.3);
+      link.rotation.y = k % 2 ? Math.PI / 2 : 0;
+      arc.add(link);
+    }
+    boxA(lam(0xc8a040, 0x2a1c08), 0.14, 0.16, 0.06, ax, 1.06, fz - 0.32);
+    // CLOSED, in red, over the doors -- and the one light it throws
+    const closed = canvasTex(96, 24, (g) => {
+      g.fillStyle = '#1a0606';
+      g.fillRect(0, 0, 96, 24);
+      g.strokeStyle = '#e8323c';
+      g.strokeRect(1, 1, 94, 22);
+      g.font = 'bold 16px monospace';
+      g.fillStyle = '#ff3a3a';
+      g.fillText('CLOSED', 18, 18);
+    });
+    const closedM = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.65), new THREE.MeshBasicMaterial({ map: closed }));
+    closedM.rotation.y = Math.PI;
+    closedM.position.set(ax, 3.45, fz - 0.06);
+    arc.add(closedM);
+    const red = new THREE.PointLight(0xff3020, 5, 9, 1.6);
+    red.position.set(ax, 3.3, fz - 1);
+    arc.add(red);
+    this.beacon = { mesh: closedM, light: red };
+    // the pavement in front, and a car parked at the kerb
+    boxA(lam(0x3a3c44), aw, 0.12, 2.2, ax, 0, fz - 1.1);
+    boxA(lam(0x5a2a30), 3.6, 0.8, 1.6, ax - 6, 0.3, fz - 4.9);
+    boxA(lam(0x5a2a30), 2, 0.6, 1.5, ax - 6.2, 1.1, fz - 4.9);
+    boxA(lam(0x5a6a88), 1.8, 0.4, 1.52, ax - 6.2, 1.15, fz - 4.9);
+    for (const wx of [-1.2, 1.2]) {
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 1.7, 10), lam(0x111214));
+      w.rotation.x = Math.PI / 2;
+      w.position.set(ax - 6 + wx, 0.32, fz - 4.9);
+      arc.add(w);
+    }
 
     // ---- ACROSS THE ROAD (your right: -x): a row of shops and flats, alleys
     // between them, and neon
@@ -1504,10 +1636,72 @@ export class NightRoad3D extends Phaser.Scene {
     const D = 14;
     const fx = (px: number): number => (px - HOTEL_DOOR) / PX;
     const fy = (py: number): number => (HOTEL_H - py) / PX;
-    const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), new THREE.MeshLambertMaterial({ color: 0x3a2e3e }));
+    // Its sides: stone with rows of windows, a few lit, so from an angle it is
+    // a building and not a painted board on a box.
+    const sideTex = canvasTex(D * 8, H * 8, (g) => {
+      g.fillStyle = '#4a3c48';
+      g.fillRect(0, 0, D * 8, H * 8);
+      for (let y = 0; y < H * 8; y += 6) {
+        g.fillStyle = 'rgba(0,0,0,0.2)';
+        g.fillRect(0, y + 5, D * 8, 1);
+        for (let x = (y / 6) % 2 ? -6 : 0; x < D * 8; x += 12) {
+          g.fillStyle = `rgba(255,240,230,${(((x * 7 + y * 3) % 9) / 9) * 0.06})`;
+          g.fillRect(x, y, 11, 5);
+        }
+      }
+      for (let fy2 = 14; fy2 < H * 8 - 20; fy2 += 22) {
+        for (let fx2 = 10; fx2 < D * 8 - 10; fx2 += 22) {
+          const on = (fx2 * 13 + fy2 * 7) % 5 === 0;
+          g.fillStyle = '#2a2430';
+          g.fillRect(fx2 - 2, fy2 - 2, 14, 18);
+          g.fillStyle = on ? '#f0c070' : '#141018';
+          g.fillRect(fx2, fy2, 10, 14);
+          g.fillStyle = '#9a8a88';
+          g.fillRect(fx2 - 3, fy2 + 15, 16, 2);
+        }
+      }
+    });
+    sideTex.magFilter = THREE.LinearFilter;
+    sideTex.minFilter = THREE.LinearMipmapLinearFilter;
+    const sideMat = new THREE.MeshLambertMaterial({ map: sideTex, emissive: 0xffffff, emissiveMap: sideTex, emissiveIntensity: 0.25 });
+    const roofMat = new THREE.MeshLambertMaterial({ color: 0x2a2430 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), [sideMat, sideMat, roofMat, roofMat, roofMat, roofMat]);
     body.position.set(0, H / 2, HOTEL_Z - 2 - D / 2);
     S.add(body);
-    const facade = canvasTex(HOTEL_W, HOTEL_H, (g) => paintHotel(g, { dusk: true }));
+    // The front: the street's painting, drawn four times over with the stone
+    // between the windows given courses and grain, so up close it is masonry
+    // and not a blown-up sprite.
+    const facade = canvasTex(HOTEL_W * 4, HOTEL_H * 4, (g) => {
+      const small = document.createElement('canvas');
+      small.width = HOTEL_W;
+      small.height = HOTEL_H;
+      const sg = small.getContext('2d')!;
+      paintHotel(sg, { dusk: true });
+      g.imageSmoothingEnabled = false;
+      g.drawImage(small, 0, 0, HOTEL_W * 4, HOTEL_H * 4);
+      const px = sg.getImageData(0, 0, HOTEL_W, HOTEL_H).data;
+      for (let y = 0; y < HOTEL_H; y++) {
+        for (let x = 0; x < HOTEL_W; x++) {
+          const i = (y * HOTEL_W + x) * 4;
+          const lum = px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11;
+          if (px[i + 3] < 10 || lum > 120) continue; // windows, lamps, the sign: left clean
+          // stone: a mortar line every few rows, and grain
+          if (y % 3 === 0) {
+            g.fillStyle = 'rgba(0,0,0,0.16)';
+            g.fillRect(x * 4, y * 4, 4, 1);
+          }
+          if ((x + (Math.floor(y / 3) % 2) * 3) % 6 === 0) {
+            g.fillStyle = 'rgba(0,0,0,0.12)';
+            g.fillRect(x * 4, y * 4, 1, 4);
+          }
+          g.fillStyle = `rgba(255,245,235,${(((x * 31 + y * 17) % 7) / 7) * 0.07})`;
+          g.fillRect(x * 4 + ((x * y) % 3), y * 4 + 1, 2, 2);
+        }
+      }
+    });
+    facade.magFilter = THREE.LinearFilter;
+    facade.minFilter = THREE.LinearMipmapLinearFilter;
+    facade.anisotropy = 4;
     const front = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ map: facade, fog: false }));
     front.position.set(0, H / 2, HOTEL_Z - 1.98);
     S.add(front);
@@ -1650,9 +1844,10 @@ export class NightRoad3D extends Phaser.Scene {
     this.stepRipples(dt);
     this.sky?.position.copy(this.stage.camera.position);
     if (this.beacon) {
-      const on = Math.sin(this.clock * 6) > 0.2;
-      this.beacon.light.intensity = on ? 6 : 0.3;
-      (this.beacon.mesh.material as THREE.MeshBasicMaterial).color.setHex(on ? 0xff3020 : 0x401008);
+      // the CLOSED sign: a tired neon, mostly on, now and then a stutter
+      const on = Math.sin(this.clock * 23) > -0.85 || Math.sin(this.clock * 1.3) < 0.7;
+      this.beacon.light.intensity = on ? 5 : 0.6;
+      (this.beacon.mesh.material as THREE.MeshBasicMaterial).color.setHex(on ? 0xffffff : 0x502020);
     }
     if (this.twinkle) this.twinkle.opacity = 0.7 + Math.sin(this.clock * 2.3) * 0.2 + Math.sin(this.clock * 5.1) * 0.1;
     if (this.busLight && this.busTube) {
