@@ -638,6 +638,9 @@ export class FroggyMonster {
   private varSplay = 0;
   private neckBaseY = NaN;
   private stretchNow = 0;
+  /** The eyes' and lids' own scales, before the scream swells them. */
+  private eyeBase: number[] = [];
+  private lidBase: number[] = [];
   private pounceNow = 0;
   private armSkin: THREE.MeshPhongMaterial | null = null;
   /** World height of the floor this frame.  See FroggyPose.floor. */
@@ -2251,6 +2254,22 @@ export class FroggyMonster {
     this.jaw.scale.set(1 + st * 0.06, 1 + st * 0.55, 1 + st * 0.22);
     this.jaw.position.set(0, MOUTH_Y - st * 0.09, JAW_PIVOT_Z + st * 0.035);
     if (this.lowerJaw) this.lowerJaw.scale.y = 1 + st * 0.35;
+    // ---- THE SCREAM IS BIG.  Past most of the way open, the jaw keeps going
+    // -- further down and wider -- and the eyes swell out of their sockets,
+    // lids and all, so the face is nothing but mouth and stare.
+    const sc = THREE.MathUtils.smoothstep(m, 0.55, 1);
+    if (!this.eyeBase.length) {
+      for (const e of this.eyes) this.eyeBase.push(e.scale.x);
+      for (const l of this.lids) this.lidBase.push(l.group.scale.x);
+    }
+    const swell = 1 + 0.34 * sc;
+    this.eyes.forEach((e, i) => e.scale.setScalar(this.eyeBase[i] * swell));
+    this.lids.forEach((l, i) => {
+      l.group.scale.setScalar(this.lidBase[i] * swell);
+    });
+    this.jaw.rotation.x += 0.28 * sc;
+    this.jaw.scale.x *= 1 + 0.16 * sc;
+    this.jaw.scale.z *= 1 + 0.12 * sc;
     // the wall inside, as deep as the drop at the back of the jaw
     if (this.cavity) {
       const drop = Math.sin(Math.max(0, this.jaw.rotation.x)) * (MOUTH_Z - JAW_PIVOT_Z + MOUTH_D * 0.2) * this.jaw.scale.z;
@@ -2859,8 +2878,10 @@ export class FroggyMonster {
       const stare = Math.min(1, this.constrictNow);
       const follow = eye.rotation.x * (1 - 0.8 * stare);
       const heavy = e === 0 ? 0.05 * (1 - stare) : 0;
-      const upOpen = -0.42 - d * 0.3 + follow * 0.8 + heavy;
-      const loOpen = 0.62 + d * 0.14 + follow * 0.45;
+      // screaming, pulled right back off the bulging white
+      const scream = THREE.MathUtils.smoothstep(this.mawNow, 0.55, 1);
+      const upOpen = -0.42 - d * 0.3 + follow * 0.8 + heavy - 0.4 * scream;
+      const loOpen = 0.62 + d * 0.14 + follow * 0.45 + 0.25 * scream;
       upper.rotation.x = upOpen + (0.06 - upOpen) * shut;
       lower.rotation.x = loOpen + (-0.04 - loOpen) * shut;
     }
