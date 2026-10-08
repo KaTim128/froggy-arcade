@@ -230,7 +230,9 @@ export class ExteriorDay extends Phaser.Scene {
       .rectangle(door.x - 2, door.y - 2, door.w + 4, door.h + 4)
       .setOrigin(0, 0)
       .setStrokeStyle(1, PALETTE.gold)
-      .setDepth(60)
+      // behind whoever is standing at the door (people are 50 and up), in
+      // front of the shopfront and its CLOSED sign
+      .setDepth(48)
       .setAlpha(0)
       .setFillStyle(PALETTE.gold, 0.12);
 

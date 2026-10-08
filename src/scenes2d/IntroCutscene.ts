@@ -29,7 +29,7 @@ import { Player } from '../art/player';
 import { froggyLayer } from '../render/froggyLayer';
 import { isTouch } from '../core/device';
 
-export const STARTING_TOKENS = 20;
+export const STARTING_TOKENS = 30;
 
 /**
  * The cards.  One thought per card, and the next one is a click away.  The
@@ -47,7 +47,7 @@ const OFFER: string[] = [
   '"That arcade is full of prizes."',
   '"Win them for me, and I will pay you in cash."',
   '"Half of whatever the prize is worth."',
-  'Here\'s 20 tokens.',
+  'Here\'s 30 tokens.',
 ];
 /** The cards are big.  Only the cards. */
 const CARD_SIZE = 16;
@@ -247,7 +247,7 @@ export class IntroCutscene extends Phaser.Scene {
         ease: 'Bounce.easeOut',
       });
     }
-    this.caption.setText('twenty tokens. a start.').setAlpha(0);
+    this.caption.setText('thirty tokens. a start.').setAlpha(0);
     this.tweens.add({ targets: this.caption, alpha: 1, duration: 500 });
     this.armArrow(() => this.finish());
   }
