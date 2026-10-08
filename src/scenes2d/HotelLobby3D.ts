@@ -996,6 +996,23 @@ export class HotelLobby3D extends Phaser.Scene {
     return this.eye > 1.3;
   }
 
+  /**
+   * Eye contact: you are up at the glass AND his gaze -- where his face is
+   * turned, or his body and the sweep of his head -- is on the door.  Up
+   * while he is looking elsewhere, he does not see you.
+   */
+  private sees(): boolean {
+    if (!this.standing()) return false;
+    const fx = this.fpos.x;
+    const fz = this.fpos.z;
+    const toYou = Math.atan2(this.camPos.x - fx, this.camPos.z - fz);
+    const gaze = this.faceTo && this.faceK > 0.5 ? Math.atan2(this.faceTo.x - fx, this.faceTo.z - fz) : this.fYaw + this.scanT;
+    let d = toYou - gaze;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return Math.abs(d) < 0.75;
+  }
+
   private story(dt: number): void {
     const m = this.monster;
     // the banging on the stairwell door, until it goes
@@ -1015,7 +1032,8 @@ export class HotelLobby3D extends Phaser.Scene {
       return;
     }
     // looking round the lobby: on your feet at the glass, he sees you
-    if (this.mode === 'hide' && (this.phase === 'search' || (this.phase === 'burst' && this.phaseT > 0.6)) && this.standing()) return this.detect();
+    // (a second to get down after the door goes, before he looks your way)
+    if (this.mode === 'hide' && (this.phase === 'search' || (this.phase === 'burst' && this.phaseT > 1.0)) && this.sees()) return this.detect();
     if (this.phase === 'burst' && this.phaseT > 1.6) {
       if (this.mode === 'exposed') {
         // he has seen you
@@ -1039,7 +1057,7 @@ export class HotelLobby3D extends Phaser.Scene {
     }
     if (this.phase === 'approach') {
       // coming at the door, and you are still on your feet
-      if (this.standing()) return this.detect();
+      if (this.sees()) return this.detect();
       if (this.legs.length === 0) {
         this.phase = 'watch';
         this.phaseT = 0;
@@ -1047,7 +1065,7 @@ export class HotelLobby3D extends Phaser.Scene {
       }
     }
     if (this.phase === 'watch') {
-      if (this.standing()) return this.detect();
+      if (this.sees()) return this.detect();
       // the heart, going hard, and nothing else
       this.heartT -= dt;
       if (this.heartT <= 0) {
@@ -1068,7 +1086,7 @@ export class HotelLobby3D extends Phaser.Scene {
     }
     if (this.phase === 'lookback') {
       // the last look back at the door: quiet, and long
-      if (this.phaseT > 1.6 && this.phaseT < 4.4 && this.standing()) return this.detect();
+      if (this.phaseT > 1.6 && this.phaseT < 4.4 && this.sees()) return this.detect();
       if (this.phaseT > 5.2) {
         this.phase = 'exit';
         this.phaseT = 0;
@@ -1316,6 +1334,8 @@ export class HotelLobby3D extends Phaser.Scene {
       }
     } else this.stepT = 0.1;
 
+    // out of the stairwell, a second, then the head comes round to the storage door
+    if (this.phase === 'burst' && this.phaseT > 0.9 && this.mode === 'hide') faceTo = new THREE.Vector3(X1, 1.5, DOOR_Z);
     this.faceTo = faceTo;
     this.faceK += ((faceTo ? 1 : 0) - this.faceK) * Math.min(1, dt * 2);
     this.lean += (leanWant - this.lean) * Math.min(1, dt * 1.5);
