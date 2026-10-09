@@ -16,7 +16,11 @@ import type { CabinetDef } from '../game/content';
 import { centerText } from '../core/ui';
 
 /** Radius of the painted face, in world pixels.  `def.y` is the foot of it. */
-export const WHEEL_R = 20;
+/**
+ * 12: a wheel about 1.6 m across on a waist-high post, so the whole thing
+ * stands a head over the 26-pixel drifter.  At 20 it towered at nearly 4 m.
+ */
+export const WHEEL_R = 12;
 
 export class PrizeWheel {
   readonly def: CabinetDef;
@@ -29,15 +33,16 @@ export class PrizeWheel {
     this.def = def;
     const { x, y } = def;
     const d = y / 1000;
-    const cy = y - WHEEL_R - 16;
+    const cy = y - WHEEL_R - 9;
 
     // shadow on the carpet, and the post it stands on
-    scene.add.ellipse(x, y + 1, WHEEL_R * 2, 8, PALETTE.black, 0.35).setDepth(d);
-    scene.add.rectangle(x, y, 8, 18, PALETTE.steel).setOrigin(0.5, 1).setDepth(d);
-    scene.add.ellipse(x, y, 22, 6, PALETTE.slate).setDepth(d);
+    scene.add.ellipse(x, y + 1, WHEEL_R * 2, 5, PALETTE.black, 0.35).setDepth(d);
+    scene.add.rectangle(x, y, 4, 11, PALETTE.steel).setOrigin(0.5, 1).setDepth(d);
+    scene.add.rectangle(x - 1, y, 1, 11, 0xd0d4dc).setOrigin(0.5, 1).setDepth(d);
+    scene.add.ellipse(x, y, 14, 4, PALETTE.slate).setDepth(d);
 
     // the face: a rim, and eight wedges of alternating colour
-    scene.add.circle(x, cy, WHEEL_R + 3, PALETTE.brownLight).setDepth(d);
+    scene.add.circle(x, cy, WHEEL_R + 2, PALETTE.brownLight).setDepth(d);
     scene.add.circle(x, cy, WHEEL_R + 1, PALETTE.ink).setDepth(d);
     // Drawn around its OWN origin and then placed, so the idle tween turns the
     // face instead of swinging it round the room: a Graphics drawn at world
@@ -49,11 +54,11 @@ export class PrizeWheel {
       wedge.slice(0, 0, WHEEL_R, Phaser.Math.DegToRad(i * 45 - 90), Phaser.Math.DegToRad((i + 1) * 45 - 90), false);
       wedge.fillPath();
     }
-    scene.add.circle(x, cy, 4, PALETTE.bone).setDepth(d + 0.0001);
-    scene.add.circle(x, cy, 2, PALETTE.ink).setDepth(d + 0.0001);
+    scene.add.circle(x, cy, 2.5, PALETTE.bone).setDepth(d + 0.0001);
+    scene.add.circle(x, cy, 1, PALETTE.ink).setDepth(d + 0.0001);
     // the pointer, over the top of it
     scene.add
-      .triangle(x, cy - WHEEL_R - 3, 0, 0, 6, 0, 3, 7, PALETTE.cream)
+      .triangle(x, cy - WHEEL_R - 3, 0, 0, 4, 0, 2, 5, PALETTE.cream)
       .setOrigin(0.5, 0)
       .setDepth(d + 0.0002);
 
@@ -75,7 +80,7 @@ export class PrizeWheel {
     const badge = scene.add.container(x - WHEEL_R - 10, cy, [this.badgeBox, this.badgeText]).setDepth(500);
     scene.tweens.add({ targets: badge, y: cy - 2, duration: 1200, yoyo: true, repeat: -1 });
 
-    this.bounds = new Phaser.Geom.Rectangle(x - WHEEL_R - 4, cy - WHEEL_R - 6, WHEEL_R * 2 + 8, WHEEL_R * 2 + 26);
+    this.bounds = new Phaser.Geom.Rectangle(x - WHEEL_R - 4, cy - WHEEL_R - 6, WHEEL_R * 2 + 8, WHEEL_R * 2 + 18);
   }
 
   /** PRD §6.8: greys out when a spin is out of reach. */

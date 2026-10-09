@@ -182,10 +182,15 @@ export class ArrestEnding extends Phaser.Scene {
     for (let x = 4; x < GAME_W; x += 26) g.fillRect(x, 171, 12, 1);
     // a guard at the gate
     const guard = this.add.graphics();
-    guard.fillStyle(0x1e2a4a, 1).fillRect(186, 138, 10, 14);
-    guard.fillStyle(0x14182a, 1).fillRect(187, 152, 8, 10);
-    guard.fillStyle(0xd8b090, 1).fillRect(188, 131, 7, 7);
-    guard.fillStyle(0x0c1020, 1).fillRect(187, 128, 9, 3);
+    // the drifter's height, a little over: 27 pixels from cap to boots
+    guard.fillStyle(0x0c0a10, 1).fillRect(186, 134, 11, 29).fillRect(185, 143, 13, 11);
+    guard.fillStyle(0x1e2a4a, 1).fillRect(186, 144, 11, 10);
+    guard.fillStyle(0x2c3a5e, 1).fillRect(186, 144, 11, 1);
+    guard.fillStyle(0x14182a, 1).fillRect(187, 154, 4, 8).fillRect(192, 154, 4, 8);
+    guard.fillStyle(0xd8b090, 1).fillRect(188, 138, 7, 6);
+    guard.fillStyle(0x2a1a10, 1).fillRect(189, 140, 1, 1).fillRect(193, 140, 1, 1);
+    guard.fillStyle(0x0c1020, 1).fillRect(187, 135, 9, 3).fillRect(193, 137, 4, 1);
+    guard.fillStyle(0xe8c040, 1).fillRect(194, 147, 1, 1);
     this.layer.add(guard);
     this.player = new Player(this, 128, 162, false);
     this.walkTo = 128;

@@ -266,24 +266,25 @@ export class StreetWest extends Phaser.Scene {
     // the doorman: a long coat, a peaked cap, gold buttons, arms folded
     const d = DOORMAN_X;
     const man = this.add.container(d, 158);
-    this.add.ellipse(d + 1, 158, 16, 3, 0x000000, 0.3);
+    this.add.ellipse(d + 1, 158, 13, 3, 0x000000, 0.3);
     const R = (x: number, y: number, w: number, h: number, col: number, ox = 0.5, oy = 1) =>
       man.add(this.add.rectangle(x, y, w, h, col).setOrigin(ox, oy));
-    R(-2, 0, 4, 12, 0x2a2a3a); // trousers, two legs
-    R(2, 0, 4, 12, 0x24243a);
-    R(-2, 0, 5, 2, 0x111114);
-    R(2, 0, 5, 2, 0x111114);
-    R(0, -12, 11, 14, 0x7b2a3a); // the long coat
-    R(0, -18, 13, 3, 0x6a2232); // folded arms across it
-    R(0, -26, 7, 7, 0xe8b890); // face
-    R(0, -32, 9, 3, 0x2a2a3a); // cap crown
-    R(2, -32, 6, 1, 0x1a1a24); // peak
+    // to the player's scale: a big man, a little taller than the drifter
+    R(-2, 0, 3, 9, 0x2a2a3a); // trousers, two legs
+    R(2, 0, 3, 9, 0x24243a);
+    R(-2, 0, 4, 2, 0x111114);
+    R(2, 0, 4, 2, 0x111114);
+    R(0, -9, 10, 11, 0x7b2a3a); // the long coat
+    R(0, -13, 12, 3, 0x6a2232); // folded arms across it
+    R(0, -20, 6, 6, 0xe8b890); // face
+    R(0, -25, 7, 3, 0x2a2a3a); // cap crown
+    R(2, -25, 5, 1, 0x1a1a24); // peak
     finishFigure(this, man, { seed: 41 });
-    for (let k = 0; k < 3; k++) man.add(this.add.rectangle(0, -21 + k * 3, 1, 1, PALETTE.gold));
-    man.add(this.add.rectangle(-2, -29, 1, 1, 0x2a1a10)); // eyes, unimpressed
-    man.add(this.add.rectangle(1, -29, 1, 1, 0x2a1a10));
-    man.add(this.add.rectangle(-0.5, -27, 3, 1, 0xb08060)); // a flat mouth
-    man.add(this.add.rectangle(0, -32.5, 9, 1, PALETTE.gold).setAlpha(0.8)); // cap band
+    for (let k = 0; k < 2; k++) man.add(this.add.rectangle(0, -17 + k * 3, 1, 1, PALETTE.gold));
+    man.add(this.add.rectangle(-1.5, -23, 1, 1, 0x2a1a10)); // eyes, unimpressed
+    man.add(this.add.rectangle(1.5, -23, 1, 1, 0x2a1a10));
+    man.add(this.add.rectangle(0, -21, 2, 1, 0xb08060)); // a flat mouth
+    man.add(this.add.rectangle(0, -25.5, 7, 1, PALETTE.gold).setAlpha(0.8)); // cap band
   }
 
   /**
@@ -335,24 +336,24 @@ export class StreetWest extends Phaser.Scene {
     this.add.ellipse(o + 1, 158, 16, 3, 0x000000, 0.3).setDepth(3);
     const R = (x: number, y: number, w: number, h: number, col: number) =>
       cop.add(this.add.rectangle(x, y, w, h, col).setOrigin(0.5, 1));
-    R(-2, 0, 4, 10, 0x14182a);
-    R(2, 0, 4, 10, 0x101424);
-    R(-2, 0, 5, 2, 0x08080c);
-    R(2, 0, 5, 2, 0x08080c);
-    R(0, -10, 10, 13, 0x1e2a4a); // tunic
-    R(0, -10, 10, 2, 0x2a2a2a); // duty belt
-    R(-6, -12, 3, 9, 0x1e2a4a); // the arm holding the notebook
-    R(0, -23, 7, 7, 0xd8b090); // face
-    R(0, -29, 9, 3, 0x0c1020); // cap
+    R(-2, 0, 3, 9, 0x14182a);
+    R(2, 0, 3, 9, 0x101424);
+    R(-2, 0, 4, 2, 0x08080c);
+    R(2, 0, 4, 2, 0x08080c);
+    R(0, -9, 9, 10, 0x1e2a4a); // tunic
+    R(0, -9, 9, 2, 0x2a2a2a); // duty belt
+    R(-5, -10, 2, 7, 0x1e2a4a); // the arm holding the notebook
+    R(0, -19, 6, 6, 0xd8b090); // face
+    R(0, -24, 7, 3, 0x0c1020); // cap
     finishFigure(this, cop, { seed: 43 });
-    cop.add(this.add.rectangle(3, -29, 4, 1, 0x0c1020).setOrigin(0, 1)); // peak
-    cop.add(this.add.rectangle(0, -30, 9, 1, 0xd8d8e0).setOrigin(0.5, 1)); // cap band
-    cop.add(this.add.rectangle(2, -18, 2, 2, 0xe8c040)); // badge
-    cop.add(this.add.rectangle(-2, -11, 1, 1, 0xc0c0c8)); // buckle
-    cop.add(this.add.rectangle(-2, -27, 1, 1, 0x2a1a10)); // eyes
-    cop.add(this.add.rectangle(1, -27, 1, 1, 0x2a1a10));
-    cop.add(this.add.rectangle(-7, -14, 3, 4, 0xe8e4d8)); // the notebook
-    cop.add(this.add.rectangle(-7, -15, 2, 1, 0x8a8a90));
+    cop.add(this.add.rectangle(2, -24, 4, 1, 0x0c1020).setOrigin(0, 1)); // peak
+    cop.add(this.add.rectangle(0, -25, 7, 1, 0xd8d8e0).setOrigin(0.5, 1)); // cap band
+    cop.add(this.add.rectangle(2, -15, 1, 1, 0xe8c040)); // badge
+    cop.add(this.add.rectangle(-1, -10, 1, 1, 0xc0c0c8)); // buckle
+    cop.add(this.add.rectangle(-1.5, -22, 1, 1, 0x2a1a10)); // eyes
+    cop.add(this.add.rectangle(1.5, -22, 1, 1, 0x2a1a10));
+    cop.add(this.add.rectangle(-6, -12, 3, 3, 0xe8e4d8)); // the notebook
+    cop.add(this.add.rectangle(-6, -13, 2, 1, 0x8a8a90));
     // a patrol car at the kerb, its lightbar turning over, slow, in the daylight
     const car = this.add.graphics().setDepth(1);
     const cx = 170;

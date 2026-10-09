@@ -60,9 +60,10 @@ export class BackAlley extends Phaser.Scene {
     if (this.chained) this.paintChainedDoor(c);
     else {
       // the back door — ajar, and behind it nothing but black
-      this.add.rectangle(DOOR_X, 100, 34, 50, PALETTE.brown).setOrigin(0, 0);
-      this.add.rectangle(DOOR_X + 22, 100, 12, 50, PALETTE.black).setOrigin(0, 0);
-      this.add.rectangle(DOOR_X + 21, 100, 1, 50, PALETTE.moon).setOrigin(0, 0).setAlpha(0.25);
+      // a door the drifter's size: 32 high, about 2.1 m, where it was 50
+      this.add.rectangle(DOOR_X + 4, 118, 22, 32, PALETTE.brown).setOrigin(0, 0);
+      this.add.rectangle(DOOR_X + 18, 118, 8, 32, PALETTE.black).setOrigin(0, 0);
+      this.add.rectangle(DOOR_X + 17, 118, 1, 32, PALETTE.moon).setOrigin(0, 0).setAlpha(0.25);
     }
 
     this.player = new Player(this, 70, WALK_Y, time === 'midnight');
@@ -90,20 +91,22 @@ export class BackAlley extends Phaser.Scene {
    * crossed over it from the frame's bolts, and a padlock where they meet.
    */
   private paintChainedDoor(c: (n: number) => number): void {
-    this.add.rectangle(DOOR_X - 2, 98, 38, 52, c(0x2a2018)).setOrigin(0, 0);
-    this.add.rectangle(DOOR_X, 100, 34, 50, c(PALETTE.brown)).setOrigin(0, 0);
-    this.add.rectangle(DOOR_X + 2, 104, 30, 18, c(0x5a3c24)).setOrigin(0, 0).setAlpha(0.6);
-    this.add.rectangle(DOOR_X + 2, 126, 30, 20, c(0x5a3c24)).setOrigin(0, 0).setAlpha(0.6);
-    this.add.rectangle(DOOR_X + 28, 124, 3, 2, c(PALETTE.steel)).setOrigin(0, 0);
+    // Sized to the drifter: 22 wide and 32 high, a standard door's 0.9 by
+    // 2.1 m, where it used to be 50 high.
+    this.add.rectangle(DOOR_X + 2, 116, 26, 34, c(0x2a2018)).setOrigin(0, 0);
+    this.add.rectangle(DOOR_X + 4, 118, 22, 32, c(PALETTE.brown)).setOrigin(0, 0);
+    this.add.rectangle(DOOR_X + 6, 121, 18, 11, c(0x5a3c24)).setOrigin(0, 0).setAlpha(0.6);
+    this.add.rectangle(DOOR_X + 6, 135, 18, 12, c(0x5a3c24)).setOrigin(0, 0).setAlpha(0.6);
+    this.add.rectangle(DOOR_X + 22, 134, 2, 2, c(PALETTE.steel)).setOrigin(0, 0);
     // the chains: links laid along two diagonals, alternately face-on and edge-on
     const g = this.add.graphics();
     const steel = c(0x9aa4ae);
     const dark = c(0x3a4048);
     for (const [x0, y0, x1, y1] of [
-      [DOOR_X - 1, 104, DOOR_X + 35, 142],
-      [DOOR_X + 35, 104, DOOR_X - 1, 142],
+      [DOOR_X + 3, 121, DOOR_X + 27, 146],
+      [DOOR_X + 27, 121, DOOR_X + 3, 146],
     ]) {
-      const n = 13;
+      const n = 9;
       for (let k = 0; k <= n; k++) {
         const x = x0 + ((x1 - x0) * k) / n;
         const y = y0 + ((y1 - y0) * k) / n;
@@ -114,8 +117,8 @@ export class BackAlley extends Phaser.Scene {
       g.fillStyle(dark, 1).fillCircle(x0, y0, 2).fillCircle(x1, y1, 2);
     }
     // the padlock where they cross
-    const lx = DOOR_X + 17;
-    const ly = 123;
+    const lx = DOOR_X + 15;
+    const ly = 134;
     g.lineStyle(1.5, steel, 1).strokeCircle(lx, ly - 4, 3);
     g.fillStyle(c(0xb08a3a), 1).fillRect(lx - 4, ly - 3, 8, 7);
     g.fillStyle(c(0xe0c070), 1).fillRect(lx - 3, ly - 2, 2, 5);
@@ -277,48 +280,48 @@ function paintAlley(scene: Phaser.Scene, key: string, c: (n: number) => number, 
 
   // the caged lamp over the door, and its cone of light
   const lx = 253;
-  const cone = g.createRadialGradient(lx, 92, 2, lx, 130, 60);
+  const cone = g.createRadialGradient(lx, 112, 2, lx, 140, 50);
   cone.addColorStop(0, 'rgba(255,214,140,0.45)');
   cone.addColorStop(1, 'rgba(255,214,140,0)');
   g.fillStyle = cone;
   g.beginPath();
-  g.moveTo(lx - 4, 92);
-  g.lineTo(lx + 4, 92);
+  g.moveTo(lx - 4, 112);
+  g.lineTo(lx + 4, 112);
   g.lineTo(lx + 44, 178);
   g.lineTo(lx - 44, 178);
   g.fill();
   g.fillStyle = col(0x2a2c30);
-  g.fillRect(lx - 6, 84, 12, 3);
+  g.fillRect(lx - 6, 104, 12, 3);
   g.fillStyle = '#ffe6a8';
-  g.fillRect(lx - 4, 87, 8, 5);
+  g.fillRect(lx - 4, 107, 8, 5);
   g.fillStyle = col(0x2a2c30);
-  for (let k = 0; k < 3; k++) g.fillRect(lx - 4 + k * 3, 87, 1, 5);
+  for (let k = 0; k < 3; k++) g.fillRect(lx - 4 + k * 3, 107, 1, 5);
 
   // dumpster: body with ribs, a lid propped, wheels, and bags beside it
   const dx = 52;
   g.fillStyle = col(0x2f6a3e);
-  g.fillRect(dx, 124, 58, 28);
+  g.fillRect(dx, 134, 52, 18);
   g.fillStyle = col(0x3f8250);
-  g.fillRect(dx, 124, 58, 3);
+  g.fillRect(dx, 134, 52, 2);
   for (let k = 0; k < 5; k++) {
     g.fillStyle = col(0x24542f);
-    g.fillRect(dx + 6 + k * 11, 128, 2, 22);
+    g.fillRect(dx + 5 + k * 10, 137, 2, 13);
   }
   g.fillStyle = col(0x1c4026);
-  g.fillRect(dx - 2, 118, 62, 4);
+  g.fillRect(dx - 2, 130, 56, 4);
   g.fillStyle = col(0x5aa06a);
-  g.fillRect(dx - 2, 118, 62, 1);
+  g.fillRect(dx - 2, 130, 56, 1);
   g.fillStyle = col(0xe8e0c8);
-  g.fillRect(dx + 20, 134, 18, 6);
+  g.fillRect(dx + 18, 140, 14, 5);
   g.fillStyle = col(0x24542f);
-  g.fillRect(dx + 22, 136, 14, 1);
+  g.fillRect(dx + 20, 142, 10, 1);
   g.fillStyle = col(0x111214);
-  for (const wx of [dx + 6, dx + 50]) {
+  for (const wx of [dx + 6, dx + 46]) {
     g.beginPath();
     g.arc(wx, 152, 3, 0, Math.PI * 2);
     g.fill();
   }
-  for (const [bx, r, tone] of [[dx + 66, 9, 0x1a1c22], [dx + 76, 7, 0x24262e], [dx + 62, 6, 0x2c2e36]] as const) {
+  for (const [bx, r, tone] of [[dx + 62, 7, 0x1a1c22], [dx + 71, 5, 0x24262e], [dx + 58, 5, 0x2c2e36]] as const) {
     g.fillStyle = col(tone);
     g.beginPath();
     g.ellipse(bx, 152 - r, r, r, 0, 0, Math.PI * 2);
@@ -345,17 +348,17 @@ function paintAlley(scene: Phaser.Scene, key: string, c: (n: number) => number, 
     let seed = 913;
     const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
     g.strokeStyle = col(0x0e1a12);
-    g.strokeRect(dx - 2.5, 117.5, 63, 35);
+    g.strokeRect(dx - 2.5, 129.5, 57, 23);
     for (let k = 0; k < 5; k++) {
       g.fillStyle = 'rgba(120,70,30,0.55)';
-      g.fillRect(dx + 6 + k * 11, 129, 1, 3 + Math.floor(rnd() * 8));
+      g.fillRect(dx + 5 + k * 10, 138, 1, 2 + Math.floor(rnd() * 5));
     }
     for (let k = 0; k < 90; k++) {
       g.fillStyle = rnd() < 0.5 ? 'rgba(20,30,20,0.35)' : 'rgba(110,150,110,0.25)';
-      g.fillRect(dx + Math.floor(rnd() * 58), 127 + Math.floor(rnd() * 25), 1, 1);
+      g.fillRect(dx + Math.floor(rnd() * 52), 136 + Math.floor(rnd() * 16), 1, 1);
     }
     g.fillStyle = 'rgba(30,26,20,0.35)';
-    g.fillRect(dx, 146, 58, 6);
+    g.fillRect(dx, 147, 52, 5);
     for (const [cx, cy, w, h] of [[204, 134, 18, 16], [208, 120, 14, 14]]) {
       for (let k = 0; k < 6; k++) {
         g.fillStyle = rnd() < 0.5 ? 'rgba(70,45,22,0.6)' : 'rgba(170,130,85,0.5)';

@@ -195,8 +195,11 @@ export class ArcadeCasino extends Phaser.Scene {
       if (gone) {
         drawSuitedMan(ctx, {
           x: spot.x,
-          y: spot.y + 8,
-          height: 40,
+          // A man the drifter's size, stood behind the table: the felt is at
+          // his hips, so a little over half of him shows above it.  He was
+          // 40 high, half again the player's height.
+          y: spot.y + 12,
+          height: 28,
           pose: this.talk ? (Math.floor(this.clock * 7) % 2 ? 'talk' : 'idle') : atTable ? 'talk' : 'idle',
           // A third of the frog's sway.  He breathes and that is all, and a
           // player who watched Froggy bob at this table for an afternoon reads

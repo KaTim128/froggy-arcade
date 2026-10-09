@@ -25,6 +25,7 @@
 import Phaser from 'phaser';
 import { audio, SILENCE } from '../core/audio';
 import { store } from '../core/state';
+import { finishFigure } from '../art/surface';
 import { KEYS } from '../core/input';
 import { centerText } from '../core/ui';
 import { isTouch } from '../core/device';
@@ -481,7 +482,11 @@ export class RooftopEscape extends Phaser.Scene {
     const cap = this.add.rectangle(0, -25, 9, 3, 0x0c1020).setOrigin(0.5, 1);
     const peak = this.add.rectangle(3, -24, 4, 1, 0x0c1020).setOrigin(0, 1);
     const torch = this.add.rectangle(7, -14, 4, 2, 0xd8d8d0);
-    return this.add.container(-100, 0, [legs, body, badge, head, cap, peak, torch]).setDepth(9);
+    const cop = this.add.container(-100, 0, [legs, body, head, cap, peak]).setDepth(9);
+    // the same outline and shading as the drifter he is chasing
+    finishFigure(this, cop, { seed: 47 });
+    cop.add([badge, torch]);
+    return cop;
   }
 
   private makePolice(): void {
