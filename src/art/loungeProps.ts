@@ -123,7 +123,7 @@ export type Opponent = 'froggy' | 'nerd' | null;
  * there by the room, cut at this line, so the table crosses his chest.
  */
 export function boardSeat(x: number, y: number): { x: number; y: number } {
-  return { x, y: y - 27 };
+  return { x, y: y - 18 };
 }
 
 /**
@@ -143,11 +143,11 @@ export function paintBoardTable(scene: Phaser.Scene, x: number, y: number, who: 
   const n = (col: number) => (night ? nightify(col, 0.75) : col);
 
   // the dealer's chair, back to front, and whoever sits in it
-  c.add(chairAt(scene, 0, -27, 0, 0.58));
+  c.add(chairAt(scene, 0, -18, 0, 0.58));
   if (who === 'nerd') {
     // a skinny young man in a striped polo and big round glasses, sat back
     // in the big chair and hunched over the board like it owes him money
-    const b = -27;
+    const b = -18;
     c.add(scene.add.rectangle(0, b - 6, 12, 14, n(0x3f6fd8)));
     for (let i = 0; i < 4; i++) c.add(scene.add.rectangle(0, b - 11 + i * 3.4, 12, 1, n(0xf2e6d8)));
     c.add(scene.add.rectangle(0, b - 14, 4, 2, n(0xe8b890)));
@@ -196,7 +196,7 @@ export function paintBoardTable(scene: Phaser.Scene, x: number, y: number, who: 
   notes(22, -8, 4);
 
   // ---- the player's chair, pulled up to the near edge (as at Froggy 21)
-  c.add(chairAt(scene, 0, 26, 0, 0.5));
+  c.add(chairAt(scene, 0, 17, 0, 0.5));
 
   if (night) {
     // after closing: the same furniture, switched off and dark
