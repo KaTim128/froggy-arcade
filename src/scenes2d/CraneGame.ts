@@ -96,7 +96,7 @@ const PILE_L = 84;
 const PILE_R = 292;
 /** The prize chute, front left, behind its own little glass wall. */
 const CHUTE = { x: 46, z: 0.05, l: 20, r: 72 };
-const CLOCK_S = 25;
+const CLOCK_S = 14;
 /** How far the claw can be let down, in pixels below the gantry. */
 const MAX_DROP = 118;
 /** The claw is drawn this much bigger than its design, to match the toys. */
