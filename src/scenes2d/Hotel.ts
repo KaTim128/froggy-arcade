@@ -1259,8 +1259,10 @@ export class Hotel extends Phaser.Scene {
     if (!p) return;
     if (this.area === 'bath' && this.reflection) {
       // you, in the mirror, when you are in front of it
-      const near = Math.abs(p.x - (MIRROR.x + MIRROR.w / 2)) < 18;
-      this.reflection.setVisible(near).setPosition(Phaser.Math.Clamp(p.x, MIRROR.x + 7, MIRROR.x + MIRROR.w - 7), MIRROR.y + MIRROR.h + 8);
+      // fades in as you come up to the glass and out as you walk on: no pop
+      const d = Math.abs(p.x - (MIRROR.x + MIRROR.w / 2));
+      const a = Phaser.Math.Clamp(1 - (d - 4) / 18, 0, 1);
+      this.reflection.setVisible(a > 0).setAlpha(a).setPosition(Phaser.Math.Clamp(p.x, MIRROR.x + 7, MIRROR.x + MIRROR.w - 7), MIRROR.y + MIRROR.h + 8);
     }
     if (this.locked || this.talk) {
       this.prompt.setVisible(false);
