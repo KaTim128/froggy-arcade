@@ -119,8 +119,15 @@ const REST = { left: { x: 30, y: 30 }, right: { x: 98, y: 34 } };
  * smoothly, about his feet on the ledge: at this he stands a head and a bit
  * taller than you -- wrong, thin and too tall, but a body, not a building.
  */
-export const FIGURE_K = 0.46;
-const FEET = { x: 64, y: 98 };
+/*
+ * The window is shown at five sixteenths of this design space (the room's
+ * 40-by-31 casement; see hotelInterior's WIN_SCALE), so he is drawn larger
+ * inside it: on screen he stands about 32 pixels to the drifter's 26, with
+ * his feet on the ledge below the sill and his face and chest filling the
+ * glass.
+ */
+export const FIGURE_K = 1.1;
+const FEET = { x: 64, y: 112 };
 
 /** A point in the window to the same point in his design space. */
 function toDesign(p: { x: number; y: number }): { x: number; y: number } {
