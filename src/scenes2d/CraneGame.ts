@@ -51,6 +51,39 @@ import { CAPSULE_VARIANTS, TOY_H, TOY_RES, plushKind, toyTexture } from '../art/
 import { FULL_LINE, ODDITIES, PLUSHIES, addItem, itemDef, pocketsFull } from '../game/inventory';
 import { isTouch } from '../core/device';
 import { touchControls } from '../ui/touchControls';
+import { showTutorial, type TutorialCard } from '../ui/tutorialCard';
+import { deviceControls, deviceObjective, type ControlRow } from '../ui/controlsList';
+import { touchLayoutFor } from '../game/touchLayouts';
+
+/**
+ * How to play, on the same card every cabinet in the back rooms opens on.
+ * The two machines play alike; what differs is what is in the glass and how
+ * hard it holds on.
+ */
+const HOW_TO: Record<CraneKind, string[]> = {
+  plush: [
+    'GRAB A PLUSH AND DROP IT DOWN THE CHUTE.',
+    'LINE THE CLAW UP FROM THE FRONT, THEN',
+    'CHECK THE DEPTH IN THE SIDE VIEW.',
+    'DROP, LET IT SETTLE, THEN GRAB.',
+    'DEAD CENTRE GRIPS BEST. IT CAN SLIP!',
+    'A WON TOY GOES IN YOUR POCKETS.',
+  ],
+  oddity: [
+    'GRAB A CAPSULE AND DROP IT DOWN THE CHUTE.',
+    'LINE THE CLAW UP FROM THE FRONT, THEN',
+    'CHECK THE DEPTH IN THE SIDE VIEW.',
+    'DROP, LET IT SETTLE, THEN GRAB.',
+    'LAND ON A CAPSULE: IT HOLDS 4 IN 5.',
+    'WHAT IS INSIDE GOES IN YOUR POCKETS.',
+  ],
+};
+const HOW_TO_KEYS: ControlRow[] = [
+  ['A / D OR ← →', 'MOVE THE CLAW'],
+  ['SPACE / E', 'SIDE VIEW, DROP, THEN GRAB'],
+  ['V', 'FRONT / SIDE VIEW'],
+  ['ESC', 'LEAVE'],
+];
 
 export type CraneKind = 'plush' | 'oddity';
 
@@ -213,6 +246,8 @@ export class CraneGame extends Phaser.Scene {
     super('CraneGame');
   }
 
+  private howTo: TutorialCard | null = null;
+
   init(data: { kind?: CraneKind } = {}): void {
     this.kind = data.kind === 'oddity' ? 'oddity' : 'plush';
   }
@@ -268,7 +303,7 @@ export class CraneGame extends Phaser.Scene {
       right: bind(['D', 'RIGHT']),
       drop: bind(['SPACE', 'E']),
     };
-    kb?.on('keydown-ESC', () => this.leave(true));
+    kb?.on('keydown-ESC', () => !this.howTo && this.leave(true));
     // A press is DROP while aiming and GRAB once the claw has settled
     // (polling `isDown` in the loop misses a tap that goes down and up
     // between two frames; a key held down and auto-repeating is one press).
@@ -285,7 +320,7 @@ export class CraneGame extends Phaser.Scene {
     // dropped the claw and grabbed)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => touchControls.relabel('SPACE', 'SIDE VIEW'));
 
-    this.askToPay();
+    this.showHowTo();
     // (the touch layout is put up after create, which shows every button:
     // set them again once it is there)
     this.time.delayedCall(60, () => this.syncButtons());
@@ -529,6 +564,30 @@ export class CraneGame extends Phaser.Scene {
    * tokens, and the clock does not run until they are in.  No tokens (or no
    * free pocket for a prize), and it says so and does not start at all.
    */
+  /** The how-to-play card, first thing, before a token is asked for. */
+  private showHowTo(): void {
+    this.phase = 'pay';
+    const cost = CRANE_COST[this.kind];
+    const layout = touchLayoutFor('CraneGame');
+    this.howTo = showTutorial(this, {
+      title: this.kind === 'oddity' ? 'ODDITY CRANE' : 'PLUSH CRANE',
+      tutorial: { objective: deviceObjective(HOW_TO[this.kind], layout), controls: deviceControls(HOW_TO_KEYS, layout) },
+      cost,
+      balance: ledger.balance(),
+      payNote: 'WIN: THE PRIZE YOU DROP IN THE CHUTE',
+      onPlay: () => {
+        this.howTo = null;
+        this.askToPay();
+        this.pay();
+      },
+      onLeave: () => {
+        this.howTo = null;
+        this.leave(true);
+      },
+    });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.howTo?.destroy());
+  }
+
   private askToPay(): void {
     this.phase = 'pay';
     this.clockText.setText(`TIME ${CLOCK_S}`);
@@ -586,6 +645,7 @@ export class CraneGame extends Phaser.Scene {
    * lowering, coming up, carrying -- it does nothing.
    */
   private press(): void {
+    if (this.howTo) return;
     if (this.phase === 'pay') return this.pay();
     if (this.phase === 'aim') {
       if (!this.viewedSide && !this.sideOn) this.toggleSide();

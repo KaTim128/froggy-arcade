@@ -18,7 +18,6 @@ export const SCENES = [
   'ArcadeCasino',
   'ArcadeLounge',
   'CraneGame',
-  'Froggopoly',
   'PrizeCounter',
   'PrizeExchange',
   'ChangeMachine',
@@ -69,7 +68,6 @@ export function canEnter(scene: SceneId, s: Readonly<GameState>, ctx: GuardConte
       return s.route === 'normal' || s.route === 'ejected';
 
     case 'CraneGame':
-    case 'Froggopoly':
     case 'ArcadeHub':
     case 'ArcadeAnnex':
     case 'ArcadeCasino':

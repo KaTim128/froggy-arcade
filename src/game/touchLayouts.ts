@@ -83,7 +83,6 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   ArcadeLounge: ROOM,
   // the claw: left and right to aim, and the one button that drops it
   // the board is all buttons and spaces you tap
-  Froggopoly: TAP,
   // the claw: left and right only (in the side view, left and right are front
   // and back); one action button that walks SIDE VIEW -> DROP -> GRAB, and a
   // view button (BACK / SIDE VIEW) that the scene shows when it applies

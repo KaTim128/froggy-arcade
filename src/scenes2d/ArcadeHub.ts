@@ -88,7 +88,7 @@ const COUNTER_POST = { x: 237, y: COUNTER.y + 17 };
  * he is a mascot leaning on a counter, and at the height he was first drawn at
  * he loomed over the prizes he is pointing at.
  */
-const FROG_POST = { x: 230, y: COUNTER.y + 13, height: 30 };
+const FROG_POST = { x: 230, y: COUNTER.y + 9, height: 22 };
 /**
  * ---- AND HE IS BEHIND IT, NOT ON IT.
  *

@@ -214,13 +214,13 @@ export class ArcadeCasino extends Phaser.Scene {
           // at thirteen that rail came up across his mouth and left a frog
           // peering over the table.  At eight it crosses his chest, which is
           // where a table crosses anyone sitting at one.
-          y: spot.y + 8,
+          y: spot.y + 6,
           // SMALLER THAN HE WAS.  At forty he filled the back of the table and
-          // read as leaning over it; at thirty he is sat behind it, which is
+          // read as leaning over it; at twenty-two, a touch under the player, he is sat behind it, which is
           // what a dealer does.  Same spot, same drawing, same everything else
           // -- the anchor is his feet, so shrinking him takes the top down and
           // leaves him sat exactly where he was sat.
-          height: 30,
+          height: 22,
           variant: 'cozy',
           pose: atTable ? 'talk' : 'idleA',
           // Seated, so he sways rather than bounces: half the travel of a stand.

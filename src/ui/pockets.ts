@@ -8,7 +8,7 @@
  * counter prizes in the bag under that.
  *
  * Only in the rooms you walk around.  Not in a cabinet, not in hide and seek,
- * not at the Froggopoly table -- `attachPockets` is called by the rooms and
+ * not at the crane -- `attachPockets` is called by the rooms and
  * nothing else.
  */
 
