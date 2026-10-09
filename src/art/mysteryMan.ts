@@ -12,6 +12,7 @@
 
 import Phaser from 'phaser';
 import { PALETTE, dim } from '../render/palette';
+import { finishFigure } from './surface';
 
 const COAT = 0x14161c;
 const COAT_LIT = 0x232833;
@@ -62,6 +63,9 @@ export class MysteryMan {
     add(scene.add.rectangle(0, -47, 14, 2, dim(HAT, 1.8)).setOrigin(0.5, 1)); // hatband
 
     this.root = scene.add.container(x, y, parts as Phaser.GameObjects.GameObject[]);
+    // the same finish as the player: an outline round him, lit edges, weave
+    // in the cloth.  Black on black, so the outline is only a shade darker.
+    finishFigure(scene, this.root, { outline: 0x050506, seed: 31 });
     this.root.setDepth(60);
 
     // He breathes, and that is the entire animation.  Anything more would make

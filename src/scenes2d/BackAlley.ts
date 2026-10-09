@@ -339,6 +339,35 @@ function paintAlley(scene: Phaser.Scene, key: string, c: (n: number) => number, 
     g.stroke();
   }
 
+  // weathering on the bin and the crates: a dark outline round the bin, rust
+  // bleeding from its rivets, grime low on its flank, and grain in the wood
+  {
+    let seed = 913;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    g.strokeStyle = col(0x0e1a12);
+    g.strokeRect(dx - 2.5, 117.5, 63, 35);
+    for (let k = 0; k < 5; k++) {
+      g.fillStyle = 'rgba(120,70,30,0.55)';
+      g.fillRect(dx + 6 + k * 11, 129, 1, 3 + Math.floor(rnd() * 8));
+    }
+    for (let k = 0; k < 90; k++) {
+      g.fillStyle = rnd() < 0.5 ? 'rgba(20,30,20,0.35)' : 'rgba(110,150,110,0.25)';
+      g.fillRect(dx + Math.floor(rnd() * 58), 127 + Math.floor(rnd() * 25), 1, 1);
+    }
+    g.fillStyle = 'rgba(30,26,20,0.35)';
+    g.fillRect(dx, 146, 58, 6);
+    for (const [cx, cy, w, h] of [[204, 134, 18, 16], [208, 120, 14, 14]]) {
+      for (let k = 0; k < 6; k++) {
+        g.fillStyle = rnd() < 0.5 ? 'rgba(70,45,22,0.6)' : 'rgba(170,130,85,0.5)';
+        g.fillRect(cx + 1 + Math.floor(rnd() * (w - 6)), cy + 2 + Math.floor(rnd() * (h - 3)), 3 + Math.floor(rnd() * 4), 1);
+      }
+      g.fillStyle = 'rgba(200,170,120,0.6)';
+      g.fillRect(cx, cy, w, 1);
+      g.fillStyle = 'rgba(30,20,10,0.6)';
+      g.fillRect(cx, cy + h - 1, w, 1);
+    }
+  }
+
   // the fire escape: a landing with railings, and the ladder down from it
   g.fillStyle = col(0x2c3238);
   g.fillRect(138, 36, 70, 4);
