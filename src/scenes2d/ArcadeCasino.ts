@@ -42,11 +42,11 @@ const INTERACT_RANGE = 24;
  * walking, which was fine while every fixture was a cabinet shoved against a
  * wall -- the table stands in the middle of the carpet, and a player who held
  * UP walked straight through the apron and came out stood ON the green with
- * their head level with the dealer's.  Twenty pixels puts them at the chair,
- * in front of the table, with the whole top of it between them and the man
+ * their head level with the dealer's.  The stand-off puts them at the chair,
+ * in front of the table (fourteen, now the table is to scale), with the whole top of it between them and the man
  * dealing.
  */
-const TABLE_STAND = 20;
+const TABLE_STAND = 14;
 /** How far behind the felt the table stops being walkable. */
 const TABLE_BACK = TABLE_H + 4;
 /** The way back, on this room's right wall. */

@@ -10,7 +10,8 @@ import { centerText } from '../core/ui';
 import { depthFor } from './player';
 import { grain, seeded, tone } from './surface';
 
-export const CAB_W = 26;
+/** 22 wide: a cabinet about 0.75 m across beside the 26-pixel drifter. */
+export const CAB_W = 22;
 /**
  * 30 high against a 26-pixel man: about 1.9 m to the top of the marquee, which
  * is what a stand-up cabinet measures.  It used to be 36 -- 2.4 m of machine.
@@ -22,8 +23,14 @@ export const CAB_H = 30;
  * Anything outside this is drawn over the bezel or over the room behind it,
  * which reads as a glitch rather than as art.
  */
-const SCREEN_HW = (CAB_W - 8) / 2; // 9
-const SCREEN_HH = 7;
+const SCREEN_HW = (CAB_W - 8) / 2; // 7
+const SCREEN_HH = 5;
+/**
+ * The motifs are laid out on the old eighteen-by-fourteen glass; this brings
+ * every one of them down to the smaller tube in one place, so the pictures
+ * keep their proportions and stay inside the screen.
+ */
+const MS = 0.72;
 
 /**
  * The picture on a machine's screen.  A handful of rectangles each, drawn in
@@ -49,10 +56,17 @@ function drawMotif(scene: Phaser.Scene, cx: number, cy: number, def: CabinetDef,
     }
   };
   const put = (dx: number, dy: number, w: number, h: number, col: number = ink, alpha = 1) => {
+    dx *= MS;
+    dy *= MS;
+    w = Math.max(1, w * MS);
+    h = Math.max(1, h * MS);
     fits(dx, dy, w / 2, h / 2);
     return scene.add.rectangle(cx + dx, cy + dy, w, h, col).setOrigin(0.5, 0.5).setDepth(depth).setAlpha(alpha);
   };
   const dot = (dx: number, dy: number, r: number, col: number = ink) => {
+    dx *= MS;
+    dy *= MS;
+    r = Math.max(0.6, r * MS);
     fits(dx, dy, r, r);
     return scene.add.circle(cx + dx, cy + dy, r, col).setDepth(depth);
   };
@@ -64,6 +78,10 @@ function drawMotif(scene: Phaser.Scene, cx: number, cy: number, def: CabinetDef,
    * kicked out on a diagonal.
    */
   const bar = (dx: number, dy: number, w: number, h: number, deg: number, col: number = ink) => {
+    dx *= MS;
+    dy *= MS;
+    w = Math.max(1, w * MS);
+    h = Math.max(0.8, h * MS);
     const a = Phaser.Math.DegToRad(deg);
     const hw = (Math.abs(Math.cos(a)) * w + Math.abs(Math.sin(a)) * h) / 2;
     const hh = (Math.abs(Math.sin(a)) * w + Math.abs(Math.cos(a)) * h) / 2;
@@ -310,28 +328,28 @@ export class Cabinet {
 
     // ---- the screen, set in a black bezel with a bevelled inner edge, a
     // motif on it, scanlines over that, and the glass catching the light
-    g.fillStyle(c(PALETTE.black), 1).fillRect(L + 2, T + 5, CAB_W - 4, 16);
-    g.fillStyle(c(0x2a2a34), 1).fillRect(L + 2, T + 5, CAB_W - 4, 1).fillRect(L + 2, T + 5, 1, 16);
-    g.fillStyle(c(0x050508), 1).fillRect(L + 3, T + 20, CAB_W - 6, 1);
+    g.fillStyle(c(PALETTE.black), 1).fillRect(L + 2, T + 5, CAB_W - 4, 12);
+    g.fillStyle(c(0x2a2a34), 1).fillRect(L + 2, T + 5, CAB_W - 4, 1).fillRect(L + 2, T + 5, 1, 12);
+    g.fillStyle(c(0x050508), 1).fillRect(L + 3, T + 16, CAB_W - 6, 1);
     this.screen = scene.add
-      .rectangle(x, T + 20, CAB_W - 8, 14, night ? PALETTE.black : c(def.color))
+      .rectangle(x, T + 16, CAB_W - 8, 10, night ? PALETTE.black : c(def.color))
       .setOrigin(0.5, 1)
       .setDepth(d);
     this.screen.setAlpha(night ? 1 : 0.85);
     if (!night) {
-      drawMotif(scene, x, T + 13, def, d + 0.0001);
+      drawMotif(scene, x, T + 11, def, d + 0.0001);
       const glass = scene.add.graphics().setDepth(d + 0.0002);
-      for (let i = 0; i < 7; i++) glass.fillStyle(PALETTE.black, 0.18).fillRect(L + 4, T + 6 + i * 2, CAB_W - 8, 1);
+      for (let i = 0; i < 5; i++) glass.fillStyle(PALETTE.black, 0.18).fillRect(L + 4, T + 6 + i * 2, CAB_W - 8, 1);
       // the curve of the tube: darker corners
       glass.fillStyle(PALETTE.black, 0.35);
-      for (const [cx, cy] of [[L + 4, T + 6], [L + CAB_W - 5, T + 6], [L + 4, T + 19], [L + CAB_W - 5, T + 19]]) glass.fillRect(cx, cy, 1, 1);
+      for (const [cx, cy] of [[L + 4, T + 6], [L + CAB_W - 5, T + 6], [L + 4, T + 15], [L + CAB_W - 5, T + 15]]) glass.fillRect(cx, cy, 1, 1);
       // a glare streak across the glass, and a hot spot in its top corner
-      glass.fillStyle(0xffffff, 0.16).fillTriangle(L + 4, T + 6, L + 11, T + 6, L + 4, T + 13);
+      glass.fillStyle(0xffffff, 0.16).fillTriangle(L + 4, T + 6, L + 9, T + 6, L + 4, T + 11);
       glass.fillStyle(0xffffff, 0.5).fillRect(L + 5, T + 7, 2, 1);
     } else {
       // a dead tube still has a sheen on it
       const glass = scene.add.graphics().setDepth(d + 0.0002);
-      glass.fillStyle(0xa0b0d0, 0.08).fillTriangle(L + 4, T + 6, L + 12, T + 6, L + 4, T + 14);
+      glass.fillStyle(0xa0b0d0, 0.08).fillTriangle(L + 4, T + 6, L + 10, T + 6, L + 4, T + 12);
     }
 
     // ---- the control deck, at hand height for a 26-pixel man: a sloped
@@ -343,15 +361,15 @@ export class Cabinet {
     grain(g, L + 1, y - 9, CAB_W - 2, 3, c(PALETTE.steel), seed + 1, 0.12, 0.1);
     const parts = scene.add.graphics().setDepth(d + 0.0001);
     // the stick: a dust washer, the shaft, and a ball-top with a highlight
-    parts.fillStyle(c(PALETTE.ink), 1).fillEllipse(x - 7, y - 7, 4, 2);
-    parts.fillStyle(c(0x6a6e78), 1).fillRect(x - 7.5, y - 10, 1, 3);
+    parts.fillStyle(c(PALETTE.ink), 1).fillEllipse(x - 6, y - 7, 4, 2);
+    parts.fillStyle(c(0x6a6e78), 1).fillRect(x - 6.5, y - 10, 1, 3);
     const ball = night ? nightify(PALETTE.blood) : PALETTE.blood;
-    parts.fillStyle(tone(ball, 0.6), 1).fillCircle(x - 7, y - 10, 1.8);
-    parts.fillStyle(ball, 1).fillCircle(x - 7.3, y - 10.3, 1.4);
-    if (!night) parts.fillStyle(0xffffff, 0.8).fillRect(x - 8, y - 11, 1, 1);
+    parts.fillStyle(tone(ball, 0.6), 1).fillCircle(x - 6, y - 10, 1.8);
+    parts.fillStyle(ball, 1).fillCircle(x - 6.3, y - 10.3, 1.4);
+    if (!night) parts.fillStyle(0xffffff, 0.8).fillRect(x - 7, y - 11, 1, 1);
     // the buttons, each in a dark collar with a pinprick of light on top
     for (let i = 0; i < 3; i++) {
-      const bx = x - 1 + i * 4;
+      const bx = x - 1 + i * 3.5;
       const col = night ? nightify(trim) : [PALETTE.gold, PALETTE.cream, trim][i];
       parts.fillStyle(c(0x101218), 1).fillCircle(bx, y - 7.5, 1.9);
       parts.fillStyle(tone(col, 0.7), 1).fillCircle(bx, y - 7.5, 1.4);
@@ -359,12 +377,12 @@ export class Cabinet {
       if (!night) parts.fillStyle(0xffffff, 0.7).fillRect(bx - 1, y - 9, 1, 1);
     }
     // ---- the coin slots, set in the kick plate: lit orange in the day
-    for (const sx of [x - 4, x + 1]) {
+    for (const sx of [x - 3, x + 1]) {
       g.fillStyle(night ? 0x1a1010 : PALETTE.ember, 1).fillRect(sx, y - 3, 3, 2);
       g.fillStyle(PALETTE.black, 1).fillRect(sx + 1, y - 3, 1, 2);
     }
     // the speaker grille between the screen and the deck
-    g.fillStyle(c(tone(PALETTE.slate, 1.25)), 1).fillRect(L + 3, T + 21, CAB_W - 6, 1);
+    g.fillStyle(c(tone(PALETTE.slate, 1.25)), 1).fillRect(L + 3, T + 18, CAB_W - 6, 1);
 
     // floating cost badge
     this.badgeBox = scene.add.rectangle(0, 0, 12, 11, PALETTE.black, 0.75).setStrokeStyle(1, PALETTE.gold);

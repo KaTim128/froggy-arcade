@@ -17,8 +17,12 @@ import type { CabinetDef } from '../game/content';
 import { centerText } from '../core/ui';
 
 /** Footprint of the felt, in world pixels.  `def.y` is the front edge. */
-export const TABLE_W = 82;
-export const TABLE_H = 30;
+/**
+ * Sized to the 26-pixel drifter: about 3.6 m across the felt and 1.3 m deep,
+ * a full-size table with the dealer's arc.  It was 82 by 30 -- 5.5 m long.
+ */
+export const TABLE_W = 54;
+export const TABLE_H = 20;
 
 const FELT = 0x1d5c2d;
 const FELT_DARK = 0x123b1e;
@@ -31,15 +35,15 @@ const FELT_DARK = 0x123b1e;
  */
 export function paintFelt(scene: Phaser.Scene, x: number, y: number): Array<Phaser.GameObjects.Shape> {
   return [
-    scene.add.ellipse(x, y + 2, TABLE_W + 6, 12, PALETTE.black, 0.35),
+    scene.add.ellipse(x, y + 2, TABLE_W + 4, 8, PALETTE.black, 0.35),
     // apron
-    scene.add.rectangle(x, y, TABLE_W - 6, 14, PALETTE.brown).setOrigin(0.5, 1),
-    scene.add.rectangle(x, y, TABLE_W - 6, 3, 0x4a3320).setOrigin(0.5, 1),
+    scene.add.rectangle(x, y, TABLE_W - 4, 9, PALETTE.brown).setOrigin(0.5, 1),
+    scene.add.rectangle(x, y, TABLE_W - 4, 2, 0x4a3320).setOrigin(0.5, 1),
     // felt top, with a padded rail around it
-    scene.add.ellipse(x, y - 14, TABLE_W, TABLE_H, PALETTE.brown),
-    scene.add.ellipse(x, y - 15, TABLE_W - 8, TABLE_H - 7, FELT),
+    scene.add.ellipse(x, y - 9, TABLE_W, TABLE_H, PALETTE.brown),
+    scene.add.ellipse(x, y - 10, TABLE_W - 6, TABLE_H - 5, FELT),
     // the dealer's arc, painted on the felt
-    scene.add.ellipse(x, y - 20, TABLE_W - 26, TABLE_H - 16, FELT_DARK).setAlpha(0.7),
+    scene.add.ellipse(x, y - 13, TABLE_W - 18, TABLE_H - 11, FELT_DARK).setAlpha(0.7),
   ];
 }
 
@@ -70,7 +74,7 @@ export class BlackjackTable {
     // of the game, and it is legible from the doorway.
     const card = (cx: number, cy: number, ang: number): void => {
       scene.add
-        .rectangle(cx, cy, 6, 8, PALETTE.cream)
+        .rectangle(cx, cy, 4, 5, PALETTE.cream)
         .setDepth(d)
         .setAngle(ang)
         .setStrokeStyle(1, PALETTE.ink);
@@ -78,27 +82,27 @@ export class BlackjackTable {
 
     // the dealer's pair, on his arc, and the shoe on his right where his hand
     // falls -- the two things on the table that are not the player's
-    card(x - 5, y - 19, -10);
-    card(x + 6, y - 18, 8);
-    scene.add.rectangle(x + 27, y - 21, 9, 6, PALETTE.slate).setDepth(d);
-    scene.add.rectangle(x + 27, y - 23, 9, 2, PALETTE.steel).setDepth(d);
+    card(x - 3, y - 13, -10);
+    card(x + 4, y - 12, 8);
+    scene.add.rectangle(x + 17, y - 14, 6, 4, PALETTE.slate).setDepth(d);
+    scene.add.rectangle(x + 17, y - 15, 6, 1, PALETTE.steel).setDepth(d);
 
     // the player's pair, at the near edge, lying the way cards lie when they
     // are held from this side
-    card(x + 8, y - 10, -14);
-    card(x + 18, y - 10, 12);
+    card(x + 5, y - 6, -14);
+    card(x + 11, y - 6, 12);
 
     // the player's bet, in the betting spot: near edge, and off to the left so
     // that a player stood at the middle of the table never covers their own
     // money.  Not all the same size -- that is the point of the stacks.
     const stacks: [number, number, number][] = [
-      [x - 20, 3, PALETTE.neon],
-      [x - 14, 2, PALETTE.cream],
-      [x - 8, 4, PALETTE.gold],
+      [x - 14, 3, PALETTE.neon],
+      [x - 10, 2, PALETTE.cream],
+      [x - 6, 4, PALETTE.gold],
     ];
     for (const [sx, n, col] of stacks) {
       for (let i = 0; i < n; i++) {
-        scene.add.ellipse(sx, y - 9 - i * 2, 6, 3, col).setDepth(d + 0.0001 * i);
+        scene.add.ellipse(sx, y - 6 - i, 4, 2, col).setDepth(d + 0.0001 * i);
       }
     }
 
@@ -122,7 +126,7 @@ export class BlackjackTable {
     // of it.
     // sized to the drifter: a high-back chair comes to about 1.2 m, eighteen
     // pixels, which is a little over half the size it used to be drawn
-    chairAt(scene, x, y - 27, d - 0.002, 0.58);
+    chairAt(scene, x, y - 18, d - 0.002, 0.58);
 
     // ---- THE PLAYER'S CHAIR, pulled up to the near edge.
     //
@@ -133,13 +137,13 @@ export class BlackjackTable {
     // hundredths -- so the player's body is always the thing in front and the
     // chair is always the thing around it.  A chair that covered the player
     // would be a chair in the way.
-    chairAt(scene, x, y + 26, d + 0.002, 0.5);
+    chairAt(scene, x, y + 17, d + 0.002, 0.5);
 
     // ---- stools for whoever else is playing, pushed out past the chair's
     // arms so the near edge belongs to the one seat that matters
-    for (const sx of [x - 38, x + 38]) {
-      scene.add.ellipse(sx, y + 14, 12, 6, PALETTE.rust).setDepth(d + 0.001);
-      scene.add.rectangle(sx, y + 17, 2, 4, PALETTE.steel).setOrigin(0.5, 0).setDepth(d + 0.001);
+    for (const sx of [x - 26, x + 26]) {
+      scene.add.ellipse(sx, y + 9, 8, 4, PALETTE.rust).setDepth(d + 0.001);
+      scene.add.rectangle(sx, y + 11, 1, 5, PALETTE.steel).setOrigin(0.5, 0).setDepth(d + 0.001);
     }
 
     // ---- sign on the back wall.  It hangs clear above the dealer's head:
@@ -161,8 +165,8 @@ export class BlackjackTable {
     // side of the felt, for the same reason the sign is up on the wall.
     this.badgeBox = scene.add.rectangle(0, 0, 20, 11, PALETTE.black, 0.75).setStrokeStyle(1, PALETTE.gold);
     this.badgeText = centerText(scene, 0, 0, `${def.cost}+`, PALETTE.gold);
-    const badge = scene.add.container(x - 52, y - 22, [this.badgeBox, this.badgeText]).setDepth(500);
-    scene.tweens.add({ targets: badge, y: y - 24, duration: 1200, yoyo: true, repeat: -1 });
+    const badge = scene.add.container(x - 38, y - 16, [this.badgeBox, this.badgeText]).setDepth(500);
+    scene.tweens.add({ targets: badge, y: y - 18, duration: 1200, yoyo: true, repeat: -1 });
 
     this.bounds = new Phaser.Geom.Rectangle(x - TABLE_W / 2, y - TABLE_H - 6, TABLE_W, TABLE_H + 18);
   }
@@ -179,7 +183,7 @@ export class BlackjackTable {
    * dealer behind it, which is what a blackjack table is.
    */
   dealerSpot(): { x: number; y: number } {
-    return { x: this.def.x, y: this.def.y - 27 };
+    return { x: this.def.x, y: this.def.y - 18 };
   }
 
   /** PRD §6.8: greys out when the player cannot even make the minimum. */
@@ -199,7 +203,7 @@ export class BlackjackTable {
    * out exactly when the player arrived at the chair.
    */
   distanceTo(x: number, y: number): number {
-    return Phaser.Math.Distance.Between(this.def.x, this.def.y + 8, x, y);
+    return Phaser.Math.Distance.Between(this.def.x, this.def.y + 6, x, y);
   }
 }
 

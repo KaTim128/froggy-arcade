@@ -65,6 +65,10 @@ import {
   paintRoom,
   paintRoomLight,
   paintView,
+  BED,
+  DESK,
+  WIN_SCALE,
+  CEIL_Y,
 } from '../art/hotelInterior';
 import { HITS, WF, WF_H, WF_W, drawBrokenEdge, drawCracks, drawWindowFroggy } from '../art/windowFroggy';
 import { runHotelScare } from '../froggy/hotelScare';
@@ -78,9 +82,10 @@ const WALK_Y = 160;
  * the smooth overlay, behind the desk -- clipped at the marble top, with a
  * hole where the player stands and where the guest book lies on the desk.
  */
-const CLERK = { x: 160, feet: 132, h: 46 };
-const DESK_TOP = 116;
-const BOOK = { x: 140, y: 112, w: 15, h: 4 };
+// (to the drifter's scale: a man of 28 behind a 17-pixel desk, head and chest over it)
+const CLERK = { x: 160, feet: 150, h: 28 };
+const DESK_TOP = DESK.top;
+const BOOK = { x: 140, y: DESK.top - 2, w: 11, h: 2 };
 
 type Area = 'lobby' | 'lift' | 'corridor' | 'room' | 'bath';
 type Spot = 'out' | 'desk' | 'lift' | 'stairs' | 'stairdoor' | 'storage' | 'door612' | 'roomdoor' | 'bathdoor' | 'bed' | 'window' | 'mirror' | null;
@@ -329,16 +334,16 @@ export class Hotel extends Phaser.Scene {
     this.clerkOn = !dark;
     // the lights are out and the desk is empty
     if (dark) img.setTint(0x3a4058);
-    centerText(this, 280, 82, dark ? '-' : '1', 0xff7a3d);
+    centerText(this, 280, 109, dark ? '-' : '1', 0xff7a3d);
     if (this.from === 'storage') {
       // what he left: the stairwell door hanging open on the dark, and the
       // front doors gone, glass across the marble
       const g = this.add.graphics().setDepth(1);
-      g.fillStyle(0x05060a, 1).fillRect(STAIR_DOOR_X - 12, 99, 24, 53);
-      g.fillStyle(0x4a3422, 1).fillRect(STAIR_DOOR_X + 8, 99, 5, 53);
-      g.fillStyle(0x07101e, 1).fillRect(7, 104, 32, 46);
+      g.fillStyle(0x05060a, 1).fillRect(STAIR_DOOR_X - 9, 118, 18, 34);
+      g.fillStyle(0x4a3422, 1).fillRect(STAIR_DOOR_X + 6, 118, 4, 34);
+      g.fillStyle(0x07101e, 1).fillRect(9, 120, 28, 30);
       g.fillStyle(0x3a4a68, 0.6);
-      for (const [x, y, w, h] of [[8, 104, 4, 9], [20, 104, 6, 5], [33, 106, 5, 12], [8, 140, 6, 9], [30, 138, 8, 11]]) g.fillRect(x, y, w, h);
+      for (const [x, y, w, h] of [[9, 120, 3, 6], [20, 120, 4, 3], [32, 121, 4, 8], [9, 142, 4, 6], [29, 141, 6, 7]]) g.fillRect(x, y, w, h);
       g.fillStyle(0x9ab8d8, 0.7);
       for (let k = 0; k < 22; k++) g.fillRect(10 + ((k * 37) % 70), 152 + ((k * 13) % 7), 1 + (k % 3), 1);
       g.fillStyle(0x6a4a2e, 1).fillRect(52, 153, 14, 2).fillRect(70, 156, 9, 2);
@@ -346,81 +351,45 @@ export class Hotel extends Phaser.Scene {
   }
 
   private buildCorridor(): void {
-    this.add.image(0, 0, this.painted('hotel_corridor', GAME_W, GAME_H, paintCorridor)).setOrigin(0, 0);
-    centerText(this, 22, 87, '6', 0xff7a3d);
+    this.add.image(0, 0, this.painted('hotel_corridor_v2', GAME_W, GAME_H, paintCorridor)).setOrigin(0, 0);
+    centerText(this, 22, 110, '6', 0xff7a3d);
   }
 
   private buildBath(): void {
-    this.add.image(0, 0, this.painted('hotel_bath', GAME_W, GAME_H, paintBathroom)).setOrigin(0, 0);
+    this.add.image(0, 0, this.painted('hotel_bath_v2', GAME_W, GAME_H, paintBathroom)).setOrigin(0, 0);
     // the mirror: the room behind you in it, and then you
     const m = MIRROR;
     const back = this.add.graphics().setDepth(1);
     back.fillStyle(0xd8e0e4, 1).fillRect(m.x, m.y, m.w, m.h);
-    for (let y = m.y; y < m.y + m.h; y += 5) back.fillStyle(0xb8c0c4, 1).fillRect(m.x, y, m.w, 1);
-    back.fillStyle(0x7b2a3a, 1).fillRect(m.x, m.y + 30, m.w, 3);
-    back.fillStyle(0x9aa6ae, 1).fillRect(m.x + 26, m.y + 4, 14, 26);
-    this.reflection = this.add.container(0, 0).setDepth(2);
-    const shape = this.make.graphics({}, false).fillRect(m.x, m.y, m.w, m.h);
-    this.reflection.setMask(shape.createGeometryMask());
-    const body: Phaser.GameObjects.GameObject[] = [
-      this.add.rectangle(0, 0, 10, 8, PALETTE.rust).setOrigin(0.5, 1),
-      this.add.rectangle(0, -8, 12, 12, PALETTE.brownLight).setOrigin(0.5, 1),
-    ];
-    // The face, drawn pixel by pixel: a proper head with ears, a hair cap and
-    // fringe, eyes with a glint under brows, a little blush and a tired mouth.
-    const face = this.add.graphics();
-    const px = (x: number, y: number, w: number, h: number, c: number): void => {
-      face.fillStyle(c, 1).fillRect(x, y, w, h);
-    };
-    const SKIN = 0xf2d2b0;
-    const SHADE = 0xd8b08c;
-    px(-2, -21, 4, 2, SHADE); // neck
-    px(-4, -31, 8, 10, SKIN); // head
-    px(-5, -29, 1, 6, SKIN); // cheeks, rounding it out
-    px(4, -29, 1, 6, SKIN);
-    px(-3, -21, 6, 1, SKIN); // chin
-    px(-6, -27, 1, 3, SHADE); // ears
-    px(5, -27, 1, 3, SHADE);
-    px(3, -30, 2, 8, SHADE); // the shadow side of the face
-    // hair: a cap, a side part, a fringe, sideburns
-    px(-5, -33, 10, 3, PALETTE.brown);
-    px(-4, -34, 8, 1, PALETTE.brown);
-    px(-5, -30, 2, 2, PALETTE.brown);
-    px(1, -30, 4, 1, PALETTE.brown);
-    px(-5, -28, 1, 2, PALETTE.brown);
-    px(4, -28, 1, 2, PALETTE.brown);
-    px(-2, -33, 3, 1, 0x8a6040); // a shine on the hair
-    // brows, eyes (dark, with a glint), tired bags under them
-    px(-3, -28, 2, 1, 0x5a3a24);
-    px(1, -28, 2, 1, 0x5a3a24);
-    px(-3, -27, 2, 2, 0x2a1a10);
-    px(1, -27, 2, 2, 0x2a1a10);
-    px(-3, -27, 1, 1, 0xffffff);
-    px(1, -27, 1, 1, 0xffffff);
-    px(-3, -25, 2, 1, 0xe0b898);
-    px(1, -25, 2, 1, 0xe0b898);
-    // nose, blush, and a small flat mouth
-    px(0, -25, 1, 2, SHADE);
-    px(-4, -24, 1, 1, 0xf0a090);
-    px(3, -24, 1, 1, 0xf0a090);
-    px(-1, -22, 3, 1, 0x9a5a4a);
-    body.push(face);
-    this.reflection.add(body);
+    for (let y = m.y; y < m.y + m.h; y += 4) back.fillStyle(0xb8c0c4, 1).fillRect(m.x, y, m.w, 1);
+    back.fillStyle(0x7b2a3a, 1).fillRect(m.x, m.y + 15, m.w, 2);
+    back.fillStyle(0x9aa6ae, 1).fillRect(m.x + 13, m.y + 2, 6, 13);
+    // you, in it: the same drifter, from the coat up.  Stood with his feet
+    // eight pixels under the frame, everything below the coat -- the legs --
+    // would be under the glass, so it is simply not drawn.
+    const twin = new Player(this, 0, 0, false);
+    for (const o of twin.sprite.list) {
+      const r = o as Phaser.GameObjects.Rectangle;
+      if (r.y > -8.6) r.setVisible(false);
+    }
+    this.reflection = twin.sprite.setDepth(2);
     // the glass over it: a sheen
     const sheen = this.add.graphics().setDepth(3);
-    for (let d = 0; d < 12; d++) sheen.fillStyle(0xffffff, 0.08).fillRect(m.x + 4 + d, m.y + 4 + d * 2, 1, 2);
-    sheen.fillStyle(0xffffff, 0.06).fillRect(m.x, m.y, m.w, 2);
+    for (let d = 0; d < 6; d++) sheen.fillStyle(0xffffff, 0.08).fillRect(m.x + 2 + d, m.y + 2 + d * 2, 1, 2);
+    sheen.fillStyle(0xffffff, 0.06).fillRect(m.x, m.y, m.w, 1);
   }
 
   private buildRoom(): void {
     const { x, y, w, h } = ROOM_WINDOW;
     const when = this.night === 'late' ? 'late' : this.morning && store.get().timeOfDay === 'day' ? 'day' : 'night';
-    this.view = this.add.image(x, y, this.painted(`hotel_view_${when}`, w, h, (g) => paintView(g, w, h, when))).setOrigin(0, 0).setDepth(1);
+    this.view = this.add.image(x, y, this.painted(`hotel_view_${when}_${w}`, w, h, (g) => paintView(g, w, h, when))).setOrigin(0, 0).setDepth(1);
     // him: a canvas the size of the window and its margins, drawn every frame once he is there
     this.froggyTex = this.textures.exists('hotel_wfroggy') ? (this.textures.get('hotel_wfroggy') as Phaser.Textures.CanvasTexture) : this.textures.createCanvas('hotel_wfroggy', WF_W, WF_H);
     // (centred on the window, so it can grow from the middle as he comes through)
-    this.froggyImg = this.add.image(x + w / 2, y + h / 2, 'hotel_wfroggy').setOrigin(0.5, 0.5).setDepth(2).setVisible(false);
-    this.glazing = this.add.image(x, y, this.painted('hotel_glazing', w, h, (g) => paintGlazing(g, w, h))).setOrigin(0, 0).setDepth(3);
+    this.froggyImg = this.add.image(x + w / 2, y + h / 2, 'hotel_wfroggy').setOrigin(0.5, 0.5).setDepth(2).setScale(WIN_SCALE).setVisible(false);
+    // (drawn at his own detail and shown at the window's scale: smooth it down)
+    this.textures.get('hotel_wfroggy').setFilter(Phaser.Textures.FilterMode.LINEAR);
+    this.glazing = this.add.image(x, y, this.painted(`hotel_glazing_${w}`, w, h, (g) => paintGlazing(g, w, h))).setOrigin(0, 0).setDepth(3);
     this.crackTex = this.textures.exists('hotel_cracks') ? (this.textures.get('hotel_cracks') as Phaser.Textures.CanvasTexture) : this.textures.createCanvas('hotel_cracks', WF.winW, WF.winH);
     this.crackTex?.getContext().clearRect(0, 0, WF.winW, WF.winH);
     // after that night the window stays as he left it: out of its frame
@@ -428,18 +397,19 @@ export class Hotel extends Phaser.Scene {
     if (broken && this.crackTex) drawBrokenEdge(this.crackTex.getContext());
     this.crackTex?.refresh();
     if (broken) this.glazing.setVisible(false);
-    this.add.image(x, y, 'hotel_cracks').setOrigin(0, 0).setDepth(4);
-    this.roomImg = this.add.image(0, 0, this.painted('hotel_room', GAME_W, GAME_H, paintRoom)).setOrigin(0, 0).setDepth(5);
+    this.add.image(x, y, 'hotel_cracks').setOrigin(0, 0).setDepth(4).setScale(WIN_SCALE);
+    this.textures.get('hotel_cracks').setFilter(Phaser.Textures.FilterMode.LINEAR);
+    this.roomImg = this.add.image(0, 0, this.painted('hotel_room_v2', GAME_W, GAME_H, paintRoom)).setOrigin(0, 0).setDepth(5);
     // the curtains: full width when drawn, squeezed to the sides when open
-    const cw = w / 2 + 6;
-    const ch = h + 10;
-    this.curtainL = this.add.image(x - 8, y - 11, this.painted('hotel_curtain_l', cw, ch, (g) => paintCurtain(g, cw, ch, -1))).setOrigin(0, 0).setDepth(6);
-    this.curtainR = this.add.image(x + w + 8, y - 11, this.painted('hotel_curtain_r', cw, ch, (g) => paintCurtain(g, cw, ch, 1))).setOrigin(1, 0).setDepth(6);
+    const cw = w / 2 + 4;
+    const ch = h + 7;
+    this.curtainL = this.add.image(x - 6, y - 4, this.painted(`hotel_curtain_l_${cw}`, cw, ch, (g) => paintCurtain(g, cw, ch, -1))).setOrigin(0, 0).setDepth(6);
+    this.curtainR = this.add.image(x + w + 6, y - 4, this.painted(`hotel_curtain_r_${cw}`, cw, ch, (g) => paintCurtain(g, cw, ch, 1))).setOrigin(1, 0).setDepth(6);
     this.setCurtains(this.night === 'late' ? false : this.curtainsOpen, true);
-    this.lampLight = this.add.image(0, 0, this.painted('hotel_room_light', GAME_W, GAME_H, paintRoomLight)).setOrigin(0, 0).setDepth(7).setBlendMode(Phaser.BlendModes.ADD);
+    this.lampLight = this.add.image(0, 0, this.painted('hotel_room_light_v2', GAME_W, GAME_H, paintRoomLight)).setOrigin(0, 0).setDepth(7).setBlendMode(Phaser.BlendModes.ADD);
     // dust turning slowly in the lamplight
     for (let k = 0; k < 10; k++) {
-      const m = this.add.rectangle(200 + Math.random() * 120, 90 + Math.random() * 50, 1, 1, 0xfff0c8, 0.5).setDepth(8);
+      const m = this.add.rectangle(230 + Math.random() * 80, CEIL_Y + 8 + Math.random() * 40, 1, 1, 0xfff0c8, 0.5).setDepth(8);
       this.motes.push(m);
     }
     if (broken) {
@@ -516,11 +486,11 @@ export class Hotel extends Phaser.Scene {
     if (this.area === 'lobby') {
       // through the smashed front doors, onto the floor in front of them,
       // and swept along the walls by the light bars
-      this.policeGlows.push(glow(24, 120, 1.1, 1.1), glow(40, 158, 1.8, 0.35), glow(24, 98, 0.7, 0.5));
+      this.policeGlows.push(glow(24, 134, 0.8, 0.8), glow(40, 158, 1.8, 0.35), glow(24, 118, 0.5, 0.35));
       // ...and thrown the length of the lobby: up the walls and across the
       // marble, all the way to the far end, so wherever you stand it is on you
-      for (const lx of [110, 200, 290, 380]) this.policeGlows.push(glow(lx, 150, 1.4, 0.3), glow(lx + 40, 70, 0.9, 0.7));
-      this.policeBeam = this.add.image(0, 92, beamKey).setOrigin(0.5, 0.5).setScale(1.6, 1.1).setBlendMode(Phaser.BlendModes.ADD).setDepth(59).setAlpha(0);
+      for (const lx of [110, 200, 290, 380]) this.policeGlows.push(glow(lx, 150, 1.4, 0.3), glow(lx + 40, 118, 0.7, 0.4));
+      this.policeBeam = this.add.image(0, 128, beamKey).setOrigin(0.5, 0.5).setScale(1.2, 0.5).setBlendMode(Phaser.BlendModes.ADD).setDepth(59).setAlpha(0);
     } else if (this.area === 'room') {
       const { x, y, w, h } = ROOM_WINDOW;
       this.policeGlows.push(glow(x + w / 2, y + h / 2, 1.6, 1.2), glow(x + w / 2, WALK_Y + 6, 2.2, 0.35));
@@ -562,7 +532,7 @@ export class Hotel extends Phaser.Scene {
     });
     if (this.policeBeam) {
       const sweep = (this.clock * 0.55) % 1;
-      this.policeBeam.setTint(col).setAlpha(0.22 * on).setPosition(10 + sweep * 300, 96);
+      this.policeBeam.setTint(col).setAlpha(0.22 * on).setPosition(10 + sweep * 300, 128);
     }
     this.policeTint?.setFillStyle(col, 0.08 * on * far);
     // the megaphone, over and over
@@ -926,8 +896,8 @@ export class Hotel extends Phaser.Scene {
     const ui = this.cameras.add(0, 0, GAME_W, GAME_H);
     ui.ignore(this.children.list.filter((o) => !words.includes(o as never)));
     cam.ignore(words);
-    cam.pan(m.x + m.w / 2, m.y + m.h / 2 + 4, 700, 'Sine.easeInOut');
-    cam.zoomTo(2.6, 700, 'Sine.easeInOut');
+    cam.pan(m.x + m.w / 2, m.y + m.h / 2 + 2, 700, 'Sine.easeInOut');
+    cam.zoomTo(4, 700, 'Sine.easeInOut');
     this.time.delayedCall(800, () => {
       this.say('What a day...', 3);
       const back = (): void => {
@@ -993,9 +963,10 @@ export class Hotel extends Phaser.Scene {
     this.time.delayedCall(900, () => {
       this.player?.sprite.setVisible(false);
       this.sleeper = this.add.container(0, 0, [
-        this.add.rectangle(254, 121, 8, 6, PALETTE.cream).setOrigin(0, 0),
-        this.add.rectangle(253, 119, 10, 3, PALETTE.brown).setOrigin(0, 0),
-        this.add.rectangle(262, 126, 40, 4, 0xe4ded0).setOrigin(0, 0),
+        // his head on the pillow and the duvet over him, at the bed's scale
+        this.add.rectangle(BED.x - 2, BED.top - 4, 5, 4, 0xd8b088).setOrigin(0, 0),
+        this.add.rectangle(BED.x - 3, BED.top - 5, 7, 2, 0x5a3a3a).setOrigin(0, 0),
+        this.add.rectangle(BED.x - 9, BED.top - 1, 18, 2, 0xe4ded0).setOrigin(0, 0),
       ]).setDepth(9);
       audio.sfx('footstep_carpet', 0.3);
     });
@@ -1043,9 +1014,10 @@ export class Hotel extends Phaser.Scene {
     if (!this.sleeper) {
       this.player?.sprite.setVisible(false);
       this.sleeper = this.add.container(0, 0, [
-        this.add.rectangle(254, 121, 8, 6, PALETTE.cream).setOrigin(0, 0),
-        this.add.rectangle(253, 119, 10, 3, PALETTE.brown).setOrigin(0, 0),
-        this.add.rectangle(262, 126, 40, 4, 0xe4ded0).setOrigin(0, 0),
+        // his head on the pillow and the duvet over him, at the bed's scale
+        this.add.rectangle(BED.x - 2, BED.top - 4, 5, 4, 0xd8b088).setOrigin(0, 0),
+        this.add.rectangle(BED.x - 3, BED.top - 5, 7, 2, 0x5a3a3a).setOrigin(0, 0),
+        this.add.rectangle(BED.x - 9, BED.top - 1, 18, 2, 0xe4ded0).setOrigin(0, 0),
       ]).setDepth(9);
       this.roomTint(0.28, 0.75);
     }
@@ -1084,6 +1056,15 @@ export class Hotel extends Phaser.Scene {
     audio.sfx('door_creak', 0.5);
     this.froggyImg?.setVisible(true).setTint(0xc4cce2);
     this.drawHim();
+    // the camera goes to the glass with you -- he fills it -- then lets go
+    const cam = this.cameras.main;
+    const { x: wx, y: wy, w: ww, h: wh } = ROOM_WINDOW;
+    cam.pan(wx + ww / 2, wy + wh / 2, 220, 'Sine.easeOut');
+    cam.zoomTo(2.6, 220, 'Sine.easeOut');
+    this.time.delayedCall(820, () => {
+      cam.pan(GAME_W / 2, GAME_H / 2, 420, 'Sine.easeInOut');
+      cam.zoomTo(1, 420, 'Sine.easeInOut');
+    });
     this.time.delayedCall(200, () => {
       audio.sfx('dun', 1);
       audio.sfx('stinger', 0.5);
@@ -1132,7 +1113,7 @@ export class Hotel extends Phaser.Scene {
     // through the frame and down into the room, coming at you
     const e = enter * enter;
     // (off the ledge and down onto the floor of the room, a step toward you)
-    this.froggyImg?.setScale(1 + e * 0.25).setPosition(ROOM_WINDOW.x + ROOM_WINDOW.w / 2 - e * 30, ROOM_WINDOW.y + ROOM_WINDOW.h / 2 + e * 24);
+    this.froggyImg?.setScale(WIN_SCALE * (1 + e * 1.4)).setPosition(ROOM_WINDOW.x + ROOM_WINDOW.w / 2 - e * 18, ROOM_WINDOW.y + ROOM_WINDOW.h / 2 + e * 14);
   }
 
   /** A blow lands: the crack runs, the room jumps. */
@@ -1252,11 +1233,11 @@ export class Hotel extends Phaser.Scene {
       }
       ctx.clip('evenodd');
       // his shadow on the pigeonholes behind him
-      const sh = ctx.createRadialGradient(CLERK.x + 3, 104, 1, CLERK.x + 3, 104, 18);
+      const sh = ctx.createRadialGradient(CLERK.x + 2, 128, 1, CLERK.x + 2, 128, 11);
       sh.addColorStop(0, 'rgba(8, 4, 16, 0.4)');
       sh.addColorStop(1, 'rgba(8, 4, 16, 0)');
       ctx.fillStyle = sh;
-      ctx.fillRect(CLERK.x - 16, 84, 38, 34);
+      ctx.fillRect(CLERK.x - 10, 116, 24, 20);
       drawClerk(ctx, { x: CLERK.x, y: CLERK.feet, height: CLERK.h, pose: talking ? 'talk' : 'idle', breath: (this.clock / 4) % 1 });
       ctx.restore();
     });
@@ -1270,7 +1251,7 @@ export class Hotel extends Phaser.Scene {
     for (const [k, m] of this.motes.entries()) {
       m.y -= dt * (1.5 + (k % 3));
       m.x += Math.sin(this.clock * 0.6 + k) * dt * 2;
-      if (m.y < 70) m.y = 150;
+      if (m.y < CEIL_Y + 6) m.y = 148;
     }
     if (this.area === 'room') this.tickNight(dt);
     this.tickPolice(dt);
@@ -1278,8 +1259,8 @@ export class Hotel extends Phaser.Scene {
     if (!p) return;
     if (this.area === 'bath' && this.reflection) {
       // you, in the mirror, when you are in front of it
-      const near = Math.abs(p.x - (MIRROR.x + MIRROR.w / 2)) < 40;
-      this.reflection.setVisible(near).setPosition(p.x, MIRROR.y + MIRROR.h + 2);
+      const near = Math.abs(p.x - (MIRROR.x + MIRROR.w / 2)) < 18;
+      this.reflection.setVisible(near).setPosition(Phaser.Math.Clamp(p.x, MIRROR.x + 7, MIRROR.x + MIRROR.w - 7), MIRROR.y + MIRROR.h + 8);
     }
     if (this.locked || this.talk) {
       this.prompt.setVisible(false);
@@ -1303,14 +1284,14 @@ export class Hotel extends Phaser.Scene {
           ? 'out'
           : Math.abs(x - 160) < 30
             ? 'desk'
-            : Math.abs(x - STAIR_DOOR_X) < 12
+            : Math.abs(x - STAIR_DOOR_X) < 10
               ? 'stairdoor'
-              : x > 262 && x < 306
+              : x > 266 && x < 294
                 ? 'lift'
-                : Math.abs(x - STORAGE_X) < 14
+                : Math.abs(x - STORAGE_X) < 10
                   ? 'storage'
                   : null;
-    else if (this.area === 'corridor') this.spot = x < 38 ? 'lift' : Math.abs(x - 56) < 10 ? 'stairs' : x > CORRIDOR_DOORS[5] - 16 ? 'door612' : null;
+    else if (this.area === 'corridor') this.spot = x < 34 ? 'lift' : Math.abs(x - 56) < 10 ? 'stairs' : x > CORRIDOR_DOORS[5] - 16 ? 'door612' : null;
     else if (this.area === 'bath') this.spot = x < 34 ? 'bathdoor' : Math.abs(x - (MIRROR.x + MIRROR.w / 2)) < 16 ? 'mirror' : null;
     else
       this.spot =
@@ -1318,9 +1299,9 @@ export class Hotel extends Phaser.Scene {
           ? 'roomdoor'
           : Math.abs(x - BATH_DOOR_X) < 10
             ? 'bathdoor'
-            : Math.abs(x - (ROOM_WINDOW.x + ROOM_WINDOW.w / 2)) < 44
+            : Math.abs(x - (ROOM_WINDOW.x + ROOM_WINDOW.w / 2)) < 24
               ? 'window'
-              : x > 232 && x < 300
+              : Math.abs(x - BED.x) < 24
                 ? 'bed'
                 : null;
     if (!this.spot) {
