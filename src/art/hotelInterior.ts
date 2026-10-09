@@ -159,6 +159,37 @@ const WAIN_BOTTOM = 148;
 export const CEIL_Y = 102;
 export const ROOF_Y = 94;
 
+
+/**
+ * A tiny 3x5 sign font, drawn pixel by pixel: the house pixel font smears at
+ * plate size, these stay crisp.  Digits and the letters the signs need.
+ */
+const GLYPH: Record<string, string[]> = {
+  '0': ['111', '101', '101', '101', '111'],
+  '1': ['010', '110', '010', '010', '111'],
+  '2': ['111', '001', '111', '100', '111'],
+  '3': ['111', '001', '011', '001', '111'],
+  '4': ['101', '101', '111', '001', '001'],
+  '5': ['111', '100', '111', '001', '111'],
+  '6': ['111', '100', '111', '101', '111'],
+  '7': ['111', '001', '010', '010', '010'],
+  '8': ['111', '101', '111', '101', '111'],
+  '9': ['111', '101', '111', '001', '111'],
+  E: ['111', '100', '110', '100', '111'],
+  X: ['101', '101', '010', '101', '101'],
+  I: ['111', '010', '010', '010', '111'],
+  T: ['111', '010', '010', '010', '010'],
+};
+function signText(g: Ctx, text: string, cx: number, y: number, color: string): void {
+  const w = text.length * 4 - 1;
+  let x = Math.round(cx - w / 2);
+  for (const ch of text) {
+    const rows = GLYPH[ch];
+    if (rows) rows.forEach((row, r) => [...row].forEach((b, c) => b === '1' && rect(g, x + c, y + r, 1, 1, color)));
+    x += 4;
+  }
+}
+
 /**
  * A walnut room door, side-on: casing, two raised panels, a brass plate with
  * the number, a lever handle.  `cx` is its middle, it stands on `floor`.
@@ -197,11 +228,11 @@ export function roomDoor(g: Ctx, cx: number, num: string, opts: { w?: number; h?
   // the number plate, on the door at eye height
   if (num) {
     // over the door on the wall, dark with gold figures, so it reads
-    const pw = num.length * 6 + 6;
+    const pw = num.length * 4 + 5;
     const px = Math.round(cx - pw / 2);
     rect(g, px, y - 11, pw, 9, HP.goldDark);
     rect(g, px + 1, y - 10, pw - 2, 7, '#1e140c');
-    drawPixelText(g, num, cx + 0.5, y - 9, { scale: 1, color: HP.goldHi, center: true });
+    signText(g, num, cx, y - 9, '#ffe9a8');
   }
 }
 
@@ -664,9 +695,9 @@ export function paintCorridor(g: Ctx): void {
   rect(g, sx - 3, 121, 6, 7, '#3a4440');
   rect(g, sx - 2, 122, 4, 5, '#6a8088');
   rect(g, sx - 7, 135, 14, 1, '#c0c4c0');
-  rect(g, sx - 11, 106, 22, 8, '#0e5a30');
-  rect(g, sx - 10, 107, 20, 6, '#1a8a4a');
-  drawPixelText(g, 'EXIT', sx + 0.5, 107, { scale: 1, color: '#e8ffe8', center: true });
+  rect(g, sx - 10, 105, 20, 9, '#0e5a30');
+  rect(g, sx - 9, 106, 18, 7, '#138040');
+  signText(g, 'EXIT', sx, 107, '#ffffff');
   glow(g, sx, 110, 10, 0.3, '120,255,160');
   // the rooms
   CORRIDOR_DOORS.forEach((x, k) => roomDoor(g, x, `${607 + k}`));
