@@ -1,6 +1,7 @@
 /**
- * The player character: a small pixel-art kid in a rust hoodie, hood up,
- * jeans and trainers.  Drawn from hand-made pixel grids, one per body part,
+ * The player character: a down-on-his-luck drifter -- faded beanie, grey
+ * beard, a patched army coat over a grubby scarf, baggy trousers and boots
+ * worn through at the toe.  Drawn from hand-made pixel grids, one per body part,
  * so the legs can stride, the arms can swing and the body can bob without
  * a sprite sheet.  Every pixel run is a plain Rectangle in one flat
  * container, which keeps scenes that recolour the player (the hotel's
@@ -46,19 +47,24 @@ const FLOOR_SFX: Record<Surface, 'footstep_carpet' | 'footstep_concrete' | 'foot
 
 /** One letter per pixel; '.' is empty. */
 const COLS: Record<string, number> = {
-  H: 0xa8451f, // hood / hoodie
-  C: 0xc0582c, // hoodie, lit
-  D: 0x7e3016, // hoodie, shade
-  w: 0xfff0c9, // drawstrings
-  r: 0x4a2c1a, // hair under the hood
-  S: 0xf2d2a8, // skin
-  s: 0xd2a880, // skin, shade
+  B: 0x5a3a3a, // knitted beanie, faded maroon
+  b: 0x7a5050, // beanie, lit fold
+  r: 0x5a4a3a, // greasy hair
+  S: 0xd8b088, // weathered skin
+  s: 0xb08a68, // skin, shade
   E: 0x1e1410, // eyes
-  m: 0xa0584a, // mouth
-  J: 0x3e5280, // jeans
-  j: 0x2c3a60, // jeans, shade
-  K: 0x2a2226, // shoes
-  W: 0xe8e0d0, // soles
+  G: 0x8a8070, // grey beard
+  g: 0x6a6258, // beard, shade
+  C: 0x6a6a44, // old army coat, olive
+  c: 0x7e7e54, // coat, lit
+  D: 0x4a4a30, // coat, shade
+  P: 0x8a5a3a, // patch
+  w: 0x9a9480, // scarf, grubby
+  J: 0x5a5048, // baggy trousers
+  j: 0x463e38, // trousers, shade
+  K: 0x3a2a1e, // worn boots
+  W: 0x6a5a48, // boot sole, scuffed
+  T: 0xc8b8a0, // toe poking through
 };
 const OUTLINE = 0x1a1210;
 
@@ -68,39 +74,40 @@ const PARTS: Record<string, Part> = {
   head: {
     top: 0,
     rows: [
-      '....HHHH....',
-      '...HHCCHH...',
-      '..HHrrrrHH..',
-      '..HrrSSrrH..',
-      '..HrSSSSSH..',
-      '..HSSSSSsH..',
-      '..HSSSSSsH..',
-      '...HSSmsH...',
-      '....HssH....',
+      '....BBBB....',
+      '...BBBBBB...',
+      '..bbbbbbbb..',
+      '..rSSSSSSr..',
+      '..rSSSSSSs..',
+      '...SSSSSs...',
+      '...GSSSsG...',
+      '...GGGGGg...',
+      '....GGGg....',
     ],
   },
-  eyes: { top: 5, rows: ['.....E.E....'] },
+  eyes: { top: 4, rows: ['.....E.E....'] },
   torso: {
     top: 9,
     rows: [
-      '...CCCCCC...',
-      '...CwCwCC...',
-      '...CwCwCC...',
-      '...CCCCCC...',
-      '...CDDDDC...',
-      '...DCCCCD...',
-      '...DDDDDD...',
+      '...wwwwww...',
+      '..CcCCCCCD..',
+      '..CcCDCCCD..',
+      '..CcCDCPPD..',
+      '..CcCDCPPD..',
+      '..CCCDCCCD..',
+      '..DCCDCCDD..',
+      '...D.DD.D...',
     ],
   },
-  backArm: { top: 9, rows: ['..D', '..D', '..D', '..D', '..D', '..s'] },
-  frontArm: { top: 9, rows: ['.........C', '.........C', '.........C', '.........C', '.........C', '.........S'] },
+  backArm: { top: 10, rows: ['.D', '.D', '.D', '.D', '.D', '.s'] },
+  frontArm: { top: 10, rows: ['..........C', '..........C', '..........C', '..........C', '..........D', '..........S'] },
   backLeg: {
-    top: 16,
-    rows: ['....jj', '....jj', '....jj', '....jj', '....jj', '....jj', '....jj', '....KKK', '....WWW'],
+    top: 17,
+    rows: ['....jj', '....jj', '....jj', '....jj', '....jj', '...jjj', '....KKK', '....WWW'],
   },
   frontLeg: {
-    top: 16,
-    rows: ['......JJ', '......JJ', '......JJ', '......JJ', '......JJ', '......JJ', '......JJ', '......KKK', '......WWW'],
+    top: 17,
+    rows: ['......JJ', '......JJ', '......JJ', '......JJ', '......JJ', '......JJJ', '......KKT', '......WWW'],
   },
 };
 const FIG_H = 25;
