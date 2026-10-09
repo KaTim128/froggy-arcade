@@ -11,6 +11,7 @@ import { PALETTE, nightify } from '../render/palette';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { centerText } from '../core/ui';
 import { depthFor } from './player';
+import { bevel, grain, tone } from './surface';
 
 export const ROOM = {
   left: 14,
@@ -82,6 +83,18 @@ export function paintHubRoom(scene: Phaser.Scene, opts: RoomOpts): void {
     }
   }
 
+  // ---- the pile of the carpet: a fine weave of lighter and darker tufts,
+  // and the floor darkening into the corners where the light does not reach
+  const base = c(casino ? 0x4a1424 : PALETTE.tealDark);
+  const weave = scene.add.graphics().setDepth(0.0003);
+  grain(weave, 14, 46, GAME_W - 28, GAME_H - 46, base, casino ? 91 : 17, 0.07, 0.16);
+  for (let i = 0; i < 6; i++) {
+    weave.fillStyle(0x000000, (opts.night ? 0.07 : 0.05) * (6 - i) / 6);
+    weave.fillRect(14, 48 + i * 2, GAME_W - 28, 2);
+    weave.fillRect(14 + i * 2, 48, 2, GAME_H - 48);
+    weave.fillRect(GAME_W - 16 - i * 2, 48, 2, GAME_H - 48);
+  }
+
   // ---- floor detail.  A bare carpet the size of this one reads as a
   // corridor; what makes it read as a room is the things a floor has on it.
   // None of this is interactive and none of it stands where the player walks:
@@ -111,10 +124,19 @@ export function paintHubRoom(scene: Phaser.Scene, opts: RoomOpts): void {
   if (!casino) {
     // Panelling, a skirting board, and the wall vents and cable runs that make
     // the back of a room look like the back of a building.
+    const wall = scene.add.graphics().setDepth(0.001);
+    grain(wall, 14, 0, GAME_W - 28, 44, c(PALETTE.plum), 23, 0.05, 0.12);
     for (let x = 16; x < GAME_W - 14; x += 30) {
-      scene.add.rectangle(x, 10, 26, 30, 0x3a2050).setOrigin(0, 0).setAlpha(0.5);
-      scene.add.rectangle(x, 10, 26, 1, 0x5c3a78).setOrigin(0, 0).setAlpha(0.6);
+      // a recessed panel: shaded along its top and left (the lip above it
+      // throws a shadow in), lit along its bottom and right
+      const p = c(0x3a2050);
+      wall.fillStyle(p, 0.6).fillRect(x, 10, 26, 30);
+      wall.fillStyle(tone(p, 0.55), 0.8).fillRect(x, 10, 26, 1).fillRect(x, 10, 1, 30);
+      wall.fillStyle(c(0x5c3a78), 0.7).fillRect(x, 39, 26, 1).fillRect(x + 25, 10, 1, 30);
     }
+    // a skirting board along the foot of the wall, lit on its top edge
+    wall.fillStyle(c(0x241634), 1).fillRect(14, 40, GAME_W - 28, 4);
+    wall.fillStyle(c(0x4a2e64), 1).fillRect(14, 40, GAME_W - 28, 1);
     // a cable run along the top of the wall, with a sag between each hook
     const cable = scene.add.graphics().setDepth(0.02);
     cable.lineStyle(1, c(0x1b1128), 0.9);
@@ -131,6 +153,10 @@ export function paintHubRoom(scene: Phaser.Scene, opts: RoomOpts): void {
   if (casino) {
     for (let x = 18; x < GAME_W - 14; x += 26) {
       scene.add.rectangle(x, 12, 22, 30, 0x3a1830).setOrigin(0, 0).setStrokeStyle(1, 0x5c2440);
+      const pg = scene.add.graphics().setDepth(0.001);
+      grain(pg, x + 1, 13, 20, 28, 0x3a1830, x, 0.08, 0.14);
+      pg.fillStyle(0x1e0a18, 1).fillRect(x + 1, 13, 20, 1);
+      pg.fillStyle(PALETTE.amberDark, 0.35).fillRect(x + 1, 40, 20, 1);
     }
     scene.add.rectangle(0, 42, GAME_W, 2, c(PALETTE.amberDark)).setOrigin(0, 0);
   }
@@ -229,6 +255,8 @@ export function paintArcadeDressing(
   // looked welded to the side of it.
   for (const vx of opts.vents ?? [24, GAME_W - 46]) {
     scene.add.rectangle(vx, 20, 22, 12, c(0x241638)).setOrigin(0, 0).setStrokeStyle(1, c(0x140c22));
+    scene.add.rectangle(vx, 32, 22, 1, c(0x4a3466)).setOrigin(0, 0);
+    scene.add.rectangle(vx + 1, 33, 20, 3, 0x000000).setOrigin(0, 0).setAlpha(0.15);
     for (let i = 0; i < 4; i++) {
       scene.add.rectangle(vx + 2, 22 + i * 3, 18, 1, c(0x150d24)).setOrigin(0, 0);
     }
@@ -241,7 +269,12 @@ export function paintArcadeDressing(
   ];
   for (const [x, y, colour] of posters) {
     if (!clear(x - 9, x + 9)) continue;
+    scene.add.rectangle(x + 1, y + 1, 18, 24, 0x000000).setOrigin(0.5, 0).setDepth(0.019).setAlpha(0.3);
     scene.add.rectangle(x, y, 18, 24, c(PALETTE.bone)).setOrigin(0.5, 0).setDepth(0.02).setAlpha(lit ? 0.9 : 0.5);
+    // tape at the top corners, and the bottom corner lifting away from the wall
+    scene.add.rectangle(x - 8, y, 4, 2, c(0xe8e0c0)).setOrigin(0.5, 0.5).setDepth(0.022).setAlpha(0.7);
+    scene.add.rectangle(x + 8, y, 4, 2, c(0xe8e0c0)).setOrigin(0.5, 0.5).setDepth(0.022).setAlpha(0.7);
+    scene.add.triangle(x + 9, y + 24, 0, 0, -4, 0, 0, -4, c(tone(PALETTE.bone, 0.7))).setOrigin(0, 0).setDepth(0.022);
     scene.add.rectangle(x, y + 3, 12, 9, lit ? colour : nightify(colour)).setOrigin(0.5, 0).setDepth(0.021);
     for (let i = 0; i < 3; i++) {
       scene.add.rectangle(x - 5, y + 15 + i * 3, 10, 1, c(PALETTE.steel)).setOrigin(0, 0).setDepth(0.021);
@@ -252,14 +285,24 @@ export function paintArcadeDressing(
   for (const prop of opts.props ?? []) {
     const d = depthFor(prop.y);
     if (prop.kind === 'bin') {
+      scene.add.ellipse(prop.x + 5, prop.y, 14, 3, 0x000000, 0.3).setDepth(d);
+      scene.add.rectangle(prop.x - 1, prop.y + 1, 12, 14, c(0x0c0a10)).setOrigin(0, 1).setDepth(d);
       scene.add.rectangle(prop.x, prop.y, 10, 12, c(PALETTE.steel)).setOrigin(0, 1).setDepth(d);
+      // ribs pressed into the metal, lit on one side
+      for (let k = 2; k < 10; k += 3) {
+        scene.add.rectangle(prop.x + k, prop.y - 1, 1, 9, c(tone(PALETTE.steel, 1.3))).setOrigin(0, 1).setDepth(d);
+        scene.add.rectangle(prop.x + k + 1, prop.y - 1, 1, 9, c(tone(PALETTE.steel, 0.75))).setOrigin(0, 1).setDepth(d);
+      }
       scene.add.rectangle(prop.x, prop.y - 11, 10, 2, c(PALETTE.slate)).setOrigin(0, 1).setDepth(d);
       scene.add.rectangle(prop.x + 2, prop.y - 8, 6, 1, c(PALETTE.ink)).setOrigin(0, 1).setDepth(d);
     } else {
       // A pot with a rim, soil in it, and a plant with leaves that overlap —
       // three ellipses in one green read as a bush somebody dropped.
       const cx = prop.x + 6;
+      scene.add.ellipse(cx, prop.y, 16, 3, 0x000000, 0.3).setDepth(d);
+      scene.add.rectangle(prop.x, prop.y + 1, 12, 9, c(0x1a0e08)).setOrigin(0, 1).setDepth(d);
       scene.add.rectangle(prop.x + 1, prop.y, 10, 7, c(PALETTE.rust)).setOrigin(0, 1).setDepth(d);
+      scene.add.rectangle(prop.x + 9, prop.y, 2, 7, c(tone(PALETTE.rust, 0.7))).setOrigin(0, 1).setDepth(d);
       scene.add.rectangle(prop.x, prop.y - 6, 12, 3, c(PALETTE.ember)).setOrigin(0, 1).setDepth(d);
       scene.add.rectangle(prop.x + 1, prop.y - 7, 10, 1, c(0x2a1a12)).setOrigin(0, 1).setDepth(d);
       // the stems
@@ -364,9 +407,17 @@ export function paintOpening(
 /** The change machine, decorative in Act I and dead at night. */
 export function paintChangeMachine(scene: Phaser.Scene, night: boolean): void {
   const c = (col: number) => (night ? nightify(col) : col);
-  scene.add.rectangle(262, 10, 20, 32, c(PALETTE.steel)).setOrigin(0, 0);
-  scene.add.rectangle(265, 15, 14, 10, night ? PALETTE.black : PALETTE.gold).setOrigin(0, 0);
-  scene.add.rectangle(266, 32, 12, 3, c(PALETTE.ink)).setOrigin(0, 0);
+  const g = scene.add.graphics();
+  g.fillStyle(c(0x0c0a10), 1).fillRect(261, 9, 22, 34);
+  g.fillStyle(c(PALETTE.steel), 1).fillRect(262, 10, 20, 32);
+  grain(g, 263, 11, 18, 30, c(PALETTE.steel), 262, 0.08, 0.12);
+  bevel(g, 262, 10, 20, 32, c(PALETTE.steel));
+  g.fillStyle(c(PALETTE.ink), 1).fillRect(264, 14, 16, 12);
+  g.fillStyle(night ? PALETTE.black : PALETTE.gold, 1).fillRect(265, 15, 14, 10);
+  if (!night) g.fillStyle(0xffffff, 0.3).fillTriangle(265, 15, 271, 15, 265, 20);
+  g.fillStyle(c(PALETTE.ink), 1).fillRect(266, 32, 12, 3);
+  g.fillStyle(c(tone(PALETTE.steel, 1.3)), 1).fillRect(266, 35, 12, 1);
+  g.fillStyle(night ? 0x1a1010 : PALETTE.ember, 1).fillRect(270, 28, 4, 2);
 }
 
 /**

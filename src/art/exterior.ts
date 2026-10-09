@@ -11,6 +11,7 @@
  */
 
 import Phaser from 'phaser';
+import { grain, seeded, tone } from './surface';
 import { PALETTE, nightify, daylight } from '../render/palette';
 import { GAME_W } from '../render/pixelScaler';
 import { centerText } from '../core/ui';
@@ -94,6 +95,18 @@ export function paintExterior(scene: Phaser.Scene, opts: ExteriorOpts): Exterior
   for (let i = 0; i < tops.length; i++) {
     sky.fillRect(i * 32, tops[i], 30, 90 - tops[i]);
   }
+  // a few lit windows in the far towers, and a lit edge on their roofs
+  {
+    const rnd = seeded(5);
+    for (let i = 0; i < tops.length; i++) {
+      sky.fillStyle(c(PALETTE.slate), 0.6).fillRect(i * 32, tops[i], 30, 1);
+      for (let k = 0; k < 4; k++) {
+        const wx = i * 32 + 3 + Math.floor(rnd() * 24);
+        const wy = tops[i] + 4 + Math.floor(rnd() * 14);
+        sky.fillStyle(opts.day ? c(0x3a4250) : PALETTE.amber, opts.day ? 0.8 : 0.5).fillRect(wx, wy, 2, 2);
+      }
+    }
+  }
 
   // ---- THE ARCADE.  A solid building: no windows -- nothing of the inside
   // shows from the street but what comes through the glass doors.  Brick, in
@@ -115,6 +128,7 @@ export function paintExterior(scene: Phaser.Scene, opts: ExteriorOpts): Exterior
     wall.fillRect(fx, y, fw, 1);
     for (let x = fx + (row % 2 ? 4 : 0); x < fx + fw; x += 9) wall.fillRect(x, y - 3, 1, 3);
   }
+  grain(wall, fx, fy + 5, fw, fh - 12, c(PALETTE.slate), 61, 0.05, 0.14);
   // a few bricks a shade lighter, so it is not wallpaper
   wall.fillStyle(c(PALETTE.steel), 0.35);
   for (let i = 0; i < 26; i++) {
@@ -333,6 +347,7 @@ export function paintExterior(scene: Phaser.Scene, opts: ExteriorOpts): Exterior
       scene.add.rectangle(18 + i * 44, 160 + (i % 3) * 5, 20, 2, PALETTE.amber).setOrigin(0, 0).setAlpha(0.2);
     }
   }
+  grain(pave, 0, 152, GAME_W, 24, c(PALETTE.steel), 77, 0.06, 0.12);
   // ---- two parked cars
   paintCar(scene, 12, 138, c(PALETTE.blood), c);
   paintCar(scene, 258, 140, c(PALETTE.tealDark), c);
@@ -396,12 +411,38 @@ function paintAlleyMouth(scene: Phaser.Scene, c: (n: number) => number, x0: numb
 }
 
 function paintCar(scene: Phaser.Scene, x: number, y: number, body: number, c: (n: number) => number): void {
-  scene.add.rectangle(x, y, 50, 12, body).setOrigin(0, 0);
-  scene.add.rectangle(x + 10, y - 7, 28, 8, body).setOrigin(0, 0);
-  scene.add.rectangle(x + 13, y - 5, 10, 5, c(PALETTE.fog)).setOrigin(0, 0);
-  scene.add.rectangle(x + 25, y - 5, 10, 5, c(PALETTE.fog)).setOrigin(0, 0);
-  scene.add.circle(x + 11, y + 12, 4, c(PALETTE.ink));
-  scene.add.circle(x + 39, y + 12, 4, c(PALETTE.ink));
+  // A parked hatchback with the player's finish: outlined, lit along its
+  // roofline and shoulder, a shaded sill, glass that catches the sky, a door
+  // seam and handle, hubcaps in the tyres, and a shadow on the road.
+  const g = scene.add.graphics();
+  const ink = c(0x0c0a10);
+  g.fillStyle(0x000000, 0.3).fillEllipse(x + 25, y + 15, 58, 5);
+  // outline
+  g.fillStyle(ink, 1).fillRect(x - 1, y - 1, 52, 14).fillRect(x + 9, y - 8, 30, 9);
+  // body and cabin
+  g.fillStyle(body, 1).fillRect(x, y, 50, 12).fillRect(x + 10, y - 7, 28, 8);
+  g.fillStyle(tone(body, 1.35), 1).fillRect(x + 10, y - 7, 28, 1).fillRect(x, y, 50, 1);
+  g.fillStyle(tone(body, 0.65), 1).fillRect(x, y + 9, 50, 3);
+  grain(g, x + 1, y + 1, 48, 8, body, x + y, 0.05, 0.1);
+  // glass, with the sky in it
+  for (const gx of [x + 13, x + 25]) {
+    g.fillStyle(c(PALETTE.fog), 1).fillRect(gx, y - 5, 10, 5);
+    g.fillStyle(c(0x5a6a80), 1).fillRect(gx, y - 2, 10, 2);
+    g.fillStyle(0xffffff, 0.45).fillRect(gx + 1, y - 5, 3, 1);
+  }
+  g.fillStyle(tone(body, 0.6), 1).fillRect(x + 24, y - 5, 1, 5);
+  // door seam, handle, lights
+  g.fillStyle(tone(body, 0.6), 1).fillRect(x + 24, y + 1, 1, 8);
+  g.fillStyle(c(PALETTE.ash), 1).fillRect(x + 27, y + 3, 3, 1);
+  g.fillStyle(c(PALETTE.cream), 1).fillRect(x + 48, y + 3, 2, 2);
+  g.fillStyle(c(PALETTE.blood), 1).fillRect(x, y + 3, 2, 2);
+  g.fillStyle(c(PALETTE.ash), 1).fillRect(x - 1, y + 8, 3, 2).fillRect(x + 48, y + 8, 3, 2);
+  // wheels: tyre, hubcap, a lit edge on the cap
+  for (const wx of [x + 11, x + 39]) {
+    g.fillStyle(c(PALETTE.ink), 1).fillCircle(wx, y + 12, 4);
+    g.fillStyle(c(0x6a6e78), 1).fillCircle(wx, y + 12, 2);
+    g.fillStyle(c(0xa0a4ae), 1).fillRect(wx - 1, y + 11, 1, 1);
+  }
 }
 
 /** The sign's irregular flicker.  Gaps of 0.1s to 4s (PRD §7.2). */

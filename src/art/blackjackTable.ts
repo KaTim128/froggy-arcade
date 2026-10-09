@@ -120,7 +120,9 @@ export class BlackjackTable {
     // It sits three pixels further back than it did, on the same line the
     // dealer is now cut at, so that he is framed by it rather than leaning out
     // of it.
-    chairAt(scene, x, y - 27, d - 0.002);
+    // sized to the drifter: a high-back chair comes to about 1.2 m, eighteen
+    // pixels, which is a little over half the size it used to be drawn
+    chairAt(scene, x, y - 27, d - 0.002, 0.58);
 
     // ---- THE PLAYER'S CHAIR, pulled up to the near edge.
     //
@@ -131,7 +133,7 @@ export class BlackjackTable {
     // hundredths -- so the player's body is always the thing in front and the
     // chair is always the thing around it.  A chair that covered the player
     // would be a chair in the way.
-    chairAt(scene, x, y + 26, d + 0.002, 0.72);
+    chairAt(scene, x, y + 26, d + 0.002, 0.5);
 
     // ---- stools for whoever else is playing, pushed out past the chair's
     // arms so the near edge belongs to the one seat that matters

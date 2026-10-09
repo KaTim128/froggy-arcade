@@ -8,6 +8,7 @@
  */
 
 import Phaser from 'phaser';
+import { seeded, tone } from '../art/surface';
 import { PALETTE } from '../render/palette';
 import { audio, type SfxName } from '../core/audio';
 import { store, type GameId } from '../core/state';
@@ -127,8 +128,11 @@ const PLAYER_BOX = { headW: 10, headTop: 28, headH: 20, torsoW: 12, torsoH: 12 }
  * answers from.
  */
 const FROG_SCALE = (FROG_POST.height / FROGGY_DESIGN.h) * FROGGY_DESIGN.breath;
-const STAFFER_FEET = FROG_CUT + 22;
-const STAFFER_H = 50;
+// To the player's scale: a 30-pixel adult standing behind an 18-pixel (1.2 m)
+// counter shows head, shoulders and chest over it -- about 13 pixels.  He was
+// 50 high, nearly twice the drifter.
+const STAFFER_FEET = FROG_CUT + 16;
+const STAFFER_H = 30;
 const STAFFER_TOP = STAFFER_FEET - STAFFER_H * (118 / 114);
 /**
  * ---- AND THE HIGHLIGHTS GO BEHIND EVERYBODY.
@@ -1341,6 +1345,29 @@ export class ArcadeHub extends Phaser.Scene {
     // off at the waist by it instead of standing on top of it.
     this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, COUNTER.h, PALETTE.brown).setOrigin(0, 0).setDepth(COUNTER_DEPTH);
     this.add.rectangle(COUNTER.x, COUNTER.y, COUNTER.w, 3, PALETTE.brownLight).setOrigin(0, 0).setDepth(COUNTER_DEPTH);
+    // The wood: grain running along the top and the front, a lit nosing on
+    // the edge of the top, recessed front panels, a dark kick at the foot,
+    // and the pale wear where a thousand elbows have leant on it.
+    {
+      const w = this.add.graphics().setDepth(COUNTER_DEPTH);
+      const { x, y, w: cw, h } = COUNTER;
+      const rnd = seeded(4631);
+      for (let k = 0; k < 26; k++) {
+        const gx = x + Math.floor(rnd() * (cw - 12));
+        const gy = y + 4 + Math.floor(rnd() * (h - 7));
+        w.fillStyle(rnd() < 0.5 ? tone(PALETTE.brown, 0.85) : tone(PALETTE.brown, 1.1), 0.6).fillRect(gx, gy, 4 + Math.floor(rnd() * 10), 1);
+      }
+      w.fillStyle(tone(PALETTE.brownLight, 1.3), 1).fillRect(x, y, cw, 1);
+      w.fillStyle(tone(PALETTE.brown, 0.6), 1).fillRect(x, y + 3, cw, 1);
+      for (let px = x + 4; px + 20 < x + cw; px += 24) {
+        w.fillStyle(tone(PALETTE.brown, 0.72), 1).fillRect(px, y + 6, 20, 1).fillRect(px, y + 6, 1, h - 10);
+        w.fillStyle(tone(PALETTE.brown, 1.2), 1).fillRect(px, y + h - 4, 20, 1).fillRect(px + 19, y + 6, 1, h - 10);
+      }
+      w.fillStyle(tone(PALETTE.brown, 0.45), 1).fillRect(x, y + h - 2, cw, 2);
+      w.fillStyle(0xf0e0c0, 0.18).fillRect(x + 30, y + 1, 26, 1).fillRect(x + 92, y + 1, 18, 1);
+      // the counter's shadow on the carpet in front of it
+      this.add.rectangle(x, y + h, cw, 3, 0x000000, 0.22).setOrigin(0, 0).setDepth(0.5);
+    }
 
     this.add
       .rectangle(PRIZE_CASE.x, PRIZE_CASE.y - 30, PRIZE_CASE.w, 30, PALETTE.ink)
