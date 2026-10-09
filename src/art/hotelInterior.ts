@@ -262,40 +262,46 @@ function crownAt(g: Ctx, w: number, y: number, h = 4): void {
 }
 
 /**
- * The top floor's ceiling, cut away: the concrete slab of the roof in
- * section, with the roof's own clutter standing on it against the sky.
- * Above ROOF_Y the canvas is left EMPTY -- the scene puts the sky (for the
- * hour it is) behind it.
+ * The ceiling, seen from inside the room: a plaster ceiling running back to
+ * the cornice, coffered between beams that come towards you, darkening as it
+ * gets nearer the eye, with a heavy header across the very top -- the room
+ * is closed in.  Nothing of the outside shows except through a window.
  */
-function roofCutaway(g: Ctx, w: number): void {
-  g.clearRect(0, 0, w, CEIL_Y);
-  // the slab, in section: concrete with its hatching, a membrane on top
-  rect(g, 0, ROOF_Y, w, CEIL_Y - ROOF_Y, '#6a6660');
-  for (let x = -8; x < w; x += 5) for (let k = 0; k < CEIL_Y - ROOF_Y; k++) rect(g, x + k, ROOF_Y + k, 1, 1, '#57534e');
-  rect(g, 0, ROOF_Y, w, 1, '#2e2c2a');
-  rect(g, 0, ROOF_Y - 1, w, 1, '#3a3836');
-  // the roof's furniture: a parapet at the far end, vent stacks, an air
-  // handler, a water tank on legs, an aerial
-  const dark = '#24262c';
-  const lit = '#3e424c';
-  rect(g, 0, ROOF_Y - 5, 3, 4, dark);
-  rect(g, w - 3, ROOF_Y - 5, 3, 4, dark);
-  for (const vx of [38, 132, 226]) {
-    rect(g, vx, ROOF_Y - 7, 2, 6, dark);
-    rect(g, vx - 1, ROOF_Y - 8, 4, 1, lit);
+function enclosedCeiling(g: Ctx, w: number, opts: { plaster?: string; beam?: string; lights?: number[] } = {}): void {
+  const plaster = opts.plaster ?? '#d8ccb0';
+  const beam = opts.beam ?? '#b8a47c';
+  const top = 6;
+  // the plaster, light by the far wall and dimmer towards us
+  for (let y = top; y < CEIL_Y; y++) {
+    const k = (y - top) / (CEIL_Y - top);
+    rect(g, 0, y, w, 1, plaster);
+    rect(g, 0, y, w, 1, '#1a1008', 0.62 * (1 - k) * (1 - k) + 0.08);
   }
-  rect(g, 70, ROOF_Y - 9, 18, 8, dark);
-  rect(g, 70, ROOF_Y - 9, 18, 1, lit);
-  for (let k = 0; k < 4; k++) rect(g, 72 + k * 4, ROOF_Y - 7, 2, 4, '#30333a');
-  rect(g, 182, ROOF_Y - 20, 16, 11, dark);
-  rect(g, 182, ROOF_Y - 20, 16, 1, lit);
-  rect(g, 182, ROOF_Y - 20, 1, 11, lit);
-  for (const lx of [183, 196]) rect(g, lx, ROOF_Y - 9, 1, 8, dark);
-  rect(g, 280, ROOF_Y - 24, 1, 23, dark);
-  rect(g, 277, ROOF_Y - 20, 7, 1, dark);
-  rect(g, 278, ROOF_Y - 15, 5, 1, dark);
-  rect(g, 280, ROOF_Y - 25, 1, 1, '#ff3a3a');
-  // the ceiling of the room under it
+  // beams running towards us, fanning out from the vanishing line
+  const cx = w / 2;
+  for (let bx = -w; bx <= 2 * w; bx += 40) {
+    for (let y = top; y < CEIL_Y; y++) {
+      const k = (y - top) / (CEIL_Y - top);
+      const x = cx + (bx - cx) * (1.9 - 0.9 * k);
+      rect(g, Math.round(x), y, 3, 1, beam);
+      rect(g, Math.round(x) + 3, y, 1, 1, '#000000', 0.18);
+    }
+  }
+  // cross-beams, closer together as they recede
+  for (const k of [0.25, 0.5, 0.72, 0.88]) {
+    const y = Math.round(top + k * (CEIL_Y - top));
+    rect(g, 0, y, w, 2, beam);
+    rect(g, 0, y + 2, w, 1, '#000000', 0.15);
+  }
+  // ceiling roses with their lamps
+  for (const lx of opts.lights ?? []) {
+    rect(g, lx - 3, CEIL_Y - 14, 7, 2, '#f4ecd6');
+    glow(g, lx, CEIL_Y - 12, 22, 0.35);
+  }
+  // the header across the top, nearest the eye
+  rect(g, 0, 0, w, top, '#3a2a1c');
+  rect(g, 0, top - 1, w, 1, HP.goldDark);
+  // and the cornice where the ceiling meets the wall
   crownAt(g, w, CEIL_Y, 3);
 }
 
@@ -340,6 +346,7 @@ export const DESK = { x: 124, w: 72, top: 135 };
  */
 function gallery(g: Ctx, W: number, floor: number, doors: number[]): void {
   for (const dx of doors) roomDoor(g, dx, '', { floor });
+  // the balcony runs across the side bays only; the middle bay is open
   for (const sx of doors.filter((_, k) => k % 2 === 0)) sconce(g, sx + 14, floor - 26);
   // the slab edge, with the light along its underside
   rect(g, 0, floor, W, 4, HP.cream);
@@ -356,11 +363,45 @@ function gallery(g: Ctx, W: number, floor: number, doors: number[]): void {
 export function paintLobby(g: Ctx, night: boolean, empty = false): void {
   const W = LOBBY_W;
   crown(g, W);
+  for (let x = 0; x < W; x += 12) rect(g, x, 0, 1, 7, HP.goldDark, 0.5);
   wallpaper(g, 0, 11, W, DADO - 14, { paper: HP.paper, shade: HP.paperShade, motif: HP.paperMotif });
   // ---- the atrium: two guest floors on galleries round it
-  const doors = [24, 60, 132, 176, 252, 300, 338, 384];
+  // guest doors only in the side bays: over the desk the atrium is open
+  const doors = [24, 60, 252, 300, 338, 384];
   gallery(g, W, 48, doors);
   gallery(g, W, 98, doors);
+  // ---- the middle bay, over the desk: open to the full height of the
+  // atrium.  The balconies stop at the columns with a carved return; behind
+  // the desk, tall panelling, a pair of arched mirrors and the great
+  // chandelier hanging through all three storeys.
+  rect(g, 109, 11, 102, 92, HP.paper);
+  wallpaper(g, 109, 11, 102, 92, { paper: HP.paper, shade: HP.paperShade, motif: HP.paperMotif });
+  for (const fl of [48, 98]) {
+    rect(g, 109, fl - 14, 4, 18, HP.cream);
+    rect(g, 207, fl - 14, 4, 18, HP.cream);
+    rect(g, 109, fl + 2, 102, 2, HP.goldDark, 0.5);
+  }
+  for (const mx of [128, 180]) {
+    rect(g, mx - 1, 30, 14, 56, HP.goldDark);
+    rect(g, mx, 31, 12, 54, HP.gold);
+    rect(g, mx + 1, 34, 10, 50, '#cfd8dc');
+    rect(g, mx + 1, 32, 10, 2, '#cfd8dc');
+    rect(g, mx + 2, 36, 2, 30, '#ffffff', 0.35);
+  }
+  rect(g, 154, 22, 12, 4, HP.goldDark);
+  drawPixelText(g, 'GL', 160.5, 21, { scale: 1, color: HP.goldHi, center: true });
+  // the great chandelier
+  rect(g, 160, 0, 1, 52, HP.goldDark);
+  rect(g, 148, 52, 25, 2, HP.gold);
+  rect(g, 151, 54, 19, 2, HP.goldDark);
+  rect(g, 154, 56, 13, 2, HP.gold);
+  for (let k = -11; k <= 11; k += 3) {
+    rect(g, 160 + k, 49, 1, 3, HP.goldDark);
+    rect(g, 160 + k - 1, 47, 3, 2, '#fff6d8');
+  }
+  for (let k = -9; k <= 9; k += 3) rect(g, 160 + k, 58 + (Math.abs(k) % 6), 1, 3, '#e8f0ff');
+  glow(g, 160.5, 52, 60, 0.4);
+  glow(g, 160.5, 52, 16, 0.55);
   wainscot(g, 0, W, DADO, WAIN_BOTTOM);
   marbleFloor(g, W);
   // the runner, from the doors to the lift
@@ -611,7 +652,7 @@ export const CORRIDOR_DOORS = [90, 132, 174, 216, 258, 300];
 export function paintCorridor(g: Ctx): void {
   const W = 320;
   wallpaper(g, 0, CEIL_Y, W, DADO - CEIL_Y, { paper: HP.paper, shade: HP.paperShade, motif: HP.paperMotif });
-  roofCutaway(g, W);
+  enclosedCeiling(g, W, { lights: [80, 240] });
   wainscot(g, 0, W, DADO, WAIN_BOTTOM);
   carpetFloor(g, W);
   // the lift you came up in
@@ -671,7 +712,7 @@ export function paintRoom(g: Ctx): void {
   const W = 320;
   // soft warm walls: a pale stripe, cream panelling below
   wallpaper(g, 0, CEIL_Y, W, DADO - CEIL_Y, { paper: '#efe6d2', shade: '#e6dbc2', motif: '#d8c8a4' });
-  roofCutaway(g, W);
+  enclosedCeiling(g, W, { lights: [80, 240] });
   wainscot(g, 0, W, DADO, WAIN_BOTTOM, '#e2d6bc', '#f4ecd8', '#c8b898');
   // the carpet: a quiet oatmeal, and a rug under the bed
   rect(g, 0, FLOOR_Y, W, 28, '#8a7a66');
@@ -870,7 +911,7 @@ export function paintBathroom(g: Ctx): void {
     rect(g, 0, y, W, 1, '#d8d4cc');
     for (let x = ((y - CEIL_Y) / 4) % 2 ? 4 : 0; x < W; x += 8) rect(g, x, y, 1, 4, '#d8d4cc');
   }
-  roofCutaway(g, W);
+  enclosedCeiling(g, W, { lights: [80, 240] });
   rect(g, 0, DADO - 2, W, 3, '#7b2a3a');
   rect(g, 0, DADO - 2, W, 1, '#9a3a4c');
   rect(g, 0, DADO + 1, W, 1, HP.gold);

@@ -65,7 +65,6 @@ import {
   paintRoom,
   paintRoomLight,
   paintView,
-  paintSky,
   BED,
   DESK,
   WIN_SCALE,
@@ -352,21 +351,11 @@ export class Hotel extends Phaser.Scene {
   }
 
   private buildCorridor(): void {
-    this.addSky(store.get().timeOfDay === 'day' ? 'day' : 'night');
     this.add.image(0, 0, this.painted('hotel_corridor_v2', GAME_W, GAME_H, paintCorridor)).setOrigin(0, 0);
     centerText(this, 22, 110, '6', 0xff7a3d);
   }
 
-  /**
-   * The sky over the cut-away roof: the sixth floor is the top floor, so over
-   * its ceiling there is only the roof and then this.
-   */
-  private addSky(when: 'night' | 'day' | 'late'): void {
-    this.add.image(0, 0, this.painted(`hotel_sky_${when}`, GAME_W, CEIL_Y, (g) => paintSky(g, GAME_W, CEIL_Y, when))).setOrigin(0, 0).setDepth(-1);
-  }
-
   private buildBath(): void {
-    this.addSky(store.get().timeOfDay === 'day' ? 'day' : 'night');
     this.add.image(0, 0, this.painted('hotel_bath_v2', GAME_W, GAME_H, paintBathroom)).setOrigin(0, 0);
     // the mirror: the room behind you in it, and then you
     const m = MIRROR;
@@ -393,7 +382,6 @@ export class Hotel extends Phaser.Scene {
   private buildRoom(): void {
     const { x, y, w, h } = ROOM_WINDOW;
     const when = this.night === 'late' ? 'late' : this.morning && store.get().timeOfDay === 'day' ? 'day' : 'night';
-    this.addSky(when);
     this.view = this.add.image(x, y, this.painted(`hotel_view_${when}_${w}`, w, h, (g) => paintView(g, w, h, when))).setOrigin(0, 0).setDepth(1);
     // him: a canvas the size of the window and its margins, drawn every frame once he is there
     this.froggyTex = this.textures.exists('hotel_wfroggy') ? (this.textures.get('hotel_wfroggy') as Phaser.Textures.CanvasTexture) : this.textures.createCanvas('hotel_wfroggy', WF_W, WF_H);
