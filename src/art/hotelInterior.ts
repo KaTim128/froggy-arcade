@@ -196,10 +196,12 @@ export function roomDoor(g: Ctx, cx: number, num: string, opts: { w?: number; h?
   if (!opts.white) rect(g, x + Math.round(w / 2), y + 8, 1, 1, HP.goldHi);
   // the number plate, on the door at eye height
   if (num) {
-    const pw = num.length * 6 + 2;
-    rect(g, Math.round(cx - pw / 2), y + 3, pw, 7, HP.goldDark);
-    rect(g, Math.round(cx - pw / 2) + 1, y + 4, pw - 2, 5, HP.gold);
-    drawPixelText(g, num, cx + 0.5, y + 3, { scale: 1, color: HP.ink, center: true });
+    // over the door on the wall, dark with gold figures, so it reads
+    const pw = num.length * 6 + 6;
+    const px = Math.round(cx - pw / 2);
+    rect(g, px, y - 11, pw, 9, HP.goldDark);
+    rect(g, px + 1, y - 10, pw - 2, 7, '#1e140c');
+    drawPixelText(g, num, cx + 0.5, y - 9, { scale: 1, color: HP.goldHi, center: true });
   }
 }
 
@@ -376,18 +378,6 @@ export function paintLobby(g: Ctx, night: boolean, empty = false): void {
   // chandelier hanging through all three storeys.
   rect(g, 109, 11, 102, 92, HP.paper);
   wallpaper(g, 109, 11, 102, 92, { paper: HP.paper, shade: HP.paperShade, motif: HP.paperMotif });
-  for (const fl of [48, 98]) {
-    rect(g, 109, fl - 14, 4, 18, HP.cream);
-    rect(g, 207, fl - 14, 4, 18, HP.cream);
-    rect(g, 109, fl + 2, 102, 2, HP.goldDark, 0.5);
-  }
-  for (const mx of [128, 180]) {
-    rect(g, mx - 1, 30, 14, 56, HP.goldDark);
-    rect(g, mx, 31, 12, 54, HP.gold);
-    rect(g, mx + 1, 34, 10, 50, '#cfd8dc');
-    rect(g, mx + 1, 32, 10, 2, '#cfd8dc');
-    rect(g, mx + 2, 36, 2, 30, '#ffffff', 0.35);
-  }
   rect(g, 154, 22, 12, 4, HP.goldDark);
   drawPixelText(g, 'GL', 160.5, 21, { scale: 1, color: HP.goldHi, center: true });
   // the great chandelier
