@@ -183,7 +183,32 @@ export interface GameState {
    * hotel left wrecked, taped off and watched.
    */
   hotelAfter: 'none' | 'police' | 'escape' | 'escaped';
+  /**
+   * ---- THE CRANES' GLASS, as it was left.  Every toy where it lay, keyed by
+   * machine, and the real day the heap was tipped in: the heap is only
+   * refilled on a new day, or once the machine is empty.
+   */
+  cranes: Record<string, CraneSave>;
   settings: Settings;
+}
+
+/** One toy in a crane, as saved: what it is, where it lies, how it was drawn. */
+export interface SavedToy {
+  id: string;
+  /** Texture kind: a plush kind ('bear') or 'capsule-N'. */
+  look: string;
+  x: number;
+  z: number;
+  lift: number;
+  size: number;
+  tilt: number;
+  flip: boolean;
+  /** Knocked over by the claw, degrees. */
+  lean: number;
+}
+export interface CraneSave {
+  day: string;
+  toys: SavedToy[];
 }
 
 /**
@@ -326,6 +351,7 @@ function defaultState(): GameState {
     checkedIn: false,
     hotelNight: false,
     hotelAfter: 'none',
+    cranes: {},
     settings: { master: 80, music: 70, sfx: 85, moveStyle: 'stick', ...generalDefaults() },
   };
 }
@@ -423,6 +449,17 @@ class Store {
     fresh.items = Array.isArray(run.items) ? run.items.filter((i) => typeof i === 'string').slice(0, 3) : [];
     fresh.hotelAfter = run.hotelAfter === 'police' || run.hotelAfter === 'escape' || run.hotelAfter === 'escaped' ? run.hotelAfter : 'none';
     fresh.timeOfDay = run.timeOfDay === 'evening' || run.timeOfDay === 'midnight' ? run.timeOfDay : 'day';
+    // the cranes' glass: only well-formed toys come back
+    fresh.cranes = {};
+    if (run.cranes && typeof run.cranes === 'object') {
+      for (const [k, v] of Object.entries(run.cranes)) {
+        if (!v || typeof v.day !== 'string' || !Array.isArray(v.toys)) continue;
+        const toys = v.toys.filter(
+          (t) => t && typeof t.id === 'string' && typeof t.look === 'string' && [t.x, t.z, t.lift, t.size, t.tilt].every((n) => Number.isFinite(n)),
+        );
+        fresh.cranes[k] = { day: v.day, toys: toys.map((t) => ({ ...t, flip: !!t.flip, lean: Number.isFinite(t.lean) ? t.lean : 0 })) };
+      }
+    }
     this.state = fresh;
     // A saved unlimited run comes back unlimited, whatever the file says.
     if (this.isAdmin()) this.state.tokens = ADMIN_TOKENS;
