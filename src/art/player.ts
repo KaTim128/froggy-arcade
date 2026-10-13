@@ -247,6 +247,29 @@ export class Player {
     this.sprite.setDepth(depthFor(y));
   }
 
+  /**
+   * For scenes that move the figure themselves (the rooftop run): face `dx`,
+   * and walk the stride on at `speed` (1 = a walk) without moving anything.
+   */
+  stride(dx: number, delta: number, speed = 1): void {
+    if (Math.abs(dx) > 0.01) this.dir = dx > 0 ? 1 : -1;
+    this.bobT += delta * speed;
+    const ph = (this.bobT / (STEP_INTERVAL_MS * 2)) * Math.PI * 2;
+    this.pose(Math.sin(ph) * 1.4, Math.abs(Math.cos(ph)) > 0.7 ? 1 : 0);
+  }
+
+  /** Stood still. */
+  stand(): void {
+    this.bobT = 0;
+    this.pose(0, 0);
+  }
+
+  /** In the air: legs apart, arms out, facing `dx` if it is given. */
+  air(dx = 0): void {
+    if (Math.abs(dx) > 0.01) this.dir = dx > 0 ? 1 : -1;
+    this.pose(1.4, 0);
+  }
+
   /** Returns true if the player actually moved this frame. */
   move(dx: number, dy: number, delta: number, bounds: Phaser.Geom.Rectangle): boolean {
     const len = Math.hypot(dx, dy);
