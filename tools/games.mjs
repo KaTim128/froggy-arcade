@@ -104,6 +104,17 @@ const cardUp = (page) =>
  * dismissed by a click as readily as by SPACE, so check before pressing
  * anything: a stray press into an already-running game is not free.
  */
+
+/** Wait (up to `ms`) for a scene to be running: a click walks you there first. */
+const waitForScene = async (page, key, ms = 12000) => {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if ((await page.evaluate(() => window.__froggy.activeScenes())).includes(key)) return true;
+    await sleep(250);
+  }
+  return false;
+};
+
 const startGame = async (page) => {
   if (await cardUp(page)) {
     await page.keyboard.press('Space');
@@ -2533,7 +2544,8 @@ for (const g of [
 
     const before = await page.evaluate(() => window.__froggy.state().tokens);
     await page.mouse.click(640 + (f.x - 160) * 4, 360 + (f.y - 90) * 4);
-    await sleep(1800);
+    await waitForScene(page, 'Minigame');
+    await sleep(1200);
 
     const inside = await page.evaluate(() => ({
       scenes: window.__froggy.activeScenes(),
@@ -4118,6 +4130,7 @@ for (const g of [
   await page.goto(`${URL}/?intro=1&tokens=9000&scene=ArcadeHub`, { waitUntil: 'networkidle2' });
   await sleep(2600);
   await page.mouse.click(640 + (185 - 160) * 4, 360 + (30 - 90) * 4); // the prize case
+  await waitForScene(page, 'PrizeCounter');
   await sleep(1200);
 
   const state = () => page.evaluate(() => window.__froggy.state());

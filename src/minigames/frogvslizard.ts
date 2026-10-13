@@ -173,8 +173,9 @@ export const frogVsLizard: MinigameModule = {
     ],
     controls: [
       ['W / S', 'AIM HIGHER OR LOWER'],
-      ['1 2 3 4', 'PICK ROCK HEAL TNT PSN'],
-      ['LEFT/RIGHT', 'CYCLE ITEMS'],
+      // (one row: on a phone the items are tapped on the bar, and the
+      // numbers and LEFT/RIGHT cycling stay for the keyboard)
+      ['1-4 / CLICK', 'PICK AN ITEM ON THE BAR'],
       ['HOLD SPACE', 'POWER, LET GO TO THROW'],
     ],
   },
