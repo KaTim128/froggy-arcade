@@ -289,9 +289,9 @@ export class Hotel extends Phaser.Scene {
       } else if (dark) {
         // and he is on the stairs behind you
         this.hunted = true;
-        this.say('The ground floor...', 2.6);
-        this.say('I made it down.', 2.4);
-        this.say('Where is everyone?', 3);
+        // straight away: no catching your breath, he is right behind you
+        this.say("He's coming down the stairs!", 2.6, true);
+        this.say('I need to hide. The storage room, past the lift!', 4, true);
       } else if (this.from === 'outside') this.time.delayedCall(500, () => this.say('A safe place to stay the night.', 3));
     }
     if ((this.area === 'corridor' || this.area === 'room' || this.area === 'bath') && store.get().hotelAfter === 'police') {
@@ -787,8 +787,7 @@ export class Hotel extends Phaser.Scene {
     if (this.bangs === 1) {
       this.lines = [];
       this.nextLine();
-      this.say("He's coming down the stairs!", 2.6, true);
-      this.say('I need to hide. The storage room, past the lift!', 4, true);
+      this.say("He's at the door!", 2.4, true);
     }
     if (this.bangs === 7) this.say('The door is giving!', 2.4, true);
     // too late: he is through it, and you are standing in the lobby
