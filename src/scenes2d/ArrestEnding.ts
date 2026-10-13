@@ -23,7 +23,7 @@ import { centerText } from '../core/ui';
 import { PALETTE } from '../render/palette';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { froggyLayer } from '../render/froggyLayer';
-import { Player } from '../art/player';
+import { LOOKS, Player } from '../art/player';
 import { paintExterior } from '../art/exterior';
 
 type Act = 'paper' | 'later' | 'gate' | 'arcade' | 'done';
@@ -180,18 +180,12 @@ export class ArrestEnding extends Phaser.Scene {
     g.fillStyle(0x5a5a5c, 1).fillRect(0, 162, GAME_W, 1);
     g.fillStyle(0xd8d0b0, 0.6);
     for (let x = 4; x < GAME_W; x += 26) g.fillRect(x, 171, 12, 1);
-    // a guard at the gate
-    const guard = this.add.graphics();
-    // the drifter's height, a little over: 27 pixels from cap to boots
-    guard.fillStyle(0x0c0a10, 1).fillRect(186, 134, 11, 29).fillRect(185, 143, 13, 11);
-    guard.fillStyle(0x1e2a4a, 1).fillRect(186, 144, 11, 10);
-    guard.fillStyle(0x2c3a5e, 1).fillRect(186, 144, 11, 1);
-    guard.fillStyle(0x14182a, 1).fillRect(187, 154, 4, 8).fillRect(192, 154, 4, 8);
-    guard.fillStyle(0xd8b090, 1).fillRect(188, 138, 7, 6);
-    guard.fillStyle(0x2a1a10, 1).fillRect(189, 140, 1, 1).fillRect(193, 140, 1, 1);
-    guard.fillStyle(0x0c1020, 1).fillRect(187, 135, 9, 3).fillRect(193, 137, 4, 1);
-    guard.fillStyle(0xe8c040, 1).fillRect(194, 147, 1, 1);
-    this.layer.add(guard);
+    // a police officer at the gate: built on the drifter's own rig, so he is
+    // the same size, the same pixels and the same finish, in uniform
+    const officer = new Player(this, 192, 162, false, LOOKS.officer);
+    officer.stride(-1, 0);
+    officer.stand();
+    this.layer.add(officer.sprite);
     this.player = new Player(this, 128, 162, false);
     this.walkTo = 128;
     this.black.setAlpha(1);
