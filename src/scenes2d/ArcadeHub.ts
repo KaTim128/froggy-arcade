@@ -8,6 +8,7 @@
  */
 
 import Phaser from 'phaser';
+import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../game/roomWalk';
 import { seeded, tone } from '../art/surface';
 import { PALETTE } from '../render/palette';
 import { audio, type SfxName } from '../core/audio';
@@ -233,6 +234,10 @@ export class ArcadeHub extends Phaser.Scene {
   private bounds!: Phaser.Geom.Rectangle;
   private keys!: Record<string, Phaser.Input.Keyboard.Key[]>;
   private cabinets: Cabinet[] = [];
+  /** Where each machine is played from, and what of the floor is solid. */
+  private spots = new Map<Cabinet, Spot>();
+  private solids: Box[] = [];
+  private walker!: Walker;
   private prompt!: Phaser.GameObjects.BitmapText;
   private promptPlate!: Phaser.GameObjects.Rectangle;
   private target: Target = null;
@@ -338,6 +343,13 @@ export class ArcadeHub extends Phaser.Scene {
     this.paintCounter();
 
     this.cabinets = cabinetsIn('hub').map((def) => new Cabinet(this, def));
+    // Each machine stands on the floor: walked round, played from the front.
+    // The counter is in the list too, for the walk-to path; walking into it
+    // is still kept out by `keepOutOfCounter`.
+    this.spots = new Map(this.cabinets.map((c) => [c, machineSpot(c.def.x, c.def.y, CAB_W)]));
+    this.solids = [...this.spots.values()].map((s) => s.solid!);
+    const counterBox: Box = { x: COUNTER.x - COUNTER_EDGE + 3, y: 0, w: COUNTER.w + 2 * COUNTER_EDGE - 6, h: COUNTER_STAND };
+    this.walker = new Walker(() => this.bounds, () => [...this.solids, counterBox]);
 
     // A cabinet advertises itself as clickable — cost badge, affordable
     // highlight — so it has to BE clickable.  Walking up and pressing [E] still
@@ -350,10 +362,7 @@ export class ArcadeHub extends Phaser.Scene {
       this.add
         .zone(cab.def.x, cab.def.y - CAB_H / 2, CAB_W + 4, CAB_H + 2)
         .setInteractive({ useHandCursor: true })
-        .on('pointerdown', () => {
-          if (this.busy()) return;
-          this.launchGame(cab, 'card');
-        });
+        .on('pointerdown', () => this.walkTo(this.spots.get(cab)!, () => this.launchGame(cab, 'card')));
     }
 
     // The prize case is the whole reason to earn tokens, and it was viewable
@@ -362,18 +371,23 @@ export class ArcadeHub extends Phaser.Scene {
     this.add
       .zone(PRIZE_CASE.x + PRIZE_CASE.w / 2, PRIZE_CASE.y - 15, PRIZE_CASE.w, 30)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.openCounter());
+      .on('pointerdown', (p: Phaser.Input.Pointer) => this.walkTo(this.counterSpot(p.worldX), () => this.openCounter()));
     this.add
       .zone(COUNTER.x + COUNTER.w / 2, COUNTER.y + COUNTER.h / 2, COUNTER.w, COUNTER.h)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.openCounter());
+      .on('pointerdown', (p: Phaser.Input.Pointer) => this.walkTo(this.counterSpot(p.worldX), () => this.openCounter()));
 
     // The change machine is on the wall with the rest of the furniture and had
     // nothing clickable on it, so the mouse path stopped at the counter.
     this.add
       .zone(272, 26, 26, 38)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.openChangeMachine());
+      .on('pointerdown', () =>
+        this.walkTo(
+          doorSpot({ x: CHANGE_SPOT.x, y: CHANGE_SPOT.y + 4 }, (px, py) => Phaser.Math.Distance.Between(px, py, CHANGE_SPOT.x, CHANGE_SPOT.y) < INTERACT_RANGE),
+          () => this.openChangeMachine(),
+        ),
+      );
 
     // ---- THE DOOR, WHICH HAD NO HITBOX AT ALL.
     //
@@ -392,21 +406,27 @@ export class ArcadeHub extends Phaser.Scene {
     this.add
       .zone(GAME_W / 2, GAME_H - 3, 40, 10)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        if (this.busy()) return;
-        this.useDoor();
-      });
+      .on('pointerdown', () =>
+        this.walkTo(
+          doorSpot({ x: GAME_W / 2, y: ROOM.bottom - 2 }, (px, py) => py > ROOM.bottom - 22 && Math.abs(px - GAME_W / 2) < 26),
+          () => this.useDoor(),
+        ),
+      );
 
     // The bell still summons nobody (VOC-18) — but it has to at least answer a
     // click, or it reads as broken rather than as ignored.
     this.add
       .zone(BELL.x + 8, BELL.y - 8, 40, 22)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        if (this.busy()) return;
-        audio.sfx('bell_ding');
-        this.say('nobody comes.');
-      });
+      .on('pointerdown', () =>
+        this.walkTo(
+          doorSpot({ x: BELL.x, y: COUNTER_STAND + 2 }, (px, py) => Phaser.Math.Distance.Between(px, py, BELL.x, BELL.y) < INTERACT_RANGE),
+          () => {
+            audio.sfx('bell_ding');
+            this.say('nobody comes.');
+          },
+        ),
+      );
 
     this.paintCounterStaff();
     this.paintCues();
@@ -585,7 +605,12 @@ export class ArcadeHub extends Phaser.Scene {
       this.add
         .zone(COUNTER_POST.x, (STAFFER_TOP + FROG_CUT) / 2, 28, FROG_CUT - STAFFER_TOP)
         .setInteractive({ useHandCursor: true })
-        .on('pointerdown', () => this.talkToStaff());
+        .on('pointerdown', () =>
+          this.walkTo(
+            doorSpot({ x: COUNTER_POST.x, y: COUNTER_STAND + 2 }, (px, py) => py < COUNTER_REACH && Math.abs(px - COUNTER_POST.x) < POST_RANGE),
+            () => this.talkToStaff(),
+          ),
+        );
     } else {
       this.frogOnCounter = true;
       x = FROG_POST.x;
@@ -1473,9 +1498,12 @@ export class ArcadeHub extends Phaser.Scene {
     this.add
       .zone(ANNEX_DOOR.x, ANNEX_DOOR.y, 26, 50)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        if (!this.busy()) this.toAnnex();
-      });
+      .on('pointerdown', () =>
+        this.walkTo(
+          doorSpot({ x: this.bounds.x, y: ANNEX_DOOR.y }, (px, py) => px < ANNEX_DOOR.x + 20 && Math.abs(py - ANNEX_DOOR.y) < 28),
+          () => this.toAnnex(),
+        ),
+      );
   }
 
   private toAnnex(): void {
@@ -1495,9 +1523,12 @@ export class ArcadeHub extends Phaser.Scene {
     this.add
       .zone(LOUNGE_DOOR.x, LOUNGE_DOOR.y, 22, LOUNGE_DOOR.h + 4)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        if (!this.busy()) this.toLounge();
-      });
+      .on('pointerdown', () =>
+        this.walkTo(
+          doorSpot({ x: this.bounds.right, y: LOUNGE_DOOR.y }, (px, py) => px > LOUNGE_DOOR.x - 20 && Math.abs(py - LOUNGE_DOOR.y) < 24),
+          () => this.toLounge(),
+        ),
+      );
   }
 
   private toLounge(): void {
@@ -1560,6 +1591,23 @@ export class ArcadeHub extends Phaser.Scene {
     this.locked = true;
     // (out through the doors: the street decides whether it is evening yet)
     fadeToScene(this, 'ExteriorDay', { fromArcade: true });
+  }
+
+  /**
+   * A click or tap on something walks you to it, and it is used when you get
+   * there -- never from across the room.
+   */
+  private walkTo(spot: Spot, then: () => void): void {
+    if (this.busy()) return;
+    this.walker.to(this.player, spot, () => {
+      if (!this.busy()) then();
+    });
+  }
+
+  /** Somewhere along the front of the counter, under where you clicked. */
+  private counterSpot(x: number): Spot {
+    const sx = Phaser.Math.Clamp(x, COUNTER.x + 6, COUNTER.x + COUNTER.w - 6);
+    return doorSpot({ x: sx, y: COUNTER_STAND + 2 }, (px, py) => py < COUNTER_REACH && px > COUNTER.x && px < COUNTER.x + COUNTER.w);
   }
 
   private interact(): void {
@@ -1705,7 +1753,10 @@ export class ArcadeHub extends Phaser.Scene {
     const dx = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     const dy = (this.held('down') ? 1 : 0) - (this.held('up') ? 1 : 0);
     const before = { x: this.player.x, y: this.player.y };
-    this.player.move(dx, dy, delta, this.bounds);
+    if (dx || dy) this.walker.cancel();
+    if (this.walker.active) this.walker.drive(this.player, delta);
+    else this.player.move(dx, dy, delta, this.bounds);
+    collide(this.player, before, this.solids);
     this.keepOutOfCounter(before);
 
     const bal = ledger.balance();
@@ -1750,9 +1801,11 @@ export class ArcadeHub extends Phaser.Scene {
     const px = this.player.x;
     const py = this.player.y;
 
+    // a machine answers only from in front of it, not from beside or behind
     let best: Cabinet | null = null;
-    let bestD = INTERACT_RANGE;
+    let bestD = Infinity;
     for (const c of this.cabinets) {
+      if (!this.spots.get(c)?.at(px, py)) continue;
       const d = c.distanceTo(px, py);
       if (d < bestD) {
         bestD = d;
