@@ -25,6 +25,7 @@
  *   scare.  The frame closes in and goes red at the very end.
  */
 
+import { ScareCuller, clearScareLine, solidMeshes, validateJumpscareConditions } from './scareClear';
 import Phaser from 'phaser';
 import * as THREE from 'three';
 import { audio } from '../core/audio';
@@ -123,7 +124,7 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
   const up = new THREE.Vector3(0, 1, 0);
   const right = new THREE.Vector3().crossVectors(fwd, up).normalize();
   // He faces back down that line, at you.
-  const yaw = Math.atan2(-fwd.x, -fwd.z);
+  let yaw = Math.atan2(-fwd.x, -fwd.z);
 
   // How big his face is, so "fills the screen" is measured rather than typed.
   // Distances are to the middle of his head; the muzzle stands `faceFront`
@@ -137,6 +138,28 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
   const near = faceFront + headSize / (view(1) * 1.18);
   // far: his head, his chest and his hanging arms, towering
   const far = faceFront + (headSize * 2.5) / view(1);
+
+  // ---- THE PRE-SCARE CHECK (see scareClear).  Facing a wall, the scare is
+  // turned to the nearest line with room in it for him, and the view with it;
+  // then the points of him that must be seen are tested from the lens.
+  const { under: rigU, behind: rigB } = rigFor(stage);
+  const meshes = solidMeshes(stage.scene, [monster.root, cam, rigU, rigB]);
+  const line = clearScareLine(meshes, basePos, fwd, far + headSize);
+  const turned = line.angleTo(fwd) > 0.01;
+  if (turned) {
+    fwd.copy(line);
+    right.crossVectors(fwd, up).normalize();
+    yaw = Math.atan2(-fwd.x, -fwd.z);
+    baseQuat.setFromEuler(new THREE.Euler(0, yaw, 0, 'YXZ'));
+  }
+  const check = validateJumpscareConditions(meshes, basePos, basePos.clone().addScaledVector(fwd, near), right, headSize);
+  // and whatever is still in the way is taken out of the picture as he comes
+  const culler = new ScareCuller(meshes);
+  if (!check.clear) culler.clear(basePos, [basePos.clone().addScaledVector(fwd, near)]);
+  let cullIn = 0;
+  if (import.meta.env?.DEV) {
+    (window as unknown as Record<string, unknown>).__scare = { turned, clearAtStart: check.clear, structural: check.structural, culled: () => culler.count };
+  }
 
   // ---- THE LIGHT.  Something cold from underneath and in front, which is
   // the one angle a face is never lit from; a dim red behind him; and the
@@ -181,6 +204,7 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
     under.intensity = 0;
     behind.intensity = 0;
     for (const [l, i] of carried) l.intensity = i;
+    culler.restore();
   };
   scene.time.delayedCall(SCARE_MS + 650, dispose);
 
@@ -397,6 +421,21 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
         monster.root.position.y += sunk;
         monster.root.updateMatrixWorld(true);
       }
+    }
+
+    // ---- NOTHING IN FRONT OF IT: anything between the lens and his face or
+    // his hands is taken out, a few times a second, for as long as it lasts.
+    cullIn -= dt;
+    if (cullIn <= 0) {
+      cullIn = 0.08;
+      // the middle of his face, both eyes and the crown of his head
+      culler.clear(basePos, [
+        target.clone(),
+        target.clone().addScaledVector(right, -headSize * 0.3).addScaledVector(up, headSize * 0.25),
+        target.clone().addScaledVector(right, headSize * 0.3).addScaledVector(up, headSize * 0.25),
+        target.clone().addScaledVector(up, headSize * 0.5),
+      ]);
+      culler.clear(basePos, [handAt(-1), handAt(1)], true);
     }
 
     // ---- THE FACE, straight at the lens, and never quite still.

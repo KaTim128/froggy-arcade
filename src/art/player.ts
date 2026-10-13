@@ -11,6 +11,8 @@
 import Phaser from 'phaser';
 import { nightify } from '../render/palette';
 import { audio } from '../core/audio';
+import { store } from '../core/state';
+import { lookFor } from '../game/catalog';
 
 export const PLAYER_SPEED = 62; // logical px/s
 /**
@@ -68,6 +70,130 @@ const COLS: Record<string, number> = {
 };
 const OUTLINE = 0x1a1210;
 
+/**
+ * ---- OTHER PEOPLE, ON THE SAME RIG.
+ *
+ * Everyone outside the arcade machines is built the way the drifter is: the
+ * same pixel grids, the same proportions, the same one-pixel outline and the
+ * same stride -- recoloured into their own clothes, with their own head.  A
+ * look swaps colours by letter, and may swap the head's rows (a cap for the
+ * beanie, a clean-shaven chin for the beard).
+ */
+export interface Look {
+  cols?: Partial<Record<string, number>>;
+  head?: string[];
+}
+const CLEAN_HEAD_CAP = [
+  '...BBBBBB...',
+  '..BBBBBBBB..',
+  '..bbbbbbbbbb',
+  '..rSSSSSSr..',
+  '..rSSSSSSs..',
+  '...SSSSSs...',
+  '...SSSSSs...',
+  '....SSSs....',
+  '.....ss.....',
+];
+const BRIM_HEAD = [
+  '....BBBB....',
+  '....BbbB....',
+  '.BBBBBBBBBB.',
+  '..sssssssr..',
+  '..rSSSSSSs..',
+  '...SSSSSs...',
+  '...SSSSSs...',
+  '....SSSs....',
+  '.....ss.....',
+];
+export const LOOKS: Record<'officer' | 'guard' | 'doorman' | 'stranger', Look> = {
+  // the hotel doorman: a long maroon coat with gold buttons, a peaked cap
+  doorman: {
+    head: CLEAN_HEAD_CAP,
+    cols: {
+      B: 0x2a2a3a,
+      b: 0x3a3a52,
+      r: 0x3a2a1e,
+      S: 0xe8b890,
+      s: 0xc09070,
+      C: 0x7b2a3a,
+      c: 0x8e3a4a,
+      D: 0x5a1a28,
+      P: 0xe8c040,
+      w: 0xe8e0d0,
+      J: 0x2a2a3a,
+      j: 0x1e1e2c,
+      K: 0x111114,
+      W: 0x22222a,
+      T: 0x111114,
+    },
+  },
+  // the man outside the arcade: black hat, black coat, the brim's shadow on
+  // his face
+  stranger: {
+    head: BRIM_HEAD,
+    cols: {
+      B: 0x0d0f13,
+      b: 0x1e222a,
+      r: 0x1a1410,
+      S: 0x8a6a4e,
+      s: 0x4a3a2c,
+      C: 0x14161c,
+      c: 0x232833,
+      D: 0x0c0d12,
+      P: 0x14161c,
+      w: 0x232833,
+      J: 0x101218,
+      j: 0x0a0b10,
+      K: 0x060608,
+      W: 0x16161c,
+      T: 0x060608,
+    },
+  },
+  // a city police officer: peaked cap, navy tunic with a gold badge, light
+  // shirt at the collar, navy trousers, polished black boots
+  officer: {
+    head: CLEAN_HEAD_CAP,
+    cols: {
+      B: 0x141a30,
+      b: 0x2a3456,
+      r: 0x3a2a20,
+      S: 0xd8b090,
+      s: 0xb08a68,
+      C: 0x1e2a4a,
+      c: 0x2c3a5e,
+      D: 0x141c34,
+      P: 0xe8c040,
+      w: 0xa8c0e0,
+      J: 0x1a2238,
+      j: 0x12182a,
+      K: 0x0c0c10,
+      W: 0x22222a,
+      T: 0x0c0c10,
+    },
+  },
+  // a prison guard: the same build, grey-blue, the cap a shade darker
+  guard: {
+    head: CLEAN_HEAD_CAP,
+    cols: {
+      B: 0x22283a,
+      b: 0x3a425a,
+      r: 0x2a2018,
+      S: 0xc8a080,
+      s: 0xa07a5a,
+      C: 0x4a5468,
+      c: 0x5e6a80,
+      D: 0x343c4e,
+      P: 0xd8b040,
+      w: 0xc8ccd4,
+      J: 0x2a3040,
+      j: 0x1e2430,
+      K: 0x0c0c10,
+      W: 0x22222a,
+      T: 0x0c0c10,
+    },
+  },
+};
+
 /** Rows from the top of the figure (row 24 is the ground row). */
 type Part = { top: number; rows: string[] };
 const PARTS: Record<string, Part> = {
@@ -119,6 +245,15 @@ type PartName = (typeof ORDER)[number];
 /** A run of same-coloured pixels on one row, at its unflipped centre. */
 type Run = { r: Phaser.GameObjects.Rectangle; cx: number; cy: number };
 
+/** The player's own look, from the outfit they are wearing. */
+export function playerLook(): Look {
+  try {
+    return lookFor(store.get().life?.outfit ?? {});
+  } catch {
+    return {};
+  }
+}
+
 export class Player {
   readonly sprite: Phaser.GameObjects.Container;
   private stepTimer = 0;
@@ -129,13 +264,18 @@ export class Player {
   private dir = 1;
   private blinkT = 2.5;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, night = false) {
+  /**
+   * `look` is someone else's clothes.  Left out, it is the player, dressed in
+   * whatever they have on (see game/catalog `lookFor`).
+   */
+  constructor(scene: Phaser.Scene, x: number, y: number, night = false, look: Look = playerLook()) {
     this.shift = scene.input.keyboard?.addKey('SHIFT') ?? null;
     const c = (col: number) => (night ? nightify(col) : col);
+    const colOf = (ch: string): number => look.cols?.[ch] ?? COLS[ch];
     const lines: Phaser.GameObjects.Rectangle[] = [];
     const fills: Phaser.GameObjects.Rectangle[] = [];
     for (const name of ORDER) {
-      const part = PARTS[name];
+      const part = name === 'head' && look.head ? { ...PARTS.head, rows: look.head } : PARTS[name];
       const fill: Run[] = [];
       const line: Run[] = [];
       // the part's own pixels, then a one-pixel outline round it; outlines all
@@ -175,7 +315,7 @@ export class Player {
           if (ch === '.') return;
           const yy = part.top + i;
           if (!fc.has(yy)) fc.set(yy, []);
-          fc.get(yy)!.push([x, COLS[ch]]);
+          fc.get(yy)!.push([x, colOf(ch)]);
         }),
       );
       const oc = new Map<number, Array<[number, number]>>();
@@ -245,6 +385,29 @@ export class Player {
     // Being put somewhere is being somewhere: the depth has to follow, or a
     // player placed behind a fixture keeps the sorting of wherever they were.
     this.sprite.setDepth(depthFor(y));
+  }
+
+  /**
+   * For scenes that move the figure themselves (the rooftop run): face `dx`,
+   * and walk the stride on at `speed` (1 = a walk) without moving anything.
+   */
+  stride(dx: number, delta: number, speed = 1): void {
+    if (Math.abs(dx) > 0.01) this.dir = dx > 0 ? 1 : -1;
+    this.bobT += delta * speed;
+    const ph = (this.bobT / (STEP_INTERVAL_MS * 2)) * Math.PI * 2;
+    this.pose(Math.sin(ph) * 1.4, Math.abs(Math.cos(ph)) > 0.7 ? 1 : 0);
+  }
+
+  /** Stood still. */
+  stand(): void {
+    this.bobT = 0;
+    this.pose(0, 0);
+  }
+
+  /** In the air: legs apart, arms out, facing `dx` if it is given. */
+  air(dx = 0): void {
+    if (Math.abs(dx) > 0.01) this.dir = dx > 0 ? 1 : -1;
+    this.pose(1.4, 0);
   }
 
   /** Returns true if the player actually moved this frame. */

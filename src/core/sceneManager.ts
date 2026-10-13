@@ -6,6 +6,13 @@
  * completely on exit (contexts released, RAF cancelled) before Phaser resumes.
  */
 
+import { Shop } from '../scenes2d/Shop';
+import { Goals } from '../scenes2d/Goals';
+import { Condo } from '../scenes2d/Condo';
+import { CreatureHub } from '../scenes2d/CreatureHub';
+import { CreatureArena } from '../scenes2d/CreatureArena';
+import { StreetEast } from '../scenes2d/StreetEast';
+import { installLifeTicker } from '../game/lifeTicker';
 import Phaser from 'phaser';
 import { attachLandscapeFill } from '../render/landscapeFill';
 import { PALETTE } from '../render/palette';
@@ -28,7 +35,6 @@ import { ArcadeAnnex } from '../scenes2d/ArcadeAnnex';
 import { ArcadeCasino } from '../scenes2d/ArcadeCasino';
 import { ArcadeLounge } from '../scenes2d/ArcadeLounge';
 import { CraneGame } from '../scenes2d/CraneGame';
-import { Froggopoly } from '../scenes2d/Froggopoly';
 import { IntroCutscene } from '../scenes2d/IntroCutscene';
 import { PrizeCounter } from '../scenes2d/PrizeCounter';
 import { PrizeExchange } from '../scenes2d/PrizeExchange';
@@ -93,12 +99,17 @@ export function bootGame(): void {
       ArcadeCasino,
       ArcadeLounge,
       CraneGame,
-      Froggopoly,
       PrizeCounter,
       PrizeExchange,
       ChangeMachine,
       ExteriorDay,
       StreetWest,
+      StreetEast,
+      Condo,
+      Shop,
+      Goals,
+      CreatureHub,
+      CreatureArena,
       Hotel,
       RooftopEscape,
       ArrestEnding,
@@ -132,6 +143,7 @@ export function bootGame(): void {
   installTouchDirector(game);
   installPause(game);
   initDebug(game);
+  installLifeTicker(game);
 
   // Boot's CLICK TO BEGIN gate is the intended unlock (PRD EC-9), but any first
   // gesture anywhere will do it.  Without this, entering the game at a scene

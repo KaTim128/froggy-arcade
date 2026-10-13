@@ -205,6 +205,19 @@ try {
   // arcade is somewhere you choose to walk into.  You land at the doors.
   console.log('4b. street -> in through the doors');
   await shot('05b-street-daytime');
+  // You come out standing clear of the doors (on the pavement in front of
+  // the windows), so walk back along to them before going in.
+  for (let i = 0; i < 40; i++) {
+    const at = await page.evaluate(() => {
+      const s = window.__froggy.game().scene.getScene('ExteriorDay');
+      return s?.player ? s.player.x - s.doorX : 0;
+    });
+    if (Math.abs(at) < 8) break;
+    const key = at > 0 ? 'KeyA' : 'KeyD';
+    await page.keyboard.down(key);
+    await sleep(90);
+    await page.keyboard.up(key);
+  }
   await page.keyboard.press('KeyE');
   await sleep(2200);
 
@@ -269,6 +282,7 @@ try {
   await sleep(1400);
   // The card is up and nothing has been charged for it; PLAY is the coin slot.
   const atCard = await readState();
+  console.log(`   at the card: ${atCard.tokens} tokens, scenes ${JSON.stringify(await page.evaluate(() => window.__froggy.activeScenes()))}`);
   await page.keyboard.press('Space');
   await sleep(900);
   await shot('10-minigame-placeholder');
@@ -320,7 +334,8 @@ try {
 
   console.log('\nState checks:');
   const checks = [
-    ['seed credited 20 tokens', before.tokens === 20],
+    // (STARTING_TOKENS in IntroCutscene)
+    ['seed credited 30 tokens', before.tokens === 30],
     ['reading the card costs nothing', atCard.tokens === before.tokens],
     ['cost debited on PLAY', !!def && after.tokens === before.tokens - def.cost],
     ['reward credited on win', !!def && won.tokens === after.tokens + def.reward],

@@ -1468,6 +1468,37 @@ class AudioManager {
         noise(0.6, 0.012, 1200, 0);
         break;
       }
+      case 'breath': {
+        // ---- A BREATH, in through the nose and out through the mouth: two
+        // shaped hisses, the in-breath rising, the out-breath falling.  The
+        // gain is how hard it is: calm is barely there, panic is ragged.
+        const shape = (dur: number, vol: number, from: number, to: number, delay: number, rise: boolean) => {
+          const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+          const d = buf.getChannelData(0);
+          for (let i = 0; i < d.length; i++) {
+            const k = i / d.length;
+            d[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * (rise ? Math.pow(k, 0.7) : 1 - Math.pow(1 - k, 0.7)));
+          }
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          const filt = ctx.createBiquadFilter();
+          filt.type = 'bandpass';
+          filt.Q.value = 0.9;
+          filt.frequency.setValueAtTime(from, t + delay);
+          filt.frequency.linearRampToValueAtTime(to, t + delay + dur);
+          const g = ctx.createGain();
+          g.gain.value = vol;
+          src.connect(filt);
+          filt.connect(g);
+          g.connect(out);
+          src.start(t + delay);
+        };
+        const k = Math.min(1, gain);
+        const inDur = 0.55 - k * 0.3;
+        shape(inDur, 0.09, 700, 1400, 0, true);
+        shape(0.7 - k * 0.35, 0.11, 1100, 600, inDur + 0.05, false);
+        break;
+      }
       case 'reverse_breath': {
         // a breath played backwards: swelling up out of nothing and cut off
         const len = 0.9;
@@ -2035,6 +2066,7 @@ export type SfxName =
   | 'helicopter'
   | 'megaphone'
   | 'net_drop'
-  | 'bin_land';
+  | 'bin_land'
+  | 'breath';
 
 export const audio = new AudioManager();

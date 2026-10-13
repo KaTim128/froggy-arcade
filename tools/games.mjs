@@ -104,6 +104,17 @@ const cardUp = (page) =>
  * dismissed by a click as readily as by SPACE, so check before pressing
  * anything: a stray press into an already-running game is not free.
  */
+
+/** Wait (up to `ms`) for a scene to be running: a click walks you there first. */
+const waitForScene = async (page, key, ms = 12000) => {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if ((await page.evaluate(() => window.__froggy.activeScenes())).includes(key)) return true;
+    await sleep(250);
+  }
+  return false;
+};
+
 const startGame = async (page) => {
   if (await cardUp(page)) {
     await page.keyboard.press('Space');
@@ -1430,8 +1441,9 @@ for (const g of [
   const cabinet = await cabinetAt(page, 'ArcadeHub', 'tictactoe');
 
   const before = await tokens();
+  // (a click walks you to the machine first: give the walk time)
   await page.mouse.click(...cabinet);
-  await sleep(1800);
+  await sleep(5000);
   const atCard = { scenes: await scenes(), tokens: await tokens(), card: await cardUp(page) };
   const opened = atCard.scenes.includes('Minigame') && atCard.card && atCard.tokens === before;
   console.log(
@@ -1450,7 +1462,7 @@ for (const g of [
 
   // PLAY charges exactly once, however many times it is hit.
   await page.mouse.click(...cabinet);
-  await sleep(1800);
+  await sleep(5000);
   for (let i = 0; i < 5; i++) {
     await page.mouse.click(...PLAY);
     await sleep(70);
@@ -2108,7 +2120,7 @@ for (const g of [
   const purse = await page.evaluate(() => window.__froggy.state().tokens);
   // The card is free; PLAY is the charge.
   await page.mouse.click(...(await cabinetAt(page, 'ArcadeHub', 'tictactoe')));
-  await sleep(1800);
+  await sleep(5000);
   await startGame(page);
   await sleep(400);
   const paid = await page.evaluate(() => window.__froggy.state().tokens);
@@ -2532,7 +2544,8 @@ for (const g of [
 
     const before = await page.evaluate(() => window.__froggy.state().tokens);
     await page.mouse.click(640 + (f.x - 160) * 4, 360 + (f.y - 90) * 4);
-    await sleep(1800);
+    await waitForScene(page, 'Minigame');
+    await sleep(1200);
 
     const inside = await page.evaluate(() => ({
       scenes: window.__froggy.activeScenes(),
@@ -4117,6 +4130,7 @@ for (const g of [
   await page.goto(`${URL}/?intro=1&tokens=9000&scene=ArcadeHub`, { waitUntil: 'networkidle2' });
   await sleep(2600);
   await page.mouse.click(640 + (185 - 160) * 4, 360 + (30 - 90) * 4); // the prize case
+  await waitForScene(page, 'PrizeCounter');
   await sleep(1200);
 
   const state = () => page.evaluate(() => window.__froggy.state());
@@ -4809,11 +4823,7 @@ for (const g of [
 
 // ------------------------------------------------ the fourth room's games
 //
-// Froggopoly's rules run a whole game to the end, AI against AI, a few
-// hundred times: nobody stalls, money is never negative, bankruptcy and the
-// thirty-round limit both end games, and winners are decided on what they
-// own.  Then the stake at the table: taken once at the start, a draw hands it
-// back, quitting keeps it.  And the oddity crane's capsule odds.
+// The oddity crane's capsule odds.
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
@@ -4821,78 +4831,6 @@ for (const g of [
   page.on('pageerror', (e) => errs.push(e.message));
   await page.goto(`${URL}/?intro=1&tokens=200&scene=ArcadeLounge`, { waitUntil: 'networkidle2' });
   await sleep(1500);
-  const sim = await page.evaluate(async () => {
-    const R = await import('/src/game/froggopoly.ts');
-    let bankrupts = 0, limits = 0, draws = 0, stalls = 0, negative = 0, games = 300;
-    for (let n = 0; n < games; n++) {
-      const g = R.newGame();
-      let guard = 0;
-      while (!g.over && guard++ < 2000) {
-        const who = g.turn;
-        const p = g.players[who];
-        const [a, b] = R.rollDice();
-        if (p.swamp > 0) {
-          if (a === b) p.swamp = 0; else { p.swamp -= 1; if (p.swamp > 0) { R.endTurn(g); continue; } }
-        }
-        R.moveBy(g, who, a + b);
-        const i = p.pos;
-        const s = R.BOARD[i];
-        const pay = (amt, to) => {
-          if (p.cash < amt) R.aiRaise(g, who, amt);
-          if (p.cash < amt) { R.bankrupt(g, who); return; }
-          p.cash -= amt; if (to !== null) g.players[to].cash += amt;
-        };
-        if ((s.kind === 'prop' || s.kind === 'util') && g.owner[i] === null && R.aiWantsToBuy(g, who, i)) { p.cash -= s.price; g.owner[i] = who; }
-        else if ((s.kind === 'prop' || s.kind === 'util') && g.owner[i] !== null && g.owner[i] !== who) pay(R.rentOf(g, i, a + b), g.owner[i]);
-        else if (s.kind === 'tax') pay(s.tax, null);
-        else if (s.kind === 'goswamp') R.toSwamp(g, who);
-        if (g.over) break;
-        R.aiBuild(g, who);
-        if (g.players.some((q) => q.cash < 0)) negative++;
-        R.endTurn(g);
-      }
-      if (!g.over) stalls++;
-      else if (g.players.some((q) => q.bankrupt)) bankrupts++;
-      else { limits++; if (g.winner === 'draw') draws++; }
-    }
-    return { games, bankrupts, limits, draws, stalls, negative };
-  });
-  const simOk = sim.stalls === 0 && sim.negative === 0 && sim.bankrupts > 0 && sim.limits > 0;
-  console.log(`${simOk ? 'PASS' : 'FAIL'}  froggopoly: whole games finish, by bankruptcy or the round limit  — ${JSON.stringify(sim)}`);
-  if (!simOk) failures++;
-
-  await page.goto(`${URL}/?intro=1&tokens=200&scene=Froggopoly`, { waitUntil: 'networkidle2' });
-  await sleep(1500);
-  const bal = () => page.evaluate(() => window.__froggy.state().tokens);
-  const b0 = await bal();
-  await page.evaluate(() => window.__froggopoly.start(30));
-  await sleep(200);
-  const b1 = await bal();
-  await page.evaluate(() => window.__froggopoly.start(30));
-  const b1b = await bal();
-  await page.evaluate(() => {
-    const st = window.__froggopoly.state();
-    void st;
-    window.__froggopoly.finish();
-  });
-  await sleep(300);
-  const fin = await page.evaluate(() => window.__froggopoly.state());
-  const b2 = await bal();
-  const want = fin.g.winner === 0 ? b1 + 60 : fin.g.winner === 'draw' ? b1 + 30 : b1;
-  const stakeOk = b1 === b0 - 30 && b1b === b1 && b2 === want && fin.settled;
-  console.log(`${stakeOk ? 'PASS' : 'FAIL'}  froggopoly: the stake is taken once and settled once  — ${b0} -> ${b1} (again ${b1b}) -> ${b2} on ${fin.g.winner}`);
-  if (!stakeOk) failures++;
-
-  await page.goto(`${URL}/?intro=1&tokens=200&scene=Froggopoly`, { waitUntil: 'networkidle2' });
-  await sleep(1500);
-  const q0 = await bal();
-  await page.evaluate(() => window.__froggopoly.start(10));
-  await page.evaluate(() => window.__froggopoly.quit());
-  await sleep(1200);
-  const q1 = await bal();
-  const quitOk = q1 === q0 - 10;
-  console.log(`${quitOk ? 'PASS' : 'FAIL'}  froggopoly: walking away is a loss  — ${q0} -> ${q1}`);
-  if (!quitOk) failures++;
 
   const odds = await page.evaluate(async () => {
     const C = await import('/src/scenes2d/CraneGame.ts');

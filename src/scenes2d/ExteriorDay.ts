@@ -20,6 +20,7 @@
  */
 
 import Phaser from 'phaser';
+import { pullBackAtClosing } from '../game/closingPull';
 import { TokenHud } from '../ui/hud';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -34,13 +35,17 @@ import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 import { ensureKeyInPocket, heldItems } from '../game/inventory';
+import { Pedestrians } from '../art/pedestrians';
+import { BEG_MS, NAP_BELOW, begNextMs, clock, collectBegging, nap, sleep, startBegging, stopBegging, visit } from '../game/life';
 
 const WALK_Y = KERB_Y;
 /** Where the alley mouth is, off the arcade's right-hand corner. */
 const ALLEY_X = GAME_W - 24;
 /** The alley is open to you once you have come through the night in the arcade. */
 const alleyOpen = (): boolean => store.get().froggyGone;
-type Spot = 'door' | 'man' | 'alley' | null;
+type Spot = 'door' | 'man' | 'alley' | 'beg' | null;
+/** The patch of pavement against the arcade's wall where you can sit with a cup. */
+const BEG_X = 236;
 /** More tokens than this, walking out of the arcade after the night, and it is evening. */
 export const EVENING_TOKENS = 600;
 
@@ -62,12 +67,15 @@ export class ExteriorDay extends Phaser.Scene {
   }
 
   /** Where the player came from: the arcade's doors, or the street to the west. */
-  private cameFrom: 'arcade' | 'west' | 'alley' | 'other' = 'other';
+  private cameFrom: 'arcade' | 'west' | 'alley' | 'east' | 'other' = 'other';
+  private people: Pedestrians | null = null;
+  private begging = false;
+  private begText!: Phaser.GameObjects.BitmapText;
   /** It has just turned midnight: the thoughts play, and nobody moves till they have. */
   private nightfall = false;
 
-  init(data: { fromArcade?: boolean; fromWest?: boolean; fromAlley?: boolean; nightfall?: boolean } = {}): void {
-    this.cameFrom = data.fromArcade ? 'arcade' : data.fromWest ? 'west' : data.fromAlley ? 'alley' : 'other';
+  init(data: { fromArcade?: boolean; fromWest?: boolean; fromAlley?: boolean; fromEast?: boolean; nightfall?: boolean } = {}): void {
+    this.cameFrom = data.fromArcade ? 'arcade' : data.fromWest ? 'west' : data.fromAlley ? 'alley' : data.fromEast ? 'east' : 'other';
     this.nightfall = data.nightfall === true;
   }
 
@@ -113,7 +121,7 @@ export class ExteriorDay extends Phaser.Scene {
     // scenes -- the alley, the dark arcade, the street after hours -- keep it.
     // On the pavement in front of the arcade's windows, clear of the doors
     // (or at the end you walked in from: the road west, the alley mouth).
-    const startX = this.cameFrom === 'west' ? 26 : this.cameFrom === 'alley' ? ALLEY_X - 6 : this.doorX + 46;
+    const startX = this.cameFrom === 'west' ? 26 : this.cameFrom === 'alley' ? ALLEY_X - 6 : this.cameFrom === 'east' ? GAME_W - 10 : this.doorX + 46;
     this.player = new Player(this, startX, WALK_Y, time === 'midnight');
     // The forecourt is loose ground, not the arcade's carpet.  This scene
     // never said so, which left the walk outside sounding like the walk in.
@@ -123,6 +131,7 @@ export class ExteriorDay extends Phaser.Scene {
     // together -- the same HUD as inside.
     new TokenHud(this);
     attachPockets(this, () => this.locked || this.busy());
+    pullBackAtClosing(this, () => !this.locked && !this.busy(), () => (this.locked = true));
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
@@ -144,6 +153,25 @@ export class ExteriorDay extends Phaser.Scene {
     });
 
     this.checkFinished();
+    // ---- THE STREET IS NOT EMPTY.  People going past, and by the wall a
+    // flattened cardboard box and a paper cup: the begging spot.
+    this.begging = false;
+    if (time !== 'midnight') {
+      this.people = new Pedestrians(this, GAME_W, WALK_Y + 3, 3, false);
+      const g = this.add.graphics().setDepth(49);
+      g.fillStyle(0x14100c, 1).fillRect(BEG_X - 11, WALK_Y - 3, 22, 4);
+      g.fillStyle(0xb08a58, 1).fillRect(BEG_X - 10, WALK_Y - 2, 20, 2);
+      g.fillStyle(0x14100c, 1).fillRect(BEG_X + 6, WALK_Y - 7, 6, 6);
+      g.fillStyle(0xe8e0d0, 1).fillRect(BEG_X + 7, WALK_Y - 6, 4, 5);
+      this.add.zone(BEG_X - 12, WALK_Y - 30, 24, 32).setOrigin(0, 0).setDepth(61).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.send('beg'));
+      visit('forecourt');
+    } else this.people = null;
+    this.begText = centerText(this, BEG_X, WALK_Y - 52, '', PALETTE.gold).setDepth(803).setVisible(false);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (this.begging) stopBegging();
+    });
+    // and the way east, to the shops
+    if (time !== 'midnight') text(this, GAME_W - 10, WALK_Y + 4, '>', PALETTE.cream).setDepth(800).setAlpha(0.7);
     // the way west, marked at the edge of the pavement
     text(this, 6, WALK_Y + 4, '<', time === 'midnight' ? PALETTE.ash : PALETTE.cream).setDepth(800).setAlpha(0.7);
     if (time === 'midnight' && this.nightfall) this.midnightThoughts();
@@ -275,7 +303,7 @@ export class ExteriorDay extends Phaser.Scene {
   }
 
   private targetX(where: Spot): number {
-    return where === 'man' ? MAN_X + 16 : where === 'alley' ? ALLEY_X : this.doorX;
+    return where === 'man' ? MAN_X + 16 : where === 'alley' ? ALLEY_X : where === 'beg' ? BEG_X : this.doorX;
   }
 
   private bind(names: readonly string[]): Phaser.Input.Keyboard.Key[] {
@@ -315,6 +343,47 @@ export class ExteriorDay extends Phaser.Scene {
       fadeToScene(this, 'ArcadeHub');
       return;
     }
+    if (this.spot === 'beg') {
+      if (this.begging) {
+        const got = stopBegging();
+        this.begging = false;
+        this.begText.setVisible(false);
+        this.say(got ? `YOU GET UP. $${got} IN THE CUP.` : 'YOU GET UP.');
+        return;
+      }
+      const c = clock();
+      if (c.dark && !store.get().life.rented && store.get().froggyGone) {
+        // nowhere else to go: the pavement for the night
+        this.locked = true;
+        this.cameras.main.fadeOut(900, 0, 0, 0);
+        this.time.delayedCall(1000, () => {
+          const r = sleep('street');
+          this.cameras.main.fadeIn(900, 0, 0, 0);
+          this.say(r.msg);
+          this.locked = false;
+        });
+        return;
+      }
+      if (store.get().life.energy < NAP_BELOW) {
+        const r = nap();
+        if (!r.ok) {
+          this.say(r.msg);
+          return;
+        }
+        this.locked = true;
+        this.cameras.main.fadeOut(700, 0, 0, 0);
+        this.time.delayedCall(800, () => {
+          this.cameras.main.fadeIn(700, 0, 0, 0);
+          this.say(r.msg);
+          this.locked = false;
+        });
+        return;
+      }
+      startBegging();
+      this.begging = true;
+      this.say('YOU SIT DOWN WITH THE CUP. $1 EVERY 15 MINUTES.');
+      return;
+    }
     if (this.spot === 'alley') {
       this.locked = true;
       audio.sfx('footstep_gravel', 0.5);
@@ -334,7 +403,7 @@ export class ExteriorDay extends Phaser.Scene {
   }
 
   private busy(): boolean {
-    return this.scene.isActive('PrizeExchange') || this.scene.isActive('SettingsModal');
+    return this.scene.isActive('PrizeExchange') || this.scene.isActive('SettingsModal') || this.scene.isActive('Goals') || this.scene.isActive('InventoryModal');
   }
 
   private say(msg: string): void {
@@ -344,6 +413,19 @@ export class ExteriorDay extends Phaser.Scene {
   }
 
   update(_t: number, delta: number): void {
+    this.people?.update(delta);
+    if (this.begging) {
+      const got = collectBegging();
+      if (got) {
+        audio.sfx('coin_drop', 0.6);
+        this.say(`SOMEONE DROPS $${got} IN THE CUP.`);
+      }
+      const ms = begNextMs();
+      const m = Math.floor(ms / 60000);
+      const sec = Math.floor((ms % 60000) / 1000);
+      this.begText.setText(`NEXT $1 IN ${m}:${String(sec).padStart(2, '0')}`).setVisible(true);
+      void BEG_MS;
+    }
     if (this.locked || this.busy()) {
       this.prompt.setVisible(false);
       this.promptPlate.setVisible(false);
@@ -354,6 +436,13 @@ export class ExteriorDay extends Phaser.Scene {
     // A hand on the keys always wins: touching a movement key drops whatever
     // the last click asked for, so the two never fight over the same legs.
     if (dx !== 0) this.errand = null;
+    // getting up to walk away stops the begging
+    if (dx !== 0 && this.begging) {
+      const got = stopBegging();
+      this.begging = false;
+      this.begText.setVisible(false);
+      if (got) this.say(`$${got} IN THE CUP.`);
+    }
     if (this.errand) {
       const gap = this.targetX(this.errand) - this.player.x;
       if (Math.abs(gap) <= 2) {
@@ -365,7 +454,13 @@ export class ExteriorDay extends Phaser.Scene {
       }
       dx = gap > 0 ? 1 : -1;
     }
-    this.player.move(dx, 0, delta, new Phaser.Geom.Rectangle(4, WALK_Y, GAME_W - 24, 0));
+    this.player.move(dx, 0, delta, new Phaser.Geom.Rectangle(4, WALK_Y, GAME_W - 8, 0));
+    // ---- EAST, off the right-hand end: the shops (not at midnight).
+    if (this.player.x >= GAME_W - 5 && dx > 0 && this.time0 !== 'midnight') {
+      this.locked = true;
+      fadeToScene(this, 'StreetEast', {});
+      return;
+    }
     // ---- WEST, off the left-hand end: the street to the hotel by day and
     // by evening; at midnight, the night road.
     if (this.player.x <= 5 && dx < 0) {
@@ -380,6 +475,8 @@ export class ExteriorDay extends Phaser.Scene {
         ? 'man'
         : Math.abs(px - this.doorX) < 24
           ? 'door'
+          : this.time0 !== 'midnight' && Math.abs(px - BEG_X) < 10
+            ? 'beg'
           : px > ALLEY_X - 8 && alleyOpen()
             ? 'alley'
             : null;
@@ -390,7 +487,8 @@ export class ExteriorDay extends Phaser.Scene {
       return;
     }
 
-    const label = this.spot === 'man' ? '[E] TALK' : this.spot === 'alley' ? '[E] ALLEY' : this.time0 === 'midnight' ? '[E] DOOR' : '[E] GO IN';
+    const begLabel = this.begging ? '[E] GET UP' : clock().dark && !store.get().life.rented && store.get().froggyGone ? '[E] SLEEP HERE' : store.get().life.energy < NAP_BELOW ? '[E] NAP' : '[E] BEG';
+    const label = this.spot === 'beg' ? begLabel : this.spot === 'man' ? '[E] TALK' : this.spot === 'alley' ? '[E] ALLEY' : this.time0 === 'midnight' ? '[E] DOOR' : '[E] GO IN';
     const x = Phaser.Math.Clamp(px, 40, GAME_W - 40);
     this.prompt.setText(label).setPosition(x, WALK_Y - 34).setVisible(true);
     this.promptPlate

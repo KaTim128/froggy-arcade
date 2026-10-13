@@ -154,21 +154,6 @@ export const TRACKS: Record<string, TrackPreset> = {
     vol: { lead: 0.03, bass: 0.038, arp: 0.012, drums: 0.8 },
     ring: 1,
   }),
-  // ...and at the Froggopoly table, the same room's tune slowed into a
-  // thinking-about-it loop: it plays under every turn of a long game.
-  game_froggopoly: preset({
-    bpm: 112,
-    chords: [maj(C.f4 - 12), min(C.d4), maj(C.b4 - 12 - 1), maj(C.c4)],
-    bass: [0, _, 1, _, 0, _, 1, 3],
-    lead: [C.a5, _, C.f5, _, C.c5, _, C.f5, C.g5, C.a5, _, _, C.g5, C.f5, _, _, _, C.d5, _, C.f5, _, C.b4 + 1, _, C.d5, C.e5, C.c5, _, _, _, _, _, _, _],
-    leadWave: 'triangle',
-    bassWave: 'square',
-    arpWave: 'square',
-    drums: 'sparse',
-    cutoff: 3000,
-    vol: { lead: 0.032, bass: 0.04, arp: 0.012, drums: 0.7 },
-    ring: 1.6,
-  }),
 
   // ------------------------------------------------------------ the games
   // Noughts and crosses: light, ticking, a music box.

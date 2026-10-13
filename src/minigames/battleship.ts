@@ -555,12 +555,17 @@ function repaint(pond: Pond, isMine: boolean): void {
 function buildPicker(scene: Phaser.Scene): void {
   pickBtns.forEach((b) => b.destroy());
   pickBtns = [];
+  // Spread across the row with a clear gap between each, centred: they
+  // used to be two pixels apart and read as one long bar.
+  const n = toPlace.length;
+  const step = Math.min(52, Math.floor((GAME_W - 24) / Math.max(1, n)));
+  const x0 = GAME_W / 2 - ((n - 1) * step) / 2;
   toPlace.forEach((key, i) => {
     const k = kindOf(key);
-    const b = button(scene, 30 + i * 44, 158, k.short, () => {
+    const b = button(scene, x0 + i * step, 158, k.short, () => {
       holding = i;
       refreshPicker();
-    }, { width: 42, height: 13, fill: 0x1d5561, textColor: PALETTE.cream });
+    }, { width: step - 8, height: 13, fill: 0x1d5561, textColor: PALETTE.cream });
     b.setDepth(30);
     pickBtns.push(b);
   });

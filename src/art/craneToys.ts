@@ -22,7 +22,7 @@
 
 import Phaser from 'phaser';
 
-export type PlushKind = 'frog' | 'bear' | 'bunny' | 'duck' | 'cat' | 'owl';
+export type PlushKind = 'frog' | 'bear' | 'bunny' | 'duck' | 'cat' | 'owl' | 'pig' | 'fox' | 'panda' | 'penguin' | 'lion' | 'unicorn';
 
 /**
  * How much finer than its 30px design a toy is drawn.  Every shape below is
@@ -73,6 +73,12 @@ const PLUSH: Record<PlushKind, Plush> = {
   duck: { body: 0xffc830, belly: 0xfff0a0 },
   cat: { body: 0x8a8f99, belly: 0xd8dce4 },
   owl: { body: 0x7b4bd8, belly: 0xc8a8f0 },
+  pig: { body: 0xf0a0b4, belly: 0xf8ccd8 },
+  fox: { body: 0xe0702a, belly: 0xfff0e0 },
+  panda: { body: 0xf2f2ee, belly: 0xffffff },
+  penguin: { body: 0x2a3044, belly: 0xf0f0f0 },
+  lion: { body: 0xe0a83a, belly: 0xf8e0a0 },
+  unicorn: { body: 0xf6f0ff, belly: 0xffe4f2 },
 };
 
 /**
@@ -135,7 +141,16 @@ function drawPlush(g: Pen, kind: PlushKind): void {
   if (kind === 'frog') {
     g.fillEllipse(cx, 12, 21, 14);
     g.fillCircle(cx - 5, 6, 4.4).fillCircle(cx + 5, 6, 4.4);
-  } else g.fillCircle(cx, headY, headR + 1);
+  } else {
+    // the lion's mane: a ring round the head, under it
+    if (kind === 'lion') {
+      g.fillCircle(cx, headY, headR + 4.5);
+      g.fillStyle(0x8a4a1a, 1).fillCircle(cx, headY, headR + 3.5);
+      g.fillStyle(0xa85a22, 1).fillCircle(cx - 1, headY - 1, headR + 2.5);
+      g.fillStyle(INK, 1);
+    }
+    g.fillCircle(cx, headY, headR + 1);
+  }
   earsOrTop(g, kind, cx, headY, INK, 1);
 
   // ---- 2. THE FILL, the shadow side and the lit side.
@@ -206,7 +221,28 @@ function earsOrTop(g: Pen, kind: PlushKind, cx: number, hy: number, col: number,
       // a little tuft of fluff on top
       g.fillEllipse(cx, hy - 8, 3 + o * 2, 4 + o * 2);
       break;
+    case 'pig':
+      g.fillTriangle(cx - 7 - o, hy - 3, cx - 2 + o, hy - 6, cx - 7, hy - 9 - o);
+      g.fillTriangle(cx + 7 + o, hy - 3, cx + 2 - o, hy - 6, cx + 7, hy - 9 - o);
+      break;
+    case 'fox':
+      g.fillTriangle(cx - 7 - o, hy - 2, cx - 1 + o, hy - 6, cx - 6, hy - 12 - o);
+      g.fillTriangle(cx + 7 + o, hy - 2, cx + 1 - o, hy - 6, cx + 6, hy - 12 - o);
+      if (!o) g.fillStyle(0x3a2014, 1).fillTriangle(cx - 6.8, hy - 9, cx - 5, hy - 9, cx - 6, hy - 11.5).fillTriangle(cx + 6.8, hy - 9, cx + 5, hy - 9, cx + 6, hy - 11.5);
+      break;
+    case 'panda':
+      g.fillStyle(o ? col : 0x1e1e22, 1).fillCircle(cx - 6, hy - 6, 2.8 + o).fillCircle(cx + 6, hy - 6, 2.8 + o);
+      break;
+    case 'unicorn':
+      g.fillTriangle(cx - 6 - o, hy - 3, cx - 2 + o, hy - 6, cx - 5, hy - 9 - o);
+      g.fillTriangle(cx + 6 + o, hy - 3, cx + 2 - o, hy - 6, cx + 5, hy - 9 - o);
+      // the horn, gold, spiralled
+      g.fillStyle(o ? col : 0xf0c040, 1).fillTriangle(cx - 1.6 - o, hy - 6, cx + 1.6 + o, hy - 6, cx, hy - 14 - o);
+      if (!o) g.fillStyle(0xc8901a, 1).fillRect(cx - 1, hy - 8, 2, 1).fillRect(cx - 0.5, hy - 11, 1, 1);
+      break;
     case 'frog':
+    case 'penguin':
+    case 'lion':
       break;
   }
 }
@@ -266,6 +302,57 @@ function face(g: Pen, kind: PlushKind, cx: number, hy: number, body: number): vo
       g.lineStyle(1, shade(body, 0.5), 1).lineBetween(cx - 8, hy + 2, cx - 3, hy + 2.5).lineBetween(cx + 3, hy + 2.5, cx + 8, hy + 2);
       // stripes over the head
       g.fillStyle(shade(body, -0.3), 1).fillRect(cx - 1, hy - 7, 2, 2).fillRect(cx - 4, hy - 6, 1, 2).fillRect(cx + 3, hy - 6, 1, 2);
+      break;
+    }
+    case 'pig': {
+      eye(cx - 3, hy - 1.5);
+      eye(cx + 3, hy - 1.5);
+      g.fillStyle(INK, 1).fillEllipse(cx, hy + 2.5, 7, 5);
+      g.fillStyle(0xf8b8c8, 1).fillEllipse(cx, hy + 2.5, 5.6, 3.8);
+      g.fillStyle(0xa04a60, 1).fillRect(cx - 1.6, hy + 2, 1, 1.4).fillRect(cx + 0.8, hy + 2, 1, 1.4);
+      g.fillStyle(0xff8aa0, 0.7).fillEllipse(cx - 6, hy + 2, 2.4, 1.4).fillEllipse(cx + 6, hy + 2, 2.4, 1.4);
+      break;
+    }
+    case 'fox': {
+      // a white muzzle coming to a point, a black nose
+      g.fillStyle(0xfff0e0, 1).fillTriangle(cx - 5, hy + 1, cx + 5, hy + 1, cx, hy + 6);
+      g.fillEllipse(cx - 3, hy + 2, 4, 3).fillEllipse(cx + 3, hy + 2, 4, 3);
+      eye(cx - 3, hy - 1.5, 1.2);
+      eye(cx + 3, hy - 1.5, 1.2);
+      g.fillStyle(INK, 1).fillEllipse(cx, hy + 4.5, 2.4, 1.6);
+      break;
+    }
+    case 'panda': {
+      // the black patches the eyes sit in
+      g.fillStyle(0x1e1e22, 1).fillEllipse(cx - 3.2, hy, 3.6, 4.4).fillEllipse(cx + 3.2, hy, 3.6, 4.4);
+      g.fillStyle(0xffffff, 1).fillCircle(cx - 3, hy - 0.4, 1).fillCircle(cx + 3.4, hy - 0.4, 1);
+      g.fillStyle(INK, 1).fillEllipse(cx, hy + 3, 2.6, 1.6).fillRect(cx - 1, hy + 4.5, 2, 1);
+      break;
+    }
+    case 'penguin': {
+      // a white face like a heart, an orange beak
+      g.fillStyle(0xf0f0f0, 1).fillEllipse(cx - 2.2, hy + 1, 5, 7).fillEllipse(cx + 2.2, hy + 1, 5, 7);
+      eye(cx - 2.4, hy - 0.5, 1.2);
+      eye(cx + 2.4, hy - 0.5, 1.2);
+      g.fillStyle(0xff9a2a, 1).fillTriangle(cx - 1.6, hy + 2, cx + 1.6, hy + 2, cx, hy + 4.4);
+      g.fillStyle(0xff8aa0, 0.7).fillEllipse(cx - 4, hy + 2.5, 1.8, 1.2).fillEllipse(cx + 4, hy + 2.5, 1.8, 1.2);
+      break;
+    }
+    case 'lion': {
+      eye(cx - 3, hy - 1);
+      eye(cx + 3, hy - 1);
+      g.fillStyle(0xf8e0a0, 1).fillEllipse(cx, hy + 3, 7, 4.6);
+      g.fillStyle(0x5a2a14, 1).fillTriangle(cx - 1.6, hy + 1.5, cx + 1.6, hy + 1.5, cx, hy + 3);
+      g.fillStyle(INK, 1).fillRect(cx, hy + 3, 1, 1.4).fillRect(cx - 2, hy + 4.4, 2, 1).fillRect(cx + 1, hy + 4.4, 2, 1);
+      break;
+    }
+    case 'unicorn': {
+      // closed, happy eyes; a pink mane falling over one side
+      g.fillStyle(INK, 1).fillRect(cx - 4, hy, 2, 1).fillRect(cx + 2, hy, 2, 1);
+      g.fillStyle(0xff8ab8, 1).fillEllipse(cx - 6, hy - 3, 4, 7).fillEllipse(cx - 4, hy - 6, 4, 3);
+      g.fillStyle(0xb88aff, 1).fillEllipse(cx - 7, hy + 1, 3, 4);
+      g.fillStyle(0xffd0e0, 1).fillEllipse(cx, hy + 3.5, 6, 3.6);
+      g.fillStyle(0xd88aa8, 1).fillRect(cx - 1.4, hy + 3, 1, 1).fillRect(cx + 0.6, hy + 3, 1, 1);
       break;
     }
     case 'owl': {

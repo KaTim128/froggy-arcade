@@ -51,6 +51,40 @@ import { CAPSULE_VARIANTS, TOY_H, TOY_RES, plushKind, toyTexture } from '../art/
 import { FULL_LINE, ODDITIES, PLUSHIES, addItem, itemDef, pocketsFull } from '../game/inventory';
 import { isTouch } from '../core/device';
 import { touchControls } from '../ui/touchControls';
+import { showTutorial, type TutorialCard } from '../ui/tutorialCard';
+import { deviceControls, deviceObjective, type ControlRow } from '../ui/controlsList';
+import { touchLayoutFor } from '../game/touchLayouts';
+import { store, type SavedToy } from '../core/state';
+
+/**
+ * How to play, on the same card every cabinet in the back rooms opens on.
+ * The two machines play alike; what differs is what is in the glass and how
+ * hard it holds on.
+ */
+const HOW_TO: Record<CraneKind, string[]> = {
+  plush: [
+    'GRAB A PLUSH AND DROP IT DOWN THE CHUTE.',
+    'LINE THE CLAW UP FROM THE FRONT, THEN',
+    'CHECK THE DEPTH IN THE SIDE VIEW.',
+    'DROP, LET IT SETTLE, THEN GRAB.',
+    'DEAD CENTRE GRIPS BEST. IT CAN SLIP!',
+    'A WON TOY GOES IN YOUR POCKETS.',
+  ],
+  oddity: [
+    'GRAB A CAPSULE AND DROP IT DOWN THE CHUTE.',
+    'LINE THE CLAW UP FROM THE FRONT, THEN',
+    'CHECK THE DEPTH IN THE SIDE VIEW.',
+    'DROP, LET IT SETTLE, THEN GRAB.',
+    'LAND ON A CAPSULE: IT HOLDS 4 IN 5.',
+    'WHAT IS INSIDE GOES IN YOUR POCKETS.',
+  ],
+};
+const HOW_TO_KEYS: ControlRow[] = [
+  ['A / D OR ← →', 'MOVE THE CLAW'],
+  ['SPACE / E', 'SIDE VIEW, DROP, THEN GRAB'],
+  ['V', 'FRONT / SIDE VIEW'],
+  ['ESC', 'LEAVE'],
+];
 
 export type CraneKind = 'plush' | 'oddity';
 
@@ -144,7 +178,41 @@ interface Toy {
   /** Height up the pile, in pixels at the front. */
   lift: number;
   art: Phaser.GameObjects.Container;
+  /** How it was drawn: kept so the heap can be put back exactly as it was. */
+  look: string;
+  size: number;
+  tilt: number;
+  flip: boolean;
+  /** Knocked over by the claw, degrees. */
+  lean: number;
 }
+
+/**
+ * ---- WHAT EACH TOY IS LIKE TO GRAB.  `weight`: heavier is harder to lift
+ * and likelier to slip (1 is an ordinary plush).  `stable`: how hard it is
+ * to knock over -- the big ones barely tip when the claw bumps them.
+ * `head`: how much worse a grab round the head is than round the body (a
+ * round body fills the fingers; a head slides out between them).
+ */
+const FEEL: Record<string, { weight: number; stable: number; head: number }> = {
+  frog: { weight: 1.2, stable: 0.9, head: 0.7 },
+  lion: { weight: 1.15, stable: 0.85, head: 0.75 },
+  panda: { weight: 1.12, stable: 0.8, head: 0.75 },
+  unicorn: { weight: 1.05, stable: 0.55, head: 0.65 },
+  bear: { weight: 1.0, stable: 0.6, head: 0.8 },
+  fox: { weight: 0.95, stable: 0.45, head: 0.75 },
+  penguin: { weight: 0.95, stable: 0.5, head: 0.85 },
+  owl: { weight: 0.9, stable: 0.5, head: 0.85 },
+  bunny: { weight: 0.85, stable: 0.3, head: 0.6 },
+  cat: { weight: 0.85, stable: 0.4, head: 0.8 },
+  pig: { weight: 0.9, stable: 0.55, head: 0.85 },
+  duck: { weight: 0.8, stable: 0.35, head: 0.85 },
+  capsule: { weight: 0.8, stable: 0.7, head: 1 },
+};
+const feelOf = (t: Toy) => FEEL[t.look.startsWith('capsule') ? 'capsule' : t.look] ?? FEEL.bear;
+
+/** The real calendar day: the heap is tipped in fresh once a day. */
+const today = (): string => new Date().toLocaleDateString('en-CA');
 
 /** Where the claw starts every go, and goes back to after each one: right
  *  over the prize chute. */
@@ -152,10 +220,25 @@ const HOME = { x: CHUTE.x, z: CHUTE.z };
 /** How far left the claw can go: over the chute. */
 const CLAW_MIN_X = CHUTE.x;
 
+/**
+ * An animal for the heap, rarer the more it is worth: weight 1/value squared,
+ * so a 10-cash duck turns up about nine times as often as a 30-cash unicorn.
+ */
+function pickPlush(): (typeof PLUSHIES)[number] {
+  const pool = PLUSHIES.slice(1);
+  const w = pool.map((d) => 1 / (d.value * d.value));
+  let r = Math.random() * w.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < pool.length; i++) {
+    r -= w[i];
+    if (r <= 0) return pool[i];
+  }
+  return pool[0];
+}
+
 type Phase = 'pay' | 'aim' | 'lower' | 'wait' | 'shut' | 'up' | 'carry' | 'release' | 'result';
 
 /** One heap in this many draws a Froggy in each spot: he is the rare one. */
-const FROGGY_CHANCE = 0.03;
+const FROGGY_CHANCE = 0.012;
 
 /** THE SIDE VIEW: the glass seen from its right-hand end.  Front of the
  *  machine on the left, back on the right, the floor along the bottom. */
@@ -207,11 +290,12 @@ export class CraneGame extends Phaser.Scene {
   private marquee: Phaser.GameObjects.BitmapText[] = [];
   private sideTag: Phaser.GameObjects.BitmapText | null = null;
   /** The side view has been used this go: DROP is open. */
-  private viewedSide = false;
 
   constructor() {
     super('CraneGame');
   }
+
+  private howTo: TutorialCard | null = null;
 
   init(data: { kind?: CraneKind } = {}): void {
     this.kind = data.kind === 'oddity' ? 'oddity' : 'plush';
@@ -238,6 +322,7 @@ export class CraneGame extends Phaser.Scene {
 
     this.paintCabinet(eerie);
     this.fillPile();
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.saveGlass());
     this.paintChuteGlass(eerie);
 
     // the gantry: two rails, the bar across them, the motor block on the bar
@@ -268,7 +353,7 @@ export class CraneGame extends Phaser.Scene {
       right: bind(['D', 'RIGHT']),
       drop: bind(['SPACE', 'E']),
     };
-    kb?.on('keydown-ESC', () => this.leave(true));
+    kb?.on('keydown-ESC', () => !this.howTo && this.leave(true));
     // A press is DROP while aiming and GRAB once the claw has settled
     // (polling `isDown` in the loop misses a tap that goes down and up
     // between two frames; a key held down and auto-repeating is one press).
@@ -285,7 +370,7 @@ export class CraneGame extends Phaser.Scene {
     // dropped the claw and grabbed)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => touchControls.relabel('SPACE', 'SIDE VIEW'));
 
-    this.askToPay();
+    this.showHowTo();
     // (the touch layout is put up after create, which shows every button:
     // set them again once it is there)
     this.time.delayedCall(60, () => this.syncButtons());
@@ -431,7 +516,29 @@ export class CraneGame extends Phaser.Scene {
    * -- so every toy is easy to see and to aim at, and still touches its
    * neighbours.
    */
+  /**
+   * The glass as it was left -- every toy where it lay, knocked over or not --
+   * unless it is a new day, or the machine has been emptied, in which case
+   * it is tipped in fresh.
+   */
   private fillPile(): void {
+    const saved = store.get().cranes[this.kind];
+    if (saved && saved.day === today() && saved.toys.length > 0) {
+      for (const st of saved.toys) this.toys.push(this.makeToy(st.x, st.z, st.lift, st));
+      this.froggies = this.toys.filter((t) => t.id === PLUSHIES[0].id).length;
+      return;
+    }
+    this.freshPile();
+    this.saveGlass();
+  }
+
+  /** Keep the glass exactly as it is now. */
+  private saveGlass(): void {
+    const toys = this.toys.map((t) => ({ id: t.id, look: t.look, x: t.x, z: t.z, lift: t.lift, size: t.size, tilt: t.tilt, flip: t.flip, lean: t.lean }));
+    store.patch({ cranes: { ...store.get().cranes, [this.kind]: { day: today(), toys } } });
+  }
+
+  private freshPile(): void {
     const rows = 3;
     const layers = 3;
     const specs: Array<{ x: number; z: number; lift: number }> = [];
@@ -463,27 +570,34 @@ export class CraneGame extends Phaser.Scene {
 
   private placeToy(t: Toy): void {
     const k = scaleAt(t.z);
-    t.art.setPosition(screenX(t.x, t.z), floorY(t.z) - t.lift * k).setScale(k).setDepth(this.toyDepth(t.z, t.lift));
+    t.art.setPosition(screenX(t.x, t.z), floorY(t.z) - t.lift * k).setScale(k).setDepth(this.toyDepth(t.z, t.lift)).setAngle(t.lean);
   }
 
-  private makeToy(x: number, z: number, lift: number): Toy {
+  private makeToy(x: number, z: number, lift: number, saved?: SavedToy): Toy {
     const c = this.add.container(0, 0);
     let id = 'capsule';
     let key: string;
+    let look: string;
     // drawn at the size it sits at, a little bigger or smaller than the next
     // one and a little tumbled: they were tipped in, not arranged
-    const size = scaleAt(z) * Phaser.Math.FloatBetween(0.96, 1.04);
-    const tilt = Phaser.Math.Between(-2, 2) * 3;
-    if (this.kind === 'plush') {
+    const size = saved ? saved.size : scaleAt(z) * Phaser.Math.FloatBetween(0.96, 1.04);
+    const tilt = saved ? saved.tilt : Phaser.Math.Between(-2, 2) * 3;
+    if (saved) {
+      id = saved.id;
+      look = saved.look;
+      key = toyTexture(this, look as Parameters<typeof toyTexture>[1], size, tilt);
+    } else if (this.kind === 'plush') {
       // Froggy is the rare one: a small chance at each spot, and never more
       // than one in a heap
       const froggy = this.froggies < 1 && Math.random() < FROGGY_CHANCE;
       if (froggy) this.froggies++;
-      const def = froggy ? PLUSHIES[0] : PLUSHIES[Phaser.Math.Between(1, PLUSHIES.length - 1)];
+      const def = froggy ? PLUSHIES[0] : pickPlush();
       id = def.id;
+      look = plushKind(def.id);
       key = toyTexture(this, plushKind(def.id), size, tilt);
     } else {
-      key = toyTexture(this, `capsule-${Phaser.Math.Between(0, CAPSULE_VARIANTS - 1)}`, size, tilt);
+      look = `capsule-${Phaser.Math.Between(0, CAPSULE_VARIANTS - 1)}`;
+      key = toyTexture(this, look as `capsule-${number}`, size, tilt);
     }
     // stood on its feet (its bottom edge), a little tumbled, a little bigger
     // or smaller than the next one: they were tipped in, not arranged
@@ -491,7 +605,8 @@ export class CraneGame extends Phaser.Scene {
     // texel to one pixel)
     const drawn = Math.round(size * 25) / 25;
     const img = this.add.image(0, 0, key).setOrigin(0.5, 1).setScale(1 / drawn).setData('drawn', drawn);
-    if (Math.random() < 0.5 && this.kind === 'plush') img.setFlipX(true);
+    const flip = saved ? saved.flip : Math.random() < 0.5 && this.kind === 'plush';
+    img.setFlipX(flip);
     // THE DEPTH.  A soft contact shadow where it sits, on the floor or on the
     // toys under it; and the light falls off into the pile -- the further back
     // and the further down a toy is, the more it is in the shade of the rest.
@@ -501,7 +616,7 @@ export class CraneGame extends Phaser.Scene {
     const v = Math.round(255 * light);
     img.setTint(Phaser.Display.Color.GetColor(v, v, Math.min(255, v + 8)));
     c.add(img);
-    const t: Toy = { id, x, z, lift, art: c };
+    const t: Toy = { id, x, z, lift, art: c, look, size, tilt, flip, lean: saved?.lean ?? 0 };
     this.placeToy(t);
     return t;
   }
@@ -529,6 +644,30 @@ export class CraneGame extends Phaser.Scene {
    * tokens, and the clock does not run until they are in.  No tokens (or no
    * free pocket for a prize), and it says so and does not start at all.
    */
+  /** The how-to-play card, first thing, before a token is asked for. */
+  private showHowTo(): void {
+    this.phase = 'pay';
+    const cost = CRANE_COST[this.kind];
+    const layout = touchLayoutFor('CraneGame');
+    this.howTo = showTutorial(this, {
+      title: this.kind === 'oddity' ? 'ODDITY CRANE' : 'PLUSH CRANE',
+      tutorial: { objective: deviceObjective(HOW_TO[this.kind], layout), controls: deviceControls(HOW_TO_KEYS, layout) },
+      cost,
+      balance: ledger.balance(),
+      payNote: 'WIN: THE PRIZE YOU DROP IN THE CHUTE',
+      onPlay: () => {
+        this.howTo = null;
+        this.askToPay();
+        this.pay();
+      },
+      onLeave: () => {
+        this.howTo = null;
+        this.leave(true);
+      },
+    });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.howTo?.destroy());
+  }
+
   private askToPay(): void {
     this.phase = 'pay';
     this.clockText.setText(`TIME ${CLOCK_S}`);
@@ -572,7 +711,6 @@ export class CraneGame extends Phaser.Scene {
     audio.sfx('coin_drop');
     this.phase = 'aim';
     // every go starts at the first step: line it up from the front
-    this.viewedSide = false;
     if (this.sideOn) this.toggleSide();
     this.clock = CLOCK_S;
     this.timedOut = false;
@@ -581,26 +719,33 @@ export class CraneGame extends Phaser.Scene {
   }
 
   /**
-   * The action button.  Aiming: SIDE VIEW the first time (into the side
-   * view), DROP once you have been there.  Settled: GRAB.  Anything else --
-   * lowering, coming up, carrying -- it does nothing.
+   * The action button, one step at a time, every go:
+   *   FRONT VIEW  -- move left and right; the button says SIDE VIEW
+   *   SIDE VIEW   -- set the depth; the button says DROP, and only here
+   *   dropped     -- the button says GRAB
+   * Nothing drops or grabs from the front view, and changing view never does
+   * anything by itself.
    */
   private press(): void {
+    if (this.howTo) return;
     if (this.phase === 'pay') return this.pay();
     if (this.phase === 'aim') {
-      if (!this.viewedSide && !this.sideOn) this.toggleSide();
+      if (!this.sideOn) this.toggleSide();
       else this.beginLower();
-    } else if (this.phase === 'wait') this.shut();
+    } else if (this.phase === 'wait' && this.sideOn) this.shut();
   }
 
-  /** The view button: BACK from the side view; SIDE VIEW again from the front. */
+  /** The view button: back to the front from the side.  That starts the sequence over. */
   private viewButton(): void {
     if (this.phase !== 'aim') return;
-    if (this.sideOn || this.viewedSide) this.toggleSide();
+    if (this.sideOn) {
+      this.toggleSide();
+      this.syncButtons();
+    }
   }
 
   private actionLabel(): string {
-    if (this.phase === 'aim') return this.viewedSide || this.sideOn ? 'DROP' : 'SIDE VIEW';
+    if (this.phase === 'aim') return this.sideOn ? 'DROP' : 'SIDE VIEW';
     if (this.phase === 'wait') return 'GRAB';
     if (this.phase === 'pay') return 'INSERT';
     return '...';
@@ -609,7 +754,7 @@ export class CraneGame extends Phaser.Scene {
   /** '' when the view button is not shown. */
   private viewLabel(): string {
     if (this.phase !== 'aim') return '';
-    return this.sideOn ? 'BACK' : this.viewedSide ? 'SIDE VIEW' : '';
+    return this.sideOn ? 'FRONT VIEW' : '';
   }
 
   /** Put every button's label and visibility right for where the go is. */
@@ -637,16 +782,16 @@ export class CraneGame extends Phaser.Scene {
     if (this.phase === 'wait') return `${key}GRAB`;
     if (this.phase === 'pay') return `${key}INSERT ${CRANE_COST[this.kind]} TOKENS`;
     if (this.phase !== 'aim') return '';
-    return `${key}${this.viewedSide || this.sideOn ? 'DROP' : 'SIDE VIEW'}`;
+    return `${key}${this.sideOn ? 'DROP' : 'SIDE VIEW'}`;
   }
 
   /** From wherever it is, carrying the way it was going. */
   private beginLower(): void {
-    if (this.phase !== 'aim') return;
+    // only from the side view: never from the front
+    if (this.phase !== 'aim' || !this.sideOn) return;
     this.phase = 'lower';
     audio.sfx('ui_blip');
-    // the drop is watched from the front
-    if (this.sideOn) this.toggleSide();
+    // (it stays in the side view: the drop and the grab are watched from there)
     this.syncButtons();
   }
 
@@ -733,6 +878,7 @@ export class CraneGame extends Phaser.Scene {
         // time, it shuts on its own a beat after it lands
         this.drop = bottom;
         this.phase = 'wait';
+        this.disturb();
         this.vx = this.vz = 0;
         this.grabCue.setVisible(true);
         this.syncButtons();
@@ -753,9 +899,11 @@ export class CraneGame extends Phaser.Scene {
       this.drop -= RAISE * dt;
       if (this.drop <= 0) {
         this.drop = 0;
-        // held or not, back to the chute: that is where a go ends
+        // held or not, back to the chute: that is where a go ends -- watched
+        // from the front, where the chute is (the drop and grab are done)
         this.phase = 'carry';
         this.carryFrom.set(this.clawX, this.clawZ);
+        if (this.sideOn) this.toggleSide();
       }
     } else if (this.phase === 'carry') {
       // over to the chute, front left
@@ -838,19 +986,31 @@ export class CraneGame extends Phaser.Scene {
       // dead centre is the best grip there is; at the edge of the claw it
       // is just over half that
       const off = Math.max(Math.abs(best.x - this.clawX) / REACH_X, Math.abs(best.z - this.clawZ) / REACH_Z);
-      const odds = GRIP[this.kind] * (1 - OFF_CENTRE[this.kind] * Math.min(1, off));
+      // WHERE the fingers closed: square over it, round the fat body; off to
+      // the side, round the head -- which slides out more easily.  And how
+      // heavy it is: the claw's grip is the same for everything.
+      const feel = feelOf(best);
+      const onBody = off < 0.4 && Math.abs(best.lean) < 30;
+      const part = onBody ? 1.12 : feel.head;
+      const odds = Phaser.Math.Clamp((GRIP[this.kind] * (1 - OFF_CENTRE[this.kind] * Math.min(1, off)) * part) / feel.weight, 0.02, 0.95);
+      this.showGripLine(onBody ? 'GOT IT ROUND THE BODY' : 'ONLY BY THE HEAD...');
       if (Math.random() < odds) {
         this.held = best;
         this.heldFrom.set(best.art.x, best.art.y);
         this.heldT = 0;
         this.toys = this.toys.filter((t) => t !== best);
         // and some of what comes up does not make it to the chute
-        this.slipAt = Math.random() < SLIP[this.kind] ? 0.25 + Math.random() * 0.5 : -1;
+        // heavier toys, and toys held by the head, slip more often
+        const slip = SLIP[this.kind] * feel.weight * (onBody ? 0.85 : 1.35);
+        this.slipAt = Math.random() < slip ? 0.25 + Math.random() * 0.5 : -1;
       } else {
         // it closes on it, lifts it a fraction, and lets it go
         this.tweens.add({ targets: best.art, y: '-=4', duration: 140, yoyo: true });
+        // and drops it a little askew
+        this.knock(best, Math.sign(best.x - this.clawX) || 1, 0.6);
       }
     }
+    this.saveGlass();
     this.phase = 'up';
   }
 
@@ -880,8 +1040,63 @@ export class CraneGame extends Phaser.Scene {
       scale: k,
       duration: 380,
       ease: 'Bounce.easeOut',
+      onComplete: () => {
+        t.lean = Phaser.Math.Clamp(t.lean + Phaser.Math.Between(-20, 20) * (1 - feelOf(t).stable), -60, 60);
+        this.placeToy(t);
+        this.saveGlass();
+      },
+    });
+  }
+
+  /**
+   * THE CLAW HITS THE HEAP.  Coming down, its frame and fingers shove what is
+   * round the toy it is landing on: away from it sideways, a little back, and
+   * -- unless it is a big steady one -- tipped over.  Light toys go further.
+   */
+  private disturb(): void {
+    const target = this.targetUnder();
+    for (const t of this.toys) {
+      if (t === target) continue;
+      const dx = t.x - this.clawX;
+      const dz = t.z - this.clawZ;
+      if (Math.abs(dx) > 24 || Math.abs(dz) > 0.2) continue;
+      const near = 1 - Math.abs(dx) / 24;
+      this.knock(t, Math.sign(dx) || 1, near);
+    }
+    // the target itself is nudged by an off-centre landing
+    if (target) {
+      const off = target.x - this.clawX;
+      if (Math.abs(off) > 3) this.knock(target, Math.sign(off), 0.35);
+    }
+  }
+
+  /** Push one toy `dir` (+1 right, -1 left), `force` 0..1. */
+  private knock(t: Toy, dir: number, force: number): void {
+    const feel = feelOf(t);
+    const push = (7 * force) / feel.weight;
+    t.x = Phaser.Math.Clamp(t.x + dir * push, PILE_L + 8, PILE_R - 8);
+    t.z = Phaser.Math.Clamp(t.z + (Math.random() - 0.5) * 0.05 * force, 0.1, 0.95);
+    // a pushed toy off the top of another settles down a little
+    if (t.lift > 0 && force > 0.5) t.lift = Math.max(0, t.lift - 6 * force);
+    const tip = (1 - feel.stable) * 40 * force;
+    if (tip > 4) t.lean = Phaser.Math.Clamp(t.lean + dir * tip, -70, 70);
+    const k = scaleAt(t.z);
+    this.tweens.add({
+      targets: t.art,
+      x: screenX(t.x, t.z),
+      y: floorY(t.z) - t.lift * k,
+      angle: t.lean,
+      duration: 220 + 140 * force,
+      ease: 'Back.easeOut',
       onComplete: () => this.placeToy(t),
     });
+  }
+
+  private gripLine: Phaser.GameObjects.BitmapText | null = null;
+  private showGripLine(msg: string): void {
+    this.gripLine?.destroy();
+    this.gripLine = centerText(this, GAME_W / 2, BOX.top + 22, msg, PALETTE.cream).setDepth(66);
+    this.tweens.add({ targets: this.gripLine, alpha: 0, delay: 900, duration: 400 });
   }
 
   private payOut(): void {
@@ -981,7 +1196,6 @@ export class CraneGame extends Phaser.Scene {
   private toggleSide(): void {
     if (this.phase === 'result') return;
     this.sideOn = !this.sideOn;
-    if (this.sideOn) this.viewedSide = true;
     // a move in one view does not carry on into the other's axis
     this.vx = this.vz = 0;
     this.sideBox.setVisible(this.sideOn);
@@ -1051,6 +1265,11 @@ export class CraneGame extends Phaser.Scene {
   }
 
   private again(): void {
+    // emptied: the attendant tips a fresh heap in
+    if (this.toys.length === 0) {
+      this.freshPile();
+      this.saveGlass();
+    }
     if (pocketsFull()) {
       this.showResult(FULL_LINE, PALETTE.ember, false);
       return;

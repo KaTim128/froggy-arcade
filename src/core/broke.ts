@@ -12,6 +12,7 @@
 
 import { store } from './state';
 import { ledger } from './ledger';
+import { clock } from '../game/life';
 
 export type BrokeOutcome = 'charity' | 'eject' | null;
 
@@ -27,8 +28,19 @@ export function evaluateBroke(): BrokeOutcome {
   // player keeps the run of the arcade and the street outside, and nothing
   // walks over to tell them the day is finished.
   if (s.froggyGone) return null;
+  // ---- CLOSING TIME is the only thing that ends the day.  Running out of
+  // tokens is not: once his one handout has been given, an empty pocket is
+  // just an empty pocket, and the street (begging, the man, the goals) is
+  // where you get going again.
+  if (s.seenIntro && clock(s.life.t).closed) return 'eject';
   if (ledger.balance() > 0) return null;
-  return s.charityUsed ? 'eject' : 'charity';
+  return s.charityUsed ? null : 'charity';
+}
+
+/** Whether the day ending is why he is throwing you out (not the tokens). */
+export function closingTime(): boolean {
+  const s = store.get();
+  return s.seenIntro && clock(s.life.t).closed;
 }
 
 /**

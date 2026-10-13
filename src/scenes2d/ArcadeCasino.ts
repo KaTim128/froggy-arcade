@@ -12,7 +12,9 @@
  * Darker and quieter than the arcade floor.  Nobody has ever won in here.
  */
 
+import { closingTime } from '../core/broke';
 import Phaser from 'phaser';
+import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../game/roomWalk';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store, type GameId } from '../core/state';
@@ -23,7 +25,7 @@ import { fadeIn, fadeToScene, text } from '../core/ui';
 import { openTalkPanel } from '../ui/talkPanel';
 import { paintCasinoDressing, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
-import { Cabinet } from '../art/cabinet';
+import { Cabinet, CAB_W } from '../art/cabinet';
 import { BlackjackTable, TABLE_H, TABLE_W } from '../art/blackjackTable';
 import { PrizeWheel } from '../art/prizeWheel';
 import { TokenHud } from '../ui/hud';
@@ -34,7 +36,6 @@ import { drawSuitedMan } from '../froggy/suit';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 
-const INTERACT_RANGE = 24;
 /**
  * How far in front of the table's near edge the player's feet come to rest.
  *
@@ -62,6 +63,10 @@ export class ArcadeCasino extends Phaser.Scene {
   private bounds!: Phaser.Geom.Rectangle;
   private keys!: Record<string, Phaser.Input.Keyboard.Key[]>;
   private cabinets: Fixture[] = [];
+  /** Where each machine is played from, and what of the floor is solid. */
+  private spots = new Map<object, Spot>();
+  private solids: Box[] = [];
+  private walker!: Walker;
   private table: BlackjackTable | null = null;
   /** The conversation with the man in the suit, while it is open. */
   private talk: Phaser.GameObjects.Container | null = null;
@@ -108,15 +113,31 @@ export class ArcadeCasino extends Phaser.Scene {
       this.table = t;
       return t;
     });
+    // The machines and the wheel's post stand on the floor; the table keeps
+    // its own edges (keepOffTheTable) and is in the list for the walk-to path.
+    for (const cab of this.cabinets) {
+      const { x, y } = cab.def;
+      const spot =
+        cab instanceof BlackjackTable
+          ? {
+              stand: { x, y: y + TABLE_STAND + 2 },
+              solid: { x: x - TABLE_W / 2 + 3, y: y - TABLE_BACK, w: TABLE_W - 6, h: TABLE_BACK + TABLE_STAND },
+              at: (px: number, py: number) => Math.abs(px - x) < TABLE_W / 2 + 4 && py >= y + TABLE_STAND - 1 && py <= y + TABLE_STAND + 16,
+            }
+          : cab instanceof PrizeWheel
+            ? machineSpot(x, y, 10, 5)
+            : machineSpot(x, y, CAB_W);
+      this.spots.set(cab, spot);
+      if (!(cab instanceof BlackjackTable)) this.solids.push(spot.solid!);
+    }
+    const tableBox = [...this.spots.entries()].filter(([c]) => c instanceof BlackjackTable).map(([, s]) => s.solid!);
+    this.walker = new Walker(() => this.bounds, () => [...this.solids, ...tableBox]);
     for (const cab of this.cabinets) {
       const b = cab.bounds;
       this.add
         .zone(b.centerX, b.centerY, b.width, b.height)
         .setInteractive({ useHandCursor: true })
-        .on('pointerdown', () => {
-          if (this.busy()) return;
-          this.launchGame(cab, 'card');
-        });
+        .on('pointerdown', () => this.walkTo(this.spots.get(cab)!, () => this.launchGame(cab, 'card')));
     }
 
     this.bounds = new Phaser.Geom.Rectangle(
@@ -161,6 +182,13 @@ export class ArcadeCasino extends Phaser.Scene {
     // back the moment it stops owning it.
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => froggyLayer.clear());
 
+    // closing time: back to the front room, where he is waiting to say so
+    this.time.addEvent({ delay: 2000, loop: true, callback: () => {
+      if (!this.locked && !this.busy() && closingTime() && !store.get().froggyGone && store.get().route === 'normal') {
+        this.locked = true;
+        fadeToScene(this, 'ArcadeHub', {});
+      }
+    } });
     store.flush();
   }
 
@@ -214,13 +242,13 @@ export class ArcadeCasino extends Phaser.Scene {
           // at thirteen that rail came up across his mouth and left a frog
           // peering over the table.  At eight it crosses his chest, which is
           // where a table crosses anyone sitting at one.
-          y: spot.y + 8,
+          y: spot.y + 6,
           // SMALLER THAN HE WAS.  At forty he filled the back of the table and
-          // read as leaning over it; at thirty he is sat behind it, which is
+          // read as leaning over it; at twenty-two, a touch under the player, he is sat behind it, which is
           // what a dealer does.  Same spot, same drawing, same everything else
           // -- the anchor is his feet, so shrinking him takes the top down and
           // leaves him sat exactly where he was sat.
-          height: 30,
+          height: 22,
           variant: 'cozy',
           pose: atTable ? 'talk' : 'idleA',
           // Seated, so he sways rather than bounces: half the travel of a stand.
@@ -228,7 +256,7 @@ export class ArcadeCasino extends Phaser.Scene {
         });
       }
       ctx.restore();
-    });
+    }, false, true);
   }
 
   private paintDoorway(): void {
@@ -238,9 +266,12 @@ export class ArcadeCasino extends Phaser.Scene {
     this.add
       .zone(BACK_DOOR.x, BACK_DOOR.y, 26, 50)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        if (!this.busy()) this.toAnnex();
-      });
+      .on('pointerdown', () =>
+        this.walkTo(
+          doorSpot({ x: this.bounds.right, y: BACK_DOOR.y }, (px, py) => px > BACK_DOOR.x - 22 && Math.abs(py - BACK_DOOR.y) < 28),
+          () => this.toAnnex(),
+        ),
+      );
   }
 
 
@@ -275,6 +306,14 @@ export class ArcadeCasino extends Phaser.Scene {
 
   private busy(): boolean {
     return this.locked || !!this.talk || this.scene.isActive('SettingsModal');
+  }
+
+  /** A click or tap walks you to it; it is used when you get there. */
+  private walkTo(spot: Spot, then: () => void): void {
+    if (this.busy()) return;
+    this.walker.to(this.player, spot, () => {
+      if (!this.busy()) then();
+    });
   }
 
   private interact(): void {
@@ -451,7 +490,10 @@ export class ArcadeCasino extends Phaser.Scene {
     const dx = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     const dy = (this.held('down') ? 1 : 0) - (this.held('up') ? 1 : 0);
     const before = { x: this.player.x, y: this.player.y };
-    this.player.move(dx, dy, delta, this.bounds);
+    if (dx || dy) this.walker.cancel();
+    if (this.walker.active) this.walker.drive(this.player, delta);
+    else this.player.move(dx, dy, delta, this.bounds);
+    collide(this.player, before, this.solids);
     this.keepOffTheTable(before);
 
     const bal = ledger.balance();
@@ -497,8 +539,10 @@ export class ArcadeCasino extends Phaser.Scene {
     const py = this.player.y;
 
     let best: Fixture | null = null;
-    let bestD = INTERACT_RANGE;
+    let bestD = Infinity;
     for (const c of this.cabinets) {
+      // only from in front of it, not from beside or behind
+      if (!this.spots.get(c)?.at(px, py)) continue;
       const d = c.distanceTo(px, py);
       if (d < bestD) {
         bestD = d;

@@ -137,7 +137,7 @@ export function paintHotel(g: CanvasRenderingContext2D, o: HotelOpts): void {
   r(2, 13, HOTEL_W - 4, 1, P.goldDark);
   r(2, 4, 1, 10, P.gold);
   r(HOTEL_W - 3, 4, 1, 10, P.goldDark);
-  const name = 'GRAND LILY HOTEL';
+  const name = "LILY'S CONDOS";
   drawPixelText(g, name, HOTEL_DOOR + 1, 6, { scale: 1, color: P.bandEdge, center: true });
   drawPixelText(g, name, HOTEL_DOOR, 5, { scale: 1, color: o.dusk ? '#ffe090' : P.gold, center: true });
   // a lily at each end: three petals and a stem

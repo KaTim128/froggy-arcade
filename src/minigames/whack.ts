@@ -112,6 +112,8 @@ export const whackAFrog: MinigameModule = {
   rules: '30 seconds - whack all you can',
   tutorial: {
     objective: [
+      'FROGS POP UP OUT OF THE HOLES.',
+      'HIT ONE BEFORE IT DUCKS BACK DOWN.',
       'THIRTY SECONDS. WHACK ALL YOU CAN.',
       'THERE IS NO TARGET - THE CLOCK ENDS IT.',
       '55 WHACKS OR MORE PAYS 15 TOKENS.',
@@ -295,7 +297,7 @@ export const whackAFrog: MinigameModule = {
             pose: 'blank',
           });
         }
-      });
+      }, false, true);
     } else {
       froggyLayer.clear();
     }

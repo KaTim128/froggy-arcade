@@ -22,7 +22,8 @@ import { audio, SILENCE } from '../core/audio';
 import { paintChangeMachine, paintHubRoom } from '../art/hubRoom';
 import { TokenHud } from '../ui/hud';
 import { DialogueBox } from '../froggy/dialogue';
-import { secondBustScript } from '../froggy/script';
+import { closingScript, secondBustScript } from '../froggy/script';
+import { closingTime } from '../core/broke';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { fadeToScene } from '../core/ui';
@@ -54,7 +55,7 @@ export class SecondBust extends Phaser.Scene {
     this.time.delayedCall(600, () => {
       const dialogue = new DialogueBox(this);
       this.time.delayedCall(400, () => {
-        dialogue.play(secondBustScript, () => {
+        dialogue.play(closingTime() ? closingScript : secondBustScript, () => {
           fadeToScene(this, 'EjectionCutscene');
         });
       });

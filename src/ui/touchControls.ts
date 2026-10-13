@@ -349,6 +349,21 @@ const STYLE = `
     rgba(28, 82, 80, 0.8);
 }
 #touch-controls.skin-after .tc-panel { filter: saturate(0.7) hue-rotate(-14deg) brightness(0.92); }
+/* In a cabinet every control sits on the same plain dark plate, so the
+   buttons read against any game's picture and none of them is a colour the
+   game itself uses. */
+#touch-controls.skin-game .tc-dkey,
+#touch-controls.skin-game .tc-dkey.diag,
+#touch-controls.skin-game .tc-btn,
+#touch-controls.skin-game .tc-btn.primary,
+#touch-controls.skin-game .tc-xbtn,
+#touch-controls.skin-game .tc-corner,
+#touch-controls.skin-game .tc-dhub {
+  background: rgba(0, 0, 0, 0.6);
+}
+#touch-controls.skin-game .tc-dkey.down,
+#touch-controls.skin-game .tc-btn.down,
+#touch-controls.skin-game .tc-xbtn.down { background: rgba(255, 212, 94, 0.85); color: #141a24; }
 
 /* Over the picture (landscape without room in the black either side) the
    controls are see-through until a thumb is on them, so the game shows
@@ -595,6 +610,9 @@ class TouchControls {
 
   /** Show or hide the button that sends `key`, without swapping the layout. */
   showButton(key: KeyName, visible: boolean): void {
+    // remembered, so a re-apply of the same layout keeps it hidden
+    if (visible) this.hiddenKeys.delete(key);
+    else this.hiddenKeys.add(key);
     if (!this.root) return;
     for (const el of Array.from(this.root.querySelectorAll('.tc-btn')) as HTMLElement[]) {
       if (el.dataset.key === key) el.hidden = !visible;
@@ -610,6 +628,13 @@ class TouchControls {
   }
 
   /** Swap what is on screen.  Called as scenes and cabinets come and go. */
+  private hiddenKeys = new Set<KeyName>();
+
+  /** A new scene: every button it declares starts out shown. */
+  resetHidden(): void {
+    this.hiddenKeys.clear();
+  }
+
   apply(layout: TouchLayout): void {
     if (!this.root) return;
     this.releaseAll();
@@ -629,6 +654,7 @@ class TouchControls {
       el.className = 'tc-btn' + (b.primary ? ' primary' : '');
       el.textContent = b.label;
       el.dataset.key = b.key;
+      el.hidden = this.hiddenKeys.has(b.key);
       pads.appendChild(el);
       this.wireHold(el, b.also ? [b.key, b.also] : [b.key]);
     }
@@ -657,11 +683,12 @@ class TouchControls {
 
   private skin: 'normal' | 'horror' | 'after' = 'normal';
   /** The mood the controls are in: see the horror and after skins in STYLE. */
-  setSkin(skin: 'normal' | 'horror' | 'after'): void {
+  setSkin(skin: 'normal' | 'horror' | 'after', cabinet = false): void {
     this.skin = skin;
     if (!this.root) return;
     this.root.classList.toggle('skin-horror', skin === 'horror');
     this.root.classList.toggle('skin-after', skin === 'after');
+    this.root.classList.toggle('skin-game', cabinet);
   }
 
   /**
@@ -1001,8 +1028,20 @@ class TouchControls {
     const cols = portrait ? Math.min(n >= 5 ? 3 : 2, n) : n <= 3 ? Math.min(1, n) : 2;
     (this.pads as HTMLElement).style.gridTemplateColumns = cols ? `repeat(${cols}, auto)` : '';
     const primary = (this.layout.buttons ?? []).some((b) => b.primary);
-    const padsW = cols ? cols * btn + (cols - 1) * gap + (primary ? btn * 0.25 : 0) : 0;
+    let padsW = cols ? cols * btn + (cols - 1) * gap + (primary ? btn * 0.25 : 0) : 0;
     const leftW = this.layout.joystick ? Math.round(stick * 0.78) : stick;
+    // ---- NEVER OVER THE PAD.  Upright, the pad and the buttons share one
+    // width: if a game's buttons would not fit beside the pad at full size,
+    // they are made smaller until they do, rather than laid over it.
+    const hasPad = !!(this.layout.stick || this.layout.joystick);
+    if (portrait && cols && hasPad) {
+      const room = window.innerWidth - leftW - margin * 2 - 12 - safe.left - safe.right;
+      if (padsW > room) {
+        const fit = Math.max(40, Math.floor((room - (cols - 1) * gap) / (cols + (primary ? 0.25 : 0))));
+        this.root.style.setProperty('--tc-btn', `${fit}px`);
+        padsW = cols * fit + (cols - 1) * gap + (primary ? fit * 0.25 : 0);
+      }
+    }
     // Upright: in the black under the picture.  Sideways: ALWAYS over the
     // picture's own bottom corners, never out in the bands either side of it.
     const left = portrait

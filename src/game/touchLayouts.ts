@@ -65,6 +65,12 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   StartScreen: BARE,
   ProfileModal: BARE,
   SettingsModal: TAP,
+  Shop: TAP,
+  Goals: TAP,
+  // (the arena draws its own two sticks and attack buttons)
+  CreatureHub: TAP,
+  CreatureArena: BARE,
+  Condo: TAP,
   InventoryModal: TAP,
   // SKIP sends the same Esc the desktop hint names, and it lives in the band
   // under the picture, so it cannot land on the dialogue it is offering to
@@ -83,7 +89,6 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   ArcadeLounge: ROOM,
   // the claw: left and right to aim, and the one button that drops it
   // the board is all buttons and spaces you tap
-  Froggopoly: TAP,
   // the claw: left and right only (in the side view, left and right are front
   // and back); one action button that walks SIDE VIEW -> DROP -> GRAB, and a
   // view button (BACK / SIDE VIEW) that the scene shows when it applies
@@ -100,6 +105,7 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   ExteriorNight: STREET,
   BackAlley: STREET,
   StreetWest: STREET,
+  StreetEast: STREET,
   Hotel: STREET,
 
   PrizeCounter: TAP,
@@ -163,6 +169,8 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
     buttons: [
       { label: 'CROUCH', key: 'C', primary: true },
       { label: 'LEAVE', key: 'E' },
+      // the skill checks: shown only while one is up
+      { label: 'CALM', key: 'SPACE' },
     ],
   },
 
@@ -255,12 +263,18 @@ function schedule(): void {
   }, 0);
 }
 
+let lastTop = '';
+
 export function refreshTouchLayout(): void {
   if (!gameRef || !touchControls.mounted()) return;
   hookScenes();
   const running = gameRef.scene.getScenes(true);
   const top = running.length ? running[running.length - 1].scene.key : 'Boot';
-  touchControls.setSkin(skinFor(top));
+  if (top !== lastTop) {
+    lastTop = top;
+    touchControls.resetHidden();
+  }
+  touchControls.setSkin(skinFor(top), top === 'Minigame');
   if (top === 'Minigame' && cabinet) touchControls.apply(cabinet);
   else touchControls.apply(touchLayoutFor(top));
 }

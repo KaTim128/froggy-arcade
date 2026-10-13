@@ -13,11 +13,12 @@ export type LedgerReason =
   | 'game.cost' // minigame launch
   | 'game.reward' // minigame win
   | 'game.refund' // a tie: the entry cost handed straight back
+  | 'mission' // a daily goal, weekly goal or achievement claimed
+  | 'creature' // the creature arena's fees and winnings
   | 'charity' // Froggy's five
   | 'change' // the machine on the back wall, at half rate
   | 'prize' // redemption
   | 'crane' // the fourth room's claw machines
-  | 'board' // Froggopoly's stake, and what it pays back
   | 'hotel'; // a room at the Grand Lily, paid in tokens
 
 export type LedgerListener = (next: number, prev: number, reason: LedgerReason) => void;

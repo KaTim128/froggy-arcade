@@ -13,13 +13,14 @@
  */
 
 import Phaser from 'phaser';
+import { collide, machineSpot } from '../game/roomWalk';
 import { PALETTE } from '../render/palette';
 import { audio, SILENCE } from '../core/audio';
 import { store } from '../core/state';
 import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
 import { paintChangeMachine, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
-import { Cabinet } from '../art/cabinet';
+import { Cabinet, CAB_W } from '../art/cabinet';
 import { Player } from '../art/player';
 import {
   cabinetsIn,
@@ -37,6 +38,7 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 type Spot = 'door' | 'case' | 'counter' | 'staff' | 'lounge' | null;
 
 export class ArcadeDark extends Phaser.Scene {
+  private solids: { x: number; y: number; w: number; h: number }[] = [];
   private player!: Player;
   private keys!: Record<string, Phaser.Input.Keyboard.Key[]>;
   private prompt!: Phaser.GameObjects.BitmapText;
@@ -82,6 +84,8 @@ export class ArcadeDark extends Phaser.Scene {
     // arcade a different floor plan from the lit one.  It is the same room at
     // night or it is nothing: same six machines, same places.
     for (const def of cabinetsIn('hub')) new Cabinet(this, def, true);
+    // the machines are as solid in the dark as they were in the day
+    this.solids = cabinetsIn('hub').map((def) => machineSpot(def.x, def.y, CAB_W).solid!);
 
     // the STAFF door, on the wall behind the counter's right-hand end
     this.staffDoor = this.add
@@ -282,7 +286,9 @@ export class ArcadeDark extends Phaser.Scene {
           ROOM.right - ROOM.left - 16,
           ROOM.bottom - (COUNTER.y + COUNTER.h + 2),
         );
+    const before = { x: this.player.x, y: this.player.y };
     this.player.move(dx, dy, delta, bounds);
+    if (!this.behindCounter) collide(this.player, before, this.solids);
 
     const px = this.player.x;
     const py = this.player.y;

@@ -15,17 +15,16 @@
  */
 
 import Phaser from 'phaser';
+import { pullBackAtClosing } from '../game/closingPull';
 import { TokenHud } from '../ui/hud';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { KEYS } from '../core/input';
 import { centerText, fadeIn, fadeToScene, text } from '../core/ui';
-import { Player } from '../art/player';
-import { finishFigure } from '../art/surface';
+import { LOOKS, Player } from '../art/player';
 import { GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
-import { ROOM_MONEY } from './PrizeExchange';
 import { HOTEL_DOOR, HOTEL_H, HOTEL_W, paintHotel } from '../art/hotel';
 
 export const WORLD_W = 640;
@@ -76,6 +75,7 @@ export class StreetWest extends Phaser.Scene {
     // (top right: the hotel's name is across the top left of the street)
     new TokenHud(this);
     attachPockets(this, () => this.locked);
+    pullBackAtClosing(this, () => !this.locked, () => (this.locked = true));
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
     this.mutterPlate = this.add.rectangle(0, 0, 1, 1, PALETTE.black, 0.72).setOrigin(0, 0).setDepth(801).setScrollFactor(0).setVisible(false);
     this.mutter = centerText(this, 160, GAME_H - 40, '', PALETTE.cream).setDepth(802).setScrollFactor(0).setVisible(false).setMaxWidth(290);
@@ -86,7 +86,7 @@ export class StreetWest extends Phaser.Scene {
     kb?.on('keydown-E', () => this.interact());
     // tap the doorman or the door to walk there and use it
     this.add.zone(DOOR_X - 10, WALK_Y - 40, 20, 40).setOrigin(0, 0).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.walkTo('door'));
-    this.add.zone(DOORMAN_X - 8, WALK_Y - 34, 16, 34).setOrigin(0, 0).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.walkTo('doorman'));
+
   }
 
   private errand: Spot = null;
@@ -247,7 +247,7 @@ export class StreetWest extends Phaser.Scene {
     g.fillStyle(0x5a3a1e, 1).fillRect(B - S(16), foot - 5, 1, 5).fillRect(B + S(5), foot - 5, 1, 5);
     // ---- the hotel, at the end of the street: the same painting as the
     // front of it at the end of the night road (art/hotel.ts)
-    const key = dusk ? 'grand_lily_dusk' : 'grand_lily_day';
+    const key = dusk ? 'lily_condos_dusk' : 'lily_condos_day';
     if (!this.textures.exists(key)) {
       const tex = this.textures.createCanvas(key, HOTEL_W, HOTEL_H);
       if (tex) {
@@ -263,28 +263,7 @@ export class StreetWest extends Phaser.Scene {
     this.add.rectangle(DOOR_X - 13, 158, 1, 4, 0xc9a24a).setOrigin(0, 0);
     this.add.rectangle(DOOR_X + 12, 158, 1, 4, 0xc9a24a).setOrigin(0, 0);
     if (store.get().hotelAfter === 'escaped') return this.paintAftermath();
-    // the doorman: a long coat, a peaked cap, gold buttons, arms folded
-    const d = DOORMAN_X;
-    const man = this.add.container(d, 158);
-    this.add.ellipse(d + 1, 158, 13, 3, 0x000000, 0.3);
-    const R = (x: number, y: number, w: number, h: number, col: number, ox = 0.5, oy = 1) =>
-      man.add(this.add.rectangle(x, y, w, h, col).setOrigin(ox, oy));
-    // to the player's scale: a big man, a little taller than the drifter
-    R(-2, 0, 3, 9, 0x2a2a3a); // trousers, two legs
-    R(2, 0, 3, 9, 0x24243a);
-    R(-2, 0, 4, 2, 0x111114);
-    R(2, 0, 4, 2, 0x111114);
-    R(0, -9, 10, 11, 0x7b2a3a); // the long coat
-    R(0, -13, 12, 3, 0x6a2232); // folded arms across it
-    R(0, -20, 6, 6, 0xe8b890); // face
-    R(0, -25, 7, 3, 0x2a2a3a); // cap crown
-    R(2, -25, 5, 1, 0x1a1a24); // peak
-    finishFigure(this, man, { seed: 41 });
-    for (let k = 0; k < 2; k++) man.add(this.add.rectangle(0, -17 + k * 3, 1, 1, PALETTE.gold));
-    man.add(this.add.rectangle(-1.5, -23, 1, 1, 0x2a1a10)); // eyes, unimpressed
-    man.add(this.add.rectangle(1.5, -23, 1, 1, 0x2a1a10));
-    man.add(this.add.rectangle(0, -21, 2, 1, 0xb08060)); // a flat mouth
-    man.add(this.add.rectangle(0, -25.5, 7, 1, PALETTE.gold).setAlpha(0.8)); // cap band
+    // (no doorman any more: Lily's is flats, and anyone may go in)
   }
 
   /**
@@ -330,30 +309,15 @@ export class StreetWest extends Phaser.Scene {
     tape(dx - 40, dx + 41, 156, 4);
     // evidence markers on the steps
     for (const [mx, n] of [[dx - 16, 0xe8c020], [dx + 18, 0xe8c020]] as const) g.fillStyle(n, 1).fillTriangle(mx, 167, mx + 4, 167, mx + 2, 163);
-    // the officer: dark uniform, cap, a notebook out
+    // the officer, where the doorman stood: the same rig, in uniform
     const o = DOORMAN_X;
-    const cop = this.add.container(o, 158).setDepth(3);
     this.add.ellipse(o + 1, 158, 16, 3, 0x000000, 0.3).setDepth(3);
-    const R = (x: number, y: number, w: number, h: number, col: number) =>
-      cop.add(this.add.rectangle(x, y, w, h, col).setOrigin(0.5, 1));
-    R(-2, 0, 3, 9, 0x14182a);
-    R(2, 0, 3, 9, 0x101424);
-    R(-2, 0, 4, 2, 0x08080c);
-    R(2, 0, 4, 2, 0x08080c);
-    R(0, -9, 9, 10, 0x1e2a4a); // tunic
-    R(0, -9, 9, 2, 0x2a2a2a); // duty belt
-    R(-5, -10, 2, 7, 0x1e2a4a); // the arm holding the notebook
-    R(0, -19, 6, 6, 0xd8b090); // face
-    R(0, -24, 7, 3, 0x0c1020); // cap
-    finishFigure(this, cop, { seed: 43 });
-    cop.add(this.add.rectangle(2, -24, 4, 1, 0x0c1020).setOrigin(0, 1)); // peak
-    cop.add(this.add.rectangle(0, -25, 7, 1, 0xd8d8e0).setOrigin(0.5, 1)); // cap band
-    cop.add(this.add.rectangle(2, -15, 1, 1, 0xe8c040)); // badge
-    cop.add(this.add.rectangle(-1, -10, 1, 1, 0xc0c0c8)); // buckle
-    cop.add(this.add.rectangle(-1.5, -22, 1, 1, 0x2a1a10)); // eyes
-    cop.add(this.add.rectangle(1.5, -22, 1, 1, 0x2a1a10));
-    cop.add(this.add.rectangle(-6, -12, 3, 3, 0xe8e4d8)); // the notebook
-    cop.add(this.add.rectangle(-6, -13, 2, 1, 0x8a8a90));
+    const cop = new Player(this, o, 158, false, LOOKS.officer);
+    cop.sprite.setDepth(3);
+    cop.stride(-1, 0);
+    cop.stand();
+    // a notebook out
+    cop.sprite.add(this.add.rectangle(-6, -12, 3, 3, 0xe8e4d8));
     // a patrol car at the kerb, its lightbar turning over, slow, in the daylight
     const car = this.add.graphics().setDepth(1);
     const cx = 170;
@@ -375,19 +339,8 @@ export class StreetWest extends Phaser.Scene {
       this.say('POLICE: "Crime scene. Nobody goes in, I\'m afraid."');
       return;
     }
-    const cash = store.get().cash;
-    const welcome = cash >= ROOM_MONEY || store.get().checkedIn;
     if (this.spot === 'bus') {
       this.say('The bus stop across the road.  Nothing has stopped there in years.');
-      return;
-    }
-    if (!welcome) {
-      audio.sfx('buzzer', 0.4);
-      this.say(DOORMAN_NO);
-      return;
-    }
-    if (this.spot === 'doorman') {
-      this.say('"Good evening. Reception is straight through."');
       return;
     }
     this.locked = true;
@@ -429,12 +382,12 @@ export class StreetWest extends Phaser.Scene {
       return;
     }
     const px = this.player.x;
-    this.spot = Math.abs(px - DOOR_X) < 10 ? 'door' : Math.abs(px - DOORMAN_X) < 18 ? 'doorman' : Math.abs(px - BUS_X) < 22 ? 'bus' : null;
+    this.spot = Math.abs(px - DOOR_X) < 10 ? 'door' : Math.abs(px - BUS_X) < 22 ? 'bus' : null;
     if (!this.spot) {
       this.prompt.setVisible(false);
       return;
     }
-    const label = this.spot === 'door' ? '[E] GO IN' : this.spot === 'doorman' ? '[E] TALK' : '[E] LOOK';
+    const label = this.spot === 'door' ? '[E] GO IN' : '[E] LOOK';
     // (not while a line is being said: the two would sit on top of each other)
     this.prompt.setText(label).setPosition(px, WALK_Y - 36).setVisible(!(this.mutter.visible && this.mutter.alpha > 0.2));
   }

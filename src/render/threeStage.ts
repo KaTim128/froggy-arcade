@@ -41,6 +41,73 @@ function softwareGL(): boolean {
   return software;
 }
 
+/**
+ * ONE RENDERER FOR THE WHOLE SESSION.
+ *
+ * Every 3D scene used to make its own WebGL context and force-lose it on the
+ * way out.  A phone counts those losses: after a handful the browser blocks
+ * WebGL for the page outright, and the next 3D scene got a white canvas with
+ * a sad face on it instead of a context.  Now there is exactly one renderer,
+ * made the first time a stage needs it and handed from stage to stage; a
+ * stage that leaves only takes its canvas off the page.
+ */
+let shared: THREE.WebGLRenderer | null = null;
+
+function makeRenderer(antialias: boolean): THREE.WebGLRenderer | null {
+  if (shared && !shared.getContext().isContextLost()) return shared;
+  shared = null;
+  const tries: THREE.WebGLRendererParameters[] = [
+    { antialias, powerPreference: 'low-power' },
+    { antialias: false, powerPreference: 'default', precision: 'mediump' },
+    { antialias: false, precision: 'lowp', stencil: false, depth: true, failIfMajorPerformanceCaveat: false },
+  ];
+  for (const opts of tries) {
+    try {
+      const r = new THREE.WebGLRenderer(opts);
+      // a context the phone takes away is asked back, not left as a sad face
+      r.domElement.addEventListener('webglcontextlost', (e) => e.preventDefault());
+      shared = r;
+      return r;
+    } catch {
+      // the next, plainer, attempt
+    }
+  }
+  return null;
+}
+
+/**
+ * What a phone that cannot draw 3D at all shows instead: words, on black,
+ * not the browser's broken-canvas face.
+ */
+function noGLNotice(root: HTMLElement): HTMLDivElement {
+  const d = document.createElement('div');
+  Object.assign(d.style, {
+    position: 'fixed',
+    inset: '0',
+    zIndex: '5',
+    background: '#000',
+    color: '#ffd45e',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '14px',
+    font: '700 15px ui-monospace, monospace',
+    textAlign: 'center',
+    padding: '24px',
+  } as Partial<CSSStyleDeclaration>);
+  d.innerHTML =
+    '<div>THIS DEVICE COULD NOT START THE 3D VIEW.</div>' +
+    '<div style="color:#c9d1dc;font-weight:400">Close other tabs and apps, then reload.</div>';
+  const b = document.createElement('button');
+  b.textContent = 'RELOAD';
+  Object.assign(b.style, { font: 'inherit', padding: '10px 22px', background: '#3d2a5c', color: '#fff0c9', border: '2px solid #ffd45e', borderRadius: '10px' });
+  b.addEventListener('click', () => window.location.reload());
+  d.appendChild(b);
+  root.appendChild(d);
+  return d;
+}
+
 export class ThreeStage {
   /**
    * The stage on screen, if any.  There is only ever one (see above), and the
@@ -68,12 +135,22 @@ export class ThreeStage {
   }
 
   mount(root: HTMLElement, phaserCanvas: HTMLCanvasElement): void {
-    this.renderer = new THREE.WebGLRenderer({ antialias: this.smooth && !softwareGL(), powerPreference: 'low-power' });
+    // (no multisampling on a phone: it is the first thing that runs one out
+    // of memory, and the probe for a software renderer costs a context)
+    this.renderer = makeRenderer(!isTouch() && this.smooth && !softwareGL());
+    if (!this.renderer) {
+      this.notice = noGLNotice(root);
+      ThreeStage.current = this;
+      return;
+    }
     this.renderer.setPixelRatio(1);
+    this.renderer.setScissorTest(false);
     this.renderer.setSize(RENDER_W, RENDER_H, false);
     // (resized again by the quality level, in applyQuality)
 
     const c = this.renderer.domElement;
+    // (the canvas is shared: whatever the last scene left on it goes)
+    c.style.cssText = '';
     c.id = 'three-canvas';
     c.style.position = 'fixed';
     c.style.zIndex = '5';
@@ -98,6 +175,7 @@ export class ThreeStage {
   }
 
   private phaserCanvas: HTMLCanvasElement | null = null;
+  private notice: HTMLDivElement | null = null;
   private vignette: HTMLDivElement | null = null;
   private offGraphics: (() => void) | null = null;
   /** What the scene was built with, before any quality level touched it. */
@@ -325,14 +403,24 @@ export class ThreeStage {
       const mesh = obj as THREE.Mesh;
       if (mesh.geometry) mesh.geometry.dispose();
       const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
-      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-      else mat?.dispose();
+      // the textures too: they are most of the memory a phone runs out of
+      const drop = (m: THREE.Material) => {
+        for (const v of Object.values(m)) if (v instanceof THREE.Texture) v.dispose();
+        m.dispose();
+      };
+      if (Array.isArray(mat)) mat.forEach(drop);
+      else if (mat) drop(mat);
     });
     this.scene.clear();
 
+    this.notice?.remove();
+    this.notice = null;
     if (this.renderer) {
-      this.renderer.dispose();
-      this.renderer.forceContextLoss();
+      // The context stays: it is the session's, and the next stage takes it
+      // (see `shared`).  Only what this scene put in it goes.
+      this.renderer.renderLists.dispose();
+      this.renderer.info.reset();
+      this.renderer.domElement.style.visibility = '';
       this.renderer.domElement.remove();
       this.renderer = null;
     }

@@ -289,9 +289,9 @@ export class Hotel extends Phaser.Scene {
       } else if (dark) {
         // and he is on the stairs behind you
         this.hunted = true;
-        this.say('The ground floor...', 2.6);
-        this.say('I made it down.', 2.4);
-        this.say('Where is everyone?', 3);
+        // straight away: no catching your breath, he is right behind you
+        this.say("He's coming down the stairs!", 2.6, true);
+        this.say('I need to hide. The storage room, past the lift!', 4, true);
       } else if (this.from === 'outside') this.time.delayedCall(500, () => this.say('A safe place to stay the night.', 3));
     }
     if ((this.area === 'corridor' || this.area === 'room' || this.area === 'bath') && store.get().hotelAfter === 'police') {
@@ -351,7 +351,11 @@ export class Hotel extends Phaser.Scene {
   }
 
   private buildCorridor(): void {
-    this.add.image(0, 0, this.painted('hotel_corridor_v2', GAME_W, GAME_H, paintCorridor)).setOrigin(0, 0);
+    // Room 612's door, once he has been through it, stays broken; once the
+    // police have come, it is taped off.
+    const after = store.get().hotelAfter;
+    const door612 = after === 'none' ? 'none' : after === 'police' ? 'taped' : 'broken';
+    this.add.image(0, 0, this.painted(`hotel_corridor_v3_${door612}`, GAME_W, GAME_H, (g) => paintCorridor(g, door612))).setOrigin(0, 0);
     centerText(this, 22, 110, '6', 0xff7a3d);
   }
 
@@ -681,6 +685,16 @@ export class Hotel extends Phaser.Scene {
           this.say('Dead. Nothing lights up.');
           return;
         }
+        if (!this.storyNight()) {
+          if (!s.life.rented) {
+            this.say(s.life.evicted ? '"Residents only. Your things are in storage -- see me to rent again."' : '"Residents only. The landlord is at the desk."');
+            return;
+          }
+          this.locked = true;
+          audio.sfx('bell_ding', 0.4);
+          fadeToScene(this, 'Condo', {});
+          return;
+        }
         if (!s.checkedIn) {
           this.say('"Guests only, I\'m afraid. Reception is right here."');
           return;
@@ -783,8 +797,7 @@ export class Hotel extends Phaser.Scene {
     if (this.bangs === 1) {
       this.lines = [];
       this.nextLine();
-      this.say("He's coming down the stairs!", 2.6, true);
-      this.say('I need to hide. The storage room, past the lift!', 4, true);
+      this.say("He's at the door!", 2.4, true);
     }
     if (this.bangs === 7) this.say('The door is giving!', 2.4, true);
     // too late: he is through it, and you are standing in the lobby
@@ -815,8 +828,24 @@ export class Hotel extends Phaser.Scene {
     this.time.delayedCall(320, () => this.scene.start('HotelLobby3D', { mode: 'exposed', x }));
   }
 
+  /**
+   * By day, Lily's is flats: the desk is the landlord's and the lift goes up
+   * to your own unit.  The night of the story (midnight, or the stay that
+   * started then) is the old check-in, untouched.
+   */
+  private storyNight(): boolean {
+    const s = store.get();
+    return s.timeOfDay === 'midnight' || s.checkedIn || s.hotelNight || s.hotelAfter !== 'none';
+  }
+
   private reception(): void {
     const s = store.get();
+    if (!this.storyNight()) {
+      this.locked = true;
+      this.events.once('shop-closed', () => (this.locked = false));
+      this.scene.launch('Shop', { kind: 'landlord', from: 'Hotel' });
+      return;
+    }
     if (s.checkedIn) {
       this.openTalk('"Room 612, sixth floor. The lift is on your right."', [{ label: 'THANKS', fn: () => this.closeTalk() }]);
       return;
@@ -825,7 +854,7 @@ export class Hotel extends Phaser.Scene {
     const can = s.cash >= ROOM_PRICE || s.tokens >= ROOM_PRICE;
     this.openTalk(
       can
-        ? `"Good evening, welcome to the Grand Lily. A room for the night is $${ROOM_PRICE}, or ${ROOM_PRICE} tokens."`
+        ? `"Good evening, welcome to Lily's. A room for the night is $${ROOM_PRICE}, or ${ROOM_PRICE} tokens."`
         : `"A room is $${ROOM_PRICE}, or ${ROOM_PRICE} tokens. You have $${s.cash} and ${s.tokens}. I'm sorry."`,
       can
         ? [
@@ -1240,7 +1269,7 @@ export class Hotel extends Phaser.Scene {
       ctx.fillRect(CLERK.x - 10, 116, 24, 20);
       drawClerk(ctx, { x: CLERK.x, y: CLERK.feet, height: CLERK.h, pose: talking ? 'talk' : 'idle', breath: (this.clock / 4) % 1 });
       ctx.restore();
-    });
+    }, false, true);
   }
 
   update(_t: number, delta: number): void {
@@ -1259,8 +1288,10 @@ export class Hotel extends Phaser.Scene {
     if (!p) return;
     if (this.area === 'bath' && this.reflection) {
       // you, in the mirror, when you are in front of it
-      const near = Math.abs(p.x - (MIRROR.x + MIRROR.w / 2)) < 18;
-      this.reflection.setVisible(near).setPosition(Phaser.Math.Clamp(p.x, MIRROR.x + 7, MIRROR.x + MIRROR.w - 7), MIRROR.y + MIRROR.h + 8);
+      // fades in as you come up to the glass and out as you walk on: no pop
+      const d = Math.abs(p.x - (MIRROR.x + MIRROR.w / 2));
+      const a = Phaser.Math.Clamp(1 - (d - 4) / 18, 0, 1);
+      this.reflection.setVisible(a > 0).setAlpha(a).setPosition(Phaser.Math.Clamp(p.x, MIRROR.x + 7, MIRROR.x + MIRROR.w - 7), MIRROR.y + MIRROR.h + 8);
     }
     if (this.locked || this.talk) {
       this.prompt.setVisible(false);
@@ -1326,7 +1357,11 @@ export class Hotel extends Phaser.Scene {
       .setText(label[this.spot])
       .setTint(this.night === 'late' && this.spot === 'window' ? 0xffb0a0 : PALETTE.gold)
       // (at the desk, on its front: the clerk is where the prompt would go)
-      .setPosition(Phaser.Math.Clamp(x, 60, worldW - 90), this.spot === 'desk' ? DESK_TOP + 13 : WALK_Y - 44)
+      .setPosition(
+        Phaser.Math.Clamp(x, 60, worldW - 90),
+        // (in the corridor, down on the carpet: up by the doors it covered their numbers)
+        this.spot === 'desk' ? DESK_TOP + 13 : this.area === 'corridor' ? WALK_Y + 12 : WALK_Y - 44,
+      )
       .setVisible(true);
   }
 

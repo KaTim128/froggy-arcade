@@ -36,6 +36,7 @@
  * because the number is a constant and not an assumption baked into the code.)
  */
 
+import { isTouch } from '../core/device';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -172,23 +173,18 @@ export const frogVsLizard: MinigameModule = {
     ],
     controls: [
       ['W / S', 'AIM HIGHER OR LOWER'],
-      ['1 2 3 4', 'PICK ROCK HEAL TNT PSN'],
-      ['LEFT/RIGHT', 'CYCLE ITEMS'],
+      // (one row: on a phone the items are tapped on the bar, and the
+      // numbers and LEFT/RIGHT cycling stay for the keyboard)
+      ['1-4 / CLICK', 'PICK AN ITEM ON THE BAR'],
       ['HOLD SPACE', 'POWER, LET GO TO THROW'],
     ],
   },
-  // Up and down aim, left and right cycle the items — and the four items are
-  // also a button each, because picking one directly beats cycling to it.
+  // Up and down aim, and one button to throw.  The items are picked by
+  // tapping them on the bar along the bottom of the picture -- four more
+  // buttons for them only crowded the aim pad off the screen.
   touch: {
-    stick: 'wasd',
-    arrows: true,
-    buttons: [
-      { label: 'THROW', key: 'SPACE', primary: true },
-      { label: '1', key: 'ONE' },
-      { label: '2', key: 'TWO' },
-      { label: '3', key: 'THREE' },
-      { label: '4', key: 'FOUR' },
-    ],
+    stick: 'ud',
+    buttons: [{ label: 'THROW', key: 'SPACE', primary: true }],
   },
 
   create(scene: Phaser.Scene, api: MinigameApi) {
@@ -518,6 +514,10 @@ export function makeLizard(scene: Phaser.Scene, x: number, groundY: number): Pha
 // --------------------------------------------------------------------- hud
 
 function buildHud(scene: Phaser.Scene): void {
+  // Dark plates under the read-outs: gold and teal on a bright summer sky
+  // were unreadable, and so was the item bar on the lawn.
+  scene.add.rectangle(0, 16, GAME_W, 52, 0x000000, 0.55).setOrigin(0, 0);
+  scene.add.rectangle(0, 148, GAME_W, GAME_H - 148, 0x000000, 0.6).setOrigin(0, 0).setDepth(49);
   roundText = centerText(scene, GAME_W / 2, 23, '', PALETTE.gold);
 
   text(scene, 8, 30, 'FROG', PALETTE.tealLight);
@@ -554,7 +554,7 @@ function buildHud(scene: Phaser.Scene): void {
     box.setInteractive({ useHandCursor: true }).on('pointerdown', () => selectItem(id));
     slots.push({ box, label });
   });
-  centerText(scene, GAME_W / 2, 172, 'W/S AIM   HOLD SPACE THROW   1-4 ITEM', PALETTE.ash).setDepth(51);
+  centerText(scene, GAME_W / 2, 170, isTouch() ? 'UP/DOWN AIM   HOLD THROW   TAP AN ITEM' : 'W/S AIM   HOLD SPACE THROW   1-4 ITEM', PALETTE.fog).setDepth(51);
 }
 
 function refreshHud(): void {

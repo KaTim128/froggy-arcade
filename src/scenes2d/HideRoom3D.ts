@@ -237,6 +237,10 @@ const VIEW_RANGE = 13;
 const VIEW_HALF = Math.PI / 3.6;
 /** How long he keeps coming after losing sight of you. */
 const MEMORY_S = 4.0;
+/** Seconds out of every hiding spot and not going anywhere before he hears you -- and again before he hunts you. */
+const EXPOSE_S = 25;
+/** Metres you have to actually go for it to count as moving. */
+const MOVED_M = 2.5;
 /**
  * How close he has to be to have you.
  *
@@ -1057,6 +1061,15 @@ export class HideRoom3D extends Phaser.Scene {
   private onUp: (() => void) | null = null;
   private frames = 0;
   private grace = 0;
+  /**
+   * ---- NOT HIDING IS NOT HIDING.  Out of every hiding spot and not really
+   * moving -- stood in a corner, crouched against a wall, gone AFK -- for
+   * EXPOSE_S, and he hears you: the warning goes up and he comes straight to
+   * where you are.  Another EXPOSE_S of it and he hunts you down.  Only going
+   * somewhere (more than MOVED_M from where it started) resets it: turning,
+   * jiggling, crouch-spamming and tapping keys do not.
+   */
+  private afk = { anchor: new THREE.Vector2(), still: 0, exposed: false, exposedT: 0, hunting: false, nudge: 0 };
   private stuckT = 0;
   /** Walking time on the current trip, and how far from its waypoint he was when last measured. */
   private headwayT = 0;
@@ -3679,7 +3692,8 @@ export class HideRoom3D extends Phaser.Scene {
     // A few seconds of grace.  Without it he is already looking straight down
     // the room as the intro ends, and the first thing the room does is chase.
     this.grace = Math.max(0, this.grace - dt);
-    const seen = this.grace <= 0 && !this.hiding && this.sees();
+    this.exposure(dt);
+    const seen = this.grace <= 0 && !this.hiding && (this.sees() || this.afk.hunting);
     this.unseenT = seen ? 0 : this.unseenT + dt;
 
     // A noise buys a look, not a hunt.  When the look runs out he goes back to
@@ -4651,6 +4665,64 @@ export class HideRoom3D extends Phaser.Scene {
     this.investigate(this.pos.x, this.pos.y);
   }
 
+  /** See `afk`.  Run every frame of the round, before he decides what to do. */
+  private exposure(dt: number): void {
+    const a = this.afk;
+    const safe = !!this.hiding || this.inSecret || this.mode !== 'seeking' || this.grace > 0;
+    if (safe) {
+      if (a.hunting && this.hiding) {
+        // made it: he has lost you, and goes back to looking
+        this.fMode = 'search';
+        audio.setScene(SILENCE);
+        this.pickWaypoint();
+      }
+      a.still = 0;
+      a.exposed = false;
+      a.exposedT = 0;
+      a.hunting = false;
+      a.anchor.copy(this.pos);
+      return;
+    }
+    // genuinely somewhere else: the clock starts again
+    if (this.pos.distanceTo(a.anchor) > MOVED_M && !a.hunting) {
+      a.anchor.copy(this.pos);
+      a.still = 0;
+      a.exposed = false;
+      a.exposedT = 0;
+      return;
+    }
+    a.still += dt;
+    if (!a.exposed && a.still >= EXPOSE_S) {
+      a.exposed = true;
+      a.exposedT = 0;
+      a.nudge = 0;
+      this.say('FROGGY HEARS YOU... FIND A HIDING SPOT', 3200);
+      audio.sfx('eerie_swell', 0.6);
+    }
+    if (a.exposed && !a.hunting) {
+      a.exposedT += dt;
+      // he comes to you, ahead of anything else on his round
+      a.nudge -= dt;
+      if (a.nudge <= 0 && this.fMode !== 'chase') {
+        a.nudge = 3;
+        this.fMode = 'investigate';
+        this.investigateT = INVESTIGATE_S + 3;
+        this.waypoint.copy(this.pos);
+        this.startTrip();
+        this.targetSpot = null;
+      }
+      if (a.exposedT >= EXPOSE_S) {
+        a.hunting = true;
+        this.say('HE KNOWS WHERE YOU ARE', 2400);
+      }
+    }
+    if (a.hunting) {
+      // he does not lose you until you are in something
+      this.memory = MEMORY_S;
+      this.lastSeen.copy(this.pos);
+    }
+  }
+
   /**
    * Go and look at a noise.  Never a promotion to hunting: if he can already
    * see you he is doing something better than this, and if he cannot then a
@@ -5437,6 +5509,11 @@ export class HideRoom3D extends Phaser.Scene {
       creakChance: CREAK_CHANCE,
       memorySeconds: MEMORY_S,
       unseenSeconds: this.unseenT,
+      exposure: { still: this.afk.still, exposed: this.afk.exposed, exposedT: this.afk.exposedT, hunting: this.afk.hunting },
+      afkSkip: (s: number) => {
+        if (this.afk.exposed) this.afk.exposedT += s;
+        else this.afk.still += s;
+      },
       froggySearch: FROGGY_SEARCH,
       froggyProwl: FROGGY_PROWL,
       lostYouSeconds: LOST_YOU_S,

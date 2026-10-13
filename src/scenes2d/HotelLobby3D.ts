@@ -18,6 +18,7 @@
  * comes, stopping when he stops, going away when he goes.
  */
 
+import { CHECK_TITLE, checkHow, newCheck, pressCheck, releaseCheck, stepCheck, type CalmCheck, type CheckResult } from '../game/calmCheck';
 import Phaser from 'phaser';
 import * as THREE from 'three';
 import { attachMouseLook, lockedDelta, lookScale } from '../core/look';
@@ -34,7 +35,7 @@ import { climbFrame, climbSeconds, type ClimbGeom } from '../three/froggyClimb';
 import { ThreeStage } from '../render/threeStage';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { touchControls } from '../ui/touchControls';
-import { texBlock, texCarpet, texConcrete, texLiftDoors, texSign, texWainscot, texWallpaper } from '../art/hotelInterior';
+import { texBlock, texCarpet, texConcrete, texLiftDoors, texRoomDoor, texSign, texWainscot, texWallpaper } from '../art/hotelInterior';
 
 /** 2D lobby x to 3D metres along it. */
 const lx = (px: number): number => (px - 200) * 0.05;
@@ -42,7 +43,10 @@ const lx = (px: number): number => (px - 200) * 0.05;
 const X0 = -10; // the front doors' end
 const X1 = 11; // the storage room's end
 const DEPTH = 7;
-const CEIL = 4;
+/** The atrium: the 2D lobby's two floors of galleries go up over it. */
+const CEIL = 6.6;
+/** The gallery floors along the back wall, either side of the middle bay. */
+const GALLERY_Y = [3.0, 5.0];
 const DADO = 1;
 const DESK_X = lx(160);
 const STAIR_X = lx(238);
@@ -71,7 +75,7 @@ const FROG_SCALE = 1.25;
  */
 const AWARE = {
   /** Seconds of a full, square-on view of you for suspicion to go 0 -> 1 (from mid-lobby). */
-  timeToDetect: 1.1,
+  timeToDetect: 0.45,
   /** Suspicion lost per second while he cannot see you: slow, so peeks add up. */
   suspicionDecayRate: 0.05,
   /** The jolt the instant he catches a head coming up at the glass. */
@@ -90,6 +94,39 @@ const AWARE = {
   crouchNoise: 0.12,
   /** Metres that noise carries. */
   hearing: 6,
+};
+
+/**
+ * ---- THE STORAGE ROOM IS NOT SAFE.  Tune here.
+ *
+ * STRESS, 0..1, climbs the whole time you are in there -- faster the longer
+ * it has been, faster with him close, faster the surer he is.  It is what
+ * your breathing is: calm is silent, past `loud` he can hear it through the
+ * door.  Skill checks (see game/calmCheck) are how you bring it down.
+ */
+const NERVE = {
+  /** Stress per second, before anything else. */
+  base: 0.016,
+  /** ...plus this much per second for every second already hidden. */
+  perSecondHidden: 0.0005,
+  /** ...plus this, scaled by how close he is (1 = at the door). */
+  near: 0.03,
+  /** Above this your breathing carries. */
+  loud: 0.62,
+  /** Suspicion per second from loud breathing, at the door, at full stress. */
+  breathNoise: 0.1,
+  /** Seconds between checks, calm and early -> late and with him close. */
+  checkEvery: [9, 3.2] as [number, number],
+  /** What each result does to stress. */
+  perfect: -0.35,
+  success: -0.12,
+  failStress: 0.08,
+  /** Suspicion a failed check adds at the door (grows with repeated failures). */
+  failNoise: 0.16,
+  /** Doorway stare: idle this long and the eyes are drawn up to his face. */
+  tiltIdle: 1.1,
+  /** How fast they are drawn, radians per second. */
+  tiltRate: 0.32,
 };
 
 type Mode = 'hide' | 'exposed';
@@ -313,6 +350,8 @@ export class HotelLobby3D extends Phaser.Scene {
   private pitch = 0;
   private eye = EYE_UP;
   private crouched = false;
+  /** What the touch button last said, so it is relabelled only on a change. */
+  private crouchLabel = '';
   private camPos = new THREE.Vector3();
   private keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
   private dragging = false;
@@ -349,6 +388,18 @@ export class HotelLobby3D extends Phaser.Scene {
   /** How long his eyes have been on you, standing at the glass. */
   /** His suspicion, 0..1: see AWARE. */
   private sus = 0;
+  /** See NERVE. */
+  private stress = 0;
+  private hideT = 0;
+  private check: CalmCheck | null = null;
+  private checkIn = 6;
+  private breathT = 0;
+  private recentFails = 0;
+  /** He has had a look at you: what he hears from the room, he goes straight to. */
+  private sawYou = false;
+  /** Last time the player moved the view, for the doorway stare. */
+  private lookedAt = 0;
+  private flash: { text: string; colour: string; until: number } | null = null;
   /** Whether he could see any of you last frame (a new sighting is a jolt). */
   private susSeen = false;
   /** 0 calm, 1 uneasy, 2 coming to check: the cues fire as it climbs. */
@@ -389,7 +440,17 @@ export class HotelLobby3D extends Phaser.Scene {
     this.frontPanes = [];
     this.stairFly = null;
     this.crouched = false;
+    this.crouchLabel = '';
     this.sus = 0;
+    this.stress = 0;
+    this.hideT = 0;
+    this.check = null;
+    this.checkIn = 6;
+    this.breathT = 1;
+    this.recentFails = 0;
+    this.sawYou = false;
+    this.lookedAt = 0;
+    this.flash = null;
     this.susSeen = false;
     this.susStage = 0;
     this.alertLook = 0;
@@ -436,6 +497,8 @@ export class HotelLobby3D extends Phaser.Scene {
       kb.on('keydown-C', () => this.toggleCrouch());
       kb.on('keydown-CTRL', () => this.toggleCrouch());
       kb.on('keydown-E', () => this.press());
+      kb.on('keydown-SPACE', () => this.calmKey(true));
+      kb.on('keyup-SPACE', () => this.calmKey(false));
     }
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (p.event instanceof MouseEvent && document.pointerLockElement) this.turn(lockedDelta(p.event).dx * 0.0027, lockedDelta(p.event).dy * 0.0027);
@@ -447,6 +510,8 @@ export class HotelLobby3D extends Phaser.Scene {
       if (e.button === 0 && !isPaused()) this.dragging = true;
     };
     this.onLookMove = (e: MouseEvent) => {
+      // any movement of the mouse breaks the doorway stare (see doorwayStare)
+      if (e.movementX || e.movementY) this.lookedAt = this.clock;
       if (!this.dragging || document.pointerLockElement || isPaused()) return;
       const k = (e as MouseEvent & { lookSens?: number }).lookSens ?? 0.0042;
       this.turn((e.movementX || 0) * k, (e.movementY || 0) * k);
@@ -474,9 +539,12 @@ export class HotelLobby3D extends Phaser.Scene {
     st.camera.far = 60;
     st.camera.fov = 70;
     st.camera.updateProjectionMatrix();
-    S.background = new THREE.Color(0x040508);
-    S.fog = new THREE.FogExp2(0x05060a, 0.045);
-    S.add(new THREE.HemisphereLight(0x3a3a52, 0x0c0a08, 0.5));
+    // The lobby as it is in 2D: cream and gold under its chandeliers, the
+    // lights left on all night.  Warm, and lit enough to read every piece of
+    // it from the storage room -- the dark is in the corners and behind him.
+    S.background = new THREE.Color(0x0a0806);
+    S.fog = new THREE.FogExp2(0x0c0a08, 0.028);
+    S.add(new THREE.HemisphereLight(0x8a7a62, 0x1a140c, 0.85));
     S.add(st.camera);
 
     this.buildLobby(S);
@@ -671,7 +739,7 @@ export class HotelLobby3D extends Phaser.Scene {
     this.stairDoor.add(leaf);
     this.stairDoor.position.set(STAIR_X - 0.54, 0, 0.04);
     S.add(this.stairDoor);
-    const exit = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.22), new THREE.MeshBasicMaterial({ map: tex(texSign('STAIRS', '#0e7a3e', '#e8ffe8', 256, 96)) }));
+    const exit = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.22), new THREE.MeshBasicMaterial({ map: tex(texSign('EXIT', '#0e7a3e', '#e8ffe8', 256, 96)) }));
     exit.position.set(STAIR_X, 2.62, 0.03);
     S.add(exit);
     const green = new THREE.PointLight(0x40ff90, 1.6, 4, 1.6);
@@ -903,6 +971,80 @@ export class HotelLobby3D extends Phaser.Scene {
     const deskGlow = new THREE.PointLight(0xa0ffb0, 0.8, 3, 1.6);
     deskGlow.position.set(DESK_X - 1.2, 1.35, 1.7);
     S.add(deskGlow);
+
+    this.buildAtrium(S, brass, cream);
+  }
+
+  /**
+   * ---- THE ATRIUM, as the 2D lobby draws it: either side of the middle
+   * bay, two floors of galleries along the back wall -- a cream slab, a gold
+   * rail on cream balusters, room doors behind -- and the middle bay open to
+   * the ceiling, with the great chandelier in it and a smaller one over each
+   * side.
+   */
+  private buildAtrium(S: THREE.Scene, brass: THREE.Material, cream: THREE.Material): void {
+    const doorT = tex(texRoomDoor(''));
+    const doorM = new THREE.MeshLambertMaterial({ map: doorT });
+    const bays: Array<[number, number]> = [
+      [X0, lx(104) - 0.32],
+      [lx(216) + 0.32, X1],
+    ];
+    for (const [a, b] of bays) {
+      const len = b - a;
+      const mid = (a + b) / 2;
+      for (const gy of GALLERY_Y) {
+        const slab = new THREE.Mesh(new THREE.BoxGeometry(len, 0.2, 1.0), cream);
+        slab.position.set(mid, gy - 0.1, 0.5);
+        S.add(slab);
+        const fascia = new THREE.Mesh(new THREE.BoxGeometry(len, 0.06, 0.04), brass);
+        fascia.position.set(mid, gy - 0.12, 1.02);
+        S.add(fascia);
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.06, 0.08), brass);
+        rail.position.set(mid, gy + 0.95, 0.96);
+        S.add(rail);
+        for (let x = a + 0.12; x < b; x += 0.24) {
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.9, 6), cream);
+          post.position.set(x, gy + 0.47, 0.96);
+          S.add(post);
+        }
+        for (let x = a + 1.1; x < b - 0.6; x += 2.3) {
+          const door = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 2.1), doorM);
+          door.position.set(x, gy + 1.05, 0.015);
+          S.add(door);
+        }
+      }
+    }
+    // the chandeliers
+    const crystal = new THREE.MeshLambertMaterial({ color: 0xfff4d8, emissive: 0xa08850 });
+    const chandelier = (x: number, y: number, z: number, r: number, power: number): void => {
+      const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, CEIL - y, 4), brass);
+      chain.position.set(x, (CEIL + y) / 2, z);
+      S.add(chain);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.035, 6, 24), brass);
+      ring.rotation.x = Math.PI / 2;
+      ring.position.set(x, y, z);
+      S.add(ring);
+      const ring2 = new THREE.Mesh(new THREE.TorusGeometry(r * 0.6, 0.03, 6, 20), brass);
+      ring2.rotation.x = Math.PI / 2;
+      ring2.position.set(x, y + 0.28, z);
+      S.add(ring2);
+      const n = Math.round(r * 18);
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2;
+        const drop = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), crystal);
+        drop.position.set(x + Math.cos(a) * r, y - 0.12 - (k % 2) * 0.08, z + Math.sin(a) * r);
+        S.add(drop);
+      }
+      const bowl = new THREE.Mesh(new THREE.SphereGeometry(r * 0.35, 12, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), brass);
+      bowl.position.set(x, y + 0.02, z);
+      S.add(bowl);
+      const light = new THREE.PointLight(0xffd9a0, power, 9 + r * 4, 1.3);
+      light.position.set(x, y - 0.3, z);
+      S.add(light);
+    };
+    chandelier(DESK_X, 4.4, 2.0, 0.85, 5.5);
+    chandelier(lx(36), 2.55, 2.4, 0.5, 2.8);
+    chandelier(lx(360), 2.55, 2.4, 0.5, 2.8);
   }
 
   private buildStorage(S: THREE.Scene): void {
@@ -1089,6 +1231,7 @@ export class HotelLobby3D extends Phaser.Scene {
 
   private turn(dx: number, dy: number): void {
     if (this.phase === 'caught') return;
+    if (dx || dy) this.lookedAt = this.clock;
     this.yaw -= dx * lookScale();
     this.pitch = Phaser.Math.Clamp(this.pitch - dy * lookScale(), -1.0, 0.9);
     if (this.mode === 'hide') this.yaw = Phaser.Math.Clamp(this.yaw, Math.PI / 2 - 2.3, Math.PI / 2 + 2.3);
@@ -1137,7 +1280,14 @@ export class HotelLobby3D extends Phaser.Scene {
   private syncPad(): void {
     if (!isTouch()) return;
     touchControls.showButton('C', this.mode === 'hide' && this.phase !== 'gone');
+    // The button says what it will DO: CROUCH while standing, STAND once down.
+    const crouchLabel = this.crouched ? 'STAND' : 'CROUCH';
+    if (crouchLabel !== this.crouchLabel) {
+      this.crouchLabel = crouchLabel;
+      touchControls.relabel('C', crouchLabel);
+    }
     touchControls.showButton('E', this.phase === 'gone');
+    touchControls.showButton('SPACE', !!this.check);
   }
 
   /** Standing up where he could see you. */
@@ -1196,10 +1346,12 @@ export class HotelLobby3D extends Phaser.Scene {
     const mult = near ? AWARE.janitorRoomAwarenessMultiplier : 1;
     const vis = this.visibleOfYou();
     if (vis > 0) {
-      const dist = this.fpos.distanceTo(new THREE.Vector3(this.camPos.x, 0, this.camPos.z));
-      const closeK = Phaser.Math.Clamp(1.6 - dist / 12, 0.5, 1.5);
+      // In his line of sight he has you almost at once, near or far: the
+      // glass is what hides you, not the length of the lobby.
       if (!this.susSeen) this.sus += AWARE.peekDetectionSensitivity * mult * vis;
-      this.sus += (dt / AWARE.timeToDetect) * vis * closeK * mult;
+      this.sus += (dt / AWARE.timeToDetect) * vis * 1.5 * mult;
+      // and he remembers the room you were seen in
+      if (this.sus >= AWARE.suspiciousThreshold) this.sawYou = true;
     } else this.sus -= AWARE.suspicionDecayRate * dt;
     this.susSeen = vis > 0;
     this.sus = Phaser.Math.Clamp(this.sus, 0, 1);
@@ -1251,6 +1403,144 @@ export class HotelLobby3D extends Phaser.Scene {
     this.watchFor = 6 + Math.random() * 3;
   }
 
+  // ============================================================ the nerve
+
+  /** 0..1: how close he is to the storage room (1 = at the door). */
+  private nearK(): number {
+    const m = this.monster;
+    if (!m?.root.visible) return 0;
+    const d = this.fpos.distanceTo(new THREE.Vector3(X1, 0, DOOR_Z));
+    return Phaser.Math.Clamp(1 - (d - 1) / 11, 0, 1);
+  }
+
+  /**
+   * Stress, breathing, and the checks that keep them down -- every frame he
+   * is in the lobby and you are in the cupboard.
+   */
+  private nerve(dt: number): void {
+    this.hideT += dt;
+    const near = this.nearK();
+    this.stress += dt * (NERVE.base + this.hideT * NERVE.perSecondHidden + near * NERVE.near + this.sus * 0.03);
+    this.recentFails = Math.max(0, this.recentFails - dt / 12);
+
+    // your breathing: quiet, then audible, then ragged
+    this.breathT -= dt;
+    if (this.breathT <= 0) {
+      this.breathT = Math.max(0.7, 2.8 - this.stress * 1.9);
+      audio.sfx('breath', 0.1 + this.stress * 0.9);
+    }
+    // ...and past `loud`, he can hear it.  Having seen you, he comes at once.
+    if (this.stress > NERVE.loud && near > 0.3) {
+      const k = (this.stress - NERVE.loud) / (1 - NERVE.loud);
+      this.noise(dt * NERVE.breathNoise * k * near * (this.sawYou ? 2 : 1));
+      if (this.sawYou && this.susStage < 2 && k > 0.5) {
+        this.susStage = 2;
+        this.investigate();
+      }
+    }
+    // stress all the way up: you gasp
+    if (this.stress >= 1) {
+      this.stress = 0.7;
+      this.panic();
+    }
+
+    // the checks: more often, and harder, the longer it goes and the nearer he is
+    if (!this.check) {
+      this.checkIn -= dt * (1 + near * 0.9);
+      if (this.checkIn <= 0) {
+        const hard = Phaser.Math.Clamp(this.hideT / 90 + near * 0.3, 0, 1);
+        this.check = newCheck(hard, near > 0.6);
+        this.checkIn = Phaser.Math.Linear(NERVE.checkEvery[0], NERVE.checkEvery[1], hard) + Math.random() * 2;
+      }
+    } else {
+      const r = stepCheck(this.check, dt);
+      if (r) this.checkDone(r);
+    }
+    this.stress = Phaser.Math.Clamp(this.stress, 0, 1);
+  }
+
+  private calmKey(down: boolean): void {
+    if (!this.check || this.phase === 'caught' || this.phase === 'lunge') return;
+    const r = down ? pressCheck(this.check) : releaseCheck(this.check);
+    if (r) this.checkDone(r);
+  }
+
+  private checkDone(r: CheckResult): void {
+    this.check = null;
+    // a failure with your nerve already gone is a panic
+    if (r === 'fail' && this.stress > 0.85) r = 'critical';
+    const show = (text: string, colour: string) => (this.flash = { text, colour, until: this.clock + 1.1 });
+    if (r === 'perfect') {
+      this.stress += NERVE.perfect;
+      this.breathT = Math.max(this.breathT, 2.5);
+      show('CALM', '#7fd88a');
+    } else if (r === 'success') {
+      this.stress += NERVE.success;
+      show('STEADY', '#f0d060');
+    } else if (r === 'fail') {
+      this.stress += NERVE.failStress;
+      this.recentFails += 1;
+      audio.sfx('breath', 0.9);
+      this.noise(NERVE.failNoise * (1 + this.recentFails * 0.6) * Math.max(0.25, this.nearK()));
+      if (this.sawYou && this.susStage < 2) {
+        this.susStage = 2;
+        this.investigate();
+      }
+      show('TOO LOUD', '#ff7060');
+    } else {
+      this.panic();
+      show('YOU GASP', '#ff4030');
+    }
+    this.stress = Phaser.Math.Clamp(this.stress, 0, 1);
+  }
+
+  /** Panic: a ragged gasp he cannot miss, and he comes straight to the door. */
+  private panic(): void {
+    audio.sfx('breath', 1);
+    this.time.delayedCall(260, () => audio.sfx('breath', 1));
+    this.noise(0.25);
+    if (this.susStage < 2) {
+      this.susStage = 2;
+      this.investigate();
+    }
+  }
+
+  /** A sound from the storage room, heard by him as far as it carries. */
+  private noise(amount: number): void {
+    const m = this.monster;
+    if (!m?.root.visible || this.mode !== 'hide') return;
+    const d = this.fpos.distanceTo(new THREE.Vector3(X1, 0, DOOR_Z));
+    const reach = AWARE.hearing * 1.6;
+    if (d > reach) return;
+    const mult = this.nearStore() ? AWARE.janitorRoomAwarenessMultiplier : 1;
+    this.sus = Math.min(0.99, this.sus + amount * (1 - d / reach) * mult);
+    this.reactToSuspicion();
+  }
+
+  /**
+   * HE IS AT THE DOOR, LOOKING IN.  Leave the view alone and your eyes are
+   * drawn up, slowly, to his face; touch the mouse (or the screen) and they
+   * are yours again at once.  Nothing is taken from you.
+   */
+  private doorwayStare(dt: number): void {
+    if (this.mode !== 'hide' || this.phase !== 'watch' || !this.monster?.root.visible) return;
+    if (this.clock - this.lookedAt < NERVE.tiltIdle) return;
+    const head = new THREE.Vector3(this.fpos.x, 2.3 * FROG_SCALE * 0.9, this.fpos.z);
+    const dx = head.x - this.camPos.x;
+    const dz = head.z - this.camPos.z;
+    const dy = head.y - this.camPos.y;
+    const wantYaw = Math.atan2(-dx, -dz);
+    const wantPitch = Math.atan2(dy, Math.hypot(dx, dz));
+    let dyaw = wantYaw - this.yaw;
+    while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+    while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+    const step = NERVE.tiltRate * dt;
+    this.yaw = Phaser.Math.Clamp(this.yaw + Phaser.Math.Clamp(dyaw, -step, step), Math.PI / 2 - 2.3, Math.PI / 2 + 2.3);
+    this.pitch += Phaser.Math.Clamp(wantPitch - this.pitch, -step, step);
+    // and it does nothing for your nerve
+    this.stress = Math.min(1, this.stress + dt * 0.02);
+  }
+
   /** Getting up or down in there makes a sound, and at the door he hears it. */
   private crouchNoise(): void {
     const m = this.monster;
@@ -1289,12 +1579,14 @@ export class HotelLobby3D extends Phaser.Scene {
     if (this.mode === 'hide') {
       if (hunting && this.spotted(dt)) return this.detect();
       if (!hunting) this.sus = Math.max(0, this.sus - AWARE.suspicionDecayRate * dt);
+      if (hunting) this.nerve(dt);
       // your heart, louder and faster the surer he is
-      if (this.phase !== 'watch' && this.sus > 0.15) {
+      const fear = Math.max(this.sus, this.stress * 0.85);
+      if (this.phase !== 'watch' && fear > 0.15) {
         this.heartT -= dt;
         if (this.heartT <= 0) {
-          this.heartT = 0.9 - this.sus * 0.45;
-          audio.heartbeat(0.3 + this.sus * 0.4);
+          this.heartT = 0.9 - fear * 0.45;
+          audio.heartbeat(0.3 + fear * 0.4);
         }
       }
     }
@@ -1331,8 +1623,9 @@ export class HotelLobby3D extends Phaser.Scene {
       // the heart, going hard, and nothing else
       this.heartT -= dt;
       if (this.heartT <= 0) {
-        this.heartT = 0.62 - this.sus * 0.2;
-        audio.heartbeat(0.55 + this.sus * 0.3);
+        const fear = Math.max(this.sus, this.stress);
+        this.heartT = 0.62 - fear * 0.22;
+        audio.heartbeat(0.55 + fear * 0.35);
       }
       // (and he does not go while he is still unsure)
       if (this.phaseT > this.watchFor && this.sus < AWARE.investigateThreshold) {
@@ -1763,6 +2056,7 @@ export class HotelLobby3D extends Phaser.Scene {
     this.camPos.y = this.eye + sway;
     const shake = this.phase === 'burst' && this.phaseT < 0.4 ? (0.4 - this.phaseT) * 0.03 : 0;
     cam.position.set(this.camPos.x + (Math.random() - 0.5) * shake, this.camPos.y, this.camPos.z + (Math.random() - 0.5) * shake);
+    this.doorwayStare(dt);
     cam.rotation.order = 'YXZ';
     cam.rotation.set(this.pitch, this.yaw, 0);
     // (dev only: a free camera, to look at things from where the player cannot)
@@ -1810,6 +2104,8 @@ export class HotelLobby3D extends Phaser.Scene {
         ctx.fillStyle = v;
         ctx.fillRect(0, 0, GAME_W, GAME_H);
         drawPixelText(ctx, this.crouched ? 'CROUCHING' : 'STANDING', 6, 6, { scale: 1, color: this.crouched ? '#8ab890' : '#d07060', alpha: 0.85 });
+        if (!isTouch()) drawPixelText(ctx, this.crouched ? 'C: STAND' : 'C: CROUCH', 6, 14, { scale: 1, color: '#c8c0b0', alpha: 0.7 });
+        this.paintNerve(ctx);
       }
       const line = this.lines[0];
       if (line) {
@@ -1839,6 +2135,66 @@ export class HotelLobby3D extends Phaser.Scene {
     });
   }
 
+  /** The stress meter, the check in progress, and how the last one went. */
+  private paintNerve(ctx: CanvasRenderingContext2D): void {
+    if (this.hideT <= 0) return;
+    // the edges close in as it climbs, in time with the breathing
+    if (this.stress > 0.3) {
+      const pulse = 0.5 + 0.5 * Math.sin(this.clock * (2 + this.stress * 5));
+      const a = (this.stress - 0.3) * 0.5 * (0.7 + 0.3 * pulse);
+      const v = ctx.createRadialGradient(GAME_W / 2, GAME_H / 2, GAME_H * 0.25, GAME_W / 2, GAME_H / 2, GAME_W * 0.55);
+      v.addColorStop(0, 'rgba(0,0,0,0)');
+      v.addColorStop(1, `rgba(40,0,0,${a.toFixed(3)})`);
+      ctx.fillStyle = v;
+      ctx.fillRect(0, 0, GAME_W, GAME_H);
+    }
+    const x = 6;
+    const y = isTouch() ? 16 : 24;
+    drawPixelText(ctx, 'STRESS', x, y, { scale: 1, color: '#c8c0b0', alpha: 0.8 });
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(x, y + 9, 52, 5);
+    const sc = this.stress < 0.5 ? '#7fd88a' : this.stress < NERVE.loud ? '#f0d060' : '#ff6050';
+    ctx.fillStyle = sc;
+    ctx.fillRect(x + 1, y + 10, Math.round(50 * this.stress), 3);
+
+    const c = this.check;
+    if (c) {
+      const w = 150;
+      const bx = Math.round(GAME_W / 2 - w / 2);
+      const by = 128;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(bx - 6, by - 22, w + 12, 40);
+      drawPixelText(ctx, CHECK_TITLE[c.kind], GAME_W / 2, by - 18, { scale: 1, color: '#f0d890', center: true });
+      const zone = (z: [number, number], col: string) => {
+        ctx.fillStyle = col;
+        ctx.fillRect(bx + Math.round(z[0] * w), by - 6, Math.max(1, Math.round((z[1] - z[0]) * w)), 8);
+      };
+      zone([0, 1], '#7a2420');
+      if (c.kind === 'react') {
+        zone([0, 1], c.pos >= 1 ? '#3aa04a' : '#7a2420');
+      } else {
+        zone(c.yellow, '#b89a30');
+        zone(c.green, '#3aa04a');
+        const mx = bx + Math.round(c.pos * w);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(mx - 1, by - 8, 2, 12);
+      }
+      const act = isTouch() ? 'CALM' : 'SPACE';
+      drawPixelText(ctx, checkHow(c.kind, act), GAME_W / 2, by + 6, { scale: 1, color: '#c8c0b0', center: true });
+      // the time it has left, as a thin line under it all
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillRect(bx, by + 15, Math.round(w * Math.max(0, 1 - c.t / c.dur)), 1);
+    }
+    const f = this.flash;
+    if (f && f.until > this.clock) {
+      // (over the gauge's box, not on its title)
+      const fy = 92;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(GAME_W / 2 - (f.text.length * 6) / 2 - 3, fy - 2, f.text.length * 6 + 5, 11);
+      drawPixelText(ctx, f.text, GAME_W / 2, fy, { scale: 1, color: f.colour, center: true });
+    }
+  }
+
   // ==================================================================== misc
 
   private publish(outcome?: string): void {
@@ -1855,6 +2211,9 @@ export class HotelLobby3D extends Phaser.Scene {
       fz: this.fpos.z,
       watchFor: this.watchFor,
       sus: this.sus,
+      stress: this.stress,
+      check: this.check ? { kind: this.check.kind, pos: this.check.pos, green: this.check.green } : null,
+      sawYou: this.sawYou,
       outcome: outcome ?? t.outcome,
     });
     w.__lobby = t;
@@ -1873,6 +2232,14 @@ export class HotelLobby3D extends Phaser.Scene {
       look: (yaw: number, pitch: number) => {
         this.yaw = yaw;
         this.pitch = pitch;
+        this.lookedAt = this.clock;
+      },
+      calm: (down: boolean) => this.calmKey(down),
+      setStress: (v: number) => {
+        this.stress = v;
+      },
+      forceCheck: () => {
+        this.checkIn = 0;
       },
       skip: (phase: Phase) => {
         this.phaseT = 99;

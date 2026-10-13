@@ -11,8 +11,11 @@
  * at postage-stamp size with two thirds of the glass unused.  Touch devices
  * therefore get a continuous fit of the space actually left over after the
  * on-screen controls have taken theirs, and `image-rendering: pixelated` keeps
- * the blocks crisp.  Held sideways, a phone is filled outright: the picture
- * is stretched to the whole screen rather than banded at 16:9.  At the two-and-three-times device pixel ratios phones
+ * the blocks crisp.  Held sideways, a phone is filled edge to edge WITHOUT
+ * stretching: the picture is fitted to the screen's height at its true 16:9
+ * shape, and the bands either side of it are filled by an ambient glow of the
+ * picture itself (see `ambient`), so the screen is all game and nothing is
+ * squashed.  At the two-and-three-times device pixel ratios phones
  * ship with, the unevenness a fractional factor introduces lands inside a
  * single physical pixel and cannot be seen.  Desktop is untouched.
  */
@@ -60,6 +63,59 @@ export function computeTouchZoom(viewW: number, viewH: number, reserve: number, 
 
 let attached: Phaser.Game | null = null;
 
+/**
+ * THE AMBIENT FILL.  Where the 16:9 picture does not reach the edges of a
+ * wider screen, the bands are painted with the picture's own colours: every
+ * few frames it is copied down to a 32x18 thumbnail, and that thumbnail is
+ * blown up across the whole screen, blurred and dimmed, behind the game.  The
+ * room's light spills out to the edges of the glass, the way an ambient TV
+ * does, instead of the picture being stretched to get there.
+ */
+const ambient = {
+  canvas: null as HTMLCanvasElement | null,
+  ctx: null as CanvasRenderingContext2D | null,
+  on: false,
+  frame: 0,
+  ensure(): void {
+    if (this.canvas) return;
+    const c = document.createElement('canvas');
+    c.width = 32;
+    c.height = 18;
+    c.id = 'ambient';
+    Object.assign(c.style, {
+      position: 'fixed',
+      inset: '0',
+      width: '100%',
+      height: '100%',
+      filter: 'blur(14px) brightness(0.5) saturate(1.2)',
+      transform: 'scale(1.15)',
+      pointerEvents: 'none',
+      zIndex: '0',
+      display: 'none',
+    } as Partial<CSSStyleDeclaration>);
+    document.body.prepend(c);
+    this.canvas = c;
+    this.ctx = c.getContext('2d');
+  },
+  set(on: boolean): void {
+    if (on) this.ensure();
+    this.on = on;
+    if (this.canvas) this.canvas.style.display = on ? 'block' : 'none';
+    // (the root's own black would cover it)
+    const root = document.getElementById('game-root');
+    if (root) root.style.background = on ? 'transparent' : '';
+  },
+  copy(src: HTMLCanvasElement): void {
+    if (!this.on || !this.ctx) return;
+    if (this.frame++ % 4 !== 0) return;
+    try {
+      this.ctx.drawImage(src, 0, 0, 32, 18);
+    } catch {
+      // (a lost context: the last glow stays up)
+    }
+  },
+};
+
 export function attachScaler(game: Phaser.Game): void {
   attached = game;
   const root = document.getElementById('game-root');
@@ -73,21 +129,18 @@ export function attachScaler(game: Phaser.Game): void {
     const safe = touch ? safeInsets() : { top: 0, right: 0, bottom: 0, left: 0 };
     const portrait = touch && window.innerHeight >= window.innerWidth;
     const topPad = portrait ? Math.max(TOUCH_TOP_PAD, safe.top) : safe.top;
-    // A phone held sideways is FILLED, edge to edge: the picture is fitted to
-    // the screen's height and then stretched across the rest of its width,
-    // however much wider than 16:9 the phone is.  No bands either side.  (The
-    // stretch is a CSS transform on the canvas, which Phaser leaves alone;
-    // its pointer mapping reads the transformed box, so taps still land
-    // where they are drawn.)
+    // A phone held sideways is filled TOP TO BOTTOM at the picture's own
+    // shape -- it used to be stretched across the rest of the width too,
+    // which made every circle an egg and every person fat.  What is left
+    // either side is the ambient glow, not black bars.
     const fill = touch && !portrait;
     const zoom = fill
       ? computeTouchZoom(window.innerWidth, window.innerHeight, 0, 0, 0)
       : touch
         ? computeTouchZoom(window.innerWidth, window.innerHeight - topPad - safe.bottom, 0, safe.left + safe.right, 0)
         : computeZoom(window.innerWidth, window.innerHeight);
-    attached.canvas.style.transform = fill
-      ? `scale(${window.innerWidth / (GAME_W * zoom)}, ${window.innerHeight / (GAME_H * zoom)})`
-      : '';
+    attached.canvas.style.transform = '';
+    ambient.set(fill && window.innerWidth - GAME_W * zoom > 8);
     if (fill && root) {
       root.style.padding = '';
     } else if (root) {
@@ -109,6 +162,7 @@ export function attachScaler(game: Phaser.Game): void {
   };
 
   apply();
+  game.events.on(Phaser.Core.Events.POST_RENDER, () => ambient.copy(game.canvas));
   window.addEventListener('resize', apply);
   window.addEventListener('orientationchange', () => window.setTimeout(apply, 120));
   // Some browsers settle layout a frame late.

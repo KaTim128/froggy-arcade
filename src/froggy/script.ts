@@ -79,3 +79,18 @@ export const secondBustScript: DialogueLine[] = [
     auto: true,
   },
 ];
+
+/** The same goodbye, when it is the clock that ran out and not the tokens. */
+export const closingScript: DialogueLine[] = [
+  {
+    text: "That's closing time. The arcade is shut for the day.",
+    holdAfter: 3000,
+    auto: true,
+  },
+  {
+    text: 'See you next time!',
+    holdBefore: 400,
+    holdAfter: 1400,
+    auto: true,
+  },
+];

@@ -29,8 +29,8 @@ const FELT_DARK = 0x123b1e;
 
 /**
  * The felt itself, front edge at `y`: its shadow, the apron, the padded rail,
- * the green and the dealer's arc painted on it.  The game corner's Froggopoly
- * table is the same piece of furniture, so it is built here once and handed
+ * the green and the dealer's arc painted on it.
+ * Built here once and handed
  * back for the caller to place.
  */
 export function paintFelt(scene: Phaser.Scene, x: number, y: number): Array<Phaser.GameObjects.Shape> {

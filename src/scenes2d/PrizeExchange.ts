@@ -12,6 +12,7 @@
  * in its own column of the save.
  */
 
+import { record } from '../game/life';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -171,6 +172,8 @@ export class PrizeExchange extends Phaser.Scene {
     if (!s.prizesOwned.includes(p.id) || s.prizesSold.includes(p.id) || p.id === CAMERA_ITEM.id) return;
 
     store.earnCash(cashFor(p));
+    record('sell_prize');
+    record('earn_cash', cashFor(p));
     store.patch({ prizesSold: [...s.prizesSold, p.id] });
     store.flush();
     audio.sfx('coin_spin');
@@ -242,6 +245,8 @@ export class PrizeExchange extends Phaser.Scene {
     }
     if (d.id === CAMERA_ITEM.id || d.value <= 0 || !removeItem(d.id)) return;
     store.earnCash(d.value);
+    record('sell_prize');
+    record('earn_cash', d.value);
     store.flush();
     audio.sfx('coin_spin');
     this.picked = null;

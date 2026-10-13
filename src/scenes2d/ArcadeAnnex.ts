@@ -10,7 +10,9 @@
  * Everything that only happens once happens in there, not in here.
  */
 
+import { closingTime } from '../core/broke';
 import Phaser from 'phaser';
+import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../game/roomWalk';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store, type GameId } from '../core/state';
@@ -27,7 +29,6 @@ import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 
-const INTERACT_RANGE = 24;
 /** The way back, on this room's right wall. */
 const BACK_DOOR = { x: GAME_W - 20, y: 118 };
 
@@ -38,6 +39,10 @@ export class ArcadeAnnex extends Phaser.Scene {
   private bounds!: Phaser.Geom.Rectangle;
   private keys!: Record<string, Phaser.Input.Keyboard.Key[]>;
   private cabinets: Cabinet[] = [];
+  /** Where each machine is played from, and what of the floor is solid. */
+  private spots = new Map<object, Spot>();
+  private solids: Box[] = [];
+  private walker!: Walker;
   private prompt!: Phaser.GameObjects.BitmapText;
   private promptPlate!: Phaser.GameObjects.Rectangle;
   private target: Target = null;
@@ -81,14 +86,14 @@ export class ArcadeAnnex extends Phaser.Scene {
     this.paintCasinoDoor();
 
     this.cabinets = cabinetsIn('annex').map((def) => new Cabinet(this, def));
+    this.spots = new Map(this.cabinets.map((c) => [c, machineSpot(c.def.x, c.def.y, CAB_W)]));
+    this.solids = [...this.spots.values()].map((s) => s.solid!);
+    this.walker = new Walker(() => this.bounds, () => this.solids);
     for (const cab of this.cabinets) {
       this.add
         .zone(cab.def.x, cab.def.y - CAB_H / 2, CAB_W + 4, CAB_H + 2)
         .setInteractive({ useHandCursor: true })
-        .on('pointerdown', () => {
-          if (this.busy()) return;
-          this.launchGame(cab, 'card');
-        });
+        .on('pointerdown', () => this.walkTo(this.spots.get(cab)!, () => this.launchGame(cab, 'card')));
     }
 
     this.bounds = new Phaser.Geom.Rectangle(
@@ -121,6 +126,13 @@ export class ArcadeAnnex extends Phaser.Scene {
     // machines each own a hitbox and answer a click on themselves; [E] is the
     // other way in, and the only thing proximity does.
 
+    // closing time: back to the front room, where he is waiting to say so
+    this.time.addEvent({ delay: 2000, loop: true, callback: () => {
+      if (!this.locked && !this.busy() && closingTime() && !store.get().froggyGone && store.get().route === 'normal') {
+        this.locked = true;
+        fadeToScene(this, 'ArcadeHub', {});
+      }
+    } });
     store.flush();
   }
 
@@ -131,9 +143,12 @@ export class ArcadeAnnex extends Phaser.Scene {
     this.add
       .zone(BACK_DOOR.x, BACK_DOOR.y, 26, 50)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        if (!this.busy()) this.toHub();
-      });
+      .on('pointerdown', () =>
+        this.walkTo(
+          doorSpot({ x: this.bounds.right, y: BACK_DOOR.y }, (px, py) => px > BACK_DOOR.x - 22 && Math.abs(py - BACK_DOOR.y) < 28),
+          () => this.toHub(),
+        ),
+      );
   }
 
   /** On through the left wall, to the machines that take money. */
@@ -146,9 +161,12 @@ export class ArcadeAnnex extends Phaser.Scene {
     this.add
       .zone(CASINO_DOOR.x, CASINO_DOOR.y, 26, 50)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        if (!this.busy()) this.toCasino();
-      });
+      .on('pointerdown', () =>
+        this.walkTo(
+          doorSpot({ x: this.bounds.x, y: CASINO_DOOR.y }, (px, py) => px < CASINO_DOOR.x + 20 && Math.abs(py - CASINO_DOOR.y) < 28),
+          () => this.toCasino(),
+        ),
+      );
   }
 
   private toCasino(): void {
@@ -185,6 +203,14 @@ export class ArcadeAnnex extends Phaser.Scene {
 
   private busy(): boolean {
     return this.locked || this.scene.isActive('SettingsModal');
+  }
+
+  /** A click or tap walks you to it; it is used when you get there. */
+  private walkTo(spot: Spot, then: () => void): void {
+    if (this.busy()) return;
+    this.walker.to(this.player, spot, () => {
+      if (!this.busy()) then();
+    });
   }
 
   private interact(): void {
@@ -245,7 +271,11 @@ export class ArcadeAnnex extends Phaser.Scene {
 
     const dx = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     const dy = (this.held('down') ? 1 : 0) - (this.held('up') ? 1 : 0);
-    this.player.move(dx, dy, delta, this.bounds);
+    const before = { x: this.player.x, y: this.player.y };
+    if (dx || dy) this.walker.cancel();
+    if (this.walker.active) this.walker.drive(this.player, delta);
+    else this.player.move(dx, dy, delta, this.bounds);
+    collide(this.player, before, this.solids);
 
     const bal = ledger.balance();
     for (const c of this.cabinets) c.setAffordable(bal >= c.def.cost);
@@ -259,8 +289,10 @@ export class ArcadeAnnex extends Phaser.Scene {
     const py = this.player.y;
 
     let best: Cabinet | null = null;
-    let bestD = INTERACT_RANGE;
+    let bestD = Infinity;
     for (const c of this.cabinets) {
+      // only from in front of it, not from beside or behind
+      if (!this.spots.get(c)?.at(px, py)) continue;
       const d = c.distanceTo(px, py);
       if (d < bestD) {
         bestD = d;

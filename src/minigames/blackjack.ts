@@ -471,7 +471,7 @@ export const blackjack: MinigameModule = {
           bounce: (clock * 0.5) % 1,
         });
       }
-    });
+    }, false, true);
   },
 
   destroy() {
