@@ -31,6 +31,7 @@
  */
 
 import Phaser from 'phaser';
+import { makeFloodTextures } from './floodArt';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { centerText, text } from '../core/ui';
@@ -107,7 +108,7 @@ interface Plat {
   /** Crumble only. */
   state: 'solid' | 'going' | 'gone';
   timer: number;
-  art: Phaser.GameObjects.Rectangle;
+  art: Phaser.GameObjects.TileSprite;
   lip: Phaser.GameObjects.Rectangle;
 }
 
@@ -952,8 +953,9 @@ function push(
   side: -1 | 1,
   radius = 0,
 ): void {
-  const colour = KIND_COLOUR[kind];
-  const art = scene.add.rectangle(x, 0, w, 6, colour).setDepth(12);
+  // (a ledge has a material now -- planks, grate, rivets, girder, cracked
+  // stone -- but keeps its kind's colour, which is what the player reads)
+  const art = scene.add.tileSprite(x, 0, w, 6, `flood_${kind}`).setDepth(12);
   const lip = scene.add.rectangle(x, 0, w, 2, PALETTE.bone).setDepth(13).setAlpha(0.55);
   plats.push({
     kind,
@@ -1026,18 +1028,52 @@ function jump(): void {
 
 // ------------------------------------------------------------------ drawing
 
+/**
+ * The shaft: brick on every side, the far wall a little darker and moving at
+ * half the speed of the near ones as you climb (see `scrollShaft`), so the
+ * climb has depth.  Pipes run up the far wall; caged lamps hang on the side
+ * walls every so often, and pass you on the way up.
+ */
+let farWall: Phaser.GameObjects.TileSprite | null = null;
+let sideWalls: Phaser.GameObjects.TileSprite[] = [];
+let pipes: Phaser.GameObjects.TileSprite[] = [];
+let lamps: Array<{ img: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Arc; h: number }> = [];
+
 function paintShaft(scene: Phaser.Scene): void {
+  makeFloodTextures(scene, KIND_COLOUR);
   scene.add.rectangle(0, 18, GAME_W, 162, 0x0d1420).setOrigin(0, 0);
-  scene.add.rectangle(0, 18, WALL, 162, 0x1a2334).setOrigin(0, 0);
-  scene.add.rectangle(GAME_W - WALL, 18, WALL, 162, 0x1a2334).setOrigin(0, 0);
-  // brickwork down both walls, and a wet sheen on the inside faces
-  for (let i = 0; i < 40; i++) {
-    const y = 20 + ((i * 29) % 158);
-    scene.add.rectangle((i % 2) * 5 + 2, y, 8, 2, 0x243049).setOrigin(0, 0);
-    scene.add.rectangle(GAME_W - 12 - (i % 2) * 5, y + 6, 8, 2, 0x243049).setOrigin(0, 0);
-  }
+  farWall = scene.add.tileSprite(SHAFT_L, 18, SHAFT_W, 162, 'flood_wall_far').setOrigin(0, 0).setAlpha(0.75);
+  pipes = [SHAFT_L + 34, SHAFT_R - 52].map((x) => scene.add.tileSprite(x, 18, 6, 162, 'flood_pipe').setOrigin(0, 0).setAlpha(0.8));
+  // the far wall darkens toward the bottom, where the water is
+  const shade = scene.add.graphics();
+  for (let i = 0; i < 8; i++) shade.fillStyle(0x050a12, 0.05 * i).fillRect(SHAFT_L, 18 + i * 20, SHAFT_W, 20);
+  sideWalls = [
+    scene.add.tileSprite(0, 18, WALL, 162, 'flood_wall_near').setOrigin(0, 0),
+    scene.add.tileSprite(GAME_W - WALL, 18, WALL, 162, 'flood_wall_near').setOrigin(0, 0),
+  ];
   scene.add.rectangle(WALL - 1, 18, 1, 162, 0x3f5a7a).setOrigin(0, 0).setAlpha(0.6);
   scene.add.rectangle(GAME_W - WALL, 18, 1, 162, 0x3f5a7a).setOrigin(0, 0).setAlpha(0.6);
+  lamps = [];
+  for (let h = 60, i = 0; h < GOAL_H; h += 110, i++) {
+    const left = i % 2 === 0;
+    const x = left ? WALL + 4 : GAME_W - WALL - 4;
+    const glow = scene.add.circle(x, 0, 16, 0xffe08a, 0.08).setDepth(1);
+    const img = scene.add.image(x, 0, 'flood_lamp').setDepth(2);
+    lamps.push({ img, glow, h });
+  }
+}
+
+function scrollShaft(): void {
+  if (farWall) farWall.tilePositionY = -camY * 0.5;
+  for (const p of pipes) p.tilePositionY = -camY * 0.5;
+  for (const w of sideWalls) w.tilePositionY = -camY;
+  for (const l of lamps) {
+    const y = sy(l.h);
+    const on = y > TOP_SY - 10 && y < FLOOR_SY + 10;
+    l.img.setVisible(on).setY(y);
+    // (a lamp under the water is out)
+    l.glow.setVisible(on && l.h > waterY).setY(y + 2).setAlpha(0.06 + Math.sin(clock / 300 + l.h) * 0.02);
+  }
 }
 
 function spawnBubble(x: number, y: number): void {
@@ -1064,6 +1100,7 @@ function tickBubbles(dt: number): void {
 }
 
 function draw(): void {
+  scrollShaft();
   for (const p of plats) {
     const top = sy(p.y);
     const inView = top > TOP_SY - 14 && top < FLOOR_SY + 14;
@@ -1080,7 +1117,8 @@ function draw(): void {
     if (gone) continue;
 
     if (p.kind === 'spin') {
-      p.art.setPosition(p.x, top).setSize(p.w, 6).setRotation(p.angle);
+      p.art.setPosition(p.x, top).setRotation(p.angle);
+      if (p.art.width !== p.w) p.art.setSize(p.w, 6);
       p.lip.setPosition(p.x, top).setSize(p.w, 2).setRotation(p.angle);
       // Solid when it will hold you, hollow when it will not: the same bar,
       // and the difference is the whole timing of the jump.
@@ -1090,18 +1128,21 @@ function draw(): void {
     } else if (p.kind === 'retract') {
       const len = Math.max(4, p.w * extension(p));
       const cx = p.side < 0 ? SHAFT_L + len / 2 : SHAFT_R - len / 2;
-      p.art.setPosition(cx, top + 3).setSize(len, 6).setRotation(0);
+      p.art.setPosition(cx, top + 3).setRotation(0);
+      if (Math.round(p.art.width) !== Math.round(len)) p.art.setSize(Math.round(len), 6);
       p.lip.setPosition(cx, top).setSize(len, 2).setRotation(0);
       const out = extension(p);
       p.art.setAlpha(out < 0.28 ? 0.4 : 1);
       p.lip.setAlpha(out < 0.28 ? 0.2 : 0.55);
     } else {
-      p.art.setPosition(p.x, top + 3).setSize(p.w, 6).setRotation(0).setAlpha(1);
+      p.art.setPosition(p.x, top + 3).setRotation(0).setAlpha(1);
+      if (p.art.width !== p.w) p.art.setSize(p.w, 6);
       p.lip.setPosition(p.x, top).setSize(p.w, 2).setRotation(0).setAlpha(0.55);
     }
     // A ledge about to go says so: it flashes for the half second it has left.
     const doomed = p.kind === 'crumble' && p.state === 'going';
-    p.art.setFillStyle(doomed && Math.floor(p.timer / 90) % 2 === 0 ? PALETTE.blood : platColour(p));
+    if (doomed && Math.floor(p.timer / 90) % 2 === 0) p.art.setTintFill(PALETTE.blood);
+    else p.art.clearTint();
   }
 
   const wTop = sy(waterY);
@@ -1145,9 +1186,6 @@ const KIND_COLOUR: Record<Kind, number> = {
   crumble: PALETTE.rust,
 };
 
-function platColour(p: Plat): number {
-  return KIND_COLOUR[p.kind];
-}
 
 function refreshHud(): void {
   if (!hud) return;
