@@ -22,6 +22,7 @@
  * shell (MG-3).  The best score is kept per profile (store.highScores).
  */
 
+import { touchControls } from '../ui/touchControls';
 import { isTouch } from '../core/device';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
@@ -120,6 +121,8 @@ export const frogCross: MinigameModule = {
       'CROSS THE ROAD FIVE TIMES.',
       'THAT IS FIFTY POINTS, AND IT PAYS 20.',
       'THREE LIVES. THE ROAD GETS WORSE.',
+      'SECURED PRIZES WILL NOT BE LOST, AND YOU CAN',
+      'BANK YOUR WINNINGS EARLY AT ANY TIME.',
     ],
     controls: [
       ['W A S D', 'HOP'],
@@ -336,6 +339,8 @@ export const frogCross: MinigameModule = {
   },
 
   update(_t: number, delta: number) {
+    // (kept up every frame: the layout is put up a tick after the game is)
+    touchControls.showButton('ENTER', !over && frogPayout(points) > 0);
     if (over || !sprite) return;
     const dt = delta / 1000;
 
@@ -568,6 +573,8 @@ function refreshHud(): void {
   hud.best.setText(`BEST ${best}`);
   const banked = frogPayout(points);
   hud.bank.setText(`[${isTouch() ? 'BANK' : 'ENTER'}] BANK ${banked} TOKENS`).setVisible(banked > 0);
+  // and the button is only there while there is something to bank
+  touchControls.showButton('ENTER', banked > 0);
 }
 
 function finish(): void {

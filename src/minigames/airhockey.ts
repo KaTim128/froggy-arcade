@@ -12,8 +12,7 @@ import { audio } from '../core/audio';
 import { centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
-import { backdrop } from './decor';
-import { makeLizard } from './frogvslizard';
+import { isTouch } from '../core/device';
 
 
 const TABLE = { x: 70, y: 22, w: 180, h: 152 };
@@ -116,6 +115,7 @@ export const airHockey: MinigameModule = {
       'TEN TOKENS IN, TWENTY BACK ON A WIN.',
       'THREE SECONDS ON THE SPOT AFTER A GOAL.',
       'USE THEM - GET BACK INTO YOUR OWN HALF.',
+      ...(isTouch() ? ['UPRIGHT: DRAG IN THE PAD UNDER THE TABLE.'] : []),
     ],
     controls: [
       ['MOUSE', 'MOVES YOUR MALLET'],
@@ -132,7 +132,7 @@ export const airHockey: MinigameModule = {
     over = false;
     history = [];
 
-    backdrop(scene, 0x101a2a, 0x0a1220, { speckleColor: 0x9fd4ff });
+    paintArena(scene);
     // the table: a wooden rail, then the playing surface with its markings
     scene.add.rectangle(TABLE.x - 6, TABLE.y - 6, TABLE.w + 12, TABLE.h + 12, 0x5c4326).setOrigin(0, 0);
     scene.add.rectangle(TABLE.x - 6, TABLE.y - 6, TABLE.w + 12, 3, 0x8a6a3a).setOrigin(0, 0);
@@ -189,17 +189,18 @@ export const airHockey: MinigameModule = {
     // sets of eyes in the corner of the table.
     dressPads();
 
-    scoreText = centerText(scene, GAME_W / 2, 178, '', PALETTE.cream);
+    // In the left-hand margin, clear of your goal mouth (it used to sit on it).
+    scoreText = centerText(scene, 35, 140, '', PALETTE.cream);
     // On the centre spot, over the puck it is holding still.
     countText = centerText(scene, GAME_W / 2, TABLE.y + TABLE.h / 2 - 14, '', PALETTE.gold, 16)
       .setDepth(40)
       .setVisible(false);
-    text(scene, 8, 30, 'MOUSE', PALETTE.ash);
-    text(scene, 8, 40, 'TO MOVE', PALETTE.ash);
-    // ---- WHO YOU ARE PLAYING: the lizard, at the far end of the table,
-    // leaning over its rail with its striker.
-    makeLizard(scene, 292, 62).setScale(0.85).setDepth(5);
-    centerText(scene, 287, 70, 'LIZARD', PALETTE.gold);
+    text(scene, 8, 30, isTouch() ? 'DRAG' : 'MOUSE', PALETTE.fog);
+    text(scene, 8, 40, 'TO MOVE', PALETTE.fog);
+    nearMs = { pad: 0, ai: 0 };
+    backOffMs = 0;
+    dragGoal = null;
+    mountDragPad(scene);
     updateScore();
 
     if (import.meta.env?.DEV) {
@@ -301,8 +302,8 @@ export const airHockey: MinigameModule = {
     // the ring and come in again (or the puck is already moving, from his
     // side), the way his mallet has to come in from his end.
     if (!armed) {
-      const p = scene.input.activePointer;
-      const off = Math.hypot(p.worldX - puck.x, p.worldY - puck.y) >= KEEP_OFF;
+      const p = aimPoint(scene);
+      const off = Math.hypot(p.x - puck.x, p.y - puck.y) >= KEEP_OFF;
       if (off || vel.x !== 0 || vel.y !== 0) armed = true;
       else {
         keepOffPuck(pad);
@@ -362,6 +363,12 @@ export const airHockey: MinigameModule = {
         ? Math.min(puck.y - PAD_R * 0.4, midY - PAD_R)
         : vel.y < 0 ? Math.min(seen.y + 10, midY - PAD_R) : TABLE.y + 26;
     }
+    // backing off after breaking an orbit: home, and let the puck go
+    if (backOffMs > 0) {
+      backOffMs -= delta;
+      wantX = TABLE.x + TABLE.w / 2;
+      wantY = TABLE.y + PAD_R + 2;
+    }
     const aiSpeed = dead ? AI_SPEED * eager : AI_SPEED;
     const step = (aiSpeed * delta) / 1000;
     aiPad.x += Phaser.Math.Clamp(wantX - aiPad.x, -step, step);
@@ -404,6 +411,8 @@ export const airHockey: MinigameModule = {
 
     collide(pad, { x: pad.x - padPrev.x, y: pad.y - padPrev.y }, delta);
     collide(aiPad, { x: 0, y: 0 }, delta);
+    unstick(pad, 'pad', delta);
+    unstick(aiPad, 'ai', delta);
 
     // friction and cap
     vel.x *= 0.9995;
@@ -418,6 +427,9 @@ export const airHockey: MinigameModule = {
   },
 
   destroy() {
+    dragEl?.remove();
+    dragEl = null;
+    dragGoal = null;
     puck = null;
     pad = null;
     aiPad = null;
@@ -471,11 +483,18 @@ function strikePoint(ai: Vec, p: Vec): Vec {
 }
 
 /** The player's mallet, under the mouse and inside its own half. */
+/** Where the player wants the mallet: the mouse/finger on the table, or the drag pad. */
+function aimPoint(scene: Phaser.Scene): Vec {
+  if (dragGoal) return dragGoal;
+  const p = scene.input.activePointer;
+  return { x: p.worldX, y: p.worldY };
+}
+
 function followPointer(scene: Phaser.Scene): void {
   if (!pad) return;
-  const p = scene.input.activePointer;
-  const px = Phaser.Math.Clamp(p.worldX, TABLE.x + PAD_R, TABLE.x + TABLE.w - PAD_R);
-  const py = Phaser.Math.Clamp(p.worldY, TABLE.y + TABLE.h / 2 + PAD_R, TABLE.y + TABLE.h - PAD_R);
+  const p = aimPoint(scene);
+  const px = Phaser.Math.Clamp(p.x, TABLE.x + PAD_R, TABLE.x + TABLE.w - PAD_R);
+  const py = Phaser.Math.Clamp(p.y, TABLE.y + TABLE.h / 2 + PAD_R, TABLE.y + TABLE.h - PAD_R);
   padPrev = { x: pad.x, y: pad.y };
   pad.setPosition(px, py);
 }
@@ -614,7 +633,7 @@ function dressPads(): void {
 }
 
 function updateScore(): void {
-  scoreText?.setText(`LIZARD ${scoreA}   -   ${scoreP} YOU`);
+  scoreText?.setText(`LIZARD ${scoreA}\n\nYOU ${scoreP}`);
 }
 
 /** PRD §9.4: on timeout the higher score wins.  Level on the clock is a tie. */
@@ -627,3 +646,181 @@ function finish(): void {
 }
 
 export const _debug = { TABLE, GAME_H };
+
+
+// ------------------------------------------------------------ anti-orbit
+
+let nearMs = { pad: 0, ai: 0 };
+let backOffMs = 0;
+
+/**
+ * THE PUCK MAY NOT ORBIT A MALLET.  Pressed against a striker that keeps
+ * re-chasing it, the puck could be carried round and round it for ever --
+ * neither hit nor free.  Held in contact for more than half a second, it is
+ * flicked off, away from the mallet and towards the far half, and if it was
+ * the lizard's mallet the lizard goes home for a moment and lets it go.
+ */
+function unstick(p: Phaser.GameObjects.Arc, who: 'pad' | 'ai', delta: number): void {
+  if (!puck) return;
+  const dx = puck.x - p.x;
+  const dy = puck.y - p.y;
+  const d = Math.hypot(dx, dy) || 1;
+  if (d > PAD_R + PUCK_R + 4) {
+    nearMs[who] = 0;
+    return;
+  }
+  nearMs[who] += delta;
+  if (nearMs[who] < 550) return;
+  nearMs[who] = 0;
+  const away = who === 'ai' ? 1 : -1; // the lizard's puck goes down the table, yours up it
+  const speed = 150;
+  vel.x = (dx / d) * speed * 0.6;
+  vel.y = away * speed * 0.8 + (dy / d) * speed * 0.2;
+  puck.x = p.x + (dx / d) * (PAD_R + PUCK_R + 2);
+  puck.y = p.y + (dy / d) * (PAD_R + PUCK_R + 2);
+  if (who === 'ai') backOffMs = 600;
+}
+
+// ------------------------------------------------------------ the drag pad
+
+let dragEl: HTMLDivElement | null = null;
+let dragGoal: Vec | null = null;
+
+/**
+ * UPRIGHT ON A PHONE the table is a small picture at the top of the glass and
+ * the rest is black.  That black becomes a trackpad: drag anywhere on it and
+ * the mallet moves the same way, the pad's width standing for the table's,
+ * so your thumb is not covering the thing it is playing.
+ */
+function mountDragPad(scene: Phaser.Scene): void {
+  if (!isTouch() || window.innerHeight < window.innerWidth) return;
+  const canvas = document.querySelector('#game-root canvas') as HTMLCanvasElement | null;
+  if (!canvas) return;
+  const pic = canvas.getBoundingClientRect();
+  const top = Math.round(pic.bottom + 70);
+  if (window.innerHeight - top < 120) return;
+  const el = document.createElement('div');
+  Object.assign(el.style, {
+    position: 'fixed',
+    left: '12px',
+    right: '12px',
+    top: `${top}px`,
+    bottom: '16px',
+    border: '2px dashed rgba(255, 212, 94, 0.35)',
+    borderRadius: '18px',
+    background: 'rgba(0, 0, 0, 0.6)',
+    zIndex: '40',
+    touchAction: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'rgba(255, 240, 201, 0.55)',
+    font: '700 15px ui-monospace, monospace',
+    letterSpacing: '2px',
+  } as Partial<CSSStyleDeclaration>);
+  el.textContent = 'DRAG HERE TO MOVE';
+  document.body.appendChild(el);
+  dragEl = el;
+  let last: { x: number; y: number } | null = null;
+  const kx = TABLE.w / Math.max(80, el.clientWidth);
+  const ky = (TABLE.h / 2) / Math.max(80, el.clientHeight) * 1.4;
+  el.addEventListener('pointerdown', (e) => {
+    last = { x: e.clientX, y: e.clientY };
+    el.setPointerCapture(e.pointerId);
+    if (!dragGoal && pad) dragGoal = { x: pad.x, y: pad.y };
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!last || !dragGoal) return;
+    dragGoal = {
+      x: Phaser.Math.Clamp(dragGoal.x + (e.clientX - last.x) * kx, TABLE.x + PAD_R, TABLE.x + TABLE.w - PAD_R),
+      y: Phaser.Math.Clamp(dragGoal.y + (e.clientY - last.y) * ky, TABLE.y + TABLE.h / 2 + PAD_R, TABLE.y + TABLE.h - PAD_R),
+    };
+    last = { x: e.clientX, y: e.clientY };
+  });
+  const end = () => {
+    last = null;
+  };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+  // a finger on the table itself takes over again
+  scene.input.on('pointerdown', () => {
+    dragGoal = null;
+  });
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+    el.remove();
+    if (dragEl === el) dragEl = null;
+  });
+}
+
+// ------------------------------------------------------------ the arena
+
+/**
+ * Not a starfield: an arcade's air hockey corner.  A dark plum room with a
+ * neon tube along the top of the back wall, the glow of it on the wall, a
+ * scoreboard housing over the table, and rubber matting on the floor.
+ */
+function paintArena(scene: Phaser.Scene): void {
+  const key = 'airhockey_arena_v2';
+  if (!scene.textures.exists(key)) {
+    const tex = scene.textures.createCanvas(key, GAME_W, GAME_H);
+    if (tex) {
+      const g = tex.getContext();
+      const wall = g.createLinearGradient(0, 16, 0, GAME_H);
+      wall.addColorStop(0, '#1d1230');
+      wall.addColorStop(0.55, '#140d24');
+      wall.addColorStop(1, '#0b0a14');
+      g.fillStyle = wall;
+      g.fillRect(0, 0, GAME_W, GAME_H);
+      // wall panels
+      for (let x = 0; x < GAME_W; x += 32) {
+        g.fillStyle = 'rgba(255,255,255,0.03)';
+        g.fillRect(x, 16, 1, 110);
+      }
+      // the neon tubes, pink over the lizard's end, gold over yours
+      const tube = (y: number, col: string) => {
+        const glow = g.createLinearGradient(0, y - 10, 0, y + 22);
+        glow.addColorStop(0, 'rgba(0,0,0,0)');
+        glow.addColorStop(0.35, col.replace('1)', '0.22)'));
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = glow;
+        g.fillRect(0, y - 10, GAME_W, 32);
+        g.fillStyle = col;
+        g.fillRect(6, y, 52, 2);
+        g.fillRect(GAME_W - 58, y, 52, 2);
+      };
+      tube(26, 'rgba(255,79,163,1)');
+      tube(150, 'rgba(255,212,94,1)');
+      // rubber floor matting under the table
+      g.fillStyle = '#0d0d12';
+      g.fillRect(0, 128, GAME_W, GAME_H - 128);
+      for (let y = 130; y < GAME_H; y += 4) {
+        for (let x = (y / 4) % 2 ? 0 : 2; x < GAME_W; x += 4) {
+          g.fillStyle = 'rgba(255,255,255,0.035)';
+          g.fillRect(x, y, 2, 2);
+        }
+      }
+      // posters either side: a puck and a mallet in neon outline
+      const poster = (x: number, tint: string, label: string) => {
+        g.fillStyle = 'rgba(0,0,0,0.45)';
+        g.fillRect(x, 58, 44, 56);
+        g.strokeStyle = tint;
+        g.lineWidth = 1;
+        g.strokeRect(x + 0.5, 58.5, 43, 55);
+        g.beginPath();
+        g.arc(x + 22, 80, 10, 0, Math.PI * 2);
+        g.stroke();
+        g.beginPath();
+        g.arc(x + 22, 80, 4, 0, Math.PI * 2);
+        g.stroke();
+        void label;
+      };
+      poster(13, 'rgba(70,196,189,0.8)', 'PLAY');
+      poster(GAME_W - 57, 'rgba(255,79,163,0.8)', 'FIRST TO 5');
+      tex.refresh();
+    }
+  }
+  scene.add.image(0, 0, key).setOrigin(0, 0);
+  centerText(scene, 35, 106, 'PLAY', PALETTE.tealLight).setAlpha(0.8);
+  centerText(scene, GAME_W - 35, 102, 'FIRST', PALETTE.neon).setAlpha(0.8);
+  centerText(scene, GAME_W - 35, 110, 'TO 5', PALETTE.neon).setAlpha(0.8);
+}

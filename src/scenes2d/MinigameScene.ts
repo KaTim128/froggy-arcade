@@ -102,8 +102,11 @@ export class MinigameScene extends Phaser.Scene {
     audio.setScene({ music: this.mod.music ?? 'room_hub' });
 
     this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black).setOrigin(0, 0);
-    this.add.rectangle(0, 0, GAME_W, 16, PALETTE.ink).setOrigin(0, 0);
-    text(this, 4, 4, def.title, PALETTE.gold);
+    // The title bar -- name, payout, QUIT -- is drawn over everything a
+    // game paints, so no cabinet can cover its own way out.
+    const TOP = 1000;
+    this.add.rectangle(0, 0, GAME_W, 16, PALETTE.ink).setOrigin(0, 0).setDepth(TOP);
+    text(this, 4, 4, def.title, PALETTE.gold).setDepth(TOP);
 
     // A real button, not just a key.  It asks first, and says what walking
     // out costs; confirmed, it forfeits exactly as it always has (MG-4).
@@ -111,16 +114,17 @@ export class MinigameScene extends Phaser.Scene {
       width: 40,
       height: 12,
       fill: PALETTE.plum,
-    });
+    }).setDepth(TOP + 1);
 
     this.hud = new TokenHud(this);
     this.hud.setVisible(false); // the title bar already carries the balance line
-    // Right-aligned to just short of the QUIT button rather than pinned to a
+    // Right-aligned a clear gap short of the QUIT button rather than pinned to a
     // fixed left edge: the note is the cabinet's own wording and some of them
     // are twice as long as others, so a fixed start meant "WIN: 15 TOKENS"
     // reached under QUIT while "WIN: +2" sat in the middle of nowhere.
-    const note = text(this, GAME_W - 50, 4, this.mod.payoutNote ?? `WIN: +${def.reward}`, PALETTE.tealLight)
-      .setOrigin(1, 0);
+    const note = text(this, GAME_W - 58, 4, this.mod.payoutNote ?? `WIN: +${def.reward}`, PALETTE.tealLight)
+      .setOrigin(1, 0)
+      .setDepth(TOP);
     // The personal best, where this cabinet keeps one, centred in whatever
     // gap the title and the payout leave -- and shortened until it fits
     // there, so it never runs into either of them.
@@ -128,11 +132,11 @@ export class MinigameScene extends Phaser.Scene {
     const was = bestRecord(this.gameId);
     if (rec && was !== null) {
       const from = 4 + def.title.length * FONT_ADVANCE + 6;
-      const to = GAME_W - 50 - note.width - 6;
+      const to = GAME_W - 58 - note.width - 6;
       const fit = [rec.short(was), `BEST ${rec.format(was)}`, rec.format(was)].find(
         (s) => s.length * FONT_ADVANCE <= to - from,
       );
-      if (fit) centerText(this, Math.round((from + to) / 2), 8, fit, PALETTE.gold).setAlpha(0.9);
+      if (fit) centerText(this, Math.round((from + to) / 2), 8, fit, PALETTE.gold).setAlpha(0.9).setDepth(TOP);
     }
 
     const api: MinigameApi = {

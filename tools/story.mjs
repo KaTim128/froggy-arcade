@@ -106,7 +106,7 @@ console.log('\nAC-3  charity fires exactly once per run');
   // walking blind and hoping — is deliberate: retuning whichever cabinet
   // happened to sit bottom-left used to silently stop the run going broke.
   await page.mouse.click(640 + (52 - 160) * 4, 360 + (88 - 90) * 4); // TIC-TAC-TOE, 1 token
-  await sleep(1600);
+  await sleep(5000); // (walked to first)
   await page.keyboard.press('Space'); // PLAY -> 0 tokens
   await sleep(900);
   await page.keyboard.press('Escape'); // forfeit the play
@@ -141,7 +141,7 @@ console.log('\nAC-4  second bust ejects, front door locked for good');
   // cabinet happened to sit bottom-left, so retuning that cabinet's cost
   // silently stopped the run from ever going broke.
   await page.mouse.click(640 + (52 - 160) * 4, 360 + (88 - 90) * 4); // TIC-TAC-TOE, 1 token
-  await sleep(1600);
+  await sleep(5000); // (walked to first)
   await page.keyboard.press('Space'); // PLAY
   await sleep(900);
   await page.keyboard.press('Escape');

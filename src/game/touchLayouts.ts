@@ -254,12 +254,18 @@ function schedule(): void {
   }, 0);
 }
 
+let lastTop = '';
+
 export function refreshTouchLayout(): void {
   if (!gameRef || !touchControls.mounted()) return;
   hookScenes();
   const running = gameRef.scene.getScenes(true);
   const top = running.length ? running[running.length - 1].scene.key : 'Boot';
-  touchControls.setSkin(skinFor(top));
+  if (top !== lastTop) {
+    lastTop = top;
+    touchControls.resetHidden();
+  }
+  touchControls.setSkin(skinFor(top), top === 'Minigame');
   if (top === 'Minigame' && cabinet) touchControls.apply(cabinet);
   else touchControls.apply(touchLayoutFor(top));
 }

@@ -392,8 +392,8 @@ function draw(): void {
 /**
  * THE NUMBERS, EACH INSIDE ITS OWN FACE.
  *
- * Along the radius, out near the rim where the face is widest, turned over on
- * the left half of the wheel so none is ever upside down.  They are painted on
+ * Out near the rim where the face is widest, and always the right way up --
+ * they are never turned with the wheel.  They are painted on
  * the overlay canvas, at the display's own resolution: the game draws at
  * 320x180 and a pixel font rotated to an arbitrary angle at that size breaks
  * up into noise -- the rare faces, whose numbers matter most, were the worst.
@@ -402,13 +402,17 @@ function draw(): void {
 function paintNumbers(): void {
   froggyLayer.paint((ctx) => {
     for (const s of slices) {
-      const str = s.pays === 0 ? '-' : `${s.pays}`;
+      // (the two thin splinters are written short, to fit them upright)
+      const str = s.pays === 0 ? '-' : s.pays >= 1000 ? `${s.pays / 1000}K` : `${s.pays}`;
       const mid = (s.from + s.to) / 2 + rotation;
       const len = str.length * 6;
-      const lr = R - 5 - len / 2;
+      // UPRIGHT, always: the wheel turns and the numbers ride round on it
+      // the right way up.  Pulled in from the rim by however much of the
+      // label's width and height points outwards at this angle, so it stays
+      // on its own face.
+      const lr = R - 4 - (len / 2) * Math.abs(Math.cos(mid)) - 4 * Math.abs(Math.sin(mid));
       ctx.save();
       ctx.translate(CX + Math.cos(mid) * lr, CY + Math.sin(mid) * lr);
-      ctx.rotate(Math.cos(mid) >= 0 ? mid : mid + Math.PI);
       // dark on the gold faces, light on everything else
       const col = s.pays >= 40 && s.pays < 200 ? PALETTE.ink : PALETTE.cream;
       drawPixelText(ctx, str, 0, -3, { scale: 1, center: true, color: `#${col.toString(16).padStart(6, '0')}` });

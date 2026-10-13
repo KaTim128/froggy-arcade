@@ -1430,8 +1430,9 @@ for (const g of [
   const cabinet = await cabinetAt(page, 'ArcadeHub', 'tictactoe');
 
   const before = await tokens();
+  // (a click walks you to the machine first: give the walk time)
   await page.mouse.click(...cabinet);
-  await sleep(1800);
+  await sleep(5000);
   const atCard = { scenes: await scenes(), tokens: await tokens(), card: await cardUp(page) };
   const opened = atCard.scenes.includes('Minigame') && atCard.card && atCard.tokens === before;
   console.log(
@@ -1450,7 +1451,7 @@ for (const g of [
 
   // PLAY charges exactly once, however many times it is hit.
   await page.mouse.click(...cabinet);
-  await sleep(1800);
+  await sleep(5000);
   for (let i = 0; i < 5; i++) {
     await page.mouse.click(...PLAY);
     await sleep(70);
@@ -2108,7 +2109,7 @@ for (const g of [
   const purse = await page.evaluate(() => window.__froggy.state().tokens);
   // The card is free; PLAY is the charge.
   await page.mouse.click(...(await cabinetAt(page, 'ArcadeHub', 'tictactoe')));
-  await sleep(1800);
+  await sleep(5000);
   await startGame(page);
   await sleep(400);
   const paid = await page.evaluate(() => window.__froggy.state().tokens);
