@@ -34,7 +34,7 @@ import { climbFrame, climbSeconds, type ClimbGeom } from '../three/froggyClimb';
 import { ThreeStage } from '../render/threeStage';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { touchControls } from '../ui/touchControls';
-import { texBlock, texCarpet, texConcrete, texLiftDoors, texSign, texWainscot, texWallpaper } from '../art/hotelInterior';
+import { texBlock, texCarpet, texConcrete, texLiftDoors, texRoomDoor, texSign, texWainscot, texWallpaper } from '../art/hotelInterior';
 
 /** 2D lobby x to 3D metres along it. */
 const lx = (px: number): number => (px - 200) * 0.05;
@@ -42,7 +42,10 @@ const lx = (px: number): number => (px - 200) * 0.05;
 const X0 = -10; // the front doors' end
 const X1 = 11; // the storage room's end
 const DEPTH = 7;
-const CEIL = 4;
+/** The atrium: the 2D lobby's two floors of galleries go up over it. */
+const CEIL = 6.6;
+/** The gallery floors along the back wall, either side of the middle bay. */
+const GALLERY_Y = [3.0, 5.0];
 const DADO = 1;
 const DESK_X = lx(160);
 const STAIR_X = lx(238);
@@ -313,6 +316,8 @@ export class HotelLobby3D extends Phaser.Scene {
   private pitch = 0;
   private eye = EYE_UP;
   private crouched = false;
+  /** What the touch button last said, so it is relabelled only on a change. */
+  private crouchLabel = '';
   private camPos = new THREE.Vector3();
   private keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
   private dragging = false;
@@ -389,6 +394,7 @@ export class HotelLobby3D extends Phaser.Scene {
     this.frontPanes = [];
     this.stairFly = null;
     this.crouched = false;
+    this.crouchLabel = '';
     this.sus = 0;
     this.susSeen = false;
     this.susStage = 0;
@@ -474,9 +480,12 @@ export class HotelLobby3D extends Phaser.Scene {
     st.camera.far = 60;
     st.camera.fov = 70;
     st.camera.updateProjectionMatrix();
-    S.background = new THREE.Color(0x040508);
-    S.fog = new THREE.FogExp2(0x05060a, 0.045);
-    S.add(new THREE.HemisphereLight(0x3a3a52, 0x0c0a08, 0.5));
+    // The lobby as it is in 2D: cream and gold under its chandeliers, the
+    // lights left on all night.  Warm, and lit enough to read every piece of
+    // it from the storage room -- the dark is in the corners and behind him.
+    S.background = new THREE.Color(0x0a0806);
+    S.fog = new THREE.FogExp2(0x0c0a08, 0.028);
+    S.add(new THREE.HemisphereLight(0x8a7a62, 0x1a140c, 0.85));
     S.add(st.camera);
 
     this.buildLobby(S);
@@ -671,7 +680,7 @@ export class HotelLobby3D extends Phaser.Scene {
     this.stairDoor.add(leaf);
     this.stairDoor.position.set(STAIR_X - 0.54, 0, 0.04);
     S.add(this.stairDoor);
-    const exit = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.22), new THREE.MeshBasicMaterial({ map: tex(texSign('STAIRS', '#0e7a3e', '#e8ffe8', 256, 96)) }));
+    const exit = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.22), new THREE.MeshBasicMaterial({ map: tex(texSign('EXIT', '#0e7a3e', '#e8ffe8', 256, 96)) }));
     exit.position.set(STAIR_X, 2.62, 0.03);
     S.add(exit);
     const green = new THREE.PointLight(0x40ff90, 1.6, 4, 1.6);
@@ -903,6 +912,80 @@ export class HotelLobby3D extends Phaser.Scene {
     const deskGlow = new THREE.PointLight(0xa0ffb0, 0.8, 3, 1.6);
     deskGlow.position.set(DESK_X - 1.2, 1.35, 1.7);
     S.add(deskGlow);
+
+    this.buildAtrium(S, brass, cream);
+  }
+
+  /**
+   * ---- THE ATRIUM, as the 2D lobby draws it: either side of the middle
+   * bay, two floors of galleries along the back wall -- a cream slab, a gold
+   * rail on cream balusters, room doors behind -- and the middle bay open to
+   * the ceiling, with the great chandelier in it and a smaller one over each
+   * side.
+   */
+  private buildAtrium(S: THREE.Scene, brass: THREE.Material, cream: THREE.Material): void {
+    const doorT = tex(texRoomDoor(''));
+    const doorM = new THREE.MeshLambertMaterial({ map: doorT });
+    const bays: Array<[number, number]> = [
+      [X0, lx(104) - 0.32],
+      [lx(216) + 0.32, X1],
+    ];
+    for (const [a, b] of bays) {
+      const len = b - a;
+      const mid = (a + b) / 2;
+      for (const gy of GALLERY_Y) {
+        const slab = new THREE.Mesh(new THREE.BoxGeometry(len, 0.2, 1.0), cream);
+        slab.position.set(mid, gy - 0.1, 0.5);
+        S.add(slab);
+        const fascia = new THREE.Mesh(new THREE.BoxGeometry(len, 0.06, 0.04), brass);
+        fascia.position.set(mid, gy - 0.12, 1.02);
+        S.add(fascia);
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.06, 0.08), brass);
+        rail.position.set(mid, gy + 0.95, 0.96);
+        S.add(rail);
+        for (let x = a + 0.12; x < b; x += 0.24) {
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.9, 6), cream);
+          post.position.set(x, gy + 0.47, 0.96);
+          S.add(post);
+        }
+        for (let x = a + 1.1; x < b - 0.6; x += 2.3) {
+          const door = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 2.1), doorM);
+          door.position.set(x, gy + 1.05, 0.015);
+          S.add(door);
+        }
+      }
+    }
+    // the chandeliers
+    const crystal = new THREE.MeshLambertMaterial({ color: 0xfff4d8, emissive: 0xa08850 });
+    const chandelier = (x: number, y: number, z: number, r: number, power: number): void => {
+      const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, CEIL - y, 4), brass);
+      chain.position.set(x, (CEIL + y) / 2, z);
+      S.add(chain);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.035, 6, 24), brass);
+      ring.rotation.x = Math.PI / 2;
+      ring.position.set(x, y, z);
+      S.add(ring);
+      const ring2 = new THREE.Mesh(new THREE.TorusGeometry(r * 0.6, 0.03, 6, 20), brass);
+      ring2.rotation.x = Math.PI / 2;
+      ring2.position.set(x, y + 0.28, z);
+      S.add(ring2);
+      const n = Math.round(r * 18);
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2;
+        const drop = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), crystal);
+        drop.position.set(x + Math.cos(a) * r, y - 0.12 - (k % 2) * 0.08, z + Math.sin(a) * r);
+        S.add(drop);
+      }
+      const bowl = new THREE.Mesh(new THREE.SphereGeometry(r * 0.35, 12, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), brass);
+      bowl.position.set(x, y + 0.02, z);
+      S.add(bowl);
+      const light = new THREE.PointLight(0xffd9a0, power, 9 + r * 4, 1.3);
+      light.position.set(x, y - 0.3, z);
+      S.add(light);
+    };
+    chandelier(DESK_X, 4.4, 2.0, 0.85, 5.5);
+    chandelier(lx(36), 2.55, 2.4, 0.5, 2.8);
+    chandelier(lx(360), 2.55, 2.4, 0.5, 2.8);
   }
 
   private buildStorage(S: THREE.Scene): void {
@@ -1137,6 +1220,12 @@ export class HotelLobby3D extends Phaser.Scene {
   private syncPad(): void {
     if (!isTouch()) return;
     touchControls.showButton('C', this.mode === 'hide' && this.phase !== 'gone');
+    // The button says what it will DO: CROUCH while standing, STAND once down.
+    const crouchLabel = this.crouched ? 'STAND' : 'CROUCH';
+    if (crouchLabel !== this.crouchLabel) {
+      this.crouchLabel = crouchLabel;
+      touchControls.relabel('C', crouchLabel);
+    }
     touchControls.showButton('E', this.phase === 'gone');
   }
 
@@ -1810,6 +1899,7 @@ export class HotelLobby3D extends Phaser.Scene {
         ctx.fillStyle = v;
         ctx.fillRect(0, 0, GAME_W, GAME_H);
         drawPixelText(ctx, this.crouched ? 'CROUCHING' : 'STANDING', 6, 6, { scale: 1, color: this.crouched ? '#8ab890' : '#d07060', alpha: 0.85 });
+        if (!isTouch()) drawPixelText(ctx, this.crouched ? 'C: STAND' : 'C: CROUCH', 6, 14, { scale: 1, color: '#c8c0b0', alpha: 0.7 });
       }
       const line = this.lines[0];
       if (line) {

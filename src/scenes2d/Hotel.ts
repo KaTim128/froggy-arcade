@@ -351,7 +351,11 @@ export class Hotel extends Phaser.Scene {
   }
 
   private buildCorridor(): void {
-    this.add.image(0, 0, this.painted('hotel_corridor_v2', GAME_W, GAME_H, paintCorridor)).setOrigin(0, 0);
+    // Room 612's door, once he has been through it, stays broken; once the
+    // police have come, it is taped off.
+    const after = store.get().hotelAfter;
+    const door612 = after === 'none' ? 'none' : after === 'police' ? 'taped' : 'broken';
+    this.add.image(0, 0, this.painted(`hotel_corridor_v3_${door612}`, GAME_W, GAME_H, (g) => paintCorridor(g, door612))).setOrigin(0, 0);
     centerText(this, 22, 110, '6', 0xff7a3d);
   }
 
@@ -1328,7 +1332,11 @@ export class Hotel extends Phaser.Scene {
       .setText(label[this.spot])
       .setTint(this.night === 'late' && this.spot === 'window' ? 0xffb0a0 : PALETTE.gold)
       // (at the desk, on its front: the clerk is where the prompt would go)
-      .setPosition(Phaser.Math.Clamp(x, 60, worldW - 90), this.spot === 'desk' ? DESK_TOP + 13 : WALK_Y - 44)
+      .setPosition(
+        Phaser.Math.Clamp(x, 60, worldW - 90),
+        // (in the corridor, down on the carpet: up by the doors it covered their numbers)
+        this.spot === 'desk' ? DESK_TOP + 13 : this.area === 'corridor' ? WALK_Y + 12 : WALK_Y - 44,
+      )
       .setVisible(true);
   }
 

@@ -223,16 +223,69 @@ export function roomDoor(g: Ctx, cx: number, num: string, opts: { w?: number; h?
   // handle at hand height, on its rose
   rect(g, x + w - 3, y + Math.round(h * 0.5), 1, 2, HP.goldDark);
   rect(g, x + w - 5, y + Math.round(h * 0.5), 3, 1, HP.goldHi);
-  // peephole at eye height
-  if (!opts.white) rect(g, x + Math.round(w / 2), y + 8, 1, 1, HP.goldHi);
-  // the number plate, on the door at eye height
+  // the number: a brass plate screwed to the upper panel, dark figures on it,
+  // so it is part of the door and not a label floating over it
   if (num) {
-    // over the door on the wall, dark with gold figures, so it reads
-    const pw = num.length * 4 + 5;
+    const pw = num.length * 4 + 1;
     const px = Math.round(cx - pw / 2);
-    rect(g, px, y - 11, pw, 9, HP.goldDark);
-    rect(g, px + 1, y - 10, pw - 2, 7, '#1e140c');
-    signText(g, num, cx, y - 9, '#ffe9a8');
+    const py = y + 4;
+    rect(g, px - 1, py - 1, pw + 2, 9, HP.goldDark);
+    rect(g, px, py, pw, 7, HP.gold);
+    rect(g, px, py, pw, 1, HP.goldHi);
+    rect(g, px, py + 6, pw, 1, HP.goldDark);
+    signText(g, num, cx, py + 1, '#24160a');
+    // the peephole below it
+    rect(g, Math.round(cx), py + 10, 1, 1, HP.goldHi);
+  } else if (!opts.white) rect(g, x + Math.round(w / 2), y + 8, 1, 1, HP.goldHi);
+}
+
+/**
+ * Room 612 after the night: the door smashed in off its hinges.  The frame
+ * stands, the doorway is dark, the door hangs from its top hinge on the
+ * splintered jamb, and the wood he went through is on the carpet.  After the
+ * police, a strip of tape across it.
+ */
+function brokenDoor(g: Ctx, cx: number, num: string, taped: boolean): void {
+  const w = DOOR_W;
+  const h = DOOR_H;
+  const x = Math.round(cx - w / 2);
+  const y = FLOOR_Y - h;
+  rect(g, x - 2, y - 2, w + 4, h + 2, HP.cream);
+  rect(g, x - 1, y - 1, w + 2, h + 1, HP.creamShade);
+  // the room behind: dark, a sliver of the window's light on the floor
+  rect(g, x, y, w, h, '#120d0a');
+  rect(g, x + 3, FLOOR_Y - 3, w - 6, 3, '#2a2230');
+  // splinters torn out of the lock side of the jamb
+  for (const [dy, len] of [[10, 3], [15, 2], [18, 4], [24, 2]]) rect(g, x + w - len, y + dy, len, 1, HP.woodHi);
+  rect(g, x + w + 1, y + 13, 1, 9, HP.woodDark);
+  // the door, torn off the lower hinge: hanging from the top one on the
+  // left, its foot swung out into the corridor and resting on the carpet
+  for (let r = 0; r < h - 1; r++) {
+    const lean = -Math.round((r / h) ** 1.4 * 6);
+    rect(g, x + lean, y + r, 11, 1, r % 11 === 0 ? HP.woodDark : HP.wood);
+    rect(g, x + lean, y + r, 1, 1, HP.woodHi);
+    rect(g, x + lean + 10, y + r, 1, 1, HP.woodDark);
+  }
+  // a split down it, and a fist-sized hole through the top panel
+  for (let r = 6; r < 24; r++) rect(g, x + 6 - Math.round((r / h) ** 1.4 * 6) + (r % 3 === 0 ? 1 : 0), y + r, 1, 1, '#120d0a');
+  rect(g, x + 4, y + 14, 3, 3, '#120d0a');
+  // the plate, still on what is left of it, crooked
+  const pw = num.length * 4 + 1;
+  rect(g, x - 1, y + 3, pw + 2, 9, HP.goldDark);
+  rect(g, x, y + 4, pw, 7, HP.gold);
+  signText(g, num, x + pw / 2, y + 5, '#24160a');
+  // the wood on the carpet
+  for (const [dx, dy, len] of [[-6, 0, 4], [-2, -1, 2], [w - 2, 0, 5], [w + 4, -1, 2], [3, 1, 3], [w + 1, 1, 2]]) {
+    rect(g, x + dx, FLOOR_Y + dy, len, 1, HP.wood);
+    rect(g, x + dx, FLOOR_Y + dy + 1, len, 1, HP.woodDark);
+  }
+  if (taped) {
+    // POLICE LINE: two strips crossed over the doorway, pinned to the frame
+    for (let k = 0; k <= w + 2; k++) {
+      const c = (k >> 1) % 2 ? '#f0c814' : '#1a1a10';
+      rect(g, x - 1 + k, y + 15 + Math.round(k * 0.6), 1, 2, c);
+      rect(g, x - 1 + k, y + 25 - Math.round(k * 0.6), 1, 2, c);
+    }
   }
 }
 
@@ -670,7 +723,7 @@ function storageDoor(g: Ctx, cx: number): void {
 
 export const CORRIDOR_DOORS = [90, 132, 174, 216, 258, 300];
 
-export function paintCorridor(g: Ctx): void {
+export function paintCorridor(g: Ctx, broken612: 'none' | 'broken' | 'taped' = 'none'): void {
   const W = 320;
   wallpaper(g, 0, CEIL_Y, W, DADO - CEIL_Y, { paper: HP.paper, shade: HP.paperShade, motif: HP.paperMotif });
   enclosedCeiling(g, W, { lights: [80, 240] });
@@ -695,12 +748,18 @@ export function paintCorridor(g: Ctx): void {
   rect(g, sx - 3, 121, 6, 7, '#3a4440');
   rect(g, sx - 2, 122, 4, 5, '#6a8088');
   rect(g, sx - 7, 135, 14, 1, '#c0c4c0');
-  rect(g, sx - 10, 105, 20, 9, '#0e5a30');
-  rect(g, sx - 9, 106, 18, 7, '#138040');
-  signText(g, 'EXIT', sx, 107, '#ffffff');
-  glow(g, sx, 110, 10, 0.3, '120,255,160');
+  // EXIT: a lit box sign bolted to the wall right on top of the door frame
+  rect(g, sx - 11, 106, 22, 10, '#0a2a18');
+  rect(g, sx - 10, 107, 20, 8, '#0e5a30');
+  rect(g, sx - 9, 108, 18, 6, '#16a050');
+  rect(g, sx - 9, 108, 18, 1, '#5ad890');
+  signText(g, 'EXIT', sx, 108, '#ffffff');
+  glow(g, sx, 111, 12, 0.3, '120,255,160');
   // the rooms
-  CORRIDOR_DOORS.forEach((x, k) => roomDoor(g, x, `${607 + k}`));
+  CORRIDOR_DOORS.forEach((x, k) => {
+    if (k === 5 && broken612 !== 'none') brokenDoor(g, x, '612', broken612 === 'taped');
+    else roomDoor(g, x, `${607 + k}`);
+  });
   // between them: sconces and the odd picture
   CORRIDOR_DOORS.slice(0, -1).forEach((x, k) => {
     const mx = x + 21;
