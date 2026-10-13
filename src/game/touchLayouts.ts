@@ -162,6 +162,8 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
     buttons: [
       { label: 'CROUCH', key: 'C', primary: true },
       { label: 'LEAVE', key: 'E' },
+      // the skill checks: shown only while one is up
+      { label: 'CALM', key: 'SPACE' },
     ],
   },
 
