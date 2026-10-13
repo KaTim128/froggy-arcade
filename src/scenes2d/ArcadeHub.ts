@@ -672,7 +672,7 @@ export class ArcadeHub extends Phaser.Scene {
       ctx.fillRect(x - 13, FROG_CUT - 26, 34, 26);
       draw(ctx);
       ctx.restore();
-    }, keep);
+    }, keep, true);
   }
 
   /**

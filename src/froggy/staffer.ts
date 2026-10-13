@@ -20,6 +20,8 @@
  * that lives.
  */
 
+import { humanEye } from './pixelFace';
+
 export type StafferPose = 'idle' | 'talk';
 
 export interface StafferDrawOpts {
@@ -369,6 +371,7 @@ function drawHim(ctx: CanvasRenderingContext2D, pose: StafferPose, bounce: numbe
   // ---- eyes behind them, and one eyebrow up: he thinks you are joking
   ctx.fillStyle = KIT.ink;
   for (const sx of [-1, 1]) {
+    if (humanEye(ctx, sx * 6.8, -44.6, KIT.ink)) continue;
     ctx.beginPath();
     ctx.ellipse(sx * 6.8, -44.6, 1.7, 2.1, 0, 0, Math.PI * 2);
     ctx.fill();

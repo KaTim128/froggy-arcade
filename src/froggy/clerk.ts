@@ -18,6 +18,8 @@
  * lives -- but he is drawn whole.
  */
 
+import { humanEye } from './pixelFace';
+
 export type ClerkPose = 'idle' | 'talk';
 
 export interface ClerkDrawOpts {
@@ -316,13 +318,14 @@ function drawHim(ctx: CanvasRenderingContext2D, pose: ClerkPose, breath: number)
 
   // ---- eyes and brows: attentive, calm
   ctx.fillStyle = KIT.ink;
-  for (const sx of [-1, 1]) {
+  const pixelEyes = humanEye(ctx, -6, -45, KIT.ink) && humanEye(ctx, 6, -45, KIT.ink);
+  for (const sx of pixelEyes ? [] : [-1, 1]) {
     ctx.beginPath();
     ctx.ellipse(sx * 6, -45, 1.6, 2, 0, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.fillStyle = '#ffffff';
-  for (const sx of [-1, 1]) {
+  for (const sx of pixelEyes ? [] : [-1, 1]) {
     ctx.beginPath();
     ctx.arc(sx * 6 + 0.5, -45.7, 0.5, 0, Math.PI * 2);
     ctx.fill();

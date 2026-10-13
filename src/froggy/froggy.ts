@@ -19,6 +19,7 @@
  */
 
 import { drawMonster } from './monster';
+import { eyeSprite, stamp, worldUnit } from '../render/froggyLayer';
 
 export type FroggyVariant = 'cozy' | 'uncanny' | 'predator' | 'monster';
 export type FroggyPose = 'idleA' | 'idleB' | 'talk' | 'blank' | 'constricted';
@@ -225,6 +226,15 @@ function drawCozy(ctx: CanvasRenderingContext2D, pose: FroggyPose, bounce: numbe
     ctx.fillStyle = COZY.eyeRing;
     ctx.fill();
 
+    // ---- IN PIXELS: a round black pupil with a white glint in it, placed
+    // whole -- reduced with the rest of him it came out lopsided, a blot a
+    // different shape in each eye.  The cute version: a touch smaller than
+    // the ring, so the peach shows round it, and sat a little low.
+    const u = worldUnit(ctx);
+    if (pupils && (pose === 'idleA' || pose === 'idleB' || pose === 'talk')) {
+      const pp = Math.max(2, Math.round(15 * u));
+      if (stamp(ctx, ex, ey + 1.5, eyeSprite(pp), { k: COZY.pupil, w: '#ffffff' })) continue;
+    }
     // pupil: big and friendly, or the fourth pose's pinprick -- or, outside
     // the glass at two in the morning, not there at all.
     if (pupils) {
@@ -250,6 +260,22 @@ function drawCozy(ctx: CanvasRenderingContext2D, pose: FroggyPose, bounce: numbe
       }
       ctx.fillStyle = COZY.pupil;
       ctx.fill();
+    }
+  }
+
+  // ---- in pixels: rosy cheeks, and his two nostrils as exact pixels (no
+  // mouth: the mascot has never had one at rest)
+  if (pose === 'idleA' || pose === 'idleB' || pose === 'talk') {
+    const u = worldUnit(ctx);
+    const cheek = Math.max(2, Math.round(9 * u));
+    const ck = { p: '#ff8fa8' };
+    if (stamp(ctx, -30, -20, ['p'.repeat(cheek)], ck)) {
+      stamp(ctx, 30, -20, ['p'.repeat(cheek)], ck);
+      const n = Math.max(1, Math.round(4 * u));
+      const nostril = Array.from({ length: n }, () => 'k'.repeat(n));
+      stamp(ctx, -8, -16, nostril, { k: COZY.pupil });
+      stamp(ctx, 8, -16, nostril, { k: COZY.pupil });
+      return;
     }
   }
 

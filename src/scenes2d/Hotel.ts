@@ -1240,7 +1240,7 @@ export class Hotel extends Phaser.Scene {
       ctx.fillRect(CLERK.x - 10, 116, 24, 20);
       drawClerk(ctx, { x: CLERK.x, y: CLERK.feet, height: CLERK.h, pose: talking ? 'talk' : 'idle', breath: (this.clock / 4) % 1 });
       ctx.restore();
-    });
+    }, false, true);
   }
 
   update(_t: number, delta: number): void {

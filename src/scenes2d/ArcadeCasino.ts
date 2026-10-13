@@ -228,7 +228,7 @@ export class ArcadeCasino extends Phaser.Scene {
         });
       }
       ctx.restore();
-    });
+    }, false, true);
   }
 
   private paintDoorway(): void {

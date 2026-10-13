@@ -295,7 +295,7 @@ export const whackAFrog: MinigameModule = {
             pose: 'blank',
           });
         }
-      });
+      }, false, true);
     } else {
       froggyLayer.clear();
     }

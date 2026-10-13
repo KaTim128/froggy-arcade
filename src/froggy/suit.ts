@@ -21,6 +21,8 @@
  * not answer the question, which is worse.
  */
 
+import { humanEye } from './pixelFace';
+
 export type SuitPose = 'idle' | 'talk';
 
 export interface SuitDrawOpts {
@@ -297,6 +299,7 @@ function drawMan(ctx: CanvasRenderingContext2D, pose: SuitPose, bounce: number):
   // is not going to look surprised about anything.
   ctx.fillStyle = SUIT.ink;
   for (const sx of [-1, 1]) {
+    if (humanEye(ctx, sx * 6.5, -45, SUIT.ink)) continue;
     ctx.beginPath();
     ctx.ellipse(sx * 6.5, -45, 2.2, 2.6, 0, 0, Math.PI * 2);
     ctx.fill();
