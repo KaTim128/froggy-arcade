@@ -685,6 +685,16 @@ export class Hotel extends Phaser.Scene {
           this.say('Dead. Nothing lights up.');
           return;
         }
+        if (!this.storyNight()) {
+          if (!s.life.rented) {
+            this.say(s.life.evicted ? '"Residents only. Your things are in storage -- see me to rent again."' : '"Residents only. The landlord is at the desk."');
+            return;
+          }
+          this.locked = true;
+          audio.sfx('bell_ding', 0.4);
+          fadeToScene(this, 'Condo', {});
+          return;
+        }
         if (!s.checkedIn) {
           this.say('"Guests only, I\'m afraid. Reception is right here."');
           return;
@@ -818,8 +828,24 @@ export class Hotel extends Phaser.Scene {
     this.time.delayedCall(320, () => this.scene.start('HotelLobby3D', { mode: 'exposed', x }));
   }
 
+  /**
+   * By day, Lily's is flats: the desk is the landlord's and the lift goes up
+   * to your own unit.  The night of the story (midnight, or the stay that
+   * started then) is the old check-in, untouched.
+   */
+  private storyNight(): boolean {
+    const s = store.get();
+    return s.timeOfDay === 'midnight' || s.checkedIn || s.hotelNight || s.hotelAfter !== 'none';
+  }
+
   private reception(): void {
     const s = store.get();
+    if (!this.storyNight()) {
+      this.locked = true;
+      this.events.once('shop-closed', () => (this.locked = false));
+      this.scene.launch('Shop', { kind: 'landlord', from: 'Hotel' });
+      return;
+    }
     if (s.checkedIn) {
       this.openTalk('"Room 612, sixth floor. The lift is on your right."', [{ label: 'THANKS', fn: () => this.closeTalk() }]);
       return;
@@ -828,7 +854,7 @@ export class Hotel extends Phaser.Scene {
     const can = s.cash >= ROOM_PRICE || s.tokens >= ROOM_PRICE;
     this.openTalk(
       can
-        ? `"Good evening, welcome to the Grand Lily. A room for the night is $${ROOM_PRICE}, or ${ROOM_PRICE} tokens."`
+        ? `"Good evening, welcome to Lily's. A room for the night is $${ROOM_PRICE}, or ${ROOM_PRICE} tokens."`
         : `"A room is $${ROOM_PRICE}, or ${ROOM_PRICE} tokens. You have $${s.cash} and ${s.tokens}. I'm sorry."`,
       can
         ? [

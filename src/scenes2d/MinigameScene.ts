@@ -19,6 +19,7 @@
  * and the result card knows what actually changed hands.
  */
 
+import { record } from '../game/life';
 import Phaser from 'phaser';
 import { RECORDS, best as bestRecord, submit as submitRecord } from '../core/records';
 import { deviceControls, deviceObjective, type ControlRow } from '../ui/controlsList';
@@ -484,6 +485,11 @@ export class MinigameScene extends Phaser.Scene {
     // its own payout; everything else takes the cabinet's flat reward.
     const paid = won ? Math.max(0, Math.floor(payout ?? def.reward)) : 0;
     if (won) ledger.credit(paid, 'game.reward');
+    // (counted for the goals: a game played, and won)
+    if (this.started && !quit) {
+      record('game_played');
+      if (won) record('game_won');
+    }
     store.flush();
 
     const panel = this.add.rectangle(GAME_W / 2, GAME_H / 2, 250, 60, PALETTE.ink).setDepth(990);

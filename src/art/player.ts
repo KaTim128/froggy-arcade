@@ -11,6 +11,8 @@
 import Phaser from 'phaser';
 import { nightify } from '../render/palette';
 import { audio } from '../core/audio';
+import { store } from '../core/state';
+import { lookFor } from '../game/catalog';
 
 export const PLAYER_SPEED = 62; // logical px/s
 /**
@@ -243,6 +245,15 @@ type PartName = (typeof ORDER)[number];
 /** A run of same-coloured pixels on one row, at its unflipped centre. */
 type Run = { r: Phaser.GameObjects.Rectangle; cx: number; cy: number };
 
+/** The player's own look, from the outfit they are wearing. */
+export function playerLook(): Look {
+  try {
+    return lookFor(store.get().life?.outfit ?? {});
+  } catch {
+    return {};
+  }
+}
+
 export class Player {
   readonly sprite: Phaser.GameObjects.Container;
   private stepTimer = 0;
@@ -253,7 +264,11 @@ export class Player {
   private dir = 1;
   private blinkT = 2.5;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, night = false, look: Look = {}) {
+  /**
+   * `look` is someone else's clothes.  Left out, it is the player, dressed in
+   * whatever they have on (see game/catalog `lookFor`).
+   */
+  constructor(scene: Phaser.Scene, x: number, y: number, night = false, look: Look = playerLook()) {
     this.shift = scene.input.keyboard?.addKey('SHIFT') ?? null;
     const c = (col: number) => (night ? nightify(col) : col);
     const colOf = (ch: string): number => look.cols?.[ch] ?? COLS[ch];

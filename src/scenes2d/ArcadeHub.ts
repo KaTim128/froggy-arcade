@@ -16,7 +16,7 @@ import { store, type GameId } from '../core/state';
 import { KEY_ITEM, ensureKeyInPocket, holdingKey } from '../game/inventory';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
-import { evaluateBroke } from '../core/broke';
+import { closingTime, evaluateBroke } from '../core/broke';
 import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
 import { paintArcadeDressing, paintChangeMachine, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
@@ -491,6 +491,10 @@ export class ArcadeHub extends Phaser.Scene {
     // event, which covers spending the last token on a game you then quit.
     if (!store.get().seenIntro) this.runTutorial();
     else this.checkBroke();
+    // closing time comes round on the clock, wherever you are standing
+    this.time.addEvent({ delay: 2000, loop: true, callback: () => {
+      if (!this.locked && !this.busy() && closingTime()) this.checkBroke();
+    } });
   }
 
   // ------------------------------------------------------------------ tutorial

@@ -65,6 +65,12 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   StartScreen: BARE,
   ProfileModal: BARE,
   SettingsModal: TAP,
+  Shop: TAP,
+  Goals: TAP,
+  // (the arena draws its own two sticks and attack buttons)
+  CreatureHub: TAP,
+  CreatureArena: BARE,
+  Condo: TAP,
   InventoryModal: TAP,
   // SKIP sends the same Esc the desktop hint names, and it lives in the band
   // under the picture, so it cannot land on the dialogue it is offering to
@@ -99,6 +105,7 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   ExteriorNight: STREET,
   BackAlley: STREET,
   StreetWest: STREET,
+  StreetEast: STREET,
   Hotel: STREET,
 
   PrizeCounter: TAP,

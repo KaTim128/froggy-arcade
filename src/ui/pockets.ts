@@ -12,6 +12,8 @@
  * nothing else.
  */
 
+import { claimable } from '../game/life';
+import { text } from '../core/ui';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { store } from '../core/state';
@@ -129,7 +131,15 @@ export function attachPockets(scene: Phaser.Scene, busy: () => boolean = () => f
   const total = SLOTS * CELL + (SLOTS - 1) * GAP;
   const x0 = GAME_W - 4 - total;
   const y0 = 4;
+  const GOALS_W = 36;
+  const GOALS_X = x0 - 3 - GOALS_W;
+  let drawn = '';
   const draw = (): void => {
+    // (the store changes every second now -- the clock -- so only redraw
+    // when what is in the pockets, or the goals waiting, actually changed)
+    const key = `${heldItems().join(',')}|${goalsReady()}`;
+    if (key === drawn) return;
+    drawn = key;
     layer.removeAll(true);
     const held = heldItems();
     for (let i = 0; i < SLOTS; i++) {
@@ -137,6 +147,15 @@ export function attachPockets(scene: Phaser.Scene, busy: () => boolean = () => f
       layer.add(scene.add.rectangle(x, y0, CELL, CELL, PALETTE.black, 0.55).setOrigin(0, 0).setStrokeStyle(1, PALETTE.slate));
       const d = held[i] ? itemDef(held[i]) : undefined;
       if (d) layer.add(drawItem(scene, x + CELL / 2, y0 + CELL - 1, d, 0.9));
+    }
+    // GOALS, beside the pockets on the same row, with how many are ready to
+    // claim.  (Under them it sat on the rooms' hanging WIN sign, and on the
+    // phone's gear.)
+    if (goalsOn()) {
+      const n = goalsReady();
+      layer.add(scene.add.rectangle(GOALS_X, y0, GOALS_W, CELL, PALETTE.black, 0.55).setOrigin(0, 0).setStrokeStyle(1, n ? PALETTE.gold : PALETTE.slate));
+      layer.add(text(scene, GOALS_X + GOALS_W / 2, y0 + (n ? 1 : 4), 'GOALS', n ? PALETTE.gold : PALETTE.fog).setOrigin(0.5, 0));
+      if (n) layer.add(text(scene, GOALS_X + GOALS_W / 2, y0 + 8, `${n} NEW`, PALETTE.gold).setOrigin(0.5, 0));
     }
   };
   draw();
@@ -148,6 +167,21 @@ export function attachPockets(scene: Phaser.Scene, busy: () => boolean = () => f
     scene.scene.launch('InventoryModal', { from: scene.scene.key });
   };
   scene.input.keyboard?.on('keydown-G', open);
+  const openGoals = (): void => {
+    if (!goalsOn() || busy() || scene.scene.isActive('Goals') || scene.scene.isActive('InventoryModal')) return;
+    scene.scene.launch('Goals', { from: scene.scene.key });
+  };
+  scene.input.keyboard?.on('keydown-J', openGoals);
+  scene.add
+    .zone(GOALS_X, y0, GOALS_W, CELL)
+    .setOrigin(0, 0)
+    .setDepth(941)
+    .setScrollFactor(0)
+    .setInteractive({ useHandCursor: true })
+    .on('pointerdown', (_p: unknown, _x: number, _y: number, ev: { stopPropagation(): void }) => {
+      ev.stopPropagation();
+      openGoals();
+    });
   scene.add
     .zone(x0 - 2, y0 - 2, total + 4, CELL + 4)
     .setOrigin(0, 0)
@@ -158,4 +192,17 @@ export function attachPockets(scene: Phaser.Scene, busy: () => boolean = () => f
       ev.stopPropagation();
       open();
     });
+}
+
+/** Goals are part of the daytime life, not the night's story. */
+function goalsOn(): boolean {
+  const s = store.get();
+  return s.seenIntro && s.route === 'normal' && s.timeOfDay !== 'midnight';
+}
+function goalsReady(): number {
+  try {
+    return goalsOn() ? claimable() : 0;
+  } catch {
+    return 0;
+  }
 }

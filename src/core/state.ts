@@ -5,6 +5,8 @@
  * the settings (PRD ST-5, QFD FMEA #11).
  */
 
+import { defaultLife, sanitizeLife, type LifeState } from '../game/lifeState';
+import { defaultCreatures, sanitizeCreatures, type CreatureState } from '../game/creatureState';
 import { isTouch } from './device';
 
 export type Route = 'normal' | 'ejected' | 'basement' | 'hide' | 'chase' | 'ended';
@@ -189,6 +191,13 @@ export interface GameState {
    * refilled on a new day, or once the machine is empty.
    */
   cranes: Record<string, CraneSave>;
+  /**
+   * ---- LIVING HERE: the clock, rent, food and water, the condo, clothes,
+   * goals.  Versioned on its own and only written through game/life.ts.
+   */
+  life: LifeState;
+  /** Creature Clash (the fourth room): owned creatures, open pack, open battle.  Only written through game/creatureClash.ts. */
+  creatures: CreatureState;
   settings: Settings;
 }
 
@@ -352,6 +361,8 @@ function defaultState(): GameState {
     hotelNight: false,
     hotelAfter: 'none',
     cranes: {},
+    life: defaultLife(),
+    creatures: defaultCreatures(),
     settings: { master: 80, music: 70, sfx: 85, moveStyle: 'stick', ...generalDefaults() },
   };
 }
@@ -460,6 +471,8 @@ class Store {
         fresh.cranes[k] = { day: v.day, toys: toys.map((t) => ({ ...t, flip: !!t.flip, lean: Number.isFinite(t.lean) ? t.lean : 0 })) };
       }
     }
+    fresh.life = sanitizeLife((run as Partial<GameState>).life);
+    fresh.creatures = sanitizeCreatures((run as Partial<GameState>).creatures);
     this.state = fresh;
     // A saved unlimited run comes back unlimited, whatever the file says.
     if (this.isAdmin()) this.state.tokens = ADMIN_TOKENS;

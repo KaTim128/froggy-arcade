@@ -12,6 +12,7 @@
  * Darker and quieter than the arcade floor.  Nobody has ever won in here.
  */
 
+import { closingTime } from '../core/broke';
 import Phaser from 'phaser';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../game/roomWalk';
 import { PALETTE } from '../render/palette';
@@ -181,6 +182,13 @@ export class ArcadeCasino extends Phaser.Scene {
     // back the moment it stops owning it.
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => froggyLayer.clear());
 
+    // closing time: back to the front room, where he is waiting to say so
+    this.time.addEvent({ delay: 2000, loop: true, callback: () => {
+      if (!this.locked && !this.busy() && closingTime() && !store.get().froggyGone && store.get().route === 'normal') {
+        this.locked = true;
+        fadeToScene(this, 'ArcadeHub', {});
+      }
+    } });
     store.flush();
   }
 

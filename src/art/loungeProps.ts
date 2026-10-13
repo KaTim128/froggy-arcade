@@ -112,3 +112,47 @@ export function paintCrane(scene: Phaser.Scene, x: number, y: number, kind: Cran
   }
   return c;
 }
+
+export const CLASH_W = 36;
+export const CLASH_H = 34;
+
+/**
+ * CREATURE CLASH, the cabinet: a tall upright with a lit marquee, a screen
+ * with two little creatures squaring up on it, and two sticks on the panel
+ * (it is a twin-stick game).  Feet on `y`, sorted with the player like the
+ * cranes.  After closing: dark glass, the marquee off.
+ */
+export function paintClashCabinet(scene: Phaser.Scene, x: number, y: number, night: boolean): Phaser.GameObjects.Container {
+  const c = scene.add.container(x, y).setDepth(depthFor(y));
+  const n = (col: number) => (night ? nightify(col, 0.75) : col);
+  const W = CLASH_W;
+  const H = CLASH_H;
+  // body and side panels
+  c.add(scene.add.rectangle(0, -H / 2, W, H, n(0x1e2a5a)).setStrokeStyle(1, n(PALETTE.ink)));
+  c.add(scene.add.rectangle(-W / 2 + 2, -H / 2, 3, H - 2, n(0x3a5ab8)));
+  c.add(scene.add.rectangle(W / 2 - 2, -H / 2, 3, H - 2, n(0x3a5ab8)));
+  // marquee
+  c.add(scene.add.rectangle(0, -H + 5, W - 2, 10, n(night ? 0x1a1a2a : 0xf0a830)).setStrokeStyle(1, n(PALETTE.ink)));
+  c.add(centerText(scene, 0, -H + 6, 'CLASH', night ? nightify(PALETTE.ink, 0.6) : PALETTE.ink));
+  // screen: two creatures facing off on grass
+  c.add(scene.add.rectangle(0, -H + 15, W - 8, 12, n(0x0c1020)).setStrokeStyle(1, n(0x5a6a98)));
+  if (!night) {
+    c.add(scene.add.rectangle(0, -H + 19, W - 10, 3, 0x3a7a3a));
+    c.add(scene.add.circle(-5, -H + 15, 2.5, 0xe8642a));
+    c.add(scene.add.circle(5, -H + 15, 2.5, 0x3a8ad8));
+    c.add(scene.add.rectangle(0, -H + 14, 3, 1, 0xfff4a0));
+    const glow = scene.add.rectangle(0, -H + 15, W - 8, 12, 0x8ab0ff, 0.12);
+    c.add(glow);
+    scene.tweens.add({ targets: glow, alpha: 0.02, duration: 700, yoyo: true, repeat: -1 });
+  }
+  // control panel: two sticks and three buttons
+  c.add(scene.add.rectangle(0, -9, W - 2, 5, n(0x2a3a78)));
+  for (const sx of [-8, 8]) {
+    c.add(scene.add.rectangle(sx, -12, 1, 3, n(0x101010)));
+    c.add(scene.add.circle(sx, -13, 1.5, n(0xd83a4a)));
+  }
+  for (const [bx, col] of [[-2, 0xf0d030], [1, 0x5ac85a], [4, 0x4a9aff]] as const) c.add(scene.add.rectangle(bx - 1, -9, 2, 2, n(col)));
+  // coin door
+  c.add(scene.add.rectangle(0, -3, 8, 4, n(0x141a3a)).setStrokeStyle(1, n(0x5a6a98)));
+  return c;
+}

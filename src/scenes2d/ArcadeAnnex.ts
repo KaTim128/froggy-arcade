@@ -10,6 +10,7 @@
  * Everything that only happens once happens in there, not in here.
  */
 
+import { closingTime } from '../core/broke';
 import Phaser from 'phaser';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../game/roomWalk';
 import { PALETTE } from '../render/palette';
@@ -125,6 +126,13 @@ export class ArcadeAnnex extends Phaser.Scene {
     // machines each own a hitbox and answer a click on themselves; [E] is the
     // other way in, and the only thing proximity does.
 
+    // closing time: back to the front room, where he is waiting to say so
+    this.time.addEvent({ delay: 2000, loop: true, callback: () => {
+      if (!this.locked && !this.busy() && closingTime() && !store.get().froggyGone && store.get().route === 'normal') {
+        this.locked = true;
+        fadeToScene(this, 'ArcadeHub', {});
+      }
+    } });
     store.flush();
   }
 

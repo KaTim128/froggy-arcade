@@ -15,6 +15,7 @@
  */
 
 import Phaser from 'phaser';
+import { pullBackAtClosing } from '../game/closingPull';
 import { TokenHud } from '../ui/hud';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -24,7 +25,6 @@ import { centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { LOOKS, Player } from '../art/player';
 import { GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
-import { ROOM_MONEY } from './PrizeExchange';
 import { HOTEL_DOOR, HOTEL_H, HOTEL_W, paintHotel } from '../art/hotel';
 
 export const WORLD_W = 640;
@@ -75,6 +75,7 @@ export class StreetWest extends Phaser.Scene {
     // (top right: the hotel's name is across the top left of the street)
     new TokenHud(this);
     attachPockets(this, () => this.locked);
+    pullBackAtClosing(this, () => !this.locked, () => (this.locked = true));
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
     this.mutterPlate = this.add.rectangle(0, 0, 1, 1, PALETTE.black, 0.72).setOrigin(0, 0).setDepth(801).setScrollFactor(0).setVisible(false);
     this.mutter = centerText(this, 160, GAME_H - 40, '', PALETTE.cream).setDepth(802).setScrollFactor(0).setVisible(false).setMaxWidth(290);
@@ -85,7 +86,7 @@ export class StreetWest extends Phaser.Scene {
     kb?.on('keydown-E', () => this.interact());
     // tap the doorman or the door to walk there and use it
     this.add.zone(DOOR_X - 10, WALK_Y - 40, 20, 40).setOrigin(0, 0).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.walkTo('door'));
-    this.add.zone(DOORMAN_X - 8, WALK_Y - 34, 16, 34).setOrigin(0, 0).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.walkTo('doorman'));
+
   }
 
   private errand: Spot = null;
@@ -246,7 +247,7 @@ export class StreetWest extends Phaser.Scene {
     g.fillStyle(0x5a3a1e, 1).fillRect(B - S(16), foot - 5, 1, 5).fillRect(B + S(5), foot - 5, 1, 5);
     // ---- the hotel, at the end of the street: the same painting as the
     // front of it at the end of the night road (art/hotel.ts)
-    const key = dusk ? 'grand_lily_dusk' : 'grand_lily_day';
+    const key = dusk ? 'lily_condos_dusk' : 'lily_condos_day';
     if (!this.textures.exists(key)) {
       const tex = this.textures.createCanvas(key, HOTEL_W, HOTEL_H);
       if (tex) {
@@ -262,12 +263,7 @@ export class StreetWest extends Phaser.Scene {
     this.add.rectangle(DOOR_X - 13, 158, 1, 4, 0xc9a24a).setOrigin(0, 0);
     this.add.rectangle(DOOR_X + 12, 158, 1, 4, 0xc9a24a).setOrigin(0, 0);
     if (store.get().hotelAfter === 'escaped') return this.paintAftermath();
-    // the doorman: the drifter's own rig, in a long maroon coat and a cap
-    const d = DOORMAN_X;
-    this.add.ellipse(d + 1, 158, 13, 3, 0x000000, 0.3);
-    const man = new Player(this, d, 158, dusk, LOOKS.doorman);
-    man.stride(-1, 0);
-    man.stand();
+    // (no doorman any more: Lily's is flats, and anyone may go in)
   }
 
   /**
@@ -343,19 +339,8 @@ export class StreetWest extends Phaser.Scene {
       this.say('POLICE: "Crime scene. Nobody goes in, I\'m afraid."');
       return;
     }
-    const cash = store.get().cash;
-    const welcome = cash >= ROOM_MONEY || store.get().checkedIn;
     if (this.spot === 'bus') {
       this.say('The bus stop across the road.  Nothing has stopped there in years.');
-      return;
-    }
-    if (!welcome) {
-      audio.sfx('buzzer', 0.4);
-      this.say(DOORMAN_NO);
-      return;
-    }
-    if (this.spot === 'doorman') {
-      this.say('"Good evening. Reception is straight through."');
       return;
     }
     this.locked = true;
@@ -397,12 +382,12 @@ export class StreetWest extends Phaser.Scene {
       return;
     }
     const px = this.player.x;
-    this.spot = Math.abs(px - DOOR_X) < 10 ? 'door' : Math.abs(px - DOORMAN_X) < 18 ? 'doorman' : Math.abs(px - BUS_X) < 22 ? 'bus' : null;
+    this.spot = Math.abs(px - DOOR_X) < 10 ? 'door' : Math.abs(px - BUS_X) < 22 ? 'bus' : null;
     if (!this.spot) {
       this.prompt.setVisible(false);
       return;
     }
-    const label = this.spot === 'door' ? '[E] GO IN' : this.spot === 'doorman' ? '[E] TALK' : '[E] LOOK';
+    const label = this.spot === 'door' ? '[E] GO IN' : '[E] LOOK';
     // (not while a line is being said: the two would sit on top of each other)
     this.prompt.setText(label).setPosition(px, WALK_Y - 36).setVisible(!(this.mutter.visible && this.mutter.alpha > 0.2));
   }

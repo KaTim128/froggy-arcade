@@ -50,7 +50,7 @@ const newPage = async (query) => {
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   await page.goto(`${URL}/${query}`, { waitUntil: 'networkidle2' });
   await sleep(900);
-  await page.mouse.click(640, 700);
+  await page.mouse.click(40, 40); // (audio gesture on the purse: the floor would walk you somewhere)
   await sleep(700);
   return page;
 };
@@ -90,6 +90,16 @@ console.log('\nAC-6  route guards (every scene x every route)');
   await page.close();
 }
 
+/** Wait (up to `ms`) for a scene to be running -- the walk to a cabinet takes as long as it takes. */
+async function waitScene(page, key, ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if ((await active(page)).includes(key)) return true;
+    await sleep(250);
+  }
+  return false;
+}
+
 // ------------------------------------------------------- AC-3 charity, once
 console.log('\nAC-3  charity fires exactly once per run');
 {
@@ -106,15 +116,17 @@ console.log('\nAC-3  charity fires exactly once per run');
   // walking blind and hoping — is deliberate: retuning whichever cabinet
   // happened to sit bottom-left used to silently stop the run going broke.
   await page.mouse.click(640 + (52 - 160) * 4, 360 + (88 - 90) * 4); // TIC-TAC-TOE, 1 token
-  await sleep(5000); // (walked to first)
+  await waitScene(page, 'Minigame', 20000); // (walked to first)
+  await sleep(600);
   await page.keyboard.press('Space'); // PLAY -> 0 tokens
   await sleep(900);
-  await page.keyboard.press('Escape'); // forfeit the play
+  // forfeit the play (Esc mid-game is the pause menu now; QUIT confirmed is this)
+  await page.evaluate(() => window.__froggy.game().scene.getScene('Minigame').quitTo('ArcadeHub'));
   await sleep(12000); // result card, hub, charity dialogue
 
   await page.screenshot({ path: `${SHOTS}/01-charity.png` });
   const afterCharity = await st(page);
-  check('charity granted 10 tokens', afterCharity.tokens === 10, `tokens=${afterCharity.tokens}`);
+  check('charity granted 20 tokens', afterCharity.tokens === 20, `tokens=${afterCharity.tokens}`);
   check('charityUsed latched', afterCharity.charityUsed === true);
   check('still on the normal route', afterCharity.route === 'normal');
 
@@ -141,10 +153,22 @@ console.log('\nAC-4  second bust ejects, front door locked for good');
   // cabinet happened to sit bottom-left, so retuning that cabinet's cost
   // silently stopped the run from ever going broke.
   await page.mouse.click(640 + (52 - 160) * 4, 360 + (88 - 90) * 4); // TIC-TAC-TOE, 1 token
-  await sleep(5000); // (walked to first)
+  await waitScene(page, 'Minigame', 20000); // (walked to first)
+  await sleep(600);
   await page.keyboard.press('Space'); // PLAY
   await sleep(900);
-  await page.keyboard.press('Escape');
+  // forfeit the play (Esc mid-game is the pause menu now; QUIT confirmed is this)
+  await page.evaluate(() => window.__froggy.game().scene.getScene('Minigame').quitTo('ArcadeHub'));
+  await sleep(4000);
+  // Broke again after the handout is NOT the end of the day any more: the
+  // pocket is empty and play goes on (the street, begging, the goals).
+  const brokeAgain = await active(page);
+  check('out of tokens after the handout does not close the arcade', !brokeAgain.includes('SecondBust'), brokeAgain.join(','));
+  // Closing time does: 22:00 on the game clock (one day = 20 minutes).
+  await page.evaluate(() => {
+    const s = window.__froggy.state();
+    window.__froggy.patch({ life: { ...s.life, t: 1200 * (14 / 24) + 5 } });
+  });
   await sleep(6000);
 
   await page.screenshot({ path: `${SHOTS}/02-second-bust.png` });
@@ -192,7 +216,7 @@ console.log('\nAC-10 the silence contract');
 
   await page.goto(`${URL}/?intro=1&charity=1&route=ejected&scene=ArcadeDark`, { waitUntil: 'networkidle2' });
   await sleep(900);
-  await page.mouse.click(640, 700);
+  await page.mouse.click(40, 40); // (audio gesture on the purse: the floor would walk you somewhere)
   await sleep(2200);
   const darkSources = await page.evaluate(() => window.__froggy.audioSources());
   await page.screenshot({ path: `${SHOTS}/05-arcade-dark.png` });

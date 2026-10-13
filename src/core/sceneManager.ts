@@ -6,6 +6,13 @@
  * completely on exit (contexts released, RAF cancelled) before Phaser resumes.
  */
 
+import { Shop } from '../scenes2d/Shop';
+import { Goals } from '../scenes2d/Goals';
+import { Condo } from '../scenes2d/Condo';
+import { CreatureHub } from '../scenes2d/CreatureHub';
+import { CreatureArena } from '../scenes2d/CreatureArena';
+import { StreetEast } from '../scenes2d/StreetEast';
+import { installLifeTicker } from '../game/lifeTicker';
 import Phaser from 'phaser';
 import { attachLandscapeFill } from '../render/landscapeFill';
 import { PALETTE } from '../render/palette';
@@ -97,6 +104,12 @@ export function bootGame(): void {
       ChangeMachine,
       ExteriorDay,
       StreetWest,
+      StreetEast,
+      Condo,
+      Shop,
+      Goals,
+      CreatureHub,
+      CreatureArena,
       Hotel,
       RooftopEscape,
       ArrestEnding,
@@ -130,6 +143,7 @@ export function bootGame(): void {
   installTouchDirector(game);
   installPause(game);
   initDebug(game);
+  installLifeTicker(game);
 
   // Boot's CLICK TO BEGIN gate is the intended unlock (PRD EC-9), but any first
   // gesture anywhere will do it.  Without this, entering the game at a scene

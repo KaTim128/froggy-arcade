@@ -23,6 +23,7 @@
  * of its left-hand doorway into the dark lobby.
  */
 
+import { closingTime } from '../core/broke';
 import Phaser from 'phaser';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../game/roomWalk';
 import { PALETTE } from '../render/palette';
@@ -37,7 +38,7 @@ import { Player } from '../art/player';
 import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
 import { CABINETS, LOUNGE_DOOR, cabinetsIn } from '../game/content';
-import { paintCrane, CRANE_H, CRANE_W, type CraneKind } from '../art/loungeProps';
+import { paintClashCabinet, paintCrane, CLASH_H, CLASH_W, CRANE_H, CRANE_W, type CraneKind } from '../art/loungeProps';
 import { CRANE_COST } from './CraneGame';
 import { FULL_LINE, pocketsFull } from '../game/inventory';
 import { GAME_W } from '../render/pixelScaler';
@@ -59,8 +60,12 @@ const CRANES: Array<{ kind: CraneKind; x: number; y: number; cost: number; title
   { kind: 'oddity', x: 82, y: 74, cost: CRANE_COST.oddity, title: 'ODDITY CRANE' },
 ];
 
+/** CREATURE CLASH: the upright on the back wall, right of the sign. */
+const CLASH = { x: 244, y: 74 };
+
 type Target =
   | { kind: 'cabinet'; cab: Cabinet }
+  | { kind: 'clash' }
   | { kind: 'back' }
   | { kind: 'side' }
   | { kind: 'crane'; crane: (typeof CRANES)[number] }
@@ -93,8 +98,11 @@ export class ArcadeLounge extends Phaser.Scene {
   /** Back from a crane: stand where you left it. */
   private atProp: CraneKind | null = null;
 
-  init(data: { atCabinet?: GameId; fromAlley?: boolean; atProp?: CraneKind } = {}): void {
+  private fromClash = false;
+
+  init(data: { atCabinet?: GameId; fromAlley?: boolean; atProp?: CraneKind; fromClash?: boolean } = {}): void {
     this.returnTo = data.atCabinet ?? null;
+    this.fromClash = data.fromClash === true;
     this.fromAlley = data.fromAlley === true;
     this.atProp = data.atProp ?? null;
   }
@@ -129,6 +137,7 @@ export class ArcadeLounge extends Phaser.Scene {
     // The game corner: two cranes.
     for (const cab of this.cabinets) this.spots.set(cab, machineSpot(cab.def.x, cab.def.y, CAB_W));
     for (const cr of CRANES) this.spots.set(cr, machineSpot(cr.x, cr.y, CRANE_W, 10));
+    this.spots.set(CLASH, machineSpot(CLASH.x, CLASH.y, CLASH_W, 10));
     this.solids = [...this.spots.values()].map((s) => s.solid!);
     this.walker = new Walker(() => this.bounds, () => this.solids);
     for (const cr of CRANES) {
@@ -138,6 +147,11 @@ export class ArcadeLounge extends Phaser.Scene {
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => this.walkTo(this.spots.get(cr)!, () => this.useCrane(cr)));
     }
+    paintClashCabinet(this, CLASH.x, CLASH.y, this.night);
+    this.add
+      .zone(CLASH.x, CLASH.y - CLASH_H / 2, CLASH_W + 4, CLASH_H)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.walkTo(this.spots.get(CLASH)!, () => this.useClash()));
     for (const cab of this.cabinets) {
       this.add
         .zone(cab.def.x, cab.def.y - CAB_H / 2, CAB_W + 4, CAB_H + 2)
@@ -159,6 +173,8 @@ export class ArcadeLounge extends Phaser.Scene {
       ? { x: ROOM.right - 22, y: SIDE_DOOR.y + SIDE_DOOR.h / 2 + 4 }
       : prop
         ? { x: prop.x, y: prop.y + 12 }
+        : this.fromClash
+          ? { x: CLASH.x, y: CLASH.y + 12 }
         : this.spawnPoint({ x: BACK_DOOR.x + 18, y: BACK_DOOR.y });
     this.player = new Player(this, spawn.x, spawn.y, this.night);
     if (this.night) this.player.setSurface('carpet');
@@ -181,6 +197,13 @@ export class ArcadeLounge extends Phaser.Scene {
     // A click on the floor is floor.  The door answers a click on the door,
     // a machine a click on the machine; nothing is reached by proximity.
 
+    // closing time: back to the front room, where he is waiting to say so
+    this.time.addEvent({ delay: 2000, loop: true, callback: () => {
+      if (!this.locked && !this.busy() && closingTime() && !store.get().froggyGone && store.get().route === 'normal') {
+        this.locked = true;
+        fadeToScene(this, 'ArcadeHub', {});
+      }
+    } });
     store.flush();
   }
 
@@ -192,13 +215,13 @@ export class ArcadeLounge extends Phaser.Scene {
       // Switched off: the letters are there, dark on dark, and nothing buzzes.
       this.add.rectangle(x, y, 122, 26, PALETTE.black).setStrokeStyle(1, PALETTE.slate).setDepth(1);
       centerText(this, x, y - 5, 'GAME CORNER', PALETTE.slate).setDepth(2).setAlpha(0.6);
-      centerText(this, x, y + 5, 'CLAW MACHINES', PALETTE.slate).setDepth(2).setAlpha(0.5);
+      centerText(this, x, y + 5, 'CLAWS + CLASH', PALETTE.slate).setDepth(2).setAlpha(0.5);
       return;
     }
     this.add.rectangle(x, y, 122, 26, PALETTE.ink).setStrokeStyle(1, PALETTE.neon).setDepth(1);
     this.add.rectangle(x, y, 118, 22, PALETTE.plum, 0.35).setDepth(1);
     centerText(this, x, y - 5, 'GAME CORNER', PALETTE.gold).setDepth(2);
-    centerText(this, x, y + 5, 'CLAW MACHINES', PALETTE.neon).setDepth(2);
+    centerText(this, x, y + 5, 'CLAWS + CLASH', PALETTE.neon).setDepth(2);
     // It buzzes like every other sign in the building.
     const glow = this.add.rectangle(x, y, 126, 30, PALETTE.neon, 0.08).setDepth(0.9);
     this.tweens.add({ targets: glow, alpha: 0.02, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
@@ -331,7 +354,23 @@ export class ArcadeLounge extends Phaser.Scene {
       this.useCrane(this.target.crane);
       return;
     }
+    if (this.target.kind === 'clash') {
+      this.useClash();
+      return;
+    }
     this.launchGame(this.target.cab, 'play');
+  }
+
+  /** Into CREATURE CLASH.  Nothing is paid here: the packs and the battles inside ask. */
+  private useClash(): void {
+    if (this.busy()) return;
+    if (this.night) {
+      this.say('Dark. Two little shapes squaring up on the dead glass.');
+      return;
+    }
+    this.locked = true;
+    audio.sfx('coin_drop', 0.5);
+    fadeToScene(this, 'CreatureHub', { from: 'ArcadeLounge' });
   }
 
   /**
@@ -416,6 +455,7 @@ export class ArcadeLounge extends Phaser.Scene {
     }
     if (best) return { kind: 'cabinet', cab: best };
     for (const cr of CRANES) if (this.spots.get(cr)?.at(px, py)) return { kind: 'crane', crane: cr };
+    if (this.spots.get(CLASH)?.at(px, py)) return { kind: 'clash' };
     if (px < BACK_DOOR.x + 20 && Math.abs(py - BACK_DOOR.y) < 28) return { kind: 'back' };
     return null;
   }
@@ -435,6 +475,8 @@ export class ArcadeLounge extends Phaser.Scene {
       colour = ledger.balance() >= cost ? PALETTE.gold : PALETTE.ash;
     } else if (t.kind === 'side') {
       msg = '[E] DOOR';
+    } else if (t.kind === 'clash') {
+      msg = this.night ? '[E] CABINET' : '[E] CREATURE CLASH';
     } else if (t.kind === 'crane') {
       msg = this.night ? '[E] CRANE' : `[E] ${t.crane.title} - ${t.crane.cost} TOKENS`;
       colour = this.night || ledger.balance() >= t.crane.cost ? PALETTE.gold : PALETTE.ash;

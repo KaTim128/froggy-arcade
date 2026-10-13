@@ -13,6 +13,8 @@ export type LedgerReason =
   | 'game.cost' // minigame launch
   | 'game.reward' // minigame win
   | 'game.refund' // a tie: the entry cost handed straight back
+  | 'mission' // a daily goal, weekly goal or achievement claimed
+  | 'creature' // the creature arena's fees and winnings
   | 'charity' // Froggy's five
   | 'change' // the machine on the back wall, at half rate
   | 'prize' // redemption

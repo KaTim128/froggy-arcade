@@ -12,6 +12,7 @@ import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
 import { text } from '../core/ui';
 import { store } from '../core/state';
+import { clock, rentInDays, takeNotice } from '../game/life';
 
 export const LOW_TOKEN_THRESHOLD = 3;
 
@@ -30,6 +31,12 @@ export class TokenHud {
   private unsub: () => void;
   private pulse?: Phaser.Tweens.Tween;
   private lastCash = -1;
+  /** Energy, food and water, small, under the purse: energy on top. */
+  private bars: { fill: Phaser.GameObjects.Rectangle; key: 'energy' | 'hunger' | 'thirst' }[] = [];
+  private clockText!: Phaser.GameObjects.BitmapText;
+  private lifeBox!: Phaser.GameObjects.Container;
+  private toast: Phaser.GameObjects.Container | null = null;
+  private lifePlate!: Phaser.GameObjects.Rectangle;
 
   /**
    * Cash on the left, tokens beside it: the two currencies side by side and
@@ -49,10 +56,12 @@ export class TokenHud {
 
     this.container = scene.add.container(at.x ?? 4, at.y ?? 4, [this.cashPlate, this.cashLabel, this.tokens]);
     this.container.setDepth(950).setScrollFactor(0);
+    this.buildLife();
 
     this.unsub = ledger.onChange((next, prev) => this.onChange(next, prev));
     const unStore = store.subscribe((st) => {
       if (st.cash !== this.lastCash) this.refreshCash(st.cash);
+      this.refreshLife();
     });
     this.refreshCash(store.get().cash);
     this.refresh(ledger.balance());
@@ -111,5 +120,65 @@ export class TokenHud {
 
   setVisible(v: boolean): void {
     this.container.setVisible(v);
+  }
+
+  /**
+   * ---- THE BODY.  Three thin bars under the purse -- ENERGY, then FOOD,
+   * then WATER -- each with its letter, and the clock and the rent beside
+   * them.  Small: 34 pixels wide, 2 high, out of the way of everything.
+   */
+  private buildLife(): void {
+    const parts: Phaser.GameObjects.GameObject[] = [];
+    const plate = this.scene.add.rectangle(0, 0, 112, 20, PALETTE.black, 0.6).setOrigin(0, 0);
+    parts.push(plate);
+    const rows: Array<['energy' | 'hunger' | 'thirst', string, number]> = [
+      ['energy', 'E', PALETTE.gold],
+      ['hunger', 'F', 0xe8925a],
+      ['thirst', 'W', 0x6fc0f0],
+    ];
+    rows.forEach(([key, letter, col], i) => {
+      const y = 1 + i * 6;
+      parts.push(text(this.scene, 2, y, letter, col));
+      parts.push(this.scene.add.rectangle(9, y + 1, 34, 3, 0x222833).setOrigin(0, 0));
+      const fill = this.scene.add.rectangle(9, y + 1, 34, 3, col).setOrigin(0, 0);
+      parts.push(fill);
+      this.bars.push({ fill, key });
+    });
+    this.clockText = text(this.scene, 47, 1, '', PALETTE.fog);
+    parts.push(this.clockText);
+    this.lifeBox = this.scene.add.container(0, 16, parts);
+    this.lifePlate = plate;
+    this.container.add(this.lifeBox);
+    this.refreshLife();
+  }
+
+  private refreshLife(): void {
+    const s = store.get();
+    const on = s.seenIntro && s.route === 'normal' && s.timeOfDay !== 'midnight';
+    this.lifeBox.setVisible(on);
+    if (!on) return;
+    const l = s.life;
+    for (const b of this.bars) {
+      const v = l[b.key];
+      b.fill.width = Math.max(0, Math.round((34 * v) / 100));
+      b.fill.setAlpha(v < 20 ? 0.55 + 0.45 * Math.abs(Math.sin(Date.now() / 300)) : 1);
+    }
+    const c = clock(l.t);
+    const rent = l.rented ? (rentInDays(l) <= 0 ? 'RENT DUE' : `RENT ${rentInDays(l)}D`) : '';
+    this.clockText.setText(`DAY ${c.day + 1} ${c.text}\n${rent}`);
+    this.lifePlate.width = 47 + this.clockText.width + 3;
+    const n = takeNotice();
+    if (n) this.showToast(n);
+  }
+
+  /** A life notice, along the bottom for a few seconds. */
+  private showToast(msg: string): void {
+    this.toast?.destroy();
+    const t = text(this.scene, 160, 0, msg, PALETTE.cream).setOrigin(0.5, 0.5);
+    const w = Math.min(312, t.width + 10);
+    const plate = this.scene.add.rectangle(160, 0, w, 12, PALETTE.black, 0.8).setStrokeStyle(1, PALETTE.gold);
+    this.toast = this.scene.add.container(0, 150, [plate, t]).setDepth(960).setScrollFactor(0);
+    const toast = this.toast;
+    this.scene.tweens.add({ targets: toast, alpha: 0, delay: 3800, duration: 600, onComplete: () => toast.destroy() });
   }
 }
