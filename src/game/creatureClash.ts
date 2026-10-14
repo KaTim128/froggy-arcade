@@ -8,13 +8,14 @@
  *   packs        50 / 150 / 300 tokens, nine different cards face down, pick 1
  *   party        two at most, one fights
  *   battle       2 tokens in; a win pays 5; a loss faints the fighter (gone)
- *                and costs 1 more, never below zero
+ *                and costs nothing further -- what is left in your pocket is
+ *                yours, however the fight went
  *   recovery     nobody left: the recruitment table, same three packs
  */
 
 import { store, type GameState } from '../core/state';
 import { ledger } from '../core/ledger';
-import { BATTLE_COST, BATTLE_WIN, BIOMES, BOSS_AFTER, DEFEAT_PENALTY, MAX_OWNED, STARTERS, TIERS, creatureById, rollPack, type Creature, type Tier } from './creatures';
+import { BATTLE_COST, BATTLE_WIN, BIOMES, BOSS_AFTER, MAX_OWNED, STARTERS, TIERS, creatureById, rollPack, type Creature, type Tier } from './creatures';
 import type { CreatureState, Owned } from './creatureState';
 import { record } from './life';
 import { MAX_LEVEL, MAX_XP, XP_BOSS, XP_WIN, levelOf, withLevel } from './creatureLevel';
@@ -143,12 +144,6 @@ export function startBattle(biomeId: string, boss: boolean): Result {
   return ok('FIGHT!');
 }
 
-function takePenalty(): number {
-  const n = Math.min(DEFEAT_PENALTY, ledger.balance());
-  if (n > 0) ledger.debit(n, 'creature');
-  return n;
-}
-
 /**
  * The end of a battle.  Only one call per battle does anything: the battle
  * is closed in the same write, so a second call (a double tap, a late timer)
@@ -191,17 +186,20 @@ export function finishBattle(won: boolean): Result & { paid: number; lost?: stri
     s.owned = s.owned.filter((o) => o.uid !== s.active);
     s.active = s.owned[0]?.uid ?? -1;
   });
-  const pen = takePenalty();
   store.flush();
   const name = fighter ? creatureById(fighter.id)!.name.toUpperCase() : 'YOUR CREATURE';
-  return { ...ok(`${name} FAINTED AND IS GONE.${pen ? ` -${pen} TOKEN.` : ''}`), paid: -pen, lost: fighter?.id };
+  // THE LOSS IS THE CREATURE.  Losing takes the one that fought and nothing
+  // else: the tokens left in your pocket are still yours, so a bad run costs
+  // you your fighter and the stake you already paid, never the float you
+  // need to put another one in the machine.
+  return { ...ok(`${name} FAINTED. YOUR TOKENS ARE SAFE.`), paid: 0, lost: fighter?.id };
 }
 
 /**
- * Walking away mid-fight (QUIT, or the page going away).  The fighter comes
- * home; the stake stays spent and the penalty is paid, so it is never
- * cheaper to leave than to lose a battle you were already losing -- only
- * kinder to the creature.
+ * The battle closed without a result -- the page going away mid-fight, or
+ * QUIT before the count reaches one.  There is no running from a fight that
+ * has started (the arena gives no way to), so this only tidies up: the
+ * fighter comes home, the stake stays spent, and nothing else is taken.
  */
 export function retreat(): Result {
   if (!C().battle) return no('NO BATTLE IS ON.');
@@ -209,7 +207,6 @@ export function retreat(): Result {
     s.battle = null;
     s.losses += 1;
   });
-  const pen = takePenalty();
   store.flush();
-  return ok(`YOU RAN.${pen ? ` -${pen} TOKEN.` : ''}`);
+  return ok('THE BATTLE IS OVER.');
 }

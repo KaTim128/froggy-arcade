@@ -49,7 +49,25 @@ const WORDS: Record<AttackKind, { word: string; emoji: string }> = {
   mine: { word: 'TRAP', emoji: '💣' },
   shield: { word: 'GUARD', emoji: '🛡️' },
   blink: { word: 'BLINK', emoji: '💨' },
+  arc: { word: 'LOB', emoji: '🌋' },
+  snare: { word: 'SNARE', emoji: '🕸️' },
+  aura: { word: 'CHARGE', emoji: '⚡' },
+  mend: { word: 'MEND', emoji: '💚' },
+  wall: { word: 'COVER', emoji: '🧱' },
 };
+
+/** How long a lobbed shot is in the air before it lands. */
+const ARC_T = 0.75;
+/** What an aura is worth, and for how long (CreatureArena: `aura`). */
+export const AURA_S = 5;
+export const AURA_SPEED = 1.35;
+export const AURA_POWER = 1.25;
+/** A snare holds you still this long (CreatureArena: `root`). */
+export const ROOT_S = 1.3;
+/** A mend gives back this much of a full health bar. */
+export const MEND_FRAC = 0.22;
+/** A dropped piece of cover stands this long. */
+export const WALL_S = 7;
 
 export function attackInfo(a: Attack, el: Element, scale = 1): AttackInfo {
   const effect = a.dmg > 0 ? ELEMENTS[el].effect : '';
@@ -82,7 +100,35 @@ export function attackInfo(a: Attack, el: Element, scale = 1): AttackInfo {
       return { ...base, type: 'DEFENCE', target: 'YOU', range: `BLOCKS ALL HITS ${a.reach}S`, reachPx: 0, use: 'POP IT WHEN A BIG ATTACK IS COMING.' };
     case 'blink':
       return { ...base, type: 'MOVEMENT', target: 'YOU', range: `TELEPORT ${a.reach}PX`, reachPx: a.reach, use: 'ESCAPE, OR GET BEHIND COVER. NO DAMAGE.' };
+    case 'arc': {
+      const r = Math.round(a.reach * ARC_T);
+      return { ...base, type: 'LOBBED (AREA)', target: 'BURSTS WHERE IT LANDS', range: `OVER COVER, UP TO ${r}PX`, reachPx: r, use: 'THE ONE SHOT THAT IGNORES COVER. LEAD THEM.' };
+    }
+    case 'snare': {
+      const r = Math.round(a.reach * SHOT_LIFE);
+      return { ...base, type: 'PROJECTILE (HOLD)', target: 'SINGLE TARGET', range: `LONG RANGE ${r}PX`, reachPx: r, use: `ROOTS THEM FOR ${ROOT_S}S. SET UP YOUR BIG ONE.` };
+    }
+    case 'aura':
+      return { ...base, type: 'BUFF (SELF)', target: 'YOU', range: `${AURA_S}S OF IT`, reachPx: 0, use: `+${Math.round((AURA_SPEED - 1) * 100)}% SPEED, +${Math.round((AURA_POWER - 1) * 100)}% DAMAGE. OPEN WITH IT.` };
+    case 'mend':
+      return { ...base, type: 'HEAL (SELF)', target: 'YOU', range: `${Math.round(MEND_FRAC * 100)}% OF FULL HEALTH`, reachPx: 0, use: 'BREAK AWAY FIRST - IT TAKES A MOMENT.' };
+    case 'wall':
+      return { ...base, type: 'COVER (PLACED)', target: 'BLOCKS SHOTS', range: `DROPPED ${a.reach}PX AWAY, ${WALL_S}S`, reachPx: a.reach, use: 'PUT IT BETWEEN YOU AND THEIR BIG MOVE.' };
   }
+}
+
+/**
+ * The whole card, for the menu: every line a player could want before
+ * choosing a move -- what kind it is, what it hits, how far, how hard, how
+ * often, what the element adds, and when to reach for it.
+ */
+export function attackCard(a: Attack, el: Element, scale = 1): string[] {
+  const i = attackInfo(a, el, scale);
+  const out = [`TYPE: ${i.type}`, `HITS: ${i.target}`, `RANGE: ${i.range}`];
+  out.push(`DAMAGE: ${a.dmg > 0 ? `${a.dmg}` : 'NONE'}    COOLDOWN: ${a.cd}S`);
+  if (i.effect) out.push(`ON HIT: ${i.effect}`);
+  out.push(`USE: ${i.use}`);
+  return out;
 }
 
 /** One short line for a list: SHOT - PROJECTILE, SINGLE TARGET - 12 DMG - 0.6S */

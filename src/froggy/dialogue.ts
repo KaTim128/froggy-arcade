@@ -246,8 +246,11 @@ export class DialogueBox {
 
   private paintPortrait(line: DialogueLine): void {
     this.painted = true;
-    const talking = this.state === 'typing';
-    const pose: FroggyPose = line.pose ?? (talking ? 'talk' : 'idleA');
+    // HIS MOUTH STAYS SHUT.  The portrait beside the words used to gape open
+    // on every line that was still typing, which read as a scream rather than
+    // as somebody talking; the line itself says he is speaking.  A pose a
+    // line asks for by name is still honoured -- the story needs those.
+    const pose: FroggyPose = line.pose ?? 'idleA';
     froggyLayer.paint(
       (ctx) => {
         drawFroggy(ctx, {
