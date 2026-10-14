@@ -89,7 +89,8 @@ let scleraTex: THREE.CanvasTexture | null = null;
  * The white of the eye, painted rather than built: yellowed toward the rim,
  * with thin red veins creeping in from it and stopping short of the pupil.
  * Laid on a sphere whose pole faces forward, so the top of the canvas is the
- * middle of the eye and the bottom half is the part the socket hides.
+ * middle of the eye and the bottom half its sides and back -- still white,
+ * only a little more yellowed, since from the side they show.
  */
 function sclera(): THREE.CanvasTexture {
   if (scleraTex) return scleraTex;
@@ -100,11 +101,14 @@ function sclera(): THREE.CanvasTexture {
   c.height = H;
   const ctx = c.getContext('2d')!;
   const g = ctx.createLinearGradient(0, 0, 0, H);
+  // (it stays an eye all the way round: the eyes stand proud of the head,
+  // and seen from the side the back of the ball shows -- painted the brown
+  // of the socket it was meant to sit in, it read as skin inside the eye)
   g.addColorStop(0, '#f2f0ea');
   g.addColorStop(0.28, '#e9e5da');
-  g.addColorStop(0.45, '#d8cdb4');
-  g.addColorStop(0.6, '#b59d83');
-  g.addColorStop(1, '#6e5a4c');
+  g.addColorStop(0.45, '#ddd3bd');
+  g.addColorStop(0.6, '#d3c6ab');
+  g.addColorStop(1, '#c6b598');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
   let seed = 7;
@@ -120,7 +124,7 @@ function sclera(): THREE.CanvasTexture {
   const flush = ctx.createLinearGradient(0, H * 0.18, 0, H * 0.6);
   flush.addColorStop(0, 'rgba(150,40,36,0)');
   flush.addColorStop(0.55, 'rgba(150,40,36,0.16)');
-  flush.addColorStop(1, 'rgba(120,20,22,0.42)');
+  flush.addColorStop(1, 'rgba(120,20,22,0.26)');
   ctx.fillStyle = flush;
   ctx.fillRect(0, 0, W, H);
   // the veins: from the rim (y ~ 0.55H) up toward the middle, branching
@@ -1395,13 +1399,19 @@ export class FroggyMonster {
       const eyeK = side > 0 ? 1.06 : 1;
       const socket = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.122, 20, 16), 0.004, 9, 87 + side), face);
       socket.position.set(ex, ey - 0.014, ez - 0.05);
+      // narrower than the eyeball across and set back: seen from the side,
+      // a socket wider than the eye stood in front of the back of it, and the
+      // white was cut off by a wall of skin
+      socket.scale.set(0.84, 1, 0.9);
       this.head.add(socket);
       const eye = new THREE.Group();
       eye.position.set(ex, ey, ez + 0.012);
       eye.scale.setScalar(eyeK);
       this.head.add(eye);
-      const shade = new THREE.Mesh(new THREE.TorusGeometry(0.108 * eyeK, 0.014, 8, 30), hollow);
-      shade.position.set(ex, ey - 0.004, ez - 0.012);
+      // (inside the eyeball's outline, so from the side it is behind it and
+      // not a black bar beside it)
+      const shade = new THREE.Mesh(new THREE.TorusGeometry(0.094 * eyeK, 0.012, 8, 30), hollow);
+      shade.position.set(ex, ey - 0.004, ez - 0.02);
       this.head.add(shade);
       // fine veins creeping in from the rim, painted on, thin enough to be
       // seen only up close -- which is where you will be
@@ -1475,15 +1485,16 @@ export class FroggyMonster {
         lumpy(new THREE.SphereGeometry(0.128 * eyeK, 22, 10, 0, Math.PI * 2, 0, Math.PI * 0.52), 0.003, 11, 61 + side),
         lidMat,
       );
-      brow.position.set(ex, ey + 0.004, ez - 0.03);
-      brow.scale.set(1.04, 0.95, 0.9);
+      brow.position.set(ex, ey + 0.004, ez - 0.042);
+      // (inside the eye's own outline from the side: see the socket)
+      brow.scale.set(0.9, 0.95, 0.84);
       this.head.add(brow);
       const cheek = new THREE.Mesh(
         lumpy(new THREE.SphereGeometry(0.126 * eyeK, 22, 10, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5), 0.003, 11, 71 + side),
         lidMat,
       );
-      cheek.position.set(ex, ey - 0.004, ez - 0.032);
-      cheek.scale.set(1.03, 0.9, 0.88);
+      cheek.position.set(ex, ey - 0.004, ez - 0.044);
+      cheek.scale.set(0.9, 0.9, 0.82);
       this.head.add(cheek);
       // (the creases round the eye are in the skin's relief now: thin rings
       // laid on the face read up close as stray lines, not as folds)
