@@ -1,9 +1,7 @@
 /**
- * ---- ONE COUNTER FOR EVERYTHING YOU BUY, OR USE, BY THE LIST.
- *
- * The corner market, the furniture shop, the clothes shop and the barber --
- * and in the condo the pantry, the hob and the wardrobe, and the landlord's
- * desk -- are all the same panel: tabs across the top, a list on the left, a
+ * ---- THE LIST PANEL: the wardrobe (in the condo, and the clothes shop's
+ * fitting room) and the landlord's desk.  (The shops themselves are rooms
+ * you walk round: see scenes2d/shops.)  Tabs across the top, a list on the left, a
  * preview and the details on the right, and the buttons that do something
  * with what is picked.  What differs is only the data (see `modeFor`).
  *
@@ -21,32 +19,21 @@ import { Player } from '../art/player';
 import { drawFurniture } from '../art/furnitureArt';
 import {
   COSMETICS,
-  FOODS,
-  FURNITURE,
-  INGREDIENTS,
-  RECIPES,
-  available,
-  buyCosmetic,
-  buyFood,
-  buyFurniture,
-  cannotCook,
-  consume,
-  cookingLeft,
   evict,
   payRent,
   rent,
   rentInDays,
   resaleValue,
   sellAsset,
-  startCooking,
   wear,
   RENT_DAYS,
   RENT_PRICE,
   type Result,
 } from '../game/life';
-import { cosmeticById, foodById, furnitureById, ingredientById, lookFor, recipeById, type CosmeticSlot, type FurnitureCat } from '../game/catalog';
+import { cosmeticById, furnitureById, lookFor, type CosmeticSlot } from '../game/catalog';
 
-export type ShopKind = 'market' | 'furniture' | 'clothes' | 'barber' | 'landlord' | 'pantry' | 'cook' | 'wardrobe';
+/** The shops themselves are rooms now (scenes2d/shops); this is the landlord's desk and your wardrobe. */
+export type ShopKind = 'landlord' | 'wardrobe';
 
 interface Row {
   id: string;
@@ -78,7 +65,7 @@ const ROWS = 9;
 const PREV_X = 166;
 
 export class Shop extends Phaser.Scene {
-  private kind: ShopKind = 'market';
+  private kind: ShopKind = 'wardrobe';
   private from = '';
   private mode!: Mode;
   private tab = 0;
@@ -95,7 +82,7 @@ export class Shop extends Phaser.Scene {
   }
 
   init(data: { kind?: ShopKind; from?: string }): void {
-    this.kind = data.kind ?? 'market';
+    this.kind = data.kind ?? 'wardrobe';
     this.from = data.from ?? '';
     this.tab = 0;
     this.sel = 0;
@@ -115,8 +102,6 @@ export class Shop extends Phaser.Scene {
     kb?.on('keydown-W', () => this.move(-1));
     kb?.on('keydown-S', () => this.move(1));
     this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => this.move(dy > 0 ? 1 : -1));
-    // the hob counts down while you watch
-    if (this.kind === 'cook') this.refresher = this.time.addEvent({ delay: 500, loop: true, callback: () => this.draw() });
     this.draw();
   }
 
@@ -241,118 +226,7 @@ export class Shop extends Phaser.Scene {
 
   private modeFor(kind: ShopKind): Mode {
     const life = () => store.get().life;
-    const foodRows = (pick: (id: string) => boolean): Row[] =>
-      FOODS.filter((f) => f.sold === 'market' && pick(f.id)).map((f) => ({ id: f.id, name: f.name, right: `$${f.price}` }));
-    const ingRows = (): Row[] => INGREDIENTS.map((g) => ({ id: g.id, name: g.name, right: `$${g.price}` }));
-    const foodLines = (id: string): string[] => {
-      const f = foodById(id);
-      const g = ingredientById(id);
-      if (g) return [g.name, `$${g.price}  INGREDIENT`, `YOU HAVE ${available(id)}`, 'FOR COOKING IN YOUR CONDO'];
-      if (!f) return [];
-      const bits = [f.hunger ? `FOOD ${f.hunger > 0 ? '+' : ''}${f.hunger}` : '', f.thirst ? `WATER ${f.thirst > 0 ? '+' : ''}${f.thirst}` : '', f.energy ? `ENERGY +${f.energy}` : '']
-        .filter(Boolean);
-      // (two to a line: three of them run off the panel)
-      return [f.name, `${f.price ? `$${f.price}  ` : ''}${f.tier.toUpperCase()}`, bits.slice(0, 2).join('  '), bits.slice(2).join('  '), f.note, `YOU HAVE ${available(id)}`].filter(Boolean);
-    };
-
     switch (kind) {
-      case 'market':
-        return {
-          title: 'CORNER MARKET',
-          tabs: [
-            { label: 'FOOD', rows: () => foodRows((id) => { const f = foodById(id)!; return f.hunger >= f.thirst; }) },
-            { label: 'DRINKS', rows: () => foodRows((id) => { const f = foodById(id)!; return f.thirst > f.hunger; }) },
-            { label: 'COOKING', rows: ingRows },
-          ],
-          detail: foodLines,
-          preview: (id, at) => this.drawIcon((foodById(id) ?? ingredientById(id))?.colour ?? 0x888888, at, true),
-          actions: (id) => [
-            { label: 'BUY 1', fn: () => buyFood(id, 1) },
-            { label: 'BUY 5', fn: () => buyFood(id, 5) },
-          ],
-        };
-
-      case 'furniture': {
-        const cats: Array<[string, FurnitureCat[]]> = [
-          ['WALL', ['poster', 'painting']],
-          ['SEATS', ['chair', 'sofa']],
-          ['TABLES', ['table', 'storage']],
-          ['TECH', ['tv', 'radio', 'lamp']],
-          ['FLOOR', ['rug', 'bed', 'decor']],
-        ];
-        return {
-          title: 'HOME AND HEARTH - FURNITURE',
-          tabs: cats.map(([label, cs]) => ({
-            label,
-            rows: () =>
-              FURNITURE.filter((f) => cs.includes(f.cat) && !f.reward).map((f) => ({
-                id: f.id,
-                name: f.name,
-                right: `$${f.price}`,
-                dim: store.get().cash < f.price,
-              })),
-          })),
-          detail: (id) => {
-            const f = furnitureById(id)!;
-            return [f.name, `$${f.price}  ${f.cat.toUpperCase()}`, f.note, f.wall ? 'HANGS ON THE WALL' : `${f.w} x ${f.h} ON THE FLOOR`, `YOU OWN ${life().furniture[id] ?? 0}`];
-          },
-          preview: (id, at) => {
-            const g = this.add.graphics();
-            drawFurniture(g, furnitureById(id)!, at.x, at.y, false);
-            this.previewBits.push(g);
-          },
-          actions: (id) => [{ label: 'BUY', fn: () => buyFurniture(id) }],
-        };
-      }
-
-      case 'clothes':
-      case 'barber': {
-        const slots: Array<[string, CosmeticSlot]> =
-          kind === 'clothes'
-            ? [['TOPS', 'top'], ['LEGS', 'legs'], ['SHOES', 'shoes'], ['SCARF', 'scarf'], ['HATS', 'hat']]
-            : [['CUTS', 'hair'], ['DYES', 'dye']];
-        return {
-          title: kind === 'clothes' ? 'THREADS - CLOTHING' : 'THE CLIP JOINT - BARBER',
-          tabs: slots.map(([label, slot]) => ({
-            label,
-            rows: () =>
-              COSMETICS.filter((c) => c.slot === slot && c.shop === kind && (!c.reward || life().wardrobe.includes(c.id))).map((c) => ({
-                id: c.id,
-                name: c.name,
-                right: life().wardrobe.includes(c.id) ? 'OWNED' : c.price ? `$${c.price}` : 'FREE',
-              })),
-          })),
-          detail: (id) => {
-            const c = cosmeticById(id)!;
-            const owned = life().wardrobe.includes(id);
-            const on = (life().outfit as Record<string, string>)[c.slot] === id;
-            return [c.name, owned ? (on ? 'WEARING' : 'OWNED') : `$${c.price}`, kind === 'barber' && c.slot === 'hair' ? 'SHOWS WITH NO HAT ON' : 'LOOKS ONLY. NO ADVANTAGE', 'PREVIEW ABOVE'];
-          },
-          preview: (id, at) => {
-            const c = cosmeticById(id)!;
-            const outfit = { ...(life().outfit as Record<string, string>), [c.slot]: id };
-            if (c.slot === 'hair') outfit.hat = 'cos_no_hat';
-            this.drawPerson(outfit, at);
-          },
-          actions: (id) => {
-            const owned = life().wardrobe.includes(id);
-            return owned
-              ? [{ label: 'WEAR', fn: () => wear(id) }]
-              : [
-                { label: 'BUY', fn: () => buyCosmetic(id) },
-                {
-                  label: 'BUY + WEAR',
-                  fn: () => {
-                    const r = buyCosmetic(id);
-                    if (r.ok) wear(id);
-                    return r;
-                  },
-                },
-              ];
-          },
-        };
-      }
-
       case 'wardrobe': {
         const slots: Array<[string, CosmeticSlot[]]> = [['TOPS', ['top', 'scarf']], ['LEGS', ['legs', 'shoes']], ['HEAD', ['hat', 'hair', 'dye']]];
         return {
@@ -376,51 +250,6 @@ export class Shop extends Phaser.Scene {
           actions: (id) => [{ label: 'WEAR', fn: () => wear(id) }],
         };
       }
-
-      case 'pantry':
-        return {
-          title: 'PANTRY',
-          tabs: [
-            {
-              label: 'EAT AND DRINK',
-              rows: () =>
-                Object.entries(life().pantry)
-                  .filter(([id]) => !!foodById(id) && available(id) > 0)
-                  .map(([id]) => ({ id, name: foodById(id)!.name, right: `x${available(id)}` })),
-            },
-            {
-              label: 'INGREDIENTS',
-              rows: () =>
-                Object.entries(life().pantry)
-                  .filter(([id]) => !!ingredientById(id))
-                  .map(([id]) => ({ id, name: ingredientById(id)!.name, right: `x${available(id)}` })),
-            },
-          ],
-          detail: foodLines,
-          preview: (id, at) => this.drawIcon((foodById(id) ?? ingredientById(id))?.colour ?? 0x888888, at, true),
-          actions: (id) => (foodById(id) ? [{ label: foodById(id)!.thirst > foodById(id)!.hunger ? 'DRINK' : 'EAT', fn: () => consume(id) }] : []),
-        };
-
-      case 'cook':
-        return {
-          title: 'COOKING',
-          tabs: [
-            {
-              label: 'RECIPES',
-              rows: () => RECIPES.map((r) => ({ id: r.id, name: r.name, right: cannotCook(r.id) ? '' : 'READY', dim: !!cannotCook(r.id) })),
-            },
-          ],
-          detail: (id) => {
-            const r = recipeById(id)!;
-            const needs = Object.entries(r.needs).map(([i, n]) => `${n} ${ingredientById(i)?.name ?? i} (${available(i)})`);
-            const cooking = life().cooking;
-            const status = cooking ? `ON THE HOB: ${recipeById(cooking.recipe)?.name} ${Math.ceil(cookingLeft())}S` : cannotCook(id) ?? `TAKES ${r.seconds}S`;
-            const meal = foodById(r.makes);
-            return [r.name, ...needs, meal ? `FOOD +${meal.hunger} ENERGY +${meal.energy}` : '', status];
-          },
-          preview: (id, at) => this.drawIcon(foodById(recipeById(id)!.makes)?.colour ?? 0x888888, at, true),
-          actions: (id) => [{ label: 'COOK', fn: () => startCooking(id), off: !!cannotCook(id) }],
-        };
 
       case 'landlord':
       default:
@@ -457,7 +286,7 @@ export class Shop extends Phaser.Scene {
               'UNIT 612, SIXTH FLOOR',
               `$${RENT_PRICE} FOR ${RENT_DAYS} DAYS`,
               'EMPTY: A WINDOW AND CURTAINS.',
-              'SLEEP, COOK, DECORATE.',
+              'SLEEP AND DECORATE.',
               l.evicted ? 'YOUR THINGS ARE IN STORAGE.' : '',
             ];
           }

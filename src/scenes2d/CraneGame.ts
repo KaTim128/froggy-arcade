@@ -158,10 +158,11 @@ export const SLIP: Record<CraneKind, number> = { plush: 0.2, oddity: 0 };
 /** Only the plush crane's grip weakens off centre. */
 const OFF_CENTRE: Record<CraneKind, number> = { plush: 0.45, oddity: 0 };
 /** How close the fingers must come down to a toy to close on it at all. */
-const REACH_X = 9;
+const REACH_X = 11;
 const REACH_Z = 0.1;
 /** From the claw's hanging point down to its fingertips, in claw units. */
-const FINGERS = 19 * TOY_RES;
+/** From the claw's hanging point to the tips of its fingers, open. */
+const FINGERS = 24 * TOY_RES;
 
 /** Front of the floor is lower on screen; the back of it is higher. */
 const floorY = (z: number): number => 146 - z * 32;
@@ -621,18 +622,52 @@ export class CraneGame extends Phaser.Scene {
     return t;
   }
 
-  private drawClaw(shut: boolean, into: Phaser.GameObjects.Container = this.claw): void {
+  /**
+   * THE CLAW: a hub on the cable, and three prongs -- one each side and one
+   * at the back -- each bent at a knuckle and hooked at the tip.  Open, the
+   * side prongs stand out wider than a toy's head; shut, the hooks meet
+   * under it.  `open` is 1 for open, 0 for shut, anything between while it
+   * closes.  Drawn big enough that what it closes on is visibly inside it.
+   */
+  private drawClaw(open: boolean | number, into: Phaser.GameObjects.Container = this.claw): void {
+    const v = typeof open === 'number' ? Phaser.Math.Clamp(open, 0, 1) : open ? 1 : 0;
+    this.clawOpen = v;
     into.removeAll(true);
-    // the head, the prongs, and the hooked tips
-    into.add(this.add.rectangle(0, 0, 10, 5, 0x9aa6b6).setStrokeStyle(1, 0x4a5666));
-    into.add(this.add.rectangle(0, 3, 4, 2, 0x6a7686));
-    const o = shut ? 2.5 : 7;
+    const steel = 0xc8d0dc;
+    const dark = 0x5a6676;
+    // the hub: a housing with a collar where the cable goes in
+    into.add(this.add.rectangle(0, -1, 6, 3, 0x6a7686).setStrokeStyle(1, 0x3a4656));
+    into.add(this.add.rectangle(0, 2.5, 14, 6, 0x9aa6b6).setStrokeStyle(1, 0x4a5666));
+    into.add(this.add.rectangle(0, 2, 12, 1, 0xd8e0ea));
+    // the back prong, behind the others: straight down, hooked forward
+    into.add(this.add.line(0, 0, 0, 5, 0, 20, dark).setLineWidth(1.6).setOrigin(0, 0));
+    // the side prongs: shoulder, knuckle, tip
+    const knee = 5 + 8 * v; // how far out the knuckle stands
+    const tip = 2 + 8 * v; // and the hook
     for (const sx of [-1, 1]) {
-      into.add(this.add.line(0, 0, sx * 2, 3, sx * o, 11, 0xc8d0dc).setLineWidth(1.6).setOrigin(0, 0));
-      into.add(this.add.line(0, 0, sx * o, 11, sx * (o - 3), 15, 0xc8d0dc).setLineWidth(1.6).setOrigin(0, 0));
+      into.add(this.add.line(0, 0, sx * 5, 5, sx * knee, 14, steel).setLineWidth(2).setOrigin(0, 0));
+      into.add(this.add.line(0, 0, sx * knee, 14, sx * tip, 21, steel).setLineWidth(2).setOrigin(0, 0));
+      // the hooked tip, turned in
+      into.add(this.add.rectangle(sx * tip - sx * 1, 21, 3, 2, steel).setStrokeStyle(0.6, dark));
+      // the knuckle pin
+      into.add(this.add.circle(sx * knee, 14, 1.1, 0x8a96a6));
     }
-    into.add(this.add.line(0, 0, 0, 3, 0, 13, 0xc8d0dc).setLineWidth(1.4).setOrigin(0, 0));
-    if (into === this.claw && this.sideClaw) this.drawClaw(shut, this.sideClaw);
+    if (into === this.claw && this.sideClaw) this.drawClaw(v, this.sideClaw);
+  }
+
+  private clawOpen = 1;
+
+  /** Close (or open) the claw over `ms`, drawn as it goes. */
+  private moveClaw(to: number, ms: number, done?: () => void): void {
+    const from = this.clawOpen;
+    this.tweens.addCounter({
+      from: 0,
+      to: 1,
+      duration: ms,
+      ease: 'Quad.easeOut',
+      onUpdate: (tw) => this.drawClaw(from + (to - from) * (tw.getValue() ?? 1)),
+      onComplete: () => done?.(),
+    });
   }
 
   // ------------------------------------------------------------------ a go
@@ -800,10 +835,10 @@ export class CraneGame extends Phaser.Scene {
     if (this.phase !== 'wait') return;
     this.phase = 'shut';
     this.grabCue.setVisible(false);
-    this.drawClaw(true);
     audio.sfx('door_shut', 0.25);
     this.syncButtons();
-    this.time.delayedCall(350, () => this.grab());
+    // the prongs swing in round whatever is under them, and then it grabs
+    this.moveClaw(0, 320, () => this.time.delayedCall(80, () => this.grab()));
   }
 
   /** The screen y of the top of a toy's head. */
@@ -836,7 +871,8 @@ export class CraneGame extends Phaser.Scene {
   private floorUnder(): number {
     const k = scaleAt(this.clawZ);
     const t = this.targetUnder();
-    const y = t ? this.topOf(t) + 6 * scaleAt(t.z) : floorY(this.clawZ);
+    // (the open prongs come down either side of its head, a third of the way down it)
+    const y = t ? this.topOf(t) + 15 * scaleAt(t.z) : floorY(this.clawZ);
     return (y - gantryY(this.clawZ)) / k - FINGERS;
   }
 
@@ -920,7 +956,8 @@ export class CraneGame extends Phaser.Scene {
       this.clawZ += Math.sign(dz) * Math.min(Math.abs(dz), 1 * dt);
       if (Math.abs(dx) < 0.5 && Math.abs(dz) < 0.01) {
         this.phase = 'release';
-        this.drawClaw(false);
+        // the prongs swing open over the chute and it drops
+        this.moveClaw(1, 220);
         const t = this.held;
         if (t) {
           this.tweens.add({ targets: t.art, y: floorY(0) + 4, duration: 260, ease: 'Quad.easeIn' });
@@ -951,7 +988,8 @@ export class CraneGame extends Phaser.Scene {
       const k = scaleAt(this.clawZ);
       const hx = screenX(this.clawX, this.clawZ) + this.sway;
       // hanging from the closed claw by its head
-      const hy = gantryY(this.clawZ) + (this.drop + 10 * CLAW_K + TOY_H * 0.8) * k;
+      // its head between the closed prongs: the hooks under its chin
+      const hy = gantryY(this.clawZ) + (this.drop + 9 * CLAW_K + TOY_H * 0.74) * k;
       // from where it lay into the claw's fingers, over a moment, not a snap
       this.heldT = Math.min(1, this.heldT + dt / 0.3);
       const e = this.heldT * this.heldT * (3 - 2 * this.heldT);
@@ -1004,8 +1042,13 @@ export class CraneGame extends Phaser.Scene {
         const slip = SLIP[this.kind] * feel.weight * (onBody ? 0.85 : 1.35);
         this.slipAt = Math.random() < slip ? 0.25 + Math.random() * 0.5 : -1;
       } else {
-        // it closes on it, lifts it a fraction, and lets it go
-        this.tweens.add({ targets: best.art, y: '-=4', duration: 140, yoyo: true });
+        // it closes on it and lifts it -- and it slides out of the prongs and
+        // drops back: plainly a miss, not a claw that never touched it
+        this.tweens.add({ targets: best.art, y: '-=12', duration: 260, ease: 'Quad.easeOut', yoyo: true, hold: 120, yoyoEase: 'Bounce.easeOut' } as Phaser.Types.Tweens.TweenBuilderConfig);
+        this.time.delayedCall(380, () => {
+          if (this.phase === 'up') this.moveClaw(0.6, 160);
+          audio.sfx('door_shut', 0.12);
+        });
         // and drops it a little askew
         this.knock(best, Math.sign(best.x - this.clawX) || 1, 0.6);
       }
@@ -1022,7 +1065,7 @@ export class CraneGame extends Phaser.Scene {
     const t = this.held;
     if (!t) return;
     this.held = null;
-    this.drawClaw(false);
+    this.moveClaw(0.7, 140);
     audio.sfx('door_shut', 0.15);
     t.x = this.clawX;
     t.z = Phaser.Math.Clamp(this.clawZ, 0.25, 0.95);

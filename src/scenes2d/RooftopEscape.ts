@@ -31,6 +31,7 @@ import { PALETTE } from '../render/palette';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { froggyLayer } from '../render/froggyLayer';
 import { Player } from '../art/player';
+import { backPlate } from '../ui/plate';
 
 // ---------------------------------------------------------------- the level
 
@@ -218,6 +219,7 @@ export class RooftopEscape extends Phaser.Scene {
 
     this.sayPlate = this.add.rectangle(0, 0, 1, 1, PALETTE.black, 0.72).setOrigin(0, 0).setScrollFactor(0).setDepth(9000).setVisible(false);
     this.say = centerText(this, GAME_W / 2, GAME_H - 22, '', PALETTE.cream).setScrollFactor(0).setDepth(9001).setVisible(false).setMaxWidth(290);
+    backPlate(this, this.say);
     this.hint = centerText(this, GAME_W / 2, 14, '', PALETTE.gold).setScrollFactor(0).setDepth(9001).setAlpha(0);
     this.edgeText = centerText(this, 0, 0, 'JUMP OFF BUILDING', 0xffe070).setDepth(9002).setVisible(false);
     this.black = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 1).setOrigin(0, 0).setScrollFactor(0).setDepth(9500);

@@ -1,5 +1,5 @@
 /**
- * ---- LIVING HERE.  Time, rent, food, water, sleep, the condo, the street.
+ * ---- LIVING HERE.  Time, rent, sleep, the condo, the shops, the street.
  *
  * One save field (`GameState.life`), versioned, sanitised on load, and only
  * ever changed through the functions in this file -- so every purchase is
@@ -19,7 +19,7 @@
 
 import { store, type GameState } from '../core/state';
 import { ledger } from '../core/ledger';
-import { COSMETICS, FOODS, FURNITURE, INGREDIENTS, RECIPES, STARTER_COSMETICS, cosmeticById, foodById, furnitureById, ingredientById, recipeById } from './catalog';
+import { COSMETICS, FURNITURE, STARTER_COSMETICS, cosmeticById, furnitureById } from './catalog';
 import type { LifeState } from './lifeState';
 export { LIFE_VERSION, defaultLife, sanitizeLife, type LifeState, type Placement } from './lifeState';
 
@@ -85,24 +85,14 @@ export function rentInDays(l = L()): number {
 }
 
 /**
- * A second (or a few) of the game being played.  Needs go down, the hob
- * finishes, rent comes due -- and eviction, once the grace day is gone.
+ * A second (or a few) of the game being played.  The clock moves on, rent
+ * comes due -- and eviction, once the grace day is gone.
  */
 export function tick(seconds: number): void {
   if (!(seconds > 0)) return;
   const l = structuredClone(L());
   const dayWas = clock(l.t).day;
   l.t += seconds;
-  const perDay = seconds / DAY_SECONDS;
-  // a day's worth: fed twice and watered three times keeps you level
-  l.hunger = Math.max(0, l.hunger - 60 * perDay);
-  l.thirst = Math.max(0, l.thirst - 85 * perDay);
-  l.energy = Math.max(0, l.energy - 70 * perDay);
-  // going hungry or thirsty wears you out faster
-  if (l.hunger < 10 || l.thirst < 10) l.energy = Math.max(0, l.energy - 40 * perDay);
-  // the hob
-  if (l.cooking && l.t >= l.cooking.ready) finishCooking(l);
-  // rent
   if (l.rented && clock(l.t).day > l.rentDue) {
     l.rented = false;
     l.evicted = true;
@@ -110,12 +100,6 @@ export function tick(seconds: number): void {
   } else if (l.rented && clock(l.t).day !== dayWas && rentInDays(l) <= 0) {
     l.notice = `RENT OF $${RENT_PRICE} IS DUE TODAY. PAY THE LANDLORD.`;
   }
-  // warnings, once as each line is crossed
-  const crossed = (was: number, now: number, at: number) => was > at && now <= at;
-  const was = L();
-  if (crossed(was.thirst, l.thirst, 20)) l.notice = 'THIRSTY. DRINK SOMETHING - THE FOUNTAIN IS FREE.';
-  else if (crossed(was.hunger, l.hunger, 20)) l.notice = 'HUNGRY. EAT SOMETHING.';
-  else if (crossed(was.energy, l.energy, 15)) l.notice = 'EXHAUSTED. FIND SOMEWHERE TO SLEEP.';
   put(l);
 }
 
@@ -126,115 +110,9 @@ export function takeNotice(): string {
   return n;
 }
 
-// ----------------------------------------------------------------- pantry
-
-export function pantryCount(id: string, l = L()): number {
-  return l.pantry[id] ?? 0;
-}
-
-/** What a cooking recipe has taken off the shelf until it is done. */
-function reserved(l: LifeState, id: string): number {
-  if (!l.cooking) return 0;
-  return recipeById(l.cooking.recipe)?.needs[id] ?? 0;
-}
-
-export function available(id: string, l = L()): number {
-  return pantryCount(id, l) - reserved(l, id);
-}
-
 export type Result = { ok: true; msg: string } | { ok: false; msg: string };
 const ok = (msg: string): Result => ({ ok: true, msg });
 const no = (msg: string): Result => ({ ok: false, msg });
-
-/** Buy `qty` of a food, drink or ingredient.  Paid once, or not at all. */
-export function buyFood(id: string, qty = 1): Result {
-  const f = foodById(id);
-  const g = ingredientById(id);
-  const price = f?.sold === 'market' ? f.price : g ? g.price : 0;
-  if (!price || qty < 1) return no('NOT FOR SALE.');
-  const total = price * qty;
-  if (pantryCount(id) + qty > 99) return no('YOU CANNOT CARRY ANY MORE OF THAT.');
-  if (!store.spendCash(total)) return no(`NOT ENOUGH CASH. IT IS $${total}.`);
-  edit((l) => {
-    l.pantry[id] = (l.pantry[id] ?? 0) + qty;
-  });
-  record(f ? (f.thirst > f.hunger ? 'buy_water' : 'buy_food') : 'buy_ingredient', qty);
-  return ok(`BOUGHT ${qty} x ${(f ?? g)!.name} FOR $${total}.`);
-}
-
-/** Eat or drink one of something you have. */
-export function consume(id: string): Result {
-  const f = foodById(id);
-  if (!f) return no('YOU CANNOT EAT THAT.');
-  if (available(id) < 1) return no('YOU HAVE NONE.');
-  edit((l) => {
-    l.pantry[id] -= 1;
-    if (l.pantry[id] <= 0) delete l.pantry[id];
-    l.hunger = Math.min(100, Math.max(0, l.hunger + f.hunger));
-    l.thirst = Math.min(100, Math.max(0, l.thirst + f.thirst));
-    l.energy = Math.min(100, l.energy + f.energy);
-  });
-  record(f.thirst > f.hunger ? 'drink' : 'eat');
-  if (f.tier === 'premium') record('eat_premium');
-  return ok(`${f.name}. ${f.thirst > f.hunger ? 'REFRESHING.' : 'THAT HIT THE SPOT.'}`);
-}
-
-/** The fountain: free, always, a little at a time. */
-export function drinkFountain(): Result {
-  edit((l) => (l.thirst = Math.min(100, l.thirst + 25)));
-  record('drink');
-  record('fountain');
-  return ok('COLD WATER. FREE.');
-}
-
-// ---------------------------------------------------------------- cooking
-
-/** Why a recipe cannot be started right now, or null when it can. */
-export function cannotCook(recipeId: string): string | null {
-  const l = L();
-  const r = recipeById(recipeId);
-  if (!r) return 'NO SUCH RECIPE.';
-  if (!l.rented) return 'YOU NEED YOUR CONDO TO COOK.';
-  if (l.cooking) return 'SOMETHING IS ALREADY COOKING.';
-  for (const [id, n] of Object.entries(r.needs)) {
-    if (available(id, l) < n) return `MISSING ${ingredientById(id)?.name ?? id}.`;
-  }
-  return null;
-}
-
-/** Put it on.  Nothing is used up until it is done (see `finishCooking`). */
-export function startCooking(recipeId: string): Result {
-  const why = cannotCook(recipeId);
-  if (why) return no(why);
-  const r = recipeById(recipeId)!;
-  edit((l) => (l.cooking = { recipe: r.id, ready: l.t + r.seconds }));
-  return ok(`COOKING ${r.name}...`);
-}
-
-/** Done: the ingredients go and the meal arrives, in one step, or neither. */
-function finishCooking(l: LifeState): void {
-  const r = l.cooking ? recipeById(l.cooking.recipe) : undefined;
-  l.cooking = null;
-  if (!r) return;
-  for (const [id, n] of Object.entries(r.needs)) if ((l.pantry[id] ?? 0) < n) {
-    l.notice = `THE ${r.name} DID NOT WORK - SOMETHING WAS MISSING.`;
-    return;
-  }
-  for (const [id, n] of Object.entries(r.needs)) {
-    l.pantry[id] -= n;
-    if (l.pantry[id] <= 0) delete l.pantry[id];
-  }
-  l.pantry[r.makes] = (l.pantry[r.makes] ?? 0) + 1;
-  l.stats.cook = (l.stats.cook ?? 0) + 1;
-  bump(l, 'cook', 1);
-  l.notice = `${r.name} IS READY. IT IS IN YOUR PANTRY.`;
-}
-
-/** Called by the condo while it is open, so a meal finishes in front of you. */
-export function cookingLeft(): number {
-  const l = L();
-  return l.cooking ? Math.max(0, l.cooking.ready - l.t) : 0;
-}
 
 // ------------------------------------------------------------------- rent
 
@@ -299,7 +177,6 @@ export function evict(): void {
   edit((l) => {
     l.rented = false;
     l.evicted = true;
-    l.cooking = null;
     l.notice = 'EVICTED. YOUR THINGS ARE IN STORAGE. YOU CAN RENT AGAIN.';
   });
 }
@@ -360,25 +237,15 @@ export function wear(id: string): Result {
 
 /**
  * Sleep until morning: on the condo floor (or a mattress, or a bed), or on
- * the street.  The clock goes to 08:00 of the next day; how rested you wake
- * depends on what you slept on.
+ * the street.  The clock goes to 08:00 of the next day.
  */
 export function sleep(where: 'street' | 'floor' | 'mattress' | 'bed'): Result {
   const c = clock();
   if (where === 'street' && !c.dark) return no('TOO LIGHT AND TOO BUSY. WAIT FOR DARK.');
-  const restored = { street: 55, floor: 75, mattress: 90, bed: 100 }[where];
   edit((l) => {
     const day = clock(l.t).day;
     // to 08:00 on the next morning (or this one, before dawn)
-    const morning = (c.hour < 8 ? day : day + 1) * DAY_SECONDS;
-    const slept = Math.max(0, morning - l.t);
-    l.t = morning;
-    l.energy = Math.max(l.energy, restored);
-    // a night costs some food and water, less than a day awake
-    const k = slept / DAY_SECONDS;
-    l.hunger = Math.max(5, l.hunger - 25 * k);
-    l.thirst = Math.max(5, l.thirst - 35 * k);
-    if (l.cooking && l.t >= l.cooking.ready) finishCooking(l);
+    l.t = (c.hour < 8 ? day : day + 1) * DAY_SECONDS;
     if (l.rented && clock(l.t).day > l.rentDue) {
       l.rented = false;
       l.evicted = true;
@@ -389,33 +256,14 @@ export function sleep(where: 'street' | 'floor' | 'mattress' | 'bed'): Result {
   return ok(where === 'street' ? 'A HARD NIGHT ON THE PAVEMENT. MORNING.' : 'YOU SLEEP RIGHT THROUGH TO MORNING.');
 }
 
-/** Below this, the cardboard outside offers a nap instead of the cup. */
-export const NAP_BELOW = 40;
-
 /**
- * A daytime nap on the cardboard: +35 energy and up to three hours gone,
- * but never past half an hour before the arcade shuts -- a nap must not
- * sleep through closing time (the day's end, and before Hide and Seek, the
- * night that follows it).
+ * Begging is for when there is nothing at all: no tokens and no cash.  (What
+ * the cup earns while you sit there is yours; it is starting that needs you
+ * to be broke.)
  */
-export function nap(): Result {
-  const c = clock();
-  if (c.dark || c.closed) return no('TOO LATE FOR A NAP. SLEEP INSTEAD.');
-  const l0 = L();
-  if (l0.energy >= NAP_BELOW) return no('NOT TIRED ENOUGH TO NAP.');
-  const day = c.day;
-  const latest = day * DAY_SECONDS + ((CLOSE_HOUR - 0.5 - 8) / 24) * DAY_SECONDS;
-  const until = Math.min(l0.t + (3 / 24) * DAY_SECONDS, latest);
-  if (until <= l0.t + 1) return no('TOO CLOSE TO CLOSING TIME TO NAP.');
-  edit((l) => {
-    const k = (until - l.t) / DAY_SECONDS;
-    l.t = until;
-    l.energy = Math.min(100, l.energy + 35);
-    l.hunger = Math.max(5, l.hunger - 25 * k);
-    l.thirst = Math.max(5, l.thirst - 35 * k);
-    if (l.cooking && l.t >= l.cooking.ready) finishCooking(l);
-  });
-  return ok('A NAP ON THE CARDBOARD. A LITTLE BETTER.');
+export function canBeg(): boolean {
+  const s = store.get();
+  return s.cash <= 0 && ledger.balance() <= 0;
 }
 
 export function startBegging(now = Date.now()): void {
@@ -478,7 +326,6 @@ export function record(stat: string, n = 1): void {
 export interface Reward {
   cash?: number;
   tokens?: number;
-  items?: Record<string, number>;
   furniture?: string;
   cosmetic?: string;
 }
@@ -498,21 +345,18 @@ export const GOALS: GoalDef[] = [
   // daily-sized
   { id: 'd_win2', text: 'WIN 2 ARCADE GAMES', stat: 'game_won', need: 2, reward: { tokens: 5 } },
   { id: 'd_play4', text: 'PLAY 4 ARCADE GAMES', stat: 'game_played', need: 4, reward: { cash: 4 } },
-  { id: 'd_drink3', text: 'DRINK 3 TIMES', stat: 'drink', need: 3, reward: { items: { water: 2 } } },
-  { id: 'd_eat2', text: 'EAT 2 MEALS', stat: 'eat', need: 2, reward: { items: { bread: 2 } } },
   { id: 'd_earn20', text: 'EARN $20', stat: 'earn_cash', need: 20, reward: { tokens: 6 } },
   { id: 'd_sell1', text: 'SELL A PRIZE TO THE MAN', stat: 'sell_prize', need: 1, reward: { cash: 5 } },
-  { id: 'd_cook1', text: 'COOK A MEAL', stat: 'cook', need: 1, reward: { items: { ing_egg: 2, ing_rice: 1 } }, when: rentedOnly },
-  { id: 'd_fountain', text: 'DRINK AT THE FOUNTAIN', stat: 'fountain', need: 1, reward: { cash: 2 } },
-  { id: 'd_buyfood', text: 'BUY SOMETHING TO EAT', stat: 'buy_food', need: 1, reward: { items: { apple: 1 } } },
+  { id: 'd_shop', text: 'LOOK ROUND A SHOP', stat: 'shop_visit', need: 1, reward: { cash: 2 } },
+  { id: 'd_clash1', text: 'WIN A CREATURE BATTLE', stat: 'creature_win', need: 1, reward: { tokens: 4 } },
   // weekly-sized
   { id: 'w_win15', text: 'WIN 15 ARCADE GAMES', stat: 'game_won', need: 15, reward: { tokens: 30 } },
   { id: 'w_earn150', text: 'EARN $150', stat: 'earn_cash', need: 150, reward: { cash: 25 } },
-  { id: 'w_cook5', text: 'COOK 5 MEALS', stat: 'cook', need: 5, reward: { items: { ing_meat: 1, ing_spice: 2 } }, when: rentedOnly },
-  { id: 'w_place3', text: 'PLACE 3 PIECES OF FURNITURE', stat: 'place_furniture', need: 3, reward: { furniture: 'fur_frog_statue' }, when: (l) => l.rented },
-  { id: 'w_sleep3', text: 'SLEEP 3 NIGHTS', stat: 'sleep', need: 3, reward: { items: { coffee: 2 } } },
+  { id: 'w_place3', text: 'PLACE 3 PIECES OF FURNITURE', stat: 'place_furniture', need: 3, reward: { furniture: 'fur_frog_statue' }, when: rentedOnly },
+  { id: 'w_sleep3', text: 'SLEEP 3 NIGHTS', stat: 'sleep', need: 3, reward: { cash: 10 } },
   { id: 'w_rent', text: 'PAY YOUR RENT', stat: 'pay_rent', need: 1, reward: { cash: 20 }, when: rentedOnly },
   { id: 'w_play30', text: 'PLAY 30 ARCADE GAMES', stat: 'game_played', need: 30, reward: { cosmetic: 'cos_frog_jacket' } },
+  { id: 'w_haircut', text: 'GET A HAIRCUT', stat: 'barber', need: 1, reward: { tokens: 10 } },
 ];
 
 export interface AchievementDef {
@@ -527,13 +371,13 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'a_first_win', text: 'FIRST WIN', stat: 'game_won', need: 1, reward: { tokens: 3 } },
   { id: 'a_wins_50', text: '50 WINS', stat: 'game_won', need: 50, reward: { furniture: 'fur_trophy' } },
   { id: 'a_tenant', text: 'A ROOF OVER YOUR HEAD', stat: 'pay_rent', need: 1, reward: { cash: 10 } },
-  { id: 'a_chef', text: 'HOME COOK (10 MEALS)', stat: 'cook', need: 10, reward: { cosmetic: 'cos_frog_jacket' } },
   { id: 'a_decorator', text: 'DECORATOR (10 PLACED)', stat: 'place_furniture', need: 10, reward: { cash: 40 } },
   { id: 'a_explorer', text: 'EXPLORER (6 PLACES)', stat: 'visit', need: 6, reward: { tokens: 10 } },
-  { id: 'a_hydrated', text: 'WELL WATERED (50 DRINKS)', stat: 'drink', need: 50, reward: { items: { smoothie: 1 } } },
   { id: 'a_beggar', text: 'SPARE CHANGE (EARN $5 BEGGING)', stat: 'beg', need: 5, reward: { cash: 5 } },
-  { id: 'a_gourmet', text: 'GOURMET (5 PREMIUM MEALS)', stat: 'eat_premium', need: 5, reward: { furniture: 'fur_paint_lily' } },
-  { id: 'a_style', text: 'NEW LOOK (BUY CLOTHES)', stat: 'buy_clothes', need: 1, reward: { items: { coffee: 1 } } },
+  { id: 'a_style', text: 'NEW LOOK (BUY CLOTHES)', stat: 'buy_clothes', need: 1, reward: { cash: 5 } },
+  { id: 'a_fresh_cut', text: 'FRESH CUT (BARBER)', stat: 'barber', need: 1, reward: { furniture: 'fur_paint_lily' } },
+  { id: 'a_homemaker', text: 'HOMEMAKER (BUY 5 FURNITURE)', stat: 'buy_furniture', need: 5, reward: { cash: 20 } },
+  { id: 'a_clash10', text: 'CREATURE CHAMPION (10 WINS)', stat: 'creature_win', need: 10, reward: { tokens: 25 } },
 ];
 
 /** Today's and this week's keys: local calendar day, ISO-style week starting Monday. */
@@ -559,7 +403,8 @@ const seeded = (key: string): (() => number) => {
 export function refreshGoals(now = new Date()): void {
   const k = periodKeys(now);
   const l = L();
-  if (l.daily.key === k.day && l.weekly.key === k.week) return;
+  const known = (ids: string[]) => ids.every((id) => GOALS.some((g) => g.id === id));
+  if (l.daily.key === k.day && l.weekly.key === k.week && known(l.daily.ids) && known(l.weekly.ids)) return;
   const s = store.get();
   const pick = (pool: GoalDef[], n: number, key: string): string[] => {
     const rnd = seeded(key);
@@ -569,8 +414,8 @@ export function refreshGoals(now = new Date()): void {
     return out;
   };
   edit((x) => {
-    if (x.daily.key !== k.day) x.daily = { key: k.day, ids: pick(GOALS.filter((g) => g.id.startsWith('d_')), 3, k.day), prog: {}, claimed: [] };
-    if (x.weekly.key !== k.week) x.weekly = { key: k.week, ids: pick(GOALS.filter((g) => g.id.startsWith('w_')), 3, k.week), prog: {}, claimed: [] };
+    if (x.daily.key !== k.day || !known(x.daily.ids)) x.daily = { key: k.day, ids: pick(GOALS.filter((g) => g.id.startsWith('d_')), 3, k.day), prog: {}, claimed: [] };
+    if (x.weekly.key !== k.week || !known(x.weekly.ids)) x.weekly = { key: k.week, ids: pick(GOALS.filter((g) => g.id.startsWith('w_')), 3, k.week), prog: {}, claimed: [] };
   });
 }
 
@@ -585,10 +430,6 @@ function grant(r: Reward): string {
     bits.push(`${r.tokens} TOKENS`);
   }
   edit((l) => {
-    for (const [id, n] of Object.entries(r.items ?? {})) {
-      l.pantry[id] = Math.min(99, (l.pantry[id] ?? 0) + n);
-      bits.push(`${n} x ${(foodById(id) ?? ingredientById(id))?.name ?? id}`);
-    }
     if (r.furniture) {
       l.furniture[r.furniture] = (l.furniture[r.furniture] ?? 0) + 1;
       bits.push(furnitureById(r.furniture)?.name ?? r.furniture);
@@ -638,4 +479,4 @@ export function claimable(): number {
 }
 
 // (re-exported for the shops)
-export { COSMETICS, FOODS, FURNITURE, INGREDIENTS, RECIPES };
+export { COSMETICS, FURNITURE };

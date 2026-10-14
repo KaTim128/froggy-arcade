@@ -179,13 +179,24 @@ export class Walker {
 
   /** Walk to `spot` and then `then()` -- or just do it, if already there. */
   to(player: Player, spot: Spot, then: () => void): void {
-    if (spot.at(player.x, player.y)) {
+    // Already stood where it is used from: use it.  In reach but off to one
+    // side, the last few steps are still walked -- the thing is used from its
+    // place, never from wherever the click happened to find you.
+    const there = Math.hypot(player.x - spot.stand.x, player.y - spot.stand.y) <= 3;
+    if (there) {
       this.cancel();
       then();
       return;
     }
     const path = findPath({ x: player.x, y: player.y }, spot.stand, this.bounds(), this.solids());
-    if (!path) return;
+    if (!path) {
+      // (no way to the spot itself, but in reach of it: that will do)
+      if (spot.at(player.x, player.y)) {
+        this.cancel();
+        then();
+      }
+      return;
+    }
     this.path = path;
     this.done = then;
     this.stuck = 0;

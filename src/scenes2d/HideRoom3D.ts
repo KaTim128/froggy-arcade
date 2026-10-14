@@ -68,7 +68,8 @@ import { furnishWalls, trimFurniture, trimPartition } from '../three/hideDressin
  * can run.
  */
 const WALK = 2.0;
-const RUN = WALK * 1.5;
+/** A little faster than half again a walk -- and a great deal louder (see HEAR_RUN_MIN). */
+const RUN = WALK * 1.65;
 /**
  * The pace his own speeds are set against: what a run used to be.  His speeds
  * are fixed numbers in the room, not shares of yours, so slowing your run did
@@ -655,7 +656,20 @@ const HEADWAY_DIST = 1.0;
  * he does not hear at all — walking is the quiet choice, and slow for it.
  * Hearing gives him somewhere to look, not you.
  */
-const HEAR_RUN = 18;
+/**
+ * THE LONGER YOU RUN, THE BETTER HE HEARS IT.  A running step carries
+ * HEAR_RUN_MIN on the first strides and up to HEAR_RUN_MAX once you have kept
+ * it up for RUN_FIX_S seconds -- through walls, round corners, out of his
+ * sight -- and where he thinks it came from closes in from RUN_SLOP_FAR metres
+ * off to RUN_SLOP_NEAR.  Stop, and it fades over RUN_FADE_S: a burst to get
+ * away is a guess for him, a long run is an address.
+ */
+const HEAR_RUN_MIN = 16;
+const HEAR_RUN_MAX = 30;
+const RUN_FIX_S = 3;
+const RUN_FADE_S = 1.6;
+const RUN_SLOP_FAR = 4.2;
+const RUN_SLOP_NEAR = 0.6;
 /**
  * The floor.
  *
@@ -863,6 +877,8 @@ export class HideRoom3D extends Phaser.Scene {
   private unseenT = 0;
   /** What is left of his patience with a noise he heard. */
   private investigateT = 0;
+  /** 0..1: how long you have been running, and so how well he can place it. */
+  private runLoud = 0;
   /** Seconds until the next drip.  The room is quiet, not dead. */
   private dripIn = 0;
   /**
@@ -1156,6 +1172,7 @@ export class HideRoom3D extends Phaser.Scene {
     this.heard = [];
     this.unseenT = 0;
     this.investigateT = 0;
+    this.runLoud = 0;
     this.memory = 0;
     this.shake = 0;
     this.stuckT = 0;
@@ -3624,6 +3641,9 @@ export class HideRoom3D extends Phaser.Scene {
 
     const fwd = (this.held('fwd') ? 1 : 0) - (this.held('back') ? 1 : 0);
     const strafe = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
+    // how loud you have been: up while running, fading otherwise
+    const runningNow = (fwd !== 0 || strafe !== 0) && this.held('run') && !this.crouching && !this.inSecret;
+    this.runLoud = runningNow ? Math.min(1, this.runLoud + dt / RUN_FIX_S) : Math.max(0, this.runLoud - dt / RUN_FADE_S);
     if (fwd === 0 && strafe === 0) return;
 
     // SHIFT stands you up rather than being ignored: a player holding run is
@@ -3670,7 +3690,8 @@ export class HideRoom3D extends Phaser.Scene {
       if (this.crouching) return;
       if (running) {
         this.play('step_run', 0.55);
-        if (this.froggy.distanceTo(this.pos) < HEAR_RUN) this.alert();
+        const carries = HEAR_RUN_MIN + (HEAR_RUN_MAX - HEAR_RUN_MIN) * this.runLoud;
+        if (this.froggy.distanceTo(this.pos) < carries) this.alert();
         else if (Math.random() < CREAK_CHANCE) this.creak();
       } else {
         this.play('step_walk', 0.32);
@@ -4728,10 +4749,10 @@ export class HideRoom3D extends Phaser.Scene {
    * see you he is doing something better than this, and if he cannot then a
    * sound is not allowed to tell him where you are.
    */
-  private investigate(x: number, z: number): void {
+  private investigate(x: number, z: number, off = CREAK_SLOP): void {
     if (this.fMode === 'chase') return;
     // He heard a direction and a rough distance, not a position.
-    const slop = () => (Math.random() - 0.5) * 2 * CREAK_SLOP;
+    const slop = () => (Math.random() - 0.5) * 2 * off;
     const guess = new THREE.Vector2(x + slop(), z + slop());
     this.clampToRoom(guess);
     if (this.solid(guess.x, guess.y, 0.5)) guess.set(x, z); // do not send him into a sofa
@@ -4745,10 +4766,13 @@ export class HideRoom3D extends Phaser.Scene {
 
   private alert(): void {
     if (this.inSecret || this.fMode === 'chase') return;
-    // Running is louder than a board, so he gets a better fix on it — but it
-    // is still only a place to walk to.
+    // Running is louder than a board, so he gets a better fix on it -- the
+    // better the longer you have kept it up -- but it is still only a place to
+    // walk to: being seen is what makes it a chase.
+    const fresh = this.fMode !== 'investigate';
     this.lastSeen.copy(this.pos);
-    this.investigate(this.pos.x, this.pos.y);
+    this.investigate(this.pos.x, this.pos.y, RUN_SLOP_FAR + (RUN_SLOP_NEAR - RUN_SLOP_FAR) * this.runLoud);
+    if (fresh && this.mode === 'seeking') this.say(this.runLoud > 0.6 ? 'HE HEARD YOU RUNNING. HE KNOWS WHERE.' : 'HE HEARD THAT...', 1800);
   }
 
   private sees(): boolean {

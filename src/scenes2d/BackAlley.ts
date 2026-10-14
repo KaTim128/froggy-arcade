@@ -21,6 +21,7 @@ import { centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { Player } from '../art/player';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
+import { backPlate } from '../ui/plate';
 
 const WALK_Y = 168;
 const DOOR_X = 236;
@@ -71,6 +72,7 @@ export class BackAlley extends Phaser.Scene {
 
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setOrigin(0.5, 0.5).setDepth(801).setVisible(false);
     this.mutter = centerText(this, GAME_W / 2, GAME_H - 18, '', PALETTE.cream).setDepth(802).setVisible(false);
+    backPlate(this, this.mutter);
 
     this.keys = { left: this.bind(KEYS.left), right: this.bind(KEYS.right) };
     this.input.keyboard?.on('keydown-E', () => this.interact());

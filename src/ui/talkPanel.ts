@@ -16,6 +16,7 @@ import { button, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { touchControls } from './touchControls';
 import { FONT_ADVANCE } from '../render/pixelFont';
+import { SPEAKERS, WELL_W, addPortrait, type Speaker, type SpeakerId } from './portraits';
 
 export interface TalkOption {
   label: string;
@@ -23,7 +24,10 @@ export interface TalkOption {
 }
 
 export interface TalkOpts {
-  who: string;
+  /** The name over the line (defaults to the speaker's). */
+  who?: string;
+  /** Who is talking: their portrait in the box, the box in their colour. */
+  speaker?: SpeakerId | Speaker;
   /** The panel's edge and the name, in the speaker's colour. */
   color?: number;
   line: string;
@@ -44,8 +48,12 @@ export function openTalkPanel(scene: Phaser.Scene, o: TalkOpts): Phaser.GameObje
   const over = touchControls.overBottom();
   const L = over.left;
   const R = over.right;
-  const inner = GAME_W - 46 - L - R;
-  const color = o.color ?? PALETTE.neon;
+  const sp: Speaker | null = typeof o.speaker === 'string' ? SPEAKERS[o.speaker] : (o.speaker ?? null);
+  // the portrait's well takes the left of the panel, the words move over
+  const PW = sp ? WELL_W + 6 : 0;
+  const inner = GAME_W - 46 - L - R - PW;
+  const color = o.color ?? sp?.color ?? PALETTE.neon;
+  const name = o.who ?? sp?.name ?? '';
   // EVERY ANSWER TAKES DOWN THE PANEL IT IS ON, AND ANSWERS ONCE.  A phone
   // can deliver one tap twice (the touch, then the mouse event the browser
   // makes from it), and a scene that loses track of a panel would otherwise
@@ -63,21 +71,28 @@ export function openTalkPanel(scene: Phaser.Scene, o: TalkOpts): Phaser.GameObje
       op.fn();
     },
   }));
-  const body = text(scene, 22 + L, 0, o.line, PALETTE.cream).setMaxWidth(inner);
+  const body = text(scene, 22 + L + PW, 0, o.line, PALETTE.cream).setMaxWidth(inner);
   const textH = Math.max(8, Math.ceil(body.height));
   const widths = options.map((op) => Math.max(60, op.label.length * FONT_ADVANCE + 14));
   const across = widths.reduce((a, w) => a + w, 0) + Math.max(0, widths.length - 1) * GAP;
   const oneRow = across <= inner;
   const rows = options.length === 0 ? 0 : oneRow ? 1 : options.length;
-  const h = PAD + HEAD + textH + PAD + (rows > 0 ? rows * ROW + 2 : 10);
+  const h = Math.max(sp ? 48 : 0, PAD + HEAD + textH + PAD + (rows > 0 ? rows * ROW + 2 : 10));
   const y = GAME_H - h - 5;
   body.setY(y + PAD + HEAD);
 
   const cx = GAME_W / 2 + (L - R) / 2;
-  const panel = scene.add.rectangle(cx, y + h / 2, GAME_W - 24 - L - R, h, PALETTE.ink, 0.95);
+  // solid: the words are read against the panel, never the room through it
+  const panel = scene.add.rectangle(cx, y + h / 2, GAME_W - 24 - L - R, h, PALETTE.ink, 1);
   panel.setStrokeStyle(1, color);
-  const who = text(scene, 22 + L, y + PAD, o.who, color);
+  const who = text(scene, 22 + L + PW, y + PAD, name, color);
   const parts: Phaser.GameObjects.GameObject[] = [panel, who, body];
+  const pending: Array<(box: Phaser.GameObjects.Container) => void> = [];
+  if (sp) pending.push((box) => {
+    const extra: Phaser.GameObjects.GameObject[] = [];
+    addPortrait(scene, box, extra, sp, 16 + L, y + 4, WELL_W, h - 8, o.depth ?? 900);
+    box.add(extra);
+  });
 
   const top = y + PAD + HEAD + textH + PAD + ROW / 2;
   if (rows === 0) {
@@ -97,6 +112,34 @@ export function openTalkPanel(scene: Phaser.Scene, o: TalkOpts): Phaser.GameObje
     });
   }
   panelBox = scene.add.container(0, 0, parts).setDepth(o.depth ?? 900);
+  for (const f of pending) f(panelBox);
   panelBox.once(Phaser.GameObjects.Events.DESTROY, () => touchControls.releaseStick());
   return panelBox;
+}
+
+/**
+ * Someone says one thing: their box, their portrait, and E (or SPACE, ENTER,
+ * Esc, or a tap) takes it down.  Screen-fixed, so it sits right in a room the
+ * camera scrolls through.  `onClose` when it goes.
+ */
+export function speak(scene: Phaser.Scene, speaker: SpeakerId | Speaker, line: string, onClose?: () => void): Phaser.GameObjects.Container {
+  const box = openTalkPanel(scene, { speaker, line, depth: 950 });
+  box.setScrollFactor(0);
+  for (const o of box.list) (o as unknown as Phaser.GameObjects.Components.ScrollFactor).setScrollFactor?.(0);
+  const t0 = performance.now();
+  const close = () => {
+    // (not the same press that opened it)
+    if (performance.now() - t0 < 200) return;
+    if (box.active) box.destroy();
+  };
+  const keys = ['E', 'SPACE', 'ENTER', 'ESC'];
+  const kb = scene.input.keyboard;
+  for (const k of keys) kb?.on(`keydown-${k}`, close);
+  scene.input.on('pointerdown', close);
+  box.once(Phaser.GameObjects.Events.DESTROY, () => {
+    for (const k of keys) kb?.off(`keydown-${k}`, close);
+    scene.input.off('pointerdown', close);
+    onClose?.();
+  });
+  return box;
 }

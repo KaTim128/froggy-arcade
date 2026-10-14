@@ -43,7 +43,10 @@ export interface ExteriorRefs {
 
 /** Where the man stands, and where the player sits at the start. */
 export const KERB_Y = 168;
-export const MAN_X = 74;
+/** The man's pitch on the forecourt: to the right of the doors. */
+export const MAN_X = 236;
+/** Where he stops in the opening scene, over the drifter on the kerb. */
+export const INTRO_MAN_X = 74;
 
 export function paintExterior(scene: Phaser.Scene, opts: ExteriorOpts): ExteriorRefs {
   const c = (col: number) => (opts.night ? nightify(col) : opts.day ? daylight(col) : col);
@@ -184,110 +187,9 @@ export function paintExterior(scene: Phaser.Scene, opts: ExteriorOpts): Exterior
   // there just shows.  Every view of this street has it, the same.
   paintAlleyMouth(scene, c, fx + fw, fy);
 
-  // ---- THE ENTRANCE.  The frame from the street's open doorway -- warm tan,
-  // with a transom over it -- and in it a pair of GLASS doors, the arcade's
-  // purple light through them, a pull handle on each leaf either side of the
-  // meeting stiles.  Shut, a chain runs through the two handles and nowhere
-  // else, on the inside of the glass, and a padlock hangs from it.
-  const dw = 34; // the frame, outside
-  const dh = 34;
-  const dTop = base - dh;
-  const d = scene.add.graphics();
-  // the recess in the wall and the step up to it
-  d.fillStyle(c(PALETTE.ink), 1).fillRect(doorX - dw / 2 - 2, dTop - 2, dw + 4, dh + 2);
-  d.fillStyle(c(PALETTE.brownLight), 1).fillRect(doorX - dw / 2, dTop, dw, dh);
-  d.fillStyle(c(PALETTE.cream), 0.25).fillRect(doorX - dw / 2, dTop, dw, 1);
-  d.fillStyle(c(PALETTE.brown), 1).fillRect(doorX - dw / 2 + dw - 2, dTop, 2, dh);
-  // the transom: a strip of glass over the doors
-  const tY = dTop + 3;
-  d.fillStyle(closed ? c(PALETTE.night) : PALETTE.plum, 1).fillRect(doorX - 13, tY, 26, 4);
-  d.fillStyle(c(PALETTE.brown), 1).fillRect(doorX - 14, tY + 4, 28, 1);
-  // the two leaves
-  const gTop = tY + 6;
-  const gBot = base - 2;
-  const leafW = 13;
-  for (const side of [-1, 1]) {
-    const lx = side < 0 ? doorX - leafW - 1 : doorX + 1;
-    // the leaf's metal frame
-    d.fillStyle(c(PALETTE.steel), 1).fillRect(lx, gTop, leafW, gBot - gTop);
-    // the glass, and what is behind it
-    const gx = lx + 1;
-    const gw = leafW - 2;
-    const gh = gBot - gTop - 4;
-    if (closed) {
-      d.fillStyle(c(PALETTE.night), 1).fillRect(gx, gTop + 1, gw, gh);
-      d.fillStyle(c(PALETTE.ink), 1).fillRect(gx, gTop + gh - 6, gw, 6);
-    } else {
-      // the arcade's light inside, as in the open doorway
-      d.fillStyle(PALETTE.plum, 1).fillRect(gx, gTop + 1, gw, gh);
-      d.fillStyle(PALETTE.neonDim, 0.55).fillRect(gx, gTop + gh - 8, gw, 8);
-      d.fillStyle(PALETTE.violet, 0.35).fillRect(gx, gTop + 3, gw, 3);
-    }
-    // the kick plate at the foot of each leaf
-    d.fillStyle(c(PALETTE.ash), 1).fillRect(lx + 1, gBot - 4, leafW - 2, 3);
-  }
-  // the meeting stiles down the middle
-  d.fillStyle(c(PALETTE.ink), 1).fillRect(doorX - 1, gTop, 2, gBot - gTop);
-  // THE HANDLES: a vertical pull bar on each leaf, standing off the glass on
-  // two short brackets, either side of the middle
-  const hTop = gTop + 8;
-  const hLen = 9;
-  const hx = [doorX - 4, doorX + 3];
-  for (const x of hx) {
-    d.fillStyle(c(PALETTE.ash), 1).fillRect(x, hTop + 1, 1, 1).fillRect(x, hTop + hLen - 2, 1, 1);
-    d.fillStyle(c(PALETTE.bone), 1).fillRect(x, hTop, 1, hLen);
-  }
-  if (closed) {
-    // THE CHAIN, through both handles and nothing else.  Wrapped twice round
-    // the pair of bars, pulled tight between them, and the padlock hanging
-    // off the lower wrap.  Lit by the street, so it shows even at night.
-    const steel = 0x9aa4b0;
-    const dark = 0x5c6672;
-    for (const wy of [hTop + 2, hTop + 5]) {
-      // links: alternately face-on (a ring) and edge-on (a bar)
-      for (let x = hx[0] - 1, k = 0; x <= hx[1] + 1; x++, k++) {
-        d.fillStyle(k % 2 ? dark : steel, 1).fillRect(x, wy, 1, k % 2 ? 1 : 2);
-      }
-      // round the back of each bar
-      d.fillStyle(dark, 1).fillRect(hx[0] - 1, wy - 1, 1, 3).fillRect(hx[1] + 1, wy - 1, 1, 3);
-    }
-    // the padlock, hanging from the lower wrap between the bars
-    const lx = doorX - 1;
-    const ly = hTop + 7;
-    d.fillStyle(steel, 1).fillRect(lx, ly, 1, 1).fillRect(lx + 1, ly - 1, 1, 1).fillRect(lx + 2, ly, 1, 1);
-    d.fillStyle(0xc9a24a, 1).fillRect(lx - 1, ly + 1, 5, 4);
-    d.fillStyle(0x7a5a24, 1).fillRect(lx + 1, ly + 2, 1, 2);
-    // and the glass in front of it all, so it reads as inside
-    d.fillStyle(c(PALETTE.moon), 0.08).fillRect(doorX - 12, gTop + 1, 24, gBot - gTop - 4);
-  }
-  // reflections across the glass
-  for (const side of [-1, 1]) {
-    const lx = side < 0 ? doorX - leafW : doorX + 2;
-    d.fillStyle(PALETTE.white, closed ? 0.07 : 0.16);
-    for (let i = 0; i < 4; i++) d.fillRect(lx + 2 + i, gTop + 3 + i * 2, 1, 4);
-  }
-  // the threshold, and a mat on the step
-  d.fillStyle(c(PALETTE.fog), 1).fillRect(doorX - dw / 2 - 2, base - 1, dw + 4, 1);
-  if (!closed) d.fillStyle(c(PALETTE.neonDim), 0.8).fillRect(doorX - 10, base, 20, 2);
+  // ---- THE ENTRANCE (shared with the shops along the street)
+  const entrance = paintEntrance(scene, wall, { doorX, base, lampY: fy + 30, closed, day: !!opts.day, night: opts.night, c });
   const doorY = base - 16;
-
-  // ---- the lamps either side of the door, and their light on the wall
-  for (const side of [-1, 1]) {
-    const lx = doorX + side * 28;
-    const ly = fy + 30;
-    const lit = !opts.night;
-    if (lit) {
-      wall.fillStyle(PALETTE.gold, opts.day ? 0.08 : 0.18).fillCircle(lx, ly + 6, 14);
-      wall.fillStyle(PALETTE.gold, opts.day ? 0.1 : 0.22).fillCircle(lx, ly + 4, 7);
-    }
-    d.fillStyle(c(PALETTE.ink), 1).fillRect(lx - 1, ly - 3, 3, 2);
-    d.fillStyle(lit ? PALETTE.cream : c(PALETTE.ash), 1).fillRect(lx - 2, ly - 1, 5, 4);
-    d.fillStyle(c(PALETTE.ink), 1).fillRect(lx - 2, ly + 3, 5, 1);
-  }
-  if (!closed) {
-    // light falling out of the glass onto the pavement
-    scene.add.rectangle(doorX, base, 30, 14, opts.day ? PALETTE.gold : PALETTE.neon).setOrigin(0.5, 0).setAlpha(opts.day ? 0.12 : 0.14);
-  }
 
   // ---- the neon frog sign
   const signGlow = scene.add
@@ -371,8 +273,163 @@ export function paintExterior(scene: Phaser.Scene, opts: ExteriorOpts): Exterior
     moth,
     doorX,
     doorY,
-    doorRect: { x: doorX - dw / 2, y: dTop, w: dw, h: dh },
+    doorRect: entrance.rect,
   };
+}
+
+/** The entrance, outside: the frame of the arcade's doorway. */
+export const ENTRANCE_W = 34;
+export const ENTRANCE_H = 34;
+
+/** What shows through the glass when it is open. */
+export interface Inside {
+  /** The room's light. */
+  back: number;
+  /** Down near the floor. */
+  floor: number;
+  /** A band across the top. */
+  band: number;
+  /** The mat on the step. */
+  mat: number;
+  /** The light falling out onto the pavement after dark. */
+  spill: number;
+}
+
+const ARCADE_INSIDE: Inside = { back: PALETTE.plum, floor: PALETTE.neonDim, band: PALETTE.violet, mat: PALETTE.neonDim, spill: PALETTE.neon };
+
+export interface EntranceOpts {
+  doorX: number;
+  /** Where the building meets the pavement. */
+  base: number;
+  /** The height of the lamps either side. */
+  lampY: number;
+  closed: boolean;
+  day: boolean;
+  night: boolean;
+  /** The street's colour transform (night, daylight). */
+  c: (n: number) => number;
+  /** What is behind the glass: the arcade's purple, or a shop's own light. */
+  inside?: Inside;
+  depth?: number;
+}
+
+/**
+ * THE ENTRANCE: the arcade's doorway, and every shop's on the street -- one
+ * design, so every door you can go in by reads the same.  The recess and the
+ * frame with its transom, a pair of glass leaves with the light inside
+ * through them, a pull bar on each, the kick plates; a chain and padlock
+ * through the handles when it is shut; and a lamp either side, lighting the
+ * wall (`wall`) round it.
+ */
+export function paintEntrance(scene: Phaser.Scene, wall: Phaser.GameObjects.Graphics, o: EntranceOpts): { rect: { x: number; y: number; w: number; h: number } } {
+  const { doorX, base, closed, day, night, c } = o;
+  // ---- THE ENTRANCE.  The frame from the street's open doorway -- warm tan,
+  // with a transom over it -- and in it a pair of GLASS doors, the arcade's
+  // purple light through them, a pull handle on each leaf either side of the
+  // meeting stiles.  Shut, a chain runs through the two handles and nowhere
+  // else, on the inside of the glass, and a padlock hangs from it.
+  const dw = ENTRANCE_W; // the frame, outside
+  const dh = ENTRANCE_H;
+  const dTop = base - dh;
+  const d = scene.add.graphics();
+  const inside = o.inside ?? ARCADE_INSIDE;
+  // the recess in the wall and the step up to it
+  d.fillStyle(c(PALETTE.ink), 1).fillRect(doorX - dw / 2 - 2, dTop - 2, dw + 4, dh + 2);
+  d.fillStyle(c(PALETTE.brownLight), 1).fillRect(doorX - dw / 2, dTop, dw, dh);
+  d.fillStyle(c(PALETTE.cream), 0.25).fillRect(doorX - dw / 2, dTop, dw, 1);
+  d.fillStyle(c(PALETTE.brown), 1).fillRect(doorX - dw / 2 + dw - 2, dTop, 2, dh);
+  // the transom: a strip of glass over the doors
+  const tY = dTop + 3;
+  d.fillStyle(closed ? c(PALETTE.night) : inside.back, 1).fillRect(doorX - 13, tY, 26, 4);
+  d.fillStyle(c(PALETTE.brown), 1).fillRect(doorX - 14, tY + 4, 28, 1);
+  // the two leaves
+  const gTop = tY + 6;
+  const gBot = base - 2;
+  const leafW = 13;
+  for (const side of [-1, 1]) {
+    const lx = side < 0 ? doorX - leafW - 1 : doorX + 1;
+    // the leaf's metal frame
+    d.fillStyle(c(PALETTE.steel), 1).fillRect(lx, gTop, leafW, gBot - gTop);
+    // the glass, and what is behind it
+    const gx = lx + 1;
+    const gw = leafW - 2;
+    const gh = gBot - gTop - 4;
+    if (closed) {
+      d.fillStyle(c(PALETTE.night), 1).fillRect(gx, gTop + 1, gw, gh);
+      d.fillStyle(c(PALETTE.ink), 1).fillRect(gx, gTop + gh - 6, gw, 6);
+    } else {
+      // the light inside, as in the open doorway
+      d.fillStyle(inside.back, 1).fillRect(gx, gTop + 1, gw, gh);
+      d.fillStyle(inside.floor, 0.55).fillRect(gx, gTop + gh - 8, gw, 8);
+      d.fillStyle(inside.band, 0.35).fillRect(gx, gTop + 3, gw, 3);
+    }
+    // the kick plate at the foot of each leaf
+    d.fillStyle(c(PALETTE.ash), 1).fillRect(lx + 1, gBot - 4, leafW - 2, 3);
+  }
+  // the meeting stiles down the middle
+  d.fillStyle(c(PALETTE.ink), 1).fillRect(doorX - 1, gTop, 2, gBot - gTop);
+  // THE HANDLES: a vertical pull bar on each leaf, standing off the glass on
+  // two short brackets, either side of the middle
+  const hTop = gTop + 8;
+  const hLen = 9;
+  const hx = [doorX - 4, doorX + 3];
+  for (const x of hx) {
+    d.fillStyle(c(PALETTE.ash), 1).fillRect(x, hTop + 1, 1, 1).fillRect(x, hTop + hLen - 2, 1, 1);
+    d.fillStyle(c(PALETTE.bone), 1).fillRect(x, hTop, 1, hLen);
+  }
+  if (closed) {
+    // THE CHAIN, through both handles and nothing else.  Wrapped twice round
+    // the pair of bars, pulled tight between them, and the padlock hanging
+    // off the lower wrap.  Lit by the street, so it shows even at night.
+    const steel = 0x9aa4b0;
+    const dark = 0x5c6672;
+    for (const wy of [hTop + 2, hTop + 5]) {
+      // links: alternately face-on (a ring) and edge-on (a bar)
+      for (let x = hx[0] - 1, k = 0; x <= hx[1] + 1; x++, k++) {
+        d.fillStyle(k % 2 ? dark : steel, 1).fillRect(x, wy, 1, k % 2 ? 1 : 2);
+      }
+      // round the back of each bar
+      d.fillStyle(dark, 1).fillRect(hx[0] - 1, wy - 1, 1, 3).fillRect(hx[1] + 1, wy - 1, 1, 3);
+    }
+    // the padlock, hanging from the lower wrap between the bars
+    const lx = doorX - 1;
+    const ly = hTop + 7;
+    d.fillStyle(steel, 1).fillRect(lx, ly, 1, 1).fillRect(lx + 1, ly - 1, 1, 1).fillRect(lx + 2, ly, 1, 1);
+    d.fillStyle(0xc9a24a, 1).fillRect(lx - 1, ly + 1, 5, 4);
+    d.fillStyle(0x7a5a24, 1).fillRect(lx + 1, ly + 2, 1, 2);
+    // and the glass in front of it all, so it reads as inside
+    d.fillStyle(c(PALETTE.moon), 0.08).fillRect(doorX - 12, gTop + 1, 24, gBot - gTop - 4);
+  }
+  // reflections across the glass
+  for (const side of [-1, 1]) {
+    const lx = side < 0 ? doorX - leafW : doorX + 2;
+    d.fillStyle(PALETTE.white, closed ? 0.07 : 0.16);
+    for (let i = 0; i < 4; i++) d.fillRect(lx + 2 + i, gTop + 3 + i * 2, 1, 4);
+  }
+  // the threshold, and a mat on the step
+  d.fillStyle(c(PALETTE.fog), 1).fillRect(doorX - dw / 2 - 2, base - 1, dw + 4, 1);
+  if (!closed) d.fillStyle(c(inside.mat), 0.8).fillRect(doorX - 10, base, 20, 2);
+
+  // ---- the lamps either side of the door, and their light on the wall
+  for (const side of [-1, 1]) {
+    const lx = doorX + side * 28;
+    const ly = o.lampY;
+    const lit = !night;
+    if (lit) {
+      wall.fillStyle(PALETTE.gold, day ? 0.08 : 0.18).fillCircle(lx, ly + 6, 14);
+      wall.fillStyle(PALETTE.gold, day ? 0.1 : 0.22).fillCircle(lx, ly + 4, 7);
+    }
+    d.fillStyle(c(PALETTE.ink), 1).fillRect(lx - 1, ly - 3, 3, 2);
+    d.fillStyle(lit ? PALETTE.cream : c(PALETTE.ash), 1).fillRect(lx - 2, ly - 1, 5, 4);
+    d.fillStyle(c(PALETTE.ink), 1).fillRect(lx - 2, ly + 3, 5, 1);
+  }
+  if (!closed) {
+    // light falling out of the glass onto the pavement
+    scene.add.rectangle(doorX, base, 30, 14, day ? PALETTE.gold : inside.spill).setOrigin(0.5, 0).setAlpha(day ? 0.12 : 0.14).setDepth(o.depth ?? 0);
+  }
+
+  d.setDepth(o.depth ?? 0);
+  return { rect: { x: doorX - dw / 2, y: dTop, w: dw, h: dh } };
 }
 
 function paintAlleyMouth(scene: Phaser.Scene, c: (n: number) => number, x0: number, top: number): void {

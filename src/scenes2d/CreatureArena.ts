@@ -17,8 +17,12 @@ import { store } from '../core/state';
 import { button, centerText, confirmDialog, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
-import { BIOMES, ELEMENTS, bossCreature, creatureById, wildFor, type Attack, type Biome, type Creature } from '../game/creatures';
+import { BATTLE_COST, BIOMES, ELEMENTS, bossCreature, creatureById, wildFor, type Attack, type Biome, type Creature } from '../game/creatures';
 import { activeOwned, finishBattle, retreat, startBattle } from '../game/creatureClash';
+import { attackInfo } from '../game/attackInfo';
+import { drawAttackIcon } from '../art/attackIcons';
+import { setCabinetTouch } from '../game/touchLayouts';
+import type { KeyName } from '../ui/touchControls';
 
 const ARENA = { x: 6, y: 24, w: GAME_W - 12, h: GAME_H - 52 };
 const TIME_LIMIT = 120;
@@ -136,6 +140,19 @@ export class CreatureArena extends Phaser.Scene {
   private atkBtns: Array<{ x: number; y: number }> = [];
   private dialog: Phaser.GameObjects.Container | null = null;
   private paused = false;
+  /**
+   * A phone held upright: the controls are in the band under the picture (a
+   * move pad and three labelled attack buttons that fire at the foe), and a
+   * tap on the battlefield aims the chosen attack there -- nothing is drawn
+   * over the fight.  Held sideways, the two sticks in the corners as before.
+   */
+  private band = false;
+  /** The bell has gone: the stake is taken and the fight is on. */
+  private started = false;
+  private info!: Phaser.GameObjects.BitmapText;
+  private info2!: Phaser.GameObjects.BitmapText;
+  private infoPlate!: Phaser.GameObjects.Rectangle;
+  private infoT = 0;
 
   constructor() {
     super('CreatureArena');
@@ -158,6 +175,8 @@ export class CreatureArena extends Phaser.Scene {
     this.hazardT = 3;
     this.dialog = null;
     this.paused = false;
+    this.started = false;
+    this.infoT = 0;
     this.moveStick = { id: -1, hx: 0, hy: 0, bx: 0, by: 0, dx: 0, dy: 0 };
     this.aimStick = { id: -1, hx: 0, hy: 0, bx: 0, by: 0, dx: 0, dy: 0 };
   }
@@ -169,12 +188,6 @@ export class CreatureArena extends Phaser.Scene {
       this.scene.start('CreatureHub', { from: this.from, msg: 'YOU NEED A CREATURE TO FIGHT.' });
       return;
     }
-    const r = startBattle(this.biome.id, this.boss);
-    if (!r.ok) {
-      this.scene.start('CreatureHub', { from: this.from, msg: r.msg });
-      return;
-    }
-    audio.sfx('bell_ding', 0.6);
     const wins = store.get().creatures.biomeWins[this.biome.id] ?? 0;
     const foeC = this.boss ? bossCreature(this.biome) : wildFor(this.biome, wins);
     this.me = this.fighter(mine, ARENA.x + 40, ARENA.y + ARENA.h / 2, 1, 1);
@@ -185,8 +198,32 @@ export class CreatureArena extends Phaser.Scene {
     this.dark = this.add.graphics().setDepth(40);
     this.ui = this.add.graphics().setDepth(50);
     // (before the hud: it lays the buttons out for whichever this is)
-    this.touch = this.sys.game.device.input.touch;
+    const touchDevice = this.sys.game.device.input.touch;
+    this.band = touchDevice && window.innerHeight >= window.innerWidth;
+    this.touch = touchDevice && !this.band;
     this.paintHud();
+    if (this.band) {
+      const keys: KeyName[] = ['FOUR', 'FIVE', 'SIX'];
+      setCabinetTouch(
+        {
+          stick: 'wasd',
+          buttons: this.me.c.attacks.map((a, i) => {
+            const inf = attackInfo(a, this.me.c.element);
+            return { label: `${inf.emoji}\n${inf.word}`, key: keys[i], primary: i === 0 };
+          }),
+        },
+        'CreatureArena',
+      );
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setCabinetTouch(null));
+    }
+    // the band's attack buttons: pick that attack and let it go at the foe
+    this.input.keyboard!.on('keydown-FOUR', () => this.quickFire(0));
+    this.input.keyboard!.on('keydown-FIVE', () => this.quickFire(1));
+    this.input.keyboard!.on('keydown-SIX', () => this.quickFire(2));
+    // what the chosen attack does, along the bottom of the arena for a moment
+    this.infoPlate = this.add.rectangle(GAME_W / 2, ARENA.y + ARENA.h - 10, GAME_W - 24, 19, PALETTE.ink, 0.92).setStrokeStyle(1, PALETTE.steel).setDepth(55).setVisible(false);
+    this.info = centerText(this, GAME_W / 2, ARENA.y + ARENA.h - 15, '', PALETTE.gold).setDepth(56).setVisible(false);
+    this.info2 = centerText(this, GAME_W / 2, ARENA.y + ARENA.h - 6, '', PALETTE.cream).setDepth(56).setVisible(false);
 
     this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,ONE,TWO,THREE') as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.keyboard!.on('keydown-ONE', () => this.choose(0));
@@ -199,6 +236,109 @@ export class CreatureArena extends Phaser.Scene {
     this.input.on('pointerupoutside', (p: Phaser.Input.Pointer) => this.up(p));
     (window as unknown as { __clash?: unknown }).__clash = this;
     this.cameras.main.fadeIn(250, 0, 0, 0);
+    // before a token is taken: who you are up against, and what they do
+    this.paused = true;
+    this.strategy();
+  }
+
+  /** FIGHT on the card: the stake, the bell, and go. */
+  private begin(): void {
+    const r = startBattle(this.biome.id, this.boss);
+    if (!r.ok) {
+      this.scene.start('CreatureHub', { from: this.from, msg: r.msg });
+      return;
+    }
+    this.dialog?.destroy();
+    this.dialog = null;
+    this.started = true;
+    this.paused = false;
+    audio.sfx('bell_ding', 0.6);
+    this.showInfo(this.sel);
+  }
+
+  /**
+   * THE STRATEGY CARD.  Their creature: element and what it does to you,
+   * rarity, health and speed, and each of its three attacks -- the kind, who
+   * it can hit, how far, how hard, how often.  Your three under it, the same
+   * way.  And a word on what to watch for.  Nothing is spent until FIGHT.
+   */
+  private strategy(): void {
+    const foe = this.foe.c;
+    const me = this.me.c;
+    const c = this.add.container(0, 0).setDepth(2500);
+    this.dialog = c;
+    c.add(this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0.7).setOrigin(0, 0).setInteractive());
+    c.add(this.add.rectangle(GAME_W / 2, GAME_H / 2, GAME_W - 12, GAME_H - 8, PALETTE.ink, 1).setStrokeStyle(1, ELEMENTS[foe.element].col));
+    const fe = ELEMENTS[foe.element];
+    const L = 12;
+    let y = 9;
+    c.add(text(this, L, y, `VS ${foe.name.toUpperCase()}`, this.boss ? PALETTE.gold : PALETTE.cream));
+    c.add(text(this, GAME_W - 12, y, `${fe.name}  HP ${Math.round(foe.hp * this.foe.scale)}  SPD ${foe.speed}`, fe.light).setOrigin(1, 0));
+    y += 10;
+    c.add(text(this, L, y, `ITS HITS: ${fe.effect}`, fe.col));
+    y += 12;
+    const g = this.add.graphics();
+    c.add(g);
+    const rows = (who: Creature, el: typeof foe.element, top: number, head: string, col: number): number => {
+      c.add(text(this, L, top, head, col));
+      let yy = top + 10;
+      who.attacks.forEach((a) => {
+        const inf = attackInfo(a, el, who === foe ? this.foe.scale : 1);
+        g.fillStyle(0x2a2a48, 1).fillRect(L, yy - 1, 11, 10);
+        drawAttackIcon(g, a.kind, L + 5, yy + 4, ELEMENTS[el].light);
+        c.add(text(this, L + 15, yy, `${a.name} - ${inf.type}`, PALETTE.cream));
+        c.add(text(this, GAME_W - 12, yy, a.dmg > 0 ? `${a.dmg} DMG  ${a.cd}S` : `${a.cd}S`, PALETTE.gold).setOrigin(1, 0));
+        c.add(text(this, L + 15, yy + 8, `${inf.target} - ${inf.range}`, PALETTE.fog));
+        yy += 16;
+      });
+      return yy;
+    };
+    y = rows(foe, foe.element, y, 'THEIR ATTACKS', 0xff8a8a);
+    y = rows(me, me.element, y + 1, `YOUR ${me.name.toUpperCase()} - HITS ${ELEMENTS[me.element].effect}`, 0x8ae88a);
+    c.add(text(this, L, y + 1, this.tip(foe), PALETTE.ash).setMaxWidth(GAME_W - 24));
+    c.add(button(this, GAME_W / 2 - 50, GAME_H - 11, `FIGHT (${BATTLE_COST} TOK)`, () => this.begin(), { width: 84, height: 12, fill: 0x1e6a3a }));
+    c.add(button(this, GAME_W / 2 + 50, GAME_H - 11, 'BACK', () => this.scene.start('CreatureHub', { from: this.from }), { width: 60, height: 12 }));
+  }
+
+  /** What to watch for, from what they are. */
+  private tip(foe: Creature): string {
+    const kinds = foe.attacks.map((a) => a.kind);
+    const near = kinds.includes('nova') || kinds.includes('dash');
+    const far = kinds.includes('beam') || kinds.includes('spread');
+    const el: Record<string, string> = {
+      ember: 'BURNS LINGER - TRADE HITS QUICKLY OR STAY OUT OF REACH.',
+      tide: 'IT SHOVES YOU BACK - KEEP AWAY FROM THE EDGES.',
+      moss: 'IT HEALS WHEN IT HITS - DO NOT TRADE BLOWS, OUT-RANGE IT.',
+      frost: 'IT SLOWS YOU - DO NOT GET CAUGHT IN THE OPEN.',
+      volt: 'IT STUNS - DODGE THE FIRST SHOT, THEN PUNISH.',
+      stone: 'IT TAKES LESS DAMAGE - USE YOUR BIG ATTACK OFTEN.',
+      gale: 'IT IS FAST - TRAPS AND AREA ATTACKS CATCH IT.',
+      murk: 'IT BLINDS YOU - STAY CLOSE ENOUGH TO SEE IT.',
+      glow: 'ITS SHOTS GO THROUGH COVER - KEEP MOVING, NOT HIDING.',
+    };
+    return `TIP: ${el[foe.element] ?? ''}${near && !far ? ' IT WANTS TO BE CLOSE.' : far && !near ? ' IT HITS FROM AFAR.' : ''}`;
+  }
+
+  /** A band button: that attack, now, at the foe (a blink goes the way you are walking). */
+  private quickFire(i: number): void {
+    if (this.over || this.paused || !this.started || this.dialog) return;
+    this.choose(i);
+    const a = this.me.c.attacks[i];
+    const k = this.keys;
+    const mx = (k.D.isDown || k.RIGHT.isDown ? 1 : 0) - (k.A.isDown || k.LEFT.isDown ? 1 : 0);
+    const my = (k.S.isDown || k.DOWN.isDown ? 1 : 0) - (k.W.isDown || k.UP.isDown ? 1 : 0);
+    if (a.kind === 'blink' && (mx || my)) this.fire(this.me, i, mx, my);
+    else this.fire(this.me, i, this.foe.x - this.me.x, this.foe.y - this.me.y);
+  }
+
+  /** What the chosen attack does, in one place, for a few seconds. */
+  private showInfo(i: number): void {
+    const a = this.me.c.attacks[i];
+    if (!a || !this.info) return;
+    const inf = attackInfo(a, this.me.c.element);
+    this.info.setText(`${a.name}: ${inf.type} - ${inf.target}`);
+    this.info2.setText(`${inf.range}${a.dmg > 0 ? ` - ${a.dmg} DMG` : ''} - EVERY ${a.cd}S`);
+    this.infoT = 3;
   }
 
   private fighter(c: Creature, x: number, y: number, face: number, scale: number): Fighter {
@@ -289,14 +429,20 @@ export class CreatureArena extends Phaser.Scene {
       Object.assign(this.moveStick, { hx: mx, hy: GAME_H - 28 });
       const dir = left ? 1 : -1;
       this.atkBtns = [0, 1, 2].map((i) => ({ x: ax + dir * (34 + i * 26), y: GAME_H - 14 }));
+    } else if (this.band) {
+      // (on the band under the picture)
+      this.atkBtns = [];
     } else {
-      this.atkBtns = [0, 1, 2].map((i) => ({ x: 70 + i * 90, y: GAME_H - 13 }));
+      this.atkBtns = [0, 1, 2].map((i) => ({ x: 58 + i * 102, y: GAME_H - 13 }));
     }
-    this.me.c.attacks.forEach((a, i) => {
-      const b = this.atkBtns[i];
-      const label = this.touch ? `${i + 1}` : `${i + 1} ${a.name}`;
-      this.labels.push(centerText(this, b.x, b.y, label, PALETTE.cream).setDepth(52));
-    });
+    // the strip: the key, the icon (drawn each frame), the name
+    if (!this.touch && !this.band) {
+      this.me.c.attacks.forEach((a, i) => {
+        const b = this.atkBtns[i];
+        this.labels.push(text(this, b.x - 46, b.y - 4, `${i + 1}`, PALETTE.fog).setDepth(52));
+        this.labels.push(text(this, b.x - 26, b.y - 4, a.name, PALETTE.cream).setDepth(52));
+      });
+    }
     // what your element does: under the attack strip's corner, or (on a phone, where the stick is) up by your name
     const eff = ELEMENTS[this.me.c.element];
     if (this.touch) {
@@ -305,13 +451,14 @@ export class CreatureArena extends Phaser.Scene {
       if (t.x + t.width < GAME_W / 2 - 12) this.labels.push(t);
       else t.destroy();
     }
-    else this.labels.push(text(this, 6, GAME_H - 26, eff.effect, eff.light).setDepth(51));
+    else if (!this.band) this.labels.push(text(this, 6, GAME_H - 26, eff.effect, eff.light).setDepth(51));
   }
 
   // ------------------------------------------------------------------ input
 
   private choose(i: number): void {
     if (this.over) return;
+    if (this.sel !== i) this.showInfo(i);
     this.sel = i;
     audio.sfx('ui_blip', 0.4);
   }
@@ -320,7 +467,8 @@ export class CreatureArena extends Phaser.Scene {
     const r = this.touch ? 12 : 0;
     for (let i = 0; i < 3; i++) {
       const b = this.atkBtns[i];
-      if (this.touch ? Math.hypot(p.x - b.x, p.y - b.y) < r : Math.abs(p.x - b.x) < 43 && Math.abs(p.y - b.y) < 7) return i;
+      if (!b) continue;
+      if (this.touch ? Math.hypot(p.x - b.x, p.y - b.y) < r : Math.abs(p.x - b.x) < 48 && Math.abs(p.y - b.y) < 7) return i;
     }
     return -1;
   }
@@ -372,6 +520,10 @@ export class CreatureArena extends Phaser.Scene {
   }
 
   private askQuit(): void {
+    if (!this.started) {
+      this.scene.start('CreatureHub', { from: this.from });
+      return;
+    }
     if (this.over || this.dialog) return;
     this.paused = true;
     this.dialog = confirmDialog(this, {
@@ -493,6 +645,9 @@ export class CreatureArena extends Phaser.Scene {
     d = Math.max(1, Math.round(d));
     to.hp = Math.max(0, to.hp - d);
     to.flash = 0.12;
+    // the number, rising off whoever took it
+    const n = text(this, to.x, to.y - 14 * to.scale, `${d}`, to === this.me ? 0xff8a8a : 0xffe060).setOrigin(0.5, 1).setDepth(58);
+    this.tweens.add({ targets: n, y: n.y - 10, alpha: 0, duration: 650, ease: 'Quad.easeOut', onComplete: () => n.destroy() });
     this.fx.push({ kind: 'spark', x: to.x, y: to.y - 4, r: 6, t: 0, life: 0.25, col: ELEMENTS[from.c.element].light });
     audio.sfx('whack', 0.3);
     if (a) {
@@ -650,6 +805,7 @@ export class CreatureArena extends Phaser.Scene {
     const running = this.scene.isActive('SettingsModal');
     const dt = this.paused || running || this.over ? 0 : Math.min(delta, 50) / 1000;
     if (dt > 0) this.simulate(dt);
+    this.infoT = Math.max(0, this.infoT - Math.min(delta, 50) / 1000);
     this.render(time / 1000);
   }
 
@@ -764,6 +920,46 @@ export class CreatureArena extends Phaser.Scene {
     });
   }
 
+  /**
+   * How far the chosen attack reaches, drawn faintly on the ground from you:
+   * a line for a shot, a beam or a charge, a cone for a fan, a ring for an
+   * area or a blink, the throw ring for a trap, a halo for a guard.
+   */
+  private drawReach(g: Phaser.GameObjects.Graphics): void {
+    const me = this.me;
+    const a = me.c.attacks[this.sel];
+    const inf = attackInfo(a, me.c.element);
+    const col = ELEMENTS[me.c.element].light;
+    let ax = this.foe.x - me.x;
+    let ay = this.foe.y - me.y;
+    if (!this.touch && !this.band) {
+      const p = this.input.activePointer;
+      ax = p.x - me.x;
+      ay = p.y - me.y;
+    } else if (this.touch && this.aimStick.id >= 0 && Math.hypot(this.aimStick.dx, this.aimStick.dy) > 4) {
+      ax = this.aimStick.dx;
+      ay = this.aimStick.dy;
+    }
+    const m = Math.hypot(ax, ay) || 1;
+    const ux = ax / m;
+    const uy = ay / m;
+    const r = inf.reachPx;
+    g.lineStyle(1, col, 0.28);
+    if (a.kind === 'bolt' || a.kind === 'beam' || a.kind === 'dash') {
+      for (let d = 6; d < r; d += 6) g.fillStyle(col, 0.3).fillRect(me.x + ux * d, me.y + uy * d, 1, 1);
+      g.strokeCircle(me.x + ux * r, me.y + uy * r, 2);
+    } else if (a.kind === 'spread') {
+      const ang = Math.atan2(uy, ux);
+      for (const k of [-0.26, 0, 0.26]) {
+        for (let d = 6; d < r; d += 8) g.fillStyle(col, 0.25).fillRect(me.x + Math.cos(ang + k) * d, me.y + Math.sin(ang + k) * d, 1, 1);
+      }
+    } else if (a.kind === 'nova' || a.kind === 'blink' || a.kind === 'mine') {
+      g.strokeCircle(me.x, me.y, r);
+    } else if (a.kind === 'shield') {
+      g.strokeCircle(me.x, me.y, 11);
+    }
+  }
+
   private render(t: number): void {
     const g = this.g;
     g.clear();
@@ -826,19 +1022,29 @@ export class CreatureArena extends Phaser.Scene {
     bar(8, this.me, false);
     bar(GAME_W - 8, this.foe, true);
     this.timerText.setText(`${Math.max(0, Math.ceil(TIME_LIMIT - this.elapsed))}`);
+    const ic = ELEMENTS[this.me.c.element].light;
     this.me.c.attacks.forEach((a, i) => {
       const b = this.atkBtns[i];
+      if (!b) return;
       const ready = 1 - this.me.cds[i] / a.cd;
       if (this.touch) {
         u.fillStyle(i === this.sel ? 0x6a3aa8 : 0x2a2a48, 0.85).fillCircle(b.x, b.y, 11);
         u.lineStyle(1, i === this.sel ? 0xffe060 : 0x8a8ab0, 1).strokeCircle(b.x, b.y, 11);
+        drawAttackIcon(u, a.kind, b.x, b.y, ic);
         if (ready < 1) u.fillStyle(0x000000, 0.55).slice(b.x, b.y, 11, -Math.PI / 2, -Math.PI / 2 + (1 - ready) * Math.PI * 2, false).fillPath();
       } else {
-        u.fillStyle(i === this.sel ? 0x4a2a78 : 0x1a1a30, 0.9).fillRect(b.x - 43, b.y - 7, 86, 13);
-        u.fillStyle(0xffffff, 0.15).fillRect(b.x - 43, b.y + 4, 86 * Math.min(1, ready), 2);
-        u.lineStyle(1, i === this.sel ? 0xffe060 : 0x4a4a68, 1).strokeRect(b.x - 43, b.y - 7, 86, 13);
+        u.fillStyle(i === this.sel ? 0x4a2a78 : 0x1a1a30, 0.9).fillRect(b.x - 48, b.y - 7, 96, 13);
+        u.fillStyle(0xffffff, 0.15).fillRect(b.x - 48, b.y + 4, 96 * Math.min(1, ready), 2);
+        u.lineStyle(1, i === this.sel ? 0xffe060 : 0x4a4a68, 1).strokeRect(b.x - 48, b.y - 7, 96, 13);
+        drawAttackIcon(u, a.kind, b.x - 34, b.y - 1, ic);
       }
     });
+    // the chosen attack's line, fading
+    const showing = this.infoT > 0 && !this.over && !this.dialog;
+    this.info.setVisible(showing).setAlpha(Math.min(1, this.infoT));
+    this.info2.setVisible(showing).setAlpha(Math.min(1, this.infoT));
+    this.infoPlate.setVisible(showing).setAlpha(Math.min(1, this.infoT) * 0.92);
+    if (this.started && !this.over) this.drawReach(g);
     if (this.touch) {
       for (const s of [this.moveStick, this.aimStick]) {
         const bx = s.id >= 0 ? s.bx : s.hx;

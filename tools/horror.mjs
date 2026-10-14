@@ -1529,7 +1529,7 @@ try {
       Math.abs(gears.search - gears.pace * 1.1) < 1e-6 && gears.hunting > gears.playerRun, `${gears.search} vs ${gears.playerRun}`);
     check('and hunting he is twice the pace, far past your run', Math.abs(gears.chasing - gears.pace * 2) < 1e-6 && gears.chasing > gears.playerRun * 2,
       `${gears.chasing} vs ${gears.playerRun}`);
-    check('SHIFT runs at half again your walk', Math.abs(gears.playerRun - gears.playerWalk * 1.5) < 1e-6,
+    check('SHIFT runs a little faster than half again your walk (1.65x)', Math.abs(gears.playerRun - gears.playerWalk * 1.65) < 1e-6,
       `${gears.playerWalk} -> ${gears.playerRun}`);
 
     // The face goes first.  He spent a whole release walking backwards because

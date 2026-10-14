@@ -48,7 +48,7 @@ const FLOOR_SFX: Record<Surface, 'footstep_carpet' | 'footstep_concrete' | 'foot
 };
 
 /** One letter per pixel; '.' is empty. */
-const COLS: Record<string, number> = {
+export const COLS: Record<string, number> = {
   B: 0x5a3a3a, // knitted beanie, faded maroon
   b: 0x7a5050, // beanie, lit fold
   r: 0x5a4a3a, // greasy hair
@@ -263,6 +263,12 @@ export class Player {
   private parts = new Map<PartName, { fill: Run[]; line: Run[] }>();
   private dir = 1;
   private blinkT = 2.5;
+  /** Sitting: how, and the folded legs (and the can) drawn for it. */
+  private seat: { kind: 'floor' | 'chair'; can: boolean } | null = null;
+  private lap: Phaser.GameObjects.Container | null = null;
+  private lapKey = '';
+  private colOf: (ch: string) => number = (ch) => COLS[ch];
+  private night = false;
 
   /**
    * `look` is someone else's clothes.  Left out, it is the player, dressed in
@@ -272,6 +278,8 @@ export class Player {
     this.shift = scene.input.keyboard?.addKey('SHIFT') ?? null;
     const c = (col: number) => (night ? nightify(col) : col);
     const colOf = (ch: string): number => look.cols?.[ch] ?? COLS[ch];
+    this.colOf = colOf;
+    this.night = night;
     const lines: Phaser.GameObjects.Rectangle[] = [];
     const fills: Phaser.GameObjects.Rectangle[] = [];
     for (const name of ORDER) {
@@ -352,10 +360,86 @@ export class Player {
       backLeg: [-s, swing < 0 ? -lift : 0],
       frontLeg: [s, swing > 0 ? -lift : 0],
     };
+    // seated: the body comes down onto the seat, the legs are folded
+    // forward and drawn separately (see `sit`)
+    const drop = this.seat ? (this.seat.kind === 'floor' ? 8 : 5) : 0;
     for (const [name, p] of this.parts) {
       const [ox, oy] = off[name];
-      for (const run of [...p.fill, ...p.line]) run.r.setPosition((run.cx + ox) * this.dir, run.cy + oy);
+      const leg = name === 'backLeg' || name === 'frontLeg';
+      for (const run of [...p.fill, ...p.line]) {
+        run.r.setPosition((run.cx + ox) * this.dir, run.cy + oy + drop);
+        run.r.setVisible(!(leg && this.seat));
+      }
     }
+    if (this.seat) this.drawLap();
+  }
+
+  /**
+   * Sit down: on the floor (legs out in front, as a beggar sits on his bit of
+   * cardboard) or on a chair (thighs level, shins down).  With `can`, a tin
+   * held out in the front hand.  Any walk or `stand` gets back up.
+   */
+  sit(kind: 'floor' | 'chair', opts: { can?: boolean; facing?: number } = {}): void {
+    if (opts.facing) this.dir = opts.facing > 0 ? 1 : -1;
+    this.seat = { kind, can: !!opts.can };
+    this.bobT = 0;
+    this.pose(0, 0);
+  }
+
+  get seated(): boolean {
+    return this.seat !== null;
+  }
+
+  private drawLap(): void {
+    const s = this.seat;
+    if (!s) return;
+    const key = `${s.kind}${s.can}${this.dir}`;
+    if (this.lap && this.lapKey === key) return;
+    this.lapKey = key;
+    const scene = this.sprite.scene;
+    this.lap?.destroy();
+    const c = (col: number) => (this.night ? nightify(col) : col);
+    const lap = scene.add.container(0, 0);
+    const d = this.dir;
+    // a block with the rig's one-pixel ink line round it
+    const block = (x: number, y: number, w: number, h: number, col: number) => {
+      const x0 = d > 0 ? x : -x - w;
+      lap.add(scene.add.rectangle(x0 - 1, y - 1, w + 2, h + 2, OUTLINE).setOrigin(0, 0));
+      lap.add(scene.add.rectangle(x0, y, w, h, c(col)).setOrigin(0, 0));
+    };
+    if (s.kind === 'floor') {
+      // backside on the ground, legs straight out in front
+      block(-2, -4, 11, 3, this.colOf('j'));
+      block(-1, -3, 11, 3, this.colOf('J'));
+      block(10, -5, 2, 4, this.colOf('K'));
+      block(10, -1, 2, 1, this.colOf('W'));
+    } else {
+      // knees forward at seat height, shins straight down
+      block(-1, -9, 8, 3, this.colOf('J'));
+      block(5, -6, 3, 5, this.colOf('j'));
+      block(5, -1, 4, 1, this.colOf('K'));
+    }
+    if (s.can) {
+      // a dented tin held out on the knee, open end up
+      const hx = s.kind === 'floor' ? 5 : 7;
+      const hy = s.kind === 'floor' ? -9 : -13;
+      block(hx, hy, 3, 4, 0x9aa0a8);
+      lap.add(scene.add.rectangle(d > 0 ? hx : -hx - 3, hy, 3, 1, 0x3a3e44).setOrigin(0, 0));
+      lap.add(scene.add.rectangle(d > 0 ? hx : -hx - 3, hy + 2, 1, 1, 0xe0e4ea).setOrigin(0, 0));
+    }
+    this.sprite.addAt(lap, 0);
+    // (the legs go behind the body, the can in front of it)
+    if (s.can) this.sprite.bringToTop(lap);
+    this.lap = lap;
+  }
+
+  /** Back on your feet. */
+  getUp(): void {
+    if (!this.seat) return;
+    this.seat = null;
+    this.lap?.destroy();
+    this.lap = null;
+    this.pose(0, 0);
   }
 
   /** Blinks now and then, whatever else is happening. */
@@ -401,6 +485,7 @@ export class Player {
   /** Stood still. */
   stand(): void {
     this.bobT = 0;
+    if (this.seat) this.getUp();
     this.pose(0, 0);
   }
 
@@ -418,6 +503,7 @@ export class Player {
       this.pose(0, 0);
       return false;
     }
+    if (this.seat) this.getUp();
     if (Math.abs(dx) > 0.01) this.dir = dx > 0 ? 1 : -1;
     const sprinting = this.shift?.isDown ?? false;
     const step = (PLAYER_SPEED * (sprinting ? SPRINT_MUL : 1) * delta) / 1000;

@@ -4,9 +4,10 @@
  * store back (see core/state.ts).
  */
 
-import { STARTER_COSMETICS, cosmeticById, foodById, furnitureById, ingredientById, recipeById, type CosmeticSlot } from './catalog';
+import { STARTER_COSMETICS, cosmeticById, furnitureById, type CosmeticSlot } from './catalog';
 
-export const LIFE_VERSION = 1;
+/** 2: food, water, energy, the pantry and the hob are gone. */
+export const LIFE_VERSION = 2;
 
 export interface Placement {
   uid: number;
@@ -20,17 +21,10 @@ export interface LifeState {
   v: number;
   /** Seconds of game time since the very first morning. */
   t: number;
-  hunger: number;
-  thirst: number;
-  energy: number;
   rented: boolean;
   /** Game day on whose morning the next rent is due. */
   rentDue: number;
   evicted: boolean;
-  /** Food, drink, ingredients and cooked meals, by id. */
-  pantry: Record<string, number>;
-  /** What is on the hob, and the game second it is ready. */
-  cooking: { recipe: string; ready: number } | null;
   /** Furniture owned, by id (count). */
   furniture: Record<string, number>;
   placed: Placement[];
@@ -49,7 +43,7 @@ export interface LifeState {
   achieved: string[];
   /** Places seen at least once. */
   visited: string[];
-  /** A warning line waiting to be shown (hunger, thirst, rent...). */
+  /** A warning line waiting to be shown (rent...). */
   notice: string;
 }
 
@@ -57,14 +51,9 @@ export function defaultLife(): LifeState {
   return {
     v: LIFE_VERSION,
     t: 0,
-    hunger: 80,
-    thirst: 80,
-    energy: 90,
     rented: false,
     rentDue: 0,
     evicted: false,
-    pantry: { water: 1, bread: 1 },
-    cooking: null,
     furniture: {},
     placed: [],
     nextUid: 1,
@@ -99,18 +88,12 @@ export function sanitizeLife(raw: unknown): LifeState {
   const d = defaultLife();
   if (!raw || typeof raw !== 'object') return d;
   const r = raw as Partial<LifeState>;
-  const pantryValid = (id: string) => !!foodById(id) || !!ingredientById(id);
   const out: LifeState = {
     v: LIFE_VERSION,
     t: num(r.t, 0, 0),
-    hunger: num(r.hunger, d.hunger, 0, 100),
-    thirst: num(r.thirst, d.thirst, 0, 100),
-    energy: num(r.energy, d.energy, 0, 100),
     rented: !!r.rented,
     rentDue: Math.floor(num(r.rentDue, 0, 0)),
     evicted: !!r.evicted,
-    pantry: counts(r.pantry, pantryValid),
-    cooking: r.cooking && recipeById(r.cooking.recipe) ? { recipe: r.cooking.recipe, ready: num(r.cooking.ready, 0, 0) } : null,
     furniture: counts(r.furniture, (id) => !!furnitureById(id)),
     placed: [],
     nextUid: Math.floor(num(r.nextUid, 1, 1)),

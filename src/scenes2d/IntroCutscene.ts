@@ -23,11 +23,12 @@ import { store } from '../core/state';
 import { ledger } from '../core/ledger';
 import { button, centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
-import { paintExterior, startSignFlicker, KERB_Y, MAN_X } from '../art/exterior';
+import { paintExterior, startSignFlicker, KERB_Y, INTRO_MAN_X as MAN_X } from '../art/exterior';
 import { MysteryMan } from '../art/mysteryMan';
 import { Player } from '../art/player';
 import { froggyLayer } from '../render/froggyLayer';
 import { isTouch } from '../core/device';
+import { backPlate } from '../ui/plate';
 
 export const STARTING_TOKENS = 30;
 
@@ -195,6 +196,7 @@ export class IntroCutscene extends Phaser.Scene {
       this.player.sprite.setScale(1, 0.72); // sitting: the same body, folded up
 
       this.caption = centerText(this, GAME_W / 2, GAME_H - 20, '', PALETTE.cream).setDepth(900);
+      backPlate(this, this.caption);
       this.buildChrome();
 
       this.time.delayedCall(1400, () => this.manArrives());

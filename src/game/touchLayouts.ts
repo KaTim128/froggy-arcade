@@ -70,7 +70,11 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   // (the arena draws its own two sticks and attack buttons)
   CreatureHub: TAP,
   CreatureArena: BARE,
-  Condo: TAP,
+  // (rooms you walk round: the stick, and E for whatever you are stood at)
+  Condo: ROOM,
+  FurnitureStore: ROOM,
+  ClothesStore: ROOM,
+  BarberShop: ROOM,
   InventoryModal: TAP,
   // SKIP sends the same Esc the desktop hint names, and it lives in the band
   // under the picture, so it cannot land on the dialogue it is offering to
@@ -212,11 +216,14 @@ export function touchLayoutFor(sceneKey: string): TouchLayout {
 
 let gameRef: Phaser.Game | null = null;
 let cabinet: TouchLayout | null = null;
+/** Which scene the cabinet layout belongs to (the minigame shell, or a game with its own scene). */
+let cabinetScene = 'Minigame';
 let pending = 0;
 
 /** The cabinet currently being played owns the buttons; null hands them back. */
-export function setCabinetTouch(layout: TouchLayout | null): void {
+export function setCabinetTouch(layout: TouchLayout | null, scene = 'Minigame'): void {
   cabinet = layout;
+  cabinetScene = scene;
   refreshTouchLayout();
 }
 
@@ -275,6 +282,6 @@ export function refreshTouchLayout(): void {
     touchControls.resetHidden();
   }
   touchControls.setSkin(skinFor(top), top === 'Minigame');
-  if (top === 'Minigame' && cabinet) touchControls.apply(cabinet);
+  if (top === cabinetScene && cabinet) touchControls.apply(cabinet);
   else touchControls.apply(touchLayoutFor(top));
 }

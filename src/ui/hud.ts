@@ -31,8 +31,6 @@ export class TokenHud {
   private unsub: () => void;
   private pulse?: Phaser.Tweens.Tween;
   private lastCash = -1;
-  /** Energy, food and water, small, under the purse: energy on top. */
-  private bars: { fill: Phaser.GameObjects.Rectangle; key: 'energy' | 'hunger' | 'thirst' }[] = [];
   private clockText!: Phaser.GameObjects.BitmapText;
   private lifeBox!: Phaser.GameObjects.Container;
   private toast: Phaser.GameObjects.Container | null = null;
@@ -58,8 +56,15 @@ export class TokenHud {
     this.container.setDepth(950).setScrollFactor(0);
     this.buildLife();
 
-    this.unsub = ledger.onChange((next, prev) => this.onChange(next, prev));
+    this.unsub = ledger.onChange((next, prev) => {
+      if (this.alive()) this.onChange(next, prev);
+    });
     const unStore = store.subscribe((st) => {
+      // A scene going down can still write to the store on its way out (the
+      // crane saves its glass on shutdown): by then these texts are gone, and
+      // measuring one threw in the middle of the change of scene -- which
+      // never finished, and left the screen black.
+      if (!this.alive()) return;
       if (st.cash !== this.lastCash) this.refreshCash(st.cash);
       this.refreshLife();
     });
@@ -70,6 +75,11 @@ export class TokenHud {
       this.unsub();
       unStore();
     });
+  }
+
+  /** Still on screen: the scene up and the texts not torn down. */
+  private alive(): boolean {
+    return this.container.active && this.label.active && this.cashLabel.active && !!this.clockText?.active && this.scene.sys.isActive();
   }
 
   private refreshCash(cash: number): void {
@@ -122,31 +132,11 @@ export class TokenHud {
     this.container.setVisible(v);
   }
 
-  /**
-   * ---- THE BODY.  Three thin bars under the purse -- ENERGY, then FOOD,
-   * then WATER -- each with its letter, and the clock and the rent beside
-   * them.  Small: 34 pixels wide, 2 high, out of the way of everything.
-   */
+  /** The day, the time and the rent, small, under the purse. */
   private buildLife(): void {
-    const parts: Phaser.GameObjects.GameObject[] = [];
-    const plate = this.scene.add.rectangle(0, 0, 112, 20, PALETTE.black, 0.6).setOrigin(0, 0);
-    parts.push(plate);
-    const rows: Array<['energy' | 'hunger' | 'thirst', string, number]> = [
-      ['energy', 'E', PALETTE.gold],
-      ['hunger', 'F', 0xe8925a],
-      ['thirst', 'W', 0x6fc0f0],
-    ];
-    rows.forEach(([key, letter, col], i) => {
-      const y = 1 + i * 6;
-      parts.push(text(this.scene, 2, y, letter, col));
-      parts.push(this.scene.add.rectangle(9, y + 1, 34, 3, 0x222833).setOrigin(0, 0));
-      const fill = this.scene.add.rectangle(9, y + 1, 34, 3, col).setOrigin(0, 0);
-      parts.push(fill);
-      this.bars.push({ fill, key });
-    });
-    this.clockText = text(this.scene, 47, 1, '', PALETTE.fog);
-    parts.push(this.clockText);
-    this.lifeBox = this.scene.add.container(0, 16, parts);
+    const plate = this.scene.add.rectangle(0, 0, 60, 9, PALETTE.black, 0.6).setOrigin(0, 0);
+    this.clockText = text(this.scene, 3, 1, '', PALETTE.fog);
+    this.lifeBox = this.scene.add.container(0, 16, [plate, this.clockText]);
     this.lifePlate = plate;
     this.container.add(this.lifeBox);
     this.refreshLife();
@@ -158,15 +148,10 @@ export class TokenHud {
     this.lifeBox.setVisible(on);
     if (!on) return;
     const l = s.life;
-    for (const b of this.bars) {
-      const v = l[b.key];
-      b.fill.width = Math.max(0, Math.round((34 * v) / 100));
-      b.fill.setAlpha(v < 20 ? 0.55 + 0.45 * Math.abs(Math.sin(Date.now() / 300)) : 1);
-    }
     const c = clock(l.t);
     const rent = l.rented ? (rentInDays(l) <= 0 ? 'RENT DUE' : `RENT ${rentInDays(l)}D`) : '';
-    this.clockText.setText(`DAY ${c.day + 1} ${c.text}\n${rent}`);
-    this.lifePlate.width = 47 + this.clockText.width + 3;
+    this.clockText.setText(rent ? `DAY ${c.day + 1} ${c.text}  ${rent}` : `DAY ${c.day + 1} ${c.text}`);
+    this.lifePlate.width = this.clockText.width + 6;
     const n = takeNotice();
     if (n) this.showToast(n);
   }
