@@ -23,7 +23,7 @@ import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
 import { paintArcadeDressing, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
-import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
+import { Cabinet, CAB_W, CAB_H, CAB_FOOT } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
 import { CASINO_DOOR, CABINETS, cabinetsIn } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
@@ -91,7 +91,7 @@ export class ArcadeAnnex extends Phaser.Scene {
     this.paintCasinoDoor();
 
     this.cabinets = cabinetsIn('annex').map((def) => new Cabinet(this, def));
-    this.spots = new Map(this.cabinets.map((c) => [c, machineSpot(c.def.x, c.def.y, CAB_W)]));
+    this.spots = new Map(this.cabinets.map((c) => [c, machineSpot(c.def.x, c.def.y, CAB_W, CAB_FOOT)]));
     this.solids = [...this.spots.values()].map((s) => s.solid!);
     this.walker = new Walker(() => this.bounds, () => this.solids);
     for (const cab of this.cabinets) {

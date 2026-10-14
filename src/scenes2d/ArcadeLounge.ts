@@ -36,7 +36,7 @@ import { KEYS } from '../core/input';
 import { centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { paintArcadeDressing, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
-import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
+import { Cabinet, CAB_W, CAB_H, CAB_FOOT } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
 import { CABINETS, LOUNGE_DOOR, cabinetsIn } from '../game/content';
 import { paintClashCabinet, paintCrane, CLASH_H, CLASH_W, CRANE_H, CRANE_W, type CraneKind } from '../art/loungeProps';
@@ -136,7 +136,7 @@ export class ArcadeLounge extends Phaser.Scene {
 
     this.cabinets = cabinetsIn('lounge').map((def) => new Cabinet(this, def, this.night));
     // The game corner: two cranes.
-    for (const cab of this.cabinets) this.spots.set(cab, machineSpot(cab.def.x, cab.def.y, CAB_W));
+    for (const cab of this.cabinets) this.spots.set(cab, machineSpot(cab.def.x, cab.def.y, CAB_W, CAB_FOOT));
     for (const cr of CRANES) this.spots.set(cr, machineSpot(cr.x, cr.y, CRANE_W, 10));
     this.spots.set(CLASH, machineSpot(CLASH.x, CLASH.y, CLASH_W, 10));
     this.solids = [...this.spots.values()].map((s) => s.solid!);
