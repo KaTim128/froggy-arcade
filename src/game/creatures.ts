@@ -116,16 +116,16 @@ export const BODY_LIST = Object.keys(BODIES) as Body[];
  */
 const SIGNATURES: Record<Body, Record<Element, [string, AttackKind]>> = {
   mole: { ember: ['MAGMA RUSH', 'dash'], tide: ['SILT SPRAY', 'arc'], moss: ['ROOT FEED', 'mend'], frost: ['FROST BURROW', 'mine'], volt: ['GROUND FAULT', 'nova'], stone: ['DIG IN', 'shield'], gale: ['SAND SKIP', 'blink'], murk: ['TAR PULL', 'snare'], glow: ['SUNSHAFT', 'beam'] },
-  wisp: { ember: ['EMBER TRAIL', 'beam'], tide: ['SEA DRIFT', 'blink'], moss: ['SPORE HAZE', 'aura'], frost: ['COLD TETHER', 'snare'], volt: ['ARC FLASH', 'bolt'], stone: ['DUST SHROUD', 'shield'], gale: ['SCATTER LIGHT', 'spread'], murk: ['WILL O WISP', 'mine'], glow: ['FLARE OUT', 'nova'] },
+  wisp: { ember: ['EMBER TRAIL', 'beam'], tide: ['SEA DRIFT', 'blink'], moss: ['SPORE HAZE', 'aura'], frost: ['COLD TETHER', 'snare'], volt: ['ARC FLASH', 'bolt'], stone: ['DUST SHROUD', 'shield'], gale: ['SPLIT LIGHT', 'spread'], murk: ['WILL O WISP', 'mine'], glow: ['FLARE OUT', 'nova'] },
   crab: { ember: ['BOILING SNAP', 'nova'], tide: ['SHELL UP', 'shield'], moss: ['KELP WEAVE', 'wall'], frost: ['BRINE LOCK', 'snare'], volt: ['SHOCK CLAW', 'beam'], stone: ['STONE CLAW', 'dash'], gale: ['SIDE SCUTTLE', 'blink'], murk: ['MUD POT', 'mine'], glow: ['PEARL SHOT', 'arc'] },
-  beetle: { ember: ['HORN CHARGE', 'dash'], tide: ['SPRAY HORN', 'spread'], moss: ['CARAPACE BLOOM', 'mend'], frost: ['RIME GUARD', 'shield'], volt: ['STORM HORN', 'beam'], stone: ['BOULDER TOSS', 'arc'], gale: ['WING WHIRR', 'aura'], murk: ['PITFALL', 'mine'], glow: ['PRISM HORN', 'nova'] },
-  serpent: { ember: ['COIL SNAP', 'beam'], tide: ['WHIRLPOOL COIL', 'nova'], moss: ['VINE BIND', 'snare'], frost: ['ICE FANG', 'dash'], volt: ['LIVE WIRE', 'aura'], stone: ['SCALE PLATE', 'shield'], gale: ['SIDEWIND', 'blink'], murk: ['VENOM SPIT', 'arc'], glow: ['DAZZLE SCALES', 'spread'] },
+  beetle: { ember: ['HORN CHARGE', 'dash'], tide: ['SPRAY HORN', 'spread'], moss: ['SHELL BLOOM', 'mend'], frost: ['RIME GUARD', 'shield'], volt: ['STORM HORN', 'beam'], stone: ['BOULDER TOSS', 'arc'], gale: ['WING WHIRR', 'aura'], murk: ['PITFALL', 'mine'], glow: ['PRISM HORN', 'nova'] },
+  serpent: { ember: ['COIL SNAP', 'beam'], tide: ['WHIRL COIL', 'nova'], moss: ['VINE BIND', 'snare'], frost: ['ICE FANG', 'dash'], volt: ['LIVE WIRE', 'aura'], stone: ['SCALE PLATE', 'shield'], gale: ['SIDEWIND', 'blink'], murk: ['VENOM SPIT', 'arc'], glow: ['DAZZLE SCALE', 'spread'] },
   golem: { ember: ['MAGMA QUAKE', 'nova'], tide: ['FLOOD STOMP', 'arc'], moss: ['OVERGROW', 'mend'], frost: ['GLACIER SLAB', 'wall'], volt: ['OVERLOAD', 'aura'], stone: ['QUAKE', 'dash'], gale: ['STONE SLING', 'spread'], murk: ['GRAVE GRIP', 'snare'], glow: ['LIGHT PILLAR', 'beam'] },
   moth: { ember: ['ASH DUST', 'mine'], tide: ['MIST VEIL', 'shield'], moss: ['POLLEN DRIFT', 'aura'], frost: ['FROST POWDER', 'snare'], volt: ['STATIC WINGS', 'nova'], stone: ['GRIT SCALES', 'wall'], gale: ['WING BEAT', 'spread'], murk: ['NIGHT DUST', 'blink'], glow: ['MOON SCALES', 'beam'] },
   toad: { ember: ['SCALD TONGUE', 'beam'], tide: ['WATER GULP', 'mend'], moss: ['LILY LASH', 'snare'], frost: ['FROZEN HOP', 'blink'], volt: ['TONGUE ARC', 'bolt'], stone: ['BELLY SLAM', 'nova'], gale: ['LEAP OFF', 'dash'], murk: ['SWAMP SPIT', 'arc'], glow: ['GLEAM CROAK', 'aura'] },
   hound: { ember: ['ASH POUNCE', 'dash'], tide: ['RIPTIDE RUSH', 'snare'], moss: ['PACK HOWL', 'aura'], frost: ['FROST BITE', 'beam'], volt: ['THUNDER RUN', 'blink'], stone: ['BONE GUARD', 'shield'], gale: ['SLIPSTREAM', 'spread'], murk: ['SHADOW SNAP', 'mine'], glow: ['DAWN HOWL', 'nova'] },
-  owl: { ember: ['CINDER TALONS', 'spread'], tide: ['DIVE BOMB', 'dash'], moss: ['NEST MEND', 'mend'], frost: ['HAIL DROP', 'arc'], volt: ['STORM EYE', 'aura'], stone: ['ROOST GUARD', 'wall'], gale: ['SILENT GLIDE', 'blink'], murk: ['NIGHT EYES', 'snare'], glow: ['PIERCING STARE', 'beam'] },
-  ray: { ember: ['HEAT GLIDE', 'blink'], tide: ['TIDE WASH', 'nova'], moss: ['REEF GUARD', 'wall'], frost: ['CHILL WAKE', 'snare'], volt: ['ELECTRIC STING', 'beam'], stone: ['SAND BURY', 'shield'], gale: ['SKY GLIDE', 'aura'], murk: ['INK CLOUD', 'mine'], glow: ['LANTERN FLASH', 'spread'] },
+  owl: { ember: ['CINDER TALON', 'spread'], tide: ['DIVE BOMB', 'dash'], moss: ['NEST MEND', 'mend'], frost: ['HAIL DROP', 'arc'], volt: ['STORM EYE', 'aura'], stone: ['ROOST GUARD', 'wall'], gale: ['SILENT GLIDE', 'blink'], murk: ['NIGHT EYES', 'snare'], glow: ['PIERCE GAZE', 'beam'] },
+  ray: { ember: ['HEAT GLIDE', 'blink'], tide: ['TIDE WASH', 'nova'], moss: ['REEF GUARD', 'wall'], frost: ['CHILL WAKE', 'snare'], volt: ['LIVE STING', 'beam'], stone: ['SAND BURY', 'shield'], gale: ['SKY GLIDE', 'aura'], murk: ['INK CLOUD', 'mine'], glow: ['LAMP FLASH', 'spread'] },
 };
 
 /**
@@ -288,6 +288,21 @@ export const CREATURES: Creature[] = (() => {
   // (the longest made-up name is 13 letters: Bramblebeetle)
   return out.map((c) => ({ ...c, name: cap(c.name) }));
 })();
+
+/**
+ * ---- TWO THINGS THAT MUST STAY TRUE, checked where they are easiest to
+ * break: every creature's signature move is its own (the whole point of
+ * SIGNATURES), and no move's name is longer than the arena's buttons can
+ * print -- twelve characters, measured against the attack strip.
+ */
+export const MOVE_NAME_MAX = 12;
+if (import.meta.env?.DEV) {
+  const sigs = CREATURES.map((c) => c.attacks[1].name);
+  const dupe = sigs.find((n, i) => sigs.indexOf(n) !== i);
+  if (dupe) throw new Error(`creatures: two creatures share the signature "${dupe}"`);
+  const long = CREATURES.flatMap((c) => c.attacks).find((a) => a.name.length > MOVE_NAME_MAX);
+  if (long) throw new Error(`creatures: "${long.name}" is too long for an attack button`);
+}
 
 export const creatureById = (id: string): Creature | undefined => CREATURES.find((c) => c.id === id);
 

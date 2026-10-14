@@ -521,69 +521,154 @@ export class CreatureArena extends Phaser.Scene {
     g.setAlpha(1);
   }
 
+  /**
+   * ---- NOTHING HERE IS A CIRCLE.
+   *
+   * A barrier is painted as the thing it is: `blob` makes a lumpy outline
+   * from a seed (so the same rock is the same rock every time it is drawn),
+   * and each kind puts its own silhouette, shading and detail on top -- a
+   * crag with faces and a lit edge, a tree with a trunk and a notched crown,
+   * a shard of ice with light through it, a stand of reeds, a cactus, a
+   * crust of cooled lava.  The round outline underneath is only what the
+   * walking and the shots test against; it is never what you see.
+   */
+  private blob(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number, seed: number, squash = 1, n = 9): Phaser.Types.Math.Vector2Like[] {
+    const pts: Phaser.Types.Math.Vector2Like[] = [];
+    let h = seed * 2654435761;
+    const rnd = (): number => {
+      h = (h ^ (h << 13)) >>> 0;
+      h = (h ^ (h >>> 17)) >>> 0;
+      h = (h ^ (h << 5)) >>> 0;
+      return (h % 1000) / 1000;
+    };
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const rr = r * (0.82 + rnd() * 0.36);
+      pts.push({ x: x + Math.cos(a) * rr, y: y + Math.sin(a) * rr * squash });
+    }
+    g.fillPoints(pts, true);
+    return pts;
+  }
+
   /** One piece of a barrier, in whatever the place is made of. */
   private paintProp(g: Phaser.GameObjects.Graphics, p: Prop, bar: Barrier): void {
     const kind = bar.kind;
     const tint = bar.owner ? ELEMENTS[bar.owner.c.element] : null;
-    g.fillStyle(0x000000, 0.25).fillEllipse(p.x + 2, p.y + p.r * 0.7, p.r * 2.2, p.r);
+    const seed = bar.seed + Math.round(p.x * 7 + p.y * 13);
+    g.fillStyle(0x000000, 0.28);
+    this.blob(g, p.x + 1.5, p.y + p.r * 0.75, p.r * 1.15, seed + 91, 0.42);
     switch (kind) {
       case 'rock':
       case 'pillar': {
         const pillar = kind === 'pillar';
-        // a crag, not a disc: a chipped silhouette with a lit top
-        g.fillStyle(pillar ? 0x8a8068 : 0x4a443e, 1).fillEllipse(p.x, p.y + 1, p.r * 2.1, p.r * 1.5);
-        g.fillStyle(pillar ? 0xb8ae90 : 0x6a625a, 1);
-        g.fillTriangle(p.x - p.r, p.y + p.r * 0.8, p.x - p.r * 0.2, p.y - p.r * 1.3, p.x + p.r * 0.5, p.y + p.r * 0.8);
-        g.fillTriangle(p.x - p.r * 0.3, p.y + p.r * 0.8, p.x + p.r * 0.6, p.y - p.r, p.x + p.r, p.y + p.r * 0.8);
-        g.fillStyle(pillar ? 0xe0d8b8 : 0x8a827a, 1).fillRect(p.x - p.r * 0.4, p.y - p.r * 1.1, p.r * 0.5, p.r * 0.5);
-        if (pillar) for (let i = 0; i < 3; i++) g.fillStyle(0x6a6048, 0.7).fillRect(p.x - p.r * 0.8, p.y - p.r * 0.6 + i * p.r * 0.6, p.r * 1.6, 1);
+        if (pillar) {
+          // a fallen column: a drum with fluting and a broken end
+          g.fillStyle(0x6a6048, 1).fillRect(p.x - p.r, p.y - p.r * 0.9, p.r * 2, p.r * 1.8);
+          g.fillStyle(0xb8ae90, 1).fillRect(p.x - p.r + 1, p.y - p.r * 0.9, p.r * 2 - 2, p.r * 1.5);
+          g.fillStyle(0xe0d8b8, 1).fillRect(p.x - p.r + 1, p.y - p.r * 0.9, p.r * 2 - 2, 1);
+          for (let i = 0; i < 4; i++) g.fillStyle(0x8a8068, 0.8).fillRect(p.x - p.r + 2 + i * (p.r / 2.4), p.y - p.r * 0.7, 1, p.r * 1.2);
+          g.fillStyle(0x4a4436, 1).fillRect(p.x - p.r, p.y + p.r * 0.6, p.r * 2, 2);
+          // the broken top edge, chipped
+          g.fillStyle(0x6a6048, 1);
+          for (let i = 0; i < 3; i++) g.fillRect(p.x - p.r + 1 + i * (p.r * 0.7), p.y - p.r * 0.9, 2, 1 + (i % 2));
+        } else {
+          // a crag: a dark mass, two lit faces and a shadowed one
+          g.fillStyle(0x332e2a, 1);
+          this.blob(g, p.x, p.y, p.r * 1.08, seed, 0.95, 8);
+          g.fillStyle(0x5a534a, 1);
+          this.blob(g, p.x, p.y, p.r * 0.95, seed + 3, 0.95, 8);
+          g.fillStyle(0x7d7468, 1).fillTriangle(p.x - p.r * 0.8, p.y + p.r * 0.5, p.x - p.r * 0.1, p.y - p.r, p.x + p.r * 0.4, p.y + p.r * 0.3);
+          g.fillStyle(0x9a9183, 1).fillTriangle(p.x - p.r * 0.2, p.y - p.r * 0.9, p.x + p.r * 0.5, p.y - p.r * 0.2, p.x - p.r * 0.1, p.y - p.r * 0.1);
+          g.fillStyle(0x241f1c, 0.7).fillTriangle(p.x + p.r * 0.3, p.y + p.r * 0.8, p.x + p.r, p.y - p.r * 0.1, p.x + p.r * 0.9, p.y + p.r * 0.8);
+        }
         break;
       }
-      case 'tree':
-        // trunk and crown: in the fields these come in stands you hide in
-        g.fillStyle(0x3a2412, 1).fillRect(p.x - 2, p.y - 1, 4, p.r * 0.9);
-        g.fillStyle(0x1e4216, 1).fillCircle(p.x, p.y - 3, p.r + 1);
-        g.fillStyle(0x2f6a20, 1).fillCircle(p.x - 1, p.y - 4, p.r * 0.85);
-        g.fillStyle(0x4f9a30, 1).fillCircle(p.x - p.r * 0.35, p.y - p.r * 0.8, p.r * 0.45);
-        g.fillStyle(0x7ac04a, 0.8).fillCircle(p.x - p.r * 0.5, p.y - p.r, p.r * 0.2);
+      case 'tree': {
+        // a trunk with a root flare, and a crown of layered leaf masses
+        g.fillStyle(0x2a1a0e, 1).fillRect(p.x - 2.5, p.y - 2, 5, p.r * 1.1);
+        g.fillStyle(0x4a3018, 1).fillRect(p.x - 1.5, p.y - 2, 3, p.r * 1.1);
+        g.fillStyle(0x2a1a0e, 1).fillRect(p.x - 4, p.y + p.r * 0.9, 8, 1.5);
+        g.fillStyle(0x16300f, 1);
+        this.blob(g, p.x, p.y - p.r * 0.5, p.r * 1.25, seed + 7, 0.85, 11);
+        g.fillStyle(0x2a5a1c, 1);
+        this.blob(g, p.x - 0.5, p.y - p.r * 0.7, p.r * 1.05, seed + 11, 0.85, 11);
+        g.fillStyle(0x47892c, 1);
+        this.blob(g, p.x - p.r * 0.3, p.y - p.r * 0.95, p.r * 0.62, seed + 19, 0.8, 9);
+        g.fillStyle(0x76bb49, 0.9);
+        this.blob(g, p.x - p.r * 0.45, p.y - p.r * 1.15, p.r * 0.3, seed + 23, 0.8, 7);
         break;
+      }
       case 'tuft':
-        g.fillStyle(0x3a6a1e, 1).fillEllipse(p.x, p.y, p.r * 2, p.r * 1.2);
-        for (let i = -3; i <= 3; i++) g.fillStyle(0x6aa83a, 1).fillRect(p.x + i * 2, p.y - p.r, 1, p.r + 2);
-        g.fillStyle(0xe8d870, 1).fillCircle(p.x + 2, p.y - p.r, 1.4);
+        // a clump of grass: a shaded base and blades of two lengths
+        g.fillStyle(0x2e5416, 1);
+        this.blob(g, p.x, p.y + 1, p.r * 1.1, seed, 0.5, 8);
+        for (let i = -4; i <= 4; i++) {
+          const h = p.r * (0.8 + ((i + 4) % 3) * 0.35);
+          g.fillStyle(i % 2 ? 0x6aa83a : 0x4a8a2a, 1);
+          g.fillTriangle(p.x + i * 1.7 - 0.6, p.y + 1, p.x + i * 1.7 + 0.6, p.y + 1, p.x + i * 1.7 + (i < 0 ? -1.4 : 1.4), p.y + 1 - h);
+        }
+        g.fillStyle(0xe8d870, 1).fillCircle(p.x + 2, p.y - p.r * 0.9, 1.2);
         break;
       case 'ice':
-        // a shard of the pass, with light through it
-        g.fillStyle(0x6ab0d0, 1).fillTriangle(p.x - p.r, p.y + p.r * 0.7, p.x + p.r, p.y + p.r * 0.7, p.x - p.r * 0.1, p.y - p.r * 1.6);
-        g.fillStyle(0xa8e0f0, 1).fillTriangle(p.x - p.r * 0.7, p.y + p.r * 0.7, p.x + p.r * 0.6, p.y + p.r * 0.7, p.x, p.y - p.r * 1.3);
-        g.fillStyle(0xffffff, 0.8).fillTriangle(p.x - 1.5, p.y + 2, p.x + 1, p.y + 2, p.x - 0.5, p.y - p.r);
+        // a shard: three faces, one of them nearly white
+        g.fillStyle(0x3a7a9a, 1).fillTriangle(p.x - p.r * 1.1, p.y + p.r * 0.8, p.x + p.r * 1.1, p.y + p.r * 0.8, p.x - p.r * 0.1, p.y - p.r * 1.8);
+        g.fillStyle(0x6ab4d6, 1).fillTriangle(p.x - p.r * 0.9, p.y + p.r * 0.7, p.x + p.r * 0.5, p.y + p.r * 0.7, p.x - p.r * 0.1, p.y - p.r * 1.6);
+        g.fillStyle(0xbfe8f6, 1).fillTriangle(p.x - p.r * 0.5, p.y + p.r * 0.6, p.x + p.r * 0.1, p.y + p.r * 0.6, p.x - p.r * 0.15, p.y - p.r * 1.45);
+        g.fillStyle(0xffffff, 0.9).fillTriangle(p.x - p.r * 0.2, p.y + p.r * 0.2, p.x + p.r * 0.05, p.y + p.r * 0.2, p.x - p.r * 0.12, p.y - p.r * 1.2);
+        // a smaller shard leaning off it
+        g.fillStyle(0x6ab4d6, 1).fillTriangle(p.x + p.r * 0.3, p.y + p.r * 0.8, p.x + p.r * 1.2, p.y + p.r * 0.8, p.x + p.r * 1.1, p.y - p.r * 0.5);
         break;
       case 'reed':
-        g.fillStyle(0x24382a, 1).fillEllipse(p.x, p.y + 1, p.r * 2.4, p.r * 1.3);
+        // standing water, and reeds out of it with seed heads
+        g.fillStyle(0x1e3024, 1);
+        this.blob(g, p.x, p.y + 1, p.r * 1.25, seed, 0.45, 9);
+        g.fillStyle(0x33503a, 0.8);
+        this.blob(g, p.x, p.y + 1, p.r * 0.9, seed + 5, 0.45, 9);
         for (let i = -3; i <= 3; i++) {
-          g.fillStyle(0x5a7a32, 1).fillRect(p.x + i * 2.2, p.y - p.r * 1.4, 1, p.r * 1.6);
-          g.fillStyle(0x8a6a2a, 1).fillRect(p.x + i * 2.2, p.y - p.r * 1.6, 1, 2);
+          const h = p.r * (1.3 + ((i + 3) % 3) * 0.45);
+          const lean = i * 0.5;
+          g.fillStyle(0x5a7a32, 1).fillTriangle(p.x + i * 2.1 - 0.5, p.y + 1, p.x + i * 2.1 + 0.5, p.y + 1, p.x + i * 2.1 + lean, p.y + 1 - h);
+          g.fillStyle(0x8a6a2a, 1).fillRect(p.x + i * 2.1 + lean - 0.5, p.y + 1 - h, 1.5, 2.5);
         }
         break;
       case 'shell':
-        g.fillStyle(0xc8a890, 1).fillEllipse(p.x, p.y + 1, p.r * 2.1, p.r * 1.7);
-        g.fillStyle(0xf0d8c0, 1).fillEllipse(p.x, p.y, p.r * 2, p.r * 1.5);
+        // a big conch lying on the sand, with its ribs and its lip
+        g.fillStyle(0xb08a70, 1);
+        this.blob(g, p.x, p.y + 1, p.r * 1.1, seed, 0.78, 10);
+        g.fillStyle(0xf0dcc4, 1);
+        this.blob(g, p.x - 0.5, p.y, p.r, seed + 2, 0.78, 10);
         g.lineStyle(1, 0xc8a890, 1);
-        for (let i = -2; i <= 2; i++) g.lineBetween(p.x, p.y + p.r * 0.7, p.x + i * p.r * 0.4, p.y - p.r * 0.8);
+        for (let i = -2; i <= 2; i++) g.lineBetween(p.x - p.r * 0.1, p.y + p.r * 0.7, p.x + i * p.r * 0.45, p.y - p.r * 0.8);
+        g.fillStyle(0xfff4e8, 1).fillEllipse(p.x - p.r * 0.35, p.y - p.r * 0.3, p.r * 0.5, p.r * 0.35);
+        g.fillStyle(0xd8b8a0, 1).fillEllipse(p.x + p.r * 0.6, p.y + p.r * 0.5, p.r * 0.7, p.r * 0.4);
         break;
-      case 'cactus':
-        g.fillStyle(0x24602e, 1).fillRoundedRect(p.x - 3.5, p.y - p.r * 1.3, 7, p.r * 2.1, 3);
-        g.fillStyle(0x3a8a4a, 1).fillRoundedRect(p.x - 2.5, p.y - p.r * 1.3, 5, p.r * 2, 2);
-        g.fillRoundedRect(p.x - p.r, p.y - p.r * 0.3, 5, 4, 2);
-        g.fillRoundedRect(p.x + p.r - 4, p.y - p.r * 0.7, 5, 4, 2);
-        for (let i = 0; i < 4; i++) g.fillStyle(0xd8e8a0, 1).fillRect(p.x - 1 + (i % 2) * 2, p.y - p.r + i * 3, 1, 1);
+      case 'cactus': {
+        // a column with two arms, ribbed, with spines down it
+        const h = p.r * 2.2;
+        g.fillStyle(0x1c4a24, 1).fillRoundedRect(p.x - 4, p.y - h * 0.62, 8, h, 3.5);
+        g.fillStyle(0x2f7a3a, 1).fillRoundedRect(p.x - 3, p.y - h * 0.6, 6, h - 1, 3);
+        g.fillStyle(0x4aa84e, 1).fillRoundedRect(p.x - 3, p.y - h * 0.6, 2, h - 2, 1);
+        g.fillStyle(0x1c4a24, 1).fillRoundedRect(p.x - p.r - 1, p.y - p.r * 0.5, 5.5, 4.5, 2);
+        g.fillStyle(0x2f7a3a, 1).fillRoundedRect(p.x - p.r - 0.5, p.y - p.r * 0.45, 4.5, 3.5, 2);
+        g.fillStyle(0x1c4a24, 1).fillRoundedRect(p.x + p.r - 4, p.y - p.r * 0.95, 5.5, 4.5, 2);
+        g.fillStyle(0x2f7a3a, 1).fillRoundedRect(p.x + p.r - 3.5, p.y - p.r * 0.9, 4.5, 3.5, 2);
+        for (let i = 0; i < 5; i++) g.fillStyle(0xe8f0b0, 1).fillRect(p.x - 1 + (i % 2) * 2, p.y - h * 0.5 + i * (h / 6), 1, 1);
         break;
+      }
       case 'vent':
-        // cooled lava crust with the fire still under it
-        g.fillStyle(0x1a0e0a, 1).fillEllipse(p.x, p.y, p.r * 2.2, p.r * 1.6);
-        g.fillStyle(0x3a2018, 1).fillEllipse(p.x, p.y - 1, p.r * 1.9, p.r * 1.3);
-        g.fillStyle(0xe8642a, 0.9).fillCircle(p.x, p.y, p.r * 0.5);
-        g.fillStyle(0xffd060, 0.9).fillCircle(p.x - 1, p.y - 1, p.r * 0.22);
+        // a crust of cooled lava, cracked, with the fire still under it
+        g.fillStyle(0xff8a30, 0.5);
+        this.blob(g, p.x, p.y, p.r * 1.2, seed + 13, 0.75, 9);
+        g.fillStyle(0x1a0e08, 1);
+        this.blob(g, p.x, p.y, p.r * 1.05, seed, 0.78, 10);
+        g.fillStyle(0x3a2016, 1);
+        this.blob(g, p.x - 0.5, p.y - 0.5, p.r * 0.85, seed + 4, 0.78, 10);
+        // the cracks, glowing
+        g.lineStyle(1, 0xff6a20, 0.95);
+        g.lineBetween(p.x - p.r * 0.7, p.y + p.r * 0.3, p.x, p.y - p.r * 0.2);
+        g.lineBetween(p.x, p.y - p.r * 0.2, p.x + p.r * 0.6, p.y + p.r * 0.4);
+        g.lineBetween(p.x, p.y - p.r * 0.2, p.x + p.r * 0.2, p.y - p.r * 0.8);
+        g.fillStyle(0xffd060, 0.9).fillCircle(p.x, p.y - p.r * 0.2, 1.2);
         break;
     }
     if (tint) {
@@ -599,7 +684,9 @@ export class CreatureArena extends Phaser.Scene {
     this.timerText = centerText(this, GAME_W / 2, 7, '', PALETTE.fog).setDepth(51);
     // QUIT is only there during the count: once the fight is on there is no
     // running from it.  (The clock ends every battle, so nobody is stuck.)
-    this.quitBtn = button(this, GAME_W / 2, 18, this.training ? 'LEAVE' : 'QUIT', () => this.askQuit(), { width: 36, height: 9 }).setDepth(60);
+    // just inside the top of the arena, clear of the bars and of the line
+    // under the clock that says what your element does
+    this.quitBtn = button(this, GAME_W / 2, ARENA.y + 7, this.training ? 'LEAVE' : 'QUIT', () => this.askQuit(), { width: 38, height: 10 }).setDepth(60);
     // the attack strip / touch buttons
     const left = store.get().creatures.handed === 'left';
     if (this.touch) {
@@ -614,27 +701,25 @@ export class CreatureArena extends Phaser.Scene {
       // (on the band under the picture)
       this.atkBtns = [];
     } else {
-      // three buttons 88 wide with 16 between them, and 12 of margin either
-      // side: room to read the name on each without them touching
-      this.atkBtns = [0, 1, 2].map((i) => ({ x: 56 + i * 104, y: GAME_H - 13 }));
+      // three buttons 98 wide with 8 between them: a twelve-letter move name
+      // (the longest there is -- see creatures MOVE_NAME_MAX) fits inside one
+      // with its number and its icon, and still clears the border.
+      this.atkBtns = [0, 1, 2].map((i) => ({ x: 54 + i * 106, y: GAME_H - 13 }));
     }
     // the strip: the key, the icon (drawn each frame), the name
     if (!this.touch && !this.band) {
       this.me.c.attacks.forEach((a, i) => {
         const b = this.atkBtns[i];
-        this.labels.push(text(this, b.x - 42, b.y - 4, `${i + 1}`, PALETTE.fog).setDepth(52));
-        this.labels.push(text(this, b.x - 22, b.y - 4, a.name, PALETTE.cream).setDepth(52));
+        this.labels.push(text(this, b.x - 46, b.y - 4, `${i + 1}`, PALETTE.fog).setDepth(52));
+        this.labels.push(text(this, b.x - 28, b.y - 4, a.name, PALETTE.cream).setDepth(52).setMaxWidth(74));
       });
     }
-    // what your element does: under the attack strip's corner, or (on a phone, where the stick is) up by your name
+    // WHAT YOUR ELEMENT DOES, in the one place that is clear on every layout:
+    // the middle of the top bar, under the clock, between the two health
+    // bars.  Along the bottom it sat on top of the attack strip's border on
+    // a phone, and beside your name it ran into the clock.
     const eff = ELEMENTS[this.me.c.element];
-    if (this.touch) {
-      const t = text(this, 8 + this.labels[0].width + 6, 3, eff.effect, eff.light).setDepth(51);
-      // (only if it clears the clock in the middle)
-      if (t.x + t.width < GAME_W / 2 - 12) this.labels.push(t);
-      else t.destroy();
-    }
-    else if (!this.band) this.labels.push(text(this, 6, GAME_H - 26, eff.effect, eff.light).setDepth(51));
+    this.labels.push(centerText(this, GAME_W / 2, 15, eff.effect, eff.light).setDepth(51).setMaxWidth(GAME_W / 2 - 8));
   }
 
   // ------------------------------------------------------------------ input
@@ -651,7 +736,7 @@ export class CreatureArena extends Phaser.Scene {
     for (let i = 0; i < 3; i++) {
       const b = this.atkBtns[i];
       if (!b) continue;
-      if (this.touch ? Math.hypot(p.x - b.x, p.y - b.y) < r : Math.abs(p.x - b.x) < 44 && Math.abs(p.y - b.y) < 7) return i;
+      if (this.touch ? Math.hypot(p.x - b.x, p.y - b.y) < r : Math.abs(p.x - b.x) < 49 && Math.abs(p.y - b.y) < 7) return i;
     }
     return -1;
   }
@@ -663,7 +748,7 @@ export class CreatureArena extends Phaser.Scene {
       this.choose(b);
       return;
     }
-    if (p.y < 24) return; // the hud, and QUIT
+    if (p.y < 24) return; // the hud
     if (this.touch) {
       const leftHalf = p.x < GAME_W / 2;
       const moveLeft = store.get().creatures.handed !== 'left';
@@ -1440,10 +1525,10 @@ export class CreatureArena extends Phaser.Scene {
         drawAttackIcon(u, a.kind, b.x, b.y, ic);
         if (ready < 1) u.fillStyle(0x000000, 0.55).slice(b.x, b.y, 12, -Math.PI / 2, -Math.PI / 2 + (1 - ready) * Math.PI * 2, false).fillPath();
       } else {
-        u.fillStyle(i === this.sel ? 0x4a2a78 : 0x1a1a30, 0.9).fillRect(b.x - 44, b.y - 7, 88, 13);
-        u.fillStyle(0xffffff, 0.15).fillRect(b.x - 44, b.y + 4, 88 * Math.min(1, ready), 2);
-        u.lineStyle(1, i === this.sel ? 0xffe060 : 0x4a4a68, 1).strokeRect(b.x - 44, b.y - 7, 88, 13);
-        drawAttackIcon(u, a.kind, b.x - 31, b.y - 1, ic);
+        u.fillStyle(i === this.sel ? 0x4a2a78 : 0x1a1a30, 0.9).fillRect(b.x - 49, b.y - 7, 98, 13);
+        u.fillStyle(0xffffff, 0.15).fillRect(b.x - 49, b.y + 4, 98 * Math.min(1, ready), 2);
+        u.lineStyle(1, i === this.sel ? 0xffe060 : 0x4a4a68, 1).strokeRect(b.x - 49, b.y - 7, 98, 13);
+        drawAttackIcon(u, a.kind, b.x - 37, b.y - 1, ic);
       }
     });
     // the chosen attack's line, fading
