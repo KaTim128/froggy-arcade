@@ -204,7 +204,6 @@ export class CreatureArena extends Phaser.Scene {
   private band = false;
   /** The bell has gone: the stake is taken and the fight is on. */
   private started = false;
-  private quitBtn: Phaser.GameObjects.Container | null = null;
   private info!: Phaser.GameObjects.BitmapText;
   private info2!: Phaser.GameObjects.BitmapText;
   private infoPlate!: Phaser.GameObjects.Rectangle;
@@ -348,12 +347,6 @@ export class CreatureArena extends Phaser.Scene {
     this.dialog?.destroy();
     this.dialog = null;
     this.started = true;
-    // no running from a real fight: the way out is winning, losing or the
-    // clock.  Training is not a fight, so LEAVE stays where it is.
-    if (!this.training) {
-      this.quitBtn?.destroy();
-      this.quitBtn = null;
-    }
     this.paused = false;
     audio.sfx('bell_ding', 0.6);
     const go = centerText(this, ARENA.x + ARENA.w / 2, ARENA.y + ARENA.h / 2, 'FIGHT!', PALETTE.gold, 24).setDepth(2401);
@@ -682,11 +675,20 @@ export class CreatureArena extends Phaser.Scene {
     this.labels.push(text(this, 8, 3, `${name(this.me)} LV${this.myLevel}`, PALETTE.cream).setDepth(51));
     this.labels.push(text(this, GAME_W - 8, 3, name(this.foe), this.boss ? PALETTE.gold : PALETTE.cream).setOrigin(1, 0).setDepth(51));
     this.timerText = centerText(this, GAME_W / 2, 7, '', PALETTE.fog).setDepth(51);
-    // QUIT is only there during the count: once the fight is on there is no
-    // running from it.  (The clock ends every battle, so nobody is stuck.)
-    // just inside the top of the arena, clear of the bars and of the line
-    // under the clock that says what your element does
-    this.quitBtn = button(this, GAME_W / 2, ARENA.y + 7, this.training ? 'LEAVE' : 'QUIT', () => this.askQuit(), { width: 38, height: 10 }).setDepth(60);
+    // ---- THERE IS NO LEAVING A BATTLE.  Not during the count either: a
+    // real fight ends by winning it, losing it or running the clock out, and
+    // no button says otherwise.  (Nobody is ever stuck: TIME_LIMIT settles
+    // every battle on its own.)
+    //
+    // TRAINING is not a battle, so it has a way out -- and it goes in the
+    // HUD, not over the arena: the middle of the top bar, in the slot the
+    // clock would use, which training does not need (the bars either side of
+    // it are untouched, and the line under it still says what your element
+    // does).  Nothing it covers is part of the game being played.
+    if (this.training) {
+      // (8 high, at 5: it ends above the element line under it)
+      button(this, GAME_W / 2, 5, 'LEAVE', () => this.askQuit(), { width: 40, height: 8 }).setDepth(60);
+    }
     // the attack strip / touch buttons
     const left = store.get().creatures.handed === 'left';
     if (this.touch) {
@@ -719,7 +721,9 @@ export class CreatureArena extends Phaser.Scene {
     // bars.  Along the bottom it sat on top of the attack strip's border on
     // a phone, and beside your name it ran into the clock.
     const eff = ELEMENTS[this.me.c.element];
-    this.labels.push(centerText(this, GAME_W / 2, 15, eff.effect, eff.light).setDepth(51).setMaxWidth(GAME_W / 2 - 8));
+    // (a line lower in training, under the LEAVE button that takes the
+    // clock's place there)
+    this.labels.push(centerText(this, GAME_W / 2, this.training ? 17 : 15, eff.effect, eff.light).setDepth(51).setMaxWidth(GAME_W / 2 - 8));
   }
 
   // ------------------------------------------------------------------ input
@@ -788,12 +792,12 @@ export class CreatureArena extends Phaser.Scene {
   }
 
   /**
-   * Before the count runs out, QUIT walks away and nothing has happened yet.
-   * Once the fight is on there is no quitting: the button is gone, and this
-   * does nothing if something else reaches it.
+   * The way out of the training ground, and only of the training ground: a
+   * battle has no button to reach this, and if something else does, it does
+   * nothing.
    */
   private askQuit(): void {
-    if (this.started && !this.training) return;
+    if (!this.training) return;
     this.scene.start('CreatureHub', { from: this.from });
   }
 
@@ -1513,7 +1517,8 @@ export class CreatureArena extends Phaser.Scene {
     };
     bar(8, this.me, false);
     bar(GAME_W - 8, this.foe, true);
-    this.timerText.setText(this.training ? 'TRAINING' : `${Math.max(0, Math.ceil(TIME_LIMIT - this.elapsed))}`);
+    // (in training the clock's slot holds the LEAVE button instead)
+    this.timerText.setText(this.training ? '' : `${Math.max(0, Math.ceil(TIME_LIMIT - this.elapsed))}`);
     const ic = ELEMENTS[this.me.c.element].light;
     this.me.c.attacks.forEach((a, i) => {
       const b = this.atkBtns[i];
