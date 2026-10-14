@@ -36,7 +36,7 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 import { ensureKeyInPocket, heldItems } from '../game/inventory';
 import { Pedestrians } from '../art/pedestrians';
-import { BEG_MS, NAP_BELOW, begNextMs, clock, collectBegging, nap, sleep, startBegging, stopBegging, visit } from '../game/life';
+import { BEG_MS, begNextMs, canBeg, clock, collectBegging, sleep, startBegging, stopBegging, visit } from '../game/life';
 
 const WALK_Y = KERB_Y;
 /** Where the alley mouth is, off the arcade's right-hand corner. */
@@ -71,6 +71,7 @@ export class ExteriorDay extends Phaser.Scene {
   private people: Pedestrians | null = null;
   private begging = false;
   private begText!: Phaser.GameObjects.BitmapText;
+  private cup: Phaser.GameObjects.Graphics | null = null;
   /** It has just turned midnight: the thoughts play, and nobody moves till they have. */
   private nightfall = false;
 
@@ -161,8 +162,11 @@ export class ExteriorDay extends Phaser.Scene {
       const g = this.add.graphics().setDepth(49);
       g.fillStyle(0x14100c, 1).fillRect(BEG_X - 11, WALK_Y - 3, 22, 4);
       g.fillStyle(0xb08a58, 1).fillRect(BEG_X - 10, WALK_Y - 2, 20, 2);
-      g.fillStyle(0x14100c, 1).fillRect(BEG_X + 6, WALK_Y - 7, 6, 6);
-      g.fillStyle(0xe8e0d0, 1).fillRect(BEG_X + 7, WALK_Y - 6, 4, 5);
+      // the can, on the cardboard until somebody sits down with it
+      this.cup = this.add.graphics().setDepth(49);
+      this.cup.fillStyle(0x14100c, 1).fillRect(BEG_X + 6, WALK_Y - 7, 6, 6);
+      this.cup.fillStyle(0x9aa0a8, 1).fillRect(BEG_X + 7, WALK_Y - 6, 4, 5);
+      this.cup.fillStyle(0x3a3e44, 1).fillRect(BEG_X + 7, WALK_Y - 6, 4, 1);
       this.add.zone(BEG_X - 12, WALK_Y - 30, 24, 32).setOrigin(0, 0).setDepth(61).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.send('beg'));
       visit('forecourt');
     } else this.people = null;
@@ -293,6 +297,10 @@ export class ExteriorDay extends Phaser.Scene {
   /** Go and do that.  Arriving is `update`'s job; this only sets the errand. */
   private send(where: Spot): void {
     if (this.locked || this.busy()) return;
+    if (this.begging && where !== 'beg') {
+      this.say('YOU ARE SITTING WITH THE CAN. [E] TO GET UP FIRST.');
+      return;
+    }
     audio.sfx('ui_blip', 0.4);
     if (this.spot === where) {
       this.errand = null;
@@ -345,10 +353,7 @@ export class ExteriorDay extends Phaser.Scene {
     }
     if (this.spot === 'beg') {
       if (this.begging) {
-        const got = stopBegging();
-        this.begging = false;
-        this.begText.setVisible(false);
-        this.say(got ? `YOU GET UP. $${got} IN THE CUP.` : 'YOU GET UP.');
+        this.getUp();
         return;
       }
       const c = clock();
@@ -364,24 +369,19 @@ export class ExteriorDay extends Phaser.Scene {
         });
         return;
       }
-      if (store.get().life.energy < NAP_BELOW) {
-        const r = nap();
-        if (!r.ok) {
-          this.say(r.msg);
-          return;
-        }
-        this.locked = true;
-        this.cameras.main.fadeOut(700, 0, 0, 0);
-        this.time.delayedCall(800, () => {
-          this.cameras.main.fadeIn(700, 0, 0, 0);
-          this.say(r.msg);
-          this.locked = false;
-        });
+      // only when there is nothing left: no tokens and no cash
+      if (!canBeg()) {
+        this.say('YOU STILL HAVE MONEY. THE CUP IS FOR WHEN YOU HAVE NOTHING.');
         return;
       }
       startBegging();
       this.begging = true;
-      this.say('YOU SIT DOWN WITH THE CUP. $1 EVERY 15 MINUTES.');
+      // down onto the cardboard, the can held out; nobody walks off from here
+      this.errand = null;
+      this.player.setPosition(BEG_X - 3, WALK_Y);
+      this.player.sit('floor', { can: true, facing: 1 });
+      this.cup?.setVisible(false);
+      this.say('YOU SIT DOWN WITH THE CAN. $1 EVERY 15 MINUTES. [E] TO GET UP.');
       return;
     }
     if (this.spot === 'alley') {
@@ -400,6 +400,16 @@ export class ExteriorDay extends Phaser.Scene {
       return;
     }
     this.scene.launch('PrizeExchange', { from: 'ExteriorDay' });
+  }
+
+  /** Up off the cardboard: begging over, and what is in the can is yours. */
+  private getUp(): void {
+    const got = stopBegging();
+    this.begging = false;
+    this.begText.setVisible(false);
+    this.player.getUp();
+    this.cup?.setVisible(true);
+    this.say(got ? `YOU GET UP. $${got} IN THE CAN.` : 'YOU GET UP.');
   }
 
   private busy(): boolean {
@@ -436,12 +446,13 @@ export class ExteriorDay extends Phaser.Scene {
     // A hand on the keys always wins: touching a movement key drops whatever
     // the last click asked for, so the two never fight over the same legs.
     if (dx !== 0) this.errand = null;
-    // getting up to walk away stops the begging
-    if (dx !== 0 && this.begging) {
-      const got = stopBegging();
-      this.begging = false;
-      this.begText.setVisible(false);
-      if (got) this.say(`$${got} IN THE CUP.`);
+    // sat with the can, you stay sat: only [E] gets you up
+    if (this.begging) {
+      dx = 0;
+      this.errand = null;
+      this.spot = 'beg';
+      this.showPrompt('[E] GET UP');
+      return;
     }
     if (this.errand) {
       const gap = this.targetX(this.errand) - this.player.x;
@@ -487,9 +498,13 @@ export class ExteriorDay extends Phaser.Scene {
       return;
     }
 
-    const begLabel = this.begging ? '[E] GET UP' : clock().dark && !store.get().life.rented && store.get().froggyGone ? '[E] SLEEP HERE' : store.get().life.energy < NAP_BELOW ? '[E] NAP' : '[E] BEG';
+    const begLabel = clock().dark && !store.get().life.rented && store.get().froggyGone ? '[E] SLEEP HERE' : canBeg() ? '[E] BEG' : 'BEG WHEN BROKE';
     const label = this.spot === 'beg' ? begLabel : this.spot === 'man' ? '[E] TALK' : this.spot === 'alley' ? '[E] ALLEY' : this.time0 === 'midnight' ? '[E] DOOR' : '[E] GO IN';
-    const x = Phaser.Math.Clamp(px, 40, GAME_W - 40);
+    this.showPrompt(label);
+  }
+
+  private showPrompt(label: string): void {
+    const x = Phaser.Math.Clamp(this.player.x, 40, GAME_W - 40);
     this.prompt.setText(label).setPosition(x, WALK_Y - 34).setVisible(true);
     this.promptPlate
       .setPosition(x, WALK_Y - 34)

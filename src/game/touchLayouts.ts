@@ -70,7 +70,11 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   // (the arena draws its own two sticks and attack buttons)
   CreatureHub: TAP,
   CreatureArena: BARE,
-  Condo: TAP,
+  // (rooms you walk round: the stick, and E for whatever you are stood at)
+  Condo: ROOM,
+  FurnitureStore: ROOM,
+  ClothesStore: ROOM,
+  BarberShop: ROOM,
   InventoryModal: TAP,
   // SKIP sends the same Esc the desktop hint names, and it lives in the band
   // under the picture, so it cannot land on the dialogue it is offering to

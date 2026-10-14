@@ -3,104 +3,11 @@
  * the missions and the save all refer to things by these ids, so a line can
  * be added here without touching any of them.
  *
- *   FOODS      eaten or drunk: food, water and drinks, cheap to premium
- *   INGREDIENTS for cooking in the condo
- *   RECIPES     what the ingredients make, and how long it takes
  *   FURNITURE   for the condo, by category, with a size on the floor
  *   COSMETICS   clothes and hair, as recolours of the drifter's own rig
  */
 
 import type { Look } from '../art/player';
-
-// ------------------------------------------------------------------ food
-
-export type FoodTier = 'cheap' | 'standard' | 'premium';
-
-export interface FoodDef {
-  id: string;
-  name: string;
-  /** Cash, at the shop.  0 = cannot be bought (only cooked or given). */
-  price: number;
-  /** Fullness restored, 0..100. */
-  hunger: number;
-  /** Hydration restored, 0..100 (may be negative: salty food). */
-  thirst: number;
-  /** Energy restored. */
-  energy: number;
-  tier: FoodTier;
-  /** Where it is sold: 'market' (the corner shop), or nowhere ('cooked'). */
-  sold: 'market' | 'cooked';
-  note: string;
-  colour: number;
-}
-
-export const FOODS: FoodDef[] = [
-  // ---- water: always cheap, always there
-  { id: 'water', name: 'BOTTLE OF WATER', price: 1, hunger: 0, thirst: 40, energy: 0, tier: 'cheap', sold: 'market', note: 'THE ESSENTIAL', colour: 0x8fd0f0 },
-  { id: 'water_big', name: 'BIG WATER JUG', price: 3, hunger: 0, thirst: 100, energy: 0, tier: 'cheap', sold: 'market', note: 'A WHOLE DAY OF WATER', colour: 0x6fb8e8 },
-  // ---- cheap food: enough to live on
-  { id: 'bread', name: 'BREAD ROLL', price: 2, hunger: 20, thirst: -2, energy: 2, tier: 'cheap', sold: 'market', note: 'CHEAP AND FILLING ENOUGH', colour: 0xd8a860 },
-  { id: 'apple', name: 'APPLE', price: 2, hunger: 12, thirst: 8, energy: 3, tier: 'cheap', sold: 'market', note: 'CRISP', colour: 0xd84838 },
-  { id: 'noodle_cup', name: 'CUP NOODLES', price: 3, hunger: 30, thirst: -8, energy: 4, tier: 'cheap', sold: 'market', note: 'SALTY. DRINK SOMETHING', colour: 0xe8c048 },
-  { id: 'banana', name: 'BANANA', price: 2, hunger: 15, thirst: 2, energy: 8, tier: 'cheap', sold: 'market', note: 'QUICK ENERGY', colour: 0xf0d850 },
-  // ---- standard
-  { id: 'sandwich', name: 'SANDWICH', price: 6, hunger: 40, thirst: 0, energy: 6, tier: 'standard', sold: 'market', note: 'A PROPER LUNCH', colour: 0xe0c090 },
-  { id: 'soup_can', name: 'TIN OF SOUP', price: 5, hunger: 30, thirst: 12, energy: 5, tier: 'standard', sold: 'market', note: 'WARM AND WET', colour: 0xc86040 },
-  { id: 'coffee', name: 'COFFEE', price: 3, hunger: 0, thirst: 10, energy: 22, tier: 'standard', sold: 'market', note: 'WAKES YOU UP', colour: 0x6a4028 },
-  { id: 'juice', name: 'ORANGE JUICE', price: 4, hunger: 4, thirst: 45, energy: 6, tier: 'standard', sold: 'market', note: 'FRESH SQUEEZED', colour: 0xf09828 },
-  // ---- premium: nice, never needed
-  { id: 'sushi', name: 'SUSHI BOX', price: 24, hunger: 55, thirst: 4, energy: 12, tier: 'premium', sold: 'market', note: 'PREMIUM. A TREAT', colour: 0xf0f0e8 },
-  { id: 'steak', name: 'STEAK DINNER', price: 38, hunger: 85, thirst: 0, energy: 18, tier: 'premium', sold: 'market', note: 'PREMIUM. FILLS YOU UP', colour: 0x8a3a28 },
-  { id: 'cake', name: 'BAKERY CAKE', price: 16, hunger: 30, thirst: -4, energy: 16, tier: 'premium', sold: 'market', note: 'PREMIUM. SWEET', colour: 0xf0a8c8 },
-  { id: 'smoothie', name: 'BERRY SMOOTHIE', price: 12, hunger: 12, thirst: 50, energy: 14, tier: 'premium', sold: 'market', note: 'PREMIUM. COLD', colour: 0xb05090 },
-  // ---- cooked at home (see RECIPES)
-  { id: 'meal_fried_rice', name: 'FRIED RICE', price: 0, hunger: 50, thirst: -4, energy: 10, tier: 'standard', sold: 'cooked', note: 'HOME COOKED', colour: 0xe0c070 },
-  { id: 'meal_omelette', name: 'OMELETTE', price: 0, hunger: 38, thirst: 0, energy: 12, tier: 'standard', sold: 'cooked', note: 'HOME COOKED', colour: 0xf0d860 },
-  { id: 'meal_noodle_soup', name: 'NOODLE SOUP', price: 0, hunger: 42, thirst: 20, energy: 8, tier: 'standard', sold: 'cooked', note: 'HOME COOKED', colour: 0xd89848 },
-  { id: 'meal_veg_stew', name: 'VEGETABLE STEW', price: 0, hunger: 55, thirst: 15, energy: 10, tier: 'standard', sold: 'cooked', note: 'HOME COOKED', colour: 0xa86030 },
-  { id: 'meal_pancakes', name: 'PANCAKES', price: 0, hunger: 40, thirst: -2, energy: 18, tier: 'standard', sold: 'cooked', note: 'HOME COOKED', colour: 0xe8b860 },
-  { id: 'meal_steak_rice', name: 'STEAK AND RICE', price: 0, hunger: 75, thirst: 0, energy: 20, tier: 'premium', sold: 'cooked', note: 'HOME COOKED. HEARTY', colour: 0x9a4a30 },
-  { id: 'meal_tomato_pasta', name: 'TOMATO PASTA', price: 0, hunger: 52, thirst: 4, energy: 12, tier: 'standard', sold: 'cooked', note: 'HOME COOKED', colour: 0xd04830 },
-];
-
-export interface IngredientDef {
-  id: string;
-  name: string;
-  price: number;
-  colour: number;
-}
-
-export const INGREDIENTS: IngredientDef[] = [
-  { id: 'ing_rice', name: 'RICE', price: 2, colour: 0xf0ece0 },
-  { id: 'ing_egg', name: 'EGG', price: 1, colour: 0xf8f0d8 },
-  { id: 'ing_veg', name: 'VEGETABLES', price: 2, colour: 0x58a848 },
-  { id: 'ing_noodles', name: 'DRY NOODLES', price: 2, colour: 0xe8d088 },
-  { id: 'ing_meat', name: 'MEAT', price: 6, colour: 0xb04a40 },
-  { id: 'ing_cheese', name: 'CHEESE', price: 3, colour: 0xf0c840 },
-  { id: 'ing_flour', name: 'FLOUR', price: 2, colour: 0xf4f0e8 },
-  { id: 'ing_milk', name: 'MILK', price: 2, colour: 0xf8f8f8 },
-  { id: 'ing_tomato', name: 'TOMATOES', price: 1, colour: 0xe04030 },
-  { id: 'ing_spice', name: 'SPICES', price: 1, colour: 0xc87830 },
-];
-
-export interface RecipeDef {
-  id: string;
-  name: string;
-  needs: Record<string, number>;
-  /** Seconds of cooking (game-active seconds). */
-  seconds: number;
-  makes: string;
-}
-
-export const RECIPES: RecipeDef[] = [
-  { id: 'rcp_fried_rice', name: 'FRIED RICE', needs: { ing_rice: 1, ing_egg: 1, ing_veg: 1 }, seconds: 20, makes: 'meal_fried_rice' },
-  { id: 'rcp_omelette', name: 'OMELETTE', needs: { ing_egg: 2, ing_cheese: 1 }, seconds: 12, makes: 'meal_omelette' },
-  { id: 'rcp_noodle_soup', name: 'NOODLE SOUP', needs: { ing_noodles: 1, ing_veg: 1, ing_spice: 1 }, seconds: 18, makes: 'meal_noodle_soup' },
-  { id: 'rcp_veg_stew', name: 'VEGETABLE STEW', needs: { ing_veg: 2, ing_tomato: 1, ing_spice: 1 }, seconds: 30, makes: 'meal_veg_stew' },
-  { id: 'rcp_pancakes', name: 'PANCAKES', needs: { ing_flour: 1, ing_egg: 1, ing_milk: 1 }, seconds: 16, makes: 'meal_pancakes' },
-  { id: 'rcp_steak_rice', name: 'STEAK AND RICE', needs: { ing_meat: 1, ing_rice: 1, ing_spice: 1 }, seconds: 25, makes: 'meal_steak_rice' },
-  { id: 'rcp_tomato_pasta', name: 'TOMATO PASTA', needs: { ing_noodles: 1, ing_tomato: 2, ing_cheese: 1 }, seconds: 20, makes: 'meal_tomato_pasta' },
-];
 
 // ------------------------------------------------------------- furniture
 
@@ -190,6 +97,12 @@ const HEAD_LONG = ['...rrrrrr...', '..rrrrrrrr..', '.rrrrrrrrrr.', '.rrSSSSSSrr.
 const HEAD_MOHAWK = ['.....rr.....', '.....rr.....', '....rrrr....', '..sSSSSSSs..', '..sSSSSSSs..', '...SSSSSs...', '...GGGGGg...', '....GGGg....', '.....gg.....'];
 const HEAD_BALD = ['............', '............', '...SSSSSS...', '..SSSSSSSS..', '..sSSSSSSs..', '...SSSSSs...', '...GGGGGg...', '....GGGg....', '.....gg.....'];
 const HEAD_SHAVEN = ['............', '...rrrrrr...', '..rrrrrrrr..', '..rSSSSSSr..', '..rSSSSSSs..', '...SSSSSs...', '...SSSSSs...', '....SSSs....', '.....ss.....'];
+const HEAD_POMP = ['...rrrrrrr..', '..rrrrrrrrr.', '..rrrrrrrr..', '..rSSSSSSr..', '..SSSSSSSs..', '...SSSSSs...', '...SSSSSs...', '....SSSs....', '.....ss.....'];
+const HEAD_SIDEPART = ['............', '..rrrrrrrr..', '..rrrSrrrrr.', '..rSSSSSSr..', '..rSSSSSSs..', '...SSSSSs...', '...GGGGGg...', '....GGGg....', '.....gg.....'];
+const HEAD_BUZZ = ['............', '............', '...rrrrrr...', '..rSSSSSSr..', '..sSSSSSSs..', '...SSSSSs...', '...SSSSSs...', '....SSSs....', '.....ss.....'];
+const HEAD_AFRO = ['..rrrrrrrr..', '.rrrrrrrrrr.', '.rrrrrrrrrr.', '.rrSSSSSSrr.', '.rrSSSSSSsr.', '..rSSSSSsr..', '...GGGGGg...', '....GGGg....', '.....gg.....'];
+const HEAD_BUN = ['.....rr.....', '....rrrr....', '...rrrrrr...', '..rSSSSSSr..', '..rSSSSSSs..', '...SSSSSs...', '...GGGGGg...', '....GGGg....', '.....gg.....'];
+const HEAD_SLICK = ['............', '...rrrrrr...', '..rrrrrrrrr.', '..rSSSSSSr..', '..sSSSSSSs..', '...SSSSSs...', '...SGGGSs...', '....SSSs....', '.....ss.....'];
 const HEAD_CAP = ['............', '...BBBBBB...', '..BBBBBBBB..', '..bbbbbbbbbb', '..rSSSSSSs..', '...SSSSSs...', '...GGGGGg...', '....GGGg....', '.....gg.....'];
 
 export const COSMETICS: CosmeticDef[] = [
@@ -225,6 +138,12 @@ export const COSMETICS: CosmeticDef[] = [
   { id: 'hair_mohawk', name: 'MOHAWK', slot: 'hair', shop: 'barber', price: 20, cols: {}, head: HEAD_MOHAWK },
   { id: 'hair_bald', name: 'CLEAN SHAVE', slot: 'hair', shop: 'barber', price: 6, cols: {}, head: HEAD_BALD },
   { id: 'hair_shaven', name: 'SHORT, NO BEARD', slot: 'hair', shop: 'barber', price: 12, cols: {}, head: HEAD_SHAVEN },
+  { id: 'hair_pomp', name: 'POMPADOUR', slot: 'hair', shop: 'barber', price: 25, cols: {}, head: HEAD_POMP },
+  { id: 'hair_sidepart', name: 'SIDE PART', slot: 'hair', shop: 'barber', price: 15, cols: {}, head: HEAD_SIDEPART },
+  { id: 'hair_buzz', name: 'BUZZ CUT', slot: 'hair', shop: 'barber', price: 8, cols: {}, head: HEAD_BUZZ },
+  { id: 'hair_afro', name: 'AFRO', slot: 'hair', shop: 'barber', price: 22, cols: {}, head: HEAD_AFRO },
+  { id: 'hair_bun', name: 'TOP KNOT', slot: 'hair', shop: 'barber', price: 18, cols: {}, head: HEAD_BUN },
+  { id: 'hair_slick', name: 'SLICKED BACK + TASH', slot: 'hair', shop: 'barber', price: 28, cols: {}, head: HEAD_SLICK },
   { id: 'hair_col_brown', name: 'DYE: BROWN', slot: 'dye', shop: 'barber', price: 5, cols: { r: 0x5a4a3a, G: 0x6a5040, g: 0x4a3828 } },
   { id: 'hair_col_black', name: 'DYE: BLACK', slot: 'dye', shop: 'barber', price: 7, cols: { r: 0x1e1814, G: 0x2a2420, g: 0x1a1612 } },
   { id: 'hair_col_blond', name: 'DYE: BLOND', slot: 'dye', shop: 'barber', price: 10, cols: { r: 0xd8b060, G: 0xc8a050, g: 0xa88038 } },
@@ -234,9 +153,6 @@ export const COSMETICS: CosmeticDef[] = [
 /** The cosmetics the drifter starts in, owned from the beginning. */
 export const STARTER_COSMETICS = ['cos_coat_olive', 'cos_trousers_baggy', 'cos_boots_worn', 'cos_scarf_grubby', 'cos_beanie', 'cos_no_hat'];
 
-export const foodById = (id: string): FoodDef | undefined => FOODS.find((f) => f.id === id);
-export const ingredientById = (id: string): IngredientDef | undefined => INGREDIENTS.find((f) => f.id === id);
-export const recipeById = (id: string): RecipeDef | undefined => RECIPES.find((r) => r.id === id);
 export const furnitureById = (id: string): FurnitureDef | undefined => FURNITURE.find((f) => f.id === id);
 export const cosmeticById = (id: string): CosmeticDef | undefined => COSMETICS.find((c) => c.id === id);
 

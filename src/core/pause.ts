@@ -34,7 +34,7 @@ import { applyDisplay } from './graphics';
 const NEVER = new Set(['Boot', 'StartScreen', 'ProfileModal', 'IntroCutscene', 'TheEnd', 'EndCard', 'DeathScreen']);
 
 /** Panels that close themselves on Esc; while one is up, Esc is theirs. */
-const OWN_ESC = new Set(['SettingsModal', 'ChangeMachine', 'PrizeCounter', 'PrizeExchange', 'ProfileModal']);
+const OWN_ESC = new Set(['SettingsModal', 'ChangeMachine', 'PrizeCounter', 'PrizeExchange', 'ProfileModal', 'Shop']);
 
 /**
  * A scene can take Esc for itself first -- the arcade shell uses this to

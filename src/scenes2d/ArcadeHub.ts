@@ -8,6 +8,7 @@
  */
 
 import Phaser from 'phaser';
+import { StageFigure } from '../render/stageFigure';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../game/roomWalk';
 import { seeded, tone } from '../art/surface';
 import { PALETTE } from '../render/palette';
@@ -230,6 +231,8 @@ const APP_VOICES: { at: number; name: SfxName; vol: number; pan: number }[] = [
 const HUB_AUDIO = { music: 'room_hub', ambience: ['cabinet_bleeps', 'crowd_hum'] };
 
 export class ArcadeHub extends Phaser.Scene {
+  /** Froggy or the staffer behind the counter, in the room (render/stageFigure). */
+  private counterFigure!: StageFigure;
   private player!: Player;
   private bounds!: Phaser.Geom.Rectangle;
   private keys!: Record<string, Phaser.Input.Keyboard.Key[]>;
@@ -296,6 +299,7 @@ export class ArcadeHub extends Phaser.Scene {
 
   create(): void {
     froggyLayer.clear();
+    this.counterFigure = new StageFigure(this, COUNTER_DEPTH - 0.0005);
     // the key out of the night, in a pocket, however the run got here
     ensureKeyInPocket();
     // Phaser reuses scene instances across start/stop, so every mutable field
@@ -668,32 +672,19 @@ export class ArcadeHub extends Phaser.Scene {
     onTop?: { x: number; y: number; w: number; h: number },
     keep = false,
   ): void {
-    const px = this.player.x;
-    const py = this.player.y;
-    froggyLayer.paint((ctx) => {
+    // In the room, just behind the counter's front: the player in front of
+    // the counter is drawn over them, so nothing has to be cut out of them.
+    // (They were on the overlay, above everything, with a player-sized box
+    // cut out -- the square hole customers saw.)
+    void keep;
+    this.counterFigure.paint((ctx) => {
       ctx.save();
-      // TWO clips, which the canvas intersects.  First, only what is behind
-      // the counter: above its back edge...
+      // only what is behind the counter: above its back edge...
       ctx.beginPath();
       ctx.rect(0, 0, GAME_W, FROG_CUT);
-      // ...and whatever of them lies ON the counter top, which is in front of
-      // the cut line and still behind nothing
+      // ...and whatever of them lies ON the counter top
       if (onTop) ctx.rect(onTop.x, onTop.y, onTop.w, onTop.h);
       ctx.clip();
-      // Then, of that, everything but the player.  (This was one even-odd
-      // path, and wherever the player's box reached BELOW the cut -- a
-      // customer stood at the counter -- the two cancelled and put the hidden
-      // lower half of whoever was behind it back, drawn across the player.)
-      ctx.beginPath();
-      ctx.rect(0, 0, GAME_W, GAME_H);
-      ctx.rect(px - PLAYER_BOX.headW / 2, py - PLAYER_BOX.headTop, PLAYER_BOX.headW, PLAYER_BOX.headH);
-      ctx.rect(
-        px - PLAYER_BOX.torsoW / 2,
-        py - (PLAYER_BOX.headTop - PLAYER_BOX.headH),
-        PLAYER_BOX.torsoW,
-        PLAYER_BOX.torsoH,
-      );
-      ctx.clip('evenodd');
       const shadow = ctx.createRadialGradient(x + 3, FROG_CUT - 9, 1, x + 3, FROG_CUT - 9, 14);
       shadow.addColorStop(0, 'rgba(8, 4, 16, 0.42)');
       shadow.addColorStop(1, 'rgba(8, 4, 16, 0)');
@@ -701,7 +692,7 @@ export class ArcadeHub extends Phaser.Scene {
       ctx.fillRect(x - 13, FROG_CUT - 26, 34, 26);
       draw(ctx);
       ctx.restore();
-    }, keep, true);
+    });
   }
 
   /**
@@ -757,11 +748,17 @@ export class ArcadeHub extends Phaser.Scene {
     // to press.  It re-arms when the player leaves, so it is a greeting rather
     // than a loop -- he says it once each time you come over, and never twice
     // for one visit.
-    const d = Math.hypot(this.player.x - FROG_POST.x, this.player.y - (COUNTER.y + 24));
-    if (d < 46 && !this.frogSpoke && !this.busy()) {
+    // Only when you are really with him: stood at the counter, in front of
+    // him.  (It was a 46-pixel circle, which reached halfway across the
+    // room -- the line came up for a player nowhere near him.)
+    const dx = Math.abs(this.player.x - FROG_POST.x);
+    const out = this.player.y - COUNTER_STAND;
+    const near = dx <= 18 && out <= 10;
+    const gone = dx > 24 || out > 16;
+    if (near && !this.frogSpoke && !this.busy()) {
       this.frogSpoke = true;
       this.showFrogLine();
-    } else if (d > 52) {
+    } else if (gone) {
       // He says it EVERY TIME you come over.  The gap between the two numbers
       // is only there to stop a player stood exactly on the line setting him
       // off once a frame -- step back off the counter and walk up again and he
@@ -1720,6 +1717,8 @@ export class ArcadeHub extends Phaser.Scene {
     // The apparition runs while the room is locked, because taking the
     // controls away is half of what makes it one.
     this.stepApparition(delta);
+    // (whoever is behind the counter is not there while he is)
+    this.counterFigure.image.setVisible(this.apparition === 'off' && (this.frogOnCounter || this.stafferOnCounter));
 
     if (this.locked || this.dialogue.isActive()) {
       this.promptPlate.setVisible(false);

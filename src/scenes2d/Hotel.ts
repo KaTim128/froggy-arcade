@@ -35,6 +35,7 @@
  */
 
 import Phaser from 'phaser';
+import { StageFigure } from '../render/stageFigure';
 import { TokenHud } from '../ui/hud';
 import { PALETTE } from '../render/palette';
 import { audio, SILENCE } from '../core/audio';
@@ -160,6 +161,8 @@ export class Hotel extends Phaser.Scene {
   /** The check-in dialog, while it is up: the clerk dims under it. */
   private dialog: Phaser.GameObjects.Container | null = null;
   private clerkOn = false;
+  /** The clerk, in the room behind the desk (render/stageFigure). */
+  private clerkFigure: StageFigure | null = null;
   private clerkDimmed = false;
   // ---- the police, outside, after the night (see startPolice)
   private policeOn = false;
@@ -209,6 +212,7 @@ export class Hotel extends Phaser.Scene {
     this.dialog = null;
     this.clerkOn = false;
     this.clerkDimmed = false;
+    this.clerkFigure = null;
     this.policeOn = false;
     this.policeGlows = [];
     this.policeBeam = null;
@@ -332,6 +336,7 @@ export class Hotel extends Phaser.Scene {
     const key = `hotel_lobby_${dark ? 'dark' : night ? 'night' : 'day'}_w${LOBBY_W}`;
     const img = this.add.image(0, 0, this.painted(key, LOBBY_W, GAME_H, (g) => paintLobby(g, night || dark, true))).setOrigin(0, 0);
     this.clerkOn = !dark;
+    this.clerkFigure = this.clerkOn ? new StageFigure(this, 0.5) : null;
     // the lights are out and the desk is empty
     if (dark) img.setTint(0x3a4058);
     centerText(this, 280, 109, dark ? '-' : '1', 0xff7a3d);
@@ -1223,43 +1228,36 @@ export class Hotel extends Phaser.Scene {
 
   /** The clerk, each frame: behind the desk, talking while you talk to him. */
   private paintClerk(): void {
-    if (!this.clerkOn) return;
-    const p = this.player;
+    if (!this.clerkOn) {
+      this.clerkFigure?.clear();
+      return;
+    }
     // under the reception panel, he stops at its top edge
     const panelTop = this.talk ? (this.talk.getBounds().top || DESK_TOP) : DESK_TOP;
     const cut = Math.min(DESK_TOP, panelTop);
     const talking = !!this.talk && Math.floor(this.clock / 0.14) % 2 === 0;
-    // (only when the dialog comes or goes: the scene fades drive it otherwise)
+    // (dimmed under the check-in dialog, as the overlay used to be)
     const dimmed = !!this.dialog;
     if (dimmed !== this.clerkDimmed) {
       this.clerkDimmed = dimmed;
-      froggyLayer.setDim(dimmed ? 0.4 : 1);
+      if (dimmed) this.clerkFigure?.image.setTint(0x666666);
+      else this.clerkFigure?.image.clearTint();
     }
-    froggyLayer.paint((ctx) => {
+    // In the room, behind the desk, at a depth: the player, the prompt and
+    // the dialogs are all drawn over him because they are in front of him.
+    // (On the overlay he had a player-sized box cut out of him -- the square
+    // hole by the desk.)
+    this.clerkFigure?.paint((ctx) => {
       ctx.save();
       // (the lobby scrolls past the lift: he stays where his desk is)
       ctx.translate(-this.cameras.main.scrollX, 0);
       ctx.beginPath();
       ctx.rect(0, 0, GAME_W, cut);
       ctx.clip();
-      // everything but the player and the guest book on the desk
+      // and the guest book on the desk top stays in front of him
       ctx.beginPath();
-      ctx.rect(0, 0, GAME_W, GAME_H);
-      if (p && p.sprite.visible) ctx.rect(p.x - 6, p.y - 30, 12, 30);
-      // (holes must not overlap one another: even-odd would cancel them)
-      const panel = this.dialog?.list[1] as Phaser.GameObjects.Rectangle | undefined;
-      if (panel) {
-        // the check-in dialog, in front of everybody
-        const b = panel.getBounds();
-        ctx.rect(b.x - 1, b.y - 1, b.width + 2, b.height + 2);
-      } else {
-        ctx.rect(BOOK.x, BOOK.y, BOOK.w, BOOK.h);
-        // and the [E] prompt over the desk, which is the player's, not his
-        if (this.prompt.visible) {
-          const b = this.prompt.getBounds();
-          ctx.rect(b.x - 1, b.y - 1, b.width + 2, Math.min(b.height + 2, DESK_TOP - (b.y - 1)));
-        }
-      }
+      ctx.rect(0, 0, LOBBY_W, GAME_H);
+      ctx.rect(BOOK.x, BOOK.y, BOOK.w, BOOK.h);
       ctx.clip('evenodd');
       // his shadow on the pigeonholes behind him
       const sh = ctx.createRadialGradient(CLERK.x + 2, 128, 1, CLERK.x + 2, 128, 11);
@@ -1269,7 +1267,7 @@ export class Hotel extends Phaser.Scene {
       ctx.fillRect(CLERK.x - 10, 116, 24, 20);
       drawClerk(ctx, { x: CLERK.x, y: CLERK.feet, height: CLERK.h, pose: talking ? 'talk' : 'idle', breath: (this.clock / 4) % 1 });
       ctx.restore();
-    }, false, true);
+    });
   }
 
   update(_t: number, delta: number): void {

@@ -12,13 +12,12 @@ import { store } from '../core/state';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { ACHIEVEMENTS, GOALS, claimAchievement, claimGoal, refreshGoals, type Reward } from '../game/life';
-import { cosmeticById, foodById, furnitureById, ingredientById } from '../game/catalog';
+import { cosmeticById, furnitureById } from '../game/catalog';
 
 const rewardText = (r: Reward): string => {
   const bits: string[] = [];
   if (r.cash) bits.push(`$${r.cash}`);
   if (r.tokens) bits.push(`${r.tokens} TOK`);
-  for (const [id, n] of Object.entries(r.items ?? {})) bits.push(`${n} ${(foodById(id) ?? ingredientById(id))?.name ?? id}`);
   if (r.furniture) bits.push(furnitureById(r.furniture)?.name ?? '');
   if (r.cosmetic) bits.push(cosmeticById(r.cosmetic)?.name ?? '');
   return bits.join(', ');

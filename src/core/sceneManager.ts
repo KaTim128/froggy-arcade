@@ -9,6 +9,9 @@
 import { Shop } from '../scenes2d/Shop';
 import { Goals } from '../scenes2d/Goals';
 import { Condo } from '../scenes2d/Condo';
+import { FurnitureStore } from '../scenes2d/shops/FurnitureStore';
+import { ClothesStore } from '../scenes2d/shops/ClothesStore';
+import { BarberShop } from '../scenes2d/shops/BarberShop';
 import { CreatureHub } from '../scenes2d/CreatureHub';
 import { CreatureArena } from '../scenes2d/CreatureArena';
 import { StreetEast } from '../scenes2d/StreetEast';
@@ -106,6 +109,9 @@ export function bootGame(): void {
       StreetWest,
       StreetEast,
       Condo,
+      FurnitureStore,
+      ClothesStore,
+      BarberShop,
       Shop,
       Goals,
       CreatureHub,

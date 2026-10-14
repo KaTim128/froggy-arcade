@@ -1,10 +1,10 @@
 /**
  * ---- EAST OF THE ARCADE.  The shops.
  *
- * Out of the arcade's forecourt to the right, along a row of shopfronts: the
- * CORNER MARKET (food, water, ingredients), a drinking FOUNTAIN that is free
- * and always on, HOME AND HEARTH (furniture), THREADS (clothes) and THE CLIP
- * JOINT (the barber).  Walk up to a door and use it -- or tap it, and walk
+ * Out of the arcade's forecourt to the right, along a row of shopfronts:
+ * HOME AND HEARTH (furniture), THREADS (clothes) and THE CLIP JOINT (the
+ * barber).  Each door goes INTO the shop, the way the arcade's does (see
+ * scenes2d/shops).  Walk up to a door and use it -- or tap it, and walk
  * there.  People go past on the pavement.
  */
 
@@ -20,14 +20,17 @@ import { attachPockets } from '../ui/pockets';
 import { Player } from '../art/player';
 import { Pedestrians } from '../art/pedestrians';
 import { froggyLayer } from '../render/froggyLayer';
-import { clock, drinkFountain, visit } from '../game/life';
-import type { ShopKind } from './Shop';
+import { clock, visit } from '../game/life';
+
+export type StoreKind = 'furniture' | 'clothes' | 'barber';
+/** The scene each door opens into. */
+export const STORE_SCENE: Record<StoreKind, string> = { furniture: 'FurnitureStore', clothes: 'ClothesStore', barber: 'BarberShop' };
 
 const WORLD_W = 640;
 const WALK_Y = 168;
 
 interface Front {
-  kind: ShopKind | 'fountain';
+  kind: StoreKind;
   name: string;
   x: number;
   w: number;
@@ -38,11 +41,9 @@ interface Front {
 }
 
 const FRONTS: Front[] = [
-  { kind: 'market', name: 'CORNER MARKET', x: 20, w: 120, wall: 0x9a5a3a, trim: 0xe8d8b0, awning: 0x2f8d4f, door: 92 },
-  { kind: 'fountain', name: 'FOUNTAIN', x: 152, w: 44, wall: 0, trim: 0, awning: 0, door: 174 },
-  { kind: 'furniture', name: 'HOME AND HEARTH', x: 208, w: 150, wall: 0x6a7a8a, trim: 0xf0e8d8, awning: 0xc85a3a, door: 300 },
-  { kind: 'clothes', name: 'THREADS', x: 370, w: 120, wall: 0x5a3a6a, trim: 0xf0d0e8, awning: 0xff4fa3, door: 446 },
-  { kind: 'barber', name: 'THE CLIP JOINT', x: 502, w: 124, wall: 0x2a4a5a, trim: 0xe8f0f0, awning: 0x2a6ab0, door: 580 },
+  { kind: 'furniture', name: 'HOME AND HEARTH', x: 24, w: 184, wall: 0x6a7a8a, trim: 0xf0e8d8, awning: 0xc85a3a, door: 150 },
+  { kind: 'clothes', name: 'THREADS', x: 228, w: 180, wall: 0x5a3a6a, trim: 0xf0d0e8, awning: 0xff4fa3, door: 350 },
+  { kind: 'barber', name: 'THE CLIP JOINT', x: 428, w: 188, wall: 0x2a4a5a, trim: 0xe8f0f0, awning: 0x2a6ab0, door: 556 },
 ];
 
 export class StreetEast extends Phaser.Scene {
@@ -60,6 +61,13 @@ export class StreetEast extends Phaser.Scene {
     super('StreetEast');
   }
 
+  /** Back out of a shop: stood at its door. */
+  private atShop: StoreKind | null = null;
+
+  init(data: { atShop?: StoreKind } = {}): void {
+    this.atShop = data.atShop ?? null;
+  }
+
   create(): void {
     froggyLayer.clear();
     this.locked = false;
@@ -71,7 +79,8 @@ export class StreetEast extends Phaser.Scene {
     const dark = clock().dark;
     this.paint(dark);
 
-    this.player = new Player(this, 16, WALK_Y, dark);
+    const door = FRONTS.find((f) => f.kind === this.atShop);
+    this.player = new Player(this, door ? door.door : 16, WALK_Y, dark);
     this.player.setSurface('gravel');
     this.cameras.main.setBounds(0, 0, WORLD_W, GAME_H);
     this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
@@ -118,11 +127,6 @@ export class StreetEast extends Phaser.Scene {
   private interact(): void {
     if (this.locked || this.busy() || !this.spot) return;
     const f = this.spot;
-    if (f.kind === 'fountain') {
-      audio.sfx('water_plip', 0.7);
-      this.say(drinkFountain().msg);
-      return;
-    }
     const c = clock();
     if (c.hour < 7 || c.hour >= 23) {
       audio.sfx('door_rattle', 0.5);
@@ -132,7 +136,8 @@ export class StreetEast extends Phaser.Scene {
     this.locked = true;
     audio.sfx('door_open', 0.5);
     visit(f.kind);
-    this.scene.launch('Shop', { kind: f.kind, from: 'StreetEast' });
+    // in through the door, as into the arcade
+    fadeToScene(this, STORE_SCENE[f.kind], {});
   }
 
   // ---------------------------------------------------------------- paint
@@ -150,10 +155,6 @@ export class StreetEast extends Phaser.Scene {
     }
     // the shopfronts
     for (const f of FRONTS) {
-      if (f.kind === 'fountain') {
-        this.paintFountain(g, f, dark);
-        continue;
-      }
       const top = 44;
       const wall = dark ? Phaser.Display.Color.ValueToColor(f.wall).darken(35).color : f.wall;
       g.fillStyle(0x14100c, 1).fillRect(f.x - 1, top - 1, f.w + 2, WALK_Y - top + 1);
@@ -213,16 +214,6 @@ export class StreetEast extends Phaser.Scene {
     }
   }
 
-  private paintFountain(g: Phaser.GameObjects.Graphics, f: Front, dark: boolean): void {
-    const cx = f.door;
-    g.fillStyle(0x14100c, 1).fillRect(cx - 9, WALK_Y - 30, 18, 30);
-    g.fillStyle(dark ? 0x5a6470 : 0xa8b0b8, 1).fillRect(cx - 8, WALK_Y - 29, 16, 29);
-    g.fillStyle(0x14100c, 1).fillRect(cx - 12, WALK_Y - 33, 24, 5);
-    g.fillStyle(dark ? 0x6a7480 : 0xc8d0d8, 1).fillRect(cx - 11, WALK_Y - 32, 22, 3);
-    g.fillStyle(0x6fb8e8, 1).fillRect(cx - 1, WALK_Y - 40, 2, 7);
-    centerText(this, cx, WALK_Y - 50, 'FREE WATER', dark ? PALETTE.fog : 0x2a4a6a).setDepth(2);
-  }
-
   update(_t: number, delta: number): void {
     this.people.update(delta);
     if (this.locked || this.busy()) {
@@ -256,7 +247,7 @@ export class StreetEast extends Phaser.Scene {
       this.promptPlate.setVisible(false);
       return;
     }
-    const label = this.spot.kind === 'fountain' ? '[E] DRINK' : `[E] ${this.spot.name}`;
+    const label = `[E] ${this.spot.name}`;
     this.prompt.setText(label).setPosition(px, WALK_Y - 52).setVisible(true);
     this.promptPlate.setPosition(px, WALK_Y - 52).setSize(this.prompt.width + 6, 11).setVisible(true);
   }

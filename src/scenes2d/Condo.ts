@@ -1,101 +1,185 @@
 /**
  * ---- UNIT 612, LILY'S CONDOS.  Yours for as long as the rent is paid.
  *
- * It comes empty: a window, its curtains, bare boards.  Everything else is
- * what you buy and put there -- DECORATE places, moves, turns and takes
- * away what you own, and the room keeps it exactly where you left it.  The
- * PANTRY is what you have to eat and drink; COOK uses its ingredients; the
- * WARDROBE changes what you wear; SLEEP is on the floor until there is
- * something better to sleep on.
+ * It comes empty: a window, its curtains, bare boards, a blanket on the
+ * floor.  You walk round it like any room (see rooms/WalkRoom), and what
+ * you have put in it is solid and USABLE: sit on the chairs and the sofa,
+ * sleep in the bed (or on the blanket until you own one), switch the TV and
+ * the lamps on, play the radio.  The coat hook by the door is your
+ * wardrobe.  DECORATE places, moves, turns and takes away what you own, and
+ * the room keeps it exactly where you left it.
  */
 
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { button, centerText, fadeIn, fadeToScene, text } from '../core/ui';
+import { button } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
-import { TokenHud } from '../ui/hud';
-import { attachPockets } from '../ui/pockets';
-import { Player } from '../art/player';
-import { drawFurniture } from '../art/furnitureArt';
 import { furnitureById, type FurnitureDef } from '../game/catalog';
-import { clock, cookingLeft, movePlacement, placeFurniture, removePlacement, sleep, visit, type Placement } from '../game/life';
-import { recipeById } from '../game/catalog';
-import { froggyLayer } from '../render/froggyLayer';
+import { clock, movePlacement, placeFurniture, removePlacement, sleep, visit, type Placement } from '../game/life';
+import { useOf } from '../game/furnitureUse';
+import { WalkRoom, type Fixture } from './rooms/WalkRoom';
+import { Piece } from './rooms/piece';
 
 const FLOOR_TOP = 124;
-const FLOOR_BOTTOM = 160; // (the button bar starts just below)
+const FLOOR_BOTTOM = 160;
 const WALL_TOP = 28;
 const WALL_BOTTOM = 112;
 const WINDOW = { x: 118, y: 34, w: 84, h: 62 };
+/** The blanket on the floor, where you sleep until you own a bed. */
+const BLANKET = { x: 278, y: 158 };
 
-export class Condo extends Phaser.Scene {
+export class Condo extends WalkRoom {
   private room!: Phaser.GameObjects.Graphics;
-  private furn!: Phaser.GameObjects.Graphics;
   private ui!: Phaser.GameObjects.Container;
-  private player!: Player;
+  private pieces: Piece[] = [];
+  private outline!: Phaser.GameObjects.Graphics;
   private decorating = false;
   private picked: number | null = null;
   private dragging = false;
   private dragFrom: { x: number; y: number } | null = null;
-  private msg!: Phaser.GameObjects.BitmapText;
-  private locked = false;
-  private hobText!: Phaser.GameObjects.BitmapText;
 
   constructor() {
     super('Condo');
   }
 
   create(): void {
-    froggyLayer.clear();
+    this.floorTop = FLOOR_TOP;
     this.decorating = false;
     this.picked = null;
-    this.locked = false;
-    fadeIn(this);
-    audio.setScene({ music: 'room_lounge', ambience: [] });
+    this.dragging = false;
+    this.pieces = [];
+    super.create();
     visit('condo');
-
-    this.room = this.add.graphics().setDepth(0);
-    this.furn = this.add.graphics().setDepth(10);
-    this.paintRoom();
-    this.player = new Player(this, 40, 166);
-    this.player.sprite.setDepth(20);
-
-    new TokenHud(this);
-    attachPockets(this, () => this.locked || this.busy());
-    this.msg = centerText(this, GAME_W / 2, 118, '', PALETTE.cream).setDepth(900);
-    this.hobText = text(this, GAME_W - 8, 40, '', PALETTE.gold).setOrigin(1, 0).setDepth(900);
-    this.ui = this.add.container(0, 0).setDepth(800);
+    this.ui = this.add.container(0, 0).setDepth(850).setScrollFactor(0);
     this.buildButtons();
-    this.drawFurniture();
-
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.pointerDown(p));
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.pointerMove(p));
     this.input.on('pointerup', () => this.pointerUp());
-    this.events.on('shop-closed', () => {
-      this.locked = false;
-      // what you wear may have changed
-      this.player.sprite.destroy();
-      this.player = new Player(this, this.player.x, 166);
-      this.player.sprite.setDepth(20);
-      this.drawFurniture();
-    });
   }
 
-  private busy(): boolean {
-    return this.scene.isActive('Shop') || this.scene.isActive('SettingsModal') || this.scene.isActive('Goals');
+  protected leave(): void {
+    this.exitTo('Hotel', { area: 'lobby', from: 'lift' });
   }
 
-  private say(m: string): void {
-    this.msg.setText(m).setAlpha(1);
-    this.tweens.killTweensOf(this.msg);
-    this.tweens.add({ targets: this.msg, alpha: 0, delay: 2200, duration: 500 });
+  protected spawnX(): number {
+    return 40;
   }
 
-  // ----------------------------------------------------------------- room
+  protected paintDoor(): void {
+    // (the door is part of the wall: see paintWalls)
+  }
 
-  private paintRoom(): void {
+  protected exitFixture(): Fixture {
+    return {
+      x: 18,
+      y: FLOOR_TOP + 10,
+      w: 22,
+      depth: 0,
+      label: () => '[E] LEAVE',
+      use: () => this.goOut(),
+      hit: { x: 5, y: 58, w: 26, h: 66 },
+    };
+  }
+
+  protected busy(): boolean {
+    return super.busy() || this.decorating;
+  }
+
+  // ------------------------------------------------------------------ room
+
+  protected paintRoom(): void {
+    this.room = this.add.graphics().setDepth(0);
+    this.outline = this.add.graphics().setDepth(700);
+    this.paintWalls();
+    // the blanket, folded on the boards: a bed of sorts
+    const b = this.add.graphics().setDepth(3);
+    b.fillStyle(0x14100c, 1).fillRect(BLANKET.x - 15, BLANKET.y - 6, 30, 7);
+    b.fillStyle(0x5a6a8a, 1).fillRect(BLANKET.x - 14, BLANKET.y - 5, 28, 5);
+    b.fillStyle(0x7a8aaa, 1).fillRect(BLANKET.x - 14, BLANKET.y - 5, 28, 1);
+    b.fillStyle(0xe8e0d0, 1).fillRect(BLANKET.x + 6, BLANKET.y - 7, 8, 3);
+    // the coat hook by the door: your clothes
+    const h = this.add.graphics().setDepth(2);
+    h.fillStyle(0x3a2a1e, 1).fillRect(40, 78, 14, 2);
+    h.fillStyle(0x6a6a44, 1).fillRect(41, 80, 5, 12);
+    h.fillStyle(0x5a3a3a, 1).fillRect(48, 80, 4, 4);
+    this.placePieces();
+  }
+
+  /** Every placed piece, as a thing in the room. */
+  private placePieces(): void {
+    for (const p of this.pieces) p.destroy();
+    this.pieces = [];
+    for (const pl of store.get().life.placed) {
+      const f = furnitureById(pl.id);
+      if (f) this.pieces.push(new Piece(this, f, pl.x, pl.y, pl.flip));
+    }
+    this.drawOutline();
+  }
+
+  protected fixtures(): Fixture[] {
+    const out: Fixture[] = [
+      {
+        x: 47,
+        y: FLOOR_TOP + 2,
+        w: 14,
+        depth: 0,
+        wall: true,
+        label: () => '[E] WARDROBE',
+        use: () => this.openWardrobe(),
+        hit: { x: 38, y: 76, w: 18, h: 20 },
+      },
+    ];
+    const hasBed = store.get().life.placed.some((p) => furnitureById(p.id)?.cat === 'bed');
+    if (!hasBed) {
+      out.push({ x: BLANKET.x, y: BLANKET.y, w: 30, depth: 0, label: () => '[E] SLEEP ON THE BLANKET', use: () => this.goToSleep('floor') });
+    }
+    for (const piece of this.pieces) {
+      const f = piece.def;
+      const verb = useOf(f);
+      if (f.wall || f.cat === 'rug') continue;
+      out.push({
+        x: piece.x,
+        y: piece.y,
+        w: Math.max(10, f.w),
+        depth: Math.min(8, Math.max(4, Math.round(f.h / 3))),
+        label: () => (verb === 'sit' ? `[E] SIT ON THE ${f.name}` : verb === 'lie' ? `[E] SLEEP IN THE ${f.name}` : verb === 'switch' ? `[E] ${f.name}: ${piece.on ? 'OFF' : 'ON'}` : verb === 'play' ? `[E] PLAY THE ${f.name}` : f.name),
+        use: () => this.usePiece(piece),
+      });
+    }
+    return out;
+  }
+
+  private usePiece(piece: Piece): void {
+    const f = piece.def;
+    switch (useOf(f)) {
+      case 'sit':
+        this.sitOn(piece.x, piece.y + 1, 'chair', piece.flip ? -1 : 1);
+        this.say('YOU SIT DOWN. MOVE TO GET UP.');
+        break;
+      case 'lie':
+        this.goToSleep(f.id === 'fur_bed' ? 'bed' : 'mattress');
+        break;
+      case 'switch':
+        this.say(piece.toggle() ? `THE ${f.name} IS ON.` : `THE ${f.name} IS OFF.`);
+        break;
+      case 'play':
+        piece.play();
+        this.say(`THE ${f.name} PLAYS.`);
+        break;
+      default:
+        this.say(`YOUR ${f.name}. ${f.note}.`);
+    }
+  }
+
+  private openWardrobe(): void {
+    if (this.busy()) return;
+    this.locked = true;
+    this.scene.launch('Shop', { kind: 'wardrobe', from: 'Condo' });
+  }
+
+  private paintWalls(): void {
     const g = this.room;
     g.clear();
     const c = clock();
@@ -178,26 +262,25 @@ export class Condo extends Phaser.Scene {
     return true;
   }
 
-  private drawFurniture(): void {
-    const g = this.furn;
+  /** The picked piece's outline while decorating. */
+  private drawOutline(): void {
+    const g = this.outline;
     g.clear();
-    const list = [...this.placements()].sort((a, b) => {
-      const fa = furnitureById(a.id)!;
-      const fb = furnitureById(b.id)!;
-      // wall things, then rugs, then the rest back to front
-      const ka = fa.wall ? 0 : fa.cat === 'rug' ? 1 : 2;
-      const kb = fb.wall ? 0 : fb.cat === 'rug' ? 1 : 2;
-      return ka - kb || a.y - b.y;
-    });
-    for (const p of list) {
-      const f = furnitureById(p.id);
-      if (!f) continue;
-      drawFurniture(g, f, p.x, p.y, p.flip);
-      if (this.decorating && p.uid === this.picked) {
-        const r = this.rectOf(p, f);
-        g.lineStyle(1, this.valid(f, p.x, p.y, p.uid) ? 0x7fd88a : 0xff5040, 1).strokeRect(r.x - 2, r.y - 2, r.width + 4, r.height + 4);
-      }
-    }
+    if (!this.decorating || this.picked === null) return;
+    const p = this.placements().find((q) => q.uid === this.picked);
+    if (!p) return;
+    const f = furnitureById(p.id)!;
+    const r = this.rectOf(p, f);
+    g.lineStyle(1, this.valid(f, p.x, p.y, p.uid) ? 0x7fd88a : 0xff5040, 1).strokeRect(r.x - 2, r.y - 2, r.width + 4, r.height + 4);
+  }
+
+  /** Something moved, was put out or put away: the room is built again. */
+  private rebuild(): void {
+    this.placePieces();
+    // the footprints and the things to use follow the furniture
+    this.items = this.items.filter((it) => it.f === this.exitDoor);
+    this.solids = [];
+    for (const f of this.fixtures()) this.addFixture(f);
   }
 
   // ------------------------------------------------------------- buttons
@@ -213,33 +296,20 @@ export class Condo extends Phaser.Scene {
       this.ui.add(button(this, 100, y - 6, 'FLIP', () => this.flipPicked(), { width: 40, height: 11, disabled: this.picked === null }));
       this.ui.add(button(this, 148, y - 6, 'REMOVE', () => this.removePicked(), { width: 48, height: 11, disabled: this.picked === null }));
       this.ui.add(button(this, 284, y - 6, 'DONE', () => this.setDecorating(false), { width: 50, height: 11 }));
-      this.ui.add(text(this, 176, y - 9, 'DRAG TO MOVE', PALETTE.ash));
       return;
     }
-    const acts: Array<[string, () => void]> = [
-      ['DECORATE', () => this.setDecorating(true)],
-      ['COOK', () => this.open('cook')],
-      ['PANTRY', () => this.open('pantry')],
-      ['WARDROBE', () => this.open('wardrobe')],
-      ['SLEEP', () => this.goToSleep()],
-      ['LEAVE', () => this.leave()],
-    ];
-    const bw = 50;
-    acts.forEach(([label, fn], i) => this.ui.add(button(this, 4 + bw / 2 + i * (bw + 2), y - 6, label, fn, { width: bw, height: 11 })));
-  }
-
-  private open(kind: 'cook' | 'pantry' | 'wardrobe'): void {
-    if (this.busy()) return;
-    this.locked = true;
-    this.scene.launch('Shop', { kind, from: 'Condo' });
+    // one button, up out of the way of your feet
+    this.ui.add(button(this, GAME_W / 2, 31, 'DECORATE', () => this.setDecorating(true), { width: 58, height: 11 }));
   }
 
   private setDecorating(on: boolean): void {
+    if (on && super.busy()) return;
     this.decorating = on;
     this.picked = null;
     this.buildButtons();
-    this.drawFurniture();
-    if (on) this.say(store.get().life.placed.length ? 'TAP SOMETHING TO PICK IT UP.' : 'BUY FURNITURE AT HOME AND HEARTH, EAST OF THE ARCADE.');
+    this.drawOutline();
+    if (!on) this.rebuild();
+    if (on) this.say(store.get().life.placed.length ? 'TAP SOMETHING TO PICK IT UP, DRAG TO MOVE IT.' : 'BUY FURNITURE AT HOME AND HEARTH, EAST OF THE ARCADE.');
   }
 
   /** The next owned piece that is not out yet, set down somewhere free. */
@@ -263,14 +333,14 @@ export class Condo extends Phaser.Scene {
     this.say(r.msg);
     this.picked = store.get().life.placed[store.get().life.placed.length - 1]?.uid ?? null;
     this.buildButtons();
-    this.drawFurniture();
+    this.placePieces();
   }
 
   private flipPicked(): void {
     const p = this.placements().find((q) => q.uid === this.picked);
     if (!p) return;
     movePlacement(p.uid, p.x, p.y, !p.flip);
-    this.drawFurniture();
+    this.placePieces();
   }
 
   private removePicked(): void {
@@ -279,7 +349,7 @@ export class Condo extends Phaser.Scene {
     this.picked = null;
     this.say('PUT AWAY. IT IS STILL YOURS.');
     this.buildButtons();
-    this.drawFurniture();
+    this.placePieces();
   }
 
   private pointerDown(p: Phaser.Input.Pointer): void {
@@ -292,7 +362,7 @@ export class Condo extends Phaser.Scene {
     this.dragging = !!hit;
     this.dragFrom = hit ? { x: hit.x, y: hit.y } : null;
     this.buildButtons();
-    this.drawFurniture();
+    this.placePieces();
   }
 
   private pointerMove(p: Phaser.Input.Pointer): void {
@@ -304,7 +374,7 @@ export class Condo extends Phaser.Scene {
     const y = Math.round(f.wall ? Phaser.Math.Clamp(p.worldY + f.h / 2, WALL_TOP + f.h, WALL_BOTTOM) : Phaser.Math.Clamp(p.worldY + f.h / 2, FLOOR_TOP + 6, FLOOR_BOTTOM));
     const x = Math.round(Phaser.Math.Clamp(p.worldX, 4 + f.w / 2, GAME_W - 4 - f.w / 2));
     movePlacement(q.uid, x, y);
-    this.drawFurniture();
+    this.placePieces();
   }
 
   private pointerUp(): void {
@@ -318,42 +388,39 @@ export class Condo extends Phaser.Scene {
       this.say('IT CANNOT GO THERE.');
       audio.sfx('buzzer', 0.4);
     }
-    this.drawFurniture();
+    this.placePieces();
   }
 
   // ------------------------------------------------------------ sleeping
 
-  private goToSleep(): void {
-    if (this.busy() || this.locked) return;
-    const placed = this.placements().map((p) => furnitureById(p.id)!);
-    const on = placed.some((f) => f.id === 'fur_bed') ? 'bed' : placed.some((f) => f.id === 'fur_mattress') ? 'mattress' : 'floor';
+  private goToSleep(on: 'floor' | 'mattress' | 'bed'): void {
+    if (this.busy()) return;
     this.locked = true;
     this.cameras.main.fadeOut(900, 0, 0, 0);
     this.time.delayedCall(1000, () => {
       const r = sleep(on);
-      this.paintRoom();
+      this.paintWalls();
       this.cameras.main.fadeIn(900, 0, 0, 0);
-      this.say(`${on === 'floor' ? 'ON THE FLOOR. ' : ''}${r.msg}`);
+      this.say(`${on === 'floor' ? 'ON THE BLANKET. ' : ''}${r.msg}`);
       this.locked = false;
     });
   }
 
-  private leave(): void {
-    if (this.busy() || this.locked) return;
-    this.locked = true;
-    audio.sfx('door_open', 0.6);
-    fadeToScene(this, 'Hotel', { area: 'lobby', from: 'lift' });
-  }
-
-  update(): void {
+  protected tick(): void {
     // evicted while standing in it (the grace day ran out): shown the door
     if (!store.get().life.rented && !this.locked) {
       this.locked = true;
       this.say('THE LANDLORD IS AT THE DOOR. YOU HAVE TO GO.');
-      this.time.delayedCall(1800, () => fadeToScene(this, 'Hotel', { area: 'lobby', from: 'lift' }));
+      this.time.delayedCall(1800, () => this.exitTo('Hotel', { area: 'lobby', from: 'lift' }));
     }
-    const left = cookingLeft();
-    const c = store.get().life.cooking;
-    this.hobText.setText(c ? `COOKING ${recipeById(c.recipe)?.name ?? ''} ${Math.ceil(left)}S` : '');
+  }
+
+  update(t: number, delta: number): void {
+    super.update(t, delta);
+    // (the eviction check runs even while a menu is up)
+    if (super.busy() || this.decorating) this.tick();
   }
 }
+
+void clock;
+void audio;

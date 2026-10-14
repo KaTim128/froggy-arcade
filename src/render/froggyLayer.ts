@@ -178,6 +178,23 @@ class FroggyLayer {
    * that is not the edge of the figure, it is where something is in front.
    */
   private paintPixel(fn: FroggyPainter): void {
+    const low = this.pixelate(fn);
+    if (!low || !this.ctx) return;
+    const c = this.ctx;
+    c.save();
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.imageSmoothingEnabled = false;
+    c.drawImage(low, 0, 0, this.canvas!.width, this.canvas!.height);
+    c.restore();
+  }
+
+  /**
+   * The same pixel-mode figure, reduced to the world's 320x180 and handed
+   * back rather than put on the overlay -- for a figure that lives IN the
+   * room, at a depth, with the player able to stand in front of it (see
+   * render/stageFigure).  Null if there is no canvas to draw with.
+   */
+  pixelate(fn: FroggyPainter): HTMLCanvasElement | null {
     const K = PIXEL_SS;
     if (!this.low) {
       this.low = document.createElement('canvas');
@@ -191,7 +208,7 @@ class FroggyLayer {
     }
     const lc = this.lowCtx;
     const hc = this.hiCtx;
-    if (!lc || !hc || !this.ctx) return;
+    if (!lc || !hc) return null;
     // Drawn K times finer, then each world pixel takes the ONE colour most of
     // its K x K block is -- never an average of them.  An average is what
     // made the first try look blurred: every edge inside him (the eye on the
@@ -277,13 +294,7 @@ class FroggyLayer {
       });
     }
     lc.putImageData(img, 0, 0);
-
-    const c = this.ctx;
-    c.save();
-    c.setTransform(1, 0, 0, 1, 0, 0);
-    c.imageSmoothingEnabled = false;
-    c.drawImage(this.low, 0, 0, this.canvas!.width, this.canvas!.height);
-    c.restore();
+    return this.low;
   }
 
   /** Logical pixels per side — handy for full-frame horror renders. */
