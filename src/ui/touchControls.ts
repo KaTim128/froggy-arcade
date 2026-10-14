@@ -968,9 +968,10 @@ class TouchControls {
     // both sides and the buttons enough of theirs to stay off the edge.
     // (landscape: smaller, because there it sits over the corner of the
     // picture rather than in the black under it)
+    // (a little bigger than they were: easier to find without looking)
     return portrait
-      ? Math.round(Math.min(200, Math.max(124, short * 0.4)))
-      : Math.round(Math.min(124, Math.max(96, short * 0.28)));
+      ? Math.round(Math.min(220, Math.max(138, short * 0.44)))
+      : Math.round(Math.min(140, Math.max(108, short * 0.315)));
   }
 
   /** A button: half the pad across, never under the size a thumb can hit blind. */

@@ -214,6 +214,8 @@ export class ArcadeAnnex extends Phaser.Scene {
   }
 
   private interact(): void {
+    // (on the way somewhere: it is used when you get there, not on the way)
+    if (this.walker.active) return;
     if (this.busy() || !this.target) return;
     if (this.target.kind === 'back') {
       this.toHub();

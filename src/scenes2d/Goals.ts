@@ -58,7 +58,7 @@ export class Goals extends Phaser.Scene {
     const L = this.layer;
     const l = store.get().life;
     L.add(text(this, 14, 11, 'GOALS', PALETTE.gold));
-    L.add(button(this, GAME_W - 32, 15, 'CLOSE', () => this.close(), { width: 44, height: 11 }));
+    L.add(button(this, GAME_W - 34, 15, 'CLOSE', () => this.close(), { width: 48, height: 13 }));
     const tabs: Array<[typeof this.tab, string]> = [['daily', 'TODAY'], ['weekly', 'THIS WEEK'], ['achievements', 'ACHIEVEMENTS']];
     const tw = Math.floor((GAME_W - 28) / 3);
     tabs.forEach(([k, label], i) =>
@@ -66,7 +66,7 @@ export class Goals extends Phaser.Scene {
         this.tab = k;
         this.msg = '';
         this.draw();
-      }, { width: tw - 4, height: 11, fill: k === this.tab ? PALETTE.tealDark : PALETTE.ink })),
+      }, { width: tw - 4, height: 13, fill: k === this.tab ? PALETTE.tealDark : PALETTE.ink })),
     );
 
     type Line = { text: string; prog: number; need: number; reward: Reward; claimed: boolean; claim: () => void };
@@ -98,17 +98,19 @@ export class Goals extends Phaser.Scene {
       }
       L.add(text(this, 14, 158, this.tab === 'daily' ? 'NEW GOALS EVERY DAY AT MIDNIGHT.' : 'NEW GOALS EVERY MONDAY.', PALETTE.ash));
     }
-    const rowH = this.tab === 'achievements' ? 12 : 30;
+    // achievements: one row each, the count in its own column clear of the
+    // longest name, and a CLAIM button tall enough for its word
+    const rowH = this.tab === 'achievements' ? 13 : 30;
     lines.forEach((ln, i) => {
-      const y = 40 + i * rowH;
+      const y = 42 + i * rowH;
       const done = ln.prog >= ln.need;
       L.add(text(this, 14, y, ln.text, ln.claimed ? PALETTE.ash : done ? PALETTE.gold : PALETTE.cream));
-      L.add(text(this, 196, y, `${ln.prog}/${ln.need}`, PALETTE.fog).setOrigin(1, 0));
+      L.add(text(this, 236, y, `${ln.prog}/${ln.need}`, PALETTE.fog).setOrigin(1, 0));
       if (this.tab !== 'achievements') L.add(text(this, 20, y + 10, rewardText(ln.reward), PALETTE.mossLight));
-      if (ln.claimed) L.add(text(this, 270, y, 'CLAIMED', PALETTE.ash).setOrigin(0.5, 0));
-      else L.add(button(this, 270, y + 4, 'CLAIM', ln.claim, { width: 46, height: 10, disabled: !done }));
+      if (ln.claimed) L.add(text(this, 278, y, 'CLAIMED', PALETTE.ash).setOrigin(0.5, 0));
+      else L.add(button(this, 278, y + 3, 'CLAIM', ln.claim, { width: 52, height: 12, disabled: !done }));
     });
-    if (this.msg) L.add(centerText(this, GAME_W / 2, 168, this.msg, PALETTE.gold));
+    if (this.msg) L.add(centerText(this, GAME_W / 2, 170, this.msg, PALETTE.gold));
   }
 
   private result(r: { ok: boolean; msg: string }): void {

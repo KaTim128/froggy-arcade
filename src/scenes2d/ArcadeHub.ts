@@ -1618,6 +1618,8 @@ export class ArcadeHub extends Phaser.Scene {
       this.closeTalk();
       return;
     }
+    // (on the way somewhere: it is used when you get there, not on the way)
+    if (this.walker.active) return;
     if (this.busy() || !this.target) return;
     const t = this.target;
 

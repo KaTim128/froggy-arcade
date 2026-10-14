@@ -239,6 +239,8 @@ export abstract class WalkRoom extends Phaser.Scene {
 
   protected interact(): void {
     if (this.panel) return;
+    // (on the way somewhere: it is used when you get there, not on the way)
+    if (this.walker.active) return;
     if (this.busy() || !this.target) return;
     this.target.f.use();
   }
