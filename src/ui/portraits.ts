@@ -97,8 +97,10 @@ export const SPEAKERS = {
 
 export type SpeakerId = keyof typeof SPEAKERS;
 
-/** The well: 48 wide; as tall as the panel gives it (40 or more). */
-export const WELL_W = 48;
+/** The well: a small square beside the words, head and shoulders only. */
+export const WELL_W = 34;
+/** It never grows with the panel: a long line must not stretch the face. */
+export const WELL_H = 36;
 
 /**
  * Put `who`'s portrait in the well at (x, y, w, h).  What it adds goes into
@@ -134,27 +136,32 @@ export function addPortrait(
     owner.once(Phaser.GameObjects.Events.DESTROY, () => fig.destroy());
     return;
   }
-  parts.push(headAndShoulders(scene, who.look ?? {}, x + w / 2, y, h));
+  parts.push(headAndShoulders(scene, who.look ?? {}, x + w / 2, y, h, w));
 }
 
-/** The rig's head, three times size, with the coat's shoulders under it. */
-export function headAndShoulders(scene: Phaser.Scene, look: Look, cx: number, top: number, h: number): Phaser.GameObjects.Graphics {
+/**
+ * The rig's head, scaled to the well it goes in, with the coat's shoulders
+ * under it.  `w` is the well's width: the head is drawn at whatever pixel
+ * size keeps it inside, so the same face serves a small frame and a large.
+ */
+export function headAndShoulders(scene: Phaser.Scene, look: Look, cx: number, top: number, h: number, w = 48): Phaser.GameObjects.Graphics {
   const g = scene.add.graphics();
   const rows = look.head ?? HEAD_DEFAULT;
-  const k = 3;
+  const k = Math.max(1, Math.floor((w - 8) / 12));
   const x0 = cx - 6 * k;
   const y0 = top + 4;
   const col = (ch: string) => look.cols?.[ch] ?? COLS[ch] ?? 0xff00ff;
   const INK = 0x14100c;
   // shoulders first: the coat, a collar of the scarf, out to the frame's foot
-  const sy = y0 + rows.length * k - 4;
+  const sy = y0 + rows.length * k - Math.round(4 * k / 3);
   const sh = top + h - 1 - sy;
+  const sw = Math.round(16 * k / 3);
   if (sh > 0) {
-    g.fillStyle(INK, 1).fillRect(cx - 17, sy - 1, 34, sh + 1);
-    g.fillStyle(col('C'), 1).fillRect(cx - 16, sy, 32, sh);
-    g.fillStyle(col('c'), 1).fillRect(cx - 16, sy, 6, sh);
-    g.fillStyle(col('D'), 1).fillRect(cx + 10, sy, 6, sh);
-    g.fillStyle(col('w'), 1).fillRect(cx - 8, sy, 16, 3);
+    g.fillStyle(INK, 1).fillRect(cx - sw - 1, sy - 1, sw * 2 + 2, sh + 1);
+    g.fillStyle(col('C'), 1).fillRect(cx - sw, sy, sw * 2, sh);
+    g.fillStyle(col('c'), 1).fillRect(cx - sw, sy, k * 2, sh);
+    g.fillStyle(col('D'), 1).fillRect(cx + sw - k * 2, sy, k * 2, sh);
+    g.fillStyle(col('w'), 1).fillRect(cx - sw / 2, sy, sw, k);
   }
   // the ink outline, then the pixels over it
   for (const pass of [0, 1])

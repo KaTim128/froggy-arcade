@@ -16,7 +16,7 @@ import { button, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { touchControls } from './touchControls';
 import { FONT_ADVANCE } from '../render/pixelFont';
-import { SPEAKERS, WELL_W, addPortrait, type Speaker, type SpeakerId } from './portraits';
+import { SPEAKERS, WELL_H, WELL_W, addPortrait, type Speaker, type SpeakerId } from './portraits';
 
 export interface TalkOption {
   label: string;
@@ -77,7 +77,7 @@ export function openTalkPanel(scene: Phaser.Scene, o: TalkOpts): Phaser.GameObje
   const across = widths.reduce((a, w) => a + w, 0) + Math.max(0, widths.length - 1) * GAP;
   const oneRow = across <= inner;
   const rows = options.length === 0 ? 0 : oneRow ? 1 : options.length;
-  const h = Math.max(sp ? 48 : 0, PAD + HEAD + textH + PAD + (rows > 0 ? rows * ROW + 2 : 10));
+  const h = Math.max(sp ? WELL_H + 8 : 0, PAD + HEAD + textH + PAD + (rows > 0 ? rows * ROW + 2 : 10));
   const y = GAME_H - h - 5;
   body.setY(y + PAD + HEAD);
 
@@ -90,7 +90,9 @@ export function openTalkPanel(scene: Phaser.Scene, o: TalkOpts): Phaser.GameObje
   const pending: Array<(box: Phaser.GameObjects.Container) => void> = [];
   if (sp) pending.push((box) => {
     const extra: Phaser.GameObjects.GameObject[] = [];
-    addPortrait(scene, box, extra, sp, 16 + L, y + 4, WELL_W, h - 8, o.depth ?? 900);
+    // the well keeps its own size whatever the panel came to: a tall panel
+    // gives a taller frame, never a bigger face
+    addPortrait(scene, box, extra, sp, 16 + L, y + 4, WELL_W, Math.min(h - 8, WELL_H), o.depth ?? 900);
     box.add(extra);
   });
 
