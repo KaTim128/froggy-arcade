@@ -26,9 +26,9 @@ const FRONT_ROW = FLOOR + 52;
 /** The shop's width; the fitting room stands in the middle of it. */
 const SHOP_W = 460;
 const FIT_X = SHOP_W / 2;
-const FIT_W = 34;
+const FIT_W = 26;
 /** The booth's top: a cubicle a little taller than a person, not a wardrobe to the ceiling. */
-const FIT_TOP = 70;
+const FIT_TOP = 84;
 const MIRROR_X = 335;
 
 /** A bald, pale shop dummy, wearing `top`. */
