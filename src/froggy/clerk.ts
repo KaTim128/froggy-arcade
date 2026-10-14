@@ -1,16 +1,16 @@
 /**
- * The night clerk at the Grand Lily's reception desk.
+ * The concierge at the front desk of Lily's Condos.
  *
  * Drawn the way every PERSON in this building is drawn -- the dealer, the kid
  * on the prize counter (froggy/staffer.ts) -- in vector paths on the smooth
  * overlay, in the same 320x180 logical space with the same cartoon drop
  * shadow and the same lamp across the head and shoulders.  He is not the kid
- * in a different shirt: he is a hotel's man, upright and immaculate, in the
- * Grand Lily's own colours:
+ * in a different shirt: he is the building's man, upright and tidy, in the
+ * block's plain modern uniform:
  *
- *   - a navy tailored jacket with gold piping on the lapels and two gold
- *     buttons, over a crisp white shirt and a burgundy tie
- *   - a brass name badge, and a small lily pinned to his lapel
+ *   - a charcoal jacket with steel-grey piping and two dark buttons, over
+ *     a crisp white shirt and a teal tie
+ *   - a steel name badge, and a small lily pinned to his lapel
  *   - dark hair, neatly side-parted and combed flat
  *   - a calm, polite half-smile; his mouth moves when he speaks to you
  *
@@ -35,16 +35,16 @@ export interface ClerkDrawOpts {
 }
 
 const KIT = {
-  jacket: '#22304E',
-  jacketDark: '#17213A',
-  jacketShade: '#111A2E',
-  piping: '#C9A24A',
-  pipingHi: '#ECD07A',
+  jacket: '#33373E',
+  jacketDark: '#272A30',
+  jacketShade: '#1C1E23',
+  piping: '#8A9098',
+  pipingHi: '#C4C8CE',
   shirt: '#F4F0E8',
   shirtShade: '#D6D0C4',
-  tie: '#7B2A3A',
-  tieDark: '#5A1C2A',
-  badge: '#C9A24A',
+  tie: '#2E7A7A',
+  tieDark: '#1E5656',
+  badge: '#B4BAC2',
   badgeInk: '#2A1608',
   lily: '#F8E0EC',
   lilyDeep: '#E08AB0',

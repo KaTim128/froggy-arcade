@@ -254,7 +254,7 @@ export class ExteriorDay extends Phaser.Scene {
     this.locked = true;
     const lines = [
       "It's getting dark...",
-      'I finally have enough to afford a decent place to rest. Maybe I should try that hotel down the street.',
+      'I finally have enough to afford a decent place to rest. Maybe I should try those condos down the street.',
       'I can get back to grabbing arcade prizes tomorrow.',
     ];
     let i = -1;

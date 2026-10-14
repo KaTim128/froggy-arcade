@@ -199,8 +199,8 @@ export class SettingsModal extends Phaser.Scene {
         },
       ],
       [
-        'MIDNIGHT HOTEL RUN',
-        `$${ROOM_MONEY}, MIDNIGHT, HOTEL`,
+        'MIDNIGHT CONDO RUN',
+        `$${ROOM_MONEY}, MIDNIGHT, CONDOS`,
         () => {
           const s = store.get();
           if (s.cash < ROOM_MONEY) store.earnCash(ROOM_MONEY - s.cash);
@@ -210,7 +210,7 @@ export class SettingsModal extends Phaser.Scene {
         },
       ],
       [
-        'HOTEL ARRIVAL',
+        'CONDO ARRIVAL',
         `AFTER THE ROAD: LOBBY, $${ROOM_MONEY}`,
         () => {
           // Exactly where the night road leaves you: through the hotel's doors,

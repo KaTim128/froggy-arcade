@@ -73,8 +73,8 @@ export class StreetWest extends Phaser.Scene {
     this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
 
     // the purse, fixed to the screen
-    // (top right: the hotel's name is across the top left of the street)
-    new TokenHud(this);
+    // (dropped under the name band: LILY'S CONDOS runs across the top left)
+    new TokenHud(this, { y: 24 });
     attachPockets(this, () => this.locked);
     pullBackAtClosing(this, () => !this.locked, () => (this.locked = true));
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);

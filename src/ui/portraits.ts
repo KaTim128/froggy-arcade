@@ -75,7 +75,7 @@ export const SPEAKERS = {
     painter: (x: number, y: number, h: number) => (ctx: CanvasRenderingContext2D) => drawStaffer(ctx, { x, y, height: h, pose: 'idle' }),
   },
   clerk: {
-    name: 'RECEPTION',
+    name: 'CONCIERGE',
     color: 0xc9a24a,
     well: 0x2a2416,
     painter: (x: number, y: number, h: number) => (ctx: CanvasRenderingContext2D) => drawClerk(ctx, { x, y, height: h }),

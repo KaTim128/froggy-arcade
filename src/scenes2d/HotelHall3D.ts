@@ -324,8 +324,8 @@ export class HotelHall3D extends Phaser.Scene {
       lo.position.set(x, DADO / 2, z);
       lo.rotation.y = ry;
       S.add(lo);
-      // the crown moulding
-      const crown = new THREE.Mesh(new THREE.BoxGeometry(len, 0.14, 0.08), new THREE.MeshLambertMaterial({ color: 0xe8dcc0 }));
+      // the shadow gap where the white ceiling meets the wall
+      const crown = new THREE.Mesh(new THREE.BoxGeometry(len, 0.05, 0.03), new THREE.MeshLambertMaterial({ color: 0x3a3d44 }));
       crown.position.set(x, CEIL - 0.07, z);
       crown.rotation.y = ry;
       S.add(crown);
@@ -360,7 +360,7 @@ export class HotelHall3D extends Phaser.Scene {
     alcFloor.position.set(0, 0, (ALCOVE_Z + END_Z) / 2);
     S.add(alcFloor);
     // the ceiling, and its lights
-    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(ALCOVE_HALF * 2, BACK_Z - END_Z), new THREE.MeshLambertMaterial({ color: 0xece4d4 }));
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(ALCOVE_HALF * 2, BACK_Z - END_Z), new THREE.MeshLambertMaterial({ color: 0xeceae4 }));
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(0, CEIL, (BACK_Z + END_Z) / 2);
     S.add(ceil);
@@ -412,22 +412,28 @@ export class HotelHall3D extends Phaser.Scene {
     ] as const;
     for (const [n, s, z] of nums) doorAt(n, s, z);
 
-    // sconces between the doors: brass, a cream shade, lit
-    const brass = new THREE.MeshLambertMaterial({ color: 0xc9a24a, emissive: 0x2a1c06 });
-    const shade = new THREE.MeshBasicMaterial({ color: 0xffefc8 });
+    // wall lights between the doors: steel cylinders washing up and down
+    const brass = new THREE.MeshLambertMaterial({ color: 0xa8aeb4, emissive: 0x101214 });
+    const shade = new THREE.MeshBasicMaterial({ color: 0xfff6e4 });
     for (let z = -1.25; z > ALCOVE_Z; z -= 2.5) {
       for (const side of [-1, 1]) {
         const x = side * (HALF - 0.06);
-        const plate = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 0.1), brass);
+        const plate = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.3, 0.08), brass);
         plate.position.set(side * (HALF - 0.02), 1.85, z);
         S.add(plate);
-        const s = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.11, 0.16, 12), shade);
-        s.position.set(x, 1.98, z);
+        const s = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.26, 12), brass);
+        s.position.set(x - side * 0.04, 1.85, z);
         S.add(s);
+        for (const dy of [-0.135, 0.135]) {
+          const lens = new THREE.Mesh(new THREE.CircleGeometry(0.04, 12), shade);
+          lens.rotation.x = dy > 0 ? -Math.PI / 2 : Math.PI / 2;
+          lens.position.set(x - side * 0.04, 1.85 + dy, z);
+          S.add(lens);
+        }
       }
     }
-    // a console table with lilies and a mirror on the back wall
-    const wood = new THREE.MeshLambertMaterial({ color: 0x5a3a22 });
+    // a slim oak console with lilies and a mirror on the back wall
+    const wood = new THREE.MeshLambertMaterial({ color: 0x9a7448 });
     const table = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 0.4), wood);
     table.position.set(0, 0.8, BACK_Z - 0.22);
     S.add(table);
