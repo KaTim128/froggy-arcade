@@ -81,6 +81,24 @@ const KEYS = {
 
 export type KeyName = keyof typeof KEYS;
 
+/** A button's words: one line, or an icon over a word when given as "ICON\nWORD". */
+function setLabel(el: HTMLElement, label: string): void {
+  const [top, word] = label.split('\n');
+  el.classList.toggle('two', word !== undefined);
+  if (word === undefined) {
+    el.textContent = label;
+    return;
+  }
+  el.textContent = '';
+  const i = document.createElement('span');
+  i.className = 'tc-ico';
+  i.textContent = top;
+  const w = document.createElement('span');
+  w.className = 'tc-word';
+  w.textContent = word;
+  el.append(i, w);
+}
+
 /** One labelled button.  The label is what the player reads, `key` is what it sends. */
 export interface TouchButton {
   label: string;
@@ -232,6 +250,17 @@ const STYLE = `
   height: calc(var(--tc-btn, 62px) * 1.25);
 }
 #touch-controls .tc-btn.down { background: rgba(255, 212, 94, 0.85); color: #141a24; }
+/* An icon over a short word ("ICON\nWORD"): both kept inside the button,
+   the word shrunk to fit rather than spilling out of it. */
+#touch-controls .tc-btn.two {
+  flex-direction: column; gap: 1px; padding: 0 4px; overflow: hidden;
+  border-radius: 18px;
+}
+#touch-controls .tc-btn.two .tc-ico { font-size: 1.55em; line-height: 1; }
+#touch-controls .tc-btn.two .tc-word {
+  font-size: 0.8em; line-height: 1.1; max-width: 100%;
+  white-space: nowrap; overflow: hidden;
+}
 #touch-controls .tc-btn[hidden] { display: none; }
 
 /* The gear: pause and settings, at the top right, always reachable. */
@@ -623,7 +652,7 @@ class TouchControls {
   relabel(key: KeyName, label: string): void {
     if (!this.root) return;
     for (const el of Array.from(this.root.querySelectorAll('.tc-btn')) as HTMLElement[]) {
-      if (el.dataset.key === key) el.textContent = label;
+      if (el.dataset.key === key) setLabel(el, label);
     }
   }
 
@@ -652,7 +681,7 @@ class TouchControls {
       const el = document.createElement('button');
       el.type = 'button';
       el.className = 'tc-btn' + (b.primary ? ' primary' : '');
-      el.textContent = b.label;
+      setLabel(el, b.label);
       el.dataset.key = b.key;
       el.hidden = this.hiddenKeys.has(b.key);
       pads.appendChild(el);
