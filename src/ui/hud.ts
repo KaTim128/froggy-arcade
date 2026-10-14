@@ -56,8 +56,15 @@ export class TokenHud {
     this.container.setDepth(950).setScrollFactor(0);
     this.buildLife();
 
-    this.unsub = ledger.onChange((next, prev) => this.onChange(next, prev));
+    this.unsub = ledger.onChange((next, prev) => {
+      if (this.alive()) this.onChange(next, prev);
+    });
     const unStore = store.subscribe((st) => {
+      // A scene going down can still write to the store on its way out (the
+      // crane saves its glass on shutdown): by then these texts are gone, and
+      // measuring one threw in the middle of the change of scene -- which
+      // never finished, and left the screen black.
+      if (!this.alive()) return;
       if (st.cash !== this.lastCash) this.refreshCash(st.cash);
       this.refreshLife();
     });
@@ -68,6 +75,11 @@ export class TokenHud {
       this.unsub();
       unStore();
     });
+  }
+
+  /** Still on screen: the scene up and the texts not torn down. */
+  private alive(): boolean {
+    return this.container.active && this.label.active && this.cashLabel.active && !!this.clockText?.active && this.scene.sys.isActive();
   }
 
   private refreshCash(cash: number): void {

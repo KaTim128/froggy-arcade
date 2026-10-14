@@ -13,9 +13,9 @@ import { depthFor } from './player';
 import { centerText } from '../core/ui';
 
 export type CraneKind = 'plush' | 'oddity';
-export const CRANE_W = 26;
-/** About 2 m against the 26-pixel man, marquee and all.  It was 40: 2.7 m. */
-export const CRANE_H = 32;
+export const CRANE_W = 30;
+/** A little over 2 m against the 26-pixel man, marquee and all. */
+export const CRANE_H = 36;
 
 /** One claw machine, its feet on `y`. */
 export function paintCrane(scene: Phaser.Scene, x: number, y: number, kind: CraneKind, night: boolean): Phaser.GameObjects.Container {
