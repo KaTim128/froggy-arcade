@@ -45,6 +45,10 @@ export function text(
  * checked when the line is first drawn (by which time its origin and any
  * container it went into are known) and again whenever its text changes, and
  * a line the code has since MOVED is measured from where it was moved to.
+ * A line out in a room the camera scrolls along is left where it was put --
+ * it scrolls into view with the room -- so it is never pushed off its target
+ * (and off the box behind it) just because the room is wider than the
+ * picture.
  * A line entirely off the picture is left alone: that is something sliding in
  * or out on purpose, not something that does not fit.
  */
@@ -93,12 +97,24 @@ function fitInside(t: Phaser.GameObjects.BitmapText): void {
   // of the ones text goes into are.
   let ox = 0;
   let oy = 0;
+  let top: Phaser.GameObjects.Components.ScrollFactor = t;
   for (let c = t.parentContainer; c; c = c.parentContainer) {
     ox += c.x;
     oy += c.y;
+    top = c;
   }
-  const x = ax + nudge(ox + ax - t.width * t.originX, t.width, GAME_W_UI);
-  const y = ay + nudge(oy + ay - t.height * t.originY, t.height, GAME_H_UI);
+  // A line out in a room the camera scrolls along is part of the room: it
+  // comes into view as you walk to it, and is never slid off where it was
+  // put (a shop's name over the middle of a wide shop, a prompt over the
+  // thing it is for).  Anything else is measured where it shows.
+  const cam = t.scene.cameras.main;
+  const b = cam.getBounds();
+  const rollsX = top.scrollFactorX !== 0 && cam.useBounds && b.width > cam.width;
+  const rollsY = top.scrollFactorY !== 0 && cam.useBounds && b.height > cam.height;
+  ox -= cam.scrollX * top.scrollFactorX;
+  oy -= cam.scrollY * top.scrollFactorY;
+  const x = rollsX ? ax : ax + nudge(ox + ax - t.width * t.originX, t.width, GAME_W_UI);
+  const y = rollsY ? ay : ay + nudge(oy + ay - t.height * t.originY, t.height, GAME_H_UI);
   const rx = x === ax ? ax : Math.round(x);
   const ry = y === ay ? ay : Math.round(y);
   if (t.x !== rx) t.x = rx;

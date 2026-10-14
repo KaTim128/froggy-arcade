@@ -1,7 +1,8 @@
 /**
  * ---- SHARP'S, inside.  Black and white tiles, a striped pole, the style
- * posters on the wall, one big red chair in front of the mirror and the
- * barber beside it (a man who looks after his moustache).  Sit in the chair
+ * posters on the wall, one big red chair in front of the mirror, and the
+ * barber (a man who looks after his moustache) at his desk just inside the
+ * doors.  Sit in the chair
  * and he shows you the book: every cut and colour, tried on you in the
  * mirror as you go through them -- BUY & APPLY the one you want, or APPLY one
  * you have had before.  The bench by the window is for waiting on.
@@ -13,7 +14,7 @@ import { audio } from '../../core/audio';
 import { store } from '../../core/state';
 import { centerText, text } from '../../core/ui';
 import { GAME_H } from '../../render/pixelScaler';
-import { COLS, Player, depthFor, type Look } from '../../art/player';
+import { COLS, depthFor, type Look } from '../../art/player';
 import { COSMETICS, lookFor, type CosmeticDef } from '../../game/catalog';
 import { buyCosmetic, record, wear } from '../../game/life';
 import { FLOOR_TOP, WalkRoom, type Fixture } from '../rooms/WalkRoom';
@@ -22,7 +23,6 @@ import { BARBER_LOOK } from '../../ui/portraits';
 const BACK_ROW = FLOOR_TOP + 24;
 const FRONT_ROW = FLOOR_TOP + 52;
 const CHAIR_X = 180;
-const BARBER_X = 208;
 const BENCH_X = 296;
 
 export { BARBER_LOOK };
@@ -34,6 +34,7 @@ export class BarberShop extends WalkRoom {
   private styles: CosmeticDef[] = [];
   private pick = 0;
   private previewing = false;
+  private desk: Fixture | null = null;
 
   constructor() {
     super('BarberShop');
@@ -124,9 +125,24 @@ export class BarberShop extends WalkRoom {
     ch.fillStyle(0x14100c, 1).fillRect(CHAIR_X - 12, y - 17, 3, 9).fillRect(CHAIR_X + 10, y - 17, 3, 9);
     ch.fillStyle(0xb8b8c0, 1).fillRect(CHAIR_X - 6, y - 4, 13, 2);
 
-    // the barber, stood by his chair, facing it
-    const barber = new Player(this, BARBER_X, BACK_ROW - 1, false, BARBER_LOOK);
-    barber.sprite.setScale(-1, 1);
+    // the barber, at his desk just inside the doors
+    this.desk = this.paintCounter({
+      look: BARBER_LOOK,
+      top: 0x2a5a4a,
+      front: 0xf0f0ea,
+      trim: 0x14100c,
+      who: 'barber',
+      line: '"TAKE A SEAT IN THE CHAIR, FRIEND. WE WILL SMARTEN YOU UP."',
+      dress: (g, x, top) => {
+        // the appointments book, the scissors, a jar of combs
+        g.fillStyle(0x14100c, 1).fillRect(x - 18, top - 2, 12, 2);
+        g.fillStyle(0xf8f0e0, 1).fillRect(x - 17, top - 2, 10, 1);
+        g.fillStyle(0xb8b8c0, 1).fillRect(x - 2, top - 2, 6, 1).fillRect(x - 2, top - 1, 1, 1).fillRect(x + 3, top - 1, 1, 1);
+        g.fillStyle(0x14100c, 1).fillRect(x + 10, top - 7, 6, 7);
+        g.fillStyle(0x7ac8d8, 1).fillRect(x + 11, top - 6, 4, 6);
+        g.fillStyle(0x14100c, 1).fillRect(x + 12, top - 9, 1, 3).fillRect(x + 14, top - 9, 1, 3);
+      },
+    });
 
     // the waiting bench, and a pot plant
     const bn = this.add.graphics().setDepth(depthFor(FRONT_ROW) - 0.0002);
@@ -168,14 +184,7 @@ export class BarberShop extends WalkRoom {
         use: () => this.sitDown(),
         hit: { x: CHAIR_X - 12, y: BACK_ROW - 32, w: 24, h: 34 },
       },
-      {
-        x: BARBER_X,
-        y: BACK_ROW,
-        w: 12,
-        depth: 5,
-        label: () => '[E] TALK',
-        use: () => this.talkAs('barber', '"TAKE A SEAT IN THE CHAIR, FRIEND. WE WILL SMARTEN YOU UP."'),
-      },
+      ...(this.desk ? [this.desk] : []),
       {
         x: BENCH_X,
         y: FRONT_ROW,

@@ -17,6 +17,8 @@ import { ledger } from '../core/ledger';
 import { button, centerText, confirmDialog, fadeToScene, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
+import { drawAttackIcon } from '../art/attackIcons';
+import { backPlate } from '../ui/plate';
 import {
   BATTLE_COST, BATTLE_WIN, BIOMES, BOSS_AFTER, DEFEAT_PENALTY, ELEMENTS, MAX_OWNED, RARITIES, STARTERS, TIERS, creatureById, tierOdds, type Creature,
 } from '../game/creatures';
@@ -103,33 +105,129 @@ export class CreatureHub extends Phaser.Scene {
     this.layer.removeAll(true);
     this.shown = [];
     const L = this.layer;
-    L.add(text(this, 8, 5, 'CREATURE CLASH', PALETTE.gold));
-    L.add(text(this, 98, 5, `${ledger.balance()} TOK`, PALETTE.mossLight));
-    if (this.screen !== 'pack') L.add(button(this, GAME_W - 26, 9, this.screen === 'home' || this.screen === 'starter' ? 'LEAVE' : 'BACK', () => (this.screen === 'home' || this.screen === 'starter' ? this.leave() : this.go('home')), { width: 44, height: 11 }));
+    // the header: a dark band with a neon edge, the name, your tokens in a chip
+    L.add(this.add.rectangle(0, 0, GAME_W, 15, 0x0a0d1e).setOrigin(0, 0));
+    L.add(this.add.rectangle(0, 15, GAME_W, 1, PALETTE.neon, 0.8).setOrigin(0, 0));
+    L.add(this.add.rectangle(0, 16, GAME_W, 1, PALETTE.neon, 0.2).setOrigin(0, 0));
+    L.add(text(this, 8, 4, 'CREATURE CLASH', PALETTE.gold));
+    const tok = `${ledger.balance()} TOK`;
+    const chipW = tok.length * 5 + 16;
+    L.add(this.add.rectangle(96, 2, chipW, 11, 0x14182e).setOrigin(0, 0).setStrokeStyle(1, 0x2a5a3a));
+    const coin = this.add.graphics();
+    coin.fillStyle(0x14100c, 1).fillCircle(102, 7.5, 3.5);
+    coin.fillStyle(PALETTE.gold, 1).fillCircle(102, 7.5, 2.5);
+    L.add(coin);
+    L.add(text(this, 108, 4, tok, PALETTE.mossLight));
+    if (this.screen !== 'pack') L.add(button(this, GAME_W - 26, 8, this.screen === 'home' || this.screen === 'starter' ? 'LEAVE' : 'BACK', () => (this.screen === 'home' || this.screen === 'starter' ? this.leave() : this.go('home')), { width: 44, height: 11 }));
     ({ home: () => this.home(), starter: () => this.starter(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), controls: () => this.controls() })[this.screen]();
-    if (this.msg) L.add(centerText(this, GAME_W / 2, GAME_H - 6, this.msg, PALETTE.gold));
+    if (this.msg) {
+      const m = centerText(this, GAME_W / 2, GAME_H - 7, this.msg, PALETTE.gold);
+      L.add(m);
+      backPlate(this, m, PALETTE.gold);
+    }
   }
 
-  /** One creature's card: picture, name, rarity, stats, the three attacks. */
-  private card(c: Creature, x: number, y: number, w: number, h: number, big = true): void {
+  /**
+   * A menu tile: a panel with a coloured edge, an icon, the word and a line
+   * under it.  It lights up under the pointer, dips when pressed, and is
+   * dimmed (and does nothing) when it cannot be used.
+   */
+  private tile(x: number, y: number, w: number, h: number, label: string, sub: string, col: number, icon: (g: Phaser.GameObjects.Graphics, x: number, y: number, col: number) => void, fn: () => void, disabled = false): void {
+    const L = this.layer;
+    const c = this.add.container(x, y);
+    const bg = this.add.rectangle(0, 0, w, h, disabled ? 0x14172a : 0x1c2142).setOrigin(0, 0).setStrokeStyle(1, disabled ? 0x2a2e48 : col);
+    const edge = this.add.rectangle(0, 0, 3, h, disabled ? 0x2a2e48 : col).setOrigin(0, 0);
+    const shine = this.add.rectangle(3, 0, w - 3, 1, 0xffffff, disabled ? 0.04 : 0.1).setOrigin(0, 0);
+    const g = this.add.graphics();
+    const well = disabled ? 0x2a2e48 : col;
+    g.fillStyle(0x0a0d1e, 1).fillRect(7, (h - 18) / 2, 18, 18);
+    g.lineStyle(1, well, 0.7).strokeRect(7.5, (h - 18) / 2 + 0.5, 17, 17);
+    icon(g, 16, h / 2, disabled ? PALETTE.ash : col);
+    const t1 = text(this, 30, h / 2 - 9, label, disabled ? PALETTE.ash : PALETTE.cream);
+    const t2 = text(this, 30, h / 2 + 2, sub, disabled ? 0x4a4e68 : PALETTE.fog);
+    c.add([bg, edge, shine, g, t1, t2]);
+    L.add(c);
+    if (disabled) return;
+    bg.setInteractive({ useHandCursor: true });
+    let last = -Infinity;
+    bg.on('pointerover', () => {
+      bg.setFillStyle(0x2a3060);
+      t1.setTint(PALETTE.gold);
+      audio.sfx('ui_hover');
+    });
+    bg.on('pointerout', () => {
+      bg.setFillStyle(0x1c2142);
+      t1.setTint(PALETTE.cream);
+      c.setY(y);
+    });
+    bg.on('pointerdown', () => {
+      const now = performance.now();
+      if (now - last < 250) return;
+      last = now;
+      c.setY(y + 1);
+      audio.sfx('ui_blip');
+      this.time.delayedCall(70, fn);
+    });
+  }
+
+  /** A short bar for a stat, 0..1 full, in `col`. */
+  private bar(x: number, y: number, w: number, f: number, col: number): void {
+    const g = this.add.graphics();
+    g.fillStyle(0x0a0d1e, 1).fillRect(x, y, w, 4);
+    g.fillStyle(col, 1).fillRect(x + 1, y + 1, Math.max(1, Math.round((w - 2) * Math.min(1, Math.max(0, f)))), 2);
+    this.layer.add(g);
+  }
+
+  /**
+   * One creature's card: its picture on a panel in its element's colours, its
+   * name and rarity, health and speed as bars, and the three attacks with
+   * their icons.  `active` gives it the gold edge of the one in the ring.
+   */
+  private card(c: Creature, x: number, y: number, w: number, h: number, big = true, active = false): void {
     const L = this.layer;
     const r = RARITIES[c.rarity];
-    L.add(this.add.rectangle(x, y, w, h, 0x1a1e38).setOrigin(0, 0).setStrokeStyle(1, r.col));
-    L.add(this.add.rectangle(x + 2, y + 2, w - 4, big ? 34 : 26, ELEMENTS[c.element].dark, 0.45).setOrigin(0, 0));
-    this.shown.push({ c, x: x + w / 2, y: y + (big ? 19 : 15), s: big ? 1.6 : 1.2, f: 1 });
-    let ty = y + (big ? 38 : 30);
-    L.add(text(this, x + 3, ty, c.name.toUpperCase(), PALETTE.cream));
+    const el = ELEMENTS[c.element];
+    const artH = big ? 36 : 26;
+    L.add(this.add.rectangle(x + 2, y + 2, w, h, 0x000000, 0.35).setOrigin(0, 0));
+    L.add(this.add.rectangle(x, y, w, h, 0x181c36).setOrigin(0, 0).setStrokeStyle(active ? 2 : 1, active ? PALETTE.gold : r.col));
+    // the picture: the element's dark, lighter towards the floor it stands on
+    L.add(this.add.rectangle(x + 2, y + 2, w - 4, artH, el.dark, 0.55).setOrigin(0, 0));
+    L.add(this.add.rectangle(x + 2, y + 2 + artH * 0.6, w - 4, artH * 0.4, el.col, 0.18).setOrigin(0, 0));
+    L.add(this.add.ellipse(x + w / 2, y + artH - 2, 30, 6, 0x000000, 0.3));
+    this.shown.push({ c, x: x + w / 2, y: y + (big ? 20 : 15), s: big ? 1.6 : 1.2, f: 1 });
+    // the rarity, in a chip on the picture's corner
+    const tag = text(this, x + w - 6, y + 5, r.name.split(' ')[0], r.col).setOrigin(1, 0);
+    L.add(this.add.rectangle(x + w - 3, y + 3, Math.ceil(tag.width) + 6, 11, 0x0a0d1e, 0.85).setOrigin(1, 0).setStrokeStyle(1, r.col));
+    L.add(tag);
+    let ty = y + artH + 4;
+    L.add(text(this, x + 4, ty, c.name.toUpperCase(), PALETTE.cream).setMaxWidth(w - 6));
     ty += 9;
-    L.add(text(this, x + 3, ty, `${r.name} ${ELEMENTS[c.element].name}`, r.col));
+    L.add(text(this, x + 4, ty, `${r.name} ${el.name}`, r.col));
     if (!big) return;
-    ty += 9;
-    L.add(text(this, x + 3, ty, `HP ${c.hp}  SPD ${c.speed}`, PALETTE.fog));
-    ty += 9;
-    L.add(text(this, x + 3, ty, `POWER ${c.power.toFixed(2)}`, PALETTE.fog));
     ty += 10;
+    const bw = w - 44;
+    L.add(text(this, x + 4, ty, 'HP', PALETTE.ash));
+    this.bar(x + 18, ty + 2, bw, c.hp / 320, 0x6ad86a);
+    L.add(text(this, x + w - 4, ty, String(c.hp), PALETTE.fog).setOrigin(1, 0));
+    ty += 8;
+    L.add(text(this, x + 4, ty, 'SPD', PALETTE.ash));
+    this.bar(x + 18, ty + 2, bw, c.speed / 100, 0x6ac8e8);
+    L.add(text(this, x + w - 4, ty, String(c.speed), PALETTE.fog).setOrigin(1, 0));
+    ty += 10;
+    L.add(this.add.rectangle(x + 4, ty - 2, w - 8, 1, 0x2a3050).setOrigin(0, 0));
+    const g = this.add.graphics();
+    L.add(g);
     for (const a of c.attacks) {
-      L.add(text(this, x + 3, ty, `${a.name}${a.dmg ? ' ' + a.dmg : ''}`, PALETTE.cream).setAlpha(0.75));
-      ty += 8;
+      drawAttackIcon(g, a.kind, x + 8, ty + 3, el.light);
+      const name = text(this, x + 15, ty, a.name, PALETTE.cream).setAlpha(0.85);
+      L.add(name);
+      // the damage, at the right -- where the name leaves room for it
+      if (a.dmg) {
+        const d = text(this, x + w - 4, ty, String(a.dmg), PALETTE.gold).setOrigin(1, 0);
+        if (name.x + name.width + 2 <= d.x - d.width) L.add(d);
+        else d.destroy();
+      }
+      ty += 9;
     }
   }
 
@@ -155,30 +253,57 @@ export class CreatureHub extends Phaser.Scene {
     const L = this.layer;
     const c = store.get().creatures;
     const act = activeOwned(c);
-    L.add(text(this, 8, 18, `YOUR CREATURES (${c.owned.length}/${MAX_OWNED})   WON ${c.wins}  LOST ${c.losses}`, PALETTE.fog));
+    // ---- your two, on the left
+    L.add(text(this, 8, 23, `YOUR TEAM  ${c.owned.length}/${MAX_OWNED}`, PALETTE.gold));
+    L.add(text(this, 164, 23, `W ${c.wins}`, PALETTE.mossLight).setOrigin(1, 0));
+    L.add(text(this, 196, 23, `L ${c.losses}`, 0xff8a8a).setOrigin(1, 0));
     for (let i = 0; i < MAX_OWNED; i++) {
       const o = c.owned[i];
-      const x = 8 + i * 100;
+      const x = 8 + i * 98;
+      const y = 33;
+      const w = 92;
+      const h = 116;
       if (!o) {
-        L.add(this.add.rectangle(x, 28, 94, 108, 0x1a1e38).setOrigin(0, 0).setStrokeStyle(1, 0x3a3e58));
-        L.add(centerText(this, x + 47, 82, 'EMPTY SLOT', PALETTE.ash));
+        const slot = this.add.rectangle(x, y, w, h, 0x12152a).setOrigin(0, 0).setStrokeStyle(1, 0x2a2e48);
+        L.add(slot);
+        const g = this.add.graphics();
+        g.lineStyle(1, 0x3a3e58, 1).strokeCircle(x + w / 2, y + 46, 12);
+        g.fillStyle(0x3a3e58, 1).fillRect(x + w / 2 - 5, y + 45, 11, 2).fillRect(x + w / 2 - 1, y + 41, 2, 11);
+        L.add(g);
+        L.add(centerText(this, x + w / 2, y + 70, 'EMPTY SLOT', PALETTE.ash));
+        L.add(centerText(this, x + w / 2, y + 80, 'RECRUIT TO FILL', 0x4a4e68));
         continue;
       }
       const cr = creatureById(o.id)!;
-      this.card(cr, x, 28, 94, 108);
-      if (o.uid === act?.uid) L.add(text(this, x + 3, 30, 'FIGHTING', PALETTE.gold));
-      else L.add(button(this, x + 24, 146, 'USE', () => (this.say(setActive(o.uid)), this.draw()), { width: 40, height: 11 }));
-      L.add(button(this, x + 70, 146, 'RELEASE', () => this.confirmRelease(o.uid, cr), { width: 46, height: 11 }));
+      const on = o.uid === act?.uid;
+      this.card(cr, x, y, w, h, true, on);
+      if (on) {
+        // the one that fights: a gold chip where USE would be
+        L.add(this.add.rectangle(x + 2, y + h + 4, 42, 12, 0x3a2e10).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold));
+        L.add(centerText(this, x + 23, y + h + 10, 'IN RING', PALETTE.gold));
+      } else L.add(button(this, x + 23, y + h + 10, 'USE', () => (this.say(setActive(o.uid)), this.draw()), { width: 42, height: 12 }));
+      L.add(button(this, x + w - 23, y + h + 10, 'RELEASE', () => this.confirmRelease(o.uid, cr), { width: 44, height: 12, fill: 0x2a1424, hoverFill: 0x5a2040 }));
     }
-    const bx = 262;
+    // ---- the menu, on the right
+    const mx = 204;
+    const mw = GAME_W - mx - 8;
+    L.add(this.add.rectangle(mx - 4, 21, mw + 8, GAME_H - 34, 0x0e1124, 0.9).setOrigin(0, 0).setStrokeStyle(1, 0x2a3050));
+    L.add(text(this, mx, 25, 'MENU', PALETTE.ash));
     const busy = !!c.pending;
-    L.add(button(this, bx, 40, 'BATTLE', () => this.go('map'), { width: 100, height: 14, disabled: !act }));
-    L.add(text(this, 214, 50, `${BATTLE_COST} IN, WIN ${BATTLE_WIN}`, PALETTE.ash));
-    L.add(button(this, bx, 74, 'RECRUIT', () => this.go(busy ? 'pack' : 'recruit'), { width: 100, height: 14 }));
-    L.add(text(this, 214, 84, c.owned.length >= MAX_OWNED ? 'RELEASE ONE FIRST' : 'PACKS 50/150/300', PALETTE.ash));
-    L.add(button(this, bx, 108, 'CONTROLS', () => this.go('controls'), { width: 100, height: 14 }));
-    L.add(text(this, 214, 118, c.handed === 'left' ? 'LEFT-HANDED' : 'RIGHT-HANDED', PALETTE.ash));
-    if (!act) L.add(text(this, 214, 134, 'NO CREATURE: RECRUIT', PALETTE.gold));
+    this.tile(mx, 35, mw, 30, 'BATTLE', act ? `${BATTLE_COST} IN - WIN ${BATTLE_WIN}` : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => this.go('map'), !act);
+    const full = c.owned.length >= MAX_OWNED && !busy;
+    this.tile(mx, 69, mw, 30, 'RECRUIT', busy ? 'PACK WAITING' : full ? 'TEAM IS FULL' : `FROM ${TIERS[0].cost} TOK`, 0x8a6aff, (g, x, y, col) => {
+      g.fillStyle(0x14100c, 1).fillRect(x - 6, y - 5, 9, 12).fillRect(x - 2, y - 7, 9, 12);
+      g.fillStyle(col, 0.6).fillRect(x - 5, y - 4, 7, 10);
+      g.fillStyle(col, 1).fillRect(x - 1, y - 6, 7, 10);
+      g.fillStyle(0x14100c, 1).fillRect(x + 2, y - 3, 1, 3).fillRect(x + 2, y + 1, 1, 1);
+    }, () => this.go(busy ? 'pack' : 'recruit'));
+    this.tile(mx, 103, mw, 30, 'CONTROLS', c.handed === 'left' ? 'LEFT-HANDED' : 'RIGHT-HANDED', 0x4ad0c0, (g, x, y, col) => {
+      g.fillStyle(col, 1).fillRect(x - 7, y - 3, 14, 7).fillRect(x - 8, y - 1, 16, 5);
+      g.fillStyle(0x0a0d1e, 1).fillRect(x - 5, y, 3, 1).fillRect(x - 4, y - 1, 1, 3).fillRect(x + 3, y - 1, 1, 1).fillRect(x + 5, y + 1, 1, 1);
+    }, () => this.go('controls'));
+    L.add(text(this, mx, 140, `WIN ${BOSS_AFTER} IN A PLACE`, PALETTE.ash));
+    L.add(text(this, mx, 149, 'TO MEET ITS BOSS.', PALETTE.ash));
   }
 
   private confirmRelease(uid: number, cr: Creature): void {

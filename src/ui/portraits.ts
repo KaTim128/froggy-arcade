@@ -31,18 +31,22 @@ export interface Speaker {
   painter?: (x: number, y: number, h: number) => FroggyPainter;
 }
 
-/** The barber: white tunic, slick hair, a waxed handlebar moustache. */
+/**
+ * The barber: white tunic, slick hair, a waxed handlebar moustache -- thick
+ * under the nose, sweeping out and curling UP at both ends, past his cheeks.
+ * (Waxed a warm brown, with lighter tips, so the curls read against his hair.)
+ */
 export const BARBER_LOOK: Look = {
   cols: {
     C: 0xf2f2ee, c: 0xffffff, D: 0xc8c8c0, w: 0xf2f2ee,
     r: 0x1e1814, S: 0xd8a880, s: 0xb88860, G: 0xd8a880, g: 0xb88860,
-    M: 0x2a1a10, J: 0x2a2a30, j: 0x1e1e24, K: 0x141010, W: 0x2a2020, T: 0x141010,
+    M: 0x6a4026, m: 0x9a6a3a, J: 0x2a2a30, j: 0x1e1e24, K: 0x141010, W: 0x2a2020, T: 0x141010,
   },
   head: [
     '............',
     '...rrrrrr...',
     '..rrrrrrrrr.',
-    '..rSSSSSSr..',
+    'm.rSSSSSSr.m',
     '.MrSSSSSSsM.',
     '..MMMMMMMM..',
     '...SSSSSs...',

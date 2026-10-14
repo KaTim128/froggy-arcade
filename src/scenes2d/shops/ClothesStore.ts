@@ -3,8 +3,9 @@
  * on mannequins along the back, trousers folded on a table, shoes on a low
  * shelf, scarves on hooks on the wall, hats on a stand.  Walk up to one and
  * [E]: you, wearing it, and BUY & WEAR -- or WEAR, if it is already yours.
- * The fitting room at the end changes you into anything you own; the mirror
- * shows you what you look like now.
+ * The fitting room in the middle of the shop changes you into anything you
+ * own; the mirror shows you what you look like now.  The assistant is at the
+ * till just inside the doors.
  */
 
 import Phaser from 'phaser';
@@ -16,11 +17,17 @@ import { GAME_H } from '../../render/pixelScaler';
 import { Player, depthFor, type Look } from '../../art/player';
 import { COSMETICS, cosmeticById, lookFor, type CosmeticDef } from '../../game/catalog';
 import { buyCosmetic, record, wear } from '../../game/life';
-import { WalkRoom, type Fixture } from '../rooms/WalkRoom';
+import { COUNTER_RIGHT, WalkRoom, type Fixture } from '../rooms/WalkRoom';
+import { ASSISTANT_LOOK } from '../../ui/portraits';
 
 const FLOOR = 100;
 const BACK_ROW = FLOOR + 22;
 const FRONT_ROW = FLOOR + 52;
+/** The shop's width; the fitting room stands in the middle of it. */
+const SHOP_W = 460;
+const FIT_X = SHOP_W / 2;
+const FIT_W = 46;
+const MIRROR_X = 335;
 
 /** A bald, pale shop dummy, wearing `top`. */
 function mannequin(top: CosmeticDef): Look {
@@ -33,6 +40,7 @@ function mannequin(top: CosmeticDef): Look {
 
 export class ClothesStore extends WalkRoom {
   private spots: Array<{ c: CosmeticDef; x: number; y: number; depth: number; wall?: boolean }> = [];
+  private counter: Fixture | null = null;
 
   constructor() {
     super('ClothesStore');
@@ -55,7 +63,7 @@ export class ClothesStore extends WalkRoom {
   }
 
   protected paintRoom(): void {
-    this.worldW = 420;
+    this.worldW = SHOP_W;
     this.bounds.width = this.worldW - 20;
     this.spots = [];
     const W = this.worldW;
@@ -76,8 +84,9 @@ export class ClothesStore extends WalkRoom {
     text(this, W / 2, 36, 'CLOTHING AND ACCESSORIES', 0x8a5a70).setOrigin(0.5, 0).setDepth(1);
 
     // ---- tops, on mannequins on little round stands
+    // (either side of the fitting room: three before it, the rest after)
     this.forSale('top').forEach((c, i) => {
-      const x = 62 + i * 32;
+      const x = i < 3 ? COUNTER_RIGHT + 12 + i * 30 : FIT_X + FIT_W / 2 + 16 + (i - 3) * 30;
       const s = this.add.graphics().setDepth(depthFor(BACK_ROW) - 0.0001);
       s.fillStyle(0x14100c, 1).fillEllipse(x, BACK_ROW, 16, 5);
       s.fillStyle(0xd8d0c8, 1).fillEllipse(x, BACK_ROW - 1, 14, 3);
@@ -88,7 +97,7 @@ export class ClothesStore extends WalkRoom {
 
     // ---- trousers, folded on a table
     const legs = this.forSale('legs');
-    const tx = 74;
+    const tx = 172;
     const t = this.add.graphics().setDepth(depthFor(FRONT_ROW));
     t.fillStyle(0x14100c, 1).fillRect(tx - 34, FRONT_ROW - 12, 68, 12);
     t.fillStyle(0xf0ece4, 1).fillRect(tx - 33, FRONT_ROW - 11, 66, 4);
@@ -105,7 +114,7 @@ export class ClothesStore extends WalkRoom {
 
     // ---- shoes, on a low shelf
     const shoes = this.forSale('shoes');
-    const sx = 168;
+    const sx = 262;
     const sh = this.add.graphics().setDepth(depthFor(FRONT_ROW));
     sh.fillStyle(0x14100c, 1).fillRect(sx - 22, FRONT_ROW - 6, 44, 6);
     sh.fillStyle(0x8a6a48, 1).fillRect(sx - 21, FRONT_ROW - 5, 42, 4);
@@ -123,7 +132,7 @@ export class ClothesStore extends WalkRoom {
 
     // ---- hats, on a stand
     const hats = this.forSale('hat');
-    const hx = 232;
+    const hx = 334;
     const hs = this.add.graphics().setDepth(depthFor(FRONT_ROW));
     hs.fillStyle(0x14100c, 1).fillRect(hx - 1, FRONT_ROW - 30, 3, 30).fillRect(hx - 8, FRONT_ROW - 2, 17, 2);
     hats.forEach((c, i) => {
@@ -139,7 +148,7 @@ export class ClothesStore extends WalkRoom {
 
     // ---- scarves, on hooks on the wall
     this.forSale('scarf').forEach((c, i) => {
-      const x = 268 + i * 22;
+      const x = MIRROR_X + 36 + i * 22;
       const sc = this.add.graphics().setDepth(2);
       sc.fillStyle(0x3a3a3a, 1).fillRect(x - 1, 52, 3, 2);
       sc.fillStyle(0x14100c, 1).fillRect(x - 4, 53, 9, 28);
@@ -149,27 +158,46 @@ export class ClothesStore extends WalkRoom {
       this.spots.push({ c, x, y: FLOOR, depth: 0, wall: true });
     });
 
-    // ---- the mirror, and the fitting room
+    // ---- the mirror
     const m = this.add.graphics().setDepth(2);
-    m.fillStyle(0x6a4a2a, 1).fillRect(330, 30, 26, 56);
-    m.fillStyle(0xcfe4ee, 1).fillRect(332, 32, 22, 52);
-    m.fillStyle(0xffffff, 0.5).fillRect(336, 36, 3, 40);
-    const fr = this.add.graphics().setDepth(depthFor(BACK_ROW));
-    fr.fillStyle(0x14100c, 1).fillRect(372, 52, 40, BACK_ROW - 52);
-    fr.fillStyle(0x7b2a5a, 1).fillRect(373, 53, 38, BACK_ROW - 54);
-    for (let k = 0; k < 38; k += 4) fr.fillStyle(0x5a1a40, 1).fillRect(373 + k, 53, 1, BACK_ROW - 54);
-    fr.fillStyle(0xd8a838, 1).fillRect(372, 50, 40, 2);
-    text(this, 392, 42, 'FITTING', 0x7b2a5a).setOrigin(0.5, 0).setDepth(2);
+    m.fillStyle(0x6a4a2a, 1).fillRect(MIRROR_X - 13, 30, 26, 56);
+    m.fillStyle(0xcfe4ee, 1).fillRect(MIRROR_X - 11, 32, 22, 52);
+    m.fillStyle(0xffffff, 0.5).fillRect(MIRROR_X - 7, 36, 3, 40);
 
-    // the assistant, by the till
-    new Player(this, 318, BACK_ROW - 1, false, {
-      cols: { C: 0x2a2a3a, c: 0x3a3a52, D: 0x1a1a28, w: 0xf0e0e8, r: 0x1e1814, S: 0xa87a58, s: 0x86603e, G: 0xa87a58, g: 0x86603e, B: 0x1e1814, b: 0x1e1814 },
-      head: ['...rrrrrr...', '..rrrrrrrr..', '.rrrrrrrrrr.', '.rrSSSSSSrr.', '.rrSSSSSSsr.', '..rSSSSSsr..', '...SSSSSs...', '....SSSs....', '.....ss.....'],
+    // ---- the fitting room, in the middle of the shop: a booth against the
+    // back wall, its curtain, and its name on the pelmet
+    const fl = FIT_X - FIT_W / 2;
+    const fr = this.add.graphics().setDepth(depthFor(BACK_ROW));
+    fr.fillStyle(0x000000, 0.18).fillRect(fl + 1, BACK_ROW, FIT_W, 3);
+    fr.fillStyle(0x14100c, 1).fillRect(fl, 50, FIT_W, BACK_ROW - 50);
+    fr.fillStyle(0x7b2a5a, 1).fillRect(fl + 1, 61, FIT_W - 2, BACK_ROW - 62);
+    for (let k = 0; k < FIT_W - 2; k += 4) fr.fillStyle(0x5a1a40, 1).fillRect(fl + 1 + k, 61, 1, BACK_ROW - 62);
+    // the curtain drawn back a little at one side, the bench inside showing
+    fr.fillStyle(0x3a2030, 1).fillRect(fl + FIT_W - 9, 61, 8, BACK_ROW - 62);
+    fr.fillStyle(0x8a6a48, 1).fillRect(fl + FIT_W - 8, BACK_ROW - 14, 7, 3);
+    fr.fillStyle(0x9a3a6a, 1).fillRect(fl + FIT_W - 12, 61, 3, BACK_ROW - 62);
+    // the pelmet, with the name on it
+    fr.fillStyle(0x2a1430, 1).fillRect(fl + 1, 51, FIT_W - 2, 10);
+    fr.fillStyle(0xd8a838, 1).fillRect(fl, 50, FIT_W, 1).fillRect(fl, 60, FIT_W, 1);
+    text(this, FIT_X, 52, 'FITTING', 0xff8ac0).setOrigin(0.5, 0).setDepth(depthFor(BACK_ROW) + 0.0001);
+
+    // ---- the till, just inside the doors, and the assistant behind it
+    this.counter = this.paintCounter({
+      look: ASSISTANT_LOOK,
+      top: 0xf0ece4,
+      front: 0x2a2430,
+      trim: 0xc0306a,
+      who: 'assistant',
+      line: '"TRY ANYTHING ON YOU LIKE. THE FITTING ROOM IS IN THE MIDDLE, BY THE MIRROR."',
+      dress: (g, x, top) => {
+        // the till, and a folded jumper waiting to be bagged
+        g.fillStyle(0x14100c, 1).fillRect(x - 4, top - 7, 12, 7);
+        g.fillStyle(0x3a3a3a, 1).fillRect(x - 3, top - 6, 10, 6);
+        g.fillStyle(0x7ad0a0, 1).fillRect(x - 1, top - 5, 6, 2);
+        g.fillStyle(0x14100c, 1).fillRect(x - 18, top - 4, 10, 4);
+        g.fillStyle(0xc84a4a, 1).fillRect(x - 17, top - 3, 8, 3);
+      },
     });
-    const till = this.add.graphics().setDepth(depthFor(BACK_ROW + 1));
-    till.fillStyle(0x14100c, 1).fillRect(304, BACK_ROW - 14, 30, 15);
-    till.fillStyle(0xf0ece4, 1).fillRect(305, BACK_ROW - 13, 28, 13);
-    till.fillStyle(0x3a3a3a, 1).fillRect(314, BACK_ROW - 20, 10, 6);
     this.surfaces(0xe8c8d8, 0xbeb6ba);
   }
 
@@ -196,9 +224,9 @@ export class ClothesStore extends WalkRoom {
         hit: s.wall ? { x: s.x - 6, y: 50, w: 12, h: 34 } : { x: s.x - 8, y: s.y - (s.depth ? 28 : 22), w: 16, h: s.depth ? 30 : 24 },
       });
     }
-    out.push({ x: 343, y: this.floorTop, w: 22, depth: 0, wall: true, label: () => '[E] MIRROR', use: () => this.mirror(), hit: { x: 330, y: 30, w: 26, h: 56 } });
-    out.push({ x: 392, y: BACK_ROW, w: 40, depth: 6, label: () => '[E] FITTING ROOM', use: () => this.fitting() });
-    out.push({ x: 318, y: BACK_ROW + 1, w: 30, depth: 6, label: () => '[E] TALK', use: () => this.talkAs('assistant', '"TRY ANYTHING ON YOU LIKE. THE FITTING ROOM IS AT THE END."') });
+    out.push({ x: MIRROR_X, y: this.floorTop, w: 22, depth: 0, wall: true, label: () => '[E] MIRROR', use: () => this.mirror(), hit: { x: MIRROR_X - 13, y: 30, w: 26, h: 56 } });
+    out.push({ x: FIT_X, y: BACK_ROW, w: FIT_W, depth: 6, label: () => '[E] FITTING ROOM', use: () => this.fitting(), hit: { x: FIT_X - FIT_W / 2, y: 50, w: FIT_W, h: BACK_ROW - 48 } });
+    if (this.counter) out.push(this.counter);
     return out;
   }
 

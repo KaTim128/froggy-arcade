@@ -13,12 +13,13 @@ import { audio } from '../../core/audio';
 import { store } from '../../core/state';
 import { text } from '../../core/ui';
 import { GAME_H } from '../../render/pixelScaler';
-import { Player, depthFor } from '../../art/player';
+import { depthFor } from '../../art/player';
 import { drawFurniture } from '../../art/furnitureArt';
 import { FURNITURE, type FurnitureDef } from '../../game/catalog';
 import { buyFurniture, record } from '../../game/life';
 import { VERB_LABEL, useOf } from '../../game/furnitureUse';
-import { FLOOR_TOP, WalkRoom, type Fixture } from '../rooms/WalkRoom';
+import { COUNTER_RIGHT, FLOOR_TOP, WalkRoom, type Fixture } from '../rooms/WalkRoom';
+import { KEEPER_LOOK } from '../../ui/portraits';
 import { Piece } from '../rooms/piece';
 
 const BACK_ROW = FLOOR_TOP + 24;
@@ -48,7 +49,8 @@ export class FurnitureStore extends WalkRoom {
   private layout(): Array<{ def: FurnitureDef; x: number; y: number }> {
     const forSale = FURNITURE.filter((f) => !f.reward && f.price > 0);
     const out: Array<{ def: FurnitureDef; x: number; y: number }> = [];
-    let wx = 70;
+    // (everything starts past the counter by the door)
+    let wx = COUNTER_RIGHT + 4;
     for (const f of forSale.filter((x) => x.wall)) {
       out.push({ def: f, x: wx + f.w / 2, y: WALL_FOOT });
       wx += f.w + 26;
@@ -58,7 +60,8 @@ export class FurnitureStore extends WalkRoom {
     const back = floor.filter((f) => f.h >= 14 && f.cat !== 'rug');
     const front = floor.filter((f) => !back.includes(f));
     for (const [row, y] of [[back, BACK_ROW], [front, FRONT_ROW]] as const) {
-      let x = 56;
+      // the back row starts past the counter; the front row runs in front of it
+      let x = y === BACK_ROW ? COUNTER_RIGHT : 56;
       for (const f of row) {
         // (room for the price card under the narrow ones too)
         const w = Math.max(f.w, 26);
@@ -97,18 +100,22 @@ export class FurnitureStore extends WalkRoom {
     text(this, W / 2, 26, 'HOME AND HEARTH', 0x7a3a22).setOrigin(0.5, 0).setDepth(1);
     text(this, W / 2, 36, 'FURNITURE FOR EVERY ROOM', 0x9a7a58).setOrigin(0.5, 0).setDepth(1);
 
-    // the counter at the far end, and the woman who runs the place behind it
-    const cx = W - 38;
-    const keeper = new Player(this, cx, FLOOR_TOP + 22, false, {
-      cols: { C: 0x8a3a5a, c: 0xa04a6a, D: 0x6a2a44, r: 0x6a4a3a, S: 0xe8c8a8, s: 0xc8a080, G: 0xe8c8a8, g: 0xc8a080, w: 0xf0e0c8, J: 0x3a3a48, j: 0x2a2a38, B: 0x6a4a3a, b: 0x6a4a3a },
-      head: ['....rrrr....', '...rrrrrr...', '..rrrrrrrr..', '..rSSSSSSr..', '.rrSSSSSSsr.', '.rrSSSSSsrr.', '..rSSSSSsr..', '....SSSs....', '.....ss.....'],
+    // the counter, just inside the doors, and the woman who runs the place behind it
+    this.counter = this.paintCounter({
+      look: KEEPER_LOOK,
+      top: 0x9a6a3a,
+      front: 0x7a4a28,
+      trim: 0x5a3418,
+      who: 'keeper',
+      line: '"HAVE A LOOK ROUND, LOVE. ANYTHING YOU BUY GOES STRAIGHT TO YOUR PLACE."',
+      dress: (g, x, top) => {
+        // a brass bell and the order book
+        g.fillStyle(0x14100c, 1).fillRect(x - 15, top - 4, 8, 4);
+        g.fillStyle(0xd8a838, 1).fillRect(x - 14, top - 3, 6, 3);
+        g.fillStyle(0x14100c, 1).fillRect(x + 6, top - 2, 12, 2);
+        g.fillStyle(0xf0e8d0, 1).fillRect(x + 7, top - 2, 10, 1);
+      },
     });
-    keeper.sprite.setScale(-1, 1);
-    const cg = this.add.graphics().setDepth(depthFor(FLOOR_TOP + 23));
-    cg.fillStyle(0x14100c, 1).fillRect(cx - 24, FLOOR_TOP + 8, 48, 18);
-    cg.fillStyle(0x7a4a28, 1).fillRect(cx - 23, FLOOR_TOP + 9, 46, 16);
-    cg.fillStyle(0x9a6a3a, 1).fillRect(cx - 23, FLOOR_TOP + 9, 46, 3);
-    cg.fillStyle(0xd8a838, 1).fillRect(cx - 4, FLOOR_TOP + 5, 8, 4);
 
     for (const p of all) {
       const piece = new Piece(this, p.def, p.x, p.y);
@@ -124,17 +131,10 @@ export class FurnitureStore extends WalkRoom {
   }
 
   private layoutCache: Array<{ def: FurnitureDef; x: number; y: number }> = [];
+  private counter: Fixture | null = null;
 
   protected fixtures(): Fixture[] {
-    const cx = this.worldW - 38;
-    const counter: Fixture = {
-      x: cx,
-      y: FLOOR_TOP + 26,
-      w: 48,
-      depth: 18,
-      label: () => '[E] TALK',
-      use: () => this.talkAs('keeper', '"HAVE A LOOK ROUND, LOVE. ANYTHING YOU BUY GOES STRAIGHT TO YOUR PLACE."'),
-    };
+    const counter = this.counter!;
     return [counter, ...this.layoutCache.map(({ def, x, y }) => ({
       x,
       y,
