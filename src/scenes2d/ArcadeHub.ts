@@ -23,7 +23,7 @@ import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
 import { paintArcadeDressing, paintChangeMachine, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
-import { Cabinet, CAB_W, CAB_H } from '../art/cabinet';
+import { Cabinet, CAB_W, CAB_H, CAB_FOOT } from '../art/cabinet';
 import { TokenHud } from '../ui/hud';
 import {
   ANNEX_DOOR,
@@ -351,7 +351,7 @@ export class ArcadeHub extends Phaser.Scene {
     // Each machine stands on the floor: walked round, played from the front.
     // The counter is in the list too, for the walk-to path; walking into it
     // is still kept out by `keepOutOfCounter`.
-    this.spots = new Map(this.cabinets.map((c) => [c, machineSpot(c.def.x, c.def.y, CAB_W)]));
+    this.spots = new Map(this.cabinets.map((c) => [c, machineSpot(c.def.x, c.def.y, CAB_W, CAB_FOOT)]));
     this.solids = [...this.spots.values()].map((s) => s.solid!);
     const counterBox: Box = { x: COUNTER.x - COUNTER_EDGE + 3, y: 0, w: COUNTER.w + 2 * COUNTER_EDGE - 6, h: COUNTER_STAND };
     this.walker = new Walker(() => this.bounds, () => [...this.solids, counterBox]);

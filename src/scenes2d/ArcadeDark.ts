@@ -20,7 +20,7 @@ import { store } from '../core/state';
 import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
 import { paintChangeMachine, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
-import { Cabinet, CAB_W } from '../art/cabinet';
+import { Cabinet, CAB_W, CAB_FOOT } from '../art/cabinet';
 import { Player } from '../art/player';
 import {
   cabinetsIn,
@@ -85,7 +85,7 @@ export class ArcadeDark extends Phaser.Scene {
     // night or it is nothing: same six machines, same places.
     for (const def of cabinetsIn('hub')) new Cabinet(this, def, true);
     // the machines are as solid in the dark as they were in the day
-    this.solids = cabinetsIn('hub').map((def) => machineSpot(def.x, def.y, CAB_W).solid!);
+    this.solids = cabinetsIn('hub').map((def) => machineSpot(def.x, def.y, CAB_W, CAB_FOOT).solid!);
 
     // the STAFF door, on the wall behind the counter's right-hand end
     this.staffDoor = this.add

@@ -7411,14 +7411,8 @@ function startStage(n: number): void {
   // ---- FIVE CHESTS, DROPPING IN.  They fall from above the frame and land
   // in a row, which is the one moment in this game that says "loot".
   for (let i = 0; i < 5; i++) {
-    const box = S().add.container(CHEST_X[i], -40);
-    box.add(S().add.rectangle(0, 0, CHEST_W, CHEST_H, 0x6b4a2f).setStrokeStyle(1, PALETTE.gold));
-    box.add(S().add.rectangle(0, -CHEST_H / 2 + 7, CHEST_W - 2, 12, 0x8a6138));
-    box.add(S().add.rectangle(0, -CHEST_H / 2 + 13, CHEST_W, 2, 0x3f2a18));
-    box.add(S().add.rectangle(0, 2, 8, 9, PALETTE.gold));
-    // No quality tag.  Five identical boxes is the point: a chest that
-    // advertises what grade it is has already been opened.
-    box.add(centerText(S(), 0, CHEST_H / 2 - 6, '?', PALETTE.gold));
+    const box = buildChest();
+    box.setPosition(CHEST_X[i], -40);
     box.setSize(CHEST_W, CHEST_H).setInteractive({ useHandCursor: true });
     box.on('pointerdown', () => {
       if (phase !== 'pick') return;
@@ -7498,11 +7492,155 @@ function redrawPreview(): void {
   previewC.add(art.root);
 }
 
+/**
+ * ---- A CHEST WORTH OPENING.
+ *
+ * It used to be four rectangles.  Now it is a banded wooden box: planks with
+ * their grain and their seams, two iron bands with nail heads, iron caps on
+ * the corners, a lock plate with a keyhole, and a lid on hinges that is its
+ * own thing (`lid`), so it can swing open about its hinge line instead of
+ * sliding up the screen.
+ *
+ * Three children carry names rather than list positions, because the rest of
+ * the file needs them: `frame` (the outline the highlight thickens), `lid`
+ * (what opens) and `tag` (the question mark on the front).
+ */
+function buildChest(): Phaser.GameObjects.Container {
+  const sc = S();
+  const box = sc.add.container(0, 0);
+  const hw = CHEST_W / 2;
+  const top = -CHEST_H / 2;
+  // the lid's hinge line: everything above it swings, everything below stays
+  const hinge = top + 13;
+  const WOOD = 0x6b4a2f;
+  const WOOD_HI = 0x8a6138;
+  const WOOD_LO = 0x4a3220;
+  const IRON = 0x5a5e68;
+  const IRON_HI = 0x8a8f9a;
+
+  // ---- THE BODY.  Planks, their seams, the shadow in the base.
+  const body = sc.add.graphics();
+  body.fillStyle(0x2a1c10, 1).fillRect(-hw - 1, hinge - 1, CHEST_W + 2, CHEST_H - 13 + 2);
+  body.fillStyle(WOOD, 1).fillRect(-hw, hinge, CHEST_W, CHEST_H - 13);
+  for (let x = -hw + 6; x < hw; x += 9) {
+    body.fillStyle(WOOD_LO, 0.8).fillRect(x, hinge + 1, 1, CHEST_H - 15);
+    body.fillStyle(WOOD_HI, 0.35).fillRect(x + 1, hinge + 1, 1, CHEST_H - 15);
+  }
+  body.fillStyle(0x2a1c10, 0.45).fillRect(-hw, CHEST_H / 2 - 4, CHEST_W, 4);
+  // iron bands down the front, with nail heads
+  for (const bx of [-hw + 7, hw - 10]) {
+    body.fillStyle(IRON, 1).fillRect(bx, hinge, 3, CHEST_H - 13);
+    body.fillStyle(IRON_HI, 1).fillRect(bx, hinge, 1, CHEST_H - 13);
+    for (let k = 0; k < 2; k++) body.fillStyle(IRON_HI, 1).fillRect(bx + 1, hinge + 3 + k * 9, 1, 1);
+  }
+  // corner caps
+  for (const cx of [-hw, hw - 4]) {
+    body.fillStyle(IRON, 1).fillRect(cx, CHEST_H / 2 - 5, 4, 5);
+    body.fillStyle(IRON_HI, 1).fillRect(cx, CHEST_H / 2 - 5, 4, 1);
+  }
+  // ---- THE FRAME.  Kept as a rectangle because the highlight restyles it.
+  const frame = sc.add.rectangle(0, 0, CHEST_W, CHEST_H).setStrokeStyle(1, PALETTE.gold).setName('frame');
+
+  // ---- THE LID, on its hinge.  The container sits ON the hinge line and the
+  // art hangs above it, so tweening the container's angle swings the lid back
+  // on its hinges instead of sliding it up the picture.
+  const lid = sc.add.container(0, hinge).setName('lid');
+  const lg = sc.add.graphics();
+  lg.fillStyle(0x2a1c10, 1).fillRect(-hw - 1, -14, CHEST_W + 2, 15);
+  lg.fillStyle(WOOD_HI, 1).fillRect(-hw, -13, CHEST_W, 13);
+  // the curved top: two lighter courses, and a dark one under the lip
+  lg.fillStyle(0x9c7142, 1).fillRect(-hw + 2, -13, CHEST_W - 4, 4);
+  lg.fillStyle(0xb98a52, 1).fillRect(-hw + 5, -13, CHEST_W - 10, 2);
+  lg.fillStyle(WOOD_LO, 1).fillRect(-hw, -2, CHEST_W, 2);
+  for (const bx of [-hw + 7, hw - 10]) {
+    lg.fillStyle(IRON, 1).fillRect(bx, -13, 3, 13);
+    lg.fillStyle(IRON_HI, 1).fillRect(bx, -13, 1, 13);
+  }
+  // the hinges themselves, at the back of the lid
+  for (const hx of [-hw + 14, hw - 17]) {
+    lg.fillStyle(IRON, 1).fillRect(hx, -4, 4, 5);
+    lg.fillStyle(IRON_HI, 1).fillRect(hx, -4, 4, 1);
+  }
+  lid.add(lg);
+
+  // ---- THE LOCK, on the body, under the lid's lip: plate, hasp and keyhole.
+  const lock = sc.add.graphics();
+  lock.fillStyle(0x3a2a14, 1).fillRect(-5, hinge - 3, 10, 12);
+  lock.fillStyle(PALETTE.gold, 1).fillRect(-4, hinge - 2, 8, 10);
+  lock.fillStyle(0xfff0b0, 1).fillRect(-4, hinge - 2, 8, 1);
+  lock.fillStyle(0x7a5a24, 1).fillRect(-4, hinge + 7, 8, 1);
+  lock.fillStyle(0x2a1e08, 1).fillRect(-1, hinge + 1, 2, 2).fillRect(-1, hinge + 3, 1, 2);
+
+  const tag = centerText(sc, 0, CHEST_H / 2 - 6, '?', PALETTE.gold).setName('tag');
+  box.add([body, lid, lock, frame, tag]);
+  return box;
+}
+
+/**
+ * ---- OPENING ONE.
+ *
+ * The latch jolts, the box shudders, a seam of light opens along the lid,
+ * the lid swings back on its hinges, and what is inside throws light and
+ * sparks up out of the box.  It happens where the chest already stands, and
+ * nothing of it reaches the card above -- the reveal must not cover the
+ * reveal.
+ */
+function openChest(box: Phaser.GameObjects.Container): void {
+  const sc = S();
+  const lid = box.getByName('lid') as Phaser.GameObjects.Container | null;
+  const tag = box.getByName('tag') as Phaser.GameObjects.BitmapText | null;
+  tag?.setText('');
+  const hingeY = CHEST_Y - CHEST_H / 2 + 13;
+  // 1 -- the latch, and the shudder
+  audio.sfx('ui_blip', 0.5);
+  sc.tweens.add({ targets: box, x: box.x + 1.5, duration: 45, yoyo: true, repeat: 2, ease: 'Sine.easeInOut' });
+  // 2 -- the seam of light along the lid, widening
+  const seam = sc.add.rectangle(box.x, hingeY - 1, CHEST_W - 6, 1, 0xfff0b0).setDepth(13);
+  layer?.add(seam);
+  sc.tweens.add({ targets: seam, scaleY: 4, alpha: 0.2, duration: 260, delay: 150, ease: 'Quad.easeOut', onComplete: () => seam.destroy() });
+  // 3 -- and it swings, with a little overshoot and a settle
+  sc.time.delayedCall(190, () => {
+    audio.sfx('vault', 0.5);
+    if (lid) {
+      // It LEANS BACK, it does not spin: the chest is seen face on, so the lid
+      // tipping away from you is a short tilt and a squash in height, not a
+      // quarter turn that throws it off to one side.
+      sc.tweens.add({ targets: lid, angle: -22, scaleY: 0.5, duration: 420, ease: 'Back.easeOut' });
+      sc.tweens.add({ targets: lid, y: lid.y - 3, duration: 420, ease: 'Sine.easeOut' });
+    }
+    // the light out of the box, and the rays off it
+    const glow = sc.add.ellipse(box.x, hingeY + 2, 10, 5, 0xfff0b0, 0.9).setDepth(12);
+    layer?.add(glow);
+    sc.tweens.add({ targets: glow, scaleX: 4.2, scaleY: 3.4, alpha: 0, duration: 620, ease: 'Quad.easeOut', onComplete: () => glow.destroy() });
+    for (let r = -1; r <= 1; r++) {
+      const ray = sc.add.rectangle(box.x + r * 9, hingeY - 6, 2, 14, 0xfff0b0, 0.55).setDepth(12).setAngle(r * 14);
+      layer?.add(ray);
+      sc.tweens.add({ targets: ray, scaleY: 2.2, alpha: 0, duration: 520, delay: 60, onComplete: () => ray.destroy() });
+    }
+    // 4 -- and the sparks, up and out, falling back
+    for (let k = 0; k < 9; k++) {
+      const sp = sc.add.rectangle(box.x + (Math.random() - 0.5) * CHEST_W * 0.7, hingeY, 2, 2, k % 3 ? PALETTE.gold : 0xfff4d0).setDepth(14);
+      layer?.add(sp);
+      sc.tweens.add({
+        targets: sp,
+        y: hingeY - 10 - Math.random() * 16,
+        x: sp.x + (Math.random() - 0.5) * 22,
+        alpha: 0,
+        angle: Math.random() * 180,
+        duration: 420 + Math.random() * 280,
+        ease: 'Quad.easeOut',
+        onComplete: () => sp.destroy(),
+      });
+    }
+    sc.cameras.main.shake(70, 0.003);
+  });
+}
+
 function highlight(i: number, quiet = false): void {
   hi = i;
   chests.forEach((b, k) => {
-    const frame = b.list[0] as Phaser.GameObjects.Rectangle;
-    frame.setStrokeStyle(k === i ? 2 : 1, k === i ? PALETTE.gold : PALETTE.steel);
+    const frame = b.getByName('frame') as Phaser.GameObjects.Rectangle | null;
+    frame?.setStrokeStyle(k === i ? 2 : 1, k === i ? PALETTE.gold : PALETTE.steel);
     b.setScale(k === i ? 1.08 : 1);
   });
   if (!quiet) audio.sfx('ui_hover', 0.4);
@@ -7642,10 +7780,7 @@ function take(i: number): void {
     // put the open lid across the bottom of the card, over the one line that
     // says what the weapon actually does -- so the reveal covered the reveal.
     S().tweens.add({ targets: box, scaleX: 1.06, scaleY: 1.06, duration: 220, ease: 'Back.easeOut' });
-    const lid = box.list[1] as Phaser.GameObjects.Rectangle | undefined;
-    if (lid) S().tweens.add({ targets: lid, y: lid.y - 7, angle: -16, duration: 280, ease: 'Quad.easeOut' });
-    const tag = box.list[4] as Phaser.GameObjects.BitmapText | undefined;
-    tag?.setText('');
+    openChest(box);
   }
 
   // ---- AND ONLY NOW DOES IT SAY WHAT IT WAS.
@@ -7655,7 +7790,7 @@ function take(i: number): void {
   // The NEXT button exists only from this moment.  It is the player's signal
   // that they have read the card, so it cannot be there while the card is
   // still a row of shut boxes -- and there is no timer racing them for it.
-  S().time.delayedCall(320, () => {
+  S().time.delayedCall(560, () => {
     if (phase !== 'reveal') return;
     revealHint?.setText('');
     // 168, not 171.  At 171 a fourteen-high button ran to 178 of 180 and sat

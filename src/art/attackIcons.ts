@@ -76,5 +76,45 @@ export function drawAttackIcon(g: Phaser.GameObjects.Graphics, kind: AttackKind,
       px(-4, 2, 4, 1);
       px(2, -1, 2, 3);
       break;
+    case 'arc':
+      // a lobbed shot: a rising curve with the shell at the top of it
+      px(-5, 3, 1, 2);
+      px(-4, 1, 1, 2);
+      px(-2, -1, 1, 2);
+      px(1, -2, 1, 2);
+      px(3, 0, 1, 2);
+      px(4, 2, 1, 3);
+      g.fillStyle(col, 1).fillCircle(x - 0.5, y - 3, 1.6);
+      break;
+    case 'snare':
+      // a net: a square of crossed threads
+      g.lineStyle(1, col, 1);
+      g.strokeRect(x - 4, y - 4, 8, 8);
+      g.lineBetween(x - 4, y, x + 4, y);
+      g.lineBetween(x, y - 4, x, y + 4);
+      px(-4, -4, 1, 1, 0xffffff);
+      px(3, 3, 1, 1, 0xffffff);
+      break;
+    case 'aura':
+      // a figure with rings coming off it
+      px(-1, -2, 2, 6);
+      px(-3, -1, 1, 3);
+      px(2, -1, 1, 3);
+      g.lineStyle(1, col, 0.8).strokeCircle(x, y, 5);
+      break;
+    case 'mend':
+      // a cross
+      px(-1, -4, 2, 9);
+      px(-4, -1, 9, 2);
+      break;
+    case 'wall':
+      // courses of brick
+      px(-5, -3, 10, 2);
+      px(-5, 0, 10, 2);
+      px(-5, 3, 10, 2);
+      px(-1, -3, 1, 2, 0x000000);
+      px(2, 0, 1, 2, 0x000000);
+      px(-3, 3, 1, 2, 0x000000);
+      break;
   }
 }

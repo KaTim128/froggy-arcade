@@ -58,8 +58,6 @@ type Spot = 'door' | 'man' | 'alley' | 'beg' | null;
 const BEG_X = 104;
 /** And the line it is laid along: back from the walk line, at the wall. */
 const BEG_Y = KERB_Y - 9;
-/** More tokens than this, walking out of the arcade after the night, and it is evening. */
-export const EVENING_TOKENS = 600;
 
 export class ExteriorDay extends Phaser.Scene {
   private player!: Player;
@@ -114,17 +112,21 @@ export class ExteriorDay extends Phaser.Scene {
     // out of the night with the key in a pocket, however you got here
     ensureKeyInPocket();
 
-    // ---- WHAT TIME IT IS.  After the night in the arcade it stays sunny --
-    // nothing forces the evening -- until the player has more than six
-    // hundred tokens and walks out of the doors, and then it is evening.
-    // Midnight is the man's doing (see PrizeExchange): the arcade is shut,
-    // he is gone, and the road west to the hotel is the only way on.
+    // ---- WHAT TIME IT IS.
+    //
+    // NOTHING OUT HERE MOVES THE STORY'S CLOCK ON.  Walking out of the doors
+    // with a full pocket used to force the evening, which meant a player who
+    // had done well found the sky changed under them for no reason they
+    // could see, and the hour they had been keeping went with it.  The life
+    // clock (game/life) owns the time and the light now, all day, every day.
+    //
+    // The ONE thing that turns the world dark is the man in the suit paying
+    // out: when he hands over enough for a room (ROOM_MONEY) he calls it a
+    // day, and putting his table away is what sets midnight (see
+    // PrizeExchange `afterSale` / `close`).  Carrying prizes worth that much
+    // does nothing; selling them for it is the whole of it.
     const st0 = store.get();
-    if (this.cameFrom === 'arcade' && st0.froggyGone && st0.timeOfDay === 'day' && st0.tokens > EVENING_TOKENS) {
-      store.patch({ timeOfDay: 'evening' });
-      store.flush();
-    }
-    const time = store.get().timeOfDay;
+    const time = st0.timeOfDay;
     this.time0 = time;
 
     fadeIn(this);

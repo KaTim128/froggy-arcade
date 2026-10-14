@@ -19,6 +19,36 @@ export const CAB_W = 22;
 export const CAB_H = 30;
 
 /**
+ * ---- WHERE THE MACHINE ENDS, FOR THE FLOOR AND FOR THE EYE.
+ *
+ * Two different jobs, from one number, so they can never disagree:
+ *
+ *  - COLLISION.  `CAB_FOOT` is how many pixels of floor the cabinet stands
+ *    on: the invisible solid box every room already builds with
+ *    `machineSpot`.  You cannot stand in it from any side.
+ *  - DEPTH.  `cabinetSortY` is the floor line the whole cabinet is sorted
+ *    on, on the player's own scale (`depthFor`, which takes the avatar's
+ *    FEET -- the ground position -- never its head or its middle).
+ *
+ * The sort line is the TOP OF THE FOOTPRINT, which is the forty per cent of
+ * the cabinet's height it has always been.  That is the point: the only
+ * floor above the line is floor the footprint has already taken away, so
+ * there is no longer a band of carpet -- it was four pixels deep -- where
+ * the player stood behind the machine and was drawn in front of it.  Walk
+ * up past the line and you are behind the machine and drawn behind it; walk
+ * back down and the footprint stops you before you can be in front of it on
+ * screen while still being behind it on the floor.
+ *
+ * (The half pixel breaks the tie: a player standing on the very top edge of
+ * the footprint sorts BEHIND the machine, not in a coin-flip with it.)
+ */
+export const CAB_DEPTH_FRAC = 0.4;
+export const CAB_FOOT = Math.round(CAB_H * CAB_DEPTH_FRAC);
+export function cabinetSortY(base: number): number {
+  return base - CAB_FOOT + 0.5;
+}
+
+/**
  * The screen a motif is drawn on, as offsets from the motif's own centre.
  * Anything outside this is drawn over the bezel or over the room behind it,
  * which reads as a glitch rather than as art.
@@ -271,11 +301,11 @@ export class Cabinet {
     this.bounds = new Phaser.Geom.Rectangle(x - (CAB_W + 4) / 2, y - CAB_H - 1, CAB_W + 4, CAB_H + 2);
 
     // ONE DEPTH FOR THE WHOLE CABINET, on the player's own scale (depthFor),
-    // taken at FOUR TENTHS OF ITS HEIGHT: walk up past that line on a machine
-    // and it is drawn in front of you, so you are going behind it; below it you
-    // are in front of it.  It sat under every depth the player can have, so the
-    // player was drawn over the machine whichever side of it they were on.
-    const d = depthFor(y - CAB_H * 0.4);
+    // taken at FOUR TENTHS OF ITS HEIGHT -- which is also the top edge of the
+    // footprint the room keeps the player out of (see `cabinetSortY`): walk up
+    // past that line and it is drawn in front of you, so you are going behind
+    // it; below it you are in front of it, and there is no floor in between.
+    const d = depthFor(cabinetSortY(y));
 
     // ---- the box itself.  Drawn as one Graphics so the whole machine is a
     // single object to sort, with the same finish the player has: a dark

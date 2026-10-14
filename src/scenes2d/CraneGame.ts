@@ -373,7 +373,9 @@ export class CraneGame extends Phaser.Scene {
     // been there; hidden until then (the action button takes you the first time).
     // Clear of QUIT and the title plate, and the only view button on touch too:
     // a second one in the touch pad sat on top of DROP.
-    this.sideBtn = button(this, 246, 10, 'SIDE VIEW', () => this.viewButton(), { width: 52, height: 13 }).setDepth(70);
+    // wide enough for FRONT VIEW, which is the longer of the two words it
+    // carries: at 52 the F and the W hung over the ends of the button.
+    this.sideBtn = button(this, 244, 10, 'SIDE VIEW', () => this.viewButton(), { width: 64, height: 13 }).setDepth(70);
 
     const kb = this.input.keyboard;
     const bind = (names: string[]) => (kb ? names.map((n) => kb.addKey(n)) : []);
@@ -1413,14 +1415,40 @@ export class CraneGame extends Phaser.Scene {
     this.syncButtons();
   }
 
-  /** The pile, end on: every toy at its depth and height, back to front. */
+  /**
+   * ---- THE PILE, END ON.
+   *
+   * The side view looks down the machine's width: left to right is DEPTH,
+   * and the whole width of the glass is squashed into the one picture.  A
+   * toy's height up the heap cannot be carried over from the front view --
+   * what it is resting on there is very often at another x, which is off to
+   * one side of this picture entirely, and the toy came out hanging in mid
+   * air over nothing with its support nowhere to be seen.
+   *
+   * So the heap is PACKED AGAIN for this view, in depth only: lowest first,
+   * each toy set down on the highest thing already standing where it would
+   * land.  Every toy keeps its depth -- which is the one thing this view
+   * exists to show -- and the pile is a pile, with nothing floating and
+   * nothing here that is not in the glass.
+   */
   private fillSide(): void {
     this.sideToys.removeAll(true);
     this.sideHeld = null;
-    for (const t of this.toys) {
+    const placed: Array<{ x: number; half: number; top: number }> = [];
+    // lowest up: a toy can only rest on something already on the heap
+    for (const t of [...this.toys].sort((a, b) => a.lift - b.lift)) {
       const k = scaleAt(t.z) * sideK(t.z);
       const src = t.art.list[1] as Phaser.GameObjects.Image;
-      const img = this.add.image(sideX(t.z), SIDE.floor - t.lift * k, src.texture.key).setOrigin(0.5, 1).setScale((k * 0.95) / ((src.getData('drawn') as number) || 1));
+      const x = sideX(t.z);
+      const img = this.add.image(x, SIDE.floor, src.texture.key).setOrigin(0.5, 1).setScale((k * 0.95) / ((src.getData('drawn') as number) || 1));
+      const half = img.displayWidth / 2;
+      // the top of whatever it lands on, if anything
+      let base = 0;
+      for (const q of placed) if (Math.abs(q.x - x) < (q.half + half) * 0.8) base = Math.max(base, q.top);
+      // it settles into the gap a little, the way a heap of capsules does
+      if (base > 0) base = Math.max(0, base - img.displayHeight * 0.3);
+      img.setY(SIDE.floor - base);
+      placed.push({ x, half, top: base + img.displayHeight });
       img.setData('toy', t);
       this.sideToys.add(img);
     }

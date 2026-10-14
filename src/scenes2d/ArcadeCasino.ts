@@ -26,7 +26,7 @@ import { fadeIn, fadeToScene, text } from '../core/ui';
 import { openTalkPanel } from '../ui/talkPanel';
 import { paintCasinoDressing, paintHubRoom, paintOpening, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
-import { Cabinet, CAB_W } from '../art/cabinet';
+import { Cabinet, CAB_W, CAB_FOOT } from '../art/cabinet';
 import { BlackjackTable, TABLE_H, TABLE_W } from '../art/blackjackTable';
 import { PrizeWheel } from '../art/prizeWheel';
 import { TokenHud } from '../ui/hud';
@@ -127,7 +127,7 @@ export class ArcadeCasino extends Phaser.Scene {
             }
           : cab instanceof PrizeWheel
             ? machineSpot(x, y, 10, 5)
-            : machineSpot(x, y, CAB_W);
+            : machineSpot(x, y, CAB_W, CAB_FOOT);
       this.spots.set(cab, spot);
       if (!(cab instanceof BlackjackTable)) this.solids.push(spot.solid!);
     }

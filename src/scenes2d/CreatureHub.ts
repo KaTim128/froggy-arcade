@@ -18,11 +18,12 @@ import { button, centerText, confirmDialog, fadeToScene, text } from '../core/ui
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
 import { drawAttackIcon } from '../art/attackIcons';
+import { attackCard } from '../game/attackInfo';
 import { backPlate } from '../ui/plate';
 import { drawFrogToken } from '../ui/hud';
 import { xpProgress } from '../game/creatureLevel';
 import {
-  BATTLE_COST, BATTLE_WIN, BIOMES, BOSS_AFTER, DEFEAT_PENALTY, ELEMENTS, MAX_OWNED, RARITIES, STARTERS, TIERS, creatureById, tierOdds, type Creature,
+  BATTLE_COST, BATTLE_WIN, BIOMES, BODIES, BOSS_AFTER, ELEMENTS, MAX_OWNED, RARITIES, STARTERS, TIERS, creatureById, tierOdds, type Attack, type Creature,
 } from '../game/creatures';
 import { activeOwned, ownedCreature, bossOpen, claimStarter, needsRecovery, openPack, pickCard, release, retreat, setActive, setHanded } from '../game/creatureClash';
 
@@ -240,8 +241,57 @@ export class CreatureHub extends Phaser.Scene {
         if (name.x + name.width + 2 <= d.x - d.width) L.add(d);
         else d.destroy();
       }
+      // TAP A MOVE TO READ IT.  Every line of what it does is on the card
+      // that opens: what kind of attack it is, what it can hit, how far it
+      // reaches, its damage, its cooldown, what its element adds on a hit,
+      // and what it is FOR.  Nobody should have to buy a battle to find out.
+      const row = this.add.rectangle(x + 4, ty - 1, w - 8, 9, 0xffffff, 0.001).setOrigin(0, 0);
+      row.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.showMove(c, a));
+      L.add(row);
       ty += 9;
     }
+    // only where the card has the room: on the narrow ones the moves run
+    // to the bottom edge and the hint would be printed over the card below
+    if (ty + 9 <= y + h) L.add(text(this, x + 4, ty + 1, 'TAP A MOVE TO READ IT', 0x6a7090).setMaxWidth(w - 8));
+  }
+
+  /**
+   * One move, said in full.  It is a panel over whatever screen you were on;
+   * anything outside it, or the button, puts it away again.
+   */
+  private showMove(c: Creature, a: Attack): void {
+    const L = this.layer;
+    const el = ELEMENTS[c.element];
+    const body = BODIES[c.body];
+    const lines = attackCard(a, c.element);
+    const w = 200;
+    const h = 42 + lines.length * 10 + 22;
+    const x = (GAME_W - w) / 2;
+    const y = (GAME_H - h) / 2;
+    const close = (): void => this.draw();
+    const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.72).setOrigin(0, 0).setDepth(600);
+    veil.setInteractive().on('pointerdown', close);
+    L.add(veil);
+    const panel = this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, el.col).setDepth(601);
+    L.add(panel);
+    const put = (o: Phaser.GameObjects.GameObject & { setDepth: (d: number) => unknown }): void => {
+      o.setDepth(602);
+      L.add(o);
+    };
+    const g = this.add.graphics();
+    drawAttackIcon(g, a.kind, x + 13, y + 13, el.light);
+    put(g);
+    put(text(this, x + 24, y + 8, a.name, PALETTE.gold));
+    put(text(this, x + w - 6, y + 8, `${c.name.toUpperCase()}`, PALETTE.fog).setOrigin(1, 0));
+    put(this.add.rectangle(x + 6, y + 22, w - 12, 1, 0x2a3050).setOrigin(0, 0));
+    lines.forEach((ln, i) => put(text(this, x + 8, y + 27 + i * 10, ln, i === 0 ? PALETTE.cream : PALETTE.fog).setMaxWidth(w - 16)));
+    let ly = y + 29 + lines.length * 10;
+    put(text(this, x + 8, ly, `GOOD AT: ${body.strong}`, PALETTE.mossLight).setMaxWidth(w - 16));
+    ly += 9;
+    put(text(this, x + 8, ly, `WEAK: ${body.weak}`, 0xff9a9a).setMaxWidth(w - 16));
+    const b = button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 });
+    b.setDepth(602);
+    L.add(b);
   }
 
   // ----------------------------------------------------------------- screens
@@ -468,8 +518,21 @@ export class CreatureHub extends Phaser.Scene {
     const open = bossOpen(b.id, c);
     L.add(button(this, px + 59, 110, open ? `BOSS  ${BATTLE_COST} TOK` : `BOSS AFTER ${BOSS_AFTER} WINS`, () => this.fight(b.id, true), { width: 108, height: 13, disabled: !open || ledger.balance() < BATTLE_COST }));
     L.add(text(this, px + 4, 124, `WIN: +${BATTLE_WIN} TOKENS`, PALETTE.mossLight));
-    L.add(text(this, px + 4, 133, 'LOSE: YOUR CREATURE', PALETTE.ash));
-    L.add(text(this, px + 4, 142, `FAINTS AND -${DEFEAT_PENALTY} TOKEN`, PALETTE.ash));
+    L.add(text(this, px + 4, 133, 'LOSE: YOUR CREATURE FAINTS', PALETTE.ash));
+    L.add(text(this, px + 4, 141, 'NO TOKENS LOST', PALETTE.ash));
+    // ---- AND SOMEWHERE TO PRACTISE.  Free, in this world's own arena, on a
+    // dummy that cannot hurt you: try the moves, learn the cover, walk about.
+    L.add(button(this, px + 59, 154, 'TRAINING - FREE', () => this.train(b.id), { width: 108, height: 12, fill: 0x14303a, hoverFill: 0x1e5a68 }));
+  }
+
+  /** The training ground: no stake, no clock, nothing to lose. */
+  private train(biome: string): void {
+    if (!activeOwned()) {
+      this.say({ ok: false, msg: 'YOU NEED A CREATURE FIRST.' });
+      this.draw();
+      return;
+    }
+    this.scene.start('CreatureArena', { biome, training: true, from: this.from });
   }
 
   private fight(biome: string, boss: boolean): void {
