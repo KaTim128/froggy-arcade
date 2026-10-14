@@ -36,8 +36,8 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 import { ensureKeyInPocket, heldItems } from '../game/inventory';
 import { Pedestrians } from '../art/pedestrians';
-import { BEG_MS, begNextMs, canBeg, clock, collectBegging, sleep, sleepPlace, startBegging, stopBegging, visit } from '../game/life';
-import { nightfallOnce, onLightTurn } from '../game/dayNight';
+import { SUNRISE_HOUR, twelveHour, BEG_MS, begNextMs, canBeg, clock, collectBegging, sleep, sleepPlace, startBegging, stopBegging, visit } from '../game/life';
+import { nightfallOnce, onPhaseTurn } from '../game/dayNight';
 import { speak } from '../ui/talkPanel';
 import { backPlate } from '../ui/plate';
 
@@ -78,7 +78,8 @@ export class ExteriorDay extends Phaser.Scene {
   /** It has just turned midnight: the thoughts play, and nobody moves till they have. */
   private nightfall = false;
 
-  init(data: { fromArcade?: boolean; fromWest?: boolean; fromAlley?: boolean; fromEast?: boolean; nightfall?: boolean; atX?: number; woke?: string } = {}): void {
+  init(data: { fromArcade?: boolean; fromWest?: boolean; fromAlley?: boolean; fromEast?: boolean; nightfall?: boolean; atX?: number; woke?: string; opening?: boolean } = {}): void {
+    this.opening = data.opening === true;
     this.cameFrom = data.fromArcade ? 'arcade' : data.fromWest ? 'west' : data.fromAlley ? 'alley' : data.fromEast ? 'east' : 'other';
     this.nightfall = data.nightfall === true;
     this.atX = data.atX ?? null;
@@ -91,6 +92,10 @@ export class ExteriorDay extends Phaser.Scene {
   private woke: string | null = null;
   /** The life clock's night (not the story's midnight): the forecourt in the dark. */
   private lifeDark = false;
+  /** Sunrise has just come: the shutters go up as you watch. */
+  private opening = false;
+  /** Down over the doors at night (after the night in the arcade, when it keeps hours). */
+  private shutter: Phaser.GameObjects.Container | null = null;
 
   create(): void {
     this.talking = null;
@@ -119,9 +124,17 @@ export class ExteriorDay extends Phaser.Scene {
     // the clock's night (twelve hours of it, as long as the day): the
     // forecourt at dusk colours under a dark sky, the lamps and the arcade's
     // lit front glowing in it.  (The story's midnight paints its own.)
-    this.lifeDark = time !== 'midnight' && clock().dark;
-    const refs = paintExterior(this, { night: time === 'midnight', day: time === 'day' && !this.lifeDark, darkSky: this.lifeDark });
+    // the sky follows the clock: morning, evening (the sun going down), night.
+    // (The story's evening keeps its dusk; the story's midnight paints its own.)
+    const phase = clock().phase;
+    this.lifeDark = time !== 'midnight' && phase === 'night';
+    const sunny = time === 'day' && phase === 'morning';
+    const refs = paintExterior(this, { night: time === 'midnight', day: sunny, darkSky: this.lifeDark });
     if (this.lifeDark) this.paintNight(refs.doorX);
+    // after the night in the arcade it keeps hours: shuttered all night, and
+    // the shutters roll up at sunrise
+    this.shutter = null;
+    if (time !== 'midnight' && st0.froggyGone && (this.lifeDark || this.opening || this.woke)) this.shutter = this.paintShutter(refs.doorRect);
     startSignFlicker(this, refs);
     this.doorX = refs.doorX;
     this.errand = null;
@@ -199,14 +212,15 @@ export class ExteriorDay extends Phaser.Scene {
     if (time === 'midnight' && this.nightfall) this.midnightThoughts();
     if (time !== 'midnight') {
       // dusk or dawn while you are out here: the forecourt repaints for it
-      onLightTurn(
+      onPhaseTurn(
         this,
-        () => {
+        (p) => {
           this.locked = true;
-          fadeToScene(this, 'ExteriorDay', { atX: Math.round(this.player.x) });
+          fadeToScene(this, 'ExteriorDay', { atX: Math.round(this.player.x), opening: p === 'morning' });
         },
         () => !this.locked && !this.busy() && !this.begging,
       );
+      if (this.opening && !this.woke) this.raiseShutter();
       if (this.woke) this.wakeUp(this.woke);
       else {
         const line = nightfallOnce();
@@ -380,6 +394,11 @@ export class ExteriorDay extends Phaser.Scene {
         this.say('Shut. The lights are off inside, all of them.');
         return;
       }
+      if (this.shutter) {
+        audio.sfx('door_rattle', 0.7);
+        this.say(`THE SHUTTERS ARE DOWN. THE ARCADE OPENS AT ${twelveHour(SUNRISE_HOUR)}.`);
+        return;
+      }
       this.locked = true;
       audio.sfx('door_open');
       fadeToScene(this, 'ArcadeHub');
@@ -515,6 +534,7 @@ export class ExteriorDay extends Phaser.Scene {
       this.cup?.setVisible(true);
       this.locked = false;
       this.say(msg);
+      this.raiseShutter();
     });
   }
 
@@ -544,6 +564,53 @@ export class ExteriorDay extends Phaser.Scene {
     // a few windows lit in the buildings behind
     const w = this.add.graphics().setDepth(701);
     for (let i = 0; i < 9; i++) w.fillStyle(0xf0d070, 0.55).fillRect(12 + ((i * 71) % 290), 40 + ((i * 29) % 20), 2, 2);
+  }
+
+  /**
+   * The roller shutter over the doors: steel slats in a box under the sign,
+   * a padlocked bottom rail, and OPENS 7:00 AM stencilled on it.
+   */
+  private paintShutter(door: { x: number; y: number; w: number; h: number }): Phaser.GameObjects.Container {
+    const x = door.x - 3;
+    const w = door.w + 6;
+    const top = door.y - 4;
+    const h = door.h + 4;
+    const g = this.add.graphics();
+    g.fillStyle(0x14100c, 1).fillRect(0, 0, w, h);
+    g.fillStyle(0x8a929e, 1).fillRect(1, 0, w - 2, h - 1);
+    for (let y = 2; y < h - 3; y += 3) {
+      g.fillStyle(0x5a626e, 1).fillRect(1, y, w - 2, 1);
+      g.fillStyle(0xb8c0ca, 0.6).fillRect(1, y + 1, w - 2, 1);
+    }
+    g.fillStyle(0x3a3f48, 1).fillRect(0, h - 4, w, 4);
+    g.fillStyle(0xd8a838, 1).fillRect(w / 2 - 2, h - 4, 4, 3);
+    const label = centerText(this, w / 2, h / 2 - 2, 'OPENS', 0x2a2e36);
+    const label2 = centerText(this, w / 2, h / 2 + 7, twelveHour(SUNRISE_HOUR).replace(':00', ''), 0x2a2e36);
+    // the box it rolls up into
+    const box = this.add.rectangle(x - 1, top - 4, w + 2, 5, 0x3a3f48).setOrigin(0, 0).setStrokeStyle(1, 0x14100c).setDepth(46);
+    const c = this.add.container(x, top, [g, label, label2]).setDepth(45);
+    c.setData('h', h);
+    c.once(Phaser.GameObjects.Events.DESTROY, () => box.destroy());
+    return c;
+  }
+
+  /** Sunrise: the shutter rattles up into its box, and the doors are open. */
+  private raiseShutter(): void {
+    const sh = this.shutter;
+    if (!sh) return;
+    audio.sfx('door_rattle', 0.6);
+    this.tweens.add({
+      targets: sh,
+      scaleY: 0.04,
+      delay: 500,
+      duration: 1800,
+      ease: 'Quad.InOut',
+      onComplete: () => {
+        sh.destroy();
+        if (this.shutter === sh) this.shutter = null;
+        this.say(`${twelveHour(SUNRISE_HOUR)}. SUNRISE - THE ARCADE IS OPEN.`);
+      },
+    });
   }
 
   /** The man in black says something, in his own box. */

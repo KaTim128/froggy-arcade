@@ -172,7 +172,7 @@ export class FurnitureStore extends WalkRoom {
         disabled: store.get().cash < def.price,
       },
     ];
-    if (verb) {
+    if (verb && verb !== 'wash') {
       buttons.push({
         label: verb === 'sit' ? 'TRY IT' : verb === 'lie' ? 'TRY IT' : verb === 'play' ? 'PLAY' : piece.on ? 'TURN OFF' : 'TURN ON',
         fn: () => {

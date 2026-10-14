@@ -11,7 +11,7 @@ import type { Look } from '../art/player';
 
 // ------------------------------------------------------------- furniture
 
-export type FurnitureCat = 'painting' | 'poster' | 'table' | 'chair' | 'sofa' | 'tv' | 'radio' | 'lamp' | 'rug' | 'storage' | 'decor' | 'bed';
+export type FurnitureCat = 'painting' | 'poster' | 'table' | 'chair' | 'sofa' | 'tv' | 'radio' | 'lamp' | 'rug' | 'storage' | 'decor' | 'bed' | 'bath';
 
 export interface FurnitureDef {
   id: string;
@@ -65,7 +65,11 @@ export const FURNITURE: FurnitureDef[] = [
   F('fur_cabinet', 'CABINET', 'storage', 55, 20, 20, false, 0x5a3a28, 0x8a6a48, 'FOR YOUR THINGS'),
   F('fur_plant', 'POT PLANT', 'decor', 9, 10, 16, false, 0x3a8a3a, 0xa86a40, 'GREEN'),
   F('fur_mattress', 'MATTRESS', 'bed', 20, 40, 6, false, 0xe8e0c8, 0x9a9480, 'BETTER THAN THE FLOOR'),
-  F('fur_bed', 'PROPER BED', 'bed', 180, 44, 14, false, 0x7b2a3a, 0xe8e0c8, 'SLEEP LIKE A KING'),
+  F('fur_bed', 'SINGLE BED', 'bed', 120, 32, 13, false, 0x3a5a8a, 0xe8e0c8, 'A SMALL BED, ALL YOURS'),
+  // the flat comes without a bathroom fitted: these are bought and put in
+  F('fur_toilet', 'TOILET', 'bath', 60, 12, 16, false, 0xf2f2ee, 0xc8d0d8, 'A FLAT NEEDS ONE'),
+  F('fur_sink', 'WASH BASIN', 'bath', 45, 14, 18, false, 0xf2f2ee, 0x9aa8b4, 'HOT AND COLD'),
+  F('fur_bathtub', 'BATHTUB', 'bath', 150, 40, 14, false, 0xf2f2ee, 0x8ac0e0, 'A LONG HOT SOAK'),
   // reward-only
   F('fur_trophy', 'ARCADE TROPHY', 'decor', 0, 10, 14, false, 0xd8a838, 0x8a6a28, 'EARNED, NOT BOUGHT', true),
   F('fur_frog_statue', 'FROG STATUE', 'decor', 0, 14, 18, false, 0x5aa85f, 0x2f6b36, 'EARNED, NOT BOUGHT', true),

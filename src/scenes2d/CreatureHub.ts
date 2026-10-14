@@ -19,6 +19,7 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
 import { drawAttackIcon } from '../art/attackIcons';
 import { backPlate } from '../ui/plate';
+import { drawFrogToken } from '../ui/hud';
 import { xpProgress } from '../game/creatureLevel';
 import {
   BATTLE_COST, BATTLE_WIN, BIOMES, BOSS_AFTER, DEFEAT_PENALTY, ELEMENTS, MAX_OWNED, RARITIES, STARTERS, TIERS, creatureById, tierOdds, type Creature,
@@ -111,14 +112,11 @@ export class CreatureHub extends Phaser.Scene {
     L.add(this.add.rectangle(0, 15, GAME_W, 1, PALETTE.neon, 0.8).setOrigin(0, 0));
     L.add(this.add.rectangle(0, 16, GAME_W, 1, PALETTE.neon, 0.2).setOrigin(0, 0));
     L.add(text(this, 8, 4, 'CREATURE CLASH', PALETTE.gold));
-    const tok = `${ledger.balance()} TOK`;
-    const chipW = tok.length * 5 + 16;
+    const tok = `${ledger.balance()}`;
+    const chipW = tok.length * 6 + 20;
     L.add(this.add.rectangle(96, 2, chipW, 11, 0x14182e).setOrigin(0, 0).setStrokeStyle(1, 0x2a5a3a));
-    const coin = this.add.graphics();
-    coin.fillStyle(0x14100c, 1).fillCircle(102, 7.5, 3.5);
-    coin.fillStyle(PALETTE.gold, 1).fillCircle(102, 7.5, 2.5);
-    L.add(coin);
-    L.add(text(this, 108, 4, tok, PALETTE.mossLight));
+    L.add(drawFrogToken(this.add.graphics()).setPosition(103, 7.5));
+    L.add(text(this, 111, 4, tok, PALETTE.mossLight));
     if (this.screen !== 'pack') L.add(button(this, GAME_W - 26, 8, this.screen === 'home' || this.screen === 'starter' ? 'LEAVE' : 'BACK', () => (this.screen === 'home' || this.screen === 'starter' ? this.leave() : this.go('home')), { width: 44, height: 11 }));
     ({ home: () => this.home(), starter: () => this.starter(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), controls: () => this.controls() })[this.screen]();
     if (this.msg) {

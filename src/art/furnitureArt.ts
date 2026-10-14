@@ -102,6 +102,34 @@ export function drawFurniture(g: Phaser.GameObjects.Graphics, f: FurnitureDef, x
       block(g, fx(1, 9), y - h, 9, Math.max(3, h - 3), 0xf0ece0);
       break;
     }
+    case 'bath': {
+      if (f.id === 'fur_toilet') {
+        // the cistern against the wall, the bowl in front, the seat
+        block(g, fx(1, 8), T, 8, 7, a);
+        block(g, fx(4, 2), T + 1, 2, 1, b);
+        block(g, L + 1, T + 8, w - 2, 5, a);
+        block(g, L + 2, T + 7, w - 4, 2, b);
+        block(g, L + 3, T + 13, w - 6, 3, shade(a, 0.85));
+        break;
+      }
+      if (f.id === 'fur_sink') {
+        // a basin on a pedestal, the tap and a little mirror over it
+        block(g, L + 3, T, w - 6, 5, b);
+        block(g, L, T + 6, w, 4, a);
+        block(g, L + 2, T + 7, w - 4, 1, b);
+        block(g, x - 2, T + 10, 4, h - 10, a);
+        g.fillStyle(0xb8b8c0, 1).fillRect(x - 1, T + 5, 2, 2);
+        break;
+      }
+      // the bath: a long white tub on feet, the water, the taps at one end
+      block(g, L, T + 3, w, h - 5, a);
+      g.fillStyle(b, 1).fillRect(L + 2, T + 4, w - 4, 3);
+      g.fillStyle(0xffffff, 0.5).fillRect(L + 4, T + 4, 6, 1);
+      block(g, fx(2), y - 2, 2, 2, 0xb8b8c0);
+      block(g, fx(w - 4), y - 2, 2, 2, 0xb8b8c0);
+      g.fillStyle(0xb8b8c0, 1).fillRect(fx(w - 4, 2), T, 2, 4);
+      break;
+    }
     case 'decor':
     default: {
       if (f.id === 'fur_clock') {

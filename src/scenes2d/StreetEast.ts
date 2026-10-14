@@ -21,7 +21,7 @@ import { Player } from '../art/player';
 import { Pedestrians } from '../art/pedestrians';
 import { froggyLayer } from '../render/froggyLayer';
 import { SHOP_HOURS, clock, shopsOpen, visit } from '../game/life';
-import { nightfallOnce, onLightTurn } from '../game/dayNight';
+import { nightfallOnce, onPhaseTurn } from '../game/dayNight';
 import { backPlate } from '../ui/plate';
 import { FRONT_TOP, paintShopfront, paintStreet, type ShopfrontOpts } from '../art/shopfront';
 
@@ -158,9 +158,9 @@ export class StreetEast extends Phaser.Scene {
     }
     this.events.on('shop-closed', () => (this.locked = false));
     text(this, 4, WALK_Y + 4, '<', PALETTE.cream).setDepth(800).setAlpha(0.7);
-    // dusk or dawn while you are out here: the street, its lights and its
+    // morning, evening or night coming while you are out here: the street, its lights and its
     // shop signs repaint for the new hour, round you where you stand
-    onLightTurn(
+    onPhaseTurn(
       this,
       () => {
         this.locked = true;
@@ -208,7 +208,7 @@ export class StreetEast extends Phaser.Scene {
   /** The arcade's street, and the shops along it built the way it is. */
   private paint(dark: boolean): void {
     const c = clock();
-    const mood = { day: !dark && c.hour < 18, night: dark };
+    const mood = { day: c.phase === 'morning', night: dark };
     paintStreet(this, WORLD_W, mood);
     const shut = !shopsOpen(c);
     // the gaps between the buildings, in shadow

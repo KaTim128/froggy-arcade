@@ -12,7 +12,7 @@ import { canEnter, SCENES } from './routes';
 import { evaluateBroke } from './broke';
 import { ledger } from './ledger';
 import { audio } from './audio';
-import { DAY_SECONDS, clock } from '../game/life';
+import { DAY_SECONDS, SUNRISE_HOUR, clock } from '../game/life';
 
 declare const __DEV__: boolean;
 
@@ -149,11 +149,11 @@ function applyLaunchParams(g: Phaser.Game): void {
   }, 350);
 }
 
-/** The life clock to `hour` of today's game day (the day runs from 08:00). */
+/** The life clock to `hour` of today's game day (the day runs from sunrise, 7:00 AM). */
 function setHour(hour: number): void {
   if (!Number.isFinite(hour)) return;
   const day = clock().day;
-  const into = (((hour - 8) % 24) + 24) % 24;
+  const into = (((hour - SUNRISE_HOUR) % 24) + 24) % 24;
   store.patch({ life: { ...store.get().life, t: day * DAY_SECONDS + (into / 24) * DAY_SECONDS } } as never);
   store.flush();
 }

@@ -17,7 +17,31 @@ import { clock, rentInDays, takeNotice } from '../game/life';
 export const LOW_TOKEN_THRESHOLD = 3;
 
 /** Left edge of the label, clear of the coin (within the token plate). */
-const LABEL_X = 15;
+const LABEL_X = 16;
+
+/**
+ * A FROGGY TOKEN: a gold coin with a raised rim, and on its face Froggy
+ * himself -- the green head, the two big eyes on top -- so the count beside
+ * it needs no word to say what it is.  Drawn centred on (0, 0); `low` turns
+ * the rim to ember when the purse is nearly empty.
+ */
+export function drawFrogToken(g: Phaser.GameObjects.Graphics, low = false): Phaser.GameObjects.Graphics {
+  g.clear();
+  const rim = low ? PALETTE.ember : PALETTE.gold;
+  g.fillStyle(0x14100c, 1).fillCircle(0, 0, 6);
+  g.fillStyle(rim, 1).fillCircle(0, 0, 5.2);
+  g.fillStyle(low ? 0x8a3a1a : 0xa8781e, 1).fillCircle(0, 0, 4.2);
+  // Froggy: the head, the eyes on top of it, the smile
+  g.fillStyle(0x3a8a3e, 1).fillEllipse(0, 1, 6.4, 4.4);
+  g.fillStyle(0x5aa85f, 1).fillEllipse(0, 0.6, 5.6, 3.6);
+  g.fillStyle(0x5aa85f, 1).fillCircle(-1.8, -1.6, 1.5).fillCircle(1.8, -1.6, 1.5);
+  g.fillStyle(0xffffff, 1).fillRect(-2.5, -2.3, 1, 1).fillRect(1.5, -2.3, 1, 1);
+  g.fillStyle(0x14100c, 1).fillRect(-2, -2, 1, 1).fillRect(2, -2, 1, 1);
+  g.fillStyle(0x24492a, 1).fillRect(-1.5, 1.5, 3, 0.8);
+  // the shine on the rim
+  g.fillStyle(0xffffff, 0.55).fillRect(-3, -4, 2, 1);
+  return g;
+}
 
 export class TokenHud {
   private scene: Phaser.Scene;
@@ -25,7 +49,8 @@ export class TokenHud {
   private cashLabel: Phaser.GameObjects.BitmapText;
   private tokens: Phaser.GameObjects.Container;
   private plate: Phaser.GameObjects.Rectangle;
-  private coin: Phaser.GameObjects.Arc;
+  private coin: Phaser.GameObjects.Graphics;
+  private coinLow = false;
   private label: Phaser.GameObjects.BitmapText;
   private container: Phaser.GameObjects.Container;
   private unsub: () => void;
@@ -48,7 +73,7 @@ export class TokenHud {
     this.cashLabel = text(scene, 5, 3, '', PALETTE.mossLight);
 
     this.plate = scene.add.rectangle(0, 0, 54, 14, PALETTE.black, 0.75).setOrigin(0, 0);
-    this.coin = scene.add.circle(7, 7, 4, PALETTE.gold);
+    this.coin = drawFrogToken(scene.add.graphics()).setPosition(8, 7);
     this.label = text(scene, LABEL_X, 3, '', PALETTE.cream);
     this.tokens = scene.add.container(0, 0, [this.plate, this.coin, this.label]);
 
@@ -104,14 +129,18 @@ export class TokenHud {
   }
 
   private refresh(v: number): void {
-    this.label.setText(`${v} TOK`);
+    // just the number: the Froggy token beside it says what it counts
+    this.label.setText(`${v}`);
     // The plate tracks the label rather than assuming a width: a four-digit
-    // balance is reachable, and the old fixed 54px clipped the K off ' TOK'.
+    // balance is reachable.
     this.plate.setSize(LABEL_X + this.label.width + 5, 14);
 
     const low = v <= LOW_TOKEN_THRESHOLD;
     this.label.setTint(low ? PALETTE.blood : PALETTE.cream);
-    this.coin.setFillStyle(low ? PALETTE.ember : PALETTE.gold);
+    if (low !== this.coinLow) {
+      this.coinLow = low;
+      drawFrogToken(this.coin, low);
+    }
 
     if (low && !this.pulse) {
       this.pulse = this.scene.tweens.add({

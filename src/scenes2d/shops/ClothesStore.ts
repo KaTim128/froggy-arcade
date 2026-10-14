@@ -26,7 +26,9 @@ const FRONT_ROW = FLOOR + 52;
 /** The shop's width; the fitting room stands in the middle of it. */
 const SHOP_W = 460;
 const FIT_X = SHOP_W / 2;
-const FIT_W = 46;
+const FIT_W = 34;
+/** The booth's top: a cubicle a little taller than a person, not a wardrobe to the ceiling. */
+const FIT_TOP = 70;
 const MIRROR_X = 335;
 
 /** A bald, pale shop dummy, wearing `top`. */
@@ -171,17 +173,19 @@ export class ClothesStore extends WalkRoom {
     const fl = FIT_X - FIT_W / 2;
     const fr = this.add.graphics().setDepth(depthFor(BACK_ROW));
     fr.fillStyle(0x000000, 0.18).fillRect(fl + 1, BACK_ROW, FIT_W, 3);
-    fr.fillStyle(0x14100c, 1).fillRect(fl, 50, FIT_W, BACK_ROW - 50);
-    fr.fillStyle(0x7b2a5a, 1).fillRect(fl + 1, 61, FIT_W - 2, BACK_ROW - 62);
-    for (let k = 0; k < FIT_W - 2; k += 4) fr.fillStyle(0x5a1a40, 1).fillRect(fl + 1 + k, 61, 1, BACK_ROW - 62);
-    // the curtain drawn back a little at one side, the bench inside showing
-    fr.fillStyle(0x3a2030, 1).fillRect(fl + FIT_W - 9, 61, 8, BACK_ROW - 62);
-    fr.fillStyle(0x8a6a48, 1).fillRect(fl + FIT_W - 8, BACK_ROW - 14, 7, 3);
-    fr.fillStyle(0x9a3a6a, 1).fillRect(fl + FIT_W - 12, 61, 3, BACK_ROW - 62);
-    // the pelmet, with the name on it
-    fr.fillStyle(0x2a1430, 1).fillRect(fl + 1, 51, FIT_W - 2, 10);
-    fr.fillStyle(0xd8a838, 1).fillRect(fl, 50, FIT_W, 1).fillRect(fl, 60, FIT_W, 1);
-    text(this, FIT_X, 52, 'FITTING', 0xff8ac0).setOrigin(0.5, 0).setDepth(depthFor(BACK_ROW) + 0.0001);
+    fr.fillStyle(0x14100c, 1).fillRect(fl, FIT_TOP, FIT_W, BACK_ROW - FIT_TOP);
+    fr.fillStyle(0x7b2a5a, 1).fillRect(fl + 1, FIT_TOP + 5, FIT_W - 2, BACK_ROW - FIT_TOP - 6);
+    for (let k = 0; k < FIT_W - 2; k += 3) fr.fillStyle(0x5a1a40, 1).fillRect(fl + 1 + k, FIT_TOP + 5, 1, BACK_ROW - FIT_TOP - 6);
+    // the curtain drawn back a little at one side, the stool inside showing
+    fr.fillStyle(0x3a2030, 1).fillRect(fl + FIT_W - 8, FIT_TOP + 5, 7, BACK_ROW - FIT_TOP - 6);
+    fr.fillStyle(0x8a6a48, 1).fillRect(fl + FIT_W - 7, BACK_ROW - 10, 6, 2);
+    fr.fillStyle(0x9a3a6a, 1).fillRect(fl + FIT_W - 10, FIT_TOP + 5, 2, BACK_ROW - FIT_TOP - 6);
+    // the rail, in brass, with the curtain rings
+    fr.fillStyle(0xd8a838, 1).fillRect(fl - 1, FIT_TOP, FIT_W + 2, 2);
+    for (let k = 2; k < FIT_W; k += 5) fr.fillStyle(0xb88828, 1).fillRect(fl + k, FIT_TOP + 2, 2, 2);
+    // and its little sign on the wall over it
+    const sign = text(this, FIT_X, FIT_TOP - 11, 'FITTING', 0xff8ac0).setOrigin(0.5, 0).setDepth(2.1);
+    this.add.rectangle(FIT_X, FIT_TOP - 7, sign.width + 6, 10, 0x2a1430).setStrokeStyle(1, 0xd8a838).setDepth(2);
 
     // ---- the till, just inside the doors, and the assistant behind it
     this.counter = this.paintCounter({
@@ -227,7 +231,7 @@ export class ClothesStore extends WalkRoom {
       });
     }
     out.push({ x: MIRROR_X, y: this.floorTop, w: 22, depth: 0, wall: true, label: () => '[E] MIRROR', use: () => this.mirror(), hit: { x: MIRROR_X - 13, y: 30, w: 26, h: 56 } });
-    out.push({ x: FIT_X, y: BACK_ROW, w: FIT_W, depth: 6, label: () => '[E] FITTING ROOM', use: () => this.fitting(), hit: { x: FIT_X - FIT_W / 2, y: 50, w: FIT_W, h: BACK_ROW - 48 } });
+    out.push({ x: FIT_X, y: BACK_ROW, w: FIT_W, depth: 6, label: () => '[E] FITTING ROOM', use: () => this.fitting(), hit: { x: FIT_X - FIT_W / 2, y: FIT_TOP - 12, w: FIT_W, h: BACK_ROW - FIT_TOP + 14 } });
     if (this.counter) out.push(this.counter);
     return out;
   }

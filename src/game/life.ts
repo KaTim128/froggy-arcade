@@ -9,7 +9,7 @@
  * TIME.  One game day is twenty minutes of the game being open and in front
  * of the player (`DAY_SECONDS` of `tick`).  Time the game is closed or hidden
  * does not pass at all: that is the offline rule, and it means a deadline can
- * never arrive while nobody is looking.  The day starts at 08:00.
+ * never arrive while nobody is looking.  The day starts at 7:00 AM, at sunrise.
  *
  * RENT.  Two hundred cash for seven game days, paid to the landlord at Lily's
  * Condos.  It falls due on the morning of the eighth day; there is one day of
@@ -27,17 +27,33 @@ export { LIFE_VERSION, defaultLife, sanitizeLife, type LifeState, type Placement
 export const DAY_SECONDS = 20 * 60;
 export const RENT_PRICE = 200;
 export const RENT_DAYS = 7;
-/** The arcade shuts at 22:00. */
-export const CLOSE_HOUR = 22;
 /**
- * Night and day are the same length: dark from 18:00 to 06:00, light from
- * 06:00 to 18:00 -- twelve hours each, ten minutes of play each.  The shops
- * keep the same hours as the light (see `shopsOpen`).
+ * THE DAY, by the clock on the wall.  It starts at 7:00 AM, at sunrise,
+ * when the arcade's shutters go up and the shops open.  Morning (the
+ * working day) runs to 5:00 PM; evening, the sun going down, to 7:45 PM;
+ * then it is night until seven the next morning -- the arcade and the
+ * shops shut, the streets dark, time to sleep.
  */
-export const DUSK_HOUR = 18;
-export const DAWN_HOUR = 6;
-/** Sleeping takes you to this hour of the morning. */
-export const WAKE_HOUR = 8;
+export const SUNRISE_HOUR = 7;
+export const EVENING_HOUR = 17;
+/** Night falls at 19:45 (as a fraction of an hour). */
+export const NIGHT_HOUR = 19.75;
+/** Sleeping takes you to sunrise. */
+export const WAKE_HOUR = SUNRISE_HOUR;
+/** Kept for the callers that talk of dusk and dawn. */
+export const DUSK_HOUR = NIGHT_HOUR;
+export const DAWN_HOUR = SUNRISE_HOUR;
+
+export type DayPhase = 'morning' | 'evening' | 'night';
+
+/** "7:00 AM", "5:30 PM", "12:05 AM" -- the hour as people say it. */
+export function twelveHour(hour: number, minute = 0): string {
+  const h = Math.floor(hour) % 24;
+  const m = Math.round(minute + (hour - Math.floor(hour)) * 60);
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
 /** Begging: one cash per this many real milliseconds of sitting there. */
 export const BEG_MS = 15 * 60 * 1000;
 /** What a sold thing fetches: this fraction of what it cost.  Never more. */
@@ -62,36 +78,43 @@ export interface Clock {
   day: number;
   hour: number;
   minute: number;
-  /** "08:15" */
+  /** "7:15 AM" */
   text: string;
+  /** Morning (sunrise to 5 PM), evening (to 7:45 PM) or night. */
+  phase: DayPhase;
+  /** Night: from 7:45 PM to 7:00 AM. */
   dark: boolean;
-  /** The arcade's hours are over. */
+  /** The arcade's hours are over: it shuts at night. */
   closed: boolean;
 }
 
 export function clock(t = L().t): Clock {
+  // (a game day runs from sunrise to sunrise)
   const day = Math.floor(t / DAY_SECONDS);
   const into = (t - day * DAY_SECONDS) / DAY_SECONDS;
-  const mins = Math.floor(into * 24 * 60 + 8 * 60) % (24 * 60);
+  const mins = Math.floor(into * 24 * 60 + SUNRISE_HOUR * 60) % (24 * 60);
   const hour = Math.floor(mins / 60);
   const minute = mins % 60;
+  const h = mins / 60;
+  const phase: DayPhase = h >= SUNRISE_HOUR && h < EVENING_HOUR ? 'morning' : h >= EVENING_HOUR && h < NIGHT_HOUR ? 'evening' : 'night';
   return {
     day,
     hour,
     minute,
-    text: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
-    dark: hour >= DUSK_HOUR || hour < DAWN_HOUR,
-    closed: hour >= CLOSE_HOUR || hour < 8,
+    text: twelveHour(hour, minute),
+    phase,
+    dark: phase === 'night',
+    closed: phase === 'night',
   };
 }
 
-/** Every shop keeps the daylight's hours: open 06:00 - 18:00, shut all night. */
+/** Every shop keeps the arcade's hours: open from sunrise until night falls. */
 export function shopsOpen(c: Clock = clock()): boolean {
   return !c.dark;
 }
 
 /** The shops' hours, as a sign on the door says them. */
-export const SHOP_HOURS = `${String(DAWN_HOUR).padStart(2, '0')}:00 - ${DUSK_HOUR}:00`;
+export const SHOP_HOURS = `${twelveHour(SUNRISE_HOUR)} - ${twelveHour(NIGHT_HOUR)}`;
 
 /** Days until rent is due (0 = due today, negative = overdue). */
 export function rentInDays(l = L()): number {
@@ -251,8 +274,7 @@ export function wear(id: string): Result {
 
 /**
  * Sleep until morning: on the condo floor (or a mattress, or a bed), or on
- * the street.  The clock goes to 08:00 of the next day (or of this one, if
- * it is already past midnight).
+ * the street.  The clock goes to 7:00 AM, sunrise, the next morning.
  *
  * Only at night, wherever it is: once you have slept it is morning, and
  * morning is no time for sleeping -- so a night can be slept through once,
@@ -260,11 +282,11 @@ export function wear(id: string): Result {
  */
 export function sleep(where: 'street' | 'floor' | 'mattress' | 'bed'): Result {
   const c = clock();
-  if (!c.dark) return no(where === 'street' ? 'TOO LIGHT AND TOO BUSY. WAIT FOR DARK.' : `YOU ARE NOT TIRED. SLEEP COMES AFTER ${DUSK_HOUR}:00.`);
+  if (!c.dark) return no(where === 'street' ? 'TOO LIGHT AND TOO BUSY. WAIT FOR DARK.' : `YOU ARE NOT TIRED. SLEEP COMES AFTER ${twelveHour(NIGHT_HOUR)}.`);
   edit((l) => {
     const day = clock(l.t).day;
-    // to 08:00 on the next morning (or this one, before dawn)
-    l.t = (c.hour < WAKE_HOUR ? day : day + 1) * DAY_SECONDS;
+    // to sunrise: the start of the next game day (a game day runs sunrise to sunrise)
+    l.t = (day + 1) * DAY_SECONDS;
     if (l.rented && clock(l.t).day > l.rentDue) {
       l.rented = false;
       l.evicted = true;

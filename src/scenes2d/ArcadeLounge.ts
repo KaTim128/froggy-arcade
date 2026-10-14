@@ -23,6 +23,7 @@
  * of its left-hand doorway into the dark lobby.
  */
 
+import { showOutAtNight } from '../game/closingPull';
 import { closingTime } from '../core/broke';
 import Phaser from 'phaser';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../game/roomWalk';
@@ -182,6 +183,8 @@ export class ArcadeLounge extends Phaser.Scene {
     // (no tokens to count after closing: the HUD is the daytime's)
     if (!this.night) new TokenHud(this);
     if (!this.night) attachPockets(this, () => this.busy());
+    // after the night: the arcade keeps hours, and shuts at 7:45 PM
+    showOutAtNight(this, () => !this.locked && !this.busy(), () => (this.locked = true));
     this.mutter = text(this, GAME_W / 2, 180 - 30, '', PALETTE.fog).setOrigin(0.5, 0.5).setDepth(802).setVisible(false);
     if (this.night && this.fromAlley) this.shutBehind();
 

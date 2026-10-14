@@ -10,6 +10,7 @@
  * Everything that only happens once happens in there, not in here.
  */
 
+import { showOutAtNight } from '../game/closingPull';
 import { closingTime } from '../core/broke';
 import Phaser from 'phaser';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../game/roomWalk';
@@ -108,6 +109,8 @@ export class ArcadeAnnex extends Phaser.Scene {
 
     new TokenHud(this);
     attachPockets(this, () => this.busy());
+    // after the night: the arcade keeps hours, and shuts at 7:45 PM
+    showOutAtNight(this, () => !this.locked && !this.busy(), () => (this.locked = true));
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);

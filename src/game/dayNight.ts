@@ -7,7 +7,7 @@
  */
 
 import type Phaser from 'phaser';
-import { clock, DUSK_HOUR, SHOP_HOURS, sleepPlace, type Clock } from './life';
+import { clock, SHOP_HOURS, sleepPlace, type Clock, type DayPhase } from './life';
 import { store } from '../core/state';
 
 /**
@@ -43,9 +43,30 @@ let toldNight = -1;
 export function nightfallOnce(): string | null {
   const c = clock();
   if (!c.dark) return null;
-  // the night belongs to the day it began on
-  const night = c.hour >= DUSK_HOUR ? c.day : c.day - 1;
+  // (a game day runs sunrise to sunrise, so the whole night is in one)
+  const night = c.day;
   if (toldNight === night) return null;
   toldNight = night;
   return nightfallLine();
+}
+
+/**
+ * Call `turned` when the part of the day changes -- morning to evening,
+ * evening to night, night to morning -- while `scene` is up, so the sky
+ * and the light in it follow the clock live.
+ */
+export function onPhaseTurn(scene: Phaser.Scene, turned: (phase: DayPhase, c: Clock) => void, ready: () => boolean = () => true): void {
+  let was = clock().phase;
+  scene.time.addEvent({
+    delay: 500,
+    loop: true,
+    callback: () => {
+      const s = store.get();
+      if (s.timeOfDay === 'midnight' || s.route !== 'normal') return;
+      const c = clock();
+      if (c.phase === was || !ready()) return;
+      was = c.phase;
+      turned(c.phase, c);
+    },
+  });
 }

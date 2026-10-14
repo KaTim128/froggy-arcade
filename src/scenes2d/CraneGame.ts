@@ -236,7 +236,10 @@ function pickPlush(): (typeof PLUSHIES)[number] {
   return pool[0];
 }
 
-type Phase = 'pay' | 'aim' | 'lower' | 'wait' | 'shut' | 'up' | 'carry' | 'release' | 'result';
+/** How far the prongs close round a toy they meet (0 = fully shut): the hooks hug it. */
+const GRIP_SHUT = 0.38;
+
+type Phase = 'pay' | 'aim' | 'opening' | 'lower' | 'wait' | 'shut' | 'up' | 'carry' | 'release' | 'result';
 
 /** One heap in this many draws a Froggy in each spot: he is the rare one. */
 const FROGGY_CHANCE = 0.012;
@@ -745,6 +748,9 @@ export class CraneGame extends Phaser.Scene {
     }
     audio.sfx('coin_drop');
     this.phase = 'aim';
+    // shut while it is being lined up: it opens when it is sent down
+    this.drawClaw(false);
+    this.outcome = null;
     // every go starts at the first step: line it up from the front
     if (this.sideOn) this.toggleSide();
     this.clock = CLOCK_S;
@@ -824,10 +830,17 @@ export class CraneGame extends Phaser.Scene {
   private beginLower(): void {
     // only from the side view: never from the front
     if (this.phase !== 'aim' || !this.sideOn) return;
-    this.phase = 'lower';
-    audio.sfx('ui_blip');
-    // (it stays in the side view: the drop and the grab are watched from there)
+    // FIRST it opens, where it hangs -- the prongs swinging out wide, plainly
+    // -- and only then goes down
+    this.phase = 'opening';
+    audio.sfx('lock_click', 0.5);
     this.syncButtons();
+    this.moveClaw(1, 420, () => {
+      if (this.phase !== 'opening') return;
+      this.phase = 'lower';
+      audio.sfx('ui_blip');
+    });
+    // (it stays in the side view: the drop and the grab are watched from there)
   }
 
   /** GRAB: the claw closes on whatever it has settled on. */
@@ -837,8 +850,11 @@ export class CraneGame extends Phaser.Scene {
     this.grabCue.setVisible(false);
     audio.sfx('door_shut', 0.25);
     this.syncButtons();
-    // the prongs swing in round whatever is under them, and then it grabs
-    this.moveClaw(0, 320, () => this.time.delayedCall(80, () => this.grab()));
+    // the prongs swing in round whatever is under them -- stopping where
+    // they meet it (a toy between the hooks), or all the way on nothing --
+    // then a beat as it takes the grip, and it grabs
+    const on = this.targetUnder();
+    this.moveClaw(on ? GRIP_SHUT : 0, 380, () => this.time.delayedCall(220, () => this.grab()));
   }
 
   /** The screen y of the top of a toy's head. */
@@ -957,7 +973,7 @@ export class CraneGame extends Phaser.Scene {
       if (Math.abs(dx) < 0.5 && Math.abs(dz) < 0.01) {
         this.phase = 'release';
         // the prongs swing open over the chute and it drops
-        this.moveClaw(1, 220);
+        this.moveClaw(1, 320);
         const t = this.held;
         if (t) {
           this.tweens.add({ targets: t.art, y: floorY(0) + 4, duration: 260, ease: 'Quad.easeIn' });
@@ -1031,8 +1047,9 @@ export class CraneGame extends Phaser.Scene {
       const onBody = off < 0.4 && Math.abs(best.lean) < 30;
       const part = onBody ? 1.12 : feel.head;
       const odds = Phaser.Math.Clamp((GRIP[this.kind] * (1 - OFF_CENTRE[this.kind] * Math.min(1, off)) * part) / feel.weight, 0.02, 0.95);
-      this.showGripLine(onBody ? 'GOT IT ROUND THE BODY' : 'ONLY BY THE HEAD...');
       if (Math.random() < odds) {
+        this.banner('GOT IT!', 0x8ae88a, onBody ? 'ROUND THE BODY' : 'ONLY BY THE HEAD...');
+        audio.sfx('lock_click', 0.6);
         this.held = best;
         this.heldFrom.set(best.art.x, best.art.y);
         this.heldT = 0;
@@ -1044,14 +1061,21 @@ export class CraneGame extends Phaser.Scene {
       } else {
         // it closes on it and lifts it -- and it slides out of the prongs and
         // drops back: plainly a miss, not a claw that never touched it
+        this.outcome = 'missed';
         this.tweens.add({ targets: best.art, y: '-=12', duration: 260, ease: 'Quad.easeOut', yoyo: true, hold: 120, yoyoEase: 'Bounce.easeOut' } as Phaser.Types.Tweens.TweenBuilderConfig);
         this.time.delayedCall(380, () => {
-          if (this.phase === 'up') this.moveClaw(0.6, 160);
+          // the prongs snap shut on the empty air where it was
+          this.moveClaw(0, 160);
           audio.sfx('door_shut', 0.12);
+          this.banner('MISSED!', 0xff7a6a, 'IT SLID OUT OF THE CLAW');
         });
         // and drops it a little askew
         this.knock(best, Math.sign(best.x - this.clawX) || 1, 0.6);
       }
+    }
+    else {
+      this.outcome = 'empty';
+      this.banner('NOTHING THERE', 0xff7a6a, 'THE CLAW CLOSED ON NOTHING');
     }
     this.saveGlass();
     this.phase = 'up';
@@ -1065,8 +1089,11 @@ export class CraneGame extends Phaser.Scene {
     const t = this.held;
     if (!t) return;
     this.held = null;
-    this.moveClaw(0.7, 140);
+    this.outcome = 'slipped';
+    // the prongs give -- they spring open -- and it drops out of them
+    this.moveClaw(0.85, 160);
     audio.sfx('door_shut', 0.15);
+    this.banner('IT SLIPPED!', 0xffb050, 'DROPPED ON THE WAY TO THE CHUTE');
     t.x = this.clawX;
     t.z = Phaser.Math.Clamp(this.clawZ, 0.25, 0.95);
     let lift = 0;
@@ -1135,11 +1162,25 @@ export class CraneGame extends Phaser.Scene {
     });
   }
 
-  private gripLine: Phaser.GameObjects.BitmapText | null = null;
-  private showGripLine(msg: string): void {
-    this.gripLine?.destroy();
-    this.gripLine = centerText(this, GAME_W / 2, BOX.top + 22, msg, PALETTE.cream).setDepth(66);
-    this.tweens.add({ targets: this.gripLine, alpha: 0, delay: 900, duration: 400 });
+  /** How the go ended, if not with a prize: for the result to say why. */
+  private outcome: 'missed' | 'slipped' | 'empty' | null = null;
+  private bannerBox: Phaser.GameObjects.Container | null = null;
+  /**
+   * What just happened, big and plain across the top of the glass: GOT IT!,
+   * MISSED!, IT SLIPPED! -- with a smaller line under it.
+   */
+  private banner(msg: string, col: number, sub = ''): void {
+    this.bannerBox?.destroy();
+    const c = this.add.container(GAME_W / 2, BOX.top + 22).setDepth(70);
+    const t = centerText(this, 0, 0, msg, col, 16);
+    const w = Math.max(t.width, sub.length * 6) + 16;
+    c.add(this.add.rectangle(0, sub ? 4 : 0, w, sub ? 30 : 20, PALETTE.ink, 0.92).setStrokeStyle(1, col));
+    c.add(t);
+    if (sub) c.add(centerText(this, 0, 13, sub, PALETTE.cream));
+    c.setScale(0.6);
+    this.tweens.add({ targets: c, scale: 1, duration: 200, ease: 'Back.Out' });
+    this.tweens.add({ targets: c, alpha: 0, delay: 1400, duration: 400, onComplete: () => c.destroy() });
+    this.bannerBox = c;
   }
 
   private payOut(): void {
@@ -1148,14 +1189,15 @@ export class CraneGame extends Phaser.Scene {
     this.drawClaw(false);
     if (t) t.art.destroy();
     if (!t) {
-      this.showResult(this.kind === 'plush' ? 'IT SLIPPED RIGHT OUT.  NOTHING.' : 'NOTHING.', PALETTE.ash, true);
+      const why = this.outcome === 'slipped' ? 'IT SLIPPED ON THE WAY' : this.outcome === 'missed' ? 'THE CLAW LOST ITS GRIP' : 'THE CLAW CAME UP EMPTY';
+      this.showResult(`NO PRIZE - ${why}.`, 0xff7a6a, true, undefined, 'YOU LOST');
       return;
     }
     if (this.kind === 'plush') {
       const def = itemDef(t.id);
       if (def && addItem(def.id)) {
         audio.sfx('chime');
-        this.showResult(`YOU GOT A ${def.name}!`, PALETTE.gold, true, def.id);
+        this.showResult(`YOU GOT A ${def.name}!`, PALETTE.gold, true, def.id, 'YOU WIN!');
       } else {
         this.showResult(FULL_LINE, PALETTE.ember, true);
       }
@@ -1171,18 +1213,27 @@ export class CraneGame extends Phaser.Scene {
       const def = ODDITIES[Phaser.Math.Between(0, ODDITIES.length - 1)];
       if (addItem(def.id)) {
         audio.sfx('chime');
-        this.showResult(`${cap.jackpot ? 'JACKPOT!  ' : cap.lucky ? 'LUCKY!  ' : ''}${coins} + ${def.name}`, 0xc8a0e0, true, def.id);
+        this.showResult(`${cap.jackpot ? 'JACKPOT!  ' : cap.lucky ? 'LUCKY!  ' : ''}${coins} + ${def.name}`, 0xc8a0e0, true, def.id, 'YOU WIN!');
         return;
       }
     }
-    this.showResult(cap.jackpot ? `JACKPOT!  ${coins}` : cap.lucky ? `LUCKY CAPSULE!  ${coins}` : `INSIDE: ${coins}`, PALETTE.gold, true);
+    this.showResult(cap.jackpot ? `JACKPOT!  ${coins}` : cap.lucky ? `LUCKY CAPSULE!  ${coins}` : `INSIDE: ${coins}`, PALETTE.gold, true, undefined, 'YOU WIN!');
   }
 
-  private showResult(line: string, colour: number, played: boolean, itemId?: string): void {
+  private showResult(line: string, colour: number, played: boolean, itemId?: string, title?: string): void {
     this.phase = 'result';
     this.result?.destroy();
     const c = this.add.container(0, 0).setDepth(90);
     c.add(this.add.rectangle(GAME_W / 2, 92, 230, 70, PALETTE.ink, 0.95).setStrokeStyle(1, colour));
+    // WIN or LOSE, big, over the panel
+    if (title) {
+      const tt = centerText(this, GAME_W / 2, 50, title, colour, 16);
+      c.add(this.add.rectangle(GAME_W / 2, 50, tt.width + 14, 20, PALETTE.ink, 0.95).setStrokeStyle(1, colour));
+      c.add(tt);
+      tt.setScale(0.5);
+      this.tweens.add({ targets: tt, scale: 1, duration: 260, ease: 'Back.Out' });
+      if (title === 'YOU WIN!') this.tweens.add({ targets: tt, alpha: 0.6, duration: 420, yoyo: true, repeat: -1, delay: 300 });
+    }
     c.add(centerText(this, GAME_W / 2, itemId ? 104 : 80, line, colour).setMaxWidth(220));
     if (itemId) {
       const d = itemDef(itemId);

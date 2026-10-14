@@ -7,7 +7,7 @@
 
 import type { FurnitureDef } from './catalog';
 
-export type FurnitureVerb = 'sit' | 'lie' | 'switch' | 'play' | null;
+export type FurnitureVerb = 'sit' | 'lie' | 'switch' | 'play' | 'wash' | null;
 
 export function useOf(f: FurnitureDef): FurnitureVerb {
   switch (f.cat) {
@@ -21,6 +21,8 @@ export function useOf(f: FurnitureDef): FurnitureVerb {
       return 'switch';
     case 'radio':
       return 'play';
+    case 'bath':
+      return 'wash';
     default:
       return null;
   }
@@ -31,4 +33,10 @@ export const VERB_LABEL: Record<Exclude<FurnitureVerb, null>, string> = {
   lie: 'LIE DOWN',
   switch: 'SWITCH ON/OFF',
   play: 'PLAY',
+  wash: 'USE',
 };
+
+/** What using a bathroom fitting says. */
+export function washLine(f: FurnitureDef): string {
+  return f.id === 'fur_toilet' ? 'YOU USE THE TOILET. MUCH BETTER.' : f.id === 'fur_bathtub' ? 'A LONG HOT BATH. YOU FEEL HUMAN AGAIN.' : 'YOU WASH YOUR FACE AND HANDS.';
+}

@@ -1,8 +1,10 @@
 /**
  * ---- UNIT 612, LILY'S CONDOS.  Yours for as long as the rent is paid.
  *
- * It comes empty: a window, its curtains, bare boards, a blanket on the
- * floor.  You walk round it like any room (see rooms/WalkRoom), and what
+ * A mid-range flat, and it comes bare: painted walls, an oak floor, a
+ * fitted kitchenette, a window on the city and a blanket on the floor.  The
+ * bed and the bathroom (toilet, basin, bath) are yours to buy at Home and
+ * Hearth.  You walk round it like any room (see rooms/WalkRoom), and what
  * you have put in it is solid and USABLE: sit on the chairs and the sofa,
  * sleep in the bed (or on the blanket until you own one), switch the TV and
  * the lamps on, play the radio.  The coat hook by the door is your
@@ -17,9 +19,9 @@ import { store } from '../core/state';
 import { button } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { furnitureById, type FurnitureDef } from '../game/catalog';
-import { onLightTurn } from '../game/dayNight';
-import { DUSK_HOUR, clock, movePlacement, placeFurniture, removePlacement, sleep, visit, type Placement } from '../game/life';
-import { useOf } from '../game/furnitureUse';
+import { onPhaseTurn } from '../game/dayNight';
+import { NIGHT_HOUR, SUNRISE_HOUR, twelveHour, clock, movePlacement, placeFurniture, removePlacement, sleep, visit, type Placement } from '../game/life';
+import { useOf, washLine } from '../game/furnitureUse';
 import { WalkRoom, type Fixture } from './rooms/WalkRoom';
 import { Piece } from './rooms/piece';
 
@@ -89,10 +91,13 @@ export class Condo extends WalkRoom {
   }
 
   protected entered(): void {
-    // dusk or dawn in here: the window goes dark (or light) with it
-    onLightTurn(this, (dark) => {
+    // the window keeps time: the sun crosses it, evening comes, night falls
+    this.time.addEvent({ delay: 4000, loop: true, callback: () => this.paintWalls() });
+    onPhaseTurn(this, (p) => {
       this.paintWalls();
-      if (dark) this.say('IT IS DARK OUT. TIME FOR BED.');
+      if (p === 'night') this.say('IT IS NIGHT. TIME FOR BED.');
+      else if (p === 'evening') this.say('THE SUN IS GOING DOWN.');
+      else this.say('SUNRISE. A NEW DAY.');
     });
   }
 
@@ -101,6 +106,7 @@ export class Condo extends WalkRoom {
   protected paintRoom(): void {
     this.room = this.add.graphics().setDepth(0);
     this.outline = this.add.graphics().setDepth(700);
+    this.dim = this.add.graphics().setDepth(690);
     this.paintWalls();
     // the blanket, folded on the boards: a bed of sorts
     const b = this.add.graphics().setDepth(3);
@@ -153,7 +159,7 @@ export class Condo extends WalkRoom {
         y: piece.y,
         w: Math.max(10, f.w),
         depth: Math.min(8, Math.max(4, Math.round(f.h / 3))),
-        label: () => (verb === 'sit' ? `[E] SIT ON THE ${f.name}` : verb === 'lie' ? `[E] SLEEP IN THE ${f.name}` : verb === 'switch' ? `[E] ${f.name}: ${piece.on ? 'OFF' : 'ON'}` : verb === 'play' ? `[E] PLAY THE ${f.name}` : f.name),
+        label: () => (verb === 'sit' ? `[E] SIT ON THE ${f.name}` : verb === 'lie' ? `[E] SLEEP IN THE ${f.name}` : verb === 'wash' ? `[E] USE THE ${f.name}` : verb === 'switch' ? `[E] ${f.name}: ${piece.on ? 'OFF' : 'ON'}` : verb === 'play' ? `[E] PLAY THE ${f.name}` : f.name),
         use: () => this.usePiece(piece),
       });
     }
@@ -177,6 +183,10 @@ export class Condo extends WalkRoom {
         piece.play();
         this.say(`THE ${f.name} PLAYS.`);
         break;
+      case 'wash':
+        audio.sfx('splash', 0.4);
+        this.say(washLine(f));
+        break;
       default:
         this.say(`YOUR ${f.name}. ${f.note}.`);
     }
@@ -188,52 +198,174 @@ export class Condo extends WalkRoom {
     this.scene.launch('Shop', { kind: 'wardrobe', from: 'Condo' });
   }
 
+  /**
+   * The flat itself: a mid-range condo, not a hotel room.  Painted walls with
+   * a sage feature wall, white skirting and downlights, light oak laminate,
+   * a fitted kitchenette along the right (cupboards, a hob, a fridge -- no
+   * sink: the bathroom things are yours to buy), a slim aluminium window with
+   * a roller blind and sheers, and a plain white front door with an intercom.
+   * The window is the sky as it is now: morning, evening or night, the sun
+   * crossing it through the day, and the room dims when it is dark.
+   */
   private paintWalls(): void {
     const g = this.room;
     g.clear();
     const c = clock();
-    // the wall: plain plaster, a dado rail, the skirting
-    g.fillStyle(0xcfc2a8, 1).fillRect(0, 0, GAME_W, FLOOR_TOP);
-    g.fillStyle(0xbfb196, 1).fillRect(0, 0, GAME_W, 8);
-    for (let x = 0; x < GAME_W; x += 6) g.fillStyle(0xc6b99e, 1).fillRect(x, 8, 1, FLOOR_TOP - 8);
-    g.fillStyle(0x8a7a5e, 1).fillRect(0, FLOOR_TOP - 6, GAME_W, 6);
-    g.fillStyle(0x6a5a42, 1).fillRect(0, FLOOR_TOP - 1, GAME_W, 1);
-    // the floor: bare boards
-    for (let y = FLOOR_TOP; y < GAME_H; y += 5) {
-      g.fillStyle(y % 10 === 0 ? 0x8a6440 : 0x7e5a38, 1).fillRect(0, y, GAME_W, 5);
-      g.fillStyle(0x5a3e24, 1).fillRect(0, y, GAME_W, 1);
-      for (let x = (y * 7) % 40; x < GAME_W; x += 40) g.fillStyle(0x5a3e24, 1).fillRect(x, y, 1, 5);
-    }
-    // the window: what time it is outside
     const W = WINDOW;
-    const sky = c.dark ? 0x10183a : c.hour < 9 || c.hour >= 18 ? 0xe89858 : 0x7ac0e8;
-    g.fillStyle(0x14100c, 1).fillRect(W.x - 3, W.y - 3, W.w + 6, W.h + 6);
-    g.fillStyle(0xe8e0d0, 1).fillRect(W.x - 2, W.y - 2, W.w + 4, W.h + 4);
-    g.fillStyle(sky, 1).fillRect(W.x, W.y, W.w, W.h);
-    // the city beyond
+    // ---- the walls: warm grey paint, and the sage feature wall round the window
+    g.fillStyle(0xd9d3c8, 1).fillRect(0, 0, GAME_W, FLOOR_TOP);
+    g.fillStyle(0x9aae9e, 1).fillRect(W.x - 30, 0, W.w + 60, FLOOR_TOP);
+    for (let i = 0; i < 260; i++) {
+      const x = (i * 97) % GAME_W;
+      const y = (i * 53) % (FLOOR_TOP - 8);
+      g.fillStyle(0xffffff, 0.06).fillRect(x, y + 6, 1, 1);
+      g.fillStyle(0x000000, 0.04).fillRect((x + 41) % GAME_W, (y + 17) % FLOOR_TOP, 1, 1);
+    }
+    // the ceiling line, a shadow gap and the downlights
+    g.fillStyle(0xf2efe8, 1).fillRect(0, 0, GAME_W, 6);
+    g.fillStyle(0x000000, 0.12).fillRect(0, 6, GAME_W, 1);
+    for (const lx of [60, 160, 260]) {
+      g.fillStyle(0x8a8a8a, 1).fillRect(lx - 3, 2, 7, 2);
+      g.fillStyle(c.dark ? 0xfff0c0 : 0xf8f4e8, 1).fillRect(lx - 2, 3, 5, 1);
+      if (c.dark) g.fillStyle(0xfff0c0, 0.06).fillTriangle(lx - 2, 4, lx + 3, 4, lx + 22, FLOOR_TOP).fillTriangle(lx - 2, 4, lx + 3, 4, lx - 20, FLOOR_TOP);
+    }
+    // white skirting
+    g.fillStyle(0xf4f2ec, 1).fillRect(0, FLOOR_TOP - 5, GAME_W, 5);
+    g.fillStyle(0xc8c4bc, 1).fillRect(0, FLOOR_TOP - 1, GAME_W, 1);
+    // ---- the floor: light oak laminate, long planks, staggered joints
+    for (let y = FLOOR_TOP; y < GAME_H; y += 5) {
+      const row = (y - FLOOR_TOP) / 5;
+      g.fillStyle(row % 2 ? 0xc49a68 : 0xcba272, 1).fillRect(0, y, GAME_W, 5);
+      g.fillStyle(0x9a7448, 0.7).fillRect(0, y, GAME_W, 1);
+      for (let x = (row * 37) % 64; x < GAME_W; x += 64) g.fillStyle(0x9a7448, 0.8).fillRect(x, y, 1, 5);
+      for (let x = (row * 23) % 17; x < GAME_W; x += 17) g.fillStyle(0xffffff, 0.06).fillRect(x, y + 2, 6, 1);
+    }
+    // the light off the window on the floor (by day)
+    if (!c.dark) g.fillStyle(c.phase === 'evening' ? 0xffb070 : 0xfff6d8, 0.12).fillRect(W.x - 6, FLOOR_TOP + 2, W.w + 12, 20);
+
+    // ---- the window: the sky now
+    g.fillStyle(0x2a2e34, 1).fillRect(W.x - 3, W.y - 3, W.w + 6, W.h + 6);
+    this.paintSky(g, c);
+    // slim aluminium frame: a fixed pane and a sliding one
+    g.fillStyle(0x3a3f46, 1).fillRect(W.x + W.w / 2 - 1, W.y, 3, W.h);
+    g.fillStyle(0x3a3f46, 1).fillRect(W.x, W.y + W.h - 3, W.w, 3);
+    g.fillStyle(0xffffff, 0.12).fillRect(W.x + 4, W.y + 3, 3, W.h - 10).fillRect(W.x + W.w / 2 + 6, W.y + 3, 2, W.h - 10);
+    // the sill, the roller blind rolled up in its cassette, the sheers either side
+    g.fillStyle(0xf4f2ec, 1).fillRect(W.x - 6, W.y + W.h + 3, W.w + 12, 3);
+    g.fillStyle(0xe8e4dc, 1).fillRect(W.x - 4, W.y - 9, W.w + 8, 6);
+    g.fillStyle(0xb8b4ac, 1).fillRect(W.x - 4, W.y - 4, W.w + 8, 1);
+    g.fillStyle(0x6a6a6a, 1).fillRect(W.x - 22, W.y - 12, W.w + 44, 2);
+    for (const side of [-1, 1]) {
+      const x0 = side < 0 ? W.x - 20 : W.x + W.w + 6;
+      for (let k = 0; k < 14; k += 2) g.fillStyle(k % 4 ? 0xf0ece4 : 0xe0dcd2, 0.92).fillRect(x0 + k, W.y - 10, 2, W.h + 18);
+    }
+
+    // ---- the kitchenette along the right: wall cupboards, worktop, hob, fridge
+    const kx = 236;
+    const kw = 56;
+    g.fillStyle(0x14100c, 1).fillRect(kx - 1, 38, kw + 2, 22);
+    g.fillStyle(0xf2f0ea, 1).fillRect(kx, 39, kw, 20);
+    for (let d = 0; d < 3; d++) {
+      g.fillStyle(0xd8d4cc, 1).fillRect(kx + d * (kw / 3), 39, 1, 20);
+      g.fillStyle(0x8a8a8a, 1).fillRect(kx + d * (kw / 3) + kw / 3 - 4, 54, 2, 3);
+    }
+    // the splashback tiles
+    g.fillStyle(0xe6ecef, 1).fillRect(kx, 60, kw, 38);
+    for (let ty = 60; ty < 98; ty += 5) g.fillStyle(0xc8d0d4, 1).fillRect(kx, ty, kw, 1);
+    for (let ty = 60, r = 0; ty < 98; ty += 5, r++) for (let tx = kx + (r % 2) * 5; tx < kx + kw; tx += 10) g.fillStyle(0xc8d0d4, 1).fillRect(tx, ty, 1, 5);
+    // base units and the worktop
+    g.fillStyle(0x14100c, 1).fillRect(kx - 1, 98, kw + 2, FLOOR_TOP - 98);
+    g.fillStyle(0x4a5a6a, 1).fillRect(kx, 102, kw, FLOOR_TOP - 104);
+    for (let d = 0; d < 3; d++) {
+      g.fillStyle(0x3a4856, 1).fillRect(kx + d * (kw / 3), 102, 1, FLOOR_TOP - 104);
+      g.fillStyle(0xb8b8c0, 1).fillRect(kx + d * (kw / 3) + 4, 105, 8, 1);
+    }
+    g.fillStyle(0x2a2a2e, 1).fillRect(kx - 2, 98, kw + 4, 4);
+    g.fillStyle(0x5a5a62, 1).fillRect(kx - 2, 98, kw + 4, 1);
+    // the hob: two rings
+    g.fillStyle(0x14161c, 1).fillRect(kx + 30, 96, 18, 2);
+    g.fillStyle(0x6a6a72, 1).fillRect(kx + 32, 96, 5, 1).fillRect(kx + 41, 96, 5, 1);
+    // a kettle and a jar on the worktop
+    g.fillStyle(0x14100c, 1).fillRect(kx + 8, 90, 8, 8);
+    g.fillStyle(0xc83a3a, 1).fillRect(kx + 9, 91, 6, 7);
+    g.fillStyle(0x14100c, 1).fillRect(kx + 19, 92, 5, 6);
+    g.fillStyle(0xe8d8a8, 1).fillRect(kx + 20, 93, 3, 5);
+    // the fridge
+    const fx = kx + kw + 4;
+    g.fillStyle(0x14100c, 1).fillRect(fx - 1, 56, 22, FLOOR_TOP - 56);
+    g.fillStyle(0xdfe3e6, 1).fillRect(fx, 57, 20, FLOOR_TOP - 58);
+    g.fillStyle(0xb8bec4, 1).fillRect(fx, 82, 20, 1);
+    g.fillStyle(0x8a9098, 1).fillRect(fx + 16, 62, 2, 14).fillRect(fx + 16, 86, 2, 18);
+    g.fillStyle(0xffffff, 0.3).fillRect(fx + 1, 58, 2, FLOOR_TOP - 60);
+
+    // ---- the front door: plain white, lever handle, a spy hole, the intercom
+    g.fillStyle(0xbab4a8, 1).fillRect(3, 56, 30, FLOOR_TOP - 56);
+    g.fillStyle(0x14100c, 1).fillRect(5, 58, 26, FLOOR_TOP - 58);
+    g.fillStyle(0xf2f0ea, 1).fillRect(6, 59, 24, FLOOR_TOP - 59);
+    g.fillStyle(0xe2dfd8, 1).fillRect(9, 63, 18, 22).fillRect(9, 90, 18, 28);
+    g.fillStyle(0x6a6a72, 1).fillRect(24, 92, 5, 2);
+    g.fillStyle(0x3a3a3a, 1).fillRect(17, 66, 2, 2);
+    // the intercom and the light switch beside it
+    g.fillStyle(0x14100c, 1).fillRect(60, 72, 7, 11);
+    g.fillStyle(0xe8e8e0, 1).fillRect(61, 73, 5, 9);
+    g.fillStyle(0x3a8a5a, 1).fillRect(62, 75, 3, 2);
+    g.fillStyle(0xf4f2ec, 1).fillRect(61, 88, 4, 5);
+    // a thermostat and a socket
+    g.fillStyle(0xf4f2ec, 1).fillRect(214, 70, 8, 8);
+    g.fillStyle(0x46c4bd, 1).fillRect(216, 72, 4, 2);
+    g.fillStyle(0xf4f2ec, 1).fillRect(80, FLOOR_TOP - 13, 6, 5);
+    g.fillStyle(0x6a6a6a, 1).fillRect(81, FLOOR_TOP - 11, 1, 2).fillRect(84, FLOOR_TOP - 11, 1, 2);
+
+    // ---- night: the room dimmer, the downlights' pools on the floor
+    this.dim?.clear();
+    if (c.dark) {
+      const d = this.dim!;
+      d.fillStyle(0x0a1030, 0.28).fillRect(0, 0, GAME_W, GAME_H);
+      for (const lx of [60, 160, 260]) d.fillStyle(0xfff0c0, 0.07).fillEllipse(lx, FLOOR_TOP + 22, 80, 22);
+    } else if (c.phase === 'evening') {
+      this.dim!.fillStyle(0xff9a50, 0.06).fillRect(0, 0, GAME_W, GAME_H);
+    }
+  }
+
+  /** What the window shows: the sky for the hour, the sun or the moon, the city. */
+  private paintSky(g: Phaser.GameObjects.Graphics, c: ReturnType<typeof clock>): void {
+    const W = WINDOW;
+    const bands =
+      c.phase === 'morning'
+        ? [0x5aa8e0, 0x6ab4e6, 0x7ac0ea, 0x9ad0ee]
+        : c.phase === 'evening'
+          ? [0x5a3a7a, 0xa84a6a, 0xe8784a, 0xf0b060]
+          : [0x060a1c, 0x0a1028, 0x0e1634, 0x141c40];
+    const bh = Math.ceil(W.h / bands.length);
+    bands.forEach((col, i) => g.fillStyle(col, 1).fillRect(W.x, W.y + i * bh, W.w, Math.min(bh, W.h - i * bh)));
+    // where the sun is: across the window from sunrise to night, low in the evening
+    const h = c.hour + c.minute / 60;
+    if (c.phase !== 'night') {
+      const k = Math.min(1, Math.max(0, (h - SUNRISE_HOUR) / (NIGHT_HOUR - SUNRISE_HOUR)));
+      const sx = W.x + 8 + k * (W.w - 16);
+      const sy = W.y + W.h - 14 - Math.sin(k * Math.PI) * (W.h - 26);
+      g.fillStyle(c.phase === 'evening' ? 0xffd080 : 0xfff4c0, 0.35).fillCircle(sx, sy, 8);
+      g.fillStyle(c.phase === 'evening' ? 0xffb050 : 0xfffae0, 1).fillCircle(sx, sy, 5);
+      // a cloud or two by day
+      if (c.phase === 'morning') {
+        g.fillStyle(0xffffff, 0.85).fillEllipse(W.x + 20, W.y + 14, 16, 5).fillEllipse(W.x + 26, W.y + 12, 10, 5);
+        g.fillStyle(0xffffff, 0.7).fillEllipse(W.x + W.w - 18, W.y + 22, 14, 4);
+      }
+    } else {
+      for (let i = 0; i < 14; i++) g.fillStyle(0xffffff, 0.5 + (i % 3) * 0.15).fillRect(W.x + 3 + ((i * 29) % (W.w - 6)), W.y + 3 + ((i * 17) % 30), 1, 1);
+      g.fillStyle(0xf0ecd0, 1).fillCircle(W.x + W.w - 16, W.y + 12, 5);
+      g.fillStyle(0x0a1028, 1).fillCircle(W.x + W.w - 14, W.y + 11, 4);
+    }
+    // the city beyond, lit windows when it is dark
     for (let i = 0; i < 9; i++) {
       const bx = W.x + i * 10;
-      const bh = 10 + ((i * 37) % 26);
-      g.fillStyle(c.dark ? 0x0a0e1c : 0x5a6a80, 1).fillRect(bx, W.y + W.h - bh, 9, bh);
-      if (c.dark) for (let k = 0; k < 4; k++) if ((i + k) % 3) g.fillStyle(0xf0d070, 1).fillRect(bx + 2 + (k % 2) * 4, W.y + W.h - bh + 3 + Math.floor(k / 2) * 5, 2, 2);
+      const tall = 10 + ((i * 37) % 26);
+      g.fillStyle(c.dark ? 0x0a0e1c : c.phase === 'evening' ? 0x4a3a5a : 0x5a6a80, 1).fillRect(bx, W.y + W.h - tall, 9, tall);
+      if (c.phase !== 'morning') for (let k = 0; k < 4; k++) if ((i + k) % 3) g.fillStyle(0xf0d070, c.dark ? 1 : 0.6).fillRect(bx + 2 + (k % 2) * 4, W.y + W.h - tall + 3 + Math.floor(k / 2) * 5, 2, 2);
     }
-    g.fillStyle(0xe8e0d0, 1).fillRect(W.x + W.w / 2 - 1, W.y, 2, W.h).fillRect(W.x, W.y + W.h / 2 - 1, W.w, 2);
-    g.fillStyle(0xd8d0c0, 1).fillRect(W.x - 6, W.y + W.h + 2, W.w + 12, 3);
-    // the curtains, and their rail
-    g.fillStyle(0x3a3a3a, 1).fillRect(W.x - 22, W.y - 8, W.w + 44, 2);
-    for (const side of [-1, 1]) {
-      const x0 = side < 0 ? W.x - 20 : W.x + W.w + 4;
-      for (let k = 0; k < 16; k += 2) {
-        g.fillStyle(k % 4 ? 0x7b2a3a : 0x8e3a4a, 1).fillRect(x0 + k, W.y - 6, 2, W.h + 14);
-      }
-    }
-    // the door you came in by
-    g.fillStyle(0x14100c, 1).fillRect(5, 58, 26, 66);
-    g.fillStyle(0x6a4a2a, 1).fillRect(6, 59, 24, 65);
-    g.fillStyle(0xd8a838, 1).fillRect(26, 92, 2, 2);
-    g.fillStyle(0x14100c, 1);
-    g.lineStyle(1, 0x14100c, 1);
   }
+
+  private dim: Phaser.GameObjects.Graphics | null = null;
 
   private placements(): Placement[] {
     return store.get().life.placed;
@@ -406,7 +538,7 @@ export class Condo extends WalkRoom {
     if (this.busy()) return;
     // (only at night: a slept night is a morning, and mornings are not for sleeping)
     if (!clock().dark) {
-      this.say(`YOU ARE NOT TIRED. SLEEP COMES AFTER ${DUSK_HOUR}:00.`);
+      this.say(`YOU ARE NOT TIRED. SLEEP COMES AFTER ${twelveHour(NIGHT_HOUR)}.`);
       return;
     }
     this.locked = true;
