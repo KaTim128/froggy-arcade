@@ -130,7 +130,12 @@ const PILE_L = 84;
 const PILE_R = 292;
 /** The prize chute, front left, behind its own little glass wall. */
 const CHUTE = { x: 46, z: 0.05, l: 20, r: 72 };
-const CLOCK_S = 14;
+/**
+ * How long a go gives you, in seconds.  Long enough to line it up from the
+ * front, look again from the side and still think about it: the clock is
+ * there so nobody stands at the glass all afternoon, not to hurry the shot.
+ */
+const CLOCK_S = 30;
 /** How far the claw can be let down, in pixels below the gantry. */
 const MAX_DROP = 118;
 /** The claw is drawn this much bigger than its design, to match the toys. */
@@ -238,6 +243,21 @@ function pickPlush(): (typeof PLUSHIES)[number] {
 
 /** How far the prongs close round a toy they meet (0 = fully shut): the hooks hug it. */
 const GRIP_SHUT = 0.38;
+/**
+ * A GRAB THAT DOES NOT HOLD STILL LIFTS IT.  The claw shuts on the toy and
+ * carries it this far up off the heap before the thing slides out of the
+ * prongs and drops back -- so a miss reads as a toy that was had and lost,
+ * not as a claw that closed on nothing.
+ */
+const FUMBLE_LIFT = 26;
+/**
+ * NOTHING CAME UP.  Both cranes say the same thing in the same colour, from
+ * here: a go that gives you nothing is not a loss to be announced, just a go
+ * that gave you nothing, with the next one there to be had.  Neither machine
+ * has its own wording or colour for it.
+ */
+const NO_PRIZE_TITLE = 'NO PRIZE';
+const NO_PRIZE_COL = 0xffb050;
 
 type Phase = 'pay' | 'aim' | 'opening' | 'lower' | 'wait' | 'shut' | 'up' | 'carry' | 'release' | 'result';
 
@@ -280,6 +300,11 @@ export class CraneGame extends Phaser.Scene {
   private heldT = 0;
   /** How far through the carry the prize slips out, or -1 if it holds. */
   private slipAt = -1;
+  /**
+   * A grab that did not hold: the drop the claw lifts the toy up to before
+   * the fingers give and it falls back.  -1 when the claw has it properly.
+   */
+  private fumbleAt = -1;
   private carryFrom = new Phaser.Math.Vector2();
   /** How many Froggies this heap has (at most one). */
   private froggies = 0;
@@ -289,6 +314,8 @@ export class CraneGame extends Phaser.Scene {
   private sideToys!: Phaser.GameObjects.Container;
   private sideClaw!: Phaser.GameObjects.Container;
   private sideRig!: Phaser.GameObjects.Graphics;
+  /** The heap's outline from the side, drawn behind the toys. */
+  private sideProfile!: Phaser.GameObjects.Graphics;
   private sideHeld: Phaser.GameObjects.Image | null = null;
   private sideBtn: Phaser.GameObjects.Container | null = null;
   private marquee: Phaser.GameObjects.BitmapText[] = [];
@@ -554,7 +581,12 @@ export class CraneGame extends Phaser.Scene {
           // the heap is taller in the middle than at the edges
           const mid = 1 - Math.abs((x - (PILE_L + PILE_R) / 2) / ((PILE_R - PILE_L) / 2));
           if (layer > 0 && Math.random() > 0.2 + mid * 0.8 - (layer - 1) * 0.25) continue;
-          specs.push({ x: x + Phaser.Math.Between(-3, 3), z: z + Phaser.Math.FloatBetween(-0.04, 0.04), lift: layer * 18 + Phaser.Math.Between(0, 3) });
+          // Depth is scattered right across the row, not pinned to it: three
+          // hard rows made a heap that was solid from the front and three
+          // sparse clumps from the side.  Spread, the two views show the one
+          // pile, and there is something under the claw at any depth.
+          const zj = Phaser.Math.Clamp(z + Phaser.Math.FloatBetween(-0.13, 0.13), 0.06, 0.96);
+          specs.push({ x: x + Phaser.Math.Between(-3, 3), z: zj, lift: layer * 18 + Phaser.Math.Between(0, 3) });
         }
       }
     }
@@ -751,6 +783,8 @@ export class CraneGame extends Phaser.Scene {
     // shut while it is being lined up: it opens when it is sent down
     this.drawClaw(false);
     this.outcome = null;
+    this.slipAt = -1;
+    this.fumbleAt = -1;
     // every go starts at the first step: line it up from the front
     if (this.sideOn) this.toggleSide();
     this.clock = CLOCK_S;
@@ -949,6 +983,16 @@ export class CraneGame extends Phaser.Scene {
       }
     } else if (this.phase === 'up') {
       this.drop -= RAISE * dt;
+      // Lifted clear of the heap: it hangs there a moment, tilting in the
+      // prongs -- you have it -- and then they give.
+      if (this.fumbleAt >= 0 && this.held && this.drop <= this.fumbleAt) {
+        this.fumbleAt = -1;
+        const slipping = this.held;
+        this.tweens.add({ targets: slipping.art, angle: slipping.lean + 18, duration: 300, ease: 'Sine.easeIn' });
+        this.time.delayedCall(320, () => {
+          if (this.held === slipping) this.loseGrip('missed');
+        });
+      }
       if (this.drop <= 0) {
         this.drop = 0;
         // held or not, back to the chute: that is where a go ends -- watched
@@ -965,7 +1009,7 @@ export class CraneGame extends Phaser.Scene {
         const all = Math.max(1, Math.abs(CHUTE.x - this.carryFrom.x));
         if (1 - Math.abs(dx) / all >= this.slipAt) {
           this.slipAt = -1;
-          this.slip();
+          this.loseGrip('slipped');
         }
       }
       this.clawX += Math.sign(dx) * Math.min(Math.abs(dx), 80 * dt);
@@ -1059,18 +1103,18 @@ export class CraneGame extends Phaser.Scene {
         const slip = SLIP[this.kind] * feel.weight * (onBody ? 0.85 : 1.35);
         this.slipAt = Math.random() < slip ? 0.25 + Math.random() * 0.5 : -1;
       } else {
-        // it closes on it and lifts it -- and it slides out of the prongs and
-        // drops back: plainly a miss, not a claw that never touched it
-        this.outcome = 'missed';
-        this.tweens.add({ targets: best.art, y: '-=12', duration: 260, ease: 'Quad.easeOut', yoyo: true, hold: 120, yoyoEase: 'Bounce.easeOut' } as Phaser.Types.Tweens.TweenBuilderConfig);
-        this.time.delayedCall(380, () => {
-          // the prongs snap shut on the empty air where it was
-          this.moveClaw(0, 160);
-          audio.sfx('door_shut', 0.12);
-          this.banner('MISSED!', 0xff7a6a, 'IT SLID OUT OF THE CLAW');
-        });
-        // and drops it a little askew
-        this.knock(best, Math.sign(best.x - this.clawX) || 1, 0.6);
+        // IT HAS IT, AND THEN IT HAS NOT.  The prongs close on it and the
+        // claw lifts it clear of the heap -- you watch it come up -- and only
+        // then does it slide out of them and drop back.  (`fumbleAt` is the
+        // drop it gets to before the fingers give: the lift happens in the
+        // 'up' phase, where everything else the claw carries is drawn.)
+        this.held = best;
+        this.heldFrom.set(best.art.x, best.art.y);
+        this.heldT = 0;
+        this.toys = this.toys.filter((t) => t !== best);
+        this.fumbleAt = Math.max(0, this.drop - FUMBLE_LIFT);
+        this.slipAt = -1;
+        audio.sfx('lock_click', 0.45);
       }
     }
     else {
@@ -1082,18 +1126,21 @@ export class CraneGame extends Phaser.Scene {
   }
 
   /**
-   * The prize slips out of the fingers on the way over and drops back onto
-   * the pile, wherever the claw is.
+   * IT COMES OUT OF THE FINGERS AND DROPS BACK onto the pile, wherever the
+   * claw has got to: either straight off the heap, a grab that never really
+   * held (`missed`), or halfway to the chute (`slipped`).  The one fall for
+   * both, so a dropped prize always lands and settles the same way.
    */
-  private slip(): void {
+  private loseGrip(why: 'missed' | 'slipped'): void {
     const t = this.held;
     if (!t) return;
     this.held = null;
-    this.outcome = 'slipped';
+    this.outcome = why;
     // the prongs give -- they spring open -- and it drops out of them
     this.moveClaw(0.85, 160);
     audio.sfx('door_shut', 0.15);
-    this.banner('IT SLIPPED!', 0xffb050, 'DROPPED ON THE WAY TO THE CHUTE');
+    if (why === 'missed') this.banner('MISSED!', 0xff7a6a, 'IT SLID OUT OF THE CLAW');
+    else this.banner('IT SLIPPED!', 0xffb050, 'DROPPED ON THE WAY TO THE CHUTE');
     t.x = this.clawX;
     t.z = Phaser.Math.Clamp(this.clawZ, 0.25, 0.95);
     let lift = 0;
@@ -1190,7 +1237,7 @@ export class CraneGame extends Phaser.Scene {
     if (t) t.art.destroy();
     if (!t) {
       const why = this.outcome === 'slipped' ? 'IT SLIPPED ON THE WAY' : this.outcome === 'missed' ? 'THE CLAW LOST ITS GRIP' : 'THE CLAW CAME UP EMPTY';
-      this.showResult(`NO PRIZE - ${why}.`, 0xff7a6a, true, undefined, 'YOU LOST');
+      this.showResult(`YOU GOT NOTHING - ${why}.`, NO_PRIZE_COL, true, undefined, NO_PRIZE_TITLE);
       return;
     }
     if (this.kind === 'plush') {
@@ -1243,9 +1290,9 @@ export class CraneGame extends Phaser.Scene {
     }
     const cost = CRANE_COST[this.kind];
     if (played) {
-      c.add(button(this, GAME_W / 2 - 46, 116, `AGAIN - ${cost}`, () => this.again(), { width: 76, height: 13 }));
+      c.add(button(this, GAME_W / 2 - 51, 116, `TRY AGAIN - ${cost}`, () => this.again(), { width: 90, height: 13 }));
     }
-    c.add(button(this, GAME_W / 2 + (played ? 46 : 0), 116, 'LEAVE', () => this.leave(true), { width: 60, height: 13 }));
+    c.add(button(this, GAME_W / 2 + (played ? 54 : 0), 116, 'LEAVE', () => this.leave(true), { width: 60, height: 13 }));
     this.result = c;
   }
 
@@ -1277,6 +1324,8 @@ export class CraneGame extends Phaser.Scene {
     }
     c.add(text(this, SIDE.l - 6, BOX.bottom - 9, 'FRONT', PALETTE.gold).setOrigin(0, 0.5));
     c.add(text(this, SIDE.r + 6, BOX.bottom - 9, 'REAR', PALETTE.gold).setOrigin(1, 0.5));
+    this.sideProfile = this.add.graphics();
+    c.add(this.sideProfile);
     this.sideToys = this.add.container(0, 0);
     c.add(this.sideToys);
     this.sideRig = this.add.graphics();
@@ -1315,11 +1364,48 @@ export class CraneGame extends Phaser.Scene {
     this.sideToys.sort('y', (a: Phaser.GameObjects.Image, b: Phaser.GameObjects.Image) => (b.y - a.y) || 0);
   }
 
+  /**
+   * The pile from the side, as a solid: the machine's depth cut into slices,
+   * and each one filled from the floor up to the top of the tallest toy
+   * standing in it, wherever it is left to right.  It is the same heap the
+   * front view shows, seen end on -- so the side view reads as a full machine,
+   * and the claw's depth can be judged against the mass under it.
+   */
+  private drawPileProfile(): void {
+    const g = this.sideProfile;
+    g.clear();
+    const SLICES = 26;
+    for (let i = 0; i < SLICES; i++) {
+      const z0 = i / SLICES;
+      const z1 = (i + 1) / SLICES;
+      let top = SIDE.floor;
+      let near = false;
+      for (const t of this.toys) {
+        if (t.z < z0 || t.z >= z1) continue;
+        const k = scaleAt(t.z) * sideK(t.z);
+        top = Math.min(top, SIDE.floor - (t.lift + TOY_H * 0.78) * k);
+        if (Math.abs(t.x - this.clawX) < 22) near = true;
+      }
+      if (top >= SIDE.floor) continue;
+      const x0 = sideX(z0);
+      const w = sideX(z1) - x0 + 1;
+      // the claw's own lane a shade lighter than the heap either side of it
+      g.fillStyle(near ? 0x4a5676 : 0x3a4460, 1).fillRect(x0, top, w, SIDE.floor - top);
+      g.fillStyle(near ? 0x66759c : 0x4a5674, 1).fillRect(x0, top, w, 2);
+    }
+  }
+
   private drawSide(): void {
     const k = scaleAt(this.clawZ) * sideK(this.clawZ);
     const x = sideX(this.clawZ);
     const tip = SIDE.top + this.drop * k;
-    // the lane the claw is over, solid; the rest of the heap, a ghost
+    // THE HEAP BEHIND THE LANE.  Thirty-odd toys stand at a handful of
+    // depths, so drawn one behind another they came to three sparse clumps
+    // with gaps between them -- nothing like the wall of plush the front view
+    // shows.  So the rest of the heap is drawn as what it is from here: its
+    // outline, depth by depth, as high as the toys standing at that depth.
+    // The claw's own lane goes over it, toy by toy, in full.
+    this.drawPileProfile();
     const lane: Phaser.GameObjects.Image[] = [];
     for (const o of [...this.sideToys.list] as Phaser.GameObjects.Image[]) {
       const t = o.getData('toy') as Toy;
@@ -1328,11 +1414,11 @@ export class CraneGame extends Phaser.Scene {
         continue;
       }
       if (Math.abs(t.x - this.clawX) < 22) {
-        o.setAlpha(1).clearTint();
+        o.setVisible(true).setAlpha(1).clearTint();
         lane.push(o);
-      } else o.setAlpha(0.18).setTint(0x404a60);
+      } else o.setVisible(true).setAlpha(0.55).setTint(0x7482a0);
     }
-    // the claw's lane drawn over the ghosts, lowest first
+    // the claw's lane drawn over the profile, lowest first
     lane.sort((a, b) => b.y - a.y).forEach((o) => this.sideToys.bringToTop(o));
     const g = this.sideRig;
     g.clear();
