@@ -12,7 +12,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../../render/palette';
 import { audio } from '../../core/audio';
 import { store } from '../../core/state';
-import { centerText, text } from '../../core/ui';
+import { button, centerText, text } from '../../core/ui';
 import { GAME_H } from '../../render/pixelScaler';
 import { COLS, depthFor, type Look } from '../../art/player';
 import { COSMETICS, lookFor, type CosmeticDef } from '../../game/catalog';
@@ -221,9 +221,10 @@ export class BarberShop extends WalkRoom {
     const owned = l.wardrobe.includes(c.id);
     const on = (l.outfit as Record<string, string>)[c.slot] === c.id;
     const look = this.lookWith(c);
+    // (< and > are not in this row: they go either side of the head in the
+    // panel, clear of the corner a phone keeps its own arrows in -- down here
+    // the d-pad sat on top of them and took every tap meant for the book)
     const buttons = [
-      { label: '<', fn: () => this.browse(this.pick - 1), w: 20 },
-      { label: '>', fn: () => this.browse(this.pick + 1), w: 20 },
       owned
         ? { label: on ? 'HAVE IT' : 'APPLY', fn: () => this.apply(c, false), disabled: on, w: 100 }
         : { label: `BUY & APPLY $${c.price}`, fn: () => this.apply(c, true), disabled: store.get().cash < c.price, w: 100 },
@@ -238,7 +239,13 @@ export class BarberShop extends WalkRoom {
         `YOU HAVE $${store.get().cash}`,
       ],
       buttons,
-      (box, x, y) => box.add(this.portrait(look, x, y - 30)),
+      (box, x, y) => {
+        box.add(this.portrait(look, x, y - 30));
+        // the page turners, under the head: the preview's anchor is the
+        // middle of its box, so they sit either side of it and above the row
+        box.add(button(this, x - 22, y + 16, '<', () => this.browse(this.pick - 1), { width: 20, height: 12 }));
+        box.add(button(this, x + 22, y + 16, '>', () => this.browse(this.pick + 1), { width: 20, height: 12 }));
+      },
     );
     // the panel keeps the bottom of the head in its box; the chair shows it too
     this.previewing = true;

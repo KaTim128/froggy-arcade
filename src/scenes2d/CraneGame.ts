@@ -314,8 +314,6 @@ export class CraneGame extends Phaser.Scene {
   private sideToys!: Phaser.GameObjects.Container;
   private sideClaw!: Phaser.GameObjects.Container;
   private sideRig!: Phaser.GameObjects.Graphics;
-  /** The heap's outline from the side, drawn behind the toys. */
-  private sideProfile!: Phaser.GameObjects.Graphics;
   private sideHeld: Phaser.GameObjects.Image | null = null;
   private sideBtn: Phaser.GameObjects.Container | null = null;
   private marquee: Phaser.GameObjects.BitmapText[] = [];
@@ -897,7 +895,7 @@ export class CraneGame extends Phaser.Scene {
     // they meet it (a toy between the hooks), or all the way on nothing --
     // then a beat as it takes the grip, and it grabs
     const on = this.targetUnder();
-    this.moveClaw(on ? GRIP_SHUT : 0, 380, () => this.time.delayedCall(220, () => this.grab()));
+    this.moveClaw(on ? GRIP_SHUT : 0, 380, () => this.time.delayedCall(220, () => this.grab(early)));
   }
 
   /** The screen y of the top of a toy's head. */
@@ -1087,14 +1085,14 @@ export class CraneGame extends Phaser.Scene {
   }
 
   /** The claw shuts.  What it comes up with depends on the machine. */
-  private grab(): void {
-    // What the fingers have come down to: a toy is only in them if the tips
-    // are level with its head or below.  Letting it settle always gets there;
-    // shutting early only does if the claw is far enough down already.
+  private grab(early = false): void {
+    // Shut on the way down, the fingers only have what they have reached: the
+    // tips level with the toy's head or below.  Let it settle and they are
+    // always there, so a settled grab is judged exactly as it always was.
     const under = this.targetUnder();
     const k = scaleAt(this.clawZ);
     const tips = gantryY(this.clawZ) + (this.drop + FINGERS) * k;
-    const best = under && tips >= this.topOf(under) ? under : null;
+    const best = under && (!early || tips >= this.topOf(under)) ? under : null;
     if (best) {
       // dead centre is the best grip there is; at the edge of the claw it
       // is just over half that
@@ -1392,8 +1390,6 @@ export class CraneGame extends Phaser.Scene {
     }
     c.add(text(this, SIDE.l - 6, BOX.bottom - 9, 'FRONT', PALETTE.gold).setOrigin(0, 0.5));
     c.add(text(this, SIDE.r + 6, BOX.bottom - 9, 'REAR', PALETTE.gold).setOrigin(1, 0.5));
-    this.sideProfile = this.add.graphics();
-    c.add(this.sideProfile);
     this.sideToys = this.add.container(0, 0);
     c.add(this.sideToys);
     this.sideRig = this.add.graphics();
@@ -1432,48 +1428,16 @@ export class CraneGame extends Phaser.Scene {
     this.sideToys.sort('y', (a: Phaser.GameObjects.Image, b: Phaser.GameObjects.Image) => (b.y - a.y) || 0);
   }
 
-  /**
-   * The pile from the side, as a solid: the machine's depth cut into slices,
-   * and each one filled from the floor up to the top of the tallest toy
-   * standing in it, wherever it is left to right.  It is the same heap the
-   * front view shows, seen end on -- so the side view reads as a full machine,
-   * and the claw's depth can be judged against the mass under it.
-   */
-  private drawPileProfile(): void {
-    const g = this.sideProfile;
-    g.clear();
-    const SLICES = 26;
-    for (let i = 0; i < SLICES; i++) {
-      const z0 = i / SLICES;
-      const z1 = (i + 1) / SLICES;
-      let top = SIDE.floor;
-      let near = false;
-      for (const t of this.toys) {
-        if (t.z < z0 || t.z >= z1) continue;
-        const k = scaleAt(t.z) * sideK(t.z);
-        top = Math.min(top, SIDE.floor - (t.lift + TOY_H * 0.78) * k);
-        if (Math.abs(t.x - this.clawX) < 22) near = true;
-      }
-      if (top >= SIDE.floor) continue;
-      const x0 = sideX(z0);
-      const w = sideX(z1) - x0 + 1;
-      // the claw's own lane a shade lighter than the heap either side of it
-      g.fillStyle(near ? 0x4a5676 : 0x3a4460, 1).fillRect(x0, top, w, SIDE.floor - top);
-      g.fillStyle(near ? 0x66759c : 0x4a5674, 1).fillRect(x0, top, w, 2);
-    }
-  }
-
   private drawSide(): void {
     const k = scaleAt(this.clawZ) * sideK(this.clawZ);
     const x = sideX(this.clawZ);
     const tip = SIDE.top + this.drop * k;
-    // THE HEAP BEHIND THE LANE.  Thirty-odd toys stand at a handful of
-    // depths, so drawn one behind another they came to three sparse clumps
-    // with gaps between them -- nothing like the wall of plush the front view
-    // shows.  So the rest of the heap is drawn as what it is from here: its
-    // outline, depth by depth, as high as the toys standing at that depth.
-    // The claw's own lane goes over it, toy by toy, in full.
-    this.drawPileProfile();
+    // THE HEAP BEHIND THE LANE.  The toys are scattered through the whole
+    // depth of the glass, so end on they already read as one pile: the claw's
+    // own lane is drawn in full and the rest of it dimmed behind, each toy
+    // its own shape.  (Nothing is blocked in behind them: a slab drawn under
+    // the heap to fill the gaps showed up as plain rectangles behind the
+    // round capsules in the dark machine.)
     const lane: Phaser.GameObjects.Image[] = [];
     for (const o of [...this.sideToys.list] as Phaser.GameObjects.Image[]) {
       const t = o.getData('toy') as Toy;
