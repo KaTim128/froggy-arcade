@@ -66,16 +66,16 @@ const HOW_TO: Record<CraneKind, string[]> = {
     'GRAB A PLUSH AND DROP IT DOWN THE CHUTE.',
     'LINE THE CLAW UP FROM THE FRONT, THEN',
     'CHECK THE DEPTH IN THE SIDE VIEW.',
-    'DROP, LET IT SETTLE, THEN GRAB.',
-    'DEAD CENTRE GRIPS BEST. IT CAN SLIP!',
+    'DROP, THEN GRAB ON THE WAY DOWN OR',
+    'ONCE IT SETTLES. CENTRE GRIPS BEST!',
     'A WON TOY GOES IN YOUR POCKETS.',
   ],
   oddity: [
     'GRAB A CAPSULE AND DROP IT DOWN THE CHUTE.',
     'LINE THE CLAW UP FROM THE FRONT, THEN',
     'CHECK THE DEPTH IN THE SIDE VIEW.',
-    'DROP, LET IT SETTLE, THEN GRAB.',
-    'LAND ON A CAPSULE: IT HOLDS 4 IN 5.',
+    'DROP, THEN GRAB ON THE WAY DOWN OR',
+    'ONCE IT SETTLES ON A CAPSULE: 4 IN 5.',
     'WHAT IS INSIDE GOES IN YOUR POCKETS.',
   ],
 };
@@ -807,6 +807,12 @@ export class CraneGame extends Phaser.Scene {
     if (this.phase === 'aim') {
       if (!this.sideOn) this.toggleSide();
       else this.beginLower();
+    } else if (this.phase === 'lower') {
+      // GRABBING EARLY.  You do not have to let it settle: press again on the
+      // way down and the fingers close where they are.  Catch a toy standing
+      // proud of the heap on the way past and it is yours; close too high and
+      // they shut on air, which is the gamble.
+      this.shut(true);
     } else if (this.phase === 'wait' && this.sideOn) this.shut();
   }
 
@@ -821,7 +827,8 @@ export class CraneGame extends Phaser.Scene {
 
   private actionLabel(): string {
     if (this.phase === 'aim') return this.sideOn ? 'DROP' : 'SIDE VIEW';
-    if (this.phase === 'wait') return 'GRAB';
+    // on the way down as well as settled: the fingers can shut at any height
+    if (this.phase === 'wait' || this.phase === 'lower') return 'GRAB';
     if (this.phase === 'pay') return 'INSERT';
     return '...';
   }
@@ -873,13 +880,15 @@ export class CraneGame extends Phaser.Scene {
       if (this.phase !== 'opening') return;
       this.phase = 'lower';
       audio.sfx('ui_blip');
+      // the button says GRAB from here down: it can be shut at any height
+      this.syncButtons();
     });
     // (it stays in the side view: the drop and the grab are watched from there)
   }
 
   /** GRAB: the claw closes on whatever it has settled on. */
-  private shut(): void {
-    if (this.phase !== 'wait') return;
+  private shut(early = false): void {
+    if (this.phase !== (early ? 'lower' : 'wait')) return;
     this.phase = 'shut';
     this.grabCue.setVisible(false);
     audio.sfx('door_shut', 0.25);
@@ -1079,7 +1088,13 @@ export class CraneGame extends Phaser.Scene {
 
   /** The claw shuts.  What it comes up with depends on the machine. */
   private grab(): void {
-    const best = this.targetUnder();
+    // What the fingers have come down to: a toy is only in them if the tips
+    // are level with its head or below.  Letting it settle always gets there;
+    // shutting early only does if the claw is far enough down already.
+    const under = this.targetUnder();
+    const k = scaleAt(this.clawZ);
+    const tips = gantryY(this.clawZ) + (this.drop + FINGERS) * k;
+    const best = under && tips >= this.topOf(under) ? under : null;
     if (best) {
       // dead centre is the best grip there is; at the edge of the claw it
       // is just over half that

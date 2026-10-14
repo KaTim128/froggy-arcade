@@ -54,6 +54,15 @@ const OFFER: string[] = [
 const CARD_SIZE = 16;
 
 /**
+ * WHERE THE TALKING SITS.  Both men are on the kerb along the bottom of the
+ * picture, and a line of dialogue down there covered them -- you heard the
+ * offer without seeing either of the two people making it.  So the line goes
+ * up, clear above both their heads, against the front of the arcade: the
+ * whole of the pavement stays in view for every line of it.
+ */
+const TALK_Y = 118;
+
+/**
  * The arrow does not appear the instant a line does.  A line fades in over
  * this long, and a click landing during the fade would skip a beat the player
  * never saw.
@@ -192,10 +201,16 @@ export class IntroCutscene extends Phaser.Scene {
       // the rust trousers all came out the same desaturated blue-grey.  He is
       // the same man the player walks around the arcade as, so he is the same
       // colours as him.
+      // THE SAME MAN, SAT DOWN.  He used to be the standing figure squashed
+      // to 72% of his height, which is nobody's proportions -- a head too wide
+      // for its body, legs too short.  `sit` is the rig's own seated pose (the
+      // one he begs in outside the arcade): the same model, the same height
+      // out of the ground, the same colours, with the body let down onto the
+      // kerb and the legs folded out in front.  Facing left, at the man.
       this.player = new Player(this, MAN_X + 34, KERB_Y, false);
-      this.player.sprite.setScale(1, 0.72); // sitting: the same body, folded up
+      this.player.sit('floor', { facing: -1 });
 
-      this.caption = centerText(this, GAME_W / 2, GAME_H - 20, '', PALETTE.cream).setDepth(900);
+      this.caption = centerText(this, GAME_W / 2, TALK_Y, '', PALETTE.cream).setDepth(900);
       backPlate(this, this.caption);
       this.buildChrome();
 
