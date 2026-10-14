@@ -9,9 +9,11 @@
  * buttoned-up and still; this is a young man in the arcade's own uniform who
  * slouches, grins, and plainly thinks the whole job is a bit of a laugh:
  *
- *   - a purple FROGGY ARCADE polo with a teal collar and piping, short
- *     sleeves, a green frog on the chest pocket and a name badge
- *   - a pink cap on backwards
+ *   - the house uniform, cut like the shopkeeper's over the road and in the
+ *     same family of colours: a plain wine polo with one lit edge and one
+ *     shade, a cream collar and piping, short sleeves, a green frog on the
+ *     chest pocket and a name badge
+ *   - a cap on backwards, in the same wine with the same cream trim
  *   - untidy ginger hair out from under it, freckles, round glasses
  *   - a lanyard, with nothing on the hook -- the missing key
  *   - one eyebrow up and a crooked smirk: he is joking with you
@@ -43,18 +45,19 @@ export interface StafferDrawOpts {
 }
 
 const KIT = {
-  polo: '#6B3FC4',
-  poloDark: '#4E2C94',
-  poloShade: '#3A2170',
-  trim: '#46C4BD',
-  trimDark: '#2D8E89',
+  // the shopkeeper's wine, lit and shaded the way hers is, with her cream
+  polo: '#8A3A5A',
+  poloDark: '#6A2A44',
+  poloShade: '#4E1E32',
+  trim: '#F0E0C8',
+  trimDark: '#C8B496',
   frog: '#6FBB6A',
   frogDark: '#3F7E3B',
   badge: '#F4EEDC',
   badgeInk: '#2B303C',
-  lanyard: '#FFD45E',
-  cap: '#FF4FA3',
-  capDark: '#C2357A',
+  lanyard: '#D8A838',
+  cap: '#8A3A5A',
+  capDark: '#5E2438',
   skin: '#E2BC98',
   skinShade: '#B98E6B',
   freckle: '#B7775A',

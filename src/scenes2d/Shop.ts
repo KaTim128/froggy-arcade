@@ -31,6 +31,7 @@ import {
   type Result,
 } from '../game/life';
 import { cosmeticById, furnitureById, lookFor, type CosmeticSlot } from '../game/catalog';
+import { touchControls } from '../ui/touchControls';
 
 /** The shops themselves are rooms now (scenes2d/shops); this is the landlord's desk and your wardrobe. */
 export type ShopKind = 'landlord' | 'wardrobe';
@@ -91,6 +92,10 @@ export class Shop extends Phaser.Scene {
   }
 
   create(): void {
+    // The list fills the screen, and its rows and buttons reach into the
+    // corners a phone keeps its arrows in: the pad goes while it is open.
+    touchControls.holdStick();
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => touchControls.releaseStick());
     this.mode = this.modeFor(this.kind);
     this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0.88).setOrigin(0, 0).setInteractive();
     this.add.rectangle(6, 6, GAME_W - 12, GAME_H - 12, PALETTE.ink, 0.97).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold);

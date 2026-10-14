@@ -1,9 +1,15 @@
 /**
  * Froggy's dialogue box.  PRD §8.3.
  *
- * Typewriter reveal at 28 chars/sec with a soft blip per character.  The
- * portrait is drawn on the UNFILTERED overlay (PRD FR-2) while the box itself
- * is pixel art, so Froggy sits inside a frame he does not visually belong to.
+ * Typewriter reveal at 28 chars/sec with a soft blip per character.
+ *
+ * THE PORTRAIT IS PIXEL ART, like everyone else's.  It used to be drawn
+ * smooth on the unfiltered overlay, which put a soft, round, high-resolution
+ * frog inside a box of hard pixels -- next to the arcade staff's own portrait
+ * he looked like he had been pasted in from another game.  The same drawing
+ * goes through the overlay's pixel mode instead, so he is made of the world's
+ * own pixels, and the box carries his name over the line the way the staff's
+ * boxes carry theirs.
  */
 
 import Phaser from 'phaser';
@@ -74,14 +80,17 @@ export class DialogueBox {
 
     const panel = scene.add.rectangle(0, BOX_Y, GAME_W, BOX_H, PALETTE.ink).setOrigin(0, 0);
     panel.setStrokeStyle(1, PALETTE.neon);
+    // the well, with the 1px edge every staff portrait sits in
     const portraitWell = scene.add.rectangle(6, BOX_Y + 3, 48, BOX_H - 6, PALETTE.plum).setOrigin(0, 0);
+    portraitWell.setStrokeStyle(1, PALETTE.neon, 0.6);
+    const who = text(scene, 60, BOX_Y + 5, 'FROGGY', PALETTE.neon);
 
-    this.label = text(scene, 60, BOX_Y + 8, '', PALETTE.cream).setMaxWidth(GAME_W - 70);
+    this.label = text(scene, 60, BOX_Y + 15, '', PALETTE.cream).setMaxWidth(GAME_W - 70);
     this.prompt = text(scene, GAME_W - 14, BOX_Y + BOX_H - 11, '>', PALETTE.gold).setVisible(false);
 
     this.highlight = scene.add.rectangle(0, 0, 10, 10).setStrokeStyle(1, PALETTE.gold).setVisible(false);
 
-    this.container = scene.add.container(0, 0, [panel, portraitWell, this.label, this.prompt]);
+    this.container = scene.add.container(0, 0, [panel, portraitWell, who, this.label, this.prompt]);
     this.container.setDepth(900).setVisible(false);
 
     this.updateRef = (_t: number, d: number) => this.tick(d);
@@ -239,17 +248,21 @@ export class DialogueBox {
     this.painted = true;
     const talking = this.state === 'typing';
     const pose: FroggyPose = line.pose ?? (talking ? 'talk' : 'idleA');
-    froggyLayer.paint((ctx) => {
-      drawFroggy(ctx, {
-        x: PORTRAIT_CX,
-        y: PORTRAIT_BASE,
-        height: PORTRAIT_H,
-        // V1 is V0's art with the animation stopped.  Nothing else.
-        variant: line.freeze ? 'uncanny' : 'cozy',
-        pose,
-        bounce: this.bounce,
-      });
-    });
+    froggyLayer.paint(
+      (ctx) => {
+        drawFroggy(ctx, {
+          x: PORTRAIT_CX,
+          y: PORTRAIT_BASE,
+          height: PORTRAIT_H,
+          // V1 is V0's art with the animation stopped.  Nothing else.
+          variant: line.freeze ? 'uncanny' : 'cozy',
+          pose,
+          bounce: this.bounce,
+        });
+      },
+      false,
+      true, // pixel mode: the same frog, in the world's own pixels
+    );
   }
 
   private advance(): void {

@@ -24,17 +24,31 @@ import { froggyLayer } from '../../render/froggyLayer';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../../game/roomWalk';
 import { pullBackAtClosing } from '../../game/closingPull';
 import { paintEntrance, ENTRANCE_W, ENTRANCE_H } from '../../art/exterior';
+import { touchControls } from '../../ui/touchControls';
 import { grain, seeded } from '../../art/surface';
 import { speak } from '../../ui/talkPanel';
 import type { SpeakerId } from '../../ui/portraits';
 import { backPlate } from '../../ui/plate';
-import { SHOP_HOURS, shopsOpen } from '../../game/life';
-import { onLightTurn } from '../../game/dayNight';
+import { SHOP_HOURS, clock, shopsOpen, type DayPhase } from '../../game/life';
+import { onLightTurn, onPhaseTurn } from '../../game/dayNight';
 
 /** The back wall's foot: the floor starts here. */
 export const FLOOR_TOP = 100;
 /** The lowest the feet go (the HUD strip along the bottom stays clear). */
 export const FLOOR_BOTTOM = 170;
+/**
+ * What the street looks like through a shop's front doors, hour by hour: the
+ * flat blue of the middle of the day, the low amber of the evening, and the
+ * dark of the night with the lamps on in it.
+ */
+const SKY_THROUGH: Record<DayPhase, number> = { morning: 0xbfe0ee, evening: 0xf0a86a, night: 0x1a2038 };
+/** And the light of that hour, washed over the whole doorway. */
+const GLASS_WASH: Record<DayPhase, { col: number; a: number }> = {
+  morning: { col: 0xbfe0ee, a: 0 },
+  evening: { col: 0xd8632e, a: 0.28 },
+  night: { col: 0x0a0e1c, a: 0.45 },
+};
+
 /** The way out: the arcade's glass doors, seen from inside, at the left of the back wall. */
 export const EXIT_X = 34;
 /**
@@ -133,6 +147,8 @@ export abstract class WalkRoom extends Phaser.Scene {
 
   create(): void {
     froggyLayer.clear();
+    // (a room left with a panel open must not take the pad with it)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.releasePad());
     this.locked = false;
     this.closingNight = false;
     this.panel = null;
@@ -262,16 +278,32 @@ export abstract class WalkRoom extends Phaser.Scene {
    */
   protected paintDoor(): void {
     const g = this.add.graphics().setDepth(1);
-    paintEntrance(this, g, {
+    // THE DAY, THROUGH THE GLASS.  The street outside is whatever hour it
+    // actually is: the glass was painted a flat midday blue whatever the
+    // clock said, so a quarter to eight in the evening looked like noon from
+    // inside every shop.  The sky behind the doors is the hour's, and a wash
+    // over the whole opening carries the light of it into the doorway -- and
+    // it follows the hour over, so evening arriving while you are browsing is
+    // seen in the doorway rather than waiting for you to leave.
+    const c0 = clock();
+    const night = c0.phase === 'night';
+    const ent = paintEntrance(this, g, {
       doorX: EXIT_X,
       base: this.floorTop,
       lampY: this.floorTop - 30,
       closed: false,
-      day: true,
-      night: false,
+      day: c0.phase === 'morning',
+      night,
       c: (n) => n,
-      inside: { back: 0xbfe0ee, floor: 0x9a9488, band: 0xffffff, mat: 0x6a4a3a, spill: 0xfff0c0 },
+      inside: { back: SKY_THROUGH[c0.phase], floor: night ? 0x3a3a44 : 0x9a9488, band: night ? 0xc8d0e0 : 0xffffff, mat: 0x6a4a3a, spill: 0xfff0c0 },
       depth: 1,
+    });
+    const r = ent.rect;
+    const wash = this.add.rectangle(r.x, r.y, r.w, r.h, GLASS_WASH[c0.phase].col, GLASS_WASH[c0.phase].a).setOrigin(0, 0).setDepth(1.6);
+    onPhaseTurn(this, (phase) => {
+      const w = GLASS_WASH[phase];
+      this.tweens.add({ targets: wash, alpha: w.a, duration: 900 });
+      wash.setFillStyle(w.col, w.a);
     });
     const top = this.floorTop - ENTRANCE_H - 9;
     g.fillStyle(0x14100c, 1).fillRect(EXIT_X - 11, top - 1, 22, 9);
@@ -441,6 +473,15 @@ export abstract class WalkRoom extends Phaser.Scene {
       bx += w + 4;
     }
     this.panel = c;
+    // THE PAD GOES WHILE THE PANEL IS UP.  On a phone the arrows and the E
+    // button are real elements over the picture, so they take the tap before
+    // the canvas under them ever sees it -- and the panel's own buttons sit
+    // in exactly that corner.  That is why BUY, WEAR and the barber's arrows
+    // did nothing on a phone: the thing being pressed was the d-pad.
+    if (!this.padHeld) {
+      this.padHeld = true;
+      touchControls.holdStick();
+    }
     this.player.move(0, 0, 16, this.bounds);
   }
 
@@ -448,8 +489,18 @@ export abstract class WalkRoom extends Phaser.Scene {
     if (!this.panel) return;
     this.panel.destroy();
     this.panel = null;
+    this.releasePad();
     this.modalClosedAt = performance.now();
   }
+
+  /** The pad comes back when nothing is over it any more. */
+  protected releasePad(): void {
+    if (!this.padHeld) return;
+    this.padHeld = false;
+    touchControls.releaseStick();
+  }
+
+  private padHeld = false;
 
   // ------------------------------------------------------------------ frame
 

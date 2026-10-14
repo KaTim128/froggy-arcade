@@ -291,6 +291,63 @@ function texStaffDoor(): HTMLCanvasElement {
   });
 }
 
+/**
+ * ---- THE GAUGES YOU READ WHILE YOU HIDE, drawn like a piece of dark
+ * equipment rather than flat blocks of colour: a plate of smoked glass, and
+ * sunk into it a channel whose fill is lit from inside.
+ */
+
+/** The panel a gauge sits on: near-black glass, lit along the top edge. */
+function plate(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(x - 1, y + 2, w + 2, h);
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, 'rgba(32,30,34,0.94)');
+  g.addColorStop(0.5, 'rgba(14,13,16,0.94)');
+  g.addColorStop(1, 'rgba(8,7,9,0.94)');
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = 'rgba(255,255,255,0.14)';
+  ctx.fillRect(x, y, w, 1);
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(x, y + h - 1, w, 1);
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  ctx.fillRect(x, y, 1, h);
+  ctx.fillRect(x + w - 1, y, 1, h);
+}
+
+/** An empty channel: a dark groove with its own shadow along the top lip. */
+function gauge(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, 'rgba(2,2,3,0.92)');
+  g.addColorStop(1, 'rgba(18,17,20,0.92)');
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(x, y, w, 1);
+  ctx.fillStyle = 'rgba(255,255,255,0.10)';
+  ctx.fillRect(x, y + h - 1, w, 1);
+}
+
+/** A length of the channel, filled and lit: bright at the top, deep at the foot. */
+function lit(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, col: string): void {
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, shade(col, 1.45));
+  g.addColorStop(0.45, col);
+  g.addColorStop(1, shade(col, 0.55));
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.fillRect(x, y, w, 1);
+}
+
+/** `col` (a #rrggbb) lightened or darkened by `k`. */
+function shade(col: string, k: number): string {
+  const n = parseInt(col.slice(1), 16);
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * k)));
+  return `rgb(${c((n >> 16) & 255)},${c((n >> 8) & 255)},${c(n & 255)})`;
+}
+
 /** Through the front doors: the night, a street lamp, the trees. */
 function texNight(): HTMLCanvasElement {
   return canvas(256, 256, (g) => {
@@ -2121,39 +2178,80 @@ export class HotelLobby3D extends Phaser.Scene {
     const x = 6;
     const y = isTouch() ? 16 : 24;
     drawPixelText(ctx, 'STRESS', x, y, { scale: 1, color: '#c8c0b0', alpha: 0.8 });
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(x, y + 9, 52, 5);
+    // the gauge: a dark glass channel with the fill lit inside it
+    gauge(ctx, x, y + 9, 52, 5);
     const sc = this.stress < 0.5 ? '#7fd88a' : this.stress < NERVE.loud ? '#f0d060' : '#ff6050';
-    ctx.fillStyle = sc;
-    ctx.fillRect(x + 1, y + 10, Math.round(50 * this.stress), 3);
+    const sw = Math.round(50 * this.stress);
+    if (sw > 0) {
+      lit(ctx, x + 1, y + 10, sw, 3, sc);
+    }
 
     const c = this.check;
     if (c) {
       const w = 150;
       const bx = Math.round(GAME_W / 2 - w / 2);
       const by = 128;
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(bx - 6, by - 22, w + 12, 40);
-      drawPixelText(ctx, CHECK_TITLE[c.kind], GAME_W / 2, by - 18, { scale: 1, color: '#f0d890', center: true });
-      const zone = (z: [number, number], col: string) => {
-        ctx.fillStyle = col;
-        ctx.fillRect(bx + Math.round(z[0] * w), by - 6, Math.max(1, Math.round((z[1] - z[0]) * w)), 8);
+      // ---- the plate: dark glass, a lit top edge, a shadow under it
+      plate(ctx, bx - 8, by - 24, w + 16, 44);
+      drawPixelText(ctx, CHECK_TITLE[c.kind], GAME_W / 2, by - 18, { scale: 1, color: '#f6e3a4', center: true });
+      // ---- the track: a channel sunk into the plate, the bands lit in it
+      const ty = by - 7;
+      const th = 10;
+      gauge(ctx, bx - 1, ty - 1, w + 2, th + 2);
+      const zone = (z: [number, number], col: string): void => {
+        const zx = bx + Math.round(z[0] * w);
+        const zw = Math.max(1, Math.round((z[1] - z[0]) * w));
+        lit(ctx, zx, ty, zw, th, col);
       };
-      zone([0, 1], '#7a2420');
+      zone([0, 1], '#8c2a24');
       if (c.kind === 'react') {
-        zone([0, 1], c.pos >= 1 ? '#3aa04a' : '#7a2420');
+        zone([0, 1], c.pos >= 1 ? '#3fb455' : '#8c2a24');
       } else {
-        zone(c.yellow, '#b89a30');
-        zone(c.green, '#3aa04a');
+        zone(c.yellow, '#c8a634');
+        zone(c.green, '#3fb455');
+        // the band edges, so where one ends and the next begins is plain
+        for (const e of [c.yellow[0], c.yellow[1], c.green[0], c.green[1]]) {
+          ctx.fillStyle = 'rgba(0,0,0,0.45)';
+          ctx.fillRect(bx + Math.round(e * w), ty, 1, th);
+        }
+      }
+      // the glass over the whole channel: bright along the top, dim at the foot
+      const gloss = ctx.createLinearGradient(0, ty, 0, ty + th);
+      gloss.addColorStop(0, 'rgba(255,255,255,0.30)');
+      gloss.addColorStop(0.42, 'rgba(255,255,255,0.07)');
+      gloss.addColorStop(0.46, 'rgba(0,0,0,0.12)');
+      gloss.addColorStop(1, 'rgba(0,0,0,0.32)');
+      ctx.fillStyle = gloss;
+      ctx.fillRect(bx, ty, w, th);
+      if (c.kind !== 'react') {
+        // ---- the needle: a bright blade with its own glow and a dark edge
         const mx = bx + Math.round(c.pos * w);
+        const glow = ctx.createRadialGradient(mx, ty + th / 2, 0, mx, ty + th / 2, 9);
+        glow.addColorStop(0, 'rgba(255,255,255,0.45)');
+        glow.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(mx - 9, ty - 4, 18, th + 8);
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        ctx.fillRect(mx - 2, ty - 3, 4, th + 6);
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(mx - 1, by - 8, 2, 12);
+        ctx.fillRect(mx - 1, ty - 2, 2, th + 4);
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fillRect(mx - 1, ty - 4, 2, 2);
+        ctx.fillRect(mx - 1, ty + th + 2, 2, 2);
       }
       const act = isTouch() ? 'CALM' : 'SPACE';
-      drawPixelText(ctx, checkHow(c.kind, act), GAME_W / 2, by + 6, { scale: 1, color: '#c8c0b0', center: true });
-      // the time it has left, as a thin line under it all
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.fillRect(bx, by + 15, Math.round(w * Math.max(0, 1 - c.t / c.dur)), 1);
+      drawPixelText(ctx, checkHow(c.kind, act), GAME_W / 2, by + 6, { scale: 1, color: '#d4ccbc', center: true });
+      // the time it has left, as a thin lit line under it all
+      const left = Math.round(w * Math.max(0, 1 - c.t / c.dur));
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(bx, by + 15, w, 2);
+      if (left > 0) {
+        const tl = ctx.createLinearGradient(bx, 0, bx + left, 0);
+        tl.addColorStop(0, 'rgba(255,255,255,0.35)');
+        tl.addColorStop(1, 'rgba(255,255,255,0.8)');
+        ctx.fillStyle = tl;
+        ctx.fillRect(bx, by + 15, left, 2);
+      }
     }
     const f = this.flash;
     if (f && f.until > this.clock) {

@@ -172,8 +172,36 @@ export function headAndShoulders(scene: Phaser.Scene, look: Look, cx: number, to
         else g.fillStyle(col(ch), 1).fillRect(x0 + rx * k, y0 + ry * k, k, k);
       }),
     );
-  // the eyes (the rig draws them as their own part, on row 4)
-  g.fillStyle(col('E'), 1).fillRect(x0 + 5 * k, y0 + 4 * k, k, k).fillRect(x0 + 7 * k, y0 + 4 * k, k, k);
+  // ---- THE FACE, up close.  The rig gives everyone two dots for eyes, which
+  // is right at the size they are walked around at and bare in a portrait
+  // three times that.  So, in the colours the look already carries: a brow
+  // over each eye, a shaded nose between them, a cheek on each side, and a
+  // mouth -- but only where there is face to put one on, so a beard or a
+  // scarf over the chin is left alone.  Nobody's identity changes: it is the
+  // same head, read at the size it is being looked at.
+  const at = (rx: number, ry: number): string => rows[ry]?.[rx] ?? '.';
+  const skin = (ch: string): boolean => ch === 'S' || ch === 's';
+  const EYE_ROW = 4;
+  const brow = look.cols?.r ?? COLS.r ?? INK;
+  for (const ex of [5, 7]) {
+    if (skin(at(ex, EYE_ROW - 1))) g.fillStyle(brow, 0.75).fillRect(x0 + ex * k - 1, y0 + (EYE_ROW - 1) * k + k - 1, k + 1, 1);
+  }
+  // the nose: a shaded pixel down the middle, a row under the eyes
+  if (skin(at(6, EYE_ROW + 1))) g.fillStyle(col('s'), 0.9).fillRect(x0 + 6 * k, y0 + (EYE_ROW + 1) * k, k, k);
+  // the cheeks, where the light leaves the face
+  for (const cx of [4, 8]) {
+    if (skin(at(cx, EYE_ROW + 1))) g.fillStyle(col('s'), 0.5).fillRect(x0 + cx * k, y0 + (EYE_ROW + 1) * k, k, k);
+  }
+  // the mouth, a row lower again -- only on bare face
+  if (skin(at(5, EYE_ROW + 2)) && skin(at(6, EYE_ROW + 2))) {
+    g.fillStyle(col('s'), 0.85).fillRect(x0 + 5 * k, y0 + (EYE_ROW + 2) * k + 1, 2 * k, Math.max(1, k - 1));
+  }
+  // the eyes themselves, with a catchlight: the one pixel that makes a face
+  // look at you rather than past you
+  for (const ex of [5, 7]) {
+    g.fillStyle(col('E'), 1).fillRect(x0 + ex * k, y0 + EYE_ROW * k, k, k);
+    if (k > 1) g.fillStyle(0xffffff, 0.75).fillRect(x0 + ex * k, y0 + EYE_ROW * k, 1, 1);
+  }
   return g;
 }
 

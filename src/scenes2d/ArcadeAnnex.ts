@@ -54,9 +54,13 @@ export class ArcadeAnnex extends Phaser.Scene {
     super('ArcadeAnnex');
   }
 
-  init(data: { atCabinet?: GameId } = {}): void {
+  init(data: { atCabinet?: GameId; from?: 'hub' | 'casino' } = {}): void {
     this.returnTo = data.atCabinet ?? null;
+    this.cameFrom = data.from ?? 'hub';
   }
+
+  /** Which doorway you came in by: you arrive at that one, facing the room. */
+  private cameFrom: 'hub' | 'casino' = 'hub';
 
   create(): void {
     froggyLayer.clear();
@@ -103,9 +107,13 @@ export class ArcadeAnnex extends Phaser.Scene {
       ROOM.right - ROOM.left - 16,
       ROOM.bottom - ROOM.top - 6,
     );
-    // You come in through the right-hand doorway, so you arrive next to it.
-    const spawn = this.spawnPoint({ x: BACK_DOOR.x - 16, y: BACK_DOOR.y });
+    // You arrive at the doorway you came in by -- the hub's is the right-hand
+    // one, the casino's the left -- a step clear of it, looking into the room
+    // rather than back out the way you came.
+    const door = this.cameFrom === 'casino' ? { x: CASINO_DOOR.x + 16, y: CASINO_DOOR.y } : { x: BACK_DOOR.x - 16, y: BACK_DOOR.y };
+    const spawn = this.spawnPoint(door);
     this.player = new Player(this, spawn.x, spawn.y);
+    this.player.face(this.cameFrom === 'casino' ? 1 : -1);
 
     new TokenHud(this);
     attachPockets(this, () => this.busy());
@@ -133,7 +141,7 @@ export class ArcadeAnnex extends Phaser.Scene {
     this.time.addEvent({ delay: 2000, loop: true, callback: () => {
       if (!this.locked && !this.busy() && closingTime() && !store.get().froggyGone && store.get().route === 'normal') {
         this.locked = true;
-        fadeToScene(this, 'ArcadeHub', {});
+        fadeToScene(this, 'ArcadeHub', { fromDoor: 'annex' });
       }
     } });
     store.flush();
@@ -175,7 +183,7 @@ export class ArcadeAnnex extends Phaser.Scene {
   private toCasino(): void {
     this.locked = true;
     audio.sfx('footstep_carpet');
-    fadeToScene(this, 'ArcadeCasino');
+    fadeToScene(this, 'ArcadeCasino', { from: 'annex' });
   }
 
 
@@ -234,7 +242,7 @@ export class ArcadeAnnex extends Phaser.Scene {
   private toHub(): void {
     this.locked = true;
     audio.sfx('footstep_carpet');
-    fadeToScene(this, 'ArcadeHub');
+    fadeToScene(this, 'ArcadeHub', { fromDoor: 'annex' });
   }
 
   /**

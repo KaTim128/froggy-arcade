@@ -84,7 +84,7 @@ export class ArcadeCasino extends Phaser.Scene {
     super('ArcadeCasino');
   }
 
-  init(data: { atCabinet?: GameId } = {}): void {
+  init(data: { atCabinet?: GameId; from?: 'annex' } = {}): void {
     this.returnTo = data.atCabinet ?? null;
   }
 
@@ -148,8 +148,10 @@ export class ArcadeCasino extends Phaser.Scene {
       ROOM.bottom - ROOM.top - 6,
     );
     // You come in through the right-hand doorway, so you arrive next to it.
+    // in by the only door there is, the right-hand one: facing the room
     const spawn = this.spawnPoint({ x: BACK_DOOR.x - 16, y: BACK_DOOR.y });
     this.player = new Player(this, spawn.x, spawn.y);
+    this.player.face(-1);
 
     new TokenHud(this);
     attachPockets(this, () => this.busy());
@@ -189,7 +191,7 @@ export class ArcadeCasino extends Phaser.Scene {
     this.time.addEvent({ delay: 2000, loop: true, callback: () => {
       if (!this.locked && !this.busy() && closingTime() && !store.get().froggyGone && store.get().route === 'normal') {
         this.locked = true;
-        fadeToScene(this, 'ArcadeHub', {});
+        fadeToScene(this, 'ArcadeHub', { fromDoor: 'annex' });
       }
     } });
     store.flush();
@@ -407,7 +409,7 @@ export class ArcadeCasino extends Phaser.Scene {
     this.locked = true;
     audio.sfx('footstep_carpet');
     froggyLayer.clear();
-    fadeToScene(this, 'ArcadeAnnex');
+    fadeToScene(this, 'ArcadeAnnex', { from: 'casino' });
   }
 
   /**

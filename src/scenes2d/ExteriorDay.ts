@@ -40,6 +40,7 @@ import { SUNRISE_HOUR, twelveHour, BEG_MS, begNextMs, canBeg, clock, collectBegg
 import { nightfallOnce, onPhaseTurn } from '../game/dayNight';
 import { speak } from '../ui/talkPanel';
 import { backPlate } from '../ui/plate';
+import { grain } from '../art/surface';
 
 const WALK_Y = KERB_Y;
 /** Where the alley mouth is, off the arcade's right-hand corner. */
@@ -47,8 +48,16 @@ const ALLEY_X = GAME_W - 24;
 /** The alley is open to you once you have come through the night in the arcade. */
 const alleyOpen = (): boolean => store.get().froggyGone;
 type Spot = 'door' | 'man' | 'alley' | 'beg' | null;
-/** The patch of pavement against the arcade's wall, left of the doors, where you can sit with a can. */
-const BEG_X = 110;
+/**
+ * THE PITCH: the patch of pavement against the arcade's wall, just left of
+ * its doors, where you can sit with a can.  It used to sit out by the kerb
+ * halfway along the frontage, a pitch nobody coming out of the arcade would
+ * pass; it is up against the building now, a few steps from the doors, where
+ * the people with tokens in their pockets actually walk.
+ */
+const BEG_X = 104;
+/** And the line it is laid along: back from the walk line, at the wall. */
+const BEG_Y = KERB_Y - 9;
 /** More tokens than this, walking out of the arcade after the night, and it is evening. */
 export const EVENING_TOKENS = 600;
 
@@ -194,10 +203,10 @@ export class ExteriorDay extends Phaser.Scene {
       this.paintMat();
       // the can, on the cardboard until somebody sits down with it
       this.cup = this.add.graphics().setDepth(49);
-      this.cup.fillStyle(0x14100c, 1).fillRect(BEG_X + 6, WALK_Y - 7, 6, 6);
-      this.cup.fillStyle(0x9aa0a8, 1).fillRect(BEG_X + 7, WALK_Y - 6, 4, 5);
-      this.cup.fillStyle(0x3a3e44, 1).fillRect(BEG_X + 7, WALK_Y - 6, 4, 1);
-      this.add.zone(BEG_X - 12, WALK_Y - 30, 24, 32).setOrigin(0, 0).setDepth(61).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.send('beg'));
+      this.cup.fillStyle(0x14100c, 1).fillRect(BEG_X + 6, BEG_Y - 7, 6, 6);
+      this.cup.fillStyle(0x9aa0a8, 1).fillRect(BEG_X + 7, BEG_Y - 6, 4, 5);
+      this.cup.fillStyle(0x3a3e44, 1).fillRect(BEG_X + 7, BEG_Y - 6, 4, 1);
+      this.add.zone(BEG_X - 14, BEG_Y - 30, 28, 36).setOrigin(0, 0).setDepth(61).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.send('beg'));
       visit('forecourt');
     } else this.people = null;
     this.begText = centerText(this, BEG_X, WALK_Y - 52, '', PALETTE.gold).setDepth(803).setVisible(false);
@@ -401,7 +410,7 @@ export class ExteriorDay extends Phaser.Scene {
       }
       this.locked = true;
       audio.sfx('door_open');
-      fadeToScene(this, 'ArcadeHub');
+      fadeToScene(this, 'ArcadeHub', { fromDoor: 'street' });
       return;
     }
     if (this.spot === 'beg') {
@@ -428,7 +437,7 @@ export class ExteriorDay extends Phaser.Scene {
       this.begging = true;
       // down onto the cardboard, the can held out; nobody walks off from here
       this.errand = null;
-      this.player.setPosition(BEG_X - 3, WALK_Y);
+      this.player.setPosition(BEG_X - 3, BEG_Y);
       this.player.sit('floor', { can: true, facing: 1 });
       this.cup?.setVisible(false);
       this.say('YOU SIT DOWN WITH THE CAN. $1 EVERY 15 MINUTES. [E] TO GET UP.');
@@ -457,35 +466,76 @@ export class ExteriorDay extends Phaser.Scene {
   }
 
   /**
-   * The begging pitch: a flattened box laid on the pavement, its flaps and
-   * folds and a strip of tape showing, an old blanket folded on one end, and
-   * a cardboard sign propped against the wall behind it.
+   * THE PITCH, up against the arcade's wall: a flattened box laid on the
+   * pavement, an old blanket folded on one end, a sign propped on the stone.
+   *
+   * Drawn the way the building behind it is drawn -- a one-pixel ink line
+   * round everything, courses and seams in it rather than flat fill, the same
+   * speckled grain over the top, and a contact shadow where it meets the
+   * ground -- so the cardboard belongs to the same street as the brick, the
+   * plinth and the pavement slabs instead of sitting on them as two tan
+   * rectangles.
    */
   private paintMat(): void {
     const g = this.add.graphics().setDepth(49);
-    const x = BEG_X - 15;
-    const y = WALK_Y - 4;
-    // the box, opened out flat
-    g.fillStyle(0x14100c, 1).fillRect(x - 1, y - 1, 32, 7);
-    g.fillStyle(0xb88a54, 1).fillRect(x, y, 30, 5);
-    g.fillStyle(0xcf9f64, 1).fillRect(x, y, 30, 1);
-    g.fillStyle(0x8e6638, 1).fillRect(x + 10, y, 1, 5).fillRect(x + 20, y, 1, 5);
-    g.fillStyle(0xd8d0b8, 0.8).fillRect(x + 4, y + 2, 4, 1);
-    // a folded blanket at the wall end
-    g.fillStyle(0x14100c, 1).fillRect(x + 1, y - 3, 11, 4);
-    g.fillStyle(0x5a6a7a, 1).fillRect(x + 2, y - 2, 9, 2);
-    g.fillStyle(0x7a8a9a, 1).fillRect(x + 2, y - 2, 9, 1);
-    g.fillStyle(0xa83a3a, 1).fillRect(x + 4, y - 2, 1, 2).fillRect(x + 8, y - 2, 1, 2);
-    // the sign, leaning on the wall
-    const sx = BEG_X + 13;
-    const sy = WALK_Y - 18;
-    g.fillStyle(0x14100c, 1).fillRect(sx - 1, sy - 1, 14, 12);
-    g.fillStyle(0xc89a60, 1).fillRect(sx, sy, 12, 10);
-    g.fillStyle(0xa47a44, 1).fillRect(sx, sy + 9, 12, 1);
-    g.fillStyle(0x2a2018, 1)
-      .fillRect(sx + 2, sy + 2, 8, 1)
-      .fillRect(sx + 2, sy + 4, 6, 1)
-      .fillRect(sx + 2, sy + 6, 7, 1);
+    const x = BEG_X - 16;
+    const y = BEG_Y - 2;
+    const W = 32;
+    const H = 7;
+    // the shadow it casts on the slabs, softest at the far edge
+    for (let i = 0; i < 3; i++) g.fillStyle(0x000000, 0.1 - i * 0.03).fillRect(x - i, y + H - 1 + i, W + i * 2, 1);
+    // the box, opened out flat: ink line, card, a lit top edge
+    g.fillStyle(0x14100c, 1).fillRect(x - 1, y - 1, W + 2, H + 2);
+    g.fillStyle(0xa8835a, 1).fillRect(x, y, W, H);
+    g.fillStyle(0xc49c6c, 1).fillRect(x, y, W, 1);
+    g.fillStyle(0x8a6a44, 1).fillRect(x, y + H - 1, W, 1);
+    // the flutes of the corrugation, running the length of it
+    for (let k = 1; k < W; k += 3) {
+      g.fillStyle(0x97744e, 0.5).fillRect(x + k, y + 1, 1, H - 2);
+      g.fillStyle(0xbb9264, 0.35).fillRect(x + k + 1, y + 1, 1, H - 2);
+    }
+    // the folds where the flaps came over, creased pale along the crest
+    for (const fx of [10, 21]) {
+      g.fillStyle(0x6e5230, 1).fillRect(x + fx, y, 1, H);
+      g.fillStyle(0xd0ab7c, 0.8).fillRect(x + fx + 1, y, 1, H);
+    }
+    // a torn corner, and a strip of parcel tape with a shine on it
+    g.fillStyle(0x9a948a, 1).fillRect(x + W - 3, y, 3, 2);
+    g.fillStyle(0xd8d0b8, 0.55).fillRect(x + 3, y + 2, 7, 2);
+    g.fillStyle(0xf0ead8, 0.35).fillRect(x + 3, y + 2, 7, 1);
+    grain(g, x, y, W, H, 0xa8835a, 73, 0.16, 0.14);
+    // the blanket, folded at the wall end: wool, with a worn stripe
+    const bx = x + 2;
+    const by = y - 4;
+    g.fillStyle(0x14100c, 1).fillRect(bx - 1, by - 1, 13, 6);
+    g.fillStyle(0x55626f, 1).fillRect(bx, by, 11, 4);
+    g.fillStyle(0x76838f, 1).fillRect(bx, by, 11, 1);
+    g.fillStyle(0x3e4954, 1).fillRect(bx, by + 3, 11, 1);
+    g.fillStyle(0x9a3a3a, 1).fillRect(bx + 3, by, 1, 4).fillRect(bx + 7, by, 1, 4);
+    grain(g, bx, by, 11, 4, 0x55626f, 29, 0.14, 0.18);
+    // ---- the sign, propped against the arcade's plinth
+    const sx = BEG_X + 14;
+    const sy = BEG_Y - 15;
+    const sw = 13;
+    const sh = 12;
+    g.fillStyle(0x000000, 0.18).fillRect(sx - 2, sy + sh - 1, sw + 4, 2);
+    g.fillStyle(0x14100c, 1).fillRect(sx - 1, sy - 1, sw + 2, sh + 2);
+    g.fillStyle(0xb08c60, 1).fillRect(sx, sy, sw, sh);
+    g.fillStyle(0xc9a470, 1).fillRect(sx, sy, sw, 1);
+    // the cut top edge, where the corrugation shows through
+    for (let k = 0; k < sw; k += 2) g.fillStyle(0x8a6a44, 0.7).fillRect(sx + k, sy + 1, 1, 1);
+    // it leans, so one side catches the light and the other is in shadow
+    g.fillStyle(0xd0ab7c, 0.5).fillRect(sx, sy, 1, sh);
+    g.fillStyle(0x7a5c3a, 0.6).fillRect(sx + sw - 1, sy, 1, sh);
+    // marker, in a hand that has written it many times: uneven lines
+    g.fillStyle(0x241a12, 1)
+      .fillRect(sx + 2, sy + 3, 9, 1)
+      .fillRect(sx + 2, sy + 5, 6, 1)
+      .fillRect(sx + 2, sy + 7, 8, 1)
+      .fillRect(sx + 2, sy + 9, 4, 1);
+    grain(g, sx, sy, sw, sh, 0xb08c60, 41, 0.14, 0.12);
+    // a damp, dirty foot where it stands in the pavement grit
+    g.fillStyle(0x6a5438, 0.8).fillRect(sx, sy + sh - 1, sw, 1);
   }
 
   /** Up off the cardboard: begging over, and what is in the can is yours. */
@@ -499,7 +549,7 @@ export class ExteriorDay extends Phaser.Scene {
     this.errand = null;
     this.prompt.setVisible(false);
     this.promptPlate.setVisible(false);
-    this.player.setPosition(BEG_X - 3, WALK_Y);
+    this.player.setPosition(BEG_X - 3, BEG_Y);
     this.player.lie(1);
     this.cup?.setVisible(false);
     // (over the mat, clear of the sleeper)
@@ -560,7 +610,7 @@ export class ExteriorDay extends Phaser.Scene {
     glow(doorX, 132, 60, 40, 0xffe0a0, 0.25);
     glow(doorX - 33, 102, 26, 26, 0xffe0a0, 0.3);
     glow(doorX + 33, 102, 26, 26, 0xffe0a0, 0.3);
-    glow(BEG_X, WALK_Y + 2, 46, 10, 0xffd890, 0.12);
+    glow(BEG_X, BEG_Y + 4, 46, 10, 0xffd890, 0.12);
     // a few windows lit in the buildings behind
     const w = this.add.graphics().setDepth(701);
     for (let i = 0; i < 9; i++) w.fillStyle(0xf0d070, 0.55).fillRect(12 + ((i * 71) % 290), 40 + ((i * 29) % 20), 2, 2);
