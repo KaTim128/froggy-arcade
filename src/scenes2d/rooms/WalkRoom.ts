@@ -23,6 +23,8 @@ import { Player, depthFor, type Look } from '../../art/player';
 import { froggyLayer } from '../../render/froggyLayer';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../../game/roomWalk';
 import { pullBackAtClosing } from '../../game/closingPull';
+import { paintEntrance, ENTRANCE_W, ENTRANCE_H } from '../../art/exterior';
+import { grain, seeded } from '../../art/surface';
 import { speak } from '../../ui/talkPanel';
 import type { SpeakerId } from '../../ui/portraits';
 import { backPlate } from '../../ui/plate';
@@ -31,6 +33,8 @@ import { backPlate } from '../../ui/plate';
 export const FLOOR_TOP = 100;
 /** The lowest the feet go (the HUD strip along the bottom stays clear). */
 export const FLOOR_BOTTOM = 170;
+/** The way out: the arcade's glass doors, seen from inside, at the left of the back wall. */
+export const EXIT_X = 34;
 
 export interface Fixture {
   /** The middle of it, along the room. */
@@ -108,7 +112,8 @@ export abstract class WalkRoom extends Phaser.Scene {
     this.paintRoom();
     this.paintDoor();
 
-    this.player = new Player(this, this.spawnX(), FLOOR_BOTTOM - 14);
+    // in through the doors: stood just inside them
+    this.player = new Player(this, this.spawnX(), this.floorTop + 16);
     this.player.setSurface('carpet');
     this.cameras.main.setBounds(0, 0, this.worldW, GAME_H);
     if (this.worldW > GAME_W) this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
@@ -137,19 +142,20 @@ export abstract class WalkRoom extends Phaser.Scene {
   /** The way out: by default the door standing at the left end of the floor. */
   protected exitFixture(): Fixture {
     return {
-      x: 18,
-      y: FLOOR_BOTTOM - 4,
-      w: 16,
+      x: EXIT_X,
+      y: this.floorTop,
+      w: ENTRANCE_W - 6,
       depth: 0,
+      wall: true,
       label: () => '[E] LEAVE',
       use: () => this.goOut(),
-      hit: { x: 4, y: this.floorTop + 20, w: 28, h: 52 },
+      hit: { x: EXIT_X - ENTRANCE_W / 2, y: this.floorTop - ENTRANCE_H, w: ENTRANCE_W, h: ENTRANCE_H + 8 },
     };
   }
 
   /** Where you come in: just inside the door. */
   protected spawnX(): number {
-    return 30;
+    return EXIT_X;
   }
 
   /** Called once the room is up. */
@@ -189,14 +195,60 @@ export abstract class WalkRoom extends Phaser.Scene {
     });
   }
 
+  /**
+   * The way out: the same glass doors as the arcade's (and every shop's) front,
+   * from the inside -- the street's daylight through the glass, a lamp either
+   * side, and a lit EXIT over them.
+   */
   protected paintDoor(): void {
-    // the door out, in the left wall: a frame, the street's light through it
     const g = this.add.graphics().setDepth(1);
-    g.fillStyle(0x14100c, 1).fillRect(4, this.floorTop + 18, 24, FLOOR_BOTTOM - this.floorTop - 16);
-    g.fillStyle(0x5a3a22, 1).fillRect(5, this.floorTop + 19, 22, FLOOR_BOTTOM - this.floorTop - 18);
-    g.fillStyle(0xbfe0ee, 0.9).fillRect(9, this.floorTop + 23, 14, 18);
-    g.fillStyle(0xd8a838, 1).fillRect(23, this.floorTop + 46, 2, 2);
-    text(this, 16, this.floorTop + 10, 'EXIT', 0x7fd88a).setOrigin(0.5, 0).setDepth(2);
+    paintEntrance(this, g, {
+      doorX: EXIT_X,
+      base: this.floorTop,
+      lampY: this.floorTop - 30,
+      closed: false,
+      day: true,
+      night: false,
+      c: (n) => n,
+      inside: { back: 0xbfe0ee, floor: 0x9a9488, band: 0xffffff, mat: 0x6a4a3a, spill: 0xfff0c0 },
+      depth: 1,
+    });
+    const top = this.floorTop - ENTRANCE_H - 9;
+    g.fillStyle(0x14100c, 1).fillRect(EXIT_X - 11, top - 1, 22, 9);
+    g.fillStyle(0x1e6a3a, 1).fillRect(EXIT_X - 10, top, 20, 7);
+    text(this, EXIT_X, top + 4, 'EXIT', 0xbfffd0).setOrigin(0.5, 0.5).setDepth(2);
+  }
+
+  /**
+   * The finish the arcade's rooms have: a weave of lighter and darker specks
+   * over the wall and the floor, the floor darkening along the foot of the
+   * wall and into the ends of the room, a few scuffs where people walk, and
+   * the pools the ceiling lights make on it.  Every shop calls it with the
+   * colours of its own wall and floor once it has painted them.
+   */
+  protected surfaces(wall: number, floor: number, floorGrain = 0.05): void {
+    const W = this.worldW;
+    const top = this.floorTop;
+    const g = this.add.graphics().setDepth(0.5);
+    grain(g, 0, 0, W, top - 6, wall, 31 + W, 0.035, 0.08);
+    grain(g, 0, top, W, GAME_H - top, floor, 47 + W, floorGrain, 0.1);
+    // the contact shadow along the foot of the wall, and the dark ends
+    for (let i = 0; i < 6; i++) {
+      g.fillStyle(0x000000, 0.07 * (6 - i) / 6);
+      g.fillRect(0, top + i * 2, W, 2);
+      g.fillRect(i * 3, top, 3, GAME_H - top);
+      g.fillRect(W - 3 - i * 3, top, 3, GAME_H - top);
+    }
+    // scuffs, where the traffic is
+    const rnd = seeded(W);
+    g.fillStyle(0x000000, 0.08);
+    for (let i = 0; i < Math.round(W / 14); i++) {
+      g.fillRect(20 + Math.floor(rnd() * (W - 40)), top + 14 + Math.floor(rnd() * (GAME_H - top - 24)), 2 + Math.floor(rnd() * 5), 1);
+    }
+    // the ceiling lights' pools on the floor
+    for (let x = 60; x < W; x += 110) {
+      this.add.ellipse(x, top + 34, 90, 26, 0xfff0c8, 0.07).setDepth(0.6).setBlendMode(Phaser.BlendModes.ADD);
+    }
   }
 
   protected goOut(): void {

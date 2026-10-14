@@ -11,7 +11,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../../render/palette';
 import { audio } from '../../core/audio';
 import { store } from '../../core/state';
-import { text } from '../../core/ui';
+import { centerText, text } from '../../core/ui';
 import { GAME_H } from '../../render/pixelScaler';
 import { COLS, Player, depthFor, type Look } from '../../art/player';
 import { COSMETICS, lookFor, type CosmeticDef } from '../../game/catalog';
@@ -78,18 +78,18 @@ export class BarberShop extends WalkRoom {
 
     // the pole, by the door
     const pole = this.add.graphics().setDepth(1);
-    pole.fillStyle(0x14100c, 1).fillRect(41, 30, 10, 42);
-    pole.fillStyle(0xffffff, 1).fillRect(42, 31, 8, 40);
+    pole.fillStyle(0x14100c, 1).fillRect(59, 30, 10, 42);
+    pole.fillStyle(0xffffff, 1).fillRect(60, 31, 8, 40);
     for (let k = 0; k < 40; k += 8) {
-      pole.fillStyle(0xc83030, 1).fillRect(42, 31 + k, 8, 2);
-      pole.fillStyle(0x3050c8, 1).fillRect(42, 35 + k, 8, 2);
+      pole.fillStyle(0xc83030, 1).fillRect(60, 31 + k, 8, 2);
+      pole.fillStyle(0x3050c8, 1).fillRect(60, 35 + k, 8, 2);
     }
-    pole.fillStyle(0xd8a838, 1).fillRect(40, 28, 12, 3).fillRect(40, 71, 12, 3);
+    pole.fillStyle(0xd8a838, 1).fillRect(58, 28, 12, 3).fillRect(58, 71, 12, 3);
 
     // the style posters: four heads from the book
     ['hair_pomp', 'hair_afro', 'hair_slick', 'hair_bun'].forEach((id, i) => {
       const c = this.styles.find((s) => s.id === id);
-      if (c) this.poster(68 + i * 24, 34, c);
+      if (c) this.poster(76 + i * 22, 34, c);
     });
 
     // the mirror over the chair, the shelf with the bottles
@@ -107,9 +107,9 @@ export class BarberShop extends WalkRoom {
     const b = this.add.graphics().setDepth(1);
     b.fillStyle(0x14100c, 1).fillRect(244, 28, 104, 40);
     b.fillStyle(0x24302a, 1).fillRect(245, 29, 102, 38);
-    text(this, 296, 31, 'CUTS FROM $6', 0xf0e8d0).setOrigin(0.5, 0).setDepth(2);
-    text(this, 296, 41, 'COLOURS FROM $5', 0xf0e8d0).setOrigin(0.5, 0).setDepth(2);
-    text(this, 296, 53, 'SIT IN THE CHAIR', 0xd8a838).setOrigin(0.5, 0).setDepth(2);
+    centerText(this, 296, 35, 'CUTS FROM $6', 0xf0e8d0).setDepth(2);
+    centerText(this, 296, 45, 'COLOURS FROM $5', 0xf0e8d0).setDepth(2);
+    centerText(this, 296, 57, 'SIT IN THE CHAIR', 0xd8a838).setDepth(2);
 
     // the chair: a red leather seat on a chrome pedestal
     const ch = this.add.graphics().setDepth(depthFor(BACK_ROW) - 0.0002);
@@ -138,6 +138,8 @@ export class BarberShop extends WalkRoom {
     pl.fillStyle(0xa85a32, 1).fillRect(335, BACK_ROW - 9, 10, 9);
     pl.fillStyle(0x3a8a4a, 1).fillCircle(340, BACK_ROW - 16, 7);
     pl.fillStyle(0x5aa85f, 1).fillCircle(337, BACK_ROW - 18, 3);
+    // (the tiles get only a little: they are glazed)
+    this.surfaces(0xbfe0d0, 0xa8a8a0, 0.012);
   }
 
   /** A head from the style book, twice size, in a frame. */

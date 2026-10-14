@@ -39,33 +39,33 @@ export const FURNITURE: FurnitureDef[] = [
   F('fur_poster_frog', 'FROGGY POSTER', 'poster', 8, 14, 18, true, 0x5aa85f, 0xffd45e, 'THE ARCADE MASCOT'),
   F('fur_poster_band', 'BAND POSTER', 'poster', 10, 14, 20, true, 0xc31f2e, 0x14161c, 'A BAND NOBODY KNOWS'),
   F('fur_poster_city', 'CITY POSTER', 'poster', 12, 22, 14, true, 0x3a6ab0, 0xf0d890, 'SKYLINE AT DUSK'),
-  F('fur_paint_lily', 'LILY PAD PAINTING', 'painting', 40, 24, 18, true, 0x2f6b36, 0xf0a8c8, 'OIL ON CANVAS'),
-  F('fur_paint_sea', 'SEASCAPE', 'painting', 65, 28, 18, true, 0x2a5a8a, 0xe8e0c8, 'A STORMY HARBOUR'),
-  F('fur_paint_gold', 'GILT PORTRAIT', 'painting', 180, 22, 26, true, 0xd8a838, 0x5a3a28, 'LATE COLLECTION'),
+  F('fur_paint_lily', 'LILY PAD PAINTING', 'painting', 65, 24, 18, true, 0x2f6b36, 0xf0a8c8, 'OIL ON CANVAS'),
+  F('fur_paint_sea', 'SEASCAPE', 'painting', 110, 28, 18, true, 0x2a5a8a, 0xe8e0c8, 'A STORMY HARBOUR'),
+  F('fur_paint_gold', 'GILT PORTRAIT', 'painting', 320, 22, 26, true, 0xd8a838, 0x5a3a28, 'LATE COLLECTION'),
   F('fur_clock', 'WALL CLOCK', 'decor', 15, 10, 10, true, 0xf0ece0, 0x3a2a1e, 'TICKS QUIETLY'),
   // floor
   F('fur_table_crate', 'CRATE TABLE', 'table', 6, 20, 10, false, 0x9a7048, 0x6a4a2a, 'A CRATE. IT WORKS'),
   F('fur_table_wood', 'WOODEN TABLE', 'table', 35, 28, 12, false, 0x8a5a32, 0x5a3a1e, 'SOLID PINE'),
-  F('fur_table_glass', 'GLASS TABLE', 'table', 120, 30, 10, false, 0xb8d8e8, 0x6a7a8a, 'LATE COLLECTION'),
+  F('fur_table_glass', 'GLASS TABLE', 'table', 220, 30, 10, false, 0xb8d8e8, 0x6a7a8a, 'LATE COLLECTION'),
   F('fur_chair_stool', 'STOOL', 'chair', 5, 8, 12, false, 0x8a6a48, 0x5a4028, 'THREE LEGS'),
   F('fur_chair_wood', 'WOODEN CHAIR', 'chair', 18, 10, 18, false, 0x7a4a28, 0x4a2a18, 'STURDY'),
-  F('fur_chair_arm', 'ARMCHAIR', 'chair', 60, 16, 18, false, 0x7b2a3a, 0x4a1a24, 'DEEP AND SOFT'),
+  F('fur_chair_arm', 'ARMCHAIR', 'chair', 95, 16, 18, false, 0x7b2a3a, 0x4a1a24, 'DEEP AND SOFT'),
   F('fur_sofa_old', 'SECOND-HAND SOFA', 'sofa', 30, 40, 16, false, 0x6a6a44, 0x4a4a30, 'A FEW STAINS'),
-  F('fur_sofa_new', 'VELVET SOFA', 'sofa', 140, 44, 18, false, 0x3a2a6a, 0x241a48, 'LATE COLLECTION'),
+  F('fur_sofa_new', 'VELVET SOFA', 'sofa', 260, 44, 18, false, 0x3a2a6a, 0x241a48, 'LATE COLLECTION'),
   F('fur_tv_old', 'OLD TV', 'tv', 25, 18, 16, false, 0x3a3a3a, 0x7ab0c0, 'TWO CHANNELS'),
-  F('fur_tv_flat', 'FLAT SCREEN', 'tv', 150, 30, 20, false, 0x14161c, 0x46c4bd, 'BIG AND BRIGHT'),
+  F('fur_tv_flat', 'FLAT SCREEN', 'tv', 280, 30, 20, false, 0x14161c, 0x46c4bd, 'BIG AND BRIGHT'),
   F('fur_radio', 'RADIO', 'radio', 12, 12, 8, false, 0x8a5a32, 0xe8d0a0, 'TINNY BUT CHEERFUL'),
-  F('fur_radio_retro', 'RETRO RADIO', 'radio', 45, 14, 10, false, 0xc87830, 0xf0e0b0, 'WARM VALVES'),
+  F('fur_radio_retro', 'RETRO RADIO', 'radio', 70, 14, 10, false, 0xc87830, 0xf0e0b0, 'WARM VALVES'),
   F('fur_lamp_floor', 'FLOOR LAMP', 'lamp', 14, 8, 30, false, 0xf0d890, 0x3a3a3a, 'A WARM CORNER'),
-  F('fur_lamp_neon', 'NEON FROG LAMP', 'lamp', 55, 14, 16, false, 0x6dd36d, 0xff4fa3, 'BUZZES SOFTLY'),
+  F('fur_lamp_neon', 'NEON FROG LAMP', 'lamp', 85, 14, 16, false, 0x6dd36d, 0xff4fa3, 'BUZZES SOFTLY'),
   F('fur_rug_mat', 'DOOR MAT', 'rug', 4, 24, 4, false, 0x8a6a48, 0x5a4028, 'WELCOME'),
   F('fur_rug_round', 'ROUND RUG', 'rug', 22, 40, 6, false, 0xc85a3a, 0xf0c070, 'COSY'),
-  F('fur_rug_persian', 'PERSIAN RUG', 'rug', 110, 60, 8, false, 0x8a2a3a, 0xd8a838, 'LATE COLLECTION'),
+  F('fur_rug_persian', 'PERSIAN RUG', 'rug', 210, 60, 8, false, 0x8a2a3a, 0xd8a838, 'LATE COLLECTION'),
   F('fur_shelf', 'BOOKSHELF', 'storage', 28, 18, 30, false, 0x7a4a28, 0xc8b070, 'FULL OF PAPERBACKS'),
-  F('fur_cabinet', 'CABINET', 'storage', 40, 20, 20, false, 0x5a3a28, 0x8a6a48, 'FOR YOUR THINGS'),
+  F('fur_cabinet', 'CABINET', 'storage', 55, 20, 20, false, 0x5a3a28, 0x8a6a48, 'FOR YOUR THINGS'),
   F('fur_plant', 'POT PLANT', 'decor', 9, 10, 16, false, 0x3a8a3a, 0xa86a40, 'GREEN'),
   F('fur_mattress', 'MATTRESS', 'bed', 20, 40, 6, false, 0xe8e0c8, 0x9a9480, 'BETTER THAN THE FLOOR'),
-  F('fur_bed', 'PROPER BED', 'bed', 90, 44, 14, false, 0x7b2a3a, 0xe8e0c8, 'SLEEP LIKE A KING'),
+  F('fur_bed', 'PROPER BED', 'bed', 180, 44, 14, false, 0x7b2a3a, 0xe8e0c8, 'SLEEP LIKE A KING'),
   // reward-only
   F('fur_trophy', 'ARCADE TROPHY', 'decor', 0, 10, 14, false, 0xd8a838, 0x8a6a28, 'EARNED, NOT BOUGHT', true),
   F('fur_frog_statue', 'FROG STATUE', 'decor', 0, 14, 18, false, 0x5aa85f, 0x2f6b36, 'EARNED, NOT BOUGHT', true),
@@ -169,7 +169,38 @@ export function lookFor(outfit: Record<string, string>): Look {
   }
   for (const c of hairStyle) Object.assign(cols, c.cols);
   const hat = outfit.hat ? cosmeticById(outfit.hat) : undefined;
-  if (hat && hat.id !== 'cos_no_hat') head = hat.head; // the beanie: the rig's own head
+  if (hat && hat.id !== 'cos_no_hat') {
+    // A haircut of your own: the hat goes ON it -- its crown over the top of
+    // the head, and the cut still there under the brim (the beard, the
+    // sideburns, long hair down the sides, an afro wider than the hat).
+    // Without one, the hat's own head, as before (the beanie: the rig's).
+    head = head ? underHat(head, CROWNS[hat.id] ?? CROWNS.cos_beanie) : hat.head;
+  }
   if (hat?.id === 'cos_no_hat' && !head) head = HEAD_SHORT;
   return { cols, head };
+}
+
+/** The top rows of each hat: what it covers of the head. */
+const CROWNS: Record<string, string[]> = {
+  cos_beanie: ['....BBBB....', '...BBBBBB...', '..bbbbbbbb..'],
+  cos_beanie_teal: ['....BBBB....', '...BBBBBB...', '..bbbbbbbb..'],
+  cos_cap: ['............', '...BBBBBB...', '..BBBBBBBB..', '..bbbbbbbbbb'],
+};
+
+/**
+ * `hair` with `crown` on it.  The crown's own pixels always show; over its
+ * rows, hair shows only where it stands out wider than the brim; under them,
+ * the cut is as it was.
+ */
+export function underHat(hair: string[], crown: string[]): string[] {
+  const brim = crown[crown.length - 1];
+  const l = brim.search(/[^.]/);
+  const r = brim.length - 1 - [...brim].reverse().join('').search(/[^.]/);
+  return hair.map((row, i) => {
+    if (i >= crown.length) return row;
+    const c = crown[i];
+    return [...row]
+      .map((ch, x) => (c[x] !== '.' ? c[x] : ch !== '.' && (x < l || x > r) ? ch : '.'))
+      .join('');
+  });
 }

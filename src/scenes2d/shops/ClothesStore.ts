@@ -72,8 +72,8 @@ export class ClothesStore extends WalkRoom {
       g.fillStyle(0x3a3a3a, 1).fillRect(x, 0, 1, 6);
       g.fillStyle(0xffffff, 1).fillCircle(x, 8, 3);
     }
-    text(this, W / 2, 10, 'THREADS', 0xc0306a).setOrigin(0.5, 0).setDepth(1);
-    text(this, W / 2, 20, 'CLOTHING AND ACCESSORIES', 0x8a5a70).setOrigin(0.5, 0).setDepth(1);
+    text(this, W / 2, 26, 'THREADS', 0xc0306a).setOrigin(0.5, 0).setDepth(1);
+    text(this, W / 2, 36, 'CLOTHING AND ACCESSORIES', 0x8a5a70).setOrigin(0.5, 0).setDepth(1);
 
     // ---- tops, on mannequins on little round stands
     this.forSale('top').forEach((c, i) => {
@@ -170,6 +170,7 @@ export class ClothesStore extends WalkRoom {
     till.fillStyle(0x14100c, 1).fillRect(304, BACK_ROW - 14, 30, 15);
     till.fillStyle(0xf0ece4, 1).fillRect(305, BACK_ROW - 13, 28, 13);
     till.fillStyle(0x3a3a3a, 1).fillRect(314, BACK_ROW - 20, 10, 6);
+    this.surfaces(0xe8c8d8, 0xbeb6ba);
   }
 
   /** A display stand you cannot walk through (not something to buy itself). */

@@ -94,8 +94,8 @@ export class FurnitureStore extends WalkRoom {
       for (let x = (y * 11) % 48; x < W; x += 48) g.fillStyle(0x6a4a2a, 1).fillRect(x, y, 1, 6);
     }
     // the shop's name, painted on the wall
-    text(this, W / 2, 12, 'HOME AND HEARTH', 0x7a3a22).setOrigin(0.5, 0).setDepth(1);
-    text(this, W / 2, 22, 'FURNITURE FOR EVERY ROOM', 0x9a7a58).setOrigin(0.5, 0).setDepth(1);
+    text(this, W / 2, 26, 'HOME AND HEARTH', 0x7a3a22).setOrigin(0.5, 0).setDepth(1);
+    text(this, W / 2, 36, 'FURNITURE FOR EVERY ROOM', 0x9a7a58).setOrigin(0.5, 0).setDepth(1);
 
     // the counter at the far end, and the woman who runs the place behind it
     const cx = W - 38;
@@ -120,6 +120,7 @@ export class FurnitureStore extends WalkRoom {
         .setDepth(p.def.wall ? 2 : depthFor(p.y) + 0.0002);
     }
     this.layoutCache = all;
+    this.surfaces(0xe8dcc0, 0x9a6c40);
   }
 
   private layoutCache: Array<{ def: FurnitureDef; x: number; y: number }> = [];
