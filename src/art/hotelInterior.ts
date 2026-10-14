@@ -1,17 +1,17 @@
 /**
- * ---- INSIDE THE GRAND LILY.
+ * ---- INSIDE LILY'S CONDOS.
  *
- * Every room of the hotel painted onto a canvas -- the side-on pixel rooms the
- * 2D scene walks (one 320x180 picture each) and the surfaces the 3D corridor
- * and stairwell are dressed in -- from ONE palette and one set of motifs, so
- * the lobby you check in at and the corridor you run down at three in the
- * morning are the same building:
+ * Every room of the building painted onto a canvas -- the side-on pixel
+ * rooms the 2D scene walks (one 320x180 picture each) and the surfaces the
+ * 3D corridor and stairwell are dressed in -- from ONE palette and one set of
+ * materials, so the lobby you come in at and the corridor you run down at
+ * three in the morning are the same block of flats:
  *
- *   cream damask wallpaper, a lily in every repeat;
- *   dark walnut wainscot under a gilded dado rail;
- *   burgundy carpet with a gold lattice and border;
- *   walnut doors with two raised panels, a brass plate, a brass handle;
- *   brass, everywhere a hand goes.
+ *   warm grey paint on plaster walls, a darker lower wall and a steel
+ *   bumper rail, white skirting;
+ *   charcoal carpet tiles in the corridors, big porcelain tiles in the lobby;
+ *   flush oak-veneer flat doors with a steel number plate and lever;
+ *   brushed steel wherever a hand goes, and recessed downlights.
  *
  * The 2D rooms are drawn at one pixel per pixel with hard edges; the 3D
  * surfaces are the same designs drawn at texture resolution.
@@ -20,30 +20,37 @@
 import { drawPixelText } from '../render/pixelFont';
 
 export const HP = {
-  paper: '#ebdfc4',
-  paperShade: '#dccba6',
-  paperMotif: '#cdb88c',
-  gold: '#c9a24a',
-  goldHi: '#ecd07a',
-  goldDark: '#8a6a24',
-  wood: '#5a3a22',
-  woodDark: '#3a2414',
-  woodHi: '#7a5232',
-  woodDeep: '#2a1a0e',
-  carpet: '#6e1f2e',
-  carpetDark: '#4a1220',
-  carpetHi: '#8a2a3c',
-  marble: '#ece6da',
-  marbleVein: '#c8c0b0',
-  marbleDark: '#b8ae9c',
-  cream: '#f4ecd6',
-  creamShade: '#d8ccae',
+  // the walls: warm grey paint
+  paper: '#e2ded6',
+  paperShade: '#d6d1c7',
+  paperMotif: '#c8c2b6',
+  // (once brass; brushed steel now -- handles, rails, plates, frames)
+  gold: '#a8aeb4',
+  goldHi: '#d8dce0',
+  goldDark: '#6a7078',
+  // light oak veneer: doors, desk fronts, furniture
+  wood: '#b48a5a',
+  woodDark: '#8a6640',
+  woodHi: '#d0a878',
+  woodDeep: '#5a4430',
+  // charcoal carpet tiles
+  carpet: '#4e525a',
+  carpetDark: '#3a3d44',
+  carpetHi: '#5e636c',
+  // large-format porcelain tiles
+  marble: '#d6d2ca',
+  marbleVein: '#c6c2ba',
+  marbleDark: '#aeaaa2',
+  cream: '#f2f0ea',
+  creamShade: '#d6d2c8',
   steel: '#a8acb0',
   steelHi: '#d4d8dc',
   steelDark: '#6a6e74',
   navy: '#22304e',
   ink: '#16100c',
-  glow: '#ffe2a0',
+  glow: '#fff0d0',
+  // the lower wall, a shade darker than the paint above it
+  lowerWall: '#c9c4ba',
 };
 
 type Ctx = CanvasRenderingContext2D;
@@ -72,66 +79,55 @@ export function glow(g: Ctx, x: number, y: number, r: number, a: number, rgb = '
 /** The 2D rooms' floor line: wall down to here, then the floor. */
 export const FLOOR_Y = 152;
 
-/** Cream damask: broad stripes, a small lily in each, pixel by pixel. */
+/** Painted plaster: an even warm grey, the faintest texture in it. */
 function wallpaper(g: Ctx, x0: number, y0: number, w: number, h: number, tone: { paper: string; shade: string; motif: string }): void {
   rect(g, x0, y0, w, h, tone.paper);
-  for (let x = x0; x < x0 + w; x += 16) {
-    rect(g, x + 5, y0, 6, h, tone.shade);
-    rect(g, x + 4, y0, 1, h, tone.motif, 0.35);
-    rect(g, x + 11, y0, 1, h, tone.motif, 0.35);
-    for (let y = y0 + 4; y < y0 + h - 4; y += 14) {
-      // a lily: three petals and a stem
-      rect(g, x + 8, y, 1, 3, tone.motif);
-      rect(g, x + 6, y + 1, 1, 2, tone.motif);
-      rect(g, x + 10, y + 1, 1, 2, tone.motif);
-      rect(g, x + 7, y + 3, 3, 1, tone.motif);
-      rect(g, x + 8, y + 4, 1, 2, tone.motif, 0.7);
-    }
+  for (let k = 0; k < (w * h) / 40; k++) {
+    const x = x0 + ((k * 97) % w);
+    const y = y0 + ((k * 61) % h);
+    rect(g, x, y, 1, 1, k % 3 ? tone.shade : '#ffffff', 0.35);
   }
 }
 
-/** Crown moulding along the top of the wall. */
+/** The ceiling line along the top of the wall: a shadow gap and a white edge. */
 function crown(g: Ctx, w: number, h = 9): void {
-  rect(g, 0, 0, w, h, HP.creamShade);
-  rect(g, 0, h - 3, w, 1, HP.cream);
-  rect(g, 0, h - 2, w, 1, HP.goldDark, 0.5);
-  for (let x = 1; x < w; x += 4) rect(g, x, h - 6, 2, 2, HP.cream);
-  rect(g, 0, h, w, 2, '#000000', 0.12);
+  rect(g, 0, 0, w, h, '#f4f3ef');
+  rect(g, 0, h - 1, w, 1, '#ffffff', 0.7);
+  rect(g, 0, h, w, 2, '#000000', 0.14);
 }
 
-/** Walnut panelling from the dado rail down, with a gilded rail on top. */
-function wainscot(g: Ctx, x0: number, w: number, top: number, bottom: number, wood = HP.wood, hi = HP.woodHi, dark = HP.woodDark): void {
-  rect(g, x0, top, w, bottom - top, wood);
-  // the rail
-  rect(g, x0, top - 3, w, 3, dark);
-  rect(g, x0, top - 3, w, 1, hi);
-  rect(g, x0, top - 1, w, 1, HP.gold);
-  // raised panels, at the wainscot's own height
-  const ph = bottom - top - 4;
-  for (let x = x0 + 2; x + 14 <= x0 + w; x += 17) {
-    rect(g, x, top + 2, 14, ph, dark);
-    rect(g, x + 1, top + 3, 12, ph - 2, wood);
-    rect(g, x + 1, top + 3, 12, 1, hi);
-    rect(g, x + 1, top + 3, 1, ph - 2, hi);
-  }
-  // skirting
-  rect(g, x0, bottom, w, FLOOR_Y - bottom, HP.woodDeep);
-  rect(g, x0, bottom, w, 1, hi, 0.6);
+/**
+ * The lower wall: a shade darker than the paint above it (it takes the
+ * knocks), a steel bumper rail on top at hip height, white skirting.  (The
+ * colours a room passes are its lower-wall tone, the rail's light and dark.)
+ */
+function wainscot(g: Ctx, x0: number, w: number, top: number, bottom: number, wood = HP.lowerWall, hi = HP.steelHi, dark = HP.steelDark): void {
+  const lower = wood === HP.wood ? HP.lowerWall : wood;
+  rect(g, x0, top, w, bottom - top, lower);
+  for (let k = 0; k < (w * (bottom - top)) / 50; k++) rect(g, x0 + ((k * 83) % w), top + ((k * 29) % (bottom - top)), 1, 1, '#ffffff', 0.18);
+  // the bumper rail
+  rect(g, x0, top - 3, w, 3, HP.steel);
+  rect(g, x0, top - 3, w, 1, hi === HP.woodHi ? HP.steelHi : hi);
+  rect(g, x0, top - 1, w, 1, dark === HP.woodDark ? HP.steelDark : dark);
+  // white skirting
+  rect(g, x0, bottom, w, FLOOR_Y - bottom, '#f4f3ef');
+  rect(g, x0, bottom, w, 1, '#ffffff');
+  rect(g, x0, FLOOR_Y - 1, w, 1, '#c8c4bc');
 }
 
-/** The corridor carpet: burgundy, a gold lattice, a border. */
+/** The corridor carpet: charcoal tiles, laid quarter-turned, flecked. */
 function carpetFloor(g: Ctx, w: number, c = { base: HP.carpet, dark: HP.carpetDark, hi: HP.carpetHi }): void {
   rect(g, 0, FLOOR_Y, w, 180 - FLOOR_Y, c.base);
-  rect(g, 0, FLOOR_Y, w, 2, c.dark);
-  rect(g, 0, FLOOR_Y + 3, w, 1, HP.gold, 0.7);
-  for (let y = FLOOR_Y + 7; y < 180; y += 6) {
-    const off = ((y - FLOOR_Y) / 6) % 2 ? 4 : 0;
-    for (let x = off; x < w; x += 8) {
-      rect(g, x, y, 1, 1, HP.gold, 0.55);
-      rect(g, x + 2, y + 2, 1, 1, c.hi, 0.8);
+  for (let y = FLOOR_Y; y < 180; y += 8) {
+    for (let x = 0, k = 0; x < w; x += 12, k++) {
+      const along = ((y - FLOOR_Y) / 8 + k) % 2 === 0;
+      for (let d = 1; d < 8; d += 2) rect(g, x, y + d, 12, 1, along ? c.hi : c.dark, 0.35);
+      rect(g, x, y, 1, 8, c.dark, 0.6);
     }
+    rect(g, 0, y, w, 1, c.dark, 0.6);
   }
-  // the far edge shades into the dark, the near edge catches the light
+  for (let k = 0; k < w; k++) rect(g, (k * 37) % w, FLOOR_Y + 2 + ((k * 11) % 26), 1, 1, '#8a8e96', 0.4);
+  rect(g, 0, FLOOR_Y, w, 2, c.dark);
   rect(g, 0, 176, w, 4, c.dark, 0.6);
 }
 
@@ -203,40 +199,31 @@ export function roomDoor(g: Ctx, cx: number, num: string, opts: { w?: number; h?
   const face = opts.white ? HP.cream : HP.wood;
   const hi = opts.white ? '#ffffff' : HP.woodHi;
   const dark = opts.white ? HP.creamShade : HP.woodDark;
-  // casing
-  rect(g, x - 2, y - 2, w + 4, h + 2, HP.cream);
-  rect(g, x - 2, y - 2, w + 4, 1, '#ffffff', 0.6);
+  // a plain white architrave
+  rect(g, x - 2, y - 2, w + 4, h + 2, '#f4f3ef');
+  rect(g, x - 2, y - 2, w + 4, 1, '#ffffff');
   rect(g, x - 1, y - 1, w + 2, h + 1, HP.creamShade);
-  // the door
+  // the door: a flush slab, its veneer running top to bottom
   rect(g, x, y, w, h, face);
-  const top = Math.round(h * 0.38);
-  for (const [py, ph] of [
-    [y + 2, top],
-    [y + 4 + top, h - top - 6],
-  ]) {
-    rect(g, x + 2, py, w - 4, ph, dark);
-    rect(g, x + 3, py + 1, w - 6, ph - 2, face);
-    rect(g, x + 3, py + 1, w - 6, 1, hi);
-    rect(g, x + 3, py + 1, 1, ph - 2, hi);
-  }
+  for (let k = 2; k < w - 1; k += 3) rect(g, x + k, y, 1, h, dark, 0.18);
+  rect(g, x, y, w, 1, hi);
+  rect(g, x, y, 1, h, hi, 0.6);
   rect(g, x + w - 1, y, 1, h, dark);
-  // handle at hand height, on its rose
-  rect(g, x + w - 3, y + Math.round(h * 0.5), 1, 2, HP.goldDark);
-  rect(g, x + w - 5, y + Math.round(h * 0.5), 3, 1, HP.goldHi);
-  // the number: a brass plate screwed to the upper panel, dark figures on it,
-  // so it is part of the door and not a label floating over it
+  // a lever handle in steel, and the lock rose under it
+  rect(g, x + w - 3, y + Math.round(h * 0.5) - 1, 1, 3, HP.steelDark);
+  rect(g, x + w - 6, y + Math.round(h * 0.5) - 1, 4, 1, HP.steelHi);
+  rect(g, x + w - 3, y + Math.round(h * 0.5) + 4, 1, 1, HP.steelDark);
+  // the flat's number on a steel plate, and the spy hole over it
   if (num) {
     const pw = num.length * 4 + 1;
     const px = Math.round(cx - pw / 2);
-    const py = y + 4;
-    rect(g, px - 1, py - 1, pw + 2, 9, HP.goldDark);
-    rect(g, px, py, pw, 7, HP.gold);
-    rect(g, px, py, pw, 1, HP.goldHi);
-    rect(g, px, py + 6, pw, 1, HP.goldDark);
-    signText(g, num, cx, py + 1, '#24160a');
-    // the peephole below it
-    rect(g, Math.round(cx), py + 10, 1, 1, HP.goldHi);
-  } else if (!opts.white) rect(g, x + Math.round(w / 2), y + 8, 1, 1, HP.goldHi);
+    const py = y + 6;
+    rect(g, px - 1, py - 1, pw + 2, 9, HP.steelDark);
+    rect(g, px, py, pw, 7, HP.steelHi);
+    rect(g, px, py + 6, pw, 1, HP.steel);
+    signText(g, num, cx, py + 1, '#1a1c20');
+    rect(g, Math.round(cx), py - 3, 1, 1, HP.ink);
+  } else if (!opts.white) rect(g, x + Math.round(w / 2), y + 8, 1, 1, HP.ink);
 }
 
 /**
@@ -289,62 +276,53 @@ function brokenDoor(g: Ctx, cx: number, num: string, taped: boolean): void {
   }
 }
 
-/** A brass wall sconce with a cream shade, and its light on the wall. */
+/** A wall light: a slim steel cylinder washing light up and down the paint. */
 function sconce(g: Ctx, x: number, y: number, lit = true): void {
-  rect(g, x, y + 3, 1, 3, HP.goldDark);
-  rect(g, x - 1, y + 5, 3, 1, HP.gold);
-  rect(g, x - 2, y - 1, 5, 4, lit ? '#fff0c8' : '#b8ae98');
-  rect(g, x - 1, y - 2, 3, 1, lit ? '#fff6dc' : '#c8bea8');
+  rect(g, x - 1, y - 2, 3, 7, HP.steelDark);
+  rect(g, x - 1, y - 2, 1, 7, HP.steelHi);
+  rect(g, x - 1, y - 3, 3, 1, lit ? '#fff6dc' : HP.steel);
+  rect(g, x - 1, y + 5, 3, 1, lit ? '#fff6dc' : HP.steel);
   if (lit) {
-    glow(g, x + 0.5, y + 1, 12, 0.22);
-    glow(g, x + 0.5, y - 3, 6, 0.22);
+    glow(g, x + 0.5, y - 6, 9, 0.22);
+    glow(g, x + 0.5, y + 8, 9, 0.22);
   }
 }
 
-/** A framed picture: a lily on a dark ground, or a landscape. */
+/** A framed print: thin black frame, a white mount, abstract blocks or a photo of the coast. */
 function picture(g: Ctx, x: number, y: number, w: number, h: number, kind: 'lily' | 'land'): void {
-  rect(g, x - 1, y - 1, w + 2, h + 2, HP.goldDark);
-  rect(g, x, y, w, h, HP.gold);
+  rect(g, x - 1, y - 1, w + 2, h + 2, '#1e2024');
+  rect(g, x, y, w, h, '#f6f5f0');
   const ix = x + 1;
   const iy = y + 1;
   const iw = w - 2;
   const ih = h - 2;
   if (kind === 'lily') {
-    rect(g, ix, iy, iw, ih, '#26302a');
-    const cx = ix + Math.floor(iw / 2);
-    rect(g, cx, iy + 1, 1, 2, '#f4c8dc');
-    rect(g, cx - 1, iy + 2, 3, 1, '#e08ab0');
-    rect(g, cx, iy + 3, 1, ih - 3, '#5a8a4a');
+    rect(g, ix + 1, iy + 1, Math.ceil(iw / 2), ih - 2, '#d8a04a');
+    rect(g, ix + Math.ceil(iw / 2), iy + 2, Math.floor(iw / 2) - 1, Math.ceil(ih / 2), '#3a6a8a');
+    rect(g, ix + 2, iy + ih - 3, iw - 3, 1, '#2a2a2e');
   } else {
     rect(g, ix, iy, iw, Math.ceil(ih * 0.55), '#9ac0d8');
-    rect(g, ix, iy + Math.ceil(ih * 0.55), iw, ih - Math.ceil(ih * 0.55), '#5a7a4a');
-    rect(g, ix + iw - 2, iy + 1, 1, 1, '#fff0b0');
+    rect(g, ix, iy + Math.ceil(ih * 0.55), iw, ih - Math.ceil(ih * 0.55), '#3a6a8a');
+    rect(g, ix, iy + Math.ceil(ih * 0.55), iw, 1, '#f0f0e8');
   }
 }
 
-/** Polished marble: big tiles, veins, and the room's lights in it. */
+/** Large porcelain tiles: a warm grey, fine grout, a soft sheen. */
 function marbleFloor(g: Ctx, w: number): void {
   rect(g, 0, FLOOR_Y, w, 180 - FLOOR_Y, HP.marble);
-  for (let y = FLOOR_Y; y < 180; y += 7) {
-    const off = ((y - FLOOR_Y) / 7) % 2 ? 8 : 0;
-    rect(g, 0, y, w, 1, HP.marbleDark, 0.7);
-    for (let x = off; x < w; x += 16) rect(g, x, y, 1, 7, HP.marbleDark, 0.7);
+  for (let y = FLOOR_Y; y < 180; y += 9) {
+    rect(g, 0, y, w, 1, HP.marbleDark, 0.6);
+    for (let x = 0; x < w; x += 24) rect(g, x, y, 1, 9, HP.marbleDark, 0.6);
   }
-  for (let k = 0; k < 40; k++) {
-    const x = (k * 53) % w;
-    const y = FLOOR_Y + 2 + ((k * 7) % 24);
-    rect(g, x, y, 2 + (k % 3), 1, HP.marbleVein, 0.8);
-  }
-  rect(g, 0, FLOOR_Y, w, 2, '#8a8070', 0.6);
+  for (let k = 0; k < 60; k++) rect(g, (k * 53) % w, FLOOR_Y + 2 + ((k * 7) % 24), 1, 1, HP.marbleVein, 0.7);
+  rect(g, 0, FLOOR_Y, w, 2, '#8a867e', 0.5);
 }
 
-/** A run of crown moulding at any height. */
+/** A shadow-gap ceiling line at any height. */
 function crownAt(g: Ctx, w: number, y: number, h = 4): void {
-  rect(g, 0, y, w, h, HP.creamShade);
-  rect(g, 0, y + h - 2, w, 1, HP.cream);
-  rect(g, 0, y + h - 1, w, 1, HP.goldDark, 0.5);
-  for (let x = 1; x < w; x += 4) rect(g, x, y + 1, 2, 1, HP.cream);
-  rect(g, 0, y + h, w, 1, '#000000', 0.12);
+  rect(g, 0, y, w, h, '#f4f3ef');
+  rect(g, 0, y + h - 1, w, 1, '#ffffff', 0.7);
+  rect(g, 0, y + h, w, 1, '#000000', 0.14);
 }
 
 /**
@@ -354,40 +332,43 @@ function crownAt(g: Ctx, w: number, y: number, h = 4): void {
  * is closed in.  Nothing of the outside shows except through a window.
  */
 function enclosedCeiling(g: Ctx, w: number, opts: { plaster?: string; beam?: string; lights?: number[] } = {}): void {
-  const plaster = opts.plaster ?? '#d8ccb0';
-  const beam = opts.beam ?? '#b8a47c';
+  const plaster = opts.plaster ?? '#e8e6e0';
   const top = 6;
-  // the plaster, light by the far wall and dimmer towards us
+  // flat white plaster, light by the far wall and dimmer towards us
   for (let y = top; y < CEIL_Y; y++) {
     const k = (y - top) / (CEIL_Y - top);
     rect(g, 0, y, w, 1, plaster);
-    rect(g, 0, y, w, 1, '#1a1008', 0.62 * (1 - k) * (1 - k) + 0.08);
+    rect(g, 0, y, w, 1, '#10141c', 0.55 * (1 - k) * (1 - k) + 0.06);
   }
-  // beams running towards us, fanning out from the vanishing line
+  // faint plasterboard joints running towards us, fanning from the far wall
   const cx = w / 2;
-  for (let bx = -w; bx <= 2 * w; bx += 40) {
+  for (let bx = -w; bx <= 2 * w; bx += 80) {
     for (let y = top; y < CEIL_Y; y++) {
       const k = (y - top) / (CEIL_Y - top);
-      const x = cx + (bx - cx) * (1.9 - 0.9 * k);
-      rect(g, Math.round(x), y, 3, 1, beam);
-      rect(g, Math.round(x) + 3, y, 1, 1, '#000000', 0.18);
+      const x = Math.round(cx + (bx - cx) * (1.9 - 0.9 * k));
+      rect(g, x, y, 1, 1, '#000000', 0.07);
     }
   }
-  // cross-beams, closer together as they recede
-  for (const k of [0.25, 0.5, 0.72, 0.88]) {
+  // rows of recessed downlights going away: bigger and further apart near us
+  for (const k of [0.22, 0.5, 0.72, 0.88]) {
     const y = Math.round(top + k * (CEIL_Y - top));
-    rect(g, 0, y, w, 2, beam);
-    rect(g, 0, y + 2, w, 1, '#000000', 0.15);
+    const r = k < 0.4 ? 3 : k < 0.8 ? 2 : 1;
+    rect(g, 0, y + r, w, 1, '#000000', 0.05);
+    for (let bx = -w; bx <= 2 * w; bx += 80) {
+      const x = Math.round(cx + (bx - cx) * (1.9 - 0.9 * k) + 40 * (1.9 - 0.9 * k));
+      if (x < -4 || x > w + 4) continue;
+      rect(g, x - r - 1, y - 1, 2 * r + 3, r + 2, '#b8bcc2');
+      rect(g, x - r, y, 2 * r + 1, r, '#fffaf0');
+      glow(g, x, y + 2, 6 + r * 4, 0.12 + k * 0.08);
+    }
   }
-  // ceiling roses with their lamps
   for (const lx of opts.lights ?? []) {
-    rect(g, lx - 3, CEIL_Y - 14, 7, 2, '#f4ecd6');
-    glow(g, lx, CEIL_Y - 12, 22, 0.35);
+    rect(g, lx - 2, CEIL_Y - 8, 5, 1, '#fffaf0');
+    glow(g, lx, CEIL_Y - 8, 20, 0.3);
   }
-  // the header across the top, nearest the eye
-  rect(g, 0, 0, w, top, '#3a2a1c');
-  rect(g, 0, top - 1, w, 1, HP.goldDark);
-  // and the cornice where the ceiling meets the wall
+  // the bulkhead nearest the eye, and the shadow gap where ceiling meets wall
+  rect(g, 0, 0, w, top, '#3a3d44');
+  rect(g, 0, top - 1, w, 1, '#5a5e66');
   crownAt(g, w, CEIL_Y, 3);
 }
 
@@ -439,11 +420,12 @@ function gallery(g: Ctx, W: number, floor: number, doors: number[]): void {
   rect(g, 0, floor, W, 1, '#ffffff', 0.7);
   rect(g, 0, floor + 3, W, 1, HP.goldDark);
   rect(g, 0, floor + 4, W, 1, '#000000', 0.15);
-  // the balustrade: a brass rail at waist height and turned balusters
+  // the balustrade: glass panels in a steel shoe, a steel handrail
+  rect(g, 0, floor - 13, W, 11, '#bcd8e4', 0.32);
+  for (let x = 0; x < W; x += 24) rect(g, x, floor - 13, 1, 11, '#ffffff', 0.35);
   rect(g, 0, floor - 14, W, 2, HP.gold);
   rect(g, 0, floor - 14, W, 1, HP.goldHi);
-  for (let x = 1; x < W; x += 3) rect(g, x, floor - 12, 1, 12, HP.creamShade);
-  rect(g, 0, floor - 2, W, 2, HP.cream);
+  rect(g, 0, floor - 2, W, 2, HP.steelDark);
 }
 
 export function paintLobby(g: Ctx, night: boolean, empty = false): void {
@@ -462,27 +444,22 @@ export function paintLobby(g: Ctx, night: boolean, empty = false): void {
   // chandelier hanging through all three storeys.
   rect(g, 109, 11, 102, 92, HP.paper);
   wallpaper(g, 109, 11, 102, 92, { paper: HP.paper, shade: HP.paperShade, motif: HP.paperMotif });
-  rect(g, 154, 22, 12, 4, HP.goldDark);
-  drawPixelText(g, 'GL', 160.5, 21, { scale: 1, color: HP.goldHi, center: true });
-  // the great chandelier
-  rect(g, 160, 0, 1, 52, HP.goldDark);
-  rect(g, 148, 52, 25, 2, HP.gold);
-  rect(g, 151, 54, 19, 2, HP.goldDark);
-  rect(g, 154, 56, 13, 2, HP.gold);
-  for (let k = -11; k <= 11; k += 3) {
-    rect(g, 160 + k, 49, 1, 3, HP.goldDark);
-    rect(g, 160 + k - 1, 47, 3, 2, '#fff6d8');
+  // the building's name in brushed letters on the wall of the atrium
+  drawPixelText(g, "LILY'S", 160.5, 18, { scale: 1, color: HP.goldDark, center: true });
+  drawPixelText(g, 'CONDOS', 160.5, 27, { scale: 1, color: HP.goldDark, center: true });
+  // a cluster of glass pendants, hung at different lengths through the atrium
+  for (const [px, len] of [[150, 40], [160, 52], [170, 44], [155, 60], [166, 34]] as const) {
+    rect(g, px, 0, 1, len, '#3a3d44');
+    rect(g, px - 2, len, 5, 4, '#e8eef2');
+    rect(g, px - 1, len + 4, 3, 1, '#fff6dc');
+    glow(g, px + 0.5, len + 3, 12, 0.3);
   }
-  for (let k = -9; k <= 9; k += 3) rect(g, 160 + k, 58 + (Math.abs(k) % 6), 1, 3, '#e8f0ff');
-  glow(g, 160.5, 52, 60, 0.4);
-  glow(g, 160.5, 52, 16, 0.55);
+  glow(g, 160.5, 52, 50, 0.22);
   wainscot(g, 0, W, DADO, WAIN_BOTTOM);
   marbleFloor(g, W);
-  // the runner, from the doors to the lift
-  rect(g, 30, 160, 370, 12, HP.carpet);
-  rect(g, 30, 160, 370, 1, HP.gold);
-  rect(g, 30, 171, 370, 1, HP.gold);
-  for (let x = 34; x < 396; x += 8) rect(g, x, 165, 2, 2, HP.gold, 0.6);
+  // the entrance mat, sunk into the tiles inside the doors
+  rect(g, 6, 160, 46, 12, '#3a3d44');
+  for (let x = 8; x < 50; x += 3) rect(g, x, 161, 1, 10, '#4e525a');
 
   // ---- the front doors: glass and brass, the night (or the day) in them
   const out = night ? '#0c1426' : '#9ac8e0';
@@ -503,20 +480,20 @@ export function paintLobby(g: Ctx, night: boolean, empty = false): void {
 
   // ---- a velvet armchair, a side table and a lamp, at sitting height
   const ax = 56;
-  rect(g, ax + 1, 136, 14, 9, '#356a54');
-  rect(g, ax + 1, 136, 14, 1, '#4a8068');
-  rect(g, ax, 143, 16, 5, '#2e5a48');
-  rect(g, ax - 1, 141, 3, 7, '#2a5040');
-  rect(g, ax + 14, 141, 3, 7, '#2a5040');
-  rect(g, ax + 2, 143, 12, 1, '#3e7460');
+  rect(g, ax + 1, 137, 14, 8, '#6a7078');
+  rect(g, ax + 1, 137, 14, 1, '#8a9098');
+  rect(g, ax, 143, 16, 5, '#5a6068');
+  rect(g, ax - 1, 141, 3, 7, '#4e545c');
+  rect(g, ax + 14, 141, 3, 7, '#4e545c');
+  rect(g, ax + 2, 143, 12, 1, '#7a8088');
   rect(g, ax, 148, 1, 4, HP.woodDark);
   rect(g, ax + 15, 148, 1, 4, HP.woodDark);
   rect(g, 78, 142, 8, 1, HP.wood);
   rect(g, 81, 143, 2, 8, HP.woodDark);
   rect(g, 79, 151, 6, 1, HP.woodDark);
   rect(g, 81, 138, 2, 4, HP.goldDark);
-  rect(g, 79, 134, 6, 4, '#f0e0b8');
-  rect(g, 80, 133, 4, 1, '#f8ecd0');
+  rect(g, 79, 134, 6, 4, '#f4f2ec');
+  rect(g, 80, 133, 4, 1, '#ffffff');
   glow(g, 82, 137, 14, 0.4);
 
   // ---- columns framing the desk, all three storeys
@@ -530,26 +507,26 @@ export function paintLobby(g: Ctx, night: boolean, empty = false): void {
     rect(g, px + 3, 11, 1, 141, '#000000', 0.08);
   }
 
-  // ---- behind the desk: the sign under the gallery, the pigeonholes
-  rect(g, 132, 105, 56, 9, HP.woodDark);
-  rect(g, 133, 106, 54, 7, HP.wood);
-  rect(g, 133, 106, 54, 1, HP.gold);
-  drawPixelText(g, 'RECEPTION', 160.5, 107, { scale: 1, color: '#2a1608', center: true });
-  drawPixelText(g, 'RECEPTION', 160, 106, { scale: 1, color: HP.goldHi, center: true });
+  // ---- behind the desk: the sign under the gallery, the residents' mailboxes
+  rect(g, 132, 105, 56, 9, '#2a2d33');
+  rect(g, 133, 106, 54, 7, '#3a3d44');
+  drawPixelText(g, 'CONCIERGE', 160, 106, { scale: 1, color: '#e8eaec', center: true });
+  // the intercom panels either side
   for (const cx of [124, 196]) {
-    rect(g, cx - 3, 118, 7, 7, HP.goldDark);
-    rect(g, cx - 2, 119, 5, 5, HP.cream);
-    rect(g, cx, 120, 1, 2, HP.ink);
-    rect(g, cx, 122, 2, 1, HP.ink);
+    rect(g, cx - 3, 118, 7, 9, HP.steelDark);
+    rect(g, cx - 2, 119, 5, 7, HP.steelHi);
+    rect(g, cx - 1, 120, 3, 2, '#2a3a4a');
+    for (let k = 0; k < 2; k++) rect(g, cx - 1 + k * 2, 123, 1, 1, HP.steelDark);
   }
-  rect(g, 137, 117, 46, 18, HP.woodDark);
+  // the mailboxes: a steel wall of little numbered doors
+  rect(g, 137, 117, 46, 18, HP.steelDark);
   for (let r = 0; r < 3; r++)
     for (let c = 0; c < 8; c++) {
       const x = 138 + c * 5 + (c >= 4 ? 4 : 0);
       const y = 118 + r * 5;
-      rect(g, x, y, 4, 4, HP.woodDeep);
-      rect(g, x, y + 3, 4, 1, HP.woodHi);
-      if ((r * 8 + c) % 3 !== 1) rect(g, x + 1, y + 1, 2, 2, HP.gold);
+      rect(g, x, y, 4, 4, HP.steel);
+      rect(g, x, y, 4, 1, HP.steelHi);
+      rect(g, x + 1, y + 2, 2, 1, '#3a3d44');
     }
 
   // ---- the clerk, behind it (unless nobody is)
@@ -572,9 +549,9 @@ function clerk(g: Ctx, cx: number): void {
 
 function desk(g: Ctx): void {
   const { x, w, top } = DESK;
-  rect(g, x - 3, top, w + 6, 3, HP.marble);
+  rect(g, x - 3, top, w + 6, 3, '#f4f3ef');
   rect(g, x - 3, top, w + 6, 1, '#ffffff');
-  rect(g, x - 3, top + 2, w + 6, 1, HP.marbleDark);
+  rect(g, x - 3, top + 2, w + 6, 1, '#c8c4bc');
   rect(g, x, top + 3, w, FLOOR_Y - top - 3, HP.wood);
   rect(g, x, top + 3, w, 1, HP.woodDark);
   rect(g, x, top + 4, w, 1, HP.gold);
@@ -587,10 +564,11 @@ function desk(g: Ctx): void {
   }
   rect(g, x, FLOOR_Y - 2, w, 2, HP.woodDeep);
   // on it: a banker's lamp, the book, a bell, the lilies
-  rect(g, x + 6, top - 3, 1, 3, HP.goldDark);
-  rect(g, x + 3, top - 5, 6, 2, '#2e6a4a');
-  rect(g, x + 3, top - 5, 6, 1, '#4a8a68');
-  glow(g, x + 6, top - 2, 9, 0.45);
+  // a monitor for the parcel log, its stand
+  rect(g, x + 2, top - 8, 10, 6, '#1e2024');
+  rect(g, x + 3, top - 7, 8, 4, '#4a7a9a');
+  rect(g, x + 6, top - 2, 2, 2, '#3a3d44');
+  glow(g, x + 7, top - 5, 8, 0.25, '160,200,255');
   rect(g, 140, top - 2, 11, 2, '#f4ecd6');
   rect(g, 145, top - 2, 1, 2, HP.creamShade);
   rect(g, 174, top - 2, 4, 2, HP.gold);
@@ -629,18 +607,13 @@ function paintLobbyRest(g: Ctx): void {
   rect(g, 297, 131, 2, 1, '#ffd45e');
   rect(g, 297, 133, 2, 1, HP.goldHi);
 
-  // ---- the chandeliers, down the middle of the atrium
+  // ---- pendant lights down the atrium
   for (const chx of [56, 252, 380]) {
-    rect(g, chx, 0, 1, 66, HP.goldDark);
-    rect(g, chx - 9, 66, 19, 2, HP.gold);
-    rect(g, chx - 6, 68, 13, 2, HP.goldDark);
-    for (let k = -8; k <= 8; k += 4) {
-      rect(g, chx + k, 63, 1, 3, HP.goldDark);
-      rect(g, chx + k - 1, 61, 3, 2, '#fff6d8');
-    }
-    for (let k = -6; k <= 6; k += 3) rect(g, chx + k, 70 + (Math.abs(k) % 6 === 0 ? 1 : 2), 1, 2, '#e8f0ff');
-    glow(g, chx + 0.5, 64, 40, 0.34);
-    glow(g, chx + 0.5, 64, 12, 0.5);
+    rect(g, chx, 0, 1, 62, '#3a3d44');
+    rect(g, chx - 5, 62, 11, 3, '#2a2d33');
+    rect(g, chx - 4, 65, 9, 1, '#fff6dc');
+    glow(g, chx + 0.5, 66, 30, 0.3);
+    glow(g, chx + 0.5, 66, 10, 0.45);
   }
   sconce(g, 104, 124);
   sconce(g, 216, 124);
@@ -682,17 +655,19 @@ function stairDoor(g: Ctx, cx: number): void {
   glow(g, cx, y - 6, 12, 0.25);
 }
 
-/** A brass luggage trolley, parked by the wall: handle at about 1.8 m. */
+/** The parcel lockers by the wall: a bank of steel doors, a little screen. */
 function luggageTrolley(g: Ctx, cx: number): void {
-  rect(g, cx - 8, 147, 16, 2, HP.gold);
-  rect(g, cx - 8, 125, 1, 23, HP.gold);
-  rect(g, cx + 7, 125, 1, 23, HP.gold);
-  rect(g, cx - 8, 124, 16, 2, HP.goldHi);
-  rect(g, cx - 6, 137, 8, 10, '#5a2a3a');
-  rect(g, cx - 6, 137, 8, 1, '#7a3a4a');
-  rect(g, cx + 1, 141, 5, 6, '#2a3a5a');
-  rect(g, cx - 3, 135, 3, 2, HP.goldDark);
-  for (const wx of [cx - 7, cx + 6]) rect(g, wx - 1, 149, 2, 3, HP.ink);
+  rect(g, cx - 12, 120, 24, 32, HP.steelDark);
+  for (let r = 0; r < 4; r++)
+    for (let c = 0; c < 3; c++) {
+      const x = cx - 11 + c * 8;
+      const y = 121 + r * 7;
+      rect(g, x, y, 7, 6, HP.steel);
+      rect(g, x, y, 7, 1, HP.steelHi);
+      rect(g, x + 5, y + 3, 1, 1, '#3a3d44');
+    }
+  rect(g, cx - 3, 115, 6, 4, '#1e2024');
+  rect(g, cx - 2, 116, 4, 2, '#5aa0c8');
 }
 
 /** The storage room: a plain staff door with a small window in it. */
@@ -716,7 +691,7 @@ function storageDoor(g: Ctx, cx: number): void {
   rect(g, x + 1, FLOOR_Y - 3, w - 2, 2, '#6a604e');
   rect(g, cx - 16, y - 11, 32, 8, HP.goldDark);
   rect(g, cx - 15, y - 10, 30, 6, HP.ink);
-  drawPixelText(g, 'STAFF', cx, y - 10, { scale: 1, color: '#c8c2b4', center: true });
+  drawPixelText(g, 'STORE', cx, y - 10, { scale: 1, color: '#c8c2b4', center: true });
 }
 
 // ============================================================ the corridor
@@ -791,17 +766,21 @@ export const BED = { x: 268, w: 34, top: 144 };
 export function paintRoom(g: Ctx): void {
   const W = 320;
   // soft warm walls: a pale stripe, cream panelling below
-  wallpaper(g, 0, CEIL_Y, W, DADO - CEIL_Y, { paper: '#efe6d2', shade: '#e6dbc2', motif: '#d8c8a4' });
+  // the flat: plain painted walls, the same paint all the way down
+  wallpaper(g, 0, CEIL_Y, W, FLOOR_Y - CEIL_Y, { paper: '#e6e2da', shade: '#dad6cc', motif: '#ccc6ba' });
   enclosedCeiling(g, W, { lights: [80, 240] });
-  wainscot(g, 0, W, DADO, WAIN_BOTTOM, '#e2d6bc', '#f4ecd8', '#c8b898');
-  // the carpet: a quiet oatmeal, and a rug under the bed
-  rect(g, 0, FLOOR_Y, W, 28, '#8a7a66');
-  rect(g, 0, FLOOR_Y, W, 2, '#6a5a48');
-  for (let y = FLOOR_Y + 4; y < 180; y += 4) for (let x = (y % 8) / 2; x < W; x += 6) rect(g, x, y, 1, 1, '#9a8a74');
-  rect(g, 240, 156, 58, 14, '#7b2a3a');
-  rect(g, 240, 156, 58, 1, HP.gold);
-  rect(g, 240, 169, 58, 1, HP.gold);
-  for (let x = 244; x < 296; x += 6) rect(g, x, 162, 2, 2, '#9a3a4c');
+  rect(g, 0, WAIN_BOTTOM, W, FLOOR_Y - WAIN_BOTTOM, '#f4f3ef');
+  rect(g, 0, WAIN_BOTTOM, W, 1, '#ffffff');
+  // oak laminate, long boards, and a grey rug under the bed
+  for (let y = FLOOR_Y; y < 180; y += 4) {
+    const row = (y - FLOOR_Y) / 4;
+    rect(g, 0, y, W, 4, row % 2 ? '#a88660' : '#b08e66');
+    rect(g, 0, y, W, 1, '#8a6a48', 0.7);
+    for (let x = (row * 37) % 56; x < W; x += 56) rect(g, x, y, 1, 4, '#8a6a48');
+  }
+  rect(g, 240, 156, 58, 14, '#7a8088');
+  rect(g, 240, 156, 58, 1, '#9aa0a8');
+  for (let x = 242; x < 296; x += 4) rect(g, x, 158 + (x % 3), 1, 10, '#6a7078', 0.6);
 
   // ---- the window: a cream frame and a sill
   const { x, y, w, h } = ROOM_WINDOW;
@@ -824,23 +803,23 @@ export function paintRoom(g: Ctx): void {
   // ---- the door out, with its chain, and the bathroom door
   roomDoor(g, ROOM_DOOR_X, '');
   rect(g, ROOM_DOOR_X + 2, 130, 4, 1, HP.goldHi);
-  rect(g, ROOM_DOOR_X - 6, 128, 3, 6, '#7b2a3a');
+  rect(g, ROOM_DOOR_X - 6, 128, 3, 6, '#3a7a80');
   rect(g, ROOM_DOOR_X - 6, 127, 2, 1, '#f4ecd6');
   roomDoor(g, BATH_DOOR_X, '', { w: 15, white: true });
 
   // ---- the bed, foot towards you: a buttoned headboard against the wall,
   // white sheets, a burgundy throw, the pillows just showing over the duvet
   const bx = BED.x - BED.w / 2;
-  rect(g, bx + 1, 128, BED.w - 2, 18, '#3e5a6a');
-  rect(g, bx + 1, 128, BED.w - 2, 1, '#5a7a8a');
-  for (let r = 0; r < 2; r++) for (let c = 0; c < 4; c++) rect(g, bx + 5 + c * 7 + (r % 2) * 3, 132 + r * 5, 1, 1, '#2a3e4a');
+  rect(g, bx + 1, 130, BED.w - 2, 16, '#8a8e96');
+  rect(g, bx + 1, 130, BED.w - 2, 1, '#a8acb4');
+  for (let c = 1; c < 4; c++) rect(g, bx + 1 + c * 8, 131, 1, 15, '#7a7e86');
   rect(g, bx + 4, 139, 11, 4, '#ffffff');
   rect(g, bx + 19, 139, 11, 4, '#ffffff');
   rect(g, bx + 4, 142, 26, 1, '#d8d4cc');
   rect(g, bx, BED.top, BED.w, 6, '#f6f2ea');
   rect(g, bx, BED.top, BED.w, 1, '#ffffff');
-  rect(g, bx, BED.top + 3, BED.w, 3, '#7b2a3a');
-  rect(g, bx, BED.top + 3, BED.w, 1, HP.gold);
+  rect(g, bx, BED.top + 3, BED.w, 3, '#3a7a80');
+  rect(g, bx, BED.top + 3, BED.w, 1, '#5a9aa0');
   rect(g, bx - 1, BED.top + 6, BED.w + 2, 4, HP.wood);
   rect(g, bx - 1, BED.top + 6, BED.w + 2, 1, HP.woodHi);
   rect(g, bx, FLOOR_Y - 2, 2, 2, HP.woodDark);
@@ -851,15 +830,14 @@ export function paintRoom(g: Ctx): void {
     rect(g, nx - 4, 143, 8, 1, HP.woodHi);
     rect(g, nx - 3, 147, 6, 1, HP.woodDark);
     rect(g, nx, 148, 1, 1, HP.gold);
-    rect(g, nx, 139, 1, 4, HP.goldDark);
-    rect(g, nx - 2, 135, 5, 4, '#f4e6c4');
-    rect(g, nx - 1, 134, 3, 1, '#fff4dc');
+    rect(g, nx, 139, 1, 4, HP.steelDark);
+    rect(g, nx - 2, 135, 5, 4, '#f4f2ec');
+    rect(g, nx - 1, 134, 3, 1, '#ffffff');
   }
   // a picture over the bed
   picture(g, BED.x - 6, 112, 12, 10, 'lily');
   // the ceiling light
-  rect(g, 160, CEIL_Y + 3, 1, 2, HP.goldDark);
-  rect(g, 156, CEIL_Y + 5, 9, 2, '#f4ecd6');
+  rect(g, 157, CEIL_Y + 3, 7, 1, '#fffaf0');
 }
 
 /** The room's lamps and their light, painted over the room (only when lit). */
@@ -955,13 +933,13 @@ export function paintGlazing(g: Ctx, w: number, h: number): void {
 }
 
 /**
- * One curtain: heavy velvet, its folds, a gold hem and tie-back.  Drawn the
+ * One curtain: a plain grey-blue linen, its folds, a stitched hem.  Drawn the
  * full width it hangs when closed; opening it squeezes the folds together.
  */
 export function paintCurtain(g: Ctx, w: number, h: number, side: -1 | 1): void {
-  const base = '#6a1e2e';
-  const hi = '#8e3044';
-  const dark = '#3e0e1a';
+  const base = '#8a96a0';
+  const hi = '#a4b0ba';
+  const dark = '#6a7680';
   rect(g, 0, 0, w, h, base);
   for (let x = 0; x < w; x += 4) {
     rect(g, x, 0, 1, h, hi);
@@ -969,13 +947,12 @@ export function paintCurtain(g: Ctx, w: number, h: number, side: -1 | 1): void {
   }
   // the heading tape and rings
   rect(g, 0, 0, w, 2, dark);
-  for (let x = 1; x < w; x += 4) rect(g, x, 0, 1, 1, '#c9a24a');
-  // a gold hem
-  rect(g, 0, h - 2, w, 1, '#c9a24a');
-  rect(g, 0, h - 1, w, 1, '#8a6a24');
+  for (let x = 1; x < w; x += 4) rect(g, x, 0, 1, 1, HP.steelHi);
+  // a plain hem
+  rect(g, 0, h - 2, w, 2, dark);
   // the leading edge catches the light
   const edge = side < 0 ? w - 1 : 0;
-  rect(g, edge, 0, 1, h, '#b04a60');
+  rect(g, edge, 0, 1, h, '#c0cad2');
 }
 
 // ============================================================ the bathroom
@@ -992,9 +969,8 @@ export function paintBathroom(g: Ctx): void {
     for (let x = ((y - CEIL_Y) / 4) % 2 ? 4 : 0; x < W; x += 8) rect(g, x, y, 1, 4, '#d8d4cc');
   }
   enclosedCeiling(g, W, { lights: [80, 240] });
-  rect(g, 0, DADO - 2, W, 3, '#7b2a3a');
-  rect(g, 0, DADO - 2, W, 1, '#9a3a4c');
-  rect(g, 0, DADO + 1, W, 1, HP.gold);
+  rect(g, 0, DADO - 2, W, 3, '#8a96a0');
+  rect(g, 0, DADO - 2, W, 1, '#a4b0ba');
   // floor: small black-and-white tiles
   for (let y = FLOOR_Y; y < 180; y += 4)
     for (let x = 0; x < W; x += 4) rect(g, x, y, 4, 4, ((x + y) / 4) % 2 ? '#2a2a2e' : '#e8e6e0');
@@ -1004,9 +980,9 @@ export function paintBathroom(g: Ctx): void {
   // a towel rail with towels, at hand height
   rect(g, 70, 128, 18, 1, HP.steelHi);
   rect(g, 72, 129, 6, 12, '#f8f6f0');
-  rect(g, 72, 138, 6, 1, '#7b2a3a');
+  rect(g, 72, 138, 6, 1, '#3a7a80');
   rect(g, 80, 129, 6, 10, '#f8f6f0');
-  rect(g, 80, 136, 6, 1, '#7b2a3a');
+  rect(g, 80, 136, 6, 1, '#3a7a80');
   // the vanity: mirror in gold, a light bar, a marble top, a basin
   const m = MIRROR;
   rect(g, m.x - 2, m.y - 2, m.w + 4, m.h + 4, HP.goldDark);
@@ -1063,10 +1039,15 @@ export function paintBathroom(g: Ctx): void {
 
 export function paintLift(g: Ctx): void {
   const W = 320;
-  rect(g, 0, 0, W, 180, '#3a2414');
-  // walnut walls, a brass handrail, the doors in front of you
-  wainscot(g, 0, W, 26, 146);
-  rect(g, 0, 0, W, 20, '#2a1a0e');
+  rect(g, 0, 0, W, 180, '#8a9098');
+  // brushed steel walls, a steel handrail, the doors in front of you
+  for (let x = 0; x < W; x += 40) {
+    rect(g, x, 20, 40, 126, x % 80 ? '#a0a6ae' : '#98a0a8');
+    rect(g, x, 20, 1, 126, '#6a7078');
+    for (let k = 2; k < 40; k += 3) rect(g, x + k, 20, 1, 126, '#ffffff', 0.06);
+  }
+  rect(g, 0, 146, W, 6, '#6a7078');
+  rect(g, 0, 0, W, 20, '#e8e6e0');
   for (let x = 20; x < W; x += 40) {
     rect(g, x, 4, 20, 10, '#fff4d8');
     glow(g, x + 10, 10, 40, 0.3);
@@ -1091,13 +1072,12 @@ export function paintLift(g: Ctx): void {
   const labels = ['6', '5', '4', '3', '2', 'G'];
   labels.forEach((l, k) => {
     rect(g, cx + 58, 50 + k * 11, 14, 10, HP.goldDark);
-    rect(g, cx + 59, 51 + k * 11, 12, 8, '#3a2a14');
-    drawPixelText(g, l, cx + 65.5, 51 + k * 11, { scale: 1, color: '#fff0c0', center: true });
+    rect(g, cx + 59, 51 + k * 11, 12, 8, '#2a2d33');
+    drawPixelText(g, l, cx + 65.5, 51 + k * 11, { scale: 1, color: '#bfe8ff', center: true });
   });
-  // the carpet under your feet
-  rect(g, 0, FLOOR_Y, W, 28, HP.carpet);
-  rect(g, 0, FLOOR_Y, W, 2, HP.carpetDark);
-  rect(g, 0, FLOOR_Y + 3, W, 1, HP.gold, 0.7);
+  // the floor under your feet: a rubber-studded panel
+  rect(g, 0, FLOOR_Y, W, 28, '#3a3d44');
+  for (let y = FLOOR_Y + 3; y < 180; y += 4) for (let x = (y % 8) / 2; x < W; x += 6) rect(g, x, y, 2, 1, '#4e525a');
 }
 
 // ============================================================ 3D surfaces
@@ -1114,202 +1094,153 @@ export function canvas(w: number, h: number, paint: (g: Ctx) => void): HTMLCanva
   return c;
 }
 
-/** One repeat of the damask (one metre wide, the wall's height above the rail). */
+/** The painted wall: warm grey emulsion on plaster, one metre of it. */
 export function texWallpaper(): HTMLCanvasElement {
   return canvas(256, 512, (g) => {
     g.fillStyle = HP.paper;
     g.fillRect(0, 0, 256, 512);
-    // the broad stripe and its fine edges
-    g.fillStyle = HP.paperShade;
-    g.fillRect(80, 0, 96, 512);
-    g.fillStyle = 'rgba(160,130,80,0.35)';
-    g.fillRect(72, 0, 3, 512);
-    g.fillRect(181, 0, 3, 512);
-    // a lily in the stripe, and small sprigs between
-    for (let y = 40; y < 512; y += 128) {
-      lily(g, 128, y + 30, 1.4, '#c8b07e');
-      lily(g, 20, y + 94, 0.7, '#d8c49a');
-      lily(g, 236, y + 94, 0.7, '#d8c49a');
+    // the roller's faint texture, and a little life in the paint
+    for (let k = 0; k < 2600; k++) {
+      g.fillStyle = k % 3 ? 'rgba(120,110,95,0.05)' : 'rgba(255,255,255,0.08)';
+      g.fillRect((k * 97) % 256, (k * 61) % 512, 2, 1);
     }
-    // a little age in it
-    for (let k = 0; k < 400; k++) {
-      g.fillStyle = `rgba(120,90,50,${0.02 + (k % 5) * 0.006})`;
-      g.fillRect((k * 97) % 256, (k * 61) % 512, 2, 2);
+    for (let k = 0; k < 10; k++) {
+      const x = (k * 71) % 256;
+      const y = (k * 137) % 512;
+      const gr = g.createRadialGradient(x, y, 0, x, y, 60);
+      gr.addColorStop(0, 'rgba(90,80,70,0.04)');
+      gr.addColorStop(1, 'rgba(90,80,70,0)');
+      g.fillStyle = gr;
+      g.fillRect(x - 60, y - 60, 120, 120);
     }
   });
 }
 
-function lily(g: Ctx, x: number, y: number, s: number, col: string): void {
-  g.save();
-  g.translate(x, y);
-  g.scale(s, s);
-  g.fillStyle = col;
-  g.beginPath();
-  g.ellipse(0, -12, 6, 16, 0, 0, Math.PI * 2);
-  g.ellipse(-12, -2, 5, 13, -0.9, 0, Math.PI * 2);
-  g.ellipse(12, -2, 5, 13, 0.9, 0, Math.PI * 2);
-  g.fill();
-  g.fillRect(-1.5, 6, 3, 22);
-  g.beginPath();
-  g.ellipse(-8, 22, 8, 3, -0.4, 0, Math.PI * 2);
-  g.ellipse(8, 22, 8, 3, 0.4, 0, Math.PI * 2);
-  g.fill();
-  g.restore();
-}
-
-/** The walnut wainscot, one panel wide (0.8 m), rail to skirting. */
+/** The lower wall: a darker paint that takes the knocks, a steel bumper rail, white skirting. */
 export function texWainscot(): HTMLCanvasElement {
   return canvas(256, 256, (g) => {
-    const grain = (x: number, y: number, w: number, h: number, base: string): void => {
-      g.fillStyle = base;
-      g.fillRect(x, y, w, h);
-      for (let k = 0; k < h; k += 3) {
-        g.fillStyle = `rgba(30,16,6,${0.06 + ((k * 7) % 5) * 0.02})`;
-        g.fillRect(x, y + k, w, 1);
-      }
-    };
-    grain(0, 0, 256, 256, HP.wood);
-    // the rail at the top
-    g.fillStyle = HP.woodDark;
-    g.fillRect(0, 0, 256, 18);
-    g.fillStyle = HP.woodHi;
-    g.fillRect(0, 0, 256, 4);
-    g.fillStyle = HP.gold;
-    g.fillRect(0, 14, 256, 3);
-    // the raised panel
-    g.fillStyle = HP.woodDark;
-    g.fillRect(24, 40, 208, 176);
-    grain(30, 46, 196, 164, '#6a4428');
-    g.fillStyle = 'rgba(255,220,170,0.18)';
-    g.fillRect(30, 46, 196, 4);
-    g.fillRect(30, 46, 4, 164);
+    g.fillStyle = HP.lowerWall;
+    g.fillRect(0, 0, 256, 256);
+    for (let k = 0; k < 1200; k++) {
+      g.fillStyle = k % 3 ? 'rgba(90,80,70,0.05)' : 'rgba(255,255,255,0.07)';
+      g.fillRect((k * 83) % 256, (k * 29) % 256, 2, 1);
+    }
+    // scuffs where trolleys and shoulders brush it
+    for (let k = 0; k < 6; k++) {
+      g.fillStyle = 'rgba(60,56,50,0.08)';
+      g.fillRect((k * 47) % 230, 120 + ((k * 31) % 80), 18, 2);
+    }
+    // the bumper rail at the top
+    const rail = g.createLinearGradient(0, 0, 0, 22);
+    rail.addColorStop(0, HP.steelHi);
+    rail.addColorStop(0.5, HP.steel);
+    rail.addColorStop(1, HP.steelDark);
+    g.fillStyle = rail;
+    g.fillRect(0, 0, 256, 22);
     g.fillStyle = 'rgba(0,0,0,0.25)';
-    g.fillRect(30, 206, 196, 4);
-    g.fillRect(222, 46, 4, 164);
-    // the skirting
-    g.fillStyle = HP.woodDeep;
-    g.fillRect(0, 232, 256, 24);
-    g.fillStyle = HP.woodHi;
-    g.fillRect(0, 232, 256, 2);
+    g.fillRect(0, 22, 256, 3);
+    // white skirting
+    g.fillStyle = '#f4f3ef';
+    g.fillRect(0, 226, 256, 30);
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 226, 256, 3);
+    g.fillStyle = 'rgba(0,0,0,0.12)';
+    g.fillRect(0, 252, 256, 4);
   });
 }
 
-/** The carpet: burgundy, a gold lattice -- one repeat, half a metre. */
+/** The carpet: charcoal tiles, quarter-turned, flecked -- one repeat, half a metre. */
 export function texCarpet(): HTMLCanvasElement {
   return canvas(128, 128, (g) => {
     g.fillStyle = HP.carpet;
     g.fillRect(0, 0, 128, 128);
-    for (let k = 0; k < 600; k++) {
-      g.fillStyle = k % 2 ? 'rgba(0,0,0,0.08)' : 'rgba(255,200,200,0.04)';
-      g.fillRect((k * 37) % 128, (k * 53) % 128, 2, 1);
+    for (const [x0, y0, along] of [[0, 0, true], [64, 0, false], [0, 64, false], [64, 64, true]] as const) {
+      for (let k = 2; k < 64; k += 4) {
+        g.fillStyle = 'rgba(0,0,0,0.12)';
+        if (along) g.fillRect(x0, y0 + k, 64, 2);
+        else g.fillRect(x0 + k, y0, 2, 64);
+      }
+      g.fillStyle = 'rgba(0,0,0,0.3)';
+      g.fillRect(x0, y0, 64, 1);
+      g.fillRect(x0, y0, 1, 64);
     }
-    g.strokeStyle = 'rgba(201,162,74,0.75)';
-    g.lineWidth = 2;
-    g.beginPath();
-    g.moveTo(64, 0);
-    g.lineTo(128, 64);
-    g.lineTo(64, 128);
-    g.lineTo(0, 64);
-    g.closePath();
-    g.stroke();
-    g.fillStyle = HP.carpetHi;
-    g.beginPath();
-    g.arc(64, 64, 9, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = HP.gold;
-    g.beginPath();
-    g.arc(64, 64, 4, 0, Math.PI * 2);
-    g.fill();
-    for (const [x, y] of [
-      [0, 0],
-      [128, 0],
-      [0, 128],
-      [128, 128],
-    ]) {
-      g.fillStyle = HP.carpetDark;
-      g.beginPath();
-      g.arc(x, y, 12, 0, Math.PI * 2);
-      g.fill();
+    for (let k = 0; k < 500; k++) {
+      g.fillStyle = k % 2 ? 'rgba(150,155,165,0.12)' : 'rgba(20,20,24,0.12)';
+      g.fillRect((k * 37) % 128, (k * 53) % 128, 2, 1);
     }
   });
 }
 
-/** The carpet's border, along each side of the runner. */
+/** The carpet's edge along each wall: a darker border tile. */
 export function texCarpetBorder(): HTMLCanvasElement {
   return canvas(64, 128, (g) => {
     g.fillStyle = HP.carpetDark;
     g.fillRect(0, 0, 64, 128);
-    g.fillStyle = HP.gold;
-    g.fillRect(10, 0, 4, 128);
-    g.fillRect(50, 0, 4, 128);
-    for (let y = 8; y < 128; y += 32) {
-      g.beginPath();
-      g.moveTo(32, y);
-      g.lineTo(42, y + 16);
-      g.lineTo(32, y + 32);
-      g.lineTo(22, y + 16);
-      g.closePath();
-      g.fill();
+    for (let k = 0; k < 200; k++) {
+      g.fillStyle = 'rgba(150,155,165,0.1)';
+      g.fillRect((k * 23) % 64, (k * 41) % 128, 2, 1);
     }
+    g.fillStyle = 'rgba(0,0,0,0.3)';
+    g.fillRect(0, 0, 1, 128);
+    g.fillRect(0, 63, 64, 1);
   });
 }
 
-/** A room door, front on: walnut, two panels, brass plate with its number. */
+/** A flat's front door, face on: flush oak veneer, a steel number plate, lever and spy hole. */
 export function texRoomDoor(num: string, broken = false): HTMLCanvasElement {
   return canvas(256, 512, (g) => {
     g.fillStyle = HP.wood;
     g.fillRect(0, 0, 256, 512);
-    for (let k = 0; k < 512; k += 4) {
-      g.fillStyle = `rgba(30,16,6,${0.05 + ((k * 11) % 7) * 0.012})`;
-      g.fillRect(0, k, 256, 2);
+    // the veneer's grain, running up the door
+    for (let k = 0; k < 256; k += 3) {
+      g.fillStyle = `rgba(90,60,30,${0.05 + ((k * 11) % 7) * 0.012})`;
+      g.fillRect(k, 0, 1 + (k % 2), 512);
     }
-    const panel = (x: number, y: number, w: number, h: number): void => {
-      g.fillStyle = HP.woodDark;
-      g.fillRect(x, y, w, h);
-      g.fillStyle = '#684326';
-      g.fillRect(x + 8, y + 8, w - 16, h - 16);
-      g.fillStyle = 'rgba(255,220,170,0.2)';
-      g.fillRect(x + 8, y + 8, w - 16, 4);
-      g.fillRect(x + 8, y + 8, 4, h - 16);
-      g.fillStyle = 'rgba(0,0,0,0.3)';
-      g.fillRect(x + 8, y + h - 12, w - 16, 4);
-      g.fillRect(x + w - 12, y + 8, 4, h - 16);
-    };
-    panel(36, 40, 184, 170);
-    panel(36, 250, 184, 220);
-    // the brass plate
-    g.fillStyle = HP.goldDark;
-    g.fillRect(84, 100, 88, 44);
-    g.fillStyle = HP.gold;
-    g.fillRect(88, 104, 80, 36);
-    g.fillStyle = HP.goldHi;
-    g.fillRect(88, 104, 80, 4);
-    g.fillStyle = '#2a1608';
-    g.font = 'bold 28px Georgia, serif';
+    g.fillStyle = 'rgba(255,240,210,0.12)';
+    g.fillRect(0, 0, 256, 6);
+    g.fillStyle = 'rgba(0,0,0,0.18)';
+    g.fillRect(250, 0, 6, 512);
+    // the number plate, brushed steel, the figures cut into it
+    g.fillStyle = HP.steelDark;
+    g.fillRect(84, 120, 88, 48);
+    const pl = g.createLinearGradient(88, 0, 168, 0);
+    pl.addColorStop(0, '#c4c8cc');
+    pl.addColorStop(0.5, '#e4e8ec');
+    pl.addColorStop(1, '#b0b4b8');
+    g.fillStyle = pl;
+    g.fillRect(88, 124, 80, 40);
+    g.fillStyle = '#1e2024';
+    g.font = 'bold 28px sans-serif';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.fillText(num, 128, 124);
-    // the peephole
-    g.fillStyle = HP.goldDark;
+    g.fillText(num, 128, 145);
+    // the spy hole over it
+    g.fillStyle = HP.steelDark;
     g.beginPath();
-    g.arc(128, 70, 6, 0, Math.PI * 2);
+    g.arc(128, 84, 6, 0, Math.PI * 2);
     g.fill();
     g.fillStyle = '#100a06';
     g.beginPath();
-    g.arc(128, 70, 3, 0, Math.PI * 2);
+    g.arc(128, 84, 3, 0, Math.PI * 2);
     g.fill();
-    // the lever handle and the card lock
-    g.fillStyle = HP.goldDark;
-    g.fillRect(206, 228, 20, 60);
-    g.fillStyle = HP.gold;
-    g.fillRect(208, 230, 16, 56);
-    g.fillStyle = '#c03030';
-    g.fillRect(212, 238, 8, 4);
-    g.fillStyle = HP.goldHi;
-    g.fillRect(170, 270, 50, 8);
+    // the lever handle on its rose, and the key cylinder under it
+    g.fillStyle = HP.steelDark;
+    g.beginPath();
+    g.arc(214, 262, 12, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = HP.steelHi;
+    g.fillRect(168, 256, 50, 10);
+    g.fillStyle = HP.steel;
+    g.fillRect(168, 264, 50, 3);
+    g.fillStyle = HP.steelDark;
+    g.beginPath();
+    g.arc(214, 300, 7, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#2a2a2e';
+    g.fillRect(213, 296, 2, 8);
     if (broken) {
       // split and gouged
-      g.strokeStyle = '#1a0e06';
+      g.strokeStyle = '#2a1a0c';
       g.lineWidth = 6;
       g.beginPath();
       g.moveTo(40, 0);
@@ -1318,7 +1249,7 @@ export function texRoomDoor(num: string, broken = false): HTMLCanvasElement {
       g.lineTo(150, 512);
       g.stroke();
       for (let k = 0; k < 4; k++) {
-        g.strokeStyle = 'rgba(20,10,4,0.8)';
+        g.strokeStyle = 'rgba(40,24,10,0.8)';
         g.lineWidth = 3;
         g.beginPath();
         g.moveTo(140 + k * 14, 180);
@@ -1329,12 +1260,13 @@ export function texRoomDoor(num: string, broken = false): HTMLCanvasElement {
   });
 }
 
-/** The lift doors: brushed steel in brass, the dead indicator over them. */
+/** The lift doors: brushed steel in a steel surround. */
 export function texLiftDoors(): HTMLCanvasElement {
   return canvas(512, 512, (g) => {
-    g.fillStyle = HP.gold;
+    // a brushed steel surround
+    g.fillStyle = HP.steel;
     g.fillRect(0, 0, 512, 512);
-    g.fillStyle = HP.goldDark;
+    g.fillStyle = HP.steelDark;
     g.fillRect(20, 20, 472, 492);
     for (const x0 of [28, 258]) {
       const grd = g.createLinearGradient(x0, 0, x0 + 226, 0);

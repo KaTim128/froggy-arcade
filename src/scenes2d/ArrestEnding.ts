@@ -440,9 +440,9 @@ function paintNewspaper(): HTMLCanvasElement {
   g.font = `bold 58px ${SERIF}`;
   g.fillText('ARCADE DRIFTER ARRESTED', PAPER_W / 2, 262, W);
   g.font = `bold 46px ${SERIF}`;
-  g.fillText('AFTER NIGHT OF CHAOS AT HOTEL', PAPER_W / 2, 314);
+  g.fillText('AFTER NIGHT OF CHAOS AT CONDOS', PAPER_W / 2, 314);
   g.font = `italic 22px ${SERIF}`;
-  g.fillText('Grand Lily left wrecked; suspect blames "a giant frog"', PAPER_W / 2, 350);
+  g.fillText('Lily\'s Condos left wrecked; suspect blames "a giant frog"', PAPER_W / 2, 350);
   g.fillRect(M, 366, W, 1);
 
   // ---- the lead photograph: the hotel, taped off, police lights
@@ -516,7 +516,7 @@ function paintNewspaper(): HTMLCanvasElement {
   });
   g.font = `italic 14px ${SERIF}`;
   g.textAlign = 'left';
-  g.fillText('POLICE TAPE across the shattered entrance of the Grand Lily Hotel in the early hours of', PX, PY + PHGT + 20);
+  g.fillText('POLICE TAPE across the shattered entrance of Lily\'s Condos in the early hours of', PX, PY + PHGT + 20);
   g.fillText('yesterday morning. Damage throughout the building is described as "extensive." (Staff photo)', PX, PY + PHGT + 38);
 
   // ---- the second photograph: led away
@@ -548,15 +548,15 @@ function paintNewspaper(): HTMLCanvasElement {
 
   // ---- the copy, in columns
   const body =
-    'The Grand Lily Hotel was left in ruins early yesterday after what police called "a night of senseless destruction," ending with the arrest of a young man found alone in the lobby. ' +
+    'Lily\'s Condos was left in ruins early yesterday after what police called "a night of senseless destruction," ending with the arrest of a young man found alone in the lobby. ' +
     'Officers responding to reports of screaming and breaking glass found the front doors smashed from the inside, the stairwell door torn from its hinges and a sixth-floor window broken outward. ' +
     'Room 612 was "turned over completely," according to one officer at the scene. No staff were found on the premises. ' +
-    'The suspect, who had checked into the hotel that evening, surrendered at the front entrance after repeated warnings. ' +
+    'The suspect, who had rented a short-stay unit there that evening, surrendered at the front entrance after repeated warnings. ' +
     'In a statement described by investigators as "frankly bizarre," he claimed he had been pursued through the building by "a giant frog." ' +
-    'Police have found no evidence to support the claim. Footage from the hotel\'s security cameras is said to have been "damaged beyond recovery." ' +
+    'Police have found no evidence to support the claim. Footage from the building\'s security cameras is said to have been "damaged beyond recovery." ' +
     'The suspect is also understood to have been a regular at the arcade on the edge of town, where staff declined to comment. ' +
     'A court date has been set. Charges include criminal damage and trespass. ' +
-    'Residents of the street say the hotel had been quiet for years. "Nothing ever happens here," said one. "Not until now."';
+    'Residents of the street say the block had been quiet for years. "Nothing ever happens here," said one. "Not until now."';
   g.font = `17px ${SERIF}`;
   g.fillStyle = INK;
   const colTop = 792;
@@ -607,7 +607,7 @@ function paintNewspaper(): HTMLCanvasElement {
   g.fillText('INSIDE', BX + 10, lastY + 98);
   g.font = `14px ${SERIF}`;
   g.fillText('Arcade owner silent ........ 4', BX + 10, lastY + 120);
-  g.fillText('Hotel to close "for now" ..... 6', BX + 10, lastY + 140);
+  g.fillText('Condos to close "for now" .... 6', BX + 10, lastY + 140);
   g.fillText('Crossword ................. 19', BX + 10, lastY + 160);
   return c;
 }

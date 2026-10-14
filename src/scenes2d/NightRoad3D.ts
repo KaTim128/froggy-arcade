@@ -117,7 +117,7 @@ const CATCH = 1.4;
 /** Seconds without sight of you before he gives up chasing and starts looking. */
 const LOST_AFTER = 3;
 /** What to do, said straight after RUN. */
-export const CHASE_HOW = 'Jump over the rails, hide behind trees or bushes to avoid Froggy, and make your way to the hotel.';
+export const CHASE_HOW = 'Jump over the rails, hide behind trees or bushes to avoid Froggy, and make your way to the condos.';
 
 type Phase = 'walk' | 'turn' | 'creep' | 'reveal' | 'chase' | 'safe' | 'caught';
 
@@ -389,7 +389,7 @@ export class NightRoad3D extends Phaser.Scene {
       this.say(CHASE_HOW, 6);
     } else {
       this.say("It's so quiet out here.", 3);
-      this.say('The hotel is at the end of this road.', 3.4);
+      this.say('The condos are at the end of this road.', 3.4);
       this.say('Just keep walking.', 2.6);
     }
 
@@ -2856,7 +2856,7 @@ gl_Position = projectionMatrix * mvPosition;`,
       this.phaseT = 0;
       this.lines = [];
       this.say("Don't look back.", 2.4);
-      this.say('Just get to the hotel.', 3.2);
+      this.say('Just get to the condos.', 3.2);
     }
     if (this.autoTurn) {
       this.autoTurn.t = Math.min(1, this.autoTurn.t + dt / 1.6);
@@ -3448,9 +3448,9 @@ gl_Position = projectionMatrix * mvPosition;`,
       }
       if (this.phase === 'chase' && this.phaseT > 1.2) {
         drawPixelText(ctx, 'OBJECTIVE', 6, 6, { scale: 1, color: '#9a4848', alpha: 0.85 });
-        drawPixelText(ctx, 'RUN and hide - reach the hotel', 6, 16, { scale: 1, color: '#ff4a4a', alpha: 0.95 });
+        drawPixelText(ctx, 'RUN and hide - reach the condos', 6, 16, { scale: 1, color: '#ff4a4a', alpha: 0.95 });
         const left = Math.max(0, Math.round(this.pos.y - HOTEL_Z));
-        drawPixelText(ctx, `HOTEL ${left}m`, 6, 26, { scale: 1, color: '#7a8494', alpha: 0.75 });
+        drawPixelText(ctx, `CONDOS ${left}m`, 6, 26, { scale: 1, color: '#7a8494', alpha: 0.75 });
         // how close he is to having you: an eye's worth of bar, top right,
         // filling amber to red as he looks, draining as you get away
         if (this.aware > 0.02 && !(this.seen && this.fMode === 'hunt')) {

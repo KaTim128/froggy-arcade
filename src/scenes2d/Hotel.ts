@@ -861,11 +861,11 @@ export class Hotel extends Phaser.Scene {
     const can = s.cash >= ROOM_PRICE || s.tokens >= ROOM_PRICE;
     this.openTalk(
       can
-        ? `"Good evening, welcome to Lily's. A room for the night is $${ROOM_PRICE}, or ${ROOM_PRICE} tokens."`
-        : `"A room is $${ROOM_PRICE}, or ${ROOM_PRICE} tokens. You have $${s.cash} and ${s.tokens}. I'm sorry."`,
+        ? `"Good evening, welcome to Lily's Condos. A furnished short-stay unit for the night is $${ROOM_PRICE}, or ${ROOM_PRICE} tokens."`
+        : `"A short-stay unit is $${ROOM_PRICE}, or ${ROOM_PRICE} tokens. You have $${s.cash} and ${s.tokens}. I'm sorry."`,
       can
         ? [
-          { label: `CHECK IN - $${ROOM_PRICE}`, fn: () => this.confirmCheckIn() },
+          { label: `RENT A UNIT - $${ROOM_PRICE}`, fn: () => this.confirmCheckIn() },
           { label: 'NOT NOW', fn: () => this.closeTalk() },
         ]
         : [{ label: 'OKAY', fn: () => this.closeTalk() }],
@@ -879,9 +879,9 @@ export class Hotel extends Phaser.Scene {
     this.locked = true;
     this.dialog = confirmDialog(this, {
       lines: byTokens
-        ? [`CHECK IN FOR ${ROOM_PRICE} TOKENS?`, `YOU HAVE ${tokens}.  YOU WILL HAVE ${tokens - ROOM_PRICE}.`]
-        : [`CHECK IN FOR $${ROOM_PRICE}?`, `YOU HAVE $${cash}.  YOU WILL HAVE $${cash - ROOM_PRICE}.`],
-      confirm: 'CHECK IN',
+        ? [`RENT UNIT 612 FOR ${ROOM_PRICE} TOKENS?`, `YOU HAVE ${tokens}.  YOU WILL HAVE ${tokens - ROOM_PRICE}.`]
+        : [`RENT UNIT 612 FOR $${ROOM_PRICE}?`, `YOU HAVE $${cash}.  YOU WILL HAVE $${cash - ROOM_PRICE}.`],
+      confirm: 'RENT IT',
       cancel: 'NO',
       edge: PALETTE.gold,
       onConfirm: () => {
@@ -895,7 +895,7 @@ export class Hotel extends Phaser.Scene {
         store.flush();
         audio.sfx('cha_ching');
         audio.sfx('bell_ding', 0.5);
-        this.openTalk('"Thank you. Room 612, sixth floor. The lift is on your right. Sleep well."', [{ label: 'THANK YOU', fn: () => this.closeTalk() }]);
+        this.openTalk('"Here is your key card. Unit 612, sixth floor. The lift is on your right. Sleep well."', [{ label: 'THANK YOU', fn: () => this.closeTalk() }]);
       },
       onCancel: () => {
         this.locked = false;

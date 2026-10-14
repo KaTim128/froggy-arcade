@@ -20,7 +20,8 @@ import { attachPockets } from '../ui/pockets';
 import { Player } from '../art/player';
 import { Pedestrians } from '../art/pedestrians';
 import { froggyLayer } from '../render/froggyLayer';
-import { clock, visit } from '../game/life';
+import { SHOP_HOURS, clock, shopsOpen, visit } from '../game/life';
+import { nightfallOnce, onPhaseTurn } from '../game/dayNight';
 import { backPlate } from '../ui/plate';
 import { FRONT_TOP, paintShopfront, paintStreet, type ShopfrontOpts } from '../art/shopfront';
 
@@ -107,9 +108,16 @@ export class StreetEast extends Phaser.Scene {
   /** Back out of a shop: stood at its door. */
   private atShop: StoreKind | null = null;
 
-  init(data: { atShop?: StoreKind } = {}): void {
+  init(data: { atShop?: StoreKind; atX?: number; say?: string } = {}): void {
     this.atShop = data.atShop ?? null;
+    this.atX = data.atX ?? null;
+    this.greet = data.say ?? null;
   }
+
+  /** Where you were standing when the light turned (the street repaints round you). */
+  private atX: number | null = null;
+  /** Something to say on arrival (a shop that has just shut behind you). */
+  private greet: string | null = null;
 
   create(): void {
     froggyLayer.clear();
@@ -123,7 +131,7 @@ export class StreetEast extends Phaser.Scene {
     this.paint(dark);
 
     const door = FRONTS.find((f) => f.kind === this.atShop);
-    this.player = new Player(this, door ? door.door : 16, WALK_Y, dark);
+    this.player = new Player(this, this.atX ?? (door ? door.door : 16), WALK_Y, dark);
     this.player.setSurface('gravel');
     this.cameras.main.setBounds(0, 0, WORLD_W, GAME_H);
     this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
@@ -150,6 +158,18 @@ export class StreetEast extends Phaser.Scene {
     }
     this.events.on('shop-closed', () => (this.locked = false));
     text(this, 4, WALK_Y + 4, '<', PALETTE.cream).setDepth(800).setAlpha(0.7);
+    // morning, evening or night coming while you are out here: the street, its lights and its
+    // shop signs repaint for the new hour, round you where you stand
+    onPhaseTurn(
+      this,
+      () => {
+        this.locked = true;
+        fadeToScene(this, 'StreetEast', { atX: Math.round(this.player.x) });
+      },
+      () => !this.locked && !this.busy(),
+    );
+    const line = this.greet ?? nightfallOnce();
+    if (line) this.time.delayedCall(400, () => this.say(line));
   }
 
   private busy(): boolean {
@@ -171,10 +191,9 @@ export class StreetEast extends Phaser.Scene {
   private interact(): void {
     if (this.locked || this.busy() || !this.spot) return;
     const f = this.spot;
-    const c = clock();
-    if (c.hour < 7 || c.hour >= 23) {
+    if (!shopsOpen()) {
       audio.sfx('door_rattle', 0.5);
-      this.say(`${f.name} IS SHUT. OPEN 07:00 - 23:00.`);
+      this.say(`${f.name} IS SHUT FOR THE NIGHT. OPEN ${SHOP_HOURS}.`);
       return;
     }
     this.locked = true;
@@ -189,9 +208,9 @@ export class StreetEast extends Phaser.Scene {
   /** The arcade's street, and the shops along it built the way it is. */
   private paint(dark: boolean): void {
     const c = clock();
-    const mood = { day: !dark && c.hour < 18, night: dark };
+    const mood = { day: c.phase === 'morning', night: dark };
     paintStreet(this, WORLD_W, mood);
-    const shut = c.hour < 7 || c.hour >= 23;
+    const shut = !shopsOpen(c);
     // the gaps between the buildings, in shadow
     const gaps = this.add.graphics();
     for (const f of FRONTS) {

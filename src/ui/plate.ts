@@ -5,12 +5,24 @@
  * every frame (where it is, how big it came out, whether it is showing and
  * how faded), so whatever the scene already does with the text -- set it,
  * fade it, hide it -- the box does too.
+ *
+ * And it keeps the line on the screen: a long line wraps (centred) instead of
+ * running off the edge, and a line near an edge is nudged back in, box and
+ * all.
  */
 
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
+import { GAME_H, GAME_W } from '../render/pixelScaler';
+
+/** The widest a line runs before it wraps. */
+const MAX_W = GAME_W - 30;
+/** How close the box comes to the screen's edge. */
+const EDGE = 3;
 
 export function backPlate(scene: Phaser.Scene, t: Phaser.GameObjects.BitmapText, edge: number = PALETTE.steel): Phaser.GameObjects.Rectangle {
+  if (!t.maxWidth || t.maxWidth > MAX_W) t.setMaxWidth(MAX_W);
+  t.setCenterAlign();
   const r = scene.add.rectangle(0, 0, 4, 4, PALETTE.ink, 1).setOrigin(0, 0).setStrokeStyle(1, edge).setVisible(false);
   const sync = () => {
     if (!t.active) {
@@ -21,7 +33,24 @@ export function backPlate(scene: Phaser.Scene, t: Phaser.GameObjects.BitmapText,
     const on = t.visible && t.alpha > 0.01 && t.text.trim().length > 0;
     r.setVisible(on);
     if (!on) return;
-    const b = t.getBounds();
+    let b = t.getBounds();
+    // keep it in view: the camera's view for a line in the world, the screen
+    // for a line fixed to it
+    const cam = scene.cameras.main;
+    const vx = t.scrollFactorX === 0 ? 0 : cam.worldView.x;
+    const vy = t.scrollFactorY === 0 ? 0 : cam.worldView.y;
+    const vw = t.scrollFactorX === 0 ? GAME_W : cam.worldView.width || GAME_W;
+    const vh = t.scrollFactorY === 0 ? GAME_H : cam.worldView.height || GAME_H;
+    let dx = 0;
+    let dy = 0;
+    if (b.x - 5 < vx + EDGE) dx = vx + EDGE - (b.x - 5);
+    else if (b.right + 5 > vx + vw - EDGE) dx = vx + vw - EDGE - (b.right + 5);
+    if (b.y - 4 < vy + EDGE) dy = vy + EDGE - (b.y - 4);
+    else if (b.bottom + 3 > vy + vh - EDGE) dy = vy + vh - EDGE - (b.bottom + 3);
+    if (dx || dy) {
+      t.setPosition(Math.round(t.x + dx), Math.round(t.y + dy));
+      b = t.getBounds();
+    }
     r.setPosition(Math.floor(b.x) - 5, Math.floor(b.y) - 4)
       .setSize(Math.ceil(b.width) + 10, Math.ceil(b.height) + 7)
       .setAlpha(t.alpha * 0.96)

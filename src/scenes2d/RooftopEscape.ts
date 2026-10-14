@@ -1024,7 +1024,7 @@ export class RooftopEscape extends Phaser.Scene {
 
   /** On black: what came of it.  Then the morning, outside the arcade. */
   private epilogue(): void {
-    const lines = ['You managed to escape.', "The police couldn't recover the hotel's video recordings.", 'But Froggy is still out there...'];
+    const lines = ['You managed to escape.', "The police couldn't recover the building's video recordings.", 'But Froggy is still out there...'];
     const t = centerText(this, GAME_W / 2, GAME_H / 2, '', PALETTE.cream).setScrollFactor(0).setDepth(9600).setMaxWidth(280).setAlpha(0);
     let i = 0;
     const next = () => {

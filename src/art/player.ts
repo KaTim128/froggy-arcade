@@ -433,8 +433,39 @@ export class Player {
     this.lap = lap;
   }
 
+  /**
+   * Lie down flat on the ground, asleep: the whole figure turned onto its
+   * back along the floor, head towards `facing`'s other side, eyes shut, the
+   * chest rising and falling.  `getUp` (or any `stand`) stands back up.
+   */
+  lie(facing = 1): void {
+    this.getUp();
+    this.dir = facing > 0 ? 1 : -1;
+    this.pose(0, 0);
+    this.lying = true;
+    // turned about the feet, then lowered so the body rests on the ground
+    this.sprite.setRotation(this.dir > 0 ? -Math.PI / 2 : Math.PI / 2);
+    this.sprite.y -= 3;
+    this.lyingY = this.sprite.y;
+    this.sprite.scene.tweens.add({ targets: this.sprite, scaleY: { from: 1, to: 1.06 }, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+  }
+
+  get asleep(): boolean {
+    return this.lying;
+  }
+
+  private lying = false;
+  private lyingY = 0;
+
   /** Back on your feet. */
   getUp(): void {
+    if (this.lying) {
+      this.lying = false;
+      this.sprite.scene.tweens.killTweensOf(this.sprite);
+      this.sprite.setRotation(0).setScale(1, 1);
+      this.sprite.y = this.lyingY + 3;
+      this.pose(0, 0);
+    }
     if (!this.seat) return;
     this.seat = null;
     this.lap?.destroy();
@@ -448,7 +479,7 @@ export class Player {
     this.blinkT -= dt / 1000;
     const eyes = this.parts.get('eyes');
     if (!eyes) return;
-    const shut = this.blinkT < 0;
+    const shut = this.blinkT < 0 || this.lying;
     for (const run of eyes.fill) run.r.setVisible(!shut);
     if (this.blinkT < -0.12) this.blinkT = 2 + Math.random() * 3;
   }
@@ -485,7 +516,7 @@ export class Player {
   /** Stood still. */
   stand(): void {
     this.bobT = 0;
-    if (this.seat) this.getUp();
+    if (this.seat || this.lying) this.getUp();
     this.pose(0, 0);
   }
 
@@ -503,7 +534,7 @@ export class Player {
       this.pose(0, 0);
       return false;
     }
-    if (this.seat) this.getUp();
+    if (this.seat || this.lying) this.getUp();
     if (Math.abs(dx) > 0.01) this.dir = dx > 0 ? 1 : -1;
     const sprinting = this.shift?.isDown ?? false;
     const step = (PLAYER_SPEED * (sprinting ? SPRINT_MUL : 1) * delta) / 1000;

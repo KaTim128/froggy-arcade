@@ -12,6 +12,7 @@ import { canEnter, SCENES } from './routes';
 import { evaluateBroke } from './broke';
 import { ledger } from './ledger';
 import { audio } from './audio';
+import { DAY_SECONDS, SUNRISE_HOUR, clock } from '../game/life';
 
 declare const __DEV__: boolean;
 
@@ -76,6 +77,8 @@ export function initDebug(g: Phaser.Game): void {
       store.patch(p as never);
       store.flush();
     },
+    /** The life clock to `hour` (fractional) of the current game day, for the day/night tests. */
+    setHour: (hour: number) => setHour(hour),
   };
 
   applyLaunchParams(g);
@@ -129,6 +132,11 @@ function applyLaunchParams(g: Phaser.Game): void {
   }
   const time = q.get('time');
   if (time === 'day' || time === 'evening' || time === 'midnight') store.patch({ timeOfDay: time });
+  //   ?hour=19.5     the life clock's hour (the day/night, the shops' hours)
+  const hour = q.get('hour');
+  if (hour !== null) setHour(Number(hour));
+  //   ?rented=1      renting unit 612
+  if (q.get('rented') === '1') store.patch({ life: { ...store.get().life, rented: true, rentDue: clock().day + 7 } } as never);
 
   const game = q.get('game');
   const scene = q.get('scene');
@@ -139,6 +147,15 @@ function applyLaunchParams(g: Phaser.Game): void {
     if (game) g.scene.start('Minigame', { id: game });
     else if (scene && g.scene.getScene(scene)) g.scene.start(scene);
   }, 350);
+}
+
+/** The life clock to `hour` of today's game day (the day runs from sunrise, 7:00 AM). */
+function setHour(hour: number): void {
+  if (!Number.isFinite(hour)) return;
+  const day = clock().day;
+  const into = (((hour - SUNRISE_HOUR) % 24) + 24) % 24;
+  store.patch({ life: { ...store.get().life, t: day * DAY_SECONDS + (into / 24) * DAY_SECONDS } } as never);
+  store.flush();
 }
 
 function toggle(): void {

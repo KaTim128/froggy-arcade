@@ -28,6 +28,8 @@ import { grain, seeded } from '../../art/surface';
 import { speak } from '../../ui/talkPanel';
 import type { SpeakerId } from '../../ui/portraits';
 import { backPlate } from '../../ui/plate';
+import { SHOP_HOURS, shopsOpen } from '../../game/life';
+import { onLightTurn } from '../../game/dayNight';
 
 /** The back wall's foot: the floor starts here. */
 export const FLOOR_TOP = 100;
@@ -35,6 +37,29 @@ export const FLOOR_TOP = 100;
 export const FLOOR_BOTTOM = 170;
 /** The way out: the arcade's glass doors, seen from inside, at the left of the back wall. */
 export const EXIT_X = 34;
+/**
+ * Every shop's counter: just inside the doors, so whoever runs the place is
+ * the first thing you meet coming in -- the counter's end on to the doorway,
+ * its keeper behind it facing the door.  `COUNTER_RIGHT` is where the rest of
+ * the shop can start.
+ */
+export const COUNTER_X = EXIT_X + 54;
+export const COUNTER_W = 46;
+export const COUNTER_RIGHT = COUNTER_X + COUNTER_W / 2 + 14;
+
+export interface CounterOpts {
+  /** Who stands behind it. */
+  look: Look;
+  /** Its top, its front, and the edge along the top. */
+  top: number;
+  front: number;
+  trim: number;
+  /** Who talks, and what they say. */
+  who: SpeakerId;
+  line: string;
+  /** Something on it: a till, a bell, a stack of books. Drawn at the counter's top. */
+  dress?: (g: Phaser.GameObjects.Graphics, x: number, top: number) => void;
+}
 
 export interface Fixture {
   /** The middle of it, along the room. */
@@ -51,6 +76,8 @@ export interface Fixture {
   label: () => string;
   /** [E] */
   use: () => void;
+  /** The prompt goes under your feet, not over your head (so it does not cover whoever is behind a counter). */
+  promptBelow?: boolean;
   /** Where it can be tapped, in room pixels (defaults to its own box). */
   hit?: { x: number; y: number; w: number; h: number };
 }
@@ -85,6 +112,14 @@ export abstract class WalkRoom extends Phaser.Scene {
   /** Sat on something: where you were standing, to step back to on getting up. */
   private seatReturn: { x: number; y: number } | null = null;
 
+  /**
+   * A shop keeps the shops' hours (see life `shopsOpen`): shut all night.
+   * Night falling while you are in one, you are shown out; arriving at
+   * night, you are not let in.
+   */
+  protected keepsShopHours = false;
+  private closingNight = false;
+
   /** Paint the room (wall, floor, the things in it) into the scene. */
   protected abstract paintRoom(): void;
   /** What there is to walk up to. */
@@ -99,6 +134,7 @@ export abstract class WalkRoom extends Phaser.Scene {
   create(): void {
     froggyLayer.clear();
     this.locked = false;
+    this.closingNight = false;
     this.panel = null;
     this.talking = null;
     this.seatReturn = null;
@@ -137,6 +173,29 @@ export abstract class WalkRoom extends Phaser.Scene {
     kb?.on('keydown-ESC', () => this.closePanel());
     this.events.on('shop-closed', () => this.afterModal());
     this.entered();
+    if (this.keepsShopHours) {
+      if (!shopsOpen()) this.time.delayedCall(300, () => this.closeForNight());
+      onLightTurn(this, (dark) => dark && this.closeForNight());
+    }
+  }
+
+  /** Night: whatever is open is put away, the keeper says so, and you are shown out. */
+  protected closeForNight(): void {
+    // (already on the way out of the door, or shown out already)
+    if (this.closingNight || (this.locked && !this.scene.isActive('Shop'))) return;
+    this.closingNight = true;
+    this.closePanel();
+    if (this.scene.isActive('Shop')) this.scene.stop('Shop');
+    this.talking?.destroy();
+    this.talking = null;
+    if (this.player.seated) this.player.getUp();
+    this.walker.cancel();
+    this.locked = true;
+    this.say(`WE ARE CLOSING FOR THE NIGHT. OPEN AGAIN ${SHOP_HOURS}.`);
+    this.time.delayedCall(1800, () => {
+      audio.sfx('door_open', 0.5);
+      this.leave();
+    });
   }
 
   /** The way out: by default the door standing at the left end of the floor. */
@@ -164,7 +223,8 @@ export abstract class WalkRoom extends Phaser.Scene {
   /** A modal scene (the wardrobe, say) closed over this room. */
   protected afterModal(): void {
     this.modalClosedAt = performance.now();
-    this.locked = false;
+    // (not when it was night that closed it: you are on your way out)
+    if (!this.closingNight) this.locked = false;
     // (the wardrobe may have changed what you have on)
     this.refreshPlayer();
   }
@@ -272,6 +332,44 @@ export abstract class WalkRoom extends Phaser.Scene {
       this.scene.isActive('Goals') ||
       this.scene.isActive('InventoryModal')
     );
+  }
+
+  /**
+   * The counter by the door and its keeper (see COUNTER_X): drawn, made solid
+   * from the wall to its front so nobody walks round behind it, and a fixture
+   * to talk to them at.
+   */
+  protected paintCounter(o: CounterOpts): Fixture {
+    const x = COUNTER_X;
+    const w = COUNTER_W;
+    const front = this.floorTop + 30;
+    const top = front - 15;
+    // the keeper, behind it: feet hidden by the counter, facing the doors
+    const keeper = new Player(this, x + 4, this.floorTop + 21, false, o.look);
+    keeper.sprite.setScale(-1, 1);
+    const g = this.add.graphics().setDepth(depthFor(front));
+    // its shadow on the floor
+    g.fillStyle(0x000000, 0.18).fillRect(x - w / 2 + 1, front, w, 3);
+    // the body: ink outline, the front panel with its edge and its kick plate
+    g.fillStyle(0x14100c, 1).fillRect(x - w / 2 - 1, top - 1, w + 2, front - top + 2);
+    g.fillStyle(o.front, 1).fillRect(x - w / 2, top + 3, w, front - top - 3);
+    g.fillStyle(0x000000, 0.18).fillRect(x - w / 2, front - 3, w, 3);
+    for (let k = x - w / 2 + 8; k < x + w / 2 - 4; k += 10) g.fillStyle(0x000000, 0.12).fillRect(k, top + 6, 1, front - top - 10);
+    // the top, and its lit edge
+    g.fillStyle(o.top, 1).fillRect(x - w / 2 - 2, top, w + 4, 3);
+    g.fillStyle(o.trim, 1).fillRect(x - w / 2 - 2, top + 3, w + 4, 1);
+    g.fillStyle(0xffffff, 0.25).fillRect(x - w / 2 - 2, top, w + 4, 1);
+    o.dress?.(g, x, top);
+    return {
+      x,
+      y: front,
+      w,
+      depth: front - this.floorTop,
+      label: () => '[E] TALK',
+      use: () => this.talkAs(o.who, o.line),
+      promptBelow: true,
+      hit: { x: x - w / 2 - 2, y: this.floorTop - 6, w: w + 4, h: front - this.floorTop + 8 },
+    };
   }
 
   /** Somebody in the room says something: their box, their portrait. */
@@ -387,7 +485,7 @@ export abstract class WalkRoom extends Phaser.Scene {
       return;
     }
     const x = Phaser.Math.Clamp(px, this.cameras.main.scrollX + 50, this.cameras.main.scrollX + GAME_W - 50);
-    const y = Math.max(28, py - 36);
+    const y = this.target.f.promptBelow ? Math.min(GAME_H - 8, py + 8) : Math.max(28, py - 36);
     this.prompt.setText(this.target.f.label()).setPosition(x, y).setVisible(true);
     this.promptPlate.setPosition(x, y).setSize(this.prompt.width + 6, 11).setVisible(true);
   }

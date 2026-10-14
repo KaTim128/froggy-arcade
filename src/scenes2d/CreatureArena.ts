@@ -17,11 +17,13 @@ import { store } from '../core/state';
 import { button, centerText, confirmDialog, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
-import { BATTLE_COST, BIOMES, ELEMENTS, bossCreature, creatureById, wildFor, type Attack, type Biome, type Creature } from '../game/creatures';
-import { activeOwned, finishBattle, retreat, startBattle } from '../game/creatureClash';
+import { BIOMES, ELEMENTS, bossCreature, wildFor, type Attack, type Biome, type Creature } from '../game/creatures';
+import { activeOwned, finishBattle, ownedCreature, retreat, startBattle } from '../game/creatureClash';
+import { MAX_LEVEL, levelOf } from '../game/creatureLevel';
 import { attackInfo } from '../game/attackInfo';
 import { drawAttackIcon } from '../art/attackIcons';
 import { setCabinetTouch } from '../game/touchLayouts';
+import { backPlate } from '../ui/plate';
 import type { KeyName } from '../ui/touchControls';
 
 const ARENA = { x: 6, y: 24, w: GAME_W - 12, h: GAME_H - 52 };
@@ -153,6 +155,8 @@ export class CreatureArena extends Phaser.Scene {
   private info2!: Phaser.GameObjects.BitmapText;
   private infoPlate!: Phaser.GameObjects.Rectangle;
   private infoT = 0;
+  /** Your creature's level, for the name over its bar. */
+  private myLevel = 1;
 
   constructor() {
     super('CreatureArena');
@@ -183,7 +187,9 @@ export class CreatureArena extends Phaser.Scene {
 
   create(): void {
     const own = activeOwned();
-    const mine = own ? creatureById(own.id) : undefined;
+    // (yours fights at its level: see creatureLevel)
+    const mine = own ? ownedCreature(own) : undefined;
+    this.myLevel = own ? levelOf(own.xp ?? 0) : 1;
     if (!mine) {
       this.scene.start('CreatureHub', { from: this.from, msg: 'YOU NEED A CREATURE TO FIGHT.' });
       return;
@@ -236,12 +242,42 @@ export class CreatureArena extends Phaser.Scene {
     this.input.on('pointerupoutside', (p: Phaser.Input.Pointer) => this.up(p));
     (window as unknown as { __clash?: unknown }).__clash = this;
     this.cameras.main.fadeIn(250, 0, 0, 0);
-    // before a token is taken: who you are up against, and what they do
+    // nothing moves until the count is done; the stake goes at the bell
     this.paused = true;
-    this.strategy();
+    this.countdown();
   }
 
-  /** FIGHT on the card: the stake, the bell, and go. */
+  /**
+   * 3, 2, 1 -- big, in the middle of the arena, each one popping in and
+   * fading -- and then the bell.  Nothing is said about what you are up
+   * against: you find out by fighting it.  (QUIT during the count goes back
+   * to the menu, and nothing has been spent.)
+   */
+  private countdown(): void {
+    const cx = ARENA.x + ARENA.w / 2;
+    const cy = ARENA.y + ARENA.h / 2;
+    const ready = centerText(this, cx, cy - 26, 'GET READY', PALETTE.cream).setDepth(2400);
+    backPlate(this, ready);
+    const step = (n: number): void => {
+      if (this.over || !this.scene.isActive()) return;
+      if (n === 0) {
+        ready.destroy();
+        this.begin();
+        return;
+      }
+      audio.sfx('ui_blip', 0.7);
+      const t = centerText(this, cx, cy, String(n), n === 1 ? PALETTE.gold : PALETTE.cream, 32).setDepth(2401);
+      const ring = this.add.circle(cx, cy, 14).setStrokeStyle(2, n === 1 ? PALETTE.gold : PALETTE.neon).setDepth(2400);
+      t.setScale(1.6).setAlpha(0);
+      this.tweens.add({ targets: t, scale: 1, alpha: 1, duration: 180, ease: 'Back.Out' });
+      this.tweens.add({ targets: t, alpha: 0, delay: 560, duration: 200, onComplete: () => t.destroy() });
+      this.tweens.add({ targets: ring, scale: 2.2, alpha: 0, duration: 760, ease: 'Quad.Out', onComplete: () => ring.destroy() });
+      this.time.delayedCall(800, () => step(n - 1));
+    };
+    this.time.delayedCall(350, () => step(3));
+  }
+
+  /** The count is done: the stake, the bell, and go. */
   private begin(): void {
     const r = startBattle(this.biome.id, this.boss);
     if (!r.ok) {
@@ -253,70 +289,9 @@ export class CreatureArena extends Phaser.Scene {
     this.started = true;
     this.paused = false;
     audio.sfx('bell_ding', 0.6);
+    const go = centerText(this, ARENA.x + ARENA.w / 2, ARENA.y + ARENA.h / 2, 'FIGHT!', PALETTE.gold, 24).setDepth(2401);
+    this.tweens.add({ targets: go, scale: 1.4, alpha: 0, delay: 250, duration: 450, onComplete: () => go.destroy() });
     this.showInfo(this.sel);
-  }
-
-  /**
-   * THE STRATEGY CARD.  Their creature: element and what it does to you,
-   * rarity, health and speed, and each of its three attacks -- the kind, who
-   * it can hit, how far, how hard, how often.  Your three under it, the same
-   * way.  And a word on what to watch for.  Nothing is spent until FIGHT.
-   */
-  private strategy(): void {
-    const foe = this.foe.c;
-    const me = this.me.c;
-    const c = this.add.container(0, 0).setDepth(2500);
-    this.dialog = c;
-    c.add(this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0.7).setOrigin(0, 0).setInteractive());
-    c.add(this.add.rectangle(GAME_W / 2, GAME_H / 2, GAME_W - 12, GAME_H - 8, PALETTE.ink, 1).setStrokeStyle(1, ELEMENTS[foe.element].col));
-    const fe = ELEMENTS[foe.element];
-    const L = 12;
-    let y = 9;
-    c.add(text(this, L, y, `VS ${foe.name.toUpperCase()}`, this.boss ? PALETTE.gold : PALETTE.cream));
-    c.add(text(this, GAME_W - 12, y, `${fe.name}  HP ${Math.round(foe.hp * this.foe.scale)}  SPD ${foe.speed}`, fe.light).setOrigin(1, 0));
-    y += 10;
-    c.add(text(this, L, y, `ITS HITS: ${fe.effect}`, fe.col));
-    y += 12;
-    const g = this.add.graphics();
-    c.add(g);
-    const rows = (who: Creature, el: typeof foe.element, top: number, head: string, col: number): number => {
-      c.add(text(this, L, top, head, col));
-      let yy = top + 10;
-      who.attacks.forEach((a) => {
-        const inf = attackInfo(a, el, who === foe ? this.foe.scale : 1);
-        g.fillStyle(0x2a2a48, 1).fillRect(L, yy - 1, 11, 10);
-        drawAttackIcon(g, a.kind, L + 5, yy + 4, ELEMENTS[el].light);
-        c.add(text(this, L + 15, yy, `${a.name} - ${inf.type}`, PALETTE.cream));
-        c.add(text(this, GAME_W - 12, yy, a.dmg > 0 ? `${a.dmg} DMG  ${a.cd}S` : `${a.cd}S`, PALETTE.gold).setOrigin(1, 0));
-        c.add(text(this, L + 15, yy + 8, `${inf.target} - ${inf.range}`, PALETTE.fog));
-        yy += 16;
-      });
-      return yy;
-    };
-    y = rows(foe, foe.element, y, 'THEIR ATTACKS', 0xff8a8a);
-    y = rows(me, me.element, y + 1, `YOUR ${me.name.toUpperCase()} - HITS ${ELEMENTS[me.element].effect}`, 0x8ae88a);
-    c.add(text(this, L, y + 1, this.tip(foe), PALETTE.ash).setMaxWidth(GAME_W - 24));
-    c.add(button(this, GAME_W / 2 - 50, GAME_H - 11, `FIGHT (${BATTLE_COST} TOK)`, () => this.begin(), { width: 84, height: 12, fill: 0x1e6a3a }));
-    c.add(button(this, GAME_W / 2 + 50, GAME_H - 11, 'BACK', () => this.scene.start('CreatureHub', { from: this.from }), { width: 60, height: 12 }));
-  }
-
-  /** What to watch for, from what they are. */
-  private tip(foe: Creature): string {
-    const kinds = foe.attacks.map((a) => a.kind);
-    const near = kinds.includes('nova') || kinds.includes('dash');
-    const far = kinds.includes('beam') || kinds.includes('spread');
-    const el: Record<string, string> = {
-      ember: 'BURNS LINGER - TRADE HITS QUICKLY OR STAY OUT OF REACH.',
-      tide: 'IT SHOVES YOU BACK - KEEP AWAY FROM THE EDGES.',
-      moss: 'IT HEALS WHEN IT HITS - DO NOT TRADE BLOWS, OUT-RANGE IT.',
-      frost: 'IT SLOWS YOU - DO NOT GET CAUGHT IN THE OPEN.',
-      volt: 'IT STUNS - DODGE THE FIRST SHOT, THEN PUNISH.',
-      stone: 'IT TAKES LESS DAMAGE - USE YOUR BIG ATTACK OFTEN.',
-      gale: 'IT IS FAST - TRAPS AND AREA ATTACKS CATCH IT.',
-      murk: 'IT BLINDS YOU - STAY CLOSE ENOUGH TO SEE IT.',
-      glow: 'ITS SHOTS GO THROUGH COVER - KEEP MOVING, NOT HIDING.',
-    };
-    return `TIP: ${el[foe.element] ?? ''}${near && !far ? ' IT WANTS TO BE CLOSE.' : far && !near ? ' IT HITS FROM AFAR.' : ''}`;
   }
 
   /** A band button: that attack, now, at the foe (a blink goes the way you are walking). */
@@ -415,7 +390,7 @@ export class CreatureArena extends Phaser.Scene {
 
   private paintHud(): void {
     const name = (f: Fighter): string => (f === this.foe && this.boss ? f.c.name : f.c.name.toUpperCase());
-    this.labels.push(text(this, 8, 3, name(this.me), PALETTE.cream).setDepth(51));
+    this.labels.push(text(this, 8, 3, `${name(this.me)} LV${this.myLevel}`, PALETTE.cream).setDepth(51));
     this.labels.push(text(this, GAME_W - 8, 3, name(this.foe), this.boss ? PALETTE.gold : PALETTE.cream).setOrigin(1, 0).setDepth(51));
     this.timerText = centerText(this, GAME_W / 2, 7, '', PALETTE.fog).setDepth(51);
     button(this, GAME_W / 2, 18, 'QUIT', () => this.askQuit(), { width: 30, height: 8 }).setDepth(60);
@@ -912,11 +887,24 @@ export class CreatureArena extends Phaser.Scene {
     this.time.delayedCall(700, () => {
       const box = this.add.container(0, 0).setDepth(2000);
       box.add(this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0.6).setOrigin(0, 0).setInteractive());
-      box.add(this.add.rectangle(GAME_W / 2, GAME_H / 2, 220, 74, PALETTE.ink).setStrokeStyle(1, won ? PALETTE.gold : 0xc31f2e));
-      box.add(centerText(this, GAME_W / 2, GAME_H / 2 - 24, won ? (this.boss ? 'BOSS DEFEATED!' : 'VICTORY!') : 'DEFEATED', won ? PALETTE.gold : 0xff6a6a));
-      if (timeUp) box.add(centerText(this, GAME_W / 2, GAME_H / 2 - 13, 'TIME: MORE HEALTH LEFT WINS', PALETTE.ash));
-      box.add(centerText(this, GAME_W / 2, GAME_H / 2 - 2, r.msg, PALETTE.cream));
-      box.add(button(this, GAME_W / 2, GAME_H / 2 + 22, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, msg: r.msg }), { width: 80, height: 13 }));
+      box.add(this.add.rectangle(GAME_W / 2, GAME_H / 2, 236, 84, PALETTE.ink).setStrokeStyle(1, won ? PALETTE.gold : 0xc31f2e));
+      box.add(centerText(this, GAME_W / 2, GAME_H / 2 - 30, won ? (this.boss ? 'BOSS DEFEATED!' : 'VICTORY!') : 'DEFEATED', won ? PALETTE.gold : 0xff6a6a));
+      if (timeUp) box.add(centerText(this, GAME_W / 2, GAME_H / 2 - 20, 'TIME: MORE HEALTH LEFT WINS', PALETTE.ash));
+      box.add(centerText(this, GAME_W / 2, GAME_H / 2 - 9, won ? `YOU WIN ${r.paid} TOKENS.` : r.msg, PALETTE.cream).setMaxWidth(224));
+      // experience, and a level gained
+      if (won) {
+        const xpLine = r.xp ? `+${r.xp} XP` : this.myLevel >= MAX_LEVEL ? 'MAX LEVEL - NO MORE XP' : '';
+        if (xpLine) box.add(centerText(this, GAME_W / 2, GAME_H / 2 + 2, xpLine, 0x8ae88a));
+        if (r.levelUp) {
+          const up = centerText(this, GAME_W / 2, GAME_H / 2 + 13, `LEVEL UP!  LV ${r.levelUp}`, PALETTE.gold);
+          box.add(up);
+          up.setScale(0.6);
+          this.tweens.add({ targets: up, scale: 1, duration: 260, ease: 'Back.Out' });
+          this.tweens.add({ targets: up, alpha: 0.55, duration: 380, yoyo: true, repeat: -1, delay: 300 });
+          audio.sfx('chime', 0.7);
+        }
+      }
+      box.add(button(this, GAME_W / 2, GAME_H / 2 + 30, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, msg: r.msg }), { width: 80, height: 13 }));
     });
   }
 

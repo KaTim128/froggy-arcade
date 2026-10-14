@@ -1,7 +1,7 @@
 /**
- * ---- THE GRAND LILY HOTEL, ONE PAINTING FOR BOTH STREETS.
+ * ---- LILY'S CONDOS, ONE PAINTING FOR BOTH STREETS.
  *
- * The hotel is seen twice: side-on in the pixel street (StreetWest), and
+ * The building is seen twice: side-on in the pixel street (StreetWest), and
  * head-on at the end of the midnight road (NightRoad3D).  It is one building,
  * so it is one picture: this paints the front of it, pixel for pixel, onto a
  * canvas, and the street hangs that canvas on its wall while the night road
@@ -42,64 +42,66 @@ export interface HotelOpts {
 }
 
 const DAY = {
-  wall: '#e4d6b4',
-  course: '#d4c49e',
-  quoin: '#efe5ca',
-  quoinEdge: '#bba984',
-  trim: '#f4ecd6',
-  trimShadow: '#a8987a',
-  band: '#6a4226',
-  bandEdge: '#3e2414',
-  gold: '#d8b24a',
-  goldDark: '#8a6a24',
-  plinth: '#c6b28c',
-  plinthLine: '#a6926c',
-  frame: '#5a4632',
+  wall: '#dcd9d2',
+  slab: '#c2bfb8',
+  clad: '#7c838c',
+  cladEdge: '#5e646c',
+  trim: '#f2f1ec',
+  trimShadow: '#9a978f',
+  band: '#34383e',
+  bandEdge: '#1e2126',
+  letter: '#eef0f2',
+  steel: '#9aa2ac',
+  steelDark: '#5e646c',
+  plinth: '#5a5f66',
+  plinthLine: '#4a4e54',
+  frame: '#3a3e44',
   glass: '#8ab8d0',
   glassHi: '#c8e2ee',
   glassLo: '#6a98b4',
-  curtain: '#c87a84',
-  lobby: '#d8b878',
-  lobbyHi: '#eed49a',
-  recess: '#3a2a24',
-  maroon: '#7b2a3a',
-  maroonDark: '#4a1a24',
-  maroonHi: '#9a3a4c',
-  leaf: '#4a7a3a',
-  leafHi: '#6a9a4a',
-  pot: '#5a5048',
+  rail: '#a8d4e8',
+  curtain: '#d8d2c4',
+  lobby: '#e8dcc0',
+  lobbyHi: '#f8f0dc',
+  recess: '#2a2e34',
+  canopy: '#3a3e44',
+  canopyHi: '#5a6068',
+  leaf: '#5a8a4a',
+  leafHi: '#7aaa5a',
+  pot: '#8a8780',
 };
 const DUSK = {
-  wall: '#5e4e60',
-  course: '#524458',
-  quoin: '#6e5e70',
-  quoinEdge: '#3e3044',
-  trim: '#7c6c7e',
-  trimShadow: '#2e2434',
-  band: '#3e2a28',
-  bandEdge: '#22161a',
-  gold: '#f0c860',
-  goldDark: '#8a6a2a',
-  plinth: '#4a3c4c',
-  plinthLine: '#382c3a',
-  frame: '#2a2030',
-  glass: '#2a2230',
-  glassHi: '#3e3648',
-  glassLo: '#221a28',
-  curtain: '#a0524a',
+  wall: '#5a5866',
+  slab: '#4c4a58',
+  clad: '#3a3c48',
+  cladEdge: '#2a2c36',
+  trim: '#76747e',
+  trimShadow: '#2a2832',
+  band: '#22242a',
+  bandEdge: '#141518',
+  letter: '#ffe6a0',
+  steel: '#6a6e7a',
+  steelDark: '#3a3c46',
+  plinth: '#2e3038',
+  plinthLine: '#24262c',
+  frame: '#1e2026',
+  glass: '#262a36',
+  glassHi: '#363a48',
+  glassLo: '#1e222c',
+  rail: '#4a5a6e',
+  curtain: '#a89070',
   lobby: '#ffd890',
   lobbyHi: '#fff0c0',
-  recess: '#1a1218',
-  maroon: '#6a2232',
-  maroonDark: '#3a121c',
-  maroonHi: '#8a3244',
+  recess: '#16181c',
+  canopy: '#1e2026',
+  canopyHi: '#34363e',
   leaf: '#2e4a2a',
   leafHi: '#42603a',
-  pot: '#3a3238',
+  pot: '#3e3c44',
 };
 const LIT = ['#ffe090', '#ffd070', '#f8c060'];
 
-/** The window columns' centres (the glazing bar): six, three either side of the door. */
+/** The window columns' centres: six bays, three either side of the door. */
 export function hotelColumns(): number[] {
   return [0, 1, 2, 3, 4, 5].map((w) => HOTEL_DOOR + (w - 2.5) * 24);
 }
@@ -108,6 +110,15 @@ export function hotelColumns(): number[] {
 export const HOTEL_FLOORS = [22, 38, 54, 70, 86, 102];
 const FLOORS = HOTEL_FLOORS;
 
+/**
+ * LILY'S CONDOS: a modern block of flats.  A charcoal name band with the
+ * name in aluminium letters; six floors of pale render with a slab edge at
+ * each floor and dark cladding up the corners; every flat a wide window and
+ * a balcony with a glass railing (the odd plant, the odd bike on it); the
+ * ground floor clad in dark stone, its lobby glazed floor to ceiling, a flat
+ * steel canopy over the doors, concrete planters of grasses either side.
+ * At dusk most of the flats are lit -- not all, not all the same.
+ */
 export function paintHotel(g: CanvasRenderingContext2D, o: HotelOpts): void {
   const P = o.dusk ? DUSK : DAY;
   const r = (x: number, y: number, w: number, h: number, c: string, a = 1): void => {
@@ -118,141 +129,114 @@ export function paintHotel(g: CanvasRenderingContext2D, o: HotelOpts): void {
   };
   g.clearRect(0, 0, HOTEL_W, HOTEL_H);
 
-  // ---- the stone: courses every eight, quoins up both corners
+  // ---- the render, faintly mottled, and the cladding up the corners
   r(0, 0, HOTEL_W, HOTEL_H, P.wall);
-  for (let y = 26; y < HOTEL_GROUND; y += 8) r(6, y, HOTEL_W - 12, 1, P.course);
-  for (let y = 18, k = 0; y < HOTEL_GROUND; y += 5, k++) {
-    const w = k % 2 ? 4 : 6;
-    r(0, y, w, 4, P.quoin);
-    r(0, y + 4, w, 1, P.quoinEdge);
-    r(HOTEL_W - w, y, w, 4, P.quoin);
-    r(HOTEL_W - w, y + 4, w, 1, P.quoinEdge);
+  for (let k = 0; k < 220; k++) r((k * 37) % HOTEL_W, 18 + ((k * 23) % (HOTEL_GROUND - 18)), 1, 1, k % 2 ? P.slab : P.trim, 0.35);
+  for (const x0 of [0, HOTEL_W - 7]) {
+    r(x0, 15, 7, HOTEL_GROUND - 15, P.clad);
+    for (let y = 22; y < HOTEL_GROUND; y += 8) r(x0, y, 7, 1, P.cladEdge);
+    r(x0 + 3, 15, 1, HOTEL_GROUND - 15, P.cladEdge, 0.6);
   }
 
-  // ---- the parapet and the name band
+  // ---- the parapet and the name band: aluminium letters on charcoal
   r(0, 0, HOTEL_W, 2, P.trim);
   r(0, 2, HOTEL_W, 13, P.band);
   r(0, 2, HOTEL_W, 1, P.bandEdge);
-  r(2, 4, HOTEL_W - 4, 1, P.gold);
-  r(2, 13, HOTEL_W - 4, 1, P.goldDark);
-  r(2, 4, 1, 10, P.gold);
-  r(HOTEL_W - 3, 4, 1, 10, P.goldDark);
+  r(0, 14, HOTEL_W, 1, P.bandEdge);
   const name = "LILY'S CONDOS";
   drawPixelText(g, name, HOTEL_DOOR + 1, 6, { scale: 1, color: P.bandEdge, center: true });
-  drawPixelText(g, name, HOTEL_DOOR, 5, { scale: 1, color: o.dusk ? '#ffe090' : P.gold, center: true });
-  // a lily at each end: three petals and a stem
-  for (const lx of [10, HOTEL_W - 11]) {
-    r(lx, 6, 1, 3, '#f4a8c8');
-    r(lx - 2, 7, 1, 2, '#f4a8c8');
-    r(lx + 2, 7, 1, 2, '#f4a8c8');
-    r(lx - 1, 9, 3, 1, '#e07aa8');
-    r(lx, 10, 1, 2, P.leafHi);
-  }
-  // the cornice: a lip, the dentils under it, its shadow on the wall
-  r(0, 15, HOTEL_W, 1, P.trim);
-  r(0, 16, HOTEL_W, 2, P.course);
-  for (let x = 1; x < HOTEL_W; x += 3) r(x, 17, 1, 1, P.trimShadow);
-  r(0, 18, HOTEL_W, 1, P.trimShadow, 0.5);
+  drawPixelText(g, name, HOTEL_DOOR, 5, { scale: 1, color: P.letter, center: true });
+  // the roofline, flat, and its shadow
+  r(0, 15, HOTEL_W, 2, P.trim);
+  r(0, 17, HOTEL_W, 1, P.trimShadow, 0.5);
 
-  // ---- the rooms
+  // ---- the flats: a wide window and a balcony to each, a slab at each floor
   const cols = hotelColumns();
   FLOORS.forEach((top, f) => {
+    // the floor slab's edge, running right across
+    r(7, top + 13, HOTEL_W - 14, 2, P.trim);
+    r(7, top + 15, HOTEL_W - 14, 1, P.trimShadow, 0.5);
     cols.forEach((cx, w) => {
-      const x = cx - 5;
+      const x = cx - 8;
       const lit = o.dusk && (f * 7 + w * 3) % 4 !== 0;
       const tone = LIT[(f * 5 + w) % 3];
-      const curtain = (f * 3 + w * 5) % 4;
-      // lintel with its keystone, and the sill with its shadow
-      r(x - 1, top - 2, 12, 2, P.trim);
-      r(cx - 1, top - 3, 2, 3, P.trim);
-      r(x - 1, top - 1, 12, 1, P.trimShadow, 0.4);
-      r(x - 1, top + 11, 12, 1, P.trim);
-      r(x, top + 12, 10, 1, P.trimShadow, 0.5);
-      // frame and glass
-      r(x, top, 10, 11, P.frame);
-      r(x + 1, top + 1, 8, 9, lit ? tone : P.glass);
+      // the window wall: a sliding door onto the balcony
+      r(x, top - 1, 16, 14, P.frame);
+      r(x + 1, top, 14, 13, lit ? tone : P.glass);
       if (!lit) {
-        // the sky in it: lighter at the top, a glint across
-        r(x + 1, top + 1, 8, 2, P.glassHi);
-        r(x + 2, top + 4, 1, 1, P.glassHi);
-        r(x + 1, top + 8, 8, 2, P.glassLo);
+        r(x + 1, top, 14, 2, P.glassHi);
+        r(x + 3, top + 3, 1, 3, P.glassHi);
+        r(x + 1, top + 10, 14, 3, P.glassLo);
       } else {
-        // a room: a lamp's warmth low down, and somebody's shape now and then
-        r(x + 1, top + 7, 8, 3, '#e8a850', 0.5);
-        if ((f + w * 2) % 5 === 0) r(x + 5, top + 4, 2, 6, '#5a3a2a', 0.55);
+        r(x + 1, top + 8, 14, 5, '#e8a850', 0.45);
+        if ((f + w * 2) % 5 === 0) r(x + 9, top + 3, 2, 9, '#5a3a2a', 0.55);
       }
-      if (curtain === 0) {
-        r(x + 1, top + 1, 2, 9, P.curtain, lit ? 0.85 : 0.7);
-        r(x + 7, top + 1, 2, 9, P.curtain, lit ? 0.85 : 0.7);
-      } else if (curtain === 1) {
-        r(x + 1, top + 1, 8, 3, P.curtain, lit ? 0.6 : 0.5);
+      // a curtain drawn to one side, now and then
+      if ((f * 3 + w * 5) % 4 === 0) r(x + 1, top, 3, 13, P.curtain, lit ? 0.85 : 0.7);
+      r(cx, top, 1, 13, P.frame);
+      // the balcony: its glass railing on the slab, a steel top rail
+      r(x - 1, top + 7, 18, 6, P.rail, 0.45);
+      r(x - 1, top + 6, 18, 1, P.steel);
+      r(x - 1, top + 6, 1, 7, P.steel);
+      r(x + 16, top + 6, 1, 7, P.steel);
+      // what people keep out there
+      const kind = (f * 11 + w * 7) % 6;
+      if (kind === 0) {
+        r(x + 2, top + 9, 3, 4, P.pot);
+        r(x + 1, top + 7, 5, 3, P.leaf);
+        r(x + 2, top + 6, 2, 1, P.leafHi);
+      } else if (kind === 3) {
+        r(x + 10, top + 10, 4, 1, P.steelDark);
+        r(x + 10, top + 11, 1, 2, P.steelDark);
+        r(x + 13, top + 11, 1, 2, P.steelDark);
       }
-      // the glazing bars
-      r(cx, top + 1, 1, 9, P.frame);
-      r(x + 1, top + 4, 8, 1, P.frame);
     });
   });
 
-  // ---- the belt course, and the ground floor in rusticated stone
-  r(0, HOTEL_GROUND - 2, HOTEL_W, 1, P.trim);
-  r(0, HOTEL_GROUND - 1, HOTEL_W, 2, P.course);
-  r(0, HOTEL_GROUND + 1, HOTEL_W, HOTEL_H - HOTEL_GROUND - 1, P.plinth);
-  for (let y = HOTEL_GROUND + 6, k = 0; y < HOTEL_H; y += 6, k++) {
-    r(0, y, HOTEL_W, 1, P.plinthLine);
-    for (let x = k % 2 ? 6 : 0; x < HOTEL_W; x += 12) r(x, y - 5, 1, 5, P.plinthLine);
+  // ---- the ground floor: dark stone cladding, a glazed lobby
+  r(0, HOTEL_GROUND - 2, HOTEL_W, 2, P.trim);
+  r(0, HOTEL_GROUND, HOTEL_W, HOTEL_H - HOTEL_GROUND, P.plinth);
+  for (let x = 12; x < HOTEL_W; x += 18) r(x, HOTEL_GROUND, 1, HOTEL_H - HOTEL_GROUND, P.plinthLine);
+  r(0, HOTEL_GROUND + 14, HOTEL_W, 1, P.plinthLine);
+  // the lobby's glass, either side of the doors: the lobby lit inside
+  for (const [x0, x1] of [[10, HOTEL_DOOR - 18], [HOTEL_DOOR + 18, HOTEL_W - 10]]) {
+    r(x0 - 1, 124, x1 - x0 + 2, HOTEL_H - 125, P.frame);
+    r(x0, 125, x1 - x0, HOTEL_H - 127, P.lobby);
+    r(x0, 125, x1 - x0, 3, P.lobbyHi);
+    r(x0, HOTEL_H - 8, x1 - x0, 6, '#b8a080', 0.35);
+    for (let x = x0 + 9; x < x1; x += 10) r(x, 125, 1, HOTEL_H - 127, P.frame);
+    // inside: the mailboxes on one side, a plant on the other
+    if (x0 < HOTEL_DOOR) {
+      r(x0 + 3, 132, 12, 9, P.steel, 0.8);
+      for (let k = 0; k < 3; k++) r(x0 + 3, 134 + k * 3, 12, 1, P.steelDark, 0.8);
+    } else {
+      r(x1 - 9, 140, 5, 6, P.pot);
+      r(x1 - 11, 133, 9, 7, P.leaf, 0.9);
+    }
   }
-
-  // the lobby windows, tall, one at each end
-  for (const cx of [cols[0], cols[1], cols[4], cols[5]]) {
-    const x = cx - 6;
-    r(x - 1, 126, 14, 2, P.trim);
-    r(x, 128, 12, 18, P.frame);
-    r(x + 1, 129, 10, 16, P.lobby);
-    r(x + 1, 129, 10, 3, P.lobbyHi);
-    r(x + 1, 141, 10, 4, '#b8864a', 0.45);
-    r(cx, 129, 1, 16, P.frame);
-    r(x + 1, 134, 10, 1, P.frame);
-    r(x - 1, 146, 14, 1, P.trim);
-    r(x, 147, 12, 1, P.trimShadow, 0.6);
-  }
-
-  // the entrance: a stone surround, a fanlight, the glass doors in brass
+  // the entrance: a deep recess, frameless glass doors, the number over them
   const d = HOTEL_DOOR;
-  r(d - 15, 122, 30, HOTEL_H - 122, P.trim);
-  r(d - 14, 123, 28, 1, P.trim);
-  r(d - 13, 124, 26, HOTEL_H - 124, P.recess);
-  r(d - 2, 121, 4, 3, P.trim); // the keystone
-  // fanlight
-  r(d - 11, 125, 22, 5, P.lobbyHi);
-  r(d - 11, 129, 22, 1, P.gold);
-  for (const k of [-7, -3, 0, 3, 7]) r(d + k, 125, 1, 4, P.goldDark);
-  // the two doors
+  r(d - 15, 122, 30, HOTEL_H - 122, P.recess);
   for (const s of [-1, 1]) {
     const x = s < 0 ? d - 11 : d + 1;
-    r(x, 130, 10, HOTEL_H - 130, P.gold);
-    r(x + 1, 131, 8, HOTEL_H - 134, P.lobby);
-    r(x + 1, 131, 8, 4, P.lobbyHi);
-    r(x + 2, 133, 1, 8, '#ffffff', 0.45);
-    r(x + 1, HOTEL_H - 4, 8, 3, P.goldDark); // kick plate
-    // the long brass pull
-    r(s < 0 ? x + 8 : x + 1, 137, 1, 8, P.goldDark);
-    r(s < 0 ? x + 7 : x + 2, 137, 1, 8, P.gold);
+    r(x, 128, 10, HOTEL_H - 129, P.frame);
+    r(x + 1, 129, 8, HOTEL_H - 131, P.lobby);
+    r(x + 2, 131, 1, 8, '#ffffff', 0.45);
+    // the long steel pull
+    r(s < 0 ? x + 8 : x + 1, 134, 1, 10, P.steel);
   }
-  r(d - 1, 130, 2, HOTEL_H - 130, P.goldDark);
+  r(d - 1, 128, 2, HOTEL_H - 128, P.frame);
   // the step
   r(d - 16, HOTEL_H - 2, 32, 2, P.trim);
   r(d - 16, HOTEL_H - 2, 32, 1, '#ffffff', 0.25);
-
-  // a lamp either side: bracket, brass cage, the glass
-  for (const lx of [d - 20, d + 19]) {
-    r(lx - 1, 133, 3, 1, P.goldDark);
-    r(lx, 128, 1, 5, P.goldDark);
-    r(lx - 1, 128, 3, 4, o.dusk ? '#fff0b0' : '#f0e0b0');
-    r(lx - 2, 127, 5, 1, P.gold);
-    r(lx - 1, 132, 3, 1, P.gold);
+  // the wall lights either side: slim boxes washing up and down
+  for (const lx of [d - 19, d + 18]) {
+    r(lx, 128, 2, 6, P.steelDark);
+    r(lx, 128, 2, 1, o.dusk ? '#fff0b0' : '#e8e8e0');
+    r(lx, 133, 2, 1, o.dusk ? '#fff0b0' : '#e8e8e0');
   }
 
-  // ---- dusk: warm light from the doors and the lamps up the stone
+  // ---- dusk: the light from the lobby and the wall lights
   if (o.dusk) {
     g.save();
     g.globalCompositeOperation = 'lighter';
@@ -263,40 +247,32 @@ export function paintHotel(g: CanvasRenderingContext2D, o: HotelOpts): void {
       g.fillStyle = gr;
       g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
     };
-    glow(d, HOTEL_H - 8, 34, 0.32);
-    glow(d - 20, 130, 12, 0.5);
-    glow(d + 19, 130, 12, 0.5);
-    // the corners lit from below
-    glow(4, HOTEL_H, 26, 0.18);
-    glow(HOTEL_W - 4, HOTEL_H, 26, 0.18);
+    glow(d, HOTEL_H - 8, 34, 0.3);
+    glow(d - 18, 130, 10, 0.45);
+    glow(d + 19, 130, 10, 0.45);
+    glow(30, HOTEL_H - 10, 22, 0.16);
+    glow(HOTEL_W - 30, HOTEL_H - 10, 22, 0.16);
     g.restore();
   }
 
   if (!o.flat) return;
 
-  // ---- in front of it all (the street only): planters, canopy, posts
+  // ---- in front (the street only): concrete planters of grasses, the canopy
   for (const px of HOTEL_PLANTERS) {
-    r(px - 3, HOTEL_H - 6, 7, 6, P.pot);
-    r(px - 3, HOTEL_H - 6, 7, 1, P.trim);
-    r(px, HOTEL_H - 10, 1, 4, P.frame);
-    g.fillStyle = P.leaf;
-    g.beginPath();
-    g.arc(px + 0.5, HOTEL_H - 13, 4, 0, Math.PI * 2);
-    g.fill();
-    r(px - 2, HOTEL_H - 16, 3, 2, P.leafHi);
-    r(px + 2, HOTEL_H - 13, 1, 1, P.leafHi);
+    r(px - 4, HOTEL_H - 7, 9, 7, P.pot);
+    r(px - 4, HOTEL_H - 7, 9, 1, P.trim);
+    for (let k = -3; k <= 3; k += 2) r(px + k, HOTEL_H - 12 + Math.abs(k), 1, 5 - Math.abs(k) + 0, P.leaf);
+    r(px, HOTEL_H - 13, 1, 2, P.leafHi);
   }
   const C = HOTEL_CANOPY;
   for (const px of HOTEL_POSTS) {
-    r(px - 1, C.bottom, 2, HOTEL_H - C.bottom, P.gold);
-    r(px, C.bottom, 1, HOTEL_H - C.bottom, P.goldDark);
-    r(px - 2, HOTEL_H - 2, 4, 2, P.goldDark);
-    r(px - 2, C.bottom, 4, 1, P.gold);
+    r(px - 1, C.bottom, 2, HOTEL_H - C.bottom, P.steel);
+    r(px, C.bottom, 1, HOTEL_H - C.bottom, P.steelDark);
   }
   paintCanopy(g, o, C.x0, C.top);
 }
 
-/** The canopy's front, at (x, y): the night road paints it on its own. */
+/** The canopy's front, at (x, y): a flat slab of steel with downlights under it. */
 export function paintCanopy(g: CanvasRenderingContext2D, o: HotelOpts, x = 0, y = 0): void {
   const P = o.dusk ? DUSK : DAY;
   const C = HOTEL_CANOPY;
@@ -305,24 +281,11 @@ export function paintCanopy(g: CanvasRenderingContext2D, o: HotelOpts, x = 0, y 
     g.fillStyle = c;
     g.fillRect(x + xx, y + yy, ww, hh);
   };
-  r(0, 0, w, 7, P.maroon);
-  r(0, 0, w, 1, P.gold);
-  r(0, 1, w, 1, P.maroonHi);
-  r(0, 6, w, 1, P.maroonDark);
-  // the valance: scallops along the edge
-  for (let k = 0; k < w; k += 4) {
-    r(k, 7, 4, 1, P.maroon);
-    r(k + 1, 8, 2, 1, P.maroon);
-    r(k, 7, 1, 1, P.maroonDark);
-  }
-  // a gold lily in the middle
-  const m = Math.floor(w / 2);
-  r(m, 2, 1, 3, P.gold);
-  r(m - 2, 3, 1, 2, P.gold);
-  r(m + 2, 3, 1, 2, P.gold);
-  r(m - 1, 5, 3, 1, P.goldDark);
-  // stripes of gold piping either side of it
-  r(4, 3, m - 8, 1, P.goldDark);
-  r(m + 5, 3, m - 8, 1, P.goldDark);
-  if (o.dusk) for (const k of [8, m, w - 9]) r(k, 7, 2, 1, '#fff0b0');
+  r(0, 2, w, 4, P.canopy);
+  r(0, 2, w, 1, P.canopyHi);
+  r(0, 5, w, 1, '#000000');
+  // the building number on its fascia
+  r(Math.floor(w / 2) - 5, 3, 10, 2, P.steel);
+  // downlights under it
+  for (const k of [6, Math.floor(w / 2), w - 7]) r(k, 6, 2, 1, o.dusk ? '#fff0b0' : '#dcdcd4');
 }

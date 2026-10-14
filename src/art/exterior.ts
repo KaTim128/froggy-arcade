@@ -25,6 +25,12 @@ export interface ExteriorOpts {
    * Defaults to `night` -- the arcade is open by day and at dusk.
    */
   closed?: boolean;
+  /**
+   * The clock's night with the arcade still open: the night sky and the
+   * streetlight's cone, over a street in its own (dusk) colours -- the scene
+   * lays its own dark over it.
+   */
+  darkSky?: boolean;
 }
 
 export interface ExteriorRefs {
@@ -54,7 +60,7 @@ export function paintExterior(scene: Phaser.Scene, opts: ExteriorOpts): Exterior
   // ---- sky: day, dusk bands, or night
   const skyBands = opts.day
     ? [PALETTE.tealLight, PALETTE.tealLight, PALETTE.teal, PALETTE.moon]
-    : opts.night
+    : opts.night || opts.darkSky
       ? [PALETTE.night, PALETTE.night, PALETTE.nightMid, PALETTE.nightMid]
       : [PALETTE.plum, PALETTE.violet, PALETTE.ember, PALETTE.amber];
   const bandH = 16;
@@ -62,7 +68,7 @@ export function paintExterior(scene: Phaser.Scene, opts: ExteriorOpts): Exterior
     scene.add.rectangle(0, i * bandH, GAME_W, bandH, skyBands[i]).setOrigin(0, 0);
   }
   scene.add
-    .rectangle(0, 64, GAME_W, 22, opts.day ? PALETTE.moon : opts.night ? PALETTE.nightMid : PALETTE.amberDark)
+    .rectangle(0, 64, GAME_W, 22, opts.day ? PALETTE.moon : opts.night || opts.darkSky ? PALETTE.nightMid : PALETTE.amberDark)
     .setOrigin(0, 0);
 
   // ---- the sun, high and hard.  Nothing about this street is subtle at noon.
@@ -257,8 +263,8 @@ export function paintExterior(scene: Phaser.Scene, opts: ExteriorOpts): Exterior
   // ---- streetlight
   scene.add.rectangle(300, 96, 3, 56, c(PALETTE.steel)).setOrigin(0, 0);
   scene.add.rectangle(294, 92, 15, 5, c(PALETTE.ash)).setOrigin(0, 0);
-  if (opts.night) {
-    scene.add.rectangle(301, 98, 40, 56, PALETTE.moon).setOrigin(0.5, 0).setAlpha(0.10);
+  if (opts.night || opts.darkSky) {
+    scene.add.rectangle(301, 98, 40, 56, PALETTE.moon).setOrigin(0.5, 0).setAlpha(opts.darkSky ? 0.16 : 0.10);
   }
 
   // ---- moth (dusk only)

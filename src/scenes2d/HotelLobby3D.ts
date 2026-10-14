@@ -175,103 +175,85 @@ function canvas(w: number, h: number, paint: (g: CanvasRenderingContext2D) => vo
   return c;
 }
 
-/** Polished marble: big pale tiles with grey veins. */
+/** Large porcelain floor tiles: warm grey, fine grout, a faint mottle. */
 function texMarble(): HTMLCanvasElement {
   let seed = 3;
   const rnd = (): number => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   return canvas(256, 256, (g) => {
-    g.fillStyle = '#e4ddd0';
+    g.fillStyle = '#d2cec6';
     g.fillRect(0, 0, 256, 256);
     for (let i = 0; i < 2; i++)
       for (let j = 0; j < 2; j++) {
-        g.fillStyle = (i + j) % 2 ? '#ddd5c6' : '#e8e2d6';
+        g.fillStyle = (i + j) % 2 ? '#cecac2' : '#d6d2ca';
         g.fillRect(i * 128 + 1, j * 128 + 1, 126, 126);
       }
-    g.strokeStyle = 'rgba(120,112,100,0.35)';
-    for (let k = 0; k < 14; k++) {
-      g.lineWidth = 0.6 + rnd();
-      g.beginPath();
-      let x = rnd() * 256;
-      let y = rnd() * 256;
-      g.moveTo(x, y);
-      for (let s = 0; s < 6; s++) {
-        x += (rnd() - 0.3) * 40;
-        y += (rnd() - 0.5) * 30;
-        g.lineTo(x, y);
-      }
-      g.stroke();
+    for (let k = 0; k < 1800; k++) {
+      g.fillStyle = rnd() < 0.5 ? 'rgba(90,86,80,0.06)' : 'rgba(255,255,255,0.08)';
+      g.fillRect(rnd() * 256, rnd() * 256, 2, 2);
     }
-    g.fillStyle = 'rgba(90,84,74,0.6)';
-    g.fillRect(0, 0, 256, 1);
-    g.fillRect(0, 128, 256, 1);
-    g.fillRect(0, 0, 1, 256);
-    g.fillRect(128, 0, 1, 256);
+    g.fillStyle = 'rgba(110,106,100,0.7)';
+    g.fillRect(0, 0, 256, 2);
+    g.fillRect(0, 128, 256, 2);
+    g.fillRect(0, 0, 2, 256);
+    g.fillRect(128, 0, 2, 256);
   });
 }
 
-/** Walnut with raised panels, for the desk front and the stairwell door. */
-function texPanels(cols: number, rows: number, w = 256, h = 128): HTMLCanvasElement {
+/** Flush oak veneer in long boards over a steel kick strip, for the concierge desk's front. */
+function texPanels(cols: number, w = 256, h = 128): HTMLCanvasElement {
   return canvas(w, h, (g) => {
-    g.fillStyle = '#5a3a22';
+    g.fillStyle = '#b08658';
     g.fillRect(0, 0, w, h);
-    for (let k = 0; k < 60; k++) {
-      g.fillStyle = `rgba(30,16,8,${0.08 + (k % 4) * 0.03})`;
-      g.fillRect(0, (k * 37) % h, w, 1);
+    for (let k = 0; k < w; k += 2) {
+      g.fillStyle = `rgba(90,60,30,${0.04 + ((k * 7) % 5) * 0.015})`;
+      g.fillRect(k, 0, 1, h);
     }
     const pw = w / cols;
-    const ph = h / rows;
-    for (let i = 0; i < cols; i++)
-      for (let j = 0; j < rows; j++) {
-        const x = i * pw + pw * 0.12;
-        const y = j * ph + ph * 0.14;
-        g.fillStyle = '#6e4a2c';
-        g.fillRect(x, y, pw * 0.76, ph * 0.72);
-        g.fillStyle = 'rgba(255,220,160,0.18)';
-        g.fillRect(x, y, pw * 0.76, 2);
-        g.fillStyle = 'rgba(0,0,0,0.3)';
-        g.fillRect(x, y + ph * 0.72 - 2, pw * 0.76, 2);
-        g.fillStyle = '#c9a24a';
-        g.fillRect(x + pw * 0.33, y + ph * 0.3, pw * 0.1, ph * 0.1);
-      }
+    for (let i = 1; i < cols; i++) {
+      g.fillStyle = 'rgba(40,26,12,0.45)';
+      g.fillRect(i * pw - 1, 0, 2, h);
+    }
+    g.fillStyle = '#8a9098';
+    g.fillRect(0, h - 10, w, 6);
   });
 }
 
-/** The pigeonholes behind the desk, keys hanging in most of them. */
+/** The residents' mailboxes: a steel wall of little numbered doors. */
 function texPigeonholes(): HTMLCanvasElement {
   return canvas(192, 128, (g) => {
-    g.fillStyle = '#3a2414';
+    g.fillStyle = '#5e646c';
     g.fillRect(0, 0, 192, 128);
     for (let r = 0; r < 4; r++)
       for (let c = 0; c < 6; c++) {
         const x = 6 + c * 31;
         const y = 6 + r * 30;
-        g.fillStyle = '#24160c';
+        const grd = g.createLinearGradient(x, 0, x + 27, 0);
+        grd.addColorStop(0, '#a4aab2');
+        grd.addColorStop(0.5, '#c4c8ce');
+        grd.addColorStop(1, '#9aa0a8');
+        g.fillStyle = grd;
         g.fillRect(x, y, 27, 26);
-        g.fillStyle = '#7a5232';
-        g.fillRect(x, y + 24, 27, 2);
-        if ((r * 6 + c) % 3 !== 1) {
-          g.fillStyle = '#ecd07a';
-          g.fillRect(x + 12, y + 4, 3, 10);
-          g.fillStyle = '#c9a24a';
-          g.fillRect(x + 9, y + 12, 9, 7);
-        }
+        g.fillStyle = '#2a2d33';
+        g.fillRect(x + 6, y + 6, 15, 2);
+        g.fillStyle = '#3a3d44';
+        g.fillRect(x + 20, y + 16, 3, 3);
+        g.fillStyle = '#1e2024';
+        g.font = 'bold 8px sans-serif';
+        g.fillText(`${(r + 1) * 100 + c + 1}`, x + 3, y + 22);
       }
   });
 }
 
-/** The stairwell door: a heavy fire door with a wired-glass slit and a push bar. */
+/** The stairwell door: a grey steel fire door with a wired-glass slit and a push bar. */
 function texStairDoor(): HTMLCanvasElement {
   return canvas(128, 256, (g) => {
-    g.fillStyle = '#7a5a3a';
+    g.fillStyle = '#8a9088';
     g.fillRect(0, 0, 128, 256);
     for (let k = 0; k < 50; k++) {
-      g.fillStyle = `rgba(40,22,10,${0.06 + (k % 3) * 0.03})`;
-      g.fillRect((k * 23) % 128, 0, 1, 256);
+      g.fillStyle = `rgba(30,34,30,${0.04 + (k % 3) * 0.02})`;
+      g.fillRect((k * 23) % 128, (k * 41) % 256, 3, 1);
     }
-    g.fillStyle = '#6a4a2e';
-    g.fillRect(14, 120, 100, 50);
-    g.fillRect(14, 180, 100, 60);
-    g.fillStyle = '#8a6a24';
+    g.fillStyle = '#5a605a';
     g.fillRect(44, 18, 40, 76);
     g.fillStyle = '#1e2630';
     g.fillRect(48, 22, 32, 68);
@@ -284,7 +266,13 @@ function texStairDoor(): HTMLCanvasElement {
     }
     g.fillStyle = '#c8c8c0';
     g.fillRect(10, 150, 108, 8);
-    g.fillStyle = '#c9a24a';
+    g.fillStyle = '#a0201c';
+    g.fillRect(34, 112, 60, 18);
+    g.fillStyle = '#ffffff';
+    g.font = 'bold 11px sans-serif';
+    g.textAlign = 'center';
+    g.fillText('STAIRS', 64, 125);
+    g.fillStyle = '#6a7078';
     g.fillRect(4, 236, 120, 16);
   });
 }
@@ -582,9 +570,10 @@ export class HotelLobby3D extends Phaser.Scene {
       t.needsUpdate = true;
       return new THREE.MeshLambertMaterial({ map: t });
     };
-    const brass = new THREE.MeshLambertMaterial({ color: 0xc9a24a });
-    const cream = new THREE.MeshLambertMaterial({ color: 0xe8dcc0 });
-    const wood = new THREE.MeshLambertMaterial({ color: 0x4a2e18 });
+    // brushed steel, white paint and light oak: a modern block's lobby
+    const brass = new THREE.MeshLambertMaterial({ color: 0xa8aeb4, emissive: 0x101214 });
+    const cream = new THREE.MeshLambertMaterial({ color: 0xeceae4 });
+    const wood = new THREE.MeshLambertMaterial({ color: 0x9a7448 });
 
     /** A stretch of wall: wallpaper over wainscot, from a to b along it. */
     const wall = (a: number, b: number, at: (m: THREE.Mesh, mid: number) => void, top = CEIL, bottom = 0): void => {
@@ -654,7 +643,7 @@ export class HotelLobby3D extends Phaser.Scene {
     runner.rotation.x = -Math.PI / 2;
     runner.position.set((X0 + X1) / 2, 0.006, DOOR_Z);
     S.add(runner);
-    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(X1 - X0, DEPTH), new THREE.MeshLambertMaterial({ color: 0xd8cfb8 }));
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(X1 - X0, DEPTH), new THREE.MeshLambertMaterial({ color: 0xeceae4 }));
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set((X0 + X1) / 2, CEIL, DEPTH / 2);
     S.add(ceil);
@@ -673,15 +662,16 @@ export class HotelLobby3D extends Phaser.Scene {
       wood,
       wood,
       wood,
-      new THREE.MeshLambertMaterial({ map: tex(texPanels(3, 1)) }),
+      new THREE.MeshLambertMaterial({ map: tex(texPanels(3)) }),
       wood,
     ]);
     desk.position.set(DESK_X, 0.55, 1.5);
     S.add(desk);
-    const top = new THREE.Mesh(new THREE.BoxGeometry(3.75, 0.06, 0.82), new THREE.MeshLambertMaterial({ color: 0xece6da }));
+    const top = new THREE.Mesh(new THREE.BoxGeometry(3.75, 0.06, 0.82), new THREE.MeshLambertMaterial({ color: 0xf4f3ef }));
     top.position.set(DESK_X, 1.13, 1.5);
     S.add(top);
-    const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, 0.1, 12), new THREE.MeshLambertMaterial({ color: 0x2e7a4a, emissive: 0x123a20 }));
+    // the concierge's monitor on its stand
+    const shade = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.32, 0.03), new THREE.MeshLambertMaterial({ color: 0x1e2024, emissive: 0x1a3a5a }));
     shade.position.set(DESK_X - 1.2, 1.5, 1.4);
     S.add(shade);
     const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.02, 0.32, 6), brass);
@@ -690,13 +680,13 @@ export class HotelLobby3D extends Phaser.Scene {
     const bell = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), brass);
     bell.position.set(DESK_X + 1.0, 1.16, 1.65);
     S.add(bell);
-    const book = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.3), new THREE.MeshLambertMaterial({ color: 0x5a1a22 }));
+    const book = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.3), new THREE.MeshLambertMaterial({ color: 0x2a2d33 }));
     book.position.set(DESK_X - 0.4, 1.17, 1.6);
     S.add(book);
     const holes = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.7), new THREE.MeshLambertMaterial({ map: tex(texPigeonholes()) }));
     holes.position.set(DESK_X, 2.25, 0.02);
     S.add(holes);
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 0.5), new THREE.MeshLambertMaterial({ map: tex(texSign('RECEPTION', '#5a3a22', '#ecd07a', 512, 96)) }));
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 0.5), new THREE.MeshLambertMaterial({ map: tex(texSign('CONCIERGE', '#2a2d33', '#e8eaec', 512, 96)) }));
     sign.position.set(DESK_X, 3.45, 0.02);
     S.add(sign);
     for (const dx of [-1.9, 1.9]) {
@@ -764,12 +754,12 @@ export class HotelLobby3D extends Phaser.Scene {
     S.add(dial);
 
     // ---- along the front wall: a sofa, a low table, and a bin with a lid
-    // A chesterfield: buttoned leather, rolled arms, three seat cushions on
-    // a dark plinth with turned feet.  Its back is to the wall (+z).
-    const leather = new THREE.MeshLambertMaterial({ color: 0x8e3a2c, emissive: 0x1a0705 });
-    const leatherLit = new THREE.MeshLambertMaterial({ color: 0xa8493a, emissive: 0x200906 });
-    const darkWood = new THREE.MeshLambertMaterial({ color: 0x3a2214 });
-    const brassStud = new THREE.MeshLambertMaterial({ color: 0xc9a050, emissive: 0x2a1c08 });
+    // A lounge sofa in grey woven fabric: three seat cushions on a dark
+    // steel plinth.  Its back is to the wall (+z).
+    const leather = new THREE.MeshLambertMaterial({ color: 0x6a7078, emissive: 0x0c0d0f });
+    const leatherLit = new THREE.MeshLambertMaterial({ color: 0x7c828a, emissive: 0x0e0f11 });
+    const darkWood = new THREE.MeshLambertMaterial({ color: 0x2a2d33 });
+    const brassStud = new THREE.MeshLambertMaterial({ color: 0x6a7078 });
     const sz = DEPTH - 0.55;
     const box = (w: number, h: number, d: number, x: number, y: number, z: number, m: THREE.Material): THREE.Mesh => {
       const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
@@ -872,7 +862,7 @@ export class HotelLobby3D extends Phaser.Scene {
     S.add(lid);
     this.binLid = lid;
     // a wall light over them, so they read from the storage room
-    const sconce = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.08), new THREE.MeshLambertMaterial({ color: 0xf0e0b8, emissive: 0x806030 }));
+    const sconce = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.36, 0.08), new THREE.MeshLambertMaterial({ color: 0xd8dce0, emissive: 0x807868 }));
     sconce.position.set((SOFA_X + BIN.x) / 2, 2.3, DEPTH - 0.05);
     S.add(sconce);
     const sconceLight = new THREE.PointLight(0xffd090, 2.2, 7, 1.4);
@@ -880,7 +870,7 @@ export class HotelLobby3D extends Phaser.Scene {
     S.add(sconceLight);
 
     // ---- the armchair, the lamp beside it, the trolley past the lift
-    const velvet = new THREE.MeshLambertMaterial({ color: 0x2e5a48 });
+    const velvet = new THREE.MeshLambertMaterial({ color: 0x5a6068 });
     const cx = lx(69);
     for (const [w, h, d, x, y, z] of [
       [0.9, 0.42, 0.8, cx, 0.32, 0.9],
@@ -895,32 +885,20 @@ export class HotelLobby3D extends Phaser.Scene {
     const lampPole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 1.5, 6), brass);
     lampPole.position.set(lx(92), 0.75, 0.5);
     S.add(lampPole);
-    const lampShade = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 0.3, 14), new THREE.MeshLambertMaterial({ color: 0xf0e0b8, emissive: 0x3a2a10 }));
+    const lampShade = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 0.3, 14), new THREE.MeshLambertMaterial({ color: 0xf4f3ef, emissive: 0x3a3428 }));
     lampShade.position.set(lx(92), 1.6, 0.5);
     S.add(lampShade);
     const lampLight = new THREE.PointLight(0xffc880, 1.4, 4.5, 1.6);
     lampLight.position.set(lx(92), 1.45, 0.8);
     S.add(lampLight);
+    // the parcel lockers past the lift: a bank of steel doors and a screen
     const tx = lx(336);
-    for (const dx of [-0.55, 0.55]) {
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.8, 6), brass);
-      pole.position.set(tx + dx, 0.95, 0.5);
-      S.add(pole);
-    }
-    const arch = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.05, 0.05), brass);
-    arch.position.set(tx, 1.85, 0.5);
-    S.add(arch);
-    const base = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 0.6), brass);
-    base.position.set(tx, 0.12, 0.5);
-    S.add(base);
-    for (const [w, h, x, col] of [
-      [0.55, 0.75, -0.2, 0x5a2a3a],
-      [0.4, 0.55, 0.3, 0x2a3a5a],
-    ] as const) {
-      const bag = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.3), new THREE.MeshLambertMaterial({ color: col }));
-      bag.position.set(tx + x, 0.15 + h / 2, 0.5);
-      S.add(bag);
-    }
+    const lockers = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.0, 0.45), [brass, brass, brass, brass, new THREE.MeshLambertMaterial({ map: tex(texPigeonholes()) }), brass]);
+    lockers.position.set(tx, 1.0, 0.3);
+    S.add(lockers);
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.2), new THREE.MeshBasicMaterial({ color: 0x5aa0c8 }));
+    screen.position.set(tx, 1.4, 0.53);
+    S.add(screen);
 
     // ---- the front doors, the night through them
     const night = new THREE.Mesh(new THREE.PlaneGeometry(6, 4), new THREE.MeshBasicMaterial({ map: tex(texNight()), fog: false }));
@@ -968,7 +946,7 @@ export class HotelLobby3D extends Phaser.Scene {
       sc.position.set(x, 2.6, 0.5);
       S.add(sc);
     }
-    const deskGlow = new THREE.PointLight(0xa0ffb0, 0.8, 3, 1.6);
+    const deskGlow = new THREE.PointLight(0xa0c8ff, 0.8, 3, 1.6);
     deskGlow.position.set(DESK_X - 1.2, 1.35, 1.7);
     S.add(deskGlow);
 
@@ -1002,11 +980,10 @@ export class HotelLobby3D extends Phaser.Scene {
         const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.06, 0.08), brass);
         rail.position.set(mid, gy + 0.95, 0.96);
         S.add(rail);
-        for (let x = a + 0.12; x < b; x += 0.24) {
-          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.9, 6), cream);
-          post.position.set(x, gy + 0.47, 0.96);
-          S.add(post);
-        }
+        // a glass balustrade under the steel rail
+        const pane = new THREE.Mesh(new THREE.BoxGeometry(len, 0.9, 0.02), new THREE.MeshLambertMaterial({ color: 0xbcd8e4, transparent: true, opacity: 0.28 }));
+        pane.position.set(mid, gy + 0.47, 0.96);
+        S.add(pane);
         for (let x = a + 1.1; x < b - 0.6; x += 2.3) {
           const door = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 2.1), doorM);
           door.position.set(x, gy + 1.05, 0.015);
@@ -1014,31 +991,24 @@ export class HotelLobby3D extends Phaser.Scene {
         }
       }
     }
-    // the chandeliers
-    const crystal = new THREE.MeshLambertMaterial({ color: 0xfff4d8, emissive: 0xa08850 });
+    // the pendant lights: clusters of glass globes on long black flexes
+    const globeM = new THREE.MeshLambertMaterial({ color: 0xf4f8fa, emissive: 0x908a78 });
+    const flex = new THREE.MeshLambertMaterial({ color: 0x2a2d33 });
     const chandelier = (x: number, y: number, z: number, r: number, power: number): void => {
-      const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, CEIL - y, 4), brass);
-      chain.position.set(x, (CEIL + y) / 2, z);
-      S.add(chain);
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.035, 6, 24), brass);
-      ring.rotation.x = Math.PI / 2;
-      ring.position.set(x, y, z);
-      S.add(ring);
-      const ring2 = new THREE.Mesh(new THREE.TorusGeometry(r * 0.6, 0.03, 6, 20), brass);
-      ring2.rotation.x = Math.PI / 2;
-      ring2.position.set(x, y + 0.28, z);
-      S.add(ring2);
-      const n = Math.round(r * 18);
+      const n = Math.max(3, Math.round(r * 7));
       for (let k = 0; k < n; k++) {
         const a = (k / n) * Math.PI * 2;
-        const drop = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), crystal);
-        drop.position.set(x + Math.cos(a) * r, y - 0.12 - (k % 2) * 0.08, z + Math.sin(a) * r);
-        S.add(drop);
+        const px = x + Math.cos(a) * r * 0.6;
+        const pz = z + Math.sin(a) * r * 0.6;
+        const py = y - (k % 3) * 0.25;
+        const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, CEIL - py, 4), flex);
+        cord.position.set(px, (CEIL + py) / 2, pz);
+        S.add(cord);
+        const globe = new THREE.Mesh(new THREE.SphereGeometry(0.11 + r * 0.05, 12, 8), globeM);
+        globe.position.set(px, py, pz);
+        S.add(globe);
       }
-      const bowl = new THREE.Mesh(new THREE.SphereGeometry(r * 0.35, 12, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), brass);
-      bowl.position.set(x, y + 0.02, z);
-      S.add(bowl);
-      const light = new THREE.PointLight(0xffd9a0, power, 9 + r * 4, 1.3);
+      const light = new THREE.PointLight(0xfff0d8, power, 9 + r * 4, 1.3);
       light.position.set(x, y - 0.3, z);
       S.add(light);
     };

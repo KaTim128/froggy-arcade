@@ -17,6 +17,7 @@ import { ledger } from '../core/ledger';
 import { BATTLE_COST, BATTLE_WIN, BIOMES, BOSS_AFTER, DEFEAT_PENALTY, MAX_OWNED, STARTERS, TIERS, creatureById, rollPack, type Creature, type Tier } from './creatures';
 import type { CreatureState, Owned } from './creatureState';
 import { record } from './life';
+import { MAX_LEVEL, MAX_XP, XP_BOSS, XP_WIN, levelOf, withLevel } from './creatureLevel';
 
 export interface Result {
   ok: boolean;
@@ -35,9 +36,14 @@ function edit(fn: (c: CreatureState) => void): void {
 export function activeOwned(c = C()): Owned | undefined {
   return c.owned.find((o) => o.uid === c.active);
 }
+/** An owned creature as it fights now: grown to its level. */
+export function ownedCreature(o: Owned): Creature | undefined {
+  const base = creatureById(o.id);
+  return base ? withLevel(base, levelOf(o.xp ?? 0)) : undefined;
+}
 export function activeCreature(c = C()): Creature | undefined {
   const o = activeOwned(c);
-  return o ? creatureById(o.id) : undefined;
+  return o ? ownedCreature(o) : undefined;
 }
 
 /** Nobody left, but you have played before: the recruitment table. */
@@ -51,7 +57,7 @@ export function claimStarter(id: string): Result {
   if (!STARTERS.includes(id)) return no('THAT ONE IS NOT ON OFFER.');
   edit((s) => {
     const uid = s.nextUid++;
-    s.owned.push({ uid, id, wins: 0 });
+    s.owned.push({ uid, id, wins: 0, xp: 0 });
     s.active = uid;
     s.starterTaken = true;
   });
@@ -87,7 +93,7 @@ export function pickCard(index: number): Result & { id?: string; cards?: string[
   const id = p.cards[index];
   edit((s) => {
     const uid = s.nextUid++;
-    s.owned.push({ uid, id, wins: 0 });
+    s.owned.push({ uid, id, wins: 0, xp: 0 });
     if (!s.owned.some((o) => o.uid === s.active)) s.active = uid;
     s.pending = null;
   });
@@ -148,12 +154,17 @@ function takePenalty(): number {
  * is closed in the same write, so a second call (a double tap, a late timer)
  * finds nothing open and pays nothing.
  */
-export function finishBattle(won: boolean): Result & { paid: number; lost?: string } {
+export function finishBattle(won: boolean): Result & { paid: number; lost?: string; xp?: number; levelUp?: number } {
   const c = C();
   const b = c.battle;
   if (!b) return { ...no('NO BATTLE IS ON.'), paid: 0 };
   const fighter = activeOwned(c);
   if (won) {
+    // experience for the one that fought (none past level 3)
+    const before = fighter?.xp ?? 0;
+    const gain = fighter && levelOf(before) < MAX_LEVEL ? Math.min(MAX_XP - before, b.boss ? XP_BOSS : XP_WIN) : 0;
+    const lvBefore = levelOf(before);
+    const lvAfter = levelOf(before + gain);
     edit((s) => {
       s.battle = null;
       s.wins += 1;
@@ -161,12 +172,17 @@ export function finishBattle(won: boolean): Result & { paid: number; lost?: stri
       const bossId = BIOMES.find((x) => x.id === b.biome)!.boss.id;
       if (b.boss && !s.bosses.includes(bossId)) s.bosses.push(bossId);
       const f = s.owned.find((o) => o.uid === s.active);
-      if (f) f.wins += 1;
+      if (f) {
+        f.wins += 1;
+        f.xp = Math.min(MAX_XP, (f.xp ?? 0) + gain);
+      }
     });
     ledger.credit(BATTLE_WIN, 'creature');
     record('creature_win');
     store.flush();
-    return { ...ok(`YOU WIN ${BATTLE_WIN} TOKENS.`), paid: BATTLE_WIN };
+    const name = fighter ? creatureById(fighter.id)!.name.toUpperCase() : '';
+    const up = lvAfter > lvBefore ? lvAfter : undefined;
+    return { ...ok(`YOU WIN ${BATTLE_WIN} TOKENS.${up ? ` ${name} IS NOW LEVEL ${up}!` : ''}`), paid: BATTLE_WIN, xp: gain, levelUp: up };
   }
   edit((s) => {
     s.battle = null;
