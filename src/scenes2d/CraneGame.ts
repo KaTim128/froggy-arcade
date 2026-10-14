@@ -1118,8 +1118,8 @@ export class CraneGame extends Phaser.Scene {
       }
     }
     else {
+      // (nothing said here: the result box at the end of the go says it)
       this.outcome = 'empty';
-      this.banner('NOTHING THERE', 0xff7a6a, 'THE CLAW CLOSED ON NOTHING');
     }
     this.saveGlass();
     this.phase = 'up';
@@ -1137,10 +1137,9 @@ export class CraneGame extends Phaser.Scene {
     this.held = null;
     this.outcome = why;
     // the prongs give -- they spring open -- and it drops out of them
+    // (no banner: the one result box at the end of the go says how it went)
     this.moveClaw(0.85, 160);
     audio.sfx('door_shut', 0.15);
-    if (why === 'missed') this.banner('MISSED!', 0xff7a6a, 'IT SLID OUT OF THE CLAW');
-    else this.banner('IT SLIPPED!', 0xffb050, 'DROPPED ON THE WAY TO THE CHUTE');
     t.x = this.clawX;
     t.z = Phaser.Math.Clamp(this.clawZ, 0.25, 0.95);
     let lift = 0;
@@ -1148,19 +1147,71 @@ export class CraneGame extends Phaser.Scene {
       if (Math.abs(o.x - t.x) < 16 && Math.abs(o.z - t.z) < 0.2) lift = Math.max(lift, o.lift + 18);
     }
     t.lift = Math.min(lift, 40);
-    const k = scaleAt(t.z);
     this.toys.push(t);
+    this.fall(t, why === 'slipped');
+  }
+
+  /**
+   * ---- A DROPPED PRIZE FALLS.  Out of the fingers, down into the glass, and
+   * it lands -- it is never set down where it ends up.  It picks up speed the
+   * whole way (a real fall, not an eased slide), turns as it goes, squashes
+   * where it lands, bounces once, and rocks to a stop.  How far it has to
+   * fall sets how long it takes, so a prize lost over the pile drops in a
+   * moment and one lost up at the gantry takes its time coming down.
+   */
+  private fall(t: Toy, tumbling: boolean): void {
+    const k = scaleAt(t.z);
+    const art = t.art;
+    const y0 = art.y;
+    const x1 = screenX(t.x, t.z);
+    const y1 = floorY(t.z) - t.lift * k;
+    const drop = Math.max(0, y1 - y0);
+    // t = sqrt(2h/g): twice the height is not twice the time
+    const ms = Phaser.Math.Clamp(Math.sqrt(drop) * 44, 160, 620);
+    const spin = (tumbling ? 28 : 16) * (Math.random() < 0.5 ? -1 : 1) * (1 - feelOf(t).stable * 0.5);
+    const land = Phaser.Math.Clamp(t.lean + spin, -60, 60);
+    art.setDepth(this.toyDepth(t.z, t.lift) + 0.3);
     this.tweens.add({
-      targets: t.art,
-      x: screenX(t.x, t.z),
-      y: floorY(t.z) - t.lift * k,
+      targets: art,
+      x: x1,
+      y: y1,
       scale: k,
-      duration: 380,
-      ease: 'Bounce.easeOut',
+      angle: land,
+      duration: ms,
+      ease: 'Quad.easeIn',
       onComplete: () => {
-        t.lean = Phaser.Math.Clamp(t.lean + Phaser.Math.Between(-20, 20) * (1 - feelOf(t).stable), -60, 60);
-        this.placeToy(t);
-        this.saveGlass();
+        audio.sfx('door_shut', 0.1);
+        // it lands on its side, gives under itself, and rocks to a stop
+        const squash = Phaser.Math.Clamp(drop / 180, 0.08, 0.22);
+        this.tweens.add({
+          targets: art,
+          scaleX: k * (1 + squash),
+          scaleY: k * (1 - squash),
+          duration: 70,
+          yoyo: true,
+          ease: 'Quad.easeOut',
+        });
+        this.tweens.add({
+          targets: art,
+          y: y1 - Math.min(9, drop * 0.09),
+          duration: 150,
+          yoyo: true,
+          ease: 'Quad.easeOut',
+          delay: 60,
+          onComplete: () => {
+            t.lean = land;
+            this.placeToy(t);
+            this.saveGlass();
+          },
+        });
+        this.tweens.add({
+          targets: art,
+          angle: land + (spin > 0 ? -7 : 7),
+          duration: 120,
+          yoyo: true,
+          repeat: 1,
+          ease: 'Sine.easeInOut',
+        });
       },
     });
   }
@@ -1213,8 +1264,10 @@ export class CraneGame extends Phaser.Scene {
   private outcome: 'missed' | 'slipped' | 'empty' | null = null;
   private bannerBox: Phaser.GameObjects.Container | null = null;
   /**
-   * What just happened, big and plain across the top of the glass: GOT IT!,
-   * MISSED!, IT SLIPPED! -- with a smaller line under it.
+   * GOT IT!, big and plain across the top of the glass, with a smaller line
+   * under it.  Only the win is called out as it happens: a go that comes to
+   * nothing is not announced over the glass, it is simply told by the one NO
+   * PRIZE box at the end, so a loss is never reported twice.
    */
   private banner(msg: string, col: number, sub = ''): void {
     this.bannerBox?.destroy();
