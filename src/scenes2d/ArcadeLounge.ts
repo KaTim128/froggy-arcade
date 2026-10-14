@@ -101,7 +101,7 @@ export class ArcadeLounge extends Phaser.Scene {
 
   private fromClash = false;
 
-  init(data: { atCabinet?: GameId; fromAlley?: boolean; atProp?: CraneKind; fromClash?: boolean } = {}): void {
+  init(data: { atCabinet?: GameId; fromAlley?: boolean; atProp?: CraneKind; fromClash?: boolean; from?: 'hub' } = {}): void {
     this.returnTo = data.atCabinet ?? null;
     this.fromClash = data.fromClash === true;
     this.fromAlley = data.fromAlley === true;
@@ -178,6 +178,8 @@ export class ArcadeLounge extends Phaser.Scene {
           ? { x: CLASH.x, y: CLASH.y + 12 }
         : this.spawnPoint({ x: BACK_DOOR.x + 18, y: BACK_DOOR.y });
     this.player = new Player(this, spawn.x, spawn.y, this.night);
+    // in by the left-hand doorway from the hub: looking into the room
+    if (!this.fromAlley && !prop && !this.fromClash) this.player.face(1);
     if (this.night) this.player.setSurface('carpet');
 
     // (no tokens to count after closing: the HUD is the daytime's)
@@ -204,7 +206,7 @@ export class ArcadeLounge extends Phaser.Scene {
     this.time.addEvent({ delay: 2000, loop: true, callback: () => {
       if (!this.locked && !this.busy() && closingTime() && !store.get().froggyGone && store.get().route === 'normal') {
         this.locked = true;
-        fadeToScene(this, 'ArcadeHub', {});
+        fadeToScene(this, 'ArcadeHub', { fromDoor: 'lounge' });
       }
     } });
     store.flush();

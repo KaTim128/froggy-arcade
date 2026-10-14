@@ -8,8 +8,9 @@
  * in a different shirt: he is the building's man, upright and tidy, in the
  * block's plain modern uniform:
  *
- *   - a charcoal jacket with steel-grey piping and two dark buttons, over
- *     a crisp white shirt and a teal tie
+ *   - a charcoal jacket with cream piping and two dark buttons, over a
+ *     crisp white shirt and a wine tie -- the house's colours, the same
+ *     ones the shops along the street put their staff in
  *   - a steel name badge, and a small lily pinned to his lapel
  *   - dark hair, neatly side-parted and combed flat
  *   - a calm, polite half-smile; his mouth moves when he speaks to you
@@ -38,12 +39,12 @@ const KIT = {
   jacket: '#33373E',
   jacketDark: '#272A30',
   jacketShade: '#1C1E23',
-  piping: '#8A9098',
-  pipingHi: '#C4C8CE',
+  piping: '#F0E0C8',
+  pipingHi: '#FFF4DC',
   shirt: '#F4F0E8',
   shirtShade: '#D6D0C4',
-  tie: '#2E7A7A',
-  tieDark: '#1E5656',
+  tie: '#8A3A5A',
+  tieDark: '#6A2A44',
   badge: '#B4BAC2',
   badgeInk: '#2A1608',
   lily: '#F8E0EC',

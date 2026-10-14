@@ -484,6 +484,15 @@ export class Player {
     if (this.blinkT < -0.12) this.blinkT = 2 + Math.random() * 3;
   }
 
+  /**
+   * Turn on the spot, without walking: for coming through a door, where you
+   * should be facing into the room rather than back the way you came.
+   */
+  face(dir: number): void {
+    this.dir = dir >= 0 ? 1 : -1;
+    this.pose(0, 0);
+  }
+
   setSurface(s: Surface): void {
     this.surface = s;
   }

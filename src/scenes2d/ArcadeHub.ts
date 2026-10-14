@@ -272,7 +272,7 @@ export class ArcadeHub extends Phaser.Scene {
   private staffT = 0;
   private frogOnCounter = false;
   /** Which doorway the player just came back through, if not the front. */
-  private fromDoor: 'lounge' | null = null;
+  private fromDoor: 'lounge' | 'annex' | 'street' | null = null;
   private frogT = 0;
   /** Whether he has already said it since the player last walked away. */
   private frogSpoke = false;
@@ -293,7 +293,7 @@ export class ArcadeHub extends Phaser.Scene {
     super('ArcadeHub');
   }
 
-  init(data: { atCabinet?: GameId; fromDoor?: 'lounge' } = {}): void {
+  init(data: { atCabinet?: GameId; fromDoor?: 'lounge' | 'annex' | 'street' } = {}): void {
     this.returnTo = data.atCabinet ?? null;
     this.fromDoor = data.fromDoor ?? null;
   }
@@ -449,6 +449,10 @@ export class ArcadeHub extends Phaser.Scene {
     // click on the carpet walked you straight back out again.
     const spawn = this.spawnPoint({ x: GAME_W / 2, y: ROOM.bottom - 34 });
     this.player = new Player(this, spawn.x, spawn.y);
+    // facing into the room: from a side door you look across it, in off the
+    // street you are already looking up it
+    if (this.fromDoor === 'annex') this.player.face(1);
+    else if (this.fromDoor === 'lounge') this.player.face(-1);
 
     new TokenHud(this);
     // (the front door is in the middle of the bottom wall: the pockets sit beside it)
@@ -1458,6 +1462,11 @@ export class ArcadeHub extends Phaser.Scene {
     // Back through the right-hand doorway: stood just inside it, a step clear
     // of its interact zone so a stray click does not walk you back out.
     if (this.fromDoor === 'lounge') return { x: LOUNGE_DOOR.x - 28, y: LOUNGE_DOOR.y - 12 };
+    // back in from room two: stood just inside its doorway, on the left
+    if (this.fromDoor === 'annex') return { x: ANNEX_DOOR.x + 28, y: ANNEX_DOOR.y - 12 };
+    // in off the street: just inside the front doors, which are the middle of
+    // the bottom wall
+    if (this.fromDoor === 'street') return { x: GAME_W / 2, y: ROOM.bottom - 34 };
     if (!this.returnTo) return fallback;
     const def = CABINETS.find((c) => c.id === this.returnTo);
     if (!def) return fallback;
@@ -1513,7 +1522,7 @@ export class ArcadeHub extends Phaser.Scene {
   private toAnnex(): void {
     this.locked = true;
     audio.sfx('footstep_carpet');
-    fadeToScene(this, 'ArcadeAnnex');
+    fadeToScene(this, 'ArcadeAnnex', { from: 'hub' });
   }
 
   /**
@@ -1538,7 +1547,7 @@ export class ArcadeHub extends Phaser.Scene {
   private toLounge(): void {
     this.locked = true;
     audio.sfx('footstep_carpet');
-    fadeToScene(this, 'ArcadeLounge');
+    fadeToScene(this, 'ArcadeLounge', { from: 'hub' });
   }
 
   private openCounter(): void {
