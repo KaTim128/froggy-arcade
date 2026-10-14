@@ -43,7 +43,10 @@ export interface ExteriorRefs {
 
 /** Where the man stands, and where the player sits at the start. */
 export const KERB_Y = 168;
-export const MAN_X = 74;
+/** The man's pitch on the forecourt: to the right of the doors. */
+export const MAN_X = 236;
+/** Where he stops in the opening scene, over the drifter on the kerb. */
+export const INTRO_MAN_X = 74;
 
 export function paintExterior(scene: Phaser.Scene, opts: ExteriorOpts): ExteriorRefs {
   const c = (col: number) => (opts.night ? nightify(col) : opts.day ? daylight(col) : col);

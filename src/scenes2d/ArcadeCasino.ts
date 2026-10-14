@@ -354,8 +354,7 @@ export class ArcadeCasino extends Phaser.Scene {
 
   private openDealerTalk(): void {
     this.talk = openTalkPanel(this, {
-      who: 'DEALER',
-      color: PALETTE.gold,
+      speaker: 'dealer',
       line: '"GOOD EVENING. TAKE A SEAT WHENEVER YOU ARE READY."',
       options: [
         { label: 'WHERE IS FROGGY?', fn: () => this.askWhereFroggyIs() },
@@ -370,8 +369,7 @@ export class ArcadeCasino extends Phaser.Scene {
     store.flush();
     this.closeTalk();
     this.talk = openTalkPanel(this, {
-      who: 'DEALER',
-      color: PALETTE.gold,
+      speaker: 'dealer',
       line:
         '"FROGGY? THE FROG ON THE CUPS AND THE CARPET. HE IS OUR MASCOT, SIR, A DRAWING, AND A ' +
         'COSTUME AT BIRTHDAY PARTIES. I CONFESS I HAVE NEVER UNDERSTOOD WHY PEOPLE SPEAK OF HIM ' +

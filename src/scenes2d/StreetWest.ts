@@ -26,6 +26,7 @@ import { LOOKS, Player } from '../art/player';
 import { GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 import { HOTEL_DOOR, HOTEL_H, HOTEL_W, paintHotel } from '../art/hotel';
+import { speak } from '../ui/talkPanel';
 
 export const WORLD_W = 640;
 const WALK_Y = 168;
@@ -329,14 +330,21 @@ export class StreetWest extends Phaser.Scene {
     this.time.addEvent({ delay: 260, loop: true, callback: () => bar.setFillStyle(bar.fillColor === 0xff2a3a ? 0x2a5aff : 0xff2a3a) });
   }
 
+  private talking: Phaser.GameObjects.Container | null = null;
+
+  /** The officer on the hotel steps, in his own box. */
+  private officerSays(line: string): void {
+    this.talking = speak(this, 'officer', line, () => (this.talking = null));
+  }
+
   private interact(): void {
-    if (this.locked || !this.spot) return;
+    if (this.locked || this.talking || !this.spot) return;
     if (store.get().hotelAfter === 'escaped' && this.spot !== 'bus') {
       if (this.spot === 'doorman') {
-        this.say('POLICE: "Who could have done this? They completely trashed the place."');
+        this.officerSays('"Who could have done this? They completely trashed the place."');
         return;
       }
-      this.say('POLICE: "Crime scene. Nobody goes in, I\'m afraid."');
+      this.officerSays('"Crime scene. Nobody goes in, I\'m afraid."');
       return;
     }
     if (this.spot === 'bus') {

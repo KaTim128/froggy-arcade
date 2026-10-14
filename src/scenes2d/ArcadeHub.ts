@@ -885,7 +885,7 @@ export class ArcadeHub extends Phaser.Scene {
   private openTalk(line: string, options: TalkOption[] = []): void {
     // E closes it, through `interact` -- the same key that opened it, on the
     // same handler.
-    this.talk = openTalkPanel(this, { who: 'ARCADE STAFF', line, options });
+    this.talk = openTalkPanel(this, { speaker: 'staffer', line, options });
   }
 
   /** Esc with a conversation open closes the conversation, not the room. */

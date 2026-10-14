@@ -23,6 +23,9 @@ import { Player, depthFor, type Look } from '../../art/player';
 import { froggyLayer } from '../../render/froggyLayer';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../../game/roomWalk';
 import { pullBackAtClosing } from '../../game/closingPull';
+import { speak } from '../../ui/talkPanel';
+import type { SpeakerId } from '../../ui/portraits';
+import { backPlate } from '../../ui/plate';
 
 /** The back wall's foot: the floor starts here. */
 export const FLOOR_TOP = 100;
@@ -93,6 +96,7 @@ export abstract class WalkRoom extends Phaser.Scene {
     froggyLayer.clear();
     this.locked = false;
     this.panel = null;
+    this.talking = null;
     this.seatReturn = null;
     this.target = null;
     this.items = [];
@@ -119,6 +123,7 @@ export abstract class WalkRoom extends Phaser.Scene {
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.72).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
     this.mutter = centerText(this, GAME_W / 2, GAME_H - 30, '', PALETTE.cream).setDepth(860).setScrollFactor(0).setVisible(false).setMaxWidth(290);
+    backPlate(this, this.mutter);
 
     const kb = this.input.keyboard;
     const bind = (n: readonly string[]) => (kb ? n.map((k) => kb.addKey(k)) : []);
@@ -209,12 +214,22 @@ export abstract class WalkRoom extends Phaser.Scene {
     return (
       this.locked ||
       !!this.panel ||
+      !!this.talking ||
       this.scene.isActive('Shop') ||
       this.scene.isActive('SettingsModal') ||
       this.scene.isActive('Goals') ||
       this.scene.isActive('InventoryModal')
     );
   }
+
+  /** Somebody in the room says something: their box, their portrait. */
+  protected talkAs(who: SpeakerId, line: string): void {
+    if (this.talking) return;
+    this.player.move(0, 0, 16, this.bounds);
+    this.talking = speak(this, who, line, () => (this.talking = null));
+  }
+
+  protected talking: Phaser.GameObjects.Container | null = null;
 
   protected say(m: string): void {
     this.mutter.setText(m).setVisible(true).setAlpha(1);

@@ -37,6 +37,8 @@ import { attachPockets } from '../ui/pockets';
 import { ensureKeyInPocket, heldItems } from '../game/inventory';
 import { Pedestrians } from '../art/pedestrians';
 import { BEG_MS, begNextMs, canBeg, clock, collectBegging, sleep, startBegging, stopBegging, visit } from '../game/life';
+import { speak } from '../ui/talkPanel';
+import { backPlate } from '../ui/plate';
 
 const WALK_Y = KERB_Y;
 /** Where the alley mouth is, off the arcade's right-hand corner. */
@@ -44,8 +46,8 @@ const ALLEY_X = GAME_W - 24;
 /** The alley is open to you once you have come through the night in the arcade. */
 const alleyOpen = (): boolean => store.get().froggyGone;
 type Spot = 'door' | 'man' | 'alley' | 'beg' | null;
-/** The patch of pavement against the arcade's wall where you can sit with a cup. */
-const BEG_X = 236;
+/** The patch of pavement against the arcade's wall, left of the doors, where you can sit with a can. */
+const BEG_X = 110;
 /** More tokens than this, walking out of the arcade after the night, and it is evening. */
 export const EVENING_TOKENS = 600;
 
@@ -81,6 +83,7 @@ export class ExteriorDay extends Phaser.Scene {
   }
 
   create(): void {
+    this.talking = null;
     froggyLayer.clear();
     this.locked = false;
     this.spot = null;
@@ -137,6 +140,7 @@ export class ExteriorDay extends Phaser.Scene {
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
     this.mutter = centerText(this, GAME_W / 2, GAME_H - 18, '', PALETTE.cream).setDepth(802).setVisible(false);
+    backPlate(this, this.mutter);
 
     this.keys = { left: this.bind(KEYS.left), right: this.bind(KEYS.right) };
     this.input.keyboard?.on('keydown-E', () => this.interact());
@@ -159,9 +163,7 @@ export class ExteriorDay extends Phaser.Scene {
     this.begging = false;
     if (time !== 'midnight') {
       this.people = new Pedestrians(this, GAME_W, WALK_Y + 3, 3, false);
-      const g = this.add.graphics().setDepth(49);
-      g.fillStyle(0x14100c, 1).fillRect(BEG_X - 11, WALK_Y - 3, 22, 4);
-      g.fillStyle(0xb08a58, 1).fillRect(BEG_X - 10, WALK_Y - 2, 20, 2);
+      this.paintMat();
       // the can, on the cardboard until somebody sits down with it
       this.cup = this.add.graphics().setDepth(49);
       this.cup.fillStyle(0x14100c, 1).fillRect(BEG_X + 6, WALK_Y - 7, 6, 6);
@@ -171,6 +173,7 @@ export class ExteriorDay extends Phaser.Scene {
       visit('forecourt');
     } else this.people = null;
     this.begText = centerText(this, BEG_X, WALK_Y - 52, '', PALETTE.gold).setDepth(803).setVisible(false);
+    backPlate(this, this.begText);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (this.begging) stopBegging();
     });
@@ -392,14 +395,50 @@ export class ExteriorDay extends Phaser.Scene {
     }
 
     const s = store.get();
+    if (canBeg()) {
+      this.manSays('"You expect me to lend you money when you\'ve got nothing? Go earn it by begging!"');
+      return;
+    }
     const toSell = s.prizesOwned.filter((id) => !s.prizesSold.includes(id));
     if (toSell.length === 0 && heldItems(s).length === 0) {
-      this.say(s.prizesOwned.length === 0
+      this.manSays(s.prizesOwned.length === 0
         ? '"Nothing yet?  The counter is inside, friend."'
         : '"You have sold me everything you are carrying."');
       return;
     }
     this.scene.launch('PrizeExchange', { from: 'ExteriorDay' });
+  }
+
+  /**
+   * The begging pitch: a flattened box laid on the pavement, its flaps and
+   * folds and a strip of tape showing, an old blanket folded on one end, and
+   * a cardboard sign propped against the wall behind it.
+   */
+  private paintMat(): void {
+    const g = this.add.graphics().setDepth(49);
+    const x = BEG_X - 15;
+    const y = WALK_Y - 4;
+    // the box, opened out flat
+    g.fillStyle(0x14100c, 1).fillRect(x - 1, y - 1, 32, 7);
+    g.fillStyle(0xb88a54, 1).fillRect(x, y, 30, 5);
+    g.fillStyle(0xcf9f64, 1).fillRect(x, y, 30, 1);
+    g.fillStyle(0x8e6638, 1).fillRect(x + 10, y, 1, 5).fillRect(x + 20, y, 1, 5);
+    g.fillStyle(0xd8d0b8, 0.8).fillRect(x + 4, y + 2, 4, 1);
+    // a folded blanket at the wall end
+    g.fillStyle(0x14100c, 1).fillRect(x + 1, y - 3, 11, 4);
+    g.fillStyle(0x5a6a7a, 1).fillRect(x + 2, y - 2, 9, 2);
+    g.fillStyle(0x7a8a9a, 1).fillRect(x + 2, y - 2, 9, 1);
+    g.fillStyle(0xa83a3a, 1).fillRect(x + 4, y - 2, 1, 2).fillRect(x + 8, y - 2, 1, 2);
+    // the sign, leaning on the wall
+    const sx = BEG_X + 13;
+    const sy = WALK_Y - 18;
+    g.fillStyle(0x14100c, 1).fillRect(sx - 1, sy - 1, 14, 12);
+    g.fillStyle(0xc89a60, 1).fillRect(sx, sy, 12, 10);
+    g.fillStyle(0xa47a44, 1).fillRect(sx, sy + 9, 12, 1);
+    g.fillStyle(0x2a2018, 1)
+      .fillRect(sx + 2, sy + 2, 8, 1)
+      .fillRect(sx + 2, sy + 4, 6, 1)
+      .fillRect(sx + 2, sy + 6, 7, 1);
   }
 
   /** Up off the cardboard: begging over, and what is in the can is yours. */
@@ -412,8 +451,16 @@ export class ExteriorDay extends Phaser.Scene {
     this.say(got ? `YOU GET UP. $${got} IN THE CAN.` : 'YOU GET UP.');
   }
 
+ /** The man in black says something, in his own box. */
+  private manSays(line: string): void {
+    if (this.talking) return;
+    this.talking = speak(this, 'man', line, () => (this.talking = null));
+  }
+
+  private talking: Phaser.GameObjects.Container | null = null;
+
   private busy(): boolean {
-    return this.scene.isActive('PrizeExchange') || this.scene.isActive('SettingsModal') || this.scene.isActive('Goals') || this.scene.isActive('InventoryModal');
+    return !!this.talking || this.scene.isActive('PrizeExchange') || this.scene.isActive('SettingsModal') || this.scene.isActive('Goals') || this.scene.isActive('InventoryModal');
   }
 
   private say(msg: string): void {

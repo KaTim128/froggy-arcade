@@ -17,6 +17,7 @@ import { COLS, Player, depthFor, type Look } from '../../art/player';
 import { COSMETICS, lookFor, type CosmeticDef } from '../../game/catalog';
 import { buyCosmetic, record, wear } from '../../game/life';
 import { FLOOR_TOP, WalkRoom, type Fixture } from '../rooms/WalkRoom';
+import { BARBER_LOOK } from '../../ui/portraits';
 
 const BACK_ROW = FLOOR_TOP + 24;
 const FRONT_ROW = FLOOR_TOP + 52;
@@ -24,25 +25,7 @@ const CHAIR_X = 180;
 const BARBER_X = 208;
 const BENCH_X = 296;
 
-/** The barber: a white tunic, slick dark hair, and a waxed handlebar moustache. */
-export const BARBER_LOOK: Look = {
-  cols: {
-    C: 0xf2f2ee, c: 0xffffff, D: 0xc8c8c0, w: 0xf2f2ee,
-    r: 0x1e1814, S: 0xd8a880, s: 0xb88860, G: 0xd8a880, g: 0xb88860,
-    M: 0x2a1a10, J: 0x2a2a30, j: 0x1e1e24, K: 0x141010, W: 0x2a2020, T: 0x141010,
-  },
-  head: [
-    '............',
-    '...rrrrrr...',
-    '..rrrrrrrrr.',
-    '..rSSSSSSr..',
-    '..rSSSSSSs..',
-    '.M.SSSSSs.M.',
-    '..MMMMMMMM..',
-    '....SSSs....',
-    '.....ss.....',
-  ],
-};
+export { BARBER_LOOK };
 
 /** Colours for drawing a head row on the poster. */
 const POSTER_COLS: Record<string, number> = { r: 0x3a2a1e, S: 0xe0b090, s: 0xc09070, G: 0x5a4030, g: 0x4a3426 };
@@ -189,7 +172,7 @@ export class BarberShop extends WalkRoom {
         w: 12,
         depth: 5,
         label: () => '[E] TALK',
-        use: () => this.say('"TAKE A SEAT IN THE CHAIR, FRIEND. WE WILL SMARTEN YOU UP."'),
+        use: () => this.talkAs('barber', '"TAKE A SEAT IN THE CHAIR, FRIEND. WE WILL SMARTEN YOU UP."'),
       },
       {
         x: BENCH_X,

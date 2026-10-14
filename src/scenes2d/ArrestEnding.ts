@@ -25,6 +25,7 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { froggyLayer } from '../render/froggyLayer';
 import { LOOKS, Player } from '../art/player';
 import { paintExterior } from '../art/exterior';
+import { backPlate } from '../ui/plate';
 
 type Act = 'paper' | 'later' | 'gate' | 'arcade' | 'done';
 
@@ -64,6 +65,7 @@ export class ArrestEnding extends Phaser.Scene {
     this.layer = this.add.container(0, 0);
     this.linePlate = this.add.rectangle(0, 0, 1, 1, PALETTE.black, 0.72).setOrigin(0, 0).setDepth(900).setVisible(false);
     this.lineText = centerText(this, GAME_W / 2, GAME_H - 22, '', PALETTE.cream).setDepth(901).setVisible(false).setMaxWidth(290);
+    backPlate(this, this.lineText);
     this.black = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0).setOrigin(0, 0).setDepth(950);
     this.paper = paintNewspaper();
     audio.sfx('door_shut', 0.5);

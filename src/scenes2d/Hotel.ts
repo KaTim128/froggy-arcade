@@ -75,6 +75,7 @@ import { HITS, WF, WF_H, WF_W, drawBrokenEdge, drawCracks, drawWindowFroggy } fr
 import { runHotelScare } from '../froggy/hotelScare';
 import { drawClerk } from '../froggy/clerk';
 import { froggyLayer } from '../render/froggyLayer';
+import { backPlate } from '../ui/plate';
 
 export const ROOM_PRICE = 300;
 const WALK_Y = 160;
@@ -238,6 +239,7 @@ export class Hotel extends Phaser.Scene {
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
     this.mutterPlate = this.add.rectangle(0, 0, 1, 1, PALETTE.black, 0.72).setOrigin(0, 0).setDepth(820).setVisible(false);
     this.mutter = centerText(this, GAME_W / 2, GAME_H - 34, '', PALETTE.cream).setDepth(821).setVisible(false).setMaxWidth(290);
+    backPlate(this, this.mutter);
     // the words are the button: a click or a tap on them moves on
     this.tapZone = this.add.zone(0, GAME_H - 76, GAME_W, 76).setOrigin(0, 0).setDepth(850);
     // (the lobby is wider than the screen: the words stay put while it scrolls)
@@ -701,7 +703,7 @@ export class Hotel extends Phaser.Scene {
           return;
         }
         if (!s.checkedIn) {
-          this.say('"Guests only, I\'m afraid. Reception is right here."');
+          this.openTalk('"Guests only, I\'m afraid. Reception is right here."', [{ label: 'OK', fn: () => this.closeTalk() }]);
           return;
         }
         this.locked = true;
@@ -910,7 +912,7 @@ export class Hotel extends Phaser.Scene {
     // the words under it are not a button while the panel is up
     this.tapZone.disableInteractive();
     // (each answer takes its own panel down: see ui/talkPanel)
-    this.talk = openTalkPanel(this, { who, line, options, color: PALETTE.gold });
+    this.talk = openTalkPanel(this, who === 'RECEPTION' ? { speaker: 'clerk', line, options } : { who, line, options, color: PALETTE.gold });
   }
 
   private closeTalk(): void {

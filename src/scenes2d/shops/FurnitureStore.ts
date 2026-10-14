@@ -132,7 +132,7 @@ export class FurnitureStore extends WalkRoom {
       w: 48,
       depth: 18,
       label: () => '[E] TALK',
-      use: () => this.say('"HAVE A LOOK ROUND, LOVE. ANYTHING YOU BUY GOES STRAIGHT TO YOUR PLACE."'),
+      use: () => this.talkAs('keeper', '"HAVE A LOOK ROUND, LOVE. ANYTHING YOU BUY GOES STRAIGHT TO YOUR PLACE."'),
     };
     return [counter, ...this.layoutCache.map(({ def, x, y }) => ({
       x,

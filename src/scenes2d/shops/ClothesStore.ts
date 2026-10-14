@@ -197,7 +197,7 @@ export class ClothesStore extends WalkRoom {
     }
     out.push({ x: 343, y: this.floorTop, w: 22, depth: 0, wall: true, label: () => '[E] MIRROR', use: () => this.mirror(), hit: { x: 330, y: 30, w: 26, h: 56 } });
     out.push({ x: 392, y: BACK_ROW, w: 40, depth: 6, label: () => '[E] FITTING ROOM', use: () => this.fitting() });
-    out.push({ x: 318, y: BACK_ROW + 1, w: 30, depth: 6, label: () => '[E] TALK', use: () => this.say('"TRY ANYTHING ON YOU LIKE. THE FITTING ROOM IS AT THE END."') });
+    out.push({ x: 318, y: BACK_ROW + 1, w: 30, depth: 6, label: () => '[E] TALK', use: () => this.talkAs('assistant', '"TRY ANYTHING ON YOU LIKE. THE FITTING ROOM IS AT THE END."') });
     return out;
   }
 
