@@ -5,6 +5,7 @@
  */
 
 import { BIOMES, MAX_OWNED, TIERS, creatureById, type Tier } from './creatures';
+import { XP_WIN, cleanXp } from './creatureLevel';
 
 export const CREATURE_VERSION = 1;
 
@@ -12,6 +13,8 @@ export interface Owned {
   uid: number;
   id: string;
   wins: number;
+  /** Experience (see creatureLevel): 0 at level 1, capped at level 3's. */
+  xp: number;
 }
 
 export interface CreatureState {
@@ -69,7 +72,12 @@ export function sanitizeCreatures(raw: unknown): CreatureState {
   const seen = new Set<number>();
   const owned = (Array.isArray(r.owned) ? r.owned : [])
     .filter((o): o is Owned => !!o && typeof o === 'object' && typeof o.id === 'string' && !!creatureById(o.id))
-    .map((o) => ({ uid: Math.floor(num(o.uid)), id: o.id, wins: Math.max(0, Math.floor(num(o.wins))) }))
+    .map((o) => {
+      const wins = Math.max(0, Math.floor(num(o.wins)));
+      // (a creature saved before levels: its past wins count, as if it had earned them)
+      const xp = cleanXp(typeof o.xp === 'number' ? o.xp : wins * XP_WIN);
+      return { uid: Math.floor(num(o.uid)), id: o.id, wins, xp };
+    })
     .filter((o) => o.uid > 0 && !seen.has(o.uid) && (seen.add(o.uid), true))
     .slice(0, MAX_OWNED);
   const nextUid = Math.max(num(r.nextUid, 1), ...owned.map((o) => o.uid + 1), 1);

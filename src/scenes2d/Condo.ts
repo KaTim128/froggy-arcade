@@ -17,7 +17,8 @@ import { store } from '../core/state';
 import { button } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { furnitureById, type FurnitureDef } from '../game/catalog';
-import { clock, movePlacement, placeFurniture, removePlacement, sleep, visit, type Placement } from '../game/life';
+import { onLightTurn } from '../game/dayNight';
+import { DUSK_HOUR, clock, movePlacement, placeFurniture, removePlacement, sleep, visit, type Placement } from '../game/life';
 import { useOf } from '../game/furnitureUse';
 import { WalkRoom, type Fixture } from './rooms/WalkRoom';
 import { Piece } from './rooms/piece';
@@ -85,6 +86,14 @@ export class Condo extends WalkRoom {
 
   protected busy(): boolean {
     return super.busy() || this.decorating;
+  }
+
+  protected entered(): void {
+    // dusk or dawn in here: the window goes dark (or light) with it
+    onLightTurn(this, (dark) => {
+      this.paintWalls();
+      if (dark) this.say('IT IS DARK OUT. TIME FOR BED.');
+    });
   }
 
   // ------------------------------------------------------------------ room
@@ -395,6 +404,11 @@ export class Condo extends WalkRoom {
 
   private goToSleep(on: 'floor' | 'mattress' | 'bed'): void {
     if (this.busy()) return;
+    // (only at night: a slept night is a morning, and mornings are not for sleeping)
+    if (!clock().dark) {
+      this.say(`YOU ARE NOT TIRED. SLEEP COMES AFTER ${DUSK_HOUR}:00.`);
+      return;
+    }
     this.locked = true;
     this.cameras.main.fadeOut(900, 0, 0, 0);
     this.time.delayedCall(1000, () => {

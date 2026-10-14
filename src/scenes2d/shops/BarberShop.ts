@@ -40,6 +40,8 @@ export class BarberShop extends WalkRoom {
     super('BarberShop');
   }
 
+  protected keepsShopHours = true;
+
   protected music(): string {
     return 'room_lounge';
   }

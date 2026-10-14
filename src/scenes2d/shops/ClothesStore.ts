@@ -46,6 +46,8 @@ export class ClothesStore extends WalkRoom {
     super('ClothesStore');
   }
 
+  protected keepsShopHours = true;
+
   protected music(): string {
     return 'room_lounge';
   }

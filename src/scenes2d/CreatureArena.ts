@@ -17,8 +17,9 @@ import { store } from '../core/state';
 import { button, centerText, confirmDialog, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
-import { BIOMES, ELEMENTS, bossCreature, creatureById, wildFor, type Attack, type Biome, type Creature } from '../game/creatures';
-import { activeOwned, finishBattle, retreat, startBattle } from '../game/creatureClash';
+import { BIOMES, ELEMENTS, bossCreature, wildFor, type Attack, type Biome, type Creature } from '../game/creatures';
+import { activeOwned, finishBattle, ownedCreature, retreat, startBattle } from '../game/creatureClash';
+import { MAX_LEVEL, levelOf } from '../game/creatureLevel';
 import { attackInfo } from '../game/attackInfo';
 import { drawAttackIcon } from '../art/attackIcons';
 import { setCabinetTouch } from '../game/touchLayouts';
@@ -154,6 +155,8 @@ export class CreatureArena extends Phaser.Scene {
   private info2!: Phaser.GameObjects.BitmapText;
   private infoPlate!: Phaser.GameObjects.Rectangle;
   private infoT = 0;
+  /** Your creature's level, for the name over its bar. */
+  private myLevel = 1;
 
   constructor() {
     super('CreatureArena');
@@ -184,7 +187,9 @@ export class CreatureArena extends Phaser.Scene {
 
   create(): void {
     const own = activeOwned();
-    const mine = own ? creatureById(own.id) : undefined;
+    // (yours fights at its level: see creatureLevel)
+    const mine = own ? ownedCreature(own) : undefined;
+    this.myLevel = own ? levelOf(own.xp ?? 0) : 1;
     if (!mine) {
       this.scene.start('CreatureHub', { from: this.from, msg: 'YOU NEED A CREATURE TO FIGHT.' });
       return;
@@ -385,7 +390,7 @@ export class CreatureArena extends Phaser.Scene {
 
   private paintHud(): void {
     const name = (f: Fighter): string => (f === this.foe && this.boss ? f.c.name : f.c.name.toUpperCase());
-    this.labels.push(text(this, 8, 3, name(this.me), PALETTE.cream).setDepth(51));
+    this.labels.push(text(this, 8, 3, `${name(this.me)} LV${this.myLevel}`, PALETTE.cream).setDepth(51));
     this.labels.push(text(this, GAME_W - 8, 3, name(this.foe), this.boss ? PALETTE.gold : PALETTE.cream).setOrigin(1, 0).setDepth(51));
     this.timerText = centerText(this, GAME_W / 2, 7, '', PALETTE.fog).setDepth(51);
     button(this, GAME_W / 2, 18, 'QUIT', () => this.askQuit(), { width: 30, height: 8 }).setDepth(60);
@@ -882,11 +887,24 @@ export class CreatureArena extends Phaser.Scene {
     this.time.delayedCall(700, () => {
       const box = this.add.container(0, 0).setDepth(2000);
       box.add(this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0.6).setOrigin(0, 0).setInteractive());
-      box.add(this.add.rectangle(GAME_W / 2, GAME_H / 2, 220, 74, PALETTE.ink).setStrokeStyle(1, won ? PALETTE.gold : 0xc31f2e));
-      box.add(centerText(this, GAME_W / 2, GAME_H / 2 - 24, won ? (this.boss ? 'BOSS DEFEATED!' : 'VICTORY!') : 'DEFEATED', won ? PALETTE.gold : 0xff6a6a));
-      if (timeUp) box.add(centerText(this, GAME_W / 2, GAME_H / 2 - 13, 'TIME: MORE HEALTH LEFT WINS', PALETTE.ash));
-      box.add(centerText(this, GAME_W / 2, GAME_H / 2 - 2, r.msg, PALETTE.cream));
-      box.add(button(this, GAME_W / 2, GAME_H / 2 + 22, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, msg: r.msg }), { width: 80, height: 13 }));
+      box.add(this.add.rectangle(GAME_W / 2, GAME_H / 2, 236, 84, PALETTE.ink).setStrokeStyle(1, won ? PALETTE.gold : 0xc31f2e));
+      box.add(centerText(this, GAME_W / 2, GAME_H / 2 - 30, won ? (this.boss ? 'BOSS DEFEATED!' : 'VICTORY!') : 'DEFEATED', won ? PALETTE.gold : 0xff6a6a));
+      if (timeUp) box.add(centerText(this, GAME_W / 2, GAME_H / 2 - 20, 'TIME: MORE HEALTH LEFT WINS', PALETTE.ash));
+      box.add(centerText(this, GAME_W / 2, GAME_H / 2 - 9, won ? `YOU WIN ${r.paid} TOKENS.` : r.msg, PALETTE.cream).setMaxWidth(224));
+      // experience, and a level gained
+      if (won) {
+        const xpLine = r.xp ? `+${r.xp} XP` : this.myLevel >= MAX_LEVEL ? 'MAX LEVEL - NO MORE XP' : '';
+        if (xpLine) box.add(centerText(this, GAME_W / 2, GAME_H / 2 + 2, xpLine, 0x8ae88a));
+        if (r.levelUp) {
+          const up = centerText(this, GAME_W / 2, GAME_H / 2 + 13, `LEVEL UP!  LV ${r.levelUp}`, PALETTE.gold);
+          box.add(up);
+          up.setScale(0.6);
+          this.tweens.add({ targets: up, scale: 1, duration: 260, ease: 'Back.Out' });
+          this.tweens.add({ targets: up, alpha: 0.55, duration: 380, yoyo: true, repeat: -1, delay: 300 });
+          audio.sfx('chime', 0.7);
+        }
+      }
+      box.add(button(this, GAME_W / 2, GAME_H / 2 + 30, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, msg: r.msg }), { width: 80, height: 13 }));
     });
   }
 

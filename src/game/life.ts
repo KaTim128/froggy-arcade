@@ -29,9 +29,15 @@ export const RENT_PRICE = 200;
 export const RENT_DAYS = 7;
 /** The arcade shuts at 22:00. */
 export const CLOSE_HOUR = 22;
-/** Dark from 20:00 to 06:00. */
-export const DUSK_HOUR = 20;
+/**
+ * Night and day are the same length: dark from 18:00 to 06:00, light from
+ * 06:00 to 18:00 -- twelve hours each, ten minutes of play each.  The shops
+ * keep the same hours as the light (see `shopsOpen`).
+ */
+export const DUSK_HOUR = 18;
 export const DAWN_HOUR = 6;
+/** Sleeping takes you to this hour of the morning. */
+export const WAKE_HOUR = 8;
 /** Begging: one cash per this many real milliseconds of sitting there. */
 export const BEG_MS = 15 * 60 * 1000;
 /** What a sold thing fetches: this fraction of what it cost.  Never more. */
@@ -78,6 +84,14 @@ export function clock(t = L().t): Clock {
     closed: hour >= CLOSE_HOUR || hour < 8,
   };
 }
+
+/** Every shop keeps the daylight's hours: open 06:00 - 18:00, shut all night. */
+export function shopsOpen(c: Clock = clock()): boolean {
+  return !c.dark;
+}
+
+/** The shops' hours, as a sign on the door says them. */
+export const SHOP_HOURS = `${String(DAWN_HOUR).padStart(2, '0')}:00 - ${DUSK_HOUR}:00`;
 
 /** Days until rent is due (0 = due today, negative = overdue). */
 export function rentInDays(l = L()): number {
@@ -237,15 +251,20 @@ export function wear(id: string): Result {
 
 /**
  * Sleep until morning: on the condo floor (or a mattress, or a bed), or on
- * the street.  The clock goes to 08:00 of the next day.
+ * the street.  The clock goes to 08:00 of the next day (or of this one, if
+ * it is already past midnight).
+ *
+ * Only at night, wherever it is: once you have slept it is morning, and
+ * morning is no time for sleeping -- so a night can be slept through once,
+ * and the days cannot be skipped by lying down again and again.
  */
 export function sleep(where: 'street' | 'floor' | 'mattress' | 'bed'): Result {
   const c = clock();
-  if (where === 'street' && !c.dark) return no('TOO LIGHT AND TOO BUSY. WAIT FOR DARK.');
+  if (!c.dark) return no(where === 'street' ? 'TOO LIGHT AND TOO BUSY. WAIT FOR DARK.' : `YOU ARE NOT TIRED. SLEEP COMES AFTER ${DUSK_HOUR}:00.`);
   edit((l) => {
     const day = clock(l.t).day;
     // to 08:00 on the next morning (or this one, before dawn)
-    l.t = (c.hour < 8 ? day : day + 1) * DAY_SECONDS;
+    l.t = (c.hour < WAKE_HOUR ? day : day + 1) * DAY_SECONDS;
     if (l.rented && clock(l.t).day > l.rentDue) {
       l.rented = false;
       l.evicted = true;
@@ -253,7 +272,19 @@ export function sleep(where: 'street' | 'floor' | 'mattress' | 'bed'): Result {
     }
   });
   record('sleep');
-  return ok(where === 'street' ? 'A HARD NIGHT ON THE PAVEMENT. MORNING.' : 'YOU SLEEP RIGHT THROUGH TO MORNING.');
+  return ok(where === 'street' ? 'A HARD NIGHT ON THE PAVEMENT. MORNING - THE SHOPS ARE OPEN.' : 'YOU SLEEP RIGHT THROUGH TO MORNING.');
+}
+
+/**
+ * Where you can sleep tonight.  Your own place comes first: renting a unit,
+ * you sleep there, never on the street.  Without one, once the arcade's
+ * night is behind you, the pavement by its doors is yours.  (Before that,
+ * the arcade's closing IS the night -- see closingPull.)
+ */
+export function sleepPlace(): 'home' | 'street' | 'none' {
+  const s = store.get();
+  if (s.life.rented) return 'home';
+  return s.froggyGone ? 'street' : 'none';
 }
 
 /**

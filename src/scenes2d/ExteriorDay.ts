@@ -36,7 +36,8 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 import { ensureKeyInPocket, heldItems } from '../game/inventory';
 import { Pedestrians } from '../art/pedestrians';
-import { BEG_MS, begNextMs, canBeg, clock, collectBegging, sleep, startBegging, stopBegging, visit } from '../game/life';
+import { BEG_MS, begNextMs, canBeg, clock, collectBegging, sleep, sleepPlace, startBegging, stopBegging, visit } from '../game/life';
+import { nightfallOnce, onLightTurn } from '../game/dayNight';
 import { speak } from '../ui/talkPanel';
 import { backPlate } from '../ui/plate';
 
@@ -77,10 +78,19 @@ export class ExteriorDay extends Phaser.Scene {
   /** It has just turned midnight: the thoughts play, and nobody moves till they have. */
   private nightfall = false;
 
-  init(data: { fromArcade?: boolean; fromWest?: boolean; fromAlley?: boolean; fromEast?: boolean; nightfall?: boolean } = {}): void {
+  init(data: { fromArcade?: boolean; fromWest?: boolean; fromAlley?: boolean; fromEast?: boolean; nightfall?: boolean; atX?: number; woke?: string } = {}): void {
     this.cameFrom = data.fromArcade ? 'arcade' : data.fromWest ? 'west' : data.fromAlley ? 'alley' : data.fromEast ? 'east' : 'other';
     this.nightfall = data.nightfall === true;
+    this.atX = data.atX ?? null;
+    this.woke = data.woke ?? null;
   }
+
+  /** Where you stood when the light turned: the forecourt repaints round you. */
+  private atX: number | null = null;
+  /** Just woken on the mat, and what the night came to. */
+  private woke: string | null = null;
+  /** The life clock's night (not the story's midnight): the forecourt in the dark. */
+  private lifeDark = false;
 
   create(): void {
     this.talking = null;
@@ -106,7 +116,12 @@ export class ExteriorDay extends Phaser.Scene {
     fadeIn(this);
     audio.setScene(time === 'midnight' ? { music: 'neon_buzz', ambience: ['wind_low', 'crickets'] } : { music: 'theme_arcade', ambience: ['street_dusk'] });
 
-    const refs = paintExterior(this, { night: time === 'midnight', day: time === 'day' });
+    // the clock's night (twelve hours of it, as long as the day): the
+    // forecourt at dusk colours under a dark sky, the lamps and the arcade's
+    // lit front glowing in it.  (The story's midnight paints its own.)
+    this.lifeDark = time !== 'midnight' && clock().dark;
+    const refs = paintExterior(this, { night: time === 'midnight', day: time === 'day' && !this.lifeDark, darkSky: this.lifeDark });
+    if (this.lifeDark) this.paintNight(refs.doorX);
     startSignFlicker(this, refs);
     this.doorX = refs.doorX;
     this.errand = null;
@@ -125,7 +140,7 @@ export class ExteriorDay extends Phaser.Scene {
     // scenes -- the alley, the dark arcade, the street after hours -- keep it.
     // On the pavement in front of the arcade's windows, clear of the doors
     // (or at the end you walked in from: the road west, the alley mouth).
-    const startX = this.cameFrom === 'west' ? 26 : this.cameFrom === 'alley' ? ALLEY_X - 6 : this.cameFrom === 'east' ? GAME_W - 10 : this.doorX + 46;
+    const startX = this.woke ? BEG_X - 3 : this.atX ?? (this.cameFrom === 'west' ? 26 : this.cameFrom === 'alley' ? ALLEY_X - 6 : this.cameFrom === 'east' ? GAME_W - 10 : this.doorX + 46);
     this.player = new Player(this, startX, WALK_Y, time === 'midnight');
     // The forecourt is loose ground, not the arcade's carpet.  This scene
     // never said so, which left the walk outside sounding like the walk in.
@@ -182,6 +197,22 @@ export class ExteriorDay extends Phaser.Scene {
     // the way west, marked at the edge of the pavement
     text(this, 6, WALK_Y + 4, '<', time === 'midnight' ? PALETTE.ash : PALETTE.cream).setDepth(800).setAlpha(0.7);
     if (time === 'midnight' && this.nightfall) this.midnightThoughts();
+    if (time !== 'midnight') {
+      // dusk or dawn while you are out here: the forecourt repaints for it
+      onLightTurn(
+        this,
+        () => {
+          this.locked = true;
+          fadeToScene(this, 'ExteriorDay', { atX: Math.round(this.player.x) });
+        },
+        () => !this.locked && !this.busy() && !this.begging,
+      );
+      if (this.woke) this.wakeUp(this.woke);
+      else {
+        const line = nightfallOnce();
+        if (line) this.time.delayedCall(500, () => this.say(line));
+      }
+    }
   }
 
   private time0: 'day' | 'evening' | 'midnight' = 'day';
@@ -360,16 +391,13 @@ export class ExteriorDay extends Phaser.Scene {
         return;
       }
       const c = clock();
-      if (c.dark && !store.get().life.rented && store.get().froggyGone) {
+      if (c.dark && sleepPlace() === 'street') {
         // nowhere else to go: the pavement for the night
-        this.locked = true;
-        this.cameras.main.fadeOut(900, 0, 0, 0);
-        this.time.delayedCall(1000, () => {
-          const r = sleep('street');
-          this.cameras.main.fadeIn(900, 0, 0, 0);
-          this.say(r.msg);
-          this.locked = false;
-        });
+        this.sleepRough();
+        return;
+      }
+      if (c.dark && sleepPlace() === 'home') {
+        this.say('YOU HAVE A BED AT LILY\'S CONDOS, WEST OF HERE. SLEEP THERE.');
         return;
       }
       // only when there is nothing left: no tokens and no cash
@@ -442,6 +470,54 @@ export class ExteriorDay extends Phaser.Scene {
   }
 
   /** Up off the cardboard: begging over, and what is in the can is yours. */
+  /**
+   * A night on the pavement: down onto the mat, flat out, the Zs going up,
+   * the dark coming in; then the clock to the morning, and the forecourt in
+   * daylight with the shops open again.
+   */
+  private sleepRough(): void {
+    this.locked = true;
+    this.errand = null;
+    this.prompt.setVisible(false);
+    this.promptPlate.setVisible(false);
+    this.player.setPosition(BEG_X - 3, WALK_Y);
+    this.player.lie(1);
+    this.cup?.setVisible(false);
+    // (over the mat, clear of the sleeper)
+    this.begText.setText('GOOD NIGHT...').setPosition(BEG_X, WALK_Y - 40).setVisible(true).setAlpha(1);
+    const zs = this.time.addEvent({
+      delay: 650,
+      loop: true,
+      callback: () => {
+        const z = text(this, BEG_X - 10 + Math.random() * 6, WALK_Y - 10, 'Z', PALETTE.cream).setDepth(805);
+        this.tweens.add({ targets: z, x: z.x - 8, y: z.y - 22, alpha: 0, duration: 1600, onComplete: () => z.destroy() });
+      },
+    });
+    this.time.delayedCall(2200, () => {
+      this.cameras.main.fadeOut(1400, 0, 0, 0);
+      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+        zs.remove();
+        this.begText.setVisible(false);
+        const r = sleep('street');
+        // the forecourt again, in the morning's light
+        this.scene.restart({ woke: r.msg });
+      });
+    });
+  }
+
+  /** On the mat at first light: a moment flat out, then up. */
+  private wakeUp(msg: string): void {
+    this.locked = true;
+    this.player.lie(1);
+    this.cup?.setVisible(false);
+    this.time.delayedCall(1300, () => {
+      this.player.getUp();
+      this.cup?.setVisible(true);
+      this.locked = false;
+      this.say(msg);
+    });
+  }
+
   private getUp(): void {
     const got = stopBegging();
     this.begging = false;
@@ -451,7 +527,26 @@ export class ExteriorDay extends Phaser.Scene {
     this.say(got ? `YOU GET UP. $${got} IN THE CAN.` : 'YOU GET UP.');
   }
 
- /** The man in black says something, in his own box. */
+  /**
+   * The forecourt after dark: the sky and the street under a deep blue, the
+   * arcade's front and its lamps glowing through it, a lamp's pool on the
+   * pavement by the mat.
+   */
+  private paintNight(doorX: number): void {
+    this.add.rectangle(0, 0, GAME_W, GAME_H, 0x080c24, 0.42).setOrigin(0, 0).setDepth(700);
+    const glow = (x: number, y: number, w: number, h: number, col: number, a: number) =>
+      this.add.ellipse(x, y, w, h, col, a).setDepth(701).setBlendMode(Phaser.BlendModes.ADD);
+    glow(doorX, 70, 150, 40, 0xff4fa3, 0.22);
+    glow(doorX, 132, 60, 40, 0xffe0a0, 0.25);
+    glow(doorX - 33, 102, 26, 26, 0xffe0a0, 0.3);
+    glow(doorX + 33, 102, 26, 26, 0xffe0a0, 0.3);
+    glow(BEG_X, WALK_Y + 2, 46, 10, 0xffd890, 0.12);
+    // a few windows lit in the buildings behind
+    const w = this.add.graphics().setDepth(701);
+    for (let i = 0; i < 9; i++) w.fillStyle(0xf0d070, 0.55).fillRect(12 + ((i * 71) % 290), 40 + ((i * 29) % 20), 2, 2);
+  }
+
+  /** The man in black says something, in his own box. */
   private manSays(line: string): void {
     if (this.talking) return;
     this.talking = speak(this, 'man', line, () => (this.talking = null));
@@ -545,7 +640,8 @@ export class ExteriorDay extends Phaser.Scene {
       return;
     }
 
-    const begLabel = clock().dark && !store.get().life.rented && store.get().froggyGone ? '[E] SLEEP HERE' : canBeg() ? '[E] BEG' : 'BEG WHEN BROKE';
+    const night = clock().dark ? sleepPlace() : null;
+    const begLabel = night === 'street' ? '[E] SLEEP HERE' : night === 'home' ? 'YOUR BED IS AT LILY\'S' : canBeg() ? '[E] BEG' : 'BEG WHEN BROKE';
     const label = this.spot === 'beg' ? begLabel : this.spot === 'man' ? '[E] TALK' : this.spot === 'alley' ? '[E] ALLEY' : this.time0 === 'midnight' ? '[E] DOOR' : '[E] GO IN';
     this.showPrompt(label);
   }

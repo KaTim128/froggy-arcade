@@ -28,6 +28,8 @@ import { grain, seeded } from '../../art/surface';
 import { speak } from '../../ui/talkPanel';
 import type { SpeakerId } from '../../ui/portraits';
 import { backPlate } from '../../ui/plate';
+import { SHOP_HOURS, shopsOpen } from '../../game/life';
+import { onLightTurn } from '../../game/dayNight';
 
 /** The back wall's foot: the floor starts here. */
 export const FLOOR_TOP = 100;
@@ -110,6 +112,14 @@ export abstract class WalkRoom extends Phaser.Scene {
   /** Sat on something: where you were standing, to step back to on getting up. */
   private seatReturn: { x: number; y: number } | null = null;
 
+  /**
+   * A shop keeps the shops' hours (see life `shopsOpen`): shut all night.
+   * Night falling while you are in one, you are shown out; arriving at
+   * night, you are not let in.
+   */
+  protected keepsShopHours = false;
+  private closingNight = false;
+
   /** Paint the room (wall, floor, the things in it) into the scene. */
   protected abstract paintRoom(): void;
   /** What there is to walk up to. */
@@ -124,6 +134,7 @@ export abstract class WalkRoom extends Phaser.Scene {
   create(): void {
     froggyLayer.clear();
     this.locked = false;
+    this.closingNight = false;
     this.panel = null;
     this.talking = null;
     this.seatReturn = null;
@@ -162,6 +173,29 @@ export abstract class WalkRoom extends Phaser.Scene {
     kb?.on('keydown-ESC', () => this.closePanel());
     this.events.on('shop-closed', () => this.afterModal());
     this.entered();
+    if (this.keepsShopHours) {
+      if (!shopsOpen()) this.time.delayedCall(300, () => this.closeForNight());
+      onLightTurn(this, (dark) => dark && this.closeForNight());
+    }
+  }
+
+  /** Night: whatever is open is put away, the keeper says so, and you are shown out. */
+  protected closeForNight(): void {
+    // (already on the way out of the door, or shown out already)
+    if (this.closingNight || (this.locked && !this.scene.isActive('Shop'))) return;
+    this.closingNight = true;
+    this.closePanel();
+    if (this.scene.isActive('Shop')) this.scene.stop('Shop');
+    this.talking?.destroy();
+    this.talking = null;
+    if (this.player.seated) this.player.getUp();
+    this.walker.cancel();
+    this.locked = true;
+    this.say(`WE ARE CLOSING FOR THE NIGHT. OPEN AGAIN ${SHOP_HOURS}.`);
+    this.time.delayedCall(1800, () => {
+      audio.sfx('door_open', 0.5);
+      this.leave();
+    });
   }
 
   /** The way out: by default the door standing at the left end of the floor. */
@@ -189,7 +223,8 @@ export abstract class WalkRoom extends Phaser.Scene {
   /** A modal scene (the wardrobe, say) closed over this room. */
   protected afterModal(): void {
     this.modalClosedAt = performance.now();
-    this.locked = false;
+    // (not when it was night that closed it: you are on your way out)
+    if (!this.closingNight) this.locked = false;
     // (the wardrobe may have changed what you have on)
     this.refreshPlayer();
   }

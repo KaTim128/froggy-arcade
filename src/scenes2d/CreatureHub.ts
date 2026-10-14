@@ -19,10 +19,11 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
 import { drawAttackIcon } from '../art/attackIcons';
 import { backPlate } from '../ui/plate';
+import { xpProgress } from '../game/creatureLevel';
 import {
   BATTLE_COST, BATTLE_WIN, BIOMES, BOSS_AFTER, DEFEAT_PENALTY, ELEMENTS, MAX_OWNED, RARITIES, STARTERS, TIERS, creatureById, tierOdds, type Creature,
 } from '../game/creatures';
-import { activeOwned, bossOpen, claimStarter, needsRecovery, openPack, pickCard, release, retreat, setActive, setHanded } from '../game/creatureClash';
+import { activeOwned, ownedCreature, bossOpen, claimStarter, needsRecovery, openPack, pickCard, release, retreat, setActive, setHanded } from '../game/creatureClash';
 
 type Screen = 'home' | 'starter' | 'recruit' | 'pack' | 'map' | 'controls';
 
@@ -182,8 +183,10 @@ export class CreatureHub extends Phaser.Scene {
    * One creature's card: its picture on a panel in its element's colours, its
    * name and rarity, health and speed as bars, and the three attacks with
    * their icons.  `active` gives it the gold edge of the one in the ring.
+   * Its level is in a chip on the picture; with `xp` (one you own), the
+   * experience towards the next level as a bar, or MAX at level 3.
    */
-  private card(c: Creature, x: number, y: number, w: number, h: number, big = true, active = false): void {
+  private card(c: Creature, x: number, y: number, w: number, h: number, big = true, active = false, xp?: number): void {
     const L = this.layer;
     const r = RARITIES[c.rarity];
     const el = ELEMENTS[c.element];
@@ -199,12 +202,24 @@ export class CreatureHub extends Phaser.Scene {
     const tag = text(this, x + w - 6, y + 5, r.name.split(' ')[0], r.col).setOrigin(1, 0);
     L.add(this.add.rectangle(x + w - 3, y + 3, Math.ceil(tag.width) + 6, 11, 0x0a0d1e, 0.85).setOrigin(1, 0).setStrokeStyle(1, r.col));
     L.add(tag);
+    // the level, in a chip on the other corner
+    const lv = xpProgress(xp ?? 0);
+    const lvT = text(this, x + 6, y + 5, `LV ${lv.level}`, lv.max ? PALETTE.gold : PALETTE.cream);
+    L.add(this.add.rectangle(x + 3, y + 3, Math.ceil(lvT.width) + 6, 11, 0x0a0d1e, 0.85).setOrigin(0, 0).setStrokeStyle(1, lv.max ? PALETTE.gold : 0x6a7090));
+    L.add(lvT);
     let ty = y + artH + 4;
     L.add(text(this, x + 4, ty, c.name.toUpperCase(), PALETTE.cream).setMaxWidth(w - 6));
     ty += 9;
     L.add(text(this, x + 4, ty, `${r.name} ${el.name}`, r.col));
     if (!big) return;
     ty += 10;
+    if (xp !== undefined) {
+      // experience: how far into this level, or MAX
+      L.add(text(this, x + 4, ty, 'XP', PALETTE.ash));
+      this.bar(x + 18, ty + 2, w - 44, lv.max ? 1 : lv.into / lv.need, lv.max ? PALETTE.gold : 0xc08aff);
+      L.add(text(this, x + w - 4, ty, lv.max ? 'MAX' : `${lv.into}/${lv.need}`, lv.max ? PALETTE.gold : PALETTE.fog).setOrigin(1, 0));
+      ty += 8;
+    }
     const bw = w - 44;
     L.add(text(this, x + 4, ty, 'HP', PALETTE.ash));
     this.bar(x + 18, ty + 2, bw, c.hp / 320, 0x6ad86a);
@@ -274,9 +289,9 @@ export class CreatureHub extends Phaser.Scene {
         L.add(centerText(this, x + w / 2, y + 80, 'RECRUIT TO FILL', 0x4a4e68));
         continue;
       }
-      const cr = creatureById(o.id)!;
+      const cr = ownedCreature(o)!;
       const on = o.uid === act?.uid;
-      this.card(cr, x, y, w, h, true, on);
+      this.card(cr, x, y, w, h, true, on, o.xp ?? 0);
       if (on) {
         // the one that fights: a gold chip where USE would be
         L.add(this.add.rectangle(x + 2, y + h + 4, 42, 12, 0x3a2e10).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold));

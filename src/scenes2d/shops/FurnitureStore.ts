@@ -33,6 +33,8 @@ export class FurnitureStore extends WalkRoom {
     super('FurnitureStore');
   }
 
+  protected keepsShopHours = true;
+
   protected music(): string {
     return 'room_lounge';
   }
