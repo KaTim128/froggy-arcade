@@ -178,17 +178,64 @@ export class ClothesStore extends WalkRoom {
     // back wall, its curtain, and its name on the pelmet
     const fl = FIT_X - FIT_W / 2;
     const fr = this.add.graphics().setDepth(depthFor(BACK_ROW));
-    fr.fillStyle(0x000000, 0.18).fillRect(fl + 1, BACK_ROW, FIT_W, 3);
-    fr.fillStyle(0x14100c, 1).fillRect(fl, FIT_TOP, FIT_W, BACK_ROW - FIT_TOP);
-    fr.fillStyle(0x7b2a5a, 1).fillRect(fl + 1, FIT_TOP + 5, FIT_W - 2, BACK_ROW - FIT_TOP - 6);
-    for (let k = 0; k < FIT_W - 2; k += 3) fr.fillStyle(0x5a1a40, 1).fillRect(fl + 1 + k, FIT_TOP + 5, 1, BACK_ROW - FIT_TOP - 6);
-    // the curtain drawn back a little at one side, the stool inside showing
-    fr.fillStyle(0x3a2030, 1).fillRect(fl + FIT_W - 8, FIT_TOP + 5, 7, BACK_ROW - FIT_TOP - 6);
-    fr.fillStyle(0x8a6a48, 1).fillRect(fl + FIT_W - 7, BACK_ROW - 10, 6, 2);
-    fr.fillStyle(0x9a3a6a, 1).fillRect(fl + FIT_W - 10, FIT_TOP + 5, 2, BACK_ROW - FIT_TOP - 6);
-    // the rail, in brass, with the curtain rings
-    fr.fillStyle(0xd8a838, 1).fillRect(fl - 1, FIT_TOP, FIT_W + 2, 2);
-    for (let k = 2; k < FIT_W; k += 5) fr.fillStyle(0xb88828, 1).fillRect(fl + k, FIT_TOP + 2, 2, 2);
+    const fh = BACK_ROW - FIT_TOP;
+    // the shadow it throws on the floor, and the cubicle's own dark inside
+    fr.fillStyle(0x000000, 0.2).fillRect(fl + 1, BACK_ROW, FIT_W, 3);
+    fr.fillStyle(0x14100c, 1).fillRect(fl - 1, FIT_TOP - 1, FIT_W + 2, fh + 1);
+    fr.fillStyle(0x241428, 1).fillRect(fl, FIT_TOP + 4, FIT_W, fh - 4);
+    // ---- the panelled sides of the booth, in dark walnut
+    for (const sx of [fl, fl + FIT_W - 3]) {
+      fr.fillStyle(0x4a3326, 1).fillRect(sx, FIT_TOP + 4, 3, fh - 4);
+      fr.fillStyle(0x6a4a34, 1).fillRect(sx, FIT_TOP + 4, 1, fh - 4);
+      fr.fillStyle(0x32221a, 1).fillRect(sx + 2, FIT_TOP + 4, 1, fh - 4);
+    }
+    // ---- the curtain: heavy velvet, drawn most of the way across, with
+    // folds that catch the light, a sweeping hem and a gap at one side
+    const cl = fl + 3;
+    const cw = FIT_W - 10;
+    const ct = FIT_TOP + 5;
+    const ch = fh - 5;
+    for (let k = 0; k < cw; k++) {
+      const fold = Math.sin((k / 2.4) * Math.PI) * 0.5 + 0.5;
+      const col = fold > 0.72 ? 0xa2447a : fold > 0.36 ? 0x7b2a5a : 0x571a3e;
+      fr.fillStyle(col, 1).fillRect(cl + k, ct, 1, ch);
+      if (fold > 0.86) fr.fillStyle(0xc45a94, 0.55).fillRect(cl + k, ct + 1, 1, ch - 6);
+    }
+    // the hem, gathered, and the shadow it drops on the floor of the booth
+    for (let k = 0; k < cw; k++) {
+      const dip = (k % 5 === 2 ? 1 : 0) + (k % 3 === 0 ? 1 : 0);
+      fr.fillStyle(0x3e1230, 1).fillRect(cl + k, ct + ch - 2 + dip, 1, 2);
+    }
+    fr.fillStyle(0x000000, 0.25).fillRect(cl, ct + ch, cw, 1);
+    // the leading edge of the curtain, catching the shop light
+    fr.fillStyle(0xd07aa8, 0.8).fillRect(cl + cw - 1, ct, 1, ch);
+    // ---- through the gap: the lit inside, a mirror on the back wall, a
+    // stool, a hook with something hung on it, and the carpet
+    const gx = cl + cw;
+    const gw = fl + FIT_W - 3 - gx;
+    fr.fillStyle(0x3a2438, 1).fillRect(gx, ct, gw, ch);
+    fr.fillStyle(0xfff0d0, 0.16).fillRect(gx, ct, gw, ch);
+    fr.fillStyle(0x8a94a0, 1).fillRect(gx + 1, ct + 3, gw - 2, 14);
+    fr.fillStyle(0xc8d8e0, 1).fillRect(gx + 1, ct + 4, gw - 3, 12);
+    fr.fillStyle(0xffffff, 0.45).fillRect(gx + 2, ct + 5, 1, 9);
+    fr.fillStyle(0x6a4a34, 1).fillRect(gx + 1, BACK_ROW - 8, gw - 2, 2);
+    fr.fillStyle(0x8a6a48, 1).fillRect(gx + 1, BACK_ROW - 8, gw - 2, 1);
+    fr.fillStyle(0x4a3326, 1).fillRect(gx + 2, BACK_ROW - 6, 1, 5).fillRect(gx + gw - 3, BACK_ROW - 6, 1, 5);
+    fr.fillStyle(0x7b2a5a, 1).fillRect(gx, BACK_ROW - 2, gw, 2);
+    // ---- the rail: brass, with rings threaded on it, and the pelmet over
+    fr.fillStyle(0x2a1430, 1).fillRect(fl - 1, FIT_TOP - 4, FIT_W + 2, 5);
+    fr.fillStyle(0x4a2450, 1).fillRect(fl, FIT_TOP - 3, FIT_W, 3);
+    fr.fillStyle(0x6a3a70, 1).fillRect(fl, FIT_TOP - 3, FIT_W, 1);
+    fr.fillStyle(0xd8a838, 1).fillRect(fl - 1, FIT_TOP + 1, FIT_W + 2, 2);
+    fr.fillStyle(0xf0d070, 1).fillRect(fl - 1, FIT_TOP + 1, FIT_W + 2, 1);
+    fr.fillStyle(0x8a6418, 1).fillRect(fl - 1, FIT_TOP + 3, FIT_W + 2, 1);
+    for (let k = 2; k < FIT_W - 1; k += 4) {
+      fr.fillStyle(0xb88828, 1).fillRect(fl + k, FIT_TOP + 3, 2, 2);
+      fr.fillStyle(0xf0d070, 1).fillRect(fl + k, FIT_TOP + 3, 1, 1);
+    }
+    // the light over the booth, and the pool it throws down the curtain
+    fr.fillStyle(0xfff0d0, 0.1).fillRect(fl, FIT_TOP + 5, FIT_W, 10);
+    fr.fillStyle(0xfff0d0, 0.06).fillRect(fl, FIT_TOP + 15, FIT_W, 12);
     // and its little sign on the wall over it
     const sign = text(this, FIT_X, FIT_TOP - 11, 'FITTING', 0xff8ac0).setOrigin(0.5, 0).setDepth(2.1);
     this.add.rectangle(FIT_X, FIT_TOP - 7, sign.width + 6, 10, 0x2a1430).setStrokeStyle(1, 0xd8a838).setDepth(2);
