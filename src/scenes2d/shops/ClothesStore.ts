@@ -10,26 +10,34 @@
 
 import Phaser from 'phaser';
 import { PALETTE } from '../../render/palette';
-import { audio } from '../../core/audio';
 import { store } from '../../core/state';
 import { text } from '../../core/ui';
-import { GAME_H } from '../../render/pixelScaler';
+import { GAME_H, GAME_W } from '../../render/pixelScaler';
 import { Player, depthFor, type Look } from '../../art/player';
 import { COSMETICS, cosmeticById, lookFor, type CosmeticDef } from '../../game/catalog';
-import { buyCosmetic, record, wear } from '../../game/life';
+import { record } from '../../game/life';
 import { COUNTER_RIGHT, WalkRoom, type Fixture } from '../rooms/WalkRoom';
 import { ASSISTANT_LOOK } from '../../ui/portraits';
 
 const FLOOR = 100;
 const BACK_ROW = FLOOR + 22;
 const FRONT_ROW = FLOOR + 52;
-/** The shop's width; the fitting room stands in the middle of it. */
-const SHOP_W = 460;
-const FIT_X = SHOP_W / 2;
+/**
+ * ---- ONE SCREEN WIDE.
+ *
+ * Threads used to be four hundred and sixty pixels of rails, with a price
+ * label on every single garment in the catalogue: buying socks meant walking
+ * the length of it.  The shop is now exactly the screen -- a couple of
+ * dressed mannequins, the hats, the mirror and the fitting room -- and the
+ * whole range is bought from THE RAILS CARD at the till (scenes2d/Shop, kind
+ * 'clothes'), which fits on one screen on any phone.
+ */
+const SHOP_W = GAME_W;
+const FIT_X = 206;
 const FIT_W = 26;
 /** The booth's top: a cubicle a little taller than a person, not a wardrobe to the ceiling. */
 const FIT_TOP = 84;
-const MIRROR_X = 335;
+const MIRROR_X = 258;
 
 /** A bald, pale shop dummy, wearing `top`. */
 function mannequin(top: CosmeticDef): Look {
@@ -70,6 +78,7 @@ export class ClothesStore extends WalkRoom {
     this.worldW = SHOP_W;
     this.bounds.width = this.worldW - 20;
     this.spots = [];
+    this.racks = [];
     const W = this.worldW;
     const g = this.add.graphics().setDepth(0);
     // the wall: pink plaster and white panelling; a polished concrete floor
@@ -87,80 +96,77 @@ export class ClothesStore extends WalkRoom {
     text(this, W / 2, 26, 'THREADS', 0xc0306a).setOrigin(0.5, 0).setDepth(1);
     text(this, W / 2, 36, 'CLOTHING AND ACCESSORIES', 0x8a5a70).setOrigin(0.5, 0).setDepth(1);
 
-    // ---- tops, on mannequins on little round stands
-    // (either side of the fitting room: three before it, the rest after)
-    this.forSale('top').forEach((c, i) => {
-      const x = i < 3 ? COUNTER_RIGHT + 12 + i * 30 : FIT_X + FIT_W / 2 + 16 + (i - 3) * 30;
-      const s = this.add.graphics().setDepth(depthFor(BACK_ROW) - 0.0001);
-      s.fillStyle(0x14100c, 1).fillEllipse(x, BACK_ROW, 16, 5);
-      s.fillStyle(0xd8d0c8, 1).fillEllipse(x, BACK_ROW - 1, 14, 3);
+    // ---- tops, on two mannequins in the window: today's look, not the catalogue
+    this.forSale('top').slice(0, 2).forEach((c, i) => {
+      const x = COUNTER_RIGHT + 16 + i * 34;
+      const st = this.add.graphics().setDepth(depthFor(BACK_ROW) - 0.0001);
+      st.fillStyle(0x14100c, 1).fillEllipse(x, BACK_ROW, 16, 5);
+      st.fillStyle(0xd8d0c8, 1).fillEllipse(x, BACK_ROW - 1, 14, 3);
       new Player(this, x, BACK_ROW - 1, false, mannequin(c));
       this.tag(x, BACK_ROW + 2, c.price);
       this.spots.push({ c, x, y: BACK_ROW, depth: 5 });
     });
 
-    // ---- trousers, folded on a table
+    // ---- a table of folded things, out in front
     const legs = this.forSale('legs');
-    const tx = 172;
+    const tx = 120;
     const t = this.add.graphics().setDepth(depthFor(FRONT_ROW));
-    t.fillStyle(0x14100c, 1).fillRect(tx - 34, FRONT_ROW - 12, 68, 12);
-    t.fillStyle(0xf0ece4, 1).fillRect(tx - 33, FRONT_ROW - 11, 66, 4);
-    t.fillStyle(0xb8a890, 1).fillRect(tx - 31, FRONT_ROW - 7, 3, 7).fillRect(tx + 28, FRONT_ROW - 7, 3, 7);
-    legs.forEach((c, i) => {
-      const x = tx - 20 + i * 20;
+    t.fillStyle(0x14100c, 1).fillRect(tx - 30, FRONT_ROW - 12, 60, 12);
+    t.fillStyle(0xf0ece4, 1).fillRect(tx - 29, FRONT_ROW - 11, 58, 4);
+    t.fillStyle(0xb8a890, 1).fillRect(tx - 27, FRONT_ROW - 7, 3, 7).fillRect(tx + 24, FRONT_ROW - 7, 3, 7);
+    legs.slice(0, 3).forEach((c, i) => {
+      const x = tx - 18 + i * 18;
       t.fillStyle(0x14100c, 1).fillRect(x - 7, FRONT_ROW - 18, 14, 7);
       t.fillStyle(c.cols.J ?? 0x444444, 1).fillRect(x - 6, FRONT_ROW - 17, 12, 5);
       t.fillStyle(c.cols.j ?? 0x333333, 1).fillRect(x - 6, FRONT_ROW - 15, 12, 1);
-      this.tag(x, FRONT_ROW + 1, c.price);
-      this.spots.push({ c, x, y: FRONT_ROW, depth: 0 });
     });
-    this.solidBox(tx, FRONT_ROW, 68);
+    this.tagRack(tx, FRONT_ROW + 1, 'TROUSERS');
+    this.solidBox(tx, FRONT_ROW, 60);
+    this.racks.push({ x: tx, y: FRONT_ROW, w: 60, depth: 0, tab: 1, name: 'THE TABLE' });
 
-    // ---- shoes, on a low shelf
+    // ---- shoes on a low shelf
     const shoes = this.forSale('shoes');
-    const sx = 262;
+    const sx = 176;
     const sh = this.add.graphics().setDepth(depthFor(FRONT_ROW));
-    sh.fillStyle(0x14100c, 1).fillRect(sx - 22, FRONT_ROW - 6, 44, 6);
-    sh.fillStyle(0x8a6a48, 1).fillRect(sx - 21, FRONT_ROW - 5, 42, 4);
-    shoes.forEach((c, i) => {
-      const x = sx - 10 + i * 20;
-      for (const k of [-3, 2]) {
+    sh.fillStyle(0x14100c, 1).fillRect(sx - 20, FRONT_ROW - 6, 40, 6);
+    sh.fillStyle(0x8a6a48, 1).fillRect(sx - 19, FRONT_ROW - 5, 38, 4);
+    shoes.slice(0, 3).forEach((c, i) => {
+      const x = sx - 12 + i * 12;
+      for (const k of [-3, 1]) {
         sh.fillStyle(0x14100c, 1).fillRect(x + k - 1, FRONT_ROW - 10, 6, 5);
         sh.fillStyle(c.cols.K ?? 0x333333, 1).fillRect(x + k, FRONT_ROW - 9, 4, 3);
         sh.fillStyle(c.cols.W ?? 0x555555, 1).fillRect(x + k, FRONT_ROW - 7, 5, 1);
       }
-      this.tag(x, FRONT_ROW + 1, c.price);
-      this.spots.push({ c, x, y: FRONT_ROW, depth: 0 });
     });
-    this.solidBox(sx, FRONT_ROW, 44);
+    this.tagRack(sx, FRONT_ROW + 1, 'SHOES');
+    this.solidBox(sx, FRONT_ROW, 40);
+    this.racks.push({ x: sx, y: FRONT_ROW, w: 40, depth: 0, tab: 1, name: 'THE SHELF' });
 
-    // ---- hats, on a stand
+    // ---- hats on a stand, and the scarves on hooks beside the mirror
     const hats = this.forSale('hat');
-    const hx = 334;
+    const hx = 300;
     const hs = this.add.graphics().setDepth(depthFor(FRONT_ROW));
     hs.fillStyle(0x14100c, 1).fillRect(hx - 1, FRONT_ROW - 30, 3, 30).fillRect(hx - 8, FRONT_ROW - 2, 17, 2);
-    hats.forEach((c, i) => {
+    hats.slice(0, 2).forEach((c, i) => {
       const x = hx + (i === 0 ? -9 : 9);
       const y = FRONT_ROW - 26 + i * 8;
       hs.fillStyle(0x14100c, 1).fillEllipse(x, y, 12, 8);
       hs.fillStyle(c.cols.B ?? 0x444444, 1).fillEllipse(x, y, 10, 6);
       hs.fillStyle(c.cols.b ?? 0x666666, 1).fillRect(x - 5, y + 1, c.head ? 9 : 10, 2);
-      this.tag(x, FRONT_ROW + 1, c.price);
-      this.spots.push({ c, x, y: FRONT_ROW, depth: 0 });
     });
+    this.tagRack(hx, FRONT_ROW + 1, 'HATS');
     this.solidBox(hx, FRONT_ROW, 10);
+    this.racks.push({ x: hx, y: FRONT_ROW, w: 14, depth: 0, tab: 2, name: 'THE HAT STAND' });
 
-    // ---- scarves, on hooks on the wall
-    this.forSale('scarf').forEach((c, i) => {
-      const x = MIRROR_X + 36 + i * 22;
+    this.forSale('scarf').slice(0, 2).forEach((c, i) => {
+      const x = MIRROR_X + 20 + i * 18;
       const sc = this.add.graphics().setDepth(2);
       sc.fillStyle(0x3a3a3a, 1).fillRect(x - 1, 52, 3, 2);
       sc.fillStyle(0x14100c, 1).fillRect(x - 4, 53, 9, 28);
       sc.fillStyle(c.cols.w ?? 0x888888, 1).fillRect(x - 3, 54, 7, 26);
       sc.fillStyle(0xffffff, 0.25).fillRect(x - 3, 58, 7, 1).fillRect(x - 3, 70, 7, 1);
-      text(this, x, 84, `$${c.price}`, 0x8a3a5a).setOrigin(0.5, 0).setDepth(2);
-      this.spots.push({ c, x, y: FLOOR, depth: 0, wall: true });
     });
+    this.racks.push({ x: MIRROR_X + 29, y: FLOOR, w: 40, depth: 0, wall: true, tab: 2, name: 'THE HOOKS' });
 
     // ---- the mirror
     const m = this.add.graphics().setDepth(2);
@@ -194,7 +200,9 @@ export class ClothesStore extends WalkRoom {
       front: 0x2a2430,
       trim: 0xc0306a,
       who: 'assistant',
-      line: '"TRY ANYTHING ON YOU LIKE. THE FITTING ROOM IS IN THE MIDDLE, BY THE MIRROR."',
+      line: '"TRY ANYTHING ON YOU LIKE. THE FITTING ROOM IS BY THE MIRROR."',
+      useLabel: '[E] THE RAILS',
+      onUse: () => this.rails(0),
       dress: (g, x, top) => {
         // the till, and a folded jumper waiting to be bagged
         g.fillStyle(0x14100c, 1).fillRect(x - 4, top - 7, 12, 7);
@@ -218,16 +226,30 @@ export class ClothesStore extends WalkRoom {
 
   protected fixtures(): Fixture[] {
     const out: Fixture[] = [];
+    // the two dressed mannequins: what is in the window, and the way in to
+    // the tops on the card
     for (const s of this.spots) {
       out.push({
         x: s.x,
-        y: s.wall ? s.y : s.y + (s.depth ? 0 : 4),
+        y: s.y + (s.depth ? 0 : 4),
         w: 14,
         depth: s.depth,
-        wall: s.wall,
-        label: () => `[E] ${s.c.name} ${this.owns(s.c.id) ? '(YOURS)' : `$${s.c.price}`}`,
-        use: () => this.show(s.c),
-        hit: s.wall ? { x: s.x - 6, y: 50, w: 12, h: 34 } : { x: s.x - 8, y: s.y - (s.depth ? 28 : 22), w: 16, h: s.depth ? 30 : 24 },
+        label: () => `[E] ${s.c.name} $${s.c.price}`,
+        use: () => this.rails(0),
+        hit: { x: s.x - 8, y: s.y - 30, w: 16, h: 32 },
+      });
+    }
+    // and every rack: the card, open at what that rack holds
+    for (const r of this.racks) {
+      out.push({
+        x: r.x,
+        y: r.y,
+        w: r.w,
+        depth: r.depth,
+        wall: r.wall,
+        label: () => `[E] ${r.name}`,
+        use: () => this.rails(r.tab),
+        hit: r.wall ? { x: r.x - r.w / 2, y: 48, w: r.w, h: 40 } : { x: r.x - r.w / 2, y: r.y - 26, w: r.w, h: 30 },
       });
     }
     out.push({ x: MIRROR_X, y: this.floorTop, w: 22, depth: 0, wall: true, label: () => '[E] MIRROR', use: () => this.mirror(), hit: { x: MIRROR_X - 13, y: 30, w: 26, h: 56 } });
@@ -236,51 +258,19 @@ export class ClothesStore extends WalkRoom {
     return out;
   }
 
-  private owns(id: string): boolean {
-    return store.get().life.wardrobe.includes(id);
+  /** THE RAILS, on one card: the whole range, bought and worn from here. */
+  private rails(tab: number): void {
+    if (this.busy()) return;
+    this.locked = true;
+    this.scene.launch('Shop', { kind: 'clothes', from: 'ClothesStore', tab });
   }
 
-  private wearing(c: CosmeticDef): boolean {
-    return (store.get().life.outfit as Record<string, string>)[c.slot] === c.id;
+  /** What a rack is, written under it (the prices are on the card). */
+  private tagRack(x: number, y: number, what: string): void {
+    text(this, x, y, what, PALETTE.cream).setOrigin(0.5, 0).setDepth(depthFor(y) + 0.0003);
   }
 
-  private show(c: CosmeticDef): void {
-    const outfit = { ...(store.get().life.outfit as Record<string, string>), [c.slot]: c.id };
-    const owned = this.owns(c.id);
-    const on = this.wearing(c);
-    const buttons = [];
-    if (!owned) {
-      buttons.push({
-        label: `BUY & WEAR $${c.price}`,
-        fn: () => {
-          const r = buyCosmetic(c.id);
-          if (r.ok) wear(c.id);
-          audio.sfx(r.ok ? 'cha_ching' : 'buzzer', 0.6);
-          this.closePanel();
-          if (r.ok) this.refreshPlayer();
-          this.say(r.ok ? `${c.name} - YOU PUT IT ON.` : r.msg);
-        },
-        disabled: store.get().cash < c.price,
-      });
-    } else if (!on) {
-      buttons.push({ label: 'WEAR', fn: () => this.wearIt(c.id) });
-    } else if (c.slot === 'hat') {
-      buttons.push({ label: 'TAKE OFF', fn: () => this.wearIt('cos_no_hat') });
-    }
-    this.openPanel(
-      c.name,
-      [owned ? (on ? 'YOU ARE WEARING IT' : 'YOURS') : `$${c.price}`, c.slot.toUpperCase(), 'LOOKS ONLY - NO ADVANTAGE', `YOU HAVE $${store.get().cash}`],
-      buttons,
-      (box, x, y) => this.figure(box, x, y, lookFor(outfit)),
-    );
-  }
-
-  private wearIt(id: string): void {
-    wear(id);
-    this.closePanel();
-    this.refreshPlayer();
-    this.say(`NOW WEARING ${cosmeticById(id)?.name ?? ''}.`);
-  }
+  private racks: Array<{ x: number; y: number; w: number; depth: number; wall?: boolean; tab: number; name: string }> = [];
 
   /** You, in a panel, half as big again. */
   private figure(box: Phaser.GameObjects.Container, x: number, y: number, look: Look): void {

@@ -1,58 +1,118 @@
 /**
  * ---- UNIT 612, LILY'S CONDOS.  Yours for as long as the rent is paid.
  *
- * A mid-range flat, and it comes bare: painted walls, an oak floor, a
- * fitted kitchenette, a window on the city and a blanket on the floor.  The
- * bed and the bathroom (toilet, basin, bath) are yours to buy at Home and
- * Hearth.  You walk round it like any room (see rooms/WalkRoom), and what
- * you have put in it is solid and USABLE: sit on the chairs and the sofa,
- * sleep in the bed (or on the blanket until you own one), switch the TV and
- * the lamps on, play the radio.  The coat hook by the door is your
- * wardrobe.  DECORATE places, moves, turns and takes away what you own, and
- * the room keeps it exactly where you left it.
+ * IT IS ROOM 612.  Up in the lift, along Level 6, through the last door:
+ * the same room the hotel's guests get -- the plain warm walls, the oak
+ * floor, the tall window in the middle with its curtains tied back, the
+ * door out and the white bathroom door beside it, the bed against the far
+ * wall between its lamps -- painted by the same hand (art/hotelInterior).
+ *
+ * THE BATHROOM IS ITS OWN ROOM, through its own door: white tile, the
+ * chequered floor, the mirror and its light, a towel rail -- and nothing
+ * plumbed in.  No bath, no basin, no toilet: the pipes are capped in the
+ * wall, waiting.  Those are bought at Home and Hearth and put in there.
+ *
+ * DECORATE is the same in both rooms: pick something you own, carry it
+ * about with your finger, TURN it round, and PUT IT DOWN when it looks
+ * right -- or CANCEL and it goes back in the van.  Anything already down can
+ * be picked up again, moved, turned or taken away, and the flat remembers
+ * exactly where you left it.  The bathroom things go in the bathroom (and
+ * only there); everything else goes in the room.  What is in it is real:
+ * sit on the chairs, sleep in the bed, switch the lamps on, play the radio,
+ * wash in what you have plumbed in.
  */
 
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { button, pinToScreen } from '../core/ui';
+import { button, pinToScreen, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { furnitureById, type FurnitureDef } from '../game/catalog';
 import { onPhaseTurn } from '../game/dayNight';
-import { NIGHT_HOUR, SUNRISE_HOUR, twelveHour, clock, movePlacement, placeFurniture, removePlacement, sleep, visit, type Placement } from '../game/life';
+import { NIGHT_HOUR, twelveHour, clock, movePlacement, placeFurniture, removePlacement, sleep, visit, type Placement } from '../game/life';
 import { useOf, washLine } from '../game/furnitureUse';
 import { WalkRoom, type Fixture } from './rooms/WalkRoom';
 import { Piece } from './rooms/piece';
+import { touchControls } from '../ui/touchControls';
+import {
+  BATH_DOOR_X,
+  BED,
+  CEIL_Y,
+  FLOOR_Y,
+  ROOM_DOOR_X,
+  ROOM_WINDOW,
+  paintBathroom,
+  paintCurtain,
+  paintGlazing,
+  paintRoom as paintHotelRoom,
+  paintRoomLight,
+  paintView,
+} from '../art/hotelInterior';
 
-const FLOOR_TOP = 124;
-const FLOOR_BOTTOM = 160;
-const WALL_TOP = 28;
-const WALL_BOTTOM = 112;
-const WINDOW = { x: 118, y: 34, w: 84, h: 62 };
-/** The blanket on the floor, where you sleep until you own a bed. */
-const BLANKET = { x: 278, y: 158 };
+type Area = 'room' | 'bath';
+
+/**
+ * WHERE THINGS GO.  The floor is the strip along the back wall -- furniture
+ * stands against it, as the bed does, and the front of the floor is kept to
+ * walk on (so nothing you put down can ever shut you away from a door or
+ * the bed).  Things for the wall hang between the ceiling and the skirting.
+ */
+const PLACE_TOP = FLOOR_Y + 4;
+const PLACE_BOTTOM = FLOOR_Y + 12;
+const WALL_TOP = CEIL_Y + 3;
+const WALL_BOTTOM = FLOOR_Y - 6;
+/** The doors (and the floor in front of them): the corridor door and the bathroom's. */
+const DOORS_RIGHT = BATH_DOOR_X + 11;
+/** The bathroom's one door, back to the room. */
+const BATH_BACK_X = 22;
+/** The bed, its lamps and its rug: the far end of the room. */
+const BED_LEFT = BED.x - BED.w / 2 - 13;
+const BED_RIGHT = BED.x + BED.w / 2 + 13;
+/** The coat hook: your clothes, the wardrobe. */
+const HOOK = { x: 104, y: 124 };
 
 export class Condo extends WalkRoom {
-  private room!: Phaser.GameObjects.Graphics;
+  private area: Area = 'room';
+  private from: 'corridor' | 'room' | 'bath' = 'corridor';
   private ui!: Phaser.GameObjects.Container;
   private pieces: Piece[] = [];
   private outline!: Phaser.GameObjects.Graphics;
   private decorating = false;
   private picked: number | null = null;
+  /** What is in your hands: down in the room, but not settled yet. */
+  private placing: number | null = null;
+  private picker: Phaser.GameObjects.Container | null = null;
+  private pickerPage = 0;
   private dragging = false;
   private dragFrom: { x: number; y: number } | null = null;
+  private view: Phaser.GameObjects.Image | null = null;
+  private lamps: Phaser.GameObjects.Image | null = null;
 
   constructor() {
     super('Condo');
   }
 
+  init(data: { area?: Area; from?: 'corridor' | 'room' | 'bath' } = {}): void {
+    this.area = data.area ?? 'room';
+    this.from = data.from ?? (this.area === 'bath' ? 'room' : 'corridor');
+  }
+
   create(): void {
-    this.floorTop = FLOOR_TOP;
+    // (the floor line of the hotel's rooms: the feet walk just in front of it)
+    this.floorTop = FLOOR_Y - 2;
+    // (what is said goes up on the ceiling: the floor strip is where the furniture is)
+    this.mutterY = 60;
     this.decorating = false;
     this.picked = null;
+    this.placing = null;
+    this.picker = null;
+    this.pickerPage = 0;
     this.dragging = false;
     this.pieces = [];
+    this.view = null;
+    this.lamps = null;
+    this.dim = null;
     super.create();
     visit('condo');
     this.ui = this.add.container(0, 0).setDepth(850).setScrollFactor(0);
@@ -60,29 +120,46 @@ export class Condo extends WalkRoom {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.pointerDown(p));
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.pointerMove(p));
     this.input.on('pointerup', () => this.pointerUp());
+    // (left mid-decorate -- evicted, say -- the pad comes back)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (this.decorating) touchControls.releaseStick();
+      this.decorating = false;
+    });
   }
 
+  protected music(): string {
+    return 'hotel_room';
+  }
+
+  /** Out of the flat: on to Level 6, outside your door. */
   protected leave(): void {
-    this.exitTo('Hotel', { area: 'lobby', from: 'lift' });
+    if (this.area === 'bath') {
+      this.exitTo('Condo', { area: 'room', from: 'bath' });
+      return;
+    }
+    this.exitTo('Hotel', { area: 'corridor', from: 'room' });
   }
 
   protected spawnX(): number {
-    return 40;
+    if (this.area === 'bath') return BATH_BACK_X + 14;
+    return this.from === 'bath' ? BATH_DOOR_X + 2 : ROOM_DOOR_X + 14;
   }
 
   protected paintDoor(): void {
-    // (the door is part of the wall: see paintWalls)
+    // (the doors are part of the painted room: see paintRoom)
   }
 
   protected exitFixture(): Fixture {
+    const x = this.area === 'bath' ? BATH_BACK_X : ROOM_DOOR_X;
     return {
-      x: 18,
-      y: FLOOR_TOP + 10,
-      w: 22,
+      x,
+      y: this.floorTop,
+      w: 16,
       depth: 0,
-      label: () => '[E] LEAVE',
+      wall: true,
+      label: () => (this.area === 'bath' ? '[E] BACK TO THE ROOM' : '[E] CORRIDOR'),
       use: () => this.goOut(),
-      hit: { x: 5, y: 58, w: 26, h: 66 },
+      hit: { x: x - 10, y: FLOOR_Y - 38, w: 20, h: 46 },
     };
   }
 
@@ -91,42 +168,109 @@ export class Condo extends WalkRoom {
   }
 
   protected entered(): void {
-    // the window keeps time: the sun crosses it, evening comes, night falls
-    this.time.addEvent({ delay: 4000, loop: true, callback: () => this.paintWalls() });
+    // the window keeps time: the sky in it is the hour's, and the room is
+    // lit by the lamps once it is dark
     onPhaseTurn(this, (p) => {
-      this.paintWalls();
+      this.paintLight();
       if (p === 'night') this.say('IT IS NIGHT. TIME FOR BED.');
       else if (p === 'evening') this.say('THE SUN IS GOING DOWN.');
       else this.say('SUNRISE. A NEW DAY.');
     });
+    if (!store.get().life.placed.some((p) => this.areaOf(p) === 'bath') && this.area === 'bath') {
+      this.time.delayedCall(500, () => this.say('NOTHING PLUMBED IN YET. DECORATE TO PUT IN WHAT YOU BUY.'));
+    }
   }
 
   // ------------------------------------------------------------------ room
 
+  /** A canvas texture painted once and kept, keyed by what it shows. */
+  private painted(key: string, w: number, h: number, paint: (g: CanvasRenderingContext2D) => void): string {
+    if (!this.textures.exists(key)) {
+      const t = this.textures.createCanvas(key, w, h);
+      if (t) {
+        paint(t.getContext());
+        t.refresh();
+      }
+    }
+    return key;
+  }
+
   protected paintRoom(): void {
-    this.room = this.add.graphics().setDepth(0);
     this.outline = this.add.graphics().setDepth(700);
     this.dim = this.add.graphics().setDepth(690);
-    this.paintWalls();
-    // the blanket, folded on the boards: a bed of sorts
-    const b = this.add.graphics().setDepth(3);
-    b.fillStyle(0x14100c, 1).fillRect(BLANKET.x - 15, BLANKET.y - 6, 30, 7);
-    b.fillStyle(0x5a6a8a, 1).fillRect(BLANKET.x - 14, BLANKET.y - 5, 28, 5);
-    b.fillStyle(0x7a8aaa, 1).fillRect(BLANKET.x - 14, BLANKET.y - 5, 28, 1);
-    b.fillStyle(0xe8e0d0, 1).fillRect(BLANKET.x + 6, BLANKET.y - 7, 8, 3);
-    // the coat hook by the door: your clothes
-    const h = this.add.graphics().setDepth(2);
-    h.fillStyle(0x3a2a1e, 1).fillRect(40, 78, 14, 2);
-    h.fillStyle(0x6a6a44, 1).fillRect(41, 80, 5, 12);
-    h.fillStyle(0x5a3a3a, 1).fillRect(48, 80, 4, 4);
+    if (this.area === 'bath') {
+      this.add.image(0, 0, this.painted('condo_bath_v1', GAME_W, GAME_H, (g) => paintBathroom(g, false))).setOrigin(0, 0).setDepth(-2);
+    } else {
+      const { x, y, w, h } = ROOM_WINDOW;
+      // the sky through the window, behind the room; the glazing over it
+      this.view = this.add.image(x, y, this.viewKey()).setOrigin(0, 0).setDepth(-4);
+      this.add.image(x, y, this.painted(`hotel_glazing_${w}`, w, h, (g) => paintGlazing(g, w, h))).setOrigin(0, 0).setDepth(-3);
+      this.add.image(0, 0, this.painted('hotel_room_v2', GAME_W, GAME_H, paintHotelRoom)).setOrigin(0, 0).setDepth(-2);
+      // the curtains, tied back either side
+      const cw = w / 2 + 4;
+      const ch = h + 7;
+      this.add.image(x - 6, y - 4, this.painted(`hotel_curtain_l_${cw}`, cw, ch, (g) => paintCurtain(g, cw, ch, -1))).setOrigin(0, 0).setDepth(-1).setScale(0.24, 1);
+      this.add.image(x + w + 6, y - 4, this.painted(`hotel_curtain_r_${cw}`, cw, ch, (g) => paintCurtain(g, cw, ch, 1))).setOrigin(1, 0).setDepth(-1).setScale(0.24, 1);
+      // the coat hook by the doors, with your coat on it: the wardrobe
+      const hk = this.add.graphics().setDepth(-1);
+      hk.fillStyle(0x6a7078, 1).fillRect(HOOK.x - 7, HOOK.y, 14, 2);
+      hk.fillStyle(0xd4d8dc, 1).fillRect(HOOK.x - 7, HOOK.y, 14, 1);
+      hk.fillStyle(0x6a6a44, 1).fillRect(HOOK.x - 6, HOOK.y + 2, 6, 15);
+      hk.fillStyle(0x58583a, 1).fillRect(HOOK.x - 6, HOOK.y + 14, 6, 3);
+      hk.fillStyle(0x5a3a3a, 1).fillRect(HOOK.x + 2, HOOK.y + 2, 4, 6);
+      this.lamps = this.add.image(0, 0, this.painted('hotel_room_light_v2', GAME_W, GAME_H, paintRoomLight)).setOrigin(0, 0).setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
+      // the flat's number over the inside of its door
+      text(this, ROOM_DOOR_X, CEIL_Y + 5, '612', 0x8a8070).setOrigin(0.5, 0).setDepth(-1);
+    }
+    this.settle();
+    this.paintLight();
     this.placePieces();
   }
 
-  /** Every placed piece, as a thing in the room. */
+  private viewKey(): string {
+    const when = clock().dark ? 'night' : 'day';
+    const { w, h } = ROOM_WINDOW;
+    return this.painted(`hotel_view_${when}_${w}`, w, h, (g) => paintView(g, w, h, when));
+  }
+
+  /** The hour on the room: the sky in the window, the lamps, the dark. */
+  private paintLight(): void {
+    const c = clock();
+    this.view?.setTexture(this.viewKey());
+    this.lamps?.setVisible(c.dark);
+    const d = this.dim;
+    if (!d) return;
+    d.clear();
+    if (c.dark) d.fillStyle(0x0a1030, this.area === 'bath' ? 0.22 : 0.3).fillRect(0, 0, GAME_W, GAME_H);
+    else if (c.phase === 'evening') d.fillStyle(0xff9a50, 0.07).fillRect(0, 0, GAME_W, GAME_H);
+  }
+
+  /** Which room a placed piece is in: by what it is. */
+  private areaOf(p: Placement): Area {
+    const f = furnitureById(p.id);
+    return f && this.roomFor(f) === 'bath' ? 'bath' : 'room';
+  }
+
+  /**
+   * The flat as it was left: anything of this room's standing somewhere it
+   * can no longer go (a save from before the flat was the hotel's room)
+   * is moved to somewhere it can, or back into the van if there is nowhere.
+   */
+  private settle(): void {
+    for (const p of [...this.areaPlacements()]) {
+      const f = furnitureById(p.id);
+      if (!f || this.valid(f, p.x, p.y, p.uid)) continue;
+      const spot = this.freeSpot(f, p.uid);
+      if (spot) movePlacement(p.uid, spot[0], spot[1]);
+      else removePlacement(p.uid);
+    }
+  }
+
+  /** Every placed piece in this room, as a thing in the room. */
   private placePieces(): void {
     for (const p of this.pieces) p.destroy();
     this.pieces = [];
-    for (const pl of store.get().life.placed) {
+    for (const pl of this.areaPlacements()) {
       const f = furnitureById(pl.id);
       if (f) this.pieces.push(new Piece(this, f, pl.x, pl.y, pl.flip));
     }
@@ -134,21 +278,40 @@ export class Condo extends WalkRoom {
   }
 
   protected fixtures(): Fixture[] {
-    const out: Fixture[] = [
-      {
-        x: 47,
-        y: FLOOR_TOP + 2,
-        w: 14,
-        depth: 0,
-        wall: true,
-        label: () => '[E] WARDROBE',
-        use: () => this.openWardrobe(),
-        hit: { x: 38, y: 76, w: 18, h: 20 },
-      },
-    ];
-    const hasBed = store.get().life.placed.some((p) => furnitureById(p.id)?.cat === 'bed');
-    if (!hasBed) {
-      out.push({ x: BLANKET.x, y: BLANKET.y, w: 30, depth: 0, label: () => '[E] SLEEP ON THE BLANKET', use: () => this.goToSleep('floor') });
+    const out: Fixture[] = [];
+    if (this.area === 'room') {
+      out.push(
+        {
+          x: BATH_DOOR_X,
+          y: this.floorTop,
+          w: 15,
+          depth: 0,
+          wall: true,
+          label: () => '[E] BATHROOM',
+          use: () => this.toBathroom(),
+          hit: { x: BATH_DOOR_X - 10, y: FLOOR_Y - 38, w: 20, h: 46 },
+        },
+        {
+          x: HOOK.x,
+          y: this.floorTop,
+          w: 14,
+          depth: 0,
+          wall: true,
+          label: () => '[E] WARDROBE',
+          use: () => this.openWardrobe(),
+          hit: { x: HOOK.x - 9, y: HOOK.y - 2, w: 18, h: 22 },
+        },
+        {
+          x: BED.x,
+          y: this.floorTop,
+          w: BED.w,
+          depth: 0,
+          wall: true,
+          label: () => '[E] SLEEP',
+          use: () => this.goToSleep('bed'),
+          hit: { x: BED.x - BED.w / 2, y: BED.top - 14, w: BED.w, h: 22 },
+        },
+      );
     }
     for (const piece of this.pieces) {
       const f = piece.def;
@@ -164,6 +327,14 @@ export class Condo extends WalkRoom {
       });
     }
     return out;
+  }
+
+  /** Through the white door, into the bathroom. */
+  private toBathroom(): void {
+    if (this.busy()) return;
+    this.locked = true;
+    audio.sfx('door_open', 0.6);
+    this.exitTo('Condo', { area: 'bath', from: 'room' });
   }
 
   private usePiece(piece: Piece): void {
@@ -198,195 +369,53 @@ export class Condo extends WalkRoom {
     this.scene.launch('Shop', { kind: 'wardrobe', from: 'Condo' });
   }
 
-  /**
-   * The flat itself: a mid-range condo, not a hotel room.  Painted walls with
-   * a sage feature wall, white skirting and downlights, light oak laminate,
-   * a fitted kitchenette along the right (cupboards, a hob, a fridge -- no
-   * sink: the bathroom things are yours to buy), a slim aluminium window with
-   * a roller blind and sheers, and a plain white front door with an intercom.
-   * The window is the sky as it is now: morning, evening or night, the sun
-   * crossing it through the day, and the room dims when it is dark.
-   */
-  private paintWalls(): void {
-    const g = this.room;
-    g.clear();
-    const c = clock();
-    const W = WINDOW;
-    // ---- the walls: warm grey paint, and the sage feature wall round the window
-    g.fillStyle(0xd9d3c8, 1).fillRect(0, 0, GAME_W, FLOOR_TOP);
-    g.fillStyle(0x9aae9e, 1).fillRect(W.x - 30, 0, W.w + 60, FLOOR_TOP);
-    for (let i = 0; i < 260; i++) {
-      const x = (i * 97) % GAME_W;
-      const y = (i * 53) % (FLOOR_TOP - 8);
-      g.fillStyle(0xffffff, 0.06).fillRect(x, y + 6, 1, 1);
-      g.fillStyle(0x000000, 0.04).fillRect((x + 41) % GAME_W, (y + 17) % FLOOR_TOP, 1, 1);
-    }
-    // the ceiling line, a shadow gap and the downlights
-    g.fillStyle(0xf2efe8, 1).fillRect(0, 0, GAME_W, 6);
-    g.fillStyle(0x000000, 0.12).fillRect(0, 6, GAME_W, 1);
-    for (const lx of [60, 160, 260]) {
-      g.fillStyle(0x8a8a8a, 1).fillRect(lx - 3, 2, 7, 2);
-      g.fillStyle(c.dark ? 0xfff0c0 : 0xf8f4e8, 1).fillRect(lx - 2, 3, 5, 1);
-      if (c.dark) g.fillStyle(0xfff0c0, 0.06).fillTriangle(lx - 2, 4, lx + 3, 4, lx + 22, FLOOR_TOP).fillTriangle(lx - 2, 4, lx + 3, 4, lx - 20, FLOOR_TOP);
-    }
-    // white skirting
-    g.fillStyle(0xf4f2ec, 1).fillRect(0, FLOOR_TOP - 5, GAME_W, 5);
-    g.fillStyle(0xc8c4bc, 1).fillRect(0, FLOOR_TOP - 1, GAME_W, 1);
-    // ---- the floor: light oak laminate, long planks, staggered joints
-    for (let y = FLOOR_TOP; y < GAME_H; y += 5) {
-      const row = (y - FLOOR_TOP) / 5;
-      g.fillStyle(row % 2 ? 0xc49a68 : 0xcba272, 1).fillRect(0, y, GAME_W, 5);
-      g.fillStyle(0x9a7448, 0.7).fillRect(0, y, GAME_W, 1);
-      for (let x = (row * 37) % 64; x < GAME_W; x += 64) g.fillStyle(0x9a7448, 0.8).fillRect(x, y, 1, 5);
-      for (let x = (row * 23) % 17; x < GAME_W; x += 17) g.fillStyle(0xffffff, 0.06).fillRect(x, y + 2, 6, 1);
-    }
-    // the light off the window on the floor (by day)
-    if (!c.dark) g.fillStyle(c.phase === 'evening' ? 0xffb070 : 0xfff6d8, 0.12).fillRect(W.x - 6, FLOOR_TOP + 2, W.w + 12, 20);
-
-    // ---- the window: the sky now
-    g.fillStyle(0x2a2e34, 1).fillRect(W.x - 3, W.y - 3, W.w + 6, W.h + 6);
-    this.paintSky(g, c);
-    // slim aluminium frame: a fixed pane and a sliding one
-    g.fillStyle(0x3a3f46, 1).fillRect(W.x + W.w / 2 - 1, W.y, 3, W.h);
-    g.fillStyle(0x3a3f46, 1).fillRect(W.x, W.y + W.h - 3, W.w, 3);
-    g.fillStyle(0xffffff, 0.12).fillRect(W.x + 4, W.y + 3, 3, W.h - 10).fillRect(W.x + W.w / 2 + 6, W.y + 3, 2, W.h - 10);
-    // the sill, the roller blind rolled up in its cassette, the sheers either side
-    g.fillStyle(0xf4f2ec, 1).fillRect(W.x - 6, W.y + W.h + 3, W.w + 12, 3);
-    g.fillStyle(0xe8e4dc, 1).fillRect(W.x - 4, W.y - 9, W.w + 8, 6);
-    g.fillStyle(0xb8b4ac, 1).fillRect(W.x - 4, W.y - 4, W.w + 8, 1);
-    g.fillStyle(0x6a6a6a, 1).fillRect(W.x - 22, W.y - 12, W.w + 44, 2);
-    for (const side of [-1, 1]) {
-      const x0 = side < 0 ? W.x - 20 : W.x + W.w + 6;
-      for (let k = 0; k < 14; k += 2) g.fillStyle(k % 4 ? 0xf0ece4 : 0xe0dcd2, 0.92).fillRect(x0 + k, W.y - 10, 2, W.h + 18);
-    }
-
-    // ---- the kitchenette along the right: wall cupboards, worktop, hob, fridge
-    const kx = 236;
-    const kw = 56;
-    g.fillStyle(0x14100c, 1).fillRect(kx - 1, 38, kw + 2, 22);
-    g.fillStyle(0xf2f0ea, 1).fillRect(kx, 39, kw, 20);
-    for (let d = 0; d < 3; d++) {
-      g.fillStyle(0xd8d4cc, 1).fillRect(kx + d * (kw / 3), 39, 1, 20);
-      g.fillStyle(0x8a8a8a, 1).fillRect(kx + d * (kw / 3) + kw / 3 - 4, 54, 2, 3);
-    }
-    // the splashback tiles
-    g.fillStyle(0xe6ecef, 1).fillRect(kx, 60, kw, 38);
-    for (let ty = 60; ty < 98; ty += 5) g.fillStyle(0xc8d0d4, 1).fillRect(kx, ty, kw, 1);
-    for (let ty = 60, r = 0; ty < 98; ty += 5, r++) for (let tx = kx + (r % 2) * 5; tx < kx + kw; tx += 10) g.fillStyle(0xc8d0d4, 1).fillRect(tx, ty, 1, 5);
-    // base units and the worktop
-    g.fillStyle(0x14100c, 1).fillRect(kx - 1, 98, kw + 2, FLOOR_TOP - 98);
-    g.fillStyle(0x4a5a6a, 1).fillRect(kx, 102, kw, FLOOR_TOP - 104);
-    for (let d = 0; d < 3; d++) {
-      g.fillStyle(0x3a4856, 1).fillRect(kx + d * (kw / 3), 102, 1, FLOOR_TOP - 104);
-      g.fillStyle(0xb8b8c0, 1).fillRect(kx + d * (kw / 3) + 4, 105, 8, 1);
-    }
-    g.fillStyle(0x2a2a2e, 1).fillRect(kx - 2, 98, kw + 4, 4);
-    g.fillStyle(0x5a5a62, 1).fillRect(kx - 2, 98, kw + 4, 1);
-    // the hob: two rings
-    g.fillStyle(0x14161c, 1).fillRect(kx + 30, 96, 18, 2);
-    g.fillStyle(0x6a6a72, 1).fillRect(kx + 32, 96, 5, 1).fillRect(kx + 41, 96, 5, 1);
-    // a kettle and a jar on the worktop
-    g.fillStyle(0x14100c, 1).fillRect(kx + 8, 90, 8, 8);
-    g.fillStyle(0xc83a3a, 1).fillRect(kx + 9, 91, 6, 7);
-    g.fillStyle(0x14100c, 1).fillRect(kx + 19, 92, 5, 6);
-    g.fillStyle(0xe8d8a8, 1).fillRect(kx + 20, 93, 3, 5);
-    // the fridge
-    const fx = kx + kw + 4;
-    g.fillStyle(0x14100c, 1).fillRect(fx - 1, 56, 22, FLOOR_TOP - 56);
-    g.fillStyle(0xdfe3e6, 1).fillRect(fx, 57, 20, FLOOR_TOP - 58);
-    g.fillStyle(0xb8bec4, 1).fillRect(fx, 82, 20, 1);
-    g.fillStyle(0x8a9098, 1).fillRect(fx + 16, 62, 2, 14).fillRect(fx + 16, 86, 2, 18);
-    g.fillStyle(0xffffff, 0.3).fillRect(fx + 1, 58, 2, FLOOR_TOP - 60);
-
-    // ---- the front door: plain white, lever handle, a spy hole, the intercom
-    g.fillStyle(0xbab4a8, 1).fillRect(3, 56, 30, FLOOR_TOP - 56);
-    g.fillStyle(0x14100c, 1).fillRect(5, 58, 26, FLOOR_TOP - 58);
-    g.fillStyle(0xf2f0ea, 1).fillRect(6, 59, 24, FLOOR_TOP - 59);
-    g.fillStyle(0xe2dfd8, 1).fillRect(9, 63, 18, 22).fillRect(9, 90, 18, 28);
-    g.fillStyle(0x6a6a72, 1).fillRect(24, 92, 5, 2);
-    g.fillStyle(0x3a3a3a, 1).fillRect(17, 66, 2, 2);
-    // the intercom and the light switch beside it
-    g.fillStyle(0x14100c, 1).fillRect(60, 72, 7, 11);
-    g.fillStyle(0xe8e8e0, 1).fillRect(61, 73, 5, 9);
-    g.fillStyle(0x3a8a5a, 1).fillRect(62, 75, 3, 2);
-    g.fillStyle(0xf4f2ec, 1).fillRect(61, 88, 4, 5);
-    // a thermostat and a socket
-    g.fillStyle(0xf4f2ec, 1).fillRect(214, 70, 8, 8);
-    g.fillStyle(0x46c4bd, 1).fillRect(216, 72, 4, 2);
-    g.fillStyle(0xf4f2ec, 1).fillRect(80, FLOOR_TOP - 13, 6, 5);
-    g.fillStyle(0x6a6a6a, 1).fillRect(81, FLOOR_TOP - 11, 1, 2).fillRect(84, FLOOR_TOP - 11, 1, 2);
-
-    // ---- night: the room dimmer, the downlights' pools on the floor
-    this.dim?.clear();
-    if (c.dark) {
-      const d = this.dim!;
-      d.fillStyle(0x0a1030, 0.28).fillRect(0, 0, GAME_W, GAME_H);
-      for (const lx of [60, 160, 260]) d.fillStyle(0xfff0c0, 0.07).fillEllipse(lx, FLOOR_TOP + 22, 80, 22);
-    } else if (c.phase === 'evening') {
-      this.dim!.fillStyle(0xff9a50, 0.06).fillRect(0, 0, GAME_W, GAME_H);
-    }
-  }
-
-  /** What the window shows: the sky for the hour, the sun or the moon, the city. */
-  private paintSky(g: Phaser.GameObjects.Graphics, c: ReturnType<typeof clock>): void {
-    const W = WINDOW;
-    const bands =
-      c.phase === 'morning'
-        ? [0x5aa8e0, 0x6ab4e6, 0x7ac0ea, 0x9ad0ee]
-        : c.phase === 'evening'
-          ? [0x5a3a7a, 0xa84a6a, 0xe8784a, 0xf0b060]
-          : [0x060a1c, 0x0a1028, 0x0e1634, 0x141c40];
-    const bh = Math.ceil(W.h / bands.length);
-    bands.forEach((col, i) => g.fillStyle(col, 1).fillRect(W.x, W.y + i * bh, W.w, Math.min(bh, W.h - i * bh)));
-    // where the sun is: across the window from sunrise to night, low in the evening
-    const h = c.hour + c.minute / 60;
-    if (c.phase !== 'night') {
-      const k = Math.min(1, Math.max(0, (h - SUNRISE_HOUR) / (NIGHT_HOUR - SUNRISE_HOUR)));
-      const sx = W.x + 8 + k * (W.w - 16);
-      const sy = W.y + W.h - 14 - Math.sin(k * Math.PI) * (W.h - 26);
-      g.fillStyle(c.phase === 'evening' ? 0xffd080 : 0xfff4c0, 0.35).fillCircle(sx, sy, 8);
-      g.fillStyle(c.phase === 'evening' ? 0xffb050 : 0xfffae0, 1).fillCircle(sx, sy, 5);
-      // a cloud or two by day
-      if (c.phase === 'morning') {
-        g.fillStyle(0xffffff, 0.85).fillEllipse(W.x + 20, W.y + 14, 16, 5).fillEllipse(W.x + 26, W.y + 12, 10, 5);
-        g.fillStyle(0xffffff, 0.7).fillEllipse(W.x + W.w - 18, W.y + 22, 14, 4);
-      }
-    } else {
-      for (let i = 0; i < 14; i++) g.fillStyle(0xffffff, 0.5 + (i % 3) * 0.15).fillRect(W.x + 3 + ((i * 29) % (W.w - 6)), W.y + 3 + ((i * 17) % 30), 1, 1);
-      g.fillStyle(0xf0ecd0, 1).fillCircle(W.x + W.w - 16, W.y + 12, 5);
-      g.fillStyle(0x0a1028, 1).fillCircle(W.x + W.w - 14, W.y + 11, 4);
-    }
-    // the city beyond, lit windows when it is dark
-    for (let i = 0; i < 9; i++) {
-      const bx = W.x + i * 10;
-      const tall = 10 + ((i * 37) % 26);
-      g.fillStyle(c.dark ? 0x0a0e1c : c.phase === 'evening' ? 0x4a3a5a : 0x5a6a80, 1).fillRect(bx, W.y + W.h - tall, 9, tall);
-      if (c.phase !== 'morning') for (let k = 0; k < 4; k++) if ((i + k) % 3) g.fillStyle(0xf0d070, c.dark ? 1 : 0.6).fillRect(bx + 2 + (k % 2) * 4, W.y + W.h - tall + 3 + Math.floor(k / 2) * 5, 2, 2);
-    }
-  }
-
   private dim: Phaser.GameObjects.Graphics | null = null;
 
   private placements(): Placement[] {
     return store.get().life.placed;
   }
 
+  /** What is in this room (the bathroom's things in the bathroom, the rest in the room). */
+  private areaPlacements(): Placement[] {
+    return this.placements().filter((p) => this.areaOf(p) === this.area);
+  }
+
   private rectOf(p: Placement, f = furnitureById(p.id)!): Phaser.Geom.Rectangle {
     return new Phaser.Geom.Rectangle(p.x - f.w / 2, p.y - f.h, f.w, f.h);
   }
 
-  /** Can `f` stand at (x, y) without floating, clipping, or covering the window? */
-  private valid(f: FurnitureDef, x: number, y: number, uid: number | null): boolean {
+  /** Bathroom things go in the bathroom; everything else stays out of it. */
+  private roomFor(f: FurnitureDef): Area {
+    return f.cat === 'bath' ? 'bath' : 'room';
+  }
+
+  /** Why `f` cannot go at (x, y) in this room -- or '' if it can. */
+  private whyNot(f: FurnitureDef, x: number, y: number, uid: number | null): string {
+    // ---- WHICH ROOM.  The bath, the basin, the toilet and the shower are
+    // plumbed in, and the plumbing is in the bathroom: they go in there and
+    // nowhere else, and nothing else goes in there with them.
+    if (this.roomFor(f) !== this.area) return this.area === 'bath' ? 'THAT DOES NOT GO IN THE BATHROOM.' : 'THAT BELONGS IN THE BATHROOM.';
     const r = new Phaser.Geom.Rectangle(x - f.w / 2, y - f.h, f.w, f.h);
-    if (r.x < 4 || r.right > GAME_W - 4) return false;
+    if (r.x < 4 || r.right > GAME_W - 4) return 'IT WILL NOT FIT THERE.';
+    const over = (x0: number, x1: number) => r.right > x0 && r.x < x1;
+    const doorsRight = this.area === 'bath' ? BATH_BACK_X + 11 : DOORS_RIGHT;
     if (f.wall) {
-      if (r.y < WALL_TOP || r.bottom > WALL_BOTTOM) return false;
-      if (Phaser.Geom.Intersects.RectangleToRectangle(r, new Phaser.Geom.Rectangle(WINDOW.x - 22, WINDOW.y - 8, WINDOW.w + 44, WINDOW.h + 16))) return false;
+      if (r.y < WALL_TOP || r.bottom > WALL_BOTTOM) return 'TOO HIGH OR TOO LOW FOR THE WALL.';
+      if (over(0, doorsRight)) return 'NOT OVER THE DOOR.';
+      if (this.area === 'room') {
+        const W = ROOM_WINDOW;
+        if (over(W.x - 14, W.x + W.w + 14)) return 'NOT OVER THE WINDOW.';
+        if (over(HOOK.x - 9, HOOK.x + 9)) return 'THE COAT HOOK IS THERE.';
+        if (over(BED_LEFT, BED_RIGHT)) return 'NOT OVER THE BED.';
+      } else if (over(140, 180) || over(212, 234)) return 'THE MIRROR AND THE WINDOW ARE THERE.';
     } else {
-      if (y < FLOOR_TOP + 6 || y > FLOOR_BOTTOM) return false;
-      if (r.x < 34 && y < FLOOR_TOP + 20) return false; // not in front of the door
+      if (y < PLACE_TOP || y > PLACE_BOTTOM) return 'IT HAS TO STAND ON THE FLOOR.';
+      if (f.cat !== 'rug') {
+        if (over(0, doorsRight)) return 'NOT IN FRONT OF THE DOOR.';
+        if (this.area === 'room' && over(BED_LEFT, BED_RIGHT)) return 'THE BED IS THERE.';
+      }
     }
-    for (const p of this.placements()) {
+    for (const p of this.areaPlacements()) {
       if (p.uid === uid) continue;
       const o = furnitureById(p.id);
       if (!o || o.wall !== f.wall) continue;
@@ -397,10 +426,14 @@ export class Condo extends WalkRoom {
         // floor items collide on their FOOTPRINT: the bottom few pixels
         const fa = new Phaser.Geom.Rectangle(r.x, y - 6, r.width, 6);
         const fb = new Phaser.Geom.Rectangle(or.x, p.y - 6, or.width, 6);
-        if (Phaser.Geom.Intersects.RectangleToRectangle(fa, fb)) return false;
-      } else if (Phaser.Geom.Intersects.RectangleToRectangle(r, or)) return false;
+        if (Phaser.Geom.Intersects.RectangleToRectangle(fa, fb)) return 'SOMETHING IS ALREADY THERE.';
+      } else if (Phaser.Geom.Intersects.RectangleToRectangle(r, or)) return 'SOMETHING IS ALREADY THERE.';
     }
-    return true;
+    return '';
+  }
+
+  private valid(f: FurnitureDef, x: number, y: number, uid: number | null): boolean {
+    return !this.whyNot(f, x, y, uid);
   }
 
   /** The picked piece's outline while decorating. */
@@ -426,55 +459,191 @@ export class Condo extends WalkRoom {
 
   // ------------------------------------------------------------- buttons
 
+  /**
+   * ---- DECORATING, in two states.
+   *
+   * CARRYING something (`placing` is its uid): it is down in the room but
+   * not settled -- drag it about, TURN it round, and PUT IT DOWN when the
+   * outline is green.  CANCEL at any point and it goes back in the van as
+   * though it had never come out.
+   *
+   * NOT CARRYING: tap anything already in the room to pick it up again --
+   * the same drag, the same TURN, and TAKE AWAY to put it back in storage.
+   * PLACE opens the list of what you own and have not put out yet.
+   */
   private buildButtons(): void {
     this.ui.removeAll(true);
-    const y = 176;
-    if (this.decorating) {
-      const l = store.get().life;
-      const unplaced = Object.entries(l.furniture).filter(([id, n]) => n > l.placed.filter((p) => p.id === id).length);
-      this.ui.add(this.add.rectangle(0, GAME_H - 17, GAME_W, 17, PALETTE.black, 0.8).setOrigin(0, 0));
-      this.ui.add(button(this, 34, y - 6, unplaced.length ? `PLACE (${unplaced.length})` : 'NOTHING TO PLACE', () => this.placeNext(), { width: 62, height: 11, disabled: !unplaced.length }));
-      this.ui.add(button(this, 100, y - 6, 'FLIP', () => this.flipPicked(), { width: 40, height: 11, disabled: this.picked === null }));
-      this.ui.add(button(this, 148, y - 6, 'REMOVE', () => this.removePicked(), { width: 48, height: 11, disabled: this.picked === null }));
-      this.ui.add(button(this, 284, y - 6, 'DONE', () => this.setDecorating(false), { width: 50, height: 11 }));
+    const y = GAME_H - 11;
+    if (!this.decorating) {
+      // (right of the clock and the rent, clear of the settings gear on a phone)
+      this.ui.add(button(this, GAME_W - 70, 31, 'DECORATE', () => this.setDecorating(true), { width: 58, height: 11 }));
       pinToScreen(this.ui);
       return;
     }
-    // one button, up out of the way of your feet
-    this.ui.add(button(this, GAME_W / 2, 31, 'DECORATE', () => this.setDecorating(true), { width: 58, height: 11 }));
+    this.ui.add(this.add.rectangle(0, GAME_H - 17, GAME_W, 17, PALETTE.black, 0.8).setOrigin(0, 0));
+    if (this.placing !== null) {
+      const p = this.placements().find((q) => q.uid === this.placing);
+      const f = p ? furnitureById(p.id) : null;
+      const ok = !!p && !!f && this.valid(f, p.x, p.y, p.uid);
+      this.ui.add(button(this, 40, y, 'TURN', () => this.flipPicked(), { width: 56, height: 11 }));
+      this.ui.add(button(this, 150, y, ok ? 'PUT IT DOWN' : 'NOT THERE', () => this.confirmPlacing(), { width: 92, height: 11, disabled: !ok, fill: ok ? PALETTE.tealDark : PALETTE.ink }));
+      this.ui.add(button(this, 262, y, 'CANCEL', () => this.cancelPlacing(), { width: 68, height: 11, fill: 0x2a1424, hoverFill: 0x5a2040 }));
+      pinToScreen(this.ui);
+      return;
+    }
+    const l = store.get().life;
+    const unplaced = this.unplaced().length;
+    this.ui.add(button(this, 44, y, unplaced ? `PLACE (${unplaced})` : 'NOTHING TO PLACE', () => this.openPicker(), { width: 76, height: 11, disabled: !unplaced }));
+    this.ui.add(button(this, 128, y, 'TURN', () => this.flipPicked(), { width: 46, height: 11, disabled: this.picked === null }));
+    this.ui.add(button(this, 196, y, 'TAKE AWAY', () => this.removePicked(), { width: 76, height: 11, disabled: this.picked === null, fill: 0x2a1424, hoverFill: 0x5a2040 }));
+    this.ui.add(button(this, 282, y, 'DONE', () => this.setDecorating(false), { width: 60, height: 11 }));
+    void l;
     pinToScreen(this.ui);
   }
 
   private setDecorating(on: boolean): void {
     if (on && super.busy()) return;
+    // (walking out of DECORATE with something still in your hands puts it back)
+    if (!on && this.placing !== null) this.cancelPlacing(true);
+    // (on a phone the pad and the E button are real elements over the
+    // picture, right where PLACE and DONE are: they go while you decorate)
+    if (on !== this.decorating) {
+      if (on) touchControls.holdStick();
+      else touchControls.releaseStick();
+    }
     this.decorating = on;
     this.picked = null;
     this.buildButtons();
     this.drawOutline();
     if (!on) this.rebuild();
-    if (on) this.say(store.get().life.placed.length ? 'TAP SOMETHING TO PICK IT UP, DRAG TO MOVE IT.' : 'BUY FURNITURE AT HOME AND HEARTH, EAST OF THE ARCADE.');
+    if (on) {
+      const here = this.areaPlacements().length || this.unplaced().length;
+      const elsewhere = this.unplaced(this.area === 'bath' ? 'room' : 'bath').length;
+      this.say(
+        here
+          ? 'TAP SOMETHING TO PICK IT UP. DRAG TO MOVE IT.'
+          : elsewhere
+            ? this.area === 'bath'
+              ? 'NOTHING FOR THE BATHROOM YET. THE REST GOES IN THE ROOM.'
+              : 'THE BATHROOM THINGS GO IN THE BATHROOM, THROUGH THE WHITE DOOR.'
+            : 'BUY FURNITURE AT HOME AND HEARTH, EAST OF THE ARCADE.',
+      );
+    }
   }
 
-  /** The next owned piece that is not out yet, set down somewhere free. */
-  private placeNext(): void {
+  /** What you own and have not put out, that goes in this room (or in `area`). */
+  private unplaced(area: Area = this.area): Array<{ f: FurnitureDef; n: number }> {
     const l = store.get().life;
-    const entry = Object.entries(l.furniture).find(([id, n]) => n > l.placed.filter((p) => p.id === id).length);
-    if (!entry) return;
-    const f = furnitureById(entry[0])!;
-    const tries: Array<[number, number]> = [];
-    // from the middle of the room outwards, and clear of the HUD in the top corner
-    const mid = (x: number): number => Math.abs(x - GAME_W / 2);
-    if (f.wall) for (let y = Math.max(WALL_TOP + f.h + 4, 44 + f.h); y <= WALL_BOTTOM; y += 10) for (let x = 30; x < GAME_W - 20; x += 12) tries.push([x, y]);
-    else for (let y = FLOOR_BOTTOM - 4; y > FLOOR_TOP + 6; y -= 8) for (let x = 40; x < GAME_W - 20; x += 10) tries.push([x, y]);
-    tries.sort((a, b) => (f.wall ? mid(a[0]) - mid(b[0]) || a[1] - b[1] : b[1] - a[1] || mid(a[0]) - mid(b[0])));
-    const spot = tries.find(([x, y]) => this.valid(f, x, y, null));
+    return Object.entries(l.furniture)
+      .map(([id, n]) => ({ f: furnitureById(id)!, n: n - l.placed.filter((p) => p.id === id).length }))
+      .filter((e) => e.f && e.n > 0 && this.roomFor(e.f) === area);
+  }
+
+  /**
+   * THE VAN: everything of yours that is not out yet, two columns of it on
+   * one card, with what room each piece goes in.  Picking one brings it in
+   * and puts it in your hands (see `startPlacing`).
+   */
+  private openPicker(): void {
+    const items = this.unplaced();
+    if (!items.length) return;
+    this.pickerPage = Math.min(this.pickerPage, Math.max(0, Math.ceil(items.length / 8) - 1));
+    const page = items.slice(this.pickerPage * 8, this.pickerPage * 8 + 8);
+    const c = this.add.container(0, 0).setDepth(880);
+    c.add(this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0.55).setOrigin(0, 0).setInteractive());
+    const W = 236;
+    const H = 112;
+    const x0 = (GAME_W - W) / 2;
+    const y0 = 30;
+    c.add(this.add.rectangle(x0, y0, W, H, PALETTE.ink, 0.97).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold));
+    c.add(text(this, x0 + 6, y0 + 4, 'WHAT TO PUT OUT', PALETTE.gold));
+    page.forEach((e, i) => {
+      const bx = x0 + 6 + (i % 2) * (W / 2 - 4);
+      const by = y0 + 17 + Math.floor(i / 2) * 20;
+      const plate = this.add.rectangle(bx, by, W / 2 - 10, 18, PALETTE.black, 0.45).setOrigin(0, 0).setStrokeStyle(1, PALETTE.slate);
+      plate.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        c.destroy();
+        this.picker = null;
+        this.startPlacing(e.f);
+      });
+      c.add(plate);
+      c.add(text(this, bx + 4, by + 2, e.f.name.length > 16 ? `${e.f.name.slice(0, 15)}.` : e.f.name, PALETTE.cream).setMaxWidth(W / 2 - 18));
+      c.add(text(this, bx + 4, by + 10, `${e.f.cat === 'bath' ? 'BATHROOM' : e.f.wall ? 'ON THE WALL' : 'ON THE FLOOR'}${e.n > 1 ? `  x${e.n}` : ''}`, PALETTE.fog));
+    });
+    if (items.length > 8) {
+      c.add(button(this, x0 + 60, y0 + H - 9, 'MORE', () => {
+        this.pickerPage = (this.pickerPage + 1) % Math.ceil(items.length / 8);
+        c.destroy();
+        this.picker = null;
+        this.openPicker();
+      }, { width: 70, height: 11 }));
+    }
+    c.add(button(this, x0 + W - 48, y0 + H - 9, 'BACK', () => {
+      c.destroy();
+      this.picker = null;
+    }, { width: 70, height: 11 }));
+    pinToScreen(c);
+    this.picker = c;
+  }
+
+  /** It comes in, lands somewhere free, and you are holding it. */
+  private startPlacing(f: FurnitureDef): void {
+    const spot = this.freeSpot(f, null);
     if (!spot) {
-      this.say('NO ROOM FOR THAT. MOVE SOMETHING FIRST.');
+      this.say('NO ROOM FOR THAT YET. MOVE SOMETHING FIRST.');
       return;
     }
     const r = placeFurniture(f.id, spot[0], spot[1]);
-    this.say(r.msg);
-    this.picked = store.get().life.placed[store.get().life.placed.length - 1]?.uid ?? null;
+    if (!r.ok) {
+      this.say(r.msg);
+      return;
+    }
+    const uid = store.get().life.placed[store.get().life.placed.length - 1]?.uid ?? null;
+    this.placing = uid;
+    this.picked = uid;
+    this.say(`${f.name}: DRAG IT WHERE YOU WANT IT, TURN IT ROUND, THEN PUT IT DOWN.`);
+    this.buildButtons();
+    this.placePieces();
+  }
+
+  /** Somewhere it can go: the open middle of this room, working outwards. */
+  private freeSpot(f: FurnitureDef, uid: number | null): [number, number] | null {
+    const lo = 40;
+    const hi = GAME_W - 10;
+    const centre = this.area === 'bath' ? 180 : 170;
+    const mid = (x: number): number => Math.abs(x - centre);
+    const tries: Array<[number, number]> = [];
+    if (f.wall) for (let y = WALL_TOP + f.h + 4; y <= WALL_BOTTOM; y += 4) for (let x = lo; x < hi; x += 4) tries.push([x, y]);
+    else for (let y = PLACE_BOTTOM - 2; y >= PLACE_TOP; y -= 2) for (let x = lo; x < hi; x += 4) tries.push([x, y]);
+    tries.sort((a, b) => mid(a[0]) - mid(b[0]) || (f.wall ? a[1] - b[1] : b[1] - a[1]));
+    return tries.find(([x, y]) => this.valid(f, x, y, uid)) ?? null;
+  }
+
+  /** Down it goes, and it stays there. */
+  private confirmPlacing(): void {
+    const p = this.placements().find((q) => q.uid === this.placing);
+    const f = p ? furnitureById(p.id) : null;
+    if (!p || !f) return;
+    const why = this.whyNot(f, p.x, p.y, p.uid);
+    if (why) {
+      this.say(why);
+      audio.sfx('buzzer', 0.4);
+      return;
+    }
+    this.placing = null;
+    audio.sfx('item_thud', 0.4);
+    this.say(`${f.name} IS IN. TAP IT AGAIN TO MOVE IT.`);
+    this.buildButtons();
+    this.rebuild();
+  }
+
+  /** Changed your mind: it goes back in the van, still yours. */
+  private cancelPlacing(quiet = false): void {
+    if (this.placing === null) return;
+    removePlacement(this.placing);
+    this.placing = null;
+    this.picked = null;
+    if (!quiet) this.say('PUT BACK. IT IS STILL YOURS.');
     this.buildButtons();
     this.placePieces();
   }
@@ -483,6 +652,7 @@ export class Condo extends WalkRoom {
     const p = this.placements().find((q) => q.uid === this.picked);
     if (!p) return;
     movePlacement(p.uid, p.x, p.y, !p.flip);
+    audio.sfx('ui_blip', 0.4);
     this.placePieces();
   }
 
@@ -493,12 +663,24 @@ export class Condo extends WalkRoom {
     this.say('PUT AWAY. IT IS STILL YOURS.');
     this.buildButtons();
     this.placePieces();
+    this.rebuild();
   }
 
   private pointerDown(p: Phaser.Input.Pointer): void {
-    if (!this.decorating || this.busy() || p.y > GAME_H - 18) return;
+    // (`busy()` counts decorating itself as busy -- it is what stops you
+    // walking about while you rearrange -- so the test here is what ELSE is
+    // going on.  Asking this.busy() meant no tap ever reached the furniture
+    // and nothing could be picked up or dragged at all.)
+    if (!this.decorating || super.busy() || this.picker || p.y > GAME_H - 18) return;
+    // carrying something: the finger moves THAT, wherever it goes down
+    if (this.placing !== null) {
+      this.dragging = true;
+      this.dragFrom = null;
+      this.pointerMove(p);
+      return;
+    }
     // the frontmost thing under the finger
-    const hit = [...this.placements()]
+    const hit = [...this.areaPlacements()]
       .reverse()
       .find((q) => Phaser.Geom.Rectangle.Contains(this.rectOf(q), p.worldX, p.worldY));
     this.picked = hit ? hit.uid : null;
@@ -514,24 +696,28 @@ export class Condo extends WalkRoom {
     if (!q) return;
     const f = furnitureById(q.id)!;
     // the base follows the finger; it never leaves the floor (or the wall)
-    const y = Math.round(f.wall ? Phaser.Math.Clamp(p.worldY + f.h / 2, WALL_TOP + f.h, WALL_BOTTOM) : Phaser.Math.Clamp(p.worldY + f.h / 2, FLOOR_TOP + 6, FLOOR_BOTTOM));
+    const y = Math.round(f.wall ? Phaser.Math.Clamp(p.worldY + f.h / 2, WALL_TOP + f.h, WALL_BOTTOM) : Phaser.Math.Clamp(p.worldY + f.h / 2, PLACE_TOP, PLACE_BOTTOM));
     const x = Math.round(Phaser.Math.Clamp(p.worldX, 4 + f.w / 2, GAME_W - 4 - f.w / 2));
     movePlacement(q.uid, x, y);
     this.placePieces();
+    if (this.placing !== null) this.buildButtons();
   }
 
   private pointerUp(): void {
     if (!this.dragging) return;
     this.dragging = false;
     const q = this.placements().find((x) => x.uid === this.picked);
-    if (!q || !this.dragFrom) return;
-    // let go somewhere it cannot be: back where it was
-    if (!this.valid(furnitureById(q.id)!, q.x, q.y, q.uid)) {
+    if (!q) return;
+    const why = this.whyNot(furnitureById(q.id)!, q.x, q.y, q.uid);
+    // something you are still carrying may rest anywhere while you think;
+    // something already in the room goes back where it was
+    if (why && this.placing === null && this.dragFrom) {
       movePlacement(q.uid, this.dragFrom.x, this.dragFrom.y);
-      this.say('IT CANNOT GO THERE.');
+      this.say(why);
       audio.sfx('buzzer', 0.4);
-    }
+    } else if (why) this.say(why);
     this.placePieces();
+    this.buildButtons();
   }
 
   // ------------------------------------------------------------ sleeping
@@ -547,9 +733,9 @@ export class Condo extends WalkRoom {
     this.cameras.main.fadeOut(900, 0, 0, 0);
     this.time.delayedCall(1000, () => {
       const r = sleep(on);
-      this.paintWalls();
+      this.paintLight();
       this.cameras.main.fadeIn(900, 0, 0, 0);
-      this.say(`${on === 'floor' ? 'ON THE BLANKET. ' : ''}${r.msg}`);
+      this.say(r.msg);
       this.locked = false;
     });
   }
@@ -559,7 +745,7 @@ export class Condo extends WalkRoom {
     if (!store.get().life.rented && !this.locked) {
       this.locked = true;
       this.say('THE LANDLORD IS AT THE DOOR. YOU HAVE TO GO.');
-      this.time.delayedCall(1800, () => this.exitTo('Hotel', { area: 'lobby', from: 'lift' }));
+      this.time.delayedCall(1800, () => this.exitTo('Hotel', { area: 'corridor', from: 'room' }));
     }
   }
 
@@ -570,5 +756,3 @@ export class Condo extends WalkRoom {
   }
 }
 
-void clock;
-void audio;

@@ -11,19 +11,18 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../../render/palette';
 import { audio } from '../../core/audio';
-import { store } from '../../core/state';
-import { button, centerText, text } from '../../core/ui';
-import { GAME_H } from '../../render/pixelScaler';
-import { COLS, depthFor, type Look } from '../../art/player';
-import { COSMETICS, lookFor, type CosmeticDef } from '../../game/catalog';
-import { buyCosmetic, record, wear } from '../../game/life';
+import { centerText, text } from '../../core/ui';
+import { GAME_H, GAME_W } from '../../render/pixelScaler';
+import { depthFor } from '../../art/player';
+import { COSMETICS, type CosmeticDef } from '../../game/catalog';
+import { record } from '../../game/life';
 import { FLOOR_TOP, WalkRoom, type Fixture } from '../rooms/WalkRoom';
 import { BARBER_LOOK } from '../../ui/portraits';
 
 const BACK_ROW = FLOOR_TOP + 24;
 const FRONT_ROW = FLOOR_TOP + 52;
-const CHAIR_X = 180;
-const BENCH_X = 296;
+const CHAIR_X = 166;
+const BENCH_X = 272;
 
 export { BARBER_LOOK };
 
@@ -32,7 +31,6 @@ const POSTER_COLS: Record<string, number> = { r: 0x3a2a1e, S: 0xe0b090, s: 0xc09
 
 export class BarberShop extends WalkRoom {
   private styles: CosmeticDef[] = [];
-  private pick = 0;
   private previewing = false;
   private desk: Fixture | null = null;
 
@@ -56,7 +54,10 @@ export class BarberShop extends WalkRoom {
   }
 
   protected paintRoom(): void {
-    this.worldW = 360;
+    // ONE SCREEN WIDE.  The chair, the mirror and the bench, and the book of
+    // cuts opens as a card (scenes2d/Shop, kind 'barber') with every cut and
+    // every colour on it -- so nothing is reached by walking.
+    this.worldW = GAME_W;
     this.bounds.width = this.worldW - 20;
     this.styles = COSMETICS.filter((c) => c.shop === 'barber' && !c.reward && c.price > 0);
     const W = this.worldW;
@@ -201,100 +202,21 @@ export class BarberShop extends WalkRoom {
     ];
   }
 
+  /**
+   * In the chair, and the book open on the arm of it: every cut and every
+   * colour on one card (scenes2d/Shop, kind 'barber'), with you in the
+   * mirror wearing whichever is picked.  It used to be one cut a page with
+   * arrows to turn them, which is a lot of tapping for eleven haircuts.
+   */
   private sitDown(): void {
+    if (this.busy()) return;
     if (!this.player.seated) {
       this.sitOn(CHAIR_X, BACK_ROW + 1, 'chair', 1);
       audio.sfx('door_open', 0.2);
     }
-    // start the book on whatever you have now, if it is in there
-    const outfit = store.get().life.outfit as Record<string, string>;
-    const at = this.styles.findIndex((s) => s.id === outfit.hair);
-    this.browse(at >= 0 ? at : 0);
-  }
-
-  /** The style book, open at `i`, and you in the mirror wearing it. */
-  private browse(i: number): void {
-    const n = this.styles.length;
-    this.pick = ((i % n) + n) % n;
-    const c = this.styles[this.pick];
-    const l = store.get().life;
-    const owned = l.wardrobe.includes(c.id);
-    const on = (l.outfit as Record<string, string>)[c.slot] === c.id;
-    const look = this.lookWith(c);
-    // (< and > are not in this row: they go either side of the head in the
-    // panel, clear of the corner a phone keeps its own arrows in -- down here
-    // the d-pad sat on top of them and took every tap meant for the book)
-    const buttons = [
-      owned
-        ? { label: on ? 'HAVE IT' : 'APPLY', fn: () => this.apply(c, false), disabled: on, w: 100 }
-        : { label: `BUY & APPLY $${c.price}`, fn: () => this.apply(c, true), disabled: store.get().cash < c.price, w: 100 },
-    ];
+    this.locked = true;
     this.previewing = false;
-    this.openPanel(
-      `${c.name}  ${this.pick + 1}/${n}`,
-      [
-        c.slot === 'dye' ? 'A NEW COLOUR' : 'A NEW CUT',
-        owned ? (on ? 'YOU HAVE IT NOW' : 'HAD IT BEFORE - FREE') : `$${c.price}`,
-        'SEE YOURSELF IN THE CHAIR',
-        `YOU HAVE $${store.get().cash}`,
-      ],
-      buttons,
-      (box, x, y) => {
-        box.add(this.portrait(look, x, y - 30));
-        // the page turners, under the head: the preview's anchor is the
-        // middle of its box, so they sit either side of it and above the row
-        box.add(button(this, x - 22, y + 16, '<', () => this.browse(this.pick - 1), { width: 20, height: 12 }));
-        box.add(button(this, x + 22, y + 16, '>', () => this.browse(this.pick + 1), { width: 20, height: 12 }));
-      },
-    );
-    // the panel keeps the bottom of the head in its box; the chair shows it too
-    this.previewing = true;
-    this.refreshPlayer(look);
-  }
-
-  /** The head alone, four times size: the cut is what you are looking at. */
-  private portrait(look: Look, cx: number, cy: number): Phaser.GameObjects.Graphics {
-    const g = this.add.graphics();
-    const rows = look.head ?? [];
-    const k = 4;
-    const x0 = cx - 6 * k;
-    const y0 = cy - (rows.length * k) / 2;
-    const col = (ch: string) => look.cols?.[ch] ?? COLS[ch] ?? 0xff00ff;
-    // the ink outline first, then the pixels over it
-    for (const pass of [0, 1])
-      rows.forEach((row, ry) =>
-        [...row].forEach((ch, rx) => {
-          if (ch === '.') return;
-          if (pass === 0) g.fillStyle(0x14100c, 1).fillRect(x0 + rx * k - 2, y0 + ry * k - 2, k + 4, k + 4);
-          else g.fillStyle(col(ch), 1).fillRect(x0 + rx * k, y0 + ry * k, k, k);
-        }),
-      );
-    // the eyes (the rig draws them as their own part)
-    g.fillStyle(col('E'), 1).fillRect(x0 + 5 * k, y0 + 4 * k, k, k).fillRect(x0 + 7 * k, y0 + 4 * k, k, k);
-    return g;
-  }
-
-  /** What you have on, with `c` instead of your hair (or its colour), hat off. */
-  private lookWith(c: CosmeticDef): Look {
-    const outfit = { ...(store.get().life.outfit as Record<string, string>), [c.slot]: c.id, hat: 'cos_no_hat' };
-    return lookFor(outfit);
-  }
-
-  private apply(c: CosmeticDef, buy: boolean): void {
-    if (buy) {
-      const r = buyCosmetic(c.id);
-      if (!r.ok) {
-        audio.sfx('buzzer', 0.6);
-        this.say(r.msg);
-        return;
-      }
-      audio.sfx('cha_ching', 0.6);
-    }
-    wear(c.id);
-    // (a hat would hide the new cut)
-    wear('cos_no_hat');
-    this.closePanel();
-    this.say(`SNIP SNIP... ${c.name}. LOOKING SHARP.`);
+    this.scene.launch('Shop', { kind: 'barber', from: 'BarberShop' });
   }
 
   /** Closing the book puts you back as you are (which may be newly cut). */

@@ -73,6 +73,14 @@ export interface CounterOpts {
   line: string;
   /** Something on it: a till, a bell, a stack of books. Drawn at the counter's top. */
   dress?: (g: Phaser.GameObjects.Graphics, x: number, top: number) => void;
+  /**
+   * What [E] at the counter does instead of a line of talk: the shops put
+   * their whole stock on one card here (see scenes2d/Shop), which is the
+   * only part of a shop a phone has to be able to reach.
+   */
+  onUse?: () => void;
+  /** The prompt for that, when there is one. */
+  useLabel?: string;
 }
 
 export interface Fixture {
@@ -119,6 +127,8 @@ export abstract class WalkRoom extends Phaser.Scene {
   private prompt!: Phaser.GameObjects.BitmapText;
   private promptPlate!: Phaser.GameObjects.Rectangle;
   private mutter!: Phaser.GameObjects.BitmapText;
+  /** Where what is said goes, across the screen (a room whose floor is down there moves it up). */
+  protected mutterY = GAME_H - 30;
   protected panel: Phaser.GameObjects.Container | null = null;
   protected exitDoor!: Fixture;
   /** When a card or the wardrobe last closed: the Esc that closed it is not a pause. */
@@ -179,7 +189,7 @@ export abstract class WalkRoom extends Phaser.Scene {
     pullBackAtClosing(this, () => !this.busy(), () => (this.locked = true));
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.72).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
-    this.mutter = centerText(this, GAME_W / 2, GAME_H - 30, '', PALETTE.cream).setDepth(860).setScrollFactor(0).setVisible(false).setMaxWidth(290);
+    this.mutter = centerText(this, GAME_W / 2, this.mutterY, '', PALETTE.cream).setDepth(860).setScrollFactor(0).setVisible(false).setMaxWidth(290);
     backPlate(this, this.mutter);
 
     const kb = this.input.keyboard;
@@ -397,8 +407,8 @@ export abstract class WalkRoom extends Phaser.Scene {
       y: front,
       w,
       depth: front - this.floorTop,
-      label: () => '[E] TALK',
-      use: () => this.talkAs(o.who, o.line),
+      label: () => o.useLabel ?? (o.onUse ? '[E] THE COUNTER' : '[E] TALK'),
+      use: () => (o.onUse ? o.onUse() : this.talkAs(o.who, o.line)),
       promptBelow: true,
       hit: { x: x - w / 2 - 2, y: this.floorTop - 6, w: w + 4, h: front - this.floorTop + 8 },
     };

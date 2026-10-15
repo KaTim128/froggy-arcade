@@ -59,6 +59,7 @@ import {
   paintCurtain,
   paintGlazing,
   paintLift,
+  LIFT,
   paintLobby,
   LOBBY_W,
   STAIR_DOOR_X,
@@ -79,6 +80,8 @@ import { backPlate } from '../ui/plate';
 
 export const ROOM_PRICE = 300;
 const WALK_Y = 160;
+/** The floor line every landing and the lift car stand on (art/hotelInterior FLOOR_Y). */
+const FLOOR_LINE = 152;
 /**
  * The clerk: drawn like every person in the building (froggy/clerk.ts), on
  * the smooth overlay, behind the desk -- clipped at the marble top, with a
@@ -88,6 +91,15 @@ const WALK_Y = 160;
 const CLERK = { x: 160, feet: 150, h: 28 };
 const DESK_TOP = DESK.top;
 const BOOK = { x: 140, y: DESK.top - 2, w: 11, h: 2 };
+
+/** The lifts: the middle of the doors in the lobby, and on Level 6 (see art/hotelInterior). */
+const LOBBY_LIFT_X = 280;
+const CORRIDOR_LIFT_X = 22;
+/** A landing's lift doors: slide them open, or shut. */
+interface LiftDoors {
+  open(ms?: number, then?: () => void): void;
+  close(ms?: number, then?: () => void): void;
+}
 
 type Area = 'lobby' | 'lift' | 'corridor' | 'room' | 'bath';
 type Spot = 'out' | 'desk' | 'lift' | 'stairs' | 'stairdoor' | 'storage' | 'door612' | 'roomdoor' | 'bathdoor' | 'bed' | 'window' | 'mirror' | null;
@@ -173,6 +185,10 @@ export class Hotel extends Phaser.Scene {
   private sirenT = 0;
   private shoutT = 0;
   private shouts = 0;
+  /** Walked somewhere by the story (into or out of a lift): no keys until there. */
+  private autoWalk: { x: number; then: () => void } | null = null;
+  /** The lift's doors on this landing, drawn over the painted ones so they can slide. */
+  private landing: LiftDoors | null = null;
 
   constructor() {
     super('Hotel');
@@ -221,6 +237,8 @@ export class Hotel extends Phaser.Scene {
     this.sirenT = 0;
     this.shoutT = 0;
     this.shouts = 0;
+    this.autoWalk = null;
+    this.landing = null;
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (this.clerkOn) froggyLayer.clear();
     });
@@ -264,11 +282,13 @@ export class Hotel extends Phaser.Scene {
             ? STORAGE_X - 20
           : this.goingUp
             ? 30
-            : 270
+            : LOBBY_LIFT_X
         : this.area === 'corridor'
           ? this.from === 'room'
             ? 290
-            : 40
+            : this.from === 'lift'
+              ? CORRIDOR_LIFT_X
+              : 40
           : this.area === 'bath'
             ? 34
             : this.from === 'corridor' || this.from === 'lift'
@@ -280,6 +300,11 @@ export class Hotel extends Phaser.Scene {
     attachPockets(this, () => this.locked || !!this.talk || this.night === 'reveal');
     // cash and tokens, top left, as everywhere else
     new TokenHud(this);
+    // the lift on this landing: its doors slide, and coming up (or down) in
+    // it you step out of it before they close behind you
+    if (this.area === 'lobby' && !dark) this.landing = this.liftDoors(LOBBY_LIFT_X, 117, 11, this.from === 'lift' && !this.goingUp);
+    if (this.area === 'corridor') this.landing = this.liftDoors(CORRIDOR_LIFT_X, 118, 10, this.from === 'lift');
+    if (this.from === 'lift' && this.landing && ((this.area === 'lobby' && !this.goingUp) || this.area === 'corridor')) this.stepOutOfLift();
 
     if (this.area === 'lobby') {
       this.cameras.main.setBounds(0, 0, LOBBY_W, GAME_H);
@@ -367,7 +392,8 @@ export class Hotel extends Phaser.Scene {
   }
 
   private buildBath(): void {
-    this.add.image(0, 0, this.painted('hotel_bath_v2', GAME_W, GAME_H, paintBathroom)).setOrigin(0, 0);
+    // (Unit 612's bathroom, as it comes: tile, mirror, towels -- nothing plumbed in)
+    this.add.image(0, 0, this.painted('condo_bath_v1', GAME_W, GAME_H, (g) => paintBathroom(g, false))).setOrigin(0, 0);
     // the mirror: the room behind you in it, and then you
     const m = MIRROR;
     const back = this.add.graphics().setDepth(1);
@@ -605,20 +631,176 @@ export class Hotel extends Phaser.Scene {
 
   // ------------------------------------------------------------- the lift
 
-  /** Up (or down), the numbers counting over the door. */
+  /**
+   * THE RIDE.  Inside the car, facing the doors: they are open on the floor
+   * you got in at, they close, the numbers count over them a floor at a
+   * time with the lit button on the panel, the car settles and chimes, and
+   * the doors slide open on the other floor -- Level 6's carpet and its
+   * doors, or the lobby's marble -- and you walk out through them.
+   */
   private rideLift(): void {
-    this.add.image(0, 0, this.painted('hotel_lift', GAME_W, GAME_H, paintLift)).setOrigin(0, 0);
-    const num = centerText(this, GAME_W / 2, 31, this.goingUp ? '1' : '6', 0xff7a3d);
-    audio.sfx('ticket_machine', 0.4);
-    for (let k = 1; k <= 5; k++) {
-      this.time.delayedCall(k * 420, () => {
-        num.setText(`${this.goingUp ? 1 + k : 6 - k}`);
-        audio.sfx('ui_blip', 0.3);
-      });
-    }
-    this.time.delayedCall(6 * 420, () => {
-      audio.sfx('chime', 0.5);
-      fadeToScene(this, 'Hotel', { area: this.goingUp ? 'corridor' : 'lobby', up: false, from: 'lift' });
+    const up = this.goingUp;
+    this.add.image(0, 0, this.painted('hotel_lift_v4', GAME_W, GAME_H, paintLift)).setOrigin(0, 0);
+    // the doorway, the landing's size (see art/hotelInterior LIFT)
+    const { x: DX, y: DY, w: DW, h: DH } = LIFT.door;
+    // what is out there, seen through the doorway: the landing, close up
+    const lobbyKey = this.painted(`hotel_lobby_${store.get().timeOfDay !== 'day' ? 'night' : 'day'}_w${LOBBY_W}`, LOBBY_W, GAME_H, (g) => paintLobby(g, store.get().timeOfDay !== 'day', true));
+    const hallKey = this.painted('hotel_corridor_v3_none', GAME_W, GAME_H, (g) => paintCorridor(g, 'none'));
+    const view = (key: string, cx: number): Phaser.GameObjects.Image => {
+      // the landing just there, through the doors, at its own scale
+      const sx = cx - DW / 2;
+      const sy = FLOOR_LINE - DH;
+      return this.add.image(DX - sx, DY - sy, key).setOrigin(0, 0).setCrop(sx, sy, DW, DH).setDepth(1);
+    };
+    // (the lobby's seats and lamp by the doors; Level 6's doors 608 and 609)
+    const from = view(up ? lobbyKey : hallKey, up ? 95 : 150);
+    const to = view(up ? hallKey : lobbyKey, up ? 150 : 95).setVisible(false);
+    // the car's light spilling out on to the landing floor
+    this.add.rectangle(DX, FLOOR_LINE - 2, DW, 2, 0x000000, 0.25).setOrigin(0, 0).setDepth(1.5);
+    // the doors themselves, and the floor numbers over them
+    const doors = this.add.graphics().setDepth(2);
+    const drawDoors = (k: number): void => {
+      // k: 0 shut, 1 open
+      doors.clear();
+      const half = DW / 2;
+      const w = Math.max(0, Math.round(half * (1 - k)));
+      if (!w) return;
+      for (const [x0, flip] of [[DX, false], [DX + DW - w, true]] as Array<[number, boolean]>) {
+        doors.fillStyle(0xa8acb0, 1).fillRect(x0, DY, w, DH);
+        for (let i = 2; i < w; i += 3) doors.fillStyle(0xd4d8dc, 0.45).fillRect(x0 + i, DY, 1, DH);
+        doors.fillStyle(0xd4d8dc, 1).fillRect(x0, DY, w, 1);
+        // the meeting edge: a dark rubber strip
+        doors.fillStyle(0x3a3d44, 1).fillRect(flip ? x0 : x0 + w - 1, DY, 1, DH);
+      }
+    };
+    const state = { k: 1 };
+    drawDoors(1);
+    const slide = (to1: number, ms: number, then: () => void): void => {
+      audio.sfx('door_creak', 0.18);
+      this.tweens.add({ targets: state, k: to1, duration: ms, ease: 'Sine.easeInOut', onUpdate: () => drawDoors(state.k), onComplete: then });
+    };
+    const num = centerText(this, LIFT.dial.x + 3, LIFT.dial.y, up ? '1' : '6', 0xff7a3d).setDepth(3);
+    const arrow = centerText(this, LIFT.dial.x - 5, LIFT.dial.y, up ? '^' : 'v', 0xff7a3d).setDepth(3).setAlpha(0);
+    // the button you pressed, lit on the panel: 6 going up, 1 going down
+    const bt = LIFT.button(up ? 6 : 1);
+    const lit = this.add.rectangle(bt.x, bt.y, 3, 3, 0xffd45e, 0.6).setOrigin(0, 0).setDepth(3).setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({ targets: lit, alpha: 0.6, duration: 500, yoyo: true, repeat: -1 });
+    // you, in the car, in front of the panel
+    this.player = new Player(this, 142, FLOOR_LINE + 8, false);
+    this.player.setSurface('carpet');
+    this.locked = true;
+    this.time.delayedCall(500, () =>
+      slide(0, 700, () => {
+        audio.sfx('ticket_machine', 0.4);
+        arrow.setAlpha(1);
+        this.tweens.add({ targets: this.cameras.main, scrollY: 0.6, duration: 160, yoyo: true });
+        const STEP = 520;
+        for (let k = 1; k <= 5; k++) {
+          this.time.delayedCall(k * STEP, () => {
+            num.setText(`${up ? 1 + k : 6 - k}`);
+            audio.sfx('ui_blip', 0.3);
+          });
+        }
+        this.time.delayedCall(6 * STEP, () => {
+          // arrived: the car settles, the bell, the arrow goes out
+          this.cameras.main.shake(140, 0.002);
+          arrow.setAlpha(0);
+          lit.setVisible(false);
+          this.tweens.killTweensOf(lit);
+          num.setText(up ? '6' : '1');
+          audio.sfx('chime', 0.5);
+          from.setVisible(false);
+          to.setVisible(true);
+          this.time.delayedCall(350, () =>
+            slide(1, 800, () => {
+              // and out: across the car and through the doors
+              this.autoWalk = {
+                x: DX + DW / 2,
+                then: () => {
+                  const p = this.player;
+                  if (!p) return;
+                  this.tweens.add({ targets: p.sprite, y: p.sprite.y - 6, scale: 0.85, alpha: 0, duration: 420 });
+                  this.time.delayedCall(260, () => fadeToScene(this, 'Hotel', { area: up ? 'corridor' : 'lobby', up: false, from: 'lift' }));
+                },
+              };
+            }),
+          );
+        });
+      }),
+    );
+  }
+
+  /**
+   * The lift on a landing: the car behind the doors (lit steel, a rail, its
+   * floor), and the two doors over it, drawn so they can slide apart.
+   */
+  private liftDoors(cx: number, top: number, half: number, open: boolean): LiftDoors {
+    const h = FLOOR_LINE - top;
+    const car = this.add.graphics().setDepth(1);
+    car.fillStyle(0x6a7078, 1).fillRect(cx - half, top, half * 2, h);
+    car.fillStyle(0xa0a6ae, 1).fillRect(cx - half + 1, top + 1, half * 2 - 2, h - 3);
+    for (let x = cx - half + 2; x < cx + half - 1; x += 3) car.fillStyle(0xffffff, 0.08).fillRect(x, top + 1, 1, h - 3);
+    car.fillStyle(0xfff4d8, 0.8).fillRect(cx - half + 2, top + 1, half * 2 - 4, 1);
+    car.fillStyle(0xd8dce0, 1).fillRect(cx - half + 1, top + Math.round(h * 0.6), half * 2 - 2, 1);
+    car.fillStyle(0x3a3d44, 1).fillRect(cx - half, FLOOR_LINE - 3, half * 2, 3);
+    const doors = this.add.graphics().setDepth(1.2);
+    const state = { k: open ? 1 : 0 };
+    const draw = (): void => {
+      doors.clear();
+      const w = Math.max(0, Math.round(half * (1 - state.k)));
+      if (!w) return;
+      for (const [x0, edge] of [[cx - half, cx - half + w - 1], [cx + half - w, cx + half - w]]) {
+        doors.fillStyle(0xa8acb0, 1).fillRect(x0, top, w, h);
+        for (let i = 2; i < w; i += 3) doors.fillStyle(0xd4d8dc, 0.5).fillRect(x0 + i, top, 1, h);
+        doors.fillStyle(0xd4d8dc, 1).fillRect(x0, top, w, 1);
+        doors.fillStyle(0x6a6e74, 1).fillRect(edge, top, 1, h);
+      }
+    };
+    draw();
+    const slide = (k: number, ms: number, then?: () => void): void => {
+      this.tweens.killTweensOf(state);
+      audio.sfx('door_creak', 0.15);
+      this.tweens.add({ targets: state, k, duration: ms, ease: 'Sine.easeInOut', onUpdate: draw, onComplete: () => then?.() });
+    };
+    return { open: (ms = 700, then) => slide(1, ms, then), close: (ms = 700, then) => slide(0, ms, then) };
+  }
+
+  /** Out of the lift you came in: through its open doors, and they shut behind you. */
+  private stepOutOfLift(): void {
+    const p = this.player;
+    if (!p) return;
+    this.locked = true;
+    p.sprite.setAlpha(0).setScale(0.9);
+    p.sprite.y -= 4;
+    this.tweens.add({ targets: p.sprite, alpha: 1, scale: 1, y: p.sprite.y + 4, duration: 380, ease: 'Sine.easeOut' });
+    const cx = this.area === 'lobby' ? LOBBY_LIFT_X : CORRIDOR_LIFT_X;
+    this.autoWalk = {
+      x: this.area === 'lobby' ? cx - 24 : cx + 24,
+      then: () => {
+        this.locked = false;
+        this.landing?.close(700);
+      },
+    };
+  }
+
+  /**
+   * Into the lift: walked to its doors, they open, you step into the car,
+   * they close on you -- and then the ride.
+   */
+  private enterLift(up: boolean): void {
+    const cx = this.area === 'lobby' ? LOBBY_LIFT_X : CORRIDOR_LIFT_X;
+    this.locked = true;
+    audio.sfx('bell_ding', 0.4);
+    this.landing?.open(700, () => {
+      this.autoWalk = {
+        x: cx,
+        then: () => {
+          const p = this.player;
+          if (!p) return;
+          this.tweens.add({ targets: p.sprite, y: p.sprite.y - 4, scale: 0.9, alpha: 0, duration: 380 });
+          this.time.delayedCall(420, () => this.landing?.close(650, () => fadeToScene(this, 'Hotel', { area: 'lift', up })));
+        },
+      };
     });
   }
 
@@ -692,22 +874,21 @@ export class Hotel extends Phaser.Scene {
           this.say('Dead. Nothing lights up.');
           return;
         }
-        if (!this.storyNight()) {
-          if (!s.life.rented) {
-            this.say(s.life.evicted ? '"Residents only. Your things are in storage -- see me to rent again."' : '"Residents only. The landlord is at the desk."');
+        // (on Level 6 the lift only goes down)
+        if (this.area === 'lobby') {
+          if (!this.storyNight()) {
+            // by day it is the residents' lift: up to the sixth floor, and
+            // along the corridor to your own door
+            if (!s.life.rented) {
+              this.say(s.life.evicted ? '"Residents only. Your things are in storage -- see me to rent again."' : '"Residents only. The landlord is at the desk."');
+              return;
+            }
+          } else if (!s.checkedIn) {
+            this.openTalk('"Guests only, I\'m afraid. Reception is right here."', [{ label: 'OK', fn: () => this.closeTalk() }]);
             return;
           }
-          this.locked = true;
-          audio.sfx('bell_ding', 0.4);
-          fadeToScene(this, 'Condo', {});
-          return;
         }
-        if (!s.checkedIn) {
-          this.openTalk('"Guests only, I\'m afraid. Reception is right here."', [{ label: 'OK', fn: () => this.closeTalk() }]);
-          return;
-        }
-        this.locked = true;
-        fadeToScene(this, 'Hotel', { area: 'lift', up: this.area === 'lobby' });
+        this.enterLift(this.area === 'lobby');
         return;
       case 'stairs':
         if (this.policeOn) {
@@ -744,6 +925,18 @@ export class Hotel extends Phaser.Scene {
         this.say('STAFF ONLY. Locked.');
         return;
       case 'door612':
+        if (!this.storyNight()) {
+          // by day, 612 is your flat: the key card works while the rent is paid
+          if (!s.life.rented) {
+            audio.sfx('buzzer', 0.4);
+            this.say('The card light goes red. The landlord has my things.');
+            return;
+          }
+          this.locked = true;
+          audio.sfx('door_open');
+          fadeToScene(this, 'Condo', { area: 'room', from: 'corridor' });
+          return;
+        }
         this.locked = true;
         audio.sfx('door_open');
         fadeToScene(this, 'Hotel', { area: 'room', from: 'corridor' });
@@ -1292,6 +1485,18 @@ export class Hotel extends Phaser.Scene {
       const d = Math.abs(p.x - (MIRROR.x + MIRROR.w / 2));
       const a = Phaser.Math.Clamp(1 - (d - 4) / 18, 0, 1);
       this.reflection.setVisible(a > 0).setAlpha(a).setPosition(Phaser.Math.Clamp(p.x, MIRROR.x + 7, MIRROR.x + MIRROR.w - 7), MIRROR.y + MIRROR.h + 8);
+    }
+    if (this.autoWalk) {
+      const w = this.autoWalk;
+      const d = w.x - p.x;
+      this.prompt.setVisible(false);
+      if (Math.abs(d) <= 1.5) {
+        this.autoWalk = null;
+        p.move(0, 0, delta, new Phaser.Geom.Rectangle(0, p.y, this.area === 'lobby' ? LOBBY_W : GAME_W, 0));
+        w.then();
+      } else p.move(Math.sign(d), 0, delta, new Phaser.Geom.Rectangle(0, p.y, this.area === 'lobby' ? LOBBY_W : GAME_W, 0));
+      if (this.area === 'lobby') this.cameras.main.scrollX = Phaser.Math.Clamp(p.x - 250, 0, LOBBY_W - GAME_W);
+      return;
     }
     if (this.locked || this.talk) {
       this.prompt.setVisible(false);

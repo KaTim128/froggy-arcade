@@ -17,8 +17,12 @@ import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { Player } from '../art/player';
 import { drawFurniture } from '../art/furnitureArt';
+import { paintUnitDoor } from '../art/hotelInterior';
 import {
   COSMETICS,
+  buyCosmetic,
+  buyFurniture,
+  clock,
   evict,
   payRent,
   rent,
@@ -30,11 +34,16 @@ import {
   RENT_PRICE,
   type Result,
 } from '../game/life';
-import { cosmeticById, furnitureById, lookFor, type CosmeticSlot } from '../game/catalog';
+import { cosmeticById, furnitureById, lookFor, stockFor, type CosmeticDef, type CosmeticSlot, type FurnitureDef } from '../game/catalog';
 import { touchControls } from '../ui/touchControls';
 
-/** The shops themselves are rooms now (scenes2d/shops); this is the landlord's desk and your wardrobe. */
-export type ShopKind = 'landlord' | 'wardrobe';
+/**
+ * The three shops on the street sell from a COUNTER CARD -- this panel --
+ * rather than by walking the length of the room and pressing [E] on every
+ * price label in it.  The rooms are still there to walk round and try things
+ * in; the buying is here, on one screen, where a phone can reach all of it.
+ */
+export type ShopKind = 'landlord' | 'wardrobe' | 'furniture' | 'barber' | 'clothes';
 
 interface Row {
   id: string;
@@ -82,10 +91,11 @@ export class Shop extends Phaser.Scene {
     super('Shop');
   }
 
-  init(data: { kind?: ShopKind; from?: string }): void {
+  init(data: { kind?: ShopKind; from?: string; tab?: number }): void {
     this.kind = data.kind ?? 'wardrobe';
     this.from = data.from ?? '';
-    this.tab = 0;
+    // a rack in the room opens the card at what that rack holds
+    this.tab = Math.max(0, data.tab ?? 0);
     this.sel = 0;
     this.top = 0;
     this.msg = '';
@@ -236,16 +246,18 @@ export class Shop extends Phaser.Scene {
 
   // ------------------------------------------------------------- previews
 
-  private drawIcon(col: number, at: { x: number; y: number }, round = false): void {
-    const g = this.add.graphics();
-    g.fillStyle(0x14100c, 1);
-    if (round) g.fillCircle(at.x, at.y - 22, 13);
-    else g.fillRect(at.x - 12, at.y - 36, 24, 26);
-    g.fillStyle(col, 1);
-    if (round) g.fillCircle(at.x, at.y - 22, 12);
-    else g.fillRect(at.x - 11, at.y - 35, 22, 24);
-    g.fillStyle(0xffffff, 0.25).fillRect(at.x - 9, at.y - 33, 6, 3);
-    this.previewBits.push(g);
+  /** The door of Unit 612, as it is on Level 6 (art/hotelInterior paintUnitDoor). */
+  private drawUnitDoor(at: { x: number; y: number }): void {
+    const W = 56;
+    const H = 50;
+    if (!this.textures.exists('unit612_door')) {
+      const t = this.textures.createCanvas('unit612_door', W, H);
+      if (t) {
+        paintUnitDoor(t.getContext(), W, H);
+        t.refresh();
+      }
+    }
+    this.previewBits.push(this.add.image(Math.round(at.x), at.y + 3, 'unit612_door').setOrigin(0.5, 1));
   }
 
   private drawPerson(outfit: Record<string, string>, at: { x: number; y: number }): void {
@@ -282,10 +294,141 @@ export class Shop extends Phaser.Scene {
         };
       }
 
+      case 'furniture':
+        return this.furnitureMode();
+
+      case 'barber':
+        return this.dresserMode('barber');
+
+      case 'clothes':
+        return this.dresserMode('clothes');
+
       case 'landlord':
       default:
         return this.landlordMode();
     }
+  }
+
+  /**
+   * ---- HOME AND HEARTH, over the counter.
+   *
+   * Only what is in today (catalog `stockFor`), in three tabs so no list is
+   * ever longer than the panel: what stands on the floor, what hangs on the
+   * wall, and the bathroom things.  The card says what it is, what it costs,
+   * how many you already own, and where it may go.
+   */
+  private furnitureMode(): Mode {
+    const life = () => store.get().life;
+    const today = (): FurnitureDef[] => stockFor(clock().day);
+    const owned = (f: FurnitureDef): number => life().furniture[f.id] ?? 0;
+    const tab = (label: string, pick: (f: FurnitureDef) => boolean): Tab => ({
+      label,
+      rows: () =>
+        today()
+          .filter(pick)
+          .map((f) => ({ id: f.id, name: f.name, right: owned(f) ? `$${f.price} x${owned(f)}` : `$${f.price}`, dim: store.get().cash < f.price })),
+    });
+    return {
+      title: 'HOME AND HEARTH',
+      tabs: [
+        tab('FLOOR', (f) => !f.wall && f.cat !== 'bath'),
+        tab('WALL', (f) => f.wall),
+        tab('BATHROOM', (f) => f.cat === 'bath'),
+      ],
+      detail: (id) => {
+        const f = furnitureById(id)!;
+        const l = life();
+        return [
+          f.name,
+          f.note,
+          `$${f.price}   ${f.cat.toUpperCase()}`,
+          owned(f) ? `YOU OWN ${owned(f)}` : 'YOU DO NOT OWN ONE',
+          f.cat === 'bath' ? 'GOES IN THE BATHROOM' : f.wall ? 'HANGS ON THE WALL' : 'STANDS ON THE FLOOR',
+          l.rented ? 'PLACE IT WITH DECORATE' : 'RENT A UNIT FIRST',
+        ];
+      },
+      preview: (id, at) => {
+        const f = furnitureById(id)!;
+        const g = this.add.graphics();
+        drawFurniture(g, f, 0, 0, false);
+        // big things shown smaller, so nothing leaves the box
+        const k = f.w > 34 || f.h > 26 ? 1 : 1.6;
+        g.setScale(k).setPosition(at.x, at.y - 6);
+        this.previewBits.push(g);
+      },
+      actions: (id) => {
+        const f = furnitureById(id)!;
+        return [{ label: `BUY $${f.price}`, fn: () => buyFurniture(f.id), off: store.get().cash < f.price }];
+      },
+    };
+  }
+
+  /**
+   * ---- THE BARBER'S BOOK AND THE RAILS AT THREADS, over the counter.
+   *
+   * The same card for both: the shop's own stock in tabs by what it is for,
+   * YOU wearing the one that is picked in the preview, and one button that
+   * buys it and puts it on (or just puts it on, if it is already yours).
+   */
+  private dresserMode(shop: 'barber' | 'clothes'): Mode {
+    const life = () => store.get().life;
+    const owns = (c: CosmeticDef): boolean => life().wardrobe.includes(c.id);
+    const on = (c: CosmeticDef): boolean => (life().outfit as Record<string, string>)[c.slot] === c.id;
+    const tab = (label: string, slots: CosmeticSlot[]): Tab => ({
+      label,
+      rows: () =>
+        COSMETICS.filter((c) => c.shop === shop && !c.reward && slots.includes(c.slot)).map((c) => ({
+          id: c.id,
+          name: c.name,
+          right: on(c) ? 'ON' : owns(c) ? 'YOURS' : `$${c.price}`,
+          dim: !owns(c) && store.get().cash < c.price,
+        })),
+    });
+    const tabs: Tab[] =
+      shop === 'barber'
+        ? [tab('CUTS', ['hair']), tab('COLOUR', ['dye'])]
+        : [tab('TOPS', ['top']), tab('LEGS', ['legs', 'shoes']), tab('EXTRAS', ['scarf', 'hat'])];
+    return {
+      title: shop === 'barber' ? "CLIP JOINT - THE BOOK" : 'THREADS - THE RAILS',
+      tabs,
+      detail: (id) => {
+        const c = cosmeticById(id)!;
+        return [
+          c.name,
+          c.slot === 'dye' ? 'A NEW COLOUR' : c.slot === 'hair' ? 'A NEW CUT' : `FOR YOUR ${c.slot.toUpperCase()}`,
+          on(c) ? 'YOU ARE WEARING IT' : owns(c) ? 'YOURS ALREADY - FREE' : `$${c.price}`,
+          `YOU HAVE $${store.get().cash}`,
+        ];
+      },
+      preview: (id, at) => {
+        const c = cosmeticById(id)!;
+        const outfit = { ...(life().outfit as Record<string, string>), [c.slot]: id };
+        // a haircut is only seen bare-headed, so the hat comes off for it
+        if (c.slot === 'hair' || c.slot === 'dye') outfit.hat = 'cos_no_hat';
+        this.drawPerson(outfit, at);
+      },
+      actions: (id) => {
+        const c = cosmeticById(id)!;
+        if (on(c)) return [{ label: 'WEARING IT', fn: () => undefined, off: true }];
+        if (owns(c)) return [{ label: 'WEAR IT', fn: () => this.wearIt(c) }];
+        return [
+          {
+            label: `BUY & WEAR $${c.price}`,
+            fn: () => {
+              const r = buyCosmetic(c.id);
+              return r.ok ? this.wearIt(c) : r;
+            },
+            off: store.get().cash < c.price,
+          },
+        ];
+      },
+    };
+  }
+
+  /** On it goes -- and a haircut takes the hat off, or you would not see it. */
+  private wearIt(c: CosmeticDef): Result {
+    if (c.slot === 'hair' || c.slot === 'dye') wear('cos_no_hat');
+    return wear(c.id);
   }
 
   private landlordMode(): Mode {
@@ -316,8 +459,8 @@ export class Shop extends Phaser.Scene {
             return [
               'UNIT 612, SIXTH FLOOR',
               `$${RENT_PRICE} FOR ${RENT_DAYS} DAYS`,
-              'EMPTY: A WINDOW AND CURTAINS.',
-              'SLEEP AND DECORATE.',
+              'A BED, A WINDOW AND A BARE',
+              'BATHROOM. DECORATE BOTH.',
               l.evicted ? 'YOUR THINGS ARE IN STORAGE.' : '',
             ];
           }
@@ -329,7 +472,7 @@ export class Shop extends Phaser.Scene {
       },
       preview: (id, at) => {
         if (id === 'rent') {
-          this.drawIcon(0x7b2a3a, at);
+          this.drawUnitDoor(at);
           return;
         }
         const [kind, real] = id.split(':');
