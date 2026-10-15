@@ -4237,8 +4237,12 @@ for (const g of [
   // (up to a minute: the lizard has the Sleep Ball now, and a frog put to
   // sleep sits out two whole turns -- twelve seconds on an idle machine --
   // before its own comes round again)
+  // (by the clock, not a count of polls: under the whole suite's load each
+  // poll and each turn takes far longer, and two slept-through turns plus the
+  // lizard's in between can run past a minute)
   const waitForFrog = async () => {
-    for (let i = 0; i < 150; i++) {
+    const until = Date.now() + 150_000;
+    while (Date.now() < until) {
       const s = await st();
       if (s.turn === 'frog' && s.phase === 'aim') {
         await page.evaluate(() => window.__fvl.setHp('frog', 80));
@@ -4246,6 +4250,7 @@ for (const g of [
       }
       await sleep(400);
     }
+    console.log('NOTE  frog vs lizard: the frog\'s turn never came round in 150s');
     return st();
   };
 
