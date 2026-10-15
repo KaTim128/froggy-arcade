@@ -17,6 +17,7 @@ import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { Player } from '../art/player';
 import { drawFurniture } from '../art/furnitureArt';
+import { paintUnitDoor } from '../art/hotelInterior';
 import {
   COSMETICS,
   buyCosmetic,
@@ -245,16 +246,18 @@ export class Shop extends Phaser.Scene {
 
   // ------------------------------------------------------------- previews
 
-  private drawIcon(col: number, at: { x: number; y: number }, round = false): void {
-    const g = this.add.graphics();
-    g.fillStyle(0x14100c, 1);
-    if (round) g.fillCircle(at.x, at.y - 22, 13);
-    else g.fillRect(at.x - 12, at.y - 36, 24, 26);
-    g.fillStyle(col, 1);
-    if (round) g.fillCircle(at.x, at.y - 22, 12);
-    else g.fillRect(at.x - 11, at.y - 35, 22, 24);
-    g.fillStyle(0xffffff, 0.25).fillRect(at.x - 9, at.y - 33, 6, 3);
-    this.previewBits.push(g);
+  /** The door of Unit 612, as it is on Level 6 (art/hotelInterior paintUnitDoor). */
+  private drawUnitDoor(at: { x: number; y: number }): void {
+    const W = 56;
+    const H = 50;
+    if (!this.textures.exists('unit612_door')) {
+      const t = this.textures.createCanvas('unit612_door', W, H);
+      if (t) {
+        paintUnitDoor(t.getContext(), W, H);
+        t.refresh();
+      }
+    }
+    this.previewBits.push(this.add.image(Math.round(at.x), at.y + 3, 'unit612_door').setOrigin(0.5, 1));
   }
 
   private drawPerson(outfit: Record<string, string>, at: { x: number; y: number }): void {
@@ -456,8 +459,8 @@ export class Shop extends Phaser.Scene {
             return [
               'UNIT 612, SIXTH FLOOR',
               `$${RENT_PRICE} FOR ${RENT_DAYS} DAYS`,
-              'EMPTY: A WINDOW AND CURTAINS.',
-              'SLEEP AND DECORATE.',
+              'A BED, A WINDOW AND A BARE',
+              'BATHROOM. DECORATE BOTH.',
               l.evicted ? 'YOUR THINGS ARE IN STORAGE.' : '',
             ];
           }
@@ -469,7 +472,7 @@ export class Shop extends Phaser.Scene {
       },
       preview: (id, at) => {
         if (id === 'rent') {
-          this.drawIcon(0x7b2a3a, at);
+          this.drawUnitDoor(at);
           return;
         }
         const [kind, real] = id.split(':');

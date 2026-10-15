@@ -694,6 +694,54 @@ function storageDoor(g: Ctx, cx: number): void {
   drawPixelText(g, 'STORE', cx, y - 10, { scale: 1, color: '#c8c2b4', center: true });
 }
 
+/**
+ * Unit 612's door as the landlord's card shows it: a stretch of the Level 6
+ * wall -- the paint, the bumper rail, the skirting, the carpet -- with the
+ * walnut door in its white architrave, the steel number plate and spy hole,
+ * the lever handle, a kick plate, a sconce beside it and a mat in front.
+ */
+export function paintUnitDoor(g: Ctx, w: number, h: number): void {
+  const floor = h - 7;
+  wallpaper(g, 0, 0, w, floor, { paper: HP.paper, shade: HP.paperShade, motif: HP.paperMotif });
+  // the lower wall and its bumper rail, the skirting
+  rect(g, 0, floor - 14, w, 11, HP.lowerWall);
+  rect(g, 0, floor - 17, w, 3, HP.steel);
+  rect(g, 0, floor - 17, w, 1, HP.steelHi);
+  rect(g, 0, floor - 15, w, 1, HP.steelDark);
+  rect(g, 0, floor - 3, w, 3, '#f4f3ef');
+  rect(g, 0, floor - 1, w, 1, '#c8c4bc');
+  // the carpet
+  rect(g, 0, floor, w, h - floor, HP.carpet);
+  for (let y = floor + 1; y < h; y += 2) rect(g, 0, y, w, 1, HP.carpetHi, 0.35);
+  for (let x = 0; x < w; x += 12) rect(g, x, floor, 1, h - floor, HP.carpetDark, 0.6);
+  const cx = Math.round(w / 2);
+  const dw = 20;
+  const dh = 38;
+  // the light from the sconce down the wall, and the door's shadow on it
+  glow(g, cx + 19, floor - 27, 16, 0.3);
+  rect(g, cx + dw / 2 + 2, floor - dh - 1, 2, dh + 1, '#000000', 0.12);
+  roomDoor(g, cx, '612', { w: dw, h: dh, floor });
+  const x = cx - dw / 2;
+  const y = floor - dh;
+  // two raised panels in the veneer, catching the light on their top edges
+  for (const [py, ph] of [[y + 16, 9], [y + 27, 8]]) {
+    rect(g, x + 3, py, dw - 6, ph, HP.woodDark, 0.35);
+    rect(g, x + 4, py + 1, dw - 8, ph - 2, HP.wood);
+    rect(g, x + 4, py + 1, dw - 8, 1, HP.woodHi);
+  }
+  // a brushed kick plate along the foot, and the threshold
+  rect(g, x + 1, floor - 4, dw - 2, 3, HP.steel);
+  rect(g, x + 1, floor - 4, dw - 2, 1, HP.steelHi);
+  rect(g, x - 2, floor, dw + 4, 1, HP.steelDark);
+  // the card reader beside the handle, its light green
+  rect(g, x + dw + 3, y + 17, 3, 6, HP.ink);
+  rect(g, x + dw + 4, y + 18, 1, 1, '#5adc8a');
+  sconce(g, cx + 19, floor - 27);
+  // the mat in front of it
+  rect(g, cx - 9, floor + 2, 18, 3, '#5a4434');
+  rect(g, cx - 9, floor + 2, 18, 1, '#7a5e48');
+}
+
 // ============================================================ the corridor
 
 export const CORRIDOR_DOORS = [90, 132, 174, 216, 258, 300];
@@ -960,7 +1008,13 @@ export function paintCurtain(g: Ctx, w: number, h: number, side: -1 | 1): void {
 /** The mirror over the basin: chest to crown for a man standing at it. */
 export const MIRROR = { x: 149, y: 115, w: 22, h: 21 };
 
-export function paintBathroom(g: Ctx): void {
+/**
+ * The bathroom.  `fitted` is the hotel's: a vanity and basin under the
+ * mirror, a toilet and a bath.  Without it it is the flat's -- the same tile,
+ * floor, mirror, towel rail and window, and the plumbing waiting in the wall
+ * for whatever the tenant buys and puts in.
+ */
+export function paintBathroom(g: Ctx, fitted = true): void {
   const W = 320;
   // white subway tile to the ceiling, a burgundy band at the dado
   rect(g, 0, CEIL_Y, W, FLOOR_Y - CEIL_Y, '#f2f0ea');
@@ -991,6 +1045,27 @@ export function paintBathroom(g: Ctx): void {
   rect(g, m.x - 2, m.y - 7, m.w + 4, 3, HP.steel);
   for (let k = 0; k < 3; k++) rect(g, m.x + 2 + k * 8, m.y - 6, 3, 1, '#fff6d8');
   glow(g, m.x + m.w / 2, m.y - 5, 24, 0.38);
+  if (!fitted) {
+    // the glass, with nothing in front of it: a cool sheen
+    rect(g, m.x, m.y, m.w, m.h, '#cfdde2');
+    for (let d = 0; d < 6; d++) rect(g, m.x + 2 + d, m.y + 2 + d * 2, 1, 2, '#ffffff', 0.35);
+    rect(g, m.x, m.y + m.h - 3, m.w, 3, '#b8c8ce');
+    // the capped pipes where a basin goes, a soil pipe stub, a floor drain
+    rect(g, m.x + 6, 143, 2, 5, HP.steelHi);
+    rect(g, m.x + 14, 143, 2, 5, HP.steelHi);
+    rect(g, m.x + 5, 142, 4, 1, HP.steel);
+    rect(g, m.x + 13, 142, 4, 1, HP.steel);
+    rect(g, 216, 146, 6, 6, '#e8e6e0');
+    rect(g, 217, 146, 4, 1, HP.steel);
+    rect(g, 274, FLOOR_Y + 8, 6, 2, HP.steelDark);
+    rect(g, 275, FLOOR_Y + 8, 4, 1, HP.steel);
+    // a small frosted window high up
+    rect(g, 216, 108, 14, 11, HP.cream);
+    rect(g, 217, 109, 12, 9, '#9ab0c4');
+    rect(g, 222, 109, 1, 9, HP.cream);
+    glow(g, 160, CEIL_Y, 60, 0.12);
+    return;
+  }
   const top = 139;
   rect(g, m.x - 7, top, m.w + 14, 2, HP.marble);
   rect(g, m.x - 7, top, m.w + 14, 1, '#ffffff');
@@ -1037,47 +1112,119 @@ export function paintBathroom(g: Ctx): void {
 
 // ============================================================ the lift
 
+/**
+ * The car, to the player's scale like every other room here: a steel box
+ * about two of him wide each side of the doors, a lit ceiling, a handrail at
+ * the hip, and in the back wall the doors -- the same size as the doors on
+ * the landings -- with the floor dial over them and the buttons beside them.
+ */
+export const LIFT = {
+  /** The doorway in the back wall. */
+  door: { x: 145, y: FLOOR_Y - 36, w: 30, h: 36 },
+  /** The floor dial over it: where the number goes. */
+  dial: { x: 160, y: FLOOR_Y - 42 },
+  /** The buttons, floor 1 to 6: their top-left corners. */
+  button: (floor: number) => ({ x: 182 + ((floor - 1) % 2) * 6, y: 120 + (2 - Math.floor((floor - 1) / 2)) * 8 }),
+};
+
 export function paintLift(g: Ctx): void {
   const W = 320;
-  rect(g, 0, 0, W, 180, '#8a9098');
-  // brushed steel walls, a steel handrail, the doors in front of you
-  for (let x = 0; x < W; x += 40) {
-    rect(g, x, 20, 40, 126, x % 80 ? '#a0a6ae' : '#98a0a8');
-    rect(g, x, 20, 1, 126, '#6a7078');
-    for (let k = 2; k < 40; k += 3) rect(g, x + k, 20, 1, 126, '#ffffff', 0.06);
+  // the car: a lift's size, not a hall's -- about three of him wide, the
+  // back wall with the doors in it, the side walls and the floor coming out
+  // towards us, and round it the dark of the shaft
+  const L = 116;
+  const R = 204;
+  const FL = 86;
+  const FR = 234;
+  const CF = 72;
+  const BACK_TOP = 100;
+  // the shaft: dark concrete, the guide rails and the cables
+  rect(g, 0, 0, W, 180, '#0e1014');
+  for (let y = 0; y < 180; y += 12) rect(g, 0, y, W, 1, '#16181e');
+  for (const x of [64, 252]) {
+    rect(g, x, 0, 4, 180, '#2a2d33');
+    rect(g, x, 0, 1, 180, '#3a3d44');
+    for (let y = 6; y < 180; y += 24) rect(g, x - 2, y, 8, 2, '#24262c');
   }
-  rect(g, 0, 146, W, 6, '#6a7078');
-  rect(g, 0, 0, W, 20, '#e8e6e0');
-  for (let x = 20; x < W; x += 40) {
-    rect(g, x, 4, 20, 10, '#fff4d8');
-    glow(g, x + 10, 10, 40, 0.3);
+  for (const cx of [154, 160, 166]) rect(g, cx, 0, 1, CF - 6, '#2a2d33');
+  rect(g, FL + 20, CF - 7, FR - FL - 40, 6, '#24262c');
+  rect(g, FL + 20, CF - 7, FR - FL - 40, 1, '#3a3d44');
+  const poly = (pts: number[][], c: string, a = 1): void => {
+    g.globalAlpha = a;
+    g.fillStyle = c;
+    g.beginPath();
+    pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    g.closePath();
+    g.fill();
+    g.globalAlpha = 1;
+  };
+  // the ceiling, lit
+  poly([[FL, CF], [FR, CF], [R, BACK_TOP], [L, BACK_TOP]], '#d8d6d0');
+  for (let k = 0; k < 2; k++) {
+    const t = 0.3 + k * 0.4;
+    const y = Math.round(CF + t * (BACK_TOP - CF));
+    const half = Math.round(((FR - FL) / 2) * (1 - t) + ((R - L) / 2) * t) - 12;
+    rect(g, 160 - half, y, half * 2, 2, '#fff6dc');
   }
-  rect(g, 0, 20, W, 3, HP.gold);
-  rect(g, 0, 112, W, 3, HP.goldHi);
-  rect(g, 0, 115, W, 1, HP.goldDark);
-  const cx = 160;
-  rect(g, cx - 44, 42, 88, 110, HP.gold);
-  rect(g, cx - 42, 44, 84, 108, HP.goldDark);
-  for (const dx of [-41, 0]) {
-    rect(g, cx + dx, 45, 41, 107, HP.steel);
-    for (let k = 2; k < 41; k += 3) rect(g, cx + dx + k, 45, 1, 107, HP.steelHi, 0.45);
-    rect(g, cx + dx, 45, 41, 1, HP.steelHi);
+  glow(g, 160, CF + 12, 34, 0.2);
+  rect(g, FL, CF - 1, FR - FL, 2, '#6a7078');
+  // the side walls, panelled, the handrail running along them
+  for (const [x0, x1] of [[FL, L], [FR, R]]) {
+    poly([[x0, CF], [x1, BACK_TOP], [x1, FLOOR_Y], [x0, 180]], '#9aa0a8');
+    for (let k = 1; k < 3; k++) {
+      const x = x0 + ((x1 - x0) * k) / 3;
+      const yt = CF + ((BACK_TOP - CF) * k) / 3;
+      const yb = 180 - ((180 - FLOOR_Y) * k) / 3;
+      rect(g, Math.round(x), Math.round(yt), 1, Math.round(yb - yt), '#7a8088');
+    }
+    g.strokeStyle = HP.steelHi;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(x0, 148);
+    g.lineTo(x1, 137);
+    g.stroke();
+    // the front edge of the car, catching the light
+    rect(g, x0 - (x0 < 160 ? 1 : 0), CF, 1, 180 - CF, '#c8ccd2');
   }
-  rect(g, cx, 45, 1, 107, HP.steelDark);
-  // the floor indicator, and the panel of buttons
-  rect(g, cx - 16, 24, 32, 14, HP.goldDark);
-  rect(g, cx - 15, 25, 30, 12, HP.ink);
-  rect(g, cx + 54, 46, 22, 76, HP.goldDark);
-  rect(g, cx + 55, 47, 20, 74, HP.gold);
-  const labels = ['6', '5', '4', '3', '2', 'G'];
-  labels.forEach((l, k) => {
-    rect(g, cx + 58, 50 + k * 11, 14, 10, HP.goldDark);
-    rect(g, cx + 59, 51 + k * 11, 12, 8, '#2a2d33');
-    drawPixelText(g, l, cx + 65.5, 51 + k * 11, { scale: 1, color: '#bfe8ff', center: true });
-  });
-  // the floor under your feet: a rubber-studded panel
-  rect(g, 0, FLOOR_Y, W, 28, '#3a3d44');
-  for (let y = FLOOR_Y + 3; y < 180; y += 4) for (let x = (y % 8) / 2; x < W; x += 6) rect(g, x, y, 2, 1, '#4e525a');
+  // the back wall
+  rect(g, L, BACK_TOP, R - L, FLOOR_Y - BACK_TOP, '#a4aab2');
+  for (let x = L; x < R; x += 3) rect(g, x, BACK_TOP, 1, FLOOR_Y - BACK_TOP, '#ffffff', 0.06);
+  rect(g, L, BACK_TOP, R - L, 1, '#6a7078');
+  rect(g, L, 137, R - L, 2, HP.steelHi);
+  rect(g, L, 139, R - L, 1, HP.steelDark);
+  rect(g, L, BACK_TOP, 1, FLOOR_Y - BACK_TOP, '#6a7078');
+  rect(g, R - 1, BACK_TOP, 1, FLOOR_Y - BACK_TOP, '#6a7078');
+  // the doors and their surround, landing-sized
+  const d = LIFT.door;
+  rect(g, d.x - 3, d.y - 3, d.w + 6, d.h + 3, HP.goldDark);
+  rect(g, d.x - 2, d.y - 2, d.w + 4, d.h + 2, HP.gold);
+  rect(g, d.x - 2, d.y - 2, d.w + 4, 1, HP.goldHi);
+  for (const dx of [0, d.w / 2]) {
+    rect(g, d.x + dx, d.y, d.w / 2, d.h, HP.steel);
+    for (let k = 2; k < d.w / 2; k += 3) rect(g, d.x + dx + k, d.y, 1, d.h, HP.steelHi, 0.45);
+  }
+  rect(g, d.x + d.w / 2, d.y, 1, d.h, HP.steelDark);
+  // the floor dial over the doors
+  rect(g, LIFT.dial.x - 11, LIFT.dial.y - 5, 22, 10, HP.goldDark);
+  rect(g, LIFT.dial.x - 10, LIFT.dial.y - 4, 20, 8, HP.ink);
+  // the button panel, beside the doors at hand height
+  rect(g, 179, 116, 16, 30, HP.goldDark);
+  rect(g, 180, 117, 14, 28, HP.gold);
+  for (let f = 1; f <= 6; f++) {
+    const b = LIFT.button(f);
+    rect(g, b.x, b.y, 5, 7, HP.goldDark);
+    rect(g, b.x + 1, b.y + 1, 3, 5, '#2a2d33');
+    signText(g, `${f}`, b.x + 2.5, b.y + 1, '#bfe8ff');
+  }
+  // the floor: rubber, studded, running out to us
+  poly([[L, FLOOR_Y], [R, FLOOR_Y], [FR, 180], [FL, 180]], '#3a3d44');
+  for (let y = FLOOR_Y + 3; y < 180; y += 4) {
+    const k = (y - FLOOR_Y) / (180 - FLOOR_Y);
+    const x0 = Math.round(L + (FL - L) * k);
+    const x1 = Math.round(R + (FR - R) * k);
+    for (let x = x0 + 2 + ((y / 4) % 2) * 3; x < x1 - 2; x += 6) rect(g, x, y, 2, 1, '#4e525a');
+  }
+  rect(g, L, FLOOR_Y, R - L, 1, '#24262c');
 }
 
 // ============================================================ 3D surfaces
