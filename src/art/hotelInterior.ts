@@ -428,7 +428,7 @@ function gallery(g: Ctx, W: number, floor: number, doors: number[]): void {
   rect(g, 0, floor - 2, W, 2, HP.steelDark);
 }
 
-export function paintLobby(g: Ctx, night: boolean, empty = false): void {
+export function paintLobby(g: Ctx, night: boolean, empty = false, evening = false): void {
   const W = LOBBY_W;
   crown(g, W);
   for (let x = 0; x < W; x += 12) rect(g, x, 0, 1, 7, HP.goldDark, 0.5);
@@ -462,7 +462,7 @@ export function paintLobby(g: Ctx, night: boolean, empty = false): void {
   for (let x = 8; x < 50; x += 3) rect(g, x, 161, 1, 10, '#4e525a');
 
   // ---- the front doors: glass and brass, the night (or the day) in them
-  const out = night ? '#0c1426' : '#9ac8e0';
+  const out = night ? '#0c1426' : evening ? '#d0805e' : '#9ac8e0';
   rect(g, 6, 112, 34, 40, HP.cream);
   rect(g, 8, 114, 30, 38, HP.goldDark);
   rect(g, 9, 115, 28, 4, out);
@@ -805,7 +805,7 @@ export const WIN_SCALE = 40 / 128;
 export const ROOM_DOOR_X = 22;
 export const BATH_DOOR_X = 62;
 /** The bed: its middle, and where a sleeper's head lies. */
-export const BED = { x: 268, w: 34, top: 144 };
+export const BED = { x: 268, w: 36, top: 158 };
 
 /**
  * The room.  `lamp` lights the bedside lamps and the room; without it the
@@ -862,23 +862,18 @@ export function paintRoom(g: Ctx, furnished = true): void {
     rect(g, 157, CEIL_Y + 3, 7, 1, '#fffaf0');
     return;
   }
-  // ---- the bed, foot towards you: a buttoned headboard against the wall,
-  // white sheets, a burgundy throw, the pillows just showing over the duvet
+  // ---- the bed is a SLEEPING BAG: what the unit comes with.  Rolled out on
+  // the rug against the wall, its hood and a folded pillow at the near end,
+  // channel-quilted, the zip down its side.
   const bx = BED.x - BED.w / 2;
-  rect(g, bx + 1, 130, BED.w - 2, 16, '#8a8e96');
-  rect(g, bx + 1, 130, BED.w - 2, 1, '#a8acb4');
-  for (let c = 1; c < 4; c++) rect(g, bx + 1 + c * 8, 131, 1, 15, '#7a7e86');
-  rect(g, bx + 4, 139, 11, 4, '#ffffff');
-  rect(g, bx + 19, 139, 11, 4, '#ffffff');
-  rect(g, bx + 4, 142, 26, 1, '#d8d4cc');
-  rect(g, bx, BED.top, BED.w, 6, '#f6f2ea');
-  rect(g, bx, BED.top, BED.w, 1, '#ffffff');
-  rect(g, bx, BED.top + 3, BED.w, 3, '#3a7a80');
-  rect(g, bx, BED.top + 3, BED.w, 1, '#5a9aa0');
-  rect(g, bx - 1, BED.top + 6, BED.w + 2, 4, HP.wood);
-  rect(g, bx - 1, BED.top + 6, BED.w + 2, 1, HP.woodHi);
-  rect(g, bx, FLOOR_Y - 2, 2, 2, HP.woodDark);
-  rect(g, bx + BED.w - 2, FLOOR_Y - 2, 2, 2, HP.woodDark);
+  rect(g, bx, BED.top, BED.w, 6, '#3a6a5a');
+  rect(g, bx, BED.top, BED.w, 1, '#5a8a7a');
+  for (let c = 5; c < BED.w; c += 6) rect(g, bx + c, BED.top + 1, 1, 5, '#2e5a4c');
+  rect(g, bx + 1, BED.top + 5, BED.w - 2, 1, '#b8bcc4');
+  rect(g, bx - 3, BED.top - 2, 9, 8, '#2a3450');
+  rect(g, bx - 3, BED.top - 2, 9, 1, '#3e4a6a');
+  rect(g, bx - 2, BED.top - 4, 7, 3, '#eeeae0');
+  rect(g, bx - 2, BED.top - 4, 7, 1, '#ffffff');
   // nightstands and their lamps
   for (const nx of [bx - 7, bx + BED.w + 7]) {
     rect(g, nx - 4, 143, 8, 9, HP.wood);
@@ -911,9 +906,16 @@ export function paintRoomLight(g: Ctx, furnished = true): void {
 }
 
 /** The view out: the night, the morning, or three in the morning. */
-export function paintView(g: Ctx, w: number, h: number, when: 'night' | 'day' | 'late'): void {
+export function paintView(g: Ctx, w: number, h: number, when: 'night' | 'day' | 'late' | 'evening'): void {
   const sky = g.createLinearGradient(0, 0, 0, h);
-  if (when === 'day') {
+  const eve = when === 'evening';
+  if (eve) {
+    // the sun going down: violet overhead, through rose to amber on the trees
+    sky.addColorStop(0, '#3a2c62');
+    sky.addColorStop(0.45, '#b45a6e');
+    sky.addColorStop(0.8, '#f09a5a');
+    sky.addColorStop(1, '#ffc878');
+  } else if (when === 'day') {
     sky.addColorStop(0, '#7ab8e8');
     sky.addColorStop(1, '#d8ecf4');
   } else if (when === 'night') {
@@ -926,8 +928,24 @@ export function paintView(g: Ctx, w: number, h: number, when: 'night' | 'day' | 
   }
   g.fillStyle = sky;
   g.fillRect(0, 0, w, h);
-  const night = when !== 'day';
-  if (night) {
+  const night = when === 'night' || when === 'late';
+  if (eve) {
+    // a low orange sun sinking into the forest, and long thin clouds lit from under
+    const sx = Math.round(w * 0.3);
+    const sy = Math.round(h * 0.56);
+    glow(g, sx, sy, Math.max(8, h * 0.45), 0.55, '255,170,90');
+    g.fillStyle = '#ffe2a0';
+    g.beginPath();
+    g.arc(sx, sy, Math.max(2, h * 0.09), 0, Math.PI * 2);
+    g.fill();
+    for (const [cx, cy] of [
+      [w * 0.6, h * 0.22],
+      [w * 0.82, h * 0.34],
+    ]) {
+      rect(g, Math.round(cx - w * 0.1), Math.round(cy), Math.round(w * 0.2), 1, '#ffb07a', 0.8);
+      rect(g, Math.round(cx - w * 0.06), Math.round(cy) - 1, Math.round(w * 0.12), 1, '#e07a7a', 0.7);
+    }
+  } else if (night) {
     for (let k = 0; k < 40; k++) {
       const sx = (k * 37) % w;
       const sy = (k * 23) % Math.floor(h * 0.55);
@@ -953,8 +971,8 @@ export function paintView(g: Ctx, w: number, h: number, when: 'night' | 'day' | 
     }
   }
   // the forest, two rows of it, and the road through it with its lamps
-  const far = night ? '#101a22' : '#4a7a5a';
-  const near = night ? '#060c10' : '#2e5a3e';
+  const far = night ? '#101a22' : eve ? '#3a3a3e' : '#4a7a5a';
+  const near = night ? '#060c10' : eve ? '#1c1e26' : '#2e5a3e';
   const hz = Math.round(h * 0.62);
   for (let x = 0; x < w; x += 5) {
     const t = 6 + ((x * 7) % 9);

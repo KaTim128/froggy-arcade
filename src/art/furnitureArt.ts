@@ -608,6 +608,23 @@ export function drawFurniture(g: G, f: FurnitureDef, x: number, y: number, flip 
 
     // -------------------------------------------------------------- beds
     case 'bed': {
+      if (f.id === 'fur_sleeping_bag') {
+        // a quilted bag rolled out on the boards: channel stitching across it,
+        // the zip down the side, the hood turned back at the head with a
+        // folded pillow in it
+        slab(g, L, T, w, h, a);
+        cloth(g, L + 1, T + 1, w - 2, h - 2, a, seed);
+        for (let k = 1; k < 6; k++) px(g, L + Math.round((w * k) / 6), T + 1, 1, h - 2, shade(a, 0.72));
+        px(g, L, T, w, 1, shade(a, 1.25));
+        px(g, L + 1, T + h - 2, w - 2, 1, shade(b, 0.9));
+        metal(g, L + 2, T + h - 2, w - 4, 1, 0xb8bcc4);
+        const hood = Math.max(6, Math.round(w * 0.22));
+        slab(g, R - hood, T - 1, hood, h + 1, b);
+        px(g, R - hood + 1, T, hood - 2, 1, shade(b, 1.3));
+        slab(g, R - hood + 2, T - 2, hood - 4, Math.max(2, h - 2), 0xeeeae0);
+        px(g, R - hood + 3, T - 2, hood - 6, 1, 0xffffff);
+        break;
+      }
       if (f.id === 'fur_mattress') {
         // a bare mattress on the boards: buttoned, piped at the edge
         slab(g, L, T, w, h, a);

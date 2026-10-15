@@ -66,15 +66,10 @@ const WALK_X = 6;
 const KERB_H = 0.12;
 /** Where the road and its pavements stop and the forecourt starts. */
 const ROAD_END = -ROAD_LEN + 10;
-/** The guard rails, either side, past the pavements, all the way to the forecourt. */
+/** The verge, either side, past the pavements: where the road ends and the woods begin (there are no rails). */
 const RAIL_X = 6.5;
 const RAIL_H = 0.72;
-const RAIL_Z0 = 6;
-const RAIL_Z1 = HOTEL_Z + 9;
-/**
- * Openings in the rails: the bus stop's, and three footpaths into the woods.
- * Everywhere else a rail is a wall -- you cannot climb it or jump it.
- */
+/** The bus stop, and three footpaths into the woods: kept clear of trees. */
 const GAPS: { side: number; z0: number; z1: number }[] = [
   { side: 1, z0: -23, z1: -31 },
   { side: -1, z0: -58, z1: -61 },
@@ -117,7 +112,7 @@ const CATCH = 1.4;
 /** Seconds without sight of you before he gives up chasing and starts looking. */
 const LOST_AFTER = 3;
 /** What to do, said straight after RUN. */
-export const CHASE_HOW = 'Jump over the rails, hide behind trees or bushes to avoid Froggy, and make your way to the condos.';
+export const CHASE_HOW = 'Hide behind trees or bushes to avoid Froggy, and make your way to the condos.';
 
 type Phase = 'walk' | 'turn' | 'creep' | 'reveal' | 'chase' | 'safe' | 'caught';
 
@@ -699,7 +694,6 @@ export class NightRoad3D extends Phaser.Scene {
       S.add(edge);
     }
 
-    this.buildRails(S);
     this.buildWater(S, R);
     this.buildTrees(S, R);
     this.buildLitter(S, R);
@@ -721,67 +715,6 @@ export class NightRoad3D extends Phaser.Scene {
       if (!wet) this.footDust?.puff(at, hard, FROGGY_SCALE * 0.7);
     };
     if (this.stage) prepareJumpscare3D(this.stage, this.monster);
-  }
-
-  /**
-   * ROADSIDE GUARDRAILS, both sides, past the pavements: a continuous
-   * galvanised W-beam -- two rounded ridges with the groove between them --
-   * on steel posts every two metres, each through a spacer block that holds
-   * the beam off the post, the way a crash barrier is built.  No fence rails
-   * and nothing to climb.  They stop for the gaps -- the bus stop and the
-   * footpaths -- with a post either side, and a trodden path runs off into
-   * the trees from each footpath gap.
-   */
-  private buildRails(S: THREE.Scene): void {
-    const steel = new THREE.MeshLambertMaterial({ color: 0x8c9298 });
-    const ridge = new THREE.MeshLambertMaterial({ color: 0xa4aab0 });
-    const postMat = new THREE.MeshLambertMaterial({ color: 0x4a4e54 });
-    const posts: THREE.Matrix4[] = [];
-    const blocks: THREE.Matrix4[] = [];
-    for (const side of [-1, 1]) {
-      const cuts = GAPS.filter((g) => g.side === side).sort((a, b) => b.z0 - a.z0);
-      const runs: [number, number][] = [];
-      let from = RAIL_Z0;
-      for (const g of cuts) {
-        runs.push([from, g.z0]);
-        from = g.z1;
-      }
-      runs.push([from, RAIL_Z1]);
-      for (const [a, b] of runs) {
-        const len = a - b;
-        const mid = (a + b) / 2;
-        // the beam: a flat web, and the two ridges standing proud of it
-        const beamY = RAIL_H - 0.17;
-        const web = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.32, len), steel);
-        web.position.set(side * (RAIL_X - 0.02), beamY, mid);
-        S.add(web);
-        for (const dy of [0.09, -0.09]) {
-          const r = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, len, 8, 1), ridge);
-          r.rotation.x = Math.PI / 2;
-          r.position.set(side * (RAIL_X - 0.05), beamY + dy, mid);
-          S.add(r);
-        }
-        const n = Math.max(1, Math.round(len / 2));
-        for (let k = 0; k <= n; k++) {
-          const z = a - (k * len) / n;
-          posts.push(new THREE.Matrix4().makeTranslation(side * (RAIL_X + 0.16), RAIL_H / 2 - 0.02, z));
-          blocks.push(new THREE.Matrix4().makeTranslation(side * (RAIL_X + 0.06), beamY, z));
-        }
-      }
-    }
-    const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, RAIL_H - 0.04, 0.14), postMat, posts.length);
-    posts.forEach((m, i) => inst.setMatrixAt(i, m));
-    S.add(inst);
-    const spacers = new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, 0.2, 0.12), postMat, blocks.length);
-    blocks.forEach((m, i) => spacers.setMatrixAt(i, m));
-    S.add(spacers);
-    const path = decal(new THREE.MeshLambertMaterial({ color: 0x2a2219 }), 1);
-    for (const g of GAPS.slice(1)) {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(10, g.z0 - g.z1 - 0.4), path);
-      m.rotation.x = -Math.PI / 2;
-      m.position.set(g.side * (RAIL_X + 5), 0.004, (g.z0 + g.z1) / 2);
-      S.add(m);
-    }
   }
 
   /**
@@ -2495,8 +2428,14 @@ gl_Position = projectionMatrix * mvPosition;`,
     return this.ponds.some((p) => Math.hypot(x - p.x, z - p.z) < p.r);
   }
 
-  private railsAt(z: number): boolean {
-    return z < RAIL_Z0 && z > RAIL_Z1;
+  /**
+   * NO RAILS.  There used to be guardrails along both sides of the road,
+   * and they cost him a hop to cross that they never cost you -- so the
+   * chase came down to hopping back and forth over one.  The verge runs
+   * straight into the woods now, for both of you.
+   */
+  private railsAt(_z: number): boolean {
+    return false;
   }
 
   /** Is there rail at this point of the line -- not a gap? */
@@ -3508,7 +3447,6 @@ gl_Position = projectionMatrix * mvPosition;`,
         const touch = isTouch();
         let hint = '';
         if (this.phaseT > 1.2 && this.phaseT < 5.5 && !this.overRail) hint = touch ? 'HOLD RUN TO RUN' : 'HOLD SHIFT TO RUN';
-        if (this.railHint > 0) hint = touch ? 'TAP JUMP TO JUMP OVER THE RAIL' : 'PRESS SPACE TO JUMP OVER THE RAIL';
         if (this.hideHintT > 0) hint = touch ? 'HIDE BEHIND TREES AND BUSHES - TAP CROUCH' : 'HIDE BEHIND TREES AND BUSHES - C TO CROUCH';
         if (hint) {
           const a = this.hideHintT > 0 ? Math.min(1, this.hideHintT, 7 - this.hideHintT + 0.2) : 1;

@@ -153,6 +153,29 @@ const no = (msg: string): Result => ({ ok: false, msg });
 
 // ------------------------------------------------------------------- rent
 
+/**
+ * WHAT THE UNIT COMES WITH: a sleeping bag on the floor and a wardrobe.  Both
+ * are yours like anything bought -- sell them, move them, put a real bed in
+ * the bag's place.  Given once, on the first rent (and to a save that was
+ * already renting before the unit came furnished).
+ */
+export const STARTER_ROOM: Array<[id: string, x: number, y: number]> = [
+  ['fur_sleeping_bag', 236, 160],
+  ['fur_wardrobe', 290, 160],
+];
+
+export function furnishStarterRoom(): void {
+  const l = L();
+  if (!l.rented || (l.stats.starter_room ?? 0) > 0) return;
+  edit((x) => {
+    x.stats.starter_room = 1;
+    for (const [id, px, py] of STARTER_ROOM) {
+      x.furniture[id] = (x.furniture[id] ?? 0) + 1;
+      x.placed.push({ uid: x.nextUid++, id, x: px, y: py, flip: false });
+    }
+  });
+}
+
 export function rent(): Result {
   const l = L();
   if (l.rented) return no('YOU ALREADY RENT UNIT 612.');
@@ -163,7 +186,8 @@ export function rent(): Result {
     x.rentDue = clock(x.t).day + RENT_DAYS;
   });
   record('pay_rent');
-  return ok(`UNIT 612 IS YOURS FOR ${RENT_DAYS} DAYS.`);
+  furnishStarterRoom();
+  return ok(`UNIT 612 IS YOURS FOR ${RENT_DAYS} DAYS. IT COMES WITH A SLEEPING BAG AND A WARDROBE.`);
 }
 
 /** Pay the rent that is due (or up to one week ahead).  Never twice for the same week. */

@@ -9,7 +9,6 @@
  */
 
 import Phaser from 'phaser';
-import { pullBackAtClosing } from '../game/closingPull';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { KEYS } from '../core/input';
@@ -139,7 +138,6 @@ export class StreetEast extends Phaser.Scene {
 
     new TokenHud(this);
     attachPockets(this, () => this.locked || this.busy());
-    pullBackAtClosing(this, () => !this.locked && !this.busy(), () => (this.locked = true));
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
     this.mutter = centerText(this, 160, GAME_H - 40, '', PALETTE.cream).setDepth(802).setScrollFactor(0).setVisible(false).setMaxWidth(290);

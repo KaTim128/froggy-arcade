@@ -40,7 +40,6 @@ import { TokenHud } from '../ui/hud';
 import { PALETTE } from '../render/palette';
 import { audio, SILENCE } from '../core/audio';
 import { store } from '../core/state';
-import { ledger } from '../core/ledger';
 import { KEYS } from '../core/input';
 import { centerText, confirmDialog, fadeIn, fadeToScene, text } from '../core/ui';
 import { openTalkPanel } from '../ui/talkPanel';
@@ -77,6 +76,7 @@ import { runHotelScare } from '../froggy/hotelScare';
 import { drawClerk } from '../froggy/clerk';
 import { froggyLayer } from '../render/froggyLayer';
 import { backPlate } from '../ui/plate';
+import { clock as lifeClock } from '../game/life';
 
 export const ROOM_PRICE = 300;
 const WALK_Y = 160;
@@ -357,11 +357,19 @@ export class Hotel extends Phaser.Scene {
     return key;
   }
 
+  /** What is through the lobby's glass doors: the story's dark, or the clock's hour. */
+  private lobbySky(): 'night' | 'evening' | 'day' {
+    const c = lifeClock();
+    if (store.get().timeOfDay !== 'day' || c.dark) return 'night';
+    return c.phase === 'evening' ? 'evening' : 'day';
+  }
+
   private buildLobby(dark: boolean): void {
-    const night = store.get().timeOfDay !== 'day';
+    const sky = this.lobbySky();
+    const night = sky === 'night';
     // (the desk is painted empty: the clerk behind it is on the overlay)
-    const key = `hotel_lobby_${dark ? 'dark' : night ? 'night' : 'day'}_w${LOBBY_W}`;
-    const img = this.add.image(0, 0, this.painted(key, LOBBY_W, GAME_H, (g) => paintLobby(g, night || dark, true))).setOrigin(0, 0);
+    const key = `hotel_lobby_${dark ? 'dark' : sky}_w${LOBBY_W}`;
+    const img = this.add.image(0, 0, this.painted(key, LOBBY_W, GAME_H, (g) => paintLobby(g, night || dark, true, sky === 'evening'))).setOrigin(0, 0);
     this.clerkOn = !dark;
     this.clerkFigure = this.clerkOn ? new StageFigure(this, 0.5) : null;
     // the lights are out and the desk is empty
@@ -644,7 +652,8 @@ export class Hotel extends Phaser.Scene {
     // the doorway, the landing's size (see art/hotelInterior LIFT)
     const { x: DX, y: DY, w: DW, h: DH } = LIFT.door;
     // what is out there, seen through the doorway: the landing, close up
-    const lobbyKey = this.painted(`hotel_lobby_${store.get().timeOfDay !== 'day' ? 'night' : 'day'}_w${LOBBY_W}`, LOBBY_W, GAME_H, (g) => paintLobby(g, store.get().timeOfDay !== 'day', true));
+    const sky = this.lobbySky();
+    const lobbyKey = this.painted(`hotel_lobby_${sky}_w${LOBBY_W}`, LOBBY_W, GAME_H, (g) => paintLobby(g, sky === 'night', true, sky === 'evening'));
     const hallKey = this.painted('hotel_corridor_v3_none', GAME_W, GAME_H, (g) => paintCorridor(g, 'none'));
     const view = (key: string, cx: number): Phaser.GameObjects.Image => {
       // the landing just there, through the doors, at its own scale
@@ -1038,63 +1047,23 @@ export class Hotel extends Phaser.Scene {
     return s.timeOfDay === 'midnight' || s.checkedIn || s.hotelNight || s.hotelAfter !== 'none';
   }
 
+  /**
+   * THE DESK IS THE LANDLORD'S, ALWAYS: rent, pay the rent, sell things.  The
+   * old short-stay check-in conversation is gone.  On the story's night the
+   * unit you rent here is also your room for it (so the lift takes you up to
+   * it, and the night goes on as it did).
+   */
   private reception(): void {
-    const s = store.get();
-    if (!this.storyNight()) {
-      this.locked = true;
-      this.events.once('shop-closed', () => (this.locked = false));
-      this.scene.launch('Shop', { kind: 'landlord', from: 'Hotel' });
-      return;
-    }
-    if (s.checkedIn) {
-      this.openTalk('"Room 612, sixth floor. The lift is on your right."', [{ label: 'THANKS', fn: () => this.closeTalk() }]);
-      return;
-    }
-    // (300 in tokens will do as well as $300: the desk takes either)
-    const can = s.cash >= ROOM_PRICE || s.tokens >= ROOM_PRICE;
-    this.openTalk(
-      can
-        ? `"Good evening, welcome to Lily's Condos. A furnished short-stay unit for the night is $${ROOM_PRICE}, or ${ROOM_PRICE} tokens."`
-        : `"A short-stay unit is $${ROOM_PRICE}, or ${ROOM_PRICE} tokens. You have $${s.cash} and ${s.tokens}. I'm sorry."`,
-      can
-        ? [
-          { label: `RENT A UNIT - $${ROOM_PRICE}`, fn: () => this.confirmCheckIn() },
-          { label: 'NOT NOW', fn: () => this.closeTalk() },
-        ]
-        : [{ label: 'OKAY', fn: () => this.closeTalk() }],
-    );
-  }
-
-  private confirmCheckIn(): void {
-    this.closeTalk();
-    const { cash, tokens } = store.get();
-    const byTokens = cash < ROOM_PRICE;
     this.locked = true;
-    this.dialog = confirmDialog(this, {
-      lines: byTokens
-        ? [`RENT UNIT 612 FOR ${ROOM_PRICE} TOKENS?`, `YOU HAVE ${tokens}.  YOU WILL HAVE ${tokens - ROOM_PRICE}.`]
-        : [`RENT UNIT 612 FOR $${ROOM_PRICE}?`, `YOU HAVE $${cash}.  YOU WILL HAVE $${cash - ROOM_PRICE}.`],
-      confirm: 'RENT IT',
-      cancel: 'NO',
-      edge: PALETTE.gold,
-      onConfirm: () => {
-        this.locked = false;
-        this.dialog = null;
-        if (!(byTokens ? ledger.debit(ROOM_PRICE, 'hotel') : store.spendCash(ROOM_PRICE))) {
-          audio.sfx('buzzer');
-          return;
-        }
+    this.events.once('shop-closed', () => {
+      this.locked = false;
+      const s = store.get();
+      if (this.storyNight() && !s.checkedIn && s.life.rented) {
         store.patch({ checkedIn: true });
         store.flush();
-        audio.sfx('cha_ching');
-        audio.sfx('bell_ding', 0.5);
-        this.openTalk('"Here is your key card. Unit 612, sixth floor. The lift is on your right. Sleep well."', [{ label: 'THANK YOU', fn: () => this.closeTalk() }]);
-      },
-      onCancel: () => {
-        this.locked = false;
-        this.dialog = null;
-      },
+      }
     });
+    this.scene.launch('Shop', { kind: 'landlord', from: 'Hotel' });
   }
 
   /**

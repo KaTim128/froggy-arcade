@@ -64,6 +64,7 @@ export const FURNITURE: FurnitureDef[] = [
   F('fur_shelf', 'BOOKSHELF', 'storage', 28, 18, 30, false, 0x7a4a28, 0xc8b070, 'FULL OF PAPERBACKS'),
   F('fur_cabinet', 'CABINET', 'storage', 55, 20, 20, false, 0x5a3a28, 0x8a6a48, 'FOR YOUR THINGS'),
   F('fur_plant', 'POT PLANT', 'decor', 9, 10, 16, false, 0x3a8a3a, 0xa86a40, 'GREEN'),
+  F('fur_sleeping_bag', 'SLEEPING BAG', 'bed', 10, 38, 5, false, 0x3a6a5a, 0x2a3450, 'COMES WITH THE UNIT. SWAP IT FOR A BED'),
   F('fur_mattress', 'MATTRESS', 'bed', 20, 40, 6, false, 0xe8e0c8, 0x9a9480, 'BETTER THAN THE FLOOR'),
   F('fur_bed', 'SINGLE BED', 'bed', 120, 32, 13, false, 0x3a5a8a, 0xe8e0c8, 'A SMALL BED, ALL YOURS'),
   // the flat comes without a bathroom fitted: these are bought and put in

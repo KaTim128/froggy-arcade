@@ -15,7 +15,7 @@
  */
 
 import Phaser from 'phaser';
-import { pullBackAtClosing } from '../game/closingPull';
+import { clock } from '../game/life';
 import { TokenHud } from '../ui/hud';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -63,9 +63,12 @@ export class StreetWest extends Phaser.Scene {
     this.locked = false;
     this.spot = null;
     fadeIn(this);
-    const dusk = store.get().timeOfDay !== 'day';
+    // the sky follows the clock: daylight in the morning, the sun going down
+    // from 5 PM, and dark after 7:45 (the story's own evening keeps its dusk)
+    const c = clock();
+    const dusk = store.get().timeOfDay !== 'day' || c.phase !== 'morning';
     audio.setScene({ music: 'theme_arcade', ambience: ['street_dusk', 'wind_low'] });
-    this.paint(dusk);
+    this.paint(dusk, c.dark || store.get().timeOfDay === 'midnight');
 
     this.player = new Player(this, this.spawn === 'hotel' ? DOOR_X + 10 : WORLD_W - 18, WALK_Y, false);
     this.player.setSurface('gravel');
@@ -76,7 +79,6 @@ export class StreetWest extends Phaser.Scene {
     // (dropped under the name band: LILY'S CONDOS runs across the top left)
     new TokenHud(this, { y: 24 });
     attachPockets(this, () => this.locked);
-    pullBackAtClosing(this, () => !this.locked, () => (this.locked = true));
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
     this.mutterPlate = this.add.rectangle(0, 0, 1, 1, PALETTE.black, 0.72).setOrigin(0, 0).setDepth(801).setScrollFactor(0).setVisible(false);
     this.mutter = centerText(this, 160, GAME_H - 40, '', PALETTE.cream).setDepth(802).setScrollFactor(0).setVisible(false).setMaxWidth(290);
@@ -103,9 +105,11 @@ export class StreetWest extends Phaser.Scene {
    * side of the road with the bus shelter standing on it, the road, and the
    * pavement you walk on.
    */
-  private paint(dusk: boolean): void {
-    const sky = dusk ? [PALETTE.plum, PALETTE.violet, PALETTE.ember, PALETTE.amber] : [0x8fd0e8, 0x8fd0e8, 0x7ec0dc, 0xbfe0ee];
+  private paint(dusk: boolean, dark = false): void {
+    const sky = dark ? [0x070a1c, 0x0c1228, 0x141a36, 0x1e2242] : dusk ? [PALETTE.plum, PALETTE.violet, PALETTE.ember, PALETTE.amber] : [0x8fd0e8, 0x8fd0e8, 0x7ec0dc, 0xbfe0ee];
     for (let i = 0; i < 4; i++) this.add.rectangle(0, i * 18, WORLD_W, 18, sky[i]).setOrigin(0, 0);
+    // and after dark, the stars over the forest
+    if (dark) for (let k = 0; k < 90; k++) this.add.rectangle((k * 53) % WORLD_W, (k * 29) % 64, 1, 1, 0xfff4d0, 0.4 + (k % 3) * 0.2).setOrigin(0, 0);
     // the sky goes on down to the treeline, and under the trees the forest
     // floor -- nothing behind the street is ever bare black
     this.add.rectangle(0, 72, WORLD_W, 32, sky[3]).setOrigin(0, 0);
@@ -119,10 +123,10 @@ export class StreetWest extends Phaser.Scene {
         this.add.triangle(x, base - h / 2, -9, h / 2, 9, h / 2, 0, -h / 2, col);
       }
     });
-    // everything from the guardrail forward, over the trees
+    // everything from the verge forward, over the trees
     const g = this.add.graphics();
     // ROW Y's, back to front
-    const RAIL = 113; // where the guardrail's posts stand, at the forest's edge
+    const RAIL = 113; // the forest's edge, where the verge meets the far pavement
     const FAR = 113; // far pavement, to its kerb
     const FAR_KERB = 127;
     const ROAD = 129;
@@ -131,27 +135,6 @@ export class StreetWest extends Phaser.Scene {
     const X0 = 0; // (the hotel stands over the left-hand end of all of it)
     // a strip of verge along the forest
     g.fillStyle(dusk ? 0x1c1828 : 0x3f7a4f, 1).fillRect(X0, RAIL - 4, WORLD_W - X0, 4);
-
-    // ---- THE GUARDRAIL.  A roadside crash barrier, not a fence: one
-    // continuous galvanised W-beam -- two ridges and the groove between them
-    // -- bolted through a spacer block to a steel post every couple of metres.
-    const beamTop = RAIL - 9;
-    const rail = dusk
-      ? { post: 0x3a3e46, block: 0x2e3238, face: 0x6a707a, hi: 0x8a909a, groove: 0x4a5058, lo: 0x50565e }
-      : { post: 0x5a6068, block: 0x4a5058, face: 0x9aa2aa, hi: 0xd0d6dc, groove: 0x6a727a, lo: 0x7a828a };
-    for (let x = X0 + 4; x < WORLD_W; x += 14) {
-      g.fillStyle(rail.post, 1).fillRect(x, beamTop + 1, 2, RAIL - beamTop - 1);
-      g.fillStyle(rail.block, 1).fillRect(x - 1, beamTop + 2, 4, 3);
-    }
-    g.fillStyle(rail.face, 1).fillRect(X0, beamTop, WORLD_W - X0, 5);
-    g.fillStyle(rail.hi, 1).fillRect(X0, beamTop, WORLD_W - X0, 1);
-    g.fillStyle(rail.groove, 1).fillRect(X0, beamTop + 2, WORLD_W - X0, 1);
-    g.fillStyle(rail.lo, 1).fillRect(X0, beamTop + 4, WORLD_W - X0, 1);
-    // the bolts at each post, and the splice where one length meets the next
-    for (let x = X0 + 4; x < WORLD_W; x += 14) g.fillStyle(rail.groove, 1).fillRect(x + 1, beamTop + 1, 1, 1).fillRect(x + 1, beamTop + 3, 1, 1);
-    for (let x = X0 + 60; x < WORLD_W; x += 56) g.fillStyle(rail.lo, 1).fillRect(x, beamTop, 1, 5);
-    // its shadow on the verge
-    g.fillStyle(0x000000, 0.18).fillRect(X0, RAIL - 1, WORLD_W - X0, 1);
 
     // ---- the far pavement: slabs, and its kerb onto the road
     const slab = dusk ? 0x4a4450 : 0xa8a8a0;

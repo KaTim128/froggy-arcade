@@ -1,12 +1,11 @@
 /**
- * Before Hide and Seek, the arcade shutting for the day is what starts the
- * night -- so the day may not end anywhere else.  Out on the street at
- * closing time, you are walked back to the front room, where Froggy is
- * waiting to say so (see core/broke `evaluateBroke`).
+ * Closing time.  Only somebody INSIDE the arcade is told: out on the street,
+ * the shop just shuts behind its shutters and nobody walks you back in to
+ * hear it (before Hide and Seek, see core/broke `evaluateBroke` and the
+ * hub's closing check; after it, `showOutAtNight` below).
  */
 
 import type Phaser from 'phaser';
-import { closingTime } from '../core/broke';
 import { store } from '../core/state';
 import { centerText, fadeToScene } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
@@ -14,17 +13,14 @@ import { PALETTE } from '../render/palette';
 import { backPlate } from '../ui/plate';
 import { SUNRISE_HOUR, clock, twelveHour } from './life';
 
-export function pullBackAtClosing(scene: Phaser.Scene, free: () => boolean, onGo: () => void): void {
-  scene.time.addEvent({
-    delay: 2000,
-    loop: true,
-    callback: () => {
-      const s = store.get();
-      if (s.froggyGone || s.route !== 'normal' || s.timeOfDay === 'midnight' || !closingTime() || !free()) return;
-      onGo();
-      fadeToScene(scene, 'ArcadeHub', {});
-    },
-  });
+/**
+ * BEFORE Hide and Seek, the night after closing is when the alley's side door
+ * is the way back in (the story's break-in).  Shown out at closing, you are
+ * on the ordinary street -- HUD, clock, the pavement to sleep on -- and the
+ * alley mouth is open to you until sunrise.
+ */
+export function backWayOpen(s = store.get()): boolean {
+  return !s.froggyGone && s.route === 'normal' && s.seenIntro && s.timeOfDay !== 'midnight' && clock(s.life.t).closed;
 }
 
 /**

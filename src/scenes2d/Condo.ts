@@ -30,7 +30,7 @@ import { button, pinToScreen, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { furnitureById, type FurnitureDef } from '../game/catalog';
 import { onPhaseTurn } from '../game/dayNight';
-import { NIGHT_HOUR, twelveHour, clock, movePlacement, placeFurniture, removePlacement, sleep, visit, type Placement } from '../game/life';
+import { NIGHT_HOUR, twelveHour, clock, furnishStarterRoom, movePlacement, placeFurniture, removePlacement, sleep, visit, type Placement } from '../game/life';
 import { useOf, washLine } from '../game/furnitureUse';
 import { WalkRoom, type Fixture } from './rooms/WalkRoom';
 import { Piece } from './rooms/piece';
@@ -87,6 +87,8 @@ export class Condo extends WalkRoom {
   private curtainL: Phaser.GameObjects.Image | null = null;
   private curtainR: Phaser.GameObjects.Image | null = null;
   private curtainsOpen = true;
+  /** The coat hook: only there while no wardrobe stands in the room. */
+  private hook: Phaser.GameObjects.Graphics | null = null;
 
   constructor() {
     super('Condo');
@@ -213,6 +215,7 @@ export class Condo extends WalkRoom {
       this.setCurtains(this.registry.get('condoCurtains') !== false, true);
       // the coat hook by the doors, with your coat on it: the wardrobe
       const hk = this.add.graphics().setDepth(-1);
+      this.hook = hk;
       hk.fillStyle(0x6a7078, 1).fillRect(HOOK.x - 7, HOOK.y, 14, 2);
       hk.fillStyle(0xd4d8dc, 1).fillRect(HOOK.x - 7, HOOK.y, 14, 1);
       hk.fillStyle(0x6a6a44, 1).fillRect(HOOK.x - 6, HOOK.y + 2, 6, 15);
@@ -222,13 +225,17 @@ export class Condo extends WalkRoom {
       // the flat's number over the inside of its door
       text(this, ROOM_DOOR_X, CEIL_Y + 5, '612', 0x8a8070).setOrigin(0.5, 0).setDepth(-1);
     }
+    // (a unit rented before it came furnished gets its sleeping bag and wardrobe now)
+    furnishStarterRoom();
     this.settle();
     this.paintLight();
     this.placePieces();
   }
 
   private viewKey(): string {
-    const when = clock().dark ? 'night' : 'day';
+    const c = clock();
+    // morning, the sun going down (from 5 PM), or night
+    const when = c.dark ? 'night' : c.phase === 'evening' ? 'evening' : 'day';
     const { w, h } = ROOM_WINDOW;
     return this.painted(`hotel_view_${when}_${w}`, w, h, (g) => paintView(g, w, h, when));
   }
@@ -274,6 +281,7 @@ export class Condo extends WalkRoom {
       const f = furnitureById(pl.id);
       if (f) this.pieces.push(new Piece(this, f, pl.x, pl.y, pl.flip));
     }
+    this.hook?.setVisible(!this.hasWardrobe());
     this.drawOutline();
   }
 
@@ -291,7 +299,7 @@ export class Condo extends WalkRoom {
           use: () => this.toBathroom(),
           hit: { x: BATH_DOOR_X - 10, y: FLOOR_Y - 38, w: 20, h: 46 },
         },
-        {
+        ...(this.hasWardrobe() ? [] : [{
           x: HOOK.x,
           y: this.floorTop,
           w: 14,
@@ -300,7 +308,7 @@ export class Condo extends WalkRoom {
           label: () => '[E] WARDROBE',
           use: () => this.openWardrobe(),
           hit: { x: HOOK.x - 9, y: HOOK.y - 2, w: 18, h: 22 },
-        },
+        }]),
         {
           x: ROOM_WINDOW.x + ROOM_WINDOW.w / 2,
           y: this.floorTop,
@@ -322,7 +330,7 @@ export class Condo extends WalkRoom {
         y: piece.y,
         w: Math.max(10, f.w),
         depth: Math.min(8, Math.max(4, Math.round(f.h / 3))),
-        label: () => (verb === 'sit' ? `[E] SIT ON THE ${f.name}` : verb === 'lie' ? `[E] SLEEP IN THE ${f.name}` : verb === 'wash' ? `[E] USE THE ${f.name}` : verb === 'switch' ? `[E] ${f.name}: ${piece.on ? 'OFF' : 'ON'}` : verb === 'play' ? `[E] PLAY THE ${f.name}` : f.name),
+        label: () => (f.id === 'fur_wardrobe' ? '[E] WARDROBE' : verb === 'sit' ? `[E] SIT ON THE ${f.name}` : verb === 'lie' ? `[E] SLEEP IN THE ${f.name}` : verb === 'wash' ? `[E] USE THE ${f.name}` : verb === 'switch' ? `[E] ${f.name}: ${piece.on ? 'OFF' : 'ON'}` : verb === 'play' ? `[E] PLAY THE ${f.name}` : f.name),
         use: () => this.usePiece(piece),
       });
     }
@@ -378,8 +386,13 @@ export class Condo extends WalkRoom {
         this.say(washLine(f));
         break;
       default:
+        if (f.id === 'fur_wardrobe') return this.openWardrobe();
         this.say(`YOUR ${f.name}. ${f.note}.`);
     }
+  }
+
+  private hasWardrobe(): boolean {
+    return this.area === 'room' && this.areaPlacements().some((p) => p.id === 'fur_wardrobe');
   }
 
   private openWardrobe(): void {

@@ -22,7 +22,6 @@ import { attachPockets } from '../../ui/pockets';
 import { Player, depthFor, type Look } from '../../art/player';
 import { froggyLayer } from '../../render/froggyLayer';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../../game/roomWalk';
-import { pullBackAtClosing } from '../../game/closingPull';
 import { paintEntrance, ENTRANCE_W, ENTRANCE_H } from '../../art/exterior';
 import { touchControls } from '../../ui/touchControls';
 import { grain, seeded } from '../../art/surface';
@@ -186,7 +185,6 @@ export abstract class WalkRoom extends Phaser.Scene {
 
     new TokenHud(this);
     attachPockets(this, () => this.busy());
-    pullBackAtClosing(this, () => !this.busy(), () => (this.locked = true));
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.72).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
     this.mutter = centerText(this, GAME_W / 2, this.mutterY, '', PALETTE.cream).setDepth(860).setScrollFactor(0).setVisible(false).setMaxWidth(290);
