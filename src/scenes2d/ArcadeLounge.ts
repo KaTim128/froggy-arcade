@@ -62,7 +62,7 @@ const CRANES: Array<{ kind: CraneKind; x: number; y: number; cost: number; title
 ];
 
 /** CREATURE CLASH: the upright on the back wall, right of the sign. */
-const CLASH = { x: 244, y: 74 };
+const CLASH = { x: 244, y: 82 };
 
 type Target =
   | { kind: 'cabinet'; cab: Cabinet }

@@ -1230,6 +1230,7 @@ export class CraneGame extends Phaser.Scene {
     const t = this.held;
     if (!t) return;
     this.held = null;
+    this.dropSideHeld();
     this.outcome = why;
     // the prongs give -- they spring open -- and it drops out of them
     // (no banner: the one result box at the end of the go says how it went)
@@ -1391,7 +1392,12 @@ export class CraneGame extends Phaser.Scene {
     const t = this.held;
     this.held = null;
     this.drawClaw(false);
-    if (t) t.art.destroy();
+    // it is out of the machine: gone from both views, nothing left behind
+    if (t) {
+      this.tweens.killTweensOf(t.art);
+      t.art.destroy();
+    }
+    this.dropSideHeld();
     if (!t) {
       const why = this.outcome === 'slipped' ? 'IT SLIPPED ON THE WAY' : this.outcome === 'missed' ? 'THE CLAW LOST ITS GRIP' : 'THE CLAW CAME UP EMPTY';
       this.showResult(`YOU GOT NOTHING - ${why}.`, NO_PRIZE_COL, true, undefined, NO_PRIZE_TITLE);
@@ -1530,8 +1536,8 @@ export class CraneGame extends Phaser.Scene {
    * over the ones further left; at the same place, the higher over the lower.
    */
   private fillSide(): void {
+    // (the prize in the claw is not part of the heap and keeps its own image)
     this.sideToys.removeAll(true);
-    this.sideHeld = null;
     const order = [...this.toys].sort((a, b) => a.x - b.x || a.lift - b.lift);
     for (const t of order) {
       const drawn = Math.round(t.size * 25) / 25;
@@ -1563,7 +1569,8 @@ export class CraneGame extends Phaser.Scene {
     for (const o of [...this.sideToys.list] as Phaser.GameObjects.Image[]) {
       const t = o.getData('toy') as Toy;
       if (!this.toys.includes(t)) {
-        o.setVisible(false);
+        // taken out of the machine: its picture goes with it
+        o.destroy();
         continue;
       }
       // (a prize settling is seen coming down here too)
@@ -1596,10 +1603,13 @@ export class CraneGame extends Phaser.Scene {
         this.sideBox.add(this.sideHeld);
       }
       this.sideHeld.setPosition(x, tip + (10 * CLAW_K + TOY_H * 0.8) * k).setScale(k / (this.sideHeld.getData('drawn') as number)).setVisible(true);
-    } else if (this.sideHeld) {
-      this.sideHeld.destroy();
-      this.sideHeld = null;
-    }
+    } else this.dropSideHeld();
+  }
+
+  /** The side view's picture of the prize in the claw, gone with it. */
+  private dropSideHeld(): void {
+    this.sideHeld?.destroy();
+    this.sideHeld = null;
   }
 
   private again(): void {
