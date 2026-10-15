@@ -45,6 +45,11 @@ export class PrizeCounter extends Phaser.Scene {
   }
 
   create(): void {
+    // OVER WHOEVER OPENED IT.  Scenes draw in the order they were registered,
+    // and this one is registered before some of the rooms that open it -- the
+    // condo reception among them -- so launched from there it was drawn
+    // underneath the room: the pad went away for it, and nothing appeared.
+    this.scene.bringToTop();
     // Phaser reuses the scene instance across restart(), so this has to be
     // cleared here or the first purchase latches it for the rest of the run
     // and the shelf never restocks.
