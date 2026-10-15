@@ -97,6 +97,19 @@ export function drawFurniture(g: Phaser.GameObjects.Graphics, f: FurnitureDef, x
       break;
     }
     case 'bed': {
+      if (f.id === 'fur_bed_premium') {
+        // the big one: a tall buttoned headboard, two pillows, white sheets
+        // under a folded throw, a walnut base, a bedside lamp's worth of class
+        block(g, L, T, w, h - 6, 0x8a8e96);
+        for (let i = 1; i < 5; i++) g.fillStyle(0x7a7e86, 1).fillRect(L + Math.round((i * w) / 5), T + 1, 1, h - 8);
+        block(g, L + 4, T + 10, Math.round(w / 2) - 6, 5, 0xffffff);
+        block(g, L + Math.round(w / 2) + 2, T + 10, Math.round(w / 2) - 6, 5, 0xffffff);
+        block(g, L, T + h - 12, w, 7, 0xf6f2ea);
+        block(g, L, T + h - 8, w, 4, a);
+        block(g, L - 1, T + h - 5, w + 2, 5, 0x8a6640);
+        g.fillStyle(0xd0a878, 1).fillRect(L - 1, T + h - 5, w + 2, 1);
+        break;
+      }
       block(g, L, y - h, w, h, a);
       block(g, L + 1, y - h + 1, w - 2, Math.max(2, h - 4), b);
       block(g, fx(1, 9), y - h, 9, Math.max(3, h - 3), 0xf0ece0);

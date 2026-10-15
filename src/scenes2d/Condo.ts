@@ -37,7 +37,6 @@ import { Piece } from './rooms/piece';
 import { touchControls } from '../ui/touchControls';
 import {
   BATH_DOOR_X,
-  BED,
   CEIL_Y,
   FLOOR_Y,
   ROOM_DOOR_X,
@@ -66,9 +65,6 @@ const WALL_BOTTOM = FLOOR_Y - 6;
 const DOORS_RIGHT = BATH_DOOR_X + 11;
 /** The bathroom's one door, back to the room. */
 const BATH_BACK_X = 22;
-/** The bed, its lamps and its rug: the far end of the room. */
-const BED_LEFT = BED.x - BED.w / 2 - 13;
-const BED_RIGHT = BED.x + BED.w / 2 + 13;
 /** The coat hook: your clothes, the wardrobe. */
 const HOOK = { x: 104, y: 124 };
 
@@ -88,6 +84,9 @@ export class Condo extends WalkRoom {
   private dragFrom: { x: number; y: number } | null = null;
   private view: Phaser.GameObjects.Image | null = null;
   private lamps: Phaser.GameObjects.Image | null = null;
+  private curtainL: Phaser.GameObjects.Image | null = null;
+  private curtainR: Phaser.GameObjects.Image | null = null;
+  private curtainsOpen = true;
 
   constructor() {
     super('Condo');
@@ -205,12 +204,13 @@ export class Condo extends WalkRoom {
       // the sky through the window, behind the room; the glazing over it
       this.view = this.add.image(x, y, this.viewKey()).setOrigin(0, 0).setDepth(-4);
       this.add.image(x, y, this.painted(`hotel_glazing_${w}`, w, h, (g) => paintGlazing(g, w, h))).setOrigin(0, 0).setDepth(-3);
-      this.add.image(0, 0, this.painted('hotel_room_v2', GAME_W, GAME_H, paintHotelRoom)).setOrigin(0, 0).setDepth(-2);
+      this.add.image(0, 0, this.painted('condo_room_v1', GAME_W, GAME_H, (g) => paintHotelRoom(g, false))).setOrigin(0, 0).setDepth(-2);
       // the curtains, tied back either side
       const cw = w / 2 + 4;
       const ch = h + 7;
-      this.add.image(x - 6, y - 4, this.painted(`hotel_curtain_l_${cw}`, cw, ch, (g) => paintCurtain(g, cw, ch, -1))).setOrigin(0, 0).setDepth(-1).setScale(0.24, 1);
-      this.add.image(x + w + 6, y - 4, this.painted(`hotel_curtain_r_${cw}`, cw, ch, (g) => paintCurtain(g, cw, ch, 1))).setOrigin(1, 0).setDepth(-1).setScale(0.24, 1);
+      this.curtainL = this.add.image(x - 6, y - 4, this.painted(`hotel_curtain_l_${cw}`, cw, ch, (g) => paintCurtain(g, cw, ch, -1))).setOrigin(0, 0).setDepth(-1);
+      this.curtainR = this.add.image(x + w + 6, y - 4, this.painted(`hotel_curtain_r_${cw}`, cw, ch, (g) => paintCurtain(g, cw, ch, 1))).setOrigin(1, 0).setDepth(-1);
+      this.setCurtains(this.registry.get('condoCurtains') !== false, true);
       // the coat hook by the doors, with your coat on it: the wardrobe
       const hk = this.add.graphics().setDepth(-1);
       hk.fillStyle(0x6a7078, 1).fillRect(HOOK.x - 7, HOOK.y, 14, 2);
@@ -218,7 +218,7 @@ export class Condo extends WalkRoom {
       hk.fillStyle(0x6a6a44, 1).fillRect(HOOK.x - 6, HOOK.y + 2, 6, 15);
       hk.fillStyle(0x58583a, 1).fillRect(HOOK.x - 6, HOOK.y + 14, 6, 3);
       hk.fillStyle(0x5a3a3a, 1).fillRect(HOOK.x + 2, HOOK.y + 2, 4, 6);
-      this.lamps = this.add.image(0, 0, this.painted('hotel_room_light_v2', GAME_W, GAME_H, paintRoomLight)).setOrigin(0, 0).setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
+      this.lamps = this.add.image(0, 0, this.painted('condo_room_light_v1', GAME_W, GAME_H, (g) => paintRoomLight(g, false))).setOrigin(0, 0).setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
       // the flat's number over the inside of its door
       text(this, ROOM_DOOR_X, CEIL_Y + 5, '612', 0x8a8070).setOrigin(0.5, 0).setDepth(-1);
     }
@@ -302,14 +302,14 @@ export class Condo extends WalkRoom {
           hit: { x: HOOK.x - 9, y: HOOK.y - 2, w: 18, h: 22 },
         },
         {
-          x: BED.x,
+          x: ROOM_WINDOW.x + ROOM_WINDOW.w / 2,
           y: this.floorTop,
-          w: BED.w,
+          w: 30,
           depth: 0,
           wall: true,
-          label: () => '[E] SLEEP',
-          use: () => this.goToSleep('bed'),
-          hit: { x: BED.x - BED.w / 2, y: BED.top - 14, w: BED.w, h: 22 },
+          label: () => (this.curtainsOpen ? '[E] CLOSE THE CURTAINS' : '[E] OPEN THE CURTAINS'),
+          use: () => this.toggleCurtains(),
+          hit: { x: ROOM_WINDOW.x - 8, y: ROOM_WINDOW.y - 6, w: ROOM_WINDOW.w + 16, h: ROOM_WINDOW.h + 12 },
         },
       );
     }
@@ -329,6 +329,25 @@ export class Condo extends WalkRoom {
     return out;
   }
 
+  /** Tied back (open) or drawn (closed): squeezed to the sides, or across the glass. */
+  private setCurtains(open: boolean, instant = false): void {
+    this.curtainsOpen = open;
+    this.registry.set('condoCurtains', open);
+    for (const c of [this.curtainL, this.curtainR]) {
+      if (!c) continue;
+      this.tweens.killTweensOf(c);
+      if (instant) c.setScale(open ? 0.24 : 1, 1);
+      else this.tweens.add({ targets: c, scaleX: open ? 0.24 : 1, duration: 700, ease: 'Sine.easeInOut' });
+    }
+  }
+
+  private toggleCurtains(): void {
+    if (this.busy()) return;
+    audio.sfx('door_creak', 0.25);
+    this.setCurtains(!this.curtainsOpen);
+    this.say(this.curtainsOpen ? 'THE CURTAINS ARE OPEN.' : 'THE CURTAINS ARE DRAWN.');
+  }
+
   /** Through the white door, into the bathroom. */
   private toBathroom(): void {
     if (this.busy()) return;
@@ -345,7 +364,7 @@ export class Condo extends WalkRoom {
         this.say('YOU SIT DOWN. MOVE TO GET UP.');
         break;
       case 'lie':
-        this.goToSleep(f.id === 'fur_bed' ? 'bed' : 'mattress');
+        this.goToSleep(f.id === 'fur_bed' || f.id === 'fur_bed_premium' ? 'bed' : 'mattress');
         break;
       case 'switch':
         this.say(piece.toggle() ? `THE ${f.name} IS ON.` : `THE ${f.name} IS OFF.`);
@@ -406,13 +425,11 @@ export class Condo extends WalkRoom {
         const W = ROOM_WINDOW;
         if (over(W.x - 14, W.x + W.w + 14)) return 'NOT OVER THE WINDOW.';
         if (over(HOOK.x - 9, HOOK.x + 9)) return 'THE COAT HOOK IS THERE.';
-        if (over(BED_LEFT, BED_RIGHT)) return 'NOT OVER THE BED.';
       } else if (over(140, 180) || over(212, 234)) return 'THE MIRROR AND THE WINDOW ARE THERE.';
     } else {
       if (y < PLACE_TOP || y > PLACE_BOTTOM) return 'IT HAS TO STAND ON THE FLOOR.';
       if (f.cat !== 'rug') {
         if (over(0, doorsRight)) return 'NOT IN FRONT OF THE DOOR.';
-        if (this.area === 'room' && over(BED_LEFT, BED_RIGHT)) return 'THE BED IS THERE.';
       }
     }
     for (const p of this.areaPlacements()) {
@@ -564,7 +581,8 @@ export class Condo extends WalkRoom {
       plate.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
         c.destroy();
         this.picker = null;
-        this.startPlacing(e.f);
+        // (a frame later: the same tap must not also be the finger that drags it)
+        this.time.delayedCall(0, () => this.startPlacing(e.f));
       });
       c.add(plate);
       c.add(text(this, bx + 4, by + 2, e.f.name.length > 16 ? `${e.f.name.slice(0, 15)}.` : e.f.name, PALETTE.cream).setMaxWidth(W / 2 - 18));

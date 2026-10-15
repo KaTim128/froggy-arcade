@@ -93,6 +93,7 @@ export const FURNITURE: FurnitureDef[] = [
   F('fur_wardrobe', 'WARDROBE', 'storage', 130, 24, 32, false, 0x7a5230, 0x4a3018, 'ROOM FOR A COAT'),
   F('fur_plant_tall', 'TALL PLANT', 'decor', 26, 14, 26, false, 0x2f7a3a, 0xa86a40, 'NEEDS WATERING'),
   F('fur_bookcase_tall', 'TALL BOOKCASE', 'storage', 95, 22, 38, false, 0x5a3a22, 0xc8b070, 'TO THE CEILING'),
+  F('fur_bed_premium', 'PREMIUM BED', 'bed', 700, 56, 26, false, 0x3a7a80, 0xf6f2ea, 'KING-SIZE. SLEEP LIKE A GUEST'),
   F('fur_bed_double', 'DOUBLE BED', 'bed', 260, 46, 14, false, 0x6a3a5a, 0xf0e8d8, 'THE GOOD ONE'),
   F('fur_shower', 'SHOWER', 'bath', 190, 20, 34, false, 0xdfe8ee, 0x8ac0e0, 'HOT WATER, EVENTUALLY'),
   F('fur_bath_mat', 'BATH MAT', 'bath', 8, 20, 4, false, 0x7ab0c8, 0xc8e4f0, 'WARM UNDERFOOT'),
@@ -194,7 +195,7 @@ export const STARTER_COSMETICS = ['cos_coat_olive', 'cos_trousers_baggy', 'cos_b
  *
  * `day` is the life clock's day number (game/life `clock`).
  */
-export const STOCK_ALWAYS = ['fur_mattress', 'fur_toilet', 'fur_sink', 'fur_rug_mat'];
+export const STOCK_ALWAYS = ['fur_mattress', 'fur_bed_premium', 'fur_toilet', 'fur_sink', 'fur_rug_mat'];
 /** How many of the rest are out on any one day. */
 export const STOCK_ROTATING = 12;
 

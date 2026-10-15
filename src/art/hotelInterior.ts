@@ -811,7 +811,7 @@ export const BED = { x: 268, w: 34, top: 144 };
  * The room.  `lamp` lights the bedside lamps and the room; without it the
  * room is lit only by whatever comes round the curtains.
  */
-export function paintRoom(g: Ctx): void {
+export function paintRoom(g: Ctx, furnished = true): void {
   const W = 320;
   // soft warm walls: a pale stripe, cream panelling below
   // the flat: plain painted walls, the same paint all the way down
@@ -826,9 +826,11 @@ export function paintRoom(g: Ctx): void {
     rect(g, 0, y, W, 1, '#8a6a48', 0.7);
     for (let x = (row * 37) % 56; x < W; x += 56) rect(g, x, y, 1, 4, '#8a6a48');
   }
-  rect(g, 240, 156, 58, 14, '#7a8088');
-  rect(g, 240, 156, 58, 1, '#9aa0a8');
-  for (let x = 242; x < 296; x += 4) rect(g, x, 158 + (x % 3), 1, 10, '#6a7078', 0.6);
+  if (furnished) {
+    rect(g, 240, 156, 58, 14, '#7a8088');
+    rect(g, 240, 156, 58, 1, '#9aa0a8');
+    for (let x = 242; x < 296; x += 4) rect(g, x, 158 + (x % 3), 1, 10, '#6a7078', 0.6);
+  }
 
   // ---- the window: a cream frame and a sill
   const { x, y, w, h } = ROOM_WINDOW;
@@ -855,6 +857,11 @@ export function paintRoom(g: Ctx): void {
   rect(g, ROOM_DOOR_X - 6, 127, 2, 1, '#f4ecd6');
   roomDoor(g, BATH_DOOR_X, '', { w: 15, white: true });
 
+  // (the flat comes without the bed, its lamps or the picture: bought, then put in)
+  if (!furnished) {
+    rect(g, 157, CEIL_Y + 3, 7, 1, '#fffaf0');
+    return;
+  }
   // ---- the bed, foot towards you: a buttoned headboard against the wall,
   // white sheets, a burgundy throw, the pillows just showing over the duvet
   const bx = BED.x - BED.w / 2;
@@ -889,7 +896,11 @@ export function paintRoom(g: Ctx): void {
 }
 
 /** The room's lamps and their light, painted over the room (only when lit). */
-export function paintRoomLight(g: Ctx): void {
+export function paintRoomLight(g: Ctx, furnished = true): void {
+  if (!furnished) {
+    glow(g, 160, CEIL_Y + 6, 56, 0.2);
+    return;
+  }
   const bx = BED.x - BED.w / 2;
   for (const nx of [bx - 7, bx + BED.w + 7]) {
     glow(g, nx, 137, 24, 0.42);
