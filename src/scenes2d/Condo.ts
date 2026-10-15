@@ -16,7 +16,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { button } from '../core/ui';
+import { button, pinToScreen } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { furnitureById, type FurnitureDef } from '../game/catalog';
 import { onPhaseTurn } from '../game/dayNight';
@@ -437,10 +437,12 @@ export class Condo extends WalkRoom {
       this.ui.add(button(this, 100, y - 6, 'FLIP', () => this.flipPicked(), { width: 40, height: 11, disabled: this.picked === null }));
       this.ui.add(button(this, 148, y - 6, 'REMOVE', () => this.removePicked(), { width: 48, height: 11, disabled: this.picked === null }));
       this.ui.add(button(this, 284, y - 6, 'DONE', () => this.setDecorating(false), { width: 50, height: 11 }));
+      pinToScreen(this.ui);
       return;
     }
     // one button, up out of the way of your feet
     this.ui.add(button(this, GAME_W / 2, 31, 'DECORATE', () => this.setDecorating(true), { width: 58, height: 11 }));
+    pinToScreen(this.ui);
   }
 
   private setDecorating(on: boolean): void {

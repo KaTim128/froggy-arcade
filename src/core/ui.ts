@@ -152,6 +152,28 @@ export interface ButtonOpts {
   disabled?: boolean;
 }
 
+/**
+ * ---- PIN IT TO THE SCREEN, ALL OF IT.
+ *
+ * `setScrollFactor(0)` on a container draws everything in it pinned to the
+ * screen -- but Phaser tests each interactive child's hit area with that
+ * CHILD's own scroll factor, which is still 1.  So in any room wider than
+ * the screen, the moment the camera had followed the player along, a
+ * panel's buttons were drawn where they belonged and answered clicks a
+ * camera-scroll away from them: BUY and CLOSE in the furniture store did
+ * nothing at all.  This pins the container and every descendant, so what
+ * you see is what you can press.  Call it after the children are added.
+ */
+export function pinToScreen<T extends Phaser.GameObjects.GameObject>(obj: T): T {
+  const pin = (o: Phaser.GameObjects.GameObject): void => {
+    const s = o as unknown as { setScrollFactor?: (x: number, y?: number) => unknown };
+    s.setScrollFactor?.(0, 0);
+    if (o instanceof Phaser.GameObjects.Container) o.list.forEach(pin);
+  };
+  pin(obj);
+  return obj;
+}
+
 export function button(
   scene: Phaser.Scene,
   x: number,

@@ -15,7 +15,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../../render/palette';
 import { audio } from '../../core/audio';
 import { KEYS } from '../../core/input';
-import { button, centerText, fadeIn, fadeToScene, text } from '../../core/ui';
+import { button, centerText, fadeIn, fadeToScene, pinToScreen, text } from '../../core/ui';
 import { GAME_W, GAME_H } from '../../render/pixelScaler';
 import { TokenHud } from '../../ui/hud';
 import { attachPockets } from '../../ui/pockets';
@@ -472,6 +472,9 @@ export abstract class WalkRoom extends Phaser.Scene {
       c.add(button(this, bx + w / 2, y0 + H - 12, b.label, b.fn, { width: w, height: 12, disabled: b.disabled }));
       bx += w + 4;
     }
+    // (every button in it answers where it is drawn, however far the camera
+    // has followed the player along a room wider than the screen)
+    pinToScreen(c);
     this.panel = c;
     // THE PAD GOES WHILE THE PANEL IS UP.  On a phone the arrows and the E
     // button are real elements over the picture, so they take the tap before

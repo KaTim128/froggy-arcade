@@ -92,6 +92,11 @@ export class Shop extends Phaser.Scene {
   }
 
   create(): void {
+    // OVER WHOEVER OPENED IT.  Scenes draw in the order they were registered,
+    // and this one is registered before some of the rooms that open it -- the
+    // condo reception among them -- so launched from there it was drawn
+    // underneath the room: the pad went away for it, and nothing appeared.
+    this.scene.bringToTop();
     // The list fills the screen, and its rows and buttons reach into the
     // corners a phone keeps its arrows in: the pad goes while it is open.
     touchControls.holdStick();
@@ -187,7 +192,28 @@ export class Shop extends Phaser.Scene {
     L.add(this.add.rectangle(PREV_X, 36, GAME_W - PREV_X - 12, 52, PALETTE.black, 0.5).setOrigin(0, 0).setStrokeStyle(1, PALETTE.slate));
     if (r) {
       this.mode.preview(r.id, { x: PREV_X + (GAME_W - PREV_X - 12) / 2, y: 84 });
-      this.mode.detail(r.id).forEach((line, i) => L.add(text(this, PREV_X, 92 + i * 9, line, i === 0 ? PALETTE.gold : PALETTE.cream)));
+      // Wrapped to the card, a word at a time: the column from PREV_X to the
+      // frame holds about twenty-four characters, and a longer line ran out
+      // through the frame and off the side of the shop.
+      const cols = Math.floor((GAME_W - 10 - PREV_X) / 6);
+      let row = 0;
+      this.mode.detail(r.id).forEach((line, i) => {
+        const col = i === 0 ? PALETTE.gold : PALETTE.cream;
+        let cur = '';
+        const flush = (): void => {
+          L.add(text(this, PREV_X, 92 + row * 9, cur, col));
+          row++;
+          cur = '';
+        };
+        for (const word of line.split(' ')) {
+          const next = cur ? `${cur} ${word}` : word;
+          if (next.length > cols && cur) {
+            flush();
+            cur = word;
+          } else cur = next;
+        }
+        if (cur || !line) flush();
+      });
       const acts = this.mode.actions(r.id);
       const bw = Math.floor((GAME_W - PREV_X - 12 - (acts.length - 1) * 4) / Math.max(1, acts.length));
       acts.forEach((a, i) => {

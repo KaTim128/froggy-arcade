@@ -39,6 +39,11 @@ export class Goals extends Phaser.Scene {
   }
 
   create(): void {
+    // OVER WHOEVER OPENED IT.  Scenes draw in the order they were registered,
+    // and this one is registered before some of the rooms that open it -- the
+    // condo reception among them -- so launched from there it was drawn
+    // underneath the room: the pad went away for it, and nothing appeared.
+    this.scene.bringToTop();
     refreshGoals();
     this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0.88).setOrigin(0, 0).setInteractive();
     this.add.rectangle(6, 6, GAME_W - 12, GAME_H - 12, PALETTE.ink, 0.97).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold);
