@@ -10,7 +10,7 @@
  * Everything that only happens once happens in there, not in here.
  */
 
-import { showOutAtNight } from '../game/closingPull';
+import { closingNotice, showOutAtNight } from '../game/closingPull';
 import { closingTime } from '../core/broke';
 import Phaser from 'phaser';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../game/roomWalk';
@@ -29,6 +29,7 @@ import { CASINO_DOOR, CABINETS, cabinetsIn } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
+import { fitPrompt } from '../ui/plate';
 
 /** The way back, on this room's right wall. */
 const BACK_DOOR = { x: GAME_W - 20, y: 118 };
@@ -141,7 +142,8 @@ export class ArcadeAnnex extends Phaser.Scene {
     this.time.addEvent({ delay: 2000, loop: true, callback: () => {
       if (!this.locked && !this.busy() && closingTime() && !store.get().froggyGone && store.get().route === 'normal') {
         this.locked = true;
-        fadeToScene(this, 'ArcadeHub', { fromDoor: 'annex' });
+        // the notice first, then back to the front room where he says so
+        closingNotice(this, () => fadeToScene(this, 'ArcadeHub', { fromDoor: 'annex' }));
       }
     } });
     store.flush();
@@ -346,9 +348,6 @@ export class ArcadeAnnex extends Phaser.Scene {
     const x = Phaser.Math.Clamp(this.player.x, 70, GAME_W - 70);
     const y = this.player.y - 34;
     this.prompt.setPosition(x, y).setVisible(true);
-    this.promptPlate
-      .setPosition(x, y)
-      .setSize(this.prompt.width + 6, 11)
-      .setVisible(true);
+    fitPrompt(this.promptPlate, this.prompt);
   }
 }

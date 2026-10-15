@@ -173,32 +173,50 @@ function built(): Spec[] {
  * on this instant — a spin bar seen edge-on, a retracted arm, a ledge that has
  * already crumbled.
  */
-function surfaceOf(p: Plat): { left: number; right: number; y: number } | null {
+/** A standable top: its span, its height at `cx`, and how it tilts (world rise per pixel across). */
+interface Surface {
+  left: number;
+  right: number;
+  y: number;
+  cx: number;
+  slope: number;
+}
+
+/** Height of a surface at `x`: level for every ledge but a turning bar. */
+const surfaceY = (s: Surface, x: number): number => s.y + s.slope * (Phaser.Math.Clamp(x, s.left, s.right) - s.cx);
+
+/** A spin bar is solid while it is no steeper than this (|cos| of its angle): 60 degrees. */
+const SPIN_FLAT = 0.5;
+
+function surfaceOf(p: Plat): Surface | null {
   if (p.kind === 'crumble' && p.state === 'gone') return null;
   if (p.kind === 'spin') {
-    // A bar turning on its middle presents a foreshortened ledge: as wide as
-    // its own shadow.  Edge-on there is nothing there to land on, and the
-    // whole move is waiting for it to come flat again.
-    const flat = Math.abs(Math.cos(p.angle));
-    if (flat < 0.34) return null;
-    const half = (p.w / 2) * flat;
-    return { left: p.x - half, right: p.x + half, y: p.y };
+    // A BAR TURNING ON ITS MIDDLE, in the plane of the screen: what you land
+    // on is the bar itself, tilted as it is drawn -- one end high, one low --
+    // not a level line through its middle.  (It used to be a flat strip at
+    // the pivot's height, so on a slant the frog stood in the air over one
+    // end and sank into the other.)  Past 60 degrees it is too steep to hold.
+    const c = Math.cos(p.angle);
+    if (Math.abs(c) < SPIN_FLAT) return null;
+    const half = (p.w / 2) * Math.abs(c);
+    // screen rotation is clockwise with y down; the world's y is up
+    return { left: p.x - half, right: p.x + half, y: p.y, cx: p.x, slope: -Math.tan(p.angle) };
   }
   if (p.kind === 'orbit') {
     // A ledge going round a post.  It is always solid — the difficulty is
     // WHERE it is, not whether it is there — so the only question is the same
     // one every ledge answers: how wide is it and where is it right now.
-    return { left: p.x - p.w / 2, right: p.x + p.w / 2, y: p.y };
+    return { left: p.x - p.w / 2, right: p.x + p.w / 2, y: p.y, cx: p.x, slope: 0 };
   }
   if (p.kind === 'retract') {
     const out = extension(p);
     if (out < 0.28) return null;
     const len = p.w * out;
     return p.side < 0
-      ? { left: SHAFT_L, right: SHAFT_L + len, y: p.y }
-      : { left: SHAFT_R - len, right: SHAFT_R, y: p.y };
+      ? { left: SHAFT_L, right: SHAFT_L + len, y: p.y, cx: SHAFT_L + len / 2, slope: 0 }
+      : { left: SHAFT_R - len, right: SHAFT_R, y: p.y, cx: SHAFT_R - len / 2, slope: 0 };
   }
-  return { left: p.x - p.w / 2, right: p.x + p.w / 2, y: p.y };
+  return { left: p.x - p.w / 2, right: p.x + p.w / 2, y: p.y, cx: p.x, slope: 0 };
 }
 
 /** How far out of the wall a retracting arm is, 0..1, with a hold at each end. */
@@ -333,6 +351,22 @@ export const flood: MinigameModule = {
         setWater: (y: number) => {
           waterY = y;
         },
+        /** The spin bars as they stand: pivot, width, angle, and what you can stand on. */
+        spins: () =>
+          plats
+            .map((p, i) => ({ p, i }))
+            .filter(({ p }) => p.kind === 'spin')
+            .map(({ p, i }) => ({ i, x: p.x, y: p.y, w: p.w, angle: p.angle, surface: surfaceOf(p), visible: p.art.visible, alpha: p.art.alpha })),
+        /** Turn one spin bar to an angle (radians) and hold its rate at zero, for a test. */
+        setSpin: (i: number, angle: number) => {
+          const p = plats[i];
+          if (p && p.kind === 'spin') {
+            p.angle = angle;
+            p.rate = 0;
+          }
+        },
+        /** The frog's feet against a ledge's surface under it, for a test. */
+        feet: () => ({ x: px, y: py, riding: rider ? plats.indexOf(rider) : -1, onGround }),
         jump: () => jump(),
         /**
          * Every ledge in the built tower, anchor and travel both.
@@ -440,7 +474,8 @@ export const flood: MinigameModule = {
         // A ledge that moves takes the frog with it, sideways as well as up.
         px = Phaser.Math.Clamp(px + (rider.x - riderX), SHAFT_L + PW / 2, SHAFT_R - PW / 2);
         riderX = rider.x;
-        py = s.y;
+        // (on a turning bar, wherever along it you are: it carries you up or down)
+        py = surfaceY(s, px);
         vy = 0;
       }
     }
@@ -458,8 +493,9 @@ export const flood: MinigameModule = {
         const s = surfaceOf(p);
         if (!s) continue;
         if (px + PW / 2 <= s.left || px - PW / 2 >= s.right) continue;
-        if (feetWas >= s.y - 1 && py <= s.y) {
-          py = s.y;
+        const sy0 = surfaceY(s, px);
+        if (feetWas >= sy0 - 1 && py <= sy0) {
+          py = sy0;
           vy = 0;
           rider = p;
           riderX = p.x;
@@ -1117,14 +1153,20 @@ function draw(): void {
     if (gone) continue;
 
     if (p.kind === 'spin') {
-      p.art.setPosition(p.x, top).setRotation(p.angle);
+      // The whole bar, at every angle -- flat, slanted, upright -- turning
+      // on its pivot.  Its top face is what you stand on (see surfaceOf), so
+      // the bar hangs 3 pixels under it along its own normal, the same as a
+      // level ledge hangs under its top.
+      const nx = -Math.sin(p.angle) * 3;
+      const ny = Math.cos(p.angle) * 3;
       if (p.art.width !== p.w) p.art.setSize(p.w, 6);
-      p.lip.setPosition(p.x, top).setSize(p.w, 2).setRotation(p.angle);
-      // Solid when it will hold you, hollow when it will not: the same bar,
-      // and the difference is the whole timing of the jump.
-      const flat = Math.abs(Math.cos(p.angle));
-      p.art.setAlpha(flat < 0.34 ? 0.35 : 1);
-      p.lip.setAlpha(flat < 0.34 ? 0.2 : 0.55);
+      p.art.setPosition(p.x + nx, top + ny).setRotation(p.angle).setAlpha(1);
+      p.lip.setPosition(p.x, top).setRotation(p.angle);
+      // Solid when it will hold you, dimmed when it is too steep: the same
+      // bar, always there to watch, and the difference is the timing.
+      const holds = Math.abs(Math.cos(p.angle)) >= SPIN_FLAT;
+      if (!holds) p.art.setTint(0x8a8aa0);
+      p.lip.setAlpha(holds ? 0.75 : 0.25);
     } else if (p.kind === 'retract') {
       const len = Math.max(4, p.w * extension(p));
       const cx = p.side < 0 ? SHAFT_L + len / 2 : SHAFT_R - len / 2;
@@ -1142,7 +1184,7 @@ function draw(): void {
     // A ledge about to go says so: it flashes for the half second it has left.
     const doomed = p.kind === 'crumble' && p.state === 'going';
     if (doomed && Math.floor(p.timer / 90) % 2 === 0) p.art.setTintFill(PALETTE.blood);
-    else p.art.clearTint();
+    else if (!(p.kind === 'spin' && Math.abs(Math.cos(p.angle)) < SPIN_FLAT)) p.art.clearTint();
   }
 
   const wTop = sy(waterY);

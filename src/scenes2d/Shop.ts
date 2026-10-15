@@ -459,8 +459,8 @@ export class Shop extends Phaser.Scene {
             return [
               'UNIT 612, SIXTH FLOOR',
               `$${RENT_PRICE} FOR ${RENT_DAYS} DAYS`,
-              'A BED, A WINDOW AND A BARE',
-              'BATHROOM. DECORATE BOTH.',
+              'COMES WITH A SLEEPING BAG',
+              'AND A WARDROBE. DECORATE IT.',
               l.evicted ? 'YOUR THINGS ARE IN STORAGE.' : '',
             ];
           }

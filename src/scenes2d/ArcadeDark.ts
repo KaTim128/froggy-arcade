@@ -34,6 +34,7 @@ import {
 } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
+import { fitPrompt } from '../ui/plate';
 
 type Spot = 'door' | 'case' | 'counter' | 'staff' | 'lounge' | null;
 
@@ -326,9 +327,6 @@ export class ArcadeDark extends Phaser.Scene {
             : '[E] STAFF';
     const x = Phaser.Math.Clamp(px, 50, GAME_W - 50);
     this.prompt.setText(label).setPosition(x, py - 32).setVisible(true);
-    this.promptPlate
-      .setPosition(x, py - 32)
-      .setSize(this.prompt.width + 6, 11)
-      .setVisible(true);
+    fitPrompt(this.promptPlate, this.prompt);
   }
 }

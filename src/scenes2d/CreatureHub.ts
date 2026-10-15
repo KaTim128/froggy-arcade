@@ -39,6 +39,8 @@ interface Shown {
 
 export class CreatureHub extends Phaser.Scene {
   private screen: Screen = 'home';
+  /** A move's card, when one is open: over the screen and its creatures. */
+  private modal: Phaser.GameObjects.Container | null = null;
   private layer!: Phaser.GameObjects.Container;
   private art!: Phaser.GameObjects.Graphics;
   private shown: Shown[] = [];
@@ -74,6 +76,7 @@ export class CreatureHub extends Phaser.Scene {
     const cols = Object.values(ELEMENTS).map((e) => e.col);
     for (let i = 0; i < 70; i++) bg.fillStyle(cols[i % cols.length], 0.25 + (i % 3) * 0.1).fillRect((i * 97) % GAME_W, (i * 53) % GAME_H, 1, 1);
     this.layer = this.add.container(0, 0);
+    this.modal = null;
     this.art = this.add.graphics().setDepth(5);
     this.input.keyboard?.on('keydown-ESC', () => {
       if (this.dialog) return;
@@ -105,6 +108,8 @@ export class CreatureHub extends Phaser.Scene {
   }
 
   private draw(): void {
+    this.modal?.destroy(true);
+    this.modal = null;
     this.layer.removeAll(true);
     this.shown = [];
     const L = this.layer;
@@ -260,38 +265,48 @@ export class CreatureHub extends Phaser.Scene {
    * anything outside it, or the button, puts it away again.
    */
   private showMove(c: Creature, a: Attack): void {
-    const L = this.layer;
+    // ITS OWN LAYER, OVER EVERYTHING.  It used to go into the screen's layer,
+    // which sits under the creatures' drawing -- so the creatures on the cards
+    // were painted on top of the card that was meant to cover them.
+    this.modal?.destroy(true);
+    const M = this.add.container(0, 0).setDepth(600);
+    this.modal = M;
     const el = ELEMENTS[c.element];
     const body = BODIES[c.body];
     const lines = attackCard(a, c.element);
     const w = 200;
-    const h = 42 + lines.length * 10 + 22;
-    const x = (GAME_W - w) / 2;
-    const y = (GAME_H - h) / 2;
     const close = (): void => this.draw();
-    const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.72).setOrigin(0, 0).setDepth(600);
+    const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.82).setOrigin(0, 0);
     veil.setInteractive().on('pointerdown', close);
-    L.add(veil);
-    const panel = this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, el.col).setDepth(601);
-    L.add(panel);
-    const put = (o: Phaser.GameObjects.GameObject & { setDepth: (d: number) => unknown }): void => {
-      o.setDepth(602);
-      L.add(o);
+    M.add(veil);
+    // the lines first, each under the last by its real height (a long one
+    // wraps onto two, and used to be printed over by the next)
+    const body0: Phaser.GameObjects.BitmapText[] = [];
+    const lineOf = (ln: string, col: number): void => {
+      body0.push(text(this, 0, 0, ln, col).setMaxWidth(w - 16));
     };
+    lines.forEach((ln, i) => lineOf(ln, i === 0 ? PALETTE.cream : PALETTE.fog));
+    lineOf(`GOOD AT: ${body.strong}`, PALETTE.mossLight);
+    lineOf(`WEAK: ${body.weak}`, 0xff9a9a);
+    const gap = 3;
+    const textH = body0.reduce((t, o) => t + o.height + gap, 0);
+    const h = 27 + textH + 20;
+    const x = (GAME_W - w) / 2;
+    const y = Math.max(2, (GAME_H - h) / 2);
+    M.add(this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, el.col));
     const g = this.add.graphics();
     drawAttackIcon(g, a.kind, x + 13, y + 13, el.light);
-    put(g);
-    put(text(this, x + 24, y + 8, a.name, PALETTE.gold));
-    put(text(this, x + w - 6, y + 8, `${c.name.toUpperCase()}`, PALETTE.fog).setOrigin(1, 0));
-    put(this.add.rectangle(x + 6, y + 22, w - 12, 1, 0x2a3050).setOrigin(0, 0));
-    lines.forEach((ln, i) => put(text(this, x + 8, y + 27 + i * 10, ln, i === 0 ? PALETTE.cream : PALETTE.fog).setMaxWidth(w - 16)));
-    let ly = y + 29 + lines.length * 10;
-    put(text(this, x + 8, ly, `GOOD AT: ${body.strong}`, PALETTE.mossLight).setMaxWidth(w - 16));
-    ly += 9;
-    put(text(this, x + 8, ly, `WEAK: ${body.weak}`, 0xff9a9a).setMaxWidth(w - 16));
-    const b = button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 });
-    b.setDepth(602);
-    L.add(b);
+    M.add(g);
+    M.add(text(this, x + 24, y + 8, a.name, PALETTE.gold));
+    M.add(text(this, x + w - 6, y + 8, `${c.name.toUpperCase()}`, PALETTE.fog).setOrigin(1, 0));
+    M.add(this.add.rectangle(x + 6, y + 22, w - 12, 1, 0x2a3050).setOrigin(0, 0));
+    let ly = y + 27;
+    for (const o of body0) {
+      o.setPosition(x + 8, ly);
+      M.add(o);
+      ly += o.height + gap;
+    }
+    M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
   }
 
   // ----------------------------------------------------------------- screens

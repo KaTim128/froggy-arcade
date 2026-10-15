@@ -22,13 +22,12 @@ import { attachPockets } from '../../ui/pockets';
 import { Player, depthFor, type Look } from '../../art/player';
 import { froggyLayer } from '../../render/froggyLayer';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../../game/roomWalk';
-import { pullBackAtClosing } from '../../game/closingPull';
 import { paintEntrance, ENTRANCE_W, ENTRANCE_H } from '../../art/exterior';
 import { touchControls } from '../../ui/touchControls';
 import { grain, seeded } from '../../art/surface';
 import { speak } from '../../ui/talkPanel';
 import type { SpeakerId } from '../../ui/portraits';
-import { backPlate } from '../../ui/plate';
+import { backPlate, fitPrompt } from '../../ui/plate';
 import { SHOP_HOURS, clock, shopsOpen, type DayPhase } from '../../game/life';
 import { onLightTurn, onPhaseTurn } from '../../game/dayNight';
 
@@ -186,7 +185,6 @@ export abstract class WalkRoom extends Phaser.Scene {
 
     new TokenHud(this);
     attachPockets(this, () => this.busy());
-    pullBackAtClosing(this, () => !this.busy(), () => (this.locked = true));
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.72).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
     this.mutter = centerText(this, GAME_W / 2, this.mutterY, '', PALETTE.cream).setDepth(860).setScrollFactor(0).setVisible(false).setMaxWidth(290);
@@ -551,7 +549,7 @@ export abstract class WalkRoom extends Phaser.Scene {
     const x = Phaser.Math.Clamp(px, this.cameras.main.scrollX + 50, this.cameras.main.scrollX + GAME_W - 50);
     const y = this.target.f.promptBelow ? Math.min(GAME_H - 8, py + 8) : Math.max(28, py - 36);
     this.prompt.setText(this.target.f.label()).setPosition(x, y).setVisible(true);
-    this.promptPlate.setPosition(x, y).setSize(this.prompt.width + 6, 11).setVisible(true);
+    fitPrompt(this.promptPlate, this.prompt);
   }
 
   /**

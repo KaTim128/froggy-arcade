@@ -7,7 +7,7 @@
 
 import type Phaser from 'phaser';
 import { store } from '../core/state';
-import { refreshGoals, tick } from './life';
+import { DAY_SECONDS, refreshGoals, tick } from './life';
 
 /** Where the clock runs. */
 export const LIFE_SCENES = new Set([
@@ -15,8 +15,31 @@ export const LIFE_SCENES = new Set([
   'ExteriorDay', 'StreetWest', 'StreetEast', 'Condo', 'FurnitureStore', 'ClothesStore', 'BarberShop', 'Shop', 'Goals', 'Minigame', 'Hotel', 'CreatureHub', 'CreatureArena', 'InventoryModal',
 ]);
 
+/**
+ * ONE GAME MINUTE AT A TIME.  A game day is DAY_SECONDS of real time for
+ * 1440 minutes on the clock, so a real second is 1.2 minutes.  The clock used
+ * to tick a whole real second at once, and 1.2 minutes floored shows 0, 1, 2,
+ * 3, 4 -- then 6: every fifth minute was never on the wall.  Now the real time
+ * that passes is banked, from the browser's own clock (so a slow or skipped
+ * timer neither loses nor doubles any), and paid out one minute's worth at a
+ * time.
+ */
+const MINUTE_S = DAY_SECONDS / (24 * 60);
+
+let installed = false;
+
 export function installLifeTicker(game: Phaser.Game): void {
+  // (once: a second copy -- a hot reload -- would run the clock double speed)
+  if (installed) return;
+  installed = true;
+  let last = performance.now();
+  let banked = 0;
   window.setInterval(() => {
+    const now = performance.now();
+    // at most a few seconds' worth at once: a tab coming back from the
+    // background does not fast-forward the day
+    const dt = Math.min(5, (now - last) / 1000);
+    last = now;
     if (document.visibilityState !== 'visible' || !store.activeSlotId()) return;
     const s = store.get();
     if (!s.seenIntro) return;
@@ -25,8 +48,12 @@ export function installLifeTicker(game: Phaser.Game): void {
     // (the night story keeps its own time)
     if (s.timeOfDay === 'midnight' || s.route !== 'normal') return;
     if (!running.some((k) => LIFE_SCENES.has(k))) return;
-    tick(1);
-  }, 1000);
+    banked += dt;
+    while (banked >= MINUTE_S) {
+      banked -= MINUTE_S;
+      tick(MINUTE_S);
+    }
+  }, 200);
   refreshGoals();
   // and the goals roll over at midnight, real time
   window.setInterval(() => refreshGoals(), 60_000);

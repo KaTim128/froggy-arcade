@@ -6,6 +6,7 @@
  */
 
 import Phaser from 'phaser';
+import { resumePoint } from '../core/resume';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
@@ -69,52 +70,8 @@ export class StartScreen extends Phaser.Scene {
       this.openProfiles();
       return;
     }
-    const s = store.get();
-    // Resume where the run left off (PRD EC-3).
-    if (s.route === 'ejected') {
-      fadeToScene(this, 'ExteriorNight');
-      return;
-    }
-    if (s.route === 'basement') {
-      fadeToScene(this, 'BasementSequence');
-      return;
-    }
-    if (s.route === 'hide') {
-      // A run locked in the rooms comes back to the rooms.  This case was
-      // missing, so a player who closed the tab mid hide-and-seek — broke, in
-      // the dark, with the door locked behind them — was handed back a warm
-      // arcade and no explanation.  Every other route was covered; this one
-      // fell through to the hub.
-      // Back to the first room, it opens as it did the first time: coming
-      // round on the floor with him already staring at you -- never on the
-      // briefing from across the room.
-      fadeToScene(this, 'HideRoom3D', { wake: s.hideRoom === 0 });
-      return;
-    }
-    if (s.route === 'chase') {
-      fadeToScene(this, 'Chase3D');
-      return;
-    }
-    if (s.route === 'ended') {
-      fadeToScene(this, 'EndCard');
-      return;
-    }
-    // After the hotel: out on the roofs, or still in the lobby with the
-    // police outside -- each picks up where it was saved.
-    if (s.hotelAfter === 'escape') {
-      fadeToScene(this, 'RooftopEscape', {});
-      return;
-    }
-    if (s.hotelAfter === 'police' && s.reachedHotel) {
-      fadeToScene(this, 'Hotel', { area: 'lobby', from: 'storage' });
-      return;
-    }
-    // The hotel is a checkpoint twice over: through its doors after the
-    // road, and asleep in 612 -- which comes back at 3 AM, at the knocking.
-    if (s.timeOfDay === 'midnight' && s.reachedHotel && s.hotelAfter === 'none') {
-      fadeToScene(this, 'Hotel', s.hotelNight ? { area: 'room', late: true } : { area: 'lobby' });
-      return;
-    }
-    fadeToScene(this, s.seenIntro ? 'ArcadeHub' : 'IntroCutscene');
+    // Resume where the run left off (PRD EC-3): see core/resume.
+    const at = resumePoint();
+    fadeToScene(this, at.key, at.data);
   }
 }

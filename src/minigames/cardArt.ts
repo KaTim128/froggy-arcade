@@ -27,7 +27,7 @@ export const FACE_H = 16;
 
 /** The deck's own suit characters, and what each one is at this table. */
 export const SUIT_OF: Record<string, { key: string; name: string; ink: number }> = {
-  '♣': { key: 'card_suit_lily', name: 'LILY', ink: 0x2a7a3a },
+  '♣': { key: 'card_suit_lily', name: 'LILY', ink: 0x1b5a2a },
   '♥': { key: 'card_suit_firefly', name: 'FIREFLY', ink: 0xc0302a },
   '♦': { key: 'card_suit_pond', name: 'POND', ink: 0x1d5fb0 },
   '♠': { key: 'card_suit_tadpole', name: 'TADPOLE', ink: 0x3a2a5a },
@@ -49,7 +49,7 @@ type Pal = Record<string, number>;
 const SUITS: Record<string, { rows: string[]; pal: Pal }> = {
   card_suit_lily: {
     rows: ['.gg.gg.', 'ggg.ggg', 'gggdggg', 'ggdgdgg', 'ggggggg', '.ggggg.', '..ggg..'],
-    pal: { g: 0x3fae5a, d: 0x1f6a32 },
+    pal: { g: 0x2f9148, d: 0x175426 },
   },
   card_suit_firefly: {
     rows: ['..kkk..', 'ww.k.ww', 'wwkkkww', '.wkrkw.', '..yyy..', '..yyy..', '...y...'],

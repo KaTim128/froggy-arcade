@@ -101,7 +101,7 @@ export function canEnter(scene: SceneId, s: Readonly<GameState>, ctx: GuardConte
     // The alley too -- and, once the night in the arcade is behind you, by
     // day as well: its side door chained shut (see BackAlley).
     case 'BackAlley':
-      return s.route === 'ejected' || (s.route === 'normal' && s.froggyGone);
+      return s.route === 'ejected' || s.route === 'normal';
 
     case 'BasementSequence':
       return s.route === 'basement';

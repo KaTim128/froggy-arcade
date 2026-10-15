@@ -20,7 +20,6 @@
  */
 
 import Phaser from 'phaser';
-import { pullBackAtClosing } from '../game/closingPull';
 import { TokenHud } from '../ui/hud';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -33,20 +32,21 @@ import { Player } from '../art/player';
 import { CAMERA_PRIZE, shelfStock } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
+import { backWayOpen } from '../game/closingPull';
 import { attachPockets } from '../ui/pockets';
 import { ensureKeyInPocket, heldItems } from '../game/inventory';
 import { Pedestrians } from '../art/pedestrians';
 import { SUNRISE_HOUR, twelveHour, BEG_MS, begNextMs, canBeg, clock, collectBegging, sleep, sleepPlace, startBegging, stopBegging, visit } from '../game/life';
 import { nightfallOnce, onPhaseTurn } from '../game/dayNight';
 import { speak } from '../ui/talkPanel';
-import { backPlate } from '../ui/plate';
+import { backPlate, fitPrompt } from '../ui/plate';
 import { grain } from '../art/surface';
 
 const WALK_Y = KERB_Y;
 /** Where the alley mouth is, off the arcade's right-hand corner. */
 const ALLEY_X = GAME_W - 24;
 /** The alley is open to you once you have come through the night in the arcade. */
-const alleyOpen = (): boolean => store.get().froggyGone;
+const alleyOpen = (): boolean => store.get().froggyGone || backWayOpen();
 type Spot = 'door' | 'man' | 'alley' | 'beg' | null;
 /**
  * THE PITCH: the patch of pavement against the arcade's wall, just left of
@@ -145,7 +145,8 @@ export class ExteriorDay extends Phaser.Scene {
     // after the night in the arcade it keeps hours: shuttered all night, and
     // the shutters roll up at sunrise
     this.shutter = null;
-    if (time !== 'midnight' && st0.froggyGone && (this.lifeDark || this.opening || this.woke)) this.shutter = this.paintShutter(refs.doorRect);
+    // (and before it, once it has shut for the night: nobody is let back in at the front)
+    if (time !== 'midnight' && (this.lifeDark || ((this.opening || this.woke) && st0.froggyGone))) this.shutter = this.paintShutter(refs.doorRect);
     startSignFlicker(this, refs);
     this.doorX = refs.doorX;
     this.errand = null;
@@ -174,7 +175,6 @@ export class ExteriorDay extends Phaser.Scene {
     // together -- the same HUD as inside.
     new TokenHud(this);
     attachPockets(this, () => this.locked || this.busy());
-    pullBackAtClosing(this, () => !this.locked && !this.busy(), () => (this.locked = true));
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
@@ -768,9 +768,6 @@ export class ExteriorDay extends Phaser.Scene {
   private showPrompt(label: string): void {
     const x = Phaser.Math.Clamp(this.player.x, 40, GAME_W - 40);
     this.prompt.setText(label).setPosition(x, WALK_Y - 34).setVisible(true);
-    this.promptPlate
-      .setPosition(x, WALK_Y - 34)
-      .setSize(this.prompt.width + 6, 11)
-      .setVisible(true);
+    fitPrompt(this.promptPlate, this.prompt);
   }
 }

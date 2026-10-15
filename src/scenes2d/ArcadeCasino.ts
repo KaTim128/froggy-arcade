@@ -12,7 +12,7 @@
  * Darker and quieter than the arcade floor.  Nobody has ever won in here.
  */
 
-import { showOutAtNight } from '../game/closingPull';
+import { closingNotice, showOutAtNight } from '../game/closingPull';
 import { closingTime } from '../core/broke';
 import Phaser from 'phaser';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../game/roomWalk';
@@ -36,6 +36,7 @@ import { drawFroggy } from '../froggy/froggy';
 import { drawSuitedMan } from '../froggy/suit';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
+import { fitPrompt } from '../ui/plate';
 
 /**
  * How far in front of the table's near edge the player's feet come to rest.
@@ -191,7 +192,8 @@ export class ArcadeCasino extends Phaser.Scene {
     this.time.addEvent({ delay: 2000, loop: true, callback: () => {
       if (!this.locked && !this.busy() && closingTime() && !store.get().froggyGone && store.get().route === 'normal') {
         this.locked = true;
-        fadeToScene(this, 'ArcadeHub', { fromDoor: 'annex' });
+        // the notice first, then back to the front room where he says so
+        closingNotice(this, () => fadeToScene(this, 'ArcadeHub', { fromDoor: 'annex' }));
       }
     } });
     store.flush();
@@ -599,9 +601,6 @@ export class ArcadeCasino extends Phaser.Scene {
     const atTable = t.kind === 'cabinet' && t.cab.def.fixture === 'table';
     const y = atTable ? Math.min(this.player.y + 20, GAME_H - 36) : this.player.y - 34;
     this.prompt.setPosition(x, y).setVisible(true);
-    this.promptPlate
-      .setPosition(x, y)
-      .setSize(this.prompt.width + 6, 11)
-      .setVisible(true);
+    fitPrompt(this.promptPlate, this.prompt);
   }
 }

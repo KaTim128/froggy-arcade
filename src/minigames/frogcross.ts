@@ -569,7 +569,12 @@ function squash(): void {
 function refreshHud(): void {
   if (!hud) return;
   hud.pts.setText(`PTS ${points}`);
-  hud.lives.setText(`LIVES ${lives}`);
+  // HOW FAR TO THE PRIZE: the crossings still needed for the 20 tokens,
+  // counted down the moment each one is made, and then that it is earned
+  // (it is paid once, at the end of the go -- see `finish`).
+  const need = Math.max(0, Math.ceil((TARGET_POINTS - points) / POINTS_PER_CROSS));
+  const goal = need > 0 ? `${need} MORE FOR ${BASE_REWARD}` : `${BASE_REWARD} TOKENS EARNED`;
+  hud.lives.setText(`LIVES ${lives} - ${goal}`).setTint(need > 0 ? PALETTE.fog : PALETTE.gold);
   hud.best.setText(`BEST ${best}`);
   const banked = frogPayout(points);
   hud.bank.setText(`[${isTouch() ? 'BANK' : 'ENTER'}] BANK ${banked} TOKENS`).setVisible(banked > 0);

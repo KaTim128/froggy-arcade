@@ -857,7 +857,7 @@ function refreshScore(): void {
   if (!mine || !theirs) return;
   const gotTheirs = theirs.frogs.filter((f) => f.found.size >= f.kind.size).length;
   const gotMine = mine.frogs.filter((f) => f.found.size >= f.kind.size).length;
-  subStatus?.setText(`FROGS FOUND  ${gotTheirs}/6      THEY HAVE  ${gotMine}/6`);
+  subStatus?.setText(`FROGS FOUND  ${gotTheirs}/6      THEY FOUND  ${gotMine}/6`);
 }
 
 function finish(won: boolean): void {

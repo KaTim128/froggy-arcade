@@ -2,14 +2,13 @@
  * The ejection.  PRD §7.9.
  *
  * The player character walks to the door without input, at a constant pace,
- * dragged by nothing visible.  The camera does not move.  `route = 'ejected'`
- * is committed here, and the front door never opens again (AC-4).
+ * dragged by nothing visible.  The camera does not move.  Out on the street,
+ * the shutters are down until sunrise.
  */
 
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio, SILENCE } from '../core/audio';
-import { commitEjection } from '../core/broke';
 import { fadeToScene } from '../core/ui';
 import { paintChangeMachine, paintHubRoom, ROOM } from '../art/hubRoom';
 import { Player } from '../art/player';
@@ -65,8 +64,10 @@ export class EjectionCutscene extends Phaser.Scene {
       audio.sfx('door_shut');
       this.time.delayedCall(400, () => {
         audio.sfx('lock_click');
-        commitEjection(); // route = 'ejected'
-        this.time.delayedCall(1500, () => fadeToScene(this, 'ExteriorNight'));
+        // out onto the ordinary street at night: the HUD, the clock, the
+        // pavement to sleep on -- and, until sunrise, the alley (see
+        // game/closingPull `backWayOpen`)
+        this.time.delayedCall(1500, () => fadeToScene(this, 'ExteriorDay', { fromArcade: true }));
       });
     });
   }

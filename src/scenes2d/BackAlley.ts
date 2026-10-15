@@ -16,6 +16,7 @@ import Phaser from 'phaser';
 import { PALETTE, daylight, nightify } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
+import { backWayOpen } from '../game/closingPull';
 import { KEYS } from '../core/input';
 import { centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { Player } from '../art/player';
@@ -46,7 +47,9 @@ export class BackAlley extends Phaser.Scene {
     this.locked = false;
     this.spot = null;
     const st = store.get();
-    this.chained = st.route !== 'ejected';
+    // open on the night it is the way in (shown out at closing, before Hide
+    // and Seek); chained every other time
+    this.chained = st.route !== 'ejected' && !backWayOpen(st);
     // the street's light, run through the alley's own colours
     const time = this.chained ? st.timeOfDay : 'midnight';
     const c = (col: number) => (!this.chained ? col : time === 'midnight' ? nightify(col, 0.35) : time === 'day' ? daylight(col, 0.28) : col);
@@ -147,7 +150,7 @@ export class BackAlley extends Phaser.Scene {
 
     if (this.spot === 'out') {
       // back to whichever street you came in off
-      fadeToScene(this, this.chained ? 'ExteriorDay' : 'ExteriorNight', this.chained ? { fromAlley: true } : {});
+      fadeToScene(this, store.get().route === 'ejected' ? 'ExteriorNight' : 'ExteriorDay', store.get().route === 'ejected' ? {} : { fromAlley: true });
       return;
     }
 

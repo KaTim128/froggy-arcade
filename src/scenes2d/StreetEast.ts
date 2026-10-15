@@ -9,7 +9,6 @@
  */
 
 import Phaser from 'phaser';
-import { pullBackAtClosing } from '../game/closingPull';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { KEYS } from '../core/input';
@@ -22,7 +21,7 @@ import { Pedestrians } from '../art/pedestrians';
 import { froggyLayer } from '../render/froggyLayer';
 import { SHOP_HOURS, clock, shopsOpen, visit } from '../game/life';
 import { nightfallOnce, onPhaseTurn } from '../game/dayNight';
-import { backPlate } from '../ui/plate';
+import { backPlate, fitPrompt } from '../ui/plate';
 import { FRONT_TOP, paintShopfront, paintStreet, type ShopfrontOpts } from '../art/shopfront';
 
 export type StoreKind = 'furniture' | 'clothes' | 'barber';
@@ -139,7 +138,6 @@ export class StreetEast extends Phaser.Scene {
 
     new TokenHud(this);
     attachPockets(this, () => this.locked || this.busy());
-    pullBackAtClosing(this, () => !this.locked && !this.busy(), () => (this.locked = true));
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
     this.mutter = centerText(this, 160, GAME_H - 40, '', PALETTE.cream).setDepth(802).setScrollFactor(0).setVisible(false).setMaxWidth(290);
@@ -255,7 +253,7 @@ export class StreetEast extends Phaser.Scene {
     }
     const label = `[E] ${this.spot.name}`;
     this.prompt.setText(label).setPosition(px, WALK_Y - 52).setVisible(true);
-    this.promptPlate.setPosition(px, WALK_Y - 52).setSize(this.prompt.width + 6, 11).setVisible(true);
+    fitPrompt(this.promptPlate, this.prompt);
   }
 
   private held(g: string): boolean {
