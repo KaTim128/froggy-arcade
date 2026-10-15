@@ -92,7 +92,9 @@ export function clock(t = L().t): Clock {
   // (a game day runs from sunrise to sunrise)
   const day = Math.floor(t / DAY_SECONDS);
   const into = (t - day * DAY_SECONDS) / DAY_SECONDS;
-  const mins = Math.floor(into * 24 * 60 + SUNRISE_HOUR * 60) % (24 * 60);
+  // (a hair over, so a minute banked as a fraction of a second -- 0.8333...
+  // -- reads as the minute it is, not the one before it)
+  const mins = Math.floor(into * 24 * 60 + SUNRISE_HOUR * 60 + 1e-6) % (24 * 60);
   const hour = Math.floor(mins / 60);
   const minute = mins % 60;
   const h = mins / 60;

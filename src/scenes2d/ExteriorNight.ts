@@ -26,6 +26,7 @@ import { paintExterior } from '../art/exterior';
 import { Player } from '../art/player';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W } from '../render/pixelScaler';
+import { fitPrompt } from '../ui/plate';
 
 const WALK_Y = 166;
 type Spot = 'door' | 'alley' | null;
@@ -137,9 +138,6 @@ export class ExteriorNight extends Phaser.Scene {
     const label = this.spot === 'alley' ? '[E] ALLEY' : '[E] DOOR';
     const x = Phaser.Math.Clamp(px, 40, GAME_W - 40);
     this.prompt.setText(label).setPosition(x, WALK_Y - 34).setVisible(true);
-    this.promptPlate
-      .setPosition(x, WALK_Y - 34)
-      .setSize(this.prompt.width + 6, 11)
-      .setVisible(true);
+    fitPrompt(this.promptPlate, this.prompt);
   }
 }

@@ -457,6 +457,8 @@ export const grudge: MinigameModule = {
   title: 'GRUDGE',
   music: 'game_grudge',
   rules: 'best of 3',
+  // a free practice fight on the card, to learn the moves before paying
+  practice: true,
   tutorial: {
     objective: [
       'BEST OF THREE ROUNDS.',

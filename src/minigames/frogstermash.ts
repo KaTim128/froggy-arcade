@@ -7208,7 +7208,7 @@ let pickT = 0;
 let chests: Phaser.GameObjects.Container[] = [];
 let timerBar: Phaser.GameObjects.Rectangle | null = null;
 let panelText: Phaser.GameObjects.BitmapText[] = [];
-let panelChip: Phaser.GameObjects.Rectangle | null = null;
+let panelChip: Phaser.GameObjects.Graphics | null = null;
 let previewC: Phaser.GameObjects.Container | null = null;
 
 // ---- the fight
@@ -7400,7 +7400,7 @@ function startStage(n: number): void {
   // ---- and the card for whichever chest is lit
   const px = 70;
   c.add(S().add.rectangle(px, 42, GAME_W - px - 5, 84, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel));
-  panelChip = S().add.rectangle(px + 5, 47, 9, 9, PALETTE.slate).setOrigin(0, 0);
+  panelChip = S().add.graphics().setPosition(px + 4, 46);
   c.add(panelChip);
   for (let i = 0; i < 7; i++) {
     const t = text(S(), px + (i === 0 ? 18 : 5), 47 + i * 11, '', PALETTE.cream);
@@ -7655,8 +7655,59 @@ function highlight(i: number, quiet = false): void {
  * opening one only confirmed something already read.  A reveal has to happen
  * at the moment of commitment or it is not a reveal.
  */
+/**
+ * THE LITTLE PICTURE BY THE NAME: what kind of thing it is, at a glance --
+ * a helmet, a blade, a breastplate, a pair of greaves -- in the colours of
+ * what it is made of.  Eleven pixels square, outlined and lit from the top
+ * left like everything else in the arcade.
+ */
+function drawSlotIcon(g: Phaser.GameObjects.Graphics | null, slot: Slot, col: number, edge: number): void {
+  if (!g) return;
+  g.clear();
+  const c = Phaser.Display.Color.IntegerToColor(col);
+  const lit = Phaser.Display.Color.GetColor(Math.min(255, c.red + 60), Math.min(255, c.green + 60), Math.min(255, c.blue + 60));
+  const dim = Phaser.Display.Color.GetColor(c.red * 0.62, c.green * 0.62, c.blue * 0.62);
+  const ink = 0x0c0a12;
+  // each shape as rows of [x, y, w] runs on an 11 x 11 grid
+  const runs: Record<Slot, Array<[number, number, number]>> = {
+    head: [[3, 1, 5], [2, 2, 7], [1, 3, 9], [1, 4, 9], [1, 5, 9], [1, 6, 2], [8, 6, 2], [1, 7, 2], [8, 7, 2], [1, 8, 2], [8, 8, 2]],
+    body: [[0, 1, 3], [8, 1, 3], [0, 2, 11], [1, 3, 9], [1, 4, 9], [2, 5, 7], [2, 6, 7], [2, 7, 7], [3, 8, 5]],
+    legs: [[1, 1, 9], [1, 2, 9], [1, 3, 4], [6, 3, 4], [1, 4, 4], [6, 4, 4], [2, 5, 3], [6, 5, 3], [2, 6, 3], [6, 6, 3], [2, 7, 3], [6, 7, 3], [1, 8, 4], [6, 8, 4]],
+    weapon: [[8, 1, 2], [7, 2, 2], [6, 3, 2], [5, 4, 2], [4, 5, 2], [3, 6, 2]],
+  };
+  const shape = runs[slot];
+  // the outline: every run, one pixel bigger each way, in ink
+  g.fillStyle(ink, 1);
+  for (const [x, y, w] of shape) g.fillRect(x - 1, y - 1, w + 2, 3);
+  // the body of it, its shadow side, and its lit edge
+  g.fillStyle(col, 1);
+  for (const [x, y, w] of shape) g.fillRect(x, y, w, 1);
+  g.fillStyle(dim, 1);
+  for (const [x, y, w] of shape) g.fillRect(x + w - 1, y, 1, 1);
+  g.fillStyle(lit, 1);
+  for (const [x, y, w] of shape.slice(0, 2)) g.fillRect(x, y, Math.max(1, w - 1), 1);
+  // and what makes each one itself
+  if (slot === 'head') {
+    g.fillStyle(ink, 1).fillRect(3, 5, 5, 1); // the visor slit
+    g.fillStyle(edge, 1).fillRect(5, 0, 1, 2); // a crest
+  } else if (slot === 'body') {
+    g.fillStyle(dim, 1).fillRect(5, 3, 1, 5); // the breast ridge
+    g.fillStyle(edge, 1).fillRect(2, 5, 7, 1); // the belt
+  } else if (slot === 'legs') {
+    g.fillStyle(edge, 1).fillRect(1, 1, 9, 1); // the belt
+    g.fillStyle(lit, 1).fillRect(3, 4, 1, 1).fillRect(7, 4, 1, 1); // the knee caps
+  } else {
+    // the blade's edge, then the crossguard and the grip and pommel
+    g.fillStyle(0xffffff, 0.7).fillRect(9, 1, 1, 1).fillRect(8, 2, 1, 1).fillRect(7, 3, 1, 1);
+    g.fillStyle(ink, 1).fillRect(1, 5, 5, 3).fillRect(0, 7, 4, 4);
+    g.fillStyle(0xc8a040, 1).fillRect(2, 6, 3, 1).fillRect(3, 5, 1, 3); // the guard
+    g.fillStyle(0x6a4020, 1).fillRect(2, 8, 1, 1).fillRect(1, 9, 1, 1); // the grip
+    g.fillStyle(0xc8a040, 1).fillRect(0, 10, 1, 1); // the pommel
+  }
+}
+
 function showSealed(): void {
-  panelChip?.setFillStyle(PALETTE.slate);
+  drawSlotIcon(panelChip, ORDER[stage], PALETTE.slate, 0x3a4250);
   // Short lines on purpose: the card is 235px of glass and the font walks six
   // to the character, so anything past about thirty-four runs into the border.
   const lines = [
@@ -7726,7 +7777,7 @@ function showCard(p: Piece | undefined): void {
   const lines: string[] = [];
   if (p.weapon) {
     const w = p.weapon;
-    panelChip?.setFillStyle(w.key === 'none' ? PALETTE.slate : PALETTE.bone);
+    drawSlotIcon(panelChip, 'weapon', w.key === 'none' ? PALETTE.slate : PALETTE.bone, 0x6a5a3a);
     lines.push(
       p.name,
       `POWER     ${bar(p.rPower)} ${p.rPower}`,
@@ -7737,7 +7788,7 @@ function showCard(p: Piece | undefined): void {
     );
   } else {
     const m = p.mat!;
-    panelChip?.setFillStyle(m.colour);
+    drawSlotIcon(panelChip, p.slot as Slot, m.colour, m.edge ?? m.colour);
     lines.push(
       p.name,
       `DEFENCE   ${(m.def * 100) | 0}% OF A SUIT` + (m.evade > 0 ? `, ${(m.evade * 100) | 0}% AVOID` : ''),

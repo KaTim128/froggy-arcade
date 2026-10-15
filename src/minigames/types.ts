@@ -53,6 +53,11 @@ export interface MinigameApi {
   /** What is left in the player's pocket. */
   balance(): number;
   /**
+   * A free PRACTICE go (see MinigameModule.practice): nothing was charged and
+   * nothing will be paid, recorded or counted, whatever happens.
+   */
+  readonly practice: boolean;
+  /**
    * Offer this play's result for the cabinet's personal best (see
    * core/records.ts for what each one measures).  Call it when the number is
    * final.  The shell keeps it only if it beats the best, and says so.
@@ -104,6 +109,11 @@ export interface MinigameModule {
   touch: TouchLayout;
   /** Replaces the shell's "WIN: +n" line when the payout is not fixed. */
   payoutNote?: string;
+  /**
+   * Offer a free PRACTICE button on the card: the same game, to learn the
+   * controls on, with no tokens in and nothing out.
+   */
+  practice?: boolean;
   /**
    * The cabinet's own music, by id (see core/tracks.ts).  The shell fades the
    * room's bed into it on launch and the room fades it back out on return.

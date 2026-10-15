@@ -61,3 +61,43 @@ export function backPlate(scene: Phaser.Scene, t: Phaser.GameObjects.BitmapText,
   scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => scene.events.off(Phaser.Scenes.Events.POST_UPDATE, sync));
   return r;
 }
+
+/**
+ * THE [E] PROMPT AND THE DARK STRIP BEHIND IT, AS ONE THING.
+ *
+ * The strip used to be a rectangle made 4 pixels wide with its origin in the
+ * middle and then stretched with `setSize` to fit the line.  `setSize` does
+ * not move a shape's display origin, so it stayed 2 pixels in from the LEFT
+ * edge and the box grew off to the right of the words: the longer the line,
+ * the further it slid, and it changed every time the line did as you walked
+ * from one machine to the next.
+ *
+ * Here the strip is pinned by its top-left corner to the text's own bounds,
+ * sized from the text as it actually came out, and the pair is kept on the
+ * view together -- a long name near an edge moves both, never one.
+ */
+export function fitPrompt(plate: Phaser.GameObjects.Rectangle, t: Phaser.GameObjects.BitmapText): void {
+  const PAD_X = 4;
+  const PAD_Y = 2;
+  t.setOrigin(0.5, 0.5);
+  const w = Math.ceil(t.width) + PAD_X * 2;
+  const h = Math.ceil(t.height) + PAD_Y * 2;
+  // on the view the text lives in (a room that scrolls, or the screen)
+  const cam = t.scene.cameras.main;
+  const vx = t.scrollFactorX === 0 ? 0 : cam.scrollX;
+  const vy = t.scrollFactorY === 0 ? 0 : cam.scrollY;
+  const half = w / 2;
+  const cx = w + 2 * EDGE >= GAME_W ? vx + GAME_W / 2 : Phaser.Math.Clamp(t.x, vx + EDGE + half, vx + GAME_W - EDGE - half);
+  const cy = Phaser.Math.Clamp(t.y, vy + EDGE + h / 2, vy + GAME_H - EDGE - h / 2);
+  // whole pixels, from the left edge: the words and the box line up exactly
+  const left = Math.round(cx - half);
+  const top = Math.round(cy - h / 2);
+  t.setPosition(left + half, top + h / 2);
+  plate
+    .setOrigin(0, 0)
+    .setPosition(left, top)
+    .setSize(w, h)
+    .setScrollFactor(t.scrollFactorX, t.scrollFactorY)
+    .setVisible(t.visible);
+  plate.setDepth(Math.min(plate.depth, t.depth - 0.01));
+}

@@ -85,6 +85,8 @@ export interface TutorialCardOpts {
   onPlay: () => void;
   /** Pressed LEAVE, or Esc.  Nothing has been charged. */
   onLeave: () => void;
+  /** Pressed PRACTICE (offered only when given): a free go that counts for nothing. */
+  onPractice?: () => void;
 }
 
 export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): TutorialCard {
@@ -236,18 +238,39 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
     opts.onLeave();
   };
 
+  const practice = (): void => {
+    if (taken || done || !opts.onPractice) return;
+    taken = true;
+    card.destroy();
+    audio.sfx('ui_blip');
+    opts.onPractice();
+  };
+
   const by = buttonY;
+  // three across when there is a PRACTICE button: PLAY, PRACTICE (free), LEAVE
+  const three = !!opts.onPractice;
+  const bw = three ? 84 : 88;
+  const dx = three ? 92 : 52;
+  if (three) {
+    keep(
+      button(scene, GAME_W / 2, by, 'PRACTICE', practice, {
+        width: bw,
+        height: 15,
+        fill: 0x1f4a5a,
+      }).setDepth(905),
+    );
+  }
   keep(
-    button(scene, GAME_W / 2 - 52, by, affordable ? 'PLAY' : 'CANT PLAY', play, {
-      width: 88,
+    button(scene, GAME_W / 2 - dx, by, affordable ? 'PLAY' : 'CANT PLAY', play, {
+      width: bw,
       height: 15,
       fill: affordable ? PALETTE.tealDark : PALETTE.slate,
       disabled: !affordable,
     }).setDepth(905),
   );
   keep(
-    button(scene, GAME_W / 2 + 52, by, 'LEAVE', leave, {
-      width: 88,
+    button(scene, GAME_W / 2 + dx, by, 'LEAVE', leave, {
+      width: bw,
       height: 15,
       fill: PALETTE.plum,
     }).setDepth(905),

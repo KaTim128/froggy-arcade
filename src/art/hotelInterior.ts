@@ -862,18 +862,39 @@ export function paintRoom(g: Ctx, furnished = true): void {
     rect(g, 157, CEIL_Y + 3, 7, 1, '#fffaf0');
     return;
   }
-  // ---- the bed is a SLEEPING BAG: what the unit comes with.  Rolled out on
-  // the rug against the wall, its hood and a folded pillow at the near end,
-  // channel-quilted, the zip down its side.
+  // ---- the bed is a SLEEPING BAG: what the unit comes with, the same one
+  // the condo's furniture draws (see art/furnitureArt) -- rolled out on the
+  // rug, the hood and its folded pillow at the right-hand end, puffed
+  // channels between the stitching, a sheen along the top, the zip and pull.
   const bx = BED.x - BED.w / 2;
-  rect(g, bx, BED.top, BED.w, 6, '#3a6a5a');
-  rect(g, bx, BED.top, BED.w, 1, '#5a8a7a');
-  for (let c = 5; c < BED.w; c += 6) rect(g, bx + c, BED.top + 1, 1, 5, '#2e5a4c');
-  rect(g, bx + 1, BED.top + 5, BED.w - 2, 1, '#b8bcc4');
-  rect(g, bx - 3, BED.top - 2, 9, 8, '#2a3450');
-  rect(g, bx - 3, BED.top - 2, 9, 1, '#3e4a6a');
-  rect(g, bx - 2, BED.top - 4, 7, 3, '#eeeae0');
-  rect(g, bx - 2, BED.top - 4, 7, 1, '#ffffff');
+  const T = BED.top;
+  const H = 6;
+  const hood = 8;
+  rect(g, bx, T + H + 1, BED.w, 1, '#000000', 0.18);
+  rect(g, bx - 1, T - 1, BED.w + 2, H + 2, '#1a2420');
+  rect(g, bx, T, BED.w, H, '#3a6a5a');
+  for (let k = 0; k < 6; k++) {
+    const x0 = bx + Math.round((BED.w * k) / 6) + 1;
+    const x1 = bx + Math.round((BED.w * (k + 1)) / 6);
+    rect(g, x0 + 1, T + 1, Math.max(1, x1 - x0 - 2), 1, '#5c8c7a');
+    rect(g, x0, T + 2, x1 - x0, 1, '#467868', 0.6);
+    rect(g, x1 - 1, T + 1, 1, H - 3, '#2e5a4c', 0.7);
+    if (k > 0) for (let yy = T + 1; yy < T + H - 2; yy += 2) rect(g, x0 - 1, yy, 1, 1, '#24483c');
+  }
+  rect(g, bx + 2, T + 1, Math.round(BED.w * 0.55), 1, '#ffffff', 0.16);
+  rect(g, bx + 1, T + H - 2, BED.w - 2, 1, '#26304a');
+  rect(g, bx + 2, T + H - 2, BED.w - 4, 1, '#b8bcc4');
+  rect(g, bx + BED.w - hood - 3, T + H - 3, 2, 2, '#d8dce2');
+  const hx = bx + BED.w - hood;
+  rect(g, hx - 1, T - 2, hood + 2, H + 3, '#121828');
+  rect(g, hx, T - 1, hood, H + 1, '#2a3450');
+  rect(g, hx + 1, T - 1, hood - 2, 1, '#3e4a6a');
+  rect(g, hx, T - 1, 1, H, '#5a8a7a');
+  rect(g, hx + hood - 1, T - 1, 1, H, '#1c2438');
+  rect(g, hx + 2, T - 3, hood - 4, H - 2, '#eeeae0');
+  rect(g, hx + 2, T - 3, hood - 4, 1, '#ffffff');
+  rect(g, hx + 2, T + H - 6, hood - 4, 1, '#cfc8b8');
+  rect(g, hx + 4, T - 2, 1, H - 4, '#d8d2c4', 0.8);
   // nightstands and their lamps
   for (const nx of [bx - 7, bx + BED.w + 7]) {
     rect(g, nx - 4, 143, 8, 9, HP.wood);

@@ -64,6 +64,8 @@ export class MinigameScene extends Phaser.Scene {
   private card: TutorialCard | null = null;
   /** Where the result card goes afterwards, when it is not back to the room. */
   private exitTo: string | null = null;
+  /** This go is PRACTICE: free, and counted for nothing. */
+  private practicing = false;
   /** The quit question, while it is up.  The game is frozen under it. */
   private asking: Phaser.GameObjects.Container | null = null;
 
@@ -86,6 +88,7 @@ export class MinigameScene extends Phaser.Scene {
     this.started = false;
     this.card = null;
     this.exitTo = null;
+    this.practicing = false;
     this.asking = null;
   }
 
@@ -149,7 +152,10 @@ export class MinigameScene extends Phaser.Scene {
       payout: (n: number) => this.payout(n),
       cashOut: () => this.cashOut(),
       balance: () => ledger.balance(),
+      practice: false,
       record: (value: number) => {
+        // (a practice go sets no records)
+        if (this.practicing) return;
         const rec = RECORDS[this.gameId];
         if (rec && submitRecord(this.gameId, value)) this.newBest = `NEW BEST!  ${rec.format(bestRecord(this.gameId) ?? value)}`;
       },
@@ -200,7 +206,27 @@ export class MinigameScene extends Phaser.Scene {
       setCabinetTouch(mod.touch);
     };
 
-    if (this.straight) {
+    // (the first go at a cabinet always gets its card, however it was
+    // started -- [E] and a tap on a phone included: nobody is dropped into a
+    // game they have never been shown how to play)
+    const firstGo = (store.get().gamesPlayed[this.gameId] ?? 0) === 0;
+    // PRACTICE: the same game, built the same way, with nothing taken, nothing
+    // counted, and the title bar saying so the whole time.
+    const startPractice = (): void => {
+      this.card = null;
+      if (this.settled) return;
+      this.practicing = true;
+      (api as { practice: boolean }).practice = true;
+      this.stake = 0;
+      const tag = this.add.rectangle(GAME_W / 2, 8, 112, 12, 0x1f4a5a).setStrokeStyle(1, PALETTE.tealLight).setDepth(1002);
+      centerText(this, GAME_W / 2, 8, 'PRACTICE - FREE', PALETTE.tealLight).setDepth(1003);
+      void tag;
+      mod.create(this, api);
+      this.started = true;
+      setCabinetTouch(mod.touch);
+    };
+
+    if (this.straight && !firstGo && !mod.practice) {
       // The affordability check the card would have made.  Without it a player
       // who cannot cover the cabinet gets dropped into a built game that then
       // refuses to charge them, which is the accidental loop this whole change
@@ -233,6 +259,8 @@ export class MinigameScene extends Phaser.Scene {
         return rec && was !== null ? rec.long(was) : undefined;
       })(),
       onPlay: start,
+      // a free go to learn on, where the cabinet offers one
+      onPractice: mod.practice ? () => startPractice() : undefined,
       onLeave: () => {
         this.card = null;
         this.leave();
@@ -293,6 +321,7 @@ export class MinigameScene extends Phaser.Scene {
    */
   forfeitAmount(): number | null {
     if (this.settled || !this.started) return null;
+    if (this.practicing) return 0;
     return Math.max(0, Math.floor(this.mod?.atRisk?.() ?? this.stake));
   }
 
@@ -304,6 +333,12 @@ export class MinigameScene extends Phaser.Scene {
   /** Forfeit, and go somewhere other than back to the room afterwards. */
   quitTo(key: string): void {
     this.exitTo = key;
+    this.forfeit();
+  }
+
+  /** Quit back to the room the cabinet stands in (the lobby), forfeit and all. */
+  quitToLobby(): void {
+    this.exitTo = null;
     this.forfeit();
   }
 
@@ -374,7 +409,29 @@ export class MinigameScene extends Phaser.Scene {
     froggyLayer.setVisible(!on);
   }
 
+  /**
+   * The end of a practice go, however it ended: nothing changes hands, nothing
+   * is recorded or counted, and the card says it was practice.
+   */
+  private endPractice(won: boolean | null): void {
+    if (this.settled) return;
+    this.settled = true;
+    this.card?.destroy();
+    this.card = null;
+    if (this.started) this.mod?.destroy?.();
+    const panel = this.add.rectangle(GAME_W / 2, GAME_H / 2, 250, 60, PALETTE.ink).setDepth(990);
+    panel.setStrokeStyle(1, PALETTE.tealLight);
+    centerText(this, GAME_W / 2, GAME_H / 2 - 10, won === null ? 'PRACTICE OVER' : won ? 'PRACTICE - YOU WON' : 'PRACTICE - YOU LOST', PALETTE.tealLight, 16).setDepth(991);
+    centerText(this, GAME_W / 2, GAME_H / 2 + 12, 'NOTHING WON OR LOST - PAY TO PLAY FOR REAL', PALETTE.ash).setDepth(991);
+    audio.sfx('ui_blip');
+    this.time.delayedCall(RESULT_MS, () => fadeToScene(this, this.exitTo ?? this.from, { atCabinet: this.gameId }));
+  }
+
   private forfeit(): void {
+    if (this.practicing) {
+      this.endPractice(null);
+      return;
+    }
     // Nothing was ever staked — a free fixture the player only looked at — so
     // there is nothing to forfeit.  Walking out of the wheel without spinning
     // is not a loss, and the card must not say it took a token that it did not.
@@ -384,6 +441,7 @@ export class MinigameScene extends Phaser.Scene {
 
   /** MG-3 mid-game: a table settles each hand as it is won. */
   private payout(n: number): void {
+    if (this.practicing) return;
     if (this.settled || !Number.isFinite(n) || n <= 0) return;
     const amount = Math.floor(n);
     ledger.credit(amount, 'game.reward');
@@ -393,6 +451,7 @@ export class MinigameScene extends Phaser.Scene {
 
   /** MG-2 again, mid-game: more tokens on the table, debited the same way. */
   private raise(n: number): boolean {
+    if (this.practicing) return false;
     if (this.settled || !Number.isFinite(n) || n <= 0) return false;
     if (!ledger.debit(Math.floor(n), 'game.cost')) return false;
     this.stake += Math.floor(n);
@@ -414,6 +473,10 @@ export class MinigameScene extends Phaser.Scene {
    * an hour at a table.
    */
   private cashOut(): void {
+    if (this.practicing) {
+      this.endPractice(null);
+      return;
+    }
     if (this.settled) return;
     this.settled = true;
     this.card?.destroy();
@@ -450,6 +513,10 @@ export class MinigameScene extends Phaser.Scene {
    * `settled` latches before the credit.
    */
   private settleDraw(): void {
+    if (this.practicing) {
+      this.endPractice(null);
+      return;
+    }
     if (this.settled) return;
     this.settled = true;
     this.card?.destroy();
@@ -470,6 +537,10 @@ export class MinigameScene extends Phaser.Scene {
   }
 
   private settle(won: boolean, quit = false, payout?: number): void {
+    if (this.practicing) {
+      this.endPractice(quit ? null : won);
+      return;
+    }
     if (this.settled) return;
     this.settled = true;
     this.card?.destroy();

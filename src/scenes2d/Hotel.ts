@@ -1161,10 +1161,10 @@ export class Hotel extends Phaser.Scene {
     this.time.delayedCall(900, () => {
       this.player?.sprite.setVisible(false);
       this.sleeper = this.add.container(0, 0, [
-        // his head on the pillow and the duvet over him, at the bed's scale
-        this.add.rectangle(BED.x - 2, BED.top - 4, 5, 4, 0xd8b088).setOrigin(0, 0),
-        this.add.rectangle(BED.x - 3, BED.top - 5, 7, 2, 0x5a3a3a).setOrigin(0, 0),
-        this.add.rectangle(BED.x - 9, BED.top - 1, 18, 2, 0xe4ded0).setOrigin(0, 0),
+        // his head on the pillow at the hood end, and the bag zipped up over him
+        this.add.rectangle(BED.x + BED.w / 2 - 8, BED.top - 6, 5, 4, 0xd8b088).setOrigin(0, 0),
+        this.add.rectangle(BED.x + BED.w / 2 - 9, BED.top - 7, 7, 2, 0x5a3a3a).setOrigin(0, 0),
+        this.add.rectangle(BED.x - BED.w / 2 + 1, BED.top - 1, BED.w - 11, 2, 0x4a7a6a).setOrigin(0, 0),
       ]).setDepth(9);
       audio.sfx('footstep_carpet', 0.3);
     });
@@ -1212,10 +1212,10 @@ export class Hotel extends Phaser.Scene {
     if (!this.sleeper) {
       this.player?.sprite.setVisible(false);
       this.sleeper = this.add.container(0, 0, [
-        // his head on the pillow and the duvet over him, at the bed's scale
-        this.add.rectangle(BED.x - 2, BED.top - 4, 5, 4, 0xd8b088).setOrigin(0, 0),
-        this.add.rectangle(BED.x - 3, BED.top - 5, 7, 2, 0x5a3a3a).setOrigin(0, 0),
-        this.add.rectangle(BED.x - 9, BED.top - 1, 18, 2, 0xe4ded0).setOrigin(0, 0),
+        // his head on the pillow at the hood end, and the bag zipped up over him
+        this.add.rectangle(BED.x + BED.w / 2 - 8, BED.top - 6, 5, 4, 0xd8b088).setOrigin(0, 0),
+        this.add.rectangle(BED.x + BED.w / 2 - 9, BED.top - 7, 7, 2, 0x5a3a3a).setOrigin(0, 0),
+        this.add.rectangle(BED.x - BED.w / 2 + 1, BED.top - 1, BED.w - 11, 2, 0x4a7a6a).setOrigin(0, 0),
       ]).setDepth(9);
       this.roomTint(0.28, 0.75);
     }

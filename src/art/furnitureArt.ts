@@ -609,20 +609,49 @@ export function drawFurniture(g: G, f: FurnitureDef, x: number, y: number, flip 
     // -------------------------------------------------------------- beds
     case 'bed': {
       if (f.id === 'fur_sleeping_bag') {
-        // a quilted bag rolled out on the boards: channel stitching across it,
-        // the zip down the side, the hood turned back at the head with a
-        // folded pillow in it
+        // A QUILTED BAG ROLLED OUT ON THE BOARDS -- the same shape as ever
+        // (the body, the hood at the head end, the folded pillow in it), in
+        // better cloth: puffed channels between the stitch lines, a nylon
+        // sheen along the top, a piped hem, the zip with its pull, the hood's
+        // lining at its mouth, and a soft pillow with a crease in it.
+        // (a little shadow where it lies on the floor)
+        px(g, L, T + h + 1, w, 1, 0x000000, 0.18);
         slab(g, L, T, w, h, a);
         cloth(g, L + 1, T + 1, w - 2, h - 2, a, seed);
-        for (let k = 1; k < 6; k++) px(g, L + Math.round((w * k) / 6), T + 1, 1, h - 2, shade(a, 0.72));
-        px(g, L, T, w, 1, shade(a, 1.25));
+        const seg = 6;
+        for (let k = 0; k < seg; k++) {
+          const x0 = L + Math.round((w * k) / seg) + 1;
+          const x1 = L + Math.round((w * (k + 1)) / seg);
+          const cw = x1 - x0;
+          if (cw < 2) continue;
+          // each channel puffs: lit across its crown, falling into the stitch
+          px(g, x0 + 1, T + 1, Math.max(1, cw - 2), 1, shade(a, 1.22), 0.8);
+          px(g, x0, T + 2, cw, 1, shade(a, 1.08), 0.5);
+          px(g, x1 - 1, T + 1, 1, h - 3, shade(a, 0.86), 0.7);
+          // the stitch line itself, a row of tiny dashes
+          if (k > 0) for (let yy = T + 1; yy < T + h - 2; yy += 2) px(g, x0 - 1, yy, 1, 1, shade(a, 0.62));
+        }
+        // the nylon sheen: one long soft streak along the top
+        px(g, L + 2, T + 1, Math.round(w * 0.55), 1, 0xffffff, 0.16);
+        // the piped hem, then the zip rail and its pull by the hood
         px(g, L + 1, T + h - 2, w - 2, 1, shade(b, 0.9));
         metal(g, L + 2, T + h - 2, w - 4, 1, 0xb8bcc4);
         const hood = Math.max(6, Math.round(w * 0.22));
+        px(g, R - hood - 3, T + h - 3, 2, 2, 0xd8dce2);
+        px(g, R - hood - 3, T + h - 1, 2, 1, shade(0xd8dce2, 0.6));
+        // the hood: the same outline, quilted in its own colour, darker round
+        // the back, its lining showing at the mouth
         slab(g, R - hood, T - 1, hood, h + 1, b);
+        cloth(g, R - hood + 1, T, hood - 2, h - 1, b, seed + 5);
         px(g, R - hood + 1, T, hood - 2, 1, shade(b, 1.3));
+        px(g, R - 2, T, 1, h - 1, shade(b, 0.7));
+        px(g, R - hood, T, 1, h - 1, shade(a, 1.35));
+        px(g, R - hood + 1, T + Math.round(h / 2), hood - 2, 1, shade(b, 0.8), 0.6);
+        // the pillow: soft cotton, shaded underneath, a crease across it
         slab(g, R - hood + 2, T - 2, hood - 4, Math.max(2, h - 2), 0xeeeae0);
         px(g, R - hood + 3, T - 2, hood - 6, 1, 0xffffff);
+        px(g, R - hood + 3, T - 3 + Math.max(2, h - 2), hood - 6, 1, 0xcfc8b8);
+        px(g, R - hood + 3 + Math.floor((hood - 6) / 2), T - 1, 1, Math.max(1, h - 4), 0xd8d2c4, 0.8);
         break;
       }
       if (f.id === 'fur_mattress') {

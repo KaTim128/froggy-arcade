@@ -675,8 +675,14 @@ function hit(): void {
  */
 function flipAce(): void {
   if (phase !== 'play' || standing) return;
-  const choices = aceChoices(player);
-  if (!choices.length) return;
+  // only the prices that keep the hand alive: an ace is never flipped into a
+  // bust (Q 7 A at one is 18; at ten it is 27, and that is not a hand)
+  const choices = aceChoices(player).filter((v) => score(player, v) <= 21);
+  if (choices.length < 2) {
+    audio.sfx('buzzer', 0.4);
+    say(`ANY OTHER PRICE BUSTS YOU - YOU HAVE ${mine()}`);
+    return;
+  }
   aceAs = choices[(choices.indexOf(aceAs) + 1) % choices.length];
   audio.sfx('ui_hover', 0.5);
   say(`ACE PLAYS AS ${aceAs} - YOU HAVE ${mine()}`);
@@ -725,6 +731,13 @@ function canSurrender(): boolean {
 
 function stand(): void {
   if (phase !== 'play' || standing || !sceneRef) return;
+  // OVER 21 IS LOST, WHATEVER HE HOLDS.  Nothing should leave a hand over 21
+  // standing, but if anything ever does, it is settled here as the bust it is.
+  if (mine() > 21) {
+    standing = true;
+    finish(false, `BUST ON ${mine()}`);
+    return;
+  }
   standing = true;
   // The hole card turns over here, so the first thing he can honestly say is
   // what he is actually holding.  "DEALER STANDS ON 17" is a RULE, not a
@@ -751,6 +764,12 @@ function stand(): void {
     }
     const p = mine();
     const d = score(dealer);
+    // a player over 21 has lost before his cards are even looked at -- a
+    // dealer bust does not rescue a bust hand
+    if (p > 21) {
+      settleLost(d, `BUST ON ${p} - YOU LOSE`);
+      return;
+    }
     if (d > 21) {
       settleWon(p, `DEALER BUSTS`);
       return;
@@ -782,6 +801,11 @@ function stand(): void {
 /** The player took it on the ordinary comparison: the stake and the same again. */
 function settleWon(_p: number, why: string): void {
   stakeMul = 1;
+  // (and the last word: a win is never paid on a hand over 21)
+  if (mine() > 21) {
+    finish(false, `BUST ON ${mine()} - YOU LOSE`);
+    return;
+  }
   finish(true, why);
 }
 

@@ -17,7 +17,7 @@ import { store, type GameId } from '../core/state';
 import { KEY_ITEM, ensureKeyInPocket, holdingKey } from '../game/inventory';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
-import { showOutAtNight } from '../game/closingPull';
+import { closingNotice, closingNoticed, showOutAtNight } from '../game/closingPull';
 import { closingTime, evaluateBroke } from '../core/broke';
 import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
@@ -44,6 +44,7 @@ import { tutorialScript } from '../froggy/script';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
+import { fitPrompt } from '../ui/plate';
 
 const INTERACT_RANGE = 24;
 
@@ -501,10 +502,21 @@ export class ArcadeHub extends Phaser.Scene {
     // PRD BR-1: the broke check runs on hub entry as well as on the ledger
     // event, which covers spending the last token on a game you then quit.
     if (!store.get().seenIntro) this.runTutorial();
-    else this.checkBroke();
+    // (at closing time, the notice comes first: the check below shows it)
+    else if (!(closingTime() && !closingNoticed())) this.checkBroke();
     // closing time comes round on the clock, wherever you are standing
     this.time.addEvent({ delay: 2000, loop: true, callback: () => {
-      if (!this.locked && !this.busy() && closingTime()) this.checkBroke();
+      if (!this.locked && !this.busy() && closingTime()) {
+        // the friendly notice first (once a day), then the closing itself
+        if (closingNoticed()) this.checkBroke();
+        else {
+          this.locked = true;
+          closingNotice(this, () => {
+            this.locked = false;
+            this.checkBroke();
+          });
+        }
+      }
     } });
   }
 
@@ -1908,9 +1920,6 @@ export class ArcadeHub extends Phaser.Scene {
     const below = t.kind === 'counter' || t.kind === 'staff' || t.kind === 'change';
     const y = below ? this.player.y + 15 : this.player.y - 34;
     this.prompt.setPosition(x, y).setVisible(true);
-    this.promptPlate
-      .setPosition(x, y)
-      .setSize(this.prompt.width + 6, 11)
-      .setVisible(true);
+    fitPrompt(this.promptPlate, this.prompt);
   }
 }

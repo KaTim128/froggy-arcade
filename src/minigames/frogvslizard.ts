@@ -20,6 +20,10 @@
  *   DYNAMITE  double damage.
  *   POISON    a small hit, then chip damage at the top of his next three
  *             turns.  Applied once per turn, three turns, then it is gone.
+ *   SLEEP     a dark blue ball: no damage, and he sleeps through his next
+ *             two turns -- eyes shut, Zs drifting off him.
+ *   CONFUSION a pink ball: a light hit, and on his next turn he cannot read
+ *             the wind -- its bar is hidden from him, and his eyes spin.
  *
  * THE WIND: rolled fresh for every single turn and shown as a bar with a side
  * to it.  It pushes whatever is in the air, and it pushes harder the stronger
@@ -70,7 +74,7 @@ const AIM_RATE = 1.1;
 const WIND_MAX = 88;
 
 type Who = 'frog' | 'lizard';
-type ItemId = 'rock' | 'heal' | 'tnt' | 'poison';
+type ItemId = 'rock' | 'heal' | 'tnt' | 'poison' | 'sleep' | 'confuse';
 
 interface ItemDef {
   id: ItemId;
@@ -84,9 +88,15 @@ interface ItemDef {
   heal: number;
   /** Turns of chip damage applied to whoever it lands on. */
   poison: number;
+  /** Turns the target sleeps through (the Sleep Ball). */
+  sleep: number;
+  /** Turns the target spends unable to read the wind (the Confusion Ball). */
+  confuse: number;
   color: number;
   /** How many a side gets each round.  The rock is the one you never run out of. */
   stock: number;
+  /** What it does, in one line under the item bar. */
+  desc: string;
 }
 
 /**
@@ -95,12 +105,16 @@ interface ItemDef {
  * dynamite is exactly double, and poison is a light hit that keeps going.
  */
 const ITEMS: Record<ItemId, ItemDef> = {
-  rock: { id: 'rock', name: 'ROCK', short: 'ROCK', dmg: 14, heal: 0, poison: 0, color: 0x9aa4b0, stock: Infinity },
-  heal: { id: 'heal', name: 'HEAL', short: 'HEAL', dmg: 4, heal: 16, poison: 0, color: 0x6fe08a, stock: 1 },
-  tnt: { id: 'tnt', name: 'DYNAMITE', short: 'TNT', dmg: 28, heal: 0, poison: 0, color: 0xd94f2e, stock: 1 },
-  poison: { id: 'poison', name: 'POISON', short: 'PSN', dmg: 8, heal: 0, poison: 3, color: 0x9b6fe0, stock: 1 },
+  rock: { id: 'rock', name: 'ROCK', short: 'ROCK', dmg: 14, heal: 0, poison: 0, sleep: 0, confuse: 0, color: 0x9aa4b0, stock: Infinity, desc: 'ROCK - 14 DAMAGE. NEVER RUNS OUT.' },
+  heal: { id: 'heal', name: 'HEAL', short: 'HEAL', dmg: 4, heal: 16, poison: 0, sleep: 0, confuse: 0, color: 0x6fe08a, stock: 1, desc: 'HEAL - 4 DAMAGE, +16 HEALTH FOR YOU.' },
+  tnt: { id: 'tnt', name: 'DYNAMITE', short: 'TNT', dmg: 28, heal: 0, poison: 0, sleep: 0, confuse: 0, color: 0xd94f2e, stock: 1, desc: 'DYNAMITE - 28 DAMAGE. A BIG BANG.' },
+  poison: { id: 'poison', name: 'POISON', short: 'PSN', dmg: 8, heal: 0, poison: 3, sleep: 0, confuse: 0, color: 0x9b6fe0, stock: 1, desc: 'POISON - 8, THEN 5 A TURN FOR 3 TURNS.' },
+  sleep: { id: 'sleep', name: 'SLEEP BALL', short: 'SLP', dmg: 0, heal: 0, poison: 0, sleep: 2, confuse: 0, color: 0x2e4a9a, stock: 1, desc: 'SLEEP BALL - NO DAMAGE. SLEEPS 2 TURNS.' },
+  confuse: { id: 'confuse', name: 'CONFUSION BALL', short: 'CNF', dmg: 4, heal: 0, poison: 0, sleep: 0, confuse: 1, color: 0xff6fb4, stock: 1, desc: 'CONFUSION BALL - 4 DAMAGE. NO WIND BAR 1 TURN.' },
 };
-const ORDER: ItemId[] = ['rock', 'heal', 'tnt', 'poison'];
+const ORDER: ItemId[] = ['rock', 'heal', 'tnt', 'poison', 'sleep', 'confuse'];
+/** A round's specials: one of each. */
+const fullStock = (): Record<ItemId, number> => ({ rock: Infinity, heal: 1, tnt: 1, poison: 1, sleep: 1, confuse: 1 });
 /** What poison takes off at the top of each of its three turns. */
 const POISON_TICK = 5;
 
@@ -108,10 +122,16 @@ interface Side {
   hp: number;
   /** Turns of poison left to apply.  Counts down one per turn, then stops. */
   poison: number;
+  /** Turns left to sleep through. */
+  sleep: number;
+  /** Turns left unable to read the wind (counted off at the end of his own turn). */
+  confused: number;
   stock: Record<ItemId, number>;
   /** Damage dealt over the whole match — the tiebreak on a one-all split. */
   dealt: number;
   sprite: Phaser.GameObjects.Container | null;
+  /** The sleeping and confused faces, drawn over the sprite's eyes. */
+  status: Phaser.GameObjects.Graphics | null;
 }
 
 type Phase = 'aim' | 'flight' | 'settle' | 'roundEnd' | 'over';
@@ -153,11 +173,15 @@ let poisonText: Record<Who, Phaser.GameObjects.BitmapText | null> = { frog: null
 let roundText: Phaser.GameObjects.BitmapText | null = null;
 let windText: Phaser.GameObjects.BitmapText | null = null;
 let bannerText: Phaser.GameObjects.BitmapText | null = null;
+/** The confused side's turn: the wind bar is not shown. */
+let windHidden = false;
+let zzzT = 0;
+let descText: Phaser.GameObjects.BitmapText | null = null;
 let slots: Array<{ box: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.BitmapText }> = [];
 let keys: Record<'up' | 'down', Phaser.Input.Keyboard.Key[]> = { up: [], down: [] };
 
 function blankSide(): Side {
-  return { hp: MAX_HP, poison: 0, stock: { rock: Infinity, heal: 1, tnt: 1, poison: 1 }, dealt: 0, sprite: null };
+  return { hp: MAX_HP, poison: 0, sleep: 0, confused: 0, stock: fullStock(), dealt: 0, sprite: null, status: null };
 }
 
 export const frogVsLizard: MinigameModule = {
@@ -175,7 +199,7 @@ export const frogVsLizard: MinigameModule = {
       ['W / S', 'AIM HIGHER OR LOWER'],
       // (one row: on a phone the items are tapped on the bar, and the
       // numbers and LEFT/RIGHT cycling stay for the keyboard)
-      ['1-4 / CLICK', 'PICK AN ITEM ON THE BAR'],
+      ['1-6 / CLICK', 'PICK AN ITEM ON THE BAR'],
       ['HOLD SPACE', 'POWER, LET GO TO THROW'],
     ],
   },
@@ -208,6 +232,9 @@ export const frogVsLizard: MinigameModule = {
     paintYard(scene);
     sides.frog.sprite = makeFrog(scene, FROG_X, GROUND_Y);
     sides.lizard.sprite = makeLizard(scene, LIZARD_X, GROUND_Y);
+    for (const who of ['frog', 'lizard'] as Who[]) sides[who].status = scene.add.graphics().setDepth(21);
+    windHidden = false;
+    zzzT = 0;
 
     buildHud(scene);
     aimG = scene.add.graphics().setDepth(30);
@@ -220,6 +247,8 @@ export const frogVsLizard: MinigameModule = {
     kb?.on('keydown-TWO', pick('heal'));
     kb?.on('keydown-THREE', pick('tnt'));
     kb?.on('keydown-FOUR', pick('poison'));
+    kb?.on('keydown-FIVE', pick('sleep'));
+    kb?.on('keydown-SIX', pick('confuse'));
     kb?.on('keydown-RIGHT', () => cycle(1));
     kb?.on('keydown-LEFT', () => cycle(-1));
     kb?.on('keydown-SPACE', () => {
@@ -246,8 +275,9 @@ export const frogVsLizard: MinigameModule = {
           phase,
           wind,
           roundsWon: { ...roundsWon },
-          frog: { hp: sides.frog.hp, poison: sides.frog.poison, stock: { ...sides.frog.stock }, dealt: sides.frog.dealt },
-          lizard: { hp: sides.lizard.hp, poison: sides.lizard.poison, stock: { ...sides.lizard.stock }, dealt: sides.lizard.dealt },
+          frog: { hp: sides.frog.hp, poison: sides.frog.poison, sleep: sides.frog.sleep, confused: sides.frog.confused, stock: { ...sides.frog.stock }, dealt: sides.frog.dealt },
+          lizard: { hp: sides.lizard.hp, poison: sides.lizard.poison, sleep: sides.lizard.sleep, confused: sides.lizard.confused, stock: { ...sides.lizard.stock }, dealt: sides.lizard.dealt },
+          windHidden,
         }),
         /**
          * Throw for whoever's turn it is, bypassing the meter.  `elev` is the
@@ -302,6 +332,7 @@ export const frogVsLizard: MinigameModule = {
       powerFill?.setSize(6, (charging ? power : 0) * 48);
     }
     drawAim();
+    drawStatus(delta);
 
     if (phase === 'flight' && proj) {
       stepProjectile(dt);
@@ -329,6 +360,9 @@ export const frogVsLizard: MinigameModule = {
     slots = [];
     sides.frog.sprite = null;
     sides.lizard.sprite = null;
+    sides.frog.status = null;
+    sides.lizard.status = null;
+    descText = null;
     apiRef = null;
     scene0 = null;
   },
@@ -547,14 +581,18 @@ function buildHud(scene: Phaser.Scene): void {
   text(scene, 4, 86, 'PWR', PALETTE.ash);
 
   // the item bar: what you have, what it is called, and how many are left
+  // (six now: 52 pixels a slot, each with its colour as a dot)
   ORDER.forEach((id, i) => {
-    const x = 6 + i * 78;
-    const box = scene.add.rectangle(x, 151, 74, 13, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel).setDepth(50);
-    const label = text(scene, x + 4, 154, '', PALETTE.cream).setDepth(51);
+    const x = 4 + i * 52;
+    const box = scene.add.rectangle(x, 151, 50, 13, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel).setDepth(50);
+    scene.add.circle(x + 5, 157.5, 2, ITEMS[id].color).setStrokeStyle(1, PALETTE.ink).setDepth(51);
+    const label = text(scene, x + 9, 154, '', PALETTE.cream).setDepth(51);
     box.setInteractive({ useHandCursor: true }).on('pointerdown', () => selectItem(id));
     slots.push({ box, label });
   });
-  centerText(scene, GAME_W / 2, 170, isTouch() ? 'UP/DOWN AIM   HOLD THROW   TAP AN ITEM' : 'W/S AIM   HOLD SPACE THROW   1-4 ITEM', PALETTE.fog).setDepth(51);
+  // what the chosen item does, in a line of its own
+  descText = centerText(scene, GAME_W / 2, 168, '', PALETTE.cream).setDepth(51);
+  centerText(scene, GAME_W / 2, 176, isTouch() ? 'UP/DOWN AIM   HOLD THROW   TAP AN ITEM' : 'W/S AIM   HOLD SPACE THROW   1-6 ITEM', PALETTE.fog).setDepth(51);
 }
 
 function refreshHud(): void {
@@ -566,10 +604,14 @@ function refreshHud(): void {
     const frac = Math.max(0, s.hp) / MAX_HP;
     hpFill[who]?.setSize(Math.max(0, 94 * frac), 5);
     hpText[who]?.setText(`${Math.max(0, Math.ceil(s.hp))} HP`);
-    poisonText[who]?.setText(s.poison > 0 ? `POISON ${s.poison}` : '');
+    const st = [s.poison > 0 ? `POISON ${s.poison}` : '', s.sleep > 0 ? `ASLEEP ${s.sleep}` : '', s.confused > 0 ? 'CONFUSED' : ''].filter(Boolean);
+    poisonText[who]?.setText(st.join(' ')).setTint(s.sleep > 0 ? 0x8aa8ff : s.confused > 0 ? 0xff6fb4 : 0x9b6fe0);
   }
 
-  // wind: side, and how much of the bar it fills
+  // wind: side, and how much of the bar it fills -- unless whoever is
+  // throwing is confused, and then nobody is shown it
+  windFill?.setVisible(!windHidden);
+  if (windHidden) windText?.setText('WIND ???');
   const mag = Math.abs(wind);
   const w = Math.round(mag * 34);
   if (windFill) {
@@ -579,19 +621,20 @@ function refreshHud(): void {
     windFill.setFillStyle(mag > 0.66 ? PALETTE.ember : mag > 0.33 ? PALETTE.gold : PALETTE.tealLight);
   }
   const arrows = mag < 0.08 ? '-' : (wind < 0 ? '<' : '>').repeat(Math.min(3, 1 + Math.floor(mag * 3)));
-  windText?.setText(`WIND ${arrows}`);
+  if (!windHidden) windText?.setText(`WIND ${arrows}`);
 
   slots.forEach((slot, i) => {
     const item = ITEMS[ORDER[i]];
     const n = sides.frog.stock[item.id];
     const left = n === Infinity ? '-' : `x${n}`;
-    slot.label.setText(`${i + 1} ${item.short} ${left}`);
+    slot.label.setText(`${i + 1} ${item.short}${n === Infinity ? '' : ` ${left}`}`);
     const usable = n > 0;
     const active = ORDER[i] === sel;
     slot.box.setStrokeStyle(1, active ? PALETTE.gold : PALETTE.steel);
     slot.box.setFillStyle(active ? PALETTE.plum : PALETTE.ink);
     slot.label.setTint(usable ? (active ? PALETTE.gold : PALETTE.cream) : PALETTE.ash);
   });
+  descText?.setText(ITEMS[sel].desc).setTint(ITEMS[sel].color === 0x2e4a9a ? 0x8aa8ff : ITEMS[sel].color);
 }
 
 function banner(str: string, colour: number = PALETTE.cream): void {
@@ -668,6 +711,21 @@ function beginTurn(who: Who, first = false): void {
   power = 0;
   charging = false;
   powerFill?.setSize(6, 0);
+
+  // ASLEEP: the turn goes by without him.  Two of them, then he wakes.
+  if (s.sleep > 0) {
+    s.sleep--;
+    windHidden = false;
+    phase = 'settle';
+    settleMs = 1300;
+    refreshHud();
+    banner(who === 'frog' ? 'YOU ARE ASLEEP - ZZZ' : 'THE LIZARD IS ASLEEP - ZZZ', 0x8aa8ff);
+    audio.sfx('ui_blip', 0.3);
+    if (s.sleep === 0) scene0?.time.delayedCall(1100, () => floatText(who === 'frog' ? FROG_X : LIZARD_X, GROUND_Y - 40, 'WAKES UP', PALETTE.cream));
+    return;
+  }
+  // CONFUSED: this one turn, the wind bar is gone
+  windHidden = s.confused > 0;
   phase = 'aim';
 
   // A side that has run its specials out falls back to the rock rather than
@@ -685,6 +743,9 @@ function nextTurn(): void {
     endRound();
     return;
   }
+  // a confused side has had its turn without the wind: it clears now
+  if (windHidden && sides[turn].confused > 0) sides[turn].confused--;
+  windHidden = false;
   beginTurn(turn === 'frog' ? 'lizard' : 'frog');
 }
 
@@ -700,7 +761,8 @@ function throwItem(who: Who, angle: number, pow: number, id: ItemId): void {
   const x = (who === 'frog' ? FROG_X : LIZARD_X) + HAND.dx * dir;
   const y = GROUND_Y + HAND.dy;
   const speed = THROW_MIN + Phaser.Math.Clamp(pow, 0, 1) * (THROW_MAX - THROW_MIN);
-  const body = scene0.add.circle(x, y, item.id === 'tnt' ? 4 : 3, item.color).setStrokeStyle(1, PALETTE.ink).setDepth(40);
+  const ball = item.id === 'sleep' || item.id === 'confuse';
+  const body = scene0.add.circle(x, y, item.id === 'tnt' || ball ? 4 : 3, item.color).setStrokeStyle(1, ball ? 0xffffff : PALETTE.ink).setDepth(40);
   proj = { x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, item, from: who, body, spin: 0 };
 
   phase = 'flight';
@@ -733,6 +795,13 @@ function stepProjectile(dt: number): void {
   }
   proj.spin += dt * 12;
   proj.body?.setPosition(proj.x, proj.y);
+  // the two balls leave a short trail of their colour: a sparkle for the
+  // confusion ball, a sleepy haze for the sleep ball
+  if (scene0 && (proj.item.id === 'sleep' || proj.item.id === 'confuse') && Math.random() < 0.6) {
+    const c = proj.item.id === 'sleep' ? 0x6a88e0 : 0xffb0da;
+    const d = scene0.add.circle(proj.x, proj.y, proj.item.id === 'sleep' ? 2 : 1.2, c).setDepth(39).setAlpha(0.8);
+    scene0.tweens.add({ targets: d, alpha: 0, scale: 0.3, duration: 260, onComplete: () => d.destroy() });
+  }
 }
 
 /** Returns true if this step ended the flight. */
@@ -776,7 +845,7 @@ function land(target: Who): void {
 
   sides[target].hp -= item.dmg;
   sides[thrower].dealt += item.dmg;
-  floatText(tx, GROUND_Y - 34, `-${item.dmg}`, item.id === 'tnt' ? PALETTE.ember : PALETTE.cream);
+  if (item.dmg > 0) floatText(tx, GROUND_Y - 34, `-${item.dmg}`, item.id === 'tnt' ? PALETTE.ember : PALETTE.cream);
 
   if (item.heal > 0) {
     // It still lands on him, and it still hurts him — it just does the thrower
@@ -789,6 +858,16 @@ function land(target: Who): void {
     sides[target].poison = item.poison;
     floatText(tx, GROUND_Y - 44, 'POISONED', 0x9b6fe0);
     audio.sfx('poison_hiss');
+  } else if (item.sleep > 0) {
+    sides[target].sleep = item.sleep;
+    floatText(tx, GROUND_Y - 44, 'FAST ASLEEP', 0x8aa8ff);
+    audio.sfx('heal_up', 0.4);
+    impactSleep(tx);
+  } else if (item.confuse > 0) {
+    sides[target].confused = Math.max(sides[target].confused, item.confuse);
+    floatText(tx, GROUND_Y - 44, 'CONFUSED', 0xff6fb4);
+    audio.sfx('ui_blip');
+    impactConfuse(tx);
   } else if (item.id === 'tnt') {
     audio.sfx('boom');
     scene0.cameras.main.shake(200, 0.009);
@@ -803,8 +882,95 @@ function land(target: Who): void {
   const sprite = sides[target].sprite;
   if (sprite) scene0.tweens.add({ targets: sprite, x: sprite.x + (thrower === 'frog' ? 4 : -4), duration: 70, yoyo: true, repeat: 1 });
 
-  banner(item.heal > 0 ? 'HEALING HIT' : item.poison > 0 ? 'POISON LANDS' : 'DIRECT HIT', item.color);
+  banner(item.heal > 0 ? 'HEALING HIT' : item.poison > 0 ? 'POISON LANDS' : item.sleep > 0 ? 'SLEEP BALL LANDS' : item.confuse > 0 ? 'CONFUSION BALL LANDS' : 'DIRECT HIT', item.id === 'sleep' ? 0x8aa8ff : item.color);
   endFlight(true);
+}
+
+/** The sleep ball bursts: a dark blue cloud, and Zs drifting up out of it. */
+function impactSleep(x: number): void {
+  if (!scene0) return;
+  for (let i = 0; i < 8; i++) {
+    const c = scene0.add.circle(x + (Math.random() - 0.5) * 22, GROUND_Y - 10 - Math.random() * 18, 3 + Math.random() * 3, i % 2 ? 0x2e4a9a : 0x4a66c0).setDepth(45).setAlpha(0.75);
+    scene0.tweens.add({ targets: c, alpha: 0, scale: 1.8, y: c.y - 6, duration: 520, onComplete: () => c.destroy() });
+  }
+  for (let i = 0; i < 3; i++) {
+    const z = text(scene0, x - 4 + i * 5, GROUND_Y - 26 - i * 4, 'Z', 0x8aa8ff).setDepth(46);
+    scene0.tweens.add({ targets: z, y: z.y - 18, alpha: 0, delay: i * 120, duration: 700, onComplete: () => z.destroy() });
+  }
+}
+
+/** The confusion ball bursts: a pink ring of stars spinning out. */
+function impactConfuse(x: number): void {
+  if (!scene0) return;
+  const cy = GROUND_Y - 18;
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    const st = scene0.add.star(x, cy, 4, 1, 3, i % 2 ? 0xff6fb4 : 0xffe0f0).setDepth(45);
+    scene0.tweens.add({ targets: st, x: x + Math.cos(a) * 20, y: cy + Math.sin(a) * 12, angle: 360, alpha: 0, duration: 600, onComplete: () => st.destroy() });
+  }
+}
+
+/**
+ * Over each side's eyes: shut lids and Zs while asleep, spinning pink spirals
+ * while confused.  Drawn every frame, so the moment either wears off the eyes
+ * are the ordinary eyes again.
+ */
+function drawStatus(delta: number): void {
+  zzzT += delta;
+  for (const who of ['frog', 'lizard'] as Who[]) {
+    const s = sides[who];
+    const g = s.status;
+    if (!g) continue;
+    g.clear();
+    const sp = s.sprite;
+    if (!sp) continue;
+    const ox = sp.x;
+    const oy = sp.y;
+    // where the eyes are on each sprite (see makeFrog / makeLizard)
+    const eyes = who === 'frog' ? [[-6, -23, 4], [6, -23, 4]] : [[-15, -16, 3.2]];
+    if (s.sleep > 0) {
+      for (const [ex, ey, r] of eyes) {
+        // the lid, shut: the skin colour over the eye, and the line of it
+        g.fillStyle(who === 'frog' ? PALETTE.mossLight : 0xc39a3e, 1).fillCircle(ox + ex, oy + ey, r + 0.5);
+        g.fillStyle(PALETTE.black, 1).fillRect(ox + ex - r + 1, oy + ey, r * 2 - 2, 1);
+      }
+      // and the Zs, rising and fading, one after another
+      for (let k = 0; k < 3; k++) {
+        const t = ((zzzT / 1400 + k / 3) % 1);
+        const zx = ox + (who === 'frog' ? 6 : -16) + t * 8;
+        const zy = oy - 30 - t * 16;
+        const zs = 2 + k;
+        g.lineStyle(1, 0xc8d8ff, 1 - t);
+        g.beginPath();
+        g.moveTo(zx, zy);
+        g.lineTo(zx + zs, zy);
+        g.lineTo(zx, zy + zs);
+        g.lineTo(zx + zs, zy + zs);
+        g.strokePath();
+      }
+    } else if (s.confused > 0) {
+      // spiral eyes, turning
+      const turn = zzzT / 180;
+      for (const [ex, ey, r] of eyes) {
+        g.fillStyle(0xffffff, 1).fillCircle(ox + ex, oy + ey, r);
+        g.lineStyle(1, 0xd02f86, 1);
+        g.beginPath();
+        for (let a = 0; a <= Math.PI * 4; a += 0.4) {
+          const rr = (a / (Math.PI * 4)) * (r - 0.5);
+          const px = ox + ex + Math.cos(a + turn) * rr;
+          const py = oy + ey + Math.sin(a + turn) * rr;
+          if (a === 0) g.moveTo(px, py);
+          else g.lineTo(px, py);
+        }
+        g.strokePath();
+      }
+      // and a little ring of stars round the head
+      for (let k = 0; k < 3; k++) {
+        const a = turn * 0.6 + (k / 3) * Math.PI * 2;
+        g.fillStyle(0xff6fb4, 1).fillCircle(ox + Math.cos(a) * 9 + (who === 'frog' ? 0 : -12), oy - 30 + Math.sin(a) * 3, 1.2);
+      }
+    }
+  }
 }
 
 function puff(x: number, y: number): void {
@@ -915,14 +1081,14 @@ function simulate(from: Who, angle: number, pow: number, w: number): { hit: bool
  * blowing and keeps the best one — that is the whole of his skill, and it is
  * the same information the player has (the bar) rather than anything hidden.
  */
-function solveThrow(who: Who): { angle: number; power: number } {
+function solveThrow(who: Who, w: number = wind): { angle: number; power: number } {
   let bestAngle = who === 'frog' ? -Math.PI / 4 : Math.PI + Math.PI / 4;
   let bestPow = 0.6;
   let bestMiss = Infinity;
   for (let elev = 0.12; elev <= 1.42; elev += 0.045) {
     const angle = who === 'frog' ? -elev : Math.PI + elev;
     for (let pow = 0.1; pow <= 1.0001; pow += 0.035) {
-      const r = simulate(who, angle, pow, wind);
+      const r = simulate(who, angle, pow, w);
       if (r.miss < bestMiss) {
         bestMiss = r.miss;
         bestAngle = angle;
@@ -946,6 +1112,10 @@ function aiChooseItem(): ItemId {
   if (me.hp <= MAX_HP * 0.45 && me.stock.heal > 0) return 'heal';
   if (you.hp <= ITEMS.tnt.dmg && me.stock.tnt > 0) return 'tnt';
   if (you.poison === 0 && you.hp > MAX_HP * 0.35 && me.stock.poison > 0) return 'poison';
+  // put you to sleep while there is a fight left to win off it
+  if (you.sleep === 0 && me.stock.sleep > 0 && me.hp < MAX_HP * 0.8) return 'sleep';
+  // and take the wind away from you on a day it matters
+  if (you.confused === 0 && me.stock.confuse > 0 && Math.abs(wind) > 0.3) return 'confuse';
   if (you.hp <= MAX_HP * 0.5 && me.stock.tnt > 0) return 'tnt';
   return 'rock';
 }
@@ -963,7 +1133,8 @@ function lizardTurn(): void {
     banner(`LIZARD PICKS ${ITEMS[item].short}`, ITEMS[item].color);
     scene0.time.delayedCall(550, () => {
       if (phase !== 'aim' || turn !== 'lizard') return;
-      const plan = solveThrow('lizard');
+      // (confused, he cannot read the wind: he throws as if the air were still)
+      const plan = solveThrow('lizard', windHidden ? 0 : wind);
       // His arm is not a solver: the throw goes out near the plan, not on it.
       const angle = plan.angle + wobble() * 0.06;
       const pow = Phaser.Math.Clamp(plan.power + wobble() * 0.055, 0.05, 1);
@@ -1010,7 +1181,9 @@ function endRound(): void {
     for (const who of ['frog', 'lizard'] as Who[]) {
       sides[who].hp = MAX_HP;
       sides[who].poison = 0;
-      sides[who].stock = { rock: Infinity, heal: 1, tnt: 1, poison: 1 };
+      sides[who].sleep = 0;
+      sides[who].confused = 0;
+      sides[who].stock = fullStock();
     }
     sel = 'rock';
     phase = 'aim';

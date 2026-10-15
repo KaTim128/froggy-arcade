@@ -39,7 +39,7 @@ import { Pedestrians } from '../art/pedestrians';
 import { SUNRISE_HOUR, twelveHour, BEG_MS, begNextMs, canBeg, clock, collectBegging, sleep, sleepPlace, startBegging, stopBegging, visit } from '../game/life';
 import { nightfallOnce, onPhaseTurn } from '../game/dayNight';
 import { speak } from '../ui/talkPanel';
-import { backPlate } from '../ui/plate';
+import { backPlate, fitPrompt } from '../ui/plate';
 import { grain } from '../art/surface';
 
 const WALK_Y = KERB_Y;
@@ -768,9 +768,6 @@ export class ExteriorDay extends Phaser.Scene {
   private showPrompt(label: string): void {
     const x = Phaser.Math.Clamp(this.player.x, 40, GAME_W - 40);
     this.prompt.setText(label).setPosition(x, WALK_Y - 34).setVisible(true);
-    this.promptPlate
-      .setPosition(x, WALK_Y - 34)
-      .setSize(this.prompt.width + 6, 11)
-      .setVisible(true);
+    fitPrompt(this.promptPlate, this.prompt);
   }
 }
