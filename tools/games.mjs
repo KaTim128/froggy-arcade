@@ -4228,8 +4228,11 @@ for (const g of [
     return st();
   };
 
+  // (up to a minute: the lizard has the Sleep Ball now, and a frog put to
+  // sleep sits out two whole turns -- twelve seconds on an idle machine --
+  // before its own comes round again)
   const waitForFrog = async () => {
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 150; i++) {
       const s = await st();
       if (s.turn === 'frog' && s.phase === 'aim') {
         await page.evaluate(() => window.__fvl.setHp('frog', 80));
