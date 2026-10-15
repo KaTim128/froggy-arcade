@@ -48,6 +48,7 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { TokenHud } from '../ui/hud';
 import { drawItem } from '../ui/pockets';
 import { CAPSULE_VARIANTS, TOY_H, TOY_RES, TOY_W, plushKind, toyTexture } from '../art/craneToys';
+import { bodyFor, generatePile, restPlace, settlePile, type PileBody, type PileBounds } from '../game/cranePile';
 import { FULL_LINE, ODDITIES, PLUSHIES, addItem, itemDef, pocketsFull } from '../game/inventory';
 import { isTouch } from '../core/device';
 import { touchControls } from '../ui/touchControls';
@@ -121,6 +122,22 @@ export function rollCapsule(rnd: () => number = Math.random): Capsule {
   return { tokens, jackpot, lucky, oddity: rnd() < ODDITY_CHANCE };
 }
 
+/**
+ * ---- THE TOP BAR, laid out right to left with the same gap between every
+ * piece: QUIT against the right edge, the view button left of it, the title
+ * plate left of that.  Each owns its own slot; nothing is placed by eye.
+ * (The plate used to run 5 pixels under the view button, and QUIT sat one
+ * pixel off its other side.)
+ */
+const BAR_GAP = 4;
+const QUIT_W = 40;
+const VIEW_W = 64;
+const PLATE_W = 96;
+const QUIT_X = GAME_W - BAR_GAP - QUIT_W / 2;
+const VIEW_X = QUIT_X - QUIT_W / 2 - BAR_GAP - VIEW_W / 2;
+/** The title plate's centre (and the SIDE VIEW sign that replaces its name). */
+const PLATE_X = VIEW_X - VIEW_W / 2 - BAR_GAP - PLATE_W / 2;
+
 /** The inside of the machine, in the cabinet's picture. */
 /** The clock's left edge: moved left on touch, out from under the DROP button. */
 const CLOCK_X = isTouch() ? 208 : 246;
@@ -128,6 +145,12 @@ const BOX = { l: 14, r: 306, top: 26, bottom: 150 };
 /** Where the pile is: left/right in pixels, back/forth 0 (front) to 1 (back). */
 const PILE_L = 84;
 const PILE_R = 292;
+/** Where a prize may lie: across the pile, and from just inside the glass to the back wall. */
+const PILE_BOUNDS: PileBounds = { l: PILE_L, r: PILE_R, zMin: 0.1, zMax: 0.94 };
+/** Rows of the bottom layer, back to front, in depth. */
+const PILE_ROWS = [0.86, 0.64, 0.42, 0.2];
+/** The heap is never built higher than this (pixels of lift): two deep, clear of the claw. */
+const MAX_LIFT = 40;
 /** The prize chute, front left, behind its own little glass wall. */
 const CHUTE = { x: 46, z: 0.05, l: 20, r: 72 };
 /**
@@ -191,6 +214,8 @@ interface Toy {
   flip: boolean;
   /** Knocked over by the claw, degrees. */
   lean: number;
+  /** Where it is drawn while it is settling: both views follow this, not a jump. */
+  anim?: { x: number; z: number; lift: number };
 }
 
 /**
@@ -368,14 +393,14 @@ export class CraneGame extends Phaser.Scene {
 
     this.clockText = text(this, CLOCK_X, 160, '', 0xff6a5a).setDepth(60);
     new TokenHud(this);
-    button(this, GAME_W - 23, 10, 'QUIT', () => this.leave(true), { width: 40, height: 13, fill: 0x5a1a22 }).setDepth(70);
+    button(this, QUIT_X, 10, 'QUIT', () => this.leave(true), { width: QUIT_W, height: 13, fill: 0x5a1a22 }).setDepth(70);
     // the view button: BACK in the side view, SIDE VIEW once you have
     // been there; hidden until then (the action button takes you the first time).
     // Clear of QUIT and the title plate, and the only view button on touch too:
     // a second one in the touch pad sat on top of DROP.
     // wide enough for FRONT VIEW, which is the longer of the two words it
     // carries: at 52 the F and the W hung over the ends of the button.
-    this.sideBtn = button(this, 244, 10, 'SIDE VIEW', () => this.viewButton(), { width: 64, height: 13 }).setDepth(70);
+    this.sideBtn = button(this, VIEW_X, 10, 'SIDE VIEW', () => this.viewButton(), { width: VIEW_W, height: 13 }).setDepth(70);
 
     const kb = this.input.keyboard;
     const bind = (names: string[]) => (kb ? names.map((n) => kb.addKey(n)) : []);
@@ -468,8 +493,8 @@ export class CraneGame extends Phaser.Scene {
     this.add.rectangle(BOX.l - 8, 2, BOX.r - BOX.l + 16, GAME_H - 4, frame).setOrigin(0, 0).setStrokeStyle(2, trim);
     // the marquee, with the name in lit letters
     // (narrow enough to leave room for SIDE VIEW and QUIT on its right)
-    const MQ = 169; // the marquee's centre: clear of the token readout on its left
-    this.add.rectangle(MQ, 15, 96, 20, 0x0c0814).setStrokeStyle(1, trim);
+    const MQ = PLATE_X; // in its own slot of the top bar, clear of the token readout and the buttons
+    this.add.rectangle(MQ, 15, PLATE_W, 20, 0x0c0814).setStrokeStyle(1, trim);
     const name = eerie ? '? CAPSULES ?' : 'FROGGY GRAB!';
     const cols = eerie ? [0xc8a0e0, 0x8a6ab0] : [0xff4fa3, 0xffc830, 0x46c46e, 0x3fb8e8, 0xff7a3d, 0xa870e8];
     const w = name.length * 6;
@@ -557,6 +582,8 @@ export class CraneGame extends Phaser.Scene {
     if (saved && saved.day === today() && saved.toys.length > 0) {
       for (const st of saved.toys) this.toys.push(this.makeToy(st.x, st.z, st.lift, st));
       this.froggies = this.toys.filter((t) => t.id === PLUSHIES[0].id).length;
+      // (a heap saved before it was built properly is made good, quietly)
+      this.settle(false);
       return;
     }
     this.freshPile();
@@ -569,30 +596,80 @@ export class CraneGame extends Phaser.Scene {
     store.patch({ cranes: { ...store.get().cranes, [this.kind]: { day: today(), toys } } });
   }
 
+  /**
+   * A fresh heap, built from the floor up (game/cranePile): the bottom layer
+   * in staggered rows, and the ones on top only where something is really
+   * under them -- across the glass AND in depth -- never at a height made
+   * up for them.  Every view draws this one heap.
+   */
   private freshPile(): void {
-    const rows = 3;
-    const layers = 3;
-    const specs: Array<{ x: number; z: number; lift: number }> = [];
-    for (let layer = 0; layer < layers; layer++) {
-      for (let r = 0; r < rows; r++) {
-        const z = 0.85 - r * 0.3;
-        const step = 30 + layer * 4;
-        for (let x = PILE_L + 14 + (r % 2) * 14 + layer * 12; x < PILE_R - 12 - layer * 12; x += step) {
-          // the heap is taller in the middle than at the edges
-          const mid = 1 - Math.abs((x - (PILE_L + PILE_R) / 2) / ((PILE_R - PILE_L) / 2));
-          if (layer > 0 && Math.random() > 0.2 + mid * 0.8 - (layer - 1) * 0.25) continue;
-          // Depth is scattered right across the row, not pinned to it: three
-          // hard rows made a heap that was solid from the front and three
-          // sparse clumps from the side.  Spread, the two views show the one
-          // pile, and there is something under the claw at any depth.
-          const zj = Phaser.Math.Clamp(z + Phaser.Math.FloatBetween(-0.13, 0.13), 0.06, 0.96);
-          specs.push({ x: x + Phaser.Math.Between(-3, 3), z: zj, lift: layer * 18 + Phaser.Math.Between(0, 3) });
-        }
-      }
-    }
+    const specs = generatePile({
+      bounds: PILE_BOUNDS,
+      body: bodyFor(this.kind === 'oddity' ? 'capsule' : 'plush', TOY_W, TOY_H),
+      rows: PILE_ROWS,
+      upper: 0.55,
+      maxLift: MAX_LIFT,
+      rnd: Math.random,
+    });
     // back to front, bottom to top, so nearer and higher prizes are drawn over
     specs.sort((a, b) => b.z - a.z || a.lift - b.lift);
     for (const sp of specs) this.toys.push(this.makeToy(sp.x, sp.z, sp.lift));
+  }
+
+  /** A toy's body in the heap: its contact box, not its picture's canvas. */
+  private bodyOf(t: Toy): PileBody {
+    return { x: t.x, z: t.z, lift: t.lift, ...bodyFor(t.look.startsWith('capsule') ? 'capsule' : 'plush', TOY_W, TOY_H) };
+  }
+
+  /**
+   * ---- THE HEAP SETTLES.  After anything is taken out of it, knocked about
+   * or dropped back on it, every prize is checked from the bottom up and
+   * anything left without support comes down onto what is under it, or
+   * slides off an edge it was perched on -- chains of them in order.  Each
+   * one that moves FALLS there (a short eased drop, both views following it)
+   * unless `animate` is off (a heap being put back as it was saved).
+   */
+  private settle(animate = true): void {
+    const bodies = this.toys.map((t) => this.bodyOf(t));
+    const moved = settlePile(bodies, PILE_BOUNDS);
+    for (const m of moved) {
+      const t = this.toys[m.i];
+      const from = t.anim ? { ...t.anim } : { x: t.x, z: t.z, lift: t.lift };
+      t.x = m.x;
+      t.z = m.z;
+      t.lift = m.lift;
+      if (animate) this.slideTo(t, from);
+      else this.placeToy(t);
+    }
+    if (moved.length) {
+      this.saveGlass();
+      if (this.sideOn) this.fillSide();
+    }
+  }
+
+  /** It drops (or slides) from `from` to where it now is: gravity, not a teleport. */
+  private slideTo(t: Toy, from: { x: number; z: number; lift: number }): void {
+    if (t.anim) this.tweens.killTweensOf(t.anim);
+    const p = { ...from };
+    t.anim = p;
+    const fall = Math.max(0, from.lift - t.lift);
+    const ms = Phaser.Math.Clamp(Math.sqrt(fall + Math.abs(from.x - t.x)) * 40, 120, 480);
+    this.tweens.add({
+      targets: p,
+      x: t.x,
+      z: t.z,
+      lift: t.lift,
+      duration: ms,
+      ease: 'Quad.easeIn',
+      onUpdate: () => {
+        const k = scaleAt(p.z);
+        t.art.setPosition(screenX(p.x, p.z), floorY(p.z) - p.lift * k).setScale(k).setDepth(this.toyDepth(p.z, p.lift));
+      },
+      onComplete: () => {
+        t.anim = undefined;
+        this.placeToy(t);
+      },
+    });
   }
 
   /** Over any toy at the claw's depth or further back, however high it is piled. */
@@ -1113,6 +1190,8 @@ export class CraneGame extends Phaser.Scene {
         this.heldFrom.set(best.art.x, best.art.y);
         this.heldT = 0;
         this.toys = this.toys.filter((t) => t !== best);
+        // what it was holding up comes down as it is lifted away
+        this.time.delayedCall(150, () => this.settle());
         // and some of what comes up does not make it to the chute
         // heavier toys, and toys held by the head, slip more often
         const slip = SLIP[this.kind] * feel.weight * (onBody ? 0.85 : 1.35);
@@ -1127,6 +1206,7 @@ export class CraneGame extends Phaser.Scene {
         this.heldFrom.set(best.art.x, best.art.y);
         this.heldT = 0;
         this.toys = this.toys.filter((t) => t !== best);
+        this.time.delayedCall(150, () => this.settle());
         this.fumbleAt = Math.max(0, this.drop - FUMBLE_LIFT);
         this.slipAt = -1;
         audio.sfx('lock_click', 0.45);
@@ -1155,13 +1235,14 @@ export class CraneGame extends Phaser.Scene {
     // (no banner: the one result box at the end of the go says how it went)
     this.moveClaw(0.85, 160);
     audio.sfx('door_shut', 0.15);
-    t.x = this.clawX;
-    t.z = Phaser.Math.Clamp(this.clawZ, 0.25, 0.95);
-    let lift = 0;
-    for (const o of this.toys) {
-      if (Math.abs(o.x - t.x) < 16 && Math.abs(o.z - t.z) < 0.2) lift = Math.max(lift, o.lift + 18);
-    }
-    t.lift = Math.min(lift, 40);
+    t.x = Phaser.Math.Clamp(this.clawX, PILE_BOUNDS.l + 8, PILE_BOUNDS.r - 8);
+    t.z = Phaser.Math.Clamp(this.clawZ, PILE_BOUNDS.zMin, PILE_BOUNDS.zMax);
+    // it lands where the heap under it will really hold it -- on top of what
+    // it falls on, or off the edge of it and down
+    const place = restPlace(this.bodyOf(t), this.toys.map((o) => this.bodyOf(o)), PILE_BOUNDS);
+    t.x = place.x;
+    t.z = place.z;
+    t.lift = place.lift;
     this.toys.push(t);
     this.fall(t, why === 'slipped');
   }
@@ -1217,6 +1298,7 @@ export class CraneGame extends Phaser.Scene {
             t.lean = land;
             this.placeToy(t);
             this.saveGlass();
+            this.settle();
           },
         });
         this.tweens.add({
@@ -1251,16 +1333,23 @@ export class CraneGame extends Phaser.Scene {
       const off = target.x - this.clawX;
       if (Math.abs(off) > 3) this.knock(target, Math.sign(off), 0.35);
     }
+    // and whatever was shoved off its support comes down once the shove is done
+    this.time.delayedCall(380, () => this.settle());
   }
 
   /** Push one toy `dir` (+1 right, -1 left), `force` 0..1. */
   private knock(t: Toy, dir: number, force: number): void {
     const feel = feelOf(t);
-    const push = (7 * force) / feel.weight;
+    let push = (7 * force) / feel.weight;
+    // shoved, but not INTO a neighbour beside it: it stops against it
+    const me = this.bodyOf(t);
+    for (const o of this.toys) {
+      if (o === t || Math.abs(o.lift - t.lift) > me.h / 2 || Math.abs(o.z - t.z) > me.hz * 2) continue;
+      const gap = dir > 0 ? o.x - t.x : t.x - o.x;
+      if (gap > 0) push = Math.min(push, Math.max(0, gap - me.hw * 2 * (1 - 0.3)));
+    }
     t.x = Phaser.Math.Clamp(t.x + dir * push, PILE_L + 8, PILE_R - 8);
     t.z = Phaser.Math.Clamp(t.z + (Math.random() - 0.5) * 0.05 * force, 0.1, 0.95);
-    // a pushed toy off the top of another settles down a little
-    if (t.lift > 0 && force > 0.5) t.lift = Math.max(0, t.lift - 6 * force);
     const tip = (1 - feel.stable) * 40 * force;
     if (tip > 4) t.lean = Phaser.Math.Clamp(t.lean + dir * tip, -70, 70);
     const k = scaleAt(t.z);
@@ -1431,48 +1520,33 @@ export class CraneGame extends Phaser.Scene {
    * exists to show -- and the pile is a pile, with nothing floating and
    * nothing here that is not in the glass.
    */
+  /**
+   * ---- THE SAME HEAP, END ON.
+   *
+   * Nothing is placed for this view: each prize is drawn where it IS -- its
+   * depth along the floor, its height up the heap -- with its own profile
+   * drawing at that depth's scale.  Looking in from the right-hand end, the
+   * prizes further right in the glass are nearer you, so they are drawn
+   * over the ones further left; at the same place, the higher over the lower.
+   */
   private fillSide(): void {
     this.sideToys.removeAll(true);
     this.sideHeld = null;
-    // ---- STACKED IN THREE DIMENSIONS, NOT ONE.
-    //
-    // A toy rests only on toys that are really under it: overlapping it
-    // ACROSS the glass (its front-view x) as well as along it (its depth).
-    // Packing by depth alone stood every toy at that depth on top of the
-    // last -- a column far taller than the machine, capped at the ceiling
-    // with nothing under it.  Toys side by side across the glass are, end on,
-    // simply in front of and behind each other at the same height.
-    const placed: Array<{ fx: number; fhalf: number; x: number; half: number; top: number }> = [];
-    // lowest up: a toy can only rest on something already on the heap
-    for (const t of [...this.toys].sort((a, b) => a.lift - b.lift)) {
-      const k = scaleAt(t.z) * sideK(t.z);
-      const x = sideX(t.z);
-      // its own PROFILE drawing, at the size it is shown -- not the front one
+    const order = [...this.toys].sort((a, b) => a.x - b.x || a.lift - b.lift);
+    for (const t of order) {
       const drawn = Math.round(t.size * 25) / 25;
       const key = toyTexture(this, t.look as Parameters<typeof toyTexture>[1], drawn, 0, 'side');
-      const img = this.add.image(x, SIDE.floor, key).setOrigin(0.5, 1).setScale((k * 0.95) / drawn);
-      const half = img.displayWidth / 2;
-      // how wide it is across the glass, in the front view's pixels
-      const fhalf = (TOY_W * t.size) / 2;
-      // the top of whatever is really under it, if anything
-      let base = 0;
-      for (const q of placed) {
-        if (Math.abs(q.fx - t.x) < (q.fhalf + fhalf) * 0.6 && Math.abs(q.x - x) < (q.half + half) * 0.6) base = Math.max(base, q.top);
-      }
-      // how much of its picture is the toy: a capsule is a ball at the foot
-      // of a square drawing, with empty canvas over it -- counted as solid,
-      // that air held the next one up off it
-      const solid = img.displayHeight * (t.look.startsWith('capsule') ? 0.72 : 0.92);
-      // it settles into the gap a little, the way a heap does
-      if (base > 0) base = Math.max(0, base - solid * 0.25);
-      base = Math.min(base, Math.max(0, SIDE.floor - SIDE.top - 6 - img.displayHeight));
-      img.setY(SIDE.floor - base);
-      placed.push({ fx: t.x, fhalf, x, half, top: base + solid });
-      img.setData('toy', t);
+      const img = this.add.image(0, 0, key).setOrigin(0.5, 1).setData('toy', t).setData('drawn', drawn);
+      this.placeSide(img, t);
       this.sideToys.add(img);
     }
-    // the lower ones first, so a toy on top is drawn over the one it sits on
-    this.sideToys.sort('y', (a: Phaser.GameObjects.Image, b: Phaser.GameObjects.Image) => (b.y - a.y) || 0);
+  }
+
+  /** Where a prize is in the side view: straight from the heap (or its fall, mid-fall). */
+  private placeSide(img: Phaser.GameObjects.Image, t: Toy): void {
+    const p = t.anim ?? t;
+    const k = scaleAt(p.z) * sideK(p.z);
+    img.setPosition(sideX(p.z), SIDE.floor - p.lift * k).setScale(k / (img.getData('drawn') as number));
   }
 
   private drawSide(): void {
@@ -1492,13 +1566,17 @@ export class CraneGame extends Phaser.Scene {
         o.setVisible(false);
         continue;
       }
+      // (a prize settling is seen coming down here too)
+      this.placeSide(o, t);
       if (Math.abs(t.x - this.clawX) < 22) {
         o.setVisible(true).setAlpha(1).clearTint();
         lane.push(o);
       } else o.setVisible(true).setAlpha(0.55).setTint(0x7482a0);
     }
     // the claw's lane drawn over the profile, lowest first
-    lane.sort((a, b) => b.y - a.y).forEach((o) => this.sideToys.bringToTop(o));
+    lane
+      .sort((a, b) => (a.getData('toy') as Toy).x - (b.getData('toy') as Toy).x || b.y - a.y)
+      .forEach((o) => this.sideToys.bringToTop(o));
     const g = this.sideRig;
     g.clear();
     // the carriage on the rail, the cable down, and a guide straight down from
@@ -1517,7 +1595,7 @@ export class CraneGame extends Phaser.Scene {
         this.sideHeld = this.add.image(0, 0, toyTexture(this, this.held.look as Parameters<typeof toyTexture>[1], drawn, 0, 'side')).setOrigin(0.5, 1).setData('drawn', drawn);
         this.sideBox.add(this.sideHeld);
       }
-      this.sideHeld.setPosition(x, tip + (10 * CLAW_K + TOY_H * 0.8) * k).setScale((k * 0.95) / (this.sideHeld.getData('drawn') as number)).setVisible(true);
+      this.sideHeld.setPosition(x, tip + (10 * CLAW_K + TOY_H * 0.8) * k).setScale(k / (this.sideHeld.getData('drawn') as number)).setVisible(true);
     } else if (this.sideHeld) {
       this.sideHeld.destroy();
       this.sideHeld = null;
