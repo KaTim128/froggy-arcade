@@ -640,7 +640,7 @@ export class Hotel extends Phaser.Scene {
    */
   private rideLift(): void {
     const up = this.goingUp;
-    this.add.image(0, 0, this.painted('hotel_lift_v4', GAME_W, GAME_H, paintLift)).setOrigin(0, 0);
+    this.add.image(0, 0, this.painted('hotel_lift_v5', GAME_W, GAME_H, paintLift)).setOrigin(0, 0);
     // the doorway, the landing's size (see art/hotelInterior LIFT)
     const { x: DX, y: DY, w: DW, h: DH } = LIFT.door;
     // what is out there, seen through the doorway: the landing, close up
@@ -656,7 +656,7 @@ export class Hotel extends Phaser.Scene {
     const from = view(up ? lobbyKey : hallKey, up ? 95 : 150);
     const to = view(up ? hallKey : lobbyKey, up ? 150 : 95).setVisible(false);
     // the car's light spilling out on to the landing floor
-    this.add.rectangle(DX, FLOOR_LINE - 2, DW, 2, 0x000000, 0.25).setOrigin(0, 0).setDepth(1.5);
+    this.add.rectangle(DX, DY + DH - 2, DW, 2, 0x000000, 0.25).setOrigin(0, 0).setDepth(1.5);
     // the doors themselves, and the floor numbers over them
     const doors = this.add.graphics().setDepth(2);
     const drawDoors = (k: number): void => {
@@ -686,7 +686,7 @@ export class Hotel extends Phaser.Scene {
     const lit = this.add.rectangle(bt.x, bt.y, 3, 3, 0xffd45e, 0.6).setOrigin(0, 0).setDepth(3).setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({ targets: lit, alpha: 0.6, duration: 500, yoyo: true, repeat: -1 });
     // you, in the car, in front of the panel
-    this.player = new Player(this, 142, FLOOR_LINE + 8, false);
+    this.player = new Player(this, 142, FLOOR_LINE - 36 + 8, false);
     this.player.setSurface('carpet');
     this.locked = true;
     this.time.delayedCall(500, () =>
