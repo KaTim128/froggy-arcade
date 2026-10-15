@@ -25,6 +25,7 @@ import { drawAttackIcon } from '../art/attackIcons';
 import { setCabinetTouch } from '../game/touchLayouts';
 import { backPlate } from '../ui/plate';
 import type { KeyName } from '../ui/touchControls';
+import { isTouch } from '../core/device';
 
 const ARENA = { x: 6, y: 24, w: GAME_W - 12, h: GAME_H - 52 };
 const TIME_LIMIT = 120;
@@ -262,7 +263,10 @@ export class CreatureArena extends Phaser.Scene {
     this.dark = this.add.graphics().setDepth(40);
     this.ui = this.add.graphics().setDepth(50);
     // (before the hud: it lays the buttons out for whichever this is)
-    const touchDevice = this.sys.game.device.input.touch;
+    // (the game's own answer -- a coarse pointer and no fine one -- not
+    // Phaser's "has a touch screen", which a touchscreen laptop also has:
+    // on a desktop the sticks never appear)
+    const touchDevice = isTouch();
     this.band = touchDevice && window.innerHeight >= window.innerWidth;
     this.touch = touchDevice && !this.band;
     this.paintHud();
@@ -290,9 +294,10 @@ export class CreatureArena extends Phaser.Scene {
     this.info2 = centerText(this, GAME_W / 2, ARENA.y + ARENA.h - 6, '', PALETTE.cream).setDepth(56).setVisible(false);
 
     this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,ONE,TWO,THREE') as Record<string, Phaser.Input.Keyboard.Key>;
-    this.input.keyboard!.on('keydown-ONE', () => this.choose(0));
-    this.input.keyboard!.on('keydown-TWO', () => this.choose(1));
-    this.input.keyboard!.on('keydown-THREE', () => this.choose(2));
+    // 1 2 3: that ability, now, at the mouse (on a phone, just the choice)
+    this.input.keyboard!.on('keydown-ONE', () => this.keyFire(0));
+    this.input.keyboard!.on('keydown-TWO', () => this.keyFire(1));
+    this.input.keyboard!.on('keydown-THREE', () => this.keyFire(2));
     this.input.addPointer(2);
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.down(p));
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.moveP(p));
@@ -352,6 +357,22 @@ export class CreatureArena extends Phaser.Scene {
     const go = centerText(this, ARENA.x + ARENA.w / 2, ARENA.y + ARENA.h / 2, 'FIGHT!', PALETTE.gold, 24).setDepth(2401);
     this.tweens.add({ targets: go, scale: 1.4, alpha: 0, delay: 250, duration: 450, onComplete: () => go.destroy() });
     this.showInfo(this.sel);
+    if (this.training) {
+      const t = centerText(this, ARENA.x + ARENA.w / 2, ARENA.y + 10, 'TRAINING MODE DOES NOT AWARD TOKENS.', PALETTE.fog).setDepth(2401);
+      backPlate(this, t);
+      this.time.delayedCall(3500, () => this.tweens.add({ targets: t, alpha: 0, duration: 500, onComplete: () => t.destroy() }));
+    }
+  }
+
+  /**
+   * A number key on a desktop: choose that ability and let it go where the
+   * mouse is pointing.  Before the bell (or on a phone) it only chooses.
+   */
+  private keyFire(i: number): void {
+    this.choose(i);
+    if (this.touch || this.band || this.over || this.paused || !this.started || this.dialog) return;
+    const p = this.input.activePointer;
+    this.fire(this.me, i, p.worldX - this.me.x, p.worldY - this.me.y);
   }
 
   /** A band button: that attack, now, at the foe (a blink goes the way you are walking). */
@@ -712,8 +733,9 @@ export class CreatureArena extends Phaser.Scene {
     if (!this.touch && !this.band) {
       this.me.c.attacks.forEach((a, i) => {
         const b = this.atkBtns[i];
-        this.labels.push(text(this, b.x - 46, b.y - 4, `${i + 1}`, PALETTE.fog).setDepth(52));
-        this.labels.push(text(this, b.x - 28, b.y - 4, a.name, PALETTE.cream).setDepth(52).setMaxWidth(74));
+        // the key that fires it, always in view, on a keycap: [1] [2] [3]
+        this.labels.push(centerText(this, b.x - 42.5, b.y - 0.5, `${i + 1}`, PALETTE.gold).setDepth(52));
+        this.labels.push(text(this, b.x - 21, b.y - 4, a.name, PALETTE.cream).setDepth(52).setMaxWidth(68));
       });
     }
     // WHAT YOUR ELEMENT DOES, in the one place that is clear on every layout:
@@ -1533,7 +1555,11 @@ export class CreatureArena extends Phaser.Scene {
         u.fillStyle(i === this.sel ? 0x4a2a78 : 0x1a1a30, 0.9).fillRect(b.x - 49, b.y - 7, 98, 13);
         u.fillStyle(0xffffff, 0.15).fillRect(b.x - 49, b.y + 4, 98 * Math.min(1, ready), 2);
         u.lineStyle(1, i === this.sel ? 0xffe060 : 0x4a4a68, 1).strokeRect(b.x - 49, b.y - 7, 98, 13);
-        drawAttackIcon(u, a.kind, b.x - 37, b.y - 1, ic);
+        // the keycap, then the ability's icon beside it
+        u.fillStyle(0x0c0c18, 1).fillRect(b.x - 47, b.y - 5, 9, 9);
+        u.lineStyle(1, i === this.sel ? 0xffe060 : 0x8a8ab0, 1).strokeRect(b.x - 47, b.y - 5, 9, 9);
+        u.fillStyle(0xffffff, 0.12).fillRect(b.x - 46, b.y - 4, 7, 1);
+        drawAttackIcon(u, a.kind, b.x - 30, b.y - 1, ic);
       }
     });
     // the chosen attack's line, fading

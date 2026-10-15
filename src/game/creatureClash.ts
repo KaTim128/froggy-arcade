@@ -15,7 +15,7 @@
 
 import { store, type GameState } from '../core/state';
 import { ledger } from '../core/ledger';
-import { BATTLE_COST, BATTLE_WIN, BIOMES, BOSS_AFTER, MAX_OWNED, STARTERS, TIERS, creatureById, rollPack, type Creature, type Tier } from './creatures';
+import { BATTLE_COST, BATTLE_WIN, BOSS_WIN, BIOMES, BOSS_AFTER, MAX_OWNED, STARTERS, TIERS, creatureById, rollPack, type Creature, type Tier } from './creatures';
 import type { CreatureState, Owned } from './creatureState';
 import { record } from './life';
 import { MAX_LEVEL, MAX_XP, XP_BOSS, XP_WIN, levelOf, withLevel } from './creatureLevel';
@@ -172,12 +172,14 @@ export function finishBattle(won: boolean): Result & { paid: number; lost?: stri
         f.xp = Math.min(MAX_XP, (f.xp ?? 0) + gain);
       }
     });
-    ledger.credit(BATTLE_WIN, 'creature');
+    // (a boss pays five times what a wild one does)
+    const prize = b.boss ? BOSS_WIN : BATTLE_WIN;
+    ledger.credit(prize, 'creature');
     record('creature_win');
     store.flush();
     const name = fighter ? creatureById(fighter.id)!.name.toUpperCase() : '';
     const up = lvAfter > lvBefore ? lvAfter : undefined;
-    return { ...ok(`YOU WIN ${BATTLE_WIN} TOKENS.${up ? ` ${name} IS NOW LEVEL ${up}!` : ''}`), paid: BATTLE_WIN, xp: gain, levelUp: up };
+    return { ...ok(`YOU WIN ${prize} TOKENS.${up ? ` ${name} IS NOW LEVEL ${up}!` : ''}`), paid: prize, xp: gain, levelUp: up };
   }
   edit((s) => {
     s.battle = null;

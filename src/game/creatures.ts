@@ -466,6 +466,8 @@ export function wildFor(b: Biome, wins: number, rng: () => number = Math.random)
 
 export const BATTLE_COST = 2;
 export const BATTLE_WIN = 5;
+/** A boss beaten pays this instead. */
+export const BOSS_WIN = 25;
 /** Lost on a defeat on top of the stake -- never below zero. */
 export const DEFEAT_PENALTY = 1;
 export const MAX_OWNED = 2;
