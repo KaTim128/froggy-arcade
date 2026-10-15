@@ -25,7 +25,7 @@ export { LIFE_VERSION, defaultLife, sanitizeLife, type LifeState, type Placement
 
 /** Seconds of play in one game day. */
 export const DAY_SECONDS = 20 * 60;
-export const RENT_PRICE = 200;
+export const RENT_PRICE = 100;
 export const RENT_DAYS = 7;
 /**
  * THE DAY, by the clock on the wall.  It starts at 7:00 AM, at sunrise,

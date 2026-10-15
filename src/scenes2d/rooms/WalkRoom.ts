@@ -73,6 +73,14 @@ export interface CounterOpts {
   line: string;
   /** Something on it: a till, a bell, a stack of books. Drawn at the counter's top. */
   dress?: (g: Phaser.GameObjects.Graphics, x: number, top: number) => void;
+  /**
+   * What [E] at the counter does instead of a line of talk: the shops put
+   * their whole stock on one card here (see scenes2d/Shop), which is the
+   * only part of a shop a phone has to be able to reach.
+   */
+  onUse?: () => void;
+  /** The prompt for that, when there is one. */
+  useLabel?: string;
 }
 
 export interface Fixture {
@@ -397,8 +405,8 @@ export abstract class WalkRoom extends Phaser.Scene {
       y: front,
       w,
       depth: front - this.floorTop,
-      label: () => '[E] TALK',
-      use: () => this.talkAs(o.who, o.line),
+      label: () => o.useLabel ?? (o.onUse ? '[E] THE COUNTER' : '[E] TALK'),
+      use: () => (o.onUse ? o.onUse() : this.talkAs(o.who, o.line)),
       promptBelow: true,
       hit: { x: x - w / 2 - 2, y: this.floorTop - 6, w: w + 4, h: front - this.floorTop + 8 },
     };

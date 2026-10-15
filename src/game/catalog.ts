@@ -71,6 +71,31 @@ export const FURNITURE: FurnitureDef[] = [
   F('fur_sink', 'WASH BASIN', 'bath', 45, 14, 18, false, 0xf2f2ee, 0x9aa8b4, 'HOT AND COLD'),
   F('fur_bathtub', 'BATHTUB', 'bath', 150, 40, 14, false, 0xf2f2ee, 0x8ac0e0, 'A LONG HOT SOAK'),
   // reward-only
+  // ---- and the rest of the range.  Home and Hearth does not have all of
+  // this out at once: what is on the floor changes with the day (see
+  // `stockFor`), so coming back tomorrow is worth doing.
+  F('fur_poster_map', 'OLD MAP', 'poster', 14, 24, 16, true, 0xd8c08a, 0x6a5230, 'SOMEWHERE ELSE'),
+  F('fur_poster_film', 'FILM POSTER', 'poster', 16, 14, 20, true, 0x2a2a3a, 0xe8d060, 'ONE NIGHT ONLY'),
+  F('fur_paint_frog', 'FROG IN OILS', 'painting', 140, 22, 20, true, 0x3a7a42, 0xe8d8a8, 'HE IS WATCHING YOU'),
+  F('fur_mirror_wall', 'WALL MIRROR', 'decor', 48, 16, 22, true, 0xdfe8ee, 0x8a9098, 'CHECK YOURSELF'),
+  F('fur_shelf_wall', 'FLOATING SHELF', 'storage', 22, 26, 6, true, 0x8a5a32, 0x5a3a1e, 'FOR LITTLE THINGS'),
+  F('fur_table_coffee', 'COFFEE TABLE', 'table', 48, 26, 9, false, 0x6a4a2a, 0x4a3018, 'RINGS ON THE TOP'),
+  F('fur_desk', 'WRITING DESK', 'table', 85, 30, 16, false, 0x7a5230, 0x4a3018, 'A DRAWER THAT STICKS'),
+  F('fur_chair_office', 'SWIVEL CHAIR', 'chair', 45, 12, 18, false, 0x2a2a34, 0x4a4a58, 'IT SPINS'),
+  F('fur_chair_bean', 'BEAN BAG', 'chair', 26, 18, 12, false, 0x8a4a7a, 0xc07aaa, 'SWALLOWS YOU WHOLE'),
+  F('fur_sofa_corner', 'CORNER SOFA', 'sofa', 190, 48, 18, false, 0x4a6a5a, 0x2e4a3c, 'ROOM FOR EVERYONE'),
+  F('fur_tv_crt', 'PORTABLE TV', 'tv', 45, 14, 13, false, 0x6a6a60, 0x8ac0c8, 'A HANDLE ON TOP'),
+  F('fur_record_player', 'RECORD PLAYER', 'radio', 110, 18, 10, false, 0x5a3a22, 0xd8c8a0, 'CRACKLES BEAUTIFULLY'),
+  F('fur_lamp_desk', 'DESK LAMP', 'lamp', 20, 8, 14, false, 0x2a6a8a, 0xf0e0a0, 'A POOL OF LIGHT'),
+  F('fur_lamp_paper', 'PAPER LANTERN', 'lamp', 34, 14, 14, false, 0xf0ead8, 0xc8bfa8, 'SOFT AND ROUND'),
+  F('fur_rug_rag', 'RAG RUG', 'rug', 12, 32, 5, false, 0x8a6a8a, 0xd8c070, 'MADE OF OLD CLOTHES'),
+  F('fur_chest', 'STORAGE CHEST', 'storage', 40, 24, 14, false, 0x6a4a2a, 0xc8a050, 'A LID THAT SHUTS'),
+  F('fur_wardrobe', 'WARDROBE', 'storage', 130, 24, 32, false, 0x7a5230, 0x4a3018, 'ROOM FOR A COAT'),
+  F('fur_plant_tall', 'TALL PLANT', 'decor', 26, 14, 26, false, 0x2f7a3a, 0xa86a40, 'NEEDS WATERING'),
+  F('fur_bookcase_tall', 'TALL BOOKCASE', 'storage', 95, 22, 38, false, 0x5a3a22, 0xc8b070, 'TO THE CEILING'),
+  F('fur_bed_double', 'DOUBLE BED', 'bed', 260, 46, 14, false, 0x6a3a5a, 0xf0e8d8, 'THE GOOD ONE'),
+  F('fur_shower', 'SHOWER', 'bath', 190, 20, 34, false, 0xdfe8ee, 0x8ac0e0, 'HOT WATER, EVENTUALLY'),
+  F('fur_bath_mat', 'BATH MAT', 'bath', 8, 20, 4, false, 0x7ab0c8, 0xc8e4f0, 'WARM UNDERFOOT'),
   F('fur_trophy', 'ARCADE TROPHY', 'decor', 0, 10, 14, false, 0xd8a838, 0x8a6a28, 'EARNED, NOT BOUGHT', true),
   F('fur_frog_statue', 'FROG STATUE', 'decor', 0, 14, 18, false, 0x5aa85f, 0x2f6b36, 'EARNED, NOT BOUGHT', true),
 ];
@@ -156,6 +181,40 @@ export const COSMETICS: CosmeticDef[] = [
 
 /** The cosmetics the drifter starts in, owned from the beginning. */
 export const STARTER_COSMETICS = ['cos_coat_olive', 'cos_trousers_baggy', 'cos_boots_worn', 'cos_scarf_grubby', 'cos_beanie', 'cos_no_hat'];
+
+/**
+ * ---- WHAT IS ON THE FLOOR TODAY.
+ *
+ * Home and Hearth is a shop, not a catalogue: it puts out a dozen pieces at
+ * a time and the van brings something different tomorrow.  The day decides
+ * it, the same way for everybody, so a player who wants the velvet sofa can
+ * come back for it -- and the four things a flat cannot do without (a bed, a
+ * toilet, a basin and a mat) are always in, because being unable to buy a
+ * toilet for three days is not an interesting shop.
+ *
+ * `day` is the life clock's day number (game/life `clock`).
+ */
+export const STOCK_ALWAYS = ['fur_mattress', 'fur_toilet', 'fur_sink', 'fur_rug_mat'];
+/** How many of the rest are out on any one day. */
+export const STOCK_ROTATING = 12;
+
+export function stockFor(day: number): FurnitureDef[] {
+  const pool = FURNITURE.filter((f) => !f.reward && f.price > 0 && !STOCK_ALWAYS.includes(f.id));
+  // a shuffle the day seeds: the same day gives the same shop, everywhere
+  const order = pool.map((f, i) => ({ f, k: hash(day * 7919 + i * 104729) }));
+  order.sort((a, b) => a.k - b.k);
+  const out = STOCK_ALWAYS.map((id) => furnitureById(id)!).filter(Boolean);
+  out.push(...order.slice(0, STOCK_ROTATING).map((o) => o.f));
+  // cheapest first inside each kind, so the list reads like a price list
+  return out.sort((a, b) => Number(a.wall) - Number(b.wall) || a.price - b.price);
+}
+
+function hash(n: number): number {
+  let x = (n ^ 0x9e3779b9) >>> 0;
+  x = (x ^ (x >>> 16)) * 0x45d9f3b;
+  x = (x ^ (x >>> 16)) * 0x45d9f3b;
+  return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
+}
 
 export const furnitureById = (id: string): FurnitureDef | undefined => FURNITURE.find((f) => f.id === id);
 export const cosmeticById = (id: string): CosmeticDef | undefined => COSMETICS.find((c) => c.id === id);
