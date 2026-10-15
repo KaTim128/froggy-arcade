@@ -198,8 +198,14 @@ const mashToFight = async (page) => {
     // the middle chest every time, so the run is the same shape each pass
     await page.evaluate(() => window.__mash.take(1));
     if (!(await phase('reveal'))) return false;
-    await sleep(450);
-    await press('^(NEXT|TO THE COLOSSEUM)$');
+    // NEXT only appears once the card has been up 560ms of game time (it is
+    // the player's 'I have read it'): wait for the button, not a guess at it
+    let pressed = false;
+    for (let t = 0; t < 30 && !pressed; t++) {
+      await sleep(150);
+      pressed = await press('^(NEXT|TO THE COLOSSEUM)$');
+    }
+    if (!pressed) return false;
     await sleep(650);
   }
   if (!(await phase('entry'))) return false;
