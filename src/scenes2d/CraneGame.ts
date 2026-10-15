@@ -47,7 +47,7 @@ import { button, centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { TokenHud } from '../ui/hud';
 import { drawItem } from '../ui/pockets';
-import { CAPSULE_VARIANTS, TOY_H, TOY_RES, plushKind, toyTexture } from '../art/craneToys';
+import { CAPSULE_VARIANTS, TOY_H, TOY_RES, TOY_W, plushKind, toyTexture } from '../art/craneToys';
 import { FULL_LINE, ODDITIES, PLUSHIES, addItem, itemDef, pocketsFull } from '../game/inventory';
 import { isTouch } from '../core/device';
 import { touchControls } from '../ui/touchControls';
@@ -135,7 +135,7 @@ const CHUTE = { x: 46, z: 0.05, l: 20, r: 72 };
  * front, look again from the side and still think about it: the clock is
  * there so nobody stands at the glass all afternoon, not to hurry the shot.
  */
-const CLOCK_S = 30;
+const CLOCK_S = 14;
 /** How far the claw can be let down, in pixels below the gantry. */
 const MAX_DROP = 118;
 /** The claw is drawn this much bigger than its design, to match the toys. */
@@ -642,7 +642,7 @@ export class CraneGame extends Phaser.Scene {
     const drawn = Math.round(size * 25) / 25;
     const img = this.add.image(0, 0, key).setOrigin(0.5, 1).setScale(1 / drawn).setData('drawn', drawn);
     const flip = saved ? saved.flip : Math.random() < 0.5 && this.kind === 'plush';
-    img.setFlipX(flip);
+    // (never mirrored: the front drawing is the front, the way it was sewn)
     // THE DEPTH.  A soft contact shadow where it sits, on the floor or on the
     // toys under it; and the light falls off into the pile -- the further back
     // and the further down a toy is, the more it is in the shade of the rest.
@@ -1434,21 +1434,40 @@ export class CraneGame extends Phaser.Scene {
   private fillSide(): void {
     this.sideToys.removeAll(true);
     this.sideHeld = null;
-    const placed: Array<{ x: number; half: number; top: number }> = [];
+    // ---- STACKED IN THREE DIMENSIONS, NOT ONE.
+    //
+    // A toy rests only on toys that are really under it: overlapping it
+    // ACROSS the glass (its front-view x) as well as along it (its depth).
+    // Packing by depth alone stood every toy at that depth on top of the
+    // last -- a column far taller than the machine, capped at the ceiling
+    // with nothing under it.  Toys side by side across the glass are, end on,
+    // simply in front of and behind each other at the same height.
+    const placed: Array<{ fx: number; fhalf: number; x: number; half: number; top: number }> = [];
     // lowest up: a toy can only rest on something already on the heap
     for (const t of [...this.toys].sort((a, b) => a.lift - b.lift)) {
       const k = scaleAt(t.z) * sideK(t.z);
-      const src = t.art.list[1] as Phaser.GameObjects.Image;
       const x = sideX(t.z);
-      const img = this.add.image(x, SIDE.floor, src.texture.key).setOrigin(0.5, 1).setScale((k * 0.95) / ((src.getData('drawn') as number) || 1));
+      // its own PROFILE drawing, at the size it is shown -- not the front one
+      const drawn = Math.round(t.size * 25) / 25;
+      const key = toyTexture(this, t.look as Parameters<typeof toyTexture>[1], drawn, 0, 'side');
+      const img = this.add.image(x, SIDE.floor, key).setOrigin(0.5, 1).setScale((k * 0.95) / drawn);
       const half = img.displayWidth / 2;
-      // the top of whatever it lands on, if anything
+      // how wide it is across the glass, in the front view's pixels
+      const fhalf = (TOY_W * t.size) / 2;
+      // the top of whatever is really under it, if anything
       let base = 0;
-      for (const q of placed) if (Math.abs(q.x - x) < (q.half + half) * 0.8) base = Math.max(base, q.top);
-      // it settles into the gap a little, the way a heap of capsules does
-      if (base > 0) base = Math.max(0, base - img.displayHeight * 0.3);
+      for (const q of placed) {
+        if (Math.abs(q.fx - t.x) < (q.fhalf + fhalf) * 0.6 && Math.abs(q.x - x) < (q.half + half) * 0.6) base = Math.max(base, q.top);
+      }
+      // how much of its picture is the toy: a capsule is a ball at the foot
+      // of a square drawing, with empty canvas over it -- counted as solid,
+      // that air held the next one up off it
+      const solid = img.displayHeight * (t.look.startsWith('capsule') ? 0.72 : 0.92);
+      // it settles into the gap a little, the way a heap does
+      if (base > 0) base = Math.max(0, base - solid * 0.25);
+      base = Math.min(base, Math.max(0, SIDE.floor - SIDE.top - 6 - img.displayHeight));
       img.setY(SIDE.floor - base);
-      placed.push({ x, half, top: base + img.displayHeight });
+      placed.push({ fx: t.x, fhalf, x, half, top: base + solid });
       img.setData('toy', t);
       this.sideToys.add(img);
     }
@@ -1494,7 +1513,8 @@ export class CraneGame extends Phaser.Scene {
     if (this.held && this.phase !== 'release') {
       if (!this.sideHeld) {
         const src = this.held.art.list[1] as Phaser.GameObjects.Image;
-        this.sideHeld = this.add.image(0, 0, src.texture.key).setOrigin(0.5, 1).setData('drawn', src.getData('drawn') || 1);
+        const drawn = (src.getData('drawn') as number) || 1;
+        this.sideHeld = this.add.image(0, 0, toyTexture(this, this.held.look as Parameters<typeof toyTexture>[1], drawn, 0, 'side')).setOrigin(0.5, 1).setData('drawn', drawn);
         this.sideBox.add(this.sideHeld);
       }
       this.sideHeld.setPosition(x, tip + (10 * CLAW_K + TOY_H * 0.8) * k).setScale((k * 0.95) / (this.sideHeld.getData('drawn') as number)).setVisible(true);

@@ -130,6 +130,9 @@ export class ArcadeLounge extends Phaser.Scene {
       props: [{ x: 284, y: 70, kind: 'plant' }],
       // (one, clear of the claw machines that now stand where the other was)
       vents: [236],
+      // (the hanging WIN sign would sit behind CREATURE CLASH's marquee: the
+      // cabinet is the thing that is lit up over there now)
+      avoid: [{ from: CLASH.x - CLASH_W / 2 - 4, to: CLASH.x + CLASH_W / 2 + 4 }],
     });
     this.paintSign();
     this.paintSideDoor();

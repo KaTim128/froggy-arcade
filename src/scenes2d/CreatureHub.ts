@@ -23,7 +23,7 @@ import { backPlate } from '../ui/plate';
 import { drawFrogToken } from '../ui/hud';
 import { xpProgress } from '../game/creatureLevel';
 import {
-  BATTLE_COST, BATTLE_WIN, BIOMES, BODIES, BOSS_AFTER, ELEMENTS, MAX_OWNED, RARITIES, STARTERS, TIERS, creatureById, tierOdds, type Attack, type Creature,
+  BATTLE_COST, BATTLE_WIN, BOSS_WIN, BIOMES, BODIES, BOSS_AFTER, ELEMENTS, MAX_OWNED, RARITIES, STARTERS, TIERS, creatureById, tierOdds, type Attack, type Creature,
 } from '../game/creatures';
 import { activeOwned, ownedCreature, bossOpen, claimStarter, needsRecovery, openPack, pickCard, release, retreat, setActive, setHanded } from '../game/creatureClash';
 
@@ -517,8 +517,9 @@ export class CreatureHub extends Phaser.Scene {
     L.add(text(this, px + 4, 92, b.boss.trick, PALETTE.ash));
     const open = bossOpen(b.id, c);
     L.add(button(this, px + 59, 110, open ? `BOSS  ${BATTLE_COST} TOK` : `BOSS AFTER ${BOSS_AFTER} WINS`, () => this.fight(b.id, true), { width: 108, height: 13, disabled: !open || ledger.balance() < BATTLE_COST }));
-    L.add(text(this, px + 4, 124, `WIN: +${BATTLE_WIN} TOKENS`, PALETTE.mossLight));
-    L.add(text(this, px + 4, 133, 'LOSE: YOUR CREATURE FAINTS', PALETTE.ash));
+    // (each line short enough for the panel: the long one ran out of it)
+    L.add(text(this, px + 4, 124, `WIN +${BATTLE_WIN}  BOSS +${BOSS_WIN}`, PALETTE.mossLight));
+    L.add(text(this, px + 4, 133, 'LOSS: IT FAINTS', PALETTE.ash));
     L.add(text(this, px + 4, 141, 'NO TOKENS LOST', PALETTE.ash));
     // ---- AND SOMEWHERE TO PRACTISE.  Free, in this world's own arena, on a
     // dummy that cannot hurt you: try the moves, learn the cover, walk about.
