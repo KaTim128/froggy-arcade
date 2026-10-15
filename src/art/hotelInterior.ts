@@ -1120,11 +1120,11 @@ export function paintBathroom(g: Ctx, fitted = true): void {
  */
 export const LIFT = {
   /** The doorway in the back wall. */
-  door: { x: 145, y: FLOOR_Y - 36, w: 30, h: 36 },
+  door: { x: 150, y: FLOOR_Y - 32, w: 20, h: 32 },
   /** The floor dial over it: where the number goes. */
-  dial: { x: 160, y: FLOOR_Y - 42 },
-  /** The buttons, floor 1 to 6: their top-left corners. */
-  button: (floor: number) => ({ x: 182 + ((floor - 1) % 2) * 6, y: 120 + (2 - Math.floor((floor - 1) / 2)) * 8 }),
+  dial: { x: 160, y: FLOOR_Y - 37 },
+  /** The buttons, floor 1 to 6 (3 by 3 each): their top-left corners. */
+  button: (floor: number) => ({ x: 174 + ((floor - 1) % 2) * 4, y: 126 + (2 - Math.floor((floor - 1) / 2)) * 5 }),
 };
 
 export function paintLift(g: Ctx): void {
@@ -1132,23 +1132,23 @@ export function paintLift(g: Ctx): void {
   // the car: a lift's size, not a hall's -- about three of him wide, the
   // back wall with the doors in it, the side walls and the floor coming out
   // towards us, and round it the dark of the shaft
-  const L = 116;
-  const R = 204;
-  const FL = 86;
-  const FR = 234;
-  const CF = 72;
-  const BACK_TOP = 100;
+  const L = 134;
+  const R = 186;
+  const FL = 114;
+  const FR = 206;
+  const CF = 92;
+  const BACK_TOP = 110;
   // the shaft: dark concrete, the guide rails and the cables
   rect(g, 0, 0, W, 180, '#0e1014');
   for (let y = 0; y < 180; y += 12) rect(g, 0, y, W, 1, '#16181e');
-  for (const x of [64, 252]) {
+  for (const x of [96, 220]) {
     rect(g, x, 0, 4, 180, '#2a2d33');
     rect(g, x, 0, 1, 180, '#3a3d44');
     for (let y = 6; y < 180; y += 24) rect(g, x - 2, y, 8, 2, '#24262c');
   }
-  for (const cx of [154, 160, 166]) rect(g, cx, 0, 1, CF - 6, '#2a2d33');
-  rect(g, FL + 20, CF - 7, FR - FL - 40, 6, '#24262c');
-  rect(g, FL + 20, CF - 7, FR - FL - 40, 1, '#3a3d44');
+  for (const cx of [156, 160, 164]) rect(g, cx, 0, 1, CF - 5, '#2a2d33');
+  rect(g, FL + 14, CF - 6, FR - FL - 28, 5, '#24262c');
+  rect(g, FL + 14, CF - 6, FR - FL - 28, 1, '#3a3d44');
   const poly = (pts: number[][], c: string, a = 1): void => {
     g.globalAlpha = a;
     g.fillStyle = c;
@@ -1163,25 +1163,25 @@ export function paintLift(g: Ctx): void {
   for (let k = 0; k < 2; k++) {
     const t = 0.3 + k * 0.4;
     const y = Math.round(CF + t * (BACK_TOP - CF));
-    const half = Math.round(((FR - FL) / 2) * (1 - t) + ((R - L) / 2) * t) - 12;
+    const half = Math.round(((FR - FL) / 2) * (1 - t) + ((R - L) / 2) * t) - 8;
     rect(g, 160 - half, y, half * 2, 2, '#fff6dc');
   }
-  glow(g, 160, CF + 12, 34, 0.2);
+  glow(g, 160, CF + 8, 22, 0.2);
   rect(g, FL, CF - 1, FR - FL, 2, '#6a7078');
   // the side walls, panelled, the handrail running along them
   for (const [x0, x1] of [[FL, L], [FR, R]]) {
     poly([[x0, CF], [x1, BACK_TOP], [x1, FLOOR_Y], [x0, 180]], '#9aa0a8');
-    for (let k = 1; k < 3; k++) {
-      const x = x0 + ((x1 - x0) * k) / 3;
-      const yt = CF + ((BACK_TOP - CF) * k) / 3;
-      const yb = 180 - ((180 - FLOOR_Y) * k) / 3;
+    for (let k = 1; k < 2; k++) {
+      const x = x0 + ((x1 - x0) * k) / 2;
+      const yt = CF + ((BACK_TOP - CF) * k) / 2;
+      const yb = 180 - ((180 - FLOOR_Y) * k) / 2;
       rect(g, Math.round(x), Math.round(yt), 1, Math.round(yb - yt), '#7a8088');
     }
     g.strokeStyle = HP.steelHi;
     g.lineWidth = 2;
     g.beginPath();
-    g.moveTo(x0, 148);
-    g.lineTo(x1, 137);
+    g.moveTo(x0, 146);
+    g.lineTo(x1, 139);
     g.stroke();
     // the front edge of the car, catching the light
     rect(g, x0 - (x0 < 160 ? 1 : 0), CF, 1, 180 - CF, '#c8ccd2');
@@ -1190,8 +1190,8 @@ export function paintLift(g: Ctx): void {
   rect(g, L, BACK_TOP, R - L, FLOOR_Y - BACK_TOP, '#a4aab2');
   for (let x = L; x < R; x += 3) rect(g, x, BACK_TOP, 1, FLOOR_Y - BACK_TOP, '#ffffff', 0.06);
   rect(g, L, BACK_TOP, R - L, 1, '#6a7078');
-  rect(g, L, 137, R - L, 2, HP.steelHi);
-  rect(g, L, 139, R - L, 1, HP.steelDark);
+  rect(g, L, 139, R - L, 1, HP.steelHi);
+  rect(g, L, 140, R - L, 1, HP.steelDark);
   rect(g, L, BACK_TOP, 1, FLOOR_Y - BACK_TOP, '#6a7078');
   rect(g, R - 1, BACK_TOP, 1, FLOOR_Y - BACK_TOP, '#6a7078');
   // the doors and their surround, landing-sized
@@ -1205,16 +1205,15 @@ export function paintLift(g: Ctx): void {
   }
   rect(g, d.x + d.w / 2, d.y, 1, d.h, HP.steelDark);
   // the floor dial over the doors
-  rect(g, LIFT.dial.x - 11, LIFT.dial.y - 5, 22, 10, HP.goldDark);
-  rect(g, LIFT.dial.x - 10, LIFT.dial.y - 4, 20, 8, HP.ink);
+  rect(g, LIFT.dial.x - 10, LIFT.dial.y - 4, 20, 9, HP.goldDark);
+  rect(g, LIFT.dial.x - 9, LIFT.dial.y - 3, 18, 7, HP.ink);
   // the button panel, beside the doors at hand height
-  rect(g, 179, 116, 16, 30, HP.goldDark);
-  rect(g, 180, 117, 14, 28, HP.gold);
+  rect(g, 172, 123, 11, 19, HP.goldDark);
+  rect(g, 173, 124, 9, 17, HP.gold);
   for (let f = 1; f <= 6; f++) {
     const b = LIFT.button(f);
-    rect(g, b.x, b.y, 5, 7, HP.goldDark);
-    rect(g, b.x + 1, b.y + 1, 3, 5, '#2a2d33');
-    signText(g, `${f}`, b.x + 2.5, b.y + 1, '#bfe8ff');
+    rect(g, b.x, b.y, 3, 3, '#2a2d33');
+    rect(g, b.x + 1, b.y + 1, 1, 1, '#bfe8ff');
   }
   // the floor: rubber, studded, running out to us
   poly([[L, FLOOR_Y], [R, FLOOR_Y], [FR, 180], [FL, 180]], '#3a3d44');
