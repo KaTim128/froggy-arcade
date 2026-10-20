@@ -186,6 +186,24 @@ export interface GameState {
    */
   hotelAfter: 'none' | 'police' | 'escape' | 'escaped';
   /**
+   * ---- TWO WEEKS LATER.  'back': over the roofs and away, and two weeks
+   * gone -- the player is outside the arcade again, their face on the wall,
+   * and the man has not yet had his word.  'live': he has (the $200, room
+   * 213, the police on the streets): the rest of the game is played here.
+   */
+  arc: 'none' | 'back' | 'live';
+  /**
+   * ---- BADGES.  The story's milestones, by id (game/badges).  The
+   * profile's, like `playSeconds`: a reset of the run keeps them, deleting
+   * the profile loses them.
+   */
+  badges: string[];
+  /**
+   * ---- ARRESTED.  The run ended in a cell: the profile is locked for good
+   * and can never be resumed (its badges can still be looked at).
+   */
+  jailed: boolean;
+  /**
    * ---- THE CRANES' GLASS, as it was left.  Every toy where it lay, keyed by
    * machine, and the real day the heap was tipped in: the heap is only
    * refilled on a new day, or once the machine is empty.
@@ -271,6 +289,9 @@ export interface SlotSummary {
   played: number;
   /** Seconds played on this profile. */
   playSeconds: number;
+  /** Arrested: the profile is locked and cannot be resumed. */
+  jailed: boolean;
+  badges: number;
 }
 
 interface SlotIndex {
@@ -380,6 +401,9 @@ function defaultState(): GameState {
     checkedIn: false,
     hotelNight: false,
     hotelAfter: 'none',
+    arc: 'none',
+    badges: [],
+    jailed: false,
     cranes: {},
     life: defaultLife(),
     creatures: defaultCreatures(),
@@ -480,6 +504,12 @@ class Store {
     fresh.playSeconds = Math.max(0, Number(run.playSeconds) || 0);
     fresh.items = Array.isArray(run.items) ? run.items.filter((i) => typeof i === 'string').slice(0, 3) : [];
     fresh.hotelAfter = run.hotelAfter === 'police' || run.hotelAfter === 'escape' || run.hotelAfter === 'escaped' ? run.hotelAfter : 'none';
+    fresh.arc = run.arc === 'back' || run.arc === 'live' ? run.arc : 'none';
+    fresh.badges = Array.isArray(run.badges) ? [...new Set(run.badges.filter((b) => typeof b === 'string'))] : [];
+    fresh.jailed = run.jailed === true;
+    // (a save from before the two weeks: out over the roofs and away already
+    // -- it picks up on the street outside the arcade, two weeks on)
+    if (fresh.hotelAfter === 'escaped' && fresh.arc === 'none') fresh.arc = 'back';
     fresh.timeOfDay = run.timeOfDay === 'evening' || run.timeOfDay === 'midnight' ? run.timeOfDay : 'day';
     // the cranes' glass: only well-formed toys come back
     fresh.cranes = {};
@@ -545,6 +575,8 @@ class Store {
       played,
       // the one in play is ahead of what is on disk by up to a flush
       playSeconds: id === this.index.active ? this.state.playSeconds : Math.max(0, Number(run?.playSeconds) || 0),
+      jailed: id === this.index.active ? this.state.jailed : run?.jailed === true,
+      badges: id === this.index.active ? this.state.badges.length : Array.isArray(run?.badges) ? run.badges.length : 0,
     };
   }
 
@@ -801,9 +833,14 @@ class Store {
   resetRun(): void {
     const settings = { ...this.state.settings };
     const playSeconds = this.state.playSeconds;
+    // (the profile's own: its badges, and a lock that no reset lifts)
+    const badges = [...this.state.badges];
+    const jailed = this.state.jailed;
     this.state = defaultState();
     this.state.settings = settings;
     this.state.playSeconds = playSeconds;
+    this.state.badges = badges;
+    this.state.jailed = jailed;
     this.flush();
     this.emit();
   }

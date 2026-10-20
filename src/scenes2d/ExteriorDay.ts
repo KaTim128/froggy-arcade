@@ -36,9 +36,12 @@ import { backWayOpen } from '../game/closingPull';
 import { attachPockets } from '../ui/pockets';
 import { ensureKeyInPocket, heldItems } from '../game/inventory';
 import { Pedestrians } from '../art/pedestrians';
+import { paintWantedPoster } from '../art/wantedPoster';
+import { earnBadge } from '../game/badges';
+import { moveInto213, payRent, rent, rentInDays, RENT_DAYS, RENT_PRICE } from '../game/life';
 import { SUNRISE_HOUR, twelveHour, BEG_MS, begNextMs, canBeg, clock, collectBegging, sleep, sleepPlace, startBegging, stopBegging, visit } from '../game/life';
 import { nightfallOnce, onPhaseTurn } from '../game/dayNight';
-import { speak } from '../ui/talkPanel';
+import { openTalkPanel, speak } from '../ui/talkPanel';
 import { backPlate, fitPrompt, SUBTITLE_Y } from '../ui/plate';
 import { resumeSpot, trackPlace } from '../game/place';
 import { BEG_SPOT_X, BEG_SPOT_Y, paintBegCup, paintBegSpot } from '../art/begSpot';
@@ -157,6 +160,12 @@ export class ExteriorDay extends Phaser.Scene {
     // does not need keeping hold of -- and at midnight he is not there.
     if (time !== 'midnight') new MysteryMan(this, MAN_X, WALK_Y + 4);
     else this.paintClosed(refs.doorRect);
+    // TWO WEEKS ON: your face, pasted over the arcade's own posters by the doors
+    if (st0.arc !== 'none') {
+      // (one either side of the doors, each over one of the arcade's own)
+      paintWantedPoster(this, 97, 95, 41);
+      paintWantedPoster(this, 199, 95, 41);
+    }
     // You come out of the doors standing at them, so going back in is one key
     // press away — the loop is meant to be walked dozens of times.
     // DAY COLOURS, on the one scene in the game that is painted in daylight.
@@ -232,7 +241,8 @@ export class ExteriorDay extends Phaser.Scene {
         () => !this.locked && !this.busy() && !this.begging,
       );
       if (this.opening && !this.woke) this.raiseShutter();
-      if (this.woke) this.wakeUp(this.woke);
+      if (st0.arc === 'back') this.time.delayedCall(700, () => this.comeBack());
+      else if (this.woke) this.wakeUp(this.woke);
       else {
         const line = nightfallOnce();
         if (line) this.time.delayedCall(500, () => this.say(line));
@@ -453,6 +463,9 @@ export class ExteriorDay extends Phaser.Scene {
     }
 
     const s = store.get();
+    // ---- THE RENT ON 213 IS HIS: due (or a week ahead), or the flat to take back
+    if (s.arc === 'live' && !this.rentAsked && (!s.life.rented || rentInDays(s.life) <= RENT_DAYS - 1)) return this.rentTalk();
+    this.rentAsked = false;
     if (canBeg()) {
       this.manSays('"You expect me to lend you money when you\'ve got nothing? Go earn it by begging!"');
       return;
@@ -591,6 +604,102 @@ export class ExteriorDay extends Phaser.Scene {
         this.say(`${twelveHour(SUNRISE_HOUR)}. SUNRISE - THE ARCADE IS OPEN.`);
       },
     });
+  }
+
+  /** Asked about the rent this visit: the next [E] goes on to the prizes. */
+  private rentAsked = false;
+
+  /**
+   * ---- ROOM 213'S RENT, TO HIM.  $100 a week, paid here, on the street;
+   * or, if it has lapsed, the flat to have again.  The prizes are the other
+   * answer.
+   */
+  private rentTalk(): void {
+    if (this.talking) return;
+    const l = store.get().life;
+    const d = rentInDays(l);
+    const line = !l.rented
+      ? `"213's empty since you stopped paying. $${RENT_PRICE} and the key's yours again."`
+      : d < 0
+        ? `"You're late. $${RENT_PRICE} for 213, now, or I find a tenant who pays."`
+        : d === 0
+          ? `"Rent day. $${RENT_PRICE} for 213, cash, to me."`
+          : `"Rent on 213's due in ${d} ${d === 1 ? 'day' : 'days'}. Pay ahead if you like: $${RENT_PRICE}."`;
+    const done = (msg: string) => {
+      this.talking = null;
+      this.say(msg);
+    };
+    this.talking = openTalkPanel(this, {
+      speaker: 'man',
+      line,
+      depth: 950,
+      options: [
+        {
+          label: l.rented ? `PAY $${RENT_PRICE}` : `RENT 213 - $${RENT_PRICE}`,
+          fn: () => {
+            const r = l.rented ? payRent() : rent();
+            if (r.ok) audio.sfx('coin_drop', 0.6);
+            store.flush();
+            done(r.msg);
+          },
+        },
+        {
+          label: 'PRIZES',
+          fn: () => {
+            this.talking = null;
+            this.rentAsked = true;
+            this.spot = 'man';
+            this.interact();
+          },
+        },
+        { label: 'LATER', fn: () => (this.talking = null) },
+      ],
+    });
+  }
+
+  /**
+   * ---- BACK, TWO WEEKS LATER.  Your own face on the arcade's wall, and the
+   * man has a word: $200 for the trouble, a flat at Lily's (Level 2, room
+   * 213, the middle door -- a week free, then the rent is his), and the
+   * police on the streets now and then.  Nobody moves till he has said it.
+   */
+  private comeBack(): void {
+    this.locked = true;
+    this.errand = null;
+    this.player.face(1);
+    this.say('...IS THAT MY FACE? ON THE WALL?');
+    earnBadge('most_wanted', this);
+    const lines = [
+      '"Well, well. If it isn\'t the most famous face on the street."',
+      '"Something strange went on at Lily\'s that night. And you were right in the middle of it. I\'d bet my hat."',
+      '"Here. $200. Call it compensation for the rental situation... and everything after it."',
+      '"Don\'t go soft on me, though. I still want my prizes. And I still want them cheap."',
+      '"A word of warning: the police patrol these streets now and then. They\'ve all seen that poster."',
+      '"If one spots you, get out of sight. Into the arcade, down the alley, or home."',
+      '"Home is Lily\'s again. I rented you a flat: LEVEL 2, ROOM 213. The middle door."',
+      `"The first week's on me. After that the rent comes to me, not the landlord. $${RENT_PRICE} a week."`,
+      '"Why? A roof over your head keeps you winning prizes. And I do like easy money."',
+    ];
+    let i = 0;
+    const next = (): void => {
+      if (i >= lines.length) {
+        store.earnCash(200);
+        moveInto213();
+        store.patch({ arc: 'live' });
+        store.flush();
+        audio.sfx('coin_drop', 0.7);
+        this.talking = null;
+        this.locked = false;
+        this.say('$200, AND A KEY: LILY\'S, LEVEL 2, ROOM 213.');
+        return;
+      }
+      this.talking = speak(this, 'man', lines[i++], () => {
+        this.talking = null;
+        // (the next on the next frame: not the same press)
+        this.time.delayedCall(60, next);
+      });
+    };
+    this.time.delayedCall(2600, next);
   }
 
   /** The man in black says something, in his own box. */
