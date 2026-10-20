@@ -38,6 +38,8 @@ const FIT_W = 26;
 /** The booth's top: a cubicle a little taller than a person, not a wardrobe to the ceiling. */
 const FIT_TOP = 84;
 const MIRROR_X = 258;
+/** The mirror on the wall: its frame, top to bottom (shorter than it was). */
+const MIRROR = { w: 24, top: 46, h: 40 };
 
 /** A bald, pale shop dummy, wearing `top`. */
 function mannequin(top: CosmeticDef): Look {
@@ -146,33 +148,138 @@ export class ClothesStore extends WalkRoom {
     const hats = this.forSale('hat');
     const hx = 300;
     const hs = this.add.graphics().setDepth(depthFor(FRONT_ROW));
-    hs.fillStyle(0x14100c, 1).fillRect(hx - 1, FRONT_ROW - 30, 3, 30).fillRect(hx - 8, FRONT_ROW - 2, 17, 2);
+    // ---- THE STAND: a weighted round foot, a turned pole, and two pegs
+    // angled up off it, each going up INTO a hat's crown -- the hats rest on
+    // the pegs, they do not hang in the air beside them.
+    const INK = 0x14100c;
+    hs.fillStyle(0x000000, 0.22).fillEllipse(hx, FRONT_ROW, 22, 4);
+    hs.fillStyle(INK, 1).fillEllipse(hx, FRONT_ROW - 2, 20, 6);
+    hs.fillStyle(0x4a3326, 1).fillEllipse(hx, FRONT_ROW - 2, 18, 4);
+    hs.fillStyle(0x6a4a34, 1).fillRect(hx - 7, FRONT_ROW - 4, 12, 1);
+    hs.fillStyle(INK, 1).fillRect(hx - 2, FRONT_ROW - 34, 4, 32);
+    hs.fillStyle(0x4a3326, 1).fillRect(hx - 1, FRONT_ROW - 33, 2, 30);
+    hs.fillStyle(0x6a4a34, 1).fillRect(hx - 1, FRONT_ROW - 33, 1, 30);
+    hs.fillStyle(0xd8a838, 1).fillRect(hx - 2, FRONT_ROW - 36, 4, 3);
+    hs.fillStyle(0xf0d070, 1).fillRect(hx - 1, FRONT_ROW - 36, 2, 1);
+    const pegs = [
+      { x: hx - 9, y: FRONT_ROW - 29, from: FRONT_ROW - 22 },
+      { x: hx + 9, y: FRONT_ROW - 20, from: FRONT_ROW - 13 },
+    ];
+    for (const pg of pegs) {
+      const dir = Math.sign(pg.x - hx);
+      for (let k = 0; k <= 7; k++) {
+        const px = hx + dir * (1 + k);
+        const py = pg.from - k;
+        hs.fillStyle(INK, 1).fillRect(px - 1, py - 1, 3, 3);
+      }
+      for (let k = 0; k <= 7; k++) {
+        const px = hx + dir * (1 + k);
+        const py = pg.from - k;
+        hs.fillStyle(0x6a4a34, 1).fillRect(px, py, 1, 1);
+      }
+    }
     hats.slice(0, 2).forEach((c, i) => {
-      const x = hx + (i === 0 ? -9 : 9);
-      const y = FRONT_ROW - 26 + i * 8;
-      hs.fillStyle(0x14100c, 1).fillEllipse(x, y, 12, 8);
-      hs.fillStyle(c.cols.B ?? 0x444444, 1).fillEllipse(x, y, 10, 6);
-      hs.fillStyle(c.cols.b ?? 0x666666, 1).fillRect(x - 5, y + 1, c.head ? 9 : 10, 2);
+      const pg = pegs[i];
+      const crown = c.cols.B ?? 0x444444;
+      const band = c.cols.b ?? 0x666666;
+      const dark = Phaser.Display.Color.ValueToColor(crown).darken(25).color;
+      const lit = Phaser.Display.Color.ValueToColor(crown).lighten(18).color;
+      const x = pg.x;
+      const top = pg.y - 6; // the peg's tip is up inside the crown
+      // the crown, outlined, lit on the left and shaded on the right
+      hs.fillStyle(INK, 1).fillRoundedRect(x - 6, top - 1, 12, 9, 3);
+      hs.fillStyle(crown, 1).fillRoundedRect(x - 5, top, 10, 8, 3);
+      hs.fillStyle(lit, 1).fillRect(x - 4, top + 1, 2, 5);
+      hs.fillStyle(dark, 1).fillRect(x + 2, top + 1, 2, 6);
+      // the band round it
+      hs.fillStyle(band, 1).fillRect(x - 5, top + 5, 10, 2);
+      // the brim, wider than the crown, with its own lit edge and shadow
+      hs.fillStyle(INK, 1).fillEllipse(x, top + 8, 18, 5);
+      hs.fillStyle(crown, 1).fillEllipse(x, top + 8, 16, 3);
+      hs.fillStyle(lit, 1).fillRect(x - 6, top + 7, 6, 1);
+      hs.fillStyle(dark, 1).fillRect(x - 5, top + 9, 10, 1);
     });
     this.tagRack(hx, FRONT_ROW + 1, 'HATS');
     this.solidBox(hx, FRONT_ROW, 10);
     this.racks.push({ x: hx, y: FRONT_ROW, w: 14, depth: 0, tab: 2, name: 'THE HAT STAND' });
 
+    // ---- THE SCARVES, each over a brass hook on the wall: looped over it,
+    // the two ends falling to different lengths, knitted in two tones with
+    // a stripe, fringed at the ends, and shaded where the loop turns under
     this.forSale('scarf').slice(0, 2).forEach((c, i) => {
-      const x = MIRROR_X + 20 + i * 18;
+      const x = MIRROR_X + 22 + i * 18;
       const sc = this.add.graphics().setDepth(2);
-      sc.fillStyle(0x3a3a3a, 1).fillRect(x - 1, 52, 3, 2);
-      sc.fillStyle(0x14100c, 1).fillRect(x - 4, 53, 9, 28);
-      sc.fillStyle(c.cols.w ?? 0x888888, 1).fillRect(x - 3, 54, 7, 26);
-      sc.fillStyle(0xffffff, 0.25).fillRect(x - 3, 58, 7, 1).fillRect(x - 3, 70, 7, 1);
+      const wool = c.cols.w ?? 0x888888;
+      const dark = Phaser.Display.Color.ValueToColor(wool).darken(22).color;
+      const lit = Phaser.Display.Color.ValueToColor(wool).lighten(16).color;
+      const stripe = c.cols.C ?? Phaser.Display.Color.ValueToColor(wool).darken(40).color;
+      const ink = 0x14100c;
+      // the hook: a brass plate and its curl
+      sc.fillStyle(ink, 1).fillRect(x - 2, 47, 5, 4);
+      sc.fillStyle(0xd8a838, 1).fillRect(x - 1, 48, 3, 2);
+      sc.fillStyle(0xf0d070, 1).fillRect(x - 1, 48, 1, 1);
+      // the loop over the hook
+      sc.fillStyle(ink, 1).fillRoundedRect(x - 5, 49, 11, 6, 2);
+      sc.fillStyle(wool, 1).fillRoundedRect(x - 4, 50, 9, 4, 2);
+      sc.fillStyle(lit, 1).fillRect(x - 3, 50, 6, 1);
+      // the two ends: the long one in front, the short one behind it
+      const end = (ex: number, len: number, front: boolean) => {
+        sc.fillStyle(ink, 1).fillRect(ex - 1, 53, 6, len + 2);
+        sc.fillStyle(front ? wool : dark, 1).fillRect(ex, 54, 4, len);
+        if (front) sc.fillStyle(lit, 1).fillRect(ex, 54, 1, len);
+        // the knit: a row of stitches every other line
+        for (let y = 56; y < 54 + len - 3; y += 2) sc.fillStyle(front ? dark : ink, 0.35).fillRect(ex + 1 + ((y / 2) % 2), y, 1, 1);
+        // a stripe across, near the end
+        sc.fillStyle(stripe, 1).fillRect(ex, 54 + len - 6, 4, 2);
+        // the fringe
+        for (let k = 0; k < 4; k += 1) sc.fillStyle(k % 2 ? dark : wool, 1).fillRect(ex + k, 54 + len, 1, 3);
+      };
+      end(x + 1, 16, false);
+      end(x - 4, 22, true);
+      // the shade where the loop turns under itself
+      sc.fillStyle(dark, 1).fillRect(x - 3, 54, 8, 1);
     });
     this.racks.push({ x: MIRROR_X + 29, y: FLOOR, w: 40, depth: 0, wall: true, tab: 2, name: 'THE HOOKS' });
 
-    // ---- the mirror
+    // ---- THE MIRROR: shorter than it was, and made the way the booth is --
+    // an ink line round it, a walnut frame lit on the left and shaded on the
+    // right with brass at the corners, and glass that shows the room back:
+    // the pink of the walls in it, darker to the foot, with two bright
+    // streaks of shine across it
     const m = this.add.graphics().setDepth(2);
-    m.fillStyle(0x6a4a2a, 1).fillRect(MIRROR_X - 13, 30, 26, 56);
-    m.fillStyle(0xcfe4ee, 1).fillRect(MIRROR_X - 11, 32, 22, 52);
-    m.fillStyle(0xffffff, 0.5).fillRect(MIRROR_X - 7, 36, 3, 40);
+    const mx = MIRROR_X - MIRROR.w / 2;
+    const my = MIRROR.top;
+    m.fillStyle(0x000000, 0.12).fillRect(mx + 2, my + 2, MIRROR.w, MIRROR.h);
+    m.fillStyle(0x14100c, 1).fillRect(mx - 1, my - 1, MIRROR.w + 2, MIRROR.h + 2);
+    m.fillStyle(0x4a3326, 1).fillRect(mx, my, MIRROR.w, MIRROR.h);
+    m.fillStyle(0x6a4a34, 1).fillRect(mx, my, 1, MIRROR.h).fillRect(mx, my, MIRROR.w, 1);
+    m.fillStyle(0x32221a, 1).fillRect(mx + MIRROR.w - 1, my, 1, MIRROR.h).fillRect(mx, my + MIRROR.h - 1, MIRROR.w, 1);
+    const gx0 = mx + 3;
+    const gy0 = my + 3;
+    const glw = MIRROR.w - 6;
+    const glh = MIRROR.h - 6;
+    m.fillStyle(0x14100c, 1).fillRect(gx0 - 1, gy0 - 1, glw + 2, glh + 2);
+    for (let y = 0; y < glh; y++) {
+      const k = y / glh;
+      const col = Phaser.Display.Color.Interpolate.ColorWithColor(
+        Phaser.Display.Color.ValueToColor(0xe4eef2),
+        Phaser.Display.Color.ValueToColor(0xd8b8c8),
+        100,
+        Math.round(k * 100),
+      );
+      m.fillStyle(Phaser.Display.Color.GetColor(col.r, col.g, col.b), 1).fillRect(gx0, gy0 + y, glw, 1);
+    }
+    // the room behind you in it: the panelling's line and the floor's edge
+    m.fillStyle(0xf0d8e4, 0.6).fillRect(gx0, gy0 + glh - 9, glw, 1);
+    m.fillStyle(0xbeb6ba, 0.5).fillRect(gx0, gy0 + glh - 4, glw, 4);
+    // shine
+    for (let k = 0; k < 9; k++) m.fillStyle(0xffffff, 0.55).fillRect(gx0 + 3 + Math.floor(k / 3), gy0 + 3 + k, 1, 1);
+    for (let k = 0; k < 6; k++) m.fillStyle(0xffffff, 0.35).fillRect(gx0 + 7 + Math.floor(k / 3), gy0 + 4 + k, 1, 1);
+    // brass at the corners
+    for (const [cx, cy] of [[mx, my], [mx + MIRROR.w - 2, my], [mx, my + MIRROR.h - 2], [mx + MIRROR.w - 2, my + MIRROR.h - 2]]) {
+      m.fillStyle(0xd8a838, 1).fillRect(cx, cy, 2, 2);
+      m.fillStyle(0xf0d070, 1).fillRect(cx, cy, 1, 1);
+    }
 
     // ---- the fitting room, in the middle of the shop: a booth against the
     // back wall, its curtain, and its name on the pelmet
@@ -236,9 +343,24 @@ export class ClothesStore extends WalkRoom {
     // the light over the booth, and the pool it throws down the curtain
     fr.fillStyle(0xfff0d0, 0.1).fillRect(fl, FIT_TOP + 5, FIT_W, 10);
     fr.fillStyle(0xfff0d0, 0.06).fillRect(fl, FIT_TOP + 15, FIT_W, 12);
-    // and its little sign on the wall over it
-    const sign = text(this, FIT_X, FIT_TOP - 11, 'FITTING', 0xff8ac0).setOrigin(0.5, 0).setDepth(2.1);
-    this.add.rectangle(FIT_X, FIT_TOP - 7, sign.width + 6, 10, 0x2a1430).setStrokeStyle(1, 0xd8a838).setDepth(2);
+    // ---- ITS SIGN, hung over it on two brass chains: FITTING ROOM in two
+    // lines of the game's own letters, cream on the booth's velvet, a brass
+    // rim round the plate with a lit top edge and a shadow under it
+    const sg = this.add.graphics().setDepth(2);
+    const SW = 50;
+    const SH = 21;
+    const sx0 = FIT_X - SW / 2;
+    const sy0 = FIT_TOP - SH - 6;
+    sg.fillStyle(0xd8a838, 1).fillRect(sx0 + 8, sy0 - 4, 1, 4).fillRect(sx0 + SW - 9, sy0 - 4, 1, 4);
+    sg.fillStyle(0x000000, 0.18).fillRect(sx0 + 1, sy0 + SH + 1, SW, 1);
+    sg.fillStyle(0x14100c, 1).fillRect(sx0 - 1, sy0 - 1, SW + 2, SH + 2);
+    sg.fillStyle(0xd8a838, 1).fillRect(sx0, sy0, SW, SH);
+    sg.fillStyle(0xf0d070, 1).fillRect(sx0, sy0, SW, 1);
+    sg.fillStyle(0x8a6418, 1).fillRect(sx0, sy0 + SH - 1, SW, 1);
+    sg.fillStyle(0x4a2450, 1).fillRect(sx0 + 2, sy0 + 2, SW - 4, SH - 4);
+    sg.fillStyle(0x6a3a70, 1).fillRect(sx0 + 2, sy0 + 2, SW - 4, 1);
+    text(this, FIT_X, sy0 + 3, 'FITTING', 0xf6e6c8).setOrigin(0.5, 0).setDepth(2.1);
+    text(this, FIT_X, sy0 + 11, 'ROOM', 0xf6e6c8).setOrigin(0.5, 0).setDepth(2.1);
 
     // ---- the till, just inside the doors, and the assistant behind it
     this.counter = this.paintCounter({
@@ -299,7 +421,7 @@ export class ClothesStore extends WalkRoom {
         hit: r.wall ? { x: r.x - r.w / 2, y: 48, w: r.w, h: 40 } : { x: r.x - r.w / 2, y: r.y - 26, w: r.w, h: 30 },
       });
     }
-    out.push({ x: MIRROR_X, y: this.floorTop, w: 22, depth: 0, wall: true, label: () => '[E] MIRROR', use: () => this.mirror(), hit: { x: MIRROR_X - 13, y: 30, w: 26, h: 56 } });
+    out.push({ x: MIRROR_X, y: this.floorTop, w: 22, depth: 0, wall: true, label: () => '[E] MIRROR', use: () => this.mirror(), hit: { x: MIRROR_X - MIRROR.w / 2, y: MIRROR.top, w: MIRROR.w, h: MIRROR.h } });
     out.push({ x: FIT_X, y: BACK_ROW, w: FIT_W, depth: 6, label: () => '[E] FITTING ROOM', use: () => this.fitting(), hit: { x: FIT_X - FIT_W / 2, y: FIT_TOP - 12, w: FIT_W, h: BACK_ROW - FIT_TOP + 14 } });
     if (this.counter) out.push(this.counter);
     return out;
