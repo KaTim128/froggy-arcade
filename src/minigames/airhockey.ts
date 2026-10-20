@@ -311,6 +311,9 @@ export const airHockey: MinigameModule = {
       }
     }
 
+    // where his mallet starts this frame, for how fast it swings into the puck
+    const aiFrom: Vec = { x: aiPad.x, y: aiPad.y };
+
     // ---- AI: chase a 140ms-old view of the puck
     history.push({ t: elapsed, x: puck.x, y: puck.y });
     while (history.length > 2 && elapsed - history[0].t > AI_REACTION_MS) history.shift();
@@ -379,38 +382,37 @@ export const airHockey: MinigameModule = {
     // the faces ride their strikers
     dressPads();
 
-    // ---- puck
+    // ---- THE PUCK, IN SMALL STEPS.
+    //
+    // A fast puck -- or a mallet that jumps with the mouse -- can travel
+    // further in one frame than the two of them are wide, and checked once a
+    // frame it was found halfway through the mallet and pushed out of the
+    // wrong side: the puck that seemed to pass through, or to wrap round it.
+    // The frame is cut into steps no longer than the puck's radius, the two
+    // mallets swept along their paths through it, and every step is the
+    // walls, then each mallet.
     const dt = delta / 1000;
-    puck.x += vel.x * dt;
-    puck.y += vel.y * dt;
-
-    if (puck.x < TABLE.x + PUCK_R) {
-      puck.x = TABLE.x + PUCK_R;
-      vel.x = Math.abs(vel.x);
-      audio.sfx('ui_hover');
+    const padFrom = { ...padPrev };
+    const padMove = Math.hypot(pad.x - padFrom.x, pad.y - padFrom.y);
+    const aiMove = Math.hypot(aiPad.x - aiFrom.x, aiPad.y - aiFrom.y);
+    const puckMove = Math.hypot(vel.x, vel.y) * dt;
+    const steps = Phaser.Math.Clamp(Math.ceil(Math.max(padMove, aiMove, puckMove) / (PUCK_R * 0.75)), 1, 12);
+    const sdt = dt / steps;
+    // each mallet's velocity over the frame, px/s
+    const padVel: Vec = { x: (pad.x - padFrom.x) / Math.max(dt, 1e-4), y: (pad.y - padFrom.y) / Math.max(dt, 1e-4) };
+    const aiVel: Vec = { x: (aiPad.x - aiFrom.x) / Math.max(dt, 1e-4), y: (aiPad.y - aiFrom.y) / Math.max(dt, 1e-4) };
+    let hit = false;
+    for (let k = 1; k <= steps; k++) {
+      const f = k / steps;
+      puck.x += vel.x * sdt;
+      puck.y += vel.y * sdt;
+      const scored = walls();
+      if (scored !== null) return goal(scored);
+      hit = collide({ x: padFrom.x + (pad.x - padFrom.x) * f, y: padFrom.y + (pad.y - padFrom.y) * f }, padVel, sdt) || hit;
+      hit = collide({ x: aiFrom.x + (aiPad.x - aiFrom.x) * f, y: aiFrom.y + (aiPad.y - aiFrom.y) * f }, aiVel, sdt) || hit;
     }
-    if (puck.x > TABLE.x + TABLE.w - PUCK_R) {
-      puck.x = TABLE.x + TABLE.w - PUCK_R;
-      vel.x = -Math.abs(vel.x);
-      audio.sfx('ui_hover');
-    }
+    if (hit) audio.sfx('whack');
 
-    const gx0 = TABLE.x + (TABLE.w - GOAL_W) / 2;
-    const inGoalX = puck.x > gx0 && puck.x < gx0 + GOAL_W;
-
-    if (puck.y < TABLE.y + PUCK_R) {
-      if (inGoalX) return goal(true);
-      puck.y = TABLE.y + PUCK_R;
-      vel.y = Math.abs(vel.y);
-    }
-    if (puck.y > TABLE.y + TABLE.h - PUCK_R) {
-      if (inGoalX) return goal(false);
-      puck.y = TABLE.y + TABLE.h - PUCK_R;
-      vel.y = -Math.abs(vel.y);
-    }
-
-    collide(pad, { x: pad.x - padPrev.x, y: pad.y - padPrev.y }, delta);
-    collide(aiPad, { x: 0, y: 0 }, delta);
     unstick(pad, 'pad', delta);
     unstick(aiPad, 'ai', delta);
 
@@ -520,53 +522,126 @@ function keepOffPuck(p: Phaser.GameObjects.Arc): void {
   p.setPosition(puck.x + nx * KEEP_OFF, puck.y + ny * KEEP_OFF);
 }
 
-function collide(p: Phaser.GameObjects.Arc, padVel: Vec, delta: number): void {
-  if (!puck) return;
-  const dx = puck.x - p.x;
-  const dy = puck.y - p.y;
-  const d = Math.hypot(dx, dy);
-  if (d > PAD_R + PUCK_R || d === 0) return;
+/**
+ * The boards and the goal mouths, for one step.  Returns who scored if the
+ * puck went in (true: you), or null.
+ */
+function walls(): boolean | null {
+  if (!puck) return null;
+  if (puck.x < TABLE.x + PUCK_R) {
+    puck.x = TABLE.x + PUCK_R;
+    vel.x = Math.abs(vel.x);
+    audio.sfx('ui_hover');
+  }
+  if (puck.x > TABLE.x + TABLE.w - PUCK_R) {
+    puck.x = TABLE.x + TABLE.w - PUCK_R;
+    vel.x = -Math.abs(vel.x);
+    audio.sfx('ui_hover');
+  }
+  const gx0 = TABLE.x + (TABLE.w - GOAL_W) / 2;
+  const inGoalX = puck.x > gx0 && puck.x < gx0 + GOAL_W;
+  if (puck.y < TABLE.y + PUCK_R) {
+    if (inGoalX) return true;
+    puck.y = TABLE.y + PUCK_R;
+    vel.y = Math.abs(vel.y);
+  }
+  if (puck.y > TABLE.y + TABLE.h - PUCK_R) {
+    if (inGoalX) return false;
+    puck.y = TABLE.y + TABLE.h - PUCK_R;
+    vel.y = -Math.abs(vel.y);
+  }
+  return null;
+}
 
-  const nx = dx / d;
-  const ny = dy / d;
-  puck.x = p.x + nx * (PAD_R + PUCK_R + 0.5);
-  puck.y = p.y + ny * (PAD_R + PUCK_R + 0.5);
-  // Never out through the boards: a mallet pressing a puck into a corner used
-  // to shove it clean outside the table, where it sat forever.  Kept in, it
-  // comes off the boards instead.
-  let nxOut = nx;
-  let nyOut = ny;
+/** How much of the speed into a mallet comes back out of it. */
+const RESTITUTION = 0.88;
+
+/**
+ * ONE MALLET AGAINST THE PUCK, as a real collision.
+ *
+ * The mallet is the heavy one (a hand is behind it), so it is not moved: the
+ * puck is put back outside it along the line between their centres, and --
+ * only if the two are closing on each other along that line -- the part of
+ * the puck's velocity relative to the mallet that points into it is turned
+ * round, a little softer.  So a puck that meets a still mallet glances off
+ * it at the angle it came in at; a mallet swung into a still puck sends it
+ * off along the line of the hit at up to twice the swing; and a puck already
+ * leaving is let go, instead of being turned back into the mallet to go
+ * round and round it (which is what the old one did).
+ */
+function collide(m: Vec, mVel: Vec, stepS: number): boolean {
+  if (!puck) return false;
+  let dx = puck.x - m.x;
+  let dy = puck.y - m.y;
+  let d = Math.hypot(dx, dy);
+  const reach = PAD_R + PUCK_R;
+  if (d >= reach) return false;
+  // ---- BACK TO THE MOMENT THEY TOUCHED.  Found up to a step inside the
+  // mallet, the line between the centres is not the one they met on, and
+  // the bounce comes off at the wrong angle (an off-centre hit sent nearly
+  // flat).  Run the two back along their relative motion to where they were
+  // just touching -- within this step -- and bounce from there.
+  const wx = vel.x - mVel.x;
+  const wy = vel.y - mVel.y;
+  const ww = wx * wx + wy * wy;
+  let back = 0;
+  if (ww > 1e-6) {
+    const dw = dx * wx + dy * wy;
+    const disc = dw * dw - ww * (dx * dx + dy * dy - reach * reach);
+    if (disc >= 0) back = Math.min(stepS, Math.max(0, (dw + Math.sqrt(disc)) / ww));
+  }
+  if (back > 0) {
+    dx -= wx * back;
+    dy -= wy * back;
+    d = Math.hypot(dx, dy);
+  }
+  // dead centre: out the way the mallet is moving, or down the table
+  const ms = Math.hypot(mVel.x, mVel.y);
+  const nx = d > 1e-6 ? dx / d : ms > 1e-6 ? mVel.x / ms : 0;
+  const ny = d > 1e-6 ? dy / d : ms > 1e-6 ? mVel.y / ms : 1;
+  // (the contact point, as the mallet stands now)
+  puck.x = m.x + nx * (reach + 0.25);
+  puck.y = m.y + ny * (reach + 0.25);
+
+  // Never out through the boards: a mallet pressing a puck into the side or
+  // an end wall is pushing it into something that pushes back, so it comes
+  // off along the boards instead of out through them.
+  let wedgedX = false;
+  let wedgedY = false;
   if (puck.x < TABLE.x + PUCK_R || puck.x > TABLE.x + TABLE.w - PUCK_R) {
     puck.x = Phaser.Math.Clamp(puck.x, TABLE.x + PUCK_R, TABLE.x + TABLE.w - PUCK_R);
-    nxOut = -nx;
+    wedgedX = true;
   }
   const gx0 = TABLE.x + (TABLE.w - GOAL_W) / 2;
   const inGoalX = puck.x > gx0 && puck.x < gx0 + GOAL_W;
   if (!inGoalX && (puck.y < TABLE.y + PUCK_R || puck.y > TABLE.y + TABLE.h - PUCK_R)) {
     puck.y = Phaser.Math.Clamp(puck.y, TABLE.y + PUCK_R, TABLE.y + TABLE.h - PUCK_R);
-    nyOut = -ny;
+    wedgedY = true;
   }
 
-  const dot = vel.x * nx + vel.y * ny;
-  vel.x = (vel.x - 2 * dot * nx) * 0.98;
-  vel.y = (vel.y - 2 * dot * ny) * 0.98;
-
-  // the puck inherits some of the paddle's motion
-  const inherit = 1000 / Math.max(1, delta);
-  vel.x += padVel.x * inherit * 0.28;
-  vel.y += padVel.y * inherit * 0.28;
-
-  if (nxOut !== nx || nyOut !== ny) {
-    // wedged: off the boards, whichever way is open
-    vel.x = Math.max(Math.abs(vel.x), 60) * Math.sign(nxOut || 1);
-    vel.y = Math.max(Math.abs(vel.y), 60) * Math.sign(nyOut || 1);
-  }
+  // the puck's velocity as the mallet sees it, along the line between them
+  const rvx = vel.x - mVel.x;
+  const rvy = vel.y - mVel.y;
+  const closing = rvx * nx + rvy * ny;
+  if (closing >= 0) return false; // already parting: nothing to bounce
+  const j = -(1 + RESTITUTION) * closing;
+  vel.x += j * nx;
+  vel.y += j * ny;
+  // and on from the touch for the part of the step it was run back
+  puck.x += (vel.x - mVel.x) * back;
+  puck.y += (vel.y - mVel.y) * back;
+  // squeezed against the boards: the blocked direction is handed back as the
+  // way out, so it squirts along the wall instead of sticking to it
+  if (wedgedX) vel.x = -vel.x * 0.6;
+  if (wedgedY) vel.y = -vel.y * 0.6;
+  // no faster than the table allows, straight away: a mallet that jumped
+  // with the mouse would otherwise fling it across the rest of this frame
   const sp = Math.hypot(vel.x, vel.y);
-  if (sp < 120) {
-    vel.x = nxOut * 150;
-    vel.y = nyOut * 150;
+  if (sp > MAX_SPEED) {
+    vel.x = (vel.x / sp) * MAX_SPEED;
+    vel.y = (vel.y / sp) * MAX_SPEED;
   }
-  audio.sfx('whack');
+  return true;
 }
 
 function goal(playerScored: boolean): void {
