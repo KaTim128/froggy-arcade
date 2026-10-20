@@ -22,7 +22,7 @@ import { BINDINGS } from '../core/input';
 import { button, centerText, confirmDialog, forfeitLines, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { isTouch } from '../core/device';
-import { jumpToScene, leaveToMenu, pausedScene, resumePause, returnToLobby } from '../core/pause';
+import { jumpToScene, leaveToMenu, pausedScene, resumePause } from '../core/pause';
 import { ROOM_MONEY } from './PrizeExchange';
 import { roomControls, type ControlRow } from '../ui/controlsList';
 import type { MinigameScene } from './MinigameScene';
@@ -61,8 +61,7 @@ export class SettingsModal extends Phaser.Scene {
 
     // 280x162 rather than 250x150: the controls list grew past what the old
     // panel could hold without running its last row under the BACK button.
-    // (the pause menu is taller: RESUME on its own row, then the two ways out)
-    this.add.rectangle(GAME_W / 2, GAME_H / 2, 280, this.pause ? 176 : 162, PALETTE.ink).setStrokeStyle(1, PALETTE.neon);
+    this.add.rectangle(GAME_W / 2, GAME_H / 2, 280, 162, PALETTE.ink).setStrokeStyle(1, PALETTE.neon);
     centerText(this, GAME_W / 2, 18, this.pause ? 'PAUSED' : 'SETTINGS', PALETTE.gold, 8);
 
     // The admin run gets a third tab: jumps to points of the story, for testing.
@@ -76,12 +75,9 @@ export class SettingsModal extends Phaser.Scene {
     this.renderBody();
 
     if (this.pause) {
-      button(this, GAME_W / 2, 153, 'RESUME', () => resumePause(), { width: 70, height: 13 });
-      // TWO WAYS OUT: back to the game's lobby (the same profile, straight
-      // back in), or right out to the title screen.
-      button(this, GAME_W / 2 - 66, 168, 'RETURN TO GAME LOBBY', () => this.leave('lobby'), { width: 128, height: 13 });
-      button(this, GAME_W / 2 + 66, 168, 'EXIT TO START MENU', () => this.leave('menu'), {
-        width: 128,
+      button(this, GAME_W / 2 - 52, 158, 'RESUME', () => resumePause(), { width: 70, height: 13 });
+      button(this, GAME_W / 2 + 48, 158, 'EXIT TO START MENU', () => this.leave(), {
+        width: 118,
         height: 13,
         fill: 0x5a1a22,
         hoverFill: 0x8a2b34,
@@ -120,27 +116,23 @@ export class SettingsModal extends Phaser.Scene {
    * from inside a game that has taken tokens, the question says how many
    * walking out forfeits, and the cabinet's own forfeit is what takes them.
    */
-  private leave(to: 'lobby' | 'menu' = 'menu'): void {
+  private leave(): void {
     if (this.asking) return;
     const mg = this.from === 'Minigame' ? (pausedScene() as MinigameScene | null) : null;
     const risk = mg?.forfeitAmount() ?? null;
     const lines =
       risk === null
-        ? [to === 'lobby' ? 'RETURN TO THE GAME LOBBY?' : 'EXIT TO THE START MENU?', 'YOUR PROGRESS IS SAVED.']
+        ? ['EXIT TO THE START MENU?', 'YOUR PROGRESS IS SAVED.']
         : ['ARE YOU SURE YOU WANT TO QUIT?', ...forfeitLines(risk)];
     this.asking = confirmDialog(this, {
       lines,
-      confirm: risk !== null ? 'CONFIRM QUIT' : to === 'lobby' ? 'RETURN' : 'EXIT',
+      confirm: risk !== null ? 'CONFIRM QUIT' : 'EXIT',
       onConfirm: () => {
         this.asking = null;
         if (mg && risk !== null) {
           resumePause();
-          // the cabinet's own quit takes the forfeit, then out: to the room
-          // it stands in, or to the title screen
-          if (to === 'lobby') mg.quitToLobby();
-          else mg.quitTo('StartScreen');
-        } else if (to === 'lobby') {
-          returnToLobby();
+          // the cabinet's own quit takes the forfeit, then out to the title screen
+          mg.quitTo('StartScreen');
         } else {
           leaveToMenu();
         }

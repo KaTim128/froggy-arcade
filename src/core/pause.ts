@@ -22,7 +22,6 @@
  * would come back to a camera that never finishes going black.
  */
 
-import { resumePoint } from './resume';
 import Phaser from 'phaser';
 import { froggyLayer } from '../render/froggyLayer';
 import { ThreeStage } from '../render/threeStage';
@@ -167,16 +166,6 @@ export function resumePause(): void {
  */
 export function leaveToMenu(): void {
   jumpToScene('StartScreen');
-}
-
-/**
- * RETURN TO GAME LOBBY: out of whatever this is and back to where the run is
- * played from (the arcade floor, or the story checkpoint it is at) -- the
- * same profile, the same save, no title screen, no START.
- */
-export function returnToLobby(): void {
-  const at = resumePoint();
-  jumpToScene(at.key, at.data);
 }
 
 /**
