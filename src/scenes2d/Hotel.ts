@@ -89,7 +89,8 @@ const FLOOR_LINE = 152;
  * hole where the player stands and where the guest book lies on the desk.
  */
 // (to the drifter's scale: a man of 28 behind a 17-pixel desk, head and chest over it)
-const CLERK = { x: 160, feet: 150, h: 28 };
+// (on the drifter's rig, 25 tall: head, collar and badge over the desk)
+const CLERK = { x: 160, feet: 146, h: 28 };
 const DESK_TOP = DESK.top;
 const BOOK = { x: 140, y: DESK.top - 2, w: 11, h: 2 };
 

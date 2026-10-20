@@ -136,7 +136,8 @@ const FROG_SCALE = (FROG_POST.height / FROGGY_DESIGN.h) * FROGGY_DESIGN.breath;
 // To the player's scale: a 30-pixel adult standing behind an 18-pixel (1.2 m)
 // counter shows head, shoulders and chest over it -- about 13 pixels.  He was
 // 50 high, nearly twice the drifter.
-const STAFFER_FEET = FROG_CUT + 16;
+// (on the drifter's rig, 25 tall: head, shoulders and the top of the polo over the counter)
+const STAFFER_FEET = FROG_CUT + 11;
 const STAFFER_H = 30;
 const STAFFER_TOP = STAFFER_FEET - STAFFER_H * (118 / 114);
 /**
