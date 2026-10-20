@@ -35,6 +35,8 @@ export const TOY_RES = 1.5;
 export const TOY_W = 30 * TOY_RES;
 export const TOY_H = 30 * TOY_RES;
 /** The 30x30 design grid the shapes are laid out on. */
+/** Drawing units drawn above the top of the 30x30 box, for ears and horns. */
+const TOY_HEADROOM = 8;
 const DW = 30;
 const DH = 30;
 
@@ -105,13 +107,19 @@ export function toyTexture(scene: Phaser.Scene, kind: PlushKind | `capsule-${num
   if (scene.textures.exists(key)) return key;
   const g = scene.make.graphics({ x: 0, y: 0 }, false);
   const w = Math.ceil(TOY_W * s);
-  const h = Math.ceil(TOY_H * s);
+  // Room above the toy for what sticks up past its head: the bunny's ears
+  // (and the fox's, the cat's, the unicorn's horn) reach above the top of
+  // the 30-unit drawing and were cut off flat.  Every toy stands on its
+  // feet (origin at the bottom), so the extra is all sky.
+  const head = Math.ceil(TOY_HEADROOM * TOY_RES * s);
+  const h = Math.ceil(TOY_H * s) + head;
   if (a) {
     // tipped over about its feet
     g.translateCanvas(w / 2, h);
     g.rotateCanvas((a * Math.PI) / 180);
     g.translateCanvas(-w / 2, -h);
   }
+  g.translateCanvas(0, head);
   const pen = new Pen(g, TOY_RES * s);
   if (kind.startsWith('capsule-')) drawCapsule(pen, Number(kind.slice(8)), view);
   else if (view === 'side') drawPlushSide(pen, kind as PlushKind);
