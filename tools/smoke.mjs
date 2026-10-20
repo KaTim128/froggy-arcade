@@ -166,6 +166,13 @@ try {
   await shot('01-boot');
   await click(640, 360); // unlock audio + advance
   await sleep(1200);
+  // The picker opens itself a fade after the title screen comes up; wait
+  // for it rather than for a fixed beat, which a slow machine overruns.
+  for (let i = 0; i < 60; i++) {
+    if (await page.evaluate(() => window.__froggy.activeScenes().includes('ProfileModal'))) break;
+    await sleep(100);
+  }
+  await sleep(200);
 
   // With no profile the picker opens on its own — there is nowhere to save a
   // run until one exists, so this is the real first-run path.
