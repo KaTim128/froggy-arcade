@@ -16,7 +16,7 @@
 
 import { Howl } from 'howler';
 import { store } from './state';
-import { TRACKS, runTrack } from './tracks';
+import { TRACKS, playback, runTrack } from './tracks';
 
 /**
  * The scream's shape, so a face can scream it: full from the first hundredth
@@ -79,7 +79,13 @@ interface Sustained {
   bus: BusName;
   gain: GainNode;
   stop: () => void;
+  /** A recorded file: paused where it is and played on from there. */
+  pause?: () => void;
+  resume?: () => void;
 }
+
+/** Why the sound is held: any one of them holds it. */
+export type HoldReason = 'hidden' | 'blur' | 'pagehide';
 
 class AudioManager {
   private ctx: AudioContext | null = null;
@@ -124,7 +130,8 @@ class AudioManager {
     }
     this.unlocked = true;
     this.applyVolumes();
-    void this.ctx.resume();
+    if (this.holds.size) void this.ctx.suspend().catch(() => undefined);
+    else this.resumeContext();
     // Decoded now, on the gesture that made the context, so the first scare
     // never waits on a decode.
     this.preloadScream();
@@ -142,7 +149,62 @@ class AudioManager {
    * silent until the scare that needed it.
    */
   wake(): void {
-    if (this.ctx && this.ctx.state !== 'running') void this.ctx.resume();
+    // (not while the page is away: coming back is what lets it play again)
+    if (this.holds.size) return;
+    if (this.ctx && this.ctx.state !== 'running') this.resumeContext();
+  }
+
+  // ------------------------------------------------------- tab away and back
+  //
+  // THE MUSIC STOPS WHEN THE PLAYER LEAVES, AND PICKS UP WHERE IT WAS.  A tab
+  // switch, a minimised window, another app, a phone put away: each one holds
+  // the sound (see core/sceneManager for the events).  Holding suspends the
+  // context, which freezes everything on it where it is, and stops the tunes'
+  // step clocks (`playback.held`) so they do not run on and burst out on
+  // return.  Nothing is stopped or restarted, so the track, its place, the
+  // volumes and the mute are all exactly as they were, and there is never a
+  // second copy of anything.  Released, the context is resumed -- and if the
+  // browser will not resume it without a gesture, the next tap or key does.
+  private holds = new Set<HoldReason>();
+
+  hold(why: HoldReason): void {
+    if (this.holds.has(why)) return;
+    this.holds.add(why);
+    if (this.holds.size > 1) return;
+    playback.held = true;
+    for (const s of this.sustained) s.pause?.();
+    if (this.ctx && this.ctx.state === 'running') void this.ctx.suspend().catch(() => undefined);
+  }
+
+  release(why: HoldReason): void {
+    if (!this.holds.delete(why) || this.holds.size) return;
+    playback.held = false;
+    for (const s of this.sustained) s.resume?.();
+    this.resumeContext();
+  }
+
+  /** Held right now (for the tests). */
+  isHeld(): boolean {
+    return this.holds.size > 0;
+  }
+
+  /** The context's state, for the tests: 'running', 'suspended', or 'none'. */
+  contextState(): string {
+    return this.ctx?.state ?? 'none';
+  }
+
+  /**
+   * Resume the context, quietly.  A browser that wants a gesture first
+   * rejects or ignores this; the next pointerdown / touchend / keydown calls
+   * `wake`, which tries again, so the music is never left off for good.
+   */
+  private resumeContext(): void {
+    if (!this.ctx || this.ctx.state === 'closed') return;
+    try {
+      void this.ctx.resume().catch(() => undefined);
+    } catch {
+      /* some browsers throw rather than reject: the next gesture retries */
+    }
   }
 
   /**
@@ -323,13 +385,19 @@ class AudioManager {
   private startSustained(id: string, bus: BusName): Sustained | null {
     const asset = this.assets.get(id);
     if (asset) {
-      asset.howl.play();
+      // one copy, ever: a howl already going is left going (and one asked
+      // for while the page is away starts when it comes back: see release)
+      if (!asset.howl.playing() && !this.holds.size) asset.howl.play();
       const fake = this.ctx?.createGain() ?? null;
       return {
         id,
         bus,
         gain: fake as GainNode,
         stop: () => asset.howl.stop(),
+        pause: () => asset.howl.pause(),
+        resume: () => {
+          if (!asset.howl.playing()) asset.howl.play();
+        },
       };
     }
     return this.startPlaceholder(id, bus);
@@ -468,6 +536,8 @@ class AudioManager {
 
     const tick = () => {
       if (stopped) return;
+      // held (the tab is away): no notes, and the place in the tune kept
+      if (playback.held) return;
       const t = ctx.currentTime + 0.02;
       const bar = Math.floor(beat / 4) % chords.length;
       const chord = chords[bar];
@@ -581,6 +651,8 @@ class AudioManager {
 
     const tick = () => {
       if (stopped) return;
+      // held (the tab is away): no notes, and the place in the tune kept
+      if (playback.held) return;
       const t = ctx.currentTime + 0.02;
       const bar = Math.floor(step / 8) % 4;
       const inBar = step % 8;
@@ -720,6 +792,11 @@ class AudioManager {
     // two thirds a tritone stab lands on every other beat.
     const tick = () => {
       if (stopped) return;
+      // held (the tab is away): no notes, and the place in the tune kept
+      if (playback.held) {
+        timer = window.setTimeout(tick, 250);
+        return;
+      }
       const heat = this.chaseHeat;
       const beatMs = 400 - 150 * heat;
       const t = ctx.currentTime + 0.02;
@@ -807,6 +884,11 @@ class AudioManager {
     let stopped = false;
     const schedule = () => {
       if (stopped) return;
+      // held (the tab is away): no notes, and the place in the tune kept
+      if (playback.held) {
+        timer = window.setTimeout(schedule, 250);
+        return;
+      }
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
       osc.type = 'square';
@@ -833,6 +915,11 @@ class AudioManager {
     let stopped = false;
     const chirp = () => {
       if (stopped) return;
+      // held (the tab is away): no notes, and the place in the tune kept
+      if (playback.held) {
+        timer = window.setTimeout(chirp, 250);
+        return;
+      }
       const t = ctx.currentTime;
       for (let k = 0; k < 3; k++) {
         const osc = ctx.createOscillator();
@@ -862,6 +949,11 @@ class AudioManager {
     let stopped = false;
     const pass = () => {
       if (stopped) return;
+      // held (the tab is away): no notes, and the place in the tune kept
+      if (playback.held) {
+        timer = window.setTimeout(pass, 250);
+        return;
+      }
       const buf = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
       const d = buf.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;

@@ -172,13 +172,28 @@ export function bootGame(): void {
   };
   window.addEventListener('beforeunload', saveNow);
   window.addEventListener('pagehide', saveNow);
-  // PRD EC-12: pause and duck when the tab loses focus.
+  // PRD EC-12: pause when the tab loses focus.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) saveNow();
+    if (document.hidden) {
+      saveNow();
+      audio.hold('hidden');
+    } else audio.release('hidden');
     if (!game) return;
     if (document.hidden) game.loop.sleep();
     else game.loop.wake();
   });
+  // The music, through every way of leaving and coming back: another window
+  // or app (blur / focus), and the page put away and restored from the
+  // back-forward cache (pagehide / pageshow).  See audio `hold`.
+  window.addEventListener('blur', () => audio.hold('blur'));
+  window.addEventListener('focus', () => audio.release('blur'));
+  window.addEventListener('pagehide', () => audio.hold('pagehide'));
+  window.addEventListener('pageshow', () => {
+    audio.release('pagehide');
+    if (!document.hidden) audio.release('hidden');
+    if (document.hasFocus()) audio.release('blur');
+  });
+  if (document.hidden) audio.hold('hidden');
   // The same profile played in another tab: its newer save is taken here, so
   // this tab never writes an older run back over it.
   window.addEventListener('storage', (e) => {
