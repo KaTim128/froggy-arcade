@@ -111,6 +111,8 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   StreetWest: STREET,
   StreetEast: STREET,
   Hotel: STREET,
+  // (forward and back on the landing, along the flights: the full stick)
+  Stairwell: ROOM,
 
   PrizeCounter: TAP,
   PrizeExchange: TAP,

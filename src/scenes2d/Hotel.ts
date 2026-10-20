@@ -41,7 +41,7 @@ import { PALETTE } from '../render/palette';
 import { audio, SILENCE } from '../core/audio';
 import { store } from '../core/state';
 import { KEYS } from '../core/input';
-import { centerText, confirmDialog, fadeIn, fadeToScene, text } from '../core/ui';
+import { centerText, confirmDialog, fadeIn, fadeToScene, pinToScreen, text } from '../core/ui';
 import { openTalkPanel } from '../ui/talkPanel';
 import { Player, depthFor } from '../art/player';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
@@ -1190,6 +1190,8 @@ export class Hotel extends Phaser.Scene {
     this.tapZone.disableInteractive();
     // (each answer takes its own panel down: see ui/talkPanel)
     this.talk = openTalkPanel(this, who === 'RECEPTION' ? { speaker: 'clerk', line, options } : { who, line, options, color: PALETTE.gold });
+    // (the lobby is wider than the screen: the panel stays where the screen is)
+    pinToScreen(this.talk);
   }
 
   private closeTalk(): void {

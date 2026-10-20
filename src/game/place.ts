@@ -33,6 +33,7 @@ export const RESUMABLE = new Set([
   'ClothesStore',
   'BarberShop',
   'Hotel',
+  'Stairwell',
 ]);
 
 /** What a resumed scene is started with, beside its own entry data. */
