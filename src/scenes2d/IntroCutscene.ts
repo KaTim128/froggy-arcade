@@ -72,6 +72,9 @@ const ARROW_DELAY_MS = 700;
 
 type Phase = 'cards' | 'street' | 'offer' | 'done';
 
+/** The coins he drops: over everyone on the street, under the captions (900). */
+const COIN_DEPTH = 880;
+
 export class IntroCutscene extends Phaser.Scene {
   private phase: Phase = 'cards';
   private card = 0;
@@ -261,7 +264,10 @@ export class IntroCutscene extends Phaser.Scene {
     if (this.phase !== 'offer') return;
     audio.sfx('coin_drop');
     for (let i = 0; i < 8; i++) {
-      const coin = this.add.circle(MAN_X + 14 + Phaser.Math.Between(-4, 4), KERB_Y - 20, 2, PALETTE.gold);
+      // (in front of him and the cardboard: they land on the pavement at your
+      // feet, the nearest thing on the street, under the words only)
+      const coin = this.add.circle(MAN_X + 14 + Phaser.Math.Between(-4, 4), KERB_Y - 20, 2, PALETTE.gold).setDepth(COIN_DEPTH);
+      coin.setStrokeStyle(1, 0x8a6a1a);
       this.tweens.add({
         targets: coin,
         y: KERB_Y - 2 + Phaser.Math.Between(-2, 2),
