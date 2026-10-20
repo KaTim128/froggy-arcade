@@ -124,6 +124,20 @@ export function rentInDays(l = L()): number {
 }
 
 /**
+ * The rent, in words, for the HUD: RENT DUE IN 7 DAYS, counting down with
+ * the days, RENT DUE TODAY on the day, RENT OVERDUE past it, and RENT PAID
+ * on the day it was paid.  `warn` is true when it needs paying now.
+ */
+export function rentLabel(l = L()): { text: string; warn: boolean } | null {
+  if (!l.rented) return null;
+  const d = rentInDays(l);
+  if (d < 0) return { text: 'RENT OVERDUE', warn: true };
+  if (l.rentPaidDay === clock(l.t).day) return { text: `RENT PAID - DUE IN ${d} ${d === 1 ? 'DAY' : 'DAYS'}`, warn: false };
+  if (d === 0) return { text: 'RENT DUE TODAY', warn: true };
+  return { text: `RENT DUE IN ${d} ${d === 1 ? 'DAY' : 'DAYS'}`, warn: false };
+}
+
+/**
  * A second (or a few) of the game being played.  The clock moves on, rent
  * comes due -- and eviction, once the grace day is gone.
  */
@@ -186,6 +200,7 @@ export function rent(): Result {
     x.rented = true;
     x.evicted = false;
     x.rentDue = clock(x.t).day + RENT_DAYS;
+    x.rentPaidDay = clock(x.t).day;
   });
   record('pay_rent');
   furnishStarterRoom();
@@ -198,7 +213,10 @@ export function payRent(): Result {
   if (!l.rented) return no('YOU DO NOT RENT HERE.');
   if (rentInDays(l) > RENT_DAYS - 1) return no('YOUR RENT IS PAID UP.');
   if (!store.spendCash(RENT_PRICE)) return no(`RENT IS $${RENT_PRICE}. YOU HAVE $${store.get().cash}.`);
-  edit((x) => (x.rentDue += RENT_DAYS));
+  edit((x) => {
+    x.rentDue += RENT_DAYS;
+    x.rentPaidDay = clock(x.t).day;
+  });
   record('pay_rent');
   return ok(`PAID. NEXT RENT IN ${rentInDays()} DAYS.`);
 }

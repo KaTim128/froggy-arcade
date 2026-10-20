@@ -43,7 +43,7 @@ import { store } from '../core/state';
 import { KEYS } from '../core/input';
 import { centerText, confirmDialog, fadeIn, fadeToScene, text } from '../core/ui';
 import { openTalkPanel } from '../ui/talkPanel';
-import { Player } from '../art/player';
+import { Player, depthFor } from '../art/player';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 import { isTouch } from '../core/device';
@@ -106,6 +106,8 @@ type Area = 'lobby' | 'lift' | 'corridor' | 'room' | 'bath';
 type Spot = 'out' | 'desk' | 'lift' | 'stairs' | 'stairdoor' | 'storage' | 'door612' | 'roomdoor' | 'bathdoor' | 'bed' | 'window' | 'mirror' | null;
 /** Where the night is, in room 612. */
 type Night = 'calm' | 'sleeping' | 'late' | 'reveal' | 'gone';
+/** Where the sleeper's feet go: the foot of the bag, so the head lands on the hood. */
+const SLEEP_FEET_X = BED.x - BED.w / 2 + 8;
 
 /** The window breaking: when each blow lands, from the curtains opening. */
 const FIRST_BLOW = 0.8;
@@ -497,7 +499,8 @@ export class Hotel extends Phaser.Scene {
       const b = c & 255;
       s.setFillStyle((col(r, 0) << 16) | (col(g, 0) << 8) | col(b, blue * 30));
     }
-    for (const { s } of this.sleeper ? this.sleeper.list.map((o) => ({ s: o as Phaser.GameObjects.Rectangle })) : []) s.setAlpha(Math.max(0.35, k));
+    // (the bag's flap over the sleeper dims with the room)
+    if (this.sleeper) for (const o of this.sleeper.list) (o as Phaser.GameObjects.Rectangle).setFillStyle((o as Phaser.GameObjects.Rectangle).getData('col') ?? 0, 1).setAlpha(Math.max(0.35, k));
   }
 
   // ------------------------------------------------------------- the police
@@ -1164,13 +1167,7 @@ export class Hotel extends Phaser.Scene {
     this.say('I lock the door. For the first time tonight, I feel safe.', 3.2);
     // you, in bed, under the covers
     this.time.delayedCall(900, () => {
-      this.player?.sprite.setVisible(false);
-      this.sleeper = this.add.container(0, 0, [
-        // his head on the pillow at the hood end, and the bag zipped up over him
-        this.add.rectangle(BED.x + BED.w / 2 - 8, BED.top - 6, 5, 4, 0xd8b088).setOrigin(0, 0),
-        this.add.rectangle(BED.x + BED.w / 2 - 9, BED.top - 7, 7, 2, 0x5a3a3a).setOrigin(0, 0),
-        this.add.rectangle(BED.x - BED.w / 2 + 1, BED.top - 1, BED.w - 11, 2, 0x4a7a6a).setOrigin(0, 0),
-      ]).setDepth(9);
+      this.tuckIn();
       audio.sfx('footstep_carpet', 0.3);
     });
     this.time.delayedCall(2600, () => {
@@ -1184,6 +1181,54 @@ export class Hotel extends Phaser.Scene {
     this.time.delayedCall(4200, () => audio.setScene(SILENCE));
     if (this.black) this.tweens.add({ targets: this.black, fillAlpha: 1, duration: 8000, delay: 3200, ease: 'Sine.easeIn' });
     this.time.delayedCall(12500, () => this.threeAM());
+  }
+
+  /**
+   * ---- INTO THE BAG: the player themselves, the same model as everywhere,
+   * lying down on it -- head on the pillow at the hood end, eyes shut,
+   * breathing -- with the bag's flap pulled up over them.  One figure,
+   * never a second drawing of you: it is the same Player that gets up.
+   */
+  private tuckIn(): void {
+    const p = this.player;
+    if (!p || this.sleeper) return;
+    p.sprite.setVisible(true);
+    p.setPosition(SLEEP_FEET_X, BED.top + 1);
+    p.lie(-1);
+    p.sprite.setDepth(9);
+    // the bag's top layer, over the body up to the shoulders
+    const flap = (x: number, y: number, w: number, h: number, col: number) => this.add.rectangle(x, y, w, h, col).setOrigin(0, 0).setData('col', col);
+    this.sleeper = this.add.container(0, 0, [
+      flap(BED.x - BED.w / 2 + 2, BED.top - 6, BED.w - 14, 6, 0x2e5a4c),
+      flap(BED.x - BED.w / 2 + 2, BED.top - 6, BED.w - 14, 1, 0x4a8a72),
+      flap(BED.x - BED.w / 2 + 3, BED.top - 3, BED.w - 16, 1, 0x24483c),
+      flap(BED.x + BED.w / 2 - 13, BED.top - 6, 1, 6, 0x1a3a30),
+    ]).setDepth(10);
+  }
+
+  /**
+   * ---- 3 AM: AWAKE.  The flap goes back, you sit up in the bag, and then you
+   * are on your feet beside it -- the one figure all the way through, so
+   * nothing of the sleeper is left lying there.
+   */
+  private wakeUp(then: () => void): void {
+    const p = this.player;
+    this.sleeper?.destroy();
+    this.sleeper = null;
+    if (!p) return then();
+    audio.sfx('floor_creak', 0.4);
+    p.getUp();
+    // sat up in the bag, a moment, facing the window
+    p.setPosition(SLEEP_FEET_X + 8, BED.top + 1);
+    p.sit('floor', { facing: -1 });
+    this.time.delayedCall(700, () => {
+      p.getUp();
+      p.setPosition(BED.x - BED.w / 2 - 6, WALK_Y);
+      p.face(-1);
+      p.sprite.setDepth(depthFor(WALK_Y));
+      audio.sfx('footstep_carpet', 0.4);
+      then();
+    });
   }
 
   /** Out of the black, slowly: 3 AM.  A click or a tap moves it on. */
@@ -1215,13 +1260,7 @@ export class Hotel extends Phaser.Scene {
     this.setCurtains(false, true);
     this.roomTint(0.28, 0.75);
     if (!this.sleeper) {
-      this.player?.sprite.setVisible(false);
-      this.sleeper = this.add.container(0, 0, [
-        // his head on the pillow at the hood end, and the bag zipped up over him
-        this.add.rectangle(BED.x + BED.w / 2 - 8, BED.top - 6, 5, 4, 0xd8b088).setOrigin(0, 0),
-        this.add.rectangle(BED.x + BED.w / 2 - 9, BED.top - 7, 7, 2, 0x5a3a3a).setOrigin(0, 0),
-        this.add.rectangle(BED.x - BED.w / 2 + 1, BED.top - 1, BED.w - 11, 2, 0x4a7a6a).setOrigin(0, 0),
-      ]).setDepth(9);
+      this.tuckIn();
       this.roomTint(0.28, 0.75);
     }
     if (this.black) {
@@ -1237,14 +1276,10 @@ export class Hotel extends Phaser.Scene {
     this.knocks = 0;
     this.time.delayedCall(retry ? 2400 : 5600, () => {
       this.say('Something is knocking on the window outside...', 3.6);
-      this.sleeper?.destroy();
-      this.sleeper = null;
-      if (this.player) {
-        this.player.setPosition(222, WALK_Y);
-        this.player.sprite.setVisible(true);
-      }
-      this.roomTint(0.28, 0.75);
-      this.locked = false;
+      this.wakeUp(() => {
+        this.roomTint(0.28, 0.75);
+        this.locked = false;
+      });
     });
   }
 

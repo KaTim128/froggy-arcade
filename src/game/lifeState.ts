@@ -24,6 +24,8 @@ export interface LifeState {
   rented: boolean;
   /** Game day on whose morning the next rent is due. */
   rentDue: number;
+  /** Game day rent was last paid on (-1: never), for the HUD's RENT PAID. */
+  rentPaidDay: number;
   evicted: boolean;
   /** Furniture owned, by id (count). */
   furniture: Record<string, number>;
@@ -53,6 +55,7 @@ export function defaultLife(): LifeState {
     t: 0,
     rented: false,
     rentDue: 0,
+    rentPaidDay: -1,
     evicted: false,
     furniture: {},
     placed: [],
@@ -93,6 +96,7 @@ export function sanitizeLife(raw: unknown): LifeState {
     t: num(r.t, 0, 0),
     rented: !!r.rented,
     rentDue: Math.floor(num(r.rentDue, 0, 0)),
+    rentPaidDay: Math.floor(num(r.rentPaidDay, -1, -1)),
     evicted: !!r.evicted,
     furniture: counts(r.furniture, (id) => !!furnitureById(id)),
     placed: [],
