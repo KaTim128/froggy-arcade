@@ -177,7 +177,7 @@ let bannerText: Phaser.GameObjects.BitmapText | null = null;
 let windHidden = false;
 let zzzT = 0;
 let descText: Phaser.GameObjects.BitmapText | null = null;
-let slots: Array<{ box: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.BitmapText }> = [];
+let slots: Array<{ box: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.BitmapText; icon: Phaser.GameObjects.Graphics }> = [];
 let keys: Record<'up' | 'down', Phaser.Input.Keyboard.Key[]> = { up: [], down: [] };
 
 function blankSide(): Side {
@@ -550,7 +550,7 @@ export function makeLizard(scene: Phaser.Scene, x: number, groundY: number): Pha
 function buildHud(scene: Phaser.Scene): void {
   // Dark plates under the read-outs: gold and teal on a bright summer sky
   // were unreadable, and so was the item bar on the lawn.
-  scene.add.rectangle(0, 16, GAME_W, 52, 0x000000, 0.55).setOrigin(0, 0);
+  scene.add.rectangle(0, 16, GAME_W, 62, 0x000000, 0.55).setOrigin(0, 0);
   scene.add.rectangle(0, 148, GAME_W, GAME_H - 148, 0x000000, 0.6).setOrigin(0, 0).setDepth(49);
   roundText = centerText(scene, GAME_W / 2, 23, '', PALETTE.gold);
 
@@ -580,19 +580,29 @@ function buildHud(scene: Phaser.Scene): void {
   powerFill = scene.add.rectangle(7, 143, 6, 0, PALETTE.gold).setOrigin(0, 1);
   text(scene, 4, 86, 'PWR', PALETTE.ash);
 
-  // the item bar: what you have, what it is called, and how many are left
-  // (six now: 52 pixels a slot, each with its colour as a dot)
+  // How to play, under the banner in the top panel: the bottom one is the
+  // items' and their description's, and three lines did not fit down there.
+  centerText(scene, GAME_W / 2, 71, isTouch() ? 'UP/DOWN AIM   HOLD THROW   TAP AN ITEM' : 'W/S AIM   HOLD SPACE THROW   1-6 ITEM', PALETTE.fog);
+
+  // THE ITEM BAR: a picture of each thing, and how many are left (the key
+  // that picks it, on a keyboard).  On a phone the bar keeps clear of the
+  // aim pad on the left and the THROW button on the right.
+  const touch = isTouch();
+  const x0 = touch ? 50 : 4;
+  const slotW = touch ? 37 : 52;
   ORDER.forEach((id, i) => {
-    const x = 4 + i * 52;
-    const box = scene.add.rectangle(x, 151, 50, 13, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel).setDepth(50);
-    scene.add.circle(x + 5, 157.5, 2, ITEMS[id].color).setStrokeStyle(1, PALETTE.ink).setDepth(51);
-    const label = text(scene, x + 9, 154, '', PALETTE.cream).setDepth(51);
+    const x = x0 + i * slotW;
+    const box = scene.add.rectangle(x, 151, slotW - 2, 14, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel).setDepth(50);
+    const keyW = touch ? 0 : 8;
+    if (!touch) text(scene, x + 3, 154, `${i + 1}`, PALETTE.ash).setDepth(51);
+    const icon = scene.add.graphics().setDepth(51);
+    drawItemIcon(icon, id, x + 3 + keyW, 153);
+    const label = text(scene, x + 16 + keyW, 154, '', PALETTE.cream).setDepth(51);
     box.setInteractive({ useHandCursor: true }).on('pointerdown', () => selectItem(id));
-    slots.push({ box, label });
+    slots.push({ box, label, icon });
   });
-  // what the chosen item does, in a line of its own
-  descText = centerText(scene, GAME_W / 2, 168, '', PALETTE.cream).setDepth(51);
-  centerText(scene, GAME_W / 2, 176, isTouch() ? 'UP/DOWN AIM   HOLD THROW   TAP AN ITEM' : 'W/S AIM   HOLD SPACE THROW   1-6 ITEM', PALETTE.fog).setDepth(51);
+  // what the chosen item does, in a line of its own under the bar
+  descText = centerText(scene, GAME_W / 2, 173, '', PALETTE.cream).setDepth(51);
 }
 
 function refreshHud(): void {
@@ -626,15 +636,48 @@ function refreshHud(): void {
   slots.forEach((slot, i) => {
     const item = ITEMS[ORDER[i]];
     const n = sides.frog.stock[item.id];
-    const left = n === Infinity ? '-' : `x${n}`;
-    slot.label.setText(`${i + 1} ${item.short}${n === Infinity ? '' : ` ${left}`}`);
+    // (the rock never runs out, so it has no count)
+    slot.label.setText(n === Infinity ? '' : `x${n}`);
     const usable = n > 0;
     const active = ORDER[i] === sel;
     slot.box.setStrokeStyle(1, active ? PALETTE.gold : PALETTE.steel);
     slot.box.setFillStyle(active ? PALETTE.plum : PALETTE.ink);
     slot.label.setTint(usable ? (active ? PALETTE.gold : PALETTE.cream) : PALETTE.ash);
+    // used up: the picture greys out with the count
+    slot.icon.setAlpha(usable ? 1 : 0.35);
   });
   descText?.setText(ITEMS[sel].desc).setTint(ITEMS[sel].color === 0x2e4a9a ? 0x8aa8ff : ITEMS[sel].color);
+}
+
+/**
+ * Each item's picture for the bar, 10x9, drawn in pixels from its top left.
+ * Read at a glance: a grey stone, a green bottle with a cross, a red stick of
+ * dynamite with its fuse, a purple bottle with a skull, a blue ball with a
+ * moon on it, a pink ball with a spiral.
+ */
+function drawItemIcon(g: Phaser.GameObjects.Graphics, id: ItemId, x: number, y: number): void {
+  const px = (c: number, rows: string[]): void => {
+    rows.forEach((row, ry) =>
+      [...row].forEach((ch, rx) => {
+        if (ch === '.') return;
+        g.fillStyle(ch === 'o' ? 0x14100c : ch === 'h' ? 0xffffff : ch === 'd' ? Phaser.Display.Color.ValueToColor(c).darken(28).color : ch === 'y' ? 0xffd45e : c, 1);
+        g.fillRect(x + rx, y + ry, 1, 1);
+      }),
+    );
+  };
+  if (id === 'rock') {
+    px(0x9aa4b0, ['...oooo...', '..oxhxxo..', '.oxxxxxdo.', 'oxxxxxxxdo', 'oxxxxxxddo', 'oxxxxxdddo', '.oddddddo.', '..oooooo..']);
+  } else if (id === 'heal') {
+    px(0x6fe08a, ['...oooo...', '...oddo...', '..oxxxxo..', '.oxxhhxxo.', '.oxhhhhxo.', '.oxxhhxxo.', '.oxxxxxxo.', '..oooooo..']);
+  } else if (id === 'tnt') {
+    px(0xd94f2e, ['.......y..', '......yo..', '....ooo...', '.ooxxxxoo.', 'oxhxxxxxdo', 'oxxxxxxxdo', 'odddddddoo', '.oooooooo.']);
+  } else if (id === 'poison') {
+    px(0x9b6fe0, ['...oooo...', '...oddo...', '..oxxxxo..', '.oxhhhhxo.', '.oxhohoxo.', '.oxxhhxxo.', '.oxhxhxxo.', '..oooooo..']);
+  } else if (id === 'sleep') {
+    px(0x5a7ad8, ['..oooooo..', '.oxxxxxxo.', 'oxxxhhxxdo', 'oxxhxxxxdo', 'oxxhxxxxdo', 'oxxxhhxddo', '.oddddddo.', '..oooooo..']);
+  } else {
+    px(0xff6fb4, ['..oooooo..', '.oxxxxxxo.', 'oxhhhhhxdo', 'oxhxxxhxdo', 'oxhxhhhxdo', 'oxhxxxxddo', '.oddddddo.', '..oooooo..']);
+  }
 }
 
 function banner(str: string, colour: number = PALETTE.cream): void {
