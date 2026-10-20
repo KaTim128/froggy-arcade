@@ -39,7 +39,7 @@ const ROOM: TouchLayout = {
   stick: 'wasd',
   arrows: true,
   buttons: [
-    { label: 'E', key: 'E', primary: true },
+    { label: 'INTERACT', key: 'E', primary: true },
     { label: 'RUN', key: 'SHIFT' },
   ],
 };
@@ -49,7 +49,7 @@ const STREET: TouchLayout = {
   stick: 'lr',
   arrows: true,
   buttons: [
-    { label: 'E', key: 'E', primary: true },
+    { label: 'INTERACT', key: 'E', primary: true },
     { label: 'RUN', key: 'SHIFT' },
   ],
 };
@@ -125,7 +125,7 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
     stick: 'wasd',
     look: true,
     buttons: [
-      { label: 'E', key: 'E', primary: true },
+      { label: 'INTERACT', key: 'E', primary: true },
       { label: 'CROUCH', key: 'C' },
       { label: 'RUN', key: 'SHIFT' },
       // (No DROP: E puts down what you are carrying in the lab.)

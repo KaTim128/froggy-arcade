@@ -923,7 +923,7 @@ export class HotelHall3D extends Phaser.Scene {
           if (this.door612 && !this.doorFly) this.door612.position.x = -HALF + 0.012;
         });
       }
-      this.prompt = this.nearPanel() ? (isTouch() ? 'TAP E - CALL THE LIFT' : '[E] CALL THE LIFT') : '';
+      this.prompt = this.nearPanel() ? (isTouch() ? 'TAP INTERACT - CALL THE LIFT' : '[E] CALL THE LIFT') : '';
       // Ten seconds to get to the lift.  Dawdle and he does not wait: you
       // are turned round to the door as it comes off its hinges.
       if (this.phaseT > ESCAPE_TIME) {
