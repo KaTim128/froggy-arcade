@@ -33,8 +33,8 @@ import {
   STAFF_DOOR,
 } from '../game/content';
 import { froggyLayer } from '../render/froggyLayer';
-import { GAME_W, GAME_H } from '../render/pixelScaler';
-import { fitPrompt } from '../ui/plate';
+import { GAME_W } from '../render/pixelScaler';
+import { fitPrompt, SUBTITLE_Y } from '../ui/plate';
 
 type Spot = 'door' | 'case' | 'counter' | 'staff' | 'lounge' | null;
 
@@ -131,7 +131,7 @@ export class ArcadeDark extends Phaser.Scene {
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.8).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.moon).setOrigin(0.5, 0.5).setDepth(801).setVisible(false);
-    this.mutter = text(this, GAME_W / 2, GAME_H - 30, '', PALETTE.fog)
+    this.mutter = text(this, GAME_W / 2, SUBTITLE_Y, '', PALETTE.fog)
       .setOrigin(0.5, 0.5)
       .setDepth(802)
       .setVisible(false);

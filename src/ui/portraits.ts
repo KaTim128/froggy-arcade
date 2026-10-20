@@ -98,7 +98,7 @@ export type SpeakerId = keyof typeof SPEAKERS;
 /** The well: a small square beside the words, head and shoulders only. */
 export const WELL_W = 34;
 /** It never grows with the panel: a long line must not stretch the face. */
-export const WELL_H = 36;
+export const WELL_H = 30;
 
 /**
  * Put `who`'s portrait in the well at (x, y, w, h).  What it adds goes into

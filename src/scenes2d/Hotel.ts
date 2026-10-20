@@ -75,7 +75,7 @@ import { HITS, WF, WF_H, WF_W, drawBrokenEdge, drawCracks, drawWindowFroggy } fr
 import { runHotelScare } from '../froggy/hotelScare';
 import { drawClerk } from '../froggy/clerk';
 import { froggyLayer } from '../render/froggyLayer';
-import { backPlate } from '../ui/plate';
+import { backPlate, SUBTITLE_Y } from '../ui/plate';
 import { clock as lifeClock } from '../game/life';
 import { resumeSpot, trackPlace } from '../game/place';
 
@@ -317,8 +317,8 @@ export class Hotel extends Phaser.Scene {
     this.keys = { left: bind(KEYS.left), right: bind(KEYS.right) };
     kb?.on('keydown-E', () => this.interact());
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
-    this.mutterPlate = this.add.rectangle(0, 0, 1, 1, PALETTE.black, 0.72).setOrigin(0, 0).setDepth(820).setVisible(false);
-    this.mutter = centerText(this, GAME_W / 2, GAME_H - 34, '', PALETTE.cream).setDepth(821).setVisible(false).setMaxWidth(290);
+    this.mutterPlate = this.add.rectangle(0, 0, 1, 1, PALETTE.black, 0).setOrigin(0, 0).setDepth(820).setVisible(false);
+    this.mutter = centerText(this, GAME_W / 2, SUBTITLE_Y, '', PALETTE.cream).setDepth(821).setVisible(false).setMaxWidth(290);
     backPlate(this, this.mutter);
     // the words are the button: a click or a tap on them moves on
     this.tapZone = this.add.zone(0, GAME_H - 76, GAME_W, 76).setOrigin(0, 0).setDepth(850);

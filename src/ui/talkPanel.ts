@@ -17,6 +17,7 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { touchControls } from './touchControls';
 import { FONT_ADVANCE } from '../render/pixelFont';
 import { SPEAKERS, WELL_H, WELL_W, addPortrait, type Speaker, type SpeakerId } from './portraits';
+import { DIALOGUE_ALPHA } from './plate';
 
 export interface TalkOption {
   label: string;
@@ -37,8 +38,8 @@ export interface TalkOpts {
 }
 
 export function openTalkPanel(scene: Phaser.Scene, o: TalkOpts): Phaser.GameObjects.Container {
-  const PAD = 7;
-  const HEAD = 11;
+  const PAD = 5;
+  const HEAD = 10;
   const ROW = 17;
   const GAP = 10;
   // On a phone: the arrow pad goes while someone is talking, and the panel
@@ -78,12 +79,13 @@ export function openTalkPanel(scene: Phaser.Scene, o: TalkOpts): Phaser.GameObje
   const oneRow = across <= inner;
   const rows = options.length === 0 ? 0 : oneRow ? 1 : options.length;
   const h = Math.max(sp ? WELL_H + 8 : 0, PAD + HEAD + textH + PAD + (rows > 0 ? rows * ROW + 2 : 10));
-  const y = GAME_H - h - 5;
+  // on the bottom edge of the screen
+  const y = GAME_H - h - 2;
   body.setY(y + PAD + HEAD);
 
   const cx = GAME_W / 2 + (L - R) / 2;
-  // solid: the words are read against the panel, never the room through it
-  const panel = scene.add.rectangle(cx, y + h / 2, GAME_W - 24 - L - R, h, PALETTE.ink, 1);
+  // see-through, so whoever you are talking to and the room stay in sight
+  const panel = scene.add.rectangle(cx, y + h / 2, GAME_W - 24 - L - R, h, PALETTE.ink, DIALOGUE_ALPHA + 0.12);
   panel.setStrokeStyle(1, color);
   const who = text(scene, 22 + L + PW, y + PAD, name, color);
   const parts: Phaser.GameObjects.GameObject[] = [panel, who, body];

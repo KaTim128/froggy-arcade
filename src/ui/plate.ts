@@ -15,6 +15,16 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { GAME_H, GAME_W } from '../render/pixelScaler';
 
+/**
+ * How opaque every box of words is -- the subtitles, the talk panels,
+ * Froggy's box: enough to read the words on, not so much that the room,
+ * the people in it and what can be used are hidden behind it.
+ */
+export const DIALOGUE_ALPHA = 0.62;
+
+/** Where a line of subtitle sits: on the bottom edge of the screen. */
+export const SUBTITLE_Y = GAME_H - 12;
+
 /** The widest a line runs before it wraps. */
 const MAX_W = GAME_W - 30;
 /** How close the box comes to the screen's edge. */
@@ -51,9 +61,11 @@ export function backPlate(scene: Phaser.Scene, t: Phaser.GameObjects.BitmapText,
       t.setPosition(Math.round(t.x + dx), Math.round(t.y + dy));
       b = t.getBounds();
     }
-    r.setPosition(Math.floor(b.x) - 5, Math.floor(b.y) - 4)
-      .setSize(Math.ceil(b.width) + 10, Math.ceil(b.height) + 7)
-      .setAlpha(t.alpha * 0.96)
+    // See-through, so the room behind the words still reads, and only as
+    // big as the words need (see DIALOGUE_ALPHA)
+    r.setPosition(Math.floor(b.x) - 4, Math.floor(b.y) - 3)
+      .setSize(Math.ceil(b.width) + 8, Math.ceil(b.height) + 5)
+      .setAlpha(t.alpha * DIALOGUE_ALPHA)
       .setDepth(t.depth - 0.01)
       .setScrollFactor(t.scrollFactorX, t.scrollFactorY);
   };

@@ -44,7 +44,7 @@ import { CRANE_COST } from './CraneGame';
 import { FULL_LINE, pocketsFull } from '../game/inventory';
 import { GAME_W } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
-import { fitPrompt } from '../ui/plate';
+import { fitPrompt, SUBTITLE_Y } from '../ui/plate';
 import { resumeSpot, trackPlace } from '../game/place';
 
 const rgb = (c: number): [number, number, number] => [(c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff];
@@ -194,7 +194,7 @@ export class ArcadeLounge extends Phaser.Scene {
     if (!this.night) attachPockets(this, () => this.busy());
     // after the night: the arcade keeps hours, and shuts at 7:45 PM
     showOutAtNight(this, () => !this.locked && !this.busy(), () => (this.locked = true));
-    this.mutter = text(this, GAME_W / 2, 180 - 30, '', PALETTE.fog).setOrigin(0.5, 0.5).setDepth(802).setVisible(false);
+    this.mutter = text(this, GAME_W / 2, SUBTITLE_Y, '', PALETTE.fog).setOrigin(0.5, 0.5).setDepth(802).setVisible(false);
     if (this.night && this.fromAlley) this.shutBehind();
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);

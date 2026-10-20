@@ -17,9 +17,10 @@ import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { froggyLayer } from '../render/froggyLayer';
 import { drawFroggy, type FroggyPose } from './froggy';
-import { GAME_W } from '../render/pixelScaler';
+import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { text } from '../core/ui';
 import { touchControls } from '../ui/touchControls';
+import { DIALOGUE_ALPHA } from '../ui/plate';
 
 export const DEFAULT_CPS = 28;
 
@@ -48,11 +49,16 @@ export interface DialogueLine {
   auto?: boolean;
 }
 
-const BOX_Y = 128;
-const BOX_H = 46;
-const PORTRAIT_CX = 30;
-const PORTRAIT_BASE = BOX_Y + BOX_H - 3;
-const PORTRAIT_H = 40;
+// On the bottom edge, and short: two lines of words and the face beside them.
+const BOX_H = 34;
+const BOX_Y = GAME_H - BOX_H - 2;
+const WELL = { x: 6, w: 40, h: BOX_H - 6 };
+const PORTRAIT_CX = WELL.x + WELL.w / 2;
+const PORTRAIT_BASE = BOX_Y + BOX_H - 4;
+/** His height in the well, before he is squashed down into it (see paintPortrait). */
+const PORTRAIT_H = 36;
+/** Squat: a little wider and much shorter, a square frog for a square frame. */
+const SQUASH = { x: 1.1, y: 0.7 };
 
 export class DialogueBox {
   private scene: Phaser.Scene;
@@ -78,14 +84,15 @@ export class DialogueBox {
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
 
-    const panel = scene.add.rectangle(0, BOX_Y, GAME_W, BOX_H, PALETTE.ink).setOrigin(0, 0);
+    // see-through, so the room and whoever is in it stay in sight
+    const panel = scene.add.rectangle(0, BOX_Y, GAME_W, BOX_H, PALETTE.ink, DIALOGUE_ALPHA + 0.12).setOrigin(0, 0);
     panel.setStrokeStyle(1, PALETTE.neon);
     // the well, with the 1px edge every staff portrait sits in
-    const portraitWell = scene.add.rectangle(6, BOX_Y + 3, 48, BOX_H - 6, PALETTE.plum).setOrigin(0, 0);
+    const portraitWell = scene.add.rectangle(WELL.x, BOX_Y + 3, WELL.w, WELL.h, PALETTE.plum, 0.85).setOrigin(0, 0);
     portraitWell.setStrokeStyle(1, PALETTE.neon, 0.6);
-    const who = text(scene, 60, BOX_Y + 5, 'FROGGY', PALETTE.neon);
+    const who = text(scene, 52, BOX_Y + 4, 'FROGGY', PALETTE.neon);
 
-    this.label = text(scene, 60, BOX_Y + 15, '', PALETTE.cream).setMaxWidth(GAME_W - 70);
+    this.label = text(scene, 52, BOX_Y + 13, '', PALETTE.cream).setMaxWidth(GAME_W - 66);
     this.prompt = text(scene, GAME_W - 14, BOX_Y + BOX_H - 11, '>', PALETTE.gold).setVisible(false);
 
     this.highlight = scene.add.rectangle(0, 0, 10, 10).setStrokeStyle(1, PALETTE.gold).setVisible(false);
@@ -253,6 +260,16 @@ export class DialogueBox {
     const pose: FroggyPose = line.pose ?? 'idleA';
     froggyLayer.paint(
       (ctx) => {
+        // ---- SQUAT, AND INSIDE HIS FRAME.  He was drawn tall and ran out
+        // of the top of the box; squashed about his feet he is a short,
+        // square frog that sits in it, clipped to the well's edge.
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(WELL.x + 1, BOX_Y + 4, WELL.w - 2, WELL.h - 2);
+        ctx.clip();
+        ctx.translate(PORTRAIT_CX, PORTRAIT_BASE);
+        ctx.scale(SQUASH.x, SQUASH.y);
+        ctx.translate(-PORTRAIT_CX, -PORTRAIT_BASE);
         drawFroggy(ctx, {
           x: PORTRAIT_CX,
           y: PORTRAIT_BASE,
@@ -262,6 +279,7 @@ export class DialogueBox {
           pose,
           bounce: this.bounce,
         });
+        ctx.restore();
       },
       false,
       true, // pixel mode: the same frog, in the world's own pixels
