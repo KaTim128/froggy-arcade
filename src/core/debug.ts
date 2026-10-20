@@ -22,8 +22,6 @@ const JUMPABLE = [
   'IntroCutscene',
   'ArcadeHub',
   'FroggyCharity',
-  'SecondBust',
-  'EjectionCutscene',
   'ExteriorNight',
   'BackAlley',
   'ArcadeDark',

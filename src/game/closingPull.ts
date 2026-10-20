@@ -71,6 +71,15 @@ export function closingNotice(scene: Phaser.Scene, then: () => void): void {
 }
 
 /**
+ * OUT OF THE DOORS AT CLOSING: the notice (once a day), and OK takes you
+ * straight out onto the forecourt through a slow fade to black.  Nobody
+ * walks you to the door and nobody says goodbye -- the building just shuts.
+ */
+export function closeAndShowOut(scene: Phaser.Scene): void {
+  closingNotice(scene, () => fadeToScene(scene, 'ExteriorDay', { fromArcade: true }, { ms: 900, hold: 450 }));
+}
+
+/**
  * AFTER the night in the arcade, the building keeps hours like any other:
  * open from sunrise (7:00 AM) until night falls (7:45 PM).  Inside it when
  * it shuts, you are told so and shown out onto the forecourt, where the
@@ -85,7 +94,7 @@ export function showOutAtNight(scene: Phaser.Scene, free: () => boolean, onGo: (
       if (!s.froggyGone || s.route !== 'normal' || s.timeOfDay === 'midnight' || !clock().closed || !free()) return;
       onGo();
       // the notice first (once a day), then out onto the forecourt
-      closingNotice(scene, () => fadeToScene(scene, 'ExteriorDay', { fromArcade: true }));
+      closeAndShowOut(scene);
     },
   });
 }

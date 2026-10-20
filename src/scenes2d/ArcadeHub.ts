@@ -17,7 +17,7 @@ import { store, type GameId } from '../core/state';
 import { KEY_ITEM, ensureKeyInPocket, holdingKey } from '../game/inventory';
 import { ledger } from '../core/ledger';
 import { canEnter } from '../core/routes';
-import { closingNotice, closingNoticed, showOutAtNight } from '../game/closingPull';
+import { closeAndShowOut, showOutAtNight } from '../game/closingPull';
 import { closingTime, evaluateBroke } from '../core/broke';
 import { KEYS } from '../core/input';
 import { fadeIn, fadeToScene, text } from '../core/ui';
@@ -505,20 +505,12 @@ export class ArcadeHub extends Phaser.Scene {
     // PRD BR-1: the broke check runs on hub entry as well as on the ledger
     // event, which covers spending the last token on a game you then quit.
     if (!store.get().seenIntro) this.runTutorial();
-    // (at closing time, the notice comes first: the check below shows it)
-    else if (!(closingTime() && !closingNoticed())) this.checkBroke();
+    else this.checkBroke();
     // closing time comes round on the clock, wherever you are standing
     this.time.addEvent({ delay: 2000, loop: true, callback: () => {
       if (!this.locked && !this.busy() && closingTime()) {
-        // the friendly notice first (once a day), then the closing itself
-        if (closingNoticed()) this.checkBroke();
-        else {
-          this.locked = true;
-          closingNotice(this, () => {
-            this.locked = false;
-            this.checkBroke();
-          });
-        }
+        // the friendly notice (once a day), then straight out of the doors
+        this.checkBroke();
       }
     } });
   }
@@ -1730,14 +1722,14 @@ export class ArcadeHub extends Phaser.Scene {
     const outcome = evaluateBroke();
     if (!outcome) return;
     this.locked = true;
-    const scene = outcome === 'charity' ? 'FroggyCharity' : 'SecondBust';
-    if (this.scene.get(scene)) {
-      this.time.delayedCall(400, () => fadeToScene(this, scene));
-    } else {
-      // Phase 4 has not landed yet.
-      console.warn(`[hub] broke outcome "${outcome}" — ${scene} not built yet`);
-      this.locked = false;
+    // Closing time: the notice, and OK is straight out onto the forecourt
+    // through a fade to black.  (There used to be a scene of him closing up
+    // and walking you out; the building just shuts now.)
+    if (outcome === 'eject') {
+      closeAndShowOut(this);
+      return;
     }
+    this.time.delayedCall(400, () => fadeToScene(this, 'FroggyCharity'));
   }
 
   // --------------------------------------------------------------------- update
