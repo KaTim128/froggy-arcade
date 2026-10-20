@@ -15,9 +15,7 @@ import Phaser from 'phaser';
 import { COLS, LOOKS, type Look } from '../art/player';
 import { StageFigure } from '../render/stageFigure';
 import type { FroggyPainter } from '../render/froggyLayer';
-import { drawStaffer } from '../froggy/staffer';
-import { drawClerk } from '../froggy/clerk';
-import { drawSuitedMan } from '../froggy/suit';
+import { CLERK_LOOK, DEALER_LOOK, STAFFER_LOOK } from '../art/staffLooks';
 
 export interface Speaker {
   name: string;
@@ -72,19 +70,19 @@ export const SPEAKERS = {
     name: 'ARCADE STAFF',
     color: 0xff4fa3,
     well: 0x3a1a30,
-    painter: (x: number, y: number, h: number) => (ctx: CanvasRenderingContext2D) => drawStaffer(ctx, { x, y, height: h, pose: 'idle' }),
+    look: STAFFER_LOOK,
   },
   clerk: {
     name: 'CONCIERGE',
     color: 0xc9a24a,
     well: 0x2a2416,
-    painter: (x: number, y: number, h: number) => (ctx: CanvasRenderingContext2D) => drawClerk(ctx, { x, y, height: h }),
+    look: CLERK_LOOK,
   },
   dealer: {
     name: 'DEALER',
     color: 0xb83848,
     well: 0x281418,
-    painter: (x: number, y: number, h: number) => (ctx: CanvasRenderingContext2D) => drawSuitedMan(ctx, { x, y, height: h, pose: 'idle' }),
+    look: DEALER_LOOK,
   },
   man: { name: 'THE MAN IN BLACK', color: 0x8a8a9a, well: 0x1a1c24, look: LOOKS.stranger },
   doorman: { name: 'DOORMAN', color: 0xc04a5a, well: 0x2a1218, look: LOOKS.doorman },
@@ -100,7 +98,7 @@ export type SpeakerId = keyof typeof SPEAKERS;
 /** The well: a small square beside the words, head and shoulders only. */
 export const WELL_W = 34;
 /** It never grows with the panel: a long line must not stretch the face. */
-export const WELL_H = 36;
+export const WELL_H = 30;
 
 /**
  * Put `who`'s portrait in the well at (x, y, w, h).  What it adds goes into

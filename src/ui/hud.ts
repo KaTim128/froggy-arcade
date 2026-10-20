@@ -12,7 +12,7 @@ import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
 import { text } from '../core/ui';
 import { store } from '../core/state';
-import { clock, rentInDays, takeNotice } from '../game/life';
+import { clock, rentLabel, takeNotice } from '../game/life';
 
 export const LOW_TOKEN_THRESHOLD = 3;
 
@@ -173,13 +173,19 @@ export class TokenHud {
 
   private refreshLife(): void {
     const s = store.get();
-    const on = s.seenIntro && s.route === 'normal' && s.timeOfDay !== 'midnight';
+    // (and not from going to sleep in 612 until the night is survived: the
+    // knocking, 3 AM, waking, the stairs, the storage room, the police and
+    // the roofs -- that night has no clock on it, and this is read off the
+    // story's own state, not a timer)
+    const night = s.hotelNight || s.hotelAfter === 'police' || s.hotelAfter === 'escape';
+    const on = s.seenIntro && s.route === 'normal' && s.timeOfDay !== 'midnight' && !night;
     this.lifeBox.setVisible(on);
     if (!on) return;
     const l = s.life;
     const c = clock(l.t);
-    const rent = l.rented ? (rentInDays(l) <= 0 ? 'RENT DUE' : `RENT ${rentInDays(l)}D`) : '';
-    this.clockText.setText(rent ? `DAY ${c.day + 1} ${c.text}  ${rent}` : `DAY ${c.day + 1} ${c.text}`);
+    const rent = rentLabel(l);
+    this.clockText.setText(rent ? `DAY ${c.day + 1} ${c.text}  ${rent.text}` : `DAY ${c.day + 1} ${c.text}`);
+    this.clockText.setTint(rent?.warn ? PALETTE.gold : PALETTE.fog);
     this.lifePlate.width = this.clockText.width + 6;
     const n = takeNotice();
     if (n) this.showToast(n);

@@ -44,7 +44,7 @@ import { tutorialScript } from '../froggy/script';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
-import { fitPrompt } from '../ui/plate';
+import { fitPrompt, SUBTITLE_Y } from '../ui/plate';
 import { resumeSpot, trackPlace } from '../game/place';
 
 const INTERACT_RANGE = 24;
@@ -136,7 +136,8 @@ const FROG_SCALE = (FROG_POST.height / FROGGY_DESIGN.h) * FROGGY_DESIGN.breath;
 // To the player's scale: a 30-pixel adult standing behind an 18-pixel (1.2 m)
 // counter shows head, shoulders and chest over it -- about 13 pixels.  He was
 // 50 high, nearly twice the drifter.
-const STAFFER_FEET = FROG_CUT + 16;
+// (on the drifter's rig, 25 tall: head, shoulders and the top of the polo over the counter)
+const STAFFER_FEET = FROG_CUT + 11;
 const STAFFER_H = 30;
 const STAFFER_TOP = STAFFER_FEET - STAFFER_H * (118 / 114);
 /**
@@ -466,7 +467,7 @@ export class ArcadeHub extends Phaser.Scene {
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
-    this.mutter = text(this, GAME_W / 2, GAME_H - 26, '', PALETTE.fog)
+    this.mutter = text(this, GAME_W / 2, SUBTITLE_Y, '', PALETTE.fog)
       .setOrigin(0.5, 0.5)
       .setDepth(802)
       .setVisible(false);

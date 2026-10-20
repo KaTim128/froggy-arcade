@@ -21,7 +21,7 @@ import { Pedestrians } from '../art/pedestrians';
 import { froggyLayer } from '../render/froggyLayer';
 import { SHOP_HOURS, clock, shopsOpen, visit } from '../game/life';
 import { nightfallOnce, onPhaseTurn } from '../game/dayNight';
-import { backPlate, fitPrompt } from '../ui/plate';
+import { backPlate, fitPrompt, SUBTITLE_Y } from '../ui/plate';
 import { FRONT_TOP, paintShopfront, paintStreet, type ShopfrontOpts } from '../art/shopfront';
 import { resumeSpot, trackPlace } from '../game/place';
 
@@ -143,7 +143,7 @@ export class StreetEast extends Phaser.Scene {
     attachPockets(this, () => this.locked || this.busy());
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
-    this.mutter = centerText(this, 160, GAME_H - 40, '', PALETTE.cream).setDepth(802).setScrollFactor(0).setVisible(false).setMaxWidth(290);
+    this.mutter = centerText(this, 160, SUBTITLE_Y, '', PALETTE.cream).setDepth(802).setScrollFactor(0).setVisible(false).setMaxWidth(290);
     backPlate(this, this.mutter);
 
     const kb = this.input.keyboard;

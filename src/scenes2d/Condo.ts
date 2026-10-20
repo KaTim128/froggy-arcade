@@ -102,8 +102,6 @@ export class Condo extends WalkRoom {
   create(): void {
     // (the floor line of the hotel's rooms: the feet walk just in front of it)
     this.floorTop = FLOOR_Y - 2;
-    // (what is said goes up on the ceiling: the floor strip is where the furniture is)
-    this.mutterY = 60;
     this.decorating = false;
     this.picked = null;
     this.placing = null;

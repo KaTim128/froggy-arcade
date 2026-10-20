@@ -28,6 +28,7 @@ import { attachPockets } from '../ui/pockets';
 import { HOTEL_DOOR, HOTEL_H, HOTEL_W, paintHotel } from '../art/hotel';
 import { speak } from '../ui/talkPanel';
 import { resumeSpot, trackPlace } from '../game/place';
+import { SUBTITLE_Y } from '../ui/plate';
 
 export const WORLD_W = 640;
 const WALK_Y = 168;
@@ -83,8 +84,8 @@ export class StreetWest extends Phaser.Scene {
     new TokenHud(this, { y: 24 });
     attachPockets(this, () => this.locked);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
-    this.mutterPlate = this.add.rectangle(0, 0, 1, 1, PALETTE.black, 0.72).setOrigin(0, 0).setDepth(801).setScrollFactor(0).setVisible(false);
-    this.mutter = centerText(this, 160, GAME_H - 40, '', PALETTE.cream).setDepth(802).setScrollFactor(0).setVisible(false).setMaxWidth(290);
+    this.mutterPlate = this.add.rectangle(0, 0, 1, 1, PALETTE.black, 0).setOrigin(0, 0).setDepth(801).setScrollFactor(0).setVisible(false);
+    this.mutter = centerText(this, 160, SUBTITLE_Y, '', PALETTE.cream).setDepth(802).setScrollFactor(0).setVisible(false).setMaxWidth(290);
 
     const kb = this.input.keyboard;
     const bind = (n: readonly string[]) => (kb ? n.map((k) => kb.addKey(k)) : []);

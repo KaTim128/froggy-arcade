@@ -37,12 +37,40 @@ export const CHECK_TITLE: Record<CheckKind, string> = {
   react: 'DO NOT FLINCH',
 };
 
-/** What to do, in words: `act` is the key or the button's name. */
-export function checkHow(kind: CheckKind, act: string): string {
-  if (kind === 'hold') return `HOLD ${act}, LET GO IN THE GREEN`;
-  if (kind === 'react') return `${act} THE MOMENT IT GOES GREEN`;
-  if (kind === 'pulse') return `${act} ON THE BEAT IN THE GREEN`;
-  return `${act} IN THE GREEN`;
+/**
+ * What to do, in two short lines that fit under the bar: what the bar is
+ * doing, then what you do about it.  `act` is the key or the button's name.
+ * (`checkLive` is the line that replaces the second one while it is playing.)
+ */
+export function checkHow(kind: CheckKind, act: string): [string, string] {
+  switch (kind) {
+    case 'hold':
+      return [`HOLD ${act} TO FILL THE BAR`, 'LET GO IN THE GREEN'];
+    case 'react':
+      return ['WAIT FOR IT TO GO GREEN', `THEN PRESS ${act} AT ONCE`];
+    case 'pulse':
+      return ['YOUR HEART SWEEPS ACROSS', `PRESS ${act} IN THE GREEN`];
+    case 'breath':
+      return ['BREATH RISES AND FALLS', `PRESS ${act} IN THE GREEN`];
+    default:
+      return ['THE LINE SWINGS ACROSS', `PRESS ${act} IN THE GREEN`];
+  }
+}
+
+/**
+ * What the check says right now, as it plays: NOW when the line is in the
+ * green (or the bar has gone green), WAIT before it has, HOLDING while the
+ * key is down on a hold.  Null when there is nothing live to say.
+ */
+export function checkLive(c: CalmCheck): { text: string; good: boolean } | null {
+  if (c.result) return null;
+  if (c.kind === 'react') return c.pos >= 1 ? { text: 'NOW!', good: true } : { text: 'WAIT...', good: false };
+  const inGreen = c.pos >= c.green[0] && c.pos <= c.green[1];
+  if (c.kind === 'hold') {
+    if (!c.holding) return c.pos > 0 ? null : { text: 'HOLD IT DOWN', good: false };
+    return inGreen ? { text: 'LET GO NOW!', good: true } : { text: 'HOLDING...', good: false };
+  }
+  return inGreen ? { text: 'NOW!', good: true } : null;
 }
 
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;

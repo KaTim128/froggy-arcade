@@ -454,13 +454,20 @@ export const blackjack: MinigameModule = {
     const gone = store.get().froggyGone;
     froggyLayer.paint((ctx) => {
       if (gone) {
+        // On the drifter's rig, at two pixels a cell: sat across the table,
+        // so head and shoulders over the rail and the rest of him behind it.
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, GAME_W, DEALER.y - 12);
+        ctx.clip();
         drawSuitedMan(ctx, {
           x: DEALER.x,
-          y: DEALER.y,
+          y: DEALER.y + 12,
           height: DEALER.height,
           pose: talking > 0 ? 'talk' : 'idle',
           bounce: (clock * 0.28) % 1,
         });
+        ctx.restore();
       } else {
         drawFroggy(ctx, {
           x: DEALER.x,

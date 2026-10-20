@@ -36,7 +36,7 @@ import { drawFroggy } from '../froggy/froggy';
 import { drawSuitedMan } from '../froggy/suit';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
-import { fitPrompt } from '../ui/plate';
+import { fitPrompt, SUBTITLE_Y } from '../ui/plate';
 import { resumeSpot, trackPlace } from '../game/place';
 
 /**
@@ -167,7 +167,7 @@ export class ArcadeCasino extends Phaser.Scene {
     // Below the interact prompt, not level with it: the prompt at the table
     // drops UNDER the player (Froggy used to eat the line above his head), and
     // at 26 up the two of them sat on top of each other.
-    this.mutter = text(this, GAME_W / 2, GAME_H - 14, '', PALETTE.fog)
+    this.mutter = text(this, GAME_W / 2, SUBTITLE_Y, '', PALETTE.fog)
       .setOrigin(0.5, 0.5)
       .setDepth(802)
       .setVisible(false);

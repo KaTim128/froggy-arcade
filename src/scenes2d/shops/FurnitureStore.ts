@@ -20,7 +20,6 @@ import { audio } from '../../core/audio';
 import { store } from '../../core/state';
 import { text } from '../../core/ui';
 import { GAME_H } from '../../render/pixelScaler';
-import { depthFor } from '../../art/player';
 import { drawFurniture } from '../../art/furnitureArt';
 import { stockFor, type FurnitureDef } from '../../game/catalog';
 import { buyFurniture, clock, record } from '../../game/life';
@@ -32,6 +31,12 @@ import { Piece } from '../rooms/piece';
 const BACK_ROW = FLOOR_TOP + 24;
 const FRONT_ROW = FLOOR_TOP + 54;
 const WALL_FOOT = FLOOR_TOP - 20;
+/** The clear floor between one piece (or its price card) and the next. */
+const PIECE_GAP = 12;
+/** The price cards: above all the furniture, below the prompts and panels. */
+const PRICE_DEPTH = 700;
+/** How wide a price card comes out, in the pixel font. */
+const priceWidth = (price: number): number => `$${price}`.length * 6 + 2;
 
 export class FurnitureStore extends WalkRoom {
   private pieces = new Map<string, Piece>();
@@ -68,10 +73,39 @@ export class FurnitureStore extends WalkRoom {
     const floor = today.filter((f) => !f.wall && f.cat !== 'rug');
     // the biggest and best of them: what a showroom puts in the window
     const show = [...floor].sort((a, b) => b.price - a.price).slice(0, 4);
-    const back = show.slice(0, 2);
-    const front = show.slice(2);
-    back.forEach((f, i) => out.push({ def: f, x: COUNTER_RIGHT + 28 + i * 74, y: BACK_ROW }));
-    front.forEach((f, i) => out.push({ def: f, x: 76 + i * 86, y: FRONT_ROW }));
+    // ---- LAID OUT BY SIZE, NOT BY SLOT.  They used to stand at fixed
+    // places whatever their width, so a wide bed and a tall shower ran into
+    // each other and over each other's price cards.  Now each takes the room
+    // it needs -- its own width or its card's, whichever is wider, and a
+    // clear gap -- along two rows that both start past the counter, so
+    // nothing stands in the doorway or in front of the counter.  A piece
+    // with no room left on the floor is still in the book on the counter.
+    const rows = [BACK_ROW, FRONT_ROW];
+    const right = this.worldW - 8;
+    // what is already standing: each piece's body and the card under it
+    // (the pictures on the wall and their cards count: a tall piece in the
+    // back row must not stand up over the card under a clock)
+    const taken: Array<{ x0: number; x1: number; y0: number; y1: number }> = out.map(({ def, x, y }) => {
+      const half = Math.max(def.w, priceWidth(def.price)) / 2;
+      return { x0: x - half, x1: x + half, y0: y - def.h, y1: y + 11 };
+    });
+    const clash = (x0: number, x1: number, y0: number, y1: number) =>
+      taken.find((t) => x0 < t.x1 + PIECE_GAP && x1 + PIECE_GAP > t.x0 && y0 < t.y1 && y1 > t.y0);
+    for (const f of show) {
+      const need = Math.max(f.w, priceWidth(f.price));
+      let spot: { x: number; y: number } | null = null;
+      for (const y of rows) {
+        const y0 = y - f.h;
+        const y1 = y + 11;
+        let x0 = COUNTER_RIGHT + 6;
+        // slide it along past anything it would touch
+        for (let c = clash(x0, x0 + need, y0, y1); c && x0 + need <= right; c = clash(x0, x0 + need, y0, y1)) x0 = c.x1 + PIECE_GAP;
+        if (x0 + need <= right && (!spot || x0 < spot.x)) spot = { x: x0, y };
+      }
+      if (!spot) continue;
+      taken.push({ x0: spot.x, x1: spot.x + need, y0: spot.y - f.h, y1: spot.y + 11 });
+      out.push({ def: f, x: Math.round(spot.x + need / 2), y: spot.y });
+    }
     return out;
   }
 
@@ -128,7 +162,9 @@ export class FurnitureStore extends WalkRoom {
       const ty = p.def.wall ? p.y + 3 : p.y + 2;
       text(this, p.x, ty, `$${p.def.price}`, p.def.wall ? 0x5a3a22 : PALETTE.cream)
         .setOrigin(0.5, 0)
-        .setDepth(p.def.wall ? 2 : depthFor(p.y) + 0.0002);
+        // over every piece of furniture in the room, so nothing standing in
+        // front of it can ever hide what it costs
+        .setDepth(PRICE_DEPTH);
     }
     this.layoutCache = all;
     this.surfaces(0xe8dcc0, 0x9a6c40);

@@ -245,6 +245,85 @@ type PartName = (typeof ORDER)[number];
 /** A run of same-coloured pixels on one row, at its unflipped centre. */
 type Run = { r: Phaser.GameObjects.Rectangle; cx: number; cy: number };
 
+/**
+ * ---- THE SAME FIGURE, PAINTED ON A CANVAS.  For people drawn by a painter
+ * function rather than built as a Phaser container (the counter staff, the
+ * dealer, the concierge, the faces in the talk panel): the exact grids, the
+ * one-pixel outline drawn first round everything, the letters coloured by
+ * `look` -- the drifter's pixels, pixel for pixel, in someone else's clothes.
+ *
+ * `x` is the middle of the figure and `feet` the ground line; `scale` is
+ * whole pixels per grid cell (1 in the world, where everyone is 25 tall).
+ * `talk` opens the mouth a pixel; `breath` 0..1 lifts the top half a pixel
+ * at the top of each breath.
+ */
+export function paintFigure(
+  ctx: CanvasRenderingContext2D,
+  look: Look,
+  x: number,
+  feet: number,
+  opts: { scale?: number; dir?: 1 | -1; talk?: boolean; breath?: number; alpha?: number } = {},
+): void {
+  const k = Math.max(1, Math.round(opts.scale ?? 1));
+  const dir = opts.dir ?? 1;
+  const colOf = (ch: string): number => look.cols?.[ch] ?? COLS[ch];
+  const lift = (opts.breath ?? 0) > 0.5 ? 1 : 0;
+  const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+  const cells: Array<{ part: PartName; px: Set<string>; fills: Array<[number, number, number]> }> = [];
+  for (const name of ORDER) {
+    const part = name === 'head' && look.head ? { ...PARTS.head, rows: look.head } : PARTS[name];
+    const px = new Set<string>();
+    const fills: Array<[number, number, number]> = [];
+    // the top half rises with the breath; the legs stay on the ground
+    const up = name === 'backLeg' || name === 'frontLeg' ? 0 : lift;
+    part.rows.forEach((row, i) =>
+      [...row].forEach((ch, gx) => {
+        if (ch === '.') return;
+        const gy = part.top + i - up;
+        px.add(`${gx},${gy}`);
+        fills.push([gx, gy, colOf(ch)]);
+      }),
+    );
+    cells.push({ part: name, px, fills });
+  }
+  const at = (gx: number, gy: number): [number, number] => {
+    const lx = (gx - MID) * dir - (dir < 0 ? 1 : 0);
+    return [Math.round(x + lx * k), Math.round(feet + (gy - FIG_H) * k)];
+  };
+  ctx.save();
+  ctx.globalAlpha = opts.alpha ?? 1;
+  // the outline: every part a pixel bigger, in ink, under every fill
+  ctx.fillStyle = hex(OUTLINE);
+  for (const c of cells) {
+    if (c.part === 'eyes') continue;
+    for (const key of c.px) {
+      const [gx, gy] = key.split(',').map(Number);
+      for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (c.px.has(`${gx + ox},${gy + oy}`)) continue;
+        const [sx, sy] = at(gx + ox, gy + oy);
+        ctx.fillRect(sx, sy, k, k);
+      }
+    }
+  }
+  for (const c of cells) {
+    for (const [gx, gy, col] of c.fills) {
+      ctx.fillStyle = hex(col);
+      const [sx, sy] = at(gx, gy);
+      ctx.fillRect(sx, sy, k, k);
+    }
+  }
+  // talking: the mouth open a pixel, under the nose
+  if (opts.talk) {
+    ctx.fillStyle = '#3a1a14';
+    const [sx, sy] = at(MID, 6 - lift);
+    ctx.fillRect(sx, sy, k, k);
+  }
+  ctx.restore();
+}
+
+/** The figure's height in grid cells: what `paintFigure` stands at scale 1. */
+export const FIGURE_H = FIG_H;
+
 /** The player's own look, from the outfit they are wearing. */
 export function playerLook(): Look {
   try {

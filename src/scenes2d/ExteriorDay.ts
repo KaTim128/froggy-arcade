@@ -39,7 +39,7 @@ import { Pedestrians } from '../art/pedestrians';
 import { SUNRISE_HOUR, twelveHour, BEG_MS, begNextMs, canBeg, clock, collectBegging, sleep, sleepPlace, startBegging, stopBegging, visit } from '../game/life';
 import { nightfallOnce, onPhaseTurn } from '../game/dayNight';
 import { speak } from '../ui/talkPanel';
-import { backPlate, fitPrompt } from '../ui/plate';
+import { backPlate, fitPrompt, SUBTITLE_Y } from '../ui/plate';
 import { resumeSpot, trackPlace } from '../game/place';
 import { BEG_SPOT_X, BEG_SPOT_Y, paintBegCup, paintBegSpot } from '../art/begSpot';
 
@@ -181,7 +181,7 @@ export class ExteriorDay extends Phaser.Scene {
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
-    this.mutter = centerText(this, GAME_W / 2, GAME_H - 18, '', PALETTE.cream).setDepth(802).setVisible(false);
+    this.mutter = centerText(this, GAME_W / 2, SUBTITLE_Y, '', PALETTE.cream).setDepth(802).setVisible(false);
     backPlate(this, this.mutter);
 
     this.keys = { left: this.bind(KEYS.left), right: this.bind(KEYS.right) };

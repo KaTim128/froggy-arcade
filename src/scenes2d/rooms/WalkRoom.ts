@@ -28,7 +28,7 @@ import { touchControls } from '../../ui/touchControls';
 import { grain, seeded } from '../../art/surface';
 import { speak } from '../../ui/talkPanel';
 import type { SpeakerId } from '../../ui/portraits';
-import { backPlate, fitPrompt } from '../../ui/plate';
+import { backPlate, fitPrompt, SUBTITLE_Y } from '../../ui/plate';
 import { SHOP_HOURS, clock, shopsOpen, type DayPhase } from '../../game/life';
 import { onLightTurn, onPhaseTurn } from '../../game/dayNight';
 
@@ -128,7 +128,7 @@ export abstract class WalkRoom extends Phaser.Scene {
   private promptPlate!: Phaser.GameObjects.Rectangle;
   private mutter!: Phaser.GameObjects.BitmapText;
   /** Where what is said goes, across the screen (a room whose floor is down there moves it up). */
-  protected mutterY = GAME_H - 30;
+  protected mutterY = SUBTITLE_Y;
   protected panel: Phaser.GameObjects.Container | null = null;
   protected exitDoor!: Fixture;
   /** When a card or the wardrobe last closed: the Esc that closed it is not a pause. */

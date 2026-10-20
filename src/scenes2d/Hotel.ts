@@ -43,7 +43,7 @@ import { store } from '../core/state';
 import { KEYS } from '../core/input';
 import { centerText, confirmDialog, fadeIn, fadeToScene, text } from '../core/ui';
 import { openTalkPanel } from '../ui/talkPanel';
-import { Player } from '../art/player';
+import { Player, depthFor } from '../art/player';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 import { isTouch } from '../core/device';
@@ -75,7 +75,7 @@ import { HITS, WF, WF_H, WF_W, drawBrokenEdge, drawCracks, drawWindowFroggy } fr
 import { runHotelScare } from '../froggy/hotelScare';
 import { drawClerk } from '../froggy/clerk';
 import { froggyLayer } from '../render/froggyLayer';
-import { backPlate } from '../ui/plate';
+import { backPlate, SUBTITLE_Y } from '../ui/plate';
 import { clock as lifeClock } from '../game/life';
 import { resumeSpot, trackPlace } from '../game/place';
 
@@ -89,7 +89,8 @@ const FLOOR_LINE = 152;
  * hole where the player stands and where the guest book lies on the desk.
  */
 // (to the drifter's scale: a man of 28 behind a 17-pixel desk, head and chest over it)
-const CLERK = { x: 160, feet: 150, h: 28 };
+// (on the drifter's rig, 25 tall: head, collar and badge over the desk)
+const CLERK = { x: 160, feet: 146, h: 28 };
 const DESK_TOP = DESK.top;
 const BOOK = { x: 140, y: DESK.top - 2, w: 11, h: 2 };
 
@@ -106,6 +107,66 @@ type Area = 'lobby' | 'lift' | 'corridor' | 'room' | 'bath';
 type Spot = 'out' | 'desk' | 'lift' | 'stairs' | 'stairdoor' | 'storage' | 'door612' | 'roomdoor' | 'bathdoor' | 'bed' | 'window' | 'mirror' | null;
 /** Where the night is, in room 612. */
 type Night = 'calm' | 'sleeping' | 'late' | 'reveal' | 'gone';
+/** Where the sleeper's feet go: the foot of the bag, so the head lands on the hood. */
+const SLEEP_FEET_X = BED.x - BED.w / 2 + 8;
+/** The top of the bag's flap, puffed up over the body lying in it. */
+const FLAP_TOP = BED.top - 7;
+
+/**
+ * ---- THE BAG'S TOP HALF, done up over whoever is in it: the same bag as
+ * the one rolled out under it (art/hotelInterior), so the same greens, the
+ * same six quilted channels with their stitching, the lit top edge, the
+ * zip along the side -- puffed up over the body into a rounded top, and
+ * turned down at the shoulders in a cuff where the head comes out onto the
+ * hood.  Drawn once into a texture so the room's light can tint it.
+ */
+function sleepFlapTexture(scene: Phaser.Scene): string {
+  const key = 'hotel_sleep_flap';
+  if (scene.textures.exists(key)) return key;
+  const hood = 8;
+  const w = BED.w - hood; // up to the hood: the head lies on it
+  const top = 0;
+  const bottom = BED.top + 6 - FLAP_TOP; // down to the bag's foot line
+  const g = scene.make.graphics({ x: 0, y: 0 }, false);
+  // the outline, rounded at the corners of the puffed top
+  g.fillStyle(0x1a2420, 1);
+  g.fillRect(2, top, w - 3, 1);
+  g.fillRect(1, top + 1, w - 1, 1);
+  g.fillRect(0, top + 2, w + 1, bottom - top);
+  g.fillRect(1, bottom, w, 1);
+  // the body of it
+  g.fillStyle(0x3a6a5a, 1);
+  g.fillRect(2, top + 1, w - 4, 1);
+  g.fillRect(1, top + 2, w - 1, bottom - top - 2);
+  // the six quilted channels across the length, each lit on top and
+  // shaded at its seam, stitched along the seams
+  for (let k = 0; k < 5; k++) {
+    const x0 = 1 + Math.round(((w - 6) * k) / 5);
+    const x1 = 1 + Math.round(((w - 6) * (k + 1)) / 5);
+    g.fillStyle(0x5c8c7a, 1).fillRect(x0 + 1, top + 2, Math.max(1, x1 - x0 - 2), 1);
+    g.fillStyle(0x467868, 1).fillRect(x0 + 1, top + 3, Math.max(1, x1 - x0 - 2), 2);
+    g.fillStyle(0x2e5a4c, 1).fillRect(x1 - 1, top + 2, 1, bottom - top - 4);
+    if (k > 0) {
+      g.fillStyle(0x24483c, 1);
+      for (let y = top + 3; y < bottom - 2; y += 2) g.fillRect(x0, y, 1, 1);
+    }
+  }
+  // the underside of the puff, in its own shade, and a sheen along the top
+  g.fillStyle(0x2e5a4c, 1).fillRect(1, bottom - 3, w - 1, 2);
+  g.fillStyle(0xffffff, 0.16).fillRect(3, top + 1, Math.round(w * 0.5), 1);
+  // the zip along the foot, with its pull by the cuff
+  g.fillStyle(0x26304a, 1).fillRect(1, bottom - 1, w - 1, 1);
+  g.fillStyle(0xb8bcc4, 1).fillRect(2, bottom - 1, w - 4, 1);
+  g.fillStyle(0xd8dce2, 1).fillRect(w - 6, bottom - 2, 2, 2);
+  // the cuff at the shoulders: turned down, the lining showing
+  g.fillStyle(0x1a2420, 1).fillRect(w - 4, top + 1, 1, bottom - top - 1);
+  g.fillStyle(0x6a9a88, 1).fillRect(w - 3, top + 2, 3, bottom - top - 3);
+  g.fillStyle(0x8ab8a6, 1).fillRect(w - 3, top + 2, 3, 1);
+  g.fillStyle(0x4a7a6a, 1).fillRect(w - 1, top + 3, 1, bottom - top - 5);
+  g.generateTexture(key, w + 2, bottom + 2);
+  g.destroy();
+  return key;
+}
 
 /** The window breaking: when each blow lands, from the curtains opening. */
 const FIRST_BLOW = 0.8;
@@ -156,7 +217,7 @@ export class Hotel extends Phaser.Scene {
   private roomImg: Phaser.GameObjects.Image | null = null;
   private glazing: Phaser.GameObjects.Image | null = null;
   private lampLight: Phaser.GameObjects.Image | null = null;
-  private sleeper: Phaser.GameObjects.Container | null = null;
+  private sleeper: Phaser.GameObjects.Image | null = null;
   private black: Phaser.GameObjects.Rectangle | null = null;
   private froggyTex: Phaser.Textures.CanvasTexture | null = null;
   private froggyImg: Phaser.GameObjects.Image | null = null;
@@ -256,8 +317,8 @@ export class Hotel extends Phaser.Scene {
     this.keys = { left: bind(KEYS.left), right: bind(KEYS.right) };
     kb?.on('keydown-E', () => this.interact());
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
-    this.mutterPlate = this.add.rectangle(0, 0, 1, 1, PALETTE.black, 0.72).setOrigin(0, 0).setDepth(820).setVisible(false);
-    this.mutter = centerText(this, GAME_W / 2, GAME_H - 34, '', PALETTE.cream).setDepth(821).setVisible(false).setMaxWidth(290);
+    this.mutterPlate = this.add.rectangle(0, 0, 1, 1, PALETTE.black, 0).setOrigin(0, 0).setDepth(820).setVisible(false);
+    this.mutter = centerText(this, GAME_W / 2, SUBTITLE_Y, '', PALETTE.cream).setDepth(821).setVisible(false).setMaxWidth(290);
     backPlate(this, this.mutter);
     // the words are the button: a click or a tap on them moves on
     this.tapZone = this.add.zone(0, GAME_H - 76, GAME_W, 76).setOrigin(0, 0).setDepth(850);
@@ -497,7 +558,8 @@ export class Hotel extends Phaser.Scene {
       const b = c & 255;
       s.setFillStyle((col(r, 0) << 16) | (col(g, 0) << 8) | col(b, blue * 30));
     }
-    for (const { s } of this.sleeper ? this.sleeper.list.map((o) => ({ s: o as Phaser.GameObjects.Rectangle })) : []) s.setAlpha(Math.max(0.35, k));
+    // (the bag's flap over the sleeper dims with the room)
+    this.sleeper?.setTint(tint);
   }
 
   // ------------------------------------------------------------- the police
@@ -1164,13 +1226,7 @@ export class Hotel extends Phaser.Scene {
     this.say('I lock the door. For the first time tonight, I feel safe.', 3.2);
     // you, in bed, under the covers
     this.time.delayedCall(900, () => {
-      this.player?.sprite.setVisible(false);
-      this.sleeper = this.add.container(0, 0, [
-        // his head on the pillow at the hood end, and the bag zipped up over him
-        this.add.rectangle(BED.x + BED.w / 2 - 8, BED.top - 6, 5, 4, 0xd8b088).setOrigin(0, 0),
-        this.add.rectangle(BED.x + BED.w / 2 - 9, BED.top - 7, 7, 2, 0x5a3a3a).setOrigin(0, 0),
-        this.add.rectangle(BED.x - BED.w / 2 + 1, BED.top - 1, BED.w - 11, 2, 0x4a7a6a).setOrigin(0, 0),
-      ]).setDepth(9);
+      this.tuckIn();
       audio.sfx('footstep_carpet', 0.3);
     });
     this.time.delayedCall(2600, () => {
@@ -1184,6 +1240,48 @@ export class Hotel extends Phaser.Scene {
     this.time.delayedCall(4200, () => audio.setScene(SILENCE));
     if (this.black) this.tweens.add({ targets: this.black, fillAlpha: 1, duration: 8000, delay: 3200, ease: 'Sine.easeIn' });
     this.time.delayedCall(12500, () => this.threeAM());
+  }
+
+  /**
+   * ---- INTO THE BAG: the player themselves, the same model as everywhere,
+   * lying down on it -- head on the pillow at the hood end, eyes shut,
+   * breathing -- with the bag's flap pulled up over them.  One figure,
+   * never a second drawing of you: it is the same Player that gets up.
+   */
+  private tuckIn(): void {
+    const p = this.player;
+    if (!p || this.sleeper) return;
+    p.sprite.setVisible(true);
+    p.setPosition(SLEEP_FEET_X, BED.top + 1);
+    p.lie(-1);
+    p.sprite.setDepth(9);
+    // the bag's top half, zipped up over the body to the shoulders
+    this.sleeper = this.add.image(BED.x - BED.w / 2 - 1, FLAP_TOP - 1, sleepFlapTexture(this)).setOrigin(0, 0).setDepth(10);
+  }
+
+  /**
+   * ---- 3 AM: AWAKE.  The flap goes back, you sit up in the bag, and then you
+   * are on your feet beside it -- the one figure all the way through, so
+   * nothing of the sleeper is left lying there.
+   */
+  private wakeUp(then: () => void): void {
+    const p = this.player;
+    this.sleeper?.destroy();
+    this.sleeper = null;
+    if (!p) return then();
+    audio.sfx('floor_creak', 0.4);
+    p.getUp();
+    // sat up in the bag, a moment, facing the window
+    p.setPosition(SLEEP_FEET_X + 8, BED.top + 1);
+    p.sit('floor', { facing: -1 });
+    this.time.delayedCall(700, () => {
+      p.getUp();
+      p.setPosition(BED.x - BED.w / 2 - 6, WALK_Y);
+      p.face(-1);
+      p.sprite.setDepth(depthFor(WALK_Y));
+      audio.sfx('footstep_carpet', 0.4);
+      then();
+    });
   }
 
   /** Out of the black, slowly: 3 AM.  A click or a tap moves it on. */
@@ -1215,13 +1313,7 @@ export class Hotel extends Phaser.Scene {
     this.setCurtains(false, true);
     this.roomTint(0.28, 0.75);
     if (!this.sleeper) {
-      this.player?.sprite.setVisible(false);
-      this.sleeper = this.add.container(0, 0, [
-        // his head on the pillow at the hood end, and the bag zipped up over him
-        this.add.rectangle(BED.x + BED.w / 2 - 8, BED.top - 6, 5, 4, 0xd8b088).setOrigin(0, 0),
-        this.add.rectangle(BED.x + BED.w / 2 - 9, BED.top - 7, 7, 2, 0x5a3a3a).setOrigin(0, 0),
-        this.add.rectangle(BED.x - BED.w / 2 + 1, BED.top - 1, BED.w - 11, 2, 0x4a7a6a).setOrigin(0, 0),
-      ]).setDepth(9);
+      this.tuckIn();
       this.roomTint(0.28, 0.75);
     }
     if (this.black) {
@@ -1237,14 +1329,10 @@ export class Hotel extends Phaser.Scene {
     this.knocks = 0;
     this.time.delayedCall(retry ? 2400 : 5600, () => {
       this.say('Something is knocking on the window outside...', 3.6);
-      this.sleeper?.destroy();
-      this.sleeper = null;
-      if (this.player) {
-        this.player.setPosition(222, WALK_Y);
-        this.player.sprite.setVisible(true);
-      }
-      this.roomTint(0.28, 0.75);
-      this.locked = false;
+      this.wakeUp(() => {
+        this.roomTint(0.28, 0.75);
+        this.locked = false;
+      });
     });
   }
 
