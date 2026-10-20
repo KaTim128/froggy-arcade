@@ -226,34 +226,59 @@ export function button(
   return c;
 }
 
+/**
+ * A small square button with a pixel gear on it: the way into the pause
+ * menu where a word would take too much of a bar.
+ */
+export function gearButton(scene: Phaser.Scene, x: number, y: number, onClick: () => void): Phaser.GameObjects.Container {
+  const c = button(scene, x, y, '', onClick, { width: 14, height: 12 });
+  // a 9x9 gear: eight teeth round a ring, a hole in the middle
+  const g = scene.add.graphics();
+  g.fillStyle(PALETTE.cream, 1);
+  ['...xxx...', '.x.xxx.x.', '..xxxxx..', 'xxxx.xxxx', 'xxx...xxx', 'xxxx.xxxx', '..xxxxx..', '.x.xxx.x.', '...xxx...'].forEach((row, ry) =>
+    [...row].forEach((ch, rx) => ch === 'x' && g.fillRect(rx - 4, ry - 4, 1, 1)),
+  );
+  c.add(g);
+  return c;
+}
+
 /** PRD SM-5: fade out 300ms -> teardown -> build -> fade in 300ms. */
 export const FADE_MS = 300;
 
-export function fadeToScene(scene: Phaser.Scene, key: string, data?: object): void {
+export function fadeToScene(scene: Phaser.Scene, key: string, data?: object, opts: { ms?: number; hold?: number } = {}): void {
   // Froggy is composited on his own canvas above the game buffer, and the
   // camera fade does not own that canvas -- so without this he stays brightly
   // lit over a room going to black.  The same progress that darkens the room
   // darkens him, so the two are never out of step.
-  scene.cameras.main.fadeOut(FADE_MS, 0, 0, 0, (_cam: Phaser.Cameras.Scene2D.Camera, progress: number) => {
+  scene.cameras.main.fadeOut(opts.ms ?? FADE_MS, 0, 0, 0, (_cam: Phaser.Cameras.Scene2D.Camera, progress: number) => {
     froggyLayer.setDim(1 - progress);
   });
   scene.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
     froggyLayer.setDim(0);
-    // ...AND HE COMES BACK UP WITH THE NEXT ROOM, whoever builds it.  The dim
-    // is a CSS filter on his own canvas, so it outlives the scene that set it:
-    // a scene that fades itself in with the camera directly (the two where he
-    // tells you you are out of tokens did) drew the cozy portrait at
-    // brightness zero -- a solid black Froggy.  Restored the moment the next
-    // scene has been created; one that uses `fadeIn` below still ramps him
-    // up with the room, because its fade drives the dim from then on.
-    const next = scene.scene.get(key);
-    next?.events.once(Phaser.Scenes.Events.CREATE, () => froggyLayer.setDim(1));
-    // ALWAYS SOMETHING, never nothing.  Started without data, Phaser hands the
-    // scene whatever it was given LAST time -- so walking in off the street
-    // put you back where you had last come in from (the lounge doorway, a
-    // cabinet) instead of in front of the doors you just came through.
-    scene.scene.start(key, data ?? {});
+    // (a long transition holds on black a moment before the next room)
+    if (opts.hold) {
+      scene.time.delayedCall(opts.hold, () => startNext(scene, key, data));
+      return;
+    }
+    startNext(scene, key, data);
   });
+}
+
+function startNext(scene: Phaser.Scene, key: string, data?: object): void {
+  // ...AND HE COMES BACK UP WITH THE NEXT ROOM, whoever builds it.  The dim
+  // is a CSS filter on his own canvas, so it outlives the scene that set it:
+  // a scene that fades itself in with the camera directly (the two where he
+  // tells you you are out of tokens did) drew the cozy portrait at
+  // brightness zero -- a solid black Froggy.  Restored the moment the next
+  // scene has been created; one that uses `fadeIn` below still ramps him
+  // up with the room, because its fade drives the dim from then on.
+  const next = scene.scene.get(key);
+  next?.events.once(Phaser.Scenes.Events.CREATE, () => froggyLayer.setDim(1));
+  // ALWAYS SOMETHING, never nothing.  Started without data, Phaser hands the
+  // scene whatever it was given LAST time -- so walking in off the street
+  // put you back where you had last come in from (the lounge doorway, a
+  // cabinet) instead of in front of the doors you just came through.
+  scene.scene.start(key, data ?? {});
 }
 
 export function fadeIn(scene: Phaser.Scene): void {

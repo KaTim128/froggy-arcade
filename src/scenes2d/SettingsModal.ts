@@ -7,9 +7,10 @@
  * Anywhere you are playing it is the PAUSE menu (see core/pause.ts): the room
  * underneath is frozen, the CONTROLS tab lists what THAT place reads -- the
  * cabinet's own keys in a cabinet, the room's in a room, and the thumb
- * version of either on a phone -- and the buttons are RESUME and LEAVE.
- * LEAVE goes to the title screen; from inside a paid game it first asks, and
- * says what walking out will cost, exactly as the cabinet's own QUIT does.
+ * version of either on a phone -- and the buttons are RESUME and EXIT TO
+ * START MENU, with QUIT GAME between them inside an arcade game (the
+ * cabinet's title bar has only a gear).  From inside a paid game either way
+ * out asks first, and says what walking out will cost.
  */
 
 import Phaser from 'phaser';
@@ -75,8 +76,16 @@ export class SettingsModal extends Phaser.Scene {
     this.renderBody();
 
     if (this.pause) {
-      button(this, GAME_W / 2 - 52, 158, 'RESUME', () => resumePause(), { width: 70, height: 13 });
-      button(this, GAME_W / 2 + 48, 158, 'EXIT TO START MENU', () => this.leave(), {
+      // In an arcade game the menu is where QUIT lives too (the cabinet's
+      // title bar keeps only the gear): back to the room, asked first.
+      const inGame = this.from === 'Minigame' && !!pausedScene();
+      if (inGame) {
+        button(this, 54, 158, 'RESUME', () => resumePause(), { width: 54, height: 13 });
+        button(this, 122, 158, 'QUIT GAME', () => this.quitGame(), { width: 70, height: 13, fill: 0x5a1a22, hoverFill: 0x8a2b34 });
+      } else {
+        button(this, GAME_W / 2 - 52, 158, 'RESUME', () => resumePause(), { width: 70, height: 13 });
+      }
+      button(this, inGame ? 226 : GAME_W / 2 + 48, 158, 'EXIT TO START MENU', () => this.leave(), {
         width: 118,
         height: 13,
         fill: 0x5a1a22,
@@ -136,6 +145,31 @@ export class SettingsModal extends Phaser.Scene {
         } else {
           leaveToMenu();
         }
+      },
+      onCancel: () => {
+        this.asking = null;
+      },
+      edge: risk === null ? PALETTE.neon : 0xc31f2e,
+    });
+  }
+
+  /**
+   * QUIT GAME: out of the cabinet and back to the room it stands in.  Asked
+   * first, with what walking out forfeits; confirmed, the cabinet's own quit
+   * takes it, exactly as the old QUIT button did.
+   */
+  private quitGame(): void {
+    if (this.asking) return;
+    const mg = pausedScene() as MinigameScene | null;
+    if (!mg) return;
+    const risk = mg.forfeitAmount();
+    this.asking = confirmDialog(this, {
+      lines: mg.quitLines(),
+      confirm: risk === null ? 'LEAVE' : 'CONFIRM QUIT',
+      onConfirm: () => {
+        this.asking = null;
+        resumePause();
+        mg.quitGame();
       },
       onCancel: () => {
         this.asking = null;
