@@ -18,6 +18,8 @@ export interface ResumePoint {
 
 export function resumePoint(): ResumePoint {
   const s = store.get();
+  // (an arrested profile is never resumed: the title screen says so)
+  if (s.jailed) return { key: 'StartScreen' };
   if (s.route === 'ejected') return { key: 'ExteriorNight' };
   if (s.route === 'basement') return { key: 'BasementSequence' };
   // A run locked in the rooms comes back to the rooms, coming round on the

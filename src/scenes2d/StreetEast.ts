@@ -9,6 +9,7 @@
  */
 
 import Phaser from 'phaser';
+import { Patrol } from '../game/patrol';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { KEYS } from '../core/input';
@@ -100,6 +101,7 @@ export class StreetEast extends Phaser.Scene {
   private errand: Front | null = null;
   private locked = false;
   private people!: Pedestrians;
+  private patrol: Patrol | null = null;
 
   constructor() {
     super('StreetEast');
@@ -138,6 +140,7 @@ export class StreetEast extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, WORLD_W, GAME_H);
     this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
     this.people = new Pedestrians(this, WORLD_W, WALK_Y + 2, dark ? 2 : 4, dark);
+    this.patrol = new Patrol({ scene: this, worldW: WORLD_W, y: WALK_Y, player: () => this.player, dark: () => clock().dark, lock: (on) => ((this.locked = on), on && (this.errand = null)) });
 
     new TokenHud(this);
     attachPockets(this, () => this.locked || this.busy());
@@ -192,6 +195,11 @@ export class StreetEast extends Phaser.Scene {
   private interact(): void {
     if (this.locked || this.busy() || !this.spot) return;
     const f = this.spot;
+    // (a shop is no place to hide: they would only follow you in)
+    if (this.patrol?.chasing) {
+      this.say('NOT IN THERE - THEY WOULD FOLLOW ME IN!');
+      return;
+    }
     if (!shopsOpen()) {
       audio.sfx('door_rattle', 0.5);
       this.say(`${f.name} IS SHUT FOR THE NIGHT. OPEN ${SHOP_HOURS}.`);
@@ -223,6 +231,7 @@ export class StreetEast extends Phaser.Scene {
 
   update(_t: number, delta: number): void {
     this.people.update(delta);
+    this.patrol?.update(delta);
     if (this.locked || this.busy()) {
       this.prompt.setVisible(false);
       this.promptPlate.setVisible(false);
@@ -244,6 +253,7 @@ export class StreetEast extends Phaser.Scene {
     // back west, to the arcade
     if (this.player.x <= 3 && dx < 0) {
       this.locked = true;
+      this.patrol?.leaveBy('right');
       fadeToScene(this, 'ExteriorDay', { fromEast: true });
       return;
     }

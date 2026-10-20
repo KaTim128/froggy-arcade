@@ -10,6 +10,8 @@ import { Shop } from '../scenes2d/Shop';
 import { Goals } from '../scenes2d/Goals';
 import { Condo } from '../scenes2d/Condo';
 import { Stairwell } from '../scenes2d/Stairwell';
+import { JailEnding } from '../scenes2d/JailEnding';
+import { BadgesModal } from '../scenes2d/BadgesModal';
 import { FurnitureStore } from '../scenes2d/shops/FurnitureStore';
 import { ClothesStore } from '../scenes2d/shops/ClothesStore';
 import { BarberShop } from '../scenes2d/shops/BarberShop';
@@ -96,6 +98,7 @@ export function bootGame(): void {
       SettingsModal,
       InventoryModal,
       ProfileModal,
+      BadgesModal,
       IntroCutscene,
       ArcadeHub,
       ArcadeAnnex,
@@ -120,6 +123,7 @@ export function bootGame(): void {
       Stairwell,
       RooftopEscape,
       ArrestEnding,
+      JailEnding,
       MinigameScene,
       FroggyCharity,
       ExteriorNight,

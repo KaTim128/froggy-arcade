@@ -20,6 +20,7 @@
  */
 
 import Phaser from 'phaser';
+import { Patrol } from '../game/patrol';
 import { TokenHud } from '../ui/hud';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -183,6 +184,19 @@ export class ExteriorDay extends Phaser.Scene {
     // kept with the run, and back on the spot when resumed here (game/place)
     trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
 
+    // now and then, two weeks on: an officer walking the pavement (game/patrol)
+    this.patrol = time === 'midnight' ? null : new Patrol({
+      scene: this,
+      worldW: GAME_W,
+      y: WALK_Y,
+      player: () => this.player,
+      dark: () => this.lifeDark,
+      lowProfile: () => this.begging,
+      lock: (on) => {
+        this.locked = on;
+        if (on) this.errand = null;
+      },
+    });
     // What you are carrying: cash and tokens, side by side and never added
     // together -- the same HUD as inside.
     new TokenHud(this);
@@ -251,6 +265,7 @@ export class ExteriorDay extends Phaser.Scene {
   }
 
   private time0: 'day' | 'evening' | 'midnight' = 'day';
+  private patrol: Patrol | null = null;
 
   /**
    * The arcade shut: the glass doors chained through their handles (see
@@ -408,6 +423,10 @@ export class ExteriorDay extends Phaser.Scene {
 
   private interact(): void {
     if (this.locked || this.busy() || !this.spot) return;
+    if (this.patrol?.chasing && this.spot !== 'door' && this.spot !== 'alley') {
+      this.say('NO TIME - GET OUT OF SIGHT!');
+      return;
+    }
 
     if (this.spot === 'door') {
       if (this.time0 === 'midnight') {
@@ -422,6 +441,7 @@ export class ExteriorDay extends Phaser.Scene {
       }
       this.locked = true;
       audio.sfx('door_open');
+      this.patrol?.safe();
       fadeToScene(this, 'ArcadeHub', { fromDoor: 'street' });
       return;
     }
@@ -458,6 +478,7 @@ export class ExteriorDay extends Phaser.Scene {
     if (this.spot === 'alley') {
       this.locked = true;
       audio.sfx('footstep_gravel', 0.5);
+      this.patrol?.safe();
       fadeToScene(this, 'BackAlley', {});
       return;
     }
@@ -722,6 +743,7 @@ export class ExteriorDay extends Phaser.Scene {
 
   update(_t: number, delta: number): void {
     this.people?.update(delta);
+    this.patrol?.update(delta);
     if (this.begging) {
       const got = collectBegging();
       if (got) {
@@ -767,6 +789,7 @@ export class ExteriorDay extends Phaser.Scene {
     // ---- EAST, off the right-hand end: the shops (not at midnight).
     if (this.player.x >= GAME_W - 5 && dx > 0 && this.time0 !== 'midnight') {
       this.locked = true;
+      this.patrol?.leaveBy('left');
       fadeToScene(this, 'StreetEast', {});
       return;
     }
@@ -774,6 +797,7 @@ export class ExteriorDay extends Phaser.Scene {
     // by evening; at midnight, the night road.
     if (this.player.x <= 5 && dx < 0) {
       this.locked = true;
+      this.patrol?.leaveBy('right');
       fadeToScene(this, this.time0 === 'midnight' ? 'NightRoad3D' : 'StreetWest', {});
       return;
     }

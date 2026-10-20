@@ -26,11 +26,12 @@ import { froggyLayer } from '../render/froggyLayer';
 import { LOOKS, Player } from '../art/player';
 import { paintExterior } from '../art/exterior';
 import { backPlate } from '../ui/plate';
+import { earnBadge } from '../game/badges';
 
 type Act = 'paper' | 'later' | 'gate' | 'arcade' | 'done';
 
-const PAPER_W = 900;
-const PAPER_H = 1240;
+export const PAPER_W = 900;
+export const PAPER_H = 1240;
 
 export class ArrestEnding extends Phaser.Scene {
   private act: Act = 'paper';
@@ -54,6 +55,7 @@ export class ArrestEnding extends Phaser.Scene {
   create(): void {
     froggyLayer.clear();
     store.patch({ route: 'ended', hotelAfter: 'none' });
+    earnBadge('justice');
     store.flush();
     audio.setScene(SILENCE);
     this.act = 'paper';
@@ -370,7 +372,42 @@ export class ArrestEnding extends Phaser.Scene {
  * banner headline, three columns of copy, two halftone photographs with
  * captions, and the odds and ends down the side that make it a newspaper.
  */
-function paintNewspaper(): HTMLCanvasElement {
+/** What a front page says: the paper's own furniture stays, the story changes. */
+export interface PaperStory {
+  banner: string;
+  deck: string;
+  sub: string;
+  cap1: [string, string];
+  cap2: string;
+  body: string;
+  side: { head: string; text: string };
+  inside: [string, string, string];
+}
+
+export const HOTEL_STORY: PaperStory = {
+  banner: 'ARCADE DRIFTER ARRESTED',
+  deck: 'AFTER NIGHT OF CHAOS AT CONDOS',
+  sub: 'Lily\'s Condos left wrecked; suspect blames "a giant frog"',
+  cap1: ['POLICE TAPE across the shattered entrance of Lily\'s Condos in the early hours of', 'yesterday morning. Damage throughout the building is described as "extensive." (Staff photo)'],
+  cap2: 'THE SUSPECT is escorted from the scene. He offered no resistance.',
+  body:
+    'Lily\'s Condos was left in ruins early yesterday after what police called "a night of senseless destruction," ending with the arrest of a young man found alone in the lobby. ' +
+    'Officers responding to reports of screaming and breaking glass found the front doors smashed from the inside, the stairwell door torn from its hinges and a sixth-floor window broken outward. ' +
+    'Room 612 was "turned over completely," according to one officer at the scene. No staff were found on the premises. ' +
+    'The suspect, who had rented a short-stay unit there that evening, surrendered at the front entrance after repeated warnings. ' +
+    'In a statement described by investigators as "frankly bizarre," he claimed he had been pursued through the building by "a giant frog." ' +
+    'Police have found no evidence to support the claim. Footage from the building\'s security cameras is said to have been "damaged beyond recovery." ' +
+    'The suspect is also understood to have been a regular at the arcade on the edge of town, where staff declined to comment. ' +
+    'A court date has been set. Charges include criminal damage and trespass. ' +
+    'Residents of the street say the block had been quiet for years. "Nothing ever happens here," said one. "Not until now."',
+  side: {
+    head: '"GIANT FROG" SIGHTINGS DISMISSED',
+    text: 'Police yesterday dismissed a string of reports of a "frog-like figure" seen near the old road west of town. "There is no frog," a spokesman said. Several callers described it as "very tall."',
+  },
+  inside: ['Arcade owner silent ........ 4', 'Condos to close "for now" .... 6', 'Crossword ................. 19'],
+};
+
+export function paintNewspaper(story: PaperStory = HOTEL_STORY): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = PAPER_W;
   c.height = PAPER_H;
@@ -438,11 +475,11 @@ function paintNewspaper(): HTMLCanvasElement {
   // ---- the banner
   g.textAlign = 'center';
   g.font = `bold 58px ${SERIF}`;
-  g.fillText('ARCADE DRIFTER ARRESTED', PAPER_W / 2, 262, W);
+  g.fillText(story.banner, PAPER_W / 2, 262, W);
   g.font = `bold 46px ${SERIF}`;
-  g.fillText('AFTER NIGHT OF CHAOS AT CONDOS', PAPER_W / 2, 314);
+  g.fillText(story.deck, PAPER_W / 2, 314, W);
   g.font = `italic 22px ${SERIF}`;
-  g.fillText('Lily\'s Condos left wrecked; suspect blames "a giant frog"', PAPER_W / 2, 350);
+  g.fillText(story.sub, PAPER_W / 2, 350, W);
   g.fillRect(M, 366, W, 1);
 
   // ---- the lead photograph: the hotel, taped off, police lights
@@ -516,8 +553,8 @@ function paintNewspaper(): HTMLCanvasElement {
   });
   g.font = `italic 14px ${SERIF}`;
   g.textAlign = 'left';
-  g.fillText('POLICE TAPE across the shattered entrance of Lily\'s Condos in the early hours of', PX, PY + PHGT + 20);
-  g.fillText('yesterday morning. Damage throughout the building is described as "extensive." (Staff photo)', PX, PY + PHGT + 38);
+  g.fillText(story.cap1[0], PX, PY + PHGT + 20);
+  g.fillText(story.cap1[1], PX, PY + PHGT + 38);
 
   // ---- the second photograph: led away
   const SX = PX + PWID + 24;
@@ -543,20 +580,11 @@ function paintNewspaper(): HTMLCanvasElement {
     }
   });
   g.font = `italic 13px ${SERIF}`;
-  const cap2 = 'THE SUSPECT is escorted from the scene. He offered no resistance.';
+  const cap2 = story.cap2;
   wrap(g, cap2, SX, PY + 250, SW, 17);
 
   // ---- the copy, in columns
-  const body =
-    'Lily\'s Condos was left in ruins early yesterday after what police called "a night of senseless destruction," ending with the arrest of a young man found alone in the lobby. ' +
-    'Officers responding to reports of screaming and breaking glass found the front doors smashed from the inside, the stairwell door torn from its hinges and a sixth-floor window broken outward. ' +
-    'Room 612 was "turned over completely," according to one officer at the scene. No staff were found on the premises. ' +
-    'The suspect, who had rented a short-stay unit there that evening, surrendered at the front entrance after repeated warnings. ' +
-    'In a statement described by investigators as "frankly bizarre," he claimed he had been pursued through the building by "a giant frog." ' +
-    'Police have found no evidence to support the claim. Footage from the building\'s security cameras is said to have been "damaged beyond recovery." ' +
-    'The suspect is also understood to have been a regular at the arcade on the edge of town, where staff declined to comment. ' +
-    'A court date has been set. Charges include criminal damage and trespass. ' +
-    'Residents of the street say the block had been quiet for years. "Nothing ever happens here," said one. "Not until now."';
+  const body = story.body;
   g.font = `17px ${SERIF}`;
   g.fillStyle = INK;
   const colTop = 792;
@@ -585,11 +613,11 @@ function paintNewspaper(): HTMLCanvasElement {
   g.fillRect(M, lastY + 10, W, 2);
   g.font = `bold 26px ${SERIF}`;
   g.textAlign = 'left';
-  g.fillText('"GIANT FROG" SIGHTINGS DISMISSED', M, lastY + 46);
+  g.fillText(story.side.head, M, lastY + 46);
   g.font = `17px ${SERIF}`;
   wrap(
     g,
-    'Police yesterday dismissed a string of reports of a "frog-like figure" seen near the old road west of town. "There is no frog," a spokesman said. Several callers described it as "very tall."',
+    story.side.text,
     M,
     lastY + 72,
     W * 0.62,
@@ -606,9 +634,7 @@ function paintNewspaper(): HTMLCanvasElement {
   g.font = `bold 15px ${SERIF}`;
   g.fillText('INSIDE', BX + 10, lastY + 98);
   g.font = `14px ${SERIF}`;
-  g.fillText('Arcade owner silent ........ 4', BX + 10, lastY + 120);
-  g.fillText('Condos to close "for now" .... 6', BX + 10, lastY + 140);
-  g.fillText('Crossword ................. 19', BX + 10, lastY + 160);
+  story.inside.forEach((l, i) => g.fillText(l, BX + 10, lastY + 120 + i * 20));
   return c;
 }
 
