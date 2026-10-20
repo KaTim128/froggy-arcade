@@ -17,6 +17,18 @@
  * Into the arcade, down the alley, or home through Lily's doors, and they
  * have lost you.  Off the end of the street and they follow you on to the
  * next one.  Caught: arrested, and the run ends in a cell (JailEnding).
+ *
+ * THE STEALTH PHASE.  Until your look is changed at Sharp's (the man's
+ * orders), it is different: the patrols never stop -- one walking every
+ * street, up and down, past the mouths of the alleys -- and a catch is not
+ * the end of the run but of the attempt: CAUGHT, and you are back on the
+ * forecourt to try again (`caughtByPolice`).  So is lying down anywhere to
+ * sleep before the look is changed.  Down an alley you are out of sight
+ * altogether; a patrol going by out on the street shows as its lights
+ * sweeping the alley's mouth (`alleyWatch`).
+ *
+ * Every officer carries the lights with them: a red and blue glow pulsing
+ * round them, so one reads as a threat from the far end of a street.
  */
 
 import Phaser from 'phaser';
@@ -38,6 +50,10 @@ export interface PatrolHost {
   dark: () => boolean;
   /** Sat down on the pavement (begging): harder to make out. */
   lowProfile?: () => boolean;
+  /** Out of sight altogether (in an alley's mouth). */
+  concealed?: () => boolean;
+  /** Seconds before the first officer can turn up (a moment to get your bearings). */
+  grace?: number;
   /** Freeze (or free) the scene's own controls while you are being questioned or taken. */
   lock: (on: boolean) => void;
 }
@@ -59,6 +75,71 @@ let clearedUntil = 0;
 
 /** Patrols are only out after the two weeks, and never on a run already over. */
 export const patrolsOut = (): boolean => store.get().arc === 'live' && !store.get().jailed && store.get().route === 'normal';
+
+/** The face on the poster is still yours: the hunt is on (see the header). */
+export const stealthPhase = (): boolean => patrolsOut() && !store.get().disguised;
+
+/**
+ * CAUGHT, in the stealth phase: a red card, and back on the forecourt by
+ * the arcade to try again -- not the cell, not the paper.  `why` says what
+ * gave you away.
+ */
+export function caughtByPolice(scene: Phaser.Scene, why: 'seen' | 'sleep'): void {
+  pursuit = null;
+  audio.sfx('door_smash', 0.4);
+  scene.cameras.main.shake(160, 0.006);
+  const k = scene.add.container(0, 0).setDepth(4000).setScrollFactor(0);
+  k.add(scene.add.rectangle(0, 0, 320, 180, 0x000000, 0.55).setOrigin(0, 0));
+  k.add(scene.add.rectangle(160, 80, 236, 40, 0x1a0a0e, 0.96).setStrokeStyle(1, 0xd04040));
+  k.add(centerText(scene, 160, 72, 'CAUGHT BY THE POLICE', 0xff5050));
+  k.add(
+    centerText(scene, 160, 86, why === 'sleep' ? 'YOU LAY DOWN WITH THE POSTER FACE.' : 'THEY KNEW YOUR FACE.', PALETTE.cream),
+  );
+  for (const o of k.list) (o as unknown as Phaser.GameObjects.Components.ScrollFactor).setScrollFactor?.(0);
+  k.setAlpha(0);
+  scene.tweens.add({ targets: k, alpha: 1, duration: 200 });
+  scene.time.delayedCall(1500, () => fadeToScene(scene, 'ExteriorDay', { respawn: why }, { ms: 400 }));
+}
+
+/**
+ * IN AN ALLEY, a patrol going past outside: its lights swept along the
+ * far left of the screen (the alley's mouth), red and blue, top to bottom.
+ * Every so often while the hunt is on, and soon after you duck in if one
+ * was on your heels.
+ */
+export function alleyWatch(scene: Phaser.Scene): void {
+  if (!stealthPhase() && !(pursuit && performance.now() < pursuit.until)) return;
+  const chased = !!(pursuit && performance.now() < pursuit.until);
+  pursuit = null;
+  if (chased) earnBadge('low_profile', scene);
+  const key = 'siren_band';
+  if (!scene.textures.exists(key)) {
+    const t = scene.textures.createCanvas(key, 32, 90);
+    if (t) {
+      const g = t.getContext();
+      const grad = g.createRadialGradient(4, 45, 1, 4, 45, 44);
+      grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+      grad.addColorStop(0.4, 'rgba(255,255,255,0.35)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 32, 90);
+      t.refresh();
+    }
+  }
+  const pass = (): void => {
+    if (!scene.sys.isActive()) return;
+    const red = scene.add.image(0, -60, key).setOrigin(0, 0.5).setTint(0xff2a3a).setBlendMode(Phaser.BlendModes.ADD).setDepth(3500).setScrollFactor(0);
+    const blue = scene.add.image(0, -110, key).setOrigin(0, 0.5).setTint(0x2a5aff).setBlendMode(Phaser.BlendModes.ADD).setDepth(3500).setScrollFactor(0);
+    for (const [img, delay] of [[red, 0], [blue, 260]] as const) {
+      scene.tweens.add({ targets: img, y: 240, duration: 3200, delay, ease: 'Sine.easeInOut', onComplete: () => img.destroy() });
+      scene.tweens.add({ targets: img, alpha: { from: 1, to: 0.35 }, duration: 240, yoyo: true, repeat: 12 });
+    }
+    audio.sfx('footstep_concrete', 0.25);
+    scene.time.delayedCall(900, () => audio.sfx('footstep_concrete', 0.2));
+  };
+  scene.time.delayedCall(chased ? 1800 : 4000 + Math.random() * 5000, pass);
+  if (stealthPhase()) scene.time.addEvent({ delay: 14000 + Math.random() * 6000, loop: true, callback: pass });
+}
 
 /** Dev deep link ?police=1: an officer on every street, at once. */
 const forced = (): boolean => {
@@ -84,6 +165,9 @@ export class Patrol {
   private panel: Phaser.GameObjects.Container | null = null;
   private answerT = 0;
   private startT = 0;
+  private auraR: Phaser.GameObjects.Ellipse | null = null;
+  private auraB: Phaser.GameObjects.Ellipse | null = null;
+  private auraT = 0;
 
   constructor(private host: PatrolHost) {
     if (!patrolsOut()) return;
@@ -99,6 +183,13 @@ export class Patrol {
       return;
     }
     pursuit = null;
+    // in the stealth phase there is always one on the street
+    if (stealthPhase()) {
+      this.state = 'waiting';
+      this.wait = (host.grace ?? 0) + 3 + Math.random() * 3;
+      this.dir = Math.random() < 0.5 ? 1 : -1;
+      return;
+    }
     if (!forced() && (now < nextPatrolAt || Math.random() > 0.45)) return;
     nextPatrolAt = now + (75 + Math.random() * 65) * 1000;
     this.state = 'waiting';
@@ -133,6 +224,9 @@ export class Patrol {
     p.face(dir);
     this.nextPause = 3 + Math.random() * 5;
     this.mark = centerText(s, x, this.host.y - 34, '', PALETTE.gold).setDepth(820).setVisible(false);
+    // THE LIGHTS: a red and blue glow round them, swapping, pulsing
+    this.auraR = s.add.ellipse(x, this.host.y - 12, 34, 40, 0xff2a3a, 0.28).setBlendMode(Phaser.BlendModes.ADD).setDepth(p.sprite.depth - 0.001);
+    this.auraB = s.add.ellipse(x, this.host.y - 12, 34, 40, 0x2a5aff, 0.0).setBlendMode(Phaser.BlendModes.ADD).setDepth(p.sprite.depth - 0.001);
     this.state = 'walk';
   }
 
@@ -141,7 +235,7 @@ export class Patrol {
     const c = this.cop;
     if (!c) return 0;
     const p = this.host.player();
-    if (!p.sprite.visible) return 0;
+    if (!p.sprite.visible || this.host.concealed?.()) return 0;
     const dx = p.x - c.x;
     // only what is in front of them
     if (dx * c.facing <= 0) return 0;
@@ -165,6 +259,12 @@ export class Patrol {
     const p = this.host.player();
     const bounds = new Phaser.Geom.Rectangle(-80, this.host.y, this.host.worldW + 160, 0);
     this.mark?.setPosition(c.x, c.y - 33);
+    // the lights go round: red, then blue, each pulsing as it comes up
+    this.auraT += dt;
+    const ph = (Math.sin(this.auraT * 7) + 1) / 2;
+    const k = 0.18 + 0.2 * Math.abs(Math.sin(this.auraT * 3.5));
+    this.auraR?.setPosition(c.x, c.y - 12).setAlpha(k * ph).setDepth(c.sprite.depth - 0.001);
+    this.auraB?.setPosition(c.x, c.y - 12).setAlpha(k * (1 - ph)).setDepth(c.sprite.depth - 0.001);
 
     if (this.state === 'walk' || this.state === 'pause') {
       if (this.state === 'walk') {
@@ -187,7 +287,9 @@ export class Patrol {
       }
       // what they can see of you
       const v = performance.now() < clearedUntil ? 0 : this.sees();
-      if (v > 0) this.aware = Math.min(1, this.aware + dt * (0.45 + 1.5 * v));
+      // (a new look: they have to look twice as hard)
+      const slow = store.get().disguised ? 0.5 : 1;
+      if (v > 0) this.aware = Math.min(1, this.aware + dt * (0.45 + 1.5 * v) * slow);
       else this.aware = Math.max(0, this.aware - dt * 0.4);
       this.mark?.setText(this.aware > 0.15 ? '?' : '').setVisible(this.aware > 0.15).setTint(PALETTE.gold);
       if (this.aware >= 1) return this.stopYou();
@@ -253,7 +355,7 @@ export class Patrol {
           fn: () => {
             this.panel = null;
             // a bluff: better odds in poor light
-            if (Math.random() < (dark ? 0.7 : 0.45)) {
+            if (Math.random() < (store.get().disguised ? 0.85 : dark ? 0.7 : 0.45)) {
               this.say('"...Hm. Must be the light. Move along."');
               clearedUntil = performance.now() + 25000;
               this.aware = 0;
@@ -298,11 +400,17 @@ export class Patrol {
     this.panel = null;
   }
 
-  /** A hand on your shoulder.  That is the run. */
+  /** A hand on your shoulder.  That is the run (or, still in the hunt, the attempt). */
   private arrest(): void {
     this.state = 'arrest';
     this.host.lock(true);
     const s = this.host.scene;
+    if (!store.get().disguised) {
+      this.cop?.stand();
+      this.host.player().stand();
+      caughtByPolice(s, 'seen');
+      return;
+    }
     const p = this.host.player();
     this.cop?.stand();
     p.stand();
@@ -324,9 +432,17 @@ export class Patrol {
   private remove(): void {
     this.cop?.sprite.destroy();
     this.mark?.destroy();
-    this.cop = null;
-    this.mark = null;
+    this.auraR?.destroy();
+    this.auraB?.destroy();
+    this.cop = this.mark = this.auraR = this.auraB = null;
     this.state = 'gone';
+    // the hunt: another one along in a moment, from either end
+    if (stealthPhase()) {
+      this.state = 'waiting';
+      this.wait = 3 + Math.random() * 5;
+      this.dir = Math.random() < 0.5 ? 1 : -1;
+      this.aware = 0;
+    }
   }
 
   /**
@@ -336,6 +452,11 @@ export class Patrol {
   safe(): void {
     if (this.state === 'chase') earnBadge('low_profile');
     pursuit = null;
+  }
+
+  /** Ducked into an alley: out of their sight, and (if they were on you) they go by outside. */
+  hideAway(): void {
+    if (this.state === 'chase') pursuit = { until: performance.now() + 8000, edge: 'left' };
   }
 
   /** Off the end of the street with them after you: they follow you on, in at `edge` of the next. */

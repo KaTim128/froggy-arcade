@@ -31,6 +31,7 @@ export const BADGES: BadgeDef[] = [
   { id: 'not_homeless', name: 'NOT HOMELESS ANYMORE', desc: 'A KEY TO A PLACE OF YOUR OWN.', hint: 'FIND SOMEWHERE TO LIVE.', col: 0xd8a838 },
   { id: 'late_checkout', name: 'LATE CHECK-OUT', desc: 'LEFT THE GRAND LILY BY THE ROOF.', hint: 'NOT EVERY WAY OUT IS A DOOR.', col: 0x7a9ad8 },
   { id: 'most_wanted', name: 'MOST WANTED', desc: 'SAW YOUR OWN FACE ON A POSTER.', hint: 'COME BACK LATER.', col: 0xc83a3a },
+  { id: 'new_face', name: 'A NEW FACE', desc: 'CHANGED YOUR LOOK AT SHARP\'S.', hint: 'A HAIRCUT CHANGES EVERYTHING.', col: 0x7fe0d0 },
   { id: 'new_leaf', name: 'A FRESH START', desc: 'MOVED INTO ROOM 213.', hint: 'SOMEBODY OWES YOU ONE.', col: 0x8ac8b8 },
   { id: 'low_profile', name: 'LOW PROFILE', desc: 'GOT OUT OF SIGHT WITH THE POLICE ON YOU.', hint: 'KNOW WHEN TO DISAPPEAR.', col: 0x5a6a8a },
   { id: 'justice', name: 'JUSTICE PREVAILS', desc: 'ARRESTED. THE STORY ENDED IN A CELL.', hint: 'AN ENDING.', col: 0x3a5aa8 },

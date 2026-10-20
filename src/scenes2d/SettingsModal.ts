@@ -14,6 +14,7 @@
  */
 
 import Phaser from 'phaser';
+import { twoWeeksLater } from '../game/life';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { BRIGHT_MAX, BRIGHT_MIN, LOOK_SENS_MAX, LOOK_SENS_MIN, generalDefaults, store } from '../core/state';
@@ -289,9 +290,20 @@ export class SettingsModal extends Phaser.Scene {
           jumpToScene('Hotel', { area: 'lobby', from: 'stairs' });
         },
       ],
+      [
+        'TWO WEEKS LATER',
+        'OVER THE ROOFS: THE POSTER, 213',
+        () => {
+          // the end of the rooftop run: away, a fortnight on, outside the arcade
+          store.patch({ seenIntro: true, charityUsed: true, hasKey: true, froggyGone: true, route: 'normal', hideRoom: 0, timeOfDay: 'day', reachedHotel: true, checkedIn: false, hotelNight: false, hotelAfter: 'escaped', arc: 'back' });
+          twoWeeksLater();
+          store.flush();
+          jumpToScene('ExteriorDay', {});
+        },
+      ],
     ];
     rows.forEach(([label, what, go], i) => {
-      const y = 58 + i * 18;
+      const y = 58 + i * 16;
       this.body.add(button(this, 92, y, label, go, { width: 112, height: 14 }));
       this.body.add(text(this, 152, y - 3, what, PALETTE.ash));
     });

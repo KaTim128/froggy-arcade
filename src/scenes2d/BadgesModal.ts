@@ -36,7 +36,7 @@ export class BadgesModal extends Phaser.Scene {
     if (!name) centerText(this, GAME_W / 2, 90, 'CHOOSE A PROFILE TO SEE ITS BADGES.', PALETTE.cream);
     else
       BADGES.forEach((b, i) => {
-        const y = 38 + i * 16;
+        const y = 34 + i * 15;
         const have = got.has(b.id);
         const g = this.add.graphics();
         // the medal: a disc on a ribbon, or a grey padlock
@@ -50,9 +50,9 @@ export class BadgesModal extends Phaser.Scene {
           g.lineStyle(1, 0x3a3f4a, 1).strokeCircle(36.5, y + 5, 3);
         }
         text(this, 48, y, have ? b.name : '???', have ? PALETTE.cream : PALETTE.steel);
-        text(this, 48, y + 8, have ? b.desc : b.hint, have ? PALETTE.ash : 0x5a6070).setScale(1);
+        text(this, 48, y + 7, have ? b.desc : b.hint, have ? PALETTE.ash : 0x5a6070).setScale(1);
       });
-    button(this, GAME_W / 2, GAME_H - 18, 'BACK', () => this.close(), { width: 60, height: 13 });
+    button(this, GAME_W / 2, GAME_H - 15, 'BACK', () => this.close(), { width: 60, height: 13 });
     this.input.keyboard?.on('keydown-ESC', () => this.close());
   }
 

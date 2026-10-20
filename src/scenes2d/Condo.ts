@@ -23,6 +23,7 @@
  */
 
 import Phaser from 'phaser';
+import { caughtByPolice, stealthPhase } from '../game/patrol';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
@@ -764,6 +765,12 @@ export class Condo extends WalkRoom {
     // (only at night: a slept night is a morning, and mornings are not for sleeping)
     if (!clock().dark) {
       this.say(`YOU ARE NOT TIRED. SLEEP COMES AFTER ${twelveHour(NIGHT_HOUR)}.`);
+      return;
+    }
+    // (the man said it: lie down with the poster's face, and they have you)
+    if (stealthPhase()) {
+      this.locked = true;
+      caughtByPolice(this, 'sleep');
       return;
     }
     this.locked = true;

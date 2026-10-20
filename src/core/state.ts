@@ -193,6 +193,17 @@ export interface GameState {
    */
   arc: 'none' | 'back' | 'live';
   /**
+   * ---- THE STEALTH PHASE.  Once the man has had his word, your face is the
+   * one on the poster: patrols are out on every street until you have had
+   * a new cut or colour at Sharp's (`disguised`).  `wantedOutfit` is what
+   * you had on when the poster went up -- the poster keeps that face.
+   * `hudShown`: the full purse and clock have been brought back, outside the
+   * arcade, once the look was changed.
+   */
+  disguised: boolean;
+  wantedOutfit: Record<string, string> | null;
+  hudShown: boolean;
+  /**
    * ---- BADGES.  The story's milestones, by id (game/badges).  The
    * profile's, like `playSeconds`: a reset of the run keeps them, deleting
    * the profile loses them.
@@ -402,6 +413,9 @@ function defaultState(): GameState {
     hotelNight: false,
     hotelAfter: 'none',
     arc: 'none',
+    disguised: false,
+    wantedOutfit: null,
+    hudShown: false,
     badges: [],
     jailed: false,
     cranes: {},
@@ -507,6 +521,9 @@ class Store {
     fresh.arc = run.arc === 'back' || run.arc === 'live' ? run.arc : 'none';
     fresh.badges = Array.isArray(run.badges) ? [...new Set(run.badges.filter((b) => typeof b === 'string'))] : [];
     fresh.jailed = run.jailed === true;
+    fresh.disguised = run.disguised === true;
+    fresh.hudShown = run.hudShown === true;
+    fresh.wantedOutfit = run.wantedOutfit && typeof run.wantedOutfit === 'object' ? Object.fromEntries(Object.entries(run.wantedOutfit).filter(([, v]) => typeof v === 'string')) : null;
     // (a save from before the two weeks: out over the roofs and away already
     // -- it picks up on the street outside the arcade, two weeks on)
     if (fresh.hotelAfter === 'escaped' && fresh.arc === 'none') fresh.arc = 'back';

@@ -9,6 +9,8 @@
  */
 
 import Phaser from 'phaser';
+import { stealthPhase } from '../../game/patrol';
+import { store } from '../../core/state';
 import { PALETTE } from '../../render/palette';
 import { audio } from '../../core/audio';
 import { centerText, text } from '../../core/ui';
@@ -40,12 +42,28 @@ export class BarberShop extends WalkRoom {
   private styles: CosmeticDef[] = [];
   private previewing = false;
   private desk: Fixture | null = null;
+  private wasDisguised = false;
+
+  /** The book shut: if the look was changed in the chair, a new face. */
+  protected afterModal(): void {
+    super.afterModal();
+    if (store.get().disguised && !this.wasDisguised) {
+      this.wasDisguised = true;
+      this.time.delayedCall(200, () => this.say('A NEW FACE. THE POLICE WILL WALK RIGHT PAST ME NOW.'));
+    }
+  }
 
   constructor() {
     super('BarberShop');
   }
 
   protected keepsShopHours = true;
+
+  create(): void {
+    // (in the hunt, Sharp's lets you in whatever the hour: it is the way out)
+    this.keepsShopHours = !stealthPhase();
+    super.create();
+  }
 
   protected music(): string {
     return 'room_lounge';
@@ -54,6 +72,8 @@ export class BarberShop extends WalkRoom {
   protected entered(): void {
     record('shop_visit');
     this.previewing = false;
+    if (stealthPhase()) this.time.delayedCall(500, () => this.say('"IN HERE, QUICK. SIT IN THE CHAIR -- NOBODY WILL KNOW YOU WHEN I AM DONE."'));
+    this.wasDisguised = store.get().disguised;
   }
 
   protected leave(): void {

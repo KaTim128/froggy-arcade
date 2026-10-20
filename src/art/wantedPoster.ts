@@ -6,14 +6,14 @@
  */
 
 import Phaser from 'phaser';
-import { paintFigure, playerLook } from './player';
+import { paintFigure, playerLook, type Look } from './player';
 
 export const POSTER_W = 30;
 export const POSTER_H = 35;
 
 /** The poster, its top-left at (x, y), on the wall. */
-export function paintWantedPoster(scene: Phaser.Scene, x: number, y: number, depth = 40): Phaser.GameObjects.Container {
-  const key = `wanted_poster_${hash(JSON.stringify(playerLook()))}`;
+export function paintWantedPoster(scene: Phaser.Scene, x: number, y: number, depth = 40, look: Look = playerLook()): Phaser.GameObjects.Container {
+  const key = `wanted_poster_${hash(JSON.stringify(look))}`;
   if (!scene.textures.exists(key)) {
     const t = scene.textures.createCanvas(key, POSTER_W, POSTER_H);
     if (t) {
@@ -42,7 +42,7 @@ export function paintWantedPoster(scene: Phaser.Scene, x: number, y: number, dep
       g.rect(px, py, pw, ph);
       g.clip();
       // (scale 2: the head's nine rows and the collar fill the frame)
-      paintFigure(g, playerLook(), POSTER_W / 2, py + 25 * 2 - 1, { scale: 2 });
+      paintFigure(g, look, POSTER_W / 2, py + 25 * 2 - 1, { scale: 2 });
       // printed in sepia, and a coarse screen over it
       g.globalCompositeOperation = 'color';
       g.fillStyle = '#8a6a3a';

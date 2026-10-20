@@ -351,7 +351,27 @@ export function wear(id: string): Result {
   const c = cosmeticById(id);
   if (!c || !L().wardrobe.includes(id)) return no('YOU DO NOT OWN THAT.');
   edit((l) => ((l.outfit as Record<string, string>)[c.slot] = id));
+  checkDisguise();
   return ok(`WEARING ${c.name}.`);
+}
+
+/**
+ * A NEW LOOK.  In the stealth phase, a cut or a colour from the barber's
+ * that is not the one on the poster: you look like somebody else now, and
+ * the patrols stop hunting you.
+ */
+export function checkDisguise(): boolean {
+  const s = store.get();
+  if (s.arc !== 'live' || s.disguised) return false;
+  const was = s.wantedOutfit ?? {};
+  const now = L().outfit as Record<string, string>;
+  const changed = (['hair', 'dye'] as const).some((slot) => (now[slot] ?? '') !== (was[slot] ?? ''));
+  if (!changed) return false;
+  store.patch({ disguised: true });
+  edit((l) => (l.notice = 'A NEW LOOK. THE POLICE WILL NOT KNOW YOU NOW.'));
+  earnBadge('new_face');
+  store.flush();
+  return true;
 }
 
 // ------------------------------------------------------------- sleep / beg

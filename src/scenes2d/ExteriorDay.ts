@@ -20,6 +20,8 @@
  */
 
 import Phaser from 'phaser';
+import { caughtByPolice, stealthPhase } from '../game/patrol';
+import { lookFor } from '../game/catalog';
 import { Patrol } from '../game/patrol';
 import { TokenHud } from '../ui/hud';
 import { PALETTE } from '../render/palette';
@@ -90,13 +92,17 @@ export class ExteriorDay extends Phaser.Scene {
   /** It has just turned midnight: the thoughts play, and nobody moves till they have. */
   private nightfall = false;
 
-  init(data: { fromArcade?: boolean; fromWest?: boolean; fromAlley?: boolean; fromEast?: boolean; nightfall?: boolean; atX?: number; woke?: string; opening?: boolean } = {}): void {
+  init(data: { fromArcade?: boolean; fromWest?: boolean; fromAlley?: boolean; fromEast?: boolean; nightfall?: boolean; atX?: number; woke?: string; opening?: boolean; respawn?: string } = {}): void {
     this.opening = data.opening === true;
     this.cameFrom = data.fromArcade ? 'arcade' : data.fromWest ? 'west' : data.fromAlley ? 'alley' : data.fromEast ? 'east' : 'other';
     this.nightfall = data.nightfall === true;
     this.atX = data.atX ?? null;
     this.woke = data.woke ?? null;
+    this.respawn = data.respawn ?? null;
   }
+
+  /** Caught in the stealth phase, and put back here to try again. */
+  private respawn: string | null = null;
 
   /** Where you stood when the light turned: the forecourt repaints round you. */
   private atX: number | null = null;
@@ -163,9 +169,11 @@ export class ExteriorDay extends Phaser.Scene {
     else this.paintClosed(refs.doorRect);
     // TWO WEEKS ON: your face, pasted over the arcade's own posters by the doors
     if (st0.arc !== 'none') {
-      // (one either side of the doors, each over one of the arcade's own)
-      paintWantedPoster(this, 97, 95, 41);
-      paintWantedPoster(this, 199, 95, 41);
+      // (one either side of the doors, each over one of the arcade's own --
+      // the face you had when they went up, whatever you look like now)
+      const face = st0.wantedOutfit ? lookFor(st0.wantedOutfit) : undefined;
+      paintWantedPoster(this, 97, 95, 41, face);
+      paintWantedPoster(this, 199, 95, 41, face);
     }
     // You come out of the doors standing at them, so going back in is one key
     // press away — the loop is meant to be walked dozens of times.
@@ -176,7 +184,8 @@ export class ExteriorDay extends Phaser.Scene {
     // scenes -- the alley, the dark arcade, the street after hours -- keep it.
     // On the pavement in front of the arcade's windows, clear of the doors
     // (or at the end you walked in from: the road west, the alley mouth).
-    const startX = this.woke ? BEG_X - 3 : this.atX ?? (this.cameFrom === 'west' ? 26 : this.cameFrom === 'alley' ? ALLEY_X - 6 : this.cameFrom === 'east' ? GAME_W - 10 : this.doorX + 46);
+    // (caught, in the hunt: back here, at the start, by the man)
+    const startX = this.respawn ? MAN_X - 20 : this.woke ? BEG_X - 3 : this.atX ?? (this.cameFrom === 'west' ? 26 : this.cameFrom === 'alley' ? ALLEY_X - 6 : this.cameFrom === 'east' ? GAME_W - 10 : this.doorX + 46);
     this.player = new Player(this, startX, WALK_Y, time === 'midnight');
     // The forecourt is loose ground, not the arcade's carpet.  This scene
     // never said so, which left the walk outside sounding like the walk in.
@@ -185,21 +194,21 @@ export class ExteriorDay extends Phaser.Scene {
     trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
 
     // now and then, two weeks on: an officer walking the pavement (game/patrol)
-    this.patrol = time === 'midnight' ? null : new Patrol({
-      scene: this,
-      worldW: GAME_W,
-      y: WALK_Y,
-      player: () => this.player,
-      dark: () => this.lifeDark,
-      lowProfile: () => this.begging,
-      lock: (on) => {
-        this.locked = on;
-        if (on) this.errand = null;
-      },
-    });
+    this.patrol = time === 'midnight' ? null : this.makePatrol();
     // What you are carrying: cash and tokens, side by side and never added
     // together -- the same HUD as inside.
-    new TokenHud(this);
+    // THE HUNT OVER: a new face, and back outside the arcade -- the purse,
+    // the tokens and the time come back (ui/hud 'labeled')
+    const reveal = st0.arc === 'live' && st0.disguised && !st0.hudShown;
+    if (reveal) {
+      store.patch({ hudShown: true });
+      store.flush();
+    }
+    const hud = new TokenHud(this);
+    if (reveal) {
+      hud.revealIn();
+      this.time.delayedCall(700, () => this.say('THE HUNT IS OVER. NOBODY KNOWS THIS FACE.'));
+    }
     attachPockets(this, () => this.locked || this.busy());
 
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.7).setDepth(800).setVisible(false);
@@ -256,6 +265,7 @@ export class ExteriorDay extends Phaser.Scene {
       );
       if (this.opening && !this.woke) this.raiseShutter();
       if (st0.arc === 'back') this.time.delayedCall(700, () => this.comeBack());
+      else if (this.respawn) this.time.delayedCall(500, () => this.say("BACK AT THE START. SHARP'S IS EAST - STAY OUT OF SIGHT."));
       else if (this.woke) this.wakeUp(this.woke);
       else {
         const line = nightfallOnce();
@@ -266,6 +276,23 @@ export class ExteriorDay extends Phaser.Scene {
 
   private time0: 'day' | 'evening' | 'midnight' = 'day';
   private patrol: Patrol | null = null;
+
+  /** Now and then (or, in the hunt, always) an officer on the pavement. */
+  private makePatrol(grace = 0): Patrol {
+    return new Patrol({
+      grace: grace || (this.respawn ? 4 : 0),
+      scene: this,
+      worldW: GAME_W,
+      y: WALK_Y,
+      player: () => this.player,
+      dark: () => this.lifeDark,
+      lowProfile: () => this.begging,
+      lock: (on) => {
+        this.locked = on;
+        if (on) this.errand = null;
+      },
+    });
+  }
 
   /**
    * The arcade shut: the glass doors chained through their handles (see
@@ -451,6 +478,12 @@ export class ExteriorDay extends Phaser.Scene {
         return;
       }
       const c = clock();
+      // the man's warning: no sleeping until the face on the poster is gone
+      if (c.dark && stealthPhase()) {
+        this.locked = true;
+        caughtByPolice(this, 'sleep');
+        return;
+      }
       if (c.dark && sleepPlace() === 'street') {
         // nowhere else to go: the pavement for the night
         this.sleepRough();
@@ -478,12 +511,16 @@ export class ExteriorDay extends Phaser.Scene {
     if (this.spot === 'alley') {
       this.locked = true;
       audio.sfx('footstep_gravel', 0.5);
-      this.patrol?.safe();
+      this.patrol?.hideAway();
       fadeToScene(this, 'BackAlley', {});
       return;
     }
 
     const s = store.get();
+    if (stealthPhase()) {
+      this.manSays('"Sharp\'s. East of here. Change that face before you do anything else -- and don\'t you dare lie down anywhere until you have."');
+      return;
+    }
     // ---- THE RENT ON 213 IS HIS: due (or a week ahead), or the flat to take back
     if (s.arc === 'live' && !this.rentAsked && (!s.life.rented || rentInDays(s.life) <= RENT_DAYS - 1)) return this.rentTalk();
     this.rentAsked = false;
@@ -690,16 +727,20 @@ export class ExteriorDay extends Phaser.Scene {
     this.player.face(1);
     this.say('...IS THAT MY FACE? ON THE WALL?');
     earnBadge('most_wanted', this);
+    // the face on the poster: what you have on now
+    store.patch({ wantedOutfit: { ...(store.get().life.outfit as Record<string, string>) } });
     const lines = [
       '"Well, well. If it isn\'t the most famous face on the street."',
       '"Something strange went on at Lily\'s that night. And you were right in the middle of it. I\'d bet my hat."',
-      '"Here. $200. Call it compensation for the rental situation... and everything after it."',
-      '"Don\'t go soft on me, though. I still want my prizes. And I still want them cheap."',
-      '"A word of warning: the police patrol these streets now and then. They\'ve all seen that poster."',
-      '"If one spots you, get out of sight. Into the arcade, down the alley, or home."',
+      '"A word of warning: the police are all over these streets. Every one of them has seen that poster."',
+      '"If you want to get away from them, change your appearance. Sharp\'s, the barber, east of here. A new cut, a new colour."',
+      '"Keep out of their sight on the way. Duck down an alley if one comes. Into the arcade, or any gap between the shops."',
+      '"And don\'t even think of trying to find a place to sleep until your appearance is changed. If you try to sleep before changing your look, you will get caught."',
       '"Home is Lily\'s again. I rented you a flat: LEVEL 2, ROOM 213. The middle door."',
       `"The first week's on me. After that the rent comes to me, not the landlord. $${RENT_PRICE} a week."`,
       '"Why? A roof over your head keeps you winning prizes. And I do like easy money."',
+      '"Here. $200. Call it compensation for the rental situation... and everything after it."',
+      '"Don\'t go soft on me, though. I still want my prizes. And I still want them cheap. Now go and get that haircut."',
     ];
     let i = 0;
     const next = (): void => {
@@ -708,10 +749,12 @@ export class ExteriorDay extends Phaser.Scene {
         moveInto213();
         store.patch({ arc: 'live' });
         store.flush();
+        // and the hunt is on, from here (a moment's start on them)
+        this.patrol = this.makePatrol(5);
         audio.sfx('coin_drop', 0.7);
         this.talking = null;
         this.locked = false;
-        this.say('$200, AND A KEY: LILY\'S, LEVEL 2, ROOM 213.');
+        this.say("$200. NOW TO SHARP'S, EAST - WITHOUT BEING SEEN.");
         return;
       }
       this.talking = speak(this, 'man', lines[i++], () => {
