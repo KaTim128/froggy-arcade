@@ -29,8 +29,6 @@ export const SCENES = [
   'ArrestEnding',
   'NightRoad3D',
   'FroggyCharity',
-  'SecondBust',
-  'EjectionCutscene',
   'ExteriorNight',
   'BackAlley',
   'ArcadeDark',
@@ -73,7 +71,6 @@ export function canEnter(scene: SceneId, s: Readonly<GameState>, ctx: GuardConte
     case 'ArcadeCasino':
     case 'PrizeCounter':
     case 'FroggyCharity':
-    case 'SecondBust':
     // The street outside and the man on it belong to the daytime half of the
     // game: once the arcade has thrown you out, there is no going back to
     // either of them.
@@ -89,10 +86,6 @@ export function canEnter(scene: SceneId, s: Readonly<GameState>, ctx: GuardConte
 
     case 'Minigame':
       return s.route === 'normal' && s.tokens >= (ctx.cost ?? 0);
-
-    case 'EjectionCutscene':
-      // The ejection commits `route = 'ejected'`, so it runs from `normal`.
-      return s.route === 'normal';
 
     // PRD AC-6: the break-in is reachable ONLY from the ejected route.
     case 'ExteriorNight':

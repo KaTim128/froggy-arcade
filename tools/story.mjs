@@ -163,23 +163,25 @@ console.log('\nAC-4  second bust ejects, front door locked for good');
   // Broke again after the handout is NOT the end of the day any more: the
   // pocket is empty and play goes on (the street, begging, the goals).
   const brokeAgain = await active(page);
-  check('out of tokens after the handout does not close the arcade', !brokeAgain.includes('SecondBust'), brokeAgain.join(','));
+  check('out of tokens after the handout does not close the arcade', brokeAgain.includes('ArcadeHub'), brokeAgain.join(','));
   // Closing time does: 22:00 on the game clock (one day = 20 minutes).
   await page.evaluate(() => {
     const s = window.__froggy.state();
     window.__froggy.patch({ life: { ...s.life, t: 1200 * (14 / 24) + 5 } });
   });
-  await sleep(6000);
+  await sleep(4000);
 
-  await page.screenshot({ path: `${SHOTS}/02-second-bust.png` });
-  const scenes = await active(page);
-  check('second bust scene runs', scenes.includes('SecondBust'), scenes.join(','));
-
-  // The bust is timed: hard cut, 3s hold, "You can go now", then the ejection.
-  await sleep(11000);
-  await page.screenshot({ path: `${SHOTS}/03-ejected.png` });
+  // THE ARCADE IS CLOSING, and OK is straight out of the doors: no closing
+  // scene with him, no walk to the door, just a fade to black and the street.
+  await page.screenshot({ path: `${SHOTS}/02-closing-notice.png` });
+  const atNotice = await active(page);
+  check('closing shows the notice, not a closing scene', atNotice.includes('ArcadeHub') && !atNotice.some((k) => /Bust|Ejection/.test(k)), atNotice.join(','));
+  await page.keyboard.press('Enter'); // OK
+  await sleep(3500);
+  await page.screenshot({ path: `${SHOTS}/03-shown-out.png` });
+  const out = await active(page);
+  check('OK goes straight outside', out.includes('ExteriorDay') && !out.includes('ArcadeHub'), out.join(','));
   const s = await st(page);
-  check('route committed to ejected', s.route === 'ejected', `route=${s.route}`);
   check('charity did NOT fire twice', s.tokens === 0, `tokens=${s.tokens}`);
   await page.close();
 }

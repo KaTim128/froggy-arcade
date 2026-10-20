@@ -27,7 +27,7 @@ import { store } from '../core/state';
  * act is survived (`froggyGone`) every other scene gets the after skin: the
  * arcade's own controls, a shade off.
  */
-const HORROR = new Set(['HideRoom3D', 'Chase3D', 'NightRoad3D', 'HotelHall3D', 'HotelLobby3D', 'BasementSequence', 'ArcadeDark', 'SecondBust', 'EjectionCutscene']);
+const HORROR = new Set(['HideRoom3D', 'Chase3D', 'NightRoad3D', 'HotelHall3D', 'HotelLobby3D', 'BasementSequence', 'ArcadeDark']);
 
 function skinFor(top: string): 'normal' | 'horror' | 'after' {
   if (HORROR.has(top)) return 'horror';
@@ -39,7 +39,7 @@ const ROOM: TouchLayout = {
   stick: 'wasd',
   arrows: true,
   buttons: [
-    { label: 'E', key: 'E', primary: true },
+    { label: 'INTERACT', key: 'E', primary: true },
     { label: 'RUN', key: 'SHIFT' },
   ],
 };
@@ -49,7 +49,7 @@ const STREET: TouchLayout = {
   stick: 'lr',
   arrows: true,
   buttons: [
-    { label: 'E', key: 'E', primary: true },
+    { label: 'INTERACT', key: 'E', primary: true },
     { label: 'RUN', key: 'SHIFT' },
   ],
 };
@@ -125,7 +125,7 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
     stick: 'wasd',
     look: true,
     buttons: [
-      { label: 'E', key: 'E', primary: true },
+      { label: 'INTERACT', key: 'E', primary: true },
       { label: 'CROUCH', key: 'C' },
       { label: 'RUN', key: 'SHIFT' },
       // (No DROP: E puts down what you are carrying in the lab.)
@@ -187,8 +187,6 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   // The paper, the gate, the arcade: a tap moves the paper on, nothing else.
   ArrestEnding: BARE,
 
-  SecondBust: BARE,
-  EjectionCutscene: BARE,
   OutroCutscene3D: BARE,
   TheEnd: BARE,
   EndCard: BARE,

@@ -28,7 +28,9 @@ import { FONT_ADVANCE } from '../render/pixelFont';
 import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
 import { store, type GameId } from '../core/state';
-import { button, centerText, confirmDialog, fadeIn, fadeToScene, forfeitLines, text } from '../core/ui';
+import { centerText, fadeIn, fadeToScene, forfeitLines, gearButton, text } from '../core/ui';
+import { openPause } from '../core/pause';
+import { isTouch } from '../core/device';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { TokenHud } from '../ui/hud';
 import { cabinetById } from '../game/content';
@@ -67,7 +69,6 @@ export class MinigameScene extends Phaser.Scene {
   /** This go is PRACTICE: free, and counted for nothing. */
   private practicing = false;
   /** The quit question, while it is up.  The game is frozen under it. */
-  private asking: Phaser.GameObjects.Container | null = null;
 
   constructor() {
     super('Minigame');
@@ -89,7 +90,6 @@ export class MinigameScene extends Phaser.Scene {
     this.card = null;
     this.exitTo = null;
     this.practicing = false;
-    this.asking = null;
   }
 
   create(): void {
@@ -106,27 +106,26 @@ export class MinigameScene extends Phaser.Scene {
     audio.setScene({ music: this.mod.music ?? 'room_hub' });
 
     this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black).setOrigin(0, 0);
-    // The title bar -- name, payout, QUIT -- is drawn over everything a
-    // game paints, so no cabinet can cover its own way out.
+    // The title bar -- name, payout, and the way into the pause menu -- is
+    // drawn over everything a game paints, so no cabinet can cover its own
+    // way out.
     const TOP = 1000;
     this.add.rectangle(0, 0, GAME_W, 16, PALETTE.ink).setOrigin(0, 0).setDepth(TOP);
     text(this, 4, 4, def.title, PALETTE.gold).setDepth(TOP);
 
-    // A real button, not just a key.  It asks first, and says what walking
-    // out costs; confirmed, it forfeits exactly as it always has (MG-4).
-    button(this, GAME_W - 26, 8, 'QUIT', () => this.askQuit(), {
-      width: 40,
-      height: 12,
-      fill: PALETTE.plum,
-    }).setDepth(TOP + 1);
+    // QUIT lives in the pause menu now (QUIT GAME, beside RESUME), which asks
+    // first and says what walking out costs.  Esc opens it; so does this
+    // small gear, the only thing left at the end of the bar.  (A phone has
+    // its own gear, on the screen's edge: see ui/touchControls.)
+    const gearW = isTouch() ? 0 : 14;
+    if (gearW) gearButton(this, GAME_W - 9, 8, () => openPause()).setDepth(TOP + 1);
 
     this.hud = new TokenHud(this);
     this.hud.setVisible(false); // the title bar already carries the balance line
-    // Right-aligned a clear gap short of the QUIT button rather than pinned to a
+    // Right-aligned a clear gap short of the gear rather than pinned to a
     // fixed left edge: the note is the cabinet's own wording and some of them
-    // are twice as long as others, so a fixed start meant "WIN: 15 TOKENS"
-    // reached under QUIT while "WIN: +2" sat in the middle of nowhere.
-    const note = text(this, GAME_W - 58, 4, this.mod.payoutNote ?? `WIN: +${def.reward}`, PALETTE.tealLight)
+    // are twice as long as others.
+    const note = text(this, GAME_W - 6 - gearW, 4, this.mod.payoutNote ?? `WIN: +${def.reward}`, PALETTE.tealLight)
       .setOrigin(1, 0)
       .setDepth(TOP);
     // The personal best, where this cabinet keeps one, centred in whatever
@@ -291,7 +290,7 @@ export class MinigameScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
-    if (this.settled || !this.started || this.asking) return;
+    if (this.settled || !this.started) return;
     this.mod?.update?.(time, delta);
   }
 
@@ -336,7 +335,7 @@ export class MinigameScene extends Phaser.Scene {
     this.forfeit();
   }
 
-  /** Esc answers the quit question with CANCEL while it is up. */
+  /** Esc at the card is its LEAVE; anywhere else it is the pause menu. */
   handleEscape(): boolean {
     // At the how-to-play card nothing has been paid and nothing is being
     // played, so Esc is its LEAVE button, as it always was.
@@ -344,24 +343,28 @@ export class MinigameScene extends Phaser.Scene {
       this.leave();
       return true;
     }
-    if (!this.asking) return false;
-    this.cancelQuit();
-    return true;
+    return false;
   }
 
   /**
-   * QUIT.  At the card there is nothing to lose and it just leaves.  In a
-   * game, the game freezes -- its clock, its tweens, its keys, and Froggy's
-   * overlay -- and the question goes up with the real number on it.  CANCEL
-   * thaws everything exactly where it was; CONFIRM QUIT is the old forfeit.
+   * QUIT GAME, from the pause menu.  At the card nothing has been paid and
+   * it just leaves; in a game it is the old forfeit (MG-4), back to the room
+   * the cabinet stands in.
    */
-  private askQuit(): void {
-    if (this.settled || this.asking) return;
+  quitGame(): void {
+    if (this.settled) return;
     if (!this.started) {
       this.leave();
       return;
     }
-    const risk = this.forfeitAmount() ?? 0;
+    this.exitTo = null;
+    this.forfeit();
+  }
+
+  /** The question QUIT GAME asks: how the sitting stands, and what walking out forfeits. */
+  quitLines(): string[] {
+    const risk = this.forfeitAmount();
+    if (risk === null) return ['LEAVE THIS GAME?', 'NOTHING HAS BEEN PAID.'];
     // How the sitting stands, first: the hands already settled, so whatever
     // is on the felt right now is the forfeit line's and not counted twice.
     const sitting: string[] = [];
@@ -369,38 +372,7 @@ export class MinigameScene extends Phaser.Scene {
       const net = this.paid - this.stake + risk;
       sitting.push(net === 0 ? 'SO FAR YOU ARE EVEN' : net > 0 ? `SO FAR YOU ARE UP ${net}` : `SO FAR YOU ARE DOWN ${-net}`);
     }
-    this.freeze(true);
-    this.asking = confirmDialog(this, {
-      lines: [...sitting, 'ARE YOU SURE YOU WANT TO QUIT?', ...forfeitLines(risk)],
-      confirm: 'CONFIRM QUIT',
-      onConfirm: () => {
-        this.asking = null;
-        this.freeze(false);
-        this.forfeit();
-      },
-      onCancel: () => this.cancelQuit(),
-      edge: 0xc31f2e,
-    });
-  }
-
-  private cancelQuit(): void {
-    this.asking?.destroy();
-    this.asking = null;
-    this.freeze(false);
-  }
-
-  private freeze(on: boolean): void {
-    this.time.paused = on;
-    if (on) this.tweens.pauseAll();
-    else this.tweens.resumeAll();
-    if (on) this.anims.pauseAll();
-    else this.anims.resumeAll();
-    const kb = this.input.keyboard;
-    if (kb) {
-      kb.enabled = !on;
-      if (!on) kb.resetKeys();
-    }
-    froggyLayer.setVisible(!on);
+    return [...sitting, 'ARE YOU SURE YOU WANT TO QUIT?', ...forfeitLines(risk)];
   }
 
   /**

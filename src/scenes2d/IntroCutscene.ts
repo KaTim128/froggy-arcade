@@ -29,6 +29,7 @@ import { Player } from '../art/player';
 import { froggyLayer } from '../render/froggyLayer';
 import { isTouch } from '../core/device';
 import { backPlate } from '../ui/plate';
+import { BEG_SPOT_X, BEG_SPOT_Y, paintBegCup, paintBegSpot } from '../art/begSpot';
 
 export const STARTING_TOKENS = 30;
 
@@ -207,7 +208,12 @@ export class IntroCutscene extends Phaser.Scene {
       // one he begs in outside the arcade): the same model, the same height
       // out of the ground, the same colours, with the body let down onto the
       // kerb and the legs folded out in front.  Facing left, at the man.
-      this.player = new Player(this, MAN_X + 34, KERB_Y, false);
+      // ...on the begging spot by the arcade's wall, exactly where it is on
+      // the forecourt -- the same flattened box, blanket, sign and cup, and
+      // sat on it the way the forecourt sits you: this is where it started.
+      paintBegSpot(this, BEG_SPOT_X, BEG_SPOT_Y);
+      paintBegCup(this, BEG_SPOT_X, BEG_SPOT_Y);
+      this.player = new Player(this, BEG_SPOT_X - 3, BEG_SPOT_Y, false);
       this.player.sit('floor', { facing: -1 });
 
       this.caption = centerText(this, GAME_W / 2, TALK_Y, '', PALETTE.cream).setDepth(900);

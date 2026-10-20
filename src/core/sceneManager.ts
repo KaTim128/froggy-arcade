@@ -49,8 +49,6 @@ import { Hotel } from '../scenes2d/Hotel';
 import { TheEnd } from '../scenes2d/TheEnd';
 import { MinigameScene } from '../scenes2d/MinigameScene';
 import { FroggyCharity } from '../scenes2d/FroggyCharity';
-import { SecondBust } from '../scenes2d/SecondBust';
-import { EjectionCutscene } from '../scenes2d/EjectionCutscene';
 import { ExteriorNight } from '../scenes2d/ExteriorNight';
 import { BackAlley } from '../scenes2d/BackAlley';
 import { ArcadeDark } from '../scenes2d/ArcadeDark';
@@ -122,8 +120,6 @@ export function bootGame(): void {
       ArrestEnding,
       MinigameScene,
       FroggyCharity,
-      SecondBust,
-      EjectionCutscene,
       ExteriorNight,
       BackAlley,
       ArcadeDark,

@@ -135,7 +135,7 @@ const labels = (page) =>
   await page.screenshot({ path: `${SHOTS}/01-hub-portrait.png` });
   check(
     'the controls are on a phone',
-    seen.mounted && seen.stickVisible && seen.buttons.includes('E') && seen.quit,
+    seen.mounted && seen.stickVisible && seen.buttons.includes('INTERACT') && seen.quit,
     `arrow pad ${seen.stickVisible}, buttons ${seen.buttons.join('/')}`,
   );
   await page.close();
