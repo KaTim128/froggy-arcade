@@ -45,6 +45,7 @@ import { FULL_LINE, pocketsFull } from '../game/inventory';
 import { GAME_W } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 import { fitPrompt } from '../ui/plate';
+import { resumeSpot, trackPlace } from '../game/place';
 
 const rgb = (c: number): [number, number, number] => [(c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff];
 /** The side door, in this room's right-hand wall, below the plant. */
@@ -185,6 +186,8 @@ export class ArcadeLounge extends Phaser.Scene {
     // in by the left-hand doorway from the hub: looking into the room
     if (!this.fromAlley && !prop && !this.fromClash) this.player.face(1);
     if (this.night) this.player.setSurface('carpet');
+    // kept with the run, and back on the spot when resumed here (game/place)
+    trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
 
     // (no tokens to count after closing: the HUD is the daytime's)
     if (!this.night) new TokenHud(this);

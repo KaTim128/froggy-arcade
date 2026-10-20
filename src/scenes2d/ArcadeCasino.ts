@@ -37,6 +37,7 @@ import { drawSuitedMan } from '../froggy/suit';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 import { fitPrompt } from '../ui/plate';
+import { resumeSpot, trackPlace } from '../game/place';
 
 /**
  * How far in front of the table's near edge the player's feet come to rest.
@@ -153,6 +154,8 @@ export class ArcadeCasino extends Phaser.Scene {
     const spawn = this.spawnPoint({ x: BACK_DOOR.x - 16, y: BACK_DOOR.y });
     this.player = new Player(this, spawn.x, spawn.y);
     this.player.face(-1);
+    // kept with the run, and back on the spot when resumed here (game/place)
+    trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
 
     new TokenHud(this);
     attachPockets(this, () => this.busy());

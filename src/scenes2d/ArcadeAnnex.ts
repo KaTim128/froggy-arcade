@@ -30,6 +30,7 @@ import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 import { fitPrompt } from '../ui/plate';
+import { resumeSpot, trackPlace } from '../game/place';
 
 /** The way back, on this room's right wall. */
 const BACK_DOOR = { x: GAME_W - 20, y: 118 };
@@ -115,6 +116,8 @@ export class ArcadeAnnex extends Phaser.Scene {
     const spawn = this.spawnPoint(door);
     this.player = new Player(this, spawn.x, spawn.y);
     this.player.face(this.cameFrom === 'casino' ? 1 : -1);
+    // kept with the run, and back on the spot when resumed here (game/place)
+    trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
 
     new TokenHud(this);
     attachPockets(this, () => this.busy());

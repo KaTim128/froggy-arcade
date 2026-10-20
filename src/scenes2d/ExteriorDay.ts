@@ -41,6 +41,7 @@ import { nightfallOnce, onPhaseTurn } from '../game/dayNight';
 import { speak } from '../ui/talkPanel';
 import { backPlate, fitPrompt } from '../ui/plate';
 import { grain } from '../art/surface';
+import { resumeSpot, trackPlace } from '../game/place';
 
 const WALK_Y = KERB_Y;
 /** Where the alley mouth is, off the arcade's right-hand corner. */
@@ -170,6 +171,8 @@ export class ExteriorDay extends Phaser.Scene {
     // The forecourt is loose ground, not the arcade's carpet.  This scene
     // never said so, which left the walk outside sounding like the walk in.
     this.player.setSurface('gravel');
+    // kept with the run, and back on the spot when resumed here (game/place)
+    trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
 
     // What you are carrying: cash and tokens, side by side and never added
     // together -- the same HUD as inside.

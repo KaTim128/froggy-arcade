@@ -77,6 +77,7 @@ import { drawClerk } from '../froggy/clerk';
 import { froggyLayer } from '../render/froggyLayer';
 import { backPlate } from '../ui/plate';
 import { clock as lifeClock } from '../game/life';
+import { resumeSpot, trackPlace } from '../game/place';
 
 export const ROOM_PRICE = 300;
 const WALK_Y = 160;
@@ -297,6 +298,10 @@ export class Hotel extends Phaser.Scene {
     this.player = new Player(this, startX, WALK_Y, false);
     this.player.setSurface('carpet');
     this.playerCols = this.player.sprite.list.map((s) => ({ s: s as Phaser.GameObjects.Rectangle, col: (s as Phaser.GameObjects.Rectangle).fillColor }));
+    // Kept with the run on an ordinary visit (game/place).  The night's own
+    // checkpoints -- 3 AM, the stairs, the storage room -- are the story's,
+    // and core/resume picks those up itself.
+    if (this.night === 'calm' && !dark) trackPlace(this, () => this.player, { area: this.area }, resumeSpot(this.sys.settings.data));
     attachPockets(this, () => this.locked || !!this.talk || this.night === 'reveal');
     // cash and tokens, top left, as everywhere else
     new TokenHud(this);

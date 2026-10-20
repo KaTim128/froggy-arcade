@@ -198,7 +198,25 @@ export interface GameState {
   life: LifeState;
   /** Creature Clash (the fourth room): owned creatures, open pack, open battle.  Only written through game/creatureClash.ts. */
   creatures: CreatureState;
+  /**
+   * ---- WHERE THE PLAYER IS STANDING.  The walkable scene they were last in,
+   * what it was entered with, and their spot and facing in it -- so a run
+   * picks up in the shop, the condo or the street it was left in, not at the
+   * arcade door.  Written by game/place.ts, read by core/resume.ts.
+   */
+  place: SavedPlace | null;
   settings: Settings;
+}
+
+export interface SavedPlace {
+  key: string;
+  data?: Record<string, string | number | boolean>;
+  x: number;
+  y: number;
+  /** 1 facing right, -1 facing left. */
+  facing: number;
+  /** Real time it was written, for telling a newer save from an older one. */
+  at: number;
 }
 
 /** One toy in a crane, as saved: what it is, where it lies, how it was drawn. */
@@ -231,6 +249,8 @@ const SLOTS_KEY = 'froggy.slots';
 const PREFS_KEY = 'froggy.prefs';
 const SCHEMA_VERSION = 1;
 const FLUSH_DEBOUNCE_MS = 250; // PRD ST-2
+/** The player's spot is written at most this often while they walk. */
+const PLACE_FLUSH_MS = 2000;
 
 export const MAX_SLOTS = 3;
 // (13: room for any of the passwords below, and for the names already saved at it)
@@ -363,6 +383,7 @@ function defaultState(): GameState {
     cranes: {},
     life: defaultLife(),
     creatures: defaultCreatures(),
+    place: null,
     settings: { master: 80, music: 70, sfx: 85, moveStyle: 'stick', ...generalDefaults() },
   };
 }
@@ -473,6 +494,9 @@ class Store {
     }
     fresh.life = sanitizeLife((run as Partial<GameState>).life);
     fresh.creatures = sanitizeCreatures((run as Partial<GameState>).creatures);
+    fresh.place = sanitizePlace((run as Partial<GameState>).place);
+    // what is on disk now is this run: anything written after it is newer
+    this.lastWrite = Number((run as { savedAt?: number }).savedAt) || 0;
     this.state = fresh;
     // A saved unlimited run comes back unlimited, whatever the file says.
     if (this.isAdmin()) this.state.tokens = ADMIN_TOKENS;
@@ -571,6 +595,7 @@ class Store {
     this.index.slots = this.index.slots.filter((s) => s.id !== id);
     try {
       localStorage.removeItem(RUN_PREFIX + id);
+      localStorage.removeItem(`${RUN_PREFIX}${id}.backup`);
     } catch {
       /* ignore */
     }
@@ -600,6 +625,38 @@ class Store {
     Object.assign(this.state, partial);
     this.touch();
   }
+
+  /**
+   * Where the player is standing.  Quiet, like the play clock: it changes
+   * every step, and nothing on screen draws from it, so it wakes no listener;
+   * it goes out with the next write.
+   */
+  setPlace(p: SavedPlace | null): void {
+    if (!this.index.active) return;
+    this.state.place = p;
+    if (this.flushTimer !== null) return;
+    this.flushTimer = window.setTimeout(() => {
+      this.flushTimer = null;
+      this.flush();
+    }, PLACE_FLUSH_MS);
+  }
+
+  /**
+   * Another tab wrote this profile.  Take its run if it is newer than the one
+   * in play, so the tab left behind cannot write an older run over it.
+   */
+  adoptIfNewer(id: string): void {
+    if (id !== this.index.active) return;
+    const run = readRun(id);
+    if (!run) return;
+    const theirs = Number((run as { savedAt?: number }).savedAt) || 0;
+    if (theirs <= this.lastWrite) return;
+    this.lastWrite = theirs;
+    this.applyRun(run);
+    this.emit();
+  }
+  /** When this tab last wrote the run in play, or read it in. */
+  private lastWrite = 0;
 
   /**
    * Cash in, from selling a prize.  Its own path on purpose: the ledger is the
@@ -715,8 +772,25 @@ class Store {
       // Settings are device-wide, so they are written even with no profile
       // selected; the run has nowhere to go until one is.
       localStorage.setItem(PREFS_KEY, JSON.stringify(settings));
-      if (this.index.active) {
-        localStorage.setItem(RUN_PREFIX + this.index.active, JSON.stringify(run));
+      // Only into a profile that is still on the list: storage cleared under
+      // a running game (site data wiped) must not get the run written back
+      // into it as an orphan.
+      if (this.index.active && (localStorage.getItem(SLOTS_KEY) ?? '').includes(`"${this.index.active}"`)) {
+        // Never write an older run over a newer one another tab has saved
+        // since: take theirs instead (what this tab did in between is the
+        // older of the two).
+        const disk = readRun(this.index.active);
+        const theirs = Number((disk as { savedAt?: number } | null)?.savedAt) || 0;
+        if (theirs > this.lastWrite) {
+          this.lastWrite = theirs;
+          if (disk) {
+            this.applyRun(disk);
+            this.emit();
+            return;
+          }
+        }
+        this.lastWrite = Math.max(Date.now(), this.lastWrite + 1);
+        localStorage.setItem(RUN_PREFIX + this.index.active, JSON.stringify({ ...run, savedAt: this.lastWrite }));
       }
     } catch {
       // Private browsing / storage disabled.  The game still plays, it just forgets.
@@ -739,6 +813,26 @@ class Store {
     Object.assign(this.state, next);
     this.touch();
   }
+}
+
+function sanitizePlace(p: unknown): SavedPlace | null {
+  if (!p || typeof p !== 'object') return null;
+  const v = p as Partial<SavedPlace>;
+  if (typeof v.key !== 'string' || !Number.isFinite(v.x) || !Number.isFinite(v.y)) return null;
+  const data: Record<string, string | number | boolean> = {};
+  if (v.data && typeof v.data === 'object') {
+    for (const [k, d] of Object.entries(v.data)) {
+      if (typeof d === 'string' || typeof d === 'boolean' || (typeof d === 'number' && Number.isFinite(d))) data[k] = d;
+    }
+  }
+  return {
+    key: v.key,
+    data,
+    x: v.x as number,
+    y: v.y as number,
+    facing: v.facing === -1 ? -1 : 1,
+    at: Number.isFinite(v.at) ? (v.at as number) : 0,
+  };
 }
 
 function clamp100(n: number): number {
@@ -780,8 +874,31 @@ function readIndex(): SlotIndex {
     const active = slots.some((s) => s.id === parsed.active) ? (parsed.active as string) : null;
     return { active, slots };
   } catch {
-    return { active: null, slots: [] };
+    return rebuildIndex();
   }
+}
+
+/**
+ * The list of profiles is unreadable, but the runs it listed may not be: find
+ * them, so they are not orphaned and then written over.  Their names went
+ * with the list.
+ */
+function rebuildIndex(): SlotIndex {
+  const slots: SlotMeta[] = [];
+  try {
+    for (let i = 0; i < localStorage.length && slots.length < MAX_SLOTS; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(RUN_PREFIX) || k.endsWith('.backup')) continue;
+      const id = k.slice(RUN_PREFIX.length);
+      if (!id) continue;
+      slots.push({ id, name: `PLAYER ${slots.length + 1}`, createdAt: Date.now() });
+    }
+  } catch {
+    /* no storage at all */
+  }
+  const index = { active: slots[0]?.id ?? null, slots };
+  if (slots.length) writeIndex(index);
+  return index;
 }
 
 function writeIndex(index: SlotIndex): void {
@@ -797,20 +914,37 @@ function readRun(id: string): Partial<GameState> | null {
     const raw = localStorage.getItem(RUN_PREFIX + id);
     if (!raw) return null;
     const run = JSON.parse(raw) as Partial<GameState>;
+    if (!run || typeof run !== 'object' || Array.isArray(run)) throw new Error('not a run');
+    // A run from another version is still the player's progress: every field
+    // is checked on the way in (applyRun), so it is loaded rather than thrown
+    // away, and a copy of it as it was is kept beside it.
     if (run.schemaVersion !== SCHEMA_VERSION) {
-      console.warn('[state] schema mismatch — discarding run, keeping prefs');
-      localStorage.removeItem(RUN_PREFIX + id);
-      return null;
+      console.warn('[state] schema mismatch — loading what can be read, keeping a copy');
+      backUp(id, raw);
+      run.schemaVersion = SCHEMA_VERSION;
     }
     return run;
   } catch {
-    console.warn('[state] corrupt run state — starting fresh');
+    // Unreadable.  Kept to one side rather than deleted, and the profile
+    // starts from nothing -- a fresh run is written over the slot only when
+    // the player goes on to play it.
+    console.warn('[state] corrupt run state — kept a copy, starting fresh');
     try {
-      localStorage.removeItem(RUN_PREFIX + id);
+      const raw = localStorage.getItem(RUN_PREFIX + id);
+      if (raw) backUp(id, raw);
     } catch {
       /* private mode, nothing to do */
     }
     return null;
+  }
+}
+
+/** A copy of a run that could not be loaded as it was, beside the slot. */
+function backUp(id: string, raw: string): void {
+  try {
+    localStorage.setItem(`${RUN_PREFIX}${id}.backup`, raw);
+  } catch {
+    /* full or private: nothing more to be done */
   }
 }
 

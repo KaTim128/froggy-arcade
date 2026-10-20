@@ -500,6 +500,10 @@ export class Player {
   get x(): number {
     return this.sprite.x;
   }
+  /** 1 facing right, -1 facing left. */
+  get facing(): number {
+    return this.dir;
+  }
   get y(): number {
     return this.sprite.y;
   }
