@@ -246,7 +246,7 @@ export function lookFor(outfit: Record<string, string>): Look {
 }
 
 /** The top rows of each hat: what it covers of the head. */
-const CROWNS: Record<string, string[]> = {
+export const CROWNS: Record<string, string[]> = {
   cos_beanie: ['....BBBB....', '...BBBBBB...', '..bbbbbbbb..'],
   cos_beanie_teal: ['....BBBB....', '...BBBBBB...', '..bbbbbbbb..'],
   cos_cap: ['............', '...BBBBBB...', '..BBBBBBBB..', '..bbbbbbbbbb'],

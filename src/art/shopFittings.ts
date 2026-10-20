@@ -69,9 +69,32 @@ export function paintMirror(g: Phaser.GameObjects.Graphics, x: number, y: number
   for (let k = 0; k < gh; k++) g.fillStyle(mix(top, foot, k / gh), 1).fillRect(gx, gy + k, gw, 1);
   if (o.wallLine !== undefined) g.fillStyle(o.wallLine, 0.6).fillRect(gx, gy + gh - 9, gw, 1);
   if (o.floor !== undefined) g.fillStyle(o.floor, 0.5).fillRect(gx, gy + gh - 4, gw, 4);
-  for (let k = 0; k < 9; k++) g.fillStyle(0xffffff, 0.55).fillRect(gx + 3 + Math.floor(k / 3), gy + 3 + k, 1, 1);
-  for (let k = 0; k < 6; k++) g.fillStyle(0xffffff, 0.35).fillRect(gx + 7 + Math.floor(k / 3), gy + 4 + k, 1, 1);
   paintStuds(g, x, y, w, h);
+}
+
+/**
+ * The shine on a mirror's glass, drawn OVER whatever is reflected in it:
+ * a broad soft diagonal sheen, a bright hot spot in the top corner where
+ * the light catches it, and a thin bright line along the glass's top edge.
+ * The same frame arguments as `paintMirror`.
+ */
+export function paintMirrorShine(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number): void {
+  const gx = x + 3;
+  const gy = y + 3;
+  const gw = w - 6;
+  const gh = h - 6;
+  // the sheen: a wide band from top-left down to the right, fading at its edges
+  for (let r = 0; r < gh; r++) {
+    for (let c = 0; c < gw; c++) {
+      const d = c - r * 0.55 - 2;
+      const a = d > 0 && d < 6 ? 0.22 * Math.sin((d / 6) * Math.PI) : d > 9 && d < 11 ? 0.14 : 0;
+      if (a > 0) g.fillStyle(0xffffff, a).fillRect(gx + c, gy + r, 1, 1);
+    }
+  }
+  // the hot spot and the edge
+  g.fillStyle(0xffffff, 0.7).fillRect(gx + 1, gy + 1, 2, 1).fillRect(gx + 1, gy + 2, 1, 1);
+  g.fillStyle(0xffffff, 0.35).fillRect(gx, gy, gw, 1);
+  g.fillStyle(0x000000, 0.08).fillRect(gx, gy + gh - 1, gw, 1);
 }
 
 /**
