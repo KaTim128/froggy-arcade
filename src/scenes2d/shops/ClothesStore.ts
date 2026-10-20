@@ -9,6 +9,7 @@
  */
 
 import Phaser from 'phaser';
+import { paintMirror, paintPlate } from '../../art/shopFittings';
 import { PALETTE } from '../../render/palette';
 import { store } from '../../core/state';
 import { text } from '../../core/ui';
@@ -246,40 +247,12 @@ export class ClothesStore extends WalkRoom {
     // right with brass at the corners, and glass that shows the room back:
     // the pink of the walls in it, darker to the foot, with two bright
     // streaks of shine across it
-    const m = this.add.graphics().setDepth(2);
-    const mx = MIRROR_X - MIRROR.w / 2;
-    const my = MIRROR.top;
-    m.fillStyle(0x000000, 0.12).fillRect(mx + 2, my + 2, MIRROR.w, MIRROR.h);
-    m.fillStyle(0x14100c, 1).fillRect(mx - 1, my - 1, MIRROR.w + 2, MIRROR.h + 2);
-    m.fillStyle(0x4a3326, 1).fillRect(mx, my, MIRROR.w, MIRROR.h);
-    m.fillStyle(0x6a4a34, 1).fillRect(mx, my, 1, MIRROR.h).fillRect(mx, my, MIRROR.w, 1);
-    m.fillStyle(0x32221a, 1).fillRect(mx + MIRROR.w - 1, my, 1, MIRROR.h).fillRect(mx, my + MIRROR.h - 1, MIRROR.w, 1);
-    const gx0 = mx + 3;
-    const gy0 = my + 3;
-    const glw = MIRROR.w - 6;
-    const glh = MIRROR.h - 6;
-    m.fillStyle(0x14100c, 1).fillRect(gx0 - 1, gy0 - 1, glw + 2, glh + 2);
-    for (let y = 0; y < glh; y++) {
-      const k = y / glh;
-      const col = Phaser.Display.Color.Interpolate.ColorWithColor(
-        Phaser.Display.Color.ValueToColor(0xe4eef2),
-        Phaser.Display.Color.ValueToColor(0xd8b8c8),
-        100,
-        Math.round(k * 100),
-      );
-      m.fillStyle(Phaser.Display.Color.GetColor(col.r, col.g, col.b), 1).fillRect(gx0, gy0 + y, glw, 1);
-    }
-    // the room behind you in it: the panelling's line and the floor's edge
-    m.fillStyle(0xf0d8e4, 0.6).fillRect(gx0, gy0 + glh - 9, glw, 1);
-    m.fillStyle(0xbeb6ba, 0.5).fillRect(gx0, gy0 + glh - 4, glw, 4);
-    // shine
-    for (let k = 0; k < 9; k++) m.fillStyle(0xffffff, 0.55).fillRect(gx0 + 3 + Math.floor(k / 3), gy0 + 3 + k, 1, 1);
-    for (let k = 0; k < 6; k++) m.fillStyle(0xffffff, 0.35).fillRect(gx0 + 7 + Math.floor(k / 3), gy0 + 4 + k, 1, 1);
-    // brass at the corners
-    for (const [cx, cy] of [[mx, my], [mx + MIRROR.w - 2, my], [mx, my + MIRROR.h - 2], [mx + MIRROR.w - 2, my + MIRROR.h - 2]]) {
-      m.fillStyle(0xd8a838, 1).fillRect(cx, cy, 2, 2);
-      m.fillStyle(0xf0d070, 1).fillRect(cx, cy, 1, 1);
-    }
+    paintMirror(this.add.graphics().setDepth(2), MIRROR_X - MIRROR.w / 2, MIRROR.top, MIRROR.w, MIRROR.h, {
+      glassTop: 0xe4eef2,
+      glassFoot: 0xd8b8c8,
+      wallLine: 0xf0d8e4,
+      floor: 0xbeb6ba,
+    });
 
     // ---- the fitting room, in the middle of the shop: a booth against the
     // back wall, its curtain, and its name on the pelmet
@@ -346,19 +319,10 @@ export class ClothesStore extends WalkRoom {
     // ---- ITS SIGN, hung over it on two brass chains: FITTING ROOM in two
     // lines of the game's own letters, cream on the booth's velvet, a brass
     // rim round the plate with a lit top edge and a shadow under it
-    const sg = this.add.graphics().setDepth(2);
     const SW = 50;
     const SH = 21;
-    const sx0 = FIT_X - SW / 2;
     const sy0 = FIT_TOP - SH - 6;
-    sg.fillStyle(0xd8a838, 1).fillRect(sx0 + 8, sy0 - 4, 1, 4).fillRect(sx0 + SW - 9, sy0 - 4, 1, 4);
-    sg.fillStyle(0x000000, 0.18).fillRect(sx0 + 1, sy0 + SH + 1, SW, 1);
-    sg.fillStyle(0x14100c, 1).fillRect(sx0 - 1, sy0 - 1, SW + 2, SH + 2);
-    sg.fillStyle(0xd8a838, 1).fillRect(sx0, sy0, SW, SH);
-    sg.fillStyle(0xf0d070, 1).fillRect(sx0, sy0, SW, 1);
-    sg.fillStyle(0x8a6418, 1).fillRect(sx0, sy0 + SH - 1, SW, 1);
-    sg.fillStyle(0x4a2450, 1).fillRect(sx0 + 2, sy0 + 2, SW - 4, SH - 4);
-    sg.fillStyle(0x6a3a70, 1).fillRect(sx0 + 2, sy0 + 2, SW - 4, 1);
+    paintPlate(this.add.graphics().setDepth(2), FIT_X, sy0, SW, SH, 0x4a2450, 0x6a3a70, true);
     text(this, FIT_X, sy0 + 3, 'FITTING', 0xf6e6c8).setOrigin(0.5, 0).setDepth(2.1);
     text(this, FIT_X, sy0 + 11, 'ROOM', 0xf6e6c8).setOrigin(0.5, 0).setDepth(2.1);
 
