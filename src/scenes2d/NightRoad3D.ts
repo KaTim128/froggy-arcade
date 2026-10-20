@@ -84,8 +84,24 @@ const START_Z = 4;
 const BACK_Z = 9;
 /** Where something snaps in the trees behind you. */
 const SOUND_Z = -8;
-/** Where your head is turned for you, back to the hotel. */
+/** Where he is there, behind you: footsteps, then you turn round to him. */
 const TURN_Z = -17;
+/**
+ * ---- THE OPENING IS A CUTSCENE.  You walk on your own up the road (no
+ * steering, no looking round), hear him, turn round to him, and only on
+ * RUN are your controls handed back -- with him a fair way off, so the
+ * first seconds of the chase are yours to use, not his.  Tune here.
+ */
+const OPENING = {
+  /** The walk's pace, as a share of a walk. */
+  pace: 0.8,
+  /** How far behind you he follows, unseen, while you walk on. */
+  back: 15,
+  /** Seconds he follows before you turn round to him. */
+  followFor: 5.5,
+  /** Seconds the turn round takes. */
+  turnFor: 1.7,
+};
 /** A retry starts here, past the reveal. */
 const REVEAL_Z = -ROAD_LEN * 0.2;
 const RIVER_Z = -112;
@@ -293,7 +309,6 @@ export class NightRoad3D extends Phaser.Scene {
   private crowAmbientT = 6;
 
   private lines: { text: string; from: number; until: number; red?: boolean }[] = [];
-  private hintT = 0;
   /** Once over a rail in the chase: the hiding hint, for a while, the first time. */
   private overRail = false;
   private hideHintT = 0;
@@ -354,7 +369,6 @@ export class NightRoad3D extends Phaser.Scene {
     this.autoTurn = null;
     this.heardSnap = false;
     this.shake = 0;
-    this.hintT = 0;
     this.overRail = false;
     this.hideHintT = 0;
     this.railHint = 0;
@@ -412,14 +426,14 @@ export class NightRoad3D extends Phaser.Scene {
     // Look exactly as the chase does: pointer lock if the browser gives it, a
     // held left-drag if not, which is what the on-screen look pad sends.
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (this.autoTurn) return;
+      if (this.autoTurn || this.cutscene()) return;
       if (p.event instanceof MouseEvent && document.pointerLockElement) this.yaw -= lockedDelta(p.event).dx * 0.0027 * lookScale();
     });
     this.onLookDown = (e: MouseEvent) => {
       if (e.button === 0 && !isPaused()) this.dragging = true;
     };
     this.onLookMove = (e: MouseEvent) => {
-      if (!this.dragging || document.pointerLockElement || isPaused() || this.autoTurn) return;
+      if (!this.dragging || document.pointerLockElement || isPaused() || this.autoTurn || this.cutscene()) return;
       this.yaw -= (e.movementX || 0) * ((e as MouseEvent & { lookSens?: number }).lookSens ?? 0.0042) * lookScale();
     };
     this.onLookUp = () => {
@@ -712,7 +726,8 @@ export class NightRoad3D extends Phaser.Scene {
     this.monster.onFootfall = (_foot, at, hard) => {
       if (!this.monster?.root.visible) return;
       const wet = this.fy === 0 && this.inWater(at.x, at.z);
-      const g = this.gainAt(at.x, at.z) * (this.phase === 'creep' ? 0.3 : 1);
+      // (heard while he follows you up the road: that is how you know)
+      const g = this.gainAt(at.x, at.z) * (this.phase === 'creep' ? 0.7 : 1);
       if (g > 0.03) audio.sfx(wet ? 'splash' : this.fSpeed > 4 ? 'hop_wet' : 'froggy_step', g * (wet ? 0.8 : 1) * (0.8 + hard * 0.3), this.placeOf(at.x, at.z));
       if (!wet) this.footDust?.puff(at, hard, FROGGY_SCALE * 0.7);
     };
@@ -2478,10 +2493,20 @@ gl_Position = projectionMatrix * mvPosition;`,
     return Math.abs(x) > ROAD_HALF && Math.abs(x) < WALK_X && z > ROAD_END;
   }
 
+  /** The opening: you are walked up the road and turned round; nothing is yours to steer. */
+  private cutscene(): boolean {
+    return this.phase === 'walk' || this.phase === 'creep' || this.phase === 'turn' || this.phase === 'reveal';
+  }
+
   private movePlayer(dt: number): void {
-    const fwd = (this.held('up') ? 1 : 0) - (this.held('down') ? 1 : 0);
-    const strafe = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
-    const turn = (this.held('turnR') ? 1 : 0) - (this.held('turnL') ? 1 : 0);
+    const cut = this.cutscene();
+    // (in the opening the walk is the scene's: straight up the road, on
+    // the pavement, until he is heard and you turn round to him)
+    const autoWalk = this.phase === 'walk' || this.phase === 'creep';
+    const fwd = cut ? (autoWalk ? OPENING.pace : 0) : (this.held('up') ? 1 : 0) - (this.held('down') ? 1 : 0);
+    const strafe = cut ? 0 : (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
+    const turn = cut ? 0 : (this.held('turnR') ? 1 : 0) - (this.held('turnL') ? 1 : 0);
+    if (autoWalk && !this.autoTurn) this.yaw += (0 - this.yaw) * Math.min(1, dt * 3);
     if (!this.autoTurn) this.yaw -= turn * 2.4 * dt;
     // crouched, your eye comes down; up on the pavement, a hand higher
     const eyeWant = EYE * (this.crouched ? CROUCH_EYE : 1) + (this.onPavement() ? KERB_H : 0);
@@ -2816,48 +2841,52 @@ gl_Position = projectionMatrix * mvPosition;`,
       audio.sfx('twig_snap', 0.9, this.placeOf(this.pos.x - 7, this.pos.y + 12));
       this.say('...?', 2.2);
     }
+    // ---- AT TURN_Z: something behind you.  He is there, well back, and
+    // keeps there while you walk on; you hear him.
     if (this.phase === 'walk' && this.pos.y < TURN_Z) {
-      // the nearest heading straight down the road to the hotel
-      const to = this.yaw - Math.atan2(Math.sin(this.yaw), Math.cos(this.yaw));
-      this.autoTurn = { from: this.yaw, to, t: 0 };
-      this.phase = 'turn';
+      this.phase = 'creep';
       this.phaseT = 0;
       this.lines = [];
       this.say("Don't look back.", 2.4);
-      this.say('Just get to the condos.', 3.2);
-    }
-    if (this.autoTurn) {
-      this.autoTurn.t = Math.min(1, this.autoTurn.t + dt / 1.6);
-      const k = this.autoTurn.t;
-      const e = k * k * (3 - 2 * k);
-      this.yaw = this.autoTurn.from + (this.autoTurn.to - this.autoTurn.from) * e;
-      if (k >= 1) this.autoTurn = null;
-    }
-    if (this.phase === 'turn' && !this.autoTurn) {
-      this.phase = 'creep';
-      this.phaseT = 0;
-      this.hintT = 0;
-      this.froggy.set(this.pos.x, this.pos.y + 9);
+      this.say('Just get to the condos.', 2.6);
+      this.froggy.set(this.pos.x, this.pos.y + OPENING.back);
       this.fYaw = Math.PI;
       if (this.monster) this.monster.root.visible = true;
       this.fMode = 'wait';
     }
     if (this.phase === 'creep') {
-      this.hintT += dt;
-      if (this.phaseT > 5 && this.phaseT - dt <= 5) this.say('...footsteps?', 3);
-      if (this.phaseT > 15 && this.phaseT - dt <= 15) audio.sfx('croak', 1.1, this.placeOf(this.froggy.x, this.froggy.y));
-      const close = this.pos.distanceTo(this.froggy) < 7;
-      if ((close && this.lookingAt(this.froggy.x, this.froggy.y, 38)) || this.pos.distanceTo(this.froggy) < 1.7) {
-        this.phase = 'reveal';
+      if (this.phaseT > 2.4 && this.phaseT - dt <= 2.4) this.say('...footsteps?', 2.4);
+      if (this.phaseT > 4.2 && this.phaseT - dt <= 4.2) audio.sfx('croak', 1.1, this.placeOf(this.froggy.x, this.froggy.y));
+      // ...and you cannot help it: you turn round to him
+      if (this.phaseT >= OPENING.followFor) {
+        this.phase = 'turn';
         this.phaseT = 0;
-        this.lines = [];
-        this.shake = 0.6;
-        audio.sfx('stinger', 0.95);
-        audio.sfx('croak', 1.3, this.placeOf(this.froggy.x, this.froggy.y));
+        const to = Math.atan2(-(this.froggy.x - this.pos.x), -(this.froggy.y - this.pos.y));
+        let d = to - this.yaw;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        this.autoTurn = { from: this.yaw, to: this.yaw + d, t: 0 };
       }
     }
+    if (this.autoTurn) {
+      this.autoTurn.t = Math.min(1, this.autoTurn.t + dt / OPENING.turnFor);
+      const k = this.autoTurn.t;
+      const e = k * k * (3 - 2 * k);
+      this.yaw = this.autoTurn.from + (this.autoTurn.to - this.autoTurn.from) * e;
+      if (k >= 1) this.autoTurn = null;
+    }
+    // face to face: the reveal
+    if (this.phase === 'turn' && !this.autoTurn) {
+      this.phase = 'reveal';
+      this.phaseT = 0;
+      this.lines = [];
+      this.shake = 0.6;
+      audio.sfx('stinger', 0.95);
+      audio.sfx('croak', 1.3, this.placeOf(this.froggy.x, this.froggy.y));
+    }
     if (this.phase === 'reveal') {
-      if (this.phaseT > 1 && this.lines.length === 0) this.say('Froggy...?', 3);
+      if (this.phaseT > 0.8 && this.lines.length === 0) this.say('Froggy...?', 2.4);
+      // RUN: and from here on it is all yours
       if (this.phaseT > 2.6) {
         this.phase = 'chase';
         this.phaseT = 0;
@@ -3029,9 +3058,10 @@ gl_Position = projectionMatrix * mvPosition;`,
     if (this.phase === 'creep') {
       // Low and quiet up the road behind you: to an arm's length back from
       // where you are facing, and kept there however you walk.
-      const back = new THREE.Vector2(this.pos.x + Math.sin(this.yaw) * 2.6, this.pos.y + Math.cos(this.yaw) * 2.6);
+      // (well back: OPENING.back metres behind you, at your pace)
+      const back = new THREE.Vector2(this.pos.x, this.pos.y + OPENING.back);
       target = back;
-      speed = this.froggy.distanceTo(back) > 2.5 ? 4.4 : this.moving ? WALK * 1.05 : 1.2;
+      speed = this.froggy.distanceTo(back) > 2.5 ? WALK * 1.3 : WALK * OPENING.pace;
     }
 
     if (this.phase === 'chase') this.maybePassBy(dt);
@@ -3461,14 +3491,6 @@ gl_Position = projectionMatrix * mvPosition;`,
       }
       if (this.crouched && this.phase !== 'safe') {
         drawPixelText(ctx, 'CROUCHED', GAME_W / 2, GAME_H - 12, { scale: 1, color: '#7a8494', center: true, alpha: 0.7 });
-      }
-      if (this.phase === 'creep' && this.hintT > 10) {
-        drawPixelText(ctx, isTouch() ? 'DRAG THE PICTURE TO LOOK BEHIND YOU' : 'HOLD LEFT CLICK TO LOOK BEHIND YOU', GAME_W / 2, 14, {
-          scale: 1,
-          color: '#7a8494',
-          center: true,
-          alpha: 0.8,
-        });
       }
       // what to press, only when it is the thing to do (under the objective,
       // clear of the subtitles at the bottom)
