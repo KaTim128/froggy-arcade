@@ -18,7 +18,7 @@
  * comes, stopping when he stops, going away when he goes.
  */
 
-import { CHECK_TITLE, checkHow, newCheck, pressCheck, releaseCheck, stepCheck, type CalmCheck, type CheckResult } from '../game/calmCheck';
+import { CHECK_TITLE, checkHow, checkLive, newCheck, pressCheck, releaseCheck, stepCheck, type CalmCheck, type CheckResult } from '../game/calmCheck';
 import Phaser from 'phaser';
 import * as THREE from 'three';
 import { attachMouseLook, lockedDelta, lookScale } from '../core/look';
@@ -128,6 +128,30 @@ const NERVE = {
   /** How fast they are drawn, radians per second. */
   tiltRate: 0.32,
 };
+
+/**
+ * ---- HOW LONG IT LASTS, and how long he stands at the door.  Tune here.
+ *
+ * The hide is 45 seconds from the stairwell door going to the moment he
+ * turns his back on the storage room for good.  Every second of it you are
+ * keeping yourself quiet (the checks can come at any time).  He searches
+ * the lobby, comes to the door and looks in for 10 to 12 seconds -- never
+ * longer, whatever he heard -- then turns and walks away.  Before the 45 are
+ * up he goes back to searching; after them he takes one last look and goes.
+ */
+const HUNT = {
+  /** Seconds of hiding, from the stairwell door to his going. */
+  seconds: 45,
+  /** Seconds he looks in through the glass, once at the door. */
+  watch: [10, 12] as [number, number],
+  /** If he has not come to the door by this many seconds before the end, he comes now. */
+  comeBy: 18,
+  /** Metres he walks away from the door before he does anything else. */
+  walkAway: 6,
+};
+
+/** His walk to the storage door, metres a second (the last steps up to it are slower). */
+const APPROACH_SPEED = 1.3;
 
 type Mode = 'hide' | 'exposed';
 type Phase = 'settle' | 'burst' | 'search' | 'approach' | 'watch' | 'leave' | 'lookback' | 'exit' | 'gone' | 'detect' | 'lunge' | 'caught';
@@ -411,6 +435,16 @@ export class HotelLobby3D extends Phaser.Scene {
   private legs: Leg[] = [];
   private holdT = 0;
   private watchFor = 6;
+  /** Seconds since the stairwell door went (the hide's own clock). */
+  private hideClock = 0;
+  /** Been to the door and looked in, at least once. */
+  private watched = false;
+  /** The last footstep: when, and where, for the marker on the screen. */
+  private lastStep: { t: number; at: THREE.Vector3; hard: number } | null = null;
+  /** The calm key just went down: the plate lights. */
+  private pressedAt = -9;
+  /** It was your breathing that gave you away, not your face at the glass. */
+  private heardYou = false;
   private faceTo: THREE.Vector3 | null = null;
   private faceK = 0;
   private lean = 0;
@@ -508,8 +542,13 @@ export class HotelLobby3D extends Phaser.Scene {
     this.holdT = 0;
     this.bangT = 0.6;
     this.heartT = 0;
-    // a different wait every time: he cannot be timed
-    this.watchFor = 5 + Math.random() * 3;
+    // a different wait every time (10 to 12 seconds): he cannot be timed
+    this.watchFor = Phaser.Math.FloatBetween(HUNT.watch[0], HUNT.watch[1]);
+    this.hideClock = 0;
+    this.watched = false;
+    this.lastStep = null;
+    this.pressedAt = -9;
+    this.heardYou = false;
 
     this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000).setOrigin(0, 0);
     const root = document.getElementById('game-root');
@@ -542,7 +581,10 @@ export class HotelLobby3D extends Phaser.Scene {
       kb.on('keydown-C', () => this.toggleCrouch());
       kb.on('keydown-CTRL', () => this.toggleCrouch());
       kb.on('keydown-E', () => this.press());
-      kb.on('keydown-SPACE', () => this.calmKey(true));
+      // (a key held down repeats: only the first press is a press)
+      kb.on('keydown-SPACE', (e: KeyboardEvent) => {
+        if (!e.repeat) this.calmKey(true);
+      });
       kb.on('keyup-SPACE', () => this.calmKey(false));
     }
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
@@ -603,7 +645,10 @@ export class HotelLobby3D extends Phaser.Scene {
     this.footDust = new FootDust(S);
     this.monster.onFootfall = (_foot, at, hard) => {
       if (!this.monster?.root.visible) return;
-      this.heard(at.clone().setY(0.1), 'froggy_step', 0.75 + hard * 0.45);
+      // louder than they were, and never so quiet at the far end of the
+      // lobby that you lose him: you should always know where he is
+      this.heard(at.clone().setY(0.1), 'froggy_step', 0.95 + hard * 0.5, 0.16);
+      this.lastStep = { t: this.clock, at: at.clone(), hard };
       this.footDust?.puff(at, hard, FROG_SCALE * 0.8);
     };
     if (this.stage) prepareJumpscare3D(this.stage, this.monster);
@@ -1409,25 +1454,19 @@ export class HotelLobby3D extends Phaser.Scene {
   private investigate(): void {
     this.alertLook = 1.8;
     audio.sfx('dun', 0.55);
-    if (this.phase === 'watch') {
-      // already at it: he stays longer
-      this.watchFor = Math.max(this.watchFor, this.phaseT + 4);
-      return;
-    }
+    // already at it: he is looking already, and the look ends when it ends
+    // (it is never stretched -- it used to grow by four seconds a time)
+    if (this.phase === 'watch') return;
     if (this.phase === 'approach') return;
-    if (!(this.phase === 'search' || this.phase === 'leave' || this.phase === 'lookback') || this.climbing) {
+    if (!(this.phase === 'search' || this.phase === 'leave') || this.climbing) {
       // (mid-climb: as soon as he is down)
       this.susStage = 1;
       return;
     }
-    this.phase = 'approach';
-    this.phaseT = 0;
     this.holdT = 0;
-    const path: Leg[] = [];
-    if (this.fpos.x < 2.5) path.push({ to: new THREE.Vector3(2.5, 0, 3.3), speed: 1.5 });
-    path.push({ to: new THREE.Vector3(7.6, 0, DOOR_Z), speed: 1.5 }, { to: WATCH.clone(), speed: 0.8 });
-    this.legs = path;
-    this.watchFor = 6 + Math.random() * 3;
+    this.comeToDoor();
+    // (heard something: he hurries)
+    for (const l of this.legs) l.speed *= 1.35;
   }
 
   // ============================================================ the nerve
@@ -1465,10 +1504,19 @@ export class HotelLobby3D extends Phaser.Scene {
         this.investigate();
       }
     }
-    // stress all the way up: you gasp
+    // ---- STRESS ALL THE WAY UP, THE BAR RED TO THE END: you cannot hold it
+    // in any more, and he hears you.  He turns on the door and comes through
+    // it (the same end as being seen: see `detect`, the lunge, `caught`).
     if (this.stress >= 1) {
-      this.stress = 0.7;
-      this.panic();
+      this.stress = 1;
+      audio.sfx('breath', 1);
+      this.time.delayedCall(220, () => audio.sfx('breath', 1));
+      this.say('You can\'t hold it in.', 1.6, true);
+      this.check = null;
+      this.sawYou = true;
+      this.heardYou = true;
+      this.detect();
+      return;
     }
 
     // the checks: more often, and harder, the longer it goes and the nearer he is
@@ -1488,6 +1536,7 @@ export class HotelLobby3D extends Phaser.Scene {
 
   private calmKey(down: boolean): void {
     if (!this.check || this.phase === 'caught' || this.phase === 'lunge') return;
+    if (down) this.pressedAt = this.clock;
     const r = down ? pressCheck(this.check) : releaseCheck(this.check);
     if (r) this.checkDone(r);
   }
@@ -1500,10 +1549,10 @@ export class HotelLobby3D extends Phaser.Scene {
     if (r === 'perfect') {
       this.stress += NERVE.perfect;
       this.breathT = Math.max(this.breathT, 2.5);
-      show('CALM', '#7fd88a');
+      show(`CALM  -${Math.round(-NERVE.perfect * 100)}% STRESS`, '#7fd88a');
     } else if (r === 'success') {
       this.stress += NERVE.success;
-      show('STEADY', '#f0d060');
+      show(`STEADY  -${Math.round(-NERVE.success * 100)}% STRESS`, '#f0d060');
     } else if (r === 'fail') {
       this.stress += NERVE.failStress;
       this.recentFails += 1;
@@ -1513,7 +1562,7 @@ export class HotelLobby3D extends Phaser.Scene {
         this.susStage = 2;
         this.investigate();
       }
-      show('TOO LOUD', '#ff7060');
+      show(`TOO LOUD  +${Math.round(NERVE.failStress * 100)}% STRESS`, '#ff7060');
     } else {
       this.panic();
       show('YOU GASP', '#ff4030');
@@ -1606,7 +1655,14 @@ export class HotelLobby3D extends Phaser.Scene {
     if (this.mode === 'hide') {
       if (hunting && this.spotted(dt)) return this.detect();
       if (!hunting) this.sus = Math.max(0, this.sus - AWARE.suspicionDecayRate * dt);
-      if (hunting) this.nerve(dt);
+      // the 45 seconds are the ones you have to keep yourself quiet through;
+      // once he has turned his back for good you can breathe again
+      const keepQuiet = hunting && (this.hideClock < HUNT.seconds || this.phase === 'approach' || this.phase === 'watch');
+      if (keepQuiet) this.nerve(dt);
+      else if (hunting) {
+        this.check = null;
+        this.stress = Math.max(0, this.stress - dt * 0.12);
+      }
       // your heart, louder and faster the surer he is
       const fear = Math.max(this.sus, this.stress * 0.85);
       if (this.phase !== 'watch' && fear > 0.15) {
@@ -1630,19 +1686,26 @@ export class HotelLobby3D extends Phaser.Scene {
         this.legs = this.searchPlan();
       }
     }
-    if (this.phase === 'search' && this.legs.length === 0) {
-      this.phase = 'approach';
-      this.phaseT = 0;
-      this.legs = [
-        { to: new THREE.Vector3(2.5, 0, 3.3), speed: 1.0 },
-        { to: new THREE.Vector3(7.6, 0, DOOR_Z), speed: 0.9 },
-        { to: WATCH.clone(), speed: 0.55 },
-      ];
+    if (this.mode === 'hide' && this.phase !== 'burst') this.hideClock += dt;
+    // ---- THE 45 SECONDS.  Not to the door yet with the end coming: he
+    // leaves the rest of the lobby and comes.  Been, and the time is up:
+    // he stops searching and goes (the last look, then the doors).
+    if (this.phase === 'search' && !this.climbing) {
+      const end = this.mode === 'hide' && this.hideClock >= HUNT.seconds;
+      if (end && this.watched) {
+        this.legs = [];
+        this.goForGood();
+      } else if (this.legs.length === 0 || (this.mode === 'hide' && !this.watched && this.hideClock >= HUNT.seconds - this.timeToWatch())) {
+        this.comeToDoor();
+      }
     }
     if (this.phase === 'approach') {
       if (this.legs.length === 0) {
         this.phase = 'watch';
         this.phaseT = 0;
+        this.watched = true;
+        // the look: 10 to 12 seconds from now, set once, never stretched
+        this.watchFor = Phaser.Math.FloatBetween(HUNT.watch[0], HUNT.watch[1]);
         audio.sfx('eerie_swell', 0.35);
       }
     }
@@ -1654,25 +1717,34 @@ export class HotelLobby3D extends Phaser.Scene {
         this.heartT = 0.62 - fear * 0.22;
         audio.heartbeat(0.55 + fear * 0.35);
       }
-      // (and he does not go while he is still unsure)
-      if (this.phaseT > this.watchFor && this.sus < AWARE.investigateThreshold) {
+      // The look ends on time, whatever he heard (seen, he has you: that is
+      // `spotted`, not this).  He turns his back on the door -- on the spot,
+      // first, not walking backwards -- and walks a good few steps away.
+      if (this.phaseT >= this.watchFor) {
         this.phase = 'leave';
         this.phaseT = 0;
-        this.legs = [{ to: new THREE.Vector3(X0 + 2.2, 0, DOOR_Z), speed: 1.2 }];
+        this.sus = Math.min(this.sus, AWARE.investigateThreshold * 0.8);
+        this.susStage = Math.min(this.susStage, 1);
+        audio.sfx('floor_creak', 0.35);
+        this.legs = [{ to: new THREE.Vector3(WATCH.x - HUNT.walkAway, 0, DOOR_Z - 0.4), speed: 1.05 }];
       }
       return;
     }
     if (this.phase === 'leave' && this.legs.length === 0) {
-      this.phase = 'lookback';
-      this.phaseT = 0;
-      audio.sfx('floor_creak', 0.3);
+      // away from the door: back to the search while there is time left,
+      // and when it is up, the last look back and out
+      if (this.mode === 'hide' && this.hideClock < HUNT.seconds) {
+        this.phase = 'search';
+        this.phaseT = 0;
+        this.legs = this.searchPlan().filter((l) => !l.over && l.to.x < WATCH.x - 2).slice(-4);
+      } else this.goForGood();
     }
     if (this.phase === 'lookback') {
       // the last look back at the door: quiet, and long
       if (this.phaseT > 5.2) {
         this.phase = 'exit';
         this.phaseT = 0;
-        this.legs = [{ to: new THREE.Vector3(X0 + 0.5, 0, DOOR_Z), speed: 1.4 }];
+        this.legs = [{ to: new THREE.Vector3(X0 + 0.5, 0, DOOR_Z), speed: 1.6 }];
       }
     }
     if (this.phase === 'exit') {
@@ -1692,6 +1764,34 @@ export class HotelLobby3D extends Phaser.Scene {
       this.phaseT = 0;
       audio.sfx('froggy_screech', 1);
     }
+  }
+
+  /**
+   * Seconds from setting off for the door to the end of his look through
+   * it: the walk (at the approach's own pace) and the look.  He sets off
+   * that long before the 45 are up, so the look ends when they do.
+   */
+  private timeToWatch(): number {
+    // (+4: the last slow steps up to the glass, and his turns)
+    const walk = this.fpos.distanceTo(WATCH) / APPROACH_SPEED + 4;
+    return Math.max(HUNT.comeBy, walk + HUNT.watch[1]);
+  }
+
+  /** From wherever he is in the lobby, to the storage door, to look in. */
+  private comeToDoor(): void {
+    this.phase = 'approach';
+    this.phaseT = 0;
+    const legs: Leg[] = [];
+    if (this.fpos.x < 2.5) legs.push({ to: new THREE.Vector3(2.5, 0, 3.3), speed: APPROACH_SPEED });
+    legs.push({ to: new THREE.Vector3(7.6, 0, DOOR_Z), speed: APPROACH_SPEED }, { to: WATCH.clone(), speed: 0.55 });
+    this.legs = legs;
+  }
+
+  /** Time is up: no more searching -- the last look back at the door, then out. */
+  private goForGood(): void {
+    this.phase = 'lookback';
+    this.phaseT = 0;
+    audio.sfx('floor_creak', 0.3);
   }
 
   /** The search: out of the stairwell, the counter, the chairs, the floor. */
@@ -1854,7 +1954,7 @@ export class HotelLobby3D extends Phaser.Scene {
   }
 
   /** A sound from somewhere in the lobby, as heard from where you are. */
-  private heard(at: THREE.Vector3, name: Parameters<typeof audio.sfx>[0], gain: number): void {
+  private heard(at: THREE.Vector3, name: Parameters<typeof audio.sfx>[0], gain: number, floor = 0.06): void {
     const cam = this.camPos;
     const v = at.clone().sub(cam);
     const d = Math.max(0.3, v.length());
@@ -1865,7 +1965,7 @@ export class HotelLobby3D extends Phaser.Scene {
     // through a shut door, everything is a little dull
     const muffle = this.mode === 'hide' && this.phase !== 'lunge' ? 0.3 : 0;
     const behind = Phaser.Math.Clamp(Math.max(0, -ahead) * 0.8 + muffle, 0, 1);
-    const g = gain * Phaser.Math.Clamp(1.3 - d / 13, 0.06, 1);
+    const g = gain * Phaser.Math.Clamp(1.3 - d / 13, floor, 1);
     audio.sfx(name, g, { pan, behind });
   }
 
@@ -1972,10 +2072,18 @@ export class HotelLobby3D extends Phaser.Scene {
       const dir = leg.to.clone().sub(this.fpos).setY(0);
       const d = dir.length();
       if (d > 0.05) {
-        speedWant = leg.speed;
-        const step = leg.speed * dt;
+        // ---- TURN, THEN WALK.  Facing well away from where he is going,
+        // he turns on the spot first and only steps off as he comes round,
+        // instead of sliding off backwards while he turns.
+        const want = Math.atan2(dir.x, dir.z);
+        let off = want - this.fYaw;
+        while (off > Math.PI) off -= Math.PI * 2;
+        while (off < -Math.PI) off += Math.PI * 2;
+        const facing = Phaser.Math.Clamp((Math.cos(off) - 0.35) / 0.65, 0, 1);
+        speedWant = leg.speed * facing;
+        const step = leg.speed * facing * dt;
         this.fpos.addScaledVector(dir.normalize(), Math.min(step, d));
-        this.fYaw = this.turnTo(this.fYaw, Math.atan2(dir.x, dir.z), dt * 2.2);
+        this.fYaw = this.turnTo(this.fYaw, want, dt * (facing < 0.5 ? 3 : 2.2));
         this.holdT = leg.hold ?? 0;
         // a slow head, turning as he walks, looking
         scan = Math.sin(this.clock * 0.9) * 0.35;
@@ -2104,7 +2212,7 @@ export class HotelLobby3D extends Phaser.Scene {
     this.time.delayedCall(SCARE_MS + 600, () => {
       froggyLayer.clear();
       const again = this.mode === 'hide' ? { key: 'HotelLobby3D', data: { mode: 'hide' } } : { key: 'Hotel', data: { area: 'lobby', from: 'stairs' } };
-      this.scene.start('DeathScreen', { ...again, line: this.mode === 'hide' ? 'He saw you through the glass.' : 'Nowhere to hide.' });
+      this.scene.start('DeathScreen', { ...again, line: this.mode === 'hide' ? (this.heardYou ? 'He heard you breathing.' : 'He saw you through the glass.') : 'Nowhere to hide.' });
     });
   }
 
@@ -2162,6 +2270,56 @@ export class HotelLobby3D extends Phaser.Scene {
     });
   }
 
+  /**
+   * ---- WHERE HE IS, AND WHAT HE IS DOING, at a glance.  A line at the top
+   * right saying what he is up to (searching, coming to the door, looking
+   * in, walking away), coloured by how bad it is; and when he is out of your
+   * view, a marker at that edge of the screen that pulses with each of his
+   * footsteps, brighter the closer he is.
+   */
+  private paintCues(ctx: CanvasRenderingContext2D): void {
+    const m = this.monster;
+    if (!m?.root.visible) return;
+    const near = this.nearK();
+    const doing: Partial<Record<Phase, [string, string]>> = {
+      burst: ['HE IS IN THE LOBBY', '#f0d060'],
+      search: [near > 0.55 ? 'HE IS SEARCHING - CLOSE' : 'HE IS SEARCHING THE LOBBY', near > 0.55 ? '#ff9a50' : '#f0d060'],
+      approach: ['HE IS COMING TO THE DOOR', '#ff7a50'],
+      watch: ['HE IS LOOKING IN - STAY DOWN', '#ff5040'],
+      leave: ['HE IS WALKING AWAY', '#9ad890'],
+      lookback: ['HE LOOKS BACK...', '#f0d060'],
+      exit: ['HE IS LEAVING', '#9ad890'],
+    };
+    const d = doing[this.phase];
+    if (d) {
+      const tw = d[0].length * 6;
+      const tx = GAME_W - 6 - tw;
+      const ty = isTouch() ? 40 : 6;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(tx - 3, ty - 2, tw + 5, 11);
+      drawPixelText(ctx, d[0], tx, ty, { scale: 1, color: d[1] });
+    }
+    // which way he is from where you are looking
+    const v = this.fpos.clone().sub(this.camPos).setY(0);
+    const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+    const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+    const rel = Math.atan2(v.dot(right), v.dot(fwd));
+    if (Math.abs(rel) < 0.55) return; // in view: you can see him
+    const side = rel > 0 ? 1 : -1;
+    const since = this.lastStep ? this.clock - this.lastStep.t : 9;
+    const beat = Math.max(0, 1 - since / 0.45);
+    const a = 0.35 + near * 0.35 + beat * 0.4;
+    const ex = side > 0 ? GAME_W - 10 : 10;
+    const ey = GAME_H / 2;
+    ctx.fillStyle = `rgba(255,${Math.round(200 - near * 120)},${Math.round(120 - near * 90)},${a.toFixed(2)})`;
+    // an arrowhead pointing off the edge, and a footprint behind it
+    for (let k = 0; k < 6; k++) ctx.fillRect(ex + side * k - (side > 0 ? 0 : 0), ey - 6 + k, 1, 12 - k * 2);
+    ctx.fillRect(ex - side * 7, ey - 3, 3, 5);
+    ctx.fillRect(ex - side * 6, ey - 5, 1, 1);
+    ctx.fillRect(ex - side * 8, ey - 5, 1, 1);
+    if (beat > 0.2) drawPixelText(ctx, 'STEPS', side > 0 ? ex - 40 : ex + 6, ey + 8, { scale: 1, color: '#f0d0a0', alpha: beat });
+  }
+
   /** The stress meter, the check in progress, and how the last one went. */
   private paintNerve(ctx: CanvasRenderingContext2D): void {
     if (this.hideT <= 0) return;
@@ -2186,16 +2344,36 @@ export class HotelLobby3D extends Phaser.Scene {
       lit(ctx, x + 1, y + 10, sw, 3, sc);
     }
 
+    // how long is left to hold out, under the stress bar
+    if (this.hideClock < HUNT.seconds && this.phase !== 'detect' && this.phase !== 'lunge') {
+      const left = Math.ceil(HUNT.seconds - this.hideClock);
+      drawPixelText(ctx, `HOLD ON ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`, x, y + 18, { scale: 1, color: '#c8c0b0', alpha: 0.8 });
+    }
+    // past three quarters, a warning: at the end of the bar he hears you
+    if (this.stress > 0.8 && Math.sin(this.clock * 9) > -0.2) {
+      drawPixelText(ctx, 'TOO STRESSED - HE WILL HEAR YOU', GAME_W / 2, 64, { scale: 1, color: '#ff6050', center: true });
+    }
+    this.paintCues(ctx);
+
     const c = this.check;
     if (c) {
       const w = 150;
       const bx = Math.round(GAME_W / 2 - w / 2);
       const by = 128;
-      // ---- the plate: dark glass, a lit top edge, a shadow under it
-      plate(ctx, bx - 8, by - 24, w + 16, 44);
-      drawPixelText(ctx, CHECK_TITLE[c.kind], GAME_W / 2, by - 18, { scale: 1, color: '#f6e3a4', center: true });
+      const live = checkLive(c);
+      // ---- the plate: dark glass, a lit top edge, a shadow under it; it
+      // lights up the moment the key goes down, so a press is felt
+      plate(ctx, bx - 8, by - 30, w + 16, 56);
+      if (this.clock - this.pressedAt < 0.16) {
+        ctx.fillStyle = 'rgba(255,255,255,0.75)';
+        ctx.fillRect(bx - 8, by - 30, w + 16, 1);
+        ctx.fillRect(bx - 8, by + 25, w + 16, 1);
+        ctx.fillRect(bx - 8, by - 30, 1, 56);
+        ctx.fillRect(bx + w + 7, by - 30, 1, 56);
+      }
+      drawPixelText(ctx, CHECK_TITLE[c.kind], GAME_W / 2, by - 25, { scale: 1, color: '#f6e3a4', center: true });
       // ---- the track: a channel sunk into the plate, the bands lit in it
-      const ty = by - 7;
+      const ty = by - 14;
       const th = 10;
       gauge(ctx, bx - 1, ty - 1, w + 2, th + 2);
       const zone = (z: [number, number], col: string): void => {
@@ -2208,11 +2386,17 @@ export class HotelLobby3D extends Phaser.Scene {
         zone([0, 1], c.pos >= 1 ? '#3fb455' : '#8c2a24');
       } else {
         zone(c.yellow, '#c8a634');
-        zone(c.green, '#3fb455');
+        // the green glows while the line is in it: now is the moment
+        zone(c.green, live?.good ? '#6ff08a' : '#3fb455');
         // the band edges, so where one ends and the next begins is plain
         for (const e of [c.yellow[0], c.yellow[1], c.green[0], c.green[1]]) {
           ctx.fillStyle = 'rgba(0,0,0,0.45)';
           ctx.fillRect(bx + Math.round(e * w), ty, 1, th);
+        }
+        // a hold fills the bar as you hold it
+        if (c.kind === 'hold' && c.pos > 0) {
+          ctx.fillStyle = 'rgba(255,255,255,0.28)';
+          ctx.fillRect(bx, ty + 2, Math.round(c.pos * w), th - 4);
         }
       }
       // the glass over the whole channel: bright along the top, dim at the foot
@@ -2225,38 +2409,44 @@ export class HotelLobby3D extends Phaser.Scene {
       ctx.fillRect(bx, ty, w, th);
       if (c.kind !== 'react') {
         // ---- the needle: a bright blade with its own glow and a dark edge
+        // (green-white while it is in the green)
         const mx = bx + Math.round(c.pos * w);
         const glow = ctx.createRadialGradient(mx, ty + th / 2, 0, mx, ty + th / 2, 9);
-        glow.addColorStop(0, 'rgba(255,255,255,0.45)');
+        glow.addColorStop(0, live?.good ? 'rgba(160,255,170,0.7)' : 'rgba(255,255,255,0.45)');
         glow.addColorStop(1, 'rgba(255,255,255,0)');
         ctx.fillStyle = glow;
         ctx.fillRect(mx - 9, ty - 4, 18, th + 8);
         ctx.fillStyle = 'rgba(0,0,0,0.75)';
         ctx.fillRect(mx - 2, ty - 3, 4, th + 6);
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = live?.good ? '#d8ffd8' : '#ffffff';
         ctx.fillRect(mx - 1, ty - 2, 2, th + 4);
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.fillRect(mx - 1, ty - 4, 2, 2);
         ctx.fillRect(mx - 1, ty + th + 2, 2, 2);
       }
+      // ---- what to do, in two lines; the second is the live word while it plays
       const act = isTouch() ? 'CALM' : 'SPACE';
-      drawPixelText(ctx, checkHow(c.kind, act), GAME_W / 2, by + 6, { scale: 1, color: '#d4ccbc', center: true });
+      const [what, how] = checkHow(c.kind, act);
+      drawPixelText(ctx, what, GAME_W / 2, by + 1, { scale: 1, color: '#d4ccbc', center: true });
+      if (live && (live.good || c.kind === 'react' || c.kind === 'hold')) {
+        drawPixelText(ctx, live.text, GAME_W / 2, by + 10, { scale: 1, color: live.good ? '#7fff8f' : '#f0d060', center: true });
+      } else drawPixelText(ctx, how, GAME_W / 2, by + 10, { scale: 1, color: '#f6e3a4', center: true });
       // the time it has left, as a thin lit line under it all
       const left = Math.round(w * Math.max(0, 1 - c.t / c.dur));
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(bx, by + 15, w, 2);
+      ctx.fillRect(bx, by + 20, w, 2);
       if (left > 0) {
         const tl = ctx.createLinearGradient(bx, 0, bx + left, 0);
         tl.addColorStop(0, 'rgba(255,255,255,0.35)');
         tl.addColorStop(1, 'rgba(255,255,255,0.8)');
         ctx.fillStyle = tl;
-        ctx.fillRect(bx, by + 15, left, 2);
+        ctx.fillRect(bx, by + 20, left, 2);
       }
     }
     const f = this.flash;
     if (f && f.until > this.clock) {
       // (over the gauge's box, not on its title)
-      const fy = 92;
+      const fy = 84;
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.fillRect(GAME_W / 2 - (f.text.length * 6) / 2 - 3, fy - 2, f.text.length * 6 + 5, 11);
       drawPixelText(ctx, f.text, GAME_W / 2, fy, { scale: 1, color: f.colour, center: true });
@@ -2278,6 +2468,8 @@ export class HotelLobby3D extends Phaser.Scene {
       fx: this.fpos.x,
       fz: this.fpos.z,
       watchFor: this.watchFor,
+      hideClock: this.hideClock,
+      watched: this.watched,
       sus: this.sus,
       stress: this.stress,
       check: this.check ? { kind: this.check.kind, pos: this.check.pos, green: this.check.green } : null,
