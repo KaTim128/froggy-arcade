@@ -50,6 +50,8 @@ export function initDebug(g: Phaser.Game): void {
     state: () => JSON.parse(JSON.stringify(store.get())),
     audioSources: () => audio.sourceCount(),
     audioLevel: () => audio.probeLevel(),
+    /** Is the sound held (the page away), and what state its context is in. */
+    audioHeld: () => ({ held: audio.isHeld(), ctx: audio.contextState() }),
     broke: () => evaluateBroke(),
     scenes: () => SCENES,
     canEnter: (scene: string, route: string, tokens = 0) =>

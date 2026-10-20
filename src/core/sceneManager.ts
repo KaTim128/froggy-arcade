@@ -16,6 +16,7 @@ import { CreatureHub } from '../scenes2d/CreatureHub';
 import { CreatureArena } from '../scenes2d/CreatureArena';
 import { StreetEast } from '../scenes2d/StreetEast';
 import { installLifeTicker } from '../game/lifeTicker';
+import { capturePlace } from '../game/place';
 import Phaser from 'phaser';
 import { attachLandscapeFill } from '../render/landscapeFill';
 import { PALETTE } from '../render/palette';
@@ -161,12 +162,41 @@ export function bootGame(): void {
     window.addEventListener(ev, () => audio.wake(), { passive: true });
   }
 
-  // PRD ST-2: never lose a run to a closed tab.
-  window.addEventListener('beforeunload', () => store.flush());
-  // PRD EC-12: pause and duck when the tab loses focus.
+  // PRD ST-2: never lose a run to a closed tab -- or to a phone that puts
+  // the browser away and never says it is closing (no beforeunload, no
+  // pagehide: hidden is the last thing a backgrounded tab is ever told).
+  // Where the player is standing goes with it.
+  const saveNow = (): void => {
+    capturePlace();
+    store.flush();
+  };
+  window.addEventListener('beforeunload', saveNow);
+  window.addEventListener('pagehide', saveNow);
+  // PRD EC-12: pause when the tab loses focus.
   document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      saveNow();
+      audio.hold('hidden');
+    } else audio.release('hidden');
     if (!game) return;
     if (document.hidden) game.loop.sleep();
     else game.loop.wake();
+  });
+  // The music, through every way of leaving and coming back: another window
+  // or app (blur / focus), and the page put away and restored from the
+  // back-forward cache (pagehide / pageshow).  See audio `hold`.
+  window.addEventListener('blur', () => audio.hold('blur'));
+  window.addEventListener('focus', () => audio.release('blur'));
+  window.addEventListener('pagehide', () => audio.hold('pagehide'));
+  window.addEventListener('pageshow', () => {
+    audio.release('pagehide');
+    if (!document.hidden) audio.release('hidden');
+    if (document.hasFocus()) audio.release('blur');
+  });
+  if (document.hidden) audio.hold('hidden');
+  // The same profile played in another tab: its newer save is taken here, so
+  // this tab never writes an older run back over it.
+  window.addEventListener('storage', (e) => {
+    if (e.key?.startsWith('froggy.run.') && !e.key.endsWith('.backup')) store.adoptIfNewer(e.key.slice('froggy.run.'.length));
   });
 }

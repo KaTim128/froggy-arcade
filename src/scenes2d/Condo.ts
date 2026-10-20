@@ -141,6 +141,10 @@ export class Condo extends WalkRoom {
     this.exitTo('Hotel', { area: 'corridor', from: 'room' });
   }
 
+  protected placeData(): Record<string, string | number | boolean> {
+    return { area: this.area };
+  }
+
   protected spawnX(): number {
     if (this.area === 'bath') return BATH_BACK_X + 14;
     return this.from === 'bath' ? BATH_DOOR_X + 2 : ROOM_DOOR_X + 14;

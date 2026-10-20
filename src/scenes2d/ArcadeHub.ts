@@ -45,6 +45,7 @@ import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 import { fitPrompt } from '../ui/plate';
+import { resumeSpot, trackPlace } from '../game/place';
 
 const INTERACT_RANGE = 24;
 
@@ -454,6 +455,8 @@ export class ArcadeHub extends Phaser.Scene {
     // street you are already looking up it
     if (this.fromDoor === 'annex') this.player.face(1);
     else if (this.fromDoor === 'lounge') this.player.face(-1);
+    // kept with the run, and back on the spot when resumed here (game/place)
+    trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
 
     new TokenHud(this);
     // (the front door is in the middle of the bottom wall: the pockets sit beside it)

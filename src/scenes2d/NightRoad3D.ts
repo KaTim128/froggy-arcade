@@ -91,6 +91,8 @@ const REVEAL_Z = -ROAD_LEN * 0.2;
 const RIVER_Z = -112;
 const RIVER_HALF = 3.4;
 const LAMP_ZS = [4, -20, -46, -74, -104, -132, -158];
+/** How many of them carry a real light on a phone, handed to the nearest ones. */
+const TOUCH_LAMP_LIGHTS = 2;
 
 const EYE = 1.6;
 /** Eye height crouched, as a share of standing. */
@@ -1249,6 +1251,9 @@ gl_Position = projectionMatrix * mvPosition;`,
    * stop's pole and sign at the kerb.  Its walls and bench are solid.
    */
   private busLight: THREE.PointLight | null = null;
+  /** Where every road lamp's head is, and the real lights shared out among them. */
+  private lampSpots: THREE.Vector3[] = [];
+  private lampLights: THREE.PointLight[] = [];
   private busTube: THREE.MeshBasicMaterial | null = null;
 
   private buildBusStop(S: THREE.Scene): void {
@@ -2025,6 +2030,12 @@ gl_Position = projectionMatrix * mvPosition;`,
     const pole = new THREE.MeshLambertMaterial({ color: 0x3a3e44 });
     const bulb = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
     const pool = decal(new THREE.MeshBasicMaterial({ color: 0xffc070, transparent: true, opacity: 0.08, depthWrite: false }), 6);
+    // On a phone only the two lamps nearest you carry a real light (see
+    // `poolLamps`): every light is paid for by every pixel of every
+    // material, and a phone handed the whole road at once ran out.
+    const lit = isTouch() ? TOUCH_LAMP_LIGHTS : LAMP_ZS.length;
+    this.lampSpots = [];
+    this.lampLights = [];
     LAMP_ZS.forEach((z, i) => {
       const side = i % 2 ? 1 : -1;
       const x = side * (RAIL_X + 0.7);
@@ -2035,9 +2046,13 @@ gl_Position = projectionMatrix * mvPosition;`,
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.12, 0.3), bulb);
       head.position.set(x - side * 1.9, 5.82, z);
       S.add(post, arm, head);
-      const light = new THREE.PointLight(0xffc98a, 40, 17, 1.35);
-      light.position.set(x - side * 1.9, 5.5, z);
-      S.add(light);
+      this.lampSpots.push(new THREE.Vector3(x - side * 1.9, 5.5, z));
+      if (i < lit) {
+        const light = new THREE.PointLight(0xffc98a, 40, 17, 1.35);
+        light.position.copy(this.lampSpots[i]);
+        S.add(light);
+        this.lampLights.push(light);
+      }
       const disc = new THREE.Mesh(new THREE.CircleGeometry(5.5, 20), pool);
       disc.rotation.x = -Math.PI / 2;
       disc.position.set(x - side * 1.9, KERB_H + 0.012, z);
@@ -2344,8 +2359,22 @@ gl_Position = projectionMatrix * mvPosition;`,
 
   // ===================================================================== loop
 
+  /**
+   * A phone's few lamp lights go to the lamps nearest you, so the pools of
+   * light you walk through are always lit; the far ones keep their glow and
+   * their painted pool on the ground.  (The number of lights never changes,
+   * so nothing is recompiled as they move.)
+   */
+  private poolLamps(): void {
+    if (this.lampLights.length >= this.lampSpots.length) return;
+    const z = this.pos.y;
+    const near = [...this.lampSpots].sort((a, b) => Math.abs(a.z - z) - Math.abs(b.z - z));
+    this.lampLights.forEach((l, i) => l.position.copy(near[i]));
+  }
+
   private tick(dt: number): void {
     if (!this.stage) return;
+    this.poolLamps();
     if (this.phase === 'caught') {
       this.scare?.update(dt);
       return;

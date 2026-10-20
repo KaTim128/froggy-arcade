@@ -23,6 +23,7 @@ import { SHOP_HOURS, clock, shopsOpen, visit } from '../game/life';
 import { nightfallOnce, onPhaseTurn } from '../game/dayNight';
 import { backPlate, fitPrompt } from '../ui/plate';
 import { FRONT_TOP, paintShopfront, paintStreet, type ShopfrontOpts } from '../art/shopfront';
+import { resumeSpot, trackPlace } from '../game/place';
 
 export type StoreKind = 'furniture' | 'clothes' | 'barber';
 /** The scene each door opens into. */
@@ -132,6 +133,8 @@ export class StreetEast extends Phaser.Scene {
     const door = FRONTS.find((f) => f.kind === this.atShop);
     this.player = new Player(this, this.atX ?? (door ? door.door : 16), WALK_Y, dark);
     this.player.setSurface('gravel');
+    // kept with the run, and back on the spot when resumed here (game/place)
+    trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
     this.cameras.main.setBounds(0, 0, WORLD_W, GAME_H);
     this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
     this.people = new Pedestrians(this, WORLD_W, WALK_Y + 2, dark ? 2 : 4, dark);

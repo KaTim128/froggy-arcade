@@ -336,12 +336,6 @@ export class MinigameScene extends Phaser.Scene {
     this.forfeit();
   }
 
-  /** Quit back to the room the cabinet stands in (the lobby), forfeit and all. */
-  quitToLobby(): void {
-    this.exitTo = null;
-    this.forfeit();
-  }
-
   /** Esc answers the quit question with CANCEL while it is up. */
   handleEscape(): boolean {
     // At the how-to-play card nothing has been paid and nothing is being

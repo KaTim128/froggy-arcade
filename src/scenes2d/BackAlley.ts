@@ -23,6 +23,7 @@ import { Player } from '../art/player';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { backPlate } from '../ui/plate';
+import { resumeSpot, trackPlace } from '../game/place';
 
 const WALK_Y = 168;
 const DOOR_X = 236;
@@ -72,6 +73,8 @@ export class BackAlley extends Phaser.Scene {
 
     this.player = new Player(this, 70, WALK_Y, time === 'midnight');
     this.player.setSurface('gravel');
+    // kept with the run, and back on the spot when resumed here (game/place)
+    trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
 
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setOrigin(0.5, 0.5).setDepth(801).setVisible(false);
     this.mutter = centerText(this, GAME_W / 2, GAME_H - 18, '', PALETTE.cream).setDepth(802).setVisible(false);

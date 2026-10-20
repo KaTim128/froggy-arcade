@@ -27,6 +27,7 @@ import { GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
 import { HOTEL_DOOR, HOTEL_H, HOTEL_W, paintHotel } from '../art/hotel';
 import { speak } from '../ui/talkPanel';
+import { resumeSpot, trackPlace } from '../game/place';
 
 export const WORLD_W = 640;
 const WALK_Y = 168;
@@ -72,6 +73,8 @@ export class StreetWest extends Phaser.Scene {
 
     this.player = new Player(this, this.spawn === 'hotel' ? DOOR_X + 10 : WORLD_W - 18, WALK_Y, false);
     this.player.setSurface('gravel');
+    // kept with the run, and back on the spot when resumed here (game/place)
+    trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
     this.cameras.main.setBounds(0, 0, WORLD_W, GAME_H);
     this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
 

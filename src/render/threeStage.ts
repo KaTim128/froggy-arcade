@@ -64,8 +64,14 @@ function makeRenderer(antialias: boolean): THREE.WebGLRenderer | null {
   for (const opts of tries) {
     try {
       const r = new THREE.WebGLRenderer(opts);
-      // a context the phone takes away is asked back, not left as a sad face
-      r.domElement.addEventListener('webglcontextlost', (e) => e.preventDefault());
+      // A context the phone takes away is asked back, not left as a sad
+      // face: the stage on screen covers the canvas while it is gone, and
+      // offers a reload if the browser never gives it back.
+      r.domElement.addEventListener('webglcontextlost', (e) => {
+        e.preventDefault();
+        ThreeStage.current?.contextLost();
+      });
+      r.domElement.addEventListener('webglcontextrestored', () => ThreeStage.current?.contextRestored());
       shared = r;
       return r;
     } catch {
@@ -79,7 +85,7 @@ function makeRenderer(antialias: boolean): THREE.WebGLRenderer | null {
  * What a phone that cannot draw 3D at all shows instead: words, on black,
  * not the browser's broken-canvas face.
  */
-function noGLNotice(root: HTMLElement): HTMLDivElement {
+function noGLNotice(root: HTMLElement, lines = ['THIS DEVICE COULD NOT START THE 3D VIEW.', 'Close other tabs and apps, then reload.'], button = true): HTMLDivElement {
   const d = document.createElement('div');
   Object.assign(d.style, {
     position: 'fixed',
@@ -96,9 +102,11 @@ function noGLNotice(root: HTMLElement): HTMLDivElement {
     textAlign: 'center',
     padding: '24px',
   } as Partial<CSSStyleDeclaration>);
-  d.innerHTML =
-    '<div>THIS DEVICE COULD NOT START THE 3D VIEW.</div>' +
-    '<div style="color:#c9d1dc;font-weight:400">Close other tabs and apps, then reload.</div>';
+  d.innerHTML = `<div>${lines[0]}</div>` + (lines[1] ? `<div style="color:#c9d1dc;font-weight:400">${lines[1]}</div>` : '');
+  if (!button) {
+    root.appendChild(d);
+    return d;
+  }
   const b = document.createElement('button');
   b.textContent = 'RELOAD';
   Object.assign(b.style, { font: 'inherit', padding: '10px 22px', background: '#3d2a5c', color: '#fff0c9', border: '2px solid #ffd45e', borderRadius: '10px' });
@@ -176,6 +184,44 @@ export class ThreeStage {
 
   private phaserCanvas: HTMLCanvasElement | null = null;
   private notice: HTMLDivElement | null = null;
+  /** Shaders still compiling: nothing steps or draws until they are done. */
+  private warming = false;
+  /** The context is gone, and the world holds still until it is back. */
+  private lost = false;
+  private lostCover: HTMLDivElement | null = null;
+  private lostTimer = 0;
+
+  /**
+   * The browser took the context away (out of GPU memory, the GPU reset).
+   * The canvas is covered in black with a word on it, the world holds still,
+   * and if the context is not back in a few seconds the cover offers a
+   * reload -- the run is saved, so it comes back at its checkpoint.
+   */
+  contextLost(): void {
+    if (this.lost) return;
+    this.lost = true;
+    const root = this.renderer?.domElement.parentElement ?? document.getElementById('game-root');
+    if (!root) return;
+    this.lostCover?.remove();
+    this.lostCover = noGLNotice(root, ['RESTORING THE 3D VIEW...'], false);
+    this.lostCover.style.zIndex = '60';
+    this.lostTimer = window.setTimeout(() => {
+      if (!this.lost) return;
+      this.lostCover?.remove();
+      this.lostCover = noGLNotice(root, ['THE 3D VIEW STOPPED.', 'Your progress is saved. Close other tabs and apps, then reload.']);
+      this.lostCover.style.zIndex = '60';
+    }, 5000);
+  }
+
+  /** The context is back: three.js rebuilds what it had; uncover and go on. */
+  contextRestored(): void {
+    if (!this.lost) return;
+    this.lost = false;
+    window.clearTimeout(this.lostTimer);
+    this.lostCover?.remove();
+    this.lostCover = null;
+    this.last = performance.now();
+  }
   private vignette: HTMLDivElement | null = null;
   private offGraphics: (() => void) | null = null;
   /** What the scene was built with, before any quality level touched it. */
@@ -286,6 +332,30 @@ export class ThreeStage {
     this.applyQuality();
     this.onFrame = onFrame;
     this.last = performance.now();
+    // ---- EVERY SHADER BUILT BEFORE THE FIRST FRAME, NOT ON IT.  A big
+    // scene's first frame used to compile fifty-odd programs in one go,
+    // and a phone that spends that long on one frame resets the GPU and
+    // takes the page's context with it: the white canvas and the sad face.
+    // Compiled in the background (where the browser can), the world holds
+    // still until it is ready, and the first frame is an ordinary one.
+    const r = this.renderer;
+    this.warming = !!r;
+    const ready = (): void => {
+      if (!this.warming) return;
+      this.warming = false;
+      this.last = performance.now();
+    };
+    if (r) {
+      try {
+        // (one step at no time first: the world as the first frame will
+        // draw it, so what is compiled is what is used)
+        this.onFrame(0);
+        void r.compileAsync(this.scene, this.camera).then(ready, ready);
+      } catch {
+        ready();
+      }
+      window.setTimeout(ready, 8000);
+    }
     const loop = (now: number) => {
       this.raf = requestAnimationFrame(loop);
       // (the first frame's timestamp can be from before `start` was called,
@@ -295,7 +365,7 @@ export class ThreeStage {
       // Paused, the world holds still: nothing steps, and on the way back the
       // clock picks up from now rather than handing over the whole pause as
       // one enormous frame.
-      if (this.paused) return;
+      if (this.paused || this.warming || this.lost) return;
       this.onFrame?.(dt);
       // a directional light's shadow box goes where you are
       for (const l of this.shadowLights) {
@@ -415,6 +485,11 @@ export class ThreeStage {
 
     this.notice?.remove();
     this.notice = null;
+    window.clearTimeout(this.lostTimer);
+    this.lostCover?.remove();
+    this.lostCover = null;
+    this.lost = false;
+    this.warming = false;
     if (this.renderer) {
       // The context stays: it is the session's, and the next stage takes it
       // (see `shared`).  Only what this scene put in it goes.

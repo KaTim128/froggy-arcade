@@ -18,4 +18,3 @@ bootGame();
 window.setInterval(() => {
   if (document.visibilityState === 'visible') store.addPlayTime(1);
 }, 1000);
-window.addEventListener('pagehide', () => store.flush());

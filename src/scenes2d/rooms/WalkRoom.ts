@@ -11,6 +11,7 @@
  * Subclasses paint the room and say what is in it (`fixtures`).
  */
 
+import { resumeSpot, trackPlace } from '../../game/place';
 import Phaser from 'phaser';
 import { PALETTE } from '../../render/palette';
 import { audio } from '../../core/audio';
@@ -197,6 +198,20 @@ export abstract class WalkRoom extends Phaser.Scene {
     kb?.on('keydown-ESC', () => this.closePanel());
     this.events.on('shop-closed', () => this.afterModal());
     this.entered();
+    // Kept with the run, and put back on the spot when it was resumed here.
+    // Sat down, the spot is where you stood up from, not the seat.
+    trackPlace(
+      this,
+      () => {
+        const p = this.player;
+        if (!p) return null;
+        if (!p.seated || !this.seatReturn) return p;
+        const at = this.seatReturn;
+        return { x: at.x, y: at.y, facing: p.facing, setPosition: (x: number, y: number) => p.setPosition(x, y), face: (d: number) => p.face(d) };
+      },
+      this.placeData(),
+      resumeSpot(this.sys.settings.data),
+    );
     if (this.keepsShopHours) {
       if (!shopsOpen()) this.time.delayedCall(300, () => this.closeForNight());
       onLightTurn(this, (dark) => dark && this.closeForNight());
@@ -234,6 +249,11 @@ export abstract class WalkRoom extends Phaser.Scene {
       use: () => this.goOut(),
       hit: { x: EXIT_X - ENTRANCE_W / 2, y: this.floorTop - ENTRANCE_H, w: ENTRANCE_W, h: ENTRANCE_H + 8 },
     };
+  }
+
+  /** What this room needs to be entered the same way again, when a run is resumed in it. */
+  protected placeData(): Record<string, string | number | boolean> {
+    return {};
   }
 
   /** Where you come in: just inside the door. */

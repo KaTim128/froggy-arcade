@@ -1,10 +1,15 @@
 /**
  * WHERE A RUN PICKS UP.  The one answer to "this profile wants to play: which
- * scene, with what?" -- used by START on the title screen and by the pause
- * menu's RETURN TO GAME LOBBY, so the two can never disagree (PRD EC-3).
+ * scene, with what?" -- used by START on the title screen (PRD EC-3).
+ *
+ * The story's own checkpoints come first: a run in the rooms, on the roofs or
+ * in the hotel at 3 AM goes back to that.  Otherwise it goes back to wherever
+ * the player was last standing (game/place) -- the shop, the condo, the
+ * street -- and only to the arcade floor when there is nowhere better.
  */
 
 import { store } from './state';
+import { RESUMABLE } from '../game/place';
 
 export interface ResumePoint {
   key: string;
@@ -29,5 +34,17 @@ export function resumePoint(): ResumePoint {
   if (s.timeOfDay === 'midnight' && s.reachedHotel && s.hotelAfter === 'none') {
     return { key: 'Hotel', data: s.hotelNight ? { area: 'room', late: true } : { area: 'lobby' } };
   }
-  return { key: s.seenIntro ? 'ArcadeHub' : 'IntroCutscene' };
+  if (!s.seenIntro) return { key: 'IntroCutscene' };
+  return lastPlace() ?? { key: 'ArcadeHub' };
+}
+
+/** Where the player was standing, if it is somewhere the run can go back to. */
+function lastPlace(): ResumePoint | null {
+  const s = store.get();
+  const p = s.place;
+  if (s.route !== 'normal' || !p || !RESUMABLE.has(p.key)) return null;
+  const resume = { x: p.x, y: p.y, facing: p.facing };
+  // the flat is only yours while it is rented: down in the lobby otherwise
+  if (p.key === 'Condo' && !s.life.rented) return { key: 'Hotel', data: { area: 'lobby' } };
+  return { key: p.key, data: { ...(p.data ?? {}), resume } };
 }

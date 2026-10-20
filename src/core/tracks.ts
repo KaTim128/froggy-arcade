@@ -15,6 +15,14 @@
  * room, or starting a cabinet, should sound like somewhere else.
  */
 
+/**
+ * Every running tune checks this before it plays a step.  While it is set
+ * (the tab hidden, the window blurred, the page put away) nothing is
+ * scheduled and nothing moves on, so the music resumes where it stopped
+ * rather than rushing through what it missed.  Set only by core/audio.
+ */
+export const playback = { held: false };
+
 export interface TrackPreset {
   bpm: number;
   /** One entry per bar, looping. */
@@ -474,6 +482,9 @@ export function runTrack(ctx: AudioContext, out: GainNode, p: TrackPreset): () =
 
   const tick = () => {
     if (stopped) return;
+    // held (the tab is away): no notes, and the step not moved on, so the
+    // tune comes back from the bar it stopped in
+    if (playback.held) return;
     const inBar = step % 8;
     const bar = Math.floor(step / 8) % p.chords.length;
     const chord = p.chords[bar];
