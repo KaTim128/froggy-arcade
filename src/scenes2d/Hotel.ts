@@ -109,6 +109,64 @@ type Spot = 'out' | 'desk' | 'lift' | 'stairs' | 'stairdoor' | 'storage' | 'door
 type Night = 'calm' | 'sleeping' | 'late' | 'reveal' | 'gone';
 /** Where the sleeper's feet go: the foot of the bag, so the head lands on the hood. */
 const SLEEP_FEET_X = BED.x - BED.w / 2 + 8;
+/** The top of the bag's flap, puffed up over the body lying in it. */
+const FLAP_TOP = BED.top - 7;
+
+/**
+ * ---- THE BAG'S TOP HALF, done up over whoever is in it: the same bag as
+ * the one rolled out under it (art/hotelInterior), so the same greens, the
+ * same six quilted channels with their stitching, the lit top edge, the
+ * zip along the side -- puffed up over the body into a rounded top, and
+ * turned down at the shoulders in a cuff where the head comes out onto the
+ * hood.  Drawn once into a texture so the room's light can tint it.
+ */
+function sleepFlapTexture(scene: Phaser.Scene): string {
+  const key = 'hotel_sleep_flap';
+  if (scene.textures.exists(key)) return key;
+  const hood = 8;
+  const w = BED.w - hood; // up to the hood: the head lies on it
+  const top = 0;
+  const bottom = BED.top + 6 - FLAP_TOP; // down to the bag's foot line
+  const g = scene.make.graphics({ x: 0, y: 0 }, false);
+  // the outline, rounded at the corners of the puffed top
+  g.fillStyle(0x1a2420, 1);
+  g.fillRect(2, top, w - 3, 1);
+  g.fillRect(1, top + 1, w - 1, 1);
+  g.fillRect(0, top + 2, w + 1, bottom - top);
+  g.fillRect(1, bottom, w, 1);
+  // the body of it
+  g.fillStyle(0x3a6a5a, 1);
+  g.fillRect(2, top + 1, w - 4, 1);
+  g.fillRect(1, top + 2, w - 1, bottom - top - 2);
+  // the six quilted channels across the length, each lit on top and
+  // shaded at its seam, stitched along the seams
+  for (let k = 0; k < 5; k++) {
+    const x0 = 1 + Math.round(((w - 6) * k) / 5);
+    const x1 = 1 + Math.round(((w - 6) * (k + 1)) / 5);
+    g.fillStyle(0x5c8c7a, 1).fillRect(x0 + 1, top + 2, Math.max(1, x1 - x0 - 2), 1);
+    g.fillStyle(0x467868, 1).fillRect(x0 + 1, top + 3, Math.max(1, x1 - x0 - 2), 2);
+    g.fillStyle(0x2e5a4c, 1).fillRect(x1 - 1, top + 2, 1, bottom - top - 4);
+    if (k > 0) {
+      g.fillStyle(0x24483c, 1);
+      for (let y = top + 3; y < bottom - 2; y += 2) g.fillRect(x0, y, 1, 1);
+    }
+  }
+  // the underside of the puff, in its own shade, and a sheen along the top
+  g.fillStyle(0x2e5a4c, 1).fillRect(1, bottom - 3, w - 1, 2);
+  g.fillStyle(0xffffff, 0.16).fillRect(3, top + 1, Math.round(w * 0.5), 1);
+  // the zip along the foot, with its pull by the cuff
+  g.fillStyle(0x26304a, 1).fillRect(1, bottom - 1, w - 1, 1);
+  g.fillStyle(0xb8bcc4, 1).fillRect(2, bottom - 1, w - 4, 1);
+  g.fillStyle(0xd8dce2, 1).fillRect(w - 6, bottom - 2, 2, 2);
+  // the cuff at the shoulders: turned down, the lining showing
+  g.fillStyle(0x1a2420, 1).fillRect(w - 4, top + 1, 1, bottom - top - 1);
+  g.fillStyle(0x6a9a88, 1).fillRect(w - 3, top + 2, 3, bottom - top - 3);
+  g.fillStyle(0x8ab8a6, 1).fillRect(w - 3, top + 2, 3, 1);
+  g.fillStyle(0x4a7a6a, 1).fillRect(w - 1, top + 3, 1, bottom - top - 5);
+  g.generateTexture(key, w + 2, bottom + 2);
+  g.destroy();
+  return key;
+}
 
 /** The window breaking: when each blow lands, from the curtains opening. */
 const FIRST_BLOW = 0.8;
@@ -159,7 +217,7 @@ export class Hotel extends Phaser.Scene {
   private roomImg: Phaser.GameObjects.Image | null = null;
   private glazing: Phaser.GameObjects.Image | null = null;
   private lampLight: Phaser.GameObjects.Image | null = null;
-  private sleeper: Phaser.GameObjects.Container | null = null;
+  private sleeper: Phaser.GameObjects.Image | null = null;
   private black: Phaser.GameObjects.Rectangle | null = null;
   private froggyTex: Phaser.Textures.CanvasTexture | null = null;
   private froggyImg: Phaser.GameObjects.Image | null = null;
@@ -501,7 +559,7 @@ export class Hotel extends Phaser.Scene {
       s.setFillStyle((col(r, 0) << 16) | (col(g, 0) << 8) | col(b, blue * 30));
     }
     // (the bag's flap over the sleeper dims with the room)
-    if (this.sleeper) for (const o of this.sleeper.list) (o as Phaser.GameObjects.Rectangle).setFillStyle((o as Phaser.GameObjects.Rectangle).getData('col') ?? 0, 1).setAlpha(Math.max(0.35, k));
+    this.sleeper?.setTint(tint);
   }
 
   // ------------------------------------------------------------- the police
@@ -1197,14 +1255,8 @@ export class Hotel extends Phaser.Scene {
     p.setPosition(SLEEP_FEET_X, BED.top + 1);
     p.lie(-1);
     p.sprite.setDepth(9);
-    // the bag's top layer, over the body up to the shoulders
-    const flap = (x: number, y: number, w: number, h: number, col: number) => this.add.rectangle(x, y, w, h, col).setOrigin(0, 0).setData('col', col);
-    this.sleeper = this.add.container(0, 0, [
-      flap(BED.x - BED.w / 2 + 2, BED.top - 6, BED.w - 14, 6, 0x2e5a4c),
-      flap(BED.x - BED.w / 2 + 2, BED.top - 6, BED.w - 14, 1, 0x4a8a72),
-      flap(BED.x - BED.w / 2 + 3, BED.top - 3, BED.w - 16, 1, 0x24483c),
-      flap(BED.x + BED.w / 2 - 13, BED.top - 6, 1, 6, 0x1a3a30),
-    ]).setDepth(10);
+    // the bag's top half, zipped up over the body to the shoulders
+    this.sleeper = this.add.image(BED.x - BED.w / 2 - 1, FLAP_TOP - 1, sleepFlapTexture(this)).setOrigin(0, 0).setDepth(10);
   }
 
   /**

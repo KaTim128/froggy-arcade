@@ -819,17 +819,12 @@ export function paintRoom(g: Ctx, furnished = true): void {
   enclosedCeiling(g, W, { lights: [80, 240] });
   rect(g, 0, WAIN_BOTTOM, W, FLOOR_Y - WAIN_BOTTOM, '#f4f3ef');
   rect(g, 0, WAIN_BOTTOM, W, 1, '#ffffff');
-  // oak laminate, long boards, and a grey rug under the bed
+  // oak laminate, long boards (no rug: the bag lies on the boards)
   for (let y = FLOOR_Y; y < 180; y += 4) {
     const row = (y - FLOOR_Y) / 4;
     rect(g, 0, y, W, 4, row % 2 ? '#a88660' : '#b08e66');
     rect(g, 0, y, W, 1, '#8a6a48', 0.7);
     for (let x = (row * 37) % 56; x < W; x += 56) rect(g, x, y, 1, 4, '#8a6a48');
-  }
-  if (furnished) {
-    rect(g, 240, 156, 58, 14, '#7a8088');
-    rect(g, 240, 156, 58, 1, '#9aa0a8');
-    for (let x = 242; x < 296; x += 4) rect(g, x, 158 + (x % 3), 1, 10, '#6a7078', 0.6);
   }
 
   // ---- the window: a cream frame and a sill
@@ -864,7 +859,7 @@ export function paintRoom(g: Ctx, furnished = true): void {
   }
   // ---- the bed is a SLEEPING BAG: what the unit comes with, the same one
   // the condo's furniture draws (see art/furnitureArt) -- rolled out on the
-  // rug, the hood and its folded pillow at the right-hand end, puffed
+  // boards, the hood and its folded pillow at the right-hand end, puffed
   // channels between the stitching, a sheen along the top, the zip and pull.
   const bx = BED.x - BED.w / 2;
   const T = BED.top;
@@ -895,18 +890,7 @@ export function paintRoom(g: Ctx, furnished = true): void {
   rect(g, hx + 2, T - 3, hood - 4, 1, '#ffffff');
   rect(g, hx + 2, T + H - 6, hood - 4, 1, '#cfc8b8');
   rect(g, hx + 4, T - 2, 1, H - 4, '#d8d2c4', 0.8);
-  // nightstands and their lamps
-  for (const nx of [bx - 7, bx + BED.w + 7]) {
-    rect(g, nx - 4, 143, 8, 9, HP.wood);
-    rect(g, nx - 4, 143, 8, 1, HP.woodHi);
-    rect(g, nx - 3, 147, 6, 1, HP.woodDark);
-    rect(g, nx, 148, 1, 1, HP.gold);
-    rect(g, nx, 139, 1, 4, HP.steelDark);
-    rect(g, nx - 2, 135, 5, 4, '#f4f2ec');
-    rect(g, nx - 1, 134, 3, 1, '#ffffff');
-  }
-  // a picture over the bed
-  picture(g, BED.x - 6, 112, 12, 10, 'lily');
+  // (no nightstands, lamps or picture: the room is bare until you buy them)
   // the ceiling light
   rect(g, 157, CEIL_Y + 3, 7, 1, '#fffaf0');
 }
@@ -917,13 +901,8 @@ export function paintRoomLight(g: Ctx, furnished = true): void {
     glow(g, 160, CEIL_Y + 6, 56, 0.2);
     return;
   }
-  const bx = BED.x - BED.w / 2;
-  for (const nx of [bx - 7, bx + BED.w + 7]) {
-    glow(g, nx, 137, 24, 0.42);
-    glow(g, nx, 137, 7, 0.6);
-  }
   glow(g, 160, CEIL_Y + 6, 56, 0.2);
-  glow(g, BED.x, 150, 44, 0.12);
+  glow(g, BED.x, 150, 44, 0.08);
 }
 
 /** The view out: the night, the morning, or three in the morning. */
