@@ -9,6 +9,12 @@
 
 import type Phaser from 'phaser';
 import { grain } from './surface';
+import { KERB_Y } from './exterior';
+
+/** Where it is on the forecourt: up against the arcade, a few steps left of the doors. */
+export const BEG_SPOT_X = 104;
+/** And the line it is laid along: back from the walk line, at the wall. */
+export const BEG_SPOT_Y = KERB_Y - 9;
 
 /**
  * THE PITCH, up against the arcade's wall: a flattened box laid on the

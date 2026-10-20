@@ -41,7 +41,7 @@ import { nightfallOnce, onPhaseTurn } from '../game/dayNight';
 import { speak } from '../ui/talkPanel';
 import { backPlate, fitPrompt } from '../ui/plate';
 import { resumeSpot, trackPlace } from '../game/place';
-import { paintBegCup, paintBegSpot } from '../art/begSpot';
+import { BEG_SPOT_X, BEG_SPOT_Y, paintBegCup, paintBegSpot } from '../art/begSpot';
 
 const WALK_Y = KERB_Y;
 /** Where the alley mouth is, off the arcade's right-hand corner. */
@@ -56,9 +56,9 @@ type Spot = 'door' | 'man' | 'alley' | 'beg' | null;
  * pass; it is up against the building now, a few steps from the doors, where
  * the people with tokens in their pockets actually walk.
  */
-const BEG_X = 104;
+const BEG_X = BEG_SPOT_X;
 /** And the line it is laid along: back from the walk line, at the wall. */
-const BEG_Y = KERB_Y - 9;
+const BEG_Y = BEG_SPOT_Y;
 
 export class ExteriorDay extends Phaser.Scene {
   private player!: Player;
