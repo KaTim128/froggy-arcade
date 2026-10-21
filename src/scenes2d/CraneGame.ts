@@ -489,8 +489,27 @@ export class CraneGame extends Phaser.Scene {
     const trim = eerie ? 0x7a4aa8 : 0xffc830;
     const wall = eerie ? 0x120a1c : 0x1c2a48;
     this.add.rectangle(0, 0, GAME_W, GAME_H, eerie ? 0x08060c : 0x221a2e).setOrigin(0, 0);
-    // the frame
+    // the frame: painted steel, lit along its top and left, shaded down its
+    // right and bottom, bolted at the corners, with a chrome lip round the glass
     this.add.rectangle(BOX.l - 8, 2, BOX.r - BOX.l + 16, GAME_H - 4, frame).setOrigin(0, 0).setStrokeStyle(2, trim);
+    const fr = this.add.graphics();
+    const FL = BOX.l - 7;
+    const FR = BOX.r + 7;
+    const lit = eerie ? 0x4a2a6a : 0xf04a5a;
+    const shade = eerie ? 0x160a24 : 0x8a1424;
+    fr.fillStyle(lit, 1).fillRect(FL, 3, FR - FL, 2).fillRect(FL, 3, 2, GAME_H - 6);
+    fr.fillStyle(shade, 1).fillRect(FR - 2, 3, 2, GAME_H - 6);
+    // a faint brushed grain down the painted metal
+    for (let x = FL + 3; x < BOX.l - 1; x += 2) fr.fillStyle(0xffffff, 0.04).fillRect(x, 6, 1, GAME_H - 12);
+    for (let x = BOX.r + 1; x < FR - 2; x += 2) fr.fillStyle(0x000000, 0.06).fillRect(x, 6, 1, GAME_H - 12);
+    // bolts down both stiles
+    for (let y = 30; y < BOX.bottom; y += 28) {
+      for (const bx of [BOX.l - 4, BOX.r + 4]) {
+        fr.fillStyle(0x000000, 0.45).fillCircle(bx + 0.5, y + 0.5, 1.6);
+        fr.fillStyle(eerie ? 0x8a7aa0 : 0xd8c0a0, 1).fillCircle(bx, y, 1.3);
+        fr.fillStyle(0xffffff, 0.7).fillRect(bx - 1, y - 1, 1, 1);
+      }
+    }
     // the marquee, with the name in lit letters
     // (narrow enough to leave room for SIDE VIEW and QUIT on its right)
     const MQ = PLATE_X; // in its own slot of the top bar, clear of the token readout and the buttons
@@ -509,9 +528,31 @@ export class CraneGame extends Phaser.Scene {
       const star = this.add.star(sx, 15, 4, 1.5, 4, eerie ? 0xc8a0e0 : 0xffe080);
       this.tweens.add({ targets: star, alpha: 0.3, duration: 500 + Math.random() * 300, yoyo: true, repeat: -1 });
     }
-    // inside the glass: the back wall, lit from the top
+    // inside the glass: the back wall, lit from the top -- an LED bar along
+    // the ceiling, the wall brightest under it and falling away to the floor,
+    // and the seams of the wall's panels catching a little of the light
     this.add.rectangle(BOX.l, BOX.top, BOX.r - BOX.l, BOX.bottom - BOX.top, wall).setOrigin(0, 0);
-    this.add.rectangle(BOX.l, BOX.top, BOX.r - BOX.l, 22, 0xffffff, eerie ? 0.03 : 0.08).setOrigin(0, 0);
+    const wl = this.add.graphics();
+    const bandH = (BOX.bottom - BOX.top) / 6;
+    for (let k = 0; k < 6; k++) wl.fillStyle(k < 3 ? 0xffffff : 0x000000, eerie ? 0.012 * (3 - Math.min(k, 3)) : [0.09, 0.06, 0.03, 0.04, 0.08, 0.12][k]).fillRect(BOX.l, BOX.top + k * bandH, BOX.r - BOX.l, bandH + 1);
+    for (let x = BOX.l + 36; x < BOX.r; x += 48) {
+      wl.fillStyle(0x000000, 0.18).fillRect(x, BOX.top + 4, 1, BOX.bottom - BOX.top - 8);
+      wl.fillStyle(0xffffff, 0.04).fillRect(x + 1, BOX.top + 4, 1, BOX.bottom - BOX.top - 8);
+    }
+    // the LED bar and its light, falling in a soft cone over the heap
+    wl.fillStyle(eerie ? 0x8a6ab0 : 0xfff6d8, eerie ? 0.5 : 0.95).fillRect(BOX.l + 6, BOX.top + 1, BOX.r - BOX.l - 12, 2);
+    wl.fillStyle(0xffffff, eerie ? 0.2 : 0.6).fillRect(BOX.l + 6, BOX.top + 1, BOX.r - BOX.l - 12, 1);
+    const coneG = this.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
+    coneG.fillStyle(eerie ? 0x6a3a9a : 0xfff0c0, eerie ? 0.05 : 0.07).fillPoints(
+      [
+        new Phaser.Math.Vector2(BOX.l + 50, BOX.top + 3),
+        new Phaser.Math.Vector2(BOX.r - 30, BOX.top + 3),
+        new Phaser.Math.Vector2(BOX.r - 4, floorY(0.6)),
+        new Phaser.Math.Vector2(BOX.l + 30, floorY(0.6)),
+      ],
+      true,
+    );
+    if (!eerie) this.tweens.add({ targets: coneG, alpha: 0.7, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     // the floor of the machine, in depth
     const g = this.add.graphics();
     g.fillStyle(eerie ? 0x1a1024 : 0x2a3e66, 1);
@@ -521,32 +562,90 @@ export class CraneGame extends Phaser.Scene {
       new Phaser.Math.Vector2(screenX(BOX.r, 1), floorY(1)),
       new Phaser.Math.Vector2(screenX(BOX.l, 1), floorY(1)),
     ], true);
-    // the gantry rails along the top, front and back
+    // the gantry rails along the top, front and back: steel channel, lit on
+    // its top face, dark under it, bolted to the frame at each end
     this.add.rectangle(GAME_W / 2, gantryY(0), BOX.r - BOX.l - 4, 2, 0x6a7686).setDepth(39);
     this.add.rectangle(GAME_W / 2, gantryY(1), BOX.r - BOX.l - 20, 2, 0x4a5666).setDepth(39);
+    const rails = this.add.graphics().setDepth(39.5);
+    for (const [z, w] of [[0, BOX.r - BOX.l - 4], [1, BOX.r - BOX.l - 20]] as const) {
+      const ry = gantryY(z);
+      rails.fillStyle(0xc8d0dc, z ? 0.5 : 0.9).fillRect(GAME_W / 2 - w / 2, ry - 1, w, 1);
+      rails.fillStyle(0x1a1e26, 0.9).fillRect(GAME_W / 2 - w / 2, ry + 1, w, 1);
+      for (const ex of [GAME_W / 2 - w / 2 + 2, GAME_W / 2 + w / 2 - 3]) rails.fillStyle(0x2a2e38, 1).fillRect(ex, ry - 1, 2, 3);
+    }
     // the corner posts and their glints
     for (const x of [BOX.l + 1, BOX.r - 1]) {
       this.add.rectangle(x, BOX.top, 4, BOX.bottom - BOX.top, 0xc8d0dc).setOrigin(0.5, 0).setDepth(55);
+      // polished chrome: a dark core, a hot line, and the room in it
+      this.add.rectangle(x + 1, BOX.top, 1, BOX.bottom - BOX.top, 0x6a7480).setOrigin(0.5, 0).setDepth(55);
       this.add.rectangle(x - 1, BOX.top, 1, BOX.bottom - BOX.top, 0xffffff, 0.6).setOrigin(0.5, 0).setDepth(55);
+      for (let y = BOX.top + 10; y < BOX.bottom; y += 34) this.add.rectangle(x, y, 4, 2, 0x8a96a6).setOrigin(0.5, 0).setDepth(55);
     }
+    // the chrome lip round the top and bottom of the glass
+    this.add.rectangle(BOX.l, BOX.top - 1, BOX.r - BOX.l, 1, 0xc8d0dc, 0.9).setOrigin(0, 0).setDepth(55);
+    this.add.rectangle(BOX.l, BOX.bottom, BOX.r - BOX.l, 2, 0x8a96a6).setOrigin(0, 0).setDepth(57);
+    this.add.rectangle(BOX.l, BOX.bottom, BOX.r - BOX.l, 1, 0xe8eef6).setOrigin(0, 0).setDepth(57);
     // glass streaks over the whole box
     for (const [x, w2] of [[96, 6], [106, 2], [270, 4]] as const) {
       this.add.rectangle(x, BOX.top + 4, w2, BOX.bottom - BOX.top - 8, 0xffffff, 0.06).setOrigin(0, 0).setAngle(8).setDepth(56);
     }
+    // the pane's own edges: a faint blue-green where the glass is thickest,
+    // a sheen along its top, and a couple of fingerprints at hand height
+    const pane = this.add.graphics().setDepth(56);
+    pane.fillStyle(0x9fe0d8, 0.05).fillRect(BOX.l + 3, BOX.top, 6, BOX.bottom - BOX.top).fillRect(BOX.r - 9, BOX.top, 6, BOX.bottom - BOX.top);
+    pane.fillStyle(0xffffff, 0.05).fillRect(BOX.l + 3, BOX.top + 1, BOX.r - BOX.l - 6, 3);
+    for (const [fx, fy] of [[150, 130], [158, 134], [232, 126]] as const) pane.fillStyle(0xffffff, 0.035).fillEllipse(fx, fy, 6, 4);
     // the control panel along the bottom
     this.add.rectangle(BOX.l - 6, BOX.bottom + 2, BOX.r - BOX.l + 12, GAME_H - BOX.bottom - 6, eerie ? 0x2a1a3a : 0xffc830).setOrigin(0, 0).setStrokeStyle(1, eerie ? 0x7a4aa8 : 0xb88a20).setDepth(58);
     const ink = eerie ? 0xc8a0e0 : 0x5a3a10;
-    // the stick
+    // the panel's finish: lit along its top edge, shaded along the bottom,
+    // a brushed grain, and a screw in each corner
+    const pnl = this.add.graphics().setDepth(58.5);
+    const PL = BOX.l - 6;
+    const PR = BOX.r + 6;
+    const PT = BOX.bottom + 2;
+    const PB = GAME_H - 4;
+    pnl.fillStyle(0xffffff, eerie ? 0.1 : 0.45).fillRect(PL + 1, PT + 1, PR - PL - 2, 1);
+    pnl.fillStyle(0x000000, 0.25).fillRect(PL + 1, PB - 2, PR - PL - 2, 1);
+    for (let y = PT + 4; y < PB - 3; y += 2) pnl.fillStyle(0xffffff, eerie ? 0.015 : 0.05).fillRect(PL + 2, y, PR - PL - 4, 1);
+    for (const [sx, sy] of [[PL + 3, PT + 3], [PR - 4, PT + 3], [PL + 3, PB - 4], [PR - 4, PB - 4]] as const) {
+      pnl.fillStyle(0x000000, 0.4).fillCircle(sx + 0.5, sy + 0.5, 1.4);
+      pnl.fillStyle(eerie ? 0x8a7aa0 : 0xe8e0c8, 1).fillCircle(sx, sy, 1.1);
+      pnl.fillStyle(0x5a5040, 1).fillRect(sx - 1, sy, 2, 0.6);
+    }
+    // the stick: a rubber dust boot, a chrome shaft, a ball-top that is lit
+    // on one side and dark on the other, with a hot spot on it
     this.add.rectangle(42, 170, 14, 4, 0x2a2a2a).setDepth(59);
     this.add.rectangle(42, 164, 2, 10, 0x3a3a3a).setDepth(59);
     this.add.circle(42, 159, 4, 0xd8202a).setStrokeStyle(1, 0x7a1018).setDepth(59);
-    // the buttons
+    const stick = this.add.graphics().setDepth(59.5);
+    stick.fillStyle(0x101010, 1).fillEllipse(42, 168, 10, 3);
+    stick.fillStyle(0x3a3a3a, 1).fillEllipse(42, 167.5, 6, 2);
+    stick.fillStyle(0xb0b8c4, 1).fillRect(41.5, 160, 1, 7);
+    stick.fillStyle(0x7a1018, 0.7).fillCircle(43, 160, 3);
+    stick.fillStyle(0xff5a5a, 0.8).fillCircle(41, 158, 2);
+    stick.fillStyle(0xffffff, 0.9).fillRect(40, 157, 1, 1);
+    // the buttons: each in a dark collar, domed, with a ring of its own light
     this.add.circle(68, 165, 5, 0x46c46e).setStrokeStyle(1, 0x2a7a44).setDepth(59);
     this.add.circle(84, 165, 5, 0xd8202a).setStrokeStyle(1, 0x7a1018).setDepth(59);
+    const btn = this.add.graphics().setDepth(59.5);
+    for (const [bx, col, hi] of [[68, 0x46c46e, 0xa8f0b8], [84, 0xd8202a, 0xff9a9a]] as const) {
+      btn.lineStyle(1, 0x101010, 1).strokeCircle(bx, 165, 6);
+      btn.fillStyle(0x000000, 0.25).fillCircle(bx + 1, 166.5, 3.5);
+      btn.fillStyle(hi, 0.85).fillCircle(bx - 1.5, 163.5, 1.6);
+      btn.fillStyle(0xffffff, 0.9).fillRect(bx - 2, 162, 1, 1);
+      const halo = this.add.circle(bx, 165, 8, col, eerie ? 0.06 : 0.14).setDepth(58.8);
+      this.tweens.add({ targets: halo, alpha: 0.03, duration: 700 + bx * 3, yoyo: true, repeat: -1 });
+    }
     this.credit = text(this, 100, 157, `CREDIT ${CRANE_COST[this.kind]}`, ink).setDepth(59);
     this.hint = text(this, 100, 168, '', ink).setDepth(59);
     // the clock window
     this.add.rectangle(CLOCK_X - 2, 158, 54, 14, 0x0c0814).setOrigin(0, 0).setStrokeStyle(1, 0x5a3a10).setDepth(59);
+    // its bezel, sunk into the panel, and the glass over the digits
+    const bez = this.add.graphics().setDepth(59.6);
+    bez.fillStyle(0x000000, 0.35).fillRect(CLOCK_X - 3, 157, 56, 1).fillRect(CLOCK_X - 3, 157, 1, 16);
+    bez.fillStyle(0xffffff, eerie ? 0.1 : 0.35).fillRect(CLOCK_X - 2, 172, 55, 1).fillRect(CLOCK_X + 53, 157, 1, 16);
+    bez.fillStyle(0xffffff, 0.06).fillRect(CLOCK_X - 1, 159, 52, 4);
     if (eerie) {
       // the light in here is not well
       const dark = this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0).setOrigin(0, 0).setDepth(80);
@@ -763,7 +862,13 @@ export class CraneGame extends Phaser.Scene {
       into.add(this.add.rectangle(sx * tip - sx * 1, 21, 3, 2, steel).setStrokeStyle(0.6, dark));
       // the knuckle pin
       into.add(this.add.circle(sx * knee, 14, 1.1, 0x8a96a6));
+      // polished steel: a hot line down the lit side of each finger
+      into.add(this.add.line(0, 0, sx * 5 - 0.6, 5, sx * knee - 0.6, 14, 0xffffff).setLineWidth(0.6).setOrigin(0, 0).setAlpha(0.7));
+      into.add(this.add.line(0, 0, sx * knee - 0.6, 14, sx * tip - 0.6, 21, 0xffffff).setLineWidth(0.5).setOrigin(0, 0).setAlpha(0.5));
     }
+    // the bolts on the hub, and the light on its top face
+    for (const bx of [-5, 5]) into.add(this.add.circle(bx, 2.5, 0.9, 0x3a4656));
+    into.add(this.add.rectangle(0, 0.2, 13, 0.6, 0xffffff, 0.5));
     if (into === this.claw && this.sideClaw) this.drawClaw(v, this.sideClaw);
   }
 

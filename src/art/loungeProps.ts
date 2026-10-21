@@ -17,72 +17,198 @@ export const CRANE_W = 30;
 /** A little over 2 m against the 26-pixel man, marquee and all. */
 export const CRANE_H = 36;
 
-/** One claw machine, its feet on `y`. */
+/**
+ * One claw machine, its feet on `y`.
+ *
+ * Built to the CREATURE CLASH cabinet's finish: one dark outline round the
+ * whole silhouette, every panel lit along its top edge and shaded beneath,
+ * chrome posts that catch the light, a lit interior with an LED bar throwing
+ * a cone of light down over the prizes, a real claw on a gantry with a
+ * motor carriage, a sloped control deck with a ball-top stick and domed
+ * buttons, a prize door with a swing flap, a coin door, and glass that
+ * shows its reflections.  The plush one is bright pink and teal; the other
+ * is a bruise of violets, and its light is not well.
+ */
 export function paintCrane(scene: Phaser.Scene, x: number, y: number, kind: CraneKind, night: boolean): Phaser.GameObjects.Container {
   const c = scene.add.container(x, y).setDepth(depthFor(y));
   const n = (col: number) => (night ? nightify(col, 0.75) : col);
   const W = CRANE_W;
   const H = CRANE_H;
+  const L = -W / 2;
+  const R = W / 2;
   const eerie = kind === 'oddity';
   const frame = n(eerie ? 0x2a1a3a : PALETTE.neon);
+  const frameLit = n(eerie ? 0x4a2a62 : 0xff8ac4);
+  const frameDark = n(eerie ? 0x160c20 : 0x8a1848);
   const trim = n(eerie ? 0x6a3a8a : PALETTE.tealLight);
-  const side = n(eerie ? 0x1a1024 : 0xb0205a);
-  const glassCol = n(eerie ? 0x140c1c : 0x1c2a48);
-  // ---- THE BASE: the coloured body, a stripe, the prize door and the panel
-  c.add(scene.add.rectangle(0, -6, W, 12, frame).setStrokeStyle(1, n(PALETTE.ink)));
-  c.add(scene.add.rectangle(0, -2, W - 2, 1, trim));
-  c.add(scene.add.rectangle(0, -11, W, 2, side));
-  // the prize door, front left, with its flap
-  c.add(scene.add.rectangle(-W / 2 + 6, -5, 8, 5, n(PALETTE.black)).setStrokeStyle(0.6, trim));
-  c.add(scene.add.rectangle(-W / 2 + 6, -7, 8, 1.2, n(0x5a5a6a)));
-  // the coin slot and the stick and button on the panel
-  c.add(scene.add.rectangle(W / 2 - 5, -5, 3, 4, n(0x3a3a3a)));
-  c.add(scene.add.rectangle(W / 2 - 5, -5, 1, 2, n(PALETTE.gold)));
-  c.add(scene.add.rectangle(1, -10, 1, 3, n(0x2a2a2a)));
-  c.add(scene.add.circle(1, -12, 1.4, n(0xd8202a)));
-  c.add(scene.add.circle(5, -11, 1.2, n(0x46c46e)));
-  // ---- THE GLASS BOX, heaped to halfway with prizes
+  const wallTop = n(eerie ? 0x1c1028 : 0x2a3e66);
+  const wallLow = n(eerie ? 0x0c0612 : 0x141e36);
+  const chrome = n(0xc8d0dc);
+  const g = scene.add.graphics();
+  c.add(g);
+  // the glow it throws on the floor, and its contact shadow
+  if (!night) g.fillStyle(eerie ? 0x8a4ab8 : PALETTE.neon, 0.1).fillEllipse(0, 1, W + 12, 6);
+  g.fillStyle(0x000000, 0.3).fillEllipse(0, 0, W + 4, 4);
+  // ---- THE OUTLINE, round the whole machine
+  g.fillStyle(n(0x0a0812), 1).fillRect(L - 1, -H - 3, W + 2, H + 3);
+
+  // ---- THE BASE: the coloured body, lit along its top, shaded under it
+  g.fillStyle(frame, 1).fillRect(L, -12, W, 12);
+  g.fillStyle(frameLit, 1).fillRect(L, -12, W, 1);
+  g.fillStyle(frameLit, 0.6).fillRect(L, -12, 1, 12);
+  g.fillStyle(frameDark, 1).fillRect(R - 1, -12, 1, 12);
+  // a pin-stripe in the trim colour, and a bevelled seam above the kick plate
+  g.fillStyle(trim, 1).fillRect(L + 1, -3, W - 2, 1);
+  g.fillStyle(n(0x0a0812), 1).fillRect(L, -2, W, 2);
+  if (!night) g.fillStyle(trim, 0.55).fillRect(L + 2, -1, W - 4, 1);
+  // the prize door, front left: a chrome frame, a dark mouth, a swing flap
+  const dx = L + 2;
+  g.fillStyle(n(0x0a0812), 1).fillRect(dx, -10, 10, 7);
+  g.fillStyle(chrome, 1).fillRect(dx, -10, 10, 1).fillRect(dx, -10, 1, 7);
+  g.fillStyle(n(0x7a828c), 1).fillRect(dx + 9, -10, 1, 7).fillRect(dx, -4, 10, 1);
+  g.fillStyle(n(0x2a2e38), 1).fillRect(dx + 1, -9, 8, 3);
+  g.fillStyle(n(0x5a6270), 1).fillRect(dx + 1, -9, 8, 1);
+  g.fillStyle(n(0x000000), 1).fillRect(dx + 1, -6, 8, 2);
+  // the coin door, front right, with its lit slot and a reject button
+  const cx = R - 8;
+  g.fillStyle(n(0x0a0812), 1).fillRect(cx, -10, 6, 7);
+  g.fillStyle(n(0x3a3a46), 1).fillRect(cx + 1, -9, 4, 5);
+  g.fillStyle(n(0x5a5a68), 1).fillRect(cx + 1, -9, 4, 1);
+  g.fillStyle(n(night ? 0x3a2a10 : PALETTE.gold), 1).fillRect(cx + 2, -8, 2, 2);
+  g.fillStyle(n(0x000000), 1).fillRect(cx + 2.5, -8, 1, 2);
+  g.fillStyle(n(0xd8202a), 1).fillRect(cx + 2, -5, 2, 1);
+
+  // ---- THE CONTROL DECK: sloped forward, lit along its lip
+  g.fillStyle(n(0x0a0812), 1).fillRect(L - 1, -15, W + 2, 4);
+  g.fillStyle(n(0x3a4250), 1).fillRect(L, -14, W, 2);
+  g.fillStyle(n(0x6a7480), 1).fillRect(L, -14, W, 1);
+  g.fillStyle(trim, night ? 0.4 : 0.9).fillRect(L, -12, W, 1);
+  // the stick: a dust washer, the shaft, a red ball-top with its highlight
+  g.fillStyle(n(0x101010), 1).fillEllipse(2, -13, 4, 1.6);
+  g.fillStyle(n(0x8a929c), 1).fillRect(1.5, -16, 1, 3);
+  g.fillStyle(n(0x7a1018), 1).fillCircle(2, -16.5, 1.7);
+  g.fillStyle(n(0xd8202a), 1).fillCircle(1.8, -16.7, 1.3);
+  if (!night) g.fillStyle(0xffffff, 0.85).fillRect(1, -17.5, 1, 1);
+  // two domed buttons in dark collars, each with a pinprick of light
+  for (const [bx, col] of [[6, 0x46c46e], [9.5, 0xffc830]] as const) {
+    g.fillStyle(n(0x101010), 1).fillEllipse(bx, -13, 3.4, 1.8);
+    g.fillStyle(n(col), 1).fillEllipse(bx, -13.4, 2.6, 1.4);
+    if (!night) {
+      g.fillStyle(col, 0.25).fillCircle(bx, -13.4, 2.4);
+      g.fillStyle(0xffffff, 0.8).fillRect(bx - 0.8, -14, 1, 0.6);
+    }
+  }
+
+  // ---- THE GLASS BOX: a lit interior, the prizes, the claw
   const gTop = -H + 7;
-  const gH = -12 - gTop;
-  c.add(scene.add.rectangle(0, gTop + gH / 2, W - 2, gH, glassCol));
-  c.add(scene.add.rectangle(0, gTop + 2, W - 4, 4, 0xffffff, eerie ? 0.03 : 0.08));
+  const gBot = -15;
+  const gH = gBot - gTop;
+  // the back wall, lighter up top where the LED bar is
+  g.fillStyle(wallLow, 1).fillRect(L + 1, gTop, W - 2, gH);
+  g.fillStyle(wallTop, 1).fillRect(L + 1, gTop, W - 2, Math.ceil(gH * 0.55));
+  g.fillStyle(wallTop, 0.5).fillRect(L + 1, gTop + Math.ceil(gH * 0.55), W - 2, 2);
+  // the floor of the box, a lighter strip in perspective
+  g.fillStyle(n(eerie ? 0x241634 : 0x3a5288), 1).fillRect(L + 1, gBot - 2, W - 2, 2);
+  // the light cone off the LED bar, falling on the heap
+  const cone = scene.add.graphics();
+  c.add(cone);
+  if (!night) {
+    cone.fillStyle(eerie ? 0xb080e0 : 0xfff6d8, eerie ? 0.07 : 0.12).fillTriangle(-4, gTop + 2, 4, gTop + 2, 0, gTop + 2).fillPoints(
+      [new Phaser.Geom.Point(-5, gTop + 2), new Phaser.Geom.Point(5, gTop + 2), new Phaser.Geom.Point(12, gBot - 1), new Phaser.Geom.Point(-12, gBot - 1)],
+      true,
+    );
+  }
+  // the heap, three layers deep, the back row first
   const pile = eerie ? [0x6a3a8a, 0x8a7aa0, 0x3a2a4a, 0x5a2a6a, 0x9fd4e0] : [0x46c46e, 0xa8743e, 0xf2e6d8, 0xffc830, 0x8a8f99, 0x7b4bd8, 0xff7ab0];
+  const pg = scene.add.graphics();
+  c.add(pg);
   let i = 0;
-  // three layers, the back row first, each a bit narrower and higher
-  for (const [row, y0, inset] of [[0, -14.5, 3], [1, -13.5, 5], [2, -16.5, 7], [3, -19, 9]] as const) {
-    for (let px = -W / 2 + inset; px <= W / 2 - inset; px += 3.6) {
+  for (const [row, y0, inset] of [[0, -18, 3], [1, -17, 5], [2, -20, 7], [3, -22.5, 9]] as const) {
+    for (let px = L + inset; px <= R - inset; px += 3.6) {
       const col = n(pile[(i++ * 5 + row * 3) % pile.length]);
       const py = y0 + ((i * 7) % 3) * 0.5;
+      // the body, a shade under it and a lit cap
+      pg.fillStyle(col, 1).fillCircle(px, py, 2);
+      pg.fillStyle(0x000000, 0.18).fillRect(px - 1, py + 1, 3, 1);
+      pg.fillStyle(0xffffff, night ? 0.05 : 0.4).fillRect(px - 1, py - 1.4, 1, 1);
       if (eerie) {
-        c.add(scene.add.circle(px, py, 1.8, col));
-        c.add(scene.add.rectangle(px, py, 3.4, 0.5, n(0xc8b0d8)));
+        // capsules: a pale seam round the middle
+        pg.fillStyle(n(0xc8b0d8), 1).fillRect(px - 1.7, py - 0.25, 3.4, 0.5);
       } else {
-        c.add(scene.add.circle(px, py, 1.9, col));
-        c.add(scene.add.circle(px - 1.1, py - 1.7, 0.7, col));
-        c.add(scene.add.circle(px + 1.1, py - 1.7, 0.7, col));
+        // plush: two little ears and a dot of an eye
+        pg.fillStyle(col, 1).fillCircle(px - 1.1, py - 1.7, 0.7).fillCircle(px + 1.1, py - 1.7, 0.7);
+        pg.fillStyle(n(0x0a0812), 1).fillRect(px - 0.6, py - 0.6, 0.6, 0.6);
       }
     }
   }
-  // the claw on its gantry, holding nothing yet
-  c.add(scene.add.rectangle(0, gTop + 1.5, W - 4, 1, n(PALETTE.steel)));
-  c.add(scene.add.rectangle(3, gTop + 2, 3, 2, n(0x5a7aa8)));
-  c.add(scene.add.rectangle(3, gTop + 4, 0.6, 3, n(0xb0b8c4)));
-  c.add(scene.add.triangle(3, gTop + 6, -2, 0, 2, 0, 0, 3, n(PALETTE.steel)));
-  // the corner posts, and a glint down the glass
-  for (const sx of [-W / 2 + 0.5, W / 2 - 0.5]) c.add(scene.add.rectangle(sx, gTop + gH / 2, 1.5, gH, n(0xc8d0dc)));
-  c.add(scene.add.rectangle(-W / 2 + 5, gTop + gH / 2, 1.2, gH - 2, 0xffffff, 0.12).setAngle(6));
-  c.add(scene.add.rectangle(-W / 2 + 7.5, gTop + gH / 2, 0.6, gH - 4, 0xffffff, 0.1).setAngle(6));
-  // ---- THE MARQUEE: a lit sign with a row of bulbs round it
-  const head = scene.add.rectangle(0, -H + 3, W, 8, n(0x0c0814)).setStrokeStyle(1, trim);
-  c.add(head);
-  c.add(scene.add.rectangle(0, -H - 1.5, W + 2, 2, frame));
+  // the prize chute's own little glass wall, front left
+  const chute = scene.add.graphics();
+  c.add(chute);
+  chute.fillStyle(0x9fd4ff, night ? 0.04 : 0.1).fillRect(L + 2, gBot - 7, 7, 7);
+  chute.fillStyle(0xc8e0ff, night ? 0.1 : 0.5).fillRect(L + 2, gBot - 7, 7, 1);
+  // ---- THE GANTRY: two rails, the carriage on them, the cable, the claw
+  const rig = scene.add.graphics();
+  c.add(rig);
+  rig.fillStyle(n(0x3a4250), 1).fillRect(L + 2, gTop + 1, W - 4, 2);
+  rig.fillStyle(n(0x8a96a6), 1).fillRect(L + 2, gTop + 1, W - 4, 1);
+  for (const bx of [L + 3, R - 4]) rig.fillStyle(n(0x1a1e26), 1).fillRect(bx, gTop + 1, 1, 2);
+  // the LED bar along the front of the ceiling
+  rig.fillStyle(n(eerie ? 0x8a6ab0 : 0xfff0c9), night ? 0.3 : 1).fillRect(L + 3, gTop, W - 6, 1);
+  const clawX = 3;
+  rig.fillStyle(n(0x0a0812), 1).fillRect(clawX - 2.5, gTop + 2, 5, 3);
+  rig.fillStyle(n(0x5a7aa8), 1).fillRect(clawX - 2, gTop + 2, 4, 2);
+  rig.fillStyle(n(0x8aaad8), 1).fillRect(clawX - 2, gTop + 2, 4, 1);
+  rig.fillStyle(n(0x8a929c), 1).fillRect(clawX - 0.3, gTop + 4, 0.6, 3);
+  // the claw: a hub, two prongs out and hooked in, and the back prong
+  rig.fillStyle(n(0x6a7686), 1).fillRect(clawX - 1.8, gTop + 7, 3.6, 1.6);
+  rig.fillStyle(chrome, 1).fillRect(clawX - 1.8, gTop + 7, 3.6, 0.6);
+  rig.lineStyle(0.8, chrome, 1);
+  rig.lineBetween(clawX - 1.2, gTop + 8.6, clawX - 2.6, gTop + 10.6).lineBetween(clawX - 2.6, gTop + 10.6, clawX - 1.6, gTop + 12);
+  rig.lineBetween(clawX + 1.2, gTop + 8.6, clawX + 2.6, gTop + 10.6).lineBetween(clawX + 2.6, gTop + 10.6, clawX + 1.6, gTop + 12);
+  rig.lineStyle(0.6, n(0x5a6676), 1).lineBetween(clawX, gTop + 8.6, clawX, gTop + 11.4);
+
+  // ---- THE GLASS: chrome posts at the corners, the panes catching the light
+  const glass = scene.add.graphics();
+  c.add(glass);
+  for (const sx of [L + 0.5, R - 1.5]) {
+    glass.fillStyle(n(0x6a7480), 1).fillRect(sx, gTop - 1, 1.5, gH + 1);
+    glass.fillStyle(chrome, 1).fillRect(sx, gTop - 1, 0.8, gH + 1);
+  }
+  glass.fillStyle(chrome, 1).fillRect(L, gBot, W, 0.8);
+  if (!night) {
+    // a broad diagonal glare and a thin one beside it, and a soft sheen
+    // across the top where the pane meets the frame
+    glass.fillStyle(0xffffff, 0.06).fillPoints(
+      [new Phaser.Geom.Point(L + 3, gBot), new Phaser.Geom.Point(L + 6, gBot), new Phaser.Geom.Point(L + 10, gTop), new Phaser.Geom.Point(L + 7, gTop)],
+      true,
+    );
+    glass.fillStyle(0xffffff, 0.09).fillPoints(
+      [new Phaser.Geom.Point(L + 8, gBot), new Phaser.Geom.Point(L + 8.8, gBot), new Phaser.Geom.Point(L + 12.8, gTop), new Phaser.Geom.Point(L + 12, gTop)],
+      true,
+    );
+    glass.fillStyle(0xffffff, 0.05).fillRect(L + 1, gTop, W - 2, 2);
+    glass.fillStyle(0xffffff, 0.5).fillRect(R - 4, gTop + 1, 1, 1);
+  } else {
+    glass.fillStyle(0xa0b0d0, 0.06).fillRect(L + 4, gTop + 2, 3, gH - 4);
+  }
+
+  // ---- THE MARQUEE: a lightbox with a lit name and a row of bulbs round it
+  const mqT = -H - 2;
+  g.fillStyle(frame, 1).fillRect(L, mqT, W, 2);
+  g.fillStyle(frameLit, 1).fillRect(L, mqT, W, 1);
+  g.fillStyle(n(0x0c0814), 1).fillRect(L, -H, W, 7);
+  g.fillStyle(trim, 1).fillRect(L, -H, W, 0.8).fillRect(L, -H + 6.2, W, 0.8).fillRect(L, -H, 0.8, 7).fillRect(R - 0.8, -H, 0.8, 7);
+  if (!night) g.fillStyle(eerie ? 0x6a3a8a : PALETTE.gold, 0.18).fillRect(L + 1, -H + 2, W - 2, 3);
   c.add(centerText(scene, 0, -H + 3, eerie ? '???' : 'GRAB', n(eerie ? 0xc8a0e0 : PALETTE.gold)));
   const bulbs: Phaser.GameObjects.Arc[] = [];
   for (let b = 0; b < 7; b++) {
-    const bulb = scene.add.circle(-W / 2 + 1 + b * ((W - 2) / 6), -H - 1.5, 0.8, n(eerie ? 0xc8a0e0 : 0xffe080));
+    const bulb = scene.add.circle(L + 1 + b * ((W - 2) / 6), mqT + 0.5, 0.8, n(eerie ? 0xc8a0e0 : 0xffe080));
     bulbs.push(bulb);
     c.add(bulb);
   }
+  // the gloss down the front edge of the body
+  g.fillStyle(0xffffff, night ? 0.03 : 0.1).fillRect(L + 1, -11, 1, 8);
+
   if (!night) {
     // The plush crane chases its lights; the other one flickers, unwell.
     const glow = scene.add.rectangle(0, -19, W + 2, 18, eerie ? 0x8a4ab8 : PALETTE.tealLight, 0.07);
@@ -94,11 +220,13 @@ export function paintCrane(scene: Phaser.Scene, x: number, y: number, kind: Cran
         callback: () => {
           const a = Math.random() < 0.12 ? 0.02 : 0.07 + Math.random() * 0.05;
           glow.setAlpha(a);
+          cone.setAlpha(a < 0.05 ? 0.2 : 1);
           bulbs.forEach((bl) => bl.setAlpha(a < 0.05 ? 0.2 : 1));
         },
       });
     } else {
       scene.tweens.add({ targets: glow, alpha: 0.03, duration: 700, yoyo: true, repeat: -1 });
+      scene.tweens.add({ targets: cone, alpha: 0.6, duration: 1300, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       let step = 0;
       scene.time.addEvent({
         delay: 180,
