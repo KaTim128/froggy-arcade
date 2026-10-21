@@ -25,6 +25,7 @@ import { nightfallOnce, onPhaseTurn } from '../game/dayNight';
 import { backPlate, fitPrompt, SUBTITLE_Y } from '../ui/plate';
 import { FRONT_TOP, paintShopfront, paintStreet, type ShopfrontOpts } from '../art/shopfront';
 import { resumeSpot, trackPlace } from '../game/place';
+import { OldMan, placeOldMan } from './oldMan';
 
 export type StoreKind = 'furniture' | 'clothes' | 'barber';
 /** The scene each door opens into. */
@@ -42,6 +43,9 @@ const GAPS = [
   { x: 628, variant: 2 },
 ];
 const WALK_Y = 168;
+/** The old man's blanket, against the wall line, under Home and Hearth's right-hand window. */
+const OLD_Y = WALK_Y - 9;
+const OLD_WANT = 184;
 
 interface Front {
   kind: StoreKind;
@@ -114,6 +118,10 @@ export class StreetEast extends Phaser.Scene {
   private locked = false;
   private people!: Pedestrians;
   private patrol: Patrol | null = null;
+  private oldMan: OldMan | null = null;
+  private talking: Phaser.GameObjects.Container | null = null;
+  /** Walking over to talk to him. */
+  private toOldMan = false;
 
   constructor() {
     super('StreetEast');
@@ -138,6 +146,8 @@ export class StreetEast extends Phaser.Scene {
     this.locked = false;
     this.spot = null;
     this.errand = null;
+    this.talking = null;
+    this.toOldMan = false;
     fadeIn(this);
     audio.setScene({ music: 'theme_arcade', ambience: ['street_dusk'] });
     visit('street_east');
@@ -151,6 +161,29 @@ export class StreetEast extends Phaser.Scene {
     trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
     this.cameras.main.setBounds(0, 0, WORLD_W, GAME_H);
     this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
+    // the old man, in front of HOME AND HEARTH: kept to his own bit of the
+    // front, clear of its door, the alley mouth and the way you came in
+    const hearth = FRONTS[0];
+    const oldX = placeOldMan(
+      OLD_WANT,
+      [...FRONTS.map((f) => ({ x: f.door, half: 17 })), ...GAPS.map((gp) => ({ x: gp.x, half: 10 })), { x: this.player.x, half: 8 }],
+      hearth.x,
+      hearth.x + hearth.w,
+    );
+    this.oldMan = OldMan.paint(
+      {
+        scene: this,
+        talking: () => !!this.talking,
+        setTalking: (c) => (this.talking = c),
+        lock: (on) => (this.locked = on),
+        say: (m) => this.say(m),
+        gone: () => (this.oldMan = null),
+      },
+      oldX,
+      OLD_Y,
+      dark,
+      () => this.walkToOldMan(),
+    );
     this.people = new Pedestrians(this, WORLD_W, WALK_Y + 2, dark ? 2 : 4, dark);
     this.patrol = new Patrol({ scene: this, worldW: WORLD_W, y: WALK_Y, player: () => this.player, dark: () => clock().dark, lock: (on) => ((this.locked = on), on && (this.errand = null)) });
 
@@ -199,13 +232,26 @@ export class StreetEast extends Phaser.Scene {
   }
 
   private busy(): boolean {
-    return this.scene.isActive('Shop') || this.scene.isActive('SettingsModal') || this.scene.isActive('Goals') || this.scene.isActive('InventoryModal');
+    return !!this.talking || this.scene.isActive('Shop') || this.scene.isActive('SettingsModal') || this.scene.isActive('Goals') || this.scene.isActive('InventoryModal');
   }
 
   private walkTo(f: Front): void {
     if (this.locked || this.busy()) return;
     if (this.spot === f) return this.interact();
+    this.toOldMan = false;
     this.errand = f;
+  }
+
+  private walkToOldMan(): void {
+    if (this.locked || this.busy() || !this.oldMan) return;
+    if (this.oldMan.near(this.player.x)) return this.oldMan.talk();
+    this.errand = null;
+    this.toOldMan = true;
+  }
+
+  /** Stood by him, with no door or alley to hand. */
+  private byOldMan(): boolean {
+    return !this.spot && !this.gap && !!this.oldMan?.near(this.player.x);
   }
 
   private say(m: string): void {
@@ -225,6 +271,7 @@ export class StreetEast extends Phaser.Scene {
   }
 
   private interact(): void {
+    if (this.byOldMan() && !this.locked && !this.busy()) return this.oldMan?.talk();
     if (this.gap && !this.spot) return this.intoAlley();
     if (this.locked || this.busy() || !this.spot) return;
     const f = this.spot;
@@ -271,7 +318,16 @@ export class StreetEast extends Phaser.Scene {
       return;
     }
     let dx = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
-    if (dx !== 0) this.errand = null;
+    if (dx !== 0) (this.errand = null), (this.toOldMan = false);
+    if (this.toOldMan && this.oldMan) {
+      const gap = this.oldMan.standX - this.player.x;
+      if (Math.abs(gap) <= 2) {
+        this.toOldMan = false;
+        this.oldMan.talk();
+        return;
+      }
+      dx = gap > 0 ? 1 : -1;
+    }
     if (this.errand) {
       const gap = this.errand.door - this.player.x;
       if (Math.abs(gap) <= 2) {
@@ -295,6 +351,11 @@ export class StreetEast extends Phaser.Scene {
     this.gap = this.spot ? null : (GAPS.find((gp) => Math.abs(px - gp.x) < 9) ?? null);
     if (this.gap) {
       this.prompt.setText('[E] DUCK INTO THE ALLEY').setPosition(Phaser.Math.Clamp(px, this.cameras.main.scrollX + 70, this.cameras.main.scrollX + 250), WALK_Y - 52).setVisible(true);
+      fitPrompt(this.promptPlate, this.prompt);
+      return;
+    }
+    if (this.byOldMan()) {
+      this.prompt.setText('[E] TALK TO HIM').setPosition(px, WALK_Y - 52).setVisible(true);
       fitPrompt(this.promptPlate, this.prompt);
       return;
     }
