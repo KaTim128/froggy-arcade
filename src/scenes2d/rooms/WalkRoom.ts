@@ -31,6 +31,8 @@ import type { SpeakerId } from '../../ui/portraits';
 import { backPlate, fitPrompt, SUBTITLE_Y } from '../../ui/plate';
 import { SHOP_HOURS, clock, shopsOpen, type DayPhase } from '../../game/life';
 import { onLightTurn, onPhaseTurn } from '../../game/dayNight';
+import { IndoorCop, type Cover } from '../../game/indoorPatrol';
+import type { Place } from '../../game/policeVisits';
 
 /** The back wall's foot: the floor starts here. */
 export const FLOOR_TOP = 100;
@@ -150,6 +152,25 @@ export abstract class WalkRoom extends Phaser.Scene {
   protected abstract fixtures(): Fixture[];
   /** Where the door out goes. */
   protected abstract leave(): void;
+  /**
+   * Which of the places the police look in at this is (game/policeVisits),
+   * or null for one they never do.
+   */
+  protected policePlace(): Place | null {
+    return null;
+  }
+
+  /**
+   * What in here might hide you from an officer: only the tall things do
+   * (game/indoorPatrol).  By default, nothing.
+   */
+  protected covers(): Cover[] {
+    return [];
+  }
+
+  /** The officer looking round, while there is one (game/indoorPatrol). */
+  protected police: IndoorCop | null = null;
+
   /** Music for the room. */
   protected music(): string {
     return 'room_lounge';
@@ -183,6 +204,24 @@ export abstract class WalkRoom extends Phaser.Scene {
     this.exitDoor = this.exitFixture();
     for (const f of [this.exitDoor, ...this.fixtures()]) this.addFixture(f);
     this.walker = new Walker(() => this.bounds, () => this.solids);
+
+    // now and then, while the patrols are out, an officer looks in
+    const place = this.policePlace();
+    this.police = place
+      ? new IndoorCop({
+          scene: this,
+          place,
+          player: () => this.player,
+          bounds: () => this.bounds,
+          solids: () => this.solids,
+          covers: () => this.covers(),
+          door: { x: this.exitDoor.x, y: this.floorTop + 12 },
+          lock: (on) => (this.locked = on),
+          alarm: () => this.policeAlarm(),
+        }, { asks: !!(this.sys.settings.data as { copAsks?: boolean } | undefined)?.copAsks })
+      : null;
+    // (out of the door with one after you: they come out after you)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.police?.leftRoom());
 
     new TokenHud(this);
     attachPockets(this, () => this.busy());
@@ -235,6 +274,24 @@ export abstract class WalkRoom extends Phaser.Scene {
       audio.sfx('door_open', 0.5);
       this.leave();
     });
+  }
+
+  /** Seen: whatever card is up comes down, and you are on your feet. */
+  protected policeAlarm(): void {
+    this.closePanel();
+    for (const k of ['InventoryModal', 'Goals']) if (this.scene.isActive(k)) this.scene.stop(k);
+    if (this.scene.isActive('Shop')) {
+      this.scene.stop('Shop');
+      this.afterModal();
+    }
+    this.talking?.destroy();
+    this.talking = null;
+    if (this.player.seated || this.player.asleep) {
+      this.player.getUp();
+      if (this.seatReturn) this.player.setPosition(this.seatReturn.x, this.seatReturn.y);
+      this.seatReturn = null;
+    }
+    this.walker.cancel();
   }
 
   /** The way out: by default the door standing at the left end of the floor. */
@@ -539,6 +596,7 @@ export abstract class WalkRoom extends Phaser.Scene {
   // ------------------------------------------------------------------ frame
 
   update(_t: number, delta: number): void {
+    this.police?.update(delta);
     if (this.busy()) {
       this.prompt.setVisible(false);
       this.promptPlate.setVisible(false);

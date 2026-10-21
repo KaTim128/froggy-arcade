@@ -25,7 +25,7 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { backPlate, SUBTITLE_Y } from '../ui/plate';
 import { resumeSpot, trackPlace } from '../game/place';
 import { clock } from '../game/life';
-import { alleyWatch } from '../game/patrol';
+import { Patrol, alleyWatch } from '../game/patrol';
 
 const WALK_Y = 168;
 const DOOR_X = 236;
@@ -36,6 +36,8 @@ export class BackAlley extends Phaser.Scene {
   private prompt!: Phaser.GameObjects.BitmapText;
   private spot: 'door' | 'out' | null = null;
   private locked = false;
+  /** Nobody, unless one of them saw you come down here (game/patrol). */
+  private patrol: Patrol | null = null;
   /** After the night: the street's alley, with its door chained. */
   private chained = false;
   private mutter!: Phaser.GameObjects.BitmapText;
@@ -90,6 +92,7 @@ export class BackAlley extends Phaser.Scene {
     this.input.on('pointerdown', () => this.interact());
     // a patrol going past out on the street, while the hunt is on
     if (st.route === 'normal') alleyWatch(this);
+    this.patrol = st.route === 'normal' ? this.follower(time === 'night' || time === 'midnight') : null;
   }
 
   private bind(names: readonly string[]): Phaser.Input.Keyboard.Key[] {
@@ -140,6 +143,19 @@ export class BackAlley extends Phaser.Scene {
     g.fillStyle(PALETTE.black, 1).fillRect(lx - 0.5, ly, 1, 2);
   }
 
+  /** Seen ducking in here: one of them comes down the alley after you. */
+  private follower(dark: boolean): Patrol {
+    return new Patrol({
+      scene: this,
+      worldW: GAME_W,
+      y: WALK_Y,
+      player: () => this.player,
+      dark: () => dark,
+      alley: true,
+      lock: (on) => (this.locked = on),
+    });
+  }
+
   private say(msg: string): void {
     this.mutter.setText(msg).setVisible(true).setAlpha(1);
     this.tweens.killTweensOf(this.mutter);
@@ -174,6 +190,7 @@ export class BackAlley extends Phaser.Scene {
   }
 
   update(_t: number, delta: number): void {
+    this.patrol?.update(delta);
     if (this.locked) return;
 
     const dx = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);

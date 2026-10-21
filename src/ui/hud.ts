@@ -12,7 +12,7 @@ import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
 import { text } from '../core/ui';
 import { store } from '../core/state';
-import { clock, rentLabel, takeNotice, DAY_SECONDS } from '../game/life';
+import { attireProgress, clock, rentLabel, takeNotice, DAY_SECONDS } from '../game/life';
 import { tinyText, tinyWidth } from './tinyText';
 import { GAME_W } from '../render/pixelScaler';
 
@@ -137,7 +137,7 @@ export class TokenHud {
       // measuring one threw in the middle of the change of scene -- which
       // never finished, and left the screen black.
       if (!this.alive()) return;
-      if (hudMode() !== this.mode) this.applyMode();
+      if (hudMode() !== this.mode || (this.mode === 'hunt' && this.huntText() !== this.objectiveText.text)) this.applyMode();
       if (st.cash !== this.lastCash) this.refreshCash(st.cash);
       this.refreshLife();
     });
@@ -164,6 +164,16 @@ export class TokenHud {
     this.layoutSlots();
   }
 
+  /**
+   * The hunt's objective: every piece of what the poster shows changed
+   * (game/life `attireProgress`), and how many are done.
+   */
+  private huntText(): string {
+    if (store.get().disguised) return 'NEW FACE\nBACK TO THE ARCADE';
+    const p = attireProgress();
+    return `CHANGE ALL ATTIRE\n${p.changed}/${p.total} - SHOPS EAST`;
+  }
+
   /** Classic, the hunt, or labeled (see `hudMode`): lay the HUD out for it. */
   private applyMode(): void {
     this.mode = hudMode();
@@ -174,7 +184,7 @@ export class TokenHud {
     if (hunt) {
       // Under GOALS and the pockets, on the right, two short lines -- not
       // across the top-left where the purse goes.
-      this.objectiveText.setText(store.get().disguised ? 'NEW FACE\nBACK TO THE ARCADE' : "REACH SHARP'S\n(EAST) UNSEEN");
+      this.objectiveText.setText(this.huntText());
       this.objectiveText.setCenterAlign?.();
       const w = this.objectiveText.width + 10;
       const h = this.objectiveText.height + 5;

@@ -20,7 +20,8 @@
 import { store, type GameState } from '../core/state';
 import { ledger } from '../core/ledger';
 import { earnBadge } from './badges';
-import { COSMETICS, FURNITURE, STARTER_COSMETICS, cosmeticById, furnitureById } from './catalog';
+import { resetSuspicion } from './patrol';
+import { ATTIRE_SLOTS, COSMETICS, DEFAULT_WORN, FURNITURE, STARTER_COSMETICS, cosmeticById, furnitureById } from './catalog';
 import type { LifeState } from './lifeState';
 export { LIFE_VERSION, defaultLife, sanitizeLife, type LifeState, type Placement } from './lifeState';
 
@@ -383,19 +384,34 @@ export function wear(id: string): Result {
 }
 
 /**
- * A NEW LOOK.  In the stealth phase, a cut or a colour from the barber's
- * that is not the one on the poster: you look like somebody else now, and
- * the patrols stop hunting you.
+ * ---- A WHOLE NEW LOOK.  In the stealth phase the face on the poster is the
+ * whole of you: the hat, the coat, the scarf, the trousers, the shoes, the
+ * glasses (or none) -- and the hair, a cut or a colour from Sharp's.  Every
+ * one of them has to be something other than it was on the poster before the
+ * patrols stop knowing you on sight (game/patrol).  `attireProgress` is how
+ * far along that is, for the objective on the HUD.
  */
+export function attireProgress(): { changed: number; total: number; left: string[] } {
+  const s = store.get();
+  const was = s.wantedOutfit ?? {};
+  const now = L().outfit as Record<string, string>;
+  const worn = (o: Record<string, string>, slot: string): string => o[slot] ?? (DEFAULT_WORN as Record<string, string>)[slot] ?? '';
+  const left: string[] = [];
+  for (const slot of ATTIRE_SLOTS) if (worn(now, slot) === worn(was, slot)) left.push(slot === 'legs' ? 'TROUSERS' : slot.toUpperCase());
+  const hair = (['hair', 'dye'] as const).some((slot) => (now[slot] ?? '') !== (was[slot] ?? ''));
+  if (!hair) left.push('HAIR');
+  const total = ATTIRE_SLOTS.length + 1;
+  return { changed: total - left.length, total, left };
+}
+
 export function checkDisguise(): boolean {
   const s = store.get();
   if (s.arc !== 'live' || s.disguised) return false;
-  const was = s.wantedOutfit ?? {};
-  const now = L().outfit as Record<string, string>;
-  const changed = (['hair', 'dye'] as const).some((slot) => (now[slot] ?? '') !== (was[slot] ?? ''));
-  if (!changed) return false;
+  if (attireProgress().left.length) return false;
   store.patch({ disguised: true });
-  edit((l) => (l.notice = 'A NEW LOOK. THE POLICE WILL NOT KNOW YOU NOW.'));
+  // (whatever they were sure of, they are not any more)
+  resetSuspicion();
+  edit((l) => (l.notice = 'A WHOLE NEW LOOK. THE POLICE WILL NOT KNOW YOU NOW.'));
   earnBadge('new_face');
   store.flush();
   return true;

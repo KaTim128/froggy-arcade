@@ -15,6 +15,8 @@
  */
 
 import Phaser from 'phaser';
+import { furnitureCover, type Cover } from '../../game/indoorPatrol';
+import type { Place } from '../../game/policeVisits';
 import { PALETTE } from '../../render/palette';
 import { audio } from '../../core/audio';
 import { store } from '../../core/state';
@@ -172,6 +174,16 @@ export class FurnitureStore extends WalkRoom {
 
   private layoutCache: Array<{ def: FurnitureDef; x: number; y: number }> = [];
   private counter: Fixture | null = null;
+
+  protected policePlace(): Place | null {
+    return 'furniture';
+  }
+
+  /** What hides you from an officer in here: only the tall things. */
+  protected covers(): Cover[] {
+    // a wardrobe or a tall bookcase hides you; a sofa or a bed does not
+    return this.layoutCache.map(({ def, x, y }) => furnitureCover(def, x, y)).filter((c): c is Cover => !!c);
+  }
 
   protected fixtures(): Fixture[] {
     const counter = this.counter!;

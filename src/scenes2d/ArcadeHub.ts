@@ -10,6 +10,7 @@
 import Phaser from 'phaser';
 import { StageFigure } from '../render/stageFigure';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../game/roomWalk';
+import { arcadeCop, type IndoorCop } from '../game/indoorPatrol';
 import { seeded, tone } from '../art/surface';
 import { PALETTE } from '../render/palette';
 import { audio, type SfxName } from '../core/audio';
@@ -292,11 +293,17 @@ export class ArcadeHub extends Phaser.Scene {
   private mutter!: Phaser.GameObjects.BitmapText;
   private returnTo: GameId | null = null;
 
+  /** An officer looking round, while the patrols are out (game/indoorPatrol). */
+  private police: IndoorCop | null = null;
+  /** Back from a cabinet an officer interrupted: they are stood right here. */
+  private copAsks = false;
+
   constructor() {
     super('ArcadeHub');
   }
 
   init(data: { atCabinet?: GameId; fromDoor?: 'lounge' | 'annex' | 'street' } = {}): void {
+    this.copAsks = (data as { copAsks?: boolean }).copAsks === true;
     this.returnTo = data.atCabinet ?? null;
     this.fromDoor = data.fromDoor ?? null;
   }
@@ -459,6 +466,21 @@ export class ArcadeHub extends Phaser.Scene {
     // kept with the run, and back on the spot when resumed here (game/place)
     trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
 
+    // now and then, while the patrols are out, an officer looks round --
+    // and the machines are what you hide behind
+    this.police = arcadeCop({
+      scene: this,
+      player: () => this.player,
+      bounds: () => this.bounds,
+      solids: () => this.solids,
+      machines: this.solids.map((b) => ({ x: b.x + b.w / 2, y: b.y + b.h, w: b.w, depth: b.h })),
+      door: { x: GAME_W / 2, y: ROOM.bottom - 6 },
+      lock: (on) => (this.locked = on),
+      alarm: () => {
+        this.talk?.destroy(); this.talk = null; this.walker.cancel();
+      },
+      asks: this.copAsks,
+    });
     new TokenHud(this);
     // (the front door is in the middle of the bottom wall: the pockets sit beside it)
     attachPockets(this, () => this.busy());
@@ -1736,6 +1758,7 @@ export class ArcadeHub extends Phaser.Scene {
   // --------------------------------------------------------------------- update
 
   update(_time: number, delta: number): void {
+    this.police?.update(delta);
     // The apparition runs while the room is locked, because taking the
     // controls away is half of what makes it one.
     this.stepApparition(delta);

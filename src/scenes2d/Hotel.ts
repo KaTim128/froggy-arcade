@@ -43,6 +43,7 @@ import { store } from '../core/state';
 import { KEYS } from '../core/input';
 import { centerText, fadeIn, fadeToScene, pinToScreen, text } from '../core/ui';
 import { openTalkPanel } from '../ui/talkPanel';
+import { IndoorCop } from '../game/indoorPatrol';
 import { Player, depthFor } from '../art/player';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
@@ -188,6 +189,8 @@ export class Hotel extends Phaser.Scene {
   private spot: Spot = null;
   private locked = false;
   private talk: Phaser.GameObjects.Container | null = null;
+  /** While the patrols are out, an officer now and then looks round the lobby (game/indoorPatrol). */
+  private police: IndoorCop | null = null;
   private goingUp = true;
   private morning = false;
   private from: 'outside' | 'lift' | 'room' | 'corridor' | 'stairs' | 'storage' | 'stairwell' = 'outside';
@@ -382,6 +385,26 @@ export class Hotel extends Phaser.Scene {
     if (this.area === 'corridor') this.landing = this.liftDoors(CORRIDOR_LIFT_X, 118, 10, this.from === 'lift');
     if (this.from === 'lift' && this.landing && ((this.area === 'lobby' && !this.goingUp) || this.area === 'corridor')) this.stepOutOfLift();
 
+    this.police =
+      this.area === 'lobby' && this.night === 'calm'
+        ? new IndoorCop({
+            scene: this,
+            place: 'lily',
+            side: true,
+            player: () => this.player!,
+            bounds: () => new Phaser.Geom.Rectangle(14, WALK_Y, LOBBY_W - 28, 0),
+            solids: () => [],
+            covers: () => [],
+            door: { x: 30, y: WALK_Y },
+            lock: (on) => (this.locked = on),
+            alarm: () => {
+              this.talk?.destroy();
+              this.talk = null;
+              this.autoWalk = null;
+            },
+          })
+        : null;
+    if (this.police) this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.police?.leftRoom());
     if (this.area === 'lobby') {
       this.cameras.main.setBounds(0, 0, LOBBY_W, GAME_H);
       if (this.from === 'storage' && store.get().hotelAfter === 'police') {
@@ -1574,6 +1597,7 @@ export class Hotel extends Phaser.Scene {
     this.tickPolice(dt);
     const p = this.player;
     if (!p) return;
+    this.police?.update(delta);
     if (this.area === 'bath' && this.reflection) {
       // you, in the mirror, when you are in front of it
       // fades in as you come up to the glass and out as you walk on: no pop

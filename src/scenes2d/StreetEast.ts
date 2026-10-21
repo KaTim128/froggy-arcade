@@ -185,7 +185,17 @@ export class StreetEast extends Phaser.Scene {
       () => this.walkToOldMan(),
     );
     this.people = new Pedestrians(this, WORLD_W, WALK_Y + 2, dark ? 2 : 4, dark);
-    this.patrol = new Patrol({ scene: this, worldW: WORLD_W, y: WALK_Y, player: () => this.player, dark: () => clock().dark, lock: (on) => ((this.locked = on), on && (this.errand = null)) });
+    this.patrol = new Patrol({
+      scene: this,
+      worldW: WORLD_W,
+      y: WALK_Y,
+      player: () => this.player,
+      dark: () => clock().dark,
+      lock: (on) => ((this.locked = on), on && (this.errand = null)),
+      // they keep an eye on the old man, and look in at the shops
+      watch: () => this.oldMan?.x ?? null,
+      doors: FRONTS.map((f) => ({ x: f.door, place: f.kind })),
+    });
 
     new TokenHud(this);
     attachPockets(this, () => this.locked || this.busy());
@@ -280,7 +290,7 @@ export class StreetEast extends Phaser.Scene {
       this.say('NOT IN THERE - THEY WOULD FOLLOW ME IN!');
       return;
     }
-    if (!shopsOpen() && !(f.kind === 'barber' && stealthPhase())) {
+    if (!shopsOpen() && !((f.kind === 'barber' || f.kind === 'clothes') && stealthPhase())) {
       audio.sfx('door_rattle', 0.5);
       this.say(`${f.name} IS SHUT FOR THE NIGHT. OPEN ${SHOP_HOURS}.`);
       return;

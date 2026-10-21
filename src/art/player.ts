@@ -55,6 +55,8 @@ export const COLS: Record<string, number> = {
   S: 0xd8b088, // weathered skin
   s: 0xb08a68, // skin, shade
   E: 0x1e1410, // eyes
+  Q: 0x14141c, // glasses: the lens
+  q: 0x2a2a30, // glasses: the frame
   G: 0x8a8070, // grey beard
   g: 0x6a6258, // beard, shade
   C: 0x6a6a44, // old army coat, olive
@@ -102,6 +104,8 @@ export function lookColour(look: Look, ch: string): number {
 export interface Look {
   cols?: Partial<Record<string, number>>;
   head?: string[];
+  /** Glasses or shades over the eyes (the eye row and the one under it). */
+  glasses?: string[];
 }
 const CLEAN_HEAD_CAP = [
   '...BBBBBB...',
@@ -232,6 +236,8 @@ const PARTS: Record<string, Part> = {
     ],
   },
   eyes: { top: 4, rows: ['.....E.E....'] },
+  // nothing, unless the look has glasses on (see Look.glasses)
+  glasses: { top: 4, rows: [] },
   torso: {
     top: 9,
     rows: [
@@ -265,8 +271,11 @@ const FIG_H = 25;
 export type SeatKind = 'floor' | 'chair' | 'front';
 const MID = 6;
 /** Drawn back to front. */
-const ORDER = ['backArm', 'backLeg', 'frontLeg', 'torso', 'head', 'eyes', 'frontArm'] as const;
+const ORDER = ['backArm', 'backLeg', 'frontLeg', 'torso', 'head', 'eyes', 'glasses', 'frontArm'] as const;
 type PartName = (typeof ORDER)[number];
+/** A part's grid in `look`: its own head, its own glasses. */
+const partFor = (name: PartName, look: Look): Part =>
+  name === 'head' && look.head ? { ...PARTS.head, rows: look.head } : name === 'glasses' ? { ...PARTS.glasses, rows: look.glasses ?? [] } : PARTS[name];
 
 /** A run of same-coloured pixels on one row, at its unflipped centre. */
 type Run = { r: Phaser.GameObjects.Rectangle; cx: number; cy: number };
@@ -297,7 +306,7 @@ export function paintFigure(
   const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
   const cells: Array<{ part: PartName; px: Set<string>; fills: Array<[number, number, number]> }> = [];
   for (const name of ORDER) {
-    const part = name === 'head' && look.head ? { ...PARTS.head, rows: look.head } : PARTS[name];
+    const part = partFor(name, look);
     const px = new Set<string>();
     const fills: Array<[number, number, number]> = [];
     // the top half rises with the breath; the legs stay on the ground
@@ -321,7 +330,7 @@ export function paintFigure(
   // the outline: every part a pixel bigger, in ink, under every fill
   ctx.fillStyle = hex(OUTLINE);
   for (const c of cells) {
-    if (c.part === 'eyes') continue;
+    if (c.part === 'eyes' || c.part === 'glasses') continue;
     for (const key of c.px) {
       const [gx, gy] = key.split(',').map(Number);
       for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -390,7 +399,7 @@ export class Player {
     const lines: Phaser.GameObjects.Rectangle[] = [];
     const fills: Phaser.GameObjects.Rectangle[] = [];
     for (const name of ORDER) {
-      const part = name === 'head' && look.head ? { ...PARTS.head, rows: look.head } : PARTS[name];
+      const part = partFor(name, look);
       const fill: Run[] = [];
       const line: Run[] = [];
       // the part's own pixels, then a one-pixel outline round it; outlines all
@@ -398,7 +407,7 @@ export class Player {
       const px = new Set<string>();
       part.rows.forEach((row, i) => [...row].forEach((ch, x) => ch !== '.' && px.add(`${x},${part.top + i}`)));
       const outline = new Set<string>();
-      if (name !== 'eyes') {
+      if (name !== 'eyes' && name !== 'glasses') {
         for (const k of px) {
           const [x, y] = k.split(',').map(Number);
           for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -461,6 +470,7 @@ export class Player {
     const off: Record<PartName, [number, number]> = {
       head: [0, -bob],
       eyes: [0, -bob],
+      glasses: [0, -bob],
       torso: [0, -bob],
       backArm: [s, -bob],
       frontArm: [-s, -bob],
@@ -633,6 +643,12 @@ export class Player {
   face(dir: number): void {
     this.dir = dir >= 0 ? 1 : -1;
     this.pose(0, 0);
+  }
+
+  /** Someone else's legs (an officer): SHIFT is the player's sprint, not theirs. */
+  noSprint(): this {
+    this.shift = null;
+    return this;
   }
 
   setSurface(s: Surface): void {

@@ -276,7 +276,7 @@ export class Shop extends Phaser.Scene {
     const life = () => store.get().life;
     switch (kind) {
       case 'wardrobe': {
-        const slots: Array<[string, CosmeticSlot[]]> = [['TOPS', ['top', 'scarf']], ['LEGS', ['legs', 'shoes']], ['HEAD', ['hat', 'hair', 'dye']]];
+        const slots: Array<[string, CosmeticSlot[]]> = [['TOPS', ['top', 'scarf']], ['LEGS', ['legs', 'shoes']], ['HEAD', ['hat', 'glasses', 'hair', 'dye']]];
         return {
           title: 'WARDROBE',
           tabs: slots.map(([label, ss]) => ({
@@ -392,7 +392,7 @@ export class Shop extends Phaser.Scene {
     const tabs: Tab[] =
       shop === 'barber'
         ? [tab('CUTS', ['hair']), tab('COLOUR', ['dye'])]
-        : [tab('TOPS', ['top']), tab('LEGS', ['legs', 'shoes']), tab('EXTRAS', ['scarf', 'hat'])];
+        : [tab('TOPS', ['top']), tab('LEGS', ['legs', 'shoes']), tab('EXTRAS', ['scarf', 'hat', 'glasses'])];
     return {
       title: shop === 'barber' ? "CLIP JOINT - THE BOOK" : 'THREADS - THE RAILS',
       tabs,

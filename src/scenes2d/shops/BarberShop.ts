@@ -9,6 +9,8 @@
  */
 
 import Phaser from 'phaser';
+import type { Cover } from '../../game/indoorPatrol';
+import type { Place } from '../../game/policeVisits';
 import { stealthPhase } from '../../game/patrol';
 import { store } from '../../core/state';
 import { PALETTE } from '../../render/palette';
@@ -17,7 +19,7 @@ import { centerText, text } from '../../core/ui';
 import { GAME_H, GAME_W } from '../../render/pixelScaler';
 import { depthFor } from '../../art/player';
 import { COSMETICS, type CosmeticDef } from '../../game/catalog';
-import { record } from '../../game/life';
+import { attireProgress, record } from '../../game/life';
 import { FLOOR_TOP, WalkRoom, type Fixture } from '../rooms/WalkRoom';
 import { BARBER_LOOK } from '../../ui/portraits';
 import { BRASS, INK, WALNUT, paintMirror, paintMirrorShine, paintStuds, paintWalnut } from '../../art/shopFittings';
@@ -55,7 +57,9 @@ export class BarberShop extends WalkRoom {
     super.afterModal();
     if (store.get().disguised && !this.wasDisguised) {
       this.wasDisguised = true;
-      this.time.delayedCall(200, () => this.say('A NEW FACE. THE POLICE WILL WALK RIGHT PAST ME NOW.'));
+      this.time.delayedCall(200, () => this.say('A WHOLE NEW LOOK. THE POLICE WILL WALK RIGHT PAST ME NOW.'));
+    } else if (stealthPhase() && !attireProgress().left.includes('HAIR')) {
+      this.time.delayedCall(200, () => this.say(`NEW HAIR. STILL TO CHANGE: ${attireProgress().left.join(', ')}.`));
     }
   }
 
@@ -78,7 +82,7 @@ export class BarberShop extends WalkRoom {
   protected entered(): void {
     record('shop_visit');
     this.previewing = false;
-    if (stealthPhase()) this.time.delayedCall(500, () => this.say('"IN HERE, QUICK. SIT IN THE CHAIR -- NOBODY WILL KNOW YOU WHEN I AM DONE."'));
+    if (stealthPhase()) this.time.delayedCall(500, () => this.say('"IN HERE, QUICK. SIT IN THE CHAIR. THEN THREADS FOR THE REST OF YOU -- EVERY STITCH."'));
     this.wasDisguised = store.get().disguised;
   }
 
@@ -307,6 +311,16 @@ export class BarberShop extends WalkRoom {
     );
     g.fillStyle(0x2a5a4a, 1).fillRect(x, y + 14, 14, 4);
     g.fillStyle(0x3e7a64, 1).fillRect(x, y + 14, 14, 1);
+  }
+
+  protected policePlace(): Place | null {
+    return 'barber';
+  }
+
+  /** What hides you from an officer in here: only the tall things. */
+  protected covers(): Cover[] {
+    // the chair, the bench, the counter: nothing in here you could hide behind
+    return [];
   }
 
   protected fixtures(): Fixture[] {

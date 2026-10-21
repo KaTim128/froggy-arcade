@@ -17,9 +17,12 @@ import { text } from '../../core/ui';
 import { GAME_H, GAME_W } from '../../render/pixelScaler';
 import { Player, depthFor, type Look } from '../../art/player';
 import { COSMETICS, CROWNS, cosmeticById, lookFor, type CosmeticDef } from '../../game/catalog';
-import { record } from '../../game/life';
+import { attireProgress, record } from '../../game/life';
+import { stealthPhase } from '../../game/patrol';
 import { COUNTER_RIGHT, WalkRoom, type Fixture } from '../rooms/WalkRoom';
 import { ASSISTANT_LOOK } from '../../ui/portraits';
+import { tallCover, type Cover } from '../../game/indoorPatrol';
+import type { Place } from '../../game/policeVisits';
 
 const FLOOR = 100;
 const BACK_ROW = FLOOR + 22;
@@ -63,6 +66,14 @@ export class ClothesStore extends WalkRoom {
   }
 
   protected keepsShopHours = true;
+  private wasDisguised = false;
+
+  create(): void {
+    // (in the hunt, Threads lets you in whatever the hour, as Sharp's does:
+    // a change of clothes is half the way out)
+    this.keepsShopHours = !stealthPhase();
+    super.create();
+  }
 
   protected music(): string {
     return 'room_lounge';
@@ -70,6 +81,21 @@ export class ClothesStore extends WalkRoom {
 
   protected entered(): void {
     record('shop_visit');
+    this.wasDisguised = store.get().disguised;
+    if (stealthPhase()) this.time.delayedCall(500, () => this.say('"THE RAILS ARE AT THE TILL, LOVE. EVERY PIECE, HAT TO SHOES -- AND GLASSES."'));
+  }
+
+  /** The card shut: in the hunt, how much of the poster's look is still on you. */
+  protected afterModal(): void {
+    super.afterModal();
+    if (store.get().disguised && !this.wasDisguised) {
+      this.wasDisguised = true;
+      this.time.delayedCall(200, () => this.say('A WHOLE NEW LOOK. THE POLICE WILL WALK RIGHT PAST ME NOW.'));
+      return;
+    }
+    if (store.get().disguised || !stealthPhase()) return;
+    const p = attireProgress();
+    if (p.left.length) this.time.delayedCall(200, () => this.say(`STILL TO CHANGE: ${p.left.join(', ')}.`));
   }
 
   protected leave(): void {
@@ -384,6 +410,19 @@ export class ClothesStore extends WalkRoom {
 
   private tag(x: number, y: number, price: number): void {
     text(this, x, y, `$${price}`, PALETTE.cream).setOrigin(0.5, 0).setDepth(depthFor(y) + 0.0003);
+  }
+
+  protected policePlace(): Place | null {
+    return 'clothes';
+  }
+
+  /** What hides you from an officer in here: only the tall things. */
+  protected covers(): Cover[] {
+    // the mannequins (a person's height) and the fitting room; the table,
+    // the low shelf and the hat stand hide nobody
+    const out: Cover[] = this.spots.filter((p) => !p.wall).map((p) => tallCover(p.x, p.y, 12, p.depth));
+    out.push(tallCover(FIT_X, BACK_ROW, FIT_W, 6, 10));
+    return out;
   }
 
   protected fixtures(): Fixture[] {
