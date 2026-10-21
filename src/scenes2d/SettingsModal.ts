@@ -21,6 +21,7 @@ import { BRIGHT_MAX, BRIGHT_MIN, LOOK_SENS_MAX, LOOK_SENS_MIN, generalDefaults, 
 import { QUALITY_NAMES, graphicsChanged, maxQuality, quality } from '../core/graphics';
 import { FONT_ADVANCE } from '../render/pixelFont';
 import { BINDINGS } from '../core/input';
+import { KEY_ACTIONS, bind, bindable, capLabel, codeFor, resetKeys, setListening } from '../core/keymap';
 import { button, centerText, confirmDialog, forfeitLines, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { isTouch } from '../core/device';
@@ -83,6 +84,9 @@ export class SettingsModal extends Phaser.Scene {
     if (tester) button(this, 244, 34, 'TEST', () => this.setTab('test'), { width: 40, height: 13, fill: 0x5a3a12 });
 
     this.body = this.add.container(0, 0);
+    this.keysView = false;
+    this.listenFor = null;
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.stopListening());
     this.renderBody();
 
     if (this.pause) {
@@ -132,6 +136,8 @@ export class SettingsModal extends Phaser.Scene {
 
   private setTab(t: Tab): void {
     this.tab = t;
+    this.keysView = false;
+    this.stopListening();
     this.renderBody();
   }
 
@@ -203,8 +209,74 @@ export class SettingsModal extends Phaser.Scene {
     if (this.tab === 'general') this.renderGeneral();
     else if (this.tab === 'audio') this.renderAudio();
     else if (this.tab === 'test') this.renderTest();
+    else if (this.keysView && !isTouch()) this.renderKeys();
     else if (this.pause) this.renderPlaceControls();
     else this.renderControls();
+  }
+
+  /** Showing the key bindings to change, rather than the list of controls. */
+  private keysView = false;
+  /** The action waiting for its new key, if one is. */
+  private listenFor: string | null = null;
+  private keyCatch: ((e: KeyboardEvent) => void) | null = null;
+
+  /**
+   * ---- CHANGE THE KEYS.  Every action the rooms and cabinets share, with
+   * the key it is on as a keycap: click one, press the key you want, and it
+   * is that key everywhere from then on (see core/keymap).  Taking a key
+   * another action had swaps the two.  Esc cancels; RESET KEYS puts them
+   * all back.  The arrows always move as well, and Esc always pauses.
+   */
+  private renderKeys(): void {
+    let y = 46;
+    this.body.add(text(this, 32, y - 4, 'CLICK A KEY, THEN PRESS THE NEW ONE', PALETTE.fog));
+    y += 5;
+    for (const a of KEY_ACTIONS) {
+      this.body.add(text(this, 32, y, a.label, PALETTE.cream));
+      const waiting = this.listenFor === a.id;
+      const label = waiting ? 'PRESS A KEY' : capLabel(codeFor(a.id));
+      const moved = codeFor(a.id) !== a.code;
+      const b = button(this, 214, y + 3, label, () => this.listen(a.id), {
+        width: 72,
+        height: 9,
+        fill: waiting ? 0x5a3a12 : moved ? 0x1f4a5a : undefined,
+      });
+      this.body.add(b);
+      y += 11;
+    }
+    this.body.add(text(this, 32, y + 1, 'ARROWS MOVE TOO', PALETTE.ash));
+    this.body.add(button(this, 214, y + 3, 'RESET KEYS', () => {
+      resetKeys();
+      this.renderBody();
+    }, { width: 72, height: 9, fill: 0x5a1a22, hoverFill: 0x8a2b34 }));
+  }
+
+  private listen(id: string): void {
+    this.stopListening();
+    this.listenFor = id;
+    setListening(true);
+    this.keyCatch = (e: KeyboardEvent): void => {
+      // (this press is the new key, not a game's or the pause menu's)
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      const code = e.code;
+      const target = this.listenFor;
+      this.stopListening();
+      if (code !== 'Escape' && target && bindable(code)) {
+        bind(target, code);
+        audio.sfx('ui_blip', 0.5);
+      } else if (code !== 'Escape') audio.sfx('buzzer', 0.4);
+      this.renderBody();
+    };
+    window.addEventListener('keydown', this.keyCatch, true);
+    this.renderBody();
+  }
+
+  private stopListening(): void {
+    if (this.keyCatch) window.removeEventListener('keydown', this.keyCatch, true);
+    this.keyCatch = null;
+    this.listenFor = null;
+    setListening(false);
   }
 
   /**
@@ -225,6 +297,16 @@ export class SettingsModal extends Phaser.Scene {
       y += 9;
     }
     if (!rows.length) this.body.add(centerText(this, GAME_W / 2, 80, isTouch() ? 'TAP WHAT YOU SEE' : 'CLICK WHAT YOU SEE', PALETTE.cream));
+    this.addChangeKeys();
+  }
+
+  /** On a keyboard: the way into changing the keys, under the controls. */
+  private addChangeKeys(): void {
+    if (isTouch()) return;
+    this.body.add(button(this, 236, 142, 'CHANGE KEYS', () => {
+      this.keysView = true;
+      this.renderBody();
+    }, { width: 66, height: 10, fill: 0x1f4a5a }));
   }
 
   /**
@@ -410,7 +492,8 @@ export class SettingsModal extends Phaser.Scene {
     // longest action reaches x=200 in the 6px-advance font, so the keycaps start
     // at 204 and the widest row (W A S D) still ends inside the panel.
     let y = 42;
-    for (const b of BINDINGS) {
+    // (the arrows' rows are one line under the list: room for CHANGE KEYS)
+    for (const b of BINDINGS.filter((x) => !x.action.endsWith('(alt)'))) {
       this.body.add(text(this, 32, y, b.action, PALETTE.cream, 8));
       let kx = 204;
       for (const k of b.keys) {
@@ -428,6 +511,8 @@ export class SettingsModal extends Phaser.Scene {
     const w = how.length * FONT_ADVANCE + 4;
     this.body.add(this.add.rectangle(204, y - 2, w, 11, PALETTE.slate).setOrigin(0, 0).setStrokeStyle(1, PALETTE.ash));
     this.body.add(centerText(this, 204 + w / 2, y + 3.5, how, PALETTE.gold));
+    this.body.add(text(this, 32, y + 11, 'THE ARROW KEYS MOVE TOO', PALETTE.ash));
+    this.addChangeKeys();
   }
 
   /**
