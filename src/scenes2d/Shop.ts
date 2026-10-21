@@ -24,6 +24,7 @@ import {
   buyFurniture,
   clock,
   evict,
+  payDebt,
   payRent,
   rent,
   rentInDays,
@@ -470,6 +471,15 @@ export class Shop extends Phaser.Scene {
           ];
         }
         if (id === 'rent') {
+          if (!l.rented && l.debt > 0) {
+            return [
+              'UNIT 612, SIXTH FLOOR',
+              `YOU OWE ${l.debt} UNPAID ${l.debt === 1 ? 'WEEK' : 'WEEKS'}: $${l.debt * RENT_PRICE}`,
+              'PAY THE OVERDUE WEEK FIRST,',
+              `THEN THIS WEEK: $${RENT_PRICE}.`,
+              `YOU HAVE $${store.get().cash}. SELL THINGS TO RAISE IT.`,
+            ];
+          }
           if (!l.rented) {
             return [
               'UNIT 612, SIXTH FLOOR',
@@ -480,7 +490,13 @@ export class Shop extends Phaser.Scene {
             ];
           }
           const d = rentInDays(l);
-          return ['UNIT 612 IS YOURS', d <= 0 ? `RENT OF $${RENT_PRICE} IS DUE NOW` : `NEXT RENT IN ${d} DAYS`, d < 0 ? 'OVERDUE: PAY OR BE EVICTED' : '', `YOU HAVE $${store.get().cash}`];
+          return [
+            'UNIT 612 IS YOURS',
+            d <= 0 ? `RENT OF $${RENT_PRICE} IS DUE NOW` : `NEXT RENT IN ${d} DAYS`,
+            d < 0 ? 'OVERDUE: PAY OR BE EVICTED' : '',
+            `YOU HAVE $${store.get().cash}`,
+            d <= 0 && store.get().cash < RENT_PRICE ? 'SHORT? SELL THINGS, OR MOVE OUT.' : '',
+          ];
         }
         const [kind, real] = id.split(':');
         return [kind === 'f' ? furnitureById(real)!.name : cosmeticById(real)!.name, `HE WILL GIVE YOU $${resaleValue(kind === 'f' ? 'furniture' : 'cosmetic', real)}`, 'TO HELP WITH THE RENT'];
@@ -501,9 +517,14 @@ export class Shop extends Phaser.Scene {
         const l = life();
         if (id === 'rent' && rentToMan()) return [];
         if (id === 'rent') {
-          if (!l.rented) return [{ label: `RENT - $${RENT_PRICE}`, fn: () => rent() }];
+          // two buttons, one per week: what is owed from before, then this week
+          if (!l.rented)
+            return [
+              ...(l.debt > 0 ? [{ label: `PAY OVERDUE WEEK $${RENT_PRICE}`, fn: () => payDebt() }] : []),
+              { label: `PAY THIS WEEK $${RENT_PRICE}`, fn: () => rent(), off: l.debt > 0 },
+            ];
           return [
-            { label: 'PAY RENT', fn: () => payRent(), off: rentInDays(l) > RENT_DAYS - 1 },
+            { label: `PAY THIS WEEK $${RENT_PRICE}`, fn: () => payRent(), off: rentInDays(l) > RENT_DAYS - 1 },
             {
               label: 'MOVE OUT',
               fn: () => {

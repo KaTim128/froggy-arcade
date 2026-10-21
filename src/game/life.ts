@@ -150,9 +150,15 @@ export function tick(seconds: number): void {
   if (l.rented && clock(l.t).day > l.rentDue) {
     l.rented = false;
     l.evicted = true;
-    l.notice = 'EVICTED. YOUR THINGS ARE IN STORAGE. YOU CAN RENT AGAIN.';
+    // (the week that went unpaid is still owed)
+    l.debt += 1;
+    l.notice = `EVICTED. YOU STILL OWE $${RENT_PRICE}. YOUR THINGS ARE IN STORAGE.`;
   } else if (l.rented && clock(l.t).day !== dayWas && rentInDays(l) <= 0) {
-    l.notice = `RENT OF $${RENT_PRICE} IS DUE TODAY. PAY ${store.get().arc === 'live' ? 'THE MAN OUTSIDE THE ARCADE' : 'THE LANDLORD'}.`;
+    const who = store.get().arc === 'live' ? 'THE MAN OUTSIDE THE ARCADE' : 'THE LANDLORD';
+    l.notice =
+      store.get().cash >= RENT_PRICE
+        ? `RENT OF $${RENT_PRICE} IS DUE TODAY. PAY ${who}.`
+        : `RENT OF $${RENT_PRICE} IS DUE. SELL THINGS AT LILY'S DESK TO RAISE IT, OR MOVE OUT.`;
   }
   put(l);
 }
@@ -234,6 +240,8 @@ export function moveInto213(): void {
 export function rent(): Result {
   const l = L();
   if (l.rented) return no(`YOU ALREADY RENT UNIT ${unitNo()}.`);
+  // what is owed from last time comes first: no new week over an unpaid one
+  if (l.debt > 0) return no(`PAY THE OVERDUE WEEK FIRST: $${RENT_PRICE}${l.debt > 1 ? ` (${l.debt} WEEKS OWED)` : ''}.`);
   if (!store.spendCash(RENT_PRICE)) return no(`IT IS $${RENT_PRICE} FOR ${RENT_DAYS} DAYS. YOU HAVE $${store.get().cash}.`);
   edit((x) => {
     x.rented = true;
@@ -296,10 +304,24 @@ export function sellAsset(kind: 'furniture' | 'cosmetic', id: string): Result {
 /** Give up: evicted now, with everything kept in storage. */
 export function evict(): void {
   edit((l) => {
+    // moving out with the week due does not make it go away
+    const owed = l.rented && rentInDays(l) <= 0;
     l.rented = false;
     l.evicted = true;
-    l.notice = 'EVICTED. YOUR THINGS ARE IN STORAGE. YOU CAN RENT AGAIN.';
+    if (owed) l.debt += 1;
+    l.notice = owed ? `MOVED OUT. YOU STILL OWE $${RENT_PRICE} FOR THE WEEK.` : 'MOVED OUT. YOUR THINGS ARE IN STORAGE.';
   });
+}
+
+/** Pay one overdue week of an old tenancy (the oldest first).  Never more than is owed. */
+export function payDebt(): Result {
+  const l = L();
+  if (l.debt <= 0) return no('YOU OWE NOTHING.');
+  if (!store.spendCash(RENT_PRICE)) return no(`THE OVERDUE WEEK IS $${RENT_PRICE}. YOU HAVE $${store.get().cash}.`);
+  edit((x) => (x.debt = Math.max(0, x.debt - 1)));
+  record('pay_rent');
+  const left = L().debt;
+  return ok(left ? `PAID ONE OVERDUE WEEK. ${left} MORE OWED.` : 'THE OVERDUE WEEK IS PAID. NOW THE NEW WEEK.');
 }
 
 // ------------------------------------------------------- furniture / looks
@@ -394,7 +416,8 @@ export function sleep(where: 'street' | 'floor' | 'mattress' | 'bed'): Result {
     if (l.rented && clock(l.t).day > l.rentDue) {
       l.rented = false;
       l.evicted = true;
-      l.notice = 'EVICTED IN THE NIGHT. YOUR THINGS ARE IN STORAGE.';
+      l.debt += 1;
+      l.notice = `EVICTED IN THE NIGHT. YOU STILL OWE $${RENT_PRICE}. YOUR THINGS ARE IN STORAGE.`;
     }
   });
   record('sleep');
@@ -419,8 +442,48 @@ export function sleepPlace(): 'home' | 'street' | 'none' {
  * to be broke.)
  */
 export function canBeg(): boolean {
-  const s = store.get();
-  return s.cash <= 0 && ledger.balance() <= 0;
+  // (whenever you have no place of your own -- not only when you are broke)
+  return !store.get().life.rented;
+}
+
+/** Nothing at all left: no cash and no tokens. */
+export function broke(): boolean {
+  return store.get().cash <= 0 && ledger.balance() <= 0;
+}
+
+/** The chance, each night slept on the street, that someone goes through your pockets. */
+export const THEFT_CHANCE = 0.25;
+
+/**
+ * A NIGHT ON THE PAVEMENT, and maybe a hand in your pockets: one time in
+ * four, exactly half your cash and half your tokens are gone by morning
+ * (rounded down, so the last coin of each is always left you).  Returns
+ * what was taken, or null.  `roll` is for the harness.
+ */
+export function streetTheft(roll = Math.random()): { cash: number; tokens: number } | null {
+  if (roll >= THEFT_CHANCE) return null;
+  const cash = Math.floor(store.get().cash * 0.5);
+  const tokens = Math.floor(ledger.balance() * 0.5);
+  if (cash > 0) store.spendCash(cash);
+  if (tokens > 0) ledger.debit(tokens, 'theft');
+  record('robbed');
+  return { cash, tokens };
+}
+
+/** The man on the pavement: what getting him off the street takes. */
+export const HOMELESS_GOAL = 500;
+
+/**
+ * Give him `n` cash -- never more than you have, never more than he still
+ * needs.  Returns what was given (0 if nothing could be).
+ */
+export function donate(n: number): number {
+  const left = HOMELESS_GOAL - L().donated;
+  const give = Math.max(0, Math.min(Math.floor(n), left, store.get().cash));
+  if (give <= 0 || !store.spendCash(give)) return 0;
+  edit((l) => (l.donated = Math.min(HOMELESS_GOAL, l.donated + give)));
+  store.flush();
+  return give;
 }
 
 export function startBegging(now = Date.now()): void {
