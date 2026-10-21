@@ -10,6 +10,8 @@ import { audio } from '../../core/audio';
 import { drawFurniture } from '../../art/furnitureArt';
 import { depthFor } from '../../art/player';
 import type { FurnitureDef } from '../../game/catalog';
+import { paintMirrorShine } from '../../art/shopFittings';
+import { MirrorTwin } from '../../ui/mirrorTwin';
 
 export class Piece {
   readonly g: Phaser.GameObjects.Graphics;
@@ -21,7 +23,19 @@ export class Piece {
     drawFurniture(this.g, def, x, y, flip);
     // wall things and rugs are behind everybody; the rest stand where they stand
     this.g.setDepth(def.wall ? 2 : def.cat === 'rug' ? 3 : depthFor(y));
+    // A wall mirror is Threads' mirror: you are in it when you stand at it,
+    // under its shine.
+    if (def.id === 'fur_mirror_wall') {
+      const L = Math.round(x - def.w / 2);
+      const T = Math.round(y - def.h);
+      this.twin = new MirrorTwin(scene, { x: L + 3, y: T + 3, w: def.w - 6, h: def.h - 6 }, 2, 9);
+      this.shine = scene.add.graphics().setDepth(2.2);
+      paintMirrorShine(this.shine, L, T, def.w, def.h);
+    }
   }
+
+  private twin: MirrorTwin | null = null;
+  private shine: Phaser.GameObjects.Graphics | null = null;
 
   /** The TV's picture or the lamp's light, on or off. */
   toggle(): boolean {
@@ -54,6 +68,8 @@ export class Piece {
 
   destroy(): void {
     this.g.destroy();
+    this.twin?.destroy();
+    this.shine?.destroy();
     this.glow?.destroy();
   }
 }

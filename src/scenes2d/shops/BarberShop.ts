@@ -328,7 +328,7 @@ export class BarberShop extends WalkRoom {
         depth: 6,
         label: () => '[E] SIT AND WAIT',
         use: () => {
-          this.sitOn(BENCH_X, FRONT_ROW + 1, 'chair', 1);
+          this.sitOn(BENCH_X, FRONT_ROW + 1, 'front', 1);
           this.say('YOU SIT AND WAIT. MOVE TO GET UP.');
         },
       },
@@ -344,7 +344,7 @@ export class BarberShop extends WalkRoom {
   private sitDown(): void {
     if (this.busy()) return;
     if (!this.player.seated) {
-      this.sitOn(CHAIR_X, BACK_ROW + 1, 'chair', 1);
+      this.sitOn(CHAIR_X, BACK_ROW + 1, 'front', 1);
       audio.sfx('door_open', 0.2);
     }
     this.locked = true;

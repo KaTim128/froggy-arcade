@@ -245,7 +245,16 @@ export class FurnitureStore extends WalkRoom {
       this.sitOn(piece.x, piece.y + 1, 'chair', 1);
       this.say(`YOU TRY THE ${def.name}. COMFY. MOVE TO GET UP.`);
     } else if (verb === 'lie') {
-      this.sitOn(piece.x - def.w / 4, piece.y + 1, 'floor', 1);
+      // laid out along it, head on the (left-hand) pillow, eyes shut, breathing
+      // -- not sat on the floor in front of it
+      const L = Math.round(piece.x - def.w / 2);
+      const flat = def.id === 'fur_sleeping_bag' || def.id === 'fur_mattress';
+      const headH = Math.max(6, Math.round(def.h * (def.id === 'fur_bed_premium' ? 0.52 : 0.42)));
+      const pw = Math.max(5, Math.round(def.w / 2) - 5);
+      const restY = flat ? piece.y - Math.round(def.h / 2) - 1 : piece.y - def.h + headH + 3;
+      const headX = flat ? L + 6 : L + 3 + pw / 2;
+      const feetX = Math.min(L + def.w - 2, Math.round(headX + 22));
+      this.lieOn(feetX, piece.y + 1, restY, 1);
       this.say(`YOU STRETCH OUT ON THE ${def.name}. MOVE TO GET UP.`);
     } else if (verb === 'switch') {
       this.say(piece.toggle() ? `THE ${def.name} IS ON.` : `THE ${def.name} IS OFF.`);

@@ -20,7 +20,7 @@ import { button, centerText, fadeIn, fadeToScene, pinToScreen, text } from '../.
 import { GAME_W, GAME_H } from '../../render/pixelScaler';
 import { TokenHud } from '../../ui/hud';
 import { attachPockets } from '../../ui/pockets';
-import { Player, depthFor, type Look } from '../../art/player';
+import { Player, depthFor, type Look, type SeatKind } from '../../art/player';
 import { froggyLayer } from '../../render/froggyLayer';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../../game/roomWalk';
 import { paintEntrance, ENTRANCE_W, ENTRANCE_H } from '../../art/exterior';
@@ -205,7 +205,7 @@ export abstract class WalkRoom extends Phaser.Scene {
       () => {
         const p = this.player;
         if (!p) return null;
-        if (!p.seated || !this.seatReturn) return p;
+        if ((!p.seated && !p.asleep) || !this.seatReturn) return p;
         const at = this.seatReturn;
         return { x: at.x, y: at.y, facing: p.facing, setPosition: (x: number, y: number) => p.setPosition(x, y), face: (d: number) => p.face(d) };
       },
@@ -405,10 +405,10 @@ export abstract class WalkRoom extends Phaser.Scene {
     // Set back against the wall rather than out on the shop floor, and a
     // counter's height (about two thirds of a person) with the keeper stood
     // up tall behind it: chest and shoulders over the top, not just a head.
-    const front = this.floorTop + 24;
+    const front = this.floorTop + 17;
     const top = front - 16;
     // the keeper, behind it: feet hidden by the counter, facing the doors
-    const keeper = new Player(this, x + 4, this.floorTop + 12, false, o.look);
+    const keeper = new Player(this, x + 4, this.floorTop + 5, false, o.look);
     keeper.sprite.setScale(-1, 1);
     const g = this.add.graphics().setDepth(depthFor(front));
     // its shadow on the floor
@@ -549,7 +549,7 @@ export abstract class WalkRoom extends Phaser.Scene {
     const dy = (held('down') ? 1 : 0) - (held('up') ? 1 : 0);
     const before = { x: this.player.x, y: this.player.y };
     if (dx || dy) this.walker.cancel();
-    if (this.player.seated && !dx && !dy && !this.walker.active) {
+    if ((this.player.seated || this.player.asleep) && !dx && !dy && !this.walker.active) {
       // sat down: stays sat until moved
     } else if (this.seatReturn) {
       // up off the seat, back to where you stood (never left inside it)
@@ -579,7 +579,19 @@ export abstract class WalkRoom extends Phaser.Scene {
    * Sit on something at (x, y) -- a chair, a sofa, the barber's chair -- or
    * lie on a bed (`floor`).  Any move gets up again, back where you stood.
    */
-  protected sitOn(x: number, y: number, kind: 'chair' | 'floor', facing = 1): void {
+  /**
+   * Lie down on something -- a bed, a mattress: feet at (x, y) so the body
+   * sorts in front of it, the body laid along it at `restY`.  Moving gets
+   * you up, back to where you stood, as getting off a seat does.
+   */
+  protected lieOn(x: number, y: number, restY: number, facing = 1): void {
+    this.walker.cancel();
+    this.seatReturn = { x: this.player.x, y: this.player.y };
+    this.player.setPosition(x, y);
+    this.player.lie(facing, restY);
+  }
+
+  protected sitOn(x: number, y: number, kind: SeatKind, facing = 1): void {
     this.walker.cancel();
     this.seatReturn = { x: this.player.x, y: this.player.y };
     this.player.setPosition(x, y);
@@ -592,11 +604,11 @@ export abstract class WalkRoom extends Phaser.Scene {
    */
   protected refreshPlayer(look?: Look): void {
     const { x, y } = this.player;
-    const seated = this.player.seated;
+    const seated = this.player.seatKind;
     this.player.sprite.destroy();
     this.player = look ? new Player(this, x, y, false, look) : new Player(this, x, y);
     this.player.setSurface('carpet');
-    if (seated) this.player.sit('chair', { facing: 1 });
+    if (seated) this.player.sit(seated, { facing: 1 });
     if (this.worldW > GAME_W) this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
   }
 

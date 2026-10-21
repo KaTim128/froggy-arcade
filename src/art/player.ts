@@ -260,6 +260,9 @@ const PARTS: Record<string, Part> = {
   },
 };
 const FIG_H = 25;
+
+/** How someone is sat: see `Player.sit`. */
+export type SeatKind = 'floor' | 'chair' | 'front';
 const MID = 6;
 /** Drawn back to front. */
 const ORDER = ['backArm', 'backLeg', 'frontLeg', 'torso', 'head', 'eyes', 'frontArm'] as const;
@@ -366,7 +369,7 @@ export class Player {
   private dir = 1;
   private blinkT = 2.5;
   /** Sitting: how, and the folded legs (and the can) drawn for it. */
-  private seat: { kind: 'floor' | 'chair'; can: boolean } | null = null;
+  private seat: { kind: SeatKind; can: boolean } | null = null;
   private lap: Phaser.GameObjects.Container | null = null;
   /** What the lap holds out in front of the body (the can). */
   private lapFront: Phaser.GameObjects.Container | null = null;
@@ -466,7 +469,8 @@ export class Player {
     };
     // seated: the body comes down onto the seat, the legs are folded
     // forward and drawn separately (see `sit`)
-    const drop = this.seat ? (this.seat.kind === 'floor' ? 8 : 5) : 0;
+    // (facing out of a chair you sit taller: the thighs come towards you, not down)
+    const drop = this.seat ? (this.seat.kind === 'floor' ? 8 : this.seat.kind === 'front' ? 2 : 5) : 0;
     for (const [name, p] of this.parts) {
       const [ox, oy] = off[name];
       const leg = name === 'backLeg' || name === 'frontLeg';
@@ -480,10 +484,13 @@ export class Player {
 
   /**
    * Sit down: on the floor (legs out in front, as a beggar sits on his bit of
-   * cardboard) or on a chair (thighs level, shins down).  With `can`, a tin
-   * held out in the front hand.  Any walk or `stand` gets back up.
+   * cardboard), on a chair seen side-on (thighs level, shins down), or
+   * `front`: in a chair that faces you -- the barber's, a bench -- the lap
+   * coming straight at you over the seat and both shins down to the boots.
+   * With `can`, a tin held out in the front hand.  Any walk or `stand` gets
+   * back up.
    */
-  sit(kind: 'floor' | 'chair', opts: { can?: boolean; facing?: number } = {}): void {
+  sit(kind: SeatKind, opts: { can?: boolean; facing?: number } = {}): void {
     if (opts.facing) this.dir = opts.facing > 0 ? 1 : -1;
     this.seat = { kind, can: !!opts.can };
     this.bobT = 0;
@@ -492,6 +499,11 @@ export class Player {
 
   get seated(): boolean {
     return this.seat !== null;
+  }
+
+  /** How they are sat, if they are. */
+  get seatKind(): SeatKind | null {
+    return this.seat?.kind ?? null;
   }
 
   private drawLap(): void {
@@ -523,6 +535,19 @@ export class Player {
       block(10, -5, 2, 4, this.colOf('K'));
       lap.add(scene.add.rectangle(d > 0 ? 10 : -12, -5, 1, 2, c(this.colOf('k'))).setOrigin(0, 0));
       block(10, -1, 2, 1, this.colOf('W'));
+    } else if (s.kind === 'front') {
+      // facing you: the thighs foreshortened to a short block across the lap,
+      // lit along its top, a shadow between the knees; then both shins
+      // straight down from the edge of the seat, and the boots on the floor
+      block(-4, -6, 8, 2, this.colOf('J'));
+      lap.add(scene.add.rectangle(-4, -6, 8, 1, c(this.colOf('H'))).setOrigin(0, 0));
+      lap.add(scene.add.rectangle(0, -5, 1, 1, c(this.colOf('j'))).setOrigin(0, 0));
+      block(-3, -4, 2, 3, this.colOf('j'));
+      block(1, -4, 2, 3, this.colOf('J'));
+      block(-4, -1, 3, 1, this.colOf('K'));
+      block(1, -1, 3, 1, this.colOf('K'));
+      lap.add(scene.add.rectangle(d > 0 ? -4 : -1, -1, 1, 1, c(this.colOf('k'))).setOrigin(0, 0));
+      lap.add(scene.add.rectangle(d > 0 ? 1 : 3, -1, 1, 1, c(this.colOf('k'))).setOrigin(0, 0));
     } else {
       // knees forward at seat height, shins straight down
       block(-1, -9, 8, 3, this.colOf('J'));
@@ -551,14 +576,16 @@ export class Player {
    * back along the floor, head towards `facing`'s other side, eyes shut, the
    * chest rising and falling.  `getUp` (or any `stand`) stands back up.
    */
-  lie(facing = 1): void {
+  lie(facing = 1, restY?: number): void {
     this.getUp();
     this.dir = facing > 0 ? 1 : -1;
     this.pose(0, 0);
     this.lying = true;
-    // turned about the feet, then lowered so the body rests on the ground
+    // turned about the feet, then lowered so the body rests on the ground --
+    // or, given `restY`, laid along a mattress at that height
     this.sprite.setRotation(this.dir > 0 ? -Math.PI / 2 : Math.PI / 2);
-    this.sprite.y -= 3;
+    if (restY !== undefined) this.sprite.y = restY;
+    else this.sprite.y -= 3;
     this.lyingY = this.sprite.y;
     this.sprite.scene.tweens.add({ targets: this.sprite, scaleY: { from: 1, to: 1.06 }, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
   }

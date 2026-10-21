@@ -9,7 +9,8 @@
  */
 
 import Phaser from 'phaser';
-import { paintMirror, paintMirrorShine, paintPlate } from '../../art/shopFittings';
+import { MIRROR_GLASS, paintMirror, paintMirrorShine, paintPlate } from '../../art/shopFittings';
+import { MirrorTwin } from '../../ui/mirrorTwin';
 import { PALETTE } from '../../render/palette';
 import { store } from '../../core/state';
 import { text } from '../../core/ui';
@@ -41,6 +42,8 @@ const FIT_TOP = 84;
 const MIRROR_X = 258;
 /** The mirror on the wall: its frame, top to bottom (shorter than it was). */
 const MIRROR = { w: 24, top: 46, h: 40 };
+/** The scarf hooks: at a standing shoulder (the wall's foot is at 100, a person 25 tall). */
+const SCARF_Y = 70;
 
 /** A bald, pale shop dummy, wearing `top`. */
 function mannequin(top: CosmeticDef): Look {
@@ -54,33 +57,6 @@ function mannequin(top: CosmeticDef): Look {
 export class ClothesStore extends WalkRoom {
   private spots: Array<{ c: CosmeticDef; x: number; y: number; depth: number; wall?: boolean }> = [];
   private counter: Fixture | null = null;
-  /** You, in the mirror: a twin, clipped to its glass (see `update`). */
-  private twin: Player | null = null;
-  private twinOf: Player | null = null;
-  private glassMask: Phaser.Display.Masks.GeometryMask | null = null;
-
-  update(t: number, delta: number): void {
-    super.update(t, delta);
-    const p = this.player;
-    if (!p || !this.glassMask) return;
-    // (made again whenever you are: a change of clothes is a new you)
-    if (this.twinOf !== p) {
-      this.twin?.sprite.destroy();
-      this.twin = new Player(this, p.x, 0, false);
-      this.twin.sprite.setMask(this.glassMask);
-      this.twinOf = p;
-    }
-    const tw = this.twin!;
-    // (the glass shows the shop, and you, from the waist up as you near it)
-    const near = Math.abs(p.x - MIRROR_X) < MIRROR.w;
-    tw.sprite.setVisible(near && p.sprite.visible);
-    if (!near) return;
-    tw.setPosition(p.x, MIRROR.top + MIRROR.h + 2);
-    tw.sprite.setDepth(2.1);
-    // the other way round, and walking when you walk
-    tw.sprite.setScale(-p.sprite.scaleX || -1, 1);
-    tw.face(p.facing);
-  }
 
   constructor() {
     super('ClothesStore');
@@ -184,36 +160,38 @@ export class ClothesStore extends WalkRoom {
     hs.fillStyle(INK, 1).fillEllipse(hx, FRONT_ROW - 2, 20, 6);
     hs.fillStyle(0x4a3326, 1).fillEllipse(hx, FRONT_ROW - 2, 18, 4);
     hs.fillStyle(0x6a4a34, 1).fillRect(hx - 7, FRONT_ROW - 4, 12, 1);
-    hs.fillStyle(INK, 1).fillRect(hx - 2, FRONT_ROW - 34, 4, 32);
-    hs.fillStyle(0x4a3326, 1).fillRect(hx - 1, FRONT_ROW - 33, 2, 30);
-    hs.fillStyle(0x6a4a34, 1).fillRect(hx - 1, FRONT_ROW - 33, 1, 30);
-    hs.fillStyle(0xd8a838, 1).fillRect(hx - 2, FRONT_ROW - 36, 4, 3);
-    hs.fillStyle(0xf0d070, 1).fillRect(hx - 1, FRONT_ROW - 36, 2, 1);
+    // (as tall as a person, and no taller: the hats on it at head height)
+    hs.fillStyle(INK, 1).fillRect(hx - 2, FRONT_ROW - 26, 4, 24);
+    hs.fillStyle(0x4a3326, 1).fillRect(hx - 1, FRONT_ROW - 25, 2, 22);
+    hs.fillStyle(0x6a4a34, 1).fillRect(hx - 1, FRONT_ROW - 25, 1, 22);
+    hs.fillStyle(0xd8a838, 1).fillRect(hx - 2, FRONT_ROW - 28, 4, 3);
+    hs.fillStyle(0xf0d070, 1).fillRect(hx - 1, FRONT_ROW - 28, 2, 1);
     const pegs = [
-      { x: hx - 9, y: FRONT_ROW - 29, from: FRONT_ROW - 22 },
-      { x: hx + 9, y: FRONT_ROW - 20, from: FRONT_ROW - 13 },
+      { x: hx - 6, y: FRONT_ROW - 22, from: FRONT_ROW - 17 },
+      { x: hx + 6, y: FRONT_ROW - 15, from: FRONT_ROW - 10 },
     ];
     for (const pg of pegs) {
       const dir = Math.sign(pg.x - hx);
-      for (let k = 0; k <= 7; k++) {
+      for (let k = 0; k <= 4; k++) {
         const px = hx + dir * (1 + k);
         const py = pg.from - k;
         hs.fillStyle(INK, 1).fillRect(px - 1, py - 1, 3, 3);
       }
-      for (let k = 0; k <= 7; k++) {
+      for (let k = 0; k <= 4; k++) {
         const px = hx + dir * (1 + k);
         const py = pg.from - k;
         hs.fillStyle(0x6a4a34, 1).fillRect(px, py, 1, 1);
       }
     }
     // THE HATS, AS THEY ARE WORN.  Each is drawn from its own crown rows
-    // (catalog CROWNS) -- the very pixels that sit on your head, twice size:
+    // (catalog CROWNS) -- the very pixels that sit on your head, at the size
+    // they sit on it (they were drawn twice that, half again the size of a head):
     // the beanie's dome and turned-up cuff, the cap's crown and its peak --
     // set down over a round wooden head-form on the end of its peg.
     hats.slice(0, 2).forEach((c, i) => {
       const pg = pegs[i];
       const rows = (CROWNS[c.id] ?? CROWNS.cos_beanie).filter((r) => r.includes('B') || r.includes('b'));
-      const K = 2;
+      const K = 1;
       const colOf = (ch: string) => (ch === 'B' ? c.cols.B ?? 0x444444 : c.cols.b ?? 0x666666);
       const cells: Array<[number, number, string]> = [];
       rows.forEach((row, ry) => [...row].forEach((ch, rx) => ch !== '.' && cells.push([rx, ry, ch])));
@@ -226,12 +204,12 @@ export class ClothesStore extends WalkRoom {
       // THE HAT BLOCK it is worn on: a pale wooden head-form the width of
       // the cuff, rounded under it, so the hat sits as it does on a head
       // (the dome over the top, the cuff round the brow) -- not a flat lid
-      const bw = 14;
+      const bw = 8;
       const by = pg.y + 1;
-      hs.fillStyle(INK, 1).fillEllipse(pg.x, by + 3, bw + 2, 13);
-      hs.fillStyle(0xc8a878, 1).fillEllipse(pg.x, by + 3, bw, 11);
-      hs.fillStyle(0xe0c49a, 1).fillRect(pg.x - 5, by + 1, 2, 4);
-      hs.fillStyle(0xa08058, 1).fillRect(pg.x + 3, by + 2, 2, 5);
+      hs.fillStyle(INK, 1).fillEllipse(pg.x, by + 2, bw + 2, 8);
+      hs.fillStyle(0xc8a878, 1).fillEllipse(pg.x, by + 2, bw, 6);
+      hs.fillStyle(0xe0c49a, 1).fillRect(pg.x - 3, by + 1, 1, 2);
+      hs.fillStyle(0xa08058, 1).fillRect(pg.x + 2, by + 1, 1, 3);
       // ink round it, then the fills, lit top-left and shaded on the right
       for (const [rx, ry] of cells) {
         for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -267,20 +245,23 @@ export class ClothesStore extends WalkRoom {
       const dark = Phaser.Display.Color.ValueToColor(wool).darken(22).color;
       const lit = Phaser.Display.Color.ValueToColor(wool).lighten(16).color;
       const ink = 0x14100c;
+      // the hook at shoulder height, the ends hanging to the waist (they were
+      // hung up by the ceiling, a metre over anybody's head)
+      const Y = SCARF_Y;
       // the hook: a brass plate and its curl
-      sc.fillStyle(ink, 1).fillRect(x - 1, 50, 4, 3);
-      sc.fillStyle(0xd8a838, 1).fillRect(x, 51, 2, 1);
+      sc.fillStyle(ink, 1).fillRect(x - 1, Y, 4, 3);
+      sc.fillStyle(0xd8a838, 1).fillRect(x, Y + 1, 2, 1);
       // the loop over the hook
-      sc.fillStyle(ink, 1).fillRect(x - 3, 52, 8, 4);
-      sc.fillStyle(wool, 1).fillRect(x - 2, 53, 6, 2);
-      sc.fillStyle(lit, 1).fillRect(x - 2, 53, 4, 1);
+      sc.fillStyle(ink, 1).fillRect(x - 3, Y + 2, 8, 4);
+      sc.fillStyle(wool, 1).fillRect(x - 2, Y + 3, 6, 2);
+      sc.fillStyle(lit, 1).fillRect(x - 2, Y + 3, 4, 1);
       // the two ends, two pixels wide: the long one in front
       const end = (ex: number, len: number, front: boolean) => {
-        sc.fillStyle(ink, 1).fillRect(ex - 1, 55, 4, len + 2);
-        sc.fillStyle(front ? wool : dark, 1).fillRect(ex, 55, 2, len);
-        if (front) sc.fillStyle(lit, 1).fillRect(ex, 55, 1, len);
-        sc.fillStyle(dark, 1).fillRect(ex, 55 + len - 3, 2, 1);
-        sc.fillStyle(front ? wool : dark, 1).fillRect(ex, 55 + len, 1, 2).fillRect(ex + 1, 55 + len, 1, 1);
+        sc.fillStyle(ink, 1).fillRect(ex - 1, Y + 5, 4, len + 2);
+        sc.fillStyle(front ? wool : dark, 1).fillRect(ex, Y + 5, 2, len);
+        if (front) sc.fillStyle(lit, 1).fillRect(ex, Y + 5, 1, len);
+        sc.fillStyle(dark, 1).fillRect(ex, Y + 5 + len - 3, 2, 1);
+        sc.fillStyle(front ? wool : dark, 1).fillRect(ex, Y + 5 + len, 1, 2).fillRect(ex + 1, Y + 5 + len, 1, 1);
       };
       end(x + 2, 9, false);
       end(x - 1, 12, true);
@@ -297,12 +278,10 @@ export class ClothesStore extends WalkRoom {
     // glass, that walks across it as you walk past -- then the shine over
     // the top of the lot, the way glass catches the shop lights.
     const mx = MIRROR_X - MIRROR.w / 2;
-    paintMirror(this.add.graphics().setDepth(2), mx, MIRROR.top, MIRROR.w, MIRROR.h, { glassTop: 0xeef2f4, glassFoot: 0xe0d4da });
-    const gm = this.make.graphics({}, false);
-    gm.fillStyle(0xffffff, 1).fillRect(mx + 3, MIRROR.top + 3, MIRROR.w - 6, MIRROR.h - 6);
-    this.glassMask = gm.createGeometryMask();
+    paintMirror(this.add.graphics().setDepth(2), mx, MIRROR.top, MIRROR.w, MIRROR.h, MIRROR_GLASS);
+    // (only while you are at it: see MirrorTwin)
+    new MirrorTwin(this, { x: mx + 3, y: MIRROR.top + 3, w: MIRROR.w - 6, h: MIRROR.h - 6 }, 2, 2);
     paintMirrorShine(this.add.graphics().setDepth(2.2), mx, MIRROR.top, MIRROR.w, MIRROR.h);
-    this.twin = null;
 
     // ---- the fitting room, in the middle of the shop: a booth against the
     // back wall, its curtain, and its name on the pelmet
