@@ -1,6 +1,6 @@
 /**
  * WHAT AN ATTACK DOES, SAID PLAINLY.  Every attack in Creature Clash is one
- * of eight kinds, and the arena runs each kind one way (see CreatureArena
+ * of thirteen kinds with one special on top (creatures `Mod`), and the arena runs each kind one way (see CreatureArena
  * `fire`); this says the same thing in words -- the kind (melee, projectile,
  * area, trap...), who it can hit (one target, several, everyone near), how
  * far it reaches in arena pixels, the damage and the cooldown -- and gives it
@@ -10,7 +10,8 @@
  * way, so what a card says is what the attack does.
  */
 
-import { ELEMENTS, type Attack, type AttackKind, type Element } from './creatures';
+import { ELEMENTS, type Attack, type AttackKind, type Element, type Mod } from './creatures';
+import { SPECIALS } from './specials';
 
 export interface AttackInfo {
   /** One word for the button. */
@@ -31,6 +32,8 @@ export interface AttackInfo {
   use: string;
   /** What the element adds when it hits. */
   effect: string;
+  /** What this move does that no other move does, in a line ('' for a plain one). */
+  special: string;
 }
 
 /** How long a shot flies (CreatureArena: `life` on a shot). */
@@ -69,10 +72,73 @@ export const MEND_FRAC = 0.22;
 /** A dropped piece of cover stands this long. */
 export const WALL_S = 7;
 
+// ---- THE SPECIALS' NUMBERS (CreatureArena reads the same ones)
+export const POISON_S = 4;
+export const POISON_PER_S = 3;
+export const MARK_S = 4;
+export const MARK_MUL = 1.5;
+export const SHRED_S = 3;
+export const SHRED_MUL = 1.25;
+export const EXECUTE_MUL = 1.6;
+export const DRAIN_FRAC = 0.4;
+export const HOLD_S = 0.8;
+export const SILENCE_S = 1.2;
+export const WEAK_S = 3;
+export const WEAK_MUL = 0.7;
+export const CHILL_S = 3;
+export const CHILL_SPEED = 0.5;
+export const STAGGER_S = 0.3;
+export const LINGER_S = 3;
+export const LINGER_DMG = 2;
+export const HASTE_S = 2;
+export const HASTE_SPEED = 1.4;
+export const GUARD_S = 1.5;
+export const REGEN_S = 4;
+export const REGEN_PER_S = 3;
+export const THORNS_DMG = 6;
+export const STRIKE_DMG = 10;
+
+/** Every special, said in a line a player can act on. */
+export const MODS: Record<Mod, { name: string; desc: string }> = {
+  none: { name: '', desc: '' },
+  poison: { name: 'POISON', desc: `POISONS: ${POISON_PER_S} DAMAGE A SECOND FOR ${POISON_S}S` },
+  mark: { name: 'MARK', desc: `MARKS THEM: YOUR NEXT HIT DEALS +${Math.round((MARK_MUL - 1) * 100)}%` },
+  shred: { name: 'SHRED', desc: `THEY TAKE ${Math.round((SHRED_MUL - 1) * 100)}% MORE DAMAGE FOR ${SHRED_S}S` },
+  execute: { name: 'EXECUTE', desc: `+${Math.round((EXECUTE_MUL - 1) * 100)}% DAMAGE IF THEY ARE UNDER 40% HEALTH` },
+  drain: { name: 'DRAIN', desc: `YOU HEAL ${Math.round(DRAIN_FRAC * 100)}% OF THE DAMAGE IT DEALS` },
+  pull: { name: 'PULL', desc: 'DRAGS THEM TOWARDS YOU' },
+  push: { name: 'KNOCKBACK', desc: 'KNOCKS THEM A LONG WAY BACK' },
+  root: { name: 'HOLD', desc: `HOLDS THEM IN PLACE FOR ${HOLD_S}S` },
+  silence: { name: 'SILENCE', desc: `ADDS ${SILENCE_S}S TO ALL THEIR COOLDOWNS` },
+  weaken: { name: 'WEAKEN', desc: `THEIR HITS DEAL ${Math.round((1 - WEAK_MUL) * 100)}% LESS FOR ${WEAK_S}S` },
+  chill: { name: 'CHILL', desc: `HALVES THEIR SPEED FOR ${CHILL_S}S` },
+  stagger: { name: 'STAGGER', desc: 'INTERRUPTS THEM WITH A SHORT STUN' },
+  crit: { name: 'CRITICAL', desc: '1 IN 4 CHANCE TO DEAL DOUBLE DAMAGE' },
+  homing: { name: 'HOMING', desc: 'CURVES TOWARDS THEM IN FLIGHT' },
+  bounce: { name: 'RICOCHET', desc: 'BOUNCES OFF COVER ONCE' },
+  wave: { name: 'WEAVING', desc: 'WEAVES SIDE TO SIDE: HARD TO DODGE' },
+  boomerang: { name: 'BOOMERANG', desc: 'FLIES OUT AND BACK: CAN HIT TWICE' },
+  grow: { name: 'SWELLING', desc: 'GROWS AND HITS HARDER THE FURTHER IT FLIES' },
+  drill: { name: 'PIERCING', desc: 'BORES STRAIGHT THROUGH COVER' },
+  split: { name: 'SHATTER', desc: 'BREAKS INTO THREE SHARDS WHEN IT STOPS' },
+  linger: { name: 'SCORCH', desc: `LEAVES A PATCH THAT HURTS FOR ${LINGER_S}S` },
+  echo: { name: 'ECHO', desc: 'GOES OFF AGAIN A MOMENT LATER, HALF AS HARD' },
+  vortex: { name: 'VORTEX', desc: 'SUCKS THEM IN TOWARDS THE MIDDLE' },
+  haste: { name: 'HASTE', desc: `YOU MOVE ${Math.round((HASTE_SPEED - 1) * 100)}% FASTER FOR ${HASTE_S}S AFTER` },
+  guard: { name: 'GUARD', desc: `BLOCKS THE NEXT HIT ON YOU WITHIN ${GUARD_S}S` },
+  regen: { name: 'REGROW', desc: `YOU HEAL ${REGEN_PER_S} A SECOND FOR ${REGEN_S}S` },
+  cleanse: { name: 'CLEANSE', desc: 'SHAKES OFF BURNS, POISON, SLOWS AND HOLDS' },
+  reflect: { name: 'REFLECT', desc: 'SHOTS THAT HIT IT FLY BACK AT THEM' },
+  thorns: { name: 'THORNS', desc: `ANYTHING THAT HITS IT TAKES ${THORNS_DMG} DAMAGE` },
+  strike: { name: 'STRIKE', desc: `DEALS ${STRIKE_DMG} DAMAGE ALL ROUND WHERE YOU LAND` },
+};
+
 export function attackInfo(a: Attack, el: Element, scale = 1): AttackInfo {
   const effect = a.dmg > 0 ? ELEMENTS[el].effect : '';
   const w = WORDS[a.kind];
-  const base = { word: w.word, emoji: w.emoji, dmg: a.dmg, cd: a.cd, effect };
+  // (a special says exactly what it does; a plain attack has nothing to add)
+  const special = a.sp ? SPECIALS[a.sp]?.desc ?? '' : MODS[a.mod].desc;
+  const base = { word: w.word, emoji: w.emoji, dmg: a.dmg, cd: a.cd, effect, special };
   switch (a.kind) {
     case 'bolt': {
       const r = Math.round(a.reach * SHOT_LIFE);
@@ -126,8 +192,10 @@ export function attackCard(a: Attack, el: Element, scale = 1): string[] {
   const i = attackInfo(a, el, scale);
   const out = [`TYPE: ${i.type}`, `HITS: ${i.target}`, `RANGE: ${i.range}`];
   out.push(`DAMAGE: ${a.dmg > 0 ? `${a.dmg}` : 'NONE'}    COOLDOWN: ${a.cd}S`);
-  if (i.effect) out.push(`ON HIT: ${i.effect}`);
-  out.push(`USE: ${i.use}`);
+  out.push(a.sp ? `SPECIAL: ${i.special}` : 'PLAIN ATTACK - NO SPECIAL');
+  if (i.effect) out.push(`ELEMENT: ${i.effect}`);
+  // (a special's line already says what it is for; a plain attack gets the kind's advice)
+  if (!a.sp) out.push(`USE: ${i.use}`);
   return out;
 }
 

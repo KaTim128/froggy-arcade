@@ -140,6 +140,8 @@ export class CreatureHub extends Phaser.Scene {
       const m = centerText(this, GAME_W / 2, GAME_H - 7, this.msg, PALETTE.gold);
       L.add(m);
       backPlate(this, m, PALETTE.gold);
+    } else if (this.screen === 'home' || this.screen === 'starter') {
+      L.add(text(this, 8, GAME_H - 10, 'TAP A MOVE (?) TO READ WHAT IT DOES', 0x8a90b0));
     }
   }
 
@@ -248,27 +250,35 @@ export class CreatureHub extends Phaser.Scene {
     const g = this.add.graphics();
     L.add(g);
     for (const a of c.attacks) {
+      // TAP A MOVE TO READ IT.  Each move is a button -- a raised chip with a
+      // "?" on the end that lights up under the pointer -- and the card it
+      // opens says everything: what kind of attack it is, what it hits, how
+      // far, how hard, how often, its special, and its element's effect.
+      // Nobody should have to buy a battle to find out.
+      // (laid out so the longest name there is -- eleven letters, 66px, see
+      // creatures MOVE_NAME_MAX -- sits clear of the icon and the "?")
+      const chip = this.add.rectangle(x + 2, ty - 1, w - 4, 9, 0x232a4a).setOrigin(0, 0).setStrokeStyle(1, 0x3a4470);
+      L.addAt(chip, L.getIndex(g));
+      // (an icon is 11px wide, centred: x+3..x+13; the name starts after it)
       drawAttackIcon(g, a.kind, x + 8, ty + 3, el.light);
-      const name = text(this, x + 15, ty, a.name, PALETTE.cream).setAlpha(0.85);
+      const name = text(this, x + 15, ty, a.name, PALETTE.cream);
       L.add(name);
-      // the damage, at the right -- where the name leaves room for it
+      // the "?" that says there is more to read
+      const qx = x + w - 9;
+      L.add(this.add.rectangle(qx - 1, ty - 1, 7, 9, 0x3a4470).setOrigin(0, 0));
+      L.add(text(this, qx, ty, '?', PALETTE.gold));
+      // the damage, left of the "?" -- where the name leaves room for it
       if (a.dmg) {
-        const d = text(this, x + w - 4, ty, String(a.dmg), PALETTE.gold).setOrigin(1, 0);
+        const d = text(this, qx - 4, ty, String(a.dmg), PALETTE.gold).setOrigin(1, 0);
         if (name.x + name.width + 2 <= d.x - d.width) L.add(d);
         else d.destroy();
       }
-      // TAP A MOVE TO READ IT.  Every line of what it does is on the card
-      // that opens: what kind of attack it is, what it can hit, how far it
-      // reaches, its damage, its cooldown, what its element adds on a hit,
-      // and what it is FOR.  Nobody should have to buy a battle to find out.
-      const row = this.add.rectangle(x + 4, ty - 1, w - 8, 9, 0xffffff, 0.001).setOrigin(0, 0);
-      row.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.showMove(c, a));
-      L.add(row);
-      ty += 9;
+      chip.setInteractive({ useHandCursor: true });
+      chip.on('pointerover', () => (chip.setFillStyle(0x34407a).setStrokeStyle(1, PALETTE.gold), name.setTint(PALETTE.gold), audio.sfx('ui_hover')));
+      chip.on('pointerout', () => (chip.setFillStyle(0x232a4a).setStrokeStyle(1, 0x3a4470), name.setTint(PALETTE.cream)));
+      chip.on('pointerdown', () => (audio.sfx('ui_blip'), this.showMove(c, a)));
+      ty += 10;
     }
-    // only where the card has the room: on the narrow ones the moves run
-    // to the bottom edge and the hint would be printed over the card below
-    if (ty + 9 <= y + h) L.add(text(this, x + 4, ty + 1, 'TAP A MOVE TO READ IT', 0x6a7090).setMaxWidth(w - 8));
   }
 
   /**
@@ -326,9 +336,9 @@ export class CreatureHub extends Phaser.Scene {
     L.add(centerText(this, GAME_W / 2, 24, 'CHOOSE YOUR FIRST CREATURE - FREE', PALETTE.cream));
     STARTERS.forEach((id, i) => {
       const c = creatureById(id)!;
-      const x = 14 + i * 102;
-      this.card(c, x, 32, 94, 108);
-      L.add(button(this, x + 47, 152, 'CHOOSE', () => {
+      const x = 10 + i * 102;
+      this.card(c, x, 32, 96, 108);
+      L.add(button(this, x + 48, 152, 'CHOOSE', () => {
         const r = claimStarter(id);
         this.say(r);
         if (r.ok) this.screen = 'home';
@@ -347,9 +357,10 @@ export class CreatureHub extends Phaser.Scene {
     L.add(text(this, 196, 23, `L ${c.losses}`, 0xff8a8a).setOrigin(1, 0));
     for (let i = 0; i < MAX_OWNED; i++) {
       const o = c.owned[i];
-      const x = 8 + i * 98;
+      // (96 wide: room on a move's row for the longest name between its icon and its "?")
+      const x = 4 + i * 98;
       const y = 33;
-      const w = 92;
+      const w = 96;
       const h = 116;
       if (!o) {
         const slot = this.add.rectangle(x, y, w, h, 0x12152a).setOrigin(0, 0).setStrokeStyle(1, 0x2a2e48);
@@ -380,7 +391,7 @@ export class CreatureHub extends Phaser.Scene {
     const busy = !!c.pending;
     const run = c.ladder;
     this.tile(mx, 35, mw, 28, 'ZONE BATTLE', act ? `${BATTLE_COST} IN - WIN ${BATTLE_WIN}` : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => this.go('map'), !act);
-    this.tile(mx, 67, mw, 28, 'LADDER', run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `${LADDER_COST} TOKENS A RUN`, PALETTE.gold, (g, x, y, col) => {
+    this.tile(mx, 67, mw, 28, 'LADDER', run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
       // three rungs
       g.fillStyle(col, 1).fillRect(x - 5, y - 7, 2, 14).fillRect(x + 3, y - 7, 2, 14);
       for (const k of [-4, 0, 4]) g.fillRect(x - 3, y + k, 6, 1);
