@@ -41,8 +41,10 @@ import { ensureKeyInPocket, heldItems } from '../game/inventory';
 import { Pedestrians } from '../art/pedestrians';
 import { paintWantedPoster } from '../art/wantedPoster';
 import { earnBadge } from '../game/badges';
-import { moveInto213, payRent, rent, rentInDays, RENT_DAYS, RENT_PRICE } from '../game/life';
-import { SUNRISE_HOUR, twelveHour, BEG_MS, begNextMs, canBeg, clock, collectBegging, sleep, sleepPlace, startBegging, stopBegging, visit } from '../game/life';
+import { evict, payDebt, moveInto213, payRent, rent, rentInDays, RENT_DAYS, RENT_PRICE } from '../game/life';
+import { broke, donate, streetTheft, HOMELESS_GOAL, NIGHT_HOUR } from '../game/life';
+import { HOMELESS_LOOK } from '../art/staffLooks';
+import { SUNRISE_HOUR, twelveHour, BEG_MS, begNextMs, canBeg, clock, collectBegging, sleep, startBegging, stopBegging, visit } from '../game/life';
 import { nightfallOnce, onPhaseTurn } from '../game/dayNight';
 import { openTalkPanel, speak } from '../ui/talkPanel';
 import { backPlate, fitPrompt, SUBTITLE_Y } from '../ui/plate';
@@ -54,7 +56,15 @@ const WALK_Y = KERB_Y;
 const ALLEY_X = GAME_W - 24;
 /** The alley is open to you once you have come through the night in the arcade. */
 const alleyOpen = (): boolean => store.get().froggyGone || backWayOpen();
-type Spot = 'door' | 'man' | 'alley' | 'beg' | null;
+type Spot = 'door' | 'man' | 'alley' | 'beg' | 'oldman' | null;
+/**
+ * THE OLD MAN: sat on a blanket against the arcade's wall, left of your
+ * pitch -- in the same floor pose you beg in.  He warns you about the
+ * thieves, and takes what you can spare towards getting off the street
+ * (life `donate`, 500 in all); once it is all given he is gone for good.
+ */
+const OLD_X = 78;
+const OLD_SPEAKER = { name: 'OLD MAN', color: 0xe8a050, well: 0x2a1a10, look: HOMELESS_LOOK };
 /**
  * THE PITCH: the patch of pavement against the arcade's wall, just left of
  * its doors, where you can sit with a can.  It used to sit out by the kerb
@@ -238,6 +248,7 @@ export class ExteriorDay extends Phaser.Scene {
     if (time !== 'midnight') {
       this.people = new Pedestrians(this, GAME_W, WALK_Y + 3, 3, false);
       paintBegSpot(this, BEG_X, BEG_Y);
+      this.paintOldMan();
       // the can, on the cardboard until somebody sits down with it
       this.cup = paintBegCup(this, BEG_X, BEG_Y);
       this.add.zone(BEG_X - 14, BEG_Y - 30, 28, 36).setOrigin(0, 0).setDepth(61).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.send('beg'));
@@ -275,6 +286,99 @@ export class ExteriorDay extends Phaser.Scene {
   }
 
   private time0: 'day' | 'evening' | 'midnight' = 'day';
+  private oldMan: Player | null = null;
+
+  /** Him, his blanket and his cardboard sign -- while he still needs to be here. */
+  private paintOldMan(): void {
+    this.oldMan = null;
+    if (store.get().life.donated >= HOMELESS_GOAL) return;
+    const g = this.add.graphics().setDepth(55);
+    // a grey blanket folded under him, and his sign propped by his knee
+    // (facing left, his legs out towards the kerb's end: clear of your pitch)
+    g.fillStyle(0x14100c, 1).fillRect(OLD_X - 16, BEG_Y - 2, 24, 5);
+    g.fillStyle(0x5a5a66, 1).fillRect(OLD_X - 15, BEG_Y - 1, 22, 3);
+    g.fillStyle(0x7a7a86, 1).fillRect(OLD_X - 15, BEG_Y - 1, 22, 1);
+    for (let k = OLD_X - 13; k < OLD_X + 6; k += 5) g.fillStyle(0x3a3a46, 1).fillRect(k, BEG_Y, 1, 2);
+    // his sign, propped against the wall behind him
+    const sg = this.add.graphics().setDepth(54);
+    sg.fillStyle(0x14100c, 1).fillRect(OLD_X + 1, BEG_Y - 24, 12, 11);
+    sg.fillStyle(0xb08a58, 1).fillRect(OLD_X + 2, BEG_Y - 23, 10, 9);
+    sg.fillStyle(0x3a2a18, 1).fillRect(OLD_X + 4, BEG_Y - 21, 6, 1).fillRect(OLD_X + 3, BEG_Y - 19, 8, 1).fillRect(OLD_X + 4, BEG_Y - 17, 5, 1);
+    const p = new Player(this, OLD_X, BEG_Y, this.lifeDark, HOMELESS_LOOK);
+    p.sit('floor', { facing: -1 });
+    p.sprite.setDepth(56);
+    this.oldMan = p;
+    this.add.zone(OLD_X - 14, BEG_Y - 26, 24, 30).setOrigin(0, 0).setDepth(61).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.send('oldman'));
+  }
+
+  /**
+   * TALKING TO HIM: the warning about the night, where his savings have got
+   * to, and what you can give.  Never more than you have, never more than
+   * he still needs.
+   */
+  private oldManTalk(lead?: string): void {
+    if (this.talking || !this.oldMan) return;
+    const got = store.get().life.donated;
+    const left = HOMELESS_GOAL - got;
+    const line =
+      (lead ?? `"Watch your money if you're sleeping out here. Thieves come around at night. I lost some of mine while I was asleep."`) +
+      ` "I'm saving to get off the street: $${got} given, $${left} to go."`;
+    const give = (n: number) => () => {
+      this.talking = null;
+      const cash = store.get().cash;
+      const want = Math.min(n, HOMELESS_GOAL - store.get().life.donated);
+      if (cash < want) {
+        this.say(cash > 0 ? `YOU ONLY HAVE $${cash}.` : 'YOU HAVE NO CASH TO GIVE.');
+        return;
+      }
+      const given = donate(want);
+      if (!given) return;
+      audio.sfx('coin_drop', 0.6);
+      if (store.get().life.donated >= HOMELESS_GOAL) return this.oldManLeaves();
+      const thanks = given >= 50 ? '"That\'s... that\'s a lot. Thank you, really."' : given >= 20 ? '"Bless you. That\'s a hot meal and then some."' : '"Every bit counts. Thank you, friend."';
+      this.time.delayedCall(80, () => this.oldManTalk(thanks));
+    };
+    const step = (n: number) => Math.min(n, left);
+    this.talking = openTalkPanel(this, {
+      speaker: OLD_SPEAKER,
+      line,
+      depth: 950,
+      options: [
+        { label: `GIVE $${step(5)}`, fn: give(5) },
+        { label: `GIVE $${step(20)}`, fn: give(20) },
+        { label: `GIVE $${step(50)}`, fn: give(50) },
+        { label: 'LEAVE', fn: () => (this.talking = null) },
+      ],
+    });
+  }
+
+  /** $500: off the street.  He thanks you, gets up, and walks away for good. */
+  private oldManLeaves(): void {
+    const p = this.oldMan;
+    if (!p) return;
+    this.locked = true;
+    earnBadge('good_heart', this);
+    this.talking = speak(this, OLD_SPEAKER, '"Thank you. You\'ve given me a chance to start over. I\'ll never forget what you\'ve done for me."', () => {
+      this.talking = null;
+      p.getUp();
+      this.tweens.addCounter({
+        from: 0,
+        to: 1,
+        duration: 2400,
+        onUpdate: (tw, tg) => {
+          p.move(-1, 0, 16, new Phaser.Geom.Rectangle(-40, BEG_Y, GAME_W, 0));
+          void tw;
+          void tg;
+        },
+        onComplete: () => {
+          p.sprite.destroy();
+          this.oldMan = null;
+          this.locked = false;
+          this.scene.restart({ atX: Math.round(this.player.x) });
+        },
+      });
+    });
+  }
   private patrol: Patrol | null = null;
 
   /** Now and then (or, in the hunt, always) an officer on the pavement. */
@@ -422,6 +526,7 @@ export class ExteriorDay extends Phaser.Scene {
   }
 
   private targetX(where: Spot): number {
+    if (where === 'oldman') return OLD_X + 6;
     return where === 'man' ? MAN_X + 16 : where === 'alley' ? ALLEY_X : where === 'beg' ? BEG_X : this.doorX;
   }
 
@@ -477,37 +582,14 @@ export class ExteriorDay extends Phaser.Scene {
         this.getUp();
         return;
       }
-      const c = clock();
-      // the man's warning: no sleeping until the face on the poster is gone
-      if (c.dark && stealthPhase()) {
-        this.locked = true;
-        caughtByPolice(this, 'sleep');
-        return;
-      }
-      if (c.dark && sleepPlace() === 'street') {
-        // nowhere else to go: the pavement for the night
-        this.sleepRough();
-        return;
-      }
-      if (c.dark && sleepPlace() === 'home') {
-        this.say('YOU HAVE A BED AT LILY\'S CONDOS, WEST OF HERE. SLEEP THERE.');
-        return;
-      }
-      // only when there is nothing left: no tokens and no cash
+      // a place of your own: no can, and your bed is there
       if (!canBeg()) {
-        this.say('YOU STILL HAVE MONEY. THE CUP IS FOR WHEN YOU HAVE NOTHING.');
+        this.say("YOU RENT A PLACE AT LILY'S NOW. NO NEED FOR THE CAN - SLEEP THERE.");
         return;
       }
-      startBegging();
-      this.begging = true;
-      // down onto the cardboard, the can held out; nobody walks off from here
-      this.errand = null;
-      this.player.setPosition(BEG_X - 3, BEG_Y);
-      this.player.sit('floor', { can: true, facing: 1 });
-      this.cup?.setVisible(false);
-      this.say('YOU SIT DOWN WITH THE CAN. $1 EVERY 15 MINUTES. [E] TO GET UP.');
-      return;
+      return this.pitchChoice();
     }
+    if (this.spot === 'oldman') return this.oldManTalk();
     if (this.spot === 'alley') {
       this.locked = true;
       audio.sfx('footstep_gravel', 0.5);
@@ -524,7 +606,7 @@ export class ExteriorDay extends Phaser.Scene {
     // ---- THE RENT ON 213 IS HIS: due (or a week ahead), or the flat to take back
     if (s.arc === 'live' && !this.rentAsked && (!s.life.rented || rentInDays(s.life) <= RENT_DAYS - 1)) return this.rentTalk();
     this.rentAsked = false;
-    if (canBeg()) {
+    if (broke()) {
       this.manSays('"You expect me to lend you money when you\'ve got nothing? Go earn it by begging!"');
       return;
     }
@@ -538,6 +620,58 @@ export class ExteriorDay extends Phaser.Scene {
     this.scene.launch('PrizeExchange', { from: 'ExteriorDay' });
   }
 
+
+  /**
+   * ---- THE PITCH: BEG, OR SLEEP.  With no place of your own the cardboard
+   * is both -- sit with the can ($1 every 15 minutes, any time), or, at
+   * night only, lie down on it.  The card says plainly what a night out here
+   * risks before you choose it.
+   */
+  private pitchChoice(): void {
+    if (this.talking) return;
+    const dark = clock().dark;
+    const line = dark
+      ? `BEG WITH THE CAN ($1 EVERY 15 MINUTES), OR SLEEP HERE TILL MORNING. THIEVES WORK THIS STREET AT NIGHT: ONE NIGHT IN FOUR THEY TAKE HALF YOUR CASH AND TOKENS.`
+      : `BEG WITH THE CAN: $1 EVERY 15 MINUTES. SLEEPING OUT HERE IS FOR NIGHT-TIME ONLY.`;
+    this.talking = openTalkPanel(this, {
+      who: 'YOUR PITCH',
+      color: PALETTE.gold,
+      line,
+      depth: 950,
+      options: [
+        { label: 'BEG', fn: () => ((this.talking = null), this.startBeg()) },
+        {
+          label: dark ? 'SLEEP' : 'SLEEP (NIGHT)',
+          fn: () => {
+            this.talking = null;
+            if (!clock().dark) {
+              this.say(`TOO LIGHT AND TOO BUSY TO SLEEP. WAIT FOR DARK, AFTER ${twelveHour(NIGHT_HOUR)}.`);
+              return;
+            }
+            // the man's warning: no sleeping until the face on the poster is gone
+            if (stealthPhase()) {
+              this.locked = true;
+              caughtByPolice(this, 'sleep');
+              return;
+            }
+            this.sleepRough();
+          },
+        },
+        { label: 'CANCEL', fn: () => (this.talking = null) },
+      ],
+    });
+  }
+
+  /** Down onto the cardboard, the can held out; nobody walks off from here. */
+  private startBeg(): void {
+    startBegging();
+    this.begging = true;
+    this.errand = null;
+    this.player.setPosition(BEG_X - 3, BEG_Y);
+    this.player.sit('floor', { can: true, facing: 1 });
+    this.cup?.setVisible(false);
+    this.say('YOU SIT DOWN WITH THE CAN. $1 EVERY 15 MINUTES. [E] TO GET UP.');
+  }
 
   /** Up off the cardboard: begging over, and what is in the can is yours. */
   /**
@@ -569,8 +703,24 @@ export class ExteriorDay extends Phaser.Scene {
         zs.remove();
         this.begText.setVisible(false);
         const r = sleep('street');
-        // the forecourt again, in the morning's light
-        this.scene.restart({ woke: r.msg });
+        // ---- AND IN THE NIGHT, MAYBE, A HAND IN YOUR POCKETS: said on the
+        // dark, before the morning comes up
+        const got = streetTheft();
+        if (!got) {
+          this.scene.restart({ woke: r.msg });
+          return;
+        }
+        const what =
+          got.cash || got.tokens
+            ? `SOMEONE STOLE ${[got.cash ? `$${got.cash} OF YOUR CASH` : '', got.tokens ? `${got.tokens} OF YOUR TOKENS` : ''].filter(Boolean).join(' AND ')} WHILE YOU WERE ASLEEP.`
+            : 'SOMEONE WENT THROUGH YOUR POCKETS IN THE NIGHT. THERE WAS NOTHING TO TAKE.';
+        this.cameras.main.resetFX();
+        this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 1).setOrigin(0, 0).setDepth(5000);
+        const t = centerText(this, GAME_W / 2, GAME_H / 2 - 6, what, PALETTE.cream).setDepth(5001).setMaxWidth(270).setAlpha(0);
+        const t2 = centerText(this, GAME_W / 2, GAME_H / 2 + 20, 'THIEVES.', 0xd06060).setDepth(5001).setAlpha(0);
+        audio.sfx('eerie_swell', 0.25);
+        this.tweens.add({ targets: [t, t2], alpha: 1, duration: 700 });
+        this.time.delayedCall(4200, () => this.scene.restart({ woke: got.cash || got.tokens ? 'MORNING. LIGHTER POCKETS THAN LAST NIGHT.' : r.msg }));
       });
     });
   }
@@ -676,31 +826,36 @@ export class ExteriorDay extends Phaser.Scene {
     if (this.talking) return;
     const l = store.get().life;
     const d = rentInDays(l);
-    const line = !l.rented
+    const short = store.get().cash < RENT_PRICE ? ' Short? Sell some of your things at Lily\'s desk -- or move out.' : '';
+    const line = !l.rented && l.debt > 0
+      ? `"You walked out owing me ${l.debt === 1 ? 'a week' : `${l.debt} weeks`}. That first, $${RENT_PRICE}. Then this week, $${RENT_PRICE}."${short ? `${short.replace(' or move out', '')}` : ''}`
+      : !l.rented
       ? `"213's empty since you stopped paying. $${RENT_PRICE} and the key's yours again."`
       : d < 0
         ? `"You're late. $${RENT_PRICE} for 213, now, or I find a tenant who pays."`
         : d === 0
           ? `"Rent day. $${RENT_PRICE} for 213, cash, to me."`
           : `"Rent on 213's due in ${d} ${d === 1 ? 'day' : 'days'}. Pay ahead if you like: $${RENT_PRICE}."`;
+    const lineFull = l.rented && d <= 0 ? line + short : line;
     const done = (msg: string) => {
       this.talking = null;
       this.say(msg);
     };
+    const pay = (fn: () => { ok: boolean; msg: string }) => () => {
+      const r = fn();
+      if (r.ok) audio.sfx('coin_drop', 0.6);
+      store.flush();
+      done(r.msg);
+    };
     this.talking = openTalkPanel(this, {
       speaker: 'man',
-      line,
+      line: lineFull,
       depth: 950,
       options: [
-        {
-          label: l.rented ? `PAY $${RENT_PRICE}` : `RENT 213 - $${RENT_PRICE}`,
-          fn: () => {
-            const r = l.rented ? payRent() : rent();
-            if (r.ok) audio.sfx('coin_drop', 0.6);
-            store.flush();
-            done(r.msg);
-          },
-        },
+        // one button per week: what is owed from before, then this week
+        ...(!l.rented && l.debt > 0 ? [{ label: `OVERDUE WEEK $${RENT_PRICE}`, fn: pay(payDebt) }] : []),
+        { label: l.rented ? `PAY THIS WEEK $${RENT_PRICE}` : l.debt > 0 ? `THIS WEEK $${RENT_PRICE}` : `RENT 213 - $${RENT_PRICE}`, fn: pay(l.rented ? payRent : rent) },
+        ...(l.rented && d <= 0 ? [{ label: 'MOVE OUT', fn: pay(() => (evict(), { ok: true, msg: store.get().life.notice || 'MOVED OUT.' })) }] : []),
         {
           label: 'PRIZES',
           fn: () => {
@@ -853,6 +1008,8 @@ export class ExteriorDay extends Phaser.Scene {
           ? 'door'
           : this.time0 !== 'midnight' && Math.abs(px - BEG_X) < 10
             ? 'beg'
+          : this.oldMan && Math.abs(px - (OLD_X + 4)) < 8
+            ? 'oldman'
           : px > ALLEY_X - 8 && alleyOpen()
             ? 'alley'
             : null;
@@ -863,9 +1020,8 @@ export class ExteriorDay extends Phaser.Scene {
       return;
     }
 
-    const night = clock().dark ? sleepPlace() : null;
-    const begLabel = night === 'street' ? '[E] SLEEP HERE' : night === 'home' ? 'YOUR BED IS AT LILY\'S' : canBeg() ? '[E] BEG' : 'BEG WHEN BROKE';
-    const label = this.spot === 'beg' ? begLabel : this.spot === 'man' ? '[E] TALK' : this.spot === 'alley' ? '[E] ALLEY' : this.time0 === 'midnight' ? '[E] DOOR' : '[E] GO IN';
+    const begLabel = !canBeg() ? 'YOUR BED IS AT LILY\'S' : clock().dark ? '[E] BEG OR SLEEP' : '[E] BEG';
+    const label = this.spot === 'oldman' ? '[E] TALK TO HIM' : this.spot === 'beg' ? begLabel : this.spot === 'man' ? '[E] TALK' : this.spot === 'alley' ? '[E] ALLEY' : this.time0 === 'midnight' ? '[E] DOOR' : '[E] GO IN';
     this.showPrompt(label);
   }
 

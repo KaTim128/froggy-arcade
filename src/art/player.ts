@@ -70,6 +70,26 @@ export const COLS: Record<string, number> = {
 };
 const OUTLINE = 0x1a1210;
 
+/** `n` a shade lighter (k 0..1 of the way to white). */
+const lighter = (n: number, k: number): number => {
+  const ch = (v: number) => Math.round(v + (255 - v) * k);
+  return (ch((n >> 16) & 255) << 16) | (ch((n >> 8) & 255) << 8) | ch(n & 255);
+};
+
+/**
+ * A pixel's colour in a look.  Two letters are not set by looks but worked
+ * out from the ones that are, so every outfit gets them in its own colours:
+ * H, the lit front edge of the trousers (from J), and k, the shine on the
+ * toe of the boot (from K).
+ */
+export function lookColour(look: Look, ch: string): number {
+  const own = look.cols?.[ch];
+  if (own !== undefined) return own;
+  if (ch === 'H') return lighter(lookColour(look, 'J'), 0.16);
+  if (ch === 'k') return lighter(lookColour(look, 'K'), 0.22);
+  return COLS[ch];
+}
+
 /**
  * ---- OTHER PEOPLE, ON THE SAME RIG.
  *
@@ -227,13 +247,16 @@ const PARTS: Record<string, Part> = {
   },
   backArm: { top: 10, rows: ['.D', '.D', '.D', '.D', '.D', '.s'] },
   frontArm: { top: 10, rows: ['..........C', '..........C', '..........C', '..........C', '..........D', '..........S'] },
+  // THE LEGS: baggy trousers lit down the front edge (H), a crease at the
+  // knee, the hem turned up over the boot, and the boot's toe catching the
+  // light (k) -- the back leg a shade darker all through, being behind
   backLeg: {
     top: 17,
-    rows: ['....jj', '....jj', '....jj', '....jj', '....jj', '...jjj', '....KKK', '....WWW'],
+    rows: ['....jj', '....jj', '....jj', '....Jj', '....jj', '...jjj', '....kKK', '....WWW'],
   },
   frontLeg: {
     top: 17,
-    rows: ['......JJ', '......JJ', '......JJ', '......JJ', '......JJ', '......JJJ', '......KKT', '......WWW'],
+    rows: ['......HJ', '......HJ', '......Hj', '......jJ', '......HJ', '......JJj', '......kKT', '......WWW'],
   },
 };
 const FIG_H = 25;
@@ -266,7 +289,7 @@ export function paintFigure(
 ): void {
   const k = Math.max(1, Math.round(opts.scale ?? 1));
   const dir = opts.dir ?? 1;
-  const colOf = (ch: string): number => look.cols?.[ch] ?? COLS[ch];
+  const colOf = (ch: string): number => lookColour(look, ch);
   const lift = (opts.breath ?? 0) > 0.5 ? 1 : 0;
   const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
   const cells: Array<{ part: PartName; px: Set<string>; fills: Array<[number, number, number]> }> = [];
@@ -356,7 +379,7 @@ export class Player {
   constructor(scene: Phaser.Scene, x: number, y: number, night = false, look: Look = playerLook()) {
     this.shift = scene.input.keyboard?.addKey('SHIFT') ?? null;
     const c = (col: number) => (night ? nightify(col) : col);
-    const colOf = (ch: string): number => look.cols?.[ch] ?? COLS[ch];
+    const colOf = (ch: string): number => lookColour(look, ch);
     this.colOf = colOf;
     this.night = night;
     const lines: Phaser.GameObjects.Rectangle[] = [];
@@ -487,14 +510,19 @@ export class Player {
       lap.add(scene.add.rectangle(x0, y, w, h, c(col)).setOrigin(0, 0));
     };
     if (s.kind === 'floor') {
-      // backside on the ground, legs straight out in front
+      // backside on the ground, legs straight out in front: the trousers lit
+      // along the top, a crease at the knee, the boots up at the end
       block(-2, -4, 11, 3, this.colOf('j'));
       block(-1, -3, 11, 3, this.colOf('J'));
+      lap.add(scene.add.rectangle(d > 0 ? -1 : -10, -3, 10, 1, c(this.colOf('H'))).setOrigin(0, 0));
+      lap.add(scene.add.rectangle(d > 0 ? 5 : -6, -3, 1, 3, c(this.colOf('j'))).setOrigin(0, 0));
       block(10, -5, 2, 4, this.colOf('K'));
+      lap.add(scene.add.rectangle(d > 0 ? 10 : -12, -5, 1, 2, c(this.colOf('k'))).setOrigin(0, 0));
       block(10, -1, 2, 1, this.colOf('W'));
     } else {
       // knees forward at seat height, shins straight down
       block(-1, -9, 8, 3, this.colOf('J'));
+      lap.add(scene.add.rectangle(d > 0 ? -1 : -7, -9, 8, 1, c(this.colOf('H'))).setOrigin(0, 0));
       block(5, -6, 3, 5, this.colOf('j'));
       block(5, -1, 4, 1, this.colOf('K'));
     }

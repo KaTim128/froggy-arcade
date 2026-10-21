@@ -106,3 +106,42 @@ export const CLERK_LOOK: Look = {
     T: 0x0c0c10,
   },
 };
+
+/**
+ * The old man on the forecourt, sat against the arcade's wall: a navy watch
+ * cap, long grey hair down past it, a full white beard, a brown coat with a
+ * green patch and a red scarf, dark trousers and broken boots.  Not the
+ * drifter: his own head and colours, on the same rig, in the same pose.
+ */
+export const HOMELESS_LOOK: Look = {
+  head: [
+    '...BBBBBB...',
+    '..BBBBBBBB..',
+    '..bbbbbbbb..',
+    '.rrSSSSSSrr.',
+    '.rrSSSSSsrr.',
+    '..rGSSSsGr..',
+    '..GGGGGGGG..',
+    '...GGGGGg...',
+    '....GGGg....',
+  ],
+  cols: {
+    B: 0x3a4a6a,
+    b: 0x4e5e84,
+    r: 0xb8b0a0,
+    S: 0xc89870,
+    s: 0xa07850,
+    G: 0xdcd8cc,
+    g: 0xb4b0a4,
+    C: 0x7a4a2a,
+    c: 0x8e5a36,
+    D: 0x5a341e,
+    P: 0x3a6a4a,
+    w: 0x9a2a2a,
+    J: 0x3a3a44,
+    j: 0x2a2a34,
+    K: 0x2a1e16,
+    W: 0x4a3a2a,
+    T: 0x2a1e16,
+  },
+};

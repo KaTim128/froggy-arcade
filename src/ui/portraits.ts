@@ -12,7 +12,7 @@
  */
 
 import Phaser from 'phaser';
-import { COLS, LOOKS, type Look } from '../art/player';
+import { COLS, LOOKS, lookColour, type Look } from '../art/player';
 import { StageFigure } from '../render/stageFigure';
 import type { FroggyPainter } from '../render/froggyLayer';
 import { CLERK_LOOK, DEALER_LOOK, STAFFER_LOOK } from '../art/staffLooks';
@@ -148,7 +148,7 @@ export function headAndShoulders(scene: Phaser.Scene, look: Look, cx: number, to
   const k = Math.max(1, Math.floor((w - 8) / 12));
   const x0 = cx - 6 * k;
   const y0 = top + 4;
-  const col = (ch: string) => look.cols?.[ch] ?? COLS[ch] ?? 0xff00ff;
+  const col = (ch: string) => lookColour(look, ch) ?? 0xff00ff;
   const INK = 0x14100c;
   // shoulders first: the coat, a collar of the scarf, out to the frame's foot
   const sy = y0 + rows.length * k - Math.round(4 * k / 3);

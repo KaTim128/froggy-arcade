@@ -47,6 +47,14 @@ export interface LifeState {
   visited: string[];
   /** A warning line waiting to be shown (rent...). */
   notice: string;
+  /**
+   * WEEKS OF RENT OWED from a tenancy that ended unpaid -- evicted, or moved
+   * out with the week due.  Kept when you leave: renting again means paying
+   * every week of it first, one at a time, before the new week.
+   */
+  debt: number;
+  /** Given to the man on the pavement, towards getting him off the street (500 and he is gone). */
+  donated: number;
 }
 
 export function defaultLife(): LifeState {
@@ -69,6 +77,8 @@ export function defaultLife(): LifeState {
     achieved: [],
     visited: [],
     notice: '',
+    debt: 0,
+    donated: 0,
   };
 }
 
@@ -110,6 +120,8 @@ export function sanitizeLife(raw: unknown): LifeState {
     achieved: strs(r.achieved),
     visited: strs(r.visited),
     notice: '',
+    debt: Math.floor(num(r.debt, 0, 0, 52)),
+    donated: Math.floor(num(r.donated, 0, 0, 500)),
   };
   for (const id of STARTER_COSMETICS) if (!out.wardrobe.includes(id)) out.wardrobe.push(id);
   // what is on must be owned
