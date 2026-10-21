@@ -390,20 +390,26 @@ export class CreatureHub extends Phaser.Scene {
     L.add(text(this, mx, 25, 'MENU', PALETTE.ash));
     const busy = !!c.pending;
     const run = c.ladder;
-    this.tile(mx, 35, mw, 28, 'ZONE BATTLE', act ? `${BATTLE_COST} IN - WIN ${BATTLE_WIN}` : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => this.go('map'), !act);
-    this.tile(mx, 67, mw, 28, 'LADDER', run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
+    this.tile(mx, 34, mw, 24, 'ZONE BATTLE', act ? `${BATTLE_COST} IN, WIN ${BATTLE_WIN}` : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => this.go('map'), !act);
+    this.tile(mx, 61, mw, 24, 'LADDER', run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
       // three rungs
       g.fillStyle(col, 1).fillRect(x - 5, y - 7, 2, 14).fillRect(x + 3, y - 7, 2, 14);
       for (const k of [-4, 0, 4]) g.fillRect(x - 3, y + k, 6, 1);
     }, () => this.go('ladder'), !act && !run);
+    // TRAINING: free, no stake, a dummy that cannot hurt you -- in the place
+    // last picked on the zone map
+    this.tile(mx, 88, mw, 24, 'TRAINING', act ? 'FREE, SAFE' : 'NO CREATURE', 0x6ad8f0, (g, x, y, col) => {
+      // a straw dummy on its post
+      g.fillStyle(col, 1).fillRect(x - 1, y - 6, 3, 3).fillRect(x - 3, y - 3, 7, 5).fillRect(x, y + 2, 1, 5).fillRect(x - 5, y - 2, 11, 1);
+    }, () => this.train(this.biome), !act);
     const full = c.owned.length >= MAX_OWNED && !busy;
-    this.tile(mx, 99, mw, 28, 'RECRUIT', busy ? 'PACK WAITING' : full ? 'TEAM IS FULL' : `${PACK_COST} TOKENS`, 0x8a6aff, (g, x, y, col) => {
+    this.tile(mx, 115, mw, 24, 'RECRUIT', busy ? 'PACK WAITING' : full ? 'TEAM IS FULL' : `${PACK_COST} TOKENS`, 0x8a6aff, (g, x, y, col) => {
       g.fillStyle(0x14100c, 1).fillRect(x - 6, y - 5, 9, 12).fillRect(x - 2, y - 7, 9, 12);
       g.fillStyle(col, 0.6).fillRect(x - 5, y - 4, 7, 10);
       g.fillStyle(col, 1).fillRect(x - 1, y - 6, 7, 10);
       g.fillStyle(0x14100c, 1).fillRect(x + 2, y - 3, 1, 3).fillRect(x + 2, y + 1, 1, 1);
     }, () => this.go(busy ? 'pack' : 'recruit'));
-    this.tile(mx, 131, mw, 28, 'CONTROLS', c.handed === 'left' ? 'LEFT-HANDED' : 'RIGHT-HANDED', 0x4ad0c0, (g, x, y, col) => {
+    this.tile(mx, 142, mw, 24, 'CONTROLS', c.handed === 'left' ? 'LEFT-HANDED' : 'RIGHT-HANDED', 0x4ad0c0, (g, x, y, col) => {
       g.fillStyle(col, 1).fillRect(x - 7, y - 3, 14, 7).fillRect(x - 8, y - 1, 16, 5);
       g.fillStyle(0x0a0d1e, 1).fillRect(x - 5, y, 3, 1).fillRect(x - 4, y - 1, 1, 3).fillRect(x + 3, y - 1, 1, 1).fillRect(x + 5, y + 1, 1, 1);
     }, () => this.go('controls'));
@@ -571,9 +577,6 @@ export class CreatureHub extends Phaser.Scene {
     L.add(text(this, px + 4, 112, `WIN: +${BATTLE_WIN} TOKENS`, PALETTE.mossLight));
     L.add(text(this, px + 4, 121, 'LOSS: IT FAINTS', PALETTE.ash));
     L.add(text(this, px + 4, 130, 'NO TOKENS LOST', PALETTE.ash));
-    // ---- AND SOMEWHERE TO PRACTISE.  Free, in this world's own arena, on a
-    // dummy that cannot hurt you: try the moves, learn the cover, walk about.
-    L.add(button(this, px + 59, 150, 'TRAINING - FREE', () => this.train(b.id), { width: 108, height: 12, fill: 0x14303a, hoverFill: 0x1e5a68 }));
   }
 
   /** The training ground: no stake, no clock, nothing to lose. */
