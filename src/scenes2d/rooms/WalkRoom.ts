@@ -402,10 +402,13 @@ export abstract class WalkRoom extends Phaser.Scene {
   protected paintCounter(o: CounterOpts): Fixture {
     const x = COUNTER_X;
     const w = COUNTER_W;
-    const front = this.floorTop + 30;
-    const top = front - 15;
+    // Set back against the wall rather than out on the shop floor, and a
+    // counter's height (about two thirds of a person) with the keeper stood
+    // up tall behind it: chest and shoulders over the top, not just a head.
+    const front = this.floorTop + 24;
+    const top = front - 16;
     // the keeper, behind it: feet hidden by the counter, facing the doors
-    const keeper = new Player(this, x + 4, this.floorTop + 21, false, o.look);
+    const keeper = new Player(this, x + 4, this.floorTop + 12, false, o.look);
     keeper.sprite.setScale(-1, 1);
     const g = this.add.graphics().setDepth(depthFor(front));
     // its shadow on the floor

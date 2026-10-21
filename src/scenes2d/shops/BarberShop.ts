@@ -26,12 +26,18 @@ const BACK_ROW = FLOOR_TOP + 24;
 const FRONT_ROW = FLOOR_TOP + 52;
 const CHAIR_X = 166;
 const BENCH_X = 272;
-/** Where the things on the wall start: under the shop's name, clear of the HUD. */
-const WALL_TOP = 44;
-/** The white tiles, from here down to the floor, under a walnut rail. */
-const TILE_TOP = 80;
-const MIRROR_W = 30;
-const MIRROR_H = 26;
+/** Where the price board starts: under the shop's name, clear of the HUD. */
+const WALL_TOP = 48;
+/**
+ * Where the mirror, the posters and the pole hang: at a standing head's
+ * height.  (The player is 25px: everything on the wall used to be hung a
+ * metre above their head and drawn half as big again as it should be.)
+ */
+const EYE_TOP = 58;
+/** The white tiles, from here down to the floor, under a walnut rail: a dado, waist high. */
+const TILE_TOP = 84;
+const MIRROR_W = 26;
+const MIRROR_H = 21;
 
 export { BARBER_LOOK };
 
@@ -132,8 +138,8 @@ export class BarberShop extends WalkRoom {
     // running round it, lit down one side
     const pole = this.add.graphics().setDepth(1);
     const PX = 58;
-    const PT = WALL_TOP + 2;
-    const PH = 28;
+    const PT = EYE_TOP;
+    const PH = 18;
     pole.fillStyle(INK, 1).fillRect(PX - 1, PT, 10, PH);
     pole.fillStyle(0xf8f8f4, 1).fillRect(PX, PT, 8, PH);
     for (let k = -8; k < PH; k += 8) {
@@ -157,37 +163,37 @@ export class BarberShop extends WalkRoom {
     // the mirror, none of them behind it
     ['hair_pomp', 'hair_afro', 'hair_slick'].forEach((id, i) => {
       const c = this.styles.find((s) => s.id === id);
-      if (c) this.poster(74 + i * 24, WALL_TOP + 1, c);
+      if (c) this.poster(76 + i * 20, EYE_TOP, c);
     });
 
     // ---- the mirror over the chair, and the shelf under it with the bottles
     const m = this.add.graphics().setDepth(1);
-    paintMirror(m, CHAIR_X - MIRROR_W / 2, WALL_TOP, MIRROR_W, MIRROR_H, {
+    paintMirror(m, CHAIR_X - MIRROR_W / 2, EYE_TOP, MIRROR_W, MIRROR_H, {
       glassTop: 0xeef6f2,
       glassFoot: 0xbcdcd0,
       wallLine: 0xf2f2ec,
       floor: 0x8a8a8e,
     });
-    paintMirrorShine(this.add.graphics().setDepth(1.2), CHAIR_X - MIRROR_W / 2, WALL_TOP, MIRROR_W, MIRROR_H);
-    const shelfY = WALL_TOP + MIRROR_H + 2;
-    paintWalnut(m, CHAIR_X - 22, shelfY, 44, 2);
-    for (const [k, col] of [[-19, 0x3a8a5a], [-13, 0xc8a038], [9, 0x3a5ac8], [15, 0xc83a5a]] as const) {
-      m.fillStyle(INK, 1).fillRect(CHAIR_X + k - 1, shelfY - 7, 5, 7);
-      m.fillStyle(col, 1).fillRect(CHAIR_X + k, shelfY - 6, 3, 6);
-      m.fillStyle(0xffffff, 0.4).fillRect(CHAIR_X + k, shelfY - 5, 1, 4);
-      m.fillStyle(INK, 1).fillRect(CHAIR_X + k, shelfY - 9, 3, 2);
+    paintMirrorShine(this.add.graphics().setDepth(1.2), CHAIR_X - MIRROR_W / 2, EYE_TOP, MIRROR_W, MIRROR_H);
+    const shelfY = EYE_TOP + MIRROR_H + 1;
+    paintWalnut(m, CHAIR_X - 19, shelfY, 38, 2);
+    for (const [k, col] of [[-17, 0x3a8a5a], [-12, 0xc8a038], [9, 0x3a5ac8], [14, 0xc83a5a]] as const) {
+      m.fillStyle(INK, 1).fillRect(CHAIR_X + k - 1, shelfY - 5, 4, 5);
+      m.fillStyle(col, 1).fillRect(CHAIR_X + k, shelfY - 4, 2, 4);
+      m.fillStyle(0xffffff, 0.4).fillRect(CHAIR_X + k, shelfY - 4, 1, 3);
+      m.fillStyle(INK, 1).fillRect(CHAIR_X + k, shelfY - 6, 2, 1);
     }
 
     // ---- the price board: a walnut-framed chalkboard, clear of GOALS and
     // inside the shop's own wall
     const b = this.add.graphics().setDepth(1);
     const BX = 250;
-    const BW = 104;
-    paintWalnut(b, BX - BW / 2, WALL_TOP - 2, BW, 34);
-    b.fillStyle(INK, 1).fillRect(BX - BW / 2 + 2, WALL_TOP, BW - 4, 30);
-    b.fillStyle(0x24302a, 1).fillRect(BX - BW / 2 + 3, WALL_TOP + 1, BW - 6, 28);
+    const BW = 100;
+    paintWalnut(b, BX - BW / 2, WALL_TOP - 2, BW, 33);
+    b.fillStyle(INK, 1).fillRect(BX - BW / 2 + 2, WALL_TOP, BW - 4, 29);
+    b.fillStyle(0x24302a, 1).fillRect(BX - BW / 2 + 3, WALL_TOP + 1, BW - 6, 27);
     b.fillStyle(0xffffff, 0.04).fillRect(BX - BW / 2 + 3, WALL_TOP + 1, BW - 6, 9);
-    paintStuds(b, BX - BW / 2, WALL_TOP - 2, BW, 34);
+    paintStuds(b, BX - BW / 2, WALL_TOP - 2, BW, 33);
     centerText(this, BX, WALL_TOP + 7, 'CUTS FROM $6', 0xf0e8d0).setDepth(2);
     centerText(this, BX, WALL_TOP + 15, 'COLOURS FROM $5', 0xf0e8d0).setDepth(2);
     centerText(this, BX, WALL_TOP + 24, 'SIT IN THE CHAIR', BRASS.base).setDepth(2);
@@ -199,39 +205,40 @@ export class BarberShop extends WalkRoom {
     const y = BACK_ROW;
     const RED = { base: 0xa82a2a, lit: 0xd04848, shade: 0x781c20 };
     const CHROME = { base: 0xb8b8c0, lit: 0xeeeef4, shade: 0x7a7a84 };
-    ch.fillStyle(0x000000, 0.2).fillEllipse(CHAIR_X + 1, y + 1, 26, 6);
-    ch.fillStyle(INK, 1).fillEllipse(CHAIR_X, y - 1, 22, 6);
-    ch.fillStyle(CHROME.base, 1).fillEllipse(CHAIR_X, y - 1, 20, 4);
-    ch.fillStyle(CHROME.lit, 1).fillRect(CHAIR_X - 6, y - 3, 8, 1);
-    ch.fillStyle(INK, 1).fillRect(CHAIR_X - 3, y - 10, 7, 9);
-    ch.fillStyle(CHROME.base, 1).fillRect(CHAIR_X - 2, y - 9, 5, 8);
-    ch.fillStyle(CHROME.lit, 1).fillRect(CHAIR_X - 2, y - 9, 1, 8);
-    ch.fillStyle(CHROME.shade, 1).fillRect(CHAIR_X + 2, y - 9, 1, 8);
+    // (sized to the player: the seat at their knee, the headrest at the
+    // back of a seated head -- it was drawn taller than a standing man)
+    ch.fillStyle(0x000000, 0.2).fillEllipse(CHAIR_X + 1, y + 1, 20, 5);
+    ch.fillStyle(INK, 1).fillEllipse(CHAIR_X, y - 1, 17, 5);
+    ch.fillStyle(CHROME.base, 1).fillEllipse(CHAIR_X, y - 1, 15, 3);
+    ch.fillStyle(CHROME.lit, 1).fillRect(CHAIR_X - 5, y - 2, 6, 1);
+    ch.fillStyle(INK, 1).fillRect(CHAIR_X - 2, y - 8, 5, 7);
+    ch.fillStyle(CHROME.base, 1).fillRect(CHAIR_X - 1, y - 7, 3, 6);
+    ch.fillStyle(CHROME.lit, 1).fillRect(CHAIR_X - 1, y - 7, 1, 6);
+    ch.fillStyle(CHROME.shade, 1).fillRect(CHAIR_X + 1, y - 7, 1, 6);
     // the footrest
-    ch.fillStyle(INK, 1).fillRect(CHAIR_X - 9, y - 5, 18, 3);
-    ch.fillStyle(CHROME.base, 1).fillRect(CHAIR_X - 8, y - 4, 16, 1);
+    ch.fillStyle(INK, 1).fillRect(CHAIR_X - 7, y - 4, 14, 2);
+    ch.fillStyle(CHROME.base, 1).fillRect(CHAIR_X - 6, y - 4, 12, 1);
     // the back and headrest
-    ch.fillStyle(INK, 1).fillRect(CHAIR_X - 10, y - 32, 21, 18);
-    ch.fillStyle(RED.base, 1).fillRect(CHAIR_X - 9, y - 31, 19, 16);
-    ch.fillStyle(RED.lit, 1).fillRect(CHAIR_X - 9, y - 31, 1, 16).fillRect(CHAIR_X - 9, y - 31, 19, 1);
-    ch.fillStyle(RED.shade, 1).fillRect(CHAIR_X + 9, y - 31, 1, 16);
-    for (const [bx, by] of [[-4, -26], [4, -26], [0, -21], [-4, -18], [4, -18]]) ch.fillStyle(RED.shade, 1).fillRect(CHAIR_X + bx, y + by, 1, 1);
-    ch.fillStyle(INK, 1).fillRect(CHAIR_X - 5, y - 37, 11, 6);
-    ch.fillStyle(RED.base, 1).fillRect(CHAIR_X - 4, y - 36, 9, 4);
-    ch.fillStyle(RED.lit, 1).fillRect(CHAIR_X - 4, y - 36, 9, 1);
-    ch.fillStyle(CHROME.base, 1).fillRect(CHAIR_X, y - 32, 1, 1);
-    // the seat cushion, deeper, with its lit front edge
-    ch.fillStyle(INK, 1).fillRect(CHAIR_X - 11, y - 15, 23, 6);
-    ch.fillStyle(RED.base, 1).fillRect(CHAIR_X - 10, y - 14, 21, 4);
-    ch.fillStyle(RED.lit, 1).fillRect(CHAIR_X - 10, y - 14, 21, 1);
-    ch.fillStyle(RED.shade, 1).fillRect(CHAIR_X - 10, y - 11, 21, 1);
+    ch.fillStyle(INK, 1).fillRect(CHAIR_X - 8, y - 20, 17, 11);
+    ch.fillStyle(RED.base, 1).fillRect(CHAIR_X - 7, y - 19, 15, 9);
+    ch.fillStyle(RED.lit, 1).fillRect(CHAIR_X - 7, y - 19, 1, 9).fillRect(CHAIR_X - 7, y - 19, 15, 1);
+    ch.fillStyle(RED.shade, 1).fillRect(CHAIR_X + 7, y - 19, 1, 9);
+    for (const [bx, by] of [[-3, -16], [3, -16], [0, -13], [-3, -11], [3, -11]]) ch.fillStyle(RED.shade, 1).fillRect(CHAIR_X + bx, y + by, 1, 1);
+    ch.fillStyle(INK, 1).fillRect(CHAIR_X - 4, y - 24, 9, 5);
+    ch.fillStyle(RED.base, 1).fillRect(CHAIR_X - 3, y - 23, 7, 3);
+    ch.fillStyle(RED.lit, 1).fillRect(CHAIR_X - 3, y - 23, 7, 1);
+    ch.fillStyle(CHROME.base, 1).fillRect(CHAIR_X, y - 20, 1, 1);
+    // the seat cushion, at knee height, with its lit front edge
+    ch.fillStyle(INK, 1).fillRect(CHAIR_X - 9, y - 11, 19, 5);
+    ch.fillStyle(RED.base, 1).fillRect(CHAIR_X - 8, y - 10, 17, 3);
+    ch.fillStyle(RED.lit, 1).fillRect(CHAIR_X - 8, y - 10, 17, 1);
+    ch.fillStyle(RED.shade, 1).fillRect(CHAIR_X - 8, y - 8, 17, 1);
     // the chrome arms
-    for (const ax of [CHAIR_X - 14, CHAIR_X + 11]) {
-      ch.fillStyle(INK, 1).fillRect(ax, y - 20, 4, 11);
-      ch.fillStyle(CHROME.base, 1).fillRect(ax + 1, y - 19, 2, 9);
-      ch.fillStyle(CHROME.lit, 1).fillRect(ax + 1, y - 19, 1, 9);
-      ch.fillStyle(INK, 1).fillRect(ax - 1, y - 21, 6, 3);
-      ch.fillStyle(RED.base, 1).fillRect(ax, y - 20, 4, 1);
+    for (const ax of [CHAIR_X - 11, CHAIR_X + 9]) {
+      ch.fillStyle(INK, 1).fillRect(ax, y - 15, 3, 9);
+      ch.fillStyle(CHROME.base, 1).fillRect(ax + 1, y - 14, 1, 7);
+      ch.fillStyle(INK, 1).fillRect(ax - 1, y - 16, 5, 2);
+      ch.fillStyle(RED.base, 1).fillRect(ax, y - 16, 3, 1);
     }
 
     // the barber, at his desk just inside the doors
@@ -256,49 +263,50 @@ export class BarberShop extends WalkRoom {
     // ---- the waiting bench: walnut, with a green leather cushion and
     // turned legs; and the pot plant, inside the right-hand wall
     const bn = this.add.graphics().setDepth(depthFor(FRONT_ROW) - 0.0002);
-    bn.fillStyle(0x000000, 0.2).fillRect(BENCH_X - 21, FRONT_ROW, 44, 2);
-    for (const lx of [BENCH_X - 19, BENCH_X + 16]) {
-      bn.fillStyle(INK, 1).fillRect(lx - 1, FRONT_ROW - 7, 5, 7);
-      bn.fillStyle(WALNUT.base, 1).fillRect(lx, FRONT_ROW - 6, 3, 6);
-      bn.fillStyle(WALNUT.lit, 1).fillRect(lx, FRONT_ROW - 6, 1, 6);
+    // (a bench for two, its cushion at the height a sitting player's knee is)
+    bn.fillStyle(0x000000, 0.2).fillRect(BENCH_X - 16, FRONT_ROW, 34, 2);
+    for (const lx of [BENCH_X - 15, BENCH_X + 12]) {
+      bn.fillStyle(INK, 1).fillRect(lx - 1, FRONT_ROW - 5, 5, 5);
+      bn.fillStyle(WALNUT.base, 1).fillRect(lx, FRONT_ROW - 4, 3, 4);
+      bn.fillStyle(WALNUT.lit, 1).fillRect(lx, FRONT_ROW - 4, 1, 4);
     }
-    paintWalnut(bn, BENCH_X - 22, FRONT_ROW - 10, 44, 3);
-    bn.fillStyle(INK, 1).fillRect(BENCH_X - 21, FRONT_ROW - 14, 42, 4);
-    bn.fillStyle(0x2a5a4a, 1).fillRect(BENCH_X - 20, FRONT_ROW - 13, 40, 3);
-    bn.fillStyle(0x3e7a64, 1).fillRect(BENCH_X - 20, FRONT_ROW - 13, 40, 1);
-    for (let k = BENCH_X - 12; k < BENCH_X + 20; k += 10) bn.fillStyle(0x1e4438, 1).fillRect(k, FRONT_ROW - 12, 1, 2);
+    paintWalnut(bn, BENCH_X - 17, FRONT_ROW - 7, 34, 2);
+    bn.fillStyle(INK, 1).fillRect(BENCH_X - 16, FRONT_ROW - 10, 32, 3);
+    bn.fillStyle(0x2a5a4a, 1).fillRect(BENCH_X - 15, FRONT_ROW - 9, 30, 2);
+    bn.fillStyle(0x3e7a64, 1).fillRect(BENCH_X - 15, FRONT_ROW - 9, 30, 1);
+    for (let k = BENCH_X - 10; k < BENCH_X + 14; k += 8) bn.fillStyle(0x1e4438, 1).fillRect(k, FRONT_ROW - 8, 1, 1);
     const PLX = 306;
     const pl = this.add.graphics().setDepth(depthFor(BACK_ROW));
-    pl.fillStyle(0x000000, 0.2).fillRect(PLX - 6, BACK_ROW, 13, 2);
-    pl.fillStyle(INK, 1).fillRect(PLX - 6, BACK_ROW - 10, 13, 10);
-    pl.fillStyle(0xa85a32, 1).fillRect(PLX - 5, BACK_ROW - 9, 11, 9);
-    pl.fillStyle(0xc87a4a, 1).fillRect(PLX - 5, BACK_ROW - 9, 2, 9);
-    pl.fillStyle(0x7a3a1e, 1).fillRect(PLX - 6, BACK_ROW - 10, 13, 2);
-    pl.fillStyle(INK, 1).fillCircle(PLX, BACK_ROW - 17, 8);
-    pl.fillStyle(0x3a8a4a, 1).fillCircle(PLX, BACK_ROW - 17, 7);
-    pl.fillStyle(0x2a6a38, 1).fillCircle(PLX + 3, BACK_ROW - 15, 4);
-    pl.fillStyle(0x5aa85f, 1).fillCircle(PLX - 3, BACK_ROW - 19, 3);
+    pl.fillStyle(0x000000, 0.2).fillRect(PLX - 5, BACK_ROW, 11, 2);
+    pl.fillStyle(INK, 1).fillRect(PLX - 5, BACK_ROW - 8, 11, 8);
+    pl.fillStyle(0xa85a32, 1).fillRect(PLX - 4, BACK_ROW - 7, 9, 7);
+    pl.fillStyle(0xc87a4a, 1).fillRect(PLX - 4, BACK_ROW - 7, 2, 7);
+    pl.fillStyle(0x7a3a1e, 1).fillRect(PLX - 5, BACK_ROW - 8, 11, 2);
+    pl.fillStyle(INK, 1).fillCircle(PLX, BACK_ROW - 14, 7);
+    pl.fillStyle(0x3a8a4a, 1).fillCircle(PLX, BACK_ROW - 14, 6);
+    pl.fillStyle(0x2a6a38, 1).fillCircle(PLX + 2, BACK_ROW - 12, 3);
+    pl.fillStyle(0x5aa85f, 1).fillCircle(PLX - 2, BACK_ROW - 16, 2);
     // (the tiles get only a little: they are glazed)
     this.surfaces(0xbfe0d0, 0xa8a8a0, 0.012);
   }
 
-  /** A head from the style book, twice size, in a frame. */
+  /** A head from the style book, life size, in a frame the size of a poster. */
   private poster(x: number, y: number, c: CosmeticDef): void {
     const g = this.add.graphics().setDepth(1);
-    paintWalnut(g, x - 2, y - 2, 24, 30);
-    g.fillStyle(INK, 1).fillRect(x - 1, y - 1, 22, 26);
-    g.fillStyle(0xf8f0e0, 1).fillRect(x, y, 20, 24);
+    paintWalnut(g, x - 2, y - 2, 18, 22);
+    g.fillStyle(INK, 1).fillRect(x - 1, y - 1, 16, 20);
+    g.fillStyle(0xf8f0e0, 1).fillRect(x, y, 14, 18);
     const rows = c.head ?? [];
-    // (the head is twelve wide at twice size: clipped to the paper, centred)
+    // (the head is twelve wide: centred on the paper)
     rows.forEach((row, ry) =>
       [...row].forEach((ch, rx) => {
         const col = POSTER_COLS[ch];
-        const px = x - 2 + rx * 2;
-        if (col !== undefined && px >= x && px + 2 <= x + 20) g.fillStyle(col, 1).fillRect(px, y + 1 + ry * 2, 2, 2);
+        const py = y + 1 + ry;
+        if (col !== undefined && py < y + 14) g.fillStyle(col, 1).fillRect(x + 1 + rx, py, 1, 1);
       }),
     );
-    g.fillStyle(0x2a5a4a, 1).fillRect(x, y + 20, 20, 4);
-    g.fillStyle(0x3e7a64, 1).fillRect(x, y + 20, 20, 1);
+    g.fillStyle(0x2a5a4a, 1).fillRect(x, y + 14, 14, 4);
+    g.fillStyle(0x3e7a64, 1).fillRect(x, y + 14, 14, 1);
   }
 
   protected fixtures(): Fixture[] {
@@ -306,17 +314,17 @@ export class BarberShop extends WalkRoom {
       {
         x: CHAIR_X,
         y: BACK_ROW,
-        w: 22,
-        depth: 6,
+        w: 20,
+        depth: 5,
         label: () => (this.player.seated ? '[E] THE STYLE BOOK' : '[E] SIT IN THE CHAIR'),
         use: () => this.sitDown(),
-        hit: { x: CHAIR_X - 12, y: BACK_ROW - 32, w: 24, h: 34 },
+        hit: { x: CHAIR_X - 12, y: BACK_ROW - 25, w: 24, h: 27 },
       },
       ...(this.desk ? [this.desk] : []),
       {
         x: BENCH_X,
         y: FRONT_ROW,
-        w: 44,
+        w: 34,
         depth: 6,
         label: () => '[E] SIT AND WAIT',
         use: () => {
