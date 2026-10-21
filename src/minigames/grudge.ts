@@ -451,6 +451,10 @@ let aiFrozen = false;
 let aiHover: number | null = null;
 /** Debounce on the "not ready" buzz, so a held key does not machine-gun it. */
 let notReadyT = 0;
+/** A PRACTICE go: nobody across the ring, just the bag (see `makeBag`). */
+let practicing = false;
+let bag: Bag | null = null;
+let bagHits = 0;
 
 export const grudge: MinigameModule = {
   id: 'grudge',
@@ -510,12 +514,24 @@ export const grudge: MinigameModule = {
       scene.add.circle(12 + i * 22, 150, 6, PALETTE.ink).setAlpha(0.7);
     }
 
+    practicing = api.practice;
+    bagHits = 0;
     p1 = makeFighter(scene, 90, 'frog', 1);
-    p2 = makeFighter(scene, 230, chooseFoe(), -1);
+    if (practicing) {
+      // PRACTICE: no fighter in the other corner, a heavy bag in the middle.
+      // (An unseen stand-in stays where the bag hangs, so every strike is
+      // measured by exactly the same reach and height rules as a real fight.)
+      p2 = makeFighter(scene, BAG_X, FOES[0], -1);
+      p2.art.root.setVisible(false);
+      p2.art.shadow.setVisible(false);
+      bag = makeBag(scene);
+    } else {
+      p2 = makeFighter(scene, 230, chooseFoe(), -1);
+    }
 
     scene.add.rectangle(8, 26, 130, 7, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
     hpBar1 = scene.add.rectangle(9, 27, 128, 5, PALETTE.tealLight).setOrigin(0, 0);
-    scene.add.rectangle(GAME_W - 138, 26, 130, 7, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
+    const hp2Frame = scene.add.rectangle(GAME_W - 138, 26, 130, 7, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
     hpBar2 = scene.add.rectangle(GAME_W - 137, 27, 128, 5, PALETTE.blood).setOrigin(0, 0);
 
     text(scene, 8, 36, 'FROG', PALETTE.mossLight);
@@ -527,8 +543,13 @@ export const grudge: MinigameModule = {
     scene.add.rectangle(8, 44, 64, 5, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
     cd1 = scene.add.rectangle(9, 45, 62, 3, PALETTE.ember).setOrigin(0, 0);
     cd1Label = text(scene, 76, 44, '', PALETTE.ember);
-    scene.add.rectangle(GAME_W - 72, 44, 64, 5, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
+    const cd2Frame = scene.add.rectangle(GAME_W - 72, 44, 64, 5, PALETTE.ink).setOrigin(0, 0).setStrokeStyle(1, PALETTE.steel);
     cd2 = scene.add.rectangle(GAME_W - 71, 45, 62, 3, PALETTE.ember).setOrigin(0, 0);
+    if (practicing) {
+      // a bag has no health and no special: its corner of the HUD just says what it is
+      for (const o of [hp2Frame, hpBar2, cd2Frame, cd2]) o.setVisible(false);
+      foeLabel.setText('PUNCHING BAG').setTint(PALETTE.amber);
+    }
     // The clock is short enough to sit in the 45px gap between the HP bars; the
     // round line is not, and used to be drawn straight through both of them.
     timerText = centerText(scene, GAME_W / 2, 30, '', PALETTE.cream);
@@ -700,6 +721,27 @@ export const grudge: MinigameModule = {
     if (over || !p1 || !p2) return;
     const dt = delta / 1000;
 
+    if (practicing) {
+      tickBag(dt);
+      if (roundOver) return;
+      sceneClock += dt;
+      if (notReadyT > 0) notReadyT -= delta;
+      handleInput(dt);
+      tickFighter(p1, delta, dt);
+      // the stand-in never moves, never tires, and never hits back
+      p2.x = BAG_X;
+      p2.hp = MAX_HP;
+      p2.stun = 0;
+      // and the bag is in the way: Froggy walks up to it, not through it
+      const side = p1.x < BAG_X ? -1 : 1;
+      if (Math.abs(p1.x - BAG_X) < BAG_GAP) p1.x = BAG_X + side * BAG_GAP;
+      p1.facing = side === -1 ? 1 : -1;
+      render(p1, dt);
+      renderCooldowns();
+      hpBar1?.setSize((Math.max(0, p1.hp) / MAX_HP) * 128, 5);
+      return;
+    }
+
     if (roundOver) return;
 
     roundMs -= delta;
@@ -737,6 +779,8 @@ export const grudge: MinigameModule = {
     cd1 = null;
     cd2 = null;
     cd1Label = null;
+    practicing = false;
+    bag = null;
     p1 = null;
     p2 = null;
     apiRef = null;
@@ -1283,7 +1327,7 @@ function startRound(): void {
   p1.hp = MAX_HP;
   p2.hp = MAX_HP;
   p1.x = 90;
-  p2.x = 230;
+  p2.x = practicing ? BAG_X : 230;
   p1.move = p2.move = null;
   p1.phase = p2.phase = null;
   p1.specialCd = p2.specialCd = 0;
@@ -1306,13 +1350,17 @@ function startRound(): void {
   aiCounter = 0;
   roundOver = true;
 
-  roundText?.setText(`ROUND ${wins1 + wins2 + 1}   ${wins1}-${wins2}`);
+  roundText?.setText(practicing ? 'HITS 0' : `ROUND ${wins1 + wins2 + 1}   ${wins1}-${wins2}`);
+  timerText?.setText('');
   announce?.setText('READY');
   // Round one says who you have drawn, and what they are like.  The later
   // rounds do not: by then you know.
   const first = wins1 + wins2 === 0;
   const foe = p2.foe;
-  if (first && foe) {
+  if (practicing) {
+    introName?.setText('PRACTICE BAG').setTint(PALETTE.cream);
+    introNote?.setText('PUNCH IT - THE SPECIAL SENDS IT FLYING');
+  } else if (first && foe) {
     introName?.setText(`VS ${foe.name}`).setTint(foe.rare ? PALETTE.gold : PALETTE.cream);
     introNote?.setText(foe.rare ? `RARE - ${foe.note}` : foe.note);
   }
@@ -1661,6 +1709,18 @@ function tryHit(f: Fighter): void {
 
   // A low sweep goes under a block; a high strike does not go through one.
   const blocked = target.blocking && !(f.move === 'low' && !target.crouch);
+
+  // ---- PRACTICE: the bag takes it, and swings
+  if (practicing && target === p2 && bag) {
+    f.hitLanded = true;
+    const away = target.x > f.x ? 1 : -1;
+    const hy = f.y - (f.move === 'low' ? 12 : f.move === 'special' ? 20 : 28);
+    hitBag(away, f.move, hy);
+    audio.sfx(f.move === 'special' ? 'boom' : 'whack');
+    roundText?.setText(`HITS ${++bagHits}`);
+    impact(bagSurfaceX(hy, -away), hy, f.move, false);
+    return;
+  }
 
   // ---- THE SLIPPERY ONES ARE SOMETIMES SIMPLY NOT THERE.  A clean blow at a
   // snake or a chameleon can miss outright -- the swing is spent, nothing
@@ -2044,6 +2104,175 @@ function impact(x: number, y: number, move: keyof typeof MOVES, blocked: boolean
     onComplete: () => ring.destroy(),
   });
   if (!blocked) sceneRef.cameras.main.shake(move === 'special' ? 220 : 90, move === 'special' ? 0.008 : 0.003);
+}
+
+/**
+ * ================= THE PRACTICE BAG =================
+ *
+ * A heavy leather bag on a chain, hung from a steel frame in the middle of
+ * the ring.  It is a pendulum and moves like one: a blow is a kick of angular
+ * speed, gravity pulls it back through the middle, and the swing dies away
+ * on its own.  A jab nudges it back a few degrees; a sweep, landing low on
+ * it, a little more; the special throws it up and away so it comes swinging
+ * back.  The leather body lags the chain a touch and squashes where it is
+ * hit, so it reads as a heavy soft thing and not a rigid board.
+ *
+ * The chain never leaves its hook: the whole bag turns about the hook, so
+ * however hard it is hit it stays hung from the frame.
+ */
+const BAG_X = GAME_W / 2;
+/** The hook on the frame's crossbar. */
+const BAG_PIVOT_Y = 70;
+const BAG_CHAIN = 20;
+const BAG_W = 18;
+const BAG_H = 54;
+/** How close Froggy can stand to the hanging bag. */
+const BAG_GAP = 15;
+/** Gravity over length (stiffness) and air/leather damping, per second. */
+const BAG_K = 21;
+const BAG_DAMP = 1.15;
+/** The swing each blow puts in, in radians per second. */
+const BAG_KICK: Record<'high' | 'low' | 'special', number> = { high: 0.95, low: 1.15, special: 3.4 };
+/** Never so far that it would meet a post. */
+const BAG_MAX = 0.8;
+
+interface Bag {
+  /** Chain angle off straight down (positive: the bottom swung right), and its speed. */
+  a: number;
+  w: number;
+  /** How far the body trails the chain, and how squashed it is (0..1). */
+  lag: number;
+  squash: number;
+  swing: Phaser.GameObjects.Container;
+  body: Phaser.GameObjects.Container;
+  flash: Phaser.GameObjects.Rectangle;
+  shadow: Phaser.GameObjects.Ellipse;
+}
+
+function makeBag(scene: Phaser.Scene): Bag {
+  // ---- the frame: two posts on weighted feet, a crossbar, the hook
+  const fr = scene.add.graphics().setDepth(12);
+  const L = BAG_X - 70;
+  const R = BAG_X + 70;
+  const top = BAG_PIVOT_Y - 6;
+  for (const x of [L, R]) {
+    fr.fillStyle(0x0b0d12, 1).fillRect(x - 3, top, 6, FLOOR_Y - top);
+    fr.fillStyle(PALETTE.steel, 1).fillRect(x - 2, top, 4, FLOOR_Y - top);
+    fr.fillStyle(PALETTE.ash, 1).fillRect(x - 2, top, 1, FLOOR_Y - top);
+    fr.fillStyle(0x0b0d12, 1).fillRect(x - 8, FLOOR_Y - 4, 16, 5);
+    fr.fillStyle(PALETTE.slate, 1).fillRect(x - 7, FLOOR_Y - 3, 14, 3);
+    fr.fillStyle(PALETTE.ash, 1).fillRect(x - 7, FLOOR_Y - 3, 14, 1);
+    // bolts where the bar meets the post
+    fr.fillStyle(PALETTE.fog, 1).fillRect(x - 1, top + 1, 2, 2);
+  }
+  fr.fillStyle(0x0b0d12, 1).fillRect(L - 4, top - 1, R - L + 8, 6);
+  fr.fillStyle(PALETTE.steel, 1).fillRect(L - 3, top, R - L + 6, 4);
+  fr.fillStyle(PALETTE.fog, 1).fillRect(L - 3, top, R - L + 6, 1);
+  fr.fillStyle(0x0b0d12, 1).fillRect(BAG_X - 3, top + 4, 6, 3);
+  fr.fillStyle(PALETTE.bone, 1).fillRect(BAG_X - 2, top + 4, 4, 2);
+
+  // ---- what swings: the chain, the straps, the bag, all about the hook
+  const chain = scene.add.graphics();
+  for (let i = 0; i < 4; i++) {
+    const y = i * 5;
+    chain.fillStyle(0x0b0d12, 1).fillRect(-2, y, 4, 5);
+    chain.fillStyle(i % 2 ? PALETTE.ash : PALETTE.fog, 1).fillRect(i % 2 ? -1 : -1, y + 1, 2, 3);
+    chain.fillStyle(0x0b0d12, 1).fillRect(-0, y + 2, 1, 1);
+  }
+  // the ring and the four straps down to the bag's shoulders
+  chain.fillStyle(PALETTE.bone, 1).fillRect(-3, BAG_CHAIN - 1, 6, 2);
+  chain.lineStyle(1, 0x2a1a10, 1);
+  chain.lineBetween(-1, BAG_CHAIN, -BAG_W / 2 + 1, BAG_CHAIN + 7);
+  chain.lineBetween(1, BAG_CHAIN, BAG_W / 2 - 1, BAG_CHAIN + 7);
+  chain.lineStyle(1, 0x5a3a20, 1);
+  chain.lineBetween(0, BAG_CHAIN, -3, BAG_CHAIN + 7);
+  chain.lineBetween(0, BAG_CHAIN, 3, BAG_CHAIN + 7);
+
+  const g = scene.add.graphics();
+  const w = BAG_W;
+  const h = BAG_H;
+  const x0 = -w / 2;
+  const leather = 0xa8202c;
+  const lit = 0xd8404a;
+  const dark = 0x6a1018;
+  // outline, then the body as rounded leather: lit on the left (the
+  // spotlight), dark down the right, darker caps top and bottom
+  g.fillStyle(0x0b0d12, 1).fillRoundedRect(x0 - 1, -1, w + 2, h + 2, 4);
+  g.fillStyle(leather, 1).fillRoundedRect(x0, 0, w, h, 3);
+  g.fillStyle(lit, 1).fillRect(x0 + 2, 3, 3, h - 6);
+  g.fillStyle(0xf07078, 1).fillRect(x0 + 3, 6, 1, h - 16);
+  g.fillStyle(dark, 1).fillRect(x0 + w - 5, 2, 4, h - 4);
+  g.fillStyle(0x4a0a10, 1).fillRect(x0 + w - 2, 4, 1, h - 8);
+  // the caps, with their stitching
+  g.fillStyle(0x2a2a34, 1).fillRoundedRect(x0, 0, w, 6, 3).fillRoundedRect(x0, h - 6, w, 6, 3);
+  g.fillStyle(PALETTE.steel, 1).fillRect(x0 + 2, 1, w - 4, 1).fillRect(x0 + 2, h - 5, w - 4, 1);
+  g.fillStyle(PALETTE.fog, 1);
+  for (let k = x0 + 2; k < x0 + w - 2; k += 3) g.fillRect(k, 5, 1, 1).fillRect(k, h - 7, 1, 1);
+  // the seam down the middle, and the taped band where everybody hits it
+  g.fillStyle(dark, 1).fillRect(-1, 7, 1, h - 14);
+  g.fillStyle(0xe8dcc0, 1).fillRect(x0, 20, w, 6);
+  g.fillStyle(0xb8ac90, 1).fillRect(x0, 24, w, 2).fillRect(x0 + w - 5, 20, 4, 6);
+  g.fillStyle(0xfff6dc, 1).fillRect(x0 + 2, 21, 3, 1);
+  // the scuffs from a thousand hits
+  g.fillStyle(dark, 1).fillRect(x0 + 6, 33, 3, 1).fillRect(x0 + 10, 38, 2, 1).fillRect(x0 + 5, 44, 2, 1);
+  g.fillStyle(lit, 1).fillRect(x0 + 7, 32, 2, 1);
+
+  const flash = scene.add.rectangle(0, h / 2, w, h, 0xffffff).setAlpha(0);
+  // the body hangs from the bottom of the straps, centred on its top edge
+  const body = scene.add.container(0, BAG_CHAIN + 7, [g, flash]);
+  const swing = scene.add.container(BAG_X, BAG_PIVOT_Y - 1, [chain, body]).setDepth(13);
+  const shadow = scene.add.ellipse(BAG_X, FLOOR_Y + 1, 22, 4, 0x000000).setAlpha(0.25).setDepth(12);
+  const b: Bag = { a: 0, w: 0, lag: 0, squash: 0, swing, body, flash, shadow };
+  tickBag(0);
+  return b;
+}
+
+/** Gravity, damping, and the drawing: once a frame, fight or no fight. */
+function tickBag(dt: number): void {
+  const b = bag;
+  if (!b) return;
+  // small steps, so a long frame cannot fling it (semi-implicit Euler)
+  const n = Math.max(1, Math.ceil(dt / 0.008));
+  const h = dt / n;
+  for (let i = 0; i < n; i++) {
+    b.w += (-BAG_K * Math.sin(b.a) - BAG_DAMP * b.w) * h;
+    b.a += b.w * h;
+  }
+  if (Math.abs(b.a) > BAG_MAX) {
+    b.a = Math.sign(b.a) * BAG_MAX;
+    b.w *= -0.3;
+  }
+  // the heavy body trails the chain a little, and unsquashes
+  b.lag += (-b.w * 0.07 - b.lag) * Math.min(1, dt * 9);
+  b.squash = Math.max(0, b.squash - dt * 5);
+  // (Phaser turns clockwise: the bottom swinging right is a negative turn)
+  b.swing.setRotation(-b.a);
+  b.body.setRotation(-b.lag);
+  b.body.setScale(1 - 0.14 * b.squash, 1 + 0.05 * b.squash);
+  // the shadow on the boards follows the bottom of the bag, and fades as it lifts
+  const reach = BAG_CHAIN + 7 + BAG_H;
+  const bx = BAG_X + Math.sin(b.a) * reach;
+  const lift = (1 - Math.cos(b.a)) * reach;
+  b.shadow.setPosition(bx, FLOOR_Y + 1).setAlpha(Math.max(0.08, 0.25 - lift * 0.006)).setSize(22 - Math.min(10, lift * 0.3), 4);
+}
+
+/** A blow from the `away` side (1: thrown left-to-right), landing at height `hy`. */
+function hitBag(away: number, move: 'high' | 'low' | 'special', hy: number): void {
+  const b = bag;
+  if (!b || !sceneRef) return;
+  // a blow lower down the bag has more leverage on the hook
+  const lever = Phaser.Math.Clamp((hy - BAG_PIVOT_Y) / (BAG_CHAIN + 7 + BAG_H * 0.5), 0.7, 1.4);
+  b.w += away * BAG_KICK[move] * lever;
+  b.squash = move === 'special' ? 1 : 0.6;
+  b.flash.setAlpha(move === 'special' ? 0.7 : 0.4);
+  sceneRef.tweens.add({ targets: b.flash, alpha: 0, duration: move === 'special' ? 220 : 120 });
+}
+
+/** Where the face of the bag is, at height `y`, on the `side` facing the puncher. */
+function bagSurfaceX(y: number, side: number): number {
+  const b = bag;
+  const a = b ? b.a : 0;
+  return BAG_X + Math.sin(a) * Math.max(0, y - BAG_PIVOT_Y) + side * (BAG_W / 2);
 }
 
 export const _css = css;
