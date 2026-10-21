@@ -88,6 +88,8 @@ const GAMES = [
   // proper is four screens in, so the drive walks the picks rather than
   // waiting a fixed time and screenshotting a chest.
   { id: 'frogstermash', drive: async (p) => { await mashToFight(p); await sleep(2500); } },
+  // A drag back off the middle frog and let go: one slingshot shot.
+  { id: 'bogball', drive: async (p) => { await sleep(600); await p.mouse.move(70 * 4, 106 * 4); await p.mouse.down(); await p.mouse.move(40 * 4, 106 * 4, { steps: 6 }); await p.mouse.up(); await sleep(2500); } },
   { id: 'bowling', drive: async (p) => { await p.keyboard.down('KeyD'); await sleep(200); await p.keyboard.up('KeyD'); await p.keyboard.down('KeyE'); await sleep(400); await p.keyboard.up('KeyE'); await p.keyboard.down('Space'); await sleep(600); await p.keyboard.up('Space'); await sleep(2600); } },
 ];
 
@@ -4875,6 +4877,63 @@ for (const g of [
 
   if (errs.length) {
     console.log(`FAIL  fourth room: ${errs.slice(0, 2).join(' | ')}`);
+    failures++;
+  }
+  await page.close();
+}
+
+// BOG BALL: a frog knocked into the ball sends it through the arch, the goal
+// counts, the machine's own shot never puts it in its own net, and a 1-0 win
+// at the end of the shots pays the cabinet's ten.
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(e.message));
+  await page.goto(`${URL}/?intro=1&tokens=50&game=bogball`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+  await startGame(page);
+  await bridge(page, '__bog');
+  const st = () => page.evaluate(() => window.__bog.state());
+  const tok0 = await page.evaluate(() => window.__froggy.state().tokens);
+
+  const plan = await page.evaluate(() => window.__bog.plan());
+  const planOk = plan.frog >= 3 && plan.frog <= 5 && plan.score > -2000;
+  console.log(`${planOk ? 'PASS' : 'FAIL'}  bog ball: the machine plans a red frog's shot, never an own goal  — frog ${plan.frog}, score ${Math.round(plan.score)}`);
+  if (!planOk) failures++;
+
+  await page.evaluate(() => {
+    window.__bog.setShots(9, 9);
+    window.__bog.place(270, 106);
+    window.__bog.placeFrog(0, 240, 106);
+    window.__bog.placeFrog(3, 200, 60);
+    window.__bog.shoot(0, 0, 1);
+  });
+  let s = await st();
+  for (let i = 0; i < 40 && s.phase !== 'goal'; i++) {
+    await sleep(100);
+    s = await st();
+  }
+  const goalOk = s.score.green === 1 && s.score.red === 0;
+  console.log(`${goalOk ? 'PASS' : 'FAIL'}  bog ball: the ball through his arch is a goal for green  — ${JSON.stringify(s.score)}`);
+  if (!goalOk) failures++;
+
+  // the machine's last shot, then the whistle
+  for (let i = 0; i < 160; i++) {
+    const t = await page.evaluate(() => window.__bog?.state()).catch(() => null);
+    if (!t || t.phase === 'over') break;
+    await sleep(250);
+  }
+  await sleep(4000);
+  const tok1 = await page.evaluate(() => window.__froggy.state().tokens);
+  const final = s.score;
+  const paid = tok1 - tok0;
+  // (read after PLAY took the five, so a win shows as the full ten coming back)
+  const payOk = paid === 10 || (final.red > 0 && paid === 0);
+  console.log(`${payOk ? 'PASS' : 'FAIL'}  bog ball: five in, ten out for the win  — tokens ${tok0} -> ${tok1}`);
+  if (!payOk) failures++;
+  if (errs.length) {
+    console.log(`FAIL  bog ball: ${errs.slice(0, 2).join(' | ')}`);
     failures++;
   }
   await page.close();

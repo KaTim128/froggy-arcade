@@ -356,6 +356,22 @@ const LOOPS: Record<string, (px: Px, t: number) => void> = {
     if (cyc === 6) px(6, 4, 2, 1, C), px(7, 3, 1, 3, C);
     if (t % 8 === 0) px(5, 1, 1, 1, K);
   },
+  // BOG BALL: a frog flies in off the slingshot, the mud ball rolls into the arch
+  bog: (px, t) => {
+    const cyc = t % 18;
+    px(13, 3, 1, 4, B);
+    px(12, 2, 2, 1, K);
+    px(12, 7, 2, 1, K);
+    const hit = 8;
+    const fx = cyc < hit ? 1 + cyc * 0.6 : 1 + hit * 0.6 - (cyc - hit) * 0.2;
+    px(fx, 6, 2, 2, C);
+    px(fx + 1, 6, 1, 1, K);
+    const bx = cyc < hit ? 7 : Math.min(12, 7 + (cyc - hit) * 0.7);
+    const by = cyc < hit ? 5 : 5 - Math.min(1, (cyc - hit) * 0.15);
+    px(bx - 1, by - 1, 3, 3, K);
+    px(bx - 1, by - 1, 1, 1, C);
+    if (bx >= 12 && t % 2) px(12, 3, 2, 4, C, 0.6);
+  },
   default: (px, t) => {
     px(t % 14, 4, 2, 2, C);
   },

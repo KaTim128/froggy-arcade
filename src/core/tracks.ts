@@ -403,6 +403,19 @@ export const TRACKS: Record<string, TrackPreset> = {
     cutoff: 3800,
     ring: 1.1,
   }),
+  // Bog Ball: a stomping swamp chant -- low, heavy, a terrace drum.
+  game_bogball: preset({
+    bpm: 118,
+    chords: [min(C.d4 - 12), min(C.d4 - 12), maj(C.c4 - 12), maj(C.a4 - 12)],
+    bass: [0, _, 0, 1, 0, _, 2, _],
+    lead: [C.d5, _, C.f5, _, C.a5, _, C.g5, C.f5, C.d5, _, _, C.c5, C.d5, _, _, _],
+    leadWave: 'square',
+    bassWave: 'sawtooth',
+    arpWave: 'triangle',
+    drums: 'four',
+    cutoff: 2400,
+    ring: 1,
+  }),
   // Frog vs Lizard: a fast minor march with a taunt in the lead — two
   // neighbours over a fence, and neither of them backing down.
   game_frogvslizard: preset({
