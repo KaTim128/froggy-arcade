@@ -205,20 +205,21 @@ export function furnishStarterRoom(): void {
 
 /**
  * ---- WHOSE FLAT, AND WHO TO PAY.  Unit 612 on Level 6 until the night at
- * the Grand Lily; after it (two weeks on, the arc 'live') the man outside
+ * the Grand Lily; after it (the following day on, the arc 'live') the man outside
  * the arcade rents you 213 on Level 2, and the rent goes to him.
  */
 export const unitNo = (): number => (store.get().arc === 'live' ? 213 : 612);
 export const rentToMan = (): boolean => store.get().arc === 'live';
 
 /**
- * TWO WEEKS ON.  The clock to the morning a fortnight after the night (no
- * rent falls due across it: there is nothing rented -- 612 is a crime
- * scene), and the old tenancy gone.  What you owned is still yours.
+ * THE FOLLOWING DAY.  Out of 612's window in the night, and the clock on to
+ * the next morning (the arc 'back').  No rent falls due across it: there is
+ * nothing rented -- 612 is a crime scene -- and the old tenancy is gone.
+ * What you owned is still yours.
  */
-export function twoWeeksLater(): void {
+export function followingDay(): void {
   edit((l) => {
-    const day = clock(l.t).day + 14;
+    const day = clock(l.t).day + 1;
     l.t = day * DAY_SECONDS;
     l.rented = false;
     l.evicted = false;

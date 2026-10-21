@@ -168,7 +168,7 @@ export class ExteriorDay extends Phaser.Scene {
     // does not need keeping hold of -- and at midnight he is not there.
     if (time !== 'midnight') new MysteryMan(this, MAN_X, WALK_Y + 4);
     else this.paintClosed(refs.doorRect);
-    // TWO WEEKS ON: your face, pasted over the arcade's own posters by the doors
+    // THE FOLLOWING DAY: your face, pasted over the arcade's own posters by the doors
     if (st0.arc !== 'none') {
       // (one either side of the doors, each over one of the arcade's own --
       // the face you had when they went up, whatever you look like now)
@@ -194,7 +194,7 @@ export class ExteriorDay extends Phaser.Scene {
     // kept with the run, and back on the spot when resumed here (game/place)
     trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
 
-    // now and then, two weeks on: an officer walking the pavement (game/patrol)
+    // now and then, the following day: an officer walking the pavement (game/patrol)
     this.patrol = time === 'midnight' ? null : this.makePatrol();
     // What you are carrying: cash and tokens, side by side and never added
     // together -- the same HUD as inside.
@@ -766,7 +766,7 @@ export class ExteriorDay extends Phaser.Scene {
   }
 
   /**
-   * ---- BACK, TWO WEEKS LATER.  Your own face on the arcade's wall, and the
+   * ---- BACK, THE FOLLOWING DAY.  Your own face on the arcade's wall, and the
    * man has a word: $200 for the trouble, a flat at Lily's (Level 2, room
    * 213, the middle door -- a week free, then the rent is his), and the
    * police on the streets now and then.  Nobody moves till he has said it.

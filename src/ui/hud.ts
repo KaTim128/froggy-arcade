@@ -14,6 +14,10 @@ import { text } from '../core/ui';
 import { store } from '../core/state';
 import { clock, rentLabel, takeNotice, DAY_SECONDS } from '../game/life';
 import { tinyText, tinyWidth } from './tinyText';
+import { GAME_W } from '../render/pixelScaler';
+
+/** The hunt's line: just under the GOALS button and the pocket slots. */
+const OBJECTIVE_Y = 25;
 
 /**
  * WHICH HUD.  'classic' is the purse as it always was.  'hunt' is the
@@ -168,8 +172,14 @@ export class TokenHud {
     this.container.setVisible(!hunt);
     this.objective.setVisible(hunt);
     if (hunt) {
-      this.objectiveText.setText(store.get().disguised ? 'NEW FACE - BACK TO THE ARCADE' : "REACH SHARP'S (EAST) UNSEEN");
-      (this.objective.getData('plate') as Phaser.GameObjects.Rectangle).setSize(this.objectiveText.width + 10, 12);
+      // Under GOALS and the pockets, on the right, two short lines -- not
+      // across the top-left where the purse goes.
+      this.objectiveText.setText(store.get().disguised ? 'NEW FACE\nBACK TO THE ARCADE' : "REACH SHARP'S\n(EAST) UNSEEN");
+      this.objectiveText.setCenterAlign?.();
+      const w = this.objectiveText.width + 10;
+      const h = this.objectiveText.height + 5;
+      (this.objective.getData('plate') as Phaser.GameObjects.Rectangle).setSize(w, h);
+      this.objective.setPosition(GAME_W - 4 - w, OBJECTIVE_Y);
     }
     // the value goes under its name
     const vy = lab ? 10 : 3;

@@ -594,9 +594,11 @@ export class PoliceOfficer {
     // the jaw, its chin, and the mouth that opens
     this.head.add(this.jaw);
     this.jaw.position.set(0, -0.055, 0.02);
-    const chin = mesh(new THREE.SphereGeometry(0.07, 18, 12, 0, Math.PI * 2, Math.PI * 0.45, Math.PI * 0.55), face, this.jaw, 0, 0.01, 0.0);
+    const chin = mesh(new THREE.SphereGeometry(0.07, 18, 12, 0, Math.PI * 2, Math.PI * 0.45, Math.PI * 0.55), skin, this.jaw, 0, 0.01, 0.0);
     chin.scale.set(1.05, 0.9, 1.1);
-    const mouthIn = mesh(new THREE.BoxGeometry(0.04, 0.02, 0.01), mouth, this.head, 0, -0.06, 0.098);
+    // the mouth: a dark oval, a line shut, open round when they shout
+    const mouthIn = mesh(new THREE.CircleGeometry(0.019, 16), mouth, this.head, 0, -0.061, 0.1);
+    mouthIn.rotation.x = -0.15;
     mouthIn.name = 'mouth';
     mesh(new THREE.BoxGeometry(0.034, 0.006, 0.006), teeth, this.head, 0, -0.053, 0.099);
     // the nose and the ears
@@ -680,7 +682,9 @@ export class PoliceOfficer {
     this.armR = arm(-1);
     // the torch, in the right hand, pointing down the forearm
     this.armR.end.add(this.torchBody);
-    this.torchBody.position.set(0, -0.06, 0.04);
+    // (pointing on down the forearm: out in front when the arm is raised)
+    this.torchBody.position.set(0, -0.07, 0.03);
+    this.torchBody.rotation.x = Math.PI / 2;
     {
       const body = mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.22, 12), metal, this.torchBody, 0, 0, 0);
       body.rotation.x = Math.PI / 2;
@@ -771,10 +775,9 @@ export class PoliceOfficer {
     this.floorRing.userData.noShadow = true;
     this.root.add(this.floorRing);
 
-    // nothing of theirs needs to throw a shadow but the body; the glows never
-    this.root.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh || (o as THREE.Sprite).isSprite) o.frustumCulled = false;
-    });
+    // (the beam is scaled to where it meets a wall, the ring and the glows
+    // are flat: none of them is culled on a box it has outgrown)
+    for (const o of [this.beam, this.floorRing, this.lens, ...this.barDots]) o.frustumCulled = false;
   }
 
   setPose(x: number, y: number, z: number, yaw: number): void {
@@ -875,7 +878,7 @@ export class PoliceOfficer {
     // ---- the arms.  The right holds the torch out where the head looks; the
     // left swings, or reaches for a handle, or points, or grabs.
     const aimUp = -s.aimPitch;
-    this.armR.pivot.rotation.x = -1.25 + aimUp * 0.9 - 0.3 * s.grab;
+    this.armR.pivot.rotation.x = -1.25 + aimUp * 0.9;
     this.armR.pivot.rotation.y = yaw * 0.5;
     this.armR.pivot.rotation.z = 0.12;
     this.armR.mid.rotation.x = -0.35 + 0.2 * c;
@@ -890,7 +893,7 @@ export class PoliceOfficer {
     // ---- the face: shouting, blinking, scowling
     this.jaw.rotation.x = s.shout * 0.35;
     const m = this.head.getObjectByName('mouth');
-    if (m) m.scale.y = 1 + s.shout * 2.6;
+    if (m) m.scale.set(1 - s.shout * 0.15, 0.16 + s.shout * 0.95, 1);
     this.blinkT -= dt;
     const blink = this.blinkT < 0.12 ? 1 : 0;
     if (this.blinkT < 0) this.blinkT = 2 + Math.random() * 3.5;

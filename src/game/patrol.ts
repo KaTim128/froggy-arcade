@@ -1,5 +1,5 @@
 /**
- * ---- THE POLICE ON THE STREETS.  Two weeks on, your face is on the wall,
+ * ---- THE POLICE ON THE STREETS.  The following day, your face is on the wall,
  * and now and then an officer walks the pavement.  Only now and then: a
  * patrol turns up on a street at most every minute and a half or so, and
  * often not even then -- tension, not a wall of uniforms.
@@ -73,7 +73,7 @@ let pursuit: { until: number; edge: 'left' | 'right' } | null = null;
 /** Talked your way out: that officer leaves you be for a while. */
 let clearedUntil = 0;
 
-/** Patrols are only out after the two weeks, and never on a run already over. */
+/** Patrols are only out after the night, and never on a run already over. */
 export const patrolsOut = (): boolean => store.get().arc === 'live' && !store.get().jailed && store.get().route === 'normal';
 
 /** The face on the poster is still yours: the hunt is on (see the header). */
