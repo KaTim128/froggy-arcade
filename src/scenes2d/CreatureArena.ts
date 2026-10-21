@@ -238,7 +238,34 @@ interface Prop {
   x: number;
   y: number;
   r: number;
+  /** A piece somebody put up that shots can break: what it has left, and had. */
+  hp?: number;
+  maxHp?: number;
 }
+
+/**
+ * ---- EVERY WALL GOES AGAIN, AND EACH ONE PAYS FOR WHAT IT IS.
+ *
+ * Nobody gets a fortress.  A dropped wall always has a clock on it, shown
+ * as a bar over it running down, and the walls trade against each other:
+ * the ones that shots can tear down stand longer and come back sooner; the
+ * one nothing breaks stands only a few seconds.  And they are not all the
+ * same shape -- a curved screen round you, a long straight line, a post.
+ */
+interface WallSpec {
+  shape: 'line' | 'long' | 'curve';
+  /** Seconds it stands. */
+  life: number;
+  /** Health of each piece, or 0 for unbreakable. */
+  hp: number;
+}
+const WALL_SPECS: Record<string, WallSpec> = {
+  kelp_weave: { shape: 'curve', life: 9, hp: 12 },
+  glacier_slab: { shape: 'long', life: 4, hp: 0 },
+};
+const WALL_DEFAULT: WallSpec = { shape: 'line', life: WALL_S, hp: 0 };
+/** A crag lob's pillar: breakable, seven seconds. */
+const PILLAR = { life: 7, hp: 16 };
 
 interface Barrier {
   kind: CoverShape;
@@ -246,6 +273,8 @@ interface Barrier {
   seed: number;
   /** Seconds left, for one somebody dropped mid-fight; -1 for the scenery. */
   life: number;
+  /** What it started with, for the bar over it. */
+  max?: number;
   /** Who put it there (their colour tints it), or null for the place itself. */
   owner: Fighter | null;
   /** It bursts as it goes (a glacier slab). */
@@ -712,6 +741,42 @@ export class CreatureArena extends Phaser.Scene {
     }
   }
 
+  /** A shot into a breakable piece of wall: it cracks, and at nothing it falls. */
+  private chip(p: Prop, dmg: number): void {
+    if (p.hp === undefined) return;
+    p.hp -= dmg;
+    if (p.hp > 0) {
+      this.repaintCover();
+      return;
+    }
+    this.props = this.props.filter((q) => q !== p);
+    for (const b of this.barriers) b.parts = b.parts.filter((q) => q !== p);
+    this.barriers = this.barriers.filter((b) => b.parts.length || b.life < 0);
+    this.fx.push({ kind: 'boom', x: p.x, y: p.y, r: 10, t: 0, life: 0.3, col: 0xd8d0c0 });
+    audio.sfx('item_thud', 0.4);
+    this.repaintCover();
+  }
+
+  /**
+   * The clock on every dropped wall, and the cracks in the breakable ones:
+   * a bar over the wall running down to nothing, so nobody has to guess
+   * how long it has left.
+   */
+  private drawWallClocks(u: Phaser.GameObjects.Graphics): void {
+    for (const bar of this.barriers) {
+      if (bar.life < 0 || !bar.max || !bar.parts.length) continue;
+      const top = bar.parts.reduce((a, q) => (q.y - q.r < a.y - a.r ? q : a));
+      const cx = bar.parts.reduce((a, q) => a + q.x, 0) / bar.parts.length;
+      const w = 14;
+      const k = Phaser.Math.Clamp(bar.life / bar.max, 0, 1);
+      const col = bar.owner ? ELEMENTS[bar.owner.c.element].light : 0xffffff;
+      u.fillStyle(0x000000, 0.6).fillRect(cx - w / 2 - 1, top.y - top.r - 6, w + 2, 3);
+      u.fillStyle(col, 0.9).fillRect(cx - w / 2, top.y - top.r - 5, Math.max(1, w * k), 1);
+      // a piece nothing breaks wears a little lock: no point shooting it
+      if (!bar.parts.some((q) => q.hp !== undefined)) u.fillStyle(0xffffff, 0.8).fillRect(cx + w / 2 + 2, top.y - top.r - 6, 2, 3);
+    }
+  }
+
   /** Every barrier, drawn again: the scenery, and anything dropped since. */
   private repaintCover(): void {
     const g = this.terrain;
@@ -719,7 +784,17 @@ export class CreatureArena extends Phaser.Scene {
     for (const bar of this.barriers) {
       const fade = bar.life >= 0 ? Math.min(1, bar.life / 1.2) : 1;
       g.setAlpha(fade);
-      for (const p of bar.parts) this.paintProp(g, p, bar);
+      for (const p of bar.parts) {
+        this.paintProp(g, p, bar);
+        // cracks across a piece that has been shot, more the worse it is
+        if (p.hp !== undefined && p.maxHp && p.hp < p.maxHp) {
+          const dmg = 1 - p.hp / p.maxHp;
+          g.lineStyle(1, 0x000000, 0.7);
+          g.lineBetween(p.x - p.r * 0.6, p.y - p.r * 0.2, p.x + p.r * 0.1, p.y + p.r * 0.3);
+          if (dmg > 0.4) g.lineBetween(p.x + p.r * 0.1, p.y + p.r * 0.3, p.x + p.r * 0.5, p.y - p.r * 0.4);
+          if (dmg > 0.7) g.lineBetween(p.x - p.r * 0.2, p.y - p.r * 0.6, p.x, p.y + p.r * 0.6);
+        }
+      }
     }
     g.setAlpha(1);
   }
@@ -1209,19 +1284,31 @@ export class CreatureArena extends Phaser.Scene {
       // stops shots and bodies exactly as the scenery does, and it goes
       // again after a few seconds.
       case 'wall': {
+        const spec = WALL_SPECS[a.sp ?? ''] ?? WALL_DEFAULT;
         const d = Math.max(16, Math.min(a.reach, m));
         const wx = Phaser.Math.Clamp(f.x + ux * d, ARENA.x + 12, ARENA.x + ARENA.w - 12);
         const wy = Phaser.Math.Clamp(f.y + uy * d, ARENA.y + 10, ARENA.y + ARENA.h - 10);
-        // across the way you are facing, so it is cover and not a post
+        // across the way you are facing, so it is cover and not a post: a
+        // short line, a long one, or a screen curved round its maker
         const px = -uy;
         const py = ux;
-        const parts: Prop[] = [-1, 0, 1].map((k) => ({
-          x: Phaser.Math.Clamp(wx + px * k * 9, ARENA.x + 6, ARENA.x + ARENA.w - 6),
-          y: Phaser.Math.Clamp(wy + py * k * 9, ARENA.y + 6, ARENA.y + ARENA.h - 6),
-          r: 6,
-        })).filter((q) => Math.hypot(q.x - this.other(f).x, q.y - this.other(f).y) > 10 * this.other(f).scale);
+        const spots: Array<[number, number]> =
+          spec.shape === 'curve'
+            ? [-2, -1, 0, 1, 2].map((k) => {
+                const ang = Math.atan2(uy, ux) + k * 0.42;
+                return [f.x + Math.cos(ang) * d, f.y + Math.sin(ang) * d];
+              })
+            : (spec.shape === 'long' ? [-2, -1, 0, 1, 2] : [-1, 0, 1]).map((k) => [wx + px * k * 9, wy + py * k * 9]);
+        const parts: Prop[] = spots
+          .map(([x, y]) => ({
+            x: Phaser.Math.Clamp(x, ARENA.x + 6, ARENA.x + ARENA.w - 6),
+            y: Phaser.Math.Clamp(y, ARENA.y + 6, ARENA.y + ARENA.h - 6),
+            r: 6,
+            ...(spec.hp ? { hp: spec.hp, maxHp: spec.hp } : {}),
+          }))
+          .filter((q) => Math.hypot(q.x - this.other(f).x, q.y - this.other(f).y) > 10 * this.other(f).scale);
         if (parts.length) {
-          this.barriers.push({ kind: this.biome.prop, parts, seed: 1, life: WALL_S, owner: f, shatter: a.sp === 'glacier_slab' });
+          this.barriers.push({ kind: this.biome.prop, parts, seed: 1, life: spec.life, max: spec.life, owner: f, shatter: a.sp === 'glacier_slab' });
           this.props.push(...parts);
           this.repaintCover();
         }
@@ -1777,8 +1864,8 @@ export class CreatureArena extends Phaser.Scene {
   private onLand(f: Fighter, x: number, y: number, a: Attack): void {
     const o = this.other(f);
     if (a.sp === 'crag_lob' && !this.props.some((p) => Math.hypot(p.x - x, p.y - y) < p.r + 8) && Math.hypot(o.x - x, o.y - y) > 12 && Math.hypot(f.x - x, f.y - y) > 12) {
-      const part = { x, y, r: 7 };
-      this.barriers.push({ kind: 'rock', parts: [part], seed: 3, life: 7, owner: f });
+      const part = { x, y, r: 7, hp: PILLAR.hp, maxHp: PILLAR.hp };
+      this.barriers.push({ kind: 'rock', parts: [part], seed: 3, life: PILLAR.life, max: PILLAR.life, owner: f });
       this.props.push(part);
       this.repaintCover();
     }
@@ -2780,6 +2867,8 @@ export class CreatureArena extends Phaser.Scene {
         s.life = 0;
         if (s.a.mod === 'split') this.shatter(s);
         this.fx.push({ kind: 'spark', x: s.x, y: s.y, r: 3, t: 0, life: 0.15, col: 0xffffff });
+        // a wall that can be broken takes the hit
+        if (p.hp !== undefined) this.chip(p, Math.max(1, s.dmg));
       } else if (s.x < ARENA.x || s.x > ARENA.x + ARENA.w || s.y < ARENA.y || s.y > ARENA.y + ARENA.h) s.life = 0;
       else if (s.life <= 0 && s.a.mod === 'split') this.shatter(s);
     }
@@ -3438,6 +3527,7 @@ export class CreatureArena extends Phaser.Scene {
     this.info2.setVisible(showing).setAlpha(Math.min(1, this.infoT));
     this.infoPlate.setVisible(showing).setAlpha(Math.min(1, this.infoT) * 0.92);
     if (this.started && !this.over) this.drawReach(g);
+    this.drawWallClocks(u);
     if (this.touch) {
       for (const s of [this.moveStick, this.aimStick]) {
         const bx = s.id >= 0 ? s.bx : s.hx;
