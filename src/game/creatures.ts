@@ -24,6 +24,7 @@
 
 import type { SfxName } from '../core/audio';
 import { SPECIALS, SPECIAL_LIST } from './specials';
+import { assignAll, checkIcons } from '../art/abilityIcons';
 
 export type Element = 'ember' | 'tide' | 'moss' | 'frost' | 'volt' | 'stone' | 'gale' | 'murk' | 'glow';
 /** One body to one creature: no shape in the game is worn twice. */
@@ -322,6 +323,15 @@ export const BOSSES: BossSpec[] = [
 
 export const CREATURES: Creature[] = ROSTER;
 
+// Every move's icon is fixed here, once, in a set order -- the specials
+// first (their names are the most particular), then the everyday attacks --
+// so which glyph a move gets never depends on what happened to be drawn
+// first.  See art/abilityIcons.
+{
+  const all = [...ROSTER, ...BOSSES].flatMap((c) => c.attacks);
+  assignAll([...all.filter((m) => m.sp), ...all.filter((m) => !m.sp)]);
+}
+
 /**
  * ---- WHAT MUST STAY TRUE, checked in dev where it is easiest to break: one
  * body to one creature (and none worn by a boss), every move name its own,
@@ -338,6 +348,9 @@ if (import.meta.env?.DEV) {
   // (only the ones you can own go on the attack buttons)
   const long = ROSTER.flatMap((c) => c.attacks.map((a) => a.name)).find((n) => n.length > MOVE_NAME_MAX);
   if (long) throw new Error(`creatures: "${long}" is too long for an attack button`);
+  // and every move has an icon of its own
+  const clash = checkIcons([...ROSTER, ...BOSSES].flatMap((c) => c.attacks));
+  if (clash.length) throw new Error(`creatures: ability icons -- ${clash.slice(0, 3).join('; ')}`);
   // EVERY SPECIAL BELONGS TO EXACTLY ONE CREATURE, and the first move is always plain
   const used = new Map<string, string>();
   for (const c of [...ROSTER, ...BOSSES]) {

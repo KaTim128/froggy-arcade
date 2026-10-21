@@ -34,7 +34,7 @@ import {
   AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
   POISON_PER_S, POISON_S, REGEN_PER_S, REGEN_S, ROOT_S, SHRED_MUL, SHRED_S, SILENCE_S, STAGGER_S, STRIKE_DMG, THORNS_DMG, WALL_S, WEAK_MUL, WEAK_S, attackInfo,
 } from '../game/attackInfo';
-import { drawAttackIcon } from '../art/attackIcons';
+import { drawAbilityIcon } from '../art/abilityIcons';
 import { setCabinetTouch } from '../game/touchLayouts';
 import { backPlate } from '../ui/plate';
 import type { KeyName } from '../ui/touchControls';
@@ -48,6 +48,24 @@ const TIME_LIMIT = 120;
  * the biggest creature to walk round the end of a ridge in plain sight.
  */
 const COVER_LANE = 24;
+/** How long an attack's lunge takes, wind-up to settle. */
+const ATK_T = 0.28;
+/** How many letters fit across the move's description plate. */
+const INFO_COLS = Math.floor((GAME_W - 32) / 6);
+
+/** Words into lines of at most `cols` letters. */
+function wrapWords(str: string, cols: number): string[] {
+  const out: string[] = [];
+  let line = '';
+  for (const w of str.split(' ')) {
+    if (line && line.length + 1 + w.length > cols) {
+      out.push(line);
+      line = w;
+    } else line = line ? `${line} ${w}` : w;
+  }
+  if (line) out.push(line);
+  return out;
+}
 /** A fighter's footprint against walls and cover, before its size scales it. */
 const BODY_R = 7;
 
@@ -96,6 +114,15 @@ interface Fighter {
   ky: number;
   flash: number;
   moving: boolean;
+  /**
+   * The body's own motion, on top of the drawing's: `atk` counts down an
+   * attack's lunge (wind-up, strike, back) toward `atkX`/`atkY`; `stride`
+   * is how far into the step it is, and `hurt` a flinch when it is hit.
+   */
+  atk: number;
+  atkX: number;
+  atkY: number;
+  stride: number;
 }
 
 interface Shot {
@@ -499,7 +526,7 @@ export class CreatureArena extends Phaser.Scene {
     // what the chosen attack does, along the bottom of the arena for a moment
     this.infoPlate = this.add.rectangle(GAME_W / 2, ARENA.y + ARENA.h - 10, GAME_W - 24, 19, PALETTE.ink, 0.92).setStrokeStyle(1, PALETTE.steel).setDepth(55).setVisible(false);
     this.info = centerText(this, GAME_W / 2, ARENA.y + ARENA.h - 15, '', PALETTE.gold).setDepth(56).setVisible(false);
-    this.info2 = centerText(this, GAME_W / 2, ARENA.y + ARENA.h - 6, '', PALETTE.cream).setDepth(56).setVisible(false);
+    this.info2 = centerText(this, GAME_W / 2, ARENA.y + ARENA.h - 6, '', PALETTE.cream).setCenterAlign().setLineSpacing(1).setDepth(56).setVisible(false);
 
     this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,ONE,TWO,THREE') as Record<string, Phaser.Input.Keyboard.Key>;
     // 1 2 3: that ability, now, at the mouse (on a phone, just the choice)
@@ -602,17 +629,26 @@ export class CreatureArena extends Phaser.Scene {
     const a = this.me.c.attacks[i];
     if (!a || !this.info) return;
     const inf = attackInfo(a, this.me.c.element);
-    this.info.setText(`${a.name}: ${inf.type}${a.dmg > 0 ? ` - ${a.dmg} DMG` : ''} - ${a.cd}S`);
-    // the line under it: what makes this move its own, or else what it is for
-    this.info2.setText(inf.special || inf.use);
-    this.infoT = 3;
+    this.info.setText(`${a.name}: ${inf.type}${a.dmg > 0 ? ` - ${a.dmg} DMG` : ''} - RELOAD ${a.cd}S`);
+    // the lines under it: what makes this move its own, or else what it is
+    // for -- wrapped to the plate, never run off the edges of the screen
+    const lines = wrapWords(inf.special || inf.use, INFO_COLS);
+    this.info2.setText(lines.join('\n'));
+    const h = 11 + lines.length * 9;
+    const bottom = ARENA.y + ARENA.h - 1;
+    this.infoPlate.setSize(GAME_W - 24, h).setPosition(GAME_W / 2, bottom - h / 2);
+    this.infoPlate.setOrigin(0.5, 0.5);
+    this.info.setPosition(GAME_W / 2, bottom - h + 6);
+    this.info2.setPosition(GAME_W / 2, bottom - h + 11 + (lines.length * 9) / 2 - 1);
+    // a longer one stays up long enough to read
+    this.infoT = 3 + Math.max(0, lines.length - 1) * 1.5;
   }
 
   private fighter(c: Creature, x: number, y: number, face: number, scale: number): Fighter {
     return {
       c, x, y, hp: c.hp, max: c.hp, cds: [0, 0.8, 2], face, scale, burn: 0, slow: 0, stun: 0, stunImmune: 0, blind: 0, shield: 0, invuln: 0, aura: 0, root: 0, dash: null,
       poison: 0, marked: 0, shred: 0, weak: 0, chill: 0, haste: 0, regen: 0, guard: 0, shieldMod: null, st: {}, ref: {},
-      kx: 0, ky: 0, flash: 0, moving: false,
+      kx: 0, ky: 0, flash: 0, moving: false, atk: 0, atkX: 0, atkY: 0, stride: 0,
     };
   }
 
@@ -1141,6 +1177,10 @@ export class CreatureArena extends Phaser.Scene {
     if (a.kind === 'blink' || a.kind === 'dash') m *= mired;
     f.cds[i] = a.cd;
     f.face = ux >= 0 ? 1 : -1;
+    // the lunge that throws it
+    f.atk = ATK_T;
+    f.atkX = ux;
+    f.atkY = uy;
     // out of hiding the moment it attacks
     f.st.invis = 0;
     const col = ELEMENTS[f.c.element].col;
@@ -1871,6 +1911,42 @@ export class CreatureArena extends Phaser.Scene {
     }
     // a direct hit with the boulder: encased
     if (a.sp === 'ice_boulder' && Math.hypot(o.x - x, o.y - y) < 10 * o.scale) o.stun = Math.max(o.stun, 0.8);
+  }
+
+  /** Where the body is drawn, off its true spot, for its step and its lunge. */
+  private bodyMotion(f: Fighter): { ox: number; oy: number; k: number } {
+    let ox = 0;
+    let oy = 0;
+    let k = 1;
+    if (f.moving && !f.atk) {
+      const ph = f.stride;
+      // up on each step (two a stride), leaning into the way it is going
+      oy -= Math.abs(Math.sin(ph * Math.PI)) * 1.4 * f.scale;
+      ox += f.face * 0.6 * f.scale;
+    }
+    if (f.atk > 0) {
+      const p = 1 - f.atk / ATK_T; // 0 -> 1 over the lunge
+      // back for the first fifth, out hard to the peak, then home again
+      const d = p < 0.2 ? -(p / 0.2) * 1.5 : p < 0.45 ? -1.5 + ((p - 0.2) / 0.25) * 5.5 : 4 * (1 - (p - 0.45) / 0.55);
+      ox += f.atkX * d * f.scale;
+      oy += f.atkY * d * f.scale * 0.7;
+      k = 1 + (p > 0.25 && p < 0.6 ? 0.08 : 0);
+    }
+    return { ox: Math.round(ox), oy: Math.round(oy), k };
+  }
+
+  /** The step and lunge clocks, and the dust each footfall kicks up. */
+  private tickMotion(f: Fighter, dt: number): void {
+    if (f.atk > 0) f.atk = Math.max(0, f.atk - dt);
+    if (!f.moving) {
+      f.stride = 0;
+      return;
+    }
+    const before = Math.floor(f.stride * 2);
+    f.stride += dt * (f.c.speed / 28);
+    if (Math.floor(f.stride * 2) !== before && !f.st.air && !f.st.aloft && !f.st.under) {
+      this.fx.push({ kind: 'boom', x: f.x - f.face * 3 * f.scale, y: f.y + 6 * f.scale, r: 3, t: 0, life: 0.3, col: this.biome.groundDark });
+    }
   }
 
   /** Can it act at all (attack, or walk)? */
@@ -2718,6 +2794,7 @@ export class CreatureArena extends Phaser.Scene {
 
   private simulate(dt: number): void {
     this.elapsed += dt;
+    for (const f of [this.me, this.foe]) this.tickMotion(f, dt);
     const me = this.me;
     // ---- you
     let mx = 0;
@@ -3391,7 +3468,13 @@ export class CreatureArena extends Phaser.Scene {
       }
       const lift = f.st.air || f.st.aloft ? 10 : 0;
       if (lift) g.fillStyle(0x000000, 0.3).fillEllipse(f.x, f.y + 6, 12 * f.scale, 4);
-      drawCreature(g, f.c, f.x, f.y - lift, f.scale, f.face, f.st.sleep || f.st.stone || f.st.hibernate ? 0 : f.moving ? t * 1.8 : t);
+      // ---- THE BODY MOVES LIKE A BODY.  Walking, it steps: a bounce on
+      // every stride and a little forward lean, with a scuff of dust off the
+      // ground each time a foot comes down.  Attacking, it lunges: it draws
+      // back for a beat, throws itself at the aim, and settles -- and it
+      // swells a touch at the moment of the blow, so a hit reads as effort.
+      const { ox, oy, k } = this.bodyMotion(f);
+      drawCreature(g, f.c, f.x + ox, f.y - lift + oy, f.scale * k, f.face, f.st.sleep || f.st.stone || f.st.hibernate ? 0 : f.moving ? t * 1.8 : t);
       if (f.st.stone) g.fillStyle(0x8a8a8a, 0.55).fillEllipse(f.x, f.y, 16 * f.scale, 15 * f.scale);
       if (f.st.cage) g.lineStyle(1, 0x9ad0ff, 0.9).strokeCircle(f.x, f.y, 12 * f.scale).fillStyle(0x9ad0ff, 0.2).fillCircle(f.x, f.y, 12 * f.scale);
       if (f.st.sleep) g.fillStyle(0xffffff, 0.9).fillRect(f.x + 6, f.y - 16 - ((t * 8) % 4), 3, 1).fillRect(f.x + 8, f.y - 15 - ((t * 8) % 4), 1, 1).fillRect(f.x + 6, f.y - 14 - ((t * 8) % 4), 3, 1);
@@ -3508,7 +3591,7 @@ export class CreatureArena extends Phaser.Scene {
       if (this.touch) {
         u.fillStyle(i === this.sel ? 0x6a3aa8 : 0x2a2a48, 0.85).fillCircle(b.x, b.y, 12);
         u.lineStyle(1, i === this.sel ? 0xffe060 : 0x8a8ab0, 1).strokeCircle(b.x, b.y, 12);
-        drawAttackIcon(u, a.kind, b.x, b.y, ic);
+        drawAbilityIcon(u, a, b.x, b.y, ic);
         if (ready < 1) u.fillStyle(0x000000, 0.55).slice(b.x, b.y, 12, -Math.PI / 2, -Math.PI / 2 + (1 - ready) * Math.PI * 2, false).fillPath();
       } else {
         u.fillStyle(i === this.sel ? 0x4a2a78 : 0x1a1a30, 0.9).fillRect(b.x - 49, b.y - 7, 98, 13);
@@ -3518,7 +3601,7 @@ export class CreatureArena extends Phaser.Scene {
         u.fillStyle(0x0c0c18, 1).fillRect(b.x - 47, b.y - 5, 9, 9);
         u.lineStyle(1, i === this.sel ? 0xffe060 : 0x8a8ab0, 1).strokeRect(b.x - 47, b.y - 5, 9, 9);
         u.fillStyle(0xffffff, 0.12).fillRect(b.x - 46, b.y - 4, 7, 1);
-        drawAttackIcon(u, a.kind, b.x - 30, b.y - 1, ic);
+        drawAbilityIcon(u, a, b.x - 30, b.y - 1, ic);
       }
     });
     // the chosen attack's line, fading

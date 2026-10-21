@@ -26,6 +26,7 @@ import { isTouch } from '../core/device';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
 import { drawAttackIcon } from '../art/attackIcons';
+import { drawAbilityIcon } from '../art/abilityIcons';
 import { attackCard } from '../game/attackInfo';
 import { backPlate } from '../ui/plate';
 import { drawFrogToken } from '../ui/hud';
@@ -243,21 +244,25 @@ export class CreatureHub extends Phaser.Scene {
     L.add(text(this, x + 4, ty, c.role, el.light).setMaxWidth(w - 6));
     if (!big) return;
     ty += 10;
+    // ---- each stat on one row: its name, a bar, its number -- the bar
+    // fitted BETWEEN the two, so neither the name (SPD is three letters
+    // wide) nor the number (40/100 is six) can ever sit on top of it
+    const row = (label: string, value: string, frac: number, col: number, valCol: number): void => {
+      L.add(text(this, x + 4, ty, label, PALETTE.ash));
+      const v = text(this, x + w - 4, ty, value, valCol).setOrigin(1, 0);
+      L.add(v);
+      const bx = x + 4 + 3 * 6 + 3;
+      const bwid = Math.max(8, x + w - 4 - Math.ceil(v.width) - 3 - bx);
+      this.bar(bx, ty + 2, bwid, frac, col);
+      ty += 8;
+    };
     if (xp !== undefined) {
       // experience: how far into this level, or MAX
-      L.add(text(this, x + 4, ty, 'XP', PALETTE.ash));
-      this.bar(x + 18, ty + 2, w - 44, lv.max ? 1 : lv.into / lv.need, lv.max ? PALETTE.gold : 0xc08aff);
-      L.add(text(this, x + w - 4, ty, lv.max ? 'MAX' : `${lv.into}/${lv.need}`, lv.max ? PALETTE.gold : PALETTE.fog).setOrigin(1, 0));
-      ty += 8;
+      row('XP', lv.max ? 'MAX' : `${lv.into}/${lv.need}`, lv.max ? 1 : lv.into / lv.need, lv.max ? PALETTE.gold : 0xc08aff, lv.max ? PALETTE.gold : PALETTE.fog);
     }
-    const bw = w - 44;
-    L.add(text(this, x + 4, ty, 'HP', PALETTE.ash));
-    this.bar(x + 18, ty + 2, bw, c.hp / 160, 0x6ad86a);
-    L.add(text(this, x + w - 4, ty, String(c.hp), PALETTE.fog).setOrigin(1, 0));
-    ty += 8;
-    L.add(text(this, x + 4, ty, 'SPD', PALETTE.ash));
-    this.bar(x + 18, ty + 2, bw, c.speed / 100, 0x6ac8e8);
-    L.add(text(this, x + w - 4, ty, String(c.speed), PALETTE.fog).setOrigin(1, 0));
+    row('HP', String(c.hp), c.hp / 160, 0x6ad86a, PALETTE.fog);
+    row('SPD', String(c.speed), c.speed / 100, 0x6ac8e8, PALETTE.fog);
+    ty -= 8;
     ty += 10;
     L.add(this.add.rectangle(x + 4, ty - 2, w - 8, 1, 0x2a3050).setOrigin(0, 0));
     const g = this.add.graphics();
@@ -273,7 +278,7 @@ export class CreatureHub extends Phaser.Scene {
       const chip = this.add.rectangle(x + 2, ty - 1, w - 4, 9, 0x232a4a).setOrigin(0, 0).setStrokeStyle(1, 0x3a4470);
       L.addAt(chip, L.getIndex(g));
       // (an icon is 11px wide, centred: x+3..x+13; the name starts after it)
-      drawAttackIcon(g, a.kind, x + 8, ty + 3, el.light);
+      drawAbilityIcon(g, a, x + 8, ty + 3, el.light);
       const name = text(this, x + 15, ty, a.name, PALETTE.cream);
       L.add(name);
       // the "?" that says there is more to read
@@ -328,7 +333,7 @@ export class CreatureHub extends Phaser.Scene {
     const y = Math.max(2, (GAME_H - h) / 2);
     M.add(this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, el.col));
     const g = this.add.graphics();
-    drawAttackIcon(g, a.kind, x + 13, y + 13, el.light);
+    drawAbilityIcon(g, a, x + 13, y + 13, el.light);
     M.add(g);
     M.add(text(this, x + 24, y + 8, a.name, PALETTE.gold));
     M.add(text(this, x + w - 6, y + 8, `${c.name.toUpperCase()}`, PALETTE.fog).setOrigin(1, 0));
