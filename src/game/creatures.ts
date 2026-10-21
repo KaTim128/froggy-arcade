@@ -387,7 +387,7 @@ export function migrateCreatureId(old: string): string | null {
 // ------------------------------------------------------------------ recruit
 
 /** One pack, one price: nine different creatures face down, keep one. */
-export const PACK_COST = 50;
+export const PACK_COST = 25;
 
 /** Nine different creatures, every one as likely as any other. */
 export function rollPack(rng: () => number = Math.random): string[] {

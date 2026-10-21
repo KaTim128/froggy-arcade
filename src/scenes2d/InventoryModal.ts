@@ -71,7 +71,7 @@ export class InventoryModal extends Phaser.Scene {
         this.body.add(centerText(this, x + CELL_W / 2, y + CELL_H / 2, 'EMPTY', PALETTE.slate));
         continue;
       }
-      this.body.add(drawItem(this, x + CELL_W / 2, y + 30, d, 1.4));
+      this.body.add(drawItem(this, x + CELL_W / 2, y + 30, d, 1.4, { w: CELL_W - 8, h: 26 }));
       this.body.add(centerText(this, x + CELL_W / 2, y + 37, d.name, PALETTE.cream));
       this.body.add(centerText(this, x + CELL_W / 2, y + 45, d.value > 0 ? `HE PAYS $${d.value}` : 'NOT FOR SALE', d.value > 0 ? PALETTE.mossLight : PALETTE.ash));
       box.setInteractive({ useHandCursor: true }).on('pointerdown', () => {

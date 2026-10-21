@@ -438,8 +438,8 @@ export class ExteriorDay extends Phaser.Scene {
   /**
    * Everything on the shelf sold: nothing is said, and the game goes on.  The
    * case is restocked quietly, so the next time you are inside the arcade
-   * there is a fresh lot behind the glass.  (The camera does not count: he
-   * will not take it.)
+   * there is a fresh lot behind the glass.  (The camera is not one of the
+   * shelf's set: it does not count towards clearing it.)
    */
   private checkFinished(): void {
     const s = store.get();
