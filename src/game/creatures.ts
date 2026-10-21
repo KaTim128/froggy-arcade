@@ -463,14 +463,18 @@ export function zoneFoe(b: Biome, last: string | null, rng: () => number = Math.
 
 // ----------------------------------------------------------------- economy
 
-/** A zone battle: a small stake in, the win paid out. */
-export const BATTLE_COST = 2;
-export const BATTLE_WIN = 5;
-/** The ladder: one entry fee, five normal fights, one boss. */
-export const LADDER_COST = 50;
+/** A zone battle: 5 in, 10 back for a win. */
+export const BATTLE_COST = 5;
+export const BATTLE_WIN = 10;
+/**
+ * The ladder: 20 to enter, five normal fights and the boss -- and 80 for
+ * beating the boss (60 up on the entry).  The levels on the way pay nothing:
+ * the prize is for the whole run.
+ */
+export const LADDER_COST = 20;
 export const LADDER_LEVELS = 5;
-export const LADDER_WIN = 5;
-export const LADDER_BOSS_WIN = 25;
+export const LADDER_WIN = 0;
+export const LADDER_BOSS_WIN = 80;
 export const MAX_OWNED = 2;
 
 /**

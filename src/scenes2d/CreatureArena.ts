@@ -3070,13 +3070,13 @@ export class CreatureArena extends Phaser.Scene {
       if (timeUp) box.add(centerText(this, X, Y - 28, 'TIME: MORE HEALTH LEFT WINS', PALETTE.ash));
       const lines: Array<[string, number]> = [];
       if (won) {
-        lines.push([`+${r.paid} TOKENS`, PALETTE.gold]);
+        if (r.paid) lines.push([`+${r.paid} TOKENS`, PALETTE.gold]);
         if (ladder) lines.push([this.boss ? `THE RUN PAID ${before + r.paid} TOKENS IN ALL.` : this.level >= LADDER_LEVELS ? 'NEXT: THE FINAL BOSS' : `NEXT: LEVEL ${this.level + 1} OF ${LADDER_LEVELS}`, PALETTE.cream]);
         const xpLine = r.xp ? `+${r.xp} XP` : this.myLevel >= MAX_LEVEL ? 'MAX LEVEL - NO MORE XP' : '';
         if (xpLine) lines.push([xpLine, 0x8ae88a]);
       } else {
         lines.push([r.msg, PALETTE.cream]);
-        if (ladder) lines.push([`THE RUN PAID ${before} TOKENS. THEY ARE YOURS TO KEEP.`, PALETTE.ash]);
+        if (ladder) lines.push([before ? `THE RUN PAID ${before} TOKENS. THEY ARE YOURS TO KEEP.` : 'NO REFUND, AND NO PRIZE.', PALETTE.ash]);
       }
       lines.forEach(([t, c], i) => box.add(centerText(this, X, Y - 16 + i * 10, t, c).setMaxWidth(232)));
       if (won && r.levelUp) {

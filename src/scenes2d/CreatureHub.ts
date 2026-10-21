@@ -390,20 +390,26 @@ export class CreatureHub extends Phaser.Scene {
     L.add(text(this, mx, 25, 'MENU', PALETTE.ash));
     const busy = !!c.pending;
     const run = c.ladder;
-    this.tile(mx, 35, mw, 28, 'ZONE BATTLE', act ? `${BATTLE_COST} IN - WIN ${BATTLE_WIN}` : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => this.go('map'), !act);
-    this.tile(mx, 67, mw, 28, 'LADDER', run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
+    this.tile(mx, 34, mw, 24, 'ZONE BATTLE', act ? `${BATTLE_COST} IN, WIN ${BATTLE_WIN}` : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => this.go('map'), !act);
+    this.tile(mx, 61, mw, 24, 'LADDER', run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
       // three rungs
       g.fillStyle(col, 1).fillRect(x - 5, y - 7, 2, 14).fillRect(x + 3, y - 7, 2, 14);
       for (const k of [-4, 0, 4]) g.fillRect(x - 3, y + k, 6, 1);
     }, () => this.go('ladder'), !act && !run);
+    // TRAINING: free, no stake, a dummy that cannot hurt you -- in the place
+    // last picked on the zone map
+    this.tile(mx, 88, mw, 24, 'TRAINING', act ? 'FREE, SAFE' : 'NO CREATURE', 0x6ad8f0, (g, x, y, col) => {
+      // a straw dummy on its post
+      g.fillStyle(col, 1).fillRect(x - 1, y - 6, 3, 3).fillRect(x - 3, y - 3, 7, 5).fillRect(x, y + 2, 1, 5).fillRect(x - 5, y - 2, 11, 1);
+    }, () => this.train(this.biome), !act);
     const full = c.owned.length >= MAX_OWNED && !busy;
-    this.tile(mx, 99, mw, 28, 'RECRUIT', busy ? 'PACK WAITING' : full ? 'TEAM IS FULL' : `${PACK_COST} TOKENS`, 0x8a6aff, (g, x, y, col) => {
+    this.tile(mx, 115, mw, 24, 'RECRUIT', busy ? 'PACK WAITING' : full ? 'TEAM IS FULL' : `${PACK_COST} TOKENS`, 0x8a6aff, (g, x, y, col) => {
       g.fillStyle(0x14100c, 1).fillRect(x - 6, y - 5, 9, 12).fillRect(x - 2, y - 7, 9, 12);
       g.fillStyle(col, 0.6).fillRect(x - 5, y - 4, 7, 10);
       g.fillStyle(col, 1).fillRect(x - 1, y - 6, 7, 10);
       g.fillStyle(0x14100c, 1).fillRect(x + 2, y - 3, 1, 3).fillRect(x + 2, y + 1, 1, 1);
     }, () => this.go(busy ? 'pack' : 'recruit'));
-    this.tile(mx, 131, mw, 28, 'CONTROLS', c.handed === 'left' ? 'LEFT-HANDED' : 'RIGHT-HANDED', 0x4ad0c0, (g, x, y, col) => {
+    this.tile(mx, 142, mw, 24, 'CONTROLS', c.handed === 'left' ? 'LEFT-HANDED' : 'RIGHT-HANDED', 0x4ad0c0, (g, x, y, col) => {
       g.fillStyle(col, 1).fillRect(x - 7, y - 3, 14, 7).fillRect(x - 8, y - 1, 16, 5);
       g.fillStyle(0x0a0d1e, 1).fillRect(x - 5, y, 3, 1).fillRect(x - 4, y - 1, 1, 3).fillRect(x + 3, y - 1, 1, 1).fillRect(x + 5, y + 1, 1, 1);
     }, () => this.go('controls'));
@@ -561,18 +567,16 @@ export class CreatureHub extends Phaser.Scene {
     const px = 196;
     L.add(this.add.rectangle(px, 26, 118, 134, 0x1a1e38).setOrigin(0, 0).setStrokeStyle(1, b.groundDark));
     L.add(text(this, px + 4, 30, b.name, PALETTE.gold));
-    L.add(text(this, px + 4, 40, 'WHO LIVES HERE:', PALETTE.ash));
+    L.add(text(this, px + 4, 40, `WHO LIVES HERE: ${b.pool.length}`, PALETTE.ash));
+    // (as little pictures, six to a row: a list of names no longer fits)
     b.pool.forEach((id, k) => {
       const cr = creatureById(id)!;
-      L.add(text(this, px + 6, 49 + k * 8, cr.name.toUpperCase(), ELEMENTS[cr.element].light).setMaxWidth(110));
+      this.shown.push({ c: cr, x: px + 12 + (k % 6) * 19, y: 56 + Math.floor(k / 6) * 19, s: 0.75, f: 1 });
     });
     L.add(button(this, px + 59, 100, `FIGHT  ${BATTLE_COST} TOK`, () => this.fight(b.id), { width: 108, height: 13, disabled: ledger.balance() < BATTLE_COST || !activeOwned() }));
     L.add(text(this, px + 4, 112, `WIN: +${BATTLE_WIN} TOKENS`, PALETTE.mossLight));
     L.add(text(this, px + 4, 121, 'LOSS: IT FAINTS', PALETTE.ash));
     L.add(text(this, px + 4, 130, 'NO TOKENS LOST', PALETTE.ash));
-    // ---- AND SOMEWHERE TO PRACTISE.  Free, in this world's own arena, on a
-    // dummy that cannot hurt you: try the moves, learn the cover, walk about.
-    L.add(button(this, px + 59, 150, 'TRAINING - FREE', () => this.train(b.id), { width: 108, height: 12, fill: 0x14303a, hoverFill: 0x1e5a68 }));
   }
 
   /** The training ground: no stake, no clock, nothing to lose. */
@@ -620,21 +624,23 @@ export class CreatureHub extends Phaser.Scene {
         if (cr) who = cr.name.toUpperCase();
       } else if (boss) who = 'FINAL BOSS';
       L.add(text(this, 42, y + 6, who, done ? PALETTE.mossLight : next ? PALETTE.gold : PALETTE.ash));
-      L.add(text(this, 184, y + 6, done ? 'OK' : `+${boss ? LADDER_BOSS_WIN : LADDER_WIN}`, done ? PALETTE.mossLight : PALETTE.fog).setOrigin(1, 0));
+      // (only the boss pays: the prize is for the whole run)
+      const pay = boss ? LADDER_BOSS_WIN : LADDER_WIN;
+      L.add(text(this, 184, y + 6, done ? 'OK' : pay ? `+${pay}` : '', done ? PALETTE.mossLight : boss ? PALETTE.gold : PALETTE.fog).setOrigin(1, 0));
     }
     // ---- the terms, the balance, and what to do
     const px = 196;
     L.add(this.add.rectangle(px, 26, 118, 134, 0x1a1e38).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold));
     L.add(text(this, px + 4, 30, `ENTRY: ${LADDER_COST} TOKENS`, PALETTE.gold));
     L.add(text(this, px + 4, 39, 'PAID ONCE A RUN', PALETTE.ash));
-    L.add(text(this, px + 4, 50, `+${LADDER_WIN} EACH LEVEL`, PALETTE.mossLight));
-    L.add(text(this, px + 4, 59, `+${LADDER_BOSS_WIN} THE BOSS`, PALETTE.mossLight));
+    L.add(text(this, px + 4, 50, LADDER_WIN ? `+${LADDER_WIN} EACH LEVEL` : 'BEAT ALL 5 + BOSS:', PALETTE.mossLight));
+    L.add(text(this, px + 4, 59, `WIN ${LADDER_BOSS_WIN} TOKENS`, PALETTE.mossLight));
     L.add(text(this, px + 4, 70, 'LOSS ENDS THE RUN.', 0xff9a9a));
-    L.add(text(this, px + 4, 79, 'NO REFUND, BUT YOU', PALETTE.ash));
-    L.add(text(this, px + 4, 88, 'KEEP WHAT IT PAID.', PALETTE.ash));
-    L.add(text(this, px + 4, 100, `YOU HAVE ${ledger.balance()} TOKENS`, PALETTE.cream));
+    L.add(text(this, px + 4, 79, LADDER_WIN ? 'NO REFUND, BUT YOU' : 'NO REFUND, AND', PALETTE.ash));
+    L.add(text(this, px + 4, 88, LADDER_WIN ? 'KEEP WHAT IT PAID.' : 'NO PRIZE.', PALETTE.ash));
+    L.add(text(this, px + 4, 100, `TOKENS: ${ledger.balance()}`, PALETTE.cream));
     if (run) {
-      L.add(text(this, px + 4, 109, `THIS RUN: +${run.earned}`, PALETTE.gold));
+      L.add(text(this, px + 4, 109, LADDER_WIN ? `THIS RUN: +${run.earned}` : `BOSS PAYS ${LADDER_BOSS_WIN}`, PALETTE.gold));
       L.add(button(this, px + 59, 128, run.level > LADDER_LEVELS ? 'FIGHT THE BOSS' : `CONTINUE - LV ${run.level}`, () => this.ladderFight(), { width: 108, height: 13, disabled: !activeOwned() }));
       L.add(button(this, px + 59, 148, 'ABANDON RUN', () => this.confirmAbandon(), { width: 108, height: 12, fill: 0x2a1424, hoverFill: 0x5a2040 }));
     } else {

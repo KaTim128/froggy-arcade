@@ -9,15 +9,15 @@
  *   party        two at most, one fights
  *
  *   ZONE BATTLES  one fight, in that place, against one of the creatures
- *                 that live there.  2 tokens in; a win pays 5 and the fight
+ *                 that live there.  5 tokens in; a win pays 10 and the fight
  *                 is done.  A loss faints the fighter (gone).  No bosses.
  *
- *   LADDER        50 tokens, once, for a run: Level 1 to Level 5, one normal
- *                 creature each, then a boss.  Each normal win pays 5, the
- *                 boss pays 25 -- 50 back for a full run.  Lose a fight and
- *                 the run is over: no refund, but what it paid you is
- *                 yours, and your creature limps home (the fee is the price).
- *                 A new run is a new 50.  The two modes share nothing but
+ *   LADDER        20 tokens, once, for a run: Level 1 to Level 5, one normal
+ *                 creature each, then a boss.  Beat the boss and the run
+ *                 pays 80 (60 up on the entry); the levels on the way pay
+ *                 nothing.  Lose a fight and the run is over: no refund, no
+ *                 prize, and your creature limps home (the fee is the price).
+ *                 A new run is a new 20.  The two modes share nothing but
  *                 your creatures.
  */
 
@@ -177,7 +177,7 @@ export function ladderStep(c = C()): { level: number; foe: Creature; biome: stri
 }
 
 /**
- * PAY FOR A RUN: 50 tokens, taken here and only here, once.  Refused before
+ * PAY FOR A RUN: the entry fee, taken here and only here, once.  Refused before
  * taking anything if you cannot pay, have no creature, or a run is on.
  */
 export function startLadder(rng: () => number = Math.random): Result {
