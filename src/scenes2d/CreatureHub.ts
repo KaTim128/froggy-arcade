@@ -561,10 +561,11 @@ export class CreatureHub extends Phaser.Scene {
     const px = 196;
     L.add(this.add.rectangle(px, 26, 118, 134, 0x1a1e38).setOrigin(0, 0).setStrokeStyle(1, b.groundDark));
     L.add(text(this, px + 4, 30, b.name, PALETTE.gold));
-    L.add(text(this, px + 4, 40, 'WHO LIVES HERE:', PALETTE.ash));
+    L.add(text(this, px + 4, 40, `WHO LIVES HERE: ${b.pool.length}`, PALETTE.ash));
+    // (as little pictures, six to a row: a list of names no longer fits)
     b.pool.forEach((id, k) => {
       const cr = creatureById(id)!;
-      L.add(text(this, px + 6, 49 + k * 8, cr.name.toUpperCase(), ELEMENTS[cr.element].light).setMaxWidth(110));
+      this.shown.push({ c: cr, x: px + 12 + (k % 6) * 19, y: 56 + Math.floor(k / 6) * 19, s: 0.75, f: 1 });
     });
     L.add(button(this, px + 59, 100, `FIGHT  ${BATTLE_COST} TOK`, () => this.fight(b.id), { width: 108, height: 13, disabled: ledger.balance() < BATTLE_COST || !activeOwned() }));
     L.add(text(this, px + 4, 112, `WIN: +${BATTLE_WIN} TOKENS`, PALETTE.mossLight));
@@ -620,21 +621,23 @@ export class CreatureHub extends Phaser.Scene {
         if (cr) who = cr.name.toUpperCase();
       } else if (boss) who = 'FINAL BOSS';
       L.add(text(this, 42, y + 6, who, done ? PALETTE.mossLight : next ? PALETTE.gold : PALETTE.ash));
-      L.add(text(this, 184, y + 6, done ? 'OK' : `+${boss ? LADDER_BOSS_WIN : LADDER_WIN}`, done ? PALETTE.mossLight : PALETTE.fog).setOrigin(1, 0));
+      // (only the boss pays: the prize is for the whole run)
+      const pay = boss ? LADDER_BOSS_WIN : LADDER_WIN;
+      L.add(text(this, 184, y + 6, done ? 'OK' : pay ? `+${pay}` : '', done ? PALETTE.mossLight : boss ? PALETTE.gold : PALETTE.fog).setOrigin(1, 0));
     }
     // ---- the terms, the balance, and what to do
     const px = 196;
     L.add(this.add.rectangle(px, 26, 118, 134, 0x1a1e38).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold));
     L.add(text(this, px + 4, 30, `ENTRY: ${LADDER_COST} TOKENS`, PALETTE.gold));
     L.add(text(this, px + 4, 39, 'PAID ONCE A RUN', PALETTE.ash));
-    L.add(text(this, px + 4, 50, `+${LADDER_WIN} EACH LEVEL`, PALETTE.mossLight));
-    L.add(text(this, px + 4, 59, `+${LADDER_BOSS_WIN} THE BOSS`, PALETTE.mossLight));
+    L.add(text(this, px + 4, 50, LADDER_WIN ? `+${LADDER_WIN} EACH LEVEL` : 'BEAT ALL 5 + BOSS:', PALETTE.mossLight));
+    L.add(text(this, px + 4, 59, `WIN ${LADDER_BOSS_WIN} TOKENS`, PALETTE.mossLight));
     L.add(text(this, px + 4, 70, 'LOSS ENDS THE RUN.', 0xff9a9a));
-    L.add(text(this, px + 4, 79, 'NO REFUND, BUT YOU', PALETTE.ash));
-    L.add(text(this, px + 4, 88, 'KEEP WHAT IT PAID.', PALETTE.ash));
-    L.add(text(this, px + 4, 100, `YOU HAVE ${ledger.balance()} TOKENS`, PALETTE.cream));
+    L.add(text(this, px + 4, 79, LADDER_WIN ? 'NO REFUND, BUT YOU' : 'NO REFUND, AND', PALETTE.ash));
+    L.add(text(this, px + 4, 88, LADDER_WIN ? 'KEEP WHAT IT PAID.' : 'NO PRIZE.', PALETTE.ash));
+    L.add(text(this, px + 4, 100, `TOKENS: ${ledger.balance()}`, PALETTE.cream));
     if (run) {
-      L.add(text(this, px + 4, 109, `THIS RUN: +${run.earned}`, PALETTE.gold));
+      L.add(text(this, px + 4, 109, LADDER_WIN ? `THIS RUN: +${run.earned}` : `BOSS PAYS ${LADDER_BOSS_WIN}`, PALETTE.gold));
       L.add(button(this, px + 59, 128, run.level > LADDER_LEVELS ? 'FIGHT THE BOSS' : `CONTINUE - LV ${run.level}`, () => this.ladderFight(), { width: 108, height: 13, disabled: !activeOwned() }));
       L.add(button(this, px + 59, 148, 'ABANDON RUN', () => this.confirmAbandon(), { width: 108, height: 12, fill: 0x2a1424, hoverFill: 0x5a2040 }));
     } else {
