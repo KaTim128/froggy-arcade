@@ -10,7 +10,13 @@
 
 import { bootGame } from './core/sceneManager';
 import { store } from './core/state';
+import { installKeyWords } from './core/keyWords';
+import { installKeymap } from './core/keymap';
 
+// (on a phone, every [E] on screen says INTERACT or PLAY instead)
+installKeyWords();
+// (keys the player has rebound, turned back into the ones the game reads)
+installKeymap();
 bootGame();
 
 // Time played, for the profile cards: counted while the game is open and in

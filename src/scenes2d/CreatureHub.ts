@@ -20,10 +20,13 @@ import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { ledger } from '../core/ledger';
-import { button, centerText, confirmDialog, fadeToScene, text } from '../core/ui';
+import { button, centerText, confirmDialog, fadeToScene, gearButton, text } from '../core/ui';
+import { openPause } from '../core/pause';
+import { isTouch } from '../core/device';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
 import { drawAttackIcon } from '../art/attackIcons';
+import { drawAbilityIcon } from '../art/abilityIcons';
 import { attackCard } from '../game/attackInfo';
 import { backPlate } from '../ui/plate';
 import { drawFrogToken } from '../ui/hud';
@@ -91,8 +94,8 @@ export class CreatureHub extends Phaser.Scene {
     this.art = this.add.graphics().setDepth(5);
     this.input.keyboard?.on('keydown-ESC', () => {
       if (this.dialog) return;
-      if (this.screen === 'home' || this.screen === 'starter') this.leave();
-      else if (this.screen !== 'pack') this.go('home');
+      // (on the top screens Esc is the pause menu's, where LEAVE is)
+      if (this.screen !== 'home' && this.screen !== 'starter' && this.screen !== 'pack') this.go('home');
     });
     this.cameras.main.fadeIn(250, 0, 0, 0);
     this.draw();
@@ -101,6 +104,12 @@ export class CreatureHub extends Phaser.Scene {
   update(time: number): void {
     this.art.clear();
     for (const s of this.shown) drawCreature(this.art, s.c, s.x, s.y, s.s, s.f, time / 1000);
+  }
+
+  /** LEAVE, in the pause menu between RESUME and EXIT TO START MENU. */
+  pauseExit(): { label: string; run: () => void } | null {
+    if (this.dialog) return null;
+    return this.screen === 'home' || this.screen === 'starter' ? { label: 'LEAVE', run: () => this.leave() } : null;
   }
 
   private leave(): void {
@@ -134,7 +143,12 @@ export class CreatureHub extends Phaser.Scene {
     L.add(this.add.rectangle(96, 2, chipW, 11, 0x14182e).setOrigin(0, 0).setStrokeStyle(1, 0x2a5a3a));
     L.add(drawFrogToken(this.add.graphics()).setPosition(103, 7.5));
     L.add(text(this, 111, 4, tok, PALETTE.mossLight));
-    if (this.screen !== 'pack') L.add(button(this, GAME_W - 26, 8, this.screen === 'home' || this.screen === 'starter' ? 'LEAVE' : 'BACK', () => (this.screen === 'home' || this.screen === 'starter' ? this.leave() : this.go('home')), { width: 44, height: 11 }));
+    // LEAVE is in the pause menu (see pauseExit): the corner has the gear
+    // that opens it on the top screens, and BACK on the ones under them
+    const top = this.screen === 'home' || this.screen === 'starter';
+    if (top) {
+      if (!isTouch()) L.add(gearButton(this, GAME_W - 10, 8, () => openPause()));
+    } else if (this.screen !== 'pack') L.add(button(this, GAME_W - 26, 8, 'BACK', () => this.go('home'), { width: 44, height: 11 }));
     ({ home: () => this.home(), starter: () => this.starter(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), ladder: () => this.ladder(), controls: () => this.controls() })[this.screen]();
     if (this.msg) {
       const m = centerText(this, GAME_W / 2, GAME_H - 7, this.msg, PALETTE.gold);
@@ -230,21 +244,25 @@ export class CreatureHub extends Phaser.Scene {
     L.add(text(this, x + 4, ty, c.role, el.light).setMaxWidth(w - 6));
     if (!big) return;
     ty += 10;
+    // ---- each stat on one row: its name, a bar, its number -- the bar
+    // fitted BETWEEN the two, so neither the name (SPD is three letters
+    // wide) nor the number (40/100 is six) can ever sit on top of it
+    const row = (label: string, value: string, frac: number, col: number, valCol: number): void => {
+      L.add(text(this, x + 4, ty, label, PALETTE.ash));
+      const v = text(this, x + w - 4, ty, value, valCol).setOrigin(1, 0);
+      L.add(v);
+      const bx = x + 4 + 3 * 6 + 3;
+      const bwid = Math.max(8, x + w - 4 - Math.ceil(v.width) - 3 - bx);
+      this.bar(bx, ty + 2, bwid, frac, col);
+      ty += 8;
+    };
     if (xp !== undefined) {
       // experience: how far into this level, or MAX
-      L.add(text(this, x + 4, ty, 'XP', PALETTE.ash));
-      this.bar(x + 18, ty + 2, w - 44, lv.max ? 1 : lv.into / lv.need, lv.max ? PALETTE.gold : 0xc08aff);
-      L.add(text(this, x + w - 4, ty, lv.max ? 'MAX' : `${lv.into}/${lv.need}`, lv.max ? PALETTE.gold : PALETTE.fog).setOrigin(1, 0));
-      ty += 8;
+      row('XP', lv.max ? 'MAX' : `${lv.into}/${lv.need}`, lv.max ? 1 : lv.into / lv.need, lv.max ? PALETTE.gold : 0xc08aff, lv.max ? PALETTE.gold : PALETTE.fog);
     }
-    const bw = w - 44;
-    L.add(text(this, x + 4, ty, 'HP', PALETTE.ash));
-    this.bar(x + 18, ty + 2, bw, c.hp / 160, 0x6ad86a);
-    L.add(text(this, x + w - 4, ty, String(c.hp), PALETTE.fog).setOrigin(1, 0));
-    ty += 8;
-    L.add(text(this, x + 4, ty, 'SPD', PALETTE.ash));
-    this.bar(x + 18, ty + 2, bw, c.speed / 100, 0x6ac8e8);
-    L.add(text(this, x + w - 4, ty, String(c.speed), PALETTE.fog).setOrigin(1, 0));
+    row('HP', String(c.hp), c.hp / 160, 0x6ad86a, PALETTE.fog);
+    row('SPD', String(c.speed), c.speed / 100, 0x6ac8e8, PALETTE.fog);
+    ty -= 8;
     ty += 10;
     L.add(this.add.rectangle(x + 4, ty - 2, w - 8, 1, 0x2a3050).setOrigin(0, 0));
     const g = this.add.graphics();
@@ -260,7 +278,7 @@ export class CreatureHub extends Phaser.Scene {
       const chip = this.add.rectangle(x + 2, ty - 1, w - 4, 9, 0x232a4a).setOrigin(0, 0).setStrokeStyle(1, 0x3a4470);
       L.addAt(chip, L.getIndex(g));
       // (an icon is 11px wide, centred: x+3..x+13; the name starts after it)
-      drawAttackIcon(g, a.kind, x + 8, ty + 3, el.light);
+      drawAbilityIcon(g, a, x + 8, ty + 3, el.light);
       const name = text(this, x + 15, ty, a.name, PALETTE.cream);
       L.add(name);
       // the "?" that says there is more to read
@@ -315,7 +333,7 @@ export class CreatureHub extends Phaser.Scene {
     const y = Math.max(2, (GAME_H - h) / 2);
     M.add(this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, el.col));
     const g = this.add.graphics();
-    drawAttackIcon(g, a.kind, x + 13, y + 13, el.light);
+    drawAbilityIcon(g, a, x + 13, y + 13, el.light);
     M.add(g);
     M.add(text(this, x + 24, y + 8, a.name, PALETTE.gold));
     M.add(text(this, x + w - 6, y + 8, `${c.name.toUpperCase()}`, PALETTE.fog).setOrigin(1, 0));

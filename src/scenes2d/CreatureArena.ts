@@ -22,7 +22,8 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { button, centerText, text } from '../core/ui';
+import { button, centerText, gearButton, text } from '../core/ui';
+import { openPause } from '../core/pause';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
 import { SPECIALS } from '../game/specials';
@@ -33,7 +34,7 @@ import {
   AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
   POISON_PER_S, POISON_S, REGEN_PER_S, REGEN_S, ROOT_S, SHRED_MUL, SHRED_S, SILENCE_S, STAGGER_S, STRIKE_DMG, THORNS_DMG, WALL_S, WEAK_MUL, WEAK_S, attackInfo,
 } from '../game/attackInfo';
-import { drawAttackIcon } from '../art/attackIcons';
+import { drawAbilityIcon } from '../art/abilityIcons';
 import { setCabinetTouch } from '../game/touchLayouts';
 import { backPlate } from '../ui/plate';
 import type { KeyName } from '../ui/touchControls';
@@ -42,6 +43,31 @@ import { isTouch } from '../core/device';
 // (from 28: the line under the health bars has the band above it to itself)
 const ARENA = { x: 6, y: 28, w: GAME_W - 12, h: GAME_H - 56 };
 const TIME_LIMIT = 120;
+/**
+ * How far the scenery's cover keeps in from the fence: a lane wide enough for
+ * the biggest creature to walk round the end of a ridge in plain sight.
+ */
+const COVER_LANE = 24;
+/** How long an attack's lunge takes, wind-up to settle. */
+const ATK_T = 0.28;
+/** How many letters fit across the move's description plate. */
+const INFO_COLS = Math.floor((GAME_W - 32) / 6);
+
+/** Words into lines of at most `cols` letters. */
+function wrapWords(str: string, cols: number): string[] {
+  const out: string[] = [];
+  let line = '';
+  for (const w of str.split(' ')) {
+    if (line && line.length + 1 + w.length > cols) {
+      out.push(line);
+      line = w;
+    } else line = line ? `${line} ${w}` : w;
+  }
+  if (line) out.push(line);
+  return out;
+}
+/** A fighter's footprint against walls and cover, before its size scales it. */
+const BODY_R = 7;
 
 interface Fighter {
   c: Creature;
@@ -88,6 +114,15 @@ interface Fighter {
   ky: number;
   flash: number;
   moving: boolean;
+  /**
+   * The body's own motion, on top of the drawing's: `atk` counts down an
+   * attack's lunge (wind-up, strike, back) toward `atkX`/`atkY`; `stride`
+   * is how far into the step it is, and `hurt` a flinch when it is hit.
+   */
+  atk: number;
+  atkX: number;
+  atkY: number;
+  stride: number;
 }
 
 interface Shot {
@@ -230,7 +265,34 @@ interface Prop {
   x: number;
   y: number;
   r: number;
+  /** A piece somebody put up that shots can break: what it has left, and had. */
+  hp?: number;
+  maxHp?: number;
 }
+
+/**
+ * ---- EVERY WALL GOES AGAIN, AND EACH ONE PAYS FOR WHAT IT IS.
+ *
+ * Nobody gets a fortress.  A dropped wall always has a clock on it, shown
+ * as a bar over it running down, and the walls trade against each other:
+ * the ones that shots can tear down stand longer and come back sooner; the
+ * one nothing breaks stands only a few seconds.  And they are not all the
+ * same shape -- a curved screen round you, a long straight line, a post.
+ */
+interface WallSpec {
+  shape: 'line' | 'long' | 'curve';
+  /** Seconds it stands. */
+  life: number;
+  /** Health of each piece, or 0 for unbreakable. */
+  hp: number;
+}
+const WALL_SPECS: Record<string, WallSpec> = {
+  kelp_weave: { shape: 'curve', life: 9, hp: 12 },
+  glacier_slab: { shape: 'long', life: 4, hp: 0 },
+};
+const WALL_DEFAULT: WallSpec = { shape: 'line', life: WALL_S, hp: 0 };
+/** A crag lob's pillar: breakable, seven seconds. */
+const PILLAR = { life: 7, hp: 16 };
 
 interface Barrier {
   kind: CoverShape;
@@ -238,6 +300,8 @@ interface Barrier {
   seed: number;
   /** Seconds left, for one somebody dropped mid-fight; -1 for the scenery. */
   life: number;
+  /** What it started with, for the bar over it. */
+  max?: number;
   /** Who put it there (their colour tints it), or null for the place itself. */
   owner: Fighter | null;
   /** It bursts as it goes (a glacier slab). */
@@ -435,19 +499,25 @@ export class CreatureArena extends Phaser.Scene {
     this.band = touchDevice && window.innerHeight >= window.innerWidth;
     this.touch = touchDevice && !this.band;
     this.paintHud();
-    if (this.band) {
-      const keys: KeyName[] = ['FOUR', 'FIVE', 'SIX'];
-      setCabinetTouch(
-        {
-          stick: 'wasd',
-          buttons: this.me.c.attacks.map((a, i) => {
-            const inf = attackInfo(a, this.me.c.element);
-            return { label: `${inf.emoji}\n${inf.word}`, key: keys[i], primary: i === 0 };
-          }),
-        },
-        'CreatureArena',
-      );
-      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setCabinetTouch(null));
+    this.applyBand();
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setCabinetTouch(null));
+    // TURN THE PHONE AND THE CONTROLS GO WITH IT.  Upright, they are in the
+    // black band under the picture; sideways, the two sticks in its corners.
+    // It used to be decided once, at the bell, so a fight started sideways
+    // and then turned upright kept its sticks over the picture with a band
+    // of empty black underneath.
+    if (touchDevice) {
+      const onResize = (): void => {
+        const band = window.innerHeight >= window.innerWidth;
+        if (band === this.band) return;
+        this.band = band;
+        this.touch = !band;
+        for (const st of [this.moveStick, this.aimStick]) Object.assign(st, { id: -1, dx: 0, dy: 0 });
+        this.layAtkBtns();
+        this.applyBand();
+      };
+      window.addEventListener('resize', onResize);
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => window.removeEventListener('resize', onResize));
     }
     // the band's attack buttons: pick that attack and let it go at the foe
     this.input.keyboard!.on('keydown-FOUR', () => this.quickFire(0));
@@ -456,7 +526,7 @@ export class CreatureArena extends Phaser.Scene {
     // what the chosen attack does, along the bottom of the arena for a moment
     this.infoPlate = this.add.rectangle(GAME_W / 2, ARENA.y + ARENA.h - 10, GAME_W - 24, 19, PALETTE.ink, 0.92).setStrokeStyle(1, PALETTE.steel).setDepth(55).setVisible(false);
     this.info = centerText(this, GAME_W / 2, ARENA.y + ARENA.h - 15, '', PALETTE.gold).setDepth(56).setVisible(false);
-    this.info2 = centerText(this, GAME_W / 2, ARENA.y + ARENA.h - 6, '', PALETTE.cream).setDepth(56).setVisible(false);
+    this.info2 = centerText(this, GAME_W / 2, ARENA.y + ARENA.h - 6, '', PALETTE.cream).setCenterAlign().setLineSpacing(1).setDepth(56).setVisible(false);
 
     this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,ONE,TWO,THREE') as Record<string, Phaser.Input.Keyboard.Key>;
     // 1 2 3: that ability, now, at the mouse (on a phone, just the choice)
@@ -559,17 +629,26 @@ export class CreatureArena extends Phaser.Scene {
     const a = this.me.c.attacks[i];
     if (!a || !this.info) return;
     const inf = attackInfo(a, this.me.c.element);
-    this.info.setText(`${a.name}: ${inf.type}${a.dmg > 0 ? ` - ${a.dmg} DMG` : ''} - ${a.cd}S`);
-    // the line under it: what makes this move its own, or else what it is for
-    this.info2.setText(inf.special || inf.use);
-    this.infoT = 3;
+    this.info.setText(`${a.name}: ${inf.type}${a.dmg > 0 ? ` - ${a.dmg} DMG` : ''} - RELOAD ${a.cd}S`);
+    // the lines under it: what makes this move its own, or else what it is
+    // for -- wrapped to the plate, never run off the edges of the screen
+    const lines = wrapWords(inf.special || inf.use, INFO_COLS);
+    this.info2.setText(lines.join('\n'));
+    const h = 11 + lines.length * 9;
+    const bottom = ARENA.y + ARENA.h - 1;
+    this.infoPlate.setSize(GAME_W - 24, h).setPosition(GAME_W / 2, bottom - h / 2);
+    this.infoPlate.setOrigin(0.5, 0.5);
+    this.info.setPosition(GAME_W / 2, bottom - h + 6);
+    this.info2.setPosition(GAME_W / 2, bottom - h + 11 + (lines.length * 9) / 2 - 1);
+    // a longer one stays up long enough to read
+    this.infoT = 3 + Math.max(0, lines.length - 1) * 1.5;
   }
 
   private fighter(c: Creature, x: number, y: number, face: number, scale: number): Fighter {
     return {
       c, x, y, hp: c.hp, max: c.hp, cds: [0, 0.8, 2], face, scale, burn: 0, slow: 0, stun: 0, stunImmune: 0, blind: 0, shield: 0, invuln: 0, aura: 0, root: 0, dash: null,
       poison: 0, marked: 0, shred: 0, weak: 0, chill: 0, haste: 0, regen: 0, guard: 0, shieldMod: null, st: {}, ref: {},
-      kx: 0, ky: 0, flash: 0, moving: false,
+      kx: 0, ky: 0, flash: 0, moving: false, atk: 0, atkX: 0, atkY: 0, stride: 0,
     };
   }
 
@@ -628,7 +707,7 @@ export class CreatureArena extends Phaser.Scene {
     const clear = (x: number, y: number, r: number, apart = true): boolean =>
       Math.hypot(x - this.me.x, y - this.me.y) > r + 26 &&
       Math.hypot(x - this.foe.x, y - this.foe.y) > r + 26 * this.foe.scale &&
-      x > ARENA.x + 16 && x < ARENA.x + ARENA.w - 16 && y > ARENA.y + 10 && y < ARENA.y + ARENA.h - 10 &&
+      x > ARENA.x + COVER_LANE && x < ARENA.x + ARENA.w - COVER_LANE && y > ARENA.y + COVER_LANE - 4 && y < ARENA.y + ARENA.h - COVER_LANE + 4 &&
       (!apart || !this.props.some((q) => Math.hypot(q.x - x, q.y - y) < q.r + r + 10));
     const add = (parts: Prop[]): void => {
       if (!parts.length) return;
@@ -638,12 +717,15 @@ export class CreatureArena extends Phaser.Scene {
     const n = this.boss ? 3 : 4;
     switch (b.cover) {
       case 'line': {
-        // two ridges across the floor, each with a gap you can run through
+        // two ridges across the middle of the floor, each with a gap you can
+        // run through -- and stopping well short of the fence at both ends,
+        // so the way round them is a lane you can see, not a crack along the
+        // wall that a creature seemed to walk straight through
         for (const k of [-1, 1]) {
-          const cx = ARENA.x + ARENA.w / 2 + k * 46;
-          const gap = rnd.between(-16, 16);
+          const cx = ARENA.x + ARENA.w / 2 + k * 40;
+          const gap = rnd.between(-10, 10);
           const parts: Prop[] = [];
-          for (let y = ARENA.y + 12; y < ARENA.y + ARENA.h - 12; y += 7) {
+          for (let y = ARENA.y + COVER_LANE; y < ARENA.y + ARENA.h - COVER_LANE; y += 7) {
             if (Math.abs(y - (midY + gap)) < 15) continue;
             const x = cx + rnd.between(-2, 2);
             if (!clear(x, y, 5, false)) continue;
@@ -658,7 +740,7 @@ export class CreatureArena extends Phaser.Scene {
         let guard = 0;
         while (this.barriers.length < n && guard++ < 200) {
           const cx = ARENA.x + rnd.between(46, ARENA.w - 46);
-          const cy = ARENA.y + rnd.between(18, ARENA.h - 18);
+          const cy = ARENA.y + rnd.between(COVER_LANE + 4, ARENA.h - COVER_LANE - 4);
           if (!clear(cx, cy, 16)) continue;
           const parts: Prop[] = [];
           for (let i = 0; i < rnd.between(4, 6); i++) {
@@ -675,8 +757,8 @@ export class CreatureArena extends Phaser.Scene {
         // round the outside, leaving the floor in the middle open
         for (let i = 0; i < 8; i++) {
           const a = (i / 8) * Math.PI * 2 + 0.3;
-          const x = ARENA.x + ARENA.w / 2 + Math.cos(a) * ARENA.w * 0.36;
-          const y = midY + Math.sin(a) * ARENA.h * 0.36;
+          const x = ARENA.x + ARENA.w / 2 + Math.cos(a) * ARENA.w * 0.3;
+          const y = midY + Math.sin(a) * ARENA.h * 0.3;
           if (!clear(x, y, 8)) continue;
           add([{ x, y, r: rnd.between(7, 9) }]);
         }
@@ -686,12 +768,48 @@ export class CreatureArena extends Phaser.Scene {
         let guard = 0;
         while (this.barriers.length < n + 2 && guard++ < 200) {
           const x = ARENA.x + rnd.between(50, ARENA.w - 50);
-          const y = ARENA.y + rnd.between(16, ARENA.h - 16);
+          const y = ARENA.y + rnd.between(COVER_LANE, ARENA.h - COVER_LANE);
           if (!clear(x, y, 9)) continue;
           add([{ x, y, r: rnd.between(6, 9) }]);
         }
         break;
       }
+    }
+  }
+
+  /** A shot into a breakable piece of wall: it cracks, and at nothing it falls. */
+  private chip(p: Prop, dmg: number): void {
+    if (p.hp === undefined) return;
+    p.hp -= dmg;
+    if (p.hp > 0) {
+      this.repaintCover();
+      return;
+    }
+    this.props = this.props.filter((q) => q !== p);
+    for (const b of this.barriers) b.parts = b.parts.filter((q) => q !== p);
+    this.barriers = this.barriers.filter((b) => b.parts.length || b.life < 0);
+    this.fx.push({ kind: 'boom', x: p.x, y: p.y, r: 10, t: 0, life: 0.3, col: 0xd8d0c0 });
+    audio.sfx('item_thud', 0.4);
+    this.repaintCover();
+  }
+
+  /**
+   * The clock on every dropped wall, and the cracks in the breakable ones:
+   * a bar over the wall running down to nothing, so nobody has to guess
+   * how long it has left.
+   */
+  private drawWallClocks(u: Phaser.GameObjects.Graphics): void {
+    for (const bar of this.barriers) {
+      if (bar.life < 0 || !bar.max || !bar.parts.length) continue;
+      const top = bar.parts.reduce((a, q) => (q.y - q.r < a.y - a.r ? q : a));
+      const cx = bar.parts.reduce((a, q) => a + q.x, 0) / bar.parts.length;
+      const w = 14;
+      const k = Phaser.Math.Clamp(bar.life / bar.max, 0, 1);
+      const col = bar.owner ? ELEMENTS[bar.owner.c.element].light : 0xffffff;
+      u.fillStyle(0x000000, 0.6).fillRect(cx - w / 2 - 1, top.y - top.r - 6, w + 2, 3);
+      u.fillStyle(col, 0.9).fillRect(cx - w / 2, top.y - top.r - 5, Math.max(1, w * k), 1);
+      // a piece nothing breaks wears a little lock: no point shooting it
+      if (!bar.parts.some((q) => q.hp !== undefined)) u.fillStyle(0xffffff, 0.8).fillRect(cx + w / 2 + 2, top.y - top.r - 6, 2, 3);
     }
   }
 
@@ -702,7 +820,17 @@ export class CreatureArena extends Phaser.Scene {
     for (const bar of this.barriers) {
       const fade = bar.life >= 0 ? Math.min(1, bar.life / 1.2) : 1;
       g.setAlpha(fade);
-      for (const p of bar.parts) this.paintProp(g, p, bar);
+      for (const p of bar.parts) {
+        this.paintProp(g, p, bar);
+        // cracks across a piece that has been shot, more the worse it is
+        if (p.hp !== undefined && p.maxHp && p.hp < p.maxHp) {
+          const dmg = 1 - p.hp / p.maxHp;
+          g.lineStyle(1, 0x000000, 0.7);
+          g.lineBetween(p.x - p.r * 0.6, p.y - p.r * 0.2, p.x + p.r * 0.1, p.y + p.r * 0.3);
+          if (dmg > 0.4) g.lineBetween(p.x + p.r * 0.1, p.y + p.r * 0.3, p.x + p.r * 0.5, p.y - p.r * 0.4);
+          if (dmg > 0.7) g.lineBetween(p.x - p.r * 0.2, p.y - p.r * 0.6, p.x, p.y + p.r * 0.6);
+        }
+      }
     }
     g.setAlpha(1);
   }
@@ -880,29 +1008,10 @@ export class CreatureArena extends Phaser.Scene {
     // clock would use, which training does not need (the bars either side of
     // it are untouched, and the line under it still says what your element
     // does).  Nothing it covers is part of the game being played.
-    if (this.training) {
-      // (8 high, at 5: it ends above the element line under it)
-      button(this, GAME_W / 2, 5, 'LEAVE', () => this.askQuit(), { width: 40, height: 8 }).setDepth(60);
-    }
-    // the attack strip / touch buttons
-    const left = store.get().creatures.handed === 'left';
-    if (this.touch) {
-      // aim stick on the dominant side, its three attack buttons above it
-      const ax = left ? 34 : GAME_W - 34;
-      const mx = left ? GAME_W - 34 : 34;
-      Object.assign(this.aimStick, { hx: ax, hy: GAME_H - 28 });
-      Object.assign(this.moveStick, { hx: mx, hy: GAME_H - 28 });
-      const dir = left ? 1 : -1;
-      this.atkBtns = [0, 1, 2].map((i) => ({ x: ax + dir * (36 + i * 30), y: GAME_H - 14 }));
-    } else if (this.band) {
-      // (on the band under the picture)
-      this.atkBtns = [];
-    } else {
-      // three buttons 98 wide with 8 between them: an eleven-letter move name
-      // (the longest there is -- see creatures MOVE_NAME_MAX) fits inside one
-      // with its number and its icon, and still clears the border.
-      this.atkBtns = [0, 1, 2].map((i) => ({ x: 54 + i * 106, y: GAME_H - 13 }));
-    }
+    // ...and that way out is LEAVE in the pause menu (see pauseExit); on a
+    // desktop the slot holds the gear that opens it
+    if (this.training && !isTouch()) gearButton(this, GAME_W / 2, 7, () => openPause()).setDepth(60);
+    this.layAtkBtns();
     // the strip: the key, the icon (drawn each frame), the name
     if (!this.touch && !this.band) {
       this.me.c.attacks.forEach((a, i) => {
@@ -990,6 +1099,52 @@ export class CreatureArena extends Phaser.Scene {
    * battle has no button to reach this, and if something else does, it does
    * nothing.
    */
+  /** Where the attack buttons are, for whichever way the controls are laid out. */
+  private layAtkBtns(): void {
+    const left = store.get().creatures.handed === 'left';
+    if (this.touch) {
+      // aim stick on the dominant side, its three attack buttons above it
+      const ax = left ? 34 : GAME_W - 34;
+      const mx = left ? GAME_W - 34 : 34;
+      Object.assign(this.aimStick, { hx: ax, hy: GAME_H - 28 });
+      Object.assign(this.moveStick, { hx: mx, hy: GAME_H - 28 });
+      const dir = left ? 1 : -1;
+      this.atkBtns = [0, 1, 2].map((i) => ({ x: ax + dir * (36 + i * 30), y: GAME_H - 14 }));
+    } else if (this.band) {
+      // (on the band under the picture)
+      this.atkBtns = [];
+    } else {
+      // three buttons 98 wide with 8 between them: an eleven-letter move name
+      // (the longest there is -- see creatures MOVE_NAME_MAX) fits inside one
+      // with its number and its icon, and still clears the border.
+      this.atkBtns = [0, 1, 2].map((i) => ({ x: 54 + i * 106, y: GAME_H - 13 }));
+    }
+  }
+
+  /** Upright on a phone: the move pad and the three attacks in the band under the picture. */
+  private applyBand(): void {
+    if (!this.band) {
+      setCabinetTouch(null);
+      return;
+    }
+    const keys: KeyName[] = ['FOUR', 'FIVE', 'SIX'];
+    setCabinetTouch(
+      {
+        stick: 'wasd',
+        buttons: this.me.c.attacks.map((a, i) => {
+          const inf = attackInfo(a, this.me.c.element);
+          return { label: `${inf.emoji}\n${inf.word}`, key: keys[i], primary: i === 0 };
+        }),
+      },
+      'CreatureArena',
+    );
+  }
+
+  /** Training's LEAVE, in the pause menu between RESUME and EXIT TO START MENU. */
+  pauseExit(): { label: string; run: () => void } | null {
+    return this.training ? { label: 'LEAVE', run: () => this.askQuit() } : null;
+  }
+
   private askQuit(): void {
     if (!this.training) return;
     this.scene.start('CreatureHub', { from: this.from });
@@ -1022,6 +1177,10 @@ export class CreatureArena extends Phaser.Scene {
     if (a.kind === 'blink' || a.kind === 'dash') m *= mired;
     f.cds[i] = a.cd;
     f.face = ux >= 0 ? 1 : -1;
+    // the lunge that throws it
+    f.atk = ATK_T;
+    f.atkX = ux;
+    f.atkY = uy;
     // out of hiding the moment it attacks
     f.st.invis = 0;
     const col = ELEMENTS[f.c.element].col;
@@ -1165,19 +1324,31 @@ export class CreatureArena extends Phaser.Scene {
       // stops shots and bodies exactly as the scenery does, and it goes
       // again after a few seconds.
       case 'wall': {
+        const spec = WALL_SPECS[a.sp ?? ''] ?? WALL_DEFAULT;
         const d = Math.max(16, Math.min(a.reach, m));
         const wx = Phaser.Math.Clamp(f.x + ux * d, ARENA.x + 12, ARENA.x + ARENA.w - 12);
         const wy = Phaser.Math.Clamp(f.y + uy * d, ARENA.y + 10, ARENA.y + ARENA.h - 10);
-        // across the way you are facing, so it is cover and not a post
+        // across the way you are facing, so it is cover and not a post: a
+        // short line, a long one, or a screen curved round its maker
         const px = -uy;
         const py = ux;
-        const parts: Prop[] = [-1, 0, 1].map((k) => ({
-          x: Phaser.Math.Clamp(wx + px * k * 9, ARENA.x + 6, ARENA.x + ARENA.w - 6),
-          y: Phaser.Math.Clamp(wy + py * k * 9, ARENA.y + 6, ARENA.y + ARENA.h - 6),
-          r: 6,
-        })).filter((q) => Math.hypot(q.x - this.other(f).x, q.y - this.other(f).y) > 10 * this.other(f).scale);
+        const spots: Array<[number, number]> =
+          spec.shape === 'curve'
+            ? [-2, -1, 0, 1, 2].map((k) => {
+                const ang = Math.atan2(uy, ux) + k * 0.42;
+                return [f.x + Math.cos(ang) * d, f.y + Math.sin(ang) * d];
+              })
+            : (spec.shape === 'long' ? [-2, -1, 0, 1, 2] : [-1, 0, 1]).map((k) => [wx + px * k * 9, wy + py * k * 9]);
+        const parts: Prop[] = spots
+          .map(([x, y]) => ({
+            x: Phaser.Math.Clamp(x, ARENA.x + 6, ARENA.x + ARENA.w - 6),
+            y: Phaser.Math.Clamp(y, ARENA.y + 6, ARENA.y + ARENA.h - 6),
+            r: 6,
+            ...(spec.hp ? { hp: spec.hp, maxHp: spec.hp } : {}),
+          }))
+          .filter((q) => Math.hypot(q.x - this.other(f).x, q.y - this.other(f).y) > 10 * this.other(f).scale);
         if (parts.length) {
-          this.barriers.push({ kind: this.biome.prop, parts, seed: 1, life: WALL_S, owner: f, shatter: a.sp === 'glacier_slab' });
+          this.barriers.push({ kind: this.biome.prop, parts, seed: 1, life: spec.life, max: spec.life, owner: f, shatter: a.sp === 'glacier_slab' });
           this.props.push(...parts);
           this.repaintCover();
         }
@@ -1733,13 +1904,49 @@ export class CreatureArena extends Phaser.Scene {
   private onLand(f: Fighter, x: number, y: number, a: Attack): void {
     const o = this.other(f);
     if (a.sp === 'crag_lob' && !this.props.some((p) => Math.hypot(p.x - x, p.y - y) < p.r + 8) && Math.hypot(o.x - x, o.y - y) > 12 && Math.hypot(f.x - x, f.y - y) > 12) {
-      const part = { x, y, r: 7 };
-      this.barriers.push({ kind: 'rock', parts: [part], seed: 3, life: 7, owner: f });
+      const part = { x, y, r: 7, hp: PILLAR.hp, maxHp: PILLAR.hp };
+      this.barriers.push({ kind: 'rock', parts: [part], seed: 3, life: PILLAR.life, max: PILLAR.life, owner: f });
       this.props.push(part);
       this.repaintCover();
     }
     // a direct hit with the boulder: encased
     if (a.sp === 'ice_boulder' && Math.hypot(o.x - x, o.y - y) < 10 * o.scale) o.stun = Math.max(o.stun, 0.8);
+  }
+
+  /** Where the body is drawn, off its true spot, for its step and its lunge. */
+  private bodyMotion(f: Fighter): { ox: number; oy: number; k: number } {
+    let ox = 0;
+    let oy = 0;
+    let k = 1;
+    if (f.moving && !f.atk) {
+      const ph = f.stride;
+      // up on each step (two a stride), leaning into the way it is going
+      oy -= Math.abs(Math.sin(ph * Math.PI)) * 1.4 * f.scale;
+      ox += f.face * 0.6 * f.scale;
+    }
+    if (f.atk > 0) {
+      const p = 1 - f.atk / ATK_T; // 0 -> 1 over the lunge
+      // back for the first fifth, out hard to the peak, then home again
+      const d = p < 0.2 ? -(p / 0.2) * 1.5 : p < 0.45 ? -1.5 + ((p - 0.2) / 0.25) * 5.5 : 4 * (1 - (p - 0.45) / 0.55);
+      ox += f.atkX * d * f.scale;
+      oy += f.atkY * d * f.scale * 0.7;
+      k = 1 + (p > 0.25 && p < 0.6 ? 0.08 : 0);
+    }
+    return { ox: Math.round(ox), oy: Math.round(oy), k };
+  }
+
+  /** The step and lunge clocks, and the dust each footfall kicks up. */
+  private tickMotion(f: Fighter, dt: number): void {
+    if (f.atk > 0) f.atk = Math.max(0, f.atk - dt);
+    if (!f.moving) {
+      f.stride = 0;
+      return;
+    }
+    const before = Math.floor(f.stride * 2);
+    f.stride += dt * (f.c.speed / 28);
+    if (Math.floor(f.stride * 2) !== before && !f.st.air && !f.st.aloft && !f.st.under) {
+      this.fx.push({ kind: 'boom', x: f.x - f.face * 3 * f.scale, y: f.y + 6 * f.scale, r: 3, t: 0, life: 0.3, col: this.biome.groundDark });
+    }
   }
 
   /** Can it act at all (attack, or walk)? */
@@ -2244,7 +2451,9 @@ export class CreatureArena extends Phaser.Scene {
 
   /** Move with walls, cover and knockback; true if it got anywhere. */
   private step(f: Fighter, vx: number, vy: number, dt: number): void {
-    const r = 6 * f.scale;
+    // (the size it is drawn at: a big boss stops at the cover with its body,
+    // not with a point in its middle)
+    const r = BODY_R * f.scale;
     let nx = f.x + (vx + f.kx) * dt;
     let ny = f.y + (vy + f.ky) * dt;
     f.kx *= Math.pow(0.02, dt);
@@ -2585,6 +2794,7 @@ export class CreatureArena extends Phaser.Scene {
 
   private simulate(dt: number): void {
     this.elapsed += dt;
+    for (const f of [this.me, this.foe]) this.tickMotion(f, dt);
     const me = this.me;
     // ---- you
     let mx = 0;
@@ -2734,6 +2944,8 @@ export class CreatureArena extends Phaser.Scene {
         s.life = 0;
         if (s.a.mod === 'split') this.shatter(s);
         this.fx.push({ kind: 'spark', x: s.x, y: s.y, r: 3, t: 0, life: 0.15, col: 0xffffff });
+        // a wall that can be broken takes the hit
+        if (p.hp !== undefined) this.chip(p, Math.max(1, s.dmg));
       } else if (s.x < ARENA.x || s.x > ARENA.x + ARENA.w || s.y < ARENA.y || s.y > ARENA.y + ARENA.h) s.life = 0;
       else if (s.life <= 0 && s.a.mod === 'split') this.shatter(s);
     }
@@ -3256,7 +3468,13 @@ export class CreatureArena extends Phaser.Scene {
       }
       const lift = f.st.air || f.st.aloft ? 10 : 0;
       if (lift) g.fillStyle(0x000000, 0.3).fillEllipse(f.x, f.y + 6, 12 * f.scale, 4);
-      drawCreature(g, f.c, f.x, f.y - lift, f.scale, f.face, f.st.sleep || f.st.stone || f.st.hibernate ? 0 : f.moving ? t * 1.8 : t);
+      // ---- THE BODY MOVES LIKE A BODY.  Walking, it steps: a bounce on
+      // every stride and a little forward lean, with a scuff of dust off the
+      // ground each time a foot comes down.  Attacking, it lunges: it draws
+      // back for a beat, throws itself at the aim, and settles -- and it
+      // swells a touch at the moment of the blow, so a hit reads as effort.
+      const { ox, oy, k } = this.bodyMotion(f);
+      drawCreature(g, f.c, f.x + ox, f.y - lift + oy, f.scale * k, f.face, f.st.sleep || f.st.stone || f.st.hibernate ? 0 : f.moving ? t * 1.8 : t);
       if (f.st.stone) g.fillStyle(0x8a8a8a, 0.55).fillEllipse(f.x, f.y, 16 * f.scale, 15 * f.scale);
       if (f.st.cage) g.lineStyle(1, 0x9ad0ff, 0.9).strokeCircle(f.x, f.y, 12 * f.scale).fillStyle(0x9ad0ff, 0.2).fillCircle(f.x, f.y, 12 * f.scale);
       if (f.st.sleep) g.fillStyle(0xffffff, 0.9).fillRect(f.x + 6, f.y - 16 - ((t * 8) % 4), 3, 1).fillRect(f.x + 8, f.y - 15 - ((t * 8) % 4), 1, 1).fillRect(f.x + 6, f.y - 14 - ((t * 8) % 4), 3, 1);
@@ -3373,7 +3591,7 @@ export class CreatureArena extends Phaser.Scene {
       if (this.touch) {
         u.fillStyle(i === this.sel ? 0x6a3aa8 : 0x2a2a48, 0.85).fillCircle(b.x, b.y, 12);
         u.lineStyle(1, i === this.sel ? 0xffe060 : 0x8a8ab0, 1).strokeCircle(b.x, b.y, 12);
-        drawAttackIcon(u, a.kind, b.x, b.y, ic);
+        drawAbilityIcon(u, a, b.x, b.y, ic);
         if (ready < 1) u.fillStyle(0x000000, 0.55).slice(b.x, b.y, 12, -Math.PI / 2, -Math.PI / 2 + (1 - ready) * Math.PI * 2, false).fillPath();
       } else {
         u.fillStyle(i === this.sel ? 0x4a2a78 : 0x1a1a30, 0.9).fillRect(b.x - 49, b.y - 7, 98, 13);
@@ -3383,7 +3601,7 @@ export class CreatureArena extends Phaser.Scene {
         u.fillStyle(0x0c0c18, 1).fillRect(b.x - 47, b.y - 5, 9, 9);
         u.lineStyle(1, i === this.sel ? 0xffe060 : 0x8a8ab0, 1).strokeRect(b.x - 47, b.y - 5, 9, 9);
         u.fillStyle(0xffffff, 0.12).fillRect(b.x - 46, b.y - 4, 7, 1);
-        drawAttackIcon(u, a.kind, b.x - 30, b.y - 1, ic);
+        drawAbilityIcon(u, a, b.x - 30, b.y - 1, ic);
       }
     });
     // the chosen attack's line, fading
@@ -3392,6 +3610,7 @@ export class CreatureArena extends Phaser.Scene {
     this.info2.setVisible(showing).setAlpha(Math.min(1, this.infoT));
     this.infoPlate.setVisible(showing).setAlpha(Math.min(1, this.infoT) * 0.92);
     if (this.started && !this.over) this.drawReach(g);
+    this.drawWallClocks(u);
     if (this.touch) {
       for (const s of [this.moveStick, this.aimStick]) {
         const bx = s.id >= 0 ? s.bx : s.hx;

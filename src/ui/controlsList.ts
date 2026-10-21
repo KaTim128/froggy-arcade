@@ -17,6 +17,7 @@ import { isTouch } from '../core/device';
 import { store } from '../core/state';
 import { touchLayoutFor } from '../game/touchLayouts';
 import type { TouchLayout, KeyName } from './touchControls';
+import { relabelKeys } from '../core/keymap';
 
 export type ControlRow = [string, string];
 
@@ -106,7 +107,8 @@ function touchRow([keys, does]: ControlRow, layout: TouchLayout): ControlRow | n
  * thumb version of them on a touch screen.
  */
 export function deviceControls(rows: ControlRow[], layout: TouchLayout): ControlRow[] {
-  if (!isTouch()) return rows;
+  // (on a keyboard, with whatever keys the player has chosen)
+  if (!isTouch()) return rows.map(([k, d]) => [relabelKeys(k), d]);
   const out: ControlRow[] = [];
   for (const r of rows) {
     const t = touchRow(r, layout);

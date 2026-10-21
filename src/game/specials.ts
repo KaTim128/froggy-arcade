@@ -71,7 +71,7 @@ export const SPECIAL_LIST: SpecialDef[] = [
   D('current_ward', 'EDDY WARD', 'aura', 0, 8, 5, 'defend', 'FOR 4S, ENEMY SHOTS THAT PASS WITHIN 18PX ARE BENT OFF COURSE.'),
   // ------------------------------------------------------------------- moss
   D('shell_up', 'SHELL UP', 'shield', 0, 6, 1.6, 'defend', 'BLOCKS ALL DAMAGE FOR 1.6S.'),
-  D('kelp_weave', 'KELP WEAVE', 'wall', 0, 7.5, 28, 'mid', 'RAISES A 3-PART SEAWEED WALL 28PX AWAY FOR 7S.'),
+  D('kelp_weave', 'KELP WEAVE', 'wall', 0, 6, 28, 'mid', 'RAISES A CURVED SEAWEED WALL FOR 9S. SHOTS CAN TEAR IT DOWN, BUT IT IS BACK SOON.'),
   D('root_grip', 'ROOT GRIP', 'snare', 10, 5, 165, 'poke', 'A ROOT THAT CURVES AFTER THE TARGET AND HOLDS THEM FOR 1.3S.', 'homing'),
   D('sneeze_spores', 'ACHOO SPORE', 'nova', 12, 6, 46, 'close', 'A 46PX RING OF SPORES: ANYONE CAUGHT FIRES THEIR NEXT ATTACK IN A RANDOM DIRECTION.'),
   D('antler_rush', 'ANTLER RUSH', 'dash', 15, 3.6, 250, 'close', 'A 70PX CHARGE THAT PINS THE TARGET TO THE SPOT FOR 1S.'),
@@ -83,7 +83,7 @@ export const SPECIAL_LIST: SpecialDef[] = [
   D('pollinate', 'POLLINATE', 'bolt', 6, 5, 200, 'poke', 'DUSTS THE TARGET FOR 4S: EVERY HIT IT LANDS ON THEM HEALS IT 3.'),
   D('hive_call', 'HIVE CALL', 'aura', 0, 10, 5, 'self', 'THREE DRONES CIRCLE IT FOR 5S, STINGING ANYTHING THEY TOUCH FOR 3.'),
   // ------------------------------------------------------------------ frost
-  D('glacier_slab', 'ICE SLAB', 'wall', 0, 8, 30, 'mid', 'DROPS AN ICE WALL THAT SHATTERS AS IT MELTS, DEALING 10 TO ANYONE WITHIN 20PX.'),
+  D('glacier_slab', 'ICE SLAB', 'wall', 0, 8, 30, 'mid', 'A LONG ICE WALL NOTHING CAN BREAK - FOR ONLY 4S. THEN IT SHATTERS: 10 TO ANYONE WITHIN 20PX.'),
   D('hailburst', 'HAILBURST', 'spread', 12, 6, 180, 'poke', '3 HAILSTONES THAT GROW AND HIT HARDER THE FURTHER THEY FLY.', 'grow'),
   D('cold_tether', 'COLD TETHER', 'snare', 9, 5, 170, 'poke', 'HOLDS THE TARGET, THEN HALVES THEIR SPEED FOR 3S AFTER IT LETS GO.', 'chill'),
   D('prism_stasis', 'PRISM HALT', 'nova', 0, 7, 40, 'defend', 'A FLASH THAT FREEZES EVERY SHOT IN FLIGHT FOR 1S BEFORE LETTING THEM GO ON.'),
@@ -111,7 +111,7 @@ export const SPECIAL_LIST: SpecialDef[] = [
   D('horn_toss', 'HORN TOSS', 'dash', 13, 3.6, 235, 'close', 'CHARGES AND FLIPS THE TARGET OVER ITS BACK TO LAND 40PX BEHIND IT.'),
   D('roll_out', 'ROLL OUT', 'dash', 15, 3.6, 268, 'close', 'ROLLS 75PX; WHATEVER IT HITS IS KNOCKED DOWN FOR 0.6S AND CANNOT ATTACK OR MOVE.'),
   D('dig_in', 'DIG IN', 'shield', 0, 6.5, 1.8, 'defend', 'SHIELDS FOR 1.8S; ANYTHING THAT HITS IT TAKES 6 DAMAGE.', 'thorns'),
-  D('crag_lob', 'CRAG LOB', 'arc', 13, 4.5, 105, 'hidden', 'A LOBBED ROCK THAT STAYS WHERE IT LANDS AS A PILLAR OF COVER FOR 7S.'),
+  D('crag_lob', 'CRAG LOB', 'arc', 13, 4.5, 105, 'hidden', 'A LOBBED ROCK THAT STANDS WHERE IT LANDS AS A PILLAR FOR 7S, UNTIL IT IS SHOT DOWN.'),
   D('hide_away', 'HIDE AWAY', 'shield', 0, 7, 1.8, 'defend', 'IMMUNE INSIDE ITS SHELL FOR 1.8S, HEALING 3 A SECOND.', 'regen'),
   D('gravity_rune', 'PULL RUNE', 'mine', 0, 7, 0, 'mid', 'A RUNE ON THE FLOOR THAT SLOWLY DRAGS THE OPPONENT TOWARDS IT FOR 4S.'),
   D('petrify_gaze', 'STONE GAZE', 'beam', 8, 6, 120, 'poke', 'A 120PX STARE THAT TURNS THE TARGET TO STONE FOR 1S: STUNNED, BUT TAKING 50% LESS DAMAGE.'),

@@ -54,11 +54,14 @@ const BOX_H = 34;
 const BOX_Y = GAME_H - BOX_H - 2;
 const WELL = { x: 6, w: 40, h: BOX_H - 6 };
 const PORTRAIT_CX = WELL.x + WELL.w / 2;
-const PORTRAIT_BASE = BOX_Y + BOX_H - 4;
+const PORTRAIT_BASE = BOX_Y + BOX_H - 6;
 /** His height in the well, before he is squashed down into it (see paintPortrait). */
-const PORTRAIT_H = 36;
-/** Squat: a little wider and much shorter, a square frog for a square frame. */
-const SQUASH = { x: 1.1, y: 0.7 };
+const PORTRAIT_H = 24;
+/**
+ * Squat, but only a touch: he sits IN the frame with room round him, not
+ * pressed up against all four sides of it.
+ */
+const SQUASH = { x: 1, y: 0.86 };
 
 export class DialogueBox {
   private scene: Phaser.Scene;
