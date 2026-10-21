@@ -436,19 +436,25 @@ export class CreatureArena extends Phaser.Scene {
     this.band = touchDevice && window.innerHeight >= window.innerWidth;
     this.touch = touchDevice && !this.band;
     this.paintHud();
-    if (this.band) {
-      const keys: KeyName[] = ['FOUR', 'FIVE', 'SIX'];
-      setCabinetTouch(
-        {
-          stick: 'wasd',
-          buttons: this.me.c.attacks.map((a, i) => {
-            const inf = attackInfo(a, this.me.c.element);
-            return { label: `${inf.emoji}\n${inf.word}`, key: keys[i], primary: i === 0 };
-          }),
-        },
-        'CreatureArena',
-      );
-      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setCabinetTouch(null));
+    this.applyBand();
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setCabinetTouch(null));
+    // TURN THE PHONE AND THE CONTROLS GO WITH IT.  Upright, they are in the
+    // black band under the picture; sideways, the two sticks in its corners.
+    // It used to be decided once, at the bell, so a fight started sideways
+    // and then turned upright kept its sticks over the picture with a band
+    // of empty black underneath.
+    if (touchDevice) {
+      const onResize = (): void => {
+        const band = window.innerHeight >= window.innerWidth;
+        if (band === this.band) return;
+        this.band = band;
+        this.touch = !band;
+        for (const st of [this.moveStick, this.aimStick]) Object.assign(st, { id: -1, dx: 0, dy: 0 });
+        this.layAtkBtns();
+        this.applyBand();
+      };
+      window.addEventListener('resize', onResize);
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => window.removeEventListener('resize', onResize));
     }
     // the band's attack buttons: pick that attack and let it go at the foe
     this.input.keyboard!.on('keydown-FOUR', () => this.quickFire(0));
@@ -883,26 +889,8 @@ export class CreatureArena extends Phaser.Scene {
     // does).  Nothing it covers is part of the game being played.
     // ...and that way out is LEAVE in the pause menu (see pauseExit); on a
     // desktop the slot holds the gear that opens it
-    if (this.training && !this.touch) gearButton(this, GAME_W / 2, 7, () => openPause()).setDepth(60);
-    // the attack strip / touch buttons
-    const left = store.get().creatures.handed === 'left';
-    if (this.touch) {
-      // aim stick on the dominant side, its three attack buttons above it
-      const ax = left ? 34 : GAME_W - 34;
-      const mx = left ? GAME_W - 34 : 34;
-      Object.assign(this.aimStick, { hx: ax, hy: GAME_H - 28 });
-      Object.assign(this.moveStick, { hx: mx, hy: GAME_H - 28 });
-      const dir = left ? 1 : -1;
-      this.atkBtns = [0, 1, 2].map((i) => ({ x: ax + dir * (36 + i * 30), y: GAME_H - 14 }));
-    } else if (this.band) {
-      // (on the band under the picture)
-      this.atkBtns = [];
-    } else {
-      // three buttons 98 wide with 8 between them: an eleven-letter move name
-      // (the longest there is -- see creatures MOVE_NAME_MAX) fits inside one
-      // with its number and its icon, and still clears the border.
-      this.atkBtns = [0, 1, 2].map((i) => ({ x: 54 + i * 106, y: GAME_H - 13 }));
-    }
+    if (this.training && !isTouch()) gearButton(this, GAME_W / 2, 7, () => openPause()).setDepth(60);
+    this.layAtkBtns();
     // the strip: the key, the icon (drawn each frame), the name
     if (!this.touch && !this.band) {
       this.me.c.attacks.forEach((a, i) => {
@@ -990,6 +978,47 @@ export class CreatureArena extends Phaser.Scene {
    * battle has no button to reach this, and if something else does, it does
    * nothing.
    */
+  /** Where the attack buttons are, for whichever way the controls are laid out. */
+  private layAtkBtns(): void {
+    const left = store.get().creatures.handed === 'left';
+    if (this.touch) {
+      // aim stick on the dominant side, its three attack buttons above it
+      const ax = left ? 34 : GAME_W - 34;
+      const mx = left ? GAME_W - 34 : 34;
+      Object.assign(this.aimStick, { hx: ax, hy: GAME_H - 28 });
+      Object.assign(this.moveStick, { hx: mx, hy: GAME_H - 28 });
+      const dir = left ? 1 : -1;
+      this.atkBtns = [0, 1, 2].map((i) => ({ x: ax + dir * (36 + i * 30), y: GAME_H - 14 }));
+    } else if (this.band) {
+      // (on the band under the picture)
+      this.atkBtns = [];
+    } else {
+      // three buttons 98 wide with 8 between them: an eleven-letter move name
+      // (the longest there is -- see creatures MOVE_NAME_MAX) fits inside one
+      // with its number and its icon, and still clears the border.
+      this.atkBtns = [0, 1, 2].map((i) => ({ x: 54 + i * 106, y: GAME_H - 13 }));
+    }
+  }
+
+  /** Upright on a phone: the move pad and the three attacks in the band under the picture. */
+  private applyBand(): void {
+    if (!this.band) {
+      setCabinetTouch(null);
+      return;
+    }
+    const keys: KeyName[] = ['FOUR', 'FIVE', 'SIX'];
+    setCabinetTouch(
+      {
+        stick: 'wasd',
+        buttons: this.me.c.attacks.map((a, i) => {
+          const inf = attackInfo(a, this.me.c.element);
+          return { label: `${inf.emoji}\n${inf.word}`, key: keys[i], primary: i === 0 };
+        }),
+      },
+      'CreatureArena',
+    );
+  }
+
   /** Training's LEAVE, in the pause menu between RESUME and EXIT TO START MENU. */
   pauseExit(): { label: string; run: () => void } | null {
     return this.training ? { label: 'LEAVE', run: () => this.askQuit() } : null;
