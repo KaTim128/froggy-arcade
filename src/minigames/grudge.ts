@@ -548,7 +548,8 @@ export const grudge: MinigameModule = {
     if (practicing) {
       // a bag has no health and no special: its corner of the HUD just says what it is
       for (const o of [hp2Frame, hpBar2, cd2Frame, cd2]) o.setVisible(false);
-      foeLabel.setText('PUNCHING BAG').setTint(PALETTE.amber);
+      // (named in the middle, under the clock: the phone's gear sits over that corner)
+      foeLabel.setText('');
     }
     // The clock is short enough to sit in the 45px gap between the HP bars; the
     // round line is not, and used to be drawn straight through both of them.
@@ -1350,7 +1351,7 @@ function startRound(): void {
   aiCounter = 0;
   roundOver = true;
 
-  roundText?.setText(practicing ? 'HITS 0' : `ROUND ${wins1 + wins2 + 1}   ${wins1}-${wins2}`);
+  roundText?.setText(practicing ? 'PUNCHING BAG - HITS 0' : `ROUND ${wins1 + wins2 + 1}   ${wins1}-${wins2}`);
   timerText?.setText('');
   announce?.setText('READY');
   // Round one says who you have drawn, and what they are like.  The later
@@ -1717,7 +1718,7 @@ function tryHit(f: Fighter): void {
     const hy = f.y - (f.move === 'low' ? 12 : f.move === 'special' ? 20 : 28);
     hitBag(away, f.move, hy);
     audio.sfx(f.move === 'special' ? 'boom' : 'whack');
-    roundText?.setText(`HITS ${++bagHits}`);
+    roundText?.setText(`PUNCHING BAG - HITS ${++bagHits}`);
     impact(bagSurfaceX(hy, -away), hy, f.move, false);
     return;
   }
