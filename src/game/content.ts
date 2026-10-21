@@ -173,9 +173,10 @@ export const CABINETS: CabinetDef[] = [
   // Ten on a five, like every other five-token cabinet on the floor.
   { id: 'frogvslizard', title: 'FENCE WARS', tier: 'hard', cost: 7, reward: 15, x: 240, y: 162, color: 0xa8c23f, room: 'annex', symbol: 'FL', motif: 'throw' },
 
-  // ---- the game corner (the fourth room), on the back wall between the claw
-  // machines and CREATURE CLASH, under the sign.  Five in, ten out.
-  { id: 'bogball', title: 'BOG BALL', tier: 'medium', cost: 5, reward: 10, x: 168, y: 80, color: 0x5a8a3a, room: 'lounge', symbol: 'BB', motif: 'bog' },
+  // ---- the game corner (the fourth room), on the back wall beside the oddity
+  // crane -- with a little more room on its left than a cabinet usually gets,
+  // so the two machines read as two -- under the sign.  Five in, ten out.
+  { id: 'bogball', title: 'BOG BALL', tier: 'medium', cost: 5, reward: 10, x: 114, y: 74, color: 0x5a8a3a, room: 'lounge', symbol: 'BB', motif: 'bog' },
 
   // ---- and the room at the back, where none of it is a game
   // Three tokens a spin, every spin raised through the shell as it is pulled

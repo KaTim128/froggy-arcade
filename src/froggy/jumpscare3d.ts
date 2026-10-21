@@ -133,9 +133,12 @@ export function playJumpscare3D(scene: Phaser.Scene, stage: ThreeStage, monster:
   const faceFront = 0.28 * s;
   const fov = THREE.MathUtils.degToRad(cam.fov);
   const view = (d: number) => 2 * d * Math.tan(fov / 2);
-  // close: the head a little bigger than the frame -- the eyes at the top
-  // edge, the stretched jaw off the bottom of it, the teeth across the middle
-  const near = faceFront + headSize / (view(1) * 1.18);
+  // close: the whole face in the frame, crown to teeth -- both eyes always
+  // in full.  (It used to be a little bigger than the frame, eyes at the top
+  // edge; on a phone's small picture that left only the eyes, cut in half.)
+  // A frame narrower than it is tall is measured across, not up.
+  const narrow = Math.min(1, cam.aspect || 1);
+  const near = faceFront + (headSize * 1.3) / (view(1) * narrow);
   // far: his head, his chest and his hanging arms, towering
   const far = faceFront + (headSize * 2.5) / view(1);
 

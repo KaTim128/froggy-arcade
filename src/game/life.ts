@@ -125,17 +125,21 @@ export function rentInDays(l = L()): number {
 }
 
 /**
- * The rent, in words, for the HUD: RENT DUE IN 7 DAYS, counting down with
- * the days, RENT DUE TODAY on the day, RENT OVERDUE past it, and RENT PAID
- * on the day it was paid.  `warn` is true when it needs paying now.
+ * The rent, in a few words, for the HUD -- and only when it needs minding:
+ * RENT IN 2D (or 1D) as it comes up, RENT DUE TODAY on the day, RENT
+ * OVERDUE past it.  The rest of the week the clock's line is just the clock:
+ * spelt out every day (RENT PAID - DUE IN 7 DAYS) it ran across half the
+ * top of the room, over the rooms' own signs.  `warn` is true when it needs
+ * paying now.
  */
+export const RENT_SHOW_DAYS = 2;
 export function rentLabel(l = L()): { text: string; warn: boolean } | null {
   if (!l.rented) return null;
   const d = rentInDays(l);
   if (d < 0) return { text: 'RENT OVERDUE', warn: true };
-  if (l.rentPaidDay === clock(l.t).day) return { text: `RENT PAID - DUE IN ${d} ${d === 1 ? 'DAY' : 'DAYS'}`, warn: false };
   if (d === 0) return { text: 'RENT DUE TODAY', warn: true };
-  return { text: `RENT DUE IN ${d} ${d === 1 ? 'DAY' : 'DAYS'}`, warn: false };
+  if (d <= RENT_SHOW_DAYS && l.rentPaidDay !== clock(l.t).day) return { text: `RENT IN ${d}D`, warn: false };
+  return null;
 }
 
 /**

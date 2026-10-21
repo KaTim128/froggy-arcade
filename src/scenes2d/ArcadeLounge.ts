@@ -64,7 +64,9 @@ const CRANES: Array<{ kind: CraneKind; x: number; y: number; cost: number; title
 ];
 
 /** CREATURE CLASH: the upright on the back wall, right of the sign. */
-const CLASH = { x: 244, y: 82 };
+// (a touch further right than it first stood: the room's two games on the
+// back wall, BOG BALL and this, each get their own stretch of it)
+const CLASH = { x: 254, y: 82 };
 
 type Target =
   | { kind: 'cabinet'; cab: Cabinet }
@@ -129,9 +131,10 @@ export class ArcadeLounge extends Phaser.Scene {
     paintHubRoom(this, { night: this.night, frontDoor: false });
     paintArcadeDressing(this, {
       night: this.night,
-      props: [{ x: 284, y: 70, kind: 'plant' }],
+      props: [{ x: 292, y: 70, kind: 'plant' }],
       // (one, clear of the claw machines that now stand where the other was)
-      vents: [236],
+      // (between BOG BALL and CREATURE CLASH, clear of both)
+      vents: [196],
       // (the hanging WIN sign would sit behind CREATURE CLASH's marquee: the
       // cabinet is the thing that is lit up over there now)
       avoid: [{ from: CLASH.x - CLASH_W / 2 - 4, to: CLASH.x + CLASH_W / 2 + 4 }],

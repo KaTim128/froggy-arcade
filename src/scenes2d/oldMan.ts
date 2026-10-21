@@ -69,21 +69,22 @@ export class OldMan {
   ) {
     this.x = x;
     const s = host.scene;
-    // everything of his sits on the wall line, BEHIND the pavement: people
-    // walking past go in front of him, never under him
-    const g = s.add.graphics().setDepth(55);
+    // everything of his sits on the wall line, BEHIND the pavement: the
+    // player and people walking past (depthFor ~50.1) go in front of him,
+    // his bench and his sign, never under them
+    const g = s.add.graphics().setDepth(49.5);
     g.fillStyle(0x14100c, 1).fillRect(x - 16, y - 2, 24, 5);
     g.fillStyle(0x5a5a66, 1).fillRect(x - 15, y - 1, 22, 3);
     g.fillStyle(0x7a7a86, 1).fillRect(x - 15, y - 1, 22, 1);
     for (let k = x - 13; k < x + 6; k += 5) g.fillStyle(0x3a3a46, 1).fillRect(k, y, 1, 2);
     // his sign, propped against the wall behind him
-    const sg = s.add.graphics().setDepth(54);
+    const sg = s.add.graphics().setDepth(49.4);
     sg.fillStyle(0x14100c, 1).fillRect(x + 1, y - 24, 12, 11);
     sg.fillStyle(0xb08a58, 1).fillRect(x + 2, y - 23, 10, 9);
     sg.fillStyle(0x3a2a18, 1).fillRect(x + 4, y - 21, 6, 1).fillRect(x + 3, y - 19, 8, 1).fillRect(x + 4, y - 17, 5, 1);
     this.fig = new Player(s, x, y, dark, HOMELESS_LOOK);
     this.fig.sit('floor', { facing: -1 });
-    this.fig.sprite.setDepth(56);
+    this.fig.sprite.setDepth(49.6);
     const z = s.add.zone(x - 14, y - 26, 24, 30).setOrigin(0, 0).setDepth(61).setInteractive({ useHandCursor: true }).on('pointerdown', onTap);
     this.parts.push(g, sg, z);
   }

@@ -280,7 +280,7 @@ export class TokenHud {
     const l = s.life;
     const c = clock(l.t);
     const rent = rentLabel(l);
-    this.clockText.setText(rent ? `DAY ${c.day + 1} ${c.text}  ${rent.text}` : `DAY ${c.day + 1} ${c.text}`);
+    this.clockText.setText(rent ? `DAY ${c.day + 1} ${c.text} - ${rent.text}` : `DAY ${c.day + 1} ${c.text}`);
     this.clockText.setTint(rent?.warn ? PALETTE.gold : PALETTE.fog);
     this.lifePlate.width = this.clockText.width + 6;
     if (this.mode === 'labeled') this.layoutSlots();
