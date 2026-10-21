@@ -10,7 +10,10 @@
 
 import { bootGame } from './core/sceneManager';
 import { store } from './core/state';
+import { installKeyWords } from './core/keyWords';
 
+// (on a phone, every [E] on screen says INTERACT or PLAY instead)
+installKeyWords();
 bootGame();
 
 // Time played, for the profile cards: counted while the game is open and in
