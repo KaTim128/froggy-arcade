@@ -1,8 +1,14 @@
 /**
  * ---- CREATURE CLASH, the cabinet's menus.  Everything that is not the
- * fight: the free starter, your two, the packs and their nine face-down
- * cards, the map of nine places and their bosses, and which hand the
- * sticks go under.
+ * fight: the free starter, your two, the pack and its nine face-down cards,
+ * and the two ways to fight, kept apart --
+ *
+ *   ZONE BATTLE  the map of nine places: one creature from the place's own
+ *                pool, a small stake, a small prize.  No bosses here.
+ *   LADDER       a paid run: five fights, then a boss.  Its own screen, with
+ *                where you are on it, what it pays and what it cost.
+ *
+ * -- and which hand the sticks go under.
  *
  * Every change goes through game/creatureClash -- this scene only draws and
  * asks.  It is redrawn from the save each time, so whatever is on screen is
@@ -23,11 +29,12 @@ import { backPlate } from '../ui/plate';
 import { drawFrogToken } from '../ui/hud';
 import { xpProgress } from '../game/creatureLevel';
 import {
-  BATTLE_COST, BATTLE_WIN, BOSS_WIN, BIOMES, BODIES, BOSS_AFTER, ELEMENTS, MAX_OWNED, RARITIES, STARTERS, TIERS, creatureById, tierOdds, type Attack, type Creature,
+  BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, PACK_COST, STARTERS, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
-import { activeOwned, ownedCreature, bossOpen, claimStarter, needsRecovery, openPack, pickCard, release, retreat, setActive, setHanded } from '../game/creatureClash';
+import { abandonLadder, activeOwned, ownedCreature, claimStarter, needsRecovery, openPack, pickCard, release, retreat, setActive, setHanded, startLadder } from '../game/creatureClash';
 
-type Screen = 'home' | 'starter' | 'recruit' | 'pack' | 'map' | 'controls';
+type Screen = 'home' | 'starter' | 'recruit' | 'pack' | 'map' | 'ladder' | 'controls';
+const SCREENS: Screen[] = ['home', 'map', 'ladder', 'recruit', 'controls'];
 
 interface Shown {
   c: { element: Creature['element']; body: Creature['body'] };
@@ -55,9 +62,13 @@ export class CreatureHub extends Phaser.Scene {
     super('CreatureHub');
   }
 
-  init(data: { from?: string; msg?: string }): void {
+  /** The screen asked for (back from a fight: the ladder, or the map). */
+  private want: Screen | null = null;
+
+  init(data: { from?: string; msg?: string; screen?: string }): void {
     this.from = data.from ?? 'ArcadeLounge';
     this.msg = data.msg ?? '';
+    this.want = SCREENS.includes(data.screen as Screen) ? (data.screen as Screen) : null;
     this.picked = null;
     this.dialog = null;
   }
@@ -69,7 +80,7 @@ export class CreatureHub extends Phaser.Scene {
       this.msg = `LAST BATTLE ABANDONED. ${r.msg}`;
     }
     const c = store.get().creatures;
-    this.screen = !c.starterTaken ? 'starter' : c.pending ? 'pack' : needsRecovery() ? 'recruit' : 'home';
+    this.screen = !c.starterTaken ? 'starter' : c.pending ? 'pack' : needsRecovery() ? 'recruit' : this.want ?? 'home';
     this.add.rectangle(0, 0, GAME_W, GAME_H, 0x10142a).setOrigin(0, 0);
     // a starfield of tiny element sparks behind everything
     const bg = this.add.graphics();
@@ -124,7 +135,7 @@ export class CreatureHub extends Phaser.Scene {
     L.add(drawFrogToken(this.add.graphics()).setPosition(103, 7.5));
     L.add(text(this, 111, 4, tok, PALETTE.mossLight));
     if (this.screen !== 'pack') L.add(button(this, GAME_W - 26, 8, this.screen === 'home' || this.screen === 'starter' ? 'LEAVE' : 'BACK', () => (this.screen === 'home' || this.screen === 'starter' ? this.leave() : this.go('home')), { width: 44, height: 11 }));
-    ({ home: () => this.home(), starter: () => this.starter(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), controls: () => this.controls() })[this.screen]();
+    ({ home: () => this.home(), starter: () => this.starter(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), ladder: () => this.ladder(), controls: () => this.controls() })[this.screen]();
     if (this.msg) {
       const m = centerText(this, GAME_W / 2, GAME_H - 7, this.msg, PALETTE.gold);
       L.add(m);
@@ -185,26 +196,26 @@ export class CreatureHub extends Phaser.Scene {
 
   /**
    * One creature's card: its picture on a panel in its element's colours, its
-   * name and rarity, health and speed as bars, and the three attacks with
+   * name, element and role (there are no rarities: every creature is its own
+   * kind of fighter, not a better or worse one), health and speed as bars, and the three attacks with
    * their icons.  `active` gives it the gold edge of the one in the ring.
    * Its level is in a chip on the picture; with `xp` (one you own), the
    * experience towards the next level as a bar, or MAX at level 3.
    */
   private card(c: Creature, x: number, y: number, w: number, h: number, big = true, active = false, xp?: number): void {
     const L = this.layer;
-    const r = RARITIES[c.rarity];
     const el = ELEMENTS[c.element];
     const artH = big ? 36 : 26;
     L.add(this.add.rectangle(x + 2, y + 2, w, h, 0x000000, 0.35).setOrigin(0, 0));
-    L.add(this.add.rectangle(x, y, w, h, 0x181c36).setOrigin(0, 0).setStrokeStyle(active ? 2 : 1, active ? PALETTE.gold : r.col));
+    L.add(this.add.rectangle(x, y, w, h, 0x181c36).setOrigin(0, 0).setStrokeStyle(active ? 2 : 1, active ? PALETTE.gold : el.col));
     // the picture: the element's dark, lighter towards the floor it stands on
     L.add(this.add.rectangle(x + 2, y + 2, w - 4, artH, el.dark, 0.55).setOrigin(0, 0));
     L.add(this.add.rectangle(x + 2, y + 2 + artH * 0.6, w - 4, artH * 0.4, el.col, 0.18).setOrigin(0, 0));
     L.add(this.add.ellipse(x + w / 2, y + artH - 2, 30, 6, 0x000000, 0.3));
     this.shown.push({ c, x: x + w / 2, y: y + (big ? 20 : 15), s: big ? 1.6 : 1.2, f: 1 });
-    // the rarity, in a chip on the picture's corner
-    const tag = text(this, x + w - 6, y + 5, r.name.split(' ')[0], r.col).setOrigin(1, 0);
-    L.add(this.add.rectangle(x + w - 3, y + 3, Math.ceil(tag.width) + 6, 11, 0x0a0d1e, 0.85).setOrigin(1, 0).setStrokeStyle(1, r.col));
+    // the element, in a chip on the picture's corner
+    const tag = text(this, x + w - 6, y + 5, el.name, el.light).setOrigin(1, 0);
+    L.add(this.add.rectangle(x + w - 3, y + 3, Math.ceil(tag.width) + 6, 11, 0x0a0d1e, 0.85).setOrigin(1, 0).setStrokeStyle(1, el.col));
     L.add(tag);
     // the level, in a chip on the other corner
     const lv = xpProgress(xp ?? 0);
@@ -214,7 +225,7 @@ export class CreatureHub extends Phaser.Scene {
     let ty = y + artH + 4;
     L.add(text(this, x + 4, ty, c.name.toUpperCase(), PALETTE.cream).setMaxWidth(w - 6));
     ty += 9;
-    L.add(text(this, x + 4, ty, `${r.name} ${el.name}`, r.col));
+    L.add(text(this, x + 4, ty, c.role, el.light).setMaxWidth(w - 6));
     if (!big) return;
     ty += 10;
     if (xp !== undefined) {
@@ -226,7 +237,7 @@ export class CreatureHub extends Phaser.Scene {
     }
     const bw = w - 44;
     L.add(text(this, x + 4, ty, 'HP', PALETTE.ash));
-    this.bar(x + 18, ty + 2, bw, c.hp / 320, 0x6ad86a);
+    this.bar(x + 18, ty + 2, bw, c.hp / 160, 0x6ad86a);
     L.add(text(this, x + w - 4, ty, String(c.hp), PALETTE.fog).setOrigin(1, 0));
     ty += 8;
     L.add(text(this, x + 4, ty, 'SPD', PALETTE.ash));
@@ -272,7 +283,6 @@ export class CreatureHub extends Phaser.Scene {
     const M = this.add.container(0, 0).setDepth(600);
     this.modal = M;
     const el = ELEMENTS[c.element];
-    const body = BODIES[c.body];
     const lines = attackCard(a, c.element);
     const w = 200;
     const close = (): void => this.draw();
@@ -286,8 +296,8 @@ export class CreatureHub extends Phaser.Scene {
       body0.push(text(this, 0, 0, ln, col).setMaxWidth(w - 16));
     };
     lines.forEach((ln, i) => lineOf(ln, i === 0 ? PALETTE.cream : PALETTE.fog));
-    lineOf(`GOOD AT: ${body.strong}`, PALETTE.mossLight);
-    lineOf(`WEAK: ${body.weak}`, 0xff9a9a);
+    lineOf(`GOOD AT: ${c.strong}`, PALETTE.mossLight);
+    lineOf(`WEAK: ${c.weak}`, 0xff9a9a);
     const gap = 3;
     const textH = body0.reduce((t, o) => t + o.height + gap, 0);
     const h = 27 + textH + 20;
@@ -368,20 +378,24 @@ export class CreatureHub extends Phaser.Scene {
     L.add(this.add.rectangle(mx - 4, 21, mw + 8, GAME_H - 34, 0x0e1124, 0.9).setOrigin(0, 0).setStrokeStyle(1, 0x2a3050));
     L.add(text(this, mx, 25, 'MENU', PALETTE.ash));
     const busy = !!c.pending;
-    this.tile(mx, 35, mw, 30, 'BATTLE', act ? `${BATTLE_COST} IN - WIN ${BATTLE_WIN}` : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => this.go('map'), !act);
+    const run = c.ladder;
+    this.tile(mx, 35, mw, 28, 'ZONE BATTLE', act ? `${BATTLE_COST} IN - WIN ${BATTLE_WIN}` : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => this.go('map'), !act);
+    this.tile(mx, 67, mw, 28, 'LADDER', run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `${LADDER_COST} TOKENS A RUN`, PALETTE.gold, (g, x, y, col) => {
+      // three rungs
+      g.fillStyle(col, 1).fillRect(x - 5, y - 7, 2, 14).fillRect(x + 3, y - 7, 2, 14);
+      for (const k of [-4, 0, 4]) g.fillRect(x - 3, y + k, 6, 1);
+    }, () => this.go('ladder'), !act && !run);
     const full = c.owned.length >= MAX_OWNED && !busy;
-    this.tile(mx, 69, mw, 30, 'RECRUIT', busy ? 'PACK WAITING' : full ? 'TEAM IS FULL' : `FROM ${TIERS[0].cost} TOK`, 0x8a6aff, (g, x, y, col) => {
+    this.tile(mx, 99, mw, 28, 'RECRUIT', busy ? 'PACK WAITING' : full ? 'TEAM IS FULL' : `${PACK_COST} TOKENS`, 0x8a6aff, (g, x, y, col) => {
       g.fillStyle(0x14100c, 1).fillRect(x - 6, y - 5, 9, 12).fillRect(x - 2, y - 7, 9, 12);
       g.fillStyle(col, 0.6).fillRect(x - 5, y - 4, 7, 10);
       g.fillStyle(col, 1).fillRect(x - 1, y - 6, 7, 10);
       g.fillStyle(0x14100c, 1).fillRect(x + 2, y - 3, 1, 3).fillRect(x + 2, y + 1, 1, 1);
     }, () => this.go(busy ? 'pack' : 'recruit'));
-    this.tile(mx, 103, mw, 30, 'CONTROLS', c.handed === 'left' ? 'LEFT-HANDED' : 'RIGHT-HANDED', 0x4ad0c0, (g, x, y, col) => {
+    this.tile(mx, 131, mw, 28, 'CONTROLS', c.handed === 'left' ? 'LEFT-HANDED' : 'RIGHT-HANDED', 0x4ad0c0, (g, x, y, col) => {
       g.fillStyle(col, 1).fillRect(x - 7, y - 3, 14, 7).fillRect(x - 8, y - 1, 16, 5);
       g.fillStyle(0x0a0d1e, 1).fillRect(x - 5, y, 3, 1).fillRect(x - 4, y - 1, 1, 3).fillRect(x + 3, y - 1, 1, 1).fillRect(x + 5, y + 1, 1, 1);
     }, () => this.go('controls'));
-    L.add(text(this, mx, 140, `WIN ${BOSS_AFTER} IN A PLACE`, PALETTE.ash));
-    L.add(text(this, mx, 149, 'TO MEET ITS BOSS.', PALETTE.ash));
   }
 
   private confirmRelease(uid: number, cr: Creature): void {
@@ -404,34 +418,42 @@ export class CreatureHub extends Phaser.Scene {
     this.dialog.setDepth(3000);
   }
 
+  /** THE PACK: one price, nine different creatures face down, every one as likely as any other. */
   private recruit(): void {
     const L = this.layer;
     const c = store.get().creatures;
     const recovery = needsRecovery(c);
-    L.add(centerText(this, GAME_W / 2, 22, recovery ? 'RECOVERY RECRUITMENT - YOU HAVE NO CREATURES LEFT' : 'RECRUIT: NINE CARDS FACE DOWN, PICK ONE', recovery ? PALETTE.gold : PALETTE.cream));
-    TIERS.forEach((t, i) => {
-      const x = 8 + i * 104;
-      L.add(this.add.rectangle(x, 32, 98, 112, 0x1a1e38).setOrigin(0, 0).setStrokeStyle(1, RARITIES[t.rarities[2]].col));
-      L.add(centerText(this, x + 49, 40, t.name, PALETTE.cream));
-      L.add(centerText(this, x + 49, 51, `${t.cost} TOKENS`, PALETTE.gold));
-      tierOdds(t).forEach(([r, p], k) => {
-        const pct = p * 100;
-        L.add(text(this, x + 5, 62 + k * 10, RARITIES[r].name, RARITIES[r].col));
-        L.add(text(this, x + 94, 62 + k * 10, pct >= 10 ? `${pct.toFixed(0)}%` : pct >= 1 ? `${pct.toFixed(1)}%` : `${pct.toFixed(2)}%`, PALETTE.fog).setOrigin(1, 0));
-      });
-      L.add(text(this, x + 5, 98, 'CHANCE PER CARD', PALETTE.ash));
-      const can = ledger.balance() >= t.cost && c.owned.length < MAX_OWNED;
-      L.add(button(this, x + 49, 132, 'OPEN', () => {
-        const r = openPack(t.id);
-        this.say(r);
-        if (r.ok) {
-          this.screen = 'pack';
-          this.picked = null;
-        }
-        this.draw();
-      }, { width: 70, height: 13, disabled: !can }));
-    });
-    if (c.owned.length >= MAX_OWNED) L.add(centerText(this, GAME_W / 2, 158, 'YOU HAVE TWO. RELEASE ONE BEFORE YOU RECRUIT.', PALETTE.gold));
+    L.add(centerText(this, GAME_W / 2, 22, recovery ? 'RECOVERY RECRUITMENT - YOU HAVE NO CREATURES LEFT' : 'RECRUIT', recovery ? PALETTE.gold : PALETTE.cream));
+    const x = GAME_W / 2 - 90;
+    L.add(this.add.rectangle(x, 32, 180, 112, 0x1a1e38).setOrigin(0, 0).setStrokeStyle(1, 0x8a6aff));
+    // the pack itself, face down
+    const g = this.add.graphics();
+    for (let k = 0; k < 3; k++) {
+      g.fillStyle(0x14100c, 1).fillRect(x + 14 + k * 6, 44 + k * 3, 30, 40);
+      g.fillStyle(0x2a1e48, 1).fillRect(x + 15 + k * 6, 45 + k * 3, 28, 38);
+      g.lineStyle(1, PALETTE.gold, 1).strokeRect(x + 15.5 + k * 6, 45.5 + k * 3, 27, 37);
+    }
+    L.add(g);
+    L.add(centerText(this, x + 41, 70, '?', PALETTE.gold));
+    L.add(text(this, x + 70, 42, 'CREATURE PACK', PALETTE.cream));
+    L.add(text(this, x + 70, 52, `${PACK_COST} TOKENS`, PALETTE.gold));
+    L.add(text(this, x + 70, 66, 'NINE DIFFERENT', PALETTE.fog));
+    L.add(text(this, x + 70, 75, 'CREATURES, FACE', PALETTE.fog));
+    L.add(text(this, x + 70, 84, 'DOWN. KEEP ONE.', PALETTE.fog));
+    L.add(text(this, x + 8, 100, 'EACH ONE AS LIKELY AS ANY', PALETTE.ash));
+    L.add(text(this, x + 8, 109, 'OTHER. NONE IS RARER.', PALETTE.ash));
+    const can = ledger.balance() >= PACK_COST && c.owned.length < MAX_OWNED;
+    L.add(button(this, GAME_W / 2, 132, `OPEN  ${PACK_COST} TOK`, () => {
+      const r = openPack();
+      this.say(r);
+      if (r.ok) {
+        this.screen = 'pack';
+        this.picked = null;
+      }
+      this.draw();
+    }, { width: 96, height: 13, disabled: !can }));
+    if (c.owned.length >= MAX_OWNED) L.add(centerText(this, GAME_W / 2, 154, 'YOU HAVE TWO. RELEASE ONE BEFORE YOU RECRUIT.', PALETTE.gold));
+    else if (ledger.balance() < PACK_COST) L.add(centerText(this, GAME_W / 2, 154, `YOU HAVE ${ledger.balance()} TOKENS.`, PALETTE.ash));
   }
 
   /** The nine cards.  Face down until one is chosen; then that one, then the rest. */
@@ -462,11 +484,12 @@ export class CreatureHub extends Phaser.Scene {
         return;
       }
       const mine = this.picked!.index === i;
-      L.add(this.add.rectangle(x, y, cw, ch, mine ? 0x2a3050 : 0x161a2c).setOrigin(0, 0).setStrokeStyle(mine ? 2 : 1, RARITIES[cr.rarity].col));
+      const el = ELEMENTS[cr.element];
+      L.add(this.add.rectangle(x, y, cw, ch, mine ? 0x2a3050 : 0x161a2c).setOrigin(0, 0).setStrokeStyle(mine ? 2 : 1, mine ? PALETTE.gold : el.col));
       this.shown.push({ c: cr, x: x + cw / 2, y: y + 18, s: 1.2, f: 1 });
       // (no name on the small cards: the big one beside them has it)
-      L.add(centerText(this, x + cw / 2, y + 35, RARITIES[cr.rarity].name.split(' ').map((w) => w[0]).join(''), RARITIES[cr.rarity].col));
-      L.add(this.add.rectangle(x + 3, y + ch - 5, cw - 6, 2, RARITIES[cr.rarity].col).setOrigin(0, 0));
+      L.add(centerText(this, x + cw / 2, y + 35, el.name, el.light));
+      L.add(this.add.rectangle(x + 3, y + ch - 5, cw - 6, 2, el.col).setOrigin(0, 0));
     });
     if (this.picked) {
       const cr = creatureById(cards[this.picked.index])!;
@@ -502,10 +525,14 @@ export class CreatureHub extends Phaser.Scene {
     });
   }
 
+  /**
+   * ZONE BATTLES.  Pick a place; one creature from the ones that live there
+   * comes out to fight (never the same one twice running).  Nothing about
+   * the ladder is here.
+   */
   private map(): void {
     const L = this.layer;
-    const c = store.get().creatures;
-    L.add(text(this, 8, 18, 'WHERE TO FIGHT', PALETTE.cream));
+    L.add(text(this, 8, 18, 'ZONE BATTLE - WHERE TO FIGHT', PALETTE.cream));
     BIOMES.forEach((b, i) => {
       const x = 8 + (i % 3) * 62;
       const y = 28 + Math.floor(i / 3) * 44;
@@ -518,27 +545,23 @@ export class CreatureHub extends Phaser.Scene {
       L.add(tile);
       L.add(this.add.rectangle(x + 1, y + 20, 56, 19, 0x000000, 0.55).setOrigin(0, 0));
       b.name.split(' ').forEach((w, k) => L.add(text(this, x + 3, y + 21 + k * 9, w, PALETTE.cream)));
-      const beaten = c.bosses.includes(b.boss.id);
-      L.add(text(this, x + 3, y + 3, beaten ? 'BOSS DOWN' : `${Math.min(c.biomeWins[b.id] ?? 0, BOSS_AFTER)}/${BOSS_AFTER}`, beaten ? PALETTE.gold : 0x10141a));
     });
     const b = BIOMES.find((x) => x.id === this.biome)!;
     const px = 196;
     L.add(this.add.rectangle(px, 26, 118, 134, 0x1a1e38).setOrigin(0, 0).setStrokeStyle(1, b.groundDark));
     L.add(text(this, px + 4, 30, b.name, PALETTE.gold));
-    L.add(text(this, px + 4, 40, `WILD: ${b.elements.map((e) => ELEMENTS[e].name).join(' + ')}`, PALETTE.fog));
-    L.add(text(this, px + 4, 50, `WINS HERE: ${c.biomeWins[b.id] ?? 0}`, PALETTE.fog));
-    L.add(button(this, px + 59, 70, `FIGHT  ${BATTLE_COST} TOK`, () => this.fight(b.id, false), { width: 108, height: 13, disabled: ledger.balance() < BATTLE_COST }));
-    L.add(text(this, px + 4, 82, `BOSS: ${b.boss.name}`, PALETTE.cream));
-    L.add(text(this, px + 4, 92, b.boss.trick, PALETTE.ash));
-    const open = bossOpen(b.id, c);
-    L.add(button(this, px + 59, 110, open ? `BOSS  ${BATTLE_COST} TOK` : `BOSS AFTER ${BOSS_AFTER} WINS`, () => this.fight(b.id, true), { width: 108, height: 13, disabled: !open || ledger.balance() < BATTLE_COST }));
-    // (each line short enough for the panel: the long one ran out of it)
-    L.add(text(this, px + 4, 124, `WIN +${BATTLE_WIN}  BOSS +${BOSS_WIN}`, PALETTE.mossLight));
-    L.add(text(this, px + 4, 133, 'LOSS: IT FAINTS', PALETTE.ash));
-    L.add(text(this, px + 4, 141, 'NO TOKENS LOST', PALETTE.ash));
+    L.add(text(this, px + 4, 40, 'WHO LIVES HERE:', PALETTE.ash));
+    b.pool.forEach((id, k) => {
+      const cr = creatureById(id)!;
+      L.add(text(this, px + 6, 49 + k * 8, cr.name.toUpperCase(), ELEMENTS[cr.element].light).setMaxWidth(110));
+    });
+    L.add(button(this, px + 59, 100, `FIGHT  ${BATTLE_COST} TOK`, () => this.fight(b.id), { width: 108, height: 13, disabled: ledger.balance() < BATTLE_COST || !activeOwned() }));
+    L.add(text(this, px + 4, 112, `WIN: +${BATTLE_WIN} TOKENS`, PALETTE.mossLight));
+    L.add(text(this, px + 4, 121, 'LOSS: IT FAINTS', PALETTE.ash));
+    L.add(text(this, px + 4, 130, 'NO TOKENS LOST', PALETTE.ash));
     // ---- AND SOMEWHERE TO PRACTISE.  Free, in this world's own arena, on a
     // dummy that cannot hurt you: try the moves, learn the cover, walk about.
-    L.add(button(this, px + 59, 154, 'TRAINING - FREE', () => this.train(b.id), { width: 108, height: 12, fill: 0x14303a, hoverFill: 0x1e5a68 }));
+    L.add(button(this, px + 59, 150, 'TRAINING - FREE', () => this.train(b.id), { width: 108, height: 12, fill: 0x14303a, hoverFill: 0x1e5a68 }));
   }
 
   /** The training ground: no stake, no clock, nothing to lose. */
@@ -551,9 +574,106 @@ export class CreatureHub extends Phaser.Scene {
     this.scene.start('CreatureArena', { biome, training: true, from: this.from });
   }
 
-  private fight(biome: string, boss: boolean): void {
+  private fight(biome: string): void {
     // the stake is taken by the arena, at the bell, not here
-    this.scene.start('CreatureArena', { biome, boss, from: this.from });
+    this.scene.start('CreatureArena', { biome, mode: 'zone', from: this.from });
+  }
+
+  /**
+   * THE LADDER.  A run is paid for once, up front (after you say yes), and
+   * then it is five fights and a boss, in order, each one unlocked by the
+   * last.  Lose one and the run is over: no refund, but what it paid you is
+   * yours.  The fights are drawn when you pay, so leaving and coming back
+   * meets the same ones.
+   */
+  private ladder(): void {
+    const L = this.layer;
+    const c = store.get().creatures;
+    const run = c.ladder;
+    L.add(text(this, 8, 18, 'THE LADDER', PALETTE.gold));
+    // ---- the rungs, the final boss at the top
+    const rows = LADDER_LEVELS + 1;
+    for (let i = 0; i < rows; i++) {
+      const lv = rows - i;
+      const y = 28 + i * 22;
+      const boss = lv > LADDER_LEVELS;
+      const done = !!run && run.level > lv;
+      const next = !!run && run.level === lv;
+      const edge = done ? PALETTE.mossLight : next ? PALETTE.gold : 0x2a3050;
+      L.add(this.add.rectangle(8, y, 180, 19, next ? 0x2a2a18 : 0x161a2c).setOrigin(0, 0).setStrokeStyle(next ? 2 : 1, edge));
+      L.add(text(this, 13, y + 6, boss ? 'BOSS' : `LV ${lv}`, boss ? PALETTE.gold : PALETTE.cream));
+      // who: met ones and the next by name; the rest stay a surprise
+      let who = '???';
+      if (run && (done || next)) {
+        const cr = boss ? bossById(run.boss) : creatureById(run.foes[lv - 1]);
+        if (cr) who = cr.name.toUpperCase();
+      } else if (boss) who = 'FINAL BOSS';
+      L.add(text(this, 42, y + 6, who, done ? PALETTE.mossLight : next ? PALETTE.gold : PALETTE.ash));
+      L.add(text(this, 184, y + 6, done ? 'OK' : `+${boss ? LADDER_BOSS_WIN : LADDER_WIN}`, done ? PALETTE.mossLight : PALETTE.fog).setOrigin(1, 0));
+    }
+    // ---- the terms, the balance, and what to do
+    const px = 196;
+    L.add(this.add.rectangle(px, 26, 118, 134, 0x1a1e38).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold));
+    L.add(text(this, px + 4, 30, `ENTRY: ${LADDER_COST} TOKENS`, PALETTE.gold));
+    L.add(text(this, px + 4, 39, 'PAID ONCE A RUN', PALETTE.ash));
+    L.add(text(this, px + 4, 50, `+${LADDER_WIN} EACH LEVEL`, PALETTE.mossLight));
+    L.add(text(this, px + 4, 59, `+${LADDER_BOSS_WIN} THE BOSS`, PALETTE.mossLight));
+    L.add(text(this, px + 4, 70, 'LOSS ENDS THE RUN.', 0xff9a9a));
+    L.add(text(this, px + 4, 79, 'NO REFUND, BUT YOU', PALETTE.ash));
+    L.add(text(this, px + 4, 88, 'KEEP WHAT IT PAID.', PALETTE.ash));
+    L.add(text(this, px + 4, 100, `YOU HAVE ${ledger.balance()} TOKENS`, PALETTE.cream));
+    if (run) {
+      L.add(text(this, px + 4, 109, `THIS RUN: +${run.earned}`, PALETTE.gold));
+      L.add(button(this, px + 59, 128, run.level > LADDER_LEVELS ? 'FIGHT THE BOSS' : `CONTINUE - LV ${run.level}`, () => this.ladderFight(), { width: 108, height: 13, disabled: !activeOwned() }));
+      L.add(button(this, px + 59, 148, 'ABANDON RUN', () => this.confirmAbandon(), { width: 108, height: 12, fill: 0x2a1424, hoverFill: 0x5a2040 }));
+    } else {
+      L.add(text(this, px + 4, 109, `RUNS ${c.ladderRuns}  CLEARED ${c.ladderClears}`, PALETTE.fog));
+      const can = ledger.balance() >= LADDER_COST && !!activeOwned();
+      L.add(button(this, px + 59, 134, `START RUN  ${LADDER_COST} TOK`, () => this.confirmStart(), { width: 108, height: 13, disabled: !can }));
+      if (!activeOwned()) L.add(text(this, px + 4, 146, 'NEED A CREATURE', PALETTE.ash));
+    }
+  }
+
+  /** Ask first: the entry fee is taken only after a yes. */
+  private confirmStart(): void {
+    if (this.dialog) return;
+    this.dialog = confirmDialog(this, {
+      lines: [`START A LADDER RUN FOR ${LADDER_COST} TOKENS?`, `YOU HAVE ${ledger.balance()}.`, 'A LOSS ENDS THE RUN. NO REFUND.'],
+      confirm: `PAY ${LADDER_COST}`,
+      onConfirm: () => {
+        this.dialog = null;
+        this.say(startLadder());
+        this.draw();
+      },
+      onCancel: () => {
+        this.dialog?.destroy();
+        this.dialog = null;
+      },
+    });
+    this.dialog.setDepth(3000);
+  }
+
+  private confirmAbandon(): void {
+    if (this.dialog) return;
+    this.dialog = confirmDialog(this, {
+      lines: ['ABANDON THIS LADDER RUN?', 'THE ENTRY FEE IS NOT REFUNDED.'],
+      confirm: 'ABANDON',
+      onConfirm: () => {
+        this.dialog = null;
+        this.say(abandonLadder());
+        this.draw();
+      },
+      onCancel: () => {
+        this.dialog?.destroy();
+        this.dialog = null;
+      },
+    });
+    this.dialog.setDepth(3000);
+  }
+
+  private ladderFight(): void {
+    // the run's own next step: the arena reads it from the save
+    this.scene.start('CreatureArena', { mode: 'ladder', from: this.from });
   }
 
   private controls(): void {

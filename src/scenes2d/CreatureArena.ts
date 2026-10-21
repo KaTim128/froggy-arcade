@@ -5,9 +5,17 @@
  *   choose    1 2 3, or the three attack buttons -- BEFORE you aim
  *   aim+fire  mouse + click, or drag the aim stick and let go
  *
- * The stake is taken at the bell (creatureClash `startBattle`) and the fight
- * is settled exactly once (`finishBattle` / `retreat`), whatever order the
- * timers, taps and tab switches arrive in.
+ * Two kinds of fight, and the training ground:
+ *
+ *   zone      one creature from the place's own pool; the stake is taken at
+ *             the bell (creatureClash `startBattle`)
+ *   ladder    the run's next step -- one of five creatures, then its boss --
+ *             already paid for (`startLadderBattle`), and harder the higher
+ *             up it is: not more health, a better fighter (see `skill`)
+ *   training  a dummy, nothing at stake
+ *
+ * Every fight is settled exactly once (`finishBattle` / `retreat`), whatever
+ * order the timers, taps and tab switches arrive in.
  */
 
 import Phaser from 'phaser';
@@ -17,8 +25,8 @@ import { store } from '../core/state';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
-import { BIOMES, ELEMENTS, bossCreature, wildFor, type Attack, type Biome, type CoverShape, type Creature } from '../game/creatures';
-import { activeOwned, finishBattle, ownedCreature, startBattle } from '../game/creatureClash';
+import { BIOMES, ELEMENTS, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
+import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle } from '../game/creatureClash';
 import { MAX_LEVEL, levelOf } from '../game/creatureLevel';
 import { AURA_POWER, AURA_S, AURA_SPEED, MEND_FRAC, ROOT_S, WALL_S, attackInfo } from '../game/attackInfo';
 import { drawAttackIcon } from '../art/attackIcons';
@@ -95,13 +103,26 @@ interface Mine {
   a: Attack;
 }
 
+/**
+ * A boss's mark on the floor: it is drawn from the moment it is put down,
+ * and goes off when `t` runs out.  A `line` is a strip from (x, y) to
+ * (x2, y2); a `ring` is a band at radius `r` (a shockwave); a `meteor` falls
+ * from the sky onto a growing shadow.  `go` runs when it goes off.
+ */
 interface Hazard {
+  kind: 'mark' | 'meteor' | 'line' | 'ring';
   x: number;
   y: number;
+  x2?: number;
+  y2?: number;
   r: number;
   t: number;
+  /** How long it was down for in all (for the telegraph's fill). */
+  t0: number;
+  dmg: number;
   /** A grasp holds you where it catches you. */
   holds?: boolean;
+  go?: () => void;
 }
 
 /**
@@ -131,33 +152,47 @@ interface Barrier {
 }
 
 /**
- * ---- EACH BOSS FIGHTS THE FLOOR AS WELL AS YOU.
+ * ---- EACH BOSS FIGHTS THE FLOOR AS WELL AS YOU, and each one its own way
+ * (`BossDef.pattern`; `n`, `r`, `every` and `dmg` are how many, how wide,
+ * how often and how hard).  Every one is telegraphed -- you can always see
+ * what is coming and where to be:
  *
- * `n`, `r`, `every` and `dmg` are how many marks, how wide, how often and
- * how hard; the PATTERN (from the biome) is the shape they come in, and it
- * is different for every world:
+ *   teleport   the lich: marks round you, and it blinks to wherever it can see you
+ *   meteor     the seraph, and only the seraph: shadows grow, then stars land on them
+ *   tribeam    the hydra: three lines of breath from its three heads
+ *   webs       the queen: webs thrown round your feet -- they hold
+ *   roots      the maw: roots under you and where you were going -- they hold
+ *   lightning  the cloud: bolts walk across the floor straight at you
+ *   burrow     the wyrm: it goes under, and comes up beside you
+ *   charge     the sphinx: a line drawn at you, then a pounce down it
+ *   tentacles  the kraken: arms roll across the floor in waves
+ *   quake      the mammoth: it stamps, and rings run out from it
  *
- *   rain    they fall out of the air on and around you -- keep moving
- *   sweep   a line crosses the whole arena one way -- get past it or behind
- *   grasp   they open under your feet and HOLD you -- stop standing still
- *   tide    a wall of them rolls in from one side -- run ahead of it
- *   burrow  it goes under and comes up beside you -- break away
+ * And NONE OF THEM can be waited out behind a wall: a boss that has not
+ * been able to see you for a couple of seconds comes for you (`HIDE_S`).
  */
-const TRICKS: Record<string, { n: number; r: number; every: number; dmg: number }> = {
-  caves: { n: 3, r: 12, every: 4.5, dmg: 12 },
-  fields: { n: 5, r: 10, every: 4, dmg: 10 },
-  forests: { n: 2, r: 15, every: 4, dmg: 11 },
-  frozen: { n: 1, r: 16, every: 5, dmg: 13 },
-  swamps: { n: 2, r: 18, every: 4.5, dmg: 10 },
-  ruins: { n: 6, r: 9, every: 5, dmg: 10 },
-  shore: { n: 5, r: 14, every: 5.5, dmg: 12 },
-  desert: { n: 3, r: 10, every: 3.5, dmg: 11 },
-  volcano: { n: 5, r: 13, every: 5, dmg: 13 },
-};
+const HIDE_S = 2.2;
 
 export class CreatureArena extends Phaser.Scene {
   private biome!: Biome;
+  private mode: 'zone' | 'ladder' | 'training' = 'zone';
+  /** The ladder step this is (6 = the boss). */
+  private level = 0;
   private boss = false;
+  /**
+   * How good a fighter the opponent is, 0..1: how well it aims, leads and
+   * dodges, how often it shoots, and whether it works its way round cover
+   * to get a line on you.  A zone creature is middling; the ladder climbs
+   * from clumsy to sharp; a boss is as good as it gets.
+   */
+  private skill = 0.35;
+  /** How long the opponent has had no line of sight on you. */
+  private hidden = 0;
+  /** Your velocity, for an opponent that leads its shots. */
+  private meV = { x: 0, y: 0 };
+  private dodge = { vx: 0, vy: 0, t: 0 };
+  private seenShots = new WeakSet<Shot>();
+  private lastFoePos = { x: 0, y: 0, stuck: 0 };
   /**
    * ---- THE TRAINING GROUND.
    *
@@ -216,10 +251,17 @@ export class CreatureArena extends Phaser.Scene {
     super('CreatureArena');
   }
 
-  init(data: { biome?: string; boss?: boolean; from?: string; training?: boolean }): void {
+  init(data: { biome?: string; mode?: 'zone' | 'ladder' | 'training'; from?: string; training?: boolean }): void {
     this.biome = BIOMES.find((b) => b.id === data.biome) ?? BIOMES[0];
-    this.training = !!data.training;
-    this.boss = !this.training && !!data.boss;
+    this.mode = data.training ? 'training' : data.mode ?? 'zone';
+    this.training = this.mode === 'training';
+    this.boss = false;
+    this.level = 0;
+    this.skill = 0.35;
+    this.hidden = 0;
+    this.meV = { x: 0, y: 0 };
+    this.dodge = { vx: 0, vy: 0, t: 0 };
+    this.seenShots = new WeakSet<Shot>();
     this.from = data.from ?? 'ArcadeLounge';
     this.shots = [];
     this.fx = [];
@@ -250,13 +292,28 @@ export class CreatureArena extends Phaser.Scene {
       this.scene.start('CreatureHub', { from: this.from, msg: 'YOU NEED A CREATURE TO FIGHT.' });
       return;
     }
-    const wins = store.get().creatures.biomeWins[this.biome.id] ?? 0;
-    const wild = this.boss ? bossCreature(this.biome) : wildFor(this.biome, wins);
-    // (a copy: `wildFor` hands back the roster's own entry, and the dummy
-    // renames what it is given)
+    // WHO YOU ARE UP AGAINST.  A ladder fight is the run's own next step,
+    // drawn when the run was paid for: the place and the opponent come from
+    // it, never from here, so nothing about it can be re-rolled.
+    let wild: Creature;
+    if (this.mode === 'ladder') {
+      const step = ladderStep();
+      if (!step) {
+        this.scene.start('CreatureHub', { from: this.from, screen: 'ladder', msg: 'NO LADDER RUN IS ON.' });
+        return;
+      }
+      this.biome = BIOMES.find((b) => b.id === step.biome) ?? this.biome;
+      this.level = step.level;
+      this.boss = step.boss;
+      wild = step.foe;
+      this.skill = step.boss ? 1 : 0.3 + ((step.level - 1) / (LADDER_LEVELS - 1)) * 0.6;
+    } else wild = nextZoneFoe(this.biome);
+    // (a copy: the roster's own entry is never renamed)
     const foeC = this.training ? { ...wild, name: 'TRAINING DUMMY' } : wild;
     this.me = this.fighter(mine, ARENA.x + 40, ARENA.y + ARENA.h / 2, 1, 1);
-    this.foe = this.fighter(foeC, ARENA.x + ARENA.w - 40, ARENA.y + ARENA.h / 2, -1, this.boss ? 1.8 : 1);
+    // (a boss is bigger, not huge: it has to fit the arena and be fair to hit)
+    this.foe = this.fighter(foeC, ARENA.x + ARENA.w - 40, ARENA.y + ARENA.h / 2, -1, this.boss ? 1.35 : 1);
+    this.lastFoePos = { x: this.foe.x, y: this.foe.y, stuck: 0 };
 
     this.paintGround();
     this.g = this.add.graphics().setDepth(10);
@@ -343,11 +400,13 @@ export class CreatureArena extends Phaser.Scene {
   /** The count is done: the stake, the bell, and go. */
   private begin(): void {
     if (!this.training) {
-      const r = startBattle(this.biome.id, this.boss);
+      const r = this.mode === 'ladder' ? startLadderBattle() : startBattle(this.biome.id, this.foe.c.id);
       if (!r.ok) {
-        this.scene.start('CreatureHub', { from: this.from, msg: r.msg });
+        this.scene.start('CreatureHub', { from: this.from, screen: this.mode === 'ladder' ? 'ladder' : 'map', msg: r.msg });
         return;
       }
+      // its own cry, at the bell
+      audio.sfx(this.foe.c.cry, 0.5);
     }
     this.dialog?.destroy();
     this.dialog = null;
@@ -695,6 +754,8 @@ export class CreatureArena extends Phaser.Scene {
     const name = (f: Fighter): string => (f === this.foe && this.boss ? f.c.name : f.c.name.toUpperCase());
     this.labels.push(text(this, 8, 3, `${name(this.me)} LV${this.myLevel}`, PALETTE.cream).setDepth(51));
     this.labels.push(text(this, GAME_W - 8, 3, name(this.foe), this.boss ? PALETTE.gold : PALETTE.cream).setOrigin(1, 0).setDepth(51));
+    // which step of the run this is, under the opponent's bar
+    if (this.mode === 'ladder') this.labels.push(text(this, GAME_W - 8, 20, this.boss ? 'FINAL BOSS' : `LEVEL ${this.level} OF ${LADDER_LEVELS}`, PALETTE.gold).setOrigin(1, 0).setDepth(51));
     this.timerText = centerText(this, GAME_W / 2, 7, '', PALETTE.fog).setDepth(51);
     // ---- THERE IS NO LEAVING A BATTLE.  Not during the count either: a
     // real fight ends by winning it, losing it or running the clock out, and
@@ -1091,44 +1152,121 @@ export class CreatureArena extends Phaser.Scene {
     const f = this.foe;
     const p = this.me;
     if (f.stun > 0 || f.dash || f.hp <= 0) return;
-    if (f.root > 0) {
-      // held: it can still shoot, it just cannot go anywhere
-      if (f.cds[0] <= 0) this.fire(f, 0, p.x - f.x, p.y - f.y);
-      return;
-    }
+    const sk = this.skill;
     const dx = p.x - f.x;
     const dy = p.y - f.y;
     const dist = Math.hypot(dx, dy) || 1;
-    this.ai.think -= dt;
-    if (this.ai.think <= 0) {
-      this.ai.think = 0.5 + Math.random() * 0.6;
-      if (Math.random() < 0.3) this.ai.strafe *= -1;
-    }
-    // close in for the big one, hang back for the shots
-    const want = f.cds[2] <= 0 && f.c.attacks[2].kind === 'nova' ? 26 : 85;
-    const toward = dist > want + 10 ? 1 : dist < want - 10 ? -1 : 0;
-    const ux = dx / dist;
-    const uy = dy / dist;
-    const vx = (ux * toward + -uy * this.ai.strafe * 0.7) * this.speedOf(f);
-    const vy = (uy * toward + ux * this.ai.strafe * 0.7) * this.speedOf(f);
-    this.step(f, vx, vy, dt);
-    f.face = dx >= 0 ? 1 : -1;
-    // aim, worse when blinded; leads a moving target a little
-    const err = (f.blind > 0 ? 0.6 : 0.16) * (Math.random() - 0.5) * 2;
-    const ang = Math.atan2(dy, dx) + err;
+    const clear = !this.blocked(f.x, f.y, p.x, p.y) || f.c.element === 'glow';
+    // aim: worse when blinded, better the sharper it is -- and a sharp one
+    // shoots where you are GOING, not where you were
+    const lead = sk > 0.5 ? (sk - 0.5) * 2 * Math.min(0.5, dist / 200) : 0;
+    const tx = p.x + this.meV.x * lead;
+    const ty = p.y + this.meV.y * lead;
+    const err = (f.blind > 0 ? 0.6 : 0.3 - 0.24 * sk) * (Math.random() - 0.5) * 2;
+    const ang = Math.atan2(ty - f.y, tx - f.x) + err;
     const ax = Math.cos(ang);
     const ay = Math.sin(ang);
-    const clear = !this.blocked(f.x, f.y, p.x, p.y) || f.c.element === 'glow';
+    if (f.root > 0) {
+      // held: it can still shoot, it just cannot go anywhere
+      if (f.cds[0] <= 0 && clear) this.fire(f, 0, ax, ay);
+      return;
+    }
+    this.ai.think -= dt;
+    if (this.ai.think <= 0) {
+      this.ai.think = 0.9 - 0.45 * sk + Math.random() * 0.5;
+      if (Math.random() < 0.3) this.ai.strafe *= -1;
+    }
+    const ux = dx / dist;
+    const uy = dy / dist;
+    const spd = this.speedOf(f);
+    let vx: number;
+    let vy: number;
+    // ---- A SHOT COMING: a good fighter sees it and steps out of its way
+    if (this.dodge.t <= 0) {
+      for (const s of this.shots) {
+        if (s.owner === f || s.arc || this.seenShots.has(s)) continue;
+        const rx = f.x - s.x;
+        const ry = f.y - s.y;
+        const sp = Math.hypot(s.vx, s.vy) || 1;
+        const ahead = (rx * s.vx + ry * s.vy) / sp;
+        if (ahead <= 0 || ahead > 60) continue;
+        this.seenShots.add(s);
+        // where it passes, how close
+        const miss = Math.abs(rx * s.vy - ry * s.vx) / sp;
+        if (miss > 10 * f.scale || Math.random() > sk * 0.85) continue;
+        const side = rx * s.vy - ry * s.vx >= 0 ? 1 : -1;
+        this.dodge = { vx: (s.vy / sp) * side, vy: (-s.vx / sp) * side, t: 0.28 };
+        break;
+      }
+    }
+    if (this.dodge.t > 0) {
+      this.dodge.t -= dt;
+      vx = this.dodge.vx * spd * 1.3;
+      vy = this.dodge.vy * spd * 1.3;
+    } else if (!clear && (sk >= 0.4 || this.boss)) {
+      // ---- NO LINE ON YOU: work round the cover to somewhere that has one
+      const spot = this.sightSpot(f, false);
+      const mx = (spot?.x ?? p.x) - f.x;
+      const my = (spot?.y ?? p.y) - f.y;
+      const m = Math.hypot(mx, my) || 1;
+      vx = (mx / m) * spd;
+      vy = (my / m) * spd;
+    } else {
+      // close in for the big one, hang back for the shots
+      const want = f.cds[2] <= 0 && f.c.attacks[2].kind === 'nova' ? 26 : 85;
+      const toward = dist > want + 10 ? 1 : dist < want - 10 ? -1 : 0;
+      vx = (ux * toward + -uy * this.ai.strafe * 0.7) * spd;
+      vy = (uy * toward + ux * this.ai.strafe * 0.7) * spd;
+    }
+    this.step(f, vx, vy, dt);
+    // stuck on something: go round it the other way
+    const moved = Math.hypot(f.x - this.lastFoePos.x, f.y - this.lastFoePos.y);
+    this.lastFoePos.stuck = moved < spd * dt * 0.25 && spd > 0 ? this.lastFoePos.stuck + dt : 0;
+    if (this.lastFoePos.stuck > 0.35) {
+      this.ai.strafe *= -1;
+      this.lastFoePos.stuck = 0;
+      this.dodge = { vx: -uy * this.ai.strafe, vy: ux * this.ai.strafe, t: 0.4 };
+    }
+    this.lastFoePos.x = f.x;
+    this.lastFoePos.y = f.y;
+    f.face = dx >= 0 ? 1 : -1;
     const a2 = f.c.attacks[2];
     const a1 = f.c.attacks[1];
     const bigOn =
       a2.kind === 'nova' ? dist < a2.reach * f.scale + 4
       : a2.kind === 'beam' ? dist < a2.reach * f.scale && clear
-      : a2.kind === 'arc' || a2.kind === 'snare' || a2.kind === 'aura' || a2.kind === 'mend' || a2.kind === 'wall' ? this.useSig(a2, dist, clear, f)
+      : a2.kind === 'arc' || a2.kind === 'snare' || a2.kind === 'aura' || a2.kind === 'mend' || a2.kind === 'wall' || a2.kind === 'dash' ? this.useSig(a2, dist, clear, f)
       : dist < 150 && clear;
     if (f.cds[2] <= 0 && bigOn) this.fire(f, 2, ax, ay);
     else if (f.cds[1] <= 0 && this.useSig(a1, dist, clear, f)) this.fire(f, 1, a1.kind === 'blink' ? -uy * this.ai.strafe : ax, a1.kind === 'blink' ? ux * this.ai.strafe : ay);
-    else if (f.cds[0] <= 0 && clear && dist < 170 && Math.random() < dt * 2.2) this.fire(f, 0, ax, ay);
+    else if (f.cds[0] <= 0 && clear && dist < 170 && Math.random() < dt * (1.2 + 2.4 * sk)) this.fire(f, 0, ax, ay);
+  }
+
+  /**
+   * A place near you that has a clear line to you, for `f` to get to: the
+   * nearest such spot to it (walking), or any good one (blinking in).
+   */
+  private sightSpot(f: Fighter, anywhere: boolean): { x: number; y: number } | null {
+    const p = this.me;
+    let best: { x: number; y: number } | null = null;
+    let bestD = Infinity;
+    for (const rad of [70, 50, 95]) {
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        const x = p.x + Math.cos(a) * rad;
+        const y = p.y + Math.sin(a) * rad * 0.8;
+        if (x < ARENA.x + 10 || x > ARENA.x + ARENA.w - 10 || y < ARENA.y + 10 || y > ARENA.y + ARENA.h - 10) continue;
+        if (this.props.some((q) => Math.hypot(q.x - x, q.y - y) < q.r + 7 * f.scale)) continue;
+        if (this.blocked(x, y, p.x, p.y)) continue;
+        const d = anywhere ? Math.random() : Math.hypot(x - f.x, y - f.y);
+        if (d < bestD) {
+          bestD = d;
+          best = { x, y };
+        }
+      }
+      if (best) return best;
+    }
+    return best;
   }
 
   /**
@@ -1221,11 +1359,16 @@ export class CreatureArena extends Phaser.Scene {
     }
     this.tickFighter(me, dt);
     this.tickFighter(this.foe, dt);
+    const px0 = me.x;
+    const py0 = me.y;
     if (me.stun <= 0 && me.root <= 0 && !me.dash) {
       this.step(me, mx * this.speedOf(me), my * this.speedOf(me), dt);
       if (!this.touch) me.face = this.input.activePointer.x >= me.x ? 1 : -1;
       else if (Math.abs(mx) > 0.2) me.face = mx > 0 ? 1 : -1;
     }
+    // (smoothed, for an opponent that leads its shots)
+    this.meV.x += ((me.x - px0) / dt - this.meV.x) * Math.min(1, dt * 6);
+    this.meV.y += ((me.y - py0) / dt - this.meV.y) * Math.min(1, dt * 6);
     if (this.training) this.trainDummy(dt);
     else this.think(dt);
 
@@ -1277,22 +1420,40 @@ export class CreatureArena extends Phaser.Scene {
     }
     this.mines = this.mines.filter((x) => x.life > 0);
 
-    // ---- the boss's trick: marks on the floor, then they go off
-    if (this.boss) {
-      const tr = TRICKS[this.biome.id];
+    // ---- the boss's mechanic: marks on the floor, then they go off
+    const def = this.boss ? this.foe.c.boss : undefined;
+    if (def) {
       this.hazardT -= dt;
       if (this.hazardT <= 0) {
-        this.hazardT = tr.every;
-        this.bossPattern(tr);
+        this.hazardT = def.every;
+        this.bossPattern(def);
       }
+      // ---- NO HIDING.  Out of its sight too long and it comes for you:
+      // the lich blinks to where it can see you; the rest throw what they
+      // have at the place you are hiding in, now
+      this.hidden = this.blocked(this.foe.x, this.foe.y, me.x, me.y) ? this.hidden + dt : 0;
+      if (this.hidden > HIDE_S && this.foe.hp > 0) {
+        this.hidden = 0;
+        const t = centerText(this, me.x, me.y - 18, 'NO HIDING!', PALETTE.gold).setDepth(60);
+        this.tweens.add({ targets: t, y: t.y - 8, alpha: 0, delay: 500, duration: 500, onComplete: () => t.destroy() });
+        if (def.pattern === 'teleport') this.blinkIn();
+        else {
+          this.bossPattern(def);
+          this.hazardT = Math.max(this.hazardT, def.every * 0.6);
+        }
+      }
+      const col = ELEMENTS[this.foe.c.element].col;
       for (const h of this.hazards) {
         h.t -= dt;
-        if (h.t <= 0) {
-          this.fx.push({ kind: 'boom', x: h.x, y: h.y, r: h.r, t: 0, life: 0.3, col: ELEMENTS[this.biome.boss.element].col });
-          if (Math.hypot(me.x - h.x, me.y - h.y) < h.r + 5) {
-            this.hit(this.foe, me, tr.dmg, this.foe.c.attacks[0]);
-            if (h.holds && me.hp > 0) me.root = Math.max(me.root, ROOT_S);
-          }
+        if (h.t > 0) continue;
+        if (h.kind === 'line') this.fx.push({ kind: 'beam', x: h.x, y: h.y, x2: h.x2, y2: h.y2, r: h.r, t: 0, life: 0.25, col });
+        else if (h.kind === 'ring') this.fx.push({ kind: 'ring', x: h.x, y: h.y, r: h.r, t: 0, life: 0.3, col });
+        else this.fx.push({ kind: 'boom', x: h.x, y: h.y, r: h.r, t: 0, life: h.kind === 'meteor' ? 0.5 : 0.3, col: h.kind === 'meteor' ? 0xffb040 : col });
+        if (h.kind === 'meteor') audio.sfx('arcane_blast', 0.55);
+        h.go?.();
+        if (h.dmg > 0 && this.caught(h, me.x, me.y)) {
+          this.hit(this.foe, me, h.dmg, this.foe.c.attacks[0]);
+          if (h.holds && me.hp > 0) me.root = Math.max(me.root, ROOT_S);
         }
       }
       this.hazards = this.hazards.filter((h) => h.t > 0);
@@ -1325,72 +1486,146 @@ export class CreatureArena extends Phaser.Scene {
   }
 
   /**
-   * One round of whatever this boss does to the floor.  Every pattern reads
-   * on sight -- you can tell what is coming and where to be -- but no two
-   * worlds ask the same thing of you.
+   * One round of what this boss does to the floor (see the table at the
+   * top).  `at` is where it is aimed: you, normally.
    */
-  private bossPattern(tr: { n: number; r: number; every: number; dmg: number }): void {
-    const me = this.me;
-    const put = (x: number, y: number, t: number, holds = false): void => {
-      this.hazards.push({
-        x: Phaser.Math.Clamp(x, ARENA.x + 10, ARENA.x + ARENA.w - 10),
-        y: Phaser.Math.Clamp(y, ARENA.y + 10, ARENA.y + ARENA.h - 10),
-        r: tr.r,
-        t,
-        holds,
-      });
+  private bossPattern(def: BossDef, at = { x: this.me.x, y: this.me.y }): void {
+    const foe = this.foe;
+    const col = ELEMENTS[foe.c.element];
+    const cx = (x: number) => Phaser.Math.Clamp(x, ARENA.x + 10, ARENA.x + ARENA.w - 10);
+    const cy = (y: number) => Phaser.Math.Clamp(y, ARENA.y + 10, ARENA.y + ARENA.h - 10);
+    const put = (h: Omit<Hazard, 't0' | 'dmg' | 'r' | 'kind'> & Partial<Pick<Hazard, 'dmg' | 'r' | 'kind'>>): void => {
+      this.hazards.push({ kind: 'mark', r: def.r, dmg: def.dmg, ...h, x: cx(h.x), y: cy(h.y), t0: h.t });
     };
-    switch (this.biome.boss.pattern) {
-      case 'rain':
-        // out of the air: one on you, the rest around where you would run
-        for (let i = 0; i < tr.n; i++) {
-          const spread = i === 0 ? 0 : 54;
-          put(me.x + (Math.random() - 0.5) * spread * 2, me.y + (Math.random() - 0.5) * spread, 1.1 + i * 0.12);
+    switch (def.pattern) {
+      case 'teleport': {
+        // marks of grave-light round you, and it blinks to wherever it can see you
+        for (let i = 0; i < def.n; i++) {
+          const a = (i / def.n) * Math.PI * 2 + Math.random();
+          put({ x: at.x + Math.cos(a) * (i === 0 ? 0 : 26), y: at.y + Math.sin(a) * (i === 0 ? 0 : 20), t: 1.2 + i * 0.15 });
         }
+        this.blinkIn();
         break;
-      case 'sweep': {
-        // a line crosses the arena, the whole height of it, from the side
-        // the boss is on; it arrives a moment at a time, so you can run past
-        const fromLeft = this.foe.x < ARENA.x + ARENA.w / 2;
-        const x0 = fromLeft ? ARENA.x + 24 : ARENA.x + ARENA.w - 24;
-        const step = (fromLeft ? 1 : -1) * ((ARENA.w - 48) / 3);
-        for (let c = 0; c < 3; c++) {
-          for (let i = 0; i < tr.n; i++) put(x0 + step * c, ARENA.y + 12 + (i / (tr.n - 1)) * (ARENA.h - 24), 1.2 + c * 0.45);
+      }
+      case 'meteor': {
+        // one on you, one where you are running to, the rest round about:
+        // the shadow grows for a second and a half, then it lands -- hard
+        const lead = { x: at.x + this.meV.x * 1.2, y: at.y + this.meV.y * 1.2 };
+        for (let i = 0; i < def.n; i++) {
+          const base = i === 0 ? at : i === 1 ? lead : { x: at.x + (Math.random() - 0.5) * 120, y: at.y + (Math.random() - 0.5) * 80 };
+          put({ kind: 'meteor', x: base.x, y: base.y, t: 1.6 + i * 0.25 });
+        }
+        audio.sfx('arcane_cast', 0.5);
+        break;
+      }
+      case 'tribeam': {
+        // three breaths from its three heads: at you, and either side
+        const a0 = Math.atan2(at.y - foe.y, at.x - foe.x);
+        for (const k of [-0.42, 0, 0.42]) {
+          const a = a0 + k;
+          put({ kind: 'line', x: foe.x, y: foe.y, x2: foe.x + Math.cos(a) * 300, y2: foe.y + Math.sin(a) * 300, t: 1.1 });
         }
         break;
       }
-      case 'grasp':
-        // where you ARE, and where you were a moment ago: they hold you
-        put(me.x, me.y, 1.0, true);
-        for (let i = 1; i < tr.n; i++) put(me.x + (Math.random() - 0.5) * 36, me.y + (Math.random() - 0.5) * 30, 1.3 + i * 0.3, true);
+      case 'webs':
+        // thrown round your feet: where you stand and the ways out of it
+        put({ x: at.x, y: at.y, t: 1.0, holds: true });
+        for (let i = 1; i < def.n; i++) {
+          const a = (i / (def.n - 1)) * Math.PI * 2 + Math.random() * 0.5;
+          put({ x: at.x + Math.cos(a) * 30, y: at.y + Math.sin(a) * 24, t: 1.2 + i * 0.1, holds: true });
+        }
         break;
-      case 'tide': {
-        // a wall of it rolls in from one side, column after column
-        const fromLeft = Math.random() < 0.5;
-        for (let c = 0; c < 5; c++) {
-          const x = fromLeft ? ARENA.x + 16 + c * 26 : ARENA.x + ARENA.w - 16 - c * 26;
-          for (let i = 0; i < tr.n; i++) put(x, ARENA.y + 14 + (i / (tr.n - 1)) * (ARENA.h - 28), 1.0 + c * 0.5);
+      case 'roots': {
+        // under you, and where you are going
+        put({ x: at.x, y: at.y, t: 1.0, holds: true });
+        for (let i = 1; i < def.n; i++) put({ x: at.x + this.meV.x * 0.5 * i + (Math.random() - 0.5) * 24, y: at.y + this.meV.y * 0.5 * i + (Math.random() - 0.5) * 20, t: 1.1 + i * 0.3, holds: true });
+        break;
+      }
+      case 'lightning': {
+        // the bolts walk from the cloud straight at you, and past
+        const a = Math.atan2(at.y - foe.y, at.x - foe.x);
+        const d0 = Math.hypot(at.x - foe.x, at.y - foe.y);
+        for (let i = 0; i < def.n; i++) {
+          const d = 20 + (i / (def.n - 1)) * (d0 + 40);
+          put({ x: foe.x + Math.cos(a) * d, y: foe.y + Math.sin(a) * d, t: 0.8 + i * 0.16 });
         }
         break;
       }
       case 'burrow': {
         // it goes under, and comes up beside you
         const a = Math.random() * Math.PI * 2;
-        const nx = Phaser.Math.Clamp(me.x + Math.cos(a) * 30, ARENA.x + 14, ARENA.x + ARENA.w - 14);
-        const ny = Phaser.Math.Clamp(me.y + Math.sin(a) * 26, ARENA.y + 14, ARENA.y + ARENA.h - 14);
-        put(nx, ny, 1.1);
-        this.fx.push({ kind: 'spark', x: this.foe.x, y: this.foe.y, r: 14, t: 0, life: 0.4, col: ELEMENTS[this.foe.c.element].light });
-        this.foe.invuln = 1.1;
+        const nx = cx(at.x + Math.cos(a) * 30);
+        const ny = cy(at.y + Math.sin(a) * 26);
+        put({ x: nx, y: ny, t: 1.1 });
+        this.fx.push({ kind: 'spark', x: foe.x, y: foe.y, r: 14, t: 0, life: 0.4, col: col.light });
+        foe.invuln = 1.1;
         this.time.delayedCall(900, () => {
-          if (this.over || this.foe.hp <= 0) return;
-          this.foe.x = nx;
-          this.foe.y = ny;
-          this.fx.push({ kind: 'ring', x: nx, y: ny, r: 18, t: 0, life: 0.4, col: ELEMENTS[this.foe.c.element].col });
+          if (this.over || foe.hp <= 0) return;
+          foe.x = nx;
+          foe.y = ny;
+          this.fx.push({ kind: 'ring', x: nx, y: ny, r: 18, t: 0, life: 0.4, col: col.col });
           audio.sfx('item_thud', 0.4);
         });
         break;
       }
+      case 'charge': {
+        // a line drawn straight at you -- then the pounce, all the way down it
+        const a = Math.atan2(at.y - foe.y, at.x - foe.x);
+        const len = 230;
+        put({
+          kind: 'line', x: foe.x, y: foe.y, x2: foe.x + Math.cos(a) * len, y2: foe.y + Math.sin(a) * len, t: 1.0, dmg: 0,
+          go: () => {
+            if (this.over || foe.hp <= 0) return;
+            foe.dash = { vx: Math.cos(a) * 330, vy: Math.sin(a) * 330, t: len / 330, dmg: def.dmg, hit: false, a: foe.c.attacks[0] };
+            audio.sfx('throw_whoosh', 0.6);
+          },
+        });
+        foe.root = 1.0;
+        break;
+      }
+      case 'tentacles': {
+        // arms roll across the floor from one side, column after column
+        const fromLeft = Math.random() < 0.5;
+        for (let c = 0; c < 5; c++) {
+          const x = fromLeft ? ARENA.x + 16 + c * 30 : ARENA.x + ARENA.w - 16 - c * 30;
+          // (a gap in each wave, somewhere different each time: get to it)
+          const gap = Math.floor(Math.random() * def.n);
+          for (let i = 0; i < def.n; i++) if (i !== gap) put({ x, y: ARENA.y + 14 + (i / (def.n - 1)) * (ARENA.h - 28), t: 1.0 + c * 0.45 });
+        }
+        break;
+      }
+      case 'quake':
+        // it stamps: rings run out from it, one after another -- be between them
+        for (let i = 0; i < 3; i++) put({ kind: 'ring', x: foe.x, y: foe.y, r: 30 + i * 32, t: 1.0 + i * 0.45 });
+        audio.sfx('item_thud', 0.6);
+        break;
     }
+  }
+
+  /** The lich's trick: gone in a puff, and back somewhere that can see you. */
+  private blinkIn(): void {
+    const foe = this.foe;
+    const spot = this.sightSpot(foe, true);
+    if (!spot) return;
+    const col = ELEMENTS[foe.c.element];
+    this.fx.push({ kind: 'ring', x: spot.x, y: spot.y, r: 14, t: 0, life: 0.6, col: col.light });
+    this.fx.push({ kind: 'spark', x: foe.x, y: foe.y, r: 14, t: 0, life: 0.5, col: col.col });
+    foe.invuln = 0.6;
+    this.time.delayedCall(550, () => {
+      if (this.over || foe.hp <= 0) return;
+      foe.x = spot.x;
+      foe.y = spot.y;
+      this.fx.push({ kind: 'spark', x: foe.x, y: foe.y, r: 14, t: 0, life: 0.5, col: col.col });
+      audio.sfx('arcane_cast', 0.5);
+    });
+  }
+
+  /** A hazard that is going off now: does it catch you? */
+  private caught(h: Hazard, x: number, y: number): boolean {
+    if (h.kind === 'line') return this.segDist(x, y, h.x, h.y, h.x2!, h.y2!) < h.r + 4;
+    const d = Math.hypot(x - h.x, y - h.y);
+    if (h.kind === 'ring') return Math.abs(d - h.r) < 7;
+    return d < h.r + 5;
   }
 
   private end(won: boolean): void {
@@ -1398,30 +1633,43 @@ export class CreatureArena extends Phaser.Scene {
     this.over = true;
     if (this.settled) return;
     this.settled = true;
+    // (what the run had paid before this one, for the run's total)
+    const before = store.get().creatures.ladder?.earned ?? 0;
     const r = finishBattle(won);
     audio.sfx(won ? 'cha_ching' : 'death_stinger', 0.6);
     const timeUp = this.me.hp > 0 && this.foe.hp > 0;
+    const ladder = this.mode === 'ladder';
     this.time.delayedCall(700, () => {
       const box = this.add.container(0, 0).setDepth(2000);
+      const X = GAME_W / 2;
+      const Y = GAME_H / 2;
       box.add(this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0.6).setOrigin(0, 0).setInteractive());
-      box.add(this.add.rectangle(GAME_W / 2, GAME_H / 2, 236, 84, PALETTE.ink).setStrokeStyle(1, won ? PALETTE.gold : 0xc31f2e));
-      box.add(centerText(this, GAME_W / 2, GAME_H / 2 - 30, won ? (this.boss ? 'BOSS DEFEATED!' : 'VICTORY!') : 'DEFEATED', won ? PALETTE.gold : 0xff6a6a));
-      if (timeUp) box.add(centerText(this, GAME_W / 2, GAME_H / 2 - 20, 'TIME: MORE HEALTH LEFT WINS', PALETTE.ash));
-      box.add(centerText(this, GAME_W / 2, GAME_H / 2 - 9, won ? `YOU WIN ${r.paid} TOKENS.` : r.msg, PALETTE.cream).setMaxWidth(224));
-      // experience, and a level gained
+      box.add(this.add.rectangle(X, Y, 244, 96, PALETTE.ink).setStrokeStyle(1, won ? PALETTE.gold : 0xc31f2e));
+      const head = won ? (ladder ? (this.boss ? 'LADDER CLEARED!' : `LEVEL ${this.level} OF ${LADDER_LEVELS} CLEARED`) : 'VICTORY!') : 'DEFEATED';
+      box.add(centerText(this, X, Y - 38, head, won ? PALETTE.gold : 0xff6a6a));
+      if (timeUp) box.add(centerText(this, X, Y - 28, 'TIME: MORE HEALTH LEFT WINS', PALETTE.ash));
+      const lines: Array<[string, number]> = [];
       if (won) {
+        lines.push([`+${r.paid} TOKENS`, PALETTE.gold]);
+        if (ladder) lines.push([this.boss ? `THE RUN PAID ${before + r.paid} TOKENS IN ALL.` : this.level >= LADDER_LEVELS ? 'NEXT: THE FINAL BOSS' : `NEXT: LEVEL ${this.level + 1} OF ${LADDER_LEVELS}`, PALETTE.cream]);
         const xpLine = r.xp ? `+${r.xp} XP` : this.myLevel >= MAX_LEVEL ? 'MAX LEVEL - NO MORE XP' : '';
-        if (xpLine) box.add(centerText(this, GAME_W / 2, GAME_H / 2 + 2, xpLine, 0x8ae88a));
-        if (r.levelUp) {
-          const up = centerText(this, GAME_W / 2, GAME_H / 2 + 13, `LEVEL UP!  LV ${r.levelUp}`, PALETTE.gold);
-          box.add(up);
-          up.setScale(0.6);
-          this.tweens.add({ targets: up, scale: 1, duration: 260, ease: 'Back.Out' });
-          this.tweens.add({ targets: up, alpha: 0.55, duration: 380, yoyo: true, repeat: -1, delay: 300 });
-          audio.sfx('chime', 0.7);
-        }
+        if (xpLine) lines.push([xpLine, 0x8ae88a]);
+      } else {
+        lines.push([r.msg, PALETTE.cream]);
+        if (ladder) lines.push([`THE RUN PAID ${before} TOKENS. THEY ARE YOURS TO KEEP.`, PALETTE.ash]);
       }
-      box.add(button(this, GAME_W / 2, GAME_H / 2 + 30, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, msg: r.msg }), { width: 80, height: 13 }));
+      lines.forEach(([t, c], i) => box.add(centerText(this, X, Y - 16 + i * 10, t, c).setMaxWidth(232)));
+      if (won && r.levelUp) {
+        const up = centerText(this, X, Y - 16 + lines.length * 10, `LEVEL UP!  LV ${r.levelUp}`, PALETTE.gold);
+        box.add(up);
+        up.setScale(0.6);
+        this.tweens.add({ targets: up, scale: 1, duration: 260, ease: 'Back.Out' });
+        this.tweens.add({ targets: up, alpha: 0.55, duration: 380, yoyo: true, repeat: -1, delay: 300 });
+        audio.sfx('chime', 0.7);
+      }
+      // back to where the fight came from: the run's ladder, or the map
+      const screen = ladder ? 'ladder' : 'map';
+      box.add(button(this, X, Y + 36, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, screen }), { width: 80, height: 13 }));
     });
   }
 
@@ -1487,9 +1735,28 @@ export class CreatureArena extends Phaser.Scene {
       g.fillStyle(col, mi.arm > 0 ? 0.4 : 0.8 + Math.sin(t * 10) * 0.2).fillCircle(mi.x, mi.y, 3);
       g.lineStyle(1, 0x000000, 0.5).strokeCircle(mi.x, mi.y, 3);
     }
+    // every one telegraphed: an outline the moment it is down, filling as it comes
     for (const h of this.hazards) {
-      g.lineStyle(1, 0xff3a3a, 0.9).strokeCircle(h.x, h.y, h.r);
-      g.fillStyle(0xff3a3a, 0.15 + (1.1 - h.t) * 0.3).fillCircle(h.x, h.y, h.r * (1 - h.t / 1.1));
+      const k = Phaser.Math.Clamp(1 - h.t / h.t0, 0, 1);
+      if (h.kind === 'line') {
+        g.lineStyle(1, 0xff3a3a, 0.5 + k * 0.4).lineBetween(h.x, h.y, h.x2!, h.y2!);
+        g.lineStyle(h.r * 2 * k, 0xff3a3a, 0.22).lineBetween(h.x, h.y, h.x2!, h.y2!);
+      } else if (h.kind === 'ring') {
+        g.lineStyle(1, 0xff3a3a, 0.4 + k * 0.5).strokeCircle(h.x, h.y, h.r);
+        g.lineStyle(1, 0xff3a3a, 0.25).strokeCircle(h.x, h.y, h.r - 7).strokeCircle(h.x, h.y, h.r + 7);
+      } else if (h.kind === 'meteor') {
+        // the shadow grows; the star comes down out of the corner of the sky onto it
+        g.fillStyle(0x000000, 0.2 + k * 0.35).fillEllipse(h.x, h.y, h.r * 2 * (0.4 + k * 0.6), h.r * 1.2 * (0.4 + k * 0.6));
+        g.lineStyle(1, 0xff6a2a, 0.9).strokeCircle(h.x, h.y, h.r);
+        const fall = Math.max(0, 1 - k);
+        const sx = h.x + fall * 70;
+        const sy = h.y - fall * 120;
+        g.lineStyle(3, 0xffb040, 0.5).lineBetween(sx + 10, sy - 18, sx, sy);
+        g.fillStyle(0xfff0a0, 1).fillCircle(sx, sy, 3 + k * 2);
+      } else {
+        g.lineStyle(1, h.holds ? 0x8ae86a : 0xff3a3a, 0.9).strokeCircle(h.x, h.y, h.r);
+        g.fillStyle(h.holds ? 0x8ae86a : 0xff3a3a, 0.15 + k * 0.3).fillCircle(h.x, h.y, h.r * k);
+      }
     }
     // fighters, the lower one in front
     for (const f of [this.me, this.foe].sort((a, b) => a.y - b.y)) {
