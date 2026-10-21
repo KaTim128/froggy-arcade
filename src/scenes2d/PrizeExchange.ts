@@ -7,6 +7,10 @@
  * so the deal is legible rather than merely accepted — the player should be
  * able to see they are being fleeced and take it anyway.
  *
+ * Every prize off the counter is on the PRIZES tab -- the video camera too
+ * -- and each can be sold once: a sale is marked in `prizesSold`, which is
+ * also what takes it out of the pockets.
+ *
  * Prizes already sold stay listed, greyed, with what they went for.  Nothing
  * here touches the token ledger: cash arrives through store.earnCash and lives
  * in its own column of the save.
@@ -19,7 +23,9 @@ import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { PRIZES, cashFor, prizeById, type PrizeDef } from '../game/content';
 import { button, centerText, text } from '../core/ui';
-import { CAMERA_ITEM, heldItems, itemDef, removeItem, type ItemDef } from '../game/inventory';
+import { heldItems, itemDef, removeItem, type ItemDef } from '../game/inventory';
+import { drawPrize } from './PrizeCounter';
+import { drawItem } from '../ui/pockets';
 
 /** Cash at which the man calls it a day: there is enough for a room. */
 export const ROOM_MONEY = 300;
@@ -87,9 +93,7 @@ export class PrizeExchange extends Phaser.Scene {
     // catalogue — a prize from a restocked shelf is rebuilt from its id, so
     // the man will buy those too.  Unsold first, because those are the ones
     // there is anything to do about.
-    // (the camera is carried in the hand, and is on the pockets tab)
     const carried = s.prizesOwned
-      .filter((id) => id !== CAMERA_ITEM.id)
       .map((id) => prizeById(id))
       .filter((p): p is PrizeDef => !!p)
       .sort((a, b) => Number(s.prizesSold.includes(a.id)) - Number(s.prizesSold.includes(b.id)));
@@ -109,12 +113,13 @@ export class PrizeExchange extends Phaser.Scene {
 
     // Everything you are carrying, not the first five of it: the shelf is
     // seven things long now and a truncated list hides prizes you own.
-    carried.slice(0, PRIZES.length - 1).forEach((p, i) => {
+    carried.slice(0, PRIZES.length).forEach((p, i) => {
       const y = 56 + i * 12;
       const sold = s.prizesSold.includes(p.id);
       const cash = cashFor(p);
 
-      this.body.add(this.add.rectangle(30, y, 10, 10, p.color).setOrigin(0, 0).setAlpha(sold ? 0.35 : 1));
+      // the thing itself, small (as in the pockets)
+      this.body.add(drawPrize(this, 36, y + 11, p, 0.62, { w: 14, h: 11 }).setAlpha(sold ? 0.35 : 1));
       this.body.add(text(this, 46, y + 2, p.name, sold ? PALETTE.steel : PALETTE.cream));
       this.body.add(text(this, 150, y + 2, `${p.cost}`, sold ? PALETTE.steel : PALETTE.gold));
       this.body.add(text(this, 200, y + 2, `$${cash}`, sold ? PALETTE.steel : PALETTE.mossLight));
@@ -169,7 +174,7 @@ export class PrizeExchange extends Phaser.Scene {
 
   private sell(p: PrizeDef): void {
     const s = store.get();
-    if (!s.prizesOwned.includes(p.id) || s.prizesSold.includes(p.id) || p.id === CAMERA_ITEM.id) return;
+    if (!s.prizesOwned.includes(p.id) || s.prizesSold.includes(p.id)) return;
 
     store.earnCash(cashFor(p));
     record('sell_prize');
@@ -183,14 +188,14 @@ export class PrizeExchange extends Phaser.Scene {
   }
 
   /**
-   * ---- THE POCKETS TAB: crane prizes, and the camera.  Each row says what
-   * it is and what he pays; the camera says NOT FOR SALE, and picking it has
-   * the player say why they are keeping it.
+   * ---- THE POCKETS TAB: the cranes' things.  Each row says what it is and
+   * what he pays; something he cannot buy (the key) says NOT FOR SALE, and
+   * picking it has the player say why they are keeping it.  (Everything off
+   * the counter, the camera included, is sold from the PRIZES tab.)
    */
   private renderPockets(): void {
     const s = store.get();
-    // (the counter's prizes are sold from the PRIZES tab; the camera is here)
-    const held = heldItems(s).filter((id) => id === CAMERA_ITEM.id || itemDef(id)?.kind !== 'prize');
+    const held = heldItems(s).filter((id) => { const k = itemDef(id)?.kind; return k !== 'prize' && k !== 'camera'; });
     this.body.add(text(this, 30, 46, 'ITEM', PALETTE.ash));
     this.body.add(text(this, 196, 46, 'HE PAYS', PALETTE.ash));
     if (held.length === 0) {
@@ -201,7 +206,7 @@ export class PrizeExchange extends Phaser.Scene {
       if (!d) return;
       const y = 56 + i * 13;
       const key = `${id}#${i}`;
-      this.body.add(this.add.rectangle(30, y, 10, 10, d.color).setOrigin(0, 0));
+      this.body.add(drawItem(this, 36, y + 11, d, 0.75, { w: 14, h: 11 }));
       this.body.add(text(this, 46, y + 2, d.name, PALETTE.cream));
       if (d.value <= 0) {
         this.body.add(text(this, 168, y + 2, 'NOT FOR SALE', PALETTE.steel));
@@ -243,7 +248,7 @@ export class PrizeExchange extends Phaser.Scene {
       this.render();
       return;
     }
-    if (d.id === CAMERA_ITEM.id || d.value <= 0 || !removeItem(d.id)) return;
+    if (d.value <= 0 || !removeItem(d.id)) return;
     store.earnCash(d.value);
     record('sell_prize');
     record('earn_cash', d.value);

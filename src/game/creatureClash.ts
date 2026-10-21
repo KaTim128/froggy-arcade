@@ -5,7 +5,7 @@
  * a creature twice.
  *
  *   starter      one of three, free, once
- *   recruit      one pack, 50 tokens: nine different cards face down, keep one
+ *   recruit      one pack, 25 tokens: nine different cards face down, keep one
  *   party        two at most, one fights
  *
  *   ZONE BATTLES  one fight, in that place, against one of the creatures

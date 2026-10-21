@@ -1,5 +1,11 @@
 /**
- * FROG VS LIZARD.  Hard — 5 tokens in, 10 out.
+ * FENCE WARS (the cabinet that was FROG VS LIZARD).  Hard — 5 tokens in, 10 out.
+ *
+ * Everything thrown glows, spins and leaves a trail of its own, and every
+ * one of them lands with an effect that says what it did: a healing stream
+ * that flows back over the fence to the thrower, a skull of purple smoke over
+ * whoever was poisoned, and dynamite that goes off with a flash, a fireball,
+ * flying debris and smoke.  The rules are the same rules either way.
  *
  * Two neighbours, one fence, and a shed's worth of things to throw over it.
  * You are the frog on the left; the lizard is on the right and he is playing
@@ -143,7 +149,11 @@ interface Projectile {
   vy: number;
   item: ItemDef;
   from: Who;
-  body: Phaser.GameObjects.Arc | null;
+  body: Phaser.GameObjects.Container | null;
+  /** What spins inside the body (the glow around it does not). */
+  core: Phaser.GameObjects.Graphics | null;
+  /** ms to the next trail mote. */
+  trailT: number;
   spin: number;
 }
 
@@ -186,7 +196,7 @@ function blankSide(): Side {
 
 export const frogVsLizard: MinigameModule = {
   id: ID,
-  title: 'FROG VS LIZARD',
+  title: 'FENCE WARS',
   music: 'game_frogvslizard',
   rules: 'one round over the fence - mind the wind',
   tutorial: {
@@ -230,6 +240,8 @@ export const frogVsLizard: MinigameModule = {
     best = store.highScore(ID);
 
     paintYard(scene);
+    groundShadow(scene, FROG_X, 26);
+    groundShadow(scene, LIZARD_X, 40);
     sides.frog.sprite = makeFrog(scene, FROG_X, GROUND_Y);
     sides.lizard.sprite = makeLizard(scene, LIZARD_X, GROUND_Y);
     for (const who of ['frog', 'lizard'] as Who[]) sides[who].status = scene.add.graphics().setDepth(21);
@@ -472,17 +484,52 @@ function paintYard(scene: Phaser.Scene): void {
   }
   scene.add.image(0, 0, key).setOrigin(0, 0);
 
-  // the fence: planks with two rails and a pointed top, the thing in the way
+  // ---- the afternoon light: warm rays down from the sun, and the shadows
+  // it throws falling away to the right
+  const rays = scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.07);
+  for (const [a, w] of [[0.55, 0.08], [0.85, 0.06], [1.15, 0.09]] as const) {
+    rays.fillStyle(0xfff0b0, 1).fillTriangle(46, 46, 46 + Math.cos(a - w) * 340, 46 + Math.sin(a - w) * 340, 46 + Math.cos(a + w) * 340, 46 + Math.sin(a + w) * 340);
+  }
+
+  // the fence: weathered planks with a pointed top, two rails nailed across
+  // them, lit from the left, and its shadow lying on the lawn behind it
   const h = GROUND_Y - FENCE.top;
-  scene.add.rectangle(FENCE.x - 4, FENCE.top - 2, FENCE.w + 8, h + 2, 0x3a2716).setOrigin(0, 0).setAlpha(0.4);
+  const f = scene.add.graphics();
+  f.fillStyle(0x1a3a14, 0.22).fillPoints(
+    [new Phaser.Geom.Point(FENCE.x - 4, GROUND_Y), new Phaser.Geom.Point(FENCE.x + FENCE.w + 4, GROUND_Y), new Phaser.Geom.Point(FENCE.x + FENCE.w + 22, GROUND_Y + 8), new Phaser.Geom.Point(FENCE.x + 14, GROUND_Y + 8)],
+    true,
+  );
+  f.fillStyle(0x2a1a0c, 1).fillRect(FENCE.x - 5, FENCE.top - 1, FENCE.w + 10, h + 1);
   for (let i = 0; i < 3; i++) {
     const px = FENCE.x - 4 + i * 7;
-    scene.add.rectangle(px, FENCE.top, 6, h, i === 1 ? 0x9c7248 : 0x8a6238).setOrigin(0, 0);
-    scene.add.triangle(px + 3, FENCE.top, 0, 4, 3, 0, 6, 4, 0xb08553).setOrigin(0.5, 1);
+    const base = i === 1 ? 0x9c7248 : 0x8a6238;
+    f.fillStyle(0x2a1a0c, 1).fillTriangle(px - 1, FENCE.top + 1, px + 3, FENCE.top - 5, px + 7, FENCE.top + 1);
+    f.fillStyle(base, 1).fillRect(px, FENCE.top, 6, h);
+    f.fillStyle(0xb08553, 1).fillTriangle(px, FENCE.top + 0.5, px + 3, FENCE.top - 4, px + 6, FENCE.top + 0.5);
+    // the lit edge, the shaded edge, and the grain
+    f.fillStyle(0xc49a68, 1).fillRect(px, FENCE.top, 1, h);
+    f.fillStyle(0x5a3e22, 1).fillRect(px + 5, FENCE.top, 1, h);
+    f.fillStyle(0x6b4a2f, 0.8);
+    for (let k = 0; k < 4; k++) f.fillRect(px + 2 + (k % 2), FENCE.top + 6 + k * 17 + i * 3, 1, 8);
+    f.fillStyle(0x4a3018, 1).fillCircle(px + 3, FENCE.top + 40 + i * 5, 1);
+    // a darker foot where the grass keeps it damp
+    f.fillStyle(0x4a3a1a, 0.6).fillRect(px, GROUND_Y - 4, 6, 4);
   }
   for (const ry of [FENCE.top + 14, FENCE.top + h - 20]) {
-    scene.add.rectangle(FENCE.x - 6, ry, FENCE.w + 12, 3, 0x6b4a2f).setOrigin(0, 0);
+    f.fillStyle(0x2a1a0c, 1).fillRect(FENCE.x - 7, ry - 1, FENCE.w + 14, 5);
+    f.fillStyle(0x6b4a2f, 1).fillRect(FENCE.x - 6, ry, FENCE.w + 12, 3);
+    f.fillStyle(0x8a6238, 1).fillRect(FENCE.x - 6, ry, FENCE.w + 12, 1);
+    f.fillStyle(0xd6dce4, 1);
+    for (let i = 0; i < 3; i++) f.fillRect(FENCE.x - 2 + i * 7, ry + 1, 1, 1);
   }
+  // grass growing up against it
+  f.fillStyle(0x4f9a44, 1);
+  for (let x = FENCE.x - 6; x < FENCE.x + FENCE.w + 6; x += 2) f.fillRect(x, GROUND_Y - 2 - ((x * 7) % 3), 1, 3);
+}
+
+/** Under someone on the lawn: the shadow the sun throws, a little to the right. */
+function groundShadow(scene: Phaser.Scene, x: number, w: number): void {
+  scene.add.ellipse(x + 3, GROUND_Y + 1, w, 5, 0x1a3a14, 0.35).setDepth(19);
 }
 
 /** The player: a round frog in a garden, facing the fence. */
@@ -498,6 +545,12 @@ function makeFrog(scene: Phaser.Scene, x: number, groundY: number): Phaser.GameO
     scene.add.circle(-5, -23, 2, PALETTE.black),
     scene.add.circle(7, -23, 2, PALETTE.black),
     scene.add.rectangle(2, -16, 9, 1, PALETTE.moss),
+    // lit from the left: a sheen on the crown, shade under the belly
+    scene.add.ellipse(-4, -19, 9, 4, 0xa8e090).setAlpha(0.85),
+    scene.add.ellipse(3, -5, 16, 3, PALETTE.moss).setAlpha(0.5),
+    // and a glint in each eye
+    scene.add.rectangle(-7, -25, 1, 1, 0xffffff),
+    scene.add.rectangle(5, -25, 1, 1, 0xffffff),
   ];
   return scene.add.container(x, groundY, parts).setDepth(20);
 }
@@ -541,6 +594,10 @@ export function makeLizard(scene: Phaser.Scene, x: number, groundY: number): Pha
     scene.add.rectangle(-15, -16, 1, 4, PALETTE.black),
     // a throat that reads as a lizard's dewlap
     scene.add.ellipse(-16, -7, 7, 4, 0xd9b45a),
+    // the sun along his back and the top of his head, and a glint in the eye
+    scene.add.ellipse(-2, -13, 18, 2, 0xe8c870).setAlpha(0.8),
+    scene.add.ellipse(-14, -16, 8, 2, 0xe8c870).setAlpha(0.7),
+    scene.add.rectangle(-16, -17, 1, 1, 0xffffff),
   );
   return scene.add.container(x, groundY, parts).setDepth(20);
 }
@@ -685,9 +742,9 @@ function banner(str: string, colour: number = PALETTE.cream): void {
 }
 
 /** A number that floats off whoever it just happened to. */
-function floatText(x: number, y: number, str: string, colour: number): void {
+function floatText(x: number, y: number, str: string, colour: number, size?: number): void {
   if (!scene0) return;
-  const t = centerText(scene0, x, y, str, colour).setDepth(60);
+  const t = (size ? centerText(scene0, x, y, str, colour, size) : centerText(scene0, x, y, str, colour)).setDepth(60);
   scene0.tweens.add({ targets: t, y: y - 16, alpha: 0, duration: 700, onComplete: () => t.destroy() });
 }
 
@@ -743,6 +800,7 @@ function beginTurn(who: Who, first = false): void {
     sides[other].dealt += POISON_TICK;
     audio.sfx('poison_hiss', 0.5);
     floatText(who === 'frog' ? FROG_X : LIZARD_X, GROUND_Y - 34, `-${POISON_TICK}`, 0x9b6fe0);
+    skullSmoke(who === 'frog' ? FROG_X : LIZARD_X, 0.6);
     refreshHud();
     if (s.hp <= 0) {
       endRound();
@@ -804,9 +862,8 @@ function throwItem(who: Who, angle: number, pow: number, id: ItemId): void {
   const x = (who === 'frog' ? FROG_X : LIZARD_X) + HAND.dx * dir;
   const y = GROUND_Y + HAND.dy;
   const speed = THROW_MIN + Phaser.Math.Clamp(pow, 0, 1) * (THROW_MAX - THROW_MIN);
-  const ball = item.id === 'sleep' || item.id === 'confuse';
-  const body = scene0.add.circle(x, y, item.id === 'tnt' || ball ? 4 : 3, item.color).setStrokeStyle(1, ball ? 0xffffff : PALETTE.ink).setDepth(40);
-  proj = { x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, item, from: who, body, spin: 0 };
+  const { body, core } = makeProjectile(scene0, item, x, y);
+  proj = { x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, item, from: who, body, core, spin: 0, trailT: 0 };
 
   phase = 'flight';
   power = 0;
@@ -836,14 +893,16 @@ function stepProjectile(dt: number): void {
     proj.y += proj.vy * h;
     if (hitSomething()) return;
   }
-  proj.spin += dt * 12;
+  // it turns over in the air -- the dynamite end over end, faster than a ball
+  proj.spin += dt * (proj.item.id === 'tnt' ? 14 : proj.item.id === 'rock' ? 9 : 6) * Math.sign(proj.vx || 1);
   proj.body?.setPosition(proj.x, proj.y);
-  // the two balls leave a short trail of their colour: a sparkle for the
-  // confusion ball, a sleepy haze for the sleep ball
-  if (scene0 && (proj.item.id === 'sleep' || proj.item.id === 'confuse') && Math.random() < 0.6) {
-    const c = proj.item.id === 'sleep' ? 0x6a88e0 : 0xffb0da;
-    const d = scene0.add.circle(proj.x, proj.y, proj.item.id === 'sleep' ? 2 : 1.2, c).setDepth(39).setAlpha(0.8);
-    scene0.tweens.add({ targets: d, alpha: 0, scale: 0.3, duration: 260, onComplete: () => d.destroy() });
+  proj.core?.setRotation(proj.spin);
+  const glow = proj.body?.getAt(0) as Phaser.GameObjects.Arc | undefined;
+  glow?.setScale(1 + Math.sin(proj.spin * 1.7) * 0.15);
+  proj.trailT -= dt * 1000;
+  if (proj.trailT <= 0) {
+    proj.trailT = 16;
+    trailMote(proj);
   }
 }
 
@@ -857,6 +916,9 @@ function hitSomething(): boolean {
   if (proj.x > FENCE.x - 6 && proj.x < FENCE.x + FENCE.w + 6 && proj.y > FENCE.top && proj.y < GROUND_Y) {
     audio.sfx('fence_thunk');
     floatText(proj.x, proj.y - 8, 'FENCE', PALETTE.fog);
+    splinters(proj.x, proj.y, proj.vx > 0 ? -1 : 1);
+    if (proj.item.id === 'tnt') explode(proj.x, proj.y, 0.6);
+    else burst(proj.x, proj.y, proj.item, 0.6);
     endFlight(false);
     return true;
   }
@@ -868,6 +930,8 @@ function hitSomething(): boolean {
   if (proj.y >= GROUND_Y) {
     audio.sfx('item_thud', 0.4);
     puff(proj.x, GROUND_Y - 2);
+    if (proj.item.id === 'tnt') explode(proj.x, GROUND_Y - 4, 0.6);
+    else burst(proj.x, GROUND_Y - 3, proj.item, 0.5);
     endFlight(false);
     return true;
   }
@@ -895,31 +959,33 @@ function land(target: Who): void {
     // more good than it does him harm.
     const before = sides[thrower].hp;
     sides[thrower].hp = Math.min(MAX_HP, sides[thrower].hp + item.heal);
-    floatText(hx, GROUND_Y - 40, `+${Math.round(sides[thrower].hp - before)}`, 0x6fe08a);
+    healStream(tx, hx, Math.round(sides[thrower].hp - before), sides[thrower].sprite);
+    burst(proj.x, proj.y, item, 1);
     audio.sfx('heal_up');
   } else if (item.poison > 0) {
     sides[target].poison = item.poison;
     floatText(tx, GROUND_Y - 44, 'POISONED', 0x9b6fe0);
+    skullSmoke(tx, 1);
     audio.sfx('poison_hiss');
   } else if (item.sleep > 0) {
     sides[target].sleep = item.sleep;
     floatText(tx, GROUND_Y - 44, 'FAST ASLEEP', 0x8aa8ff);
     audio.sfx('heal_up', 0.4);
     impactSleep(tx);
+    burst(proj.x, proj.y, item, 0.8);
   } else if (item.confuse > 0) {
     sides[target].confused = Math.max(sides[target].confused, item.confuse);
     floatText(tx, GROUND_Y - 44, 'CONFUSED', 0xff6fb4);
     audio.sfx('ui_blip');
     impactConfuse(tx);
+    burst(proj.x, proj.y, item, 0.8);
   } else if (item.id === 'tnt') {
     audio.sfx('boom');
-    scene0.cameras.main.shake(200, 0.009);
-    for (let i = 0; i < 7; i++) {
-      const p = scene0.add.circle(tx + (Math.random() - 0.5) * 20, GROUND_Y - 12 - Math.random() * 16, 2 + Math.random() * 2, i % 2 ? PALETTE.ember : PALETTE.gold).setDepth(45);
-      scene0.tweens.add({ targets: p, alpha: 0, scale: 0.3, duration: 340, onComplete: () => p.destroy() });
-    }
+    scene0.cameras.main.shake(260, 0.011);
+    explode(tx, GROUND_Y - 12, 1);
   } else {
     audio.sfx('item_thud');
+    burst(proj.x, proj.y, item, 1);
   }
 
   const sprite = sides[target].sprite;
@@ -1014,6 +1080,297 @@ function drawStatus(delta: number): void {
       }
     }
   }
+}
+
+// ------------------------------------------------------------------ effects
+//
+// WHAT IS THROWN LOOKS LIKE WHAT IT IS, and what lands says what it did.
+// None of it touches a number: damage, health and status are all settled in
+// `land` before any of this is drawn, and every effect is gone well inside
+// the 900ms the turn waits before passing over.
+
+/** The thing in the air: a soft glow of its colour, and the item, turning. */
+function makeProjectile(scene: Phaser.Scene, item: ItemDef, x: number, y: number): { body: Phaser.GameObjects.Container; core: Phaser.GameObjects.Graphics } {
+  const glowCol = item.id === 'rock' ? 0xffffff : item.id === 'tnt' ? 0xffb038 : item.id === 'sleep' ? 0x6a88e0 : item.color;
+  const glow = scene.add.circle(0, 0, item.id === 'rock' ? 5 : 8, glowCol, item.id === 'rock' ? 0.12 : 0.32).setBlendMode(Phaser.BlendModes.ADD);
+  const g = scene.add.graphics();
+  const ink = PALETTE.ink;
+  switch (item.id) {
+    case 'rock': {
+      const pts = [-3, -2, -1, -3.5, 2.5, -2.5, 3.5, 0.5, 1.5, 3, -2, 3, -3.5, 0.5];
+      const poly = (c: number, k: number[]) => {
+        g.fillStyle(c, 1).beginPath().moveTo(k[0], k[1]);
+        for (let i = 2; i < k.length; i += 2) g.lineTo(k[i], k[i + 1]);
+        g.closePath().fillPath();
+      };
+      g.fillStyle(ink, 1).fillCircle(0, 0, 4.3);
+      poly(0x9aa4b0, pts);
+      poly(0x6a7480, [1.5, 3, 3.5, 0.5, 1, 0.5, -2, 3]);
+      poly(0xd0d6de, [-3, -2, -1, -3.5, 1, -2, -1.5, -0.5]);
+      g.fillStyle(0x5a6470, 1).fillRect(0, -1, 1, 1).fillRect(-2, 1, 1, 1);
+      break;
+    }
+    case 'heal':
+      g.fillStyle(0x1e5a2e, 1).fillCircle(0, 0, 4.5);
+      g.fillStyle(0x6fe08a, 1).fillCircle(0, 0, 3.6);
+      g.fillStyle(0x3fae5a, 1).fillCircle(0.8, 1, 2.6);
+      g.fillStyle(0x6fe08a, 1).fillCircle(-0.3, -0.3, 2.4);
+      g.fillStyle(0xffffff, 1).fillRect(-0.5, -2.5, 1.5, 5).fillRect(-2.25, -0.75, 5, 1.5);
+      g.fillStyle(0xd8ffe0, 1).fillRect(-3, -3, 1, 1);
+      break;
+    case 'tnt':
+      g.fillStyle(ink, 1).fillRect(-5, -2.5, 10, 5);
+      g.fillStyle(0xd94f2e, 1).fillRect(-4, -1.5, 8, 3);
+      g.fillStyle(0xff8a5a, 1).fillRect(-4, -1.5, 8, 1);
+      g.fillStyle(0x8a2a18, 1).fillRect(-4, 1, 8, 0.5);
+      g.fillStyle(0x3a2716, 1).fillRect(-3, -1.5, 1, 3).fillRect(2, -1.5, 1, 3);
+      g.fillStyle(PALETTE.cream, 1).fillRect(-1, -0.5, 2, 1);
+      g.lineStyle(1, 0x6b4a2f, 1).lineBetween(4, 0, 6, -2);
+      break;
+    case 'poison':
+      g.fillStyle(0x2a1040, 1).fillCircle(0, 0, 4.5);
+      g.fillStyle(0x9b6fe0, 1).fillCircle(0, 0, 3.6);
+      g.fillStyle(0x6a3fa0, 1).fillCircle(0.8, 1, 2.6);
+      g.fillStyle(0x9b6fe0, 1).fillCircle(-0.4, -0.4, 2.2);
+      // the skull on the label
+      g.fillStyle(0xeadcff, 1).fillCircle(0, -0.4, 1.6).fillRect(-1, 0.6, 2, 1.2);
+      g.fillStyle(0x2a1040, 1).fillRect(-1, -0.8, 0.8, 0.8).fillRect(0.3, -0.8, 0.8, 0.8);
+      g.fillStyle(0xd8c0ff, 1).fillRect(-3, -3, 1, 1);
+      break;
+    case 'sleep':
+      g.fillStyle(0xffffff, 1).fillCircle(0, 0, 5);
+      g.fillStyle(0x2e4a9a, 1).fillCircle(0, 0, 4);
+      g.fillStyle(0x4a66c0, 1).fillCircle(-0.8, -0.8, 2.6);
+      // a crescent moon on it
+      g.fillStyle(PALETTE.cream, 1).fillCircle(0.4, 0.2, 1.8);
+      g.fillStyle(0x4a66c0, 1).fillCircle(1.2, -0.5, 1.6);
+      break;
+    case 'confuse':
+      g.fillStyle(0xffffff, 1).fillCircle(0, 0, 5);
+      g.fillStyle(0xff6fb4, 1).fillCircle(0, 0, 4);
+      g.lineStyle(1, 0xffffff, 0.95).beginPath();
+      for (let a = 0; a <= Math.PI * 3.5; a += 0.5) {
+        const r = (a / (Math.PI * 3.5)) * 3;
+        if (a === 0) g.moveTo(0, 0);
+        else g.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      g.strokePath();
+      break;
+  }
+  const body = scene.add.container(x, y, [glow, g]).setDepth(40);
+  return { body, core: g };
+}
+
+/** One frame's worth of trail behind whatever is in the air. */
+function trailMote(p: Projectile): void {
+  const sc = scene0;
+  if (!sc) return;
+  const id = p.item.id;
+  // the streak: the item's own colour, left where it was and shrinking away
+  const streakCol = id === 'rock' ? 0xc8ced6 : id === 'tnt' ? 0xff9a3c : id === 'sleep' ? 0x6a88e0 : p.item.color;
+  const st = sc.add.circle(p.x, p.y, id === 'rock' ? 1.6 : 2.4, streakCol, id === 'rock' ? 0.45 : 0.6).setDepth(39);
+  if (id !== 'rock') st.setBlendMode(Phaser.BlendModes.ADD);
+  sc.tweens.add({ targets: st, alpha: 0, scale: 0.2, duration: id === 'rock' ? 160 : 260, onComplete: () => st.destroy() });
+  const r = Math.random();
+  if (id === 'tnt') {
+    // the fuse burns at the end of the stick, wherever it has turned to
+    const fx = p.x + Math.cos(p.spin) * 6 + Math.sin(p.spin) * 2;
+    const fy = p.y + Math.sin(p.spin) * 6 - Math.cos(p.spin) * 2;
+    for (let i = 0; i < 2; i++) fling(sc, fx, fy, (Math.random() - 0.5) * 70, -Math.random() * 60, 200, i ? 0xffd45e : 0xfff0c9, 1, 220 + Math.random() * 120);
+    if (r < 0.5) smoke(sc, fx, fy, 2, 0x7a7a80, 0.5, 520, 8);
+  } else if (id === 'heal' && r < 0.35) {
+    plus(sc, p.x + (Math.random() - 0.5) * 6, p.y + (Math.random() - 0.5) * 6, 0xb8ffc8, 0.9, 420);
+  } else if (id === 'poison' && r < 0.5) {
+    // drips and bubbles of it, falling off behind
+    fling(sc, p.x, p.y + 2, (Math.random() - 0.5) * 20, 10 + Math.random() * 30, 260, r < 0.25 ? 0x6a3fa0 : 0xc8a0ff, 1.5, 380);
+  } else if (id === 'sleep' && r < 0.6) {
+    const d = sc.add.circle(p.x, p.y, 2.4, 0x4a66c0, 0.6).setDepth(39);
+    sc.tweens.add({ targets: d, alpha: 0, scale: 1.8, y: p.y - 4, duration: 420, onComplete: () => d.destroy() });
+  } else if (id === 'confuse' && r < 0.5) {
+    const s2 = sc.add.star(p.x + (Math.random() - 0.5) * 8, p.y + (Math.random() - 0.5) * 8, 4, 0.8, 2.2, r < 0.25 ? 0xffe0f0 : 0xff6fb4).setDepth(39);
+    sc.tweens.add({ targets: s2, angle: 180, alpha: 0, scale: 0.3, duration: 380, onComplete: () => s2.destroy() });
+  } else if (id === 'rock' && r < 0.25) {
+    fling(sc, p.x, p.y, (Math.random() - 0.5) * 20, Math.random() * 20, 200, 0xbfa07a, 1, 260);
+  }
+}
+
+/** A bit of something thrown off at (vx, vy), falling under `grav` and fading. */
+function fling(sc: Phaser.Scene, x: number, y: number, vx: number, vy: number, grav: number, col: number, size: number, ms: number, spin = false): void {
+  const o = sc.add.rectangle(x, y, size, size, col).setDepth(45);
+  sc.tweens.addCounter({
+    from: 0,
+    to: ms / 1000,
+    duration: ms,
+    onUpdate: (tw) => {
+      const t = tw.getValue() ?? 0;
+      o.setPosition(x + vx * t, Math.min(GROUND_Y + 2, y + vy * t + 0.5 * grav * t * t));
+      o.setAlpha(1 - (t * 1000) / ms);
+      if (spin) o.setRotation(t * 14);
+    },
+    onComplete: () => o.destroy(),
+  });
+}
+
+/** A puff of smoke that rises, spreads and thins out. */
+function smoke(sc: Phaser.Scene, x: number, y: number, r: number, col: number, a: number, ms: number, rise: number, delay = 0): void {
+  const c = sc.add.circle(x, y, r, col, a).setDepth(44);
+  sc.tweens.add({ targets: c, y: y - rise, x: x + (Math.random() - 0.5) * rise * 0.5, scale: 2.4, alpha: 0, delay, duration: ms, ease: 'Sine.easeOut', onComplete: () => c.destroy() });
+}
+
+/** A little glowing plus sign, drifting up. */
+function plus(sc: Phaser.Scene, x: number, y: number, col: number, scale: number, ms: number): void {
+  const g = sc.add.graphics({ x, y }).setDepth(46).setScale(scale);
+  g.fillStyle(0x1e5a2e, 1).fillRect(-1.5, -3.5, 3, 7).fillRect(-3.5, -1.5, 7, 3);
+  g.fillStyle(col, 1).fillRect(-0.5, -2.5, 1, 5).fillRect(-2.5, -0.5, 5, 1);
+  sc.tweens.add({ targets: g, y: y - 14, alpha: 0, duration: ms, ease: 'Sine.easeOut', onComplete: () => g.destroy() });
+}
+
+/** Contact: a flash of the item's colour, a ring going out, and bits of it. */
+function burst(x: number, y: number, item: ItemDef, k: number): void {
+  const sc = scene0;
+  if (!sc) return;
+  const col = item.id === 'rock' ? 0xd0d6de : item.id === 'sleep' ? 0x6a88e0 : item.color;
+  const fl = sc.add.circle(x, y, 4, 0xffffff, 0.9).setDepth(46).setBlendMode(Phaser.BlendModes.ADD);
+  sc.tweens.add({ targets: fl, scale: 2.6 * k, alpha: 0, duration: 180, onComplete: () => fl.destroy() });
+  const ring = sc.add.circle(x, y, 3, col, 0).setStrokeStyle(1, col).setDepth(46);
+  sc.tweens.add({ targets: ring, radius: 16 * k, alpha: 0, duration: 300, onComplete: () => ring.destroy() });
+  const n = Math.round(8 * k);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + Math.random() * 0.5;
+    const sp = 50 + Math.random() * 60;
+    fling(sc, x, y, Math.cos(a) * sp, Math.sin(a) * sp - 40, 260, i % 2 ? col : 0xffffff, item.id === 'rock' ? 2 : 1.5, 360 + Math.random() * 160, item.id === 'rock');
+  }
+}
+
+/** Wood flying off the fence. */
+function splinters(x: number, y: number, dir: number): void {
+  const sc = scene0;
+  if (!sc) return;
+  for (let i = 0; i < 7; i++) fling(sc, x, y, dir * (30 + Math.random() * 70), -40 - Math.random() * 80, 380, i % 2 ? 0x9c7248 : 0xd0a070, 2, 520 + Math.random() * 200, true);
+}
+
+/**
+ * DYNAMITE GOES OFF: the whole screen flashes, a fireball swells and burns
+ * out, a shockwave rings out across the lawn, debris and sparks fly and fall,
+ * and the smoke hangs and drifts up after it, over a scorch on the grass.
+ */
+function explode(x: number, y: number, k: number): void {
+  const sc = scene0;
+  if (!sc) return;
+  const flash = sc.add.rectangle(0, 0, GAME_W, GAME_H, 0xfff6d0, 0.8 * k).setOrigin(0, 0).setDepth(55);
+  sc.tweens.add({ targets: flash, alpha: 0, duration: 240, onComplete: () => flash.destroy() });
+  for (const [r, col, sc2, ms] of [[13, 0xd94f2e, 2.2, 560], [10, 0xffb038, 2.4, 420], [6, 0xffffff, 3, 260]] as const) {
+    const f = sc.add.circle(x, y, r * k, col, 0.95).setDepth(47).setBlendMode(Phaser.BlendModes.ADD).setScale(0.3);
+    sc.tweens.add({ targets: f, scale: sc2, alpha: 0, duration: ms, ease: 'Cubic.easeOut', onComplete: () => f.destroy() });
+  }
+  for (const [w, d] of [[2, 0], [1, 90]] as const) {
+    const ring = sc.add.circle(x, y, 4, 0xfff0c9, 0).setStrokeStyle(w, 0xfff0c9).setDepth(47);
+    sc.tweens.add({ targets: ring, radius: 52 * k, alpha: 0, delay: d, duration: 420, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
+  }
+  const debris = [0x3a2716, 0x6b4a2f, PALETTE.ember, 0xd94f2e, 0x4a8a3a];
+  for (let i = 0; i < Math.round(18 * k); i++) {
+    const a = -Math.PI * (0.1 + Math.random() * 0.8);
+    const sp = 90 + Math.random() * 150;
+    fling(sc, x, y, Math.cos(a) * sp, Math.sin(a) * sp, 520, debris[i % debris.length], 2 + (i % 2), 700 + Math.random() * 400, true);
+  }
+  for (let i = 0; i < Math.round(14 * k); i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 120 + Math.random() * 120;
+    fling(sc, x, y, Math.cos(a) * sp, Math.sin(a) * sp, 160, i % 2 ? 0xffd45e : 0xffffff, 1, 260 + Math.random() * 200);
+  }
+  for (let i = 0; i < Math.round(10 * k); i++) {
+    const c = i % 3 === 0 ? 0x3a3a40 : i % 3 === 1 ? 0x5a5a60 : 0x7a7a80;
+    smoke(sc, x + (Math.random() - 0.5) * 26 * k, y + (Math.random() - 0.5) * 12, 4 + Math.random() * 3, c, 0.75, 1300 + Math.random() * 500, 22 + Math.random() * 18, 100 + i * 30);
+  }
+  if (y > GROUND_Y - 24) {
+    const scorch = sc.add.ellipse(x, GROUND_Y + 1, 36 * k, 5, 0x1a1208, 0.55).setDepth(19);
+    sc.tweens.add({ targets: scorch, alpha: 0, delay: 900, duration: 1600, onComplete: () => scorch.destroy() });
+  }
+}
+
+/**
+ * THE HEAL GOES HOME.  The ball bursts green on whoever it hit, and the good
+ * in it streams back over the fence to the one who threw it: a column of
+ * light comes down on them, a ring opens at their feet, plus signs rise off
+ * them, they swell for a beat -- and the number lands on them, not him.
+ */
+function healStream(fromX: number, toX: number, amount: number, sprite: Phaser.GameObjects.Container | null): void {
+  const sc = scene0;
+  if (!sc) return;
+  const y0 = GROUND_Y - 18;
+  const TRAVEL = 520;
+  for (let i = 0; i < 12; i++) {
+    const m = sc.add.circle(fromX, y0, i % 3 ? 2.2 : 3.2, i % 3 === 1 ? 0xd8ffe0 : 0x6fe08a, 1).setDepth(46).setStrokeStyle(1, 0x1e5a2e, 0.8);
+    let last = 0;
+    sc.tweens.addCounter({
+      from: 0,
+      to: 1,
+      delay: i * 40,
+      duration: TRAVEL,
+      ease: 'Sine.easeInOut',
+      onUpdate: (tw) => {
+        const t = tw.getValue() ?? 0;
+        // over the top of the fence, wobbling a little
+        m.setPosition(fromX + (toX - fromX) * t, y0 - Math.sin(Math.PI * t) * 66 + Math.sin(t * 12 + i) * 2);
+        // and the lead mote leaves a glittering green wake the whole way
+        if (i % 4 === 0 && t - last > 0.04) {
+          last = t;
+          const w = sc.add.circle(m.x, m.y, 2, 0x6fe08a, 0.8).setDepth(45).setBlendMode(Phaser.BlendModes.ADD);
+          sc.tweens.add({ targets: w, alpha: 0, scale: 0.3, duration: 360, onComplete: () => w.destroy() });
+        }
+      },
+      onComplete: () => m.destroy(),
+    });
+  }
+  sc.time.delayedCall(TRAVEL + 120, () => {
+    if (!scene0) return;
+    const col = sc.add.rectangle(toX, GROUND_Y, 26, 70, 0x6fe08a, 0).setOrigin(0.5, 1).setDepth(44).setBlendMode(Phaser.BlendModes.ADD);
+    sc.tweens.add({ targets: col, alpha: 0.4, duration: 140, yoyo: true, hold: 260, onComplete: () => col.destroy() });
+    const ring = sc.add.ellipse(toX, GROUND_Y, 10, 3, 0x6fe08a, 0).setStrokeStyle(1, 0xb8ffc8).setDepth(44);
+    sc.tweens.add({ targets: ring, scaleX: 4, scaleY: 3, alpha: 0, duration: 520, onComplete: () => ring.destroy() });
+    const aura = sc.add.circle(toX, GROUND_Y - 14, 15, 0x6fe08a, 0.5).setDepth(22).setBlendMode(Phaser.BlendModes.ADD);
+    sc.tweens.add({ targets: aura, alpha: 0, scale: 1.4, duration: 600, onComplete: () => aura.destroy() });
+    for (let i = 0; i < 7; i++) sc.time.delayedCall(i * 60, () => scene0 && plus(sc, toX + (Math.random() - 0.5) * 22, GROUND_Y - 8 - Math.random() * 20, 0xb8ffc8, 1, 620));
+    if (sprite) sc.tweens.add({ targets: sprite, scaleX: 1.12, scaleY: 1.12, duration: 110, yoyo: true });
+    floatText(toX, GROUND_Y - 44, `+${amount}`, 0x6fe08a, 16);
+  });
+}
+
+/**
+ * POISONED: purple smoke boils up off whoever it hit and gathers into a
+ * skull over their head, which leers for a moment and drifts away.  Smaller,
+ * at the top of each turn the poison bites again.
+ */
+function skullSmoke(x: number, k: number): void {
+  const sc = scene0;
+  if (!sc) return;
+  const cols = [0x4a2a70, 0x6a3fa0, 0x9b6fe0];
+  for (let i = 0; i < Math.round(12 * k); i++) {
+    smoke(sc, x + (Math.random() - 0.5) * 22, GROUND_Y - 6 - Math.random() * 16, 3 + Math.random() * 2, cols[i % 3], 0.7, 900 + Math.random() * 400, 18 + Math.random() * 14, i * 25);
+  }
+  const sy = GROUND_Y - 40;
+  const g = sc.add.graphics({ x, y: sy }).setDepth(47).setAlpha(0).setScale(0.5 * k);
+  // the smoke it is made of, round its edge
+  g.fillStyle(0x6a3fa0, 0.55).fillCircle(-6, -2, 4).fillCircle(6, -2, 4).fillCircle(0, -7, 5).fillCircle(-4, 6, 3).fillCircle(4, 6, 3);
+  // crossbones behind it
+  g.lineStyle(2, 0xc8a0ff, 0.9).lineBetween(-9, -6, 9, 10).lineBetween(9, -6, -9, 10);
+  g.fillStyle(0xc8a0ff, 0.9).fillCircle(-9, -6, 1.6).fillCircle(9, -6, 1.6).fillCircle(9, 10, 1.6).fillCircle(-9, 10, 1.6);
+  // the skull
+  g.fillStyle(0xeadcff, 0.95).fillCircle(0, -1, 6.5).fillRect(-4, 3, 8, 4);
+  g.fillStyle(0x2a1040, 1).fillCircle(-2.6, -1, 1.9).fillCircle(2.6, -1, 1.9);
+  g.fillTriangle(0, 1.5, -1, 3.2, 1, 3.2);
+  g.fillRect(-3, 5, 1, 2).fillRect(-1, 5, 1, 2).fillRect(1, 5, 1, 2);
+  g.fillStyle(0xb080ff, 1).fillCircle(-2.6, -1, 0.8).fillCircle(2.6, -1, 0.8);
+  sc.tweens.add({
+    targets: g,
+    alpha: 1,
+    scale: 1.3 * k,
+    duration: 260,
+    ease: 'Back.easeOut',
+    onComplete: () => {
+      sc.tweens.add({ targets: g, y: sy - 18, x: x + 3, alpha: 0, scale: k * 1.6, delay: 260, duration: 800, ease: 'Sine.easeIn', onComplete: () => g.destroy() });
+    },
+  });
 }
 
 function puff(x: number, y: number): void {

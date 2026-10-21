@@ -19,6 +19,7 @@
  */
 
 import Phaser from 'phaser';
+import { drawThing, type ThingShape } from '../art/prizeArt';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
@@ -163,114 +164,18 @@ export class PrizeCounter extends Phaser.Scene {
 }
 
 /**
- * The prize itself, standing on the shelf: a handful of rectangles that read
- * as the thing at 320x180.  `x` is the middle of the slot and `y` is the board
- * it stands on, so everything is drawn upwards from the shelf.
+ * The prize itself, standing on the shelf: one shaded, outlined thing
+ * (art/prizeArt) drawn upwards from `y`, the board it stands on, centred on
+ * `x`.  A couple of names get a shape of their own rather than their
+ * shelf's generic one (a bunny has long ears; a frog plush is a frog).
  */
-export function drawPrize(scene: Phaser.Scene, x: number, y: number, p: PrizeDef, scale = 1): void {
-  const put = (dx: number, dy: number, w: number, h: number, col: number = p.color) =>
-    scene.add
-      .rectangle(x + dx * scale, y + dy * scale, w * scale, h * scale, col)
-      .setOrigin(0.5, 1);
-  const dot = (dx: number, dy: number, r: number, col: number = p.color) =>
-    scene.add.circle(x + dx * scale, y + dy * scale, r * scale, col);
+export function drawPrize(scene: Phaser.Scene, x: number, y: number, p: PrizeDef, scale = 1, fit?: { w: number; h: number }): Phaser.GameObjects.Graphics {
+  return drawThing(scene, prizeShapeOf(p), p.color, x, y, scale, fit);
+}
 
-  switch (p.shape) {
-    case 'ring':
-      dot(0, -8, 5);
-      dot(0, -8, 2.5, 0x14100c);
-      put(0, -12, 2, 5, PALETTE.steel);
-      break;
-    case 'sheet':
-      put(0, 0, 14, 16);
-      put(0, -2, 10, 3, PALETTE.cream);
-      put(0, -8, 10, 3, PALETTE.cream);
-      break;
-    case 'duck':
-      put(0, 0, 14, 8);
-      dot(4, -10, 4);
-      put(8, -10, 4, 2, PALETTE.ember);
-      break;
-    case 'bear':
-      put(0, 0, 12, 10);
-      dot(0, -11, 5);
-      dot(-4, -15, 2);
-      dot(4, -15, 2);
-      break;
-    case 'lamp':
-      put(0, 0, 10, 3, PALETTE.steel);
-      put(0, -3, 7, 14);
-      dot(0, -18, 4, PALETTE.cream);
-      break;
-    case 'board':
-      put(0, -3, 20, 4);
-      dot(-6, -1, 2, PALETTE.steel);
-      dot(6, -1, 2, PALETTE.steel);
-      break;
-    case 'headset':
-      put(-6, 0, 5, 10);
-      put(6, 0, 5, 10);
-      put(0, -10, 14, 3);
-      break;
-    case 'guitar':
-      put(-1, 0, 11, 11);
-      put(4, -9, 3, 12);
-      put(4, -20, 5, 3, PALETTE.bone);
-      break;
-    case 'console':
-      put(0, 0, 18, 12);
-      put(0, -4, 12, 2, PALETTE.ink);
-      dot(6, -9, 1.5, PALETTE.tealLight);
-      break;
-    case 'robot':
-      put(0, 0, 12, 10);
-      put(0, -10, 9, 8);
-      dot(-2, -15, 1.5, PALETTE.cream);
-      dot(2, -15, 1.5, PALETTE.cream);
-      put(0, -18, 1, 3, PALETTE.steel);
-      break;
-    case 'ball':
-      dot(0, -7, 7);
-      dot(-2, -9, 2, PALETTE.cream);
-      break;
-    case 'car':
-      put(0, -3, 18, 6);
-      put(0, -9, 10, 6);
-      dot(-6, -1, 2.5, PALETTE.ink);
-      dot(6, -1, 2.5, PALETTE.ink);
-      break;
-    case 'rocket':
-      put(0, 0, 8, 14);
-      put(0, -14, 4, 5, PALETTE.blood);
-      put(-6, 0, 3, 5, PALETTE.steel);
-      put(6, 0, 3, 5, PALETTE.steel);
-      break;
-    case 'camera':
-      // A CAMCORDER, not a stills camera: a long boxy body lying on its side,
-      // the lens barrel out of the front, the handle over the top, the
-      // fold-out screen on the side, and the red REC light.
-      put(-1, 0, 16, 9);
-      put(-1, -9, 16, 1, PALETTE.steel);
-      // lens barrel and its glass
-      put(9, -1.5, 5, 6, PALETTE.ink);
-      put(12, -2, 2, 5, 0x5a86b8);
-      put(12.5, -5, 1, 1, PALETTE.cream);
-      // handle over the top
-      put(-1, -10, 12, 1.5, PALETTE.ink);
-      put(-6.5, -10, 1.5, 3, PALETTE.ink);
-      put(4.5, -10, 1.5, 3, PALETTE.ink);
-      // the screen folded out on the near side
-      put(-5, -1.5, 6, 5, PALETTE.ink);
-      put(-5, -2.2, 4.6, 3.6, 0x3a6a8a);
-      // REC light, eyepiece at the back
-      dot(-7, -7.5, 0.8, PALETTE.blood);
-      put(-10.5, -4, 2, 3, PALETTE.ink);
-      break;
-    case 'cube':
-    default:
-      put(0, 0, 14, 14);
-      put(0, -3, 14, 3, PALETTE.cream);
-      put(0, 0, 3, 14, PALETTE.cream);
-      break;
-  }
+/** What a prize is drawn as. */
+export function prizeShapeOf(p: PrizeDef): ThingShape {
+  if (/BUNNY/.test(p.name)) return 'bunny';
+  if (/FROG PLUSH/.test(p.name)) return 'plushfrog';
+  return p.shape ?? 'cube';
 }

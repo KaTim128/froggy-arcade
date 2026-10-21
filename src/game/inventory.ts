@@ -15,7 +15,7 @@
  */
 
 import { store } from '../core/state';
-import { cashFor, prizeById } from './content';
+import { CAMERA_PRIZE, cashFor, prizeById } from './content';
 
 export const SLOTS = 3;
 
@@ -59,14 +59,18 @@ export const ODDITIES: ItemDef[] = [
   { id: 'oddity:amber', name: 'MOTH IN AMBER', kind: 'oddity', color: 0xe8a030, value: 250, thought: 'A moth, stopped mid-flight. Something about it feels old.' },
 ];
 
-/** Bought off the counter after the night, and not for sale to anyone. */
+/**
+ * Bought off the counter after the night.  The man outside will buy it like
+ * any prize (half what it cost), on the PRIZES tab -- though it might be the
+ * only proof of what happened in there.
+ */
 export const CAMERA_ITEM: ItemDef = {
   id: 'camera',
   name: 'VIDEO CAMERA',
   kind: 'camera',
   color: 0x3a3f4c,
-  value: 0,
-  thought: "I'm not selling this. It might be the only proof of what happened in there.",
+  value: cashFor(CAMERA_PRIZE),
+  thought: 'It might be the only proof of what happened in there. That man outside would pay well for it, though.',
 };
 
 /** The key from the basement, in the pocket once the night is survived. */
