@@ -824,7 +824,7 @@ export class PoliceEscape3D extends Phaser.Scene {
       const sp = this.hide.spot;
       const blocker = this.cops.find((c) => !c.m.well && c.m.f === sp.floor && Math.hypot(c.m.x - sp.exit.x, c.m.z - sp.exit.z) < 1.1);
       if (blocker) {
-        this.say("Not now -- he's right there.", 1.6, true);
+        this.sayNow("Not now -- he's right there.", 1.6, true);
         return;
       }
       this.hide.leaving = true;
@@ -851,7 +851,7 @@ export class PoliceEscape3D extends Phaser.Scene {
   private useDoor(d: Door): void {
     if (d.locked) {
       audio.sfx('door_rattle', 0.7);
-      this.say(d.kind === 'stair' ? "The police are in the lobby. Up -- not down." : 'Locked.', 1.6);
+      this.sayNow(d.kind === 'stair' ? "The police are in the lobby. Up -- not down." : 'Locked.', 1.6);
       this.noise(d.hx, d.hz, 4, 'door');
       return;
     }
@@ -1987,6 +1987,12 @@ export class PoliceEscape3D extends Phaser.Scene {
 
   // ===================================================================== words
 
+  /** Said now, over whatever was being said (what a door or a hiding place tells you). */
+  private sayNow(text: string, dur: number, red = false): void {
+    for (const l of this.lines) l.until += dur;
+    this.lines.unshift({ text, until: this.clock + dur, red });
+  }
+
   private say(text: string, dur: number, red = false): void {
     const from = this.lines.length ? this.lines[this.lines.length - 1].until : this.clock;
     this.lines.push({ text, until: Math.max(from, this.clock) + dur, red });
@@ -2223,6 +2229,19 @@ export class PoliceEscape3D extends Phaser.Scene {
         this.me = { x, z, f, well, seg: 'top', h: f * FH };
         this.segCache.clear();
       },
+      /** Walk straight at a point through the real collision and stairs, in small steps. */
+      walkTo: (x: number, z: number, maxSteps = 600) => {
+        for (let i = 0; i < maxSteps; i++) {
+          const dx = x - this.me.x;
+          const dz = z - this.me.z;
+          const d = Math.hypot(dx, dz);
+          if (d < 0.06) break;
+          const s = Math.min(0.05, d);
+          this.step(this.me, this.me.x + (dx / d) * s, this.me.z + (dz / d) * s, R_PLAYER, 'me');
+          this.segCache.clear();
+        }
+        return { x: this.me.x, z: this.me.z, h: this.me.h, f: this.me.f, well: this.me.well, seg: this.me.seg, level: this.levelOf(this.me) };
+      },
       face: (yaw: number, pitch = 0) => {
         this.yaw = yaw;
         this.pitch = pitch;
@@ -2233,6 +2252,13 @@ export class PoliceEscape3D extends Phaser.Scene {
       rooms: () =>
         b().rooms.map((r) => ({ id: r.id, f: r.floor, open: r.open, side: r.side, dz: r.dz, x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, spots: r.spots.map((s) => ({ id: s.id, kind: s.kind, ax: s.approach.x, az: s.approach.z })), special: r.special, door: { k: r.door.k, locked: r.door.locked } })),
       doors: () => b().doors.map((d) => ({ id: d.id, kind: d.kind, f: d.floor, k: d.k, want: d.want, locked: d.locked, by: d.by, hx: d.hx, hz: d.hz })),
+      setDoor: (id: string, k: number) => {
+        const d = b().doors.find((x) => x.id === id);
+        if (!d) return;
+        d.k = d.want = k;
+        b().poseDoor(d);
+        this.segCache.clear();
+      },
       useDoor: (id: string) => {
         const d = b().doors.find((x) => x.id === id);
         if (d) this.useDoor(d);
