@@ -22,7 +22,8 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { button, centerText, text } from '../core/ui';
+import { button, centerText, gearButton, text } from '../core/ui';
+import { openPause } from '../core/pause';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
 import { SPECIALS } from '../game/specials';
@@ -880,10 +881,9 @@ export class CreatureArena extends Phaser.Scene {
     // clock would use, which training does not need (the bars either side of
     // it are untouched, and the line under it still says what your element
     // does).  Nothing it covers is part of the game being played.
-    if (this.training) {
-      // (8 high, at 5: it ends above the element line under it)
-      button(this, GAME_W / 2, 5, 'LEAVE', () => this.askQuit(), { width: 40, height: 8 }).setDepth(60);
-    }
+    // ...and that way out is LEAVE in the pause menu (see pauseExit); on a
+    // desktop the slot holds the gear that opens it
+    if (this.training && !this.touch) gearButton(this, GAME_W / 2, 7, () => openPause()).setDepth(60);
     // the attack strip / touch buttons
     const left = store.get().creatures.handed === 'left';
     if (this.touch) {
@@ -990,6 +990,11 @@ export class CreatureArena extends Phaser.Scene {
    * battle has no button to reach this, and if something else does, it does
    * nothing.
    */
+  /** Training's LEAVE, in the pause menu between RESUME and EXIT TO START MENU. */
+  pauseExit(): { label: string; run: () => void } | null {
+    return this.training ? { label: 'LEAVE', run: () => this.askQuit() } : null;
+  }
+
   private askQuit(): void {
     if (!this.training) return;
     this.scene.start('CreatureHub', { from: this.from });

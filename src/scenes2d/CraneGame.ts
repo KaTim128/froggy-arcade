@@ -43,7 +43,8 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
-import { button, centerText, fadeIn, fadeToScene, text } from '../core/ui';
+import { button, centerText, fadeIn, fadeToScene, gearButton, text } from '../core/ui';
+import { openPause } from '../core/pause';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { TokenHud } from '../ui/hud';
 import { drawItem } from '../ui/pockets';
@@ -84,7 +85,7 @@ const HOW_TO_KEYS: ControlRow[] = [
   ['A / D OR ← →', 'MOVE THE CLAW'],
   ['SPACE / E', 'SIDE VIEW, DROP, THEN GRAB'],
   ['V', 'FRONT / SIDE VIEW'],
-  ['ESC', 'LEAVE'],
+  ['ESC', 'PAUSE - QUIT IS IN THERE'],
 ];
 
 export type CraneKind = 'plush' | 'oddity';
@@ -393,7 +394,10 @@ export class CraneGame extends Phaser.Scene {
 
     this.clockText = text(this, CLOCK_X, 160, '', 0xff6a5a).setDepth(60);
     new TokenHud(this);
-    button(this, QUIT_X, 10, 'QUIT', () => this.leave(true), { width: QUIT_W, height: 13, fill: 0x5a1a22 }).setDepth(70);
+    // QUIT lives in the pause menu, between RESUME and EXIT TO START MENU
+    // (see pauseExit): the corner keeps only the gear that opens it, and a
+    // phone has its own gear on the screen's edge.
+    if (!isTouch()) gearButton(this, QUIT_X + QUIT_W / 2 - 9, 10, () => openPause()).setDepth(70);
     // the view button: BACK in the side view, SIDE VIEW once you have
     // been there; hidden until then (the action button takes you the first time).
     // Clear of QUIT and the title plate, and the only view button on touch too:
@@ -409,7 +413,7 @@ export class CraneGame extends Phaser.Scene {
       right: bind(['D', 'RIGHT']),
       drop: bind(['SPACE', 'E']),
     };
-    kb?.on('keydown-ESC', () => !this.howTo && this.leave(true));
+    // (Esc is the pause menu's, everywhere: QUIT is in there)
     // A press is DROP while aiming and GRAB once the claw has settled
     // (polling `isDown` in the loop misses a tap that goes down and up
     // between two frames; a key held down and auto-repeating is one press).
@@ -1744,6 +1748,11 @@ export class CraneGame extends Phaser.Scene {
   }
 
   /** QUIT, LEAVE or Esc: back to the room.  A go already paid for is spent. */
+  /** QUIT, in the pause menu between RESUME and EXIT TO START MENU. */
+  pauseExit(): { label: string; run: () => void } {
+    return { label: 'QUIT', run: () => this.leave(true) };
+  }
+
   private leave(force = false): void {
     if (!force && this.phase !== 'aim' && this.phase !== 'result') return;
     fadeToScene(this, 'ArcadeLounge', { atProp: this.kind });

@@ -20,7 +20,9 @@ import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { ledger } from '../core/ledger';
-import { button, centerText, confirmDialog, fadeToScene, text } from '../core/ui';
+import { button, centerText, confirmDialog, fadeToScene, gearButton, text } from '../core/ui';
+import { openPause } from '../core/pause';
+import { isTouch } from '../core/device';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
 import { drawAttackIcon } from '../art/attackIcons';
@@ -91,8 +93,8 @@ export class CreatureHub extends Phaser.Scene {
     this.art = this.add.graphics().setDepth(5);
     this.input.keyboard?.on('keydown-ESC', () => {
       if (this.dialog) return;
-      if (this.screen === 'home' || this.screen === 'starter') this.leave();
-      else if (this.screen !== 'pack') this.go('home');
+      // (on the top screens Esc is the pause menu's, where LEAVE is)
+      if (this.screen !== 'home' && this.screen !== 'starter' && this.screen !== 'pack') this.go('home');
     });
     this.cameras.main.fadeIn(250, 0, 0, 0);
     this.draw();
@@ -101,6 +103,12 @@ export class CreatureHub extends Phaser.Scene {
   update(time: number): void {
     this.art.clear();
     for (const s of this.shown) drawCreature(this.art, s.c, s.x, s.y, s.s, s.f, time / 1000);
+  }
+
+  /** LEAVE, in the pause menu between RESUME and EXIT TO START MENU. */
+  pauseExit(): { label: string; run: () => void } | null {
+    if (this.dialog) return null;
+    return this.screen === 'home' || this.screen === 'starter' ? { label: 'LEAVE', run: () => this.leave() } : null;
   }
 
   private leave(): void {
@@ -134,7 +142,12 @@ export class CreatureHub extends Phaser.Scene {
     L.add(this.add.rectangle(96, 2, chipW, 11, 0x14182e).setOrigin(0, 0).setStrokeStyle(1, 0x2a5a3a));
     L.add(drawFrogToken(this.add.graphics()).setPosition(103, 7.5));
     L.add(text(this, 111, 4, tok, PALETTE.mossLight));
-    if (this.screen !== 'pack') L.add(button(this, GAME_W - 26, 8, this.screen === 'home' || this.screen === 'starter' ? 'LEAVE' : 'BACK', () => (this.screen === 'home' || this.screen === 'starter' ? this.leave() : this.go('home')), { width: 44, height: 11 }));
+    // LEAVE is in the pause menu (see pauseExit): the corner has the gear
+    // that opens it on the top screens, and BACK on the ones under them
+    const top = this.screen === 'home' || this.screen === 'starter';
+    if (top) {
+      if (!isTouch()) L.add(gearButton(this, GAME_W - 10, 8, () => openPause()));
+    } else if (this.screen !== 'pack') L.add(button(this, GAME_W - 26, 8, 'BACK', () => this.go('home'), { width: 44, height: 11 }));
     ({ home: () => this.home(), starter: () => this.starter(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), ladder: () => this.ladder(), controls: () => this.controls() })[this.screen]();
     if (this.msg) {
       const m = centerText(this, GAME_W / 2, GAME_H - 7, this.msg, PALETTE.gold);

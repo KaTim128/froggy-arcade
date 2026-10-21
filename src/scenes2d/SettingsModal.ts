@@ -31,6 +31,15 @@ import type { MinigameScene } from './MinigameScene';
 
 type Tab = 'general' | 'audio' | 'controls' | 'test';
 
+/**
+ * A scene with its own way out of what is being played -- QUIT at a crane,
+ * LEAVE in a Creature Clash fight -- puts it in the pause menu by having
+ * this.  Null when there is nothing to leave right now.
+ */
+export interface PauseExitScene {
+  pauseExit?: () => { label: string; run: () => void } | null;
+}
+
 export class SettingsModal extends Phaser.Scene {
   private tab: Tab = 'general';
   private body!: Phaser.GameObjects.Container;
@@ -80,13 +89,23 @@ export class SettingsModal extends Phaser.Scene {
       // In an arcade game the menu is where QUIT lives too (the cabinet's
       // title bar keeps only the gear): back to the room, asked first.
       const inGame = this.from === 'Minigame' && !!pausedScene();
+      // ...and so does any other game's own way out (the crane's QUIT,
+      // Creature Clash's LEAVE): the scene says what it is called and what it
+      // does, and it sits between RESUME and EXIT TO START MENU like QUIT GAME
+      const own = (pausedScene() as PauseExitScene | null)?.pauseExit?.() ?? null;
       if (inGame) {
         button(this, 54, 158, 'RESUME', () => resumePause(), { width: 54, height: 13 });
         button(this, 122, 158, 'QUIT GAME', () => this.quitGame(), { width: 70, height: 13, fill: 0x5a1a22, hoverFill: 0x8a2b34 });
+      } else if (own) {
+        button(this, 54, 158, 'RESUME', () => resumePause(), { width: 54, height: 13 });
+        button(this, 122, 158, own.label, () => {
+          resumePause();
+          own.run();
+        }, { width: 70, height: 13, fill: 0x5a1a22, hoverFill: 0x8a2b34 });
       } else {
         button(this, GAME_W / 2 - 52, 158, 'RESUME', () => resumePause(), { width: 70, height: 13 });
       }
-      button(this, inGame ? 226 : GAME_W / 2 + 48, 158, 'EXIT TO START MENU', () => this.leave(), {
+      button(this, inGame || own ? 226 : GAME_W / 2 + 48, 158, 'EXIT TO START MENU', () => this.leave(), {
         width: 118,
         height: 13,
         fill: 0x5a1a22,
