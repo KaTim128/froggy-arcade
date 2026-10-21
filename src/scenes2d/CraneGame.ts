@@ -43,8 +43,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
-import { button, centerText, fadeIn, fadeToScene, gearButton, text } from '../core/ui';
-import { openPause } from '../core/pause';
+import { button, centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { TokenHud } from '../ui/hud';
 import { drawItem } from '../ui/pockets';
@@ -395,9 +394,8 @@ export class CraneGame extends Phaser.Scene {
     this.clockText = text(this, CLOCK_X, 160, '', 0xff6a5a).setDepth(60);
     new TokenHud(this);
     // QUIT lives in the pause menu, between RESUME and EXIT TO START MENU
-    // (see pauseExit): the corner keeps only the gear that opens it, and a
-    // phone has its own gear on the screen's edge.
-    if (!isTouch()) gearButton(this, QUIT_X + QUIT_W / 2 - 9, 10, () => openPause()).setDepth(70);
+    // (see pauseExit): Esc opens it, and a phone has its own gear on the
+    // screen's edge.
     // the view button: BACK in the side view, SIDE VIEW once you have
     // been there; hidden until then (the action button takes you the first time).
     // Clear of QUIT and the title plate, and the only view button on touch too:

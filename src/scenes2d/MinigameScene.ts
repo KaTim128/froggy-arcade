@@ -28,9 +28,7 @@ import { FONT_ADVANCE } from '../render/pixelFont';
 import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
 import { store, type GameId } from '../core/state';
-import { centerText, fadeIn, fadeToScene, forfeitLines, gearButton, text } from '../core/ui';
-import { openPause } from '../core/pause';
-import { isTouch } from '../core/device';
+import { centerText, fadeIn, fadeToScene, forfeitLines, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { TokenHud } from '../ui/hud';
 import { cabinetById } from '../game/content';
@@ -113,19 +111,17 @@ export class MinigameScene extends Phaser.Scene {
     this.add.rectangle(0, 0, GAME_W, 16, PALETTE.ink).setOrigin(0, 0).setDepth(TOP);
     text(this, 4, 4, def.title, PALETTE.gold).setDepth(TOP);
 
-    // QUIT lives in the pause menu now (QUIT GAME, beside RESUME), which asks
-    // first and says what walking out costs.  Esc opens it; so does this
-    // small gear, the only thing left at the end of the bar.  (A phone has
-    // its own gear, on the screen's edge: see ui/touchControls.)
-    const gearW = isTouch() ? 0 : 14;
-    if (gearW) gearButton(this, GAME_W - 9, 8, () => openPause()).setDepth(TOP + 1);
+    // QUIT lives in the pause menu (QUIT GAME, beside RESUME), which asks
+    // first and says what walking out costs.  Esc opens it on a keyboard;
+    // a phone has its own gear on the screen's edge (ui/touchControls).
+    // Nothing is drawn for it in the bar.
 
     this.hud = new TokenHud(this);
     this.hud.setVisible(false); // the title bar already carries the balance line
     // Right-aligned a clear gap short of the gear rather than pinned to a
     // fixed left edge: the note is the cabinet's own wording and some of them
     // are twice as long as others.
-    const note = text(this, GAME_W - 6 - gearW, 4, this.mod.payoutNote ?? `WIN: +${def.reward}`, PALETTE.tealLight)
+    const note = text(this, GAME_W - 6, 4, this.mod.payoutNote ?? `WIN: +${def.reward}`, PALETTE.tealLight)
       .setOrigin(1, 0)
       .setDepth(TOP);
     // The personal best, where this cabinet keeps one, centred in whatever

@@ -56,7 +56,9 @@ const BALL_R = 10;
 const FROG_M = 1;
 const BALL_M = 1.7;
 /** Pull this far back for full power. */
-const PULL_MAX = 56;
+// (short enough that a frog right up against the wall can still be pulled
+// back all the way: at 56 the edge of the screen stopped the finger first)
+const PULL_MAX = 34;
 const LAUNCH_MAX = 440;
 /** The bog: a steady drag plus one that grows with speed. */
 const MU_FROG = 120;
@@ -431,7 +433,7 @@ function beginTurn(t: Team): void {
     say(sudden ? 'SUDDEN DEATH' : 'PLAYER TURN', sudden ? PALETTE.ember : PALETTE.mossLight);
   } else {
     phase = 'think';
-    say('AI TURN', PALETTE.ember);
+    say("DARK FROGGY'S TURN", PALETTE.ember);
     sceneRef?.time.delayedCall(550, () => aiTurn());
   }
 }
