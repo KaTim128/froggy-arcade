@@ -43,6 +43,13 @@ import { isTouch } from '../core/device';
 // (from 28: the line under the health bars has the band above it to itself)
 const ARENA = { x: 6, y: 28, w: GAME_W - 12, h: GAME_H - 56 };
 const TIME_LIMIT = 120;
+/**
+ * How far the scenery's cover keeps in from the fence: a lane wide enough for
+ * the biggest creature to walk round the end of a ridge in plain sight.
+ */
+const COVER_LANE = 24;
+/** A fighter's footprint against walls and cover, before its size scales it. */
+const BODY_R = 7;
 
 interface Fighter {
   c: Creature;
@@ -635,7 +642,7 @@ export class CreatureArena extends Phaser.Scene {
     const clear = (x: number, y: number, r: number, apart = true): boolean =>
       Math.hypot(x - this.me.x, y - this.me.y) > r + 26 &&
       Math.hypot(x - this.foe.x, y - this.foe.y) > r + 26 * this.foe.scale &&
-      x > ARENA.x + 16 && x < ARENA.x + ARENA.w - 16 && y > ARENA.y + 10 && y < ARENA.y + ARENA.h - 10 &&
+      x > ARENA.x + COVER_LANE && x < ARENA.x + ARENA.w - COVER_LANE && y > ARENA.y + COVER_LANE - 4 && y < ARENA.y + ARENA.h - COVER_LANE + 4 &&
       (!apart || !this.props.some((q) => Math.hypot(q.x - x, q.y - y) < q.r + r + 10));
     const add = (parts: Prop[]): void => {
       if (!parts.length) return;
@@ -645,12 +652,15 @@ export class CreatureArena extends Phaser.Scene {
     const n = this.boss ? 3 : 4;
     switch (b.cover) {
       case 'line': {
-        // two ridges across the floor, each with a gap you can run through
+        // two ridges across the middle of the floor, each with a gap you can
+        // run through -- and stopping well short of the fence at both ends,
+        // so the way round them is a lane you can see, not a crack along the
+        // wall that a creature seemed to walk straight through
         for (const k of [-1, 1]) {
-          const cx = ARENA.x + ARENA.w / 2 + k * 46;
-          const gap = rnd.between(-16, 16);
+          const cx = ARENA.x + ARENA.w / 2 + k * 40;
+          const gap = rnd.between(-10, 10);
           const parts: Prop[] = [];
-          for (let y = ARENA.y + 12; y < ARENA.y + ARENA.h - 12; y += 7) {
+          for (let y = ARENA.y + COVER_LANE; y < ARENA.y + ARENA.h - COVER_LANE; y += 7) {
             if (Math.abs(y - (midY + gap)) < 15) continue;
             const x = cx + rnd.between(-2, 2);
             if (!clear(x, y, 5, false)) continue;
@@ -665,7 +675,7 @@ export class CreatureArena extends Phaser.Scene {
         let guard = 0;
         while (this.barriers.length < n && guard++ < 200) {
           const cx = ARENA.x + rnd.between(46, ARENA.w - 46);
-          const cy = ARENA.y + rnd.between(18, ARENA.h - 18);
+          const cy = ARENA.y + rnd.between(COVER_LANE + 4, ARENA.h - COVER_LANE - 4);
           if (!clear(cx, cy, 16)) continue;
           const parts: Prop[] = [];
           for (let i = 0; i < rnd.between(4, 6); i++) {
@@ -682,8 +692,8 @@ export class CreatureArena extends Phaser.Scene {
         // round the outside, leaving the floor in the middle open
         for (let i = 0; i < 8; i++) {
           const a = (i / 8) * Math.PI * 2 + 0.3;
-          const x = ARENA.x + ARENA.w / 2 + Math.cos(a) * ARENA.w * 0.36;
-          const y = midY + Math.sin(a) * ARENA.h * 0.36;
+          const x = ARENA.x + ARENA.w / 2 + Math.cos(a) * ARENA.w * 0.3;
+          const y = midY + Math.sin(a) * ARENA.h * 0.3;
           if (!clear(x, y, 8)) continue;
           add([{ x, y, r: rnd.between(7, 9) }]);
         }
@@ -693,7 +703,7 @@ export class CreatureArena extends Phaser.Scene {
         let guard = 0;
         while (this.barriers.length < n + 2 && guard++ < 200) {
           const x = ARENA.x + rnd.between(50, ARENA.w - 50);
-          const y = ARENA.y + rnd.between(16, ARENA.h - 16);
+          const y = ARENA.y + rnd.between(COVER_LANE, ARENA.h - COVER_LANE);
           if (!clear(x, y, 9)) continue;
           add([{ x, y, r: rnd.between(6, 9) }]);
         }
@@ -2278,7 +2288,9 @@ export class CreatureArena extends Phaser.Scene {
 
   /** Move with walls, cover and knockback; true if it got anywhere. */
   private step(f: Fighter, vx: number, vy: number, dt: number): void {
-    const r = 6 * f.scale;
+    // (the size it is drawn at: a big boss stops at the cover with its body,
+    // not with a point in its middle)
+    const r = BODY_R * f.scale;
     let nx = f.x + (vx + f.kx) * dt;
     let ny = f.y + (vy + f.ky) * dt;
     f.kx *= Math.pow(0.02, dt);
