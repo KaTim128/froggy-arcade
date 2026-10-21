@@ -9,6 +9,7 @@
  */
 
 import Phaser from 'phaser';
+import { Patrol, stealthPhase } from '../game/patrol';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { KEYS } from '../core/input';
@@ -30,6 +31,16 @@ export type StoreKind = 'furniture' | 'clothes' | 'barber';
 export const STORE_SCENE: Record<StoreKind, string> = { furniture: 'FurnitureStore', clothes: 'ClothesStore', barber: 'BarberShop' };
 
 const WORLD_W = 640;
+/**
+ * THE ALLEYS: the dark gaps between the fronts, each a real alley you can
+ * duck down out of a patrol's sight (scenes2d/SideAlley, each its own
+ * layout).  Their middles along the street, and which alley each is.
+ */
+const GAPS = [
+  { x: 218, variant: 0 },
+  { x: 418, variant: 1 },
+  { x: 628, variant: 2 },
+];
 const WALK_Y = 168;
 
 interface Front {
@@ -97,9 +108,12 @@ export class StreetEast extends Phaser.Scene {
   private promptPlate!: Phaser.GameObjects.Rectangle;
   private mutter!: Phaser.GameObjects.BitmapText;
   private spot: Front | null = null;
+  /** Stood at an alley's mouth. */
+  private gap: (typeof GAPS)[number] | null = null;
   private errand: Front | null = null;
   private locked = false;
   private people!: Pedestrians;
+  private patrol: Patrol | null = null;
 
   constructor() {
     super('StreetEast');
@@ -138,6 +152,7 @@ export class StreetEast extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, WORLD_W, GAME_H);
     this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
     this.people = new Pedestrians(this, WORLD_W, WALK_Y + 2, dark ? 2 : 4, dark);
+    this.patrol = new Patrol({ scene: this, worldW: WORLD_W, y: WALK_Y, player: () => this.player, dark: () => clock().dark, lock: (on) => ((this.locked = on), on && (this.errand = null)) });
 
     new TokenHud(this);
     attachPockets(this, () => this.locked || this.busy());
@@ -150,6 +165,16 @@ export class StreetEast extends Phaser.Scene {
     const bind = (n: readonly string[]) => (kb ? n.map((k) => kb.addKey(k)) : []);
     this.keys = { left: bind(KEYS.left), right: bind(KEYS.right) };
     kb?.on('keydown-E', () => this.interact());
+    for (const gp of GAPS) {
+      this.add
+        .zone(gp.x - 10, 96, 20, 60)
+        .setOrigin(0, 0)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          if (this.gap === gp) this.intoAlley();
+          else this.say('WALK UP TO THE ALLEY.');
+        });
+    }
     for (const f of FRONTS) {
       this.add
         .zone(f.door - 17, 116, 34, 36)
@@ -189,10 +214,26 @@ export class StreetEast extends Phaser.Scene {
     this.tweens.add({ targets: this.mutter, alpha: 0, delay: 2200, duration: 500 });
   }
 
+  /** Down the alley: out of sight (and if they were on you, they lose you). */
+  private intoAlley(): void {
+    const gp = this.gap;
+    if (this.locked || this.busy() || !gp) return;
+    this.locked = true;
+    this.patrol?.hideAway();
+    audio.sfx('footstep_gravel', 0.5);
+    fadeToScene(this, 'SideAlley', { variant: gp.variant, streetX: gp.x });
+  }
+
   private interact(): void {
+    if (this.gap && !this.spot) return this.intoAlley();
     if (this.locked || this.busy() || !this.spot) return;
     const f = this.spot;
-    if (!shopsOpen()) {
+    // (a shop is no place to hide: they would only follow you in)
+    if (this.patrol?.chasing) {
+      this.say('NOT IN THERE - THEY WOULD FOLLOW ME IN!');
+      return;
+    }
+    if (!shopsOpen() && !(f.kind === 'barber' && stealthPhase())) {
       audio.sfx('door_rattle', 0.5);
       this.say(`${f.name} IS SHUT FOR THE NIGHT. OPEN ${SHOP_HOURS}.`);
       return;
@@ -223,6 +264,7 @@ export class StreetEast extends Phaser.Scene {
 
   update(_t: number, delta: number): void {
     this.people.update(delta);
+    this.patrol?.update(delta);
     if (this.locked || this.busy()) {
       this.prompt.setVisible(false);
       this.promptPlate.setVisible(false);
@@ -244,11 +286,18 @@ export class StreetEast extends Phaser.Scene {
     // back west, to the arcade
     if (this.player.x <= 3 && dx < 0) {
       this.locked = true;
+      this.patrol?.leaveBy('right');
       fadeToScene(this, 'ExteriorDay', { fromEast: true });
       return;
     }
     const px = this.player.x;
     this.spot = FRONTS.find((f) => Math.abs(px - f.door) < 12) ?? null;
+    this.gap = this.spot ? null : (GAPS.find((gp) => Math.abs(px - gp.x) < 9) ?? null);
+    if (this.gap) {
+      this.prompt.setText('[E] DUCK INTO THE ALLEY').setPosition(Phaser.Math.Clamp(px, this.cameras.main.scrollX + 70, this.cameras.main.scrollX + 250), WALK_Y - 52).setVisible(true);
+      fitPrompt(this.promptPlate, this.prompt);
+      return;
+    }
     if (!this.spot) {
       this.prompt.setVisible(false);
       this.promptPlate.setVisible(false);

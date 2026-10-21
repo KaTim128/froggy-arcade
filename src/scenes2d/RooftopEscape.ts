@@ -32,6 +32,8 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { froggyLayer } from '../render/froggyLayer';
 import { Player } from '../art/player';
 import { backPlate } from '../ui/plate';
+import { twoWeeksLater } from '../game/life';
+import { earnBadge } from '../game/badges';
 
 // ---------------------------------------------------------------- the level
 
@@ -1024,7 +1026,15 @@ export class RooftopEscape extends Phaser.Scene {
 
   /** On black: what came of it.  Then the morning, outside the arcade. */
   private epilogue(): void {
-    const lines = ['You managed to escape.', "The police couldn't recover the building's video recordings.", 'But Froggy is still out there...'];
+    // ...and then two weeks, in three lines: the building mended, him not found
+    const lines = [
+      'You managed to escape.',
+      "The police couldn't recover the building's video recordings.",
+      'But Froggy is still out there...',
+      'TWO WEEKS LATER',
+      "Lily's Condos was patched up in no time.",
+      'Froggy still has not turned up.',
+    ];
     const t = centerText(this, GAME_W / 2, GAME_H / 2, '', PALETTE.cream).setScrollFactor(0).setDepth(9600).setMaxWidth(280).setAlpha(0);
     let i = 0;
     const next = () => {
@@ -1036,11 +1046,11 @@ export class RooftopEscape extends Phaser.Scene {
         return;
       }
       this.tweens.killTweensOf(t);
-      t.setText(lines[i]).setTint(i === 2 ? 0xd06060 : PALETTE.cream).setAlpha(0);
+      t.setText(lines[i]).setTint(i === 2 || i === 5 ? 0xd06060 : i === 3 ? PALETTE.gold : PALETTE.cream).setAlpha(0);
       this.tweens.add({ targets: t, alpha: 1, duration: 700 });
       i++;
       timer?.remove(false);
-      timer = this.time.delayedCall(i === 3 ? 4200 : 3400, next);
+      timer = this.time.delayedCall(i === 3 || i === 6 ? 4200 : 3400, next);
     };
     let timer: Phaser.Time.TimerEvent | null = null;
     this.input.on('pointerdown', next);
@@ -1051,7 +1061,10 @@ export class RooftopEscape extends Phaser.Scene {
   }
 
   private finish(): void {
-    store.patch({ hotelAfter: 'escaped', timeOfDay: 'day', hotelNight: false, checkedIn: false });
+    store.patch({ hotelAfter: 'escaped', timeOfDay: 'day', hotelNight: false, checkedIn: false, arc: 'back' });
+    // a fortnight on: the morning, outside the arcade
+    twoWeeksLater();
+    earnBadge('late_checkout');
     store.flush();
     this.scene.start('ExteriorDay', {});
   }

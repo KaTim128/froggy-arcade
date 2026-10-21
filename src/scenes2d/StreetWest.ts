@@ -15,6 +15,7 @@
  */
 
 import Phaser from 'phaser';
+import { Patrol } from '../game/patrol';
 import { clock } from '../game/life';
 import { TokenHud } from '../ui/hud';
 import { PALETTE } from '../render/palette';
@@ -52,6 +53,7 @@ export class StreetWest extends Phaser.Scene {
   private spot: Spot = null;
   private locked = false;
   private spawn: 'east' | 'hotel' = 'east';
+  private patrol: Patrol | null = null;
 
   constructor() {
     super('StreetWest');
@@ -79,6 +81,7 @@ export class StreetWest extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, WORLD_W, GAME_H);
     this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
 
+    this.patrol = new Patrol({ scene: this, worldW: WORLD_W, y: WALK_Y, player: () => this.player, dark: () => clock().dark || store.get().timeOfDay === 'midnight', lock: (on) => ((this.locked = on), on && (this.errand = null)) });
     // the purse, fixed to the screen
     // (dropped under the name band: LILY'S CONDOS runs across the top left)
     new TokenHud(this, { y: 24 });
@@ -250,7 +253,7 @@ export class StreetWest extends Phaser.Scene {
     this.add.rectangle(DOOR_X, 158, 26, 1, 0x4a1a24).setOrigin(0.5, 0);
     this.add.rectangle(DOOR_X - 13, 158, 1, 4, 0xc9a24a).setOrigin(0, 0);
     this.add.rectangle(DOOR_X + 12, 158, 1, 4, 0xc9a24a).setOrigin(0, 0);
-    if (store.get().hotelAfter === 'escaped') return this.paintAftermath();
+    if (store.get().hotelAfter === 'escaped' && store.get().arc === 'none') return this.paintAftermath();
     // (no doorman any more: Lily's is flats, and anyone may go in)
   }
 
@@ -326,7 +329,7 @@ export class StreetWest extends Phaser.Scene {
 
   private interact(): void {
     if (this.locked || this.talking || !this.spot) return;
-    if (store.get().hotelAfter === 'escaped' && this.spot !== 'bus') {
+    if (store.get().hotelAfter === 'escaped' && store.get().arc === 'none' && this.spot !== 'bus') {
       if (this.spot === 'doorman') {
         this.officerSays('"Who could have done this? They completely trashed the place."');
         return;
@@ -340,6 +343,7 @@ export class StreetWest extends Phaser.Scene {
     }
     this.locked = true;
     audio.sfx('door_open');
+    this.patrol?.safe();
     fadeToScene(this, 'Hotel', { area: 'lobby' });
   }
 
@@ -352,6 +356,7 @@ export class StreetWest extends Phaser.Scene {
   }
 
   update(_t: number, delta: number): void {
+    this.patrol?.update(delta);
     if (this.locked) {
       this.prompt.setVisible(false);
       return;
@@ -373,6 +378,7 @@ export class StreetWest extends Phaser.Scene {
     // back to the arcade off the right-hand end
     if (this.player.x >= WORLD_W - 2 && dx > 0) {
       this.locked = true;
+      this.patrol?.leaveBy('left');
       fadeToScene(this, 'ExteriorDay', { fromWest: true });
       return;
     }

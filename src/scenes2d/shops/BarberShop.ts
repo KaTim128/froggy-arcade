@@ -9,6 +9,8 @@
  */
 
 import Phaser from 'phaser';
+import { stealthPhase } from '../../game/patrol';
+import { store } from '../../core/state';
 import { PALETTE } from '../../render/palette';
 import { audio } from '../../core/audio';
 import { centerText, text } from '../../core/ui';
@@ -18,7 +20,7 @@ import { COSMETICS, type CosmeticDef } from '../../game/catalog';
 import { record } from '../../game/life';
 import { FLOOR_TOP, WalkRoom, type Fixture } from '../rooms/WalkRoom';
 import { BARBER_LOOK } from '../../ui/portraits';
-import { BRASS, INK, WALNUT, paintMirror, paintStuds, paintWalnut } from '../../art/shopFittings';
+import { BRASS, INK, WALNUT, paintMirror, paintMirrorShine, paintStuds, paintWalnut } from '../../art/shopFittings';
 
 const BACK_ROW = FLOOR_TOP + 24;
 const FRONT_ROW = FLOOR_TOP + 52;
@@ -40,12 +42,28 @@ export class BarberShop extends WalkRoom {
   private styles: CosmeticDef[] = [];
   private previewing = false;
   private desk: Fixture | null = null;
+  private wasDisguised = false;
+
+  /** The book shut: if the look was changed in the chair, a new face. */
+  protected afterModal(): void {
+    super.afterModal();
+    if (store.get().disguised && !this.wasDisguised) {
+      this.wasDisguised = true;
+      this.time.delayedCall(200, () => this.say('A NEW FACE. THE POLICE WILL WALK RIGHT PAST ME NOW.'));
+    }
+  }
 
   constructor() {
     super('BarberShop');
   }
 
   protected keepsShopHours = true;
+
+  create(): void {
+    // (in the hunt, Sharp's lets you in whatever the hour: it is the way out)
+    this.keepsShopHours = !stealthPhase();
+    super.create();
+  }
 
   protected music(): string {
     return 'room_lounge';
@@ -54,6 +72,8 @@ export class BarberShop extends WalkRoom {
   protected entered(): void {
     record('shop_visit');
     this.previewing = false;
+    if (stealthPhase()) this.time.delayedCall(500, () => this.say('"IN HERE, QUICK. SIT IN THE CHAIR -- NOBODY WILL KNOW YOU WHEN I AM DONE."'));
+    this.wasDisguised = store.get().disguised;
   }
 
   protected leave(): void {
@@ -148,6 +168,7 @@ export class BarberShop extends WalkRoom {
       wallLine: 0xf2f2ec,
       floor: 0x8a8a8e,
     });
+    paintMirrorShine(this.add.graphics().setDepth(1.2), CHAIR_X - MIRROR_W / 2, WALL_TOP, MIRROR_W, MIRROR_H);
     const shelfY = WALL_TOP + MIRROR_H + 2;
     paintWalnut(m, CHAIR_X - 22, shelfY, 44, 2);
     for (const [k, col] of [[-19, 0x3a8a5a], [-13, 0xc8a038], [9, 0x3a5ac8], [15, 0xc83a5a]] as const) {

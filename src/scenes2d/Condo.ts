@@ -23,6 +23,7 @@
  */
 
 import Phaser from 'phaser';
+import { caughtByPolice, stealthPhase } from '../game/patrol';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
@@ -30,6 +31,8 @@ import { button, pinToScreen, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { furnitureById, type FurnitureDef } from '../game/catalog';
 import { onPhaseTurn } from '../game/dayNight';
+import { unitNo } from '../game/life';
+import { earnBadge } from '../game/badges';
 import { NIGHT_HOUR, twelveHour, clock, furnishStarterRoom, movePlacement, placeFurniture, removePlacement, sleep, visit, type Placement } from '../game/life';
 import { useOf, washLine } from '../game/furnitureUse';
 import { WalkRoom, type Fixture } from './rooms/WalkRoom';
@@ -114,6 +117,8 @@ export class Condo extends WalkRoom {
     this.dim = null;
     super.create();
     visit('condo');
+    // the man's flat, the first time through its door
+    if (unitNo() === 213 && earnBadge('new_leaf', this)) this.time.delayedCall(900, () => this.say('ROOM 213. A PLACE OF MY OWN. FOR A WEEK, ANYWAY.'));
     this.ui = this.add.container(0, 0).setDepth(850).setScrollFactor(0);
     this.buildButtons();
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.pointerDown(p));
@@ -136,7 +141,7 @@ export class Condo extends WalkRoom {
       this.exitTo('Condo', { area: 'room', from: 'bath' });
       return;
     }
-    this.exitTo('Hotel', { area: 'corridor', from: 'room' });
+    this.exitTo('Hotel', { area: 'corridor', from: 'room', level: unitNo() === 213 ? 2 : 6 });
   }
 
   protected placeData(): Record<string, string | number | boolean> {
@@ -225,7 +230,7 @@ export class Condo extends WalkRoom {
       hk.fillStyle(0x5a3a3a, 1).fillRect(HOOK.x + 2, HOOK.y + 2, 4, 6);
       this.lamps = this.add.image(0, 0, this.painted('condo_room_light_v1', GAME_W, GAME_H, (g) => paintRoomLight(g, false))).setOrigin(0, 0).setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
       // the flat's number over the inside of its door
-      text(this, ROOM_DOOR_X, CEIL_Y + 5, '612', 0x8a8070).setOrigin(0.5, 0).setDepth(-1);
+      text(this, ROOM_DOOR_X, CEIL_Y + 5, String(unitNo()), 0x8a8070).setOrigin(0.5, 0).setDepth(-1);
     }
     // (a unit rented before it came furnished gets its sleeping bag and wardrobe now)
     furnishStarterRoom();
@@ -762,6 +767,12 @@ export class Condo extends WalkRoom {
       this.say(`YOU ARE NOT TIRED. SLEEP COMES AFTER ${twelveHour(NIGHT_HOUR)}.`);
       return;
     }
+    // (the man said it: lie down with the poster's face, and they have you)
+    if (stealthPhase()) {
+      this.locked = true;
+      caughtByPolice(this, 'sleep');
+      return;
+    }
     this.locked = true;
     this.cameras.main.fadeOut(900, 0, 0, 0);
     this.time.delayedCall(1000, () => {
@@ -778,7 +789,7 @@ export class Condo extends WalkRoom {
     if (!store.get().life.rented && !this.locked) {
       this.locked = true;
       this.say('THE LANDLORD IS AT THE DOOR. YOU HAVE TO GO.');
-      this.time.delayedCall(1800, () => this.exitTo('Hotel', { area: 'corridor', from: 'room' }));
+      this.time.delayedCall(1800, () => this.exitTo('Hotel', { area: 'corridor', from: 'room', level: unitNo() === 213 ? 2 : 6 }));
     }
   }
 

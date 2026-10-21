@@ -19,6 +19,7 @@
 
 import { store, type GameState } from '../core/state';
 import { ledger } from '../core/ledger';
+import { earnBadge } from './badges';
 import { COSMETICS, FURNITURE, STARTER_COSMETICS, cosmeticById, furnitureById } from './catalog';
 import type { LifeState } from './lifeState';
 export { LIFE_VERSION, defaultLife, sanitizeLife, type LifeState, type Placement } from './lifeState';
@@ -151,7 +152,7 @@ export function tick(seconds: number): void {
     l.evicted = true;
     l.notice = 'EVICTED. YOUR THINGS ARE IN STORAGE. YOU CAN RENT AGAIN.';
   } else if (l.rented && clock(l.t).day !== dayWas && rentInDays(l) <= 0) {
-    l.notice = `RENT OF $${RENT_PRICE} IS DUE TODAY. PAY THE LANDLORD.`;
+    l.notice = `RENT OF $${RENT_PRICE} IS DUE TODAY. PAY ${store.get().arc === 'live' ? 'THE MAN OUTSIDE THE ARCADE' : 'THE LANDLORD'}.`;
   }
   put(l);
 }
@@ -192,9 +193,47 @@ export function furnishStarterRoom(): void {
   });
 }
 
+/**
+ * ---- WHOSE FLAT, AND WHO TO PAY.  Unit 612 on Level 6 until the night at
+ * the Grand Lily; after it (two weeks on, the arc 'live') the man outside
+ * the arcade rents you 213 on Level 2, and the rent goes to him.
+ */
+export const unitNo = (): number => (store.get().arc === 'live' ? 213 : 612);
+export const rentToMan = (): boolean => store.get().arc === 'live';
+
+/**
+ * TWO WEEKS ON.  The clock to the morning a fortnight after the night (no
+ * rent falls due across it: there is nothing rented -- 612 is a crime
+ * scene), and the old tenancy gone.  What you owned is still yours.
+ */
+export function twoWeeksLater(): void {
+  edit((l) => {
+    const day = clock(l.t).day + 14;
+    l.t = day * DAY_SECONDS;
+    l.rented = false;
+    l.evicted = false;
+    l.notice = '';
+  });
+}
+
+/**
+ * The man's flat: room 213, the first week on him.  Rented from today,
+ * paid up for seven days; then rent goes to him.
+ */
+export function moveInto213(): void {
+  edit((x) => {
+    x.rented = true;
+    x.evicted = false;
+    x.rentDue = clock(x.t).day + RENT_DAYS;
+    x.rentPaidDay = clock(x.t).day;
+  });
+  furnishStarterRoom();
+  earnBadge('not_homeless');
+}
+
 export function rent(): Result {
   const l = L();
-  if (l.rented) return no('YOU ALREADY RENT UNIT 612.');
+  if (l.rented) return no(`YOU ALREADY RENT UNIT ${unitNo()}.`);
   if (!store.spendCash(RENT_PRICE)) return no(`IT IS $${RENT_PRICE} FOR ${RENT_DAYS} DAYS. YOU HAVE $${store.get().cash}.`);
   edit((x) => {
     x.rented = true;
@@ -204,7 +243,8 @@ export function rent(): Result {
   });
   record('pay_rent');
   furnishStarterRoom();
-  return ok(`UNIT 612 IS YOURS FOR ${RENT_DAYS} DAYS. IT COMES WITH A SLEEPING BAG AND A WARDROBE.`);
+  earnBadge('not_homeless');
+  return ok(rentToMan() ? `213 IS YOURS AGAIN FOR ${RENT_DAYS} DAYS.` : `UNIT 612 IS YOURS FOR ${RENT_DAYS} DAYS. IT COMES WITH A SLEEPING BAG AND A WARDROBE.`);
 }
 
 /** Pay the rent that is due (or up to one week ahead).  Never twice for the same week. */
@@ -311,7 +351,27 @@ export function wear(id: string): Result {
   const c = cosmeticById(id);
   if (!c || !L().wardrobe.includes(id)) return no('YOU DO NOT OWN THAT.');
   edit((l) => ((l.outfit as Record<string, string>)[c.slot] = id));
+  checkDisguise();
   return ok(`WEARING ${c.name}.`);
+}
+
+/**
+ * A NEW LOOK.  In the stealth phase, a cut or a colour from the barber's
+ * that is not the one on the poster: you look like somebody else now, and
+ * the patrols stop hunting you.
+ */
+export function checkDisguise(): boolean {
+  const s = store.get();
+  if (s.arc !== 'live' || s.disguised) return false;
+  const was = s.wantedOutfit ?? {};
+  const now = L().outfit as Record<string, string>;
+  const changed = (['hair', 'dye'] as const).some((slot) => (now[slot] ?? '') !== (was[slot] ?? ''));
+  if (!changed) return false;
+  store.patch({ disguised: true });
+  edit((l) => (l.notice = 'A NEW LOOK. THE POLICE WILL NOT KNOW YOU NOW.'));
+  earnBadge('new_face');
+  store.flush();
+  return true;
 }
 
 // ------------------------------------------------------------- sleep / beg

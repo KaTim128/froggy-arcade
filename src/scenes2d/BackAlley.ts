@@ -24,6 +24,8 @@ import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { backPlate, SUBTITLE_Y } from '../ui/plate';
 import { resumeSpot, trackPlace } from '../game/place';
+import { clock } from '../game/life';
+import { alleyWatch } from '../game/patrol';
 
 const WALK_Y = 168;
 const DOOR_X = 236;
@@ -51,9 +53,12 @@ export class BackAlley extends Phaser.Scene {
     // open on the night it is the way in (shown out at closing, before Hide
     // and Seek); chained every other time
     this.chained = st.route !== 'ejected' && !backWayOpen(st);
-    // the street's light, run through the alley's own colours
-    const time = this.chained ? st.timeOfDay : 'midnight';
-    const c = (col: number) => (!this.chained ? col : time === 'midnight' ? nightify(col, 0.35) : time === 'day' ? daylight(col, 0.28) : col);
+    // the street's light, run through the alley's own colours -- the CLOCK's
+    // light, not just the story's: after dark the alley is dark too, a
+    // moonlit strip of sky over it, not the middle of the day
+    const lc = clock();
+    const time: 'day' | 'evening' | 'midnight' | 'night' = !this.chained ? 'midnight' : st.timeOfDay === 'midnight' ? 'midnight' : lc.dark ? 'night' : lc.phase === 'evening' || st.timeOfDay === 'evening' ? 'evening' : 'day';
+    const c = (col: number) => (!this.chained ? col : time === 'midnight' || time === 'night' ? nightify(col, 0.35) : time === 'day' ? daylight(col, 0.28) : col);
 
     fadeIn(this);
     audio.setScene(this.chained && time !== 'midnight' ? { ambience: ['street_dusk'] } : { ambience: ['wind_low', 'crickets'] });
@@ -71,7 +76,7 @@ export class BackAlley extends Phaser.Scene {
       this.add.rectangle(DOOR_X + 17, 118, 1, 32, PALETTE.moon).setOrigin(0, 0).setAlpha(0.25);
     }
 
-    this.player = new Player(this, 70, WALK_Y, time === 'midnight');
+    this.player = new Player(this, 70, WALK_Y, time === 'midnight' || time === 'night');
     this.player.setSurface('gravel');
     // kept with the run, and back on the spot when resumed here (game/place)
     trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
@@ -83,6 +88,8 @@ export class BackAlley extends Phaser.Scene {
     this.keys = { left: this.bind(KEYS.left), right: this.bind(KEYS.right) };
     this.input.keyboard?.on('keydown-E', () => this.interact());
     this.input.on('pointerdown', () => this.interact());
+    // a patrol going past out on the street, while the hunt is on
+    if (st.route === 'normal') alleyWatch(this);
   }
 
   private bind(names: readonly string[]): Phaser.Input.Keyboard.Key[] {
@@ -226,7 +233,22 @@ function paintAlley(scene: Phaser.Scene, key: string, c: (n: number) => number, 
   grime.addColorStop(1, 'rgba(10,6,10,0.4)');
   g.fillStyle = grime;
   g.fillRect(0, 0, GAME_W, 152);
-  if (sky) {
+  if (sky === 'night') {
+    // the night over the roofs: deep blue, stars, the moon in the gap
+    const sk = g.createLinearGradient(0, 0, 0, 8);
+    sk.addColorStop(0, '#0a1030');
+    sk.addColorStop(1, '#1a2450');
+    g.fillStyle = sk;
+    g.fillRect(40, 0, GAME_W - 66, 8);
+    for (let i = 0; i < 12; i++) {
+      g.fillStyle = R() < 0.5 ? '#e8ecff' : '#8a94c0';
+      g.fillRect(40 + Math.floor(R() * (GAME_W - 70)), Math.floor(R() * 6), 1, 1);
+    }
+    g.fillStyle = '#f4f0dc';
+    g.beginPath();
+    g.arc(210, 3, 3, 0, Math.PI * 2);
+    g.fill();
+  } else if (sky) {
     g.fillStyle = sky === 'day' ? '#8fd4e8' : '#e8a050';
     g.fillRect(40, 0, GAME_W - 66, 6);
     g.fillStyle = 'rgba(255,255,255,0.25)';
@@ -401,7 +423,7 @@ function paintAlley(scene: Phaser.Scene, key: string, c: (n: number) => number, 
   // a window up on the wall, lit or dark
   g.fillStyle = col(0x1a1c24);
   g.fillRect(60, 40, 26, 30);
-  g.fillStyle = sky ? 'rgba(140,190,220,0.5)' : 'rgba(255,200,120,0.35)';
+  g.fillStyle = sky && sky !== 'night' ? 'rgba(140,190,220,0.5)' : 'rgba(255,200,120,0.35)';
   g.fillRect(62, 42, 10, 12);
   g.fillRect(74, 42, 10, 12);
   g.fillRect(62, 56, 10, 12);

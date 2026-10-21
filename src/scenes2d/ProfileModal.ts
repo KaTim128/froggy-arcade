@@ -123,7 +123,7 @@ export class ProfileModal extends Phaser.Scene {
     this.body.add(text(this, 52, y + 12, describe(s), PALETTE.ash).setAlpha(0.85));
 
     this.body.add(
-      button(this, 216, y + 10, isActive ? 'RESUME' : 'PLAY', () => this.play(slot.id), {
+      button(this, 216, y + 10, s.jailed ? 'LOCKED' : isActive ? 'RESUME' : 'PLAY', () => this.play(slot.id), {
         width: 46,
         height: 13,
       }),
@@ -476,6 +476,7 @@ export class ProfileModal extends Phaser.Scene {
 
 function describe(s: ReturnType<typeof store.slotSummary>): string {
   const time = playTime(s.playSeconds);
+  if (s.jailed) return `ARRESTED - CANNOT RESUME`;
   if (s.route === 'ended') return `FINISHED - ${time}`;
   if (s.route !== 'normal') return `IN THE DARK - ${time}`;
   if (!s.seenIntro) return s.playSeconds >= 60 ? `NEW RUN - ${time}` : 'NEW RUN';

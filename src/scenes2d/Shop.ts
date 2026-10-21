@@ -32,6 +32,8 @@ import {
   wear,
   RENT_DAYS,
   RENT_PRICE,
+  rentToMan,
+  unitNo,
   type Result,
 } from '../game/life';
 import { cosmeticById, furnitureById, lookFor, stockFor, type CosmeticDef, type CosmeticSlot, type FurnitureDef } from '../game/catalog';
@@ -250,14 +252,16 @@ export class Shop extends Phaser.Scene {
   private drawUnitDoor(at: { x: number; y: number }): void {
     const W = 56;
     const H = 50;
-    if (!this.textures.exists('unit612_door')) {
-      const t = this.textures.createCanvas('unit612_door', W, H);
+    const num = String(unitNo());
+    const key = `unit${num}_door`;
+    if (!this.textures.exists(key)) {
+      const t = this.textures.createCanvas(key, W, H);
       if (t) {
-        paintUnitDoor(t.getContext(), W, H);
+        paintUnitDoor(t.getContext(), W, H, num);
         t.refresh();
       }
     }
-    this.previewBits.push(this.add.image(Math.round(at.x), at.y + 3, 'unit612_door').setOrigin(0.5, 1));
+    this.previewBits.push(this.add.image(Math.round(at.x), at.y + 3, key).setOrigin(0.5, 1));
   }
 
   private drawPerson(outfit: Record<string, string>, at: { x: number; y: number }): void {
@@ -449,11 +453,22 @@ export class Shop extends Phaser.Scene {
     return {
       title: "LILY'S CONDOS - LANDLORD",
       tabs: [
-        { label: 'RENT', rows: () => [{ id: 'rent', name: 'UNIT 612', right: life().rented ? 'YOURS' : `$${RENT_PRICE}` }] },
+        { label: 'RENT', rows: () => [{ id: 'rent', name: `UNIT ${unitNo()}`, right: life().rented ? 'YOURS' : rentToMan() ? 'PRIVATE' : `$${RENT_PRICE}` }] },
         { label: 'SELL THINGS', rows: sellable },
       ],
       detail: (id) => {
         const l = life();
+        if (id === 'rent' && rentToMan()) {
+          // (213 is let privately: the desk only keeps the keys)
+          const d = rentInDays(l);
+          return [
+            'UNIT 213, SECOND FLOOR',
+            'LET PRIVATELY. THE RENT',
+            'GOES TO THE MAN OUTSIDE',
+            'THE ARCADE, NOT TO ME.',
+            l.rented ? (d < 0 ? 'OVERDUE: PAY HIM OR BE EVICTED' : d <= 0 ? `$${RENT_PRICE} DUE TO HIM NOW` : `NEXT RENT IN ${d} DAYS`) : 'SEE HIM TO RENT IT AGAIN.',
+          ];
+        }
         if (id === 'rent') {
           if (!l.rented) {
             return [
@@ -484,6 +499,7 @@ export class Shop extends Phaser.Scene {
       },
       actions: (id) => {
         const l = life();
+        if (id === 'rent' && rentToMan()) return [];
         if (id === 'rent') {
           if (!l.rented) return [{ label: `RENT - $${RENT_PRICE}`, fn: () => rent() }];
           return [

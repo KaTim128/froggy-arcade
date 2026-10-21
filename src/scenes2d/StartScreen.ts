@@ -42,6 +42,9 @@ export class StartScreen extends Phaser.Scene {
       width: 74,
     });
 
+    // the story's milestones, top right (separate from the achievements in play)
+    button(this, GAME_W - 34, 12, 'BADGES', () => this.scene.launch('BadgesModal', { from: 'StartScreen' }), { width: 56, height: 13 });
+
     this.who = centerText(this, GAME_W / 2, 166, '', PALETTE.ash, 8).setAlpha(0.85);
     this.refreshWho();
     this.events.on('profiles-closed', () => this.refreshWho());
@@ -61,13 +64,39 @@ export class StartScreen extends Phaser.Scene {
       return;
     }
     const s = store.get();
+    if (s.jailed) {
+      this.who.setText(`${name} - ARRESTED. CANNOT BE RESUMED`).setTint(0xd06060);
+      return;
+    }
     const resuming = s.route !== 'normal' || s.tokens > 0 || s.seenIntro;
     this.who.setText(`${resuming ? 'continue as' : 'playing as'} ${name}`).setTint(PALETTE.ash);
   }
 
+  /** This profile ended in a cell: it cannot be played again. */
+  private lockedNotice(): void {
+    this.notice?.destroy();
+    const c = this.add.container(0, 0).setDepth(1000);
+    c.add(this.add.rectangle(0, 0, GAME_W, 180, PALETTE.black, 0.6).setOrigin(0, 0).setInteractive());
+    c.add(this.add.rectangle(GAME_W / 2, 92, 250, 74, PALETTE.ink, 0.97).setStrokeStyle(1, 0xd06060));
+    c.add(centerText(this, GAME_W / 2, 66, 'THIS PROFILE IS LOCKED', 0xd06060));
+    c.add(centerText(this, GAME_W / 2, 80, `${store.activeSlotName() ?? ''} WAS ARRESTED. THE STORY IS OVER`, PALETTE.cream));
+    c.add(centerText(this, GAME_W / 2, 90, 'AND THE GAME CANNOT BE RESUMED.', PALETTE.cream));
+    c.add(centerText(this, GAME_W / 2, 100, 'ITS BADGES ARE KEPT. MAKE A NEW PROFILE.', PALETTE.ash));
+    c.add(button(this, GAME_W / 2 - 34, 116, 'PROFILES', () => (c.destroy(), this.openProfiles()), { width: 60, height: 13 }));
+    c.add(button(this, GAME_W / 2 + 34, 116, 'OK', () => c.destroy(), { width: 60, height: 13 }));
+    this.notice = c;
+  }
+
+  private notice: Phaser.GameObjects.Container | null = null;
+
   private onStart(): void {
     if (!store.activeSlotId()) {
       this.openProfiles();
+      return;
+    }
+    // ARRESTED: that run is over for good, and says so
+    if (store.get().jailed) {
+      this.lockedNotice();
       return;
     }
     // Resume where the run left off (PRD EC-3): see core/resume.

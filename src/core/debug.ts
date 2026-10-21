@@ -135,6 +135,9 @@ function applyLaunchParams(g: Phaser.Game): void {
   //   ?hour=19.5     the life clock's hour (the day/night, the shops' hours)
   const hour = q.get('hour');
   if (hour !== null) setHour(Number(hour));
+  //   ?arc=back|live  two weeks after the Grand Lily (escaped over the roofs)
+  const arc = q.get('arc');
+  if (arc === 'back' || arc === 'live') store.patch({ arc, hotelAfter: 'escaped', froggyGone: true, reachedHotel: true });
   //   ?rented=1      renting unit 612
   if (q.get('rented') === '1') store.patch({ life: { ...store.get().life, rented: true, rentDue: clock().day + 7 } } as never);
 

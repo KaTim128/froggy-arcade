@@ -41,7 +41,7 @@ import { PALETTE } from '../render/palette';
 import { audio, SILENCE } from '../core/audio';
 import { store } from '../core/state';
 import { KEYS } from '../core/input';
-import { centerText, confirmDialog, fadeIn, fadeToScene, text } from '../core/ui';
+import { centerText, confirmDialog, fadeIn, fadeToScene, pinToScreen, text } from '../core/ui';
 import { openTalkPanel } from '../ui/talkPanel';
 import { Player, depthFor } from '../art/player';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
@@ -104,7 +104,7 @@ interface LiftDoors {
 }
 
 type Area = 'lobby' | 'lift' | 'corridor' | 'room' | 'bath';
-type Spot = 'out' | 'desk' | 'lift' | 'stairs' | 'stairdoor' | 'storage' | 'door612' | 'roomdoor' | 'bathdoor' | 'bed' | 'window' | 'mirror' | null;
+type Spot = 'out' | 'desk' | 'lift' | 'stairs' | 'stairdoor' | 'storage' | 'door612' | 'neighbour' | 'roomdoor' | 'bathdoor' | 'bed' | 'window' | 'mirror' | null;
 /** Where the night is, in room 612. */
 type Night = 'calm' | 'sleeping' | 'late' | 'reveal' | 'gone';
 /** Where the sleeper's feet go: the foot of the bag, so the head lands on the hood. */
@@ -190,7 +190,12 @@ export class Hotel extends Phaser.Scene {
   private talk: Phaser.GameObjects.Container | null = null;
   private goingUp = true;
   private morning = false;
-  private from: 'outside' | 'lift' | 'room' | 'corridor' | 'stairs' | 'storage' = 'outside';
+  private from: 'outside' | 'lift' | 'room' | 'corridor' | 'stairs' | 'storage' | 'stairwell' = 'outside';
+  /**
+   * WHICH FLOOR the corridor (or the lift ride) is: Level 6, where 612 is,
+   * or -- two weeks on -- Level 2, where the man's flat is, 213.
+   */
+  private level = 6;
   /**
    * Down the stairs alive, and him on the stairs behind: seconds since the
    * lobby, and the next blow on the stairwell door.  Hide before he is
@@ -256,8 +261,9 @@ export class Hotel extends Phaser.Scene {
     super('Hotel');
   }
 
-  init(data: { area?: Area; up?: boolean; morning?: boolean; late?: boolean; from?: Hotel['from'] } = {}): void {
+  init(data: { area?: Area; up?: boolean; morning?: boolean; late?: boolean; from?: Hotel['from']; level?: number } = {}): void {
     this.area = data.area ?? 'lobby';
+    this.level = data.level === 2 || data.level === 6 ? data.level : store.get().arc !== 'none' ? 2 : 6;
     this.goingUp = data.up !== false;
     this.morning = data.morning === true;
     this.from = data.from ?? (this.area === 'lobby' && this.goingUp ? 'outside' : 'lift');
@@ -338,7 +344,7 @@ export class Hotel extends Phaser.Scene {
 
     const startX =
       this.area === 'lobby'
-        ? this.from === 'stairs'
+        ? this.from === 'stairs' || this.from === 'stairwell'
           ? STAIR_DOOR_X
           : this.from === 'storage'
             ? STORAGE_X - 20
@@ -347,10 +353,14 @@ export class Hotel extends Phaser.Scene {
             : LOBBY_LIFT_X
         : this.area === 'corridor'
           ? this.from === 'room'
-            ? 290
+            ? this.level === 2
+              ? CORRIDOR_DOORS[2]
+              : 290
             : this.from === 'lift'
               ? CORRIDOR_LIFT_X
-              : 40
+              : this.from === 'stairwell'
+                ? 56
+                : 40
           : this.area === 'bath'
             ? 34
             : this.from === 'corridor' || this.from === 'lift'
@@ -362,7 +372,7 @@ export class Hotel extends Phaser.Scene {
     // Kept with the run on an ordinary visit (game/place).  The night's own
     // checkpoints -- 3 AM, the stairs, the storage room -- are the story's,
     // and core/resume picks those up itself.
-    if (this.night === 'calm' && !dark) trackPlace(this, () => this.player, { area: this.area }, resumeSpot(this.sys.settings.data));
+    if (this.night === 'calm' && !dark) trackPlace(this, () => this.player, { area: this.area, level: this.level }, resumeSpot(this.sys.settings.data));
     attachPockets(this, () => this.locked || !!this.talk || this.night === 'reveal');
     // cash and tokens, top left, as everywhere else
     new TokenHud(this);
@@ -459,10 +469,13 @@ export class Hotel extends Phaser.Scene {
   private buildCorridor(): void {
     // Room 612's door, once he has been through it, stays broken; once the
     // police have come, it is taped off.
+    // Two weeks on it is still there: broken in, and sealed with police tape.
     const after = store.get().hotelAfter;
-    const door612 = after === 'none' ? 'none' : after === 'police' ? 'taped' : 'broken';
-    this.add.image(0, 0, this.painted(`hotel_corridor_v3_${door612}`, GAME_W, GAME_H, (g) => paintCorridor(g, door612))).setOrigin(0, 0);
-    centerText(this, 22, 110, '6', 0xff7a3d);
+    const door612 = store.get().arc !== 'none' ? 'taped' : after === 'none' ? 'none' : after === 'police' ? 'taped' : 'broken';
+    const key = this.level === 2 ? 'hotel_corridor_v3_l2' : `hotel_corridor_v3_${door612}`;
+    this.add.image(0, 0, this.painted(key, GAME_W, GAME_H, (g) => paintCorridor(g, this.level === 2 ? 'none' : door612, this.level))).setOrigin(0, 0);
+    centerText(this, 22, 110, String(this.level), 0xff7a3d);
+    if (this.level === 6 && store.get().arc !== 'none' && this.from !== 'room') this.time.delayedCall(600, () => this.say('Level 6. My old floor.', 2.6));
   }
 
   private buildBath(): void {
@@ -721,7 +734,8 @@ export class Hotel extends Phaser.Scene {
     // what is out there, seen through the doorway: the landing, close up
     const sky = this.lobbySky();
     const lobbyKey = this.painted(`hotel_lobby_${sky}_w${LOBBY_W}`, LOBBY_W, GAME_H, (g) => paintLobby(g, sky === 'night', true, sky === 'evening'));
-    const hallKey = this.painted('hotel_corridor_v3_none', GAME_W, GAME_H, (g) => paintCorridor(g, 'none'));
+    const hallKey = this.level === 2 ? this.painted('hotel_corridor_v3_l2', GAME_W, GAME_H, (g) => paintCorridor(g, 'none', 2)) : this.painted('hotel_corridor_v3_none', GAME_W, GAME_H, (g) => paintCorridor(g, 'none'));
+    const top = this.level;
     const view = (key: string, cx: number): Phaser.GameObjects.Image => {
       // the landing just there, through the doors, at its own scale
       const sx = cx - DW / 2;
@@ -755,10 +769,10 @@ export class Hotel extends Phaser.Scene {
       audio.sfx('door_creak', 0.18);
       this.tweens.add({ targets: state, k: to1, duration: ms, ease: 'Sine.easeInOut', onUpdate: () => drawDoors(state.k), onComplete: then });
     };
-    const num = centerText(this, LIFT.dial.x + 3, LIFT.dial.y, up ? '1' : '6', 0xff7a3d).setDepth(3);
+    const num = centerText(this, LIFT.dial.x + 3, LIFT.dial.y, up ? '1' : String(top), 0xff7a3d).setDepth(3);
     const arrow = centerText(this, LIFT.dial.x - 5, LIFT.dial.y, up ? '^' : 'v', 0xff7a3d).setDepth(3).setAlpha(0);
     // the button you pressed, lit on the panel: 6 going up, 1 going down
-    const bt = LIFT.button(up ? 6 : 1);
+    const bt = LIFT.button(up ? top : 1);
     const lit = this.add.rectangle(bt.x, bt.y, 3, 3, 0xffd45e, 0.6).setOrigin(0, 0).setDepth(3).setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({ targets: lit, alpha: 0.6, duration: 500, yoyo: true, repeat: -1 });
     // you, in the car, in front of the panel
@@ -771,19 +785,19 @@ export class Hotel extends Phaser.Scene {
         arrow.setAlpha(1);
         this.tweens.add({ targets: this.cameras.main, scrollY: 0.6, duration: 160, yoyo: true });
         const STEP = 520;
-        for (let k = 1; k <= 5; k++) {
+        for (let k = 1; k < top; k++) {
           this.time.delayedCall(k * STEP, () => {
-            num.setText(`${up ? 1 + k : 6 - k}`);
+            num.setText(`${up ? 1 + k : top - k}`);
             audio.sfx('ui_blip', 0.3);
           });
         }
-        this.time.delayedCall(6 * STEP, () => {
+        this.time.delayedCall(top * STEP, () => {
           // arrived: the car settles, the bell, the arrow goes out
           this.cameras.main.shake(140, 0.002);
           arrow.setAlpha(0);
           lit.setVisible(false);
           this.tweens.killTweensOf(lit);
-          num.setText(up ? '6' : '1');
+          num.setText(up ? String(top) : '1');
           audio.sfx('chime', 0.5);
           from.setVisible(false);
           to.setVisible(true);
@@ -796,7 +810,7 @@ export class Hotel extends Phaser.Scene {
                   const p = this.player;
                   if (!p) return;
                   this.tweens.add({ targets: p.sprite, y: p.sprite.y - 6, scale: 0.85, alpha: 0, duration: 420 });
-                  this.time.delayedCall(260, () => fadeToScene(this, 'Hotel', { area: up ? 'corridor' : 'lobby', up: false, from: 'lift' }));
+                  this.time.delayedCall(260, () => fadeToScene(this, 'Hotel', { area: up ? 'corridor' : 'lobby', up: false, from: 'lift', level: top }));
                 },
               };
             }),
@@ -863,7 +877,7 @@ export class Hotel extends Phaser.Scene {
    * Into the lift: walked to its doors, they open, you step into the car,
    * they close on you -- and then the ride.
    */
-  private enterLift(up: boolean): void {
+  private enterLift(up: boolean, level = this.level): void {
     const cx = this.area === 'lobby' ? LOBBY_LIFT_X : CORRIDOR_LIFT_X;
     this.locked = true;
     audio.sfx('bell_ding', 0.4);
@@ -874,7 +888,7 @@ export class Hotel extends Phaser.Scene {
           const p = this.player;
           if (!p) return;
           this.tweens.add({ targets: p.sprite, y: p.sprite.y - 4, scale: 0.9, alpha: 0, duration: 380 });
-          this.time.delayedCall(420, () => this.landing?.close(650, () => fadeToScene(this, 'Hotel', { area: 'lift', up })));
+          this.time.delayedCall(420, () => this.landing?.close(650, () => fadeToScene(this, 'Hotel', { area: 'lift', up, level })));
         },
       };
     });
@@ -963,8 +977,21 @@ export class Hotel extends Phaser.Scene {
             this.openTalk('"Guests only, I\'m afraid. Reception is right here."', [{ label: 'OK', fn: () => this.closeTalk() }]);
             return;
           }
+          // two weeks on: your floor (2), or the old one (6)
+          if (s.arc !== 'none') {
+            this.openTalk(
+              'Which floor?',
+              [
+                { label: 'LEVEL 2', fn: () => (this.closeTalk(), this.enterLift(true, 2)) },
+                { label: 'LEVEL 6', fn: () => (this.closeTalk(), this.enterLift(true, 6)) },
+                { label: 'CANCEL', fn: () => this.closeTalk() },
+              ],
+              'LIFT',
+            );
+            return;
+          }
         }
-        this.enterLift(this.area === 'lobby');
+        this.enterLift(this.area === 'lobby', this.area === 'lobby' ? 6 : this.level);
         return;
       case 'stairs':
         if (this.policeOn) {
@@ -972,6 +999,7 @@ export class Hotel extends Phaser.Scene {
           fadeToScene(this, 'Hotel', { area: 'lobby', from: 'storage' });
           return;
         }
+        if (!this.storyNight()) return this.toStairwell();
         this.say("The stairs. Six floors. I'll take the lift.");
         return;
       case 'stairdoor':
@@ -990,7 +1018,12 @@ export class Hotel extends Phaser.Scene {
           this.say('Hanging off its hinges. He came through it like it was paper.');
           return;
         }
+        if (!this.storyNight()) return this.toStairwell();
         this.say("The stairs. I'll take the lift.");
+        return;
+      case 'neighbour':
+        audio.sfx('knock_glass', 0.15);
+        this.say("Somebody else's flat. Nobody answers.");
         return;
       case 'storage':
         if (this.from === 'stairs') return this.hide();
@@ -1001,11 +1034,17 @@ export class Hotel extends Phaser.Scene {
         this.say('STAFF ONLY. Locked.');
         return;
       case 'door612':
+        if (this.level === 6 && s.arc !== 'none') {
+          // the old flat: still sealed, two weeks on
+          this.say('POLICE LINE - DO NOT CROSS.', 2.4, true);
+          this.say('That was my door. He came right through it.', 3);
+          return;
+        }
         if (!this.storyNight()) {
           // by day, 612 is your flat: the key card works while the rent is paid
           if (!s.life.rented) {
             audio.sfx('buzzer', 0.4);
-            this.say('The card light goes red. The landlord has my things.');
+            this.say(s.arc !== 'none' ? 'The card light goes red. The rent is owed to the man outside the arcade.' : 'The card light goes red. The landlord has my things.');
             return;
           }
           this.locked = true;
@@ -1104,6 +1143,13 @@ export class Hotel extends Phaser.Scene {
     this.time.delayedCall(320, () => this.scene.start('HotelLobby3D', { mode: 'exposed', x }));
   }
 
+  /** Through the fire door into the stairwell (scenes2d/Stairwell), on this floor. */
+  private toStairwell(): void {
+    this.locked = true;
+    audio.sfx('door_creak', 0.5);
+    fadeToScene(this, 'Stairwell', { floor: this.area === 'lobby' ? 1 : this.level });
+  }
+
   /**
    * By day, Lily's is flats: the desk is the landlord's and the lift goes up
    * to your own unit.  The night of the story (midnight, or the stay that
@@ -1111,6 +1157,8 @@ export class Hotel extends Phaser.Scene {
    */
   private storyNight(): boolean {
     const s = store.get();
+    // (two weeks on, the building is flats again: the night is long over)
+    if (s.arc !== 'none') return false;
     return s.timeOfDay === 'midnight' || s.checkedIn || s.hotelNight || s.hotelAfter !== 'none';
   }
 
@@ -1142,6 +1190,8 @@ export class Hotel extends Phaser.Scene {
     this.tapZone.disableInteractive();
     // (each answer takes its own panel down: see ui/talkPanel)
     this.talk = openTalkPanel(this, who === 'RECEPTION' ? { speaker: 'clerk', line, options } : { who, line, options, color: PALETTE.gold });
+    // (the lobby is wider than the screen: the panel stays where the screen is)
+    pinToScreen(this.talk);
   }
 
   private closeTalk(): void {
@@ -1589,7 +1639,21 @@ export class Hotel extends Phaser.Scene {
                 : Math.abs(x - STORAGE_X) < 10
                   ? 'storage'
                   : null;
-    else if (this.area === 'corridor') this.spot = x < 34 ? 'lift' : Math.abs(x - 56) < 10 ? 'stairs' : x > CORRIDOR_DOORS[5] - 16 ? 'door612' : null;
+    else if (this.area === 'corridor')
+      this.spot =
+        x < 34
+          ? 'lift'
+          : Math.abs(x - 56) < 10
+            ? 'stairs'
+            : this.level === 2
+              ? Math.abs(x - CORRIDOR_DOORS[2]) < 10
+                ? 'door612'
+                : CORRIDOR_DOORS.slice(0, 5).some((d) => Math.abs(x - d) < 8)
+                  ? 'neighbour'
+                  : null
+              : x > CORRIDOR_DOORS[5] - 16
+                ? 'door612'
+                : null;
     else if (this.area === 'bath') this.spot = x < 34 ? 'bathdoor' : Math.abs(x - (MIRROR.x + MIRROR.w / 2)) < 16 ? 'mirror' : null;
     else
       this.spot =
@@ -1610,10 +1674,11 @@ export class Hotel extends Phaser.Scene {
       out: this.policeOn ? '[E] GO OUTSIDE TO THE POLICE' : '[E] OUTSIDE',
       desk: '[E] RECEPTION',
       lift: '[E] LIFT',
-      stairs: this.policeOn ? '[E] STAIRS DOWN' : '[E] STAIRS',
-      stairdoor: this.policeOn ? '[E] BACK UPSTAIRS' : '[E] STAIRS',
+      stairs: this.policeOn ? '[E] STAIRS DOWN' : '[E] STAIRWELL',
+      stairdoor: this.policeOn ? '[E] BACK UPSTAIRS' : '[E] STAIRWELL',
       storage: this.from === 'stairs' ? '[E] HIDE IN THE STORAGE ROOM' : '[E] STORAGE ROOM',
-      door612: '[E] ROOM 612',
+      door612: this.level === 2 ? '[E] ROOM 213' : '[E] ROOM 612',
+      neighbour: "[E] SOMEBODY'S DOOR",
       roomdoor: '[E] CORRIDOR',
       bathdoor: this.area === 'bath' ? '[E] BACK TO THE ROOM' : '[E] BATHROOM',
       bed: '[E] SLEEP',

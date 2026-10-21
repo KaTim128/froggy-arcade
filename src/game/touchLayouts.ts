@@ -64,6 +64,7 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   Boot: BARE,
   StartScreen: BARE,
   ProfileModal: BARE,
+  BadgesModal: BARE,
   SettingsModal: TAP,
   Shop: TAP,
   Goals: TAP,
@@ -111,6 +112,10 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
   StreetWest: STREET,
   StreetEast: STREET,
   Hotel: STREET,
+  // (forward and back on the landing, along the flights: the full stick)
+  Stairwell: ROOM,
+  JailEnding: BARE,
+  SideAlley: STREET,
 
   PrizeCounter: TAP,
   PrizeExchange: TAP,

@@ -26,6 +26,7 @@ import { touchControls } from '../ui/touchControls';
 import { isTouch } from '../core/device';
 import { isPaused } from '../core/pause';
 import Phaser from 'phaser';
+import { earnBadge } from '../game/badges';
 import * as THREE from 'three';
 import { audio, SILENCE, screamLevel, type SfxName, type SfxPlace } from '../core/audio';
 import { store } from '../core/state';
@@ -5739,6 +5740,7 @@ export class HideRoom3D extends Phaser.Scene {
     if (this.left) return;
     this.left = true;
     store.patch({ route: 'normal', hideRoom: 0, froggyGone: true });
+    earnBadge('hide_seek');
     // The key that opened the doors comes out with you, into a pocket.
     if (!store.get().items.includes(KEY_ITEM.id)) addItem(KEY_ITEM.id);
     // AND YOU COME OUT WITH NOTHING.  Not a token: whatever you went in with

@@ -700,7 +700,7 @@ function storageDoor(g: Ctx, cx: number): void {
  * walnut door in its white architrave, the steel number plate and spy hole,
  * the lever handle, a kick plate, a sconce beside it and a mat in front.
  */
-export function paintUnitDoor(g: Ctx, w: number, h: number): void {
+export function paintUnitDoor(g: Ctx, w: number, h: number, num = '612'): void {
   const floor = h - 7;
   wallpaper(g, 0, 0, w, floor, { paper: HP.paper, shade: HP.paperShade, motif: HP.paperMotif });
   // the lower wall and its bumper rail, the skirting
@@ -720,7 +720,7 @@ export function paintUnitDoor(g: Ctx, w: number, h: number): void {
   // the light from the sconce down the wall, and the door's shadow on it
   glow(g, cx + 19, floor - 27, 16, 0.3);
   rect(g, cx + dw / 2 + 2, floor - dh - 1, 2, dh + 1, '#000000', 0.12);
-  roomDoor(g, cx, '612', { w: dw, h: dh, floor });
+  roomDoor(g, cx, num, { w: dw, h: dh, floor });
   const x = cx - dw / 2;
   const y = floor - dh;
   // two raised panels in the veneer, catching the light on their top edges
@@ -746,7 +746,7 @@ export function paintUnitDoor(g: Ctx, w: number, h: number): void {
 
 export const CORRIDOR_DOORS = [90, 132, 174, 216, 258, 300];
 
-export function paintCorridor(g: Ctx, broken612: 'none' | 'broken' | 'taped' = 'none'): void {
+export function paintCorridor(g: Ctx, broken612: 'none' | 'broken' | 'taped' = 'none', floor = 6): void {
   const W = 320;
   wallpaper(g, 0, CEIL_Y, W, DADO - CEIL_Y, { paper: HP.paper, shade: HP.paperShade, motif: HP.paperMotif });
   enclosedCeiling(g, W, { lights: [80, 240] });
@@ -779,9 +779,15 @@ export function paintCorridor(g: Ctx, broken612: 'none' | 'broken' | 'taped' = '
   signText(g, 'EXIT', sx, 108, '#ffffff');
   glow(g, sx, 111, 12, 0.3, '120,255,160');
   // the rooms
+  // (Level 6: 607 to 612, yours at the end.  Level 2: five flats, 211 to
+  // 215, 213 in the middle -- and where the sixth would be, a print)
   CORRIDOR_DOORS.forEach((x, k) => {
-    if (k === 5 && broken612 !== 'none') brokenDoor(g, x, '612', broken612 === 'taped');
-    else roomDoor(g, x, `${607 + k}`);
+    if (floor !== 6 && k === 5) {
+      picture(g, x - 6, 116, 12, 10, 'lily');
+      return;
+    }
+    if (floor === 6 && k === 5 && broken612 !== 'none') brokenDoor(g, x, '612', broken612 === 'taped');
+    else roomDoor(g, x, floor === 6 ? `${607 + k}` : `${floor}${11 + k}`);
   });
   // between them: sconces and the odd picture
   CORRIDOR_DOORS.slice(0, -1).forEach((x, k) => {
