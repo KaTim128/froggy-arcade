@@ -368,6 +368,8 @@ export class Player {
   /** Sitting: how, and the folded legs (and the can) drawn for it. */
   private seat: { kind: 'floor' | 'chair'; can: boolean } | null = null;
   private lap: Phaser.GameObjects.Container | null = null;
+  /** What the lap holds out in front of the body (the can). */
+  private lapFront: Phaser.GameObjects.Container | null = null;
   private lapKey = '';
   private colOf: (ch: string) => number = (ch) => COLS[ch];
   private night = false;
@@ -500,14 +502,16 @@ export class Player {
     this.lapKey = key;
     const scene = this.sprite.scene;
     this.lap?.destroy();
+    this.lapFront?.destroy();
+    this.lapFront = null;
     const c = (col: number) => (this.night ? nightify(col) : col);
     const lap = scene.add.container(0, 0);
     const d = this.dir;
     // a block with the rig's one-pixel ink line round it
-    const block = (x: number, y: number, w: number, h: number, col: number) => {
+    const block = (x: number, y: number, w: number, h: number, col: number, into = lap) => {
       const x0 = d > 0 ? x : -x - w;
-      lap.add(scene.add.rectangle(x0 - 1, y - 1, w + 2, h + 2, OUTLINE).setOrigin(0, 0));
-      lap.add(scene.add.rectangle(x0, y, w, h, c(col)).setOrigin(0, 0));
+      into.add(scene.add.rectangle(x0 - 1, y - 1, w + 2, h + 2, OUTLINE).setOrigin(0, 0));
+      into.add(scene.add.rectangle(x0, y, w, h, c(col)).setOrigin(0, 0));
     };
     if (s.kind === 'floor') {
       // backside on the ground, legs straight out in front: the trousers lit
@@ -526,18 +530,20 @@ export class Player {
       block(5, -6, 3, 5, this.colOf('j'));
       block(5, -1, 4, 1, this.colOf('K'));
     }
+    // (the legs go behind the body, as the old man's do -- the can alone in front of it)
+    this.sprite.addAt(lap, 0);
+    this.lap = lap;
     if (s.can) {
       // a dented tin held out on the knee, open end up
+      const front = scene.add.container(0, 0);
       const hx = s.kind === 'floor' ? 5 : 7;
       const hy = s.kind === 'floor' ? -9 : -13;
-      block(hx, hy, 3, 4, 0x9aa0a8);
-      lap.add(scene.add.rectangle(d > 0 ? hx : -hx - 3, hy, 3, 1, 0x3a3e44).setOrigin(0, 0));
-      lap.add(scene.add.rectangle(d > 0 ? hx : -hx - 3, hy + 2, 1, 1, 0xe0e4ea).setOrigin(0, 0));
+      block(hx, hy, 3, 4, 0x9aa0a8, front);
+      front.add(scene.add.rectangle(d > 0 ? hx : -hx - 3, hy, 3, 1, 0x3a3e44).setOrigin(0, 0));
+      front.add(scene.add.rectangle(d > 0 ? hx : -hx - 3, hy + 2, 1, 1, 0xe0e4ea).setOrigin(0, 0));
+      this.sprite.add(front);
+      this.lapFront = front;
     }
-    this.sprite.addAt(lap, 0);
-    // (the legs go behind the body, the can in front of it)
-    if (s.can) this.sprite.bringToTop(lap);
-    this.lap = lap;
   }
 
   /**
@@ -577,6 +583,8 @@ export class Player {
     this.seat = null;
     this.lap?.destroy();
     this.lap = null;
+    this.lapFront?.destroy();
+    this.lapFront = null;
     this.pose(0, 0);
   }
 

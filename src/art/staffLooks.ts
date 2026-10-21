@@ -108,7 +108,7 @@ export const CLERK_LOOK: Look = {
 };
 
 /**
- * The old man on the forecourt, sat against the arcade's wall: a navy watch
+ * The old man outside Home and Hearth, sat against its wall: a navy watch
  * cap, long grey hair down past it, a full white beard, a brown coat with a
  * green patch and a red scarf, dark trousers and broken boots.  Not the
  * drifter: his own head and colours, on the same rig, in the same pose.

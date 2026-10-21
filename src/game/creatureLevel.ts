@@ -57,7 +57,6 @@ export function withLevel(c: Creature, level: number): Creature {
     ...c,
     hp: Math.round(c.hp * g.hp),
     speed: Math.round(c.speed * g.speed),
-    power: Math.round(c.power * g.dmg * 100) / 100,
     attacks: c.attacks.map((a) => ({ ...a, dmg: a.dmg > 0 ? Math.round(a.dmg * g.dmg) : 0 })) as Creature['attacks'],
   };
 }

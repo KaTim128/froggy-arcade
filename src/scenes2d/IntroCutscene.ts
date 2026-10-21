@@ -124,7 +124,7 @@ export class IntroCutscene extends Phaser.Scene {
    * The skip hint and the arrow.  Built twice, because the street rebuilds the
    * scene from nothing.
    *
-   * A phone gets no hint: there is no Esc key to press, so the line would be
+   * A phone gets neither.  No hint: there is no Esc key to press, so the line would be
    * an instruction the player cannot follow.  The SKIP it gets instead is a
    * real button in the control band (see `game/touchLayouts.ts`), which sends
    * the same Esc and sits below the picture rather than over the dialogue.
@@ -133,8 +133,10 @@ export class IntroCutscene extends Phaser.Scene {
     this.skip = isTouch()
       ? null
       : text(this, 6, GAME_H - 12, '[ESC] SKIP', PALETTE.ash).setAlpha(0.5).setDepth(900);
-    this.arrow = button(this, GAME_W - 14, GAME_H - 10, '>', () => this.advance(), { width: 16, height: 13 });
-    this.arrow.setDepth(900).setVisible(false);
+    // (and no arrow either: the band's NEXT is the same thing, and the corner
+    // the arrow would sit in is where SKIP is)
+    this.arrow = isTouch() ? null : button(this, GAME_W - 14, GAME_H - 10, '>', () => this.advance(), { width: 16, height: 13 });
+    this.arrow?.setDepth(900).setVisible(false);
   }
 
   /** Show the arrow after a beat, and say what a click on it does. */
