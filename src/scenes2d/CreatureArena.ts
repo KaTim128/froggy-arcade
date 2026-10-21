@@ -48,24 +48,16 @@ const TIME_LIMIT = 120;
  * the biggest creature to walk round the end of a ridge in plain sight.
  */
 const COVER_LANE = 24;
+/** The strip a move's line runs along: under the health bars, over the arena. */
+const INFO_X = 8;
+const INFO_R = GAME_W - 8;
+const INFO_Y = 20;
+/** Seconds it holds still at each end, and how fast it scrolls between, px/s. */
+const INFO_HOLD = 1.2;
+const INFO_SPEED = 40;
 /** How long an attack's lunge takes, wind-up to settle. */
 const ATK_T = 0.28;
-/** How many letters fit across the move's description plate. */
-const INFO_COLS = Math.floor((GAME_W - 32) / 6);
 
-/** Words into lines of at most `cols` letters. */
-function wrapWords(str: string, cols: number): string[] {
-  const out: string[] = [];
-  let line = '';
-  for (const w of str.split(' ')) {
-    if (line && line.length + 1 + w.length > cols) {
-      out.push(line);
-      line = w;
-    } else line = line ? `${line} ${w}` : w;
-  }
-  if (line) out.push(line);
-  return out;
-}
 /** A fighter's footprint against walls and cover, before its size scales it. */
 const BODY_R = 7;
 
@@ -410,6 +402,15 @@ export class CreatureArena extends Phaser.Scene {
   private info2!: Phaser.GameObjects.BitmapText;
   private infoPlate!: Phaser.GameObjects.Rectangle;
   private infoT = 0;
+  /** How far the strip's line has to scroll to show its end, and how long it has been up. */
+  private infoRun = 0;
+  /** The element line, which steps aside while a move's line is in the strip. */
+  private effLabel: Phaser.GameObjects.BitmapText | null = null;
+  /** The ladder step, on the same strip's right: it steps aside too. */
+  private stepLabel: Phaser.GameObjects.BitmapText | null = null;
+  /** When the strip's line went up (scene clock, ms). */
+  private infoAt = 0;
+  private infoMask: Phaser.Display.Masks.GeometryMask | null = null;
   /** Your creature's level, for the name over its bar. */
   private myLevel = 1;
 
@@ -456,6 +457,11 @@ export class CreatureArena extends Phaser.Scene {
   }
 
   create(): void {
+    // (a fresh fight: the last one's strip mask and labels went with it)
+    this.infoMask = null;
+    this.effLabel = null;
+    this.stepLabel = null;
+    this.infoT = 0;
     const own = activeOwned();
     // (yours fights at its level: see creatureLevel)
     const mine = own ? ownedCreature(own) : undefined;
@@ -595,7 +601,8 @@ export class CreatureArena extends Phaser.Scene {
     this.tweens.add({ targets: go, scale: 1.4, alpha: 0, delay: 250, duration: 450, onComplete: () => go.destroy() });
     this.showInfo(this.sel);
     if (this.training) {
-      const t = centerText(this, ARENA.x + ARENA.w / 2, ARENA.y + 10, 'TRAINING MODE DOES NOT AWARD TOKENS.', PALETTE.fog).setDepth(2401);
+      // (under the move's description when that is up at the top, on a phone held sideways)
+      const t = centerText(this, ARENA.x + ARENA.w / 2, this.touch ? ARENA.y + 50 : ARENA.y + 10, 'TRAINING MODE DOES NOT AWARD TOKENS.', PALETTE.fog).setDepth(2401);
       backPlate(this, t);
       this.time.delayedCall(3500, () => this.tweens.add({ targets: t, alpha: 0, duration: 500, onComplete: () => t.destroy() }));
     }
@@ -629,19 +636,24 @@ export class CreatureArena extends Phaser.Scene {
     const a = this.me.c.attacks[i];
     if (!a || !this.info) return;
     const inf = attackInfo(a, this.me.c.element);
-    this.info.setText(`${a.name}: ${inf.type}${a.dmg > 0 ? ` - ${a.dmg} DMG` : ''} - RELOAD ${a.cd}S`);
-    // the lines under it: what makes this move its own, or else what it is
-    // for -- wrapped to the plate, never run off the edges of the screen
-    const lines = wrapWords(inf.special || inf.use, INFO_COLS);
-    this.info2.setText(lines.join('\n'));
-    const h = 11 + lines.length * 9;
-    const bottom = ARENA.y + ARENA.h - 1;
-    this.infoPlate.setSize(GAME_W - 24, h).setPosition(GAME_W / 2, bottom - h / 2);
-    this.infoPlate.setOrigin(0.5, 0.5);
-    this.info.setPosition(GAME_W / 2, bottom - h + 6);
-    this.info2.setPosition(GAME_W / 2, bottom - h + 11 + (lines.length * 9) / 2 - 1);
-    // a longer one stays up long enough to read
-    this.infoT = 3 + Math.max(0, lines.length - 1) * 1.5;
+    // ---- IT NEVER COVERS THE FIGHT.  What the move does goes in the strip
+    // between the health bars and the arena -- where the element line is,
+    // which steps aside for it -- as one line: the name and numbers, then
+    // the description.  Too long for the strip, it holds a moment and then
+    // scrolls along it, so all of it is read and none of it is over the
+    // arena, the fighters or the thumbs.
+    const line = `${a.name}: ${inf.type}${a.dmg > 0 ? ` - ${a.dmg} DMG` : ''} - RELOAD ${a.cd}S.  ${inf.special || inf.use}`;
+    this.info.setText(line).setOrigin(0, 0).setPosition(INFO_X, INFO_Y);
+    this.infoRun = Math.max(0, Math.ceil(this.info.width) - (INFO_R - INFO_X));
+    this.infoAt = this.time.now;
+    // (kept to its strip as it scrolls: never over the bars or the arena)
+    if (!this.infoMask) {
+      const shape = this.make.graphics({}, false).fillStyle(0xffffff).fillRect(INFO_X, INFO_Y - 1, INFO_R - INFO_X, 9);
+      this.infoMask = shape.createGeometryMask();
+    }
+    this.info.setMask(this.infoMask);
+    // a hold, the scroll at a reading pace, a hold at the end
+    this.infoT = INFO_HOLD * 2 + this.infoRun / INFO_SPEED;
   }
 
   private fighter(c: Creature, x: number, y: number, face: number, scale: number): Fighter {
@@ -996,7 +1008,10 @@ export class CreatureArena extends Phaser.Scene {
     this.labels.push(text(this, 8, 3, `${name(this.me)} LV${this.myLevel}`, PALETTE.cream).setDepth(51));
     this.labels.push(text(this, GAME_W - 8, 3, name(this.foe), this.boss ? PALETTE.gold : PALETTE.cream).setOrigin(1, 0).setDepth(51));
     // which step of the run this is, under the opponent's bar
-    if (this.mode === 'ladder') this.labels.push(text(this, GAME_W - 8, 20, this.boss ? 'FINAL BOSS' : `LEVEL ${this.level} OF ${LADDER_LEVELS}`, PALETTE.gold).setOrigin(1, 0).setDepth(51));
+    if (this.mode === 'ladder') {
+      this.stepLabel = text(this, GAME_W - 8, 20, this.boss ? 'FINAL BOSS' : `LEVEL ${this.level} OF ${LADDER_LEVELS}`, PALETTE.gold).setOrigin(1, 0).setDepth(51);
+      this.labels.push(this.stepLabel);
+    }
     this.timerText = centerText(this, GAME_W / 2, 7, '', PALETTE.fog).setDepth(51);
     // ---- THERE IS NO LEAVING A BATTLE.  Not during the count either: a
     // real fight ends by winning it, losing it or running the clock out, and
@@ -1026,7 +1041,8 @@ export class CreatureArena extends Phaser.Scene {
     // clock and the opponent's side (which has the ladder step under ITS
     // bar).  In the middle of the bar row it was printed over both bars.
     const eff = ELEMENTS[this.me.c.element];
-    this.labels.push(text(this, 8, 20, `${eff.name}: ${eff.effect}`, eff.light).setDepth(51));
+    this.effLabel = text(this, 8, 20, `${eff.name}: ${eff.effect}`, eff.light).setDepth(51);
+    this.labels.push(this.effLabel);
   }
 
   // ------------------------------------------------------------------ input
@@ -3606,9 +3622,16 @@ export class CreatureArena extends Phaser.Scene {
     });
     // the chosen attack's line, fading
     const showing = this.infoT > 0 && !this.over && !this.dialog;
-    this.info.setVisible(showing).setAlpha(Math.min(1, this.infoT));
-    this.info2.setVisible(showing).setAlpha(Math.min(1, this.infoT));
-    this.infoPlate.setVisible(showing).setAlpha(Math.min(1, this.infoT) * 0.92);
+    this.info.setVisible(showing).setAlpha(Math.min(1, this.infoT * 3));
+    this.info2.setVisible(false);
+    this.infoPlate.setVisible(false);
+    this.effLabel?.setVisible(!showing);
+    this.stepLabel?.setVisible(!showing);
+    if (showing) {
+      const age = (this.time.now - this.infoAt) / 1000;
+      const k = Phaser.Math.Clamp((age - INFO_HOLD) * INFO_SPEED, 0, this.infoRun);
+      this.info.setX(INFO_X - Math.round(k));
+    }
     if (this.started && !this.over) this.drawReach(g);
     this.drawWallClocks(u);
     if (this.touch) {
