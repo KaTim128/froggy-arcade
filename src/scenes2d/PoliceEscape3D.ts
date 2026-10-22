@@ -572,7 +572,7 @@ export class PoliceEscape3D extends Phaser.Scene {
       const c: Cop = {
         i,
         model,
-        m: lobby ? { x: 0.9, z: 3.0, f: 0, well: false, seg: 'top', h: 0 } : { x: 0, z: s.z, f: s.f, well: false, seg: 'top', h: s.f * FH },
+        m: lobby ? { x: -0.2, z: 4.0, f: 0, well: false, seg: 'top', h: 0 } : { x: 0, z: s.z, f: s.f, well: false, seg: 'top', h: s.f * FH },
         yaw: lobby ? Math.PI : 0,
         mode: 'task',
         acts: [],

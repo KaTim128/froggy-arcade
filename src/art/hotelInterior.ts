@@ -1624,3 +1624,28 @@ export function texConcrete(base = '#8e8a84'): HTMLCanvasElement {
     }
   });
 }
+
+/** Large porcelain floor tiles: warm grey, fine grout, a faint mottle. */
+export function texMarble(): HTMLCanvasElement {
+  let seed = 3;
+  const rnd = (): number => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  return canvas(256, 256, (g) => {
+    g.fillStyle = '#d2cec6';
+    g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 2; i++)
+      for (let j = 0; j < 2; j++) {
+        g.fillStyle = (i + j) % 2 ? '#cecac2' : '#d6d2ca';
+        g.fillRect(i * 128 + 1, j * 128 + 1, 126, 126);
+      }
+    for (let k = 0; k < 1800; k++) {
+      g.fillStyle = rnd() < 0.5 ? 'rgba(90,86,80,0.06)' : 'rgba(255,255,255,0.08)';
+      g.fillRect(rnd() * 256, rnd() * 256, 2, 2);
+    }
+    g.fillStyle = 'rgba(110,106,100,0.7)';
+    g.fillRect(0, 0, 256, 2);
+    g.fillRect(0, 128, 256, 2);
+    g.fillRect(0, 0, 2, 256);
+    g.fillRect(128, 0, 2, 256);
+  });
+}
+

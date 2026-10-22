@@ -333,8 +333,10 @@ try {
     await sleep(3000);
     await P(page3, 'freeze', true);
     const rooms3 = await P(page3, 'rooms');
-    const rm = rooms3.find((x) => x.open && x.special === 'none' && x.spots.length);
-    const sp = rm.spots[0];
+    // (a bed or a wardrobe, out in the room where he can see it: a bathroom
+    // door is round a corner from the middle of the flat)
+    const rm = rooms3.find((x) => x.open && x.special === 'none' && x.spots.some((s) => s.kind === 'bed' || s.kind === 'wardrobe'));
+    const sp = rm.spots.find((s) => s.kind === 'bed' || s.kind === 'wardrobe');
     await P(page3, 'useDoor', `room-${rm.id}`);
     // him in the middle of the flat, looking straight at where you get in
     const cx = (rm.x0 + rm.x1) / 2;
