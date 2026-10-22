@@ -582,7 +582,7 @@ export const grudge: MinigameModule = {
           wins: { you: wins1, him: wins2 },
           roundOver,
           over,
-          you: p1 && { hp: Math.round(p1.hp), cd: Math.round(Math.max(0, p1.specialCd)), move: p1.move, phase: p1.phase, stun: Math.round(Math.max(0, p1.stun)) },
+          you: p1 && { x: Math.round(p1.x), facing: p1.facing, hp: Math.round(p1.hp), cd: Math.round(Math.max(0, p1.specialCd)), move: p1.move, phase: p1.phase, stun: Math.round(Math.max(0, p1.stun)) },
           him: p2 && { hp: Math.round(p2.hp), cd: Math.round(Math.max(0, p2.specialCd)), move: p2.move, phase: p2.phase, stun: Math.round(Math.max(0, p2.stun)),
             up: Math.round(FLOOR_Y - p2.y), jump: p2.jump },
           cooldownMs: SPECIAL_COOLDOWN,
@@ -733,10 +733,9 @@ export const grudge: MinigameModule = {
       p2.x = BAG_X;
       p2.hp = MAX_HP;
       p2.stun = 0;
-      // and the bag is in the way: Froggy walks up to it, not through it
-      const side = p1.x < BAG_X ? -1 : 1;
-      if (Math.abs(p1.x - BAG_X) < BAG_GAP) p1.x = BAG_X + side * BAG_GAP;
-      p1.facing = side === -1 ? 1 : -1;
+      // Froggy can walk past the hanging bag to its other side, and turns to
+      // face it from wherever he stands (right under it, he keeps his facing)
+      if (Math.abs(p1.x - BAG_X) >= BAG_GAP) p1.facing = p1.x < BAG_X ? 1 : -1;
       render(p1, dt);
       renderCooldowns();
       hpBar1?.setSize((Math.max(0, p1.hp) / MAX_HP) * 128, 5);
@@ -2127,7 +2126,7 @@ const BAG_PIVOT_Y = 70;
 const BAG_CHAIN = 20;
 const BAG_W = 18;
 const BAG_H = 54;
-/** How close Froggy can stand to the hanging bag. */
+/** Within this of the bag's line Froggy is under it, and keeps the way he faces. */
 const BAG_GAP = 15;
 /** Gravity over length (stiffness) and air/leather damping, per second. */
 const BAG_K = 21;

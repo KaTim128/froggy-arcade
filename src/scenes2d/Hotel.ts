@@ -72,7 +72,7 @@ import {
   WIN_SCALE,
   CEIL_Y,
 } from '../art/hotelInterior';
-import { HITS, WF, WF_H, WF_W, drawBrokenEdge, drawCracks, drawWindowFroggy } from '../art/windowFroggy';
+import { HITS, SF_FEET, SF_H, SF_W, WF, WF_H, WF_W, drawBrokenEdge, drawCracks, drawSideFroggy, drawWindowFroggy } from '../art/windowFroggy';
 import { runHotelScare } from '../froggy/hotelScare';
 import { drawClerk } from '../froggy/clerk';
 import { froggyLayer } from '../render/froggyLayer';
@@ -175,6 +175,11 @@ const BLOWS = [0, 0.75, 1.45, 2.1, 2.75, 3.35, 3.95, 4.5].map((t) => FIRST_BLOW 
 /** The glass goes about six seconds after he is seen, and he is in under a second after that. */
 export const SHATTER_AT = 6.0;
 const IN_AT = SHATTER_AT + 0.9;
+/** After the glass goes: how long he is in the frame, and his drop to the floor. */
+const DROP_AT = 0.45;
+const HOP = 0.3;
+/** His run along the floor, px/s: a little faster than you sprint. */
+const FROGGY_RUN = 104;
 /** How long a blow takes, wind-up to the glass. */
 const WINDUP = 0.45;
 
@@ -229,6 +234,11 @@ export class Hotel extends Phaser.Scene {
   private black: Phaser.GameObjects.Rectangle | null = null;
   private froggyTex: Phaser.Textures.CanvasTexture | null = null;
   private froggyImg: Phaser.GameObjects.Image | null = null;
+  /** Him in the room, side on, and where along the floor he is. */
+  private sideTex: Phaser.Textures.CanvasTexture | null = null;
+  private sideImg: Phaser.GameObjects.Image | null = null;
+  private sideX = 0;
+  private sideStride = 0;
   private crackTex: Phaser.Textures.CanvasTexture | null = null;
   private motes: Phaser.GameObjects.Rectangle[] = [];
   /** Seconds since the curtains opened on him. */
@@ -288,6 +298,10 @@ export class Hotel extends Phaser.Scene {
     this.sleeper = this.black = null;
     this.froggyTex = this.crackTex = null;
     this.froggyImg = null;
+    this.sideTex = null;
+    this.sideImg = null;
+    this.sideX = 0;
+    this.sideStride = 0;
     this.motes = [];
     this.revealT = 0;
     this.hitsLanded = 0;
@@ -536,6 +550,10 @@ export class Hotel extends Phaser.Scene {
     this.froggyImg = this.add.image(x + w / 2, y + h / 2, 'hotel_wfroggy').setOrigin(0.5, 0.5).setDepth(2).setScale(WIN_SCALE).setVisible(false);
     // (drawn at his own detail and shown at the window's scale: smooth it down)
     this.textures.get('hotel_wfroggy').setFilter(Phaser.Textures.FilterMode.LINEAR);
+    // ...and him once he is through, down on the floor and side on, at the
+    // room's own pixels
+    this.sideTex = this.textures.exists('hotel_sfroggy') ? (this.textures.get('hotel_sfroggy') as Phaser.Textures.CanvasTexture) : this.textures.createCanvas('hotel_sfroggy', SF_W, SF_H);
+    this.sideImg = this.add.image(0, WALK_Y, 'hotel_sfroggy').setOrigin(SF_FEET.x / SF_W, SF_FEET.y / SF_H).setDepth(70).setTint(0xb8c0d4).setVisible(false);
     this.glazing = this.add.image(x, y, this.painted(`hotel_glazing_${w}`, w, h, (g) => paintGlazing(g, w, h))).setOrigin(0, 0).setDepth(3);
     this.crackTex = this.textures.exists('hotel_cracks') ? (this.textures.get('hotel_cracks') as Phaser.Textures.CanvasTexture) : this.textures.createCanvas('hotel_cracks', WF.winW, WF.winH);
     this.crackTex?.getContext().clearRect(0, 0, WF.winW, WF.winH);
@@ -1457,10 +1475,52 @@ export class Hotel extends Phaser.Scene {
     drawWindowFroggy(g, { t: this.clock, maw: 0.55 + Math.min(0.45, t * 0.06), strike, enter, lean });
     g.restore();
     this.froggyTex.refresh();
-    // through the frame and down into the room, coming at you
+    // Through the frame: his size stays his size (a head and a bit over
+    // you, never blown up toward the glass), he only leans in out of it --
+    // and then he is down in the room, side on, and coming.
     const e = enter * enter;
-    // (off the ledge and down onto the floor of the room, a step toward you)
-    this.froggyImg?.setScale(WIN_SCALE * (1 + e * 1.4)).setPosition(ROOM_WINDOW.x + ROOM_WINDOW.w / 2 - e * 18, ROOM_WINDOW.y + ROOM_WINDOW.h / 2 + e * 14);
+    const inRoom = t >= SHATTER_AT + DROP_AT;
+    this.froggyImg?.setScale(WIN_SCALE).setPosition(ROOM_WINDOW.x + ROOM_WINDOW.w / 2 - e * 4, ROOM_WINDOW.y + ROOM_WINDOW.h / 2 + e * 3).setVisible(!inRoom);
+    if (inRoom) this.drawHimInRoom(t - SHATTER_AT - DROP_AT);
+  }
+
+  /**
+   * Off the sill and down on to the floor, then flat out along it at you,
+   * faster than you can run.  `s` is seconds since he dropped.
+   */
+  private drawHimInRoom(s: number): void {
+    const img = this.sideImg;
+    const p = this.player;
+    if (!img || !this.sideTex) return;
+    const sill = { x: ROOM_WINDOW.x + ROOM_WINDOW.w / 2, y: ROOM_WINDOW.y + ROOM_WINDOW.h };
+    const dt = this.game.loop.delta / 1000;
+    let y = WALK_Y;
+    let run = 1;
+    if (s < HOP) {
+      // the drop: a short arc from the sill down to the floor
+      const k = s / HOP;
+      this.sideX = sill.x - k * 14;
+      y = sill.y + (WALK_Y - sill.y) * k - Math.sin(k * Math.PI) * 8;
+      run = 0.3;
+    } else {
+      const toward = p ? Math.sign(p.x - this.sideX) || -1 : -1;
+      this.sideX += toward * FROGGY_RUN * Math.min(1, (s - HOP) / 0.25 + 0.4) * dt;
+      img.setFlipX(toward > 0);
+      this.sideStride = (this.sideStride + (FROGGY_RUN * dt) / 26) % 1;
+      if (s - HOP < 0.08) this.cameras.main.shake(120, 0.008);
+      // the feet on the floor, twice a stride
+      const was = (this.sideStride * 2) % 1;
+      if (was < ((FROGGY_RUN * dt) / 26) * 2) audio.sfx('step_run', 0.7);
+    }
+    img.setVisible(true).setPosition(Math.round(this.sideX), Math.round(y));
+    drawSideFroggy(this.sideTex.getContext(), { t: this.clock, stride: this.sideStride, run, maw: 0.6 + 0.4 * Math.abs(Math.sin(this.clock * 5)) });
+    this.sideTex.refresh();
+  }
+
+  /** Has he reached you, down on the floor? */
+  private himOnYou(): boolean {
+    if (!this.sideImg?.visible || !this.player) return false;
+    return Math.abs(this.player.x - this.sideX) < 9;
   }
 
   /** A blow lands: the crack runs, the room jumps. */
@@ -1736,6 +1796,6 @@ export class Hotel extends Phaser.Scene {
     if (was < SHATTER_AT && t >= SHATTER_AT) this.shatter();
     if (this.runHint) this.runHint.setAlpha(0.55 + Math.sin(this.clock * 9) * 0.45);
     this.drawHim();
-    if (t >= IN_AT) this.caught();
+    if (this.himOnYou()) this.caught();
   }
 }

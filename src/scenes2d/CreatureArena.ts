@@ -25,6 +25,7 @@ import { store } from '../core/state';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
+import { drawMelee, drawShot, meleeStyle, shotStyle, type MeleeStyle } from '../art/clashFx';
 import { SPECIALS } from '../game/specials';
 import { BIOMES, ELEMENTS, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
 import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle } from '../game/creatureClash';
@@ -143,7 +144,11 @@ interface Shot {
 }
 
 interface Fx {
-  kind: 'ring' | 'beam' | 'spark' | 'warn' | 'boom';
+  kind: 'ring' | 'beam' | 'spark' | 'warn' | 'boom' | 'melee';
+  /** A close-up strike: who throws it, which way, and how (see art/clashFx). */
+  owner?: Fighter;
+  ang?: number;
+  style?: MeleeStyle;
   x: number;
   y: number;
   x2?: number;
@@ -1267,7 +1272,10 @@ export class CreatureArena extends Phaser.Scene {
         const len = a.reach * f.scale;
         const x2 = f.x + ux * len;
         const y2 = f.y + uy * len;
-        this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2, y2, r: 3, t: 0, life: 0.18, col });
+        // up close it is a bite, a punch, a slash -- whatever this body does;
+        // a long beam is still a beam
+        if (a.reach < 50) this.fx.push({ kind: 'melee', x: f.x, y: f.y, r: len, t: 0, life: 0.3, col, owner: f, ang: Math.atan2(uy, ux), style: meleeStyle(f.c) });
+        else this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2, y2, r: 3, t: 0, life: 0.18, col });
         const o = this.other(f);
         const lineHit = (k: number) => {
           if (this.segDist(o.x, o.y, f.x, f.y, x2, y2) < 6 * o.scale + 2 && (pierce || !this.blocked(f.x, f.y, o.x, o.y))) this.hit(f, o, Math.round(dmg * k), a);
@@ -1277,7 +1285,8 @@ export class CreatureArena extends Phaser.Scene {
         if (a.mod === 'echo') {
           this.time.delayedCall(600, () => {
             if (this.over) return;
-            this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2, y2, r: 2, t: 0, life: 0.18, col });
+            if (a.reach < 50) this.fx.push({ kind: 'melee', x: f.x, y: f.y, r: len, t: 0, life: 0.3, col, owner: f, ang: Math.atan2(uy, ux), style: meleeStyle(f.c) });
+            else this.fx.push({ kind: 'beam', x: f.x, y: f.y, x2, y2, r: 2, t: 0, life: 0.18, col });
             lineHit(0.5);
           });
         }
@@ -3583,10 +3592,10 @@ export class CreatureArena extends Phaser.Scene {
       }
     }
     for (const s of this.shots) {
-      const col = ELEMENTS[s.owner.c.element].col;
       const size = s.a.mod === 'grow' ? 1 + s.t * 2.2 : s.grace !== undefined && s.life < 0.4 && s.a.mod === 'none' ? 0.7 : 1;
-      g.fillStyle(ELEMENTS[s.owner.c.element].light, 1).fillCircle(s.x, s.y, 2.2 * size);
-      g.fillStyle(col, 0.6).fillCircle(s.x - s.vx * 0.012, s.y - s.vy * 0.012, 1.8 * size);
+      // what this element (or this particular shot) is made of, in flight
+      const el = s.owner.c.element;
+      drawShot(g, shotStyle(s.a.name, el), s.x, s.y, s.vx, s.vy, s.t, size, el, (s.ang * 97) % 13);
     }
     for (const e of this.fx) {
       const k = e.t / e.life;
@@ -3594,6 +3603,9 @@ export class CreatureArena extends Phaser.Scene {
       else if (e.kind === 'beam') {
         g.lineStyle(e.r, e.col, 1 - k).lineBetween(e.x, e.y, e.x2!, e.y2!);
         g.lineStyle(1, 0xffffff, 1 - k).lineBetween(e.x, e.y, e.x2!, e.y2!);
+      } else if (e.kind === 'melee' && e.style) {
+        const o = e.owner;
+        drawMelee(g, e.style, o ? o.x : e.x, o ? o.y : e.y, e.ang ?? 0, k, e.r, o ? o.c.element : 'stone');
       } else if (e.kind === 'boom') g.fillStyle(e.col, 0.7 * (1 - k)).fillCircle(e.x, e.y, e.r * (0.5 + k * 0.5));
       else g.fillStyle(e.col, 1 - k).fillCircle(e.x, e.y, e.r * (1 - k * 0.5));
     }

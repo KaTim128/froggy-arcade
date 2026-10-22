@@ -50,7 +50,9 @@ import {
   buildCounter,
   buildDroppedKey,
   buildGlassDoors,
+  aimArm,
   buildHand,
+  poseHand,
   buildNightStreet,
   buildPrizeCase,
   buildStaffDoor,
@@ -402,9 +404,9 @@ const CHASE_S = 13.0;
  * hand has visibly closed on it, because a key that rises off the carpet by
  * itself is the game picking it up rather than the player.
  */
-const GRAB_S = 1.3;
+const GRAB_S = 1.7;
 /** Where in the grab the fingers shut on it. */
-const GRAB_CLOSE = 0.55;
+const GRAB_CLOSE = 0.56;
 /**
  * WHERE THE HAND SITS, in view space, for each of the three things it does.
  *
@@ -416,11 +418,30 @@ const GRAB_CLOSE = 0.55;
 const HAND_OFF = { x: 0.26, y: -0.46, z: -0.6 };
 const HAND_KEY = { x: 0.15, y: -0.17, z: -0.58 };
 const HAND_LOCK = { x: 0.035, y: -0.028, z: -0.6 };
+/** Where the grab leaves the hand, so the carry to the lock goes on from it. */
+const HAND_UP = { x: HAND_KEY.x, y: HAND_KEY.y + 0.11, z: HAND_KEY.z + 0.035 };
+/** Where the arm comes from, in the camera's space: a right shoulder. */
+const SHOULDER = new THREE.Vector3(0.36, -0.52, -0.06);
 /**
- * And which way it is turned.  A hand square to the camera is a plate; a
- * three-quarter view down the back of it, tilted in from the right, is a hand.
+ * Which way a hand points when the arm behind it comes from the shoulder to
+ * `at` (camera space): straight on from the forearm, the wrist flexed by
+ * `flex` (down, negative), rolled by `roll` onto the thumb side.
  */
-const HAND_YAW = -0.55;
+const handAim = (at: THREE.Vector3 | { x: number; y: number; z: number }, flex: number, roll: number): THREE.Quaternion => {
+  const f = new THREE.Vector3(at.x - SHOULDER.x, at.y - SHOULDER.y, at.z - SHOULDER.z).normalize();
+  return new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.asin(f.y) + flex, Math.atan2(-f.x, -f.z), roll, 'YXZ'));
+};
+/**
+ * WHERE ON THE HAND THE KEY IS HELD: the bow pinched between the pad of the
+ * thumb and the side of the bent index finger, the way anybody holds a key.
+ * In the hand's own space (see buildHand).
+ */
+const GRIP = new THREE.Vector3(-0.036, -0.03, -0.118);
+/** Smoothstep, and its smoother cousin, for motion that starts and stops softly. */
+const smooth = (t: number) => {
+  const u = Phaser.Math.Clamp(t, 0, 1);
+  return u * u * u * (u * (u * 6 - 15) + 10);
+};
 /** How much of the chase the key spends going into the lock and turning. */
 const INSERT_UNTIL = 0.3;
 /**
@@ -987,6 +1008,10 @@ export class HideRoom3D extends Phaser.Scene {
    * only thing happening is a hand closing on a key.
    */
   private handProp: THREE.Object3D | null = null;
+  /** Where the grab is reaching to (the key, at arm's length), and where it left the hand. */
+  private grabAim = new THREE.Vector3();
+  private grabEnd = new THREE.Vector3(HAND_UP.x, HAND_UP.y, HAND_UP.z);
+  private grabEndQ = new THREE.Quaternion();
   private grabbing = false;
   private grabT = 0;
   /** The padlock's shackle, so it can come open when the key turns. */
@@ -1192,6 +1217,8 @@ export class HideRoom3D extends Phaser.Scene {
     this.keyProp = null;
     this.keyFall = null;
     this.handProp = null;
+    this.grabAim.set(0, 0, 0);
+    this.grabEnd.set(HAND_UP.x, HAND_UP.y, HAND_UP.z);
     this.shackle = null;
     this.doorLeaves = [];
     this.doorLock = null;
@@ -1416,6 +1443,9 @@ export class HideRoom3D extends Phaser.Scene {
       // what makes glass read as glass is that the thing through it is a
       // different colour from everything else in the picture.
       const doorZ = d.halfD - 0.38;
+      // (the arcade is all close work -- the lock in your face, the key in
+      // your hand -- so it is drawn sharp, whatever the quality level)
+      st.setMinRes(isTouch() ? 2 : 2.5);
       const doors = buildGlassDoors(gd.w, gd.h);
       doors.position.set(d.door.x, 0, doorZ);
       st.scene.add(doors);
@@ -2066,6 +2096,7 @@ export class HideRoom3D extends Phaser.Scene {
       for (const sgn of [-1, 1]) {
         const h = buildHand();
         h.scale.set(sgn, 1, 1);
+        poseHand(h, 0.05, 0);
         h.visible = false;
         st.camera.add(h);
         hands.push(h);
@@ -2131,6 +2162,7 @@ export class HideRoom3D extends Phaser.Scene {
       // the weight comes on
       const press = Math.sin(Phaser.Math.Clamp((v.t - 0.2) / 0.4, 0, 1) * Math.PI);
       h.rotation.set(-0.35 - press * 0.25, (i === 0 ? 0.25 : -0.25), 0);
+      aimArm(h, new THREE.Vector3((i === 0 ? -1 : 1) * SHOULDER.x, SHOULDER.y, SHOULDER.z));
     });
   }
 
@@ -2462,7 +2494,9 @@ export class HideRoom3D extends Phaser.Scene {
     if (st && !this.handProp) {
       const hand = buildHand();
       hand.position.set(HAND_OFF.x, HAND_OFF.y, HAND_OFF.z);
-      hand.rotation.set(-0.55, HAND_YAW, 0.2);
+      poseHand(hand, 0.2, 0.15);
+      hand.quaternion.copy(handAim(HAND_KEY, -0.06, 0.3));
+      aimArm(hand, SHOULDER);
       st.camera.add(hand);
       this.handProp = hand;
     }
@@ -2492,29 +2526,68 @@ export class HideRoom3D extends Phaser.Scene {
     const st = this.stage;
     if (!hand || !st) return;
 
-    // ---- out to the key, then back up with it
-    const reach = Phaser.Math.Easing.Sine.Out(Phaser.Math.Clamp(k / GRAB_CLOSE, 0, 1));
-    const lift = Phaser.Math.Easing.Sine.InOut(Phaser.Math.Clamp((k - GRAB_CLOSE) / (1 - GRAB_CLOSE), 0, 1));
+    // ---- OUT TO THE KEY, DOWN ONTO IT, AND BACK UP WITH IT.
+    //
+    // One continuous movement on soft curves, the way an arm moves: it comes
+    // up into frame from the bottom corner on an arc rather than a straight
+    // line, slows as it arrives, settles the last centimetre onto the key, and
+    // the lift starts before the fingers have quite finished closing.  The
+    // wrist turns over on the way, and the fingers open as it reaches -- a
+    // hand going to pick something up shapes itself for it.
+    const reach = smooth(k / GRAB_CLOSE);
+    // WHERE THE KEY ACTUALLY IS.  On the line of sight to it, at arm's length:
+    // the grip point of the hand goes there, so the fingers close on the key
+    // the player can see rather than on a spot the key was expected to be.
+    const keyT = new THREE.Vector3(HAND_KEY.x, HAND_KEY.y, HAND_KEY.z);
+    if (this.keyProp && this.keyProp.parent === st.scene) {
+      st.camera.updateMatrixWorld();
+      const kl = st.camera.worldToLocal(this.keyProp.localToWorld(new THREE.Vector3(0, 0.012, -0.16)));
+      if (kl.z < -0.2) keyT.copy(kl.multiplyScalar(0.62 / -kl.z));
+      this.grabAim.lerp(keyT, this.grabT < 0.05 ? 1 : Math.min(1, dt * 8 + 0.0001));
+      keyT.copy(this.grabAim);
+    } else if (this.grabAim.lengthSq() > 0) {
+      keyT.copy(this.grabAim);
+    }
+    const settle = Math.sin(Phaser.Math.Clamp((k - GRAB_CLOSE * 0.82) / 0.22, 0, 1) * Math.PI);
+    const lift = smooth((k - GRAB_CLOSE * 1.04) / (1 - GRAB_CLOSE * 1.04));
+    // a quadratic arc: the control point is up and in from the straight line,
+    // so the hand travels over and comes down onto the key
+    const u = reach;
+    const cx = (HAND_OFF.x + keyT.x) / 2 + 0.05;
+    const cy = keyT.y + 0.08;
+    const cz = (HAND_OFF.z + keyT.z) / 2 - 0.04;
+    const arc = (a: number, c: number, b: number) => (1 - u) * (1 - u) * a + 2 * (1 - u) * u * c + u * u * b;
+    // a breath of unsteadiness, so it is a living hand and not a crane
+    const live = Math.sin(this.grabT * 7.3) * 0.0025 + Math.sin(this.grabT * 11.1) * 0.0015;
+    // pointing on from the forearm at the key, the wrist dropping the fingers
+    // down to it as it arrives and coming back up with the lift
+    hand.quaternion.copy(handAim(keyT, -0.06 - reach * 0.16 - settle * 0.04 + lift * 0.16, 0.3 - reach * 0.1 + lift * 0.04));
+    hand.updateMatrix();
+    // (the grip lands on the key: the hand's origin sits back from it)
+    const gripOff = GRIP.clone().applyQuaternion(hand.quaternion).multiplyScalar(reach);
     hand.position.set(
-      Phaser.Math.Linear(HAND_OFF.x, HAND_KEY.x, reach),
-      Phaser.Math.Linear(HAND_OFF.y, HAND_KEY.y, reach) + lift * 0.1,
-      Phaser.Math.Linear(HAND_OFF.z, HAND_KEY.z, reach),
+      arc(HAND_OFF.x, cx, keyT.x) - gripOff.x + live,
+      arc(HAND_OFF.y, cy, keyT.y) - gripOff.y - settle * 0.012 + lift * 0.11 + live,
+      arc(HAND_OFF.z, cz, keyT.z) - gripOff.z + lift * 0.035,
     );
-    hand.rotation.set(-0.55 + reach * 0.45, HAND_YAW, 0.2 - reach * 0.12);
+    aimArm(hand, SHOULDER);
+    this.grabEnd.copy(hand.position);
+    this.grabEndQ.copy(hand.quaternion);
 
-    // ---- the fingers.  Open on the way down, shut on the key.
-    const curl = Phaser.Math.Clamp((k - GRAB_CLOSE * 0.8) / 0.25, 0, 1);
-    const fingers = hand.getObjectByName('fingers');
-    const thumb = hand.getObjectByName('thumb');
-    if (fingers) fingers.rotation.x = curl * 1.15;
-    if (thumb) thumb.rotation.y = -curl * 0.8;
+    // ---- the fingers.  Opening as it reaches, then wrapping on the key.
+    const open = Math.sin(Phaser.Math.Clamp(k / (GRAB_CLOSE * 0.9), 0, 1) * Math.PI) * 0.2;
+    const curl = smooth((k - GRAB_CLOSE * 0.78) / 0.24);
+    poseHand(hand, 0.2 - open + curl * 0.62, 0.15 - open * 0.5 + curl * 0.75);
 
     // ---- AND THE KEY CHANGES HANDS, on the close, from the floor to the fist.
     if (k >= GRAB_CLOSE && this.keyProp && this.keyProp.parent !== hand) {
       st.scene.remove(this.keyProp);
       hand.add(this.keyProp);
-      this.keyProp.position.set(0, -0.02, -0.16);
-      this.keyProp.rotation.set(0, 0, 0.2);
+      // bow in the pinch, shaft out past the fingertips
+      this.keyProp.rotation.set(0, Math.PI - 0.25, 0.12);
+      this.keyProp.updateMatrix();
+      const bowAt = new THREE.Vector3(0, 0.012, -0.16).applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(this.keyProp.rotation));
+      this.keyProp.position.copy(GRIP).sub(bowAt);
       audio.sfx('lock_click', 0.35);
     }
 
@@ -2553,10 +2626,11 @@ export class HideRoom3D extends Phaser.Scene {
     if (!key || !st || !hole) {
       // (no lock in this room: the old in-hand version)
       hand.position.set(
-        Phaser.Math.Linear(HAND_KEY.x, HAND_LOCK.x, up),
-        Phaser.Math.Linear(HAND_KEY.y + 0.1, HAND_LOCK.y, up),
-        Phaser.Math.Linear(HAND_KEY.z, HAND_LOCK.z, up),
+        Phaser.Math.Linear(this.grabEnd.x, HAND_LOCK.x, up),
+        Phaser.Math.Linear(this.grabEnd.y, HAND_LOCK.y, up),
+        Phaser.Math.Linear(this.grabEnd.z, HAND_LOCK.z, up),
       );
+      aimArm(hand, SHOULDER);
       return;
     }
 
@@ -2574,11 +2648,12 @@ export class HideRoom3D extends Phaser.Scene {
     const LEAVE = 0.35;
     if (up < LEAVE && key.parent === hand) {
       hand.position.set(
-        Phaser.Math.Linear(HAND_KEY.x, HAND_LOCK.x, up),
-        Phaser.Math.Linear(HAND_KEY.y + 0.1, HAND_LOCK.y, up),
-        Phaser.Math.Linear(HAND_KEY.z, HAND_LOCK.z, up),
+        Phaser.Math.Linear(this.grabEnd.x, HAND_LOCK.x, up),
+        Phaser.Math.Linear(this.grabEnd.y, HAND_LOCK.y, up),
+        Phaser.Math.Linear(this.grabEnd.z, HAND_LOCK.z, up),
       );
-      hand.rotation.set(-0.1 + (1 - up) * 0.25, HAND_YAW + up * 0.2, 0.08);
+      aimArm(hand, SHOULDER);
+      this.poseInsertHand(hand, up, 0);
       return;
     }
     const cam = st.camera;
@@ -2620,10 +2695,15 @@ export class HideRoom3D extends Phaser.Scene {
     }
 
     // ---- the hand, on the bow of the key, wherever the key is
-    const bow = key.localToWorld(new THREE.Vector3(0, 0, -0.16));
+    // (the grip point on the hand goes where the bow is, so the fingers stay
+    // on the key all the way in and round)
+    const bow = key.localToWorld(new THREE.Vector3(0, 0.012, -0.16));
     const local = cam.worldToLocal(bow.clone());
-    hand.position.set(local.x + 0.01, local.y - 0.035, local.z + 0.05);
-    hand.rotation.set(-0.1 + (1 - up) * 0.25, HAND_YAW + up * 0.2, 0.08 + turn * 0.6);
+    this.poseInsertHand(hand, up, turn);
+    hand.updateMatrix();
+    const grip = GRIP.clone().applyQuaternion(hand.quaternion);
+    hand.position.copy(local).sub(grip);
+    aimArm(hand, SHOULDER);
     if (key.parent === this.doorLock) return;
 
     // ---- AND THE LOCK GIVES.  It opens once, on the far side of the turn:
@@ -2641,6 +2721,20 @@ export class HideRoom3D extends Phaser.Scene {
       }
       this.unlockLight.position.copy(mouth).add(into.clone().multiplyScalar(-0.25));
     }
+  }
+
+  /**
+   * The hand's turn and grip on the way to the lock: from how the grab left
+   * it, round to square on the padlock, and then rolling with the key.
+   */
+  private poseInsertHand(hand: THREE.Object3D, up: number, turn: number): void {
+    const t = up * up * (3 - 2 * up);
+    // from how the grab left it round to square on the padlock, then rolling
+    // with the key about the line of the fingers
+    hand.quaternion.copy(this.grabEndQ).slerp(handAim(HAND_LOCK, 0.05, 0.12), t);
+    hand.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -turn * 0.6));
+    // a firmer pinch as it pushes home, easing a little as it turns
+    poseHand(hand, 0.82 + t * 0.06 - turn * 0.05, 0.9 + t * 0.05);
   }
 
   /** The unlock's jolt and glint, running down after the lock gives. */
@@ -3622,6 +3716,15 @@ export class HideRoom3D extends Phaser.Scene {
     // The arrow keys are a second way of turning, and the door holds the head
     // whichever one is being used.
     if (this.escaping || this.mode === 'survived') this.holdOnDoor();
+    // Up at the arcade's glass doors the torch is a hand's width from bright
+    // metal and would wash the lock out white: looking at them, it eases down
+    // as you close in (with the square of the distance, the way light falls).
+    if (this.def.glassDoor && this.torch && !this.escaping) {
+      const gap = Math.hypot(this.pos.x - this.def.door.x, this.def.halfD - this.pos.y);
+      const near = Phaser.Math.Clamp(((gap - 0.3) / 3.5) ** 2, 0.05, 1);
+      const facing = Math.max(0, Math.cos(this.yaw - this.doorFacing()));
+      this.torch.intensity = 110 * Phaser.Math.Linear(1, near, facing);
+    }
 
     if (this.hiding) {
       this.pos.set(this.hiding.x, this.hiding.z);

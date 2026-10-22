@@ -19,6 +19,7 @@
  */
 
 import * as THREE from 'three';
+import { aluminiumTex, brassTex, cabinetSideTex, chromeTex, coinDoorTex, marqueeTex, matcapTex, padlockFaceTex, panelTex, screenTex, steelTex } from './arcadeTextures';
 
 /**
  * One upright cabinet, built facing +Z with its feet at y = 0 and its origin
@@ -37,10 +38,14 @@ export function buildCabinet(
   const lit = (c: number) => new THREE.MeshBasicMaterial({ color: c });
 
   const hull = lam(0x1a1c24);
-  const art = lam(color);
+  // the side art, printed on: the panel's two big faces carry the picture,
+  // its thin edges the laminate's black
+  const sideArt = new THREE.MeshLambertMaterial({ map: cabinetSideTex(color), emissive: 0x111111, emissiveMap: cabinetSideTex(color) });
+  const edge = lam(0x0c0e14, false);
+  const art = [sideArt, sideArt, edge, edge, edge, edge];
 
   const add = (
-    mat: THREE.Material,
+    mat: THREE.Material | THREE.Material[],
     sx: number,
     sy: number,
     sz: number,
@@ -70,7 +75,15 @@ export function buildCabinet(
   // behind the control panel, with a coin door in it.
   const waist = h * 0.44;
   add(hull, w - panel * 2, waist, panel, 0, waist / 2, front - 0.22);
-  add(lam(0x0d0f14), w * 0.42, h * 0.12, 0.06, 0, waist * 0.62, front - 0.16);
+  add(
+    [lam(0x0d0f14, false), lam(0x0d0f14, false), lam(0x0d0f14, false), lam(0x0d0f14, false), new THREE.MeshLambertMaterial({ map: coinDoorTex(), emissive: 0x1a1a1a, emissiveMap: coinDoorTex() }), lam(0x0d0f14, false)],
+    w * 0.42,
+    h * 0.12,
+    0.06,
+    0,
+    waist * 0.62,
+    front - 0.16,
+  );
   for (const side of [-1, 1]) {
     add(lit(0xb9a05a), 0.035, h * 0.05, 0.03, side * w * 0.09, waist * 0.68, front - 0.13);
   }
@@ -80,7 +93,11 @@ export function buildCabinet(
   // ---- THE STEP.  The control panel juts forward and tilts up at the player.
   // This is the silhouette; everything else is decoration on it.
   const cpH = h * 0.1;
-  add(lam(0x22252f), w - panel * 2, cpH, 0.42, 0, waist + cpH * 0.35, front - 0.02, -0.42);
+  {
+    const deck = new THREE.MeshLambertMaterial({ map: panelTex(color), emissive: 0x161616, emissiveMap: panelTex(color) });
+    const side = lam(0x22252f);
+    add([side, side, deck, side, side, side], w - panel * 2, cpH, 0.42, 0, waist + cpH * 0.35, front - 0.02, -0.42);
+  }
   // a stick and three buttons, because at this scale that is what says "you
   // played this" rather than "this was here"
   const ball = new THREE.Mesh(new THREE.SphereGeometry(w * 0.055, 8, 6), lit(0xc31f2e));
@@ -102,18 +119,10 @@ export function buildCabinet(
   const scrTop = h * 0.84;
   const scrBot = waist + cpH * 1.4;
   add(lam(0x0b0d12), w - panel * 2, scrTop - scrBot, panel, 0, (scrTop + scrBot) / 2, front - 0.3);
-  const screen = add(
-    lit(color),
-    (w - panel * 2) * 0.82,
-    (scrTop - scrBot) * 0.78,
-    0.04,
-    0,
-    (scrTop + scrBot) / 2,
-    front - 0.26,
-  );
-  // Screens are not marquees: a dim, cold version of the cabinet's colour, so
-  // the two lit surfaces on the front are not the same lamp twice.
-  (screen.material as THREE.MeshBasicMaterial).color.setHex(color).multiplyScalar(0.34);
+  // the screen: a game left running on it, dimmer than the marquee so the two
+  // lit surfaces on the front are not the same lamp twice
+  const scrMat = new THREE.MeshBasicMaterial({ map: screenTex(color), color: 0x9a9a9a });
+  add([lit(0x05060a), lit(0x05060a), lit(0x05060a), lit(0x05060a), scrMat, lit(0x05060a)], (w - panel * 2) * 0.82, (scrTop - scrBot) * 0.78, 0.04, 0, (scrTop + scrBot) / 2, front - 0.26);
 
   // the bezel's overhang, which is what makes the screen look set in
   add(lam(0x181b22), w - panel * 2, 0.08, 0.34, 0, scrTop + 0.04, front - 0.16);
@@ -121,7 +130,10 @@ export function buildCabinet(
   // ---- the marquee.  Backlit, the brightest thing on the machine, and the
   // reason a row of these reads from the far end of a dark room.
   const marH = h * 0.11;
-  add(lit(color), w - panel * 2.4, marH, 0.05, 0, h - marH * 0.9, front - 0.14);
+  {
+    const mq = new THREE.MeshBasicMaterial({ map: marqueeTex(color) });
+    add([lit(color), lit(color), lit(color), lit(color), mq, lit(color)], w - panel * 2.4, marH, 0.05, 0, h - marH * 0.9, front - 0.14);
+  }
   add(lam(0x14161c), w - panel * 2, 0.06, 0.3, 0, h - marH * 1.55, front - 0.2);
   // the cap over the top of it
   add(hull, w, 0.08, d, 0, h - 0.04, 0);
@@ -520,9 +532,11 @@ export function buildGlassDoors(w: number, h: number): THREE.Group {
     return m;
   };
 
-  const frame = lam(0x6f7682);
+  // (brushed aluminium, with enough light of its own to read in the dark)
+  const frame = new THREE.MeshStandardMaterial({ map: aluminiumTex(), color: 0x9aa2ac, metalness: 0.7, roughness: 0.5, emissive: 0x15171b });
   const post = 0.16;
   const leaf = (w - post * 3) / 2;
+  const barMat = new THREE.MeshPhongMaterial({ map: aluminiumTex(), color: 0xc4c8ce, specular: 0x50545a, shininess: 36, emissive: 0x2c3036 });
 
   // ---- the surround: two jambs, a head, and the mullion between the leaves.
   for (const side of [-1, 1]) add(frame, post, h, 0.24, side * (w / 2 - post / 2), h / 2, 0);
@@ -566,9 +580,13 @@ export function buildGlassDoors(w: number, h: number): THREE.Group {
     put(lam(0x5e6673), leaf, 0.12, 0.12, lx, h * 0.52, -0.04);
     put(lam(0x4e555f), leaf, 0.42, 0.14, lx, 0.21, -0.05);
     // the push bar, on the room side, at the height a hand goes to
-    put(lit(0xb9b3a0), leaf * 0.72, 0.08, 0.08, lx, 1.02, -0.15);
+    // (brushed steel, round, on two stand-off brackets)
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, leaf * 0.72, 20), barMat);
+    bar.rotation.z = Math.PI / 2;
+    bar.position.set(lx, 1.02, -0.15);
+    hinge.add(bar);
     for (const b of [-1, 1]) {
-      put(lam(0x8a8f97), 0.07, 0.07, 0.18, lx + b * leaf * 0.3, 1.02, -0.1);
+      put(barMat, 0.06, 0.06, 0.16, lx + b * leaf * 0.3, 1.02, -0.09);
     }
     // a strip of faded lettering across the glass: OPEN, on a door that is not
     put(lit(0xd9b45a), leaf * 0.5, 0.1, 0.02, lx, h * 0.72, -0.06);
@@ -588,18 +606,85 @@ export function buildGlassDoors(w: number, h: number): THREE.Group {
   g.add(lock);
   const chain = 15;
   const span = leaf * 0.86;
+  const linkGeo = new THREE.TorusGeometry(0.034, 0.011, 8, 16);
+  const linkMat = new THREE.MeshPhongMaterial({ map: steelTex(), color: 0x9aa0a8, specular: 0x4a4e54, shininess: 30, emissive: 0x2a2c30, emissiveMap: steelTex() });
+  // ---- WOUND ROUND THE BARS.  Each end of the chain goes round its push bar
+  // a turn and a quarter, link after link on a tight helix, so the bar is
+  // inside the chain and the chain could not be lifted off it -- which is the
+  // whole of what a chain on a door is for.  The slack between them leaves
+  // from the underside of each wrap.
+  const BAR_Y = 1.02;
+  const BAR_Z = -0.15;
+  const WRAP_R = 0.068;
+  const WRAP_N = 9;
+  const PER_TURN = 7;
+  const PITCH = 0.052;
+  const wrapAt = span / 2;
+  const basis = new THREE.Matrix4();
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < WRAP_N; i++) {
+      // from the outer end, winding inward, finishing underneath the bar
+      const th = Math.PI - (WRAP_N - 1 - i) * ((Math.PI * 2) / PER_TURN);
+      const x = side * (wrapAt + 0.035 - (i / (WRAP_N - 1)) * PITCH * (WRAP_N / PER_TURN));
+      const link = new THREE.Mesh(linkGeo, linkMat);
+      link.scale.set(1.45, 1, 1);
+      link.position.set(x, BAR_Y + Math.cos(th) * WRAP_R, BAR_Z + Math.sin(th) * WRAP_R);
+      // its long axis along the way round, every other one turned a quarter
+      const tangent = new THREE.Vector3(-side * 0.12, -Math.sin(th), Math.cos(th)).normalize();
+      const radial = new THREE.Vector3(0, Math.cos(th), Math.sin(th));
+      const yAx = i % 2 === 0 ? radial : new THREE.Vector3(1, 0, 0).sub(tangent.clone().multiplyScalar(tangent.x)).normalize();
+      const zAx = tangent.clone().cross(yAx).normalize();
+      basis.makeBasis(tangent, zAx.clone().cross(tangent), zAx);
+      link.quaternion.setFromRotationMatrix(basis);
+      lock.add(link);
+    }
+  }
+  // ---- and the slack, hanging between the two wraps
+  const hangFrom = wrapAt - 0.03;
   for (let i = 0; i < chain; i++) {
     const t = i / (chain - 1);
     const flat = i % 2 === 0;
-    const link = new THREE.Mesh(
-      new THREE.BoxGeometry(flat ? 0.1 : 0.04, 0.09, flat ? 0.04 : 0.1),
-      lit(flat ? 0xc9b877 : 0x9a8f6a),
-    );
-    // slack: it hangs between the two bars rather than running straight
-    link.position.set((t - 0.5) * span, 1.02 - Math.sin(t * Math.PI) * 0.14, -0.19);
+    // an oval steel link, each one turned a quarter to the last
+    const link = new THREE.Mesh(linkGeo, linkMat);
+    link.scale.set(1.45, 1, 1);
+    const sag = Math.sin(t * Math.PI);
+    link.position.set((t - 0.5) * hangFrom * 2, BAR_Y - WRAP_R - sag * (0.14 - WRAP_R), BAR_Z - sag * 0.04);
+    const next = (i + 1) / (chain - 1);
+    link.rotation.z = Math.atan2(-Math.cos(next * Math.PI) * (0.14 - WRAP_R) * Math.PI / (hangFrom * 2), 1) * 0.8;
+    if (!flat) link.rotation.x = Math.PI / 2;
     lock.add(link);
   }
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.28, 0.12), lit(0xc9a62e));
+  // A REAL PADLOCK: a thick brass body with rounded corners and a bevel all
+  // round, its face stamped with the maker's mark, lit enough to read
+  const bodyShape = new THREE.Shape();
+  {
+    const bw = 0.11;
+    const bh = 0.13;
+    const rr = 0.035;
+    bodyShape.moveTo(-bw + rr, -bh);
+    bodyShape.lineTo(bw - rr, -bh);
+    bodyShape.quadraticCurveTo(bw, -bh, bw, -bh + rr);
+    bodyShape.lineTo(bw, bh - rr);
+    bodyShape.quadraticCurveTo(bw, bh, bw - rr, bh);
+    bodyShape.lineTo(-bw + rr, bh);
+    bodyShape.quadraticCurveTo(-bw, bh, -bw, bh - rr);
+    bodyShape.lineTo(-bw, -bh + rr);
+    bodyShape.quadraticCurveTo(-bw, -bh, -bw + rr, -bh);
+  }
+  const bodyGeo = new THREE.ExtrudeGeometry(bodyShape, { depth: 0.09, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.01, bevelSegments: 3, curveSegments: 6 });
+  bodyGeo.translate(0, 0, -0.045);
+  // (the face's UVs from the shape's own x/y: the stamp sits square on it)
+  {
+    const uv = bodyGeo.attributes.uv as THREE.BufferAttribute;
+    const pos = bodyGeo.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (pos.getX(i) + 0.12) / 0.24, (pos.getY(i) + 0.14) / 0.28);
+    uv.needsUpdate = true;
+  }
+  const face = padlockFaceTex();
+  const body = new THREE.Mesh(
+    bodyGeo,
+    new THREE.MeshPhongMaterial({ map: face, color: 0xd8d0c0, specular: 0x5a4a20, shininess: 30, emissive: 0x4a3e28, emissiveMap: face }),
+  );
   body.position.set(0, 0.74, -0.21);
   body.rotation.z = 0.18;
   body.name = 'padlockBody';
@@ -613,7 +698,7 @@ export function buildGlassDoors(w: number, h: number): THREE.Group {
   keyhole.name = 'padlockKeyhole';
   keyhole.position.set(0, -0.02, -0.061);
   body.add(keyhole);
-  const plate = new THREE.Mesh(new THREE.CircleGeometry(0.05, 18), lit(0x7a5a18));
+  const plate = new THREE.Mesh(new THREE.CircleGeometry(0.036, 24), new THREE.MeshPhongMaterial({ map: brassTex(), color: 0x9a7a30, specular: 0xffe8a0, shininess: 60, emissive: 0x3a2a0a }));
   plate.rotation.y = Math.PI;
   keyhole.add(plate);
   const round = new THREE.Mesh(new THREE.CircleGeometry(0.022, 16), lit(0x050505));
@@ -625,11 +710,17 @@ export function buildGlassDoors(w: number, h: number): THREE.Group {
   slot.position.set(0, -0.012, -0.001);
   keyhole.add(slot);
   const shackle = new THREE.Mesh(
-    new THREE.TorusGeometry(0.09, 0.028, 6, 10, Math.PI),
-    lit(0xd8d2bc),
+    new THREE.TorusGeometry(0.075, 0.017, 12, 28, Math.PI),
+    new THREE.MeshPhongMaterial({ map: chromeTex(), color: 0xb8bcc4, specular: 0x6a6e74, shininess: 50, emissive: 0x2e3034, emissiveMap: chromeTex() }),
   );
   shackle.position.set(0, 0.87, -0.21);
   shackle.rotation.z = 0.18;
+  // the two straight legs down into the body
+  for (const sx of [-1, 1]) {
+    const legM = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.07, 12), shackle.material as THREE.Material);
+    legM.position.set(sx * 0.075, -0.035, 0);
+    shackle.add(legM);
+  }
   // Named so the room can find it and swing it open when the key turns.
   shackle.name = 'padlockShackle';
   lock.add(shackle);
@@ -679,30 +770,57 @@ export function buildGlassDoors(w: number, h: number): THREE.Group {
  */
 export function buildDroppedKey(): THREE.Group {
   const g = new THREE.Group();
-  const brass = (c: number) => new THREE.MeshBasicMaterial({ color: c });
-
-  const add = (mat: THREE.Material, sx: number, sy: number, sz: number, px: number, py: number, pz: number) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
-    m.position.set(px, py, pz);
+  // A BRASS KEY, MADE LIKE ONE: a round bow with its hole and a collar, a
+  // round shaft, and a bit cut with teeth -- brushed brass that catches the
+  // light, with enough of its own glow to be found on a dark carpet.
+  const brass = brassTex();
+  const mat = new THREE.MeshPhongMaterial({ map: brass, color: 0xd8d0c0, specular: 0x6a5420, shininess: 40, emissive: 0x4a3a18, emissiveMap: brass });
+  const flat = (geo: THREE.BufferGeometry, x: number, z: number, thick: number): THREE.Mesh => {
+    // shapes are drawn in x/y: laid down flat, y becomes -z, and the extrusion is up
+    geo.translate(0, 0, -thick / 2);
+    const m = new THREE.Mesh(geo, mat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(x, thick / 2 + 0.002, z);
     g.add(m);
     return m;
   };
-
+  // the bow: a ring, a notch of decoration round it, and the collar
+  const bow = new THREE.Shape();
+  bow.absarc(0, 0, 0.068, 0, Math.PI * 2, false);
+  const hole = new THREE.Path();
+  hole.absarc(0, 0.006, 0.034, 0, Math.PI * 2, true);
+  bow.holes.push(hole);
+  flat(new THREE.ExtrudeGeometry(bow, { depth: 0.014, bevelEnabled: true, bevelThickness: 0.003, bevelSize: 0.003, bevelSegments: 2, curveSegments: 24 }), 0, -0.16, 0.014);
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.03, 16), mat);
+  collar.rotation.x = Math.PI / 2;
+  collar.position.set(0, 0.012, -0.085);
+  g.add(collar);
   // the shaft
-  add(brass(0xd9b45a), 0.035, 0.035, 0.26, 0, 0.018, 0);
-  // the bow: a ring at the back, built as four sides so it has a hole in it
-  const bow = 0.115;
-  for (const [dx, dz, w, d] of [
-    [0, -bow, bow * 2, 0.03],
-    [0, -bow * 2 + 0.03, bow * 2, 0.03],
-    [-bow + 0.015, -bow * 1.5 + 0.015, 0.03, bow],
-    [bow - 0.015, -bow * 1.5 + 0.015, 0.03, bow],
-  ] as const) {
-    add(brass(0xc9a445), w, 0.03, d, dx, 0.016, dz - 0.05);
-  }
-  // the bit, two teeth on the end
-  add(brass(0xe8c96e), 0.075, 0.03, 0.035, 0.03, 0.016, 0.1);
-  add(brass(0xe8c96e), 0.055, 0.03, 0.03, 0.02, 0.016, 0.155);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.2, 16), mat);
+  shaft.rotation.x = Math.PI / 2;
+  shaft.position.set(0, 0.012, 0.025);
+  g.add(shaft);
+  // the bit: a flat blade off one side of the shaft with three teeth cut in it
+  const bit = new THREE.Shape();
+  bit.moveTo(0, 0.0);
+  bit.lineTo(0.05, 0.0);
+  bit.lineTo(0.05, -0.016);
+  bit.lineTo(0.034, -0.016);
+  bit.lineTo(0.034, -0.03);
+  bit.lineTo(0.05, -0.03);
+  bit.lineTo(0.05, -0.05);
+  bit.lineTo(0.026, -0.05);
+  bit.lineTo(0.026, -0.064);
+  bit.lineTo(0.044, -0.064);
+  bit.lineTo(0.044, -0.08);
+  bit.lineTo(0, -0.08);
+  bit.closePath();
+  const b = flat(new THREE.ExtrudeGeometry(bit, { depth: 0.01, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 1 }), 0.006, 0.05, 0.01);
+  b.position.y = 0.012 - 0.005;
+  // the tip, rounded off
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.012, 12, 8), mat);
+  tip.position.set(0, 0.012, 0.125);
+  g.add(tip);
 
   // NO GLINT UNDER IT.  There was a pale plane on the carpet beneath the key,
   // meant to catch the eye across a dark floor -- and what it actually read as
@@ -726,72 +844,162 @@ export function buildDroppedKey(): THREE.Group {
  * turns.  It is parented to the camera, so it is drawn in view space and the
  * room's own lighting never has to reach it.
  *
- * Built palm-down, fingers forward along -Z, wrist at the origin.
+ * Built palm-down, a right hand (thumb on -X), fingers forward along -Z,
+ * wrist at the origin, the forearm going back along +Z.
  */
 export function buildHand(): THREE.Group {
   const g = new THREE.Group();
   // SELF-SHADED, NOT LIT.  The torch is a 110-candela spot mounted on the
-  // camera, and the hand is half a metre from it: under a Lambert material it
-  // came out as a white slab with no shape in it at all.  These are fixed
-  // tones -- a lit top, a mid, and a shadowed underside -- so the hand carries
-  // its own form and no lamp in the room can flatten it.
-  const skin = new THREE.MeshBasicMaterial({ color: 0xb4947a });
-  const skinLit = new THREE.MeshBasicMaterial({ color: 0xd2b291 });
-  const skinDark = new THREE.MeshBasicMaterial({ color: 0x7d6350 });
+  // camera, and the hand is half a metre from it: under a lit material it came
+  // out as a white slab.  A matcap carries its own light, so every rounded
+  // surface here keeps a lit side, a shadowed side and a warm rim whatever the
+  // room is doing -- and the shapes are round, so there is form to shade.
+  const skin = new THREE.MeshMatcapMaterial({ matcap: matcapTex(0xf0cfb2, 0xc79a7c, 0x7a5442, 0x9a5a48) });
+  const nail = new THREE.MeshMatcapMaterial({ matcap: matcapTex(0xffeee6, 0xe2bcb0, 0x9c7468) });
+  const sleeve = new THREE.MeshMatcapMaterial({ matcap: matcapTex(0x6f8290, 0x3e4c58, 0x1c242c) });
+  const cuff = new THREE.MeshMatcapMaterial({ matcap: matcapTex(0x5a6a76, 0x323e48, 0x161c22) });
 
-  const add = (mat: THREE.Material, sx: number, sy: number, sz: number, px: number, py: number, pz: number) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+  /** A rounded segment from `a` to `b` in the parent's space: a capsule. */
+  const bone = (parent: THREE.Object3D, r: number, len: number, mat: THREE.Material = skin) => {
+    const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 6, 14), mat);
+    m.rotation.x = Math.PI / 2;
+    m.position.z = -len / 2;
+    parent.add(m);
+    return m;
+  };
+  const blob = (parent: THREE.Object3D, sx: number, sy: number, sz: number, px: number, py: number, pz: number, mat: THREE.Material = skin) => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), mat);
+    m.scale.set(sx, sy, sz);
     m.position.set(px, py, pz);
-    g.add(m);
+    parent.add(m);
     return m;
   };
 
-  // THE WRIST, AND NO MORE THAN THAT.  There was a forearm and a dark sleeve
-  // cuff behind the hand, and because they sit NEARER the camera than the hand
-  // does they loomed over it -- a black slab across the middle of the frame
-  // with a small hand poking out of the side.  What is wanted is the hand and
-  // just enough wrist to say it is attached to somebody; the arm leaves the
-  // shot immediately, which is what an arm does at this range.
-  add(skin, 0.062, 0.058, 0.1, 0, -0.004, 0.06);
-  add(skinDark, 0.05, 0.006, 0.09, 0, -0.03, 0.06);
-  // the back of the hand, with a lit plane on top and a dark one under, so it
-  // has a top and a bottom from any angle
-  add(skin, 0.09, 0.042, 0.11, 0, 0, -0.06);
-  add(skinLit, 0.08, 0.008, 0.1, 0, 0.022, -0.06);
-  add(skinDark, 0.08, 0.008, 0.1, 0, -0.022, -0.06);
-  // knuckles, which is what tells you it is a hand and not a glove
+  // ---- THE PALM.  Two soft overlapping ovals -- the broad back of the hand
+  // and the heel under it -- so it narrows into the wrist rather than ending
+  // on a straight edge.
+  blob(g, 0.047, 0.019, 0.058, 0.002, 0, -0.058);
+  blob(g, 0.04, 0.02, 0.04, -0.006, -0.004, -0.022);
+  // the ridge of the knuckles across the back
+  for (let i = 0; i < 4; i++) blob(g, 0.0105, 0.009, 0.0105, -0.03 + i * 0.0195, 0.011, -0.104);
+
+  // ---- FOUR FINGERS, three joints each, tapering to the tips.  Each joint
+  // is a group the next one hangs from, so a curl bends the whole finger the
+  // way a finger bends: most at the middle joint, least at the tip.
+  const LENS = [
+    [0.044, 0.027, 0.02],
+    [0.048, 0.03, 0.021],
+    [0.045, 0.028, 0.02],
+    [0.035, 0.022, 0.017],
+  ];
+  const RAD = [0.0098, 0.0102, 0.0095, 0.0082];
+  const joints: THREE.Group[][] = [];
   for (let i = 0; i < 4; i++) {
-    add(skinLit, 0.016, 0.012, 0.016, -0.031 + i * 0.021, 0.02, -0.105);
+    const chain: THREE.Group[] = [];
+    let parent: THREE.Object3D = g;
+    for (let j = 0; j < 3; j++) {
+      const jt = new THREE.Group();
+      if (j === 0) {
+        jt.position.set(-0.03 + i * 0.0195, 0.002 - Math.abs(i - 1.3) * 0.002, -0.106);
+        // a little fan, the way fingers sit when the hand is relaxed
+        jt.rotation.y = (1.5 - i) * 0.07;
+      } else {
+        jt.position.z = -LENS[i][j - 1];
+      }
+      parent.add(jt);
+      const r = RAD[i] * (1 - j * 0.1);
+      bone(jt, r, Math.max(0.001, LENS[i][j] - r * 0.6));
+      if (j === 2) {
+        const n = blob(jt, r * 0.78, r * 0.32, r * 1.05, 0, r * 0.72, -LENS[i][j] * 0.62, nail);
+        n.rotation.x = 0.08;
+      }
+      chain.push(jt);
+      parent = jt;
+    }
+    joints.push(chain);
   }
 
-  // FOUR FINGERS, on their own group so they can close on something.  They
-  // curl about the knuckle line rather than bending in the middle: at this
-  // size a curl is the only part of a grip anybody reads.
-  const fingers = new THREE.Group();
-  fingers.position.set(0, -0.01, -0.11);
-  fingers.name = 'fingers';
-  for (let i = 0; i < 4; i++) {
-    const len = 0.078 - Math.abs(i - 1.5) * 0.012;
-    const f = new THREE.Mesh(new THREE.BoxGeometry(0.019, 0.021, len), i % 2 ? skin : skinLit);
-    f.position.set(-0.031 + i * 0.021, 0, -len / 2 - 0.004);
-    fingers.add(f);
-    // a dark line down each gap, so four fingers are four fingers
-    const gap = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.023, len), skinDark);
-    gap.position.set(-0.041 + i * 0.021, 0, -len / 2 - 0.004);
-    fingers.add(gap);
-  }
-  g.add(fingers);
+  // ---- THE THUMB, set low on the inside edge and angled across, with its
+  // own fleshy root on the palm.
+  blob(g, 0.019, 0.017, 0.03, -0.034, -0.008, -0.04);
+  const thumbRoot = new THREE.Group();
+  thumbRoot.position.set(-0.042, -0.008, -0.05);
+  thumbRoot.rotation.set(-0.15, 0.62, -0.5);
+  g.add(thumbRoot);
+  bone(thumbRoot, 0.0115, 0.026);
+  const thumbTip = new THREE.Group();
+  thumbTip.position.z = -0.034;
+  thumbRoot.add(thumbTip);
+  bone(thumbTip, 0.0105, 0.022);
+  const tn = blob(thumbTip, 0.0085, 0.0034, 0.011, 0, 0.0078, -0.019, nail);
+  tn.rotation.x = 0.08;
 
-  // and the thumb, which closes from the side
-  const thumb = new THREE.Group();
-  thumb.position.set(0.045, -0.005, -0.05);
-  thumb.name = 'thumb';
-  const t = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.022, 0.024), skin);
-  t.position.set(-0.025, 0, -0.02);
-  thumb.add(t);
-  g.add(thumb);
+  // ---- THE WRIST AND THE ARM, going back out of the bottom of the frame.
+  // It tapers out from the wrist the way a forearm does, and the sleeve takes
+  // it from a little way up: the hand is a hand on the end of somebody, not
+  // something floating in front of the camera.
+  const arm = new THREE.Group();
+  arm.name = 'arm';
+  arm.rotation.x = 0.16;
+  g.add(arm);
+  const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.03, 0.2, 20, 1, true), skin);
+  fore.rotation.x = Math.PI / 2;
+  fore.position.z = 0.09;
+  fore.scale.set(1.18, 1, 0.82);
+  arm.add(fore);
+  blob(arm, 0.031, 0.021, 0.028, 0, 0, 0.002);
+  const sl = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.043, 0.7, 22, 1, false), sleeve);
+  sl.rotation.x = Math.PI / 2;
+  sl.position.z = 0.485;
+  sl.scale.set(1.12, 1, 0.9);
+  arm.add(sl);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.0065, 10, 26), cuff);
+  ring.position.z = 0.135;
+  ring.scale.set(1.12, 0.9, 1);
+  arm.add(ring);
 
+  g.userData.joints = joints;
+  g.userData.thumb = [thumbRoot, thumbTip];
+  poseHand(g, 0.15, 0.1);
   return g;
+}
+
+/**
+ * HOW CLOSED THE HAND IS: 0 is open and relaxed, 1 is a fist round something.
+ * `thumb` goes the same way for the thumb, which closes in across the palm.
+ * Every joint is eased off the same number, the middle joints most, so a
+ * grip reads as fingers wrapping rather than as a plate hinging down.
+ */
+export function poseHand(hand: THREE.Object3D, curl: number, thumb = curl): void {
+  const joints = hand.userData.joints as THREE.Group[][] | undefined;
+  const th = hand.userData.thumb as THREE.Group[] | undefined;
+  if (!joints || !th) return;
+  const BEND = [0.95, 1.3, 0.85];
+  joints.forEach((chain, i) => {
+    // the little finger closes a touch ahead of the index, as fingers do
+    const k = clamp01(curl * (1 + (i - 1.5) * 0.06));
+    chain.forEach((jt, j) => (jt.rotation.x = -BEND[j] * k - (j === 0 ? 0.06 : 0.04)));
+  });
+  th[0].rotation.set(-0.15 - thumb * 0.25, 0.62 + thumb * 0.5, -0.5 - thumb * 0.2);
+  th[1].rotation.x = -0.15 - thumb * 0.7;
+}
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+/**
+ * POINT THE FOREARM AT THE SHOULDER.  The hand is parented to the camera, and
+ * an arm that simply ran on back from the wrist ran back toward the eye and
+ * hid the hand behind its own sleeve.  An arm comes from a shoulder: below the
+ * camera and off to one side.  Given where that is in the camera's space, this
+ * turns the arm so it leaves the frame toward it, whatever the wrist is doing.
+ */
+export function aimArm(hand: THREE.Object3D, shoulder: THREE.Vector3): void {
+  const arm = hand.getObjectByName('arm');
+  if (!arm) return;
+  hand.updateMatrix();
+  // the way to the shoulder, in the hand's own (possibly mirrored) space
+  const dir = shoulder.clone().sub(hand.position).normalize().applyQuaternion(hand.quaternion.clone().invert());
+  if (hand.scale.x < 0) dir.x = -dir.x;
+  arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
 }
 
 /**

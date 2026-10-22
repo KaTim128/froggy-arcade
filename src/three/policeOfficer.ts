@@ -47,12 +47,14 @@ export interface OfficerLook {
   height: number;
   /** Broader or slimmer across the shoulders. */
   build: number;
+  /** The colour of the irises. */
+  eyes: number;
 }
 
 export const OFFICER_LOOKS: OfficerLook[] = [
-  { name: 'HALE', skin: 0xd8a888, hair: 0x4a3426, cap: true, mustache: true, beard: false, vest: false, glasses: false, height: 1.84, build: 1.06 },
-  { name: 'OKAFOR', skin: 0x7a4e34, hair: 0x14100e, cap: false, mustache: false, beard: false, vest: true, glasses: false, height: 1.88, build: 1.1 },
-  { name: 'REYES', skin: 0xc08a66, hair: 0x2a1a12, cap: true, mustache: true, beard: true, vest: false, glasses: true, height: 1.8, build: 1.02 },
+  { name: 'HALE', skin: 0xc89a7c, hair: 0x3a2a20, cap: true, mustache: true, beard: false, vest: false, glasses: false, height: 1.85, build: 0.93, eyes: 0x4a5a64 },
+  { name: 'OKAFOR', skin: 0x6a4230, hair: 0x14100e, cap: false, mustache: false, beard: false, vest: true, glasses: false, height: 1.89, build: 0.97, eyes: 0x2a1a10 },
+  { name: 'REYES', skin: 0xb07e5e, hair: 0x221812, cap: true, mustache: false, beard: true, vest: false, glasses: true, height: 1.81, build: 0.91, eyes: 0x3a2618 },
 ];
 
 /** What the officer is doing this frame: the scene decides, the rig shows it. */
@@ -300,18 +302,77 @@ function faceTex(look: OfficerLook): THREE.CanvasTexture {
     g.ellipse(cx - 13, 56, 9, 6, 0, 0, Math.PI * 2);
     g.ellipse(cx + 13, 56, 9, 6, 0, 0, Math.PI * 2);
     g.fill();
-    // the mouth line and the lips
-    g.fillStyle = hex(new THREE.Color(look.skin).multiplyScalar(0.5).lerp(new THREE.Color(0x5a2a20), 0.2).getHex());
-    g.fillRect(cx - 9, 89, 18, 3);
-    g.fillStyle = 'rgba(0,0,0,0.35)';
-    g.fillRect(cx - 8, 90, 16, 1);
-    // stubble on the jaw (every one of them a day past a shave)
+    // THE PLANES OF A HARD FACE.  Shadow under the cheekbones and down the
+    // folds from the nose to the corners of the mouth, bags under the eyes,
+    // two creases between the brows and a line or two across the forehead --
+    // a man who has been on since the evening, not a mascot.
+    const shade = (x: number, y: number, rx: number, ry: number, a: number, rot = 0): void => {
+      const gg = g.createRadialGradient(0, 0, 0, 0, 0, 1);
+      gg.addColorStop(0, `rgba(30,14,8,${a})`);
+      gg.addColorStop(1, 'rgba(30,14,8,0)');
+      g.save();
+      g.translate(x, y);
+      g.rotate(rot);
+      g.scale(rx, ry);
+      g.fillStyle = gg;
+      g.beginPath();
+      g.arc(0, 0, 1, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+    };
+    shade(cx - 24, 76, 9, 14, 0.22, 0.3);
+    shade(cx + 24, 76, 9, 14, 0.22, -0.3);
+    shade(cx - 13, 64, 8, 3, 0.28);
+    shade(cx + 13, 64, 8, 3, 0.28);
+    g.strokeStyle = 'rgba(40,18,10,0.35)';
+    g.lineWidth = 1.2;
+    for (const sx of [-1, 1]) {
+      // the folds, nose to mouth
+      g.beginPath();
+      g.moveTo(cx + sx * 9, 74);
+      g.quadraticCurveTo(cx + sx * 14, 84, cx + sx * 12, 93);
+      g.stroke();
+      // the creases between the brows
+      g.beginPath();
+      g.moveTo(cx + sx * 2.5, 44);
+      g.lineTo(cx + sx * 3.5, 52);
+      g.stroke();
+    }
+    g.strokeStyle = 'rgba(40,18,10,0.18)';
+    for (const y of [32, 37]) {
+      g.beginPath();
+      g.moveTo(cx - 16, y);
+      g.quadraticCurveTo(cx, y - 2, cx + 16, y);
+      g.stroke();
+    }
+    // the mouth: a hard straight line, the corners turned down -- no smile
+    const lip = hex(new THREE.Color(look.skin).multiplyScalar(0.58).lerp(new THREE.Color(0x4a2a22), 0.25).getHex());
+    g.strokeStyle = lip;
+    g.lineWidth = 2.2;
+    g.beginPath();
+    g.moveTo(cx - 10, 92);
+    g.quadraticCurveTo(cx, 89.5, cx + 10, 92);
+    g.stroke();
+    g.strokeStyle = 'rgba(20,8,6,0.55)';
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(cx - 10, 91.5);
+    g.quadraticCurveTo(cx, 89, cx + 10, 91.5);
+    g.stroke();
+    shade(cx, 97, 7, 2.5, 0.25);
+    // stubble on the jaw (every one of them a day past a shave), and for the
+    // one with a beard, a short dense one, painted on, following the jaw
     {
-      for (let k = 0; k < 500; k++) {
-        const a = r() * Math.PI;
-        const rr = 30 + r() * 12;
-        g.fillStyle = 'rgba(30,20,15,0.10)';
-        g.fillRect(cx + Math.cos(a) * rr * 0.9, 74 + Math.sin(a) * rr * 0.55, 1, 1);
+      const n = look.beard ? 5200 : 700;
+      for (let k = 0; k < n; k++) {
+        const a = Math.PI * (0.05 + r() * 0.9);
+        const rr = (look.beard ? 24 : 28) + r() * (look.beard ? 20 : 14);
+        const x = cx + Math.cos(a) * rr * 0.95;
+        const y = 70 + Math.sin(a) * rr * 0.75;
+        // (not over the lips)
+        if (Math.abs(x - cx) < 11 && y > 87 && y < 95) continue;
+        g.fillStyle = look.beard ? `rgba(${(look.hair >> 16) & 255},${(look.hair >> 8) & 255},${look.hair & 255},${0.35 + r() * 0.4})` : 'rgba(30,20,15,0.12)';
+        g.fillRect(x, y, 1, look.beard ? 2 : 1);
       }
     }
     if (look.mustache) {
@@ -333,6 +394,22 @@ function faceTex(look: OfficerLook): THREE.CanvasTexture {
     for (let k = 0; k < 400; k++) {
       g.fillStyle = 'rgba(255,255,255,0.05)';
       g.fillRect(r() * 256, r() * 60, 1, 2);
+    }
+  });
+}
+
+/** The chin and jaw of the bearded one: skin under a short dense beard. */
+function beardTex(look: OfficerLook): THREE.CanvasTexture {
+  return canvasTex(128, 64, (g) => {
+    g.fillStyle = hex(new THREE.Color(look.skin).multiplyScalar(0.85).getHex());
+    g.fillRect(0, 0, 128, 64);
+    const r = rng(look.hair + 7);
+    const hr = (look.hair >> 16) & 255;
+    const hg = (look.hair >> 8) & 255;
+    const hb = look.hair & 255;
+    for (let k = 0; k < 3600; k++) {
+      g.fillStyle = `rgba(${hr},${hg},${hb},${0.4 + r() * 0.45})`;
+      g.fillRect(r() * 128, r() * 64, 1, 2);
     }
   });
 }
@@ -472,8 +549,8 @@ export class PoliceOfficer {
     const skin = new THREE.MeshPhongMaterial({ color: look.skin, specular: 0x2a2018, shininess: 12 });
     const face = new THREE.MeshPhongMaterial({ map: faceTex(look), specular: 0x2a2018, shininess: 14 });
     const hair = new THREE.MeshLambertMaterial({ color: look.hair });
-    const white = new THREE.MeshPhongMaterial({ color: 0xf0ece4, shininess: 60, specular: 0x606060 });
-    const iris = new THREE.MeshPhongMaterial({ color: 0x2a1a10, shininess: 90, specular: 0xffffff });
+    const white = new THREE.MeshPhongMaterial({ color: 0xcfc6b8, shininess: 30, specular: 0x404040 });
+    const iris = new THREE.MeshBasicMaterial({ color: look.eyes });
     const mouth = new THREE.MeshBasicMaterial({ color: 0x2a0c0c });
     const teeth = new THREE.MeshPhongMaterial({ color: 0xe8e0d0, shininess: 40 });
     const navyCap = new THREE.MeshLambertMaterial({ color: 0x141c2e });
@@ -584,7 +661,8 @@ export class PoliceOfficer {
     // ---- the neck and the head
     this.chest.add(this.neck);
     this.neck.position.y = 0.3 * k;
-    mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.1, 12), skin, this.neck, 0, 0.03, 0);
+    // a man's neck: thick, the muscle either side of it running down
+    mesh(new THREE.CylinderGeometry(0.066, 0.074, 0.1, 14), skin, this.neck, 0, 0.03, -0.004);
     // the collar round it
     const collar = mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.05, 16, 1, true), new THREE.MeshLambertMaterial({ color: 0x1d2a42, side: THREE.DoubleSide }), this.neck, 0, -0.005, 0);
     collar.scale.z = 0.85;
@@ -596,38 +674,80 @@ export class PoliceOfficer {
     this.head.add(this.jaw);
     this.jaw.position.set(0, -0.055, 0.02);
     const chin = mesh(new THREE.SphereGeometry(0.07, 18, 12, 0, Math.PI * 2, Math.PI * 0.45, Math.PI * 0.55), skin, this.jaw, 0, 0.01, 0.0);
-    chin.scale.set(1.24, 0.92, 1.1);
+    // (a square jaw, set in close under the face: not a ball)
+    chin.scale.set(1.18, 0.72, 0.92);
     // the mouth: a dark oval, a line shut, open round when they shout
-    const mouthIn = mesh(new THREE.CircleGeometry(0.019, 16), mouth, this.head, 0, -0.061, 0.1);
+    // (the open mouth only shows when he shouts: shut, it is the painted line)
+    // A SHOUT, NOT A GRIN: the open mouth is wide and square, its top lip
+    // arched up hard and the corners dragged down -- the shape of a bark --
+    // and dark inside, the lower teeth only just showing at the bottom.
+    const shout = new THREE.Shape();
+    shout.moveTo(-0.024, -0.012);
+    shout.quadraticCurveTo(-0.022, 0.012, 0, 0.014);
+    shout.quadraticCurveTo(0.022, 0.012, 0.024, -0.012);
+    shout.quadraticCurveTo(0, -0.004, -0.024, -0.012);
+    const mouthIn = mesh(new THREE.ShapeGeometry(shout, 8), mouth, this.head, 0, -0.06, 0.1);
     mouthIn.rotation.x = -0.15;
     mouthIn.name = 'mouth';
-    mesh(new THREE.BoxGeometry(0.034, 0.006, 0.006), teeth, this.head, 0, -0.053, 0.099);
+    const lower = mesh(new THREE.BoxGeometry(0.026, 0.003, 0.004), new THREE.MeshLambertMaterial({ color: 0x8a8070 }), this.head, 0, -0.07, 0.1);
+    lower.rotation.x = -0.15;
+    lower.name = 'teeth';
+    void teeth;
     // the nose and the ears
-    const nose = mesh(new THREE.ConeGeometry(0.016, 0.045, 8), skin, this.head, 0, -0.01, 0.105);
-    nose.rotation.x = Math.PI / 2 - 0.35;
-    mesh(new THREE.SphereGeometry(0.012, 8, 6), skin, this.head, 0, -0.03, 0.112);
+    // the nose: a straight ridge down to a broad tip and the wings either side
+    const noseMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(look.skin).multiplyScalar(0.94) });
+    const nose = mesh(new THREE.BoxGeometry(0.016, 0.046, 0.022), noseMat, this.head, 0, -0.01, 0.1);
+    nose.rotation.x = -0.32;
+    const tip = mesh(new THREE.SphereGeometry(0.011, 10, 8), noseMat, this.head, 0, -0.03, 0.109);
+    tip.scale.set(1.3, 0.85, 0.9);
+    for (const sx of [-1, 1]) {
+      const wing = mesh(new THREE.SphereGeometry(0.008, 8, 6), noseMat, this.head, sx * 0.012, -0.032, 0.103);
+      wing.scale.set(1, 0.8, 0.8);
+    }
     for (const sx of [-1, 1]) {
       const ear = mesh(new THREE.SphereGeometry(0.022, 10, 8), skin, this.head, sx * 0.097, -0.005, 0.0);
       ear.scale.set(0.4, 1, 0.75);
-      // the eyes: a white, an iris, a lid that comes down to blink
-      const eye = mesh(new THREE.SphereGeometry(0.014, 12, 10), white, this.head, sx * 0.034, 0.012, 0.088);
-      eye.scale.z = 0.6;
-      mesh(new THREE.SphereGeometry(0.0075, 10, 8), iris, this.head, sx * 0.034, 0.012, 0.097);
-      const lid = mesh(new THREE.SphereGeometry(0.0155, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), face, this.head, sx * 0.034, 0.012, 0.089);
-      lid.rotation.x = -0.9;
+      // THE EYES: set back under the brow, almond-shaped, not two white
+      // balls -- an off-white that is in the shade of the socket, an iris
+      // that fills most of what shows, a pupil, one small catch of light,
+      // and the upper lid down over the top of it: a level, tired stare
+      const eye = mesh(new THREE.SphereGeometry(0.0125, 14, 10), white, this.head, sx * 0.033, 0.011, 0.084);
+      eye.scale.set(1.22, 0.78, 0.55);
+      const ir = mesh(new THREE.CircleGeometry(0.0062, 14), iris, this.head, sx * 0.033, 0.0105, 0.0912);
+      ir.rotation.y = sx * 0.12;
+      const pupil = mesh(new THREE.CircleGeometry(0.0028, 10), new THREE.MeshBasicMaterial({ color: 0x050302 }), this.head, sx * 0.033, 0.0105, 0.0916);
+      pupil.rotation.y = sx * 0.12;
+      mesh(new THREE.CircleGeometry(0.0011, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), this.head, sx * 0.033 + 0.0022, 0.0128, 0.0919);
+      const lid = mesh(new THREE.SphereGeometry(0.0148, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), face, this.head, sx * 0.033, 0.0115, 0.0852);
+      lid.scale.set(1.18, 1, 0.75);
+      lid.rotation.x = -0.75;
       this.lids.push(lid);
-      const brow = mesh(new THREE.BoxGeometry(0.034, 0.01, 0.012), hair, this.head, sx * 0.036, 0.035, 0.1);
-      brow.rotation.z = sx * -0.12;
+      // the lower lid, a soft line under it
+      const low = mesh(new THREE.BoxGeometry(0.026, 0.0025, 0.004), face, this.head, sx * 0.033, 0.0035, 0.0905);
+      low.rotation.z = sx * 0.08;
+      // the brow: heavy, low, its inner end down -- the scowl he wears
+      const brow = mesh(new THREE.BoxGeometry(0.036, 0.009, 0.012), hair, this.head, sx * 0.035, 0.028, 0.099);
+      brow.rotation.z = sx * 0.2;
       this.brows.push(brow);
       if (look.glasses) {
-        const rim = mesh(new THREE.TorusGeometry(0.018, 0.0022, 6, 16), metal, this.head, sx * 0.035, 0.012, 0.106);
-        rim.scale.y = 0.8;
-        mesh(new THREE.CircleGeometry(0.017, 14), glassM, this.head, sx * 0.035, 0.012, 0.106);
-        const arm = mesh(new THREE.BoxGeometry(0.002, 0.002, 0.09), metal, this.head, sx * 0.092, 0.016, 0.06);
+        // thin rectangular frames, low on the nose: a man's reading frames
+        const fw = 0.03;
+        const fh = 0.016;
+        const fz = 0.103;
+        for (const [w, h, x, y] of [
+          [fw, 0.0018, 0, fh / 2],
+          [fw, 0.0018, 0, -fh / 2],
+          [0.0018, fh, -fw / 2, 0],
+          [0.0018, fh, fw / 2, 0],
+        ] as const)
+          mesh(new THREE.BoxGeometry(w, h, 0.002), metal, this.head, sx * 0.034 + x, 0.009 + y, fz);
+        const lens = mesh(new THREE.PlaneGeometry(fw, fh), glassM, this.head, sx * 0.034, 0.009, fz);
+        lens.renderOrder = 3;
+        const arm = mesh(new THREE.BoxGeometry(0.0018, 0.0018, 0.095), metal, this.head, sx * 0.093, 0.013, 0.058);
         arm.rotation.y = sx * 0.1;
       }
     }
-    if (look.glasses) mesh(new THREE.BoxGeometry(0.018, 0.003, 0.003), metal, this.head, 0, 0.016, 0.107);
+    if (look.glasses) mesh(new THREE.BoxGeometry(0.008, 0.002, 0.002), metal, this.head, 0, 0.012, 0.104);
     // hair: cropped close round the back and sides
     const crop = mesh(new THREE.SphereGeometry(0.11, 22, 14, 0, Math.PI * 2, 0, Math.PI * 0.55), hair, this.head, 0, 0.012, -0.008);
     crop.scale.set(0.95, 1.1, 1.0);
@@ -639,19 +759,18 @@ export class PoliceOfficer {
     ridge.rotation.x = -0.2;
     const bridge = mesh(new THREE.BoxGeometry(0.014, 0.04, 0.014), skin, this.head, 0, 0.012, 0.104);
     bridge.rotation.x = 0.25;
-    if (look.beard) {
-      // close-trimmed, along the jaw and round the chin
-      // (from below the mouth down, so the mouth still shows when he shouts)
-      const beard = mesh(new THREE.SphereGeometry(0.074, 18, 10, 0, Math.PI * 2, Math.PI * 0.58, Math.PI * 0.42), hair, this.jaw, 0, 0.0, 0.004);
-      beard.scale.set(1.36, 0.86, 0.9);
-      for (const sx of [-1, 1]) {
-        const burn = mesh(new THREE.BoxGeometry(0.012, 0.06, 0.03), hair, this.head, sx * 0.093, -0.02, 0.02);
-        burn.rotation.z = sx * 0.1;
-      }
-    }
+    // (the beard is painted on, short and close, the shape of the jaw --
+    // see faceTex -- and the chin carries it too: no slab of hair on him)
+    if (look.beard) chin.material = new THREE.MeshPhongMaterial({ map: beardTex(look), specular: 0x1a1410, shininess: 6 });
     if (look.mustache) {
-      const tash = mesh(new THREE.CapsuleGeometry(0.008, 0.04, 4, 8), hair, this.head, 0, -0.041, 0.106);
+      // a short, clipped moustache along the top lip, thick in the middle
+      const tash = mesh(new THREE.CapsuleGeometry(0.0055, 0.032, 4, 8), hair, this.head, 0, -0.045, 0.104);
       tash.rotation.z = Math.PI / 2;
+      tash.scale.set(1, 1, 0.7);
+      for (const sx of [-1, 1]) {
+        const tip = mesh(new THREE.CapsuleGeometry(0.004, 0.012, 3, 6), hair, this.head, sx * 0.021, -0.05, 0.1);
+        tip.rotation.z = sx * 0.6;
+      }
     }
     if (look.cap) {
       const cap = new THREE.Group();
@@ -728,7 +847,7 @@ export class PoliceOfficer {
     cone.rotateX(-Math.PI / 2);
     this.beam = new THREE.Mesh(
       cone,
-      new THREE.MeshBasicMaterial({ color: 0xfff0d0, alphaMap: beamAlpha(), transparent: true, opacity: 0.09, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+      new THREE.MeshBasicMaterial({ color: 0xfff0d0, alphaMap: beamAlpha(), transparent: true, opacity: 0.04, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
     );
     this.beam.position.set(0, 0, 0.16);
     this.beam.renderOrder = 5;
@@ -909,14 +1028,25 @@ export class PoliceOfficer {
     // ---- the face: shouting, blinking, scowling
     this.jaw.rotation.x = s.shout * 0.35;
     const m = this.head.getObjectByName('mouth');
-    if (m) m.scale.set(1 - s.shout * 0.15, 0.16 + s.shout * 0.95, 1);
+    // (shut, there is no mouth to see but the painted line)
+    if (m) {
+      m.visible = s.shout > 0.08;
+      m.scale.set(0.9 + s.shout * 0.2, 0.25 + s.shout * 0.85, 1);
+    }
+    const tth = this.head.getObjectByName('teeth');
+    if (tth) {
+      tth.visible = s.shout > 0.4;
+      tth.position.y = -0.062 - s.shout * 0.008;
+    }
     this.blinkT -= dt;
     const blink = this.blinkT < 0.12 ? 1 : 0;
     if (this.blinkT < 0) this.blinkT = 2 + Math.random() * 3.5;
-    for (const lid of this.lids) lid.rotation.x = -0.9 + blink * 1.0 + s.shout * -0.15;
+    // the lids heavy over the eyes; shouting, the eyes go wide and hard
+    for (const lid of this.lids) lid.rotation.x = -0.8 + blink * 0.95 - s.shout * 0.35;
     for (const [i, br] of this.brows.entries()) {
-      br.position.y = 0.034 - s.shout * 0.006;
-      br.rotation.z = (i ? -1 : 1) * (0.12 + s.shout * 0.3);
+      br.position.y = 0.028 - s.shout * 0.005;
+      // (the inner end down: the first brow is the -x one)
+      br.rotation.z = (i ? 1 : -1) * (0.2 + s.shout * 0.25);
     }
 
     // ---- the torch and its beam

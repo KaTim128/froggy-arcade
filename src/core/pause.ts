@@ -88,6 +88,15 @@ export function installPause(g: Phaser.Game): void {
   }
 }
 
+/**
+ * A room shutting down lets go of the mouse: that is not an Esc press, so the
+ * pause must not open over whatever comes next (the arrest screen, mostly).
+ */
+export function releaseMouseQuietly(): void {
+  lockOwner = null;
+  if (document.pointerLockElement) document.exitPointerLock?.();
+}
+
 /** Is the game frozen under the pause menu right now? */
 export function isPaused(): boolean {
   return frozen !== null;

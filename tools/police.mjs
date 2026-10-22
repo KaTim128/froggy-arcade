@@ -161,7 +161,8 @@ try {
   const doors = await P(page, 'doors');
   check('the lobby door is off its hinges', doors.find((d) => d.id === 'stair-0').k > 0.95);
   r = await P(page, 'walkTo', 0.9, 2.8);
-  check('and you cannot go out through it into the lobby', r.well === true && r.level === 0 && r.z < 1.6, JSON.stringify(r));
+  // (up to the threshold, to lean out and look along the lobby, and no further)
+  check('and you cannot go out through it into the lobby', r.well === true && r.level === 0 && r.z <= 1.6 + 0.55, JSON.stringify(r));
 
   const rooms = await P(page, 'rooms');
   const flats = rooms.filter((x) => x.special === 'none');
@@ -238,19 +239,23 @@ try {
   await P(page, 'freeze', false);
   let s0 = await S(page);
   check('three officers, each on his own', s0.cops.length === 3 && new Set(s0.cops.map((c) => `${c.x.toFixed(1)},${c.z.toFixed(1)},${c.level}`)).size === 3);
+  check('all three start at the lobby\'s smashed front doors, away on the right', s0.cops.every((c) => c.level === 0 && c.x < -8), s0.cops.map((c) => `${c.level}:${c.x.toFixed(1)},${c.z.toFixed(1)}`).join(' '));
   // a while of the building being searched
   const start = s0.cops.map((c) => ({ x: c.x, z: c.z, h: c.h }));
   const floors = new Set();
-  for (let i = 0; i < 60; i++) {
+  let opened = [];
+  for (let i = 0; i < 200; i++) {
     await sleep(500);
     const s = await S(page);
     for (const c of s.cops) floors.add(c.level);
+    if (i % 10 === 9) opened = (await P(page, 'doors')).filter((x) => x.by === 'officer');
+    if (i > 60 && floors.size >= 3 && opened.length) break;
   }
   s0 = await S(page);
   const travelled = s0.cops.map((c, i) => Math.hypot(c.x - start[i].x, c.z - start[i].z) + Math.abs(c.h - start[i].h));
-  check('they move round the building', travelled.every((t) => t > 1), travelled.map((t) => t.toFixed(1)).join(', '));
+  check('they come in and move round the building', travelled.every((t) => t > 1), travelled.map((t) => t.toFixed(1)).join(', '));
+  check('each to his own floor first: the first to the sixth, the second the third, the last the first', s0.cops.map((c) => c.home).join(',') === '6,3,1', s0.cops.map((c) => `${c.home}->${c.floorGoal}`).join(' '));
   check('and between floors', floors.size >= 3, [...floors].join(','));
-  const opened = (await P(page, 'doors')).filter((x) => x.by === 'officer');
   check('they open doors as they go, and leave them open', opened.length > 0 && opened.every((x) => x.want === 1), `${opened.length} opened`);
 
   // sight: in plain view he sees you; behind a shut door he does not
@@ -306,7 +311,9 @@ try {
   await sleep(300);
   await page.screenshot({ path: `${SHOTS}/arrest.png` });
   let sc = [];
-  for (let i = 0; i < 20; i++) {
+  // (the arrest takes its time now -- the lunge, the hold, the black -- and
+  // a software renderer takes longer again)
+  for (let i = 0; i < 80; i++) {
     await sleep(300);
     sc = await scenes(page);
     if (sc.includes('DeathScreen')) break;
@@ -324,6 +331,14 @@ try {
   const s2 = await S(page);
   check('RESPAWN starts it over: you at the bottom of the stairs, a new building', back && s2.level === 0 && s2.well && s2.seed !== seedA, `seed ${seedA} -> ${s2.seed}`);
   check('and the police back where they began', s2.cops?.every((c) => c.mode === 'task'));
+  // caught again after the RESPAWN: the arrest screen again, not the black
+  await P(page, 'putCop', 0, 0, 1.2, 0, 0);
+  let again = [];
+  for (let i = 0; i < 60 && !again.includes('DeathScreen'); i++) {
+    await sleep(300);
+    again = await scenes(page);
+  }
+  check('caught a second time, it is the arrest screen again (not a black screen)', again.includes('DeathScreen'), again.join(','));
   await page.close();
 
   // ------------------------------------------------------------- 7b. seen going in
@@ -373,10 +388,11 @@ try {
       const s = await S(page2);
       cineMax = Math.max(cineMax, s.cine ?? 0);
       if (s.phase === 'ending') sawEnd = true;
-      if (s.phase === 'cinema' && s.cine > 3.6 && s.cine < 4.2) await page2.screenshot({ path: `${SHOTS}/612-down.png` });
-      if (s.phase === 'cinema' && s.cine > 7.4 && s.cine < 8.2) await page2.screenshot({ path: `${SHOTS}/612-them.png` });
+      if (s.phase === 'cinema' && s.cine > 5.6 && s.cine < 6.4) await page2.screenshot({ path: `${SHOTS}/612-river.png` });
+      if (s.phase === 'cinema' && s.cine > 10 && s.cine < 10.8) await page2.screenshot({ path: `${SHOTS}/612-them.png` });
+      if (s.phase === 'cinema' && s.cine > 13.2 && s.cine < 14) await page2.screenshot({ path: `${SHOTS}/612-fall.png` });
     }
-    check('in 612 the cinematic plays through: the window, down, them, out', cineMax > 10, `${cineMax.toFixed(1)} s`);
+    check('in 612 the cinematic plays through: the window, the river, them, the jump and the fall', cineMax > 14.5, `${cineMax.toFixed(1)} s`);
     check('and then the black, and the words', sawEnd);
     const st = await page2.evaluate(() => window.__froggy.state());
     check('and it is the following day, outside the arcade', after.includes('ExteriorDay') && st.hotelAfter === 'escaped' && st.arc === 'back', `${after.join(',')} ${st.hotelAfter} ${st.arc}`);

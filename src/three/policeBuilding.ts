@@ -19,7 +19,7 @@
  *   emulsion over a walnut dado, a patterned carpet, walnut doors with
  *   their numbers on brass plates, steel wall lights, ceiling fittings.
  *
- *   THE FLATS are 3.6 m by 4.6 m.  Which ones are open is decided at the
+ *   THE FLATS are 4.6 m by 6 m.  Which ones are open is decided at the
  *   start of every attempt (seeded, so an attempt keeps its building until it
  *   ends): about a third of them, never fewer than three a floor.  Each open
  *   one is furnished from one of three plans -- a bathroom beside the door
@@ -29,11 +29,12 @@
  *   bathroom or WC has a place to hide: behind its curtain if it has a bath,
  *   behind its door if it has not.
  *
- *   612 is at the far end of the sixth floor, on the right: Froggy's room.
- *   Its door is the one he took off its hinges, and its window is the one he
- *   came in through -- glass hanging in jagged teeth round the frame, the
- *   plaster cracked away round it -- and six floors under it, in the alley, a
- *   dumpster full of bin bags.
+ *   612 is at the far end of the sixth floor, on the right (the even numbers
+ *   are on the right, as in the hall upstairs): Froggy's room.  Its door is
+ *   the one he took off its hinges, and its window is the one he came in
+ *   through -- glass hanging in jagged teeth round the frame, the plaster
+ *   cracked away round it -- and six floors under it, the river: the building
+ *   goes straight down into it, wide and black and moving fast.
  *
  * Everything that can stop a body or an eye is in here as plain data -- wall
  * segments, furniture boxes, doors with hinges -- and the scene moves people
@@ -42,6 +43,8 @@
  */
 
 import * as THREE from 'three';
+import * as HL from './hotelLobby';
+import { buildHotelLobby } from './hotelLobby';
 import {
   texBlock,
   texCarpet,
@@ -49,7 +52,6 @@ import {
   texConcrete,
   texFireDoor,
   texLiftDoors,
-  texMarble,
   texRoomDoor,
   texSign,
   texWainscot,
@@ -59,12 +61,29 @@ import {
 // ------------------------------------------------------------------ the plan
 
 /**
- * The hotel lobby's own plan, as HotelLobby3D builds it (its x along the
- * back wall, its z out from it): where its stair door is, how deep it is,
- * and where the runner, the sofa and the bin are -- so the lobby seen
- * through the broken door at G is the same room.
+ * THE LOBBY, where it is in this building: the hotel lobby (three/hotelLobby)
+ * with its stairwell door on this well's G door.  In world terms, standing
+ * in the doorway looking out (+z): the front wall with the sofa ahead, the
+ * front doors' end away to the right (-x), the storage room's end to the
+ * left (+x).
  */
-const LOBBY = { stairX: (238 - 200) * 0.05, depth: 7, ceil: 6.6, dado: 1, runnerZ: 3.4, sofaX: 2.6, binX: 4.7, binZ: 7 - 0.45 };
+const LDX = (SDOOR_MID: number) => SDOOR_MID - HL.STAIR_X;
+export const LOBBY = (() => {
+  const dx = LDX((0.45 + 1.35) / 2);
+  const z0 = 1.6;
+  return {
+    dx,
+    x0: HL.X0 + dx,
+    x1: HL.X1 + dx,
+    z0,
+    z1: z0 + HL.DEPTH,
+    doorZ: z0 + HL.DOOR_Z,
+    desk: { x: HL.DESK_X + dx, z: z0 + 1.5 },
+    sofa: { x: HL.SOFA_X + dx, z: z0 + HL.DEPTH - 0.55 },
+    bin: { x: HL.BIN.x + dx, z: z0 + HL.BIN.z },
+    lift: HL.LIFT_X + dx,
+  };
+})();
 
 export const FH = 3;
 export const TOP = 6;
@@ -82,12 +101,20 @@ export const SDOOR = { x0: 0.45, x1: 1.35, z: LANDING };
 export const CH = 1.25;
 export const AH = 3;
 export const AZ = 4.6;
-export const SLOT = 3.6;
+/** A flat's width along the corridor, and its depth into the building. */
+export const SLOT = 4.6;
 export const SLOTS = 6;
-export const RD = 4.6;
+export const RD = 6.0;
 export const END_Z = AZ + SLOT * SLOTS;
 export const OUTER = CH + RD;
 export const DOOR_W = 0.9;
+/**
+ * Which side of the corridor 612 (and every even number) is on: walking in
+ * from the stairs, along +z, the right hand is -x.
+ */
+export const SIDE612 = -1 as const;
+/** The river's surface, under the back of the building. */
+export const WATER_Y = -0.6;
 
 export interface Seg {
   x0: number;
@@ -447,62 +474,6 @@ function brickTex(seed: number): HTMLCanvasElement {
   });
 }
 
-/** The dumpster's steel: green paint, scratches through to the metal, dents and rust. */
-function dumpsterTex(seed: number): HTMLCanvasElement {
-  const r = seeded(seed);
-  return cvs(256, 128, (g) => {
-    g.fillStyle = '#2e4a32';
-    g.fillRect(0, 0, 256, 128);
-    for (let k = 0; k < 600; k++) {
-      g.fillStyle = r() < 0.5 ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.05)';
-      g.fillRect(r() * 256, r() * 128, 2, 1);
-    }
-    // ribs
-    for (let x = 20; x < 256; x += 40) {
-      g.fillStyle = 'rgba(0,0,0,0.3)';
-      g.fillRect(x, 0, 3, 128);
-      g.fillStyle = 'rgba(255,255,255,0.08)';
-      g.fillRect(x - 2, 0, 2, 128);
-    }
-    for (let k = 0; k < 40; k++) {
-      g.strokeStyle = `rgba(170,170,160,${0.25 + r() * 0.3})`;
-      g.beginPath();
-      const x = r() * 256;
-      const y = r() * 128;
-      g.moveTo(x, y);
-      g.lineTo(x + (r() - 0.5) * 30, y + (r() - 0.5) * 8);
-      g.stroke();
-    }
-    for (let k = 0; k < 12; k++) {
-      g.fillStyle = `rgba(120,60,20,${0.2 + r() * 0.3})`;
-      g.beginPath();
-      g.ellipse(r() * 256, 90 + r() * 38, 6 + r() * 14, 3 + r() * 6, 0, 0, Math.PI * 2);
-      g.fill();
-    }
-    g.fillStyle = 'rgba(0,0,0,0.35)';
-    g.fillRect(0, 118, 256, 10);
-  });
-}
-
-/** Black plastic: creased, with glossy highlights along the folds. */
-function bagTex(seed: number, base = '#141618'): HTMLCanvasElement {
-  const r = seeded(seed);
-  return cvs(128, 128, (g) => {
-    g.fillStyle = base;
-    g.fillRect(0, 0, 128, 128);
-    for (let k = 0; k < 30; k++) {
-      g.strokeStyle = `rgba(200,210,220,${0.08 + r() * 0.18})`;
-      g.lineWidth = 1 + r() * 2;
-      g.beginPath();
-      const x = r() * 128;
-      const y = r() * 128;
-      g.moveTo(x, y);
-      g.quadraticCurveTo(x + (r() - 0.5) * 40, y + (r() - 0.5) * 40, x + (r() - 0.5) * 60, y + (r() - 0.5) * 60);
-      g.stroke();
-    }
-  });
-}
-
 /** Cracked plaster round the broken window. */
 function crackTex(seed: number): HTMLCanvasElement {
   const r = seeded(seed);
@@ -568,6 +539,7 @@ export class PoliceBuilding {
   readonly root = new THREE.Group();
   readonly well = new THREE.Group();
   readonly exterior = new THREE.Group();
+
   readonly floors: Floor[] = [];
   readonly doors: Door[] = [];
   readonly stairDoors: Door[] = [];
@@ -576,9 +548,10 @@ export class PoliceBuilding {
   readonly nodes: NavNode[] = [];
   /** The well's walls, for sight and for bodies (floor-independent). */
   readonly wellWalls: Seg[] = [];
-  /** The window of 612: where you stand to look out, and the dumpster below. */
-  readonly window612 = { x: OUTER, z: 0, sill: 0.9, w: 1.5, h: 1.3 };
-  readonly dumpster = { x: OUTER + 1.6, z: 0 };
+  /** The window of 612: where you stand to look out, and the water under it. */
+  readonly window612 = { x: SIDE612 * OUTER, z: 0, sill: 0.9, w: 1.5, h: 1.3 };
+  /** The river: where you land in it, under the window, and its surface. */
+  readonly below = { x: SIDE612 * (OUTER + 2.6), z: 0, y: WATER_Y };
   /** Animated bits of the building (wardrobe doors, curtains) to step each frame. */
   private tickers: Array<(dt: number) => void> = [];
   private rng: () => number;
@@ -746,6 +719,7 @@ export class PoliceBuilding {
 
     // the fire doors, one a floor
     const fireMat = new THREE.MeshLambertMaterial({ map: tex(texFireDoor()) });
+    const frameMat = new THREE.MeshLambertMaterial({ color: 0x4a5048 });
     for (let f = 0; f <= TOP; f++) {
       const d = this.makeDoor({
         id: `stair-${f}`,
@@ -766,6 +740,23 @@ export class PoliceBuilding {
       // the kick plate and the push bar on the well side
       box(0.7, 0.04, 0.04, this.mats.steel, d.pivot, 0.45, 1.0, -0.04);
       this.stairDoors.push(d);
+      // THE FRAME: a steel jamb either side and a head over it, through the
+      // wall and standing proud of both faces, lapping the edges of the leaf
+      // -- no slit of the corridor's light down the sides, no gap over the
+      // top, from the stairs or from the corridor
+      const y0 = f * FH;
+      const fz = 0.2;
+      for (const [x, w] of [
+        [SDOOR.x0 - 0.035, 0.1],
+        [SDOOR.x1 + 0.035, 0.1],
+      ] as const)
+        box(w, 2.24, fz, frameMat, S, x, y0 + 1.12, SDOOR.z);
+      box(SDOOR.x1 - SDOOR.x0 + 0.17, 0.12, fz, frameMat, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.18, SDOOR.z);
+      // the stops the leaf shuts against, inside the jambs and under the head
+      for (const x of [SDOOR.x0 + 0.012, SDOOR.x1 - 0.012]) box(0.03, 2.1, 0.04, frameMat, S, x, y0 + 1.07, SDOOR.z - 0.05);
+      box(SDOOR.x1 - SDOOR.x0, 0.03, 0.04, frameMat, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.115, SDOOR.z - 0.05);
+      // the threshold
+      box(SDOOR.x1 - SDOOR.x0 + 0.1, 0.015, fz, this.mats.steel, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 0.008, SDOOR.z);
     }
     this.breakLobbyDoor(S, fireMat);
   }
@@ -788,98 +779,20 @@ export class PoliceBuilding {
     d.broken = true;
     const w = SDOOR.x1 - SDOOR.x0;
     const edge = this.mats.walnut;
-    // ---- the lobby, laid out as HotelLobby3D lays it out: its stair door's
-    // middle is this doorway's middle, its back wall this wall (z = WZ1)
-    const LX = (x: number) => (SDOOR.x0 + SDOOR.x1) / 2 + (x - LOBBY.stairX);
     const LZ = (z: number) => WZ1 + z;
-    const x0 = -5.5;
-    const x1 = 5.5;
-    const depth = LOBBY.depth;
-    const paperT = tex(texWallpaper());
-    const panelT = tex(texWainscot());
-    const rep = (t: THREE.Texture, n: number): THREE.MeshLambertMaterial => {
-      const c = t.clone();
-      c.repeat.set(n, 1);
-      c.needsUpdate = true;
-      return new THREE.MeshLambertMaterial({ map: c });
-    };
-    /** Wallpaper over wainscot along a wall from (ax, az) to (bx, bz), facing `ry`. */
-    const wall = (ax: number, az: number, bx: number, bz: number, ry: number, top = LOBBY.ceil, bottom = 0): void => {
-      const len = Math.hypot(bx - ax, bz - az);
-      if (len < 0.01) return;
-      const mx = (ax + bx) / 2;
-      const mz = (az + bz) / 2;
-      if (top > LOBBY.dado) {
-        const lo = Math.max(LOBBY.dado, bottom);
-        plane(len, top - lo, rep(paperT, len), S, mx, (top + lo) / 2, mz, ry);
-      }
-      if (bottom < LOBBY.dado) {
-        const hi = Math.min(LOBBY.dado, top);
-        plane(len, hi - bottom, rep(panelT, len), S, mx, (hi + bottom) / 2, mz, ry);
-      }
-    };
-    // the back wall (this side of it, the lobby's), round the doorway
-    wall(x0, LZ(0.01), SDOOR.x0 - 0.04, LZ(0.01), 0);
-    wall(SDOOR.x1 + 0.04, LZ(0.01), x1, LZ(0.01), 0);
-    wall(SDOOR.x0 - 0.04, LZ(0.01), SDOOR.x1 + 0.04, LZ(0.01), 0, LOBBY.ceil, 2.25);
-    // the front wall the sofa stands against, and the two ends of what shows
-    wall(x0, LZ(depth), x1, LZ(depth), Math.PI);
-    wall(x0, LZ(0), x0, LZ(depth), Math.PI / 2);
-    wall(x1, LZ(0), x1, LZ(depth), -Math.PI / 2);
-    // floor, runner, ceiling, the dado rail
-    plane(x1 - x0, depth, new THREE.MeshLambertMaterial({ map: tex(texMarble(), (x1 - x0) / 2.4, depth / 2.4) }), S, (x0 + x1) / 2, 0.002, LZ(depth / 2), 0, -Math.PI / 2);
-    plane(x1 - x0, 1.1, new THREE.MeshLambertMaterial({ map: tex(texCarpet(), (x1 - x0) / 1.1, 1) }), S, (x0 + x1) / 2, 0.008, LZ(LOBBY.runnerZ), 0, -Math.PI / 2);
-    plane(x1 - x0, depth, new THREE.MeshLambertMaterial({ color: 0xeceae4 }), S, (x0 + x1) / 2, LOBBY.ceil, LZ(depth / 2), 0, Math.PI / 2);
-    const steelTrim = new THREE.MeshLambertMaterial({ color: 0xa8aeb4, emissive: 0x101214 });
-    box(x1 - x0, 0.05, 0.05, steelTrim, S, (x0 + x1) / 2, LOBBY.dado, LZ(depth - 0.03));
-    // ---- the sofa, its table and the bin, where they are in the lobby
-    const leather = new THREE.MeshLambertMaterial({ color: 0x6a7078, emissive: 0x0c0d0f });
-    const leatherLit = new THREE.MeshLambertMaterial({ color: 0x7c828a, emissive: 0x0e0f11 });
-    const dark = new THREE.MeshLambertMaterial({ color: 0x2a2d33 });
-    const oak = new THREE.MeshLambertMaterial({ color: 0x9a7448 });
-    const sx = LX(LOBBY.sofaX);
-    const sz = LZ(depth - 0.55);
-    box(2.1, 0.12, 0.86, dark, S, sx, 0.17, sz);
-    box(1.7, 0.2, 0.8, leather, S, sx, 0.33, sz);
-    for (const k of [-1, 0, 1]) box(0.55, 0.13, 0.66, leatherLit, S, sx + k * 0.565, 0.495, sz - 0.05);
-    const sback = box(1.9, 0.62, 0.2, leather, S, sx, 0.74, sz + 0.33);
-    sback.rotation.x = -0.08;
-    for (const side of [-1, 1]) {
-      box(0.2, 0.42, 0.84, leather, S, sx + side * 0.95, 0.44, sz);
-      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.86, 12), leatherLit);
-      roll.rotation.x = Math.PI / 2;
-      roll.position.set(sx + side * 0.97, 0.68, sz);
-      S.add(roll);
-    }
-    const pillow = box(0.32, 0.3, 0.12, new THREE.MeshLambertMaterial({ color: 0xc8a868 }), S, sx - 0.62, 0.7, sz + 0.12);
-    pillow.rotation.set(0.3, -0.25, 0.15);
-    const tz = sz - 1.05;
-    box(1.2, 0.05, 0.6, oak, S, sx, 0.45, tz);
-    box(1.05, 0.03, 0.46, dark, S, sx, 0.12, tz);
-    for (const [dx, dz] of [[-0.55, -0.25], [0.55, -0.25], [-0.55, 0.25], [0.55, 0.25]]) box(0.05, 0.4, 0.05, dark, S, sx + dx, 0.2, tz + dz);
-    box(0.28, 0.012, 0.2, new THREE.MeshLambertMaterial({ color: 0x2a4a7a }), S, sx - 0.3, 0.48, tz);
-    const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.26, 10), new THREE.MeshLambertMaterial({ color: 0x3a6a5a, emissive: 0x0a1a14 }));
-    vase.position.set(sx + 0.38, 0.6, tz - 0.05);
-    S.add(vase);
-    const steel = new THREE.MeshLambertMaterial({ color: 0xb4bac0, emissive: 0x15171a });
-    const can = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.2, 0.75, 14), steel);
-    can.position.set(LX(LOBBY.binX), 0.375, LZ(LOBBY.binZ));
-    S.add(can);
-    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.05, 14), steel);
-    lid.position.set(LX(LOBBY.binX), 0.78, LZ(LOBBY.binZ));
-    S.add(lid);
-    // the sconces along the front wall, and their light
-    const glow = new THREE.MeshBasicMaterial({ color: 0xfff0c8 });
-    for (const x of [-3.5, 0, 3.5]) {
-      box(0.12, 0.3, 0.06, glow, S, x, 2.2, LZ(depth - 0.05));
-      box(0.18, 0.04, 0.1, steelTrim, S, x, 2.03, LZ(depth - 0.06));
-    }
-    const warm = new THREE.PointLight(0xffe8c8, 3.2, 12, 1.2);
-    warm.position.set(0.5, 3.2, LZ(depth * 0.55));
-    S.add(warm);
-    // the police lights, from the front doors off to the left, round and round
-    const flash = new THREE.PointLight(0xff2a3a, 0, 12, 1.4);
-    flash.position.set(x0 + 0.6, 1.6, LZ(LOBBY.runnerZ));
+    // ---- THE LOBBY ITSELF: the janitor's-room scene's own, built by the
+    // same code (three/hotelLobby), set so that its stairwell door is this
+    // doorway.  Looking out you face across it at the front wall -- the
+    // sofa, its table and the bin under the sconce, square on -- with the
+    // smashed front doors away on your right and the storage room on your
+    // left.  The night after: the door gone, the front doors in pieces.
+    const lobby = new THREE.Group();
+    lobby.position.set(LOBBY.dx, 0, WZ1);
+    S.add(lobby);
+    buildHotelLobby(lobby, { police: true });
+    // the police lights, out past the smashed front doors, washing in
+    const flash = new THREE.PointLight(0xff2a3a, 0, 16, 1.1);
+    flash.position.set(LOBBY.x0 - 1.5, 1.8, LOBBY.doorZ);
     S.add(flash);
     // ---- the door, where it came down: out on the lobby floor, face up,
     // its top end on the lip of the runner and the push bar towards you
@@ -911,7 +824,8 @@ export class PoliceBuilding {
       t += dt;
       const ph = Math.sin(t * 6);
       flash.color.setHex(ph > 0 ? 0xff2a3a : 0x2a5aff);
-      flash.intensity = 0.55 * Math.abs(ph);
+      flash.intensity = 2.2 * Math.abs(ph);
+
     });
   }
 
@@ -1010,7 +924,20 @@ export class PoliceBuilding {
     if (f === 0) {
       // G: the lobby itself is drawn with the stairwell (see `breakLobbyDoor`);
       // here only where the officers waiting in it can walk
-      fl.walls.push({ x0: -AH, z0: WZ1, x1: SDOOR.x0, z1: WZ1 }, { x0: SDOOR.x1, z0: WZ1, x1: AH, z1: WZ1 }, { x0: -AH, z0: 4.4, x1: AH, z1: 4.4 });
+      const L = LOBBY;
+      fl.walls.push(
+        { x0: L.x0, z0: L.z0, x1: SDOOR.x0, z1: L.z0 },
+        { x0: SDOOR.x1, z0: L.z0, x1: L.x1, z1: L.z0 },
+        { x0: L.x0, z0: L.z1, x1: L.x1, z1: L.z1 },
+        { x0: L.x0, z0: L.z0, x1: L.x0, z1: L.z1 },
+        { x0: L.x1, z0: L.z0, x1: L.x1, z1: L.z1 },
+      );
+      // the desk, the sofa and its table, the bin: in the way
+      fl.boxes.push(
+        { x0: L.desk.x - 1.9, x1: L.desk.x + 1.9, z0: L.desk.z - 0.42, z1: L.desk.z + 0.42, h: 1.15 },
+        { x0: L.sofa.x - 1.1, x1: L.sofa.x + 1.1, z0: L.sofa.z - 1.4, z1: L.sofa.z + 0.5, h: 0.8 },
+        { x0: L.bin.x - 0.3, x1: L.bin.x + 0.3, z0: L.bin.z - 0.3, z1: L.bin.z + 0.3, h: 0.8 },
+      );
       return;
     }
     const paperT = tex(texWallpaper(), 1, 1);
@@ -1091,15 +1018,15 @@ export class PoliceBuilding {
     // about a third open, at least three a floor, and 612 always (see buildRoom)
     const want = new Set<number>();
     // (612 is open anyway, so on the top floor it is never one of the three)
-    const special612 = f === TOP ? order.findIndex((o) => o.side > 0 && o.slot === SLOTS - 1) : -1;
+    const special612 = f === TOP ? order.findIndex((o) => o.side === SIDE612 && o.slot === SLOTS - 1) : -1;
     const shuffled = [...order.keys()].filter((i) => i !== special612).sort(() => r() - 0.5);
     const n = 3 + Math.floor(r() * 3);
     for (let i = 0; i < n; i++) want.add(shuffled[i]);
     // never a floor whose only open flats are at the far end: one near the stairs
     if (![0, 1, 2, 3].some((i) => want.has(i))) want.add(Math.floor(r() * 4));
     order.forEach(({ side, slot }, i) => {
-      const num = slot * 2 + (side > 0 ? 2 : 1);
-      const special = f === TOP && side > 0 && slot === SLOTS - 1;
+      const num = slot * 2 + (side === SIDE612 ? 2 : 1);
+      const special = f === TOP && side === SIDE612 && slot === SLOTS - 1;
       this.buildRoom(fl, side, slot, f * 100 + num, special || want.has(i), special);
     });
     // the corridor's long walls, with the doorways left in them
@@ -1226,7 +1153,9 @@ export class PoliceBuilding {
 
     // ---- an open flat: walls, floor, ceiling, window, and one of three plans
     const tints = [0xe8e0d0, 0xdfe4dc, 0xe6dccc, 0xd8dce4, 0xeae2d8, 0xd8ccc0];
-    const wallMat = new THREE.MeshLambertMaterial({ map: tex(plasterTex(tints[Math.floor(r() * tints.length)], id), 2, 1) });
+    // (a faint glow of their own: the flats are lit only from the corridor and
+    // by your own light, and a wall turned away from both read as a black hole)
+    const wallMat = new THREE.MeshLambertMaterial({ map: tex(plasterTex(tints[Math.floor(r() * tints.length)], id), 2, 1), emissive: 0x1e1b16 });
     const woodFloor = r() < 0.55;
     const floorMat = woodFloor
       ? new THREE.MeshLambertMaterial({ map: tex(boardsTex([0x9a6a40, 0xb08050, 0x7a5a3a][Math.floor(r() * 3)], id + 1), 2, 2) })
@@ -1311,8 +1240,8 @@ export class PoliceBuilding {
     const wb = SLOT / 2;
     W.z = room.z0 + wb;
     W.x = wx(RD);
-    this.dumpster.z = W.z;
-    this.dumpster.x = wx(RD) + side(room) * 1.35;
+    this.below.z = W.z;
+    this.below.x = wx(RD) + side(room) * 2.6;
     const sill = W.sill;
     const top = sill + W.h;
     const half = W.w / 2;
@@ -1335,8 +1264,9 @@ export class PoliceBuilding {
     box(0.08, 0.06, W.w + 0.1, frame, g, RD + 0.06, top - 0.03, wb);
     box(0.08, W.h, 0.06, frame, g, RD + 0.06, sill + W.h / 2, wb - half + 0.03);
     box(0.08, W.h, 0.06, frame, g, RD + 0.06, sill + W.h / 2, wb + half - 0.03);
-    const bar = box(0.05, 0.05, W.w * 0.6, frame, g, RD + 0.08, sill + W.h * 0.55, wb + 0.25);
-    bar.rotation.x = 0.5;
+    // (hanging down the side of the frame, out of the way of the hole)
+    const bar = box(0.05, 0.05, W.w * 0.5, frame, g, RD + 0.08, sill + W.h * 0.35, wb + half - 0.12);
+    bar.rotation.x = 1.25;
     // the glass that is left: jagged teeth round the frame, each its own shard
     const glass = new THREE.MeshPhongMaterial({ color: 0xc8dce6, specular: 0xffffff, shininess: 160, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false, emissive: 0x1a2630 });
     const edgeGlass = new THREE.MeshBasicMaterial({ color: 0xe8f4ff, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
@@ -1439,23 +1369,104 @@ export class PoliceBuilding {
 
   // ------------------------------------------------------------ outside
 
+  /**
+   * OUTSIDE 612: THE RIVER.  The back of the building goes straight down into
+   * it -- no yard, no alley, the brick running wet into the water -- and it
+   * is wide: forty-odd metres of black water going past fast, the moon laid
+   * across it in pieces, the lamps of the far embankment each dropping a
+   * long broken streak of light down it, the bridge downstream with the
+   * police lights on it.  Built on the +x side and mirrored over to 612's.
+   */
   private buildExterior(): void {
-    const X = this.exterior;
+    const X = new THREE.Group();
+    X.scale.x = SIDE612;
+    this.exterior.add(X);
     const wallX = OUTER + 0.3;
-    // the alley floor, wet tarmac
-    const tar = new THREE.MeshPhongMaterial({ map: tex(cvs(128, 128, (g) => {
-      const r = seeded(5);
-      g.fillStyle = '#1a1c20';
-      g.fillRect(0, 0, 128, 128);
-      for (let k = 0; k < 1600; k++) {
-        g.fillStyle = r() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.2)';
-        g.fillRect(r() * 128, r() * 128, 1, 1);
+    const zMid = (AZ + END_Z) / 2;
+    const WY = WATER_Y;
+    const RIVER = 44;
+    const far = wallX + RIVER;
+    // ---- the water: a deep base that moves, and two layers of light on it
+    // that move at their own speeds, so it reads as a current, not a sheet
+    const baseTex = tex(cvs(256, 256, (g) => {
+      const r = seeded(31);
+      g.fillStyle = '#08141c';
+      g.fillRect(0, 0, 256, 256);
+      // long low swells running with the current (along v)
+      for (let k = 0; k < 220; k++) {
+        const x = r() * 256;
+        const y = r() * 256;
+        const len = 18 + r() * 50;
+        g.fillStyle = r() < 0.5 ? 'rgba(26,52,64,0.4)' : 'rgba(2,6,10,0.45)';
+        g.fillRect(x, y, 2 + r() * 5, len);
       }
-    }), 12, 12), specular: 0x30343a, shininess: 30 });
-    plane(14, 40, tar, X, wallX + 7, 0, (AZ + END_Z) / 2, 0, -Math.PI / 2);
-    // the building's own face, brick, with dark windows up it
+      for (let k = 0; k < 900; k++) {
+        g.fillStyle = r() < 0.5 ? 'rgba(70,110,124,0.14)' : 'rgba(0,0,0,0.25)';
+        g.fillRect(r() * 256, r() * 256, 1, 2 + r() * 4);
+      }
+    }), RIVER / 3, 140 / 5);
+    const water = new THREE.MeshBasicMaterial({ map: baseTex, fog: true });
+    plane(RIVER, 140, water, X, wallX + RIVER / 2, WY, zMid, 0, -Math.PI / 2);
+    const glintTex = tex(cvs(128, 256, (g) => {
+      const r = seeded(32);
+      g.clearRect(0, 0, 128, 256);
+      for (let k = 0; k < 260; k++) {
+        const a = 0.08 + r() * 0.3;
+        g.fillStyle = `rgba(170,200,214,${a})`;
+        g.fillRect(r() * 128, r() * 256, 1 + r() * 3, 1);
+      }
+    }), RIVER / 8, 140 / 12);
+    const glints = new THREE.MeshBasicMaterial({ map: glintTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.6 });
+    const glintPlane = plane(RIVER, 140, glints, X, wallX + RIVER / 2, WY + 0.01, zMid, 0, -Math.PI / 2);
+    glintPlane.renderOrder = 2;
+    // the water breaking white along the foot of the wall, and round the piers
+    const foamTex = tex(cvs(64, 256, (g) => {
+      const r = seeded(33);
+      for (let k = 0; k < 500; k++) {
+        const x = Math.pow(r(), 2.2) * 64;
+        g.fillStyle = `rgba(220,232,236,${0.15 + (1 - x / 64) * 0.5 * r()})`;
+        g.fillRect(x, r() * 256, 1 + r() * 2, 1 + r() * 3);
+      }
+    }), 1, 140 / 6);
+    const foam = new THREE.MeshBasicMaterial({ map: foamTex, transparent: true, depthWrite: false, opacity: 0.85 });
+    const foamPlane = plane(1.4, 140, foam, X, wallX + 0.7, WY + 0.02, zMid, 0, -Math.PI / 2);
+    foamPlane.renderOrder = 3;
+    // light laid down the water in a broken streak, toward wherever you stand
+    const streakTex = tex(cvs(64, 256, (g) => {
+      const r = seeded(34);
+      for (let k = 0; k < 340; k++) {
+        const y = r() * 256;
+        const w = (6 + r() * 26) * (0.4 + (y / 256) * 0.6);
+        g.fillStyle = `rgba(255,255,255,${0.15 + r() * 0.55})`;
+        g.fillRect(32 - w / 2 + (r() - 0.5) * 10, y, w, 1 + r() * 2);
+      }
+    }));
+    const streaks: THREE.Mesh[] = [];
+    const streak = (x: number, z: number, len: number, wide: number, col: number, op: number): void => {
+      const m = new THREE.MeshBasicMaterial({ map: streakTex.clone(), color: col, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: op });
+      m.map!.needsUpdate = true;
+      // (long along x: from the far side of the water toward the building)
+      const s = plane(wide, len, m, X, x, WY + 0.03, z, 0, -Math.PI / 2);
+      s.rotation.z = Math.PI / 2;
+      s.renderOrder = 4;
+      streaks.push(s);
+    };
+    // ---- the building's own face: brick, wet and dark to the waterline
     const brick = new THREE.MeshLambertMaterial({ map: tex(brickTex(9), 8, 9) });
-    plane(END_Z - AZ + 2, FH * TOP + 3, brick, X, wallX, (FH * TOP + 3) / 2 - 0.3, (AZ + END_Z) / 2, Math.PI / 2);
+    const faceH = FH * TOP + 3 - WY;
+    // (and the buildings either side of it carry the same wall on along the
+    // water, so there is no corner to see round on the way down)
+    const faceL = END_Z - AZ + 70;
+    plane(faceL, faceH, brick, X, wallX, WY + faceH / 2 - 0.3, zMid, Math.PI / 2);
+    const wet = new THREE.MeshBasicMaterial({ color: 0x050a0c, transparent: true, opacity: 0.6 });
+    plane(faceL, 1.6, wet, X, wallX + 0.01, WY + 0.8, zMid, Math.PI / 2);
+    {
+      const rr = seeded(18);
+      for (let z = AZ - 34; z < END_Z + 34; z += 3.2) {
+        if (z > AZ - 1 && z < END_Z + 1) continue;
+        for (let f = 0; f <= TOP; f++) if (rr() < 0.6) plane(1.1, 1.1, rr() < 0.15 ? new THREE.MeshBasicMaterial({ color: 0x8a6a40 }) : this.mats.glassNight, X, wallX + 0.02, f * FH + 1.5, z, Math.PI / 2);
+      }
+    }
     for (let f = 0; f <= TOP; f++) {
       for (let k = 0; k < SLOTS; k++) {
         const z = AZ + k * SLOT + SLOT / 2;
@@ -1463,12 +1474,74 @@ export class PoliceBuilding {
         plane(1.2, 1.1, this.mats.glassNight, X, wallX + 0.02, f * FH + 1.5, z, Math.PI / 2);
       }
     }
-    // the building across the alley, a few lit windows
-    plane(40, 12, brick, X, wallX + 8, 6, (AZ + END_Z) / 2, -Math.PI / 2);
+    // ---- the far embankment: a stone wall out of the water, a walk along
+    // the top with its lamps, and the town behind it
+    const stone = new THREE.MeshLambertMaterial({ map: tex(cvs(64, 64, (g) => {
+      const r = seeded(35);
+      g.fillStyle = '#3a3a3c';
+      g.fillRect(0, 0, 64, 64);
+      for (let y = 0; y < 64; y += 8)
+        for (let x = (y / 8) % 2 ? 0 : 8; x < 64; x += 16) {
+          g.fillStyle = `rgb(${60 + r() * 24},${60 + r() * 22},${62 + r() * 20})`;
+          g.fillRect(x + 1, y + 1, 14, 6);
+        }
+    }), 30, 2), color: 0x5a5e66 });
+    // (lit by its own lamps, not by anything here: a basic material, dim)
+    const stoneLit = new THREE.MeshBasicMaterial({ map: stone.map, color: 0x4a4e56 });
+    plane(140, 2.2, stoneLit, X, far, WY + 1.1, zMid, -Math.PI / 2);
+    plane(6, 140, new THREE.MeshBasicMaterial({ color: 0x1c1e22 }), X, far + 3, WY + 2.2, zMid, 0, -Math.PI / 2);
+    const lampMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
+    const postMat = new THREE.MeshLambertMaterial({ color: 0x1a1c20 });
+    const glowTex = tex(cvs(64, 64, (g) => {
+      const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      grd.addColorStop(0, 'rgba(255,220,160,0.9)');
+      grd.addColorStop(0.3, 'rgba(255,190,110,0.3)');
+      grd.addColorStop(1, 'rgba(255,170,90,0)');
+      g.fillStyle = grd;
+      g.fillRect(0, 0, 64, 64);
+    }));
+    for (let z = AZ - 26; z < END_Z + 18; z += 8) {
+      box(0.12, 3.2, 0.12, postMat, X, far + 0.6, WY + 2.2 + 1.6, z);
+      const head = box(0.3, 0.16, 0.3, lampMat, X, far + 0.6, WY + 2.2 + 3.25, z);
+      void head;
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+      glow.position.set(far + 0.6, WY + 2.2 + 3.2, z);
+      glow.scale.setScalar(2.2);
+      X.add(glow);
+      // its light down the water, broken by the current
+      streak(far - 4, z, 8, 3.2, 0xffc890, 0.26);
+    }
+    // the town behind it: blocks against the sky, a few windows still lit
+    const blockMat = new THREE.MeshLambertMaterial({ color: 0x15171c });
     const lit = new THREE.MeshBasicMaterial({ color: 0xc89a58 });
+    const dim = new THREE.MeshBasicMaterial({ color: 0x4a4030 });
     const r = seeded(17);
-    for (let k = 0; k < 14; k++) plane(0.9, 1.0, r() < 0.3 ? lit : this.mats.glassNight, X, wallX + 7.98, 1.6 + Math.floor(r() * 3) * FH, AZ + r() * (END_Z - AZ), -Math.PI / 2);
-    // the night over it all: the moon and a band of trees past the far roofs
+    for (let z = AZ - 30; z < END_Z + 24; ) {
+      const w = 5 + r() * 7;
+      const h = 6 + r() * 12;
+      const dx = far + 7 + r() * 4;
+      box(6, h, w, blockMat, X, dx + 3, WY + 2.2 + h / 2, z + w / 2);
+      for (let k = 0; k < Math.floor(h / 2.2); k++)
+        for (let j = 0; j < Math.floor(w / 1.8); j++) if (r() < 0.25) plane(0.7, 0.9, r() < 0.5 ? lit : dim, X, dx - 0.01, WY + 2.2 + 1.4 + k * 2.2, z + 0.9 + j * 1.8, -Math.PI / 2);
+      z += w + 0.4 + r() * 2;
+    }
+    // ---- the bridge, downstream, with the police on it
+    const bz = END_Z + 48;
+    const deck = new THREE.MeshBasicMaterial({ color: 0x1e2026 });
+    box(RIVER + 8, 0.9, 5, deck, X, wallX + RIVER / 2, 6.5, bz);
+    box(RIVER + 8, 0.6, 0.15, deck, X, wallX + RIVER / 2, 7.25, bz - 2.45);
+    for (const px of [wallX + RIVER * 0.3, wallX + RIVER * 0.7]) {
+      box(1.6, 6.5 - WY, 2.2, stoneLit, X, px, WY + (6.5 - WY) / 2, bz);
+    }
+    for (let k = 0; k < 7; k++) {
+      const px = wallX + 3 + k * ((RIVER - 6) / 6);
+      box(0.08, 1.6, 0.08, postMat, X, px, 7.7, bz - 2.4);
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+      glow.position.set(px, 8.5, bz - 2.4);
+      glow.scale.setScalar(1.6);
+      X.add(glow);
+    }
+    // the night over it all: the moon, and its light broken across the water
     const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex(cvs(64, 64, (g) => {
       const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
       grd.addColorStop(0, 'rgba(255,255,240,1)');
@@ -1478,91 +1551,51 @@ export class PoliceBuilding {
       g.fillStyle = grd;
       g.fillRect(0, 0, 64, 64);
     })), depthWrite: false, fog: false }));
-    moon.position.set(wallX + 50, 30, this.window612.z + 9);
+    moon.position.set(wallX + 60, 30, this.window612.z - 6);
     moon.scale.setScalar(12);
     X.add(moon);
-
-    // ---- THE DUMPSTER, under 612's window, full
-    const D = this.dumpster;
-    const dg = new THREE.Group();
-    dg.position.set(D.x, 0, D.z);
-    X.add(dg);
-    const steel = new THREE.MeshPhongMaterial({ map: tex(dumpsterTex(3)), specular: 0x2a3a2c, shininess: 22 });
-    const L = 2.0;
-    const Wd = 1.2;
-    const Hh = 1.15;
-    // a tapered bin: four sides, a floor, a lip, wheels
-    box(Wd, 0.08, L, steel, dg, 0, 0.2, 0);
-    for (const s of [-1, 1]) {
-      const side = box(0.06, Hh, L, steel, dg, s * Wd / 2, 0.2 + Hh / 2, 0);
-      side.rotation.z = s * 0.06;
-      box(Wd, Hh, 0.06, steel, dg, 0, 0.2 + Hh / 2, s * L / 2);
-      box(0.1, 0.06, L + 0.1, this.mats.steel, dg, s * (Wd / 2 + 0.03), 0.2 + Hh, 0);
-    }
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.06, 12), this.mats.dark);
-      w.rotation.z = Math.PI / 2;
-      w.position.set(sx * 0.45, 0.09, sz * 0.8);
-      dg.add(w);
-    }
-    // the lid, flung back against the wall
-    const lid = box(Wd + 0.05, 0.04, L / 2, new THREE.MeshPhongMaterial({ color: 0x1e2a20, shininess: 10 }), dg, -Wd / 2 - 0.25, 0.2 + Hh + 0.4, 0);
-    lid.rotation.z = 1.2;
-    // the bags: lumpy, tied at the neck, black and a few grey and green
-    const bagMats = [bagTex(1), bagTex(2), bagTex(3, '#2a2e2a'), bagTex(4, '#1e2a22'), bagTex(5, '#3a3c40')].map(
-      (c) => new THREE.MeshPhongMaterial({ map: tex(c), specular: 0x8a8e94, shininess: 60 }),
-    );
-    for (let k = 0; k < 16; k++) {
-      const geo = new THREE.SphereGeometry(0.28, 14, 10);
-      const pos = geo.attributes.position;
-      for (let i = 0; i < pos.count; i++) {
-        const y = pos.getY(i);
-        const n = 1 + (r() - 0.5) * 0.18 + (y > 0.18 ? -0.35 * ((y - 0.18) / 0.1) : 0);
-        pos.setXYZ(i, pos.getX(i) * n, y * (0.85 + r() * 0.1), pos.getZ(i) * n);
-      }
-      geo.computeVertexNormals();
-      const bag = new THREE.Mesh(geo, bagMats[k % bagMats.length]);
-      const row = Math.floor(k / 5);
-      bag.position.set((r() - 0.5) * (Wd - 0.45), 0.42 + row * 0.25 + r() * 0.1, -L / 2 + 0.3 + ((k % 5) / 4) * (L - 0.6));
-      bag.rotation.set(r() - 0.5, r() * 6, r() - 0.5);
-      bag.scale.setScalar(0.8 + r() * 0.5);
-      dg.add(bag);
-      // the tied neck
-      const neck = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.14, 8), bagMats[k % bagMats.length]);
-      neck.position.set(0, 0.3, 0);
-      bag.add(neck);
-    }
-    // a street lamp on the far wall, so it can be seen from six floors up
-    const lampPos = new THREE.Vector3(wallX + 7.6, 4.2, D.z - 3);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.25), this.mats.lamp);
-    head.position.copy(lampPos);
-    X.add(head);
-    const arm = box(0.6, 0.06, 0.06, this.mats.steel, X, lampPos.x + 0.3, lampPos.y + 0.05, lampPos.z);
-    void arm;
-    const sodium = new THREE.PointLight(0xffc27a, 26, 16, 1.4);
-    sodium.position.copy(lampPos).add(new THREE.Vector3(-0.4, -0.4, 0));
-    X.add(sodium);
-    // and a lamp on this building's wall right over the bin, so from six
-    // floors up the bags are lit and plain
-    const over = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.4), this.mats.lamp);
-    over.position.set(wallX + 0.15, 4.6, D.z - 1.3);
-    X.add(over);
-    const binLight = new THREE.PointLight(0xffd8a0, 34, 11, 1.3);
-    binLight.position.set(wallX + 0.6, 4.3, D.z - 1.0);
-    X.add(binLight);
-    // and the police out front, red and blue washing down the alley
-    const pol = new THREE.PointLight(0xff2030, 0, 22, 1.2);
-    pol.position.set(wallX + 4, 3, END_Z + 6);
+    streak(wallX + 24, this.window612.z - 3, 34, 4.5, 0xd8e4f0, 0.7);
+    // a cold light off the water on to the face of the building
+    const fill = new THREE.PointLight(0x6a8aa8, 16, 34, 1.1);
+    fill.position.set(wallX + 6, WY + 6, this.window612.z);
+    X.add(fill);
+    // and the police on the bridge, red and blue on the water
+    const pol = new THREE.PointLight(0xff2030, 0, 30, 1.1);
+    pol.position.set(wallX + 10, 8, bz - 3);
     X.add(pol);
-    const pol2 = new THREE.PointLight(0x2a50ff, 0, 22, 1.2);
-    pol2.position.set(wallX + 4, 3, END_Z + 6);
+    const pol2 = new THREE.PointLight(0x2a50ff, 0, 30, 1.1);
+    pol2.position.set(wallX + 14, 8, bz - 3);
     X.add(pol2);
+    const polRed = new THREE.MeshBasicMaterial({ color: 0xff2030 });
+    const polBlue = new THREE.MeshBasicMaterial({ color: 0x2a50ff });
+    const barR = box(0.4, 0.12, 0.2, polRed, X, wallX + 10, 7.5, bz - 1.5);
+    const barB = box(0.4, 0.12, 0.2, polBlue, X, wallX + 10.45, 7.5, bz - 1.5);
+    box(1.8, 0.9, 4.2, new THREE.MeshLambertMaterial({ color: 0x101216 }), X, wallX + 10.2, 7.4, bz - 0.2);
+    const polStreak = new THREE.MeshBasicMaterial({ map: streakTex.clone(), color: 0xff2030, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
+    polStreak.map!.needsUpdate = true;
+    const ps = plane(2.4, 14, polStreak, X, wallX + 10, WY + 0.04, bz - 9, 0, -Math.PI / 2);
+    ps.renderOrder = 4;
     let t = 0;
     this.addTicker((dt) => {
       t += dt;
+      // the current: the water and its light go by, at their own speeds
+      baseTex.offset.y = (baseTex.offset.y - dt * 0.09) % 1;
+      glintTex.offset.y = (glintTex.offset.y - dt * 0.16) % 1;
+      glintTex.offset.x = Math.sin(t * 0.7) * 0.02;
+      foamTex.offset.y = (foamTex.offset.y - dt * 0.35) % 1;
+      for (const [i, s] of streaks.entries()) {
+        const m = s.material as THREE.MeshBasicMaterial;
+        m.map!.offset.y = (t * 0.25 + i * 0.37) % 1;
+        m.map!.offset.x = Math.sin(t * 2.3 + i) * 0.04;
+      }
       const ph = Math.floor(t * 6) % 4;
-      pol.intensity = ph < 2 ? 14 : 0;
-      pol2.intensity = ph < 2 ? 0 : 14;
+      pol.intensity = ph < 2 ? 18 : 0;
+      pol2.intensity = ph < 2 ? 0 : 18;
+      barR.visible = ph < 2;
+      barB.visible = ph >= 2;
+      polStreak.color.setHex(ph < 2 ? 0xff2030 : 0x2a50ff);
+      polStreak.opacity = 0.5;
+      polStreak.map!.offset.y = (t * 0.3) % 1;
     });
   }
 
@@ -1586,6 +1619,8 @@ export class PoliceBuilding {
   readonly stairOut: NavNode[] = [];
   /** The lobby, behind the G door. */
   lobby: NavNode | null = null;
+  /** Inside the lobby's smashed front doors: where the three of them come in. */
+  entrance: NavNode | null = null;
   /** Every corridor node per floor, stairs end first. */
   readonly corridor: NavNode[][] = [];
 
@@ -1608,6 +1643,13 @@ export class PoliceBuilding {
     // (to one side of the doorway, so whoever waits there is not stood in it)
     this.lobby = this.node(-0.2, 4.0, 0, 'lobby');
     this.link(this.landing[0], this.lobby, this.stairDoors[0]);
+    // and down the runner to the front doors, where the police come in
+    // (across the lobby from the front doors, on your right as you look out,
+    // along the runner to the stair door)
+    const half = this.node((LOBBY.x0 + 0.9) / 2, LOBBY.doorZ, 0, 'lobby');
+    this.entrance = this.node(LOBBY.x0 + 1.0, LOBBY.doorZ, 0, 'lobby');
+    this.link(this.lobby, half);
+    this.link(half, this.entrance);
     this.stairOut.push(this.lobby);
     this.corridor.push([]);
     for (let f = 1; f <= TOP; f++) {
@@ -2256,118 +2298,130 @@ class RoomCtx {
   }
 
   // ---------------------------------------------------- the three plans
+  //
+  // (Laid out for a flat RD deep and SLOT wide -- 6 m by 4.6 m: the furniture
+  // its real size and against its walls, so there is floor between it, and
+  // room to get round the bed, into the wardrobe, behind the bathroom door.)
 
   /**
-   * A: the bathroom beside the door (a 0..2.2, b 1.55..3.6), the bedroom
+   * A: the bathroom beside the door (a 0..2.4, b 1.75..SLOT), the bedroom
    * beyond.  With a bath: the curtain is the place to hide.  Without: a
    * toilet and basin, and the space behind the opened door.
    */
   planA(withBath: boolean): void {
     const r = this.r;
-    this.tiles(0, 2.2, 1.55, 3.6);
-    // the partition: along b = 1.55 with the bath door at a 0.75..1.55, and along a = 2.2
-    this.wall(0, 1.55, 0.75, 1.55);
-    this.wall(1.55 + 0.0, 1.55, 2.2, 1.55);
-    this.wall(2.2, 1.55, 2.2, SLOT);
+    this.tiles(0, 2.4, 1.75, SLOT);
+    // the partition: along b = 1.75 with the bath door at a 0.87..1.65, and along a = 2.4
+    this.wall(0, 1.75, 0.86, 1.75);
+    this.wall(1.65, 1.75, 2.4, 1.75);
+    this.wall(2.4, 1.75, 2.4, SLOT);
     const above = new THREE.Mesh(new THREE.BoxGeometry(0.8, CEIL - 2.1, 0.08), this.wallMat);
-    above.position.set(1.15, 2.1 + (CEIL - 2.1) / 2, this.B(1.55));
+    above.position.set(1.26, 2.1 + (CEIL - 2.1) / 2, this.B(1.75));
     this.g.add(above);
-    this.pt('p1', 2.0, 0.9);
-    this.pt('c', 3.4, 1.2);
-    this.pt('bo', 1.15, 1.05);
-    this.pt('bi', 1.15, 2.05);
+    this.pt('p1', 2.6, 1.0);
+    this.pt('c', 4.2, 1.6);
+    this.pt('bo', 1.25, 1.25);
+    this.pt('bi', 1.25, 2.45);
     this.link('in', 'p1');
     this.link('p1', 'c');
     this.link('p1', 'bo');
     this.link('in', 'bo');
     let door: Door;
     if (withBath) {
-      door = this.bathDoor(1.55, 1.55, Math.PI, Math.PI / 2, null, 'bi');
-      this.bath(0.05, 1.75, 2.85, 3.58, 'b0', 'bi');
-      this.toilet(1.92, 2.15, -Math.PI / 2);
-      this.sink(0.3, 1.85, Math.PI / 2);
+      door = this.bathDoor(1.65, 1.75, Math.PI, Math.PI / 2, null, 'bi');
+      this.bath(0.05, 1.75, SLOT - 0.75, SLOT - 0.02, 'b0', 'bi');
+      this.toilet(2.1, 2.35, -Math.PI / 2);
+      this.sink(0.3, 2.05, Math.PI / 2);
     } else {
-      // the pocket behind the door: between the opened leaf (a 1.55) and the wall (a 2.2)
-      door = this.bathDoor(1.55, 1.55, Math.PI, Math.PI / 2, { a: 1.9, b: 1.98, peekA: 1.64, peekB: 1.62, lookA: 1.0, lookB: -1.6, fromA: 1.15, fromB: 2.2 }, 'bi');
-      this.toilet(0.35, 3.25, Math.PI / 2);
-      this.sink(0.3, 1.88, Math.PI / 2);
-      if (r() < 0.6) this.plant(1.85, 3.3);
+      // the pocket behind the door: between the opened leaf (a 1.65) and the wall (a 2.4)
+      door = this.bathDoor(1.65, 1.75, Math.PI, Math.PI / 2, { a: 2.0, b: 2.18, peekA: 1.74, peekB: 1.82, lookA: 1.1, lookB: -1.4, fromA: 1.25, fromB: 2.4 }, 'bi');
+      this.toilet(0.35, SLOT - 0.35, Math.PI / 2);
+      this.sink(0.3, 2.08, Math.PI / 2);
+      if (r() < 0.6) this.plant(2.05, SLOT - 0.3);
     }
     this.link('bo', 'bi', door);
     const under = r() < 0.85;
-    this.bed(2.65, 1.7, 3.2, false, under, 'c');
-    this.nightstand(4.35, 3.42);
-    if (r() < 0.75) this.wardrobe(3.5, 0.31, 0, 'c');
-    else this.desk(3.5, 0.3, 0);
-    if (r() < 0.6) this.desk(1.85, 0.27, 0);
-    this.window(0.5, 1.6);
-    this.rug(3.4, 1.15, 1.2, 0.7);
-    this.picture(3.6, 0, 'b1');
+    this.bed(RD - 1.95, 2.3, 3.85, false, under, 'c');
+    this.nightstand(RD - 0.25, 4.1);
+    if (r() < 0.75) this.wardrobe(3.9, 0.31, 0, 'c');
+    else this.desk(3.9, 0.3, 0);
+    if (r() < 0.6) this.desk(2.6, 0.27, 0);
+    if (r() < 0.6) this.armchair(3.0, 3.9, Math.PI);
+    if (r() < 0.6) this.plant(RD - 0.3, 0.3);
+    this.window(0.6, 1.9);
+    this.rug(4.2, 1.5, 1.6, 0.9);
+    this.picture(4.4, 0, 'b1');
   }
 
-  /** B: a separate WC off the entry (a 0..1.6, b 2.3..3.6) and a bedroom. */
+  /** B: a separate WC off the entry (a 0..1.8, b SLOT-1.5..SLOT) and a bedroom. */
   planB(): void {
     const r = this.r;
-    this.tiles(0, 1.6, 2.3, 3.6);
-    this.wall(0, 2.3, 0.5, 2.3);
-    this.wall(1.25, 2.3, 1.6, 2.3);
-    this.wall(1.6, 2.3, 1.6, SLOT);
-    const above = new THREE.Mesh(new THREE.BoxGeometry(0.75, CEIL - 2.1, 0.08), this.wallMat);
-    above.position.set(0.875, 2.1 + (CEIL - 2.1) / 2, this.B(2.3));
+    const wb = SLOT - 1.5;
+    this.tiles(0, 1.8, wb, SLOT);
+    this.wall(0, wb, 0.55, wb);
+    this.wall(1.33, wb, 1.8, wb);
+    this.wall(1.8, wb, 1.8, SLOT);
+    const above = new THREE.Mesh(new THREE.BoxGeometry(0.78, CEIL - 2.1, 0.08), this.wallMat);
+    above.position.set(0.94, 2.1 + (CEIL - 2.1) / 2, this.B(wb));
     this.g.add(above);
-    this.pt('p1', 2.0, 1.9);
-    this.pt('c', 3.2, 2.3);
-    this.pt('wo', 0.88, 1.85);
-    this.pt('wi', 0.9, 2.78);
+    this.pt('p1', 2.6, 2.3);
+    this.pt('c', 4.0, 2.8);
+    this.pt('wo', 0.95, wb - 0.45);
+    this.pt('wi', 0.95, wb + 0.48);
     this.link('in', 'p1');
     this.link('p1', 'c');
     this.link('in', 'wo');
     this.link('wo', 'p1');
     // the WC door hinged at its wall end: open, it leaves a pocket against the corridor wall
-    const door = this.bathDoor(0.5, 2.3, 0, Math.PI / 2, { a: 0.24, b: 2.68, peekA: 0.42, peekB: 2.36, lookA: 1.4, lookB: 0.2, fromA: 0.95, fromB: 2.78 }, 'wi');
+    const door = this.bathDoor(0.55, wb, 0, Math.PI / 2, { a: 0.29, b: wb + 0.38, peekA: 0.47, peekB: wb + 0.06, lookA: 1.45, lookB: wb - 2.1, fromA: 1.0, fromB: wb + 0.48 }, 'wi');
     this.link('wo', 'wi', door);
-    this.toilet(1.27, 3.3, Math.PI);
-    this.sink(0.78, 3.38, Math.PI, false);
+    this.toilet(1.4, SLOT - 0.3, Math.PI);
+    this.sink(0.85, SLOT - 0.22, Math.PI, false);
     const under = r() < 0.85;
-    this.bed(2.6, 0.18, 1.78, true, under, 'c');
-    this.nightstand(4.35, 1.98);
-    this.wardrobe(3.0, 3.29, Math.PI, 'c');
-    if (r() < 0.7) this.armchair(4.2, 2.85, -Math.PI / 2);
-    this.desk(1.5, 0.27, 0);
-    this.window(2.2, 3.2);
-    this.picture(3.2, 0, 'b0');
+    this.bed(RD - 2.0, 0.18, 1.78, true, under, 'c');
+    this.nightstand(RD - 0.25, 1.98);
+    this.wardrobe(3.6, SLOT - 0.31, Math.PI, 'c');
+    if (r() < 0.7) this.armchair(RD - 0.4, 3.0, -Math.PI / 2);
+    this.desk(2.2, 0.27, 0);
+    if (r() < 0.6) this.plant(RD - 0.3, SLOT - 0.3);
+    this.rug(3.6, 1.0, 1.6, 0.9);
+    this.window(2.4, 3.6);
+    this.picture(3.0, 0, 'b0');
   }
 
-  /** C: a studio, its bathroom in the far corner (a 3.0..4.6, b 2.0..3.6) with a bath. */
+  /** C: a studio, its bathroom in the far corner (a RD-1.6..RD, b SLOT-1.6..SLOT) with a bath. */
   planC(): void {
     const r = this.r;
-    this.tiles(3.0, RD, 2.0, SLOT);
-    this.wall(3.0, 2.0, 3.1, 2.0);
-    this.wall(3.85, 2.0, RD, 2.0);
-    this.wall(3.0, 2.0, 3.0, SLOT);
-    const above = new THREE.Mesh(new THREE.BoxGeometry(0.75, CEIL - 2.1, 0.08), this.wallMat);
-    above.position.set(3.475, 2.1 + (CEIL - 2.1) / 2, this.B(2.0));
+    const ba = RD - 1.6;
+    const bb = SLOT - 1.6;
+    this.tiles(ba, RD, bb, SLOT);
+    this.wall(ba, bb, ba + 0.1, bb);
+    this.wall(ba + 0.88, bb, RD, bb);
+    this.wall(ba, bb, ba, SLOT);
+    const above = new THREE.Mesh(new THREE.BoxGeometry(0.78, CEIL - 2.1, 0.08), this.wallMat);
+    above.position.set(ba + 0.49, 2.1 + (CEIL - 2.1) / 2, this.B(bb));
     this.g.add(above);
-    this.pt('c', 2.4, 1.0);
-    this.pt('bo', 3.47, 1.5);
-    this.pt('bi', 3.47, 2.5);
+    this.pt('c', 3.0, 1.5);
+    this.pt('bo', ba + 0.47, bb - 0.5);
+    this.pt('bi', ba + 0.47, bb + 0.5);
     this.link('in', 'c');
     this.link('c', 'bo');
-    const door = this.bathDoor(3.1, 2.0, 0, Math.PI / 2, null, 'bi');
+    const door = this.bathDoor(ba + 0.1, bb, 0, Math.PI / 2, null, 'bi');
     this.link('bo', 'bi', door);
-    this.bath(3.9, 4.58, 2.05, 3.58, 'a0', 'bi');
-    this.toilet(3.35, 3.3, Math.PI);
+    this.bath(RD - 0.7, RD - 0.02, bb + 0.05, SLOT - 0.02, 'a0', 'bi');
+    this.toilet(ba + 0.35, SLOT - 0.3, Math.PI);
     const under = r() < 0.8;
-    this.bedAlong(0.9, 2.85, 2.05, under, 'c');
-    this.wardrobe(4.29, 0.8, -Math.PI / 2, 'c');
-    this.desk(0.27, 1.65, Math.PI / 2);
-    if (r() < 0.7) this.plant(2.85, 0.2);
-    this.rug(2.0, 1.0, 1.4, 0.8);
-    this.window(1.42, 1.98);
-    this.picture(1.8, 0, 'b1');
+    this.bedAlong(1.2, 3.15, SLOT - 1.55, under, 'c');
+    this.wardrobe(RD - 0.31, 0.9, -Math.PI / 2, 'c');
+    this.desk(0.27, 2.0, Math.PI / 2);
+    if (r() < 0.7) this.plant(3.4, 0.25);
+    if (r() < 0.6) this.armchair(2.0, 0.5, 0);
+    this.rug(2.6, 1.6, 1.8, 1.0);
+    this.window(1.4, 2.4);
+    this.picture(2.2, 0, 'b1');
   }
 
-  /** A bed against the b = 3.6 wall, head at the outside end, a0..a1 along it, open toward -b. */
+  /** A bed against the b = SLOT wall, head at the outside end, a0..a1 along it, open toward -b. */
   private bedAlong(a0: number, a1: number, b0: number, under: boolean, navKey: string): void {
     // (built as a bed turned through 90 degrees: reuse `bed` by thinking in a/b swapped)
     const r = this.r;

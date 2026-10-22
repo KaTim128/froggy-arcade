@@ -68,6 +68,15 @@ try {
   await page.mouse.click((160 + 56) * k, 84 * k);
   m = await until((x) => x.started);
   check('PRACTICE starts a free go', m.started && m.practicing && m.tokens === 50, JSON.stringify(m));
+  // Froggy walks right past the bag to its other side, and turns to face it
+  await sleep(900);
+  const x0 = await page.evaluate(() => window.__grudge.state().you);
+  await page.keyboard.down('d');
+  await sleep(2600);
+  await page.keyboard.up('d');
+  await sleep(300);
+  const x1 = await page.evaluate(() => window.__grudge.state().you);
+  check('Froggy can walk past the bag to its other side', x0.x < 160 && x1.x > 160 + 20 && x1.facing === -1, JSON.stringify({ x0, x1 }));
   // out of it, as the pause menu's QUIT GAME does
   await page.evaluate(() => window.__froggy.game().scene.getScene('Minigame').quitGame());
   await sleep(1500);

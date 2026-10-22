@@ -91,9 +91,8 @@ export class StreetWest extends Phaser.Scene {
       // (and now and then one goes in at Lily's to look round the lobby)
       doors: [{ x: DOOR_X, place: 'lily' }],
     });
-    // the purse, fixed to the screen
-    // (dropped under the name band: LILY'S CONDOS runs across the top left)
-    new TokenHud(this, { y: 24 });
+    // the purse, fixed to the screen, at the top like every other street
+    new TokenHud(this);
     attachPockets(this, () => this.locked);
     this.prompt = text(this, 0, 0, '', PALETTE.gold).setDepth(801).setOrigin(0.5, 0.5).setVisible(false);
     this.mutterPlate = this.add.rectangle(0, 0, 1, 1, PALETTE.black, 0).setOrigin(0, 0).setDepth(801).setScrollFactor(0).setVisible(false);
