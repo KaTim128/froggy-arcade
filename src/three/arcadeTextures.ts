@@ -394,3 +394,33 @@ export function coinDoorTex(): THREE.CanvasTexture {
     g.fillRect(w / 2 - 1.5, 44, 3, 12);
   });
 }
+
+/**
+ * A MATCAP: a lit sphere, painted once, that a MeshMatcapMaterial wraps round
+ * whatever it is on by the way each bit of surface faces the camera.  It is
+ * shading that carries itself -- a soft key from the upper left, a mid, a
+ * shadowed rim with a little warmth in it -- so a thing held half a metre from
+ * a torch keeps its roundness instead of going to a white slab.
+ */
+export function matcapTex(light: number, mid: number, dark: number, rim = dark): THREE.CanvasTexture {
+  return paint(`matcap:${light}:${mid}:${dark}:${rim}`, 256, 256, (g, w) => {
+    const r = w / 2;
+    g.fillStyle = hex(dark);
+    g.fillRect(0, 0, w, w);
+    const body = g.createRadialGradient(r * 0.78, r * 0.7, r * 0.05, r, r, r);
+    body.addColorStop(0, hex(light));
+    body.addColorStop(0.45, hex(mid));
+    body.addColorStop(0.86, hex(dark));
+    body.addColorStop(1, hex(rim));
+    g.fillStyle = body;
+    g.beginPath();
+    g.arc(r, r, r, 0, Math.PI * 2);
+    g.fill();
+    // a soft sheen, the way skin and cotton both take a little of the light
+    const sheen = g.createRadialGradient(r * 0.66, r * 0.56, 0, r * 0.66, r * 0.56, r * 0.42);
+    sheen.addColorStop(0, 'rgba(255,248,240,0.32)');
+    sheen.addColorStop(1, 'rgba(255,248,240,0)');
+    g.fillStyle = sheen;
+    g.fillRect(0, 0, w, w);
+  });
+}
