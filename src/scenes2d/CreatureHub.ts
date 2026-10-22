@@ -28,6 +28,7 @@ import { drawAbilityIcon } from '../art/abilityIcons';
 import { attackCard } from '../game/attackInfo';
 import { backPlate } from '../ui/plate';
 import { drawFrogToken } from '../ui/hud';
+import { tinyText, tinyWrap } from '../ui/tinyText';
 import { xpProgress } from '../game/creatureLevel';
 import {
   BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, PACK_COST, STARTERS, bossById, creatureById, type Attack, type Creature,
@@ -315,18 +316,21 @@ export class CreatureHub extends Phaser.Scene {
     const veil = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05070f, 0.82).setOrigin(0, 0);
     veil.setInteractive().on('pointerdown', close);
     M.add(veil);
-    // the lines first, each under the last by its real height (a long one
-    // wraps onto two, and used to be printed over by the next)
-    const body0: Phaser.GameObjects.BitmapText[] = [];
+    // THE BODY IN THE SMALL FACE.  In the house font a move with a long
+    // element and a long weakness ran the card off the bottom of the screen
+    // and took the CLOSE button with it; in the 3x5 face, wrapped, every
+    // move fits with room to spare.
+    const rows: Array<{ s: string; col: number; gap: boolean }> = [];
     const lineOf = (ln: string, col: number): void => {
-      body0.push(text(this, 0, 0, ln, col).setMaxWidth(w - 16));
+      tinyWrap(ln, w - 16).forEach((s, i) => rows.push({ s, col, gap: i === 0 && rows.length > 0 }));
     };
     lines.forEach((ln, i) => lineOf(ln, i === 0 ? PALETTE.cream : PALETTE.fog));
     lineOf(`GOOD AT: ${c.strong}`, PALETTE.mossLight);
     lineOf(`WEAK: ${c.weak}`, 0xff9a9a);
-    const gap = 3;
-    const textH = body0.reduce((t, o) => t + o.height + gap, 0);
-    const h = 27 + textH + 20;
+    const LH = 7;
+    const textH = rows.reduce((t, r) => t + LH + (r.gap ? 3 : 0), 0);
+    // (and never taller than the screen: the button always shows)
+    const h = Math.min(GAME_H - 4, 27 + textH + 22);
     const x = (GAME_W - w) / 2;
     const y = Math.max(2, (GAME_H - h) / 2);
     M.add(this.add.rectangle(x, y, w, h, 0x141834).setOrigin(0, 0).setStrokeStyle(1, el.col));
@@ -336,11 +340,14 @@ export class CreatureHub extends Phaser.Scene {
     M.add(text(this, x + 24, y + 8, a.name, PALETTE.gold));
     M.add(text(this, x + w - 6, y + 8, `${c.name.toUpperCase()}`, PALETTE.fog).setOrigin(1, 0));
     M.add(this.add.rectangle(x + 6, y + 22, w - 12, 1, 0x2a3050).setOrigin(0, 0));
-    let ly = y + 27;
-    for (const o of body0) {
-      o.setPosition(x + 8, ly);
-      M.add(o);
-      ly += o.height + gap;
+    const body = this.add.graphics();
+    M.add(body);
+    let ly = y + 28;
+    for (const r of rows) {
+      if (r.gap) ly += 3;
+      if (ly + 5 > y + h - 20) break;
+      tinyText(body, r.s, x + 8, ly, r.col);
+      ly += LH;
     }
     M.add(button(this, x + w / 2, y + h - 9, 'CLOSE', close, { width: 56, height: 12 }));
   }
