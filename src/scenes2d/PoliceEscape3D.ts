@@ -1748,7 +1748,9 @@ export class PoliceEscape3D extends Phaser.Scene {
     // hidden, nearly none of it: what you see is the room's light and theirs
     // (caught, only the light under his face: the room goes dark round it)
     if (this.fill) this.fill.intensity = this.phase === 'caught' ? 0.04 : this.hide ? 0.08 : 0.7;
-    b.well.visible = me.well || (me.z < 9 && b.stairDoors[me.f]?.k > 0.05) || this.phase === 'caught';
+    // (near the stairs from the corridor, open or shut: the door and its
+    // frame are the well's, and a shut one left a black hole where it was)
+    b.well.visible = me.well || me.z < 9 || this.phase === 'caught';
     b.exterior.visible = lvl === TOP && (SIDE612 * me.x > CH || this.phase === 'cinema' || this.phase === 'ending');
     // the corridor's lights at the fittings nearest you
     const fl = b.floors[clamp(lvl, 1, TOP)];

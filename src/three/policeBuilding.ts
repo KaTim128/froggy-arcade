@@ -719,6 +719,7 @@ export class PoliceBuilding {
 
     // the fire doors, one a floor
     const fireMat = new THREE.MeshLambertMaterial({ map: tex(texFireDoor()) });
+    const frameMat = new THREE.MeshLambertMaterial({ color: 0x4a5048 });
     for (let f = 0; f <= TOP; f++) {
       const d = this.makeDoor({
         id: `stair-${f}`,
@@ -739,6 +740,23 @@ export class PoliceBuilding {
       // the kick plate and the push bar on the well side
       box(0.7, 0.04, 0.04, this.mats.steel, d.pivot, 0.45, 1.0, -0.04);
       this.stairDoors.push(d);
+      // THE FRAME: a steel jamb either side and a head over it, through the
+      // wall and standing proud of both faces, lapping the edges of the leaf
+      // -- no slit of the corridor's light down the sides, no gap over the
+      // top, from the stairs or from the corridor
+      const y0 = f * FH;
+      const fz = 0.2;
+      for (const [x, w] of [
+        [SDOOR.x0 - 0.035, 0.1],
+        [SDOOR.x1 + 0.035, 0.1],
+      ] as const)
+        box(w, 2.24, fz, frameMat, S, x, y0 + 1.12, SDOOR.z);
+      box(SDOOR.x1 - SDOOR.x0 + 0.17, 0.12, fz, frameMat, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.18, SDOOR.z);
+      // the stops the leaf shuts against, inside the jambs and under the head
+      for (const x of [SDOOR.x0 + 0.012, SDOOR.x1 - 0.012]) box(0.03, 2.1, 0.04, frameMat, S, x, y0 + 1.07, SDOOR.z - 0.05);
+      box(SDOOR.x1 - SDOOR.x0, 0.03, 0.04, frameMat, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.115, SDOOR.z - 0.05);
+      // the threshold
+      box(SDOOR.x1 - SDOOR.x0 + 0.1, 0.015, fz, this.mats.steel, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 0.008, SDOOR.z);
     }
     this.breakLobbyDoor(S, fireMat);
   }
