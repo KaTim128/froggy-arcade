@@ -43,10 +43,11 @@ const FOOT = 40;
 const WORLD_H = HEAD + FLOOR_H * (TOP_FLOOR - 1) + FOOT + 40;
 /** The landings: the floor's at the left, the half-landing at the right. */
 const FL = { x0: 16, x1: 104 };
-const HL = { x0: 216, x1: 304 };
+// (the half-landing, with no door on it, only as deep as the turn needs)
+const HL = { x0: 216, x1: 254 };
 /** A tread: how far along it runs. */
 const TREAD = 6;
-const DOOR_X = 48;
+const DOOR_X = 34;
 
 /** The line the feet stand on at floor `f`'s landing. */
 const floorY = (f: number): number => HEAD + FLOOR_H * (TOP_FLOOR - f) + 40;
@@ -165,8 +166,9 @@ export class Stairwell extends Phaser.Scene {
     // each floor's number, big, stencilled on the block wall by its door
     for (let f = 1; f <= TOP_FLOOR; f++) {
       const y = floorY(f);
-      centerText(this, DOOR_X + 30, y - 36, String(f), 0x2a6a4a, 24).setDepth(1).setAlpha(0.85);
-      centerText(this, DOOR_X + 30, y - 18, f === 1 ? 'LOBBY' : `LEVEL ${f}`, 0x2a4a3a).setDepth(1);
+      // (well clear of the door frame, between it and the stairs)
+      centerText(this, DOOR_X + 42, y - 36, String(f), 0x2a6a4a, 24).setDepth(1).setAlpha(0.85);
+      centerText(this, DOOR_X + 42, y - 18, f === 1 ? 'LOBBY' : `LEVEL ${f}`, 0x2a4a3a).setDepth(1);
     }
 
     // in at this floor's door, facing the stairs
@@ -446,13 +448,13 @@ function paintWell(g: Ctx): void {
     rect(g, 0, y - 23, FL.x1 + 6, 1, '#5a6a5e');
     const hy = y - FLOOR_H / 2;
     if (f <= TOP_FLOOR) {
-      rect(g, HL.x0 - 6, hy - 22, W - HL.x0 + 6, 22, '#7a8a7e');
-      rect(g, HL.x0 - 6, hy - 23, W - HL.x0 + 6, 1, '#5a6a5e');
+      rect(g, HL.x0 - 6, hy - 22, HL.x1 - HL.x0 + 12, 22, '#7a8a7e');
+      rect(g, HL.x0 - 6, hy - 23, HL.x1 - HL.x0 + 12, 1, '#5a6a5e');
     }
     // the strip lights, over the landing and the half-landing
     for (const [lx, ly] of [
       [FL.x0 + 20, y - 64],
-      [HL.x0 + 24, hy - 64],
+      [HL.x0 - 1, hy - 64],
     ]) {
       if (f > TOP_FLOOR && lx > W / 2) continue;
       rect(g, lx, ly, 40, 2, '#f4f0e0');
@@ -493,7 +495,7 @@ function paintWell(g: Ctx): void {
   for (const p of PATH) {
     if (p.kind === 'flight') continue;
     const x0 = p.kind === 'landing' ? 0 : p.x0 - 4;
-    const x1 = p.kind === 'landing' ? p.x1 + 2 : W;
+    const x1 = p.kind === 'landing' ? p.x1 + 2 : p.x1 + 4;
     rect(g, x0, p.y0, x1 - x0, 1, '#a8a49c');
     rect(g, x0, p.y0 + 1, x1 - x0, 6, '#8e8a84');
     rect(g, x0, p.y0 + 7, x1 - x0, 2, '#4a4842');
