@@ -3507,6 +3507,10 @@ for (const g of [
   await page.goto(`${URL}/?intro=1&tokens=20&game=grudge`, { waitUntil: 'networkidle2' });
   await sleep(1800);
   await startGame(page);
+  // PLAY on the card is the choice of PLAY or PRACTICE (see practice.mjs):
+  // this wants the real fight
+  await sleep(600);
+  await page.mouse.click((160 - 56) * 4, 84 * 4);
   await bridge(page, '__grudge');
   await sleep(2400); // READY / FIGHT
 
