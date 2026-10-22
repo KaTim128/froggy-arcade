@@ -60,12 +60,26 @@ import {
 // ------------------------------------------------------------------ the plan
 
 /**
- * The hotel lobby's own plan, as HotelLobby3D builds it (its x along the
- * back wall, its z out from it): where its stair door is, how deep it is,
- * and where the runner, the sofa and the bin are -- so the lobby seen
- * through the broken door at G is the same room.
+ * THE LOBBY, as it is from its stair door: a long hall going away from you
+ * (+z) to the glass front doors, the runner down its middle; walking in,
+ * the sofa and the bin are on the left (+x), the desk, the staff door, the
+ * lift and the mailboxes on the right (-x), the galleries overhead.
  */
-const LOBBY = { stairX: (238 - 200) * 0.05, depth: 7, ceil: 6.6, dado: 1, runnerZ: 3.4, sofaX: 2.6, binX: 4.7, binZ: 7 - 0.45 };
+export const LOBBY = {
+  x0: -2.4,
+  x1: 4.2,
+  z1: 1.6 + 18,
+  ceil: 6.4,
+  gal: 3.3,
+  dado: 1,
+  runX: 0.9,
+  sofaZ: 8.6,
+  binZ: 10.6,
+  deskZ: 6.2,
+  staffZ: 9.4,
+  liftZ: 12.6,
+  mailZ: 15.8,
+};
 
 export const FH = 3;
 export const TOP = 6;
@@ -520,6 +534,8 @@ export class PoliceBuilding {
   readonly root = new THREE.Group();
   readonly well = new THREE.Group();
   readonly exterior = new THREE.Group();
+  /** The light bars on the police cars outside the lobby's front doors. */
+  private lobbyBars: THREE.Mesh[] = [];
   readonly floors: Floor[] = [];
   readonly doors: Door[] = [];
   readonly stairDoors: Door[] = [];
@@ -741,13 +757,18 @@ export class PoliceBuilding {
     d.broken = true;
     const w = SDOOR.x1 - SDOOR.x0;
     const edge = this.mats.walnut;
-    // ---- the lobby, laid out as HotelLobby3D lays it out: its stair door's
-    // middle is this doorway's middle, its back wall this wall (z = WZ1)
-    const LX = (x: number) => (SDOOR.x0 + SDOOR.x1) / 2 + (x - LOBBY.stairX);
     const LZ = (z: number) => WZ1 + z;
-    const x0 = -5.5;
-    const x1 = 5.5;
-    const depth = LOBBY.depth;
+    // ---- THE LOBBY, from its stair door: the long hall going away from you
+    // to the glass front doors at the far end, the runner down the middle of
+    // it, the sofa, its table, the bin and a sconce down the left-hand wall;
+    // the desk, the staff door under its green sign, the lift and the
+    // mailboxes down the right; the globe pendants hung down the middle, and
+    // the galleries along both sides overhead.  (Walking in from the stairs
+    // you face +z: the left wall is +x, the right -x.)
+    const { x0, x1, z1, ceil, gal, dado } = LOBBY;
+    const z0 = WZ1;
+    const len = z1 - z0;
+    const mid = (x0 + x1) / 2;
     const paperT = tex(texWallpaper());
     const panelT = tex(texWainscot());
     const rep = (t: THREE.Texture, n: number): THREE.MeshLambertMaterial => {
@@ -757,82 +778,238 @@ export class PoliceBuilding {
       return new THREE.MeshLambertMaterial({ map: c });
     };
     /** Wallpaper over wainscot along a wall from (ax, az) to (bx, bz), facing `ry`. */
-    const wall = (ax: number, az: number, bx: number, bz: number, ry: number, top = LOBBY.ceil, bottom = 0): void => {
-      const len = Math.hypot(bx - ax, bz - az);
-      if (len < 0.01) return;
+    const wall = (ax: number, az: number, bx: number, bz: number, ry: number, top = ceil, bottom = 0): void => {
+      const l = Math.hypot(bx - ax, bz - az);
+      if (l < 0.01) return;
       const mx = (ax + bx) / 2;
       const mz = (az + bz) / 2;
-      if (top > LOBBY.dado) {
-        const lo = Math.max(LOBBY.dado, bottom);
-        plane(len, top - lo, rep(paperT, len), S, mx, (top + lo) / 2, mz, ry);
+      if (top > dado) {
+        const lo = Math.max(dado, bottom);
+        plane(l, top - lo, rep(paperT, l), S, mx, (top + lo) / 2, mz, ry);
       }
-      if (bottom < LOBBY.dado) {
-        const hi = Math.min(LOBBY.dado, top);
-        plane(len, hi - bottom, rep(panelT, len), S, mx, (hi + bottom) / 2, mz, ry);
+      if (bottom < dado) {
+        const hi = Math.min(dado, top);
+        plane(l, hi - bottom, rep(panelT, l), S, mx, (hi + bottom) / 2, mz, ry);
       }
     };
-    // the back wall (this side of it, the lobby's), round the doorway
-    wall(x0, LZ(0.01), SDOOR.x0 - 0.04, LZ(0.01), 0);
-    wall(SDOOR.x1 + 0.04, LZ(0.01), x1, LZ(0.01), 0);
-    wall(SDOOR.x0 - 0.04, LZ(0.01), SDOOR.x1 + 0.04, LZ(0.01), 0, LOBBY.ceil, 2.25);
-    // the front wall the sofa stands against, and the two ends of what shows
-    wall(x0, LZ(depth), x1, LZ(depth), Math.PI);
-    wall(x0, LZ(0), x0, LZ(depth), Math.PI / 2);
-    wall(x1, LZ(0), x1, LZ(depth), -Math.PI / 2);
-    // floor, runner, ceiling, the dado rail
-    plane(x1 - x0, depth, new THREE.MeshLambertMaterial({ map: tex(texMarble(), (x1 - x0) / 2.4, depth / 2.4) }), S, (x0 + x1) / 2, 0.002, LZ(depth / 2), 0, -Math.PI / 2);
-    plane(x1 - x0, 1.1, new THREE.MeshLambertMaterial({ map: tex(texCarpet(), (x1 - x0) / 1.1, 1) }), S, (x0 + x1) / 2, 0.008, LZ(LOBBY.runnerZ), 0, -Math.PI / 2);
-    plane(x1 - x0, depth, new THREE.MeshLambertMaterial({ color: 0xeceae4 }), S, (x0 + x1) / 2, LOBBY.ceil, LZ(depth / 2), 0, Math.PI / 2);
+    // the near wall (the lobby's side of it), round the doorway
+    wall(x0, z0 + 0.01, SDOOR.x0 - 0.04, z0 + 0.01, 0);
+    wall(SDOOR.x1 + 0.04, z0 + 0.01, x1, z0 + 0.01, 0);
+    wall(SDOOR.x0 - 0.04, z0 + 0.01, SDOOR.x1 + 0.04, z0 + 0.01, 0, ceil, 2.25);
+    // the two long walls
+    wall(x1, z0, x1, z1, -Math.PI / 2);
+    wall(x0, z0, x0, z1, Math.PI / 2);
+    // floor, runner, ceiling, dado rails
+    plane(x1 - x0, len, new THREE.MeshLambertMaterial({ map: tex(texMarble(), (x1 - x0) / 2.4, len / 2.4) }), S, mid, 0.002, z0 + len / 2, 0, -Math.PI / 2);
+    const runner = tex(texCarpet(), 1, len / 1.2);
+    plane(1.4, len - 1.2, new THREE.MeshLambertMaterial({ map: runner, color: 0x8a8e96 }), S, LOBBY.runX, 0.008, z0 + 0.6 + (len - 1.2) / 2, 0, -Math.PI / 2);
+    for (const s of [-1, 1]) box(0.05, 0.012, len - 1.2, new THREE.MeshLambertMaterial({ color: 0x8a7a50 }), S, LOBBY.runX + s * 0.72, 0.01, z0 + 0.6 + (len - 1.2) / 2);
+    plane(x1 - x0, len, new THREE.MeshLambertMaterial({ color: 0xe6e2d8 }), S, mid, ceil, z0 + len / 2, 0, Math.PI / 2);
     const steelTrim = new THREE.MeshLambertMaterial({ color: 0xa8aeb4, emissive: 0x101214 });
-    box(x1 - x0, 0.05, 0.05, steelTrim, S, (x0 + x1) / 2, LOBBY.dado, LZ(depth - 0.03));
-    // ---- the sofa, its table and the bin, where they are in the lobby
+    for (const x of [x0 + 0.03, x1 - 0.03]) box(0.05, 0.05, len, steelTrim, S, x, dado, z0 + len / 2);
+    // ---- the galleries: a balcony along each long wall, its rail, its underside
+    const slab = new THREE.MeshLambertMaterial({ color: 0xd8d2c4 });
+    const under = new THREE.MeshLambertMaterial({ color: 0xc2bcae });
+    const railMat = new THREE.MeshLambertMaterial({ color: 0x2a2c30 });
+    const glassRail = new THREE.MeshBasicMaterial({ color: 0x8ab0c0, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide });
+    for (const [wx, s] of [[x0, 1], [x1, -1]] as const) {
+      const gx = wx + s * 0.55;
+      box(1.1, 0.22, len - 0.4, slab, S, gx, gal, z0 + 0.2 + (len - 0.4) / 2);
+      plane(len - 0.4, 1.1, under, S, gx, gal - 0.115, z0 + 0.2 + (len - 0.4) / 2, Math.PI / 2, Math.PI / 2);
+      const ex = wx + s * 1.1;
+      box(0.05, 0.05, len - 0.4, railMat, S, ex, gal + 1.0, z0 + 0.2 + (len - 0.4) / 2);
+      const gp = plane(len - 0.4, 0.9, glassRail, S, ex, gal + 0.55, z0 + 0.2 + (len - 0.4) / 2, Math.PI / 2);
+      gp.renderOrder = 5;
+      for (let z = z0 + 0.6; z < z1 - 0.3; z += 1.6) box(0.04, 0.95, 0.04, railMat, S, ex, gal + 0.55, z);
+      // the doors up there, dark, along the gallery wall
+      for (let z = z0 + 2.4; z < z1 - 1.5; z += 3.4) {
+        const dd = plane(0.9, 2.0, new THREE.MeshLambertMaterial({ color: 0x5a3e26 }), S, wx + s * 0.012, gal + 0.11 + 1.0, z, s > 0 ? Math.PI / 2 : -Math.PI / 2);
+        void dd;
+      }
+    }
+    // ---- the globe pendants, down the middle on long cords
+    const globe = new THREE.MeshBasicMaterial({ color: 0xffe6b8 });
+    const cord = new THREE.MeshLambertMaterial({ color: 0x1a1a1c });
+    const glowTex = new THREE.CanvasTexture(
+      (() => {
+        const c = document.createElement('canvas');
+        c.width = c.height = 64;
+        const g = c.getContext('2d')!;
+        const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+        grd.addColorStop(0, 'rgba(255,230,180,0.85)');
+        grd.addColorStop(0.35, 'rgba(255,210,150,0.25)');
+        grd.addColorStop(1, 'rgba(255,200,140,0)');
+        g.fillStyle = grd;
+        g.fillRect(0, 0, 64, 64);
+        return c;
+      })(),
+    );
+    for (let z = z0 + 3.2; z < z1 - 1; z += 3.6) {
+      const y = 3.9;
+      box(0.015, ceil - y - 0.2, 0.015, cord, S, LOBBY.runX, (ceil + y + 0.2) / 2, z);
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), globe);
+      ball.position.set(LOBBY.runX, y, z);
+      S.add(ball);
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+      halo.position.set(LOBBY.runX, y, z);
+      halo.scale.setScalar(1.6);
+      S.add(halo);
+    }
+    for (const z of [z0 + 4.5, z0 + 11.5]) {
+      const warm = new THREE.PointLight(0xffdcae, 3.4, 11, 1.3);
+      warm.position.set(LOBBY.runX, 3.4, z);
+      S.add(warm);
+    }
+    // ---- down the left: the sofa against the wall, its table, the bin, a sconce
     const leather = new THREE.MeshLambertMaterial({ color: 0x6a7078, emissive: 0x0c0d0f });
     const leatherLit = new THREE.MeshLambertMaterial({ color: 0x7c828a, emissive: 0x0e0f11 });
     const dark = new THREE.MeshLambertMaterial({ color: 0x2a2d33 });
     const oak = new THREE.MeshLambertMaterial({ color: 0x9a7448 });
-    const sx = LX(LOBBY.sofaX);
-    const sz = LZ(depth - 0.55);
-    box(2.1, 0.12, 0.86, dark, S, sx, 0.17, sz);
-    box(1.7, 0.2, 0.8, leather, S, sx, 0.33, sz);
-    for (const k of [-1, 0, 1]) box(0.55, 0.13, 0.66, leatherLit, S, sx + k * 0.565, 0.495, sz - 0.05);
-    const sback = box(1.9, 0.62, 0.2, leather, S, sx, 0.74, sz + 0.33);
-    sback.rotation.x = -0.08;
-    for (const side of [-1, 1]) {
-      box(0.2, 0.42, 0.84, leather, S, sx + side * 0.95, 0.44, sz);
-      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.86, 12), leatherLit);
-      roll.rotation.x = Math.PI / 2;
-      roll.position.set(sx + side * 0.97, 0.68, sz);
-      S.add(roll);
+    {
+      const sofa = new THREE.Group();
+      // (built facing -z, then turned to face out from the left wall)
+      sofa.position.set(x1 - 0.55, 0, LOBBY.sofaZ);
+      sofa.rotation.y = -Math.PI / 2;
+      S.add(sofa);
+      box(2.1, 0.12, 0.86, dark, sofa, 0, 0.17, 0);
+      box(1.7, 0.2, 0.8, leather, sofa, 0, 0.33, 0);
+      for (const k of [-1, 0, 1]) box(0.55, 0.13, 0.66, leatherLit, sofa, k * 0.565, 0.495, -0.05);
+      const sback = box(1.9, 0.62, 0.2, leather, sofa, 0, 0.74, 0.33);
+      sback.rotation.x = -0.08;
+      for (const side of [-1, 1]) {
+        box(0.2, 0.42, 0.84, leather, sofa, side * 0.95, 0.44, 0);
+        const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.86, 12), leatherLit);
+        roll.rotation.x = Math.PI / 2;
+        roll.position.set(side * 0.97, 0.68, 0);
+        sofa.add(roll);
+      }
+      const pillow = box(0.32, 0.3, 0.12, new THREE.MeshLambertMaterial({ color: 0xc8a868 }), sofa, -0.62, 0.7, 0.12);
+      pillow.rotation.set(0.3, -0.25, 0.15);
+      // the low table in front of it
+      const tz = -1.05;
+      box(1.2, 0.05, 0.6, oak, sofa, 0, 0.45, tz);
+      box(1.05, 0.03, 0.46, dark, sofa, 0, 0.12, tz);
+      for (const [dx, dz] of [[-0.55, -0.25], [0.55, -0.25], [-0.55, 0.25], [0.55, 0.25]]) box(0.05, 0.4, 0.05, dark, sofa, dx, 0.2, tz + dz);
+      box(0.28, 0.012, 0.2, new THREE.MeshLambertMaterial({ color: 0x2a4a7a }), sofa, -0.3, 0.48, tz);
+      const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.26, 10), new THREE.MeshLambertMaterial({ color: 0x3a6a5a, emissive: 0x0a1a14 }));
+      vase.position.set(0.38, 0.6, tz - 0.05);
+      sofa.add(vase);
+      // the sconce over it, and its warm wash on the paper
+      box(0.06, 0.3, 0.12, new THREE.MeshBasicMaterial({ color: 0xfff0c8 }), S, x1 - 0.04, 2.1, LOBBY.sofaZ);
+      box(0.1, 0.04, 0.18, steelTrim, S, x1 - 0.06, 1.93, LOBBY.sofaZ);
+      const sconce = new THREE.PointLight(0xffd8a0, 1.6, 4, 1.6);
+      sconce.position.set(x1 - 0.35, 2.2, LOBBY.sofaZ);
+      S.add(sconce);
     }
-    const pillow = box(0.32, 0.3, 0.12, new THREE.MeshLambertMaterial({ color: 0xc8a868 }), S, sx - 0.62, 0.7, sz + 0.12);
-    pillow.rotation.set(0.3, -0.25, 0.15);
-    const tz = sz - 1.05;
-    box(1.2, 0.05, 0.6, oak, S, sx, 0.45, tz);
-    box(1.05, 0.03, 0.46, dark, S, sx, 0.12, tz);
-    for (const [dx, dz] of [[-0.55, -0.25], [0.55, -0.25], [-0.55, 0.25], [0.55, 0.25]]) box(0.05, 0.4, 0.05, dark, S, sx + dx, 0.2, tz + dz);
-    box(0.28, 0.012, 0.2, new THREE.MeshLambertMaterial({ color: 0x2a4a7a }), S, sx - 0.3, 0.48, tz);
-    const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.26, 10), new THREE.MeshLambertMaterial({ color: 0x3a6a5a, emissive: 0x0a1a14 }));
-    vase.position.set(sx + 0.38, 0.6, tz - 0.05);
-    S.add(vase);
     const steel = new THREE.MeshLambertMaterial({ color: 0xb4bac0, emissive: 0x15171a });
-    const can = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.2, 0.75, 14), steel);
-    can.position.set(LX(LOBBY.binX), 0.375, LZ(LOBBY.binZ));
-    S.add(can);
-    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.05, 14), steel);
-    lid.position.set(LX(LOBBY.binX), 0.78, LZ(LOBBY.binZ));
-    S.add(lid);
-    // the sconces along the front wall, and their light
-    const glow = new THREE.MeshBasicMaterial({ color: 0xfff0c8 });
-    for (const x of [-3.5, 0, 3.5]) {
-      box(0.12, 0.3, 0.06, glow, S, x, 2.2, LZ(depth - 0.05));
-      box(0.18, 0.04, 0.1, steelTrim, S, x, 2.03, LZ(depth - 0.06));
+    {
+      const can = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.2, 0.75, 14), steel);
+      can.position.set(x1 - 0.4, 0.375, LOBBY.binZ);
+      S.add(can);
+      const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.05, 14), steel);
+      lid.position.set(x1 - 0.4, 0.78, LOBBY.binZ);
+      S.add(lid);
     }
-    const warm = new THREE.PointLight(0xffe8c8, 3.2, 12, 1.2);
-    warm.position.set(0.5, 3.2, LZ(depth * 0.55));
-    S.add(warm);
-    // the police lights, from the front doors off to the left, round and round
-    const flash = new THREE.PointLight(0xff2a3a, 0, 12, 1.4);
-    flash.position.set(x0 + 0.6, 1.6, LZ(LOBBY.runnerZ));
+    // ---- down the right: the desk, the staff door, the lift, the mailboxes
+    const veneer = new THREE.MeshLambertMaterial({ color: 0x6a4a2e });
+    const marbleTop = new THREE.MeshLambertMaterial({ color: 0xe8e4dc });
+    {
+      const dz = LOBBY.deskZ;
+      box(0.75, 1.08, 2.6, veneer, S, x0 + 0.9, 0.54, dz);
+      box(0.9, 0.05, 2.75, marbleTop, S, x0 + 0.88, 1.1, dz);
+      for (let k = -1; k <= 1; k++) box(0.02, 0.8, 0.6, new THREE.MeshLambertMaterial({ color: 0x5a3c24 }), S, x0 + 1.28, 0.5, dz + k * 0.8);
+      // the bell, the lamp, the key board behind
+      const bell = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), this.mats.chrome);
+      bell.position.set(x0 + 1.1, 1.13, dz + 0.6);
+      S.add(bell);
+      box(0.04, 0.5, 0.04, dark, S, x0 + 0.7, 1.38, dz - 0.9);
+      box(0.2, 0.12, 0.2, new THREE.MeshBasicMaterial({ color: 0xffe0a8 }), S, x0 + 0.7, 1.66, dz - 0.9);
+      box(0.05, 0.9, 1.4, veneer, S, x0 + 0.03, 1.7, dz);
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 6; c++) box(0.04, 0.05, 0.03, this.mats.chrome, S, x0 + 0.07, 1.45 + r * 0.25, dz - 0.55 + c * 0.22);
+    }
+    {
+      // the staff door, its green sign lit over it
+      const dz = LOBBY.staffZ;
+      plane(1.0, 2.15, new THREE.MeshLambertMaterial({ color: 0x4e5a52 }), S, x0 + 0.012, 1.08, dz, Math.PI / 2);
+      box(0.03, 0.03, 0.5, this.mats.chrome, S, x0 + 0.05, 1.05, dz + 0.3);
+      plane(0.5, 0.18, new THREE.MeshBasicMaterial({ map: tex(texSign('STAFF', '#0e7a3e', '#e8ffe8')) }), S, x0 + 0.02, 2.4, dz, Math.PI / 2);
+      const green = new THREE.PointLight(0x40ff90, 1.2, 3.5, 1.6);
+      green.position.set(x0 + 0.4, 2.4, dz);
+      S.add(green);
+    }
+    {
+      // the lift: steel doors in a surround, its floor dial dark
+      const dz = LOBBY.liftZ;
+      plane(1.4, 2.3, new THREE.MeshLambertMaterial({ map: tex(texLiftDoors()) }), S, x0 + 0.015, 1.15, dz, Math.PI / 2);
+      box(0.06, 0.24, 0.5, dark, S, x0 + 0.03, 2.55, dz);
+      box(0.05, 0.12, 0.08, new THREE.MeshBasicMaterial({ color: 0x5a1a14 }), S, x0 + 0.04, 1.2, dz + 0.95);
+    }
+    {
+      // the mailboxes: a brass grid, a number on every one
+      const dz = LOBBY.mailZ;
+      const brass = new THREE.MeshLambertMaterial({ color: 0xb89a52, emissive: 0x1a1408 });
+      box(0.12, 1.3, 1.9, dark, S, x0 + 0.06, 1.35, dz);
+      for (let r = 0; r < 6; r++) for (let c = 0; c < 7; c++) box(0.03, 0.17, 0.24, brass, S, x0 + 0.13, 0.82 + r * 0.205, dz - 0.79 + c * 0.263);
+    }
+    // ---- the far end: the glass front doors, smashed in, and the night and
+    // the police cars beyond them
+    {
+      const glassMat = new THREE.MeshBasicMaterial({ color: 0x9ac0d0, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false });
+      const frame = new THREE.MeshLambertMaterial({ color: 0x24262a });
+      // the wall round the doors, and the doors' steel frames
+      wall(x0, z1 - 0.01, mid - 1.6, z1 - 0.01, Math.PI);
+      wall(mid + 1.6, z1 - 0.01, x1, z1 - 0.01, Math.PI);
+      wall(mid - 1.6, z1 - 0.01, mid + 1.6, z1 - 0.01, Math.PI, ceil, 2.7);
+      for (const x of [mid - 1.6, mid - 0.8, mid, mid + 0.8, mid + 1.6]) box(0.07, 2.7, 0.08, frame, S, x, 1.35, z1);
+      box(3.3, 0.1, 0.1, frame, S, mid, 2.7, z1);
+      box(3.3, 0.06, 0.1, frame, S, mid, 0.03, z1);
+      // what is left of the glass: jagged teeth round the frames
+      let seed2 = 31;
+      const r2 = () => ((seed2 = (seed2 * 16807) % 2147483647) / 2147483647);
+      for (const cx of [mid - 1.2, mid - 0.4, mid + 0.4, mid + 1.2]) {
+        const whole = cx === mid + 1.2;
+        if (whole) {
+          const gp = plane(0.74, 2.6, glassMat, S, cx, 1.35, z1, Math.PI);
+          gp.renderOrder = 6;
+          continue;
+        }
+        for (let k = 0; k < 5; k++) {
+          const sh = new THREE.Shape();
+          const u = -0.37 + k * 0.148;
+          const top = r2() < 0.5;
+          const y = top ? 2.65 : 0.06;
+          sh.moveTo(u, y);
+          sh.lineTo(u + 0.148, y);
+          sh.lineTo(u + 0.074 + (r2() - 0.5) * 0.06, top ? y - 0.2 - r2() * 0.7 : y + 0.15 + r2() * 0.5);
+          const m = new THREE.Mesh(new THREE.ShapeGeometry(sh), glassMat);
+          m.position.set(cx, 0, z1);
+          m.rotation.y = Math.PI;
+          m.renderOrder = 6;
+          S.add(m);
+        }
+      }
+      // the glass all over the floor inside the doors, glinting
+      const bits = new THREE.InstancedMesh(new THREE.CircleGeometry(0.03, 3), new THREE.MeshBasicMaterial({ color: 0xc8dce6, side: THREE.DoubleSide }), 120);
+      const m4 = new THREE.Matrix4();
+      const q = new THREE.Quaternion();
+      for (let k = 0; k < 120; k++) {
+        q.setFromEuler(new THREE.Euler(-Math.PI / 2, r2() * 6, 0));
+        const sc = 0.4 + r2() * 1.3;
+        m4.compose(new THREE.Vector3(mid + (r2() - 0.5) * 3.4, 0.012, z1 - 0.15 - Math.pow(r2(), 1.5) * 3), q, new THREE.Vector3(sc, sc, 1));
+        bits.setMatrixAt(k, m4);
+      }
+      S.add(bits);
+      // outside: the street, wet, and the cars' lights going round on it
+      plane(14, 8, new THREE.MeshBasicMaterial({ color: 0x0a0c12 }), S, mid, 0.001, z1 + 4, 0, -Math.PI / 2);
+      plane(14, 6, new THREE.MeshBasicMaterial({ color: 0x10141e }), S, mid, 3, z1 + 8, Math.PI);
+      const bar = (x: number, col: number) => box(0.5, 0.12, 0.2, new THREE.MeshBasicMaterial({ color: col }), S, x, 1.55, z1 + 4.5);
+      this.lobbyBars = [bar(mid - 1.9, 0xff2030), bar(mid - 1.4, 0x2a50ff), bar(mid + 2.2, 0xff2030), bar(mid + 2.7, 0x2a50ff)];
+      box(1.9, 1.0, 4.4, new THREE.MeshLambertMaterial({ color: 0x14161c }), S, mid - 1.65, 0.75, z1 + 5.5);
+      box(1.9, 1.0, 4.4, new THREE.MeshLambertMaterial({ color: 0x14161c }), S, mid + 2.45, 0.75, z1 + 5.5);
+    }
+    // the police lights, through the front doors, washing down the hall
+    const flash = new THREE.PointLight(0xff2a3a, 0, 22, 1.1);
+    flash.position.set(mid, 2.0, z1 + 1.5);
     S.add(flash);
     // ---- the door, where it came down: out on the lobby floor, face up,
     // its top end on the lip of the runner and the push bar towards you
@@ -864,7 +1041,9 @@ export class PoliceBuilding {
       t += dt;
       const ph = Math.sin(t * 6);
       flash.color.setHex(ph > 0 ? 0xff2a3a : 0x2a5aff);
-      flash.intensity = 0.55 * Math.abs(ph);
+      flash.intensity = 2.2 * Math.abs(ph);
+      // the light bars on the cars outside, red and blue in turn
+      this.lobbyBars.forEach((b, i) => (b.visible = (i % 2 === 0) === ph > 0));
     });
   }
 
@@ -963,7 +1142,20 @@ export class PoliceBuilding {
     if (f === 0) {
       // G: the lobby itself is drawn with the stairwell (see `breakLobbyDoor`);
       // here only where the officers waiting in it can walk
-      fl.walls.push({ x0: -AH, z0: WZ1, x1: SDOOR.x0, z1: WZ1 }, { x0: SDOOR.x1, z0: WZ1, x1: AH, z1: WZ1 }, { x0: -AH, z0: 4.4, x1: AH, z1: 4.4 });
+      const L = LOBBY;
+      fl.walls.push(
+        { x0: L.x0, z0: WZ1, x1: SDOOR.x0, z1: WZ1 },
+        { x0: SDOOR.x1, z0: WZ1, x1: L.x1, z1: WZ1 },
+        { x0: L.x0, z0: WZ1, x1: L.x0, z1: L.z1 },
+        { x0: L.x1, z0: WZ1, x1: L.x1, z1: L.z1 },
+        { x0: L.x0, z0: L.z1, x1: L.x1, z1: L.z1 },
+      );
+      // the desk, the sofa and its table, the bin, the mailboxes: in the way
+      fl.boxes.push(
+        { x0: L.x0, x1: L.x0 + 1.35, z0: L.deskZ - 1.4, z1: L.deskZ + 1.4, h: 1.1 },
+        { x0: L.x1 - 2.25, x1: L.x1, z0: L.sofaZ - 1.1, z1: L.sofaZ + 1.1, h: 0.8 },
+        { x0: L.x1 - 0.7, x1: L.x1, z0: L.binZ - 0.3, z1: L.binZ + 0.3, h: 0.8 },
+      );
       return;
     }
     const paperT = tex(texWallpaper(), 1, 1);
@@ -1642,6 +1834,8 @@ export class PoliceBuilding {
   readonly stairOut: NavNode[] = [];
   /** The lobby, behind the G door. */
   lobby: NavNode | null = null;
+  /** Inside the lobby's smashed front doors: where the three of them come in. */
+  entrance: NavNode | null = null;
   /** Every corridor node per floor, stairs end first. */
   readonly corridor: NavNode[][] = [];
 
@@ -1664,6 +1858,11 @@ export class PoliceBuilding {
     // (to one side of the doorway, so whoever waits there is not stood in it)
     this.lobby = this.node(-0.2, 4.0, 0, 'lobby');
     this.link(this.landing[0], this.lobby, this.stairDoors[0]);
+    // and down the runner to the front doors, where the police come in
+    const half = this.node(LOBBY.runX, (WZ1 + LOBBY.z1) / 2, 0, 'lobby');
+    this.entrance = this.node(LOBBY.runX, LOBBY.z1 - 1.2, 0, 'lobby');
+    this.link(this.lobby, half);
+    this.link(half, this.entrance);
     this.stairOut.push(this.lobby);
     this.corridor.push([]);
     for (let f = 1; f <= TOP; f++) {

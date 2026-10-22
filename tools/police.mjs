@@ -238,19 +238,23 @@ try {
   await P(page, 'freeze', false);
   let s0 = await S(page);
   check('three officers, each on his own', s0.cops.length === 3 && new Set(s0.cops.map((c) => `${c.x.toFixed(1)},${c.z.toFixed(1)},${c.level}`)).size === 3);
+  check('all three start at the lobby\'s smashed front doors', s0.cops.every((c) => c.level === 0 && c.z > 14), s0.cops.map((c) => `${c.level}:${c.z.toFixed(1)}`).join(' '));
   // a while of the building being searched
   const start = s0.cops.map((c) => ({ x: c.x, z: c.z, h: c.h }));
   const floors = new Set();
-  for (let i = 0; i < 60; i++) {
+  let opened = [];
+  for (let i = 0; i < 200; i++) {
     await sleep(500);
     const s = await S(page);
     for (const c of s.cops) floors.add(c.level);
+    if (i % 10 === 9) opened = (await P(page, 'doors')).filter((x) => x.by === 'officer');
+    if (i > 60 && floors.size >= 3 && opened.length) break;
   }
   s0 = await S(page);
   const travelled = s0.cops.map((c, i) => Math.hypot(c.x - start[i].x, c.z - start[i].z) + Math.abs(c.h - start[i].h));
-  check('they move round the building', travelled.every((t) => t > 1), travelled.map((t) => t.toFixed(1)).join(', '));
+  check('they come in and move round the building', travelled.every((t) => t > 1), travelled.map((t) => t.toFixed(1)).join(', '));
+  check('each to his own floor first: the first to the sixth, the second the third, the last the first', s0.cops.map((c) => c.home).join(',') === '6,3,1', s0.cops.map((c) => `${c.home}->${c.floorGoal}`).join(' '));
   check('and between floors', floors.size >= 3, [...floors].join(','));
-  const opened = (await P(page, 'doors')).filter((x) => x.by === 'officer');
   check('they open doors as they go, and leave them open', opened.length > 0 && opened.every((x) => x.want === 1), `${opened.length} opened`);
 
   // sight: in plain view he sees you; behind a shut door he does not
@@ -306,7 +310,9 @@ try {
   await sleep(300);
   await page.screenshot({ path: `${SHOTS}/arrest.png` });
   let sc = [];
-  for (let i = 0; i < 20; i++) {
+  // (the arrest takes its time now -- the lunge, the hold, the black -- and
+  // a software renderer takes longer again)
+  for (let i = 0; i < 80; i++) {
     await sleep(300);
     sc = await scenes(page);
     if (sc.includes('DeathScreen')) break;

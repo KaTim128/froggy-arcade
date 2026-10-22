@@ -149,6 +149,8 @@ interface Cop {
   detourT: number;
   lastPos: { x: number; z: number };
   floorGoal: number;
+  /** His own floor: where he goes first, and keeps coming back to. */
+  home: number;
   lastFloor: number;
   /** Rig: what the body is doing this frame. */
   st: OfficerState;
@@ -578,25 +580,34 @@ export class PoliceEscape3D extends Phaser.Scene {
     this.makeCops();
   }
 
+  /**
+   * THE THREE OF THEM, at the lobby's smashed front doors.  They come in one
+   * after another a few seconds after you, and each has his floor: the first
+   * goes straight up after you, all the way to the sixth; the second follows
+   * him up and takes the third; the last stays on the first.  Once there,
+   * each is his own -- searching his floor, then any floor, drawn to where
+   * you have been seen or heard (and to his own more than the others).
+   */
   private makeCops(): void {
     const b = this.b!;
-    const starts = [
-      { f: 3, z: 12 },
-      { f: 5, z: 20 },
-      { f: 0, z: 3 },
+    const door = b.entrance!;
+    const plan = [
+      { home: TOP, at: { x: door.x - 0.45, z: door.z - 0.2 }, wait: this.retry ? 2.5 : 4 },
+      { home: 3, at: { x: door.x + 0.5, z: door.z }, wait: this.retry ? 3.7 : 5.4 },
+      { home: 1, at: { x: door.x, z: door.z + 0.6 }, wait: this.retry ? 5 : 7 },
     ];
     OFFICER_LOOKS.forEach((look, i) => {
       const model = new PoliceOfficer(look, 101 + i * 7);
       this.stage!.scene.add(model.root);
-      const s = starts[i];
-      const lobby = s.f === 0;
+      const p = plan[i];
       const c: Cop = {
         i,
         model,
-        m: lobby ? { x: -0.2, z: 4.0, f: 0, well: false, seg: 'top', h: 0 } : { x: 0, z: s.z, f: s.f, well: false, seg: 'top', h: s.f * FH },
-        yaw: lobby ? Math.PI : 0,
+        m: { x: p.at.x, z: p.at.z, f: 0, well: false, seg: 'top', h: 0 },
+        // (facing in, down the hall, at the stairs)
+        yaw: Math.PI,
         mode: 'task',
-        acts: [],
+        acts: [{ k: 'look', t: p.wait }],
         path: [],
         pathI: 0,
         pathTo: null,
@@ -611,21 +622,37 @@ export class PoliceEscape3D extends Phaser.Scene {
         stuckT: 0,
         detourT: 0,
         lastPos: { x: 0, z: 0 },
-        floorGoal: s.f,
-        lastFloor: s.f,
+        floorGoal: p.home,
+        lastFloor: 0,
+        home: p.home,
         st: { speed: 0, run: false, aimYaw: 0, aimPitch: 0, crouch: 0, reach: 0, point: 0, shout: 0, grab: 0, beamLen: 8, torch: 1, lights: 1 },
         speedNow: 0,
-        radioT: 6 + i * 4,
-        inLobby: lobby,
+        radioT: 8 + i * 4,
+        inLobby: true,
         heardT: 0,
       };
       model.onFootfall = (at, run) => this.sfxAt('police_step', at, run ? 0.9 : 0.6);
       this.cops.push(c);
-      // the lobby one comes in a little after you
-      if (lobby) c.acts.push({ k: 'look', t: this.retry ? 8 : 11 });
-      else this.sweepFloor(c, s.f, true);
-      void b;
     });
+  }
+
+  /** What each of them says on the radio as he comes in, and where he goes. */
+  private comeIn(c: Cop): void {
+    const b = this.b!;
+    c.inLobby = false;
+    c.acts = [];
+    c.t = 0;
+    this.sfxAt('police_radio', this.eyeOf(c.m, 1.6), 0.9);
+    const words = [
+      '"HE WENT UP THE STAIRS. I\'M GOING ALL THE WAY UP."',
+      '"RIGHT BEHIND YOU. I\'LL TAKE THREE."',
+      '"FIRST FLOOR\'S MINE. NOBODY GETS PAST ME."',
+    ];
+    this.say(words[c.i] ?? '"MOVING IN."', 2.4, true);
+    // straight up to his floor -- the first one fast, after you -- and then
+    // his floor, flat by flat
+    this.sweepFloor(c, c.home, false, c.i === 0 ? HURRY : c.i === 1 ? HURRY * 0.92 : PATROL * 1.3);
+    void b;
   }
 
   // ===================================================================== loop
@@ -1099,10 +1126,10 @@ export class PoliceEscape3D extends Phaser.Scene {
   }
 
   /** A floor's worth of work for one officer: up to it, along it, into some of its flats. */
-  private sweepFloor(c: Cop, f: number, here = false): void {
+  private sweepFloor(c: Cop, f: number, here = false, pace?: number): void {
     const b = this.b!;
     c.floorGoal = f;
-    if (!here) c.acts.push({ k: 'go', n: b.stairOut[f] });
+    if (!here) c.acts.push({ k: 'go', n: b.stairOut[f], pace });
     const spine = b.corridor[f].slice(2);
     const rooms = b.floors[f].rooms.filter((r) => r.open && r.special === 'none').sort((p, q) => p.dz - q.dz);
     // from the near end or the far end, whichever is nearer
@@ -1131,6 +1158,8 @@ export class PoliceEscape3D extends Phaser.Scene {
       if (Math.abs(f - lvl) <= 1) k *= 1 + 2.5 * this.pressure;
       if (f === lvl) k *= 1 + this.pressure;
       if (f === c.lastFloor) k *= 0.35;
+      // (his own floor, more than the others: each of them keeps a part of the building)
+      if (f === c.home) k *= 2;
       w.push(k);
     }
     let roll = Math.random() * w.reduce((a, x) => a + x, 0);
@@ -1171,16 +1200,14 @@ export class PoliceEscape3D extends Phaser.Scene {
     c.st.grab = 0;
     c.st.run = false;
     c.speedNow = 0;
-    // ---- the lobby one, coming in
+    // ---- at the front doors, waiting to come in
     if (c.inLobby) {
       c.t += dt;
       const a = c.acts[0];
+      // (a torch going over the hall while he waits)
+      c.st.aimYaw = Math.sin(c.t * 0.9 + c.i * 2) * 0.5;
       if (a?.k === 'look' && c.t < a.t) return;
-      c.inLobby = false;
-      c.acts = [];
-      audio.sfx('door_open', 0.7);
-      this.sfxAt('police_radio', this.eyeOf(c.m, 1.6), 0.8);
-      this.sweepFloor(c, 1);
+      this.comeIn(c);
     }
     // ---- seeing you
     if (c.mode === 'task' || c.mode === 'lost') this.watch(c, dt);
@@ -1711,7 +1738,8 @@ export class PoliceEscape3D extends Phaser.Scene {
       fl.group.visible = on;
     }
     // hidden, nearly none of it: what you see is the room's light and theirs
-    if (this.fill) this.fill.intensity = this.hide ? 0.08 : 0.7;
+    // (caught, only the light under his face: the room goes dark round it)
+    if (this.fill) this.fill.intensity = this.phase === 'caught' ? 0.04 : this.hide ? 0.08 : 0.7;
     b.well.visible = me.well || (me.z < 9 && b.stairDoors[me.f]?.k > 0.05) || this.phase === 'caught';
     b.exterior.visible = lvl === TOP && (SIDE612 * me.x > CH || this.phase === 'cinema' || this.phase === 'ending');
     // the corridor's lights at the fittings nearest you
@@ -1721,7 +1749,10 @@ export class PoliceEscape3D extends Phaser.Scene {
       const p = near[i];
       if (p) l.position.copy(p);
       // a little flicker on a fitting that is going
-      l.intensity = 7 * (i === 2 && Math.sin(this.clock * 23) > 0.93 ? 0.4 : 1) * (me.well && lvl === 0 ? 0 : 1);
+      // (caught: they go down to almost nothing as he gets you, the hall
+      // falling away into the dark behind him)
+      const caught = this.phase === 'caught' ? 1 - 0.85 * clamp((this.scareT - 0.3) / 0.4, 0, 1) : 1;
+      l.intensity = 7 * caught * (i === 2 && Math.sin(this.clock * 23) > 0.93 ? 0.4 : 1) * (me.well && lvl === 0 ? 0 : 1);
     });
     this.wellLight?.position.set(0, me.h + 2.5, -1.5);
     // the light under the doors
@@ -2060,7 +2091,10 @@ export class PoliceEscape3D extends Phaser.Scene {
     const line = (c as Cop & { line?: THREE.Vector3 }).line ?? new THREE.Vector3(0, 0, -1);
     const rush = 0.38;
     const k = clamp(t / rush, 0, 1);
-    const dist = this.arrestFrom + (0.82 - this.arrestFrom) * (1 - Math.pow(1 - k, 3));
+    // the lunge, and then -- close enough to feel his breath -- still
+    // coming, an inch at a time, all the while he is shouting in your face
+    const creep = clamp((t - rush) / 1.6, 0, 1);
+    const dist = this.arrestFrom + (0.66 - this.arrestFrom) * (1 - Math.pow(1 - k, 3)) - 0.14 * creep;
     const floorY = this.levelOf(this.me) * FH + (this.me.well ? 0 : 0);
     const baseY = this.me.well ? this.me.h : floorY;
     c.m.x = eye.x + line.x * dist;
@@ -2069,7 +2103,7 @@ export class PoliceEscape3D extends Phaser.Scene {
     c.yaw = Math.atan2(-line.x, -line.z);
     c.speedNow = k < 1 ? 5 : 0;
     c.st.run = k < 1;
-    c.st.shout = t > 0.25 ? 1 : 0.6;
+    c.st.shout = t > 0.25 ? 0.85 + Math.sin(t * 9) * 0.15 : 0.6;
     c.st.grab = t > 0.3 ? 1 : 0;
     c.st.torch = 1;
     c.st.lights = 1;
@@ -2080,19 +2114,24 @@ export class PoliceEscape3D extends Phaser.Scene {
     c.model.update(dt, c.st);
     // look him in the face, and the picture jolts as he arrives
     const head = c.model.headWorld();
-    const shake = t > rush && t < rush + 0.35 ? (rush + 0.35 - t) * 0.12 : 0.004;
+    const shake = t > rush && t < rush + 0.45 ? (rush + 0.45 - t) * 0.16 : 0.006 + creep * 0.004;
     // (held a little back and up from where you stood, so his shoulders are
     // not in the lens and his face is level with yours)
     const back = 0.18 * k;
     cam.position.set(eye.x - line.x * back + (Math.random() - 0.5) * shake, Math.max(eye.y, head.y - 0.05) + (Math.random() - 0.5) * shake, eye.z - line.z * back);
     cam.lookAt(head);
-    const fov = 72 + (50 - 72) * k;
+    // (closing in on his face: everything else falls away out of the frame)
+    const fov = 72 + (46 - 72) * k - 8 * creep;
     cam.fov = fov;
     cam.updateProjectionMatrix();
     // the light under his face, the torch's flare in your eyes
+    // THE LIGHT ON HIM: hard and cold, from under his chin -- the sockets
+    // of his eyes and the underside of his brow gone black, the mouth a
+    // hole -- and it stutters, as a torch held in a struggle does
     if (this.scareLight) {
-      this.scareLight.position.copy(head).add(new THREE.Vector3(line.x * -0.55, -0.6, line.z * -0.55));
-      this.scareLight.intensity = 1.6 * k;
+      this.scareLight.position.copy(head).add(new THREE.Vector3(line.x * -0.75, -0.62, line.z * -0.75));
+      const stutter = t > rush && Math.random() < 0.08 ? 0.35 : 1;
+      this.scareLight.intensity = 2.6 * k * stutter;
     }
     const { pos } = c.model.torchRay();
     if (this.flare) {
@@ -2108,6 +2147,7 @@ export class PoliceEscape3D extends Phaser.Scene {
     }
     if (t > rush && t - dt <= rush) {
       audio.sfx('arrest_hit', 1);
+      audio.sfx('death_stinger', 0.9);
       const canvas = document.getElementById('three-canvas') as HTMLCanvasElement | null;
       if (canvas) {
         canvas.style.filter = 'contrast(1.7) brightness(1.3)';
@@ -2115,7 +2155,7 @@ export class PoliceEscape3D extends Phaser.Scene {
       }
     }
     if (t > rush + 0.25 && t - dt <= rush + 0.25) audio.sfx('cuffs', 1);
-    if (t > 1.9) this.toArrested();
+    if (t > 2.45) this.toArrested();
   }
 
   private arrested = false;
@@ -2181,12 +2221,40 @@ export class PoliceEscape3D extends Phaser.Scene {
       }
       if (this.phase === 'caught') {
         const t = this.scareT;
-        if (t > 0.38 && t < 0.5) {
-          ctx.fillStyle = `rgba(255,255,255,${0.6 * (1 - (t - 0.38) / 0.12)})`;
+        // the world closing in round his face: black from the edges
+        const close = clamp(t / 0.5, 0, 1);
+        const vg = ctx.createRadialGradient(GAME_W / 2, GAME_H / 2, GAME_H * (0.5 - 0.22 * close), GAME_W / 2, GAME_H / 2, GAME_W * 0.62);
+        vg.addColorStop(0, 'rgba(0,0,0,0)');
+        vg.addColorStop(1, `rgba(0,0,0,${0.55 + 0.4 * close})`);
+        ctx.fillStyle = vg;
+        ctx.fillRect(0, 0, GAME_W, GAME_H);
+        // the hit: a flash, white into red
+        if (t > 0.38 && t < 0.62) {
+          const a = 1 - (t - 0.38) / 0.24;
+          ctx.fillStyle = t < 0.46 ? `rgba(255,240,240,${0.7 * a})` : `rgba(200,10,20,${0.45 * a})`;
           ctx.fillRect(0, 0, GAME_W, GAME_H);
         }
-        if (t > 1.3) {
-          ctx.fillStyle = `rgba(0,0,0,${clamp((t - 1.3) / 0.5, 0, 1)})`;
+        if (t > 0.38) {
+          // a pulse of red at the edges with every shout, and the picture
+          // breaking up: grain, and a torn line or two
+          const pulse = 0.12 + 0.1 * Math.max(0, Math.sin(t * 9));
+          const rg = ctx.createRadialGradient(GAME_W / 2, GAME_H / 2, GAME_H * 0.3, GAME_W / 2, GAME_H / 2, GAME_W * 0.6);
+          rg.addColorStop(0, 'rgba(120,0,0,0)');
+          rg.addColorStop(1, `rgba(140,0,8,${pulse})`);
+          ctx.fillStyle = rg;
+          ctx.fillRect(0, 0, GAME_W, GAME_H);
+          for (let i = 0; i < 260; i++) {
+            ctx.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.25)';
+            ctx.fillRect(Math.random() * GAME_W, Math.random() * GAME_H, 1, 1);
+          }
+          if (Math.random() < 0.25) {
+            const y = Math.random() * GAME_H;
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(0, y, GAME_W, 1 + Math.random() * 3);
+          }
+        }
+        if (t > 1.85) {
+          ctx.fillStyle = `rgba(0,0,0,${clamp((t - 1.85) / 0.5, 0, 1)})`;
           ctx.fillRect(0, 0, GAME_W, GAME_H);
         }
         return;
@@ -2355,6 +2423,7 @@ export class PoliceEscape3D extends Phaser.Scene {
         torch: c.st.torch,
         beam: c.st.beamLen,
         floorGoal: c.floorGoal,
+        home: c.home,
       })),
       cine: this.cine?.t ?? 0,
       endI: this.endI,
