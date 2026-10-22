@@ -27,6 +27,7 @@ import { closeAndShowOut, showOutAtNight } from '../game/closingPull';
 import { closingTime } from '../core/broke';
 import Phaser from 'phaser';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../game/roomWalk';
+import { arcadeCop, type IndoorCop } from '../game/indoorPatrol';
 import { PALETTE } from '../render/palette';
 import { audio, SILENCE } from '../core/audio';
 import { store, type GameId } from '../core/state';
@@ -64,7 +65,9 @@ const CRANES: Array<{ kind: CraneKind; x: number; y: number; cost: number; title
 ];
 
 /** CREATURE CLASH: the upright on the back wall, right of the sign. */
-const CLASH = { x: 244, y: 82 };
+// (a touch further right than it first stood: the room's two games on the
+// back wall, BOG BALL and this, each get their own stretch of it)
+const CLASH = { x: 254, y: 82 };
 
 type Target =
   | { kind: 'cabinet'; cab: Cabinet }
@@ -94,6 +97,11 @@ export class ArcadeLounge extends Phaser.Scene {
   private sideDoor: { leaf: Phaser.GameObjects.Rectangle; gap: Phaser.GameObjects.Rectangle } | null = null;
   private mutter: Phaser.GameObjects.BitmapText | null = null;
 
+  /** An officer looking round, while the patrols are out (game/indoorPatrol). */
+  private police: IndoorCop | null = null;
+  /** Back from a cabinet an officer interrupted: they are stood right here. */
+  private copAsks = false;
+
   constructor() {
     super('ArcadeLounge');
   }
@@ -104,6 +112,7 @@ export class ArcadeLounge extends Phaser.Scene {
   private fromClash = false;
 
   init(data: { atCabinet?: GameId; fromAlley?: boolean; atProp?: CraneKind; fromClash?: boolean; from?: 'hub' } = {}): void {
+    this.copAsks = (data as { copAsks?: boolean }).copAsks === true;
     this.returnTo = data.atCabinet ?? null;
     this.fromClash = data.fromClash === true;
     this.fromAlley = data.fromAlley === true;
@@ -129,9 +138,10 @@ export class ArcadeLounge extends Phaser.Scene {
     paintHubRoom(this, { night: this.night, frontDoor: false });
     paintArcadeDressing(this, {
       night: this.night,
-      props: [{ x: 284, y: 70, kind: 'plant' }],
+      props: [{ x: 292, y: 70, kind: 'plant' }],
       // (one, clear of the claw machines that now stand where the other was)
-      vents: [236],
+      // (between BOG BALL and CREATURE CLASH, clear of both)
+      vents: [196],
       // (the hanging WIN sign would sit behind CREATURE CLASH's marquee: the
       // cabinet is the thing that is lit up over there now)
       avoid: [{ from: CLASH.x - CLASH_W / 2 - 4, to: CLASH.x + CLASH_W / 2 + 4 }],
@@ -190,6 +200,21 @@ export class ArcadeLounge extends Phaser.Scene {
     trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
 
     // (no tokens to count after closing: the HUD is the daytime's)
+    // now and then, while the patrols are out, an officer looks round --
+    // and the machines are what you hide behind
+    this.police = arcadeCop({
+      scene: this,
+      player: () => this.player,
+      bounds: () => this.bounds,
+      solids: () => this.solids,
+      machines: this.solids.map((b) => ({ x: b.x + b.w / 2, y: b.y + b.h, w: b.w, depth: b.h })),
+      door: { x: BACK_DOOR.x + 18, y: BACK_DOOR.y },
+      lock: (on) => (this.locked = on),
+      alarm: () => {
+        this.walker.cancel();
+      },
+      asks: this.copAsks,
+    });
     if (!this.night) new TokenHud(this);
     if (!this.night) attachPockets(this, () => this.busy());
     // after the night: the arcade keeps hours, and shuts at 7:45 PM
@@ -430,6 +455,7 @@ export class ArcadeLounge extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    this.police?.update(delta);
     if (this.busy()) {
       this.promptPlate.setVisible(false);
       this.prompt.setVisible(false);

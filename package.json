@@ -14,6 +14,8 @@
     "test:story": "node tools/story.mjs",
     "test:basement": "node tools/basement.mjs",
     "test:chase": "node tools/chase.mjs",
+    "test:police": "node tools/police.mjs",
+    "test:stealth": "node tools/stealth.mjs",
     "test:outro": "node tools/outro.mjs",
     "test:text": "node tools/text.mjs",
     "test:profiles": "node tools/profiles.mjs",

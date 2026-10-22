@@ -41,6 +41,9 @@ export function paintStuds(g: Phaser.GameObjects.Graphics, x: number, y: number,
   }
 }
 
+/** Threads' glass: pale at the top, a little warm at the foot.  Every wall mirror uses it. */
+export const MIRROR_GLASS = { glassTop: 0xeef2f4, glassFoot: 0xe0d4da };
+
 export interface MirrorOpts {
   /** The glass at its top and at its foot: the shop's own wall colour, reflected. */
   glassTop?: number;

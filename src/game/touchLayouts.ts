@@ -27,7 +27,7 @@ import { store } from '../core/state';
  * act is survived (`froggyGone`) every other scene gets the after skin: the
  * arcade's own controls, a shade off.
  */
-const HORROR = new Set(['HideRoom3D', 'Chase3D', 'NightRoad3D', 'HotelHall3D', 'HotelLobby3D', 'BasementSequence', 'ArcadeDark']);
+const HORROR = new Set(['PoliceEscape3D', 'HideRoom3D', 'Chase3D', 'NightRoad3D', 'HotelHall3D', 'HotelLobby3D', 'BasementSequence', 'ArcadeDark']);
 
 function skinFor(top: string): 'normal' | 'horror' | 'after' {
   if (HORROR.has(top)) return 'horror';
@@ -168,6 +168,19 @@ export const SCENE_TOUCH: Record<string, TouchLayout> = {
     look: true,
     buttons: [
       { label: 'PRESS', key: 'E', primary: true },
+      { label: 'RUN', key: 'SHIFT' },
+    ],
+  },
+
+  // The police in the building: walk, look, use what is in reach, get down,
+  // run -- and, hidden, PEEK out (Q) and INTERACT to get out.
+  PoliceEscape3D: {
+    stick: 'wasd',
+    look: true,
+    buttons: [
+      { label: 'INTERACT', key: 'E', primary: true },
+      { label: 'PEEK', key: 'Q' },
+      { label: 'CROUCH', key: 'C' },
       { label: 'RUN', key: 'SHIFT' },
     ],
   },

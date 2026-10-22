@@ -20,7 +20,8 @@
 import { store, type GameState } from '../core/state';
 import { ledger } from '../core/ledger';
 import { earnBadge } from './badges';
-import { COSMETICS, FURNITURE, STARTER_COSMETICS, cosmeticById, furnitureById } from './catalog';
+import { resetSuspicion } from './patrol';
+import { ATTIRE_SLOTS, COSMETICS, DEFAULT_WORN, FURNITURE, STARTER_COSMETICS, cosmeticById, furnitureById } from './catalog';
 import type { LifeState } from './lifeState';
 export { LIFE_VERSION, defaultLife, sanitizeLife, type LifeState, type Placement } from './lifeState';
 
@@ -125,17 +126,21 @@ export function rentInDays(l = L()): number {
 }
 
 /**
- * The rent, in words, for the HUD: RENT DUE IN 7 DAYS, counting down with
- * the days, RENT DUE TODAY on the day, RENT OVERDUE past it, and RENT PAID
- * on the day it was paid.  `warn` is true when it needs paying now.
+ * The rent, in a few words, for the HUD -- and only when it needs minding:
+ * RENT IN 2D (or 1D) as it comes up, RENT DUE TODAY on the day, RENT
+ * OVERDUE past it.  The rest of the week the clock's line is just the clock:
+ * spelt out every day (RENT PAID - DUE IN 7 DAYS) it ran across half the
+ * top of the room, over the rooms' own signs.  `warn` is true when it needs
+ * paying now.
  */
+export const RENT_SHOW_DAYS = 2;
 export function rentLabel(l = L()): { text: string; warn: boolean } | null {
   if (!l.rented) return null;
   const d = rentInDays(l);
   if (d < 0) return { text: 'RENT OVERDUE', warn: true };
-  if (l.rentPaidDay === clock(l.t).day) return { text: `RENT PAID - DUE IN ${d} ${d === 1 ? 'DAY' : 'DAYS'}`, warn: false };
   if (d === 0) return { text: 'RENT DUE TODAY', warn: true };
-  return { text: `RENT DUE IN ${d} ${d === 1 ? 'DAY' : 'DAYS'}`, warn: false };
+  if (d <= RENT_SHOW_DAYS && l.rentPaidDay !== clock(l.t).day) return { text: `RENT IN ${d}D`, warn: false };
+  return null;
 }
 
 /**
@@ -201,20 +206,21 @@ export function furnishStarterRoom(): void {
 
 /**
  * ---- WHOSE FLAT, AND WHO TO PAY.  Unit 612 on Level 6 until the night at
- * the Grand Lily; after it (two weeks on, the arc 'live') the man outside
+ * the Grand Lily; after it (the following day on, the arc 'live') the man outside
  * the arcade rents you 213 on Level 2, and the rent goes to him.
  */
 export const unitNo = (): number => (store.get().arc === 'live' ? 213 : 612);
 export const rentToMan = (): boolean => store.get().arc === 'live';
 
 /**
- * TWO WEEKS ON.  The clock to the morning a fortnight after the night (no
- * rent falls due across it: there is nothing rented -- 612 is a crime
- * scene), and the old tenancy gone.  What you owned is still yours.
+ * THE FOLLOWING DAY.  Out of 612's window in the night, and the clock on to
+ * the next morning (the arc 'back').  No rent falls due across it: there is
+ * nothing rented -- 612 is a crime scene -- and the old tenancy is gone.
+ * What you owned is still yours.
  */
-export function twoWeeksLater(): void {
+export function followingDay(): void {
   edit((l) => {
-    const day = clock(l.t).day + 14;
+    const day = clock(l.t).day + 1;
     l.t = day * DAY_SECONDS;
     l.rented = false;
     l.evicted = false;
@@ -378,19 +384,34 @@ export function wear(id: string): Result {
 }
 
 /**
- * A NEW LOOK.  In the stealth phase, a cut or a colour from the barber's
- * that is not the one on the poster: you look like somebody else now, and
- * the patrols stop hunting you.
+ * ---- A WHOLE NEW LOOK.  In the stealth phase the face on the poster is the
+ * whole of you: the hat, the coat, the scarf, the trousers, the shoes, the
+ * glasses (or none) -- and the hair, a cut or a colour from Sharp's.  Every
+ * one of them has to be something other than it was on the poster before the
+ * patrols stop knowing you on sight (game/patrol).  `attireProgress` is how
+ * far along that is, for the objective on the HUD.
  */
+export function attireProgress(): { changed: number; total: number; left: string[] } {
+  const s = store.get();
+  const was = s.wantedOutfit ?? {};
+  const now = L().outfit as Record<string, string>;
+  const worn = (o: Record<string, string>, slot: string): string => o[slot] ?? (DEFAULT_WORN as Record<string, string>)[slot] ?? '';
+  const left: string[] = [];
+  for (const slot of ATTIRE_SLOTS) if (worn(now, slot) === worn(was, slot)) left.push(slot === 'legs' ? 'TROUSERS' : slot.toUpperCase());
+  const hair = (['hair', 'dye'] as const).some((slot) => (now[slot] ?? '') !== (was[slot] ?? ''));
+  if (!hair) left.push('HAIR');
+  const total = ATTIRE_SLOTS.length + 1;
+  return { changed: total - left.length, total, left };
+}
+
 export function checkDisguise(): boolean {
   const s = store.get();
   if (s.arc !== 'live' || s.disguised) return false;
-  const was = s.wantedOutfit ?? {};
-  const now = L().outfit as Record<string, string>;
-  const changed = (['hair', 'dye'] as const).some((slot) => (now[slot] ?? '') !== (was[slot] ?? ''));
-  if (!changed) return false;
+  if (attireProgress().left.length) return false;
   store.patch({ disguised: true });
-  edit((l) => (l.notice = 'A NEW LOOK. THE POLICE WILL NOT KNOW YOU NOW.'));
+  // (whatever they were sure of, they are not any more)
+  resetSuspicion();
+  edit((l) => (l.notice = 'A WHOLE NEW LOOK. THE POLICE WILL NOT KNOW YOU NOW.'));
   earnBadge('new_face');
   store.flush();
   return true;

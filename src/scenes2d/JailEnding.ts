@@ -1,5 +1,5 @@
 /**
- * ---- CAUGHT.  Picked up on the street by a patrol, two weeks after the
+ * ---- CAUGHT.  Picked up on the street by a patrol, the day after the
  * Grand Lily, with your face on every wall: the run ends here.
  *
  *   THE CELL.  A bench, a steel pan, the bars, and you sat on the bench.
@@ -26,12 +26,12 @@ import { PAPER_H, PAPER_W, paintNewspaper, type PaperStory } from './ArrestEndin
 const PATROL_STORY: PaperStory = {
   banner: 'WANTED DRIFTER PICKED UP',
   deck: 'ON ARCADE STREET PATROL',
-  sub: 'Suspect in Lily\'s Condos wrecking taken in after two weeks at large',
+  sub: 'Suspect in Lily\'s Condos wrecking taken in the day after the night',
   cap1: ['WANTED: the notice posted outside the arcade on the edge of town, which officers', 'say led directly to yesterday\'s arrest. (Staff photo)'],
   cap2: 'THE SUSPECT is led to a patrol car. He did not resist.',
   body:
     'A man wanted in connection with the destruction at Lily\'s Condos was arrested yesterday by officers on a routine foot patrol near the arcade on the edge of town. ' +
-    'Police had circulated his description for two weeks after the night the building was left with its front doors smashed, its stairwell door torn away and a sixth-floor room "turned over completely." ' +
+    'Police had circulated his description since the night the building was left with its front doors smashed, its stairwell door torn away and a sixth-floor room "turned over completely." ' +
     'Officers say he was recognised from the poster displayed on the arcade\'s own wall, a few steps from where he was stopped. ' +
     'Witnesses describe a short pursuit along the pavement. "He ran, but not far," said one. ' +
     'The suspect is understood to have been living locally in a flat rented in another person\'s name. Police are keen to speak to the leaseholder, described as "a man in a black hat." ' +

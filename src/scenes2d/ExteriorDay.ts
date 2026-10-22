@@ -168,7 +168,7 @@ export class ExteriorDay extends Phaser.Scene {
     // does not need keeping hold of -- and at midnight he is not there.
     if (time !== 'midnight') new MysteryMan(this, MAN_X, WALK_Y + 4);
     else this.paintClosed(refs.doorRect);
-    // TWO WEEKS ON: your face, pasted over the arcade's own posters by the doors
+    // THE FOLLOWING DAY: your face, pasted over the arcade's own posters by the doors
     if (st0.arc !== 'none') {
       // (one either side of the doors, each over one of the arcade's own --
       // the face you had when they went up, whatever you look like now)
@@ -194,7 +194,7 @@ export class ExteriorDay extends Phaser.Scene {
     // kept with the run, and back on the spot when resumed here (game/place)
     trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
 
-    // now and then, two weeks on: an officer walking the pavement (game/patrol)
+    // now and then, the following day: an officer walking the pavement (game/patrol)
     this.patrol = time === 'midnight' ? null : this.makePatrol();
     // What you are carrying: cash and tokens, side by side and never added
     // together -- the same HUD as inside.
@@ -266,7 +266,7 @@ export class ExteriorDay extends Phaser.Scene {
       );
       if (this.opening && !this.woke) this.raiseShutter();
       if (st0.arc === 'back') this.time.delayedCall(700, () => this.comeBack());
-      else if (this.respawn) this.time.delayedCall(500, () => this.say("BACK AT THE START. SHARP'S IS EAST - STAY OUT OF SIGHT."));
+      else if (this.respawn) this.time.delayedCall(500, () => this.say('BACK AT THE START. THE SHOPS ARE EAST - STAY OUT OF SIGHT.'));
       else if (this.woke) this.wakeUp(this.woke);
       else {
         const line = nightfallOnce();
@@ -288,6 +288,8 @@ export class ExteriorDay extends Phaser.Scene {
       player: () => this.player,
       dark: () => this.lifeDark,
       lowProfile: () => this.begging,
+      // (and look in at the arcade)
+      doors: [{ x: this.doorX, place: 'arcade' }],
       lock: (on) => {
         this.locked = on;
         if (on) this.errand = null;
@@ -495,7 +497,7 @@ export class ExteriorDay extends Phaser.Scene {
 
     const s = store.get();
     if (stealthPhase()) {
-      this.manSays('"Sharp\'s. East of here. Change that face before you do anything else -- and don\'t you dare lie down anywhere until you have."');
+      this.manSays('"Sharp\'s and Threads. East of here. Change every last thing they put on that poster before you do anything else -- and don\'t you dare lie down anywhere until you have."');
       return;
     }
     // ---- THE RENT ON 213 IS HIS: due (or a week ahead), or the flat to take back
@@ -766,7 +768,7 @@ export class ExteriorDay extends Phaser.Scene {
   }
 
   /**
-   * ---- BACK, TWO WEEKS LATER.  Your own face on the arcade's wall, and the
+   * ---- BACK, THE FOLLOWING DAY.  Your own face on the arcade's wall, and the
    * man has a word: $200 for the trouble, a flat at Lily's (Level 2, room
    * 213, the middle door -- a week free, then the rent is his), and the
    * police on the streets now and then.  Nobody moves till he has said it.
@@ -783,14 +785,15 @@ export class ExteriorDay extends Phaser.Scene {
       '"Well, well. If it isn\'t the most famous face on the street."',
       '"Something strange went on at Lily\'s that night. And you were right in the middle of it. I\'d bet my hat."',
       '"A word of warning: the police are all over these streets. Every one of them has seen that poster."',
-      '"If you want to get away from them, change your appearance. Sharp\'s, the barber, east of here. A new cut, a new colour."',
-      '"Keep out of their sight on the way. Duck down an alley if one comes. Into the arcade, or any gap between the shops."',
+      '"If you want to get away from them, change your appearance. ALL of it. Sharp\'s, the barber, east of here, for the hair -- and Threads for the rest."',
+      '"The hat, the coat, the scarf, the trousers, the shoes. Glasses, even. Every stitch that\'s on that poster. Until then, any one of them who sees you knows you."',
+      '"Keep out of their sight on the way. Duck down an alley if one comes -- they won\'t follow you down one unless they see you go in."',
       '"And don\'t even think of trying to find a place to sleep until your appearance is changed. If you try to sleep before changing your look, you will get caught."',
       '"Home is Lily\'s again. I rented you a flat: LEVEL 2, ROOM 213. The middle door."',
       `"The first week's on me. After that the rent comes to me, not the landlord. $${RENT_PRICE} a week."`,
       '"Why? A roof over your head keeps you winning prizes. And I do like easy money."',
       '"Here. $200. Call it compensation for the rental situation... and everything after it."',
-      '"Don\'t go soft on me, though. I still want my prizes. And I still want them cheap. Now go and get that haircut."',
+      '"Don\'t go soft on me, though. I still want my prizes. And I still want them cheap. Now go and change -- everything."',
     ];
     let i = 0;
     const next = (): void => {
@@ -804,7 +807,7 @@ export class ExteriorDay extends Phaser.Scene {
         audio.sfx('coin_drop', 0.7);
         this.talking = null;
         this.locked = false;
-        this.say("$200. NOW TO SHARP'S, EAST - WITHOUT BEING SEEN.");
+        this.say('$200. NOW A WHOLE NEW LOOK, EAST - WITHOUT BEING SEEN.');
         return;
       }
       this.talking = speak(this, 'man', lines[i++], () => {

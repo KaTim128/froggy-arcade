@@ -81,7 +81,16 @@ export class StreetWest extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, WORLD_W, GAME_H);
     this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
 
-    this.patrol = new Patrol({ scene: this, worldW: WORLD_W, y: WALK_Y, player: () => this.player, dark: () => clock().dark || store.get().timeOfDay === 'midnight', lock: (on) => ((this.locked = on), on && (this.errand = null)) });
+    this.patrol = new Patrol({
+      scene: this,
+      worldW: WORLD_W,
+      y: WALK_Y,
+      player: () => this.player,
+      dark: () => clock().dark || store.get().timeOfDay === 'midnight',
+      lock: (on) => ((this.locked = on), on && (this.errand = null)),
+      // (and now and then one goes in at Lily's to look round the lobby)
+      doors: [{ x: DOOR_X, place: 'lily' }],
+    });
     // the purse, fixed to the screen
     // (dropped under the name band: LILY'S CONDOS runs across the top left)
     new TokenHud(this, { y: 24 });

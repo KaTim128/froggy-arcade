@@ -61,6 +61,7 @@ import { HideRoom3D } from '../scenes2d/HideRoom3D';
 import { Chase3D } from '../scenes2d/Chase3D';
 import { NightRoad3D } from '../scenes2d/NightRoad3D';
 import { HotelHall3D } from '../scenes2d/HotelHall3D';
+import { PoliceEscape3D } from '../scenes2d/PoliceEscape3D';
 import { RooftopEscape } from '../scenes2d/RooftopEscape';
 import { ArrestEnding } from '../scenes2d/ArrestEnding';
 import { HotelLobby3D } from '../scenes2d/HotelLobby3D';
@@ -136,6 +137,7 @@ export function bootGame(): void {
       Chase3D,
       NightRoad3D,
       HotelHall3D,
+      PoliceEscape3D,
       HotelLobby3D,
       OutroCutscene3D,
       TheEnd,

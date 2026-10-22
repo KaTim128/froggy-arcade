@@ -287,8 +287,11 @@ export class ThreeStage {
       }
       const mesh = o as THREE.Mesh;
       if (mesh.isMesh) {
-        mesh.castShadow = shadows;
-        mesh.receiveShadow = shadows;
+        // (a glow or a beam of light marked `noShadow` must never throw one:
+        // a torch's own beam would put the torch in its shadow)
+        const lit = !(mesh.userData as { noShadow?: boolean }).noShadow;
+        mesh.castShadow = shadows && lit;
+        mesh.receiveShadow = shadows && lit;
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         for (const m of mats) {
           const map = (m as THREE.MeshStandardMaterial).map;

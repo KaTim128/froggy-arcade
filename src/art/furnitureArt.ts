@@ -20,6 +20,7 @@
 
 import Phaser from 'phaser';
 import type { FurnitureDef } from '../game/catalog';
+import { MIRROR_GLASS, paintMirror, paintMirrorShine } from './shopFittings';
 
 type G = Phaser.GameObjects.Graphics;
 
@@ -798,26 +799,13 @@ export function drawFurniture(g: G, f: FurnitureDef, x: number, y: number, flip 
         break;
       }
       if (f.id === 'fur_mirror_wall') {
-        // THE MIRROR: the standard everything else is held to.  A steel
-        // surround, a shadow in the reveal, cool glass with the room in it
-        // and one long diagonal highlight down the face.
+        // THE MIRROR: the very mirror Threads has on its wall -- a walnut
+        // frame with brass at the corners, plain glass, and the shine across
+        // it.  Hung in a room (see rooms/piece), you are in it when you
+        // stand at it.
         g.fillStyle(0x000000, 0.22).fillRect(L + 2, T + h, w - 2, 2);
-        px(g, L - 1, T - 1, w + 2, h + 2, OUT);
-        metal(g, L, T, w, h, 0xc8ccd0);
-        px(g, L, T, w, 1, 0xeef1f4);
-        px(g, L + w - 1, T, 1, h, 0x8a9098);
-        px(g, L + 1, T + 1, w - 2, h - 2, 0x8a9098);
-        // the glass, cool at the top and warmer where the room is in it
-        // the room in the glass: ceiling, wall, the rail, and the boards
-        for (let k = 2; k < h - 2; k++) px(g, L + 2, T + k, w - 4, 1, mix(0xdce8ee, 0xc2d2da, k / h));
-        px(g, L + 2, T + 2, w - 4, Math.max(1, Math.round(h * 0.16)), 0xeef4f6);
-        px(g, L + 2, T + Math.round(h * 0.6), w - 4, 1, 0xa8b8c0);
-        px(g, L + 2, T + Math.round(h * 0.62), w - 4, Math.max(1, Math.round(h * 0.08)), 0xe4eaec);
-        px(g, L + 2, T + Math.round(h * 0.7), w - 4, Math.max(1, Math.round(h * 0.3)), 0xb49a74, 0.75);
-        for (let k = 0; k < h / 6; k++) px(g, L + 2, T + Math.round(h * 0.74) + k * 2, w - 4, 1, 0x8a6a48, 0.35);
-        for (let d = 0; d < Math.min(w - 5, h - 6); d++) px(g, L + 3 + d, T + 3 + d, 1, 1, 0xffffff, 0.5);
-        for (let d = 0; d < Math.min(w - 5, h - 6) / 2; d++) px(g, L + 5 + d, T + 3 + d, 1, 1, 0xffffff, 0.25);
-        px(g, L + 2, T + h - 3, w - 4, 1, 0xa8b4bc);
+        paintMirror(g, L, T, w, h, MIRROR_GLASS);
+        paintMirrorShine(g, L, T, w, h);
         break;
       }
       if (f.id === 'fur_trophy') {

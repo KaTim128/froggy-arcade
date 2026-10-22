@@ -28,9 +28,7 @@ import { FONT_ADVANCE } from '../render/pixelFont';
 import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
 import { store, type GameId } from '../core/state';
-import { centerText, fadeIn, fadeToScene, forfeitLines, gearButton, text } from '../core/ui';
-import { openPause } from '../core/pause';
-import { isTouch } from '../core/device';
+import { centerText, fadeIn, fadeToScene, forfeitLines, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { TokenHud } from '../ui/hud';
 import { cabinetById } from '../game/content';
@@ -39,6 +37,9 @@ import type { MinigameApi, MinigameModule } from '../minigames/types';
 import { showTutorial, type TutorialCard } from '../ui/tutorialCard';
 import { froggyLayer } from '../render/froggyLayer';
 import { setCabinetTouch } from '../game/touchLayouts';
+import { patrolsOut, stealthPhase } from '../game/patrol';
+import { copInside, copWentIn } from '../game/policeVisits';
+import { speak } from '../ui/talkPanel';
 
 const AREA = { x: 0, y: 18, w: GAME_W, h: GAME_H - 18 };
 const RESULT_MS = 2000;
@@ -90,6 +91,96 @@ export class MinigameScene extends Phaser.Scene {
     this.card = null;
     this.exitTo = null;
     this.practicing = false;
+    this.copArrive = null;
+    this.copT = null;
+    this.copBanner = null;
+  }
+
+  /**
+   * ---- THE POLICE, WHILE YOU PLAY.  At a cabinet in the arcade with the
+   * patrols out, an officer may be looking round the room already, or come
+   * in while you play (`copArrive`): the edges of the screen take their
+   * lights while they look round (`copT`), and then they are at your
+   * shoulder -- the game stops where it is, no card, nothing given back
+   * (game/indoorPatrol takes it from there, back in the room).
+   */
+  private copArrive: number | null = null;
+  private copT: number | null = null;
+  private copBanner: Phaser.GameObjects.Container | null = null;
+
+  private static readonly ARCADE_ROOMS = ['ArcadeHub', 'ArcadeAnnex', 'ArcadeLounge', 'ArcadeCasino'];
+
+  /** The game has started: is an officer in the arcade, or might one come in? */
+  private armPolice(): void {
+    if (!patrolsOut() || !MinigameScene.ARCADE_ROOMS.includes(this.from)) return;
+    if (copInside('arcade')) return this.copLooksRound(2.5 + Math.random() * 3);
+    const chance = new URLSearchParams(location.search).get('police') === '1' ? 1 : stealthPhase() ? 0.5 : 0.2;
+    if (Math.random() < chance) this.copArrive = 8 + Math.random() * 14;
+  }
+
+  /** An officer in the room, looking round it: their lights at the edges of the screen. */
+  private copLooksRound(s: number): void {
+    this.copArrive = null;
+    this.copT = s;
+    const c = this.add.container(0, 0).setDepth(1500);
+    const red = this.add.rectangle(0, 0, 10, GAME_H, 0xff2a3a, 0.3).setOrigin(0, 0).setBlendMode(Phaser.BlendModes.ADD);
+    const blue = this.add.rectangle(GAME_W - 10, 0, 10, GAME_H, 0x2a5aff, 0.3).setOrigin(0, 0).setBlendMode(Phaser.BlendModes.ADD);
+    const plate = this.add.rectangle(GAME_W / 2, GAME_H - 9, 230, 11, 0x000000, 0.7);
+    const t = centerText(this, GAME_W / 2, GAME_H - 9, 'AN OFFICER IS LOOKING ROUND THE ARCADE...', 0xff8080);
+    c.add([red, blue, plate, t]);
+    this.tweens.add({ targets: red, alpha: { from: 0.05, to: 0.35 }, duration: 260, yoyo: true, repeat: -1 });
+    this.tweens.add({ targets: blue, alpha: { from: 0.35, to: 0.05 }, duration: 260, yoyo: true, repeat: -1 });
+    this.copBanner = c;
+    audio.sfx('police_radio', 0.35);
+  }
+
+  /**
+   * At your shoulder: "aren't you the guy from the poster?"  The game ends
+   * where it is -- no result card, no FORFEIT, and the tokens it took stay
+   * taken -- and back in the room they are stood right by you.
+   */
+  private copInterrupts(): void {
+    if (this.settled) return;
+    this.settled = true;
+    this.copT = null;
+    this.card?.destroy();
+    this.card = null;
+    if (this.started) this.mod?.destroy?.();
+    setCabinetTouch(null);
+    this.copBanner?.destroy();
+    this.copBanner = null;
+    store.flush();
+    this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0.6).setOrigin(0, 0).setDepth(940).setInteractive();
+    audio.sfx('ui_blip', 0.8);
+    copWentIn('arcade', 15000);
+    // (whatever the cabinet did with the keys and the pointer, they are back)
+    this.input.enabled = true;
+    if (this.input.keyboard) this.input.keyboard.enabled = true;
+    let gone = false;
+    const back = (): void => {
+      if (gone) return;
+      gone = true;
+      fadeToScene(this, this.from, { atCabinet: this.gameId, copAsks: true });
+    };
+    const line = speak(this, 'officer', '"Hey -- aren\'t you the guy from the poster?"', back);
+    // (and they do not wait for an answer for long)
+    this.time.delayedCall(3500, () => (line.active ? line.destroy() : back()));
+  }
+
+  /** Each frame of play: the officer coming, looking, and coming over. */
+  private stepPolice(dt: number): void {
+    if (this.copArrive !== null) {
+      this.copArrive -= dt;
+      if (this.copArrive <= 0) {
+        copWentIn('arcade', 20000);
+        this.copLooksRound(3 + Math.random() * 2.5);
+      }
+    }
+    if (this.copT !== null) {
+      copWentIn('arcade', 5000);
+      this.copT -= dt;
+      if (this.copT <= 0) this.copInterrupts();
+    }
   }
 
   create(): void {
@@ -113,19 +204,17 @@ export class MinigameScene extends Phaser.Scene {
     this.add.rectangle(0, 0, GAME_W, 16, PALETTE.ink).setOrigin(0, 0).setDepth(TOP);
     text(this, 4, 4, def.title, PALETTE.gold).setDepth(TOP);
 
-    // QUIT lives in the pause menu now (QUIT GAME, beside RESUME), which asks
-    // first and says what walking out costs.  Esc opens it; so does this
-    // small gear, the only thing left at the end of the bar.  (A phone has
-    // its own gear, on the screen's edge: see ui/touchControls.)
-    const gearW = isTouch() ? 0 : 14;
-    if (gearW) gearButton(this, GAME_W - 9, 8, () => openPause()).setDepth(TOP + 1);
+    // QUIT lives in the pause menu (QUIT GAME, beside RESUME), which asks
+    // first and says what walking out costs.  Esc opens it on a keyboard;
+    // a phone has its own gear on the screen's edge (ui/touchControls).
+    // Nothing is drawn for it in the bar.
 
     this.hud = new TokenHud(this);
     this.hud.setVisible(false); // the title bar already carries the balance line
     // Right-aligned a clear gap short of the gear rather than pinned to a
     // fixed left edge: the note is the cabinet's own wording and some of them
     // are twice as long as others.
-    const note = text(this, GAME_W - 6 - gearW, 4, this.mod.payoutNote ?? `WIN: +${def.reward}`, PALETTE.tealLight)
+    const note = text(this, GAME_W - 6, 4, this.mod.payoutNote ?? `WIN: +${def.reward}`, PALETTE.tealLight)
       .setOrigin(1, 0)
       .setDepth(TOP);
     // The personal best, where this cabinet keeps one, centred in whatever
@@ -199,6 +288,7 @@ export class MinigameScene extends Phaser.Scene {
       store.flush();
       mod.create(this, api);
       this.started = true;
+      this.armPolice();
       // On a phone, the cabinet's own keys become the cabinet's own buttons
       // for as long as it is being played.  The card did not need them: it
       // is two buttons you tap.
@@ -222,6 +312,7 @@ export class MinigameScene extends Phaser.Scene {
       void tag;
       mod.create(this, api);
       this.started = true;
+      this.armPolice();
       setCabinetTouch(mod.touch);
     };
 
@@ -283,6 +374,9 @@ export class MinigameScene extends Phaser.Scene {
       lose: () => this.settle(false),
       /** Whether this one opened straight into play or on the card. */
       straight: this.straight,
+      /** An officer comes in now (seconds until they come over). */
+      cop: (s = 0.5) => this.copLooksRound(s),
+      stake: () => this.stake,
     };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       delete (window as unknown as Record<string, unknown>).__minigame;
@@ -291,6 +385,8 @@ export class MinigameScene extends Phaser.Scene {
 
   update(time: number, delta: number): void {
     if (this.settled || !this.started) return;
+    this.stepPolice(delta / 1000);
+    if (this.settled) return;
     this.mod?.update?.(time, delta);
   }
 

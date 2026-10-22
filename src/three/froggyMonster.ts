@@ -1467,12 +1467,15 @@ export class FroggyMonster {
       upper.add(upperEdge);
       lids.add(upper);
       const lower = new THREE.Group();
+      // (a clear step proud of the cheek pad under it: at 0.115 the two
+      // skins were all but one surface, and up close in the scare the lower
+      // lid broke into a sawtooth of cheek showing through it)
       const lowerShell = new THREE.Mesh(
-        new THREE.SphereGeometry(0.115, 26, 10, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5),
+        new THREE.SphereGeometry(0.12, 26, 10, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5),
         lidMat,
       );
       lower.add(lowerShell);
-      const lowerEdge = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.009, 10, 36, Math.PI), lidRim);
+      const lowerEdge = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.009, 10, 36, Math.PI), lidRim);
       lowerEdge.rotation.x = Math.PI / 2;
       lower.add(lowerEdge);
       lids.add(lower);

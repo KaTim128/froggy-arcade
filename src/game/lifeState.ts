@@ -69,7 +69,7 @@ export function defaultLife(): LifeState {
     placed: [],
     nextUid: 1,
     wardrobe: [...STARTER_COSMETICS],
-    outfit: { top: 'cos_coat_olive', legs: 'cos_trousers_baggy', shoes: 'cos_boots_worn', scarf: 'cos_scarf_grubby', hat: 'cos_beanie' },
+    outfit: { top: 'cos_coat_olive', legs: 'cos_trousers_baggy', shoes: 'cos_boots_worn', scarf: 'cos_scarf_grubby', hat: 'cos_beanie', glasses: 'cos_no_glasses' },
     beg: null,
     stats: {},
     daily: { key: '', ids: [], prog: {}, claimed: [] },

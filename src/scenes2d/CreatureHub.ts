@@ -20,9 +20,7 @@ import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { ledger } from '../core/ledger';
-import { button, centerText, confirmDialog, fadeToScene, gearButton, text } from '../core/ui';
-import { openPause } from '../core/pause';
-import { isTouch } from '../core/device';
+import { button, centerText, confirmDialog, fadeToScene, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
 import { drawAttackIcon } from '../art/attackIcons';
@@ -147,7 +145,7 @@ export class CreatureHub extends Phaser.Scene {
     // that opens it on the top screens, and BACK on the ones under them
     const top = this.screen === 'home' || this.screen === 'starter';
     if (top) {
-      if (!isTouch()) L.add(gearButton(this, GAME_W - 10, 8, () => openPause()));
+      // (LEAVE is in the pause menu: Esc on a keyboard, the gear on a phone)
     } else if (this.screen !== 'pack') L.add(button(this, GAME_W - 26, 8, 'BACK', () => this.go('home'), { width: 44, height: 11 }));
     ({ home: () => this.home(), starter: () => this.starter(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), ladder: () => this.ladder(), controls: () => this.controls() })[this.screen]();
     if (this.msg) {

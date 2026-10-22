@@ -26,6 +26,8 @@ export interface DeathData {
   data?: object;
   /** The line under the title. */
   line?: string;
+  /** The title itself, if it is not YOU DIED (the police: ARRESTED). */
+  title?: string;
 }
 
 const LINES = ['He found you.', 'He was faster.', 'He got you.', 'Too slow.'];
@@ -51,7 +53,7 @@ export class DeathScreen extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(0x000000);
     this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 1).setOrigin(0, 0);
 
-    const title = centerText(this, GAME_W / 2, 56, 'YOU DIED', 0xe8323c, 16).setAlpha(0);
+    const title = centerText(this, GAME_W / 2, 56, this.death.title ?? 'YOU DIED', 0xe8323c, 16).setAlpha(0);
     const line = this.death.line ?? LINES[Math.floor(Math.random() * LINES.length)];
     const sub = centerText(this, GAME_W / 2, 80, line, PALETTE.fog).setAlpha(0);
     const respawn = button(this, GAME_W / 2 - 46, 118, 'RESPAWN', () => this.choose('respawn'), {

@@ -3841,8 +3841,8 @@ export class HideRoom3D extends Phaser.Scene {
           const a = Math.random() * Math.PI * 2;
           const r = 2.5 + Math.random() * 3;
           const look = new THREE.Vector2(this.froggy.x + Math.cos(a) * r, this.froggy.y + Math.sin(a) * r);
-          this.clampToRoom(look);
-          if (!this.solid(look.x, look.y, 0.5)) {
+          this.roomClamp(look);
+          if (!this.roomSolid(look.x, look.y, 0.5)) {
             this.waypoint.copy(look);
             this.startTrip();
           }
@@ -3922,11 +3922,11 @@ export class HideRoom3D extends Phaser.Scene {
     // stuck.
     const stepFree = (px: number, pz: number): boolean =>
       this.inRoom(px, pz) &&
-      !this.solid(px, pz, 0.5) &&
+      !this.roomSolid(px, pz, 0.5) &&
       this.inRoom(px, this.froggy.y) &&
-      !this.solid(px, this.froggy.y, 0.5) &&
+      !this.roomSolid(px, this.froggy.y, 0.5) &&
       this.inRoom(this.froggy.x, pz) &&
-      !this.solid(this.froggy.x, pz, 0.5);
+      !this.roomSolid(this.froggy.x, pz, 0.5);
 
     // `__noDeflect` turns this off, in DEV only: it is how the check in
     // `horror.mjs` measures the old behaviour against the new one in the same
@@ -3961,8 +3961,8 @@ export class HideRoom3D extends Phaser.Scene {
     // The outer walls are solid here too, not just in the clamp below.  If
     // they were not, a step into a wall counted as a clean step and none of
     // the stuck handling ever saw it.
-    const freeX = this.inRoom(tx, this.froggy.y) && !this.solid(tx, this.froggy.y, 0.5);
-    const freeZ = this.inRoom(this.froggy.x, tz) && !this.solid(this.froggy.x, tz, 0.5);
+    const freeX = this.inRoom(tx, this.froggy.y) && !this.roomSolid(tx, this.froggy.y, 0.5);
+    const freeZ = this.inRoom(this.froggy.x, tz) && !this.roomSolid(this.froggy.x, tz, 0.5);
 
     const inTheWay =
       this.blockerAt(tx, tz, 0.5) ??
@@ -3999,7 +3999,7 @@ export class HideRoom3D extends Phaser.Scene {
         this.replan(target);
       }
     }
-    this.clampToRoom(this.froggy);
+    this.roomClamp(this.froggy);
     this.footsteps(dt, speed);
 
     // Headway.  A trip that is not getting anywhere is replanned once, and if
@@ -4594,13 +4594,13 @@ export class HideRoom3D extends Phaser.Scene {
    * stood in the furniture for as long as you cared to look at him.
    */
   private freeFroggy(force = false): void {
-    if (!force && !this.solid(this.froggy.x, this.froggy.y, 0.5)) return;
+    if (!force && !this.roomSolid(this.froggy.x, this.froggy.y, 0.5)) return;
     for (let r = 0.5; r < 8; r += 0.5) {
       for (let a = 0; a < Math.PI * 2; a += Math.PI / 6) {
         const x = this.froggy.x + Math.cos(a) * r;
         const z = this.froggy.y + Math.sin(a) * r;
         if (Math.abs(x) > this.def.halfW - 1 || Math.abs(z) > this.def.halfD - 1) continue;
-        if (!this.solid(x, z, 0.5)) {
+        if (!this.roomSolid(x, z, 0.5)) {
           this.froggy.set(x, z);
           return;
         }
@@ -4755,8 +4755,8 @@ export class HideRoom3D extends Phaser.Scene {
     // He heard a direction and a rough distance, not a position.
     const slop = () => (Math.random() - 0.5) * 2 * off;
     const guess = new THREE.Vector2(x + slop(), z + slop());
-    this.clampToRoom(guess);
-    if (this.solid(guess.x, guess.y, 0.5)) guess.set(x, z); // do not send him into a sofa
+    this.roomClamp(guess);
+    if (this.roomSolid(guess.x, guess.y, 0.5)) guess.set(x, z); // do not send him into a sofa
 
     this.fMode = 'investigate';
     this.investigateT = INVESTIGATE_S;
@@ -4833,9 +4833,9 @@ export class HideRoom3D extends Phaser.Scene {
     const reach = Math.hypot(box.w, box.d) / 2 + 1.2;
     const from = this.froggy.clone();
     const to = new THREE.Vector2(this.froggy.x + ux * reach, this.froggy.y + uz * reach);
-    this.clampToRoom(to);
+    this.roomClamp(to);
     // Landing inside something else is worse than not climbing at all.
-    if (this.solid(to.x, to.y, 0.5)) return false;
+    if (this.roomSolid(to.x, to.y, 0.5)) return false;
 
     // Where the way he is going goes into it and comes out of it.
     const L = from.distanceTo(to);
@@ -4947,16 +4947,29 @@ export class HideRoom3D extends Phaser.Scene {
     return true;
   }
 
-  /** Furniture is solid to bodies and to sight.  `pad` widens it for him. */
+  /**
+   * Furniture is solid to bodies and to sight -- for the PLAYER, in whichever
+   * space they are standing.  Inside the wall the room's own furniture is six
+   * hundred metres away and irrelevant; only the lounge's is.  `pad` widens it.
+   */
   private solid(x: number, z: number, pad = PLAYER_R): boolean {
-    // Two spaces, one test.  Inside the wall the room's own furniture is six
-    // hundred metres away and irrelevant; only the lounge's is.
     if (this.inSecret && this.secret) {
       for (const b of this.secret.blockers) {
         if (Math.abs(x - b.x) < b.w / 2 + pad && Math.abs(z - b.z) < b.d / 2 + pad) return true;
       }
       return false;
     }
+    return this.roomSolid(x, z, pad);
+  }
+
+  /**
+   * The ROOM's furniture, whoever is where: what HE walks round.  He never
+   * leaves the room, so his tests never switch to the lounge -- they did, and
+   * the moment you stepped through the wall he was steering by the gallery's
+   * benches and clamped into its walls, and the twin under the glass showed
+   * him stood stock still.
+   */
+  private roomSolid(x: number, z: number, pad = PLAYER_R): boolean {
     for (const b of this.blockers) {
       // (the ducts are grilled shut: a way through on hands and knees was a
       // place he could never reach you, and so never a hiding place at all)
@@ -4992,11 +5005,17 @@ export class HideRoom3D extends Phaser.Scene {
     return false;
   }
 
+  /** Inside the walls of the space the PLAYER is in (see `solid`). */
   private clampToRoom(v: THREE.Vector2): void {
     if (this.inSecret && this.secret) {
       this.secret.clamp(v);
       return;
     }
+    this.roomClamp(v);
+  }
+
+  /** Inside the room's walls, whoever is where: his clamp (see `roomSolid`). */
+  private roomClamp(v: THREE.Vector2): void {
     const d = this.def;
     // THE ONE HOLE IN THE WALL.  Every other millimetre of every wall clamps
     // exactly as it always did; inside the secret door's span the +X clamp is
@@ -5637,7 +5656,7 @@ export class HideRoom3D extends Phaser.Scene {
         looking: this.looking,
         frames: ++this.frames,
         blockedAtSpawn: this.solid(this.pos.x, this.pos.y),
-        froggyBlocked: this.solid(this.froggy.x, this.froggy.y, 0.5),
+        froggyBlocked: this.roomSolid(this.froggy.x, this.froggy.y, 0.5),
       },
     };
   }

@@ -2271,34 +2271,16 @@ export class HotelLobby3D extends Phaser.Scene {
   }
 
   /**
-   * ---- WHERE HE IS, AND WHAT HE IS DOING, at a glance.  A line at the top
-   * right saying what he is up to (searching, coming to the door, looking
-   * in, walking away), coloured by how bad it is; and when he is out of your
-   * view, a marker at that edge of the screen that pulses with each of his
-   * footsteps, brighter the closer he is.
+   * ---- WHERE HE IS, at a glance.  When he is out of your view, a marker at
+   * that edge of the screen that pulses with each of his footsteps, brighter
+   * the closer he is.  (No line saying what he is up to -- searching, at the
+   * door, looking back: you find that out by listening and looking, which is
+   * the whole of hiding.)
    */
   private paintCues(ctx: CanvasRenderingContext2D): void {
     const m = this.monster;
     if (!m?.root.visible) return;
     const near = this.nearK();
-    const doing: Partial<Record<Phase, [string, string]>> = {
-      burst: ['HE IS IN THE LOBBY', '#f0d060'],
-      search: [near > 0.55 ? 'HE IS SEARCHING - CLOSE' : 'HE IS SEARCHING THE LOBBY', near > 0.55 ? '#ff9a50' : '#f0d060'],
-      approach: ['HE IS COMING TO THE DOOR', '#ff7a50'],
-      watch: ['HE IS LOOKING IN - STAY DOWN', '#ff5040'],
-      leave: ['HE IS WALKING AWAY', '#9ad890'],
-      lookback: ['HE LOOKS BACK...', '#f0d060'],
-      exit: ['HE IS LEAVING', '#9ad890'],
-    };
-    const d = doing[this.phase];
-    if (d) {
-      const tw = d[0].length * 6;
-      const tx = GAME_W - 6 - tw;
-      const ty = isTouch() ? 40 : 6;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(tx - 3, ty - 2, tw + 5, 11);
-      drawPixelText(ctx, d[0], tx, ty, { scale: 1, color: d[1] });
-    }
     // which way he is from where you are looking
     const v = this.fpos.clone().sub(this.camPos).setY(0);
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));

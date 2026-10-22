@@ -1444,6 +1444,58 @@ class AudioManager {
         beep(180, 0.5, 0.05, 'square', 0.12);
         for (let k = 0; k < 5; k++) noise(0.08, 0.04, 1500 + k * 300, 0.3 + k * 0.08);
         break;
+      // A police boot on a hard floor: a heel, a sole, the creak of the leather
+      // and the jingle of the belt.
+      case 'police_step':
+        noise(0.05, 0.16, 900);
+        beep(80, 0.06, 0.07, 'sine');
+        noise(0.03, 0.05, 4000, 0.04);
+        if (Math.random() < 0.4) beep(3200 + Math.random() * 800, 0.03, 0.008, 'triangle', 0.05);
+        break;
+      // A radio on a chest: the squelch, a few broken words, the squelch.
+      case 'police_radio':
+        noise(0.06, 0.05, 3200);
+        for (let k = 0; k < 6; k++) glide(380 + Math.random() * 260, 300 + Math.random() * 300, 0.09, 0.02, 'square', 0.08 + k * 0.1);
+        for (let k = 0; k < 10; k++) noise(0.05, 0.03, 2600, 0.08 + k * 0.06);
+        noise(0.08, 0.05, 3600, 0.74);
+        beep(1600, 0.03, 0.02, 'square', 0.78);
+        break;
+      // A shout to stop: two barked syllables, rough, loud.
+      case 'police_shout':
+        glide(260, 330, 0.18, 0.09, 'sawtooth');
+        glide(300, 190, 0.32, 0.1, 'sawtooth', 0.2);
+        noise(0.45, 0.07, 1800, 0);
+        glide(520, 640, 0.18, 0.03, 'square', 0.01);
+        break;
+      // A door's lever pressed down, the latch drawn back.
+      case 'door_handle':
+        beep(1300, 0.02, 0.04, 'square');
+        noise(0.05, 0.08, 2400, 0.02);
+        beep(600, 0.04, 0.04, 'triangle', 0.06);
+        break;
+      // A wardrobe door on old hinges: a creak and a soft knock.
+      case 'wardrobe':
+        glide(220, 340, 0.3, 0.03, 'sawtooth');
+        noise(0.08, 0.06, 700, 0.3);
+        break;
+      // A shower curtain dragged along its rail: the rings rattling.
+      case 'curtain':
+        for (let k = 0; k < 8; k++) beep(2400 + Math.random() * 1200, 0.025, 0.012, 'triangle', k * 0.035);
+        noise(0.3, 0.05, 5000, 0);
+        break;
+      // The handcuffs: a ratchet of clicks and the lock.
+      case 'cuffs':
+        for (let k = 0; k < 7; k++) beep(2600, 0.012, 0.05, 'square', k * 0.028);
+        beep(900, 0.06, 0.06, 'square', 0.22);
+        noise(0.04, 0.08, 6000, 0.22);
+        break;
+      // The grab: a body slammed against you, a thump through everything.
+      case 'arrest_hit':
+        beep(55, 0.5, 0.2, 'sine');
+        noise(0.35, 0.22, 700, 0);
+        noise(0.15, 0.12, 4000, 0.02);
+        glide(900, 120, 0.4, 0.05, 'sawtooth', 0.02);
+        break;
       // A lamp switched off.
       case 'lamp_click':
         noise(0.015, 0.12, 5000);
@@ -2159,6 +2211,14 @@ export type SfxName =
   | 'megaphone'
   | 'net_drop'
   | 'bin_land'
-  | 'breath';
+  | 'breath'
+  | 'police_step'
+  | 'police_radio'
+  | 'police_shout'
+  | 'door_handle'
+  | 'wardrobe'
+  | 'curtain'
+  | 'cuffs'
+  | 'arrest_hit';
 
 export const audio = new AudioManager();

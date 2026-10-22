@@ -224,27 +224,50 @@ export function assignAll(moves: Array<{ name: string; kind: string }>): void {
 
 /** The ability's icon, seven pixels square, centred on (x, y). */
 export function drawAbilityIcon(g: Phaser.GameObjects.Graphics, move: { name: string; kind: string }, x: number, y: number, col: number): void {
+  const ox = Math.round(x) - 3;
+  const oy = Math.round(y) - 3;
+  paintIcon(move, col, (px, py, c, a) => g.fillStyle(c, a).fillRect(ox + px, oy + py, 1, 1));
+}
+
+/**
+ * The same icon as a picture, for the page's own buttons (the portrait
+ * touch band): `scale` screen pixels to each of its pixels, as a PNG data
+ * URL.  The glyph is drawn exactly as the arena draws it, so the button the
+ * thumb presses carries the picture the ability has everywhere else.
+ */
+export function abilityIconURL(move: { name: string; kind: string }, col: number, scale = 4): string {
+  if (typeof document === 'undefined') return '';
+  const cv = document.createElement('canvas');
+  // (nine: the kind badge hangs two pixels past the glyph's corner)
+  cv.width = cv.height = 9 * scale;
+  const cx = cv.getContext('2d');
+  if (!cx) return '';
+  paintIcon(move, col, (px, py, c, a) => {
+    cx.fillStyle = `rgba(${(c >> 16) & 255},${(c >> 8) & 255},${c & 255},${a})`;
+    cx.fillRect(px * scale, py * scale, scale, scale);
+  });
+  return cv.toDataURL();
+}
+
+/** Every pixel of an ability's icon handed to `put`: the 7x7 glyph, and its badge hanging two past the corner. */
+function paintIcon(move: { name: string; kind: string }, col: number, put: (x: number, y: number, c: number, a: number) => void): void {
   const { glyph, mark } = assign(move.name, move.kind);
   const rows = G[glyph] ?? G.burst;
   const dark = shade(col, 0.55);
-  const ox = Math.round(x) - 3;
-  const oy = Math.round(y) - 3;
   rows.forEach((row, ry) => {
     for (let rx = 0; rx < row.length; rx++) {
       const ch = row[rx];
       if (ch === '.') continue;
-      g.fillStyle(ch === 'o' ? dark : col, 1).fillRect(ox + rx, oy + ry, 1, 1);
+      put(rx, ry, ch === 'o' ? dark : col, 1);
     }
   });
-  for (const [mx, my] of MARKS[mark] ?? []) g.fillStyle(0xffffff, 1).fillRect(ox + mx, oy + my, 1, 1);
+  for (const [mx, my] of MARKS[mark] ?? []) put(mx, my, 0xffffff, 1);
   // the kind badge, bottom right, on a dark backing so it reads over the glyph
   const badge = BADGE[move.kind];
   if (badge) {
-    const bx = ox + 5;
-    const by = oy + 5;
-    g.fillStyle(0x0a0a14, 1).fillRect(bx - 1, by - 1, 5, 5);
+    for (let yy = 4; yy < 9; yy++) for (let xx = 4; xx < 9; xx++) put(xx, yy, 0x0a0a14, 1);
     badge.forEach((row, ry) => {
-      for (let rx = 0; rx < 3; rx++) if (row[rx] === '#') g.fillStyle(0xffffff, 0.95).fillRect(bx + rx, by + ry, 1, 1);
+      for (let rx = 0; rx < 3; rx++) if (row[rx] === '#') put(5 + rx, 5 + ry, 0xffffff, 0.95);
     });
   }
 }

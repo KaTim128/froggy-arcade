@@ -22,8 +22,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { button, centerText, gearButton, text } from '../core/ui';
-import { openPause } from '../core/pause';
+import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
 import { SPECIALS } from '../game/specials';
@@ -34,7 +33,7 @@ import {
   AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
   POISON_PER_S, POISON_S, REGEN_PER_S, REGEN_S, ROOT_S, SHRED_MUL, SHRED_S, SILENCE_S, STAGGER_S, STRIKE_DMG, THORNS_DMG, WALL_S, WEAK_MUL, WEAK_S, attackInfo,
 } from '../game/attackInfo';
-import { drawAbilityIcon } from '../art/abilityIcons';
+import { abilityIconURL, drawAbilityIcon } from '../art/abilityIcons';
 import { setCabinetTouch } from '../game/touchLayouts';
 import { backPlate } from '../ui/plate';
 import type { KeyName } from '../ui/touchControls';
@@ -406,6 +405,15 @@ export class CreatureArena extends Phaser.Scene {
   private infoRun = 0;
   /** The element line, which steps aside while a move's line is in the strip. */
   private effLabel: Phaser.GameObjects.BitmapText | null = null;
+  /**
+   * RELOADING, AT A GLANCE.  The name on each desktop button (to grey it),
+   * the seconds-left readout on each button, whether it was ready last
+   * frame, and a flash when it comes back.
+   */
+  private nameLabels: Phaser.GameObjects.BitmapText[] = [];
+  private cdTexts: Phaser.GameObjects.BitmapText[] = [];
+  private wasReady = [true, true, true];
+  private readyFlash = [0, 0, 0];
   /** The ladder step, on the same strip's right: it steps aside too. */
   private stepLabel: Phaser.GameObjects.BitmapText | null = null;
   /** When the strip's line went up (scene clock, ms). */
@@ -799,7 +807,7 @@ export class CreatureArena extends Phaser.Scene {
     }
     this.props = this.props.filter((q) => q !== p);
     for (const b of this.barriers) b.parts = b.parts.filter((q) => q !== p);
-    this.barriers = this.barriers.filter((b) => b.parts.length || b.life < 0);
+    this.barriers = this.barriers.filter((b) => b.parts.length || b.max === undefined);
     this.fx.push({ kind: 'boom', x: p.x, y: p.y, r: 10, t: 0, life: 0.3, col: 0xd8d0c0 });
     audio.sfx('item_thud', 0.4);
     this.repaintCover();
@@ -830,7 +838,7 @@ export class CreatureArena extends Phaser.Scene {
     const g = this.terrain;
     g.clear();
     for (const bar of this.barriers) {
-      const fade = bar.life >= 0 ? Math.min(1, bar.life / 1.2) : 1;
+      const fade = bar.max !== undefined ? Math.max(0, Math.min(1, bar.life / 1.2)) : 1;
       g.setAlpha(fade);
       for (const p of bar.parts) {
         this.paintProp(g, p, bar);
@@ -1025,15 +1033,24 @@ export class CreatureArena extends Phaser.Scene {
     // does).  Nothing it covers is part of the game being played.
     // ...and that way out is LEAVE in the pause menu (see pauseExit); on a
     // desktop the slot holds the gear that opens it
-    if (this.training && !isTouch()) gearButton(this, GAME_W / 2, 7, () => openPause()).setDepth(60);
+    // (Esc on a keyboard, the gear on a phone)
     this.layAtkBtns();
+    // the seconds left on each move while it reloads (placed every frame:
+    // the buttons move when the phone is turned)
+    this.nameLabels = [];
+    this.cdTexts = [0, 1, 2].map(() => text(this, 0, 0, '', PALETTE.cream).setDepth(53).setVisible(false));
+    this.labels.push(...this.cdTexts);
+    this.wasReady = [true, true, true];
+    this.readyFlash = [0, 0, 0];
     // the strip: the key, the icon (drawn each frame), the name
     if (!this.touch && !this.band) {
       this.me.c.attacks.forEach((a, i) => {
         const b = this.atkBtns[i];
         // the key that fires it, always in view, on a keycap: [1] [2] [3]
         this.labels.push(centerText(this, b.x - 42.5, b.y - 0.5, `${i + 1}`, PALETTE.gold).setDepth(52));
-        this.labels.push(text(this, b.x - 21, b.y - 4, a.name, PALETTE.cream).setDepth(52).setMaxWidth(68));
+        const nm = text(this, b.x - 21, b.y - 4, a.name, PALETTE.cream).setDepth(52).setMaxWidth(68);
+        this.nameLabels[i] = nm;
+        this.labels.push(nm);
       });
     }
     // WHAT YOUR ELEMENT DOES, as a sentence, in its own row: under your own
@@ -1149,7 +1166,9 @@ export class CreatureArena extends Phaser.Scene {
         stick: 'wasd',
         buttons: this.me.c.attacks.map((a, i) => {
           const inf = attackInfo(a, this.me.c.element);
-          return { label: `${inf.emoji}\n${inf.word}`, key: keys[i], primary: i === 0 };
+          // the ability's own pixel icon, as the arena draws it -- not an emoji
+          const icon = abilityIconURL(a, ELEMENTS[this.me.c.element].light);
+          return { label: `${inf.emoji}\n${inf.word}`, icon, key: keys[i], primary: i === 0 };
         }),
       },
       'CreatureArena',
@@ -3102,12 +3121,14 @@ export class CreatureArena extends Phaser.Scene {
     // ---- cover somebody dropped: it stands its few seconds and goes
     let wentDown = false;
     for (const bar of this.barriers) {
-      if (bar.life < 0) continue;
+      // (the scenery has no clock; everything dropped does -- by its `max`,
+      // not the sign of `life`, which a frame's step takes past zero)
+      if (bar.max === undefined) continue;
       bar.life -= dt;
       if (bar.life <= 0) wentDown = true;
     }
-    if (wentDown || this.barriers.some((b) => b.life >= 0 && b.life < 1.2)) {
-      const gone = this.barriers.filter((b) => b.life >= 0 && b.life <= 0);
+    if (wentDown || this.barriers.some((b) => b.max !== undefined && b.life < 1.2)) {
+      const gone = this.barriers.filter((b) => b.max !== undefined && b.life <= 0);
       // a glacier slab does not just melt: it shatters
       for (const b of gone) {
         if (!b.shatter || !b.owner) continue;
@@ -3603,23 +3624,50 @@ export class CreatureArena extends Phaser.Scene {
     this.me.c.attacks.forEach((a, i) => {
       const b = this.atkBtns[i];
       if (!b) return;
-      const ready = 1 - this.me.cds[i] / a.cd;
+      const ready = Phaser.Math.Clamp(1 - this.me.cds[i] / a.cd, 0, 1);
+      const cooling = ready < 1;
+      // the moment it comes back: a flash round the button
+      if (!cooling && !this.wasReady[i]) this.readyFlash[i] = 0.4;
+      this.wasReady[i] = !cooling;
+      this.readyFlash[i] = Math.max(0, this.readyFlash[i] - 1 / 60);
+      const flash = this.readyFlash[i] / 0.4;
+      const left = this.me.cds[i];
+      // (rounded up: it never reads 0.0 while it is still not ready)
+      const secs = left >= 10 ? `${Math.ceil(left)}` : (Math.ceil(left * 10) / 10).toFixed(1);
+      const cd = this.cdTexts[i];
       if (this.touch) {
         u.fillStyle(i === this.sel ? 0x6a3aa8 : 0x2a2a48, 0.85).fillCircle(b.x, b.y, 12);
         u.lineStyle(1, i === this.sel ? 0xffe060 : 0x8a8ab0, 1).strokeCircle(b.x, b.y, 12);
         drawAbilityIcon(u, a, b.x, b.y, ic);
-        if (ready < 1) u.fillStyle(0x000000, 0.55).slice(b.x, b.y, 12, -Math.PI / 2, -Math.PI / 2 + (1 - ready) * Math.PI * 2, false).fillPath();
+        if (cooling) {
+          // dark over the part still to come back, and the seconds on top
+          u.fillStyle(0x000000, 0.65).slice(b.x, b.y, 12, -Math.PI / 2, -Math.PI / 2 + (1 - ready) * Math.PI * 2, false).fillPath();
+          u.lineStyle(2, 0x6ac8ff, 0.9).beginPath().arc(b.x, b.y, 12, -Math.PI / 2, -Math.PI / 2 + ready * Math.PI * 2, false).strokePath();
+        }
+        if (flash > 0) u.lineStyle(2, 0xfff4a0, flash).strokeCircle(b.x, b.y, 12 + (1 - flash) * 5);
+        cd?.setVisible(cooling).setText(secs).setOrigin(0.5, 0.5).setPosition(b.x, b.y);
       } else {
         u.fillStyle(i === this.sel ? 0x4a2a78 : 0x1a1a30, 0.9).fillRect(b.x - 49, b.y - 7, 98, 13);
-        u.fillStyle(0xffffff, 0.15).fillRect(b.x - 49, b.y + 4, 98 * Math.min(1, ready), 2);
         u.lineStyle(1, i === this.sel ? 0xffe060 : 0x4a4a68, 1).strokeRect(b.x - 49, b.y - 7, 98, 13);
         // the keycap, then the ability's icon beside it
         u.fillStyle(0x0c0c18, 1).fillRect(b.x - 47, b.y - 5, 9, 9);
         u.lineStyle(1, i === this.sel ? 0xffe060 : 0x8a8ab0, 1).strokeRect(b.x - 47, b.y - 5, 9, 9);
         u.fillStyle(0xffffff, 0.12).fillRect(b.x - 46, b.y - 4, 7, 1);
         drawAbilityIcon(u, a, b.x - 30, b.y - 1, ic);
+        if (cooling) {
+          // RELOADING: the whole button greyed down, a bright bar filling
+          // along its foot, and the seconds left at its end
+          u.fillStyle(0x000000, 0.55).fillRect(b.x - 48, b.y - 6, 96, 11);
+          u.fillStyle(0x0a0a14, 1).fillRect(b.x - 48, b.y + 4, 96, 2);
+          u.fillStyle(0x6ac8ff, 1).fillRect(b.x - 48, b.y + 4, Math.round(96 * ready), 2);
+        }
+        if (flash > 0) u.lineStyle(2, 0xfff4a0, flash).strokeRect(b.x - 50, b.y - 8, 100, 15);
+        // (the name gives way to the countdown, and comes back with the move)
+        this.nameLabels[i]?.setText(cooling ? `RELOAD ${secs}S` : a.name).setTint(cooling ? 0x6ac8ff : PALETTE.cream);
+        cd?.setVisible(false);
       }
     });
+    if (this.band) for (const t of this.cdTexts) t.setVisible(false);
     // the chosen attack's line, fading
     const showing = this.infoT > 0 && !this.over && !this.dialog;
     this.info.setVisible(showing).setAlpha(Math.min(1, this.infoT * 3));

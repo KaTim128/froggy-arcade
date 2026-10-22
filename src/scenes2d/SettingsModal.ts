@@ -14,7 +14,7 @@
  */
 
 import Phaser from 'phaser';
-import { twoWeeksLater } from '../game/life';
+import { followingDay } from '../game/life';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { BRIGHT_MAX, BRIGHT_MIN, LOOK_SENS_MAX, LOOK_SENS_MIN, generalDefaults, store } from '../core/state';
@@ -371,6 +371,16 @@ export class SettingsModal extends Phaser.Scene {
         },
       ],
       [
+        'THE POLICE',
+        'UP SIX FLOORS TO 612',
+        () => {
+          // the janitor room survived, the police in the building
+          store.patch({ seenIntro: true, charityUsed: true, hasKey: true, froggyGone: true, route: 'normal', hideRoom: 0, timeOfDay: 'midnight', reachedHotel: true, checkedIn: true, hotelNight: true, hotelAfter: 'police' });
+          store.flush();
+          jumpToScene('PoliceEscape3D', {});
+        },
+      ],
+      [
         'LOBBY HIDE',
         'DOWN THE STAIRS: HE FOLLOWS',
         () => {
@@ -392,12 +402,12 @@ export class SettingsModal extends Phaser.Scene {
         },
       ],
       [
-        'TWO WEEKS LATER',
-        'OVER THE ROOFS: THE POSTER, 213',
+        'THE FOLLOWING DAY',
+        'OUT OF 612: THE POSTER, 213',
         () => {
-          // the end of the rooftop run: away, a fortnight on, outside the arcade
+          // out of 612's window and away: the next morning, outside the arcade
           store.patch({ seenIntro: true, charityUsed: true, hasKey: true, froggyGone: true, route: 'normal', hideRoom: 0, timeOfDay: 'day', reachedHotel: true, checkedIn: false, hotelNight: false, hotelAfter: 'escaped', arc: 'back' });
-          twoWeeksLater();
+          followingDay();
           store.flush();
           jumpToScene('ExteriorDay', {});
         },

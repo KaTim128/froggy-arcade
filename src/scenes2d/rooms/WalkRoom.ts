@@ -20,7 +20,7 @@ import { button, centerText, fadeIn, fadeToScene, pinToScreen, text } from '../.
 import { GAME_W, GAME_H } from '../../render/pixelScaler';
 import { TokenHud } from '../../ui/hud';
 import { attachPockets } from '../../ui/pockets';
-import { Player, depthFor, type Look } from '../../art/player';
+import { Player, depthFor, type Look, type SeatKind } from '../../art/player';
 import { froggyLayer } from '../../render/froggyLayer';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../../game/roomWalk';
 import { paintEntrance, ENTRANCE_W, ENTRANCE_H } from '../../art/exterior';
@@ -31,6 +31,8 @@ import type { SpeakerId } from '../../ui/portraits';
 import { backPlate, fitPrompt, SUBTITLE_Y } from '../../ui/plate';
 import { SHOP_HOURS, clock, shopsOpen, type DayPhase } from '../../game/life';
 import { onLightTurn, onPhaseTurn } from '../../game/dayNight';
+import { IndoorCop, type Cover } from '../../game/indoorPatrol';
+import type { Place } from '../../game/policeVisits';
 
 /** The back wall's foot: the floor starts here. */
 export const FLOOR_TOP = 100;
@@ -150,6 +152,25 @@ export abstract class WalkRoom extends Phaser.Scene {
   protected abstract fixtures(): Fixture[];
   /** Where the door out goes. */
   protected abstract leave(): void;
+  /**
+   * Which of the places the police look in at this is (game/policeVisits),
+   * or null for one they never do.
+   */
+  protected policePlace(): Place | null {
+    return null;
+  }
+
+  /**
+   * What in here might hide you from an officer: only the tall things do
+   * (game/indoorPatrol).  By default, nothing.
+   */
+  protected covers(): Cover[] {
+    return [];
+  }
+
+  /** The officer looking round, while there is one (game/indoorPatrol). */
+  protected police: IndoorCop | null = null;
+
   /** Music for the room. */
   protected music(): string {
     return 'room_lounge';
@@ -184,6 +205,24 @@ export abstract class WalkRoom extends Phaser.Scene {
     for (const f of [this.exitDoor, ...this.fixtures()]) this.addFixture(f);
     this.walker = new Walker(() => this.bounds, () => this.solids);
 
+    // now and then, while the patrols are out, an officer looks in
+    const place = this.policePlace();
+    this.police = place
+      ? new IndoorCop({
+          scene: this,
+          place,
+          player: () => this.player,
+          bounds: () => this.bounds,
+          solids: () => this.solids,
+          covers: () => this.covers(),
+          door: { x: this.exitDoor.x, y: this.floorTop + 12 },
+          lock: (on) => (this.locked = on),
+          alarm: () => this.policeAlarm(),
+        }, { asks: !!(this.sys.settings.data as { copAsks?: boolean } | undefined)?.copAsks })
+      : null;
+    // (out of the door with one after you: they come out after you)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.police?.leftRoom());
+
     new TokenHud(this);
     attachPockets(this, () => this.busy());
     this.promptPlate = this.add.rectangle(0, 0, 4, 12, PALETTE.black, 0.72).setDepth(800).setVisible(false);
@@ -205,7 +244,7 @@ export abstract class WalkRoom extends Phaser.Scene {
       () => {
         const p = this.player;
         if (!p) return null;
-        if (!p.seated || !this.seatReturn) return p;
+        if ((!p.seated && !p.asleep) || !this.seatReturn) return p;
         const at = this.seatReturn;
         return { x: at.x, y: at.y, facing: p.facing, setPosition: (x: number, y: number) => p.setPosition(x, y), face: (d: number) => p.face(d) };
       },
@@ -235,6 +274,24 @@ export abstract class WalkRoom extends Phaser.Scene {
       audio.sfx('door_open', 0.5);
       this.leave();
     });
+  }
+
+  /** Seen: whatever card is up comes down, and you are on your feet. */
+  protected policeAlarm(): void {
+    this.closePanel();
+    for (const k of ['InventoryModal', 'Goals']) if (this.scene.isActive(k)) this.scene.stop(k);
+    if (this.scene.isActive('Shop')) {
+      this.scene.stop('Shop');
+      this.afterModal();
+    }
+    this.talking?.destroy();
+    this.talking = null;
+    if (this.player.seated || this.player.asleep) {
+      this.player.getUp();
+      if (this.seatReturn) this.player.setPosition(this.seatReturn.x, this.seatReturn.y);
+      this.seatReturn = null;
+    }
+    this.walker.cancel();
   }
 
   /** The way out: by default the door standing at the left end of the floor. */
@@ -402,10 +459,13 @@ export abstract class WalkRoom extends Phaser.Scene {
   protected paintCounter(o: CounterOpts): Fixture {
     const x = COUNTER_X;
     const w = COUNTER_W;
-    const front = this.floorTop + 30;
-    const top = front - 15;
+    // Set back against the wall rather than out on the shop floor, and a
+    // counter's height (about two thirds of a person) with the keeper stood
+    // up tall behind it: chest and shoulders over the top, not just a head.
+    const front = this.floorTop + 17;
+    const top = front - 16;
     // the keeper, behind it: feet hidden by the counter, facing the doors
-    const keeper = new Player(this, x + 4, this.floorTop + 21, false, o.look);
+    const keeper = new Player(this, x + 4, this.floorTop + 5, false, o.look);
     keeper.sprite.setScale(-1, 1);
     const g = this.add.graphics().setDepth(depthFor(front));
     // its shadow on the floor
@@ -536,6 +596,7 @@ export abstract class WalkRoom extends Phaser.Scene {
   // ------------------------------------------------------------------ frame
 
   update(_t: number, delta: number): void {
+    this.police?.update(delta);
     if (this.busy()) {
       this.prompt.setVisible(false);
       this.promptPlate.setVisible(false);
@@ -546,7 +607,7 @@ export abstract class WalkRoom extends Phaser.Scene {
     const dy = (held('down') ? 1 : 0) - (held('up') ? 1 : 0);
     const before = { x: this.player.x, y: this.player.y };
     if (dx || dy) this.walker.cancel();
-    if (this.player.seated && !dx && !dy && !this.walker.active) {
+    if ((this.player.seated || this.player.asleep) && !dx && !dy && !this.walker.active) {
       // sat down: stays sat until moved
     } else if (this.seatReturn) {
       // up off the seat, back to where you stood (never left inside it)
@@ -576,7 +637,19 @@ export abstract class WalkRoom extends Phaser.Scene {
    * Sit on something at (x, y) -- a chair, a sofa, the barber's chair -- or
    * lie on a bed (`floor`).  Any move gets up again, back where you stood.
    */
-  protected sitOn(x: number, y: number, kind: 'chair' | 'floor', facing = 1): void {
+  /**
+   * Lie down on something -- a bed, a mattress: feet at (x, y) so the body
+   * sorts in front of it, the body laid along it at `restY`.  Moving gets
+   * you up, back to where you stood, as getting off a seat does.
+   */
+  protected lieOn(x: number, y: number, restY: number, facing = 1): void {
+    this.walker.cancel();
+    this.seatReturn = { x: this.player.x, y: this.player.y };
+    this.player.setPosition(x, y);
+    this.player.lie(facing, restY);
+  }
+
+  protected sitOn(x: number, y: number, kind: SeatKind, facing = 1): void {
     this.walker.cancel();
     this.seatReturn = { x: this.player.x, y: this.player.y };
     this.player.setPosition(x, y);
@@ -589,11 +662,11 @@ export abstract class WalkRoom extends Phaser.Scene {
    */
   protected refreshPlayer(look?: Look): void {
     const { x, y } = this.player;
-    const seated = this.player.seated;
+    const seated = this.player.seatKind;
     this.player.sprite.destroy();
     this.player = look ? new Player(this, x, y, false, look) : new Player(this, x, y);
     this.player.setSurface('carpet');
-    if (seated) this.player.sit('chair', { facing: 1 });
+    if (seated) this.player.sit(seated, { facing: 1 });
     if (this.worldW > GAME_W) this.cameras.main.startFollow(this.player.sprite, true, 0.15, 0.15);
   }
 

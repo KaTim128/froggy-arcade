@@ -81,8 +81,11 @@ const KEYS = {
 
 export type KeyName = keyof typeof KEYS;
 
-/** A button's words: one line, or an icon over a word when given as "ICON\nWORD". */
-function setLabel(el: HTMLElement, label: string): void {
+/**
+ * A button's words: one line, or an icon over a word when given as
+ * "ICON\nWORD".  With `icon` (an image URL) the picture takes the icon's place.
+ */
+function setLabel(el: HTMLElement, label: string, icon?: string): void {
   const [top, word] = label.split('\n');
   el.classList.toggle('two', word !== undefined);
   if (word === undefined) {
@@ -92,7 +95,14 @@ function setLabel(el: HTMLElement, label: string): void {
   el.textContent = '';
   const i = document.createElement('span');
   i.className = 'tc-ico';
-  i.textContent = top;
+  if (icon) {
+    const img = document.createElement('img');
+    img.className = 'tc-img';
+    img.src = icon;
+    img.alt = '';
+    img.draggable = false;
+    i.append(img);
+  } else i.textContent = top;
   const w = document.createElement('span');
   w.className = 'tc-word';
   w.textContent = word;
@@ -102,6 +112,8 @@ function setLabel(el: HTMLElement, label: string): void {
 /** One labelled button.  The label is what the player reads, `key` is what it sends. */
 export interface TouchButton {
   label: string;
+  /** A picture (image URL) shown in place of the label's icon line. */
+  icon?: string;
   key: KeyName;
   /**
    * A second key sent with the first, for the games that read two names for
@@ -257,6 +269,7 @@ const STYLE = `
   border-radius: 18px;
 }
 #touch-controls .tc-btn.two .tc-ico { font-size: 1.55em; line-height: 1; }
+#touch-controls .tc-btn.two .tc-img { display: block; width: 1.8em; height: 1.8em; margin: 0 auto; image-rendering: pixelated; pointer-events: none; }
 #touch-controls .tc-btn.two .tc-word {
   font-size: 0.8em; line-height: 1.1; max-width: 100%;
   white-space: nowrap; overflow: hidden;
@@ -681,7 +694,7 @@ class TouchControls {
       const el = document.createElement('button');
       el.type = 'button';
       el.className = 'tc-btn' + (b.primary ? ' primary' : '');
-      setLabel(el, b.label);
+      setLabel(el, b.label, b.icon);
       el.dataset.key = b.key;
       el.hidden = this.hiddenKeys.has(b.key);
       pads.appendChild(el);

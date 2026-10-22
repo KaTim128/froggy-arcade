@@ -16,6 +16,7 @@ import { closeAndShowOut, showOutAtNight } from '../game/closingPull';
 import { closingTime } from '../core/broke';
 import Phaser from 'phaser';
 import { Walker, collide, doorSpot, machineSpot, type Box, type Spot } from '../game/roomWalk';
+import { arcadeCop, type IndoorCop } from '../game/indoorPatrol';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store, type GameId } from '../core/state';
@@ -82,11 +83,17 @@ export class ArcadeCasino extends Phaser.Scene {
   private locked = false;
   private returnTo: GameId | null = null;
 
+  /** An officer looking round, while the patrols are out (game/indoorPatrol). */
+  private police: IndoorCop | null = null;
+  /** Back from a cabinet an officer interrupted: they are stood right here. */
+  private copAsks = false;
+
   constructor() {
     super('ArcadeCasino');
   }
 
   init(data: { atCabinet?: GameId; from?: 'annex' } = {}): void {
+    this.copAsks = (data as { copAsks?: boolean }).copAsks === true;
     this.returnTo = data.atCabinet ?? null;
   }
 
@@ -157,6 +164,21 @@ export class ArcadeCasino extends Phaser.Scene {
     // kept with the run, and back on the spot when resumed here (game/place)
     trackPlace(this, () => this.player, {}, resumeSpot(this.sys.settings.data));
 
+    // now and then, while the patrols are out, an officer looks round --
+    // and the machines are what you hide behind
+    this.police = arcadeCop({
+      scene: this,
+      player: () => this.player,
+      bounds: () => this.bounds,
+      solids: () => this.solids,
+      machines: this.solids.map((b) => ({ x: b.x + b.w / 2, y: b.y + b.h, w: b.w, depth: b.h })),
+      door: { x: BACK_DOOR.x - 16, y: BACK_DOOR.y },
+      lock: (on) => (this.locked = on),
+      alarm: () => {
+        this.talk?.destroy(); this.talk = null; this.walker.cancel();
+      },
+      asks: this.copAsks,
+    });
     new TokenHud(this);
     attachPockets(this, () => this.busy());
     // after the night: the arcade keeps hours, and shuts at 7:45 PM
@@ -479,6 +501,7 @@ export class ArcadeCasino extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    this.police?.update(delta);
     if (this.busy()) {
       this.promptPlate.setVisible(false);
       this.prompt.setVisible(false);

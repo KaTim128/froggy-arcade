@@ -20,7 +20,7 @@ import { TokenHud } from '../ui/hud';
 import { attachPockets } from '../ui/pockets';
 import { clock } from '../game/life';
 import { ALLEYS, paintSideAlley, type AlleyLight } from '../art/alleyArt';
-import { alleyWatch } from '../game/patrol';
+import { Patrol, alleyWatch } from '../game/patrol';
 
 export class SideAlley extends Phaser.Scene {
   private variant = 0;
@@ -31,6 +31,8 @@ export class SideAlley extends Phaser.Scene {
   private prompt!: Phaser.GameObjects.BitmapText;
   private mutter!: Phaser.GameObjects.BitmapText;
   private locked = false;
+  /** Nobody, unless one of them saw you come down here (game/patrol). */
+  private patrol: Patrol | null = null;
   private out = false;
 
   constructor() {
@@ -74,6 +76,20 @@ export class SideAlley extends Phaser.Scene {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => p.x < 60 && this.leave());
     this.time.delayedCall(500, () => this.say(['OUT OF SIGHT. FOR NOW.', 'NOBODY BACK HERE.', 'QUIET. JUST THE BINS.'][this.variant] ?? 'OUT OF SIGHT.'));
     alleyWatch(this);
+    this.patrol = this.follower(light === 'night');
+  }
+
+  /** Seen ducking in here: one of them comes down the alley after you. */
+  private follower(dark: boolean): Patrol {
+    return new Patrol({
+      scene: this,
+      worldW: GAME_W,
+      y: ALLEYS[this.variant].walkY,
+      player: () => this.player,
+      dark: () => dark,
+      alley: true,
+      lock: (on) => (this.locked = on),
+    });
   }
 
   private say(m: string): void {
@@ -90,6 +106,7 @@ export class SideAlley extends Phaser.Scene {
   }
 
   update(_t: number, delta: number): void {
+    this.patrol?.update(delta);
     if (this.locked) return;
     const L = ALLEYS[this.variant];
     const dx = (this.keys.right?.some((k) => k.isDown) ? 1 : 0) - (this.keys.left?.some((k) => k.isDown) ? 1 : 0);

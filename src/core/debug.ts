@@ -12,7 +12,9 @@ import { canEnter, SCENES } from './routes';
 import { evaluateBroke } from './broke';
 import { ledger } from './ledger';
 import { audio } from './audio';
-import { DAY_SECONDS, SUNRISE_HOUR, clock } from '../game/life';
+import { DAY_SECONDS, SUNRISE_HOUR, attireProgress, clock, wear } from '../game/life';
+import { visitsDev } from '../game/policeVisits';
+import { patrolDev } from '../game/patrol';
 
 declare const __DEV__: boolean;
 
@@ -79,6 +81,14 @@ export function initDebug(g: Phaser.Game): void {
     },
     /** The life clock to `hour` (fractional) of the current game day, for the day/night tests. */
     setHour: (hour: number) => setHour(hour),
+    /** The street stealth: how much of the look is changed, what is on, the police indoors and between streets. */
+    stealth: {
+      progress: () => attireProgress(),
+      wear: (id: string) => wear(id),
+      visits: visitsDev,
+      pursuit: patrolDev.pursuit,
+      chase: patrolDev.chase,
+    },
   };
 
   applyLaunchParams(g);

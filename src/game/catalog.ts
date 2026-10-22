@@ -104,7 +104,7 @@ export const FURNITURE: FurnitureDef[] = [
 
 // ------------------------------------------------------------- cosmetics
 
-export type CosmeticSlot = 'top' | 'legs' | 'shoes' | 'scarf' | 'hair' | 'dye' | 'hat';
+export type CosmeticSlot = 'top' | 'legs' | 'shoes' | 'scarf' | 'hair' | 'dye' | 'hat' | 'glasses';
 
 export interface CosmeticDef {
   id: string;
@@ -117,6 +117,8 @@ export interface CosmeticDef {
   cols: Partial<Record<string, number>>;
   /** For hats and hairstyles: the head rows. */
   head?: string[];
+  /** For glasses: the rows over the eyes. */
+  glasses?: string[];
   reward?: boolean;
 }
 
@@ -163,6 +165,10 @@ export const COSMETICS: CosmeticDef[] = [
   { id: 'cos_beanie_teal', name: 'TEAL BEANIE', slot: 'hat', shop: 'clothes', price: 9, cols: { B: 0x2a7a78, b: 0x46c4bd } },
   { id: 'cos_cap', name: 'BASEBALL CAP', slot: 'hat', shop: 'clothes', price: 12, cols: { B: 0x2a4a8a, b: 0x3a5aa0 }, head: HEAD_CAP },
   { id: 'cos_no_hat', name: 'NO HAT', slot: 'hat', shop: 'clothes', price: 0, cols: {} },
+  // glasses (the drifter has none: NO GLASSES is his own)
+  { id: 'cos_no_glasses', name: 'NO GLASSES', slot: 'glasses', shop: 'clothes', price: 0, cols: {} },
+  { id: 'cos_sunglasses', name: 'SUNGLASSES', slot: 'glasses', shop: 'clothes', price: 10, cols: { Q: 0x101018, q: 0x1e1e26 }, glasses: ['....QQqQQ...'] },
+  { id: 'cos_specs', name: 'READING SPECS', slot: 'glasses', shop: 'clothes', price: 8, cols: { q: 0x6a4a2a }, glasses: ['....qEqEq...'] },
   // hair (barber): only seen with NO HAT
   { id: 'hair_short', name: 'SHORT CUT', slot: 'hair', shop: 'barber', price: 8, cols: {}, head: HEAD_SHORT },
   { id: 'hair_long', name: 'LONG HAIR', slot: 'hair', shop: 'barber', price: 14, cols: {}, head: HEAD_LONG },
@@ -182,7 +188,17 @@ export const COSMETICS: CosmeticDef[] = [
 ];
 
 /** The cosmetics the drifter starts in, owned from the beginning. */
-export const STARTER_COSMETICS = ['cos_coat_olive', 'cos_trousers_baggy', 'cos_boots_worn', 'cos_scarf_grubby', 'cos_beanie', 'cos_no_hat'];
+export const STARTER_COSMETICS = ['cos_coat_olive', 'cos_trousers_baggy', 'cos_boots_worn', 'cos_scarf_grubby', 'cos_beanie', 'cos_no_hat', 'cos_no_glasses'];
+
+/**
+ * Every slot a whole change of clothes covers (the stealth phase's
+ * CHANGE YOUR LOOK): the hair counts once, as a cut or a colour.
+ */
+export const ATTIRE_SLOTS = ['hat', 'top', 'scarf', 'legs', 'shoes', 'glasses'] as const;
+/** What a slot holds with nothing bought for it (an old save, or a slot added later). */
+export const DEFAULT_WORN: Partial<Record<CosmeticSlot, string>> = {
+  top: 'cos_coat_olive', legs: 'cos_trousers_baggy', shoes: 'cos_boots_worn', scarf: 'cos_scarf_grubby', hat: 'cos_beanie', glasses: 'cos_no_glasses',
+};
 
 /**
  * ---- WHAT IS ON THE FLOOR TODAY.
@@ -229,8 +245,10 @@ export function lookFor(outfit: Record<string, string>): Look {
   const hairStyle = Object.values(outfit)
     .map((id) => cosmeticById(id))
     .filter((c): c is CosmeticDef => !!c);
+  let glasses: string[] | undefined;
   for (const c of hairStyle) {
     if (c.slot === 'hair' && c.head) head = c.head;
+    if (c.slot === 'glasses' && c.glasses) glasses = c.glasses;
   }
   for (const c of hairStyle) Object.assign(cols, c.cols);
   const hat = outfit.hat ? cosmeticById(outfit.hat) : undefined;
@@ -242,7 +260,7 @@ export function lookFor(outfit: Record<string, string>): Look {
     head = head ? underHat(head, CROWNS[hat.id] ?? CROWNS.cos_beanie) : hat.head;
   }
   if (hat?.id === 'cos_no_hat' && !head) head = HEAD_SHORT;
-  return { cols, head };
+  return { cols, head, glasses };
 }
 
 /** The top rows of each hat: what it covers of the head. */

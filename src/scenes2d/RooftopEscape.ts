@@ -32,7 +32,7 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { froggyLayer } from '../render/froggyLayer';
 import { Player } from '../art/player';
 import { backPlate } from '../ui/plate';
-import { twoWeeksLater } from '../game/life';
+import { followingDay } from '../game/life';
 import { earnBadge } from '../game/badges';
 
 // ---------------------------------------------------------------- the level
@@ -1026,13 +1026,13 @@ export class RooftopEscape extends Phaser.Scene {
 
   /** On black: what came of it.  Then the morning, outside the arcade. */
   private epilogue(): void {
-    // ...and then two weeks, in three lines: the building mended, him not found
+    // ...and then the next day, in three lines: the building boarded, him not found
     const lines = [
       'You managed to escape.',
       "The police couldn't recover the building's video recordings.",
       'But Froggy is still out there...',
-      'TWO WEEKS LATER',
-      "Lily's Condos was patched up in no time.",
+      'THE FOLLOWING DAY',
+      "Lily's Condos is boarding up the sixth floor.",
       'Froggy still has not turned up.',
     ];
     const t = centerText(this, GAME_W / 2, GAME_H / 2, '', PALETTE.cream).setScrollFactor(0).setDepth(9600).setMaxWidth(280).setAlpha(0);
@@ -1062,8 +1062,8 @@ export class RooftopEscape extends Phaser.Scene {
 
   private finish(): void {
     store.patch({ hotelAfter: 'escaped', timeOfDay: 'day', hotelNight: false, checkedIn: false, arc: 'back' });
-    // a fortnight on: the morning, outside the arcade
-    twoWeeksLater();
+    // the next morning, outside the arcade
+    followingDay();
     earnBadge('late_checkout');
     store.flush();
     this.scene.start('ExteriorDay', {});

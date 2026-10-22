@@ -41,8 +41,9 @@ import { PALETTE } from '../render/palette';
 import { audio, SILENCE } from '../core/audio';
 import { store } from '../core/state';
 import { KEYS } from '../core/input';
-import { centerText, confirmDialog, fadeIn, fadeToScene, pinToScreen, text } from '../core/ui';
+import { centerText, fadeIn, fadeToScene, pinToScreen, text } from '../core/ui';
 import { openTalkPanel } from '../ui/talkPanel';
+import { IndoorCop } from '../game/indoorPatrol';
 import { Player, depthFor } from '../art/player';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { attachPockets } from '../ui/pockets';
@@ -188,6 +189,8 @@ export class Hotel extends Phaser.Scene {
   private spot: Spot = null;
   private locked = false;
   private talk: Phaser.GameObjects.Container | null = null;
+  /** While the patrols are out, an officer now and then looks round the lobby (game/indoorPatrol). */
+  private police: IndoorCop | null = null;
   private goingUp = true;
   private morning = false;
   private from: 'outside' | 'lift' | 'room' | 'corridor' | 'stairs' | 'storage' | 'stairwell' = 'outside';
@@ -382,6 +385,26 @@ export class Hotel extends Phaser.Scene {
     if (this.area === 'corridor') this.landing = this.liftDoors(CORRIDOR_LIFT_X, 118, 10, this.from === 'lift');
     if (this.from === 'lift' && this.landing && ((this.area === 'lobby' && !this.goingUp) || this.area === 'corridor')) this.stepOutOfLift();
 
+    this.police =
+      this.area === 'lobby' && this.night === 'calm'
+        ? new IndoorCop({
+            scene: this,
+            place: 'lily',
+            side: true,
+            player: () => this.player!,
+            bounds: () => new Phaser.Geom.Rectangle(14, WALK_Y, LOBBY_W - 28, 0),
+            solids: () => [],
+            covers: () => [],
+            door: { x: 30, y: WALK_Y },
+            lock: (on) => (this.locked = on),
+            alarm: () => {
+              this.talk?.destroy();
+              this.talk = null;
+              this.autoWalk = null;
+            },
+          })
+        : null;
+    if (this.police) this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.police?.leftRoom());
     if (this.area === 'lobby') {
       this.cameras.main.setBounds(0, 0, LOBBY_W, GAME_H);
       if (this.from === 'storage' && store.get().hotelAfter === 'police') {
@@ -633,7 +656,7 @@ export class Hotel extends Phaser.Scene {
       });
     } else if (this.area === 'lobby') {
       this.say('They are still out there.', 2.6);
-      this.say('Outside to them -- or back up to my room?', 3.4);
+      this.say("Not the front. The stairs -- up to 612, and his window.", 3.4);
     }
   }
 
@@ -671,36 +694,12 @@ export class Hotel extends Phaser.Scene {
         this.say('POLICE: "Put your hands up!"', 2.4, true);
         this.say('POLICE: "You are under arrest! Come outside now!"', 3.4, true);
         this.say("They think I did all this.", 2.6);
-        this.say('Outside to them -- or back up to my room?', 3.6);
+        this.say("I can't go out there. Up the stairs -- 612. The window.", 3.6);
       } else {
         const lines = ['POLICE: "Come out with your hands up!"', 'POLICE: "This is your last warning! Come outside now!"', 'POLICE: "We know you are in there!"'];
         this.say(lines[(this.shouts - 2) % lines.length], 3, true);
       }
     }
-  }
-
-  /** Out of the front doors to them: the end of it. */
-  private surrender(): void {
-    const c = confirmDialog(this, {
-      lines: ['GO OUTSIDE TO THE POLICE?', 'THERE IS NO COMING BACK FROM THIS.'],
-      confirm: 'GO OUTSIDE',
-      cancel: 'STAY',
-      edge: 0xff3a4a,
-      onConfirm: () => {
-        this.locked = true;
-        this.lines = [];
-        this.nextLine();
-        audio.sfx('door_open', 0.8);
-        this.player?.move(-1, 0, 400, new Phaser.Geom.Rectangle(0, WALK_Y, LOBBY_W, 0));
-        this.time.delayedCall(500, () => audio.sfx('megaphone', 1));
-        this.say('POLICE: "Hands where we can see them! Down on the ground!"', 3, true);
-        // slowly, all the way to black
-        this.cameras.main.fadeOut(3200, 0, 0, 0);
-        this.time.delayedCall(3500, () => this.scene.start('ArrestEnding'));
-      },
-      onCancel: () => undefined,
-    });
-    c.setScrollFactor(0);
   }
 
   /** Out through the hole he left in the glass, onto the roofs. */
@@ -936,7 +935,13 @@ export class Hotel extends Phaser.Scene {
     const s = store.get();
     switch (this.spot) {
       case 'out':
-        if (this.policeOn) return this.surrender();
+        // (the front is theirs tonight: no walking out into it -- the way out
+        // is up, through the window he left in 612; see PoliceEscape3D)
+        if (this.policeOn) {
+          this.say("There are police all over the front. If I go out there, they'll take me.", 3);
+          this.say('The stairs. Up to 612 -- his window.', 2.6);
+          return;
+        }
         if (this.from === 'stairs') {
           this.say("Locked. They're locked from the outside.");
           return;
@@ -1008,10 +1013,11 @@ export class Hotel extends Phaser.Scene {
           return;
         }
         if (this.policeOn) {
-          // back up, six floors, to the room and its broken window
+          // back up, six floors, to the room and its broken window -- with
+          // the police coming in behind you (the stairs and the floors in 3D)
           this.locked = true;
           audio.sfx('door_creak', 0.6);
-          fadeToScene(this, 'Hotel', { area: 'corridor', from: 'stairs' });
+          fadeToScene(this, 'PoliceEscape3D', {});
           return;
         }
         if (this.from === 'storage') {
@@ -1591,6 +1597,7 @@ export class Hotel extends Phaser.Scene {
     this.tickPolice(dt);
     const p = this.player;
     if (!p) return;
+    this.police?.update(delta);
     if (this.area === 'bath' && this.reflection) {
       // you, in the mirror, when you are in front of it
       // fades in as you come up to the glass and out as you walk on: no pop
@@ -1671,7 +1678,7 @@ export class Hotel extends Phaser.Scene {
       return;
     }
     const label: Record<Exclude<Spot, null>, string> = {
-      out: this.policeOn ? '[E] GO OUTSIDE TO THE POLICE' : '[E] OUTSIDE',
+      out: this.policeOn ? '[E] FRONT DOORS' : '[E] OUTSIDE',
       desk: '[E] RECEPTION',
       lift: '[E] LIFT',
       stairs: this.policeOn ? '[E] STAIRS DOWN' : '[E] STAIRWELL',

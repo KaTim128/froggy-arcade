@@ -37,6 +37,8 @@ import { NIGHT_HOUR, twelveHour, clock, furnishStarterRoom, movePlacement, place
 import { useOf, washLine } from '../game/furnitureUse';
 import { WalkRoom, type Fixture } from './rooms/WalkRoom';
 import { Piece } from './rooms/piece';
+import { furnitureCover, type Cover } from '../game/indoorPatrol';
+import type { Place } from '../game/policeVisits';
 import { touchControls } from '../ui/touchControls';
 import {
   BATH_DOOR_X,
@@ -290,6 +292,21 @@ export class Condo extends WalkRoom {
     }
     this.hook?.setVisible(!this.hasWardrobe());
     this.drawOutline();
+  }
+
+  /** Lily's: now and then an officer comes up to have a look round your flat too. */
+  protected policePlace(): Place | null {
+    return this.area === 'room' ? 'lily' : null;
+  }
+
+  /** A wardrobe or a tall bookcase hides you; the bed and the sofa do not. */
+  protected covers(): Cover[] {
+    return this.areaPlacements()
+      .map((p) => {
+        const f = furnitureById(p.id);
+        return f ? furnitureCover(f, p.x, p.y) : null;
+      })
+      .filter((c): c is Cover => !!c);
   }
 
   protected fixtures(): Fixture[] {
