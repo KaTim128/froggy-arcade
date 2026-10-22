@@ -1243,8 +1243,9 @@ export class PoliceBuilding {
     box(0.08, 0.06, W.w + 0.1, frame, g, RD + 0.06, top - 0.03, wb);
     box(0.08, W.h, 0.06, frame, g, RD + 0.06, sill + W.h / 2, wb - half + 0.03);
     box(0.08, W.h, 0.06, frame, g, RD + 0.06, sill + W.h / 2, wb + half - 0.03);
-    const bar = box(0.05, 0.05, W.w * 0.6, frame, g, RD + 0.08, sill + W.h * 0.55, wb + 0.25);
-    bar.rotation.x = 0.5;
+    // (hanging down the side of the frame, out of the way of the hole)
+    const bar = box(0.05, 0.05, W.w * 0.5, frame, g, RD + 0.08, sill + W.h * 0.35, wb + half - 0.12);
+    bar.rotation.x = 1.25;
     // the glass that is left: jagged teeth round the frame, each its own shard
     const glass = new THREE.MeshPhongMaterial({ color: 0xc8dce6, specular: 0xffffff, shininess: 160, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false, emissive: 0x1a2630 });
     const edgeGlass = new THREE.MeshBasicMaterial({ color: 0xe8f4ff, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
@@ -1382,7 +1383,7 @@ export class PoliceBuilding {
         g.fillStyle = r() < 0.5 ? 'rgba(70,110,124,0.14)' : 'rgba(0,0,0,0.25)';
         g.fillRect(r() * 256, r() * 256, 1, 2 + r() * 4);
       }
-    }), RIVER / 6, 140 / 10);
+    }), RIVER / 3, 140 / 5);
     const water = new THREE.MeshBasicMaterial({ map: baseTex, fog: true });
     plane(RIVER, 140, water, X, wallX + RIVER / 2, WY, zMid, 0, -Math.PI / 2);
     const glintTex = tex(cvs(128, 256, (g) => {
@@ -1487,7 +1488,7 @@ export class PoliceBuilding {
       glow.scale.setScalar(2.2);
       X.add(glow);
       // its light down the water, broken by the current
-      streak(far - 4.5, z, 9, 2.2, 0xffc890, 0.32);
+      streak(far - 4, z, 8, 3.2, 0xffc890, 0.26);
     }
     // the town behind it: blocks against the sky, a few windows still lit
     const blockMat = new THREE.MeshLambertMaterial({ color: 0x15171c });
@@ -1534,8 +1535,8 @@ export class PoliceBuilding {
     X.add(moon);
     streak(wallX + 24, this.window612.z - 3, 34, 4.5, 0xd8e4f0, 0.7);
     // a cold light off the water on to the face of the building
-    const fill = new THREE.PointLight(0x6a8aa8, 10, 30, 1.2);
-    fill.position.set(wallX + 8, WY + 3, this.window612.z);
+    const fill = new THREE.PointLight(0x6a8aa8, 16, 34, 1.1);
+    fill.position.set(wallX + 6, WY + 6, this.window612.z);
     X.add(fill);
     // and the police on the bridge, red and blue on the water
     const pol = new THREE.PointLight(0xff2030, 0, 30, 1.1);

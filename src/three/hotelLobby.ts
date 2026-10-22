@@ -699,6 +699,176 @@ export function buildHotelLobby(
   sconceLight.position.set((SOFA_X + BIN.x) / 2, 2.1, DEPTH - 0.6);
   S.add(sconceLight);
 
+  // ---- THE FRONT WALL, FURNISHED.  It was a long bare stretch of paper
+  // with one sofa on it.  Now, along it from the front doors' end: a pair of
+  // armchairs round a side table under a wall clock; a console table with
+  // a lamp and a mirror over it; a tall plant; the sofa with a big painting
+  // over it and a rug under its table; the bin, another plant; a bench with
+  // two framed prints over it; and, by the storage door, a radiator and the
+  // fire extinguisher on its bracket.  (No new lights: what glows does it
+  // with its own colour.)
+  {
+    const F = DEPTH; // the wall's face
+    // a picture: a frame, a mount, and a painted canvas
+    const picture = (x: number, y: number, w: number, h: number, paint: (g: CanvasRenderingContext2D, w: number, h: number) => void, frameCol = 0x2a2018): void => {
+      box(w + 0.08, h + 0.08, 0.04, x, y, F - 0.03, new THREE.MeshLambertMaterial({ color: frameCol }));
+      const art = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshLambertMaterial({ map: tex(canvas(128, Math.round((128 * h) / w), (g) => paint(g, 128, Math.round((128 * h) / w)))) }));
+      art.position.set(x, y, F - 0.055);
+      art.rotation.y = Math.PI;
+      S.add(art);
+    };
+    // the big one over the sofa: a dark sea under a low storm sky
+    picture(SOFA_X - 0.35, 1.95, 1.5, 0.95, (g, w, h) => {
+      const sky = g.createLinearGradient(0, 0, 0, h);
+      sky.addColorStop(0, '#3a4450');
+      sky.addColorStop(0.55, '#8a8470');
+      sky.addColorStop(0.56, '#2a3a40');
+      sky.addColorStop(1, '#141e22');
+      g.fillStyle = sky;
+      g.fillRect(0, 0, w, h);
+      for (let k = 0; k < 160; k++) {
+        g.fillStyle = `rgba(${k % 2 ? '220,210,180' : '20,30,34'},${0.08 + (k % 5) * 0.03})`;
+        g.fillRect((k * 37) % w, h * 0.56 + ((k * 13) % (h * 0.44)), 4 + (k % 7), 1);
+      }
+      g.fillStyle = 'rgba(240,230,200,0.5)';
+      g.fillRect(w * 0.62, h * 0.18, 14, 6);
+    });
+    // two prints over the bench: botanical, a leaf each
+    for (const [i, x] of [7.0, 7.9].entries()) {
+      picture(x, 1.75, 0.6, 0.8, (g, w, h) => {
+        g.fillStyle = '#ece4d0';
+        g.fillRect(0, 0, w, h);
+        g.strokeStyle = '#4a6a3a';
+        g.lineWidth = 3;
+        g.beginPath();
+        g.moveTo(w / 2, h * 0.9);
+        g.quadraticCurveTo(w * (0.3 + i * 0.4), h * 0.5, w / 2, h * 0.12);
+        g.stroke();
+        g.fillStyle = '#6a8a4a';
+        for (let k = 0; k < 7; k++) {
+          const y = h * (0.2 + k * 0.1);
+          g.beginPath();
+          g.ellipse(w / 2 + (k % 2 ? 14 : -14), y, 14, 6, k % 2 ? -0.5 : 0.5, 0, Math.PI * 2);
+          g.fill();
+        }
+      }, 0xc8b078);
+    }
+    // the rug under the sofa's table
+    const rug = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.6, 1.7),
+      new THREE.MeshLambertMaterial({
+        map: tex(canvas(128, 96, (g) => {
+          g.fillStyle = '#5a2a2a';
+          g.fillRect(0, 0, 128, 96);
+          g.strokeStyle = '#c8a868';
+          g.lineWidth = 3;
+          g.strokeRect(8, 8, 112, 80);
+          g.strokeStyle = '#2a1414';
+          g.strokeRect(16, 16, 96, 64);
+          g.fillStyle = '#8a4a3a';
+          g.beginPath();
+          g.ellipse(64, 48, 28, 16, 0, 0, Math.PI * 2);
+          g.fill();
+        })),
+      }),
+    );
+    rug.rotation.x = -Math.PI / 2;
+    rug.position.set(SOFA_X, 0.009, F - 1.45);
+    S.add(rug);
+    // tall plants in black pots, either side of the sofa and the bin
+    const pot = new THREE.MeshLambertMaterial({ color: 0x1e2024 });
+    const leaf = new THREE.MeshLambertMaterial({ color: 0x2e5a32 });
+    const leafLit = new THREE.MeshLambertMaterial({ color: 0x4a7a40 });
+    const plant = (x: number): void => {
+      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.17, 0.5, 14), pot);
+      p.position.set(x, 0.25, F - 0.35);
+      S.add(p);
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 1.1, 6), new THREE.MeshLambertMaterial({ color: 0x4a3a24 }));
+      stem.position.set(x, 1.0, F - 0.35);
+      S.add(stem);
+      for (let k = 0; k < 9; k++) {
+        const a = k * 2.4;
+        const l = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), k % 3 ? leaf : leafLit);
+        l.scale.set(1.6, 0.35, 0.7);
+        l.position.set(x + Math.cos(a) * 0.22, 0.95 + k * 0.1, F - 0.35 + Math.sin(a) * 0.18);
+        l.rotation.set(0.4 * Math.sin(a), a, 0.5 * Math.cos(a));
+        S.add(l);
+      }
+    };
+    plant(SOFA_X - 1.45);
+    plant(BIN.x + 0.8);
+    // the console table, its lamp (lit from inside) and the mirror over it
+    const cx2 = -1.6;
+    box(1.4, 0.04, 0.4, cx2, 0.82, F - 0.24, wood);
+    for (const dx of [-0.64, 0.64]) box(0.04, 0.8, 0.36, cx2 + dx, 0.41, F - 0.24, darkWood);
+    box(1.3, 0.03, 0.34, cx2, 0.22, F - 0.24, darkWood);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.32, 10), brass);
+    base.position.set(cx2 - 0.4, 1.0, F - 0.24);
+    S.add(base);
+    const shadeM = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 0.22, 14), new THREE.MeshLambertMaterial({ color: 0xf4ead0, emissive: 0x8a7448 }));
+    shadeM.position.set(cx2 - 0.4, 1.27, F - 0.24);
+    S.add(shadeM);
+    box(0.24, 0.1, 0.18, cx2 + 0.3, 0.89, F - 0.24, new THREE.MeshLambertMaterial({ color: 0x7a2a2a }));
+    box(1.1, 1.0, 0.04, cx2, 1.75, F - 0.03, brass);
+    const mirror = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.9), new THREE.MeshPhongMaterial({ color: 0x9aa8b0, specular: 0xffffff, shininess: 120, emissive: 0x1a2024 }));
+    mirror.position.set(cx2, 1.75, F - 0.055);
+    mirror.rotation.y = Math.PI;
+    S.add(mirror);
+    // two armchairs round a little side table, under a wall clock
+    const velvet2 = new THREE.MeshLambertMaterial({ color: 0x4a5a5e });
+    for (const [x, turn] of [[-4.6, 0.35], [-3.2, -0.35]] as const) {
+      const g = new THREE.Group();
+      g.position.set(x, 0, F - 0.6);
+      g.rotation.y = Math.PI + turn;
+      S.add(g);
+      for (const [w, h, d, px, py, pz] of [
+        [0.8, 0.4, 0.75, 0, 0.3, 0],
+        [0.8, 0.7, 0.16, 0, 0.7, -0.3],
+        [0.14, 0.55, 0.75, -0.42, 0.45, 0],
+        [0.14, 0.55, 0.75, 0.42, 0.45, 0],
+      ] as const) {
+        const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), velvet2);
+        b.position.set(px, py, pz);
+        g.add(b);
+      }
+    }
+    const st = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.04, 16), wood);
+    st.position.set(-3.9, 0.55, F - 0.5);
+    S.add(st);
+    const stLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.05, 0.53, 8), darkWood);
+    stLeg.position.set(-3.9, 0.27, F - 0.5);
+    S.add(stLeg);
+    const clockFace = new THREE.Mesh(new THREE.CircleGeometry(0.3, 24), new THREE.MeshLambertMaterial({ color: 0xf0e8d8 }));
+    clockFace.position.set(-3.9, 2.2, F - 0.04);
+    clockFace.rotation.y = Math.PI;
+    S.add(clockFace);
+    const clockRim = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.35, 24), brass);
+    clockRim.position.set(-3.9, 2.2, F - 0.035);
+    clockRim.rotation.y = Math.PI;
+    S.add(clockRim);
+    for (const [len, a] of [[0.2, 0.9], [0.26, -1.9]] as const) {
+      const hand = box(0.02, len, 0.01, -3.9, 2.2, F - 0.05, darkWood);
+      hand.geometry.translate(0, len / 2, 0);
+      hand.rotation.z = a;
+    }
+    // the bench, a coat stand, a radiator, the extinguisher by the storage door
+    box(1.6, 0.06, 0.45, 7.45, 0.46, F - 0.3, wood);
+    for (const dx of [-0.7, 0.7]) box(0.06, 0.44, 0.4, 7.45 + dx, 0.22, F - 0.3, darkWood);
+    box(0.36, 0.05, 0.3, 7.0, 0.51, F - 0.3, new THREE.MeshLambertMaterial({ color: 0x2a4a7a }));
+    for (let k = 0; k < 10; k++) box(0.06, 0.6, 0.06, 9.0 + k * 0.1, 0.42, F - 0.08, cream);
+    box(1.05, 0.05, 0.08, 9.45, 0.74, F - 0.08, cream);
+    const ext = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.5, 12), new THREE.MeshLambertMaterial({ color: 0xb01818, emissive: 0x2a0404 }));
+    ext.position.set(10.35, 0.75, F - 0.12);
+    S.add(ext);
+    box(0.06, 0.08, 0.06, 10.35, 1.04, F - 0.12, darkWood);
+    const extSign = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.3), new THREE.MeshBasicMaterial({ map: tex(texSign('FIRE', '#b01818', '#ffffff', 128, 128)) }));
+    extSign.position.set(10.35, 1.45, F - 0.02);
+    extSign.rotation.y = Math.PI;
+    S.add(extSign);
+    // the panelling: mouldings marking the wainscot into panels along the wall
+    for (let x = X0 + 0.6; x < X1 - 0.3; x += 1.2) box(0.035, DADO - 0.2, 0.02, x, (DADO - 0.2) / 2 + 0.1, F - 0.012, cream);
+  }
+
   // ---- the armchair, the lamp beside it, the trolley past the lift
   const velvet = new THREE.MeshLambertMaterial({ color: 0x5a6068 });
   const cx = lx(69);

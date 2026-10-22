@@ -1882,14 +1882,18 @@ export class PoliceEscape3D extends Phaser.Scene {
         this.lines = [];
         this.say('No.', 0.8);
       }
+      // (and the night thins again as you turn back to the window)
+      (this.stage!.scene.fog as THREE.FogExp2).density = 0.045 - 0.033 * k;
     } else if (t < T.jump) {
       // up on to the sill -- a step up, crouched in the hole -- and the push off
       const k = (t - T.back) / (T.jump - T.back);
       yaw = yawTo(sill, outward);
       const up = Math.sin(Math.min(1, k * 1.3) * Math.PI * 0.5);
       pos = sill.clone().lerp(leanOut, ease(k));
-      pos.y = sill.y + up * 0.3 - Math.max(0, k - 0.7) * 0.5;
+      // (crouched low in the hole, under the glass still hanging in the top of it)
+      pos.y = sill.y - 0.2 + up * 0.08 - Math.max(0, k - 0.7) * 0.4;
       pitch = -0.15 - k * 0.25;
+      (this.stage!.scene.fog as THREE.FogExp2).density = 0.012;
       if (at(T.back + 0.05)) audio.sfx('glass_crack', 0.6);
       if (at(T.back + 0.35)) audio.sfx('breath', 0.8);
       cn.p0 = pos.clone();
@@ -1900,12 +1904,17 @@ export class PoliceEscape3D extends Phaser.Scene {
       // the black before you reach it.
       const k = (t - T.jump) / (T.fall - T.jump);
       const p0 = cn.p0 ?? leanOut;
-      const bottom = WATER_Y + 1.4;
-      pos = new THREE.Vector3(p0.x + S * (0.4 + 1.8 * Math.sqrt(k)), p0.y - (p0.y - bottom) * k * k, p0.z + Math.sin(k * 2.1) * 0.3);
-      yaw = yawTo(sill, outward) + Math.sin(k * 2.6) * 0.18 * k;
-      // from looking out, over and down at the water rushing up
-      pitch = -0.4 - ease(Math.min(1, k * 1.5)) * 0.9;
-      roll = Math.sin(k * 3.2) * 0.22 * k;
+      // (the black comes a few metres above it: close to, the water is only
+      // a flat picture)
+      const bottom = WATER_Y + 3.2;
+      pos = new THREE.Vector3(p0.x + S * (0.5 + 2.2 * Math.sqrt(k)), p0.y - (p0.y - bottom) * k * k, p0.z + Math.sin(k * 2.1) * 0.3);
+      // turning as you go, so the face of the building is there beside you --
+      // the brick and the dark windows going up past, faster and faster --
+      // and the water below coming up at you
+      const out = yawTo(sill, outward);
+      yaw = out + 0.75 * ease(Math.min(1, k * 1.6)) + Math.sin(k * 2.6) * 0.1 * k;
+      pitch = -0.35 - ease(Math.min(1, k * 1.4)) * 0.55;
+      roll = Math.sin(k * 3.2) * 0.2 * k;
       cam.fov = 72 + 18 * k;
       cam.updateProjectionMatrix();
       (this.stage!.scene.fog as THREE.FogExp2).density = 0.012;
@@ -2284,7 +2293,8 @@ export class PoliceEscape3D extends Phaser.Scene {
       // how close they are to seeing you: an eye that opens
       const sus = Math.max(0, ...this.cops.filter((c) => c.mode !== 'chase').map((c) => c.sus));
       const chased = this.cops.some((c) => c.mode === 'chase' || c.mode === 'alert');
-      if (sus > 0.05 || chased) {
+      // (not over the film of 612: that is not yours to play)
+      if ((sus > 0.05 || chased) && this.phase !== 'cinema') {
         const cx = GAME_W / 2;
         const cy = 18;
         const open = chased ? 1 : sus;
