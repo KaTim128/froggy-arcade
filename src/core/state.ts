@@ -203,6 +203,13 @@ export interface GameState {
    */
   disguised: boolean;
   wantedOutfit: Record<string, string> | null;
+  /**
+   * Where the stealth phase began: the cash in hand the moment the man paid
+   * the $200, and what was owned then.  Caught before the whole look is
+   * changed, it all goes back to this -- the cash, and nothing bought since
+   * -- so the new look has to be got in one go.
+   */
+  stealthStart: { cash: number; wardrobe: string[]; furniture: Record<string, number>; placed: unknown[] } | null;
   hudShown: boolean;
   /**
    * ---- BADGES.  The story's milestones, by id (game/badges).  The
@@ -417,6 +424,7 @@ function defaultState(): GameState {
     arc: 'none',
     disguised: false,
     wantedOutfit: null,
+    stealthStart: null,
     hudShown: false,
     badges: [],
     jailed: false,
@@ -526,6 +534,17 @@ class Store {
     fresh.disguised = run.disguised === true;
     fresh.hudShown = run.hudShown === true;
     fresh.wantedOutfit = run.wantedOutfit && typeof run.wantedOutfit === 'object' ? Object.fromEntries(Object.entries(run.wantedOutfit).filter(([, v]) => typeof v === 'string')) : null;
+    {
+      const ss = run.stealthStart as GameState['stealthStart'] | undefined;
+      fresh.stealthStart = ss && typeof ss === 'object' && Number.isFinite(ss.cash) && Array.isArray(ss.wardrobe)
+        ? {
+            cash: Math.max(0, Math.floor(ss.cash)),
+            wardrobe: ss.wardrobe.filter((w) => typeof w === 'string'),
+            furniture: ss.furniture && typeof ss.furniture === 'object' ? Object.fromEntries(Object.entries(ss.furniture).filter(([, v]) => Number.isFinite(v))) : {},
+            placed: Array.isArray(ss.placed) ? ss.placed : [],
+          }
+        : null;
+    }
     // (a save from before the two weeks: out over the roofs and away already
     // -- it picks up on the street outside the arcade, two weeks on)
     if (fresh.hotelAfter === 'escaped' && fresh.arc === 'none') fresh.arc = 'back';

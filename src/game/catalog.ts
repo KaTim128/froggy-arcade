@@ -104,6 +104,16 @@ export const FURNITURE: FurnitureDef[] = [
 
 // ------------------------------------------------------------- cosmetics
 
+/**
+ * GLASSES, over the eye row and the one under it (the head is 12 wide, the
+ * eyes at columns 5 and 7).  Two lenses with a bridge between them and an arm
+ * back to the hair, each lens two by two with a glint on it: a single dark
+ * line across the face read as a blindfold, not a pair of glasses.
+ */
+const SHADES = ['..qqQLqQLq..', '....QQ.QQ...'];
+/** Reading specs: thin frames round the eyes, the glass pale where it catches the light. */
+const SPECS = ['..qqlEqElq..', '....qq.qq...'];
+
 export type CosmeticSlot = 'top' | 'legs' | 'shoes' | 'scarf' | 'hair' | 'dye' | 'hat' | 'glasses';
 
 export interface CosmeticDef {
@@ -167,8 +177,8 @@ export const COSMETICS: CosmeticDef[] = [
   { id: 'cos_no_hat', name: 'NO HAT', slot: 'hat', shop: 'clothes', price: 0, cols: {} },
   // glasses (the drifter has none: NO GLASSES is his own)
   { id: 'cos_no_glasses', name: 'NO GLASSES', slot: 'glasses', shop: 'clothes', price: 0, cols: {} },
-  { id: 'cos_sunglasses', name: 'SUNGLASSES', slot: 'glasses', shop: 'clothes', price: 10, cols: { Q: 0x101018, q: 0x1e1e26 }, glasses: ['....QQqQQ...'] },
-  { id: 'cos_specs', name: 'READING SPECS', slot: 'glasses', shop: 'clothes', price: 8, cols: { q: 0x6a4a2a }, glasses: ['....qEqEq...'] },
+  { id: 'cos_sunglasses', name: 'SUNGLASSES', slot: 'glasses', shop: 'clothes', price: 10, cols: { Q: 0x101018, q: 0x1e1e26 }, glasses: SHADES },
+  { id: 'cos_specs', name: 'READING SPECS', slot: 'glasses', shop: 'clothes', price: 8, cols: { q: 0x6a4a2a }, glasses: SPECS },
   // hair (barber): only seen with NO HAT
   { id: 'hair_short', name: 'SHORT CUT', slot: 'hair', shop: 'barber', price: 8, cols: {}, head: HEAD_SHORT },
   { id: 'hair_long', name: 'LONG HAIR', slot: 'hair', shop: 'barber', price: 14, cols: {}, head: HEAD_LONG },
