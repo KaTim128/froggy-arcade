@@ -90,8 +90,13 @@ function setLabel(el: HTMLElement, label: string, icon?: string): void {
   el.classList.toggle('two', word !== undefined);
   if (word === undefined) {
     el.textContent = label;
+    // the longest word has to fit across the circle: past six letters,
+    // the label is set that much smaller
+    const longest = Math.max(...label.split(/\s+/).map((w) => w.length));
+    el.style.fontSize = longest > 6 ? `calc(var(--tc-font, 13px) * ${(6 / longest).toFixed(3)})` : '';
     return;
   }
+  el.style.fontSize = '';
   el.textContent = '';
   const i = document.createElement('span');
   i.className = 'tc-ico';
@@ -247,8 +252,11 @@ const STYLE = `
 #touch-controls .tc-btn {
   pointer-events: auto; touch-action: none;
   display: flex; align-items: center; justify-content: center;
-  min-width: var(--tc-btn, 62px); height: var(--tc-btn, 62px);
-  padding: 0 10px;
+  /* a circle, always: as wide as it is tall, whatever the label (a long
+     one is set smaller to fit -- see setLabel -- rather than stretching
+     the button into an oval) */
+  width: var(--tc-btn, 62px); height: var(--tc-btn, 62px); flex: none;
+  padding: 0 3px; box-sizing: border-box; overflow: hidden;
   border-radius: 50%;
   background: rgba(61, 42, 92, 0.72);
   border: 2px solid rgba(255, 212, 94, 0.6);
@@ -258,7 +266,7 @@ const STYLE = `
 #touch-controls .tc-btn.primary {
   background: rgba(20, 92, 95, 0.8);
   border-color: rgba(70, 196, 189, 0.9);
-  min-width: calc(var(--tc-btn, 62px) * 1.25);
+  width: calc(var(--tc-btn, 62px) * 1.25);
   height: calc(var(--tc-btn, 62px) * 1.25);
 }
 #touch-controls .tc-btn.down { background: rgba(255, 212, 94, 0.85); color: #141a24; }
@@ -267,6 +275,7 @@ const STYLE = `
 #touch-controls .tc-btn.two {
   flex-direction: column; gap: 1px; padding: 0 4px; overflow: hidden;
   border-radius: 18px;
+  width: auto; min-width: var(--tc-btn, 62px);
 }
 #touch-controls .tc-btn.two .tc-ico { font-size: 1.55em; line-height: 1; }
 #touch-controls .tc-btn.two .tc-img { display: block; width: 1.8em; height: 1.8em; margin: 0 auto; image-rendering: pixelated; pointer-events: none; }

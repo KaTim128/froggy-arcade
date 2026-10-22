@@ -1359,7 +1359,9 @@ export class HotelLobby3D extends Phaser.Scene {
       touchControls.relabel('C', crouchLabel);
     }
     touchControls.showButton('E', this.phase === 'gone');
-    touchControls.showButton('SPACE', !!this.check);
+    // (always there while you hide, not only while a check is up: you should
+    // not have to find it on the screen with him at the window)
+    touchControls.showButton('SPACE', this.mode === 'hide' && this.phase !== 'gone');
   }
 
   /** Standing up where he could see you. */
