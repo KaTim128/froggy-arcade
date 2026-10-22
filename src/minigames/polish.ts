@@ -18,10 +18,10 @@
  *   - THE GLASS.  A faint diagonal sheen across the top corner, the screen
  *     of a cabinet catching the room's lights.
  *
- * And at the end, WIN AND LOSE in colour (`resultGlow`): a burst of gold
- * light and sparks from the middle for a win, a red closing-in of the edges
- * and a dimming for a loss -- under the result card, over the game, and
- * nothing about the result or what happens next changes.
+ * And at the end, a WIN in colour (`resultGlow`): a burst of gold light and
+ * sparks from the middle -- under the result card, over the game, and
+ * nothing about the result or what happens next changes.  A loss or a draw
+ * gets nothing.
  *
  * Bog Ball keeps its own dark finish (it is the reference) and gets none of
  * the overlay.  Everything is one texture per game, made once.
@@ -139,9 +139,9 @@ function paintFinish(scene: Phaser.Scene, key: string, f: Finish): void {
 }
 
 /**
- * WIN AND LOSE, IN COLOUR.  Called as the result card goes up: a burst of
- * gold light, a ring going out and sparks thrown up from the middle for a
- * win; for a loss the edges close in red and the picture dims.  Laid between
+ * A WIN, IN COLOUR.  Called as the result card goes up: a burst of gold
+ * light, a ring going out and sparks thrown up from the middle for a win;
+ * anything else gets nothing.  Laid between
  * the game and the card (depth 980, one layer: the returned container); it fades with the card and changes
  * nothing about what the result is.
  */
@@ -155,9 +155,9 @@ export function resultGlow(scene: Phaser.Scene, won: boolean | null, card: { w?:
   // all of it in one layer, so whoever shows the card can take it down with it
   const box = scene.add.container(0, 0).setDepth(D);
   const put = <T extends Phaser.GameObjects.GameObject>(o: T): T => (box.add(o), o);
-  // the card itself glows in the result's colour, just round its edge
-  if (won !== null) {
-    const col = won ? 0xffd45e : 0xe03040;
+  // the card itself glows gold, just round its edge
+  if (won) {
+    const col = 0xffd45e;
     for (const [pad, a] of [[3, 0.55], [6, 0.28], [10, 0.12]] as const) {
       const rim = put(scene.add.rectangle(cx, cy, cw + pad * 2, ch + pad * 2).setStrokeStyle(pad > 3 ? 3 : 2, col, a).setBlendMode(Phaser.BlendModes.ADD));
       scene.tweens.add({ targets: rim, alpha: { from: 1, to: 0.55 }, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
@@ -202,28 +202,6 @@ export function resultGlow(scene: Phaser.Scene, won: boolean | null, card: { w?:
     }
     return box;
   }
-  if (won === false) {
-    // the red closing in from the edges, and the picture going dim under the card
-    if (!scene.textures.exists('result_red')) {
-      const t = scene.textures.createCanvas('result_red', GAME_W, GAME_H);
-      if (t) {
-        const g = t.getContext();
-        const gr = g.createRadialGradient(cx, cy, GAME_H * 0.3, cx, cy, GAME_W * 0.62);
-        gr.addColorStop(0, 'rgba(120,0,10,0)');
-        gr.addColorStop(1, 'rgba(150,10,20,0.75)');
-        g.fillStyle = gr;
-        g.fillRect(0, 0, GAME_W, GAME_H);
-        t.refresh();
-      }
-    }
-    const dim = put(scene.add.rectangle(0, 0, GAME_W, GAME_H, 0x10060a, 0).setOrigin(0, 0));
-    const red = put(scene.add.image(0, 0, 'result_red').setOrigin(0, 0).setAlpha(0));
-    scene.tweens.add({ targets: dim, fillAlpha: 0.38, duration: 500 });
-    scene.tweens.add({ targets: red, alpha: 1, duration: 220, yoyo: true, hold: 120, onComplete: () => red.setAlpha(0.6) });
-    return box;
-  }
-  // a draw, or a practice that just ended: a cool, even dimming
-  const dim = put(scene.add.rectangle(0, 0, GAME_W, GAME_H, 0x0a1420, 0).setOrigin(0, 0));
-  scene.tweens.add({ targets: dim, fillAlpha: 0.3, duration: 400 });
+  // a loss, a draw or a practice that ended: no colour over it
   return box;
 }

@@ -28,7 +28,7 @@ import { FONT_ADVANCE } from '../render/pixelFont';
 import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
 import { store, type GameId } from '../core/state';
-import { centerText, fadeIn, fadeToScene, forfeitLines, text } from '../core/ui';
+import { button, centerText, fadeIn, fadeToScene, forfeitLines, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { TokenHud } from '../ui/hud';
 import { cabinetById } from '../game/content';
@@ -70,14 +70,18 @@ export class MinigameScene extends Phaser.Scene {
   private exitTo: string | null = null;
   /** This go is PRACTICE: free, and counted for nothing. */
   private practicing = false;
+  /** Open on the PLAY / PRACTICE choice rather than the how-to-play card. */
+  private chooser = false;
   /** The quit question, while it is up.  The game is frozen under it. */
 
   constructor() {
     super('Minigame');
   }
 
-  init(data: { id: GameId; from?: string; straight?: boolean }): void {
+  init(data: { id: GameId; from?: string; straight?: boolean; chooser?: boolean }): void {
     this.gameId = data.id;
+    // back from a practice go: straight to the choice of PLAY or PRACTICE
+    this.chooser = data.chooser === true;
     // Walked up and pressed play in one motion: see `straight` below.
     this.straight = data.straight === true;
     // Which room's floor to put the player back on.  Sending everyone to the
@@ -321,6 +325,20 @@ export class MinigameScene extends Phaser.Scene {
       setCabinetTouch(mod.touch);
     };
 
+    // A cabinet with a practice go: PLAY on the card (or walking straight up
+    // to it, or coming back from a practice go) opens the choice -- PLAY for
+    // real, which takes the tokens, or PRACTICE, which takes nothing.
+    if (mod.practice && (this.chooser || (this.straight && !firstGo))) {
+      this.showChooser(start, startPractice);
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        this.card?.destroy();
+        this.card = null;
+        setCabinetTouch(null);
+      });
+      this.devBridge();
+      return;
+    }
+
     if (this.straight && !firstGo && !mod.practice) {
       // The affordability check the card would have made.  Without it a player
       // who cannot cover the cabinet gets dropped into a built game that then
@@ -353,9 +371,9 @@ export class MinigameScene extends Phaser.Scene {
         const was = bestRecord(this.gameId);
         return rec && was !== null ? rec.long(was) : undefined;
       })(),
-      onPlay: start,
-      // a free go to learn on, where the cabinet offers one
-      onPractice: mod.practice ? () => startPractice() : undefined,
+      // (where the cabinet has a practice go, PLAY first asks which: see `showChooser`)
+      onPlay: mod.practice ? () => this.showChooser(start, startPractice) : start,
+      choose: !!mod.practice,
       onLeave: () => {
         this.card = null;
         this.leave();
@@ -477,6 +495,67 @@ export class MinigameScene extends Phaser.Scene {
   }
 
   /**
+   * ---- PLAY OR PRACTICE.  Two big choices on one card: PLAY, which takes
+   * the cabinet's tokens there and then (and from then on walking out is a
+   * forfeit, as at any cabinet), or PRACTICE, the same game for nothing --
+   * and coming out of a practice go comes back here.  LEAVE goes back to the
+   * room with nothing taken.
+   */
+  private showChooser(play: () => void, practice: () => void): void {
+    const def = cabinetById(this.gameId);
+    const free = def.freeToEnter === true;
+    const can = free || ledger.balance() >= def.cost;
+    const parts: Phaser.GameObjects.GameObject[] = [];
+    const keep = <T extends Phaser.GameObjects.GameObject>(o: T): T => (parts.push(o), o);
+    keep(this.add.rectangle(0, 0, GAME_W, GAME_H, PALETTE.black, 0.86).setOrigin(0, 0).setDepth(900).setInteractive());
+    keep(this.add.rectangle(GAME_W / 2, 92, 236, 112, PALETTE.ink).setStrokeStyle(1, PALETTE.gold).setDepth(901));
+    keep(this.add.rectangle(GAME_W / 2, 42, 236, 11, PALETTE.plum).setDepth(902));
+    keep(centerText(this, GAME_W / 2, 42, def.title, PALETTE.gold).setDepth(903));
+    keep(centerText(this, GAME_W / 2, 58, 'PLAY FOR REAL, OR PRACTISE FIRST?', PALETTE.cream).setDepth(903));
+    let done = false;
+    const card: TutorialCard = {
+      destroy: () => {
+        if (done) return;
+        done = true;
+        for (const o of parts) o.destroy();
+        parts.length = 0;
+      },
+    };
+    const pick = (fn: () => void, sfx: 'coin_drop' | 'ui_blip'): void => {
+      if (done) return;
+      card.destroy();
+      this.card = null;
+      audio.sfx(sfx);
+      fn();
+    };
+    const bw = 104;
+    keep(
+      button(this, GAME_W / 2 - 56, 84, 'PLAY', () => (can ? pick(play, 'coin_drop') : audio.sfx('buzzer', 0.5)), {
+        width: bw,
+        height: 22,
+        fill: can ? PALETTE.tealDark : PALETTE.slate,
+        disabled: !can,
+      }).setDepth(905),
+    );
+    keep(button(this, GAME_W / 2 + 56, 84, 'PRACTICE', () => pick(practice, 'ui_blip'), { width: bw, height: 22, fill: 0x1f4a5a }).setDepth(905));
+    keep(
+      centerText(this, GAME_W / 2 - 56, 102, free ? 'BETS INSIDE' : can ? `${def.cost} TOKENS` : `NEED ${def.cost - ledger.balance()} MORE`, can ? PALETTE.gold : PALETTE.blood).setDepth(903),
+    );
+    keep(centerText(this, GAME_W / 2 + 56, 102, 'FREE - WINS NOTHING', PALETTE.tealLight).setDepth(903));
+    keep(centerText(this, GAME_W / 2, 118, 'LEAVE A REAL GAME AND YOU FORFEIT', PALETTE.ash).setDepth(903));
+    keep(
+      button(this, GAME_W / 2, 136, 'LEAVE', () => {
+        if (done) return;
+        card.destroy();
+        this.card = null;
+        this.leave();
+      }, { width: 80, height: 13, fill: PALETTE.plum }).setDepth(905),
+    );
+    // (Esc at it is LEAVE, as at the card: see `handleEscape`)
+    this.card = card;
+  }
+
+  /**
    * The end of a practice go, however it ended: nothing changes hands, nothing
    * is recorded or counted, and the card says it was practice.
    */
@@ -490,9 +569,14 @@ export class MinigameScene extends Phaser.Scene {
     const panel = this.add.rectangle(GAME_W / 2, GAME_H / 2, 250, 60, PALETTE.ink).setDepth(990);
     panel.setStrokeStyle(1, PALETTE.tealLight);
     centerText(this, GAME_W / 2, GAME_H / 2 - 10, won === null ? 'PRACTICE OVER' : won ? 'PRACTICE - YOU WON' : 'PRACTICE - YOU LOST', PALETTE.tealLight, 16).setDepth(991);
-    centerText(this, GAME_W / 2, GAME_H / 2 + 12, 'NOTHING WON OR LOST - PAY TO PLAY FOR REAL', PALETTE.ash).setDepth(991);
+    centerText(this, GAME_W / 2, GAME_H / 2 + 12, 'NOTHING WON OR LOST - BACK TO THE CHOICE', PALETTE.ash).setDepth(991);
     audio.sfx('ui_blip');
-    this.time.delayedCall(RESULT_MS, () => fadeToScene(this, this.exitTo ?? this.from, { atCabinet: this.gameId }));
+    // back to PLAY or PRACTICE -- unless the pause menu was taking you
+    // somewhere else altogether
+    this.time.delayedCall(RESULT_MS, () => {
+      if (this.exitTo) fadeToScene(this, this.exitTo, { atCabinet: this.gameId });
+      else fadeToScene(this, 'Minigame', { id: this.gameId, from: this.from, chooser: true });
+    });
   }
 
   private forfeit(): void {
