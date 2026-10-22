@@ -847,7 +847,7 @@ export class PoliceOfficer {
     cone.rotateX(-Math.PI / 2);
     this.beam = new THREE.Mesh(
       cone,
-      new THREE.MeshBasicMaterial({ color: 0xfff0d0, alphaMap: beamAlpha(), transparent: true, opacity: 0.09, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+      new THREE.MeshBasicMaterial({ color: 0xfff0d0, alphaMap: beamAlpha(), transparent: true, opacity: 0.04, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
     );
     this.beam.position.set(0, 0, 0.16);
     this.beam.renderOrder = 5;

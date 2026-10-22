@@ -161,7 +161,8 @@ try {
   const doors = await P(page, 'doors');
   check('the lobby door is off its hinges', doors.find((d) => d.id === 'stair-0').k > 0.95);
   r = await P(page, 'walkTo', 0.9, 2.8);
-  check('and you cannot go out through it into the lobby', r.well === true && r.level === 0 && r.z < 1.6, JSON.stringify(r));
+  // (up to the threshold, to lean out and look along the lobby, and no further)
+  check('and you cannot go out through it into the lobby', r.well === true && r.level === 0 && r.z <= 1.6 + 0.55, JSON.stringify(r));
 
   const rooms = await P(page, 'rooms');
   const flats = rooms.filter((x) => x.special === 'none');
@@ -238,7 +239,7 @@ try {
   await P(page, 'freeze', false);
   let s0 = await S(page);
   check('three officers, each on his own', s0.cops.length === 3 && new Set(s0.cops.map((c) => `${c.x.toFixed(1)},${c.z.toFixed(1)},${c.level}`)).size === 3);
-  check('all three start at the lobby\'s smashed front doors', s0.cops.every((c) => c.level === 0 && c.z > 14), s0.cops.map((c) => `${c.level}:${c.z.toFixed(1)}`).join(' '));
+  check('all three start at the lobby\'s smashed front doors, away on the right', s0.cops.every((c) => c.level === 0 && c.x < -8), s0.cops.map((c) => `${c.level}:${c.x.toFixed(1)},${c.z.toFixed(1)}`).join(' '));
   // a while of the building being searched
   const start = s0.cops.map((c) => ({ x: c.x, z: c.z, h: c.h }));
   const floors = new Set();

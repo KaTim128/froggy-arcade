@@ -353,7 +353,39 @@ export class ThreeStage {
         // (one step at no time first: the world as the first frame will
         // draw it, so what is compiled is what is used)
         this.onFrame(0);
-        void r.compileAsync(this.scene, this.camera).then(ready, ready);
+        // ...and what is hidden too.  A compile only walks what is visible,
+        // so whatever a scene keeps hidden until its moment -- Froggy in the
+        // janitor's room until he comes through the door, the floors of the
+        // building you are not on -- used to be built and uploaded on the
+        // frame it first showed, mid-scare, which is exactly the long frame
+        // a phone resets its GPU on.  Everything is shown for the compile
+        // (and its textures sent up), then put back as it was.
+        const hidden: THREE.Object3D[] = [];
+        this.scene.traverse((o) => {
+          if (!o.visible) {
+            hidden.push(o);
+            o.visible = true;
+          }
+        });
+        // (the textures only where they are few: a whole building's worth,
+        // most of it on floors you may never see, sent up at once is its
+        // own way to run a phone out of memory)
+        const tex = new Set<THREE.Texture>();
+        let bytes = 0;
+        this.scene.traverse((o) => {
+          const mat = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+          for (const m of Array.isArray(mat) ? mat : mat ? [mat] : [])
+            for (const v of Object.values(m))
+              if (v instanceof THREE.Texture && !tex.has(v) && v.image) {
+                tex.add(v);
+                const img = v.image as { width?: number; height?: number };
+                bytes += (img.width ?? 0) * (img.height ?? 0) * 4;
+              }
+        });
+        if (bytes < 48e6) for (const v of tex) r.initTexture(v);
+        const done = r.compileAsync(this.scene, this.camera);
+        for (const o of hidden) o.visible = false;
+        void done.then(ready, ready);
       } catch {
         ready();
       }

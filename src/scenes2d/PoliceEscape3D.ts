@@ -592,9 +592,9 @@ export class PoliceEscape3D extends Phaser.Scene {
     const b = this.b!;
     const door = b.entrance!;
     const plan = [
-      { home: TOP, at: { x: door.x - 0.45, z: door.z - 0.2 }, wait: this.retry ? 2.5 : 4 },
-      { home: 3, at: { x: door.x + 0.5, z: door.z }, wait: this.retry ? 3.7 : 5.4 },
-      { home: 1, at: { x: door.x, z: door.z + 0.6 }, wait: this.retry ? 5 : 7 },
+      { home: TOP, at: { x: door.x + 0.3, z: door.z - 0.45 }, wait: this.retry ? 2.5 : 4 },
+      { home: 3, at: { x: door.x - 0.2, z: door.z + 0.5 }, wait: this.retry ? 3.7 : 5.4 },
+      { home: 1, at: { x: door.x - 0.6, z: door.z - 0.1 }, wait: this.retry ? 5 : 7 },
     ];
     OFFICER_LOOKS.forEach((look, i) => {
       const model = new PoliceOfficer(look, 101 + i * 7);
@@ -604,8 +604,8 @@ export class PoliceEscape3D extends Phaser.Scene {
         i,
         model,
         m: { x: p.at.x, z: p.at.z, f: 0, well: false, seg: 'top', h: 0 },
-        // (facing in, down the hall, at the stairs)
-        yaw: Math.PI,
+        // (facing in, across the lobby, at the stairs)
+        yaw: Math.PI / 2,
         mode: 'task',
         acts: [{ k: 'look', t: p.wait }],
         path: [],
@@ -724,7 +724,14 @@ export class PoliceEscape3D extends Phaser.Scene {
       const inDoor = nx > SDOOR.x0 + 0.12 && nx < SDOOR.x1 - 0.12;
       if (m.seg === 'top' && nz > WZ1 - r - 0.02 && inDoor && sd && sd.k > 0.55) {
         if (m.f === 0 && who === 'me') {
-          // (the lobby: theirs)
+          // The lobby is theirs: you can come up to the threshold, into the
+          // broken doorway, and lean out to look along it -- to the front
+          // doors on your right, where they come in -- but no further
+          // (and out there, in the doorway, they can see you too).
+          m.x = clamp(nx, SDOOR.x0 + 0.12, SDOOR.x1 - 0.12);
+          m.z = Math.min(nz, WZ1 + 0.5);
+          m.h = 0;
+          return;
         } else if (nz > WZ1 + 0.02) {
           m.well = false;
           m.x = nx;
@@ -1204,8 +1211,9 @@ export class PoliceEscape3D extends Phaser.Scene {
     if (c.inLobby) {
       c.t += dt;
       const a = c.acts[0];
-      // (a torch going over the hall while he waits)
+      // (a torch going over the floor in front of him while he waits)
       c.st.aimYaw = Math.sin(c.t * 0.9 + c.i * 2) * 0.5;
+      c.st.aimPitch = -0.45;
       if (a?.k === 'look' && c.t < a.t) return;
       this.comeIn(c);
     }
