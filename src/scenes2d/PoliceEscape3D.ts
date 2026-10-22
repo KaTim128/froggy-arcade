@@ -42,7 +42,7 @@
 import Phaser from 'phaser';
 import * as THREE from 'three';
 import { attachMouseLook, lockedDelta, lookScale } from '../core/look';
-import { isPaused } from '../core/pause';
+import { isPaused, releaseMouseQuietly } from '../core/pause';
 import { audio, SILENCE, type SfxName } from '../core/audio';
 import { isTouch } from '../core/device';
 import { store } from '../core/state';
@@ -397,6 +397,10 @@ export class PoliceEscape3D extends Phaser.Scene {
     this.crouch = false;
     this.eyeNow = EYE;
     this.frozen = false;
+    // (the scene object is kept between attempts: a RESPAWN must not find it
+    // already arrested, or the second arrest never leaves the black)
+    this.arrested = false;
+    this.finished = false;
     this.hallLights = [];
     this.me = { x: 0.9, z: 0.95, f: 0, well: true, seg: 'top', h: 0 };
     // (facing the stairs, the lobby door at your back)
@@ -2431,7 +2435,8 @@ export class PoliceEscape3D extends Phaser.Scene {
     this.onLookDown = this.onLookMove = null;
     this.onLookUp = null;
     this.dragging = false;
-    if (document.pointerLockElement) document.exitPointerLock?.();
+    // (letting go of the mouse on the way out is not the player pausing)
+    releaseMouseQuietly();
   }
 }
 

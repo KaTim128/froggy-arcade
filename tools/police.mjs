@@ -324,6 +324,14 @@ try {
   const s2 = await S(page);
   check('RESPAWN starts it over: you at the bottom of the stairs, a new building', back && s2.level === 0 && s2.well && s2.seed !== seedA, `seed ${seedA} -> ${s2.seed}`);
   check('and the police back where they began', s2.cops?.every((c) => c.mode === 'task'));
+  // caught again after the RESPAWN: the arrest screen again, not the black
+  await P(page, 'putCop', 0, 0, 1.2, 0, 0);
+  let again = [];
+  for (let i = 0; i < 60 && !again.includes('DeathScreen'); i++) {
+    await sleep(300);
+    again = await scenes(page);
+  }
+  check('caught a second time, it is the arrest screen again (not a black screen)', again.includes('DeathScreen'), again.join(','));
   await page.close();
 
   // ------------------------------------------------------------- 7b. seen going in
