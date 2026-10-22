@@ -41,13 +41,22 @@ const HEAD = 96;
 /** Below the lobby's landing: the basement cage and the bottom of the well. */
 const FOOT = 40;
 const WORLD_H = HEAD + FLOOR_H * (TOP_FLOOR - 1) + FOOT + 40;
+/**
+ * THE WELL'S SIDES: solid walls, the dark of a lift shaft's (see paintLift),
+ * left of WALL_L and right of WALL_R.  Nothing is walked past them.
+ */
+const WALL_L = 44;
+const WALL_R = 258;
 /** The landings: the floor's at the left, the half-landing at the right. */
-const FL = { x0: 16, x1: 104 };
+const FL = { x0: WALL_L + 2, x1: 104 };
 // (the half-landing, with no door on it, only as deep as the turn needs)
-const HL = { x0: 216, x1: 254 };
+const HL = { x0: 216, x1: WALL_R - 4 };
 /** A tread: how far along it runs. */
 const TREAD = 6;
-const DOOR_X = 34;
+/** Each floor's fire door: at the inner end of its landing, by the foot of the flight. */
+const DOOR_X = 82;
+/** The floor's number, black on a small white square, on the wall beside the door. */
+const SIGN = { x: DOOR_X + 13, w: 9, h: 9, up: 33 };
 
 /** The line the feet stand on at floor `f`'s landing. */
 const floorY = (f: number): number => HEAD + FLOOR_H * (TOP_FLOOR - f) + 40;
@@ -154,7 +163,7 @@ export class Stairwell extends Phaser.Scene {
     this.locked = false;
     this.spot = null;
     this.stepT = 0;
-    const key = 'stairwell_well_v2';
+    const key = 'stairwell_well_v3';
     if (!this.textures.exists(key)) {
       const t = this.textures.createCanvas(key, GAME_W, WORLD_H);
       if (t) {
@@ -162,14 +171,8 @@ export class Stairwell extends Phaser.Scene {
         t.refresh();
       }
     }
+    // (each floor's number is painted in, on its little white square by the door)
     this.add.image(0, 0, key).setOrigin(0, 0).setDepth(0);
-    // each floor's number, big, stencilled on the block wall by its door
-    for (let f = 1; f <= TOP_FLOOR; f++) {
-      const y = floorY(f);
-      // (well clear of the door frame, between it and the stairs)
-      centerText(this, DOOR_X + 42, y - 36, String(f), 0x2a6a4a, 24).setDepth(1).setAlpha(0.85);
-      centerText(this, DOOR_X + 42, y - 18, f === 1 ? 'LOBBY' : `LEVEL ${f}`, 0x2a4a3a).setDepth(1);
-    }
 
     // in at this floor's door, facing the stairs
     this.spur = (this.floor - 1) * 2;
@@ -340,10 +343,44 @@ export class Stairwell extends Phaser.Scene {
       const out = outward(j);
       const lo = Math.min(joinX(j), spurEnd(j));
       const hi = Math.max(joinX(j), spurEnd(j));
+      // UP OR DOWN, anywhere out on a landing: walk in to the stairs and
+      // straight on to the flight that way -- nobody has to line up on the
+      // exact spot first.  (No flight down from the lobby, none up from the
+      // roof door: there, it is a wall.)
+      // (pushed out towards the door at the same time, it is the door you want)
+      const way: 1 | -1 | 0 = dx === out ? 0 : dy < 0 ? (j < JOINS ? 1 : 0) : dy > 0 ? (j > 0 ? -1 : 0) : 0;
+      if (way) {
+        this.sx = Phaser.Math.Clamp(this.sx - out * step, lo, hi);
+        if (Math.abs(this.sx - joinX(j)) < 0.5) toFlight(j, way);
+        return;
+      }
       if (dx) this.sx = Phaser.Math.Clamp(this.sx + dx * step, lo, hi);
-      // back in at the join, still walking in, or up / down there: a flight
+      // back in at the join, still walking in: on to a flight
       const atJoin = Math.abs(this.sx - joinX(j)) < 0.5;
-      if (atJoin && (dx === -out || (dy && !dx))) toFlight(j, dy ? (dy < 0 ? 1 : -1) : this.going);
+      if (atJoin && dx === -out) toFlight(j, this.going);
+      return;
+    }
+    // UP OR DOWN held on the flights: on up or down them, through every join
+    // -- held with left or right too (a stick held on the diagonal), it is
+    // still the climb, not a walk into the half-landing's wall.  Only at a
+    // floor's landing does a push out towards its door take you on to it.
+    if (dy) {
+      const from = this.s;
+      const to = Phaser.Math.Clamp(this.s - dy * step, 0, TOTAL);
+      // (a floor's join on the way, or right here, with a push out to its door)
+      if (dx) {
+        for (let jn = 0; jn <= JOINS; jn += 2) {
+          const js = jn * FLEN;
+          if (dx === outward(jn) && js >= Math.min(from, to) - 0.5 && js <= Math.max(from, to) + 0.5) {
+            this.s = js;
+            this.spur = jn;
+            this.sx = joinX(jn) + outward(jn) * 0.5;
+            return;
+          }
+        }
+      }
+      this.s = to;
+      this.going = dy < 0 ? 1 : -1;
       return;
     }
     if (!dx) {
@@ -444,8 +481,8 @@ function paintWell(g: Ctx): void {
   // each floor: the green dado behind its landing, its strip light and glow
   for (let f = 1; f <= TOP_FLOOR + 1; f++) {
     const y = f <= TOP_FLOOR ? floorY(f) : floorY(TOP_FLOOR) - FLOOR_H;
-    rect(g, 0, y - 22, FL.x1 + 6, 22, '#7a8a7e');
-    rect(g, 0, y - 23, FL.x1 + 6, 1, '#5a6a5e');
+    rect(g, WALL_L, y - 22, FL.x1 + 6 - WALL_L, 22, '#7a8a7e');
+    rect(g, WALL_L, y - 23, FL.x1 + 6 - WALL_L, 1, '#5a6a5e');
     const hy = y - FLOOR_H / 2;
     if (f <= TOP_FLOOR) {
       rect(g, HL.x0 - 6, hy - 22, HL.x1 - HL.x0 + 12, 22, '#7a8a7e');
@@ -494,7 +531,7 @@ function paintWell(g: Ctx): void {
   // ---- the landings and half-landings: the slab, its nosing, its edge
   for (const p of PATH) {
     if (p.kind === 'flight') continue;
-    const x0 = p.kind === 'landing' ? 0 : p.x0 - 4;
+    const x0 = p.kind === 'landing' ? WALL_L : p.x0 - 4;
     const x1 = p.kind === 'landing' ? p.x1 + 2 : p.x1 + 4;
     rect(g, x0, p.y0, x1 - x0, 1, '#a8a49c');
     rect(g, x0, p.y0 + 1, x1 - x0, 6, '#8e8a84');
@@ -542,10 +579,10 @@ function paintWell(g: Ctx): void {
   {
     const y = floorY(1);
     rect(g, 0, y + 9, W, H - y - 9, '#1c1e22');
-    rect(g, FL.x0 - 14, y - 34, 18, 34, '#2a2a2e');
-    for (let x = FL.x0 - 14; x < FL.x0 + 4; x += 3) rect(g, x, y - 34, 1, 34, '#8a8e94');
-    for (let yy = y - 34; yy < y; yy += 6) rect(g, FL.x0 - 14, yy, 18, 1, '#8a8e94');
-    rect(g, FL.x0 + 1, y - 10, 3, 4, '#c8a838');
+    rect(g, FL.x0, y - 34, 16, 34, '#2a2a2e');
+    for (let x = FL.x0; x < FL.x0 + 16; x += 3) rect(g, x, y - 34, 1, 34, '#8a8e94');
+    for (let yy = y - 34; yy < y; yy += 6) rect(g, FL.x0, yy, 16, 1, '#8a8e94');
+    rect(g, FL.x0 + 13, y - 10, 3, 4, '#c8a838');
   }
   // ---- the head: the roof door, red, with its alarm bar
   {
@@ -558,5 +595,43 @@ function paintWell(g: Ctx): void {
     rect(g, rx + 2, y - 18, 12, 2, '#e8e8e0');
     rect(g, rx + 3, y - 28, 10, 5, '#f0d020');
     rect(g, rx + 4, y - 27, 8, 3, '#141414');
+  }
+
+  // ---- each floor's number: black, on a small white square beside its door
+  const DIGITS: Record<string, string[]> = {
+    '1': ['010', '110', '010', '010', '111'],
+    '2': ['111', '001', '111', '100', '111'],
+    '3': ['111', '001', '011', '001', '111'],
+    '4': ['101', '101', '111', '001', '001'],
+    '5': ['111', '100', '111', '001', '111'],
+    '6': ['111', '100', '111', '101', '111'],
+  };
+  for (let f = 1; f <= TOP_FLOOR; f++) {
+    const sx = SIGN.x;
+    const sy = floorY(f) - SIGN.up;
+    rect(g, sx - 1, sy - 1, SIGN.w + 2, SIGN.h + 2, '#6a6a66');
+    rect(g, sx, sy, SIGN.w, SIGN.h, '#f4f4f0');
+    rect(g, sx, sy + SIGN.h - 1, SIGN.w, 1, '#c8c8c0');
+    DIGITS[String(f)].forEach((row, r) => [...row].forEach((b, c) => b === '1' && rect(g, sx + 3 + c, sy + 2 + r, 1, 1, '#101010')));
+  }
+
+  // ---- THE SIDES OF THE WELL: solid, the dark of a lift shaft -- concrete
+  // in courses, and a steel guide rail down the edge with its brackets
+  for (const [x0, x1, rail] of [
+    [0, WALL_L, WALL_L - 4],
+    [WALL_R, W, WALL_R],
+  ]) {
+    rect(g, x0, 0, x1 - x0, H, '#0e1014');
+    for (let y = 0; y < H; y += 12) rect(g, x0, y, x1 - x0, 1, '#16181e');
+    rect(g, rail, 0, 4, H, '#2a2d33');
+    rect(g, rail, 0, 1, H, '#3a3d44');
+    for (let y = 6; y < H; y += 24) rect(g, rail - 2, y, 8, 2, '#24262c');
+  }
+  // and the shadow they throw on the block walls beside them
+  for (const [x, d] of [
+    [WALL_L, 1],
+    [WALL_R, -1],
+  ]) {
+    for (let k = 0; k < 6; k++) rect(g, d > 0 ? x + k : x - 1 - k, 0, 1, H, '#000000', 0.22 - k * 0.035);
   }
 }
