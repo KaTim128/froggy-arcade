@@ -384,7 +384,7 @@ export class PoliceEscape3D extends Phaser.Scene {
   // the arrest and the end
   private catcher: Cop | null = null;
   private scareT = 0;
-  private cine: { t: number; step: number; from: THREE.Vector3; yaw0: number; p0?: THREE.Vector3; black?: boolean } | null = null;
+  private cine: { t: number; step: number; from: THREE.Vector3; yaw0: number; p0?: THREE.Vector3; black?: boolean; riverT?: number } | null = null;
   private endLines: Array<{ text: string; dur: number; col: string }> = [];
   private endI = 0;
   private endT = 0;
@@ -1825,6 +1825,20 @@ export class PoliceEscape3D extends Phaser.Scene {
     let roll = 0;
     const bob = (k: number): number => Math.sin(k * Math.PI * 2 * 1.4) * 0.03;
     const at = (when: number): boolean => t - dt < when && t >= when;
+    // THE RIVER, HEARD.  From the moment you are at the window it is there
+    // under everything -- the rush of fast water six floors down, a churn of
+    // white water against the wall -- louder leaning out over it, quieter
+    // turned back to the room, and coming up at you, loud, as you fall.
+    if (t > T.room + 0.6 && !cn.black) {
+      cn.riverT = (cn.riverT ?? 0) - dt;
+      if (cn.riverT <= 0) {
+        const out = t < T.window ? 0.35 : t < T.hold ? 0.9 : t < T.back ? 0.5 : t < T.jump ? 0.85 : 1.25;
+        audio.sfx('river_flow', out);
+        audio.sfx('river_rapids', out * (t > T.jump ? 1.1 : 0.7));
+        // (faster as you fall: the roar closing in)
+        cn.riverT = t > T.jump ? 0.45 : 0.9 + Math.random() * 0.3;
+      }
+    }
     if (t < T.room) {
       const k = ease(t / T.room);
       pos = cn.from.clone().lerp(inside, k).add(new THREE.Vector3(0, bob(t), 0));
@@ -1927,7 +1941,13 @@ export class PoliceEscape3D extends Phaser.Scene {
       // the black, and the water closing over you
       if (!cn.black) {
         cn.black = true;
+        // into the water: the slap of it, the plunge, the spray coming back
+        // down over the surface, and the roar cut off under it
         audio.sfx('plunge', 1);
+        audio.sfx('splash', 1);
+        this.time.delayedCall(120, () => audio.sfx('splash', 0.8));
+        this.time.delayedCall(380, () => audio.sfx('water_plip', 0.7));
+        this.time.delayedCall(620, () => audio.sfx('water_plip', 0.5));
       }
       if (t > T.fall + 1.4) this.toEnding();
       return;
