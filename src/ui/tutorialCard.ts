@@ -87,6 +87,12 @@ export interface TutorialCardOpts {
   onLeave: () => void;
   /** Pressed PRACTICE (offered only when given): a free go that counts for nothing. */
   onPractice?: () => void;
+  /**
+   * PLAY only opens the choice of a real go or a practice one (see
+   * MinigameScene `showChooser`), so it is pressable whatever is in the
+   * pocket, and it takes nothing itself.
+   */
+  choose?: boolean;
 }
 
 export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): TutorialCard {
@@ -219,7 +225,7 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
   // ---- the two buttons.  One of them takes tokens; the other never does.
   let taken = false;
   const play = (): void => {
-    if (!affordable) {
+    if (!affordable && !opts.choose) {
       audio.sfx('buzzer', 0.5);
       return;
     }
@@ -227,7 +233,7 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
     if (taken || done) return;
     taken = true;
     card.destroy();
-    audio.sfx('coin_drop');
+    audio.sfx(opts.choose ? 'ui_blip' : 'coin_drop');
     opts.onPlay();
   };
   const leave = (): void => {
@@ -261,11 +267,11 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
     );
   }
   keep(
-    button(scene, GAME_W / 2 - dx, by, affordable ? 'PLAY' : 'CANT PLAY', play, {
+    button(scene, GAME_W / 2 - dx, by, affordable || opts.choose ? 'PLAY' : 'CANT PLAY', play, {
       width: bw,
       height: 15,
-      fill: affordable ? PALETTE.tealDark : PALETTE.slate,
-      disabled: !affordable,
+      fill: affordable || opts.choose ? PALETTE.tealDark : PALETTE.slate,
+      disabled: !affordable && !opts.choose,
     }).setDepth(905),
   );
   keep(
