@@ -111,6 +111,8 @@ function setLabel(el: HTMLElement, label: string, icon?: string): void {
   const w = document.createElement('span');
   w.className = 'tc-word';
   w.textContent = word;
+  // (a long word is set smaller, to stay inside the button)
+  w.style.fontSize = word.length > 7 ? `${((0.8 * 7) / word.length).toFixed(3)}em` : '';
   el.append(i, w);
 }
 

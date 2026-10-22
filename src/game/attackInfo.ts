@@ -54,7 +54,7 @@ const WORDS: Record<AttackKind, { word: string; emoji: string }> = {
   blink: { word: 'BLINK', emoji: '💨' },
   arc: { word: 'LOB', emoji: '🌋' },
   snare: { word: 'SNARE', emoji: '🕸️' },
-  aura: { word: 'CHARGE', emoji: '⚡' },
+  aura: { word: 'BOOST', emoji: '⚡' },
   mend: { word: 'MEND', emoji: '💚' },
   wall: { word: 'COVER', emoji: '🧱' },
 };
@@ -204,4 +204,21 @@ export function attackLine(a: Attack, el: Element): string {
   const i = attackInfo(a, el);
   const dmg = a.dmg > 0 ? `${a.dmg} DMG` : 'NO DMG';
   return `${i.type} - ${dmg} - ${a.cd}S`;
+}
+
+/**
+ * The words on a creature's three move buttons (the phone's band): from each
+ * move's own name, never the same twice.  The kind's word ("SHOT", "LINE")
+ * was the same for every move of a kind, so a creature with two lines showed
+ * two LINE buttons that did different things.  The name's last word first
+ * (VENOM STING: STING), then its first, then the whole name.
+ */
+export function buttonWords(attacks: readonly Attack[]): string[] {
+  const out: string[] = [];
+  for (const a of attacks) {
+    const words = a.name.toUpperCase().split(/\s+/).filter(Boolean);
+    const tries = [words[words.length - 1], words[0], words.join(' '), WORDS[a.kind].word];
+    out.push(tries.find((w) => w && !out.includes(w)) ?? a.name.toUpperCase());
+  }
+  return out;
 }

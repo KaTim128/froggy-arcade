@@ -31,7 +31,7 @@ import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, star
 import { MAX_LEVEL, levelOf } from '../game/creatureLevel';
 import {
   AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
-  POISON_PER_S, POISON_S, REGEN_PER_S, REGEN_S, ROOT_S, SHRED_MUL, SHRED_S, SILENCE_S, STAGGER_S, STRIKE_DMG, THORNS_DMG, WALL_S, WEAK_MUL, WEAK_S, attackInfo,
+  POISON_PER_S, POISON_S, REGEN_PER_S, REGEN_S, ROOT_S, SHRED_MUL, SHRED_S, SILENCE_S, STAGGER_S, STRIKE_DMG, THORNS_DMG, WALL_S, WEAK_MUL, WEAK_S, attackInfo, buttonWords,
 } from '../game/attackInfo';
 import { abilityIconURL, drawAbilityIcon } from '../art/abilityIcons';
 import { setCabinetTouch } from '../game/touchLayouts';
@@ -1166,9 +1166,11 @@ export class CreatureArena extends Phaser.Scene {
         stick: 'wasd',
         buttons: this.me.c.attacks.map((a, i) => {
           const inf = attackInfo(a, this.me.c.element);
+          // (the move's own word, so no two buttons read the same)
+          const word = buttonWords(this.me.c.attacks)[i];
           // the ability's own pixel icon, as the arena draws it -- not an emoji
           const icon = abilityIconURL(a, ELEMENTS[this.me.c.element].light);
-          return { label: `${inf.emoji}\n${inf.word}`, icon, key: keys[i], primary: i === 0 };
+          return { label: `${inf.emoji}\n${word}`, icon, key: keys[i], primary: i === 0 };
         }),
       },
       'CreatureArena',
