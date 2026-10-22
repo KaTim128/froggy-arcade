@@ -24,6 +24,7 @@
 import { attachMouseLook, lockedDelta, lookScale } from '../core/look';
 import { touchControls } from '../ui/touchControls';
 import { isTouch } from '../core/device';
+import { quality } from '../core/graphics';
 import { isPaused } from '../core/pause';
 import Phaser from 'phaser';
 import { earnBadge } from '../game/badges';
@@ -1444,8 +1445,9 @@ export class HideRoom3D extends Phaser.Scene {
       // different colour from everything else in the picture.
       const doorZ = d.halfD - 0.38;
       // (the arcade is all close work -- the lock in your face, the key in
-      // your hand -- so it is drawn sharp, whatever the quality level)
-      st.setMinRes(isTouch() ? 2 : 2.5);
+      // your hand -- so it is drawn sharp at every level but LOW, which is
+      // the player asking for speed over everything)
+      if (quality() > 0) st.setMinRes(isTouch() ? 2 : 2.5);
       const doors = buildGlassDoors(gd.w, gd.h);
       doors.position.set(d.door.x, 0, doorZ);
       st.scene.add(doors);

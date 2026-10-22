@@ -738,6 +738,15 @@ try {
   {
     const page = await newPage('?intro=1&charity=1&key=1&route=hide&hideRoom=3&scene=HideRoom3D');
     await sleep(3200);
+    // AT LOW.  Everything here is walked and timed, and the arcade draws sharp
+    // above LOW -- which a software renderer turns into a slideshow and every
+    // timed walk into a short one.  What is under test is how it plays.
+    await page.evaluate(() => {
+      const f = window.__froggy;
+      f.patch({ settings: { ...f.state().settings, quality: 0 } });
+      f.game().scene.getScene('HideRoom3D').scene.restart({});
+    });
+    await sleep(3200);
     const hide = () => page.evaluate(() => window.__hide ?? null);
     const scene = (fn, ...a) => page.evaluate(fn, ...a);
     const press = async (key, ms) => {
