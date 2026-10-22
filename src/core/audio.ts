@@ -1312,6 +1312,17 @@ class AudioManager {
         noise(0.34, 0.09, 620);
         beep(240, 0.18, 0.05, 'sine', 0.03);
         break;
+      // A body going into deep water from six floors up: the crack of the
+      // surface, the heavy boom of it closing over, and the rush of the
+      // bubbles going up past you in the dark.
+      case 'plunge':
+        noise(0.09, 0.55, 2600);
+        noise(0.45, 0.34, 900);
+        beep(80, 0.7, 0.2, 'sine', 0.02);
+        beep(52, 1.1, 0.12, 'sine', 0.12);
+        noise(1.6, 0.12, 420);
+        noise(1.2, 0.05, 1800);
+        break;
       // The water finding another foot of the shaft: low, wide and patient.
       case 'water_rise':
         noise(0.9, 0.05, 340);
@@ -2195,6 +2206,7 @@ export type SfxName =
   | 'wade'
   | 'wheel_tick'
   | 'splash'
+  | 'plunge'
   | 'water_rise'
   | 'crumble'
   | 'arcane_cast'

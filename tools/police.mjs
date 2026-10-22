@@ -381,10 +381,11 @@ try {
       const s = await S(page2);
       cineMax = Math.max(cineMax, s.cine ?? 0);
       if (s.phase === 'ending') sawEnd = true;
-      if (s.phase === 'cinema' && s.cine > 3.6 && s.cine < 4.2) await page2.screenshot({ path: `${SHOTS}/612-down.png` });
-      if (s.phase === 'cinema' && s.cine > 7.4 && s.cine < 8.2) await page2.screenshot({ path: `${SHOTS}/612-them.png` });
+      if (s.phase === 'cinema' && s.cine > 5.6 && s.cine < 6.4) await page2.screenshot({ path: `${SHOTS}/612-river.png` });
+      if (s.phase === 'cinema' && s.cine > 10 && s.cine < 10.8) await page2.screenshot({ path: `${SHOTS}/612-them.png` });
+      if (s.phase === 'cinema' && s.cine > 13.2 && s.cine < 14) await page2.screenshot({ path: `${SHOTS}/612-fall.png` });
     }
-    check('in 612 the cinematic plays through: the window, down, them, out', cineMax > 10, `${cineMax.toFixed(1)} s`);
+    check('in 612 the cinematic plays through: the window, the river, them, the jump and the fall', cineMax > 14.5, `${cineMax.toFixed(1)} s`);
     check('and then the black, and the words', sawEnd);
     const st = await page2.evaluate(() => window.__froggy.state());
     check('and it is the following day, outside the arcade', after.includes('ExteriorDay') && st.hotelAfter === 'escaped' && st.arc === 'back', `${after.join(',')} ${st.hotelAfter} ${st.arc}`);

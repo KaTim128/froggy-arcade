@@ -29,11 +29,12 @@
  *   bathroom or WC has a place to hide: behind its curtain if it has a bath,
  *   behind its door if it has not.
  *
- *   612 is at the far end of the sixth floor, on the right: Froggy's room.
- *   Its door is the one he took off its hinges, and its window is the one he
- *   came in through -- glass hanging in jagged teeth round the frame, the
- *   plaster cracked away round it -- and six floors under it, in the alley, a
- *   dumpster full of bin bags.
+ *   612 is at the far end of the sixth floor, on the right (the even numbers
+ *   are on the right, as in the hall upstairs): Froggy's room.  Its door is
+ *   the one he took off its hinges, and its window is the one he came in
+ *   through -- glass hanging in jagged teeth round the frame, the plaster
+ *   cracked away round it -- and six floors under it, the river: the building
+ *   goes straight down into it, wide and black and moving fast.
  *
  * Everything that can stop a body or an eye is in here as plain data -- wall
  * segments, furniture boxes, doors with hinges -- and the scene moves people
@@ -88,6 +89,13 @@ export const RD = 4.6;
 export const END_Z = AZ + SLOT * SLOTS;
 export const OUTER = CH + RD;
 export const DOOR_W = 0.9;
+/**
+ * Which side of the corridor 612 (and every even number) is on: walking in
+ * from the stairs, along +z, the right hand is -x.
+ */
+export const SIDE612 = -1 as const;
+/** The river's surface, under the back of the building. */
+export const WATER_Y = -0.6;
 
 export interface Seg {
   x0: number;
@@ -447,62 +455,6 @@ function brickTex(seed: number): HTMLCanvasElement {
   });
 }
 
-/** The dumpster's steel: green paint, scratches through to the metal, dents and rust. */
-function dumpsterTex(seed: number): HTMLCanvasElement {
-  const r = seeded(seed);
-  return cvs(256, 128, (g) => {
-    g.fillStyle = '#2e4a32';
-    g.fillRect(0, 0, 256, 128);
-    for (let k = 0; k < 600; k++) {
-      g.fillStyle = r() < 0.5 ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.05)';
-      g.fillRect(r() * 256, r() * 128, 2, 1);
-    }
-    // ribs
-    for (let x = 20; x < 256; x += 40) {
-      g.fillStyle = 'rgba(0,0,0,0.3)';
-      g.fillRect(x, 0, 3, 128);
-      g.fillStyle = 'rgba(255,255,255,0.08)';
-      g.fillRect(x - 2, 0, 2, 128);
-    }
-    for (let k = 0; k < 40; k++) {
-      g.strokeStyle = `rgba(170,170,160,${0.25 + r() * 0.3})`;
-      g.beginPath();
-      const x = r() * 256;
-      const y = r() * 128;
-      g.moveTo(x, y);
-      g.lineTo(x + (r() - 0.5) * 30, y + (r() - 0.5) * 8);
-      g.stroke();
-    }
-    for (let k = 0; k < 12; k++) {
-      g.fillStyle = `rgba(120,60,20,${0.2 + r() * 0.3})`;
-      g.beginPath();
-      g.ellipse(r() * 256, 90 + r() * 38, 6 + r() * 14, 3 + r() * 6, 0, 0, Math.PI * 2);
-      g.fill();
-    }
-    g.fillStyle = 'rgba(0,0,0,0.35)';
-    g.fillRect(0, 118, 256, 10);
-  });
-}
-
-/** Black plastic: creased, with glossy highlights along the folds. */
-function bagTex(seed: number, base = '#141618'): HTMLCanvasElement {
-  const r = seeded(seed);
-  return cvs(128, 128, (g) => {
-    g.fillStyle = base;
-    g.fillRect(0, 0, 128, 128);
-    for (let k = 0; k < 30; k++) {
-      g.strokeStyle = `rgba(200,210,220,${0.08 + r() * 0.18})`;
-      g.lineWidth = 1 + r() * 2;
-      g.beginPath();
-      const x = r() * 128;
-      const y = r() * 128;
-      g.moveTo(x, y);
-      g.quadraticCurveTo(x + (r() - 0.5) * 40, y + (r() - 0.5) * 40, x + (r() - 0.5) * 60, y + (r() - 0.5) * 60);
-      g.stroke();
-    }
-  });
-}
-
 /** Cracked plaster round the broken window. */
 function crackTex(seed: number): HTMLCanvasElement {
   const r = seeded(seed);
@@ -576,9 +528,10 @@ export class PoliceBuilding {
   readonly nodes: NavNode[] = [];
   /** The well's walls, for sight and for bodies (floor-independent). */
   readonly wellWalls: Seg[] = [];
-  /** The window of 612: where you stand to look out, and the dumpster below. */
-  readonly window612 = { x: OUTER, z: 0, sill: 0.9, w: 1.5, h: 1.3 };
-  readonly dumpster = { x: OUTER + 1.6, z: 0 };
+  /** The window of 612: where you stand to look out, and the water under it. */
+  readonly window612 = { x: SIDE612 * OUTER, z: 0, sill: 0.9, w: 1.5, h: 1.3 };
+  /** The river: where you land in it, under the window, and its surface. */
+  readonly below = { x: SIDE612 * (OUTER + 2.6), z: 0, y: WATER_Y };
   /** Animated bits of the building (wardrobe doors, curtains) to step each frame. */
   private tickers: Array<(dt: number) => void> = [];
   private rng: () => number;
@@ -1091,15 +1044,15 @@ export class PoliceBuilding {
     // about a third open, at least three a floor, and 612 always (see buildRoom)
     const want = new Set<number>();
     // (612 is open anyway, so on the top floor it is never one of the three)
-    const special612 = f === TOP ? order.findIndex((o) => o.side > 0 && o.slot === SLOTS - 1) : -1;
+    const special612 = f === TOP ? order.findIndex((o) => o.side === SIDE612 && o.slot === SLOTS - 1) : -1;
     const shuffled = [...order.keys()].filter((i) => i !== special612).sort(() => r() - 0.5);
     const n = 3 + Math.floor(r() * 3);
     for (let i = 0; i < n; i++) want.add(shuffled[i]);
     // never a floor whose only open flats are at the far end: one near the stairs
     if (![0, 1, 2, 3].some((i) => want.has(i))) want.add(Math.floor(r() * 4));
     order.forEach(({ side, slot }, i) => {
-      const num = slot * 2 + (side > 0 ? 2 : 1);
-      const special = f === TOP && side > 0 && slot === SLOTS - 1;
+      const num = slot * 2 + (side === SIDE612 ? 2 : 1);
+      const special = f === TOP && side === SIDE612 && slot === SLOTS - 1;
       this.buildRoom(fl, side, slot, f * 100 + num, special || want.has(i), special);
     });
     // the corridor's long walls, with the doorways left in them
@@ -1311,8 +1264,8 @@ export class PoliceBuilding {
     const wb = SLOT / 2;
     W.z = room.z0 + wb;
     W.x = wx(RD);
-    this.dumpster.z = W.z;
-    this.dumpster.x = wx(RD) + side(room) * 1.35;
+    this.below.z = W.z;
+    this.below.x = wx(RD) + side(room) * 2.6;
     const sill = W.sill;
     const top = sill + W.h;
     const half = W.w / 2;
@@ -1439,23 +1392,104 @@ export class PoliceBuilding {
 
   // ------------------------------------------------------------ outside
 
+  /**
+   * OUTSIDE 612: THE RIVER.  The back of the building goes straight down into
+   * it -- no yard, no alley, the brick running wet into the water -- and it
+   * is wide: forty-odd metres of black water going past fast, the moon laid
+   * across it in pieces, the lamps of the far embankment each dropping a
+   * long broken streak of light down it, the bridge downstream with the
+   * police lights on it.  Built on the +x side and mirrored over to 612's.
+   */
   private buildExterior(): void {
-    const X = this.exterior;
+    const X = new THREE.Group();
+    X.scale.x = SIDE612;
+    this.exterior.add(X);
     const wallX = OUTER + 0.3;
-    // the alley floor, wet tarmac
-    const tar = new THREE.MeshPhongMaterial({ map: tex(cvs(128, 128, (g) => {
-      const r = seeded(5);
-      g.fillStyle = '#1a1c20';
-      g.fillRect(0, 0, 128, 128);
-      for (let k = 0; k < 1600; k++) {
-        g.fillStyle = r() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.2)';
-        g.fillRect(r() * 128, r() * 128, 1, 1);
+    const zMid = (AZ + END_Z) / 2;
+    const WY = WATER_Y;
+    const RIVER = 44;
+    const far = wallX + RIVER;
+    // ---- the water: a deep base that moves, and two layers of light on it
+    // that move at their own speeds, so it reads as a current, not a sheet
+    const baseTex = tex(cvs(256, 256, (g) => {
+      const r = seeded(31);
+      g.fillStyle = '#08141c';
+      g.fillRect(0, 0, 256, 256);
+      // long low swells running with the current (along v)
+      for (let k = 0; k < 220; k++) {
+        const x = r() * 256;
+        const y = r() * 256;
+        const len = 18 + r() * 50;
+        g.fillStyle = r() < 0.5 ? 'rgba(26,52,64,0.4)' : 'rgba(2,6,10,0.45)';
+        g.fillRect(x, y, 2 + r() * 5, len);
       }
-    }), 12, 12), specular: 0x30343a, shininess: 30 });
-    plane(14, 40, tar, X, wallX + 7, 0, (AZ + END_Z) / 2, 0, -Math.PI / 2);
-    // the building's own face, brick, with dark windows up it
+      for (let k = 0; k < 900; k++) {
+        g.fillStyle = r() < 0.5 ? 'rgba(70,110,124,0.14)' : 'rgba(0,0,0,0.25)';
+        g.fillRect(r() * 256, r() * 256, 1, 2 + r() * 4);
+      }
+    }), RIVER / 6, 140 / 10);
+    const water = new THREE.MeshBasicMaterial({ map: baseTex, fog: true });
+    plane(RIVER, 140, water, X, wallX + RIVER / 2, WY, zMid, 0, -Math.PI / 2);
+    const glintTex = tex(cvs(128, 256, (g) => {
+      const r = seeded(32);
+      g.clearRect(0, 0, 128, 256);
+      for (let k = 0; k < 260; k++) {
+        const a = 0.08 + r() * 0.3;
+        g.fillStyle = `rgba(170,200,214,${a})`;
+        g.fillRect(r() * 128, r() * 256, 1 + r() * 3, 1);
+      }
+    }), RIVER / 8, 140 / 12);
+    const glints = new THREE.MeshBasicMaterial({ map: glintTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.6 });
+    const glintPlane = plane(RIVER, 140, glints, X, wallX + RIVER / 2, WY + 0.01, zMid, 0, -Math.PI / 2);
+    glintPlane.renderOrder = 2;
+    // the water breaking white along the foot of the wall, and round the piers
+    const foamTex = tex(cvs(64, 256, (g) => {
+      const r = seeded(33);
+      for (let k = 0; k < 500; k++) {
+        const x = Math.pow(r(), 2.2) * 64;
+        g.fillStyle = `rgba(220,232,236,${0.15 + (1 - x / 64) * 0.5 * r()})`;
+        g.fillRect(x, r() * 256, 1 + r() * 2, 1 + r() * 3);
+      }
+    }), 1, 140 / 6);
+    const foam = new THREE.MeshBasicMaterial({ map: foamTex, transparent: true, depthWrite: false, opacity: 0.85 });
+    const foamPlane = plane(1.4, 140, foam, X, wallX + 0.7, WY + 0.02, zMid, 0, -Math.PI / 2);
+    foamPlane.renderOrder = 3;
+    // light laid down the water in a broken streak, toward wherever you stand
+    const streakTex = tex(cvs(64, 256, (g) => {
+      const r = seeded(34);
+      for (let k = 0; k < 340; k++) {
+        const y = r() * 256;
+        const w = (6 + r() * 26) * (0.4 + (y / 256) * 0.6);
+        g.fillStyle = `rgba(255,255,255,${0.15 + r() * 0.55})`;
+        g.fillRect(32 - w / 2 + (r() - 0.5) * 10, y, w, 1 + r() * 2);
+      }
+    }));
+    const streaks: THREE.Mesh[] = [];
+    const streak = (x: number, z: number, len: number, wide: number, col: number, op: number): void => {
+      const m = new THREE.MeshBasicMaterial({ map: streakTex.clone(), color: col, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: op });
+      m.map!.needsUpdate = true;
+      // (long along x: from the far side of the water toward the building)
+      const s = plane(wide, len, m, X, x, WY + 0.03, z, 0, -Math.PI / 2);
+      s.rotation.z = Math.PI / 2;
+      s.renderOrder = 4;
+      streaks.push(s);
+    };
+    // ---- the building's own face: brick, wet and dark to the waterline
     const brick = new THREE.MeshLambertMaterial({ map: tex(brickTex(9), 8, 9) });
-    plane(END_Z - AZ + 2, FH * TOP + 3, brick, X, wallX, (FH * TOP + 3) / 2 - 0.3, (AZ + END_Z) / 2, Math.PI / 2);
+    const faceH = FH * TOP + 3 - WY;
+    // (and the buildings either side of it carry the same wall on along the
+    // water, so there is no corner to see round on the way down)
+    const faceL = END_Z - AZ + 70;
+    plane(faceL, faceH, brick, X, wallX, WY + faceH / 2 - 0.3, zMid, Math.PI / 2);
+    const wet = new THREE.MeshBasicMaterial({ color: 0x050a0c, transparent: true, opacity: 0.6 });
+    plane(faceL, 1.6, wet, X, wallX + 0.01, WY + 0.8, zMid, Math.PI / 2);
+    {
+      const rr = seeded(18);
+      for (let z = AZ - 34; z < END_Z + 34; z += 3.2) {
+        if (z > AZ - 1 && z < END_Z + 1) continue;
+        for (let f = 0; f <= TOP; f++) if (rr() < 0.6) plane(1.1, 1.1, rr() < 0.15 ? new THREE.MeshBasicMaterial({ color: 0x8a6a40 }) : this.mats.glassNight, X, wallX + 0.02, f * FH + 1.5, z, Math.PI / 2);
+      }
+    }
     for (let f = 0; f <= TOP; f++) {
       for (let k = 0; k < SLOTS; k++) {
         const z = AZ + k * SLOT + SLOT / 2;
@@ -1463,12 +1497,74 @@ export class PoliceBuilding {
         plane(1.2, 1.1, this.mats.glassNight, X, wallX + 0.02, f * FH + 1.5, z, Math.PI / 2);
       }
     }
-    // the building across the alley, a few lit windows
-    plane(40, 12, brick, X, wallX + 8, 6, (AZ + END_Z) / 2, -Math.PI / 2);
+    // ---- the far embankment: a stone wall out of the water, a walk along
+    // the top with its lamps, and the town behind it
+    const stone = new THREE.MeshLambertMaterial({ map: tex(cvs(64, 64, (g) => {
+      const r = seeded(35);
+      g.fillStyle = '#3a3a3c';
+      g.fillRect(0, 0, 64, 64);
+      for (let y = 0; y < 64; y += 8)
+        for (let x = (y / 8) % 2 ? 0 : 8; x < 64; x += 16) {
+          g.fillStyle = `rgb(${60 + r() * 24},${60 + r() * 22},${62 + r() * 20})`;
+          g.fillRect(x + 1, y + 1, 14, 6);
+        }
+    }), 30, 2), color: 0x5a5e66 });
+    // (lit by its own lamps, not by anything here: a basic material, dim)
+    const stoneLit = new THREE.MeshBasicMaterial({ map: stone.map, color: 0x4a4e56 });
+    plane(140, 2.2, stoneLit, X, far, WY + 1.1, zMid, -Math.PI / 2);
+    plane(6, 140, new THREE.MeshBasicMaterial({ color: 0x1c1e22 }), X, far + 3, WY + 2.2, zMid, 0, -Math.PI / 2);
+    const lampMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
+    const postMat = new THREE.MeshLambertMaterial({ color: 0x1a1c20 });
+    const glowTex = tex(cvs(64, 64, (g) => {
+      const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      grd.addColorStop(0, 'rgba(255,220,160,0.9)');
+      grd.addColorStop(0.3, 'rgba(255,190,110,0.3)');
+      grd.addColorStop(1, 'rgba(255,170,90,0)');
+      g.fillStyle = grd;
+      g.fillRect(0, 0, 64, 64);
+    }));
+    for (let z = AZ - 26; z < END_Z + 18; z += 8) {
+      box(0.12, 3.2, 0.12, postMat, X, far + 0.6, WY + 2.2 + 1.6, z);
+      const head = box(0.3, 0.16, 0.3, lampMat, X, far + 0.6, WY + 2.2 + 3.25, z);
+      void head;
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+      glow.position.set(far + 0.6, WY + 2.2 + 3.2, z);
+      glow.scale.setScalar(2.2);
+      X.add(glow);
+      // its light down the water, broken by the current
+      streak(far - 4.5, z, 9, 2.2, 0xffc890, 0.32);
+    }
+    // the town behind it: blocks against the sky, a few windows still lit
+    const blockMat = new THREE.MeshLambertMaterial({ color: 0x15171c });
     const lit = new THREE.MeshBasicMaterial({ color: 0xc89a58 });
+    const dim = new THREE.MeshBasicMaterial({ color: 0x4a4030 });
     const r = seeded(17);
-    for (let k = 0; k < 14; k++) plane(0.9, 1.0, r() < 0.3 ? lit : this.mats.glassNight, X, wallX + 7.98, 1.6 + Math.floor(r() * 3) * FH, AZ + r() * (END_Z - AZ), -Math.PI / 2);
-    // the night over it all: the moon and a band of trees past the far roofs
+    for (let z = AZ - 30; z < END_Z + 24; ) {
+      const w = 5 + r() * 7;
+      const h = 6 + r() * 12;
+      const dx = far + 7 + r() * 4;
+      box(6, h, w, blockMat, X, dx + 3, WY + 2.2 + h / 2, z + w / 2);
+      for (let k = 0; k < Math.floor(h / 2.2); k++)
+        for (let j = 0; j < Math.floor(w / 1.8); j++) if (r() < 0.25) plane(0.7, 0.9, r() < 0.5 ? lit : dim, X, dx - 0.01, WY + 2.2 + 1.4 + k * 2.2, z + 0.9 + j * 1.8, -Math.PI / 2);
+      z += w + 0.4 + r() * 2;
+    }
+    // ---- the bridge, downstream, with the police on it
+    const bz = END_Z + 48;
+    const deck = new THREE.MeshBasicMaterial({ color: 0x1e2026 });
+    box(RIVER + 8, 0.9, 5, deck, X, wallX + RIVER / 2, 6.5, bz);
+    box(RIVER + 8, 0.6, 0.15, deck, X, wallX + RIVER / 2, 7.25, bz - 2.45);
+    for (const px of [wallX + RIVER * 0.3, wallX + RIVER * 0.7]) {
+      box(1.6, 6.5 - WY, 2.2, stoneLit, X, px, WY + (6.5 - WY) / 2, bz);
+    }
+    for (let k = 0; k < 7; k++) {
+      const px = wallX + 3 + k * ((RIVER - 6) / 6);
+      box(0.08, 1.6, 0.08, postMat, X, px, 7.7, bz - 2.4);
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+      glow.position.set(px, 8.5, bz - 2.4);
+      glow.scale.setScalar(1.6);
+      X.add(glow);
+    }
+    // the night over it all: the moon, and its light broken across the water
     const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex(cvs(64, 64, (g) => {
       const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
       grd.addColorStop(0, 'rgba(255,255,240,1)');
@@ -1478,91 +1574,51 @@ export class PoliceBuilding {
       g.fillStyle = grd;
       g.fillRect(0, 0, 64, 64);
     })), depthWrite: false, fog: false }));
-    moon.position.set(wallX + 50, 30, this.window612.z + 9);
+    moon.position.set(wallX + 60, 30, this.window612.z - 6);
     moon.scale.setScalar(12);
     X.add(moon);
-
-    // ---- THE DUMPSTER, under 612's window, full
-    const D = this.dumpster;
-    const dg = new THREE.Group();
-    dg.position.set(D.x, 0, D.z);
-    X.add(dg);
-    const steel = new THREE.MeshPhongMaterial({ map: tex(dumpsterTex(3)), specular: 0x2a3a2c, shininess: 22 });
-    const L = 2.0;
-    const Wd = 1.2;
-    const Hh = 1.15;
-    // a tapered bin: four sides, a floor, a lip, wheels
-    box(Wd, 0.08, L, steel, dg, 0, 0.2, 0);
-    for (const s of [-1, 1]) {
-      const side = box(0.06, Hh, L, steel, dg, s * Wd / 2, 0.2 + Hh / 2, 0);
-      side.rotation.z = s * 0.06;
-      box(Wd, Hh, 0.06, steel, dg, 0, 0.2 + Hh / 2, s * L / 2);
-      box(0.1, 0.06, L + 0.1, this.mats.steel, dg, s * (Wd / 2 + 0.03), 0.2 + Hh, 0);
-    }
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.06, 12), this.mats.dark);
-      w.rotation.z = Math.PI / 2;
-      w.position.set(sx * 0.45, 0.09, sz * 0.8);
-      dg.add(w);
-    }
-    // the lid, flung back against the wall
-    const lid = box(Wd + 0.05, 0.04, L / 2, new THREE.MeshPhongMaterial({ color: 0x1e2a20, shininess: 10 }), dg, -Wd / 2 - 0.25, 0.2 + Hh + 0.4, 0);
-    lid.rotation.z = 1.2;
-    // the bags: lumpy, tied at the neck, black and a few grey and green
-    const bagMats = [bagTex(1), bagTex(2), bagTex(3, '#2a2e2a'), bagTex(4, '#1e2a22'), bagTex(5, '#3a3c40')].map(
-      (c) => new THREE.MeshPhongMaterial({ map: tex(c), specular: 0x8a8e94, shininess: 60 }),
-    );
-    for (let k = 0; k < 16; k++) {
-      const geo = new THREE.SphereGeometry(0.28, 14, 10);
-      const pos = geo.attributes.position;
-      for (let i = 0; i < pos.count; i++) {
-        const y = pos.getY(i);
-        const n = 1 + (r() - 0.5) * 0.18 + (y > 0.18 ? -0.35 * ((y - 0.18) / 0.1) : 0);
-        pos.setXYZ(i, pos.getX(i) * n, y * (0.85 + r() * 0.1), pos.getZ(i) * n);
-      }
-      geo.computeVertexNormals();
-      const bag = new THREE.Mesh(geo, bagMats[k % bagMats.length]);
-      const row = Math.floor(k / 5);
-      bag.position.set((r() - 0.5) * (Wd - 0.45), 0.42 + row * 0.25 + r() * 0.1, -L / 2 + 0.3 + ((k % 5) / 4) * (L - 0.6));
-      bag.rotation.set(r() - 0.5, r() * 6, r() - 0.5);
-      bag.scale.setScalar(0.8 + r() * 0.5);
-      dg.add(bag);
-      // the tied neck
-      const neck = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.14, 8), bagMats[k % bagMats.length]);
-      neck.position.set(0, 0.3, 0);
-      bag.add(neck);
-    }
-    // a street lamp on the far wall, so it can be seen from six floors up
-    const lampPos = new THREE.Vector3(wallX + 7.6, 4.2, D.z - 3);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.25), this.mats.lamp);
-    head.position.copy(lampPos);
-    X.add(head);
-    const arm = box(0.6, 0.06, 0.06, this.mats.steel, X, lampPos.x + 0.3, lampPos.y + 0.05, lampPos.z);
-    void arm;
-    const sodium = new THREE.PointLight(0xffc27a, 26, 16, 1.4);
-    sodium.position.copy(lampPos).add(new THREE.Vector3(-0.4, -0.4, 0));
-    X.add(sodium);
-    // and a lamp on this building's wall right over the bin, so from six
-    // floors up the bags are lit and plain
-    const over = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.4), this.mats.lamp);
-    over.position.set(wallX + 0.15, 4.6, D.z - 1.3);
-    X.add(over);
-    const binLight = new THREE.PointLight(0xffd8a0, 34, 11, 1.3);
-    binLight.position.set(wallX + 0.6, 4.3, D.z - 1.0);
-    X.add(binLight);
-    // and the police out front, red and blue washing down the alley
-    const pol = new THREE.PointLight(0xff2030, 0, 22, 1.2);
-    pol.position.set(wallX + 4, 3, END_Z + 6);
+    streak(wallX + 24, this.window612.z - 3, 34, 4.5, 0xd8e4f0, 0.7);
+    // a cold light off the water on to the face of the building
+    const fill = new THREE.PointLight(0x6a8aa8, 10, 30, 1.2);
+    fill.position.set(wallX + 8, WY + 3, this.window612.z);
+    X.add(fill);
+    // and the police on the bridge, red and blue on the water
+    const pol = new THREE.PointLight(0xff2030, 0, 30, 1.1);
+    pol.position.set(wallX + 10, 8, bz - 3);
     X.add(pol);
-    const pol2 = new THREE.PointLight(0x2a50ff, 0, 22, 1.2);
-    pol2.position.set(wallX + 4, 3, END_Z + 6);
+    const pol2 = new THREE.PointLight(0x2a50ff, 0, 30, 1.1);
+    pol2.position.set(wallX + 14, 8, bz - 3);
     X.add(pol2);
+    const polRed = new THREE.MeshBasicMaterial({ color: 0xff2030 });
+    const polBlue = new THREE.MeshBasicMaterial({ color: 0x2a50ff });
+    const barR = box(0.4, 0.12, 0.2, polRed, X, wallX + 10, 7.5, bz - 1.5);
+    const barB = box(0.4, 0.12, 0.2, polBlue, X, wallX + 10.45, 7.5, bz - 1.5);
+    box(1.8, 0.9, 4.2, new THREE.MeshLambertMaterial({ color: 0x101216 }), X, wallX + 10.2, 7.4, bz - 0.2);
+    const polStreak = new THREE.MeshBasicMaterial({ map: streakTex.clone(), color: 0xff2030, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
+    polStreak.map!.needsUpdate = true;
+    const ps = plane(2.4, 14, polStreak, X, wallX + 10, WY + 0.04, bz - 9, 0, -Math.PI / 2);
+    ps.renderOrder = 4;
     let t = 0;
     this.addTicker((dt) => {
       t += dt;
+      // the current: the water and its light go by, at their own speeds
+      baseTex.offset.y = (baseTex.offset.y - dt * 0.09) % 1;
+      glintTex.offset.y = (glintTex.offset.y - dt * 0.16) % 1;
+      glintTex.offset.x = Math.sin(t * 0.7) * 0.02;
+      foamTex.offset.y = (foamTex.offset.y - dt * 0.35) % 1;
+      for (const [i, s] of streaks.entries()) {
+        const m = s.material as THREE.MeshBasicMaterial;
+        m.map!.offset.y = (t * 0.25 + i * 0.37) % 1;
+        m.map!.offset.x = Math.sin(t * 2.3 + i) * 0.04;
+      }
       const ph = Math.floor(t * 6) % 4;
-      pol.intensity = ph < 2 ? 14 : 0;
-      pol2.intensity = ph < 2 ? 0 : 14;
+      pol.intensity = ph < 2 ? 18 : 0;
+      pol2.intensity = ph < 2 ? 0 : 18;
+      barR.visible = ph < 2;
+      barB.visible = ph >= 2;
+      polStreak.color.setHex(ph < 2 ? 0xff2030 : 0x2a50ff);
+      polStreak.opacity = 0.5;
+      polStreak.map!.offset.y = (t * 0.3) % 1;
     });
   }
 

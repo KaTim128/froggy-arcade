@@ -31,8 +31,9 @@
  *   will look twice.
  *
  *   612.  Through its broken door, and the rest is not yours to steer: to the
- *   window; down, at the dumpster six floors under it; round, at the three of
- *   them in the doorway; and out.
+ *   window; down, at the river six floors under it; round, at the three of
+ *   them in the doorway; and out -- off the sill and down, the black just
+ *   before the water, and the splash.
  *
  * Caught, it is the arrest -- the officer in your face, the torch in your
  * eyes, the cuffs -- and then ARRESTED, and RESPAWN (a new building, the
@@ -62,6 +63,8 @@ import {
   GAP,
   OUTER,
   PoliceBuilding,
+  SIDE612,
+  WATER_Y,
   SDOOR,
   TOP,
   WX,
@@ -300,6 +303,20 @@ function pushCircle(x: number, z: number, r: number, segs: Seg[], boxes: Box[]):
 
 type Phase = 'intro' | 'play' | 'caught' | 'cinema' | 'ending';
 
+/** 612's beats, in seconds from walking in: when each one ends. */
+const CINE = (() => {
+  const room = 1.6; // into the room
+  const window = room + 1.6; // to the window
+  const down = window + 1.4; // lean out, look down
+  const hold = down + 3.0; // the river, a long look
+  const turn = hold + 1.1; // round to the door
+  const them = turn + 2.4; // the three of them, in the doorway
+  const back = them + 0.6; // back to the window
+  const jump = back + 0.9; // up on the sill, and off
+  const fall = jump + 1.9; // the fall, to just above the water
+  return { room, window, down, hold, turn, them, back, jump, fall };
+})();
+
 interface HideState {
   spot: HideSpot;
   /** 0 entering .. 1 in; then leaving runs it back down. */
@@ -365,7 +382,7 @@ export class PoliceEscape3D extends Phaser.Scene {
   // the arrest and the end
   private catcher: Cop | null = null;
   private scareT = 0;
-  private cine: { t: number; step: number; from: THREE.Vector3; yaw0: number } | null = null;
+  private cine: { t: number; step: number; from: THREE.Vector3; yaw0: number; p0?: THREE.Vector3; black?: boolean } | null = null;
   private endLines: Array<{ text: string; dur: number; col: string }> = [];
   private endI = 0;
   private endT = 0;
@@ -1696,7 +1713,7 @@ export class PoliceEscape3D extends Phaser.Scene {
     // hidden, nearly none of it: what you see is the room's light and theirs
     if (this.fill) this.fill.intensity = this.hide ? 0.08 : 0.7;
     b.well.visible = me.well || (me.z < 9 && b.stairDoors[me.f]?.k > 0.05) || this.phase === 'caught';
-    b.exterior.visible = lvl === TOP && (me.x > CH || this.phase === 'cinema' || this.phase === 'ending');
+    b.exterior.visible = lvl === TOP && (SIDE612 * me.x > CH || this.phase === 'cinema' || this.phase === 'ending');
     // the corridor's lights at the fittings nearest you
     const fl = b.floors[clamp(lvl, 1, TOP)];
     const near = [...fl.lights].sort((p, q) => Math.abs(p.z - me.z) - Math.abs(q.z - me.z));
@@ -1721,7 +1738,7 @@ export class PoliceEscape3D extends Phaser.Scene {
     const me = this.me;
     if (me.well || me.f !== TOP) return;
     const rm = this.b!.roomAt(TOP, me.x, me.z);
-    if (rm?.special === '612' && me.x > CH + 0.45) this.startCinema();
+    if (rm?.special === '612' && SIDE612 * me.x > CH + 0.45) this.startCinema();
   }
 
   private startCinema(): void {
@@ -1749,98 +1766,128 @@ export class PoliceEscape3D extends Phaser.Scene {
     const cam = this.stage!.camera;
     cam.rotation.order = 'YXZ';
     const y0 = TOP * FH;
+    // (612 is on the right of the corridor: its x runs the other way)
+    const S = SIDE612;
     const door = b.rooms.find((r) => r.special === '612')!;
-    const inside = new THREE.Vector3(CH + 0.9, y0 + EYE, door.dz);
-    const mid = new THREE.Vector3((CH + OUTER) / 2, y0 + EYE, (door.dz + W.z) / 2);
-    const sill = new THREE.Vector3(OUTER - 0.5, y0 + EYE, W.z);
+    const inside = new THREE.Vector3(S * (CH + 0.9), y0 + EYE, door.dz);
+    const mid = new THREE.Vector3((S * (CH + OUTER)) / 2, y0 + EYE, (door.dz + W.z) / 2);
+    const sill = new THREE.Vector3(S * (OUTER - 0.5), y0 + EYE, W.z);
+    const leanOut = new THREE.Vector3(S * (OUTER + 0.5), y0 + W.sill + 0.7, W.z);
+    const outward = new THREE.Vector3(S * (OUTER + 5), 0, W.z);
     const ease = (k: number): number => k * k * (3 - 2 * k);
     const yawTo = (from: THREE.Vector3, to: THREE.Vector3): number => Math.atan2(-(to.x - from.x), -(to.z - from.z));
+    // looking out and down at the river, a good way across it
+    const downAt = (p: THREE.Vector3): number => -Math.atan2(p.y - WATER_Y, 24);
     const t = cn.t;
-    // the beats, in seconds
-    const T1 = 1.6; // into the room
-    const T2 = T1 + 1.6; // to the window
-    const T3 = T2 + 1.3; // look down
-    const T4 = T3 + 1.8; // hold on the dumpster
-    const T5 = T4 + 1.1; // round to the door
-    const T6 = T5 + 2.4; // them, in the doorway
-    const T7 = T6 + 0.6; // back to the window
-    const T8 = T7 + 0.75; // out
+    const T = CINE;
     let pos = sill.clone();
     let yaw = cn.yaw0;
     let pitch = 0;
+    let roll = 0;
     const bob = (k: number): number => Math.sin(k * Math.PI * 2 * 1.4) * 0.03;
-    if (t < T1) {
-      const k = ease(t / T1);
+    const at = (when: number): boolean => t - dt < when && t >= when;
+    if (t < T.room) {
+      const k = ease(t / T.room);
       pos = cn.from.clone().lerp(inside, k).add(new THREE.Vector3(0, bob(t), 0));
       yaw = cn.yaw0 + wrap(yawTo(inside, sill) - cn.yaw0) * k;
-    } else if (t < T2) {
-      const k = ease((t - T1) / (T2 - T1));
+    } else if (t < T.window) {
+      const k = ease((t - T.room) / (T.window - T.room));
       pos = k < 0.5 ? inside.clone().lerp(mid, k * 2) : mid.clone().lerp(sill, (k - 0.5) * 2);
       pos.y += bob(t);
       yaw = yawTo(inside, sill) + wrap(yawTo(mid, sill) - yawTo(inside, sill)) * k;
-    } else if (t < T4) {
-      const k = ease(clamp((t - T2) / (T3 - T2), 0, 1));
-      // leaning out through the hole, over the sill, looking down six floors at the bags
-      pos = sill.clone().lerp(new THREE.Vector3(OUTER + 0.5, y0 + W.sill + 0.7, W.z), k);
-      yaw = yawTo(sill, new THREE.Vector3(OUTER + 5, 0, W.z));
-      const D = b.dumpster;
-      pitch = -Math.atan2(pos.y - 1.0, Math.max(0.5, D.x - pos.x)) * k;
-      // (the night thins out so the alley can be seen, six floors down)
+    } else if (t < T.hold) {
+      const k = ease(clamp((t - T.window) / (T.down - T.window), 0, 1));
+      // leaning out through the hole, over the sill, looking down six floors at the water
+      pos = sill.clone().lerp(leanOut, k);
+      yaw = yawTo(sill, outward);
+      pitch = downAt(pos) * k;
+      // (the night thins out so the river can be seen, all the way across)
       const fog = this.stage!.scene.fog as THREE.FogExp2;
-      fog.density = 0.045 - 0.03 * k;
+      fog.density = 0.045 - 0.035 * k;
       // and the eye goes to it, as it would
-      cam.fov = 72 - 30 * k;
+      cam.fov = 72 - 10 * k;
       cam.updateProjectionMatrix();
-      if (t - dt < T2 + 0.2 && t >= T2 + 0.2) this.say('Six floors... and a dumpster. Full of bags.', 2.6);
-    } else if (t < T6) {
-      const k = ease(clamp((t - T4) / (T5 - T4), 0, 1));
-      pos = new THREE.Vector3(OUTER + 0.5, y0 + W.sill + 0.7, W.z).lerp(sill, k);
-      (this.stage!.scene.fog as THREE.FogExp2).density = 0.015 + 0.03 * k;
+      if (at(T.window + 0.3)) audio.sfx('river_rapids', 0.9);
+      if (at(T.window + 0.4)) this.say('Six floors down... the river.', 2.4);
+      if (at(T.window + 2.9)) {
+        audio.sfx('river_flow', 0.8);
+        this.say("It's deep. And it's moving fast.", 2.2);
+      }
+    } else if (t < T.them) {
+      const k = ease(clamp((t - T.hold) / (T.turn - T.hold), 0, 1));
+      pos = leanOut.clone().lerp(sill, k);
+      (this.stage!.scene.fog as THREE.FogExp2).density = 0.01 + 0.035 * k;
       if (k < 1) {
-        cam.fov = 42 + 30 * k;
+        cam.fov = 62 + 10 * k;
         cam.updateProjectionMatrix();
       }
-      const out = yawTo(sill, new THREE.Vector3(OUTER + 5, 0, W.z));
-      const back = yawTo(sill, new THREE.Vector3(CH + 0.8, 0, door.dz));
+      const out = yawTo(sill, outward);
+      const back = yawTo(sill, new THREE.Vector3(S * (CH + 0.8), 0, door.dz));
       yaw = out + wrap(back - out) * k;
-      const D = b.dumpster;
-      pitch = -Math.atan2(sill.y - 1.0, Math.max(0.5, D.x - sill.x)) * (1 - k);
-      if (t - dt < T4 && t >= T4) this.copsToDoor();
-      if (t - dt < T4 + 0.9 && t >= T4 + 0.9) {
-        this.sfxAt('police_shout', new THREE.Vector3(CH + 1, y0 + 1.7, door.dz), 1);
+      pitch = downAt(sill) * (1 - k);
+      if (at(T.hold)) this.copsToDoor();
+      if (at(T.hold + 0.9)) {
+        this.sfxAt('police_shout', new THREE.Vector3(S * (CH + 1), y0 + 1.7, door.dz), 1);
         this.say('POLICE! DON\'T MOVE!', 1.4, true);
       }
-      if (t - dt < T5 + 1.2 && t >= T5 + 1.2) this.say('"Hands where we can see them! Step away from the window!"', 2.2, true);
+      if (at(T.turn + 1.2)) this.say('"Hands where we can see them! Step away from the window!"', 2.2, true);
       // a tremble, now
-      if (t > T5) pos.add(new THREE.Vector3((Math.random() - 0.5) * 0.008, (Math.random() - 0.5) * 0.008, 0));
-    } else if (t < T7) {
-      const k = ease((t - T6) / (T7 - T6));
-      const back = yawTo(sill, new THREE.Vector3(CH + 0.8, 0, door.dz));
-      const out = yawTo(sill, new THREE.Vector3(OUTER + 5, 0, W.z));
+      if (t > T.turn) pos.add(new THREE.Vector3((Math.random() - 0.5) * 0.008, (Math.random() - 0.5) * 0.008, 0));
+    } else if (t < T.back) {
+      const k = ease((t - T.them) / (T.back - T.them));
+      const back = yawTo(sill, new THREE.Vector3(S * (CH + 0.8), 0, door.dz));
+      const out = yawTo(sill, outward);
       yaw = back + wrap(out - back) * k;
       pos = sill.clone();
-      if (t - dt < T6 + 0.1 && t >= T6 + 0.1) {
+      if (at(T.them + 0.1)) {
         this.lines = [];
         this.say('No.', 0.8);
       }
-    } else if (t < T8) {
-      // up on the sill and out: a step up, then through the hole and away
-      const k = (t - T7) / (T8 - T7);
-      yaw = yawTo(sill, new THREE.Vector3(OUTER + 5, 0, W.z));
-      const x = sill.x + k * 1.9;
-      const y = sill.y + Math.sin(Math.min(1, k * 1.4) * Math.PI) * 0.35 - Math.max(0, k - 0.55) * 2.4;
-      pos = new THREE.Vector3(x, y, W.z);
-      pitch = -0.25 - k * 0.6;
-      if (t - dt < T7 + 0.05 && t >= T7 + 0.05) audio.sfx('glass_crack', 0.6);
-      if (t - dt < T7 + 0.3 && t >= T7 + 0.3) audio.sfx('throw_whoosh', 0.8);
+    } else if (t < T.jump) {
+      // up on to the sill -- a step up, crouched in the hole -- and the push off
+      const k = (t - T.back) / (T.jump - T.back);
+      yaw = yawTo(sill, outward);
+      const up = Math.sin(Math.min(1, k * 1.3) * Math.PI * 0.5);
+      pos = sill.clone().lerp(leanOut, ease(k));
+      pos.y = sill.y + up * 0.3 - Math.max(0, k - 0.7) * 0.5;
+      pitch = -0.15 - k * 0.25;
+      if (at(T.back + 0.05)) audio.sfx('glass_crack', 0.6);
+      if (at(T.back + 0.35)) audio.sfx('breath', 0.8);
+      cn.p0 = pos.clone();
+    } else if (t < T.fall) {
+      // THE FALL.  Out and away from the wall, and down: slow for a breath,
+      // then faster and faster, the brick going up past you, the water
+      // coming up black and wide, the world turning over a little -- and
+      // the black before you reach it.
+      const k = (t - T.jump) / (T.fall - T.jump);
+      const p0 = cn.p0 ?? leanOut;
+      const bottom = WATER_Y + 1.4;
+      pos = new THREE.Vector3(p0.x + S * (0.4 + 1.8 * Math.sqrt(k)), p0.y - (p0.y - bottom) * k * k, p0.z + Math.sin(k * 2.1) * 0.3);
+      yaw = yawTo(sill, outward) + Math.sin(k * 2.6) * 0.18 * k;
+      // from looking out, over and down at the water rushing up
+      pitch = -0.4 - ease(Math.min(1, k * 1.5)) * 0.9;
+      roll = Math.sin(k * 3.2) * 0.22 * k;
+      cam.fov = 72 + 18 * k;
+      cam.updateProjectionMatrix();
+      (this.stage!.scene.fog as THREE.FogExp2).density = 0.012;
+      // the shake of the air
+      pos.add(new THREE.Vector3((Math.random() - 0.5) * 0.03 * k, 0, (Math.random() - 0.5) * 0.03 * k));
+      if (at(T.jump + 0.02)) audio.sfx('throw_whoosh', 0.9);
+      if (at(T.jump + 0.3)) audio.sfx('wind_gust', 1);
+      if (at(T.jump + 1.0)) audio.sfx('wind_gust', 1);
     } else {
-      this.toEnding();
+      // the black, and the water closing over you
+      if (!cn.black) {
+        cn.black = true;
+        audio.sfx('plunge', 1);
+      }
+      if (t > T.fall + 1.4) this.toEnding();
       return;
     }
     cam.position.copy(pos);
-    cam.rotation.set(pitch, yaw, 0);
+    cam.rotation.set(pitch, yaw, roll);
     this.yaw = yaw;
-    if ((t < T2 || t > T5) && Math.abs(cam.fov - 72) > 0.1) {
+    if ((t < T.window || (t > T.turn && t < T.jump)) && Math.abs(cam.fov - 72) > 0.1) {
       cam.fov += (72 - cam.fov) * Math.min(1, dt * 5);
       cam.updateProjectionMatrix();
     }
@@ -1867,7 +1914,7 @@ export class PoliceEscape3D extends Phaser.Scene {
         c.st.aimPitch = Math.atan2(pos.y - (c.m.h + 1.5), Math.max(0.5, Math.hypot(pos.x - c.m.x, pos.z - c.m.z)));
         c.st.aimYaw = 0;
       }
-      c.st.shout = t > T4 + 0.9 && t < T4 + 1.6 ? 1 : Math.max(0, c.st.shout - dt);
+      c.st.shout = t > T.hold + 0.9 && t < T.hold + 1.6 ? 1 : Math.max(0, c.st.shout - dt);
     }
   }
 
@@ -1876,21 +1923,22 @@ export class PoliceEscape3D extends Phaser.Scene {
     const b = this.b!;
     const door = b.rooms.find((r) => r.special === '612')!;
     const y = TOP * FH;
+    const S = SIDE612;
     const marks = [
-      new THREE.Vector3(CH + 0.75, y, door.dz - 0.1),
-      new THREE.Vector3(CH + 0.35, y, door.dz + 0.75),
-      new THREE.Vector3(CH + 0.4, y, door.dz - 0.85),
+      new THREE.Vector3(S * (CH + 0.75), y, door.dz - 0.1),
+      new THREE.Vector3(S * (CH + 0.35), y, door.dz + 0.75),
+      new THREE.Vector3(S * (CH + 0.4), y, door.dz - 0.85),
     ];
     this.cops.forEach((c, i) => {
-      c.m = { x: 0.2, z: door.dz - 3 - i * 1.2, f: TOP, well: false, seg: 'top', h: y };
+      c.m = { x: S * 0.2, z: door.dz - 3 - i * 1.2, f: TOP, well: false, seg: 'top', h: y };
       c.yaw = 0;
       c.inLobby = false;
       (c as Cop & { mark?: THREE.Vector3 }).mark = marks[i];
       c.st.torch = 1;
     });
     // the second and third stop in the doorway itself
-    (this.cops[1] as Cop & { mark?: THREE.Vector3 }).mark = new THREE.Vector3(0.6, y, door.dz + 0.5);
-    (this.cops[2] as Cop & { mark?: THREE.Vector3 }).mark = new THREE.Vector3(0.6, y, door.dz - 0.6);
+    (this.cops[1] as Cop & { mark?: THREE.Vector3 }).mark = new THREE.Vector3(S * 0.6, y, door.dz + 0.5);
+    (this.cops[2] as Cop & { mark?: THREE.Vector3 }).mark = new THREE.Vector3(S * 0.6, y, door.dz - 0.6);
     for (let k = 0; k < 6; k++) this.time.delayedCall(k * 140, () => audio.sfx('step_run', 0.6));
   }
 
@@ -1898,17 +1946,18 @@ export class PoliceEscape3D extends Phaser.Scene {
     this.phase = 'ending';
     this.phaseT = 0;
     this.lines = [];
-    audio.sfx('bin_land', 0.7);
+    // (slowly: a beat of the black first, and each line given time)
     this.endLines = [
-      { text: 'You escaped the police...', dur: 3.0, col: '#e8e2cd' },
-      { text: '...but Froggy is still out there.', dur: 3.6, col: '#d06060' },
-      { text: 'THE FOLLOWING DAY', dur: 3.2, col: '#ffd45e' },
-      { text: "Lily's Condos is boarding up the sixth floor.", dur: 3.2, col: '#e8e2cd' },
-      { text: 'Froggy still has not turned up.', dur: 3.4, col: '#d06060' },
+      { text: '', dur: 1.4, col: '#e8e2cd' },
+      { text: 'You escaped the police...', dur: 4.6, col: '#e8e2cd' },
+      { text: '...but Froggy is still out there.', dur: 5.0, col: '#d06060' },
+      { text: 'THE FOLLOWING DAY', dur: 4.4, col: '#ffd45e' },
+      { text: "Lily's Condos is boarding up the sixth floor.", dur: 4.8, col: '#e8e2cd' },
+      { text: 'Froggy still has not turned up.', dur: 5.0, col: '#d06060' },
     ];
     this.endI = 0;
     this.endT = 0;
-    this.time.delayedCall(400, () => audio.sfx('eerie_swell', 0.3));
+    this.time.delayedCall(600, () => audio.sfx('eerie_swell', 0.3));
   }
 
   private advanceEnd(): void {
@@ -2112,7 +2161,7 @@ export class PoliceEscape3D extends Phaser.Scene {
         ctx.fillRect(0, 0, GAME_W, GAME_H);
         const l = this.endLines[this.endI];
         if (l) {
-          const a = clamp(Math.min(this.endT / 0.7, (l.dur - this.endT) / 0.6), 0, 1);
+          const a = clamp(Math.min(this.endT / 1.3, (l.dur - this.endT) / 1.0), 0, 1);
           const scale = l.text === 'THE FOLLOWING DAY' ? 2 : 1;
           drawPixelText(ctx, l.text, GAME_W / 2, GAME_H / 2 - 4 * scale, { scale, color: l.col, center: true, alpha: a });
         }
@@ -2124,10 +2173,9 @@ export class PoliceEscape3D extends Phaser.Scene {
         ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, GAME_W, 14 * k);
         ctx.fillRect(0, GAME_H - 14 * k, GAME_W, 14 * k);
-        // (the black comes down as you go through the hole)
-        const end = this.cine.t - 10.85;
-        if (end > 0) {
-          ctx.fillStyle = `rgba(0,0,0,${clamp(end / 0.25, 0, 1)})`;
+        // (the black, all at once, just before the water)
+        if (this.cine.black) {
+          ctx.fillStyle = '#000';
           ctx.fillRect(0, 0, GAME_W, GAME_H);
         }
       }
@@ -2416,7 +2464,7 @@ export class PoliceEscape3D extends Phaser.Scene {
       caught: () => this.caught(this.cops[0]),
       to612: () => {
         const rm = b().rooms.find((r) => r.special === '612')!;
-        this.me = { x: CH + 0.6, z: rm.dz, f: TOP, well: false, seg: 'top', h: TOP * FH };
+        this.me = { x: SIDE612 * (CH + 0.6), z: rm.dz, f: TOP, well: false, seg: 'top', h: TOP * FH };
         this.segCache.clear();
       },
       floorSpots: (f: number) => b().spots.filter((s) => s.floor === f).map((s) => s.id),
