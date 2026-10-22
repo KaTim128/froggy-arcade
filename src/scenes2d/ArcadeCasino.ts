@@ -70,6 +70,7 @@ export class ArcadeCasino extends Phaser.Scene {
   /** Where each machine is played from, and what of the floor is solid. */
   private spots = new Map<object, Spot>();
   private solids: Box[] = [];
+  private tableSolids: Box[] = [];
   private walker!: Walker;
   private table: BlackjackTable | null = null;
   /** The conversation with the man in the suit, while it is open. */
@@ -142,6 +143,7 @@ export class ArcadeCasino extends Phaser.Scene {
     }
     const tableBox = [...this.spots.entries()].filter(([c]) => c instanceof BlackjackTable).map(([, s]) => s.solid!);
     this.walker = new Walker(() => this.bounds, () => [...this.solids, ...tableBox]);
+    this.tableSolids = tableBox;
     for (const cab of this.cabinets) {
       const b = cab.bounds;
       this.add
@@ -170,7 +172,8 @@ export class ArcadeCasino extends Phaser.Scene {
       scene: this,
       player: () => this.player,
       bounds: () => this.bounds,
-      solids: () => this.solids,
+      // (round the card tables too: low, so no cover, but in the way)
+      solids: () => [...this.solids, ...this.tableSolids],
       machines: this.solids.map((b) => ({ x: b.x + b.w / 2, y: b.y + b.h, w: b.w, depth: b.h })),
       door: { x: BACK_DOOR.x - 16, y: BACK_DOOR.y },
       lock: (on) => (this.locked = on),

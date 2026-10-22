@@ -27,10 +27,10 @@ import Phaser from 'phaser';
 import { store } from '../core/state';
 import { audio } from '../core/audio';
 import { centerText, pinToScreen } from '../core/ui';
-import { LOOKS, Player } from '../art/player';
+import { LOOKS, PLAYER_SPEED, Player } from '../art/player';
 import { PALETTE } from '../render/palette';
 import { openTalkPanel } from '../ui/talkPanel';
-import { collide, type Box } from './roomWalk';
+import { collide, findPath, type Box } from './roomWalk';
 import { chaseOutOf, copSay, patrolsOut, takeIn, takeIndoorChase } from './patrol';
 import { copCameOut, copInside, copWentIn, nextVisitIn, planVisit, type Place } from './policeVisits';
 
@@ -99,6 +99,9 @@ const REACH = 7;
 const BUMP = 11;
 const ANSWER_S = 5;
 const CONE = { calm: 0xfff2b0, wary: 0xffb040, hot: 0xff4040 };
+
+/** The player's walking speed (art/player), which every pace is a fraction of. */
+const PLAYER_STEP = PLAYER_SPEED;
 
 const wrap = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -294,7 +297,9 @@ export class IndoorCop {
       const x = b.x + 8 + Math.random() * Math.max(1, b.width - 16);
       const y = this.host.side ? b.y : b.y + 4 + Math.random() * Math.max(1, b.height - 8);
       const clear = solids.every((s) => !(x > s.x - 8 && x < s.x + s.w + 8 && y > s.y - 4 && y < s.y + s.h + 6));
-      if (clear && Math.hypot(x - from.x, y - from.y) >= away) return { x, y };
+      if (!clear || Math.hypot(x - from.x, y - from.y) < away) continue;
+      // (and somewhere they can actually get to from here)
+      if (this.host.side || findPath(from, { x, y }, b, solids)) return { x, y };
     }
     return { x: b.centerX, y: this.host.side ? b.y : b.centerY };
   }
@@ -483,13 +488,27 @@ export class IndoorCop {
   }
 
   /** Straight for (x, y), sliding along whatever is in the way; stuck, try somewhere else. */
+  /**
+   * Along the floor to (x, y), round whatever stands on it: a path over the
+   * room's walking grid (game/roomWalk `findPath`), planned again when the
+   * place they want moves (you, running) -- never straight at it and into
+   * the end of a bed.  Held up anyway, they plan again, or pick somewhere else.
+   */
   private walkTo(to: { x: number; y: number } | null, pace: number, delta: number): void {
     const c = this.cop!;
     if (!to) return;
-    const dx = to.x - c.x;
-    const dy = this.host.side ? 0 : to.y - c.y;
-    if (Math.hypot(dx, dy) < 1.5) {
-      c.stand();
+    const dt = delta / 1000;
+    this.replanT -= dt;
+    const moved = !this.pathFor || Math.hypot(to.x - this.pathFor.x, to.y - this.pathFor.y) > 6;
+    if (!this.path.length || moved || (this.state === 'chase' && this.replanT <= 0)) this.plan(to);
+    const next = this.path[0] ?? to;
+    const dx = next.x - c.x;
+    const dy = this.host.side ? 0 : next.y - c.y;
+    const step = (PLAYER_STEP * delta * pace) / 1000;
+    if (Math.hypot(dx, dy) <= Math.max(1.5, step)) {
+      c.setPosition(next.x, this.host.side ? c.y : next.y);
+      this.path.shift();
+      if (!this.path.length) c.stand();
       return;
     }
     const before = { x: c.x, y: c.y };
@@ -497,18 +516,38 @@ export class IndoorCop {
     c.move(dx, dy, delta * pace, new Phaser.Geom.Rectangle(b.x - 30, b.y, b.width + 60, b.height));
     collide(c, before, this.host.solids());
     const want = Math.atan2(dy, dx);
-    this.ang += wrap(want - this.ang) * Math.min(1, (delta / 1000) * 6);
+    this.ang += wrap(want - this.ang) * Math.min(1, dt * 6);
     if (this.host.side) this.ang = dx >= 0 ? 0 : Math.PI;
     this.faceAng();
-    const moved = Math.hypot(c.x - this.lastXY.x, c.y - this.lastXY.y);
+    const gone = Math.hypot(c.x - this.lastXY.x, c.y - this.lastXY.y);
     this.lastXY = { x: c.x, y: c.y };
-    this.stuckT = moved < 0.05 ? this.stuckT + delta / 1000 : 0;
-    if (this.stuckT > 0.7 && (this.state === 'walk' || this.state === 'search')) {
+    this.stuckT = gone < 0.05 ? this.stuckT + dt : 0;
+    if (this.stuckT > 0.5) {
       this.stuckT = 0;
-      if (this.state === 'walk') this.goal = this.freeSpot(30);
-      else this.goal = null;
+      // (first a fresh path from where they are; still stuck, somewhere else)
+      this.path = [];
+      this.stuckTimes++;
+      if (this.stuckTimes > 2) {
+        this.stuckTimes = 0;
+        if (this.state === 'walk') this.goal = this.freeSpot(30);
+        else if (this.state === 'search') this.goal = null;
+      }
     }
   }
+
+  /** A path from where they stand to `to`, or (none there) straight at it. */
+  private plan(to: { x: number; y: number }): void {
+    const c = this.cop!;
+    const p = this.host.side ? null : findPath({ x: c.x, y: c.y }, to, this.host.bounds(), this.host.solids());
+    this.path = p && p.length ? p : [{ ...to }];
+    this.pathFor = { ...to };
+    this.replanT = 0.45;
+  }
+
+  private path: Array<{ x: number; y: number }> = [];
+  private pathFor: { x: number; y: number } | null = null;
+  private replanT = 0;
+  private stuckTimes = 0;
 
   private faceAng(): void {
     const k = Math.cos(this.ang);

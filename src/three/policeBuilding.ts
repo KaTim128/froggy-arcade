@@ -120,6 +120,8 @@ export interface Door {
   room: Room | null;
   /** Moving: last frame's k, to know when to play the sounds. */
   was: number;
+  /** Off its hinges for good (the lobby door Froggy came through). */
+  broken?: boolean;
 }
 
 export type SpotKind = 'bed' | 'wardrobe' | 'curtain' | 'door';
@@ -726,8 +728,8 @@ export class PoliceBuilding {
       box(GAP * 2 + 0.05, 0.05, 0.05, rail, S, 0, y0 + FH / 2 + 0.95, -FLIGHT);
       box(GAP * 2 + 0.05, 0.05, 0.05, rail, S, 0, y0 + 0.95, 0);
     }
-    // at G nothing comes down on the right: rail off the drop that is not there
-    for (const yy of [0.95, 0.5]) box(WX + GAP, 0.05, 0.05, rail, S, WX - (WX + GAP) / 2, yy, 0);
+    // (at G the floor runs under the second flight, as at the foot of the
+    // stairs Froggy chases you down: no rail across it into the wall)
     treads.count = ti;
     nosings.count = ti;
     S.add(treads);
@@ -756,6 +758,64 @@ export class PoliceBuilding {
       box(0.7, 0.04, 0.04, this.mats.steel, d.pivot, 0.45, 1.0, -0.04);
       this.stairDoors.push(d);
     }
+    this.breakLobbyDoor(S, fireMat);
+  }
+
+  /**
+   * THE LOBBY DOOR, AS FROGGY LEFT IT.  He came through it after you on the
+   * night (the janitor room), so it is not on its hinges any more: the leaf
+   * is down on the floor of the well, one corner up against the wall, the
+   * frame split where the hinges tore out -- and through the gap the lobby,
+   * dark but for the police lights going round in it.  Open for good (the
+   * officers come up through it); you cannot go back down into the lobby.
+   */
+  private breakLobbyDoor(S: THREE.Object3D, fireMat: Mat): void {
+    const d = this.stairDoors[0];
+    d.k = d.want = 1;
+    d.pivot.visible = false;
+    d.broken = true;
+    const w = SDOOR.x1 - SDOOR.x0;
+    const edge = this.mats.walnut;
+    // the leaf, face down on the well floor, its top end propped on the wall
+    const leaf = new THREE.Group();
+    // (laid across the landing in front of the doorway, its foot by the
+    // hinge side and its head raised a hand's width on the far wall)
+    leaf.position.set(-1.25, 0.03, WZ1 - 0.45);
+    leaf.rotation.set(-Math.PI / 2 + 0.09, -Math.PI / 2 + 0.3, 0, 'YXZ');
+    S.add(leaf);
+    const slab = box(w - 0.02, 2.08, 0.045, [edge, edge, edge, edge, fireMat, fireMat], leaf, 0, 1.04, 0);
+    slab.rotation.z = 0.04;
+    box(0.7, 0.04, 0.04, this.mats.steel, leaf, 0, 1.0, 0.04);
+    // a dent where he hit it, and the torn hinge plates still on its edge
+    box(0.22, 0.3, 0.02, new THREE.MeshLambertMaterial({ color: 0x3a3a3c }), leaf, 0.1, 1.5, 0.03);
+    for (const y of [0.25, 1.85]) box(0.03, 0.12, 0.05, this.mats.chrome, leaf, -w / 2 + 0.01, y, 0);
+    // the frame where the hinges were: split, splinters standing out
+    const wood = new THREE.MeshLambertMaterial({ color: 0x6a5a48 });
+    for (const [y, l, a] of [[0.35, 0.18, 0.5], [1.05, 0.12, -0.4], [1.9, 0.22, 0.7]] as const) {
+      const sp = box(0.025, l, 0.02, wood, S, SDOOR.x1 - 0.02, y, WZ1 - 0.03);
+      sp.rotation.z = a;
+    }
+    box(0.04, 2.1, 0.06, new THREE.MeshLambertMaterial({ color: 0x2a2826 }), S, SDOOR.x1 - 0.01, 1.05, WZ1 - 0.02);
+    // the lobby through the gap: dark, and the police lights going round in it
+    const deep = 2.4;
+    const lobby = new THREE.MeshLambertMaterial({ color: 0x241c18 });
+    box(w + 1.6, 0.05, deep, new THREE.MeshLambertMaterial({ color: 0x3a1c22 }), S, (SDOOR.x0 + SDOOR.x1) / 2, -0.02, WZ1 + deep / 2);
+    plane(w + 1.6, 2.6, lobby, S, (SDOOR.x0 + SDOOR.x1) / 2, 1.3, WZ1 + deep, Math.PI);
+    plane(deep, 2.6, lobby, S, SDOOR.x0 - 0.8, 1.3, WZ1 + deep / 2, Math.PI / 2);
+    plane(deep, 2.6, lobby, S, SDOOR.x1 + 0.8, 1.3, WZ1 + deep / 2, -Math.PI / 2);
+    plane(w + 1.6, deep, lobby, S, (SDOOR.x0 + SDOOR.x1) / 2, 2.6, WZ1 + deep / 2, 0, Math.PI / 2);
+    const red = new THREE.MeshBasicMaterial({ color: 0xff2a3a, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false });
+    const blue = new THREE.MeshBasicMaterial({ color: 0x2a5aff, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false });
+    const r = plane(w + 1.4, 2.4, red, S, (SDOOR.x0 + SDOOR.x1) / 2, 1.3, WZ1 + deep - 0.05, Math.PI);
+    const bl = plane(w + 1.4, 2.4, blue, S, (SDOOR.x0 + SDOOR.x1) / 2, 1.3, WZ1 + deep - 0.06, Math.PI);
+    r.userData.noShadow = bl.userData.noShadow = true;
+    let t = 0;
+    this.addTicker((dt) => {
+      t += dt;
+      const ph = (Math.sin(t * 6) + 1) / 2;
+      red.opacity = 0.08 + 0.42 * ph;
+      blue.opacity = 0.08 + 0.42 * (1 - ph);
+    });
   }
 
   // ------------------------------------------------------------ a door
