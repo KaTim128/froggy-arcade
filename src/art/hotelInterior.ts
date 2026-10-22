@@ -232,7 +232,7 @@ export function roomDoor(g: Ctx, cx: number, num: string, opts: { w?: number; h?
  * splintered jamb, and the wood he went through is on the carpet.  After the
  * police, a strip of tape across it.
  */
-function brokenDoor(g: Ctx, cx: number, num: string, taped: boolean): void {
+function brokenDoor(g: Ctx, cx: number, taped: boolean): void {
   const w = DOOR_W;
   const h = DOOR_H;
   const x = Math.round(cx - w / 2);
@@ -256,11 +256,7 @@ function brokenDoor(g: Ctx, cx: number, num: string, taped: boolean): void {
   // a split down it, and a fist-sized hole through the top panel
   for (let r = 6; r < 24; r++) rect(g, x + 6 - Math.round((r / h) ** 1.4 * 6) + (r % 3 === 0 ? 1 : 0), y + r, 1, 1, '#120d0a');
   rect(g, x + 4, y + 14, 3, 3, '#120d0a');
-  // the plate, still on what is left of it, crooked
-  const pw = num.length * 4 + 1;
-  rect(g, x - 1, y + 3, pw + 2, 9, HP.goldDark);
-  rect(g, x, y + 4, pw, 7, HP.gold);
-  signText(g, num, x + pw / 2, y + 5, '#24160a');
+  // (no number plate: it went with the door)
   // the wood on the carpet
   for (const [dx, dy, len] of [[-6, 0, 4], [-2, -1, 2], [w - 2, 0, 5], [w + 4, -1, 2], [3, 1, 3], [w + 1, 1, 2]]) {
     rect(g, x + dx, FLOOR_Y + dy, len, 1, HP.wood);
@@ -786,7 +782,7 @@ export function paintCorridor(g: Ctx, broken612: 'none' | 'broken' | 'taped' = '
       picture(g, x - 6, 116, 12, 10, 'lily');
       return;
     }
-    if (floor === 6 && k === 5 && broken612 !== 'none') brokenDoor(g, x, '612', broken612 === 'taped');
+    if (floor === 6 && k === 5 && broken612 !== 'none') brokenDoor(g, x, broken612 === 'taped');
     else roomDoor(g, x, floor === 6 ? `${607 + k}` : `${floor}${11 + k}`);
   });
   // between them: sconces and the odd picture

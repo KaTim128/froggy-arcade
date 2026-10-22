@@ -25,6 +25,7 @@ import { store } from '../core/state';
 import { button, centerText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
+import { plainWords } from '../game/plainWords';
 import { drawMelee, drawShot, meleeStyle, shotStyle, type MeleeStyle } from '../art/clashFx';
 import { SPECIALS } from '../game/specials';
 import { BIOMES, ELEMENTS, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
@@ -655,7 +656,7 @@ export class CreatureArena extends Phaser.Scene {
     // the description.  Too long for the strip, it holds a moment and then
     // scrolls along it, so all of it is read and none of it is over the
     // arena, the fighters or the thumbs.
-    const line = `${a.name}: ${inf.type}${a.dmg > 0 ? ` - ${a.dmg} DMG` : ''} - RELOAD ${a.cd}S.  ${inf.special || inf.use}`;
+    const line = plainWords(`${a.name}: ${inf.type}${a.dmg > 0 ? ` - ${a.dmg} DMG` : ''} - RELOAD ${a.cd}S.  ${inf.special || inf.use}`);
     this.info.setText(line).setOrigin(0, 0).setPosition(INFO_X, INFO_Y);
     this.infoRun = Math.max(0, Math.ceil(this.info.width) - (INFO_R - INFO_X));
     this.infoAt = this.time.now;

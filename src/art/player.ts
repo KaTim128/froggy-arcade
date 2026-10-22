@@ -57,6 +57,8 @@ export const COLS: Record<string, number> = {
   E: 0x1e1410, // eyes
   Q: 0x14141c, // glasses: the lens
   q: 0x2a2a30, // glasses: the frame
+  L: 0x6a7a92, // glasses: the shine on a dark lens
+  l: 0xc8dce4, // glasses: clear glass catching the light
   G: 0x8a8070, // grey beard
   g: 0x6a6258, // beard, shade
   C: 0x6a6a44, // old army coat, olive

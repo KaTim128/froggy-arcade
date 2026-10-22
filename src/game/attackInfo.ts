@@ -12,6 +12,7 @@
 
 import { ELEMENTS, type Attack, type AttackKind, type Element, type Mod } from './creatures';
 import { SPECIALS } from './specials';
+import { plainWords } from './plainWords';
 
 export interface AttackInfo {
   /** One word for the button. */
@@ -134,6 +135,17 @@ export const MODS: Record<Mod, { name: string; desc: string }> = {
 };
 
 export function attackInfo(a: Attack, el: Element, scale = 1): AttackInfo {
+  // every word of it in steps and seconds, never pixels (see plainWords)
+  const raw = rawInfo(a, el, scale);
+  const out = { ...raw } as AttackInfo;
+  for (const k of Object.keys(out) as (keyof AttackInfo)[]) {
+    const v = out[k];
+    if (typeof v === 'string') (out as unknown as Record<string, string>)[k] = plainWords(v);
+  }
+  return out;
+}
+
+function rawInfo(a: Attack, el: Element, scale: number): AttackInfo {
   const effect = a.dmg > 0 ? ELEMENTS[el].effect : '';
   const w = WORDS[a.kind];
   // (a special says exactly what it does; a plain attack has nothing to add)
@@ -199,30 +211,7 @@ export function attackCard(a: Attack, el: Element, scale = 1): string[] {
   return out.map(plainWords);
 }
 
-/** One STEP, the length players read distances in: about a creature's width. */
-const STEP_PX = 14;
-
-/**
- * PLAIN WORDS.  The numbers underneath are in pixels and seconds, which is
- * how the arena counts them, not how anyone playing does: "A 68PX BLINK"
- * says nothing.  On the card, a distance is in STEPS (a creature's width,
- * so 5 STEPS is five of them side by side) and a time in SEC.
- */
-export function plainWords(line: string): string {
-  const steps = (px: string): number => Math.max(1, Math.round(Number(px) / STEP_PX));
-  return (
-    line
-      // "A 44PX RING", "AN 80PX DASH": a 3-STEP RING, a 6-STEP DASH
-      .replace(/\bAN? (\d+)PX (?=[A-Z])/g, (_m, px: string) => `A ${steps(px)}-STEP `)
-      // "UP TO 64PX AWAY": UP TO 5 STEPS AWAY
-      .replace(/(\d+)PX\b/g, (_m, px: string) => {
-        const n = steps(px);
-        return `${n} STEP${n === 1 ? '' : 'S'}`;
-      })
-      // "FOR 3S", "0.5S": FOR 3 SEC, 0.5 SEC
-      .replace(/(\d+(?:\.\d+)?)S\b/g, '$1 SEC')
-  );
-}
+export { plainWords } from './plainWords';
 
 /** One short line for a list: SHOT - PROJECTILE, SINGLE TARGET - 12 DMG - 0.6S */
 export function attackLine(a: Attack, el: Element): string {

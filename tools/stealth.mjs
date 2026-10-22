@@ -137,6 +137,39 @@ try {
     await page.close();
   }
 
+  // ------------------------------------------------------------- 1b. caught: all for nothing
+  console.log('\nstealth  caught before the look is done: back to the $200, nothing kept');
+  {
+    const page = await newPage('?intro=1&charity=1&key=1&scene=ArcadeHub');
+    await hunt(page);
+    const r = await page.evaluate(async () => {
+      const f = window.__froggy;
+      const st = f.state();
+      // the man has just paid: $200 in hand and the wardrobe as it is
+      f.patch({ cash: 200, stealthStart: { cash: 200, wardrobe: [...st.life.wardrobe], furniture: { ...st.life.furniture }, placed: [...st.life.placed] } });
+      // shopping: three pieces bought and on, $60 spent
+      const life = f.state().life;
+      life.wardrobe.push('cos_hoodie_grey', 'cos_jeans', 'cos_sneakers');
+      f.patch({ cash: 140, life });
+      for (const id of ['cos_hoodie_grey', 'cos_jeans', 'cos_sneakers']) f.stealth.wear(id);
+      const before = { cash: f.state().cash, changed: f.stealth.progress().changed };
+      const { caughtByPolice } = await import('/src/game/patrol.ts');
+      const scene = f.game().scene.getScenes(true)[0];
+      caughtByPolice(scene, 'seen');
+      const after = f.state();
+      return {
+        before,
+        cash: after.cash,
+        kept: ['cos_hoodie_grey', 'cos_jeans', 'cos_sneakers'].filter((id) => after.life.wardrobe.includes(id)),
+        changed: f.stealth.progress().changed,
+      };
+    });
+    check('caught mid-shop: the cash goes back to the $200', r.before.cash === 140 && r.cash === 200, `${r.before.cash} -> ${r.cash}`);
+    check('and nothing bought since is kept', r.kept.length === 0, r.kept.join(',') || 'none kept');
+    check('and the poster look is back on: start again from 0 of 7', r.before.changed === 3 && r.changed === 0, `${r.before.changed} -> ${r.changed}`);
+    await page.close();
+  }
+
   // ------------------------------------------------------------- 2. the pavement
   console.log('\nstealth  the patrols on the pavement');
   {

@@ -147,21 +147,43 @@ export function takeIn(scene: Phaser.Scene, say: (line: string) => void): void {
 }
 
 /**
+ * ALL FOR NOTHING.  Caught before the new look is whole, the run goes back
+ * to the moment the man paid up: the cash in hand then, only what was owned
+ * then, and the poster's clothes back on.  Returns what it went back to, or
+ * null outside the hunt.
+ */
+function backToStealthStart(): { cash: number } | null {
+  const s = store.get();
+  const at = s.stealthStart;
+  if (s.arc !== 'live' || s.disguised || !at) return null;
+  const life = structuredClone(s.life);
+  life.wardrobe = [...at.wardrobe];
+  life.furniture = { ...at.furniture };
+  life.placed = structuredClone(at.placed) as typeof life.placed;
+  if (s.wantedOutfit) life.outfit = { ...(s.wantedOutfit as typeof life.outfit) };
+  store.patch({ cash: at.cash, life });
+  store.flush();
+  return { cash: at.cash };
+}
+
+/**
  * CAUGHT, in the stealth phase: a red card, and back on the forecourt by
  * the arcade to try again -- not the cell, not the paper.  `why` says what
  * gave you away.
  */
 export function caughtByPolice(scene: Phaser.Scene, why: 'seen' | 'sleep'): void {
   pursuit = null;
+  const lost = backToStealthStart();
   audio.sfx('door_smash', 0.4);
   scene.cameras.main.shake(160, 0.006);
   const k = scene.add.container(0, 0).setDepth(4000).setScrollFactor(0);
   k.add(scene.add.rectangle(0, 0, 320, 180, 0x000000, 0.55).setOrigin(0, 0));
-  k.add(scene.add.rectangle(160, 80, 236, 40, 0x1a0a0e, 0.96).setStrokeStyle(1, 0xd04040));
-  k.add(centerText(scene, 160, 72, 'CAUGHT BY THE POLICE', 0xff5050));
+  k.add(scene.add.rectangle(160, 84, 250, 52, 0x1a0a0e, 0.96).setStrokeStyle(1, 0xd04040));
+  k.add(centerText(scene, 160, 70, 'CAUGHT BY THE POLICE', 0xff5050));
   k.add(
-    centerText(scene, 160, 86, why === 'sleep' ? 'YOU LAY DOWN WITH THE POSTER FACE.' : 'THEY KNEW YOUR FACE.', PALETTE.cream),
+    centerText(scene, 160, 84, why === 'sleep' ? 'YOU LAY DOWN WITH THE POSTER FACE.' : 'THEY KNEW YOUR FACE.', PALETTE.cream),
   );
+  if (lost) k.add(centerText(scene, 160, 98, `BACK TO $${lost.cash}. NOTHING YOU BOUGHT IS KEPT.`, 0xffc860));
   for (const o of k.list) (o as unknown as Phaser.GameObjects.Components.ScrollFactor).setScrollFactor?.(0);
   k.setAlpha(0);
   scene.tweens.add({ targets: k, alpha: 1, duration: 200 });
