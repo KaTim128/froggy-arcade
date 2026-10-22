@@ -14,6 +14,7 @@
  */
 
 import type { AttackKind, Mod } from './creatures';
+import { plainWords } from './plainWords';
 
 /** When the AI uses it: at range with a clear shot, up close, on itself, ... */
 export type AiUse =
@@ -40,7 +41,7 @@ export interface SpecialDef {
   desc: string;
 }
 
-const D = (id: string, name: string, kind: AttackKind, dmg: number, cd: number, reach: number, ai: AiUse, desc: string, mod: Mod = 'none'): SpecialDef => ({ id, name, kind, dmg, cd, reach, mod, ai, desc });
+const D = (id: string, name: string, kind: AttackKind, dmg: number, cd: number, reach: number, ai: AiUse, desc: string, mod: Mod = 'none'): SpecialDef => ({ id, name, kind, dmg, cd, reach, mod, ai, desc: plainWords(desc) });
 
 export const SPECIAL_LIST: SpecialDef[] = [
   // ------------------------------------------------------------------ ember

@@ -100,7 +100,17 @@ export class SettingsModal extends Phaser.Scene {
       // Creature Clash's LEAVE): the scene says what it is called and what it
       // does, and it sits between RESUME and EXIT TO START MENU like QUIT GAME
       const own = (pausedScene() as PauseExitScene | null)?.pauseExit?.() ?? null;
-      if (inGame) {
+      // (a practice go has nothing riding on it: LEAVE, straight back to the
+      // choice of PLAY or PRACTICE, nothing to ask)
+      const practice = inGame && !!(pausedScene() as MinigameScene | null)?.isPracticing?.();
+      if (practice) {
+        button(this, 54, 158, 'RESUME', () => resumePause(), { width: 54, height: 13 });
+        button(this, 122, 158, 'LEAVE', () => {
+          const mg = pausedScene() as MinigameScene | null;
+          resumePause();
+          mg?.quitGame();
+        }, { width: 70, height: 13, fill: 0x5a1a22, hoverFill: 0x8a2b34 });
+      } else if (inGame) {
         button(this, 54, 158, 'RESUME', () => resumePause(), { width: 54, height: 13 });
         button(this, 122, 158, 'QUIT GAME', () => this.quitGame(), { width: 70, height: 13, fill: 0x5a1a22, hoverFill: 0x8a2b34 });
       } else if (own) {

@@ -465,6 +465,11 @@ export class MinigameScene extends Phaser.Scene {
     return false;
   }
 
+  /** Whether this is a practice go (nothing paid, LEAVE goes back to the choice). */
+  isPracticing(): boolean {
+    return this.practicing && this.started && !this.settled;
+  }
+
   /**
    * QUIT GAME, from the pause menu.  At the card nothing has been paid and
    * it just leaves; in a game it is the old forfeit (MG-4), back to the room

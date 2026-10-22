@@ -77,8 +77,21 @@ try {
   await sleep(300);
   const x1 = await page.evaluate(() => window.__grudge.state().you);
   check('Froggy can walk past the bag to its other side', x0.x < 160 && x1.x > 160 + 20 && x1.facing === -1, JSON.stringify({ x0, x1 }));
-  // out of it, as the pause menu's QUIT GAME does
-  await page.evaluate(() => window.__froggy.game().scene.getScene('Minigame').quitGame());
+  // out of it through the pause menu: a practice go says LEAVE, not QUIT GAME
+  await page.keyboard.press('Escape');
+  await sleep(900);
+  const words = await page.evaluate(() => {
+    const s = window.__froggy.game().scene.getScene('SettingsModal');
+    const out = [];
+    const walk = (o) => {
+      if (o.text) out.push(o.text);
+      (o.list ?? []).forEach(walk);
+    };
+    (s?.children?.list ?? []).forEach(walk);
+    return out;
+  });
+  check('in a practice go the pause menu says LEAVE, not QUIT GAME', words.includes('LEAVE') && !words.includes('QUIT GAME'), words.filter((w) => /LEAVE|QUIT|RESUME/.test(w)).join(', '));
+  await page.mouse.click(122 * k, 158 * k);
   await sleep(1500);
   m = await until((x) => x.scenes.includes('Minigame') && x.card && !x.started);
   check('leaving practice comes back to the choice, nothing taken', m.card && !m.started && m.tokens === 50 && m.scenes.includes('Minigame'), JSON.stringify(m));
