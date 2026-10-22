@@ -21,8 +21,8 @@ const OBJECTIVE_Y = 25;
 
 /**
  * WHICH HUD.  'classic' is the purse as it always was.  'hunt' is the
- * stealth phase (game/patrol): no purse at all, only what you are doing --
- * get to Sharp's unseen.  'labeled' is after it, brought back outside the
+ * stealth phase (game/patrol): the purse as always, and under GOALS what
+ * you are doing -- the whole change of look, and how far along it is.  'labeled' is after it, brought back outside the
  * arcade once the look is changed: each slot with its name over it --
  * TOKENS, CASH and TIME LEFT (the time until the rent on 213 is due).
  */
@@ -96,7 +96,9 @@ export class TokenHud {
   private timePlate!: Phaser.GameObjects.Rectangle;
   private timeText!: Phaser.GameObjects.BitmapText;
   private objective!: Phaser.GameObjects.Container;
-  private objectiveText!: Phaser.GameObjects.BitmapText;
+  private objectiveText!: Phaser.GameObjects.Graphics;
+  /** What the hunt's line says now (redrawn only when it changes). */
+  private objectiveShown = '';
 
   /**
    * Cash on the left, tokens beside it: the two currencies side by side and
@@ -123,7 +125,7 @@ export class TokenHud {
     this.buildLife();
     // the hunt's own line, in place of the purse
     const op = scene.add.rectangle(0, 0, 10, 12, 0x1a0a0e, 0.8).setOrigin(0, 0).setStrokeStyle(1, 0xd04040);
-    this.objectiveText = text(scene, 5, 2, '', PALETTE.cream);
+    this.objectiveText = scene.add.graphics();
     this.objective = scene.add.container(4, 4, [op, this.objectiveText]).setDepth(950).setScrollFactor(0).setVisible(false);
     this.objective.setData('plate', op);
     this.applyMode();
@@ -137,7 +139,7 @@ export class TokenHud {
       // measuring one threw in the middle of the change of scene -- which
       // never finished, and left the screen black.
       if (!this.alive()) return;
-      if (hudMode() !== this.mode || (this.mode === 'hunt' && this.huntText() !== this.objectiveText.text)) this.applyMode();
+      if (hudMode() !== this.mode || (this.mode === 'hunt' && this.huntText() !== this.objectiveShown)) this.applyMode();
       if (st.cash !== this.lastCash) this.refreshCash(st.cash);
       this.refreshLife();
     });
@@ -179,15 +181,18 @@ export class TokenHud {
     this.mode = hudMode();
     const lab = this.mode === 'labeled';
     const hunt = this.mode === 'hunt';
-    this.container.setVisible(!hunt);
+    // (the purse, the tokens and the clock stay up in the hunt too)
+    this.container.setVisible(true);
     this.objective.setVisible(hunt);
     if (hunt) {
-      // Under GOALS and the pockets, on the right, two short lines -- not
-      // across the top-left where the purse goes.
-      this.objectiveText.setText(this.huntText());
-      this.objectiveText.setCenterAlign?.();
-      const w = this.objectiveText.width + 10;
-      const h = this.objectiveText.height + 5;
+      // Under GOALS and the pockets, on the right, two short lines in the
+      // small face -- not across the top-left where the purse goes.
+      const lines = this.huntText().split('\n');
+      this.objectiveShown = lines.join('\n');
+      const w = Math.max(...lines.map(tinyWidth)) + 8;
+      const g = this.objectiveText.clear();
+      lines.forEach((l, i) => tinyText(g, l, 4 + Math.floor((w - 8 - tinyWidth(l)) / 2), 3 + i * 7, i === 0 ? PALETTE.cream : PALETTE.gold));
+      const h = lines.length * 7 + 4;
       (this.objective.getData('plate') as Phaser.GameObjects.Rectangle).setSize(w, h);
       this.objective.setPosition(GAME_W - 4 - w, OBJECTIVE_Y);
     }

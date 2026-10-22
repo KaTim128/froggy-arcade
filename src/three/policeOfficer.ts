@@ -12,8 +12,8 @@
  *   holster, cuff case, baton and keepers, a radio on the chest with its
  *   coiled lead, a gold shield on the left breast and a name bar on the
  *   right, and boots with a shine on the toe.  Three of them, each a little
- *   different (see OFFICER_LOOKS): a cap or none, a moustache, a ponytail,
- *   a stab vest with POLICE across the back, glasses.
+ *   different, all three men (see OFFICER_LOOKS): a cap or none, a
+ *   moustache, a short beard, a stab vest with POLICE across the back, glasses.
  *
  *   THE FACE is painted onto the head and given depth where depth reads: a
  *   nose, ears, eyes that blink, brows that come down, and a jaw that drops
@@ -39,7 +39,8 @@ export interface OfficerLook {
   hair: number;
   cap: boolean;
   mustache: boolean;
-  ponytail: boolean;
+  /** A short, close-trimmed beard along the jaw. */
+  beard: boolean;
   vest: boolean;
   glasses: boolean;
   /** A little taller or shorter than 1.8 m. */
@@ -49,9 +50,9 @@ export interface OfficerLook {
 }
 
 export const OFFICER_LOOKS: OfficerLook[] = [
-  { name: 'HALE', skin: 0xd8a888, hair: 0x4a3426, cap: true, mustache: true, ponytail: false, vest: false, glasses: false, height: 1.84, build: 1.06 },
-  { name: 'OKAFOR', skin: 0x7a4e34, hair: 0x14100e, cap: false, mustache: false, ponytail: false, vest: true, glasses: false, height: 1.88, build: 1.1 },
-  { name: 'REYES', skin: 0xc08a66, hair: 0x2a1a12, cap: true, mustache: false, ponytail: true, vest: false, glasses: true, height: 1.72, build: 0.94 },
+  { name: 'HALE', skin: 0xd8a888, hair: 0x4a3426, cap: true, mustache: true, beard: false, vest: false, glasses: false, height: 1.84, build: 1.06 },
+  { name: 'OKAFOR', skin: 0x7a4e34, hair: 0x14100e, cap: false, mustache: false, beard: false, vest: true, glasses: false, height: 1.88, build: 1.1 },
+  { name: 'REYES', skin: 0xc08a66, hair: 0x2a1a12, cap: true, mustache: true, beard: true, vest: false, glasses: true, height: 1.8, build: 1.02 },
 ];
 
 /** What the officer is doing this frame: the scene decides, the rig shows it. */
@@ -288,7 +289,7 @@ function faceTex(look: OfficerLook): THREE.CanvasTexture {
       g.fillStyle = r() < 0.5 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.04)';
       g.fillRect(r() * 256, r() * 128, 1, 1);
     }
-    g.fillStyle = 'rgba(190,70,60,0.12)';
+    g.fillStyle = 'rgba(150,60,50,0.05)';
     g.beginPath();
     g.ellipse(cx - 18, 74, 10, 7, 0, 0, Math.PI * 2);
     g.ellipse(cx + 18, 74, 10, 7, 0, 0, Math.PI * 2);
@@ -300,12 +301,12 @@ function faceTex(look: OfficerLook): THREE.CanvasTexture {
     g.ellipse(cx + 13, 56, 9, 6, 0, 0, Math.PI * 2);
     g.fill();
     // the mouth line and the lips
-    g.fillStyle = hex(new THREE.Color(look.skin).multiplyScalar(0.55).lerp(new THREE.Color(0x902020), 0.25).getHex());
+    g.fillStyle = hex(new THREE.Color(look.skin).multiplyScalar(0.5).lerp(new THREE.Color(0x5a2a20), 0.2).getHex());
     g.fillRect(cx - 9, 89, 18, 3);
     g.fillStyle = 'rgba(0,0,0,0.35)';
     g.fillRect(cx - 8, 90, 16, 1);
-    // stubble on the jaw
-    if (!look.ponytail) {
+    // stubble on the jaw (every one of them a day past a shave)
+    {
       for (let k = 0; k < 500; k++) {
         const a = r() * Math.PI;
         const rr = 30 + r() * 12;
@@ -595,7 +596,7 @@ export class PoliceOfficer {
     this.head.add(this.jaw);
     this.jaw.position.set(0, -0.055, 0.02);
     const chin = mesh(new THREE.SphereGeometry(0.07, 18, 12, 0, Math.PI * 2, Math.PI * 0.45, Math.PI * 0.55), skin, this.jaw, 0, 0.01, 0.0);
-    chin.scale.set(1.05, 0.9, 1.1);
+    chin.scale.set(1.24, 0.92, 1.1);
     // the mouth: a dark oval, a line shut, open round when they shout
     const mouthIn = mesh(new THREE.CircleGeometry(0.019, 16), mouth, this.head, 0, -0.061, 0.1);
     mouthIn.rotation.x = -0.15;
@@ -615,7 +616,7 @@ export class PoliceOfficer {
       const lid = mesh(new THREE.SphereGeometry(0.0155, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), face, this.head, sx * 0.034, 0.012, 0.089);
       lid.rotation.x = -0.9;
       this.lids.push(lid);
-      const brow = mesh(new THREE.BoxGeometry(0.03, 0.007, 0.01), hair, this.head, sx * 0.036, 0.034, 0.1);
+      const brow = mesh(new THREE.BoxGeometry(0.034, 0.01, 0.012), hair, this.head, sx * 0.036, 0.035, 0.1);
       brow.rotation.z = sx * -0.12;
       this.brows.push(brow);
       if (look.glasses) {
@@ -627,15 +628,30 @@ export class PoliceOfficer {
       }
     }
     if (look.glasses) mesh(new THREE.BoxGeometry(0.018, 0.003, 0.003), metal, this.head, 0, 0.016, 0.107);
-    // hair: cropped close round the back and sides, a ponytail for one
+    // hair: cropped close round the back and sides
     const crop = mesh(new THREE.SphereGeometry(0.11, 22, 14, 0, Math.PI * 2, 0, Math.PI * 0.55), hair, this.head, 0, 0.012, -0.008);
     crop.scale.set(0.95, 1.1, 1.0);
     crop.rotation.x = -0.35;
-    if (look.ponytail) {
-      const bun = mesh(new THREE.SphereGeometry(0.04, 12, 10), hair, this.head, 0, -0.01, -0.11);
-      bun.scale.set(1, 0.9, 0.8);
-      const tail = mesh(new THREE.CapsuleGeometry(0.022, 0.12, 4, 8), hair, this.head, 0, -0.09, -0.12);
-      tail.rotation.x = 0.25;
+    // A MAN'S HEAD: the brow ridge and the bridge of the nose standing out a
+    // little (and the chin, above, broad), so the face has planes to catch
+    // the torchlight instead of reading as a painted ball
+    const ridge = mesh(new THREE.BoxGeometry(0.1, 0.014, 0.02), skin, this.head, 0, 0.03, 0.094);
+    ridge.rotation.x = -0.2;
+    const bridge = mesh(new THREE.BoxGeometry(0.014, 0.04, 0.014), skin, this.head, 0, 0.012, 0.104);
+    bridge.rotation.x = 0.25;
+    if (look.beard) {
+      // close-trimmed, along the jaw and round the chin
+      // (from below the mouth down, so the mouth still shows when he shouts)
+      const beard = mesh(new THREE.SphereGeometry(0.074, 18, 10, 0, Math.PI * 2, Math.PI * 0.58, Math.PI * 0.42), hair, this.jaw, 0, 0.0, 0.004);
+      beard.scale.set(1.36, 0.86, 0.9);
+      for (const sx of [-1, 1]) {
+        const burn = mesh(new THREE.BoxGeometry(0.012, 0.06, 0.03), hair, this.head, sx * 0.093, -0.02, 0.02);
+        burn.rotation.z = sx * 0.1;
+      }
+    }
+    if (look.mustache) {
+      const tash = mesh(new THREE.CapsuleGeometry(0.008, 0.04, 4, 8), hair, this.head, 0, -0.041, 0.106);
+      tash.rotation.z = Math.PI / 2;
     }
     if (look.cap) {
       const cap = new THREE.Group();

@@ -142,6 +142,8 @@ interface Cop {
   waitDoor: Door | null;
   waitT: number;
   stuckT: number;
+  /** Held up on furniture going straight at you: round by the nav graph for a moment. */
+  detourT: number;
   lastPos: { x: number; z: number };
   floorGoal: number;
   lastFloor: number;
@@ -570,7 +572,7 @@ export class PoliceEscape3D extends Phaser.Scene {
       const c: Cop = {
         i,
         model,
-        m: lobby ? { x: 0.9, z: 3.0, f: 0, well: false, seg: 'top', h: 0 } : { x: 0, z: s.z, f: s.f, well: false, seg: 'top', h: s.f * FH },
+        m: lobby ? { x: -0.2, z: 4.0, f: 0, well: false, seg: 'top', h: 0 } : { x: 0, z: s.z, f: s.f, well: false, seg: 'top', h: s.f * FH },
         yaw: lobby ? Math.PI : 0,
         mode: 'task',
         acts: [],
@@ -586,6 +588,7 @@ export class PoliceEscape3D extends Phaser.Scene {
         waitDoor: null,
         waitT: 0,
         stuckT: 0,
+        detourT: 0,
         lastPos: { x: 0, z: 0 },
         floorGoal: s.f,
         lastFloor: s.f,
@@ -842,10 +845,20 @@ export class PoliceEscape3D extends Phaser.Scene {
     if (sp) return this.enterSpot(sp);
     const d = this.nearestDoor();
     if (d) return this.useDoor(d);
+    if (this.atLobbyGap()) {
+      this.sayNow("The police are in the lobby. Up -- not down.", 1.6);
+      return;
+    }
     if (!this.me.well && this.me.z < 2.2 && Math.abs(this.me.x + 1.6) < 1.0) {
       audio.sfx('lift_dead', 0.8);
       this.say('Dead. Nothing lights up.', 1.8);
     }
+  }
+
+  /** At the foot of the stairs, by the doorway Froggy broke through. */
+  private atLobbyGap(): boolean {
+    const m = this.me;
+    return m.well && m.f === 0 && m.seg === 'top' && m.z > WZ1 - 0.9 && m.x > SDOOR.x0 - 0.3 && m.x < SDOOR.x1 + 0.3;
   }
 
   private useDoor(d: Door): void {
@@ -866,7 +879,23 @@ export class PoliceEscape3D extends Phaser.Scene {
   private enterSpot(sp: HideSpot): void {
     // somebody is searching it right now
     if (this.cops.some((c) => c.acts[0]?.k === 'inspect' && (c.acts[0] as { spot: HideSpot }).spot === sp && c.t > 0)) return;
+    // SEEN GOING IN: whoever had you in sight as you got in knows exactly
+    // where you are -- straight over, open it up, and that is you caught
+    const saw = this.phase === 'play' ? this.cops.filter((c) => this.seesYouNow(c)) : [];
     this.hide = { spot: sp, k: 0, leaving: false, peek: false, peekK: 0, lookYaw: 0, lookPitch: 0, since: 0 };
+    if (saw.length && sp.node) {
+      for (const c of saw) {
+        c.mode = 'lost';
+        c.inLobby = false;
+        c.sus = 1;
+        c.t = 0;
+        c.path = [];
+        c.acts = [{ k: 'go', n: sp.node, pace: CHASE * 0.9 }, { k: 'inspect', spot: sp }];
+      }
+      this.lines = [];
+      this.sfxAt('police_shout', this.eyeOf(saw[0].m, 1.7), 1);
+      this.say(sp.kind === 'bed' ? 'I SAW YOU GET UNDER THERE!' : 'I SAW YOU GO IN THERE!', 1.8, true);
+    }
     this.crouch = false;
     if (sp.kind === 'wardrobe') {
       sp.setOpen(1);
@@ -1254,6 +1283,13 @@ export class PoliceEscape3D extends Phaser.Scene {
     // stuck on something: skip ahead, and if that does not help, start over
     if (moved < pace * dt * 0.2) {
       c.stuckT += dt;
+      // a shuffle to one side first: round the corner of whatever it is
+      if (c.stuckT > 0.6) {
+        const ux = dx / Math.hypot(dx, dz);
+        const uz = dz / Math.hypot(dx, dz);
+        const side = c.i % 2 ? 1 : -1;
+        this.step(c.m, c.m.x - uz * side * pace * dt, c.m.z + ux * side * pace * dt, R_COP, 'cop', false);
+      }
       if (c.stuckT > 1.5) {
         c.stuckT = 0;
         c.pathI++;
@@ -1367,6 +1403,28 @@ export class PoliceEscape3D extends Phaser.Scene {
     if (c.sus >= 1) this.spotted(c);
   }
 
+  /**
+   * Does this officer have you in sight right now -- after you, a moment
+   * ago (`lostT`), or simply looking your way with nothing in between?
+   * (For going into a hiding place in front of him: see `enterSpot`.)
+   */
+  private seesYouNow(c: Cop): boolean {
+    if (c.inLobby || c.mode === 'arrest' || c.mode === 'scripted') return false;
+    const me = this.me;
+    if (this.levelOf(c.m) !== this.levelOf(me) || Math.abs(c.m.h - me.h) > 1.7) return false;
+    const target = this.eyeOf(me, this.eyeNow);
+    const ok = this.sightLine(c, target.x, target.z, target.y, this.crouch);
+    if (!ok) return false;
+    // after you and only just out of sight, or still on you: he saw that
+    if (c.mode === 'chase' || c.mode === 'alert') return true;
+    const eye = this.eyeOf(c.m, 1.7);
+    const v = target.clone().sub(eye);
+    const d = Math.hypot(v.x, v.z);
+    if (d > (this.crouch ? SIGHT_LOW : SIGHT) + (this.inBeam(c, target) ? 3 : 0)) return false;
+    const ang = Math.abs(wrap(Math.atan2(v.x, v.z) - (c.yaw + c.st.aimYaw * 0.65)));
+    return ang <= FOV_H || d < 1.2;
+  }
+
   private spotted(c: Cop): void {
     c.mode = 'alert';
     c.alertT = 0;
@@ -1404,15 +1462,27 @@ export class PoliceEscape3D extends Phaser.Scene {
       c.lkp = { x: me.x, z: me.z, f: me.f, well: me.well, h: me.h };
       c.lostT = 0;
       const sameZone = c.m.well === me.well && (c.m.well || c.m.f === me.f);
-      if (sameZone && !c.m.well) {
+      c.detourT = Math.max(0, c.detourT - dt);
+      if (sameZone && !c.m.well && c.detourT <= 0) {
         const dx = me.x - c.m.x;
         const dz = me.z - c.m.z;
         const d = Math.hypot(dx, dz);
         const s = Math.min(d, CHASE * dt);
         const before = { x: c.m.x, z: c.m.z };
         this.step(c.m, c.m.x + (dx / d) * s, c.m.z + (dz / d) * s, R_COP, 'cop', true);
-        c.speedNow = Math.hypot(c.m.x - before.x, c.m.z - before.z) / Math.max(dt, 1e-4);
+        const moved = Math.hypot(c.m.x - before.x, c.m.z - before.z);
+        c.speedNow = moved / Math.max(dt, 1e-4);
         this.faceToward(c, me.x, me.z, dt, 10);
+        // pressed up against a bed or a wardrobe between you: go round it
+        // by the way through the flat instead of running on the spot
+        if (d > CATCH && moved < s * 0.25) {
+          c.stuckT += dt;
+          if (c.stuckT > 0.45) {
+            c.stuckT = 0;
+            c.detourT = 1.6;
+            c.path = [];
+          }
+        } else c.stuckT = Math.max(0, c.stuckT - dt);
       } else {
         const goal = this.nearestNode(me);
         if (goal && (c.pathTo !== goal || this.clock % 0.5 < dt)) c.path = [];
@@ -1876,6 +1946,7 @@ export class PoliceEscape3D extends Phaser.Scene {
     this.phaseT = 0;
     this.scareT = 0;
     this.catcher = c;
+    this.arrestEye = null;
     this.lines = [];
     this.prompt = '';
     c.mode = 'arrest';
@@ -1893,6 +1964,10 @@ export class PoliceEscape3D extends Phaser.Scene {
    * and the cuffs come up -- a hard cold light under his face, the picture
    * jolting, the click -- and then the black.
    */
+  /** Where you stood when he got you, and how far off he came from. */
+  private arrestEye: THREE.Vector3 | null = null;
+  private arrestFrom = 2.8;
+
   private arrestFrame(dt: number): void {
     const c = this.catcher;
     const st = this.stage!;
@@ -1908,17 +1983,31 @@ export class PoliceEscape3D extends Phaser.Scene {
       this.hide = null;
       if (sp.kind === 'wardrobe' || sp.kind === 'curtain') sp.setOpen(1);
     }
-    const eye = cam.position.clone();
-    const toCop = new THREE.Vector3(c.m.x - eye.x, 0, c.m.z - eye.z);
-    if (t < dt * 1.5) {
+    // Where you stand is fixed the first frame and kept: the camera is moved
+    // back and shaken below, and reading it again each frame walked the
+    // picture (and him with it) backwards through the walls and out of the
+    // building in under two seconds.
+    if (!this.arrestEye || t < dt * 1.5) {
+      this.arrestEye = cam.position.clone();
+      const eye0 = this.arrestEye;
+      const toCop = new THREE.Vector3(c.m.x - eye0.x, 0, c.m.z - eye0.z);
       // he comes from in front of you: put him on the line you are looking down
       const fwd = toCop.lengthSq() > 0.01 ? toCop.normalize() : new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
       (c as Cop & { line?: THREE.Vector3 }).line = fwd.clone();
+      // ...from no further off than the room allows: never through a wall
+      const segs = this.segsCache(this.levelOf(this.me), true);
+      let room = 2.8;
+      for (const sg of segs) {
+        const hit = segHit(eye0.x, eye0.z, eye0.x + fwd.x * 2.8, eye0.z + fwd.z * 2.8, sg);
+        if (hit !== null) room = Math.min(room, hit * 2.8 - 0.3);
+      }
+      this.arrestFrom = Math.max(0.95, room);
     }
+    const eye = this.arrestEye.clone();
     const line = (c as Cop & { line?: THREE.Vector3 }).line ?? new THREE.Vector3(0, 0, -1);
     const rush = 0.38;
     const k = clamp(t / rush, 0, 1);
-    const dist = 2.8 + (0.82 - 2.8) * (1 - Math.pow(1 - k, 3));
+    const dist = this.arrestFrom + (0.82 - this.arrestFrom) * (1 - Math.pow(1 - k, 3));
     const floorY = this.levelOf(this.me) * FH + (this.me.well ? 0 : 0);
     const baseY = this.me.well ? this.me.h : floorY;
     c.m.x = eye.x + line.x * dist;
@@ -2010,6 +2099,7 @@ export class PoliceEscape3D extends Phaser.Scene {
         const d = this.nearestDoor();
         if (sp) this.prompt = tap + this.spotVerb(sp);
         else if (d) this.prompt = tap + (d.locked ? 'TRY THE DOOR' : d.want > 0.5 ? 'CLOSE THE DOOR' : 'OPEN THE DOOR');
+        else if (this.atLobbyGap()) this.prompt = tap + 'THE LOBBY';
       }
     }
     froggyLayer.paint((ctx) => {

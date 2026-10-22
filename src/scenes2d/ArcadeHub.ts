@@ -245,6 +245,8 @@ export class ArcadeHub extends Phaser.Scene {
   /** Where each machine is played from, and what of the floor is solid. */
   private spots = new Map<Cabinet, Spot>();
   private solids: Box[] = [];
+  /** The counter, staff-side: walked round, never through. */
+  private counterSolid: Box = { x: 0, y: 0, w: 0, h: 0 };
   private walker!: Walker;
   private prompt!: Phaser.GameObjects.BitmapText;
   private promptPlate!: Phaser.GameObjects.Rectangle;
@@ -364,6 +366,7 @@ export class ArcadeHub extends Phaser.Scene {
     this.spots = new Map(this.cabinets.map((c) => [c, machineSpot(c.def.x, c.def.y, CAB_W, CAB_FOOT)]));
     this.solids = [...this.spots.values()].map((s) => s.solid!);
     const counterBox: Box = { x: COUNTER.x - COUNTER_EDGE + 3, y: 0, w: COUNTER.w + 2 * COUNTER_EDGE - 6, h: COUNTER_STAND };
+    this.counterSolid = counterBox;
     this.walker = new Walker(() => this.bounds, () => [...this.solids, counterBox]);
 
     // A cabinet advertises itself as clickable — cost badge, affordable
@@ -472,7 +475,8 @@ export class ArcadeHub extends Phaser.Scene {
       scene: this,
       player: () => this.player,
       bounds: () => this.bounds,
-      solids: () => this.solids,
+      // (round the counter too, not through it)
+      solids: () => [...this.solids, this.counterSolid],
       machines: this.solids.map((b) => ({ x: b.x + b.w / 2, y: b.y + b.h, w: b.w, depth: b.h })),
       door: { x: GAME_W / 2, y: ROOM.bottom - 6 },
       lock: (on) => (this.locked = on),

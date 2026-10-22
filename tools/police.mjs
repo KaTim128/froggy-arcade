@@ -157,10 +157,11 @@ try {
   r = await P(page, 'walkTo', -0.95, 0.3);
   r = await P(page, 'walkTo', 0.9, 0.85);
   check('and back down to G', r.level === 0 && r.h === 0, JSON.stringify(r));
-  await P(page, 'useDoor', 'stair-0');
-  await sleep(800);
+  // the lobby door: broken down by Froggy on the night, open -- and still no way back down into the lobby
   const doors = await P(page, 'doors');
-  check('the lobby door stays shut to you', doors.find((d) => d.id === 'stair-0').k < 0.05);
+  check('the lobby door is off its hinges', doors.find((d) => d.id === 'stair-0').k > 0.95);
+  r = await P(page, 'walkTo', 0.9, 2.8);
+  check('and you cannot go out through it into the lobby', r.well === true && r.level === 0 && r.z < 1.6, JSON.stringify(r));
 
   const rooms = await P(page, 'rooms');
   const flats = rooms.filter((x) => x.special === 'none');
@@ -324,6 +325,36 @@ try {
   check('RESPAWN starts it over: you at the bottom of the stairs, a new building', back && s2.level === 0 && s2.well && s2.seed !== seedA, `seed ${seedA} -> ${s2.seed}`);
   check('and the police back where they began', s2.cops?.every((c) => c.mode === 'task'));
   await page.close();
+
+  // ------------------------------------------------------------- 7b. seen going in
+  console.log('\npolice  seen getting into a hiding place');
+  {
+    const page3 = await newPage('?intro=1&charity=1&key=1&scene=PoliceEscape3D');
+    await sleep(3000);
+    await P(page3, 'freeze', true);
+    const rooms3 = await P(page3, 'rooms');
+    // (a bed or a wardrobe, out in the room where he can see it: a bathroom
+    // door is round a corner from the middle of the flat)
+    const rm = rooms3.find((x) => x.open && x.special === 'none' && x.spots.some((s) => s.kind === 'bed' || s.kind === 'wardrobe'));
+    const sp = rm.spots.find((s) => s.kind === 'bed' || s.kind === 'wardrobe');
+    await P(page3, 'useDoor', `room-${rm.id}`);
+    // him in the middle of the flat, looking straight at where you get in
+    const cx = (rm.x0 + rm.x1) / 2;
+    const cz = (rm.z0 + rm.z1) / 2;
+    await P(page3, 'warp', sp.ax, sp.az, rm.f, false);
+    await P(page3, 'putCop', 0, cx, cz, rm.f, Math.atan2(sp.ax - cx, sp.az - cz));
+    await P(page3, 'copHold', 0, 30);
+    await P(page3, 'hideIn', sp.id);
+    await P(page3, 'freeze', false);
+    let ph = '';
+    for (let i = 0; i < 80 && ph !== 'caught'; i++) {
+      await sleep(300);
+      ph = (await S(page3).catch(() => ({})))?.phase ?? '';
+      if (!(await scenes(page3)).includes('PoliceEscape3D')) break;
+    }
+    check(`he saw you get into the ${sp.kind}: he opens it and you are caught`, ph === 'caught' || (await scenes(page3)).includes('DeathScreen'), ph);
+    await page3.close();
+  }
 
   // ------------------------------------------------------------- 8 & 10. 612, and after
   console.log('\npolice  612, and the following day');
