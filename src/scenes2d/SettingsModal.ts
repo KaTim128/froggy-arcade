@@ -27,6 +27,9 @@ import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { isTouch } from '../core/device';
 import { jumpToScene, leaveToMenu, pausedScene, resumePause } from '../core/pause';
 import { ROOM_MONEY } from './PrizeExchange';
+import { STARTING_TOKENS } from './IntroCutscene';
+import { ledger } from '../core/ledger';
+import { tinyText } from '../ui/tinyText';
 import { roomControls, type ControlRow } from '../ui/controlsList';
 import type { MinigameScene } from './MinigameScene';
 
@@ -318,6 +321,18 @@ export class SettingsModal extends Phaser.Scene {
   private renderTest(): void {
     const rows: Array<[string, string, () => void]> = [
       [
+        'NEW GAME',
+        'AFTER THE INTRO, NOTHING DONE',
+        () => {
+          // the run wiped (the profile, its badges and the settings kept),
+          // and stood outside the arcade with the intro's thirty tokens
+          store.resetRun();
+          if (ledger.balance() === 0) ledger.credit(STARTING_TOKENS, 'seed');
+          store.flush();
+          jumpToScene('ExteriorDay', {});
+        },
+      ],
+      [
         'H&S KEY SCENE',
         'BASEMENT: KEY, TURN ROUND',
         () => {
@@ -372,7 +387,7 @@ export class SettingsModal extends Phaser.Scene {
       ],
       [
         'THE POLICE',
-        'UP SIX FLOORS TO 612',
+        'JANITOR ROOM SURVIVED: UP TO 612',
         () => {
           // the janitor room survived, the police in the building
           store.patch({ seenIntro: true, charityUsed: true, hasKey: true, froggyGone: true, route: 'normal', hideRoom: 0, timeOfDay: 'midnight', reachedHotel: true, checkedIn: true, hotelNight: true, hotelAfter: 'police' });
@@ -413,12 +428,65 @@ export class SettingsModal extends Phaser.Scene {
         },
       ],
     ];
-    rows.forEach(([label, what, go], i) => {
+    // A SCROLLING LIST: six rows at a time, a whole row per step (so a
+    // button half out of view is never live under the tabs or RESUME) --
+    // the wheel, a drag, or the arrows down the right.
+    const SHOWN = 6;
+    const most = Math.max(0, rows.length - SHOWN);
+    this.testTop = Phaser.Math.Clamp(this.testTop, 0, most);
+    const g = this.add.graphics();
+    this.body.add(g);
+    rows.slice(this.testTop, this.testTop + SHOWN).forEach(([label, what, go], i) => {
       const y = 58 + i * 16;
       this.body.add(button(this, 92, y, label, go, { width: 112, height: 14 }));
-      this.body.add(text(this, 152, y - 3, what, PALETTE.ash));
+      // the small face, so the longest line stays inside the panel
+      const max = Math.floor((282 - 152) / 4);
+      tinyText(g, what.length > max ? what.slice(0, max) : what, 152, y - 2, PALETTE.ash);
     });
+    if (!most) return;
+    const scroll = (d: number): void => {
+      const next = Phaser.Math.Clamp(this.testTop + d, 0, most);
+      if (next === this.testTop) return;
+      this.testTop = next;
+      this.renderBody();
+    };
+    this.body.add(button(this, 291, 56, '^', () => scroll(-1), { width: 12, height: 12, disabled: this.testTop === 0 }));
+    this.body.add(button(this, 291, 136, 'v', () => scroll(1), { width: 12, height: 12, disabled: this.testTop === most }));
+    // the bar between them: where in the list you are
+    const trackY = 64;
+    const trackH = 64;
+    g.fillStyle(PALETTE.slate, 1).fillRect(290, trackY, 2, trackH);
+    const thumbH = Math.max(8, (trackH * SHOWN) / rows.length);
+    g.fillStyle(PALETTE.neon, 1).fillRect(289, trackY + ((trackH - thumbH) * this.testTop) / most, 4, thumbH);
+    // the wheel, and a drag up or down the list
+    const wheel = (_p: unknown, _o: unknown, _dx: number, dy: number): void => {
+      if (this.tab === 'test') scroll(dy > 0 ? 1 : -1);
+    };
+    if (this.testWheel) this.input.off('wheel', this.testWheel);
+    this.testWheel = wheel;
+    this.input.on('wheel', wheel);
+    const zone = this.add.zone(30, 50, 254, 98).setOrigin(0, 0).setInteractive();
+    this.body.addAt(zone, 0);
+    // (the drag outlives the redraw it causes: where it started is kept here)
+    zone.on('pointerdown', (p: Phaser.Input.Pointer) => (this.dragFrom = p.y));
+    if (this.testDrag) this.input.off('pointermove', this.testDrag);
+    this.testDrag = (p: Phaser.Input.Pointer) => {
+      if (this.dragFrom === null || !p.isDown || this.tab !== 'test') return;
+      if (Math.abs(p.y - this.dragFrom) >= 14) {
+        const d = p.y < this.dragFrom ? 1 : -1;
+        this.dragFrom = p.y;
+        scroll(d);
+      }
+    };
+    this.input.on('pointermove', this.testDrag);
+    this.input.once('pointerup', () => (this.dragFrom = null));
   }
+
+  /** How far down the test list is scrolled, in rows (kept while the menu is up). */
+  private testTop = 0;
+  private testWheel: ((_p: unknown, _o: unknown, _dx: number, dy: number) => void) | null = null;
+  private testDrag: ((p: Phaser.Input.Pointer) => void) | null = null;
+  private dragFrom: number | null = null;
 
   private renderAudio(): void {
     const rows: Array<[string, 'master' | 'music' | 'sfx']> = [
