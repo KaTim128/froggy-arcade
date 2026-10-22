@@ -526,7 +526,7 @@ export class PoliceEscape3D extends Phaser.Scene {
     S.add(st.camera);
     // a little light of your own: up and behind the eye, so a door or a
     // wardrobe's inside a hand's width away is not burned white by it
-    this.fill = new THREE.PointLight(0xffe8d0, 0.7, 4, 2);
+    this.fill = new THREE.PointLight(0xffe8d0, 0.7, 6, 1.6);
     this.fill.position.set(0, 0.35, 0.6);
     st.camera.add(this.fill);
     this.b = new PoliceBuilding(S, { seed: this.seed });

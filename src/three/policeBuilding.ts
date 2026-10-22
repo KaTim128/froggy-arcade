@@ -19,7 +19,7 @@
  *   emulsion over a walnut dado, a patterned carpet, walnut doors with
  *   their numbers on brass plates, steel wall lights, ceiling fittings.
  *
- *   THE FLATS are 3.6 m by 4.6 m.  Which ones are open is decided at the
+ *   THE FLATS are 4.6 m by 6 m.  Which ones are open is decided at the
  *   start of every attempt (seeded, so an attempt keeps its building until it
  *   ends): about a third of them, never fewer than three a floor.  Each open
  *   one is furnished from one of three plans -- a bathroom beside the door
@@ -101,9 +101,10 @@ export const SDOOR = { x0: 0.45, x1: 1.35, z: LANDING };
 export const CH = 1.25;
 export const AH = 3;
 export const AZ = 4.6;
-export const SLOT = 3.6;
+/** A flat's width along the corridor, and its depth into the building. */
+export const SLOT = 4.6;
 export const SLOTS = 6;
-export const RD = 4.6;
+export const RD = 6.0;
 export const END_Z = AZ + SLOT * SLOTS;
 export const OUTER = CH + RD;
 export const DOOR_W = 0.9;
@@ -1134,7 +1135,9 @@ export class PoliceBuilding {
 
     // ---- an open flat: walls, floor, ceiling, window, and one of three plans
     const tints = [0xe8e0d0, 0xdfe4dc, 0xe6dccc, 0xd8dce4, 0xeae2d8, 0xd8ccc0];
-    const wallMat = new THREE.MeshLambertMaterial({ map: tex(plasterTex(tints[Math.floor(r() * tints.length)], id), 2, 1) });
+    // (a faint glow of their own: the flats are lit only from the corridor and
+    // by your own light, and a wall turned away from both read as a black hole)
+    const wallMat = new THREE.MeshLambertMaterial({ map: tex(plasterTex(tints[Math.floor(r() * tints.length)], id), 2, 1), emissive: 0x1e1b16 });
     const woodFloor = r() < 0.55;
     const floorMat = woodFloor
       ? new THREE.MeshLambertMaterial({ map: tex(boardsTex([0x9a6a40, 0xb08050, 0x7a5a3a][Math.floor(r() * 3)], id + 1), 2, 2) })
@@ -2277,118 +2280,130 @@ class RoomCtx {
   }
 
   // ---------------------------------------------------- the three plans
+  //
+  // (Laid out for a flat RD deep and SLOT wide -- 6 m by 4.6 m: the furniture
+  // its real size and against its walls, so there is floor between it, and
+  // room to get round the bed, into the wardrobe, behind the bathroom door.)
 
   /**
-   * A: the bathroom beside the door (a 0..2.2, b 1.55..3.6), the bedroom
+   * A: the bathroom beside the door (a 0..2.4, b 1.75..SLOT), the bedroom
    * beyond.  With a bath: the curtain is the place to hide.  Without: a
    * toilet and basin, and the space behind the opened door.
    */
   planA(withBath: boolean): void {
     const r = this.r;
-    this.tiles(0, 2.2, 1.55, 3.6);
-    // the partition: along b = 1.55 with the bath door at a 0.75..1.55, and along a = 2.2
-    this.wall(0, 1.55, 0.75, 1.55);
-    this.wall(1.55 + 0.0, 1.55, 2.2, 1.55);
-    this.wall(2.2, 1.55, 2.2, SLOT);
+    this.tiles(0, 2.4, 1.75, SLOT);
+    // the partition: along b = 1.75 with the bath door at a 0.87..1.65, and along a = 2.4
+    this.wall(0, 1.75, 0.86, 1.75);
+    this.wall(1.65, 1.75, 2.4, 1.75);
+    this.wall(2.4, 1.75, 2.4, SLOT);
     const above = new THREE.Mesh(new THREE.BoxGeometry(0.8, CEIL - 2.1, 0.08), this.wallMat);
-    above.position.set(1.15, 2.1 + (CEIL - 2.1) / 2, this.B(1.55));
+    above.position.set(1.26, 2.1 + (CEIL - 2.1) / 2, this.B(1.75));
     this.g.add(above);
-    this.pt('p1', 2.0, 0.9);
-    this.pt('c', 3.4, 1.2);
-    this.pt('bo', 1.15, 1.05);
-    this.pt('bi', 1.15, 2.05);
+    this.pt('p1', 2.6, 1.0);
+    this.pt('c', 4.2, 1.6);
+    this.pt('bo', 1.25, 1.25);
+    this.pt('bi', 1.25, 2.45);
     this.link('in', 'p1');
     this.link('p1', 'c');
     this.link('p1', 'bo');
     this.link('in', 'bo');
     let door: Door;
     if (withBath) {
-      door = this.bathDoor(1.55, 1.55, Math.PI, Math.PI / 2, null, 'bi');
-      this.bath(0.05, 1.75, 2.85, 3.58, 'b0', 'bi');
-      this.toilet(1.92, 2.15, -Math.PI / 2);
-      this.sink(0.3, 1.85, Math.PI / 2);
+      door = this.bathDoor(1.65, 1.75, Math.PI, Math.PI / 2, null, 'bi');
+      this.bath(0.05, 1.75, SLOT - 0.75, SLOT - 0.02, 'b0', 'bi');
+      this.toilet(2.1, 2.35, -Math.PI / 2);
+      this.sink(0.3, 2.05, Math.PI / 2);
     } else {
-      // the pocket behind the door: between the opened leaf (a 1.55) and the wall (a 2.2)
-      door = this.bathDoor(1.55, 1.55, Math.PI, Math.PI / 2, { a: 1.9, b: 1.98, peekA: 1.64, peekB: 1.62, lookA: 1.0, lookB: -1.6, fromA: 1.15, fromB: 2.2 }, 'bi');
-      this.toilet(0.35, 3.25, Math.PI / 2);
-      this.sink(0.3, 1.88, Math.PI / 2);
-      if (r() < 0.6) this.plant(1.85, 3.3);
+      // the pocket behind the door: between the opened leaf (a 1.65) and the wall (a 2.4)
+      door = this.bathDoor(1.65, 1.75, Math.PI, Math.PI / 2, { a: 2.0, b: 2.18, peekA: 1.74, peekB: 1.82, lookA: 1.1, lookB: -1.4, fromA: 1.25, fromB: 2.4 }, 'bi');
+      this.toilet(0.35, SLOT - 0.35, Math.PI / 2);
+      this.sink(0.3, 2.08, Math.PI / 2);
+      if (r() < 0.6) this.plant(2.05, SLOT - 0.3);
     }
     this.link('bo', 'bi', door);
     const under = r() < 0.85;
-    this.bed(2.65, 1.7, 3.2, false, under, 'c');
-    this.nightstand(4.35, 3.42);
-    if (r() < 0.75) this.wardrobe(3.5, 0.31, 0, 'c');
-    else this.desk(3.5, 0.3, 0);
-    if (r() < 0.6) this.desk(1.85, 0.27, 0);
-    this.window(0.5, 1.6);
-    this.rug(3.4, 1.15, 1.2, 0.7);
-    this.picture(3.6, 0, 'b1');
+    this.bed(RD - 1.95, 2.3, 3.85, false, under, 'c');
+    this.nightstand(RD - 0.25, 4.1);
+    if (r() < 0.75) this.wardrobe(3.9, 0.31, 0, 'c');
+    else this.desk(3.9, 0.3, 0);
+    if (r() < 0.6) this.desk(2.6, 0.27, 0);
+    if (r() < 0.6) this.armchair(3.0, 3.9, Math.PI);
+    if (r() < 0.6) this.plant(RD - 0.3, 0.3);
+    this.window(0.6, 1.9);
+    this.rug(4.2, 1.5, 1.6, 0.9);
+    this.picture(4.4, 0, 'b1');
   }
 
-  /** B: a separate WC off the entry (a 0..1.6, b 2.3..3.6) and a bedroom. */
+  /** B: a separate WC off the entry (a 0..1.8, b SLOT-1.5..SLOT) and a bedroom. */
   planB(): void {
     const r = this.r;
-    this.tiles(0, 1.6, 2.3, 3.6);
-    this.wall(0, 2.3, 0.5, 2.3);
-    this.wall(1.25, 2.3, 1.6, 2.3);
-    this.wall(1.6, 2.3, 1.6, SLOT);
-    const above = new THREE.Mesh(new THREE.BoxGeometry(0.75, CEIL - 2.1, 0.08), this.wallMat);
-    above.position.set(0.875, 2.1 + (CEIL - 2.1) / 2, this.B(2.3));
+    const wb = SLOT - 1.5;
+    this.tiles(0, 1.8, wb, SLOT);
+    this.wall(0, wb, 0.55, wb);
+    this.wall(1.33, wb, 1.8, wb);
+    this.wall(1.8, wb, 1.8, SLOT);
+    const above = new THREE.Mesh(new THREE.BoxGeometry(0.78, CEIL - 2.1, 0.08), this.wallMat);
+    above.position.set(0.94, 2.1 + (CEIL - 2.1) / 2, this.B(wb));
     this.g.add(above);
-    this.pt('p1', 2.0, 1.9);
-    this.pt('c', 3.2, 2.3);
-    this.pt('wo', 0.88, 1.85);
-    this.pt('wi', 0.9, 2.78);
+    this.pt('p1', 2.6, 2.3);
+    this.pt('c', 4.0, 2.8);
+    this.pt('wo', 0.95, wb - 0.45);
+    this.pt('wi', 0.95, wb + 0.48);
     this.link('in', 'p1');
     this.link('p1', 'c');
     this.link('in', 'wo');
     this.link('wo', 'p1');
     // the WC door hinged at its wall end: open, it leaves a pocket against the corridor wall
-    const door = this.bathDoor(0.5, 2.3, 0, Math.PI / 2, { a: 0.24, b: 2.68, peekA: 0.42, peekB: 2.36, lookA: 1.4, lookB: 0.2, fromA: 0.95, fromB: 2.78 }, 'wi');
+    const door = this.bathDoor(0.55, wb, 0, Math.PI / 2, { a: 0.29, b: wb + 0.38, peekA: 0.47, peekB: wb + 0.06, lookA: 1.45, lookB: wb - 2.1, fromA: 1.0, fromB: wb + 0.48 }, 'wi');
     this.link('wo', 'wi', door);
-    this.toilet(1.27, 3.3, Math.PI);
-    this.sink(0.78, 3.38, Math.PI, false);
+    this.toilet(1.4, SLOT - 0.3, Math.PI);
+    this.sink(0.85, SLOT - 0.22, Math.PI, false);
     const under = r() < 0.85;
-    this.bed(2.6, 0.18, 1.78, true, under, 'c');
-    this.nightstand(4.35, 1.98);
-    this.wardrobe(3.0, 3.29, Math.PI, 'c');
-    if (r() < 0.7) this.armchair(4.2, 2.85, -Math.PI / 2);
-    this.desk(1.5, 0.27, 0);
-    this.window(2.2, 3.2);
-    this.picture(3.2, 0, 'b0');
+    this.bed(RD - 2.0, 0.18, 1.78, true, under, 'c');
+    this.nightstand(RD - 0.25, 1.98);
+    this.wardrobe(3.6, SLOT - 0.31, Math.PI, 'c');
+    if (r() < 0.7) this.armchair(RD - 0.4, 3.0, -Math.PI / 2);
+    this.desk(2.2, 0.27, 0);
+    if (r() < 0.6) this.plant(RD - 0.3, SLOT - 0.3);
+    this.rug(3.6, 1.0, 1.6, 0.9);
+    this.window(2.4, 3.6);
+    this.picture(3.0, 0, 'b0');
   }
 
-  /** C: a studio, its bathroom in the far corner (a 3.0..4.6, b 2.0..3.6) with a bath. */
+  /** C: a studio, its bathroom in the far corner (a RD-1.6..RD, b SLOT-1.6..SLOT) with a bath. */
   planC(): void {
     const r = this.r;
-    this.tiles(3.0, RD, 2.0, SLOT);
-    this.wall(3.0, 2.0, 3.1, 2.0);
-    this.wall(3.85, 2.0, RD, 2.0);
-    this.wall(3.0, 2.0, 3.0, SLOT);
-    const above = new THREE.Mesh(new THREE.BoxGeometry(0.75, CEIL - 2.1, 0.08), this.wallMat);
-    above.position.set(3.475, 2.1 + (CEIL - 2.1) / 2, this.B(2.0));
+    const ba = RD - 1.6;
+    const bb = SLOT - 1.6;
+    this.tiles(ba, RD, bb, SLOT);
+    this.wall(ba, bb, ba + 0.1, bb);
+    this.wall(ba + 0.88, bb, RD, bb);
+    this.wall(ba, bb, ba, SLOT);
+    const above = new THREE.Mesh(new THREE.BoxGeometry(0.78, CEIL - 2.1, 0.08), this.wallMat);
+    above.position.set(ba + 0.49, 2.1 + (CEIL - 2.1) / 2, this.B(bb));
     this.g.add(above);
-    this.pt('c', 2.4, 1.0);
-    this.pt('bo', 3.47, 1.5);
-    this.pt('bi', 3.47, 2.5);
+    this.pt('c', 3.0, 1.5);
+    this.pt('bo', ba + 0.47, bb - 0.5);
+    this.pt('bi', ba + 0.47, bb + 0.5);
     this.link('in', 'c');
     this.link('c', 'bo');
-    const door = this.bathDoor(3.1, 2.0, 0, Math.PI / 2, null, 'bi');
+    const door = this.bathDoor(ba + 0.1, bb, 0, Math.PI / 2, null, 'bi');
     this.link('bo', 'bi', door);
-    this.bath(3.9, 4.58, 2.05, 3.58, 'a0', 'bi');
-    this.toilet(3.35, 3.3, Math.PI);
+    this.bath(RD - 0.7, RD - 0.02, bb + 0.05, SLOT - 0.02, 'a0', 'bi');
+    this.toilet(ba + 0.35, SLOT - 0.3, Math.PI);
     const under = r() < 0.8;
-    this.bedAlong(0.9, 2.85, 2.05, under, 'c');
-    this.wardrobe(4.29, 0.8, -Math.PI / 2, 'c');
-    this.desk(0.27, 1.65, Math.PI / 2);
-    if (r() < 0.7) this.plant(2.85, 0.2);
-    this.rug(2.0, 1.0, 1.4, 0.8);
-    this.window(1.42, 1.98);
-    this.picture(1.8, 0, 'b1');
+    this.bedAlong(1.2, 3.15, SLOT - 1.55, under, 'c');
+    this.wardrobe(RD - 0.31, 0.9, -Math.PI / 2, 'c');
+    this.desk(0.27, 2.0, Math.PI / 2);
+    if (r() < 0.7) this.plant(3.4, 0.25);
+    if (r() < 0.6) this.armchair(2.0, 0.5, 0);
+    this.rug(2.6, 1.6, 1.8, 1.0);
+    this.window(1.4, 2.4);
+    this.picture(2.2, 0, 'b1');
   }
 
-  /** A bed against the b = 3.6 wall, head at the outside end, a0..a1 along it, open toward -b. */
+  /** A bed against the b = SLOT wall, head at the outside end, a0..a1 along it, open toward -b. */
   private bedAlong(a0: number, a1: number, b0: number, under: boolean, navKey: string): void {
     // (built as a bed turned through 90 degrees: reuse `bed` by thinking in a/b swapped)
     const r = this.r;
