@@ -47,6 +47,7 @@ import { button, centerText, fadeIn, fadeToScene, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { TokenHud } from '../ui/hud';
 import { drawItem } from '../ui/pockets';
+import { resultGlow } from '../minigames/polish';
 import { CAPSULE_VARIANTS, TOY_H, TOY_RES, TOY_W, plushKind, toyTexture } from '../art/craneToys';
 import { bodyFor, generatePile, restPlace, settlePile, type PileBody, type PileBounds } from '../game/cranePile';
 import { FULL_LINE, ODDITIES, PLUSHIES, addItem, itemDef, pocketsFull } from '../game/inventory';
@@ -1541,6 +1542,9 @@ export class CraneGame extends Phaser.Scene {
     this.phase = 'result';
     this.result?.destroy();
     const c = this.add.container(0, 0).setDepth(90);
+    // the result in colour, under the panel (and gone with it): gold for a
+    // prize, red for nothing
+    if (title === 'YOU WIN!' || title === NO_PRIZE_TITLE) c.add(resultGlow(this, title === 'YOU WIN!', { w: 230, h: 70, y: 92 }));
     c.add(this.add.rectangle(GAME_W / 2, 92, 230, 70, PALETTE.ink, 0.95).setStrokeStyle(1, colour));
     // WIN or LOSE, big, over the panel
     if (title) {

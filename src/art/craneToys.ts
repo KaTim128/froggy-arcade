@@ -126,7 +126,98 @@ export function toyTexture(scene: Phaser.Scene, kind: PlushKind | `capsule-${num
   else drawPlush(pen, kind as PlushKind);
   g.generateTexture(key, w, h);
   g.destroy();
+  crispen(scene, key, kind.startsWith('capsule-') ? 'plastic' : 'fleece');
   return key;
+}
+
+/**
+ * ---- SHARP, AND MADE OF SOMETHING.  The shapes above are drawn with the
+ * canvas's own smoothing, at fractional sizes, so every edge comes out as a
+ * ring of half-transparent, half-mixed pixels -- and shown pixel for pixel
+ * in a 320-wide picture that fringe IS the toy: it read as a blur.  So once
+ * a toy is drawn its pixels are put right:
+ *
+ *   - the edge: every pixel either is the toy or is not (no half-alpha
+ *     fringe), and the outermost ring of the toy is the ink outline, solid;
+ *   - the inside: a light unsharp pass, so the face, the seams and the shine
+ *     stand clear of the fill instead of melting into it;
+ *   - the surface: plush gets a soft fleece -- a fixed scatter of a shade
+ *     lighter and a shade darker, never on the ink or the white catches --
+ *     and capsules a smooth plastic sheen down the lit side.
+ *
+ * It is all done once per drawing (each size and tilt), so it costs nothing
+ * in play, and nothing about where a toy is or how it moves changes.
+ */
+function crispen(scene: Phaser.Scene, key: string, surface: 'fleece' | 'plastic'): void {
+  const tex = scene.textures.get(key) as Phaser.Textures.CanvasTexture;
+  const src = tex.getSourceImage() as HTMLCanvasElement;
+  if (!(src instanceof HTMLCanvasElement)) return;
+  const ctx = src.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return;
+  const W = src.width;
+  const H = src.height;
+  const img = ctx.getImageData(0, 0, W, H);
+  const d = img.data;
+  const solid = new Uint8Array(W * H);
+  // 1. the edge: in or out, nothing between
+  for (let i = 0; i < W * H; i++) solid[i] = d[i * 4 + 3] >= 100 ? 1 : 0;
+  const orig = new Uint8ClampedArray(d);
+  const ink = [0x1a, 0x12, 0x10];
+  const lum = (r: number, g: number, b: number) => 0.3 * r + 0.59 * g + 0.11 * b;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      const o = i * 4;
+      if (!solid[i]) {
+        d[o + 3] = 0;
+        continue;
+      }
+      d[o + 3] = 255;
+      const edge = x === 0 || y === 0 || x === W - 1 || y === H - 1 || !solid[i - 1] || !solid[i + 1] || !solid[i - W] || !solid[i + W];
+      if (edge) {
+        d[o] = ink[0];
+        d[o + 1] = ink[1];
+        d[o + 2] = ink[2];
+        continue;
+      }
+      // 2. a light unsharp mask against the four neighbours
+      let r = orig[o];
+      let gg = orig[o + 1];
+      let b = orig[o + 2];
+      const n = [o - 4, o + 4, o - W * 4, o + W * 4];
+      const ar = (orig[n[0]] + orig[n[1]] + orig[n[2]] + orig[n[3]]) / 4;
+      const ag = (orig[n[0] + 1] + orig[n[1] + 1] + orig[n[2] + 1] + orig[n[3] + 1]) / 4;
+      const ab = (orig[n[0] + 2] + orig[n[1] + 2] + orig[n[2] + 2] + orig[n[3] + 2]) / 4;
+      const K = 0.45;
+      r += (r - ar) * K;
+      gg += (gg - ag) * K;
+      b += (b - ab) * K;
+      // 3. the surface
+      const L = lum(orig[o], orig[o + 1], orig[o + 2]);
+      if (L > 40 && L < 235) {
+        if (surface === 'fleece') {
+          // a fixed scatter (the same toy always has the same nap)
+          const hsh = ((x * 73856093) ^ (y * 19349663)) >>> 0;
+          // (sparse and soft: a nap, not a pattern)
+          const k = hsh % 17 === 0 ? 1.06 : hsh % 19 === 0 ? 0.94 : 1;
+          r *= k;
+          gg *= k;
+          b *= k;
+        } else {
+          // the sheen: brighter towards the top left, a touch darker low right
+          const k = 1 + 0.12 * (1 - (x / W + y / H));
+          r *= k;
+          gg *= k;
+          b *= k;
+        }
+      }
+      d[o] = Math.max(0, Math.min(255, r));
+      d[o + 1] = Math.max(0, Math.min(255, gg));
+      d[o + 2] = Math.max(0, Math.min(255, b));
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  tex.refresh();
 }
 
 /** Which plush an item id is: 'plush:bear' -> 'bear'. */

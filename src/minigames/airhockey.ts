@@ -134,10 +134,9 @@ export const airHockey: MinigameModule = {
 
     paintArena(scene);
     // the table: a wooden rail, then the playing surface with its markings
-    scene.add.rectangle(TABLE.x - 6, TABLE.y - 6, TABLE.w + 12, TABLE.h + 12, 0x5c4326).setOrigin(0, 0);
-    scene.add.rectangle(TABLE.x - 6, TABLE.y - 6, TABLE.w + 12, 3, 0x8a6a3a).setOrigin(0, 0);
-    scene.add.rectangle(TABLE.x, TABLE.y, TABLE.w, TABLE.h, PALETTE.tealDark).setOrigin(0, 0);
-    scene.add.rectangle(TABLE.x, TABLE.y, TABLE.w, TABLE.h / 2, 0x1a6a6a).setOrigin(0, 0).setAlpha(0.5);
+    // (painted, not flat fills: the rail in grained wood, the surface a
+    // glossy teal laminate full of air holes, lit from above)
+    scene.add.image(TABLE.x - 6, TABLE.y - 6, paintTable(scene)).setOrigin(0, 0);
     scene.add
       .rectangle(TABLE.x, TABLE.y, TABLE.w, TABLE.h)
       .setOrigin(0, 0)
@@ -834,6 +833,94 @@ function mountDragPad(scene: Phaser.Scene): void {
  * neon tube along the top of the back wall, the glow of it on the wall, a
  * scoreboard housing over the table, and rubber matting on the floor.
  */
+/**
+ * THE TABLE, painted once: the same teal and the same wood as ever, but made
+ * of something -- the rail a grained, rounded hardwood with a lit top edge
+ * and a shadow where it meets the surface; the surface a glossy laminate,
+ * a shade lighter at the far end, pricked all over with the air holes in
+ * rows, and one broad soft reflection of the room's lights across it.
+ */
+function paintTable(scene: Phaser.Scene): string {
+  const key = 'airhockey_table_v3';
+  if (scene.textures.exists(key)) return key;
+  const W = TABLE.w + 12;
+  const H = TABLE.h + 12;
+  const tex = scene.textures.createCanvas(key, W, H);
+  if (!tex) return key;
+  const g = tex.getContext();
+  let seed = 4117;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  // the rail: hardwood, grain running round it
+  g.fillStyle = '#5c4326';
+  g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 260; i++) {
+    const y = rnd() * H;
+    const x = rnd() * W;
+    g.fillStyle = rnd() < 0.5 ? 'rgba(30,18,8,0.35)' : 'rgba(150,110,60,0.25)';
+    if (x < 6 || x > W - 6) g.fillRect(Math.floor(x), Math.floor(y), 1, 3 + Math.floor(rnd() * 6));
+    else g.fillRect(Math.floor(x), Math.floor(y), 3 + Math.floor(rnd() * 8), 1);
+  }
+  // rounded: lit along its top and left, dark along its bottom and right
+  g.fillStyle = '#8a6a3a';
+  g.fillRect(0, 0, W, 2);
+  g.fillRect(0, 0, 2, H);
+  g.fillStyle = 'rgba(255,230,180,0.35)';
+  g.fillRect(1, 1, W - 2, 1);
+  g.fillStyle = '#3a2814';
+  g.fillRect(0, H - 2, W, 2);
+  g.fillRect(W - 2, 0, 2, H);
+  // the surface
+  const sx = 6;
+  const sy = 6;
+  const sw = TABLE.w;
+  const sh = TABLE.h;
+  const lam = g.createLinearGradient(0, sy, 0, sy + sh);
+  lam.addColorStop(0, '#2a8282');
+  lam.addColorStop(0.5, '#1f6e6e');
+  lam.addColorStop(1, '#185a5c');
+  g.fillStyle = lam;
+  g.fillRect(sx, sy, sw, sh);
+  // the air holes, in rows, each a dark prick with a lit lower edge
+  for (let y = sy + 4; y < sy + sh - 2; y += 6) {
+    for (let x = sx + ((y / 6) % 2 ? 4 : 7); x < sx + sw - 2; x += 6) {
+      g.fillStyle = 'rgba(4,30,32,0.55)';
+      g.fillRect(x, y, 1, 1);
+      g.fillStyle = 'rgba(160,240,236,0.18)';
+      g.fillRect(x, y + 1, 1, 1);
+    }
+  }
+  // the room's lights in the gloss: one broad soft band, and a narrow one
+  g.save();
+  g.beginPath();
+  g.rect(sx, sy, sw, sh);
+  g.clip();
+  for (const [x0, w0, a] of [[30, 46, 0.1], [92, 12, 0.08]] as const) {
+    const band = g.createLinearGradient(sx + x0, 0, sx + x0 + w0, 0);
+    band.addColorStop(0, 'rgba(255,255,255,0)');
+    band.addColorStop(0.5, `rgba(230,255,250,${a})`);
+    band.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = band;
+    g.save();
+    g.translate(sx + x0 + w0 / 2, sy + sh / 2);
+    g.transform(1, 0, -0.45, 1, 0, 0);
+    g.translate(-(sx + x0 + w0 / 2), -(sy + sh / 2));
+    g.fillRect(sx + x0, sy - 20, w0, sh + 40);
+    g.restore();
+  }
+  g.restore();
+  // the rail's shadow falling on the surface, all round its inside edge
+  const inner = (x: number, y: number, w: number, h: number, a: number) => {
+    g.fillStyle = `rgba(0,0,0,${a})`;
+    g.fillRect(x, y, w, h);
+  };
+  inner(sx, sy, sw, 2, 0.28);
+  inner(sx, sy, 2, sh, 0.2);
+  inner(sx, sy + sh - 1, sw, 1, 0.12);
+  inner(sx + sw - 1, sy, 1, sh, 0.12);
+  tex.refresh();
+  return key;
+}
+
 function paintArena(scene: Phaser.Scene): void {
   const key = 'airhockey_arena_v2';
   if (!scene.textures.exists(key)) {
