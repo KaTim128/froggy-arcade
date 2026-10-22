@@ -431,3 +431,159 @@ export function drawBrokenEdge(g: Ctx): void {
   edge(0, 0, 0, 1, WF.winH, 1, 0);
   edge(WF.winW - 1, 0, 0, 1, WF.winH, -1, 0);
 }
+
+// ------------------------------------------------------------------ in the room
+
+/**
+ * HIM, IN THE ROOM, SIDE ON.  Down off the sill and coming along the floor at
+ * you: drawn at the room's own scale, one design pixel to one world pixel,
+ * the same thin long body as at the glass -- not blown up.  He stands about
+ * half again your height (38 pixels to your 25) and no broader than you:
+ * taller, not bigger.
+ *
+ * Facing left (the way to the door).  Bent forward from the hips into the
+ * run, the dome of the head thrust out ahead of him, the jaw hanging, the one
+ * great eye on its corner on you; arms far too long reaching out in front,
+ * fingers spread; the legs going like a frog's -- knees up high, the long
+ * feet slapping down.
+ */
+export const SF_W = 64;
+export const SF_H = 44;
+/** Where his feet are in that canvas (its bottom middle, near enough). */
+export const SF_FEET = { x: 34, y: 42 };
+
+export interface SideFroggyOpts {
+  /** Seconds, for the twitches. */
+  t: number;
+  /** The run, in strides (0..1 one full stride; it wraps). */
+  stride: number;
+  /** 0 standing up off the sill .. 1 flat out. */
+  run: number;
+  /** 0..1 how open the jaw hangs. */
+  maw: number;
+}
+
+export function drawSideFroggy(g: Ctx, o: SideFroggyOpts): void {
+  g.clearRect(0, 0, SF_W, SF_H);
+  const ph = o.stride * Math.PI * 2;
+  const run = Math.max(0, Math.min(1, o.run));
+  // the body bobs twice a stride, low on each landing
+  const bob = Math.round(Math.abs(Math.sin(ph)) * -2 * run);
+  const fx = SF_FEET.x;
+  const fy = SF_FEET.y;
+  const lean = 0.25 + run * 0.55;
+  const hip = { x: fx + 1, y: fy - 17 + bob };
+  const shoulder = { x: hip.x - Math.round(11 * lean), y: hip.y - Math.round(14 - lean * 3) };
+
+  // ---- the legs: thigh, the knobbed knee, the long shin, a frog's foot
+  const leg = (k: number, far: boolean): void => {
+    const s = Math.sin(ph + k * Math.PI);
+    const c = Math.cos(ph + k * Math.PI);
+    const knee = { x: hip.x - 4 - Math.round(s * 7 * run), y: hip.y + 8 - Math.max(0, Math.round(-c * 4 * run)) };
+    const lift = Math.max(0, c) * 6 * run;
+    const foot = { x: hip.x - Math.round(s * 9 * run) + 2, y: fy - 1 - Math.round(lift) };
+    if (far) {
+      line(g, hip.x, hip.y, knee.x, knee.y, 3, C.outline);
+      line(g, knee.x, knee.y, foot.x, foot.y, 3, C.outline);
+      line(g, hip.x, hip.y, knee.x, knee.y, 1, C.skinDark);
+      line(g, knee.x, knee.y, foot.x, foot.y, 1, C.skinDark);
+    } else {
+      limb(g, hip.x, hip.y, knee.x, knee.y, 2);
+      limb(g, knee.x, knee.y, foot.x, foot.y, 2);
+      ell(g, knee.x, knee.y, 2, 2, C.outline);
+      r(g, knee.x - 1, knee.y - 1, 2, 2, C.skinLit);
+    }
+    // the foot: long toes forward, flat on the floor or curled up off it
+    r(g, foot.x - 6, foot.y, 8, 2, C.outline);
+    r(g, foot.x - 5, foot.y, 6, 1, far ? C.skinDark : C.skin);
+    r(g, foot.x - 7, foot.y + 1, 2, 1, C.outline);
+  };
+  leg(1, true);
+
+  // ---- the far arm, reaching
+  const arm = (k: number, far: boolean): void => {
+    const sw = Math.sin(ph + k * Math.PI) * run;
+    const elbow = { x: shoulder.x - 7 - Math.round(sw * 2), y: shoulder.y + 7 + Math.round(sw * 2) };
+    const hand = { x: elbow.x - 12 - Math.round(sw * 4), y: elbow.y - 3 - Math.round(sw * 4 * (1 - run * 0.4)) };
+    if (far) {
+      line(g, shoulder.x, shoulder.y, elbow.x, elbow.y, 2, C.outline);
+      line(g, elbow.x, elbow.y, hand.x, hand.y, 2, C.outline);
+    } else {
+      limb(g, shoulder.x, shoulder.y, elbow.x, elbow.y, 2);
+      limb(g, elbow.x, elbow.y, hand.x, hand.y, 1);
+      r(g, elbow.x, elbow.y, 1, 1, C.skinHi);
+    }
+    // four long fingers splayed out ahead of him
+    for (let f = 0; f < 4; f++) {
+      const a = Math.PI + (f - 1.5) * 0.32 - 0.1;
+      const len = f === 1 || f === 2 ? 7 : 5;
+      const tx = hand.x + Math.cos(a) * len;
+      const ty = hand.y + Math.sin(a) * len;
+      line(g, hand.x, hand.y, tx, ty, far ? 1 : 2, C.outline);
+      if (!far) r(g, tx, ty, 1, 1, C.pad);
+    }
+  };
+  arm(1, true);
+
+  // ---- the trunk: a narrow cage of ribs bent forward, the belly sunk in
+  line(g, hip.x, hip.y, shoulder.x, shoulder.y, 9, C.outline);
+  line(g, hip.x, hip.y, shoulder.x, shoulder.y, 7, C.skinDark);
+  line(g, hip.x - 1, hip.y - 2, shoulder.x + 1, shoulder.y, 3, C.skin);
+  // the spine standing out along the back, knob by knob
+  for (let k = 0; k <= 5; k++) {
+    const x = hip.x + 3 + (shoulder.x - hip.x) * (k / 5);
+    const y = hip.y - 2 + (shoulder.y - hip.y) * (k / 5) - 1;
+    r(g, x, y, 1, 1, C.skinHi);
+  }
+  // the ribs down the front of him
+  for (let k = 1; k <= 4; k++) {
+    const x = hip.x + (shoulder.x - hip.x) * (0.25 + k * 0.15);
+    const y = hip.y + (shoulder.y - hip.y) * (0.25 + k * 0.15);
+    r(g, x - 3, y + 1, 4, 1, C.skinLit);
+    r(g, x - 3, y + 2, 4, 1, C.outline, 0.6);
+  }
+  // the neck, thin, thrust out
+  const head = { x: shoulder.x - 8, y: shoulder.y - 4 + Math.round(Math.sin(o.t * 23) > 0.95 ? 1 : 0) };
+  line(g, shoulder.x, shoulder.y, head.x + 4, head.y + 3, 4, C.outline);
+  line(g, shoulder.x, shoulder.y, head.x + 4, head.y + 3, 2, C.skinDark);
+
+  // ---- the head, side on: the dome, the eye up on its corner, the jaw
+  const open = Math.round(3 + o.maw * 4);
+  // the lower jaw hanging, hinged far back
+  ell(g, head.x - 2, head.y + 3 + open, 8, 2, C.outline);
+  ell(g, head.x - 2, head.y + 3 + open, 7, 1, C.skinDark);
+  // the mouth: a black gape, raw gums, teeth top and bottom
+  r(g, head.x - 9, head.y + 2, 13, open + 1, C.throat);
+  r(g, head.x - 9, head.y + 2, 13, 1, C.gum);
+  r(g, head.x - 8, head.y + 2 + open, 12, 1, C.gumHi);
+  for (let k = 0; k < 6; k++) {
+    r(g, head.x - 8 + k * 2, head.y + 3, 1, 2 + (k % 2), C.tooth);
+    r(g, head.x - 7 + k * 2, head.y + 1 + open, 1, 1 + ((k + 1) % 2), C.toothShade);
+  }
+  // a string of drool, swinging back in the run
+  r(g, head.x - 6 + Math.round(Math.sin(ph) * run), head.y + 4 + open, 1, 3, C.drool, 0.8);
+  // the dome, long and low
+  ell(g, head.x, head.y - 1, 10, 5, C.outline);
+  ell(g, head.x, head.y - 1, 9, 4, C.skinDark);
+  ell(g, head.x - 1, head.y - 2, 7, 3, C.skin);
+  r(g, head.x - 4, head.y - 4, 5, 1, C.skinLit);
+  // the muzzle, pale, a nostril at the tip
+  r(g, head.x - 10, head.y, 8, 2, C.muzzle);
+  r(g, head.x - 9, head.y, 5, 1, C.muzzleHi);
+  r(g, head.x - 10, head.y - 1, 1, 1, C.outline);
+  // the eye: a bulge up on the corner of the dome, bloodshot, the lid
+  // heavy over it and the pupil shrunk to a point, on you
+  const ex = head.x - 3;
+  const ey = head.y - 6;
+  ell(g, ex, ey, 4, 4, C.outline);
+  ell(g, ex, ey, 3, 3, C.lid);
+  ell(g, ex, ey + 1, 2, 2, C.sclera);
+  r(g, ex - 2, ey + 2, 2, 1, C.vein);
+  r(g, ex + 1, ey, 1, 1, C.vein);
+  r(g, ex - 3, ey - 1, 7, 1, C.lidCrease);
+  r(g, ex - 1, ey + 1, 1, 1, C.pupil);
+
+  // ---- the near leg and arm, over all of him
+  leg(0, false);
+  arm(0, false);
+}
