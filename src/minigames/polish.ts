@@ -18,6 +18,11 @@
  *   - THE GLASS.  A faint diagonal sheen across the top corner, the screen
  *     of a cabinet catching the room's lights.
  *
+ * And at the end, a WIN in colour (`resultGlow`): a burst of gold light and
+ * sparks from the middle -- under the result card, over the game, and
+ * nothing about the result or what happens next changes.  A loss or a draw
+ * gets nothing.
+ *
  * Bog Ball keeps its own dark finish (it is the reference) and gets none of
  * the overlay.  Everything is one texture per game, made once.
  */
@@ -131,4 +136,72 @@ function paintFinish(scene: Phaser.Scene, key: string, f: Finish): void {
     g.fillRect(Math.floor(rnd() * W), Math.floor(rnd() * H), 1, 1);
   }
   t.refresh();
+}
+
+/**
+ * A WIN, IN COLOUR.  Called as the result card goes up: a burst of gold
+ * light, a ring going out and sparks thrown up from the middle for a win;
+ * anything else gets nothing.  Laid between
+ * the game and the card (depth 980, one layer: the returned container); it fades with the card and changes
+ * nothing about what the result is.
+ */
+export function resultGlow(scene: Phaser.Scene, won: boolean | null, card: { w?: number; h?: number; y?: number; depth?: number } = {}): Phaser.GameObjects.Container {
+  const cx = GAME_W / 2;
+  const cy = card.y ?? GAME_H / 2;
+  // (under the card: the cabinets' card is at 990, the crane's at 90)
+  const D = card.depth ?? 980;
+  const cw = card.w ?? 250;
+  const ch = card.h ?? 60;
+  // all of it in one layer, so whoever shows the card can take it down with it
+  const box = scene.add.container(0, 0).setDepth(D);
+  const put = <T extends Phaser.GameObjects.GameObject>(o: T): T => (box.add(o), o);
+  // the card itself glows gold, just round its edge
+  if (won) {
+    const col = 0xffd45e;
+    for (const [pad, a] of [[3, 0.55], [6, 0.28], [10, 0.12]] as const) {
+      const rim = put(scene.add.rectangle(cx, cy, cw + pad * 2, ch + pad * 2).setStrokeStyle(pad > 3 ? 3 : 2, col, a).setBlendMode(Phaser.BlendModes.ADD));
+      scene.tweens.add({ targets: rim, alpha: { from: 1, to: 0.55 }, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    }
+  }
+  if (won) {
+    if (!scene.textures.exists('result_gold')) {
+      const t = scene.textures.createCanvas('result_gold', 128, 128);
+      if (t) {
+        const g = t.getContext();
+        const gr = g.createRadialGradient(64, 64, 2, 64, 64, 64);
+        gr.addColorStop(0, 'rgba(255,240,170,1)');
+        gr.addColorStop(0.35, 'rgba(255,200,80,0.55)');
+        gr.addColorStop(1, 'rgba(255,170,40,0)');
+        g.fillStyle = gr;
+        g.fillRect(0, 0, 128, 128);
+        t.refresh();
+      }
+    }
+    // the warm wash over the whole picture, and the burst at the middle
+    const wash = put(scene.add.rectangle(0, 0, GAME_W, GAME_H, 0xffc84a, 0.16).setOrigin(0, 0).setBlendMode(Phaser.BlendModes.ADD));
+    const burst = put(scene.add.image(cx, cy, 'result_gold').setBlendMode(Phaser.BlendModes.ADD).setScale(0.6).setAlpha(0.9));
+    scene.tweens.add({ targets: burst, scale: 3.4, alpha: 0.25, duration: 900, ease: 'Cubic.easeOut' });
+    scene.tweens.add({ targets: wash, alpha: 0.06, duration: 1100 });
+    const ring = put(scene.add.circle(cx, cy, 20).setStrokeStyle(2, 0xffe08a, 0.9));
+    scene.tweens.add({ targets: ring, radius: 150, alpha: 0, duration: 800, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
+    // the sparks, gold and white, thrown up and falling
+    const cols = [0xffe08a, 0xffffff, 0xffc84a, 0xfff4c8];
+    for (let i = 0; i < 34; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 40 + Math.random() * 90;
+      const s = put(scene.add.rectangle(cx, cy, 2, 2, cols[i % cols.length]).setBlendMode(Phaser.BlendModes.ADD));
+      scene.tweens.add({
+        targets: s,
+        x: cx + Math.cos(a) * sp,
+        y: cy + Math.sin(a) * sp * 0.7 + 30,
+        alpha: 0,
+        duration: 900 + Math.random() * 500,
+        ease: 'Quad.easeOut',
+        onComplete: () => s.destroy(),
+      });
+    }
+    return box;
+  }
+  // a loss, a draw or a practice that ended: no colour over it
+  return box;
 }

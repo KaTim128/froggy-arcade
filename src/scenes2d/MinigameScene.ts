@@ -40,7 +40,7 @@ import { setCabinetTouch } from '../game/touchLayouts';
 import { patrolsOut, stealthPhase } from '../game/patrol';
 import { copInside, copWentIn } from '../game/policeVisits';
 import { speak } from '../ui/talkPanel';
-import { applyFinish } from '../minigames/polish';
+import { applyFinish, resultGlow } from '../minigames/polish';
 
 const AREA = { x: 0, y: 18, w: GAME_W, h: GAME_H - 18 };
 const RESULT_MS = 2000;
@@ -565,6 +565,7 @@ export class MinigameScene extends Phaser.Scene {
     this.card?.destroy();
     this.card = null;
     if (this.started) this.mod?.destroy?.();
+    resultGlow(this, won);
     const panel = this.add.rectangle(GAME_W / 2, GAME_H / 2, 250, 60, PALETTE.ink).setDepth(990);
     panel.setStrokeStyle(1, PALETTE.tealLight);
     centerText(this, GAME_W / 2, GAME_H / 2 - 10, won === null ? 'PRACTICE OVER' : won ? 'PRACTICE - YOU WON' : 'PRACTICE - YOU LOST', PALETTE.tealLight, 16).setDepth(991);
@@ -678,6 +679,8 @@ export class MinigameScene extends Phaser.Scene {
     if (back > 0) ledger.credit(back, 'game.refund');
     store.flush();
 
+    // (a draw: neither gold nor red)
+    resultGlow(this, null);
     const panel = this.add.rectangle(GAME_W / 2, GAME_H / 2, 250, 60, PALETTE.ink).setDepth(990);
     panel.setStrokeStyle(1, PALETTE.tealLight);
     centerText(this, GAME_W / 2, GAME_H / 2 - 10, `A TIE  -  ${back} BACK`, PALETTE.tealLight, 16).setDepth(991);
@@ -714,6 +717,8 @@ export class MinigameScene extends Phaser.Scene {
     }
     store.flush();
 
+    // the result in colour, under the card: gold for a win, red for a loss
+    resultGlow(this, won);
     const panel = this.add.rectangle(GAME_W / 2, GAME_H / 2, 250, 60, PALETTE.ink).setDepth(990);
     panel.setStrokeStyle(1, won ? PALETTE.gold : PALETTE.steel);
     centerText(
