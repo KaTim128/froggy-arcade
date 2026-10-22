@@ -1416,6 +1416,9 @@ export class HideRoom3D extends Phaser.Scene {
       // what makes glass read as glass is that the thing through it is a
       // different colour from everything else in the picture.
       const doorZ = d.halfD - 0.38;
+      // (the arcade is all close work -- the lock in your face, the key in
+      // your hand -- so it is drawn sharp, whatever the quality level)
+      st.setMinRes(isTouch() ? 2 : 2.5);
       const doors = buildGlassDoors(gd.w, gd.h);
       doors.position.set(d.door.x, 0, doorZ);
       st.scene.add(doors);
@@ -3622,6 +3625,15 @@ export class HideRoom3D extends Phaser.Scene {
     // The arrow keys are a second way of turning, and the door holds the head
     // whichever one is being used.
     if (this.escaping || this.mode === 'survived') this.holdOnDoor();
+    // Up at the arcade's glass doors the torch is a hand's width from bright
+    // metal and would wash the lock out white: looking at them, it eases down
+    // as you close in (with the square of the distance, the way light falls).
+    if (this.def.glassDoor && this.torch && !this.escaping) {
+      const gap = Math.hypot(this.pos.x - this.def.door.x, this.def.halfD - this.pos.y);
+      const near = Phaser.Math.Clamp(((gap - 0.3) / 3.5) ** 2, 0.05, 1);
+      const facing = Math.max(0, Math.cos(this.yaw - this.doorFacing()));
+      this.torch.intensity = 110 * Phaser.Math.Linear(1, near, facing);
+    }
 
     if (this.hiding) {
       this.pos.set(this.hiding.x, this.hiding.z);

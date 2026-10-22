@@ -330,11 +330,29 @@ function paint(theme: RoomTheme, surface: Surface, base: number, seed: number): 
       // the one surface in this building a player has already seen in two
       // dimensions, so it is the one that has to be recognisable.
       speckle(ctx, r, 0.5, 0.12);
-      for (let i = 0; i < 520; i++) {
+      // (fine flecks, and a lot of them: little shapes, not big squares)
+      for (let i = 0; i < 1400; i++) {
         const c = [0xff4fa3, 0x46c4bd, 0xffd45e, 0x7b4bd8, 0x6fbb6a][Math.floor(r() * 5)];
         ctx.fillStyle = hex(c, 0.5 + r() * 0.3);
-        const w = 2 + r() * 4;
-        ctx.fillRect(r() * SIZE, r() * SIZE, w, 2 + r() * 3);
+        const x = r() * SIZE;
+        const y = r() * SIZE;
+        const k = r();
+        if (k < 0.4) ctx.fillRect(x, y, 1 + r() * 2, 1 + r() * 1.5);
+        else if (k < 0.7) {
+          ctx.beginPath();
+          ctx.arc(x, y, 0.8 + r() * 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          // a little zig-zag squiggle, the old pattern
+          ctx.strokeStyle = ctx.fillStyle;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + 2, y - 2);
+          ctx.lineTo(x + 4, y);
+          ctx.lineTo(x + 6, y - 2);
+          ctx.stroke();
+        }
       }
       // walked-pale lanes, then the dark under the cabinets
       for (let i = 0; i < 3; i++) {
@@ -434,14 +452,17 @@ export function surfaceTexture(theme: RoomTheme, surface: Surface, base: number,
     tex = new THREE.CanvasTexture(paint(theme, surface, base, seed));
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
-    tex.magFilter = THREE.NearestFilter;
+    // (the arcade is the room you see up close -- the lock, the key on its
+    // carpet -- so its surfaces are smoothed, not blown up into squares)
+    tex.magFilter = theme === 'arcade' ? THREE.LinearFilter : THREE.NearestFilter;
     tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.anisotropy = theme === 'arcade' ? 8 : 1;
     tex.colorSpace = THREE.SRGBColorSpace;
     cache.set(key, tex);
   }
   const t = tex.clone();
   t.needsUpdate = true;
-  const tile = surface === 'wall' ? 3.2 : 4;
+  const tile = surface === 'wall' ? 3.2 : theme === 'arcade' ? 2.4 : 4;
   t.repeat.set(Math.max(1, spanW / tile), Math.max(1, spanH / tile));
   return t;
 }

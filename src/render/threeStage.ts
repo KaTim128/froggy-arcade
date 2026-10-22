@@ -246,7 +246,8 @@ export class ThreeStage {
         fogFar: fog instanceof THREE.Fog ? fog.far : null,
       };
     }
-    r.setSize(Math.round(GAME_W * q.res), Math.round(GAME_H * q.res), false);
+    const res = Math.max(q.res, this.minRes);
+    r.setSize(Math.round(GAME_W * res), Math.round(GAME_H * res), false);
     this.camera.far = this.base.far * q.far;
     this.camera.updateProjectionMatrix();
     const fog = this.scene.fog;
@@ -419,6 +420,17 @@ export class ThreeStage {
    * against the lens -- pores and teeth instead of soft squares -- then put
    * the quality level back.  (A phone gets less of a boost than a desktop.)
    */
+  /**
+   * A floor under the render size for a scene that is all close work (the
+   * arcade's key and padlock): never drawn smaller than this, whatever the
+   * quality level says, so up close nothing goes to mush.
+   */
+  private minRes = 0;
+  setMinRes(k: number): void {
+    this.minRes = k;
+    this.applyQuality();
+  }
+
   boost(on: boolean): void {
     const r = this.renderer;
     if (!r) return;
