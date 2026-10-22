@@ -18,11 +18,6 @@
  *   - THE GLASS.  A faint diagonal sheen across the top corner, the screen
  *     of a cabinet catching the room's lights.
  *
- * And at the end, WIN AND LOSE in colour (`resultGlow`): a burst of gold
- * light and sparks from the middle for a win, a red closing-in of the edges
- * and a dimming for a loss -- under the result card, over the game, and
- * nothing about the result or what happens next changes.
- *
  * Bog Ball keeps its own dark finish (it is the reference) and gets none of
  * the overlay.  Everything is one texture per game, made once.
  */
@@ -136,94 +131,4 @@ function paintFinish(scene: Phaser.Scene, key: string, f: Finish): void {
     g.fillRect(Math.floor(rnd() * W), Math.floor(rnd() * H), 1, 1);
   }
   t.refresh();
-}
-
-/**
- * WIN AND LOSE, IN COLOUR.  Called as the result card goes up: a burst of
- * gold light, a ring going out and sparks thrown up from the middle for a
- * win; for a loss the edges close in red and the picture dims.  Laid between
- * the game and the card (depth 980, one layer: the returned container); it fades with the card and changes
- * nothing about what the result is.
- */
-export function resultGlow(scene: Phaser.Scene, won: boolean | null, card: { w?: number; h?: number; y?: number; depth?: number } = {}): Phaser.GameObjects.Container {
-  const cx = GAME_W / 2;
-  const cy = card.y ?? GAME_H / 2;
-  // (under the card: the cabinets' card is at 990, the crane's at 90)
-  const D = card.depth ?? 980;
-  const cw = card.w ?? 250;
-  const ch = card.h ?? 60;
-  // all of it in one layer, so whoever shows the card can take it down with it
-  const box = scene.add.container(0, 0).setDepth(D);
-  const put = <T extends Phaser.GameObjects.GameObject>(o: T): T => (box.add(o), o);
-  // the card itself glows in the result's colour, just round its edge
-  if (won !== null) {
-    const col = won ? 0xffd45e : 0xe03040;
-    for (const [pad, a] of [[3, 0.55], [6, 0.28], [10, 0.12]] as const) {
-      const rim = put(scene.add.rectangle(cx, cy, cw + pad * 2, ch + pad * 2).setStrokeStyle(pad > 3 ? 3 : 2, col, a).setBlendMode(Phaser.BlendModes.ADD));
-      scene.tweens.add({ targets: rim, alpha: { from: 1, to: 0.55 }, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    }
-  }
-  if (won) {
-    if (!scene.textures.exists('result_gold')) {
-      const t = scene.textures.createCanvas('result_gold', 128, 128);
-      if (t) {
-        const g = t.getContext();
-        const gr = g.createRadialGradient(64, 64, 2, 64, 64, 64);
-        gr.addColorStop(0, 'rgba(255,240,170,1)');
-        gr.addColorStop(0.35, 'rgba(255,200,80,0.55)');
-        gr.addColorStop(1, 'rgba(255,170,40,0)');
-        g.fillStyle = gr;
-        g.fillRect(0, 0, 128, 128);
-        t.refresh();
-      }
-    }
-    // the warm wash over the whole picture, and the burst at the middle
-    const wash = put(scene.add.rectangle(0, 0, GAME_W, GAME_H, 0xffc84a, 0.16).setOrigin(0, 0).setBlendMode(Phaser.BlendModes.ADD));
-    const burst = put(scene.add.image(cx, cy, 'result_gold').setBlendMode(Phaser.BlendModes.ADD).setScale(0.6).setAlpha(0.9));
-    scene.tweens.add({ targets: burst, scale: 3.4, alpha: 0.25, duration: 900, ease: 'Cubic.easeOut' });
-    scene.tweens.add({ targets: wash, alpha: 0.06, duration: 1100 });
-    const ring = put(scene.add.circle(cx, cy, 20).setStrokeStyle(2, 0xffe08a, 0.9));
-    scene.tweens.add({ targets: ring, radius: 150, alpha: 0, duration: 800, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
-    // the sparks, gold and white, thrown up and falling
-    const cols = [0xffe08a, 0xffffff, 0xffc84a, 0xfff4c8];
-    for (let i = 0; i < 34; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const sp = 40 + Math.random() * 90;
-      const s = put(scene.add.rectangle(cx, cy, 2, 2, cols[i % cols.length]).setBlendMode(Phaser.BlendModes.ADD));
-      scene.tweens.add({
-        targets: s,
-        x: cx + Math.cos(a) * sp,
-        y: cy + Math.sin(a) * sp * 0.7 + 30,
-        alpha: 0,
-        duration: 900 + Math.random() * 500,
-        ease: 'Quad.easeOut',
-        onComplete: () => s.destroy(),
-      });
-    }
-    return box;
-  }
-  if (won === false) {
-    // the red closing in from the edges, and the picture going dim under the card
-    if (!scene.textures.exists('result_red')) {
-      const t = scene.textures.createCanvas('result_red', GAME_W, GAME_H);
-      if (t) {
-        const g = t.getContext();
-        const gr = g.createRadialGradient(cx, cy, GAME_H * 0.3, cx, cy, GAME_W * 0.62);
-        gr.addColorStop(0, 'rgba(120,0,10,0)');
-        gr.addColorStop(1, 'rgba(150,10,20,0.75)');
-        g.fillStyle = gr;
-        g.fillRect(0, 0, GAME_W, GAME_H);
-        t.refresh();
-      }
-    }
-    const dim = put(scene.add.rectangle(0, 0, GAME_W, GAME_H, 0x10060a, 0).setOrigin(0, 0));
-    const red = put(scene.add.image(0, 0, 'result_red').setOrigin(0, 0).setAlpha(0));
-    scene.tweens.add({ targets: dim, fillAlpha: 0.38, duration: 500 });
-    scene.tweens.add({ targets: red, alpha: 1, duration: 220, yoyo: true, hold: 120, onComplete: () => red.setAlpha(0.6) });
-    return box;
-  }
-  // a draw, or a practice that just ended: a cool, even dimming
-  const dim = put(scene.add.rectangle(0, 0, GAME_W, GAME_H, 0x0a1420, 0).setOrigin(0, 0));
-  scene.tweens.add({ targets: dim, fillAlpha: 0.3, duration: 400 });
-  return box;
 }
