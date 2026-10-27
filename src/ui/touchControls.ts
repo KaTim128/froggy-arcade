@@ -628,7 +628,10 @@ class TouchControls {
     this.wireHold(this.quit as HTMLElement, ['ESC']);
 
     window.addEventListener('resize', () => this.relayout());
-    window.addEventListener('orientationchange', () => window.setTimeout(() => this.relayout(), 120));
+    window.addEventListener('orientationchange', () => {
+      for (const ms of [120, 400, 900]) window.setTimeout(() => this.relayout(), ms);
+    });
+    window.visualViewport?.addEventListener('resize', () => this.relayout());
     // A finger lifted outside the button it started on must not leave a key
     // stuck down for the rest of the round.
     window.addEventListener('blur', () => this.releaseAll());

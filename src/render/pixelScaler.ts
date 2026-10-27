@@ -164,7 +164,14 @@ export function attachScaler(game: Phaser.Game): void {
   apply();
   game.events.on(Phaser.Core.Events.POST_RENDER, () => ambient.copy(game.canvas));
   window.addEventListener('resize', apply);
-  window.addEventListener('orientationchange', () => window.setTimeout(apply, 120));
+  // A phone turned over settles its bars over most of a second (an iPhone's
+  // address bar shrinks after the turn, not with it): fit again as it does,
+  // and whenever the visible part of the page changes size, so the picture
+  // never sits in the old shape with black gaps round it (log #62).
+  window.addEventListener('orientationchange', () => {
+    for (const ms of [120, 400, 900]) window.setTimeout(apply, ms);
+  });
+  window.visualViewport?.addEventListener('resize', apply);
   // Some browsers settle layout a frame late.
   window.setTimeout(apply, 50);
   window.setTimeout(apply, 250);
