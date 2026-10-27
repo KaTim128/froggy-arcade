@@ -433,6 +433,16 @@ export class MinigameScene extends Phaser.Scene {
     return Math.max(0, Math.floor(this.mod?.atRisk?.() ?? this.stake));
   }
 
+  /** This cabinet's objective, as its card says it on this device (the pause menu's HOW TO PLAY). */
+  howToLines(): string[] {
+    return this.mod ? deviceObjective(this.mod.tutorial.objective, this.mod.touch) : [];
+  }
+
+  /** The cabinet's name. */
+  title(): string {
+    return cabinetById(this.gameId).title;
+  }
+
   /** This cabinet's controls, as this device will actually work them. */
   controlRows(): ControlRow[] {
     return this.mod ? deviceControls(this.mod.tutorial.controls, this.mod.touch) : [];

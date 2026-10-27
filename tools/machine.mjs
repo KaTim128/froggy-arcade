@@ -205,6 +205,42 @@ try {
   await sleep(200);
   s = await screen();
   check('RESET KEYS puts J back', s.buttons.includes('J') && !s.buttons.includes('U'), s.buttons.join('|'));
+
+  // ------------------------------------------------- 7: HOW TO PLAY from the pause menu
+  await press('BACK');
+  await open('donkeykong', 2);
+  await page.keyboard.press('Space');
+  await sleep(1200);
+  await page.keyboard.press('Escape');
+  await sleep(800);
+  const inPause = (label) =>
+    page.evaluate((label) => {
+      const sc = window.__froggy.game().scene.getScene('SettingsModal');
+      const found = [];
+      const walk = (l) =>
+        l.forEach((o) => {
+          if (o.list) {
+            if (o.input && o.list[1]?.text === label) found.push(o);
+            walk(o.list);
+          }
+        });
+      walk(sc.children.list);
+      if (!found[0]) return false;
+      found[0].emit('pointerdown');
+      found[0].emit('pointerup');
+      return true;
+    }, label);
+  await inPause('CONTROLS');
+  await sleep(250);
+  const opened = await inPause('HOW TO PLAY');
+  await sleep(250);
+  const said = await page.evaluate(() => {
+    const out = [];
+    const walk = (l) => l.forEach((o) => (o.list ? walk(o.list) : o.text && out.push(o.text)));
+    walk(window.__froggy.game().scene.getScene('SettingsModal').children.list);
+    return out;
+  });
+  check('mid-game, the pause menu reopens HOW TO PLAY', opened && said.includes('HOW TO PLAY - BARREL CLIMB') && said.some((l) => l.startsWith('CLIMB TO THE EXIT')), said.slice(0, 6).join(' / '));
 } catch (e) {
   console.error(e);
   failures++;
