@@ -62,7 +62,7 @@ const phone = async (query, { w = 390, h = 844 } = {}) => {
       'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
   });
   const sep = query.includes('?') ? '&' : '?';
-  await page.goto(`${URL}/${query}${sep}touch=1`, { waitUntil: 'networkidle2' });
+  await page.goto(`${URL}/${query}${sep}touch=1`, { waitUntil: "load" });
   await sleep(2200);
   return page;
 };
@@ -145,7 +145,7 @@ const labels = (page) =>
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
-  await page.goto(`${URL}/?intro=1&tokens=20&scene=ArcadeHub`, { waitUntil: 'networkidle2' });
+  await page.goto(`${URL}/?intro=1&tokens=20&scene=ArcadeHub`, { waitUntil: "load" });
   await sleep(2000);
   const clean = await page.evaluate(() => ({
     controls: !!document.getElementById('touch-controls'),
@@ -294,6 +294,14 @@ const labels = (page) =>
     return { x: c.left + 108 * z, y: c.top + 163 * z };
   });
   await touch(page, play.x, play.y);
+  await sleep(900);
+  // ...and PLAY again on the PLAY-or-PRACTISE choice, at (104, 84)
+  const real = await page.evaluate(() => {
+    const c = document.querySelector('#game-root canvas').getBoundingClientRect();
+    const z = window.__froggy.game().scale.zoom;
+    return { x: c.left + 104 * z, y: c.top + 84 * z };
+  });
+  await touch(page, real.x, real.y);
   await sleep(2600);
   const inGame = await labels(page);
   await page.screenshot({ path: `${SHOTS}/04-grudge.png` });
@@ -584,7 +592,7 @@ const labels = (page) =>
 {
   const page = await phone('?intro=1&charity=1&route=basement&scene=HideRoom3D');
   await page.evaluate(() => { try { localStorage.removeItem('froggy.lookHintUsed'); } catch {} });
-  await page.reload({ waitUntil: 'networkidle2' });
+  await page.reload({ waitUntil: "load" });
   await sleep(3600);
   const geo = await page.evaluate(() => {
     const r = (q) => { const el = document.querySelector(q); return el && !el.hidden ? el.getBoundingClientRect() : null; };
@@ -858,7 +866,7 @@ for (const [name, w, h] of [
 {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
-  await page.goto(`${URL}/?scene=IntroCutscene`, { waitUntil: 'networkidle2' });
+  await page.goto(`${URL}/?scene=IntroCutscene`, { waitUntil: "load" });
   await sleep(2400);
   const desk = await page.evaluate(() => {
     const s = window.__froggy.game().scene.getScene('IntroCutscene');

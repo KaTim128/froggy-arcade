@@ -23,7 +23,7 @@
 
 import Phaser from 'phaser';
 import { isTouch } from '../core/device';
-import { touchWords } from '../core/keyWords';
+import { touchWords, notePainted } from '../core/keyWords';
 
 export const FONT_KEY = 'pixel';
 /** Authored glyph columns. */
@@ -190,7 +190,10 @@ export function drawPixelText(
 ): void {
   const scale = opts.scale ?? 2;
   // (the same [E] -> INTERACT as every bitmap prompt: see core/keyWords)
-  if (isTouch()) str = touchWords(str);
+  if (isTouch()) {
+    notePainted(str);
+    str = touchWords(str);
+  }
   const chars = [...str];
   const width = chars.length * FONT_ADVANCE * scale;
   const ox = opts.center ? x - width / 2 : x;
