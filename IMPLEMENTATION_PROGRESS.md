@@ -492,11 +492,13 @@ Rules for every batch:
 <br>• **Tab switch:** back from another tab mid-game, the pause menu is open (#50; pause.ts `pauseIfInGame`).
 <br>• **Inventory key:** INVENTORY in CONTROLS, default G, rebindable (#49b).
 <br>• **Text:** "NO REFUND, AND NO PRIZE" removed (#65).
-<br>**Still to do in B4:** button text centring and fit (#49/#51/#82), action-specific mobile prompts (#50), tutorials per game and platform (+ Barrel Climb) (#49b/#50/#79), high scores on the machine (#79), PLAY — N TOKENS layout (#70), Change Controls before games (#84), session persistence (#87), mobile fullscreen and the broken image (#56/#62), Tile wording (#60). | | |
+<br>• **Buttons:** every `button()` label is centred on its ink in whole pixels and the box widens to fit it (#49/#51/#82); `tools/textfit.mjs` audits every screen (button ink in its box, nothing off screen, no text over text, no text out of its panel): 948 lines, 0 out of place. tools/text.mjs 5/5, frame 14/14. Commit c4700b1. **games.mjs re-run after this commit is still owed** (the run was cut short twice: a 15-min limit, then the dev server's 2-h limit).
+<br>**Still to do in B4:** action-specific mobile prompts (#50), tutorials per game and platform (+ Barrel Climb) (#49b/#50/#79), high scores on the machine (#79), PLAY — N TOKENS layout (#70), Change Controls before games (#84), session persistence (#87), mobile fullscreen and the broken image (#56/#62), Tile wording (#60). | | |
 | B5–B13 | not started | | |
 
 ## 6. Known issues
 - Horror: the same 3 tests fail on master too (drain-tube button, moving on to the next room, arms crossing the eyes).
+- **Next step (exact):** restart the dev server, re-run tools/games.mjs on c4700b1, then add the action word for the mobile INTERACT button (draft list of verbs: PLAY / OPEN / HIDE / TALK / GO / USE ..., read from the on-screen "[E] ..." prompt in core/keyWords; touchControls keeps the E button's word and restores INTERACT when no prompt shows; also the 3D overlay prompts drawn by drawPixelText).
 - **Dev server for tests:** run `npx vite --port 5173 --base /`. Master's Vercel commit set base `/froggy-arcade/`, and the tests' `import('/src/...')` 404 without `--base /`.
 - **For B2 (seen 27 Oct):** a white block stands across the floor-2 corridor about 6 m from the stairs. It doesn't block walking (only visual); likely the floor-1 geometry protruding into floor 2 (#53).
 - **Story test, on master too:** `back-door route only from ejected — BackAlley reachable from normal` (pre-existing, not from this work).
