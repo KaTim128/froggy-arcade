@@ -137,6 +137,10 @@ let cashBtn: Phaser.GameObjects.Container | null = null;
 let rigged: 'clean' | 'live' | null = null;
 
 export const roulette: MinigameModule = {
+  // (the play starts at the first pull: until then, LEAVE and nothing lost;
+  // once there is something on the machine, the way out is CASH OUT)
+  inPlay: () => survived > 0 || phase === 'firing' || over,
+  pauseExit: () => (pot > 0 && !over ? { label: 'CASH OUT', run: () => cashOut() } : null),
   id: 'roulette',
   title: 'CHAMBER',
   music: 'game_roulette',

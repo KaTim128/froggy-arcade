@@ -128,6 +128,25 @@ function topScene(): Phaser.Scene | null {
   return running.length ? running[running.length - 1] : null;
 }
 
+/** The scenes that are an arcade game being played (log #50: a tab away pauses them). */
+const IN_GAME = new Set(['Minigame', 'CraneGame', 'CreatureArena']);
+
+/**
+ * BACK FROM ANOTHER TAB, MID-GAME: the pause menu, open over the game where
+ * it stood (the loop already slept while the tab was away, so nothing moved).
+ * Not outside a game -- a room, a street, a cabinet's card -- and not when
+ * the menu is already up.
+ */
+export function pauseIfInGame(): void {
+  if (!game || frozen) return;
+  const top = topScene();
+  if (!top || !IN_GAME.has(top.scene.key)) return;
+  // (at the card a cabinet is not yet being played)
+  const started = (top as unknown as { started?: boolean }).started;
+  if (top.scene.key === 'Minigame' && !started) return;
+  openPause();
+}
+
 export function openPause(): void {
   if (!game || frozen) return;
   const top = topScene();

@@ -278,6 +278,8 @@ export function canPlace(pond: Pond, kind: FrogKind, anchor: number): boolean {
 // ----------------------------------------------------------------- the module
 
 export const battleship: MinigameModule = {
+  // (placing your frogs is not yet the hunt: LEAVE, the stake back)
+  inPlay: () => phase !== 'place',
   // The id stays `battleship`: the cabinet, its price, its reward,
   // the registry and the high score table all key off it.  Nothing the player
   // ever reads says that word.

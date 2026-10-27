@@ -73,6 +73,17 @@ export function drawFrogToken(g: Phaser.GameObjects.Graphics, low = false): Phas
   return g;
 }
 
+/**
+ * A RED "-N" by a counter when it goes down: it rises a few pixels and fades
+ * (log #47).  `x`, `y` are on the screen, not in the world.  Exported for the
+ * odd screen with its own counter rather than the HUD's.
+ */
+export function floatDeduct(scene: Phaser.Scene, x: number, y: number, n: number, unit = ''): void {
+  if (n <= 0 || !scene.sys.isActive()) return;
+  const t = text(scene, Math.round(x), Math.round(y), `-${n}${unit}`, 0xff4a4a).setOrigin(0, 0).setDepth(1005).setScrollFactor(0);
+  scene.tweens.add({ targets: t, y: t.y - 9, alpha: 0, duration: 1100, ease: 'Quad.easeOut', onComplete: () => t.destroy() });
+}
+
 export class TokenHud {
   private scene: Phaser.Scene;
   private cashPlate: Phaser.GameObjects.Rectangle;
@@ -140,7 +151,11 @@ export class TokenHud {
       // never finished, and left the screen black.
       if (!this.alive()) return;
       if (hudMode() !== this.mode || (this.mode === 'hunt' && this.huntText() !== this.objectiveShown)) this.applyMode();
-      if (st.cash !== this.lastCash) this.refreshCash(st.cash);
+      if (st.cash !== this.lastCash) {
+        // (spent: the red amount by the cash, the size of what went)
+        if (this.lastCash >= 0 && st.cash < this.lastCash && this.container.visible) floatDeduct(this.scene, this.container.x + this.cashPlate.width + 1, this.container.y + 3, this.lastCash - st.cash);
+        this.refreshCash(st.cash);
+      }
       this.refreshLife();
     });
     this.refreshCash(store.get().cash);
@@ -236,6 +251,8 @@ export class TokenHud {
 
   private onChange(next: number, prev: number): void {
     this.refresh(next);
+    // (spent: the red amount by the tokens)
+    if (next < prev && this.container.visible) floatDeduct(this.scene, this.container.x + this.tokens.x + this.plate.width + 1, this.container.y + 3, prev - next);
     // Coin-spin: squash the coin on its Y axis, which reads as a spin at 4px.
     this.scene.tweens.add({
       targets: this.coin,

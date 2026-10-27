@@ -34,6 +34,8 @@ export const KEY_ACTIONS: KeyAction[] = [
   { id: 'run', label: 'RUN', code: 'ShiftLeft', key: 'Shift', keyCode: 16 },
   { id: 'jump', label: 'JUMP / ACTION', code: 'Space', key: ' ', keyCode: 32 },
   { id: 'crouch', label: 'CROUCH', code: 'KeyC', key: 'c', keyCode: 67 },
+  // (the pockets: open the inventory, wherever it can be opened -- ui/pockets)
+  { id: 'inventory', label: 'INVENTORY', code: 'KeyG', key: 'g', keyCode: 71 },
 ];
 
 const STORE = 'froggy.keymap.v1';

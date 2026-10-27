@@ -36,7 +36,7 @@ import { Boot } from '../scenes2d/Boot';
 import { StartScreen } from '../scenes2d/StartScreen';
 import { SettingsModal } from '../scenes2d/SettingsModal';
 import { InventoryModal } from '../scenes2d/InventoryModal';
-import { installPause } from './pause';
+import { installPause, pauseIfInGame } from './pause';
 import { ProfileModal } from '../scenes2d/ProfileModal';
 import { ArcadeHub } from '../scenes2d/ArcadeHub';
 import { ArcadeAnnex } from '../scenes2d/ArcadeAnnex';
@@ -186,7 +186,11 @@ export function bootGame(): void {
     } else audio.release('hidden');
     if (!game) return;
     if (document.hidden) game.loop.sleep();
-    else game.loop.wake();
+    else {
+      game.loop.wake();
+      // back to a game in the middle of play: the settings, paused (log #50)
+      setTimeout(() => pauseIfInGame(), 60);
+    }
   });
   // The music, through every way of leaving and coming back: another window
   // or app (blur / focus), and the page put away and restored from the

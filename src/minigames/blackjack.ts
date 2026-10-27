@@ -264,6 +264,8 @@ function maxBet(): number {
 }
 
 export const blackjack: MinigameModule = {
+  // (in play from the first deal)
+  inPlay: () => hands > 0 || phase !== 'bet',
   id: 'blackjack',
   title: 'FROGGY 21',
   music: 'game_blackjack',

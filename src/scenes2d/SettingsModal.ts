@@ -111,8 +111,17 @@ export class SettingsModal extends Phaser.Scene {
           mg?.quitGame();
         }, { width: 70, height: 13, fill: 0x5a1a22, hoverFill: 0x8a2b34 });
       } else if (inGame) {
+        // LEAVE before the play is under way, QUIT GAME once it is -- or the
+        // cabinet's own (the Chamber's CASH OUT)
+        const mg = pausedScene() as MinigameScene | null;
+        const mine = mg?.ownExit?.() ?? null;
         button(this, 54, 158, 'RESUME', () => resumePause(), { width: 54, height: 13 });
-        button(this, 122, 158, 'QUIT GAME', () => this.quitGame(), { width: 70, height: 13, fill: 0x5a1a22, hoverFill: 0x8a2b34 });
+        button(this, 122, 158, mg?.exitLabel?.() ?? 'QUIT GAME', () => {
+          if (mine) {
+            resumePause();
+            mine.run();
+          } else this.quitGame();
+        }, { width: 70, height: 13, fill: 0x5a1a22, hoverFill: 0x8a2b34 });
       } else if (own) {
         button(this, 54, 158, 'RESUME', () => resumePause(), { width: 54, height: 13 });
         button(this, 122, 158, own.label, () => {
@@ -255,7 +264,8 @@ export class SettingsModal extends Phaser.Scene {
         fill: waiting ? 0x5a3a12 : moved ? 0x1f4a5a : undefined,
       });
       this.body.add(b);
-      y += 11;
+      // (ten to a row: nine of them and RESET KEYS clear the RESUME row)
+      y += 10;
     }
     this.body.add(text(this, 32, y + 1, 'ARROWS MOVE TOO', PALETTE.ash));
     this.body.add(button(this, 214, y + 3, 'RESET KEYS', () => {

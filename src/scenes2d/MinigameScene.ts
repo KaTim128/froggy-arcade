@@ -30,7 +30,7 @@ import { ledger } from '../core/ledger';
 import { store, type GameId } from '../core/state';
 import { button, centerText, fadeIn, fadeToScene, forfeitLines, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
-import { TokenHud } from '../ui/hud';
+import { floatDeduct, TokenHud } from '../ui/hud';
 import { cabinetById } from '../game/content';
 import { getMinigame } from '../minigames/registry';
 import type { MinigameApi, MinigameModule } from '../minigames/types';
@@ -216,6 +216,12 @@ export class MinigameScene extends Phaser.Scene {
 
     this.hud = new TokenHud(this);
     this.hud.setVisible(false); // the title bar already carries the balance line
+    // (tokens going out mid-game -- the play itself, a raise, a spin -- the
+    // red amount under the title bar, where the counter would be)
+    const offSpend = ledger.onChange((next, prev) => {
+      if (next < prev) floatDeduct(this, 4, 19, prev - next, ' TOKENS');
+    });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, offSpend);
     // Right-aligned a clear gap short of the gear rather than pinned to a
     // fixed left edge: the note is the cabinet's own wording and some of them
     // are twice as long as others.
@@ -438,7 +444,7 @@ export class MinigameScene extends Phaser.Scene {
    * felt this moment; every other cabinet forfeits its whole stake.
    */
   forfeitAmount(): number | null {
-    if (this.settled || !this.started) return null;
+    if (this.settled || !this.started || !this.inPlay()) return null;
     if (this.practicing) return 0;
     return Math.max(0, Math.floor(this.mod?.atRisk?.() ?? this.stake));
   }
@@ -465,6 +471,30 @@ export class MinigameScene extends Phaser.Scene {
     return false;
   }
 
+  /**
+   * Under way: past the part before the play (see MinigameModule.inPlay).
+   * Before it -- the card, a practice go, the bets before a race -- walking
+   * out is LEAVE, and nothing is lost.
+   */
+  inPlay(): boolean {
+    if (!this.started || this.settled || this.practicing) return false;
+    return this.mod?.inPlay?.() ?? true;
+  }
+
+  /**
+   * What the way out is called right now: LEAVE until the play is under way,
+   * then QUIT GAME, or the cabinet's own (the Chamber's CASH OUT).
+   */
+  exitLabel(): string {
+    if (!this.inPlay()) return 'LEAVE';
+    return this.mod?.pauseExit?.()?.label ?? 'QUIT GAME';
+  }
+
+  /** The cabinet's own way out, if it has one now (see MinigameModule.pauseExit). */
+  ownExit(): { label: string; run: () => void } | null {
+    return this.inPlay() ? this.mod?.pauseExit?.() ?? null : null;
+  }
+
   /** Whether this is a practice go (nothing paid, LEAVE goes back to the choice). */
   isPracticing(): boolean {
     return this.practicing && this.started && !this.settled;
@@ -481,6 +511,15 @@ export class MinigameScene extends Phaser.Scene {
       this.leave();
       return;
     }
+    // BEFORE THE PLAY: the stake back, and out, with no result to show
+    // ("YOU BREAK EVEN" for walking away from a race you never ran)
+    if (!this.practicing && !this.inPlay()) {
+      if (this.stake > 0) ledger.credit(this.stake, 'game.refund');
+      this.stake = 0;
+      this.mod?.destroy?.();
+      this.leave();
+      return;
+    }
     this.exitTo = null;
     this.forfeit();
   }
@@ -488,7 +527,7 @@ export class MinigameScene extends Phaser.Scene {
   /** The question QUIT GAME asks: how the sitting stands, and what walking out forfeits. */
   quitLines(): string[] {
     const risk = this.forfeitAmount();
-    if (risk === null) return ['LEAVE THIS GAME?', 'NOTHING HAS BEEN PAID.'];
+    if (risk === null) return this.stake > 0 && !this.practicing ? ['LEAVE THIS GAME?', `YOUR ${this.stake} TOKENS COME BACK TO YOU.`] : ['LEAVE THIS GAME?', 'NOTHING HAS BEEN PAID.'];
     // How the sitting stands, first: the hands already settled, so whatever
     // is on the felt right now is the forfeit line's and not counted twice.
     const sitting: string[] = [];

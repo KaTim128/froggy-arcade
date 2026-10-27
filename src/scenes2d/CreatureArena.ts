@@ -3337,7 +3337,8 @@ export class CreatureArena extends Phaser.Scene {
         if (xpLine) lines.push([xpLine, 0x8ae88a]);
       } else {
         lines.push([r.msg, PALETTE.cream]);
-        if (ladder) lines.push([before ? `THE RUN PAID ${before} TOKENS. THEY ARE YOURS TO KEEP.` : 'NO REFUND, AND NO PRIZE.', PALETTE.ash]);
+        // (nothing said of what a loss does not give back: log #65)
+        if (ladder && before) lines.push([`THE RUN PAID ${before} TOKENS. THEY ARE YOURS TO KEEP.`, PALETTE.ash]);
       }
       lines.forEach(([t, c], i) => box.add(centerText(this, X, Y - 16 + i * 10, t, c).setMaxWidth(232)));
       if (won && r.levelUp) {

@@ -27,7 +27,7 @@ import { drawAttackIcon } from '../art/attackIcons';
 import { drawAbilityIcon } from '../art/abilityIcons';
 import { attackCard } from '../game/attackInfo';
 import { backPlate } from '../ui/plate';
-import { drawFrogToken } from '../ui/hud';
+import { drawFrogToken, floatDeduct } from '../ui/hud';
 import { tinyText, tinyWrap } from '../ui/tinyText';
 import { xpProgress } from '../game/creatureLevel';
 import {
@@ -81,6 +81,11 @@ export class CreatureHub extends Phaser.Scene {
       const r = retreat();
       this.msg = `LAST BATTLE ABANDONED. ${r.msg}`;
     }
+    // (tokens spent here: the red amount by the chip, as by the HUD's counter)
+    const off = ledger.onChange((next, prev) => {
+      if (next < prev) floatDeduct(this, 113 + `${prev}`.length * 6, 3, prev - next);
+    });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, off);
     const c = store.get().creatures;
     this.screen = !c.starterTaken ? 'starter' : c.pending ? 'pack' : needsRecovery() ? 'recruit' : this.want ?? 'home';
     this.add.rectangle(0, 0, GAME_W, GAME_H, 0x10142a).setOrigin(0, 0);
@@ -659,8 +664,10 @@ export class CreatureHub extends Phaser.Scene {
     L.add(text(this, px + 4, 50, LADDER_WIN ? `+${LADDER_WIN} EACH LEVEL` : 'BEAT ALL 5 + BOSS:', PALETTE.mossLight));
     L.add(text(this, px + 4, 59, `WIN ${LADDER_BOSS_WIN} TOKENS`, PALETTE.mossLight));
     L.add(text(this, px + 4, 70, 'LOSS ENDS THE RUN.', 0xff9a9a));
-    L.add(text(this, px + 4, 79, LADDER_WIN ? 'NO REFUND, BUT YOU' : 'NO REFUND, AND', PALETTE.ash));
-    L.add(text(this, px + 4, 88, LADDER_WIN ? 'KEEP WHAT IT PAID.' : 'NO PRIZE.', PALETTE.ash));
+    if (LADDER_WIN) {
+      L.add(text(this, px + 4, 79, 'YOU KEEP WHAT', PALETTE.ash));
+      L.add(text(this, px + 4, 88, 'IT HAS PAID.', PALETTE.ash));
+    }
     L.add(text(this, px + 4, 100, `TOKENS: ${ledger.balance()}`, PALETTE.cream));
     if (run) {
       L.add(text(this, px + 4, 109, LADDER_WIN ? `THIS RUN: +${run.earned}` : `BOSS PAYS ${LADDER_BOSS_WIN}`, PALETTE.gold));
@@ -678,7 +685,7 @@ export class CreatureHub extends Phaser.Scene {
   private confirmStart(): void {
     if (this.dialog) return;
     this.dialog = confirmDialog(this, {
-      lines: [`START A LADDER RUN FOR ${LADDER_COST} TOKENS?`, `YOU HAVE ${ledger.balance()}.`, 'A LOSS ENDS THE RUN. NO REFUND.'],
+      lines: [`START A LADDER RUN FOR ${LADDER_COST} TOKENS?`, `YOU HAVE ${ledger.balance()}.`, 'A LOSS ENDS THE RUN.'],
       confirm: `PAY ${LADDER_COST}`,
       onConfirm: () => {
         this.dialog = null;

@@ -1110,6 +1110,8 @@ let goBtn: { box: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Bitmap
 let keys: Phaser.Input.Keyboard.Key[] = [];
 
 export const frogRace: MinigameModule = {
+  // (till the gun, the bets can be walked away from: LEAVE, the stake back)
+  inPlay: () => phase !== 'betting',
   id: ID,
   title: 'FROG RACE',
   music: 'game_frograce',

@@ -224,6 +224,8 @@ export function faceAt(rot: number): Slice {
 }
 
 export const wheelOfFortune: MinigameModule = {
+  // (in play from the first spin: walking up and away again is LEAVE)
+  inPlay: () => spins > 0 || spinning,
   id: ID,
   title: 'WHEEL OF FORTUNE',
   music: 'game_wheel',
