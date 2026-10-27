@@ -53,15 +53,15 @@ I searched `src` for each one:
 
 | # | Item | What is missing |
 |---|---|---|
-| M1 | 5: arcade chained door locks | The reference image, and which alley's [E] ALLEY prompt to hide. |
-| M2 | 31: room 4 machines | The image with the "marked spots" (where the machines and Bog Ball go). |
-| M3 | 41: default wardrobe layout | The layout image. |
-| M4 | 24: mobile errors ("broken image") | Which screen or asset is broken, and on which device. |
-| M5 | 24: "eerie staircase scene with tap-to-enter doors and chair" | Which scene this is: a new scene, or the 2D Stairwell? Where is the chair, and what do the doors lead to? |
-| M6 | 10: Frog Cross invincibility exploit | How to reproduce it. I will look for it myself; if I can't find it, I'll report back. |
-| M7 | 21 / 20: "arcade mastery", "secret discoverer" | The exact conditions. My proposal: mastery = win every arcade game once; secret discoverer = find all secrets. |
-| M8 | 30: "stacked bodies with blood" | Where they are: the turn-around scare corridor? |
-| M9 | 1: Midnight Condo Run | How much prices should go up. My proposal: furniture ×2, clothing ×1.5, haircut ×2. The improvement suggestions will be text only. |
+| M1 | 5: arcade chained door locks | **ANSWERED:** reference image saved at `docs/refs/arcade-chained-lock.jpg`. It shows a white hasp bracket across the top of the doors and a gold padlock hanging on a chain. Chain and lock go on the arcade doors only, on the inside of the arcade. *Still open:* which alley's [E] ALLEY prompt to hide. |
+| M2 | 31: room 4 machines | *Still open:* the image with the marked spots for the new machines and for Bog Ball. |
+| M3 | 41: default wardrobe layout | *Still open:* the layout image. |
+| M4 | 24: mobile errors ("broken image") | **ANSWERED:** a broken-image icon appears on mobile during 3D scenes and games. Plan: find which image fails on mobile (lost WebGL context, texture size, or an asset path under the Vercel base path) and fix it at the root. |
+| M5 | 24: eerie staircase scene | **ANSWERED:** at night, the player goes through the arcade staff door and down the stairs, finds a key at the bottom, and that leads to hide and seek. Make that scene eerie, with tap-to-enter doors and the chair (mobile tap support). |
+| M6 | 10: Frog Cross invincibility exploit | **ANSWERED:** after the first car hit, the frog gets a short invincibility that players use to walk through traffic to the other side. Fix: during the invincibility window the frog cannot cross through cars; it is knocked back or held still. The window no longer gives free passage. |
+| M7 | 21 / 20: arcade mastery, secret discoverer | **ANSWERED (mastery):** one really hard challenge badge per arcade game, taken from the earlier prompts (e.g. Fence Wars with no damage, Grudge every animal in a row, Chamber 10 rounds, Frog Cross 5/10/15 crossings). Games with no stated challenge get a comparably hard one, listed here for review before they are built. *Still open:* the secret discoverer condition. Default: find every secret badge (lazy hiding, error frog-04, …). |
+| M8 | 30: stacked bodies with blood | **ANSWERED:** in the forest, during the midnight Froggy chase, once the player goes deep enough: inside a small textured building. |
+| M9 | 1: Midnight Condo Run prices | **ANSWERED:** furniture ×1.5, clothing ×1.2, haircuts ×1.3. Suggestions are text only. |
 
 ---
 
