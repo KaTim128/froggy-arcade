@@ -1,3 +1,4 @@
+import { markLive, reloadTarget } from './session';
 import { froggyLayer } from '../render/froggyLayer';
 /**
  * Dev debug panel.  PRD §6.9 / DB-1 / QFD A6.
@@ -57,6 +58,10 @@ export function initDebug(g: Phaser.Game): void {
     canEnter: (scene: string, route: string, tokens = 0) =>
       canEnter(scene as never, { ...store.get(), route: route as Route, tokens }, { cost: 0 }),
     activeScenes: () => g.scene.getScenes(true).map((s) => s.scene.key),
+    /** This tab as one a run is being played in (START does it), and where a reload would go. */
+    session: { markLive: () => markLive(), reloadTarget: () => reloadTarget() },
+    /** A new profile, made the active one (as the picker would). */
+    newProfile: (name: string) => store.createSlot(name),
     game: () => g,
     // Same setter `?tokens=` uses, for tests that need to change a balance
     // mid-session rather than at load.

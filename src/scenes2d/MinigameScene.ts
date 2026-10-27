@@ -27,7 +27,8 @@ import { PALETTE } from '../render/palette';
 import { FONT_ADVANCE } from '../render/pixelFont';
 import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
-import { store, type GameId } from '../core/state';
+import { store, type GameId, type SavedGame } from '../core/state';
+import { trackGame } from '../core/session';
 import { centerText, fadeIn, fadeToScene, forfeitLines, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { floatDeduct, TokenHud } from '../ui/hud';
@@ -64,6 +65,8 @@ export class MinigameScene extends Phaser.Scene {
    * the game.  `started` is what `update` waits on.
    */
   private started = false;
+  /** The go a reload interrupted, to put back rather than start (core/session). */
+  private restoring: SavedGame | null = null;
   /** Started from the floor (E, a tap) rather than by clicking the cabinet.  The card comes up either way. */
   private straight = false;
   private card: TutorialCard | null = null;
@@ -79,8 +82,10 @@ export class MinigameScene extends Phaser.Scene {
     super('Minigame');
   }
 
-  init(data: { id: GameId; from?: string; straight?: boolean; chooser?: boolean }): void {
+  init(data: { id: GameId; from?: string; straight?: boolean; chooser?: boolean; restore?: SavedGame }): void {
     this.gameId = data.id;
+    // back after a reload, mid-game: straight into it, charged nothing (core/session)
+    this.restoring = data.restore ?? null;
     // back from a practice go: the machine's screen, not its HOW TO PLAY page
     this.chooser = data.chooser === true;
     // Walked up and pressed play in one motion: the card still comes up.
@@ -148,6 +153,7 @@ export class MinigameScene extends Phaser.Scene {
   private copInterrupts(): void {
     if (this.settled) return;
     this.settled = true;
+    this.endSession();
     this.copT = null;
     this.card?.destroy();
     this.card = null;
@@ -296,6 +302,7 @@ export class MinigameScene extends Phaser.Scene {
       store.flush();
       mod.create(this, api);
       this.started = true;
+      this.saveGame(true);
       // the cabinet's finish over its picture: its light, its corners, its grain
       applyFinish(this, this.gameId);
       this.armPolice();
@@ -322,17 +329,34 @@ export class MinigameScene extends Phaser.Scene {
       void tag;
       mod.create(this, api);
       this.started = true;
+      this.saveGame(true);
       // the cabinet's finish over its picture: its light, its corners, its grain
       applyFinish(this, this.gameId);
       this.armPolice();
       setCabinetTouch(mod.touch);
     };
 
+    // ---- THIS GO, KEPT IN THE SAVE as it is played (log #87): every second,
+    // and on the way out of the page (core/session captureGame).
+    trackGame(() => this.saveGame(true));
+    this.time.addEvent({ delay: 1000, loop: true, callback: () => this.saveGame() });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => trackGame(null));
+
     // This game's own keys (Grudge's J...) are live from here until it goes,
     // so any the player moved are moved for it and for nothing else.
     gameKeys(this.gameId, [...keyPlan(mod.tutorial.controls).reserved]);
     setKeyScope(this.gameId);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setKeyScope(null));
+
+    // Back after a reload, mid-go: straight into it, no card, no charge.
+    if (this.restoring) {
+      const r = this.restoring;
+      this.restoring = null;
+      this.resumeGo(r, api);
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setCabinetTouch(null));
+      this.devBridge();
+      return;
+    }
 
     // ---- THE MACHINE'S SCREEN, BEFORE EVERY GO (log #49b, #70, #79).
     //
@@ -378,6 +402,67 @@ export class MinigameScene extends Phaser.Scene {
     this.devBridge();
   }
 
+  /**
+   * ---- THIS GO, IN THE SAVE (log #87).  What a reload needs to put it back:
+   * the stake, what has been paid out, practice or not, and the game's own
+   * snapshot where it keeps one.
+   */
+  private saveGame(now = false): void {
+    if (!this.started || this.settled || !this.mod) return;
+    let snap: unknown;
+    try {
+      snap = this.mod.snapshot?.();
+    } catch {
+      snap = undefined;
+    }
+    const atRisk = Math.max(0, Math.floor(this.mod.atRisk?.() ?? 0));
+    store.setGame({ id: this.gameId, from: this.from, stake: this.stake, paid: this.paid, practicing: this.practicing, atRisk, snap, at: Date.now() }, now);
+  }
+
+  /** The go is over (won, lost, left, quit): nothing to come back to. */
+  private endSession(): void {
+    if (store.get().game) store.setGame(null, true);
+  }
+
+  /**
+   * ---- BACK INTO A GO A RELOAD INTERRUPTED.  No card and no charge: the
+   * stake it had is the stake it has.  A cabinet that keeps a snapshot is put
+   * back exactly; one that does not starts a fresh go, paid for.  Either way
+   * it comes up paused with the settings open (core/pause pauseOnArrival).
+   */
+  private resumeGo(r: SavedGame, api: MinigameApi): void {
+    const mod = this.mod!;
+    this.stake = r.stake;
+    this.paid = r.paid;
+    if (r.practicing) {
+      this.practicing = true;
+      (api as { practice: boolean }).practice = true;
+      this.add.rectangle(GAME_W / 2, 8, 112, 12, 0x1f4a5a).setStrokeStyle(1, PALETTE.tealLight).setDepth(1002);
+      centerText(this, GAME_W / 2, 8, 'PRACTICE - FREE', PALETTE.tealLight).setDepth(1003);
+    }
+    mod.create(this, api);
+    let back = false;
+    if (r.snap !== undefined && mod.restore) {
+      try {
+        mod.restore(r.snap);
+        back = true;
+      } catch {
+        back = false;
+      }
+    }
+    this.started = true;
+    applyFinish(this, this.gameId);
+    this.armPolice();
+    setCabinetTouch(mod.touch);
+    // (a fresh go: whatever was on the felt mid-hand comes back to the pocket)
+    const owed = back || r.practicing ? 0 : (r.atRisk ?? 0);
+    if (owed > 0) {
+      ledger.credit(owed, 'game.refund');
+      this.stake = Math.max(0, this.stake - owed);
+    }
+    this.saveGame(true);
+  }
+
   /** PRD §6.9: force win / force loss in the active minigame. */
   private devBridge(): void {
     if (!import.meta.env?.DEV) return;
@@ -416,6 +501,7 @@ export class MinigameScene extends Phaser.Scene {
   private leave(): void {
     if (this.settled) return;
     this.settled = true;
+    this.endSession();
     this.card?.destroy();
     this.card = null;
     fadeToScene(this, this.exitTo ?? this.from, { atCabinet: this.gameId });
@@ -541,6 +627,7 @@ export class MinigameScene extends Phaser.Scene {
   private endPractice(won: boolean | null): void {
     if (this.settled) return;
     this.settled = true;
+    this.endSession();
     this.card?.destroy();
     this.card = null;
     if (this.started) this.mod?.destroy?.();
@@ -577,6 +664,7 @@ export class MinigameScene extends Phaser.Scene {
     const amount = Math.floor(n);
     ledger.credit(amount, 'game.reward');
     this.paid += amount;
+    this.saveGame();
     store.flush();
   }
 
@@ -586,6 +674,7 @@ export class MinigameScene extends Phaser.Scene {
     if (this.settled || !Number.isFinite(n) || n <= 0) return false;
     if (!ledger.debit(Math.floor(n), 'game.cost')) return false;
     this.stake += Math.floor(n);
+    this.saveGame();
     store.flush();
     return true;
   }
@@ -610,6 +699,7 @@ export class MinigameScene extends Phaser.Scene {
     }
     if (this.settled) return;
     this.settled = true;
+    this.endSession();
     this.card?.destroy();
     this.card = null;
     if (this.started) this.mod?.destroy?.();
@@ -650,6 +740,7 @@ export class MinigameScene extends Phaser.Scene {
     }
     if (this.settled) return;
     this.settled = true;
+    this.endSession();
     this.card?.destroy();
     this.card = null;
     if (this.started) this.mod?.destroy?.();
@@ -676,6 +767,7 @@ export class MinigameScene extends Phaser.Scene {
     }
     if (this.settled) return;
     this.settled = true;
+    this.endSession();
     this.card?.destroy();
     this.card = null;
 

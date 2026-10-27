@@ -144,6 +144,16 @@ export interface MinigameModule {
    * Chamber's CASH OUT), or null for the usual one.
    */
   pauseExit?(): { label: string; run: () => void } | null;
+  /**
+   * ---- A RELOAD, PUT BACK EXACTLY (log #87).  Everything this go needs to
+   * carry on from where it stood -- positions, health, the clock, the score,
+   * the round -- as plain data.  Written into the save every second of play
+   * and on the way out of the page; handed to `restore` right after `create`
+   * when the page comes back.  A cabinet without these is put back at the
+   * start of a fresh go instead, still charged nothing again.
+   */
+  snapshot?(): unknown;
+  restore?(snap: unknown): void;
   create(scene: Phaser.Scene, api: MinigameApi): void;
   update?(time: number, delta: number): void;
   destroy?(): void;

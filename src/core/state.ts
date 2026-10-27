@@ -242,7 +242,31 @@ export interface GameState {
    * arcade door.  Written by game/place.ts, read by core/resume.ts.
    */
   place: SavedPlace | null;
+  /**
+   * ---- THE GAME BEING PLAYED, IF ONE IS (log #87).  Written when PLAY
+   * charges and as it goes; gone the moment it ends.  A reload mid-game puts
+   * the player back in it, paused, charged nothing again (core/session).
+   */
+  game: SavedGame | null;
   settings: Settings;
+}
+
+/** A cabinet in play, as saved: see `GameState.game` and core/session. */
+export interface SavedGame {
+  id: GameId;
+  /** The room it was played from, to go back to. */
+  from: string;
+  /** Tokens riding on it (the entry, plus anything raised). */
+  stake: number;
+  /** Tokens it has paid back already, hand by hand. */
+  paid: number;
+  practicing: boolean;
+  /** Of the stake, what is on the felt in the hand being played (a table's bet): handed back if the go cannot be put back exactly. */
+  atRisk?: number;
+  /** The game's own picture of itself, when it can be put back exactly (MinigameModule.snapshot). */
+  snap?: unknown;
+  /** Real time it was written. */
+  at: number;
 }
 
 export interface SavedPlace {
@@ -432,6 +456,7 @@ function defaultState(): GameState {
     life: defaultLife(),
     creatures: defaultCreatures(),
     place: null,
+    game: null,
     settings: { master: 80, music: 70, sfx: 85, moveStyle: 'stick', ...generalDefaults() },
   };
 }
@@ -563,6 +588,7 @@ class Store {
     fresh.life = sanitizeLife((run as Partial<GameState>).life);
     fresh.creatures = sanitizeCreatures((run as Partial<GameState>).creatures);
     fresh.place = sanitizePlace((run as Partial<GameState>).place);
+    fresh.game = sanitizeGame((run as Partial<GameState>).game);
     // what is on disk now is this run: anything written after it is newer
     this.lastWrite = Number((run as { savedAt?: number }).savedAt) || 0;
     this.state = fresh;
@@ -701,6 +727,14 @@ class Store {
    * every step, and nothing on screen draws from it, so it wakes no listener;
    * it goes out with the next write.
    */
+  /** The game in play (or null: none), saved with the next write -- now, if `now`. */
+  setGame(g: SavedGame | null, now = false): void {
+    if (!this.index.active) return;
+    this.state.game = g;
+    if (now) this.flush();
+    else this.touch();
+  }
+
   setPlace(p: SavedPlace | null): void {
     if (!this.index.active) return;
     this.state.place = p;
@@ -888,6 +922,22 @@ class Store {
     Object.assign(this.state, next);
     this.touch();
   }
+}
+
+function sanitizeGame(g: unknown): SavedGame | null {
+  if (!g || typeof g !== 'object') return null;
+  const v = g as Partial<SavedGame>;
+  if (typeof v.id !== 'string' || typeof v.from !== 'string') return null;
+  return {
+    id: v.id as GameId,
+    from: v.from,
+    stake: Number.isFinite(v.stake) ? Math.max(0, Math.floor(v.stake as number)) : 0,
+    paid: Number.isFinite(v.paid) ? Math.max(0, Math.floor(v.paid as number)) : 0,
+    practicing: v.practicing === true,
+    atRisk: Number.isFinite(v.atRisk) ? Math.max(0, Math.floor(v.atRisk as number)) : 0,
+    snap: v.snap,
+    at: Number.isFinite(v.at) ? (v.at as number) : 0,
+  };
 }
 
 function sanitizePlace(p: unknown): SavedPlace | null {

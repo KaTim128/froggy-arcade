@@ -21,6 +21,7 @@ import { CreatureArena } from '../scenes2d/CreatureArena';
 import { StreetEast } from '../scenes2d/StreetEast';
 import { installLifeTicker } from '../game/lifeTicker';
 import { capturePlace } from '../game/place';
+import { captureGame } from './session';
 import Phaser from 'phaser';
 import { attachLandscapeFill } from '../render/landscapeFill';
 import { PALETTE } from '../render/palette';
@@ -174,6 +175,7 @@ export function bootGame(): void {
   // Where the player is standing goes with it.
   const saveNow = (): void => {
     capturePlace();
+    captureGame();
     store.flush();
   };
   window.addEventListener('beforeunload', saveNow);
