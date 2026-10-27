@@ -504,7 +504,7 @@ export class PoliceOfficer {
   private lens: THREE.Sprite;
   /** The light bar's two lamps, and everything that turns with it. */
   private bar = new THREE.Group();
-  private barLamps: THREE.PointLight[] = [];
+  private barLamps: THREE.SpotLight[] = [];
   private barDots: THREE.Sprite[] = [];
   private floorRing: THREE.Mesh;
 
@@ -664,7 +664,8 @@ export class PoliceOfficer {
     this.chest.add(this.neck);
     this.neck.position.y = 0.3 * k;
     // a man's neck: thick, the muscle either side of it running down
-    mesh(new THREE.CylinderGeometry(0.066, 0.074, 0.1, 14), skin, this.neck, 0, 0.03, -0.004);
+    // (narrower than the head by a good margin: as wide as it, it read as a post)
+    mesh(new THREE.CylinderGeometry(0.054, 0.062, 0.1, 14), skin, this.neck, 0, 0.03, -0.006);
     // the collar round it
     const collar = mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.05, 16, 1, true), new THREE.MeshLambertMaterial({ color: 0x1d2a42, side: THREE.DoubleSide }), this.neck, 0, -0.005, 0);
     collar.scale.z = 0.85;
@@ -677,7 +678,7 @@ export class PoliceOfficer {
     this.jaw.position.set(0, -0.055, 0.02);
     const chin = mesh(new THREE.SphereGeometry(0.07, 18, 12, 0, Math.PI * 2, Math.PI * 0.45, Math.PI * 0.55), skin, this.jaw, 0, 0.01, 0.0);
     // (a square jaw, set in close under the face: not a ball)
-    chin.scale.set(1.18, 0.72, 0.92);
+    chin.scale.set(1.04, 0.7, 0.9);
     // the mouth: a dark oval, a line shut, open round when they shout
     // (the open mouth only shows when he shouts: shut, it is the painted line)
     // A SHOUT, NOT A GRIN: the open mouth is wide and square, its top lip
@@ -718,7 +719,7 @@ export class PoliceOfficer {
       // was only a dark socket.  Now the eye stands just proud of the face,
       // each layer a hair in front of the last so none of them flickers.)
       const ez = 0.0935;
-      const eye = mesh(new THREE.SphereGeometry(0.0135, 16, 12), white, this.head, sx * 0.033, 0.011, ez);
+      const eye = mesh(new THREE.SphereGeometry(0.0148, 16, 12), white, this.head, sx * 0.033, 0.011, ez);
       eye.scale.set(1.2, 0.8, 0.58);
       const layer = (m: THREE.Material): THREE.Material => {
         m.polygonOffset = true;
@@ -726,12 +727,12 @@ export class PoliceOfficer {
         m.polygonOffsetUnits = -2;
         return m;
       };
-      const ir = mesh(new THREE.CircleGeometry(0.0066, 18), layer(iris), this.head, sx * 0.0328, 0.0108, ez + 0.0081);
+      const ir = mesh(new THREE.CircleGeometry(0.0074, 18), layer(iris), this.head, sx * 0.0328, 0.0108, ez + 0.0081);
       ir.rotation.y = sx * 0.14;
       // a darker ring round the iris, the way an eye has one
-      const ring = mesh(new THREE.RingGeometry(0.0058, 0.0068, 18), layer(new THREE.MeshBasicMaterial({ color: new THREE.Color(look.eyes).multiplyScalar(0.45) })), this.head, sx * 0.0328, 0.0108, ez + 0.0082);
+      const ring = mesh(new THREE.RingGeometry(0.0066, 0.0077, 18), layer(new THREE.MeshBasicMaterial({ color: new THREE.Color(look.eyes).multiplyScalar(0.45) })), this.head, sx * 0.0328, 0.0108, ez + 0.0082);
       ring.rotation.y = sx * 0.14;
-      const pupil = mesh(new THREE.CircleGeometry(0.0029, 12), layer(new THREE.MeshBasicMaterial({ color: 0x050302 })), this.head, sx * 0.0328, 0.0108, ez + 0.0084);
+      const pupil = mesh(new THREE.CircleGeometry(0.0032, 12), layer(new THREE.MeshBasicMaterial({ color: 0x050302 })), this.head, sx * 0.0328, 0.0108, ez + 0.0084);
       pupil.rotation.y = sx * 0.14;
       mesh(new THREE.CircleGeometry(0.0013, 8), layer(new THREE.MeshBasicMaterial({ color: 0xffffff })), this.head, sx * 0.0328 + 0.0022, 0.0128, ez + 0.0087);
       // the upper lid, over the top of the eye: a level, tired stare
@@ -921,10 +922,13 @@ export class PoliceOfficer {
       [0xff2030, 0],
       [0x2a50ff, Math.PI],
     ] as const) {
-      // (soft and wide: up close a hot little lamp painted a hard blot on the wall)
-      const l = new THREE.PointLight(col, 1.5, 4.2, 1.6);
+      // (soft and wide: up close a hot little lamp painted a hard blot on the
+      // wall.  And out and down, not all round: a lamp at the shins that lit
+      // all round put red and blue blotches up his own face from below.)
+      const l = new THREE.SpotLight(col, 1.5, 4.2, 1.05, 0.85, 1.6);
       l.position.set(Math.cos(a) * 0.36, 0.05, Math.sin(a) * 0.36);
-      this.bar.add(l);
+      l.target.position.set(Math.cos(a) * 1.6, -0.35, Math.sin(a) * 1.6);
+      this.bar.add(l, l.target);
       this.barLamps.push(l);
     }
     this.floorRing = new THREE.Mesh(
@@ -1077,10 +1081,14 @@ export class PoliceOfficer {
     }
 
     // ---- the torch and its beam
-    this.torch.intensity = 38 * s.torch;
+    const len = Math.max(0.2, Math.min(9, s.beamLen));
+    // (as bright on what it lights a step away as across a room: at full
+    // strength a wall half a metre off the lens burned white.  The scene
+    // eases the beam's length, so this eases with it.)
+    const near = Math.min(1, Math.pow(Math.max(len, 0.35) / 6.5, 1.6));
+    this.torch.intensity = 38 * s.torch * Math.max(0.06, near);
     this.lens.material.opacity = s.torch;
     this.beam.visible = s.torch > 0.05;
-    const len = Math.max(0.2, Math.min(9, s.beamLen));
     this.beam.scale.set(len, len, len);
     (this.beam.material as THREE.MeshBasicMaterial).opacity = 0.085 * s.torch;
 

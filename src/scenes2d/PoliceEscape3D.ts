@@ -155,6 +155,8 @@ interface Cop {
   alertT: number;
   waitDoor: Door | null;
   waitT: number;
+  /** How far open the door he is waiting on was, a frame ago. */
+  waitK?: number;
   stuckT: number;
   /** Held up on furniture going straight at you: round by the nav graph for a moment. */
   detourT: number;
@@ -213,6 +215,36 @@ function wellNext(f: number, seg: WSeg, x: number, z: number): { f: number; seg:
     if (z >= 0) return { f: f + 1, seg: 'top' };
   }
   return { f, seg };
+}
+
+/** Where a piece of the well sits in the climb: G's landing is 0, its first flight 1, and so on up. */
+const SEG_RANK: Record<WSeg, number> = { top: 0, A: 1, bot: 2, B: 3 };
+const wellRank = (f: number, seg: WSeg): number => f * 4 + SEG_RANK[seg];
+
+/**
+ * In the well, the point to make for next to get from (f, seg) toward
+ * (tf, tseg) at (tx, tz): straight at it on the same piece, otherwise the
+ * mouth of the next flight or landing, a little way past it so the step
+ * there crosses over.  (A straight line across the well runs into the gap
+ * between the flights and stops there.)
+ */
+function wellAim(f: number, seg: WSeg, tf: number, tseg: WSeg, tx: number, tz: number): { x: number; z: number } {
+  const a = wellRank(f, seg);
+  const b = wellRank(tf, tseg);
+  if (a === b) return { x: tx, z: tz };
+  const L = -(WX + GAP) / 2;
+  const R = (WX + GAP) / 2;
+  const up = b > a;
+  switch (seg) {
+    case 'top':
+      return up ? { x: L, z: -0.4 } : { x: R, z: -0.4 };
+    case 'A':
+      return up ? { x: L, z: -FLIGHT - 0.3 } : { x: L, z: 0.3 };
+    case 'bot':
+      return up ? { x: R, z: -FLIGHT + 0.4 } : { x: L, z: -FLIGHT + 0.4 };
+    case 'B':
+      return up ? { x: R, z: 0.3 } : { x: R, z: -FLIGHT - 0.3 };
+  }
 }
 
 function wellClamp(f: number, seg: WSeg, x: number, z: number, r: number): { x: number; z: number } {
@@ -1038,11 +1070,33 @@ export class PoliceEscape3D extends Phaser.Scene {
 
   private noise(x: number, z: number, range: number, kind: 'run' | 'door'): void {
     const lvl = this.levelOf(this.me);
+    const me = this.me;
     for (const c of this.cops) {
-      if (c.mode !== 'task' || c.inLobby) continue;
-      if (Math.abs(this.levelOf(c.m) - lvl) > 0 || Math.abs(c.m.h - this.me.h) > 2) continue;
+      if (c.inLobby) continue;
+      // (the well carries a sound up and down it: a floor either way)
+      const inWell = c.m.well && me.well;
+      if (inWell ? Math.abs(c.m.h - me.h) > FH * 1.5 : Math.abs(this.levelOf(c.m) - lvl) > 0 || Math.abs(c.m.h - me.h) > 2) continue;
       const d = Math.hypot(c.m.x - x, c.m.z - z);
-      if (d > range || this.clock - c.heardT < 3) continue;
+      if (d > range) continue;
+      // RUNNING IS HEARD, AND HE KNOWS IT IS YOU: after you, to where the
+      // footsteps are.  (Every step heard puts him back on them; out of
+      // earshot he goes to the last of them, and then searches.)
+      if (kind === 'run') {
+        c.lkp = { x: me.x, z: me.z, f: me.f, well: me.well, h: me.h };
+        c.lostT = 0;
+        if (c.mode !== 'chase') {
+          c.mode = 'chase';
+          c.acts = [];
+          c.path = [];
+          c.sus = 1;
+          if (this.clock - c.heardT > 3) {
+            c.heardT = this.clock;
+            audio.sfx('radio_static', 0.3);
+          }
+        }
+        continue;
+      }
+      if (c.mode !== 'task' || this.clock - c.heardT < 3) continue;
       c.heardT = this.clock;
       // somewhere to go and look: not where you are, just where it came from
       const at = this.nearestNode({ x, z, f: lvl, well: this.me.well, seg: this.me.seg, h: this.me.h });
@@ -1314,19 +1368,34 @@ export class PoliceEscape3D extends Phaser.Scene {
     }
     // a door in the way: stop, reach, open it, go on
     if (c.waitDoor) {
+      const wd = c.waitDoor;
       c.st.reach = 1;
       c.waitT += dt;
-      if (c.waitDoor.k > 0.7 || c.waitT > 2.5) {
+      // (after you, he goes through as soon as there is room for him)
+      const enough = c.mode === 'chase' ? 0.56 : 0.7;
+      if (wd.k > enough || c.waitT > 2.5) {
         c.waitDoor = null;
         c.waitT = 0;
-      } else return false;
+      } else {
+        // STOOD IN ITS WAY.  A leaf stops against whoever it would swing
+        // into -- him, there with his hand on it -- and he waited it out.
+        // Not moving while it should be: a step back, away from the hinge.
+        if (wd.want > wd.k && c.waitT > 0.25 && wd.k - (c.waitK ?? -1) < 0.002) {
+          const ax = c.m.x - wd.hx;
+          const az = c.m.z - wd.hz;
+          const al = Math.hypot(ax, az) || 1;
+          this.step(c.m, c.m.x + (ax / al) * 1.2 * dt, c.m.z + (az / al) * 1.2 * dt, R_COP, 'cop', false);
+        }
+        c.waitK = wd.k;
+        return false;
+      }
     }
     const n = c.path[c.pathI];
     if (!n) return true;
     const prev = c.path[c.pathI - 1];
     if (prev) {
       const d = this.edgeDoor(prev, n);
-      if (d && d.k < 0.7 && d.pivot.visible) {
+      if (d && d.k < (c.mode === 'chase' ? 0.56 : 0.7) && d.pivot.visible) {
         if (d.want < 1) {
           d.want = 1;
           d.by = 'officer';
@@ -1550,8 +1619,10 @@ export class PoliceEscape3D extends Phaser.Scene {
       c.detourT = Math.max(0, c.detourT - dt);
       /** Straight at you, as on a floor: the stairs' own shape takes him up or down them. */
       const closeIn = (): void => {
-        const dx = me.x - c.m.x;
-        const dz = me.z - c.m.z;
+        // (both in the well: by the flights, not across the gap between them)
+        const aim = c.m.well && me.well ? wellAim(c.m.f, c.m.seg, me.f, me.seg, me.x, me.z) : me;
+        const dx = aim.x - c.m.x;
+        const dz = aim.z - c.m.z;
         const d = Math.hypot(dx, dz) || 1e-4;
         const s = Math.min(d, this.copPace(c, CHASE) * dt);
         const before = { x: c.m.x, z: c.m.z };

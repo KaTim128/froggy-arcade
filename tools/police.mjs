@@ -58,7 +58,8 @@ const newPage = async (qs) => {
     if (m.type() === 'error' && !/favicon|vite\.svg/i.test(t)) errors.push(`console.error: ${t}`);
   });
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-  await page.goto(`${URL}/${qs}`, { waitUntil: 'networkidle2' });
+  await page.goto(`${URL}/${qs}`, { waitUntil: 'load' });
+  await sleep(1500);
   await sleep(2500);
   await page.mouse.click(640, 60);
   await sleep(400);
@@ -145,7 +146,12 @@ try {
   let r = await P(page, 'walkTo', 0.9, 2.6);
   check('a shut fire door is solid', r.well === true, `at z ${r.z.toFixed(2)}`);
   await P(page, 'useDoor', 'stair-6');
-  await sleep(1500);
+  // (till it is open: on a software renderer the swing takes more than its 1.5 s)
+  for (let i = 0; i < 40; i++) {
+    await sleep(250);
+    const d = (await P(page, 'doors')).find((x) => x.id === 'stair-6');
+    if (d && d.k > 0.9) break;
+  }
   r = await P(page, 'walkTo', 0.9, 2.6);
   check('and open, it lets you out on to the floor', r.well === false && r.f === 6 && Math.abs(r.h - 18) < 0.01, JSON.stringify(r));
   // back down, all the way, and the lobby door will not open
@@ -346,6 +352,8 @@ try {
   {
     const page3 = await newPage('?intro=1&charity=1&key=1&scene=PoliceEscape3D');
     await sleep(3000);
+    // (seen going in only counts once the scene has handed you the controls)
+    await until(page3, (x) => x.phase === 'play');
     await P(page3, 'freeze', true);
     const rooms3 = await P(page3, 'rooms');
     // (a bed or a wardrobe, out in the room where he can see it: a bathroom

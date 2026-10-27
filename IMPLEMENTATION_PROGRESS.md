@@ -475,13 +475,18 @@ Rules for every batch:
 | Batch | Status | Commit | Tests |
 |---|---|---|---|
 | B0 | done: branch restarted from origin/master (b1e6ad2); the 3 police files were later saved as a WIP commit | b1e6ad2 | |
-| B1 | IN PROGRESS: work-in-progress saved in a WIP commit (compiles; NOT verified: police tests not re-run, AI scenario H still failing) | WIP | tsc ok |
+| B1 | **DONE, verified 27 Oct.** Done: officers move at 2× your run on the way to floors 6/3/1 (measured 8.0 m/s) and 1.4× after (measured 3.36 m/s searching; chase capped at 5.6). Running is heard: a chase starts, through the well up to a floor and a half (#100). In the well they follow the flights (scenario H fixed). During a chase they go through a door once it is 56% open and step out of its swing. Bar lamps are spotlights now, with no red/blue blotches on faces. Eyes are bigger, with irises and pupils; neck and jaw narrower. Torch brightness eases with the beam's length (no white-out at the 612 window). Textures (hotel, rooms, river, outside, sky) from the WIP commit were checked in screenshots. | see git log | tsc OK; build OK; police 45/45; policeai 22/22 (new: 9 chase scenarios + stood-still check in game time, noise, speeds); smoke OK |
 | B2–B13 | not started | | |
 
 ## 6. Known issues
 - Horror: the same 3 tests fail on master too (drain-tube button, moving on to the next room, arms crossing the eyes).
-- Police AI scenario H: an officer standing in the well at (0.9, 0.56, h 0) never climbs to a player on the flight above the G landing.
+- **Dev server for tests:** run `npx vite --port 5173 --base /`. Master's Vercel commit set base `/froggy-arcade/`, and the tests' `import('/src/...')` 404 without `--base /`.
+- **For B2 (seen 27 Oct):** a white block stands across the floor-2 corridor about 6 m from the stairs. It doesn't block walking (only visual); likely the floor-1 geometry protruding into floor 2 (#53).
+- **Officer faces** are better but still simple: the Bog Ball-quality model rebuild is B2 (#53).
 - Vite dies after 2 h in this environment; restart it when that happens.
 
 ## 7. Next step
+B2 (police overhaul, log #52, #53, #74, #79 §4, #89 §3, #100). Then B3.
+
+<!-- previous: -->
 Wait for the user's answers on C1–C8 and M1–M9, and for "DO IT". Then start Batch 0, then Batch 1.
