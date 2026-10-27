@@ -2,7 +2,7 @@
 
 The working record for the Froggy Arcade backlog. Read this first in every session, then check the real state with `git status`, `git log --oneline origin/master..HEAD` and the open pull requests.
 
-**Status: PLAN ONLY. Waiting for the user to say "DO IT". No batch has started under this plan.**
+**Status: APPROVED (#107, 27 Oct 16:11: "then start doing it"). Working through the batches in order.**
 
 ---
 
@@ -137,7 +137,7 @@ No image arrived with three messages:
 - the mobile errors.
 
 ## 3c. Requirement index: log entry → batch
-`docs/REQUIREMENTS_LOG.md` holds all 106 of your messages from 22 Oct 00:00 to 27 Oct, **word for word**, including the 9 you sent while I was mid-task (my first pass had missed those). Numbering is #1–#106.
+`docs/REQUIREMENTS_LOG.md` holds all 108 of your messages (#1–#107 plus #49b) from 22 Oct 00:00 to 27 Oct, **word for word**, including the 9 you sent while I was mid-task (my first pass had missed those). Numbering is #1–#106.
 
 How each batch uses the log:
 - **The log is the specification.** A batch counts as done only when every sentence in its log entries is implemented and tested, including the "Test …" paragraphs inside them, which are acceptance criteria.
@@ -184,6 +184,7 @@ Status below means the commit is merged to master; I have not re-tested each one
 | 46 | Fence Wars models + overlay; Frog Race polish + LEAVE/QUIT; Wheel overhaul; Chamber CASH OUT / LEAVE | B8, B4 | Refs 207–211 |
 | 47 | Red −N floaters for tokens and cash; Blackjack Froggy squarer | B4, B8 | Refs 212–213 |
 | 48–49 | LEAVE before play (no "break even"), QUIT GAME after; every button's text centred | B4 | Refs 214–216 |
+| 49b | Longer version of #49: LEAVE/QUIT labels, centred buttons, **INVENTORY binding (default G)** in Controls (ref 217), Grudge chooser with costs, remove the redundant screen (refs 218–221), **badges for every game** (Frog Cross 5/10/15 crossings), **a tutorial page plus a Play/Leave choice before every game (Barrel Climb has none)**, **Frog Cross invincibility exploit**, **heavier Air Hockey puck, nothing else changed**, **Dance Off: better frog and opponent, a new dancer each round, cash out between rounds with no loss for continuing** | B4, B5, B8 | Found on the re-check |
 | 50 | Pause on tab switch; tutorials for every game per platform; action-specific mobile prompts (incl. 3D, e.g. HIDE); Car Chase traffic | B4, B8 | |
 | 51 | Button layouts; Mini Duels hands; Tic Tac Toe drop; bowling ball | B4, B8 | Refs 222–223 |
 | 52 | Police: proximity retention, 2–3 s last-known buffer; homeless sign tinted at night | B2, B11 | Refs 224–225 |
@@ -233,7 +234,7 @@ Status below means the commit is merged to master; I have not re-tested each one
 | 98 | Pad Battles (full spec) | B10 | |
 | 99 | Process: audit, plan in batches, wait for "DO IT", keep this file up to date, resume from the last checkpoint | all | Followed by this file |
 | 100–103 | Decisions and answers | all | See sections 2–3 |
-| 104–106 | Re-check requests (this log; the alley prompt is #55) | — | Done |
+| 104–107 | Re-check requests (this log; the alley prompt is #55); #107 = "check again, then start" | — | Done; work started |
 
 ---
 

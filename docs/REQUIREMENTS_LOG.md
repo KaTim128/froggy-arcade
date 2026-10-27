@@ -414,6 +414,31 @@ Inspect existing UI components and reuse shared button styles where possible. Te
 *Attached images: 215, 216, 217, 218, 219, 220, 221*
 
 
+
+## 49b. 2026-10-24 08:49 UTC (longer version of #49, sent again with more requests; my first pass missed it)
+
+Before the player starts playing a game, label the exit button Leave instead of Quit Game, if the button is Leave, it should not say break even after that. Once the player has started the game, change the button label to Quit Game. Ensure the label updates correctly based on the actual game state and resets appropriately when entering or leaving a game.
+
+Fix all button text alignment across the project so text is perfectly centered horizontally and vertically, with consistent padding and sufficient spacing from the button borders. Prevent text from touching outlines, overflowing, clipping, or appearing unevenly aligned, as shown in image 2. Ensure longer labels fit properly without breaking the layout.
+
+Controls should also have an inventory button showing in  image 1 which is G as default.
+
+Inspect existing UI components and reuse shared button styles where possible. Test different button sizes, labels, and game states to ensure consistent results without modifying unrelated gameplay or UI functionality.
+
+For the Grudge game, the practice button should be in between of play and practice with their costing, and also remove this redundancy in image 4 since practice will already be in the3rd image.
+
+All games should be able to get badges, for example, the frog cross, in order to win a badge player has to pass the road 5 times, and then 10 times, and last badge which is 15 times.
+
+Ensure all games have their tutorial page before playing, currently barrel climb does not have any tutorial, it immediately takes the player into the game, player should have a choice to either play or leave the game before that.
+
+For frog cross, after the frog gets hit by a car, it will be invincible for a while, players can use this as an exploit to reach straight away to the destination, fix it.
+
+The Air Hockey game, the puck feels too light, making the puck go real fast without any weight, fix this. but do not change anything else other than that.
+
+Enhance the frog and the opponent. also for every round the player will change to a new dancer. player should have the choice to cash out instead of continuing to the next round for Dance off. they wont lose anything if they continue.
+
+*Attached images: 217, 218, 219, 220, 221*
+
 ## 50. 2026-10-24 08:58 UTC
 
 If the player switches to another browser tab while playing an arcade game and then returns to the game tab, automatically open the Settings menu and pause gameplay if supported. Preserve the current game state and progress without restarting the game or resetting anything. Ensure this works consistently across all arcade games and does not trigger when switching tabs outside an active game. Reuse existing visibility detection and settings systems where possible, and avoid modifying unrelated features.
@@ -1188,3 +1213,8 @@ there should be more detailedf things i have stated retrieve them all from the p
 ## 106. 2026-10-27 16:07 UTC
 
 What about the following day scene where police walks pass the alley way prompt have u retrieved that?
+
+
+## 107. 2026-10-27 16:11 UTC
+
+Ensure all that was written previously while limit reached previously is found, u even missed the part where i told to add 40 more new creatures with 80 new abilities and more, please make sure to check for all remaining unfound prompts that u have missed out on. Make no mistakes and then start doing it!
