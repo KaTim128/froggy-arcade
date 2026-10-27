@@ -457,6 +457,11 @@ try {
     const before = await page.evaluate(() => window.__froggy.state().tokens ?? null);
     await start(page, 'Minigame', { id, from: 'ArcadeHub', straight: true });
     await until(page, () => !!window.__minigame, 8000);
+    // (the machine's screen comes up first, even from E: SPACE is PLAY)
+    await until(page, () => !!window.__froggy.game().scene.getScene('Minigame').card, 8000);
+    await sleep(300);
+    await page.keyboard.press('Space');
+    await until(page, () => window.__froggy.game().scene.getScene('Minigame').started, 8000);
     const paidBal = await page.evaluate(() => ({ stake: window.__minigame.stake() }));
     await page.evaluate(() => window.__minigame.cop(0.6));
     await sleep(2500);
@@ -472,7 +477,9 @@ try {
     check('no FORFEIT on the screen', !/FORFEIT/.test(panel.texts));
     await page.screenshot({ path: `${SHOTS}/cabinet_interrupt.png` });
     // through the line, back to the room: they are stood right there
+    // (only while the line is up: back in the room, E at the machine opens it again)
     for (let i = 0; i < 4; i++) {
+      if (!(await page.evaluate(() => window.__froggy.activeScenes().includes('Minigame')))) break;
       await page.keyboard.press('KeyE');
       await sleep(500);
     }

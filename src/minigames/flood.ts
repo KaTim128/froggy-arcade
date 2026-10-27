@@ -1253,7 +1253,10 @@ function finish(won: boolean, why: string): void {
   hud?.note.setText(why).setVisible(true);
   hud?.note.setTint(won ? PALETTE.gold : PALETTE.blood);
   audio.sfx(won ? 'chime' : 'buzzer');
-  if (won) sceneRef.cameras.main.flash(240, 255, 240, 180);
+  if (won) {
+    sceneRef.cameras.main.flash(240, 255, 240, 180);
+    apiRef?.record(clock / 1000);
+  }
   sceneRef.time.delayedCall(1200, () => (won ? apiRef?.win() : apiRef?.lose()));
 }
 

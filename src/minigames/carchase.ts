@@ -2522,6 +2522,7 @@ function finish(): void {
   if (over) return;
   over = true;
   store.setHighScore(ID, collected);
+  apiRef?.record(collected);
   const payout = runReward();
   scene0?.time.delayedCall(700, () => (payout > 0 ? apiRef?.win(payout) : apiRef?.lose()));
 }

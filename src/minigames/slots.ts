@@ -453,6 +453,7 @@ function settle(): void {
   const got = best(shown);
   if (got.pays > 0) {
     apiRef.payout(got.pays);
+    apiRef.record(got.pays);
     paidCount++;
     const sym = SYMBOLS[got.sym];
     const big = got.sym === FROG || got.n >= 5 || got.wins.length > 1;

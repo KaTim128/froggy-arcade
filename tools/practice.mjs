@@ -1,6 +1,6 @@
 /**
- * A cabinet with a practice go (Grudge): PLAY on the card opens the choice
- * of PLAY or PRACTICE; out of a practice go is back to that choice, nothing
+ * A cabinet with a practice go (Grudge): its screen has PRACTICE beside
+ * PLAY - 10 TOKENS; out of a practice go is back to that screen, nothing
  * taken; PLAY takes the tokens, and quitting a real go forfeits them.
  *
  *   node tools/practice.mjs [--url http://localhost:5173]
@@ -59,13 +59,16 @@ try {
   });
   await until((m) => m.scenes.includes('Minigame') && m.card);
   await sleep(800);
-  // PLAY on the card: nothing taken yet, the choice is up
-  await page.mouse.click(107 * k, 164 * k);
+  // the first go opens on HOW TO PLAY: BACK to the machine, nothing taken
+  await page.mouse.click((160 - 90) * k, 163 * k);
   await sleep(800);
   let m = await M();
-  check('PLAY on the card takes nothing and opens the choice', m.card && !m.started && m.tokens === 50, JSON.stringify(m));
+  const labels = await page.evaluate(() =>
+    window.__froggy.game().scene.getScene('Minigame').children.list.filter((o) => o.list && o.input).map((o) => o.list[1]?.text),
+  );
+  check('the screen has PRACTICE beside PLAY - 10 TOKENS, nothing taken', m.card && !m.started && m.tokens === 50 && labels.includes('PRACTICE') && labels.includes('PLAY - 10 TOKENS'), labels.join('|'));
   // PRACTICE
-  await page.mouse.click((160 + 56) * k, 84 * k);
+  await page.mouse.click((160 + 58) * k, 111 * k);
   m = await until((x) => x.started);
   check('PRACTICE starts a free go', m.started && m.practicing && m.tokens === 50, JSON.stringify(m));
   // Froggy walks right past the bag to its other side, and turns to face it
@@ -94,12 +97,12 @@ try {
   await page.mouse.click(122 * k, 158 * k);
   await sleep(1500);
   m = await until((x) => x.scenes.includes('Minigame') && x.card && !x.started);
-  check('leaving practice comes back to the choice, nothing taken', m.card && !m.started && m.tokens === 50 && m.scenes.includes('Minigame'), JSON.stringify(m));
+  check('leaving practice comes back to the screen, nothing taken', m.card && !m.started && m.tokens === 50 && m.scenes.includes('Minigame'), JSON.stringify(m));
   // PLAY for real
   await sleep(600);
-  await page.mouse.click((160 - 56) * k, 84 * k);
+  await page.mouse.click((160 - 58) * k, 111 * k);
   m = await until((x) => x.started);
-  check('PLAY on the choice takes the tokens and starts the real fight', m.started && !m.practicing && m.tokens === 40, JSON.stringify(m));
+  check('PLAY - 10 TOKENS takes the tokens and starts the real fight', m.started && !m.practicing && m.tokens === 40, JSON.stringify(m));
   await page.evaluate(() => window.__froggy.game().scene.getScene('Minigame').quitGame());
   await sleep(800);
   const forfeit = await page.evaluate(() => {

@@ -1605,6 +1605,7 @@ function finish(): void {
   const drawn = roundsWon.frog === roundsWon.lizard && sides.frog.dealt === sides.lizard.dealt;
 
   if (store.setHighScore(ID, sides.frog.dealt)) best = sides.frog.dealt;
+  apiRef?.record(sides.frog.dealt);
   refreshHud();
   const score = ROUNDS > 1 ? ` ${roundsWon.frog}-${roundsWon.lizard}` : '';
   const line = drawn

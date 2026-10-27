@@ -478,6 +478,7 @@ function settleSpin(): void {
   const landed = faceAt(rotation);
   if (landed.pays > 0) {
     apiRef.payout(landed.pays);
+    apiRef.record(landed.pays);
     won += landed.pays;
     audio.sfx(landed.pays >= 50 ? 'chime' : landed.pays >= 20 ? 'bell_ding' : 'ui_blip');
     statusText

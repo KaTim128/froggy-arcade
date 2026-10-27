@@ -287,21 +287,14 @@ const labels = (page) =>
 {
   const page = await phone('?intro=1&tokens=20&game=grudge');
   const onCard = await labels(page);
-  // The card is two big buttons you tap; PLAY is at (108, 163) in game space.
+  // The card is buttons you tap: a first go opens on HOW TO PLAY, whose
+  // PLAY - 10 TOKENS is at (210, 163) in game space.
   const play = await page.evaluate(() => {
     const c = document.querySelector('#game-root canvas').getBoundingClientRect();
     const z = window.__froggy.game().scale.zoom;
-    return { x: c.left + 108 * z, y: c.top + 163 * z };
+    return { x: c.left + 210 * z, y: c.top + 163 * z };
   });
   await touch(page, play.x, play.y);
-  await sleep(900);
-  // ...and PLAY again on the PLAY-or-PRACTISE choice, at (104, 84)
-  const real = await page.evaluate(() => {
-    const c = document.querySelector('#game-root canvas').getBoundingClientRect();
-    const z = window.__froggy.game().scale.zoom;
-    return { x: c.left + 104 * z, y: c.top + 84 * z };
-  });
-  await touch(page, real.x, real.y);
   await sleep(2600);
   const inGame = await labels(page);
   await page.screenshot({ path: `${SHOTS}/04-grudge.png` });

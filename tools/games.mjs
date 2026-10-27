@@ -97,7 +97,8 @@ const GAMES = [
 const cardUp = (page) =>
   page.evaluate(() => {
     const s = window.__froggy.game().scene.getScene('Minigame');
-    return !!s && s.children.list.some((o) => typeof o.text === 'string' && o.text.startsWith('HOW TO PLAY'));
+    // (the machine's screen or its HOW TO PLAY page: either is the card)
+    return !!s && !!s.card && !s.started;
   });
 
 /**
@@ -265,9 +266,10 @@ for (const g of GAMES) {
       return {
         titled: lines.some((t) => t.startsWith('HOW TO PLAY')),
         controls: lines.includes('CONTROLS'),
-        play: lines.some((t) => t === 'PLAY' || t === 'CANT PLAY'),
-        leave: lines.includes('LEAVE'),
-        price: lines.some((t) => t.includes('TO PLAY') || t.includes('A GO')),
+        play: lines.some((t) => t.startsWith('PLAY - ') || t === 'CANT PLAY'),
+        leave: lines.includes('LEAVE') || lines.includes('BACK'),
+        // (the price is on the PLAY button: "PLAY - 10 TOKENS", "PLAY - 3 TOKENS A GO")
+        price: lines.some((t) => /^PLAY - \d+ TOKENS?/.test(t) || t === 'CANT PLAY'),
       };
     });
     const tutorial = card.titled && card.controls && card.play && card.leave && card.price;
@@ -3507,10 +3509,7 @@ for (const g of [
   await page.goto(`${URL}/?intro=1&tokens=20&game=grudge`, { waitUntil: 'networkidle2' });
   await sleep(1800);
   await startGame(page);
-  // PLAY on the card is the choice of PLAY or PRACTICE (see practice.mjs):
-  // this wants the real fight
-  await sleep(600);
-  await page.mouse.click((160 - 56) * 4, 84 * 4);
+  // (SPACE on the card is PLAY for real; PRACTICE is its own button: see practice.mjs)
   await bridge(page, '__grudge');
   await sleep(2400); // READY / FIGHT
 

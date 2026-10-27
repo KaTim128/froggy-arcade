@@ -513,6 +513,7 @@ function finish(): void {
   phase = 'over';
   const won = score.green > score.red;
   const tie = score.green === score.red;
+  if (won) apiRef?.record(score.green - score.red);
   say(tie ? 'A DRAW' : won ? 'YOU WIN' : 'YOU LOSE', tie ? PALETTE.cream : won ? PALETTE.mossLight : PALETTE.ember);
   centerText(sceneRef, GAME_W / 2, CY - 8, `${score.green} - ${score.red}`, PALETTE.cream, 16).setDepth(30);
   sceneRef.time.delayedCall(1600, () => (tie ? apiRef?.draw() : won ? apiRef?.win() : apiRef?.lose()));

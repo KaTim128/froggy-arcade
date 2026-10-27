@@ -716,6 +716,7 @@ function finish(): void {
   over = true;
   const won = scoreP > scoreA;
   const tied = scoreP === scoreA;
+  if (won) apiRef?.record(scoreP - scoreA);
   puck?.scene.time.delayedCall(400, () => (won ? apiRef?.win() : tied ? apiRef?.draw() : apiRef?.lose()));
 }
 

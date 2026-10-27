@@ -586,6 +586,7 @@ function finish(): void {
   if (over) return;
   over = true;
   store.setHighScore(ID, points);
+  apiRef?.record(points);
   const payout = frogPayout(points);
   sceneRef?.time.delayedCall(500, () => (payout > 0 ? apiRef?.win(payout) : apiRef?.lose()));
 }
