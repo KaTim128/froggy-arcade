@@ -196,6 +196,8 @@ export class Hotel extends Phaser.Scene {
   private talk: Phaser.GameObjects.Container | null = null;
   /** While the patrols are out, an officer now and then looks round the lobby (game/indoorPatrol). */
   private police: IndoorCop | null = null;
+  /** Going into the lift: out of the police's reach (see IndoorCop's `safe`). */
+  private inLift = false;
   private goingUp = true;
   private morning = false;
   private from: 'outside' | 'lift' | 'room' | 'corridor' | 'stairs' | 'storage' | 'stairwell' = 'outside';
@@ -411,6 +413,9 @@ export class Hotel extends Phaser.Scene {
             covers: () => [],
             door: { x: 30, y: WALK_Y },
             lock: (on) => (this.locked = on),
+            // (stepping into the lift, the doors closing on you: they do not
+            // come in after you, and nobody is caught in there)
+            safe: () => this.inLift,
             alarm: () => {
               this.talk?.destroy();
               this.talk = null;
@@ -897,6 +902,7 @@ export class Hotel extends Phaser.Scene {
   private enterLift(up: boolean, level = this.level): void {
     const cx = this.area === 'lobby' ? LOBBY_LIFT_X : CORRIDOR_LIFT_X;
     this.locked = true;
+    this.inLift = true;
     audio.sfx('bell_ding', 0.4);
     this.landing?.open(700, () => {
       this.autoWalk = {

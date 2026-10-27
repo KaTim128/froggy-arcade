@@ -918,16 +918,17 @@ export class PoliceOfficer {
       this.bar.add(s);
       this.barDots.push(s);
     }
-    for (const [col, a] of [
-      [0xff2030, 0],
-      [0x2a50ff, Math.PI],
-    ] as const) {
+    // ONE LAMP, NOT TWO: it turns with the bar and goes red and blue as it
+    // comes round (see update).  Six of them across three officers were six
+    // more lights on every pixel, for a glow on the floor at their feet.
+    for (const [col, a] of [[0xff2030, 0]] as const) {
       // (soft and wide: up close a hot little lamp painted a hard blot on the
       // wall.  And out and down, not all round: a lamp at the shins that lit
       // all round put red and blue blotches up his own face from below.)
       const l = new THREE.SpotLight(col, 1.5, 4.2, 1.05, 0.85, 1.6);
       l.position.set(Math.cos(a) * 0.36, 0.05, Math.sin(a) * 0.36);
       l.target.position.set(Math.cos(a) * 1.6, -0.35, Math.sin(a) * 1.6);
+      l.userData.noShadow = true;
       this.bar.add(l, l.target);
       this.barLamps.push(l);
     }
@@ -1087,6 +1088,11 @@ export class PoliceOfficer {
     // eases the beam's length, so this eases with it.)
     const near = Math.min(1, Math.pow(Math.max(len, 0.35) / 6.5, 1.6));
     this.torch.intensity = 38 * s.torch * Math.max(0.06, near);
+    // NOT THROUGH THE WALL.  The light stops a little past the first thing the
+    // beam meets (the scene casts for it: see `beamLen`), so with shadows off
+    // nothing on the far side of a wall or a floor is lit by it; with them on,
+    // its shadow map does the rest.
+    this.torch.distance = Math.min(13, len + 0.45);
     this.lens.material.opacity = s.torch;
     this.beam.visible = s.torch > 0.05;
     this.beam.scale.set(len, len, len);
@@ -1102,7 +1108,11 @@ export class PoliceOfficer {
       d.material.opacity = s.lights * front * flash;
     }
     // (the dots flash; the light they throw only breathes, so the walls do not strobe)
-    for (const l of this.barLamps) l.intensity = 1.5 * s.lights * (0.85 + 0.15 * flash);
+    for (const l of this.barLamps) {
+      l.intensity = 1.5 * s.lights * (0.85 + 0.15 * flash);
+      // (red on one half of its turn, blue on the other)
+      l.color.setHex(Math.sin(this.lightT * 5.5) > 0 ? 0xff2030 : 0x2a50ff);
+    }
     this.floorRing.rotation.z = -this.lightT * 5.5;
     (this.floorRing.material as THREE.MeshBasicMaterial).opacity = 0.55 * s.lights * flash;
     // crouched, the ring comes down with the shins

@@ -476,12 +476,22 @@ Rules for every batch:
 |---|---|---|---|
 | B0 | done: branch restarted from origin/master (b1e6ad2); the 3 police files were later saved as a WIP commit | b1e6ad2 | |
 | B1 | **DONE, verified 27 Oct.** Done: officers move at 2× your run on the way to floors 6/3/1 (measured 8.0 m/s) and 1.4× after (measured 3.36 m/s searching; chase capped at 5.6). Running is heard: a chase starts, through the well up to a floor and a half (#100). In the well they follow the flights (scenario H fixed). During a chase they go through a door once it is 56% open and step out of its swing. Bar lamps are spotlights now, with no red/blue blotches on faces. Eyes are bigger, with irises and pupils; neck and jaw narrower. Torch brightness eases with the beam's length (no white-out at the 612 window). Textures (hotel, rooms, river, outside, sky) from the WIP commit were checked in screenshots. | see git log | tsc OK; build OK; police 45/45; policeai 22/22 (new: 9 chase scenarios + stood-still check in game time, noise, speeds); smoke OK |
-| B2–B13 | not started | | |
+| B2 | **IN PROGRESS (27 Oct).** Done, pending the regression run:
+<br>• **Geometry:** the police lobby is single-height (POLICE_CEIL 2.95, no galleries), which fixes the floor-1/floor-2 protrusion and the white block across floor 2. The G stair door is cleaned up: no inner stops, no splinters in the jamb, the leaf lies on the lobby floor away from the wall. Decorative gallery doors are removed in 2D (art/hotelInterior) and in 3D (three/hotelLobby).
+<br>• **WCs:** plan-B WC 2.3×2.2 m, plan-C bathroom 2.0×2.0 m, so you can walk in and shut the door from inside (all 28 checked).
+<br>• **Torches:** light ends at the beam's first hit; real shadows when shadows are on; far officers' shadow maps redraw 1 frame in 4; bar lamps cast no shadows; one bar lamp per officer and one bridge light (lights 23→20).
+<br>• **AI:** a 2.5 s last-known buffer; near sense 2.0 m; a flat on another officer's list is skipped; a spot checked in the last 45 s is less likely to be re-checked.
+<br>• **Dialogue:** opening, coming-in and radio lines shortened; officer lines replace each other instead of queuing.
+<br>• **2D:** no officer comes into your flat (Condo); none sees or catches you stepping into the lift (Hotel `safe`).
+<br>• **Rules:** written in docs/POLICE_RULES.md.
+<br>**NOT done:** full Bog Ball-quality rebuild of the officer models (only eyes, lamps, neck and jaw improved in B1); elevator *freeze* debugging (#89 §3, B12). | see git log | tsc OK; build OK; police 45/45; policeai 25/25 (wc, door, torch, noise, speeds, 9 chase scenarios); stealth 30/30 (new: no officer in your flat, none sees you in the lift); smoke OK; story 16/17 (the failure is the same on master: "BackAlley reachable from normal"); horror 143/147 (master 144/147; the extra failure, "room 3: still searching while you watch" in HideRoom3D, is in code B2 does not touch: re-run pending) |
+| B3–B13 | not started | | |
 
 ## 6. Known issues
 - Horror: the same 3 tests fail on master too (drain-tube button, moving on to the next room, arms crossing the eyes).
 - **Dev server for tests:** run `npx vite --port 5173 --base /`. Master's Vercel commit set base `/froggy-arcade/`, and the tests' `import('/src/...')` 404 without `--base /`.
 - **For B2 (seen 27 Oct):** a white block stands across the floor-2 corridor about 6 m from the stairs. It doesn't block walking (only visual); likely the floor-1 geometry protruding into floor 2 (#53).
+- **Story test, on master too:** `back-door route only from ejected — BackAlley reachable from normal` (pre-existing, not from this work).
 - **Officer faces** are better but still simple: the Bog Ball-quality model rebuild is B2 (#53).
 - Vite dies after 2 h in this environment; restart it when that happens.
 

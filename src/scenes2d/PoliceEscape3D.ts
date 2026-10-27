@@ -92,6 +92,10 @@ const SNEAK = 1.3;
 const PATROL = 1.3;
 const HURRY = 2.6;
 const CHASE = 4.9;
+/** After losing sight of you in a chase, how long he still knows where you are. */
+const LKP_BUFFER = 2.5;
+/** This close (and nothing between) he knows you are there, whichever way he faces. */
+const NEAR_SENSE = 2.0;
 /**
  * HOW FAST THEY REALLY GO, against you.  On the way in to his floor (the
  * sixth, the third, the first) an officer runs it at twice your run, so a
@@ -422,6 +426,8 @@ export class PoliceEscape3D extends Phaser.Scene {
   private padSyncT = 0;
   /** Rooms the police have reason to look at harder: id -> 0..1. */
   private heat = new Map<number, number>();
+  /** Which far officer's torch shadow is redrawn this frame (see lightsAndVisibility). */
+  private shadowTick = 0;
   private pressure = 0.3;
   private sirenT = 4;
   private frozen = false;
@@ -486,11 +492,11 @@ export class PoliceEscape3D extends Phaser.Scene {
     if (this.retry) {
       this.say('Again. Quiet, this time.', 2.4);
     } else {
-      this.say("I can't go out the front -- they're all over it.", 3);
-      this.say('Up the stairs. 612. His window is the only way out now.', 3.6);
+      // (short: the less there is over the picture, the better)
+      this.say('Not the front. Up -- 612, his window.', 3);
       this.time.delayedCall(2600, () => {
         audio.sfx('radio_static', 0.5);
-        this.say('RADIO: "Units in. Search every floor. Nobody leaves."', 3.2, true);
+        this.say('RADIO: "Search every floor."', 1.8, true);
       });
     }
     this.hint = isTouch() ? 'STICK TO WALK - DRAG TO LOOK - CROUCH TO SNEAK' : 'W A S D TO WALK - SHIFT RUN - C CROUCH - E USE';
@@ -689,12 +695,8 @@ export class PoliceEscape3D extends Phaser.Scene {
     c.acts = [];
     c.t = 0;
     this.sfxAt('police_radio', this.eyeOf(c.m, 1.6), 0.9);
-    const words = [
-      '"HE WENT UP THE STAIRS. I\'M GOING ALL THE WAY UP."',
-      '"RIGHT BEHIND YOU. I\'LL TAKE THREE."',
-      '"FIRST FLOOR\'S MINE. NOBODY GETS PAST ME."',
-    ];
-    this.say(words[c.i] ?? '"MOVING IN."', 2.4, true);
+    const words = ['"GOING UP."', '"TAKING THREE."', '"FIRST FLOOR."'];
+    this.say(words[c.i] ?? '"MOVING IN."', 1.3, true);
     // straight up to his floor -- the first one fast, after you -- and then
     // his floor, flat by flat
     this.sweepFloor(c, c.home, false, c.i === 0 ? HURRY : c.i === 1 ? HURRY * 0.92 : PATROL * 1.3);
@@ -1210,8 +1212,12 @@ export class PoliceEscape3D extends Phaser.Scene {
     // from the near end or the far end, whichever is nearer
     const fromFar = here && c.m.z > (spine[0].z + spine[spine.length - 1].z) / 2;
     const ordered = fromFar ? [...rooms].reverse() : rooms;
+    // (a flat another officer already has on his list is his: not two at one door)
+    const theirs = new Set<Room>();
+    for (const o of this.cops) if (o !== c) for (const a of o.acts) if (a.k === 'search') theirs.add(a.room);
     for (const rm of ordered) {
       if (rm.outside) c.acts.push({ k: 'go', n: rm.outside });
+      if (theirs.has(rm)) continue;
       const recent = this.clock - rm.searchedAt < 50;
       const heat = this.heat.get(rm.id) ?? 0;
       const p = (recent ? 0.15 : 0.5) + heat * 0.5;
@@ -1255,7 +1261,9 @@ export class PoliceEscape3D extends Phaser.Scene {
       if (!sp.node) continue;
       // (you have been in there a long time: the longer, the likelier)
       const camping = this.hide?.spot === sp ? Math.min(0.4, this.hide.since / 90) : 0;
-      const p = clamp(0.28 + heat * 0.45 + camping, 0, 0.95);
+      // (one he or another opened not long ago: less likely, unless there is reason)
+      const fresh = sp.inspectedAt !== undefined && this.clock - sp.inspectedAt < 45 ? 0.35 : 1;
+      const p = clamp((0.28 + heat * 0.45) * (heat > 0.5 ? 1 : fresh) + camping, 0, 0.95);
       if (Math.random() < p) {
         out.push({ k: 'go', n: sp.node });
         out.push({ k: 'inspect', spot: sp });
@@ -1464,6 +1472,7 @@ export class PoliceEscape3D extends Phaser.Scene {
   /** Searching a hiding place: the right move for what it is, and you, if you are in it. */
   private inspect(c: Cop, sp: HideSpot, dt: number): void {
     c.t += dt;
+    sp.inspectedAt = this.clock;
     this.faceToward(c, sp.inspectAt.x, sp.inspectAt.z, dt, 6);
     const eye = this.eyeOf(c.m, 1.7);
     const dy = sp.inspectAt.y - eye.y;
@@ -1576,7 +1585,8 @@ export class PoliceEscape3D extends Phaser.Scene {
     const d = Math.hypot(v.x, v.z);
     if (d > (this.crouch ? SIGHT_LOW : SIGHT) + (this.inBeam(c, target) ? 3 : 0)) return false;
     const ang = Math.abs(wrap(Math.atan2(v.x, v.z) - (c.yaw + c.st.aimYaw * 0.65)));
-    return ang <= FOV_H || d < 1.2;
+    // (right behind him, he knows: a step or two away is not out of sight)
+    return ang <= FOV_H || d < NEAR_SENSE;
   }
 
   private spotted(c: Cop): void {
@@ -1591,8 +1601,8 @@ export class PoliceEscape3D extends Phaser.Scene {
     // the radio: the others come
     this.time.delayedCall(500, () => {
       audio.sfx('radio_static', 0.45);
+      // (the radio is heard, not read: the shout already said it)
       const lvl = this.levelOf(this.me);
-      this.say(`RADIO: "Suspect on ${lvl === 0 ? 'the stairs' : `floor ${lvl}`}!"`, 2.2, true);
       const b = this.b!;
       let first = true;
       for (const o of this.cops) {
@@ -1658,7 +1668,13 @@ export class PoliceEscape3D extends Phaser.Scene {
       c.st.aimYaw = 0;
       c.st.aimPitch = Math.atan2(me.h + this.eyeNow - (c.m.h + 1.7), Math.max(0.5, Math.hypot(me.x - c.m.x, me.z - c.m.z)));
     } else {
-      c.lostT += dt;
+      // (working a door open after you is still after you)
+      if (!c.waitDoor) c.lostT += dt;
+      // OUT OF SIGHT IS NOT GONE.  For the first moments after he loses
+      // sight of you -- round a corner, through a door you shut behind you,
+      // a juke past him -- he still knows where you went: he keeps after
+      // where you are, not where you were.  Hidden, you are not followed.
+      if (c.lostT < LKP_BUFFER && !this.hide && this.phase === 'play') c.lkp = { x: me.x, z: me.z, f: me.f, well: me.well, h: me.h };
       const l = c.lkp;
       if (l) {
         const goal = this.nearestNode({ x: l.x, z: l.z, f: l.f, well: l.well, seg: 'top', h: l.h });
@@ -1680,7 +1696,6 @@ export class PoliceEscape3D extends Phaser.Scene {
             c.acts.push({ k: 'search', room: other });
           }
           audio.sfx('radio_static', 0.3);
-          this.say('RADIO: "Lost him. Searching."', 1.8, true);
         }
       } else c.mode = 'task';
     }
@@ -1766,7 +1781,9 @@ export class PoliceEscape3D extends Phaser.Scene {
       // never through somebody: a leaf that would sweep into a body stops
       const test = { ...d, k: next } as Door;
       const leaf = PoliceBuilding.leaf(test);
-      const bodies: Array<{ x: number; z: number; f: number; well: boolean }> = [this.me, ...this.cops.map((c) => c.m)];
+      // (one an officer is opening, he shoulders through: it does not stop
+      // against him, or the man stood at it waits for good)
+      const bodies: Array<{ x: number; z: number; f: number; well: boolean }> = d.by === 'officer' && d.want > d.k ? [this.me] : [this.me, ...this.cops.map((c) => c.m)];
       const hit = bodies.some((m) => {
         if (m.well !== (d.kind === 'stair' && false) && d.kind !== 'stair' && m.well) return false;
         if (this.levelOf(m as Mover) !== d.floor) return false;
@@ -1860,6 +1877,25 @@ export class PoliceEscape3D extends Phaser.Scene {
       if (me.well && Math.abs(me.h - fl.f * FH) < 2.4 && b.stairDoors[fl.f].k > 0.05) on = true;
       if (!me.well && fl.f === me.f) on = true;
       fl.group.visible = on;
+    }
+    // THE TORCHES' SHADOWS, WHERE THEY COST.  Each one is the whole scene drawn
+    // again from his lens; three of them every frame was most of the frame.
+    // The nearest officer's is drawn every frame, the others' in turn, one
+    // frame in four -- a far one's shadow lags a moment, which nobody sees.
+    let nearest: Cop | null = null;
+    let nd = Infinity;
+    for (const c of this.cops) {
+      const d = Math.hypot(c.m.x - me.x, c.m.z - me.z) + Math.abs(c.m.h - me.h) * 2;
+      if (d < nd) {
+        nd = d;
+        nearest = c;
+      }
+    }
+    this.shadowTick = (this.shadowTick + 1) % 4;
+    for (const c of this.cops) {
+      const sh = c.model.torch.shadow;
+      sh.autoUpdate = false;
+      sh.needsUpdate = c === nearest || this.shadowTick === c.i + 1;
     }
     // hidden, nearly none of it: what you see is the room's light and theirs
     // (caught, only the light under his face: the room goes dark round it)
@@ -2334,6 +2370,9 @@ export class PoliceEscape3D extends Phaser.Scene {
   }
 
   private say(text: string, dur: number, red = false): void {
+    // (an officer's line does not wait behind another officer's: it replaces
+    // it, so the bottom of the screen is never a queue of shouting)
+    if (red) this.lines = this.lines.filter((l) => !l.red);
     const from = this.lines.length ? this.lines[this.lines.length - 1].until : this.clock;
     this.lines.push({ text, until: Math.max(from, this.clock) + dur, red });
   }

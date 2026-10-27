@@ -266,7 +266,9 @@ export class ThreeStage {
     this.scene.traverse((o) => {
       const light = o as THREE.SpotLight | THREE.DirectionalLight;
       if ((light as THREE.SpotLight).isSpotLight || (light as THREE.DirectionalLight).isDirectionalLight) {
-        light.castShadow = shadows;
+        // (a small fill lamp marked `noShadow` never throws one: a shadow map
+        // a lamp is not worth what it costs)
+        light.castShadow = shadows && !(light.userData as { noShadow?: boolean }).noShadow;
         if (shadows) {
           light.shadow.mapSize.set(q.shadowMap, q.shadowMap);
           light.shadow.map?.dispose();

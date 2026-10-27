@@ -130,6 +130,134 @@ try {
     check(`${sc.id}: never stood still for 2 s of game time`, maxStill < 2, `longest still ${maxStill.toFixed(2)}s ${maxStill >= 1 ? whyStill : ''}`);
   }
 
+  // INTO THE WC AND SHUT THE DOOR.  Every bathroom and WC in the building:
+  // open its door, walk in through it, and shut it behind you from inside.
+  if (!ONLY || ONLY.split(',').includes('wc')) {
+    await page.evaluate(() => window.__froggy.game().scene.getScene('PoliceEscape3D').scene.restart());
+    await sleep(3000);
+    const res = await page.evaluate(async () => {
+      const p = window.__froggy.game().scene.getScene('PoliceEscape3D');
+      const P = window.__police;
+      P.freeze(true);
+      const out = [];
+      for (const d of p.b.doors.filter((x) => x.kind === 'bath')) {
+        const sx = Math.cos(d.shut);
+        const sz = Math.sin(d.shut);
+        const mx = d.hx + sx * d.width / 2;
+        const mz = d.hz + sz * d.width / 2;
+        // in is the way the leaf swings to
+        const ox = Math.cos(d.open);
+        const oz = Math.sin(d.open);
+        const side = Math.sign((ox * -sz + oz * sx) || 1);
+        const nx = -sz * side;
+        const nz = sx * side;
+        P.setDoor(d.id, 1);
+        P.warp(mx - nx * 0.7, mz - nz * 0.7, d.floor, false);
+        // through the doorway and on in, past the swing
+        P.walkTo(mx + nx * 0.4, mz + nz * 0.4, 400);
+        const inside = P.walkTo(mx + nx * 1.05, mz + nz * 1.05, 400);
+        const inRoom = p.b.roomAt(d.floor, p.me.x, p.me.z);
+        const farIn = (p.me.x - mx) * nx + (p.me.z - mz) * nz;
+        // face the door and shut it
+        p.yaw = Math.atan2(-(mx - p.me.x), -(mz - p.me.z));
+        P.useDoor(d.id);
+        P.freeze(false);
+        for (let i = 0; i < 40 && d.k > 0.02; i++) await new Promise((r) => setTimeout(r, 100));
+        P.freeze(true);
+        out.push({ id: d.id, k: +d.k.toFixed(2), farIn: +farIn.toFixed(2), inRoom: !!inRoom, inside });
+        P.setDoor(d.id, 0);
+      }
+      return out;
+    });
+    const bad = res.filter((r) => !(r.k <= 0.05 && r.farIn > 0.6));
+    check(`every WC and bathroom (${res.length}): walk in and shut the door behind you`, res.length > 0 && bad.length === 0, bad.length ? JSON.stringify(bad.slice(0, 4)) : `${res.length} doors`);
+  }
+
+  // THROUGH THE DOOR YOU SHUT.  Him a few steps behind you in the corridor,
+  // you into an open flat and the door shut behind you, out of sight: he
+  // knows which door, opens it, and comes in after you.
+  if (!ONLY || ONLY.split(',').includes('door')) {
+    await page.evaluate(() => window.__froggy.game().scene.getScene('PoliceEscape3D').scene.restart());
+    await sleep(2500);
+    for (let i = 0; i < 60; i++) {
+      if ((await page.evaluate(() => window.__police?.phase)) === 'play') break;
+      await sleep(250);
+    }
+    const setup = await page.evaluate(() => {
+      const p = window.__froggy.game().scene.getScene('PoliceEscape3D');
+      const P = window.__police;
+      const rm = p.b.rooms.find((r) => r.floor === 3 && r.open && r.special === 'none');
+      // you just inside it, a couple of metres in, the door shut behind you
+      const inX = rm.side * (1.25 + 1.6);
+      p.me = { x: inX, z: rm.dz, f: 3, well: false, seg: 'top', h: 9 };
+      P.setDoor(`room-${rm.id}`, 0);
+      p.segCache.clear();
+      p.cops.forEach((c, i) => {
+        c.inLobby = false;
+        c.arrived = true;
+        c.path = [];
+        c.pathTo = null;
+        c.stuckT = 0;
+        c.detourT = 0;
+        if (i === 0) {
+          c.m = { x: 0, z: rm.dz + 6, f: 3, well: false, seg: 'top', h: 9 };
+          c.mode = 'chase';
+          // the last he saw of you: at the door, going in
+          c.lkp = { x: rm.side * 1.0, z: rm.dz, f: 3, well: false, h: 9 };
+          c.lostT = 0;
+          c.acts = [];
+        } else {
+          c.m = { x: 0, z: 30 + i, f: 6, well: false, seg: 'top', h: 18 };
+          c.mode = 'task';
+          c.acts = [{ k: 'look', t: 999 }];
+        }
+      });
+      return { room: rm.id };
+    });
+    const t0 = Date.now();
+    let st = null;
+    while (Date.now() - t0 < 30000) {
+      await sleep(250);
+      st = await page.evaluate((id) => {
+        const p = window.__froggy.game().scene.getScene('PoliceEscape3D');
+        const c = p.cops[0];
+        const d = p.b.doors.find((x) => x.id === `room-${id}`);
+        return { phase: p.phase, mode: c.mode, door: +d.k.toFixed(2), x: +c.m.x.toFixed(2), z: +c.m.z.toFixed(2) };
+      }, setup.room);
+      if (st.phase !== 'play') break;
+    }
+    check('you into a flat and the door shut behind you: he opens it and has you', st && st.phase !== 'play', JSON.stringify(st));
+  }
+
+  // HIS LIGHT STOPS AT THE WALL.  An officer in the corridor with his torch
+  // on a wall a metre off: the light reaches the wall and no further, so the
+  // flat behind it stays dark (and aimed down the corridor it reaches on).
+  if (!ONLY || ONLY.split(',').includes('torch')) {
+    await page.evaluate(() => window.__froggy.game().scene.getScene('PoliceEscape3D').scene.restart());
+    await sleep(3000);
+    // (all three on their own rounds, you out of the way on 6's top landing)
+    const t = await page.evaluate(async () => {
+      const p = window.__froggy.game().scene.getScene('PoliceEscape3D');
+      const out = { n: 0, bad: [], short: 0 };
+      const t0 = performance.now();
+      while (performance.now() - t0 < 20000) {
+        await new Promise((r) => setTimeout(r, 150));
+        if (p.phase !== 'play') continue;
+        p.me = { x: -0.9, z: 0.6, f: 6, well: true, seg: 'top', h: 18 };
+        for (const c of p.cops) {
+          if (c.inLobby) continue;
+          out.n++;
+          const len = Math.max(0.2, Math.min(9, c.st.beamLen));
+          const dist = c.model.torch.distance;
+          if (dist > len + 0.5 + 1e-3) out.bad.push({ i: c.i, len: +len.toFixed(2), dist: +dist.toFixed(2) });
+          if (len < 4) out.short++;
+        }
+      }
+      return out;
+    });
+    check('every torch, all the time: its light ends where its beam meets something', t.n > 20 && t.bad.length === 0, t.bad.length ? JSON.stringify(t.bad.slice(0, 4)) : `${t.n} samples, ${t.short} of them on something within 4 m`);
+  }
+
   // HEARD RUNNING.  Him on your floor with his back to you, out of sight:
   // walking he does not know you are there; running, he hears it and comes.
   if (!ONLY || ONLY.split(',').includes('noise')) {

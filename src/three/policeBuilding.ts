@@ -196,6 +196,8 @@ export interface HideSpot {
   door: Door | null;
   /** The room node it is searched from. */
   node: NavNode | null;
+  /** When an officer last looked in it (the scene's clock), if ever. */
+  inspectedAt?: number;
 }
 
 export interface Room {
@@ -991,8 +993,12 @@ export class PoliceBuilding {
         box(w, 2.24, fz, frameMat, S, x, y0 + 1.12, SDOOR.z);
       box(SDOOR.x1 - SDOOR.x0 + 0.17, 0.12, fz, frameMat, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.18, SDOOR.z);
       // the stops the leaf shuts against, inside the jambs and under the head
-      for (const x of [SDOOR.x0 + 0.012, SDOOR.x1 - 0.012]) box(0.03, 2.1, 0.04, frameMat, S, x, y0 + 1.07, SDOOR.z - 0.05);
-      box(SDOOR.x1 - SDOOR.x0, 0.03, 0.04, frameMat, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.115, SDOOR.z - 0.05);
+      // (not at G: there is no leaf there now, and with nothing to shut
+      // against them they read as a second, smaller frame inside the first)
+      if (f > 0) {
+        for (const x of [SDOOR.x0 + 0.012, SDOOR.x1 - 0.012]) box(0.03, 2.1, 0.04, frameMat, S, x, y0 + 1.07, SDOOR.z - 0.05);
+        box(SDOOR.x1 - SDOOR.x0, 0.03, 0.04, frameMat, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 2.115, SDOOR.z - 0.05);
+      }
       // the threshold
       box(SDOOR.x1 - SDOOR.x0 + 0.1, 0.015, fz, this.mats.steel, S, (SDOOR.x0 + SDOOR.x1) / 2, y0 + 0.008, SDOOR.z);
     }
@@ -1034,9 +1040,11 @@ export class PoliceBuilding {
     S.add(flash);
     // ---- the door, where it came down: out on the lobby floor, face up,
     // its top end on the lip of the runner and the push bar towards you
+    // (its length out across the lobby floor, away from the wall: laid the
+    // other way it ran back through the wall it came out of)
     const leaf = new THREE.Group();
-    leaf.position.set(SDOOR.x0 - 0.15, 0.03, LZ(0.55));
-    leaf.rotation.set(-Math.PI / 2 + 0.05, -0.42, 0, 'YXZ');
+    leaf.position.set(SDOOR.x1 + 0.35, 0.03, LZ(0.45));
+    leaf.rotation.set(-Math.PI / 2 + 0.03, Math.PI - 0.35, 0, 'YXZ');
     S.add(leaf);
     box(w - 0.02, 2.08, 0.045, [edge, edge, edge, edge, fireMat, fireMat], leaf, w / 2, 1.04, 0);
     box(0.7, 0.04, 0.04, this.mats.steel, leaf, w / 2, 1.0, 0.04);
@@ -1051,12 +1059,10 @@ export class PoliceBuilding {
       const bit = box(0.03 + rnd() * 0.08, 0.02, 0.02 + rnd() * 0.05, k % 3 ? plaster : wood, S, SDOOR.x0 - 0.3 + rnd() * 1.6, 0.012, LZ(0.15 + rnd() * 1.4));
       bit.rotation.y = rnd() * Math.PI;
     }
-    // the frame where the hinges were: split, splinters standing out
-    for (const [y, l, a] of [[0.35, 0.18, 0.5], [1.05, 0.12, -0.4], [1.9, 0.22, 0.7]] as const) {
-      const sp = box(0.025, l, 0.02, wood, S, SDOOR.x1 - 0.02, y, WZ1 + 0.03);
-      sp.rotation.z = a;
-    }
-    box(0.04, 2.1, 0.06, new THREE.MeshLambertMaterial({ color: 0x2a2826 }), S, SDOOR.x1 - 0.01, 1.05, WZ1 - 0.02);
+    // the frame where the hinges were: three torn hinge plates on the steel
+    // jamb's face, on the lobby side (a dark strip and splinters set inside
+    // the jamb stuck through it, in the wall)
+    for (const y of [0.25, 1.05, 1.85]) box(0.035, 0.11, 0.008, this.mats.steel, S, SDOOR.x1 + 0.005, y, WZ1 + 0.105);
     let t = 0;
     this.addTicker((dt) => {
       t += dt;
@@ -1858,9 +1864,9 @@ export class PoliceBuilding {
     const pol = new THREE.PointLight(0xff2030, 0, 30, 1.1);
     pol.position.set(wallX + 10, 8, bz - 3);
     X.add(pol);
-    const pol2 = new THREE.PointLight(0x2a50ff, 0, 30, 1.1);
-    pol2.position.set(wallX + 14, 8, bz - 3);
-    X.add(pol2);
+    // (one light, turning red and blue, not one of each: every light in the
+    // scene is paid for on every pixel of every frame, lit or not)
+    pol.position.set(wallX + 12, 8, bz - 3);
     const polRed = new THREE.MeshBasicMaterial({ color: 0xff2030 });
     const polBlue = new THREE.MeshBasicMaterial({ color: 0x2a50ff });
     const barR = box(0.4, 0.12, 0.2, polRed, X, wallX + 10, 7.5, bz - 1.5);
@@ -1884,8 +1890,8 @@ export class PoliceBuilding {
         m.map!.offset.x = Math.sin(t * 2.3 + i) * 0.04;
       }
       const ph = Math.floor(t * 6) % 4;
-      pol.intensity = ph < 2 ? 18 : 0;
-      pol2.intensity = ph < 2 ? 0 : 18;
+      pol.intensity = 18;
+      pol.color.setHex(ph < 2 ? 0xff2030 : 0x2a50ff);
       barR.visible = ph < 2;
       barB.visible = ph >= 2;
       polStreak.color.setHex(ph < 2 ? 0xff2030 : 0x2a50ff);
@@ -2648,14 +2654,21 @@ class RoomCtx {
     this.picture(4.4, 0, 'b1');
   }
 
-  /** B: a separate WC off the entry (a 0..1.8, b SLOT-1.5..SLOT) and a bedroom. */
+  /**
+   * B: a separate WC off the entry (a 0..WC_A, b SLOT-WC_B..SLOT) and a
+   * bedroom.  Big enough to walk into and shut the door behind you: the door
+   * opens in, and in a WC 1.5 m deep you were standing where it swings, so it
+   * stopped against you and would not shut.
+   */
   planB(): void {
     const r = this.r;
-    const wb = SLOT - 1.5;
-    this.tiles(0, 1.8, wb, SLOT);
+    const WC_A = 2.3;
+    const WC_B = 2.2;
+    const wb = SLOT - WC_B;
+    this.tiles(0, WC_A, wb, SLOT);
     this.wall(0, wb, 0.55, wb);
-    this.wall(1.33, wb, 1.8, wb);
-    this.wall(1.8, wb, 1.8, SLOT);
+    this.wall(1.33, wb, WC_A, wb);
+    this.wall(WC_A, wb, WC_A, SLOT);
     const above = new THREE.Mesh(new THREE.BoxGeometry(0.78, CEIL - 2.1, 0.08), this.wallMat);
     above.position.set(0.94, 2.1 + (CEIL - 2.1) / 2, this.B(wb));
     this.g.add(above);
@@ -2670,7 +2683,7 @@ class RoomCtx {
     // the WC door hinged at its wall end: open, it leaves a pocket against the corridor wall
     const door = this.bathDoor(0.55, wb, 0, Math.PI / 2, { a: 0.29, b: wb + 0.38, peekA: 0.47, peekB: wb + 0.06, lookA: 1.45, lookB: wb - 2.1, fromA: 1.0, fromB: wb + 0.48 }, 'wi');
     this.link('wo', 'wi', door);
-    this.toilet(1.4, SLOT - 0.3, Math.PI);
+    this.toilet(WC_A - 0.4, SLOT - 0.3, Math.PI);
     this.sink(0.85, SLOT - 0.22, Math.PI, false);
     const under = r() < 0.85;
     this.bed(RD - 2.0, 0.18, 1.78, true, under, 'c');
@@ -2684,11 +2697,14 @@ class RoomCtx {
     this.picture(3.0, 0, 'b0');
   }
 
-  /** C: a studio, its bathroom in the far corner (a RD-1.6..RD, b SLOT-1.6..SLOT) with a bath. */
+  /**
+   * C: a studio, its bathroom in the far corner (a RD-2..RD, b SLOT-2..SLOT)
+   * with a bath -- room enough inside, past the door's swing, to shut it.
+   */
   planC(): void {
     const r = this.r;
-    const ba = RD - 1.6;
-    const bb = SLOT - 1.6;
+    const ba = RD - 2.0;
+    const bb = SLOT - 2.0;
     this.tiles(ba, RD, bb, SLOT);
     this.wall(ba, bb, ba + 0.1, bb);
     this.wall(ba + 0.88, bb, RD, bb);

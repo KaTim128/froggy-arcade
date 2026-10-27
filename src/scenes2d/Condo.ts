@@ -294,9 +294,12 @@ export class Condo extends WalkRoom {
     this.drawOutline();
   }
 
-  /** Lily's: now and then an officer comes up to have a look round your flat too. */
+  /**
+   * Your own flat: the police never come into it (log #89).  (They used to
+   * come up to look round it now and then.)
+   */
   protected policePlace(): Place | null {
-    return this.area === 'room' ? 'lily' : null;
+    return null;
   }
 
   /** A wardrobe or a tall bookcase hides you; the bed and the sofa do not. */
