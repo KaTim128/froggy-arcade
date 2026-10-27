@@ -301,7 +301,7 @@ Rules for every batch:
 
 | Batch | Status | Commit | Tests |
 |---|---|---|---|
-| B0 | not started | | |
+| B0 | done: branch restarted from origin/master (b1e6ad2); the 3 police files stay uncommitted until B1 is verified | b1e6ad2 | |
 | B1 | in progress before this plan (uncommitted). Open bug: AI scenario H. | | |
 | B2–B13 | not started | | |
 
