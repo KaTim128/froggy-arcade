@@ -53,15 +53,88 @@ I searched `src` for each one:
 
 | # | Item | What is missing |
 |---|---|---|
-| M1 | 5: arcade chained door locks | **ANSWERED:** reference image saved at `docs/refs/arcade-chained-lock.jpg`. It shows a white hasp bracket across the top of the doors and a gold padlock hanging on a chain. Chain and lock go on the arcade doors only, on the inside of the arcade. *Still open:* which alley's [E] ALLEY prompt to hide. |
-| M2 | 31: room 4 machines | *Still open:* the image with the marked spots for the new machines and for Bog Ball. |
-| M3 | 41: default wardrobe layout | *Still open:* the layout image. |
-| M4 | 24: mobile errors ("broken image") | **ANSWERED:** a broken-image icon appears on mobile during 3D scenes and games. Plan: find which image fails on mobile (lost WebGL context, texture size, or an asset path under the Vercel base path) and fix it at the root. |
+| M1 | 5: arcade chained door locks | **ANSWERED:** lock reference is `docs/refs/arcade-chained-lock.jpg` (also `arcade-lock-205.png`). Chain and lock go on the arcade doors only, on the inside. The alley whose [E] ALLEY prompt is hidden is the one in `docs/refs/hidden-alley-206.png`: next to the frog wanted poster, behind the parked car. |
+| M2 | 31: room 4 machines | *Still open:* no image was attached to the room 4 message (26 Oct 07:25), so the orange marks are missing. |
+| M3 | 41: wardrobe layout and bed | **ANSWERED (from the 27 Oct images):** wardrobe at the far right of room 213, sleeping bag just left of it (`docs/refs/window-room-elevator-242.png` = image 3). Bed position in the window scene per `window-room-elevator-241.png` (image 2). Image 1 (240) is the jumpscare; images 4–5 (243, 244) are the elevator. *Also still open:* the "wall side shown in Image 2" for wall furniture (26 Oct 05:45) had no image attached. |
+| M4 | 24: mobile errors ("broken image") | **ANSWERED:** a broken-image icon appears on mobile during 3D scenes and games. Plan: find which image fails on mobile (lost WebGL context, texture size, or an asset path under the Vercel base path) and fix it at the root. The "Image 1" in the mobile message (26 Oct 01:05) was not attached. |
 | M5 | 24: eerie staircase scene | **ANSWERED:** at night, the player goes through the arcade staff door and down the stairs, finds a key at the bottom, and that leads to hide and seek. Make that scene eerie, with tap-to-enter doors and the chair (mobile tap support). |
 | M6 | 10: Frog Cross invincibility exploit | **ANSWERED:** after the first car hit, the frog gets a short invincibility that players use to walk through traffic to the other side. Fix: during the invincibility window the frog cannot cross through cars; it is knocked back or held still. The window no longer gives free passage. |
 | M7 | 20: badges and achievements | **ANSWERED (from the original prompt):** achievements come from objectives, milestones, wins and actions that most players unlock through regular play. Rare badges: Fence Wars (win without taking damage from the lizard, or an extremely hard damage-threshold run); The Grudge (beat every animal in a row without losing); Chamber (10 rounds in a row without being shot: very rare, luck-based); Arcade Mastery (one unique badge per arcade game, from a hard challenge that fits the game); Secret Discoverer (hidden badges for secret areas, hidden routes, easter eggs and special interactions, kept hidden until found). Requirements must not repeat; icons are distinct; rare badges get a more prestigious look and unlock notice; progress persists across sessions; no duplicate rewards; each one is tested to unlock only when genuinely earned. The per-game challenge list goes here for review before it is built. |
 | M8 | 30: stacked bodies with blood | **ANSWERED:** in the forest, during the midnight Froggy chase, once the player goes deep enough: inside a small textured building. |
 | M9 | 1: Midnight Condo Run prices | **ANSWERED:** furniture ×1.5, clothing ×1.2, haircuts ×1.3. Suggestions are text only. |
+
+## 3b. Requirements found in the 5-day re-check (2026-10-27)
+I went back through every message from "Create a pull request" (22 Oct) to now. The batches above missed these; each is now part of the batch shown.
+- **B8:**
+  - **Room layout.** Swap the lobby places of Fence Wars and Frog Pond Hunt.
+  - **Confusion Ball.**
+    - Being hit by it deals 4 damage, shows a lock icon in the middle of the wind bar and greys the bar out.
+    - The confusion lasts for the next throw only.
+    - If that throw hits the opponent, it is a normal throw.
+    - If it hits the ground, it cracks into 4 pink mini balls that fly back at the thrower, 1 damage each, with no double hits. The same applies to the AI.
+    - Price history: 7 → 5/10 (26 Oct 11:05), then **10 to play, 20 for a win (final, 26 Oct 12:10)**. The extra win/lose text goes; the result box stays (refs 232–235).
+  - **Wheel of Fortune.** "Addicting yet a higher chance of losing." Remaining extra spins shown on screen. No spin exploits.
+  - **Bog Ball.** Show the pulls remaining and when the winner or a tie is decided.
+  - **Frog Race.** Frogs, track, background and effects at Bog Ball quality.
+- **B6:**
+  - Ability buttons are bigger, with the icon and a one-word label under it.
+  - Clear feedback for active, cooldown and unusable abilities.
+  - Attacks target the opponent automatically; buffs, defence and heals apply to self.
+  - The selected ability's name and description go in a compact strip above the buttons that doesn't cover the fight.
+- **B7:**
+  - Each Story zone has its own themed arena.
+  - Zone backgrounds have ambient animation (particles, glow, mist).
+  - The final boss is the hardest, multi-phase.
+  - Story hop and Ladder climb animations follow saved progress after a restart.
+  - Boss VS screens are more dramatic.
+- **B2:**
+  - **Players and floors.** The player must stay free to reach levels 3–6 and 612.
+  - **Movement.** Running animations match real speed: no sliding, smooth acceleration.
+  - **Doors and rooms.**
+    - A closed door doesn't make an officer lose you; officers go to the right door, check it, and enter where the rules allow.
+    - Officers never enter the elevator while you're in it, or your apartment.
+  - **Searching.**
+    - Officers coordinate their search.
+    - They don't recheck the same spot without reason.
+    - User decision 27 Oct: fast at the start, then search; running is heard and starts a chase.
+  - **Toilet.** Enlarged; the door can be closed from inside (ref `police-flashlight-toilet-231.png`, `fencewars-police-clash-233.png`).
+  - **Flashlights.** Occlusion must be real (raycast or shadow), not a visual cheat.
+  - **Geometry.** Remove the decorative condo lobby doors (refs 226–230).
+- **B4:**
+  - **Session persistence.**
+    - Covers dialogs and 3D scenes too, not just arcade games.
+    - Saves positions, health, timers, scores, rounds, opponents and items.
+    - Opens Settings paused, then counts 3-2-1 on Resume.
+    - Never charges again and never counts the refresh as a loss.
+  - **Mobile fullscreen.** On iPhone **and Android**, landscape fills the screen with no black gaps or manual zoom; portrait is supported where it fits.
+  - **Controls page.** Every game's Change Controls page has restore defaults and conflict prevention.
+  - **Machine screen.** The Play / Tutorial / Leave / Practice buttons are evenly laid out on every machine, as "PLAY — N TOKENS".
+- **B10:**
+  - **Croaked.**
+    - Role selection.
+    - A Tutorial button next to Play and Leave.
+    - GIF tutorials made from Croaked itself, with Back / Next / Close.
+    - A timer and a remaining-food counter.
+  - **Pad Battles.**
+    - AI personalities: aggressive, defensive, opportunistic.
+    - Elimination announcements, players-left indicator, final placements, replay.
+    - Simultaneous falls handled.
+    - A pause menu.
+- **B11:**
+  - **Alley.** The police sprite replaces the static red/blue wall sirens.
+  - **Man in black.** Rewrite the lines in refs 246–247.
+  - **Old man.** Buttons per ref 248.
+- **B12:**
+  - **Shops.** Rotation doesn't refresh on re-entry, a scene change or a reload. Threads gets new colours and styles each day.
+  - **Apartment.** Mirror reflection uses the Threads mirror as its reference.
+  - **Midnight Condo Run.** Prices go up (M9) and improvement suggestions are written up as text only.
+
+### Reference images
+All 50 images from the last five days are saved in `docs/refs/`, named by topic and original number, so later sessions can use them.
+No image arrived with three messages:
+- room 4 orange marks;
+- the wall side for wall furniture;
+- the mobile errors.
 
 ---
 
