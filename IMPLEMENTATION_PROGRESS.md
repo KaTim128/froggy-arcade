@@ -41,7 +41,7 @@ I searched `src` for each one:
 | # | Conflict | Proposed default |
 |---|---|---|
 | C1 | Creature level cap. | **DECIDED (user, 2026-10-27): max level 20.** Story zones run 1–20; Ladder runs 15–19, then the level-20 boss. |
-| C2 | Story prices. | **DECIDED (user):** first play of a location in world 1 costs 2 and pays 5 on a win. Replay in world 1 costs 1 and pays 2. Each later world adds 1 (user example: world 2 costs 3, pays 6). *My reading, awaiting confirmation:* first play of world N costs N+1 and pays N+4; replay of world N costs N and pays N+1. *Open:* does item 45 (reward drops to 3 when you are ≥3 levels over) still apply? |
+| C2 | Story prices. | **DECIDED (user):** first play of world N costs 2N and pays 4N on a win (costs 2/4/6/8/10, pays 4/8/12/16/20). Replay of world N costs N and pays 2N (1/2, 2/4, 3/6, 4/8, 5/10). *Open:* does item 45 (reward drops to 3 when you are ≥3 levels over) still apply? Default if unanswered: drop it, since the new table replaces the old prices. |
 | C3 | Ladder price. | **DECIDED (user): 20 tokens per run, 100 on a win.** |
 | C4 | Achievements. | **DECIDED (user): the most recent prompt, item 35. Achievements get harder; badges stay hard.** |
 | C5 | Police speeds and behaviour. | **DECIDED (user):** every officer is fast at the start (2× en route to floors 6, 3 and 1), then searches at 1.4×. If the player runs, officers in hearing range hear the footsteps, know where the player is and start a chase. Walking or crouching stays quiet. |
