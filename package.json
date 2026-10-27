@@ -15,6 +15,7 @@
     "test:basement": "node tools/basement.mjs",
     "test:chase": "node tools/chase.mjs",
     "test:police": "node tools/police.mjs",
+    "test:policeai": "node tools/policeai.mjs",
     "test:stealth": "node tools/stealth.mjs",
     "test:practice": "node tools/practice.mjs",
     "test:stairwell": "node tools/stairwell.mjs",

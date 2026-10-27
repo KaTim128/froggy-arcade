@@ -46,9 +46,9 @@ try {
     const STEP = 1.2;
     let minX = Infinity;
     let maxX = -Infinity;
-    /** Start on floor `f`'s landing, at its door. */
+    /** Start on floor `f`'s landing (0 is G), at its door. */
     const atDoor = (f) => {
-      sc.spur = (f - 1) * 2;
+      sc.spur = f * 2;
       sc.sx = 82;
       sc.s = sc.spur * 112;
       sc.going = 1;
@@ -63,9 +63,9 @@ try {
       return { ...sc.feet(), spur: sc.spur, floor: sc.landingFloor() };
     };
     const out = {};
-    atDoor(1);
-    out.up = hold(0, -1, 6000);
-    out.down = hold(0, 1, 6000);
+    atDoor(0);
+    out.up = hold(0, -1, 7000);
+    out.down = hold(0, 1, 7000);
     atDoor(3);
     out.downOne = hold(0, 1, 60);
     // up and left together, out on a landing: the door, not a ping-pong
@@ -73,14 +73,14 @@ try {
     hold(0, -1, 40);
     out.backToDoor = hold(-1, -1, 400);
     // climbing with the stick on the diagonal (up and right) past a floor
-    atDoor(1);
-    out.diag = hold(1, -1, 6000);
+    atDoor(0);
+    out.diag = hold(1, -1, 7000);
     // each floor's door can be walked to from the stairs: climb to its join, then left
     out.doors = [];
-    for (let f = 1; f <= 6; f++) {
-      atDoor(1);
+    for (let f = 0; f <= 6; f++) {
+      atDoor(0);
       sc.spur = null;
-      sc.s = (f - 1) * 2 * 112 + 30; // a little way up the flight above it
+      sc.s = f * 2 * 112 + 30; // a little way up the flight above it
       hold(0, 1, 40); // down to its landing's join
       hold(-1, 0, 120); // and along to the door
       out.doors.push({ f, x: Math.round(sc.feet().x), floor: sc.landingFloor() });
@@ -91,26 +91,69 @@ try {
   });
 
   // (the top of the last flight: the roof door's landing is off to the left of it)
-  check('holding UP from the lobby door climbs all the way to the roof door', r.up.y === 44 && r.up.x === 104, JSON.stringify(r.up));
-  check('holding DOWN from there comes all the way back to the lobby', r.down.y > r.up.y && (r.down.floor === 1 || r.down.spur === null) && r.down.y >= 590, JSON.stringify(r.down));
+  check('holding UP from G, the lobby door, climbs all the way to the roof door', r.up.y === 44 && r.up.x === 104, JSON.stringify(r.up));
+  check('holding DOWN from there comes all the way back to G', r.down.y > r.up.y && (r.down.floor === 0 || r.down.spur === null) && r.down.y >= 680, JSON.stringify(r.down));
   check('DOWN on a landing walks to the stairs and goes down them', r.downOne.spur === null && r.downOne.y > 0, JSON.stringify(r.downOne));
   // (up a flight from level 2, UP and LEFT climb on to level 3's landing and walk along it)
   check('UP and LEFT on the stairs climbs to the next landing and walks to its door, no ping-pong', r.backToDoor.floor === 3 && r.backToDoor.x <= 82, JSON.stringify(r.backToDoor));
   check('UP held with RIGHT still climbs, never stuck on a half-landing wall', r.diag.y === 44, JSON.stringify(r.diag));
-  check('every floor\'s door can be walked up to from the stairs', r.doors.every((d) => d.floor === d.f && d.x <= 82), JSON.stringify(r.doors));
+  check('every floor\'s door, G and 1 to 6, can be walked up to from the stairs', r.doors.length === 7 && r.doors.every((d) => d.floor === d.f && d.x <= 82), JSON.stringify(r.doors));
   check('the feet never go into the walls (44..258)', r.minX >= 44 && r.maxX <= 258, `${r.minX.toFixed(1)} .. ${r.maxX.toFixed(1)}`);
 
-  // the door prompt, in the real update, on a floor's landing
-  const prompt = await page.evaluate(async () => {
+  // the door prompts, in the real update, on the landings
+  const promptAt = (spur, x = 82) =>
+    page.evaluate(
+      async (spur, x) => {
+        const sc = window.__froggy.game().scene.getScene('Stairwell');
+        sc.locked = false;
+        sc.spur = spur;
+        sc.sx = x;
+        sc.place();
+        await new Promise((r) => setTimeout(r, 400));
+        return sc.prompt.visible ? sc.prompt.text : '';
+      },
+      spur,
+      x,
+    );
+  const p3 = await promptAt(6);
+  check('at level 3\'s door, the prompt is for level 3', /LEVEL 3/.test(p3), p3 || 'no prompt');
+  const pg = await promptAt(0);
+  check('at G\'s door, the prompt is for the lobby', /LOBBY/.test(pg), pg || 'no prompt');
+  // nothing at the foot of the well any more: no cage, no basement
+  const foot = await promptAt(0, 48);
+  check('at the foot of the well, no basement and no cage', !/BASEMENT/.test(foot), foot || 'no prompt');
+  // level 1: somebody else's floor, locked
+  const l1 = await page.evaluate(async () => {
     const sc = window.__froggy.game().scene.getScene('Stairwell');
-    sc.locked = false;
-    sc.spur = 4;
+    sc.spur = 2;
     sc.sx = 82;
     sc.place();
-    await new Promise((r) => setTimeout(r, 400));
-    return sc.prompt.visible ? sc.prompt.text : '';
+    await new Promise((r) => setTimeout(r, 300));
+    sc.interact();
+    await new Promise((r) => setTimeout(r, 200));
+    return { text: sc.mutter.text, still: window.__froggy.activeScenes().includes('Stairwell') };
   });
-  check('at level 3\'s door, the prompt is for level 3', /LEVEL 3/.test(prompt), prompt || 'no prompt');
+  check('level 1 is somebody else\'s floor: locked from the stairs', l1.still && /LOCKED/.test(l1.text), JSON.stringify(l1));
+  // THE ROOF: the door at the top goes out on to it, you walk along it, and come back in
+  const pr = await promptAt(14, 52);
+  check('at the top, the roof door goes out on to the roof', /ROOF/.test(pr), pr || 'no prompt');
+  const roof = await page.evaluate(async () => {
+    const sc = window.__froggy.game().scene.getScene('Stairwell');
+    sc.interact();
+    await new Promise((r) => setTimeout(r, 1200));
+    const out = { onRoof: sc.onRoof, x0: sc.player.x };
+    sc.roofFrame(1, 1000);
+    out.x1 = sc.player.x;
+    sc.sx = 40;
+    sc.roofFrame(0, 16);
+    out.back = sc.prompt.visible ? sc.prompt.text : '';
+    sc.interact();
+    await new Promise((r) => setTimeout(r, 1200));
+    out.inAgain = !sc.onRoof && sc.landingFloor() === 7;
+    return out;
+  });
+  check('out on the roof, and you walk along it', roof.onRoof && roof.x1 > roof.x0, JSON.stringify(roof));
+  check('and back in by the roof door, to the top landing', /BACK IN/.test(roof.back) && roof.inAgain, JSON.stringify(roof));
 } catch (e) {
   console.error(e);
   failed++;

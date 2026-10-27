@@ -485,7 +485,8 @@ Rules for every batch:
 <br>• **2D:** no officer comes into your flat (Condo); none sees or catches you stepping into the lift (Hotel `safe`).
 <br>• **Rules:** written in docs/POLICE_RULES.md.
 <br>**NOT done:** full Bog Ball-quality rebuild of the officer models (only eyes, lamps, neck and jaw improved in B1); elevator *freeze* debugging (#89 §3, B12). | see git log | tsc OK; build OK; police 45/45; policeai 25/25 (wc, door, torch, noise, speeds, 9 chase scenarios); stealth 30/30 (new: no officer in your flat, none sees you in the lift); smoke OK; story 16/17 (the failure is the same on master: "BackAlley reachable from normal"); horror 143/147 (master 144/147; the extra failure, "room 3: still searching while you watch" in HideRoom3D, is in code B2 does not touch: re-run pending) |
-| B3–B13 | not started | | |
+| B3 | **DONE, verified 27 Oct.** The 2D stairwell runs G, 1–6: G is the lobby's landing (the foot of the well, no basement cage); 1 and 3–5 are locked other-people's floors; 2 and 6 go to their corridors. Floor signs are painted G and 1–6. The roof door at the top opens on to a walkable rooftop (sky by time of day, the town, tank, AC units, stair house), and you come back in the same way. The Hotel lobby's stair entry sends you to G; the lift display reads G at the lobby and counts G, 1, 2 … | see git log | stairwell 14/14 (new: G, locked 1, no basement, roof out and back); stealth 30/30; story 16/17 (same as master); smoke OK |
+| B4–B13 | not started | | |
 
 ## 6. Known issues
 - Horror: the same 3 tests fail on master too (drain-tube button, moving on to the next room, arms crossing the eyes).

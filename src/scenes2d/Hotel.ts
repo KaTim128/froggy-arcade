@@ -492,7 +492,7 @@ export class Hotel extends Phaser.Scene {
     this.clerkFigure = this.clerkOn ? new StageFigure(this, 0.5) : null;
     // the lights are out and the desk is empty
     if (dark) img.setTint(0x3a4058);
-    centerText(this, 280, 109, dark ? '-' : '1', 0xff7a3d);
+    centerText(this, 280, 109, dark ? '-' : 'G', 0xff7a3d);
     if (this.from === 'storage') {
       // what he left: the stairwell door hanging open on the dark, and the
       // front doors gone, glass across the marble
@@ -791,7 +791,8 @@ export class Hotel extends Phaser.Scene {
       audio.sfx('door_creak', 0.18);
       this.tweens.add({ targets: state, k: to1, duration: ms, ease: 'Sine.easeInOut', onUpdate: () => drawDoors(state.k), onComplete: then });
     };
-    const num = centerText(this, LIFT.dial.x + 3, LIFT.dial.y, up ? '1' : String(top), 0xff7a3d).setDepth(3);
+    // (the lobby is G, as on the stairs: G, 1, 2, ... going up)
+    const num = centerText(this, LIFT.dial.x + 3, LIFT.dial.y, up ? 'G' : String(top), 0xff7a3d).setDepth(3);
     const arrow = centerText(this, LIFT.dial.x - 5, LIFT.dial.y, up ? '^' : 'v', 0xff7a3d).setDepth(3).setAlpha(0);
     // the button you pressed, lit on the panel: 6 going up, 1 going down
     const bt = LIFT.button(up ? top : 1);
@@ -809,7 +810,7 @@ export class Hotel extends Phaser.Scene {
         const STEP = 520;
         for (let k = 1; k < top; k++) {
           this.time.delayedCall(k * STEP, () => {
-            num.setText(`${up ? 1 + k : top - k}`);
+            num.setText(`${up ? k : top - k}`);
             audio.sfx('ui_blip', 0.3);
           });
         }
@@ -819,7 +820,7 @@ export class Hotel extends Phaser.Scene {
           arrow.setAlpha(0);
           lit.setVisible(false);
           this.tweens.killTweensOf(lit);
-          num.setText(up ? String(top) : '1');
+          num.setText(up ? String(top) : 'G');
           audio.sfx('chime', 0.5);
           from.setVisible(false);
           to.setVisible(true);
@@ -1177,7 +1178,8 @@ export class Hotel extends Phaser.Scene {
   private toStairwell(): void {
     this.locked = true;
     audio.sfx('door_creak', 0.5);
-    fadeToScene(this, 'Stairwell', { floor: this.area === 'lobby' ? 1 : this.level });
+    // (the lobby's landing is G, the bottom of the well)
+    fadeToScene(this, 'Stairwell', { floor: this.area === 'lobby' ? 0 : this.level });
   }
 
   /**
