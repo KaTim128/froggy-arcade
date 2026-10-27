@@ -67,6 +67,8 @@ export class MinigameScene extends Phaser.Scene {
   private started = false;
   /** The go a reload interrupted, to put back rather than start (core/session). */
   private restoring: SavedGame | null = null;
+  /** Put back after a reload and not yet RESUMEd: held exactly as it was saved. */
+  private held = false;
   /** Started from the floor (E, a tap) rather than by clicking the cabinet.  The card comes up either way. */
   private straight = false;
   private card: TutorialCard | null = null;
@@ -86,6 +88,7 @@ export class MinigameScene extends Phaser.Scene {
     this.gameId = data.id;
     // back after a reload, mid-game: straight into it, charged nothing (core/session)
     this.restoring = data.restore ?? null;
+    this.held = false;
     // back from a practice go: the machine's screen, not its HOW TO PLAY page
     this.chooser = data.chooser === true;
     // Walked up and pressed play in one motion: the card still comes up.
@@ -451,6 +454,16 @@ export class MinigameScene extends Phaser.Scene {
       }
     }
     this.started = true;
+    // not a frame of it moves until the player has the pause menu and says RESUME
+    // (its clock and its tweens too: a delayed call or a tween is the game moving)
+    this.held = true;
+    this.time.paused = true;
+    this.tweens.pauseAll();
+    this.events.once(Phaser.Scenes.Events.RESUME, () => {
+      this.held = false;
+      this.time.paused = false;
+      this.tweens.resumeAll();
+    });
     applyFinish(this, this.gameId);
     this.armPolice();
     setCabinetTouch(mod.touch);
@@ -482,7 +495,7 @@ export class MinigameScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
-    if (this.settled || !this.started) return;
+    if (this.settled || !this.started || this.held) return;
     this.stepPolice(delta / 1000);
     if (this.settled) return;
     this.mod?.update?.(time, delta);

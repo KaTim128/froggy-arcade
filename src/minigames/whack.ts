@@ -303,6 +303,32 @@ export const whackAFrog: MinigameModule = {
     }
   },
 
+  // (a reload puts it back exactly: the clock, the count, and who is up where -- log #87)
+  snapshot() {
+    return { hits, timeLeft, countdown, spawnTimer, holes: holes.map((h) => ({ o: h.occupant, t: h.timer, hit: h.hit })) };
+  },
+
+  restore(snap: unknown) {
+    const v = snap as { hits: number; timeLeft: number; countdown: number; spawnTimer: number; holes: Array<{ o: Hole['occupant']; t: number; hit: boolean }> };
+    hits = v.hits;
+    timeLeft = v.timeLeft;
+    countdown = v.countdown;
+    spawnTimer = v.spawnTimer;
+    v.holes.forEach((sv, i) => {
+      const h = holes[i];
+      if (!h) return;
+      h.occupant = sv.o;
+      h.timer = sv.t;
+      h.hit = sv.hit;
+      h.sprite.setVisible(sv.o === 'frog').setScale(1, sv.hit ? 0.4 : 1);
+    });
+    if (countdown <= 0) {
+      countText?.destroy();
+      countText = null;
+    } else countText?.setText(String(Math.ceil(countdown / 1000)));
+    refreshHud();
+  },
+
   destroy() {
     froggyLayer.clear();
     holes = [];

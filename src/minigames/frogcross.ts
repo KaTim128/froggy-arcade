@@ -377,6 +377,47 @@ export const frogCross: MinigameModule = {
     }
   },
 
+  // ---- A RELOAD (log #87): the frog's square, the score, the lives, the
+  // crossings, the grace after a hit, and the traffic as it was, car for car.
+  snapshot() {
+    return {
+      frog: { ...frog }, points, lives, crossings, invulnMs, introMs,
+      lanes: lanes.map((l) => l.timer),
+      cars: cars.map((c) => ({ lane: c.lane, x: c.x, truck: c.w > 18, speed: c.speed })),
+    };
+  },
+
+  restore(snap: unknown) {
+    const v = snap as { frog: { col: number; row: number }; points: number; lives: number; crossings: number; invulnMs: number; introMs: number; lanes: number[]; cars: Array<{ lane: number; x: number; truck: boolean; speed: number }> };
+    frog = { ...v.frog };
+    points = v.points;
+    lives = v.lives;
+    crossings = v.crossings;
+    invulnMs = v.invulnMs;
+    introMs = v.introMs;
+    hopping = false;
+    dead = false;
+    v.lanes.forEach((t, i) => lanes[i] && (lanes[i].timer = t));
+    for (const c of cars) c.body.destroy();
+    cars = [];
+    for (const c of v.cars) {
+      if (!lanes[c.lane - 1]) continue;
+      buildCar(c.lane, c.x, c.truck, c.speed);
+    }
+    sprite?.setX(colX(frog.col));
+    eyes?.setX(colX(frog.col));
+    place();
+    if (introMs <= 0) {
+      intro?.destroy();
+      introHint?.destroy();
+      introPlate?.destroy();
+      intro = null;
+      introHint = null;
+      introPlate = null;
+    }
+    refreshHud();
+  },
+
   destroy() {
     cars = [];
     sprite = null;
@@ -405,6 +446,62 @@ function truckChance(): number {
   return Math.min(0.5, 0.08 + crossings * 0.03);
 }
 
+/**
+ * A car (or a truck) in lane `k`, at `x`, going at `speed`: drawn and put on
+ * the road.  Its own function so a reload can put the same traffic back
+ * (log #87).
+ */
+function buildCar(k: number, x: number, truck: boolean, speed: number): void {
+  const lane = lanes[k - 1];
+  const w = truck ? 30 : 18;
+  const colour = truck ? PALETTE.steel : [PALETTE.ember, PALETTE.neon, PALETTE.tealLight, PALETTE.amber][k % 4];
+  // ---- THE VEHICLE ITSELF.
+  //
+  // Nine pixels of height to work with, so every band has to earn its row:
+  // a shadow on the tarmac under it, a lit top edge, the paint, a dark
+  // sill, the glass, and the lamps.  A car you can read in a tenth of a
+  // second is the whole game, so the silhouette is built from the roof
+  // down rather than being a coloured slab with a window in it.
+  const dir = lane.dir;
+  const shade = tint(colour, -0.42);
+  const lit = tint(colour, 0.34);
+  const parts: Phaser.GameObjects.GameObject[] = [];
+  const add = (o: Phaser.GameObjects.GameObject): void => {
+    parts.push(o);
+  };
+  // the shadow it throws on the road, offset the way it is travelling
+  add(sceneRef!.add.ellipse(0, CAR_H / 2 + 1, w + 2, 4, 0x15171c).setAlpha(0.45));
+  // wheels, under the sill so only the tyre shows
+  for (const wx of [-w / 3, w / 3]) {
+    add(sceneRef!.add.rectangle(wx, CAR_H / 2 - 0.5, 5, 3, 0x0f1115));
+    add(sceneRef!.add.rectangle(wx, CAR_H / 2 - 1, 5, 1, 0x3a3f48).setAlpha(0.7));
+  }
+  add(sceneRef!.add.rectangle(0, 0, w, CAR_H - 2, colour).setOrigin(0.5, 0.5));
+  // lit top edge and the dark sill that sits it on its wheels
+  add(sceneRef!.add.rectangle(0, -CAR_H / 2 + 1.5, w - 2, 1, lit).setAlpha(0.85));
+  add(sceneRef!.add.rectangle(0, CAR_H / 2 - 2, w, 1.5, shade));
+  if (truck) {
+    // a cab at the front and a slatted box behind it
+    add(sceneRef!.add.rectangle(-(w / 2 - 5) * dir, -1.5, 9, 4, 0x2a3440));
+    add(sceneRef!.add.rectangle((w / 2 - 4) * dir, -1.5, 6, 4, shade));
+    add(sceneRef!.add.rectangle((w / 2 - 4.5) * dir, -1.5, 4, 3, 0x9fd0e8).setAlpha(0.8));
+    for (let i = -2; i <= 2; i++) add(sceneRef!.add.rectangle(-(w / 2 - 5) * dir + i * 2.5, -1.5, 1, 4, 0x1d2530).setAlpha(0.6));
+  } else {
+    // cabin, then the glass inside it, brighter at the front
+    add(sceneRef!.add.rectangle(0, -1.5, w * 0.56, 4, shade));
+    add(sceneRef!.add.rectangle(0, -1.5, w * 0.5, 3, 0x1a2230));
+    add(sceneRef!.add.rectangle(w * 0.16 * dir, -2, w * 0.14, 2, 0x8fc4e0).setAlpha(0.75));
+  }
+  // headlamp and its spill on the tarmac ahead, and the tail light behind
+  add(sceneRef!.add.rectangle((w / 2 - 1) * dir, -1, 2, 2, 0xfff6c0));
+  add(sceneRef!.add.rectangle((w / 2 + 3) * dir, 0, 7, 3, 0xfff0b0).setAlpha(0.14));
+  add(sceneRef!.add.rectangle((-w / 2 + 1) * dir, -1, 2, 2, 0xff3a3a));
+  // bumpers, so front and back are different shapes
+  add(sceneRef!.add.rectangle((w / 2 - 0.5) * dir, 1.5, 1.5, 3, lit).setAlpha(0.8));
+  const body = sceneRef!.add.container(x, laneY(k), parts).setDepth(10);
+  cars.push({ x, lane: k, w, dir: lane.dir, speed, body });
+}
+
 function stepTraffic(dt: number, delta: number): void {
   if (!sceneRef) return;
 
@@ -422,52 +519,7 @@ function stepTraffic(dt: number, delta: number): void {
       lane.timer = 200;
       return;
     }
-    const colour = truck ? PALETTE.steel : [PALETTE.ember, PALETTE.neon, PALETTE.tealLight, PALETTE.amber][k % 4];
-    // ---- THE VEHICLE ITSELF.
-    //
-    // Nine pixels of height to work with, so every band has to earn its row:
-    // a shadow on the tarmac under it, a lit top edge, the paint, a dark
-    // sill, the glass, and the lamps.  A car you can read in a tenth of a
-    // second is the whole game, so the silhouette is built from the roof
-    // down rather than being a coloured slab with a window in it.
-    const dir = lane.dir;
-    const shade = tint(colour, -0.42);
-    const lit = tint(colour, 0.34);
-    const parts: Phaser.GameObjects.GameObject[] = [];
-    const add = (o: Phaser.GameObjects.GameObject): void => {
-      parts.push(o);
-    };
-    // the shadow it throws on the road, offset the way it is travelling
-    add(sceneRef!.add.ellipse(0, CAR_H / 2 + 1, w + 2, 4, 0x15171c).setAlpha(0.45));
-    // wheels, under the sill so only the tyre shows
-    for (const wx of [-w / 3, w / 3]) {
-      add(sceneRef!.add.rectangle(wx, CAR_H / 2 - 0.5, 5, 3, 0x0f1115));
-      add(sceneRef!.add.rectangle(wx, CAR_H / 2 - 1, 5, 1, 0x3a3f48).setAlpha(0.7));
-    }
-    add(sceneRef!.add.rectangle(0, 0, w, CAR_H - 2, colour).setOrigin(0.5, 0.5));
-    // lit top edge and the dark sill that sits it on its wheels
-    add(sceneRef!.add.rectangle(0, -CAR_H / 2 + 1.5, w - 2, 1, lit).setAlpha(0.85));
-    add(sceneRef!.add.rectangle(0, CAR_H / 2 - 2, w, 1.5, shade));
-    if (truck) {
-      // a cab at the front and a slatted box behind it
-      add(sceneRef!.add.rectangle(-(w / 2 - 5) * dir, -1.5, 9, 4, 0x2a3440));
-      add(sceneRef!.add.rectangle((w / 2 - 4) * dir, -1.5, 6, 4, shade));
-      add(sceneRef!.add.rectangle((w / 2 - 4.5) * dir, -1.5, 4, 3, 0x9fd0e8).setAlpha(0.8));
-      for (let i = -2; i <= 2; i++) add(sceneRef!.add.rectangle(-(w / 2 - 5) * dir + i * 2.5, -1.5, 1, 4, 0x1d2530).setAlpha(0.6));
-    } else {
-      // cabin, then the glass inside it, brighter at the front
-      add(sceneRef!.add.rectangle(0, -1.5, w * 0.56, 4, shade));
-      add(sceneRef!.add.rectangle(0, -1.5, w * 0.5, 3, 0x1a2230));
-      add(sceneRef!.add.rectangle(w * 0.16 * dir, -2, w * 0.14, 2, 0x8fc4e0).setAlpha(0.75));
-    }
-    // headlamp and its spill on the tarmac ahead, and the tail light behind
-    add(sceneRef!.add.rectangle((w / 2 - 1) * dir, -1, 2, 2, 0xfff6c0));
-    add(sceneRef!.add.rectangle((w / 2 + 3) * dir, 0, 7, 3, 0xfff0b0).setAlpha(0.14));
-    add(sceneRef!.add.rectangle((-w / 2 + 1) * dir, -1, 2, 2, 0xff3a3a));
-    // bumpers, so front and back are different shapes
-    add(sceneRef!.add.rectangle((w / 2 - 0.5) * dir, 1.5, 1.5, 3, lit).setAlpha(0.8));
-    const body = sceneRef!.add.container(x, laneY(k), parts).setDepth(10);
-    cars.push({ x, lane: k, w, dir: lane.dir, speed, body });
+    buildCar(k, x, truck, speed);
     lane.timer = (1500 + Math.random() * 1600) * gapMul();
   });
 

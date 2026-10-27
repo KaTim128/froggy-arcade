@@ -146,6 +146,41 @@ export const ticTacToe: MinigameModule = {
     }
   },
 
+  // ---- A RELOAD (log #87).  Noughts and crosses comes back square for
+  // square, with Froggy's move still to come if it was; a rock-paper-scissors
+  // throw in the air, or a game just settled, comes back to the choice of
+  // games -- the go given back if it was unfinished, as MENU does.
+  snapshot() {
+    return { current, board: [...board], paidGo, settled, streak };
+  },
+
+  restore(snap: unknown) {
+    const v = snap as { current: 'ttt' | 'rps' | null; board: Cell[]; paidGo: boolean; settled: boolean; streak: number };
+    streak = v.streak;
+    if (v.current === 'ttt' && !v.settled) {
+      startTicTacToe();
+      board = [...v.board];
+      render();
+      paidGo = v.paidGo;
+      const xs = board.filter((c) => c === 'X').length;
+      const os = board.filter((c) => c === 'O').length;
+      // (his move was on its way when the page went)
+      if (xs > os && !settle()) {
+        busy = true;
+        sceneRef?.time.delayedCall(360, () => {
+          const move = aiMove();
+          if (move >= 0) board[move] = 'O';
+          render();
+          busy = false;
+          settle();
+        });
+      }
+      return;
+    }
+    paidGo = v.current !== null && !v.settled ? true : v.paidGo;
+    showPicker();
+  },
+
   destroy() {
     cells = [];
     marks = [];

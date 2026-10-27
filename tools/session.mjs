@@ -129,7 +129,9 @@ try {
     await playCabinet(id);
     await sleep(2500);
     // the snapshot the save holds now, and the cabinet's own view of itself
+    // (held still first, so what is saved on the way out is this very moment)
     const before = await page.evaluate(() => {
+      window.__froggy.game().scene.pause('Minigame');
       window.__froggy.game().scene.getScene('Minigame').saveGame(true);
       return JSON.stringify(window.__froggy.state().game?.snap ?? null);
     });
