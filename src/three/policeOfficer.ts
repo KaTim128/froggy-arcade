@@ -549,8 +549,10 @@ export class PoliceOfficer {
     const skin = new THREE.MeshPhongMaterial({ color: look.skin, specular: 0x2a2018, shininess: 12 });
     const face = new THREE.MeshPhongMaterial({ map: faceTex(look), specular: 0x2a2018, shininess: 14 });
     const hair = new THREE.MeshLambertMaterial({ color: look.hair });
-    const white = new THREE.MeshPhongMaterial({ color: 0xcfc6b8, shininess: 30, specular: 0x404040 });
-    const iris = new THREE.MeshBasicMaterial({ color: look.eyes });
+    // (a little light of their own: in a dark corridor the whites of his eyes
+    // are what you see of them first)
+    const white = new THREE.MeshPhongMaterial({ color: 0xd8d0c2, shininess: 60, specular: 0x606060, emissive: 0x2a2620 });
+    const iris = new THREE.MeshBasicMaterial({ color: new THREE.Color(look.eyes).lerp(new THREE.Color(0x8a9aa0), 0.15) });
     const mouth = new THREE.MeshBasicMaterial({ color: 0x2a0c0c });
     const teeth = new THREE.MeshPhongMaterial({ color: 0xe8e0d0, shininess: 40 });
     const navyCap = new THREE.MeshLambertMaterial({ color: 0x141c2e });
@@ -711,20 +713,38 @@ export class PoliceOfficer {
       // balls -- an off-white that is in the shade of the socket, an iris
       // that fills most of what shows, a pupil, one small catch of light,
       // and the upper lid down over the top of it: a level, tired stare
-      const eye = mesh(new THREE.SphereGeometry(0.0125, 14, 10), white, this.head, sx * 0.033, 0.011, 0.084);
-      eye.scale.set(1.22, 0.78, 0.55);
-      const ir = mesh(new THREE.CircleGeometry(0.0062, 14), iris, this.head, sx * 0.033, 0.0105, 0.0912);
-      ir.rotation.y = sx * 0.12;
-      const pupil = mesh(new THREE.CircleGeometry(0.0028, 10), new THREE.MeshBasicMaterial({ color: 0x050302 }), this.head, sx * 0.033, 0.0105, 0.0916);
-      pupil.rotation.y = sx * 0.12;
-      mesh(new THREE.CircleGeometry(0.0011, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), this.head, sx * 0.033 + 0.0022, 0.0128, 0.0919);
-      const lid = mesh(new THREE.SphereGeometry(0.0148, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), face, this.head, sx * 0.033, 0.0115, 0.0852);
-      lid.scale.set(1.18, 1, 0.75);
+      // (IN THE FACE, NOT UNDER IT.  The skull's front is at z 0.098 here; the
+      // eyeball, iris and pupil were all behind it, so from the front there
+      // was only a dark socket.  Now the eye stands just proud of the face,
+      // each layer a hair in front of the last so none of them flickers.)
+      const ez = 0.0935;
+      const eye = mesh(new THREE.SphereGeometry(0.0135, 16, 12), white, this.head, sx * 0.033, 0.011, ez);
+      eye.scale.set(1.2, 0.8, 0.58);
+      const layer = (m: THREE.Material): THREE.Material => {
+        m.polygonOffset = true;
+        m.polygonOffsetFactor = -2;
+        m.polygonOffsetUnits = -2;
+        return m;
+      };
+      const ir = mesh(new THREE.CircleGeometry(0.0066, 18), layer(iris), this.head, sx * 0.0328, 0.0108, ez + 0.0081);
+      ir.rotation.y = sx * 0.14;
+      // a darker ring round the iris, the way an eye has one
+      const ring = mesh(new THREE.RingGeometry(0.0058, 0.0068, 18), layer(new THREE.MeshBasicMaterial({ color: new THREE.Color(look.eyes).multiplyScalar(0.45) })), this.head, sx * 0.0328, 0.0108, ez + 0.0082);
+      ring.rotation.y = sx * 0.14;
+      const pupil = mesh(new THREE.CircleGeometry(0.0029, 12), layer(new THREE.MeshBasicMaterial({ color: 0x050302 })), this.head, sx * 0.0328, 0.0108, ez + 0.0084);
+      pupil.rotation.y = sx * 0.14;
+      mesh(new THREE.CircleGeometry(0.0013, 8), layer(new THREE.MeshBasicMaterial({ color: 0xffffff })), this.head, sx * 0.0328 + 0.0022, 0.0128, ez + 0.0087);
+      // the upper lid, over the top of the eye: a level, tired stare
+      const lid = mesh(new THREE.SphereGeometry(0.0152, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), face, this.head, sx * 0.033, 0.0112, ez + 0.0006);
+      lid.scale.set(1.18, 1, 0.66);
       lid.rotation.x = -0.75;
       this.lids.push(lid);
       // the lower lid, a soft line under it
-      const low = mesh(new THREE.BoxGeometry(0.026, 0.0025, 0.004), face, this.head, sx * 0.033, 0.0035, 0.0905);
+      const low = mesh(new THREE.BoxGeometry(0.027, 0.0024, 0.004), face, this.head, sx * 0.033, 0.0036, ez + 0.0068);
       low.rotation.z = sx * 0.08;
+      // and a lash line along the top, so the eye has an edge to it
+      const lash = mesh(new THREE.BoxGeometry(0.028, 0.0016, 0.003), hair, this.head, sx * 0.033, 0.0185, ez + 0.0062);
+      lash.rotation.z = sx * 0.06;
       // the brow: heavy, low, its inner end down -- the scowl he wears
       const brow = mesh(new THREE.BoxGeometry(0.036, 0.009, 0.012), hair, this.head, sx * 0.035, 0.028, 0.099);
       brow.rotation.z = sx * 0.2;
@@ -733,7 +753,7 @@ export class PoliceOfficer {
         // thin rectangular frames, low on the nose: a man's reading frames
         const fw = 0.03;
         const fh = 0.016;
-        const fz = 0.103;
+        const fz = 0.107;
         for (const [w, h, x, y] of [
           [fw, 0.0018, 0, fh / 2],
           [fw, 0.0018, 0, -fh / 2],
@@ -747,7 +767,7 @@ export class PoliceOfficer {
         arm.rotation.y = sx * 0.1;
       }
     }
-    if (look.glasses) mesh(new THREE.BoxGeometry(0.008, 0.002, 0.002), metal, this.head, 0, 0.012, 0.104);
+    if (look.glasses) mesh(new THREE.BoxGeometry(0.008, 0.002, 0.002), metal, this.head, 0, 0.012, 0.108);
     // hair: cropped close round the back and sides
     const crop = mesh(new THREE.SphereGeometry(0.11, 22, 14, 0, Math.PI * 2, 0, Math.PI * 0.55), hair, this.head, 0, 0.012, -0.008);
     crop.scale.set(0.95, 1.1, 1.0);
@@ -755,10 +775,16 @@ export class PoliceOfficer {
     // A MAN'S HEAD: the brow ridge and the bridge of the nose standing out a
     // little (and the chin, above, broad), so the face has planes to catch
     // the torchlight instead of reading as a painted ball
-    const ridge = mesh(new THREE.BoxGeometry(0.1, 0.014, 0.02), skin, this.head, 0, 0.03, 0.094);
-    ridge.rotation.x = -0.2;
-    const bridge = mesh(new THREE.BoxGeometry(0.014, 0.04, 0.014), skin, this.head, 0, 0.012, 0.104);
-    bridge.rotation.x = 0.25;
+    // (a soft brow over each eye rather than one bar across, and the bridge
+    // only from between the eyes down: the two together made a cross on his
+    // forehead)
+    for (const sx of [-1, 1]) {
+      const ridge = mesh(new THREE.CapsuleGeometry(0.008, 0.03, 4, 8), skin, this.head, sx * 0.033, 0.026, 0.093);
+      ridge.rotation.z = Math.PI / 2 + sx * 0.12;
+      ridge.scale.set(1, 1, 0.8);
+    }
+    const bridge = mesh(new THREE.CapsuleGeometry(0.0065, 0.022, 4, 8), skin, this.head, 0, 0.004, 0.1);
+    bridge.rotation.x = 0.3;
     // (the beard is painted on, short and close, the shape of the jaw --
     // see faceTex -- and the chin carries it too: no slab of hair on him)
     if (look.beard) chin.material = new THREE.MeshPhongMaterial({ map: beardTex(look), specular: 0x1a1410, shininess: 6 });
@@ -895,7 +921,8 @@ export class PoliceOfficer {
       [0xff2030, 0],
       [0x2a50ff, Math.PI],
     ] as const) {
-      const l = new THREE.PointLight(col, 3.2, 3.6, 2);
+      // (soft and wide: up close a hot little lamp painted a hard blot on the wall)
+      const l = new THREE.PointLight(col, 1.5, 4.2, 1.6);
       l.position.set(Math.cos(a) * 0.36, 0.05, Math.sin(a) * 0.36);
       this.bar.add(l);
       this.barLamps.push(l);
@@ -1066,7 +1093,8 @@ export class PoliceOfficer {
       const front = 0.55 + 0.45 * Math.cos(a * 2);
       d.material.opacity = s.lights * front * flash;
     }
-    for (const l of this.barLamps) l.intensity = 3.2 * s.lights * flash;
+    // (the dots flash; the light they throw only breathes, so the walls do not strobe)
+    for (const l of this.barLamps) l.intensity = 1.5 * s.lights * (0.85 + 0.15 * flash);
     this.floorRing.rotation.z = -this.lightT * 5.5;
     (this.floorRing.material as THREE.MeshBasicMaterial).opacity = 0.55 * s.lights * flash;
     // crouched, the ring comes down with the shins

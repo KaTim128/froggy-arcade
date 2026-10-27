@@ -301,8 +301,8 @@ Rules for every batch:
 
 | Batch | Status | Commit | Tests |
 |---|---|---|---|
-| B0 | done: branch restarted from origin/master (b1e6ad2); the 3 police files stay uncommitted until B1 is verified | b1e6ad2 | |
-| B1 | in progress before this plan (uncommitted). Open bug: AI scenario H. | | |
+| B0 | done: branch restarted from origin/master (b1e6ad2); the 3 police files were later saved as a WIP commit | b1e6ad2 | |
+| B1 | IN PROGRESS: work-in-progress saved in a WIP commit (compiles; NOT verified: police tests not re-run, AI scenario H still failing) | WIP | tsc ok |
 | B2–B13 | not started | | |
 
 ## 6. Known issues
