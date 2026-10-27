@@ -36,15 +36,15 @@ I searched `src` for each one:
 
 ---
 
-## 2. Conflicts — need your decision (my proposed default in **bold**)
+## 2. Conflicts (decisions in **bold**; C6–C8 use my defaults unless the user says otherwise)
 
 | # | Conflict | Proposed default |
 |---|---|---|
-| C1 | Creature level cap. Item 4 says max level 5 and Ladder levels 1–5. Item 7 says Story bosses go up to level 20. Item 32 says Ladder levels 15–19, then a level-20 boss. | **Cap at 20, since the later prompts supersede. Story zones run 1–20; Ladder runs 15–19, then the level-20 boss.** |
-| C2 | Story prices. Item 7: replay costs 1 token, a first win pays 4, a repeat pays 2. Item 33: Story costs 2 and pays 5. Item 45: the reward drops to 3 when the player is 3 or more levels higher. | **Costs 2 and pays 5 (item 33). The reward drops to 3 when you are ≥3 levels over (item 45).** |
-| C3 | Ladder price. The current code charges 50. Item 33 says it costs 20 and pays 80. | **20 in, 80 out.** |
-| C4 | Achievements. Item 20 says make them easier; item 35 says make them harder. | **Medium difficulty (item 35 is later). Badges stay hard (item 20).** |
-| C5 | Police speeds. Task 62 says every officer moves at 2× the player en route, then 1.4×. Item 15 says officer 1 sprints to floor 6, officer 2 goes quickly to floor 3, and officer 3 is slower on floor 1. | **2× en route for officers 1 and 2; 1.6× for officer 3; all of them 1.4× on their floor.** |
+| C1 | Creature level cap. | **DECIDED (user, 2026-10-27): max level 20.** Story zones run 1–20; Ladder runs 15–19, then the level-20 boss. |
+| C2 | Story prices. | **DECIDED (user):** first play of a location in world 1 costs 2 and pays 5 on a win. Replay in world 1 costs 1 and pays 2. Each later world adds 1 (user example: world 2 costs 3, pays 6). *My reading, awaiting confirmation:* first play of world N costs N+1 and pays N+4; replay of world N costs N and pays N+1. *Open:* does item 45 (reward drops to 3 when you are ≥3 levels over) still apply? |
+| C3 | Ladder price. | **DECIDED (user): 20 tokens per run, 100 on a win.** |
+| C4 | Achievements. | **DECIDED (user): the most recent prompt, item 35. Achievements get harder; badges stay hard.** |
+| C5 | Police speeds and behaviour. | **DECIDED (user):** every officer is fast at the start (2× en route to floors 6, 3 and 1), then searches at 1.4×. If the player runs, officers in hearing range hear the footsteps, know where the player is and start a chase. Walking or crouching stays quiet. |
 | C6 | Item 15 says "no artificial floor restrictions"; the mid-turn police prompt says "do not change floor assignments". | **Each officer keeps his assigned starting floor, and none is blocked from following you to another floor.** |
 | C7 | Creature Clash mobile controls. Item 19 says ability buttons with icons. Item 32 says tap to activate, with no attack joystick. Item 2 says remove handedness. | **One move stick, plus tap ability buttons with icons and names. No attack stick, no handedness.** |
 | C8 | Recruiting. Item 3 says no starter creature and recruiting costs 25 tokens. The current code gives a free starter. | **Remove the starter. The first recruit costs 25.** |
