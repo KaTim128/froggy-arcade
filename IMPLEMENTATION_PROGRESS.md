@@ -136,6 +136,75 @@ No image arrived with three messages:
 - the wall side for wall furniture;
 - the mobile errors.
 
+## 3c. Requirement index: log entry → batch
+`docs/REQUIREMENTS_LOG.md` holds all 67 of your messages from 22–27 Oct, **word for word** (#1–#67 below).
+
+How each batch uses the log:
+- **The log is the specification.** A batch counts as done only when every sentence in its log entries is implemented and tested, including the "Test …" paragraphs inside them, which are acceptance criteria.
+- **Where entries conflict, the later one wins,** marked ⟶ below.
+- **Every "preserve unrelated features" clause** applies to every batch.
+
+| Log # | Topic | Batch | Notes |
+|---|---|---|---|
+| 1 | Midnight Condo suggestions (text only), higher prices, PR | B12, B13 | Multipliers set in #65 |
+| 3 | Clash: no handedness; desktop-only keybinds; mobile buttons fill the space | B6 | |
+| 4 | Clash: fainted creature stays in its slot; no starter; 25 tokens to recruit | B6 | |
+| 5 | Clash overhaul: balance, +40 creatures, +80 abilities, +5 bosses (60 boss attacks), arenas, UI, boss badges 5/10/15 | B6, B7 | Max level ⟶ 20 (#62). Ladder levels ⟶ 15–19 + boss (#38/#42). |
+| 6 | Arcade chained lock (inside only, default); hide one alley's prompt | B9 | Refs 205, 206; #65 |
+| 7 | Wall abilities keep the creature's own textures | B6 | |
+| 8 | Story Mode: 5 zones, markers, transitions, completion badge, Ladder unlock | B7 | Prices ⟶ #63 |
+| 9 | Fence Wars models + overlay; Frog Race polish + LEAVE/QUIT; Wheel overhaul; Chamber CASH OUT / LEAVE | B8, B4 | Refs 207–211 |
+| 10 | Red −N floaters for tokens and cash; Blackjack Froggy squarer | B4, B8 | Refs 212–213 |
+| 11–12 | LEAVE before play (no "break even"), QUIT GAME after; every button's text centred | B4 | Refs 214–216 |
+| 13 | Pause on tab switch; tutorials for every game per platform; action-specific mobile prompts (incl. 3D, e.g. HIDE); Car Chase traffic | B4, B8 | |
+| 14 | Button layouts; Mini Duels hands; Tic Tac Toe drop; bowling ball | B4, B8 | Refs 222–223 |
+| 15 | Police: proximity retention, 2–3 s last-known buffer; homeless sign tinted at night | B2, B11 | Refs 224–225 |
+| 16 | Police overhaul: doors and geometry, floor 1, models, dialogue, performance, speeds, door checks, roaming, noise, state rules | B2 | Refs 226–230. Speeds ⟶ #62 |
+| 17 | Clash: buff weak creatures, ranged vs melee fairness, boss animations | B6 | |
+| 18 | Alley refactor: left wall, walking police with perspective and sirens, detection and pursuit, no clipping, persistence | B11 | |
+| 19 | iPhone fullscreen | B4 | Extended by #25 |
+| 20 | Bog Ball 3-step turn; Clash ability buttons and description strip; crane Oddity freeze | B8, B6 | |
+| 21 | Achievements vs badges: rare badges, Arcade Mastery per game, Secret Discoverer | B5 | Difficulty ⟶ #46 |
+| 22 | Unique badge icons; BADGE UNLOCKED notice, queued; "lazy hiding"; secret "error frog-04" | B5 | |
+| 23 | Badge screen boxes; Clash menu spacing; ability descriptions; "Step" → "Tile" | B5, B6 | |
+| 24 | Balance every melee creature | B6 | |
+| 25 | Whole-game mobile test; broken image (3D scenes and games, #65); landscape fullscreen on iPhone and Android; eerie staircase scene with tap doors and chair | B4, B3* | *The staircase is the staff-door stairs down to the hide-and-seek key (#65), not the 2D Stairwell. It goes with B9 (arcade). |
+| 26 | Clash: remove the black boxes over icons; redesign the icons | B6 | |
+| 27 | Badge screen scrolls | B5 | |
+| 28 | Remove "NO REFUND, AND NO PRIZE" | B4 | |
+| 29 | Froggy Grab freezes like Oddity | B8 | |
+| 30 | Apartment: no default mirror or towels; more furniture; wall side; daily rotation for the furniture shop and Threads; ownership persists | B12 | The wall-side image is missing |
+| 31 | Reflective mirror; variations of every furniture type in the rotation | B12 | |
+| 32 | Turn-around scare: crouched Froggy, scream, RUN!, 2.5 s head start; stacked bodies with blood | B12 | Bodies placed per #65 |
+| 33 | Room 4 layout + Croaked (full spec) + the PLAY — N TOKENS layout in every game | B9, B10, B4 | The orange-marks image is missing |
+| 34–35 | Clash: no attack stick; tap to fire with auto-target; bigger buttons with icon and word; state feedback | B6 | |
+| 36 | Ladder creature lock: release or abandon, with confirmation | B7 | |
+| 37 | Flashlight occlusion; bigger toilet with a door closable from inside | B2 | Ref 231 |
+| 38 | Multi-phase bosses (summons, teleports, shields, arena-wide attacks, ultimates, telegraphs); Ladder 15–19 + 20 | B6, B7 | |
+| 39 | Ladder climb animation; VS screens | B7 | |
+| 40 | Swap Fence Wars and Frog Pond Hunt; Confusion Ball 4 damage + lock icon | B8 | Price ⟶ #42 |
+| 41 | Confusion mini balls | B8 | Refined in #42 |
+| 42 | Fence Wars result text and 10/20; Confusion rules; high scores per game; platform tutorials; flashlight occlusion; toilet; Clash controls, ladder lock, bosses, ladder levels | B8, B4, B2, B6, B7 | Refs 232–235 |
+| 43 | Story hop animation; ladder climb; VS screens; prices | B7 | Prices ⟶ #62/#63 (Story 2N/4N, replay N/2N; Ladder 20/100) |
+| 45 | No text outside its box anywhere | B4 | |
+| 46 | Remove "THIS WEEK"; achievements scroll; much harder achievements | B5 | Refs 236–237 |
+| 47 | Clash J/K/L; Change Controls before every game (restore defaults, no conflicts) | B6, B4 | Ref 238 |
+| 48 | Sharp's Barber window decorations darker at night | B11 | |
+| 49 | Frog Pond Hunt found/not-found markers | B8 | |
+| 50 | Session persistence everywhere, paused, 3-2-1, no recharge | B4 | |
+| 51 | Sleeping on the cardboard | B11 | Ref 239 |
+| 52 | Instant window jumpscare, Froggy 3D inside; wardrobe and bed layout; police kept out of the elevator and apartment; elevator freeze | B12, B2 | Refs 240–244 |
+| 53 | Janitor-scene creepy walk (bent elbows, twitchy, slow, forward lean, heavy steps) | B12 | Ref 245 |
+| 54 | Man in black stops breaking the fourth wall | B11 | Refs 246–247 |
+| 55 | Old man's buttons 2×2 | B11 | Ref 248 |
+| 56 | Over-level reward drop | — | **Dropped** (#64) |
+| 57 | Back out before picking a creature | B6 | |
+| 58 | Zebra (Grudge + Frogster Mash); tortoise remake with a 100% shell block; porcupine with spikes; pre-fight hints | B8 | |
+| 59 | Clash hub: no overlap, better creatures, less text | B6 | Ref 249 |
+| 60 | Air Hockey varied serve angles | B8 | Ref 250 |
+| 61 | Pad Battles (full spec) | B10 | |
+| 62–65 | Decisions and answers | all | See sections 2–3 |
+
 ---
 
 ## 4. Batches (in order, with dependencies)
