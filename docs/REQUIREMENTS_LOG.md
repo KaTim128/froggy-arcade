@@ -1,31 +1,285 @@
 # Requirements log: every request from 22 Oct to 27 Oct 2026, verbatim
 
-Your messages copied word for word, oldest first. Image attachments point to their saved copies in `docs/refs/`. Task notifications and the session summary are left out. IMPLEMENTATION_PROGRESS.md maps each request to a batch; when the two differ, this log is the original specification.
+Your messages copied word for word, oldest first. Messages sent while I was mid-task are marked *(sent mid-task)*. Image attachments point to their saved copies in `docs/refs/`; images 1–201 are older and are not copied. Task notifications and session summaries are left out. IMPLEMENTATION_PROGRESS.md maps each request to a batch and records the done/pending status of the 22 Oct ones; when the two files differ, this log is the original specification.
 
 
-## 1. 2026-10-22 18:46 UTC
+## 1. 2026-10-22 00:27 UTC
+
+Have a button in the test setting for the scene where the player will be taken to the polive stealth scene after surviving the janitor room scene. Make the text smaller to stay within the box, also have another button where the player is taken to the start of the scene whwre nothing has been completed which is the starting after introduction of the game. This can be scrollable
+
+
+## 2. 2026-10-22 00:31 UTC *(sent mid-task)*
+
+The calm button should be shown by default without disappearing during the janitor scene.
+
+Also make sure in mobile view, the interact button is circular. Not oval
+
+
+## 3. 2026-10-22 00:39 UTC
+
+The ability is different but the name of it is the same, ensure that the naming of the abilities are different as well for creature clash
+
+
+## 4. 2026-10-22 00:41 UTC
+
+Yes
+
+
+## 5. 2026-10-22 00:44 UTC
+
+Pull the request
+
+
+## 6. 2026-10-22 04:09 UTC
+
+THE POLICE SCENE
+After surviving the janitor room, if they manage to see the player while they are going into a hiding spot, the police should open the hiding spot and catch them instead of losing the player even tho the player just went in the hiding spot while player is there. 
+
+in image 4 the door should already be broken down, as broken since the janitor room scene where froggy broke the lobby stair door. The staircase in the image where i rectangled the stair rail should not be connected to the wall it should reference the stairs of when froggy is chasing the player down the stairs 
+
+make the police look better and they all should be male, make sure they dont get stuck etc. when they catch and jumpscare the player, the player and the police will be sent out of the map, fix that issue.
+
+THE FOLLOWING DAY SCENE
+when police is in a shop or arcade, they should not be able to get trapped like this after juking the police is currently stuck at the bed as shown in image 2. this goes for all shops and arcade.
+
+the objectives text should be smaller and at the left it should have the things in image 3 right now theres nothing there.
+
+*Attached images: 190, 191, 192, 193, 194*
+
+
+## 7. 2026-10-22 04:32 UTC
+
+Update the existing Froggy project only. Focus exclusively on texturing, materials, lighting, shading, visual polish, and win/lose color feedback. Use the existing Bog Ball game as the visual quality reference for the other arcade games, while preserving each game’s own identity. Bog Ball should retain its darker theme, while the other games should use brighter color palettes with lighter, less heavily textured treatments where appropriate. Ensure each visual style suits the specific game.
+
+Improve areas that currently look flat, plain, blurry, or inconsistent without changing gameplay, mechanics, layout, controls, progression, economy, UI behavior, interactions, or functionality. Add suitable visual color treatment for win and lose states without altering how those states work.
+
+The crane machine’s stuffed toys and mystery balls must be visibly clear, sharp, and properly textured rather than blurry. Improve their materials, surface detail, lighting, and shading while preserving their existing appearance, placement, animations, and functionality. Reuse existing assets and animation systems where appropriate, adapting them only for visual quality. Do not redesign Bog Ball or modify unrelated systems.
+
+
+## 8. 2026-10-22 04:45 UTC *(sent mid-task)*
+
+THE POLICE scene
+
+The door should be broken at the other side not inside the stairwell, please ensure that it references how the lobby looks from the outside when inside the stairwell. You can see in the image that the door is broken right there and u cna see the couch and the trash bin when looking from the outside but player cant go outside
+
+
+## 9. 2026-10-22 05:53 UTC
+
+Create oull request
+
+
+## 10. 2026-10-22 05:59 UTC
+
+For grudge instead of having it like this where the practise is at the tutorial, player should press play and when they do theyll can select either play or practise if player gors in practise and leaves it will bring them back to the 2 button menuto either play or practise. Once player clicks play if they leave or quit they forfeit ans lose the tokens
+
+
+## 11. 2026-10-22 07:15 UTC
+
+Update the existing Froggy project only. Inspect the current implementation, reference images, police models, stairway scene, chase mechanics, and jumpscare sequence before making changes. Reuse existing assets and systems wherever possible, and preserve all unrelated gameplay, progression, scenes, and mechanics.
+
+Redesign the apartment lobby to match the second reference image exatcly, but this time its viewed from inside the lobby stairway. Preserve its perspective, layout, depth, and atmosphere. Do not make the lobby look like a square room or an open area where the player can see the entire layout at once, as shown in the first image. Place three police officers at the broken main lobby entrance instead of having a single officer standing idle in the lobby.
+
+Implement distinct police routes and intelligent chase behaviour. The first officer should immediately pursue the player toward level 6. The second officer should follow behind the first and head toward level 3. The third officer should remain on level 1. After reaching their assigned floors, the officers can freely patrol and search their respective areas or to another floor. They should investigate suspicious sounds, detect the player based on proximity and visibility, and hear footsteps when the player runs. They should react appropriately to the player's location and movement, chase when they detect the player, and search nearby areas when the player hides. Make the escape challenging and suspenseful so the player cannot simply run uninterrupted to level 6 or easily outrun all three officers. Preserve the existing hearing, hiding, and detection mechanics while ensuring the three officers behave independently and follow their assigned routes before beginning free patrol.
+
+Improve the police officer models and jumpscare visuals shown in image 3. The current characters look poorly textured, unattractive, and unintentionally smiling, which ruins the horror atmosphere. Redesign them to look intimidating, serious, and convincingly human, with lean body proportions, detailed police uniforms, natural facial features, realistic eyes, properly textured materials, and appropriate lighting and shadows. Remove the unintended smiling expression and avoid chunky, oversized, distorted, or cartoonish appearances. Ensure all three officers maintain consistent visual quality throughout the lobby chase and jumpscare sequences.
+
+Improve the jumpscare presentation so being caught feels genuinely frightening. Use unsettling facial expressions, appropriate camera positioning, close-up framing, lighting, shadows, and animation to create tension without making the officer look unintentionally funny. Keep the character's face, uniform, proportions, and materials consistent with the rest of the game.
+
+Fix the post jumpscare respawn bug. Currently, after the jumpscare finishes, the screen remains dark and the respawn or leave options do not appear. Inspect the scene transitions, UI visibility, black screen overlays, input blocking, animation completion events, and game state resets to identify the root cause. Ensure the jumpscare ends cleanly and the complete post jumpscare menu appears reliably. Both the respawn and leave options must be visible, selectable, and functional. Verify that respawning restores the appropriate gameplay state and that leaving transitions correctly without becoming stuck on a dark screen.
+
+Test the complete sequence from entering the apartment lobby through the three officers pursuing the player, reaching their assigned floors, patrolling, detecting footsteps, chasing and catching the player, playing the jumpscare, and displaying the post jumpscare menu. Confirm that the lobby perspective matches the second reference image, the officers look properly textured and intimidating, their routes work independently, and both menu options function correctly.
+
+Do not change unrelated gameplay mechanics, progression, economy, assets, scenes, or systems. Focus only on the apartment lobby design, three officer routes and AI behaviour, police character visuals, jumpscare presentation, and post jumpscare bug fix.
+
+other than that, the rectangled info in image 4 should be moved up higher like how its supposed to be
+
+in image 5 the stair well should not be like this but it should be like 2D version of the 3D stairwell which i have made a zig zag, so the player can walk up the stairs like that and the camera screen will move up as the player goes up the stairwell
+
+when player looks out of the window, it should be a big moving river instead of a dumspter cause its unrealistic, so player will jump out the window and instead of turning dark it should show that the player actually jumps and falls and then before hitting the river it turns dark with a splashing sound effect. then it should show the dialogs but dialogs should go slower.
+
+*Attached images: 195, 196, 197, 198, 199*
+
+
+## 12. 2026-10-22 07:18 UTC
+
+remove the red and green color aura when win  or lose
+
+*Attached images: 200*
+
+
+## 13. 2026-10-22 07:20 UTC
+
+actually the win animation is good, keep that
+
+*Attached images: 201*
+
+
+## 14. 2026-10-22 07:31 UTC
+
+pull the request first then continue with the police scene
+
+
+## 15. 2026-10-22 07:36 UTC *(sent mid-task)*
+
+when froggy climbs into the room after breaking the window, it should not be enlarged but the size should look taller than the player but not bigger in the ratio and it should be rushing towards the player side view. in 2D.
+
+
+## 16. 2026-10-22 07:37 UTC *(sent mid-task)*
+
+froggy broke the door from the right side not the left, so room 612 is on the right during the police scene where player has to find room 612 and jump into the river.
+
+
+## 17. 2026-10-22 07:57 UTC *(sent mid-task)*
+
+For creature clash when player clicks into ability description, and text is too long, the close button cant be seen as shon in the image. Fix that and ensure no overlapping, maybe reduce word size font
+
+
+## 18. 2026-10-22 08:47 UTC
+
+Players wont know what 68px is, it should be player friendly where there should not be any programming jargons for its descriptions
+
+
+## 19. 2026-10-22 09:01 UTC
+
+I hit my usage limit while you were working, but it has reset now. Please continue from where you left off.
+
+
+## 20. 2026-10-22 09:31 UTC *(sent mid-task)*
+
+the platforms should be less spacious for the platform without the doors and the Level text on the wall should not be too close to the door
+
+
+## 21. 2026-10-22 09:55 UTC
+
+Show me the screenshots of how player sees the outside from the stairway during the police scene
+
+
+## 22. 2026-10-22 10:11 UTC
+
+The 3D scene janitor room is not working.
+
+Other than that for the scene where the police will try and hunt the player, it is completely wrong. The lobby should look exactly like this but, since the player will be in the staircase door after player goes in there, when the player looks out, it should  show the sofa and the rubbish bin its currently in image 2 it is the view where  player can see the main lobby door and the side view of the sofa, but right now for the police stealth scene, it should be a view where player is facing toward the player. Please verify if you understand before recreating it.
+
+
+## 23. 2026-10-22 10:13 UTC
+
+The three officer should come out from the right where the main lobby door is and the stair way door should already be broken
+
+
+## 24. 2026-10-22 10:41 UTC
+
+Can u add some stuff near the wall for both the janitor view and the lobby staircase view, cause it looks quite empty. Then after that show the screen shots of the player falling from the building of 612 to the river scene for me to verify if it is correct and the textures are enough
+
+
+## 25. 2026-10-22 10:56 UTC
+
+There should be fast river sounds that the player can hear before jumpong and splashing sounds
+
+
+## 26. 2026-10-22 11:00 UTC
+
+During the rooms at the police scene, I want the rooms to look bigger and wider so that the player can hide in wardrobes, toilets, as well as the beds.
+
+
+## 27. 2026-10-22 11:10 UTC *(sent mid-task)*
+
+Ensure that the stair doors do not have any holes at the sides and outlines  of the door.
+
+
+## 28. 2026-10-22 11:23 UTC
+
+At the fourth hide and seek room, which is the arcade, the player has to go to the door and use the key to unlock the door. However, I want the textures to be really better than current, making sure that it is not blurry and the key should be textured well as well as the lock and the 3D arcade textures. Then merge everything and create a pull request 
+For the grudge, Froggy should be able to pass to the other side of the punching bag in the practice area.
+
+
+## 29. 2026-10-22 11:50 UTC
+
+The hand when grabbing the key that is dropped on the ground should be taken using a hand that is smooth and natural, like a person's hand with the arm grabbing the key. This animation should be refined and smooth.
+For the creature clash game, For creatures that are mainly melee attackers, when they attack, it should show the animations of a bite or a punch depending on the creature. Some, for example, the golem will do punches and the bat will do bite. Some will have slicing animations so that it can replace the mini straight line as the melee attack. As for the projectiles, can you create a more textured version of the projectiles for long-ranged fighters? Depending on the uniqueness of the creatures. For example, flame creatures should have flame projectiles, while for water creatures, they'll have water projectiles.
+Have the chains to be wraps around the door handles instead of sticking onto them
+
+
+## 30. 2026-10-22 13:29 UTC
+
+Send a pull request
+
+
+## 31. 2026-10-22 17:49 UTC
+
+When player clicks on the settings button for the grudge practise game, it should be leave instead of quit game which will take the player to the 2 button menu.
+
+For creature clash, remove the texts that has PX like as shown above in image 2, 75px, normal players with no programming background wont know what that is. Ensure PX is gone from all text in this game instead replace it with how many steps or maybe another way of describing it
+
+
+## 32. 2026-10-22 18:00 UTC
+
+The glasses should look better currently its it just one line, i do not like this. Lets say if the player gets caught, then the 200 cash will be restarted and the items that was bought by the player before getting caught will not be saved. Player must get all 7 items in one go
+
+
+## 33. 2026-10-22 18:10 UTC
+
+Using the reference image, fix the 2D apartment stairwell layout and movement while preserving all unrelated gameplay, scenes, textures, animations, and systems.
+Shorten the stairwell to match Image 1, add solid side walls, and ensure smooth movement up and down without blocking or sticking. Align each floor’s door with the marked rectangles and keep them accessible.
+Place each floor number in a small white square beside its door, using black text without obstructing movement. Remove the 612 sign from the Level 6 door, but keep the door and room functionality unchanged.
+Inspect the existing layout and collision system first. Ensure all geometry, walls, doors, labels, and collision boundaries align correctly.
+
+
+## 34. 2026-10-22 18:13 UTC *(sent mid-task)*
+
+The free space that will be covered by walls should look like this as reference like the elevator but the black spaces are walls
+
+
+## 35. 2026-10-22 18:19 UTC
+
+There should be a rooftop as well the highest floor is the 6th floor
+As for the police scene when the police are going to the stairswell to catch the player, the police should be 2 times faster than the player but after reaching their destination meaning level 1 3 and 6 then they will be 1.4 times faster than the player, this is to ensure that the player doesnt simply just run to the top of room 612. Also ensure that the scene where player is going to jump, the flashlights should not have any bugs or erros should be a smooth lighting. Ensure the texture of the hotel and the rooms are well textured as well as the sea and the environment outside the broken window. Should look much better
+
+
+## 36. 2026-10-22 18:20 UTC *(sent mid-task)*
+
+Remove this, and another thing is that it should have a G floor before the first floor
+
+
+## 37. 2026-10-22 18:24 UTC *(sent mid-task)*
+
+Fix the police AI bugs and improve the police character models while preserving all unrelated gameplay and systems.
+
+Police AI and stairwell access
+
+Ensure police officers can enter and navigate the stairwell even when the player is standing near a doorway. Fix any collision issues, blocked navigation paths, or doorway detection problems preventing officers from entering. Police must not get stuck or stand idle indefinitely. If an officer cannot reach the player, make it recalculate its path and continue pursuing or searching according to its assigned floor and patrol behaviour.
+
+Police appearance
+
+Improve the police models so they look more realistic, detailed, and polished while matching the existing game's visual style. Fix the missing or invisible eyes by ensuring each officer has clearly visible, properly positioned eyes that remain visible during movement and different viewing angles. Improve facial features, proportions, uniforms, lighting, and textures without making the characters look out of place.
+
+Inspect the existing police models, animations, AI logic, pathfinding, and collision boundaries before making changes. Test scenarios where the player stands in front of doors, enters the stairwell, and moves between floors. Ensure police can follow the player reliably without getting stuck.
+
+Do not change the existing chase sequence, assigned police routes, floor assignments, or any unrelated mechanics.
+
+
+## 38. 2026-10-22 18:46 UTC
 
 For the midnight condo run can you povide me some suggestions on how it can be better, for this prompt do not change anything yet. 
 The prices for the furniture should be more pricy as well as the clothings and the haircut.
 Create a pull request
 
 
-## 2. 2026-10-22 23:41 UTC
+## 39. 2026-10-22 23:41 UTC
 
 Continue from where you left off.
 
 
-## 3. 2026-10-23 00:11 UTC
+## 40. 2026-10-23 00:11 UTC
 
 For creature clash, remove the left and right hand stick layout. Instead allow to change control keybinds here for desktop only. The controls section can only be seen on desktop not on mobile. So on mobile the other button sections can take the control button space
 
 
-## 4. 2026-10-23 07:22 UTC
+## 41. 2026-10-23 07:22 UTC
 
 For creature clash, make sure that the creature doesnt faint when it faints in the zone battles it should still be in the player slot. The starter creatures should not be there as well. Player must pay 25 tokens at the start to get a creature
 
 
-## 5. 2026-10-24 05:36 UTC
+## 42. 2026-10-24 05:36 UTC
 
 Improve Creature Clash using the existing systems and the provided screenshot as reference. Preserve unrelated gameplay, progression, economy, assets, and features.
 
@@ -55,10 +309,10 @@ Add three persistent Creature Clash badges that unlock after defeating 5 differe
 
 Before finishing, audit all creature stats, ability interactions, animations, boss difficulty, UI layouts, and battle progression. Fix bugs and verify that every new creature and ability works correctly. Ensure all creatures remain competitively balanced, every boss has distinct mechanics, and no existing unrelated features are changed.
 
-*Attached images: 202, 203, 204 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 202, 203, 204*
 
 
-## 6. 2026-10-24 05:42 UTC
+## 43. 2026-10-24 05:42 UTC
 
 Make the arcade's locked door look accessible only from the inside,  This restriction must apply exclusively to the arcade, not the other shops. Replace the arcade's existing shutters with the chained door locks shown in image 1, matching the existing pixel art style, textures, and lighting. This should be the default.
 
@@ -66,15 +320,15 @@ For the alley shown in image 2, remove the visible [E] ALLEY interaction prompt 
 
 Inspect the existing implementation first, reuse existing assets and interaction systems where possible, and test both changes to ensure they work as intended without affecting other shops or gameplay.
 
-*Attached images: 205, 206 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 205, 206*
 
 
-## 7. 2026-10-24 06:18 UTC
+## 44. 2026-10-24 06:18 UTC
 
 Update the existing Creature Clash system only. Ensure wall abilities always use the creature’s own thematic textures and colors, regardless of the battle environment. For example, Rime Golem’s walls must retain their icy appearance even when fighting in the fields. Preserve all unrelated mechanics, abilities, and visuals.
 
 
-## 8. 2026-10-24 08:08 UTC
+## 45. 2026-10-24 08:08 UTC
 
 Update the existing Froggy project only. Implement the following 5 zone sequence for Creature Clash Story Mode, preserving existing creatures, abilities, battle mechanics, and unrelated features.
 
@@ -99,7 +353,7 @@ Award a unique achievement badge when the player completes the entire story mode
 Inspect existing systems and assets first, reuse suitable creatures where possible, and avoid duplicate boss designs. Test level scaling, rewards, save persistence, zone unlocking, and battle progression. Do not modify unrelated features.
 
 
-## 9. 2026-10-24 08:27 UTC
+## 46. 2026-10-24 08:27 UTC
 
 Update the existing Froggy project only. Improve Fence Wars, Frog Race, and Wheel of Fortune while preserving all unrelated gameplay and systems.
 
@@ -128,10 +382,10 @@ Inspect existing assets and implementations first. Reuse Bog Ball's textures and
 For Chamber
 in image 4 and 5 player should be able to cash out the 5 tokens the button should be cash out, instead of Quit Game. and if player hasnt pull the trigger yet, the button in the setting will be called Leave, and player wont lose tokens
 
-*Attached images: 207, 208, 209, 210, 211 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 207, 208, 209, 210, 211*
 
 
-## 10. 2026-10-24 08:31 UTC
+## 47. 2026-10-24 08:31 UTC
 
 When tokens are spent, display the deducted amount in red near the token counter, such as "-1" or "-25". When cash is spent, display the deducted amount in red near the cash counter using the same effect. Animate the amount briefly floating upward and fading out smoothly.
 
@@ -139,17 +393,17 @@ Ensure the displayed amount matches the actual deduction, works consistently acr
 
 For blackjack, froggy's size height as shown in image 2 should look squarish not too rectangular
 
-*Attached images: 212, 213 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 212, 213*
 
 
-## 11. 2026-10-24 08:32 UTC
+## 48. 2026-10-24 08:32 UTC
 
 If player hasnt played the game yet, the button should be called Leave instead of quit game, only when played it will change to Quit Game.
 
-*Attached images: 214 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 214*
 
 
-## 12. 2026-10-24 08:35 UTC
+## 49. 2026-10-24 08:35 UTC
 
 Before the player starts playing a game, label the exit button Leave instead of Quit Game, if the button is Leave, it should not say break even after that. Once the player has started the game, change the button label to Quit Game. Ensure the label updates correctly based on the actual game state and resets appropriately when entering or leaving a game.
 
@@ -157,12 +411,10 @@ Fix all button text alignment across the project so text is perfectly centered h
 
 Inspect existing UI components and reuse shared button styles where possible. Test different button sizes, labels, and game states to ensure consistent results without modifying unrelated gameplay or UI functionality.
 
-*Attached images: 215, 216 (saved as `docs/refs/*-<number>.*`)*
-
-*Attached images: 217, 218, 219, 220, 221 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 215, 216, 217, 218, 219, 220, 221*
 
 
-## 13. 2026-10-24 08:58 UTC
+## 50. 2026-10-24 08:58 UTC
 
 If the player switches to another browser tab while playing an arcade game and then returns to the game tab, automatically open the Settings menu and pause gameplay if supported. Preserve the current game state and progress without restarting the game or resetting anything. Ensure this works consistently across all arcade games and does not trigger when switching tabs outside an active game. Reuse existing visibility detection and settings systems where possible, and avoid modifying unrelated features.
 
@@ -181,7 +433,7 @@ Ensure lane merges and splits transition smoothly, with clear road markings and 
 Test different traffic patterns, road layouts, and vehicle densities while preserving the existing Car Chase mechanics, visual style, difficulty balance, and unrelated features.
 
 
-## 14. 2026-10-24 09:03 UTC
+## 51. 2026-10-24 09:03 UTC
 
 Fix all button layouts so text is fully visible, centered, and does not overlap button edges or other UI elements as shown in image 1. Ensure consistent spacing and readable text across desktop and mobile views.
 
@@ -193,10 +445,10 @@ Test all changes on desktop and mobile to verify the UI, textures, animations, a
 
 For bowling make the bowling ball look nicer referencing ball bog for the textures as well.
 
-*Attached images: 222, 223 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 222, 223*
 
 
-## 15. 2026-10-24 09:24 UTC
+## 52. 2026-10-24 09:24 UTC
 
 # TASK: Fix Police AI Target Awareness & Homeless NPC Sign Night Palette
 
@@ -212,10 +464,10 @@ For bowling make the bowling ball look nicer referencing ball bog for the textur
   * Locate the homeless NPC script/prefab and find how day/night color tinting or shaders are applied to the NPC sprite.
   * Apply the exact same tint, material, or color update logic to the **sign sprite renderer** so it darkens alongside the NPC at night.
 
-*Attached images: 224, 225 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 224, 225*
 
 
-## 16. 2026-10-24 10:00 UTC
+## 53. 2026-10-24 10:00 UTC
 
 Doors and floor geometry
 
@@ -271,15 +523,15 @@ Fix regressions without modifying unrelated gameplay, escape progression, player
 
 Define fair chase and hiding rulesSpecify officer search state transitions
 
-*Attached images: 226, 227, 228, 229, 230 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 226, 227, 228, 229, 230*
 
 
-## 17. 2026-10-24 10:41 UTC
+## 54. 2026-10-24 10:41 UTC
 
 Update the existing Froggy project only. Balance Creature Clash abilities by buffing weaker creatures and underperforming attacks. Ensure long ranged creatures do not have an unfair advantage over melee creatures. Improve melee abilities where needed, considering damage, range, cooldowns, mobility, and defensive options. Preserve each creature’s unique identity and playstyle while ensuring all creatures remain fair, viable, and balanced in combat. Also im prove the animations for the bosses abilities
 
 
-## 18. 2026-10-25 00:43 UTC
+## 55. 2026-10-25 00:43 UTC
 
 Please refactor the alleyway scene and entity logic (as referenced in the screenshots) with the following specifications:
 
@@ -305,12 +557,12 @@ Please refactor the alleyway scene and entity logic (as referenced in the screen
    - Maintain active world coordinates (X/Y vectors) for all police officers and passing NPCs so their exact real-time positions and movements are properly preserved across views.
 
 
-## 19. 2026-10-25 03:51 UTC
+## 56. 2026-10-25 03:51 UTC
 
 Also for mobile allow the game to be full screen for iphones as well not just desktop
 
 
-## 20. 2026-10-25 04:54 UTC
+## 57. 2026-10-25 04:54 UTC
 
 Update the existing Froggy project only. Inspect the current code and reuse existing systems and assets. Preserve all unrelated gameplay, mechanics, and UI.
 
@@ -329,7 +581,7 @@ Investigate and fix the issue preventing gameplay and causing freezes after grab
 Test all three games after the changes and fix related bugs without affecting unrelated features.
 
 
-## 21. 2026-10-25 12:39 UTC
+## 58. 2026-10-25 12:39 UTC
 
 Update the existing Froggy project only. Improve the achievement and badge systems across all arcade games. Inspect the existing code and reuse current systems, progression, and UI. Preserve all unrelated gameplay and features.
 
@@ -364,7 +616,7 @@ Prioritise accessible achievements, difficult mastery badges, and meaningful sec
 Inspect the existing project before implementing changes. Reuse existing systems wherever possible and do not replace unrelated mechanics, progression, UI, assets, or game logic.
 
 
-## 22. 2026-10-25 16:27 UTC
+## 59. 2026-10-25 16:27 UTC
 
 Improve the badge system while preserving all unrelated gameplay and features.
 
@@ -379,18 +631,18 @@ Inspect and reuse the existing badge, achievement, UI, animation, and audio syst
 Also create some challenges that may be hard to achieve like maybe "lazy hiding" achieved by hiding in one spot the whole time during the hide and seek game. Etc these are RNG and hard but achievable. Things like these or also like error frog-04 like 404 that is when u saw a scary froggy when playing the whack a frog game which should be a secret badge.
 
 
-## 23. 2026-10-26 00:48 UTC
+## 60. 2026-10-26 00:48 UTC
 
 Make the badge screen easier to read by placing each badge in its own clearly defined box with a unique icon, readable name, achievement requirements, and distinct locked and unlocked states.
 For Creature Clash, improve all ability descriptions at the menu screen after the menu screen is rearranged more neatly and spacious, so players can easily understand each ability's effects, damage, duration, range, and special effects where applicable. Use simple language and clear UI text. Replace “Step” with “Tile” for distance and range indicators throughout Creature Clash. Ensure consistency and preserve existing mechanics, balancing, and unrelated features.
 
 
-## 24. 2026-10-26 00:58 UTC
+## 61. 2026-10-26 00:58 UTC
 
 Balance all melee creatures in Creature Clash so none are significantly weaker than others. Review their damage, attack speed, range, mobility, durability, cooldowns, and abilities. Improve underperforming creatures and ensure melee combat remains competitive against ranged creatures. Preserve each creature’s unique playstyle and existing mechanics. Test battles across different matchups to ensure no creature is consistently overpowered or underpowered.
 
 
-## 25. 2026-10-26 01:05 UTC
+## 62. 2026-10-26 01:05 UTC
 
 Update the existing Froggy project only. Inspect and test the entire game on mobile, including all 3D scenes, arcade games, menus, UI, animations, and gameplay. Fix the errors shown in Image 1 and any other mobile compatibility issues.
 
@@ -401,27 +653,27 @@ Improve the staircase scene with detailed wall textures, realistic doors, chairs
 Test the complete game on desktop, iPhone, and Android. Fix rendering, scaling, touch controls, interactions, and performance issues while preserving unrelated gameplay, assets, and systems.
 
 
-## 26. 2026-10-26 01:18 UTC
+## 63. 2026-10-26 01:18 UTC
 
 In Creature Clash, remove the black boxes overlapping the ability icons and fix any related UI layering or positioning issues. Redesign or improve the ability icons so each one clearly communicates its effect and is easy to distinguish at a glance. Use intuitive visual symbols, consistent styling, and clear silhouettes that match each ability's function and creature theme. Ensure icons remain readable during battles on desktop and mobile. Preserve existing ability mechanics, animations, and unrelated UI elements.
 
 
-## 27. 2026-10-26 01:29 UTC
+## 64. 2026-10-26 01:29 UTC
 
 Ensure the badge screen is scrollable as there will be many badges to achieve
 
 
-## 28. 2026-10-26 03:30 UTC
+## 65. 2026-10-26 03:30 UTC
 
 Remove the no refundable ans no prize text when lose
 
 
-## 29. 2026-10-26 05:29 UTC
+## 66. 2026-10-26 05:29 UTC
 
 The froggy grab is also having the same issue where after grabbing a prize, the buttons suddenly stopped working. This happened in oddity and also in froggy grab fix that
 
 
-## 30. 2026-10-26 05:45 UTC
+## 67. 2026-10-26 05:45 UTC
 
 Inspect the current apartment customisation, furniture shop, Threads clothing shop, inventory, and in game day systems before making changes. Reuse existing code, assets, and mechanics wherever possible, and preserve all unrelated gameplay, progression, UI, and features.
 
@@ -452,19 +704,19 @@ Test both shops across multiple in game days. Verify that the stock changes at t
 Preserve all unrelated systems and existing features. Do not replace working systems unnecessarily or introduce duplicate shop, inventory, or time management logic.
 
 
-## 31. 2026-10-26 05:50 UTC
+## 68. 2026-10-26 05:50 UTC
 
 Make the purchasable apartment mirror fully reflective, using the existing Threads shop mirror as the reference for reflection quality and functionality.
 
 Add multiple variations of each furniture type, including different designs, colours, materials, and styles. Integrate these variations into the furniture shop's daily in game rotation. Ensure purchased items remain permanently owned after rotations. Preserve existing placement mechanics, inventory, apartment customisation, and all unrelated features
 
 
-## 32. 2026-10-26 06:18 UTC
+## 69. 2026-10-26 06:18 UTC
 
 In Midnight Condo Run, when the player turns around at a scripted suspense moment, reveal Froggy sneaking directly behind them in a predatory crouched stance. Froggy should suddenly scream, triggering a clear on screen “RUN!” warning. During the scream, give the player a 2.5 second head start to escape before Froggy begins actively chasing them. Ensure the sequence feels frightening and cinematic, with appropriate animations, sound effects, and timing. Froggy must remain behind the player during the reveal and transition smoothly into the chase after the 2.5 second delay. Preserve existing gameplay, controls, and unrelated features. The dead bodies could be shown as a stack of bodies with blood
 
 
-## 33. 2026-10-26 07:25 UTC
+## 70. 2026-10-26 07:25 UTC
 
 Update the existing Froggy project only. Inspect the fourth arcade room and reuse its existing arcade systems, assets, interactions, UI patterns, and token economy.
 
@@ -550,12 +802,12 @@ Test the following on desktop and mobile:
 Preserve all unrelated games, mechanics, assets, and features. Avoid unnecessary changes to existing systems.
 
 
-## 34. 2026-10-26 09:35 UTC
+## 71. 2026-10-26 09:35 UTC
 
 Remove the attack joystick and instead when player clicks on the abilities it should already fire or trigger the buff or whatever. The buttoms should be bigger and targets the opponents. M.
 
 
-## 35. 2026-10-26 09:56 UTC
+## 72. 2026-10-26 09:56 UTC
 
 Update the existing Froggy project only. Improve the Creature Clash ability controls while preserving all unrelated gameplay and systems.
 
@@ -566,45 +818,45 @@ Make all ability buttons larger and easier to tap, especially on mobile. Ensure 
 Ensure attacks automatically target the correct opponent, hit detection works reliably, and buffs or other effects apply correctly. Keep the controls responsive, intuitive, and consistent across all battles, with a polished mobile friendly layout.
 
 
-## 36. 2026-10-26 10:01 UTC
+## 73. 2026-10-26 10:01 UTC
 
 In Creature Clash, once a creature is registered for a ladder run, lock that creature so it cannot be switched or removed. The player must either release the registered creature, permanently losing all saved progress for that ladder run, or abandon the run. Clearly explain the consequences and require confirmation before either action. Preserve all unrelated gameplay and systems.
 
 
-## 37. 2026-10-26 10:34 UTC
+## 74. 2026-10-26 10:34 UTC
 
 Update the existing Froggy project only. Fix the police chase scene so flashlight beams cannot pass through walls, floors, or other solid surfaces when police search alleyways and rooms. Ensure all surfaces have complete geometry, proper collision, and no holes or gaps. Enlarge the toilet interior and adjust the layout so the player can enter, close the toilet door from inside, and move comfortably without clipping. Test both fixes in game and preserve all unrelated features.
 
-*Attached images: 231 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 231*
 
 
-## 38. 2026-10-26 10:46 UTC
+## 75. 2026-10-26 10:46 UTC
 
 Update the existing Froggy project only. Improve all Creature Clash bosses with unique, powerful abilities, special animations, attack patterns, and multi phase mechanics. Add mechanics such as summons, teleportation, shields, arena wide attacks, and ultimate abilities that match each boss's theme. Include clear attack telegraphs and balanced counters so boss fights feel challenging and distinct from regular battles.
 
 Since Ladder Mode unlocks after Story Mode, set opponent levels to 15, 16, 17, 18, and 19, followed by a level 20 final boss. Ensure difficulty scales progressively. Preserve existing systems and all unrelated gameplay.
 
 
-## 39. 2026-10-26 10:52 UTC
+## 76. 2026-10-26 10:52 UTC
 
 Improve Creature Clash Ladder Mode with a dramatic Mortal Kombat style ladder climbing animation, showing the player's creature portrait moving up one level after each victory. Display the current opponent and upcoming boss on the ladder, with smooth transitions and clear progress indicators.
 
 Before every battle, show a cinematic VS screen featuring both creatures, bold VS text, electric effects, and animated elemental backgrounds based on their respective types. Make every matchup visually exciting and unique. Give boss battles more dramatic introductions and special effects. Ensure animations are polished using the ball bog textures as reference, mobile friendly, and integrated with saved ladder progress. Preserve all unrelated gameplay and systems.
 
 
-## 40. 2026-10-26 11:05 UTC
+## 77. 2026-10-26 11:05 UTC
 
 Swap the lobby locations of Fence Wars and Frog Pond Hunt. Reduce Fence Wars entry cost from 7 tokens to 5 tokens and set the win reward to 10 tokens.
 
 For Confusion Ball, when the ball hits the player, deal 4 damage, display a lock icon, and grey out the wind bar to indicate it is disabled. If the player misses their shot, deal an additional 4 self damage. Ensure damage, visual feedback, and UI states work correctly. Preserve all unrelated gameplay and systems.
 
 
-## 41. 2026-10-26 11:30 UTC
+## 78. 2026-10-26 11:30 UTC
 
 Update the existing Froggy project only. In Confusion Ball, when a confused player throws thr ball of their choice and it hits the ground, make it crack into 4 pink mini balls that fly back and hit the thrower. Each mini ball deals 1 damage, totaling 4 damage. Apply the same mechanic to confused opponents. Ensure clear animations, impact effects, and accurate damage without duplicate hits. Preserve all unrelated gameplay.
 
 
-## 42. 2026-10-26 12:10 UTC
+## 79. 2026-10-26 12:10 UTC
 
 Update the existing Froggy project only. Inspect the existing code, assets, and gameplay systems before making changes. The following requirements apply to three separate areas, Fence Wars and arcade systems, the 3D Police Chase scene, and Creature Clash. Implement each change in the correct game and preserve all unrelated features.
 
@@ -668,10 +920,10 @@ Test all changes across desktop and mobile. Verify Fence Wars token costs, rewar
 
 Fix any resulting bugs, prevent regressions, and preserve all unrelated gameplay, assets, animations, progression, economy, and systems.
 
-*Attached images: 232, 233, 234, 235 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 232, 233, 234, 235*
 
 
-## 43. 2026-10-26 13:08 UTC
+## 80. 2026-10-26 13:08 UTC
 
 Improve Creature Clash Story Mode and Ladder Mode using existing systems, assets, and progression. Use Bog Ball textures, materials, and animation quality as a visual reference. Preserve all unrelated gameplay and systems.
 
@@ -706,59 +958,59 @@ Ensure all animations are polished, mobile friendly, performant, and consistent 
 Test both modes from start to finish, including victories, defeats, boss encounters, token transactions, saved progress, and resuming after restarting. Ensure the Story Mode hopping animation and Ladder Mode climbing animation remain distinct and accurately reflect each mode's progression. Preserve all unrelated gameplay and systems.
 
 
-## 44. 2026-10-26 13:09 UTC
+## 81. 2026-10-26 13:09 UTC
 
 Try again
 
 
-## 45. 2026-10-26 13:31 UTC
+## 82. 2026-10-26 13:31 UTC
 
 Inspect all text boxes and fix any text that is outside its box or lacks proper spacing. Ensure all text stays within the box boundaries with correct padding, alignment, and wrapping. Test all screens and UI elements while preserving existing designs and functionality.
 
 
-## 46. 2026-10-26 13:56 UTC
+## 83. 2026-10-26 13:56 UTC
 
 Remove the "This Week" button. Make the achievements section scrollable with more space, proper text spacing, and no overlap with buttons or other UI elements. As shown in image 1 and 2, the buttons and the reward text are so close to other text and buttons are overlapping.
 
 Increase achievement difficulty significantly. Make achievements challenging and badges exceptionally difficult to earn, requiring genuine skill, consistency, or rare accomplishments. Replace overly easy objectives with well balanced, measurable challenges. Preserve existing designs and unrelated functionality.
 
-*Attached images: 236, 237 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 236, 237*
 
 
-## 47. 2026-10-26 14:15 UTC
+## 84. 2026-10-26 14:15 UTC
 
 In Creature Clash, set J, K, and L as the default desktop keys for the three abilities. Pressing each key must immediately activate its assigned attack, buff, debuff, or defensive ability, etc.
 
 Other than that, every arcade game, add a Change Controls option before gameplay where appropriate. Allow players to customize keybinds, restore defaults, and view game specific controls. Prevent conflicting bindings and ensure controls work correctly on desktop and mobile. Preserve existing gameplay and unrelated functionality.
 
-*Attached images: 238 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 238*
 
 
-## 48. 2026-10-26 14:56 UTC
+## 85. 2026-10-26 14:56 UTC
 
 The background decorations visible behind the shop window for sharps barber looks too bright for nighttime. Update the background/parallax layer color palette or tile assets to use darker, low-contrast shades of dark blue/gray so they blend naturally into the dark night sky as well as ensuring it suits the sky time.
 
 
-## 49. 2026-10-26 15:25 UTC
+## 86. 2026-10-26 15:25 UTC
 
 In Frog Pond Hunt, make it easier to identify which of the player's frogs have been found by the opponent. Add clear visual indicators for discovered and undiscovered frogs, updating instantly when a frog is found. Preserve all unrelated gameplay and features.
 
 
-## 50. 2026-10-26 16:10 UTC
+## 87. 2026-10-26 16:10 UTC
 
 Update the existing Froggy project only. Implement reliable session persistence across all arcade games, gameplay sessions, and 3D scenes. Save the current session state even when the player refreshes or accidentally reloads the page during a dialog or active game. Restore the exact game session and return the player to its settings screen in a paused state. When they press Resume, display a clear 3, 2, 1 countdown before continuing from where they left off.
 
 Preserve all gameplay progress, positions, health, timers, scores, current rounds, opponent states, collected items, and other relevant session data. Do not deduct tokens again, charge another entry fee, reset progress, or treat refreshing as a loss. Apply this consistently across all games and 3D scenes. Save and restore session state reliably using appropriate persistence mechanisms, including handling browser refreshes and unexpected reloads. Ensure timers and animations pause correctly and resume without duplicating actions or causing state inconsistencies. Test every game and scene to verify that progress is preserved and gameplay resumes smoothly without losing tokens.
 
 
-## 51. 2026-10-26 16:18 UTC
+## 88. 2026-10-26 16:18 UTC
 
 make the sleeping animation of the player to be sleeping on the carboard. right now its head is out of the carboard area. fix this
 
-*Attached images: 239 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 239*
 
 
-## 52. 2026-10-27 02:39 UTC
+## 89. 2026-10-27 02:39 UTC
 
 Please fix the following gameplay bugs and scene issues:
 
@@ -774,10 +1026,10 @@ Please fix the following gameplay bugs and scene issues:
    - Block police NPCs from entering or pathing into the elevator while the player is inside as well as their apartment room. police should not be in them 
    - Debug and fix elevator freezing, bugs, and state lockups.
 
-*Attached images: 240, 241, 242, 243, 244 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 240, 241, 242, 243, 244*
 
 
-## 53. 2026-10-27 04:15 UTC
+## 90. 2026-10-27 04:15 UTC
 
 Please update the walking animation code/logic for Froggy during the janitor scene to make it visually unsettling and creepy. 
 
@@ -794,34 +1046,34 @@ Please update the walking animation code/logic for Froggy during the janitor sce
 
 Please inspect the existing animation control logic/keyframes for Froggy in the janitor scene, adjust the rotation joints/curves accordingly, and keep the changes isolated to this specific scene/state.
 
-*Attached images: 245 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 245*
 
 
-## 54. 2026-10-27 04:20 UTC
+## 91. 2026-10-27 04:20 UTC
 
 the man in black should not say dialogs like this and break the forth wall
 
-*Attached images: 246, 247 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 246, 247*
 
 
-## 55. 2026-10-27 04:20 UTC
+## 92. 2026-10-27 04:20 UTC
 
 the buttons should be 2 by 2 instead of one vertical line down
 
-*Attached images: 248 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 248*
 
 
-## 56. 2026-10-27 04:50 UTC
+## 93. 2026-10-27 04:50 UTC
 
 In Creature Clash Story Mode, if the player's creature is 3 or more levels higher than the opponent, reduce the victory reward from 5 tokens to 3 tokens. Ensure the reward is calculated correctly after every battle and all other progression and reward mechanics remain unchanged.
 
 
-## 57. 2026-10-27 05:02 UTC
+## 94. 2026-10-27 05:02 UTC
 
 Player should still be able to go back before selecting a creature in creature clash
 
 
-## 58. 2026-10-27 10:48 UTC
+## 95. 2026-10-27 10:48 UTC
 
 Add a unique zebra to both The Grudge and Frogster Mash, with distinctive artwork, animations, abilities, and fighting styles that differentiate it from all existing animals. Give the zebra high speed, unpredictable dashes, and evasive movements.
 
@@ -832,21 +1084,21 @@ Also add a porcupine to The Grudge. Its defence should be weaker than the tortoi
 Improve The Grudge's pre fight hints to clearly explain each animal's fighting style, abilities, and weaknesses. Keep the text concise, readable, and unobtrusive. Preserve all unrelated mechanics and existing content.
 
 
-## 59. 2026-10-27 13:00 UTC
+## 96. 2026-10-27 13:00 UTC
 
 ensure text doesnt overlap with other text or buttons, also improve visuals of the creatures, make sure the screen is not overloaded with text and it should be arranged well
 
-*Attached images: 249 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 249*
 
 
-## 60. 2026-10-27 13:06 UTC
+## 97. 2026-10-27 13:06 UTC
 
 At every serve or start of a round, the AI calculates varied launch vectors (bank/wall shots, wide cross-court angles, or direct strikes) towards the puck to give unpredictable initial hits.
 
-*Attached images: 250 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 250*
 
 
-## 61. 2026-10-27 14:33 UTC
+## 98. 2026-10-27 14:33 UTC
 
 Update the existing Froggy project only. Create a fully playable arcade machine game called Pad Battles in room 4. Inspect Ball Bog first and use its arcade machine design, textures, materials, lighting, animations, and visual polish as the quality reference. Reuse existing arcade systems and assets where appropriate without modifying unrelated games.
 
@@ -873,25 +1125,40 @@ Add detailed lily pad veins, natural edges, animated water, reflections, ripples
 Test complete matches, AI behaviour, collapsing pads, combat, collisions, elimination, simultaneous falls, token transactions, pause and resume, replay, and returning to the arcade on both platforms. Fix visual glitches, unfair spawns, broken controls, clipping, and performance issues. Preserve all unrelated gameplay, progression, economy, scenes, and assets. Deliver a complete, functional game rather than a mockup.
 
 
-## 62. 2026-10-27 15:24 UTC
+## 99. 2026-10-27 15:01 UTC *(sent mid-task)*
+
+efore implementing anything, review all previous prompts, requirements, unfinished tasks, and project progress.
+
+First, audit the actual code and assets. Organize every requirement into detailed, numbered batches with dependencies, acceptance criteria, and tests. Preserve all original specifications and flag conflicts or missing information. Present the complete plan and wait for my explicit approval by saying "DO IT" before making changes.
+
+After approval, implement each batch thoroughly without omitting details or modifying unrelated features.
+
+Mandatory continuation rule. Always start where the previous session left off. Before resuming, read IMPLEMENTATION_PROGRESS.md, review available previous instructions, and inspect the actual project state. Identify the last verified checkpoint and continue from the exact unfinished task without repeating completed work, skipping requirements, or restarting unnecessarily.
+
+Maintain IMPLEMENTATION_PROGRESS.md throughout development, recording original requirements, batch status, completed and unfinished tasks, affected files, test results, known issues, and precise next steps. Save progress before reaching usage or context limits.
+
+Never mark work complete without verification. If information is missing, report it instead of guessing. Preserve every original requirement across sessions and prioritize completeness, accuracy, and continuity over speed.
+
+
+## 100. 2026-10-27 15:24 UTC
 
 Creature clash max level 20
 Story mode the starting it should be 2 tokens per location and then 5 tokens if won. If replay, it depends, if its first world then it cost 1 token to play and 2 tokens if win. Each world increases by one for example 2nd world to play is 3 tokens if win then rewards 6 tokens. Etc. Ladder pice make it 20 per play and 100 if won. For achievements do the most recent one. Ensure police are fast at the start and then search, if player runs then police will know and start chase as they could hear the sounds of running.
 
 
-## 63. 2026-10-27 15:29 UTC
+## 101. 2026-10-27 15:29 UTC
 
 For the price make it even which is 2 4 6 8 10 and then reward multiply by 2
 
 As for replay its 1/2 2/4 3/6 4/8 5/10
 
 
-## 64. 2026-10-27 15:31 UTC
+## 102. 2026-10-27 15:31 UTC
 
 Drop that rule
 
 
-## 65. 2026-10-27 15:54 UTC
+## 103. 2026-10-27 15:54 UTC
 
 The image 1 is the chained lock but only for the arcade, let the chain and the lock be inside the arcade. 
 
@@ -906,13 +1173,18 @@ Arcade mastery is where theres abadge for each arcade game which is like a reall
 The stacked bodies are in the forest when player goes deep enough, during the midnight chase with froggy. If should be inside a small textured building. For furniture x1.5, clothing x1.2. Haircut is x1.3
 
 
-## 66. 2026-10-27 15:57 UTC
+## 104. 2026-10-27 15:57 UTC
 
 i prompted since up here 5 days ago, please help check again on what u missed out since 5 days ago
 
-*Attached images: 251 (saved as `docs/refs/*-<number>.*`)*
+*Attached images: 251*
 
 
-## 67. 2026-10-27 16:03 UTC
+## 105. 2026-10-27 16:03 UTC
 
 there should be more detailedf things i have stated retrieve them all from the past 5 days
+
+
+## 106. 2026-10-27 16:07 UTC
+
+What about the following day scene where police walks pass the alley way prompt have u retrieved that?
