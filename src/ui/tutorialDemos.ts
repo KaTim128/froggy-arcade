@@ -920,6 +920,19 @@ export const DEMOS: Record<string, Demo> = {
     lbl(DEMO_W / 2, 12, 'CHASE IT DOWN', CREAM);
     lbl(DEMO_W / 2, 82, 'BEFORE THE CLOCK ENDS', GOLD);
   },
+  'croak.trap': (g, t, lbl) => {
+    g.fillStyle(0x0c1820, 1).fillRect(0, 0, DEMO_W, DEMO_H);
+    g.fillStyle(0x2e5a3a, 1).fillRect(8, 30, 108, 5).fillRect(8, 56, 108, 5);
+    const k = ph(t, 3.5);
+    // the frog drops a snare and backs off; the tadpole swims in and is held
+    g.lineStyle(1, 0xc8a050, k < 0.75 ? 1 : 0).strokeCircle(70, 46, 4);
+    const tx = k < 0.5 ? 116 - k * 92 : 70;
+    g.fillStyle(0x5a8af0, 1).fillCircle(tx, 46, 3);
+    if (k >= 0.5) g.lineStyle(1, 0xf0d060, 1).strokeCircle(70, 46, 3 + (1 - k) * 8);
+    g.fillStyle(0x5ac85a, 1).fillCircle(k < 0.5 ? 40 : 40 + (k - 0.5) * 50, 46, 5);
+    lbl(DEMO_W / 2, 14, 'DROP A TRAP', CREAM);
+    lbl(DEMO_W / 2, 76, k >= 0.5 ? 'STUCK - GRAB IT!' : 'IT SWIMS IN...', GOLD);
+  },
   'croak.survive': (g, t, lbl) => {
     g.fillStyle(0x0c1820, 1).fillRect(0, 0, DEMO_W, DEMO_H);
     const k = ph(t, 3);
@@ -931,7 +944,8 @@ export const DEMOS: Record<string, Demo> = {
     g.fillStyle(0x5a8af0, 1).fillCircle(tx, 45, 3);
     g.fillStyle(0x5ac85a, 1).fillCircle(tx - 30, 45, 5);
     lbl(DEMO_W / 2, 12, 'EAT EVERY FLY', CREAM);
-    lbl(DEMO_W / 2, 74, 'CAUGHT = LOSS', RED);
+    g.lineStyle(1, 0xc8a050, 0.4).strokeCircle(96, 45, 4);
+    lbl(DEMO_W / 2, 74, 'FAINT RING = TRAP', RED);
   },
   'croak.steer': (g, t, lbl) => {
     g.fillStyle(0x0c1820, 1).fillRect(0, 0, DEMO_W, DEMO_H);

@@ -112,6 +112,7 @@ I went back through every message from "Create a pull request" (22 Oct) to now. 
 - **B10:**
   - **Croaked.** DONE (first pass): 10 tokens, 20 for a win, in room 4's second top spot (Bog Ball moved right).
     - Role selection after PLAY (PAC FROG / SURVIVOR), a new maze each round, checked to be fully reachable.
+    - The hunter lays traps (SPACE / TRAP, 3 at once, 4 s apart, hold 2.2 s); the survivor is always the faster.
     - Hunting/fleeing AI; a timer and a flies-left counter; a step-by-step tutorial with animated pictures; NOWHERE TO HIDE badge.
     - Still open: the other 5 marked room-4 spots (which machines go there?).
   - **Pad Battles.**

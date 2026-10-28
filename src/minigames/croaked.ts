@@ -4,12 +4,16 @@
  * Two ways round, chosen after PLAY:
  *
  *   PAC FROG   you are the frog.  Catch the tadpole before the clock runs out.
- *              It runs: every turn it takes is the one that keeps it farthest
- *              from you with the most room left behind it, and it never walks
- *              into a dead end while there is a way out.
- *   SURVIVOR   you are the tadpole.  Eat every fly in the maze; the frog hunts
- *              you down the shortest way there is, and now and then cuts you
- *              off where you are heading instead.  Caught is a loss.
+ *              It is QUICKER than you, and it runs: every turn it takes keeps
+ *              it farthest from you with the most room behind it.  What the
+ *              frog has is TRAPS -- drop one where you stand (SPACE), and a
+ *              tadpole that swims into it is stuck fast for a moment.
+ *   SURVIVOR   you are the tadpole, and the quicker of the two.  Eat every fly
+ *              in the maze; the frog hunts you down the shortest way, cuts you
+ *              off now and then, and lays traps at the junctions as it goes --
+ *              a faint ring on the water.  Caught is a loss.
+ *
+ * (Log, follow-up to #70: the hunter has traps; the survivor is the faster.)
  *
  * A NEW MAZE EVERY ROUND, AND EVERY CORNER OF IT REACHABLE.  It is carved as a
  * perfect maze (one path between any two cells), then most of its dead ends
@@ -40,11 +44,16 @@ const COLS = 27;
 const ROWS = 13;
 const CELL = 11;
 /** How long the frog has to catch the tadpole. */
-const HUNT_S = 40;
-/** Cells a second: you, and the computer's side in each role. */
-const SPEED = 6;
-const RUNNER_SPEED = 5.4;
-const HUNTER_SPEED = 4.8;
+const HUNT_S = 45;
+/** Cells a second, whoever is playing which: the tadpole is always the quicker. */
+const SURVIVOR_SPEED = 6.2;
+const HUNTER_SPEED = 5.1;
+/** Traps: how many may lie at once, the wait between two, and how long one holds. */
+const MAX_TRAPS = 3;
+const TRAP_COOLDOWN = 4;
+const TRAP_HOLD = 2.2;
+/** The odds the computer's tadpole spots a trap it is about to swim into. */
+const SPOT_TRAP = 0.4;
 /** How close counts as caught, in cells. */
 const CATCH = 0.62;
 
@@ -59,6 +68,8 @@ interface Mover {
   /** The way the player last asked for (buffered until it is possible). */
   want: Dir | null;
   speed: number;
+  /** Seconds left stuck in a trap (0: free). */
+  held: number;
 }
 
 let apiRef: MinigameApi | null = null;
@@ -81,6 +92,10 @@ let banner: Phaser.GameObjects.BitmapText | null = null;
 let picker: Phaser.GameObjects.GameObject[] = [];
 let keys: Record<string, Phaser.Input.Keyboard.Key[]> = {};
 let settled = false;
+/** Traps on the water, by cell; the frog's wait for the next; the ones the computer's tadpole has looked at. */
+let traps = new Set<string>();
+let trapCd = 0;
+let spotted = new Map<string, boolean>();
 
 const open = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < COLS && y < ROWS && grid[y][x];
 const keyOf = (x: number, y: number): string => `${x},${y}`;
@@ -167,16 +182,24 @@ function farthest(g: boolean[][], x: number, y: number): [number, number] {
 
 // ------------------------------------------------------------------ movement
 
-const mover = (x: number, y: number, speed: number): Mover => ({ cx: x, cy: y, tx: x, ty: y, k: 1, dir: 1, want: null, speed });
+const mover = (x: number, y: number, speed: number): Mover => ({ cx: x, cy: y, tx: x, ty: y, k: 1, dir: 1, want: null, speed, held: 0 });
 const posOf = (m: Mover): { x: number; y: number } => ({ x: m.cx + (m.tx - m.cx) * m.k, y: m.cy + (m.ty - m.cy) * m.k });
 
 /** On a cell now: which way next.  `choose` is the brain (the keys, or the computer). */
 function step(m: Mover, dt: number, choose: (m: Mover) => Dir | null): void {
+  if (m.held > 0) {
+    m.held = Math.max(0, m.held - dt);
+    return;
+  }
   m.k += m.speed * dt;
   while (m.k >= 1) {
     const over = m.k - 1;
     m.cx = m.tx;
     m.cy = m.ty;
+    if (landed(m)) {
+      m.k = 1;
+      return;
+    }
     const d = choose(m);
     if (d === null || !open(m.cx + DX[d], m.cy + DY[d])) {
       m.k = 1;
@@ -213,6 +236,12 @@ function runnerChoice(m: Mover): Dir | null {
     const nx = m.cx + DX[d];
     const ny = m.cy + DY[d];
     if (!open(nx, ny)) continue;
+    // a trap ahead: seen (once, by the odds) it is a wall; unseen it is swum into
+    const tk = keyOf(nx, ny);
+    if (traps.has(tk)) {
+      if (!spotted.has(tk)) spotted.set(tk, Math.random() < SPOT_TRAP);
+      if (spotted.get(tk)) continue;
+    }
     // room to run: the cells it reaches first, from there, not passing back through here
     const mine = distances(grid, nx, ny, keyOf(m.cx, m.cy));
     let room = 0;
@@ -233,6 +262,7 @@ function runnerChoice(m: Mover): Dir | null {
  */
 function hunterChoice(m: Mover): Dir | null {
   if (!you) return null;
+  aiTraps();
   let gx = you.tx;
   let gy = you.ty;
   if (Math.random() < 0.25) {
@@ -258,13 +288,50 @@ function hunterChoice(m: Mover): Dir | null {
 }
 
 /** Arriving somewhere: the survivor eats what is there. */
+/** The tadpole on a cell: a trap there springs.  True if it is caught in one. */
+function landed(m: Mover): boolean {
+  const tad = role === 'frog' ? them : you;
+  if (m !== tad) return false;
+  const k = keyOf(m.cx, m.cy);
+  if (!traps.delete(k)) return false;
+  spotted.delete(k);
+  m.held = TRAP_HOLD;
+  audio.sfx('ui_blip', 0.6);
+  return true;
+}
+
+/** Drop a trap where the frog is (the cell it is nearer).  False if it cannot. */
+function dropTrap(): boolean {
+  const frog = role === 'frog' ? you : them;
+  if (phase !== 'play' || !frog || trapCd > 0 || traps.size >= MAX_TRAPS) return false;
+  const x = frog.k < 0.5 ? frog.cx : frog.tx;
+  const y = frog.k < 0.5 ? frog.cy : frog.ty;
+  const k = keyOf(x, y);
+  if (traps.has(k)) return false;
+  traps.add(k);
+  trapCd = TRAP_COOLDOWN;
+  audio.sfx('water_plip', 0.5);
+  return true;
+}
+
+/**
+ * THE COMPUTER'S FROG LAYS TRAPS where the ways meet -- the junctions a
+ * fleeing tadpole comes back round through -- once it is clear of you.
+ */
+function aiTraps(): void {
+  if (role !== 'survivor' || !them || !you || trapCd > 0) return;
+  const exits = [0, 1, 2, 3].filter((d) => open(them!.cx + DX[d], them!.cy + DY[d])).length;
+  const far = Math.abs(them.cx - you.tx) + Math.abs(them.cy - you.ty);
+  if (exits >= 3 && far >= 3 && Math.random() < 0.5) dropTrap();
+}
+
 function arrived(m: Mover): void {
   if (role !== 'survivor' || m !== you) return;
   const k = keyOf(m.tx, m.ty);
   if (flies.delete(k)) {
     audio.sfx('water_plip', 0.25);
     // the hunt quickens as the flies run out
-    if (them) them.speed = HUNTER_SPEED * (1 + 0.18 * (1 - flies.size / Math.max(1, fliesAtStart)));
+    if (them) them.speed = HUNTER_SPEED * (1 + 0.12 * (1 - flies.size / Math.max(1, fliesAtStart)));
     if (!flies.size) end(true, 'EVERY FLY EATEN!');
   }
 }
@@ -278,8 +345,11 @@ function newRound(): void {
   const b = farthest(grid, a[0], a[1]);
   const mine = role === 'frog' ? a : b;
   const theirs = role === 'frog' ? b : a;
-  you = mover(mine[0], mine[1], SPEED);
-  them = mover(theirs[0], theirs[1], role === 'frog' ? RUNNER_SPEED : HUNTER_SPEED);
+  you = mover(mine[0], mine[1], role === 'frog' ? HUNTER_SPEED : SURVIVOR_SPEED);
+  them = mover(theirs[0], theirs[1], role === 'frog' ? SURVIVOR_SPEED : HUNTER_SPEED);
+  traps = new Set();
+  spotted = new Map();
+  trapCd = 1.5;
   flies = new Set();
   if (role === 'survivor') for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (grid[y][x] && keyOf(x, y) !== keyOf(...mine) && keyOf(x, y) !== keyOf(...theirs)) flies.add(keyOf(x, y));
   fliesAtStart = flies.size;
@@ -333,8 +403,8 @@ function showPicker(scene: Phaser.Scene): void {
     picker.push(centerText(scene, x, top + 64, line2, PALETTE.ash).setDepth(41));
     picker.push(centerText(scene, x, top + 82, key, PALETTE.tealLight).setDepth(41));
   };
-  side(cx - 58, 'PAC FROG', 'CATCH THE', `TADPOLE: ${HUNT_S}S`, 'frog', '[1]');
-  side(cx + 58, 'SURVIVOR', 'EAT EVERY FLY,', 'DODGE THE FROG', 'survivor', '[2]');
+  side(cx - 58, 'PAC FROG', 'CATCH IT: IT IS', 'QUICKER - TRAP IT', 'frog', '[1]');
+  side(cx + 58, 'SURVIVOR', 'EAT EVERY FLY,', 'MIND THE TRAPS', 'survivor', '[2]');
 }
 
 function end(won: boolean, why: string): void {
@@ -353,6 +423,16 @@ function drawLive(t: number): void {
   const g = liveG;
   if (!g) return;
   g.clear();
+  // the traps: a snare of reeds.  Your own are plain; the frog's, when you are
+  // the tadpole, only a faint ring that breathes
+  for (const k of traps) {
+    const [x, y] = k.split(',').map(Number);
+    const px = ox + x * CELL + CELL / 2;
+    const py = oy + y * CELL + CELL / 2;
+    const a = role === 'frog' ? 1 : 0.3 + 0.2 * Math.sin(t * 4 + x);
+    g.lineStyle(1, 0xc8a050, a).strokeCircle(px, py, 4);
+    g.lineStyle(1, 0x8a6a30, a).lineBetween(px - 3, py - 3, px + 3, py + 3).lineBetween(px + 3, py - 3, px - 3, py + 3);
+  }
   for (const k of flies) {
     const [x, y] = k.split(',').map(Number);
     const px = ox + x * CELL + CELL / 2;
@@ -375,6 +455,11 @@ function drawLive(t: number): void {
       g.fillStyle(0x3a6ad8, 1 - i * 0.2).fillCircle(px + DX[back] * i * 1.6 + DY[back] * w, py + DY[back] * i * 1.6 + DX[back] * w, 1.6 - i * 0.3);
     }
     g.fillStyle(0x5a8af0, 1).fillCircle(px, py, 3);
+    if (tadM.held > 0) {
+      // caught in the reeds: a net that shrinks as it lets go
+      g.lineStyle(1, 0xf0d060, 1).strokeCircle(px, py, 3 + tadM.held * 1.4);
+      g.lineStyle(1, 0xc8a050, 0.8).lineBetween(px - 5, py, px + 5, py).lineBetween(px, py - 5, px, py + 5);
+    }
     g.fillStyle(0xffffff, 1).fillCircle(px + DX[tadM.dir] * 1.2 - DY[tadM.dir], py + DY[tadM.dir] * 1.2 - DX[tadM.dir], 0.8);
   }
   if (frogM) {
@@ -398,7 +483,10 @@ function drawLive(t: number): void {
 function refreshHud(): void {
   if (!hud) return;
   if (phase === 'pick') hud.setText('');
-  else if (role === 'frog') hud.setText(`PAC FROG    CATCH IT: ${Math.max(0, Math.ceil(HUNT_S - clock))}S`);
+  else if (role === 'frog') {
+    const trap = traps.size >= MAX_TRAPS ? 'ALL DOWN' : trapCd > 0 ? `${Math.ceil(trapCd)}S` : 'READY';
+    hud.setText(`PAC FROG   CATCH IT: ${Math.max(0, Math.ceil(HUNT_S - clock))}S   TRAP ${trap}  ${traps.size}/${MAX_TRAPS}`);
+  }
   else hud.setText(`SURVIVOR    FLIES LEFT ${flies.size}    ${Math.floor(clock)}S`);
 }
 
@@ -412,18 +500,20 @@ export const croaked: MinigameModule = {
     pitch: 'A MAZE, A BIG FROG, AND SOMETHING SMALL. PICK A SIDE.',
     steps: [
       { say: 'AFTER PLAY, PICK A SIDE: PAC FROG HUNTS, THE SURVIVOR RUNS.', demo: 'croak.pick' },
-      { say: `PAC FROG: CATCH THE TADPOLE BEFORE THE ${HUNT_S} SECONDS RUN OUT. IT RUNS ROUND THE LOOPS - CORNER IT.`, demo: 'croak.hunt' },
-      { say: 'SURVIVOR: EAT EVERY FLY IN THE MAZE. IF THE FROG CATCHES YOU, YOU LOSE.', demo: 'croak.survive' },
+      { say: `PAC FROG: CATCH THE TADPOLE IN ${HUNT_S} SECONDS. IT IS QUICKER THAN YOU, SO CORNER IT.`, demo: 'croak.hunt' },
+      { say: `SPACE DROPS A TRAP WHERE YOU STAND (${MAX_TRAPS} AT ONCE). A TADPOLE THAT SWIMS IN IS STUCK - GRAB IT.`, phone: `TAP TRAP TO DROP ONE WHERE YOU STAND (${MAX_TRAPS} AT ONCE). A TADPOLE THAT SWIMS IN IS STUCK - GRAB IT.`, demo: 'croak.trap' },
+      { say: 'SURVIVOR: YOU ARE QUICKER. EAT EVERY FLY, AND MIND THE FAINT RINGS - THE FROG\'S TRAPS.', demo: 'croak.survive' },
       { say: 'W A S D OR THE ARROWS STEER. PRESS A WAY EARLY AND YOU TURN AT THE NEXT GAP.', phone: 'THE STICK STEERS. PUSH A WAY EARLY AND YOU TURN AT THE NEXT GAP.', demo: 'croak.steer' },
     ],
-    objective: ['PICK A SIDE. PAC FROG: CATCH THE TADPOLE IN TIME.', 'SURVIVOR: EAT EVERY FLY WITHOUT BEING CAUGHT.', 'A NEW MAZE EVERY ROUND.'],
+    objective: ['PICK A SIDE. PAC FROG: TRAP AND CATCH THE QUICKER TADPOLE IN TIME.', 'SURVIVOR: EAT EVERY FLY, DODGE THE FROG AND ITS TRAPS.', 'A NEW MAZE EVERY ROUND.'],
     controls: [
       ['W A S D', 'STEER'],
       ['ARROWS', 'STEER'],
+      ['SPACE', 'DROP A TRAP (PAC FROG)'],
       ['1 / 2', 'PICK A SIDE'],
     ],
   },
-  touch: { stick: 'wasd', arrows: true },
+  touch: { stick: 'wasd', arrows: true, buttons: [{ label: 'TRAP', key: 'SPACE', primary: true }] },
 
   inPlay() {
     return phase === 'play' || phase === 'count';
@@ -438,6 +528,8 @@ export const croaked: MinigameModule = {
     flies = new Set();
     you = null;
     them = null;
+    traps = new Set();
+    spotted = new Map();
     ox = Math.round((GAME_W - COLS * CELL) / 2);
     oy = api.area.y + 12;
     grid = makeMaze();
@@ -453,9 +545,19 @@ export const croaked: MinigameModule = {
     keys = { up: [k('W'), k('UP')], right: [k('D'), k('RIGHT')], down: [k('S'), k('DOWN')], left: [k('A'), k('LEFT')] };
     kb.on('keydown-ONE', () => pickRole('frog'));
     kb.on('keydown-TWO', () => pickRole('survivor'));
+    kb.on('keydown-SPACE', () => {
+      if (role === 'frog') dropTrap();
+    });
     if (import.meta.env?.DEV) {
       (window as unknown as Record<string, unknown>).__croak = {
-        state: () => ({ phase, role, clock, flies: flies.size, you: you && posOf(you), them: them && posOf(them) }),
+        trap: () => dropTrap(),
+        // a trap on the cell the tadpole is swimming to (to see one spring)
+        trapAhead: () => {
+          const tad = role === 'frog' ? them : you;
+          if (tad) traps.add(keyOf(tad.tx, tad.ty));
+        },
+        traps: () => [...traps],
+        state: () => ({ phase, role, clock, flies: flies.size, held: (role === 'frog' ? them : you)?.held ?? 0, trapCd, you: you && posOf(you), them: them && posOf(them) }),
         pick: (r: Role) => pickRole(r),
         // the maze, checked: every open cell reachable from the first one
         solvable: () => {
@@ -498,10 +600,11 @@ export const croaked: MinigameModule = {
       return;
     }
     if (phase !== 'play' || !you || !them) return;
+    trapCd = Math.max(0, trapCd - dt);
     // the way asked for: held, or the last one pressed
     for (const [d, name] of [[0, 'up'], [1, 'right'], [2, 'down'], [3, 'left']] as Array<[Dir, string]>) if (keys[name]?.some((x) => x.isDown)) you.want = d;
     // (from a standstill, a press sets off at once)
-    if (you.k >= 1 && you.want !== null && open(you.cx + DX[you.want], you.cy + DY[you.want])) {
+    if (you.held <= 0 && you.k >= 1 && you.want !== null && open(you.cx + DX[you.want], you.cy + DY[you.want])) {
       you.dir = you.want;
       you.tx = you.cx + DX[you.want];
       you.ty = you.cy + DY[you.want];
@@ -523,11 +626,11 @@ export const croaked: MinigameModule = {
   },
 
   snapshot() {
-    return { role, phase, grid, flies: [...flies], fliesAtStart, you, them, clock };
+    return { role, phase, grid, flies: [...flies], fliesAtStart, you, them, clock, traps: [...traps], trapCd };
   },
 
   restore(snap: unknown) {
-    const v = snap as { role: Role; phase: Phase; grid: boolean[][]; flies: string[]; fliesAtStart: number; you: Mover | null; them: Mover | null; clock: number };
+    const v = snap as { role: Role; phase: Phase; grid: boolean[][]; flies: string[]; fliesAtStart: number; you: Mover | null; them: Mover | null; clock: number; traps?: string[]; trapCd?: number };
     if (v.phase === 'pick' || !v.you || !v.them) return;
     for (const o of picker) o.destroy();
     picker = [];
@@ -538,6 +641,11 @@ export const croaked: MinigameModule = {
     you = { ...v.you };
     them = { ...v.them };
     clock = v.clock;
+    traps = new Set(v.traps ?? []);
+    spotted = new Map();
+    trapCd = v.trapCd ?? 0;
+    you.held ??= 0;
+    them.held ??= 0;
     drawWalls();
     // (back from a reload: the count again, then on)
     phase = v.phase === 'over' ? 'over' : 'count';
