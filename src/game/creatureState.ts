@@ -18,8 +18,13 @@ export interface Owned {
   uid: number;
   id: string;
   wins: number;
-  /** Experience (see creatureLevel): 0 at level 1, capped at level 3's. */
+  /** Experience (see creatureLevel): 0 at level 1, capped at the top level's. */
   xp: number;
+  /**
+   * When it fainted (epoch ms), or absent: a fainted creature keeps its slot
+   * (log #3) and rests until it can fight again (game/creatureClash `REST_MS`).
+   */
+  faintedAt?: number;
 }
 
 /**
@@ -111,7 +116,8 @@ export function sanitizeCreatures(raw: unknown): CreatureState {
       const wins = Math.max(0, Math.floor(num(o.wins)));
       // (a creature saved before levels: its past wins count, as if it had earned them)
       const xp = cleanXp(typeof o.xp === 'number' ? o.xp : wins * XP_WIN);
-      return { uid: Math.floor(num(o.uid)), id: id ?? '', wins, xp };
+      const faintedAt = typeof o.faintedAt === 'number' && Number.isFinite(o.faintedAt) ? o.faintedAt : undefined;
+      return { uid: Math.floor(num(o.uid)), id: id ?? '', wins, xp, ...(faintedAt ? { faintedAt } : {}) };
     })
     .filter((o) => !!o.id && !!creatureById(o.id) && o.uid > 0 && !seen.has(o.uid) && (seen.add(o.uid), true))
     .slice(0, MAX_OWNED);

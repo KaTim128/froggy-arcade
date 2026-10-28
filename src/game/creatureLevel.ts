@@ -1,33 +1,38 @@
 /**
- * ---- LEVELS.  A creature starts at level 1 and grows by fighting: every
- * battle it WINS gives it experience (more for a boss), and at 100 and 250
- * experience it reaches levels 2 and 3.  Three is the top: past it the
- * experience stops counting.
+ * ---- LEVELS (C1: the top is level 20).  A creature starts at level 1 and
+ * grows by fighting: every battle it WINS gives it experience (more for a
+ * boss).  Each level asks a little more than the one before -- 70 to reach
+ * level 2, 430 for the last step to 20, about 4,750 in all -- so a creature
+ * at the top has a hundred-odd wins behind it.  Past 20 the experience stops
+ * counting.
  *
- * Each level is a modest step, not a new creature: a little more health, a
- * little more bite, a touch more speed -- enough that a level 3 common is
- * worth keeping, not enough that it walks over a fresh rare.  Everything it
- * does stays the same: the same three attacks, the same cooldowns, reach and
- * element; only the numbers grow.
+ * Each level is a modest step, not a new creature: about 4% more health,
+ * 3.5% more bite and a touch more speed.  A level-20 creature has three
+ * quarters again the health and two thirds again the damage it was caught
+ * with -- worth raising, and still the same animal: the same three attacks,
+ * cooldowns, reach and element; only the numbers grow.
  */
 
 import type { Creature } from './creatures';
 
-export const MAX_LEVEL = 3;
-/** Experience needed to BE at each level (index 0 = level 1). */
-export const LEVEL_XP = [0, 100, 250] as const;
-/** The most experience that counts: reaching level 3. */
+export const MAX_LEVEL = 20;
+/** Experience needed to BE at each level (index 0 = level 1): +50 + 20 per level. */
+export const LEVEL_XP: readonly number[] = (() => {
+  const out = [0];
+  for (let lv = 1; lv < MAX_LEVEL; lv++) out.push(out[lv - 1] + 50 + 20 * lv);
+  return out;
+})();
+/** The most experience that counts: reaching the top level. */
 export const MAX_XP = LEVEL_XP[MAX_LEVEL - 1];
 /** Experience for a won battle, and for beating a place's boss. */
 export const XP_WIN = 40;
 export const XP_BOSS = 60;
 
-/** What each level adds, on top of the creature as it was caught. */
-const GROWTH: Record<number, { hp: number; dmg: number; speed: number }> = {
-  1: { hp: 1, dmg: 1, speed: 1 },
-  2: { hp: 1.12, dmg: 1.1, speed: 1.04 },
-  3: { hp: 1.25, dmg: 1.2, speed: 1.08 },
-};
+/** What a level adds, on top of the creature as it was caught. */
+function growth(level: number): { hp: number; dmg: number; speed: number } {
+  const n = Math.max(1, Math.min(MAX_LEVEL, Math.floor(level))) - 1;
+  return { hp: 1 + 0.04 * n, dmg: 1 + 0.035 * n, speed: 1 + 0.006 * n };
+}
 
 /** Clamp saved experience to what counts. */
 export function cleanXp(xp: unknown): number {
@@ -51,7 +56,7 @@ export function xpProgress(xp: number): { level: number; into: number; need: num
 
 /** The creature at `level`: its health, damage and speed grown; all else as it was. */
 export function withLevel(c: Creature, level: number): Creature {
-  const g = GROWTH[Math.max(1, Math.min(MAX_LEVEL, Math.floor(level)))];
+  const g = growth(level);
   if (g.hp === 1) return c;
   return {
     ...c,

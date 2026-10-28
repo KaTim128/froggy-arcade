@@ -4,13 +4,17 @@
  * breath, so no order of clicks, reloads or double-taps pays twice or loses
  * a creature twice.
  *
- *   starter      one of three, free, once
- *   recruit      one pack, 25 tokens: nine different cards face down, keep one
+ *   recruit      one pack, 25 tokens: nine different cards face down, keep one.
+ *                There is no free starter (log #3): the first creature is a
+ *                recruit like any other.
  *   party        two at most, one fights
  *
  *   ZONE BATTLES  one fight, in that place, against one of the creatures
- *                 that live there.  5 tokens in; a win pays 10 and the fight
- *                 is done.  A loss faints the fighter (gone).  No bosses.
+ *                 that live there, at your creature's level.  5 tokens in; a
+ *                 win pays 10 and the fight is done.  A loss FAINTS the
+ *                 fighter: it keeps its slot -- a creature is never taken off
+ *                 your team for losing -- and rests five minutes before it
+ *                 can fight again, or is revived at once for 5 tokens.
  *
  *   LADDER        20 tokens, once, for a run: Level 1 to Level 5, one normal
  *                 creature each, then a boss.  Beat the boss and the run
@@ -62,9 +66,44 @@ export function activeCreature(c = C()): Creature | undefined {
   return o ? ownedCreature(o) : undefined;
 }
 
-/** Nobody left, but you have played before: the recruitment table. */
+/** Nobody on the team: the recruitment table (the first recruit, or after releasing them all). */
 export function needsRecovery(c = C()): boolean {
-  return c.starterTaken && c.owned.length === 0;
+  return c.owned.length === 0;
+}
+
+/** How long a fainted creature rests before it can fight again, and what reviving it now costs. */
+export const REST_MS = 5 * 60_000;
+export const REVIVE_COST = 5;
+
+/** Milliseconds of rest it still needs; 0 when it is fit to fight. */
+export function restLeft(o: Owned, now = Date.now()): number {
+  return o.faintedAt ? Math.max(0, o.faintedAt + REST_MS - now) : 0;
+}
+
+/** Back on its feet now, for REVIVE_COST.  Refused before paying, never after. */
+export function revive(uid: number): Result {
+  const c = C();
+  const o = c.owned.find((x) => x.uid === uid);
+  if (!o) return no('NOT YOURS.');
+  if (!restLeft(o)) return no('IT IS READY TO FIGHT.');
+  if (!ledger.debit(REVIVE_COST, 'creature')) return no(`REVIVING COSTS ${REVIVE_COST} TOKENS.`);
+  edit((s) => {
+    const x = s.owned.find((y) => y.uid === uid);
+    if (x) delete x.faintedAt;
+  });
+  store.flush();
+  return ok(`${creatureById(o.id)!.name.toUpperCase()} IS BACK ON ITS FEET.`);
+}
+
+/** The fighter cannot go in: none, or still resting.  The refusal says which. */
+function unfit(c: CreatureState): string | null {
+  const o = activeOwned(c);
+  if (!o) return 'YOU NEED A CREATURE TO FIGHT.';
+  const left = restLeft(o);
+  if (!left) return null;
+  const m = Math.floor(left / 60_000);
+  const sec = Math.ceil((left % 60_000) / 1000);
+  return `${creatureById(o.id)!.name.toUpperCase()} IS RESTING (${m}:${String(sec).padStart(2, '0')}). REVIVE IT FOR ${REVIVE_COST}, OR USE THE OTHER.`;
 }
 
 export function claimStarter(id: string): Result {
@@ -135,9 +174,6 @@ export function release(uid: number): Result {
   return ok(`${creatureById(o.id)!.name.toUpperCase()} WANDERS OFF.`);
 }
 
-export function setHanded(h: 'right' | 'left'): void {
-  edit((s) => (s.handed = h));
-}
 
 // --------------------------------------------------------------- zone battle
 
@@ -155,7 +191,8 @@ export function startBattle(biomeId: string, foeId?: string): Result {
   if (!BIOMES.some((b) => b.id === biomeId)) return no('NO SUCH PLACE.');
   if (c.battle) return no('A BATTLE IS ALREADY ON.');
   if (c.pending) return no('PICK A CARD FROM YOUR OPEN PACK FIRST.');
-  if (!activeOwned(c)) return no('YOU NEED A CREATURE TO FIGHT.');
+  const why = unfit(c);
+  if (why) return no(why);
   if (!ledger.debit(BATTLE_COST, 'creature')) return no(`A BATTLE COSTS ${BATTLE_COST} TOKENS.`);
   edit((s) => {
     s.battle = { mode: 'zone', biome: biomeId };
@@ -186,7 +223,8 @@ export function startLadder(rng: () => number = Math.random): Result {
   if (c.ladder) return no('A LADDER RUN IS ALREADY ON. CONTINUE IT.');
   if (c.battle) return no('FINISH THE BATTLE FIRST.');
   if (c.pending) return no('PICK A CARD FROM YOUR OPEN PACK FIRST.');
-  if (!activeOwned(c)) return no('YOU NEED A CREATURE TO FIGHT.');
+  const why = unfit(c);
+  if (why) return no(why);
   if (ledger.balance() < LADDER_COST) return no(`THE LADDER COSTS ${LADDER_COST} TOKENS. YOU HAVE ${ledger.balance()}.`);
   const draw = rollLadder(c.lastBoss, rng);
   if (!ledger.debit(LADDER_COST, 'creature')) return no(`THE LADDER COSTS ${LADDER_COST} TOKENS.`);
@@ -204,7 +242,8 @@ export function startLadderBattle(): Result {
   const step = ladderStep(c);
   if (!step) return no('NO LADDER RUN IS ON.');
   if (c.battle) return no('A BATTLE IS ALREADY ON.');
-  if (!activeOwned(c)) return no('YOU NEED A CREATURE TO FIGHT.');
+  const why = unfit(c);
+  if (why) return no(why);
   edit((s) => (s.battle = { mode: 'ladder', biome: step.biome, level: step.level }));
   store.flush();
   return ok(step.boss ? 'THE FINAL BOSS!' : `LEVEL ${step.level} OF ${LADDER_LEVELS}!`);
@@ -308,14 +347,15 @@ export function finishBattle(won: boolean): BattleEnd {
   edit((s) => {
     s.battle = null;
     s.losses += 1;
-    // fainted, and gone
-    s.owned = s.owned.filter((o) => o.uid !== s.active);
-    s.active = s.owned[0]?.uid ?? -1;
+    // FAINTED, AND STILL YOURS (log #3): it keeps its slot and rests; the
+    // other one, if it is fit, steps into the ring
+    const f = s.owned.find((o) => o.uid === s.active);
+    if (f) f.faintedAt = Date.now();
+    const fit = s.owned.find((o) => o.uid !== s.active && !restLeft(o));
+    if (fit) s.active = fit.uid;
   });
   store.flush();
-  // THE LOSS IS THE CREATURE.  Losing takes the one that fought and nothing
-  // else: the tokens left in your pocket are still yours.
-  return { ...ok(`${name} FAINTED. YOUR TOKENS ARE SAFE.`), paid: 0, lost: fighter?.id };
+  return { ...ok(`${name} FAINTED. IT RESTS FOR ${REST_MS / 60_000} MINUTES, OR REVIVE IT FOR ${REVIVE_COST}.`), paid: 0, lost: fighter?.id };
 }
 
 /**

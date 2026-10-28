@@ -1,6 +1,7 @@
 /**
  * ---- CREATURE CLASH, the cabinet's menus.  Everything that is not the
- * fight: the free starter, your two, the pack and its nine face-down cards,
+ * fight: your two (a fainted one resting in its slot), the pack and its nine
+ * face-down cards,
  * and the two ways to fight, kept apart --
  *
  *   ZONE BATTLE  the map of nine places: one creature from the place's own
@@ -8,13 +9,15 @@
  *   LADDER       a paid run: five fights, then a boss.  Its own screen, with
  *                where you are on it, what it pays and what it cost.
  *
- * -- and which hand the sticks go under.
+ * -- and, on a keyboard, which keys fight.
  *
  * Every change goes through game/creatureClash -- this scene only draws and
  * asks.  It is redrawn from the save each time, so whatever is on screen is
  * what is true.
  */
 
+import { isTouch } from '../core/device';
+import { capLabel, codeFor } from '../core/keymap';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -31,11 +34,11 @@ import { drawFrogToken, floatDeduct } from '../ui/hud';
 import { tinyText, tinyWrap } from '../ui/tinyText';
 import { xpProgress } from '../game/creatureLevel';
 import {
-  BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, PACK_COST, STARTERS, bossById, creatureById, type Attack, type Creature,
+  BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, PACK_COST, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
-import { abandonLadder, activeOwned, ownedCreature, claimStarter, needsRecovery, openPack, pickCard, release, retreat, setActive, setHanded, startLadder } from '../game/creatureClash';
+import { REST_MS, REVIVE_COST, abandonLadder, activeOwned, ownedCreature, needsRecovery, restLeft, revive, openPack, pickCard, release, retreat, setActive, startLadder } from '../game/creatureClash';
 
-type Screen = 'home' | 'starter' | 'recruit' | 'pack' | 'map' | 'ladder' | 'controls';
+type Screen = 'home' | 'recruit' | 'pack' | 'map' | 'ladder' | 'controls';
 const SCREENS: Screen[] = ['home', 'map', 'ladder', 'recruit', 'controls'];
 
 interface Shown {
@@ -87,7 +90,12 @@ export class CreatureHub extends Phaser.Scene {
     });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, off);
     const c = store.get().creatures;
-    this.screen = !c.starterTaken ? 'starter' : c.pending ? 'pack' : needsRecovery() ? 'recruit' : this.want ?? 'home';
+    // (no starter, log #3: an empty team goes straight to recruiting its first)
+    this.screen = c.pending ? 'pack' : needsRecovery() ? 'recruit' : this.want ?? 'home';
+    // a resting creature's clock, kept current on the team screen
+    this.time.addEvent({ delay: 1000, loop: true, callback: () => {
+      if (this.screen === 'home' && !this.dialog && store.get().creatures.owned.some((o) => restLeft(o) > 0)) this.draw();
+    } });
     this.add.rectangle(0, 0, GAME_W, GAME_H, 0x10142a).setOrigin(0, 0);
     // a starfield of tiny element sparks behind everything
     const bg = this.add.graphics();
@@ -99,7 +107,7 @@ export class CreatureHub extends Phaser.Scene {
     this.input.keyboard?.on('keydown-ESC', () => {
       if (this.dialog) return;
       // (on the top screens Esc is the pause menu's, where LEAVE is)
-      if (this.screen !== 'home' && this.screen !== 'starter' && this.screen !== 'pack') this.go('home');
+      if (this.screen !== 'home' && this.screen !== 'recruit') this.go(store.get().creatures.owned.length ? 'home' : 'recruit');
     });
     this.cameras.main.fadeIn(250, 0, 0, 0);
     this.draw();
@@ -113,7 +121,7 @@ export class CreatureHub extends Phaser.Scene {
   /** LEAVE, in the pause menu between RESUME and EXIT TO START MENU. */
   pauseExit(): { label: string; run: () => void } | null {
     if (this.dialog) return null;
-    return this.screen === 'home' || this.screen === 'starter' ? { label: 'LEAVE', run: () => this.leave() } : null;
+    return this.screen === 'home' || (this.screen === 'recruit' && needsRecovery()) ? { label: 'LEAVE', run: () => this.leave() } : null;
   }
 
   private leave(): void {
@@ -149,17 +157,18 @@ export class CreatureHub extends Phaser.Scene {
     L.add(text(this, 111, 4, tok, PALETTE.mossLight));
     // LEAVE is in the pause menu (see pauseExit): the corner has the gear
     // that opens it on the top screens, and BACK on the ones under them
-    const top = this.screen === 'home' || this.screen === 'starter';
+    const top = this.screen === 'home' || (this.screen === 'recruit' && needsRecovery());
     if (top) {
       // (LEAVE is in the pause menu: Esc on a keyboard, the gear on a phone)
-    } else if (this.screen !== 'pack') L.add(button(this, GAME_W - 26, 8, 'BACK', () => this.go('home'), { width: 44, height: 11 }));
-    ({ home: () => this.home(), starter: () => this.starter(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), ladder: () => this.ladder(), controls: () => this.controls() })[this.screen]();
+    } else if (!(this.screen === 'pack' && this.picked)) L.add(button(this, GAME_W - 26, 8, 'BACK', () => this.go(store.get().creatures.owned.length ? 'home' : 'recruit'), { width: 44, height: 11 }));
+    ({ home: () => this.home(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), ladder: () => this.ladder(), controls: () => this.controls() })[this.screen]();
     if (this.msg) {
       const m = centerText(this, GAME_W / 2, GAME_H - 7, this.msg, PALETTE.gold);
       L.add(m);
       backPlate(this, m, PALETTE.gold);
-    } else if (this.screen === 'home' || this.screen === 'starter') {
-      L.add(text(this, 8, GAME_H - 10, 'TAP A MOVE (?) TO READ WHAT IT DOES', 0x8a90b0));
+    } else if (this.screen === 'home') {
+      const tired = store.get().creatures.owned.some((o) => restLeft(o) > 0);
+      L.add(text(this, 8, GAME_H - 10, tired ? `FAINTED: RESTS ${REST_MS / 60_000} MIN, OR REVIVE FOR ${REVIVE_COST} TOKENS` : 'TAP A MOVE (?) TO READ WHAT IT DOES', tired ? PALETTE.ash : 0x8a90b0));
     }
   }
 
@@ -220,7 +229,7 @@ export class CreatureHub extends Phaser.Scene {
    * kind of fighter, not a better or worse one), health and speed as bars, and the three attacks with
    * their icons.  `active` gives it the gold edge of the one in the ring.
    * Its level is in a chip on the picture; with `xp` (one you own), the
-   * experience towards the next level as a bar, or MAX at level 3.
+   * experience towards the next level as a bar, or MAX at the top level.
    */
   private card(c: Creature, x: number, y: number, w: number, h: number, big = true, active = false, xp?: number): void {
     const L = this.layer;
@@ -359,22 +368,6 @@ export class CreatureHub extends Phaser.Scene {
 
   // ----------------------------------------------------------------- screens
 
-  private starter(): void {
-    const L = this.layer;
-    L.add(centerText(this, GAME_W / 2, 24, 'CHOOSE YOUR FIRST CREATURE - FREE', PALETTE.cream));
-    STARTERS.forEach((id, i) => {
-      const c = creatureById(id)!;
-      const x = 10 + i * 102;
-      this.card(c, x, 32, 96, 108);
-      L.add(button(this, x + 48, 152, 'CHOOSE', () => {
-        const r = claimStarter(id);
-        this.say(r);
-        if (r.ok) this.screen = 'home';
-        this.draw();
-      }, { width: 70, height: 12 }));
-    });
-  }
-
   private home(): void {
     const L = this.layer;
     const c = store.get().creatures;
@@ -404,7 +397,21 @@ export class CreatureHub extends Phaser.Scene {
       const cr = ownedCreature(o)!;
       const on = o.uid === act?.uid;
       this.card(cr, x, y, w, h, true, on, o.xp ?? 0);
-      if (on) {
+      const rest = restLeft(o);
+      if (rest > 0) {
+        // FAINTED: still in its slot (log #3), out of sight under the band, with its clock
+        this.shown.pop();
+        // (a band across the picture, under its level and element tags)
+        L.add(this.add.rectangle(x + 1, y + 16, w - 2, 21, 0x0a0c18, 0.82).setOrigin(0, 0));
+        const left = Math.ceil(rest / 1000);
+        const clock = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+        L.add(centerText(this, x + w / 2, y + 21, 'FAINTED', 0xff8a8a));
+        L.add(centerText(this, x + w / 2, y + 31, `RESTING ${clock}`, PALETTE.cream));
+      }
+      if (rest > 0) {
+        // (what reviving costs is on the button's own line under the cards: RELEASE has the rest of the row)
+        L.add(button(this, x + 23, y + h + 10, 'REVIVE', () => (this.say(revive(o.uid)), this.draw()), { width: 44, height: 12, disabled: ledger.balance() < REVIVE_COST }));
+      } else if (on) {
         // the one that fights: a gold chip where USE would be
         L.add(this.add.rectangle(x + 2, y + h + 4, 42, 12, 0x3a2e10).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold));
         L.add(centerText(this, x + 23, y + h + 10, 'IN RING', PALETTE.gold));
@@ -418,7 +425,8 @@ export class CreatureHub extends Phaser.Scene {
     L.add(text(this, mx, 25, 'MENU', PALETTE.ash));
     const busy = !!c.pending;
     const run = c.ladder;
-    this.tile(mx, 34, mw, 24, 'ZONE BATTLE', act ? `${BATTLE_COST} IN, WIN ${BATTLE_WIN}` : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => this.go('map'), !act);
+    const resting = !!act && restLeft(act) > 0;
+    this.tile(mx, 34, mw, 24, 'ZONE BATTLE', resting ? 'RESTING' : act ? `${BATTLE_COST} IN, WIN ${BATTLE_WIN}` : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => this.go('map'), !act || resting);
     this.tile(mx, 61, mw, 24, 'LADDER', run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
       // three rungs
       g.fillStyle(col, 1).fillRect(x - 5, y - 7, 2, 14).fillRect(x + 3, y - 7, 2, 14);
@@ -437,10 +445,12 @@ export class CreatureHub extends Phaser.Scene {
       g.fillStyle(col, 1).fillRect(x - 1, y - 6, 7, 10);
       g.fillStyle(0x14100c, 1).fillRect(x + 2, y - 3, 1, 3).fillRect(x + 2, y + 1, 1, 1);
     }, () => this.go(busy ? 'pack' : 'recruit'));
-    this.tile(mx, 142, mw, 24, 'CONTROLS', c.handed === 'left' ? 'LEFT-HANDED' : 'RIGHT-HANDED', 0x4ad0c0, (g, x, y, col) => {
-      g.fillStyle(col, 1).fillRect(x - 7, y - 3, 14, 7).fillRect(x - 8, y - 1, 16, 5);
-      g.fillStyle(0x0a0d1e, 1).fillRect(x - 5, y, 3, 1).fillRect(x - 4, y - 1, 1, 3).fillRect(x + 3, y - 1, 1, 1).fillRect(x + 5, y + 1, 1, 1);
-    }, () => this.go('controls'));
+    // (the keys, on a keyboard only: a phone's controls are on the screen -- C7)
+    if (!isTouch())
+      this.tile(mx, 142, mw, 24, 'CONTROLS', `KEYS ${capLabel(codeFor('creatureclash:KeyJ'))} ${capLabel(codeFor('creatureclash:KeyK'))} ${capLabel(codeFor('creatureclash:KeyL'))}`, 0x4ad0c0, (g, x, y, col) => {
+        g.fillStyle(col, 1).fillRect(x - 7, y - 3, 14, 7).fillRect(x - 8, y - 1, 16, 5);
+        g.fillStyle(0x0a0d1e, 1).fillRect(x - 5, y, 3, 1).fillRect(x - 4, y - 1, 1, 3).fillRect(x + 3, y - 1, 1, 1).fillRect(x + 5, y + 1, 1, 1);
+      }, () => this.go('controls'));
   }
 
   private confirmRelease(uid: number, cr: Creature): void {
@@ -468,7 +478,9 @@ export class CreatureHub extends Phaser.Scene {
     const L = this.layer;
     const c = store.get().creatures;
     const recovery = needsRecovery(c);
-    L.add(centerText(this, GAME_W / 2, 22, recovery ? 'RECOVERY RECRUITMENT - YOU HAVE NO CREATURES LEFT' : 'RECRUIT', recovery ? PALETTE.gold : PALETTE.cream));
+    // (the first one is a recruit like any other: there is no free starter)
+    const first = recovery && c.pulls === 0;
+    L.add(centerText(this, GAME_W / 2, 22, first ? 'RECRUIT YOUR FIRST CREATURE' : recovery ? 'RECRUIT - YOU HAVE NO CREATURES LEFT' : 'RECRUIT', recovery ? PALETTE.gold : PALETTE.cream));
     const x = GAME_W / 2 - 90;
     L.add(this.add.rectangle(x, 32, 180, 112, 0x1a1e38).setOrigin(0, 0).setStrokeStyle(1, 0x8a6aff));
     // the pack itself, face down
@@ -487,6 +499,11 @@ export class CreatureHub extends Phaser.Scene {
     L.add(text(this, x + 70, 84, 'DOWN. KEEP ONE.', PALETTE.fog));
     L.add(text(this, x + 8, 100, 'EACH ONE AS LIKELY AS ANY', PALETTE.ash));
     L.add(text(this, x + 8, 109, 'OTHER. NONE IS RARER.', PALETTE.ash));
+    if (c.pending) {
+      // (one paid for and left for later: back to its nine cards)
+      L.add(button(this, GAME_W / 2, 132, 'YOUR PACK', () => this.go('pack'), { width: 96, height: 13 }));
+      return;
+    }
     const can = ledger.balance() >= PACK_COST && c.owned.length < MAX_OWNED;
     L.add(button(this, GAME_W / 2, 132, `OPEN  ${PACK_COST} TOK`, () => {
       const r = openPack();
@@ -550,6 +567,8 @@ export class CreatureHub extends Phaser.Scene {
       L.add(text(this, 166, 76, 'THE PACK IS PAID FOR AND', PALETTE.ash));
       L.add(text(this, 166, 86, 'SAVED: LEAVING DOES NOT', PALETTE.ash));
       L.add(text(this, 166, 96, 'CHANGE THE CARDS.', PALETTE.ash));
+      L.add(text(this, 166, 112, 'BACK LEAVES IT FOR LATER:', PALETTE.ash));
+      L.add(text(this, 166, 122, 'RECRUIT OPENS IT AGAIN.', PALETTE.ash));
     }
   }
 
@@ -725,26 +744,19 @@ export class CreatureHub extends Phaser.Scene {
 
   private controls(): void {
     const L = this.layer;
-    const h = store.get().creatures.handed;
+    const key = (k: string): string => capLabel(codeFor(`creatureclash:${k}`));
     L.add(centerText(this, GAME_W / 2, 24, 'BATTLE CONTROLS', PALETTE.cream));
-    L.add(text(this, 14, 38, 'KEYBOARD AND MOUSE', PALETTE.gold));
-    L.add(text(this, 14, 48, 'WASD / ARROWS  MOVE', PALETTE.fog));
-    L.add(text(this, 14, 57, '1 2 3  CHOOSE AN ATTACK', PALETTE.fog));
-    L.add(text(this, 14, 66, 'MOUSE  AIM.  CLICK  FIRE', PALETTE.fog));
-    L.add(text(this, 14, 82, 'TOUCH', PALETTE.gold));
-    L.add(text(this, 14, 92, 'ONE STICK MOVES. TAP AN', PALETTE.fog));
-    L.add(text(this, 14, 101, 'ATTACK, THEN DRAG THE AIM', PALETTE.fog));
-    L.add(text(this, 14, 110, 'STICK: LET GO TO FIRE.', PALETTE.fog));
-    L.add(text(this, 180, 38, 'STICK LAYOUT', PALETTE.gold));
-    const opt = (label: string, v: 'right' | 'left', y: number, sub: string): void => {
-      L.add(button(this, 236, y, label, () => {
-        setHanded(v);
-        this.draw();
-      }, { width: 100, height: 13, fill: h === v ? PALETTE.tealDark : PALETTE.ink }));
-      L.add(text(this, 186, y + 9, sub, PALETTE.ash));
-    };
-    opt('RIGHT-HANDED', 'right', 56, 'MOVE LEFT, AIM RIGHT');
-    opt('LEFT-HANDED', 'left', 86, 'MOVE RIGHT, AIM LEFT');
-    L.add(text(this, 186, 112, 'SAVED WITH YOUR GAME.', PALETTE.ash));
+    L.add(text(this, 40, 42, 'WASD / ARROWS', PALETTE.gold));
+    L.add(text(this, 140, 42, 'MOVE', PALETTE.fog));
+    L.add(text(this, 40, 56, `${key('KeyJ')}  ${key('KeyK')}  ${key('KeyL')}`, PALETTE.gold));
+    L.add(text(this, 140, 56, 'ATTACKS 1, 2, 3 - AT ONCE,', PALETTE.fog));
+    L.add(text(this, 140, 65, 'AT THE OTHER ONE', PALETTE.fog));
+    L.add(text(this, 40, 79, '1  2  3', PALETTE.gold));
+    L.add(text(this, 140, 79, 'THE SAME, AT THE MOUSE', PALETTE.fog));
+    L.add(text(this, 40, 93, 'MOUSE', PALETTE.gold));
+    L.add(text(this, 140, 93, 'AIM.  CLICK TO FIRE THE', PALETTE.fog));
+    L.add(text(this, 140, 102, 'CHOSEN ATTACK', PALETTE.fog));
+    L.add(centerText(this, GAME_W / 2, 124, 'J, K AND L CAN BE MOVED IN THE SETTINGS, UNDER', PALETTE.ash));
+    L.add(centerText(this, GAME_W / 2, 133, 'CHANGE KEYS, WHILE A BATTLE IS ON.', PALETTE.ash));
   }
 }
