@@ -29,7 +29,7 @@ import { drawCreature } from '../art/creatureArt';
 import { plainWords } from '../game/plainWords';
 import { drawMelee, drawShot, meleeStyle, shotStyle, type MeleeStyle } from '../art/clashFx';
 import { SPECIALS } from '../game/specials';
-import { BIOMES, ELEMENTS, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
+import { BIOMES, ELEMENTS, creatureById, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
 import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle } from '../game/creatureClash';
 import { MAX_LEVEL, levelOf, withLevel } from '../game/creatureLevel';
 import {
@@ -323,6 +323,37 @@ interface Barrier {
  */
 const HIDE_S = 2.2;
 
+/**
+ * WHAT A CAST WALL IS MADE OF (log #44): its maker's own stuff, not the
+ * arena's -- an ice slab is ice wherever it is raised, a kelp weave is
+ * weed, an ember wall is a smoking vent, a stone one rock.
+ */
+const WALL_LOOK: Record<string, CoverShape> = { kelp_weave: 'reed', glacier_slab: 'ice' };
+const ELEMENT_WALL: Record<string, CoverShape> = {
+  frost: 'ice', stone: 'rock', tide: 'shell', moss: 'tuft', ember: 'vent', gale: 'tuft', volt: 'pillar', murk: 'reed', glow: 'pillar',
+};
+export const wallLook = (sp: string | undefined, element: string): CoverShape => WALL_LOOK[sp ?? ''] ?? ELEMENT_WALL[element] ?? 'rock';
+
+/** A simulated fight (dev only): who against whom, at what level, how sharp, how fast. */
+export interface SimSpec {
+  me: string;
+  foe: string;
+  level: number;
+  skill: number;
+  warp: number;
+}
+
+/** What one computer-played fighter remembers between frames. */
+interface Brain {
+  ai: { think: number; mx: number; my: number; strafe: number };
+  dodge: { vx: number; vy: number; t: number };
+  seen: WeakSet<Shot>;
+  last: { x: number; y: number; stuck: number };
+  /** The other fighter's smoothed velocity, to lead shots with. */
+  vel: { x: number; y: number };
+  prev?: { x: number; y: number };
+}
+
 export class CreatureArena extends Phaser.Scene {
   private biome!: Biome;
   private mode: 'zone' | 'ladder' | 'training' = 'zone';
@@ -343,6 +374,17 @@ export class CreatureArena extends Phaser.Scene {
   private dodge = { vx: 0, vy: 0, t: 0 };
   private seenShots = new WeakSet<Shot>();
   private lastFoePos = { x: 0, y: 0, stuck: 0 };
+  /**
+   * THE BALANCE SIMULATOR (dev only, tools/clash.mjs): both sides played by
+   * the computer, many steps a frame, and the result kept rather than paid.
+   */
+  private sim: { warp: number; result: boolean | null } | null = null;
+  private simSpec: SimSpec | null = null;
+  private meBrain: Brain = { ai: { think: 0, mx: 0, my: 0, strafe: 1 }, dodge: { vx: 0, vy: 0, t: 0 }, seen: new WeakSet<Shot>(), last: { x: 0, y: 0, stuck: 0 }, vel: { x: 0, y: 0 } };
+  /** The opponent's brain: the same fields the AI always used. */
+  private get foeBrain(): Brain {
+    return { ai: this.ai, dodge: this.dodge, seen: this.seenShots, last: this.lastFoePos, vel: this.meV };
+  }
   /**
    * ---- THE TRAINING GROUND.
    *
@@ -434,8 +476,12 @@ export class CreatureArena extends Phaser.Scene {
   /** Back after a reload with the battle already open and paid for (core/session). */
   private resumed = false;
 
-  init(data: { biome?: string; mode?: 'zone' | 'ladder' | 'training'; from?: string; training?: boolean; resumed?: boolean }): void {
+  init(data: { biome?: string; mode?: 'zone' | 'ladder' | 'training'; from?: string; training?: boolean; resumed?: boolean; sim?: SimSpec }): void {
     this.resumed = data.resumed === true;
+    // (dev only: tools/clash.mjs)
+    this.simSpec = import.meta.env?.DEV ? data.sim ?? null : null;
+    this.sim = this.simSpec ? { warp: this.simSpec.warp, result: null } : null;
+    this.meBrain = { ai: { think: 0, mx: 0, my: 0, strafe: 1 }, dodge: { vx: 0, vy: 0, t: 0 }, seen: new WeakSet<Shot>(), last: { x: 0, y: 0, stuck: 0 }, vel: { x: 0, y: 0 } };
     this.biome = BIOMES.find((b) => b.id === data.biome) ?? BIOMES[0];
     this.mode = data.training ? 'training' : data.mode ?? 'zone';
     this.training = this.mode === 'training';
@@ -481,9 +527,10 @@ export class CreatureArena extends Phaser.Scene {
     this.infoT = 0;
     this.foeLevel = 0;
     const own = activeOwned();
+    const sim = this.simSpec;
     // (yours fights at its level: see creatureLevel)
-    const mine = own ? ownedCreature(own) : undefined;
-    this.myLevel = own ? levelOf(own.xp ?? 0) : 1;
+    const mine = sim ? withLevel(creatureById(sim.me)!, sim.level) : own ? ownedCreature(own) : undefined;
+    this.myLevel = sim ? sim.level : own ? levelOf(own.xp ?? 0) : 1;
     if (!mine) {
       this.scene.start('CreatureHub', { from: this.from, msg: 'YOU NEED A CREATURE TO FIGHT.' });
       return;
@@ -492,7 +539,11 @@ export class CreatureArena extends Phaser.Scene {
     // drawn when the run was paid for: the place and the opponent come from
     // it, never from here, so nothing about it can be re-rolled.
     let wild: Creature;
-    if (this.mode === 'ladder') {
+    if (sim) {
+      wild = withLevel(creatureById(sim.foe)!, sim.level);
+      this.foeLevel = sim.level;
+      this.skill = sim.skill;
+    } else if (this.mode === 'ladder') {
       const step = ladderStep();
       if (!step) {
         this.scene.start('CreatureHub', { from: this.from, screen: 'ladder', msg: 'NO LADDER RUN IS ON.' });
@@ -579,6 +630,13 @@ export class CreatureArena extends Phaser.Scene {
     this.cameras.main.fadeIn(250, 0, 0, 0);
     // nothing moves until the count is done; the stake goes at the bell
     this.paused = true;
+    if (this.sim) {
+      // the simulator: no count, no bell, no stake -- straight in
+      this.paused = false;
+      this.started = true;
+      (window as unknown as { __clashSim?: unknown }).__clashSim = this.sim;
+      return;
+    }
     this.countdown();
   }
 
@@ -1414,7 +1472,7 @@ export class CreatureArena extends Phaser.Scene {
           }))
           .filter((q) => Math.hypot(q.x - this.other(f).x, q.y - this.other(f).y) > 10 * this.other(f).scale);
         if (parts.length) {
-          this.barriers.push({ kind: this.biome.prop, parts, seed: 1, life: spec.life, max: spec.life, owner: f, shatter: a.sp === 'glacier_slab' });
+          this.barriers.push({ kind: wallLook(a.sp, f.c.element), parts, seed: 1, life: spec.life, max: spec.life, owner: f, shatter: a.sp === 'glacier_slab' });
           this.props.push(...parts);
           this.repaintCover();
         }
@@ -2664,20 +2722,19 @@ export class CreatureArena extends Phaser.Scene {
 
   // ---------------------------------------------------------------------- AI
 
-  private think(dt: number): void {
-    const f = this.foe;
+  private think(dt: number, f: Fighter = this.foe, me: Fighter = this.me, B: Brain = this.foeBrain): void {
     // WHAT IT THINKS IS YOU: a decoy draws it while it lasts, and a you it
     // cannot see is wherever it last saw you
-    const decoy = this.minions.find((mi) => mi.kind === 'decoy' && mi.owner === this.me);
-    if (!this.me.st.invis) {
-      this.me.ref.seenX = this.me.x;
-      this.me.ref.seenY = this.me.y;
+    const decoy = this.minions.find((mi) => mi.kind === 'decoy' && mi.owner === me);
+    if (!me.st.invis) {
+      me.ref.seenX = me.x;
+      me.ref.seenY = me.y;
     }
     const p: Fighter = decoy
-      ? { ...this.me, x: decoy.x, y: decoy.y }
-      : this.me.st.invis
-        ? { ...this.me, x: this.me.ref.seenX ?? this.me.x, y: this.me.ref.seenY ?? this.me.y }
-        : this.me;
+      ? { ...me, x: decoy.x, y: decoy.y }
+      : me.st.invis
+        ? { ...me, x: me.ref.seenX ?? me.x, y: me.ref.seenY ?? me.y }
+        : me;
     if (!this.canAct(f) || f.dash || f.hp <= 0 || f.st.carried) return;
     const sk = this.skill;
     const dx = p.x - f.x;
@@ -2687,8 +2744,8 @@ export class CreatureArena extends Phaser.Scene {
     // aim: worse when blinded, better the sharper it is -- and a sharp one
     // shoots where you are GOING, not where you were
     const lead = sk > 0.5 ? (sk - 0.5) * 2 * Math.min(0.5, dist / 200) : 0;
-    const tx = p.x + this.meV.x * lead;
-    const ty = p.y + this.meV.y * lead;
+    const tx = p.x + B.vel.x * lead;
+    const ty = p.y + B.vel.y * lead;
     const err = (f.blind > 0 ? 0.6 : 0.3 - 0.24 * sk) * (Math.random() - 0.5) * 2;
     const ang = Math.atan2(ty - f.y, tx - f.x) + err;
     const ax = Math.cos(ang);
@@ -2698,10 +2755,10 @@ export class CreatureArena extends Phaser.Scene {
       if (f.cds[0] <= 0 && clear) this.fire(f, 0, ax, ay);
       return;
     }
-    this.ai.think -= dt;
-    if (this.ai.think <= 0) {
-      this.ai.think = 0.9 - 0.45 * sk + Math.random() * 0.5;
-      if (Math.random() < 0.3) this.ai.strafe *= -1;
+    B.ai.think -= dt;
+    if (B.ai.think <= 0) {
+      B.ai.think = 0.9 - 0.45 * sk + Math.random() * 0.5;
+      if (Math.random() < 0.3) B.ai.strafe *= -1;
     }
     const ux = dx / dist;
     const uy = dy / dist;
@@ -2709,30 +2766,30 @@ export class CreatureArena extends Phaser.Scene {
     let vx: number;
     let vy: number;
     // ---- A SHOT COMING: a good fighter sees it and steps out of its way
-    if (this.dodge.t <= 0) {
+    if (B.dodge.t <= 0) {
       for (const s of this.shots) {
-        if (s.owner === f || s.arc || this.seenShots.has(s)) continue;
+        if (s.owner === f || s.arc || B.seen.has(s)) continue;
         const rx = f.x - s.x;
         const ry = f.y - s.y;
         const sp = Math.hypot(s.vx, s.vy) || 1;
         const ahead = (rx * s.vx + ry * s.vy) / sp;
         if (ahead <= 0 || ahead > 60) continue;
-        this.seenShots.add(s);
+        B.seen.add(s);
         // where it passes, how close
         const miss = Math.abs(rx * s.vy - ry * s.vx) / sp;
         if (miss > 10 * f.scale || Math.random() > sk * 0.85) continue;
         const side = rx * s.vy - ry * s.vx >= 0 ? 1 : -1;
-        this.dodge = { vx: (s.vy / sp) * side, vy: (-s.vx / sp) * side, t: 0.28 };
+        Object.assign(B.dodge, { vx: (s.vy / sp) * side, vy: (-s.vx / sp) * side, t: 0.28 });
         break;
       }
     }
-    if (this.dodge.t > 0) {
-      this.dodge.t -= dt;
-      vx = this.dodge.vx * spd * 1.3;
-      vy = this.dodge.vy * spd * 1.3;
+    if (B.dodge.t > 0) {
+      B.dodge.t -= dt;
+      vx = B.dodge.vx * spd * 1.3;
+      vy = B.dodge.vy * spd * 1.3;
     } else if (!clear && (sk >= 0.4 || this.boss)) {
       // ---- NO LINE ON YOU: work round the cover to somewhere that has one
-      const spot = this.sightSpot(f, false);
+      const spot = this.sightSpot(f, false, me);
       const mx = (spot?.x ?? p.x) - f.x;
       const my = (spot?.y ?? p.y) - f.y;
       const m = Math.hypot(mx, my) || 1;
@@ -2743,8 +2800,8 @@ export class CreatureArena extends Phaser.Scene {
       const melee = f.c.attacks[0].kind === 'beam' && f.c.attacks[0].reach < 50;
       const want = melee || (f.cds[2] <= 0 && f.c.attacks[2].kind === 'nova') ? 26 : 85;
       const toward = dist > want + 10 ? 1 : dist < want - 10 ? -1 : 0;
-      vx = (ux * toward + -uy * this.ai.strafe * 0.7) * spd;
-      vy = (uy * toward + ux * this.ai.strafe * 0.7) * spd;
+      vx = (ux * toward + -uy * B.ai.strafe * 0.7) * spd;
+      vy = (uy * toward + ux * B.ai.strafe * 0.7) * spd;
     }
     if (f.st.confused) {
       vx = -vx;
@@ -2762,15 +2819,15 @@ export class CreatureArena extends Phaser.Scene {
     f.ref.vy = vy;
     this.step(f, vx, vy, dt);
     // stuck on something: go round it the other way
-    const moved = Math.hypot(f.x - this.lastFoePos.x, f.y - this.lastFoePos.y);
-    this.lastFoePos.stuck = moved < spd * dt * 0.25 && spd > 0 ? this.lastFoePos.stuck + dt : 0;
-    if (this.lastFoePos.stuck > 0.35) {
-      this.ai.strafe *= -1;
-      this.lastFoePos.stuck = 0;
-      this.dodge = { vx: -uy * this.ai.strafe, vy: ux * this.ai.strafe, t: 0.4 };
+    const moved = Math.hypot(f.x - B.last.x, f.y - B.last.y);
+    B.last.stuck = moved < spd * dt * 0.25 && spd > 0 ? B.last.stuck + dt : 0;
+    if (B.last.stuck > 0.35) {
+      B.ai.strafe *= -1;
+      B.last.stuck = 0;
+      Object.assign(B.dodge, { vx: -uy * B.ai.strafe, vy: ux * B.ai.strafe, t: 0.4 });
     }
-    this.lastFoePos.x = f.x;
-    this.lastFoePos.y = f.y;
+    B.last.x = f.x;
+    B.last.y = f.y;
     f.face = dx >= 0 ? 1 : -1;
     // ---- WHICH MOVE.  Each special says when it is for (specials `ai`);
     // the plain attack goes whenever it can reach.
@@ -2779,8 +2836,8 @@ export class CreatureArena extends Phaser.Scene {
       if (f.cds[i] > 0 || !this.wants(f, a, dist, clear)) continue;
       // a getaway goes away from you, sideways; everything else at you
       const away = SPECIALS[a.sp ?? '']?.ai === 'escape';
-      const bx = away ? -ux * 0.6 - uy * this.ai.strafe : ax;
-      const by = away ? -uy * 0.6 + ux * this.ai.strafe : ay;
+      const bx = away ? -ux * 0.6 - uy * B.ai.strafe : ax;
+      const by = away ? -uy * 0.6 + ux * B.ai.strafe : ay;
       if (this.fire(f, i, bx * Math.max(dist, 40), by * Math.max(dist, 40))) return;
     }
     const n = f.c.attacks[0];
@@ -2824,8 +2881,7 @@ export class CreatureArena extends Phaser.Scene {
    * A place near you that has a clear line to you, for `f` to get to: the
    * nearest such spot to it (walking), or any good one (blinking in).
    */
-  private sightSpot(f: Fighter, anywhere: boolean): { x: number; y: number } | null {
-    const p = this.me;
+  private sightSpot(f: Fighter, anywhere: boolean, p: Fighter = this.me): { x: number; y: number } | null {
     let best: { x: number; y: number } | null = null;
     let bestD = Infinity;
     for (const rad of [70, 50, 95]) {
@@ -2880,7 +2936,7 @@ export class CreatureArena extends Phaser.Scene {
     if (!this.me || !this.foe) return;
     const running = this.scene.isActive('SettingsModal');
     const dt = this.paused || running || this.over ? 0 : Math.min(delta, 50) / 1000;
-    if (dt > 0) this.simulate(dt);
+    if (dt > 0) for (let i = 0; i < (this.sim?.warp ?? 1) && !this.over; i++) this.simulate(dt);
     this.infoT = Math.max(0, this.infoT - Math.min(delta, 50) / 1000);
     this.render(time / 1000);
   }
@@ -2942,6 +2998,15 @@ export class CreatureArena extends Phaser.Scene {
     this.meV.y += ((me.y - py0) / dt - this.meV.y) * Math.min(1, dt * 6);
     if (this.training) this.trainDummy(dt);
     else this.think(dt);
+    if (this.sim) {
+      // (the other side's velocity, for this brain to lead its shots with)
+      const fb = this.meBrain;
+      const pv = fb.prev ?? { x: this.foe.x, y: this.foe.y };
+      fb.vel.x += ((this.foe.x - pv.x) / dt - fb.vel.x) * Math.min(1, dt * 6);
+      fb.vel.y += ((this.foe.y - pv.y) / dt - fb.vel.y) * Math.min(1, dt * 6);
+      fb.prev = { x: this.foe.x, y: this.foe.y };
+      this.think(dt, me, this.foe, fb);
+    }
 
     // ---- shots
     for (const s of this.shots) {
@@ -3364,6 +3429,12 @@ export class CreatureArena extends Phaser.Scene {
   private end(won: boolean): void {
     if (this.over) return;
     this.over = true;
+    if (this.sim) {
+      // (the simulator keeps the result and pays nothing)
+      this.sim.result = won;
+      this.settled = true;
+      return;
+    }
     if (this.settled) return;
     this.settled = true;
     // (what the run had paid before this one, for the run's total)
