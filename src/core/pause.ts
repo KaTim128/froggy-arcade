@@ -155,7 +155,7 @@ export function pauseIfInGame(): void {
   const started = (top as unknown as { started?: boolean }).started;
   if (top.scene.key === 'Minigame' && !started) return;
   openPause();
-  if (frozen) countNext = true;
+  if (frozen) countNext = countsIn(top);
 }
 
 /**
@@ -175,7 +175,7 @@ export function pauseOnArrival(key: string): void {
       if (top?.scene.key === key) {
         openPause();
         if (frozen) {
-          countNext = true;
+          countNext = key !== 'Minigame' || countsIn(top);
           return;
         }
       }
@@ -219,7 +219,7 @@ function countIn(done: () => void): void {
     }
     el.textContent = String(n);
     n--;
-    window.setTimeout(tick, 700);
+    window.setTimeout(tick, 1000);
   };
   tick();
 }
@@ -242,6 +242,22 @@ export function openPause(): void {
   froggyLayer.setVisible(false);
   if (document.pointerLockElement) document.exitPointerLock?.();
   game.scene.run('SettingsModal', { from: key, pause: true });
+  // EVERY ARCADE GAME COUNTS BACK IN (user, 28 Oct): RESUME is 3, 2, 1 in
+  // any game under way -- but not the three where nothing moves until you
+  // say so (Froggy 21, the Wheel, the Chamber)
+  if (countsIn(top)) countNext = true;
+}
+
+/** Games where nothing moves until the player acts: RESUME is straight back. */
+const NO_COUNT = new Set(['blackjack', 'wheel', 'roulette']);
+
+/** Is `sc` a game under way that should count 3, 2, 1 on RESUME? */
+function countsIn(sc: Phaser.Scene): boolean {
+  const key = sc.scene.key;
+  if (!IN_GAME.has(key)) return false;
+  if (key !== 'Minigame') return true;
+  const m = sc as unknown as { started?: boolean; gameId?: string };
+  return !!m.started && !NO_COUNT.has(m.gameId ?? '');
 }
 
 export function resumePause(): void {
