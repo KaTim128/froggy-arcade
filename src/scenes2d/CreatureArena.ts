@@ -614,8 +614,11 @@ export class CreatureArena extends Phaser.Scene {
     // Phaser's "has a touch screen", which a touchscreen laptop also has:
     // on a desktop the sticks never appear)
     const touchDevice = isTouch();
-    this.band = touchDevice && window.innerHeight >= window.innerWidth;
-    this.touch = touchDevice && !this.band;
+    // ON A PHONE, ALWAYS THE SHARED CONTROLS, NEVER STICKS DRAWN ON THE
+    // ARENA (user, 28 Oct: "buttons not in the arena view"): under the
+    // picture upright, in the black columns either side of it sideways
+    this.band = touchDevice;
+    this.touch = false;
     this.paintHud();
     this.applyBand();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setCabinetTouch(null));
@@ -626,7 +629,7 @@ export class CreatureArena extends Phaser.Scene {
     // of empty black underneath.
     if (touchDevice) {
       const onResize = (): void => {
-        const band = window.innerHeight >= window.innerWidth;
+        const band = true;
         if (band === this.band) return;
         this.band = band;
         this.touch = !band;

@@ -45,6 +45,9 @@
 
 import { isTouch, safeInsets } from '../core/device';
 
+/** Room either side of a control in its side column (CSS px). */
+const SIDE_MARGIN = 9;
+
 /** Every key the building actually binds, with the code Phaser matches on. */
 const KEYS = {
   W: { key: 'w', code: 'KeyW', keyCode: 87 },
@@ -641,6 +644,9 @@ class TouchControls {
 
     this.apply({});
     this.relayout();
+    // (sideways, the picture is fitted round the columns kept for these:
+    // fit it again now that there are some)
+    window.dispatchEvent(new Event('resize'));
 
     if (import.meta.env?.DEV) {
       (window as unknown as Record<string, unknown>).__touch = {
@@ -809,9 +815,28 @@ class TouchControls {
     return 0;
   }
 
-  /** Nothing either: no columns either side, the picture is fitted to the screen. */
+  /**
+   * SIDEWAYS, A COLUMN EACH SIDE FOR THE THUMBS (user, 28 Oct): the stick in
+   * the black on the left, the buttons in the black on the right, never over
+   * the picture.  The same width both sides, so the picture stays centred,
+   * and the same for every layout (the picture does not jump about from a
+   * room to a game); upright, nothing -- the controls go under the picture.
+   */
   reserveSides(): { left: number; right: number } {
-    return { left: 0, right: 0 };
+    if (!this.root || window.innerHeight >= window.innerWidth) return { left: 0, right: 0 };
+    const c = this.sideColumn();
+    return { left: c, right: c };
+  }
+
+  /** The width of one of those columns: a stick's breadth and its margins. */
+  private sideColumn(): number {
+    return Math.round(this.sideInner() + 2 * SIDE_MARGIN);
+  }
+
+  /** What sits in a side column: the stick (or the pad), at most this wide. */
+  private sideInner(): number {
+    const short = Math.min(window.innerWidth, window.innerHeight);
+    return Math.round(Math.min(112, Math.max(84, short * 0.25)));
   }
 
   /**
@@ -1116,14 +1141,32 @@ class TouchControls {
         padsW = cols * fit + (cols - 1) * gap + (primary ? fit * 0.25 : 0);
       }
     }
-    // Upright: in the black under the picture.  Sideways: ALWAYS over the
-    // picture's own bottom corners, never out in the bands either side of it.
+    // SIDEWAYS: IN THE BLACK EITHER SIDE (see reserveSides).  The stick
+    // and the pad are made the column's width; the buttons go one above
+    // another down the right-hand column, as big as its width and the
+    // height allow.
+    let sideL = leftW;
+    if (!portrait) {
+      const inner = this.sideInner();
+      sideL = inner;
+      this.root.style.setProperty('--tc-stick', `${inner}px`);
+      this.root.style.setProperty('--tc-joy', `${inner}px`);
+      if (n) {
+        (this.pads as HTMLElement).style.gridTemplateColumns = 'repeat(1, auto)';
+        const tall = Math.floor((pic.height - 24 - (n - 1) * gap) / n);
+        const b = Math.max(40, Math.min(btn, tall, Math.floor(inner / (primary ? 1.25 : 1))));
+        this.root.style.setProperty('--tc-btn', `${b}px`);
+        padsW = b + (primary ? b * 0.25 : 0);
+      }
+    }
+    // Upright: in the black under the picture.  Sideways: centred in the
+    // black either side of it.
     const left = portrait
       ? (barL >= leftW + margin * 2 ? Math.round((barL - leftW) / 2) : margin + safe.left)
-      : Math.round(barL) + margin + Math.max(0, safe.left - barL);
+      : Math.max(safe.left + 4, Math.round((barL - sideL) / 2));
     const right = portrait
       ? (barR >= padsW + margin * 2 ? Math.round((barR - padsW) / 2) : margin + safe.right)
-      : Math.round(barR) + margin + Math.max(0, safe.right - barR);
+      : Math.max(safe.right + 4, Math.round((barR - padsW) / 2));
     const bottom = portrait
       ? safe.bottom + Math.round(Math.min(window.innerHeight * 0.07, 60, Math.max(margin, (under - stick) * 0.35)))
       : safe.bottom + margin;
@@ -1133,7 +1176,7 @@ class TouchControls {
     // Over the picture means see-through (see STYLE): in landscape whenever
     // a cluster is not in the black, and in portrait if the picture runs down
     // into the controls (a very short, wide-ish phone).
-    const overPic = portrait ? under < stick + bottom + 8 : true;
+    const overPic = portrait ? under < stick + bottom + 8 : barL < sideL + 4 || barR < padsW + 4;
     this.root.classList.toggle('over', overPic);
 
     // ---- THE CROSS.  Big, in the middle.  Portrait: as big as the black
@@ -1192,9 +1235,16 @@ class TouchControls {
       gearTop = Math.round(pic.bottom + 10);
       gearRight = margin + safe.right;
     } else {
-      // sideways: inside the picture, at its right edge under the title bar
-      gearTop = Math.round(pic.top + 20 * zoom + 6);
-      gearRight = Math.round(barR) + 8 + Math.max(0, safe.right - barR);
+      // sideways: at the top of the right-hand column, in the black; only
+      // inside the picture (under its title bar) if there is no column
+      const gw = quit.offsetWidth || 44;
+      if (barR >= gw + 8) {
+        gearTop = Math.round(Math.max(safe.top + 8, pic.top + 8));
+        gearRight = Math.round((barR - gw) / 2);
+      } else {
+        gearTop = Math.round(pic.top + 20 * zoom + 6);
+        gearRight = Math.round(barR) + 8 + Math.max(0, safe.right - barR);
+      }
     }
     quit.style.top = `${gearTop}px`;
     quit.style.right = `${gearRight}px`;

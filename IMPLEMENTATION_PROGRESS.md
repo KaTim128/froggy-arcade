@@ -390,7 +390,7 @@ Rules for every batch:
 |---|---|---|
 | Q1 | Creature Clash: 20 new creatures + 40 abilities | DONE, pushed (70 creatures, 160 specials) |
 | Q2 | Then 20 MORE creatures + 40 MORE abilities (user: "actually 40 and 80") | open |
-| Q3 | Clash touch buttons and stick OUTSIDE the arena view (the black side bars), the same for every game | open |
+| Q3 | Clash touch buttons and stick OUTSIDE the arena view (the black side bars), the same for every game | done: sideways on a phone the picture is fitted between two black columns (touchControls.reserveSides, used by the scaler again); the stick or pad sits in the left one, the buttons one above another in the right one, the gear at the top of the right one. Creature Clash uses the shared controls both ways up (no sticks drawn on the arena), so its attacks auto-aim at the foe. Dance Off keeps its arrow tiles on the clear strip along the bottom of its stage |
 | Q4 | Clash move card: only the ability (no strong/weak), bigger text, nothing past its box | DONE |
 | Q5 | Clash creature card is tappable (and says so) -> stats page: ATTACK, DEFENCE, SPEED, HP, MELEE or RANGED, + strengths and weaknesses | DONE |
 | Q6 | Clash home: no stat bars, only the XP bar; the move rows get the room | DONE |
