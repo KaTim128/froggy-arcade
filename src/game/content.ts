@@ -30,6 +30,7 @@ export type Motif =
   | 'throw'
   | 'race'
   | 'mash'
+  | 'maze'
   | 'chomp'
   | 'bog';
 
@@ -123,6 +124,21 @@ export const STANDARD_REWARD: Record<number, number> = { 1: 2, 3: 6, 5: 10, 7: 1
  * wall, which the player stands at around x 272, y 62 and which must not have a
  * cabinet's click zone over it.
  */
+/**
+ * ROOM 4's BOTTOM ROW, kept empty for now (user, 28 Oct: "keep it as
+ * nothing for now but remember the placement").  The five orange spots
+ * along the bottom of docs/refs/room4-marks.jpg, in game pixels -- x the
+ * cabinet's centre, y its foot, as a CABINETS entry takes them.  A machine
+ * for one of them is a CABINETS line with `room: 'lounge'` at that x, y.
+ */
+export const LOUNGE_FREE_SPOTS: ReadonlyArray<{ x: number; y: number }> = [
+  { x: 66, y: 152 },
+  { x: 117, y: 152 },
+  { x: 169, y: 152 },
+  { x: 221, y: 152 },
+  { x: 270, y: 152 },
+];
+
 export const CABINETS: CabinetDef[] = [
   // ---- the front room: everything that costs one to three tokens
   // A token in, two out: you win one.  Three out was a 3x on the cheapest
@@ -176,7 +192,10 @@ export const CABINETS: CabinetDef[] = [
   // ---- the game corner (the fourth room), on the back wall beside the oddity
   // crane -- with a little more room on its left than a cabinet usually gets,
   // so the two machines read as two -- under the sign.  Five in, ten out.
-  { id: 'bogball', title: 'BOG BALL', tier: 'medium', cost: 5, reward: 10, x: 114, y: 74, color: 0x5a8a3a, room: 'lounge', symbol: 'BB', motif: 'bog' },
+  // (moved right, away from the cranes, into the first of the marked spots: log #70, docs/refs/room4-marks.jpg)
+  { id: 'bogball', title: 'BOG BALL', tier: 'medium', cost: 5, reward: 10, x: 160, y: 74, color: 0x5a8a3a, room: 'lounge', symbol: 'BB', motif: 'bog' },
+  // CROAKED, beside it in the second marked spot: a cabinet of its own colours, pond-teal and gold
+  { id: 'croaked', title: 'CROAKED', tier: 'medium', cost: 5, reward: 10, x: 202, y: 74, color: 0x1f8a8a, room: 'lounge', symbol: 'CR', motif: 'maze' },
 
   // ---- and the room at the back, where none of it is a game
   // Three tokens a spin, every spin raised through the shell as it is pulled

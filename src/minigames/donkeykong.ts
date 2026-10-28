@@ -317,6 +317,13 @@ export const donkeyKong: MinigameModule = {
   music: 'game_donkeykong',
   rules: 'get to the top',
   tutorial: {
+    pitch: 'CLIMB TO THE TOP PAST FROGGY KONG\'S BARRELS.',
+    steps: [
+      { say: 'A / D RUNS. W / S CLIMBS A LADDER.', phone: 'THE STICK RUNS, AND CLIMBS A LADDER.', demo: 'kong.climb' },
+      { say: 'SPACE JUMPS. JUMP THE YELLOW BARRELS THAT ROLL AT YOU.', phone: 'JUMP CLEARS THE YELLOW BARRELS THAT ROLL AT YOU.', demo: 'kong.jump' },
+      { say: 'ORANGE BARRELS HOP: WALK UNDER ONE WHILE IT IS UP.', demo: 'kong.hop' },
+      { say: 'A BARREL TAKES A LIFE. YOU HAVE THREE. REACH THE EXIT AT THE TOP.', demo: 'kong.lives' },
+    ],
     objective: [
       'CLIMB TO THE EXIT AT THE TOP.',
       'FROGGY KONG IS THROWING FROM THE OFF.',

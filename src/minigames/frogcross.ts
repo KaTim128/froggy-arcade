@@ -117,6 +117,12 @@ export const frogCross: MinigameModule = {
   music: 'game_frogcross',
   rules: 'cross 5 times for 20 tokens',
   tutorial: {
+    pitch: 'HOP ACROSS THE ROAD. FIVE CROSSINGS PAY 20.',
+    steps: [
+      { say: 'W A S D OR THE ARROWS HOP ONE SQUARE.', phone: 'THE STICK HOPS ONE SQUARE.', demo: 'cross.hop' },
+      { say: 'CARS AND TRUCKS: TIME EACH HOP THROUGH A GAP. THE ROAD GETS WORSE.', demo: 'cross.cars' },
+      { say: 'FIVE CROSSINGS PAY 20 - BANK IT ANY TIME, OR GO ON. THREE LIVES.', demo: 'cross.bank' },
+    ],
     objective: [
       'CROSS THE ROAD FIVE TIMES.',
       'THAT IS FIFTY POINTS, AND IT PAYS 20.',

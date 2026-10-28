@@ -114,6 +114,12 @@ export const whackAFrog: MinigameModule = {
   music: 'game_whack',
   rules: '30 seconds - whack all you can',
   tutorial: {
+    pitch: 'WHACK AS MANY FROGS AS YOU CAN IN 30 SECONDS.',
+    steps: [
+      { say: 'FROGS POP UP OUT OF THE HOLES. CLICK ONE TO WHACK IT.', phone: 'FROGS POP UP OUT OF THE HOLES. TAP ONE TO WHACK IT.', demo: 'whack.hit' },
+      { say: 'BE QUICK: EACH DUCKS BACK DOWN, AND THEY SPEED UP AS YOU GO.', demo: 'whack.quick' },
+      { say: '55 WHACKS OR MORE PAYS 15. 45 TO 54 PAYS 10. UNDER 45, NOTHING.', demo: 'whack.pay' },
+    ],
     objective: [
       'FROGS POP UP OUT OF THE HOLES.',
       'HIT ONE BEFORE IT DUCKS BACK DOWN.',

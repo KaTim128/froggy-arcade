@@ -163,6 +163,12 @@ export const RECORDS: Partial<Record<GameId, RecordDef>> = {
     short: (n) => `BEST SPIN ${n}`,
     long: (n) => `YOUR BEST SPIN: ${n} TOKENS`,
   },
+  croaked: {
+    lower: true,
+    format: secs,
+    short: (n) => `FASTEST WIN ${secs(n)}`,
+    long: (n) => `YOUR BEST: A WIN IN ${secs(n)}`,
+  },
   frogstermash: {
     lower: false,
     format: (n) => `${n} TOKENS`,

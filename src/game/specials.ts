@@ -125,7 +125,7 @@ export const SPECIAL_LIST: SpecialDef[] = [
   D('sidestep', 'SIDESTEP', 'blink', 0, 2.6, 60, 'escape', 'A 60PX BLINK THAT DEALS 10 TO EVERYTHING AROUND WHERE IT LANDS.', 'strike'),
   D('gust_kick', 'GUST KICK', 'bolt', 9, 2, 210, 'poke', 'A KICKED GUST, AFTER WHICH IT MOVES 40% FASTER FOR 2S.', 'haste'),
   D('bounding_hops', 'TRIPLE HOP', 'blink', 0, 4, 40, 'escape', 'UP TO 3 CHAINED 40PX HOPS WITHIN 2S.'),
-  D('mirage_decoy', 'MIRAGE', 'blink', 0, 6, 50, 'escape', 'LEAVES A DECOY THAT DRAWS THE OPPONENT FOR 2S WHILE IT BLINKS 50PX AWAY.'),
+  D('mirage_decoy', 'MIRAGE', 'blink', 0, 6, 50, 'escape', 'LEAVES A DOUBLE THAT LOOKS JUST LIKE IT AND WALKS AT THEM FOR 3S, WHILE IT BLINKS 50PX AWAY. AIM AND AI ALIKE ARE FOOLED.'),
   D('updraft', 'UPDRAFT', 'blink', 6, 5, 0, 'defend', 'AIRBORNE FOR 1S - FLOOR TRAPS AND CHARGES MISS IT - THEN LANDS IN A 30PX GUST.'),
   D('dive_bomb', 'DIVE BOMB', 'arc', 20, 5.5, 160, 'hidden', 'MARKS A SPOT, THEN DIVES ONTO IT 0.8S LATER FOR HEAVY DAMAGE IN 20PX.'),
   D('tailwind', 'TAILWIND', 'aura', 0, 8, 5, 'self', 'FOR 4S ITS SHOTS FLY 50% FASTER AND 30% FURTHER.'),
@@ -140,7 +140,7 @@ export const SPECIAL_LIST: SpecialDef[] = [
   D('murder', 'CROW MURDER', 'aura', 0, 8, 5, 'mid', '4 CROWS CIRCLE THE TARGET FOR 3S, PECKING 2 EACH TIME ONE PASSES THROUGH.'),
   D('shadow_step', 'SHADOW STEP', 'blink', 0, 4.5, 90, 'mid', 'BLINKS TO THE FAR SIDE OF THE TARGET; ITS NEXT HIT WITHIN 2S DEALS DOUBLE.'),
   D('pounce_pin', 'POUNCE PIN', 'dash', 6, 4.5, 235, 'close', 'LEAPS ON THE TARGET AND HOLDS THEM FOR 1S WHILE CLAWING 3 TIMES.'),
-  D('phase', 'PHASE', 'aura', 0, 6, 5, 'self', 'FOR 1.5S IT DRIFTS THROUGH COVER AS IF IT WERE NOT THERE.'),
+  D('phase', 'PHASE', 'aura', 0, 6, 5, 'self', 'FOR 1.5S IT DRIFTS THROUGH COVER - AND LEAVES A DOUBLE THAT DRIFTS AT THEM FOR 3S. NOBODY CAN TELL WHICH IS WHICH.'),
   D('soul_siphon', 'SOUL SIPHON', 'beam', 0, 7, 100, 'mid', 'A 3S TETHER THAT DRAINS 4 A SECOND FROM THE TARGET TO ITSELF WHILE WITHIN 100PX.'),
   // ------------------------------------------------------------------- glow
   D('pierce_gaze', 'PIERCE GAZE', 'beam', 15, 3.2, 120, 'poke', 'AN INSTANT 120PX BEAM THAT ADDS 1.2S TO ALL OF THE TARGET\'S COOLDOWNS.', 'silence'),

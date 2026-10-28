@@ -89,6 +89,23 @@ export interface Tutorial {
   objective: string[];
   /** [keys, what they do] — every control the cabinet reads, in play order. */
   controls: Array<[string, string]>;
+  /**
+   * The machine's screen says this and nothing more about the game: one line
+   * (two at most) on what it is.  The rules are HOW TO PLAY's, the keys are
+   * CONTROLS' -- no screen repeats another.
+   */
+  pitch?: string;
+  /** HOW TO PLAY, a step at a time, each with a moving picture (ui/tutorialDemos). */
+  steps?: TutorialStep[];
+}
+
+export interface TutorialStep {
+  /** The step, as said on a keyboard (keys by name: they follow a rebind). */
+  say: string;
+  /** The same step said for a phone, where it names keys a phone does not have. */
+  phone?: string;
+  /** Which picture (ui/tutorialDemos `DEMOS`). */
+  demo: string;
 }
 
 export interface MinigameModule {

@@ -68,7 +68,12 @@ try {
   );
   check('the screen has PRACTICE beside PLAY - 10 TOKENS, nothing taken', m.card && !m.started && m.tokens === 50 && labels.includes('PRACTICE') && labels.includes('PLAY - 10 TOKENS'), labels.join('|'));
   // PRACTICE
-  await page.mouse.click((160 + 58) * k, 111 * k);
+  // (PRACTICE, wherever the machine screen has put it)
+  const prac = await page.evaluate(() => {
+    const c = window.__froggy.game().scene.getScene('Minigame').children.list.find((o) => o.list && o.input && o.list[1]?.text === 'PRACTICE');
+    return c ? { x: c.x, y: c.y } : { x: 0, y: 0 };
+  });
+  await page.mouse.click(prac.x * k, prac.y * k);
   m = await until((x) => x.started);
   check('PRACTICE starts a free go', m.started && m.practicing && m.tokens === 50, JSON.stringify(m));
   // Froggy walks right past the bag to its other side, and turns to face it
@@ -100,7 +105,11 @@ try {
   check('leaving practice comes back to the screen, nothing taken', m.card && !m.started && m.tokens === 50 && m.scenes.includes('Minigame'), JSON.stringify(m));
   // PLAY for real
   await sleep(600);
-  await page.mouse.click((160 - 58) * k, 111 * k);
+  const playAt = await page.evaluate(() => {
+    const c = window.__froggy.game().scene.getScene('Minigame').children.list.find((o) => o.list && o.input && /^PLAY - /.test(o.list[1]?.text ?? ''));
+    return c ? { x: c.x, y: c.y } : { x: 0, y: 0 };
+  });
+  await page.mouse.click(playAt.x * k, playAt.y * k);
   m = await until((x) => x.started);
   check('PLAY - 10 TOKENS takes the tokens and starts the real fight', m.started && !m.practicing && m.tokens === 40, JSON.stringify(m));
   await page.evaluate(() => window.__froggy.game().scene.getScene('Minigame').quitGame());

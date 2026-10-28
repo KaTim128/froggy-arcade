@@ -274,6 +274,13 @@ export const blackjack: MinigameModule = {
   music: 'game_blackjack',
   rules: 'bet what you like, beat the dealer to 21',
   tutorial: {
+    pitch: 'BEAT THE DEALER TO 21.',
+    steps: [
+      { say: 'LEFT / RIGHT CHANGES THE BET BY 1, UP / DOWN BY 5. SPACE DEALS.', phone: 'THE STICK SETS THE BET. DEAL DEALS.', demo: 'bj.bet' },
+      { say: 'H TAKES A CARD. SPACE STANDS. OVER 21 IS BUST. C CASHES OUT.', phone: 'HIT TAKES A CARD. STAND STOPS. OVER 21 IS BUST.', demo: 'bj.hit' },
+      { say: 'J, Q AND K ARE 10. AN ACE IS 1, 10 OR 11 ON TWO CARDS, THEN 1 OR 10.', demo: 'bj.cards' },
+      { say: '21 ON TWO CARDS WINS 2X. 21 ON THREE WINS. FIVE NOT BUST WINS. 21 ON FIVE LOSES.', demo: 'bj.rules' },
+    ],
     objective: [
       // FIVE LINES, AND FIVE IS THE CARD'S CEILING WITH FIVE CONTROLS ON IT:
       // the ace rule is two lines because it is two rules, and the fifteen has

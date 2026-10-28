@@ -18,6 +18,8 @@
  * order the timers, taps and tab switches arrive in.
  */
 
+import { STAGES, WORLDS, drawStoryFoe, storyFoe } from '../game/creatureStory';
+import { paintFloor } from '../art/arenaFloors';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -28,12 +30,12 @@ import { drawCreature } from '../art/creatureArt';
 import { plainWords } from '../game/plainWords';
 import { drawMelee, drawShot, meleeStyle, shotStyle, type MeleeStyle } from '../art/clashFx';
 import { SPECIALS } from '../game/specials';
-import { BIOMES, ELEMENTS, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
-import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle } from '../game/creatureClash';
+import { BIOMES, ELEMENTS, creatureById, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
+import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle, startStory } from '../game/creatureClash';
 import { MAX_LEVEL, levelOf, withLevel } from '../game/creatureLevel';
 import {
   AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
-  POISON_PER_S, POISON_S, REGEN_PER_S, REGEN_S, ROOT_S, SHRED_MUL, SHRED_S, SILENCE_S, STAGGER_S, STRIKE_DMG, THORNS_DMG, WALL_S, WEAK_MUL, WEAK_S, attackInfo, buttonWords,
+  POISON_PER_S, POISON_S, WALL_DEFAULT, WALL_SPECS, REGEN_PER_S, REGEN_S, ROOT_S, SHRED_MUL, SHRED_S, SILENCE_S, STAGGER_S, STRIKE_DMG, THORNS_DMG, WEAK_MUL, WEAK_S, attackInfo, buttonWords,
 } from '../game/attackInfo';
 import { abilityIconURL, drawAbilityIcon } from '../art/abilityIcons';
 import { setCabinetTouch } from '../game/touchLayouts';
@@ -282,18 +284,7 @@ interface Prop {
  * one nothing breaks stands only a few seconds.  And they are not all the
  * same shape -- a curved screen round you, a long straight line, a post.
  */
-interface WallSpec {
-  shape: 'line' | 'long' | 'curve';
-  /** Seconds it stands. */
-  life: number;
-  /** Health of each piece, or 0 for unbreakable. */
-  hp: number;
-}
-const WALL_SPECS: Record<string, WallSpec> = {
-  kelp_weave: { shape: 'curve', life: 9, hp: 12 },
-  glacier_slab: { shape: 'long', life: 4, hp: 0 },
-};
-const WALL_DEFAULT: WallSpec = { shape: 'line', life: WALL_S, hp: 0 };
+// (the specs themselves live in game/attackInfo, so a move's card can say how long it stands)
 /** A crag lob's pillar: breakable, seven seconds. */
 const PILLAR = { life: 7, hp: 16 };
 
@@ -332,10 +323,48 @@ interface Barrier {
  * been able to see you for a couple of seconds comes for you (`HIDE_S`).
  */
 const HIDE_S = 2.2;
+/** How far a blinded fighter can still see, in px (you, on the screen; the computer, in its head). */
+const BLIND_SEE = 38;
+
+/**
+ * WHAT A CAST WALL IS MADE OF (log #44): its maker's own stuff, not the
+ * arena's -- an ice slab is ice wherever it is raised, a kelp weave is
+ * weed, an ember wall is a smoking vent, a stone one rock.
+ */
+const WALL_LOOK: Record<string, CoverShape> = { kelp_weave: 'reed', glacier_slab: 'ice' };
+const ELEMENT_WALL: Record<string, CoverShape> = {
+  frost: 'ice', stone: 'rock', tide: 'shell', moss: 'tuft', ember: 'vent', gale: 'tuft', volt: 'pillar', murk: 'reed', glow: 'pillar',
+};
+export const wallLook = (sp: string | undefined, element: string): CoverShape => WALL_LOOK[sp ?? ''] ?? ELEMENT_WALL[element] ?? 'rock';
+
+/** A simulated fight (dev only): who against whom, at what level, how sharp, how fast. */
+export interface SimSpec {
+  me: string;
+  foe: string;
+  level: number;
+  skill: number;
+  warp: number;
+}
+
+/** What one computer-played fighter remembers between frames. */
+interface Brain {
+  ai: { think: number; mx: number; my: number; strafe: number };
+  dodge: { vx: number; vy: number; t: number };
+  seen: WeakSet<Shot>;
+  last: { x: number; y: number; stuck: number };
+  /** The other fighter's smoothed velocity, to lead shots with. */
+  vel: { x: number; y: number };
+  prev?: { x: number; y: number };
+}
 
 export class CreatureArena extends Phaser.Scene {
   private biome!: Biome;
-  private mode: 'zone' | 'ladder' | 'training' = 'zone';
+  private mode: 'zone' | 'ladder' | 'training' | 'story' = 'zone';
+  /** Story: which world, which of its stages, and who (drawn when the fight opens, paid at the bell). */
+  private storyWorld = 0;
+  private storyStage = 0;
+  private storyFoeId = '';
+  private vsShown = false;
   /** The ladder step this is (6 = the boss). */
   private level = 0;
   private boss = false;
@@ -353,6 +382,17 @@ export class CreatureArena extends Phaser.Scene {
   private dodge = { vx: 0, vy: 0, t: 0 };
   private seenShots = new WeakSet<Shot>();
   private lastFoePos = { x: 0, y: 0, stuck: 0 };
+  /**
+   * THE BALANCE SIMULATOR (dev only, tools/clash.mjs): both sides played by
+   * the computer, many steps a frame, and the result kept rather than paid.
+   */
+  private sim: { warp: number; result: boolean | null } | null = null;
+  private simSpec: SimSpec | null = null;
+  private meBrain: Brain = { ai: { think: 0, mx: 0, my: 0, strafe: 1 }, dodge: { vx: 0, vy: 0, t: 0 }, seen: new WeakSet<Shot>(), last: { x: 0, y: 0, stuck: 0 }, vel: { x: 0, y: 0 } };
+  /** The opponent's brain: the same fields the AI always used. */
+  private get foeBrain(): Brain {
+    return { ai: this.ai, dodge: this.dodge, seen: this.seenShots, last: this.lastFoePos, vel: this.meV };
+  }
   /**
    * ---- THE TRAINING GROUND.
    *
@@ -386,6 +426,9 @@ export class CreatureArena extends Phaser.Scene {
   private g!: Phaser.GameObjects.Graphics;
   private ui!: Phaser.GameObjects.Graphics;
   private dark!: Phaser.GameObjects.Graphics;
+  /** Blindness: one dark sheet with the circle you can see cut out of it (no rings, no seams). */
+  private darkRT: Phaser.GameObjects.RenderTexture | null = null;
+  private holeG: Phaser.GameObjects.Graphics | null = null;
   private labels: Phaser.GameObjects.BitmapText[] = [];
   private timerText!: Phaser.GameObjects.BitmapText;
   private sel = 0;
@@ -444,8 +487,14 @@ export class CreatureArena extends Phaser.Scene {
   /** Back after a reload with the battle already open and paid for (core/session). */
   private resumed = false;
 
-  init(data: { biome?: string; mode?: 'zone' | 'ladder' | 'training'; from?: string; training?: boolean; resumed?: boolean }): void {
+  init(data: { biome?: string; mode?: 'zone' | 'ladder' | 'training' | 'story'; from?: string; training?: boolean; resumed?: boolean; sim?: SimSpec; world?: number }): void {
+    this.storyWorld = data.world ?? 0;
+    this.vsShown = false;
     this.resumed = data.resumed === true;
+    // (dev only: tools/clash.mjs)
+    this.simSpec = import.meta.env?.DEV ? data.sim ?? null : null;
+    this.sim = this.simSpec ? { warp: this.simSpec.warp, result: null } : null;
+    this.meBrain = { ai: { think: 0, mx: 0, my: 0, strafe: 1 }, dodge: { vx: 0, vy: 0, t: 0 }, seen: new WeakSet<Shot>(), last: { x: 0, y: 0, stuck: 0 }, vel: { x: 0, y: 0 } };
     this.biome = BIOMES.find((b) => b.id === data.biome) ?? BIOMES[0];
     this.mode = data.training ? 'training' : data.mode ?? 'zone';
     this.training = this.mode === 'training';
@@ -491,9 +540,10 @@ export class CreatureArena extends Phaser.Scene {
     this.infoT = 0;
     this.foeLevel = 0;
     const own = activeOwned();
+    const sim = this.simSpec;
     // (yours fights at its level: see creatureLevel)
-    const mine = own ? ownedCreature(own) : undefined;
-    this.myLevel = own ? levelOf(own.xp ?? 0) : 1;
+    const mine = sim ? withLevel(creatureById(sim.me)!, sim.level) : own ? ownedCreature(own) : undefined;
+    this.myLevel = sim ? sim.level : own ? levelOf(own.xp ?? 0) : 1;
     if (!mine) {
       this.scene.start('CreatureHub', { from: this.from, msg: 'YOU NEED A CREATURE TO FIGHT.' });
       return;
@@ -502,7 +552,33 @@ export class CreatureArena extends Phaser.Scene {
     // drawn when the run was paid for: the place and the opponent come from
     // it, never from here, so nothing about it can be re-rolled.
     let wild: Creature;
-    if (this.mode === 'ladder') {
+    if (sim) {
+      wild = withLevel(creatureById(sim.foe)!, sim.level);
+      this.foeLevel = sim.level;
+      this.skill = sim.skill;
+    } else if (this.mode === 'story') {
+      // STORY: the world's next fight.  Back from a reload, the one already
+      // paid for (its foe kept with it); otherwise drawn now, paid at the bell
+      const cs = store.get().creatures;
+      const ob = cs.battle;
+      const open = this.resumed && ob?.mode === 'story';
+      const w = open ? ob!.world ?? 0 : this.storyWorld;
+      const stage = open ? ob!.stage ?? 0 : cs.story.stage[w] ?? 0;
+      const foeId = open ? ob!.foe ?? '' : stage >= STAGES ? WORLDS[w].boss : drawStoryFoe(w, cs.lastFoe[WORLDS[w].id] ?? null);
+      const sf = storyFoe(w, stage, foeId);
+      if (!sf) {
+        this.scene.start('CreatureHub', { from: this.from, screen: 'story', msg: 'NO SUCH FIGHT.' });
+        return;
+      }
+      this.storyWorld = w;
+      this.storyStage = stage;
+      this.storyFoeId = foeId;
+      this.biome = BIOMES.find((b) => b.id === WORLDS[w].biome) ?? this.biome;
+      wild = sf.foe;
+      this.boss = sf.boss;
+      this.skill = sf.skill;
+      this.foeLevel = sf.level;
+    } else if (this.mode === 'ladder') {
       const step = ladderStep();
       if (!step) {
         this.scene.start('CreatureHub', { from: this.from, screen: 'ladder', msg: 'NO LADDER RUN IS ON.' });
@@ -530,6 +606,8 @@ export class CreatureArena extends Phaser.Scene {
     this.paintGround();
     this.g = this.add.graphics().setDepth(10);
     this.dark = this.add.graphics().setDepth(40);
+    this.darkRT = this.add.renderTexture(0, 0, GAME_W, GAME_H).setOrigin(0, 0).setDepth(40).setVisible(false);
+    this.holeG = this.make.graphics({}, false);
     this.ui = this.add.graphics().setDepth(50);
     // (before the hud: it lays the buttons out for whichever this is)
     // (the game's own answer -- a coarse pointer and no fine one -- not
@@ -589,6 +667,13 @@ export class CreatureArena extends Phaser.Scene {
     this.cameras.main.fadeIn(250, 0, 0, 0);
     // nothing moves until the count is done; the stake goes at the bell
     this.paused = true;
+    if (this.sim) {
+      // the simulator: no count, no bell, no stake -- straight in
+      this.paused = false;
+      this.started = true;
+      (window as unknown as { __clashSim?: unknown }).__clashSim = this.sim;
+      return;
+    }
     this.countdown();
   }
 
@@ -599,6 +684,12 @@ export class CreatureArena extends Phaser.Scene {
    * to the menu, and nothing has been spent.)
    */
   private countdown(): void {
+    // a story fight opens on its VS card first
+    if (this.mode === 'story' && !this.vsShown) {
+      this.vsShown = true;
+      this.vsCard(() => this.countdown());
+      return;
+    }
     const cx = ARENA.x + ARENA.w / 2;
     const cy = ARENA.y + ARENA.h / 2;
     const ready = centerText(this, cx, cy - 26, 'GET READY', PALETTE.cream).setDepth(2400);
@@ -622,15 +713,53 @@ export class CreatureArena extends Phaser.Scene {
     this.time.delayedCall(350, () => step(3));
   }
 
+  /**
+   * THE VS CARD (B7: before each story battle).  The world's name, then the
+   * two of them sliding in from either side with their names and levels,
+   * VS between them, held a moment and swept away.
+   */
+  private vsCard(then: () => void): void {
+    const box = this.add.container(0, 0).setDepth(2450);
+    const Y = ARENA.y + ARENA.h / 2;
+    box.add(this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05040a, 0.82).setOrigin(0, 0));
+    box.add(this.add.rectangle(0, Y - 30, GAME_W, 60, 0x1a1430, 1).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold));
+    const world = WORLDS[this.storyWorld];
+    box.add(centerText(this, GAME_W / 2, Y - 42, world.name, PALETTE.gold));
+    const side = (f: Fighter, lv: number, left: boolean): void => {
+      const x = left ? 70 : GAME_W - 70;
+      // (the picture slides in; the name fades in where it stays -- text
+      // started off the screen would be pulled back onto it, off its place)
+      const g = this.add.graphics();
+      drawCreature(g, f.c, x, Y - 4, 2.2 * (f === this.foe && this.boss ? 1.2 : 1), left ? 1 : -1, 0);
+      g.x = left ? -120 : 120;
+      box.add(g);
+      this.tweens.add({ targets: g, x: 0, duration: 380, ease: 'Back.Out' });
+      const nm = centerText(this, x, Y + 18, f.c.name.toUpperCase(), left ? PALETTE.cream : this.boss ? PALETTE.gold : PALETTE.cream).setAlpha(0);
+      const lvT = centerText(this, x, Y + 27, `LV ${lv}`, PALETTE.ash).setAlpha(0);
+      box.add([nm, lvT]);
+      this.tweens.add({ targets: [nm, lvT], alpha: 1, delay: 250, duration: 250 });
+    };
+    side(this.me, this.myLevel, true);
+    side(this.foe, this.foeLevel, false);
+    const vs = centerText(this, GAME_W / 2, Y - 2, 'VS', 0xff5a6a, 24).setScale(0.2).setAlpha(0);
+    box.add(vs);
+    this.tweens.add({ targets: vs, scale: 1, alpha: 1, delay: 300, duration: 260, ease: 'Back.Out' });
+    audio.sfx('throw_whoosh', 0.5);
+    this.time.delayedCall(620, () => audio.sfx(this.boss ? 'bell_ding' : 'ui_blip', 0.6));
+    this.time.delayedCall(1900, () => {
+      this.tweens.add({ targets: box, alpha: 0, duration: 260, onComplete: () => (box.destroy(true), then()) });
+    });
+  }
+
   /** The count is done: the stake, the bell, and go. */
   private begin(): void {
     // (a reload into a battle already paid for: the bell, and no second stake)
     const open = this.resumed && !!store.get().creatures.battle;
     this.resumed = false;
     if (!this.training && !open) {
-      const r = this.mode === 'ladder' ? startLadderBattle() : startBattle(this.biome.id, this.foe.c.id);
+      const r = this.mode === 'ladder' ? startLadderBattle() : this.mode === 'story' ? startStory(this.storyWorld, this.storyFoeId) : startBattle(this.biome.id, this.foe.c.id);
       if (!r.ok) {
-        this.scene.start('CreatureHub', { from: this.from, screen: this.mode === 'ladder' ? 'ladder' : 'map', msg: r.msg });
+        this.scene.start('CreatureHub', { from: this.from, screen: this.mode === 'ladder' ? 'ladder' : this.mode === 'story' ? 'story' : 'map', msg: r.msg });
         return;
       }
       // its own cry, at the bell
@@ -674,7 +803,10 @@ export class CreatureArena extends Phaser.Scene {
     const mx = (k.D.isDown || k.RIGHT.isDown ? 1 : 0) - (k.A.isDown || k.LEFT.isDown ? 1 : 0);
     const my = (k.S.isDown || k.DOWN.isDown ? 1 : 0) - (k.W.isDown || k.UP.isDown ? 1 : 0);
     if (a.kind === 'blink' && (mx || my)) this.fire(this.me, i, mx, my);
-    else this.fire(this.me, i, this.foe.x - this.me.x, this.foe.y - this.me.y);
+    else {
+      const at = this.aimAt();
+      this.fire(this.me, i, at.x - this.me.x, at.y - this.me.y);
+    }
   }
 
   /** What the chosen attack does, in one place, for a few seconds. */
@@ -724,11 +856,16 @@ export class CreatureArena extends Phaser.Scene {
       g.fillCircle(rnd.between(0, GAME_W), rnd.between(0, GAME_H), rnd.frac() * 1.6);
     }
     // ---- the ground
-    g.fillStyle(b.ground, 1).fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
-    for (let i = 0; i < 90; i++) {
-      g.fillStyle(i % 3 ? b.groundDark : 0xffffff, i % 3 ? 0.3 : 0.05);
-      g.fillEllipse(ARENA.x + rnd.between(4, ARENA.w - 4), ARENA.y + rnd.between(4, ARENA.h - 4), rnd.between(6, 24), rnd.between(3, 9));
-    }
+    // the cover goes down first, so the floor's pools, crystals and sheets
+    // are laid round it and round the two starts, never under or on them
+    this.layOutCover(rnd);
+    const avoid = [
+      ...this.props.map((q) => ({ x: q.x, y: q.y, r: q.r * 1.5 })),
+      { x: ARENA.x + 40, y: ARENA.y + ARENA.h / 2, r: 12 },
+      { x: ARENA.x + ARENA.w - 40, y: ARENA.y + ARENA.h / 2, r: 12 },
+    ];
+    // (each world's own floor and set pieces: art/arenaFloors)
+    paintFloor(g, b.id, ARENA, b.ground, b.groundDark, b.id, 1, avoid);
     // a worn track round the middle, where fights happen
     g.lineStyle(3, b.groundDark, 0.25).strokeEllipse(ARENA.x + ARENA.w / 2, ARENA.y + ARENA.h / 2, ARENA.w * 0.72, ARENA.h * 0.78);
     // the haze of the place, heaviest at the edges: light coming in over it
@@ -740,8 +877,11 @@ export class CreatureArena extends Phaser.Scene {
       g.fillRect(ARENA.x + ARENA.w - 2 - i * 2, ARENA.y, 2, ARENA.h);
     }
     g.lineStyle(2, b.groundDark, 1).strokeRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
+    // ---- THE HUD BANDS, above and below the ring: dark, so the names, the
+    // bars and the move lines read on the brightest worlds (snow, sand)
+    g.fillStyle(0x0a0c16, 0.82).fillRect(0, 0, GAME_W, ARENA.y - 1);
+    g.fillStyle(0x0a0c16, 0.82).fillRect(0, ARENA.y + ARENA.h + 1, GAME_W, GAME_H - ARENA.y - ARENA.h - 1);
 
-    this.layOutCover(rnd);
     this.terrain = this.add.graphics().setDepth(1);
     this.repaintCover();
   }
@@ -1056,6 +1196,9 @@ export class CreatureArena extends Phaser.Scene {
     // which step of the run this is, under the opponent's bar
     if (this.mode === 'ladder') {
       this.stepLabel = text(this, GAME_W - 8, 20, this.boss ? 'FINAL BOSS' : `LEVEL ${this.level} OF ${LADDER_LEVELS}`, PALETTE.gold).setOrigin(1, 0).setDepth(51);
+      this.labels.push(this.stepLabel);
+    } else if (this.mode === 'story') {
+      this.stepLabel = text(this, GAME_W - 8, 20, this.boss ? 'WORLD BOSS' : `BATTLE ${this.storyStage + 1} OF ${STAGES}`, PALETTE.gold).setOrigin(1, 0).setDepth(51);
       this.labels.push(this.stepLabel);
     }
     this.timerText = centerText(this, GAME_W / 2, 7, '', PALETTE.fog).setDepth(51);
@@ -1423,7 +1566,7 @@ export class CreatureArena extends Phaser.Scene {
           }))
           .filter((q) => Math.hypot(q.x - this.other(f).x, q.y - this.other(f).y) > 10 * this.other(f).scale);
         if (parts.length) {
-          this.barriers.push({ kind: this.biome.prop, parts, seed: 1, life: spec.life, max: spec.life, owner: f, shatter: a.sp === 'glacier_slab' });
+          this.barriers.push({ kind: wallLook(a.sp, f.c.element), parts, seed: 1, life: spec.life, max: spec.life, owner: f, shatter: a.sp === 'glacier_slab' });
           this.props.push(...parts);
           this.repaintCover();
         }
@@ -1689,13 +1832,12 @@ export class CreatureArena extends Phaser.Scene {
         return true;
       }
       case 'mirage_decoy': {
-        this.minions.push({ owner: f, kind: 'decoy', x: f.x, y: f.y, ang: 0, life: 2, hp: 6, cd: 0 });
+        this.decoy(f);
         const to = { x: cx(f.x + ux * a.reach), y: cy(f.y + uy * a.reach) };
         if (!this.props.some((p) => Math.hypot(p.x - to.x, p.y - to.y) < p.r + 6)) {
           f.x = to.x;
           f.y = to.y;
         }
-        this.fx.push({ kind: 'spark', x: f.x, y: f.y, r: 8, t: 0, life: 0.3, col });
         return true;
       }
       case 'updraft':
@@ -1744,7 +1886,10 @@ export class CreatureArena extends Phaser.Scene {
         return true;
       }
       case 'phase':
+        // the Haunter's trick: it slips into the walls, and a double of it
+        // drifts on at them in its place
         f.st.phase = 1.5;
+        this.decoy(f);
         return true;
       case 'soul_siphon':
         f.st.siphon = 3;
@@ -2166,6 +2311,29 @@ export class CreatureArena extends Phaser.Scene {
     }
   }
 
+  /**
+   * A DECOY THAT FOOLS EVERYONE (user, 28 Oct).  It is drawn exactly as its
+   * maker is -- the same body, the same facing, the same health bar over it,
+   * no glow -- and one puff of smoke covers the swap, so neither the
+   * computer nor the player watching can tell which is which.  It walks on
+   * at them as its maker would, while the real one goes its own way; it
+   * pops in a puff when its time is up or it is hit.
+   */
+  private decoy(f: Fighter): void {
+    this.minions.push({ owner: f, kind: 'decoy', x: f.x, y: f.y, ang: f.face, life: 3, hp: 6, cd: 0 });
+    this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 12 * f.scale, t: 0, life: 0.35, col: 0xd8d8e0 });
+    audio.sfx('throw_whoosh', 0.3);
+  }
+
+  /** Where your auto-aim goes: a live decoy nearer you than the real one takes the shot. */
+  private aimAt(): Fighter | { x: number; y: number } {
+    const fake = this.minions.find((mi) => mi.kind === 'decoy' && mi.owner === this.foe && mi.life > 0);
+    if (!fake) return this.foe;
+    const dReal = Math.hypot(this.foe.x - this.me.x, this.foe.y - this.me.y);
+    const dFake = Math.hypot(fake.x - this.me.x, fake.y - this.me.y);
+    return dFake < dReal ? fake : this.foe;
+  }
+
   /** The things moves brought into the arena, doing what they do. */
   private tickMinions(dt: number): void {
     for (const mi of this.minions) {
@@ -2179,6 +2347,12 @@ export class CreatureArena extends Phaser.Scene {
         mi.y += ((o.y - mi.y) / toO) * sp * dt;
       };
       switch (mi.kind) {
+        case 'decoy':
+          // on at them, at a walk, facing them, the way its maker would
+          if (toO > 30) chase(this.speedOf(mi.owner) * 0.6);
+          mi.ang = o.x >= mi.x ? 1 : -1;
+          if (mi.life <= 0 || mi.hp <= 0) this.fx.push({ kind: 'ring', x: mi.x, y: mi.y, r: 10, t: 0, life: 0.3, col: 0xd8d8e0 });
+          break;
         case 'drone':
           // round and round its owner, stinging what it brushes
           mi.ang += 3.2 * dt;
@@ -2673,20 +2847,21 @@ export class CreatureArena extends Phaser.Scene {
 
   // ---------------------------------------------------------------------- AI
 
-  private think(dt: number): void {
-    const f = this.foe;
+  private think(dt: number, f: Fighter = this.foe, me: Fighter = this.me, B: Brain = this.foeBrain): void {
     // WHAT IT THINKS IS YOU: a decoy draws it while it lasts, and a you it
     // cannot see is wherever it last saw you
-    const decoy = this.minions.find((mi) => mi.kind === 'decoy' && mi.owner === this.me);
-    if (!this.me.st.invis) {
-      this.me.ref.seenX = this.me.x;
-      this.me.ref.seenY = this.me.y;
+    const decoy = this.minions.find((mi) => mi.kind === 'decoy' && mi.owner === me);
+    // blinded, it sees only what is close; past that, you are where it last saw you
+    const lost = me.st.invis || (f.blind > 0 && Math.hypot(me.x - f.x, me.y - f.y) > BLIND_SEE);
+    if (!lost) {
+      me.ref.seenX = me.x;
+      me.ref.seenY = me.y;
     }
     const p: Fighter = decoy
-      ? { ...this.me, x: decoy.x, y: decoy.y }
-      : this.me.st.invis
-        ? { ...this.me, x: this.me.ref.seenX ?? this.me.x, y: this.me.ref.seenY ?? this.me.y }
-        : this.me;
+      ? { ...me, x: decoy.x, y: decoy.y }
+      : lost
+        ? { ...me, x: me.ref.seenX ?? me.x, y: me.ref.seenY ?? me.y }
+        : me;
     if (!this.canAct(f) || f.dash || f.hp <= 0 || f.st.carried) return;
     const sk = this.skill;
     const dx = p.x - f.x;
@@ -2696,8 +2871,8 @@ export class CreatureArena extends Phaser.Scene {
     // aim: worse when blinded, better the sharper it is -- and a sharp one
     // shoots where you are GOING, not where you were
     const lead = sk > 0.5 ? (sk - 0.5) * 2 * Math.min(0.5, dist / 200) : 0;
-    const tx = p.x + this.meV.x * lead;
-    const ty = p.y + this.meV.y * lead;
+    const tx = p.x + B.vel.x * lead;
+    const ty = p.y + B.vel.y * lead;
     const err = (f.blind > 0 ? 0.6 : 0.3 - 0.24 * sk) * (Math.random() - 0.5) * 2;
     const ang = Math.atan2(ty - f.y, tx - f.x) + err;
     const ax = Math.cos(ang);
@@ -2707,10 +2882,10 @@ export class CreatureArena extends Phaser.Scene {
       if (f.cds[0] <= 0 && clear) this.fire(f, 0, ax, ay);
       return;
     }
-    this.ai.think -= dt;
-    if (this.ai.think <= 0) {
-      this.ai.think = 0.9 - 0.45 * sk + Math.random() * 0.5;
-      if (Math.random() < 0.3) this.ai.strafe *= -1;
+    B.ai.think -= dt;
+    if (B.ai.think <= 0) {
+      B.ai.think = 0.9 - 0.45 * sk + Math.random() * 0.5;
+      if (Math.random() < 0.3) B.ai.strafe *= -1;
     }
     const ux = dx / dist;
     const uy = dy / dist;
@@ -2718,30 +2893,30 @@ export class CreatureArena extends Phaser.Scene {
     let vx: number;
     let vy: number;
     // ---- A SHOT COMING: a good fighter sees it and steps out of its way
-    if (this.dodge.t <= 0) {
+    if (B.dodge.t <= 0) {
       for (const s of this.shots) {
-        if (s.owner === f || s.arc || this.seenShots.has(s)) continue;
+        if (s.owner === f || s.arc || B.seen.has(s)) continue;
         const rx = f.x - s.x;
         const ry = f.y - s.y;
         const sp = Math.hypot(s.vx, s.vy) || 1;
         const ahead = (rx * s.vx + ry * s.vy) / sp;
         if (ahead <= 0 || ahead > 60) continue;
-        this.seenShots.add(s);
+        B.seen.add(s);
         // where it passes, how close
         const miss = Math.abs(rx * s.vy - ry * s.vx) / sp;
         if (miss > 10 * f.scale || Math.random() > sk * 0.85) continue;
         const side = rx * s.vy - ry * s.vx >= 0 ? 1 : -1;
-        this.dodge = { vx: (s.vy / sp) * side, vy: (-s.vx / sp) * side, t: 0.28 };
+        Object.assign(B.dodge, { vx: (s.vy / sp) * side, vy: (-s.vx / sp) * side, t: 0.28 });
         break;
       }
     }
-    if (this.dodge.t > 0) {
-      this.dodge.t -= dt;
-      vx = this.dodge.vx * spd * 1.3;
-      vy = this.dodge.vy * spd * 1.3;
+    if (B.dodge.t > 0) {
+      B.dodge.t -= dt;
+      vx = B.dodge.vx * spd * 1.3;
+      vy = B.dodge.vy * spd * 1.3;
     } else if (!clear && (sk >= 0.4 || this.boss)) {
       // ---- NO LINE ON YOU: work round the cover to somewhere that has one
-      const spot = this.sightSpot(f, false);
+      const spot = this.sightSpot(f, false, me);
       const mx = (spot?.x ?? p.x) - f.x;
       const my = (spot?.y ?? p.y) - f.y;
       const m = Math.hypot(mx, my) || 1;
@@ -2752,8 +2927,8 @@ export class CreatureArena extends Phaser.Scene {
       const melee = f.c.attacks[0].kind === 'beam' && f.c.attacks[0].reach < 50;
       const want = melee || (f.cds[2] <= 0 && f.c.attacks[2].kind === 'nova') ? 26 : 85;
       const toward = dist > want + 10 ? 1 : dist < want - 10 ? -1 : 0;
-      vx = (ux * toward + -uy * this.ai.strafe * 0.7) * spd;
-      vy = (uy * toward + ux * this.ai.strafe * 0.7) * spd;
+      vx = (ux * toward + -uy * B.ai.strafe * 0.7) * spd;
+      vy = (uy * toward + ux * B.ai.strafe * 0.7) * spd;
     }
     if (f.st.confused) {
       vx = -vx;
@@ -2771,15 +2946,15 @@ export class CreatureArena extends Phaser.Scene {
     f.ref.vy = vy;
     this.step(f, vx, vy, dt);
     // stuck on something: go round it the other way
-    const moved = Math.hypot(f.x - this.lastFoePos.x, f.y - this.lastFoePos.y);
-    this.lastFoePos.stuck = moved < spd * dt * 0.25 && spd > 0 ? this.lastFoePos.stuck + dt : 0;
-    if (this.lastFoePos.stuck > 0.35) {
-      this.ai.strafe *= -1;
-      this.lastFoePos.stuck = 0;
-      this.dodge = { vx: -uy * this.ai.strafe, vy: ux * this.ai.strafe, t: 0.4 };
+    const moved = Math.hypot(f.x - B.last.x, f.y - B.last.y);
+    B.last.stuck = moved < spd * dt * 0.25 && spd > 0 ? B.last.stuck + dt : 0;
+    if (B.last.stuck > 0.35) {
+      B.ai.strafe *= -1;
+      B.last.stuck = 0;
+      Object.assign(B.dodge, { vx: -uy * B.ai.strafe, vy: ux * B.ai.strafe, t: 0.4 });
     }
-    this.lastFoePos.x = f.x;
-    this.lastFoePos.y = f.y;
+    B.last.x = f.x;
+    B.last.y = f.y;
     f.face = dx >= 0 ? 1 : -1;
     // ---- WHICH MOVE.  Each special says when it is for (specials `ai`);
     // the plain attack goes whenever it can reach.
@@ -2788,8 +2963,8 @@ export class CreatureArena extends Phaser.Scene {
       if (f.cds[i] > 0 || !this.wants(f, a, dist, clear)) continue;
       // a getaway goes away from you, sideways; everything else at you
       const away = SPECIALS[a.sp ?? '']?.ai === 'escape';
-      const bx = away ? -ux * 0.6 - uy * this.ai.strafe : ax;
-      const by = away ? -uy * 0.6 + ux * this.ai.strafe : ay;
+      const bx = away ? -ux * 0.6 - uy * B.ai.strafe : ax;
+      const by = away ? -uy * 0.6 + ux * B.ai.strafe : ay;
       if (this.fire(f, i, bx * Math.max(dist, 40), by * Math.max(dist, 40))) return;
     }
     const n = f.c.attacks[0];
@@ -2833,8 +3008,7 @@ export class CreatureArena extends Phaser.Scene {
    * A place near you that has a clear line to you, for `f` to get to: the
    * nearest such spot to it (walking), or any good one (blinking in).
    */
-  private sightSpot(f: Fighter, anywhere: boolean): { x: number; y: number } | null {
-    const p = this.me;
+  private sightSpot(f: Fighter, anywhere: boolean, p: Fighter = this.me): { x: number; y: number } | null {
     let best: { x: number; y: number } | null = null;
     let bestD = Infinity;
     for (const rad of [70, 50, 95]) {
@@ -2889,7 +3063,7 @@ export class CreatureArena extends Phaser.Scene {
     if (!this.me || !this.foe) return;
     const running = this.scene.isActive('SettingsModal');
     const dt = this.paused || running || this.over ? 0 : Math.min(delta, 50) / 1000;
-    if (dt > 0) this.simulate(dt);
+    if (dt > 0) for (let i = 0; i < (this.sim?.warp ?? 1) && !this.over; i++) this.simulate(dt);
     this.infoT = Math.max(0, this.infoT - Math.min(delta, 50) / 1000);
     this.render(time / 1000);
   }
@@ -2951,6 +3125,15 @@ export class CreatureArena extends Phaser.Scene {
     this.meV.y += ((me.y - py0) / dt - this.meV.y) * Math.min(1, dt * 6);
     if (this.training) this.trainDummy(dt);
     else this.think(dt);
+    if (this.sim) {
+      // (the other side's velocity, for this brain to lead its shots with)
+      const fb = this.meBrain;
+      const pv = fb.prev ?? { x: this.foe.x, y: this.foe.y };
+      fb.vel.x += ((this.foe.x - pv.x) / dt - fb.vel.x) * Math.min(1, dt * 6);
+      fb.vel.y += ((this.foe.y - pv.y) / dt - fb.vel.y) * Math.min(1, dt * 6);
+      fb.prev = { x: this.foe.x, y: this.foe.y };
+      this.think(dt, me, this.foe, fb);
+    }
 
     // ---- shots
     for (const s of this.shots) {
@@ -3373,6 +3556,12 @@ export class CreatureArena extends Phaser.Scene {
   private end(won: boolean): void {
     if (this.over) return;
     this.over = true;
+    if (this.sim) {
+      // (the simulator keeps the result and pays nothing)
+      this.sim.result = won;
+      this.settled = true;
+      return;
+    }
     if (this.settled) return;
     this.settled = true;
     // (what the run had paid before this one, for the run's total)
@@ -3381,18 +3570,30 @@ export class CreatureArena extends Phaser.Scene {
     audio.sfx(won ? 'cha_ching' : 'death_stinger', 0.6);
     const timeUp = this.me.hp > 0 && this.foe.hp > 0;
     const ladder = this.mode === 'ladder';
+    const story = this.mode === 'story';
     this.time.delayedCall(700, () => {
       const box = this.add.container(0, 0).setDepth(2000);
       const X = GAME_W / 2;
       const Y = GAME_H / 2;
       box.add(this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0.6).setOrigin(0, 0).setInteractive());
       box.add(this.add.rectangle(X, Y, 244, 96, PALETTE.ink).setStrokeStyle(1, won ? PALETTE.gold : 0xc31f2e));
-      const head = won ? (ladder ? (this.boss ? 'LADDER CLEARED!' : `LEVEL ${this.level} OF ${LADDER_LEVELS} CLEARED`) : 'VICTORY!') : 'DEFEATED';
+      const head = won
+        ? ladder
+          ? this.boss ? 'LADDER CLEARED!' : `LEVEL ${this.level} OF ${LADDER_LEVELS} CLEARED`
+          : story && this.boss ? (r.worldOpened ? 'WORLD CLEARED!' : 'BOSS BEATEN!') : 'VICTORY!'
+        : 'DEFEATED';
       box.add(centerText(this, X, Y - 38, head, won ? PALETTE.gold : 0xff6a6a));
       if (timeUp) box.add(centerText(this, X, Y - 28, 'TIME: MORE HEALTH LEFT WINS', PALETTE.ash));
       const lines: Array<[string, number]> = [];
       if (won) {
         if (r.paid) lines.push([`+${r.paid} TOKENS`, PALETTE.gold]);
+        if (story) {
+          const nextW = WORLDS[this.storyWorld + 1];
+          lines.push([
+            this.boss ? (r.worldOpened ? (nextW ? `${nextW.name} IS OPEN!` : 'THE STORY IS DONE - THE LADDER IS OPEN!') : 'BACK TO BATTLE 1 OF THIS WORLD.') : this.storyStage + 1 >= STAGES ? `NEXT: ${WORLDS[this.storyWorld].bossName}` : `NEXT: BATTLE ${this.storyStage + 2} OF ${STAGES}`,
+            PALETTE.cream,
+          ]);
+        }
         if (ladder) lines.push([this.boss ? `THE RUN PAID ${before + r.paid} TOKENS IN ALL.` : this.level >= LADDER_LEVELS ? 'NEXT: THE FINAL BOSS' : `NEXT: LEVEL ${this.level + 1} OF ${LADDER_LEVELS}`, PALETTE.cream]);
         const xpLine = r.xp ? `+${r.xp} XP` : this.myLevel >= MAX_LEVEL ? 'MAX LEVEL - NO MORE XP' : '';
         if (xpLine) lines.push([xpLine, 0x8ae88a]);
@@ -3411,7 +3612,7 @@ export class CreatureArena extends Phaser.Scene {
         audio.sfx('chime', 0.7);
       }
       // back to where the fight came from: the run's ladder, or the map
-      const screen = ladder ? 'ladder' : 'map';
+      const screen = ladder ? 'ladder' : story ? 'story' : 'map';
       box.add(button(this, X, Y + 36, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, screen }), { width: 80, height: 13 }));
     });
   }
@@ -3632,8 +3833,10 @@ export class CreatureArena extends Phaser.Scene {
       if (f.shield > 0 && f.shieldMod) g.lineStyle(1, f.shieldMod === 'reflect' ? 0x9ad0ff : 0xffa040, 0.9).strokeCircle(f.x, f.y, 12 * f.scale);
       // the little bar over the head
       const w = 18 * f.scale;
-      g.fillStyle(0x000000, 0.6).fillRect(f.x - w / 2, f.y - 12 * f.scale - 4, w, 2);
-      g.fillStyle(f === this.me ? 0x6ae86a : 0xff5a5a, 1).fillRect(f.x - w / 2, f.y - 12 * f.scale - 4, w * (f.hp / f.max), 2);
+      // (kept inside the ring: at the top wall it would sit on the move line)
+      const by = Math.max(ARENA.y + 1, f.y - 12 * f.scale - 4);
+      g.fillStyle(0x000000, 0.6).fillRect(f.x - w / 2, by, w, 2);
+      g.fillStyle(f === this.me ? 0x6ae86a : 0xff5a5a, 1).fillRect(f.x - w / 2, by, w * (f.hp / f.max), 2);
     }
     for (const mi of this.minions) {
       const c = ELEMENTS[mi.owner.c.element];
@@ -3649,10 +3852,16 @@ export class CreatureArena extends Phaser.Scene {
         case 'crow':
           g.fillStyle(0x1a1024, 1).fillTriangle(mi.x - 3, mi.y, mi.x + 3, mi.y, mi.x, mi.y - 2 + Math.sin(t * 20) * 1.5);
           break;
-        case 'decoy':
-          drawCreature(g, mi.owner.c, mi.x, mi.y, mi.owner.scale, mi.owner.face, t);
-          g.fillStyle(0xffffff, 0.25).fillCircle(mi.x, mi.y, 7 * mi.owner.scale);
+        case 'decoy': {
+          // exactly as its maker looks: body, facing, and the bar over its head
+          const o = mi.owner;
+          drawCreature(g, o.c, mi.x, mi.y, o.scale, mi.ang >= 0 ? 1 : -1, t);
+          const w = 18 * o.scale;
+          const by = Math.max(ARENA.y + 1, mi.y - 12 * o.scale - 4);
+          g.fillStyle(0x000000, 0.6).fillRect(mi.x - w / 2, by, w, 2);
+          g.fillStyle(o === this.me ? 0x6ae86a : 0xff5a5a, 1).fillRect(mi.x - w / 2, by, w * (o.hp / o.max), 2);
           break;
+        }
         case 'husk':
           g.fillStyle(0x3a4a3a, 1).fillEllipse(mi.x, mi.y, 8, 11);
           g.fillStyle(0x8affc0, 1).fillCircle(mi.x - 1.5, mi.y - 3, 0.8).fillCircle(mi.x + 1.5, mi.y - 3, 0.8);
@@ -3691,16 +3900,23 @@ export class CreatureArena extends Phaser.Scene {
     }
 
     // murk: you only see near yourself
-    const d = this.dark;
-    d.clear();
+    this.dark.clear();
     if (this.me.blind > 0) {
-      const a = Math.min(1, this.me.blind) * 0.8;
-      // (an ink blackout closes it in to 50px)
-      const r0 = this.me.st.ink ? 50 : 64;
-      for (let r = 0; r < 6; r++) {
-        d.lineStyle(60, 0x10081a, a * (r === 0 ? 0.6 : 1)).strokeCircle(this.me.x, this.me.y, r0 + 30 + r * 50);
-      }
-    }
+      // (user, 28 Oct: darker, and a smaller circle you can see in --
+      // an ink blackout closes it tighter still)
+      const a = Math.min(1, this.me.blind) * 0.97;
+      const r0 = this.me.st.ink ? BLIND_SEE - 8 : BLIND_SEE;
+      const rt = this.darkRT!;
+      const h = this.holeG!;
+      rt.setVisible(true).clear().fill(0x0a0612, a);
+      // the hole, with a soft rim: rings that each let a little more through
+      h.clear();
+      h.fillStyle(0xffffff, 0.3).fillCircle(this.me.x, this.me.y, r0 + 6);
+      h.fillStyle(0xffffff, 0.3).fillCircle(this.me.x, this.me.y, r0 + 3);
+      h.fillStyle(0xffffff, 0.45).fillCircle(this.me.x, this.me.y, r0);
+      h.fillStyle(0xffffff, 1).fillCircle(this.me.x, this.me.y, r0 - 3);
+      rt.erase(h, 0, 0);
+    } else this.darkRT?.setVisible(false);
 
     // hud
     const u = this.ui;

@@ -9,6 +9,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from './audio';
 import { ensurePixelFont, FONT_KEY, FONT_H, FONT_ADVANCE } from '../render/pixelFont';
+import { ensureSmallFont, SMALL_ADVANCE, SMALL_FONT_KEY, smallSafe } from '../render/smallFont';
 import { froggyLayer } from '../render/froggyLayer';
 import { GAME_W as GAME_W_UI, GAME_H as GAME_H_UI } from '../render/pixelScaler';
 
@@ -130,6 +131,24 @@ function nudge(lo: number, size: number, max: number): number {
   if (lo < EDGE) return EDGE - lo;
   if (hi > max - EDGE) return max - EDGE - hi;
   return 0;
+}
+
+/**
+ * The small font (render/smallFont): for the supporting lines on a busy
+ * screen -- what a go pays, a step count, a footnote.  Never for the line
+ * that matters most.
+ */
+export function smallText(scene: Phaser.Scene, x: number, y: number, str: string, color: number = PALETTE.cream): Phaser.GameObjects.BitmapText {
+  ensureSmallFont(scene);
+  const t = scene.add.bitmapText(x, y, SMALL_FONT_KEY, smallSafe(str), SMALL_ADVANCE);
+  t.setTint(color);
+  keepOnScreen(scene, t);
+  return t;
+}
+
+/** The small font, centred on (x, y). */
+export function centerSmall(scene: Phaser.Scene, x: number, y: number, str: string, color: number = PALETTE.cream): Phaser.GameObjects.BitmapText {
+  return smallText(scene, x, y, str, color).setOrigin(0.5, 0.5);
 }
 
 export function centerText(

@@ -455,6 +455,8 @@ export const BIOMES: Biome[] = [
   { id: 'ruins', name: 'SUNKEN RUINS', pool: ['centipede', 'golem', 'spider', 'owl', 'wisp', 'gecko', 'tortoise', 'obelisk', 'snail', 'crow'], ground: 0x9a9070, groundDark: 0x6a6048, prop: 'pillar', cover: 'ring', mood: { sky: 0x2a3348, haze: 0xc8c0a0, fleck: 0xfff0c0 } },
   { id: 'shore', name: 'SALT SHORE', pool: ['crab', 'ray', 'toad', 'jelly', 'mantis', 'puffer', 'angler', 'urchin', 'seahorse', 'heron'], ground: 0xe0d090, groundDark: 0xb8a868, prop: 'shell', cover: 'scatter', mood: { sky: 0x6ab8e0, haze: 0xf0e8c0, fleck: 0xffffff } },
   { id: 'desert', name: 'GLASS DESERT', pool: ['roller', 'beetle', 'hound', 'wisp', 'mantis', 'scorpion', 'hare', 'ferret', 'falcon', 'rhino'], ground: 0xe8c078, groundDark: 0xc09050, prop: 'cactus', cover: 'scatter', mood: { sky: 0xe8a060, haze: 0xffd8a0, fleck: 0xfff4c0 } },
+  // STORY MODE's last world (game/creatureStory): an arena of its own, its dwellers the murk and the glow
+  { id: 'void', name: 'VOID CITADEL', pool: ['wraith', 'crow', 'lynx', 'shroom', 'bat', 'serpent', 'firefly', 'owl', 'angler', 'snail', 'obelisk'], ground: 0x241c38, groundDark: 0x140f22, prop: 'pillar', cover: 'ring', mood: { sky: 0x07050e, haze: 0x4a2a7a, fleck: 0xb88aff } },
   { id: 'volcano', name: 'ASHEN PEAK', pool: ['wisp', 'slug', 'mole', 'ram', 'roller', 'scorpion', 'angler', 'boar', 'heron'], ground: 0x5a3a30, groundDark: 0x3a2018, prop: 'vent', cover: 'ring', mood: { sky: 0x2a1218, haze: 0x6a2a1a, fleck: 0xff8a3a } },
 ];
 
@@ -487,7 +489,7 @@ export const BATTLE_WIN = 10;
 export const LADDER_COST = 20;
 export const LADDER_LEVELS = 5;
 export const LADDER_WIN = 0;
-export const LADDER_BOSS_WIN = 80;
+export const LADDER_BOSS_WIN = 100;
 export const MAX_OWNED = 2;
 
 /**
@@ -496,13 +498,20 @@ export const MAX_OWNED = 2;
  * and the boss -- not the same one as the last run's, where there is a
  * choice.
  */
-export function rollLadder(lastBoss: string | null, rng: () => number = Math.random): { foes: string[]; places: string[]; boss: string } {
+/**
+ * A run's draw: five creatures, the places, and the boss.  The boss is one
+ * not yet beaten this time round (`beaten`): every one of the ten is fought
+ * before any comes back -- and never the same one twice running.
+ */
+export function rollLadder(lastBoss: string | null, rng: () => number = Math.random, beaten: string[] = []): { foes: string[]; places: string[]; boss: string } {
   const pool = CREATURES.map((c) => c.id);
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
-  const bosses = BOSSES.map((b) => b.id).filter((id) => id !== lastBoss);
+  const fresh = BOSSES.map((b) => b.id).filter((id) => !beaten.includes(id));
+  const open = fresh.length ? fresh : BOSSES.map((b) => b.id);
+  const bosses = open.length > 1 ? open.filter((id) => id !== lastBoss) : open;
   const places = Array.from({ length: LADDER_LEVELS + 1 }, () => BIOMES[Math.floor(rng() * BIOMES.length)].id);
   return { foes: pool.slice(0, LADDER_LEVELS), places, boss: bosses[Math.floor(rng() * bosses.length)] };
 }

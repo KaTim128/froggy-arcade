@@ -1118,6 +1118,12 @@ export const frogRace: MinigameModule = {
   rules: `pick one, ${FIELD} run, 30 seconds`,
   payoutNote: 'WIN: 20 A TICKET',
   tutorial: {
+    pitch: 'BACK A FROG. FIRST TO THE TAPE WINS.',
+    steps: [
+      { say: `1-${FIELD} BACKS THAT FROG. UP / DOWN BUYS MORE OR FEWER TICKETS.`, phone: 'TAP A FROG TO BACK IT. MORE / LESS CHANGES THE TICKETS.', demo: 'race.back' },
+      { say: 'SPACE STARTS IT. ROCKS, TRAPS AND HAWKS CAN STEAL A RACE - IT IS A GUESS.', phone: 'RACE STARTS IT. ROCKS, TRAPS AND HAWKS CAN STEAL A RACE - IT IS A GUESS.', demo: 'race.run' },
+      { say: '10 A TICKET, AND 20 BACK ON EACH IF YOUR FROG WINS.', demo: 'race.pay' },
+    ],
     objective: [
       `${FIELD_WORD} FROGS RACE. BACK ONE OF THEM.`,
       'NOTHING SAYS WHICH. IT IS A GUESS.',

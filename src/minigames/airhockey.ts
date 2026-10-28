@@ -110,6 +110,12 @@ export const airHockey: MinigameModule = {
   music: 'game_airhockey',
   rules: 'first to 5 - 10 in, 20 out',
   tutorial: {
+    pitch: 'FIRST TO FIVE GOALS AGAINST THE LIZARD.',
+    steps: [
+      { say: 'MOVE THE MOUSE: YOUR MALLET FOLLOWS IT.', phone: 'DRAG: YOUR MALLET FOLLOWS YOUR FINGER.', demo: 'hockey.mallet' },
+      { say: 'HIT THE PUCK INTO HIS GOAL. FIRST TO FIVE WINS.', demo: 'hockey.goal' },
+      { say: 'AFTER A GOAL YOU HAVE 3 SECONDS: GET BACK INTO YOUR OWN HALF.', demo: 'hockey.reset' },
+    ],
     objective: [
       'YOU AGAINST THE LIZARD. FIRST TO FIVE.',
       'TEN TOKENS IN, TWENTY BACK ON A WIN.',

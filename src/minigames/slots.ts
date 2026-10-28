@@ -125,6 +125,12 @@ export const slots: MinigameModule = {
   music: 'game_slots',
   rules: `${SPIN_COST} tokens a spin`,
   tutorial: {
+    pitch: 'FIVE REELS. LINE UP TOKENS - MOST SPINS LOSE.',
+    steps: [
+      { say: `SPACE SPINS, FOR ${SPIN_COST} TOKENS.`, phone: `SPIN SPINS, FOR ${SPIN_COST} TOKENS.`, demo: 'slots.spin' },
+      { say: '3, 4 OR 5 OF A TOKEN IN A LINE - ACROSS, DOWN OR DIAGONAL - PAYS. LINES ADD UP.', demo: 'slots.lines' },
+      { say: `FROGGY IS THE RAREST: 3 PAY ${payFor(FROG, 3)}, 5 PAY ${JACKPOT}. THE GOLDEN FROGGY IS WILD.`, demo: 'slots.froggy' },
+    ],
     objective: [
       `${SPIN_COST} TOKENS A SPIN. LINE UP 3, 4 OR 5 OF A TOKEN:`,
       'ACROSS, DOWN OR DIAGONAL. EVERY LINE PAYS, AND THEY ADD UP.',

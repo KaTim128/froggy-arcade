@@ -467,6 +467,13 @@ export const grudge: MinigameModule = {
   // a free practice fight on the card, to learn the moves before paying
   practice: true,
   tutorial: {
+    pitch: 'BEST OF THREE ROUNDS AGAINST A NEW ANIMAL.',
+    steps: [
+      { say: 'A / D WALKS. W JUMPS, S CROUCHES.', phone: 'THE STICK WALKS. UP JUMPS, DOWN CROUCHES.', demo: 'grudge.move' },
+      { say: 'J: HIGH STRIKE. IT HITS ONE THAT IS STANDING.', phone: 'HIGH: A HIGH STRIKE. IT HITS ONE THAT IS STANDING.', demo: 'grudge.high' },
+      { say: 'K: LOW SWEEP - IT HITS ONE CROUCHING. L BLOCKS.', phone: 'LOW: A SWEEP - IT HITS ONE CROUCHING. BLOCK BLOCKS.', demo: 'grudge.low' },
+      { say: 'I: THE SPECIAL. IT HURTS - THEN NEEDS TIME TO COME BACK.', phone: 'SPCL: THE SPECIAL. IT HURTS - THEN NEEDS TIME TO COME BACK.', demo: 'grudge.special' },
+    ],
     objective: [
       'BEST OF THREE ROUNDS.',
       'A DIFFERENT OPPONENT EVERY TIME.',

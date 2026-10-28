@@ -200,6 +200,13 @@ export const frogVsLizard: MinigameModule = {
   music: 'game_frogvslizard',
   rules: 'one round over the fence - mind the wind',
   tutorial: {
+    pitch: 'LOB THINGS OVER THE FENCE AT THE LIZARD.',
+    steps: [
+      { say: 'W / S AIMS HIGHER OR LOWER.', phone: 'THE STICK AIMS HIGHER OR LOWER.', demo: 'fence.aim' },
+      { say: 'HOLD SPACE FOR POWER, LET GO TO THROW.', phone: 'HOLD THROW FOR POWER, LET GO TO THROW.', demo: 'fence.power' },
+      { say: 'THE WIND BENDS EVERY THROW - AIM OFF IT. EMPTY HIS HEALTH BAR.', demo: 'fence.wind' },
+      { say: '1-6 PICKS AN ITEM ON THE BAR: DYNAMITE, HEAL, POISON AND MORE.', phone: 'TAP AN ITEM ON THE BAR: DYNAMITE, HEAL, POISON AND MORE.', demo: 'fence.items' },
+    ],
     objective: [
       'THROW OVER THE FENCE AND HIT HIM.',
       'THE WIND BENDS EVERY THROW - AIM OFF IT.',

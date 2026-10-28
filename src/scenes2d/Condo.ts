@@ -464,7 +464,8 @@ export class Condo extends WalkRoom {
       if (this.area === 'room') {
         const W = ROOM_WINDOW;
         if (over(W.x - 14, W.x + W.w + 14)) return 'NOT OVER THE WINDOW.';
-        if (over(HOOK.x - 9, HOOK.x + 9)) return 'THE COAT HOOK IS THERE.';
+        // (the hook is only there until you have a wardrobe: then the wall is yours)
+        if (!this.hasWardrobe() && over(HOOK.x - 9, HOOK.x + 9)) return 'THE COAT HOOK IS THERE.';
       } else if (over(140, 180) || over(212, 234)) return 'THE MIRROR AND THE WINDOW ARE THERE.';
     } else {
       if (y < PLACE_TOP || y > PLACE_BOTTOM) return 'IT HAS TO STAND ON THE FLOOR.';
@@ -815,6 +816,8 @@ export class Condo extends WalkRoom {
 
   update(t: number, delta: number): void {
     super.update(t, delta);
+    // the coat hook comes down once a wardrobe is in (its wall is free for shelves and pictures)
+    this.hook?.setVisible(!this.hasWardrobe());
     // (the eviction check runs even while a menu is up)
     if (super.busy() || this.decorating) this.tick();
   }

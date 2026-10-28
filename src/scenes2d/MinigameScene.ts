@@ -371,7 +371,7 @@ export class MinigameScene extends Phaser.Scene {
     //
     // However the go was started -- the cabinet clicked, E at it, a tap, or
     // back from a practice go -- the card comes up first: YOUR BEST, PLAY and
-    // its price, PRACTICE beside it where there is one, TUTORIAL, CONTROLS
+    // its price, PRACTICE beside it where there is one, HOW TO PLAY, CONTROLS
     // and LEAVE.  The first go at a cabinet opens on its HOW TO PLAY page.
     this.card = showTutorial(this, {
       title: def.title,
@@ -379,7 +379,10 @@ export class MinigameScene extends Phaser.Scene {
       tutorial: {
         objective: deviceObjective(mod.tutorial.objective, mod.touch),
         controls: deviceControls(mod.tutorial.controls, mod.touch),
+        pitch: mod.tutorial.pitch,
+        steps: mod.tutorial.steps,
       },
+      layout: mod.touch,
       // (again after a key is changed on CONTROLS, and the keys as written for it)
       liveControls: () => deviceControls(mod.tutorial.controls, mod.touch),
       keyRows: mod.tutorial.controls,
