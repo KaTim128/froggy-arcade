@@ -151,6 +151,16 @@ const WORDS: Record<string, string[]> = {
   PECK: ['beak'], PINCER: ['pincer'], NIP: ['pincer', 'jaws'], QUICK: ['rush'], SCYTHE: ['scythe'], CUT: ['scythe', 'sword'], SEED: ['seed'], SHOT: ['seed', 'arrow'],
   VOLLEY: ['seed', 'spores'], SHOCK: ['bolt'], SLOW: ['clock', 'claw'], SNOUT: ['drop'], SONIC: ['sound'], SQUALL: ['wind', 'drop'], TALON: ['claw', 'bird'], RAKE: ['claw'],
   THORN: ['spines', 'vine'], TUSK: ['tusk'], GORE: ['tusk'], WATER: ['drop'], WING: ['wing'], ZAP: ['bolt'], TAIL: ['tail'],
+  // twenty more creatures' words (28 Oct)
+  SAND: ['pebbles', 'twister'], HAZE: ['sun', 'twister'], FLAME: ['flame'], BLAZE: ['flame', 'burst'], PINK: [], SLASH: ['claw', 'scythe'], BLOOD: ['heart', 'drop'],
+  SCENT: ['drop', 'arrow'], FEELER: ['tether', 'tail'], WHIP: ['tether', 'tail'], BRACE: ['shield', 'shell'], EUCALYPTUS: ['leaf', 'plus'], GUM: ['blob', 'honey'],
+  DROP: ['drop', 'blob'], DOT: ['seed'], SPOT: ['sparkle', 'eye'], FLASH: ['sparkle', 'sun'], APHID: ['bee', 'spores'], SWARM: ['bee', 'spores'], GNAW: ['jaws', 'tusk'],
+  DAM: ['bricks'], MOOSE: ['horn', 'hoof'], STOMP: ['hoof', 'burst'], BELLOW: ['sound', 'breath'], HARPOON: ['needle', 'chain'], RIME: ['snow', 'sheet'],
+  ZING: ['bolt', 'sparkle'], LEAP: ['hops', 'blink'], LEG: ['boot', 'hops'], CHIRP: ['sound', 'sparkle'], SCALE: ['armour', 'shell'], SHED: ['spines', 'needle'],
+  HEADBUTT: ['head', 'horn'], ROCK: ['rock'], CLIFF: ['mountain'], NUT: ['seed', 'rock'], ACORN: ['seed'], DOWN: ['wing', 'spores'], NECK: ['beak', 'head'],
+  SCRATCH: ['claw', 'paw'], SWAG: ['hand', 'cage'], SACK: ['cage', 'hand'], MASK: ['shadow', 'eye'], DASH: ['rush'], TEAR: ['claw', 'jaws'], CARRION: ['bird', 'skull'],
+  DEAD: ['skull', 'ghost'], CIRCLE: ['ring', 'shadow'], SWAT: ['tail', 'paw'], STINK: ['venom', 'splat'], MUSK: ['venom', 'ring'], GILL: ['fin', 'bubble'],
+  FAN: ['wing', 'sparkle'], STARE: ['eye'],
 };
 
 /** What each kind of move falls back to when none of its words is in WORDS. */

@@ -389,7 +389,7 @@ Rules for every batch:
 | # | Request | Status |
 |---|---|---|
 | Q1 | Creature Clash: 20 new creatures + 40 abilities | DONE, pushed (70 creatures, 160 specials) |
-| Q2 | Then 20 MORE creatures + 40 MORE abilities (user: "actually 40 and 80") | open |
+| Q2 | Then 20 MORE creatures + 40 MORE abilities (user: "actually 40 and 80") | done: 20 more creatures (camel, flamingo, shark, lobster, koala, ladybug, beaver, moose, narwhal, lemur, cricket, pangolin, goat, squirrel, swan, raccoon, vulture, skunk, axolotl, peacock), each its own body, two to three an element, all housed in biomes; 40 more specials, each a kind+special pair no other move has (incl. the new buffs); 90 creatures, 200 specials; icon words added; seen fighting in sim battles |
 | Q3 | Clash touch buttons and stick OUTSIDE the arena view (the black side bars), the same for every game | done: sideways on a phone the picture is fitted between two black columns (touchControls.reserveSides, used by the scaler again); the stick or pad sits in the left one, the buttons one above another in the right one, the gear at the top of the right one. Creature Clash uses the shared controls both ways up (no sticks drawn on the arena), so its attacks auto-aim at the foe. Dance Off keeps its arrow tiles on the clear strip along the bottom of its stage |
 | Q4 | Clash move card: only the ability (no strong/weak), bigger text, nothing past its box | DONE |
 | Q5 | Clash creature card is tappable (and says so) -> stats page: ATTACK, DEFENCE, SPEED, HP, MELEE or RANGED, + strengths and weaknesses | DONE |

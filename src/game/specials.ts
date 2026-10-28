@@ -1,5 +1,5 @@
 /**
- * ---- THE 160 SPECIALS (120, and 40 more for the twenty new creatures).  Every creature and boss fights with one plain
+ * ---- THE 200 SPECIALS (120, then 40 and 40 more for two lots of twenty new creatures).  Every creature and boss fights with one plain
  * attack of its own (`normal` in creatures) and two of these -- and each of
  * these belongs to exactly one creature in the whole game (checked in
  * creatures).  No two do the same thing: where two share an effect (two
@@ -216,6 +216,48 @@ export const SPECIAL_LIST: SpecialDef[] = [
   D('quill_burst', 'QUILL FAN', 'spread', 6, 3.4, 160, 'poke', 'A FAN OF 3 QUILLS; EACH LEAVES THEM TAKING 25% MORE DAMAGE FOR 3S.', 'shred'),
   D('stampede', 'STAMPEDE', 'dash', 15, 4, 250, 'close', 'A 70PX GALLOP THAT STUNS WHAT IT HITS FOR A MOMENT.', 'stagger'),
   D('stripe_zap', 'STRIPE ZAP', 'beam', 10, 5, 150, 'poke', 'A 150PX FLASH FROM ITS STRIPES THAT ADDS 1.2S TO ALL THEIR COOLDOWNS.', 'silence'),
+
+  // ------------------------------------------------ twenty more (28 Oct, user: "40 creatures and 80 abilities")
+  D('heat_haze', 'HEAT HAZE', 'aura', 0, 9, 5, 'self', 'FOR 5S IT IS 35% FASTER AND HITS 25% HARDER, AND FOR 4S 30% OF HITS ON IT MISS IN THE SHIMMER.', 'evade'),
+  D('sand_spit', 'SAND SPIT', 'spread', 5, 3.2, 170, 'poke', 'A FAN OF 3 SPITS OF HOT SAND; ONE THAT HITS MARKS THEM: THE NEXT HIT ON THEM DEALS +50%.', 'mark'),
+  D('flame_kick', 'FLAME KICK', 'beam', 13, 3.6, 38, 'close', 'AN INSTANT 38PX KICK OF A BURNING LEG; ONE TIME IN FOUR IT DEALS DOUBLE.', 'crit'),
+  D('pink_blaze', 'PINK BLAZE', 'nova', 12, 6, 44, 'close', 'A 44PX RING OF PINK FIRE THAT LEAVES THE GROUND BURNING FOR 3S.', 'linger'),
+  D('fin_rush', 'FIN RUSH', 'dash', 14, 4.2, 230, 'close', 'A 65PX RUSH, FIN FIRST: +60% DAMAGE TO ANYTHING UNDER 40% HEALTH.', 'execute'),
+  D('blood_scent', 'BLOOD SCENT', 'bolt', 10, 2.8, 190, 'poke', 'A SURGE OF WATER THAT CURVES TOWARDS THEM IN FLIGHT.', 'homing'),
+  D('claw_snap', 'CLAW SNAP', 'beam', 13, 4, 40, 'close', 'AN INSTANT 40PX PINCH OF A GREAT CLAW THAT STUNS FOR A MOMENT.', 'stagger'),
+  D('shell_brace', 'SHELL BRACE', 'shield', 0, 7, 1.4, 'defend', 'BRACES IN ITS SHELL: ALL DAMAGE BLOCKED FOR 1.4S, AND IT IS 40% FASTER FOR 2S.', 'haste'),
+  D('eucalyptus', 'EUCALYPTUS', 'mend', 0, 10, 0, 'heal', 'CHEWS A LEAF: 22% OF ITS HEALTH BACK, AND FOR 4S 30% OF HITS ON IT MISS.', 'evade'),
+  D('gum_drop', 'GUM DROP', 'arc', 9, 5, 110, 'hidden', 'A LOBBED GOB OF STICKY GUM THAT SAILS OVER COVER AND HOLDS THEM IN PLACE FOR 0.8S.', 'root'),
+  D('spot_flash', 'SPOT FLASH', 'nova', 9, 5, 40, 'close', 'A 40PX FLASH OF ITS SPOTS THAT MARKS THEM: THE NEXT HIT ON THEM DEALS +50%.', 'mark'),
+  D('aphid_swarm', 'APHID SWARM', 'spread', 5, 3.6, 160, 'poke', 'A FAN OF 3 APHIDS; IT HEALS 40% OF THE DAMAGE THEY DEAL.', 'drain'),
+  D('dam_wall', 'DAM WALL', 'wall', 0, 8, 30, 'mid', 'RAISES A WALL OF LOGS 2 TILES AWAY THAT NOTHING GETS THROUGH, FOR 7S, AND HEALS 3 A SECOND FOR 4S.', 'regen'),
+  D('tail_slap', 'TAIL SLAP', 'beam', 12, 4.5, 40, 'close', 'AN INSTANT 40PX SLAP OF ITS FLAT TAIL THAT KNOCKS THEM A LONG WAY BACK.', 'push'),
+  D('antler_charge', 'ANTLER RAM', 'dash', 14, 4.5, 220, 'close', 'A 60PX CHARGE, ANTLERS DOWN, THAT HALVES THE SPEED OF WHAT IT HITS FOR 3S.', 'chill'),
+  D('cold_bellow', 'COLD BELLOW', 'nova', 10, 6, 46, 'close', 'A 46PX BELLOW OF FREEZING BREATH THAT HALVES THEIR SPEED FOR 3S.', 'chill'),
+  D('harpoon', 'HARPOON', 'snare', 9, 5, 170, 'poke', 'A TUSK OF ICE: WHAT IT CATCHES IS HELD FOR 1.3S AND TAKES 25% MORE DAMAGE FOR 3S.', 'shred'),
+  D('rime_wall', 'RIME WALL', 'wall', 0, 8, 30, 'mid', 'RAISES A WALL OF ICE 2 TILES AWAY FOR 7S, AND THE FIRST HIT ON IT WITHIN 1.5S IS BLOCKED.', 'guard'),
+  D('ring_tail', 'RING TAIL', 'bolt', 9, 3, 200, 'poke', 'A CRACKLING FLICK OF ITS RINGED TAIL THAT STUNS FOR A MOMENT.', 'stagger'),
+  D('spark_leap', 'SPARK LEAP', 'blink', 0, 4.5, 60, 'escape', 'A 60PX LEAP; FOR 5S AFTER IT HAS +20% CHANCE TO CRIT.', 'focus'),
+  D('chirp', 'CHIRP', 'nova', 8, 6, 40, 'close', 'A 40PX CHIRP OF STATIC; ITS COOLDOWNS RUN 40% FASTER FOR 5S.', 'quicken'),
+  D('volt_volley', 'VOLT VOLLEY', 'spread', 4, 4, 170, 'poke', 'A FAN OF 3 SPARKS FROM ITS LEGS; EACH ONE THAT HITS STUNS FOR A MOMENT.', 'stagger'),
+  D('scale_roll', 'SCALE ROLL', 'dash', 12, 4.2, 220, 'escape', 'A 60PX ROLL IN ITS SCALES; THE FIRST HIT ON IT WITHIN 1.5S IS BLOCKED.', 'guard'),
+  D('scale_shed', 'SCALE SHED', 'spread', 4, 4.5, 150, 'poke', 'A FAN OF 3 SCALES THAT EACH BREAK INTO 3 SHARDS WHEN THEY STOP.', 'split'),
+  D('rock_slide', 'ROCK SLIDE', 'arc', 13, 5, 120, 'hidden', 'A LOBBED BOULDER THAT SAILS OVER COVER, AND DRAGS THEM IN TOWARDS WHERE IT LANDS.', 'vortex'),
+  D('cliff_hop', 'CLIFF HOP', 'blink', 0, 4.5, 60, 'escape', 'A 60PX HOP UP AND OVER; FOR 5S AFTER ITS HITS DEAL +25%.', 'fury'),
+  D('acorn_bomb', 'ACORN BOMB', 'bolt', 9, 3.2, 180, 'poke', 'AN ACORN THAT GROWS AND HITS HARDER THE FURTHER IT FLIES.', 'grow'),
+  D('glide', 'GLIDE', 'blink', 0, 3.8, 70, 'escape', 'A 70PX GLIDE ON ITS FLAPS; ITS COOLDOWNS RUN 40% FASTER FOR 5S AFTER.', 'quicken'),
+  D('wing_gust', 'WING GUST', 'nova', 8, 5.5, 48, 'mid', 'A 48PX BEAT OF ITS GREAT WINGS THAT DRAGS THEM IN TOWARDS IT.', 'pull'),
+  D('down_storm', 'DOWN STORM', 'spread', 5, 3.4, 170, 'poke', 'A FAN OF 3 FEATHERS THAT WEAVE SIDE TO SIDE AS THEY FLY: HARD TO DODGE.', 'wave'),
+  D('swag_sack', 'SWAG SACK', 'snare', 6, 5, 160, 'poke', 'A THROWN SACK: WHAT IT CATCHES IS HELD FOR 1.3S AND MARKED - THE NEXT HIT ON IT DEALS +50%.', 'mark'),
+  D('mask_dash', 'MASK DASH', 'dash', 11, 4, 220, 'escape', 'A 60PX DART; WHAT IT HITS DEALS 30% LESS FOR 3S.', 'weaken'),
+  D('carrion_dive', 'CARRION', 'dash', 13, 4.5, 230, 'close', 'A 65PX DIVE FROM ABOVE; IT HEALS 40% OF THE DAMAGE IT DEALS.', 'drain'),
+  D('dead_circle', 'DEAD CIRCLE', 'mine', 12, 6, 0, 'hidden', 'LEAVES A PATCH OF SHADOW THAT BURSTS WHEN THEY TOUCH IT AND POISONS FOR 3 A SECOND OVER 4S; IT WAITS UP TO 8S.', 'poison'),
+  D('stink_bomb', 'STINK BOMB', 'arc', 9, 5, 110, 'hidden', 'A LOBBED STINK BOMB THAT SAILS OVER COVER AND POISONS FOR 3 A SECOND OVER 4S.', 'poison'),
+  D('musk_ward', 'MUSK WARD', 'aura', 0, 9, 5, 'self', 'FOR 5S IT IS 35% FASTER AND HITS 25% HARDER, AND IT HEALS 3 A SECOND FOR 4S.', 'regen'),
+  D('gill_glow', 'GILL GLOW', 'mend', 0, 10, 0, 'heal', 'ITS GILLS GLOW: 22% OF ITS HEALTH BACK, AND ITS COOLDOWNS RUN 40% FASTER FOR 5S.', 'quicken'),
+  D('bubble_beam', 'BUBBLE BEAM', 'beam', 9, 5, 140, 'poke', 'A 140PX STREAM OF GLOWING BUBBLES: THEIR HITS DEAL 30% LESS FOR 3S.', 'weaken'),
+  D('tail_fan', 'TAIL FAN', 'nova', 10, 6, 44, 'close', 'SPREADS ITS TAIL IN A 44PX FLASH; FOR 5S IT HAS +20% CHANCE TO CRIT.', 'focus'),
+  D('eye_stare', 'EYE STARE', 'beam', 8, 5, 160, 'poke', 'A 160PX STARE FROM THE EYES ON ITS TAIL THAT MARKS THEM: THE NEXT HIT ON THEM DEALS +50%.', 'mark'),
 ];
 
 export const SPECIALS: Record<string, SpecialDef> = Object.fromEntries(SPECIAL_LIST.map((s) => [s.id, s]));
