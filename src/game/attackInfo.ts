@@ -73,6 +73,20 @@ export const MEND_FRAC = 0.22;
 /** A dropped piece of cover stands this long. */
 export const WALL_S = 7;
 
+/** A dropped wall: its shape, how long it stands, and each piece's health (0: unbreakable). */
+export interface WallSpec {
+  shape: 'line' | 'long' | 'curve';
+  life: number;
+  hp: number;
+}
+export const WALL_SPECS: Record<string, WallSpec> = {
+  kelp_weave: { shape: 'curve', life: 9, hp: 12 },
+  glacier_slab: { shape: 'long', life: 4, hp: 0 },
+};
+export const WALL_DEFAULT: WallSpec = { shape: 'line', life: WALL_S, hp: 0 };
+/** A laid mine waits this long before it fizzles. */
+export const MINE_S = 8;
+
 // ---- THE SPECIALS' NUMBERS (CreatureArena reads the same ones)
 export const POISON_S = 4;
 export const POISON_PER_S = 3;
@@ -191,7 +205,7 @@ function rawInfo(a: Attack, el: Element, scale: number): AttackInfo {
     case 'mend':
       return { ...base, type: 'HEAL (SELF)', target: 'YOU', range: `${Math.round(MEND_FRAC * 100)}% OF FULL HEALTH`, reachPx: 0, use: 'BREAK AWAY FIRST - IT TAKES A MOMENT.' };
     case 'wall':
-      return { ...base, type: 'COVER (PLACED)', target: 'BLOCKS SHOTS', range: `DROPPED ${a.reach}PX AWAY, ${WALL_S}S`, reachPx: a.reach, use: 'PUT IT BETWEEN YOU AND THEIR BIG MOVE.' };
+      return { ...base, type: 'COVER (PLACED)', target: 'BLOCKS SHOTS', range: `DROPPED ${a.reach}PX AWAY`, reachPx: a.reach, use: 'PUT IT BETWEEN YOU AND THEIR BIG MOVE.' };
   }
 }
 
@@ -204,11 +218,39 @@ export function attackCard(a: Attack, el: Element, scale = 1): string[] {
   const i = attackInfo(a, el, scale);
   const out = [`TYPE: ${i.type}`, `HITS: ${i.target}`, `RANGE: ${i.range}`];
   out.push(`DAMAGE: ${a.dmg > 0 ? `${a.dmg}` : 'NONE'} - COOLDOWN: ${a.cd}S`);
+  const dur = durationOf(a);
+  if (dur) out.push(`DURATION: ${dur}`);
   out.push(a.sp ? `SPECIAL: ${i.special}` : 'PLAIN ATTACK - NO SPECIAL');
   if (i.effect) out.push(`ELEMENT: ${i.effect}`);
   // (a special's line already says what it is for; a plain attack gets the kind's advice)
   if (!a.sp) out.push(`USE: ${i.use}`);
   return out.map(plainWords);
+}
+
+/**
+ * HOW LONG IT LASTS (log #42: each ability shows its duration): what the move
+ * leaves behind or puts on, in seconds -- a guard, an aura, a wall, a mine,
+ * a hold -- and what its special leaves on whatever it hits.  Null for a
+ * move that is over the moment it lands.
+ */
+export function durationOf(a: Attack): string | null {
+  const parts: string[] = [];
+  if (a.kind === 'shield') parts.push(`GUARDS ${a.reach}S`);
+  if (a.kind === 'aura') parts.push(`${AURA_S}S`);
+  if (a.kind === 'wall') {
+    const w = WALL_SPECS[a.sp ?? ''] ?? WALL_DEFAULT;
+    parts.push(`STANDS ${w.life}S${w.hp ? ', BREAKABLE' : ', UNBREAKABLE'}`);
+  }
+  if (a.kind === 'mine') parts.push(`WAITS ${MINE_S}S`);
+  if (a.kind === 'snare') parts.push(`HOLDS ${ROOT_S}S`);
+  const mod: Partial<Record<string, string>> = {
+    poison: `POISON ${POISON_S}S`, mark: `MARK ${MARK_S}S`, shred: `SHRED ${SHRED_S}S`, root: `ROOT ${ROOT_S}S`, silence: `SILENCE ${SILENCE_S}S`,
+    weaken: `WEAKEN ${WEAK_S}S`, chill: `CHILL ${CHILL_S}S`, stagger: `STAGGER ${STAGGER_S}S`, linger: `POOL ${LINGER_S}S`,
+    haste: `HASTE ${HASTE_S}S`, guard: `GUARD ${GUARD_S}S`, regen: `REGEN ${REGEN_S}S`,
+  };
+  const m = mod[a.mod];
+  if (m) parts.push(m);
+  return parts.length ? parts.join(' - ') : null;
 }
 
 export { plainWords } from './plainWords';

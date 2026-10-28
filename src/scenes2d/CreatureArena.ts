@@ -34,7 +34,7 @@ import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, star
 import { MAX_LEVEL, levelOf, withLevel } from '../game/creatureLevel';
 import {
   AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
-  POISON_PER_S, POISON_S, REGEN_PER_S, REGEN_S, ROOT_S, SHRED_MUL, SHRED_S, SILENCE_S, STAGGER_S, STRIKE_DMG, THORNS_DMG, WALL_S, WEAK_MUL, WEAK_S, attackInfo, buttonWords,
+  POISON_PER_S, POISON_S, WALL_DEFAULT, WALL_SPECS, REGEN_PER_S, REGEN_S, ROOT_S, SHRED_MUL, SHRED_S, SILENCE_S, STAGGER_S, STRIKE_DMG, THORNS_DMG, WEAK_MUL, WEAK_S, attackInfo, buttonWords,
 } from '../game/attackInfo';
 import { abilityIconURL, drawAbilityIcon } from '../art/abilityIcons';
 import { setCabinetTouch } from '../game/touchLayouts';
@@ -283,18 +283,7 @@ interface Prop {
  * one nothing breaks stands only a few seconds.  And they are not all the
  * same shape -- a curved screen round you, a long straight line, a post.
  */
-interface WallSpec {
-  shape: 'line' | 'long' | 'curve';
-  /** Seconds it stands. */
-  life: number;
-  /** Health of each piece, or 0 for unbreakable. */
-  hp: number;
-}
-const WALL_SPECS: Record<string, WallSpec> = {
-  kelp_weave: { shape: 'curve', life: 9, hp: 12 },
-  glacier_slab: { shape: 'long', life: 4, hp: 0 },
-};
-const WALL_DEFAULT: WallSpec = { shape: 'line', life: WALL_S, hp: 0 };
+// (the specs themselves live in game/attackInfo, so a move's card can say how long it stands)
 /** A crag lob's pillar: breakable, seven seconds. */
 const PILLAR = { life: 7, hp: 16 };
 
