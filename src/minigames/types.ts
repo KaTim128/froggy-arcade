@@ -151,6 +151,9 @@ export interface MinigameModule {
    * and on the way out of the page; handed to `restore` right after `create`
    * when the page comes back.  A cabinet without these is put back at the
    * start of a fresh go instead, still charged nothing again.
+   *
+   * A snapshot taken mid-spin can say `refund: n`: that spin is not played
+   * out after the reload, and the shell hands its n tokens back.
    */
   snapshot?(): unknown;
   restore?(snap: unknown): void;

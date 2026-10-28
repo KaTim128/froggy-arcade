@@ -467,8 +467,11 @@ export class MinigameScene extends Phaser.Scene {
     applyFinish(this, this.gameId);
     this.armPolice();
     setCabinetTouch(mod.touch);
-    // (a fresh go: whatever was on the felt mid-hand comes back to the pocket)
-    const owed = back || r.practicing ? 0 : (r.atRisk ?? 0);
+    // (a fresh go: whatever was on the felt mid-hand comes back to the pocket;
+    // put back exactly, a spin or a pull the page cut off mid-air is handed
+    // back by the snapshot's own `refund` rather than played out)
+    const told = back && r.snap && typeof (r.snap as { refund?: unknown }).refund === 'number' ? (r.snap as { refund: number }).refund : 0;
+    const owed = r.practicing ? 0 : back ? Math.max(0, Math.floor(told)) : (r.atRisk ?? 0);
     if (owed > 0) {
       ledger.credit(owed, 'game.refund');
       this.stake = Math.max(0, this.stake - owed);

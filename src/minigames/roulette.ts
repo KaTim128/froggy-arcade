@@ -361,6 +361,30 @@ export const roulette: MinigameModule = {
     }
   },
 
+  // ---- A RELOAD (log #87): the clean pulls, the pot on the machine, and the
+  // barrel.  A pull the page cut off mid-hammer is not drawn: the cylinder is
+  // back where it had stopped, the same decision handed back.  A round that
+  // had already ended ends again the way it did (cashed out, or the live one).
+  snapshot() {
+    return { survived, pot, phase, spin, spinVel };
+  },
+
+  restore(snap: unknown) {
+    const v = snap as { survived: number; pot: number; phase: Phase; spin: number; spinVel: number };
+    survived = v.survived;
+    pot = v.pot;
+    spin = v.spin;
+    spinVel = v.spinVel;
+    if (v.phase === 'over') {
+      phase = 'over';
+      refresh();
+      finish(pot > 0);
+      return;
+    }
+    phase = v.phase === 'firing' ? 'stopped' : v.phase;
+    refresh();
+  },
+
   destroy() {
     chamberDots = [];
     status = null;

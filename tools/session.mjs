@@ -123,7 +123,7 @@ try {
     const ids = ['tictactoe', 'hoops', 'whack', 'bowling', 'battleship', 'grudge', 'donkeykong', 'airhockey', 'fallingblocks', 'danceoff', 'frogcross', 'carchase', 'frogvslizard', 'bogball', 'slots', 'roulette', 'frograce', 'frogstermash', 'blackjack', 'wheel'];
     return ids.filter((id) => typeof r.getMinigame(id).snapshot === 'function');
   });
-  const list = want ? want.split(',') : snapGames;
+  const list = want === 'none' ? [] : want ? want.split(',') : snapGames;
   console.log(`  (cabinets that keep a snapshot: ${snapGames.join(', ') || 'none'})`);
   for (const id of list) {
     await playCabinet(id);
@@ -146,6 +146,22 @@ try {
     await page.evaluate(() => window.__minigame?.lose());
     await sleep(400);
   }
+
+  // ------------------------------------------------ 4b: a spin cut off mid-air
+  await playCabinet('slots');
+  await sleep(800);
+  const t1 = await tokens();
+  await page.keyboard.press('Space');
+  await sleep(150);
+  const spun = await page.evaluate(() => ({ busy: window.__slots.state().busy, t: window.__froggy.state().tokens }));
+  await reload();
+  await until(() => window.__pause?.paused() === 'Minigame', 12000);
+  const t2 = await tokens();
+  check('a reload mid-spin hands that spin back: nothing lost, nothing won', spun.busy && spun.t === t1 - 3 && t2 === t1, `${t1} -> ${spun.t} mid-spin (busy ${spun.busy}) -> ${t2} after the reload`);
+  await page.evaluate(() => window.__pause.resume());
+  await sleep(2600);
+  await page.evaluate(() => window.__minigame?.lose());
+  await sleep(400);
 
   // ------------------------------------------------ 5: a room
   await page.evaluate(() => {

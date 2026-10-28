@@ -361,6 +361,24 @@ statusText = text(scene, 180, 116, `SPIN IT - ${SPIN_COST} A GO`, PALETTE.gold);
     }
   },
 
+  // ---- A RELOAD (log #87): the wheel where it stopped, and what it has paid.
+  // A spin the page cut off mid-turn is not played out: its price comes back.
+  snapshot() {
+    return { rotation, spins: spins - (spinning ? 1 : 0), won, refund: spinning ? SPIN_COST : 0 };
+  },
+
+  restore(snap: unknown) {
+    const v = snap as { rotation: number; spins: number; won: number };
+    rotation = v.rotation;
+    spins = v.spins;
+    won = v.won;
+    spinning = false;
+    lastFace = -1;
+    draw();
+    setButtons(true);
+    refresh();
+  },
+
   destroy() {
     froggyLayer.clear();
     face = null;
