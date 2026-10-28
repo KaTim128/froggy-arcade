@@ -34,7 +34,7 @@ import { drawFrogToken, floatDeduct } from '../ui/hud';
 import { tinyText, tinyWrap } from '../ui/tinyText';
 import { xpProgress } from '../game/creatureLevel';
 import {
-  BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, PACK_COST, bossById, creatureById, type Attack, type Creature,
+  BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, PACK_COST, BOSSES, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
 import { REST_MS, REVIVE_COST, abandonLadder, activeOwned, ownedCreature, needsRecovery, restLeft, revive, openPack, pickCard, release, retreat, setActive, startLadder } from '../game/creatureClash';
 
@@ -687,16 +687,22 @@ export class CreatureHub extends Phaser.Scene {
       L.add(text(this, px + 4, 79, 'YOU KEEP WHAT', PALETTE.ash));
       L.add(text(this, px + 4, 88, 'IT HAS PAID.', PALETTE.ash));
     }
-    L.add(text(this, px + 4, 100, `TOKENS: ${ledger.balance()}`, PALETTE.cream));
+    // which bosses this time round: none comes back until all have been beaten
+    if (!LADDER_WIN) {
+      L.add(text(this, px + 4, 79, `BOSSES: ${c.bossesBeaten.length}/${BOSSES.length} BEATEN`, PALETTE.gold));
+      L.add(text(this, px + 4, 88, 'NONE COMES BACK TILL', PALETTE.ash));
+    }
+    if (!LADDER_WIN) L.add(text(this, px + 4, 97, 'ALL HAVE FALLEN.', PALETTE.ash));
+    L.add(text(this, px + 4, 108, `TOKENS: ${ledger.balance()}`, PALETTE.cream));
     if (run) {
-      L.add(text(this, px + 4, 109, LADDER_WIN ? `THIS RUN: +${run.earned}` : `BOSS PAYS ${LADDER_BOSS_WIN}`, PALETTE.gold));
-      L.add(button(this, px + 59, 128, run.level > LADDER_LEVELS ? 'FIGHT THE BOSS' : `CONTINUE - LV ${run.level}`, () => this.ladderFight(), { width: 108, height: 13, disabled: !activeOwned() }));
-      L.add(button(this, px + 59, 148, 'ABANDON RUN', () => this.confirmAbandon(), { width: 108, height: 12, fill: 0x2a1424, hoverFill: 0x5a2040 }));
+      L.add(text(this, px + 4, 119, LADDER_WIN ? `THIS RUN: +${run.earned}` : `BOSS PAYS ${LADDER_BOSS_WIN}`, PALETTE.gold));
+      L.add(button(this, px + 59, 134, run.level > LADDER_LEVELS ? 'FIGHT THE BOSS' : `CONTINUE - LV ${run.level}`, () => this.ladderFight(), { width: 108, height: 13, disabled: !activeOwned() }));
+      L.add(button(this, px + 59, 151, 'ABANDON RUN', () => this.confirmAbandon(), { width: 108, height: 12, fill: 0x2a1424, hoverFill: 0x5a2040 }));
     } else {
-      L.add(text(this, px + 4, 109, `RUNS ${c.ladderRuns}  CLEARED ${c.ladderClears}`, PALETTE.fog));
+      L.add(text(this, px + 4, 119, `RUNS ${c.ladderRuns}  CLEARED ${c.ladderClears}`, PALETTE.fog));
       const can = ledger.balance() >= LADDER_COST && !!activeOwned();
-      L.add(button(this, px + 59, 134, `START RUN  ${LADDER_COST} TOK`, () => this.confirmStart(), { width: 108, height: 13, disabled: !can }));
-      if (!activeOwned()) L.add(text(this, px + 4, 146, 'NEED A CREATURE', PALETTE.ash));
+      L.add(button(this, px + 59, 138, `START RUN  ${LADDER_COST} TOK`, () => this.confirmStart(), { width: 108, height: 13, disabled: !can }));
+      if (!activeOwned()) L.add(text(this, px + 4, 148, 'NEED A CREATURE', PALETTE.ash));
     }
   }
 

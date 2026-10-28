@@ -59,6 +59,11 @@ export interface CreatureState {
   ladder: LadderRun | null;
   /** The last boss a finished (or lost) run had: the next one draws another. */
   lastBoss: string | null;
+  /**
+   * The ladder bosses beaten this time round (user, 28 Oct): none comes up
+   * again until all ten have been beaten, then the round starts over.
+   */
+  bossesBeaten: string[];
   /** The last opponent met in each place, so the next one is someone else. */
   lastFoe: Record<string, string>;
   ladderRuns: number;
@@ -80,6 +85,7 @@ export function defaultCreatures(): CreatureState {
     battle: null,
     ladder: null,
     lastBoss: null,
+    bossesBeaten: [],
     lastFoe: {},
     ladderRuns: 0,
     ladderClears: 0,
@@ -162,6 +168,7 @@ export function sanitizeCreatures(raw: unknown): CreatureState {
     battle,
     ladder,
     lastBoss: BOSSES.some((x) => x.id === r.lastBoss) ? (r.lastBoss as string) : null,
+    bossesBeaten: Array.isArray(r.bossesBeaten) ? [...new Set(r.bossesBeaten.filter((id): id is string => typeof id === 'string' && BOSSES.some((x) => x.id === id)))] : [],
     lastFoe,
     ladderRuns: Math.max(0, Math.floor(num(r.ladderRuns))),
     ladderClears: Math.max(0, Math.floor(num(r.ladderClears))),

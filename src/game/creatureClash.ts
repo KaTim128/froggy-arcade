@@ -226,7 +226,7 @@ export function startLadder(rng: () => number = Math.random): Result {
   const why = unfit(c);
   if (why) return no(why);
   if (ledger.balance() < LADDER_COST) return no(`THE LADDER COSTS ${LADDER_COST} TOKENS. YOU HAVE ${ledger.balance()}.`);
-  const draw = rollLadder(c.lastBoss, rng);
+  const draw = rollLadder(c.lastBoss, rng, c.bossesBeaten);
   if (!ledger.debit(LADDER_COST, 'creature')) return no(`THE LADDER COSTS ${LADDER_COST} TOKENS.`);
   edit((s) => {
     s.ladder = { level: 1, foes: draw.foes, places: draw.places, boss: draw.boss, earned: 0 };
@@ -311,6 +311,9 @@ export function finishBattle(won: boolean): BattleEnd {
         s.ladder.earned += prize;
         if (runDone) {
           s.lastBoss = s.ladder.boss;
+          // this boss is done with until every one of them has been beaten
+          const done = [...new Set([...s.bossesBeaten, s.ladder.boss])];
+          s.bossesBeaten = BOSSES.every((x) => done.includes(x.id)) ? [] : done;
           s.ladder = null;
           s.ladderClears += 1;
         } else s.ladder.level += 1;

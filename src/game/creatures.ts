@@ -496,13 +496,20 @@ export const MAX_OWNED = 2;
  * and the boss -- not the same one as the last run's, where there is a
  * choice.
  */
-export function rollLadder(lastBoss: string | null, rng: () => number = Math.random): { foes: string[]; places: string[]; boss: string } {
+/**
+ * A run's draw: five creatures, the places, and the boss.  The boss is one
+ * not yet beaten this time round (`beaten`): every one of the ten is fought
+ * before any comes back -- and never the same one twice running.
+ */
+export function rollLadder(lastBoss: string | null, rng: () => number = Math.random, beaten: string[] = []): { foes: string[]; places: string[]; boss: string } {
   const pool = CREATURES.map((c) => c.id);
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
-  const bosses = BOSSES.map((b) => b.id).filter((id) => id !== lastBoss);
+  const fresh = BOSSES.map((b) => b.id).filter((id) => !beaten.includes(id));
+  const open = fresh.length ? fresh : BOSSES.map((b) => b.id);
+  const bosses = open.length > 1 ? open.filter((id) => id !== lastBoss) : open;
   const places = Array.from({ length: LADDER_LEVELS + 1 }, () => BIOMES[Math.floor(rng() * BIOMES.length)].id);
   return { foes: pool.slice(0, LADDER_LEVELS), places, boss: bosses[Math.floor(rng() * bosses.length)] };
 }
