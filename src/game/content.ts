@@ -180,7 +180,7 @@ export const CABINETS: CabinetDef[] = [
   // (moved right, away from the cranes, into the first of the marked spots: log #70, docs/refs/room4-marks.jpg)
   { id: 'bogball', title: 'BOG BALL', tier: 'medium', cost: 5, reward: 10, x: 160, y: 74, color: 0x5a8a3a, room: 'lounge', symbol: 'BB', motif: 'bog' },
   // CROAKED, beside it in the second marked spot: a cabinet of its own colours, pond-teal and gold
-  { id: 'croaked', title: 'CROAKED', tier: 'medium', cost: 10, reward: 20, x: 202, y: 74, color: 0x1f8a8a, room: 'lounge', symbol: 'CR', motif: 'maze' },
+  { id: 'croaked', title: 'CROAKED', tier: 'medium', cost: 5, reward: 10, x: 202, y: 74, color: 0x1f8a8a, room: 'lounge', symbol: 'CR', motif: 'maze' },
 
   // ---- and the room at the back, where none of it is a game
   // Three tokens a spin, every spin raised through the shell as it is pulled

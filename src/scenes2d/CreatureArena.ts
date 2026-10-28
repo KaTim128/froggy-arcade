@@ -772,8 +772,16 @@ export class CreatureArena extends Phaser.Scene {
       g.fillCircle(rnd.between(0, GAME_W), rnd.between(0, GAME_H), rnd.frac() * 1.6);
     }
     // ---- the ground
+    // the cover goes down first, so the floor's pools, crystals and sheets
+    // are laid round it and round the two starts, never under or on them
+    this.layOutCover(rnd);
+    const avoid = [
+      ...this.props.map((q) => ({ x: q.x, y: q.y, r: q.r * 1.5 })),
+      { x: ARENA.x + 40, y: ARENA.y + ARENA.h / 2, r: 12 },
+      { x: ARENA.x + ARENA.w - 40, y: ARENA.y + ARENA.h / 2, r: 12 },
+    ];
     // (each world's own floor and set pieces: art/arenaFloors)
-    paintFloor(g, b.id, ARENA, b.ground, b.groundDark, b.id);
+    paintFloor(g, b.id, ARENA, b.ground, b.groundDark, b.id, 1, avoid);
     // a worn track round the middle, where fights happen
     g.lineStyle(3, b.groundDark, 0.25).strokeEllipse(ARENA.x + ARENA.w / 2, ARENA.y + ARENA.h / 2, ARENA.w * 0.72, ARENA.h * 0.78);
     // the haze of the place, heaviest at the edges: light coming in over it
@@ -790,7 +798,6 @@ export class CreatureArena extends Phaser.Scene {
     g.fillStyle(0x0a0c16, 0.82).fillRect(0, 0, GAME_W, ARENA.y - 1);
     g.fillStyle(0x0a0c16, 0.82).fillRect(0, ARENA.y + ARENA.h + 1, GAME_W, GAME_H - ARENA.y - ARENA.h - 1);
 
-    this.layOutCover(rnd);
     this.terrain = this.add.graphics().setDepth(1);
     this.repaintCover();
   }

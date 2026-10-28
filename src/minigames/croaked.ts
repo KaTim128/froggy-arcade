@@ -22,7 +22,7 @@
  * every fly -- can be reached; the two start at the two ends of the maze's
  * longest path.
  *
- * 10 tokens a round (the cabinet's price, taken once by the shell), 20 for a
+ * 5 tokens a round (the cabinet's price, taken once by the shell), 10 for a
  * win, nothing for a loss: the shell pays, once.
  */
 

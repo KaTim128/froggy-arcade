@@ -40,6 +40,30 @@ export function shade(c: number, k: number): number {
 }
 
 const at = (r: Rnd, b: Box, pad = 2): [number, number] => [b.x + pad + r.frac() * (b.w - pad * 2), b.y + pad + r.frac() * (b.h - pad * 2)];
+
+/** Something on the floor already: the cover, the fighters' starts, the bigger decorations. */
+export interface Taken {
+  x: number;
+  y: number;
+  r: number;
+}
+/**
+ * NOTHING ON TOP OF ANYTHING ELSE.  The spots the floor's bigger pieces (a
+ * pool, a crystal, an ice sheet) may go: tried at random, refused if they
+ * would touch the cover or a piece already down, and remembered once used.
+ * After a dozen refusals the piece is simply left out.
+ */
+let taken: Taken[] = [];
+const free = (r: Rnd, b: Box, rad: number, pad = 2): [number, number] | null => {
+  for (let i = 0; i < 14; i++) {
+    const [x, y] = at(r, b, pad + rad * 0.5);
+    if (taken.every((t) => Math.hypot(t.x - x, t.y - y) > t.r + rad + 2)) {
+      taken.push({ x, y, r: rad });
+      return [x, y];
+    }
+  }
+  return null;
+};
 const speckle = (g: G, r: Rnd, b: Box, n: number, cols: number[], a = 1, size = 1): void => {
   for (let i = 0; i < n; i++) {
     const [x, y] = at(r, b, 1);
@@ -70,7 +94,9 @@ function caves(g: G, r: Rnd, b: Box, ground: number, dark: number, s: number): v
     g.fillStyle(0x4a4450, 1).fillTriangle(x - 1 * s, y + 8 * s, x + 3 * s, y + 8 * s, x, y);
   }
   for (let i = 0; i < 5; i++) {
-    const [x, y] = at(r, b, 8);
+    const p = free(r, b, 5 * s, 8);
+    if (!p) continue;
+    const [x, y] = p;
     g.fillStyle(0x8a6ae0, 0.25).fillCircle(x, y, 5 * s);
     g.fillStyle(0xb89aff, 1).fillTriangle(x - 2 * s, y + 2 * s, x + 2 * s, y + 2 * s, x, y - 4 * s);
     g.fillStyle(0xffffff, 0.8).fillRect(x, y - 2 * s, 1, 1);
@@ -116,7 +142,9 @@ function forests(g: G, r: Rnd, b: Box, ground: number, dark: number, s: number):
     }
   }
   for (let i = 0; i < 7; i++) {
-    const [x, y] = at(r, b, 4);
+    const p = free(r, b, 3 * s, 4);
+    if (!p) continue;
+    const [x, y] = p;
     g.fillStyle(0xe8e0c8, 1).fillRect(x, y, 1, 2 * s);
     g.fillStyle(i % 2 ? 0xc83a2a : 0xd8a040, 1).fillEllipse(x + 0.5, y, 4 * s, 2 * s);
   }
@@ -131,14 +159,18 @@ function forests(g: G, r: Rnd, b: Box, ground: number, dark: number, s: number):
 function frozen(g: G, r: Rnd, b: Box, ground: number, dark: number, s: number): void {
   // drifts with blue shadows on their lee side, glassy ice sheets, footprints
   for (let i = 0; i < 14; i++) {
-    const [x, y] = at(r, b, 10);
     const w = (20 + r.frac() * 30) * s;
+    const p = free(r, b, w * 0.45, 10);
+    if (!p) continue;
+    const [x, y] = p;
     g.fillStyle(shade(dark, -0.05), 0.45).fillEllipse(x + 2, y + 3 * s, w, 7 * s);
     g.fillStyle(shade(ground, 0.5), 1).fillEllipse(x, y, w, 6 * s);
   }
   for (let i = 0; i < 5; i++) {
-    const [x, y] = at(r, b, 16);
     const w = (24 + r.frac() * 24) * s;
+    const p = free(r, b, w * 0.45, 16);
+    if (!p) continue;
+    const [x, y] = p;
     g.fillStyle(0x9ad0e8, 0.7).fillEllipse(x, y, w, 10 * s);
     g.fillStyle(0xc8ecff, 0.8).fillEllipse(x - 3 * s, y - 2 * s, w * 0.6, 4 * s);
     g.lineStyle(1, 0xffffff, 0.9).lineBetween(x - w * 0.3, y - 1, x - w * 0.1, y - 3 * s);
@@ -155,8 +187,10 @@ function swamps(g: G, r: Rnd, b: Box, ground: number, dark: number, s: number): 
   // wet mud, black pools with lily pads and the odd bubble, reeds round the edge
   speckle(g, r, b, 200 * s, [dark, shade(ground, 0.12)], 0.5, 2);
   for (let i = 0; i < 7; i++) {
-    const [x, y] = at(r, b, 14);
     const w = (18 + r.frac() * 26) * s;
+    const p = free(r, b, w * 0.5, 14);
+    if (!p) continue;
+    const [x, y] = p;
     g.fillStyle(0x1a2418, 1).fillEllipse(x, y, w, w * 0.45);
     g.fillStyle(0x2a3a2a, 1).fillEllipse(x - w * 0.1, y - 1, w * 0.7, w * 0.25);
     g.lineStyle(1, 0x5a7a4a, 0.7).strokeEllipse(x, y, w, w * 0.45);
@@ -197,6 +231,12 @@ function ruins(g: G, r: Rnd, b: Box, ground: number, dark: number, s: number): v
   // THE SUNKEN SHIP: its hull and ribs breaking up through the floor in the far corner
   const sx = b.x + b.w - 58 * s;
   const sy = b.y + 2 * s;
+  const shipClear = taken.every((t) => Math.hypot(t.x - (sx + 26 * s), t.y - (sy + 10 * s)) > t.r + 26 * s);
+  taken.push({ x: sx + 26 * s, y: sy + 10 * s, r: 26 * s });
+  if (!shipClear) {
+    speckle(g, r, b, 60 * s, [0x4a6a4a], 0.6, 2);
+    return;
+  }
   g.fillStyle(0x000000, 0.25).fillEllipse(sx + 26 * s, sy + 16 * s, 56 * s, 12 * s);
   g.fillStyle(0x4a3220, 1).fillEllipse(sx + 26 * s, sy + 12 * s, 52 * s, 14 * s);
   g.fillStyle(0x6a4a2a, 1).fillEllipse(sx + 26 * s, sy + 10 * s, 46 * s, 8 * s);
@@ -222,7 +262,9 @@ function shore(g: G, r: Rnd, b: Box, ground: number, dark: number, s: number): v
   }
   const shells = [0xffe8f0, 0xf0b8a0, 0xffffff];
   for (let i = 0; i < 14; i++) {
-    const [x, y] = at(r, { ...b, y: wy, h: b.h - (wy - b.y) }, 4);
+    const p = free(r, { ...b, y: wy, h: b.h - (wy - b.y) }, 3 * s, 4);
+    if (!p) continue;
+    const [x, y] = p;
     g.fillStyle(shells[i % 3], 1).fillTriangle(x - 2 * s, y + 1, x + 2 * s, y + 1, x, y - 2 * s);
   }
   for (let i = 0; i < 6; i++) {
@@ -245,8 +287,8 @@ function desert(g: G, r: Rnd, b: Box, ground: number, dark: number, s: number): 
     for (let x = b.x; x <= b.x + b.w; x += 4) g.lineTo(x, y + 2 * s + Math.sin(x * 0.05 + i) * 3 * s);
     g.strokePath();
   }
-  const px = b.x + b.w * 0.22;
-  const py = b.y + b.h * 0.7;
+  const pan = free(r, b, 24 * s, 26 * s);
+  const [px, py] = pan ?? [-999, -999];
   g.fillStyle(shade(ground, 0.2), 1).fillEllipse(px, py, 50 * s, 18 * s);
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;
@@ -264,7 +306,9 @@ function volcano(g: G, r: Rnd, b: Box, ground: number, dark: number, s: number):
   // basalt plates split by lava that glows, ash drifts, and cinders
   speckle(g, r, b, 160 * s, [dark, shade(ground, 0.1)], 0.6, 2);
   for (let i = 0; i < 9; i++) {
-    let [x, y] = at(r, b, 6);
+    const p = free(r, b, 14 * s, 6);
+    if (!p) continue;
+    let [x, y] = p;
     for (let k = 0; k < 5; k++) {
       const nx = x + (r.frac() * 22 - 8) * s;
       const ny = y + (r.frac() * 14 - 7) * s;
@@ -290,8 +334,80 @@ const PAINT: Record<string, (g: G, r: Rnd, b: Box, ground: number, dark: number,
  * Paint world `id`'s floor into the box.  `s` scales the detail down for a
  * thumbnail (1 = the arena).  An unknown world just gets its plain ground.
  */
-export function paintFloor(g: G, id: string, box: Box, ground: number, dark: number, seed: string, s = 1): void {
+export function paintFloor(g: G, id: string, box: Box, ground: number, dark: number, seed: string, s = 1, avoid: Taken[] = []): void {
   const r = new Phaser.Math.RandomDataGenerator([seed]);
+  taken = avoid.map((t) => ({ ...t }));
   g.fillStyle(ground, 1).fillRect(box.x, box.y, box.w, box.h);
   PAINT[id]?.(g, r, box, ground, dark, s);
+  paintEdge(g, id, box, s);
+}
+
+/**
+ * THE RING'S OWN WALL, a few pixels inside its edge: cut stone in the caves,
+ * a split-rail fence in the fields, roots and logs in the Deepwood, packed
+ * ice on the pass, a reed bank in the mire, fallen masonry in the ruins,
+ * driftwood on the shore, sandstone blocks in the desert, basalt with fire
+ * in its seams on the peak.  Only paint: where anyone can go is unchanged.
+ */
+function paintEdge(g: G, id: string, b: Box, s: number): void {
+  const t = Math.max(2, Math.round(4 * s));
+  const runs: Array<[number, number, number, number]> = [
+    [b.x, b.y, b.w, t],
+    [b.x, b.y + b.h - t, b.w, t],
+    [b.x, b.y, t, b.h],
+    [b.x + b.w - t, b.y, t, b.h],
+  ];
+  const blocks = (base: number, hi: number, lo: number, len: number): void => {
+    for (const [x, y, w, h] of runs) {
+      g.fillStyle(base, 1).fillRect(x, y, w, h);
+      const along = w > h;
+      const n = Math.ceil((along ? w : h) / len);
+      for (let i = 0; i < n; i++) {
+        const bx = along ? x + i * len : x;
+        const by = along ? y : y + i * len;
+        g.fillStyle(lo, 1).fillRect(bx, by, along ? 1 : w, along ? h : 1);
+        g.fillStyle(hi, 1).fillRect(bx + (along ? 1 : 0), by + (along ? 0 : 1), along ? len - 1 : w, 1);
+      }
+    }
+  };
+  switch (id) {
+    case 'caves':
+      blocks(0x3a3436, 0x5a5254, 0x1e1a1c, 9 * s);
+      break;
+    case 'ruins':
+      blocks(0x8a8064, 0xc8bc98, 0x4a4434, 12 * s);
+      break;
+    case 'desert':
+      blocks(0xc08a4a, 0xe8b878, 0x8a5a2a, 10 * s);
+      break;
+    case 'frozen':
+      blocks(0x9ac8e0, 0xf0faff, 0x5a8aa8, 14 * s);
+      break;
+    case 'volcano':
+      blocks(0x241612, 0x4a2a20, 0xff6a1a, 8 * s);
+      break;
+    case 'fields': {
+      // split-rail fence: posts and two rails
+      for (const [x, y, w, h] of runs) {
+        const along = w > h;
+        g.fillStyle(0x8a6a3a, 1).fillRect(x + (along ? 0 : 1), y + (along ? 1 : 0), along ? w : 1, along ? 1 : h);
+        g.fillStyle(0x6a4a24, 1).fillRect(x + (along ? 0 : t - 1), y + (along ? t - 1 : 0), along ? w : 1, along ? 1 : h);
+        for (let i = 0; i < (along ? w : h); i += 14 * s) g.fillStyle(0x5a3a1a, 1).fillRect(along ? x + i : x, along ? y : y + i, along ? 2 : t, along ? t : 2);
+      }
+      break;
+    }
+    case 'forests':
+      blocks(0x3a2814, 0x5a4024, 0x1e140a, 16 * s);
+      for (const [x, y, w, h] of runs) for (let i = 0; i < (w > h ? w : h); i += 11 * s) g.fillStyle(0x3a6a2a, 1).fillRect(w > h ? x + i : x, w > h ? y : y + i, 2, 2);
+      break;
+    case 'swamps':
+      for (const [x, y, w, h] of runs) {
+        g.fillStyle(0x1e2a1a, 1).fillRect(x, y, w, h);
+        for (let i = 0; i < (w > h ? w : h); i += 3) g.fillStyle(i % 2 ? 0x6a8a4a : 0x4a6a3a, 1).fillRect(w > h ? x + i : x + (i % t), w > h ? y + (i % t) : y + i, 1, 2);
+      }
+      break;
+    case 'shore':
+      blocks(0x8a6a4a, 0xc8a878, 0x4a3a2a, 18 * s);
+      break;
+  }
 }
