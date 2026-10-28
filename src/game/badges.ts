@@ -76,6 +76,7 @@ export const BADGES: BadgeDef[] = [
   // ---- creature clash
   { id: 'c_boss5', name: 'BOSS HUNTER', desc: 'BEAT 3 DIFFERENT LADDER BOSSES.', hint: 'BEAT 3 DIFFERENT LADDER BOSSES.', col: 0x8a5ad8, kind: 'clash' },
   { id: 'c_boss10', name: 'BOSS SLAYER', desc: 'BEAT 6 DIFFERENT LADDER BOSSES.', hint: 'BEAT 6 DIFFERENT LADDER BOSSES.', col: 0xa85ad8, kind: 'clash' },
+  { id: 'c_story', name: 'WORLD WALKER', desc: 'BEAT ALL FIVE STORY WORLDS IN CREATURE CLASH.', hint: 'BEAT THE BOSS OF EVERY STORY WORLD.', col: 0x5ac88a, kind: 'clash' },
   { id: 'c_boss_all', name: 'BANE OF BOSSES', desc: 'BEAT EVERY LADDER BOSS THERE IS.', hint: 'BEAT EVERY LADDER BOSS THERE IS.', col: 0xd85ac8, kind: 'clash' },
   // ---- secrets: ??? until found
   { id: 's_lazy', name: 'LAZY HIDING', desc: 'HID IN ONE SPOT FOR A WHOLE ROUND OF HIDE AND SEEK.', hint: 'A SECRET.', col: 0x6a8a5a, kind: 'secret' },

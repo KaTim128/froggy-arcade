@@ -16,6 +16,7 @@
  * what is true.
  */
 
+import { STAGES, WORLDS, stageLevel, storyPrice } from '../game/creatureStory';
 import { paintFloor } from '../art/arenaFloors';
 import { isTouch } from '../core/device';
 import { capLabel, codeFor } from '../core/keymap';
@@ -24,7 +25,7 @@ import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { ledger } from '../core/ledger';
-import { button, centerText, confirmDialog, fadeToScene, smallText, text } from '../core/ui';
+import { button, centerText, confirmDialog, centerSmall, fadeToScene, smallText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
 import { drawAttackIcon } from '../art/attackIcons';
@@ -37,10 +38,10 @@ import { xpProgress } from '../game/creatureLevel';
 import {
   BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, PACK_COST, BOSSES, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
-import { REST_MS, REVIVE_COST, abandonLadder, activeOwned, ownedCreature, needsRecovery, restLeft, revive, openPack, pickCard, release, retreat, setActive, startLadder } from '../game/creatureClash';
+import { REST_MS, REVIVE_COST, abandonLadder, activeCreature, activeOwned, isReplay, worldOpen, ownedCreature, needsRecovery, restLeft, revive, openPack, pickCard, release, retreat, setActive, startLadder } from '../game/creatureClash';
 
-type Screen = 'home' | 'recruit' | 'pack' | 'map' | 'ladder' | 'controls';
-const SCREENS: Screen[] = ['home', 'map', 'ladder', 'recruit', 'controls'];
+type Screen = 'home' | 'recruit' | 'pack' | 'map' | 'story' | 'ladder' | 'controls';
+const SCREENS: Screen[] = ['home', 'story', 'ladder', 'recruit', 'controls'];
 
 interface Shown {
   c: { element: Creature['element']; body: Creature['body'] };
@@ -48,7 +49,18 @@ interface Shown {
   y: number;
   s: number;
   f: number;
+  /** The story map's marker: it hops, and glides to the world picked. */
+  hop?: boolean;
 }
+
+/** Where each world sits on the story map, along a winding path. */
+const WORLD_AT: Array<[number, number]> = [
+  [26, 132],
+  [62, 80],
+  [100, 128],
+  [140, 76],
+  [176, 124],
+];
 
 /** `s` broken into lines of at most `n` characters, at the spaces. */
 function wrapWords(s: string, n: number): string[] {
@@ -71,6 +83,9 @@ export class CreatureHub extends Phaser.Scene {
   private layer!: Phaser.GameObjects.Container;
   private art!: Phaser.GameObjects.Graphics;
   private shown: Shown[] = [];
+  /** The story map: the world picked, and where the marker is now. */
+  private storyW = 0;
+  private mark = { x: WORLD_AT[0][0], y: WORLD_AT[0][1] - 20 };
   private msg = '';
   private from = 'ArcadeLounge';
   private biome = BIOMES[0].id;
@@ -128,9 +143,23 @@ export class CreatureHub extends Phaser.Scene {
     this.draw();
   }
 
-  update(time: number): void {
+  update(time: number, delta: number): void {
     this.art.clear();
-    for (const s of this.shown) drawCreature(this.art, s.c, s.x, s.y, s.s, s.f, time / 1000);
+    for (const s of this.shown) {
+      if (s.hop) {
+        // the marker: glides along to the world picked, hopping as it goes
+        const [tx, ty] = WORLD_AT[this.storyW];
+        const k = Math.min(1, (delta / 1000) * 5);
+        this.mark.x += (tx - this.mark.x) * k;
+        this.mark.y += (ty - 20 - this.mark.y) * k;
+        const moving = Math.hypot(tx - this.mark.x, ty - 20 - this.mark.y) > 1;
+        const hop = Math.abs(Math.sin(time / (moving ? 90 : 220))) * (moving ? 5 : 2);
+        s.x = this.mark.x;
+        s.y = this.mark.y - hop;
+        s.f = tx >= this.mark.x - 0.5 ? 1 : -1;
+      }
+      drawCreature(this.art, s.c, s.x, s.y, s.s, s.f, time / 1000);
+    }
   }
 
   /** LEAVE, in the pause menu between RESUME and EXIT TO START MENU. */
@@ -176,7 +205,7 @@ export class CreatureHub extends Phaser.Scene {
     if (top) {
       // (LEAVE is in the pause menu: Esc on a keyboard, the gear on a phone)
     } else if (!(this.screen === 'pack' && this.picked)) L.add(button(this, GAME_W - 26, 8, 'BACK', () => this.go(store.get().creatures.owned.length ? 'home' : 'recruit'), { width: 44, height: 11 }));
-    ({ home: () => this.home(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), ladder: () => this.ladder(), controls: () => this.controls() })[this.screen]();
+    ({ home: () => this.home(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), story: () => this.story(), ladder: () => this.ladder(), controls: () => this.controls() })[this.screen]();
     // (on the pack screen the line keeps to the right-hand column, clear of
     // the cards; once one is picked its own panel says who joined)
     const packMsg = this.screen === 'pack';
@@ -444,8 +473,12 @@ export class CreatureHub extends Phaser.Scene {
     const busy = !!c.pending;
     const run = c.ladder;
     const resting = !!act && restLeft(act) > 0;
-    this.tile(mx, 34, mw, 24, 'ZONE BATTLE', resting ? 'RESTING' : act ? `${BATTLE_COST} IN, WIN ${BATTLE_WIN}` : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => this.go('map'), !act || resting);
-    this.tile(mx, 61, mw, 24, 'LADDER', run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
+    // STORY MODE, in place of the zone battles (user, 28 Oct)
+    const sw = Math.min(c.story.cleared, WORLDS.length - 1);
+    const storySub = c.story.cleared >= WORLDS.length ? 'ALL WORLDS DONE' : `WORLD ${sw + 1} OF ${WORLDS.length}`;
+    this.tile(mx, 34, mw, 24, 'STORY MODE', resting ? 'RESTING' : act ? storySub : 'NO CREATURE', 0xff5a6a, (g, x, y, col) => drawAttackIcon(g, 'dash', x, y, col), () => ((this.storyW = sw), (this.mark = { x: WORLD_AT[sw][0], y: WORLD_AT[sw][1] - 20 }), this.go('story')), !act || resting);
+    const ladderOpen = c.story.cleared >= WORLDS.length || !!run;
+    this.tile(mx, 61, mw, 24, 'LADDER', !ladderOpen ? 'AFTER THE STORY' : run ? (run.level > LADDER_LEVELS ? 'FINAL BOSS NEXT' : `LEVEL ${run.level} OF ${LADDER_LEVELS}`) : `ENTRY ${LADDER_COST} TOK`, PALETTE.gold, (g, x, y, col) => {
       // three rungs
       g.fillStyle(col, 1).fillRect(x - 5, y - 7, 2, 14).fillRect(x + 3, y - 7, 2, 14);
       for (const k of [-4, 0, 4]) g.fillRect(x - 3, y + k, 6, 1);
@@ -683,6 +716,106 @@ export class CreatureHub extends Phaser.Scene {
    * yours.  The fights are drawn when you pay, so leaving and coming back
    * meets the same ones.
    */
+  /**
+   * ---- STORY MODE: THE MAP (B7).  The five worlds along a path of stepping
+   * stones, each a round window on its own ground; your creature hops along
+   * to the one you pick.  Beaten ones are ringed in gold, the open one in
+   * cream, the rest are locked.  On the right, the world picked: its
+   * levels, its five stages (four battles and the boss) with how far you
+   * are, who is next, and what the next fight costs and pays.
+   */
+  private story(): void {
+    const L = this.layer;
+    const c = store.get().creatures;
+    L.add(text(this, 8, 18, 'STORY MODE', PALETTE.gold));
+    // the path: stepping stones from world to world
+    const path = this.add.graphics();
+    for (let i = 0; i < WORLDS.length - 1; i++) {
+      const [x0, y0] = WORLD_AT[i];
+      const [x1, y1] = WORLD_AT[i + 1];
+      const n = 6;
+      for (let k = 1; k < n; k++) {
+        const x = x0 + ((x1 - x0) * k) / n;
+        const y = y0 + ((y1 - y0) * k) / n + Math.sin((k / n) * Math.PI) * 8;
+        path.fillStyle(i < c.story.cleared ? PALETTE.gold : 0x3a4060, 1).fillCircle(x, y, 1.5);
+      }
+    }
+    L.add(path);
+    WORLDS.forEach((w, i) => {
+      const [x, y] = WORLD_AT[i];
+      const open = worldOpen(i, c);
+      const done = i < c.story.cleared;
+      const b = BIOMES.find((q) => q.id === w.biome)!;
+      const pic = this.add.graphics();
+      paintFloor(pic, w.biome, { x: x - 14, y: y - 14, w: 28, h: 28 }, b.ground, b.groundDark, w.id, 0.35);
+      pic.setMask(this.make.graphics({}, false).fillStyle(0xffffff).fillCircle(x, y, 13).createGeometryMask());
+      L.add(pic);
+      const ring = this.add.circle(x, y, 13, 0x000000, open ? 0.001 : 0.6).setStrokeStyle(i === this.storyW ? 2 : 1, done ? PALETTE.gold : open ? PALETTE.cream : 0x3a4060);
+      ring.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        this.storyW = i;
+        audio.sfx('ui_blip', 0.4);
+        this.draw();
+      });
+      L.add(ring);
+      if (!open) {
+        // a padlock
+        const g = this.add.graphics();
+        g.lineStyle(1.5, 0x8a90b0, 1).strokeCircle(x, y - 2, 3);
+        g.fillStyle(0x8a90b0, 1).fillRect(x - 4, y - 1, 8, 6);
+        L.add(g);
+      }
+      L.add(centerSmall(this, x, y + 18, `${i + 1}`, done ? PALETTE.gold : open ? PALETTE.cream : 0x5a6080));
+    });
+    // your creature, the marker
+    const me = activeCreature();
+    if (me) this.shown.push({ c: me, x: this.mark.x, y: this.mark.y, s: 1.1, f: 1, hop: true });
+    // ---- the world picked
+    const w = WORLDS[this.storyW];
+    const i = this.storyW;
+    const open = worldOpen(i, c);
+    const replay = isReplay(i, c);
+    const stage = c.story.stage[i] ?? 0;
+    const px = 198;
+    L.add(this.add.rectangle(px, 26, 116, 140, 0x1a1e38).setOrigin(0, 0).setStrokeStyle(1, open ? PALETTE.gold : 0x2a3050));
+    wrapWords(w.name, 18).slice(0, 2).forEach((ln, k) => L.add(text(this, px + 4, 30 + k * 9, ln, PALETTE.gold)));
+    L.add(text(this, px + 4, 49, `LEVELS ${w.lo}-${w.hi}`, PALETTE.cream));
+    wrapWords(w.blurb, 27).slice(0, 2).forEach((ln, k) => L.add(smallText(this, px + 4, 60 + k * 7, ln, PALETTE.ash)));
+    // the five stages: four battles and the boss
+    const sg = this.add.graphics();
+    for (let k = 0; k <= STAGES; k++) {
+      const x = px + 14 + k * 20;
+      const yy = 84;
+      const boss = k === STAGES;
+      const past = open && k < stage;
+      const next = open && k === stage;
+      if (k > 0) sg.fillStyle(past ? PALETTE.gold : 0x3a4060, 1).fillRect(x - 16, yy, 12, 1);
+      sg.fillStyle(past ? PALETTE.gold : 0x12152a, 1).fillCircle(x, yy, boss ? 6 : 4);
+      sg.lineStyle(next ? 2 : 1, next ? PALETTE.cream : boss ? 0xff5a6a : 0x3a4060, 1).strokeCircle(x, yy, boss ? 6 : 4);
+      if (boss) sg.fillStyle(past ? 0x1a1e38 : 0xff5a6a, 1).fillRect(x - 2, yy - 2, 1, 2).fillRect(x + 1, yy - 2, 1, 2).fillRect(x - 1, yy + 1, 2, 1);
+    }
+    L.add(sg);
+    if (!open) {
+      L.add(text(this, px + 4, 98, 'LOCKED', 0xff9a9a));
+      wrapWords(`BEAT ${WORLDS[i - 1].bossName} TO OPEN IT.`, 18).forEach((ln, k) => L.add(text(this, px + 4, 108 + k * 9, ln, PALETTE.ash)));
+      return;
+    }
+    const nextLine = stage >= STAGES ? `BOSS: ${w.bossName}` : `BATTLE ${stage + 1}/${STAGES} - LV ${stageLevel(i, stage)}`;
+    wrapWords(nextLine, 18).slice(0, 2).forEach((ln, k) => L.add(text(this, px + 4, 96 + k * 9, ln, stage >= STAGES ? 0xff9a9a : PALETTE.cream)));
+    const price = storyPrice(i, replay);
+    L.add(text(this, px + 4, 113, `WIN: +${price.win} TOKENS`, PALETTE.mossLight));
+    // (the small type holds 27 to a line in this panel)
+    L.add(smallText(this, px + 4, 123, replay ? 'REPLAY: BOSS ALREADY BEATEN' : 'LOSS: IT FAINTS, NOTHING', PALETTE.ash));
+    if (!replay) L.add(smallText(this, px + 4, 130, 'ELSE IS LOST', PALETTE.ash));
+    const act = activeOwned();
+    const resting = !!act && restLeft(act) > 0;
+    L.add(button(this, px + 58, 146, `FIGHT  ${price.cost} TOK`, () => this.storyFight(i), { width: 106, height: 14, disabled: !act || resting || ledger.balance() < price.cost }));
+    if (resting) L.add(smallText(this, px + 4, 157, 'YOUR CREATURE IS RESTING', 0xff9a9a));
+  }
+
+  private storyFight(w: number): void {
+    this.scene.start('CreatureArena', { mode: 'story', world: w, from: this.from });
+  }
+
   private ladder(): void {
     const L = this.layer;
     const c = store.get().creatures;
@@ -735,9 +868,11 @@ export class CreatureHub extends Phaser.Scene {
       L.add(button(this, px + 59, 151, 'ABANDON RUN', () => this.confirmAbandon(), { width: 108, height: 12, fill: 0x2a1424, hoverFill: 0x5a2040 }));
     } else {
       L.add(text(this, px + 4, 119, `RUNS ${c.ladderRuns}  CLEARED ${c.ladderClears}`, PALETTE.fog));
-      const can = ledger.balance() >= LADDER_COST && !!activeOwned();
+      const unlocked = c.story.cleared >= WORLDS.length;
+      const can = ledger.balance() >= LADDER_COST && !!activeOwned() && unlocked;
       L.add(button(this, px + 59, 138, `START RUN  ${LADDER_COST} TOK`, () => this.confirmStart(), { width: 108, height: 13, disabled: !can }));
-      if (!activeOwned()) L.add(text(this, px + 4, 148, 'NEED A CREATURE', PALETTE.ash));
+      if (!unlocked) L.add(smallText(this, px + 4, 148, 'OPENS AFTER THE STORY', 0xff9a9a));
+      else if (!activeOwned()) L.add(text(this, px + 4, 148, 'NEED A CREATURE', PALETTE.ash));
     }
   }
 

@@ -326,8 +326,29 @@ function volcano(g: G, r: Rnd, b: Box, ground: number, dark: number, s: number):
   speckle(g, r, b, 30 * s, [0xffa040], 0.9);
 }
 
+function voidFloor(g: G, r: Rnd, b: Box, ground: number, dark: number, s: number): void {
+  // obsidian flags, starlight under them, and runes that still glow
+  const t = 16 * s;
+  for (let y = b.y; y < b.y + b.h; y += t) {
+    for (let x = b.x; x < b.x + b.w; x += t) {
+      g.fillStyle(shade(ground, (r.frac() - 0.5) * 0.18), 1).fillRect(x, y, t, t);
+      g.fillStyle(dark, 1).fillRect(x, y, t, 1).fillRect(x, y, 1, t);
+      g.fillStyle(0x6a4aa0, 0.35).fillRect(x + 1, y + 1, t - 2, 1);
+    }
+  }
+  speckle(g, r, b, 120 * s, [0xb88aff, 0xffffff, 0x4a3a7a], 0.6);
+  for (let i = 0; i < 6; i++) {
+    const p = free(r, b, 7 * s, 10);
+    if (!p) continue;
+    const [x, y] = p;
+    g.fillStyle(0x9a6aff, 0.15).fillCircle(x, y, 7 * s);
+    g.lineStyle(1, 0xc8a0ff, 0.8).strokeCircle(x, y, 4 * s);
+    g.lineBetween(x - 3 * s, y, x + 3 * s, y).lineBetween(x, y - 3 * s, x, y + 3 * s);
+  }
+}
+
 const PAINT: Record<string, (g: G, r: Rnd, b: Box, ground: number, dark: number, s: number) => void> = {
-  caves, fields, forests, frozen, swamps, ruins, shore, desert, volcano,
+  caves, fields, forests, frozen, swamps, ruins, shore, desert, volcano, void: voidFloor,
 };
 
 /**
@@ -408,6 +429,9 @@ function paintEdge(g: G, id: string, b: Box, s: number): void {
       break;
     case 'shore':
       blocks(0x8a6a4a, 0xc8a878, 0x4a3a2a, 18 * s);
+      break;
+    case 'void':
+      blocks(0x120e1e, 0x3a2a5a, 0x9a6aff, 10 * s);
       break;
   }
 }

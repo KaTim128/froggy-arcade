@@ -455,6 +455,8 @@ export const BIOMES: Biome[] = [
   { id: 'ruins', name: 'SUNKEN RUINS', pool: ['centipede', 'golem', 'spider', 'owl', 'wisp', 'gecko', 'tortoise', 'obelisk', 'snail', 'crow'], ground: 0x9a9070, groundDark: 0x6a6048, prop: 'pillar', cover: 'ring', mood: { sky: 0x2a3348, haze: 0xc8c0a0, fleck: 0xfff0c0 } },
   { id: 'shore', name: 'SALT SHORE', pool: ['crab', 'ray', 'toad', 'jelly', 'mantis', 'puffer', 'angler', 'urchin', 'seahorse', 'heron'], ground: 0xe0d090, groundDark: 0xb8a868, prop: 'shell', cover: 'scatter', mood: { sky: 0x6ab8e0, haze: 0xf0e8c0, fleck: 0xffffff } },
   { id: 'desert', name: 'GLASS DESERT', pool: ['roller', 'beetle', 'hound', 'wisp', 'mantis', 'scorpion', 'hare', 'ferret', 'falcon', 'rhino'], ground: 0xe8c078, groundDark: 0xc09050, prop: 'cactus', cover: 'scatter', mood: { sky: 0xe8a060, haze: 0xffd8a0, fleck: 0xfff4c0 } },
+  // STORY MODE's last world (game/creatureStory): an arena of its own, its dwellers the murk and the glow
+  { id: 'void', name: 'VOID CITADEL', pool: ['wraith', 'crow', 'lynx', 'shroom', 'bat', 'serpent', 'firefly', 'owl', 'angler', 'snail', 'obelisk'], ground: 0x241c38, groundDark: 0x140f22, prop: 'pillar', cover: 'ring', mood: { sky: 0x07050e, haze: 0x4a2a7a, fleck: 0xb88aff } },
   { id: 'volcano', name: 'ASHEN PEAK', pool: ['wisp', 'slug', 'mole', 'ram', 'roller', 'scorpion', 'angler', 'boar', 'heron'], ground: 0x5a3a30, groundDark: 0x3a2018, prop: 'vent', cover: 'ring', mood: { sky: 0x2a1218, haze: 0x6a2a1a, fleck: 0xff8a3a } },
 ];
 
@@ -487,7 +489,7 @@ export const BATTLE_WIN = 10;
 export const LADDER_COST = 20;
 export const LADDER_LEVELS = 5;
 export const LADDER_WIN = 0;
-export const LADDER_BOSS_WIN = 80;
+export const LADDER_BOSS_WIN = 100;
 export const MAX_OWNED = 2;
 
 /**

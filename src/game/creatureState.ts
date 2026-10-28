@@ -54,7 +54,12 @@ export interface CreatureState {
    * A battle that has started and not finished.  `ladder` names the step of
    * the run it is (so it is settled against that step, once).
    */
-  battle: { mode: 'zone' | 'ladder'; biome: string; level?: number } | null;
+  battle: { mode: 'zone' | 'ladder' | 'story'; biome: string; level?: number; world?: number; stage?: number; foe?: string } | null;
+  /**
+   * STORY MODE (game/creatureStory): how many worlds are beaten (they open in
+   * order), and each world's next stage (0..3 its battles, 4 its boss).
+   */
+  story: { cleared: number; stage: number[] };
   /** The ladder run in progress, or null. */
   ladder: LadderRun | null;
   /** The last boss a finished (or lost) run had: the next one draws another. */
@@ -84,6 +89,7 @@ export function defaultCreatures(): CreatureState {
     pending: null,
     battle: null,
     ladder: null,
+    story: { cleared: 0, stage: [0, 0, 0, 0, 0] },
     lastBoss: null,
     bossesBeaten: [],
     lastFoe: {},
@@ -137,12 +143,20 @@ export function sanitizeCreatures(raw: unknown): CreatureState {
     if (cards.length === 9) pending = { cards };
   }
   const b = r.battle as { mode?: unknown; biome?: unknown; level?: unknown } | null | undefined;
-  const battle =
+  const sb = b as { world?: unknown; stage?: unknown; foe?: unknown } | null | undefined;
+  const battle: CreatureState['battle'] =
     b && typeof b === 'object' && BIOMES.some((x) => x.id === b.biome)
       ? b.mode === 'ladder'
         ? { mode: 'ladder' as const, biome: b.biome as string, level: Math.floor(num(b.level, 1)) }
-        : { mode: 'zone' as const, biome: b.biome as string }
+        : b.mode === 'story'
+          ? { mode: 'story' as const, biome: b.biome as string, world: Math.max(0, Math.min(4, Math.floor(num(sb?.world)))), stage: Math.max(0, Math.min(4, Math.floor(num(sb?.stage)))), foe: isCreature(sb?.foe) ? (sb!.foe as string) : 'mole' }
+          : { mode: 'zone' as const, biome: b.biome as string }
       : null;
+  const st = (r as { story?: { cleared?: unknown; stage?: unknown } }).story;
+  const story = {
+    cleared: Math.max(0, Math.min(5, Math.floor(num(st?.cleared)))),
+    stage: [0, 1, 2, 3, 4].map((i) => Math.max(0, Math.min(4, Math.floor(num(Array.isArray(st?.stage) ? st!.stage[i] : 0))))),
+  };
   const L = r.ladder;
   const ladder =
     L &&
@@ -167,6 +181,7 @@ export function sanitizeCreatures(raw: unknown): CreatureState {
     pending,
     battle,
     ladder,
+    story,
     lastBoss: BOSSES.some((x) => x.id === r.lastBoss) ? (r.lastBoss as string) : null,
     bossesBeaten: Array.isArray(r.bossesBeaten) ? [...new Set(r.bossesBeaten.filter((id): id is string => typeof id === 'string' && BOSSES.some((x) => x.id === id)))] : [],
     lastFoe,

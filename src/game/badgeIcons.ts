@@ -247,6 +247,12 @@ const ICONS: Record<string, Draw> = {
       tri(g, x + dx * k + 2 * k, y, x + dx * k + 2.6 * k, y - 3 * k, x + dx * k + 0.6 * k, y - 1.2 * k, ink);
     }
   },
+  c_story: (g, x, y, k, ink, hi) => {
+    // a path of five stepping stones to a flag
+    for (let i = 0; i < 4; i++) disc(g, x - 4 * k + i * 2.2 * k, y + 3 * k - i * 1.6 * k, 0.9 * k, ink);
+    line(g, x + 4 * k, y - 4.5 * k, x + 4 * k, y + 1 * k, ink, 1);
+    tri(g, x + 4 * k, y - 4.5 * k, x + 4 * k, y - 2 * k, x + 1 * k, y - 3.2 * k, hi);
+  },
   c_boss_all: (g, x, y, k, ink, hi) => {
     // a skull with a crown on it
     disc(g, x, y + 1.5 * k, 2.8 * k, hi);

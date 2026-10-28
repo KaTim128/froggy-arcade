@@ -9,16 +9,18 @@
  *                recruit like any other.
  *   party        two at most, one fights
  *
- *   ZONE BATTLES  one fight, in that place, against one of the creatures
- *                 that live there, at your creature's level.  5 tokens in; a
- *                 win pays 10 and the fight is done.  A loss FAINTS the
- *                 fighter: it keeps its slot -- a creature is never taken off
- *                 your team for losing -- and rests five minutes before it
- *                 can fight again, or is revived at once for 5 tokens.
+ *   STORY MODE   five worlds in order (game/creatureStory), four battles and
+ *                a boss each, at the world's levels.  World N's fights cost
+ *                2N and pay 4N until its boss falls, then N and 2N as
+ *                replays.  A loss FAINTS the fighter: it keeps its slot --
+ *                a creature is never taken off your team for losing -- and
+ *                rests five minutes, or is revived at once for 5 tokens.
+ *                (It replaced the zone battles: user, 28 Oct.)
  *
- *   LADDER        20 tokens, once, for a run: Level 1 to Level 5, one normal
- *                 creature each, then a boss.  Beat the boss and the run
- *                 pays 80 (60 up on the entry); the levels on the way pay
+ *   LADDER        Opens once the story's last boss falls.  20 tokens, once,
+ *                 for a run: Level 1 to Level 5, one normal creature each,
+ *                 then a boss.  Beat the boss and the run pays 100 (C3: 80
+ *                 up on the entry); the levels on the way pay
  *                 nothing.  Lose a fight and the run is over: no refund, no
  *                 prize, and your creature limps home (the fee is the price).
  *                 A new run is a new 20.  The two modes share nothing but
@@ -35,6 +37,7 @@ import type { CreatureState, Owned } from './creatureState';
 import { record } from './life';
 import { badgeSet, earnBadge, setBadgeSet } from './badges';
 import { MAX_LEVEL, MAX_XP, XP_BOSS, XP_WIN, levelOf, withLevel } from './creatureLevel';
+import { STAGES, WORLDS, drawStoryFoe, storyPrice } from './creatureStory';
 
 export interface Result {
   ok: boolean;
@@ -202,6 +205,39 @@ export function startBattle(biomeId: string, foeId?: string): Result {
   return ok('FIGHT!');
 }
 
+// ---------------------------------------------------------------- story mode
+
+/** Whether world `w` (0-based) is open: the first always, each next once the one before is beaten. */
+export const worldOpen = (w: number, c = C()): boolean => w >= 0 && w < WORLDS.length && w <= c.story.cleared;
+/** Whether a battle there now is a replay (its boss already beaten): the cheaper price. */
+export const isReplay = (w: number, c = C()): boolean => w < c.story.cleared;
+
+/**
+ * PAY FOR WORLD `w`'s NEXT FIGHT: its next battle, or its boss.  Who you meet
+ * is drawn here and kept with the battle, so a reload cannot change it.
+ * Refused before paying, never after.
+ */
+export function startStory(w: number, foeId?: string, rng: () => number = Math.random): Result {
+  const c = C();
+  if (!worldOpen(w, c)) return no(`BEAT ${WORLDS[Math.max(0, w - 1)].bossName} TO OPEN ${WORLDS[w]?.name ?? 'THAT WORLD'}.`);
+  if (c.battle) return no('A BATTLE IS ALREADY ON.');
+  if (c.pending) return no('PICK A CARD FROM YOUR OPEN PACK FIRST.');
+  const why = unfit(c);
+  if (why) return no(why);
+  const { cost } = storyPrice(w, isReplay(w, c));
+  if (ledger.balance() < cost) return no(`THIS FIGHT COSTS ${cost} TOKENS.`);
+  const world = WORLDS[w];
+  const stage = c.story.stage[w] ?? 0;
+  const foe = stage >= STAGES ? world.boss : foeId && world.pool.includes(foeId) ? foeId : drawStoryFoe(w, c.lastFoe[world.id] ?? null, rng);
+  if (!ledger.debit(cost, 'creature')) return no(`THIS FIGHT COSTS ${cost} TOKENS.`);
+  edit((s) => {
+    s.battle = { mode: 'story', biome: world.biome, world: w, stage, foe };
+    if (stage < STAGES) s.lastFoe[world.id] = foe;
+  });
+  store.flush();
+  return ok(stage >= STAGES ? `${world.bossName}!` : `BATTLE ${stage + 1} OF ${STAGES}!`);
+}
+
 // -------------------------------------------------------------------- ladder
 
 /** What the ladder's next step is, if a run is on: its opponent, place and whether it is the boss. */
@@ -221,6 +257,8 @@ export function ladderStep(c = C()): { level: number; foe: Creature; biome: stri
 export function startLadder(rng: () => number = Math.random): Result {
   const c = C();
   if (c.ladder) return no('A LADDER RUN IS ALREADY ON. CONTINUE IT.');
+  // (B7: the ladder opens after the story's final boss)
+  if (c.story.cleared < WORLDS.length) return no(`THE LADDER OPENS WHEN ${WORLDS[WORLDS.length - 1].bossName} FALLS.`);
   if (c.battle) return no('FINISH THE BATTLE FIRST.');
   if (c.pending) return no('PICK A CARD FROM YOUR OPEN PACK FIRST.');
   const why = unfit(c);
@@ -273,6 +311,8 @@ export interface BattleEnd extends Result {
   cleared?: number;
   runDone?: boolean;
   runOver?: boolean;
+  /** Story: this win beat a world's boss for the first time, and opened the next. */
+  worldOpened?: boolean;
 }
 
 /**
@@ -288,14 +328,19 @@ export function finishBattle(won: boolean): BattleEnd {
   const name = fighter ? creatureById(fighter.id)!.name.toUpperCase() : 'YOUR CREATURE';
   // the ladder step this battle was -- and only if it still is the run's step
   const ladder = b.mode === 'ladder' && c.ladder && b.level === c.ladder.level ? c.ladder : null;
-  const boss = !!ladder && ladder.level > LADDER_LEVELS;
+  // the story stage this battle was -- and only if it still is that world's next
+  const story = b.mode === 'story' && b.world !== undefined && c.story.stage[b.world] === b.stage ? { w: b.world, stage: b.stage ?? 0 } : null;
+  const storyBoss = !!story && story.stage >= STAGES;
+  const boss = (!!ladder && ladder.level > LADDER_LEVELS) || storyBoss;
   if (won) {
     // experience for the one that fought (none past level 3)
     const before = fighter?.xp ?? 0;
     const gain = fighter && levelOf(before) < MAX_LEVEL ? Math.min(MAX_XP - before, boss ? XP_BOSS : XP_WIN) : 0;
     const lvBefore = levelOf(before);
     const lvAfter = levelOf(before + gain);
-    const prize = b.mode === 'zone' ? BATTLE_WIN : ladder ? (boss ? LADDER_BOSS_WIN : LADDER_WIN) : 0;
+    const prize = b.mode === 'zone' ? BATTLE_WIN : ladder ? (boss ? LADDER_BOSS_WIN : LADDER_WIN) : story ? storyPrice(story.w, isReplay(story.w, c)).win : 0;
+    // a world's boss beaten for the first time opens the next (and the last opens the ladder)
+    const opens = storyBoss && story!.w === c.story.cleared;
     const cleared = ladder?.level;
     const runDone = !!ladder && boss;
     const bossId = runDone ? ladder.boss : null;
@@ -306,6 +351,10 @@ export function finishBattle(won: boolean): BattleEnd {
       if (f) {
         f.wins += 1;
         f.xp = Math.min(MAX_XP, (f.xp ?? 0) + gain);
+      }
+      if (story) {
+        s.story.stage[story.w] = storyBoss ? 0 : story.stage + 1;
+        if (opens) s.story.cleared = Math.min(WORLDS.length, s.story.cleared + 1);
       }
       if (ladder && s.ladder) {
         s.ladder.earned += prize;
@@ -331,10 +380,13 @@ export function finishBattle(won: boolean): BattleEnd {
       if (beaten.length >= 6) earnBadge('c_boss10');
       if (BOSSES.every((x) => beaten.includes(x.id))) earnBadge('c_boss_all');
     }
+    // THE STORY BADGE: every world's boss beaten
+    if (opens && c.story.cleared + 1 >= WORLDS.length) earnBadge('c_story');
     store.flush();
     const up = lvAfter > lvBefore ? lvAfter : undefined;
     const head = prize ? `YOU WIN ${prize} TOKENS.` : 'YOU WIN.';
-    return { ...ok(`${head}${up ? ` ${name} IS NOW LEVEL ${up}!` : ''}`), paid: prize, xp: gain, levelUp: up, cleared, runDone };
+    const opened = opens ? (WORLDS[story!.w + 1] ? ` ${WORLDS[story!.w + 1].name} IS OPEN!` : ' THE STORY IS DONE - THE LADDER IS OPEN!') : '';
+    return { ...ok(`${head}${up ? ` ${name} IS NOW LEVEL ${up}!` : ''}${opened}`), paid: prize, xp: gain, levelUp: up, cleared, runDone, worldOpened: opens };
   }
   if (b.mode === 'ladder') {
     // THE RUN IS OVER: no refund, what it paid stays paid, and the creature

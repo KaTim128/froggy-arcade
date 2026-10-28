@@ -18,6 +18,7 @@
  * order the timers, taps and tab switches arrive in.
  */
 
+import { STAGES, WORLDS, drawStoryFoe, storyFoe } from '../game/creatureStory';
 import { paintFloor } from '../art/arenaFloors';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
@@ -30,7 +31,7 @@ import { plainWords } from '../game/plainWords';
 import { drawMelee, drawShot, meleeStyle, shotStyle, type MeleeStyle } from '../art/clashFx';
 import { SPECIALS } from '../game/specials';
 import { BIOMES, ELEMENTS, creatureById, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
-import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle } from '../game/creatureClash';
+import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle, startStory } from '../game/creatureClash';
 import { MAX_LEVEL, levelOf, withLevel } from '../game/creatureLevel';
 import {
   AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
@@ -322,6 +323,8 @@ interface Barrier {
  * been able to see you for a couple of seconds comes for you (`HIDE_S`).
  */
 const HIDE_S = 2.2;
+/** How far a blinded fighter can still see, in px (you, on the screen; the computer, in its head). */
+const BLIND_SEE = 38;
 
 /**
  * WHAT A CAST WALL IS MADE OF (log #44): its maker's own stuff, not the
@@ -356,7 +359,12 @@ interface Brain {
 
 export class CreatureArena extends Phaser.Scene {
   private biome!: Biome;
-  private mode: 'zone' | 'ladder' | 'training' = 'zone';
+  private mode: 'zone' | 'ladder' | 'training' | 'story' = 'zone';
+  /** Story: which world, which of its stages, and who (drawn when the fight opens, paid at the bell). */
+  private storyWorld = 0;
+  private storyStage = 0;
+  private storyFoeId = '';
+  private vsShown = false;
   /** The ladder step this is (6 = the boss). */
   private level = 0;
   private boss = false;
@@ -418,6 +426,9 @@ export class CreatureArena extends Phaser.Scene {
   private g!: Phaser.GameObjects.Graphics;
   private ui!: Phaser.GameObjects.Graphics;
   private dark!: Phaser.GameObjects.Graphics;
+  /** Blindness: one dark sheet with the circle you can see cut out of it (no rings, no seams). */
+  private darkRT: Phaser.GameObjects.RenderTexture | null = null;
+  private holeG: Phaser.GameObjects.Graphics | null = null;
   private labels: Phaser.GameObjects.BitmapText[] = [];
   private timerText!: Phaser.GameObjects.BitmapText;
   private sel = 0;
@@ -476,7 +487,9 @@ export class CreatureArena extends Phaser.Scene {
   /** Back after a reload with the battle already open and paid for (core/session). */
   private resumed = false;
 
-  init(data: { biome?: string; mode?: 'zone' | 'ladder' | 'training'; from?: string; training?: boolean; resumed?: boolean; sim?: SimSpec }): void {
+  init(data: { biome?: string; mode?: 'zone' | 'ladder' | 'training' | 'story'; from?: string; training?: boolean; resumed?: boolean; sim?: SimSpec; world?: number }): void {
+    this.storyWorld = data.world ?? 0;
+    this.vsShown = false;
     this.resumed = data.resumed === true;
     // (dev only: tools/clash.mjs)
     this.simSpec = import.meta.env?.DEV ? data.sim ?? null : null;
@@ -543,6 +556,28 @@ export class CreatureArena extends Phaser.Scene {
       wild = withLevel(creatureById(sim.foe)!, sim.level);
       this.foeLevel = sim.level;
       this.skill = sim.skill;
+    } else if (this.mode === 'story') {
+      // STORY: the world's next fight.  Back from a reload, the one already
+      // paid for (its foe kept with it); otherwise drawn now, paid at the bell
+      const cs = store.get().creatures;
+      const ob = cs.battle;
+      const open = this.resumed && ob?.mode === 'story';
+      const w = open ? ob!.world ?? 0 : this.storyWorld;
+      const stage = open ? ob!.stage ?? 0 : cs.story.stage[w] ?? 0;
+      const foeId = open ? ob!.foe ?? '' : stage >= STAGES ? WORLDS[w].boss : drawStoryFoe(w, cs.lastFoe[WORLDS[w].id] ?? null);
+      const sf = storyFoe(w, stage, foeId);
+      if (!sf) {
+        this.scene.start('CreatureHub', { from: this.from, screen: 'story', msg: 'NO SUCH FIGHT.' });
+        return;
+      }
+      this.storyWorld = w;
+      this.storyStage = stage;
+      this.storyFoeId = foeId;
+      this.biome = BIOMES.find((b) => b.id === WORLDS[w].biome) ?? this.biome;
+      wild = sf.foe;
+      this.boss = sf.boss;
+      this.skill = sf.skill;
+      this.foeLevel = sf.level;
     } else if (this.mode === 'ladder') {
       const step = ladderStep();
       if (!step) {
@@ -571,6 +606,8 @@ export class CreatureArena extends Phaser.Scene {
     this.paintGround();
     this.g = this.add.graphics().setDepth(10);
     this.dark = this.add.graphics().setDepth(40);
+    this.darkRT = this.add.renderTexture(0, 0, GAME_W, GAME_H).setOrigin(0, 0).setDepth(40).setVisible(false);
+    this.holeG = this.make.graphics({}, false);
     this.ui = this.add.graphics().setDepth(50);
     // (before the hud: it lays the buttons out for whichever this is)
     // (the game's own answer -- a coarse pointer and no fine one -- not
@@ -647,6 +684,12 @@ export class CreatureArena extends Phaser.Scene {
    * to the menu, and nothing has been spent.)
    */
   private countdown(): void {
+    // a story fight opens on its VS card first
+    if (this.mode === 'story' && !this.vsShown) {
+      this.vsShown = true;
+      this.vsCard(() => this.countdown());
+      return;
+    }
     const cx = ARENA.x + ARENA.w / 2;
     const cy = ARENA.y + ARENA.h / 2;
     const ready = centerText(this, cx, cy - 26, 'GET READY', PALETTE.cream).setDepth(2400);
@@ -670,15 +713,53 @@ export class CreatureArena extends Phaser.Scene {
     this.time.delayedCall(350, () => step(3));
   }
 
+  /**
+   * THE VS CARD (B7: before each story battle).  The world's name, then the
+   * two of them sliding in from either side with their names and levels,
+   * VS between them, held a moment and swept away.
+   */
+  private vsCard(then: () => void): void {
+    const box = this.add.container(0, 0).setDepth(2450);
+    const Y = ARENA.y + ARENA.h / 2;
+    box.add(this.add.rectangle(0, 0, GAME_W, GAME_H, 0x05040a, 0.82).setOrigin(0, 0));
+    box.add(this.add.rectangle(0, Y - 30, GAME_W, 60, 0x1a1430, 1).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold));
+    const world = WORLDS[this.storyWorld];
+    box.add(centerText(this, GAME_W / 2, Y - 42, world.name, PALETTE.gold));
+    const side = (f: Fighter, lv: number, left: boolean): void => {
+      const x = left ? 70 : GAME_W - 70;
+      // (the picture slides in; the name fades in where it stays -- text
+      // started off the screen would be pulled back onto it, off its place)
+      const g = this.add.graphics();
+      drawCreature(g, f.c, x, Y - 4, 2.2 * (f === this.foe && this.boss ? 1.2 : 1), left ? 1 : -1, 0);
+      g.x = left ? -120 : 120;
+      box.add(g);
+      this.tweens.add({ targets: g, x: 0, duration: 380, ease: 'Back.Out' });
+      const nm = centerText(this, x, Y + 18, f.c.name.toUpperCase(), left ? PALETTE.cream : this.boss ? PALETTE.gold : PALETTE.cream).setAlpha(0);
+      const lvT = centerText(this, x, Y + 27, `LV ${lv}`, PALETTE.ash).setAlpha(0);
+      box.add([nm, lvT]);
+      this.tweens.add({ targets: [nm, lvT], alpha: 1, delay: 250, duration: 250 });
+    };
+    side(this.me, this.myLevel, true);
+    side(this.foe, this.foeLevel, false);
+    const vs = centerText(this, GAME_W / 2, Y - 2, 'VS', 0xff5a6a, 24).setScale(0.2).setAlpha(0);
+    box.add(vs);
+    this.tweens.add({ targets: vs, scale: 1, alpha: 1, delay: 300, duration: 260, ease: 'Back.Out' });
+    audio.sfx('throw_whoosh', 0.5);
+    this.time.delayedCall(620, () => audio.sfx(this.boss ? 'bell_ding' : 'ui_blip', 0.6));
+    this.time.delayedCall(1900, () => {
+      this.tweens.add({ targets: box, alpha: 0, duration: 260, onComplete: () => (box.destroy(true), then()) });
+    });
+  }
+
   /** The count is done: the stake, the bell, and go. */
   private begin(): void {
     // (a reload into a battle already paid for: the bell, and no second stake)
     const open = this.resumed && !!store.get().creatures.battle;
     this.resumed = false;
     if (!this.training && !open) {
-      const r = this.mode === 'ladder' ? startLadderBattle() : startBattle(this.biome.id, this.foe.c.id);
+      const r = this.mode === 'ladder' ? startLadderBattle() : this.mode === 'story' ? startStory(this.storyWorld, this.storyFoeId) : startBattle(this.biome.id, this.foe.c.id);
       if (!r.ok) {
-        this.scene.start('CreatureHub', { from: this.from, screen: this.mode === 'ladder' ? 'ladder' : 'map', msg: r.msg });
+        this.scene.start('CreatureHub', { from: this.from, screen: this.mode === 'ladder' ? 'ladder' : this.mode === 'story' ? 'story' : 'map', msg: r.msg });
         return;
       }
       // its own cry, at the bell
@@ -1115,6 +1196,9 @@ export class CreatureArena extends Phaser.Scene {
     // which step of the run this is, under the opponent's bar
     if (this.mode === 'ladder') {
       this.stepLabel = text(this, GAME_W - 8, 20, this.boss ? 'FINAL BOSS' : `LEVEL ${this.level} OF ${LADDER_LEVELS}`, PALETTE.gold).setOrigin(1, 0).setDepth(51);
+      this.labels.push(this.stepLabel);
+    } else if (this.mode === 'story') {
+      this.stepLabel = text(this, GAME_W - 8, 20, this.boss ? 'WORLD BOSS' : `BATTLE ${this.storyStage + 1} OF ${STAGES}`, PALETTE.gold).setOrigin(1, 0).setDepth(51);
       this.labels.push(this.stepLabel);
     }
     this.timerText = centerText(this, GAME_W / 2, 7, '', PALETTE.fog).setDepth(51);
@@ -2767,13 +2851,15 @@ export class CreatureArena extends Phaser.Scene {
     // WHAT IT THINKS IS YOU: a decoy draws it while it lasts, and a you it
     // cannot see is wherever it last saw you
     const decoy = this.minions.find((mi) => mi.kind === 'decoy' && mi.owner === me);
-    if (!me.st.invis) {
+    // blinded, it sees only what is close; past that, you are where it last saw you
+    const lost = me.st.invis || (f.blind > 0 && Math.hypot(me.x - f.x, me.y - f.y) > BLIND_SEE);
+    if (!lost) {
       me.ref.seenX = me.x;
       me.ref.seenY = me.y;
     }
     const p: Fighter = decoy
       ? { ...me, x: decoy.x, y: decoy.y }
-      : me.st.invis
+      : lost
         ? { ...me, x: me.ref.seenX ?? me.x, y: me.ref.seenY ?? me.y }
         : me;
     if (!this.canAct(f) || f.dash || f.hp <= 0 || f.st.carried) return;
@@ -3484,18 +3570,30 @@ export class CreatureArena extends Phaser.Scene {
     audio.sfx(won ? 'cha_ching' : 'death_stinger', 0.6);
     const timeUp = this.me.hp > 0 && this.foe.hp > 0;
     const ladder = this.mode === 'ladder';
+    const story = this.mode === 'story';
     this.time.delayedCall(700, () => {
       const box = this.add.container(0, 0).setDepth(2000);
       const X = GAME_W / 2;
       const Y = GAME_H / 2;
       box.add(this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0.6).setOrigin(0, 0).setInteractive());
       box.add(this.add.rectangle(X, Y, 244, 96, PALETTE.ink).setStrokeStyle(1, won ? PALETTE.gold : 0xc31f2e));
-      const head = won ? (ladder ? (this.boss ? 'LADDER CLEARED!' : `LEVEL ${this.level} OF ${LADDER_LEVELS} CLEARED`) : 'VICTORY!') : 'DEFEATED';
+      const head = won
+        ? ladder
+          ? this.boss ? 'LADDER CLEARED!' : `LEVEL ${this.level} OF ${LADDER_LEVELS} CLEARED`
+          : story && this.boss ? (r.worldOpened ? 'WORLD CLEARED!' : 'BOSS BEATEN!') : 'VICTORY!'
+        : 'DEFEATED';
       box.add(centerText(this, X, Y - 38, head, won ? PALETTE.gold : 0xff6a6a));
       if (timeUp) box.add(centerText(this, X, Y - 28, 'TIME: MORE HEALTH LEFT WINS', PALETTE.ash));
       const lines: Array<[string, number]> = [];
       if (won) {
         if (r.paid) lines.push([`+${r.paid} TOKENS`, PALETTE.gold]);
+        if (story) {
+          const nextW = WORLDS[this.storyWorld + 1];
+          lines.push([
+            this.boss ? (r.worldOpened ? (nextW ? `${nextW.name} IS OPEN!` : 'THE STORY IS DONE - THE LADDER IS OPEN!') : 'BACK TO BATTLE 1 OF THIS WORLD.') : this.storyStage + 1 >= STAGES ? `NEXT: ${WORLDS[this.storyWorld].bossName}` : `NEXT: BATTLE ${this.storyStage + 2} OF ${STAGES}`,
+            PALETTE.cream,
+          ]);
+        }
         if (ladder) lines.push([this.boss ? `THE RUN PAID ${before + r.paid} TOKENS IN ALL.` : this.level >= LADDER_LEVELS ? 'NEXT: THE FINAL BOSS' : `NEXT: LEVEL ${this.level + 1} OF ${LADDER_LEVELS}`, PALETTE.cream]);
         const xpLine = r.xp ? `+${r.xp} XP` : this.myLevel >= MAX_LEVEL ? 'MAX LEVEL - NO MORE XP' : '';
         if (xpLine) lines.push([xpLine, 0x8ae88a]);
@@ -3514,7 +3612,7 @@ export class CreatureArena extends Phaser.Scene {
         audio.sfx('chime', 0.7);
       }
       // back to where the fight came from: the run's ladder, or the map
-      const screen = ladder ? 'ladder' : 'map';
+      const screen = ladder ? 'ladder' : story ? 'story' : 'map';
       box.add(button(this, X, Y + 36, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, screen }), { width: 80, height: 13 }));
     });
   }
@@ -3802,16 +3900,23 @@ export class CreatureArena extends Phaser.Scene {
     }
 
     // murk: you only see near yourself
-    const d = this.dark;
-    d.clear();
+    this.dark.clear();
     if (this.me.blind > 0) {
-      const a = Math.min(1, this.me.blind) * 0.8;
-      // (an ink blackout closes it in to 50px)
-      const r0 = this.me.st.ink ? 50 : 64;
-      for (let r = 0; r < 6; r++) {
-        d.lineStyle(60, 0x10081a, a * (r === 0 ? 0.6 : 1)).strokeCircle(this.me.x, this.me.y, r0 + 30 + r * 50);
-      }
-    }
+      // (user, 28 Oct: darker, and a smaller circle you can see in --
+      // an ink blackout closes it tighter still)
+      const a = Math.min(1, this.me.blind) * 0.97;
+      const r0 = this.me.st.ink ? BLIND_SEE - 8 : BLIND_SEE;
+      const rt = this.darkRT!;
+      const h = this.holeG!;
+      rt.setVisible(true).clear().fill(0x0a0612, a);
+      // the hole, with a soft rim: rings that each let a little more through
+      h.clear();
+      h.fillStyle(0xffffff, 0.3).fillCircle(this.me.x, this.me.y, r0 + 6);
+      h.fillStyle(0xffffff, 0.3).fillCircle(this.me.x, this.me.y, r0 + 3);
+      h.fillStyle(0xffffff, 0.45).fillCircle(this.me.x, this.me.y, r0);
+      h.fillStyle(0xffffff, 1).fillCircle(this.me.x, this.me.y, r0 - 3);
+      rt.erase(h, 0, 0);
+    } else this.darkRT?.setVisible(false);
 
     // hud
     const u = this.ui;
