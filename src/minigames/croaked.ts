@@ -357,26 +357,71 @@ function newRound(): void {
   drawWalls();
 }
 
+/** A steady 0..1 noise for a pixel, so the textures never shimmer between redraws. */
+const hash = (x: number, y: number): number => {
+  const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return h - Math.floor(h);
+};
+
+/**
+ * THE POND MAZE.  Deep water speckled with silt, a lily pad here and there,
+ * and banks of mossy stone drawn as one continuous mass (no tile seams): a
+ * lit moss rim along every edge that faces open water, shaded stone below it,
+ * brickwork and cracks in the face, and the shadow each bank throws on the
+ * water beneath it.
+ */
 function drawWalls(): void {
   const g = wallsG;
   if (!g) return;
   g.clear();
-  g.fillStyle(0x0c1820, 1).fillRect(ox - 2, oy - 2, COLS * CELL + 4, ROWS * CELL + 4);
+  const W = COLS * CELL;
+  const H = ROWS * CELL;
+  g.fillStyle(0x08141a, 1).fillRect(ox - 2, oy - 2, W + 4, H + 4);
+  const wall = (x: number, y: number): boolean => x < 0 || y < 0 || x >= COLS || y >= ROWS || !grid[y][x];
   for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
     const px = ox + x * CELL;
     const py = oy + y * CELL;
     if (grid[y][x]) {
-      // the water floor, a little lighter where it is lit
-      g.fillStyle(((x + y) % 2) ? 0x10222c : 0x12262f, 1).fillRect(px, py, CELL, CELL);
+      // the water: two depths, silt flecks, and now and then a lily pad
+      g.fillStyle(0x0f2630, 1).fillRect(px, py, CELL, CELL);
+      for (let i = 0; i < 5; i++) {
+        const h = hash(x * 5 + i, y * 3 - i);
+        g.fillStyle(h > 0.5 ? 0x14303b : 0x0b1f27, 1).fillRect(px + Math.floor(h * CELL), py + Math.floor(hash(y + i, x - i) * CELL), 1, 1);
+      }
+      if (hash(x, y) > 0.93) {
+        const lx = px + 2 + Math.floor(hash(y, x) * 4);
+        const ly = py + 6;
+        g.fillStyle(0x2a5a2a, 0.8).fillEllipse(lx + 2, ly + 1, 5, 3);
+        g.fillStyle(0x0f2630, 1).fillRect(lx + 2, ly, 1, 1);
+      }
+      // the shadow of a bank to the north and the west
+      if (wall(x, y - 1)) g.fillStyle(0x061016, 0.7).fillRect(px, py, CELL, 2);
+      if (wall(x - 1, y)) g.fillStyle(0x061016, 0.45).fillRect(px, py, 1, CELL);
       continue;
     }
-    // mossy stone: a dark block, its face, a light top edge where the open water is above it
-    g.fillStyle(0x1a3424, 1).fillRect(px, py, CELL, CELL);
-    g.fillStyle(0x2e5a3a, 1).fillRect(px + 1, py + 1, CELL - 2, CELL - 3);
-    if (open(x, y - 1)) g.fillStyle(0x6a9a5a, 1).fillRect(px, py, CELL, 1);
-    if (!open(x, y + 1) && y < ROWS - 1) g.fillStyle(0x2e5a3a, 1).fillRect(px + 1, py + CELL - 2, CELL - 2, 2);
-    if ((x * 7 + y * 3) % 5 === 0) g.fillStyle(0x4a7a3a, 1).fillRect(px + 3, py + 3, 2, 2);
+    // stone: the face, with brick courses offset every row
+    g.fillStyle(0x2a4a32, 1).fillRect(px, py, CELL, CELL);
+    for (let r = 0; r < CELL; r += 4) {
+      g.fillStyle(0x1e3826, 1).fillRect(px, py + r + 3, CELL, 1);
+      const off = ((y * CELL + r) / 4) % 2 ? 2 : 6;
+      g.fillRect(px + ((off + x * CELL) % 8), py + r, 1, 3);
+    }
+    for (let i = 0; i < 4; i++) {
+      const h = hash(x * 7 + i, y * 11 + i);
+      g.fillStyle(h > 0.5 ? 0x36603e : 0x223e2a, 1).fillRect(px + Math.floor(h * (CELL - 1)), py + Math.floor(hash(x + i, y * 2) * (CELL - 1)), 1, 1);
+    }
+    // the edges that face the water: moss on top, shade below, a dark line at the sides
+    if (!wall(x, y - 1)) {
+      g.fillStyle(0x5a9a48, 1).fillRect(px, py, CELL, 2);
+      g.fillStyle(0x8ac860, 1).fillRect(px, py, CELL, 1);
+      for (let i = 0; i < CELL; i += 3) if (hash(x * 3 + i, y) > 0.45) g.fillStyle(0x5a9a48, 1).fillRect(px + i, py + 2, 1, 1 + Math.floor(hash(i, x + y) * 2));
+    }
+    if (!wall(x, y + 1)) g.fillStyle(0x16281c, 1).fillRect(px, py + CELL - 2, CELL, 2);
+    if (!wall(x - 1, y)) g.fillStyle(0x3e6e44, 1).fillRect(px, py, 1, CELL);
+    if (!wall(x + 1, y)) g.fillStyle(0x16281c, 1).fillRect(px + CELL - 1, py, 1, CELL);
   }
+  // the pond's rim
+  g.lineStyle(1, 0x3e6e44, 1).strokeRect(ox - 1.5, oy - 1.5, W + 3, H + 3);
 }
 
 function pickRole(r: Role): void {
@@ -454,7 +499,9 @@ function drawLive(t: number): void {
       const w = Math.sin(t * 16 - i) * i * 0.5;
       g.fillStyle(0x3a6ad8, 1 - i * 0.2).fillCircle(px + DX[back] * i * 1.6 + DY[back] * w, py + DY[back] * i * 1.6 + DX[back] * w, 1.6 - i * 0.3);
     }
-    g.fillStyle(0x5a8af0, 1).fillCircle(px, py, 3);
+    g.fillStyle(0x1a2a5a, 1).fillCircle(px, py, 3.6);
+    g.fillStyle(0x4a7ae0, 1).fillCircle(px, py, 3);
+    g.fillStyle(0x8ab4ff, 1).fillCircle(px - 0.8, py - 0.8, 1.3);
     if (tadM.held > 0) {
       // caught in the reeds: a net that shrinks as it lets go
       g.lineStyle(1, 0xf0d060, 1).strokeCircle(px, py, 3 + tadM.held * 1.4);
@@ -469,9 +516,14 @@ function drawLive(t: number): void {
     // PAC FROG: a round green frog whose mouth opens and shuts the way it goes
     const gape = 0.15 + Math.abs(Math.sin(t * 12)) * 0.6;
     const face = [-Math.PI / 2, 0, Math.PI / 2, Math.PI][frogM.dir];
-    g.fillStyle(0x2e7a3a, 1).fillCircle(px, py + 1, 5.2);
-    g.fillStyle(0x5ac85a, 1).slice(px, py, 5, face + gape, face - gape + Math.PI * 2, false).fillPath();
-    g.fillStyle(0x8a1a2a, 1).slice(px, py, 3, face - gape * 0.7, face + gape * 0.7, false).fillPath();
+    g.fillStyle(0x000000, 0.35).fillEllipse(px + 0.5, py + 4.5, 10, 3);
+    g.fillStyle(0x0e3a1e, 1).slice(px, py, 6, face + gape, face - gape + Math.PI * 2, false).fillPath();
+    g.fillStyle(0x3aa048, 1).slice(px, py, 5, face + gape, face - gape + Math.PI * 2, false).fillPath();
+    // lit from the top left: a light cap and a few darker spots on the back
+    g.fillStyle(0x6ad86a, 1).fillCircle(px - 1.2, py - 1.2, 2.6);
+    g.fillStyle(0x2a7a34, 1).fillRect(px - 3, py + 1, 1, 1).fillRect(px + 1, py + 2, 1, 1).fillRect(px - 1, py + 3, 1, 1);
+    g.fillStyle(0x5a0a18, 1).slice(px, py, 3.6, face - gape * 0.75, face + gape * 0.75, false).fillPath();
+    g.fillStyle(0xe05a7a, 1).slice(px, py, 1.6, face - gape * 0.5, face + gape * 0.5, false).fillPath();
     // its eyes, on top
     const ex = -DY[frogM.dir] * 2.4;
     const ey = DX[frogM.dir] * 2.4 - 3;
