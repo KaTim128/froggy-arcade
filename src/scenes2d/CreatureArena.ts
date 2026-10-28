@@ -18,6 +18,7 @@
  * order the timers, taps and tab switches arrive in.
  */
 
+import { paintFloor } from '../art/arenaFloors';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
@@ -724,11 +725,8 @@ export class CreatureArena extends Phaser.Scene {
       g.fillCircle(rnd.between(0, GAME_W), rnd.between(0, GAME_H), rnd.frac() * 1.6);
     }
     // ---- the ground
-    g.fillStyle(b.ground, 1).fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
-    for (let i = 0; i < 90; i++) {
-      g.fillStyle(i % 3 ? b.groundDark : 0xffffff, i % 3 ? 0.3 : 0.05);
-      g.fillEllipse(ARENA.x + rnd.between(4, ARENA.w - 4), ARENA.y + rnd.between(4, ARENA.h - 4), rnd.between(6, 24), rnd.between(3, 9));
-    }
+    // (each world's own floor and set pieces: art/arenaFloors)
+    paintFloor(g, b.id, ARENA, b.ground, b.groundDark, b.id);
     // a worn track round the middle, where fights happen
     g.lineStyle(3, b.groundDark, 0.25).strokeEllipse(ARENA.x + ARENA.w / 2, ARENA.y + ARENA.h / 2, ARENA.w * 0.72, ARENA.h * 0.78);
     // the haze of the place, heaviest at the edges: light coming in over it
@@ -740,6 +738,10 @@ export class CreatureArena extends Phaser.Scene {
       g.fillRect(ARENA.x + ARENA.w - 2 - i * 2, ARENA.y, 2, ARENA.h);
     }
     g.lineStyle(2, b.groundDark, 1).strokeRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
+    // ---- THE HUD BANDS, above and below the ring: dark, so the names, the
+    // bars and the move lines read on the brightest worlds (snow, sand)
+    g.fillStyle(0x0a0c16, 0.82).fillRect(0, 0, GAME_W, ARENA.y - 1);
+    g.fillStyle(0x0a0c16, 0.82).fillRect(0, ARENA.y + ARENA.h + 1, GAME_W, GAME_H - ARENA.y - ARENA.h - 1);
 
     this.layOutCover(rnd);
     this.terrain = this.add.graphics().setDepth(1);
@@ -3632,8 +3634,10 @@ export class CreatureArena extends Phaser.Scene {
       if (f.shield > 0 && f.shieldMod) g.lineStyle(1, f.shieldMod === 'reflect' ? 0x9ad0ff : 0xffa040, 0.9).strokeCircle(f.x, f.y, 12 * f.scale);
       // the little bar over the head
       const w = 18 * f.scale;
-      g.fillStyle(0x000000, 0.6).fillRect(f.x - w / 2, f.y - 12 * f.scale - 4, w, 2);
-      g.fillStyle(f === this.me ? 0x6ae86a : 0xff5a5a, 1).fillRect(f.x - w / 2, f.y - 12 * f.scale - 4, w * (f.hp / f.max), 2);
+      // (kept inside the ring: at the top wall it would sit on the move line)
+      const by = Math.max(ARENA.y + 1, f.y - 12 * f.scale - 4);
+      g.fillStyle(0x000000, 0.6).fillRect(f.x - w / 2, by, w, 2);
+      g.fillStyle(f === this.me ? 0x6ae86a : 0xff5a5a, 1).fillRect(f.x - w / 2, by, w * (f.hp / f.max), 2);
     }
     for (const mi of this.minions) {
       const c = ELEMENTS[mi.owner.c.element];

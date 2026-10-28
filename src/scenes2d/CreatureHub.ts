@@ -16,6 +16,7 @@
  * what is true.
  */
 
+import { paintFloor } from '../art/arenaFloors';
 import { isTouch } from '../core/device';
 import { capLabel, codeFor } from '../core/keymap';
 import Phaser from 'phaser';
@@ -414,12 +415,12 @@ export class CreatureHub extends Phaser.Scene {
       } else if (on) {
         // the one that fights: a gold chip where USE would be
         L.add(this.add.rectangle(x + 2, y + h + 4, 42, 12, 0x3a2e10).setOrigin(0, 0).setStrokeStyle(1, PALETTE.gold));
-        L.add(centerText(this, x + 23, y + h + 10, 'IN RING', PALETTE.gold));
+        L.add(centerText(this, x + 23, y + h + 10, 'ACTIVE', PALETTE.gold));
       } else L.add(button(this, x + 23, y + h + 10, 'USE', () => (this.say(setActive(o.uid)), this.draw()), { width: 42, height: 12 }));
-      L.add(button(this, x + w - 23, y + h + 10, 'RELEASE', () => this.confirmRelease(o.uid, cr), { width: 44, height: 12, fill: 0x2a1424, hoverFill: 0x5a2040 }));
+      L.add(button(this, x + w - 24, y + h + 10, 'RELEASE', () => this.confirmRelease(o.uid, cr), { width: 44, height: 12, fill: 0x2a1424, hoverFill: 0x5a2040 }));
     }
     // ---- the menu, on the right
-    const mx = 204;
+    const mx = 207;
     const mw = GAME_W - mx - 8;
     L.add(this.add.rectangle(mx - 4, 21, mw + 8, GAME_H - 34, 0x0e1124, 0.9).setOrigin(0, 0).setStrokeStyle(1, 0x2a3050));
     L.add(text(this, mx, 25, 'MENU', PALETTE.ash));
@@ -601,7 +602,12 @@ export class CreatureHub extends Phaser.Scene {
       const x = 8 + (i % 3) * 62;
       const y = 28 + Math.floor(i / 3) * 44;
       const sel = b.id === this.biome;
-      const tile = this.add.rectangle(x, y, 58, 40, b.ground).setOrigin(0, 0).setStrokeStyle(sel ? 2 : 1, sel ? PALETTE.gold : b.groundDark);
+      // the world in little: its own floor (art/arenaFloors), the same as in the ring
+      const pic = this.add.graphics();
+      paintFloor(pic, b.id, { x, y, w: 58, h: 40 }, b.ground, b.groundDark, b.id, 0.45);
+      pic.setMask(this.make.graphics({}, false).fillStyle(0xffffff).fillRect(x, y, 58, 40).createGeometryMask());
+      L.add(pic);
+      const tile = this.add.rectangle(x, y, 58, 40, 0x000000, 0.001).setOrigin(0, 0).setStrokeStyle(sel ? 2 : 1, sel ? PALETTE.gold : b.groundDark);
       tile.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
         this.biome = b.id;
         this.draw();
