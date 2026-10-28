@@ -383,6 +383,27 @@ Rules for every batch:
 
 **Buttons (user, 28 Oct): LEAVE leaves the game, BACK goes back a menu screen.** The pause menu's in-game button is LEAVE everywhere (was QUIT GAME once a go was under way; the crane's QUIT); its confirm is CONFIRM LEAVE; EXIT TO START MENU asks 'EXIT TO THE START MENU?' / CONFIRM EXIT; the forfeit line reads LEAVING WILL FORFEIT N TOKENS. The machine card already had LEAVE on its first page and BACK on HOW TO PLAY / CONTROLS; the Clash hub BACK on its screens, LEAVE in the pause menu. tools/frame.mjs updated, 14/14.
 
+
+## NEW REQUESTS (28 Oct, late) -- the queue, in the order being worked
+
+| # | Request | Status |
+|---|---|---|
+| Q1 | Creature Clash: 20 new creatures + 40 abilities | DONE, pushed (70 creatures, 160 specials) |
+| Q2 | Then 20 MORE creatures + 40 MORE abilities (user: "actually 40 and 80") | open |
+| Q3 | Clash touch buttons and stick OUTSIDE the arena view (the black side bars), the same for every game | open |
+| Q4 | Clash move card: only the ability (no strong/weak), bigger text, nothing past its box | open |
+| Q5 | Clash creature card is tappable (and says so) -> stats page: ATTACK, DEFENCE, SPEED, HP, MELEE or RANGED, + strengths and weaknesses | open |
+| Q6 | Clash home: no stat bars, only the XP bar; the move rows get the room | open |
+| Q7 | Clash LADDER tile text 'AFTER THE STORY' runs out of its box | open |
+| Q8 | Buff abilities: e.g. evasion +30%, crit chance +20% | open |
+| Q9 | Story Mode: exactly 4 FIXED opponents per world before the boss, themed, none repeated across worlds, same for every account; no random | open |
+| Q10 | Pad Battles: Bog Ball-level visuals; pads spaced apart so frogs must jump; smooth jumps, exact landing, falling animation, splashes on a miss; body blocking/pushing | open |
+| Q11 | Tutorials (all games): machine page with NO picture (text + PLAY centred, the 3 buttons where they are); pictures only in HOW TO PLAY; one unique, accurate picture per step (not like the crane's repeats); pictures kept inside their box; better textures/lighting/animation matching each game (e.g. Dance Off arrows rise the right way); clearer beginner wording, Creature Clash explained (stats, effects, buffs, debuffs, cooldowns) | open |
+| Q12 | Pause -> resume: a 3 s countdown in every arcade game except Froggy 21, the Wheel and the Chamber | open |
+| Q13 | Badges: a locked badge shows no colour (KING OF THE ROAD's green dot) | open |
+| Q14 | Text over text: the police escape's hint line over the objective; check every screen | open |
+| Q15 | Police escape: lobby stair doorway not blocked by the wall; remove the extra rail section (ref 4); police pathing/collision (no passing through each other, no back-and-forth at the doorway, recover when blocked); police models joined naturally, better walk/turn; performance with many officers; a little more time at the start | open |
+
 ### Batch 8 — Per-game fixes (items 8, 9-blackjack, 10-games, 12, 13, 19-bog/crane, 21-whack, 28, 32-fence, 38, 47, 49). Depends on B4.
 - **Fence Wars:**
   - better frog and lizard models; a smaller, higher overlay; no extra win text;
