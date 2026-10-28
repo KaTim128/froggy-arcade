@@ -1289,8 +1289,14 @@ console.log(failures === 0 ? `\nAll ${GAMES.length} games launch, play and quit 
       // when what it had actually found was the throw after it.
       window.__dk.clearBarrels();
     });
-    // Wait out whatever throw was already in flight when the cabinet came up.
-    for (let i = 0; i < 40 && (await page.evaluate(() => window.__dk.kong().swing)) > 0.01; i++) await sleep(100);
+    // Wait out whatever throw was already in flight when the cabinet came up --
+    // all of it: the swing eases out, and at 0.0099 it read as over while his
+    // arm was still coming down and the next barrel not yet in his hands.
+    for (let i = 0; i < 40; i++) {
+      const k = await page.evaluate(() => window.__dk.kong());
+      if (k.holding && k.swing === 0 && k.armL === 0) break;
+      await sleep(100);
+    }
     const rest = await page.evaluate(() => window.__dk.kong());
     // The pose is applied by the game's own update, so the throw has to be
     // read on a LATER frame than the one that started it: read on the same

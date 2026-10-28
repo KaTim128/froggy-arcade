@@ -730,7 +730,7 @@ export const bowling: MinigameModule = {
     drawAim();
 
     if (ball.rolling) {
-      stepPhysics(dt);
+      fixedSteps(dt, stepPhysics);
       const past = ball.y < LANE_TOP - BALL_R * 2;
       const stopped = Math.hypot(ball.vx, ball.vy) < 6;
       if (past || stopped) {
@@ -739,7 +739,7 @@ export const bowling: MinigameModule = {
         settleMs = 900;
       }
     } else if (settleMs > 0) {
-      stepPins(dt);
+      fixedSteps(dt, stepPins);
       settleMs -= delta;
       if (settleMs <= 0) endRoll();
     }
@@ -1169,11 +1169,31 @@ function throwBall(angle: number, pow: number, bend?: number): void {
   ball.vx = Math.sin(angle) * speed;
   ball.vy = -Math.cos(angle) * speed;
   ball.rolling = true;
+  physBank = 0;
   standingBefore = pins.filter((p) => !p.down).length;
   audio.sfx('hop_wet');
 }
 
 /** The ball and every standing pin, one step. */
+/**
+ * THE LANE AT ONE PACE ON EVERY MACHINE.  The aim line (`simulate`) is worked
+ * out in 1/60 s steps; the ball and pins used to move by the frame's own time,
+ * up to 40 ms of it, so on a slow machine the ball strayed off the line it
+ * was shown and the pins met in coarser, harder knocks -- the pocket stopped
+ * taking the rack.  So they move in the same 1/60 s steps, whatever the frame
+ * rate, with the time left over banked for the next frame.
+ */
+const PHYS_STEP = 1 / 60;
+let physBank = 0;
+
+function fixedSteps(dt: number, step: (h: number) => void): void {
+  physBank += dt;
+  while (physBank >= PHYS_STEP) {
+    physBank -= PHYS_STEP;
+    step(PHYS_STEP);
+  }
+}
+
 function stepPhysics(dt: number): void {
   if (gutter !== 0) {
     // IN THE CHANNEL.  Nothing steers it, nothing bends it, nothing on the
