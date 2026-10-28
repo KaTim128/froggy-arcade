@@ -24,7 +24,7 @@ import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
 import { ledger } from '../core/ledger';
-import { button, centerText, confirmDialog, fadeToScene, text } from '../core/ui';
+import { button, centerText, confirmDialog, fadeToScene, smallText, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
 import { drawAttackIcon } from '../art/attackIcons';
@@ -48,6 +48,20 @@ interface Shown {
   y: number;
   s: number;
   f: number;
+}
+
+/** `s` broken into lines of at most `n` characters, at the spaces. */
+function wrapWords(s: string, n: number): string[] {
+  const out: string[] = [];
+  let line = '';
+  for (const w of s.split(' ')) {
+    if (line && line.length + 1 + w.length > n) {
+      out.push(line);
+      line = w;
+    } else line = line ? `${line} ${w}` : w;
+  }
+  if (line) out.push(line);
+  return out;
 }
 
 export class CreatureHub extends Phaser.Scene {
@@ -163,8 +177,11 @@ export class CreatureHub extends Phaser.Scene {
       // (LEAVE is in the pause menu: Esc on a keyboard, the gear on a phone)
     } else if (!(this.screen === 'pack' && this.picked)) L.add(button(this, GAME_W - 26, 8, 'BACK', () => this.go(store.get().creatures.owned.length ? 'home' : 'recruit'), { width: 44, height: 11 }));
     ({ home: () => this.home(), recruit: () => this.recruit(), pack: () => this.pack(), map: () => this.map(), ladder: () => this.ladder(), controls: () => this.controls() })[this.screen]();
-    if (this.msg) {
-      const m = centerText(this, GAME_W / 2, GAME_H - 7, this.msg, PALETTE.gold);
+    // (on the pack screen the line keeps to the right-hand column, clear of
+    // the cards; once one is picked its own panel says who joined)
+    const packMsg = this.screen === 'pack';
+    if (this.msg && !(packMsg && this.picked)) {
+      const m = centerText(this, packMsg ? 239 : GAME_W / 2, GAME_H - 7, this.msg, PALETTE.gold);
       L.add(m);
       backPlate(this, m, PALETTE.gold);
     } else if (this.screen === 'home') {
@@ -530,7 +547,8 @@ export class CreatureHub extends Phaser.Scene {
     }
     L.add(text(this, 8, 18, this.picked ? 'YOURS, AND WHAT ELSE WAS IN THE PACK' : 'PICK ONE CARD', PALETTE.cream));
     const cw = 44;
-    const ch = 46;
+    // (three rows end at y 160: the line under them never touches a card)
+    const ch = 41;
     cards.forEach((id, i) => {
       const x = 10 + (i % 3) * (cw + 4);
       const y = 28 + Math.floor(i / 3) * (ch + 3);
@@ -549,15 +567,26 @@ export class CreatureHub extends Phaser.Scene {
       const mine = this.picked!.index === i;
       const el = ELEMENTS[cr.element];
       L.add(this.add.rectangle(x, y, cw, ch, mine ? 0x2a3050 : 0x161a2c).setOrigin(0, 0).setStrokeStyle(mine ? 2 : 1, mine ? PALETTE.gold : el.col));
-      this.shown.push({ c: cr, x: x + cw / 2, y: y + 18, s: 1.2, f: 1 });
+      this.shown.push({ c: cr, x: x + cw / 2, y: y + 16, s: 1.2, f: 1 });
       // (no name on the small cards: the big one beside them has it)
-      L.add(centerText(this, x + cw / 2, y + 35, el.name, el.light));
+      L.add(centerText(this, x + cw / 2, y + 31, el.name, el.light));
       L.add(this.add.rectangle(x + 3, y + ch - 5, cw - 6, 2, el.col).setOrigin(0, 0));
     });
     if (this.picked) {
       const cr = creatureById(cards[this.picked.index])!;
       this.card(cr, 166, 26, 146, 118);
-      L.add(button(this, 239, 156, 'CONTINUE', () => {
+      // WHAT IT IS GOOD AT, AND WHERE IT IS WEAK (log #42: on creature select),
+      // in the small type under its card, two lines at most each
+      let ly = 148;
+      const lines = (label: string, s: string, col: number): void => {
+        for (const ln of wrapWords(`${label} ${s}`, 36).slice(0, 2)) {
+          L.add(smallText(this, 168, ly, ln, col));
+          ly += 7;
+        }
+      };
+      lines('GOOD AT:', cr.strong, PALETTE.mossLight);
+      lines('WEAK:', cr.weak, 0xff9a9a);
+      L.add(button(this, 82, 170, 'CONTINUE', () => {
         this.picked = null;
         this.go('home');
       }, { width: 80, height: 13 }));
