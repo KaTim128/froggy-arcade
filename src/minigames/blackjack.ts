@@ -483,6 +483,57 @@ export const blackjack: MinigameModule = {
     }, false, true);
   },
 
+  // ---- A RELOAD (log #87): the shoe, both hands, the bet, the ace's price
+  // and the stake multiplier, card for card.  A hand mid-play is still yours
+  // to hit or stand; one where he was drawing goes on drawing from where he
+  // was; a settled one is offered again as it was.
+  snapshot() {
+    return { deck: [...deck], drawn: [...drawn], shoeId, player: [...player], dealer: [...dealer], phase, standing, aceAs, stakeMul, bet, ante, hands, outcome };
+  },
+
+  restore(snap: unknown) {
+    const v = snap as { deck: Card[]; drawn: Card[]; shoeId: number; player: Card[]; dealer: Card[]; phase: Phase; standing: boolean; aceAs: AceAs; stakeMul: number; bet: number; ante: number; hands: number; outcome: string };
+    deck = [...v.deck];
+    drawn = [...v.drawn];
+    shoeId = v.shoeId;
+    player = [...v.player];
+    dealer = [...v.dealer];
+    aceAs = v.aceAs;
+    stakeMul = v.stakeMul;
+    bet = v.bet;
+    ante = v.ante;
+    hands = v.hands;
+    outcome = v.outcome;
+    phase = v.phase;
+    if (phase === 'bet') {
+      standing = false;
+      setStatus('PLACE YOUR BET');
+      render();
+      return;
+    }
+    betUi?.destroy();
+    betUi = null;
+    if (phase === 'play') {
+      if (v.standing) {
+        // (he was drawing: he carries on from the cards he has)
+        standing = false;
+        stand();
+        return;
+      }
+      standing = false;
+      hitBtn?.setVisible(true);
+      standBtn?.setVisible(true);
+      say('HIT OR STAND');
+      render();
+      return;
+    }
+    standing = true;
+    hitBtn?.setVisible(false);
+    standBtn?.setVisible(false);
+    setStatus(outcome);
+    offerAnother();
+  },
+
   destroy() {
     froggyLayer.clear();
     table?.destroy();

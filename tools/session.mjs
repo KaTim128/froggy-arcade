@@ -125,9 +125,17 @@ try {
   });
   const list = want === 'none' ? [] : want ? want.split(',') : snapGames;
   console.log(`  (cabinets that keep a snapshot: ${snapGames.join(', ') || 'none'})`);
+  // (what to do in each before the reload, to catch it mid-play rather than at its start)
+  const ACT = {
+    blackjack: async () => {
+      await page.keyboard.press('Space');
+      await sleep(900);
+    },
+  };
   for (const id of list) {
     await playCabinet(id);
     await sleep(2500);
+    await ACT[id]?.();
     // the snapshot the save holds now, and the cabinet's own view of itself
     // (held still first, so what is saved on the way out is this very moment)
     const before = await page.evaluate(() => {
@@ -140,7 +148,7 @@ try {
     await until(() => window.__pause?.paused() === 'Minigame', 12000);
     const again = await page.evaluate(() => JSON.stringify(window.__froggy.game().scene.getScene('Minigame').mod.snapshot()));
     const same = before !== 'null' && again === before;
-    check(`${id}: put back exactly where it stood, nothing charged`, same && (await tokens()) === tb, same ? '' : `before ${before.slice(0, 160)} / after ${again.slice(0, 160)}`);
+    check(`${id}: put back exactly where it stood, nothing charged`, same && (await tokens()) === tb, same ? before.replace(/"deck":\[[^\]]*\],?/, '').slice(0, 110) : `before ${before.slice(0, 160)} / after ${again.slice(0, 160)}`);
     await page.evaluate(() => window.__pause.resume());
     await sleep(2600);
     await page.evaluate(() => window.__minigame?.lose());
