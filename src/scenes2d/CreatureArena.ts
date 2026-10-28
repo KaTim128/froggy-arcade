@@ -377,6 +377,8 @@ export class CreatureArena extends Phaser.Scene {
   private caveIn: { owner: Fighter; t: number; tick: number } | null = null;
   /** A boss whose head grew back breathes twice as often. */
   private patternMul = 1;
+  /** The boss's second phase (under half health): faster, harder, angrier. */
+  private bossRage = false;
   private hazards: Hazard[] = [];
   private props: Prop[] = [];
   private barriers: Barrier[] = [];
@@ -464,6 +466,7 @@ export class CreatureArena extends Phaser.Scene {
     this.stasis = 0;
     this.caveIn = null;
     this.patternMul = 1;
+    this.bossRage = false;
     this.hazards = [];
     this.props = [];
     this.barriers = [];
@@ -637,6 +640,8 @@ export class CreatureArena extends Phaser.Scene {
     this.dialog = null;
     this.started = true;
     this.paused = false;
+    // a boss announces itself at the bell
+    if (this.boss) this.time.delayedCall(150, () => this.bossRoar(false));
     audio.sfx('bell_ding', 0.6);
     const go = centerText(this, ARENA.x + ARENA.w / 2, ARENA.y + ARENA.h / 2, 'FIGHT!', PALETTE.gold, 24).setDepth(2401);
     this.tweens.add({ targets: go, scale: 1.4, alpha: 0, delay: 250, duration: 450, onComplete: () => go.destroy() });
@@ -2337,6 +2342,8 @@ export class CreatureArena extends Phaser.Scene {
   /** Damage, its element's effect, and the numbers. */
   private hit(from: Fighter, to: Fighter, dmg: number, a: Attack | null): void {
     if (this.over || to.hp <= 0 || to.invuln > 0 || to.st.cage || to.st.under) return;
+    // (an enraged boss hits harder)
+    if (this.boss && from === this.foe && this.bossRage) dmg = Math.round(dmg * 1.15);
     // up in an updraft: nothing on the floor or charging along it reaches
     if (to.st.air && (!a || a.kind === 'dash' || a.kind === 'mine')) return;
     const shotLike = !!a && (a.kind === 'bolt' || a.kind === 'spread' || a.kind === 'snare' || a.kind === 'arc');
@@ -2570,7 +2577,32 @@ export class CreatureArena extends Phaser.Scene {
       if (pl.kind === 'drift' && pl.owner !== f) k *= 0.5;
     }
     if (f.st.comet && this.pools.some((pl) => pl.kind === 'trail' && pl.owner === f && Math.hypot(pl.x - f.x, pl.y - f.y + 5) < 8)) k *= 1.5;
+    // (an enraged boss comes at you faster)
+    if (this.boss && f === this.foe && this.bossRage) k *= 1.15;
     return f.c.speed * k;
+  }
+
+  /**
+   * ---- A BOSS IS A PRESENCE.  Every mechanic it casts goes out with a roar:
+   * its cry, a shockwave off its body and the ground shaking.  The roar that
+   * starts its second phase is the big one -- ENRAGED over its head, a red
+   * burst, the arena rocking -- and from then on it is red-rimmed and quick.
+   */
+  private bossRoar(rage: boolean): void {
+    const foe = this.foe;
+    if (!this.boss || this.over || foe.hp <= 0) return;
+    const col = ELEMENTS[foe.c.element];
+    this.fx.push({ kind: 'ring', x: foe.x, y: foe.y, r: rage ? 56 : 30, t: 0, life: rage ? 0.8 : 0.5, col: rage ? 0xff4a3a : col.light });
+    this.fx.push({ kind: 'spark', x: foe.x, y: foe.y, r: rage ? 22 : 14, t: 0, life: 0.5, col: rage ? 0xffb060 : col.col });
+    this.cameras.main.shake(rage ? 380 : 160, rage ? 0.01 : 0.004);
+    audio.sfx(foe.c.cry, rage ? 0.8 : 0.5);
+    if (!rage) return;
+    audio.sfx('arcane_blast', 0.6);
+    foe.flash = 0.3;
+    const t = centerText(this, foe.x, foe.y - 24 * foe.scale, 'ENRAGED!', 0xff6a4a).setDepth(60);
+    backPlate(this, t, 0xff6a4a);
+    this.tweens.add({ targets: t, y: t.y - 10, scale: { from: 1.6, to: 1 }, duration: 380, ease: 'Back.easeOut' });
+    this.tweens.add({ targets: t, alpha: 0, delay: 1300, duration: 400, onComplete: () => t.destroy() });
   }
 
   private tickFighter(f: Fighter, dt: number): void {
@@ -3115,8 +3147,14 @@ export class CreatureArena extends Phaser.Scene {
     if (def) {
       this.hazardT -= dt;
       if (this.hazardT <= 0) {
-        this.hazardT = def.every * this.patternMul;
+        this.hazardT = def.every * this.patternMul * (this.bossRage ? 0.75 : 1);
         this.bossPattern(def);
+        this.bossRoar(false);
+      }
+      // ---- THE SECOND PHASE: at half health it gets angry -- and means it
+      if (!this.bossRage && this.foe.hp > 0 && this.foe.hp <= this.foe.max * 0.5) {
+        this.bossRage = true;
+        this.bossRoar(true);
       }
       // ---- NO HIDING.  Out of its sight too long and it comes for you:
       // the lich blinks to where it can see you; the rest throw what they
@@ -3543,7 +3581,27 @@ export class CreatureArena extends Phaser.Scene {
       // ground each time a foot comes down.  Attacking, it lunges: it draws
       // back for a beat, throws itself at the aim, and settles -- and it
       // swells a touch at the moment of the blow, so a hit reads as effort.
-      const { ox, oy, k } = this.bodyMotion(f);
+      const { ox, oy: oy0, k: k0 } = this.bodyMotion(f);
+      let oy = oy0;
+      let k = k0;
+      if (this.boss && f === this.foe && f.hp > 0) {
+        // ---- THE BOSS IS ALIVE: it breathes and bobs; before each mechanic
+        // it rears up and swells as the power gathers in it; motes of its
+        // element wheel round it, faster and more of them when it is angry
+        const wind = this.started ? Phaser.Math.Clamp(1 - this.hazardT / 0.9, 0, 1) : 0;
+        const breath = Math.sin(t * (this.bossRage ? 3.6 : 2.4));
+        k *= 1 + breath * 0.035 + wind * 0.12;
+        oy += Math.round(breath * 0.8 - wind * 3);
+        const el = ELEMENTS[f.c.element];
+        const n = this.bossRage ? 10 : 6;
+        for (let m = 0; m < n; m++) {
+          const a = t * (this.bossRage ? 2.6 : 1.5) + (m / n) * Math.PI * 2;
+          const rr = (13 + wind * 4) * f.scale;
+          g.fillStyle(m % 2 ? el.light : el.col, 0.55 + wind * 0.4).fillCircle(f.x + Math.cos(a) * rr, f.y - 2 + Math.sin(a) * rr * 0.45, 1 + wind);
+        }
+        if (wind > 0) g.lineStyle(1, el.light, wind * 0.7).strokeCircle(f.x, f.y, (10 + wind * 6) * f.scale);
+        if (this.bossRage) g.lineStyle(1, 0xff4a3a, 0.45 + Math.sin(t * 8) * 0.25).strokeEllipse(f.x, f.y + 2, 24 * f.scale, 12 * f.scale);
+      }
       drawCreature(g, f.c, f.x + ox, f.y - lift + oy, f.scale * k, f.face, f.st.sleep || f.st.stone || f.st.hibernate ? 0 : f.moving ? t * 1.8 : t);
       if (f.st.stone) g.fillStyle(0x8a8a8a, 0.55).fillEllipse(f.x, f.y, 16 * f.scale, 15 * f.scale);
       if (f.st.cage) g.lineStyle(1, 0x9ad0ff, 0.9).strokeCircle(f.x, f.y, 12 * f.scale).fillStyle(0x9ad0ff, 0.2).fillCircle(f.x, f.y, 12 * f.scale);
