@@ -948,7 +948,9 @@ export class PoliceBuilding {
         }
       }
       box(GAP * 2 + 0.05, 0.05, 0.05, rail, S, 0, y0 + FH / 2 + 0.95, -FLIGHT);
-      box(GAP * 2 + 0.05, 0.05, 0.05, rail, S, 0, y0 + 0.95, 0);
+      // (not at G: nothing comes down to meet it there, so it was a stub of
+      // rail sticking out over the foot of the first flight)
+      if (f > 0) box(GAP * 2 + 0.05, 0.05, 0.05, rail, S, 0, y0 + 0.95, 0);
     }
     // (at G the floor runs under the second flight, as at the foot of the
     // stairs Froggy chases you down: no rail across it into the wall)
