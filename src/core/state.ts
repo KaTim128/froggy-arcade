@@ -265,6 +265,9 @@ export interface SavedGame {
   atRisk?: number;
   /** The game's own picture of itself, when it can be put back exactly (MinigameModule.snapshot). */
   snap?: unknown;
+  /** A machine that is a scene of its own rather than a cabinet in the shell (the cranes): where to go back to, and with what. */
+  scene?: string;
+  data?: Record<string, string | number | boolean>;
   /** Real time it was written. */
   at: number;
 }
@@ -936,6 +939,8 @@ function sanitizeGame(g: unknown): SavedGame | null {
     practicing: v.practicing === true,
     atRisk: Number.isFinite(v.atRisk) ? Math.max(0, Math.floor(v.atRisk as number)) : 0,
     snap: v.snap,
+    scene: typeof v.scene === 'string' ? v.scene : undefined,
+    data: v.data && typeof v.data === 'object' ? { ...v.data } : undefined,
     at: Number.isFinite(v.at) ? (v.at as number) : 0,
   };
 }

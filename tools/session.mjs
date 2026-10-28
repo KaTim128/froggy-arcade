@@ -224,6 +224,32 @@ try {
   await page.evaluate(() => window.__minigame?.lose());
   await sleep(400);
 
+  // ------------------------------------------------ 4c: a crane, mid-go
+  await page.evaluate(() => {
+    const g = window.__froggy.game();
+    for (const s of g.scene.getScenes(true)) s.scene.stop();
+    window.__froggy.setTokens(100);
+  });
+  await sleep(250);
+  await page.evaluate(() => window.__froggy.game().scene.start('CraneGame', { kind: 'plush' }));
+  await sleep(1500);
+  await page.keyboard.press('Space');
+  await sleep(700);
+  await page.keyboard.press('Space');
+  await sleep(700);
+  const ct0 = await tokens();
+  const craneGo = await page.evaluate(() => ({ phase: window.__crane?.state().phase, saved: window.__froggy.state().game?.scene ?? null }));
+  await reload();
+  const craneBack = await until(() => window.__pause?.paused() === 'CraneGame', 12000);
+  const craneAfter = await page.evaluate(() => ({ phase: window.__froggy.game().scene.getScene('CraneGame').phase, t: window.__froggy.state().tokens }));
+  check('a reload mid-way through a crane go comes back to the crane, the go still paid for', craneGo.saved === 'CraneGame' && !!craneBack && craneAfter.phase === 'aim' && craneAfter.t === ct0, `${JSON.stringify(craneGo)} -> ${JSON.stringify(craneAfter)} (${ct0} before)`);
+  await page.evaluate(() => window.__pause.resume());
+  await sleep(2600);
+  // (and walked away from, as LEAVE does: nothing left to come back to)
+  await page.evaluate(() => window.__froggy.game().scene.getScene('CraneGame').leave(true));
+  await sleep(1200);
+  check('and leaving the crane leaves nothing to come back to', (await page.evaluate(() => window.__froggy.state().game)) === null);
+
   // ------------------------------------------------ 5: a room
   await page.evaluate(() => {
     const g = window.__froggy.game();

@@ -40,6 +40,7 @@ export function reloadTarget(): ResumePoint | null {
   const s = store.get();
   if (s.jailed) return null;
   // a cabinet in play: back into it, its stake still on it
+  if (s.game?.scene) return { key: s.game.scene, data: { ...(s.game.data ?? {}), prepaid: true } };
   if (s.game) return { key: 'Minigame', data: { id: s.game.id, from: s.game.from, restore: s.game } };
   const at = resumePoint();
   return at.key === 'StartScreen' ? null : at;
