@@ -34,7 +34,7 @@ import { BATTLE_COST, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, creatureBy
 import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle, startStory } from '../game/creatureClash';
 import { MAX_LEVEL, levelOf, withLevel } from '../game/creatureLevel';
 import {
-  AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
+  AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, EVADE_CHANCE, EVADE_S, FOCUS_CRIT, FOCUS_S, FURY_MUL, FURY_S, QUICK_RATE, QUICK_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
   POISON_PER_S, POISON_S, WALL_DEFAULT, WALL_SPECS, REGEN_PER_S, REGEN_S, ROOT_S, SHRED_MUL, SHRED_S, SILENCE_S, STAGGER_S, STRIKE_DMG, THORNS_DMG, WEAK_MUL, WEAK_S, attackInfo, buttonWords,
 } from '../game/attackInfo';
 import { abilityIconURL, drawAbilityIcon } from '../art/abilityIcons';
@@ -1635,6 +1635,18 @@ export class CreatureArena extends Phaser.Scene {
       case 'regen':
         f.regen = a.kind === 'shield' ? a.reach : REGEN_S;
         break;
+      // ---- THE BUFFS: seconds of an edge, said over its head as it starts
+      case 'evade':
+      case 'focus':
+      case 'fury':
+      case 'quicken': {
+        const BUFF = { evade: [EVADE_S, 'EVASION', 0xb8e8ff], focus: [FOCUS_S, 'FOCUS', 0xffe060], fury: [FURY_S, 'FURY', 0xff7a4a], quicken: [QUICK_S, 'QUICKEN', 0x9aff9a] } as const;
+        const [secs, word, col] = BUFF[a.mod];
+        f.st[`b_${a.mod}`] = secs;
+        this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 16 * f.scale, t: 0, life: 0.45, col });
+        this.floatNum(f, 0, col, `${word} `);
+        break;
+      }
       case 'cleanse':
         f.burn = f.slow = f.chill = f.root = f.blind = f.poison = f.weak = f.shred = f.stun = 0;
         for (const k of ['sleep', 'cage', 'knock', 'stone', 'slick', 'mired', 'confused', 'omen', 'pollen', 'leash', 'rain', 'n_stacks', 'n_quills']) delete f.st[k];
@@ -2585,6 +2597,11 @@ export class CreatureArena extends Phaser.Scene {
       this.fx.push({ kind: 'spark', x: to.x, y: to.y, r: 9, t: 0, life: 0.2, col: 0xfff0c0 });
       return;
     }
+    // EVASION: some of what comes at it simply misses
+    if ((to.st.b_evade ?? 0) > 0 && dmg > 0 && Math.random() < EVADE_CHANCE) {
+      this.floatNum(to, 0, 0xb8e8ff, 'MISS ');
+      return;
+    }
     if (to.shield > 0 || to.guard > 0) {
       this.fx.push({ kind: 'spark', x: to.x, y: to.y, r: 10, t: 0, life: 0.2, col: 0xffffff });
       to.guard = 0;
@@ -2622,8 +2639,12 @@ export class CreatureArena extends Phaser.Scene {
       d -= 10;
       to.st.n_bark -= 1;
     }
+    // FURY: its hits land harder while it lasts
+    if ((from.st.b_fury ?? 0) > 0 && a) d *= FURY_MUL;
     let crit = false;
-    if (m === 'crit' && Math.random() < 0.25) {
+    // (FOCUS adds its chance to a move's own, or gives a plain one a chance)
+    const critChance = (m === 'crit' ? 0.25 : 0) + ((from.st.b_focus ?? 0) > 0 && a ? FOCUS_CRIT : 0);
+    if (critChance > 0 && Math.random() < critChance) {
       d *= 2;
       crit = true;
     }
@@ -2729,7 +2750,8 @@ export class CreatureArena extends Phaser.Scene {
 
   /** A number rising off whoever took it. */
   private floatNum(to: Fighter, d: number, col: number, pre = ''): void {
-    const n = text(this, to.x, to.y - 14 * to.scale, `${pre}${d}`, col).setOrigin(0.5, 1).setDepth(58);
+    // (a word with nothing to count -- MISS, GULP, EVASION -- is the word alone)
+    const n = text(this, to.x, to.y - 14 * to.scale, d === 0 && pre ? pre.trim() : `${pre}${d}`, col).setOrigin(0.5, 1).setDepth(58);
     this.tweens.add({ targets: n, y: n.y - 10, alpha: 0, duration: 650, ease: 'Quad.easeOut', onComplete: () => n.destroy() });
   }
 
@@ -2825,7 +2847,9 @@ export class CreatureArena extends Phaser.Scene {
   }
 
   private tickFighter(f: Fighter, dt: number): void {
-    for (let i = 0; i < 3; i++) f.cds[i] = Math.max(0, f.cds[i] - dt);
+    // (QUICKEN: the cooldowns run faster while it lasts)
+    const cdRate = (f.st.b_quicken ?? 0) > 0 ? QUICK_RATE : 1;
+    for (let i = 0; i < 3; i++) f.cds[i] = Math.max(0, f.cds[i] - dt * cdRate);
     for (const k of ['slow', 'stun', 'stunImmune', 'blind', 'shield', 'invuln', 'aura', 'root', 'flash'] as const) f[k] = Math.max(0, f[k] - dt);
     if (f.burn > 0) {
       const before = Math.floor(f.burn);

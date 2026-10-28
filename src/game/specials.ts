@@ -50,7 +50,7 @@ export const SPECIAL_LIST: SpecialDef[] = [
   D('splitflame', 'SPLITFLAME', 'bolt', 12, 2.4, 200, 'poke', 'A FIREBALL THAT BREAKS INTO 3 SHARDS (40% DAMAGE EACH) WHEN IT HITS OR STOPS.', 'split'),
   D('afterburn', 'AFTERBURN', 'arc', 16, 5, 110, 'hidden', 'A LOBBED BLOB THAT BURSTS, THEN BURSTS AGAIN 0.6S LATER AT HALF DAMAGE.', 'echo'),
   D('lava_flow', 'LAVA FLOW', 'beam', 0, 6, 80, 'mid', 'POURS AN 80PX RIVER FOR 4S THAT CARRIES ANYTHING IN IT DOWNSTREAM AND BURNS 2 A SECOND.'),
-  D('molten_skin', 'MOLTEN SKIN', 'aura', 0, 9, 5, 'self', 'FOR 5S, TOUCHING IT DEALS 4 AND SETS THE TOUCHER ALIGHT.'),
+  D('molten_skin', 'MOLTEN SKIN', 'aura', 0, 9, 5, 'self', 'FOR 5S, TOUCHING IT DEALS 4 AND SETS THE TOUCHER ALIGHT - AND ITS OWN HITS DEAL +25% (FURY).', 'fury'),
   D('venom_sting', 'VENOM STING', 'beam', 12, 2.6, 70, 'close', 'AN INSTANT 70PX TAIL STRIKE THAT POISONS FOR 3 A SECOND OVER 4S.', 'poison'),
   D('ash_burrow', 'ASH BURROW', 'blink', 0, 4, 64, 'escape', 'UNTARGETABLE UNDERGROUND FOR 1S, THEN SURFACES UP TO 64PX AWAY WITH A GUARD AGAINST THE NEXT HIT.'),
   D('bellows', 'BELLOWS RAM', 'dash', 14, 3.6, 250, 'close', 'A 70PX CHARGE THAT DRIVES THE TARGET BACK; SLAMMED INTO COVER, THEY TAKE 8 MORE AND REEL FOR 0.4S.'),
@@ -128,7 +128,7 @@ export const SPECIAL_LIST: SpecialDef[] = [
   D('mirage_decoy', 'MIRAGE', 'blink', 0, 6, 50, 'escape', 'LEAVES A DOUBLE THAT LOOKS JUST LIKE IT AND WALKS AT THEM FOR 3S, WHILE IT BLINKS 50PX AWAY. AIM AND AI ALIKE ARE FOOLED.'),
   D('updraft', 'UPDRAFT', 'blink', 6, 5, 0, 'defend', 'AIRBORNE FOR 1S - FLOOR TRAPS AND CHARGES MISS IT - THEN LANDS IN A 30PX GUST.'),
   D('dive_bomb', 'DIVE BOMB', 'arc', 20, 5.5, 160, 'hidden', 'MARKS A SPOT, THEN DIVES ONTO IT 0.8S LATER FOR HEAVY DAMAGE IN 20PX.'),
-  D('tailwind', 'TAILWIND', 'aura', 0, 8, 5, 'self', 'FOR 4S ITS SHOTS FLY 50% FASTER AND 30% FURTHER.'),
+  D('tailwind', 'TAILWIND', 'aura', 0, 8, 5, 'self', 'FOR 4S ITS SHOTS FLY 50% FASTER AND 30% FURTHER; FOR 5S IT HAS +20% CHANCE TO CRIT (FOCUS).', 'focus'),
   // ------------------------------------------------------------------- murk
   D('mire_glob', 'MIRE GLOB', 'bolt', 8, 3.5, 185, 'poke', 'A STICKY GLOB THAT HALVES HOW FAR THE TARGET CAN DASH OR BLINK FOR 4S.'),
   D('coil_snap', 'COIL SNAP', 'beam', 13, 2.9, 54, 'close', 'AN INSTANT 54PX STRIKE THAT DEALS +60% TO TARGETS UNDER 40% HEALTH.', 'execute'),
@@ -144,7 +144,7 @@ export const SPECIAL_LIST: SpecialDef[] = [
   D('soul_siphon', 'SOUL SIPHON', 'beam', 0, 7, 100, 'mid', 'A 3S TETHER THAT DRAINS 4 A SECOND FROM THE TARGET TO ITSELF WHILE WITHIN 100PX.'),
   // ------------------------------------------------------------------- glow
   D('pierce_gaze', 'PIERCE GAZE', 'beam', 15, 3.2, 120, 'poke', 'AN INSTANT 120PX BEAM THAT ADDS 1.2S TO ALL OF THE TARGET\'S COOLDOWNS.', 'silence'),
-  D('silent_glide', 'HUSH GLIDE', 'blink', 0, 2.6, 68, 'escape', 'GLIDES 68PX AND CANNOT BE HIT FOR 0.5S AFTER IT LANDS.'),
+  D('silent_glide', 'HUSH GLIDE', 'blink', 0, 2.6, 68, 'escape', 'GLIDES 68PX AND CANNOT BE HIT FOR 0.5S AFTER IT LANDS; THEN FOR 4S, 30% OF HITS ON IT MISS (EVASION).', 'evade'),
   D('boomer_spit', 'BOOMER SPIT', 'bolt', 9, 2.2, 220, 'poke', 'A SHOT THAT FLIES OUT AND BACK, AND CAN HIT ON BOTH PASSES.', 'boomerang'),
   D('bright_coil', 'BRIGHT COIL', 'aura', 0, 8, 5, 'defend', 'FOR 3S IT SOAKS UP SHOTS AIMED AT IT; EACH ONE ADDS 2 DAMAGE TO ITS NEXT SHOT.'),
   D('dangling_lure', 'DANGLE LURE', 'mine', 0, 7, 0, 'mid', 'HANGS A LURE 50PX AWAY FOR 4S; COME WITHIN 15PX OF IT AND YOU ARE REELED IN.'),
@@ -152,7 +152,7 @@ export const SPECIAL_LIST: SpecialDef[] = [
   D('beacon', 'BEACON', 'wall', 0, 9, 0, 'self', 'PLANTS A LANTERN FOR 6S; WHILE IT STAYS WITHIN 40PX OF IT, ITS SHOTS GO THROUGH COVER.'),
   D('dazzle', 'DAZZLE', 'nova', 4, 5, 50, 'close', 'A FLASH THAT SENDS THE TARGET\'S NEXT 2 SHOTS 30 DEGREES OFF COURSE.'),
   D('star_shell', 'STAR SHELL', 'shield', 0, 8, 2, 'defend', 'IMMUNE IN ITS SHELL FOR 2S, THEN RELEASES THE DAMAGE IT WOULD HAVE TAKEN AS A 40PX BURST.'),
-  D('comet_trail', 'COMET TRAIL', 'aura', 0, 8, 5, 'self', 'LEAVES A GLOWING TRAIL FOR 5S AND MOVES 50% FASTER ALONG ITS OWN TRAIL.'),
+  D('comet_trail', 'COMET TRAIL', 'aura', 0, 8, 5, 'self', 'LEAVES A GLOWING TRAIL FOR 5S AND MOVES 50% FASTER ALONG ITS OWN TRAIL; ITS COOLDOWNS RUN 40% FASTER MEANWHILE (QUICKEN).', 'quicken'),
   // ------------------------------------------------------------------ bosses
   D('phantom_blink', 'PHANTOM BLINK', 'blink', 0, 4.5, 0, 'never', 'MARKS OF GRAVE-LIGHT ROUND YOU, AND IT TELEPORTS TO WHEREVER IT CAN SEE YOU.'),
   D('raise_husks', 'RAISE HUSKS', 'aura', 0, 9, 5, 'mid', 'RAISES 2 SLOW HUSKS THAT WALK AT YOU AND BURST FOR 12. SHOOT THEM DOWN.'),

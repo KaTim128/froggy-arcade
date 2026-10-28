@@ -66,6 +66,7 @@ export type AttackKind =
  *   where it     linger echo vortex                              (areas, lines, charges)
  *   lands
  *   on you       haste guard regen cleanse                       (any move)
+ *   buffs        evade focus fury quicken                        (any move: seconds of an edge)
  *   guards only  reflect thorns
  *   blinks only  strike
  *   none         the plain move, as it comes
@@ -76,13 +77,14 @@ export type Mod =
   | 'homing' | 'bounce' | 'wave' | 'boomerang' | 'grow' | 'drill' | 'split'
   | 'linger' | 'echo' | 'vortex'
   | 'haste' | 'guard' | 'regen' | 'cleanse'
+  | 'evade' | 'focus' | 'fury' | 'quicken'
   | 'reflect' | 'thorns'
   | 'strike';
 
 export const HIT_MODS: Mod[] = ['poison', 'mark', 'shred', 'execute', 'drain', 'pull', 'push', 'root', 'silence', 'weaken', 'chill', 'stagger', 'crit'];
 export const PATH_MODS: Mod[] = ['homing', 'bounce', 'wave', 'boomerang', 'grow', 'drill', 'split'];
 export const AREA_MODS: Mod[] = ['linger', 'echo', 'vortex'];
-export const SELF_MODS: Mod[] = ['haste', 'guard', 'regen', 'cleanse'];
+export const SELF_MODS: Mod[] = ['haste', 'guard', 'regen', 'cleanse', 'evade', 'focus', 'fury', 'quicken'];
 /** The kinds that fly as shots, and the ones that land somewhere as an area. */
 export const SHOT_KINDS: AttackKind[] = ['bolt', 'spread', 'snare'];
 export const AREA_KINDS: AttackKind[] = ['nova', 'arc', 'mine', 'beam', 'dash'];

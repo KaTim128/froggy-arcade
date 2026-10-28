@@ -112,6 +112,16 @@ export const REGEN_S = 4;
 export const REGEN_PER_S = 3;
 export const THORNS_DMG = 6;
 export const STRIKE_DMG = 10;
+// THE BUFFS (user, 28 Oct: "unique buff abilities, evasion +30%, crit +20%"):
+// seconds of an edge on yourself, after the move
+export const EVADE_S = 4;
+export const EVADE_CHANCE = 0.3;
+export const FOCUS_S = 5;
+export const FOCUS_CRIT = 0.2;
+export const FURY_S = 5;
+export const FURY_MUL = 1.25;
+export const QUICK_S = 5;
+export const QUICK_RATE = 1.4;
 
 /** Every special, said in a line a player can act on. */
 export const MODS: Record<Mod, { name: string; desc: string }> = {
@@ -143,6 +153,10 @@ export const MODS: Record<Mod, { name: string; desc: string }> = {
   guard: { name: 'GUARD', desc: `BLOCKS THE NEXT HIT ON YOU WITHIN ${GUARD_S}S` },
   regen: { name: 'REGROW', desc: `YOU HEAL ${REGEN_PER_S} A SECOND FOR ${REGEN_S}S` },
   cleanse: { name: 'CLEANSE', desc: 'SHAKES OFF BURNS, POISON, SLOWS AND HOLDS' },
+  evade: { name: 'EVASION', desc: `FOR ${EVADE_S}S AFTER, ${Math.round(EVADE_CHANCE * 100)}% OF HITS ON YOU MISS` },
+  focus: { name: 'FOCUS', desc: `FOR ${FOCUS_S}S AFTER, +${Math.round(FOCUS_CRIT * 100)}% CHANCE TO CRIT (DOUBLE DAMAGE)` },
+  fury: { name: 'FURY', desc: `FOR ${FURY_S}S AFTER, YOUR HITS DEAL +${Math.round((FURY_MUL - 1) * 100)}%` },
+  quicken: { name: 'QUICKEN', desc: `FOR ${QUICK_S}S AFTER, YOUR COOLDOWNS RUN ${Math.round((QUICK_RATE - 1) * 100)}% FASTER` },
   reflect: { name: 'REFLECT', desc: 'SHOTS THAT HIT IT FLY BACK AT THEM' },
   thorns: { name: 'THORNS', desc: `ANYTHING THAT HITS IT TAKES ${THORNS_DMG} DAMAGE` },
   strike: { name: 'STRIKE', desc: `DEALS ${STRIKE_DMG} DAMAGE ALL ROUND WHERE YOU LAND` },
