@@ -741,6 +741,13 @@ export const carChase: MinigameModule = {
   music: 'game_carchase',
   rules: 'dodge, grab cash, bomb the law',
   tutorial: {
+    pitch: 'GRAB CASH AND KEEP AHEAD OF THE LAW.',
+    steps: [
+      { say: 'A / D STEERS. W / S SPEEDS UP OR EASES OFF.', phone: 'THE STICK STEERS, SPEEDS UP AND EASES OFF.', demo: 'chase.drive' },
+      { say: 'GRAB THE CASH. 300 PAYS 20, AND 5 MORE FOR EVERY 100 PAST IT.', demo: 'chase.cash' },
+      { say: 'SPACE BUYS A FROGGY BOMB FOR 30: IT SPINS THE LAW AND CLEARS THEM.', phone: 'BOMB BUYS A FROGGY BOMB FOR 30: IT SPINS THE LAW AND CLEARS THEM.', demo: 'chase.bomb' },
+      { say: 'OIL SPINS YOU. POTHOLES BREAK THE CAR BIT BY BIT. CONCRETE ENDS IT.', demo: 'chase.hazards' },
+    ],
     objective: [
       'GRAB CASH AND LOSE THE LAW.',
       'SPACE BUYS A FROGGY BOMB - 30 CASH.',

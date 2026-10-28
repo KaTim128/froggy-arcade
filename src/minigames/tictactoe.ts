@@ -82,6 +82,13 @@ export const ticTacToe: MinigameModule = {
   music: 'game_tictactoe',
   rules: 'tic-tac-toe or rock paper scissors',
   tutorial: {
+    pitch: 'TWO QUICK DUELS AGAINST FROGGY.',
+    steps: [
+      { say: 'PICK A DUEL: TIC-TAC-TOE OR ROCK PAPER SCISSORS.', demo: 'ttt.pick' },
+      { say: 'TIC-TAC-TOE: CLICK A SQUARE. THREE IN A ROW WINS.', phone: 'TIC-TAC-TOE: TAP A SQUARE. THREE IN A ROW WINS.', demo: 'ttt.board' },
+      { say: 'ROCK PAPER SCISSORS: PICK A HAND. EACH BEATS ONE OTHER.', demo: 'ttt.rps' },
+      { say: 'BEAT FROGGY AND THE ROUND PAYS. A DRAW GIVES YOUR TOKEN BACK.', demo: 'ttt.pay' },
+    ],
     objective: [
       'TWO DUELS WITH FROGGY: TIC-TAC-TOE OR ROCK PAPER SCISSORS.',
       'BEAT FROGGY AND THE ROUND PAYS.',

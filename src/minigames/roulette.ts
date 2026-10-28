@@ -147,6 +147,12 @@ export const roulette: MinigameModule = {
   rules: 'six chambers, one live round, five a pull',
   payoutNote: `PAYS ${PAY_PER_PULL} A PULL`,
   tutorial: {
+    pitch: 'PULL THE TRIGGER. CASH OUT BEFORE IT FIRES.',
+    steps: [
+      { say: 'SPACE STOPS THE SPIN. SPACE AGAIN PULLS.', phone: 'STOP / PULL STOPS THE SPIN, THEN PULLS.', demo: 'chamber.spin' },
+      { say: `ONE LIVE ROUND IN ${CHAMBERS}, EVERY PULL. A CLEAN PULL PAYS ${PAY_PER_PULL}.`, demo: 'chamber.odds' },
+      { say: 'ENTER CASHES OUT AND KEEPS IT. A LIVE ROUND TAKES IT ALL.', phone: 'CASH OUT KEEPS IT. A LIVE ROUND TAKES IT ALL.', demo: 'chamber.cash' },
+    ],
     objective: [
       'SPIN THE CHAMBER, STOP IT, THEN PULL.',
       `ONE LIVE ROUND IN ${CHAMBERS}, EVERY PULL.`,

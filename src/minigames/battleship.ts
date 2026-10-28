@@ -290,6 +290,12 @@ export const battleship: MinigameModule = {
   music: 'game_battleship',
   rules: 'find their frogs before they find yours',
   tutorial: {
+    pitch: 'FIND HIS SIX HIDDEN FROGS BEFORE HE FINDS YOURS.',
+    steps: [
+      { say: 'HIDE: CLICK A FROG, THEN A PAD ON YOUR POND.', phone: 'HIDE: TAP A FROG, THEN A PAD ON YOUR POND.', demo: 'pond.hide' },
+      { say: 'HUNT: CLICK ONE PAD A TURN ON HIS POND. A FROG THERE IS FOUND.', phone: 'HUNT: TAP ONE PAD A TURN ON HIS POND. A FROG THERE IS FOUND.', demo: 'pond.hunt' },
+      { say: 'FROGS MOVE BETWEEN TURNS. RIPPLES, BUBBLES AND CROAKS SHOW WHERE.', demo: 'pond.clues' },
+    ],
     // What a new player needs, in the order they need it: the goal, the two
     // phases, what a search tells you, and what winning is worth.
     objective: [

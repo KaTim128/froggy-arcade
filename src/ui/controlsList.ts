@@ -117,6 +117,23 @@ export function deviceControls(rows: ControlRow[], layout: TouchLayout): Control
   return out;
 }
 
+/**
+ * Each control as a keyboard does it and as a phone does it, side by side:
+ * the CONTROLS page lists both on every device (a phone's column is the
+ * button or gesture the touch layout gives it; '-' where a phone has none).
+ */
+export function pairedControls(rows: ControlRow[], layout: TouchLayout): Array<{ keys: string; does: string; phone: string }> {
+  return rows.map(([keys, does]) => {
+    const t = touchRow([keys, does], layout);
+    // (the stick's arms are drawn as arrows, which the small font has no glyphs for: say it)
+    const raw = t ? t[0].replace(/\n/g, ' ') : '-';
+    const lr = /[←→]/.test(raw);
+    const ud = /[↑↓]/.test(raw);
+    const phone = lr || ud ? (lr && ud ? 'STICK' : lr ? 'STICK SIDEWAYS' : 'STICK UP/DOWN') + raw.replace(/[←→↑↓]/g, '').replace(/^[\s/]+|[\s/]+$/g, '').replace(/^(.)/, ' + $1') : raw;
+    return { keys: relabelKeys(keys), does, phone };
+  });
+}
+
 /** A cabinet's objective lines, with the keys in them said the phone's way. */
 export function deviceObjective(lines: string[], layout: TouchLayout): string[] {
   if (!isTouch()) return lines;

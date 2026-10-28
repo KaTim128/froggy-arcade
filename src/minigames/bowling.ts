@@ -328,6 +328,13 @@ export const bowling: MinigameModule = {
   music: 'game_bowling',
   rules: '3 rounds against froggy - beat his total',
   tutorial: {
+    pitch: 'THREE ROUNDS OF BOWLING AGAINST FROGGY.',
+    steps: [
+      { say: 'A / D WALKS THE FOUL LINE. LEFT / RIGHT SWINGS THE AIM.', phone: 'MOVE, THEN THE STICK WALKS THE LINE. THE STICK SWINGS THE AIM.', demo: 'bowl.aim' },
+      { say: 'Q / E HOOKS THE BALL. THE LINE SHOWS THE PATH, STRAIGHT OR HOOKED.', phone: 'HOOK BENDS THE BALL. THE LINE SHOWS THE PATH, STRAIGHT OR HOOKED.', demo: 'bowl.hook' },
+      { say: 'HOLD SPACE FOR POWER, LET GO TO THROW. THE DARK OIL SHOVES THE BALL.', phone: 'HOLD ROLL FOR POWER, LET GO TO THROW. THE DARK OIL SHOVES THE BALL.', demo: 'bowl.throw' },
+      { say: 'A STRIKE ADDS 5, A SPARE 3. BEAT HIS TOTAL - A TIE REFUNDS.', demo: 'bowl.score' },
+    ],
     objective: [
       'THREE ROUNDS AGAINST FROGGY.',
       'BEAT HIS TOTAL - A TIE REFUNDS.',

@@ -228,6 +228,13 @@ export const hoops: MinigameModule = {
   music: 'game_hoops',
   rules: '5 points in 75 seconds - streaks pay double',
   tutorial: {
+    pitch: 'FLICK FLIES INTO CHUBBY - FIVE IN 75 SECONDS.',
+    steps: [
+      { say: 'HOLD SPACE TO CROUCH. LET GO TO FLICK A FLY.', phone: 'HOLD SHOOT TO CROUCH. LET GO TO FLICK A FLY.', demo: 'hoops.flick' },
+      { say: 'W / S TILTS THE SHOT. THE DOTTED ARC TURNS GREEN WHEN IT WILL LAND.', phone: 'THE STICK TILTS THE SHOT. THE DOTTED ARC TURNS GREEN WHEN IT WILL LAND.', demo: 'hoops.tilt' },
+      { say: 'CHUBBY DRIFTS ON A LILY PAD, AND SPEEDS UP AS IT EATS. LEAD IT.', demo: 'hoops.lead' },
+      { say: 'TWO IN A ROW LIGHTS THE FLY: IT PAYS 2.', demo: 'hoops.streak' },
+    ],
     objective: [
       'FEED CHUBBY 5 FLIES IN 75 SECONDS.',
       'CHUBBY DRIFTS ON A LILY PAD: LEAD IT.',

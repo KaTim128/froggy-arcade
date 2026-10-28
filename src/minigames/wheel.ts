@@ -232,6 +232,12 @@ export const wheelOfFortune: MinigameModule = {
   rules: '25 a spin - the wheel says what it pays',
   payoutNote: 'PAYS 0 - 5000',
   tutorial: {
+    pitch: 'ONE SPIN, ONE PRIZE.',
+    steps: [
+      { say: 'SPACE SPINS THE WHEEL.', phone: 'SPIN SPINS THE WHEEL.', demo: 'wheel.spin' },
+      { say: 'THE THINNEST FACES ARE THE RAREST. THE BOARD SHOWS THE REAL CHANCE OF EACH.', demo: 'wheel.odds' },
+      { say: 'WHATEVER IT STOPS ON IS YOURS. LEAVE WHENEVER YOU LIKE.', demo: 'wheel.keep' },
+    ],
     objective: [
       'ONE SPIN, ONE PRIZE, WHATEVER IT STOPS ON.',
       'THE THINNEST FACES ARE THE RAREST.',

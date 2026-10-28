@@ -92,7 +92,7 @@ try {
   for (const id of GAMES) {
     await open(id, 2);
     const s = await screen();
-    const want = ['TUTORIAL', 'CONTROLS', 'LEAVE'];
+    const want = ['HOW TO PLAY', 'CONTROLS', 'LEAVE'];
     const hasPlay = s.buttons.some((b) => b.startsWith('PLAY'));
     if (!s.card || s.started || !hasPlay || !want.every((w) => s.buttons.includes(w))) bad.push(`${id}: ${s.buttons.join('|')}`);
     if (!s.lines.some((l) => l.startsWith('YOUR BEST') || l.startsWith('NO BEST YET'))) noBest.push(id);
@@ -121,14 +121,14 @@ try {
   check('a best that is set is on the screen', s.lines.some((l) => l.includes('41.5S')), s.lines.find((l) => l.startsWith('YOUR BEST')) ?? '(none)');
 
   // ------------------------------------------------- 5: Esc
-  await press('TUTORIAL');
+  await press('HOW TO PLAY');
   await sleep(300);
   s = await screen();
   const onHow = s.lines.some((l) => l.startsWith('HOW TO PLAY'));
   await page.keyboard.press('Escape');
   await sleep(400);
   s = await screen();
-  const back = s.lines.some((l) => l === 'GRUDGE') && s.buttons.includes('TUTORIAL');
+  const back = s.lines.some((l) => l === 'GRUDGE') && s.buttons.includes('HOW TO PLAY');
   check('TUTORIAL opens HOW TO PLAY, and Esc goes back to the machine', onHow && back && s.active.includes('Minigame'), `${onHow} ${back}`);
   await page.keyboard.press('Escape');
   await sleep(1200);

@@ -245,6 +245,12 @@ export const bogBall: MinigameModule = {
   music: 'game_bogball',
   rules: 'slingshot football - ten shots each',
   tutorial: {
+    pitch: 'SLING YOUR FROGS TO KNOCK THE MUD BALL HOME.',
+    steps: [
+      { say: 'CLICK ONE OF YOUR GREEN FROGS.', phone: 'TAP ONE OF YOUR GREEN FROGS.', demo: 'bog.pick' },
+      { say: 'DRAG BACK TO AIM AND SET THE POWER. LET GO TO LAUNCH IT.', demo: 'bog.sling' },
+      { say: 'KNOCK THE BALL INTO HIS ARCH. TEN SHOTS EACH - MOST GOALS WINS.', demo: 'bog.goal' },
+    ],
     objective: ['KNOCK THE MUD BALL INTO HIS ARCH.', 'ONE FROG A TURN, TEN SHOTS EACH.', 'MOST GOALS WINS.'],
     controls: [
       ['CLICK A FROG', 'PICK YOUR GREEN FROG'],

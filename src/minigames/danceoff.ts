@@ -246,6 +246,12 @@ export const danceOff: MinigameModule = {
   music: 'game_danceoff',
   rules: 'beat him three times, 20/35/50',
   tutorial: {
+    pitch: 'HIT THE ARROWS ON THE BEAT. THREE ROUNDS.',
+    steps: [
+      { say: 'ARROWS RISE TO THE LINE. PRESS EACH ONE AS IT REACHES IT.', phone: 'ARROWS RISE TO THE LINE. TAP EACH ONE AS IT REACHES IT.', demo: 'dance.arrows' },
+      { say: 'A AND S ARE LEFT AND DOWN. W AND D ARE UP AND RIGHT. A WRONG KEY COSTS 100.', phone: 'TAP THE ARROW THAT IS ON THE LINE. A WRONG ONE COSTS 100.', demo: 'dance.keys' },
+      { say: 'WIN ONE ROUND 20, TWO 35, ALL THREE 50. LOSE ONE AND YOU STOP AND KEEP IT.', demo: 'dance.rounds' },
+    ],
     objective: [
       'HIT THE ARROWS AS THEY REACH THE LINE.',
       'A WRONG KEY COSTS YOU 100 - NO MASHING.',

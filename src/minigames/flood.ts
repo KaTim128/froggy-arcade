@@ -231,6 +231,12 @@ export const flood: MinigameModule = {
   music: 'game_flood',
   rules: 'climb out before the water gets you',
   tutorial: {
+    pitch: 'CLIMB OUT OF A SHAFT THAT IS FLOODING.',
+    steps: [
+      { say: 'A / D RUNS. SPACE OR W JUMPS FROM LEDGE TO LEDGE.', phone: 'THE STICK RUNS. JUMP GOES FROM LEDGE TO LEDGE.', demo: 'flood.jump' },
+      { say: 'LEDGES SLIDE, SPIN, RETRACT AND CRUMBLE. WATCH BEFORE YOU LAND.', demo: 'flood.ledges' },
+      { say: 'THE WATER RISES. IF IT TOUCHES YOU, THE RUN IS OVER. REACH THE HATCH.', demo: 'flood.water' },
+    ],
     objective: [
       'THE SHAFT IS FLOODING. CLIMB OUT OF IT.',
       'JUMP THE LEDGES UP TO THE HATCH AT THE TOP.',

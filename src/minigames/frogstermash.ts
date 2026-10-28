@@ -9062,6 +9062,13 @@ export const frogsterMash: MinigameModule = {
   music: 'game_frogstermash',
   rules: 'open four chests, then take it or risk it',
   tutorial: {
+    pitch: 'OPEN CHESTS, ARM FROGGY, AND BANK HIS WINS.',
+    steps: [
+      { say: 'LEFT / RIGHT PICKS A CHEST. SPACE OPENS IT. WHAT IS INSIDE IS YOURS.', phone: 'THE STICK PICKS A CHEST. OPEN OPENS IT. WHAT IS INSIDE IS YOURS.', demo: 'mash.chests' },
+      { say: 'FOUR CHESTS: A WEAPON, AND ARMOUR FOR EACH SLOT. NO SWAPS.', demo: 'mash.gear' },
+      { say: 'THEN FROGGY FIGHTS ON HIS OWN. EVERY ROUND WON PAYS 25.', demo: 'mash.fight' },
+      { say: 'TAKE THE BANK, OR RISK IT ALL FOR 25 MORE. LOSE AND IT ALL GOES.', demo: 'mash.bank' },
+    ],
     objective: [
       // The card is 304px wide and the glyph advance is 6, so a centred line
       // has fifty characters before it runs out over the frame.  These were
