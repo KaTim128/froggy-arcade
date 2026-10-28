@@ -22,6 +22,7 @@
  * would come back to a camera that never finishes going black.
  */
 
+import { isOverlay } from './overlays';
 import Phaser from 'phaser';
 import { froggyLayer } from '../render/froggyLayer';
 import { ThreeStage } from '../render/threeStage';
@@ -133,7 +134,7 @@ export function togglePause(): void {
 /** The topmost running scene, which is the one the player is looking at. */
 function topScene(): Phaser.Scene | null {
   if (!game) return null;
-  const running = game.scene.getScenes(true);
+  const running = game.scene.getScenes(true).filter((x) => !isOverlay(x.scene.key));
   return running.length ? running[running.length - 1] : null;
 }
 

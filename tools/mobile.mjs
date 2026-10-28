@@ -67,6 +67,22 @@ const phone = async (query, { w = 390, h = 844 } = {}) => {
   return page;
 };
 
+/**
+ * Wait until a 3D horror room is really up: its controls wear the horror skin
+ * only once its create() has returned.  On the harness's software GPU the room
+ * spends ten seconds and more compiling its shaders inside create() (a real
+ * phone takes a fraction of that), so a fixed few seconds after the page loaded
+ * read the controls of the screen before it.
+ */
+const roomUp = async (page, ms = 45000) => {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    if (await page.evaluate(() => /skin-horror/.test(document.getElementById('touch-controls')?.className ?? ''))) return true;
+    await sleep(250);
+  }
+  return false;
+};
+
 /** A real touch, through the protocol, at a page coordinate. */
 const touch = async (page, x, y, holdMs = 120) => {
   const cdp = await page.target().createCDPSession();
@@ -424,6 +440,7 @@ const labels = (page) =>
 {
   const page = await phone('?intro=1&charity=1&route=basement&scene=HideRoom3D');
   await sleep(3200);
+  await roomUp(page);
   const before = await page.evaluate(() => {
     const s = window.__froggy.game().scene.getScene('HideRoom3D');
     return s ? s.yaw : null;
@@ -472,6 +489,7 @@ const labels = (page) =>
 {
   const page = await phone('?intro=1&charity=1&route=basement&scene=HideRoom3D', { w: 844, h: 390 });
   await sleep(3200);
+  await roomUp(page);
   const st = () =>
     page.evaluate(() => {
       const s = window.__froggy.game().scene.getScene('HideRoom3D');
@@ -505,8 +523,11 @@ const labels = (page) =>
     `${geo.covered} controls in the middle or the top, gear in its corner ${geo.gearOk}, look pad off by ${geo.look}px, smallest button ${Math.round(geo.smallest)}px, [${geo.skin}]`,
   );
 
-  // He talks first, and nobody walks during the rules: wait for the round.
-  for (let i = 0; i < 60; i++) {
+  // He talks first, and nobody walks during the rules (and the camera is his
+  // while he does): wait for the round.  By the clock, and long: the briefing
+  // runs on the game's time, and on the harness's software GPU that runs well
+  // under real time -- thirty seconds was still inside his speech.
+  for (const until = Date.now() + 120_000; Date.now() < until; ) {
     const m = await page.evaluate(() => window.__froggy.game().scene.getScene('HideRoom3D').mode);
     if (m === 'hiding' || m === 'seeking') break;
     await sleep(500);
@@ -587,6 +608,7 @@ const labels = (page) =>
   await page.evaluate(() => { try { localStorage.removeItem('froggy.lookHintUsed'); } catch {} });
   await page.reload({ waitUntil: "load" });
   await sleep(3600);
+  await roomUp(page);
   const geo = await page.evaluate(() => {
     const r = (q) => { const el = document.querySelector(q); return el && !el.hidden ? el.getBoundingClientRect() : null; };
     const zone = r('#touch-controls .tc-lookzone');
@@ -641,6 +663,7 @@ const labels = (page) =>
 
   const wide = await phone('?intro=1&charity=1&route=basement&scene=HideRoom3D', { w: 844, h: 390 });
   await sleep(3200);
+  await roomUp(wide);
   const shown = await wide.evaluate(() => !document.querySelector('#touch-controls .tc-lookzone').hidden);
   check('landscape: no zone is reserved -- the picture is all look', !shown, shown ? 'zone shown' : 'none');
   await wide.close();

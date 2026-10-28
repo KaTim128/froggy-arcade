@@ -63,6 +63,13 @@ export interface MinigameApi {
    * final.  The shell keeps it only if it beats the best, and says so.
    */
   record(value: number): void;
+  /**
+   * Earn a badge (game/badges) for something this go did -- five Froggys on
+   * the slots, a five-card charlie.  Refused on a practice go, like a record.
+   * (The badges that are a line on the cabinet's record need no call: the
+   * shell checks every record it is offered.)
+   */
+  badge(id: string): void;
   /** Draw area available to the game, below the title bar. */
   readonly area: { x: number; y: number; w: number; h: number };
 }

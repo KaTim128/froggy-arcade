@@ -470,6 +470,8 @@ function settle(): void {
   if (got.pays > 0) {
     apiRef.payout(got.pays);
     apiRef.record(got.pays);
+    // FROGGY JACKPOT: five Froggys in one line (a wild standing in for one counts)
+    if (got.wins.some((w) => w.sym === FROG && w.n >= 5)) apiRef.badge('m_slots');
     paidCount++;
     const sym = SYMBOLS[got.sym];
     const big = got.sym === FROG || got.n >= 5 || got.wins.length > 1;

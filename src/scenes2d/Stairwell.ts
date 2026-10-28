@@ -23,6 +23,7 @@
  */
 
 import Phaser from 'phaser';
+import { earnBadge } from '../game/badges';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { KEYS } from '../core/input';
@@ -453,6 +454,8 @@ export class Stairwell extends Phaser.Scene {
     cam.fadeOut(220, 0, 0, 0);
     cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
       this.onRoof = out;
+      // UP ON THE ROOF: a secret badge (log #59), for finding the way out here
+      if (out) earnBadge('s_roof');
       if (out) {
         const sky = this.roofSky();
         const key = `stairwell_roof_${sky}`;

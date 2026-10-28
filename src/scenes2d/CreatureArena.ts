@@ -30,7 +30,7 @@ import { drawMelee, drawShot, meleeStyle, shotStyle, type MeleeStyle } from '../
 import { SPECIALS } from '../game/specials';
 import { BIOMES, ELEMENTS, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
 import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle } from '../game/creatureClash';
-import { MAX_LEVEL, levelOf } from '../game/creatureLevel';
+import { MAX_LEVEL, levelOf, withLevel } from '../game/creatureLevel';
 import {
   AURA_POWER, AURA_S, AURA_SPEED, CHILL_S, CHILL_SPEED, DRAIN_FRAC, EXECUTE_MUL, GUARD_S, HASTE_S, HASTE_SPEED, HOLD_S, LINGER_DMG, LINGER_S, MARK_MUL, MARK_S, MEND_FRAC,
   POISON_PER_S, POISON_S, REGEN_PER_S, REGEN_S, ROOT_S, SHRED_MUL, SHRED_S, SILENCE_S, STAGGER_S, STRIKE_DMG, THORNS_DMG, WALL_S, WEAK_MUL, WEAK_S, attackInfo, buttonWords,
@@ -39,6 +39,12 @@ import { abilityIconURL, drawAbilityIcon } from '../art/abilityIcons';
 import { setCabinetTouch } from '../game/touchLayouts';
 import { backPlate } from '../ui/plate';
 import type { KeyName } from '../ui/touchControls';
+import { capLabel, codeFor, gameKeys, setKeyScope } from '../core/keymap';
+
+/** The Clash's own keys: J K L fire abilities 1 2 3 (log B6), movable in CONTROLS. */
+const CLASH_KEYS = ['KeyJ', 'KeyK', 'KeyL'];
+// (named once, up front: the keycaps on the strip are drawn before the bell)
+gameKeys('creatureclash', CLASH_KEYS);
 import { isTouch } from '../core/device';
 
 // (from 28: the line under the health bars has the band above it to itself)
@@ -371,6 +377,8 @@ export class CreatureArena extends Phaser.Scene {
   private caveIn: { owner: Fighter; t: number; tick: number } | null = null;
   /** A boss whose head grew back breathes twice as often. */
   private patternMul = 1;
+  /** The boss's second phase (under half health): faster, harder, angrier. */
+  private bossRage = false;
   private hazards: Hazard[] = [];
   private props: Prop[] = [];
   private barriers: Barrier[] = [];
@@ -390,7 +398,6 @@ export class CreatureArena extends Phaser.Scene {
   private touch = false;
   /** h = where the stick rests; b = where this touch put it down. */
   private moveStick = { id: -1, hx: 0, hy: 0, bx: 0, by: 0, dx: 0, dy: 0 };
-  private aimStick = { id: -1, hx: 0, hy: 0, bx: 0, by: 0, dx: 0, dy: 0 };
   private atkBtns: Array<{ x: number; y: number }> = [];
   private dialog: Phaser.GameObjects.Container | null = null;
   private paused = false;
@@ -427,6 +434,8 @@ export class CreatureArena extends Phaser.Scene {
   private infoMask: Phaser.Display.Masks.GeometryMask | null = null;
   /** Your creature's level, for the name over its bar. */
   private myLevel = 1;
+  /** A zone foe's level (matched to yours); 0 when it has none to show. */
+  private foeLevel = 0;
 
   constructor() {
     super('CreatureArena');
@@ -457,6 +466,7 @@ export class CreatureArena extends Phaser.Scene {
     this.stasis = 0;
     this.caveIn = null;
     this.patternMul = 1;
+    this.bossRage = false;
     this.hazards = [];
     this.props = [];
     this.barriers = [];
@@ -471,7 +481,6 @@ export class CreatureArena extends Phaser.Scene {
     this.started = false;
     this.infoT = 0;
     this.moveStick = { id: -1, hx: 0, hy: 0, bx: 0, by: 0, dx: 0, dy: 0 };
-    this.aimStick = { id: -1, hx: 0, hy: 0, bx: 0, by: 0, dx: 0, dy: 0 };
   }
 
   create(): void {
@@ -480,6 +489,7 @@ export class CreatureArena extends Phaser.Scene {
     this.effLabel = null;
     this.stepLabel = null;
     this.infoT = 0;
+    this.foeLevel = 0;
     const own = activeOwned();
     // (yours fights at its level: see creatureLevel)
     const mine = own ? ownedCreature(own) : undefined;
@@ -503,7 +513,13 @@ export class CreatureArena extends Phaser.Scene {
       this.boss = step.boss;
       wild = step.foe;
       this.skill = step.boss ? 1 : 0.3 + ((step.level - 1) / (LADDER_LEVELS - 1)) * 0.6;
-    } else wild = nextZoneFoe(this.biome);
+    } else {
+      // a zone's wild one is matched to yours: your level, give or take one
+      // (log B6: zone opponents matched to the player's level)
+      const lv = Phaser.Math.Clamp(this.myLevel + Phaser.Math.Between(-1, 1), 1, MAX_LEVEL);
+      wild = withLevel(nextZoneFoe(this.biome), lv);
+      this.foeLevel = lv;
+    }
     // (a copy: the roster's own entry is never renamed)
     const foeC = this.training ? { ...wild, name: 'TRAINING DUMMY' } : wild;
     this.me = this.fighter(mine, ARENA.x + 40, ARENA.y + ARENA.h / 2, 1, 1);
@@ -536,7 +552,7 @@ export class CreatureArena extends Phaser.Scene {
         if (band === this.band) return;
         this.band = band;
         this.touch = !band;
-        for (const st of [this.moveStick, this.aimStick]) Object.assign(st, { id: -1, dx: 0, dy: 0 });
+        Object.assign(this.moveStick, { id: -1, dx: 0, dy: 0 });
         this.layAtkBtns();
         this.applyBand();
       };
@@ -553,6 +569,13 @@ export class CreatureArena extends Phaser.Scene {
     this.info2 = centerText(this, GAME_W / 2, ARENA.y + ARENA.h - 6, '', PALETTE.cream).setCenterAlign().setLineSpacing(1).setDepth(56).setVisible(false);
 
     this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,ONE,TWO,THREE') as Record<string, Phaser.Input.Keyboard.Key>;
+    // J K L (B6): each ability, at once, at the other one -- the Clash's own
+    // keys, moved in CONTROLS like any other game's (core/keymap)
+    setKeyScope('creatureclash');
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setKeyScope(null));
+    this.input.keyboard!.on('keydown-J', () => this.quickFire(0));
+    this.input.keyboard!.on('keydown-K', () => this.quickFire(1));
+    this.input.keyboard!.on('keydown-L', () => this.quickFire(2));
     // 1 2 3: that ability, now, at the mouse (on a phone, just the choice)
     this.input.keyboard!.on('keydown-ONE', () => this.keyFire(0));
     this.input.keyboard!.on('keydown-TWO', () => this.keyFire(1));
@@ -617,6 +640,8 @@ export class CreatureArena extends Phaser.Scene {
     this.dialog = null;
     this.started = true;
     this.paused = false;
+    // a boss announces itself at the bell
+    if (this.boss) this.time.delayedCall(150, () => this.bossRoar(false));
     audio.sfx('bell_ding', 0.6);
     const go = centerText(this, ARENA.x + ARENA.w / 2, ARENA.y + ARENA.h / 2, 'FIGHT!', PALETTE.gold, 24).setDepth(2401);
     this.tweens.add({ targets: go, scale: 1.4, alpha: 0, delay: 250, duration: 450, onComplete: () => go.destroy() });
@@ -1027,7 +1052,7 @@ export class CreatureArena extends Phaser.Scene {
   private paintHud(): void {
     const name = (f: Fighter): string => (f === this.foe && this.boss ? f.c.name : f.c.name.toUpperCase());
     this.labels.push(text(this, 8, 3, `${name(this.me)} LV${this.myLevel}`, PALETTE.cream).setDepth(51));
-    this.labels.push(text(this, GAME_W - 8, 3, name(this.foe), this.boss ? PALETTE.gold : PALETTE.cream).setOrigin(1, 0).setDepth(51));
+    this.labels.push(text(this, GAME_W - 8, 3, this.foeLevel && !this.training ? `${name(this.foe)} LV${this.foeLevel}` : name(this.foe), this.boss ? PALETTE.gold : PALETTE.cream).setOrigin(1, 0).setDepth(51));
     // which step of the run this is, under the opponent's bar
     if (this.mode === 'ladder') {
       this.stepLabel = text(this, GAME_W - 8, 20, this.boss ? 'FINAL BOSS' : `LEVEL ${this.level} OF ${LADDER_LEVELS}`, PALETTE.gold).setOrigin(1, 0).setDepth(51);
@@ -1056,11 +1081,20 @@ export class CreatureArena extends Phaser.Scene {
     this.wasReady = [true, true, true];
     this.readyFlash = [0, 0, 0];
     // the strip: the key, the icon (drawn each frame), the name
+    if (this.touch) {
+      // a phone held sideways (C7): each tap button has its move's name beside it
+      this.me.c.attacks.forEach((a, i) => {
+        const b = this.atkBtns[i];
+        const nm = text(this, b.x - 16, b.y - 3, a.name, PALETTE.cream).setOrigin(1, 0).setDepth(52);
+        this.nameLabels[i] = nm;
+        this.labels.push(nm);
+      });
+    }
     if (!this.touch && !this.band) {
       this.me.c.attacks.forEach((a, i) => {
         const b = this.atkBtns[i];
-        // the key that fires it, always in view, on a keycap: [1] [2] [3]
-        this.labels.push(centerText(this, b.x - 42.5, b.y - 0.5, `${i + 1}`, PALETTE.gold).setDepth(52));
+        // the key that fires it, always in view, on a keycap: [J] [K] [L]
+        this.labels.push(centerText(this, b.x - 42.5, b.y - 0.5, capLabel(codeFor(`creatureclash:${CLASH_KEYS[i]}`)), PALETTE.gold).setDepth(52));
         const nm = text(this, b.x - 21, b.y - 4, a.name, PALETTE.cream).setDepth(52).setMaxWidth(68);
         this.nameLabels[i] = nm;
         this.labels.push(nm);
@@ -1098,23 +1132,22 @@ export class CreatureArena extends Phaser.Scene {
     if (this.over || this.dialog) return;
     const b = this.hitBtn(p);
     if (b >= 0) {
-      this.choose(b);
+      // C7: on a phone a tap on an ability uses it, at the other one
+      if (this.touch) this.quickFire(b);
+      else this.choose(b);
       return;
     }
     if (p.y < 24) return; // the hud
     if (this.touch) {
-      const leftHalf = p.x < GAME_W / 2;
-      const moveLeft = store.get().creatures.handed !== 'left';
-      if (leftHalf === moveLeft) {
-        if (this.moveStick.id < 0) Object.assign(this.moveStick, { id: p.id, bx: p.x, by: p.y, dx: 0, dy: 0 });
-      } else if (this.aimStick.id < 0) Object.assign(this.aimStick, { id: p.id, bx: p.x, by: p.y, dx: 0, dy: 0 });
+      // one stick, on the left: no aim stick, no handedness (C7)
+      if (p.x < GAME_W / 2 && this.moveStick.id < 0) Object.assign(this.moveStick, { id: p.id, bx: p.x, by: p.y, dx: 0, dy: 0 });
       return;
     }
     this.fire(this.me, this.sel, p.x - this.me.x, p.y - this.me.y);
   }
 
   private moveP(p: Phaser.Input.Pointer): void {
-    for (const s of [this.moveStick, this.aimStick]) {
+    for (const s of [this.moveStick]) {
       if (s.id !== p.id) continue;
       let dx = p.x - s.bx;
       let dy = p.y - s.by;
@@ -1130,14 +1163,6 @@ export class CreatureArena extends Phaser.Scene {
 
   private up(p: Phaser.Input.Pointer): void {
     if (this.moveStick.id === p.id) Object.assign(this.moveStick, { id: -1, dx: 0, dy: 0 });
-    if (this.aimStick.id === p.id) {
-      const { dx, dy } = this.aimStick;
-      Object.assign(this.aimStick, { id: -1, dx: 0, dy: 0 });
-      if (this.over) return;
-      // a tap with no drag aims itself at the other one
-      if (Math.hypot(dx, dy) < 4) this.fire(this.me, this.sel, this.foe.x - this.me.x, this.foe.y - this.me.y);
-      else this.fire(this.me, this.sel, dx, dy);
-    }
   }
 
   /**
@@ -1147,15 +1172,11 @@ export class CreatureArena extends Phaser.Scene {
    */
   /** Where the attack buttons are, for whichever way the controls are laid out. */
   private layAtkBtns(): void {
-    const left = store.get().creatures.handed === 'left';
     if (this.touch) {
-      // aim stick on the dominant side, its three attack buttons above it
-      const ax = left ? 34 : GAME_W - 34;
-      const mx = left ? GAME_W - 34 : 34;
-      Object.assign(this.aimStick, { hx: ax, hy: GAME_H - 28 });
-      Object.assign(this.moveStick, { hx: mx, hy: GAME_H - 28 });
-      const dir = left ? 1 : -1;
-      this.atkBtns = [0, 1, 2].map((i) => ({ x: ax + dir * (36 + i * 30), y: GAME_H - 14 }));
+      // C7: the move stick on the left; the three abilities on the right, a
+      // tap button each, stacked up the edge with their names beside them
+      Object.assign(this.moveStick, { hx: 34, hy: GAME_H - 28 });
+      this.atkBtns = [0, 1, 2].map((i) => ({ x: GAME_W - 18, y: GAME_H - 16 - (2 - i) * 28 }));
     } else if (this.band) {
       // (on the band under the picture)
       this.atkBtns = [];
@@ -2321,6 +2342,8 @@ export class CreatureArena extends Phaser.Scene {
   /** Damage, its element's effect, and the numbers. */
   private hit(from: Fighter, to: Fighter, dmg: number, a: Attack | null): void {
     if (this.over || to.hp <= 0 || to.invuln > 0 || to.st.cage || to.st.under) return;
+    // (an enraged boss hits harder)
+    if (this.boss && from === this.foe && this.bossRage) dmg = Math.round(dmg * 1.15);
     // up in an updraft: nothing on the floor or charging along it reaches
     if (to.st.air && (!a || a.kind === 'dash' || a.kind === 'mine')) return;
     const shotLike = !!a && (a.kind === 'bolt' || a.kind === 'spread' || a.kind === 'snare' || a.kind === 'arc');
@@ -2554,7 +2577,32 @@ export class CreatureArena extends Phaser.Scene {
       if (pl.kind === 'drift' && pl.owner !== f) k *= 0.5;
     }
     if (f.st.comet && this.pools.some((pl) => pl.kind === 'trail' && pl.owner === f && Math.hypot(pl.x - f.x, pl.y - f.y + 5) < 8)) k *= 1.5;
+    // (an enraged boss comes at you faster)
+    if (this.boss && f === this.foe && this.bossRage) k *= 1.15;
     return f.c.speed * k;
+  }
+
+  /**
+   * ---- A BOSS IS A PRESENCE.  Every mechanic it casts goes out with a roar:
+   * its cry, a shockwave off its body and the ground shaking.  The roar that
+   * starts its second phase is the big one -- ENRAGED over its head, a red
+   * burst, the arena rocking -- and from then on it is red-rimmed and quick.
+   */
+  private bossRoar(rage: boolean): void {
+    const foe = this.foe;
+    if (!this.boss || this.over || foe.hp <= 0) return;
+    const col = ELEMENTS[foe.c.element];
+    this.fx.push({ kind: 'ring', x: foe.x, y: foe.y, r: rage ? 56 : 30, t: 0, life: rage ? 0.8 : 0.5, col: rage ? 0xff4a3a : col.light });
+    this.fx.push({ kind: 'spark', x: foe.x, y: foe.y, r: rage ? 22 : 14, t: 0, life: 0.5, col: rage ? 0xffb060 : col.col });
+    this.cameras.main.shake(rage ? 380 : 160, rage ? 0.01 : 0.004);
+    audio.sfx(foe.c.cry, rage ? 0.8 : 0.5);
+    if (!rage) return;
+    audio.sfx('arcane_blast', 0.6);
+    foe.flash = 0.3;
+    const t = centerText(this, foe.x, foe.y - 24 * foe.scale, 'ENRAGED!', 0xff6a4a).setDepth(60);
+    backPlate(this, t, 0xff6a4a);
+    this.tweens.add({ targets: t, y: t.y - 10, scale: { from: 1.6, to: 1 }, duration: 380, ease: 'Back.easeOut' });
+    this.tweens.add({ targets: t, alpha: 0, delay: 1300, duration: 400, onComplete: () => t.destroy() });
   }
 
   private tickFighter(f: Fighter, dt: number): void {
@@ -3099,8 +3147,14 @@ export class CreatureArena extends Phaser.Scene {
     if (def) {
       this.hazardT -= dt;
       if (this.hazardT <= 0) {
-        this.hazardT = def.every * this.patternMul;
+        this.hazardT = def.every * this.patternMul * (this.bossRage ? 0.75 : 1);
         this.bossPattern(def);
+        this.bossRoar(false);
+      }
+      // ---- THE SECOND PHASE: at half health it gets angry -- and means it
+      if (!this.bossRage && this.foe.hp > 0 && this.foe.hp <= this.foe.max * 0.5) {
+        this.bossRage = true;
+        this.bossRoar(true);
       }
       // ---- NO HIDING.  Out of its sight too long and it comes for you:
       // the lich blinks to where it can see you; the rest throw what they
@@ -3378,9 +3432,6 @@ export class CreatureArena extends Phaser.Scene {
       const p = this.input.activePointer;
       ax = p.x - me.x;
       ay = p.y - me.y;
-    } else if (this.touch && this.aimStick.id >= 0 && Math.hypot(this.aimStick.dx, this.aimStick.dy) > 4) {
-      ax = this.aimStick.dx;
-      ay = this.aimStick.dy;
     }
     const m = Math.hypot(ax, ay) || 1;
     const ux = ax / m;
@@ -3530,7 +3581,27 @@ export class CreatureArena extends Phaser.Scene {
       // ground each time a foot comes down.  Attacking, it lunges: it draws
       // back for a beat, throws itself at the aim, and settles -- and it
       // swells a touch at the moment of the blow, so a hit reads as effort.
-      const { ox, oy, k } = this.bodyMotion(f);
+      const { ox, oy: oy0, k: k0 } = this.bodyMotion(f);
+      let oy = oy0;
+      let k = k0;
+      if (this.boss && f === this.foe && f.hp > 0) {
+        // ---- THE BOSS IS ALIVE: it breathes and bobs; before each mechanic
+        // it rears up and swells as the power gathers in it; motes of its
+        // element wheel round it, faster and more of them when it is angry
+        const wind = this.started ? Phaser.Math.Clamp(1 - this.hazardT / 0.9, 0, 1) : 0;
+        const breath = Math.sin(t * (this.bossRage ? 3.6 : 2.4));
+        k *= 1 + breath * 0.035 + wind * 0.12;
+        oy += Math.round(breath * 0.8 - wind * 3);
+        const el = ELEMENTS[f.c.element];
+        const n = this.bossRage ? 10 : 6;
+        for (let m = 0; m < n; m++) {
+          const a = t * (this.bossRage ? 2.6 : 1.5) + (m / n) * Math.PI * 2;
+          const rr = (13 + wind * 4) * f.scale;
+          g.fillStyle(m % 2 ? el.light : el.col, 0.55 + wind * 0.4).fillCircle(f.x + Math.cos(a) * rr, f.y - 2 + Math.sin(a) * rr * 0.45, 1 + wind);
+        }
+        if (wind > 0) g.lineStyle(1, el.light, wind * 0.7).strokeCircle(f.x, f.y, (10 + wind * 6) * f.scale);
+        if (this.bossRage) g.lineStyle(1, 0xff4a3a, 0.45 + Math.sin(t * 8) * 0.25).strokeEllipse(f.x, f.y + 2, 24 * f.scale, 12 * f.scale);
+      }
       drawCreature(g, f.c, f.x + ox, f.y - lift + oy, f.scale * k, f.face, f.st.sleep || f.st.stone || f.st.hibernate ? 0 : f.moving ? t * 1.8 : t);
       if (f.st.stone) g.fillStyle(0x8a8a8a, 0.55).fillEllipse(f.x, f.y, 16 * f.scale, 15 * f.scale);
       if (f.st.cage) g.lineStyle(1, 0x9ad0ff, 0.9).strokeCircle(f.x, f.y, 12 * f.scale).fillStyle(0x9ad0ff, 0.2).fillCircle(f.x, f.y, 12 * f.scale);
@@ -3706,17 +3777,12 @@ export class CreatureArena extends Phaser.Scene {
     if (this.started && !this.over) this.drawReach(g);
     this.drawWallClocks(u);
     if (this.touch) {
-      for (const s of [this.moveStick, this.aimStick]) {
-        const bx = s.id >= 0 ? s.bx : s.hx;
-        const by = s.id >= 0 ? s.by : s.hy;
-        u.fillStyle(0x000000, 0.35).fillCircle(bx, by, 20);
-        u.lineStyle(1, 0xffffff, 0.4).strokeCircle(bx, by, 20);
-        u.fillStyle(s === this.aimStick ? 0xffe060 : 0xffffff, 0.6).fillCircle(bx + s.dx, by + s.dy, 8);
-      }
-      if (this.aimStick.id >= 0 && Math.hypot(this.aimStick.dx, this.aimStick.dy) > 4) {
-        const m = Math.hypot(this.aimStick.dx, this.aimStick.dy);
-        u.lineStyle(1, 0xffe060, 0.6).lineBetween(this.me.x, this.me.y, this.me.x + (this.aimStick.dx / m) * 40, this.me.y + (this.aimStick.dy / m) * 40);
-      }
+      const s = this.moveStick;
+      const bx = s.id >= 0 ? s.bx : s.hx;
+      const by = s.id >= 0 ? s.by : s.hy;
+      u.fillStyle(0x000000, 0.35).fillCircle(bx, by, 20);
+      u.lineStyle(1, 0xffffff, 0.4).strokeCircle(bx, by, 20);
+      u.fillStyle(0xffffff, 0.6).fillCircle(bx + s.dx, by + s.dy, 8);
     } else if (!this.over) {
       const p = this.input.activePointer;
       u.lineStyle(1, 0xffe060, 0.7).strokeCircle(p.x, p.y, 3);

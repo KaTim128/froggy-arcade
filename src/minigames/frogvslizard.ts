@@ -410,6 +410,7 @@ export const frogVsLizard: MinigameModule = {
       const item = ITEMS[v.proj.item];
       const { body, core } = makeProjectile(scene0, item, v.proj.x, v.proj.y);
       proj = { ...v.proj, item, body, core, trailT: 0 };
+      flightBank = 0;
       phase = 'flight';
       refreshHud();
       return;
@@ -935,6 +936,7 @@ function throwItem(who: Who, angle: number, pow: number, id: ItemId): void {
   const speed = THROW_MIN + Phaser.Math.Clamp(pow, 0, 1) * (THROW_MAX - THROW_MIN);
   const { body, core } = makeProjectile(scene0, item, x, y);
   proj = { x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, item, from: who, body, core, spin: 0, trailT: 0 };
+  flightBank = 0;
 
   phase = 'flight';
   power = 0;
@@ -952,12 +954,24 @@ function throwItem(who: Who, angle: number, pow: number, id: ItemId): void {
   }
 }
 
+/** The flight's step: the same as `simulate`'s, so the solved arc is the flown one. */
+const FLIGHT_STEP = 1 / 120;
+/** Frame time not yet flown (less than one step). */
+let flightBank = 0;
+
 function stepProjectile(dt: number): void {
   if (!proj) return;
-  // Two half-steps: a thrown thing crosses a 12px fence in well under a frame
-  // at full power, and a single step can tunnel straight through it.
-  for (let i = 0; i < 2; i++) {
-    const h = dt / 2;
+  // IN THE SOLVER'S OWN STEPS.  The lizard's aim (and the harness's) is found
+  // by `simulate`, stepping 1/120 s at a time; flown in steps of half a frame
+  // instead, the arc drifted with the frame rate -- at 25 frames a second a
+  // solved throw that clipped the edge of the target went past it.  So the
+  // flight is the same 1/120 s steps, the frame's time banked between them:
+  // what was solved is what flies, on any machine.  (Small steps also keep a
+  // fast throw from tunnelling through the 12px fence.)
+  flightBank += dt;
+  while (flightBank >= FLIGHT_STEP) {
+    flightBank -= FLIGHT_STEP;
+    const h = FLIGHT_STEP;
     proj.vx += wind * WIND_MAX * h;
     proj.vy += GRAVITY * h;
     proj.x += proj.vx * h;
@@ -1677,6 +1691,9 @@ function finish(): void {
 
   if (store.setHighScore(ID, sides.frog.dealt)) best = sides.frog.dealt;
   apiRef?.record(sides.frog.dealt);
+  // UNTOUCHABLE: the match won without the lizard landing a thing on you --
+  // no hit, no splash, no poison tick, across every round (log #58)
+  if (won && sides.lizard.dealt === 0) apiRef?.badge('m_fence');
   refreshHud();
   const score = ROUNDS > 1 ? ` ${roundsWon.frog}-${roundsWon.lizard}` : '';
   const line = drawn

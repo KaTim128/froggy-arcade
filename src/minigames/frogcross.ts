@@ -566,6 +566,10 @@ function crossed(): void {
   points += POINTS_PER_CROSS;
   crossings++;
   audio.sfx('chime');
+  // the three road badges: 5, 10 and 15 crossings in one run (log #49)
+  if (crossings === 5) apiRef?.badge('m_cross5');
+  else if (crossings === 10) apiRef?.badge('m_cross10');
+  else if (crossings === 15) apiRef?.badge('m_cross15');
   if (points > best) {
     best = points;
     store.setHighScore(ID, best);

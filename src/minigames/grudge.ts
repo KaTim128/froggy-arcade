@@ -40,6 +40,7 @@ import { audio } from '../core/audio';
 import { centerText, text } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import type { MinigameApi, MinigameModule } from './types';
+import { badgeSet, setBadgeSet } from '../game/badges';
 import { silhouettes } from './decor';
 
 
@@ -844,6 +845,8 @@ export const grudge: MinigameModule = {
   },
 
   destroy() {
+    // (walked away from a match before it was decided: that is a loss to the run)
+    if (!over && p2?.foe) grudgeRun(false);
     sceneClock = 0;
     aiFrozen = false;
     aiHover = null;
@@ -1445,6 +1448,24 @@ function startRound(): void {
   });
 }
 
+/**
+ * GRUDGE MATCH (log #58): every animal beaten, one after another, without a
+ * match lost in between.  Who you have beaten in the current run is kept on
+ * the profile (game/badges), across sessions; a loss -- or walking away from
+ * a match -- starts it again.  The draw is random, so the same foe twice
+ * keeps the run going without adding to it.
+ */
+function grudgeRun(won: boolean): void {
+  if (practicing || !apiRef || apiRef.practice || !p2?.foe) return;
+  if (!won) {
+    setBadgeSet('grudge_run', []);
+    return;
+  }
+  const beaten = [...badgeSet('grudge_run'), p2.foe.key];
+  setBadgeSet('grudge_run', beaten);
+  if (FOES.every((f) => beaten.includes(f.key))) apiRef.badge('m_grudge');
+}
+
 function endRound(playerWon: boolean): void {
   if (roundOver) return;
   roundOver = true;
@@ -1457,6 +1478,7 @@ function endRound(playerWon: boolean): void {
     over = true;
     const won = wins1 >= ROUNDS_TO_WIN;
     if (won) apiRef?.record(fightMs / 1000);
+    grudgeRun(won);
     sceneRef?.time.delayedCall(1100, () => (won ? apiRef?.win() : apiRef?.lose()));
     return;
   }

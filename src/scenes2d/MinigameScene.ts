@@ -20,6 +20,7 @@
  */
 
 import { record } from '../game/life';
+import { badgeOnRecord, earnBadge } from '../game/badges';
 import Phaser from 'phaser';
 import { RECORDS, best as bestRecord, submit as submitRecord } from '../core/records';
 import { deviceControls, deviceObjective, type ControlRow } from '../ui/controlsList';
@@ -273,6 +274,11 @@ export class MinigameScene extends Phaser.Scene {
           const v = rec.lower ? Math.round(value * 10) / 10 : Math.floor(value);
           if (now === v) this.newBest = `NEW BEST!  ${rec.format(v)}`;
         }
+        // (and the mastery badge that is a line on this same number)
+        badgeOnRecord(this.gameId, value);
+      },
+      badge: (id: string) => {
+        if (!this.practicing) earnBadge(id);
       },
       area: AREA,
     };
@@ -680,6 +686,7 @@ export class MinigameScene extends Phaser.Scene {
     const amount = Math.floor(n);
     ledger.credit(amount, 'game.reward');
     this.paid += amount;
+    record('tokens_won', amount);
     this.saveGame();
     store.flush();
   }
@@ -797,10 +804,15 @@ export class MinigameScene extends Phaser.Scene {
     // its own payout; everything else takes the cabinet's flat reward.
     const paid = won ? Math.max(0, Math.floor(payout ?? def.reward)) : 0;
     if (won) ledger.credit(paid, 'game.reward');
+    if (won && paid > 0) record('tokens_won', paid);
     // (counted for the goals: a game played, and won)
     if (this.started && !quit) {
       record('game_played');
-      if (won) record('game_won');
+      if (won) {
+        record('game_won');
+        // (which cabinets have been beaten, for the goals: a win at ten, at all)
+        record(`won_${this.gameId}`);
+      }
     }
     store.flush();
 

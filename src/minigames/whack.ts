@@ -41,6 +41,7 @@ import { audio } from '../core/audio';
 import { centerText } from '../core/ui';
 import { GAME_W } from '../render/pixelScaler';
 import { froggyLayer } from '../render/froggyLayer';
+import { earnBadge } from '../game/badges';
 import { drawFroggy } from '../froggy/froggy';
 import type { MinigameApi, MinigameModule } from './types';
 
@@ -81,6 +82,8 @@ const MAX_UP = 4;
  */
 const FROGGY_SPAWN_CHANCE = 1 / 2000;
 const FROGGY_STARE_MS = 1200;
+/** A test asked for him next. */
+let forceCameo = false;
 
 interface Hole {
   x: number;
@@ -207,6 +210,10 @@ export const whackAFrog: MinigameModule = {
          * tell that apart from spawning him and hiding him, so the harness
          * samples the roll instead.  It reports counts, never the odds.
          */
+        /** The next frog up is him (the harness, for the secret badge). */
+        forceCameo: () => {
+          forceCameo = true;
+        },
         sampleCameo: (n: number) => {
           let seen = 0;
           for (let i = 0; i < n; i++) if (Math.random() < FROGGY_SPAWN_CHANCE) seen++;
@@ -269,10 +276,14 @@ export const whackAFrog: MinigameModule = {
       const free = holes.filter((h) => !h.occupant);
       if (free.length) {
         const h = free[Math.floor(Math.random() * free.length)];
-        if (Math.random() < FROGGY_SPAWN_CHANCE) {
+        if (forceCameo || Math.random() < FROGGY_SPAWN_CHANCE) {
+          forceCameo = false;
           h.occupant = 'froggy';
           h.timer = FROGGY_STARE_MS;
           h.sprite.setVisible(false); // he is not a sprite
+          // ERROR FROG-04: a secret, for having seen him (log #59).  Practice
+          // or not -- he was there either way.
+          earnBadge('s_404');
         } else {
           h.occupant = 'frog';
           h.timer = upMs;

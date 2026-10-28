@@ -12,6 +12,8 @@ import { Condo } from '../scenes2d/Condo';
 import { Stairwell } from '../scenes2d/Stairwell';
 import { JailEnding } from '../scenes2d/JailEnding';
 import { BadgesModal } from '../scenes2d/BadgesModal';
+import { BadgeToast } from '../scenes2d/BadgeToast';
+import { setBadgeToaster } from '../game/badges';
 import { SideAlley } from '../scenes2d/SideAlley';
 import { FurnitureStore } from '../scenes2d/shops/FurnitureStore';
 import { ClothesStore } from '../scenes2d/shops/ClothesStore';
@@ -144,6 +146,8 @@ export function bootGame(): void {
       TheEnd,
       EndCard,
       DeathScreen,
+      // (last: drawn over everything, wherever a badge is earned)
+      BadgeToast,
     ],
   });
 
@@ -158,6 +162,14 @@ export function bootGame(): void {
   installPause(game);
   initDebug(game);
   installLifeTicker(game);
+  // BADGE UNLOCKED, from anywhere: the drop-down is a scene of its own, put
+  // up when a badge needs it and left running over whatever comes next.
+  const g = game;
+  setBadgeToaster((b) => {
+    const t = g.scene.getScene('BadgeToast') as BadgeToast;
+    t.push({ id: b.id, name: b.name, desc: b.desc, col: b.col });
+    if (!g.scene.isActive('BadgeToast')) g.scene.run('BadgeToast');
+  });
 
   // Boot's CLICK TO BEGIN gate is the intended unlock (PRD EC-9), but any first
   // gesture anywhere will do it.  Without this, entering the game at a scene

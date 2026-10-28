@@ -27,7 +27,23 @@ export interface ToastBadge {
 /** How long a plate stays down, once it is down. */
 const HOLD_MS = 3400;
 const W = 236;
-const H = 30;
+const H = 38;
+/** Characters a line holds right of the medal (6px a glyph). */
+const COLS = Math.floor((W - 36) / 6);
+
+/** `s` in lines of at most `n` characters, broken at the spaces. */
+function wrap(s: string, n: number): string[] {
+  const out: string[] = [];
+  let line = '';
+  for (const w of s.split(' ')) {
+    if (line && line.length + 1 + w.length > n) {
+      out.push(line);
+      line = w;
+    } else line = line ? `${line} ${w}` : w;
+  }
+  if (line) out.push(line);
+  return out;
+}
 
 export class BadgeToast extends Phaser.Scene {
   private queue: ToastBadge[] = [];
@@ -46,6 +62,8 @@ export class BadgeToast extends Phaser.Scene {
   /** Another one: shown now, or after the one that is down. */
   push(b: ToastBadge): void {
     this.queue.push(b);
+    // (not up yet: it is launched for this one, and create() shows the queue)
+    if (this.sys.settings.status !== Phaser.Scenes.RUNNING) return;
     this.scene.bringToTop();
     if (!this.showing) this.next();
   }
@@ -71,10 +89,12 @@ export class BadgeToast extends Phaser.Scene {
     const g = this.add.graphics();
     drawBadgeIcon(g, b.id, -W / 2 + 17, 0, 10, b.col);
     parts.push(g);
-    parts.push(centerText(this, 14, -9, 'BADGE UNLOCKED', edge));
-    parts.push(centerText(this, 14, 0, b.name, PALETTE.cream));
-    const desc = b.desc.length > 36 ? `${b.desc.slice(0, 35)}.` : b.desc;
-    parts.push(centerText(this, 14, 9, desc, PALETTE.ash));
+    // the words in the space right of the medal, centred there
+    const cx = 15;
+    parts.push(centerText(this, cx, -13, 'BADGE UNLOCKED', edge));
+    parts.push(centerText(this, cx, -4, b.name, PALETTE.cream));
+    const desc = wrap(b.desc, COLS).slice(0, 2);
+    desc.forEach((l, i) => parts.push(centerText(this, cx, (desc.length === 1 ? 7 : 5) + i * 8, l, PALETTE.ash)));
     const c = this.add.container(GAME_W / 2, -H, parts).setDepth(5000);
     audio.sfx(rare ? 'bell_ding' : 'ticket_machine', rare ? 0.55 : 0.4);
     if (rare) audio.sfx('chime', 0.4);

@@ -23,6 +23,7 @@ import { earnBadge } from './badges';
 import { resetSuspicion } from './patrol';
 import { ATTIRE_SLOTS, COSMETICS, DEFAULT_WORN, FURNITURE, STARTER_COSMETICS, cosmeticById, furnitureById } from './catalog';
 import type { LifeState } from './lifeState';
+import { CABINETS } from './content';
 export { LIFE_VERSION, defaultLife, sanitizeLife, type LifeState, type Placement } from './lifeState';
 
 /** Seconds of play in one game day. */
@@ -606,20 +607,44 @@ export interface AchievementDef {
   stat: string;
   need: number;
   reward: Reward;
+  /** How far along it is, when that is not one stat's count (the cabinets beaten). */
+  count?: (stats: Record<string, number>) => number;
 }
 
+/** How many different cabinets have been won at least once (the `won_<id>` stats). */
+const cabinetsWon = (stats: Record<string, number>): number => CABINETS.filter((c) => (stats[`won_${c.id}`] ?? 0) > 0).length;
+
+/**
+ * ---- THE ACHIEVEMENTS (log #58, #83).  Hard, but every one of them is
+ * reached by playing: wins and games in the hundreds, a win at every cabinet,
+ * a thousand tokens won, a life lived in the room -- rent kept up, the place
+ * furnished, the wardrobe filled.  The badges (game/badges) are harder still:
+ * mastery and secrets.
+ */
 export const ACHIEVEMENTS: AchievementDef[] = [
-  { id: 'a_first_win', text: 'FIRST WIN', stat: 'game_won', need: 1, reward: { tokens: 3 } },
-  { id: 'a_wins_50', text: '50 WINS', stat: 'game_won', need: 50, reward: { furniture: 'fur_trophy' } },
-  { id: 'a_tenant', text: 'A ROOF OVER YOUR HEAD', stat: 'pay_rent', need: 1, reward: { cash: 10 } },
-  { id: 'a_decorator', text: 'DECORATOR (10 PLACED)', stat: 'place_furniture', need: 10, reward: { cash: 40 } },
-  { id: 'a_explorer', text: 'EXPLORER (6 PLACES)', stat: 'visit', need: 6, reward: { tokens: 10 } },
-  { id: 'a_beggar', text: 'SPARE CHANGE (EARN $5 BEGGING)', stat: 'beg', need: 5, reward: { cash: 5 } },
-  { id: 'a_style', text: 'NEW LOOK (BUY CLOTHES)', stat: 'buy_clothes', need: 1, reward: { cash: 5 } },
-  { id: 'a_fresh_cut', text: 'FRESH CUT (BARBER)', stat: 'barber', need: 1, reward: { furniture: 'fur_paint_lily' } },
-  { id: 'a_homemaker', text: 'HOMEMAKER (BUY 5 FURNITURE)', stat: 'buy_furniture', need: 5, reward: { cash: 20 } },
-  { id: 'a_clash10', text: 'CREATURE CHAMPION (10 WINS)', stat: 'creature_win', need: 10, reward: { tokens: 25 } },
+  { id: 'a_wins_25', text: '25 WINS', stat: 'game_won', need: 25, reward: { tokens: 20 } },
+  { id: 'a_wins_100', text: '100 WINS', stat: 'game_won', need: 100, reward: { furniture: 'fur_trophy' } },
+  { id: 'a_wins_250', text: '250 WINS', stat: 'game_won', need: 250, reward: { tokens: 150 } },
+  { id: 'a_played_200', text: '200 GAMES PLAYED', stat: 'game_played', need: 200, reward: { tokens: 40 } },
+  { id: 'a_cabinets_10', text: 'WIN AT 10 DIFFERENT CABINETS', stat: 'won_any', need: 10, reward: { tokens: 30 }, count: cabinetsWon },
+  { id: 'a_cabinets_all', text: `WIN AT ALL ${CABINETS.length} CABINETS`, stat: 'won_any', need: CABINETS.length, reward: { cash: 100 }, count: cabinetsWon },
+  { id: 'a_tokens_1000', text: 'WIN 1000 TOKENS', stat: 'tokens_won', need: 1000, reward: { cash: 50 } },
+  { id: 'a_tenant', text: 'PAY THE RENT 4 TIMES', stat: 'pay_rent', need: 4, reward: { cash: 40 } },
+  { id: 'a_decorator', text: 'PLACE 20 PIECES OF FURNITURE', stat: 'place_furniture', need: 20, reward: { cash: 60 } },
+  { id: 'a_homemaker', text: 'BUY 10 PIECES OF FURNITURE', stat: 'buy_furniture', need: 10, reward: { cash: 40 } },
+  { id: 'a_explorer', text: 'VISIT 6 PLACES', stat: 'visit', need: 6, reward: { tokens: 10 } },
+  { id: 'a_beggar', text: 'EARN $25 BEGGING', stat: 'beg', need: 25, reward: { cash: 15 } },
+  { id: 'a_style', text: 'BUY 7 PIECES OF CLOTHING', stat: 'buy_clothes', need: 7, reward: { cash: 20 } },
+  { id: 'a_fresh_cut', text: 'GET 3 HAIRCUTS', stat: 'barber', need: 3, reward: { furniture: 'fur_paint_lily' } },
+  { id: 'a_clash25', text: '25 CREATURE CLASH WINS', stat: 'creature_win', need: 25, reward: { tokens: 30 } },
+  { id: 'a_clash100', text: '100 CREATURE CLASH WINS', stat: 'creature_win', need: 100, reward: { tokens: 120 } },
+  { id: 'a_trader', text: 'SELL 10 PRIZES', stat: 'sell_prize', need: 10, reward: { cash: 30 } },
 ];
+
+/** How far along an achievement is (never past what it needs). */
+export function achievementProgress(a: AchievementDef, stats: Record<string, number> = L().stats): number {
+  return Math.min(a.need, a.count ? a.count(stats) : (stats[a.stat] ?? 0));
+}
 
 /** Today's and this week's keys: local calendar day, ISO-style week starting Monday. */
 export function periodKeys(now = new Date()): { day: string; week: string } {
@@ -700,7 +725,7 @@ export function claimAchievement(id: string): Result {
   const l = L();
   if (!a) return no('NO SUCH ACHIEVEMENT.');
   if (l.achieved.includes(id)) return no('ALREADY CLAIMED.');
-  if ((l.stats[a.stat] ?? 0) < a.need) return no('NOT DONE YET.');
+  if (achievementProgress(a, l.stats) < a.need) return no('NOT DONE YET.');
   edit((x) => x.achieved.push(id));
   return ok(`ACHIEVEMENT: ${grant(a.reward)}.`);
 }
@@ -709,13 +734,12 @@ export function claimAchievement(id: string): Result {
 export function claimable(): number {
   const l = L();
   let n = 0;
-  for (const w of ['daily', 'weekly'] as const) {
-    for (const id of l[w].ids) {
-      const g = GOALS.find((x) => x.id === id);
-      if (g && !l[w].claimed.includes(id) && (l[w].prog[id] ?? 0) >= g.need) n++;
-    }
+  // (today's goals only: THIS WEEK is gone from the card, log #83)
+  for (const id of l.daily.ids) {
+    const g = GOALS.find((x) => x.id === id);
+    if (g && !l.daily.claimed.includes(id) && (l.daily.prog[id] ?? 0) >= g.need) n++;
   }
-  for (const a of ACHIEVEMENTS) if (!l.achieved.includes(a.id) && (l.stats[a.stat] ?? 0) >= a.need) n++;
+  for (const a of ACHIEVEMENTS) if (!l.achieved.includes(a.id) && achievementProgress(a, l.stats) >= a.need) n++;
   return n;
 }
 
