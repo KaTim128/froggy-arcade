@@ -4,7 +4,7 @@
  * about -- it burrows, hops, scuttles, slithers, hovers, rolls, crawls, flies
  * or walks on two legs, four or eight), an element (what its hits DO), a
  * combat role, and three moves: one plain attack of its own, and two of the
- * 160 specials (game/specials) -- each of which belongs to one creature or
+ * 200 specials (game/specials) -- each of which belongs to one creature or
  * boss in the whole game, and no other.
  *
  * NO TIERS.  Nothing here is common or legendary, and nothing is simply
@@ -145,7 +145,7 @@ export const ELEMENT_LIST = Object.keys(ELEMENTS) as Element[];
 const A = (name: string, kind: AttackKind, dmg: number, cd: number, reach: number, mod: Mod = 'none'): Attack => ({ name, kind, dmg, cd, reach, mod });
 /** A plain attack: no special at all. */
 const N = (name: string, kind: AttackKind, dmg: number, cd: number, reach: number): Attack => A(name, kind, dmg, cd, reach);
-/** One of the 160 specials, as a move. */
+/** One of the 200 specials, as a move. */
 const SP = (id: string): Attack => {
   const d = SPECIALS[id];
   if (!d) throw new Error(`creatures: no special "${id}"`);
@@ -155,7 +155,7 @@ const SP = (id: string): Attack => {
 type Def = Omit<Creature, 'boss'>;
 
 /**
- * ---- THE SEVENTY (fifty, and twenty more on 28 Oct).  Health runs about 74 to 140 and speed 42 to 82, traded
+ * ---- THE NINETY (fifty, then twenty and twenty more on 28 Oct).  Health runs about 74 to 140 and speed 42 to 82, traded
  * against each other and against what the moves do: the glow ones, whose
  * shots go through cover, are among the thinnest in the game; the tanks
  * crawl.  Each has one plain attack (`N`: a swipe up close, or a shot) and
