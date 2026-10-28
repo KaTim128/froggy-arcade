@@ -803,9 +803,8 @@ export class CreatureHub extends Phaser.Scene {
     wrapWords(nextLine, 18).slice(0, 2).forEach((ln, k) => L.add(text(this, px + 4, 96 + k * 9, ln, stage >= STAGES ? 0xff9a9a : PALETTE.cream)));
     const price = storyPrice(i, replay);
     L.add(text(this, px + 4, 113, `WIN: +${price.win} TOKENS`, PALETTE.mossLight));
-    // (the small type holds 27 to a line in this panel)
-    L.add(smallText(this, px + 4, 123, replay ? 'REPLAY: BOSS ALREADY BEATEN' : 'LOSS: IT FAINTS, NOTHING', PALETTE.ash));
-    if (!replay) L.add(smallText(this, px + 4, 130, 'ELSE IS LOST', PALETTE.ash));
+    // (no loss line: the user's call, 28 Oct; a replay says why it pays less)
+    if (replay) L.add(smallText(this, px + 4, 123, 'REPLAY: BOSS ALREADY BEATEN', PALETTE.ash));
     const act = activeOwned();
     const resting = !!act && restLeft(act) > 0;
     L.add(button(this, px + 58, 146, `FIGHT  ${price.cost} TOK`, () => this.storyFight(i), { width: 106, height: 14, disabled: !act || resting || ledger.balance() < price.cost }));
