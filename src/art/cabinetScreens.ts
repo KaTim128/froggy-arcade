@@ -356,6 +356,26 @@ const LOOPS: Record<string, (px: Px, t: number) => void> = {
     if (cyc === 6) px(6, 4, 2, 1, C), px(7, 3, 1, 3, C);
     if (t % 8 === 0) px(5, 1, 1, 1, K);
   },
+  // CROAKED: the frog gulps its way round a little maze after the tadpole
+  maze: (px, t) => {
+    px(0, 0, 14, 1, B);
+    px(0, 9, 14, 1, B);
+    px(4, 3, 6, 1, B);
+    px(4, 6, 6, 1, B);
+    const loop = [[1, 1], [12, 1], [12, 7], [1, 7]];
+    const at = (s: number): [number, number] => {
+      const p = s % 38;
+      if (p < 11) return [loop[0][0] + p, 1];
+      if (p < 19) return [12, 1 + ((p - 11) * 6) / 8];
+      if (p < 30) return [12 - (p - 19), 7];
+      return [1, 7 - ((p - 30) * 6) / 8];
+    };
+    const [rx, ry] = at(t * 0.7 + 9);
+    px(rx, ry, 1, 1, C);
+    const [fx, fy] = at(t * 0.7);
+    px(fx, fy, 2, 2, K);
+    if (t % 4 < 2) px(fx + 1, fy, 1, 1, B);
+  },
   // BOG BALL: a frog flies in off the slingshot, the mud ball rolls into the arch
   bog: (px, t) => {
     const cyc = t % 18;

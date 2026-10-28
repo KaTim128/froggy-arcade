@@ -69,6 +69,7 @@ export const BADGES: BadgeDef[] = [
   M('m_race', 'LONG SHOT', 'WIN A FROG RACE ON TEN TICKETS OR MORE.', 0xd8c84a),
   M('m_mash', 'COLOSSEUM LEGEND', 'BANK 250 IN ONE FROGSTER MASH RUN.', 0xa83a3a),
   M('m_21', 'FIVE-CARD CHARLIE', 'TWO FIVE-CARD CHARLIES IN A ROW AT FROGGY 21.', 0x2a8a5a),
+  M('m_croak', 'NOWHERE TO HIDE', 'CATCH THE TADPOLE IN UNDER 15 SECONDS AT CROAKED.', 0x1f8a8a),
   M('m_wheel', 'THE BIG ONE', 'LAND 1000 OR MORE ON THE WHEEL.', 0xe8a83a),
   M('m_crane', 'CLAW OF GOLD', 'WIN A JACKPOT CAPSULE FROM A CRANE.', 0xc8a0e0),
   { id: 'm_master', name: 'ARCADE MASTER', desc: 'EARN EVERY ARCADE MASTERY BADGE.', hint: 'EARN EVERY ARCADE MASTERY BADGE.', col: 0xffd45e, kind: 'mastery' },
@@ -154,6 +155,7 @@ const ON_RECORD: Partial<Record<string, { badge: string; lower: boolean; at: num
   frograce: { badge: 'm_race', lower: false, at: 200 },
   frogstermash: { badge: 'm_mash', lower: false, at: 250 },
   wheel: { badge: 'm_wheel', lower: false, at: 1000 },
+  croaked: { badge: 'm_croak', lower: true, at: 15 },
 };
 
 export function badgeOnRecord(game: string, value: number): void {

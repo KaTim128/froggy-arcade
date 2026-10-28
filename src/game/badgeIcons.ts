@@ -197,6 +197,12 @@ const ICONS: Record<string, Draw> = {
     line(g, x + 4 * k, y - 4 * k, x - 4 * k, y + 4 * k, hi, 1.2 * k);
     box(g, x, y, 2 * k, 2 * k, ink);
   },
+  m_croak: (g, x, y, k, ink, hi) => {
+    // a gaping frog closing on a tadpole
+    disc(g, x - 1.5 * k, y, 4 * k, ink);
+    tri(g, x - 1.5 * k, y, x + 3 * k, y - 2.5 * k, x + 3 * k, y + 2.5 * k, 0x000000);
+    disc(g, x + 4 * k, y, 1.2 * k, hi);
+  },
   m_21: (g, x, y, k, ink, hi) => {
     // five cards fanned
     for (let i = 0; i < 5; i++) box(g, x + (i - 2) * 1.6 * k, y + Math.abs(i - 2) * 0.6 * k, 3 * k, 5 * k, i === 2 ? hi : ink);

@@ -897,6 +897,53 @@ export const DEMOS: Record<string, Demo> = {
     lbl(94, 72, 'OR RISK IT', RED);
   },
 
+  // ---------- CROAKED
+  'croak.pick': (g, t, lbl) => {
+    g.fillStyle(0x0c1820, 1).fillRect(0, 0, DEMO_W, DEMO_H);
+    const left = ph(t, 3) < 0.5;
+    g.fillStyle(0x2e6a3a, 1).fillRect(8, 30, 50, 18);
+    g.fillStyle(0x2a4a7a, 1).fillRect(66, 30, 50, 18);
+    g.lineStyle(1, GOLD, 1).strokeRect(left ? 7.5 : 65.5, 29.5, 51, 19);
+    lbl(33, 39, 'PAC FROG', CREAM);
+    lbl(91, 39, 'SURVIVOR', CREAM);
+    lbl(33, 60, 'YOU HUNT', GREEN);
+    lbl(91, 60, 'YOU RUN', 0x8ab0ff);
+    lbl(DEMO_W / 2, 12, 'PICK A SIDE', GOLD);
+  },
+  'croak.hunt': (g, t, lbl) => {
+    g.fillStyle(0x0c1820, 1).fillRect(0, 0, DEMO_W, DEMO_H);
+    g.fillStyle(0x2e5a3a, 1).fillRect(10, 24, 104, 6).fillRect(10, 66, 104, 6).fillRect(40, 44, 44, 6);
+    const k = ph(t, 3);
+    const tx = 20 + k * 84;
+    g.fillStyle(0x5a8af0, 1).fillCircle(tx, 38, 3);
+    g.fillStyle(0x5ac85a, 1).fillCircle(Math.max(14, tx - 24), 38, 5);
+    lbl(DEMO_W / 2, 12, 'CHASE IT DOWN', CREAM);
+    lbl(DEMO_W / 2, 82, 'BEFORE THE CLOCK ENDS', GOLD);
+  },
+  'croak.survive': (g, t, lbl) => {
+    g.fillStyle(0x0c1820, 1).fillRect(0, 0, DEMO_W, DEMO_H);
+    const k = ph(t, 3);
+    const tx = 16 + k * 92;
+    for (let i = 0; i < 10; i++) {
+      const fx = 16 + i * 10;
+      if (fx > tx) g.fillStyle(0xd8e8ff, 1).fillRect(fx, 44, 2, 2);
+    }
+    g.fillStyle(0x5a8af0, 1).fillCircle(tx, 45, 3);
+    g.fillStyle(0x5ac85a, 1).fillCircle(tx - 30, 45, 5);
+    lbl(DEMO_W / 2, 12, 'EAT EVERY FLY', CREAM);
+    lbl(DEMO_W / 2, 74, 'CAUGHT = LOSS', RED);
+  },
+  'croak.steer': (g, t, lbl) => {
+    g.fillStyle(0x0c1820, 1).fillRect(0, 0, DEMO_W, DEMO_H);
+    g.fillStyle(0x2e5a3a, 1).fillRect(10, 30, 50, 30).fillRect(72, 30, 42, 30);
+    const k = ph(t, 2.5);
+    const x = k < 0.5 ? 20 + k * 90 : 66;
+    const y = k < 0.5 ? 25 : 25 + (k - 0.5) * 80;
+    g.fillStyle(0x5ac85a, 1).fillCircle(x, Math.min(y, 70), 4);
+    key(g, lbl, 98, 76, 'S');
+    lbl(46, 12, 'PRESS EARLY: TURN AT THE GAP', CREAM);
+  },
+
   // ---------- anything without a picture of its own
   default: (g, t, lbl) => {
     g.fillStyle(0x1a1430, 1).fillRect(0, 0, DEMO_W, DEMO_H);

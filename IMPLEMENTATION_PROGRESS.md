@@ -110,11 +110,10 @@ I went back through every message from "Create a pull request" (22 Oct) to now. 
   - **Controls page.** Every game's Change Controls page has restore defaults and conflict prevention.
   - **Machine screen.** The Play / Tutorial / Leave / Practice buttons are evenly laid out on every machine, as "PLAY — N TOKENS".
 - **B10:**
-  - **Croaked.**
-    - Role selection.
-    - A Tutorial button next to Play and Leave.
-    - GIF tutorials made from Croaked itself, with Back / Next / Close.
-    - A timer and a remaining-food counter.
+  - **Croaked.** DONE (first pass): 10 tokens, 20 for a win, in room 4's second top spot (Bog Ball moved right).
+    - Role selection after PLAY (PAC FROG / SURVIVOR), a new maze each round, checked to be fully reachable.
+    - Hunting/fleeing AI; a timer and a flies-left counter; a step-by-step tutorial with animated pictures; NOWHERE TO HIDE badge.
+    - Still open: the other 5 marked room-4 spots (which machines go there?).
   - **Pad Battles.**
     - AI personalities: aggressive, defensive, opportunistic.
     - Elimination announcements, players-left indicator, final placements, replay.
