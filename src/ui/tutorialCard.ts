@@ -278,6 +278,15 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
     clip.fillStyle(0xffffff, 1).fillRect(DEMO_X, DEMO_Y, DEMO_W, DEMO_H);
     const mask = clip.createGeometryMask();
     g.setMask(mask);
+    // THE LIGHT ON IT: a soft light from the top and the edges going dark,
+    // over the moving picture and under its words, the same for every game
+    const light = keep(scene.add.graphics().setDepth(904.2).setPosition(DEMO_X, DEMO_Y));
+    light.fillStyle(0xffffff, 0.05).fillEllipse(DEMO_W / 2, 0, DEMO_W * 1.1, DEMO_H * 0.7);
+    for (let i = 0; i < 6; i++) {
+      const a = 0.05 + i * 0.035;
+      light.fillStyle(0x000000, a).fillRect(0, 0, DEMO_W, 6 - i).fillRect(0, DEMO_H - 6 + i, DEMO_W, 6 - i).fillRect(0, 0, 6 - i, DEMO_H).fillRect(DEMO_W - 6 + i, 0, 6 - i, DEMO_H);
+    }
+    light.setMask(mask);
     const pool: Phaser.GameObjects.BitmapText[] = [];
     const draw = demoFor(id);
     const t0 = scene.time.now;

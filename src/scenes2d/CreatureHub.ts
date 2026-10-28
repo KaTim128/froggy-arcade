@@ -34,6 +34,7 @@ import { attackCard } from '../game/attackInfo';
 import { backPlate } from '../ui/plate';
 import { drawFrogToken, floatDeduct } from '../ui/hud';
 import { levelOf, xpProgress } from '../game/creatureLevel';
+import { DEMO_H, DEMO_W, demoFor } from '../ui/tutorialDemos';
 import {
   BATTLE_COST, BATTLE_WIN, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, PACK_COST, BOSSES, bossById, creatureById, type Attack, type Creature,
 } from '../game/creatures';
@@ -82,6 +83,9 @@ export class CreatureHub extends Phaser.Scene {
   private layer!: Phaser.GameObjects.Container;
   private art!: Phaser.GameObjects.Graphics;
   private shown: Shown[] = [];
+  /** HOW TO PLAY: the step it is on, and its moving picture (redrawn in update). */
+  private howStep = 0;
+  private demo: { g: Phaser.GameObjects.Graphics; id: string; pool: Phaser.GameObjects.BitmapText[]; t0: number; clip: Phaser.GameObjects.Graphics; mask: Phaser.Display.Masks.GeometryMask } | null = null;
   /** The story map: the world picked, and where the marker is now. */
   private storyW = 0;
   private mark = { x: WORLD_AT[0][0], y: WORLD_AT[0][1] - 20 };
@@ -149,6 +153,7 @@ export class CreatureHub extends Phaser.Scene {
 
   update(time: number, delta: number): void {
     this.art.clear();
+    this.drawDemo(time);
     for (const s of this.shown) {
       if (s.hop) {
         // the marker: glides along to the world picked, hopping as it goes
@@ -190,6 +195,10 @@ export class CreatureHub extends Phaser.Scene {
   private draw(): void {
     this.modal?.destroy(true);
     this.modal = null;
+    if (this.demo) {
+      this.demo.clip.destroy();
+      this.demo = null;
+    }
     this.layer.removeAll(true);
     this.shown = [];
     const L = this.layer;
@@ -594,7 +603,7 @@ export class CreatureHub extends Phaser.Scene {
     }, () => this.go(busy ? 'pack' : 'recruit'));
     // (the keys, on a keyboard only: a phone's controls are on the screen -- C7)
     if (!isTouch())
-      this.tile(mx, 142, mw, 24, 'CONTROLS', `KEYS ${capLabel(codeFor('creatureclash:KeyJ'))} ${capLabel(codeFor('creatureclash:KeyK'))} ${capLabel(codeFor('creatureclash:KeyL'))}`, 0x4ad0c0, (g, x, y, col) => {
+      this.tile(mx, 142, mw, 24, 'HOW TO PLAY', 'MOVES, STATS, EFFECTS', 0x4ad0c0, (g, x, y, col) => {
         g.fillStyle(col, 1).fillRect(x - 7, y - 3, 14, 7).fillRect(x - 8, y - 1, 16, 5);
         g.fillStyle(0x0a0d1e, 1).fillRect(x - 5, y, 3, 1).fillRect(x - 4, y - 1, 1, 3).fillRect(x + 3, y - 1, 1, 1).fillRect(x + 5, y + 1, 1, 1);
       }, () => this.go('controls'));
@@ -1013,21 +1022,87 @@ export class CreatureHub extends Phaser.Scene {
     this.scene.start('CreatureArena', { mode: 'ladder', from: this.from });
   }
 
+  /**
+   * ---- HOW TO PLAY (user, 28 Oct: "a better tutorial for beginners --
+   * stats, effects, buffs, debuffs, cooldowns").  A step at a time: a moving
+   * picture on the left (ui/tutorialDemos `clash.*`), what it means on the
+   * right in plain words, < and > to go through them.  The last step is the
+   * controls, as this device works them.
+   */
   private controls(): void {
     const L = this.layer;
     const key = (k: string): string => capLabel(codeFor(`creatureclash:${k}`));
-    L.add(centerText(this, GAME_W / 2, 24, 'BATTLE CONTROLS', PALETTE.cream));
-    L.add(text(this, 40, 42, 'WASD / ARROWS', PALETTE.gold));
-    L.add(text(this, 140, 42, 'MOVE', PALETTE.fog));
-    L.add(text(this, 40, 56, `${key('KeyJ')}  ${key('KeyK')}  ${key('KeyL')}`, PALETTE.gold));
-    L.add(text(this, 140, 56, 'ATTACKS 1, 2, 3 - AT ONCE,', PALETTE.fog));
-    L.add(text(this, 140, 65, 'AT THE OTHER ONE', PALETTE.fog));
-    L.add(text(this, 40, 79, '1  2  3', PALETTE.gold));
-    L.add(text(this, 140, 79, 'THE SAME, AT THE MOUSE', PALETTE.fog));
-    L.add(text(this, 40, 93, 'MOUSE', PALETTE.gold));
-    L.add(text(this, 140, 93, 'AIM.  CLICK TO FIRE THE', PALETTE.fog));
-    L.add(text(this, 140, 102, 'CHOSEN ATTACK', PALETTE.fog));
-    L.add(centerText(this, GAME_W / 2, 124, 'J, K AND L CAN BE MOVED IN THE SETTINGS, UNDER', PALETTE.ash));
-    L.add(centerText(this, GAME_W / 2, 133, 'CHANGE KEYS, WHILE A BATTLE IS ON.', PALETTE.ash));
+    const touch = isTouch();
+    const steps: Array<{ demo: string; say: string }> = [
+      { demo: 'clash.move', say: touch ? 'THE STICK MOVES YOUR CREATURE. EACH MOVE BUTTON FIRES THAT MOVE STRAIGHT AT THE FOE.' : 'W A S D MOVES YOUR CREATURE. AIM WITH THE MOUSE AND CLICK TO FIRE THE MOVE YOU HAVE PICKED.' },
+      { demo: 'clash.moves', say: 'EVERY CREATURE HAS THREE MOVES: A PLAIN ATTACK AND TWO SPECIALS. AFTER A MOVE IS USED IT HAS TO RECHARGE - ITS COOLDOWN. THE RING ROUND ITS BUTTON FILLS BACK UP, AND THEN IT IS READY.' },
+      { demo: 'clash.stats', say: "TAP A CREATURE'S CARD FOR ITS STATS. HP: HOW MUCH IT CAN TAKE. ATTACK: HOW HARD IT HITS. DEFENCE: HOW WELL IT LASTS. SPEED: HOW FAST IT MOVES. MELEE FIGHTS UP CLOSE, RANGED FROM AFAR." },
+      { demo: 'clash.elements', say: 'EACH CREATURE HAS AN ELEMENT, AND EVERY HIT IT LANDS CARRIES ITS EDGE: EMBER BURNS, TIDE KNOCKS BACK, FROST SLOWS, VOLT STUNS, STONE TAKES LESS. TAP ? BY A MOVE TO READ JUST WHAT IT DOES.' },
+      { demo: 'clash.debuffs', say: 'DEBUFFS GO ON THE FOE FOR A FEW SECONDS: POISON AND BURNS HURT EVERY SECOND, SLOW AND HOLD STOP IT MOVING, SILENCE PUTS ITS MOVES BACK ON COOLDOWN, WEAKEN SOFTENS ITS HITS.' },
+      { demo: 'clash.buffs', say: 'BUFFS HELP YOU FOR A FEW SECONDS: HASTE, GUARD, REGROW, EVASION (30% OF HITS MISS), FOCUS (+20% CRITS), FURY (+25% DAMAGE), QUICKEN (FASTER COOLDOWNS). THE NAME POPS UP OVER YOU.' },
+      { demo: 'clash.cover', say: 'ROCKS AND WALLS STOP SHOTS: GET BEHIND ONE TO DODGE. BUT A LOBBED MOVE FLIES OVER COVER, AND GLOW SHOTS GO RIGHT THROUGH IT.' },
+      { demo: 'clash.story', say: 'STORY MODE: FIVE WORLDS, EACH FOUR BATTLES AND A BOSS. WINS PAY TOKENS AND XP, AND XP LEVELS YOUR CREATURE UP. BEAT THE LAST BOSS TO OPEN THE LADDER. TRAINING IS FREE PRACTICE.' },
+      {
+        demo: 'clash.keys',
+        say: touch
+          ? 'ON A PHONE THE CONTROLS SIT BESIDE OR UNDER THE ARENA: THE STICK MOVES, AND EACH MOVE BUTTON FIRES ITS MOVE AT THE FOE.'
+          : `${key('KeyJ')} ${key('KeyK')} ${key('KeyL')} FIRE MOVES 1, 2 AND 3 STRAIGHT AT THE FOE. 1 2 3 FIRE THEM AT THE MOUSE. W A S D MOVES. ${key('KeyJ')} ${key('KeyK')} ${key('KeyL')} CAN BE MOVED IN THE SETTINGS, UNDER CHANGE KEYS.`,
+      },
+    ];
+    this.howStep = Phaser.Math.Clamp(this.howStep, 0, steps.length - 1);
+    const st = steps[this.howStep];
+    L.add(centerText(this, GAME_W / 2, 24, 'HOW TO PLAY', PALETTE.gold));
+    // the picture, in its box, clipped to it
+    const DX = 12;
+    const DY = 38;
+    L.add(this.add.rectangle(DX - 1, DY - 1, DEMO_W + 2, DEMO_H + 2, 0x000000, 0).setOrigin(0, 0).setStrokeStyle(1, 0x4ad0c0));
+    const g = this.add.graphics().setPosition(DX, DY);
+    L.add(g);
+    const clip = this.make.graphics({}, false);
+    clip.fillStyle(0xffffff, 1).fillRect(DX, DY, DEMO_W, DEMO_H);
+    const mask = clip.createGeometryMask();
+    g.setMask(mask);
+    this.demo = { g, id: st.demo, pool: [], t0: this.time.now, clip, mask };
+    // the words, beside it
+    const RX = DX + DEMO_W + 10;
+    L.add(smallText(this, RX, DY, `STEP ${this.howStep + 1} OF ${steps.length}`, PALETTE.tealLight));
+    let y = DY + 10;
+    for (const ln of wrapWords(st.say, Math.floor((GAME_W - RX - 8) / 6)).slice(0, 11)) {
+      L.add(text(this, RX, y, ln, PALETTE.cream));
+      y += 9;
+    }
+    // where you are, and the way through
+    const dotsW = steps.length * 8;
+    for (let i = 0; i < steps.length; i++) L.add(this.add.rectangle(DX + DEMO_W / 2 - dotsW / 2 + i * 8 + 2, DY + DEMO_H + 6, 4, 4, i === this.howStep ? PALETTE.gold : 0x3a3450).setOrigin(0, 0));
+    const go = (d: number): void => {
+      this.howStep = Phaser.Math.Clamp(this.howStep + d, 0, steps.length - 1);
+      audio.sfx('ui_blip', 0.35);
+      this.draw();
+    };
+    L.add(button(this, GAME_W / 2 + 40, 166, '<', () => go(-1), { width: 30, height: 13, disabled: this.howStep === 0 }));
+    L.add(button(this, GAME_W / 2 + 76, 166, '>', () => go(1), { width: 30, height: 13, disabled: this.howStep === steps.length - 1 }));
   }
+
+  /** HOW TO PLAY's picture, this frame (see `controls`). */
+  private drawDemo(time: number): void {
+    const d = this.demo;
+    if (!d || this.screen !== 'controls') return;
+    d.g.clear();
+    let used = 0;
+    const lbl = (x: number, y: number, str: string, col: number = PALETTE.cream): void => {
+      if (!str) return;
+      let t = d.pool[used];
+      if (!t) {
+        t = smallText(this, 0, 0, '', col).setOrigin(0.5, 0.5);
+        t.setMask(d.mask);
+        this.layer.add(t);
+        d.pool.push(t);
+      }
+      used++;
+      t.setText(str).setTint(col).setPosition(Math.round(d.g.x + x), Math.round(d.g.y + y)).setVisible(true);
+    };
+    demoFor(d.id)(d.g, (time - d.t0) / 1000, lbl);
+    for (let i = used; i < d.pool.length; i++) d.pool[i].setVisible(false);
+  }
+
 }
