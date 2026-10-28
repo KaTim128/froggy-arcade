@@ -68,6 +68,8 @@ const reload = async () => {
 const playCabinet = async (id) => {
   await page.evaluate((id) => {
     const f = window.__froggy;
+    // (enough to pay for it: twenty cabinets in a row run a pocket dry)
+    if (f.state().tokens < 60) f.setTokens(100);
     f.patch({ gamesPlayed: { ...f.state().gamesPlayed, [id]: 3 } });
     const g = f.game();
     for (const s of g.scene.getScenes(true)) s.scene.stop();
@@ -171,9 +173,18 @@ try {
     },
   };
   for (const id of list) {
-    await playCabinet(id);
-    await sleep(2500);
-    await ACT[id]?.();
+    // (a go that ended on its own before the reload -- a crash in the first
+    // seconds of a chase -- is not what is being tested: play it again)
+    for (let tryNo = 0; tryNo < 3; tryNo++) {
+      await playCabinet(id);
+      await sleep(2500);
+      await ACT[id]?.();
+      const live = await page.evaluate(() => {
+        const g = window.__froggy.game().scene.getScene('Minigame');
+        return g.started && !g.settled && !!g.mod;
+      });
+      if (live) break;
+    }
     // the snapshot the save holds now, and the cabinet's own view of itself
     // (held still first, so what is saved on the way out is this very moment)
     const before = await page.evaluate(() => {
@@ -184,7 +195,11 @@ try {
     const tb = await tokens();
     await reload();
     await until(() => window.__pause?.paused() === 'Minigame', 12000);
-    const again = await page.evaluate(() => JSON.stringify(window.__froggy.game().scene.getScene('Minigame').mod.snapshot()));
+    const again = await page.evaluate(() => {
+      const g = window.__froggy.game().scene.getScene('Minigame');
+      if (!g.mod) return `(no game: ${JSON.stringify({ scenes: window.__froggy.activeScenes(), settled: g.settled, started: g.started, id: g.gameId, saved: window.__froggy.state().game?.id ?? null })})`;
+      return JSON.stringify(g.mod.snapshot());
+    });
     const same = before !== 'null' && again === before;
     check(`${id}: put back exactly where it stood, nothing charged`, same && (await tokens()) === tb, same ? before.replace(/"deck":\[[^\]]*\],?/, '').slice(0, 110) : `before ${before.slice(0, 160)} / after ${again.slice(0, 160)}`);
     await page.evaluate(() => window.__pause.resume());
