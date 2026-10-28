@@ -127,6 +127,12 @@ try {
   console.log(`  (cabinets that keep a snapshot: ${snapGames.join(', ') || 'none'})`);
   // (what to do in each before the reload, to catch it mid-play rather than at its start)
   const ACT = {
+    // (into the fight, a strike thrown)
+    grudge: async () => {
+      await sleep(1500);
+      await page.evaluate(() => window.__grudge.press('high'));
+      await sleep(120);
+    },
     // (a ball rolling down the lane)
     bowling: async () => {
       await page.evaluate(() => window.__bowl.throw(0, 0.8));
