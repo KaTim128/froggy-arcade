@@ -127,6 +127,11 @@ try {
   console.log(`  (cabinets that keep a snapshot: ${snapGames.join(', ') || 'none'})`);
   // (what to do in each before the reload, to catch it mid-play rather than at its start)
   const ACT = {
+    // (a shot in flight)
+    bogball: async () => {
+      await page.evaluate(() => window.__bog.shoot(0, -0.4, 0.8));
+      await sleep(250);
+    },
     // (all six placed and the hunt begun, one search made)
     battleship: async () => {
       await page.evaluate(() => {
