@@ -18,7 +18,7 @@
  * order the timers, taps and tab switches arrive in.
  */
 
-import { STAGES, WORLDS, drawStoryFoe, storyFoe, storyPrice } from '../game/creatureStory';
+import { STAGES, WORLDS, lineupFoe, storyFoe, storyPrice } from '../game/creatureStory';
 import { paintFloor } from '../art/arenaFloors';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
@@ -564,7 +564,7 @@ export class CreatureArena extends Phaser.Scene {
       const open = this.resumed && ob?.mode === 'story';
       const w = open ? ob!.world ?? 0 : this.storyWorld;
       const stage = open ? ob!.stage ?? 0 : cs.story.stage[w] ?? 0;
-      const foeId = open ? ob!.foe ?? '' : stage >= STAGES ? WORLDS[w].boss : drawStoryFoe(w, cs.lastFoe[WORLDS[w].id] ?? null);
+      const foeId = open ? ob!.foe ?? '' : stage >= STAGES ? WORLDS[w].boss : lineupFoe(w, stage);
       const sf = storyFoe(w, stage, foeId);
       if (!sf) {
         this.scene.start('CreatureHub', { from: this.from, screen: 'story', msg: 'NO SUCH FIGHT.' });

@@ -16,7 +16,7 @@
  * what is true.
  */
 
-import { STAGES, WORLDS, stageLevel, storyPrice } from '../game/creatureStory';
+import { STAGES, WORLDS, lineupFoe, stageLevel, storyPrice } from '../game/creatureStory';
 import { paintFloor } from '../art/arenaFloors';
 import { isTouch } from '../core/device';
 import { capLabel, codeFor } from '../core/keymap';
@@ -895,7 +895,7 @@ export class CreatureHub extends Phaser.Scene {
       wrapWords(`BEAT ${WORLDS[i - 1].bossName} TO OPEN IT.`, 18).forEach((ln, k) => L.add(text(this, px + 4, 108 + k * 9, ln, PALETTE.ash)));
       return;
     }
-    const nextLine = stage >= STAGES ? `BOSS: ${w.bossName}` : `BATTLE ${stage + 1}/${STAGES} - LV ${stageLevel(i, stage)}`;
+    const nextLine = stage >= STAGES ? `BOSS: ${w.bossName}` : `BATTLE ${stage + 1}/${STAGES}: ${creatureById(lineupFoe(i, stage))!.name.toUpperCase()} LV ${stageLevel(i, stage)}`;
     wrapWords(nextLine, 18).slice(0, 2).forEach((ln, k) => L.add(text(this, px + 4, 96 + k * 9, ln, stage >= STAGES ? 0xff9a9a : PALETTE.cream)));
     const price = storyPrice(i, replay);
     L.add(text(this, px + 4, 113, `WIN: +${price.win} TOKENS`, PALETTE.mossLight));

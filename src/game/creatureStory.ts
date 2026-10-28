@@ -28,7 +28,7 @@
  * game/creatureClash.
  */
 
-import { BIOMES, bossById, creatureById, type Creature } from './creatures';
+import { bossById, creatureById, type Creature } from './creatures';
 import { withLevel } from './creatureLevel';
 
 export interface World {
@@ -42,20 +42,22 @@ export interface World {
   /** The boss it is, and the name it has here. */
   boss: string;
   bossName: string;
-  /** Who you meet on the way. */
-  pool: string[];
+  /**
+   * WHO YOU MEET ON THE WAY: exactly four, fixed, in this order (user,
+   * 28 Oct) -- the same for every account, each one fitting its world, and
+   * none of them met in any other world.
+   */
+  lineup: [string, string, string, string];
   /** One line on the map. */
   blurb: string;
 }
 
-const pool = (...biomes: string[]): string[] => [...new Set(biomes.flatMap((b) => BIOMES.find((x) => x.id === b)?.pool ?? []))];
-
 export const WORLDS: World[] = [
-  { id: 'mosswood', name: 'MOSSWOOD FRONTIER', biome: 'forests', lo: 1, hi: 4, boss: 'b_maw', bossName: 'MOSSBACK GUARDIAN', pool: pool('forests', 'fields'), blurb: 'WHERE EVERY TRAINER STARTS. MIND THE ROOTS.' },
-  { id: 'sunken', name: 'SUNKEN RUINS', biome: 'ruins', lo: 5, hi: 8, boss: 'b_kraken', bossName: 'ABYSSAL DREADFIN', pool: pool('ruins', 'shore'), blurb: 'A DROWNED CITY. SOMETHING VAST MOVES UNDER IT.' },
-  { id: 'emberfall', name: 'EMBERFALL CRATER', biome: 'volcano', lo: 9, hi: 12, boss: 'b_seraph', bossName: 'CINDERMAW', pool: pool('volcano', 'desert'), blurb: 'THE GROUND GLOWS. THE SKY RAINS FIRE.' },
-  { id: 'crystal', name: 'SHATTERED CRYSTAL DEPTHS', biome: 'caves', lo: 13, hi: 16, boss: 'b_sphinx', bossName: 'PRISM WARDEN', pool: pool('caves', 'frozen'), blurb: 'EVERY WALL A MIRROR. TRUST NOTHING YOU SEE.' },
-  { id: 'void', name: 'THE VOID CITADEL', biome: 'void', lo: 17, hi: 20, boss: 'b_lich', bossName: 'THE HOLLOW SOVEREIGN', pool: pool('void'), blurb: 'THE END OF THE MAP. ITS KING HAS NO FACE.' },
+  { id: 'mosswood', name: 'MOSSWOOD FRONTIER', biome: 'forests', lo: 1, hi: 4, boss: 'b_maw', bossName: 'MOSSBACK GUARDIAN', lineup: ['sprout', 'caterpillar', 'badger', 'stag'], blurb: 'WHERE EVERY TRAINER STARTS. MIND THE ROOTS.' },
+  { id: 'sunken', name: 'SUNKEN RUINS', biome: 'ruins', lo: 5, hi: 8, boss: 'b_kraken', bossName: 'ABYSSAL DREADFIN', lineup: ['crab', 'octopus', 'seahorse', 'crocodile'], blurb: 'A DROWNED CITY. SOMETHING VAST MOVES UNDER IT.' },
+  { id: 'emberfall', name: 'EMBERFALL CRATER', biome: 'volcano', lo: 9, hi: 12, boss: 'b_seraph', bossName: 'CINDERMAW', lineup: ['salamander', 'mole', 'scorpion', 'boar'], blurb: 'THE GROUND GLOWS. THE SKY RAINS FIRE.' },
+  { id: 'crystal', name: 'SHATTERED CRYSTAL DEPTHS', biome: 'caves', lo: 13, hi: 16, boss: 'b_sphinx', bossName: 'PRISM WARDEN', lineup: ['ermine', 'hedgehog', 'golem', 'obelisk'], blurb: 'EVERY WALL A MIRROR. TRUST NOTHING YOU SEE.' },
+  { id: 'void', name: 'THE VOID CITADEL', biome: 'void', lo: 17, hi: 20, boss: 'b_lich', bossName: 'THE HOLLOW SOVEREIGN', lineup: ['crow', 'lynx', 'possum', 'wraith'], blurb: 'THE END OF THE MAP. ITS KING HAS NO FACE.' },
 ];
 
 /** Battles in a world before its boss. */
@@ -92,9 +94,14 @@ export function storyFoe(w: number, s: number, foeId: string): { foe: Creature; 
   return c ? { foe: withLevel(c, level), level, boss: false, skill: 0.25 + 0.08 * w + 0.04 * s } : null;
 }
 
-/** Who the next battle of world `w` is against, drawn now (never the last one met there). */
-export function drawStoryFoe(w: number, last: string | null, rng: () => number = Math.random): string {
-  const p = WORLDS[w].pool.filter((id) => id !== last);
-  const from = p.length ? p : WORLDS[w].pool;
-  return from[Math.floor(rng() * from.length)];
+/** Who stage `s` (0..3) of world `w` is against: always the same one. */
+export const lineupFoe = (w: number, s: number): string => WORLDS[w].lineup[Math.max(0, Math.min(STAGES - 1, s))];
+
+// (checked where it is easiest to break: four each, real creatures, no repeats)
+if (import.meta.env?.DEV) {
+  const all = WORLDS.flatMap((w) => w.lineup);
+  const dupe = all.find((id, i) => all.indexOf(id) !== i);
+  if (dupe) throw new Error(`creatureStory: ${dupe} is in two worlds' lineups`);
+  const fake = all.find((id) => !creatureById(id));
+  if (fake) throw new Error(`creatureStory: no creature "${fake}"`);
 }

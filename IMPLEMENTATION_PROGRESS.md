@@ -396,7 +396,7 @@ Rules for every batch:
 | Q6 | Clash home: no stat bars, only the XP bar; the move rows get the room | DONE |
 | Q7 | Clash LADDER tile text 'AFTER THE STORY' runs out of its box | DONE |
 | Q8 | Buff abilities: e.g. evasion +30%, crit chance +20% | open |
-| Q9 | Story Mode: exactly 4 FIXED opponents per world before the boss, themed, none repeated across worlds, same for every account; no random | open |
+| Q9 | Story Mode: exactly 4 FIXED opponents per world before the boss, themed, none repeated across worlds, same for every account; no random | DONE: Mosswood Rootwalker, Leafcrawler, Mossbadger, Thornstag; Sunken Kelpcrab, Inkling, Tidesteed, Cragodile; Emberfall Pyrosal, Cindermole, Ashscorpion, Forgeboar; Crystal Frostermine, Geodehog, Rimegolem, Obeliskwalker; Void Hollowcrow, Nightlynx, Gloompossum, Bogwraith |
 | Q10 | Pad Battles: Bog Ball-level visuals; pads spaced apart so frogs must jump; smooth jumps, exact landing, falling animation, splashes on a miss; body blocking/pushing | open |
 | Q11 | Tutorials (all games): machine page with NO picture (text + PLAY centred, the 3 buttons where they are); pictures only in HOW TO PLAY; one unique, accurate picture per step (not like the crane's repeats); pictures kept inside their box; better textures/lighting/animation matching each game (e.g. Dance Off arrows rise the right way); clearer beginner wording, Creature Clash explained (stats, effects, buffs, debuffs, cooldowns) | open |
 | Q12 | Pause -> resume: a 3 s countdown in every arcade game except Froggy 21, the Wheel and the Chamber | open |

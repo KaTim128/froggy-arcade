@@ -37,7 +37,7 @@ import type { CreatureState, Owned } from './creatureState';
 import { record } from './life';
 import { badgeSet, earnBadge, setBadgeSet } from './badges';
 import { MAX_LEVEL, MAX_XP, XP_BOSS, XP_WIN, levelOf, withLevel } from './creatureLevel';
-import { STAGES, WORLDS, drawStoryFoe, storyPrice } from './creatureStory';
+import { STAGES, WORLDS, lineupFoe, storyPrice } from './creatureStory';
 
 export interface Result {
   ok: boolean;
@@ -228,7 +228,10 @@ export function startStory(w: number, foeId?: string, rng: () => number = Math.r
   if (ledger.balance() < cost) return no(`THIS FIGHT COSTS ${cost} TOKENS.`);
   const world = WORLDS[w];
   const stage = c.story.stage[w] ?? 0;
-  const foe = stage >= STAGES ? world.boss : foeId && world.pool.includes(foeId) ? foeId : drawStoryFoe(w, c.lastFoe[world.id] ?? null, rng);
+  // (fixed: the world's lineup, stage by stage -- `foeId` is only ever that)
+  void foeId;
+  void rng;
+  const foe = stage >= STAGES ? world.boss : lineupFoe(w, stage);
   if (!ledger.debit(cost, 'creature')) return no(`THIS FIGHT COSTS ${cost} TOKENS.`);
   edit((s) => {
     s.battle = { mode: 'story', biome: world.biome, world: w, stage, foe };
