@@ -1,73 +1,163 @@
 /**
- * ---- BADGES.  The story's milestones: what happened to you, not how well
- * you played.  (How well you played is the achievements' job -- the Goals
- * card, game/life -- and the two never share a list.)
+ * ---- BADGES.  The hard ones (log #58, #59, #83).  Achievements -- the Goals
+ * card, game/life -- reward ordinary play and most players will work through
+ * them; a badge is mastery, a rare stroke of luck, or a secret found.
  *
- * Kept on the profile (`GameState.badges`): a reset of the run keeps them,
- * deleting the profile loses them.  A badge not yet earned shows as a
- * locked plate with a hint that does not give the story away.
+ *   STORY      what happened to you on the way through (the plot's milestones)
+ *   MASTERY    one per arcade machine, each a real test of that machine's own
+ *              skill (Frog Cross has three: 5, 10, 15 crossings in a run),
+ *              and ARCADE MASTER for all of them
+ *   CLASH      Creature Clash: 5, 10 and every different ladder boss beaten
+ *   SECRET     hidden until found -- their names are ??? on the badge screen
+ *
+ * Kept on the profile (`GameState.badges`), with any counting a badge needs
+ * across sessions in `GameState.badgeProgress`.  A badge is earned once:
+ * `earnBadge` says BADGE UNLOCKED (scenes2d/BadgeToast) the first time and
+ * never again.  A practice go earns nothing -- the cabinets check.
  */
 
-import Phaser from 'phaser';
+import type Phaser from 'phaser';
 import { store } from '../core/state';
-import { audio } from '../core/audio';
-import { centerText } from '../core/ui';
-import { PALETTE } from '../render/palette';
-import { GAME_W } from '../render/pixelScaler';
+
+export type BadgeKind = 'story' | 'mastery' | 'clash' | 'secret';
 
 export interface BadgeDef {
   id: string;
   name: string;
-  /** What it was for, shown once it is earned. */
+  /** What it was for, shown once it is earned (and in the drop-down). */
   desc: string;
-  /** Shown while it is locked: a nudge, never the plot. */
+  /** Shown while it is locked: the requirement, or for a story badge a nudge, never the plot. */
   hint: string;
-  /** Its plate colour. */
+  /** Its medal's colour. */
   col: number;
+  kind: BadgeKind;
 }
 
+const S = (id: string, name: string, desc: string, hint: string, col: number): BadgeDef => ({ id, name, desc, hint, col, kind: 'story' });
+const M = (id: string, name: string, desc: string, col: number): BadgeDef => ({ id, name, desc, hint: desc, col, kind: 'mastery' });
+
 export const BADGES: BadgeDef[] = [
-  { id: 'hide_seek', name: 'HIDE AND SEEK', desc: 'MADE IT THROUGH THE NIGHT IN THE ARCADE.', hint: 'STAY AFTER CLOSING.', col: 0x6fbb6a },
-  { id: 'not_homeless', name: 'NOT HOMELESS ANYMORE', desc: 'A KEY TO A PLACE OF YOUR OWN.', hint: 'FIND SOMEWHERE TO LIVE.', col: 0xd8a838 },
-  { id: 'late_checkout', name: 'LATE CHECK-OUT', desc: 'LEFT THE GRAND LILY BY THE ROOF.', hint: 'NOT EVERY WAY OUT IS A DOOR.', col: 0x7a9ad8 },
-  { id: 'most_wanted', name: 'MOST WANTED', desc: 'SAW YOUR OWN FACE ON A POSTER.', hint: 'COME BACK LATER.', col: 0xc83a3a },
-  { id: 'new_face', name: 'A NEW FACE', desc: 'CHANGED EVERYTHING THE POSTER SHOWS.', hint: 'HAT, COAT, SCARF, TROUSERS, SHOES, GLASSES, HAIR.', col: 0x7fe0d0 },
-  { id: 'new_leaf', name: 'A FRESH START', desc: 'MOVED INTO ROOM 213.', hint: 'SOMEBODY OWES YOU ONE.', col: 0x8ac8b8 },
-  { id: 'low_profile', name: 'LOW PROFILE', desc: 'GOT OUT OF SIGHT WITH THE POLICE ON YOU.', hint: 'KNOW WHEN TO DISAPPEAR.', col: 0x5a6a8a },
-  { id: 'good_heart', name: 'A CHANCE TO START OVER', desc: 'GOT THE OLD MAN OFF THE STREET.', hint: 'SOMEONE OUT THERE NEEDS A HAND.', col: 0xe8a050 },
-  { id: 'justice', name: 'JUSTICE PREVAILS', desc: 'ARRESTED. THE STORY ENDED IN A CELL.', hint: 'AN ENDING.', col: 0x3a5aa8 },
+  // ---- the story
+  S('hide_seek', 'HIDE AND SEEK', 'MADE IT THROUGH THE NIGHT IN THE ARCADE.', 'STAY AFTER CLOSING.', 0x6fbb6a),
+  S('not_homeless', 'NOT HOMELESS ANYMORE', 'A KEY TO A PLACE OF YOUR OWN.', 'FIND SOMEWHERE TO LIVE.', 0xd8a838),
+  S('late_checkout', 'LATE CHECK-OUT', 'LEFT THE GRAND LILY BY THE ROOF.', 'NOT EVERY WAY OUT IS A DOOR.', 0x7a9ad8),
+  S('most_wanted', 'MOST WANTED', 'SAW YOUR OWN FACE ON A POSTER.', 'COME BACK LATER.', 0xc83a3a),
+  S('new_face', 'A NEW FACE', 'CHANGED EVERYTHING THE POSTER SHOWS.', 'HAT, COAT, SCARF, TROUSERS, SHOES, GLASSES, HAIR.', 0x7fe0d0),
+  S('new_leaf', 'A FRESH START', 'MOVED INTO ROOM 213.', 'SOMEBODY OWES YOU ONE.', 0x8ac8b8),
+  S('low_profile', 'LOW PROFILE', 'GOT OUT OF SIGHT WITH THE POLICE ON YOU.', 'KNOW WHEN TO DISAPPEAR.', 0x5a6a8a),
+  S('good_heart', 'A CHANCE TO START OVER', 'GOT THE OLD MAN OFF THE STREET.', 'SOMEONE OUT THERE NEEDS A HAND.', 0xe8a050),
+  S('justice', 'JUSTICE PREVAILS', 'ARRESTED. THE STORY ENDED IN A CELL.', 'AN ENDING.', 0x3a5aa8),
+  // ---- arcade mastery: one real test per machine
+  M('m_ttt', 'UNBEATABLE', 'WIN 6 MINI DUELS IN A ROW.', 0xd86a4a),
+  M('m_hoops', 'FEEDING FRENZY', 'FILL CHUBBY UP IN UNDER 30 SECONDS.', 0xe8b84a),
+  M('m_whack', 'WHACK MASTER', 'WHACK 70 FROGS IN ONE ROUND.', 0x8ad06a),
+  M('m_bowl', 'PERFECT LANE', 'BOWL A STRIKE IN ALL THREE FRAMES.', 0x9a7ad8),
+  M('m_pond', 'EAGLE EYE', 'FIND ALL SIX FROGS IN 30 SEARCHES OR FEWER.', 0x4ab8c8),
+  M('m_grudge', 'GRUDGE MATCH', 'BEAT EVERY ANIMAL IN A ROW WITHOUT A LOSS.', 0xc83a3a),
+  M('m_kong', 'TOP OF THE TOWER', 'CLIMB BARREL CLIMB IN UNDER 70 SECONDS.', 0xb86a2a),
+  M('m_hockey', 'SHUTOUT', 'WIN AIR HOCKEY 5-0.', 0x5a9ad8),
+  M('m_flood', 'HIGH AND DRY', 'ESCAPE THE FLOOD IN UNDER 75 SECONDS.', 0x3a7ab8),
+  M('m_dance', 'FLAWLESS FEET', 'WIN ALL THREE DANCE OFF ROUNDS, NO MISSES.', 0xe85aa8),
+  M('m_cross5', 'ROAD RUNNER', 'CROSS THE ROAD 5 TIMES IN ONE RUN.', 0x7a8a9a),
+  M('m_cross10', 'ROAD WARRIOR', 'CROSS THE ROAD 10 TIMES IN ONE RUN.', 0x9aaabb),
+  M('m_cross15', 'KING OF THE ROAD', 'CROSS THE ROAD 15 TIMES IN ONE RUN.', 0xc8d8e8),
+  M('m_chase', 'GETAWAY DRIVER', 'GRAB $600 IN ONE CAR CHASE.', 0x6ac86a),
+  M('m_fence', 'UNTOUCHABLE', 'WIN FENCE WARS WITHOUT TAKING ANY DAMAGE.', 0x8a6a4a),
+  M('m_bog', 'CLEAN SHEET', 'WIN BOG BALL BY THREE GOALS OR MORE.', 0x5a8a3a),
+  M('m_slots', 'FROGGY JACKPOT', 'LINE UP FIVE FROGGYS ON THE SLOTS.', 0xff4fa3),
+  M('m_chamber', 'TEN CLEAN', 'SURVIVE TEN PULLS IN A ROW AT THE CHAMBER.', 0x5a5a6a),
+  M('m_race', 'LONG SHOT', 'WIN A FROG RACE ON FIVE TICKETS OR MORE.', 0xd8c84a),
+  M('m_mash', 'COLOSSEUM LEGEND', 'BANK 125 IN ONE FROGSTER MASH RUN.', 0xa83a3a),
+  M('m_21', 'FIVE-CARD CHARLIE', 'WIN A HAND OF FROGGY 21 ON FIVE CARDS.', 0x2a8a5a),
+  M('m_wheel', 'THE BIG ONE', 'LAND 1000 OR MORE ON THE WHEEL.', 0xe8a83a),
+  M('m_crane', 'CLAW OF GOLD', 'WIN A JACKPOT CAPSULE FROM A CRANE.', 0xc8a0e0),
+  { id: 'm_master', name: 'ARCADE MASTER', desc: 'EARN EVERY ARCADE MASTERY BADGE.', hint: 'EARN EVERY ARCADE MASTERY BADGE.', col: 0xffd45e, kind: 'mastery' },
+  // ---- creature clash
+  { id: 'c_boss5', name: 'BOSS HUNTER', desc: 'BEAT 5 DIFFERENT LADDER BOSSES.', hint: 'BEAT 5 DIFFERENT LADDER BOSSES.', col: 0x8a5ad8, kind: 'clash' },
+  { id: 'c_boss10', name: 'BOSS SLAYER', desc: 'BEAT 10 DIFFERENT LADDER BOSSES.', hint: 'BEAT 10 DIFFERENT LADDER BOSSES.', col: 0xa85ad8, kind: 'clash' },
+  { id: 'c_boss_all', name: 'BANE OF BOSSES', desc: 'BEAT EVERY LADDER BOSS THERE IS.', hint: 'BEAT EVERY LADDER BOSS THERE IS.', col: 0xd85ac8, kind: 'clash' },
+  // ---- secrets: ??? until found
+  { id: 's_lazy', name: 'LAZY HIDING', desc: 'HID IN ONE SPOT FOR A WHOLE ROUND OF HIDE AND SEEK.', hint: 'A SECRET.', col: 0x6a8a5a, kind: 'secret' },
+  { id: 's_404', name: 'ERROR FROG-04', desc: 'SAW SOMETHING IN WHACK-A-FROG THAT WAS NOT A FROG.', hint: 'A SECRET.', col: 0x40404a, kind: 'secret' },
+  { id: 's_alley', name: 'OFF THE MAP', desc: 'WALKED DOWN EVERY ONE OF THE SIDE ALLEYS.', hint: 'A SECRET.', col: 0x4a5a6a, kind: 'secret' },
+  { id: 's_roof', name: 'UP ON THE ROOF', desc: 'FOUND THE WAY OUT ON TO THE ROOF FROM THE STAIRS.', hint: 'A SECRET.', col: 0x2a3a6a, kind: 'secret' },
 ];
+
+/** The arcade mastery badges ARCADE MASTER asks for (every mastery badge but itself). */
+export const MASTERY = BADGES.filter((b) => b.kind === 'mastery' && b.id !== 'm_master').map((b) => b.id);
 
 export const badgeById = (id: string): BadgeDef | undefined => BADGES.find((b) => b.id === id);
 
 export const hasBadge = (id: string): boolean => store.get().badges.includes(id);
 
+/** Where the drop-down goes: set once the game exists (core/sceneManager). */
+let toaster: ((b: BadgeDef) => void) | null = null;
+export function setBadgeToaster(fn: (b: BadgeDef) => void): void {
+  toaster = fn;
+}
+
 /**
- * Earn a badge (once).  Saved at once.  With a scene, a plate comes down
- * from the top of the screen to say so.  Returns whether it was new.
+ * Earn a badge (once).  Saved at once, and the drop-down says BADGE UNLOCKED.
+ * Returns whether it was new.  (`_scene` is kept for the older callers: the
+ * drop-down is a scene of its own now and needs nobody's.)
  */
-export function earnBadge(id: string, scene?: Phaser.Scene): boolean {
+export function earnBadge(id: string, _scene?: Phaser.Scene): boolean {
   const def = badgeById(id);
   if (!def || hasBadge(id)) return false;
   store.patch({ badges: [...store.get().badges, id] });
   store.flush();
-  if (scene) badgeToast(scene, def);
+  toaster?.(def);
+  // every mastery badge, and the crown that goes with them
+  if (def.kind === 'mastery' && id !== 'm_master' && MASTERY.every((m) => store.get().badges.includes(m))) earnBadge('m_master');
   return true;
 }
 
-/** BADGE EARNED, and its name, on a plate that drops in and goes again. */
-export function badgeToast(scene: Phaser.Scene, def: BadgeDef): void {
-  audio.sfx('ticket_machine', 0.35);
-  const w = Math.max(120, def.name.length * 6 + 24);
-  const plate = scene.add.rectangle(0, 0, w, 22, 0x14100c, 0.92).setStrokeStyle(1, def.col);
-  const head = centerText(scene, 0, -5, 'BADGE EARNED', def.col);
-  const name = centerText(scene, 0, 5, def.name, PALETTE.cream);
-  const c = scene.add.container(GAME_W / 2, -16, [plate, head, name]).setDepth(3000).setScrollFactor(0);
-  scene.tweens.add({
-    targets: c,
-    y: 46,
-    duration: 420,
-    ease: 'Back.easeOut',
-    onComplete: () => scene.tweens.add({ targets: c, y: -16, delay: 2600, duration: 360, ease: 'Sine.easeIn', onComplete: () => c.destroy() }),
-  });
+/** A count a badge keeps across sessions (badgeProgress). */
+export function badgeCount(key: string): number {
+  const v = store.get().badgeProgress?.[key];
+  return typeof v === 'number' ? v : 0;
+}
+
+export function setBadgeCount(key: string, n: number): void {
+  store.patch({ badgeProgress: { ...(store.get().badgeProgress ?? {}), [key]: n } });
+  store.flush();
+}
+
+/** A set a badge keeps across sessions (badgeProgress), as a list of ids. */
+export function badgeSet(key: string): string[] {
+  const v = store.get().badgeProgress?.[key];
+  return Array.isArray(v) ? (v as string[]) : [];
+}
+
+export function setBadgeSet(key: string, ids: string[]): void {
+  store.patch({ badgeProgress: { ...(store.get().badgeProgress ?? {}), [key]: [...new Set(ids)] } });
+  store.flush();
+}
+
+/**
+ * ---- THE RECORD-SHAPED ONES.  Most cabinets' mastery is a line on the same
+ * number their best is kept in (core/records): a time under a mark, a score
+ * over one.  The shell asks here with every record offered.
+ */
+const ON_RECORD: Partial<Record<string, { badge: string; lower: boolean; at: number }>> = {
+  tictactoe: { badge: 'm_ttt', lower: false, at: 6 },
+  hoops: { badge: 'm_hoops', lower: true, at: 30 },
+  whack: { badge: 'm_whack', lower: false, at: 70 },
+  bowling: { badge: 'm_bowl', lower: false, at: 45 },
+  battleship: { badge: 'm_pond', lower: true, at: 30 },
+  donkeykong: { badge: 'm_kong', lower: true, at: 70 },
+  airhockey: { badge: 'm_hockey', lower: false, at: 5 },
+  fallingblocks: { badge: 'm_flood', lower: true, at: 75 },
+  carchase: { badge: 'm_chase', lower: false, at: 600 },
+  bogball: { badge: 'm_bog', lower: false, at: 3 },
+  roulette: { badge: 'm_chamber', lower: false, at: 10 },
+  frograce: { badge: 'm_race', lower: false, at: 100 },
+  frogstermash: { badge: 'm_mash', lower: false, at: 125 },
+  wheel: { badge: 'm_wheel', lower: false, at: 1000 },
+};
+
+export function badgeOnRecord(game: string, value: number): void {
+  const r = ON_RECORD[game];
+  if (!r || !Number.isFinite(value)) return;
+  if (r.lower ? value > 0 && value < r.at : value >= r.at) earnBadge(r.badge);
 }

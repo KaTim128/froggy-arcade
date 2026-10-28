@@ -1691,6 +1691,9 @@ function finish(): void {
 
   if (store.setHighScore(ID, sides.frog.dealt)) best = sides.frog.dealt;
   apiRef?.record(sides.frog.dealt);
+  // UNTOUCHABLE: the match won without the lizard landing a thing on you --
+  // no hit, no splash, no poison tick, across every round (log #58)
+  if (won && sides.lizard.dealt === 0) apiRef?.badge('m_fence');
   refreshHud();
   const score = ROUNDS > 1 ? ` ${roundsWon.frog}-${roundsWon.lizard}` : '';
   const line = drawn

@@ -25,10 +25,11 @@ import { store, type GameState } from '../core/state';
 import { ledger } from '../core/ledger';
 import {
   BATTLE_COST, BATTLE_WIN, BIOMES, LADDER_BOSS_WIN, LADDER_COST, LADDER_LEVELS, LADDER_WIN, MAX_OWNED, PACK_COST, STARTERS,
-  bossById, creatureById, rollLadder, rollPack, zoneFoe, type Biome, type Creature,
+  BOSSES, bossById, creatureById, rollLadder, rollPack, zoneFoe, type Biome, type Creature,
 } from './creatures';
 import type { CreatureState, Owned } from './creatureState';
 import { record } from './life';
+import { badgeSet, earnBadge, setBadgeSet } from './badges';
 import { MAX_LEVEL, MAX_XP, XP_BOSS, XP_WIN, levelOf, withLevel } from './creatureLevel';
 
 export interface Result {
@@ -258,6 +259,7 @@ export function finishBattle(won: boolean): BattleEnd {
     const prize = b.mode === 'zone' ? BATTLE_WIN : ladder ? (boss ? LADDER_BOSS_WIN : LADDER_WIN) : 0;
     const cleared = ladder?.level;
     const runDone = !!ladder && boss;
+    const bossId = runDone ? ladder.boss : null;
     edit((s) => {
       s.battle = null;
       s.wins += 1;
@@ -277,6 +279,15 @@ export function finishBattle(won: boolean): BattleEnd {
     });
     if (prize) ledger.credit(prize, 'creature');
     record('creature_win');
+    // THE BOSS BADGES (log #42): 5, 10 and every different ladder boss beaten.
+    // A set, so beating the same one again adds nothing.
+    if (bossId) {
+      const beaten = [...new Set([...badgeSet('clash_bosses'), bossId])];
+      setBadgeSet('clash_bosses', beaten);
+      if (beaten.length >= 5) earnBadge('c_boss5');
+      if (beaten.length >= 10) earnBadge('c_boss10');
+      if (BOSSES.every((x) => beaten.includes(x.id))) earnBadge('c_boss_all');
+    }
     store.flush();
     const up = lvAfter > lvBefore ? lvAfter : undefined;
     const head = prize ? `YOU WIN ${prize} TOKENS.` : 'YOU WIN.';

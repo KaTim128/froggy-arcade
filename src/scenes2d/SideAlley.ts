@@ -8,6 +8,7 @@
  */
 
 import Phaser from 'phaser';
+import { badgeSet, earnBadge, setBadgeSet } from '../game/badges';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { KEYS } from '../core/input';
@@ -46,6 +47,11 @@ export class SideAlley extends Phaser.Scene {
 
   create(): void {
     froggyLayer.clear();
+    // OFF THE MAP: a secret badge (log #59) for having been down every one of
+    // the alleys -- kept on the profile, a set, so a visit twice counts once
+    const seen = [...new Set([...badgeSet('alleys'), String(this.variant)])];
+    setBadgeSet('alleys', seen);
+    if (ALLEYS.every((_a, i) => seen.includes(String(i)))) earnBadge('s_alley');
     this.locked = false;
     this.out = false;
     fadeIn(this);

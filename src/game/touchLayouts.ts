@@ -19,6 +19,7 @@
  */
 
 import Phaser from 'phaser';
+import { isOverlay } from '../core/overlays';
 import { touchControls, type TouchLayout } from '../ui/touchControls';
 import { store } from '../core/state';
 
@@ -291,7 +292,7 @@ let lastTop = '';
 export function refreshTouchLayout(): void {
   if (!gameRef || !touchControls.mounted()) return;
   hookScenes();
-  const running = gameRef.scene.getScenes(true);
+  const running = gameRef.scene.getScenes(true).filter((x) => !isOverlay(x.scene.key));
   const top = running.length ? running[running.length - 1].scene.key : 'Boot';
   if (top !== lastTop) {
     lastTop = top;

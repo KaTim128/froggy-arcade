@@ -721,6 +721,7 @@ function hit(): void {
       finish(false, 'FIVE-CARD 21 - YOU LOSE');
       sceneRef.cameras.main.shake(200, 0.004);
     } else {
+      apiRef?.badge('m_21');
       finish(true, `FIVE-CARD CHARLIE ON ${p}`);
     }
   }

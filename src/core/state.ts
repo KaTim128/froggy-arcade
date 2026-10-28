@@ -218,6 +218,11 @@ export interface GameState {
    */
   badges: string[];
   /**
+   * What a badge counts across sessions on its way (game/badges): a streak, a
+   * set of bosses beaten.  The profile's, kept with the badges themselves.
+   */
+  badgeProgress: Record<string, number | string[]>;
+  /**
    * ---- ARRESTED.  The run ended in a cell: the profile is locked for good
    * and can never be resumed (its badges can still be looked at).
    */
@@ -454,6 +459,7 @@ function defaultState(): GameState {
     stealthStart: null,
     hudShown: false,
     badges: [],
+    badgeProgress: {},
     jailed: false,
     cranes: {},
     life: defaultLife(),
@@ -558,6 +564,12 @@ class Store {
     fresh.hotelAfter = run.hotelAfter === 'police' || run.hotelAfter === 'escape' || run.hotelAfter === 'escaped' ? run.hotelAfter : 'none';
     fresh.arc = run.arc === 'back' || run.arc === 'live' ? run.arc : 'none';
     fresh.badges = Array.isArray(run.badges) ? [...new Set(run.badges.filter((b) => typeof b === 'string'))] : [];
+    fresh.badgeProgress = {};
+    if (run.badgeProgress && typeof run.badgeProgress === 'object')
+      for (const [k, v] of Object.entries(run.badgeProgress as Record<string, unknown>)) {
+        if (typeof v === 'number' && Number.isFinite(v)) fresh.badgeProgress[k] = v;
+        else if (Array.isArray(v)) fresh.badgeProgress[k] = [...new Set(v.filter((x): x is string => typeof x === 'string'))];
+      }
     fresh.jailed = run.jailed === true;
     fresh.disguised = run.disguised === true;
     fresh.hudShown = run.hudShown === true;
@@ -910,11 +922,13 @@ class Store {
     const playSeconds = this.state.playSeconds;
     // (the profile's own: its badges, and a lock that no reset lifts)
     const badges = [...this.state.badges];
+    const badgeProgress = { ...this.state.badgeProgress };
     const jailed = this.state.jailed;
     this.state = defaultState();
     this.state.settings = settings;
     this.state.playSeconds = playSeconds;
     this.state.badges = badges;
+    this.state.badgeProgress = badgeProgress;
     this.state.jailed = jailed;
     this.flush();
     this.emit();

@@ -40,6 +40,7 @@
  */
 
 import Phaser from 'phaser';
+import { earnBadge } from '../game/badges';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { ledger } from '../core/ledger';
@@ -1537,6 +1538,8 @@ export class CraneGame extends Phaser.Scene {
     // a capsule: open it.  There are always tokens in it.
     const cap = rollCapsule();
     ledger.credit(cap.tokens, 'crane');
+    // CLAW OF GOLD: the one-in-fifty capsule (log #58)
+    if (cap.jackpot) earnBadge('m_crane');
     audio.sfx('cha_ching');
     const coins = `${cap.tokens} TOKEN${cap.tokens === 1 ? '' : 'S'}`;
     if (cap.oddity) {

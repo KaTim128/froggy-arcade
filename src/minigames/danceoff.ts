@@ -829,6 +829,9 @@ function endMatch(drawn: boolean): void {
     centerText(sceneRef, GAME_W / 2, 130, 'DRAWN ROUND - THE CLIMB STOPS THERE', PALETTE.ash).setDepth(50);
   }
   apiRef?.record(score.you);
+  // FLAWLESS FEET: all three rounds, and not one of your notes let past
+  // (log #58).  A wrong key is a miss too: the whole match, spotless.
+  if (clean && misses === 0 && wrongs === 0) apiRef?.badge('m_dance');
   sceneRef.time.delayedCall(1800, () =>
     banked > 0 ? apiRef?.win(banked) : refund ? apiRef?.draw() : apiRef?.lose(),
   );

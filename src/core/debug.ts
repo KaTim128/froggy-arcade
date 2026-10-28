@@ -1,4 +1,6 @@
 import { markLive, reloadTarget } from './session';
+import { BADGES, badgeCount, badgeOnRecord, badgeSet, earnBadge, hasBadge } from '../game/badges';
+import { ICON_IDS } from '../game/badgeIcons';
 import { froggyLayer } from '../render/froggyLayer';
 /**
  * Dev debug panel.  PRD §6.9 / DB-1 / QFD A6.
@@ -63,6 +65,18 @@ export function initDebug(g: Phaser.Game): void {
     /** A new profile, made the active one (as the picker would). */
     newProfile: (name: string) => store.createSlot(name),
     game: () => g,
+    /** The badges, through the game's own copy of game/badges (the harness's import would be another). */
+    badges: {
+      earn: (id: string) => earnBadge(id),
+      /** What the shell does with a record offered: the badge on that line, if it is crossed. */
+      onRecord: (game: string, v: number) => badgeOnRecord(game, v),
+      has: (id: string) => hasBadge(id),
+      count: (key: string) => badgeCount(key),
+      set: (key: string) => badgeSet(key),
+      ids: () => BADGES.map((b) => ({ id: b.id, kind: b.kind })),
+      icons: () => ICON_IDS,
+      toast: () => (g.scene.getScene('BadgeToast') as unknown as { pending(): number } | null)?.pending() ?? 0,
+    },
     // Same setter `?tokens=` uses, for tests that need to change a balance
     // mid-session rather than at load.
     setTokens: (n: number) => ledger.debugSet(n),

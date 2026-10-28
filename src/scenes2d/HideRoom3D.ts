@@ -929,6 +929,12 @@ export class HideRoom3D extends Phaser.Scene {
   /** When the next rattle is heard, while he hauls on something shut. */
   private rattleIn = 0;
   private hiding: Spot3D | null = null;
+  /**
+   * LAZY HIDING (a secret badge, log #59): already in a spot when he starts
+   * looking, and never out of it again until he gives up.  Cleared by any
+   * step out while he is seeking.
+   */
+  private lazy = false;
 
   private caughtT = 0;
   private endT = 0;
@@ -1883,6 +1889,7 @@ export class HideRoom3D extends Phaser.Scene {
       const was = this.hiding;
       this.stepOut(was);
       this.hiding = null;
+      this.lazy = false;
       // the camera goes back out the way it came, from the opening
       this.hideIn = was;
       audio.sfx(was.kind === 'chest' ? 'spot_open' : was.kind === 'bed' ? 'floor_creak' : 'door_open', 0.3);
@@ -3580,6 +3587,8 @@ export class HideRoom3D extends Phaser.Scene {
    */
   private beginArcade(retry = false): void {
     this.mode = 'seeking';
+    // (no hide and seek out here: nothing to be lazy about)
+    this.lazy = false;
     this.clock = 0;
     this.fMode = 'search';
     this.fTimer = 0;
@@ -3668,6 +3677,7 @@ export class HideRoom3D extends Phaser.Scene {
 
     if (this.clock <= 0) {
       this.mode = 'seeking';
+      this.lazy = !!this.hiding;
       this.clock = seekFor(this.roomIndex);
       this.subtitle = 'READY OR NOT';
       this.time.delayedCall(2400, () => {
@@ -6120,6 +6130,9 @@ export class HideRoom3D extends Phaser.Scene {
 
   private survive(): void {
     if (this.mode !== 'seeking') return;
+    // (the whole round in the one spot he never thought to open)
+    if (this.lazy && this.hiding) earnBadge('s_lazy');
+    this.lazy = false;
     this.mode = 'survived';
     this.endT = 0;
     this.left = false;
