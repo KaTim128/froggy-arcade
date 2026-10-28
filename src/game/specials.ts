@@ -1,5 +1,5 @@
 /**
- * ---- THE 120 SPECIALS.  Every creature and boss fights with one plain
+ * ---- THE 160 SPECIALS (120, and 40 more for the twenty new creatures).  Every creature and boss fights with one plain
  * attack of its own (`normal` in creatures) and two of these -- and each of
  * these belongs to exactly one creature in the whole game (checked in
  * creatures).  No two do the same thing: where two share an effect (two
@@ -174,6 +174,48 @@ export const SPECIAL_LIST: SpecialDef[] = [
   D('ink_blackout', 'INK BLACKOUT', 'nova', 0, 9, 5, 'mid', 'FLOODS THE ARENA WITH INK: YOUR SIGHT SHRINKS TO 50PX FOR 3S.'),
   D('quake_rings', 'QUAKE RINGS', 'nova', 14, 4.8, 0, 'never', 'IT STAMPS, AND THREE SHOCKWAVE RINGS RUN OUT FROM IT. BE BETWEEN THEM.'),
   D('glacier_drift', 'GLACIER DRIFT', 'nova', 14, 9, 70, 'close', 'FREEZES THE GROUND WITHIN 70PX FOR 4S - YOU ARE HALF SPEED ON IT - THEN ICE SPIKES BURST FROM IT FOR 14.'),
+
+  // ------------------------------------------------ the twenty new creatures (28 Oct)
+  D('cinder_spit', 'CINDER SPIT', 'spread', 5, 3, 170, 'poke', 'A FAN OF 3 HOT SPITS; EACH ONE THAT HITS POISONS FOR 3 A SECOND OVER 4S.', 'poison'),
+  D('scorch_dash', 'SCORCHDASH', 'dash', 12, 4, 220, 'escape', 'A 60PX DASH THAT LEAVES BURNING GROUND BEHIND IT FOR 3S.', 'linger'),
+  D('flare_burst', 'FLAREBURST', 'nova', 14, 5, 40, 'close', 'A 40PX BURST OF FLAME THAT GOES OFF AGAIN 0.6S LATER AT HALF DAMAGE.', 'echo'),
+  D('ash_volley', 'ASH VOLLEY', 'arc', 13, 4.5, 120, 'hidden', 'A LOBBED CLUMP OF HOT ASH THAT SAILS OVER COVER AND BURSTS WHERE IT LANDS.'),
+  D('current_ram', 'UNDERTOW', 'dash', 13, 3.8, 230, 'close', 'A 65PX RUSH THAT DRAGS WHAT IT HITS TOWARDS IT.', 'pull'),
+  D('slick_coat', 'SLICK COAT', 'aura', 0, 8, 5, 'self', 'FOR 5S IT IS 35% FASTER AND HITS 25% HARDER, AND IT SHAKES OFF BURNS, POISON, SLOWS AND HOLDS.', 'cleanse'),
+  D('ink_cloud', 'INK CLOUD', 'arc', 8, 5, 110, 'hidden', 'A LOBBED BLOB OF INK THAT BURSTS AND HALVES THEIR SPEED FOR 3S.', 'chill'),
+  D('tentacle_grab', 'ARM GRAB', 'snare', 8, 4.5, 160, 'poke', 'A REACHING ARM: WHAT IT CATCHES IS HELD FOR 1.3S AND DRAGGED CLOSER.', 'pull'),
+  D('moss_hide', 'MOSS HIDE', 'shield', 0, 7, 1.8, 'defend', 'BLOCKS ALL DAMAGE FOR 1.8S, THEN HEALS 3 A SECOND FOR 4S.', 'regen'),
+  D('root_rush', 'ROOT RUSH', 'dash', 13, 4.5, 200, 'close', 'A 55PX CHARGE THAT HOLDS WHATEVER IT HITS IN PLACE FOR 0.8S.', 'root'),
+  D('spore_bounce', 'SPORE SHOT', 'bolt', 11, 2.6, 190, 'poke', 'A SPORE THAT BOUNCES OFF COVER ONCE, SO IT FINDS YOU BEHIND A ROCK.', 'bounce'),
+  D('leaf_wall', 'LEAF SCREEN', 'wall', 0, 7, 30, 'mid', 'RAISES A LINE OF LEAVES 2 TILES AWAY THAT NOTHING GETS THROUGH, FOR 7S.'),
+  D('tusk_crash', 'TUSK CRASH', 'dash', 16, 4.5, 180, 'close', 'A 50PX LUNGE; ONE TIME IN FOUR IT DEALS DOUBLE DAMAGE.', 'crit'),
+  D('blubber', 'BLUBBER', 'aura', 0, 9, 5, 'self', 'FOR 5S IT IS 35% FASTER AND HITS 25% HARDER, AND THE FIRST HIT ON IT WITHIN 1.5S IS BLOCKED.', 'guard'),
+  D('snow_blink', 'SNOWBLINK', 'blink', 0, 4, 60, 'escape', 'A 60PX BLINK THROUGH THE SNOW THAT DEALS 10 ALL ROUND WHERE IT LANDS.', 'strike'),
+  D('rime_fang', 'RIME FANG', 'bolt', 10, 2.5, 200, 'poke', 'A SHARD OF ICE THAT HALVES THEIR SPEED FOR 3S.', 'chill'),
+  D('shock_sting', 'ARC STING', 'bolt', 10, 2.4, 210, 'poke', 'A STING THAT LEAVES THEM TAKING 25% MORE DAMAGE FOR 3S.', 'shred'),
+  D('swarm_fan', 'SWARM FAN', 'spread', 6, 3.5, 170, 'poke', 'A FAN OF 3 CHARGED NEEDLES THAT CURVE TOWARDS THEM IN FLIGHT.', 'homing'),
+  D('static_dash', 'STATIC RUN', 'dash', 11, 3.5, 220, 'escape', 'A 60PX DASH; IT IS 40% FASTER FOR 2S AFTER.', 'haste'),
+  D('thunder_squeak', 'SQUEAK', 'nova', 12, 6, 42, 'close', 'A 42PX RING OF SPARKS THAT ADDS 1.2S TO ALL THEIR COOLDOWNS.', 'silence'),
+  D('curl_guard', 'CURL GUARD', 'shield', 0, 7, 1.6, 'defend', 'CURLS UP FOR 1.6S: SHOTS THAT HIT IT FLY BACK AT WHOEVER FIRED THEM.', 'reflect'),
+  D('rock_roll', 'ROCK ROLL', 'dash', 14, 4.5, 240, 'close', 'A 70PX ROLL THAT KNOCKS WHAT IT HITS A LONG WAY BACK.', 'push'),
+  D('death_roll', 'DEATH ROLL', 'beam', 16, 5, 40, 'close', 'AN INSTANT 40PX BITE THAT DEALS +60% TO ANYTHING UNDER 40% HEALTH.', 'execute'),
+  D('gravel_lob', 'GRAVEL LOB', 'arc', 12, 4.5, 120, 'hidden', 'A LOBBED STONE THAT BURSTS WHERE IT LANDS AND STUNS FOR A MOMENT.', 'stagger'),
+  D('boomerang_feather', 'FEATHERANG', 'bolt', 10, 2.8, 200, 'poke', 'A FEATHER THAT FLIES OUT AND BACK: IT CAN HIT TWICE.', 'boomerang'),
+  D('mock_call', 'MOCK CALL', 'nova', 8, 6, 46, 'close', 'A 46PX SCREECH: THEIR HITS DEAL 30% LESS FOR 3S.', 'weaken'),
+  D('zigzag', 'ZIGZAG', 'bolt', 11, 2.6, 210, 'poke', 'A DART THAT WEAVES SIDE TO SIDE AS IT FLIES: HARD TO STEP AWAY FROM.', 'wave'),
+  D('hover_hop', 'HOVER HOP', 'blink', 0, 3.6, 55, 'escape', 'A 55PX DART THROUGH THE AIR; THE FIRST HIT ON IT WITHIN 1.5S IS BLOCKED.', 'guard'),
+  D('blood_latch', 'LATCH', 'beam', 13, 3.5, 44, 'close', 'AN INSTANT 44PX BITE; IT HEALS 40% OF THE DAMAGE IT DEALS.', 'drain'),
+  D('mire_spit', 'MIRE SPIT', 'bolt', 9, 3, 180, 'poke', 'A GLOB OF BLACK MUD THAT HOLDS THEM IN PLACE FOR 0.8S.', 'root'),
+  D('play_dead', 'PLAY DEAD', 'mend', 0, 9, 0, 'heal', 'LIES STILL AND GETS BACK 22% OF ITS HEALTH.'),
+  D('shadow_mark', 'DUSK MARK', 'bolt', 8, 3, 200, 'poke', 'A SHADOW DART THAT MARKS THEM: ITS NEXT HIT DEALS +50%.', 'mark'),
+  D('light_needle', 'LIGHTNEEDLE', 'bolt', 13, 3.6, 220, 'poke', 'A NEEDLE OF LIGHT THAT BORES STRAIGHT THROUGH COVER.', 'drill'),
+  D('glow_mine', 'GLOW TRAP', 'mine', 16, 6, 0, 'hidden', 'LEAVES A GLOWING BULB THAT BURSTS WHEN THEY TOUCH IT; IT WAITS UP TO 8S.'),
+  D('regrow_arm', 'NEW LIMB', 'mend', 0, 9, 0, 'heal', 'GROWS BACK AN ARM: 22% OF ITS HEALTH AT ONCE, THEN 3 A SECOND FOR 4S.', 'regen'),
+  D('shard_spin', 'SHARD SPIN', 'nova', 13, 5, 44, 'close', 'A 44PX SPIN OF CRYSTAL SHARDS; IT IS 40% FASTER FOR 2S AFTER.', 'haste'),
+  D('quill_coat', 'QUILL COAT', 'shield', 0, 7, 2, 'defend', 'RAISES ITS QUILLS FOR 2S: DAMAGE IS BLOCKED, AND ANYTHING THAT HITS IT TAKES 6.', 'thorns'),
+  D('quill_burst', 'QUILL FAN', 'spread', 6, 3.4, 160, 'poke', 'A FAN OF 3 QUILLS; EACH LEAVES THEM TAKING 25% MORE DAMAGE FOR 3S.', 'shred'),
+  D('stampede', 'STAMPEDE', 'dash', 15, 4, 250, 'close', 'A 70PX GALLOP THAT STUNS WHAT IT HITS FOR A MOMENT.', 'stagger'),
+  D('stripe_zap', 'STRIPE ZAP', 'beam', 10, 5, 150, 'poke', 'A 150PX FLASH FROM ITS STRIPES THAT ADDS 1.2S TO ALL THEIR COOLDOWNS.', 'silence'),
 ];
 
 export const SPECIALS: Record<string, SpecialDef> = Object.fromEntries(SPECIAL_LIST.map((s) => [s.id, s]));

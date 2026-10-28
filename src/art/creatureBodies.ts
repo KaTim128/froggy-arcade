@@ -1,5 +1,5 @@
 /**
- * ---- THE SIXTY BODIES, as parts for art/sdf's one-skin renderer.
+ * ---- THE EIGHTY BODIES, as parts for art/sdf's one-skin renderer.
  *
  * Each is a function of time (`t`, in seconds) that lays out its parts --
  * the body, the limbs, the horns and fins -- joined smoothly into one
@@ -672,6 +672,251 @@ export const BODY_DEFS: Record<Body | BossBody, Def> = {
     return B.done();
   },
 
+  // ============================================ THE TWENTY NEW ONES (28 Oct)
+  salamander: (t) => {
+    const B = new Build();
+    const st = Math.sin(t * 9) * 0.5;
+    for (const [u, p] of [[-4, st], [-1.5, -st], [2.5, st], [4.8, -st]] as const) B.cap(u, 4.4, u + p, 7.3, 0.45, 0.35, 'd', 0.3);
+    B.chain([[-4, 4.2], [-7, 4.6], [-9.5, 3.6 + Math.sin(t * 4)]], 1.2, 0.4, 'b', 0.7);
+    B.e(0, 3.8, 5.4, 2.1, 'b', 0, 1);
+    B.e(5.6, 3.2, 2.6, 1.9, 'b', 0, 0.9);
+    flames(B, -1, 1.8, 3, t, 2.6);
+    for (let i = 0; i < 4; i++) B.dc(-3 + i * 2, 3.4, 0.45, FLAME2);
+    B.eye(6.2, 2.2, 0.7);
+    return B.done();
+  },
+  chick: (t) => {
+    const B = new Build();
+    const hop = Math.abs(Math.sin(t * 5)) * 0.8;
+    B.cap(-1, 4.6 - hop, -1.2, 7.5, 0.35, 0.3, BEAK, 0.3).cap(1.2, 4.6 - hop, 1.4, 7.5, 0.35, 0.3, BEAK, 0.3);
+    B.c(0, 1.6 - hop, 4.4, 'b', 1);
+    B.e(-3.6, 1.4 - hop, 1.6, 2.6 + Math.sin(t * 12) * 0.6, 'd', 0.4, 0.8);
+    B.tri(3.6, 0.6 - hop, 3.6, 2 - hop, 6, 1.3 - hop, BEAK, 0.4);
+    flames(B, 0, -2.4 - hop, 3, t, 3);
+    B.dc(0, 2.4 - hop, 2, 'l').eye(1.8, 0.2 - hop, 0.85);
+    return B.done();
+  },
+  otter: (t) => {
+    const B = new Build();
+    const st = Math.sin(t * 8) * 0.5;
+    for (const [u, p] of [[-3.5, st], [-1.5, -st], [2.5, st], [4.2, -st]] as const) B.cap(u, 4.6, u + p, 7.4, 0.6, 0.5, 'd', 0.3);
+    B.chain([[-4.6, 3.6], [-7.6, 4.8], [-10, 4.2 + Math.sin(t * 3) * 0.6]], 1.4, 0.7, 'b', 0.7);
+    B.e(0, 3, 5.6, 2.8, 'b', -0.1, 1);
+    B.c(5.6, 1, 2.4, 'b', 0.9);
+    B.c(4.8, -0.9, 0.7, 'd', 0.4);
+    B.de(0.6, 4, 3.6, 1.2, 'l').de(6.6, 1.8, 1.4, 0.9, 'l');
+    B.dc(7.8, 1.2, 0.45, 'k').eye(6, 0.3, 0.7);
+    return B.done();
+  },
+  octopus: (t) => {
+    const B = new Build();
+    for (let i = 0; i < 6; i++) {
+      const u = -5 + i * 2;
+      const w = Math.sin(t * 4 + i) * 1.2;
+      B.chain([[u * 0.6, 3], [u, 5.4], [u + w, 7.4]], 0.9, 0.4, 'b', 0.7);
+    }
+    B.e(0, -1.4, 4.6, 5, 'b', 0, 1.2);
+    for (let i = 0; i < 5; i++) B.dc(-2.4 + i * 1.2, -3.8 + (i % 2), 0.45, 'l');
+    B.eye(-1.6, 0.6, 1).eye(1.8, 0.6, 1);
+    return B.done();
+  },
+  badger: (t) => {
+    const B = new Build();
+    const st = Math.sin(t * 5) * 0.4;
+    for (const [u, p] of [[-4, st], [-1.6, -st], [2.4, st], [4.6, -st]] as const) B.cap(u, 4, u + p, 7.4, 0.9, 0.75, 'd', 0.4);
+    B.e(-0.6, 2.2, 6.8, 3.6, 'b', 0, 1.2);
+    B.e(5.4, 2.6, 3, 2.4, 'b', 0, 1);
+    B.tri(5, 1, 9, 2.6, 5.4, 4, 'l', 0.4);
+    B.dl(3.6, 0.8, 8.4, 2.4, 0.5, 'k');
+    for (let i = 0; i < 4; i++) B.dc(-4 + i * 2.2, -0.6, 0.6, 'l');
+    B.dc(8.8, 2.6, 0.5, 'k').eye(6.2, 1.6, 0.6);
+    return B.done();
+  },
+  caterpillar: (t) => {
+    const B = new Build();
+    for (let i = 0; i < 6; i++) {
+      const u = -6 + i * 2.2;
+      const v = 4.4 - Math.max(0, Math.sin(t * 3 - i * 0.6)) * 1.6;
+      B.c(u, v, 1.9, i % 2 ? 'b' : 'l', 0.9);
+      B.cap(u, v + 1.4, u, 7.4, 0.3, 0.25, 'd', 0.3);
+    }
+    B.c(7, 2.8 - Math.max(0, Math.sin(t * 3 - 3.6)) * 1.6, 2.4, 'b', 0.9);
+    B.cap(6.4, 0.8, 5.6, -1.6, 0.25, 0.2, 'd', 0.3).cap(7.8, 0.8, 8.4, -1.6, 0.25, 0.2, 'd', 0.3);
+    B.eye(7.8, 2.4, 0.7);
+    return B.done();
+  },
+  walrus: (t) => {
+    const B = new Build();
+    const br = Math.sin(t * 2) * 0.4;
+    B.e(-5.4, 6.6, 2.6, 1, 'd').e(3.8, 6.8, 2.2, 0.9, 'd');
+    B.e(-1, 2.4 + br, 7.6, 5, 'b', 0, 1.3);
+    B.c(5, 0.2 + br, 3.6, 'b', 1);
+    B.e(6.6, 1.8 + br, 2, 1.4, 'l', 0, 0.8);
+    B.tri(5.8, 2.6 + br, 6.6, 2.6 + br, 6.4, 7, IVORY, 0.2).tri(7, 2.6 + br, 7.8, 2.6 + br, 7.6, 6.8, IVORY, 0.2);
+    spikes(B, [[-3, -2.4 + br, 2], [-0.5, -2.6 + br, 2.4], [2, -2.4 + br, 2]]);
+    B.eye(5.4, -1 + br, 0.7);
+    return B.done();
+  },
+  ermine: (t) => {
+    const B = new Build();
+    const w = Math.sin(t * 6) * 0.6;
+    B.cap(-3.6, 4.6, -3.8 + w, 7.4, 0.5, 0.4, 'd', 0.3).cap(2.6, 4.6, 2.8 - w, 7.4, 0.5, 0.4, 'd', 0.3);
+    B.chain([[-6.5, 3.8], [-3, 3.6], [1, 3.2], [3.6, 1.6]], 1.7, 1.5, 'b', 1);
+    B.c(5.2, 0.4, 2.2, 'b', 0.9);
+    B.c(4.6, -1.6, 0.7, 'b', 0.4);
+    B.chain([[-6.4, 3.4], [-9, 2.4 + w], [-10.4, 1 + w]], 0.9, 0.5, 'l', 0.6);
+    B.dc(-10.4, 1 + w, 0.9, 'k');
+    B.dc(7.2, 0.6, 0.4, 'k').eye(5.6, -0.2, 0.65);
+    return B.done();
+  },
+  wasp: (t) => {
+    const B = new Build();
+    const fl = Math.sin(t * 30) * 1.2;
+    const bob = Math.sin(t * 4) * 0.8;
+    B.e(-1, -4 + bob + fl * 0.3, 3, 1.4, 'l', -0.5, 0.5).e(1.6, -4.2 + bob - fl * 0.3, 2.6, 1.2, 'l', 0.5, 0.5);
+    B.e(-3.4, 0.6 + bob, 3.4, 2.4, 'b', 0.2, 0.8);
+    B.c(1, -0.4 + bob, 1.6, 'd', 0.6);
+    B.c(3.6, -1 + bob, 1.9, 'b', 0.8);
+    B.tri(-6.6, 1.4 + bob, -6.4, 2.4 + bob, -8.6, 2.4 + bob, 'k', 0.3);
+    for (let i = 0; i < 3; i++) B.dl(-5 + i * 1.6, -1 + bob, -5 + i * 1.6, 2.6 + bob, 0.45, 'k');
+    B.eye(4.4, -1.4 + bob, 0.75);
+    return B.done();
+  },
+  mouse: (t) => {
+    const B = new Build();
+    const st = Math.sin(t * 12) * 0.4;
+    B.cap(-2, 5, -2 + st, 7.4, 0.4, 0.35, 'd', 0.3).cap(2, 5, 2 - st, 7.4, 0.4, 0.35, 'd', 0.3);
+    B.e(0, 4, 4, 2.8, 'b', 0, 1);
+    B.c(4, 2.6, 2, 'b', 0.8);
+    B.c(2.8, 0.2, 1.4, 'b', 0.6).c(4.6, 0, 1.2, 'b', 0.6);
+    B.chain([[-3.8, 4.6], [-6.5, 4], [-8, 1.6], [-7, -0.4 + Math.sin(t * 6)]], 0.4, 0.3, 'd', 0.4);
+    B.dc(2.8, 0.2, 0.7, PINK).dc(6, 2.8, 0.4, PINK).eye(4.4, 2, 0.6);
+    B.glow(-7, -0.4 + Math.sin(t * 6), 0.6, 0xfff07a);
+    return B.done();
+  },
+  armadillo: (t) => {
+    const B = new Build();
+    const st = Math.sin(t * 5) * 0.4;
+    B.cap(-3, 5, -3 + st, 7.4, 0.6, 0.5, 'd', 0.3).cap(2.4, 5, 2.4 - st, 7.4, 0.6, 0.5, 'd', 0.3);
+    B.e(-0.6, 2.4, 6.2, 4.4, 'b', 0, 1.1);
+    B.cap(5, 4, 8.2, 4.6, 1.4, 0.6, 'l', 0.6);
+    B.chain([[-6.4, 4.4], [-8.6, 5.6], [-9.6, 6.6]], 0.9, 0.4, 'b', 0.5);
+    for (let i = 0; i < 5; i++) B.dl(-4.6 + i * 2.2, -1.2, -4.8 + i * 2.2, 5.8, 0.4, 'd');
+    B.eye(6.2, 3.2, 0.55);
+    return B.done();
+  },
+  crocodile: (t) => {
+    const B = new Build();
+    const st = Math.sin(t * 6) * 0.4;
+    for (const u of [-4, 2]) B.cap(u, 5.4, u + st, 7.4, 0.6, 0.5, 'd', 0.3);
+    B.chain([[-4.6, 4.8], [-8, 5.2], [-11, 5 + Math.sin(t * 3) * 0.6]], 1.6, 0.4, 'b', 0.6);
+    B.e(-0.6, 4.6, 5.6, 1.9, 'b', 0, 1);
+    B.box(6.6, 4.6, 5.4, 1.9, 0.6, 'b', 0, 0.7);
+    B.c(4.4, 3, 1.1, 'b', 0.5);
+    for (let i = 0; i < 4; i++) B.tri(-4 + i * 2.2, 3, -3.2 + i * 2.2, 3, -3.6 + i * 2.2, 1.6, 'd', 0.3);
+    for (let i = 0; i < 3; i++) B.dt(5.4 + i * 1.4, 5.4, 6 + i * 1.4, 5.4, 5.7 + i * 1.4, 6.2, IVORY);
+    B.eye(4.5, 2.5, 0.6);
+    return B.done();
+  },
+  parrot: (t) => {
+    const B = new Build();
+    const fl = Math.sin(t * 7) * 1.6;
+    const bob = Math.sin(t * 3) * 0.6;
+    B.cap(-0.4, 3.4 + bob, -0.6, 7.4, 0.35, 0.3, 'd', 0.3).cap(1, 3.4 + bob, 1.2, 7.4, 0.35, 0.3, 'd', 0.3);
+    B.e(0, -0.4 + bob, 3, 4.2, 'b', 0.15, 1);
+    B.e(-2.8, -0.6 + bob + fl * 0.4, 1.6, 3.4, 'd', 0.5 + fl * 0.1, 0.6);
+    B.tri(-2, 3.2 + bob, -0.4, 3.4 + bob, -3.6, 8.4 + bob, 'l', 0.4);
+    B.c(1.4, -4.4 + bob, 2.2, 'b', 0.8);
+    B.tri(3, -5 + bob, 3, -3 + bob, 5, -3.2 + bob, BEAK, 0.4);
+    B.dc(1.6, -3.4 + bob, 0.9, 'l').eye(1.8, -5 + bob, 0.65);
+    return B.done();
+  },
+  dragonfly: (t) => {
+    const B = new Build();
+    const fl = Math.sin(t * 28) * 1;
+    const bob = Math.sin(t * 3) * 1;
+    B.e(-1, -2.4 + bob + fl, 4.4, 1.1, 'l', -0.3, 0.4).e(-1.4, -0.6 + bob - fl, 4.2, 1, 'l', 0.3, 0.4);
+    B.cap(-8.6, 1.4 + bob, 0, 0.6 + bob, 0.4, 0.8, 'b', 0.6);
+    B.c(1.6, 0.4 + bob, 1.4, 'b', 0.6);
+    B.c(3.8, 0 + bob, 1.6, 'b', 0.7);
+    for (let i = 0; i < 4; i++) B.dl(-7 + i * 1.8, 0.6 + bob, -7 + i * 1.8, 1.8 + bob, 0.3, 'd');
+    B.eye(4.4, -0.6 + bob, 0.9);
+    return B.done();
+  },
+  leech: (t) => {
+    const B = new Build();
+    const w = Math.sin(t * 3);
+    B.chain([[-7, 6], [-3.6, 4.4 - w], [0, 5.6 + w * 0.6], [3.6, 3.4 - w * 0.4], [6, 1.6]], 1.6, 1.9, 'b', 1);
+    B.c(6.6, 1.2, 1.9, 'd', 0.6);
+    B.ring(7.2, 1, 1.1, 0.35, 'k');
+    for (let i = 0; i < 4; i++) B.dl(-5 + i * 2.6, 3.2, -4.6 + i * 2.6, 6.4, 0.3, 'l');
+    B.eye(5.2, 0.2, 0.55);
+    return B.done();
+  },
+  possum: (t) => {
+    const B = new Build();
+    const st = Math.sin(t * 6) * 0.4;
+    for (const [u, p] of [[-3.6, st], [-1.4, -st], [2.2, st], [4, -st]] as const) B.cap(u, 4.6, u + p, 7.4, 0.45, 0.4, 'd', 0.3);
+    B.e(-0.4, 3, 5, 3, 'b', 0, 1);
+    B.e(4.8, 1.6, 2.4, 1.8, 'l', 0.2, 0.8);
+    B.cap(6.2, 2, 8.4, 2.6, 0.9, 0.4, 'l', 0.5);
+    B.c(4, -0.6, 1, 'd', 0.5);
+    B.chain([[-5, 3.4], [-8, 3], [-9.4, 0.6], [-8, -1.2]], 0.5, 0.4, 'l', 0.5);
+    B.dc(8.6, 2.6, 0.4, PINK).eye(5.2, 0.9, 0.7);
+    return B.done();
+  },
+  worm: (t) => {
+    const B = new Build();
+    const r = Math.max(0, Math.sin(t * 2)) * 2.4;
+    B.e(-3, 6.8, 4, 1, 'd');
+    B.chain([[-6, 6.6], [-2.6, 6], [0.6, 4 - r * 0.4], [1.8, 0.6 - r], [3.6, -2.2 - r]], 1.1, 1.3, 'b', 1);
+    for (let i = 0; i < 5; i++) B.dl(-5 + i * 1.8, 5.8, -5 + i * 1.8, 7, 0.25, 'd');
+    B.glow(3.8, -2.6 - r, 1.2, 'l');
+    B.eye(4.2, -2.4 - r, 0.55);
+    return B.done();
+  },
+  starfish: (t) => {
+    const B = new Build();
+    const spin = t * 1.2;
+    for (let i = 0; i < 5; i++) {
+      const a = spin + (i / 5) * Math.PI * 2;
+      B.cap(0, 0.6, Math.cos(a) * 6.4, 0.6 + Math.sin(a) * 6.4, 1.8, 0.6, 'b', 0.9);
+    }
+    B.c(0, 0.6, 2.6, 'b', 1);
+    for (let i = 0; i < 5; i++) {
+      const a = spin + (i / 5) * Math.PI * 2;
+      B.dc(Math.cos(a) * 3.6, 0.6 + Math.sin(a) * 3.6, 0.5, 'l');
+    }
+    B.eye(-0.9, 0, 0.6).eye(1, 0, 0.6);
+    return B.done();
+  },
+  porcupine: (t) => {
+    const B = new Build();
+    const st = Math.sin(t * 5) * 0.4;
+    B.cap(-2.6, 5, -2.6 + st, 7.4, 0.6, 0.5, 'd', 0.3).cap(2.4, 5, 2.4 - st, 7.4, 0.6, 0.5, 'd', 0.3);
+    B.e(-0.4, 3, 5.4, 3.8, 'b', 0, 1);
+    B.e(5, 3.8, 2, 1.6, 'l', 0, 0.8);
+    for (let i = 0; i < 7; i++) {
+      const a = -2.8 + i * 0.32;
+      const q = Math.sin(t * 2 + i) * 0.3;
+      B.tri(Math.cos(a) * 4 - 0.6, 3 + Math.sin(a) * 3, Math.cos(a) * 4 + 0.6, 3 + Math.sin(a) * 3, Math.cos(a) * 8.4, 3 + Math.sin(a) * 6.8 + q, IVORY, 0.3);
+    }
+    B.dc(6.8, 3.8, 0.45, 'k').eye(5, 3, 0.55);
+    return B.done();
+  },
+  zebra: (t) => {
+    const B = new Build();
+    const g = Math.sin(t * 8) * 0.8;
+    for (const [u, p] of [[-3.6, g], [-2, -g], [2.4, g], [3.8, -g]] as const) B.cap(u, 2.6, u + p * 0.6, 7.5, 0.6, 0.45, 'b', 0.4);
+    B.e(0, 1.4, 5.2, 2.8, 'b', 0, 1);
+    B.chain([[3.8, 0], [5.4, -3], [6.4, -5]], 1.4, 1, 'b', 0.9);
+    B.e(7.4, -4.6, 2.2, 1.3, 'b', 0.4, 0.7);
+    for (let i = 0; i < 5; i++) B.dl(-4 + i * 1.8, -0.8, -3.4 + i * 1.8, 3.8, 0.55, 'k');
+    B.dl(4.6, -1.6, 5.8, -3.8, 0.5, 'k');
+    for (let i = 0; i < 4; i++) B.tri(4 + i * 0.6, -1 - i * 1.2, 4.8 + i * 0.6, -1.4 - i * 1.2, 4 + i * 0.6, -2.6 - i * 1.2, 'k', 0.2);
+    B.glow(7.6, -5.6, 0.5, 0xfff07a).eye(7.2, -5, 0.55);
+    return B.done();
+  },
   // ================================================================ BOSSES
   lich: (t) => {
     const B = new Build();
