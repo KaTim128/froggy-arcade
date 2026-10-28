@@ -272,6 +272,12 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
   const showPicture = (id: string): void => {
     const g = keep(scene.add.graphics().setDepth(904).setPosition(DEMO_X, DEMO_Y));
     keep(scene.add.rectangle(DEMO_X - 1, DEMO_Y - 1, DEMO_W + 2, DEMO_H + 2, 0x000000, 0).setOrigin(0, 0).setStrokeStyle(1, PANEL_EDGE).setDepth(904.5));
+    // EVERYTHING IN THE PICTURE STAYS IN ITS BOX (user, 28 Oct: Croaked's
+    // frog was out over the edge): drawing and labels both, clipped to it
+    const clip = keep(scene.make.graphics({}, false));
+    clip.fillStyle(0xffffff, 1).fillRect(DEMO_X, DEMO_Y, DEMO_W, DEMO_H);
+    const mask = clip.createGeometryMask();
+    g.setMask(mask);
     const pool: Phaser.GameObjects.BitmapText[] = [];
     const draw = demoFor(id);
     const t0 = scene.time.now;
@@ -283,6 +289,7 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
         let t = pool[used];
         if (!t) {
           t = keep(smallText(scene, 0, 0, '', col).setOrigin(0.5, 0.5).setDepth(905));
+          t.setMask(mask);
           pool.push(t);
         }
         used++;
@@ -316,20 +323,22 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
   };
 
   // ------------------------------------------------------------- THE MACHINE
-  // The picture, what the game is in a line, the best, and the buttons --
-  // nothing the other two pages say.
+  // What the game is in a line, the best, and the buttons -- nothing the
+  // other two pages say.  NO PICTURE HERE (user, 28 Oct): the moving
+  // pictures are HOW TO PLAY's, one a step; this page is the words and PLAY,
+  // in the middle of the card.
+  const MW = 200;
   const machine = (): void => {
     heading.setText(opts.title);
-    showPicture(steps[0]?.demo ?? 'default');
-    const cx = RIGHT_X + RIGHT_W / 2;
-    const pitch = wrapTo(opts.tutorial.pitch ?? opts.tutorial.objective[0] ?? '', Math.floor(RIGHT_W / FONT_ADVANCE)).slice(0, 3);
+    const cx = CX;
+    const pitch = wrapTo(opts.tutorial.pitch ?? opts.tutorial.objective[0] ?? '', Math.floor((MW + 40) / FONT_ADVANCE)).slice(0, 3);
     // (what a win pays is in the bar over the card already: under PLAY goes
     // only what that bar does not say -- that the pocket is short)
     const under = affordable ? '' : `YOU NEED ${opts.cost - opts.balance} MORE`;
     const best = opts.record ?? (opts.keepsRecord ? 'NO BEST YET' : '');
     // the block, measured, then set in the middle of the picture's height
     const h = (best ? 10 : 0) + pitch.length * 9 + 6 + 18 + (under ? 10 : 0) + (opts.onPractice ? 26 : 0) + (free ? 0 : 12);
-    let y = Math.max(CARD.y + 17, Math.round(DEMO_Y + (DEMO_H - h) / 2) + 2);
+    let y = Math.max(CARD.y + 17, Math.round(CARD.y + 12 + (BOTTOM_Y - 12 - CARD.y - 12 - h) / 2));
     if (best) {
       keep(centerSmall(scene, cx, y, best, opts.record ? PALETTE.gold : PALETTE.ash).setDepth(903));
       y += 10;
@@ -339,14 +348,14 @@ export function showTutorial(scene: Phaser.Scene, opts: TutorialCardOpts): Tutor
       y += 9;
     }
     y += 6 + 8;
-    playButton(cx, y, RIGHT_W - 10, 17);
+    playButton(cx, y, MW, 17);
     y += 10;
     if (under) {
       keep(centerSmall(scene, cx, y + 4, under, PALETTE.blood).setDepth(903));
       y += 10;
     }
     if (opts.onPractice) {
-      keep(button(scene, cx, y + 11, 'PRACTICE', practice, { width: RIGHT_W - 10, height: 15, fill: 0x1f4a5a }).setDepth(905));
+      keep(button(scene, cx, y + 11, 'PRACTICE', practice, { width: MW, height: 15, fill: 0x1f4a5a }).setDepth(905));
       keep(centerSmall(scene, cx, y + 23, 'FREE - WINS NOTHING', PALETTE.tealLight).setDepth(903));
       y += 26;
     }
