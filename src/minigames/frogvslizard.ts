@@ -357,6 +357,77 @@ export const frogVsLizard: MinigameModule = {
     }
   },
 
+  // ---- A RELOAD (log #87): both sides -- health, poison, sleep, confusion,
+  // what is left in the stock, the damage dealt -- the rounds won, whose
+  // throw, the wind, and an item in the air, where it was and how fast.  A
+  // round or match already decided goes on the way it was decided.
+  snapshot() {
+    const side = (w: Who) => {
+      const x = sides[w];
+      // (an endless stock is written as -1: JSON has no Infinity)
+      const stock = Object.fromEntries(Object.entries(x.stock).map(([k, n]) => [k, Number.isFinite(n) ? n : -1]));
+      return { hp: x.hp, poison: x.poison, sleep: x.sleep, confused: x.confused, stock, dealt: x.dealt };
+    };
+    return {
+      frog: side('frog'), lizard: side('lizard'), roundsWon: { ...roundsWon }, round, turn, phase, wind, aim, sel, settleMs, windHidden,
+      proj: proj ? { x: proj.x, y: proj.y, vx: proj.vx, vy: proj.vy, item: proj.item.id, from: proj.from, spin: proj.spin } : null,
+    };
+  },
+
+  restore(snap: unknown) {
+    type S = { hp: number; poison: number; sleep: number; confused: number; stock: Record<ItemId, number>; dealt: number };
+    const v = snap as { frog: S; lizard: S; roundsWon: Record<Who, number>; round: number; turn: Who; phase: Phase; wind: number; aim: number; sel: ItemId; settleMs: number; windHidden: boolean; proj: { x: number; y: number; vx: number; vy: number; item: ItemId; from: Who; spin: number } | null };
+    if (!scene0) return;
+    for (const w of ['frog', 'lizard'] as Who[]) {
+      const sv = v[w];
+      Object.assign(sides[w], { hp: sv.hp, poison: sv.poison, sleep: sv.sleep, confused: sv.confused, dealt: sv.dealt });
+      sides[w].stock = Object.fromEntries(Object.entries(sv.stock).map(([k, n]) => [k, n < 0 ? Infinity : n])) as Record<ItemId, number>;
+    }
+    roundsWon = { ...v.roundsWon };
+    round = v.round;
+    turn = v.turn;
+    wind = v.wind;
+    aim = v.aim;
+    sel = v.sel;
+    windHidden = v.windHidden;
+    proj?.body?.destroy();
+    proj = null;
+    refreshHud();
+    if (v.phase === 'over') {
+      phase = 'aim';
+      finish();
+      return;
+    }
+    if (v.phase === 'roundEnd') {
+      // (decided: it is counted again by endRound, so take it back off first)
+      const winner: Who = sides.frog.hp <= 0 ? 'lizard' : 'frog';
+      roundsWon[winner] = Math.max(0, roundsWon[winner] - 1);
+      phase = 'aim';
+      endRound();
+      return;
+    }
+    if (v.phase === 'flight' && v.proj) {
+      const item = ITEMS[v.proj.item];
+      const { body, core } = makeProjectile(scene0, item, v.proj.x, v.proj.y);
+      proj = { ...v.proj, item, body, core, trailT: 0 };
+      phase = 'flight';
+      refreshHud();
+      return;
+    }
+    if (v.phase === 'settle') {
+      phase = 'settle';
+      settleMs = v.settleMs;
+      return;
+    }
+    phase = 'aim';
+    power = 0;
+    charging = false;
+    powerFill?.setSize(6, 0);
+    refreshHud();
+    banner(turn === 'frog' ? 'YOUR THROW' : 'THE LIZARD THROWS', turn === 'frog' ? PALETTE.tealLight : PALETTE.neon);
+    if (turn === 'lizard') lizardTurn();
+  },
+
   destroy() {
     proj?.body?.destroy();
     proj = null;
