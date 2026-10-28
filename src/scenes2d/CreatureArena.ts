@@ -722,7 +722,10 @@ export class CreatureArena extends Phaser.Scene {
     const mx = (k.D.isDown || k.RIGHT.isDown ? 1 : 0) - (k.A.isDown || k.LEFT.isDown ? 1 : 0);
     const my = (k.S.isDown || k.DOWN.isDown ? 1 : 0) - (k.W.isDown || k.UP.isDown ? 1 : 0);
     if (a.kind === 'blink' && (mx || my)) this.fire(this.me, i, mx, my);
-    else this.fire(this.me, i, this.foe.x - this.me.x, this.foe.y - this.me.y);
+    else {
+      const at = this.aimAt();
+      this.fire(this.me, i, at.x - this.me.x, at.y - this.me.y);
+    }
   }
 
   /** What the chosen attack does, in one place, for a few seconds. */
@@ -1745,13 +1748,12 @@ export class CreatureArena extends Phaser.Scene {
         return true;
       }
       case 'mirage_decoy': {
-        this.minions.push({ owner: f, kind: 'decoy', x: f.x, y: f.y, ang: 0, life: 2, hp: 6, cd: 0 });
+        this.decoy(f);
         const to = { x: cx(f.x + ux * a.reach), y: cy(f.y + uy * a.reach) };
         if (!this.props.some((p) => Math.hypot(p.x - to.x, p.y - to.y) < p.r + 6)) {
           f.x = to.x;
           f.y = to.y;
         }
-        this.fx.push({ kind: 'spark', x: f.x, y: f.y, r: 8, t: 0, life: 0.3, col });
         return true;
       }
       case 'updraft':
@@ -1800,7 +1802,10 @@ export class CreatureArena extends Phaser.Scene {
         return true;
       }
       case 'phase':
+        // the Haunter's trick: it slips into the walls, and a double of it
+        // drifts on at them in its place
         f.st.phase = 1.5;
+        this.decoy(f);
         return true;
       case 'soul_siphon':
         f.st.siphon = 3;
@@ -2222,6 +2227,29 @@ export class CreatureArena extends Phaser.Scene {
     }
   }
 
+  /**
+   * A DECOY THAT FOOLS EVERYONE (user, 28 Oct).  It is drawn exactly as its
+   * maker is -- the same body, the same facing, the same health bar over it,
+   * no glow -- and one puff of smoke covers the swap, so neither the
+   * computer nor the player watching can tell which is which.  It walks on
+   * at them as its maker would, while the real one goes its own way; it
+   * pops in a puff when its time is up or it is hit.
+   */
+  private decoy(f: Fighter): void {
+    this.minions.push({ owner: f, kind: 'decoy', x: f.x, y: f.y, ang: f.face, life: 3, hp: 6, cd: 0 });
+    this.fx.push({ kind: 'ring', x: f.x, y: f.y, r: 12 * f.scale, t: 0, life: 0.35, col: 0xd8d8e0 });
+    audio.sfx('throw_whoosh', 0.3);
+  }
+
+  /** Where your auto-aim goes: a live decoy nearer you than the real one takes the shot. */
+  private aimAt(): Fighter | { x: number; y: number } {
+    const fake = this.minions.find((mi) => mi.kind === 'decoy' && mi.owner === this.foe && mi.life > 0);
+    if (!fake) return this.foe;
+    const dReal = Math.hypot(this.foe.x - this.me.x, this.foe.y - this.me.y);
+    const dFake = Math.hypot(fake.x - this.me.x, fake.y - this.me.y);
+    return dFake < dReal ? fake : this.foe;
+  }
+
   /** The things moves brought into the arena, doing what they do. */
   private tickMinions(dt: number): void {
     for (const mi of this.minions) {
@@ -2235,6 +2263,12 @@ export class CreatureArena extends Phaser.Scene {
         mi.y += ((o.y - mi.y) / toO) * sp * dt;
       };
       switch (mi.kind) {
+        case 'decoy':
+          // on at them, at a walk, facing them, the way its maker would
+          if (toO > 30) chase(this.speedOf(mi.owner) * 0.6);
+          mi.ang = o.x >= mi.x ? 1 : -1;
+          if (mi.life <= 0 || mi.hp <= 0) this.fx.push({ kind: 'ring', x: mi.x, y: mi.y, r: 10, t: 0, life: 0.3, col: 0xd8d8e0 });
+          break;
         case 'drone':
           // round and round its owner, stinging what it brushes
           mi.ang += 3.2 * dt;
@@ -3720,10 +3754,16 @@ export class CreatureArena extends Phaser.Scene {
         case 'crow':
           g.fillStyle(0x1a1024, 1).fillTriangle(mi.x - 3, mi.y, mi.x + 3, mi.y, mi.x, mi.y - 2 + Math.sin(t * 20) * 1.5);
           break;
-        case 'decoy':
-          drawCreature(g, mi.owner.c, mi.x, mi.y, mi.owner.scale, mi.owner.face, t);
-          g.fillStyle(0xffffff, 0.25).fillCircle(mi.x, mi.y, 7 * mi.owner.scale);
+        case 'decoy': {
+          // exactly as its maker looks: body, facing, and the bar over its head
+          const o = mi.owner;
+          drawCreature(g, o.c, mi.x, mi.y, o.scale, mi.ang >= 0 ? 1 : -1, t);
+          const w = 18 * o.scale;
+          const by = Math.max(ARENA.y + 1, mi.y - 12 * o.scale - 4);
+          g.fillStyle(0x000000, 0.6).fillRect(mi.x - w / 2, by, w, 2);
+          g.fillStyle(o === this.me ? 0x6ae86a : 0xff5a5a, 1).fillRect(mi.x - w / 2, by, w * (o.hp / o.max), 2);
           break;
+        }
         case 'husk':
           g.fillStyle(0x3a4a3a, 1).fillEllipse(mi.x, mi.y, 8, 11);
           g.fillStyle(0x8affc0, 1).fillCircle(mi.x - 1.5, mi.y - 3, 0.8).fillCircle(mi.x + 1.5, mi.y - 3, 0.8);
