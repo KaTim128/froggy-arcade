@@ -197,6 +197,12 @@ const ICONS: Record<string, Draw> = {
     line(g, x + 4 * k, y - 4 * k, x - 4 * k, y + 4 * k, hi, 1.2 * k);
     box(g, x, y, 2 * k, 2 * k, ink);
   },
+  m_pads: (g, x, y, k, ink, hi) => {
+    // a lily pad with its notch, and a frog on it
+    disc(g, x, y + 1.5 * k, 4 * k, ink);
+    tri(g, x, y + 1.5 * k, x + 4 * k, y - 0.5 * k, x + 4 * k, y + 2.5 * k, 0x000000);
+    disc(g, x - 1 * k, y + 0.5 * k, 1.6 * k, hi);
+  },
   m_croak: (g, x, y, k, ink, hi) => {
     // a gaping frog closing on a tadpole
     disc(g, x - 1.5 * k, y, 4 * k, ink);

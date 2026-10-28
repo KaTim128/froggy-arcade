@@ -897,6 +897,54 @@ export const DEMOS: Record<string, Demo> = {
     lbl(94, 72, 'OR RISK IT', RED);
   },
 
+  // ---------- PAD BATTLES
+  'pads.grid': (g, t, lbl) => {
+    g.fillStyle(0x123848, 1).fillRect(0, 0, DEMO_W, DEMO_H);
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 5; c++) g.fillStyle(0x3e9a3e, 1).fillCircle(22 + c * 20, 30 + r * 18, 7);
+    const cols = [GREEN, RED, 0x3a7ad8, GOLD];
+    cols.forEach((col, i) => g.fillStyle(col, 1).fillCircle(22 + [0, 4, 4, 0][i] * 20, 30 + [0, 0, 2, 2][i] * 18 - Math.abs(Math.sin(t * 5 + i)) * 2, 3.5));
+    lbl(DEMO_W / 2, 10, 'LAST FROG STANDING', CREAM);
+  },
+  'pads.collapse': (g, t, lbl) => {
+    g.fillStyle(0x123848, 1).fillRect(0, 0, DEMO_W, DEMO_H);
+    const k = ph(t, 2.6);
+    for (let c = 0; c < 3; c++) {
+      const going = c === 1;
+      if (going && k > 0.75) continue;
+      const col = going && k > 0.2 ? (Math.sin(t * 30) > 0 ? 0xff7a3a : 0x3e9a3e) : 0x3e9a3e;
+      g.fillStyle(col, 1).fillCircle(32 + c * 30 + (going && k > 0.2 ? Math.sin(t * 60) : 0), 46, 10);
+    }
+    lbl(DEMO_W / 2, 12, 'FLASH, SHAKE, CRACK...', CREAM);
+    lbl(DEMO_W / 2, 76, '...AND SINK', RED);
+  },
+  'pads.tongue': (g, t, lbl) => {
+    g.fillStyle(0x123848, 1).fillRect(0, 0, DEMO_W, DEMO_H);
+    g.fillStyle(0x3e9a3e, 1).fillCircle(40, 46, 12).fillCircle(84, 46, 12);
+    const k = ph(t, 1.6);
+    const len = Math.sin(Math.min(1, k * 2) * Math.PI) * 34;
+    g.fillStyle(GREEN, 1).fillCircle(36, 44, 5);
+    g.fillStyle(0xff5a8a, 1).fillRect(41, 43, len, 2);
+    g.fillStyle(RED, 1).fillCircle(80 + (k > 0.25 ? Math.min(14, (k - 0.25) * 40) : 0), 44, 5);
+    lbl(DEMO_W / 2, 12, 'TONGUE: KNOCK IT BACK', CREAM);
+  },
+  'pads.bump': (g, t, lbl) => {
+    g.fillStyle(0x123848, 1).fillRect(0, 0, DEMO_W, DEMO_H);
+    g.fillStyle(0x3e9a3e, 1).fillCircle(46, 46, 14).fillCircle(78, 46, 10);
+    const k = ph(t, 1.8);
+    g.fillStyle(GREEN, 1).fillCircle(36 + Math.min(1, k * 3) * 22, 44, 5);
+    const fly = k > 0.33 ? (k - 0.33) * 70 : 0;
+    g.fillStyle(RED, 1).fillCircle(66 + fly, 44 + (fly > 26 ? (fly - 26) * 0.6 : 0), 5);
+    lbl(DEMO_W / 2, 12, 'BUMP: INTO THE WATER', CREAM);
+  },
+  'pads.jump': (g, t, lbl) => {
+    g.fillStyle(0x123848, 1).fillRect(0, 0, DEMO_W, DEMO_H);
+    g.fillStyle(0x3e9a3e, 1).fillCircle(30, 52, 11).fillCircle(94, 52, 11);
+    const k = ph(t, 2);
+    const x = 30 + Math.min(1, k * 1.6) * 64;
+    g.fillStyle(GREEN, 1).fillCircle(x, 50 - Math.sin(Math.min(1, k * 1.6) * Math.PI) * 20, 5);
+    lbl(DEMO_W / 2, 12, 'JUMP A GAP OF ONE PAD', CREAM);
+  },
+
   // ---------- CROAKED
   'croak.pick': (g, t, lbl) => {
     g.fillStyle(0x0c1820, 1).fillRect(0, 0, DEMO_W, DEMO_H);
