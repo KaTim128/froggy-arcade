@@ -2141,6 +2141,63 @@ export const frogRace: MinigameModule = {
     }
   },
 
+  // ---- A RELOAD (log #87): the same field on the same track -- every frog's
+  // form, luck and furniture, and how far along it is -- the bet and the
+  // tickets, the card of what happens to whom, the bird, the fly and the
+  // jetpack, the race clock.  A race already decided pays the way it was
+  // decided.
+  snapshot() {
+    return {
+      phase, pick, tickets, winner, clock, raceT, countdown, finaleOn, callT,
+      card: card.map((c) => ({ ...c })), bird: { ...bird }, fly: { ...fly }, jet: { ...jet },
+      racers: racers.map(({ body: _b, ...r }) => (void _b, JSON.parse(JSON.stringify(r)))),
+    };
+  },
+
+  restore(snap: unknown) {
+    const v = snap as { phase: Phase; pick: number; tickets: number; winner: number; clock: number; raceT: number; countdown: number; finaleOn: boolean; callT: number; card: Booking[]; bird: Bird; fly: Fly; jet: Jet; racers: Run[] };
+    if (!sceneRef) return;
+    for (const r of racers) r.body.destroy();
+    racers = v.racers.map((r) => ({ ...r, body: makeFrog(sceneRef!, RUNNERS[r.i]) }));
+    racers.sort((a, b) => a.i - b.i);
+    drawFurniture(sceneRef);
+    card = v.card.map((c) => ({ ...c }));
+    bird = { ...v.bird };
+    fly = { ...v.fly };
+    jet = { ...v.jet };
+    finaleOn = v.finaleOn;
+    callT = v.callT;
+    pick = v.pick;
+    winner = v.winner;
+    clock = v.clock;
+    raceT = v.raceT;
+    countdown = v.countdown;
+    tickets = v.tickets;
+    if (v.phase === 'betting') {
+      phase = 'betting';
+      setTickets(tickets);
+      setGoEnabled(pick >= 0);
+      refresh();
+      return;
+    }
+    // the betting is done with: its buttons go, as they do at the gun
+    goBtn?.box.setVisible(false).disableInteractive();
+    goBtn?.label.setVisible(false);
+    for (const b of ticketBtns) {
+      b.box.setVisible(false).disableInteractive();
+      b.label.setVisible(false);
+    }
+    ticketLabel?.setVisible(false);
+    sub?.setText(`${tickets} ON ${RUNNERS[pick].name}`);
+    refresh();
+    if (v.phase === 'result') {
+      phase = 'racing';
+      settle();
+      return;
+    }
+    phase = v.phase;
+  },
+
   destroy() {
     racers = [];
     rows = [];
@@ -3027,6 +3084,46 @@ function simulate(
   return settleField(runs);
 }
 
+/** The potholes and puddles as drawn, so a reload can draw the same track again (log #87). */
+let furniture: Phaser.GameObjects.GameObject[] = [];
+
+function drawFurniture(scene: Phaser.Scene): void {
+  for (const o of furniture) o.destroy();
+  furniture = [];
+  const keepF = <T extends Phaser.GameObjects.GameObject>(o: T): T => (furniture.push(o), o);
+  // The potholes, dug where the model says they are.  Drawn UNDER the frogs
+  // and over the lane, so a frog in one is visibly down in it.  There is one a
+  // lane now: they were furniture, and the track is about the frogs.
+  for (const r of racers) {
+    const y = LANE_T + r.i * LANE_H + LANE_H / 2 + 1;
+    for (const h of r.holes) {
+      const hx = START_X + h * DIST;
+      keepF(scene.add.ellipse(hx, y + 3, 13, 6, 0x0c1f14).setDepth(6));
+      keepF(scene.add.ellipse(hx, y + 2, 12, 5, 0x05100a).setDepth(7));
+      keepF(scene.add.ellipse(hx - 1, y + 4, 8, 2, 0x25452c).setDepth(8).setAlpha(0.7));
+      // a lip of turf on the near side, so it reads as a hole and not a stain
+      keepF(scene.add.ellipse(hx + 1, y + 5, 12, 2, 0x2f6b3a).setDepth(8).setAlpha(0.5));
+    }
+    // ---- AND THE PUDDLES, which a frog can see coming.
+    //
+    // Water sitting in a dip in the lane: a dark rim so it reads against
+    // grass, open water inside it, a sky-coloured highlight because water
+    // reflects, and a couple of reeds at the edge.  Same depths as the
+    // potholes, so a frog is drawn standing IN one rather than on top of it.
+    for (const q of r.puddles) {
+      const px = START_X + q * DIST;
+      keepF(scene.add.ellipse(px, y + 3, 22, 9, 0x1d4a3a).setDepth(6).setAlpha(0.9));
+      keepF(scene.add.ellipse(px, y + 3, 20, 7, 0x2f7f9e).setDepth(7));
+      keepF(scene.add.ellipse(px, y + 2.5, 17, 5, 0x49a6c4).setDepth(7));
+      keepF(scene.add.ellipse(px - 3, y + 2, 7, 2, 0xbfe8f2).setDepth(8).setAlpha(0.55));
+      keepF(scene.add.ellipse(px + 5, y + 4, 4, 1.4, 0xbfe8f2).setDepth(8).setAlpha(0.35));
+      keepF(scene.add.rectangle(px - 9, y + 1, 1, 4, 0x3f7a46).setDepth(8).setAlpha(0.8));
+      keepF(scene.add.rectangle(px + 9, y + 2, 1, 3, 0x3f7a46).setDepth(8).setAlpha(0.8));
+    }
+  }
+
+}
+
 function draft(scene: Phaser.Scene): void {
   const field = makeField();
   racers = toRuns(field).map((r) => ({ ...r, body: makeFrog(scene, RUNNERS[r.i]) }));
@@ -3043,36 +3140,7 @@ function draft(scene: Phaser.Scene): void {
   card = bookField();
   fxWas.clear();
 
-  // The potholes, dug where the model says they are.  Drawn UNDER the frogs
-  // and over the lane, so a frog in one is visibly down in it.  There is one a
-  // lane now: they were furniture, and the track is about the frogs.
-  for (const r of racers) {
-    const y = LANE_T + r.i * LANE_H + LANE_H / 2 + 1;
-    for (const h of r.holes) {
-      const hx = START_X + h * DIST;
-      scene.add.ellipse(hx, y + 3, 13, 6, 0x0c1f14).setDepth(6);
-      scene.add.ellipse(hx, y + 2, 12, 5, 0x05100a).setDepth(7);
-      scene.add.ellipse(hx - 1, y + 4, 8, 2, 0x25452c).setDepth(8).setAlpha(0.7);
-      // a lip of turf on the near side, so it reads as a hole and not a stain
-      scene.add.ellipse(hx + 1, y + 5, 12, 2, 0x2f6b3a).setDepth(8).setAlpha(0.5);
-    }
-    // ---- AND THE PUDDLES, which a frog can see coming.
-    //
-    // Water sitting in a dip in the lane: a dark rim so it reads against
-    // grass, open water inside it, a sky-coloured highlight because water
-    // reflects, and a couple of reeds at the edge.  Same depths as the
-    // potholes, so a frog is drawn standing IN one rather than on top of it.
-    for (const q of r.puddles) {
-      const px = START_X + q * DIST;
-      scene.add.ellipse(px, y + 3, 22, 9, 0x1d4a3a).setDepth(6).setAlpha(0.9);
-      scene.add.ellipse(px, y + 3, 20, 7, 0x2f7f9e).setDepth(7);
-      scene.add.ellipse(px, y + 2.5, 17, 5, 0x49a6c4).setDepth(7);
-      scene.add.ellipse(px - 3, y + 2, 7, 2, 0xbfe8f2).setDepth(8).setAlpha(0.55);
-      scene.add.ellipse(px + 5, y + 4, 4, 1.4, 0xbfe8f2).setDepth(8).setAlpha(0.35);
-      scene.add.rectangle(px - 9, y + 1, 1, 4, 0x3f7a46).setDepth(8).setAlpha(0.8);
-      scene.add.rectangle(px + 9, y + 2, 1, 3, 0x3f7a46).setDepth(8).setAlpha(0.8);
-    }
-  }
+  drawFurniture(scene);
 
   racers.forEach((r) => {
     const y = LANE_T + r.i * LANE_H;

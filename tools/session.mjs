@@ -127,6 +127,13 @@ try {
   console.log(`  (cabinets that keep a snapshot: ${snapGames.join(', ') || 'none'})`);
   // (what to do in each before the reload, to catch it mid-play rather than at its start)
   const ACT = {
+    // (a frog backed, and the race under way)
+    frograce: async () => {
+      await page.keyboard.press('Digit1');
+      await sleep(200);
+      await page.keyboard.press('Space');
+      await sleep(3500);
+    },
     // (an item in the air)
     frogvslizard: async () => {
       await page.evaluate(() => window.__fvl.autoThrow('rock'));
