@@ -775,6 +775,74 @@ export const grudge: MinigameModule = {
     if (p1.hp <= 0 || p2.hp <= 0) endRound(p2.hp <= 0);
   },
 
+  // ---- A RELOAD (log #87): the same opponent, both fighters where they
+  // stood -- health, the move they were in and how far into it, the jump,
+  // the stun, the special's cooldown -- the rounds won, the round clock and
+  // the fighting time.  Between rounds, the next round starts; a match
+  // already decided ends the way it was decided.
+  snapshot() {
+    const plain = (f: Fighter | null) => {
+      if (!f) return null;
+      const { art: _art, foe, ...rest } = f;
+      void _art;
+      return { ...rest, foe: foe?.key ?? null };
+    };
+    return {
+      p1: plain(p1), p2: plain(p2), wins1, wins2, roundMs, roundOver, over, fightMs,
+      aiTimer, aiBeat, aiWhiffOpening, aiSway, aiCounter, sceneClock, bagHits,
+    };
+  },
+
+  restore(snap: unknown) {
+    type F = Omit<Fighter, 'art' | 'foe'> & { foe: string | null };
+    const v = snap as { p1: F | null; p2: F | null; wins1: number; wins2: number; roundMs: number; roundOver: boolean; over: boolean; fightMs: number; aiTimer: number; aiBeat: number; aiWhiffOpening: number; aiSway: number; aiCounter: number; sceneClock: number; bagHits: number };
+    if (!sceneRef || !p1 || !p2) return;
+    // the opponent that was drawn, not a new one
+    if (!practicing && v.p2?.foe && p2.foe?.key !== v.p2.foe) {
+      const def = FOES.find((f) => f.key === v.p2!.foe);
+      if (def) {
+        p2.art.root.destroy();
+        p2.art.shadow.destroy();
+        p2 = makeFighter(sceneRef, p2.x, def, -1);
+        nameFoe();
+      }
+    }
+    wins1 = v.wins1;
+    wins2 = v.wins2;
+    fightMs = v.fightMs;
+    bagHits = v.bagHits;
+    if (v.over) {
+      over = true;
+      roundOver = true;
+      const won = wins1 >= ROUNDS_TO_WIN;
+      sceneRef.time.delayedCall(600, () => (won ? apiRef?.win() : apiRef?.lose()));
+      return;
+    }
+    if (v.roundOver) {
+      startRound();
+      return;
+    }
+    const { foe: _a, ...f1 } = v.p1!;
+    const { foe: _b, ...f2 } = v.p2!;
+    void _a;
+    void _b;
+    Object.assign(p1, f1);
+    Object.assign(p2, f2);
+    roundMs = v.roundMs;
+    roundOver = false;
+    aiTimer = v.aiTimer;
+    aiBeat = v.aiBeat;
+    aiWhiffOpening = v.aiWhiffOpening;
+    aiSway = v.aiSway;
+    aiCounter = v.aiCounter;
+    sceneClock = v.sceneClock;
+    introName?.setText('');
+    introNote?.setText('');
+    announce?.setText('');
+    roundText?.setText(practicing ? `PUNCHING BAG - HITS ${bagHits}` : `ROUND ${wins1 + wins2 + 1}   ${wins1}-${wins2}`);
+    timerText?.setText(`${Math.ceil(roundMs / 1000)}`);
+  },
+
   destroy() {
     sceneClock = 0;
     aiFrozen = false;

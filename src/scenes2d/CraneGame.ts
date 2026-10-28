@@ -56,7 +56,7 @@ import { touchControls } from '../ui/touchControls';
 import { showTutorial, type TutorialCard } from '../ui/tutorialCard';
 import { deviceControls, deviceObjective, type ControlRow } from '../ui/controlsList';
 import { touchLayoutFor } from '../game/touchLayouts';
-import { store, type SavedToy } from '../core/state';
+import { store, type GameId, type SavedToy } from '../core/state';
 
 /**
  * How to play, on the same card every cabinet in the back rooms opens on.
@@ -352,8 +352,12 @@ export class CraneGame extends Phaser.Scene {
 
   private howTo: TutorialCard | null = null;
 
-  init(data: { kind?: CraneKind } = {}): void {
+  /** Back after a reload with a go already paid for (core/session): no card, no coin. */
+  private prepaid = false;
+
+  init(data: { kind?: CraneKind; prepaid?: boolean } = {}): void {
     this.kind = data.kind === 'oddity' ? 'oddity' : 'plush';
+    this.prepaid = data.prepaid === true;
   }
 
   create(): void {
@@ -429,7 +433,12 @@ export class CraneGame extends Phaser.Scene {
     // dropped the claw and grabbed)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => touchControls.relabel('SPACE', 'SIDE VIEW'));
 
-    this.showHowTo();
+    // A reload in the middle of a paid go: the go again, from the start,
+    // already paid for (and paused by core/pause until RESUME).
+    if (this.prepaid) {
+      this.prepaid = false;
+      this.startGo(true);
+    } else this.showHowTo();
     // (the touch layout is put up after create, which shows every button:
     // set them again once it is there)
     this.time.delayedCall(60, () => this.syncButtons());
@@ -953,17 +962,21 @@ export class CraneGame extends Phaser.Scene {
     this.startGo();
   }
 
-  /** Take the tokens for a go. */
-  private startGo(): void {
+  /** Take the tokens for a go (or not, when a reload already took them: `paid`). */
+  private startGo(paid = false): void {
     if (pocketsFull()) {
+      if (paid) ledger.credit(CRANE_COST[this.kind], 'game.refund');
       this.showResult(FULL_LINE, PALETTE.ember, false);
       return;
     }
-    if (!ledger.debit(CRANE_COST[this.kind], 'crane')) {
+    if (!paid && !ledger.debit(CRANE_COST[this.kind], 'crane')) {
       this.showResult('NOT ENOUGH TOKENS', PALETTE.ember, false);
       return;
     }
-    audio.sfx('coin_drop');
+    if (!paid) audio.sfx('coin_drop');
+    // ---- THE GO, IN THE SAVE (log #87): a reload before it is over comes
+    // back to this machine with it still paid for.
+    store.setGame({ id: 'crane' as GameId, from: 'ArcadeLounge', stake: CRANE_COST[this.kind], paid: 0, practicing: false, scene: 'CraneGame', data: { kind: this.kind }, at: Date.now() }, true);
     this.phase = 'aim';
     // shut while it is being lined up: it opens when it is sent down
     this.drawClaw(false);
@@ -1540,6 +1553,8 @@ export class CraneGame extends Phaser.Scene {
 
   private showResult(line: string, colour: number, played: boolean, itemId?: string, title?: string): void {
     this.phase = 'result';
+    // (the go is over, won or lost: nothing to come back to)
+    if (store.get().game?.scene === 'CraneGame') store.setGame(null, true);
     this.result?.destroy();
     const c = this.add.container(0, 0).setDepth(90);
     // the result in colour, under the panel (and gone with it): gold for a
@@ -1757,6 +1772,7 @@ export class CraneGame extends Phaser.Scene {
 
   private leave(force = false): void {
     if (!force && this.phase !== 'aim' && this.phase !== 'result') return;
+    if (store.get().game?.scene === 'CraneGame') store.setGame(null, true);
     fadeToScene(this, 'ArcadeLounge', { atProp: this.kind });
   }
 }

@@ -254,6 +254,8 @@ let curve = 0;
 let hook = 0;
 /** The oil on the lane right now: one pattern, laid per round. */
 let oil: Oil[] = [];
+/** The pattern on the lane now, as laid: what a reload lays again (log #87). */
+let oilSpec: OilSpec[] = [];
 
 /**
  * THE GARDEN, AND THE ONE RULE ABOUT IT.
@@ -743,6 +745,54 @@ export const bowling: MinigameModule = {
     }
   },
 
+  // ---- A RELOAD (log #87): the round, the ball, whose turn, both scores,
+  // the oil as it was laid, every pin (standing, down, or swept), the ball
+  // where it was -- rolling, it rolls on -- and the shot being lined up.
+  snapshot() {
+    return {
+      round, ballNo, turn, scores: { ...scores }, standingBefore, settleMs, lastRoll, oil: oilSpec.map((o) => ({ ...o })),
+      pins: pins.map((p) => ({ x: p.x, y: p.y, vx: p.vx, vy: p.vy, down: p.down, gone: p.gone })),
+      ball: { ...ball }, gutter, aim, power, charging, chargeDir, curve, hook, stickMode,
+    };
+  },
+
+  restore(snap: unknown) {
+    type P = { x: number; y: number; vx: number; vy: number; down: boolean; gone: boolean };
+    const v = snap as {
+      round: number; ballNo: number; turn: Turn; scores: typeof scores; standingBefore: number; settleMs: number; lastRoll: typeof lastRoll; oil: OilSpec[];
+      pins: P[]; ball: typeof ball; gutter: number; aim: number; power: number; charging: boolean; chargeDir: number; curve: number; hook: number; stickMode: typeof stickMode;
+    };
+    round = v.round;
+    ballNo = v.ballNo;
+    turn = v.turn;
+    scores = { ...v.scores };
+    standingBefore = v.standingBefore;
+    settleMs = v.settleMs;
+    lastRoll = v.lastRoll;
+    layOil(v.oil);
+    rack();
+    v.pins.forEach((sv, i) => {
+      const p = pins[i];
+      if (!p) return;
+      Object.assign(p, sv);
+      p.body.setPosition(p.x, p.y).setVisible(!p.gone);
+    });
+    ball = { ...v.ball };
+    gutter = v.gutter;
+    // (gone off the end, or settling: the ball is out of sight while the pins fall)
+    ballBody?.setPosition(ball.x, ball.y).setVisible(ball.rolling || settleMs <= 0);
+    aim = v.aim;
+    power = v.power;
+    charging = v.charging;
+    chargeDir = v.chargeDir;
+    curve = v.curve;
+    hook = v.hook;
+    stickMode = v.stickMode;
+    refreshHud();
+    // (his ball was still in his hand: he throws it)
+    if (turn === 'cpu' && !ball.rolling && settleMs <= 0) cpuThrow();
+  },
+
   destroy() {
     pins = [];
     oil = [];
@@ -1051,6 +1101,7 @@ function resetBall(): void {
  */
 function layOil(spec: OilSpec[] = rollOil()): void {
   if (!scene0) return;
+  oilSpec = spec.map((o) => ({ ...o }));
   for (const o of oil) for (const part of o.parts) part.destroy();
   oil = [];
   for (const s of spec) {

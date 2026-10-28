@@ -7193,6 +7193,8 @@ export function rewardFor(_n: number): number {
  */
 const PRIZE = 25;
 let phase: Phase = 'title';
+/** How the last fight went: a reload on its result goes on to the right screen (log #87). */
+let lastWon = false;
 /** The one latch that stops a result being reported twice.  See `finish`. */
 let ended = false;
 
@@ -8847,6 +8849,7 @@ function stepFight(real: number): void {
  */
 function finishFight(won: boolean): void {
   phase = 'over';
+  lastWon = won;
   for (const b of buttons) b.destroy();
   buttons = [];
 
@@ -9346,6 +9349,47 @@ export const frogsterMash: MinigameModule = {
       return;
     }
       if (phase === 'fight' && !frozen) stepFight(dt);
+  },
+
+  // ---- A RELOAD (log #87), round by round: the bank, the round, and the kit
+  // opened so far, piece for piece as it was rolled.  Mid-chests, the next
+  // chest still to open is offered again; mid-fight, the round is fought again
+  // from the bell with the same kit (a fresh lizard, as every round has); a
+  // round just won comes back to TAKE or CONTINUE, a round lost ends as lost.
+  snapshot() {
+    const plain = (p: Piece | undefined) => p && { ...p, weapon: p.weapon?.key, mat: p.mat?.key };
+    return { phase, round, bank, stage, lastWon, picked: Object.fromEntries(Object.entries(picked).map(([k, p]) => [k, plain(p as Piece)])) };
+  },
+
+  restore(snap: unknown) {
+    type P = Omit<Piece, 'weapon' | 'mat'> & { weapon?: string; mat?: string };
+    const v = snap as { phase: Phase; round: number; bank: number; stage: number; lastWon: boolean; picked: Record<string, P> };
+    picked = Object.fromEntries(
+      Object.entries(v.picked).map(([k, p]) => [k, { ...p, weapon: WEAPONS.find((w) => w.key === p.weapon), mat: MATERIALS.find((m) => m.key === p.mat) } as Piece]),
+    ) as Partial<Kit>;
+    round = v.round;
+    bank = v.bank;
+    lastWon = v.lastWon;
+    const allPicked = ORDER.every((sl) => picked[sl]);
+    if (v.phase === 'banked' || (v.phase === 'over' && v.lastWon)) {
+      startRound();
+      phase = 'over';
+      showBanked();
+      return;
+    }
+    if (v.phase === 'over') {
+      phase = 'over';
+      finish(false);
+      return;
+    }
+    if (v.phase === 'entry' || v.phase === 'fight' || allPicked) {
+      startRound();
+      return;
+    }
+    if (v.phase === 'title' && v.stage === 0 && !Object.keys(picked).length) return;
+    // the first chest not yet opened
+    const next = ORDER.findIndex((sl) => !picked[sl]);
+    startStage(next < 0 ? v.stage : next);
   },
 
   destroy() {

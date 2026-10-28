@@ -559,6 +559,8 @@ interface Car extends Mover {
   /** True while this change is aimed at the player's line. */
   hunting: boolean;
   lamps: Phaser.GameObjects.Rectangle[];
+  /** Its paint, so a reload can draw the same car again (log #87). */
+  colour: number;
 }
 
 /** A chaser.  It carries what it thinks it knows and how hurt it is. */
@@ -1052,6 +1054,7 @@ export const carChase: MinigameModule = {
           const x = LANES[idx];
           const body = carSprite(scene0, x, y, PALETTE.ember, false);
           traffic.push({
+            colour: PALETTE.ember,
             id: nextCarId++,
             x,
             y,
@@ -1706,6 +1709,80 @@ export const carChase: MinigameModule = {
     }
   },
 
+  // ---- A RELOAD (log #87): the run as it stood -- your car, the road's
+  // speed, the clock, the bag, the peak and the bar, the damage, the heat --
+  // and what was on the road with you: the traffic (each car's lane, paint,
+  // speed and indicator), the police and how stunned they were, the concrete
+  // and the cash.  The short-lived things -- a spike strip, a pickup, someone
+  // crossing, the smoke -- are cleared, and come along again as they do.
+  snapshot() {
+    const mv = (m: Mover) => ({ x: m.x, y: m.y, own: m.own });
+    return {
+      px, py, speed, elapsed, collected, peak, earned, potholeHits, brokenMs, joltMs, spinMs, spinDir, respiteMs, heatShown,
+      trafficTimer, policeTimer, trapTimer, cashTimer, jarTimer, barrierTimer, pedTimer, lastJarLane, nextCarId,
+      traffic: traffic.map((c) => ({ ...mv(c), id: c.id, lane: c.lane, from: c.from, signal: c.signal, signalMs: c.signalMs, blinks: c.blinks, warn: c.warn, move: c.move, think: c.think, cruise: c.cruise, want: c.want, hunting: c.hunting, colour: c.colour })),
+      police: police.map((p) => ({ ...mv(p), aim: p.aim, react: p.react, stun: p.stun })),
+      barriers: barriers.map((b) => ({ y: b.y, lane: b.lane })),
+      cash: cash.map((c) => ({ x: c.x, y: c.y })),
+    };
+  },
+
+  restore(snap: unknown) {
+    type M = { x: number; y: number; own: number };
+    type C = M & Omit<Car, 'x' | 'y' | 'own' | 'body' | 'lamps'>;
+    type P = M & { aim: number; react: number; stun: number };
+    const v = snap as Record<string, number | boolean> & { traffic: C[]; police: P[]; barriers: Array<{ y: number; lane: number }>; cash: Array<{ x: number; y: number }> };
+    if (!scene0) return;
+    // the road cleared, then put back
+    for (const list of [traffic, police, traps, barriers, peds] as Array<Array<{ body: Phaser.GameObjects.Container }>>) for (const o of list) o.body.destroy();
+    for (const o of [...cash, ...pickups, ...drops]) o.body.destroy();
+    for (const o of smoke) o.body.destroy();
+    traffic = [];
+    police = [];
+    traps = [];
+    barriers = [];
+    peds = [];
+    cash = [];
+    pickups = [];
+    drops = [];
+    smoke = [];
+    px = v.px as number;
+    py = v.py as number;
+    speed = v.speed as number;
+    elapsed = v.elapsed as number;
+    collected = v.collected as number;
+    peak = v.peak as number;
+    earned = v.earned as boolean;
+    potholeHits = v.potholeHits as number;
+    brokenMs = v.brokenMs as number;
+    joltMs = v.joltMs as number;
+    spinMs = v.spinMs as number;
+    spinDir = v.spinDir as number;
+    respiteMs = v.respiteMs as number;
+    heatShown = v.heatShown as number;
+    trafficTimer = v.trafficTimer as number;
+    policeTimer = v.policeTimer as number;
+    trapTimer = v.trapTimer as number;
+    cashTimer = v.cashTimer as number;
+    jarTimer = v.jarTimer as number;
+    barrierTimer = v.barrierTimer as number;
+    pedTimer = v.pedTimer as number;
+    lastJarLane = v.lastJarLane as number;
+    nextCarId = v.nextCarId as number;
+    for (const c of v.traffic) {
+      const body = carSprite(scene0, c.x, c.y, c.colour, false);
+      traffic.push({ ...c, body, lamps: body.getData('lamps') as Phaser.GameObjects.Rectangle[] });
+    }
+    for (const p of v.police) {
+      const body = carSprite(scene0, p.x, p.y, PALETTE.bone, true);
+      police.push({ ...p, body });
+    }
+    for (const b of v.barriers) spawnBarrier([b.lane], b.y);
+    for (const c of v.cash) cash.push({ x: c.x, y: c.y, body: cashBundle(scene0, c.x, c.y) });
+    player?.setPosition(px, py);
+    refreshHud();
+  },
+
   destroy() {
     traffic = [];
     police = [];
@@ -2065,8 +2142,10 @@ function spawnTraffic(): void {
   // Amber is gone from the paints: it is the indicator's colour, and a car
   // the same colour as its own indicator cannot announce anything.
   const colours = [PALETTE.ember, PALETTE.neon, PALETTE.violet, PALETTE.bone, PALETTE.tealLight];
-  const body = carSprite(scene0, lane, TOP - CAR_H, colours[Phaser.Math.Between(0, colours.length - 1)], false);
+  const colour = colours[Phaser.Math.Between(0, colours.length - 1)];
+  const body = carSprite(scene0, lane, TOP - CAR_H, colour, false);
   traffic.push({
+    colour,
     id: nextCarId++,
     x: lane,
     y: TOP - CAR_H,

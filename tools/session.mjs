@@ -68,6 +68,8 @@ const reload = async () => {
 const playCabinet = async (id) => {
   await page.evaluate((id) => {
     const f = window.__froggy;
+    // (enough to pay for it: twenty cabinets in a row run a pocket dry)
+    if (f.state().tokens < 60) f.setTokens(100);
     f.patch({ gamesPlayed: { ...f.state().gamesPlayed, [id]: 3 } });
     const g = f.game();
     for (const s of g.scene.getScenes(true)) s.scene.stop();
@@ -127,6 +129,29 @@ try {
   console.log(`  (cabinets that keep a snapshot: ${snapGames.join(', ') || 'none'})`);
   // (what to do in each before the reload, to catch it mid-play rather than at its start)
   const ACT = {
+    // (a frog backed, and the race under way)
+    frograce: async () => {
+      await page.keyboard.press('Digit1');
+      await sleep(200);
+      await page.keyboard.press('Space');
+      await sleep(3500);
+    },
+    // (an item in the air)
+    frogvslizard: async () => {
+      await page.evaluate(() => window.__fvl.autoThrow('rock'));
+      await sleep(300);
+    },
+    // (into the fight, a strike thrown)
+    grudge: async () => {
+      await sleep(1500);
+      await page.evaluate(() => window.__grudge.press('high'));
+      await sleep(120);
+    },
+    // (a ball rolling down the lane)
+    bowling: async () => {
+      await page.evaluate(() => window.__bowl.throw(0, 0.8));
+      await sleep(400);
+    },
     // (a shot in flight)
     bogball: async () => {
       await page.evaluate(() => window.__bog.shoot(0, -0.4, 0.8));
@@ -148,9 +173,18 @@ try {
     },
   };
   for (const id of list) {
-    await playCabinet(id);
-    await sleep(2500);
-    await ACT[id]?.();
+    // (a go that ended on its own before the reload -- a crash in the first
+    // seconds of a chase -- is not what is being tested: play it again)
+    for (let tryNo = 0; tryNo < 3; tryNo++) {
+      await playCabinet(id);
+      await sleep(2500);
+      await ACT[id]?.();
+      const live = await page.evaluate(() => {
+        const g = window.__froggy.game().scene.getScene('Minigame');
+        return g.started && !g.settled && !!g.mod;
+      });
+      if (live) break;
+    }
     // the snapshot the save holds now, and the cabinet's own view of itself
     // (held still first, so what is saved on the way out is this very moment)
     const before = await page.evaluate(() => {
@@ -161,7 +195,11 @@ try {
     const tb = await tokens();
     await reload();
     await until(() => window.__pause?.paused() === 'Minigame', 12000);
-    const again = await page.evaluate(() => JSON.stringify(window.__froggy.game().scene.getScene('Minigame').mod.snapshot()));
+    const again = await page.evaluate(() => {
+      const g = window.__froggy.game().scene.getScene('Minigame');
+      if (!g.mod) return `(no game: ${JSON.stringify({ scenes: window.__froggy.activeScenes(), settled: g.settled, started: g.started, id: g.gameId, saved: window.__froggy.state().game?.id ?? null })})`;
+      return JSON.stringify(g.mod.snapshot());
+    });
     const same = before !== 'null' && again === before;
     check(`${id}: put back exactly where it stood, nothing charged`, same && (await tokens()) === tb, same ? before.replace(/"deck":\[[^\]]*\],?/, '').slice(0, 110) : `before ${before.slice(0, 160)} / after ${again.slice(0, 160)}`);
     await page.evaluate(() => window.__pause.resume());
@@ -185,6 +223,56 @@ try {
   await sleep(2600);
   await page.evaluate(() => window.__minigame?.lose());
   await sleep(400);
+
+  // ------------------------------------------------ 4c: a crane, mid-go
+  await page.evaluate(() => {
+    const g = window.__froggy.game();
+    for (const s of g.scene.getScenes(true)) s.scene.stop();
+    window.__froggy.setTokens(100);
+  });
+  await sleep(250);
+  await page.evaluate(() => window.__froggy.game().scene.start('CraneGame', { kind: 'plush' }));
+  await sleep(1500);
+  await page.keyboard.press('Space');
+  await sleep(700);
+  await page.keyboard.press('Space');
+  await sleep(700);
+  const ct0 = await tokens();
+  const craneGo = await page.evaluate(() => ({ phase: window.__crane?.state().phase, saved: window.__froggy.state().game?.scene ?? null }));
+  await reload();
+  const craneBack = await until(() => window.__pause?.paused() === 'CraneGame', 12000);
+  const craneAfter = await page.evaluate(() => ({ phase: window.__froggy.game().scene.getScene('CraneGame').phase, t: window.__froggy.state().tokens }));
+  check('a reload mid-way through a crane go comes back to the crane, the go still paid for', craneGo.saved === 'CraneGame' && !!craneBack && craneAfter.phase === 'aim' && craneAfter.t === ct0, `${JSON.stringify(craneGo)} -> ${JSON.stringify(craneAfter)} (${ct0} before)`);
+  await page.evaluate(() => window.__pause.resume());
+  await sleep(2600);
+  // (and walked away from, as LEAVE does: nothing left to come back to)
+  await page.evaluate(() => window.__froggy.game().scene.getScene('CraneGame').leave(true));
+  await sleep(1200);
+  check('and leaving the crane leaves nothing to come back to', (await page.evaluate(() => window.__froggy.state().game)) === null);
+
+  // ------------------------------------------------ 4d: a Creature Clash battle, paid for
+  await page.evaluate(() => {
+    const f = window.__froggy;
+    const c = f.state().creatures;
+    f.patch({ creatures: { ...c, owned: [{ uid: 1, id: 'mole', wins: 0, xp: 0 }], active: 1, nextUid: 2, starterTaken: true, battle: { mode: 'zone', biome: 'caves' } } });
+  });
+  const bt0 = await tokens();
+  await reload();
+  const inArena = await until(() => window.__pause?.paused() === 'CreatureArena', 15000);
+  const arena = await page.evaluate(() => ({ battle: window.__froggy.state().creatures.battle, losses: window.__froggy.state().creatures.losses ?? 0 }));
+  check('a reload mid-battle comes back into the arena, the battle still open, not a retreat', !!inArena && !!arena.battle && (await tokens()) === bt0, `${JSON.stringify(arena)} ${(await scenes()).join(',')}`);
+  await page.evaluate(() => window.__pause.resume());
+  // (the resume's own 3, 2, 1 and then the arena's GET READY count)
+  await sleep(7500);
+  const fighting = await page.evaluate(() => ({ started: window.__froggy.game().scene.getScene('CreatureArena').started, t: window.__froggy.state().tokens, scenes: window.__froggy.activeScenes() }));
+  check('and the fight starts from the bell, with no second stake', fighting.started && fighting.t === bt0, JSON.stringify(fighting));
+  await page.evaluate(() => {
+    const f = window.__froggy;
+    f.patch({ creatures: { ...f.state().creatures, battle: null } });
+    const g = f.game();
+    for (const s of g.scene.getScenes(true)) s.scene.stop();
+  });
+  await sleep(300);
 
   // ------------------------------------------------ 5: a room
   await page.evaluate(() => {

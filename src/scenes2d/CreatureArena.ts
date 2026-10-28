@@ -432,7 +432,11 @@ export class CreatureArena extends Phaser.Scene {
     super('CreatureArena');
   }
 
-  init(data: { biome?: string; mode?: 'zone' | 'ladder' | 'training'; from?: string; training?: boolean }): void {
+  /** Back after a reload with the battle already open and paid for (core/session). */
+  private resumed = false;
+
+  init(data: { biome?: string; mode?: 'zone' | 'ladder' | 'training'; from?: string; training?: boolean; resumed?: boolean }): void {
+    this.resumed = data.resumed === true;
     this.biome = BIOMES.find((b) => b.id === data.biome) ?? BIOMES[0];
     this.mode = data.training ? 'training' : data.mode ?? 'zone';
     this.training = this.mode === 'training';
@@ -597,7 +601,10 @@ export class CreatureArena extends Phaser.Scene {
 
   /** The count is done: the stake, the bell, and go. */
   private begin(): void {
-    if (!this.training) {
+    // (a reload into a battle already paid for: the bell, and no second stake)
+    const open = this.resumed && !!store.get().creatures.battle;
+    this.resumed = false;
+    if (!this.training && !open) {
       const r = this.mode === 'ladder' ? startLadderBattle() : startBattle(this.biome.id, this.foe.c.id);
       if (!r.ok) {
         this.scene.start('CreatureHub', { from: this.from, screen: this.mode === 'ladder' ? 'ladder' : 'map', msg: r.msg });
