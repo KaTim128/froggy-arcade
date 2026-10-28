@@ -250,6 +250,30 @@ try {
   await sleep(1200);
   check('and leaving the crane leaves nothing to come back to', (await page.evaluate(() => window.__froggy.state().game)) === null);
 
+  // ------------------------------------------------ 4d: a Creature Clash battle, paid for
+  await page.evaluate(() => {
+    const f = window.__froggy;
+    const c = f.state().creatures;
+    f.patch({ creatures: { ...c, owned: [{ uid: 1, id: 'mole', wins: 0, xp: 0 }], active: 1, nextUid: 2, starterTaken: true, battle: { mode: 'zone', biome: 'caves' } } });
+  });
+  const bt0 = await tokens();
+  await reload();
+  const inArena = await until(() => window.__pause?.paused() === 'CreatureArena', 15000);
+  const arena = await page.evaluate(() => ({ battle: window.__froggy.state().creatures.battle, losses: window.__froggy.state().creatures.losses ?? 0 }));
+  check('a reload mid-battle comes back into the arena, the battle still open, not a retreat', !!inArena && !!arena.battle && (await tokens()) === bt0, `${JSON.stringify(arena)} ${(await scenes()).join(',')}`);
+  await page.evaluate(() => window.__pause.resume());
+  // (the resume's own 3, 2, 1 and then the arena's GET READY count)
+  await sleep(7500);
+  const fighting = await page.evaluate(() => ({ started: window.__froggy.game().scene.getScene('CreatureArena').started, t: window.__froggy.state().tokens, scenes: window.__froggy.activeScenes() }));
+  check('and the fight starts from the bell, with no second stake', fighting.started && fighting.t === bt0, JSON.stringify(fighting));
+  await page.evaluate(() => {
+    const f = window.__froggy;
+    f.patch({ creatures: { ...f.state().creatures, battle: null } });
+    const g = f.game();
+    for (const s of g.scene.getScenes(true)) s.scene.stop();
+  });
+  await sleep(300);
+
   // ------------------------------------------------ 5: a room
   await page.evaluate(() => {
     const g = window.__froggy.game();

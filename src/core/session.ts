@@ -42,6 +42,10 @@ export function reloadTarget(): ResumePoint | null {
   // a cabinet in play: back into it, its stake still on it
   if (s.game?.scene) return { key: s.game.scene, data: { ...(s.game.data ?? {}), prepaid: true } };
   if (s.game) return { key: 'Minigame', data: { id: s.game.id, from: s.game.from, restore: s.game } };
+  // a Creature Clash battle, paid for and not finished: back into the arena,
+  // the fight again from the bell, charged nothing (not a retreat)
+  const b = s.creatures.battle;
+  if (b) return { key: 'CreatureArena', data: { biome: b.biome, mode: b.mode, from: 'ArcadeLounge', resumed: true } };
   const at = resumePoint();
   return at.key === 'StartScreen' ? null : at;
 }
