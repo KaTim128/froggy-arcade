@@ -114,7 +114,7 @@ I went back through every message from "Create a pull request" (22 Oct) to now. 
     - Role selection after PLAY (PAC FROG / SURVIVOR), a new maze each round, checked to be fully reachable.
     - The hunter lays traps (SPACE / TRAP, 3 at once, 4 s apart, hold 2.2 s); the survivor is always the faster.
     - Hunting/fleeing AI; a timer and a flies-left counter; a step-by-step tutorial with animated pictures; NOWHERE TO HIDE badge.
-    - Still open: the other 5 marked room-4 spots (which machines go there?).
+    - Room 4's 5 bottom spots: **kept empty for now (user, 28 Oct)**; their placement is recorded as `LOUNGE_FREE_SPOTS` in src/game/content.ts (x 66/117/169/221/270, foot y 152, from docs/refs/room4-marks.jpg).
   - **Pad Battles.**
     - AI personalities: aggressive, defensive, opportunistic.
     - Elimination announcements, players-left indicator, final placements, replay.
