@@ -528,6 +528,45 @@ export const danceOff: MinigameModule = {
     }
   },
 
+  // ---- A RELOAD (log #87): the round and the rungs won, the chart note for
+  // note (hit, missed, still coming), the clock, both scores and combos.  At
+  // the card between rounds, the next round starts.
+  snapshot() {
+    return {
+      round, wins: { ...wins }, clock, cardMs, score: { ...score }, combo, bestCombo, hits, misses, wrongs, rivalCombo,
+      notes: notes.map((n) => ({ at: n.at, lane: n.lane, mine: n.mine, done: n.done, hit: n.hit })),
+    };
+  },
+
+  restore(snap: unknown) {
+    const v = snap as {
+      round: number; wins: typeof wins; clock: number; cardMs: number; score: typeof score; combo: number; bestCombo: number;
+      hits: number; misses: number; wrongs: number; rivalCombo: number; notes: Array<{ at: number; lane: number; mine: boolean; done: boolean; hit: boolean }>;
+    };
+    wins = { ...v.wins };
+    bestCombo = v.bestCombo;
+    hits = v.hits;
+    misses = v.misses;
+    wrongs = v.wrongs;
+    if (v.cardMs > 0) {
+      cardMs = 0;
+      startRound(v.round);
+      return;
+    }
+    for (const n of notes) clear(n);
+    round = v.round;
+    const cfg = ROUNDS[Math.min(round, ROUNDS.length - 1)];
+    audio.setScene({ music: cfg.music });
+    notes = v.notes.map((n) => ({ ...n, body: null, glyph: null }));
+    clock = v.clock;
+    cardMs = 0;
+    score = { ...v.score };
+    combo = v.combo;
+    rivalCombo = v.rivalCombo;
+    if (clock > 1600) clearBanner();
+    refreshHud();
+  },
+
   destroy() {
     if (onKey) window.removeEventListener('keydown', onKey);
     onKey = null;
