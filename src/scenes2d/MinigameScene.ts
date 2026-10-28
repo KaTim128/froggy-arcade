@@ -594,7 +594,7 @@ export class MinigameScene extends Phaser.Scene {
    */
   exitLabel(): string {
     if (!this.inPlay()) return 'LEAVE';
-    return this.mod?.pauseExit?.()?.label ?? 'QUIT GAME';
+    return this.mod?.pauseExit?.()?.label ?? 'LEAVE';
   }
 
   /** The cabinet's own way out, if it has one now (see MinigameModule.pauseExit). */
@@ -642,7 +642,7 @@ export class MinigameScene extends Phaser.Scene {
       const net = this.paid - this.stake + risk;
       sitting.push(net === 0 ? 'SO FAR YOU ARE EVEN' : net > 0 ? `SO FAR YOU ARE UP ${net}` : `SO FAR YOU ARE DOWN ${-net}`);
     }
-    return [...sitting, 'ARE YOU SURE YOU WANT TO QUIT?', ...forfeitLines(risk)];
+    return [...sitting, 'LEAVE THIS GAME?', ...forfeitLines(risk)];
   }
 
   /**

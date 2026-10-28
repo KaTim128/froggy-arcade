@@ -117,7 +117,7 @@ export class SettingsModal extends Phaser.Scene {
         const mg = pausedScene() as MinigameScene | null;
         const mine = mg?.ownExit?.() ?? null;
         button(this, 54, 158, 'RESUME', () => resumePause(), { width: 54, height: 13 });
-        button(this, 122, 158, mg?.exitLabel?.() ?? 'QUIT GAME', () => {
+        button(this, 122, 158, mg?.exitLabel?.() ?? 'LEAVE', () => {
           if (mine) {
             resumePause();
             mine.run();
@@ -182,10 +182,10 @@ export class SettingsModal extends Phaser.Scene {
     const lines =
       risk === null
         ? ['EXIT TO THE START MENU?', 'YOUR PROGRESS IS SAVED.']
-        : ['ARE YOU SURE YOU WANT TO QUIT?', ...forfeitLines(risk)];
+        : ['EXIT TO THE START MENU?', ...forfeitLines(risk)];
     this.asking = confirmDialog(this, {
       lines,
-      confirm: risk !== null ? 'CONFIRM QUIT' : 'EXIT',
+      confirm: risk !== null ? 'CONFIRM EXIT' : 'EXIT',
       onConfirm: () => {
         this.asking = null;
         if (mg && risk !== null) {
@@ -215,7 +215,7 @@ export class SettingsModal extends Phaser.Scene {
     const risk = mg.forfeitAmount();
     this.asking = confirmDialog(this, {
       lines: mg.quitLines(),
-      confirm: risk === null ? 'LEAVE' : 'CONFIRM QUIT',
+      confirm: risk === null ? 'LEAVE' : 'CONFIRM LEAVE',
       onConfirm: () => {
         this.asking = null;
         resumePause();

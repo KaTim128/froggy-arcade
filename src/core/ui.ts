@@ -390,6 +390,6 @@ export function confirmDialog(scene: Phaser.Scene, opts: ConfirmOpts): Phaser.Ga
 /** What walking out of a paid game costs, as one or two lines. */
 export function forfeitLines(risk: number): string[] {
   return risk > 0
-    ? [`QUITTING WILL FORFEIT ${risk} TOKEN${risk === 1 ? '' : 'S'}.`]
+    ? [`LEAVING WILL FORFEIT ${risk} TOKEN${risk === 1 ? '' : 'S'}.`]
     : ['NOTHING IS RIDING ON IT RIGHT NOW.'];
 }

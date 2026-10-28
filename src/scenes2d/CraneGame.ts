@@ -86,7 +86,7 @@ const HOW_TO_KEYS: ControlRow[] = [
   ['A / D OR ← →', 'MOVE THE CLAW'],
   ['SPACE / E', 'SIDE VIEW, DROP, THEN GRAB'],
   ['V', 'FRONT / SIDE VIEW'],
-  ['ESC', 'PAUSE - QUIT IS IN THERE'],
+  ['ESC', 'PAUSE - LEAVE IS IN THERE'],
 ];
 
 export type CraneKind = 'plush' | 'oddity';
@@ -1770,7 +1770,7 @@ export class CraneGame extends Phaser.Scene {
   /** QUIT, LEAVE or Esc: back to the room.  A go already paid for is spent. */
   /** QUIT, in the pause menu between RESUME and EXIT TO START MENU. */
   pauseExit(): { label: string; run: () => void } {
-    return { label: 'QUIT', run: () => this.leave(true) };
+    return { label: 'LEAVE', run: () => this.leave(true) };
   }
 
   private leave(force = false): void {

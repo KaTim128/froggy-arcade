@@ -116,21 +116,6 @@ function noGLNotice(root: HTMLElement, lines = ['THIS DEVICE COULD NOT START THE
   return d;
 }
 
-/**
- * The session's one renderer, for drawing 3D OFF the page -- a cabinet whose
- * game is 3D (Pad Battles) renders into it and copies the picture into its
- * own Phaser texture, so the shell's bars, buttons and cards stay over it.
- * Never mounted, never disposed by the borrower: it goes back as it came.
- */
-export function borrowRenderer(): THREE.WebGLRenderer | null {
-  const r = makeRenderer(false);
-  if (!r) return null;
-  r.domElement.remove();
-  r.setPixelRatio(1);
-  r.setScissorTest(false);
-  return r;
-}
-
 export class ThreeStage {
   /**
    * The stage on screen, if any.  There is only ever one (see above), and the
