@@ -2516,7 +2516,9 @@ export class PoliceEscape3D extends Phaser.Scene {
       if (!hint && this.hide && this.hide.k >= 1 && !this.hide.leaving) hint = isTouch() ? (this.hide.peek ? 'PEEK: STOP LOOKING - INTERACT: GET OUT' : 'PEEK: LOOK OUT - INTERACT: GET OUT') : this.hide.peek ? 'Q STOP PEEKING - E GET OUT' : 'Q PEEK - E GET OUT';
       if (!hint && this.clock < this.hintUntil) hint = this.hint;
       if (hint && this.phase === 'play') {
-        const y = 44;
+        // (under the objective block, never on it: on a phone that block
+        // starts lower, under the gear)
+        const y = this.objective ? top + 36 : 44;
         ctx.fillStyle = 'rgba(0,0,0,0.55)';
         ctx.fillRect(GAME_W / 2 - (hint.length * 6) / 2 - 4, y - 3, hint.length * 6 + 7, 13);
         drawPixelText(ctx, hint, GAME_W / 2, y, { scale: 1, color: '#f0d890', center: true });
