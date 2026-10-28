@@ -543,6 +543,47 @@ export const flood: MinigameModule = {
     refreshHud();
   },
 
+  // ---- A RELOAD (log #87): the same tower -- every ledge where the
+  // generator put it, and where each is in its swing, spin or crumble -- the
+  // frog where he was and how he was moving, the water's height and the clock.
+  snapshot() {
+    return {
+      clock, px, py, vy, onGround, riderI: rider ? plats.indexOf(rider) : -1, riderX, facing, camY, waterY, lastRumble,
+      plats: plats.map((p) => ({ kind: p.kind, ax: p.ax, ay: p.ay, w: p.w, x: p.x, y: p.y, amp: p.amp, rate: p.rate, phase: p.phase, angle: p.angle, radius: p.radius, side: p.side, state: p.state, timer: p.timer })),
+    };
+  },
+
+  restore(snap: unknown) {
+    type P = Omit<Plat, 'art' | 'lip'>;
+    const v = snap as { clock: number; px: number; py: number; vy: number; onGround: boolean; riderI: number; riderX: number; facing: number; camY: number; waterY: number; lastRumble: number; plats: P[] };
+    if (!sceneRef) return;
+    // the tower this go was built with, ledge for ledge
+    for (const p of plats) {
+      p.art.destroy();
+      p.lip.destroy();
+    }
+    plats = [];
+    hatch?.destroy();
+    hatchGlow?.destroy();
+    paint(sceneRef, v.plats.map((p) => ({ kind: p.kind, x: p.ax, y: p.ay, w: p.w, amp: p.amp, radius: p.radius, side: p.side })));
+    v.plats.forEach((sv, i) => {
+      const p = plats[i];
+      if (!p) return;
+      Object.assign(p, { x: sv.x, y: sv.y, rate: sv.rate, phase: sv.phase, angle: sv.angle, state: sv.state, timer: sv.timer });
+    });
+    clock = v.clock;
+    px = v.px;
+    py = v.py;
+    vy = v.vy;
+    onGround = v.onGround;
+    rider = v.riderI >= 0 ? plats[v.riderI] ?? null : null;
+    riderX = v.riderX;
+    facing = v.facing;
+    camY = v.camY;
+    waterY = v.waterY;
+    lastRumble = v.lastRumble;
+  },
+
   destroy() {
     plats = [];
     foam = [];
