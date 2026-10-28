@@ -127,6 +127,16 @@ try {
   console.log(`  (cabinets that keep a snapshot: ${snapGames.join(', ') || 'none'})`);
   // (what to do in each before the reload, to catch it mid-play rather than at its start)
   const ACT = {
+    // (all six placed and the hunt begun, one search made)
+    battleship: async () => {
+      await page.evaluate(() => {
+        const p = window.__pond;
+        for (let n = 0; n < 6 && p.state().toPlace.length; n++) p.place(p.legal()[0]);
+        p.start();
+        p.search(0);
+      });
+      await sleep(3000);
+    },
     blackjack: async () => {
       await page.keyboard.press('Space');
       await sleep(900);
