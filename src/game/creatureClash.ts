@@ -318,13 +318,14 @@ export function finishBattle(won: boolean): BattleEnd {
     });
     if (prize) ledger.credit(prize, 'creature');
     record('creature_win');
-    // THE BOSS BADGES (log #42): 5, 10 and every different ladder boss beaten.
+    // THE BOSS BADGES (log #42): 3, 6 and every different ladder boss beaten
+    // (ten bosses for now, the user's call: so not 5, 10 and 15).
     // A set, so beating the same one again adds nothing.
     if (bossId) {
       const beaten = [...new Set([...badgeSet('clash_bosses'), bossId])];
       setBadgeSet('clash_bosses', beaten);
-      if (beaten.length >= 5) earnBadge('c_boss5');
-      if (beaten.length >= 10) earnBadge('c_boss10');
+      if (beaten.length >= 3) earnBadge('c_boss5');
+      if (beaten.length >= 6) earnBadge('c_boss10');
       if (BOSSES.every((x) => beaten.includes(x.id))) earnBadge('c_boss_all');
     }
     store.flush();

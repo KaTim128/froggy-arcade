@@ -7,7 +7,7 @@
  *   MASTERY    one per arcade machine, each a real test of that machine's own
  *              skill (Frog Cross has three: 5, 10, 15 crossings in a run),
  *              and ARCADE MASTER for all of them
- *   CLASH      Creature Clash: 5, 10 and every different ladder boss beaten
+ *   CLASH      Creature Clash: 3, 6 and every different ladder boss beaten
  *   SECRET     hidden until found -- their names are ??? on the badge screen
  *
  * Kept on the profile (`GameState.badges`), with any counting a badge needs
@@ -73,8 +73,8 @@ export const BADGES: BadgeDef[] = [
   M('m_crane', 'CLAW OF GOLD', 'WIN A JACKPOT CAPSULE FROM A CRANE.', 0xc8a0e0),
   { id: 'm_master', name: 'ARCADE MASTER', desc: 'EARN EVERY ARCADE MASTERY BADGE.', hint: 'EARN EVERY ARCADE MASTERY BADGE.', col: 0xffd45e, kind: 'mastery' },
   // ---- creature clash
-  { id: 'c_boss5', name: 'BOSS HUNTER', desc: 'BEAT 5 DIFFERENT LADDER BOSSES.', hint: 'BEAT 5 DIFFERENT LADDER BOSSES.', col: 0x8a5ad8, kind: 'clash' },
-  { id: 'c_boss10', name: 'BOSS SLAYER', desc: 'BEAT 10 DIFFERENT LADDER BOSSES.', hint: 'BEAT 10 DIFFERENT LADDER BOSSES.', col: 0xa85ad8, kind: 'clash' },
+  { id: 'c_boss5', name: 'BOSS HUNTER', desc: 'BEAT 3 DIFFERENT LADDER BOSSES.', hint: 'BEAT 3 DIFFERENT LADDER BOSSES.', col: 0x8a5ad8, kind: 'clash' },
+  { id: 'c_boss10', name: 'BOSS SLAYER', desc: 'BEAT 6 DIFFERENT LADDER BOSSES.', hint: 'BEAT 6 DIFFERENT LADDER BOSSES.', col: 0xa85ad8, kind: 'clash' },
   { id: 'c_boss_all', name: 'BANE OF BOSSES', desc: 'BEAT EVERY LADDER BOSS THERE IS.', hint: 'BEAT EVERY LADDER BOSS THERE IS.', col: 0xd85ac8, kind: 'clash' },
   // ---- secrets: ??? until found
   { id: 's_lazy', name: 'LAZY HIDING', desc: 'HID IN ONE SPOT FOR A WHOLE ROUND OF HIDE AND SEEK.', hint: 'A SECRET.', col: 0x6a8a5a, kind: 'secret' },

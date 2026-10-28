@@ -54,7 +54,7 @@ I searched `src` for each one:
 | # | Item | What is missing |
 |---|---|---|
 | M1 | 5: arcade chained door locks | **ANSWERED:** lock reference is `docs/refs/arcade-chained-lock.jpg` (also `arcade-lock-205.png`). Chain and lock go on the arcade doors only, on the inside. The alley whose [E] ALLEY prompt is hidden is the one in `docs/refs/hidden-alley-206.png`: next to the frog wanted poster, behind the parked car. |
-| M2 | 31: room 4 machines | *Still open:* no image was attached to the room 4 message (26 Oct 07:25), so the orange marks are missing. |
+| M2 | 31: room 4 machines | **ANSWERED (28 Oct):** `docs/refs/room4-marks.jpg` -- room 4 is GAME CORNER (claws + Clash, ArcadeLounge). Seven spots: two at the top between the green 5-token machine and CLASH, five along the bottom row. The arrow points right from the green machine (read as: it moves right). |
 | M3 | 41: wardrobe layout and bed | **ANSWERED (from the 27 Oct images):** wardrobe at the far right of room 213, sleeping bag just left of it (`docs/refs/window-room-elevator-242.png` = image 3). Bed position in the window scene per `window-room-elevator-241.png` (image 2). Image 1 (240) is the jumpscare; images 4–5 (243, 244) are the elevator. *Also still open:* the "wall side shown in Image 2" for wall furniture (26 Oct 05:45) had no image attached. |
 | M4 | 24: mobile errors ("broken image") | **ANSWERED:** a broken-image icon appears on mobile during 3D scenes and games. Plan: find which image fails on mobile (lost WebGL context, texture size, or an asset path under the Vercel base path) and fix it at the root. The "Image 1" in the mobile message (26 Oct 01:05) was not attached. |
 | M5 | 24: eerie staircase scene | **ANSWERED:** at night, the player goes through the arcade staff door and down the stairs, finds a key at the bottom, and that leads to hide and seek. Make that scene eerie, with tap-to-enter doors and the chair (mobile tap support). |
@@ -132,8 +132,7 @@ I went back through every message from "Create a pull request" (22 Oct) to now. 
 ### Reference images
 All 50 images from the last five days are saved in `docs/refs/`, named by topic and original number, so later sessions can use them.
 No image arrived with three messages:
-- room 4 orange marks;
-- the wall side for wall furniture;
+- (answered 28 Oct) room 4 marks: docs/refs/room4-marks.jpg; wall side: docs/refs/wall-furniture-side.jpg (the back wall of the flat, between the door and the wardrobe);
 - the mobile errors.
 
 ## 3c. Requirement index: log entry → batch
@@ -339,7 +338,7 @@ Rules for every batch:
 - **Content:**
   - level cap per C1;
   - 40 new non-boss creatures and 80 new abilities;
-  - 5 new bosses (15 in total), each with 1 common attack and 3 specials, multi-phase and unique;
+  - ~~5 new bosses (15 in total)~~ **user, 28 Oct: keep 10 bosses for now; make their animations more lively and strong.** Boss badges at 3 / 6 / all 10;
   - better boss ability animations.
 - **Balance:**
   - every creature rebalanced with distinct tradeoffs;
@@ -453,7 +452,7 @@ Rules for every batch:
 - **Apartment:**
   - no default mirror or towels; both can be bought;
   - more furniture with variations;
-  - wall placement on the specified wall side;
+  - wall placement on the specified wall side (`docs/refs/wall-furniture-side.jpg`: the back wall, door to wardrobe);
   - a reflective mirror;
   - default wardrobe layout (M3); bed shifted left.
 - **Shops:** the furniture shop and Threads stock rotate each in-game day; purchases persist.
@@ -505,7 +504,7 @@ Rules for every batch:
 <br>• **Rest of the regression (28 Oct, head e06d938):** mobile.mjs 32/32 after a test fix (HideRoom3D spends 12 s+ compiling shaders inside create() on the harness's software GPU, so the checks read its controls before it was up and strafed inside the briefing; they now wait for the room and the round). mobilecrawl.mjs: 132 screens on iPhone/Android sideways and iPhone upright, 0 problems. machine 18/18, practice 8/8, actionwords 7/7, textfit 0 out of place (866 lines), text 5/5, frame 14/14, stealth 30/30, session 31/31.
 <br>**Known limit:** 3D scenes come back from a reload to their checkpoints only (route/room), not exact positions. **B4 done.** | | |
 | B5 | **BUILT (28 Oct), final regression running.** 40 badges (9 story, 24 arcade mastery incl. ARCADE MASTER, 3 Creature Clash bosses, 4 secrets), each its own icon (game/badgeIcons); state `badgeProgress` (kept across resets). BADGE UNLOCKED drop-down (scenes2d/BadgeToast, queued, rare = gold, no input; core/overlays keeps it out of the touch layout and pause). Hooks: the shell checks every record against its mastery line (game/badges `badgeOnRecord`) and gives modules `api.badge` (refused in practice); Frog Cross 5/10/15, Fence Wars no damage, Grudge every foe in a row (persistent run, a loss or walking away resets), Dance Off flawless, Slots 5 Froggys, Froggy 21 charlie, crane jackpot, Clash bosses 5/10/all (unique set). Secrets: LAZY HIDING (HideRoom3D, one spot through the seek), ERROR FROG-04 (Whack cameo), OFF THE MAP (all 4 side alleys), UP ON THE ROOF (stairwell). Badge screen: a box each, sections, ??? secrets, scrolls. Goals: no THIS WEEK, harder achievements (25/100/250 wins, 200 played, win at 10 / all 20 cabinets, 1000 tokens won, rent x4, 20 placed, 10 bought, $25 begging, 7 clothes, 3 haircuts, Clash 25/100, sell 10), scrolls in whole rows with a scroll bar, CLAIM / scroller / tabs / CLOSE spaced per the user's screenshot. tools/badges.mjs 17/17; textfit 0 out of place, profiles 19/19, practice 8/8, machine 18/18. **28 Oct, user:** mastery made harder (Mini Duels 10 in a row, Hoops <22 s, Whack 90, Pond <=20 searches, Barrel Climb <50 s, Flood <55 s, Car Chase $1000, Bog Ball by 5, Frog Race on 10 tickets, Frogster Mash 250, Froggy 21 two charlies in a row; Chamber 10 and Frog Cross 5/10/15 kept as the log states them); the badge screen is one list with no STORY / MASTERY headings or RARE label. The user asked to stop spending time on test runs and build the remaining requests. **Mismatch to ask:** log #42 says 'all 15 bosses'; there are 10, so BOSS SLAYER (10) and BANE OF BOSSES (all) unlock together. | | |
-| B6 | **IN PROGRESS (28 Oct).** Done: level cap 20 (C1; +50+20/level XP, 4,750 to the top; +4% HP, +3.5% dmg, +0.6% speed a level); zone opponents at your level +/-1 (LV shown); no starter (#3, C8): an empty team opens on RECRUIT YOUR FIRST CREATURE (25); a loss FAINTS the fighter, which keeps its slot, rests 5 min or is revived for 5 tokens (my default: the log says it must stay but not how it recovers), and the other fit one steps in; BACK from an unopened pack (#1098 'go back before selecting'), the pack stays saved; controls per C7: no handedness, phones get one move stick and three tap ability buttons with icons and names (tap = use it at the foe), desktop J/K/L fire abilities 1-3 at the foe (rebindable, the Clash's own keys), CONTROLS tile and screen desktop only. **Still to do in B6:** 40 new creatures + 80 abilities, 5 new bosses (15 total), balance pass, themed arenas, wall textures, ability screen details (type/duration/cooldown/effect), specialties/weaknesses on select, hub decluttering. | | |
+| B6 | **IN PROGRESS (28 Oct).** Done: level cap 20 (C1; +50+20/level XP, 4,750 to the top; +4% HP, +3.5% dmg, +0.6% speed a level); zone opponents at your level +/-1 (LV shown); no starter (#3, C8): an empty team opens on RECRUIT YOUR FIRST CREATURE (25); a loss FAINTS the fighter, which keeps its slot, rests 5 min or is revived for 5 tokens (my default: the log says it must stay but not how it recovers), and the other fit one steps in; BACK from an unopened pack (#1098 'go back before selecting'), the pack stays saved; controls per C7: no handedness, phones get one move stick and three tap ability buttons with icons and names (tap = use it at the foe), desktop J/K/L fire abilities 1-3 at the foe (rebindable, the Clash's own keys), CONTROLS tile and screen desktop only. **Still to do in B6:** 40 new creatures + 80 abilities, livelier and stronger boss animations (10 bosses, user 28 Oct), balance pass, themed arenas, wall textures, ability screen details (type/duration/cooldown/effect), specialties/weaknesses on select, hub decluttering. | | |
 | B7–B13 | not started | | |
 
 ## 6. Known issues
