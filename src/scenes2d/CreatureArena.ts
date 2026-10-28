@@ -18,19 +18,19 @@
  * order the timers, taps and tab switches arrive in.
  */
 
-import { STAGES, WORLDS, drawStoryFoe, storyFoe } from '../game/creatureStory';
+import { STAGES, WORLDS, drawStoryFoe, storyFoe, storyPrice } from '../game/creatureStory';
 import { paintFloor } from '../art/arenaFloors';
 import Phaser from 'phaser';
 import { PALETTE } from '../render/palette';
 import { audio } from '../core/audio';
 import { store } from '../core/state';
-import { button, centerText, text } from '../core/ui';
+import { button, centerText, confirmDialog, forfeitLines, text } from '../core/ui';
 import { GAME_W, GAME_H } from '../render/pixelScaler';
 import { drawCreature } from '../art/creatureArt';
 import { plainWords } from '../game/plainWords';
 import { drawMelee, drawShot, meleeStyle, shotStyle, type MeleeStyle } from '../art/clashFx';
 import { SPECIALS } from '../game/specials';
-import { BIOMES, ELEMENTS, creatureById, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
+import { BATTLE_COST, BIOMES, ELEMENTS, LADDER_BOSS_WIN, LADDER_COST, creatureById, LADDER_LEVELS, type Attack, type Biome, type BossDef, type CoverShape, type Creature } from '../game/creatures';
 import { activeOwned, finishBattle, ladderStep, nextZoneFoe, ownedCreature, startBattle, startLadderBattle, startStory } from '../game/creatureClash';
 import { MAX_LEVEL, levelOf, withLevel } from '../game/creatureLevel';
 import {
@@ -1202,10 +1202,9 @@ export class CreatureArena extends Phaser.Scene {
       this.labels.push(this.stepLabel);
     }
     this.timerText = centerText(this, GAME_W / 2, 7, '', PALETTE.fog).setDepth(51);
-    // ---- THERE IS NO LEAVING A BATTLE.  Not during the count either: a
-    // real fight ends by winning it, losing it or running the clock out, and
-    // no button says otherwise.  (Nobody is ever stuck: TIME_LIMIT settles
-    // every battle on its own.)
+    // ---- LEAVING A BATTLE is LEAVE in the pause menu (pauseExit), asked
+    // first with what it forfeits (user, 28 Oct) -- never a button over the
+    // fight.  (And nobody is ever stuck: TIME_LIMIT settles every battle.)
     //
     // TRAINING is not a battle, so it has a way out -- and it goes in the
     // HUD, not over the arena: the middle of the top bar, in the slot the
@@ -1354,9 +1353,55 @@ export class CreatureArena extends Phaser.Scene {
     );
   }
 
-  /** Training's LEAVE, in the pause menu between RESUME and EXIT TO START MENU. */
+  /**
+   * LEAVE, in the pause menu between RESUME and EXIT TO START MENU, like
+   * every cabinet's (user, 28 Oct).  Training goes straight out; a real
+   * battle asks first and says what walking out costs.
+   */
   pauseExit(): { label: string; run: () => void } | null {
-    return this.training ? { label: 'LEAVE', run: () => this.askQuit() } : null;
+    if (this.over || this.sim) return null;
+    return { label: 'LEAVE', run: () => (this.training ? this.askQuit() : this.confirmLeave()) };
+  }
+
+  /**
+   * WALKING OUT OF A BATTLE, asked first.  Before the bell nothing has been
+   * paid, so nothing is lost.  After it, leaving is a loss: the fight's price
+   * stays spent and the fighter faints -- or, on the ladder, the run ends and
+   * its entry and its prize go with it.
+   */
+  private confirmLeave(): void {
+    if (this.dialog || this.over) return;
+    const paid = this.started;
+    const c = store.get().creatures;
+    const risk = !paid ? 0 : this.mode === 'ladder' ? LADDER_COST : this.mode === 'story' ? storyPrice(this.storyWorld, this.storyWorld < c.story.cleared).cost : BATTLE_COST;
+    const name = this.me.c.name.toUpperCase();
+    const lines = !paid
+      ? ['LEAVE BEFORE THE BELL?', 'NOTHING HAS BEEN PAID YET.']
+      : this.mode === 'ladder'
+        ? ['LEAVE THIS BATTLE?', ...forfeitLines(risk), `THE LADDER RUN ENDS, AND ITS ${LADDER_BOSS_WIN} PRIZE.`]
+        : ['LEAVE THIS BATTLE?', ...forfeitLines(risk), `IT COUNTS AS A LOSS: ${name} FAINTS.`];
+    const was = this.paused;
+    this.paused = true;
+    this.dialog = confirmDialog(this, {
+      lines,
+      confirm: paid ? 'CONFIRM LEAVE' : 'LEAVE',
+      edge: paid ? 0xc31f2e : PALETTE.neon,
+      onConfirm: () => {
+        this.dialog = null;
+        this.over = true;
+        this.settled = true;
+        const screen = this.mode === 'ladder' ? 'ladder' : this.mode === 'story' ? 'story' : 'map';
+        const r = paid ? finishBattle(false) : null;
+        const fainted = r && !r.runOver ? `YOU LEFT. ${name} FAINTED.` : 'YOU LEFT. THE RUN IS OVER.';
+        this.scene.start('CreatureHub', { from: this.from, screen, world: this.storyWorld, msg: r ? fainted : 'YOU LEFT BEFORE THE BELL.' });
+      },
+      onCancel: () => {
+        this.dialog?.destroy();
+        this.dialog = null;
+        this.paused = was;
+      },
+    });
+    this.dialog.setDepth(3000);
   }
 
   private askQuit(): void {
@@ -3613,7 +3658,7 @@ export class CreatureArena extends Phaser.Scene {
       }
       // back to where the fight came from: the run's ladder, or the map
       const screen = ladder ? 'ladder' : story ? 'story' : 'map';
-      box.add(button(this, X, Y + 36, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, screen }), { width: 80, height: 13 }));
+      box.add(button(this, X, Y + 36, 'CONTINUE', () => this.scene.start('CreatureHub', { from: this.from, screen, world: this.storyWorld }), { width: 80, height: 13 }));
     });
   }
 

@@ -100,8 +100,13 @@ export class CreatureHub extends Phaser.Scene {
   /** The screen asked for (back from a fight: the ladder, or the map). */
   private want: Screen | null = null;
 
-  init(data: { from?: string; msg?: string; screen?: string }): void {
+  init(data: { from?: string; msg?: string; screen?: string; world?: number }): void {
     this.from = data.from ?? 'ArcadeLounge';
+    // (back from a story fight: on the world it was in)
+    if (typeof data.world === 'number' && WORLD_AT[data.world]) {
+      this.storyW = data.world;
+      this.mark = { x: WORLD_AT[data.world][0], y: WORLD_AT[data.world][1] - 20 };
+    }
     this.msg = data.msg ?? '';
     this.want = SCREENS.includes(data.screen as Screen) ? (data.screen as Screen) : null;
     this.picked = null;
@@ -209,8 +214,11 @@ export class CreatureHub extends Phaser.Scene {
     // (on the pack screen the line keeps to the right-hand column, clear of
     // the cards; once one is picked its own panel says who joined)
     const packMsg = this.screen === 'pack';
+    // (on the story map the line keeps under the map, clear of the panel)
+    const storyMsg = this.screen === 'story';
     if (this.msg && !(packMsg && this.picked)) {
-      const m = centerText(this, packMsg ? 239 : GAME_W / 2, GAME_H - 7, this.msg, PALETTE.gold);
+      const m = centerText(this, packMsg ? 239 : storyMsg ? 98 : GAME_W / 2, GAME_H - 7, this.msg, PALETTE.gold);
+      if (storyMsg) m.setMaxWidth(186);
       L.add(m);
       backPlate(this, m, PALETTE.gold);
     } else if (this.screen === 'home') {
